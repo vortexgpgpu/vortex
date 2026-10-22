@@ -417,11 +417,10 @@ private:
       l.src_color = s.req.color[t];
       l.src_depth = s.req.depth[t];
 
-      const uint32_t zbpp = depth_stencil_.depth_stencil_word() ? 8
-                          : depth_stencil_.depth_d16() ? 2 : 4;
-      // The unit addresses depth a word at a time: a D16 row starts on one.
-      assert((!depth_stencil_.depth_d16() || (zbuf_pitch_ & 3u) == 0)
-             && "OM: a D16 depth pitch is a multiple of 4 bytes");
+      const uint32_t zbpp = depth_stencil_.depth_stencil_word() ? 8 : zbuf_bytes();
+      // The unit addresses depth a word at a time: a D16 or S8 row starts on one.
+      assert(((!depth_stencil_.depth_d16() && !depth_stencil_.depth_s8()) || (zbuf_pitch_ & 3u) == 0)
+             && "OM: a D16 or S8 depth/stencil pitch is a multiple of 4 bytes");
       l.zbuf_addr_byte = zbuf_baseaddr_ + uint64_t(l.pos_y) * zbuf_pitch_ + l.pos_x * zbpp;
       assert((!has_color || cbuf_ff_ok_[s.req.rt])
              && "OM: a colour format and writemask the merger stores");
@@ -574,9 +573,13 @@ private:
                                                        : (pf.port == 0 ? zbuf_bytes() : 4));
       }
       if (pf.port == 0) {
-        // A D16 texel widens to the 24-bit key, high byte replicated; it has no
-        // stencil.
-        l.dst_depthstencil = depth_stencil_.depth_d16() ? ((v << 8) | (v >> 8)) : v;
+        // A D16 texel widens to the 24-bit key, high byte replicated, and has
+        // no stencil; an S8 texel is the stencil field alone; a float depth is
+        // compared as its key.
+        l.dst_depthstencil = depth_stencil_.depth_d16() ? ((v << 8) | (v >> 8))
+                           : depth_stencil_.depth_s8() ? (v << VX_OM_DEPTH_BITS)
+                           : depth_stencil_.depth_float() ? gfx_sw::om_float_depth_key(v)
+                           : v;
         l.z_arrived        = true;
       } else if (pf.port == 2) {
         l.dst_stencil = v & 0xff;
@@ -649,9 +652,10 @@ private:
              ? (depth_float ? 0xffffffffu : OM_DEPTH_MASK) : 0u)
         | ((stencil_enabled && !depth_float) ? (uint32_t(stencil_writemask) << VX_OM_DEPTH_BITS) : 0u);
       if (stencil_word) {
-        // As the RTL issues them: a texel is written back when any stencil write
-        // is on or the depth test passed with depth writes on, and then each of
-        // its two words whose aspect is written goes out.
+        // A texel is written back when any stencil write is on or the depth
+        // test passed with depth writes on. Its stencil word goes out with a
+        // stencil write, its depth word only with a new depth, so a stencil-only
+        // update leaves the stored float exactly as it was.
         const bool fire = l.has_depth
                        && (stencil_writeen_ || (depth_enabled && depth_writemask_ && l.ds_pass));
         const uint32_t s_writemask = stencil_writemask & 0xff;
@@ -659,8 +663,9 @@ private:
         if (l.need_s_write) {
           l.s_write_value = (l.dst_stencil & ~s_writemask) | (stencil_result & s_writemask);
         }
-        ds_writemask = (fire && depth_writemask_) ? 0xffffffffu : 0u;
-        merged = (depth_enabled && depth_writemask_ && l.ds_pass) ? l.src_depth : l.dst_depthstencil;
+        const bool depth_write = l.has_depth && depth_enabled && depth_writemask_ && l.ds_pass;
+        ds_writemask = depth_write ? 0xffffffffu : 0u;
+        merged = depth_write ? l.src_depth : l.dst_depthstencil;
         l.merged_depthstencil = merged;
       }
 
@@ -801,6 +806,10 @@ private:
     mreq.byteen = uint64_t((1u << bytes) - 1u) << off;
     if (port == 0 && depth_stencil_.depth_d16()) {
       value = (value & OM_DEPTH_MASK) >> 8;   // the key's top 16 bits
+    } else if (port == 0 && depth_stencil_.depth_s8()) {
+      value >>= VX_OM_DEPTH_BITS;
+    } else if (port == 0 && depth_stencil_.depth_float()) {
+      value = gfx_sw::om_float_depth_from_key(value);
     }
 
     auto blk = make_mem_block();
@@ -823,7 +832,7 @@ private:
 
   // Bytes of the depth/stencil word a port-0 access moves.
   uint32_t zbuf_bytes() const {
-    return depth_stencil_.depth_d16() ? 2u : 4u;
+    return depth_stencil_.depth_d16() ? 2u : depth_stencil_.depth_s8() ? 1u : 4u;
   }
 
   void free_slot(Slot& s) {

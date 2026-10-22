@@ -138,6 +138,31 @@ public:
     return 0;
   }
 
+  // Allocate a block on pages of its own: page-aligned, a whole number of
+  // pages, and sharing no page with any other block.
+  int allocate_pages(uint64_t size, uint64_t* addr) {
+    if (size == 0 || addr == nullptr) {
+      printf("Error: invalid arguments\n");
+      return -1;
+    }
+    size = alignSize(size, pageAlign_);
+    uint64_t pageAddr;
+    if (!this->findNextAddress(size, &pageAddr)) {
+      printf("Error: out of memory (Can't find next address)\n");
+      return -1;
+    }
+    auto page = this->createPage(pageAddr, size);
+    if (nullptr == page) {
+      printf("Error: out of memory (Can't create a page)\n");
+      return -1;
+    }
+    auto freeBlock = page->findFreeBlock(size);
+    page->allocate(size, freeBlock);
+    *addr = freeBlock->addr;
+    allocated_ += size;
+    return 0;
+  }
+
   int release(uint64_t addr) {
     block_t* usedBlock = nullptr;
     auto currPage = pages_;

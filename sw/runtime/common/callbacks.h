@@ -84,6 +84,17 @@ typedef struct {
   // at each doorbell, the head/completion lines it manages).
   int (*host_mem_push) (void* dev_ctx, uint64_t cp_addr);
 
+  // ----- Imported host memory -----
+  // Back the device physical range [dev_addr, dev_addr + size) with the
+  // caller's page-aligned host memory, so kernels and CP DMA reach those bytes
+  // in place; mem_unimport detaches it. Left NULL by a backend whose device
+  // cannot address host memory directly. mem_import returns 0, or
+  // VX_ERR_NOT_SUPPORTED when the range does not fit the granularity its
+  // memory aliases at, or -1 on another failure.
+  int (*mem_import)  (void* dev_ctx, uint64_t dev_addr, void* host_ptr,
+                      uint64_t size);
+  int (*mem_unimport)(void* dev_ctx, uint64_t dev_addr, uint64_t size);
+
 } callbacks_t;
 
 // Each backend's vortex.cpp implements this function (typically via the

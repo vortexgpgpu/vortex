@@ -1,0 +1,19 @@
+#version 450
+
+/* data[i] = data[i] * 3 + k, k a push constant that changes per dispatch. */
+
+layout(local_size_x_id = 0) in;
+
+layout(std430, binding = 0) buffer Buf {
+   uint data[];
+};
+
+layout(push_constant) uniform Push {
+   uint k;
+};
+
+void main()
+{
+   uint i = gl_GlobalInvocationID.x;
+   data[i] = data[i] * 3u + k;
+}

@@ -23,10 +23,13 @@ CXXFLAGS += $(XCONFIGS)
 LDFLAGS += -Wl,-rpath,$(RT_DIR) -L$(RT_DIR) -lvortex -pthread
 
 TESTS := test_basic test_async test_timeline_events test_module_kernel test_rect_fill
+# Imported host memory needs a backend that implements it, so it runs on its
+# own (run-import-<driver>) rather than in every driver's sweep.
+IMPORT_TESTS := test_import_host
 
-.PHONY: all run run-simx run-xrt clean
+.PHONY: all run run-simx run-rtlsim run-xrt clean
 
-all: $(TESTS)
+all: $(TESTS) $(IMPORT_TESTS)
 
 test_basic: $(VORTEX_HOME)/tests/runtime/test_basic.cpp
 	$(CXX) $(CXXFLAGS) $< $(LDFLAGS) -o $@
@@ -41,6 +44,9 @@ test_module_kernel: $(VORTEX_HOME)/tests/runtime/test_module_kernel.cpp
 	$(CXX) $(CXXFLAGS) $< $(LDFLAGS) -o $@
 
 test_rect_fill: $(VORTEX_HOME)/tests/runtime/test_rect_fill.cpp
+	$(CXX) $(CXXFLAGS) $< $(LDFLAGS) -o $@
+
+test_import_host: $(VORTEX_HOME)/tests/runtime/test_import_host.cpp
 	$(CXX) $(CXXFLAGS) $< $(LDFLAGS) -o $@
 
 # Bare run — honours whatever VORTEX_DRIVER is in the environment.
@@ -59,6 +65,17 @@ run-simx: $(TESTS)
 	  VX_TEST_VXBIN=$(VXBIN) ./$$t || exit 1; \
 	done
 
+run-rtlsim: $(TESTS)
+	@for t in $(TESTS); do \
+	  echo "[RUN] $$t (rtlsim)"; \
+	  VORTEX_DRIVER=rtlsim LD_LIBRARY_PATH=$(RT_DIR) \
+	  VX_TEST_VXBIN=$(VXBIN) ./$$t || exit 1; \
+	done
+
+# Imported host memory alone, per backend.
+run-import-%: test_import_host
+	VORTEX_DRIVER=$* LD_LIBRARY_PATH=$(RT_DIR) VX_TEST_VXBIN=$(VXBIN) ./test_import_host
+
 run-xrt: $(TESTS)
 	@for t in $(TESTS); do \
 	  echo "[RUN] $$t (xrt)"; \
@@ -67,4 +84,4 @@ run-xrt: $(TESTS)
 	done
 
 clean:
-	rm -f $(TESTS)
+	rm -f $(TESTS) $(IMPORT_TESTS)

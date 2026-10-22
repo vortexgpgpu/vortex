@@ -448,12 +448,58 @@ RAM::~RAM() {
 void RAM::clear() {
   for (auto& entry : chunks_) {
     for (int i = 0; i < CHUNK_SIZE; ++i) {
-      delete[] entry.second[i];
+      const uint64_t page_index = (entry.first << CHUNK_BITS) | i;
+      if (aliased_.count(page_index) == 0) {
+        delete[] entry.second[i];
+      }
     }
     delete[] entry.second;
   }
   chunks_.clear();
+  aliased_.clear();
   last_chunk_ = nullptr;
+}
+
+uint8_t** RAM::chunk_of(uint64_t page_index) {
+  const uint64_t chunk_index = page_index >> CHUNK_BITS;
+  auto it = chunks_.find(chunk_index);
+  if (it != chunks_.end()) {
+    return it->second;
+  }
+  auto chunk = new uint8_t*[CHUNK_SIZE]();
+  chunks_.emplace(chunk_index, chunk);
+  return chunk;
+}
+
+void RAM::alias(uint64_t addr, uint64_t size, uint8_t* host) {
+  const uint64_t page_size = uint64_t(1) << page_bits_;
+  if (((addr | size | reinterpret_cast<uintptr_t>(host)) & (page_size - 1)) != 0) {
+    throw BadAddress();
+  }
+  if (capacity_ != 0 && addr + size > capacity_) {
+    throw OutOfRange();
+  }
+  for (uint64_t off = 0; off < size; off += page_size) {
+    const uint64_t page_index = (addr + off) >> page_bits_;
+    uint8_t** chunk = this->chunk_of(page_index);
+    uint8_t*& page = chunk[page_index & (CHUNK_SIZE - 1)];
+    if (aliased_.count(page_index) == 0) {
+      delete[] page;
+    }
+    page = host + off;
+    aliased_.insert(page_index);
+  }
+}
+
+void RAM::unalias(uint64_t addr, uint64_t size) {
+  const uint64_t page_size = uint64_t(1) << page_bits_;
+  for (uint64_t off = 0; off < size; off += page_size) {
+    const uint64_t page_index = (addr + off) >> page_bits_;
+    if (aliased_.erase(page_index) == 0) {
+      continue;
+    }
+    chunks_.at(page_index >> CHUNK_BITS)[page_index & (CHUNK_SIZE - 1)] = nullptr;
+  }
 }
 
 uint64_t RAM::size() const {

@@ -550,7 +550,7 @@ __kernel void setup_k(pipe_arg_t* __UNIFORM__ arg) {
       const float psize = pipe_load_prim(arg, arg->prim_base + t, ref, v);
       const pipe_prim_view view = pipe_prim_viewport(arg, ref, vpp);
       uint32_t kept = 0;
-      if (!pipe_cull_distance(arg, ref) && (!arg->layer_off || view.layer == arg->layer_sel)) {
+      if (!pipe_cull_distance(arg, ref)) {
         kept = pipe_prim_setup(v, ref, psize, 0.0f, W, H, arg, view.vp, coverage_only, pr, bb,
                                nullptr);
         kept = pipe_prim_scissor(pr, bb, kept, view);
@@ -631,7 +631,7 @@ __kernel void setup_k(pipe_arg_t* __UNIFORM__ arg) {
       const float start = arg->stipple_strip ? (float)stipple[t] : 0.0f;
       const pipe_prim_view view = pipe_prim_viewport(arg, ref, vpp);
       uint32_t kept = 0;
-      if (!pipe_cull_distance(arg, ref) && (!arg->layer_off || view.layer == arg->layer_sel)) {
+      if (!pipe_cull_distance(arg, ref)) {
         kept = pipe_prim_setup(v, ref, psize, start, W, H, arg, view.vp, coverage_only, pr, bb,
                                vary ? &vr : nullptr);
         kept = pipe_prim_scissor(pr, bb, kept, view);

@@ -221,6 +221,11 @@ static inline TexFieldFmt TexFieldGeom(uint32_t format) {
   case VX_TEX_FORMAT_RGB32F: return { 12, 3, TEX_KIND_FLOAT, {0, 32, 64}, {32, 32, 32} };
   case VX_TEX_FORMAT_R5G6B5_PACK16: return { 2, 3, TEX_KIND_UNORM, {11, 5, 0}, {5, 6, 5} };
   case VX_TEX_FORMAT_A1R5G5B5_PACK16: return { 2, 4, TEX_KIND_UNORM, {10, 5, 0, 15}, {5, 5, 5, 1} };
+  case VX_TEX_FORMAT_B4G4R4A4_PACK16: return { 2, 4, TEX_KIND_UNORM, {4, 8, 12, 0}, {4, 4, 4, 4} };
+  case VX_TEX_FORMAT_RGBX8: return { 4, 3, TEX_KIND_UNORM, {0, 8, 16}, {8, 8, 8} };
+  case VX_TEX_FORMAT_BGRX8: return { 4, 3, TEX_KIND_UNORM, {16, 8, 0}, {8, 8, 8} };
+  case VX_TEX_FORMAT_SRGBX8: return { 4, 3, TEX_KIND_SRGB, {0, 8, 16}, {8, 8, 8} };
+  case VX_TEX_FORMAT_SBGRX8: return { 4, 3, TEX_KIND_SRGB, {16, 8, 0}, {8, 8, 8} };
   default: return { 4, 4, TEX_KIND_UNORM, {0, 8, 16, 24}, {8, 8, 8, 8} };
   }
 }
@@ -929,15 +934,21 @@ static inline void TexDecodeBlockF4(uint32_t format, const void* p, uint32_t t, 
 }
 
 // A texel's byte offset within its level `width` texels wide, and its index in
-// its block (0 for a format that is not block-compressed).
+// its block (0 for a format that is not block-compressed). `pitch` is the bytes
+// between the level's rows -- of texels, or of 4x4 blocks -- and 0 for rows
+// packed back to back.
 static inline uint64_t TexTexelOffset(uint32_t format, uint32_t width, uint32_t x, uint32_t y,
-                                      uint32_t* sub) {
+                                      uint32_t* sub, uint32_t pitch = 0) {
   if (TexIsBlockFormat(format)) {
     *sub = ((y & 3u) << 2) | (x & 3u);
-    return ((uint64_t)(y >> 2) * ((width + 3u) >> 2) + (x >> 2)) * TexBlockBytes(format);
+    const uint32_t bytes = TexBlockBytes(format);
+    const uint64_t row = pitch ? pitch : (uint64_t)((width + 3u) >> 2) * bytes;
+    return (uint64_t)(y >> 2) * row + (uint64_t)(x >> 2) * bytes;
   }
   *sub = 0;
-  return ((uint64_t)y * width + x) * FormatStride(format);
+  const uint32_t stride = FormatStride(format);
+  const uint64_t row = pitch ? pitch : (uint64_t)width * stride;
+  return (uint64_t)y * row + (uint64_t)x * stride;
 }
 
 // Bytes of one w x h image of the format (a 2D level, or a 3D level's slice).
@@ -959,16 +970,31 @@ static inline void TexDecodeFloat4At(uint32_t format, const void* p, uint32_t su
   TexDecodeFloat4(format, p, stride, out);
 }
 
-// TexDecodeArgb8 likewise, a block texel rounded to eight bits a channel.
+// TexDecodeArgb8 likewise, a block or field texel rounded to eight bits a
+// channel; an integer field keeps its value, clamped to a byte.
 static inline uint32_t TexDecodeArgb8At(uint32_t format, const void* p, uint32_t sub,
                                         uint32_t stride) {
-  if (!TexIsBlockFormat(format)) {
+  const bool field = TexIsFieldFormat(format);
+  if (!TexIsBlockFormat(format) && !field) {
     return TexDecodeArgb8(format, p, stride);
   }
   float f[4];
-  TexDecodeBlockF4(format, p, sub, f);
+  uint32_t kind = TEX_KIND_UNORM;
+  if (field) {
+    kind = TexFieldGeom(format).kind;
+    TexDecodeField4(format, p, f);
+  } else {
+    TexDecodeBlockF4(format, p, sub, f);
+  }
   uint32_t b[4];
   for (uint32_t c = 0; c < 4; ++c) {
+    if (kind == TEX_KIND_UINT || kind == TEX_KIND_SINT) {
+      int32_t i;
+      __builtin_memcpy(&i, &f[c], 4);
+      const bool neg = (kind == TEX_KIND_SINT) && i < 0;
+      b[c] = neg ? 0u : ((uint32_t)i > 255u ? 255u : (uint32_t)i);
+      continue;
+    }
     const float v = f[c] < 0.0f ? 0.0f : (f[c] > 1.0f ? 1.0f : f[c]);
     b[c] = (uint32_t)(v * 255.0f + 0.5f);
   }
@@ -1021,6 +1047,7 @@ static inline uint32_t TexFilterPoint(int format, uint32_t texel) {
 // it. `base_addr` is the mip's base (mip_base + mip_off for this lod); `logdim`
 // is {log_h<<16 | log_w} of mip 0; `u`/`v` are TEX_FXD_FRAC fixed-point.
 // `width0`/`height0` are the mip-0 dims; 0 takes the power of two in `logdim`.
+// `pitch` is the level's row pitch in bytes, 0 for the FF unit's packed rows.
 static inline TexelRequest tex_compute_request(uint64_t base_addr,
                                                uint32_t logdim,
                                                uint32_t format,
@@ -1031,7 +1058,8 @@ static inline TexelRequest tex_compute_request(uint64_t base_addr,
                                                uint32_t lod,
                                                uint32_t width0 = 0,
                                                uint32_t height0 = 0,
-                                               uint32_t border = 0) {
+                                               uint32_t border = 0,
+                                               uint32_t pitch = 0) {
   const uint32_t w0 = width0  ? width0  : (1u << (logdim & 0xffff));
   const uint32_t h0 = height0 ? height0 : (1u << (logdim >> 16));
   const uint32_t width  = (uint32_t)tex_imax((int32_t)(w0 >> lod), 1);
@@ -1055,7 +1083,7 @@ static inline TexelRequest tex_compute_request(uint64_t base_addr,
   for (uint32_t i = 0; i < taps; ++i) {
     const uint32_t x = i & 1u, y = i >> 1;
     uint32_t sub;
-    req.addr[i] = base_addr + TexTexelOffset(format, width, xs[x], ys[y], &sub);
+    req.addr[i] = base_addr + TexTexelOffset(format, width, xs[x], ys[y], &sub, pitch);
     req.sub[i] = (uint8_t)sub;
     if (bx[x] || by[y]) {
       req.border_mask |= 1u << i;

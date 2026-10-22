@@ -32,6 +32,9 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     // Request interface
     input wire                                      req_valid,
     input wire [NUM_LANES-1:0]                      req_ds_mask,
+    // The lanes whose write changes the depth: a float depth word is left
+    // untouched otherwise, so a stencil-only update keeps its exact bits.
+    input wire [NUM_LANES-1:0]                      req_z_mask,
     input wire [NUM_LANES-1:0]                      req_c_mask,
     input wire                                      req_rw,
     input wire [NUM_LANES-1:0][`VX_OM_DIM_BITS-1:0] req_pos_x,
@@ -63,8 +66,22 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     localparam B_ADDR_BITS = `OM_ADDR_BITS + 6;
     // A colour read returns words; the format and each lane's byte offset ride
     // with the request so the response can be shifted down and unpacked.
-    // A D16 read likewise carries which half of its word each lane's texel is.
-    localparam MTAG_WIDTH  = TAG_WIDTH + OM_CFMT_BITS + NUM_LANES + 2 * NUM_LANES;
+    // A D16 or S8 read likewise carries the byte offset of its texel in the word.
+    localparam MTAG_WIDTH  = TAG_WIDTH + OM_CFMT_BITS + 2 * NUM_LANES + 2 * NUM_LANES;
+
+    // A float depth is stored as the float itself and compared as its ordered
+    // key: the sign bit flipped for a positive value and every bit for a
+    // negative one, -0 folded onto +0 so the two compare equal.
+    function automatic [31:0] float_to_key(input [31:0] f);
+        reg [31:0] b;
+        begin
+            b = (f == 32'h80000000) ? 32'h0 : f;
+            float_to_key = b ^ (b[31] ? 32'hffffffff : 32'h80000000);
+        end
+    endfunction
+    function automatic [31:0] key_to_float(input [31:0] k);
+        key_to_float = k ^ (k[31] ? 32'h80000000 : 32'hffffffff);
+    endfunction
 
     // The merger blends in ARGB8888. R8 and RG8 hold its R (then G) byte;
     // R5G6B5 and A1R5G5B5 round its channels, x/255 taken as (x+1+(x>>8))>>8,
@@ -128,6 +145,7 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     wire [TAG_WIDTH-1:0]        mreq_tag;
     wire [MTAG_WIDTH-1:0]       mreq_mtag, mreq_mtag_r;
     wire                        mreq_ready_r;
+    wire                        sched_req_ready;
 
     wire                        req_queue_empty_w;
     wire                        mrsp_valid;
@@ -143,7 +161,7 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         ("a depth/stencil word is one 32-bit word"))
 
     // A D24S8 word is {stencil, depth[23:0]}; a D32F word is the depth alone.
-    // A D32F_S8 texel is two words, the key then the stencil, so its stencil
+    // A D32F_S8 texel is two words, the float then the stencil, so its stencil
     // takes a request slot of its own: slots [0, L) are depth/stencil words,
     // [L, 2L) colour, [2L, 3L) D32F_S8 stencil words.
     `STATIC_ASSERT(NUM_REQS == 3 * NUM_LANES, ("one depth, colour and stencil slot per lane"))
@@ -159,9 +177,10 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     // no enable network spans it: multipliers and shift registers free-run.
     wire req_fire = req_valid && req_ready;
 
-    // depth/stencil values submission. A D16 texel is half a word; its row
-    // pitch is a multiple of 4 bytes, so the half is the x position's low bit.
-    wire [NUM_LANES-1:0] z_half;
+    // depth/stencil values submission. A D16 texel is half a word and an S8
+    // texel a byte; the row pitch is a multiple of 4 bytes, so the texel's byte
+    // offset in its word comes from the low bits of x.
+    wire [NUM_LANES-1:0][1:0] z_sel;
     for (genvar i = 0;  i < NUM_LANES; ++i) begin : g_DS
         wire [31:0] m_y_pitch;
         `UNUSED_VAR (m_y_pitch)
@@ -179,32 +198,39 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
             .result (m_y_pitch)
         );
 
-        // A D32F_S8 texel is two words wide, a D16 one half a word.
+        // A D32F_S8 texel is two words wide, a D16 one half a word, an S8 one a
+        // byte.
         wire [W_ADDR_BITS-1:0] xoff = dcrs.depth_stencil_word ? (W_ADDR_BITS'(req_pos_x[i]) << 1)
                                     : dcrs.depth_d16 ? (W_ADDR_BITS'(req_pos_x[i]) >> 1)
+                                    : dcrs.depth_s8 ? (W_ADDR_BITS'(req_pos_x[i]) >> 2)
                                     : W_ADDR_BITS'(req_pos_x[i]);
         wire [W_ADDR_BITS-1:0] baddr, baddr_s;
         assign baddr = {dcrs.zbuf_addr, 4'b0} + xoff;
 
-        wire half = dcrs.depth_d16 && req_pos_x[i][0];
-        wire [3:0] d16_byteen = half ? {{2{dcrs.depth_writemask}}, 2'b00}
-                                     : {2'b00, {2{dcrs.depth_writemask}}};
+        wire [1:0] sel = dcrs.depth_d16 ? {req_pos_x[i][0], 1'b0}
+                       : dcrs.depth_s8 ? req_pos_x[i][1:0]
+                       : 2'b00;
+        wire [3:0] d16_byteen = 4'({2{dcrs.depth_writemask}}) << sel;
+        wire [3:0] s8_byteen  = 4'(stencil_byteen[i]) << sel;
         wire [3:0] byteen = req_rw ? (dcrs.depth_float ? {4{dcrs.depth_writemask}}
                                     : dcrs.depth_d16 ? d16_byteen
+                                    : dcrs.depth_s8 ? s8_byteen
                                     : {stencil_byteen[i], depth_byteen})
                                    : 4'b1111;
-        wire [31:0] data = dcrs.depth_float ? req_depth[i]
+        wire [31:0] data = dcrs.depth_float ? key_to_float(req_depth[i])
                          : dcrs.depth_d16 ? {2{req_depth[i][`VX_OM_DEPTH_BITS-1 -: 16]}}
+                         : dcrs.depth_s8 ? {4{req_stencil[i]}}
                          : {req_stencil[i], req_depth[i][`VX_OM_DEPTH_BITS-1:0]};
-        // A D32F_S8 write touches only the words whose aspect is written.
-        wire mask = req_ds_mask[i] && ~(req_rw && dcrs.depth_stencil_word && ~dcrs.depth_writemask);
+        // A float texel's depth word is written only with a new depth, and a
+        // D32F_S8 stencil word only with a stencil write.
+        wire mask = req_ds_mask[i] && ~(req_rw && dcrs.depth_float && ~req_z_mask[i]);
 
         wire [3:0]  s_byteen = req_rw ? {3'b0, stencil_byteen[i]} : 4'b1111;
         wire [31:0] s_data   = 32'(req_stencil[i]);
         wire        s_mask   = req_ds_mask[i] && dcrs.depth_stencil_word && ~(req_rw && ~stencil_byteen[i]);
 
         VX_shift_register #(
-            .DATAW (1 + 4 + 1 + 4 + W_ADDR_BITS + 32 + 32 + 1),
+            .DATAW (1 + 4 + 1 + 4 + W_ADDR_BITS + 32 + 32 + 2),
             .DEPTH (`LATENCY_IMUL)
         ) shift_reg (
             .clk      (clk),
@@ -212,10 +238,10 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
             .enable   (1'b1),
             .data_in  ({mask,         byteen,         s_mask,
                         s_byteen,                     baddr,   data,         s_data,
-                        half}),
+                        sel}),
             .data_out ({mreq_mask[i], mreq_byteen[i], mreq_mask[2 * NUM_LANES + i],
                         mreq_byteen[2 * NUM_LANES + i], baddr_s, mreq_data[i],
-                        mreq_data[2 * NUM_LANES + i], z_half[i]})
+                        mreq_data[2 * NUM_LANES + i], z_sel[i]})
         );
 
         wire [W_ADDR_BITS-1:0] addr = baddr_s + W_ADDR_BITS'(m_y_pitch[31:2]);
@@ -296,7 +322,7 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         .data_out (cfmt_s)
     );
 
-    assign mreq_mtag = {mreq_tag, cfmt_s, z_half, c_off};
+    assign mreq_mtag = {mreq_tag, cfmt_s, z_sel, c_off};
 
     VX_shift_register #(
         .DATAW  (1 + 1 + TAG_WIDTH),
@@ -352,6 +378,12 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         .ready_out (mreq_ready_r)
     );
 
+    // A write whose every slot is masked off -- a float texel whose depth is
+    // kept and whose stencil is not written for this face -- has nothing to
+    // send, and is retired here rather than handed to the scheduler.
+    wire mreq_live_r = (| mreq_mask_r) || ~mreq_rw_r;
+    assign mreq_ready_r = sched_req_ready || ~mreq_live_r;
+
     `RUNTIME_ASSERT(~(mreq_valid && ~landq_ready),
         ("%t: *** %s: landing queue overflow — the credit reservation is broken", $time, INSTANCE_ID))
     `UNUSED_VAR (landq_ready)
@@ -382,7 +414,7 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         .reset          (reset),
 
         // Input request
-        .core_req_valid (mreq_valid_r),
+        .core_req_valid (mreq_valid_r && mreq_live_r),
         .core_req_rw    (mreq_rw_r),
         .core_req_mask  (mreq_mask_r),
         .core_req_byteen(mreq_byteen_r),
@@ -390,7 +422,7 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         .core_req_user  ('0),
         .core_req_data  (mreq_data_r),
         .core_req_tag   (mreq_mtag_r),
-        .core_req_ready (mreq_ready_r),
+        .core_req_ready (sched_req_ready),
         .req_queue_rw_notify (write_notify),
         .req_queue_empty (req_queue_empty_w),
 
@@ -462,21 +494,21 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     assign rsp_mask = mrsp_mask[0 +: NUM_LANES] | mrsp_mask[NUM_LANES +: NUM_LANES]
                     | mrsp_mask[2 * NUM_LANES +: NUM_LANES];
 
-    wire [NUM_LANES-1:0] rsp_z_half = mrsp_mtag[2 * NUM_LANES +: NUM_LANES];
+    wire [NUM_LANES-1:0][1:0] rsp_z_sel = mrsp_mtag[2 * NUM_LANES +: 2 * NUM_LANES];
     for (genvar i = 0;  i < NUM_LANES; ++i) begin : g_rsp_depth
-        wire [15:0] d16 = rsp_z_half[i] ? mrsp_data[i][31:16] : mrsp_data[i][15:0];
-        assign rsp_depth[i]   = dcrs.depth_float ? mrsp_data[i]
+        wire [31:0] z_word = mrsp_data[i] >> {rsp_z_sel[i], 3'b0};
+        wire [15:0] d16 = z_word[15:0];
+        assign rsp_depth[i]   = dcrs.depth_float ? float_to_key(mrsp_data[i])
                               : dcrs.depth_d16 ? 32'({d16, d16[15:8]})
+                              : dcrs.depth_s8 ? '0
                               : (mrsp_data[i] & 32'(OM_DEPTH_MASK));
-    end
-
-    for (genvar i = 0;  i < NUM_LANES; ++i) begin : g_rsp_stencil
         assign rsp_stencil[i] = dcrs.depth_stencil_word ? `VX_OM_STENCIL_BITS'(mrsp_data[2 * NUM_LANES + i])
+                              : dcrs.depth_s8 ? `VX_OM_STENCIL_BITS'(z_word)
                               : (dcrs.depth_float || dcrs.depth_d16) ? '0
                               : `VX_OM_STENCIL_BITS'(mrsp_data[i] >> `VX_OM_DEPTH_BITS);
     end
 
-    wire [OM_CFMT_BITS-1:0] rsp_cfmt = mrsp_mtag[3 * NUM_LANES +: OM_CFMT_BITS];
+    wire [OM_CFMT_BITS-1:0] rsp_cfmt = mrsp_mtag[4 * NUM_LANES +: OM_CFMT_BITS];
     for (genvar i = NUM_LANES; i < 2 * NUM_LANES; ++i) begin : g_rsp_color
         wire [1:0] off = mrsp_mtag[2 * (i - NUM_LANES) +: 2];
         assign rsp_color[i - NUM_LANES] = cfmt_unpack(rsp_cfmt, mrsp_data[i] >> {off, 3'b0});

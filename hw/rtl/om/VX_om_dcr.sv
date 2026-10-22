@@ -89,11 +89,13 @@ module VX_om_dcr import VX_gpu_pkg::*, VX_om_pkg::*; #(
             dcrs.depth_float        <= 1'b0;
             dcrs.depth_stencil_word <= 1'b0;
             dcrs.depth_d16          <= 1'b0;
+            dcrs.depth_s8           <= 1'b0;
         end else if (write_valid && write_addr == `VX_DCR_OM_DEPTH_FORMAT) begin
             dcrs.depth_float        <= (write_data[2:0] == 3'(`VX_OM_DEPTH_FORMAT_D32F))
                                     || (write_data[2:0] == 3'(`VX_OM_DEPTH_FORMAT_D32FS8));
             dcrs.depth_stencil_word <= (write_data[2:0] == 3'(`VX_OM_DEPTH_FORMAT_D32FS8));
             dcrs.depth_d16          <= (write_data[2:0] == 3'(`VX_OM_DEPTH_FORMAT_D16));
+            dcrs.depth_s8           <= (write_data[2:0] == 3'(`VX_OM_DEPTH_FORMAT_S8));
         end
         // The colour format resets, since a driver that only binds A8R8G8B8
         // never writes it.

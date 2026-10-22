@@ -154,13 +154,15 @@ int main() {
     o.cbuf_base=(uint64_t)(uintptr_t)&cb; o.cbuf_pitch=64; o.cbuf_writemask4=0xf;
     resolve_om_state(o);
     auto fbits = [](float f){ uint32_t u; std::memcpy(&u,&f,4); return u; };
-    om_fragment(o, 0, 0, 0, 0xAAAAAAAAu, fbits(0.5f));   // 0.5 < 0.9 → passes
+    // A fragment's depth is the float's ordered key; the texel stores the float.
+    auto fkey = [&](float f){ return om_float_depth_key(fbits(f)); };
+    om_fragment(o, 0, 0, 0, 0xAAAAAAAAu, fkey(0.5f));   // 0.5 < 0.9 → passes
     expect_eq("D32F pass color",  cb, 0xAAAAAAAAu);
     expect_eq("D32F pass depth",  zf, fbits(0.5f));
-    om_fragment(o, 0, 0, 0, 0xBBBBBBBBu, fbits(0.8f));   // 0.8 !< 0.5 → fails
+    om_fragment(o, 0, 0, 0, 0xBBBBBBBBu, fkey(0.8f));   // 0.8 !< 0.5 → fails
     expect_eq("D32F fail color",  cb, 0xAAAAAAAAu);
     expect_eq("D32F fail depth",  zf, fbits(0.5f));
-    om_fragment(o, 0, 0, 0, 0xCCCCCCCCu, fbits(0.1f));   // 0.1 < 0.5 → passes
+    om_fragment(o, 0, 0, 0, 0xCCCCCCCCu, fkey(0.1f));   // 0.1 < 0.5 → passes
     expect_eq("D32F near color",  cb, 0xCCCCCCCCu);
     expect_eq("D32F near depth",  zf, fbits(0.1f));
   }

@@ -17,3 +17,17 @@ tests:
 - id: isa-1
   via: script
   run: "make -C sw/runtime simx && make -C tests/regression/basic kernel.vxbin && make -C tests/runtime run-simx"
+# Imported host memory (VX_MEM_IMPORT_HOST): device and host share the bytes,
+# including a host write between two launches, which must not meet a stale
+# cache line. Both backends that implement the import.
+- id: import-host
+  via: script
+  drivers:
+  - simx
+  run: "make -C sw/runtime simx && make -C tests/regression/basic kernel.vxbin && make -C tests/runtime run-import-simx"
+- id: import-host
+  via: script
+  drivers:
+  - rtlsim
+  configs: -DVX_CFG_L2_ENABLE
+  run: "make -C sw/runtime rtlsim && make -C tests/regression/basic kernel.vxbin && make -C tests/runtime run-import-rtlsim"

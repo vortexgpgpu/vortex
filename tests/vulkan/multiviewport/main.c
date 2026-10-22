@@ -9,7 +9,7 @@
  * both back and stamps them into the colour:
  *
  *   red   = 40 + 50 * gl_ViewportIndex
- *   green = 10 + 60 * gl_Layer
+ *   green = (10 + 60 * gl_Layer) mod 256
  *
  * Cases, every pixel compared exactly against a host model:
  *
@@ -47,6 +47,17 @@
  *              the fragments blended into it, so a layer replayed twice, a
  *              primitive drawn into another layer, or a layer tested against
  *              another layer's depth shows.
+ *   layers6    the same over six layers of an eight-layer image, the
+ *              framebuffer starting at its layer 1: the image's other layers
+ *              must keep their clear.
+ *   layers64   64 layers of a 16x16 target, depth tested and blended, every
+ *              fifth layer selected by no primitive and one primitive's
+ *              gl_Layer past the last layer.
+ *   layersR    a colour image taller than the framebuffer and a depth image
+ *              taller still, so the two step a layer by different row counts.
+ *   layers3d   a 2D array view of slices 1..4 of a six-slice 3D image.
+ *   layersms   four layers at 4 samples, blended and resolved, with every
+ *              edge on a pixel boundary so the resolve is exact.
  *
  * A driver that draws every primitive through viewport 0, scissors them all
  * with scissor 0, or renders every layer into layer 0 fails each case on most
@@ -65,7 +76,7 @@
 #define FORMAT       VK_FORMAT_R8G8B8A8_UNORM
 #define DEPTH_FORMAT VK_FORMAT_D32_SFLOAT
 #define MAX_VP       4u
-#define MAX_PRIMS    12u
+#define MAX_PRIMS    96u
 #define MAX_DRAWS    2u
 /* The interpolated depth plane is float arithmetic on the device; every
  * expectation that matters differs by at least 1/64. */
@@ -461,6 +472,12 @@ struct draw_range {
 struct scene {
    const char *name;
    uint32_t width, height, layers;
+   /* The images behind the framebuffer: img_layers layers (3D slices when
+    * is_3d), of which the framebuffer renders `layers` from base_layer; the
+    * colour image img_h rows tall and the depth image zimg_h (0: height). */
+   uint32_t img_layers, base_layer, img_h, zimg_h;
+   bool is_3d;
+   uint32_t samples;       /* 0 or 1, or 4: resolved into a single-sample image */
    uint32_t vp_count;
    VkViewport vp[MAX_VP];
    VkRect2D sc[MAX_VP];
@@ -552,6 +569,13 @@ depth_passes(VkCompareOp op, float z, float stored)
    }
 }
 
+/* The layers (3D slices) of the images behind a scene's framebuffer. */
+static uint32_t
+scene_img_layers(const struct scene *s)
+{
+   return s->img_layers ? s->img_layers : s->layers;
+}
+
 /* The colour and depth planes the scene leaves, layer after layer. A viewport
  * index past the array selects viewport 0 and a layer past the framebuffer its
  * last layer; the fragment shader then reads those. */
@@ -559,7 +583,7 @@ static void
 model_scene(const struct scene *s, uint8_t *col, float *dep)
 {
    const size_t plane = (size_t)s->width * s->height;
-   for (size_t i = 0; i < plane * s->layers; i++) {
+   for (size_t i = 0; i < plane * scene_img_layers(s); i++) {
       memcpy(col + 4 * i, k_clear, 4);
       dep[i] = s->depth_clear;
    }
@@ -587,7 +611,7 @@ model_scene(const struct scene *s, uint8_t *col, float *dep)
             double d = v->minDepth + z * (v->maxDepth - v->minDepth);
             if (s->depth_clamp)
                d = dmin(dmax(d, zlo), zhi);
-            const size_t i = li * plane + (size_t)y * s->width + x;
+            const size_t i = (s->base_layer + li) * plane + (size_t)y * s->width + x;
             if (s->depth) {
                if (!depth_passes(s->depth_op, (float)d, dep[i]))
                   continue;
@@ -630,54 +654,142 @@ host_buffer(struct ctx *c, VkDeviceSize bytes, VkBufferUsageFlags usage,
    return 0;
 }
 
+/* One image of a scene and the view the framebuffer renders through: `layers`
+ * of its layers (3D slices) from base_layer, of an image `h` rows tall. */
+static int
+alloc_scene_image(struct ctx *c, const struct scene *s, uint32_t h, uint32_t samples,
+                  VkFormat format, VkImageAspectFlags aspect, VkImageUsageFlags usage,
+                  VkImage *img, VkDeviceMemory *mem, VkImageView *view)
+{
+   const bool is_3d = s->is_3d && aspect == VK_IMAGE_ASPECT_COLOR_BIT;
+   VkImageCreateInfo imci = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+      .flags = is_3d ? VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT : 0,
+      .imageType = is_3d ? VK_IMAGE_TYPE_3D : VK_IMAGE_TYPE_2D, .format = format,
+      .extent = { s->width, h, is_3d ? scene_img_layers(s) : 1u }, .mipLevels = 1,
+      .arrayLayers = is_3d ? 1u : scene_img_layers(s),
+      .samples = (VkSampleCountFlagBits)samples, .tiling = VK_IMAGE_TILING_OPTIMAL,
+      .usage = usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT, .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+   };
+   CHECK(vkCreateImage(c->dev, &imci, NULL, img));
+   VkMemoryRequirements mr;
+   vkGetImageMemoryRequirements(c->dev, *img, &mr);
+   VkMemoryAllocateInfo mai = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .allocationSize = mr.size,
+      .memoryTypeIndex = find_mem(&c->mp, mr.memoryTypeBits, 0),
+   };
+   CHECK(vkAllocateMemory(c->dev, &mai, NULL, mem));
+   CHECK(vkBindImageMemory(c->dev, *img, *mem, 0));
+   VkImageViewCreateInfo ivci = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+      .image = *img,
+      .viewType = s->layers > 1 ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D,
+      .format = format,
+      .subresourceRange = { .aspectMask = aspect, .levelCount = 1,
+                            .baseArrayLayer = s->base_layer, .layerCount = s->layers },
+   };
+   CHECK(vkCreateImageView(c->dev, &ivci, NULL, view));
+   return 0;
+}
+
+/* Every layer (slice) of an image to TRANSFER_DST, cleared to the scene's
+ * clear, so the layers the framebuffer leaves out read back as cleared. */
+static void
+preclear(VkCommandBuffer cmd, VkImage img, VkImageAspectFlags aspect, const VkClearValue *v)
+{
+   const VkImageSubresourceRange all = { aspect, 0, VK_REMAINING_MIP_LEVELS, 0,
+                                         VK_REMAINING_ARRAY_LAYERS };
+   VkImageMemoryBarrier b = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+      .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+      .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED, .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+      .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .image = img, .subresourceRange = all,
+   };
+   vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                        0, 0, NULL, 0, NULL, 1, &b);
+   if (aspect == VK_IMAGE_ASPECT_COLOR_BIT)
+      vkCmdClearColorImage(cmd, img, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &v->color, 1, &all);
+   else
+      vkCmdClearDepthStencilImage(cmd, img, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                  &v->depthStencil, 1, &all);
+   b.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+   b.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                     VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+   b.oldLayout = b.newLayout;
+   vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
+                        0, 0, NULL, 0, NULL, 1, &b);
+}
+
 static int
 run_scene(struct ctx *c, const struct scene *s, unsigned *failed)
 {
-   VkImage img, zimg = VK_NULL_HANDLE;
-   VkDeviceMemory imem, zmem = VK_NULL_HANDLE;
-   VkImageView view, zview = VK_NULL_HANDLE;
-   if (alloc_image(c, s->width, s->height, s->layers, 1, FORMAT, VK_IMAGE_ASPECT_COLOR_BIT,
-                   VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
-                   &img, &imem, &view))
+   const uint32_t S = s->samples > 1 ? s->samples : 1u;
+   VkImage img, zimg = VK_NULL_HANDLE, rimg = VK_NULL_HANDLE;
+   VkDeviceMemory imem, zmem = VK_NULL_HANDLE, rmem = VK_NULL_HANDLE;
+   VkImageView view, zview = VK_NULL_HANDLE, rview = VK_NULL_HANDLE;
+   if (alloc_scene_image(c, s, s->img_h ? s->img_h : s->height, S, FORMAT,
+                         VK_IMAGE_ASPECT_COLOR_BIT,
+                         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+                         &img, &imem, &view))
       return 1;
-   if (s->depth && alloc_image(c, s->width, s->height, s->layers, 1, DEPTH_FORMAT,
-                               VK_IMAGE_ASPECT_DEPTH_BIT,
-                               VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
-                               VK_IMAGE_USAGE_TRANSFER_SRC_BIT, &zimg, &zmem, &zview))
+   if (S > 1 && alloc_scene_image(c, s, s->img_h ? s->img_h : s->height, 1, FORMAT,
+                                  VK_IMAGE_ASPECT_COLOR_BIT,
+                                  VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                                  VK_IMAGE_USAGE_TRANSFER_SRC_BIT, &rimg, &rmem, &rview))
+      return 1;
+   if (s->depth && alloc_scene_image(c, s, s->zimg_h ? s->zimg_h : s->height, S, DEPTH_FORMAT,
+                                     VK_IMAGE_ASPECT_DEPTH_BIT,
+                                     VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
+                                     VK_IMAGE_USAGE_TRANSFER_SRC_BIT, &zimg, &zmem, &zview))
       return 1;
 
-   VkAttachmentDescription att[2] = {
-      { .format = FORMAT, .samples = VK_SAMPLE_COUNT_1_BIT,
+   VkAttachmentDescription att[3] = {
+      { .format = FORMAT, .samples = (VkSampleCountFlagBits)S,
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
         .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
         .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .initialLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         .finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL },
-      { .format = DEPTH_FORMAT, .samples = VK_SAMPLE_COUNT_1_BIT,
+      { .format = DEPTH_FORMAT, .samples = (VkSampleCountFlagBits)S,
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
         .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
         .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .initialLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL },
+      { .format = FORMAT, .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE, .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         .finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL },
    };
    VkAttachmentReference cref = { 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
    VkAttachmentReference zref = { 1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
+   VkAttachmentReference rref = { 2, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
    VkSubpassDescription sub = {
       .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
       .colorAttachmentCount = 1, .pColorAttachments = &cref,
+      .pResolveAttachments = S > 1 ? &rref : NULL,
       .pDepthStencilAttachment = s->depth ? &zref : NULL,
    };
+   if (!s->depth && S > 1) {
+      att[1] = att[2];
+      rref.attachment = 1;
+   }
+   const uint32_t natt = 1u + (s->depth ? 1u : 0u) + (S > 1 ? 1u : 0u);
    VkRenderPassCreateInfo rpci = {
       .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-      .attachmentCount = s->depth ? 2 : 1, .pAttachments = att,
+      .attachmentCount = natt, .pAttachments = att,
       .subpassCount = 1, .pSubpasses = &sub,
    };
    VkRenderPass rp;
    CHECK(vkCreateRenderPass(c->dev, &rpci, NULL, &rp));
-   VkImageView fbviews[2] = { view, zview };
+   VkImageView fbviews[3] = { view, s->depth ? zview : rview, rview };
    VkFramebufferCreateInfo fbci = {
       .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-      .renderPass = rp, .attachmentCount = s->depth ? 2 : 1, .pAttachments = fbviews,
+      .renderPass = rp, .attachmentCount = natt, .pAttachments = fbviews,
       .width = s->width, .height = s->height, .layers = s->layers,
    };
    VkFramebuffer fb;
@@ -718,7 +830,7 @@ run_scene(struct ctx *c, const struct scene *s, unsigned *failed)
    };
    VkPipelineMultisampleStateCreateInfo msi = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-      .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+      .rasterizationSamples = (VkSampleCountFlagBits)S,
    };
    VkPipelineDepthStencilStateCreateInfo dss = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
@@ -769,7 +881,8 @@ run_scene(struct ctx *c, const struct scene *s, unsigned *failed)
    vkUnmapMemory(c->dev, vbmem);
 
    const size_t plane = (size_t)s->width * s->height;
-   const VkDeviceSize cbytes = plane * s->layers * 4, zbytes = plane * s->layers * sizeof(float);
+   const uint32_t nl = scene_img_layers(s);
+   const VkDeviceSize cbytes = plane * nl * 4, zbytes = plane * nl * sizeof(float);
    VkBuffer rb;
    VkDeviceMemory rbmem;
    if (host_buffer(c, cbytes + zbytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT, &rb, &rbmem))
@@ -791,16 +904,24 @@ run_scene(struct ctx *c, const struct scene *s, unsigned *failed)
       .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
    };
    CHECK(vkBeginCommandBuffer(cmd, &cbbi));
-   VkClearValue clear[2] = {
+   VkClearValue clear[3] = {
       { .color = { .float32 = { k_clear[0] / 255.0f, k_clear[1] / 255.0f,
                                 k_clear[2] / 255.0f, k_clear[3] / 255.0f } } },
       { .depthStencil = { s->depth_clear, 0 } },
    };
+   clear[2] = clear[0];
+   preclear(cmd, img, VK_IMAGE_ASPECT_COLOR_BIT, &clear[0]);
+   if (rimg)
+      preclear(cmd, rimg, VK_IMAGE_ASPECT_COLOR_BIT, &clear[0]);
+   if (s->depth)
+      preclear(cmd, zimg, VK_IMAGE_ASPECT_DEPTH_BIT, &clear[1]);
+   if (!s->depth)
+      clear[1] = clear[0];
    VkRenderPassBeginInfo rpbi = {
       .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
       .renderPass = rp, .framebuffer = fb,
       .renderArea = { { 0, 0 }, { s->width, s->height } },
-      .clearValueCount = s->depth ? 2 : 1, .pClearValues = clear,
+      .clearValueCount = natt, .pClearValues = clear,
    };
    vkCmdBeginRenderPass(cmd, &rpbi, VK_SUBPASS_CONTENTS_INLINE);
    const VkDeviceSize vb_off = 0;
@@ -811,14 +932,16 @@ run_scene(struct ctx *c, const struct scene *s, unsigned *failed)
    }
    vkCmdEndRenderPass(cmd);
    VkBufferImageCopy cregion = {
-      .imageSubresource = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .layerCount = s->layers },
-      .imageExtent = { s->width, s->height, 1 },
+      .imageSubresource = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                            .layerCount = s->is_3d ? 1u : nl },
+      .imageExtent = { s->width, s->height, s->is_3d ? nl : 1u },
    };
-   vkCmdCopyImageToBuffer(cmd, img, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, rb, 1, &cregion);
-   if (s->depth) {
+   vkCmdCopyImageToBuffer(cmd, rimg ? rimg : img, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, rb, 1,
+                          &cregion);
+   if (s->depth && S == 1) {
       VkBufferImageCopy zregion = {
          .bufferOffset = cbytes,
-         .imageSubresource = { .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT, .layerCount = s->layers },
+         .imageSubresource = { .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT, .layerCount = nl },
          .imageExtent = { s->width, s->height, 1 },
       };
       vkCmdCopyImageToBuffer(cmd, zimg, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, rb, 1, &zregion);
@@ -837,10 +960,10 @@ run_scene(struct ctx *c, const struct scene *s, unsigned *failed)
    CHECK(vkMapMemory(c->dev, rbmem, 0, cbytes + zbytes, 0, (void **)&px));
    const float *gz = (const float *)(px + cbytes);
    uint32_t bad = 0, drawn = 0;
-   for (size_t i = 0; i < plane * s->layers; i++) {
+   for (size_t i = 0; i < plane * nl; i++) {
       const uint8_t *p = px + 4 * i, *w = want_c + 4 * i;
       drawn += memcmp(w, k_clear, 4) != 0;
-      const bool zbad = s->depth && !(fabs((double)gz[i] - want_z[i]) <= DEPTH_TOL);
+      const bool zbad = s->depth && S == 1 && !(fabs((double)gz[i] - want_z[i]) <= DEPTH_TOL);
       if (memcmp(p, w, 4) != 0 || zbad) {
          if (bad < 8) {
             const uint32_t l = (uint32_t)(i / plane), x = (uint32_t)(i % plane % s->width),
@@ -855,7 +978,7 @@ run_scene(struct ctx *c, const struct scene *s, unsigned *failed)
    vkUnmapMemory(c->dev, rbmem);
    free(want_c);
    free(want_z);
-   const uint32_t total = (uint32_t)(plane * s->layers);
+   const uint32_t total = (uint32_t)(plane * nl);
    printf("%-10s: %s  %u/%u px match (%u drawn)\n", s->name, bad ? "FAIL" : "pass",
           total - bad, total, drawn);
    if (bad)
@@ -874,6 +997,11 @@ run_scene(struct ctx *c, const struct scene *s, unsigned *failed)
    vkDestroyImageView(c->dev, view, NULL);
    vkFreeMemory(c->dev, imem, NULL);
    vkDestroyImage(c->dev, img, NULL);
+   if (rimg) {
+      vkDestroyImageView(c->dev, rview, NULL);
+      vkFreeMemory(c->dev, rmem, NULL);
+      vkDestroyImage(c->dev, rimg, NULL);
+   }
    if (s->depth) {
       vkDestroyImageView(c->dev, zview, NULL);
       vkFreeMemory(c->dev, zmem, NULL);
@@ -1085,12 +1213,86 @@ main(int argc, char **argv)
              RECT(N32(8), N32(8), N32(24), N32(24), 0.375f, 0, 2),
              RECT(N32(20), N32(20), N32(28), N32(28), 0.875f, 0, 2) },
    };
+   /* Six layers of an eight-layer image from its layer 1: one quad per layer,
+    * then a second per layer from in front or behind, depth tested and
+    * blended. */
+   struct scene layers6 = {
+      .name = "layers6", .width = 32, .height = 32, .layers = 6,
+      .img_layers = 8, .base_layer = 1,
+      .vp_count = 1, .vp = { { 0, 0, 32, 32, 0, 1 } }, .sc = { { { 0, 0 }, { 32, 32 } } },
+      .depth = true, .depth_clear = 1.0f, .depth_op = VK_COMPARE_OP_LESS, .blend_add = true,
+      .ndraws = 2, .draws = { { 0, 6 }, { 6, 6 } }, .nprims = 12,
+   };
+   for (int l = 0; l < 6; l++) {
+      layers6.p[l] = (struct prim)RECT(N32(2 * l), N32(l), N32(2 * l + 14), N32(l + 16),
+                                       0.5f, 0, l);
+      layers6.p[6 + l] = (struct prim)RECT(N32(8), N32(8 + l), N32(24), N32(20 + l),
+                                           (l & 1) ? 0.25f : 0.75f, 0, l);
+   }
+   /* 64 layers of 16x16: every fifth layer gets nothing, every seventh a
+    * second quad in front, and one quad names layer 70, past the last. */
+   struct scene layers64 = {
+      .name = "layers64", .width = 16, .height = 16, .layers = 64,
+      .vp_count = 1, .vp = { { 0, 0, 16, 16, 0, 1 } }, .sc = { { { 0, 0 }, { 16, 16 } } },
+      .depth = true, .depth_clear = 1.0f, .depth_op = VK_COMPARE_OP_LESS, .blend_add = true,
+      .ndraws = 2,
+   };
+   {
+      uint32_t n = 0;
+      for (int l = 0; l < 64; l++) {
+         if (l % 5 == 3)
+            continue;
+         const float x = (float)(l % 8), y = (float)((l / 8) % 8);
+         layers64.p[n++] = (struct prim)RECT(x / 8 - 1, y / 8 - 1, (x + 8) / 8 - 1,
+                                             (y + 7) / 8 - 1, 0.5f, 0, l);
+      }
+      layers64.draws[0] = (struct draw_range){ 0, n };
+      const uint32_t first = n;
+      for (int l = 0; l < 64; l += 7)
+         layers64.p[n++] = (struct prim)RECT(-0.75f, -0.75f, 0.25f, 0.5f, 0.25f, 0, l);
+      layers64.p[n++] = (struct prim)RECT(0.0f, 0.0f, 1.0f, 1.0f, 0.125f, 0, 70);
+      layers64.draws[1] = (struct draw_range){ first, n - first };
+      layers64.nprims = n;
+   }
+   /* The colour image is 40 rows tall and the depth image 52, so a layer is a
+    * different number of rows in each. */
+   struct scene layersR = layers6;
+   layersR.name = "layersR";
+   layersR.layers = 4;
+   layersR.img_layers = 4;
+   layersR.base_layer = 0;
+   layersR.img_h = 40;
+   layersR.zimg_h = 52;
+   layersR.draws[0] = (struct draw_range){ 0, 4 };
+   layersR.draws[1] = (struct draw_range){ 4, 4 };
+   layersR.nprims = 8;
+   for (int l = 0; l < 4; l++) {
+      layersR.p[l] = layers6.p[l];
+      layersR.p[4 + l] = layers6.p[6 + l];
+   }
+   /* Slices 1..4 of a six-slice 3D image, as a 2D array. */
+   struct scene layers3d = layersR;
+   layers3d.name = "layers3d";
+   layers3d.img_layers = 6;
+   layers3d.base_layer = 1;
+   layers3d.img_h = 0;
+   layers3d.zimg_h = 0;
+   layers3d.is_3d = true;
+   layers3d.depth = false;
+   /* Four layers at 4 samples, every edge on a pixel boundary. */
+   struct scene layersms = layers3d;
+   layersms.name = "layersms";
+   layersms.img_layers = 4;
+   layersms.base_layer = 0;
+   layersms.is_3d = false;
+   layersms.samples = 4;
 #undef POINTAT
 #undef HLINE
 #undef RECT
 #undef N32
    const struct scene *scenes[] = {
       &depthclip, &depthclamp, &vpclamp, &layerclamp, &linepoint, &layerblend,
+      &layers6, &layers64, &layersR, &layers3d, &layersms,
    };
    for (unsigned i = 0; i < sizeof scenes / sizeof scenes[0]; i++)
       if (run_scene(&c, scenes[i], &failed))

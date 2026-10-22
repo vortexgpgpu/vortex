@@ -70,6 +70,7 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
 
     wire                                    mem_req_valid, mem_req_valid_r;
     wire [NUM_LANES-1:0]                    mem_req_ds_mask, mem_req_ds_mask_r;
+    wire [NUM_LANES-1:0]                    mem_req_z_mask, mem_req_z_mask_r;
     wire [NUM_LANES-1:0]                    mem_req_c_mask, mem_req_c_mask_r;
     wire                                    mem_req_rw, mem_req_rw_r;
     wire [NUM_LANES-1:0][`VX_OM_DIM_BITS-1:0] mem_req_pos_x, mem_req_pos_x_r;
@@ -108,6 +109,7 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
 
         .req_valid      (mem_req_valid_r),
         .req_ds_mask    (mem_req_ds_mask_r),
+        .req_z_mask     (mem_req_z_mask_r),
         .req_c_mask     (mem_req_c_mask_r),
         .req_rw         (mem_req_rw_r),
         .req_pos_x      (mem_req_pos_x_r),
@@ -372,7 +374,7 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
 
     wire ds_blend_write_sync = (wb_ds_color_writeen && wb_blend_writeen) ? (ds_valid_out && blend_valid_out) : ds_blend_write_any;
 
-    wire [NUM_LANES-1:0] ds_read_mask, ds_write_mask;
+    wire [NUM_LANES-1:0] ds_read_mask, ds_write_mask, ds_depth_write_mask;
     wire [NUM_LANES-1:0] blend_read_mask, blend_write_mask;
     wire [NUM_LANES-1:0] color_bypass_mask, ds_color_write_mask;
 
@@ -380,6 +382,7 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         assign ds_read_mask[i]        = adm_mask[i] && ds_enable_r;
         assign blend_read_mask[i]     = adm_mask[i] && adm_blend_writeen;
         assign ds_write_mask[i]       = ds_rsp_mask[i] && (stencil_writeen_r || (depth_writeen_r && ds_pass_out[i]));
+        assign ds_depth_write_mask[i] = ds_rsp_mask[i] && depth_writeen_r && ds_pass_out[i];
         assign blend_write_mask[i]    = blend_rsp_mask[i] && wb_blend_writeen && (~ds_enable_r || ds_pass_out[i]);
         assign color_bypass_mask[i]   = adm_mask[i] && adm_color_writeen;
         assign ds_color_write_mask[i] = ds_rsp_mask[i] && ds_pass_out[i] && wb_color_writeen;
@@ -393,6 +396,7 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     assign mem_req_valid    = ds_blend_write_sync
                            || (~ds_blend_write_any && (ds_blend_read || color_write));
     assign mem_req_ds_mask  = ds_valid_out ? ds_write_mask : ds_read_mask;
+    assign mem_req_z_mask   = ds_valid_out ? ds_depth_write_mask : '0;
     // A writeback wins the port, so the staged fragment's bypass mode must not
     // reach these muxes while one is issuing: with several attachments in flight
     // the two fragments no longer share a mode.
@@ -552,7 +556,7 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     wire mem_req_valid_unqual_r;
 
     VX_elastic_buffer #(
-        .DATAW   (1 + OM_RT_IDX_BITS + NUM_LANES * (1 + 1 + 2 * `VX_OM_DIM_BITS + $bits(om_color_t) + `VX_OM_DEPTH_BUS_BITS + `VX_OM_STENCIL_BITS + 1) + MEM_TAG_WIDTH),
+        .DATAW   (1 + OM_RT_IDX_BITS + NUM_LANES * (1 + 1 + 1 + 2 * `VX_OM_DIM_BITS + $bits(om_color_t) + `VX_OM_DEPTH_BUS_BITS + `VX_OM_STENCIL_BITS + 1) + MEM_TAG_WIDTH),
         .SIZE    (2 * `VX_CFG_OM_MEM_QUEUE_SIZE),
         .OUT_REG (1)
     ) mem_req_buf (
@@ -560,8 +564,8 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         .reset     (reset),
         .valid_in  (mem_req_valid),
         .ready_in  (mem_req_ready),
-        .data_in   ({mem_req_rw, mem_req_ds_mask, mem_req_c_mask, mem_req_pos_x, mem_req_pos_y, mem_req_color, mem_req_depth, mem_req_stencil, mem_req_face, mem_req_rt, mem_req_tag}),
-        .data_out  ({mem_req_rw_r, mem_req_ds_mask_r, mem_req_c_mask_r, mem_req_pos_x_r, mem_req_pos_y_r, mem_req_color_r, mem_req_depth_r, mem_req_stencil_r, mem_req_face_r, mem_req_rt_r, mem_req_tag_r}),
+        .data_in   ({mem_req_rw, mem_req_ds_mask, mem_req_z_mask, mem_req_c_mask, mem_req_pos_x, mem_req_pos_y, mem_req_color, mem_req_depth, mem_req_stencil, mem_req_face, mem_req_rt, mem_req_tag}),
+        .data_out  ({mem_req_rw_r, mem_req_ds_mask_r, mem_req_z_mask_r, mem_req_c_mask_r, mem_req_pos_x_r, mem_req_pos_y_r, mem_req_color_r, mem_req_depth_r, mem_req_stencil_r, mem_req_face_r, mem_req_rt_r, mem_req_tag_r}),
         .valid_out (mem_req_valid_unqual_r),
         .ready_out (mem_req_ready_r)
     );

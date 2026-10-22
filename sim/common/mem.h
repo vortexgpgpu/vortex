@@ -315,7 +315,20 @@ public:
     check_acl_ = enable;
   }
 
+  // Back the pages of [addr, addr + size) with caller-owned host memory, so
+  // device and host access the same bytes. addr, size and host are
+  // page-aligned; the host memory must outlive the alias.
+  void alias(uint64_t addr, uint64_t size, uint8_t* host);
+
+  // The granularity of alias(): bytes per page.
+  uint64_t page_size() const { return uint64_t(1) << page_bits_; }
+
+  // Detach an aliased range; its pages read as never written afterwards.
+  void unalias(uint64_t addr, uint64_t size);
+
 private:
+
+  uint8_t** chunk_of(uint64_t page_index);
 
   // `allocate=false` returns a pointer into `zero_page_` for unmapped
   // addresses without growing the page set — read paths use this to avoid
@@ -340,6 +353,9 @@ private:
   // Mutable access through operator[] or `get(addr, true)` will mint a real
   // page instead.
   uint8_t* zero_page_;
+
+  // Page indices backed by host memory the RAM does not own.
+  std::unordered_set<uint64_t> aliased_;
 
   ACLManager acl_mngr_;
   bool check_acl_;

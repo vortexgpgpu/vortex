@@ -141,6 +141,11 @@ public:
     // Make one region's host writes visible to the CP (see callbacks.h).
     // Called after filling a staging buffer, before submitting its command.
     virtual vx_result_t host_mem_push (uint64_t cp_addr) = 0;
+
+    // ----- Imported host memory (see callbacks.h) -----
+    virtual vx_result_t mem_import  (uint64_t dev_addr, void* host_ptr,
+                                     uint64_t size) = 0;
+    virtual vx_result_t mem_unimport(uint64_t dev_addr, uint64_t size) = 0;
 };
 
 // ============================================================================
@@ -189,6 +194,16 @@ public:
     vx_result_t host_mem_push(uint64_t cp_addr) override {
         if (!cb_.host_mem_push) return VX_SUCCESS;  // older backend: coherent
         return r(cb_.host_mem_push(dev_ctx_, cp_addr));
+    }
+    vx_result_t mem_import(uint64_t dev_addr, void* host_ptr,
+                           uint64_t size) override {
+        if (!cb_.mem_import) return VX_ERR_NOT_SUPPORTED;
+        const int rc = cb_.mem_import(dev_ctx_, dev_addr, host_ptr, size);
+        return (rc == VX_ERR_NOT_SUPPORTED) ? VX_ERR_NOT_SUPPORTED : r(rc);
+    }
+    vx_result_t mem_unimport(uint64_t dev_addr, uint64_t size) override {
+        if (!cb_.mem_unimport) return VX_ERR_NOT_SUPPORTED;
+        return r(cb_.mem_unimport(dev_ctx_, dev_addr, size));
     }
 
 private:
@@ -344,6 +359,10 @@ public:
     // address bookkeeping in a MemoryAllocator the Device owns. The
     // VX_MEM_HOST flag routes to platform host memory instead.
     vx_result_t mem_alloc  (uint64_t size, uint32_t flags, uint64_t* out_addr);
+    // Map the host pages at host_ptr into the device address space in place
+    // (VX_MEM_IMPORT_HOST). mem_free undoes it.
+    vx_result_t mem_import (void* host_ptr, uint64_t size, uint32_t flags,
+                            uint64_t* out_addr);
     vx_result_t mem_reserve(uint64_t addr, uint64_t size, uint32_t flags);
     vx_result_t mem_free   (uint64_t addr);
     vx_result_t memory_info(uint64_t* out_free, uint64_t* out_used);
@@ -434,6 +453,9 @@ private:
     uint64_t                       pinned_base_ = 0;
     // Live CP-visible host regions, keyed by cp_addr.
     std::map<uint64_t, HostMem>    host_mems_;
+    // Imported host ranges, keyed by device address: their physical base and
+    // page-rounded size.
+    std::map<uint64_t, std::pair<uint64_t, uint64_t>> imports_;
 
     // Lazily-loaded device/ISA caps words (read once from the CP regfile).
     uint64_t                       dev_caps_    = 0;
@@ -514,7 +536,7 @@ private:
 class Buffer : public RefCounted<Buffer> {
 public:
     static vx_result_t create (Device* dev, uint64_t size, uint32_t flags,
-                               Buffer** out);
+                               void* host_ptr, Buffer** out);
     static vx_result_t reserve(Device* dev, uint64_t address, uint64_t size,
                                uint32_t flags, Buffer** out);
 

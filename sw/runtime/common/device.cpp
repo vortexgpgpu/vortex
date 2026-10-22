@@ -1134,6 +1134,64 @@ vx_result_t Device::mem_alloc(uint64_t size, uint32_t flags,
     return VX_SUCCESS;
 }
 
+vx_result_t Device::mem_import(void* host_ptr, uint64_t size, uint32_t flags,
+                               uint64_t* out_addr) {
+    if (!host_ptr || !out_addr || size == 0) {
+        return VX_ERR_INVALID_VALUE;
+    }
+    const uint64_t page = RAM_PAGE_SIZE;
+    if (reinterpret_cast<uintptr_t>(host_ptr) & (page - 1)) {
+        return VX_ERR_INVALID_VALUE;
+    }
+    // The device reaches an imported page through the host page itself, so
+    // the range gets pages of its own: no other buffer may share one.
+    const uint64_t asize = (size + page - 1) & ~(page - 1);
+    const bool from_pinned = (flags & VX_MEM_PHYS) && pinned_mem_;
+    uint64_t pa = 0;
+    {
+        std::lock_guard<std::mutex> g(mu_);
+        auto& alloc = from_pinned ? *pinned_mem_ : global_mem_;
+        if (alloc.allocate_pages(asize, &pa) != 0) {
+            return VX_ERR_OUT_OF_DEVICE_MEMORY;
+        }
+    }
+    auto release = [&]() {
+        std::lock_guard<std::mutex> g(mu_);
+        auto& alloc = from_pinned ? *pinned_mem_ : global_mem_;
+        alloc.release(pa);
+    };
+    vx_result_t r;
+    {
+        // The backend remaps device memory, which the CP's DMA and the running
+        // device read; cp_mu_ keeps the CP from ticking meanwhile.
+        std::lock_guard<std::mutex> g(cp_mu_);
+        r = platform_->mem_import(pa, host_ptr, asize);
+    }
+    if (r != VX_SUCCESS) {
+        release();
+        return r;
+    }
+    uint64_t addr = pa;
+    if (vm_mgr_) {
+        std::lock_guard<std::mutex> g(vm_mu_);
+        int rc = (flags & VX_MEM_PHYS)
+                   ? vm_mgr_->install_identity_map(pa, asize)
+                   : vm_mgr_->phy_to_virt_map(asize, &addr, flags);
+        if (rc != 0) {
+            std::lock_guard<std::mutex> gc(cp_mu_);
+            platform_->mem_unimport(pa, asize);
+            release();
+            return VX_ERR_INVALID_VALUE;
+        }
+    }
+    {
+        std::lock_guard<std::mutex> g(mu_);
+        imports_[addr] = {pa, asize};
+    }
+    *out_addr = addr;
+    return VX_SUCCESS;
+}
+
 vx_result_t Device::mem_reserve(uint64_t addr, uint64_t size, uint32_t flags) {
     (void)flags;
     if (size == 0) {
@@ -1174,13 +1232,25 @@ vx_result_t Device::mem_reserve(uint64_t addr, uint64_t size, uint32_t flags) {
 
 vx_result_t Device::mem_free(uint64_t addr) {
     bool is_host;
+    bool is_import = false;
+    std::pair<uint64_t, uint64_t> import;
     {
         std::lock_guard<std::mutex> g(mu_);
         is_host = host_mems_.count(addr) != 0;
+        auto it = imports_.find(addr);
+        if (it != imports_.end()) {
+            is_import = true;
+            import = it->second;
+            imports_.erase(it);
+        }
     }
     if (is_host) {
         host_free(addr);
         return VX_SUCCESS;
+    }
+    if (is_import) {
+        std::lock_guard<std::mutex> g(cp_mu_);
+        platform_->mem_unimport(import.first, import.second);
     }
     // VM: `addr` is a VA — resolve to the PA the allocator handed out.
     if (vm_mgr_) {

@@ -355,6 +355,12 @@ VX_TEX_FORMAT_RGB32I          = 92
 VX_TEX_FORMAT_RGB32F          = 93
 VX_TEX_FORMAT_R5G6B5_PACK16   = 94   # as an attachment stores it (input attachments)
 VX_TEX_FORMAT_A1R5G5B5_PACK16 = 95
+VX_TEX_FORMAT_B4G4R4A4_PACK16 = 96
+# 8-bit colour with an unused fourth byte -> (r,g,b,1)
+VX_TEX_FORMAT_RGBX8           = 97
+VX_TEX_FORMAT_BGRX8           = 98
+VX_TEX_FORMAT_SRGBX8          = 99
+VX_TEX_FORMAT_SBGRX8          = 100
 
 [raster_const]
 VX_RASTER_DIM_BITS    = 15
@@ -471,8 +477,8 @@ VX_OM_COLOR_FORMAT_R12X4G12X4  = 63
 VX_OM_DEPTH_FORMAT_D24S8 = 0       # packed 24-bit depth + 8-bit stencil (FF default)
 VX_OM_DEPTH_FORMAT_D16   = 1       # 16-bit unorm depth, no stencil
 VX_OM_DEPTH_FORMAT_D32F  = 2       # 32-bit float depth, no stencil
-VX_OM_DEPTH_FORMAT_S8    = 3       # 8-bit stencil only, no depth
-VX_OM_DEPTH_FORMAT_D32FS8 = 4      # 8-byte texel: the D32F key, then the stencil in the next word
+VX_OM_DEPTH_FORMAT_S8    = 3       # 8-bit stencil only, no depth; rows start on a 4-byte boundary
+VX_OM_DEPTH_FORMAT_D32FS8 = 4      # 8-byte texel: the D32F float, then the stencil in the next word
 
 VX_OM_BLEND_MODE_ADD     = 0
 VX_OM_BLEND_MODE_SUB     = 1
@@ -607,9 +613,10 @@ VX_DCR_OM_RT_SELECT         = 0x097
 # Depth attachment storage: VX_OM_DEPTH_FORMAT_D24S8 (depth in bits 23:0,
 # stencil in 31:24), VX_OM_DEPTH_FORMAT_D16 (a 2-byte texel holding the top 16
 # bits of the 24-bit key; rows start on a 4-byte boundary), VX_OM_DEPTH_FORMAT_S8
-# (stencil only), VX_OM_DEPTH_FORMAT_D32F (the word is the float's ordered key,
-# compared unsigned; no stencil) or VX_OM_DEPTH_FORMAT_D32FS8 (an 8-byte texel:
-# the D32F key, then the stencil in the low byte of the next word; the z-buffer
+# (stencil only, one byte a pixel; rows start on a 4-byte boundary),
+# VX_OM_DEPTH_FORMAT_D32F (the word is the float, compared as its ordered key with
+# -0 folded into +0; no stencil) or VX_OM_DEPTH_FORMAT_D32FS8 (an 8-byte texel:
+# the D32F float, then the stencil in the low byte of the next word; the z-buffer
 # pitch covers 8 bytes a pixel). Raster early-Z tests the 24-bit plane, so it
 # applies to D24S8 only. Resets to D24S8.
 VX_DCR_OM_DEPTH_FORMAT      = 0x098

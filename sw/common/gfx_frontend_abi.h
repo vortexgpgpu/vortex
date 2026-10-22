@@ -292,13 +292,12 @@ typedef struct {
   // The draw's viewport array (setup_vp_slot_t[vp_count]) at vp_table_addr; a
   // vp_table_addr of 0 selects the one viewport above, unscissored. vpi_off and layer_off are the byte offsets of
   // ViewportIndex and Layer in the VS records (0 = not written). With layer_off,
-  // layer_max clamps a primitive's layer and only the primitives in layer_sel
-  // are drawn (a layered draw replays once per framebuffer layer).
+  // layer_max clamps a primitive's layer; every layer is drawn in the one pass,
+  // each fragment going to its primitive's layer (rast_vary_t::vp_layer).
   uint32_t vp_count;
   uint32_t vpi_off;
   uint32_t layer_off;
   uint32_t layer_max;
-  uint32_t layer_sel;
   uint64_t vp_table_addr;
   uint64_t verts_addr;     // setup_vertex_t[3*num_tris]      (in, when vsrec_addr is 0)
   // VS output records (in): when set, a primitive's vertices are records as
@@ -332,22 +331,19 @@ typedef struct {
   uint64_t vary_addr;      // rast_vary_t[P]                  (out, with vsrec_addr)
 } pipe_arg_t;
 
-// Pass-end multisample colour resolve. A multisample pass renders into a
-// sample-interleaved colour plane (a pixel's S samples are contiguous, so a row
-// is W*S texels); what the application reads is one texel per pixel. The
-// resolve folds the samples with the box filter in gfx_sw.h and writes a dense
-// single-sample plane the host copy can read at its natural size.
-//
-// It writes a SEPARATE destination rather than compacting in place: a thread
-// resolving pixel i writes at i*bpp while a thread resolving pixel j>i is still
-// reading from (j*S)*bpp, and with every pixel in flight at once the two
-// overlap. One thread per pixel, grid-strided.
+// Multisample colour resolve. A multisample image keeps one whole image per
+// sample, src_sample_stride bytes apart; the resolve folds a pixel's samples with
+// the box filter in gfx_sw.h into one texel of the single-sample destination.
+// One thread per pixel, grid-strided.
 typedef struct {
-  uint64_t src_addr;      // sample-interleaved colour plane          (in)
-  uint64_t dst_addr;      // dense single-sample colour plane         (out)
-  uint32_t width, height; // pixels
-  uint32_t samples;       // samples per pixel
-  uint32_t color_format;  // VX_OM_COLOR_FORMAT_*
+  uint64_t src_addr;          // sample 0's image                     (in)
+  uint64_t dst_addr;          // single-sample image                  (out)
+  uint32_t width, height;     // pixels
+  uint32_t samples;           // samples per pixel
+  uint32_t color_format;      // VX_OM_COLOR_FORMAT_*
+  uint32_t src_pitch;         // bytes per row of each sample's image
+  uint32_t src_sample_stride; // bytes between the sample images
+  uint32_t dst_pitch;         // bytes per row of the destination
 } resolve_arg_t;
 
 // Image blit (vkCmdBlitImage): every destination pixel of the box samples the
@@ -408,6 +404,28 @@ typedef struct {
   uint32_t samples, sample_stride;     // 0 or 1: a plain copy
   uint32_t depth_shift, depth_bits, depth_float;
 } texel_copy_arg_t;
+
+// Texture pack (tex_pack_k, gfx_tex_pack_k.h): the TEX unit's copy of a sampled
+// texture. Every texel of every level and layer of the source, read where the
+// texture lives through its software-sampler descriptor, is stored as the unit
+// reads it (`mode`) in the packed chain the unit addresses: each layer's levels
+// back to back (a 3D level holds its slices back to back), level l at
+// dst_mip_off[l] within its layer, layers dst_layer_stride bytes apart. One
+// thread per texel, grid-strided.
+#define TEX_PACK_ARGB8      0u  // colour, decoded to A8R8G8B8
+#define TEX_PACK_COPY16     1u  // the texel's first two bytes (D16)
+#define TEX_PACK_COPY32     2u  // the texel's first word (D32F, D32F_S8's depth)
+#define TEX_PACK_D24_TO_F32 3u  // a D24 texel's depth as an f32 (D32F)
+typedef struct {
+  uint64_t texstate_addr;   // gfx_sw_texstate_t of the source's level 0, layer 0 (in)
+  uint64_t dst_addr;        // packed chain                                    (out)
+  uint32_t mode;            // TEX_PACK_*
+  uint32_t levels;          // levels to pack
+  uint32_t layers;          // array layers (cube faces included); 1 for 3D
+  uint32_t depth;           // a 3D texture's slices at level 0; 0 otherwise
+  uint32_t dst_layer_stride;
+  uint32_t dst_mip_off[VX_TEX_LOD_MAX + 1];
+} tex_pack_arg_t;
 
 // Masked texel fill (clear_k, gfx_clear_k.h). Every texel of a w x h x d box of
 // the staging span takes `value` where `mask` is set and keeps its other bits,

@@ -276,8 +276,8 @@ public:
     return is_backface ? stencil_back_enabled_ : stencil_front_enabled_;
   }
 
-  // D32F: the word is a float's ordered key, compared whole, with no stencil.
-  // D32F_S8 keeps the stencil in the texel's next word.
+  // D32F: the word holds the float, compared as its ordered key, with no
+  // stencil. D32F_S8 keeps the stencil in the texel's next word.
   bool depth_float() const {
     return depth_float_;
   }
@@ -290,6 +290,11 @@ public:
   // by replicating its high byte.
   bool depth_d16() const {
     return depth_d16_;
+  }
+
+  // S8: a 1-byte texel holding the stencil alone.
+  bool depth_s8() const {
+    return depth_s8_;
   }
 
 protected:
@@ -314,6 +319,7 @@ protected:
   bool depth_float_;
   bool depth_stencil_word_;
   bool depth_d16_;
+  bool depth_s8_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////

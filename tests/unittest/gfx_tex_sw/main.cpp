@@ -321,7 +321,7 @@ void check_cube_seamless(uint8_t* pool) {
   st.height = n;
   st.format = VX_TEX_FORMAT_A8R8G8B8;
   st.filter = VX_TEX_FILTER_BILINEAR | GFX_SW_TEX_FILTER_SEAMLESS;
-  st.layer_stride = n * n * 4;
+  gfx_sw::tex_packed_pitches(st, n * n * 4);
   st.wrap = (VX_TEX_WRAP_CLAMP << 16) | VX_TEX_WRAP_CLAMP;
   struct { float d[3]; double want; const char* what; } probes[] = {
     { { 1.0f, 0.1f, 0.2f }, 20.0, "+X middle" },
@@ -554,7 +554,7 @@ void check_srgb(uint8_t* pool) {
   }
 }
 
-// (b1) 2D-array view: integer layer index selects the slice at layer*layer_stride.
+// (b1) 2D-array view: integer layer index selects the slice at layer*slice_pitch.
 void check_array(uint8_t* pool) {
   const uint32_t layers = 4, texw = 1u << 2, texh = 1u << 2; // 4x4 POT per layer
   const uint32_t stride = texw * texh * 4;                    // A8R8G8B8
@@ -563,7 +563,7 @@ void check_array(uint8_t* pool) {
       ((uint32_t*)(pool + L * stride))[i] = 0xff000000u | (0x100u * L) | i;
 
   gfx_sw::TexState st; tex_point_state(st, pool, 2, 2, VX_TEX_FORMAT_A8R8G8B8);
-  st.layer_stride = stride;
+  gfx_sw::tex_packed_pitches(st, stride);
   const int32_t ONE = 1 << TEX_FXD_FRAC;
   uint32_t fails = 0;
   for (uint32_t L = 0; L < layers; ++L) {
@@ -585,7 +585,7 @@ void check_cube(uint8_t* pool) {
       ((uint32_t*)(pool + f * stride))[i] = 0xff000000u | (0xA0u + f);   // face tag in low byte
 
   gfx_sw::TexState st; tex_point_state(st, pool, 2, 2, VX_TEX_FORMAT_A8R8G8B8);
-  st.layer_stride = stride;
+  gfx_sw::tex_packed_pitches(st, stride);
   // direction vectors whose major axis is +X,-X,+Y,-Y,+Z,-Z → faces 0..5
   const float dirs[6][3] = {
     { 1, 0.1f, 0.1f}, {-1, 0.1f, 0.1f}, {0.1f, 1, 0.1f},
@@ -897,6 +897,91 @@ void check_depth_compare() {
   }
 }
 
+// (g) a texture where it lives: an RGBA8 (VX_TEX_FORMAT_RGBA8) 2D array whose
+// levels each hold every layer, rows padded past the texels, read through
+// row_pitch/slice_pitch -- by the 8-bit sampler, the float sampler and
+// texelFetch, at each level and layer.
+void check_pitched(uint8_t* pool) {
+  const uint32_t W = 5, H = 3, layers = 2, levels = 2;
+  uint32_t mip_off[2], row[2], slice[2], at = 0;
+  for (uint32_t l = 0; l < levels; ++l) {
+    const uint32_t w = W >> l ? W >> l : 1u, h = H >> l ? H >> l : 1u;
+    row[l] = w * 4 + 12;            // padded rows
+    slice[l] = row[l] * (h + 1);    // and a padded image
+    mip_off[l] = at;
+    at += slice[l] * layers;
+  }
+  auto texel = [](uint32_t x, uint32_t y, uint32_t L, uint32_t l) {
+    return (x * 37u + y * 11u + L * 101u + l * 53u + 7u) & 0xffu;
+  };
+  memset(pool, 0xcd, at);           // padding reads as a distinct colour
+  for (uint32_t l = 0; l < levels; ++l) {
+    const uint32_t w = W >> l ? W >> l : 1u, h = H >> l ? H >> l : 1u;
+    for (uint32_t L = 0; L < layers; ++L) {
+      for (uint32_t y = 0; y < h; ++y) {
+        for (uint32_t x = 0; x < w; ++x) {
+          uint8_t* p = pool + mip_off[l] + L * slice[l] + y * row[l] + x * 4;
+          const uint32_t v = texel(x, y, L, l);
+          p[0] = (uint8_t)v; p[1] = (uint8_t)(255 - v); p[2] = (uint8_t)(v ^ 0x5a);
+          p[3] = (uint8_t)(v | 0x80);
+        }
+      }
+    }
+  }
+  gfx_sw::TexState st{};
+  st.base = (uintptr_t)pool;
+  st.width = W;
+  st.height = H;
+  st.format = VX_TEX_FORMAT_RGBA8;
+  st.filter = VX_TEX_FILTER_POINT;
+  st.wrap = (VX_TEX_WRAP_CLAMP << 16) | VX_TEX_WRAP_CLAMP;
+  st.depth = layers;
+  st.levels = levels;
+  for (uint32_t l = 0; l <= (uint32_t)VX_TEX_LOD_MAX; ++l) {
+    const uint32_t L = l < levels ? l : levels - 1;
+    st.mip_off[l] = mip_off[L];
+    st.row_pitch[l] = row[L];
+    st.slice_pitch[l] = slice[L];
+  }
+  const int32_t ONE = 1 << TEX_FXD_FRAC;
+  uint32_t fails = 0, checked = 0;
+  for (uint32_t l = 0; l < levels; ++l) {
+    const uint32_t w = W >> l ? W >> l : 1u, h = H >> l ? H >> l : 1u;
+    for (uint32_t L = 0; L < layers; ++L) {
+      for (uint32_t y = 0; y < h; ++y) {
+        for (uint32_t x = 0; x < w; ++x) {
+          const uint32_t v = texel(x, y, L, l);
+          const uint32_t r = v, g = 255 - v, b = v ^ 0x5a, a = v | 0x80;
+          const uint32_t want = (a << 24) | (r << 16) | (g << 8) | b;
+          const int32_t u = (int32_t)(((2 * x + 1) * (int64_t)ONE) / (2 * w));
+          const int32_t vv = (int32_t)(((2 * y + 1) * (int64_t)ONE) / (2 * h));
+          const uint32_t got8 = gfx_sw::tex_sample_sw_array(st, u, vv, L, l, VX_TEX_FILTER_POINT);
+          float f[4], t[4];
+          gfx_sw::tex_sample_f32_array(st, u, vv, L, l, VX_TEX_FILTER_POINT, f);
+          gfx_sw::tex_fetch_array_f32(st, (int32_t)x, (int32_t)y, L, l, t);
+          const float k = 1.0f / 255.0f;   // the decode's reciprocal multiply
+          const float wf[4] = { r * k, g * k, b * k, a * k };
+          bool ok = got8 == want;
+          for (uint32_t c = 0; c < 4; ++c) {
+            ok = ok && f[c] == wf[c] && t[c] == wf[c];
+          }
+          ++checked;
+          if (!ok && fails++ < 4) {
+            printf("  PITCHED MISMATCH level %u layer %u (%u,%u): 8-bit %08x want %08x, "
+                   "float r %g fetch r %g want %g\n", l, L, x, y, got8, want, f[0], t[0], wf[0]);
+          }
+        }
+      }
+    }
+  }
+  if (fails) {
+    g_fail += fails;
+  } else {
+    printf("PITCHED LEVEL-MAJOR: PASSED (%u texels over %u levels x %u layers, padded rows)\n",
+           checked, levels, layers);
+  }
+}
+
 int main() {
   void* p = mmap((void*)TEX_BASE, TEX_POOL, PROT_READ | PROT_WRITE,
                  MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
@@ -941,6 +1026,7 @@ int main() {
   check_bc_decode(pool);
   check_field_formats();
   check_depth_compare();
+  check_pitched(pool);
 
   if (g_fail) {
     printf("\nTEX-SW PARITY: FAILED (%u mismatches across %u configs)\n", g_fail, configs);

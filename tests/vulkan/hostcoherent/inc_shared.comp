@@ -1,0 +1,20 @@
+#version 450
+
+/* data[i] += 1 through shared memory: a workgroup that communicates cannot be
+ * split across device CTAs, so one larger than the device's runs on llvmpipe. */
+
+layout(local_size_x = 128) in;
+
+layout(std430, binding = 0) buffer Buf {
+   uint data[];
+};
+
+shared uint scratch[128];
+
+void main()
+{
+   uint i = gl_GlobalInvocationID.x;
+   scratch[gl_LocalInvocationID.x] = data[i];
+   barrier();
+   data[i] = scratch[gl_LocalInvocationID.x] + 1u;
+}

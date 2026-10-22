@@ -89,23 +89,11 @@ Lives for the screen's lifetime. The three important groups:
   fixed-function units. `has_rtu` also drives lavapipe's
   `driver_ray_queries` cap.
 - **The resource-residency table.** `struct vp_resident` entries
-  (`{host_base, size, buf, dev_addr, dirty}`), guarded by
-  `resident_lock`. A device buffer allocated for a host resource
-  outlives the dispatch that first needed it, so an unchanged vertex
-  buffer is uploaded once, not per frame, and a resource's device
-  address stays stable across dispatches. `vp_screen_resident_addr`
-  resolves any host pointer *inside* a recorded range to its entry (+
-  offset); `vp_screen_resident_dirty` marks overlapping ranges on
-  every host write path (`texture_subdata`, `transfer_unmap`, buffer
-  writes), and `vp_screen_resident_dirty_all` distrusts everything
-  after work runs on llvmpipe (which writes host memory without
-  saying which). Entries are removed in `resource_destroy` — a freed
-  host allocation can be handed back at the same address, and a table
-  keyed on a raw pointer without eviction would serve a stale device
-  buffer for a different resource. The `dirty` flag starts true and
-  is cleared only by a completed upload, so every path that has not
-  been taught to invalidate errs towards re-uploading, never towards
-  serving stale data.
+  (`{host_base, size, buf, dev_addr, alias, dirty}`), guarded by
+  `resident_lock`: how the device reaches each host allocation it has
+  used, either the allocation itself imported into the device address
+  space (`alias`) or a device copy of it. §1.6 describes both modes and
+  the texture-copy table (`tex_mirror`) kept beside it.
 
 The screen ctor also **clamps llvmpipe's advertised compute caps** to
 the Vortex device's `hw_max_block_size` so well-behaved Vulkan apps
@@ -152,9 +140,9 @@ time:
   packed border colour, mip enable/linear, shadow-compare state, and
   the LOD min/max/bias in fixed point.
 - The render-pass-resident framebuffer (`rcb` / `rzb` / `rcb_extra[]`):
-  the device colour + depth/stencil planes a pass
-  renders into, allocated and seeded once per pass (§3.2) and reused
-  across its draws.
+  in mirror mode only (§1.6), the device colour + depth/stencil planes a
+  pass renders into, holding every layer it reaches, allocated and
+  seeded once per pass (§3.2) and reused across its draws.
 - The texture-handle side table (`txh_*[VP_MAX_TEX_HANDLES]`) that
   maps a descriptor's `lp_jit_texture.base` back to the bound
   resource per draw (§3.6).
@@ -219,6 +207,96 @@ Vulkan conformance:
 Silent collapse is a **known conformance hole** — a Vulkan-CTS run
 will produce wrong pixels (not refused draws) for those inputs. See
 §3.6–§3.8 for the per-unit catalogs.
+
+### 1.6 Resource residency
+
+lavapipe exposes one memory type, the one a UMA or ReBAR GPU exposes:
+device-local, host-visible, coherent and cached, mapped once at
+allocation. vortexpipe makes that literally true. Each mapped
+allocation is reached by the device in one of two modes, decided per
+allocation on its first device use (`vp_screen_resident_addr`):
+
+- **Import (alias).** The allocation itself is entered into the device
+  address space: `vx_buffer_create` with `VX_MEM_IMPORT_HOST` and the
+  page-aligned host address in `*out` (llvmpipe maps every allocation as
+  whole pages of a memfd). simx and rtlsim alias the device pages onto
+  the host pages (`RAM::alias`), so there is one copy and nothing moves.
+  Backends that cannot import return `VX_ERR_NOT_SUPPORTED`; the screen
+  then mirrors every allocation. `VORTEXPIPE_NO_IMPORT` forces mirror
+  mode, which is how the test suites keep it covered.
+- **Mirror.** A device copy of the allocation with one dirty bit per
+  4 KiB page: host writes gallium reports mark pages
+  (`vp_screen_resident_dirty`), every submission marks every mapped
+  allocation (the application may write mapped memory without a call),
+  and a llvmpipe fallback marks everything. A device read uploads the
+  dirty pages first; a device write is read back at the end of its
+  operation.
+
+Imports are lazy and evicted when their memory is freed or unmapped,
+so a recycled host address never reaches a stale device page.
+Resources created without memory (lavapipe's internal surfaces,
+`util_blitter` temporaries) are given an allocation of their own by the
+`resource_create` wrapper, so they import like any other.
+
+**Coherence.** Every device operation completes, including its
+batch-end cache flush, before the gallium call returns; host writes are
+visible to the next device operation because the device holds no cache
+line across batches. llvmpipe runs asynchronously, so every hook that
+hands it work sets `lp_pending`, and the next device operation waits
+for it (`vp_cpu_sync`). What can go stale is *derived* device data: the
+TEX unit's texture packs below. They are keyed by resource, format and
+source format, and marked stale by every host write gallium reports
+and by every device write to their bytes — attachments a draw renders,
+writable descriptors of a dispatch or draw, address-table ranges a
+shader may store to, and transfer destinations
+(`vp_screen_tex_mirror_stale`, `vp_dirty_resource`).
+
+**Render targets in place.** An attachment in an imported allocation
+is its own plane: base `dev + mip_offsets[l] + layer * img_stride[l]`,
+pitch `row_stride[l]`, sample planes `sample_stride` apart. The
+merger's D32F, D32F_S8 and S8 modes store those formats as the API
+does (no conversion pass). In mirror mode the pass renders into
+device planes loaded from the attachments once per pass and written
+back at its end (`vp_fb_ensure`, `vp_fb_sync_out`); a plane holds every
+layer the pass reaches.
+
+**Transfers in place.** Copies, clears, blits, resolves and buffer ↔
+image transfers take `struct vp_span` operands: the device address of
+the range when it lies in an imported allocation, else a staged copy of
+the host bytes. A transfer between imported resources is one device
+command with nothing staged.
+
+**Textures.** The software sampler reads a texture where it lives:
+`gfx_sw_texstate_t` carries per-level `row_pitch[]` and `slice_pitch[]`
+beside `mip_off[]`, so it addresses llvmpipe's level-major layout and
+row padding directly, and the texel format is the stored one
+(`vp_vx_image_format`: Z24 and D32F_S8 depth read in place, RGBA8 and
+BGRA8 colour decoded field by field). The TEX unit addresses a packed
+chain only (pitch `width << lgstride`, a constant layer stride), so a
+draw that may sample on the unit gets a device-built pack instead
+(`tex_pack_k`): A8R8G8B8 for colour, D16 or D32F for its compare stage.
+A sparse texture keeps the host upload (`vp_tex_upload_host`), since
+its page bindings change behind gallium.
+
+**Layered rendering in one pass.** A vertex shader writing `gl_Layer`
+draws every framebuffer layer in one pass. The front end clamps each
+primitive's layer to the last and records it in the primitive's
+`rast_vary_t::vp_layer`, read by the fragment wrapper of a variant
+built with `VP_FS_LAYERED`. The software merger takes the layer above
+the row (`om_row_offset`) and steps each attachment by its own layer
+stride. The fixed-function merger sees the layers stacked as one tall
+target, row `y + L * rows` (`GFX_FS_ARG_LAYER_ROWS`), which requires
+every attachment to step a layer by the same whole number of rows and
+the stack to fit the merger's 15-bit row range; otherwise the draw
+merges in software. Early-Z is off for a layered draw, since RASTER
+tests the layer's own row. A multiview pass draws once per view with
+each attachment's base moved to the view's layer.
+
+**Counters.** `VORTEXPIPE_ATTRIB=1` prints, per process, the bytes
+uploaded and read back, the bytes converted on the host, the
+synchronous queue finishes and the attachment plane syncs
+(`up= down= conv= finish= planes=`), so a test can show what a change
+moved without asserting on it.
 
 ---
 
@@ -613,9 +691,10 @@ Much of what this once excluded now runs on the device:
   draw (the `!indirect` term is only reachable for
   `indirect_draw_count` / `count_from_stream_output`, which still
   fall back).
-- **Multiview**: the draw is replayed once per set bit of the view
-  mask, each view into its own layer (refused only combined with
-  MRT).
+- **Multiview**: the draw runs once per set bit of the view mask, each
+  view with its attachments' bases moved to its own layer (§1.6).
+- **Layered draws** (`gl_Layer` written by the vertex shader) run as
+  one draw over every layer (§1.6).
 - A **memory-predicate render condition** is re-tested on the host;
   only a *query*-based predicate refuses (llvmpipe owns the query).
 
@@ -668,15 +747,16 @@ DCR writes, drained in order by the CP's launch-barrier:
    offset/count fields) + sorted PID array. The RASTER unit then
    descends bin → block → quad.
 
-Colour/depth/texture are **render-pass-resident (pinned-PA)** and reached
-by the FF units through their DCRs. The colour and depth/stencil planes
-are allocated and *seeded* once per render pass (`vp_fb_ensure`): colour
-from the attachment's current contents (the pass's `loadOp=CLEAR`
-already landed there), depth/stencil read back from the attachment so
-the pass's clear values reach the device — or filled with the far value
-when no attachment is bound. Draw-consumed resources (vertex/index
-buffers, descriptors, textures) resolve through the screen residency
-table (§1.3), so an unchanged buffer is uploaded once, not per draw.
+Colour and depth/stencil are reached by the FF units through their
+DCRs: the attachments themselves when their allocations are imported,
+otherwise device planes allocated and *seeded* once per render pass
+(`vp_fb_ensure`) from the attachments' current contents, so the pass's
+`loadOp` results reach the device (§1.6). Draw-consumed resources
+(vertex/index buffers, descriptors, textures) resolve through the
+screen residency table (§1.3). The primitive record `rast_prim_t` is
+220 bytes (`VP_RAST_PRIM_STRIDE`), and the per-primitive
+`rast_vary_t` at the same index carries the varying planes' record
+indices and the primitive's `gl_ViewportIndex` and `gl_Layer`.
 
 ### 3.3 FF configuration + RASTER launch
 
@@ -707,11 +787,11 @@ lets the RASTER engine launch the fragment shader itself:
    (`APERTURE_{XBITS, YBITS, RECORD_SHIFT, DEPTH_ONLY}`) that must
    decode the same shift-only address the FS builds from
    `GFX_FS_ARG_APERTURE`.
-3. **Program TEX DCRs** (if a sampler is bound): the resident texture's
+3. **Program TEX DCRs** (if a sampler is bound): the texture pack's
    `VX_DCR_TEX_{ADDR, DIM, FORMAT, FILTER, WRAP, BORDER, LAYER_STRIDE,
-   MIPOFF_BASE+j}` for each stage the FS samples — the border colour is a DCR, so a
-   `CLAMP_TO_BORDER` wrap samples on the unit, and the mip-offset
-   table gives the unit the resident mip chain.
+   MIPOFF_BASE+j}` for each stage the FS samples (§1.6) — the border
+   colour is a DCR, so a `CLAMP_TO_BORDER` wrap samples on the unit, and
+   the mip-offset table gives the unit the packed mip chain.
 4. **RASTER runs** the fixed-function walker → early-Z → packer →
    **dispatch**, which *launches* a bare 1-warp fragment CTA per
    covered-quad wave on the core-local KMU (pure-DCR — there is **no host

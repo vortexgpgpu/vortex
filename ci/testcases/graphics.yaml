@@ -324,6 +324,13 @@ tests:
   app: gfx_om
   configs: -DVX_CFG_EXT_OM_ENABLE
   args: -w 127 -h 64 -y
+# The software merger keeps a D16 texel the way the fixed-function one does.
+- id: gfx_om-d16-sw
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 127 -h 64 -y -S
 - id: gfx_raster-1
   via: blackbox
   drivers:
@@ -759,6 +766,12 @@ tests:
   app: gfx_om
   configs: -DVX_CFG_EXT_OM_ENABLE
   args: -w 128 -h 128 -z -d
+- id: model_parity-om-s8
+  check: model_parity
+  via: blackbox
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 127 -h 64 -s8
 - id: model_parity-om-float-stencil
   check: model_parity
   via: blackbox
@@ -1014,8 +1027,9 @@ tests:
   app: gfx_om
   configs: -DVX_CFG_EXT_OM_ENABLE
   args: -w 128 -h 128 -s -S
-# D32F: stored depths below, at (both zeros) and above a -1.0 fragment, and
-# outside [0, 1], compared as ordered keys and checked per pixel; then the
+# D32F: stored floats below, at (both zeros) and above a -1.0 fragment, and
+# outside [0, 1], compared as ordered keys and checked per pixel in the
+# memory format, a texel the draw leaves keeping its exact bits; then the
 # float pair's attachment field in the export address (attachment 5, whose
 # bits are not all ones, so a shifted field decodes to another attachment).
 - id: gfx_om-float
@@ -1037,7 +1051,7 @@ tests:
   configs: -DVX_CFG_EXT_OM_ENABLE
   args: -w 128 -h 128 -z -m -n 5 -r whitebox_128.png
 # D32F_S8: the -s stencil outcomes on the stencil word of an 8-byte texel,
-# beside the float depth.
+# beside the float depth, which a stencil-only update leaves bit-exact.
 - id: gfx_om-float-stencil
   via: blackbox
   drivers: [simx, rtlsim]
@@ -1058,6 +1072,33 @@ tests:
   app: gfx_om
   configs: -DVX_CFG_EXT_OM_ENABLE
   args: -w 128 -h 128 -Z -s -f
+# S8: a 1-byte stencil texel under the -s stencil test, neighbouring bytes of a
+# word holding different values, on an odd width; in software; on the back
+# face; and counted.
+- id: gfx_om-s8
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 127 -h 64 -s8
+- id: gfx_om-s8-sw
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -s8 -S
+- id: gfx_om-s8-back
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -s8 -f
+- id: gfx_om-s8-occ
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -s8 -q
 # Occlusion counter: the passing-fragment count against every pixel's depth
 # (and stencil) outcome; once per fragment on two attachments; a draw that
 # writes nothing still tests and counts; and the per-core counters summed

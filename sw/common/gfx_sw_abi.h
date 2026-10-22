@@ -87,7 +87,8 @@ typedef struct {
   uint32_t width;                         // mip-0 integer width  (0 => POT via logdim)
   uint32_t height;                        // mip-0 integer height (0 => POT via logdim)
   uint32_t border;                        // ARGB8888 border colour (WRAP_BORDER)
-  uint32_t layer_stride;                  // bytes per array layer / cube face (0 => single 2D)
+  uint32_t row_pitch[VX_TEX_LOD_MAX + 1];   // per-LOD bytes between rows (of 4x4 blocks if compressed)
+  uint32_t slice_pitch[VX_TEX_LOD_MAX + 1]; // per-LOD bytes between array layers / cube faces / 3D slices
   uint32_t compare_func;                  // shadow compare op (VX_OM_DEPTH_FUNC_*); 0 => none
   uint32_t swizzle;                       // view component map: r|g<<3|b<<6|a<<9 (0..3=RGBA, 4=0, 5=1)
   uint32_t min_lod;                       // sampler LOD clamp lower bound, Q(VX_TEX_LOD_FRAC_BITS)
@@ -129,6 +130,8 @@ typedef struct {
   uint32_t depth_bounds_min, depth_bounds_max;
   uint32_t stencil_ref_export;
   uint32_t blend_constf[4];            // float bits, RGBA
+  uint32_t zbuf_sample_stride, cbuf_sample_stride;   // bytes between sample planes
+  uint32_t zbuf_layer_stride, cbuf_layer_stride;     // bytes between layers
 } gfx_sw_omstate_t;
 
 // Per-attachment colour descriptor for MRT (mirror of gfx_sw::om_color_t). The
@@ -146,6 +149,8 @@ typedef struct {
   uint32_t cbuf_writemask;
   uint32_t color_read, color_write;
   uint32_t blend_constf[4];            // float bits, RGBA
+  uint32_t cbuf_sample_stride;         // bytes between sample planes
+  uint32_t cbuf_layer_stride;          // bytes between layers
 } gfx_sw_omcolor_t;
 
 // Sample the resident texture (software fallback for vx_tex4). `lod` is integer
@@ -296,7 +301,7 @@ uint32_t gfx_tex_shadow_sw(const gfx_sw_texstate_t* st,
                            uint32_t lod);
 
 // sampler2DArrayShadow: like gfx_tex_shadow_sw, but the integer `layer` selects
-// the array slice (base + layer*layer_stride) before the depth compare.
+// the array slice (layer * slice_pitch past its level) before the depth compare.
 uint32_t gfx_tex_shadow_array_sw(const gfx_sw_texstate_t* st,
                                  int32_t x, int32_t y, uint32_t layer,
                                  uint32_t ref_bits, uint32_t filter, uint32_t lod);
@@ -362,8 +367,7 @@ uint32_t gfx_om_fragment_sw(const gfx_sw_omstate_t* st, uint32_t covered,
 // `rt` describes, or of `st`'s own attachment when `rt` is null. With `dual` the
 // single attachment's second source is lanes 4-7.
 //
-// Every plane's pitch must already be the multisample row stride (W*samples*bpp),
-// which is what msaa_color_addr/msaa_depth_addr index against.
+// Each attachment keeps one image per sample, its sample stride apart.
 uint32_t gfx_om_fragment_ms_sw(const gfx_sw_omstate_t* st, const gfx_sw_omcolor_t* rt,
                                uint32_t num_color, uint32_t samples, uint32_t sample_mask,
                                uint32_t x, uint32_t y, uint32_t face, const uint32_t* lanes,

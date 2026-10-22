@@ -1,0 +1,17 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+
+/* Round k's pattern, stored texel by texel. */
+layout(local_size_x = 4, local_size_y = 4) in;
+layout(rgba8, binding = 0) uniform writeonly image2D img;
+layout(push_constant) uniform Push { uint k; uint w; uint h; };
+
+#include "rtt_pattern.glsl"
+
+void main()
+{
+   uvec2 c = gl_GlobalInvocationID.xy;
+   if (c.x >= w || c.y >= h)
+      return;
+   imageStore(img, ivec2(c), unpackUnorm4x8(pattern(c.x, c.y, k)));
+}

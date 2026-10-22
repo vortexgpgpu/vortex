@@ -126,6 +126,36 @@ public:
     return 0;
   }
 
+  // ----- Imported host memory -----
+  // Unified memory: the device pages of the range become the host's own. A
+  // kernel still running reads the page directory, so the remap waits for it;
+  // the caller holds the CP still, so no other one starts meanwhile.
+  int mem_import(uint64_t dev_addr, void* host_ptr, uint64_t size) {
+    if (future_.valid()) {
+      future_.wait();
+    }
+    // RAM aliases whole pages of its own size; a range the core placed on
+    // another granularity cannot be imported, and the caller mirrors it.
+    const uint64_t mask = ram_.page_size() - 1;
+    if ((dev_addr | size | reinterpret_cast<uintptr_t>(host_ptr)) & mask) {
+      return VX_ERR_NOT_SUPPORTED;
+    }
+    try {
+      ram_.alias(dev_addr, size, static_cast<uint8_t*>(host_ptr));
+    } catch (const std::exception&) {
+      return -1;
+    }
+    return 0;
+  }
+
+  int mem_unimport(uint64_t dev_addr, uint64_t size) {
+    if (future_.valid()) {
+      future_.wait();
+    }
+    ram_.unalias(dev_addr, size);
+    return 0;
+  }
+
 
 private:
   // If `addr` falls in a registered host region, return it as a host

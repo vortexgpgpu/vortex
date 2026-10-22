@@ -516,6 +516,7 @@ int render(const CGLTrace& trace) {
         ts.wrap   = (tex_wrapV << 16) | tex_wrapU;
         for (uint32_t i = 0; i < mip_offsets.size() && i <= (uint32_t)VX_TEX_LOD_MAX; ++i)
           ts.mip_off[i] = mip_offsets.at(i);
+        gfx_sw::tex_packed_pitches(ts, 0);
       }
     }
 

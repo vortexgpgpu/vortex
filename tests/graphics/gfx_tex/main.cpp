@@ -524,7 +524,7 @@ int main(int argc, char *argv[]) {
     st.height = src_height;
     st.border = kBorderColor;
     st.border_t[0] = kBorderDepth;
-    st.layer_stride = layer_stride;
+    gfx_sw::tex_packed_pitches(st, layer_stride);
     st.depth = 2;
     st.levels = last_lod + 1;
     st.swizzle = 0u | (1u << 3) | (2u << 6) | (3u << 9);

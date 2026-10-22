@@ -90,6 +90,16 @@ tests:
 # buffers, capture under rasterizer discard, and the stream query.
 - {id: gfx-xfb, via: make-run, drivers: [simx], dir: tests/vulkan/xfb, target: "run-{driver}",
    touches: [sw/common/gfx_fs_desc_abi.h, sw/gfx/, tests/vulkan/xfb]}
+# Mirror mode (NO_IMPORT=1): simx and rtlsim import every allocation, so only
+# these runs reach the driver's resident planes and mirrored ranges -- per-view
+# plane bases of a multiview pass, a capture brought home after its draw, and
+# depth/stencil formats loaded into and stored back from planes.
+- {id: gfx-multiview-mirror, via: make-run, drivers: [simx], dir: tests/vulkan/multiview, target: "run-{driver}",
+   vars: {NO_IMPORT: 1}, touches: [tests/vulkan/multiview]}
+- {id: gfx-xfb-mirror, via: make-run, drivers: [simx], dir: tests/vulkan/xfb, target: "run-{driver}",
+   vars: {NO_IMPORT: 1}, touches: [sw/common/gfx_fs_desc_abi.h, sw/gfx/, tests/vulkan/xfb]}
+- {id: gfx-rtinplace-mirror, via: make-run, drivers: [simx], dir: tests/vulkan/rtinplace, target: "run-{driver}",
+   vars: {NO_IMPORT: 1}, touches: [hw/rtl/om/, sim/simx/om/, tests/vulkan/rtinplace]}
 - {id: gfx-varypack, via: make-run, drivers: [simx], dir: tests/vulkan/varypack, target: "run-{driver}",
    touches: [sw/gfx/, hw/rtl/raster/, sim/simx/raster/, tests/vulkan/varypack]}
 

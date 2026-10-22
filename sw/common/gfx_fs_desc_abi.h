@@ -119,7 +119,15 @@
 // ZKILL lo/hi, ZCLAMP lo/hi and ZCLAMPF lo/hi, which a fragment uses in place of
 // those arguments by its primitive's viewport index. 0 = the arguments hold.
 #define GFX_FS_ARG_ZTABLE   25u
-#define GFX_FS_ARG_COUNT    26u
+// A layered draw renders every framebuffer layer in one pass, each fragment into
+// the layer its primitive selects (rast_vary_t::vp_layer). The fixed-function
+// merger sees the layers stacked as one tall target: layer L's row y is row
+// y + L * rows, `rows` being this argument, which is every attachment's layer
+// stride over its pitch. The software merger takes the layer above the row
+// (om_row_offset) and steps each attachment by its own layer stride, so it
+// ignores this. Read only by a fragment shader built for layered draws.
+#define GFX_FS_ARG_LAYER_ROWS 26u
+#define GFX_FS_ARG_COUNT    27u
 
 // The query counter block: one 64-bit counter per statistic, kept on the device
 // and added to with 32-bit atomics (the low word, then the high word on a carry).

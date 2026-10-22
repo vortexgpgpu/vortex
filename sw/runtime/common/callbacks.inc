@@ -23,11 +23,49 @@
 //   int host_mem_alloc(uint64_t size, void** host_ptr, uint64_t* cp_addr);
 //   int host_mem_free (uint64_t cp_addr);
 //
+// and may provide, when its device reaches host memory directly:
+//
+//   int mem_import  (uint64_t dev_addr, void* host_ptr, uint64_t size);
+//   int mem_unimport(uint64_t dev_addr, uint64_t size);
+//
 // The backend is a pure transport HAL — device memory allocation, DMA and
 // capability decoding all live in the common core (sw/runtime/common). The
 // CP is the sole command + DMA engine; backends only expose the register
 // channel and CP-visible host memory above.
 // ============================================================================
+
+#include <type_traits>
+
+template <typename D, typename = void>
+struct vx_has_mem_import : std::false_type {};
+
+template <typename D>
+struct vx_has_mem_import<D, std::void_t<decltype(&D::mem_import),
+                                        decltype(&D::mem_unimport)>>
+    : std::true_type {};
+
+template <typename D>
+static void vx_dev_init_import(callbacks_t* callbacks) {
+  if constexpr (vx_has_mem_import<D>::value) {
+    callbacks->mem_import = [](void* dev_ctx, uint64_t dev_addr,
+                               void* host_ptr, uint64_t size) -> int {
+      if (nullptr == dev_ctx || nullptr == host_ptr || 0 == size) {
+        return -1;
+      }
+      return reinterpret_cast<D*>(dev_ctx)->mem_import(dev_addr, host_ptr, size);
+    };
+    callbacks->mem_unimport = [](void* dev_ctx, uint64_t dev_addr,
+                                 uint64_t size) -> int {
+      if (nullptr == dev_ctx) {
+        return -1;
+      }
+      return reinterpret_cast<D*>(dev_ctx)->mem_unimport(dev_addr, size);
+    };
+  } else {
+    callbacks->mem_import   = nullptr;
+    callbacks->mem_unimport = nullptr;
+  }
+}
 
 extern "C" int vx_dev_init(callbacks_t* callbacks) {
   if (nullptr == callbacks)
@@ -100,6 +138,8 @@ extern "C" int vx_dev_init(callbacks_t* callbacks) {
       return -1;
     return reinterpret_cast<vx_device*>(dev_ctx)->host_mem_push(cp_addr);
   };
+
+  vx_dev_init_import<vx_device>(callbacks);
 
   return 0;
 }

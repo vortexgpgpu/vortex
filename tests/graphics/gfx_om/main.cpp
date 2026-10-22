@@ -65,9 +65,10 @@ bool stencil_enable = false;   // -s : stencil test + ops on a striped stencil
 bool backface     = false;
 bool sw_path      = false;   // -S : merge via gfx_sw::om_fragment
 bool mrt_enable   = false;   // -m : also render to a second colour attachment
-bool float_depth  = false;   // -z : D32F depth target (ordered keys, face in the address)
+bool float_depth  = false;   // -z : D32F depth target (floats, face in the address)
 bool stencil_word = false;   // -Z : D32F_S8, the stencil in the next word of an 8-byte texel
 bool depth16      = false;   // -y : D16, a 2-byte texel, checked texel by texel
+bool stencil8     = false;   // -8 : S8, a 1-byte stencil texel (with -s: -s8)
 uint32_t mrt_rt   = 0;       // -n : which attachment that is (default 1)
 // -q: count the draw's passing fragments with the OM occlusion counter and check
 // the count against the test outcome of every pixel. -Q counts a draw that
@@ -94,9 +95,11 @@ struct stencil_cfg_t { uint32_t func, ref, writemask, fail, zfail, zpass; };
 static stencil_cfg_t kStencil = { VX_OM_DEPTH_FUNC_ALWAYS, 0, 0,
                                   VX_OM_STENCIL_OP_KEEP, VX_OM_STENCIL_OP_KEEP,
                                   VX_OM_STENCIL_OP_KEEP };
-// The back face compares against 0 instead, so -f admits the other rows: a
-// merger that misread the face would fail every pixel.
-static const uint32_t kStencilBackRef = 0;
+// The back face compares against another reference, so -f admits other texels:
+// a merger that misread the face would fail every pixel. 0 is the even rows'
+// stencil under -s; under -s8 it is one of the even rows' repeating values
+// (initial_stencil8), so an eighth of their texels pass.
+static uint32_t stencil_back_ref();
 
 static uint32_t float_bits(float f) {
   uint32_t b;
@@ -112,13 +115,13 @@ static const float kFloatDepths[6] = { -2.0f, -0.0f, 0.0f, 0.5f, 1.0f, 3.0f };
 const float kFloatFragDepth = -1.0f;
 
 // The depth/stencil word a pixel starts with: a depth checkerboard of 0.0 and
-// 0.99, and under -s stencil 1 on odd rows; under -z the D32F keys of
-// kFloatDepths in a 6-cycle. Under -Z the stencil is a word of its own
-// (initial_stencil).
+// 0.99, and under -s stencil 1 on odd rows; under -z the floats of kFloatDepths
+// in a 6-cycle, as the D32F texel stores them. Under -Z the stencil is a word of
+// its own (initial_stencil).
 static uint32_t initial_depthstencil(uint32_t x, uint32_t y) {
   uint32_t s = stencil_enable ? (y & 1) : 0;
   if (float_depth) {
-    return gfx_sw::om_float_depth_key(float_bits(kFloatDepths[(x + 3 * y) % 6]));
+    return float_bits(kFloatDepths[(x + 3 * y) % 6]);
   }
   uint32_t z = ((x & 1) == (y & 1)) ? TFixed<24>(0.0f).data() : TFixed<24>(0.99f).data();
   return (s << VX_OM_DEPTH_BITS) | z;
@@ -139,6 +142,17 @@ static uint32_t initial_stencil(uint32_t y) {
   return stencil_enable ? (y & 1) : 0;
 }
 
+// Under -s8 the stencil 1 on odd rows, and on even rows a value that differs
+// from each neighbour's -- 2, 4, .. 16, repeating every 8 texels -- so a byte
+// stored to or read from the wrong texel of its word changes the result.
+static uint8_t initial_stencil8(uint32_t x, uint32_t y) {
+  return (y & 1) ? 1 : (uint8_t)(2 * (x % 8) + 2);
+}
+
+static uint32_t stencil_back_ref() {
+  return stencil8 ? 6u : 0u;
+}
+
 uint32_t dst_width  = 128;
 uint32_t dst_height = 128;
 
@@ -157,12 +171,12 @@ uint64_t    cbuf1_addr = 0;
 
 static void show_usage() {
    std::cout << "Vortex Render Output Test (v2 KMU)." << std::endl;
-   std::cout << "Usage: [-c color] [-d depth] [-s stencil] [-z float depth] [-Z float depth + stencil] [-y D16 depth] [-b blend] [-m mrt] [-n mrt attachment] [-f face] [-q occlusion count] [-Q occlusion count, no writes] [-k kernel] [-o image] [-r reference] [-w width] [-h height] [-F colour format]" << std::endl;
+   std::cout << "Usage: [-c color] [-d depth] [-s stencil] [-z float depth] [-Z float depth + stencil] [-y D16 depth] [-s8 S8 stencil] [-b blend] [-m mrt] [-n mrt attachment] [-f face] [-q occlusion count] [-Q occlusion count, no writes] [-k kernel] [-o image] [-r reference] [-w width] [-h height] [-F colour format]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "o:r:k:w:h:c:n:F:bdfmszZySqQ?")) != -1) {
+  while ((c = getopt(argc, argv, "o:r:k:w:h:c:n:F:bdfmszZyS8qQ?")) != -1) {
     switch (c) {
     case 'o': output_file = optarg; break;
     case 'r': reference_file = optarg; break;
@@ -178,6 +192,7 @@ static void parse_args(int argc, char **argv) {
     case 'z': float_depth = true; break;
     case 'Z': float_depth = stencil_word = true; break;
     case 'y': depth16 = depth_enable = true; break;
+    case '8': stencil8 = true; break;
     case 'n': mrt_rt = std::atoi(optarg); break;
     case 'S': sw_path = true; break;
     case 'q': occ_query = true; break;
@@ -214,15 +229,25 @@ static void parse_args(int argc, char **argv) {
     std::cout << "Error: a D32F target has no stencil; -Z is D32F_S8" << std::endl;
     exit(1);
   }
-  if (depth16 && (float_depth || stencil_enable || mrt_enable || blend_enable || sw_path ||
+  if (depth16 && (float_depth || stencil_enable || mrt_enable || blend_enable ||
                   reference_file || cbuf_format != VX_OM_COLOR_FORMAT_A8R8G8B8)) {
     std::cout << "Error: -y checks a D16 target's every texel against the unblended colour, "
-                 "so it takes none of -z, -Z, -s, -m, -b, -S, -r or -F" << std::endl;
+                 "so it takes none of -z, -Z, -s, -m, -b, -r or -F" << std::endl;
     exit(1);
   }
   if (float_depth && depth_enable && reference_file) {
     std::cout << "Error: -z -d checks the buffers itself and has no reference image" << std::endl;
     exit(1);
+  }
+  if (stencil8 && (!stencil_enable || float_depth || depth16 || mrt_enable || blend_enable ||
+                   reference_file || occ_proxy || cbuf_format != VX_OM_COLOR_FORMAT_A8R8G8B8)) {
+    std::cout << "Error: -8 is an S8 target under the -s stencil test (-s8), checked texel by "
+                 "texel, so it takes none of -z, -Z, -y, -m, -b, -r, -Q or -F" << std::endl;
+    exit(1);
+  }
+  // An S8 target has no depth aspect.
+  if (stencil8) {
+    depth_enable = false;
   }
   if (mrt_rt != 0 && !mrt_enable) {
     std::cout << "Error: -n names the attachment -m renders to" << std::endl;
@@ -263,10 +288,13 @@ static bool ref_frag_passes(uint32_t x, uint32_t y, uint32_t frag_z) {
   if (depth16) {
     return kD16Frag < initial_d16(x, y);
   }
+  if (stencil8) {
+    return initial_stencil8(x, y) == (backface ? stencil_back_ref() : kStencil.ref);
+  }
   const uint32_t init = initial_depthstencil(x, y);
   const uint32_t s0 = stencil_word ? initial_stencil(y)
                     : float_depth  ? 0 : (init >> VX_OM_DEPTH_BITS);
-  const bool spass = !stencil_enable || s0 == (backface ? kStencilBackRef : kStencil.ref);
+  const bool spass = !stencil_enable || s0 == (backface ? stencil_back_ref() : kStencil.ref);
   const bool dpass = !depth_enable
                   || (float_depth ? (kFloatFragDepth < kFloatDepths[(x + 3 * y) % 6])
                                   : (frag_z < (init & OM_DEPTH_MASK)));
@@ -328,8 +356,11 @@ int main(int argc, char *argv[]) {
                                 &kernel));
 
   // ---- allocate cbuf + zbuf --------------------------------------------
-  // The merger addresses depth a word at a time, so a D16 row starts on one.
-  zbuf_pitch = depth16 ? ((dst_width * 2 + 3) & ~3u) : dst_width * (stencil_word ? 8 : 4);
+  // The merger addresses depth a word at a time, so a D16 or S8 row starts on
+  // one.
+  zbuf_pitch = depth16 ? ((dst_width * 2 + 3) & ~3u)
+             : stencil8 ? ((dst_width + 3) & ~3u)
+             : dst_width * (stencil_word ? 8 : 4);
   zbuf_size  = dst_height * zbuf_pitch;
   const uint32_t cbuf_bpp = gfx_sw::om_color_bpp(cbuf_format);
   cbuf_pitch = dst_width * cbuf_bpp;
@@ -354,7 +385,18 @@ int main(int argc, char *argv[]) {
   }
 
   // depth checkerboard prefill; under -s, stencil 1 on odd rows.
-  if (depth16) {
+  if (stencil8) {
+    std::vector<uint8_t> staging(zbuf_size, 0);
+    for (uint32_t y = 0; y < dst_height; ++y) {
+      for (uint32_t x = 0; x < dst_width; ++x) {
+        staging[y * zbuf_pitch + x] = initial_stencil8(x, y);
+      }
+    }
+    vx_event_h ev = nullptr;
+    RT_CHECK(vx_enqueue_write(queue, depth_buffer, 0, staging.data(), zbuf_size, 0, nullptr, &ev));
+    RT_CHECK(vx_event_wait_value(ev, 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(ev);
+  } else if (depth16) {
     std::vector<uint8_t> staging(zbuf_size, 0);
     for (uint32_t y = 0; y < dst_height; ++y) {
       for (uint32_t x = 0; x < dst_width; ++x) {
@@ -422,11 +464,11 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_APERTURE_YBITS,        ap_ybits, 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_APERTURE_RECORD_SHIFT, ap_shift, 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_APERTURE_DEPTH_ONLY,   0, 0, nullptr, nullptr));
-  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_DEPTH_FORMAT,
-                                stencil_word ? VX_OM_DEPTH_FORMAT_D32FS8
-                                : float_depth ? VX_OM_DEPTH_FORMAT_D32F
-                                : depth16 ? VX_OM_DEPTH_FORMAT_D16 : VX_OM_DEPTH_FORMAT_D24S8,
-                                0, nullptr, nullptr));
+  const uint32_t depth_format = stencil_word ? VX_OM_DEPTH_FORMAT_D32FS8
+                              : float_depth ? VX_OM_DEPTH_FORMAT_D32F
+                              : depth16 ? VX_OM_DEPTH_FORMAT_D16
+                              : stencil8 ? VX_OM_DEPTH_FORMAT_S8 : VX_OM_DEPTH_FORMAT_D24S8;
+  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_DEPTH_FORMAT, depth_format, 0, nullptr, nullptr));
 
   if (depth_enable) {
     RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_DEPTH_FUNC,      VX_OM_DEPTH_FUNC_LESS, 0, nullptr, nullptr));
@@ -443,7 +485,7 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_STENCIL_ZFAIL, both(kStencil.zfail), 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_STENCIL_FAIL,  both(kStencil.fail), 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_STENCIL_REF,
-                                (kStencilBackRef << 16) | kStencil.ref, 0, nullptr, nullptr));
+                                (stencil_back_ref() << 16) | kStencil.ref, 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_STENCIL_MASK,  both(OM_STENCIL_MASK), 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_STENCIL_WRITEMASK, both(kStencil.writemask), 0, nullptr, nullptr));
 
@@ -537,7 +579,7 @@ int main(int argc, char *argv[]) {
     om.stencil_zpass[f]     = kStencil.zpass;
     om.stencil_zfail[f]     = kStencil.zfail;
     om.stencil_fail[f]      = kStencil.fail;
-    om.stencil_ref[f]       = f ? kStencilBackRef : kStencil.ref;
+    om.stencil_ref[f]       = f ? stencil_back_ref() : kStencil.ref;
     om.stencil_mask[f]      = OM_STENCIL_MASK;
     om.stencil_writemask[f] = kStencil.writemask;
   }
@@ -555,8 +597,7 @@ int main(int argc, char *argv[]) {
   om.cbuf_pitch     = cbuf_pitch;
   om.cbuf_writemask4 = 0xf;
   om.color_format    = cbuf_format;
-  om.depth_format    = stencil_word ? VX_OM_DEPTH_FORMAT_D32FS8
-                     : float_depth ? VX_OM_DEPTH_FORMAT_D32F : VX_OM_DEPTH_FORMAT_D24S8;
+  om.depth_format    = depth_format;
   gfx_sw::resolve_om_state(om);
   if (sw_path) std::cout << "[gfx_om] software output-merger path (gfx_sw::om_fragment)\n";
 
@@ -700,7 +741,7 @@ int main(int argc, char *argv[]) {
   // when the depth test would pass; it passes on odd rows, where the depth
   // checkerboard decides. Each outcome takes a different stencil op.
   int ds_errors = 0;
-  if (stencil_enable || (float_depth && depth_enable)) {
+  if ((stencil_enable && !stencil8) || (float_depth && depth_enable)) {
     std::vector<uint32_t> zs(zbuf_size / 4), cb(cbuf_size / 4);
     vx_event_h read_ev = nullptr;
     RT_CHECK(vx_enqueue_read(queue, zs.data(), depth_buffer, 0, zbuf_size, 0, nullptr, &read_ev));
@@ -716,10 +757,12 @@ int main(int argc, char *argv[]) {
         const uint32_t z0 = float_depth ? init : (init & OM_DEPTH_MASK);
         const uint32_t s0 = stencil_word ? initial_stencil(y)
                           : float_depth  ? 0 : (init >> VX_OM_DEPTH_BITS);
-        const uint32_t frag_z = kernel_arg.depth;
+        // Under -z the texel holds the float the fragment's key stands for,
+        // and a texel the draw leaves keeps its exact bits, -0 included.
+        const uint32_t frag_z = float_depth ? float_bits(kFloatFragDepth) : kernel_arg.depth;
         // Under -z the expectation comes from the floats themselves, so the
         // check does not share the key's order with the merger it checks.
-        const bool spass = !stencil_enable || s0 == (backface ? kStencilBackRef : kStencil.ref);
+        const bool spass = !stencil_enable || s0 == (backface ? stencil_back_ref() : kStencil.ref);
         const bool dpass = float_depth ? (kFloatFragDepth < kFloatDepths[(x + 3 * y) % 6])
                                        : (frag_z < z0);
         uint32_t s1 = s0;
@@ -750,6 +793,43 @@ int main(int argc, char *argv[]) {
           ++ds_errors;
         }
       }
+    }
+  }
+
+  // -s8: every stencil byte and its colour against the stencil test alone,
+  // each outcome by its own op; neighbouring bytes of a word differ, so a byte
+  // taken from or stored to the wrong texel shows.
+  if (stencil8) {
+    std::vector<uint8_t> zs(zbuf_size);
+    std::vector<uint32_t> cb(cbuf_size / 4);
+    vx_event_h read_ev = nullptr;
+    RT_CHECK(vx_enqueue_read(queue, zs.data(), depth_buffer, 0, zbuf_size, 0, nullptr, &read_ev));
+    RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(read_ev);
+    RT_CHECK(vx_enqueue_read(queue, cb.data(), color_buffer, 0, cbuf_size, 0, nullptr, &read_ev));
+    RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(read_ev);
+    for (uint32_t y = 0; y < dst_height && ds_errors < 16; ++y) {
+      for (uint32_t x = 0; x < dst_width && ds_errors < 16; ++x) {
+        const uint8_t s0 = initial_stencil8(x, y);
+        const bool pass = ref_frag_passes(x, y, 0);
+        const uint8_t want_s = pass ? (uint8_t)~s0 : (uint8_t)(s0 + 1);   // INVERT : INCR
+        const uint32_t src = 0xff000000u
+                           | (((x * kernel_arg.r_scale_q16) >> 16) << 16)
+                           | (((y * kernel_arg.g_scale_q16) >> 16) <<  8)
+                           |  (((x + y) * kernel_arg.b_scale_q16) >> 16);
+        const uint32_t want_c = pass ? src : clear_color;
+        const uint8_t got_s = zs[y * zbuf_pitch + x];
+        if (got_s != want_s || cb[x + y * dst_width] != want_c) {
+          std::cout << "FAILED: S8 at (" << x << "," << y << "): got 0x" << std::hex
+                    << (uint32_t)got_s << "/0x" << cb[x + y * dst_width] << ", expected 0x"
+                    << (uint32_t)want_s << "/0x" << want_c << std::dec << std::endl;
+          ++ds_errors;
+        }
+      }
+    }
+    if (ds_errors == 0) {
+      std::cout << "S8: " << dst_width * dst_height << " texels match" << std::endl;
     }
   }
 

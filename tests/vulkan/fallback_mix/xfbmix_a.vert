@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: MIT
  *
  * A vertex shader that writes gl_Layer and captures its vertex index: a
- * layered draw the device runs, once per layer, capturing once. */
+ * layered draw the device runs in one pass, capturing once. */
 #version 460
 #extension GL_ARB_shader_viewport_layer_array : require
 

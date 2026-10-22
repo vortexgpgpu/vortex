@@ -31,10 +31,12 @@ Buffer::~Buffer() {
 }
 
 vx_result_t Buffer::create(Device* dev, uint64_t size, uint32_t flags,
-                           Buffer** out) {
+                           void* host_ptr, Buffer** out) {
     if (!dev || !out || size == 0) return VX_ERR_INVALID_VALUE;
     uint64_t dev_addr = 0;
-    auto r = dev->mem_alloc(size, flags, &dev_addr);
+    auto r = (flags & VX_MEM_IMPORT_HOST)
+               ? dev->mem_import(host_ptr, size, flags, &dev_addr)
+               : dev->mem_alloc(size, flags, &dev_addr);
     if (r != VX_SUCCESS) return r;
     *out = new Buffer(dev, dev_addr, size, flags);
     return VX_SUCCESS;
@@ -134,8 +136,9 @@ extern "C" vx_result_t vx_buffer_create(vx_device_h dev, uint64_t size,
                                         uint32_t flags, vx_buffer_h* out) {
     VX_C_ENTRY_TRY
     if (!dev || !out) return VX_ERR_INVALID_VALUE;
+    void* host_ptr = (flags & VX_MEM_IMPORT_HOST) ? *out : nullptr;
     Buffer* b = nullptr;
-    auto r = Buffer::create(to_device(dev), size, flags, &b);
+    auto r = Buffer::create(to_device(dev), size, flags, host_ptr, &b);
     if (r != VX_SUCCESS) return r;
     *out = to_handle(b);
     return VX_SUCCESS;

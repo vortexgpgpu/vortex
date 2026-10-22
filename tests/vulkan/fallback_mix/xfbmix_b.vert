@@ -1,9 +1,8 @@
 /* Copyright © 2026  Vortex GPGPU
  * SPDX-License-Identifier: MIT
  *
- * xfbmix_a.vert that also counts its invocations in a storage buffer. A
- * layered draw whose vertex shader has a side effect cannot replay per layer,
- * so the device leaves it to llvmpipe. */
+ * xfbmix_a.vert that also counts its invocations in a storage buffer, so a
+ * layered draw that ran its vertices more than once shows. */
 #version 460
 #extension GL_ARB_shader_viewport_layer_array : require
 

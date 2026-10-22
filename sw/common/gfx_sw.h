@@ -187,7 +187,21 @@ struct om_state_t {
   // the blend constant at full precision (float bits, RGBA), for the formats
   // that blend in float
   uint32_t blend_constf[4];
+  // bytes between a multisample attachment's sample planes
+  uint32_t zbuf_sample_stride, cbuf_sample_stride;
+  // bytes between a layered attachment's layers (see om_row_offset)
+  uint32_t zbuf_layer_stride, cbuf_layer_stride;
 };
+
+// The row a merge addresses: `y` holds the pixel row in its low half and, for a
+// layered draw, the framebuffer layer in its high half, which the attachment's
+// own layer stride places.
+static constexpr uint32_t OM_LAYER_SHIFT = 16;
+static inline __attribute__((always_inline)) uint64_t om_row_offset(
+    uint32_t y, uint32_t pitch, uint32_t layer_stride) {
+  return (uint64_t)(y >> OM_LAYER_SHIFT) * layer_stride
+       + (uint64_t)(y & ((1u << OM_LAYER_SHIFT) - 1u)) * pitch;
+}
 
 // Derive the enable flags + expanded color mask exactly as the FF unit does.
 // Call host-side after filling the raw
@@ -338,7 +352,7 @@ static inline __attribute__((always_inline)) uint32_t om_depth_bpp(uint32_t fmt)
   switch (fmt) {
   case VX_OM_DEPTH_FORMAT_S8:     return 1;
   case VX_OM_DEPTH_FORMAT_D16:    return 2;
-  case VX_OM_DEPTH_FORMAT_D32FS8: return 8;   // the key, then the stencil word
+  case VX_OM_DEPTH_FORMAT_D32FS8: return 8;   // the float, then the stencil word
   default:                        return 4;   // D24S8 / D32F
   }
 }
@@ -418,13 +432,23 @@ static inline __attribute__((always_inline)) bool om_ff_color_format(uint32_t fm
          fmt == VX_OM_COLOR_FORMAT_A1R5G5B5;
 }
 
-// A float depth as the D32F plane stores it: an unsigned key in the float's
-// order, with -0 folded onto +0, so every merger compares D32F unsigned.
+// A float depth as every merger compares it: an unsigned key in the float's
+// order, with -0 folded onto +0. A D32F texel stores the float itself.
 static inline __attribute__((always_inline)) uint32_t om_float_depth_key(uint32_t bits) {
   if (bits == 0x80000000u) {
     bits = 0;
   }
   return bits ^ ((bits & 0x80000000u) ? 0xffffffffu : 0x80000000u);
+}
+
+static inline __attribute__((always_inline)) uint32_t om_float_depth_from_key(uint32_t key) {
+  return key ^ ((key & 0x80000000u) ? 0x80000000u : 0xffffffffu);
+}
+
+// A D16 texel as every merger compares it: the 24-bit key with the high byte
+// replicated, an order-preserving widening whose top 16 bits are the texel.
+static inline __attribute__((always_inline)) uint32_t om_d16_key(uint32_t v) {
+  return (v << 8) | (v >> 8);
 }
 
 // Per-format depth geometry: comparison mask, stencil presence, and the bit
@@ -433,7 +457,7 @@ static inline __attribute__((always_inline)) uint32_t om_float_depth_key(uint32_
 struct om_depth_desc { uint32_t dmask; uint32_t sshift; bool has_depth; bool has_stencil; bool split; };
 static inline __attribute__((always_inline)) om_depth_desc om_depth_geom(uint32_t fmt) {
   switch (fmt) {
-  case VX_OM_DEPTH_FORMAT_D16:    return { 0xffffu,     0, true,  false, false };
+  case VX_OM_DEPTH_FORMAT_D16:    return { OM_DEPTH_MASK, 0, true, false, false };  // om_d16_key
   case VX_OM_DEPTH_FORMAT_D32F:   return { 0xffffffffu, 0, true,  false, false };  // om_float_depth_key
   case VX_OM_DEPTH_FORMAT_D32FS8: return { 0xffffffffu, 0, true,  true,  true  };
   case VX_OM_DEPTH_FORMAT_S8:     return { 0u,          0, false, true,  false };
@@ -517,10 +541,11 @@ static inline __attribute__((always_inline)) bool ds_rmw(
   const uint32_t stencil_wm = (s.stencil_enabled[f] && dd.has_stencil) ? (s.stencil_writemask[f] & 0xffu) : 0u;
   uint32_t stencil_result = 0;
   if (dd.split) {
-    uint32_t dst_depth = om_load(z_addr, 4), dst_stencil = om_load(z_addr + 4, 1);
+    uint32_t dst_depth = om_float_depth_key(om_load(z_addr, 4));
+    uint32_t dst_stencil = om_load(z_addr + 4, 1);
     bool ds_pass = ds_test(s, face, src_depth, dst_depth, dst_stencil, &stencil_result, src_sref);
     if (depth_write && ds_pass) {
-      om_store(z_addr, 4, src_depth);
+      om_store(z_addr, 4, om_float_depth_from_key(src_depth));
     }
     if (stencil_wm) {
       om_store(z_addr + 4, 1, (dst_stencil & ~stencil_wm) | (stencil_result & stencil_wm));
@@ -528,7 +553,14 @@ static inline __attribute__((always_inline)) bool ds_rmw(
     return ds_pass;
   }
   uint32_t dbpp = om_depth_bpp(s.depth_format);
+  const bool fdepth = s.depth_format == VX_OM_DEPTH_FORMAT_D32F;
+  const bool d16 = s.depth_format == VX_OM_DEPTH_FORMAT_D16;
   uint32_t dst_ds = om_load(z_addr, dbpp);
+  if (fdepth) {
+    dst_ds = om_float_depth_key(dst_ds);
+  } else if (d16) {
+    dst_ds = om_d16_key(dst_ds);
+  }
   uint32_t depth_ref = src_depth & dd.dmask;
   bool ds_pass = ds_test(s, face, depth_ref, dst_ds & dd.dmask,
                          dd.has_stencil ? ((dst_ds >> dd.sshift) & 0xffu) : 0u,
@@ -536,7 +568,8 @@ static inline __attribute__((always_inline)) bool ds_rmw(
   uint32_t merged = (stencil_result << dd.sshift) | depth_ref;
   uint32_t ds_wm = ((depth_write && ds_pass) ? dd.dmask : 0u) | (stencil_wm << dd.sshift);
   if (ds_wm) {
-    om_store(z_addr, dbpp, (dst_ds & ~ds_wm) | (merged & ds_wm));
+    const uint32_t out = (dst_ds & ~ds_wm) | (merged & ds_wm);
+    om_store(z_addr, dbpp, fdepth ? om_float_depth_from_key(out) : d16 ? (out >> 8) : out);
   }
   return ds_pass;
 }
@@ -561,18 +594,21 @@ static inline __attribute__((always_inline)) bool om_sample_rmw(
 }
 
 // ── MSAA storage + resolve ───────────────────────────────────────────────────
-// Per-sample surfaces are sample-interleaved within a pixel: a pixel's S samples
-// are contiguous, so a row is W*S texels and the per-sample column offset is
-// (x*S + sample). cbuf_pitch / zbuf_pitch in om_state_t already carry the
-// MSAA row stride (= W*S*bpp). Keeping samples contiguous makes resolve a unit-
-// stride gather.
+// A multisample attachment keeps one whole image per sample: sample k of a
+// pixel lies k sample strides past sample 0, at the same row and column, so each
+// plane is laid out exactly as a single-sample image. Sample 0 is the texel of
+// a single-sample attachment.
 static inline __attribute__((always_inline)) uintptr_t msaa_color_addr(
-    const om_state_t& s, uint32_t samples, uint32_t x, uint32_t y, uint32_t sample) {
-  return (uintptr_t)(s.cbuf_base + (uint64_t)y * s.cbuf_pitch + (uint64_t)(x * samples + sample) * om_color_bpp(s.color_format));
+    const om_state_t& s, uint32_t x, uint32_t y, uint32_t sample) {
+  return (uintptr_t)(s.cbuf_base + (uint64_t)sample * s.cbuf_sample_stride
+                     + om_row_offset(y, s.cbuf_pitch, s.cbuf_layer_stride)
+                     + (uint64_t)x * om_color_bpp(s.color_format));
 }
 static inline __attribute__((always_inline)) uintptr_t msaa_depth_addr(
-    const om_state_t& s, uint32_t samples, uint32_t x, uint32_t y, uint32_t sample) {
-  return (uintptr_t)(s.zbuf_base + (uint64_t)y * s.zbuf_pitch + (uint64_t)(x * samples + sample) * om_depth_bpp(s.depth_format));
+    const om_state_t& s, uint32_t x, uint32_t y, uint32_t sample) {
+  return (uintptr_t)(s.zbuf_base + (uint64_t)sample * s.zbuf_sample_stride
+                     + om_row_offset(y, s.zbuf_pitch, s.zbuf_layer_stride)
+                     + (uint64_t)x * om_depth_bpp(s.depth_format));
 }
 
 // Box resolve of one pixel's S color samples → a single ARGB8888 value
@@ -586,7 +622,7 @@ static inline __attribute__((always_inline)) uint32_t msaa_resolve_color(
   uint32_t bpp = om_color_bpp(s.color_format);
   uint32_t acc[4] = {0, 0, 0, 0};
   for (uint32_t k = 0; k < samples; ++k) {
-    uint32_t raw = om_load(msaa_color_addr(s, samples, x, y, k), bpp);
+    uint32_t raw = om_load(msaa_color_addr(s, x, y, k), bpp);
     uint32_t c   = om_decode_color(s.color_format, raw);
     acc[0] +=  c        & 0xff;
     acc[1] += (c >>  8) & 0xff;
@@ -620,12 +656,13 @@ static inline __attribute__((always_inline)) uint32_t tex_load_texel(uint64_t ad
 // space (point → tap 0, bilinear → TexFilterLinear as A8R8G8B8), or takes the
 // per-channel min/max of the nonzero-weight taps under a reduction.
 static inline __attribute__((always_inline)) uint32_t tex_sample_ext_lod(
-    uint64_t base_addr, uint32_t logdim, uint32_t format, uint32_t filter,
+    uint64_t base_addr, uint32_t pitch, uint32_t logdim, uint32_t format, uint32_t filter,
     uint32_t wrap, int32_t u, int32_t v, uint32_t lod,
     uint32_t width, uint32_t height, uint32_t border,
     uint32_t reduce = VX_TEX_REDUCTION_AVG) {
   gfx_tex::TexelRequest req =
-    gfx_tex::tex_compute_request(0, logdim, format, filter, wrap, u, v, lod, width, height);
+    gfx_tex::tex_compute_request(0, logdim, format, filter, wrap, u, v, lod, width, height,
+                                 0, pitch);
   uint32_t stride = req.stride;
   uint32_t bmask = req.border_mask;
   if (req.filter == VX_TEX_FILTER_BILINEAR) {
@@ -653,22 +690,23 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_ext_lod(
 }
 
 // One LOD's sample (POINT or BILINEAR). `base_addr` is the mip's base for `lod`
-// (mip_base + mip_off); `logdim` is mip 0's {log_h<<16|log_w}; u/v are
+// (mip_base + mip_off) and `pitch` its row pitch in bytes (0: rows packed back to
+// back); `logdim` is mip 0's {log_h<<16|log_w}; u/v are
 // TEX_FXD_FRAC fixed-point. Caller does trilinear by blending two LODs. The
 // FF-format + non-border case keeps the exact bit-identical shared path; the
 // extended-format or border case routes to tex_sample_ext_lod.
 static inline __attribute__((always_inline)) uint32_t tex_sample_sw_lod(
-    uint64_t base_addr, uint32_t logdim, uint32_t format, uint32_t filter,
+    uint64_t base_addr, uint32_t pitch, uint32_t logdim, uint32_t format, uint32_t filter,
     uint32_t wrap, int32_t u, int32_t v, uint32_t lod,
     uint32_t width = 0, uint32_t height = 0, uint32_t border = 0,
     uint32_t reduce = VX_TEX_REDUCTION_AVG) {
   bool has_border = ((wrap & 0xffff) == VX_TEX_WRAP_BORDER) || ((wrap >> 16) == VX_TEX_WRAP_BORDER);
   if (!gfx_tex::TexIsFFFormat(format) || has_border)
-    return tex_sample_ext_lod(base_addr, logdim, format, filter, wrap, u, v, lod,
+    return tex_sample_ext_lod(base_addr, pitch, logdim, format, filter, wrap, u, v, lod,
                               width, height, border, reduce);
   gfx_tex::TexelRequest req =
     gfx_tex::tex_compute_request(base_addr, logdim, format, filter, wrap, u, v, lod,
-                                 width, height);
+                                 width, height, 0, pitch);
   uint32_t texels[4] = {0, 0, 0, 0};
   uint32_t taps = (req.filter == VX_TEX_FILTER_BILINEAR) ? 4u : 1u;
   for (uint32_t i = 0; i < taps; ++i)
@@ -713,7 +751,8 @@ struct TexState {
   uint32_t width;                         // mip-0 integer width  (0 => POT via logdim)
   uint32_t height;                        // mip-0 integer height (0 => POT via logdim)
   uint32_t border;                        // ARGB8888 border colour (WRAP_BORDER)
-  uint32_t layer_stride;                  // bytes per array layer / cube face (0 => single 2D)
+  uint32_t row_pitch[VX_TEX_LOD_MAX + 1];   // per-LOD bytes between rows (of 4x4 blocks if compressed)
+  uint32_t slice_pitch[VX_TEX_LOD_MAX + 1]; // per-LOD bytes between array layers / cube faces / 3D slices
   uint32_t compare_func;                  // shadow compare op (VX_OM_DEPTH_FUNC_*); 0 is ALWAYS
   uint32_t swizzle;                       // view component map: r|g<<3|b<<6|a<<9 (0..3=RGBA, 4=0, 5=1)
   uint32_t min_lod;                       // sampler LOD clamp lower bound, Q(VX_TEX_LOD_FRAC_BITS)
@@ -735,6 +774,27 @@ struct TexState {
   uint32_t samples;                       // samples per texel of a multisample image
   uint32_t sample_stride;                 // bytes between its sample planes
 };
+
+// The pitches of a packed chain: each level's rows back to back, `layer_stride`
+// bytes between array layers, or for a 3D texture (layer_stride 0) one level
+// image between its slices. Reads the dims and format already in `s`.
+static inline void tex_packed_pitches(TexState& s, uint32_t layer_stride) {
+  const uint32_t w0 = s.width  ? s.width  : (1u << (s.logdim & 0xffff));
+  const uint32_t h0 = s.height ? s.height : (1u << (s.logdim >> 16));
+  for (uint32_t l = 0; l <= (uint32_t)VX_TEX_LOD_MAX; ++l) {
+    const uint32_t w = (uint32_t)gfx_tex::tex_imax((int32_t)(w0 >> l), 1);
+    const uint32_t h = (uint32_t)gfx_tex::tex_imax((int32_t)(h0 >> l), 1);
+    s.row_pitch[l] = (uint32_t)gfx_tex::TexImageBytes(s.format, w, 1);
+    s.slice_pitch[l] = layer_stride ? layer_stride
+                                    : (uint32_t)gfx_tex::TexImageBytes(s.format, w, h);
+  }
+}
+
+// The first texel of array layer (or cube face, or 3D slice) `layer` at level `lod`.
+static inline __attribute__((always_inline)) uint64_t tex_level_base(
+    const TexState& s, uint32_t layer, uint32_t lod) {
+  return s.base + s.mip_off[lod] + (uint64_t)layer * s.slice_pitch[lod];
+}
 
 // The sampler's reduction mode (VX_TEX_REDUCTION_*), held in the filter word.
 static inline __attribute__((always_inline)) uint32_t tex_reduction(const TexState& s) {
@@ -778,7 +838,6 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_sw_layer(
   // shader resolves min-vs-mag per fragment and passes the result, since the one
   // descriptor holds both taps. mag/min selects the per-LOD tap pattern.
   uint32_t tap_filter = filter & TEX_FILTER_MAGMIN_MASK;
-  uint64_t lbase = s.base + (uint64_t)layer * s.layer_stride;   // array/cube slice
   if (filter & VX_TEX_FILTER_MIP_LINEAR) {
     uint32_t li   = lod >> VX_TEX_LOD_FRAC_BITS;
     uint32_t lj   = (li + 1 < (uint32_t)VX_TEX_LOD_MAX) ? li + 1 : (uint32_t)VX_TEX_LOD_MAX;
@@ -786,16 +845,19 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_sw_layer(
     int32_t ui = u, vi = v, uj = u, vj = v;
     tex_offset_uv(s, filter, li, &ui, &vi);
     tex_offset_uv(s, filter, lj, &uj, &vj);
-    uint32_t c0 = tex_sample_sw_lod(lbase + s.mip_off[li], s.logdim, s.format, tap_filter,
+    uint32_t c0 = tex_sample_sw_lod(tex_level_base(s, layer, li), s.row_pitch[li],
+                                    s.logdim, s.format, tap_filter,
                                     s.wrap, ui, vi, li, s.width, s.height, s.border,
                                     tex_reduction(s));
-    uint32_t c1 = tex_sample_sw_lod(lbase + s.mip_off[lj], s.logdim, s.format, tap_filter,
+    uint32_t c1 = tex_sample_sw_lod(tex_level_base(s, layer, lj), s.row_pitch[lj],
+                                    s.logdim, s.format, tap_filter,
                                     s.wrap, uj, vj, lj, s.width, s.height, s.border,
                                     tex_reduction(s));
     return tex_combine(c0, c1, frac, tex_reduction(s));
   }
   tex_offset_uv(s, filter, lod, &u, &v);
-  return tex_sample_sw_lod(lbase + s.mip_off[lod], s.logdim, s.format, tap_filter, s.wrap,
+  return tex_sample_sw_lod(tex_level_base(s, layer, lod), s.row_pitch[lod],
+                           s.logdim, s.format, tap_filter, s.wrap,
                            u, v, lod, s.width, s.height, s.border, tex_reduction(s));
 }
 
@@ -805,12 +867,13 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_sw_layer(
 // and blends in float, so a texel outside [0,1] keeps its magnitude instead of
 // being clamped by the 8-bit working space.
 static inline __attribute__((always_inline)) void tex_sample_f32_lod(
-    uint64_t base_addr, uint32_t logdim, uint32_t format, uint32_t filter,
+    uint64_t base_addr, uint32_t pitch, uint32_t logdim, uint32_t format, uint32_t filter,
     uint32_t wrap, int32_t u, int32_t v, uint32_t lod,
     uint32_t width, uint32_t height, const uint32_t border_t[4], float out[4],
     uint32_t reduce = VX_TEX_REDUCTION_AVG) {
   gfx_tex::TexelRequest req =
-    gfx_tex::tex_compute_request(0, logdim, format, filter, wrap, u, v, lod, width, height);
+    gfx_tex::tex_compute_request(0, logdim, format, filter, wrap, u, v, lod, width, height,
+                                 0, pitch);
   uint32_t bmask = req.border_mask;
   float bf[4];
   __builtin_memcpy(bf, border_t, sizeof bf);
@@ -867,7 +930,6 @@ static inline __attribute__((always_inline)) void tex_sample_f32_layer(
     return;
   }
   uint32_t tap_filter = filter & TEX_FILTER_MAGMIN_MASK;
-  uint64_t lbase = s.base + (uint64_t)layer * s.layer_stride;   // array/cube slice
   if (filter & VX_TEX_FILTER_MIP_LINEAR) {
     uint32_t li   = lod >> VX_TEX_LOD_FRAC_BITS;
     uint32_t lj   = (li + 1 < (uint32_t)VX_TEX_LOD_MAX) ? li + 1 : (uint32_t)VX_TEX_LOD_MAX;
@@ -876,15 +938,18 @@ static inline __attribute__((always_inline)) void tex_sample_f32_layer(
     int32_t ui = u, vi = v, uj = u, vj = v;
     tex_offset_uv(s, filter, li, &ui, &vi);
     tex_offset_uv(s, filter, lj, &uj, &vj);
-    tex_sample_f32_lod(lbase + s.mip_off[li], s.logdim, s.format, tap_filter, s.wrap,
+    tex_sample_f32_lod(tex_level_base(s, layer, li), s.row_pitch[li], s.logdim, s.format,
+                       tap_filter, s.wrap,
                        ui, vi, li, s.width, s.height, s.border_t, c0, tex_reduction(s));
-    tex_sample_f32_lod(lbase + s.mip_off[lj], s.logdim, s.format, tap_filter, s.wrap,
+    tex_sample_f32_lod(tex_level_base(s, layer, lj), s.row_pitch[lj], s.logdim, s.format,
+                       tap_filter, s.wrap,
                        uj, vj, lj, s.width, s.height, s.border_t, c1, tex_reduction(s));
     tex_combine_f4(c0, c1, frac, tex_reduction(s), out);
     return;
   }
   tex_offset_uv(s, filter, lod, &u, &v);
-  tex_sample_f32_lod(lbase + s.mip_off[lod], s.logdim, s.format, tap_filter, s.wrap,
+  tex_sample_f32_lod(tex_level_base(s, layer, lod), s.row_pitch[lod], s.logdim, s.format,
+                     tap_filter, s.wrap,
                      u, v, lod, s.width, s.height, s.border_t, out, tex_reduction(s));
 }
 
@@ -909,7 +974,7 @@ static inline __attribute__((always_inline)) uint32_t array_layer_clamp(
   return (s.depth && layer >= s.depth) ? s.depth - 1u : layer;
 }
 
-// 2D-array view: integer layer index selects the slice at layer*layer_stride.
+// 2D-array view: integer layer index selects the slice at layer*slice_pitch.
 // `filter` is the tap and mip mode the shader resolved, as for tex_sample_sw.
 static inline __attribute__((always_inline)) uint32_t tex_sample_sw_array(
     const TexState& s, int32_t u, int32_t v, uint32_t layer, uint32_t lod, uint32_t filter) {
@@ -1001,8 +1066,9 @@ static inline __attribute__((always_inline)) void tex_cube_texel(
     x = x < 0 ? 0 : (x >= n ? n - 1 : x);
     y = y < 0 ? 0 : (y >= n ? n - 1 : y);
     uint32_t sub;
-    const uint64_t a = s.base + (uint64_t)(layer0 + f) * s.layer_stride + s.mip_off[level]
-                     + gfx_tex::TexTexelOffset(s.format, (uint32_t)n, (uint32_t)x, (uint32_t)y, &sub);
+    const uint64_t a = tex_level_base(s, layer0 + f, level)
+                     + gfx_tex::TexTexelOffset(s.format, (uint32_t)n, (uint32_t)x, (uint32_t)y, &sub,
+                                               s.row_pitch[level]);
     decode((const void*)(uintptr_t)a, sub, stride, t);
   };
   auto across = [&](int32_t x, int32_t y, float t[4]) {
@@ -1208,28 +1274,25 @@ static inline __attribute__((always_inline)) void tex_sample_f32_cube_array(
 // tex_sample_sw_3d.
 // The depth-slice addressing of one 3D mip level, shared by the packed and float
 // samplers so the two cannot drift: level `lod` starts at s.mip_off[lod] and holds
-// d_l = max(depth>>lod,1) slices of w_l x h_l, and slice z sits at
-// mip_off[lod] + z*(w_l*h_l*stride). The slices are the depth axis's two taps
-// (tex_axis_taps, as for u and v); a nearest sample reads only z0.
+// d_l = max(depth>>lod,1) slices, slice z at mip_off[lod] + z*slice_pitch[lod].
+// The slices are the depth axis's two taps (tex_axis_taps, as for u and v); a
+// nearest sample reads only z0.
 struct Tex3DSlices {
   uint64_t lvl_base;
   uint64_t slice_sz;
+  uint32_t pitch;
   gfx_tex::TexAxisTaps z;
 };
 
 static inline __attribute__((always_inline)) Tex3DSlices tex_3d_slices(
     const TexState& s, int32_t w, uint32_t lod, uint32_t tap) {
-  uint32_t log_w = s.logdim & 0xffff, log_h = s.logdim >> 16;
-  uint32_t w_l = s.width  ? (uint32_t)gfx_tex::tex_imax((int32_t)(s.width  >> lod), 1)
-                          : (1u << (uint32_t)gfx_tex::tex_imax((int32_t)log_w - (int32_t)lod, 0));
-  uint32_t h_l = s.height ? (uint32_t)gfx_tex::tex_imax((int32_t)(s.height >> lod), 1)
-                          : (1u << (uint32_t)gfx_tex::tex_imax((int32_t)log_h - (int32_t)lod, 0));
   uint32_t depth = s.depth ? s.depth : 1u;
   uint32_t d_l = (uint32_t)gfx_tex::tex_imax((int32_t)(depth >> lod), 1);
 
   Tex3DSlices sl{};
-  sl.slice_sz = gfx_tex::TexImageBytes(s.format, w_l, h_l);
+  sl.slice_sz = s.slice_pitch[lod];
   sl.lvl_base = s.base + s.mip_off[lod];
+  sl.pitch = s.row_pitch[lod];
   sl.z = gfx_tex::tex_axis_taps(w, d_l, s.wrap_w, tap == VX_TEX_FILTER_BILINEAR);
   return sl;
 }
@@ -1240,7 +1303,7 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_sw_3d_slice(
   if (border) {
     return s.border;
   }
-  return tex_sample_sw_lod(sl.lvl_base + z * sl.slice_sz, s.logdim, s.format,
+  return tex_sample_sw_lod(sl.lvl_base + z * sl.slice_sz, sl.pitch, s.logdim, s.format,
                            tap, s.wrap, u, v, lod, s.width, s.height, s.border,
                            tex_reduction(s));
 }
@@ -1266,7 +1329,7 @@ static inline __attribute__((always_inline)) void tex_sample_f32_3d_slice(
     __builtin_memcpy(out, s.border_t, 4 * sizeof(float));
     return;
   }
-  tex_sample_f32_lod(sl.lvl_base + z * sl.slice_sz, s.logdim, s.format, tap, s.wrap,
+  tex_sample_f32_lod(sl.lvl_base + z * sl.slice_sz, sl.pitch, s.logdim, s.format, tap, s.wrap,
                      u, v, lod, s.width, s.height, s.border_t, out, tex_reduction(s));
 }
 
@@ -1338,8 +1401,8 @@ static inline __attribute__((always_inline)) void tex_sample_f32_3d(
 // texelFetch addressing: byte address of the texel at integer (x,y) of `layer`
 // and `lod`, plus the texel stride. Coords are clamped into range (Vulkan leaves
 // an out-of-range fetch undefined; clamp is a safe, deterministic choice). Each
-// level is laid out row-major and contiguous (matching the host mip-chain upload),
-// so the texel index is x + y*w; `layer` steps whole mip chains.
+// level is laid out row-major, row_pitch[lod] bytes a row and slice_pitch[lod]
+// bytes a layer.
 static inline __attribute__((always_inline)) uint64_t tex_fetch_addr(
     const TexState& s, int32_t x, int32_t y, uint32_t layer, uint32_t lod,
     uint32_t* stride, uint32_t* sub) {
@@ -1350,8 +1413,8 @@ static inline __attribute__((always_inline)) uint64_t tex_fetch_addr(
   uint32_t xi = (x < 0) ? 0u : ((uint32_t)x >= w ? w - 1u : (uint32_t)x);
   uint32_t yi = (y < 0) ? 0u : ((uint32_t)y >= h ? h - 1u : (uint32_t)y);
   *stride = gfx_tex::FormatStride(s.format);
-  return s.base + (uint64_t)layer * s.layer_stride + s.mip_off[lod]
-       + gfx_tex::TexTexelOffset(s.format, w, xi, yi, sub);
+  return tex_level_base(s, layer, lod)
+       + gfx_tex::TexTexelOffset(s.format, w, xi, yi, sub, s.row_pitch[lod]);
 }
 
 // texelFetch: the four channels of the exact texel at (x,y) of integer `lod`, as
@@ -1380,7 +1443,7 @@ static inline __attribute__((always_inline)) void tex_fetch_i32(
 }
 
 // texelFetch on a 2D array: the texel at (x,y) of integer `layer` (slice at
-// layer*layer_stride) and `lod` (see tex_fetch_f32).
+// layer*slice_pitch) and `lod` (see tex_fetch_f32).
 static inline __attribute__((always_inline)) void tex_fetch_array_f32(
     const TexState& s, int32_t x, int32_t y, uint32_t layer, uint32_t lod,
     float out[4]) {
@@ -1409,9 +1472,9 @@ static inline __attribute__((always_inline)) uint32_t tex_gather_sw(
     return 0xffffffffu;   // PIPE_SWIZZLE_1 -> all four taps 255
   }
   gfx_tex::TexelRequest req = gfx_tex::tex_compute_request(
-      s.base + (uint64_t)array_layer_clamp(s, layer) * s.layer_stride, s.logdim, s.format,
+      tex_level_base(s, array_layer_clamp(s, layer), 0), s.logdim, s.format,
       VX_TEX_FILTER_BILINEAR, s.wrap, u, v, 0,
-      s.width, s.height);
+      s.width, s.height, 0, s.row_pitch[0]);
   const uint32_t argb_shift[4] = { 16, 8, 0, 24 };   // R,G,B,A within ARGB8888
   const uint32_t order[4]      = { 2, 3, 1, 0 };      // GL gather order over the taps
   uint32_t sh = argb_shift[map & 3];
@@ -1442,9 +1505,9 @@ static inline __attribute__((always_inline)) void tex_gather_f32(
     return;
   }
   gfx_tex::TexelRequest req = gfx_tex::tex_compute_request(
-      s.base + (uint64_t)array_layer_clamp(s, layer) * s.layer_stride, s.logdim, s.format,
+      tex_level_base(s, array_layer_clamp(s, layer), 0), s.logdim, s.format,
       VX_TEX_FILTER_BILINEAR, s.wrap, u, v, 0,
-      s.width, s.height);
+      s.width, s.height, 0, s.row_pitch[0]);
   const uint32_t order[4] = { 2, 3, 1, 0 };
   for (uint32_t i = 0; i < 4; ++i) {
     const uint32_t t = order[i] ^ req.flip;
@@ -1592,16 +1655,16 @@ static inline __attribute__((always_inline)) float shadow_tap(
 // footprint's alpha/beta fractions. Base level only (non-mipmapped). Returns the
 // float bit-pattern so the C ABI stays uint32_t like the other samplers.
 // Depth compare at one mip `level`: point (1 tap) or PCF (2x2 taps blended by the
-// footprint alpha/beta). `lbase` already carries the array/cube slice offset.
+// footprint alpha/beta) of array slice (or cube face) `layer`.
 static inline __attribute__((always_inline)) float tex_shadow_level(
     const TexState& s, int32_t u, int32_t v, uint32_t ref_bits, uint32_t filter,
-    uint64_t lbase, uint32_t level) {
+    uint32_t layer, uint32_t level) {
   bool pcf = (filter & TEX_FILTER_MAGMIN_MASK) == VX_TEX_FILTER_BILINEAR;
   tex_offset_uv(s, filter, level, &u, &v);
   gfx_tex::TexelRequest req = gfx_tex::tex_compute_request(
-      lbase + s.mip_off[level], s.logdim, s.format,
+      tex_level_base(s, layer, level), s.logdim, s.format,
       pcf ? VX_TEX_FILTER_BILINEAR : VX_TEX_FILTER_POINT,
-      s.wrap, u, v, level, s.width, s.height, s.border_t[0]);
+      s.wrap, u, v, level, s.width, s.height, s.border_t[0], s.row_pitch[level]);
   // The TEX unit's compare stage (vx_tex_cmp) computes the same Q16 result.
   uint32_t texels[4] = {};
   const uint32_t n = req.stride < 4 ? req.stride : 4;
@@ -1618,18 +1681,17 @@ static inline __attribute__((always_inline)) float tex_shadow_level(
 static inline __attribute__((always_inline)) uint32_t tex_shadow_sw(
     const TexState& s, int32_t u, int32_t v, uint32_t ref_bits, uint32_t filter,
     uint32_t layer = 0, uint32_t lod = 0) {
-  uint64_t lbase = s.base + (uint64_t)layer * s.layer_stride;
   float result;
   if (filter & VX_TEX_FILTER_MIP_LINEAR) {
     uint32_t li = lod >> VX_TEX_LOD_FRAC_BITS;
     uint32_t lj = (li + 1 < (uint32_t)VX_TEX_LOD_MAX) ? li + 1 : (uint32_t)VX_TEX_LOD_MAX;
     float frac = (float)(lod & ((1u << VX_TEX_LOD_FRAC_BITS) - 1))
                * (1.0f / (float)(1u << VX_TEX_LOD_FRAC_BITS));
-    float r0 = tex_shadow_level(s, u, v, ref_bits, filter, lbase, li);
-    float r1 = tex_shadow_level(s, u, v, ref_bits, filter, lbase, lj);
+    float r0 = tex_shadow_level(s, u, v, ref_bits, filter, layer, li);
+    float r1 = tex_shadow_level(s, u, v, ref_bits, filter, layer, lj);
     result = r0 * (1.0f - frac) + r1 * frac;
   } else {
-    result = tex_shadow_level(s, u, v, ref_bits, filter, lbase, lod);
+    result = tex_shadow_level(s, u, v, ref_bits, filter, layer, lod);
   }
   uint32_t out; __builtin_memcpy(&out, &result, 4);
   return out;
@@ -1666,9 +1728,9 @@ static inline __attribute__((always_inline)) uint32_t tex_gather_cmp_sw(
   // Array shadow gather: the layer selects the slice; s.depth bounds it.
   uint32_t ly = (s.depth && layer >= s.depth) ? s.depth - 1u : layer;
   gfx_tex::TexelRequest req = gfx_tex::tex_compute_request(
-      s.base + (uint64_t)ly * s.layer_stride, s.logdim, s.format,
+      tex_level_base(s, ly, 0), s.logdim, s.format,
       VX_TEX_FILTER_BILINEAR, s.wrap, u, v, 0,
-      s.width, s.height, s.border_t[0]);
+      s.width, s.height, s.border_t[0], s.row_pitch[0]);
   const uint32_t order[4] = { 2, 3, 1, 0 };
   uint32_t packed = 0;
   for (uint32_t i = 0; i < 4; ++i) {
@@ -1749,9 +1811,8 @@ static inline __attribute__((always_inline)) uint32_t tex_gather_cmp_cube_sw(
 static inline __attribute__((always_inline)) uint32_t om_fragment(const om_state_t& s, uint32_t x, uint32_t y,
                                 uint32_t face, uint32_t src_color, uint32_t src_depth,
                                 uint32_t src_sref = 0) {
-  uintptr_t z_addr = (uintptr_t)(s.zbuf_base + (uint64_t)y * s.zbuf_pitch + (uint64_t)x * om_depth_bpp(s.depth_format));
-  uintptr_t c_addr = (uintptr_t)(s.cbuf_base + (uint64_t)y * s.cbuf_pitch + (uint64_t)x * om_color_bpp(s.color_format));
-  return om_sample_rmw(s, z_addr, c_addr, face, src_color, src_depth, src_sref) ? 1u : 0u;
+  return om_sample_rmw(s, msaa_depth_addr(s, x, y, 0), msaa_color_addr(s, x, y, 0), face,
+                       src_color, src_depth, src_sref) ? 1u : 0u;
 }
 
 // Per-sample MSAA output-merge for one fragment into the om_state_t's packed
@@ -1767,8 +1828,8 @@ static inline __attribute__((always_inline)) void om_fragment_msaa(
     uint32_t sample_mask, uint32_t src_color, uint32_t src_depth, uint32_t src_sref = 0) {
   for (uint32_t k = 0; k < samples; ++k) {
     if (!((sample_mask >> k) & 1u)) continue;
-    om_sample_rmw(s, msaa_depth_addr(s, samples, x, y, k),
-                  msaa_color_addr(s, samples, x, y, k), face, src_color, src_depth, src_sref);
+    om_sample_rmw(s, msaa_depth_addr(s, x, y, k),
+                  msaa_color_addr(s, x, y, k), face, src_color, src_depth, src_sref);
   }
 }
 
@@ -1780,7 +1841,7 @@ static inline __attribute__((always_inline)) uint32_t ds_early(
     uint32_t sample_mask, const uint32_t* src_depth) {
   uint32_t passed = 0;
   for (uint32_t k = 0; k < samples; ++k) {
-    if (((sample_mask >> k) & 1u) && ds_rmw(s, msaa_depth_addr(s, samples, x, y, k), face, src_depth[k])) {
+    if (((sample_mask >> k) & 1u) && ds_rmw(s, msaa_depth_addr(s, x, y, k), face, src_depth[k])) {
       passed |= 1u << k;
     }
   }
@@ -1808,7 +1869,17 @@ struct om_color_t {
   uint32_t cbuf_writemask;             // expanded 32-bit byte mask
   uint32_t color_read, color_write;
   uint32_t blend_constf[4];            // float bits, RGBA
+  uint32_t cbuf_sample_stride;         // bytes between its sample planes
+  uint32_t cbuf_layer_stride;          // bytes between its layers (om_row_offset)
 };
+
+// Sample `sample` of attachment `c` at pixel (x, y), y as om_row_offset reads it.
+static inline __attribute__((always_inline)) uintptr_t om_color_addr(
+    const om_color_t& c, uint32_t x, uint32_t y, uint32_t sample) {
+  return (uintptr_t)(c.cbuf_base + (uint64_t)sample * c.cbuf_sample_stride
+                     + om_row_offset(y, c.cbuf_pitch, c.cbuf_layer_stride)
+                     + (uint64_t)x * om_color_bpp(c.color_format));
+}
 
 // Derive a colour attachment's enable flags + expanded mask exactly as
 // resolve_om_state() does for the single-RT fields.
@@ -1853,9 +1924,7 @@ static inline __attribute__((always_inline)) uint32_t om_fragment_mrt(
   // clamp the attachment count to the hardware bound so a stale/short
   // colors[] or an over-large num_color can never read past colors[]/src_colors[].
   if (num_color > VX_OM_MAX_RT) num_color = VX_OM_MAX_RT;
-  uintptr_t z_addr = (uintptr_t)(s.zbuf_base + (uint64_t)y * s.zbuf_pitch
-                               + (uint64_t)x * om_depth_bpp(s.depth_format));
-  if (!ds_rmw(s, z_addr, face, src_depth, src_sref)) {
+  if (!ds_rmw(s, msaa_depth_addr(s, x, y, 0), face, src_depth, src_sref)) {
     return 0;
   }
 
@@ -1863,7 +1932,7 @@ static inline __attribute__((always_inline)) uint32_t om_fragment_mrt(
     const om_color_t& c = colors[k];
     if (!c.color_write) continue;
     uint32_t cbpp = om_color_bpp(c.color_format);
-    uintptr_t c_addr = (uintptr_t)(c.cbuf_base + (uint64_t)y * c.cbuf_pitch + (uint64_t)x * cbpp);
+    uintptr_t c_addr = om_color_addr(c, x, y, 0);
     bool need_c_read = c.color_read || c.blend_enabled;
     uint32_t dst_raw = need_c_read ? om_load(c_addr, cbpp) : 0;
     uint32_t dst_color = om_decode_color(c.color_format, dst_raw);
@@ -2207,6 +2276,8 @@ static inline __attribute__((always_inline)) om_color_t om_state_color(const om_
   for (uint32_t ch = 0; ch < 4; ++ch) {
     c.blend_constf[ch] = s.blend_constf[ch];
   }
+  c.cbuf_sample_stride = s.cbuf_sample_stride;
+  c.cbuf_layer_stride = s.cbuf_layer_stride;
   return c;
 }
 
@@ -2233,9 +2304,7 @@ static inline __attribute__((always_inline)) void om_lanes_color_rmw_at(
 
 static inline __attribute__((always_inline)) void om_lanes_color_rmw(
     const om_color_t& c, uint32_t x, uint32_t y, const uint32_t* lanes, const uint32_t* src1) {
-  om_lanes_color_rmw_at(c, (uintptr_t)(c.cbuf_base + (uint64_t)y * c.cbuf_pitch
-                                       + (uint64_t)x * om_color_bpp(c.color_format)),
-                        lanes, src1);
+  om_lanes_color_rmw_at(c, om_color_addr(c, x, y, 0), lanes, src1);
 }
 
 // MRT merge where the shader hands four lanes per attachment: a wide attachment
@@ -2249,9 +2318,7 @@ static inline __attribute__((always_inline)) uint32_t om_fragment_mrt_wide(
   if (num_color > VX_OM_MAX_RT) {
     num_color = VX_OM_MAX_RT;
   }
-  uintptr_t z_addr = (uintptr_t)(s.zbuf_base + (uint64_t)y * s.zbuf_pitch
-                               + (uint64_t)x * om_depth_bpp(s.depth_format));
-  if (!ds_rmw(s, z_addr, face, src_depth, src_sref)) {
+  if (!ds_rmw(s, msaa_depth_addr(s, x, y, 0), face, src_depth, src_sref)) {
     return 0;
   }
 
@@ -2274,9 +2341,7 @@ static inline __attribute__((always_inline)) uint32_t om_fragment_wide(
 static inline __attribute__((always_inline)) uint32_t om_fragment_dual(
     const om_state_t& s, uint32_t x, uint32_t y, uint32_t face,
     const uint32_t src_lanes[8], uint32_t src_depth, uint32_t src_sref = 0) {
-  uintptr_t z_addr = (uintptr_t)(s.zbuf_base + (uint64_t)y * s.zbuf_pitch
-                               + (uint64_t)x * om_depth_bpp(s.depth_format));
-  if (!ds_rmw(s, z_addr, face, src_depth, src_sref)) {
+  if (!ds_rmw(s, msaa_depth_addr(s, x, y, 0), face, src_depth, src_sref)) {
     return 0;
   }
   om_lanes_color_rmw(om_state_color(s), x, y, src_lanes, src_lanes + 4);
@@ -2288,7 +2353,8 @@ static inline __attribute__((always_inline)) uint32_t om_fragment_dual(
 // way a box filter over the decoded values reads; an integer format has no
 // average and takes sample 0, as Vulkan requires.
 static inline __attribute__((always_inline)) void msaa_resolve_wide(
-    uint32_t color_format, uint32_t samples, uintptr_t src, uintptr_t dst) {
+    uint32_t color_format, uint32_t samples, uint32_t sample_stride, uintptr_t src,
+    uintptr_t dst) {
   const om_wide_fmt g = om_wide_geom(color_format);
   uint32_t raw[4];
   om_wide_load_raw(src, g.bpp, raw);
@@ -2296,7 +2362,7 @@ static inline __attribute__((always_inline)) void msaa_resolve_wide(
     float acc[4] = {0.0f, 0.0f, 0.0f, 0.0f};
     for (uint32_t k = 0; k < samples; ++k) {
       uint32_t r[4];
-      om_wide_load_raw(src + (uintptr_t)k * g.bpp, g.bpp, r);
+      om_wide_load_raw(src + (uintptr_t)k * sample_stride, g.bpp, r);
       for (uint32_t ch = 0; ch < g.nch; ++ch) {
         acc[ch] += om_bits_f(om_field_decode(g.kind, g.width[ch], om_field_get(r, g.off[ch], g.width[ch])));
       }
@@ -2313,8 +2379,8 @@ static inline __attribute__((always_inline)) void msaa_resolve_wide(
 // sample in `sample_mask` runs its own depth/stencil test at its own depth
 // (`src_depth[k]`, the depth plane evaluated at sample k) against its own slot,
 // then, if it passed, the lane-ABI colour merge into slot k of every attachment.
-// Sample k of a pixel lives at column x*samples + k of each plane, whose pitch
-// already spans S samples. `src_lanes` holds four lanes per attachment, as for
+// Sample k of a pixel lives in the k-th sample plane of each attachment.
+// `src_lanes` holds four lanes per attachment, as for
 // om_fragment_mrt_wide; with `dual` the single attachment's second source is
 // lanes 4-7. A null `colors` merges into the om_state_t's own attachment.
 static inline __attribute__((always_inline)) uint32_t om_fragment_ms(
@@ -2335,14 +2401,13 @@ static inline __attribute__((always_inline)) uint32_t om_fragment_ms(
     if (!((sample_mask >> k) & 1u)) {
       continue;
     }
-    if (!ds_rmw(s, msaa_depth_addr(s, samples, x, y, k), face, src_depth[k], src_sref)) {
+    if (!ds_rmw(s, msaa_depth_addr(s, x, y, k), face, src_depth[k], src_sref)) {
       continue;
     }
     ++passed;
     for (uint32_t j = 0; j < num_color; ++j) {
       const om_color_t& c = colors[j];
-      const uintptr_t c_addr = (uintptr_t)(c.cbuf_base + (uint64_t)y * c.cbuf_pitch
-                                           + (uint64_t)(x * samples + k) * om_color_bpp(c.color_format));
+      const uintptr_t c_addr = om_color_addr(c, x, y, k);
       om_lanes_color_rmw_at(c, c_addr, src_lanes + 4u * j,
                             (dual && j == 0) ? src_lanes + 4 : nullptr);
     }

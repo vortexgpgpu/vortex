@@ -23,20 +23,24 @@
  * and a no-op cannot write the host buffer behind the driver's back. This test
  * needs the fallback to really run.
  *
- * The same holds for transform feedback, whose filled sizes the device keeps
- * between its draws. One capture segment draws three triangles into a layered
- * framebuffer, each vertex capturing its index:
+ * Transform feedback keeps its filled sizes on the device between draws. One
+ * capture segment draws four triangles into a layered framebuffer, each vertex
+ * capturing its index:
  *
- *   1. xfbmix_a.vert  -- writes gl_Layer, runs on Vortex once per layer and
- *                        captures once
- *   2. xfbmix_b.vert  -- also counts its invocations in a storage buffer; a
- *                        layered draw with a side effect cannot replay per
- *                        layer, so it falls back to llvmpipe
- *   3. xfbmix_a.vert  -- on Vortex again
+ *   1. xfbmix_a.vert  -- writes gl_Layer and captures once, on Vortex
+ *   2. xfbmix_b.vert  -- also counts its invocations in a storage buffer: a
+ *                        layered draw renders every layer in one pass, so its
+ *                        vertex shader runs once per vertex, side effect and
+ *                        all, on Vortex
+ *   3. xfbmix_c.vert  -- also reads a vertex attribute from a null vertex
+ *                        buffer, which Vortex does not fetch, so llvmpipe
+ *                        draws it
+ *   4. xfbmix_a.vert  -- on Vortex again
  *
- * The capture must be one continuous stream of vertices 0-8 with the counter
- * at 72 bytes: llvmpipe has to resume from the size the device reached, and
- * the device from the size llvmpipe left, without losing llvmpipe's bytes.
+ * The capture must be one continuous stream of vertices 0-11 with the counter
+ * at 96 bytes: llvmpipe has to resume from the size the device reached, and the
+ * device from the size llvmpipe left, without losing llvmpipe's bytes. The
+ * invocation counter must read 3: a draw replayed per layer would count 6.
  *
  * Run against lavapipe with GALLIUM_DRIVER=vortexpipe.
  */
@@ -81,7 +85,7 @@ read_spirv(const char *path, size_t *out_size)
 }
 
 #define XM_SIZE     16u
-#define XM_VERTS    9u
+#define XM_VERTS    12u
 #define XM_STRIDE   8u
 #define XM_BYTES    256u
 #define XM_SENTINEL 0xDEADBEEFu
@@ -143,10 +147,15 @@ xm_buffer(VkDevice dev, const VkPhysicalDeviceMemoryProperties *mp, VkDeviceSize
 
 /* The capture segment described at the top; 0 on success. */
 static int
-xfb_mix(VkPhysicalDevice pd, const char *vs_a_path, const char *vs_b_path, const char *fs_path)
+xfb_mix(VkPhysicalDevice pd, const char *vs_a_path, const char *vs_b_path,
+        const char *vs_c_path, const char *fs_path)
 {
+   VkPhysicalDeviceRobustness2FeaturesEXT rb2_have = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT,
+   };
    VkPhysicalDeviceTransformFeedbackFeaturesEXT xfb_have = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_FEATURES_EXT,
+      .pNext = &rb2_have,
    };
    VkPhysicalDeviceVulkan12Features f12_have = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES, .pNext = &xfb_have,
@@ -156,10 +165,11 @@ xfb_mix(VkPhysicalDevice pd, const char *vs_a_path, const char *vs_b_path, const
    };
    vkGetPhysicalDeviceFeatures2(pd, &have);
    if (!xfb_have.transformFeedback || !f12_have.shaderOutputLayer ||
-       !have.features.vertexPipelineStoresAndAtomics) {
+       !rb2_have.nullDescriptor || !have.features.vertexPipelineStoresAndAtomics) {
       printf("FAILED (capture: transformFeedback %u, shaderOutputLayer %u, "
-             "vertexPipelineStoresAndAtomics %u)\n", xfb_have.transformFeedback,
-             f12_have.shaderOutputLayer, have.features.vertexPipelineStoresAndAtomics);
+             "nullDescriptor %u, vertexPipelineStoresAndAtomics %u)\n",
+             xfb_have.transformFeedback, f12_have.shaderOutputLayer,
+             rb2_have.nullDescriptor, have.features.vertexPipelineStoresAndAtomics);
       return 1;
    }
    uint32_t nqf = 0;
@@ -182,20 +192,25 @@ xfb_mix(VkPhysicalDevice pd, const char *vs_a_path, const char *vs_b_path, const
       .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
       .queueFamilyIndex = qf, .queueCount = 1, .pQueuePriorities = &prio,
    };
+   VkPhysicalDeviceRobustness2FeaturesEXT rb2_on = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT,
+      .nullDescriptor = VK_TRUE,
+   };
    VkPhysicalDeviceTransformFeedbackFeaturesEXT xfb_on = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_FEATURES_EXT,
-      .transformFeedback = VK_TRUE,
+      .pNext = &rb2_on, .transformFeedback = VK_TRUE,
    };
    VkPhysicalDeviceVulkan12Features f12_on = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES, .pNext = &xfb_on,
       .shaderOutputLayer = VK_TRUE,
    };
    VkPhysicalDeviceFeatures feats = { .vertexPipelineStoresAndAtomics = VK_TRUE };
-   const char *ext = VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME;
+   const char *exts[2] = { VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME,
+                           VK_EXT_ROBUSTNESS_2_EXTENSION_NAME };
    VkDeviceCreateInfo dci = {
       .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, .pNext = &f12_on,
       .queueCreateInfoCount = 1, .pQueueCreateInfos = &qci,
-      .enabledExtensionCount = 1, .ppEnabledExtensionNames = &ext, .pEnabledFeatures = &feats,
+      .enabledExtensionCount = 2, .ppEnabledExtensionNames = exts, .pEnabledFeatures = &feats,
    };
    VkDevice dev;
    CHECK(vkCreateDevice(pd, &dci, NULL, &dev));
@@ -211,8 +226,9 @@ xfb_mix(VkPhysicalDevice pd, const char *vs_a_path, const char *vs_b_path, const
       vkGetDeviceProcAddr(dev, "vkCmdEndTransformFeedbackEXT");
    VkShaderModule vs_a = xm_module(dev, vs_a_path);
    VkShaderModule vs_b = xm_module(dev, vs_b_path);
+   VkShaderModule vs_c = xm_module(dev, vs_c_path);
    VkShaderModule fs = xm_module(dev, fs_path);
-   if (!bind_xfb || !begin_xfb || !end_xfb || !vs_a || !vs_b || !fs) {
+   if (!bind_xfb || !begin_xfb || !end_xfb || !vs_a || !vs_b || !vs_c || !fs) {
       printf("FAILED (capture: entry points or shaders missing)\n");
       return 1;
    }
@@ -361,10 +377,22 @@ xfb_mix(VkPhysicalDevice pd, const char *vs_a_path, const char *vs_b_path, const
       .pInputAssemblyState = &ia, .pViewportState = &vps, .pRasterizationState = &rs,
       .pMultisampleState = &ms, .pColorBlendState = &cbs, .layout = pl, .renderPass = rp,
    };
-   VkPipeline pipe_a, pipe_b;
+   VkPipeline pipe_a, pipe_b, pipe_c;
    CHECK(vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &gpci, NULL, &pipe_a));
    stages[0].module = vs_b;
    CHECK(vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &gpci, NULL, &pipe_b));
+   /* Draw 3's one attribute, fetched from binding 0, which is bound to no
+    * buffer. */
+   VkVertexInputBindingDescription vib = { 0, 16, VK_VERTEX_INPUT_RATE_VERTEX };
+   VkVertexInputAttributeDescription via = { 0, 0, VK_FORMAT_R32G32B32A32_SFLOAT, 0 };
+   VkPipelineVertexInputStateCreateInfo vi_c = {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+      .vertexBindingDescriptionCount = 1, .pVertexBindingDescriptions = &vib,
+      .vertexAttributeDescriptionCount = 1, .pVertexAttributeDescriptions = &via,
+   };
+   stages[0].module = vs_c;
+   gpci.pVertexInputState = &vi_c;
+   CHECK(vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &gpci, NULL, &pipe_c));
 
    VkCommandPoolCreateInfo cmpci = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .queueFamilyIndex = qf,
@@ -397,8 +425,13 @@ xfb_mix(VkPhysicalDevice pd, const char *vs_a_path, const char *vs_b_path, const
    vkCmdDraw(cb, 3, 1, 0, 0);
    vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe_b);
    vkCmdDraw(cb, 3, 1, 3, 0);
-   vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe_a);
+   vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe_c);
+   const VkBuffer null_vb = VK_NULL_HANDLE;
+   const VkDeviceSize null_off = 0;
+   vkCmdBindVertexBuffers(cb, 0, 1, &null_vb, &null_off);
    vkCmdDraw(cb, 3, 1, 6, 0);
+   vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe_a);
+   vkCmdDraw(cb, 3, 1, 9, 0);
    end_xfb(cb, 0, 1, &cbuf, &coff);
    vkCmdEndRenderPass(cb);
    CHECK(vkEndCommandBuffer(cb));
@@ -430,6 +463,7 @@ xfb_mix(VkPhysicalDevice pd, const char *vs_a_path, const char *vs_b_path, const
    vkDestroyCommandPool(dev, cp, NULL);
    vkDestroyPipeline(dev, pipe_a, NULL);
    vkDestroyPipeline(dev, pipe_b, NULL);
+   vkDestroyPipeline(dev, pipe_c, NULL);
    vkDestroyPipelineLayout(dev, pl, NULL);
    vkDestroyDescriptorPool(dev, dp, NULL);
    vkDestroyDescriptorSetLayout(dev, dsl, NULL);
@@ -446,11 +480,12 @@ xfb_mix(VkPhysicalDevice pd, const char *vs_a_path, const char *vs_b_path, const
    vkFreeMemory(dev, smem, NULL);
    vkDestroyShaderModule(dev, vs_a, NULL);
    vkDestroyShaderModule(dev, vs_b, NULL);
+   vkDestroyShaderModule(dev, vs_c, NULL);
    vkDestroyShaderModule(dev, fs, NULL);
    vkDestroyDevice(dev, NULL);
    if (bad) {
-      printf("FAILED (capture: %u words wrong across device/llvmpipe/device; a gap "
-             "or overwrite means one side resumed from a stale filled size)\n", bad);
+      printf("FAILED (capture: %u words wrong across device/llvmpipe/device draws; a "
+             "gap or overwrite means a draw resumed from a stale filled size)\n", bad);
       return 1;
    }
    return 0;
@@ -464,6 +499,7 @@ main(int argc, char **argv)
    const char *vs_a_path = (argc > 3) ? argv[3] : "xfbmix_a.vert.spv";
    const char *vs_b_path = (argc > 4) ? argv[4] : "xfbmix_b.vert.spv";
    const char *fs_path   = (argc > 5) ? argv[5] : "xfbmix.frag.spv";
+   const char *vs_c_path = (argc > 6) ? argv[6] : "xfbmix_c.vert.spv";
 
    /* --- instance --------------------------------------------------- */
    VkApplicationInfo app = {
@@ -745,7 +781,7 @@ main(int argc, char **argv)
    vkFreeMemory(dev, mem, NULL);
    vkDestroyBuffer(dev, buf, NULL);
    vkDestroyDevice(dev, NULL);
-   const int capture_failed = xfb_mix(pd, vs_a_path, vs_b_path, fs_path);
+   const int capture_failed = xfb_mix(pd, vs_a_path, vs_b_path, vs_c_path, fs_path);
    vkDestroyInstance(inst, NULL);
    if (capture_failed)
       return 1;

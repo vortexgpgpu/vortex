@@ -127,6 +127,12 @@ typedef struct vx_kernel* vx_kernel_h;
 // host<->device DMA staging. Backends without a real host/device memory
 // split (simx, rtlsim, gem5) ignore this flag.
 #define VX_MEM_HOST                 0x10
+// Use caller-owned host memory as the buffer's storage instead of allocating
+// device memory, so the device reads and writes those bytes in place. On entry
+// *out holds the host address, aligned to a 4 KiB page; size is rounded up to
+// whole pages, which must stay mapped until the buffer is released. Backends
+// whose device cannot reach host memory return VX_ERR_NOT_SUPPORTED.
+#define VX_MEM_IMPORT_HOST          0x20
 
 // ============================================================================
 // Result type

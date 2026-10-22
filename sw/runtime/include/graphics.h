@@ -250,8 +250,9 @@ struct om_state_t {
   // depth (defaults disable: ALWAYS-pass, no writes)
   uint32_t depth_func      = VX_OM_DEPTH_FUNC_ALWAYS;
   uint32_t depth_writemask = 0;
-  // D24S8, D32F or D32FS8 (the z-buffer holds each float's ordered key, and a
-  // colour+depth pair carries the face and attachment in its address)
+  // D24S8, D16, S8, D32F or D32FS8 (a float z-buffer holds the floats, which
+  // the merger compares as ordered keys, and a colour+depth pair carries the
+  // face and attachment in its address)
   uint32_t depth_format    = VX_OM_DEPTH_FORMAT_D24S8;
   // Early-Z gate: caller sets 1 only when the FS has no depth-export, the
   // depth func is monotonic (LESS/LEQUAL), stencil is off, and blending is

@@ -26,24 +26,25 @@ __kernel void msaa_resolve_k(resolve_arg_t* __UNIFORM__ arg) {
   const uint32_t w = arg->width, h = arg->height, s = arg->samples;
   const uint32_t n = w * h;
   const uint32_t bpp = gfx_sw::om_color_bpp(arg->color_format);
-  // msaa_color_addr takes the plane's base, pitch and format through an
-  // om_state_t; no other field of it is consulted on this path.
+  // msaa_color_addr takes the image's base, pitch, sample stride and format
+  // through an om_state_t; no other field of it is consulted on this path.
   gfx_sw::om_state_t src{};
-  src.cbuf_base    = arg->src_addr;
-  src.cbuf_pitch   = w * s * bpp;
-  src.color_format = arg->color_format;
+  src.cbuf_base          = arg->src_addr;
+  src.cbuf_pitch         = arg->src_pitch;
+  src.cbuf_sample_stride = arg->src_sample_stride;
+  src.color_format       = arg->color_format;
   auto dst = static_cast<uintptr_t>(arg->dst_addr);
   uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
   uint32_t gstride = gridDim.x * blockDim.x;
   const bool wide = gfx_sw::om_is_wide(arg->color_format);
   for (uint32_t i = gid; i < n; i += gstride) {
     uint32_t x = i % w, y = i / w;
+    const uintptr_t d = dst + (uintptr_t)y * arg->dst_pitch + (uintptr_t)x * bpp;
     if (wide) {
-      gfx_sw::msaa_resolve_wide(arg->color_format, s, gfx_sw::msaa_color_addr(src, s, x, y, 0),
-                                dst + (uintptr_t)i * bpp);
+      gfx_sw::msaa_resolve_wide(arg->color_format, s, arg->src_sample_stride,
+                                gfx_sw::msaa_color_addr(src, x, y, 0), d);
     } else {
-      gfx_sw::om_store(dst + (uintptr_t)i * bpp, bpp,
-                       gfx_sw::msaa_resolve_color(src, s, x, y));
+      gfx_sw::om_store(d, bpp, gfx_sw::msaa_resolve_color(src, s, x, y));
     }
   }
 }

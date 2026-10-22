@@ -148,7 +148,9 @@ void make_state_opaque(gfx_sw::om_state_t& s, uint32_t* color, uint32_t* depth) 
   s.blend_dst_rgb = s.blend_dst_a = VX_OM_BLEND_FUNC_ZERO;
   s.blend_const = 0; s.logic_op = 0;
   s.zbuf_base = (uint64_t)(uintptr_t)depth; s.cbuf_base = (uint64_t)(uintptr_t)color;
-  s.zbuf_pitch = W * S * 4; s.cbuf_pitch = W * S * 4;
+  // One W x H image per sample.
+  s.zbuf_pitch = W * 4; s.cbuf_pitch = W * 4;
+  s.zbuf_sample_stride = W * H * 4; s.cbuf_sample_stride = W * H * 4;
   s.cbuf_writemask4 = 0xf;
   gfx_sw::resolve_om_state(s);
 }

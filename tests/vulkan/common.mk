@@ -117,6 +117,13 @@ RUN_ENV := VK_ICD_FILENAMES=$(VK_ICD) \
            VORTEX_HOME=$(VORTEX_HOME) \
            VORTEX_TOOLDIR=$(TOOLDIR) \
            VORTEX_BUILD=$(ROOT_DIR)
+# NO_IMPORT=1 runs with VORTEXPIPE_NO_IMPORT: every allocation is mirrored in
+# device memory rather than imported, as on a backend that cannot import, so a
+# render pass runs in the driver's resident planes.
+NO_IMPORT ?= 0
+ifeq ($(NO_IMPORT),1)
+RUN_ENV += VORTEXPIPE_NO_IMPORT=1
+endif
 # A test whose subject is the fixed-function output merger sets `FF_OM := 1`
 # before including common.mk. Its result would be the same merged in software,
 # so the run logs every fragment variant vortexpipe compiles and fails if any of
@@ -128,7 +135,8 @@ endif
 # A test that runs some of its work on llvmpipe on purpose (STRICT := 0) can
 # still pin down which work stays on the device: EXPECT_ATTRIB lists, one word
 # per context, the vortexpipe-attrib placement it must report, with '_' for
-# the space -- e.g. launches=0/0_draws=2/3.
+# the space -- e.g. launches=0/0_draws=2/3. The line goes on with the staging
+# counters; a word pins as many of its leading fields as it names.
 EXPECT_ATTRIB ?=
 # EXPECT_CPU lists, one word per reason, the llvmpipe executions some context
 # must report by reason, as its vortexpipe-cpu line prints them -- e.g.
@@ -170,7 +178,7 @@ define check_run
 	   exit 1; \
 	fi; \
 	for p in $(EXPECT_ATTRIB); do \
-	   if ! echo "$$out" | grep -qx "vortexpipe-attrib: `echo $$p | tr _ ' '`"; then \
+	   if ! echo "$$out" | grep -q "^vortexpipe-attrib: `echo $$p | tr _ ' '`\( \|$$\)"; then \
 	      echo "FAIL: $(PROJECT) did not place its work as $$p"; exit 1; \
 	   fi; \
 	done; \

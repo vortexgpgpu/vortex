@@ -22,6 +22,11 @@
  * outside the mask are not asserted on: they receive neither the clear nor the
  * draw, so the spec leaves their contents undefined.
  *
+ * Both masks run at 64x64 and at 13x7, whose rows (52 bytes) and views (364
+ * bytes) are not whole 64-byte units: a driver keeping the views back to back
+ * in device memory has to place each one where the merger can address it, or
+ * the next view starts short of its own pixels.
+ *
  * Correct behaviour is either to render all the views or to refuse the pass and
  * let llvmpipe render it. This test asserts the pixels, not which of those
  * happened, because both are right and only silence is not.
@@ -35,9 +40,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define WIDTH     64u
-#define HEIGHT    64u
 #define MAXVIEWS  3u
+
+/* The target size of the case being run (see main). */
+static uint32_t g_width = 64u, g_height = 64u;
 #define FORMAT    VK_FORMAT_R8G8B8A8_UNORM
 /* multiview.frag's colour, and the clear it has to replace. Both are exact
  * 1/255 steps so neither depends on how the device rounds a UNORM8. */
@@ -112,7 +118,7 @@ render(VkDevice dev, VkQueue queue, uint32_t qf,
    VkImageCreateInfo imci = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
       .imageType = VK_IMAGE_TYPE_2D, .format = FORMAT,
-      .extent = { WIDTH, HEIGHT, 1 }, .mipLevels = 1, .arrayLayers = layers,
+      .extent = { g_width, g_height, 1 }, .mipLevels = 1, .arrayLayers = layers,
       .samples = VK_SAMPLE_COUNT_1_BIT, .tiling = VK_IMAGE_TILING_OPTIMAL,
       .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
                VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
@@ -178,7 +184,7 @@ render(VkDevice dev, VkQueue queue, uint32_t qf,
    VkFramebufferCreateInfo fbci = {
       .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
       .renderPass = rp, .attachmentCount = 1, .pAttachments = &view,
-      .width = WIDTH, .height = HEIGHT, .layers = 1,
+      .width = g_width, .height = g_height, .layers = 1,
    };
    VkFramebuffer fb;
    CHECK(vkCreateFramebuffer(dev, &fbci, NULL, &fb));
@@ -205,8 +211,8 @@ render(VkDevice dev, VkQueue queue, uint32_t qf,
       .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
       .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
    };
-   VkViewport vp = { 0, 0, (float)WIDTH, (float)HEIGHT, 0.0f, 1.0f };
-   VkRect2D sc = { { 0, 0 }, { WIDTH, HEIGHT } };
+   VkViewport vp = { 0, 0, (float)g_width, (float)g_height, 0.0f, 1.0f };
+   VkRect2D sc = { { 0, 0 }, { g_width, g_height } };
    VkPipelineViewportStateCreateInfo vps = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
       .viewportCount = 1, .pViewports = &vp,
@@ -241,7 +247,7 @@ render(VkDevice dev, VkQueue queue, uint32_t qf,
    VkPipeline pipe;
    CHECK(vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &gpci, NULL, &pipe));
 
-   const VkDeviceSize bytes = (VkDeviceSize)WIDTH * HEIGHT * 4 * layers;
+   const VkDeviceSize bytes = (VkDeviceSize)g_width * g_height * 4 * layers;
    VkBufferCreateInfo bci = {
       .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
       .size = bytes, .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
@@ -286,7 +292,7 @@ render(VkDevice dev, VkQueue queue, uint32_t qf,
    VkRenderPassBeginInfo rpbi = {
       .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
       .renderPass = rp, .framebuffer = fb,
-      .renderArea = { { 0, 0 }, { WIDTH, HEIGHT } },
+      .renderArea = { { 0, 0 }, { g_width, g_height } },
       .clearValueCount = 1, .pClearValues = &clear,
    };
    vkCmdBeginRenderPass(cmd, &rpbi, VK_SUBPASS_CONTENTS_INLINE);
@@ -295,10 +301,10 @@ render(VkDevice dev, VkQueue queue, uint32_t qf,
    vkCmdEndRenderPass(cmd);
    VkBufferImageCopy region = {
       /* Every layer in one copy: the destination is tightly packed, so view v
-       * starts at v * WIDTH * HEIGHT * 4. */
+       * starts at v * g_width * g_height * 4. */
       .imageSubresource = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                             .layerCount = layers },
-      .imageExtent = { WIDTH, HEIGHT, 1 },
+      .imageExtent = { g_width, g_height, 1 },
    };
    vkCmdCopyImageToBuffer(cmd, img, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                           rb, 1, &region);
@@ -314,17 +320,17 @@ render(VkDevice dev, VkQueue queue, uint32_t qf,
    uint8_t *px;
    CHECK(vkMapMemory(dev, bmem, 0, bytes, 0, (void **)&px));
    for (uint32_t v = 0; v < layers; v++) {
-      const uint8_t *layer = px + (size_t)v * WIDTH * HEIGHT * 4;
+      const uint8_t *layer = px + (size_t)v * g_width * g_height * 4;
       out_covered[v] = 0;
-      for (uint32_t y = 0; y < HEIGHT; y++) {
-         for (uint32_t x = 0; x < WIDTH; x++) {
-            const uint8_t *p = layer + ((size_t)y * WIDTH + x) * 4;
+      for (uint32_t y = 0; y < g_height; y++) {
+         for (uint32_t x = 0; x < g_width; x++) {
+            const uint8_t *p = layer + ((size_t)y * g_width + x) * 4;
             if (p[0] == EXPECT_R && p[1] == EXPECT_G && p[2] == EXPECT_B) {
                out_covered[v]++;
             }
          }
       }
-      memcpy(centre[v], layer + ((size_t)(HEIGHT / 2) * WIDTH + WIDTH / 2) * 4, 4);
+      memcpy(centre[v], layer + ((size_t)(g_height / 2) * g_width + g_width / 2) * 4, 4);
    }
    vkUnmapMemory(dev, bmem);
 
@@ -428,33 +434,38 @@ main(int argc, char **argv)
     * the fragment shader's colour -- no fill-rule band and no tolerance,
     * because the colour is an exact 1/255 step and the failures this test
     * exists to catch are a whole view wide. */
-   const long EXPECT_PX = (long)WIDTH * HEIGHT;
+   static const uint32_t SIZES[][2] = { { 64u, 64u }, { 13u, 7u } };
    unsigned bad = 0;
 
-   for (unsigned c = 0; c < sizeof CASES / sizeof CASES[0]; c++) {
-      long covered[MAXVIEWS] = { 0 };
-      if (render(dev, queue, qf, &mp, vs, fs,
-                 CASES[c].layers, CASES[c].mask, covered) < 0)
-         return 1;
+   for (unsigned z = 0; z < sizeof SIZES / sizeof SIZES[0]; z++) {
+      for (unsigned c = 0; c < sizeof CASES / sizeof CASES[0]; c++) {
+         g_width = SIZES[z][0];
+         g_height = SIZES[z][1];
+         const long EXPECT_PX = (long)g_width * g_height;
+         long covered[MAXVIEWS] = { 0 };
+         if (render(dev, queue, qf, &mp, vs, fs,
+                    CASES[c].layers, CASES[c].mask, covered) < 0)
+            return 1;
 
-      /* Only the layers the mask names are views, and only they are asserted
-       * on. A layer outside the mask receives neither the loadOp clear nor the
-       * draw, so its contents are undefined and llvmpipe leaves it carrying the
-       * draw colour anyway -- checking it would assert something the spec does
-       * not promise and the reference does not do. Layer 2 of 0b101 is what
-       * makes this case worth running: a driver looping over a view *count*
-       * rather than the mask's set bits renders layers 0 and 1 and leaves it
-       * empty. */
-      for (uint32_t v = 0; v < CASES[c].layers; v++) {
-         if ((CASES[c].mask & (1u << v)) == 0u) {
-            continue;
-         }
-         if (covered[v] != EXPECT_PX) {
-            printf("  mask %s: view %u has %ld/%ld px at the draw colour -- "
-                   "centre RGB = %u,%u,%u\n",
-                   CASES[c].what, v, covered[v], EXPECT_PX,
-                   centre[v][0], centre[v][1], centre[v][2]);
-            bad++;
+         /* Only the layers the mask names are views, and only they are asserted
+          * on. A layer outside the mask receives neither the loadOp clear nor the
+          * draw, so its contents are undefined and llvmpipe leaves it carrying the
+          * draw colour anyway -- checking it would assert something the spec does
+          * not promise and the reference does not do. Layer 2 of 0b101 is what
+          * makes this case worth running: a driver looping over a view *count*
+          * rather than the mask's set bits renders layers 0 and 1 and leaves it
+          * empty. */
+         for (uint32_t v = 0; v < CASES[c].layers; v++) {
+            if ((CASES[c].mask & (1u << v)) == 0u) {
+               continue;
+            }
+            if (covered[v] != EXPECT_PX) {
+               printf("  %ux%u mask %s: view %u has %ld/%ld px at the draw colour -- "
+                      "centre RGB = %u,%u,%u\n",
+                      g_width, g_height, CASES[c].what, v, covered[v], EXPECT_PX,
+                      centre[v][0], centre[v][1], centre[v][2]);
+               bad++;
+            }
          }
       }
    }
@@ -471,6 +482,6 @@ main(int argc, char **argv)
       return 1;
    }
    printf("PASSED (multiview: every view of 0b11 and 0b101 fully covered by "
-          "one draw, %ld px each)\n", EXPECT_PX);
+          "one draw, at 64x64 and 13x7)\n");
    return 0;
 }
