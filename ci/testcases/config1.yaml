@@ -338,6 +338,13 @@ tests:
   app: dogfood
   configs: -DVX_CFG_FNCP_PE_RATIO=2
   args: -tfclamp
+- id: dogfood-10
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: dogfood
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_NUM_FPU_LANES=1
+  args: -n1 -ttrig
 - id: regression/vecadd-5
   via: blackbox
   drivers:
