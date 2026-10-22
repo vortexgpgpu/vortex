@@ -30,7 +30,7 @@
 
 // TCU_LD memory ports: one per TCU block, through the LSU block that serves
 // the same warps, when the LSU has one block per TCU block; otherwise all
-// TCU blocks share LSU block 0. Same derivation as the RTL's AGU_PORTS.
+// TCU blocks share LSU block 0, as in the RTL (VX_tcu_unit).
 #ifndef TCU_AGU_PORTS
 #define TCU_AGU_PORTS (uint32_t((VX_CFG_NUM_LSU_BLOCKS == VX_CFG_NUM_TCU_BLOCKS) ? VX_CFG_NUM_TCU_BLOCKS : 1))
 #endif

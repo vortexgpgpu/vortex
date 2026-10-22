@@ -65,9 +65,6 @@ import VX_tcu_pkg::*;
     output wire [`VX_CFG_NUM_LSU_LANES-1:0] lsu_perf_rsp_fire,
     output wire [PERF_CTR_BITS-1:0] lsu_coalescer_misses,
 `endif
-`ifdef TCU_META_ENABLE
-    VX_lsu_sched_if.slave   lsu_tcu_mem_if,
-`endif
     output wire             lsu_sched_empty,
     output wire             lsu_store_empty,
     output wire             lsu_busy,
@@ -95,18 +92,6 @@ import VX_tcu_pkg::*;
     input wire [TCU_WG_A_DATA_SIZE-1:0][`VX_CFG_XLEN-1:0] tcu_tbuf_rs1_data,
     input wire [TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0]   tcu_tbuf_rs2_data,
     input wire              tcu_tbuf_ready,
-`endif
-`ifdef TCU_META_ENABLE
-    output wire             tcu_agu_ld_valid,
-    output tcu_execute_t    tcu_agu_ld_data,
-    input wire              tcu_agu_ld_ready,
-    input wire              tcu_agu_result_valid,
-    input tcu_result_t      tcu_agu_result_data,
-    output wire             tcu_agu_result_ready,
-    input wire              tcu_meta_wr_en,
-    input wire [NW_WIDTH-1:0] tcu_meta_wr_wid,
-    input wire [4:0]        tcu_meta_wr_idx,
-    input wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0] tcu_meta_wr_data,
 `endif
 
     // core-wide warp control
@@ -316,9 +301,6 @@ import VX_tcu_pkg::*;
         .lsu_perf_rsp_fire    (lsu_perf_rsp_fire),
         .lsu_coalescer_misses (lsu_coalescer_misses),
     `endif
-    `ifdef TCU_META_ENABLE
-        .lsu_tcu_mem_if       (lsu_tcu_mem_if),
-    `endif
         .lsu_sched_empty      (lsu_sched_empty),
         .lsu_store_empty      (lsu_store_empty),
         .lsu_busy             (lsu_busy),
@@ -342,18 +324,6 @@ import VX_tcu_pkg::*;
         .tcu_tbuf_rs1_data    (tcu_tbuf_rs1_data),
         .tcu_tbuf_rs2_data    (tcu_tbuf_rs2_data),
         .tcu_tbuf_ready       (tcu_tbuf_ready),
-    `endif
-    `ifdef TCU_META_ENABLE
-        .tcu_agu_ld_valid     (tcu_agu_ld_valid),
-        .tcu_agu_ld_data      (tcu_agu_ld_data),
-        .tcu_agu_ld_ready     (tcu_agu_ld_ready),
-        .tcu_agu_result_valid (tcu_agu_result_valid),
-        .tcu_agu_result_data  (tcu_agu_result_data),
-        .tcu_agu_result_ready (tcu_agu_result_ready),
-        .tcu_meta_wr_en       (tcu_meta_wr_en),
-        .tcu_meta_wr_wid      (tcu_meta_wr_wid),
-        .tcu_meta_wr_idx      (tcu_meta_wr_idx),
-        .tcu_meta_wr_data     (tcu_meta_wr_data),
     `endif
         .warp_shared_if       (warp_shared_if),
         .cta_bcast            (cta_bcast)

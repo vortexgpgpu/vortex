@@ -412,8 +412,8 @@ public:
   }
 
 #ifdef TCU_META_ENABLE
-  // Each TCU block tracks one metadata transaction. Requests share the LSU
-  // client port, while tags allow their memory latency to overlap.
+  // Each TCU block's AGU tracks one metadata load and writes each returned
+  // lane straight into the block's metadata SRAM.
   static constexpr uint32_t kAguBeats =
       (VX_CFG_NUM_THREADS + VX_CFG_NUM_LSU_LANES - 1) / VX_CFG_NUM_LSU_LANES;
 
@@ -426,7 +426,6 @@ public:
     uint32_t next_beat = 0;
     uint32_t rsp_count = 0;
     std::array<uint64_t, VX_CFG_NUM_THREADS> addrs{};
-    std::array<uint32_t, VX_CFG_NUM_THREADS> words{};
   };
   std::array<agu_state_t, VX_CFG_NUM_TCU_BLOCKS> agu_;
   uint32_t agu_issue_rr_ = 0;
@@ -485,11 +484,10 @@ public:
       uint32_t off = agu.addrs.at(idx) & (VX_CFG_MEM_BLOCK_SIZE - 1);
       uint32_t word = 0;
       std::memcpy(&word, rsp.data.at(lane)->data() + off, 4);
-      agu.words.at(idx) = word;
+      this->agu_write(agu, idx, word);
       ++agu.rsp_count;
     }
     if (agu.busy && !agu.complete && agu.rsp_count == VX_CFG_NUM_THREADS) {
-      this->agu_deposit(agu);
       agu.complete = true;
     }
   }
@@ -531,15 +529,13 @@ public:
     }
   }
 
-  // Deposit the fetched words into the selected metadata SRAM.
-  void agu_deposit(const agu_state_t& agu) {
+  // Write lane T's fetched word into the selected metadata SRAM.
+  void agu_write(const agu_state_t& agu, uint32_t T, uint32_t word) {
     uint32_t wid = agu.wid;
   #ifdef VX_CFG_TCU_MX_ENABLE
     if (agu.selector & 0x10) {
       auto& dst = (agu.selector & 1) ? mx_meta_b_.at(wid) : mx_meta_a_.at(wid);
-      for (uint32_t lane = 0; lane < VX_CFG_NUM_THREADS; ++lane) {
-        dst.at(lane) = agu.words.at(lane);
-      }
+      dst.at(T) = word;
       return;
     }
   #endif
@@ -554,26 +550,25 @@ public:
     constexpr uint32_t BPS = cfg::banks_per_store;
     constexpr uint32_t SPC = cfg::stores_per_col;
     constexpr uint32_t CPL = cfg::meta_cols_per_load;
-    for (uint32_t T = 0; T < VX_CFG_NUM_THREADS; ++T) {
-      uint32_t store_in_load   = T / BPS;
-      uint32_t thread_in_store = T % BPS;
-      uint32_t flat_store      = slot_idx * CPL + store_in_load;
-      uint32_t col             = flat_store / SPC;
-      uint32_t store_in_col    = flat_store % SPC;
-      uint32_t bank            = store_in_col * BPS + thread_in_store;
-      if (bank >= PWD || col >= kMaxMetaCols) {
-        continue;
-      }
-      uint32_t word = agu.words.at(T);
-      sparse_meta_.at(wid).at(bank * kMaxMetaCols + col) = word;
-      // Trace: META_SRAM write (CSV: wid,bank,col,addr,value).
-      if (const char* p = std::getenv("VORTEX_TCU_TRACE")) {
-        if (p[0] == '1') {
-          fprintf(stderr, "META_TRC,%u,%u,%u,0x%lx,0x%08x\n",
-                  wid, bank, col, (unsigned long)agu.addrs.at(T), word);
-        }
+    uint32_t store_in_load   = T / BPS;
+    uint32_t thread_in_store = T % BPS;
+    uint32_t flat_store      = slot_idx * CPL + store_in_load;
+    uint32_t col             = flat_store / SPC;
+    uint32_t store_in_col    = flat_store % SPC;
+    uint32_t bank            = store_in_col * BPS + thread_in_store;
+    if (bank >= PWD || col >= kMaxMetaCols) {
+      return;
+    }
+    sparse_meta_.at(wid).at(bank * kMaxMetaCols + col) = word;
+    // Trace: META_SRAM write (CSV: wid,bank,col,addr,value).
+    if (const char* p = std::getenv("VORTEX_TCU_TRACE")) {
+      if (p[0] == '1') {
+        fprintf(stderr, "META_TRC,%u,%u,%u,0x%lx,0x%08x\n",
+                wid, bank, col, (unsigned long)agu.addrs.at(T), word);
       }
     }
+  #else
+    __unused(T, word);
   #endif
   }
 #endif // TCU_META_ENABLE
