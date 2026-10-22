@@ -86,6 +86,49 @@ so the operation field stays four bits wide.
 is the `funct5` bits and is otherwise unused — so the comparand reaches the
 LSU as `rs3_data` with no new operand path.
 
+**Refused encodings trap.** An encoding the build does not implement raises
+the illegal-instruction trap (`mcause` 2, through the same ALU trap path as
+`ECALL`): a `funct5` with no operation, `AMOCAS` without Zacas, a `funct3`
+other than `.W`/`.D`, and on a 32-bit hart every `.D` atomic unless AMO64 is
+built in. Under AMO64, `LR.D`/`SC.D` and a `.D` atomic naming an odd `rd` or
+`rs2` still trap. A 32-bit hart also refuses the RV64 load and store encodings
+(`LD`, `LWU`, `SD`, and `FLD`/`FSD` when `FLEN` is 32), so on it an LSU op of
+64-bit width is only ever a register-pair atomic.
+
+A misaligned `.D` atomic falls under the LSU's general alignment contract (an
+assertion in both models, as for every other access); it is never split into
+two word atomics.
+
+### 2.1 64-bit atomics on a 32-bit hart (AMO64)
+
+With `VX_CFG_EXT_AMO64_ENABLE` a 32-bit hart runs the `.D` read-modify-write
+atomics and `AMOCAS.D` on even-aligned register pairs — the pairing Zacas
+defines for `amocas.d` on RV32: `rs2`/`rs2+1` is the operand (low word in the
+even register), `rd`/`rd+1` receives the old value and, for compare-and-swap,
+carries the comparand in. `x0` as a pair base names `x0` for both halves.
+
+Five registers in and two out exceed one instruction's three source slots and
+one destination, so the uop sequencer splits the instruction
+([`VX_uop_packld.sv`](../../hw/rtl/core/VX_uop_packld.sv), `LsuUopGen`):
+
+| uop | reads | writes | does |
+|---|---|---|---|
+| CMP | `rd`, `rd+1` | — | the LSU stages the 64-bit comparand (used by `AMOCAS.D`); retires like a store |
+| AMO | `rs1`, `rs2`, `rs2+1` | `rd` | the atomic; retires the old low word |
+| HI | — | `rd+1` | reserves `rd+1`; the LSU drops it and retires the old high word into `rd+1` from the AMO's response |
+
+CMP leads every pair atomic, not only compare-and-swap: AMO's own register
+check covers `rd` alone, and an older still-pending write of `rd+1` (a load
+that missed) would otherwise land after HI's reservation, clobbering the high
+word and leaving `rd+1` reserved forever. Reading `rd+1` in CMP orders the burst
+behind it.
+
+The burst holds the issue slot's lock (`fu_lock`/`fu_unlock`). The LSU keeps
+one staged comparand per (issue slot within the block, operand collector,
+packet): a warp's uops leave its collector in order and the lock keeps another
+warp of the slot from issuing between a CMP and its AMO, so the slot cannot be
+overwritten in between.
+
 ---
 
 ## 3. The LSU sideband
@@ -97,7 +140,8 @@ per lane into the lane's memory attribute
 | field | width | meaning |
 |---|---|---|
 | `hart_id` | `NC_BITS + NW_BITS + NT_BITS` | `{core, warp, thread}` — the reservation owner |
-| `amo_cmp` | `XLEN` | compare-and-swap comparand; present only with Zacas |
+| `amo_cmp` | `XLEN`, 64 with AMO64 | compare-and-swap comparand; present only with Zacas |
+| `amo_wide` | 1 | AMO64 only: the lane is half of a 64-bit atomic on a 32-bit hart |
 | `amo_unsigned` | 1 | unsigned `MIN`/`MAX` |
 | `amo_op` | 4 | `amo_op_e` |
 | `amo_valid` | 1 | the lane is an atomic; sits at `MEM_ATTR_AMO_OFFS` |
@@ -120,7 +164,22 @@ Load-bearing properties:
   `hw/rtl/libs/` contain no atomic logic. The coalescer is told only
   `in_req_no_merge` ([`VX_mem_unit.sv`](../../hw/rtl/core/VX_mem_unit.sv)):
   an atomic lane is never merged, because two read-modify-writes to one word
-  are two operations, not one.
+  are two operations, not one — except the two halves of an AMO64 atomic.
+
+**AMO64 requests.** A 32-bit hart's LSU word is four bytes, so a 64-bit atomic
+rides two lanes, as a 64-bit access does on NVIDIA's 32-bit banks: the LSU
+issues one thread per request on the even/odd lane pair holding the thread's
+own lane (the low word on the even lane), both marked `amo_wide` and carrying
+the thread's attribute and 64-bit comparand. Staying on the thread's lane pair
+keeps the atomic behind the thread's older accesses to the same word, which
+travel the same lane, through the coalescer group and the cache port. The dcache coalescer fuses the pair into one 8-byte request (its
+byte enables make the commit point a `.D`), and splits the old value back onto
+the two lanes. The LSU retires each response twice, the low word into `rd`,
+then the high word into `rd+1`. One thread per request keeps two threads'
+atomics to one word from ever being fused; the alignment field of the request
+tag, unused by an 8-byte-aligned pair, names the thread. Wider issue (several
+pairs per request) is possible where the coalescer groups exactly two lanes,
+and is not implemented.
 
 A virtual-memory build checks an atomic's permissions as a **write**: the
 request arrives with `rw = 0`, so the MMU takes the write intent from the
@@ -159,10 +218,10 @@ Two parameters keep the datapath no wider than the build needs:
 - `DATA_WIDTH` — the operand width, the cache word capped at 64. A 32-bit
   word can only carry `.W`, so the adder and comparators are built 32-bit.
 - `ARITH_WIDTH` — the width of every operation **except** compare-and-swap.
-  A 32-bit hart issues 64-bit operands only for the Zacas pair, so its adder
-  and comparators shrink to 32 bits while the equality compare stays full
-  width. The bank asserts that no `.D` arithmetic atomic reaches a narrowed
-  build.
+  A 32-bit hart without AMO64 issues no 64-bit atomic, so its adder and
+  comparators shrink to 32 bits (the equality compare stays full width); the
+  bank asserts that no `.D` atomic reaches such a build. With AMO64 the
+  arithmetic is 64-bit.
 
 **A failed compare-and-swap still stores.** On a mismatch the old value is
 written back unchanged rather than the store being suppressed. The commit
@@ -347,6 +406,28 @@ A plain store reaches the reservation stage the same way an atomic does, one
 cycle after acceptance, so a plain store to a reserved word breaks the
 reservation.
 
+**Wide atomics (AMO64).** The two words of a 64-bit atomic on a 32-bit hart sit
+in adjacent banks on one row, and arrive as requests on an even/odd port pair.
+The banks do their atomics word by word, so a wide one is served apart from
+them by one engine in [`VX_local_mem.sv`](../../hw/rtl/mem/VX_local_mem.sv):
+
+| cycle | engine |
+|---|---|
+| 0 | takes both halves (round-robin over the pairs) |
+| 1.. | drains: the two banks serve what the crossbar had already routed to them (the issuing thread's older accesses to the words among them) while no new request may enter them; other banks run normally |
+| D+1..D+4 | holds every bank and the DMA port off; an atomic accepted at D writes back by D+2, and a read the cycle after a write returns the stale word |
+| D+5 | reads both words |
+| D+6 | captures them |
+| D+7 | computes the 64-bit result (`VX_amo_alu`, 64-bit) into a register, keeping the adder off the bank write path |
+| D+8 | writes it; the even bank of the pair holds the low word, so each bank's half is fixed by its index; the write reaches both banks' reservation stage as a plain store |
+| D+9 | answers on both ports at once, ahead of the bank responses |
+
+(`D` is the cycle the drain ends, at least 1.) The performance counters count
+a wide atomic as its two port requests, both reads (atomics carry `rw = 0`).
+
+Wide atomics are rare, and the exclusive window keeps the common path
+untouched: the banks and their word width are those of a build without AMO64.
+
 ---
 
 ## 8. SimX model
@@ -359,6 +440,7 @@ reservation.
 | LLC commit | `VX_cache_amo`, commit role | `CacheBank::commitAmo()` |
 | above the LLC | `VX_cache_amo`, passthrough role | `AmoProbe` request type |
 | local memory | 3-cycle in-place RMW | same occupancy, modeled as a per-bank busy count |
+| AMO64 pair | the thread's lane pair, fused by the coalescer; a wide engine at local memory | one 8-byte request on the thread's lane; at local memory the engine takes it from the input ports ahead of the crossbar, round-robin over the port pairs, and drains the requests the crossbar accepted for its two banks, as the RTL does |
 | reservations | bounded line-indexed stations with hold credit | one reservation **per hart** |
 
 Two of these differences matter when mirroring logic between the models:
@@ -386,6 +468,7 @@ Two of these differences matter when mirroring logic between the models:
 |---|---|---|
 | `VX_CFG_EXT_A_ENABLE` | false | the A extension; sets `MISA` bit 0 |
 | `VX_CFG_EXT_ZACAS_ENABLE` | false | compare-and-swap; requires A, widens every memory request by `XLEN` |
+| `VX_CFG_EXT_AMO64_ENABLE` | false | 64-bit atomics on a 32-bit hart (§2.1); requires A and `XLEN` 32, two LSU lanes and a dcache word of at least 8 bytes; `AMOCAS.D` also needs Zacas |
 | `VX_CFG_AMO_RS_SIZE` | `max(NUM_WARPS, NUM_CORES × NUM_WARPS / L2_NUM_BANKS)` | reservation stations per LLC bank |
 
 `AMO_ENABLE` is a **parameter** on the cache and local-memory modules, driven
@@ -427,6 +510,11 @@ is the LLC.
 | 12 | `self_consistency` | a hart reads back its own atomic through a plain load |
 | 13, 14 | `amoadd_lmem`, `lrsc_lmem` | cases 0 and 7 on local memory |
 | 15, 16 | `cas_ladder`, `cas_lmem` | every hart races compare-and-swap for each slot; compiled only with Zacas |
+| 17, 18 | `cas_counter`, `cas_counter_lmem` | compare-and-swap increment from a nonzero base |
+| `amo64_*` | `arith`, `bits` (global and local), `cas_counter`, `cas_counter_lmem`, `cas_ladder` | every 64-bit atomic, contended; operands that make each half matter, and every returned old value checked; on a 64-bit hart, or a 32-bit one with AMO64 |
+| `amo64_illegal` | a 32-bit hart's refused `.D` encodings | `LR.D`, an odd `rd` or `rs2` pair (AMO64) or any `.D` atomic (without), trap with `mcause` 2 and leave memory alone |
+| `amo64_war`, `amo64_war_lmem` | a load into `rd+1` that misses, then `amoadd.d` | the atomic waits for the older write of `rd+1`; every old value decodable and the counter exact |
+| `amo64_store_amo`, `amo64_store_amo_lmem` | a thread stores 0 then adds 1 to its own word | the atomic stays behind the thread's store (lane pair, local-memory drain) |
 
 The `amo` category in [`ci/testcases/amo.yaml`](../../ci/testcases/amo.yaml)
 runs them on both simulators at both `XLEN`s, with and without Zacas, on a

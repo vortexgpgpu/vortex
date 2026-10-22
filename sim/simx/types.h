@@ -270,6 +270,11 @@ struct IntrBrArgs {
   uint32_t offset;
 };
 
+// BrType::SYS offset of an encoding the decoder refused: it raises the
+// illegal-instruction trap. Lies outside the 12-bit funct12 space of the real
+// SYS instructions.
+inline constexpr uint32_t SYS_ILLEGAL_INSTR = 0x1000;
+
 inline std::ostream &operator<<(std::ostream &os, const BrType& type) {
   switch (type) {
   case BrType::BR:   os << "BR"; break;
@@ -374,10 +379,15 @@ inline std::ostream &operator<<(std::ostream &os, const MdvType& type) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+// AMO_CMP and AMO_HI are the companion uops of a register-pair atomic on a
+// 32-bit hart: AMO_CMP stages the rd pair (the compare-and-swap comparand),
+// AMO_HI retires the upper half of the old value into rd+1.
 enum class LsuType {
   LOAD,
   STORE,
-  FENCE
+  FENCE,
+  AMO_CMP,
+  AMO_HI
 };
 
 struct IntrLsuArgs {
@@ -391,6 +401,8 @@ inline std::ostream &operator<<(std::ostream &os, const LsuType& type) {
   case LsuType::LOAD:   os << "LOAD"; break;
   case LsuType::STORE:  os << "STORE"; break;
   case LsuType::FENCE:  os << "FENCE"; break;
+  case LsuType::AMO_CMP: os << "AMO_CMP"; break;
+  case LsuType::AMO_HI: os << "AMO_HI"; break;
   default:
     assert(false);
   }

@@ -165,6 +165,7 @@ static op_string_t op_string(const Instr &instr) {
         case 0x002: return {"URET", ""};
         case 0x102: return {"SRET", ""};
         case 0x302: return {"MRET", ""};
+        case SYS_ILLEGAL_INSTR: return {"ILLEGAL", ""};
         default:
           std::abort();
         }
@@ -305,6 +306,8 @@ static op_string_t op_string(const Instr &instr) {
         }
       }
       case LsuType::FENCE: return {"FENCE", ""};
+      case LsuType::AMO_CMP: return {"AMO_CMP.D", ""};
+      case LsuType::AMO_HI: return {"AMO_HI.D", ""};
       default:
         std::abort();
       }
@@ -471,6 +474,16 @@ Decoder::Decoder(const SimContext& ctx, const char* name, PoolAllocator<Instr, 6
 
 Decoder::~Decoder() {}
 
+// An encoding the decoder refuses raises the illegal-instruction trap; it
+// touches no register.
+static void set_illegal(Instr* instr) {
+  instr->set_fu_type(FUType::ALU);
+  instr->set_op_type(BrType::SYS);
+  instr->set_args(IntrBrArgs{0, 0, SYS_ILLEGAL_INSTR});
+  instr->set_wstall(true);
+  instr->set_fcsr_use(Instr::FCSR_TRAP, 0);
+}
+
 Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
   // Detect RVC from the raw bits and expand to a 32-bit instruction.
   const bool is_rvc = (code & 0x3u) != 0x3u;
@@ -612,9 +625,25 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
   case Opcode::FL:
   case Opcode::S:
   case Opcode::FS: {
-    instr->set_fu_type(FUType::LSU);
     bool is_float = (op == Opcode::FL || op == Opcode::FS);
     bool is_load = (op == Opcode::L || op == Opcode::FL);
+    // A 32-bit hart has no 64-bit integer access (ld, lwu, sd), and its
+    // floating-point loads and stores are FLEN wide.
+    if (VX_CFG_XLEN == 32) {
+      bool legal;
+      if (is_float) {
+        legal = (funct3 == 2) || (VX_CFG_FLEN == 64 && funct3 == 3);
+      } else if (is_load) {
+        legal = (funct3 <= 2) || (funct3 == 4) || (funct3 == 5);
+      } else {
+        legal = (funct3 <= 2);
+      }
+      if (!legal) {
+        set_illegal(instr.get());
+        break;
+      }
+    }
+    instr->set_fu_type(FUType::LSU);
     {
       instr->set_src_reg(0, rs1, RegType::Integer);
       uint32_t imm12 = 0;
@@ -636,35 +665,56 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     instr->set_args(IntrLsuArgs{0, 0, 0});
   } break;
   case Opcode::AMO: {
-    instr->set_fu_type(FUType::LSU);
     uint32_t aq = (code >> shift_aq) & mask_aq;
     uint32_t rl = (code >> shift_rl) & mask_rl;
+    bool legal = true;
+    AmoType amo_type = AmoType::LR;
     switch (funct5) {
-    case 0x00: instr->set_op_type(AmoType::AMOADD); break;
-    case 0x01: instr->set_op_type(AmoType::AMOSWAP); break;
-    case 0x02: instr->set_op_type(AmoType::LR); break;
-    case 0x03: instr->set_op_type(AmoType::SC); break;
-    case 0x04: instr->set_op_type(AmoType::AMOXOR); break;
-    case 0x08: instr->set_op_type(AmoType::AMOOR); break;
-    case 0x0c: instr->set_op_type(AmoType::AMOAND); break;
-    case 0x10: instr->set_op_type(AmoType::AMOMIN); break;
-    case 0x14: instr->set_op_type(AmoType::AMOMAX); break;
-    case 0x18: instr->set_op_type(AmoType::AMOMINU); break;
-    case 0x1c: instr->set_op_type(AmoType::AMOMAXU); break;
-    case 0x05: instr->set_op_type(AmoType::AMOCAS); break;
-    default:
-      std::abort();
+    case 0x00: amo_type = AmoType::AMOADD; break;
+    case 0x01: amo_type = AmoType::AMOSWAP; break;
+    case 0x02: amo_type = AmoType::LR; break;
+    case 0x03: amo_type = AmoType::SC; break;
+    case 0x04: amo_type = AmoType::AMOXOR; break;
+    case 0x08: amo_type = AmoType::AMOOR; break;
+    case 0x0c: amo_type = AmoType::AMOAND; break;
+    case 0x10: amo_type = AmoType::AMOMIN; break;
+    case 0x14: amo_type = AmoType::AMOMAX; break;
+    case 0x18: amo_type = AmoType::AMOMINU; break;
+    case 0x1c: amo_type = AmoType::AMOMAXU; break;
+    case 0x05: amo_type = AmoType::AMOCAS; legal = VX_CFG_EXT_ZACAS_ENABLED; break;
+    default:   legal = false; break;
     }
+    const bool is_lrsc = (amo_type == AmoType::LR || amo_type == AmoType::SC);
+    // A 64-bit atomic on a 32-bit hart names even-aligned register pairs. LR.D
+    // and SC.D have no pair form.
+    const bool is_pair = (VX_CFG_XLEN == 32) && (funct3 == 3);
+    if (!VX_CFG_EXT_A_ENABLED || (funct3 != 2 && funct3 != 3)) {
+      legal = false;
+    }
+    if (is_pair && !(VX_CFG_EXT_AMO64_ENABLED && !is_lrsc && (rd % 2) == 0 && (rs2 % 2) == 0)) {
+      legal = false;
+    }
+    if (!legal) {
+      set_illegal(instr.get());
+      break;
+    }
+    instr->set_fu_type(FUType::LSU);
+    instr->set_op_type(amo_type);
     instr->set_args(IntrAmoArgs{funct3, aq, rl});
     instr->set_dest_reg(rd, RegType::Integer);
     instr->set_src_reg(0, rs1, RegType::Integer);
     instr->set_src_reg(1, rs2, RegType::Integer);
-    if (funct5 == 0x05) {
+    if (amo_type == AmoType::AMOCAS) {
       // Compare-and-swap reads rd as well as writing it: rd carries the
       // comparand in, the loaded word out. It has to join the source set or
       // the operand collector supplies a stale comparand and the swap decides
       // on the wrong value.
       instr->set_src_reg(2, rd, RegType::Integer);
+    }
+    if (is_pair) {
+      // Five registers in and two out exceed one instruction's operand slots;
+      // the sequencer splits it (LsuUopGen).
+      instr->set_macro_op();
     }
   } break;
   case Opcode::SYS: {

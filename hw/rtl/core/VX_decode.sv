@@ -162,10 +162,14 @@ module VX_decode import
 `ifdef VX_CFG_EXT_A_ENABLE
     // Map RVA funct5 (instr[31:27]) to amo_op_e + amo_unsigned bit.
     // MINU/MAXU collapse into MIN/MAX + amo_unsigned=1.
+    // amo_legal clears for a funct5 with no operation (amocas without Zacas
+    // included); the width check below adds the funct3 and register rules.
     amo_op_e amo_type;
     reg      amo_unsigned;
+    reg      amo_legal;
     always @(*) begin
         amo_unsigned = 1'b0;
+        amo_legal    = 1'b1;
         case (funct5)
             5'h00: amo_type = AMO_OP_ADD;
             5'h01: amo_type = AMO_OP_SWAP;
@@ -181,9 +185,23 @@ module VX_decode import
         `ifdef VX_CFG_EXT_ZACAS_ENABLE
             5'h05: amo_type = AMO_OP_CAS;
         `endif
-            default: amo_type = AMO_OP_LR;
+            default: begin amo_type = AMO_OP_LR; amo_legal = 1'b0; end
         endcase
     end
+    wire amo_is_lrsc = (amo_type == AMO_OP_LR) || (amo_type == AMO_OP_SC);
+`ifdef VX_CFG_XLEN_64
+    wire amo_width_ok = (funct3 == 3'h2) || (funct3 == 3'h3);
+    `UNUSED_VAR (amo_is_lrsc)
+`elsif VX_CFG_EXT_AMO64_ENABLE
+    // A .D atomic on a 32-bit hart names even-aligned register pairs (the
+    // VX_uop_packld expander splits it); LR.D and SC.D have no pair form.
+    wire amo_width_ok = (funct3 == 3'h2)
+                     || ((funct3 == 3'h3) && ~amo_is_lrsc && ~rd[0] && ~rs2[0]);
+`else
+    wire amo_width_ok = (funct3 == 3'h2);
+    `UNUSED_VAR (amo_is_lrsc)
+`endif
+    wire amo_ok = amo_legal && amo_width_ok;
 `endif
 
 `ifdef VX_CFG_EXT_C_ENABLE
@@ -192,8 +210,23 @@ module VX_decode import
     wire decode_is_rvc = 1'b0;
 `endif
 
+    // A 32-bit hart has no 64-bit integer access (ld, lwu, sd), and its
+    // floating-point loads and stores are FLEN wide.
+`ifdef VX_CFG_XLEN_32
+    wire ls_fp_ok = (funct3 == 3'h2) || ((`VX_CFG_FLEN == 64) && (funct3 == 3'h3));
+    wire ld_ok = opcode[2] ? ls_fp_ok : ((funct3 <= 3'h2) || (funct3 == 3'h4) || (funct3 == 3'h5));
+    wire st_ok = opcode[2] ? ls_fp_ok : (funct3 <= 3'h2);
+`else
+    wire ld_ok = 1'b1;
+    wire st_ok = 1'b1;
+`endif
+
+    // an encoding the decoder refuses: it traps and touches no register
+    reg is_illegal;
+
     always @(*) begin
 
+        is_illegal = 0;
         ex_type   = 'x;
         op_type   = 'x;
         op_args   = 'x;
@@ -208,6 +241,10 @@ module VX_decode import
         // Default the LSU amo sideband to "not an AMO" so plain
         // loads/stores/fences/packed-loads don't propagate 'x through
         op_args.lsu.amo_valid = 1'b0;
+    `endif
+    `ifdef VX_CFG_EXT_AMO64_ENABLE
+        // the pair-uop marker is set only by the expander
+        op_args.lsu.amo_pair = 1'b0;
     `endif
     `ifdef VX_CFG_EXT_OM_ENABLE
         // Same reason: op_args defaults to 'x, and a stale export_mask makes
@@ -359,7 +396,9 @@ module VX_decode import
                 op_args.lsu.offset   = 0;
             end
         `ifdef VX_CFG_EXT_A_ENABLE
-            INST_AMO: begin
+            INST_AMO: if (~amo_ok) begin
+                is_illegal = 1;
+            end else begin
                 // RVA: funct3 = 010 (.W) or 011 (.D); we route AMO down
                 // the LSU's load path (every AMO returns to rd). The
                 // bank does the RMW commit; LSU just packs the AMO
@@ -424,7 +463,9 @@ module VX_decode import
         `ifdef VX_CFG_EXT_F_ENABLE
             INST_FL,
         `endif
-            INST_L: begin
+            INST_L: if (~ld_ok) begin
+                is_illegal = 1;
+            end else begin
                 ex_type = EX_LSU;
                 op_type = INST_OP_BITS'({1'b0, funct3});
                 op_args.lsu.is_store = 0;
@@ -441,7 +482,9 @@ module VX_decode import
         `ifdef VX_CFG_EXT_F_ENABLE
             INST_FS,
         `endif
-            INST_S: begin
+            INST_S: if (~st_ok) begin
+                is_illegal = 1;
+            end else begin
                 ex_type = EX_LSU;
                 op_type = INST_OP_BITS'({1'b1, funct3});
                 op_args.lsu.is_store = 1;
@@ -906,6 +949,18 @@ module VX_decode import
             end
             default:;
         endcase
+
+        if (is_illegal) begin
+            ex_type = EX_ALU;
+            op_type = INST_OP_BITS'(INST_BR_ILLEGAL);
+            op_args.br.xtype  = ALU_TYPE_BRANCH;
+            op_args.br.use_PC = 1;
+            op_args.br.use_imm= 1;
+            op_args.br.imm20  = 20'd4;
+            op_args.br.is_rvc = decode_is_rvc;
+            is_wstall = 1;
+            rd_xregs[XREG_TRAP] = 1'b1;
+        end
     end
 
     // disable writes to x0

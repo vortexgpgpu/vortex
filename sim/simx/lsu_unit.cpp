@@ -29,10 +29,69 @@
 using namespace vortex;
 
 uint32_t LsuUopGen::uop_count(const Instr& instr) {
+  auto op_type = instr.get_op_type();
+  if (std::get_if<AmoType>(&op_type)) {
+    // Register-pair atomic: AMO_CMP, AMO, AMO_HI.
+    return 3;
+  }
   // PACKLB.F: width=0 (LB), 4 byte-elements
   // PACKLH.F: width=1 (LH), 2 halfword-elements
   auto args = std::get<IntrLsuArgs>(instr.get_args());
   return (args.width == 0) ? 4 : 2;
+}
+
+// A 64-bit atomic on a 32-bit hart reads rs1, the rs2 pair and the rd pair
+// (the compare-and-swap comparand), and writes the rd pair: more than one
+// instruction's three source slots and one destination. It issues as a locked
+// burst:
+//   AMO_CMP : reads rd, rd+1 -> the LSU stages them as the comparand
+//   AMO     : reads rs1, rs2, rs2+1; writes rd (the old low word)
+//   AMO_HI  : writes rd+1 (the old high word)
+// AMO_CMP leads every pair atomic: reading rd+1 orders the burst after an older
+// write of rd+1, which the atomic's high word would otherwise race. AMO_HI
+// reserves rd+1 at issue; the LSU retires it with the high half of the AMO's
+// response. x0 as a pair base names x0 for both halves.
+static Instr::Ptr amo_pair_uop(PoolAllocator<Instr, 64>& pool,
+                               const Instr& macro_instr,
+                               uint32_t uop_index,
+                               uint64_t uop_uuid) {
+  auto amo_type = std::get<AmoType>(macro_instr.get_op_type());
+  uint32_t total = LsuUopGen::uop_count(macro_instr);
+  uint32_t role  = uop_index; // 0: CMP, 1: AMO, 2: HI
+  uint32_t rd    = macro_instr.get_dest_reg().idx;
+  uint32_t rs1   = macro_instr.get_src_reg(0).idx;
+  uint32_t rs2   = macro_instr.get_src_reg(1).idx;
+  uint32_t rd_hi  = rd  ? (rd + 1)  : 0;
+  uint32_t rs2_hi = rs2 ? (rs2 + 1) : 0;
+
+  auto uop = std::allocate_shared<Instr>(pool, uop_uuid, FUType::LSU);
+  uop->set_parent_uuid(macro_instr.get_uuid());
+  switch (role) {
+  case 0:
+    uop->set_op_type(LsuType::AMO_CMP);
+    uop->set_args(IntrLsuArgs{3, 0, 0});
+    uop->set_src_reg(1, rd, RegType::Integer);
+    uop->set_src_reg(2, rd_hi, RegType::Integer);
+    break;
+  case 1:
+    uop->set_op_type(amo_type);
+    uop->set_args(macro_instr.get_args());
+    uop->set_dest_reg(rd, RegType::Integer);
+    uop->set_src_reg(0, rs1, RegType::Integer);
+    uop->set_src_reg(1, rs2, RegType::Integer);
+    uop->set_src_reg(2, rs2_hi, RegType::Integer);
+    break;
+  default:
+    uop->set_op_type(LsuType::AMO_HI);
+    uop->set_args(IntrLsuArgs{3, 0, 0});
+    uop->set_dest_reg(rd_hi, RegType::Integer);
+    break;
+  }
+  // The comparand is staged per issue slot, so no other warp of the slot may
+  // issue between AMO_CMP and its AMO.
+  uop->set_fu_lock(uop_index == 0);
+  uop->set_fu_unlock(uop_index + 1 == total);
+  return uop;
 }
 
 Instr::Ptr LsuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
@@ -45,6 +104,11 @@ Instr::Ptr LsuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
   uint32_t uuid_lo = parent_uuid & 0xffffffff;
   uint32_t steps_shift = (total > 1) ? (32 - log2ceil(total)) : 0;
   uint64_t uop_uuid = (static_cast<uint64_t>(uuid_hi) << 32) | ((uop_index << steps_shift) | uuid_lo);
+
+  auto op_type = macro_instr.get_op_type();
+  if (std::get_if<AmoType>(&op_type)) {
+    return amo_pair_uop(pool_, macro_instr, uop_index, uop_uuid);
+  }
 
   auto args = std::get<IntrLsuArgs>(macro_instr.get_args());
   // Macro encodes elem-size as width: 0=byte (PACKLB), 1=halfword (PACKLH).
@@ -111,6 +175,155 @@ void LsuUnit::on_reset() {
 	pending_loads_ = 0;
 }
 
+bool LsuUnit::is_pair_amo(const instr_trace_t* trace) {
+	auto* amo_tag = std::get_if<AmoType>(&trace->op_type);
+	if (amo_tag == nullptr || VX_CFG_XLEN != 32) {
+		return false;
+	}
+	auto amo_args = std::get<IntrAmoArgs>(trace->instr_ptr->get_args());
+	return (amo_args.width == 3);
+}
+
+static uint64_t sext_word(uint32_t value) {
+	return (uint64_t)(int64_t)(int32_t)value;
+}
+
+static void retire_pair_hi(instr_trace_t* hi_trace, const std::vector<uint32_t>& hi) {
+	for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+		if (hi_trace->tmask.test(t)) {
+			hi_trace->dst_data.at(t).u64 = sext_word(hi.at(t));
+		}
+	}
+}
+
+// The companion uops of a register-pair atomic. AMO_CMP stages the comparand
+// and retires like a store; AMO_HI retires the old high words once the AMO has
+// returned every beat, and parks with the pair until then. Returns false on
+// output backpressure.
+bool LsuUnit::process_pair_uop(uint32_t b, instr_trace_t* trace) {
+	auto& state = states_.at(b);
+	auto& output = Outputs.at(b);
+	auto lsu_type = std::get<LsuType>(trace->op_type);
+	if (lsu_type == LsuType::AMO_CMP) {
+		if (output.full()) {
+			return false;
+		}
+		pair_state_t ps;
+		ps.wid = trace->wid;
+		ps.pid = trace->pid;
+		ps.cmp.assign(VX_CFG_NUM_THREADS, 0);
+		for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+			if (!trace->tmask.test(t)) {
+				continue;
+			}
+			ps.cmp.at(t) = (uint64_t)(uint32_t)trace->src_data[1][t].u
+			             | ((uint64_t)(uint32_t)trace->src_data[2][t].u << 32);
+		}
+		state.pairs.push_back(std::move(ps));
+		DT(3, this->name() << " amo-cmp: " << *trace);
+		output.send(trace);
+		return true;
+	}
+	assert(lsu_type == LsuType::AMO_HI);
+	auto it = state.pairs.begin();
+	while (it != state.pairs.end()
+	    && !(it->wid == trace->wid && it->pid == trace->pid && it->has_amo && !it->has_hi)) {
+		++it;
+	}
+	if (it == state.pairs.end()) {
+		std::cout << "Error: AMO_HI without its AMO: " << *trace << std::endl;
+		std::abort();
+	}
+	if (it->issued && it->beats == 0) {
+		if (output.full()) {
+			return false;
+		}
+		retire_pair_hi(trace, it->hi);
+		DT(3, this->name() << " amo-hi: " << *trace);
+		output.send(trace, 2);
+		state.pairs.erase(it);
+	} else {
+		it->has_hi = true;
+		it->hi_trace = trace;
+	}
+	return true;
+}
+
+// A pair response retires as two beats, as the hardware's does: the low half
+// into the AMO's rd, then the high half into rd+1. The high beat is AMO_HI's
+// retirement when it completes the AMO and AMO_HI has arrived, otherwise a
+// writeback-less commit-port slot.
+bool LsuUnit::process_pair_response(uint32_t b) {
+	auto& state = states_.at(b);
+	auto& lsu_rsp_in = core_->lmem_switch(b)->RspOut;
+	auto& lsu_rsp = lsu_rsp_in.peek();
+	auto& entry = state.pending_reqs.at(lsu_rsp.tag);
+	auto& output = Outputs.at(b);
+	if (output.full()) {
+		return false;
+	}
+	if (!state.rsp_hi_phase) {
+		auto trace = entry.trace;
+		auto ps = entry.pair;
+		state.rsp_pair = ps;
+		DT(3, this->name() << " mem-rsp: " << lsu_rsp);
+		for (uint32_t lane = 0; lane < lsu_rsp.mask.size(); ++lane) {
+			if (!lsu_rsp.mask.test(lane)) {
+				continue;
+			}
+			const auto& lane_info = entry.lanes.at(lane);
+			uint32_t off = lane_info.addr & (VX_CFG_MEM_BLOCK_SIZE - 1);
+			uint64_t old = 0;
+			std::memcpy(&old, lsu_rsp.data.at(lane)->data() + off, 8);
+			trace->dst_data.at(lane_info.tid).u64 = sext_word((uint32_t)old);
+			ps->hi.at(lane_info.tid) = (uint32_t)(old >> 32);
+		}
+		if (ps->issued && (ps->beats == 1)) {
+			// the AMO's last beat: the AMO retires, and its trace is not
+			// touched again
+			state.rsp_hi_beat = nullptr;
+			output.send(trace, 2);
+		} else {
+			auto beat_alloc = core_->trace_pool().allocate(1);
+			auto beat = new (beat_alloc) instr_trace_t(*trace);
+			beat->wb = false;
+			beat->eop = false;
+			auto hi_alloc = core_->trace_pool().allocate(1);
+			state.rsp_hi_beat = new (hi_alloc) instr_trace_t(*beat);
+			output.send(beat, 2);
+		}
+		state.rsp_hi_phase = true;
+		return true;
+	}
+	auto ps = state.rsp_pair;
+	if (state.rsp_hi_beat) {
+		output.send(state.rsp_hi_beat, 2);
+		state.rsp_hi_beat = nullptr;
+		ps->beats -= 1;
+	} else if (ps->hi_trace) {
+		retire_pair_hi(ps->hi_trace, ps->hi);
+		DT(3, this->name() << " amo-hi: " << *ps->hi_trace);
+		output.send(ps->hi_trace, 2);
+		for (auto it = state.pairs.begin(); it != state.pairs.end(); ++it) {
+			if (&*it == ps) {
+				state.pairs.erase(it);
+				break;
+			}
+		}
+	} else {
+		// AMO_HI has not reached the unit yet; it retires on arrival
+		ps->beats = 0;
+	}
+	state.rsp_pair = nullptr;
+	entry.count -= lsu_rsp.mask.count();
+	assert(entry.count == 0);
+	state.pending_reqs.release(lsu_rsp.tag);
+	pending_loads_ -= lsu_rsp.mask.count();
+	state.rsp_hi_phase = false;
+	lsu_rsp_in.pop();
+	return true;
+}
+
 void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 	// AGU formula: addr[t] = rs1[t] + stride * rs2[t] + offset
 	auto& state = states_.at(b);
@@ -124,6 +337,22 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 	// Compare-and-swap alone reads a third operand: the comparand, which the
 	// instruction takes from rd. Decode adds rd to the source set for it.
 	const bool is_cas = is_amo && (*amo_tag == AmoType::AMOCAS);
+	pair_state_t* pair = nullptr;
+	if (is_pair_amo(trace)) {
+		auto it = state.pairs.begin();
+		while (it != state.pairs.end()
+		    && !(it->wid == trace->wid && it->pid == trace->pid && !it->has_amo)) {
+			++it;
+		}
+		if (it == state.pairs.end()) {
+			std::cout << "Error: pair AMO without its AMO_CMP: " << *trace << std::endl;
+			std::abort();
+		}
+		pair = &*it;
+		pair->has_amo = true;
+		pair->hi.assign(VX_CFG_NUM_THREADS, 0);
+	}
+	state.head_pair = pair;
 	uint32_t num_threads = VX_CFG_NUM_THREADS;
 	uint32_t data_bytes;
 	bool is_write;
@@ -192,6 +421,12 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 			if (is_cas) {
 				e.amo_cmp = trace->src_data[2][t].u64;
 			}
+			if (pair) {
+				// the operand is the rs2 pair; the comparand was staged by AMO_CMP
+				e.data = (uint64_t)(uint32_t)rs2_data[t].u
+				       | ((uint64_t)(uint32_t)trace->src_data[2][t].u << 32);
+				e.amo_cmp = is_cas ? pair->cmp.at(t) : 0;
+			}
 		}
 		state.addr_list.push_back(e);
 	}
@@ -215,6 +450,10 @@ void LsuUnit::process_response_step(uint32_t b) {
 	auto& state = states_.at(b);
 	auto& lsu_rsp = lsu_rsp_in.peek();
 	auto& entry = state.pending_reqs.at(lsu_rsp.tag);
+	if (entry.pair) {
+		this->process_pair_response(b);
+		return;
+	}
 
 #ifdef TCU_META_ENABLE
 	// TCU metadata response: forward the fragment with the client's tag
@@ -418,9 +657,19 @@ void LsuUnit::process_request_step(uint32_t b) {
 		std::abort();
 	}
 #endif
+	if (lsu_tag && (*lsu_tag == LsuType::AMO_CMP || *lsu_tag == LsuType::AMO_HI)) {
+		if (this->process_pair_uop(b, trace)) {
+			state.req_queue.pop();
+		}
+		return;
+	}
 	const bool is_amo   = (amo_tag != nullptr);
 	const bool is_fence = (lsu_tag && *lsu_tag == LsuType::FENCE);
 	const bool is_write = (lsu_tag && *lsu_tag == LsuType::STORE);
+	// A register-pair atomic issues one thread per beat: the hardware carries
+	// its 64-bit operand on two adjacent lanes that the coalescer fuses.
+	const bool is_pair = is_pair_amo(trace);
+	const uint32_t beat_lanes = is_pair ? 1 : VX_CFG_NUM_LSU_LANES;
 
 	if (is_fence) {
 		// Engage fence lock; the next call will try to release it once
@@ -458,7 +707,7 @@ void LsuUnit::process_request_step(uint32_t b) {
 	// Skip beats whose tid group is entirely inactive — nothing to issue.
 	while (state.remain_addrs != 0) {
 		uint32_t t0 = state.addr_list.size() - state.remain_addrs;
-		uint32_t n  = std::min<uint32_t>(VX_CFG_NUM_LSU_LANES, state.remain_addrs);
+		uint32_t n  = std::min<uint32_t>(beat_lanes, state.remain_addrs);
 		bool any = false;
 		for (uint32_t i = 0; i < n; ++i) {
 			if (state.addr_list.at(t0 + i).size != 0) {
@@ -499,18 +748,21 @@ void LsuUnit::process_request_step(uint32_t b) {
 			lsu_req.flags.amo_unsigned = amo_is_unsigned(*amo_tag);
 		}
 		uint32_t t0 = state.addr_list.size() - state.remain_addrs;
-		uint32_t beat_n = std::min<uint32_t>(VX_CFG_NUM_LSU_LANES, state.remain_addrs);
+		uint32_t beat_n = std::min<uint32_t>(beat_lanes, state.remain_addrs);
 		std::vector<mem_addr_size_t> lane_entries(VX_CFG_NUM_LSU_LANES);
 		for (uint32_t i = 0; i < beat_n; ++i) {
 			auto& entry = state.addr_list.at(t0 + i);
 			if (entry.size == 0)
 				continue; // inactive tid: keep the lane hole (tid-stable mapping)
+			// A pair atomic rides its thread's own lane, which keeps it behind
+			// the thread's older accesses to the same word.
+			const uint32_t lane = is_pair ? (entry.tid % VX_CFG_NUM_LSU_LANES) : i;
 			// Address goes downstream as VA. The per-core dcache MMU
 			// (under VX_CFG_VM_ENABLE) substitutes PA before the request reaches
 			// the cache; with VM off, the address is already the PA.
-			lsu_req.mask.set(i);
-			lsu_req.addrs.at(i) = entry.addr;
-			lane_entries.at(i) = entry;
+			lsu_req.mask.set(lane);
+			lsu_req.addrs.at(lane) = entry.addr;
+			lane_entries.at(lane) = entry;
 			if (is_write || is_amo) {
 				// Package the lane's value into a per-lane block + byteen.
 				// Stores: store data. AMOs: rhs (rs2). The cache extracts
@@ -521,13 +773,13 @@ void LsuUnit::process_request_step(uint32_t b) {
 				for (uint32_t bo = 0; bo < entry.size; ++bo) {
 					(*block)[off + bo] = uint8_t((entry.data >> (8 * bo)) & 0xff);
 				}
-				lsu_req.data.at(i) = block;
-				lsu_req.byteen.at(i) = ((1ull << entry.size) - 1) << off;
+				lsu_req.data.at(lane) = block;
+				lsu_req.byteen.at(lane) = ((1ull << entry.size) - 1) << off;
 			}
-			lsu_req.amo_cmp.at(i) = entry.amo_cmp;
+			lsu_req.amo_cmp.at(lane) = entry.amo_cmp;
 			// The lane's original thread index rides along so the adapter can
 			// recover hart_id = make_hart_id(cid, wid, tids[i]).
-			lsu_req.tids.at(i) = entry.tid;
+			lsu_req.tids.at(lane) = entry.tid;
 		}
 		state.remain_addrs -= beat_n;
 
@@ -553,7 +805,13 @@ void LsuUnit::process_request_step(uint32_t b) {
 				--state.staged_reads;
 				state.head_staged = false;
 			}
-			tag = state.pending_reqs.allocate({trace, count, is_eop, std::move(lane_entries), entry_args, true});
+			pending_req_t pending{trace, count, is_eop, std::move(lane_entries), entry_args, true};
+			pending.pair = state.head_pair;
+			tag = state.pending_reqs.allocate(std::move(pending));
+			if (state.head_pair) {
+				state.head_pair->beats += 1;
+				state.head_pair->issued = (state.remain_addrs == 0);
+			}
 		}
 		lsu_req.tag  = tag;
 		lsu_req.cid  = trace->cid;

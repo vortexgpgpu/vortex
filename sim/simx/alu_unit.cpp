@@ -418,6 +418,7 @@ void AluUnit::execute(instr_trace_t* trace) {
 			case 0x001: sched.trigger_ebreak(trace->wid, trace->PC); break;
 			// URET / SRET / MRET: trap return — restore warp PC from mepc.
 			case 0x002: case 0x102: case 0x302: sched.mret(trace->wid); break;
+			case SYS_ILLEGAL_INSTR: sched.trigger_illegal_instr(trace->wid, trace->PC); break;
 			default: std::abort();
 			}
 			core_->perf_stats().branches += 1;

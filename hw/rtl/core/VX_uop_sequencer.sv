@@ -111,8 +111,17 @@ module VX_uop_sequencer import
     // ------------------------------------------------------------------
     // Pack Load/Store uop expander
     // ------------------------------------------------------------------
+`ifdef VX_CFG_EXT_AMO64_ENABLE
+    // a .D atomic on a 32-bit hart is a register-pair macro-op; a 64-bit hart
+    // runs it natively
+    wire is_amo_pair = (`VX_CFG_XLEN == 32)
+                    && uop_in_data.op_args.lsu.amo_valid
+                    && (uop_in_data.op_type == INST_OP_BITS'(INST_LSU_LD));
+`else
+    wire is_amo_pair = 1'b0;
+`endif
     assign uop_in_valid[UOP_PACKLD] = (uop_in_data.ex_type == EX_LSU)
-                                   && (uop_in_data.op_args.lsu.pack != 0);
+                                   && ((uop_in_data.op_args.lsu.pack != 0) || is_amo_pair);
     VX_uop_packld uop_packld (
         .clk       (clk),
         .reset     (reset),

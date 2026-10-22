@@ -89,7 +89,8 @@ int main(int argc, char *argv[]) {
   // AMOs stay on one bank). self_consistency uses one private 64B line
   // per hart (shared + hart_id*64) to test issuer self-consistency
   // WITHOUT false sharing. Size to the larger of the two needs.
-  const size_t shared_bytes  = (size_t)num_harts * 64;
+  // plus room for one word per thread a dcache bank stride apart (store_amo)
+  const size_t shared_bytes  = (size_t)num_harts * 64 + (size_t)num_threads * 2048;
   const size_t per_hart_bytes = num_harts * sizeof(uint32_t);
 
   RT_CHECK(vx_buffer_create(device, shared_bytes,   VX_MEM_READ_WRITE, &shared_buffer));

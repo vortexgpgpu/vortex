@@ -1,0 +1,120 @@
+#version 450
+#extension GL_ARB_gpu_shader_int64 : require
+#extension GL_EXT_shader_atomic_int64 : require
+#extension GL_KHR_memory_scope_semantics : require
+#extension GL_EXT_buffer_reference : require
+/*
+ * Copyright © 2026  Vortex GPGPU
+ * SPDX-License-Identifier: MIT
+ *
+ * 64-bit atomic loads and stores must be indivisible. Every invocation adds a
+ * step that moves both 32-bit halves of a counter (crossing the carry from the
+ * low word into the high word early on) and atomically loads it back; and it
+ * atomically stores a word whose two halves are equal and loads that word
+ * back. A load done as two 32-bit accesses mixes halves of two different
+ * values, which the checks catch: the counter's halves stop agreeing, the
+ * stored word's halves differ. Buffer, shared memory and device address.
+ */
+
+layout(local_size_x_id = 0) in;
+
+#define TOTAL    256u
+#define ITERS    16u
+#define NGRP_MAX 64u
+#define BASE_LO  0xfffffff0u
+const uint64_t STEP = 0x0000000100000001ul;
+
+layout(std430, binding = 0) buffer Acc {
+   uint64_t ctr;
+   uint64_t word;
+   uint     bad[TOTAL * 6u];
+   uint64_t grp[NGRP_MAX * 2u];
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 8) buffer Remote {
+   uint64_t ctr;
+   uint64_t word;
+};
+
+layout(push_constant) uniform Push {
+   Remote remote;
+} pc;
+
+shared uint64_t s_ctr;
+shared uint64_t s_word;
+
+/* A counter value from BASE after k steps: the low word is BASE_LO + k and the
+ * high word k, plus one once the low word wrapped. */
+bool ctr_valid(uint64_t v)
+{
+   uint lo = uint(v);
+   uint hi = uint(v >> 32);
+   uint k  = lo - BASE_LO;
+   uint carry = (lo < BASE_LO) ? 1u : 0u;
+   return k <= TOTAL * ITERS && hi == k + carry;
+}
+
+bool word_valid(uint64_t v)
+{
+   return uint(v) == uint(v >> 32);
+}
+
+uint64_t mark(uint i, uint j)
+{
+   uint x = i * ITERS + j + 1u;
+   return (uint64_t(x) << 32) | uint64_t(x);
+}
+
+void main()
+{
+   const uint i = gl_GlobalInvocationID.x;
+   if (gl_LocalInvocationIndex == 0u) {
+      s_ctr  = (uint64_t(0) << 32) | uint64_t(BASE_LO);
+      s_word = 0ul;
+   }
+   barrier();
+
+   uint b_ctr = 0u, b_word = 0u, s_ctr_bad = 0u, s_word_bad = 0u;
+   uint r_ctr = 0u, r_word = 0u;
+   for (uint j = 0u; j < ITERS; j++) {
+      atomicAdd(ctr, STEP);
+      b_ctr  += ctr_valid(atomicLoad(ctr, gl_ScopeDevice, gl_StorageSemanticsBuffer,
+                                     gl_SemanticsRelaxed)) ? 0u : 1u;
+      atomicStore(word, mark(i, j), gl_ScopeDevice, gl_StorageSemanticsBuffer,
+                  gl_SemanticsRelaxed);
+      b_word += word_valid(atomicLoad(word, gl_ScopeDevice, gl_StorageSemanticsBuffer,
+                                      gl_SemanticsRelaxed)) ? 0u : 1u;
+
+      atomicAdd(s_ctr, STEP);
+      s_ctr_bad  += ctr_valid(atomicLoad(s_ctr, gl_ScopeWorkgroup,
+                                         gl_StorageSemanticsShared,
+                                         gl_SemanticsRelaxed)) ? 0u : 1u;
+      atomicStore(s_word, mark(i, j), gl_ScopeWorkgroup, gl_StorageSemanticsShared,
+                  gl_SemanticsRelaxed);
+      s_word_bad += word_valid(atomicLoad(s_word, gl_ScopeWorkgroup,
+                                          gl_StorageSemanticsShared,
+                                          gl_SemanticsRelaxed)) ? 0u : 1u;
+
+      atomicAdd(pc.remote.ctr, STEP);
+      r_ctr  += ctr_valid(atomicLoad(pc.remote.ctr, gl_ScopeDevice,
+                                     gl_StorageSemanticsBuffer,
+                                     gl_SemanticsRelaxed)) ? 0u : 1u;
+      atomicStore(pc.remote.word, mark(i, j), gl_ScopeDevice,
+                  gl_StorageSemanticsBuffer, gl_SemanticsRelaxed);
+      r_word += word_valid(atomicLoad(pc.remote.word, gl_ScopeDevice,
+                                      gl_StorageSemanticsBuffer,
+                                      gl_SemanticsRelaxed)) ? 0u : 1u;
+   }
+   bad[i * 6u + 0u] = b_ctr;
+   bad[i * 6u + 1u] = b_word;
+   bad[i * 6u + 2u] = s_ctr_bad;
+   bad[i * 6u + 3u] = s_word_bad;
+   bad[i * 6u + 4u] = r_ctr;
+   bad[i * 6u + 5u] = r_word;
+
+   barrier();
+   if (gl_LocalInvocationIndex == 0u) {
+      grp[gl_WorkGroupID.x * 2u + 0u] = s_ctr;
+      grp[gl_WorkGroupID.x * 2u + 1u] = s_word;
+   }
+}

@@ -7,7 +7,7 @@ defaults:
   configs: "-DVX_CFG_EXT_A_ENABLE"
   xlen: [32, 64]
   tier: smoke
-  touches: [hw/rtl/cache, hw/rtl/mem, hw/rtl/core/VX_decode.sv, hw/rtl/core/VX_lsu_slice.sv, sim/simx/amo, sim/simx/mem]
+  touches: [hw/rtl/cache, hw/rtl/mem, hw/rtl/core/VX_decode.sv, hw/rtl/core/VX_lsu_slice.sv, hw/rtl/core/VX_uop_packld.sv, hw/rtl/core/VX_operands.sv, sim/simx/amo, sim/simx/mem, sim/simx/lsu_unit.cpp, sim/simx/decode.cpp]
 tests:
   # RISC-V 'A' ISA conformance (rv{XLEN}ua-p-{amo*,lrsc}); shares the A-built sim.
   - id: isa-conformance
@@ -26,6 +26,53 @@ tests:
     app: amo
     drivers: [simx, rtlsim]
     configs+: "-DVX_CFG_EXT_ZACAS_ENABLE"
+  # 64-bit atomics on a 32-bit hart: every .D atomic on register pairs,
+  # contended, on global and local memory, and the .D encodings that must trap.
+  # (Without AMO64, the base and zacas specs above run the trap case alone.)
+  - id: amo64
+    app: amo
+    drivers: [simx, rtlsim]
+    xlen: [32]
+    configs+: "-DVX_CFG_EXT_ZACAS_ENABLE -DVX_CFG_EXT_AMO64_ENABLE"
+  # Two LSU blocks, four operand collectors and two SIMD packets per warp: the
+  # comparand stage per issue slot and collector, pair requests across packets,
+  # and the operand arbiter keeping an instruction's packets together (a
+  # three-operand compare-and-swap stalls between them on bank conflicts).
+  - id: amo64-simd
+    app: amo
+    drivers: [simx, rtlsim]
+    xlen: [32]
+    configs+: "-DVX_CFG_EXT_ZACAS_ENABLE -DVX_CFG_EXT_AMO64_ENABLE -DVX_CFG_NUM_WARPS=32 -DVX_CFG_SIMD_WIDTH=4"
+    shape: {threads: 8}
+    args: "-n8 -t cas_ladder -t cas_lmem -t cas_counter -t cas_counter_lmem -t amo64_arith -t amo64_arith_lmem -t amo64_bits -t amo64_bits_lmem -t amo64_cas_counter -t amo64_cas_counter_lmem -t amo64_cas_ladder -t amo64_illegal -t amo64_war -t amo64_war_lmem -t amo64_store_amo -t amo64_store_amo_lmem"
+  # One LSU block for two issue slots, with the pair atomics' ordering cases.
+  - id: amo64-simd-lsu1
+    app: amo
+    drivers: [simx, rtlsim]
+    xlen: [32]
+    configs+: "-DVX_CFG_EXT_ZACAS_ENABLE -DVX_CFG_EXT_AMO64_ENABLE -DVX_CFG_NUM_WARPS=32 -DVX_CFG_SIMD_WIDTH=4 -DVX_CFG_NUM_LSU_BLOCKS=1"
+    shape: {threads: 8}
+    args: "-n8 -t amo64_arith -t amo64_arith_lmem -t amo64_cas_ladder -t amo64_war -t amo64_war_lmem -t amo64_store_amo -t amo64_store_amo_lmem"
+  # Four cores sharing an L2: the dcache passes the fused 8-byte atomic to the LLC.
+  - id: amo64-mc-l2
+    app: amo
+    drivers: [simx, rtlsim]
+    xlen: [32]
+    configs+: "-DVX_CFG_EXT_ZACAS_ENABLE -DVX_CFG_EXT_AMO64_ENABLE"
+    shape: {cores: 4, l2cache: true}
+    args: "-n8 -t amo64_arith -t amo64_arith_lmem -t amo64_bits -t amo64_bits_lmem -t amo64_cas_counter -t amo64_cas_counter_lmem -t amo64_cas_ladder"
+    tier: full
+  # SimX timing of the pair atomics (one thread per request, two retirements per
+  # response, the local-memory wide engine) against the RTL. No LR/SC and no
+  # compare-and-swap retry loop, so retired instructions match exactly.
+  - id: parity-amo64
+    check: model_parity
+    via: blackbox
+    app: amo
+    xlen: [32]
+    configs+: "-DVX_CFG_EXT_ZACAS_ENABLE -DVX_CFG_EXT_AMO64_ENABLE"
+    args: "-n32 -t amo64_arith -t amo64_arith_lmem -t amo64_bits -t amo64_bits_lmem -t amo64_cas_ladder -t amo64_illegal"
+    tier: full
   # Four operand collectors and two SIMD packets per warp (32 warps x 8 threads,
   # SIMD 4): a three-operand compare-and-swap stalls between its packets on
   # bank conflicts, and the operand arbiter must keep an instruction's packets

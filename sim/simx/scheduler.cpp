@@ -332,6 +332,7 @@ bool Scheduler::wspawn(uint32_t num_warps, Word nextPC) {
 // RISC-V machine-mode synchronous exception cause codes (mcause).
 // Standard 0..15; 24..31 reserved for custom by the privileged spec.
 namespace {
+  constexpr Word TRAP_CAUSE_ILLEGAL_INSTR = 2;
   constexpr Word TRAP_CAUSE_BREAKPOINT   = 3;
   constexpr Word TRAP_CAUSE_ECALL_MMODE  = 11;
 }
@@ -361,6 +362,10 @@ void Scheduler::trigger_ecall(uint32_t wid, Word trap_pc) {
 
 void Scheduler::trigger_ebreak(uint32_t wid, Word trap_pc) {
   this->raise_trap(wid, TRAP_CAUSE_BREAKPOINT, trap_pc);
+}
+
+void Scheduler::trigger_illegal_instr(uint32_t wid, Word trap_pc) {
+  this->raise_trap(wid, TRAP_CAUSE_ILLEGAL_INSTR, trap_pc);
 }
 
 #ifdef VX_CFG_EXT_RASTER_ENABLE

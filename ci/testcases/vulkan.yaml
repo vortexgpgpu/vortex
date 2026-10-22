@@ -124,6 +124,14 @@ tests:
    touches: [tests/vulkan/fp64]}
 - {id: shader-atomic-float, via: make-run, drivers: [simx], dir: tests/vulkan/atomic_float, target: "run-{driver}",
    touches: [sim/simx/mem/, sim/simx/amo/, tests/vulkan/atomic_float]}
+# 64-bit integer atomics: the .D atomics on register pairs (AMO64), on a buffer,
+# shared memory and a device address.
+- {id: shader-atomic64, via: make-run, drivers: [simx, rtlsim], dir: tests/vulkan/atomic64, target: "run-{driver}",
+   touches: [sim/simx/lsu_unit.cpp, sim/simx/mem/, sim/simx/amo/, hw/rtl/core/VX_lsu_slice.sv, hw/rtl/core/VX_uop_packld.sv, hw/rtl/mem/VX_local_mem.sv, hw/rtl/cache/VX_cache_amo.sv, tests/vulkan/atomic64]}
+# 64-bit atomic loads and stores (OpAtomicLoad/OpAtomicStore) are indivisible:
+# on a 32-bit device the driver runs them as register-pair atomics.
+- {id: shader-atomic64-tear, via: make-run, drivers: [simx, rtlsim], dir: tests/vulkan/atomic64_tear, target: "run-{driver}",
+   touches: [sim/simx/lsu_unit.cpp, sim/simx/mem/, hw/rtl/core/VX_lsu_slice.sv, hw/rtl/mem/VX_local_mem.sv, tests/vulkan/atomic64_tear]}
 
 # sparseImageLoadARB on ordinary storage images (2D, 2D array, cube, 3D, a packed
 # RGBA8 view and a format-less read): the seeded texel and a resident code; and

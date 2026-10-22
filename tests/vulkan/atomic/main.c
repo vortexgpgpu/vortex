@@ -23,10 +23,8 @@
  * no-op dispatch cannot be mistaken for a pass: every expected result differs
  * from its seed.
  *
- * 64-bit atomics are deliberately not exercised -- RV32A has none -- but the
- * test asserts that the device does not advertise them, so the disclaim cannot
- * silently rot into a false claim. Float atomics, built from the 32-bit AMOs,
- * are covered by tests/vulkan/atomic_float.
+ * 64-bit integer atomics are covered by tests/vulkan/atomic64 and float
+ * atomics, built from the 32-bit AMOs, by tests/vulkan/atomic_float.
  *
  * The same op set on `shared` variables is covered by tests/vulkan/atomic_shared,
  * which is a separate test because the device implements only one of the two
@@ -192,46 +190,6 @@ main(int argc, char **argv)
    VkPhysicalDeviceProperties props;
    vkGetPhysicalDeviceProperties(pd, &props);
    printf("device: %s\n", props.deviceName);
-
-   /* RV32A has only 32-bit AMOs, so 64-bit atomics are disclaimed rather than
-    * implemented. Assert the disclaim instead of assuming it: if a feature ever
-    * flips back to true, this test does not cover the ops behind it, and
-    * silence would let an unbacked claim ship. (Float atomics are built from
-    * the 32-bit AMOs and covered by tests/vulkan/atomic_float.)
-    *
-    * The check is on the FEATURES, not on the extension strings: reporting
-    * every feature of an extension unsupported is how a driver is meant to
-    * disclaim it, so keying this on the extension list would fail an honest
-    * device.
-    *
-    * The struct is zero-initialized, so a driver that ignores an unknown pNext
-    * leaves it reading "unsupported" -- the safe direction. */
-   VkPhysicalDeviceShaderAtomicInt64Features ai = {
-      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES,
-   };
-   VkPhysicalDeviceFeatures2 feats2 = {
-      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &ai,
-   };
-   vkGetPhysicalDeviceFeatures2(pd, &feats2);
-
-   const struct { const char *name; VkBool32 got; const char *why; } disclaimed[] = {
-      { "shaderBufferInt64Atomics",   ai.shaderBufferInt64Atomics,   "no 64-bit AMO" },
-      { "shaderSharedInt64Atomics",   ai.shaderSharedInt64Atomics,   "no 64-bit AMO" },
-   };
-   int unbacked_found = 0;
-   for (unsigned i = 0; i < sizeof(disclaimed) / sizeof(disclaimed[0]); i++) {
-      if (disclaimed[i].got) {
-         fprintf(stderr, "  %s is advertised, but this device has %s and this "
-                 "test does not cover it\n", disclaimed[i].name,
-                 disclaimed[i].why);
-         unbacked_found++;
-      }
-   }
-   if (unbacked_found) {
-      printf("FAILED (%d unbacked atomic feature(s) advertised)\n",
-             unbacked_found);
-      return 1;
-   }
 
    uint32_t nqf = 0;
    vkGetPhysicalDeviceQueueFamilyProperties(pd, &nqf, NULL);

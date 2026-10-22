@@ -280,9 +280,26 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     `BUFFER(coalescer_perf.misses, coalescer_misses);
 `endif
 
+`ifdef VX_CFG_EXT_AMO64_ENABLE
+    `STATIC_ASSERT ((`VX_CFG_NUM_LSU_LANES > 1) && (DCACHE_WORD_SIZE >= 8),
+        ("AMO64 needs the dcache coalescer to fuse a wide atomic's two lanes"))
+`endif
+
     if ((`VX_CFG_NUM_LSU_LANES > 1) && (DCACHE_WORD_SIZE > LSU_WORD_SIZE)) begin : g_coalescing
 
         for (genvar i = 0; i < `VX_CFG_NUM_LSU_BLOCKS; ++i) begin : g_coalescers
+
+            // An atomic lane is never merged with another, except that the two
+            // lanes of a 64-bit atomic on a 32-bit hart (AMO64) fuse into the
+            // one 8-byte operation they encode.
+            mem_bus_attr_t lane0_attr;
+            assign lane0_attr = mem_bus_attr_t'(lsu_dcache_if[i].req_data.user[0]);
+        `ifdef VX_CFG_EXT_AMO64_ENABLE
+            wire req_no_merge = lane0_attr.amo.amo_valid && ~lane0_attr.amo.amo_wide;
+        `else
+            wire req_no_merge = lane0_attr.amo.amo_valid;
+        `endif
+            `UNUSED_VAR (lane0_attr)
 
             VX_mem_coalescer #(
                 .INSTANCE_ID    (`SFORMATF(("%s-coalescer%0d", INSTANCE_ID, i))),
@@ -314,7 +331,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
                 .in_req_byteen  (lsu_dcache_if[i].req_data.byteen),
                 .in_req_addr    (lsu_dcache_if[i].req_data.addr),
                 .in_req_user    (lsu_dcache_if[i].req_data.user),
-                .in_req_no_merge(lsu_dcache_if[i].req_data.user[0][MEM_ATTR_AMO_OFFS]),
+                .in_req_no_merge(req_no_merge),
                 .in_req_data    (lsu_dcache_if[i].req_data.data),
                 .in_req_tag     (lsu_dcache_if[i].req_data.tag),
                 .in_req_ready   (lsu_dcache_if[i].req_ready),

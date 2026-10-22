@@ -750,6 +750,7 @@ VX_RT_CB_TYPE_PROC          = 2
 
 [traps]
 # RISC-V M-mode synchronous trap causes. 0..15 are standard.
+VX_TRAP_CAUSE_ILLEGAL_INSTR    = 2
 VX_TRAP_CAUSE_BREAKPOINT       = 3
 VX_TRAP_CAUSE_ECALL_MMODE      = 11
 

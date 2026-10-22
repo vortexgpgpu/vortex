@@ -192,10 +192,24 @@ package VX_gpu_pkg;
     // word already carries the swap value, so the comparand travels here. It
     // must reach wherever the read-modify-write commits, which is the local
     // bank for shared memory and the last-level bank for global memory.
+    // A 64-bit atomic on a 32-bit hart (AMO64) carries its operand on two
+    // adjacent lanes, low word first, that the dcache coalescer fuses into one
+    // 8-byte request and the local memory serves as one; amo_wide marks both
+    // lanes. Its comparand is 64 bits, so the sideband widens with it.
+`ifdef VX_CFG_EXT_AMO64_ENABLE
+    localparam AMO_CMP_BITS = 64;
+    `PACKAGE_ASSERT(`VX_CFG_XLEN == 32)
+    `PACKAGE_ASSERT(`VX_CFG_EXT_A_ENABLED != 0)
+`else
+    localparam AMO_CMP_BITS = `VX_CFG_XLEN;
+`endif
     typedef struct packed {
         logic [HART_ID_WIDTH-1:0]   hart_id;
     `ifdef VX_CFG_EXT_ZACAS_ENABLE
-        logic [`VX_CFG_XLEN-1:0]     amo_cmp;
+        logic [AMO_CMP_BITS-1:0]     amo_cmp;
+    `endif
+    `ifdef VX_CFG_EXT_AMO64_ENABLE
+        logic                        amo_wide;
     `endif
         logic                        amo_unsigned;
         amo_op_e                     amo_op;
@@ -367,7 +381,8 @@ package VX_gpu_pkg;
     localparam INST_BR_URET =    4'b1100;
     localparam INST_BR_SRET =    4'b1101;
     localparam INST_BR_MRET =    4'b1110;
-    localparam INST_BR_OTHER =   4'b1111;
+    // An encoding the decoder refused: raises the illegal-instruction trap.
+    localparam INST_BR_ILLEGAL = 4'b1111;
     localparam INST_BR_BITS =    4;
 
     function automatic logic [1:0] inst_br_class(input logic [INST_BR_BITS-1:0] op);
@@ -914,8 +929,13 @@ package VX_gpu_pkg;
     // (the expander clears it), so the LSU stays a general-purpose unit.
     // Spends two of the struct's spare padding bits -- INST_ARGS_BITS is
     // unchanged (the PACKAGE_ASSERT below proves it).
+    // amo_pair marks the companion uops of a register-pair atomic (AMO64,
+    // VX_uop_packld): with is_store, the comparand stage (rd/rd+1 ride
+    // rs2/rs3 and are held for the atomic); without, the high-half uop that
+    // reserves rd+1 and retires with the atomic's response. Neither sends a
+    // memory request.
     typedef struct packed {
-        logic [(INST_ARGS_BITS-1-1-12-2-1-1-$bits(amo_op_e)-2-2)-1:0] __padding;
+        logic                       amo_pair;
         logic [1:0]                 export_mask;
         logic                       amo_valid;
         logic                       amo_unsigned;

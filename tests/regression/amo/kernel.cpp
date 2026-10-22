@@ -443,6 +443,400 @@ void kernel_cas_counter_lmem(kernel_arg_t* __UNIFORM__ arg) {
 }
 #endif
 
+#if AMO64_TESTS
+// 64-bit atomic primitives. A 64-bit hart has the .D forms natively; a 32-bit
+// hart names even-aligned register pairs ("R"), which the assembler only spells
+// for amocas.d, so the read-modify-write forms are emitted as raw encodings
+// (funct7 = funct5 << 2).
+#if VX_CFG_XLEN == 32
+#define AMO64_RMW(name, funct7)                                          \
+  static inline uint64_t name(volatile uint64_t* p, uint64_t v) {        \
+    uint64_t old;                                                        \
+    asm volatile (".insn r 0x2f, 3, " #funct7 ", %0, %1, %2"             \
+                  : "=R"(old) : "r"(p), "R"(v) : "memory");              \
+    return old;                                                          \
+  }
+AMO64_RMW(amo64_add,  0x00)
+AMO64_RMW(amo64_swap, 0x04)
+AMO64_RMW(amo64_xor,  0x10)
+AMO64_RMW(amo64_or,   0x20)
+AMO64_RMW(amo64_and,  0x30)
+AMO64_RMW(amo64_min,  0x40)
+AMO64_RMW(amo64_max,  0x50)
+AMO64_RMW(amo64_minu, 0x60)
+AMO64_RMW(amo64_maxu, 0x70)
+#if VX_CFG_EXT_ZACAS_ENABLED
+// Returns the old value; the swap landed when it equals `expected`.
+static inline uint64_t amo64_cas(volatile uint64_t* p, uint64_t expected, uint64_t v) {
+  asm volatile ("amocas.d %0, %2, (%1)"
+                : "+R"(expected) : "r"(p), "R"(v) : "memory");
+  return expected;
+}
+#endif
+#else
+#define AMO64_RMW(name, insn)                                            \
+  static inline uint64_t name(volatile uint64_t* p, uint64_t v) {        \
+    uint64_t old;                                                        \
+    asm volatile (insn " %0, %2, (%1)"                                   \
+                  : "=r"(old) : "r"(p), "r"(v) : "memory");              \
+    return old;                                                          \
+  }
+AMO64_RMW(amo64_add,  "amoadd.d")
+AMO64_RMW(amo64_swap, "amoswap.d")
+AMO64_RMW(amo64_xor,  "amoxor.d")
+AMO64_RMW(amo64_or,   "amoor.d")
+AMO64_RMW(amo64_and,  "amoand.d")
+AMO64_RMW(amo64_min,  "amomin.d")
+AMO64_RMW(amo64_max,  "amomax.d")
+AMO64_RMW(amo64_minu, "amominu.d")
+AMO64_RMW(amo64_maxu, "amomaxu.d")
+#if VX_CFG_EXT_ZACAS_ENABLED
+static inline uint64_t amo64_cas(volatile uint64_t* p, uint64_t expected, uint64_t v) {
+  asm volatile ("amocas.d %0, %2, (%1)"
+                : "+r"(expected) : "r"(p), "r"(v) : "memory");
+  return expected;
+}
+#endif
+#endif
+
+// A value an add counter can hold after fewer than `total` steps from
+// AMO64_ADD_BASE (see common.h).
+static inline bool amo64_add_valid(uint64_t v, uint32_t total) {
+  uint32_t k  = (uint32_t)v - (uint32_t)AMO64_ADD_BASE;
+  uint32_t hi = k + ((k >= (uint32_t)(0u - (uint32_t)AMO64_ADD_BASE)) ? 1u : 0u);
+  return (k < total) && ((uint32_t)(v >> 32) == hi);
+}
+
+static inline bool amo64_minmax_valid(uint64_t v, uint64_t init, uint32_t n) {
+  uint32_t k = (uint32_t)v - 1;
+  return (v == init) || ((k < n) && (amo64_minmax_value(k) == v));
+}
+
+static inline bool amo64_swap_valid(uint64_t v, uint32_t n) {
+  uint32_t k = (uint32_t)(v >> 32) - 1;
+  return (v == AMO64_SWAP_INIT) || ((k < n) && (amo64_swap_value(k) == v));
+}
+
+// Arithmetic atomics over five words: add, signed max/min, unsigned max/min.
+// Every hart hammers every word; each returned old value must be one the word
+// can hold, and the count of those that are not is the hart's error count.
+static uint32_t amo64_arith(volatile uint64_t* w, uint32_t hid, uint32_t n,
+                            uint32_t add_total, uint32_t iters) {
+  const uint64_t v = amo64_minmax_value(hid);
+  uint32_t bad = 0;
+  for (uint32_t i = 0; i < iters; ++i) {
+    bad += !amo64_add_valid(amo64_add(&w[0], AMO64_ADD_STEP), add_total);
+    bad += !amo64_minmax_valid(amo64_max(&w[1], v),  (uint64_t)INT64_MIN, n);
+    bad += !amo64_minmax_valid(amo64_min(&w[2], v),  (uint64_t)INT64_MAX, n);
+    bad += !amo64_minmax_valid(amo64_maxu(&w[3], v), 0, n);
+    bad += !amo64_minmax_valid(amo64_minu(&w[4], v), UINT64_MAX, n);
+  }
+  return bad;
+}
+
+static void amo64_arith_init(volatile uint64_t* w) {
+  w[0] = AMO64_ADD_BASE;
+  w[1] = (uint64_t)INT64_MIN;
+  w[2] = (uint64_t)INT64_MAX;
+  w[3] = 0;
+  w[4] = UINT64_MAX;
+}
+
+// Bitwise atomics and exchange over four words: or, and, xor, swap.
+static uint32_t amo64_bits(volatile uint64_t* w, uint32_t hid, uint32_t n, uint32_t iters) {
+  const uint64_t b = amo64_bit_value(hid);
+  const uint64_t s = amo64_swap_value(hid);
+  uint32_t bad = 0;
+  for (uint32_t i = 0; i < iters; ++i) {
+    amo64_or(&w[0], b);
+    amo64_and(&w[1], ~b);
+    amo64_xor(&w[2], b);
+    bad += !amo64_swap_valid(amo64_swap(&w[3], s), n);
+  }
+  // an odd number of xors per hart, so the result is the xor of every operand
+  if ((iters & 1) == 0) {
+    amo64_xor(&w[2], b);
+  }
+  return bad;
+}
+
+static void amo64_bits_init(volatile uint64_t* w) {
+  w[0] = 0;
+  w[1] = UINT64_MAX;
+  w[2] = AMO64_XOR_INIT;
+  w[3] = AMO64_SWAP_INIT;
+}
+
+// 64-bit arithmetic atomics on global memory, every hart on the same words.
+void kernel_amo64_arith(kernel_arg_t* __UNIFORM__ arg) {
+  auto w        = (volatile uint64_t*)arg->shared_addr;
+  auto per_hart = (uint32_t*)arg->per_hart_addr;
+  const uint32_t hid = hart_id();
+  per_hart[hid] = amo64_arith(w, hid, arg->num_harts, arg->num_harts * arg->iters, arg->iters);
+}
+
+// The same on local memory. The host cannot read it, so each group's leader
+// publishes the group's final words, tagged with the group size, into its own
+// line of the shared region.
+void kernel_amo64_arith_lmem(kernel_arg_t* __UNIFORM__ arg) {
+  auto w        = (volatile uint64_t*)__local_mem();
+  auto per_hart = (uint32_t*)arg->per_hart_addr;
+  auto out      = (volatile uint64_t*)arg->shared_addr;
+  const uint32_t hid = hart_id();
+  if (threadIdx.x == 0) {
+    amo64_arith_init(w);
+  }
+  __syncthreads();
+  per_hart[hid] = amo64_arith(w, hid, arg->num_harts, blockDim.x * arg->iters, arg->iters);
+  __syncthreads();
+  if (threadIdx.x == 0) {
+    for (uint32_t i = 0; i < 5; ++i) {
+      out[hid * 8 + i] = w[i];
+    }
+    out[hid * 8 + 7] = AMO64_LMEM_MARK | blockDim.x;
+  }
+}
+
+void kernel_amo64_bits(kernel_arg_t* __UNIFORM__ arg) {
+  auto w        = (volatile uint64_t*)arg->shared_addr;
+  auto per_hart = (uint32_t*)arg->per_hart_addr;
+  const uint32_t hid = hart_id();
+  per_hart[hid] = amo64_bits(w, hid, arg->num_harts, arg->iters);
+}
+
+void kernel_amo64_bits_lmem(kernel_arg_t* __UNIFORM__ arg) {
+  auto w        = (volatile uint64_t*)__local_mem();
+  auto per_hart = (uint32_t*)arg->per_hart_addr;
+  auto out      = (volatile uint64_t*)arg->shared_addr;
+  const uint32_t hid = hart_id();
+  if (threadIdx.x == 0) {
+    amo64_bits_init(w);
+  }
+  __syncthreads();
+  per_hart[hid] = amo64_bits(w, hid, arg->num_harts, arg->iters);
+  __syncthreads();
+  if (threadIdx.x == 0) {
+    for (uint32_t i = 0; i < 4; ++i) {
+      out[hid * 8 + i] = w[i];
+    }
+    out[hid * 8 + 7] = AMO64_LMEM_MARK | blockDim.x;
+  }
+}
+
+#if VX_CFG_EXT_ZACAS_ENABLED
+// Compare-and-swap increment of a 64-bit counter whose low word wraps. The
+// initial read is two loads on a 32-bit hart and may be torn; the swap then
+// fails, returns the word it saw, and the retry carries on from there.
+static void amo64_cas_count(volatile uint64_t* counter, uint32_t iters) {
+  for (uint32_t i = 0; i < iters; ++i) {
+    uint64_t expected = *counter;
+    for (;;) {
+      uint64_t seen = amo64_cas(counter, expected, expected + 1);
+      if (seen == expected) {
+        break;
+      }
+      expected = seen;
+    }
+  }
+}
+
+void kernel_amo64_cas_counter(kernel_arg_t* __UNIFORM__ arg) {
+  amo64_cas_count((volatile uint64_t*)arg->shared_addr, arg->iters);
+}
+
+void kernel_amo64_cas_counter_lmem(kernel_arg_t* __UNIFORM__ arg) {
+  auto counter  = (volatile uint64_t*)__local_mem();
+  auto per_hart = (uint32_t*)arg->per_hart_addr;
+  if (threadIdx.x == 0) {
+    *counter = AMO64_CAS_BASE;
+  }
+  __syncthreads();
+  amo64_cas_count(counter, arg->iters);
+  __syncthreads();
+  if (threadIdx.x == 0) {
+    uint64_t moved = *counter - AMO64_CAS_BASE;
+    // a count that does not fit the low word means the high word went wrong
+    per_hart[hart_id()] = (moved >> 32) ? 0xffffffffu : (uint32_t)moved;
+  }
+}
+
+// Every hart races for each slot of a 64-bit ladder; the per-hart win counts
+// check the returned old value, which must equal the comparand exactly once
+// per slot.
+void kernel_amo64_cas_ladder(kernel_arg_t* __UNIFORM__ arg) {
+  auto slots_p  = (volatile uint64_t*)arg->shared_addr;
+  auto per_hart = (uint32_t*)arg->per_hart_addr;
+  const uint32_t hid = hart_id();
+  const uint32_t slots = (arg->iters < CAS_LADDER_SLOTS) ? arg->iters : CAS_LADDER_SLOTS;
+  uint32_t wins = 0;
+  for (uint32_t i = 0; i < slots; ++i) {
+    if (amo64_cas(&slots_p[i], 0, amo64_claim_value(hid)) == 0) {
+      ++wins;
+    }
+  }
+  per_hart[hid] = wins;
+}
+#endif
+#endif
+
+// --- 64-bit atomic ordering hazards (register pairs on a 32-bit hart) -------
+#if AMO64_TESTS && (VX_CFG_XLEN == 32)
+// B1 (write-after-write on rd+1). A 64-bit atomic writes rd and rd+1; the LSU
+// reserves rd+1 at issue (the AMO_HI uop) and retires it from the atomic's old
+// high word. If the burst does not also read rd+1 before issuing, an older,
+// still-pending write of rd+1 -- a slow load that missed in the cache -- lands
+// after the reservation and either clobbers the high word or re-reserves rd+1
+// forever (a hang). Here a9 (== the amoadd.d's rd+1, a8/a9 the rd pair) is
+// written by a slow load one instruction before the atomic, so the atomic's
+// old high word and a9 collide. The harness verifies both the final counter
+// and that every returned old value was decodable.
+static uint32_t amo64_war(volatile uint64_t* w, volatile uint32_t* slow,
+                          uint32_t total, uint32_t iters) {
+  uint32_t bad = 0;
+  for (uint32_t i = 0; i < iters; ++i) {
+    register uint64_t acc asm("a6"); // rd pair a6/a7
+    register uintptr_t wp asm("a4") = (uintptr_t)w;
+    register uint64_t step asm("a2") = AMO64_ADD_STEP; // operand pair a2/a3
+    register uintptr_t sp asm("a5") = (uintptr_t)slow;
+    // a7 (== the amoadd.d's rd+1) is written by a cache-missing load one
+    // instruction before the atomic. The burst reads rd+1 as its comparand
+    // stage, which orders the atomic behind that load; without it the load's
+    // late landing clobbers acc's high word (or re-reserves a7 and hangs).
+    asm volatile ("lw a7, 0(a5)\n"
+                  ".insn r 0x2f, 3, 0x00, a6, a4, a2"
+                  : "=r"(acc)
+                  : "r"(wp), "r"(step), "r"(sp)
+                  : "a7", "memory");
+    bad += !amo64_add_valid(acc, total);
+  }
+  return bad;
+}
+
+// B1 on global memory, every hart on the same counter. The per-hart slow word
+// lives in the hart's own 64B line of the shared region (offset 16), clear of
+// the counter in hart 0's line.
+void kernel_amo64_war(kernel_arg_t* __UNIFORM__ arg) {
+  auto w        = (volatile uint64_t*)arg->shared_addr;
+  auto per_hart = (uint32_t*)arg->per_hart_addr;
+  auto slow     = (volatile uint32_t*)arg->shared_addr;
+  const uint32_t hid = hart_id();
+  per_hart[hid] = amo64_war(w, &slow[hid * 16 + 4], arg->num_harts * arg->iters, arg->iters);
+}
+
+// B1 with the atomic on local memory: its response returns long before the
+// older global load that missed, which is the window the burst must close.
+void kernel_amo64_war_lmem(kernel_arg_t* __UNIFORM__ arg) {
+  auto w        = (volatile uint64_t*)__local_mem();
+  auto slow     = (volatile uint32_t*)arg->per_hart_addr;
+  auto per_hart = (uint32_t*)arg->per_hart_addr;
+  auto out      = (volatile uint64_t*)arg->shared_addr;
+  const uint32_t hid = hart_id();
+  if (threadIdx.x == 0) {
+    w[0] = AMO64_ADD_BASE;
+  }
+  __syncthreads();
+  // the slow word is the hart's own result slot, zero until it is written below
+  uint32_t bad = amo64_war(w, &slow[hid], blockDim.x * arg->iters, arg->iters);
+  per_hart[hid] = bad;
+  __syncthreads();
+  if (threadIdx.x == 0) {
+    out[hid * 8]     = w[0];
+    out[hid * 8 + 7] = AMO64_LMEM_MARK | blockDim.x;
+  }
+}
+
+// B2 (a thread's own store must precede its later atomic to the same word).
+// Each thread stores 0 to its private 64-bit word, then does a 64-bit atomic
+// add of 1 to it. Both must travel the thread's own lane so the atomic cannot
+// overtake the store; the result must be 1. Threads t>=2 are the ones a
+// lane-0/1 reroute would reorder, and bank contention (every thread on its own
+// word in the same local-memory banks) opens the window.
+void kernel_amo64_store_amo_lmem(kernel_arg_t* __UNIFORM__ arg) {
+  auto base     = (volatile uint64_t*)__local_mem();
+  auto per_hart = (uint32_t*)arg->per_hart_addr;
+  const uint32_t hid = hart_id();
+  volatile uint64_t* w = &base[threadIdx.x];
+  uint32_t bad = 0;
+  for (uint32_t i = 0; i < arg->iters; ++i) {
+    *w = 0;
+    uint64_t old = amo64_add(w, 1);
+    bad += (old != 0) + ((*w) != 1);
+  }
+  per_hart[hid] = bad;
+}
+
+// B2 on global memory. A warp's threads take words one bank stride apart, so
+// the warp's store request queues on one dcache bank lane by lane while the
+// thread's later atomic would have a free port if it left the thread's lane.
+#define AMO64_B2_STRIDE (VX_CFG_DCACHE_NUM_BANKS * VX_CFG_L1_LINE_SIZE / 8)
+void kernel_amo64_store_amo(kernel_arg_t* __UNIFORM__ arg) {
+  auto base     = (volatile uint64_t*)arg->shared_addr;
+  auto per_hart = (uint32_t*)arg->per_hart_addr;
+  const uint32_t hid = hart_id();
+  // a multiple of the bank stride that leaves room for every warp's word
+  const uint32_t warps = arg->num_harts / VX_CFG_NUM_THREADS;
+  uint32_t stride = AMO64_B2_STRIDE;
+  while (stride < warps) {
+    stride += AMO64_B2_STRIDE;
+  }
+  volatile uint64_t* w = &base[(hid % VX_CFG_NUM_THREADS) * stride
+                               + hid / VX_CFG_NUM_THREADS];
+  uint32_t bad = 0;
+  for (uint32_t i = 0; i < arg->iters; ++i) {
+    *w = 0;
+    uint64_t old = amo64_add(w, 1);
+    bad += (old != 0) + ((*w) != 1);
+  }
+  per_hart[hid] = bad;
+}
+#endif
+
+#if VX_CFG_XLEN == 32
+// Encodings a 32-bit hart must refuse with an illegal-instruction trap: LR.D,
+// which has no register-pair form, and a .D atomic naming an odd register (with
+// AMO64) or any .D atomic (without it). The handler records mcause in t1 and
+// resumes after the instruction; the word the instructions name must not change.
+extern "C" void amo64_illegal_handler();
+asm (".align 4\n"
+     "amo64_illegal_handler:\n"
+     "  csrr t0, mepc\n"
+     "  addi t0, t0, 4\n"
+     "  csrw mepc, t0\n"
+     "  csrr t1, mcause\n"
+     "  mret\n");
+
+void kernel_amo64_illegal(kernel_arg_t* __UNIFORM__ arg) {
+  auto per_hart = (uint32_t*)arg->per_hart_addr;
+  uintptr_t saved_mtvec;
+  asm volatile ("csrr %0, mtvec" : "=r"(saved_mtvec));
+  asm volatile ("csrw mtvec, %0" :: "r"(&amo64_illegal_handler));
+  register uintptr_t addr asm("a4") = (uintptr_t)arg->shared_addr;
+  // LR.D has no register-pair form.
+  register uint32_t cause_lrd asm("t1") = 0;
+  asm volatile (".insn r 0x2f, 3, 0x08, a2, a4, x0" // lr.d
+                : "+r"(cause_lrd) : "r"(addr) : "t0", "a2", "a3", "memory");
+  uint32_t c_lrd = cause_lrd;
+#if VX_CFG_EXT_AMO64_ENABLED
+  // With AMO64 a .D atomic naming an odd register in either pair is illegal.
+  register uint32_t cause_ord asm("t1") = 0;
+  asm volatile (".insn r 0x2f, 3, 0x00, a3, a4, a6" // amoadd.d, odd rd
+                : "+r"(cause_ord) : "r"(addr) : "t0", "a3", "memory");
+  register uint32_t cause_ors asm("t1") = 0;
+  asm volatile (".insn r 0x2f, 3, 0x00, a2, a4, a5" // amoadd.d, odd rs2
+                : "+r"(cause_ors) : "r"(addr) : "t0", "a2", "a3", "memory");
+  uint32_t c2 = cause_ord, c3 = cause_ors;
+#else
+  // Without AMO64 every .D atomic is illegal.
+  register uint32_t cause_addd asm("t1") = 0;
+  asm volatile (".insn r 0x2f, 3, 0x00, a2, a4, a6" // amoadd.d
+                : "+r"(cause_addd) : "r"(addr) : "t0", "a2", "a3", "memory");
+  uint32_t c2 = cause_addd, c3 = cause_addd;
+#endif
+  asm volatile ("csrw mtvec, %0" :: "r"(saved_mtvec));
+  per_hart[hart_id()] = c_lrd | (c2 << 8) | (c3 << 16);
+}
+#endif
+
 static const PFN_Kernel sc_tests[] = {
   kernel_amoadd,             // 0
   kernel_amoor,              // 1
@@ -464,6 +858,26 @@ static const PFN_Kernel sc_tests[] = {
   kernel_cas_lmem,           // 16  compare-and-swap on local memory (LMEM banks)
   kernel_cas_counter,        // 17  compare-and-swap increment, nonzero comparands
   kernel_cas_counter_lmem,   // 18  the same on local memory (LMEM banks)
+#endif
+#if AMO64_TESTS
+  kernel_amo64_arith,        // 64-bit add/min/max (global)
+  kernel_amo64_arith_lmem,   // the same on local memory
+  kernel_amo64_bits,         // 64-bit or/and/xor/swap (global)
+  kernel_amo64_bits_lmem,    // the same on local memory
+#if VX_CFG_EXT_ZACAS_ENABLED
+  kernel_amo64_cas_counter,      // 64-bit compare-and-swap counter (global)
+  kernel_amo64_cas_counter_lmem, // the same on local memory
+  kernel_amo64_cas_ladder,       // 64-bit compare-and-swap ladder
+#endif
+#if VX_CFG_XLEN == 32
+  kernel_amo64_war,              // write-after-write on rd+1 (global)
+  kernel_amo64_war_lmem,         // the same on local memory
+  kernel_amo64_store_amo,        // a thread's store orders before its atomic
+  kernel_amo64_store_amo_lmem,   // the same on local memory
+#endif
+#endif
+#if VX_CFG_XLEN == 32
+  kernel_amo64_illegal,      // refused .D encodings trap
 #endif
 };
 

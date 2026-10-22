@@ -23,9 +23,9 @@
 // at 64): a 32-bit-word cache can only carry .W atomics, so the adder and
 // comparators are built 32-bit rather than 64-bit. width selects .W vs .D and
 // is only meaningful when DATA_WIDTH > 32. ARITH_WIDTH bounds every op except
-// compare-and-swap: a 32-bit hart issues 64-bit operands only for the Zacas
-// pair, so its adder and comparators shrink to 32 bits while the CAS equality
-// keeps the full width.
+// compare-and-swap: a 32-bit hart without AMO64 issues no 64-bit atomic, so
+// its adder and comparators shrink to 32 bits while the CAS equality keeps the
+// full width.
 module VX_amo_alu import VX_gpu_pkg::*; #(
     parameter DATA_WIDTH  = 64,
     parameter ARITH_WIDTH = DATA_WIDTH

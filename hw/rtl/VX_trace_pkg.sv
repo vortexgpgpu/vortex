@@ -137,6 +137,7 @@ package VX_trace_pkg;
                         INST_BR_JALR:  `TRACE(level, ("JALR"))
                         INST_BR_ECALL: `TRACE(level, ("ECALL"))
                         INST_BR_EBREAK:`TRACE(level, ("EBREAK"))
+                        INST_BR_ILLEGAL: `TRACE(level, ("ILLEGAL"))
                         INST_BR_URET:  `TRACE(level, ("URET"))
                         INST_BR_SRET:  `TRACE(level, ("SRET"))
                         INST_BR_MRET:  `TRACE(level, ("MRET"))

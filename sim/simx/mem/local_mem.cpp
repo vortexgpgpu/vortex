@@ -52,6 +52,30 @@ protected:
 	// neither leaves a shadow behind.
 	std::vector<bool>     amo_rdw_pending_;
 #endif
+#if VX_CFG_EXT_AMO64_ENABLED
+	// A 64-bit atomic on a 32-bit hart spans the words of two banks. The
+	// hardware serves it apart from the banks with one engine, which takes it
+	// straight from the input ports -- round-robin over the even/odd port
+	// pairs, the pair holding the issuing thread's lane -- so it never enters
+	// the crossbar and blocks its port until taken. The engine then lets its
+	// two banks drain what the crossbar had already accepted for them (the
+	// issuing thread's older accesses to the words among them) while their
+	// inputs admit nothing new, holds off every bank and the DMA port for
+	// WIDE_HOLD_CYCLES (settle, read, capture, compute, write back), and
+	// answers. One wide atomic is served at a time.
+	static constexpr uint32_t WIDE_LOCK_CYCLES = 4;
+	static constexpr uint32_t WIDE_HOLD_CYCLES = WIDE_LOCK_CYCLES + 4;
+	static constexpr uint32_t WIDE_RSP_DELAY   = WIDE_HOLD_CYCLES + 2;
+	uint32_t wide_hold_ = 0;  // cycles the banks and the DMA port stay held
+	uint32_t wide_busy_ = 0;  // cycles until the engine takes another atomic
+	bool     wide_drain_ = false; // a taken atomic waits for its banks
+	MemReq   wide_req_;       // the taken atomic, its tag routed like the crossbar's
+	uint32_t wide_lo_bank_ = 0;
+	uint32_t wide_hi_bank_ = 0;
+	uint32_t wide_rr_ = 0;    // round-robin pointer over the port pairs
+	// requests the crossbar accepted for each bank and the bank has not served
+	std::vector<uint32_t> bank_inflight_;
+#endif
 	MemCrossBar::Ptr mem_xbar_;
 	mutable PerfStats perf_stats_;
 
@@ -80,6 +104,9 @@ public:
 		, amo_rdw_valid_(1 << config.B, false)
 		, amo_rdw_pending_(1 << config.B, false)
 #endif
+#if VX_CFG_EXT_AMO64_ENABLED
+		, bank_inflight_(1 << config.B, 0)
+#endif
 	{
 		char sname[100];
 		snprintf(sname, 100, "%s-xbar", simobject->name().c_str());
@@ -91,7 +118,10 @@ public:
 			return (uint32_t)((req.addr >> lg2_line_size) & (num_banks-1));
 		});
 		for (uint32_t i = 0; i < config.num_reqs; ++i) {
+#if !VX_CFG_EXT_AMO64_ENABLED
+			// wide atomics are taken from the inputs ahead of the crossbar
 			simobject->Inputs.at(i).bind(&mem_xbar_->ReqIn.at(i));
+#endif
 			mem_xbar_->RspOut.at(i).bind(&simobject->Outputs.at(i));
 		}
 	}
@@ -105,6 +135,15 @@ public:
 		std::fill(amo_busy_.begin(), amo_busy_.end(), 0);
 		std::fill(amo_rdw_valid_.begin(), amo_rdw_valid_.end(), false);
 		std::fill(amo_rdw_pending_.begin(), amo_rdw_pending_.end(), false);
+#endif
+#if VX_CFG_EXT_AMO64_ENABLED
+		wide_hold_ = 0;
+		wide_busy_ = 0;
+		wide_drain_ = false;
+		wide_lo_bank_ = 0;
+		wide_hi_bank_ = 0;
+		wide_rr_ = 0;
+		std::fill(bank_inflight_.begin(), bank_inflight_.end(), 0);
 #endif
 	}
 
@@ -173,8 +212,123 @@ public:
 		return 0;
 	}
 
+#if VX_CFG_EXT_AMO64_ENABLED
+	uint32_t bank_of(uint64_t addr) const {
+		uint32_t num_banks = (1 << config_.B);
+		return (uint32_t)((addr >> log2ceil(config_.line_size)) & (num_banks - 1));
+	}
+
+	bool is_wide(const MemReq& req) const {
+		return memop_is_atomic(req.op)
+		    && __builtin_popcountll(req.byteen) > config_.line_size;
+	}
+
+	// The wide-atomic engine: finish a drain, or take the next atomic from the
+	// port pairs. Runs at the start of the cycle, before the banks.
+	void wide_step() {
+		if (wide_drain_) {
+			if (bank_inflight_.at(wide_lo_bank_) != 0 || bank_inflight_.at(wide_hi_bank_) != 0) {
+				return;
+			}
+			const MemReq& req = wide_req_;
+			const uint64_t la       = to_local_addr(req.addr);
+			const uint32_t byte_off = (uint32_t)(la & (VX_CFG_MEM_BLOCK_SIZE - 1));
+			uint8_t obuf[8];
+			ram_.read(obuf, la, 8);
+			const uint64_t old_word = amo_load_word(obuf, 0, 3);
+			const uint64_t rhs = amo_load_word(req.data->data(), byte_off, 3);
+			auto rmw = amo_compute(req.op, 3, old_word, rhs, req.flags.amo_unsigned, req.amo_cmp);
+			MemRsp rsp{req.tag, req.hart_id, req.uuid};
+			auto rsp_data = make_mem_block();
+			std::memset(rsp_data->data(), 0, rsp_data->size());
+			amo_store_word(rsp_data->data(), byte_off, 3, rmw.ret_word);
+			rsp.data = rsp_data;
+			if (!mem_xbar_->RspIn.at(wide_lo_bank_).try_send(rsp, WIDE_RSP_DELAY)) {
+				return;
+			}
+			uint8_t sbuf[8];
+			amo_store_word(sbuf, 0, 3, rmw.new_word);
+			ram_.write(sbuf, la, 8);
+			// the write-back is a store to both words
+			amo_unit_.invalidate(la, req.hart_id);
+			amo_unit_.invalidate(la + config_.line_size, req.hart_id);
+			// the two port requests the atomic is in hardware; atomics carry no
+			// write flag
+			perf_stats_.reads += 2;
+			DT(4, simobject_->name() << "-wide amo : " << req);
+			wide_drain_ = false;
+			wide_hold_ = WIDE_HOLD_CYCLES;
+			wide_busy_ = WIDE_RSP_DELAY;
+			return;
+		}
+		if (wide_busy_ != 0) {
+			return;
+		}
+		const uint32_t num_pairs = config_.num_reqs / 2;
+		for (uint32_t n = 0; n < num_pairs; ++n) {
+			const uint32_t k = (wide_rr_ + n) % num_pairs;
+			for (uint32_t h = 0; h < 2; ++h) {
+				const uint32_t i = 2 * k + h;
+				auto& in = simobject_->Inputs.at(i);
+				if (in.empty() || !this->is_wide(in.peek())) {
+					continue;
+				}
+				wide_req_ = in.peek();
+				// tag it as the crossbar would, so its response routes back to i
+				const uint32_t lg2_inputs = log2ceil(config_.num_reqs);
+				if (lg2_inputs != 0) {
+					wide_req_.tag = (wide_req_.tag << lg2_inputs) | i;
+				}
+				in.pop();
+				wide_lo_bank_ = this->bank_of(wide_req_.addr);
+				wide_hi_bank_ = (wide_lo_bank_ + 1) % (1 << config_.B);
+				wide_drain_ = true;
+				wide_rr_ = (k + 1) % num_pairs;
+				return;
+			}
+		}
+	}
+
+	// Inputs feed the crossbar in place of a binding: a wide atomic stays at
+	// its port until the engine takes it, and while the engine drains, nothing
+	// new enters its two banks.
+	void forward_inputs() {
+		for (uint32_t i = 0; i < config_.num_reqs; ++i) {
+			auto& in = simobject_->Inputs.at(i);
+			while (!in.empty()) {
+				const auto& req = in.peek();
+				if (this->is_wide(req)) {
+					break;
+				}
+				const uint32_t bank = this->bank_of(req.addr);
+				if (wide_drain_ && (bank == wide_lo_bank_ || bank == wide_hi_bank_)) {
+					break;
+				}
+				if (!mem_xbar_->ReqIn.at(i).try_send(req, 0)) {
+					break;
+				}
+				++bank_inflight_.at(bank);
+				in.pop();
+			}
+		}
+	}
+#endif
+
 	void tick() {
+#if VX_CFG_EXT_AMO64_ENABLED
+		const bool wide_held = (wide_hold_ != 0);
+		if (wide_hold_ != 0) {
+			--wide_hold_;
+		}
+		if (wide_busy_ != 0) {
+			--wide_busy_;
+		}
+		uint64_t dma_banks = wide_held ? 0 : this->dma_tick();
+		this->wide_step();
+		this->forward_inputs();
+#else
 		uint64_t dma_banks = this->dma_tick();
+#endif
 
 		// process bank requets from xbar
 		uint32_t num_banks = (1 << config_.B);
@@ -192,6 +346,11 @@ public:
 			const bool     rdw_shadow = amo_rdw_valid_[i];
 			const uint64_t rdw_addr   = amo_rdw_addr_[i];
 			amo_rdw_valid_[i] = false;
+#endif
+#if VX_CFG_EXT_AMO64_ENABLED
+			if (wide_held) {
+				continue;
+			}
 #endif
 			if ((dma_banks >> i) & 1) {
 				continue;
@@ -275,6 +434,9 @@ public:
 				amo_rdw_pending_[i] = do_store;
 				xbar_req_out.pop();
 				amo_busy_[i] = AMO_BANK_STALL_CYCLES;   // capture, then write back
+#if VX_CFG_EXT_AMO64_ENABLED
+				--bank_inflight_.at(i);
+#endif
 				continue;
 			}
 #endif
@@ -320,6 +482,9 @@ public:
 
 			// remove input
 			xbar_req_out.pop();
+#if VX_CFG_EXT_AMO64_ENABLED
+			--bank_inflight_.at(i);
+#endif
 		}
 	}
 

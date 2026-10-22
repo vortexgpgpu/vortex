@@ -71,6 +71,13 @@ CONFIGS += -DVX_CFG_EXT_A_ENABLE
 # loop after its divergence passes, which breaks whenever more than one lane
 # runs it -- a fragment quad, a vertex batch.
 CONFIGS += -DVX_CFG_EXT_ZACAS_ENABLE
+# 64-bit atomics on a 32-bit device: the .D atomics on register pairs, so
+# vortexpipe offers VK_KHR_shader_atomic_int64 and runs every 64-bit atomic as
+# one AMO. A 64-bit device has the .D forms natively (and AMO64 is illegal
+# there), so the flag is XLEN=32 only.
+ifeq ($(XLEN),32)
+CONFIGS += -DVX_CFG_EXT_AMO64_ENABLE
+endif
 # WIDE := 1 -> 32 warps x 32 threads per core. A workgroup of up to 1024
 # invocations then fits one CTA, so the driver's own kernels -- lavapipe's
 # acceleration-structure build, whose PLOC pass is 1024 wide -- run on the

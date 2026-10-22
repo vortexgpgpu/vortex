@@ -12,7 +12,7 @@ TESTS := compute cflow shmem triangle indexed tristrip cull ubo depth multidraw 
          ssbo instanced mrt ubo_multiset rtquery_anyhit \
          tex_fetch tex_gather tex_shadow tex_lod tex_array tex_cube tex_3d tex_1d tex_border \
          stencil logicop blend dsclear firstvertex \
-         alu fp16 fp64 subgroup atomic atomic_shared atomic_float
+         alu fp16 fp64 subgroup atomic atomic_shared atomic_float atomic64 atomic64_tear
 
 # --- common exclude list ---------------------------------------------
 # Unsupported on the vortexpipe/simx path:

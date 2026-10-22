@@ -14,6 +14,7 @@
 #pragma once
 
 #include <array>
+#include <list>
 #include <mempool.h>
 #include <ringqueue.h>
 #include "func_unit.h"
@@ -112,6 +113,28 @@ private:
 		uint32_t tid;
 	};
 
+	// A register-pair atomic in flight. A warp's pair uops reach its block in
+	// program order, so each state is matched by (warp, packet) to the oldest
+	// one still waiting for that uop: AMO_CMP opens it with the comparand, the
+	// AMO claims it and fills `hi` from its responses, and AMO_HI retires the
+	// high words once every beat of the AMO has returned.
+	struct pair_state_t {
+		uint32_t       wid;
+		int            pid;
+		std::vector<uint64_t> cmp;
+		std::vector<uint32_t> hi;
+		bool           has_amo  = false;
+		uint32_t       beats    = 0;
+		bool           issued   = false;
+		bool           has_hi   = false;
+		instr_trace_t* hi_trace = nullptr;
+	};
+
+	// Register-pair atomic support (64-bit atomics on a 32-bit hart).
+	static bool is_pair_amo(const instr_trace_t* trace);
+	bool process_pair_uop(uint32_t b, instr_trace_t* trace);
+	bool process_pair_response(uint32_t b);
+
  	struct pending_req_t {
 		instr_trace_t* trace;
 		uint32_t count;
@@ -123,6 +146,8 @@ private:
 		// TcuRspOut with client_tag restored instead of written to registers.
 		bool        is_tcu     = false;
 		uint32_t    client_tag = 0;
+		// Register-pair atomic beat: one thread's 64-bit operation.
+		pair_state_t* pair     = nullptr;
 	};
 
 	// Per-block LSU state. Each member is a named hardware sub-block.
@@ -142,6 +167,14 @@ private:
 		FenceController           fence;
 		std::vector<mem_addr_size_t> addr_list;
 		uint32_t                  remain_addrs = 0;
+		std::list<pair_state_t>   pairs;
+		// A pair response retires in two beats, low half then high half; the
+		// response stays at the head of the stream between them.
+		bool                      rsp_hi_phase = false;
+		pair_state_t*             rsp_pair = nullptr;
+		// the pair state of the trace at the head of req_queue
+		pair_state_t*             head_pair = nullptr;
+		instr_trace_t*            rsp_hi_beat = nullptr;
 
 		void reset() {
 			this->req_queue.clear();
@@ -151,6 +184,11 @@ private:
 			this->fence.reset();
 			this->addr_list.clear();
 			this->remain_addrs = 0;
+			this->pairs.clear();
+			this->rsp_hi_phase = false;
+			this->rsp_hi_beat = nullptr;
+			this->rsp_pair = nullptr;
+			this->head_pair = nullptr;
 		}
 	};
 

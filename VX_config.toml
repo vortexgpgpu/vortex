@@ -32,6 +32,12 @@ VX_CFG_EXT_A_ENABLE = false
 # an atomic, it does not replace the set. Off by default because it widens the
 # memory request with a comparand operand.
 VX_CFG_EXT_ZACAS_ENABLE = false
+# 64-bit atomics on a 32-bit hart. The .D encodings of the read-modify-write
+# atomics, and of Zacas amocas.d, operate on even-aligned register pairs
+# (rd/rd+1, rs2/rs2+1), the pairing Zacas defines for amocas.d on RV32. LR.D and
+# SC.D stay illegal. Requires the A extension and XLEN=32 (a 64-bit hart has the
+# .D forms natively). Without it, a .D atomic on a 32-bit hart traps as illegal.
+VX_CFG_EXT_AMO64_ENABLE = false
 
 VX_CFG_EXT_ZICOND_ENABLE = true
 VX_CFG_EXT_TCU_ENABLE = false
@@ -436,7 +442,7 @@ VX_CFG_NUM_OCACHES      = "expr: max(1, up($VX_CFG_NUM_OM_CORES / 4))"
 VX_CFG_MISA_STD = "expr: ($VX_CFG_EXT_A_ENABLED << 0) | (0 << 1) | ($VX_CFG_EXT_C_ENABLED << 2) | ($VX_CFG_EXT_D_ENABLED << 3) | (0 << 4) | ($VX_CFG_EXT_F_ENABLED << 5) | (0 << 6) | (0 << 7) | (1 << 8) | (0 << 9) | (0 << 10) | (0 << 11) | ($VX_CFG_EXT_M_ENABLED << 12) | (0 << 13) | (0 << 14) | (0 << 15) | (0 << 16) | (0 << 17) | (0 << 18) | (0 << 19) | (1 << 20) | (0 << 21) | (0 << 22) | (1 << 23) | (0 << 24) | (0 << 25)"
 
 # Custom extensions signature
-VX_CFG_MISA_EXT = "expr: ($VX_CFG_ICACHE_ENABLED << 0) | ($VX_CFG_DCACHE_ENABLED << 1) | ($VX_CFG_L2_ENABLED << 2) | ($VX_CFG_L3_ENABLED << 3) | ($VX_CFG_LMEM_ENABLED << 4) | ($VX_CFG_EXT_ZICOND_ENABLED << 5) | ($VX_CFG_EXT_TCU_ENABLED << 9) | ($VX_CFG_EXT_DXA_ENABLED << 10) | ($VX_CFG_EXT_TEX_ENABLED << 6) | ($VX_CFG_EXT_RASTER_ENABLED << 7) | ($VX_CFG_EXT_OM_ENABLED << 8) | ($VX_CFG_EXT_RTU_ENABLED << 11) | ($VX_CFG_EXT_ZACAS_ENABLED << 12)"
+VX_CFG_MISA_EXT = "expr: ($VX_CFG_ICACHE_ENABLED << 0) | ($VX_CFG_DCACHE_ENABLED << 1) | ($VX_CFG_L2_ENABLED << 2) | ($VX_CFG_L3_ENABLED << 3) | ($VX_CFG_LMEM_ENABLED << 4) | ($VX_CFG_EXT_ZICOND_ENABLED << 5) | ($VX_CFG_EXT_TCU_ENABLED << 9) | ($VX_CFG_EXT_DXA_ENABLED << 10) | ($VX_CFG_EXT_TEX_ENABLED << 6) | ($VX_CFG_EXT_RASTER_ENABLED << 7) | ($VX_CFG_EXT_OM_ENABLED << 8) | ($VX_CFG_EXT_RTU_ENABLED << 11) | ($VX_CFG_EXT_ZACAS_ENABLED << 12) | ($VX_CFG_EXT_AMO64_ENABLED << 13)"
 
 [toolchain]
 ASIC = false

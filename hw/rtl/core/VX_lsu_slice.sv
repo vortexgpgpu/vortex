@@ -70,6 +70,33 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     `UNUSED_VAR (execute_if.data.rs3_data)
 `endif
 
+    // Register-pair atomics of a 32-bit hart (AMO64; VX_uop_packld splits them):
+    //  - the AMO (a .D atomic) issues one thread per request, its 64-bit
+    //    operand on the even/odd lane pair holding the thread's own lane (low
+    //    word on the even lane), which the dcache coalescer fuses into one
+    //    8-byte atomic and the local memory serves as one. Staying on the
+    //    thread's lane pair keeps the atomic behind the thread's older accesses
+    //    to the same word, which travel the same lane. Its response retires
+    //    twice, the old low word into rd, then the old high word into rd+1 as
+    //    the HI uop's retirement;
+    //  - the CMP uop stages the rd pair here (the compare-and-swap comparand)
+    //    and retires like a store;
+    //  - the HI uop only reserved rd+1 and is dropped.
+    // On a 32-bit hart op_type LD is only ever a pair atomic: the decoder
+    // refuses the RV64 load and store encodings.
+`ifdef VX_CFG_EXT_AMO64_ENABLE
+    wire req_is_pair     = (`VX_CFG_XLEN == 32)
+                        && execute_if.data.op_args.lsu.amo_valid
+                        && (execute_if.data.op_type == INST_OP_BITS'(INST_LSU_LD));
+    wire req_is_pair_cmp = execute_if.data.op_args.lsu.amo_pair && execute_if.data.op_args.lsu.is_store;
+    wire req_is_pair_hi  = execute_if.data.op_args.lsu.amo_pair && ~execute_if.data.op_args.lsu.is_store;
+    `STATIC_ASSERT (((NUM_LANES % 2) == 0), ("AMO64 needs even/odd LSU lane pairs"))
+`else
+    wire req_is_pair     = 1'b0;
+    wire req_is_pair_cmp = 1'b0;
+    wire req_is_pair_hi  = 1'b0;
+`endif
+
     // full address calculation — per-lane AGU (all address forms live in
     // VX_lsu_agu; this slice contains no address arithmetic).
 
@@ -85,6 +112,33 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
             .addr   (full_addr[i])
         );
     end
+
+    // Pair atomic: one thread per request, lowest pending lane first.
+    wire [NUM_LANES-1:0] pair_pending;
+    wire [NUM_LANES-1:0] pair_sel_onehot;
+    wire [`UP(`CLOG2(NUM_LANES))-1:0] pair_sel;
+    wire pair_first, pair_last;
+`ifdef VX_CFG_EXT_AMO64_ENABLE
+    reg [NUM_LANES-1:0] pair_issued_r;
+    assign pair_pending = execute_if.data.header.tmask & ~pair_issued_r;
+    VX_priority_encoder #(
+        .N (NUM_LANES)
+    ) pair_sel_enc (
+        .data_in    (pair_pending),
+        .onehot_out (pair_sel_onehot),
+        .index_out  (pair_sel),
+        `UNUSED_PIN (valid_out)
+    );
+    assign pair_first = (pair_issued_r == '0);
+    assign pair_last  = ((pair_pending & ~pair_sel_onehot) == '0);
+`else
+    assign pair_pending    = '0;
+    assign pair_sel_onehot = '0;
+    assign pair_sel        = '0;
+    assign pair_first      = 1'b1;
+    assign pair_last       = 1'b1;
+    `UNUSED_VAR ({pair_pending, pair_sel_onehot, pair_sel})
+`endif
 
     // address type + AMO classification — per-lane mem_bus_attr_t
     // carried through the scheduler's USER channel and out via the
@@ -135,7 +189,10 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     `ifdef VX_CFG_EXT_ZACAS_ENABLE
         // Compare-and-swap comparand. The decoder routes rd into the third
         // operand slot for it; every other atomic leaves the slot unread.
-        assign lane_amo.amo_cmp      = execute_if.data.rs3_data[i];
+        assign lane_amo.amo_cmp      = AMO_CMP_BITS'(execute_if.data.rs3_data[i]);
+    `endif
+    `ifdef VX_CFG_EXT_AMO64_ENABLE
+        assign lane_amo.amo_wide     = 1'b0;
     `endif
         // make_hart_id(cid, wid, tid) — packed concatenation, low bits = tid.
         assign lane_amo.hart_id      = HART_ID_WIDTH'(
@@ -151,6 +208,80 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     `endif
         assign mem_req_attr[i] = mem_req_attr_struct[i];
     end
+
+    // The selected thread's attribute rides both lanes of a pair request,
+    // marked wide and carrying the staged 64-bit comparand.
+    wire [MEM_ATTR_WIDTH-1:0] pair_attr;
+    // the even/odd lanes a pair request occupies: the selected thread's own
+    wire [NUM_LANES-1:0] pair_lanes;
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_pair_lanes
+        assign pair_lanes[i] = req_is_pair && ((i / 2) == (32'(pair_sel) / 2));
+    end
+`ifdef VX_CFG_EXT_AMO64_ENABLE
+    wire [63:0] pair_cmp;
+`ifdef VX_CFG_EXT_ZACAS_ENABLE
+    // One comparand per (issue slot within this block, operand collector,
+    // packet). A warp's uops leave its collector in order and the CMP..AMO
+    // burst holds the slot's issue lock, so no other CMP of the same slot and
+    // collector can land between a CMP and its AMO.
+    localparam BLK_BITS   = `CLOG2(`VX_CFG_NUM_LSU_BLOCKS);
+    localparam STG_WBITS  = ISSUE_ISW_BITS + NUM_OPCS_BITS - BLK_BITS;
+    localparam STG_ADDRW  = STG_WBITS + PID_BITS;
+    localparam STG_SIZE   = 1 << STG_ADDRW;
+    wire [`UP(STG_ADDRW)-1:0] stg_addr;
+    if (STG_ADDRW != 0) begin : g_stg_addr
+        wire [`UP(STG_WBITS)-1:0] stg_wsel;
+        if (STG_WBITS != 0) begin : g_wsel
+            assign stg_wsel = execute_if.data.header.wid[BLK_BITS +: STG_WBITS];
+        end else begin : g_no_wsel
+            assign stg_wsel = '0;
+        end
+        if (PID_BITS != 0) begin : g_pid
+            assign stg_addr = STG_ADDRW'({stg_wsel, execute_if.data.header.pid[PID_BITS-1:0]});
+        end else begin : g_no_pid
+            assign stg_addr = STG_ADDRW'(stg_wsel);
+        end
+    end else begin : g_stg_addr0
+        assign stg_addr = '0;
+    end
+    wire [NUM_LANES-1:0][63:0] stg_wdata;
+    wire [NUM_LANES-1:0][63:0] stg_rdata;
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_stg_wdata
+        assign stg_wdata[i] = {execute_if.data.rs3_data[i], execute_if.data.rs2_data[i]};
+    end
+    VX_dp_ram #(
+        .DATAW   (NUM_LANES * 64),
+        .SIZE    (STG_SIZE),
+        .OUT_REG (0),
+        .LUTRAM  (1)
+    ) pair_cmp_store (
+        .clk   (clk),
+        .reset (reset),
+        .read  (1'b1),
+        .write (execute_if.valid && execute_if.ready && req_is_pair_cmp),
+        .wren  (1'b1),
+        .waddr (stg_addr),
+        .wdata (stg_wdata),
+        .raddr (stg_addr),
+        .rdata (stg_rdata)
+    );
+    assign pair_cmp = stg_rdata[pair_sel];
+`else
+    assign pair_cmp = '0;
+    `UNUSED_VAR (pair_cmp)
+`endif
+    mem_bus_attr_t pair_attr_struct;
+    always @(*) begin
+        pair_attr_struct = mem_req_attr_struct[pair_sel];
+        pair_attr_struct.amo.amo_wide = 1'b1;
+    `ifdef VX_CFG_EXT_ZACAS_ENABLE
+        pair_attr_struct.amo.amo_cmp  = pair_cmp;
+    `endif
+    end
+    assign pair_attr = pair_attr_struct;
+`else
+    assign pair_attr = '0;
+`endif
 
     // schedule memory request
 
@@ -199,23 +330,43 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     end
 
     wire req_skip = req_is_fence && ~execute_if.data.header.eop;
-    wire no_rsp_buf_enable = (mem_req_rw && ~execute_if.data.header.wb) || req_skip;
+    // retires through the no-response path without a memory request
+    wire req_bypass = req_skip || req_is_pair_cmp;
+    wire no_rsp_buf_enable = (mem_req_rw && ~execute_if.data.header.wb) || req_bypass;
+    // a pair atomic holds the packet until its last thread's request
+    wire req_done = ~req_is_pair || pair_last;
 
     assign mem_req_valid = execute_if.valid
-                        && ~req_skip
+                        && ~req_bypass
+                        && ~req_is_pair_hi
                         && ~(no_rsp_buf_enable && ~no_rsp_buf_ready)
                         && ~fence_lock;
 
     assign no_rsp_buf_valid = execute_if.valid
                            && no_rsp_buf_enable
-                           && (req_skip || mem_req_ready)
+                           && (req_bypass || mem_req_ready)
                            && ~fence_lock;
 
-    assign execute_if.ready = (mem_req_ready || req_skip)
-                           && ~(no_rsp_buf_enable && ~no_rsp_buf_ready)
+    assign execute_if.ready = (req_is_pair_hi
+                            || (((mem_req_ready && req_done) || req_bypass)
+                             && ~(no_rsp_buf_enable && ~no_rsp_buf_ready)))
                            && ~fence_lock;
 
-    assign mem_req_mask = execute_if.data.header.tmask;
+    assign mem_req_mask = req_is_pair ? pair_lanes : execute_if.data.header.tmask;
+
+`ifdef VX_CFG_EXT_AMO64_ENABLE
+    always @(posedge clk) begin
+        if (reset) begin
+            pair_issued_r <= '0;
+        end else if (mem_req_fire && req_is_pair) begin
+            pair_issued_r <= pair_last ? '0 : (pair_issued_r | pair_sel_onehot);
+        end
+    end
+`endif
+
+    // a pair atomic's requests carry one packet's sop/eop between them
+    wire req_sop = execute_if.data.header.sop && (~req_is_pair || pair_first);
+    wire req_eop = execute_if.data.header.eop && req_done;
 `ifdef VX_CFG_EXT_A_ENABLE
     // AMO MemReq.rw is unconditionally 0: a missing line under SC must
     // miss-and-return-failure, not write-and-succeed.
@@ -229,9 +380,12 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 
     wire [NUM_LANES-1:0][REQ_ASHIFT-1:0] req_align;
 
+    wire [LSU_ADDR_WIDTH-1:0] pair_addr = full_addr[pair_sel][`VX_CFG_MEM_ADDR_WIDTH-1:REQ_ASHIFT];
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mem_req_addr
         assign req_align[i] = full_addr[i][REQ_ASHIFT-1:0];
-        assign mem_req_addr[i] = full_addr[i][`VX_CFG_MEM_ADDR_WIDTH-1:REQ_ASHIFT];
+        // the even lane carries the low word, the odd lane the high word
+        assign mem_req_addr[i] = pair_lanes[i] ? (pair_addr + LSU_ADDR_WIDTH'(i % 2))
+                                               : full_addr[i][`VX_CFG_MEM_ADDR_WIDTH-1:REQ_ASHIFT];
     end
 
     // byte enable formatting
@@ -259,7 +413,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
                 default : mem_req_byteen_w = {LSU_WORD_SIZE{1'b1}};
             endcase
         end
-        assign mem_req_byteen[i] = mem_req_byteen_w;
+        assign mem_req_byteen[i] = req_is_pair ? {LSU_WORD_SIZE{1'b1}} : mem_req_byteen_w;
     end
 
     // memory misalignment not supported!
@@ -286,19 +440,32 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
             `endif
                 default:;
             endcase
+            if (pair_lanes[i]) begin
+                mem_req_data[i] = ((i % 2) == 0) ? execute_if.data.rs2_data[pair_sel]
+                                                 : execute_if.data.rs3_data[pair_sel];
+            end
         end
     end
 
     // multi-packet load responses could return out-of-order.
     // we should track and flag SOP and EOP responses.
+    // A pair atomic sends one request per thread, so it needs the tracking
+    // even for a single packet, and its count spans every thread.
+`ifdef VX_CFG_EXT_AMO64_ENABLE
+    localparam PKT_TRACK    = 1;
+    localparam PKT_CTR_BITS = `CLOG2(`VX_CFG_NUM_THREADS + 1);
+`else
+    localparam PKT_TRACK    = (PID_BITS != 0);
+    localparam PKT_CTR_BITS = PID_BITS + 1;
+`endif
 
-    if (PID_BITS != 0) begin : g_pid
-        reg [`VX_CFG_LSU_PENDING_SIZE-1:0][PID_BITS:0] pkt_ctr;
+    if (PKT_TRACK) begin : g_pid
+        reg [`VX_CFG_LSU_PENDING_SIZE-1:0][PKT_CTR_BITS-1:0] pkt_ctr;
         reg [`VX_CFG_LSU_PENDING_SIZE-1:0] pkt_sop, pkt_eop;
 
         wire mem_req_rd_fire     = mem_req_fire && ~mem_req_rw;
-        wire mem_req_rd_sop_fire = mem_req_rd_fire && execute_if.data.header.sop;
-        wire mem_req_rd_eop_fire = mem_req_rd_fire && execute_if.data.header.eop;
+        wire mem_req_rd_sop_fire = mem_req_rd_fire && req_sop;
+        wire mem_req_rd_eop_fire = mem_req_rd_fire && req_eop;
         wire mem_rsp_eop_fire    = mem_rsp_fire && mem_rsp_eop;
         wire mem_rsp_eop_pkt_fire= mem_rsp_fire && mem_rsp_eop_pkt;
         wire full;
@@ -338,10 +505,10 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
                 end
                 if (~rw_collision) begin
                     if (mem_req_rd_fire) begin
-                        pkt_ctr[pkt_waddr] <= pkt_ctr[pkt_waddr] + PID_BITS'(1);
+                        pkt_ctr[pkt_waddr] <= pkt_ctr[pkt_waddr] + PKT_CTR_BITS'(1);
                     end
                     if (mem_rsp_eop_fire) begin
-                        pkt_ctr[pkt_raddr] <= pkt_ctr[pkt_raddr] - PID_BITS'(1);
+                        pkt_ctr[pkt_raddr] <= pkt_ctr[pkt_raddr] - PKT_CTR_BITS'(1);
                     end
                 end
             end
@@ -362,13 +529,26 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         assign mem_rsp_sop_pkt = mem_rsp_sop;
         assign mem_rsp_eop_pkt = mem_rsp_eop;
         `UNUSED_VAR (pkt_raddr)
+        `UNUSED_VAR ({req_sop, req_eop})
+    end
+
+    // A pair request's lanes are 8-byte aligned, so its alignment field
+    // carries the thread the request serves instead.
+    localparam SEL_W = `UP(`CLOG2(NUM_LANES));
+    wire [NUM_LANES-1:0][REQ_ASHIFT-1:0] req_align_tag = req_is_pair ? (NUM_LANES * REQ_ASHIFT)'(pair_sel) : req_align;
+
+    wire [NUM_LANES-1:0][MEM_ATTR_WIDTH-1:0] mem_req_attr_out;
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mem_req_attr_out
+        // every lane, not only the pair's: the masked lanes are ignored, and
+        // the coalescer reads its merge decision from lane 0's attribute
+        assign mem_req_attr_out[i] = req_is_pair ? pair_attr : mem_req_attr[i];
     end
 
     // pack memory request tag
     assign mem_req_tag = {
         execute_if.data.header,
         execute_if.data.op_type,
-        req_align,
+        req_align_tag,
         pkt_waddr,
         req_is_fence
     };
@@ -380,7 +560,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     assign client_if.req_data.mask   = mem_req_mask;
     assign client_if.req_data.byteen = mem_req_byteen;
     assign client_if.req_data.addr   = mem_req_addr;
-    assign client_if.req_data.attr   = mem_req_attr;
+    assign client_if.req_data.attr   = mem_req_attr_out;
     assign client_if.req_data.data   = mem_req_data;
     assign client_if.req_data.tag    = mem_req_tag;
     assign mem_req_ready             = client_if.req_ready;
@@ -406,6 +586,33 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         pkt_raddr,
         rsp_is_fence
     } = mem_rsp_tag;
+
+    wire [SEL_W-1:0] rsp_pair_sel = SEL_W'(rsp_align);
+    wire [SEL_W-1:0] rsp_pair_lo  = rsp_pair_sel & ~SEL_W'(1);
+
+    // A pair response retires in two beats: the old low word into rd, then the
+    // old high word into rd+1, which is the HI uop's retirement.
+    wire rsp_is_pair;
+    wire rsp_hi;
+    wire rsp_buf_ready;
+`ifdef VX_CFG_EXT_AMO64_ENABLE
+    reg rsp_hi_r;
+    assign rsp_is_pair = (`VX_CFG_XLEN == 32) && (rsp_op_type == INST_LSU_BITS'(INST_LSU_LD));
+    assign rsp_hi = rsp_hi_r;
+    always @(posedge clk) begin
+        if (reset) begin
+            rsp_hi_r <= 1'b0;
+        end else if (mem_rsp_valid && rsp_buf_ready && rsp_is_pair) begin
+            rsp_hi_r <= ~rsp_hi_r;
+        end
+    end
+    `RUNTIME_ASSERT(~(mem_rsp_valid && rsp_is_pair) || (mem_rsp_mask[rsp_pair_lo +: 2] == 2'b11),
+        ("%t: pair atomic response without both halves (mask=%b)", $time, mem_rsp_mask))
+`else
+    assign rsp_is_pair = 1'b0;
+    assign rsp_hi = 1'b0;
+`endif
+    assign mem_rsp_ready = rsp_buf_ready && (~rsp_is_pair || rsp_hi);
 
     // load response formatting
 
@@ -451,11 +658,22 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     // result
 
     lsu_header_t rsp_hdr2;
+    reg [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] rsp_data2;
+    wire [RV_REGS_BITS-1:0] rsp_rd_idx = get_reg_idx(rsp_hdr.rd);
     always @(*) begin
         rsp_hdr2 = rsp_hdr;
         rsp_hdr2.tmask = mem_rsp_mask;
         rsp_hdr2.sop = mem_rsp_sop_pkt;
         rsp_hdr2.eop = mem_rsp_eop_pkt;
+        rsp_data2 = rsp_data;
+        if (rsp_is_pair) begin
+            rsp_hdr2.tmask = NUM_LANES'(1) << rsp_pair_sel;
+            rsp_data2[rsp_pair_sel] = rsp_hi ? `VX_CFG_XLEN'(mem_rsp_data[rsp_pair_lo + 1])
+                                             : `VX_CFG_XLEN'(mem_rsp_data[rsp_pair_lo]);
+            if (rsp_hi && (rsp_rd_idx != 0)) begin
+                rsp_hdr2.rd = make_reg_num(REG_TYPE_I, rsp_rd_idx | RV_REGS_BITS'(1));
+            end
+        end
     end
 
     VX_elastic_buffer #(
@@ -465,8 +683,8 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         .clk       (clk),
         .reset     (reset),
         .valid_in  (mem_rsp_valid),
-        .ready_in  (mem_rsp_ready),
-        .data_in   ({rsp_hdr2, rsp_data}),
+        .ready_in  (rsp_buf_ready),
+        .data_in   ({rsp_hdr2, rsp_data2}),
         .data_out  (result_rsp_if.data),
         .valid_out (result_rsp_if.valid),
         .ready_out (result_rsp_if.ready)

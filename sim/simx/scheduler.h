@@ -187,6 +187,7 @@ public:
   void mret(uint32_t wid);
   void trigger_ecall(uint32_t wid, Word trap_pc);
   void trigger_ebreak(uint32_t wid, Word trap_pc);
+  void trigger_illegal_instr(uint32_t wid, Word trap_pc);
 
   // ----- Accessors -----
   warp_t& warp(uint32_t wid) { return warps_.at(wid); }
