@@ -653,8 +653,11 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .read        (do_read_st0 && ~pipe_stall),
         .write       (do_write_st0 && ~pipe_stall),
         // non-LLC AMO forwards downstream and invalidates its own copy so the
-        // issuer's later plain load refetches the new value.
-        .invalidate  (is_amo_fwd_st0 && lk_st0.is_hit && ~pipe_stall),
+        // issuer's later plain load refetches the new value. Only the hit's
+        // qualifiers are passed (a forwarded AMO has no order hazard): the
+        // array ANDs in each way's own tag match, which keeps the OR over the
+        // ways off the valid store's write enables.
+        .invalidate  (is_amo_fwd_st0 && ~partial_miss_st0 && ~pipe_stall),
         .fill_nodata (lazy_st0),
         .line_idx    (line_idx_st0),
         .line_idx_n  (sel_req.req.addr[`CS_LINE_SEL_BITS-1:0]),

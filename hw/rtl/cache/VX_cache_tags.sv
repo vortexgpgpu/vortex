@@ -48,7 +48,7 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
     input wire                          fill,
     input wire                          read,
     input wire                          write,
-    input wire                          invalidate, // clear valid on the hit way
+    input wire                          invalidate, // clear valid on the hit way (qualifies the way's own match)
     // the fill installs no data: the sector becomes partial (cleared otherwise)
     input wire                          fill_nodata,
     // a refetch completes its resident partial sector: clear its partial bit
@@ -296,6 +296,14 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
         .rdata (tag_rdata)
     );
 
+    // The side stores' array enables are the operations that may write them,
+    // never the OR of their per-bit enables: those carry the tag compare, which
+    // would otherwise fan into every LUTRAM write enable. A bit still changes
+    // only where its own enable is set.
+    wire valid_write   = init || flush || fill || ((AMO_ENABLE != 0) && invalidate);
+    wire dirty_write   = init || flush || fill || write || ((AMO_ENABLE != 0) && invalidate);
+    wire partial_write = fill || refetch;
+
     // Decoupled per-sector valid store: mirrors the tag BRAM's access pattern
     // (look-ahead read, read-first) so pipeline alignment is identical, with
     // per-bit write-enable so a sector refill sets its bit without reading back.
@@ -310,7 +318,7 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
         .clk   (clk),
         .reset (reset),
         .read  (~stall),
-        .write (| valid_wren),
+        .write (valid_write),
         .wren  (valid_wren),
         .waddr (line_idx),
         .raddr (line_idx_n),
@@ -333,7 +341,7 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
             .clk   (clk),
             .reset (reset),
             .read  (~stall),
-            .write (| dirty_wren),
+            .write (dirty_write),
             .wren  (dirty_wren),
             .waddr (line_idx),
             .raddr (line_idx_n),
@@ -342,7 +350,7 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
         );
     end else begin : g_no_dirty_store
         assign dirty_rdata = '0;
-        `UNUSED_VAR ({dirty_wren, dirty_wdata, dirty_rdata})
+        `UNUSED_VAR ({dirty_wren, dirty_wdata, dirty_rdata, dirty_write})
     end
 
     if (LAZY_FETCH != 0) begin : g_partial_store
@@ -357,7 +365,7 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
             .clk   (clk),
             .reset (reset),
             .read  (~stall),
-            .write (| partial_wren),
+            .write (partial_write),
             .wren  (partial_wren),
             .waddr (line_idx),
             .raddr (line_idx_n),
@@ -368,7 +376,7 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
     end else begin : g_no_partial_store
         assign partial_rdata = '0;
         assign partial_match = 1'b0;
-        `UNUSED_VAR ({partial_wren, partial_wdata, partial_rdata, partial_hit, read_partial, fill_nodata, refetch})
+        `UNUSED_VAR ({partial_wren, partial_wdata, partial_rdata, partial_hit, read_partial, fill_nodata, refetch, partial_write})
     end
 
 endmodule
