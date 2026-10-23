@@ -85,8 +85,9 @@ power:
 	  $(VIVADO) -mode batch -source $(SCRIPT_DIR)/xilinx_power_analysis.tcl
 
 # The timing screen (foldsim-estimate-timing): the logic levels of every
-# register-to-register path of the design, counted as Vivado counts them, by
-# RTL unit, in seconds and without Vivado. It elaborates the same sources and
+# register-to-register path of the design, counted as Vivado counts them on
+# DEVICE's family (hw/syn/xilinx/platforms), by RTL unit, in seconds and
+# without Vivado. It elaborates the same sources and
 # defines as gen-sources into a CIRCT netlist of its own, with the Xilinx
 # floating-point cores as black boxes. ci/timing_gate.py gates
 # screen_summary.csv and screen_units.json; screen/report.txt has the deepest
@@ -98,7 +99,8 @@ screen:
 		-x $(SCRIPT_DIR)/xilinx_ip_stubs.sv -r screen/memories.rpt -o screen/netlist.mlir
 	$(FOLDSIM_OPT) screen/netlist.mlir --pass-pipeline='builtin.module(foldsim-timing-map)' \
 		--emit-bytecode -o screen/mapped.mlirbc
-	$(FOLDSIM_OPT) screen/mapped.mlirbc -o /dev/null --pass-pipeline='builtin.module(foldsim-estimate-timing{top=$(TOP_LEVEL_ENTITY) output=screen/endpoints.csv instances=screen/instances.csv report=screen/report.txt})'
+	family=$$(python3 $(SCRIPT_DIR)/gen_platform.py --device=$(DEVICE) --emit=family) && \
+	$(FOLDSIM_OPT) screen/mapped.mlirbc -o /dev/null --pass-pipeline="builtin.module(foldsim-estimate-timing{top=$(TOP_LEVEL_ENTITY) family=$$family output=screen/endpoints.csv instances=screen/instances.csv report=screen/report.txt})"
 	python3 $(SCRIPT_DIR)/screen_summary.py screen --top $(TOP_LEVEL_ENTITY)
 
 clean:

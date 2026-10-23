@@ -448,8 +448,9 @@ class Screen(Tool):
 
     foldsim-estimate-timing ranks every register-to-register path of the CIRCT
     netlist the Xilinx flow elaborates by its logic levels, counted as Vivado
-    counts them on the V80. It needs no Vivado and no licence and takes seconds
-    per DUT, so it can run on every change where the Fmax gate runs nightly.
+    counts them on DEVICE's family. It needs no Vivado and no licence and
+    takes seconds per DUT, so it can run on every change where the Fmax gate
+    runs nightly.
 
     Depth is deterministic -- the same RTL and tools give the same levels -- so
     the gate has no tolerance: a unit that gets deeper fails, by name, until it
@@ -500,12 +501,14 @@ class Screen(Tool):
                 "foldsim": tool_version("foldsim-opt", "--version",
                                         package="foldsim",
                                         line_prefix="foldsim"),
+                "device": os.environ.get("DEVICE", "xcu55c-fsvh2892-2L-e"),
                 "xlen": args.xlen}
 
     def hash_key(self, env):
         # The levels are the model's: a new foldsim or CIRCT can map the same
-        # RTL to other levels, which must read as STALE, not as a regression.
-        return [env["circt"], env["foldsim"], str(env["xlen"])]
+        # RTL to other levels, and another device's family counts them
+        # differently; either must read as STALE, not as a regression.
+        return [env["circt"], env["foldsim"], env["device"], str(env["xlen"])]
 
     def env_warning(self, build, env):
         for key, label in (("foldsim", "foldsim"), ("circt", "CIRCT")):
