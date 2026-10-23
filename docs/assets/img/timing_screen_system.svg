@@ -102,10 +102,10 @@
   <text x="1005" y="322" class="ts">≥ 12 levels, watch list ≥ 8 (300 MHz)</text>
 
   <rect x="990" y="380" width="370" height="130" class="box"/>
-  <text x="1005" y="404" class="t">utils/timing (foldsim)</text>
-  <text x="1005" y="426" class="mono">screen.sh  summarize.py  validate.py</text>
-  <text x="1005" y="444" class="mono">retime_split.py</text>
-  <text x="1005" y="462" class="mono">cone_dump.tcl  cone_probe.tcl  wire_probe.tcl</text>
+  <text x="1005" y="404" class="t">ci/timing_screen.py, hw/scripts/xilinx_*.tcl</text>
+  <text x="1005" y="426" class="mono">screen  summarize  validate  retime-split</text>
+  <text x="1005" y="444" class="mono">xilinx_cone_dump.tcl  xilinx_cone_probe.tcl</text>
+  <text x="1005" y="462" class="mono">xilinx_wire_probe.tcl</text>
   <text x="1005" y="486" class="ts">screen ↔ Vivado agreement, and the Vivado</text>
   <text x="1005" y="502" class="ts">probes for what levels cannot show</text>
 
@@ -130,5 +130,5 @@
   <path d="M235,650 L235,690 L955,690 L955,155 L990,155" class="flowb"/>
   <path d="M910,600 L990,300" class="flowb"/>
   <path d="M910,620 L990,440" class="flowb"/>
-  <text x="600" y="720" class="tt">solid: data; dashed: who consumes it. Engine in foldsim (ships in the prebuilt), integration in Vortex.</text>
+  <text x="560" y="720" class="tt">solid: data; dashed: who consumes it. Engine in foldsim (ships in the prebuilt); scripts and integration in Vortex.</text>
 </svg>

@@ -48,13 +48,16 @@ ci/timing_gate.py -j 2
 ci/timing_gate.py -b om --update-baseline
 ```
 
-Any CIRCT netlist, with foldsim's scripts (`$FOLDSIM_PATH/utils/timing`):
+Any CIRCT netlist, with `ci/timing_screen.py` (subcommands `screen`,
+`summarize`, `validate`, `retime-split`; `foldsim-opt` from the `PATH` or
+`FOLDSIM_OPT`):
 
 ```bash
-screen.sh design.mlir runs/full                       # map, then screen
-screen.sh runs/full/mapped.mlirbc runs/socket \
-    top=VX_socket__lift black-boxes=VX_core__lift     # one unit of a mapped design
-summarize.py runs/full --min-levels 12                # deep end points by RTL unit
+ci/timing_screen.py screen design.mlir runs/full            # map, then screen
+ci/timing_screen.py screen runs/full/mapped.mlirbc runs/socket \
+    top=VX_socket__lift black-boxes=VX_core__lift           # one unit of a mapped design
+ci/timing_screen.py summarize runs/full --min-levels 12     # deep end points by RTL unit
+ci/timing_screen.py validate runs/socket ep.csv --native VX_socket__lift=dut
 ```
 
 Or the two passes directly:
@@ -90,7 +93,8 @@ never builds it. The integration is in Vortex:
 | Piece | Where | Role |
 |---|---|---|
 | `foldsim-timing-map`, `foldsim-estimate-timing` | foldsim `lib/Transforms/EstimateTiming.cpp` | map to LUTs; count levels |
-| `utils/timing/*` | foldsim | screen any netlist; compare with Vivado; Vivado probes |
+| `ci/timing_screen.py` | `ci/` | screen any netlist; read it by unit; compare with Vivado |
+| `xilinx_cone_dump.tcl`, `xilinx_cone_probe.tcl`, `xilinx_wire_probe.tcl` | `hw/scripts` | Vivado probes for what levels cannot show (§8) |
 | target `screen` | `hw/syn/xilinx/dut/common.mk` | one DUT: sources → netlist → screen → summary |
 | `circt_elaborate.sh -f mlir` | `hw/scripts` | the lowered HW/Comb/Seq netlist, no `firtool` |
 | `gen_platform.py --emit=family` | `hw/scripts` | the family of `DEVICE`, from `hw/syn/xilinx/platforms` |
@@ -267,8 +271,8 @@ by a human (`--update-baseline`), as for the other gates.
 Screen first, then Vivado:
 
 ```bash
-screen.sh gen/design.mlir runs/full
-summarize.py runs/full --min-levels 12        # the fix list, by unit
+ci/timing_screen.py screen gen/design.mlir runs/full
+ci/timing_screen.py summarize runs/full --min-levels 12     # the fix list, by unit
 ```
 
 The screen ranks the units; one Vivado run confirms the fix. Compare a fix
@@ -279,7 +283,7 @@ folded design (§9).
 
 Against Vivado, per RTL register or memory: the screen's deepest bit
 against Vivado's deepest failing path and worst slack, on seven V80 datasets
-with no new Vivado runs (foldsim `utils/timing/validate.py`):
+with no new Vivado runs (`ci/timing_screen.py validate`):
 
 | Dataset | Vivado run | Spearman vs levels | Spearman vs slack | ≥ 12: precision / recall |
 |---|---|---|---|---|
@@ -298,15 +302,15 @@ disagreement is the same on both devices.
 
 ## 8. Diagnostics beyond levels
 
-foldsim's `utils/timing` has three Vivado Tcl probes for questions the
+`hw/scripts` has three Vivado Tcl probes for questions the
 screen cannot answer, run on a checkpoint
 (`vivado -mode batch -source <probe> -tclargs <dcp> ...`):
 
 | Probe | Answers |
 |---|---|
-| `cone_dump.tcl` | the worst path into a register, cell by cell, following retimed start registers back |
-| `cone_probe.tcl` | whether paths exist between two register sets, and how deep Vivado built them |
-| `wire_probe.tcl` | per path: length in tiles, bounding box and fanout beside logic and net delay |
+| `xilinx_cone_dump.tcl` | the worst path into a register, cell by cell, following retimed start registers back |
+| `xilinx_cone_probe.tcl` | whether paths exist between two register sets, and how deep Vivado built them |
+| `xilinx_wire_probe.tcl` | per path: length in tiles, bounding box and fanout beside logic and net delay |
 
 ## 9. Invariants and limitations
 
