@@ -21,12 +21,18 @@ its results by RTL unit or against Vivado.
                 Vivado's failing ones
   validate      agreement per register with a Vivado end point table
   retime-split  the same agreement, split by whether Vivado retimed the paths
+  ports         the depth at the ports of chosen modules' instances, by unit
+  buffers       which elastic buffers pass a deep ready chain or a computed
+                output through: evidence for an OUT_BUF (OUT_REG) change
 
   ci/timing_screen.py screen gen/design.mlir runs/full
   ci/timing_screen.py screen runs/full/mapped.mlirbc runs/socket \\
       top=VX_socket__lift black-boxes=VX_core__lift
   ci/timing_screen.py summarize runs/full --min-levels 12
   ci/timing_screen.py validate runs/socket ep.csv --native VX_socket__lift=dut
+  ci/timing_screen.py screen --keep VX_elastic_buffer design.mlir runs/eb \\
+      port-modules=VX_elastic_buffer
+  ci/timing_screen.py buffers runs/eb
 
 A Vivado end point table is a CSV of `slack,levels,logic,net,start,end`, one
 row per failing end point (a gate's ep.csv). The DUT flow and the timing gate
@@ -178,12 +184,20 @@ def cmd_screen(args):
     if not args.design.endswith(".mlirbc"):
         mapped = os.path.join(args.out, "mapped.mlirbc")
         pipeline = "foldsim-timing-map-asic" if asic else "foldsim-timing-map"
+        if args.keep:
+            # Keep these modules' instances through inlining, so their ports
+            # can be reported (ports=, port-modules=).
+            pipeline = "foldsim-keep-modules{modules=%s},%s" % (
+                ",".join(args.keep), pipeline)
         steps.append(("map", [opt, args.design, "--emit-bytecode", "-o", mapped,
                               "--pass-pipeline=builtin.module(%s)" % pipeline]
                       + threads))
-    opts = " ".join(["output=%s/endpoints.csv" % args.out,
-                     "instances=%s/instances.csv" % args.out,
-                     "report=%s/report.txt" % args.out] + args.options)
+    files = ["output=%s/endpoints.csv" % args.out,
+             "instances=%s/instances.csv" % args.out,
+             "report=%s/report.txt" % args.out]
+    if any(o.startswith("port-modules=") for o in args.options):
+        files.append("ports=%s/ports.csv" % args.out)
+    opts = " ".join(files + args.options)
     steps.append(("screen", [opt, mapped, "-o", os.devnull,
                              "--pass-pipeline=builtin.module("
                              "foldsim-estimate-timing{%s})" % opts]))
@@ -413,6 +427,75 @@ def cmd_summarize(args):
 
 
 
+def load_ports(screen):
+    """instance -> {port: (direction, levels)} from a screen's ports.csv."""
+    ports = collections.defaultdict(dict)
+    with open(f'{screen}/ports.csv') as f:
+        for row in csv.DictReader(f):
+            ports[(row['instance'], row['module'])][row['port']] = (
+                row['direction'], int(row['levels']))
+    return ports
+
+
+def cmd_ports(args):
+    """The deepest instance of each unit, port by port."""
+    units = {}
+    for (inst, module), ports in load_ports(args.screen).items():
+        deepest = max(levels for _, levels in ports.values())
+        key = (INDEX.sub('_*', norm(inst)), module.rstrip('0123456789').rstrip('_'))
+        if key not in units or deepest > units[key][0]:
+            units[key] = (deepest, inst, ports)
+    for (unit, module), (deepest, inst, ports) in sorted(
+            units.items(), key=lambda kv: -kv[1][0])[:args.top]:
+        if deepest < args.min_levels:
+            break
+        print(f'{deepest:3d}  {module}  {unit}')
+        for port, (direction, levels) in ports.items():
+            print(f'       {direction:>3} {port:24s} {levels:3d}')
+
+
+def cmd_buffers(args):
+    """VX_elastic_buffer instances whose ready chain or output is deep.
+
+    ready_out is the input from downstream and ready_in the output upstream:
+    a buffer that passes ready combinationally drives ready_in at least as
+    deep as ready_out arrives, and a skid buffer (SIZE 2) or OUT_BUF cuts the
+    chain. An output (data_out, valid_out) above one level is computed, not
+    registered: OUT_REG would register it.
+    """
+    rows = []
+    for (inst, module), ports in load_ports(args.screen).items():
+        if not module.startswith('VX_elastic_buffer'):
+            continue
+        get = lambda p: ports.get(p, ('', -1))[1]
+        chain = get('ready_in')
+        through = chain >= 1 and chain >= get('ready_out')
+        out = max(get('data_out'), get('valid_out'))
+        advice = []
+        if through and chain >= args.min_levels:
+            advice.append(f'ready chain of {chain} levels passes through')
+        if out >= args.min_levels:
+            advice.append(f'output computed at {out} levels')
+        if advice:
+            rows.append((max(chain if through else 0, out), inst, module,
+                         get('valid_in'), get('ready_out'), chain, out,
+                         '; '.join(advice)))
+    units = {}
+    for r in rows:
+        key = INDEX.sub('_*', norm(r[1]))
+        if key not in units or r[0] > units[key][0][0]:
+            units[key] = (r, 1 + (units[key][1] if key in units else 0))
+        else:
+            units[key] = (units[key][0], units[key][1] + 1)
+    print(f'elastic buffers at or above {args.min_levels} levels: {len(rows)} '
+          f'in {len(units)} units')
+    print(f'{"lv":>3} {"n":>4} {"valid_in":>8} {"ready_out":>9} '
+          f'{"ready_in":>8} {"out":>4}  unit / advice')
+    for key, (r, n) in sorted(units.items(), key=lambda kv: -kv[1][0][0]):
+        print(f'{r[0]:3d} {n:4d} {r[3]:8d} {r[4]:9d} {r[5]:8d} {r[6]:4d}  '
+              f'{key}\n{"":32}{r[7]}')
+
+
 RETIMED = re.compile(r'_[fb]ret')
 
 
@@ -465,6 +548,9 @@ def main():
                    "trace=, retime-levels=, ...); family=asap7 maps for the ASIC library")
     p.add_argument("--no-threads", action="store_true",
                    help="map on one thread: half the peak memory, twice the time")
+    p.add_argument("--keep", action="append", default=[], metavar="MODULE",
+                   help="keep MODULE's instances through inlining, to report "
+                   "their ports with port-modules=MODULE (repeatable)")
     p.set_defaults(fn=cmd_screen)
 
     p = sub.add_parser("summarize", help="deep end points by RTL unit")
@@ -490,6 +576,17 @@ def main():
     p.add_argument('--metric', default='levels', choices=['levels', 'retimed'],
                    help="the screen's column to compare")
     p.set_defaults(fn=cmd_validate)
+
+    p = sub.add_parser("ports", help="port depths of chosen modules, by unit")
+    p.add_argument('screen')
+    p.add_argument('--min-levels', type=int, default=8)
+    p.add_argument('--top', type=int, default=40)
+    p.set_defaults(fn=cmd_ports)
+
+    p = sub.add_parser("buffers", help="elastic buffers that pass deep paths")
+    p.add_argument('screen')
+    p.add_argument('--min-levels', type=int, default=8)
+    p.set_defaults(fn=cmd_buffers)
 
     p = sub.add_parser("retime-split", help="agreement split by Vivado's retiming")
     p.add_argument('screen')
