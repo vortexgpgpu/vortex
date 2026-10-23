@@ -5,9 +5,9 @@
 # Sibling of fpga_gate (fpga_gate.yaml) and asic_gate (asic_gate.yaml): same
 # discipline -- golden baseline, results only ever re-recorded by a human --
 # over foldsim-estimate-timing instead of a synthesis tool. It counts logic
-# levels as Vivado counts them on the V80 (LUTs, CARRY8s, distributed-RAM
-# reads) on the CIRCT netlist the Xilinx flow elaborates, so it gates depth,
-# not Fmax: wires are not in it.
+# levels as Vivado counts them on DEVICE's family (LUTs, CARRY8s, DSP cells,
+# distributed-RAM reads) on the CIRCT netlist the Xilinx flow elaborates, so
+# it gates depth, not Fmax: wires are not in it.
 #
 #   - Per unit. A unit is an end point's instance path with generate indices
 #     folded (g_banks_3_bank -> g_banks_*_bank). Every unit at or above the

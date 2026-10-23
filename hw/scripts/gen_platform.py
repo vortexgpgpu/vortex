@@ -24,6 +24,8 @@ descriptor and emits one artifact:
   firesim-mk  make fragment for hw/syn/firesim and sim/firesim
   scala       the card's FireSim platform config class
   card        the resolved card name
+  family      the FPGA family of a device part, from any card on it (the DUT
+              synthesis flow, which builds for a part rather than a card)
 """
 
 from __future__ import annotations
@@ -186,6 +188,16 @@ def resolve(cards: List[Card], flow: str, xsa: str, family: str, device: str, na
     return top[0]
 
 
+def family_of(cards: List[Card], device: str) -> str:
+    families = {c.family for c in cards
+                if c.family and (device == c.part or
+                                 any(fnmatch.fnmatchcase(device, p) for p in c.match_device))}
+    if len(families) != 1:
+        raise DescriptorError(f"no single family for device '{device}': "
+                              f"{sorted(families) or 'no card has this part'}")
+    return families.pop()
+
+
 def emit_mk(c: Card) -> str:
     # override: a command-line CONFIGS=... must not drop the card settings.
     ov = "override "
@@ -310,7 +322,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--family", default="", help="FPGA family reported by platforminfo (xrt flow)")
     ap.add_argument("--device", default="", help="device part (aved flow)")
     ap.add_argument("--card", default="", help="select a card by name instead of matching")
-    ap.add_argument("--emit", required=True, choices=("mk", "cfg", "firesim-mk", "scala", "card"))
+    ap.add_argument("--emit", required=True, choices=("mk", "cfg", "firesim-mk", "scala", "card", "family"))
     ap.add_argument("--mem-tag", default="")
     ap.add_argument("--host-tag", default="")
     ap.add_argument("--kernel-mhz", type=int, default=0)
@@ -322,23 +334,28 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("-o", "--output", default="-")
     a = ap.parse_args(argv)
 
-    if not a.flow and not a.card:
+    if a.emit == "family" and not a.device:
+        ap.error("--emit=family takes --device")
+    if not a.flow and not a.card and a.emit != "family":
         ap.error("--flow is required unless --card names the card")
     try:
         cards = load_all(a.platform_dir)
-        c = resolve(cards, a.flow, a.xsa, a.family.strip(), a.device, a.card)
-        if a.emit == "mk":
-            out = emit_mk(c)
-        elif a.emit == "cfg":
-            out = emit_cfg(c, a.mem_tag or c.mem_tags[0],
-                           "" if a.no_host else (a.host_tag or c.host_tag),
-                           a.kernel_mhz or c.kernel_mhz, a.kernel, a.mem_ports)
-        elif a.emit == "firesim-mk":
-            out = emit_firesim_mk(c)
-        elif a.emit == "scala":
-            out = emit_scala(c)
+        if a.emit == "family":
+            out = family_of(cards, a.device) + "\n"
         else:
-            out = c.name + "\n"
+            c = resolve(cards, a.flow, a.xsa, a.family.strip(), a.device, a.card)
+            if a.emit == "mk":
+                out = emit_mk(c)
+            elif a.emit == "cfg":
+                out = emit_cfg(c, a.mem_tag or c.mem_tags[0],
+                               "" if a.no_host else (a.host_tag or c.host_tag),
+                               a.kernel_mhz or c.kernel_mhz, a.kernel, a.mem_ports)
+            elif a.emit == "firesim-mk":
+                out = emit_firesim_mk(c)
+            elif a.emit == "scala":
+                out = emit_scala(c)
+            else:
+                out = c.name + "\n"
     except DescriptorError as e:
         print(f"gen_platform: error: {e}", file=sys.stderr)
         return 1

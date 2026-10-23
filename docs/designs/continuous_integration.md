@@ -269,7 +269,7 @@ that makes a unit **deeper**, in seconds and without synthesis.
 
 | | `fpga_gate` | `asic_gate` | `timing_gate` |
 |---|---|---|---|
-| flow | Vivado synthesis, place and route | CIRCT → Yosys → ABC → OpenSTA, on ASAP7 | CIRCT → `foldsim-estimate-timing` (logic levels as Vivado counts them on the V80) |
+| flow | Vivado synthesis, place and route | CIRCT → Yosys → ABC → OpenSTA, on ASAP7 | CIRCT → `foldsim-estimate-timing` (logic levels as Vivado counts them on `DEVICE`'s family) |
 | design tree | `hw/syn/xilinx/dut` | `hw/syn/yosys/dut` | `hw/syn/xilinx/dut`, target `screen` |
 | gated against the baseline | `fmax_mhz`, `lut` | `cell_area_um2` (Fmax only against the target clock) | `max_levels`, and the deepest end point of every RTL unit |
 | also recorded | `wns_ns`, `lutram`, `ff`, `bram`, `uram`, `dsp`, critical paths, high-fanout nets | `wns_ns`, `tns_ns`, `seq_area_um2`, `sram_area_um2`, `cell_count`, `power_mw` | end point bits at ≥ 12 and ≥ 8 levels, the deepest paths |
@@ -354,9 +354,14 @@ so the flow reports the signed worst slack instead.
 
 The screen counts logic levels, not slack: it does not see wires, so it gates
 depth, which it predicts (Spearman 0.49–0.93 against Vivado per register on the
-V80 gates), and leaves Fmax to `fpga_gate`. A **unit** is an end point's
-instance path with generate indices folded (`g_banks_3_bank` →
-`g_banks_*_bank`).
+V80 gates), and leaves Fmax to `fpga_gate`. It counts them for the family of
+the DUT flow's `DEVICE` (the U55C by default), which
+`gen_platform.py --emit=family` reads from `hw/syn/xilinx/platforms`; the
+device is part of the baseline fingerprint, as it is for `fpga_gate`. The
+screen has profiles for the V80 and the U55C only, and fails on any other
+`DEVICE`. A
+**unit** is an end point's instance path with generate indices folded
+(`g_banks_3_bank` → `g_banks_*_bank`).
 
 | assertion | reason |
 |---|---|
