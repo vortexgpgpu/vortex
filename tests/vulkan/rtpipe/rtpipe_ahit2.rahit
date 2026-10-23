@@ -1,0 +1,19 @@
+/* Copyright © 2026  Vortex GPGPU
+ * SPDX-License-Identifier: MIT
+ *
+ * Non-opaque boxes: counts itself and rejects odd primitives' hits from the
+ * right half of the box. */
+#version 460
+#extension GL_EXT_ray_tracing : require
+#extension GL_GOOGLE_include_directive : require
+#include "rtpipe.glsl"
+
+layout(location = 0) rayPayloadInEXT Payload pl;
+hitAttributeEXT vec2 attr;
+
+void main()
+{
+   pl.w[P_AHS]++;
+   if (attr.y > 0.5)
+      ignoreIntersectionEXT;
+}

@@ -1,0 +1,290 @@
+/* Copyright © 2026  Vortex GPGPU
+ * SPDX-License-Identifier: MIT
+ *
+ * Every ray-query value, read back per invocation. Each invocation takes its
+ * own ray and an action word from the ray table, runs the proceed loop the
+ * action asks for, and writes one record of committed, candidate and ray
+ * values that the host compares against its own traversal of the scene. */
+#version 460
+#extension GL_EXT_ray_query : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+
+#ifdef RTQ_BARRIER
+/* Two warps per workgroup, so a workgroup barrier spans warps. */
+layout(local_size_x = 64) in;
+#else
+layout(local_size_x = 32) in;
+#endif
+
+/* Mirrors the ACT_* bits in main.c. */
+const uint ACT_CONFIRM   = 0x01u;  /* confirm triangle candidates          */
+const uint ACT_TERMINATE = 0x02u;  /* terminate after the first candidate  */
+const uint ACT_GENERATE  = 0x04u;  /* generate AABB candidates at gen_t    */
+const uint ACT_EXIT      = 0x08u;  /* leave after one candidate, re-trace  */
+const uint ACT_TWO       = 0x10u;  /* a second query from an array         */
+const uint ACT_NULL_AS   = 0x20u;  /* trace a null acceleration structure  */
+const uint ACT_QSEL      = 0x100u; /* which array element goes first       */
+const uint ACT_ABANDON   = 0x400u; /* leave after one candidate, trace a   */
+                                   /* second query                         */
+const uint ACT_INTERLEAVE = 0x800u;/* proceed two queries in turn          */
+const uint ACT_BARRIER   = 0x1000u;/* hold a candidate across a barrier    */
+
+const uint REC_WORDS = 80u;
+
+struct Ray {
+   vec4  origin_tmin;
+   vec4  dir_tmax;
+   uvec4 flags_cull_act_gent;
+   vec4  origin2;
+};
+
+layout(set = 0, binding = 0) uniform accelerationStructureEXT tlas;
+layout(set = 0, binding = 1, std430) readonly buffer Rays { Ray rays[]; };
+layout(set = 0, binding = 2, std430) buffer Records { uint rec[]; };
+
+uint base;
+
+void put(uint i, uint v)  { rec[base + i] = v; }
+void putf(uint i, float v) { rec[base + i] = floatBitsToUint(v); }
+
+#define PUT_COMMITTED(q)                                                     \
+   {                                                                         \
+      put(1, rayQueryGetIntersectionTypeEXT(q, true));                       \
+      putf(2, rayQueryGetIntersectionTEXT(q, true));                         \
+      vec2 cb = rayQueryGetIntersectionBarycentricsEXT(q, true);             \
+      putf(3, cb.x); putf(4, cb.y);                                          \
+      put(5, rayQueryGetIntersectionPrimitiveIndexEXT(q, true));             \
+      put(6, rayQueryGetIntersectionGeometryIndexEXT(q, true));              \
+      put(7, rayQueryGetIntersectionFrontFaceEXT(q, true) ? 1u : 0u);        \
+      put(8, rayQueryGetIntersectionInstanceIdEXT(q, true));                 \
+      put(9, rayQueryGetIntersectionInstanceCustomIndexEXT(q, true));        \
+      put(10, rayQueryGetIntersectionInstanceShaderBindingTableRecordOffsetEXT(q, true)); \
+      vec3 oo = rayQueryGetIntersectionObjectRayOriginEXT(q, true);          \
+      vec3 od = rayQueryGetIntersectionObjectRayDirectionEXT(q, true);       \
+      putf(11, oo.x); putf(12, oo.y); putf(13, oo.z);                        \
+      putf(14, od.x); putf(15, od.y); putf(16, od.z);                        \
+      mat4x3 o2w = rayQueryGetIntersectionObjectToWorldEXT(q, true);         \
+      mat4x3 w2o = rayQueryGetIntersectionWorldToObjectEXT(q, true);         \
+      for (uint c = 0u; c < 4u; c++)                                         \
+         for (uint r = 0u; r < 3u; r++) {                                    \
+            putf(17 + c * 3u + r, o2w[c][r]);                                \
+            putf(29 + c * 3u + r, w2o[c][r]);                                \
+         }                                                                   \
+   }
+
+#define PUT_CANDIDATE(q)                                                     \
+   {                                                                         \
+      uint ct = rayQueryGetIntersectionTypeEXT(q, false);                    \
+      put(42, ct);                                                           \
+      if (ct == gl_RayQueryCandidateIntersectionTriangleEXT) {               \
+         putf(43, rayQueryGetIntersectionTEXT(q, false));                    \
+         vec2 kb = rayQueryGetIntersectionBarycentricsEXT(q, false);         \
+         putf(51, kb.x); putf(52, kb.y);                                     \
+         put(46, rayQueryGetIntersectionFrontFaceEXT(q, false) ? 1u : 0u);   \
+      } else {                                                               \
+         put(50, rayQueryGetIntersectionCandidateAABBOpaqueEXT(q) ? 1u : 0u); \
+      }                                                                      \
+      put(44, rayQueryGetIntersectionPrimitiveIndexEXT(q, false));           \
+      put(45, rayQueryGetIntersectionGeometryIndexEXT(q, false));            \
+      put(47, rayQueryGetIntersectionInstanceIdEXT(q, false));               \
+      put(48, rayQueryGetIntersectionInstanceCustomIndexEXT(q, false));      \
+      put(49, rayQueryGetIntersectionInstanceShaderBindingTableRecordOffsetEXT(q, false)); \
+      vec3 ko = rayQueryGetIntersectionObjectRayOriginEXT(q, false);         \
+      vec3 kd = rayQueryGetIntersectionObjectRayDirectionEXT(q, false);      \
+      putf(53, ko.x); putf(54, ko.y); putf(55, ko.z);                        \
+      putf(56, kd.x); putf(57, kd.y); putf(58, kd.z);                        \
+   }
+
+#define PUT_RAY(q)                                                           \
+   {                                                                         \
+      putf(59, rayQueryGetRayTMinEXT(q));                                    \
+      put(60, rayQueryGetRayFlagsEXT(q));                                    \
+      vec3 wo = rayQueryGetWorldRayOriginEXT(q);                             \
+      vec3 wd = rayQueryGetWorldRayDirectionEXT(q);                          \
+      putf(61, wo.x); putf(62, wo.y); putf(63, wo.z);                        \
+      putf(64, wd.x); putf(65, wd.y); putf(66, wd.z);                        \
+   }
+
+/* One candidate verdict, shared by every loop below. */
+#define DECIDE(q, act, gen_t)                                                \
+   {                                                                         \
+      if (rayQueryGetIntersectionTypeEXT(q, false) ==                        \
+          gl_RayQueryCandidateIntersectionAABBEXT) {                         \
+         if ((act & ACT_GENERATE) != 0u)                                     \
+            rayQueryGenerateIntersectionEXT(q, gen_t);                       \
+      } else if ((act & ACT_CONFIRM) != 0u) {                                \
+         rayQueryConfirmIntersectionEXT(q);                                  \
+      }                                                                      \
+   }
+
+void main()
+{
+   uint id = gl_GlobalInvocationID.x;
+   if (id >= rays.length())
+      return;
+   base = id * REC_WORDS;
+   for (uint i = 0u; i < REC_WORDS; i++)
+      rec[base + i] = 0u;
+
+   Ray ray = rays[id];
+   uint flags = ray.flags_cull_act_gent.x;
+   uint cull  = ray.flags_cull_act_gent.y;
+   uint act   = ray.flags_cull_act_gent.z;
+   float gen_t = uintBitsToFloat(ray.flags_cull_act_gent.w);
+   vec3 o = ray.origin_tmin.xyz, d = ray.dir_tmax.xyz;
+   float tmin = ray.origin_tmin.w, tmax = ray.dir_tmax.w;
+   put(0, 0xC0DE0000u | act);
+
+#ifdef RTQ_BARRIER
+   if ((act & ACT_BARRIER) != 0u) {
+      /* Every invocation of the workgroup holds its query's first candidate
+       * across a workgroup barrier, then confirms its way to the end. */
+      rayQueryEXT q;
+      rayQueryInitializeEXT(q, tlas, flags, cull, o, tmin, d, tmax);
+      bool more = rayQueryProceedEXT(q);
+      uint n = 0u;
+      if (more) {
+         put(67, 1u);
+         PUT_CANDIDATE(q);
+         n++;
+      }
+      barrier();
+      while (more) {
+         rayQueryConfirmIntersectionEXT(q);
+         more = rayQueryProceedEXT(q);
+         if (more)
+            n++;
+      }
+      put(41, n);
+      if (rayQueryGetIntersectionTypeEXT(q, true) !=
+          gl_RayQueryCommittedIntersectionNoneEXT)
+         PUT_COMMITTED(q)
+      else
+         put(1, gl_RayQueryCommittedIntersectionNoneEXT);
+      PUT_RAY(q);
+      return;
+   }
+#endif
+
+#ifdef RTQ_INTERLEAVE
+   if ((act & ACT_INTERLEAVE) != 0u) {
+      /* Two queries open at once, proceeded in turn: each must keep its own
+       * candidate and committed record while the other traces. */
+      rayQueryEXT qa, qb;
+      rayQueryInitializeEXT(qa, tlas, flags, cull, o, tmin, d, tmax);
+      rayQueryInitializeEXT(qb, tlas, flags, cull, ray.origin2.xyz, tmin, d, tmax);
+      bool ma = true, mb = true;
+      uint na = 0u;
+      while (ma || mb) {
+         if (ma) {
+            ma = rayQueryProceedEXT(qa);
+            if (ma) {
+               na++;
+               rayQueryConfirmIntersectionEXT(qa);
+            }
+         }
+         if (mb) {
+            mb = rayQueryProceedEXT(qb);
+            if (mb)
+               rayQueryConfirmIntersectionEXT(qb);
+         }
+      }
+      put(41, na);
+      PUT_COMMITTED(qa);
+      PUT_RAY(qa);
+      put(68, rayQueryGetIntersectionTypeEXT(qb, true) |
+              (rayQueryGetIntersectionInstanceIdEXT(qb, true) << 4) |
+              (rayQueryGetIntersectionPrimitiveIndexEXT(qb, true) << 8));
+      putf(69, rayQueryGetIntersectionTEXT(qb, true));
+      return;
+   }
+#endif
+
+   if ((act & ACT_ABANDON) != 0u) {
+      /* Leave the first query open with its candidate in hand, then trace a
+       * second one: the first must be closed before the second traces. */
+      rayQueryEXT qa, qb;
+      rayQueryInitializeEXT(qa, tlas, flags, cull, o, tmin, d, tmax);
+      uint na = 0u;
+      while (rayQueryProceedEXT(qa)) {
+         put(67, 1u);
+         PUT_CANDIDATE(qa);
+         na++;
+         break;
+      }
+      put(41, na);
+      rayQueryInitializeEXT(qb, tlas, flags, cull, ray.origin2.xyz, tmin, d, tmax);
+      while (rayQueryProceedEXT(qb))
+         rayQueryConfirmIntersectionEXT(qb);
+      if (rayQueryGetIntersectionTypeEXT(qb, true) !=
+          gl_RayQueryCommittedIntersectionNoneEXT)
+         PUT_COMMITTED(qb)
+      else
+         put(1, gl_RayQueryCommittedIntersectionNoneEXT);
+      PUT_RAY(qb);
+      return;
+   }
+
+   if ((act & ACT_TWO) != 0u) {
+      /* Two queries of one array, picked by a run-time index: the second
+       * trace must leave the first query's committed record alone. */
+      rayQueryEXT rqs[2];
+      uint k = (act & ACT_QSEL) != 0u ? 1u : 0u;
+      rayQueryInitializeEXT(rqs[k], tlas, flags, cull, o, tmin, d, tmax);
+      while (rayQueryProceedEXT(rqs[k])) {
+         put(41, rec[base + 41] + 1u);
+         DECIDE(rqs[k], act, gen_t);
+      }
+      rayQueryInitializeEXT(rqs[1u - k], tlas, flags, cull, ray.origin2.xyz,
+                            tmin, d, tmax);
+      while (rayQueryProceedEXT(rqs[1u - k]))
+         DECIDE(rqs[1u - k], act, gen_t);
+      PUT_COMMITTED(rqs[k]);
+      PUT_RAY(rqs[k]);
+      put(68, rayQueryGetIntersectionTypeEXT(rqs[1u - k], true) |
+              (rayQueryGetIntersectionInstanceIdEXT(rqs[1u - k], true) << 4) |
+              (rayQueryGetIntersectionPrimitiveIndexEXT(rqs[1u - k], true) << 8));
+      putf(69, rayQueryGetIntersectionTEXT(rqs[1u - k], true));
+      return;
+   }
+
+   rayQueryEXT rq;
+   if ((act & ACT_NULL_AS) != 0u) {
+      rayQueryInitializeEXT(rq, accelerationStructureEXT(uint64_t(0)), flags,
+                            cull, o, tmin, d, tmax);
+   } else {
+      rayQueryInitializeEXT(rq, tlas, flags, cull, o, tmin, d, tmax);
+   }
+
+   uint count = 0u;
+   bool first_proceed = true;
+   while (rayQueryProceedEXT(rq)) {
+      if (first_proceed)
+         put(67, 1u);
+      first_proceed = false;
+      if (count == 0u)
+         PUT_CANDIDATE(rq);
+      count++;
+      if ((act & ACT_EXIT) != 0u)
+         break;
+      DECIDE(rq, act, gen_t);
+      if ((act & ACT_TERMINATE) != 0u)
+         rayQueryTerminateEXT(rq);
+   }
+   put(41, count);
+
+   if ((act & ACT_EXIT) != 0u) {
+      /* Abandon the open query mid-traversal and trace a new ray with it. */
+      rayQueryInitializeEXT(rq, tlas, flags, cull, ray.origin2.xyz, tmin, d,
+                            tmax);
+      while (rayQueryProceedEXT(rq))
+         rayQueryConfirmIntersectionEXT(rq);
+   }
+
+   if (rayQueryGetIntersectionTypeEXT(rq, true) !=
+       gl_RayQueryCommittedIntersectionNoneEXT)
+      PUT_COMMITTED(rq)
+   else
+      put(1, gl_RayQueryCommittedIntersectionNoneEXT);
+   PUT_RAY(rq);
+}

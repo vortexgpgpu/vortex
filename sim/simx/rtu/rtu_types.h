@@ -32,6 +32,7 @@
 #include <cstdint>
 #include <ostream>
 #include <unordered_map>
+#include <unordered_set>
 #include "instr_trace.h"
 #include "constants.h"
 #include "types.h"
@@ -151,6 +152,14 @@ struct RtuRsp {
 
   // CB_YIELD only — yielding-lane mask + per-lane callback metadata.
   uint32_t cb_active_mask = 0;
+  // CB_YIELD only — lanes of the trace whose walk has ended with no candidate
+  // left. Their status and hit fields carry their terminal record, so they
+  // leave the warp's proceed loop now instead of riding along until the last
+  // candidate is decided.
+  uint32_t done_mask = 0;
+  // The lanes of the trace the record belongs to: the window words a record
+  // writes (its status among them) are written for these lanes only.
+  uint32_t lane_mask = 0;
   std::array<uint32_t, VX_CFG_NUM_THREADS> cb_type    = {};
   std::array<uint32_t, VX_CFG_NUM_THREADS> cb_handle  = {};
   std::array<uint32_t, VX_CFG_NUM_THREADS> cb_sbt_idx = {};
@@ -172,7 +181,9 @@ struct RtuRsp {
       obj_o_x(req.origin_x), obj_o_y(req.origin_y), obj_o_z(req.origin_z),
       obj_d_x(req.dir_x), obj_d_y(req.dir_y), obj_d_z(req.dir_z),
       trace(req.trace), block_id(req.block_id), warp_id(req.warp_id),
-      slot_idx(req.slot_idx) {}
+      slot_idx(req.slot_idx) {
+    lane_mask = req.tmask_bits;
+  }
 
   friend std::ostream& operator<<(std::ostream& os, const RtuRsp& rsp) {
     os << (rsp.kind == RtuRspKind::TERMINAL ? "DONE" : "CB_YIELD")
@@ -308,6 +319,29 @@ constexpr uint32_t kRtuLatencyFma   = 9;    // FMA pipe depth
 // FMAs (VX_rtu_xform). Charged per TLAS instance descent in the SimX cost
 // model.
 constexpr uint32_t kRtuXformLatency = 27;   // 3 * FMA pipe depth
+
+// The record write-back walk: the RTU owns one write port into the
+// hit windows and walks a record through it one word at a time. A word costs a
+// read-issue cycle, a capture cycle per row it reads (a candidate's hit word
+// reads the candidate row and the committed-hit row), and a send; the walk takes
+// one cycle to claim the port.
+//   terminal:  7 hit words (read, capture, send), the payload (issue, send),
+//              the hitAttribute (read, capture, send), the status (issue, send)
+//   candidate: 7 hit words (two reads), 6 object-ray words (one read), the
+//              callback type, SBT index and handle, then payload, attribute and
+//              status as above
+constexpr uint32_t kRtuWbClaim            = 1;
+constexpr uint32_t kRtuWbTerminalCycles   = kRtuWbClaim + 7 * 3 + 2 + 3 + 2;
+constexpr uint32_t kRtuWbCandidateCycles  = kRtuWbClaim + 7 * 5 + 6 * 3 + 2 + 3 + 2
+                                          + 2 + 3 + 2;
+// A CONTINUE's two beats, then the resume walk: a cycle to start it, every
+// accepted candidate copied into its lane's committed hit field by field (read,
+// capture, write; the distance first also reads the shader's t and the committed
+// t), then its hitAttribute (read, capture, merge). With nothing accepted the
+// walk only clears the batch.
+constexpr uint32_t kRtuContinueBeats      = 2;
+constexpr uint32_t kRtuResumeAcceptCycles = kRtuContinueBeats + 1 + 7 * 3 + 4 + 3;
+constexpr uint32_t kRtuResumeIgnoreCycles = kRtuContinueBeats + 1;
 
 // TLAS instance record (64 B). Lives inline after the scene header for
 // "TLAS + inline BLAS" layout.
@@ -469,18 +503,32 @@ struct Slot {
   uint32_t  ctx_pending = 0;
   // Coherency gather: 3-bit octant signature.
   uint8_t   coh_signature = 0;
+  // The RTU tick at which the slot's resume walk has finished; until then a
+  // decided batch neither re-walks nor writes its record.
+  uint64_t  ready_at = 0;
+  // A verdict of the batch being answered committed a candidate.
+  bool      batch_accepted = false;
 };
 
 // The functional scene image a context walks through: the lines it has already
 // pulled, keyed by address. A read of a line it does not hold is a miss — the
 // walker reports it and stops, and the context fetches it. That is the whole
 // demand-fetch model: the walk itself discovers the fetch stream.
+//
+// A triangle or instance record is read by its own fetch, whether or not its
+// lines arrived with the leaf: the walker's fetch buffer holds one image, so
+// the hardware requests each record of a leaf in turn. `records` holds the
+// (record, line) fetches the walk has completed; a record line missing from it
+// is a miss on that line even when the line itself is held.
 struct SceneView {
   const std::unordered_map<uint64_t, LineBuf>* lines = nullptr;
+  const std::unordered_set<uint64_t>* records = nullptr;
   uint64_t base_line = 0;   // line holding the scene's first byte
   uint32_t byte_off  = 0;   // scene base within that line
   bool     miss      = false;
   uint64_t miss_line = 0;
+  bool     miss_record = false;   // the miss is a record fetch
+  uint64_t miss_key    = 0;       // its (record, line) key
 };
 
 struct Context {
@@ -496,9 +544,12 @@ struct Context {
   // deterministically, and charges a fetch for every line the walk first
   // touches.
   std::unordered_map<uint64_t, LineBuf> lines;
+  std::unordered_set<uint64_t> records;   // record fetches completed
   uint64_t base_line = 0;
   uint32_t byte_off  = 0;
   uint64_t req_addr  = 0;    // the line it wants (REQ / WAIT)
+  bool     req_record = false;   // the request fetches a record (req_key)
+  uint64_t req_key    = 0;
   // FSM states this step still owes the shared front end, then the PE pipeline
   // drain behind the last test it fed. img_states is the subset that decodes the
   // fetched image and so pays the extra staging cycle; it is retired first, which

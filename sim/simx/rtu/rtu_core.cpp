@@ -98,11 +98,26 @@ private:
 // responses grouped by (warp_id, sbt_idx), respecting the per-warp
 // "callback in flight" gate so two CB_YIELDs for the same warp never overlap.
 // ────────────────────────────────────────────────────────────────────
+// The hit-window write port: records leave the RTU one at a time, each taking
+// as many cycles as its write-back walk. Returns the delivery delay of a record
+// that starts walking at tick `now`.
+class RecordPort {
+public:
+  void reset() { busy_until_ = 0; }
+  uint64_t delay(uint64_t now, uint32_t cycles) {
+    uint64_t start = std::max(now, busy_until_);
+    busy_until_ = start + cycles;
+    return busy_until_ - now;
+  }
+private:
+  uint64_t busy_until_ = 0;
+};
+
 class ReformationEngine {
 public:
   ReformationEngine(std::vector<SimChannel<RtuRsp>>& rsp_out,
-                    PerfStats& perf)
-    : rsp_out_(rsp_out), perf_(perf) {}
+                    PerfStats& perf, RecordPort& port)
+    : rsp_out_(rsp_out), perf_(perf), record_port_(port) {}
 
   void reset() {
     queue_.clear();
@@ -118,7 +133,7 @@ public:
     warp_cb_inflight_[warp_id] = false;
   }
 
-  void tick() {
+  void tick(SlotPool& pool, uint64_t now) {
     if (rsp_out_.empty()) return;
     auto& port = rsp_out_.at(0);
     while (!queue_.empty()) {
@@ -135,6 +150,7 @@ public:
       if (anchor_it == queue_.end()) break;  // every warp busy
       uint32_t anchor_warp = anchor_it->warp_id;
       uint32_t anchor_sbt  = anchor_it->sbt_idx;
+      uint32_t anchor_slot = anchor_it->slot_idx;
       RtuRsp rsp;
       rsp.kind     = RtuRspKind::CB_YIELD;
       rsp.warp_id  = anchor_warp;
@@ -181,7 +197,9 @@ public:
         it = queue_.erase(it);
       }
       rsp.cb_active_mask = cb_mask;
-      port.send(rsp);
+      rsp.lane_mask      = pool.at(anchor_slot).req.tmask_bits;
+      report_done_lanes(pool.at(anchor_slot), cb_mask, rsp);
+      port.send(rsp, record_port_.delay(now, kRtuWbCandidateCycles));
       warp_cb_inflight_[anchor_warp] = true;
       ++perf_.reformation_yields;
       // cb_type is uniform within a batched yield (grouped by sbt_idx), so one
@@ -204,8 +222,37 @@ public:
   }
 
 private:
+  // Lanes of the batch's trace that have finished with no candidate left get
+  // their terminal record now. A lane still holding a candidate for a later
+  // batch stays PENDING.
+  static void report_done_lanes(const Slot& s, uint32_t cb_mask, RtuRsp& rsp) {
+    for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+      const LaneState& l = s.lanes[t];
+      if ((cb_mask >> t) & 1u) {
+        continue;
+      }
+      if (!l.active || l.cb_pending || l.walk_needed) {
+        continue;
+      }
+      rsp.done_mask |= (1u << t);
+      rsp.status[t] = l.hit ? VX_RT_STS_DONE_HIT : VX_RT_STS_DONE_MISS;
+      rsp.hit_t[t]  = l.hit ? l.hit_t : s.req.tmax[t];
+      if (!l.hit) {
+        continue;
+      }
+      rsp.hit_attr[t]            = l.hit_attr;
+      rsp.hit_bary_u[t]          = l.hit_u;
+      rsp.hit_bary_v[t]          = l.hit_v;
+      rsp.hit_primitive_id[t]    = l.hit_prim;
+      rsp.hit_instance_id[t]     = l.hit_instance_id;
+      rsp.hit_instance_custom[t] = l.hit_instance_custom;
+      rsp.hit_geometry_index[t]  = l.hit_geometry;
+    }
+  }
+
   std::vector<SimChannel<RtuRsp>>& rsp_out_;
   PerfStats&                        perf_;
+  RecordPort&                       record_port_;
   std::deque<QueueEntry>            queue_;
   std::array<bool, VX_CFG_NUM_WARPS> warp_cb_inflight_{};
 };
@@ -240,7 +287,7 @@ public:
     , pool_(VX_CFG_RTU_NUM_SLOTS)
     , contexts_(VX_CFG_RTU_NUM_CTX)
     , perf_stats_()
-    , reform_(simobject->rtu_rsp_out, perf_stats_)
+    , reform_(simobject->rtu_rsp_out, perf_stats_, record_port_)
     , mem_engine_(contexts_,
                   simobject->dcache_req_out,
                   simobject->dcache_rsp_in,
@@ -291,6 +338,8 @@ public:
     for (auto& cx : contexts_) cx = Context{};
     mem_engine_.reset();
     reform_.reset();
+    record_port_.reset();
+    now_ = 0;
     perf_stats_ = RtuCore::PerfStats();
     last_signature_ = 0;
     rr_exec_ = 0;
@@ -298,13 +347,14 @@ public:
   }
 
   void tick() {
+    ++now_;
     mem_engine_.drain_mem_rsp();
     drain_requests();
     promote_slots();
     run_contexts();
     mem_engine_.issue_memory();
     complete_slots();
-    reform_.tick();
+    reform_.tick(pool_, now_);
     emit_completions();
     sample_occupancy();
   }
@@ -383,12 +433,14 @@ public:
                          || l.cb_type == VX_RT_CB_TYPE_PROC);
       const bool accept  = (action == VX_RT_CB_ACCEPT || action == VX_RT_CB_TERMINATE);
       // An intersection shader reports its own t, which need not be nearer than
-      // what the walk already committed: only a nearer hit inside the ray's
-      // interval replaces it.
+      // what the walk already committed: only a hit no farther than it replaces
+      // it. The shader has already held its t to the ray interval it knows of
+      // (closed, as reportIntersectionEXT's is), which cannot include the opaque
+      // hits the walk committed on its own.
       const float new_t  = (l.cb_type == VX_RT_CB_TYPE_PROC) ? req.cb_hit_t[t] : l.cand_t;
-      const bool commits = accept && (!decides
-          || (new_t >= s.req.tmin[t] && new_t < (l.hit ? l.hit_t : s.req.tmax[t])));
+      const bool commits = accept && (!decides || !l.hit || new_t <= l.hit_t);
       if (commits) {
+        s.batch_accepted = true;
         l.hit = true;
         // A procedural (IS) accept commits the shader's own hit_t; a triangle
         // AHS keeps the geometric candidate t. Either way the hitAttribute the
@@ -400,7 +452,11 @@ public:
         l.hit_u    = l.cand_u;
         l.hit_v    = l.cand_v;
         l.hit_prim = l.cand_prim;
-        l.hit_geometry = l.cand_geometry;
+        // The terminal record says the hit came from a shader verdict, and a
+        // procedural one at the distance its shader reported.
+        l.hit_geometry = (l.cand_geometry & ~VX_RT_HIT_OPAQUE)
+                       | (decides ? VX_RT_HIT_COMMITTED_CB : 0u)
+                       | (l.cb_type == VX_RT_CB_TYPE_PROC ? VX_RT_HIT_COMMITTED_PROC : 0u);
         l.hit_instance_id     = l.cand_instance;
         l.hit_instance_custom = l.cand_custom;
         // The accepted candidate becomes the committed hit, so its object-space
@@ -414,9 +470,11 @@ public:
       // finished shading an already-committed hit. An any-hit / intersection
       // verdict that does not end the ray resumes its walk above the decided
       // candidate, so every candidate along the ray is offered in (t, key)
-      // order; TERMINATE, or an accept under TERMINATE_ON_FIRST_HIT, ends it.
+      // order; TERMINATE, or an accept under TERMINATE_ON_FIRST_HIT, ends it,
+      // and ABORT ends it with the candidate dropped.
       l.cb_pending = false;
       const bool ends = action == VX_RT_CB_TERMINATE
+          || (decides && action == VX_RT_CB_ABORT)
           || (commits && (s.req.flags[t] & VX_RT_FLAG_TERMINATE_ON_FIRST_HIT));
       if (decides && !ends) {
         l.has_floor   = true;
@@ -429,7 +487,12 @@ public:
         any_pending |= ll.cb_pending;
         any_walk    |= ll.walk_needed;
       }
-      if (!any_pending) s.state = any_walk ? SlotState::READY : SlotState::RESP;
+      if (!any_pending) {
+        s.state = any_walk ? SlotState::READY : SlotState::RESP;
+        s.ready_at = now_ + (s.batch_accepted ? kRtuResumeAcceptCycles
+                                              : kRtuResumeIgnoreCycles);
+        s.batch_accepted = false;
+      }
     }
     // Clear this warp's callback-in-flight gate so the next queued CB_YIELD for
     // the same warp (e.g. the second SBT group) can be emitted.
@@ -449,6 +512,9 @@ public:
     for (uint32_t i = 0; i < pool_.size(); ++i) {
       const Slot& s = pool_.at(i);
       if (!s.in_use || s.state != SlotState::READY) continue;
+      if (s.ready_at > now_) {
+        continue;
+      }
       if (best == uint32_t(-1) || s.age < best_age) {
         best = i;
         best_age = s.age;
@@ -524,6 +590,7 @@ public:
     Slot& s = pool_.at(cx.slot);
     SceneView sv;
     sv.lines     = &cx.lines;
+    sv.records   = &cx.records;
     sv.base_line = cx.base_line;
     sv.byte_off  = cx.byte_off;
 
@@ -562,6 +629,7 @@ public:
                   + leaves * kRtuStatesPerLeaf
                   + tri    * kRtuStatesPerTri
                   + inst   * kRtuStatesPerInst;
+
     cx.img_states = nodes  * kRtuImageStatesPerNode
                   + box    * kRtuImageStatesPerBox
                   + leaves * kRtuImageStatesPerLeaf
@@ -575,6 +643,11 @@ public:
     if (box) lat = std::max(lat, BoxPe::pipe_depth());
     if (tri) lat = std::max(lat, TriPe::pipe_depth());
     lat += kRtuXformLatency * inst;
+#if VX_CFG_RTU_BVH_WIDTH != 0
+    // A CW-BVH descent then waits out the object direction's reciprocal before
+    // its BLAS root's boxes can be tested; the flat walker tests no boxes.
+    lat += kRtuSetupLatency * inst;
+#endif
     lat += VX_CFG_RTU_STACK_DEPTH * restart;
     cx.pe_lat = lat;
     perf_stats_.walker_cycles_total += cx.fsm_states * kRtuPhasesPerStep
@@ -582,6 +655,8 @@ public:
 
     if (r.stalled) {
       cx.req_addr   = sv.miss_line;
+      cx.req_record = sv.miss_record;
+      cx.req_key    = sv.miss_key;
       cx.next_state = CtxState::REQ;
     } else {
       s.lanes[cx.lane] = result;   // carries cb_pending if the ray yielded
@@ -679,6 +754,9 @@ public:
     for (uint32_t i = 0; i < pool_.size(); ++i) {
       Slot& s = pool_.at(i);
       if (!s.in_use || s.state != SlotState::RESP) continue;
+      if (s.ready_at > now_) {
+        continue;
+      }
       if (port.full()) break;
       RtuRsp rsp(s.req);
       rsp.kind = RtuRspKind::TERMINAL;
@@ -715,7 +793,7 @@ public:
       // free_slot(). Until then it sits in EMITTED and is not re-sent.
       rsp.slot_idx = i;
       if (raylog::enabled()) raylog::on_terminal(this, i, s.req, s.lanes);
-      port.send(rsp);
+      port.send(rsp, record_port_.delay(now_, kRtuWbTerminalCycles));
       DT(3, "rtu-core complete: tag=" << s.req.tag << ", slot=" << i);
       s.state = SlotState::EMITTED;
     }
@@ -756,6 +834,8 @@ private:
   SlotPool             pool_;
   std::vector<Context> contexts_;
   RtuCore::PerfStats   perf_stats_;
+  RecordPort           record_port_;
+  uint64_t             now_ = 0;      // RTU ticks since reset
   ReformationEngine    reform_;
 #if VX_CFG_RTU_BVH_WIDTH == 0
   FlatWalker           flat_walker_;

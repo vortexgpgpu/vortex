@@ -138,19 +138,19 @@ RtuUnit::PendingWriteback RtuUnit::on_terminal_rsp(const RtuRsp& rsp) {
 }
 
 // Per-lane status writeback for a completing WAIT/CONTINUE. A terminal reports
-// each lane's own DONE_* code. A candidate reports YIELD_* only for the lanes it
-// actually yielded (cb_active_mask); every other active lane of the trace is
-// still traversing, so it gets PENDING — it must stay in the warp's loop rather
-// than exit on a stale status, and the RTU ignores any action it contributes
-// (only lanes with a pending candidate are applied). This is what makes a
-// partial candidate batch (e.g. divergent-SBT reformation) correct.
+// each lane's own DONE_* code. A candidate reports YIELD_* for the lanes it
+// yielded (cb_active_mask) and DONE_* for the lanes whose walk has ended with
+// nothing left to decide (done_mask), which leave the warp's loop now. A lane
+// still holding a candidate for a later batch (divergent-SBT reformation) gets
+// PENDING: it stays in the loop, and the RTU ignores any action it contributes
+// (only lanes with a pending candidate are applied).
 void RtuUnit::write_status(instr_trace_t* trace, const RtuRsp& rsp, bool is_candidate) {
   for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
     if (!trace->tmask.test(t)) {
       trace->dst_data[t].u = 0;
       continue;
     }
-    if (is_candidate && (((rsp.cb_active_mask >> t) & 1u) == 0)) {
+    if (is_candidate && (((rsp.cb_active_mask | rsp.done_mask) >> t) & 1u) == 0) {
       trace->dst_data[t].u = VX_RT_STS_PENDING;
     } else {
       trace->dst_data[t].u = rsp.status[t];
@@ -227,11 +227,23 @@ instr_trace_t* RtuUnit::process_cb_ret(instr_trace_t* trace, uint32_t block_id) 
   req.trace    = trace;
   req.block_id = block_id;
   req.warp_id  = trace->wid;
+  // A lane that holds a candidate but is absent from the CONTINUE left its
+  // proceed loop with it: it answers ABORT, which ends its ray.
   uint32_t cand_mask = last_cand_mask_.at(trace->wid);
   uint32_t bits = 0;
   for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-    if (!trace->tmask.test(t)) continue;
-    if (((cand_mask >> t) & 1u) == 0) {
+    const bool cand = ((cand_mask >> t) & 1u) != 0;
+    if (!trace->tmask.test(t)) {
+      if (cand) {
+        bits |= (1u << t);
+        req.cb_action[t] = VX_RT_CB_ABORT;
+        req.cb_handle[t] = cb_handle_.at(trace->wid)[t];
+        req.cb_hit_t[t]  = 0.f;
+        req.cb_attr[t]   = 0;
+      }
+      continue;
+    }
+    if (!cand) {
       trace->dst_data[t].u = 0;  // still traversing: no action this iteration
       continue;
     }
@@ -255,9 +267,15 @@ instr_trace_t* RtuUnit::process_cb_ret(instr_trace_t* trace, uint32_t block_id) 
 }
 
 void RtuUnit::apply_response(const RtuRsp& rsp) {
+  // A terminal record covers the lanes of its trace; the status is its last
+  // word, as the hardware writes it.
   auto& wregs = window_.warp(rsp.warp_id);
   for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+    if (((rsp.lane_mask >> t) & 1u) == 0) {
+      continue;
+    }
     auto& lregs = wregs.at(t);
+    lregs[VX_RT_STATUS]             = rsp.status[t];
     // Written by the RTU, not by any instruction: the payload pointer rode the
     // arm and the hitAttribute rode the CONTINUE that accepted this hit.
     lregs[VX_RT_PAYLOAD_PTR_LO]     = trace_payload_.at(rsp.warp_id);
@@ -290,6 +308,27 @@ void RtuUnit::apply_callback_payload(const RtuRsp& rsp) {
   // VX_RT_CB_HANDLE is per-lane (not warp-scoped).
   auto& wregs = window_.warp(rsp.warp_id);
   for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+    // Every lane of the trace reads its status from the record: its candidate,
+    // its terminal hit, or that its candidate comes in a later batch.
+    if ((rsp.lane_mask >> t) & 1u) {
+      const bool reported = ((rsp.cb_active_mask | rsp.done_mask) >> t) & 1u;
+      wregs.at(t)[VX_RT_STATUS] = reported ? rsp.status[t] : VX_RT_STS_PENDING;
+    }
+    if ((rsp.done_mask >> t) & 1u) {
+      // A lane that has finished reads its terminal hit now, with the words a
+      // record writes for every lane of its trace.
+      auto& lregs = wregs.at(t);
+      lregs[VX_RT_PAYLOAD_PTR_LO]      = trace_payload_.at(rsp.warp_id);
+      lregs[VX_RT_HIT_ATTR_0]          = rsp.hit_attr[t];
+      lregs[VX_RT_HIT_T]               = float_to_bits(rsp.hit_t[t]);
+      lregs[VX_RT_HIT_BARY_U]          = float_to_bits(rsp.hit_bary_u[t]);
+      lregs[VX_RT_HIT_BARY_V]          = float_to_bits(rsp.hit_bary_v[t]);
+      lregs[VX_RT_HIT_PRIMITIVE_ID]    = rsp.hit_primitive_id[t];
+      lregs[VX_RT_HIT_INSTANCE_ID]     = rsp.hit_instance_id[t];
+      lregs[VX_RT_HIT_INSTANCE_CUSTOM] = rsp.hit_instance_custom[t];
+      lregs[VX_RT_HIT_GEOMETRY_INDEX]  = rsp.hit_geometry_index[t];
+      continue;
+    }
     if (((rsp.cb_active_mask >> t) & 1u) == 0) continue;
     auto& lregs = wregs.at(t);
     // The callback shaders read the tracing shader's payload pointer, and they

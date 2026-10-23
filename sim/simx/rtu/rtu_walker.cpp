@@ -62,6 +62,46 @@ void read_scene_bytes(SceneView& sv, uint32_t off, uint32_t len, uint8_t* out) {
   }
 }
 
+// Fetch the record at scene offset [off, off + len): every line it spans is one
+// request of the record's own, completed or not. Returns false (and raises the
+// miss) at the first line the walk has not fetched for this record.
+bool fetch_record(SceneView& sv, uint32_t off, uint32_t len) {
+  if (!sv.records) {
+    return true;
+  }
+  const uint64_t rec = sv.base_line + sv.byte_off + off;
+  const uint64_t first = rec & kRtuLineMask;
+  const uint64_t last  = (rec + len - 1) & kRtuLineMask;
+  // A record's lines are keyed by its byte address and their index within it:
+  // a device address fits in 48 bits and a record spans far fewer than 2^16
+  // lines.
+  for (uint64_t line = first, k = 0; line <= last; line += VX_CFG_MEM_BLOCK_SIZE, ++k) {
+    const uint64_t key = (rec << 16) | k;
+    if (sv.records->count(key)) {
+      continue;
+    }
+    if (!sv.miss) {
+      sv.miss = true;
+      sv.miss_line = line;
+      sv.miss_record = true;
+      sv.miss_key = key;
+    }
+    return false;
+  }
+  return true;
+}
+
+// What the walker decodes of a node it visits: an internal node through its
+// last quantized corner, a leaf through its header and first triangle record.
+#if VX_CFG_RTU_BVH_WIDTH == 6
+constexpr uint32_t kNodeDecodeBytes = offsetof(VxBvh6InternalNode, qaabb_max)
+                                    + 3 * kVxBvh6Width;
+#else
+constexpr uint32_t kNodeDecodeBytes = offsetof(VxBvhInternalNode, qaabb_max)
+                                    + 3 * kVxBvh4Width;
+#endif
+constexpr uint32_t kLeafDecodeBytes = kVxBvhLeafHeaderBytes + kVxBvhTriStride;
+
 // Copy a 3-vector (object-space ray capture helper).
 inline void vcopy3(float dst[3], const float src[3]) {
   dst[0] = src[0]; dst[1] = src[1]; dst[2] = src[2];
@@ -107,9 +147,14 @@ inline uint64_t cand_key(uint32_t instance_id, uint32_t record_off) {
 }
 
 // Whether a candidate at (t, key) replaces the pending one: nearer than the
-// committed hit, above the resume floor, and first in (t, key) order.
-inline bool cand_takes(const WalkCtx& ctx, float t, uint64_t key) {
-  if (!(t < ctx.best_t)) return false;
+// committed hit, above the resume floor, and first in (t, key) order. A box's t
+// is where the ray enters it, so a box entered at the committed distance (or a
+// zero-length interval it contains) is still a candidate: its shader may report
+// a hit there.
+inline bool cand_takes(const WalkCtx& ctx, float t, uint64_t key, bool box = false) {
+  if (box ? !(t <= ctx.best_t) : !(t < ctx.best_t)) {
+    return false;
+  }
   if (ctx.has_floor
    && (t < ctx.floor_t || (t == ctx.floor_t && key <= ctx.floor_key)))
     return false;
@@ -154,6 +199,9 @@ void walk_bvh4_subtree(SceneView& sv,
     for (uint32_t i = 0; i < count; ++i) {
       if (ctx.terminated) return;
       uint8_t tri_buf[kVxBvhTriStride];
+      if (!fetch_record(sv, tris_off + i * kVxBvhTriStride, kVxBvhTriStride)) {
+        return;
+      }
       read_scene_bytes(sv, tris_off + i * kVxBvhTriStride,
                        kVxBvhTriStride, tri_buf);
       if (sv.miss) return;
@@ -227,6 +275,10 @@ void walk_bvh4_subtree(SceneView& sv,
         reinterpret_cast<const VxBvhLeafHeader*>(hdr_buf);
     uint32_t leaf_sbt =
         (hdr->flags >> kVxBvhLeafSbtIdxShift) & kVxBvhLeafSbtIdxMask;
+    const ProcClassify cls = classify_proc_hit(ctx.ray_flags, hdr->flags, inst_flags);
+    if (!cls.yield) {
+      return;
+    }
     uint32_t aabbs_off = leaf_off + kVxBvhLeafHeaderBytes;
     for (uint32_t i = 0; i < count; ++i) {
       if (ctx.terminated) return;
@@ -243,18 +295,19 @@ void walk_bvh4_subtree(SceneView& sv,
       if (!ray_box(rel_mn, rel_mx, inv, ctx.tmin, ctx.best_t, t_near)) {
         continue;
       }
-      // Procedural primitives are inherently non-opaque (the IS decides the
-      // hit), so always stage an IS yield for the closest candidate.
+      // A box is always an intersection-shader candidate: the shader decides
+      // the hit. Its opacity rides along and decides whether any-hit runs.
       uint64_t key = cand_key(instance_id,
                               aabbs_off + i * uint32_t(sizeof(VxBvhProcAabb)));
-      if (cand_takes(ctx, t_near, key)) {
+      if (cand_takes(ctx, t_near, key, true)) {
         ctx.yield_pending = true;
         ctx.yield_key = key;
         ctx.yield_t = t_near; ctx.yield_u = 0.f; ctx.yield_v = 0.f;
         ctx.yield_prim = hdr->prim_base + i;   // gl_PrimitiveID, as for LEAF_TRI
         ctx.yield_instance = instance_id;
         ctx.yield_custom = custom_id;
-        ctx.yield_geom = hdr->geometry_index & VX_RT_HIT_GEOMETRY_MASK;
+        ctx.yield_geom = (hdr->geometry_index & VX_RT_HIT_GEOMETRY_MASK)
+                       | (cls.opaque ? VX_RT_HIT_OPAQUE : 0u);
         ctx.yield_sbt = leaf_sbt;
         ctx.yield_cb_type = VX_RT_CB_TYPE_PROC;
         vcopy3(ctx.yield_obj_o, ro);
@@ -270,6 +323,9 @@ void walk_bvh4_subtree(SceneView& sv,
     uint32_t insts_off = leaf_off + kVxBvhLeafHeaderBytes;
     for (uint32_t i = 0; i < count; ++i) {
       uint8_t inst_buf[kVxBvhInstanceStride];
+      if (!fetch_record(sv, insts_off + i * kVxBvhInstanceStride, kVxBvhInstanceStride)) {
+        return;
+      }
       read_scene_bytes(sv, insts_off + i * kVxBvhInstanceStride,
                        kVxBvhInstanceStride, inst_buf);
       if (sv.miss) return;
@@ -313,13 +369,23 @@ void walk_bvh4_subtree(SceneView& sv,
   while (have_current) {
     if (ctx.terminated) break;
     if (++node_visits > kMaxNodeVisits) break;
+    // Every visit fetches the node: its first line, then the rest of what the
+    // decode reads -- the whole internal node, or a leaf's header and first
+    // record.
     uint8_t kind_buf[4];
+    if (!fetch_record(sv, current, sizeof(kind_buf))) {
+      return;
+    }
     read_scene_bytes(sv, current, sizeof(kind_buf), kind_buf);
     if (sv.miss) return;
     uint32_t kind_word = 0;
     std::memcpy(&kind_word, kind_buf, sizeof(uint32_t));
     uint32_t kind  = kind_word & kVxBvhKindMask;
     uint32_t count = (kind_word >> kVxBvhCountShift) & kVxBvhCountMask;
+    if (!fetch_record(sv, current, kind == kVxBvhKindInternal ? kNodeDecodeBytes
+                                                               : kLeafDecodeBytes)) {
+      return;
+    }
 
     if (kind == kVxBvhKindLeafTri) {
       ++perf.bvh_leaves_fetched;
@@ -701,6 +767,9 @@ WalkResult Bvh4Walker::walk_lane(const RtuReq& req, uint32_t t, SceneView& sv,
   // VxBvhSceneHeader: word0 = root node byte offset. Reading it is the ray's
   // first scene access, and therefore its first fetch.
   uint8_t hdr[kRtuSceneHeaderBytes];
+  if (!fetch_record(sv, 0, sizeof(hdr))) {
+    return {true, false};
+  }
   read_scene_bytes(sv, 0, sizeof(hdr), hdr);
   if (sv.miss) return {true, false};
   uint32_t root_off = 0;

@@ -17,6 +17,45 @@
 
 namespace vortex { namespace rtu {
 
+namespace {
+
+// Effective-opacity override. The geometry's OPAQUE bit is overridden first by
+// the instance FORCE_{,NO_}OPAQUE flags, then by the ray's OPAQUE / NO_OPAQUE
+// flags (ray flags take precedence over instance flags per the Vulkan spec). If
+// both members of a pair are set, OPAQUE wins (spec leaves it undefined; we
+// pick OPAQUE for determinism).
+bool effective_opaque(uint32_t ray_flags, uint32_t geom_flags, uint32_t inst_flags) {
+  bool opaque = (geom_flags & kPhase2TriFlagOpaque) != 0;
+  if (inst_flags & kRtuInstanceFlagForceOpaque) {
+    opaque = true;
+  } else if (inst_flags & kRtuInstanceFlagForceNoOpq) {
+    opaque = false;
+  }
+  if (ray_flags & VX_RT_FLAG_OPAQUE) {
+    opaque = true;
+  } else if (ray_flags & VX_RT_FLAG_NO_OPAQUE) {
+    opaque = false;
+  }
+  return opaque;
+}
+
+// Cull-by-opacity-class.
+bool opacity_culled(uint32_t ray_flags, bool opaque) {
+  return (opaque  && (ray_flags & VX_RT_FLAG_CULL_OPAQUE))
+      || (!opaque && (ray_flags & VX_RT_FLAG_CULL_NO_OPAQUE));
+}
+
+}  // namespace
+
+ProcClassify classify_proc_hit(uint32_t ray_flags,
+                               uint32_t leaf_flags,
+                               uint32_t inst_flags) {
+  ProcClassify out{};
+  out.opaque = effective_opaque(ray_flags, leaf_flags, inst_flags);
+  out.yield  = !opacity_culled(ray_flags, out.opaque);
+  return out;
+}
+
 TriClassify classify_tri_hit(uint32_t ray_flags,
                              uint32_t tri_flags,
                              uint32_t inst_flags,
@@ -38,20 +77,10 @@ TriClassify classify_tri_hit(uint32_t ray_flags,
     if (!back_facing && (ray_flags & VX_RT_FLAG_CULL_FRONT_FACING)) return out;
   }
 
-  // Effective-opacity override. The geometry's OPAQUE bit is overridden
-  // first by the instance FORCE_{,NO_}OPAQUE flags, then by the ray's OPAQUE /
-  // NO_OPAQUE flags (ray flags take precedence over instance flags per the
-  // Vulkan spec). If both members of a pair are set, OPAQUE wins (spec leaves
-  // it undefined; we pick OPAQUE for determinism).
-  bool tri_opaque = (tri_flags & kPhase2TriFlagOpaque) != 0;
-  if (inst_flags & kRtuInstanceFlagForceOpaque)      tri_opaque = true;
-  else if (inst_flags & kRtuInstanceFlagForceNoOpq)  tri_opaque = false;
-  if (ray_flags & VX_RT_FLAG_OPAQUE)         tri_opaque = true;
-  else if (ray_flags & VX_RT_FLAG_NO_OPAQUE) tri_opaque = false;
-
-  // Cull-by-opacity-class.
-  if (tri_opaque  && (ray_flags & VX_RT_FLAG_CULL_OPAQUE))    return out;
-  if (!tri_opaque && (ray_flags & VX_RT_FLAG_CULL_NO_OPAQUE)) return out;
+  bool tri_opaque = effective_opaque(ray_flags, tri_flags, inst_flags);
+  if (opacity_culled(ray_flags, tri_opaque)) {
+    return out;
+  }
 
   if (tri_opaque) {
     out.action = TriAction::Commit;

@@ -700,11 +700,14 @@ VX_RT_SLOT_COUNT            = 32
 [rtu_status]
 # Per-lane vx_rt_wait / vx_rt_continue return status. Terminal codes 0..1 end
 # the lane's traversal loop; codes 2..4 keep it proceeding (rayQueryProceedEXT
-# semantics). YIELD_* means this lane has a candidate to service; PENDING means
-# it is still traversing and has nothing to service this iteration (its action
-# is ignored) — a candidate batch that covers only some lanes (e.g. divergent-SBT
-# reformation) leaves the rest PENDING so they neither exit the loop early nor
-# act on stale candidate data. Error codes >=128.
+# semantics). YIELD_* means this lane has a candidate to service. A candidate
+# record reports a lane whose walk has ended with nothing left to decide as
+# terminal, with its hit, so it leaves the loop at once. PENDING means the lane
+# still holds a candidate that a later batch delivers: it has nothing to service
+# this iteration and its action is ignored. Only SimX's same-warp reformation,
+# which splits a batch by SBT index, produces it; the RTL never does, and a
+# lane absent from a CONTINUE that answers a candidate it holds is taken to
+# have left its loop (ABORT). Error codes >=128.
 VX_RT_STS_DONE_HIT          = 0
 VX_RT_STS_DONE_MISS         = 1
 VX_RT_STS_YIELD_ANYHIT      = 2
@@ -732,15 +735,30 @@ VX_RT_FLAG_ENABLE_MISS             = 0x800
 # Vulkan BVH layout keeps flags above them, which the RTU drops), and
 # BACK_FACING set when a triangle hit lies on its back face after the instance's
 # FLIP_FACING, i.e. gl_HitKindEXT is BACK_FACING.
+# The three bits between them say where a record came from:
+#   OPAQUE          (candidate) the candidate is opaque after the instance and
+#                   ray overrides -- a procedural box, since a triangle comes
+#                   back only when it is not.
+#   COMMITTED_PROC  (terminal) the committed hit is a procedural primitive, at
+#                   the distance its shader reported.
+#   COMMITTED_CB    (terminal) the committed hit was accepted by a shader
+#                   verdict, not committed by the RTU as an opaque triangle.
 VX_RT_HIT_GEOMETRY_MASK            = 0x0fffffff
+VX_RT_HIT_OPAQUE                   = 0x10000000
+VX_RT_HIT_COMMITTED_PROC           = 0x20000000
+VX_RT_HIT_COMMITTED_CB             = 0x40000000
 VX_RT_HIT_BACK_FACING              = 0x80000000
 
 [rtu_cb_actions]
-# vx_rt_cb_ret action codes
+# vx_rt_cb_ret action codes. TERMINATE accepts the candidate and ends the ray.
+# DONE ends the ray without committing anything more: a closest-hit or miss
+# yield has finished shading, and an any-hit or intersection candidate is
+# dropped with traversal stopped (rayQueryTerminateEXT) -- ABORT names that use.
 VX_RT_CB_ACCEPT             = 1
 VX_RT_CB_IGNORE             = 0
 VX_RT_CB_TERMINATE          = 2
 VX_RT_CB_DONE               = 3
+VX_RT_CB_ABORT              = 3
 
 [rtu_cb_types]
 VX_RT_CB_TYPE_ANYHIT        = 1

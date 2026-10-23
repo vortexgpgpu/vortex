@@ -1,0 +1,63 @@
+/* Copyright © 2026  Vortex GPGPU
+ * SPDX-License-Identifier: MIT */
+#version 460
+#extension GL_EXT_ray_tracing : require
+#extension GL_GOOGLE_include_directive : require
+#include "rtpipe.glsl"
+
+layout(set = 0, binding = 0) uniform accelerationStructureEXT tlas;
+layout(set = 0, binding = 1, std430) buffer Records { uint rec[]; };
+layout(shaderRecordEXT, std430) buffer Sbt { uint sbt_data; };
+
+layout(location = 0) rayPayloadEXT Payload pl;
+layout(location = 1) callableDataEXT uint call;
+
+void main()
+{
+   uvec2 id = gl_LaunchIDEXT.xy;
+   float fx = float(id.x) * 0.03125;
+   vec3 o = vec3(0.0, 0.0, 2.0);
+   vec3 d = vec3(0.0, 0.0, -1.0);
+   uint flags = gl_RayFlagsNoneEXT;
+   uint sbt_off = 0u, miss = 0u;
+   float tmin = 0.0, tmax = 100.0;
+
+   switch (id.y) {
+   case ROW_ALPHA:     o.xy = vec2(-0.95 + fx, -0.9); break;
+   case ROW_TERMINATE: o.xy = vec2(0.02 + fx * 0.5, 0.25); break;
+   case ROW_PROC_OPQ:  o.xy = vec2(19.01 + fx, -0.5); break;
+   case ROW_PROC:      o.xy = vec2(20.01 + fx, 0.5); break;
+   case ROW_MISS1:     o.xy = vec2(5.0 + fx, 0.0); miss = 1u; break;
+   case ROW_MISS0:
+      o.xy = vec2(-5.0 - fx, 0.0);
+      flags = gl_RayFlagsCullBackFacingTrianglesEXT | gl_RayFlagsSkipClosestHitShaderEXT;
+      tmin = 0.5; tmax = 50.0 + fx;
+      break;
+   case ROW_RECURSE:
+      o.xy = vec2(-0.95 + fx, -0.9);
+      flags = gl_RayFlagsCullNoOpaqueEXT;
+      break;
+   case ROW_SBT_OFF:
+      o.xy = vec2(-0.95 + fx, -0.9);
+      flags = gl_RayFlagsOpaqueEXT;
+      sbt_off = 4u;
+      break;
+   default:
+      o.xy = vec2(2.3 + fx * 0.25, -0.9);
+      break;
+   }
+
+   for (uint i = 0u; i < P_WORDS; i++)
+      pl.w[i] = 0u;
+   pl.w[P_LAUNCH] = id.x | (id.y << 16);
+   pl.w[P_RGEN_REC] = sbt_data;
+   traceRayEXT(tlas, flags, 0xff, sbt_off, 1, miss, o, tmin, d, tmax, 0);
+
+   call = id.x;
+   executeCallableEXT(id.x & 1u, 1);
+   pl.w[P_CALL] = call;
+
+   uint base = (id.y * gl_LaunchSizeEXT.x + id.x) * P_WORDS;
+   for (uint i = 0u; i < P_WORDS; i++)
+      rec[base + i] = pl.w[i];
+}

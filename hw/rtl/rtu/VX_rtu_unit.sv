@@ -258,10 +258,14 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     // The CONTINUE carries every active lane's action word, including lanes that
     // are still traversing (PENDING) and whose action is meaningless. The
     // scheduler applies an action only to a lane that actually yielded a
-    // candidate, so those ride along harmlessly.
+    // candidate, so those ride along harmlessly. A lane absent from the
+    // CONTINUE left its proceed loop with the candidate in hand: it answers
+    // ABORT, which ends its ray.
     wire [NUM_LANES-1:0][RTU_CB_ACTION_BITS-1:0] cont_act;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_cont_act
-        assign cont_act[i] = execute_if.data.rs1_data[i][RTU_CB_ACTION_BITS-1:0];
+        assign cont_act[i] = execute_if.data.header.tmask[i]
+                           ? execute_if.data.rs1_data[i][RTU_CB_ACTION_BITS-1:0]
+                           : RTU_CB_ACTION_BITS'(`VX_RT_CB_ABORT);
     end
 
     assign rtu_bus_w.req_valid          = rb_more;

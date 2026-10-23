@@ -551,15 +551,16 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     reg [NUM_LANES-1:0][31:0] status_word;
     always @(*) begin
         for (integer i = 0; i < NUM_LANES; ++i) begin
-            if (!is_cand[ws]) begin
-                status_word[i] = sch_hit[wctx[i]] ? 32'(`VX_RT_STS_DONE_HIT)
-                                                  : 32'(`VX_RT_STS_DONE_MISS);
-            end else if (sch_yld[wctx[i]]) begin
+            // A candidate record is written once every lane's walk has ended,
+            // so a lane with no candidate is final: it reads its terminal
+            // status (and its hit, below) and leaves the proceed loop.
+            if (is_cand[ws] && sch_yld[wctx[i]]) begin
                 status_word[i] = (sch_cbtype[wctx[i]] == RTU_CB_TYPE_BITS'(`VX_RT_CB_TYPE_PROC))
                                ? 32'(`VX_RT_STS_YIELD_PROC)
                                : 32'(`VX_RT_STS_YIELD_ANYHIT);
             end else begin
-                status_word[i] = 32'(`VX_RT_STS_PENDING);
+                status_word[i] = sch_hit[wctx[i]] ? 32'(`VX_RT_STS_DONE_HIT)
+                                                  : 32'(`VX_RT_STS_DONE_MISS);
             end
         end
     end
@@ -602,8 +603,9 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     assign rtu_bus_w.win_data.tag     = req_tag[ws];
     assign rtu_bus_w.win_data.data    = win_word;
     // A candidate's attributes only exist for its yielding lanes; its status,
-    // and every whole-trace word, cover each active lane.
-    wire wr_uniform = wr_status || wr_payload || wr_attr;
+    // the hit span (a finished lane's terminal hit) and every whole-trace word
+    // cover each active lane.
+    wire wr_uniform = wr_status || wr_payload || wr_attr || wr_hitspan;
     wire [NUM_LANES-1:0] wr_cb_mask = sch_yld[32'(ws)*NUM_LANES +: NUM_LANES];
     assign rtu_bus_w.win_data.mask    = (is_cand[ws] && !wr_uniform) ? wr_cb_mask : req_mask[ws];
     assign rtu_bus_w.win_data.slot    =

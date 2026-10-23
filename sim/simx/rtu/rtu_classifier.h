@@ -56,6 +56,21 @@ TriClassify classify_tri_hit(uint32_t ray_flags,
                              uint32_t inst_flags,
                              bool     back_facing);
 
+// Per-box decision for a procedural leaf the ray enters. A box always comes
+// back as an intersection candidate unless the ray's opacity culls drop it; the
+// opacity is resolved the same way as a triangle's (geometry flag, then the
+// instance's FORCE_{,NO_}OPAQUE, then the ray's OPAQUE / NO_OPAQUE) and travels
+// with the candidate, because an opaque box still runs its intersection shader
+// but skips any-hit.
+struct ProcClassify {
+  bool yield;    // false: culled by CULL_OPAQUE / CULL_NO_OPAQUE
+  bool opaque;   // effective opacity of the box
+};
+
+ProcClassify classify_proc_hit(uint32_t ray_flags,
+                               uint32_t leaf_flags,
+                               uint32_t inst_flags);
+
 // ────────────────────────────────────────────────────────────────────
 // End-of-lane decision: called by walker after all tris in scene have
 // been classified. Combines `any_hit`, `yield_pending`, and ray flags

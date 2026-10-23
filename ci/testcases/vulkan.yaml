@@ -36,6 +36,47 @@ tests:
 - {id: rt-rtquery-wide, via: make-run, drivers: [simx], dir: tests/vulkan/rtquery, target: "run-{driver}",
    vars: {WIDE: 1}, touches: [hw/rtl/rtu/, sim/simx/rtu/]}
 
+# Every ray-query value against the host's own traversal: committed and
+# candidate records, confirm / ignore / terminate, generated procedural hits,
+# ray flags and cull masks, a query array, a query abandoned and re-traced, and
+# a null acceleration structure. 32x32 so the acceleration-structure builds run
+# on the device too.
+- {id: rt-rtquery-full, via: make-run, drivers: [simx], dir: tests/vulkan/rtquery_full, target: "run-{driver}",
+   touches: [hw/rtl/rtu/, sim/simx/rtu/, tests/vulkan/rtquery_full]}
+# vkCmdTraceRaysKHR with every shader stage: any-hit, intersection, both miss
+# shaders, callables, a closest-hit that traces again, and SBT record offsets
+# and data, each launch cell checked against the host's traversal.
+- {id: rt-rtpipe, via: make-run, drivers: [simx], dir: tests/vulkan/rtpipe, target: "run-{driver}",
+   touches: [hw/rtl/rtu/, sim/simx/rtu/, tests/vulkan/rtpipe]}
+# Both again on the RTL RTU: an 8-warp core runs the query dispatch and the
+# trace-rays launch on the device (EXPECT_ATTRIB pins that one device launch),
+# while the acceleration-structure builds -- 1024-wide workgroups -- fall back
+# to llvmpipe. Every case traces one ray per invocation at a time.
+- {id: rt-rtquery-full-rtl, via: make-run, drivers: [rtlsim], dir: tests/vulkan/rtquery_full,
+   target: "run-{driver}", configs: "-DVX_CFG_NUM_WARPS=8",
+   vars: {WIDE: 0, STRICT: 0, EXPECT_ATTRIB: launches=1/30_draws=0/0},
+   touches: [hw/rtl/rtu/, tests/vulkan/rtquery_full]}
+- {id: rt-rtpipe-rtl, via: make-run, drivers: [rtlsim], dir: tests/vulkan/rtpipe,
+   target: "run-{driver}", configs: "-DVX_CFG_NUM_WARPS=8",
+   vars: {WIDE: 0, STRICT: 0, EXPECT_ATTRIB: launches=1/29_draws=0/0},
+   touches: [hw/rtl/rtu/, tests/vulkan/rtpipe]}
+# Shapes the RTU does not run, on vortexpipe's llvmpipe fallback with exact
+# results and the refusal reason pinned: two queries proceeded in turn, and a
+# query held open across a workgroup barrier of two warps.
+- {id: rt-rtqinterleave, via: make-run, drivers: [simx], dir: tests/vulkan/rtqinterleave,
+   target: "run-{driver}", touches: [tests/vulkan/rtquery_full]}
+- {id: rt-rtqbarrier, via: make-run, drivers: [simx], dir: tests/vulkan/rtqbarrier,
+   target: "run-{driver}", touches: [tests/vulkan/rtquery_full]}
+# The query, the ray-tracing pipeline and a fragment-stage query handed to
+# llvmpipe on purpose: the software forms lavapipe supplies must give the
+# device's results.
+- {id: rt-rtquery-full-cpu, via: make-run, drivers: [simx], dir: tests/vulkan/rtquery_full_cpu,
+   target: "run-{driver}", touches: [tests/vulkan/rtquery_full]}
+- {id: rt-rtpipe-cpu, via: make-run, drivers: [simx], dir: tests/vulkan/rtpipe_cpu,
+   target: "run-{driver}", touches: [tests/vulkan/rtpipe]}
+- {id: rt-rtqdraw-cpu, via: make-run, drivers: [simx], dir: tests/vulkan/rtqdraw_cpu,
+   target: "run-{driver}", touches: [tests/vulkan/rtqdraw]}
+
 # Rasterized 3D with multiple draw calls into one attachment.
 - {id: gfx-multidraw, via: make-run, drivers: [simx, rtlsim], dir: tests/vulkan/multidraw, target: "run-{driver}",
    touches: [hw/rtl/raster/, hw/rtl/om/, sim/simx/raster/, sim/simx/om/]}

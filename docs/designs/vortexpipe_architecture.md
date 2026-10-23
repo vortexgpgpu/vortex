@@ -180,6 +180,20 @@ statistics query, or under a query-based render condition, stands
 aside so llvmpipe both renders and counts — the counters live
 entirely in llvmpipe and a device draw would silently return zero.
 
+What llvmpipe runs must be a shader llvmpipe can execute. Where vortexpipe
+lowers an operation to device intrinsics itself -- ray queries and the
+ray-tracing pipeline, in the stages of `pipe_caps::driver_ray_query_stages` --
+lavapipe hands it a second form of the shader with that operation lowered in
+software (`fallback_nir` in `pipe_shader_state` / `pipe_compute_state`: its BVH
+walk of the ray queries, its software ray-tracing pipeline), and vortexpipe
+gives llvmpipe that form, finalized for llvmpipe, while the device kernel is
+built from the first. A compute shader that requires a subgroup size llvmpipe
+does not run (lavapipe's acceleration-structure builds, specialized for the
+warp) has no fallback at all: such a dispatch is dropped with an error rather
+than executed at the wrong width. `$VORTEXPIPE_FORCE_LLVMPIPE` (`launch`,
+`draw`, `all`) hands work llvmpipe can run to it on purpose, reported as
+`forced`, so the fallback path is tested directly.
+
 #### 1.5.1 Gated fallback vs. silent collapse
 
 Not every "unsupported" feature is a gated fallback. Two kinds of
@@ -628,6 +642,40 @@ relocates blob by blob:
   transcodes the Vulkan AS to the RTU scene format (or copies the BVH
   when the device has no RTU), recursively bringing each instance's
   BLAS across and rewriting the absolute links to device addresses.
+
+**Ray tracing on the RTU.** A ray query lowers in `vp_finalize_nir`
+(`vp_nir_lower_ray_tracing_to_rtu`): every `rayQueryEXT` (or array element)
+gets its own state -- the staged ray, the trace handle and status, the verdict,
+and a committed record filled from the shader's confirm / generate and from the
+RTU's terminal record (whose `COMMITTED_PROC` bit names a generated hit) -- and a
+trace still open when its query is re-initialized or the shader ends is closed
+with `ABORT`. A ray-tracing pipeline is one compute launch built by lavapipe
+(`lvp_compile_ray_tracing_pipeline_rtu`): raygen, closest-hit, miss and callable
+stages are split at their shader calls (`nir_lower_shader_calls`) into functions
+of a dispatch loop that pushes and pops resume ids on a per-invocation stack,
+with one traversal site where any-hit and intersection shaders run inline in the
+candidate loop and lanes with different ray flags, cull masks or scenes trace one
+configuration at a time. That launch -- recognized by its trace-rays command
+buffer -- keeps its scratch in device memory: the command carries the bytes each
+invocation needs (the entry shader's variables plus the pipeline stack size, from
+`vkGetRayTracingShaderGroupStackSizeKHR` or
+`vkCmdSetRayTracingPipelineStackSizeKHR`), `vp_launch` allocates one slice per
+hardware thread and passes it in `VP_ARG_SCRATCH` / `VP_ARG_SCRATCH_STRIDE`, and
+the translator addresses a thread's slice from its core, warp and lane.
+The RTU stages one returned candidate per warp, and `CONTINUE` resumes the trace
+that yielded it. A ray query opened inside the launch's candidate loop (in an
+any-hit or intersection stage) would need a second candidate in flight, so
+`vp_finalize_nir` marks such a shader (`vp_nir_ray_query_in_candidate_loop`), as
+it does one that proceeds a query inside another query's proceed loop or walks a
+query array across a loop's iterations (`vp_nir_ray_queries_interleave`); its
+work runs on llvmpipe or, under STRICT, is refused as `nested-trace`. Otherwise
+a query traced while another of the invocation is still open closes the other
+first (ABORT), and `rayQueryTerminateEXT` closes its own at once, so at most one
+trace per invocation is ever open; a drain reads the lane's live status from
+the hit window, since a lane that left its loop holding a candidate had it
+ABORTed by the CONTINUE of the lanes that stayed. A ray-tracing launch is named
+by lavapipe (`pipe_compute_state::ray_tracing_launch`) rather than recognized,
+and one that arrives without a scratch size is refused.
 
 Only descriptors the shader **writes** (`writable`: `store_ssbo`, an
 SSBO atomic, an image store/atomic) are read back into the host

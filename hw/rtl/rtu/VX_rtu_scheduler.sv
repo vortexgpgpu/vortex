@@ -675,6 +675,19 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     wire [31:0] tri_geom = (word_q.geom_r & `VX_RT_HIT_GEOMETRY_MASK)
                          | (eff_back ? `VX_RT_HIT_BACK_FACING : 32'd0);
 
+    // A procedural leaf resolves its opacity the way a triangle does, from the
+    // leaf's flag word. Its box still comes back as an intersection candidate
+    // (the shader decides the hit), carrying the opacity that decides whether
+    // any-hit runs; SKIP_AABBS and the opacity culls drop the whole leaf.
+    wire skip_aabbs  = (rflags & 32'(`VX_RT_FLAG_SKIP_AABBS)) != 0;
+    wire proc_opaque = ray_opaque   ? 1'b1
+                     : ray_noopaque ? 1'b0
+                     : inst_fopq    ? 1'b1
+                     : inst_fnopq   ? 1'b0
+                     : ((leaf_flags & RTU_TRI_FLAG_OPAQUE) != 0);
+    wire proc_cull   = skip_aabbs
+                    || (proc_opaque && cull_opaque) || (!proc_opaque && cull_noopq);
+
     // BLAS traversal runs the object-space ray
     wire [2:0][31:0] walk_ro    = word_q.in_blas ? word_q.obj_o     : ray_q.origin;
     wire [2:0][31:0] walk_rd    = word_q.in_blas ? word_q.obj_d     : ray_q.dir;
@@ -1105,14 +1118,19 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         end
     end
 
-    // An intersection shader reports its own t: it commits only if nearer than
-    // the committed hit (the captured row at BW_CAP3). The shader already
-    // checked it against the ray interval it knows of, which cannot include
-    // the opaque hits the walk committed on its own.
+    // An intersection shader reports its own t: it commits only if no farther
+    // than the committed hit (the captured row at BW_CAP3). The shader already
+    // held it to the ray interval it knows of (closed, as reportIntersectionEXT's
+    // is), which cannot include the opaque hits the walk committed on its own.
     reg [NUM_LANES-1:0] bw_keep_mask;
     // the lanes whose verdict did not end the ray: they re-walk above it
     reg [NUM_LANES-1:0] res_rewalk;
     wire bw_term_first = ((32'(slot_flags[bw_slot]) & 32'(`VX_RT_FLAG_TERMINATE_ON_FIRST_HIT)) != 0);
+    // Hit distances are non-negative floats, ordered as unsigned words once
+    // -0.0 is taken as the +0.0 it equals.
+    function automatic logic [31:0] t_order(input logic [31:0] t);
+        t_order = (t == 32'h80000000) ? 32'd0 : t;
+    endfunction
     always @(*) begin
         for (integer j = 0; j < NUM_LANES; j = j + 1) begin
             logic [CTX_TAG_W-1:0] c;
@@ -1121,8 +1139,10 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             is_proc = (cbtype_q[c] == RTU_CB_TYPE_BITS'(`VX_RT_CB_TYPE_PROC));
             decides = is_proc || (cbtype_q[c] == RTU_CB_TYPE_BITS'(`VX_RT_CB_TYPE_ANYHIT));
             bw_keep_mask[j] = bw_copy_mask[j]
-                && !(is_proc && hit_q[c] && !(bw_data2[j*32 +: 32] < ws_rdata[j*32 +: 32]));
+                && !(is_proc && hit_q[c]
+                     && (t_order(bw_data2[j*32 +: 32]) > t_order(ws_rdata[j*32 +: 32])));
             ends = (act_q[c] == RTU_CB_ACTION_BITS'(`VX_RT_CB_TERMINATE))
+                || (decides && (act_q[c] == RTU_CB_ACTION_BITS'(`VX_RT_CB_ABORT)))
                 || (bw_copy_mask[j] && bw_term_first);
             res_rewalk[j] = bw_is_res && yld_q[c] && decides && !ends;
         end
@@ -1164,10 +1184,19 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             bw_wr_addr = {bw_slot, bw_dst_base + RTU_WS_WORD_BITS'(32'(bw_field))};
             bw_wr_mask = bw_copy_mask;
             for (integer j = 0; j < NUM_LANES; j = j + 1) begin
-                // a PROC accept commits the intersection shader's own t
-                if (bw_is_res && (bw_field == 3'd0)
-                 && (cbtype_q[32'(bw_slot)*NUM_LANES + j] == RTU_CB_TYPE_BITS'(`VX_RT_CB_TYPE_PROC))) begin
+                logic res_proc, res_decides;
+                res_proc = (cbtype_q[32'(bw_slot)*NUM_LANES + j] == RTU_CB_TYPE_BITS'(`VX_RT_CB_TYPE_PROC));
+                res_decides = res_proc
+                           || (cbtype_q[32'(bw_slot)*NUM_LANES + j] == RTU_CB_TYPE_BITS'(`VX_RT_CB_TYPE_ANYHIT));
+                if (bw_is_res && (bw_field == 3'd0) && res_proc) begin
+                    // a PROC accept commits the intersection shader's own t
                     bw_wr_data[j*32 +: 32] = bw_data2[j*32 +: 32];
+                end else if (bw_is_res && (bw_field == 3'(RTU_WS_F_GEOM))) begin
+                    // the committed record names an any-hit or intersection
+                    // verdict as its source
+                    bw_wr_data[j*32 +: 32] = (bw_data[j*32 +: 32] & ~32'(`VX_RT_HIT_OPAQUE))
+                                           | (res_decides ? 32'(`VX_RT_HIT_COMMITTED_CB) : 32'd0)
+                                           | (res_proc ? 32'(`VX_RT_HIT_COMMITTED_PROC) : 32'd0);
                 end else begin
                     bw_wr_data[j*32 +: 32] = bw_data[j*32 +: 32];
                 end
@@ -1471,13 +1500,17 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                     word_n.cstate  = CS_LTRI_REQ0;
                 end
                 wake_self = 1'b1;
+            end else if (node_kind == RTU_KIND_LEAF_PROC && proc_cull) begin
+                word_n.cstate = CS_POP;
+                wake_self     = 1'b1;
             end else if (node_kind == RTU_KIND_LEAF_PROC) begin
                 if (coll_alloc_ok) begin
                     coll_alloc_r     = 1'b1;
                     box_raw_r        = 1'b1;   // the raw AABB is fed this pass
                     word_n.coll_id   = coll_alloc_idx;
                     word_n.prim_base = leaf_prim;
-                    word_n.geom_r    = leaf_geom;
+                    word_n.geom_r    = (leaf_geom & `VX_RT_HIT_GEOMETRY_MASK)
+                                     | (proc_opaque ? `VX_RT_HIT_OPAQUE : 32'd0);
                     word_n.proc_sbt  = RTU_CB_SBT_BITS'((leaf_flags >> RTU_TRI_SBT_IDX_SHIFT)
                                                         & RTU_TRI_SBT_IDX_MASK);
                     word_n.cstate    = CS_PROC_WAIT;
@@ -1565,8 +1598,12 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         end
         CS_PROC_WAIT: begin
             // woken by the collector: the raw AABB result landed
+            // a box entered at the committed distance (or a zero-length
+            // interval inside it) is still a candidate: its shader may report
+            // a hit there. A parked context is never fresh or re-walking, so
+            // its committed t is the stored one, as the PEs see it.
             if (coll_hit_q
-             && (coll_t0_q < word_x.best_t)
+             && (coll_t0_q <= word_q.best_t)
              && above_floor(coll_t0_q)
              && before_yld(coll_t0_q)) begin
                 cf_din_r.kind = CK_YLDP;
@@ -1574,7 +1611,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 cf_din_r.prim = word_x.prim_base;
                 cf_din_r.inst = word_x.in_blas ? word_x.inst_id   : 32'd0;
                 cf_din_r.cust = word_x.in_blas ? word_x.inst_cust : 32'd0;
-                cf_din_r.geom = word_x.geom_r & `VX_RT_HIT_GEOMETRY_MASK;
+                cf_din_r.geom = word_x.geom_r;
                 cf_din_r.sbt  = word_x.proc_sbt;
                 cf_din_r.objv = word_x.in_blas;
                 cf_din_r.obj  = {word_x.obj_d, word_x.obj_o};

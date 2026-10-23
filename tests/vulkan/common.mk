@@ -145,6 +145,13 @@ endif
 # the space -- e.g. launches=0/0_draws=2/3. The line goes on with the staging
 # counters; a word pins as many of its leading fields as it names.
 EXPECT_ATTRIB ?=
+# A test of the llvmpipe fallback itself (STRICT := 0) hands work there on
+# purpose: FORCE_LLVMPIPE names the work vortexpipe must run on llvmpipe though
+# the device could ("launch", "draw" or "all"), reported by reason as forced.
+FORCE_LLVMPIPE ?=
+ifneq ($(FORCE_LLVMPIPE),)
+RUN_ENV += VORTEXPIPE_FORCE_LLVMPIPE=$(FORCE_LLVMPIPE)
+endif
 # EXPECT_CPU lists, one word per reason, the llvmpipe executions some context
 # must report by reason, as its vortexpipe-cpu line prints them -- e.g.
 # sparse-image=2.

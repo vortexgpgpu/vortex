@@ -144,13 +144,29 @@ while (vx_rt_sts_is_yield(sts)) {
 }
 ```
 
-A candidate batch covers only the lanes that actually yielded (`YIELD_ANYHIT` /
-`YIELD_PROC`); every other active lane reports `PENDING` — still traversing,
-nothing to shade this iteration — so it stays in the loop rather than exit on
-stale data, and the RTU ignores whatever action a PENDING lane contributes. This
-is what makes a partial batch (e.g. divergent-SBT reformation, which groups
-candidates by shader) correct. `vx_rt_continue`'s `t`/`attr` ride the CONTINUE
-operands, so the shader never writes RTU state.
+A candidate record is written once every lane's walk has ended. It reports
+`YIELD_ANYHIT` / `YIELD_PROC` for the lanes that hold a candidate, and a lane that
+has finished with nothing left to decide reads its **terminal** status and hit in
+that same record, so it leaves the loop at once — a ray query must never see an
+iteration without a candidate. Only a lane whose candidate a *later* batch
+delivers reports `PENDING`: it stays in the loop, and the RTU ignores whatever
+action it contributes. `PENDING` is SimX-only: its same-warp reformation splits
+a batch by SBT index, which the RTL does not do (a transcoded Vulkan scene has a
+single SBT index, so neither model splits its batches). A lane that holds a
+candidate but is absent from the CONTINUE answering it — it broke out of its
+loop, or was discarded — is taken to have left: both models apply `ABORT` to it,
+which ends its ray. Every record writes the status word (`VX_RT_STATUS`, its last
+word) for each lane of its trace and no other, so a lane that left reads its
+live status from the window once the lanes that stayed have moved its trace on. `vx_rt_continue`'s `t`/`attr` ride the CONTINUE operands, so the
+shader never writes RTU state.
+
+The verdicts: `IGNORE` drops the candidate and resumes the walk above it;
+`ACCEPT` commits it (an intersection candidate at the shader's `t`, when nearer
+than the committed hit) and resumes; `TERMINATE` commits it and ends the ray; and
+`DONE`, on an any-hit or intersection candidate, ends the ray **without**
+committing it (`VX_RT_CB_ABORT`, `rayQueryTerminateEXT`): the terminal record is
+the hit committed so far. On a closest-hit or miss yield `DONE` means the shader
+has finished.
 
 > A trap-style dispatcher (`VX_RT_CALLBACK_ENTRY` + `vx_mret`) also exists in the
 > ISA header for a future DXR `traceRays`+SBT pipeline with recursion; it shares
@@ -187,7 +203,18 @@ Status codes ([`rtu_status`](../../VX_types.toml)): terminal `DONE_HIT`(0) /
 `PENDING`(4) keep it proceeding. Ray flags mirror `SpvRayFlags*` (opaque / no-
 opaque / terminate-on-first-hit / skip-closest-hit / cull-back / cull-front /
 cull-opaque / cull-no-opaque / skip-triangles / skip-aabbs / enable-CHS /
-enable-MISS). Callback actions: `IGNORE`(0) / `ACCEPT`(1) / `TERMINATE`(2).
+enable-MISS). Callback actions: `IGNORE`(0) / `ACCEPT`(1) / `TERMINATE`(2) /
+`DONE`·`ABORT`(3).
+
+The `HIT_GEOMETRY_INDEX` word carries the geometry index in bits 0..27 and four
+flags ([`rtu_hit_bits`](../../VX_types.toml)): `BACK_FACING` (31); on a terminal
+record `COMMITTED_CB` (30, the hit was accepted by a shader verdict rather than
+committed by the RTU as an opaque triangle) and `COMMITTED_PROC` (29, it is a
+procedural primitive at the shader's `t`); on a candidate `OPAQUE` (28, the
+candidate is opaque after the geometry, instance and ray overrides — a procedural
+box, which still runs its intersection shader but skips any-hit). A procedural
+leaf is opacity-classified like a triangle: `CULL_OPAQUE` / `CULL_NO_OPAQUE` and
+`SKIP_AABBS` drop it before it yields.
 
 `vx_rt_wait` marshals the window into `vx_hit_t` field-by-field (via a GETWF FP
 read for `t`/`u`/`v` and a GETW GP read for the four ids), each chained on the
@@ -467,7 +494,12 @@ oracle**:
 
 SimX additionally models **per-warp multi-trace concurrency** (several traces in
 flight from one warp), which the RTL core does not implement — SimX remains the
-oracle for that. Perf: MPM class `RTU` plus the SimX `PerfStats` (context/slot
+oracle for that. It covers traces that yield no candidate while another is
+parked. The returned-candidate state is still one per warp in both models (the
+handle and mask `CONTINUE` resumes, and the hit window), so a second trace that
+yields a candidate while the first holds one — a ray query in an any-hit or
+intersection stage, or interleaved queries on non-opaque geometry — is outside
+both. Perf: MPM class `RTU` plus the SimX `PerfStats` (context/slot
 occupancy, front-end busy ticks, box/tri test counts); the RTL core keeps its own
 per-slot occupancy counters (busy / write / callback / fill and the two idle
 causes: idle-with-a-ray vs starved) under `DBG_RTU_OCC`.
@@ -512,7 +544,8 @@ Grades: ✅ done · ⚠️ partial · ❌ pending.
 | Per-triangle AHS classifier in the CW-BVH walker | ✅ | opacity/face-cull/force-opaque, terminate-on-first-hit |
 | Read-only hit window (RTU sole writer; no `SETW`; overlap with graphics removed) | ✅ | window is the RTU's alone |
 | Multi-warp concurrent traversal (`NUM_SLOTS` traces) | ✅ | one trace **per warp** |
-| Reformation — single-group, divergent-SBT multi-group, multi-warp | ✅ | RTL + SimX (partial candidate batches + PENDING lanes) |
+| Reformation — single-group, divergent-SBT multi-group, multi-warp | ✅ | RTL + SimX (partial candidate batches; finished lanes report terminal) |
+| Record provenance (`COMMITTED_CB`/`_PROC`), candidate opacity, `ABORT`, `SKIP_AABBS` | ✅ | RTL + SimX (`rt_smoke_abort`, `rt_smoke_proc_flags`) |
 | Host CW-BVH / TLAS builder | ✅ | `vortex::raytrace` |
 | **Per-warp multi-trace pool** (async batch / recursion) | ❌ | staging is one entry per `{src, wid}`; recursion also needs a per-warp context stack |
 | **AS + module residency** | ❌ | BVH rebuilt per dispatch (driver) |

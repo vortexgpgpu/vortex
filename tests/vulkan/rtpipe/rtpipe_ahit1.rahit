@@ -1,0 +1,21 @@
+/* Copyright © 2026  Vortex GPGPU
+ * SPDX-License-Identifier: MIT
+ *
+ * Non-opaque triangles: an alpha test on the first barycentric, and on the
+ * terminate row an accept that ends the ray. */
+#version 460
+#extension GL_EXT_ray_tracing : require
+#extension GL_GOOGLE_include_directive : require
+#include "rtpipe.glsl"
+
+layout(location = 0) rayPayloadInEXT Payload pl;
+hitAttributeEXT vec2 bary;
+
+void main()
+{
+   pl.w[P_AHS]++;
+   if ((pl.w[P_LAUNCH] >> 16) == ROW_TERMINATE)
+      terminateRayEXT;
+   if (bary.x < 0.25)
+      ignoreIntersectionEXT;
+}

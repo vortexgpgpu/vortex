@@ -119,6 +119,10 @@ void MemoryEngine::drain_mem_rsp() {
         std::memcpy(cx.lines[e.addr].data(), rsp.data->data(),
                     VX_CFG_MEM_BLOCK_SIZE);
       }
+      if (cx.req_record) {
+        cx.records.insert(cx.req_key);
+        cx.req_record = false;
+      }
       cx.state = CtxState::PROBE;
     }
     e.valid = false;
