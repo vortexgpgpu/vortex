@@ -352,9 +352,10 @@ so the flow reports the signed worst slack instead.
 
 #### What the timing gate asserts
 
-The screen counts logic levels, not slack: it does not see wires, so it gates
-depth, which it predicts (Spearman 0.49–0.93 against Vivado per register on the
-V80 gates), and leaves Fmax to `fpga_gate`. It counts them for the family of
+The screen ([timing_screen.md](timing_screen.md)) counts logic levels, not
+slack: it does not see wires, so it gates depth, which it predicts (Spearman
+0.50–0.93 against Vivado per register on the V80 gates), and leaves Fmax to
+`fpga_gate`. It counts them for the family of
 the DUT flow's `DEVICE` (the U55C by default), which
 `gen_platform.py --emit=family` reads from `hw/syn/xilinx/platforms`; the
 device is part of the baseline fingerprint, as it is for `fpga_gate`. The
