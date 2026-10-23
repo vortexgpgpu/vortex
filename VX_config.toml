@@ -218,7 +218,10 @@ VX_CFG_ICACHE_CRSQ_SIZE = 0
 VX_CFG_ICACHE_MEM_PORTS = 1
 # banks behind the fetch-slice request ports
 VX_CFG_ICACHE_NUM_BANKS = "expr: pow(2, clog2($VX_CFG_FETCH_WIDTH))"
-VX_CFG_ICACHE_LATENCY = "expr: 2 + max(0, clog2($VX_CFG_ICACHE_SIZE) - clog2(16384))"
+# bank pipeline depth: with more banks the data array's enables and address
+# spread too far to follow the tag compare in one cycle, so a third stage
+# defers the array
+VX_CFG_ICACHE_LATENCY = "expr: 2 + int($VX_CFG_ICACHE_NUM_BANKS > 2) + max(0, clog2($VX_CFG_ICACHE_SIZE) - clog2(16384))"
 
 VX_CFG_DCACHE_SIZE = 16384
 VX_CFG_DCACHE_NUM_WAYS = 4
@@ -246,7 +249,8 @@ VX_CFG_DCACHE_MSHR_LINES = 0
 # when L1_LINE is overridden, so a sub-block line stays a valid sectored config.
 VX_CFG_DCACHE_LINE_SIZE = "expr: $VX_CFG_L1_LINE_SIZE"
 VX_CFG_DCACHE_SECTOR_SIZE = "expr: $VX_CFG_L1_LINE_SIZE"
-VX_CFG_DCACHE_LATENCY = "expr: 2 + max(0, clog2($VX_CFG_DCACHE_SIZE) - clog2(16384))"
+# bank pipeline depth: as the I-cache's
+VX_CFG_DCACHE_LATENCY = "expr: 2 + int($VX_CFG_DCACHE_NUM_BANKS > 8) + max(0, clog2($VX_CFG_DCACHE_SIZE) - clog2(16384))"
 VX_CFG_DCACHE_MRSQ_SIZE = 4
 VX_CFG_DCACHE_MREQ_SIZE = 0
 VX_CFG_DCACHE_CRSQ_SIZE = 0
