@@ -33,6 +33,13 @@ namespace {
 
 constexpr uint32_t kMaxFanout = 8;
 
+// The cache's port and response arbiters slice by four over more than 12
+// requesters (VX_cache's core_req_xbar and core_rsp_arb), keeping the tree's
+// depth with shallower slices.
+uint32_t arb_fanout(uint32_t requesters) {
+  return (requesters > 12) ? 4 : kMaxFanout;
+}
+
 // An arbiter over more than 1.5x the fan-out limit is split into a buffered
 // tree: slices of up to the fan-out limit each grant into their own buffer,
 // and those buffers are arbitrated the same way, one level per cycle, until
@@ -40,8 +47,9 @@ constexpr uint32_t kMaxFanout = 8;
 // slice count, none for a single arbiter.
 std::vector<uint32_t> arb_tree_levels(uint32_t requesters) {
   std::vector<uint32_t> levels;
-  for (uint32_t n = requesters; n > kMaxFanout + kMaxFanout / 2;) {
-    n = (n + kMaxFanout - 1) / kMaxFanout;
+  uint32_t f = arb_fanout(requesters);
+  for (uint32_t n = requesters; n > f + f / 2;) {
+    n = (n + f - 1) / f;
     levels.push_back(n);
   }
   return levels;
@@ -2271,6 +2279,7 @@ public:
     , lg2_inputs_(log2ceil(num_inputs))
     // the request crossbar registers its output when it has more than two inputs
     , delay_((num_inputs > 2) ? 1 : 0)
+    , fanout_(arb_fanout(num_inputs))
     , levels_(arb_tree_levels(num_inputs))
     , merge_group_(merge_group)
   {
@@ -2390,7 +2399,7 @@ protected:
     if (s == levels_.size()) {
       return inputs;
     }
-    return std::min(kMaxFanout, inputs - sl * kMaxFanout);
+    return std::min(fanout_, inputs - sl * fanout_);
   }
 
   void on_tick() {
@@ -2411,7 +2420,7 @@ protected:
           if (out.full()) {
             continue;
           }
-          uint32_t lo = (s < nl) ? sl * kMaxFanout : 0;
+          uint32_t lo = (s < nl) ? sl * fanout_ : 0;
           uint32_t size = this->arb_slice_size(s, sl);
           auto& rr = rr_.at(s).at(b * slices + sl);
           for (uint32_t k = 0; k < size; ++k) {
@@ -2459,7 +2468,7 @@ protected:
     // requesting ports per bank and first-level slice; non-cacheable requests
     // leave on their own port
     uint32_t slices = this->arb_slices(0);
-    uint32_t slice_ports = (nl != 0) ? kMaxFanout : n;
+    uint32_t slice_ports = (nl != 0) ? fanout_ : n;
     std::vector<uint32_t> want(nb * slices, 0);
     std::vector<uint32_t> wants(nb, 0);
     for (uint32_t i = 0; i < n; ++i) {
@@ -2553,7 +2562,7 @@ protected:
     uint32_t nb = ReqOut.size();
     uint32_t nl = levels_.size();
     uint32_t slices = this->arb_slices(0);
-    uint32_t slice_ports = (nl != 0) ? kMaxFanout : n;
+    uint32_t slice_ports = (nl != 0) ? fanout_ : n;
     std::vector<uint32_t> want(nb * slices, 0);
     std::vector<uint32_t> wants(nb, 0);
     for (uint32_t i = 0; i < n; ++i) {
@@ -2607,6 +2616,7 @@ private:
   uint32_t lg2_inputs_;
   uint32_t delay_;
   uint32_t init_cycles_ = 0;
+  uint32_t fanout_;                                         // ports per first-level slice
   std::vector<uint32_t> levels_;                            // [level] slices per bank
   std::vector<std::vector<SimChannel<MemReq>>> tree_stage_; // [level][bank][slice]
   std::vector<std::vector<uint32_t>> rr_;                   // [arbiter level][bank][slice] next to grant
@@ -2637,6 +2647,7 @@ public:
     , RspOut(num_outputs, this)
     , lg2_outputs_(log2ceil(num_outputs))
     , merge_group_(merge_group)
+    , fanout_(arb_fanout(num_banks))
     , slices_(arb_tree_slices(num_banks))
     , sent_(num_banks, 0)
     , last_grant_(num_outputs * slices_, num_banks - 1)
@@ -2694,8 +2705,8 @@ protected:
     }
     for (uint32_t o = 0; o < no; ++o) {
       for (uint32_t sl = 0; sl < slices_; ++sl) {
-        uint32_t lo = (slices_ > 1) ? sl * kMaxFanout : 0;
-        uint32_t hi = (slices_ > 1) ? std::min(lo + kMaxFanout, nb) : nb;
+        uint32_t lo = (slices_ > 1) ? sl * fanout_ : 0;
+        uint32_t hi = (slices_ > 1) ? std::min(lo + fanout_, nb) : nb;
         auto& out = (slices_ > 1) ? tree_stage_.at(o * slices_ + sl) : RspOut.at(o);
         auto& rr = last_grant_.at(o * slices_ + sl);
         for (uint32_t k = 1; k <= nb; ++k) {
@@ -2725,6 +2736,7 @@ protected:
 private:
   uint32_t lg2_outputs_;
   uint32_t merge_group_;
+  uint32_t fanout_;
   uint32_t slices_;
   std::vector<uint64_t> sent_;       // [bank] ports that took the lane's response
   std::vector<uint32_t> last_grant_; // [port][slice] round-robin pointer

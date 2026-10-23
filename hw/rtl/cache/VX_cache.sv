@@ -424,12 +424,17 @@ module VX_cache import VX_gpu_pkg::*; #(
 `ifdef PERF_ENABLE
     wire [PERF_CTR_BITS-1:0] perf_collisions;
 `endif
+    // Over more than 12 ports the arbiters are a tree anyway; slices of four
+    // instead of eight keep its depth and shorten the round-robin each stage
+    // entry's pop waits on.
+    localparam REQ_ARB_FANOUT = (NUM_REQS > 12) ? 4 : `MAX_FANOUT;
     VX_stream_xbar #(
         .NUM_INPUTS  (NUM_REQS),
         .NUM_OUTPUTS (NUM_BANKS),
         .DATAW       (CORE_REQ_DATAW),
         .PERF_CTR_BITS (PERF_CTR_BITS),
         .ARBITER     ("R"),
+        .MAX_FANOUT  (REQ_ARB_FANOUT),
         .OUT_BUF     (REQ_XBAR_BUF)
     ) core_req_xbar (
         .clk       (clk),
@@ -600,6 +605,7 @@ module VX_cache import VX_gpu_pkg::*; #(
                 .NUM_OUTPUTS (1),
                 .DATAW       (CORE_RSP_DATAW),
                 .ARBITER     ("R"),
+                .MAX_FANOUT  ((NUM_BANKS > 12) ? 4 : `MAX_FANOUT),
                 .OUT_BUF     (CORE_OUT_BUF)
             ) core_rsp_arb (
                 .clk       (clk),
