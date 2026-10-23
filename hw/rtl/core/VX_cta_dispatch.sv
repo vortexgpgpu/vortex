@@ -734,14 +734,17 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
         input logic [CTA_TID_WIDTH:0]        bd_x,
         input logic [CTA_TID_WIDTH:0]        bd_y
     );
+        // prev is a reduced coordinate (prev[0] < bd_x, prev[1] < bd_y: the
+        // warp bases come from tid_advance), so a +1 step wraps exactly when
+        // it reaches the dimension, and wraps to 0.
         logic [CTA_TID_WIDTH:0] nx, ny;
         logic wx, wy;
         nx = {1'b0, prev[0]} + (CTA_TID_WIDTH+1)'(1);
-        wx = (nx >= bd_x);
+        wx = (nx == bd_x);
         ny = {1'b0, prev[1]} + (CTA_TID_WIDTH+1)'(wx);
-        wy = wx && (ny >= bd_y);
-        tid_next[0] = wx ? CTA_TID_WIDTH'(nx - bd_x) : CTA_TID_WIDTH'(nx);
-        tid_next[1] = wy ? CTA_TID_WIDTH'(ny - bd_y) : CTA_TID_WIDTH'(ny);
+        wy = wx && (ny == bd_y);
+        tid_next[0] = wx ? '0 : CTA_TID_WIDTH'(nx);
+        tid_next[1] = wy ? '0 : CTA_TID_WIDTH'(ny);
         tid_next[2] = prev[2] + CTA_TID_WIDTH'(wy);
     endfunction
 
