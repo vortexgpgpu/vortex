@@ -2274,6 +2274,16 @@ public:
     , levels_(arb_tree_levels(num_inputs))
     , merge_group_(merge_group)
   {
+    // With more than two ports a request stage sits ahead of the bank
+    // arbiters: the flush hold, read merging and the non-cacheable split act on
+    // the port heads, the arbiters on the stage.
+    if (num_inputs > 2) {
+      stage_.reserve(num_inputs);
+      for (uint32_t i = 0; i < num_inputs; ++i) {
+        stage_.emplace_back(this, 2);
+        stage_.back().set_registered_ready(true);
+      }
+    }
     __assert(merge_group_ <= 1 || (merge_group_ <= 64 && ispow2(merge_group_) && (num_inputs % merge_group_) == 0),
              "a read-merge group must be a power of two of at most 64 dividing the ports");
     tree_stage_.reserve(levels_.size());
@@ -2331,6 +2341,11 @@ public:
 
   // No cacheable request is left between the ports and the banks.
   bool drained() const {
+    for (auto &stage : stage_) {
+      if (stage.size() != 0) {
+        return false;
+      }
+    }
     for (auto &level : tree_stage_) {
       for (auto &stage : level) {
         if (stage.size() != 0) {
@@ -2413,6 +2428,9 @@ protected:
       }
     }
     uint32_t n = ReqIn.size();
+    if (!stage_.empty()) {
+      this->arbitrate_stage();
+    }
     const bool hold = this->any_token();
     // merged ports riding each leader's bank access, by offset in its group
     std::vector<bool> followers(n, false);
@@ -2460,6 +2478,14 @@ protected:
         continue;
       }
       if (!hold) {
+        if (!stage_.empty()) {
+          auto& stage = stage_.at(i);
+          if (!stage.full()) {
+            stage.send(this->tagged(i, merged), 1);
+            in.pop();
+          }
+          continue;
+        }
         uint32_t b = params_.addr_bank_id(req.addr);
         want.at(b * slices + i / slice_ports) |= 1u << (i % slice_ports);
         ++wants.at(b);
@@ -2493,8 +2519,9 @@ protected:
     }
   }
 
-  // Send port i's request to its bank, with the ports merged into it.
-  void grant(uint32_t i, SimChannel<MemReq>& out, const std::vector<uint64_t>& merged) {
+  // Port i's request with the ports merged into it, those popped, and the
+  // bank tag that carries them and the port.
+  MemReq tagged(uint32_t i, const std::vector<uint64_t>& merged) {
     auto req = ReqIn.at(i).peek();
     uint64_t mask = 0;
     if (merge_group_ > 1) {
@@ -2509,8 +2536,61 @@ protected:
     uint64_t tag = (((uint64_t(req.tag) << this->merge_bits()) | mask) << lg2_inputs_) | i;
     __assert((tag >> 32) == 0, "cache bank tag overflow");
     req.tag = uint32_t(tag);
+    return req;
+  }
+
+  // Send port i's request to its bank, with the ports merged into it.
+  void grant(uint32_t i, SimChannel<MemReq>& out, const std::vector<uint64_t>& merged) {
+    auto req = this->tagged(i, merged);
     out.send(req, levels_.empty() ? delay_ : 1);
     ReqIn.at(i).pop();
+  }
+
+  // Each bank's arbiter, or each slice of its tree, grants one stage entry
+  // per cycle.
+  void arbitrate_stage() {
+    uint32_t n = stage_.size();
+    uint32_t nb = ReqOut.size();
+    uint32_t nl = levels_.size();
+    uint32_t slices = this->arb_slices(0);
+    uint32_t slice_ports = (nl != 0) ? kMaxFanout : n;
+    std::vector<uint32_t> want(nb * slices, 0);
+    std::vector<uint32_t> wants(nb, 0);
+    for (uint32_t i = 0; i < n; ++i) {
+      if (stage_.at(i).empty()) {
+        continue;
+      }
+      uint32_t b = params_.addr_bank_id(stage_.at(i).peek().addr);
+      want.at(b * slices + i / slice_ports) |= 1u << (i % slice_ports);
+      ++wants.at(b);
+    }
+    for (uint32_t b = 0; b < nb; ++b) {
+      if (wants.at(b) == 0) {
+        continue;
+      }
+      bool granted = false;
+      for (uint32_t sl = 0; sl < slices; ++sl) {
+        uint32_t slice_want = want.at(b * slices + sl);
+        auto& out = (nl != 0) ? tree_stage_.at(0).at(b * slices + sl) : ReqOut.at(b);
+        if (slice_want == 0 || out.full()) {
+          continue;
+        }
+        uint32_t size = this->arb_slice_size(0, sl);
+        auto& rr = rr_.at(0).at(b * slices + sl);
+        uint32_t j = rr;
+        while (!(slice_want & (1u << j))) {
+          j = (j + 1) % size;
+        }
+        uint32_t port = sl * slice_ports + j;
+        out.send(stage_.at(port).peek(), levels_.empty() ? delay_ : 1);
+        stage_.at(port).pop();
+        rr = (j + 1) % size;
+        granted = true;
+      }
+      if (granted) {
+        collisions_ += wants.at(b) - 1;
+      }
+    }
   }
 
   // A plain read: no write, flush, IO, local or atomic attribute.
@@ -2530,6 +2610,7 @@ private:
   std::vector<uint32_t> levels_;                            // [level] slices per bank
   std::vector<std::vector<SimChannel<MemReq>>> tree_stage_; // [level][bank][slice]
   std::vector<std::vector<uint32_t>> rr_;                   // [arbiter level][bank][slice] next to grant
+  std::vector<SimChannel<MemReq>> stage_;                   // [port] request stage, bank tag applied
   uint32_t merge_group_;
   uint64_t collisions_ = 0;
 

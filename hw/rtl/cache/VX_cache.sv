@@ -104,12 +104,14 @@ module VX_cache import VX_gpu_pkg::*; #(
     localparam MEM_PORTS_SEL_WIDTH = `UP(MEM_PORTS_SEL_BITS);
     localparam MEM_ARB_SEL_BITS = `CLOG2(`CDIV(NUM_BANKS, MEM_PORTS));
     localparam REQ_XBAR_BUF    = (NUM_REQS > 2) ? 2 : 0;
+    // With more than two ports, a request stage sits between the ports and the
+    // bank crossbar: the flush hold and read merging act on the port heads and
+    // the bank arbitration on the stage, two short handshake loops instead of
+    // one through both.
+    localparam CORE_REQ_STAGE  = (NUM_REQS > 2);
     localparam CORE_RSP_BUF_ENABLE = (NUM_BANKS != 1) || (NUM_REQS != 1);
     localparam MEM_REQ_BUF_ENABLE = (NUM_BANKS != 1);
     `STATIC_ASSERT(!DO_READ_MERGE || (`IS_POW2(MERGE_GROUP) && `IS_DIVISBLE(NUM_REQS, MERGE_GROUP)), ("invalid parameter: read merge group"))
-    // a merged request is one bank access for several port handshakes, which
-    // the in-flight request count of a registered request crossbar would miss
-    `STATIC_ASSERT(!DO_READ_MERGE || (`TO_OUT_BUF_REG(REQ_XBAR_BUF) == 0), ("invalid parameter: read merge with a registered request crossbar"))
 `ifdef PERF_ENABLE
     wire [NUM_BANKS-1:0] perf_read_miss_per_bank;
     wire [NUM_BANKS-1:0] perf_write_miss_per_bank;
@@ -124,7 +126,7 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire                 flush_skip;
     wire [`UP(UUID_WIDTH)-1:0] flush_uuid;
     wire [NUM_BANKS-1:0] per_bank_flush_end;
-    wire [NUM_BANKS-1:0] per_bank_core_req_fire;
+    wire                 core_req_stage_empty;
     wire                     mem_req_empty;
     wire [MEM_PORTS-1:0]     mem_flush_valid;
     wire                     mem_flush_l1_only;
@@ -143,14 +145,14 @@ module VX_cache import VX_gpu_pkg::*; #(
         .FLUSH_FORWARD    (FLUSH_FORWARD),
         .SHARED_LLC       (SHARED_LLC),
         .TAG_WIDTH        (TAG_WIDTH),
-        .BANK_SEL_LATENCY (`TO_OUT_BUF_REG(REQ_XBAR_BUF)), // request xbar latency
+        .REQ_STAGE        (CORE_REQ_STAGE),
         .REQ_SEL_WIDTH    (REQ_SEL_WIDTH)
     ) cache_init (
         .clk                 (clk),
         .reset               (reset),
         .core_bus_in_if      (core_bus_if),
         .core_bus_out_if     (core_bus2_if),
-        .bank_req_fire       (per_bank_core_req_fire),
+        .req_stage_empty     (core_req_stage_empty),
         .flush_begin         (per_bank_flush_begin),
         .flush_skip          (flush_skip),
         .flush_uuid          (flush_uuid),
@@ -389,7 +391,36 @@ module VX_cache import VX_gpu_pkg::*; #(
             core_req_attr[i]
         };
     end
-    assign per_bank_core_req_fire = per_bank_core_req_valid & per_bank_mem_req_ready;
+    wire [NUM_REQS-1:0]                      core_req_xbar_valid;
+    wire [NUM_REQS-1:0][CORE_REQ_DATAW-1:0]  core_req_xbar_data;
+    wire [NUM_REQS-1:0][BANK_SEL_WIDTH-1:0]  core_req_xbar_bid;
+    wire [NUM_REQS-1:0]                      core_req_xbar_in_ready;
+    if (CORE_REQ_STAGE) begin : g_core_req_stage
+        for (genvar i = 0; i < NUM_REQS; ++i) begin : g_lanes
+            VX_elastic_buffer #(
+                .DATAW   (BANK_SEL_WIDTH + CORE_REQ_DATAW),
+                .SIZE    (2),
+                .OUT_REG (0)
+            ) req_stage (
+                .clk       (clk),
+                .reset     (reset),
+                .valid_in  (core_req_valid[i] && ~core_req_follower[i]),
+                .data_in   ({core_req_bid[i], core_req_data_in[i]}),
+                .ready_in  (core_req_xbar_ready[i]),
+                .valid_out (core_req_xbar_valid[i]),
+                .data_out  ({core_req_xbar_bid[i], core_req_xbar_data[i]}),
+                .ready_out (core_req_xbar_in_ready[i])
+            );
+        end
+        // a stream buffer holds an entry exactly when its output is valid
+        assign core_req_stage_empty = ~(| core_req_xbar_valid);
+    end else begin : g_no_core_req_stage
+        assign core_req_xbar_valid  = core_req_valid & ~core_req_follower;
+        assign core_req_xbar_data   = core_req_data_in;
+        assign core_req_xbar_bid    = core_req_bid;
+        assign core_req_xbar_ready  = core_req_xbar_in_ready;
+        assign core_req_stage_empty = 1'b1;
+    end
 `ifdef PERF_ENABLE
     wire [PERF_CTR_BITS-1:0] perf_collisions;
 `endif
@@ -408,10 +439,10 @@ module VX_cache import VX_gpu_pkg::*; #(
     `else
         `UNUSED_PIN(collisions),
     `endif
-        .valid_in  (core_req_valid & ~core_req_follower),
-        .data_in   (core_req_data_in),
-        .sel_in    (core_req_bid),
-        .ready_in  (core_req_xbar_ready),
+        .valid_in  (core_req_xbar_valid),
+        .data_in   (core_req_xbar_data),
+        .sel_in    (core_req_xbar_bid),
+        .ready_in  (core_req_xbar_in_ready),
         .valid_out (per_bank_core_req_valid),
         .data_out  (core_req_data_out),
         .sel_out   (per_bank_core_req_idx),

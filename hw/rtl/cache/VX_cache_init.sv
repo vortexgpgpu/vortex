@@ -43,14 +43,14 @@ module VX_cache_init import VX_gpu_pkg::*; #(
     parameter FLUSH_FORWARD    = 1,              // Forward the flush to the next level
     parameter SHARED_LLC       = 0,              // The LLC serving every memory client alone: answers L1-only tokens without a walk
     parameter TAG_WIDTH        = UUID_WIDTH + 1, // core request tag size
-    parameter BANK_SEL_LATENCY = 1,              // Bank select latency
+    parameter REQ_STAGE        = 0,              // A request stage between the inputs and the banks
     parameter REQ_SEL_WIDTH    = `UP(`CLOG2(NUM_REQS))
 ) (
     input wire                        clk,
     input wire                        reset,
     VX_mem_bus_if.slave               core_bus_in_if [NUM_REQS],
     VX_mem_bus_if.master              core_bus_out_if [NUM_REQS],
-    input wire [NUM_BANKS-1:0]        bank_req_fire,
+    input wire                        req_stage_empty, // nothing accepted at the outputs short of the banks
     output wire [NUM_BANKS-1:0]       flush_begin,
     output wire                       flush_skip,    // the banks only quiesce: no walk is owed
     output wire [`UP(UUID_WIDTH)-1:0] flush_uuid,
@@ -83,42 +83,11 @@ module VX_cache_init import VX_gpu_pkg::*; #(
 
     wire no_inflight_reqs;
 
-    if (BANK_SEL_LATENCY != 0) begin : g_bank_sel_latency
-
-        localparam NUM_REQS_W  = `CLOG2(NUM_REQS+1);
-        localparam NUM_BANKS_W = `CLOG2(NUM_BANKS+1);
-
-        wire [NUM_REQS-1:0] core_bus_out_fire;
-        for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_bus_out_fire
-            assign core_bus_out_fire[i] = core_bus_out_if[i].req_valid && core_bus_out_if[i].req_ready;
-        end
-
-        wire [NUM_REQS_W-1:0] core_bus_out_cnt;
-        wire [NUM_BANKS_W-1:0] bank_req_cnt;
-
-        `POP_COUNT(core_bus_out_cnt, core_bus_out_fire);
-        `POP_COUNT(bank_req_cnt, bank_req_fire);
-        `UNUSED_VAR (core_bus_out_cnt)
-
-        VX_pending_size #(
-            .SIZE  (BANK_SEL_LATENCY * NUM_BANKS),
-            .INCRW (NUM_BANKS_W),
-            .DECRW (NUM_BANKS_W)
-        ) pending_size (
-            .clk   (clk),
-            .reset (reset),
-            .incr  (NUM_BANKS_W'(core_bus_out_cnt)),
-            .decr  (bank_req_cnt),
-            .empty (no_inflight_reqs),
-            `UNUSED_PIN (alm_empty),
-            `UNUSED_PIN (full),
-            `UNUSED_PIN (alm_full),
-            `UNUSED_PIN (size)
-        );
-
-    end else begin : g_no_bank_sel_latency
+    if (REQ_STAGE != 0) begin : g_req_stage
+        assign no_inflight_reqs = req_stage_empty;
+    end else begin : g_no_req_stage
         assign no_inflight_reqs = 0;
-        `UNUSED_VAR (bank_req_fire)
+        `UNUSED_VAR (req_stage_empty)
     end
 
     wire [NUM_REQS-1:0] flush_req_mask;
@@ -248,7 +217,7 @@ module VX_cache_init import VX_gpu_pkg::*; #(
             // STATE_IDLE:
             default: begin
                 if (flush_req_enable) begin
-                    if (BANK_SEL_LATENCY != 0) begin
+                    if (REQ_STAGE != 0) begin
                         state_n = STATE_WAIT1;
                     end else if (~flush_walk && ~any_io) begin
                         rsp_pending_n = flush_req_mask;
