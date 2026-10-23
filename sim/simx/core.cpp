@@ -124,6 +124,15 @@ public:
       mem_coalescers_.at(b) = MemCoalescer::Create(sname, LSU_CHANNELS, DCACHE_CHANNELS, DCACHE_WORD_SIZE, LSU_QUEUE_OUT_SIZE, 1);
     }
 
+  #ifdef VX_CFG_TCU_WGMMA_ENABLE
+    static_assert(VX_CFG_LMEM_ENABLED, "TCU_WGMMA_ENABLE requires LMEM_ENABLE");
+    static_assert(VX_CFG_LMEM_LOG_SIZE <= 16, "LMEM exceeds the 16-bit smem descriptor offset field");
+  #endif
+  #ifdef VX_CFG_LMEM_ENABLE
+    static_assert(0 == ((uint64_t(1) << VX_CFG_LMEM_LOG_SIZE) % VX_CFG_MEM_BLOCK_SIZE), "LMEM size must be a multiple of MEM_BLOCK_SIZE");
+    static_assert(0 == (uint64_t(VX_MEM_LMEM_BASE_ADDR) % (uint64_t(1) << VX_CFG_LMEM_LOG_SIZE)), "LMEM base address must be aligned to the LMEM size");
+  #endif
+
     // create local memory.
     // The DXA writes and the TCU tile-buffer reads share the row-wide DMA
     // port, DXA first.
