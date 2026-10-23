@@ -26,7 +26,9 @@ on it, and runs orders of magnitude faster than Verilator.
 The whole flow is one IR from SystemVerilog to Verilog: `circt-verilog`
 imports Vortex, Foldsim's passes cut it into models and compose the
 simulator, `firtool` writes it out, and the card's native flow (IP-XACT
-packaging, `slashkit link`) builds the image. Foldsim is a project of its own
+packaging, `slashkit link`) builds the image. (`foldsim-opt` also carries the
+timing screen, which counts the logic levels of a Vortex netlist before
+Vivado: [timing_screen.md](timing_screen.md).) Foldsim is a project of its own
 that builds on CIRCT, as POCL builds on LLVM: the `foldsim` driver and
 `foldsim-opt` come from the toolchain (`$(TOOLDIR)/foldsim`), CIRCT from
 `$(TOOLDIR)/circt`. Nothing else is in the flow: no Yosys, no sv2v.
