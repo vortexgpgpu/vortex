@@ -27,7 +27,6 @@ DMA-command engine have been removed.
 | [`VX_afu_ctrl.sv`](../../hw/rtl/afu/xrt/VX_afu_ctrl.sv) | Slimmed AXI-Lite slave (~322 LOC): `ap_ctrl` stub at 0x00 + a SCOPE serial register pair + SCOPE watchdog. |
 | [`VX_afu_axil_demux.sv`](../../hw/rtl/afu/common/VX_afu_axil_demux.sv) | AXI-Lite demux splitting the control space on `addr[12]`, one outstanding transaction per direction. |
 | [`VX_afu_axi_drain.sv`](../../hw/rtl/afu/common/VX_afu_axi_drain.sv) | Outstanding-transaction tracker per AXI master; reports when a port owes the interconnect nothing. |
-| [`VX_afu_axi_limit.sv`](../../hw/rtl/afu/common/VX_afu_axi_limit.sv) | Holds an AXI master to one read and one write in flight; applied to port 0 of the multi-port shell. |
 | [`VX_afu_reset_seq.sv`](../../hw/rtl/afu/common/VX_afu_reset_seq.sv) | Quiesce-before-reset sequencer for the soft reset; refuses rather than resetting a master that will not drain. |
 
 - **Control.** Host AXI-Lite `addr[12]` splits the slave: `addr[12]=0` →
@@ -42,12 +41,15 @@ DMA-command engine have been removed.
   Covered by `hw/unittest/afu_axil_demux`.
 - **Memory.** Two structures, selected by the number of memory ports.
   *One port* (the merged platforms): `Vortex_axi` and the CP's `axi_dev`
-  share the port through a 2:1 `VX_mm_axi_arb`, and CP bursts reach the
-  platform as bursts. *Several ports*: Vortex's memory ports and `axi_dev`
-  (bridged by `VX_membus_from_axi`) are the inputs of one bank adapter,
-  `VX_mem_to_axi`, so the CP is merged **upstream** of bank selection and
-  reaches every bank. In both, port 0 carries one read and one write in
-  flight (`VX_afu_axi_limit` in the second case). CP `axi_host` drives a
+  share the port through a 2:1 `VX_mm_axi_arb` in its ID-routed
+  multi-outstanding mode (`MULTI_OUT=1`: the top ID bit names the source,
+  Vortex gets the remaining ID bits), and CP bursts reach the platform as
+  bursts. *Several ports*: Vortex's memory ports and `axi_dev` (bridged by
+  `VX_membus_from_axi`) are the inputs of one bank adapter, `VX_mem_to_axi`,
+  so the CP is merged **upstream** of bank selection and reaches every bank.
+  In both, every port carries as many reads and writes in flight as its
+  masters issue; one outstanding transaction per direction would cap a port
+  at one line per DRAM round trip. CP `axi_host` drives a
   **dedicated `m_axi_host` AXI master** for the command ring + host DMA.
   `PLATFORM_MEMORY_OFFSET` is applied per bank, at the port.
 - **Interrupt.** The AFU `interrupt` pin is driven from `cp_interrupt`

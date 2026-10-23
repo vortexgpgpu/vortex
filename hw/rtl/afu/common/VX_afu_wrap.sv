@@ -479,11 +479,17 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 
     if (C_M_AXI_MEM_NUM_BANKS == 1) begin : g_single_port
 
+        // The arbiter carries the source index in the top ID bit, so each
+        // master gets the rest of the platform ID.
+        localparam ARB_SRC_BITS   = 1;
+        localparam SRC_ID_WIDTH   = C_M_AXI_MEM_ID_WIDTH - ARB_SRC_BITS;
+        `STATIC_ASSERT(`VX_CP_AXI_TID_WIDTH <= SRC_ID_WIDTH, ("CP device-master ID does not fit the platform ID"))
+
         // ---- Vortex's AXI port, ahead of the arbiter ----
         wire                              vx_awvalid_a [C_M_AXI_MEM_NUM_BANKS];
         wire                              vx_awready_a [C_M_AXI_MEM_NUM_BANKS];
         wire [M_AXI_MEM_ADDR_WIDTH-1:0]   vx_awaddr_a  [C_M_AXI_MEM_NUM_BANKS];
-        wire [C_M_AXI_MEM_ID_WIDTH-1:0]   vx_awid_a    [C_M_AXI_MEM_NUM_BANKS];
+        wire [SRC_ID_WIDTH-1:0]           vx_awid_a    [C_M_AXI_MEM_NUM_BANKS];
         wire [7:0]                        vx_awlen_a   [C_M_AXI_MEM_NUM_BANKS];
 
         wire                              vx_wvalid_a  [C_M_AXI_MEM_NUM_BANKS];
@@ -494,26 +500,26 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 
         wire                              vx_bvalid_a  [C_M_AXI_MEM_NUM_BANKS];
         wire                              vx_bready_a  [C_M_AXI_MEM_NUM_BANKS];
-        wire [C_M_AXI_MEM_ID_WIDTH-1:0]   vx_bid_a     [C_M_AXI_MEM_NUM_BANKS];
+        wire [SRC_ID_WIDTH-1:0]           vx_bid_a     [C_M_AXI_MEM_NUM_BANKS];
         wire [1:0]                        vx_bresp_a   [C_M_AXI_MEM_NUM_BANKS];
 
         wire                              vx_arvalid_a [C_M_AXI_MEM_NUM_BANKS];
         wire                              vx_arready_a [C_M_AXI_MEM_NUM_BANKS];
         wire [M_AXI_MEM_ADDR_WIDTH-1:0]   vx_araddr_a  [C_M_AXI_MEM_NUM_BANKS];
-        wire [C_M_AXI_MEM_ID_WIDTH-1:0]   vx_arid_a    [C_M_AXI_MEM_NUM_BANKS];
+        wire [SRC_ID_WIDTH-1:0]           vx_arid_a    [C_M_AXI_MEM_NUM_BANKS];
         wire [7:0]                        vx_arlen_a   [C_M_AXI_MEM_NUM_BANKS];
 
         wire                              vx_rvalid_a  [C_M_AXI_MEM_NUM_BANKS];
         wire                              vx_rready_a  [C_M_AXI_MEM_NUM_BANKS];
         wire [C_M_AXI_MEM_DATA_WIDTH-1:0] vx_rdata_a   [C_M_AXI_MEM_NUM_BANKS];
         wire                              vx_rlast_a   [C_M_AXI_MEM_NUM_BANKS];
-        wire [C_M_AXI_MEM_ID_WIDTH-1:0]   vx_rid_a     [C_M_AXI_MEM_NUM_BANKS];
+        wire [SRC_ID_WIDTH-1:0]           vx_rid_a     [C_M_AXI_MEM_NUM_BANKS];
         wire [1:0]                        vx_rresp_a   [C_M_AXI_MEM_NUM_BANKS];
 
         Vortex_axi #(
             .AXI_DATA_WIDTH (C_M_AXI_MEM_DATA_WIDTH),
             .AXI_ADDR_WIDTH (M_AXI_MEM_ADDR_WIDTH),
-            .AXI_TID_WIDTH  (C_M_AXI_MEM_ID_WIDTH),
+            .AXI_TID_WIDTH  (SRC_ID_WIDTH),
             .AXI_NUM_BANKS  (C_M_AXI_MEM_NUM_BANKS)
         ) vortex_axi (
             `SCOPE_IO_BIND  (1)
@@ -577,12 +583,12 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
         );
 
         // ---- 2:1 arbiter merges Vortex + CP axi_dev ----
-        // Pad CP's narrower ID into the platform ID width so the arbiter sees
-        // identical signal widths from both sources.
-        wire [C_M_AXI_MEM_ID_WIDTH-1:0] cp_awid_padded =
-            {{(C_M_AXI_MEM_ID_WIDTH - `VX_CP_AXI_TID_WIDTH){1'b0}}, cp_axi_dev.awid};
-        wire [C_M_AXI_MEM_ID_WIDTH-1:0] cp_arid_padded =
-            {{(C_M_AXI_MEM_ID_WIDTH - `VX_CP_AXI_TID_WIDTH){1'b0}}, cp_axi_dev.arid};
+        // Zero-extend both sources' IDs to the platform width; the arbiter
+        // overwrites the top bit with the source index.
+        wire [C_M_AXI_MEM_ID_WIDTH-1:0] vx_awid_padded = C_M_AXI_MEM_ID_WIDTH'(vx_awid_a[0]);
+        wire [C_M_AXI_MEM_ID_WIDTH-1:0] vx_arid_padded = C_M_AXI_MEM_ID_WIDTH'(vx_arid_a[0]);
+        wire [C_M_AXI_MEM_ID_WIDTH-1:0] cp_awid_padded = C_M_AXI_MEM_ID_WIDTH'(cp_axi_dev.awid);
+        wire [C_M_AXI_MEM_ID_WIDTH-1:0] cp_arid_padded = C_M_AXI_MEM_ID_WIDTH'(cp_axi_dev.arid);
 
         // The CP's device addresses come from the same host-side allocator as the
         // pointers handed to the cores -- Device::global_mem_, based at
@@ -599,7 +605,9 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
         // Packed 2-master AXI arbiter: index 0 = Vortex bank-0 (priority via
         // ARBITER="P"), index 1 = CP device master. Input channels are packed
         // {cp, vx}; the arbiter's slave-side outputs land in local packed wires
-        // and are split back to the two masters below.
+        // and are split back to the two masters below. Responses are routed by
+        // the source bit of their ID, so both masters keep as many transactions
+        // in flight as they issue.
         localparam BANK0_STRB_W = C_M_AXI_MEM_DATA_WIDTH/8;
 
         wire [1:0]                            b0_awready;
@@ -620,6 +628,7 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
             .DATA_WIDTH (C_M_AXI_MEM_DATA_WIDTH),
             .ID_WIDTH   (C_M_AXI_MEM_ID_WIDTH),
             .ARBITER    ("P"),          // index 0 (Vortex bank-0) > index 1 (CP)
+            .MULTI_OUT  (1),
             .STRB_WIDTH (BANK0_STRB_W)
         ) bank0_arb (
             .clk   (clk),
@@ -628,7 +637,7 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
             .s_awvalid ({cp_axi_dev.awvalid, vx_awvalid_a[0]}),
             .s_awready (b0_awready),
             .s_awaddr  ({cp_awaddr_dev,   vx_awaddr_a[0]}),
-            .s_awid    ({cp_awid_padded,     vx_awid_a[0]}),
+            .s_awid    ({cp_awid_padded,     vx_awid_padded}),
             .s_awlen   ({cp_axi_dev.awlen,   vx_awlen_a[0]}),
 
             .s_wvalid  ({cp_axi_dev.wvalid,  vx_wvalid_a[0]}),
@@ -645,7 +654,7 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
             .s_arvalid ({cp_axi_dev.arvalid, vx_arvalid_a[0]}),
             .s_arready (b0_arready),
             .s_araddr  ({cp_araddr_dev,   vx_araddr_a[0]}),
-            .s_arid    ({cp_arid_padded,     vx_arid_a[0]}),
+            .s_arid    ({cp_arid_padded,     vx_arid_padded}),
             .s_arlen   ({cp_axi_dev.arlen,   vx_arlen_a[0]}),
 
             .s_rvalid  (b0_rvalid),
@@ -675,6 +684,8 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
         // index 0 = Vortex bank-0, index 1 = CP device master.
         // Declared before their first assignment below (the implicit-net footgun:
         // a pre-declaration use makes Vivado mint 1-bit nets and keep both).
+        wire [C_M_AXI_MEM_ID_WIDTH-1:0] vx_bid_full;
+        wire [C_M_AXI_MEM_ID_WIDTH-1:0] vx_rid_full;
         wire [C_M_AXI_MEM_ID_WIDTH-1:0] cp_axi_dev_bid_full;
         wire [C_M_AXI_MEM_ID_WIDTH-1:0] cp_axi_dev_rid_full;
         assign vx_awready_a[0]     = b0_awready[0];
@@ -683,7 +694,7 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
         assign cp_axi_dev.wready   = b0_wready[1];
         assign vx_bvalid_a[0]      = b0_bvalid[0];
         assign cp_axi_dev.bvalid   = b0_bvalid[1];
-        assign vx_bid_a[0]         = b0_bid[0];
+        assign vx_bid_full         = b0_bid[0];
         assign cp_axi_dev_bid_full = b0_bid[1];
         assign vx_bresp_a[0]       = b0_bresp[0];
         assign cp_axi_dev.bresp    = b0_bresp[1];
@@ -695,14 +706,18 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
         assign cp_axi_dev.rdata    = b0_rdata[1];
         assign vx_rlast_a[0]       = b0_rlast[0];
         assign cp_axi_dev.rlast    = b0_rlast[1];
-        assign vx_rid_a[0]         = b0_rid[0];
+        assign vx_rid_full         = b0_rid[0];
         assign cp_axi_dev_rid_full = b0_rid[1];
         assign vx_rresp_a[0]       = b0_rresp[0];
         assign cp_axi_dev.rresp    = b0_rresp[1];
 
-        // Truncate the arbiter's wider ID back to CP's narrower native ID width.
+        // Truncate the arbiter's platform-width IDs back to each master's own.
+        assign vx_bid_a[0]    = vx_bid_full[SRC_ID_WIDTH-1:0];
+        assign vx_rid_a[0]    = vx_rid_full[SRC_ID_WIDTH-1:0];
         assign cp_axi_dev.bid = cp_axi_dev_bid_full[`VX_CP_AXI_TID_WIDTH-1:0];
         assign cp_axi_dev.rid = cp_axi_dev_rid_full[`VX_CP_AXI_TID_WIDTH-1:0];
+        `UNUSED_VAR (vx_bid_full)
+        `UNUSED_VAR (vx_rid_full)
         `UNUSED_VAR (cp_axi_dev_bid_full)
         `UNUSED_VAR (cp_axi_dev_rid_full)
 
@@ -939,13 +954,6 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
         `UNUSED_VAR (cp_axi_dev.arburst)
 
 
-        wire ad_awvalid_a [C_M_AXI_MEM_NUM_BANKS];
-        wire ad_awready_a [C_M_AXI_MEM_NUM_BANKS];
-        wire ad_arvalid_a [C_M_AXI_MEM_NUM_BANKS];
-        wire ad_arready_a [C_M_AXI_MEM_NUM_BANKS];
-        wire ad_wvalid_a  [C_M_AXI_MEM_NUM_BANKS];
-        wire ad_wready_a  [C_M_AXI_MEM_NUM_BANKS];
-
         VX_mem_to_axi #(
             .DATA_WIDTH     (C_M_AXI_MEM_DATA_WIDTH),
             .ADDR_WIDTH_IN  (VX_MEM_ADDR_A_WIDTH),
@@ -974,8 +982,8 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
             .mem_rsp_tag    (fab_rsp_tag),
             .mem_rsp_ready  (fab_rsp_ready),
 
-            .m_axi_awvalid  (ad_awvalid_a),
-            .m_axi_awready  (ad_awready_a),
+            .m_axi_awvalid  (pre_awvalid_a),
+            .m_axi_awready  (pre_awready_a),
             .m_axi_awaddr   (m_axi_mem_awaddr_u),
             .m_axi_awid     (m_axi_mem_awid_a),
             .m_axi_awlen    (m_axi_mem_awlen_a),
@@ -987,8 +995,8 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
             `UNUSED_PIN (m_axi_awqos),
             `UNUSED_PIN (m_axi_awregion),
 
-            .m_axi_wvalid   (ad_wvalid_a),
-            .m_axi_wready   (ad_wready_a),
+            .m_axi_wvalid   (m_axi_mem_wvalid_a),
+            .m_axi_wready   (m_axi_mem_wready_a),
             .m_axi_wdata    (m_axi_mem_wdata_a),
             .m_axi_wstrb    (m_axi_mem_wstrb_a),
             .m_axi_wlast    (m_axi_mem_wlast_a),
@@ -998,8 +1006,8 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
             .m_axi_bid      (m_axi_mem_bid_a),
             .m_axi_bresp    (m_axi_mem_bresp_a),
 
-            .m_axi_arvalid  (ad_arvalid_a),
-            .m_axi_arready  (ad_arready_a),
+            .m_axi_arvalid  (pre_arvalid_a),
+            .m_axi_arready  (pre_arready_a),
             .m_axi_araddr   (m_axi_mem_araddr_u),
             .m_axi_arid     (m_axi_mem_arid_a),
             .m_axi_arlen    (m_axi_mem_arlen_a),
@@ -1018,40 +1026,6 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
             .m_axi_rid      (m_axi_mem_rid_a),
             .m_axi_rresp    (m_axi_mem_rresp_a)
         );
-
-        // Bank 0 carries one read and one write at a time, the other banks
-        // as many as the adapter tracks. Reads in flight cost cycles on a
-        // saturated channel and save them across several, so moving this
-        // limit changes cycle counts in both directions.
-        VX_afu_axi_limit bank0_limit (
-            .clk         (clk),
-            .reset       (subsys_reset),
-            .in_awvalid  (ad_awvalid_a[0]),
-            .in_awready  (ad_awready_a[0]),
-            .in_wvalid   (ad_wvalid_a[0]),
-            .in_wready   (ad_wready_a[0]),
-            .in_wlast    (m_axi_mem_wlast_a[0]),
-            .in_arvalid  (ad_arvalid_a[0]),
-            .in_arready  (ad_arready_a[0]),
-            .out_awvalid (pre_awvalid_a[0]),
-            .out_awready (pre_awready_a[0]),
-            .out_wvalid  (m_axi_mem_wvalid_a[0]),
-            .out_wready  (m_axi_mem_wready_a[0]),
-            .out_arvalid (pre_arvalid_a[0]),
-            .out_arready (pre_arready_a[0]),
-            .b_fire      (m_axi_mem_bvalid_a[0] && m_axi_mem_bready_a[0]),
-            .r_fire_last (m_axi_mem_rvalid_a[0] && m_axi_mem_rready_a[0]
-                                                && m_axi_mem_rlast_a[0])
-        );
-
-        for (genvar i = 1; i < C_M_AXI_MEM_NUM_BANKS; ++i) begin : g_bank_direct
-            assign pre_awvalid_a[i]      = ad_awvalid_a[i];
-            assign ad_awready_a[i]       = pre_awready_a[i];
-            assign m_axi_mem_wvalid_a[i] = ad_wvalid_a[i];
-            assign ad_wready_a[i]        = m_axi_mem_wready_a[i];
-            assign pre_arvalid_a[i]      = ad_arvalid_a[i];
-            assign ad_arready_a[i]       = pre_arready_a[i];
-        end
 
     end
 
@@ -1087,7 +1061,11 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
             .out_ready (m_axi_mem_arready_a[i])
         );
 
-        VX_afu_axi_drain mem_drain (
+        // A memory port carries every miss the last-level caches hold in
+        // flight, so its counters are sized well past any MSHR total.
+        VX_afu_axi_drain #(
+            .COUNT_WIDTH  (16)
+        ) mem_drain (
             .clk          (clk),
             .reset        (reset),
             .aw_fire      (m_axi_mem_awvalid_a[i] && m_axi_mem_awready_a[i]),
