@@ -7,15 +7,17 @@ assertion differs: instead of rtlsim cycles it compares THIS commit's
 post-synthesis timing and area against the recorded numbers, so an RTL change
 that quietly costs timing closure or area cannot land green.
 
-Two backends, one gate. Everything that is not "how do I drive the tool and what
-does it call its numbers" is shared:
+Three backends, one gate. Everything that is not "how do I drive the tool and
+what does it call its numbers" is shared:
 
   --tool=xilinx  Vivado synthesis + place-and-route      -> ci/fpga_gate.py
   --tool=yosys   Yosys + OpenSTA on an ASIC PDK          -> ci/asic_gate.py
+  --tool=screen  logic levels per RTL unit, no synthesis -> ci/timing_gate.py
 
   Spec      : ci/testcases/<gate>.yaml                  (what to build)
   Baselines : ci/baselines/synthesis/<tool>/<group>.json (last accepted metrics)
-  Metrics   : <build>/synth_summary.csv, written by the flow itself
+  Metrics   : <build>/synth_summary.csv (screen_summary.csv for the screen),
+              written by the flow itself
 
 Same division as every other check in the catalog: the yaml is hand-authored,
 commented and reviewed; the baseline is machine-written and never hand-edited.
@@ -88,6 +90,12 @@ class Tool:
 
     metrics = ()       # recorded, in report order; build_time_s is bookkeeping
     gated = ()         # asserted by default (--gate overrides)
+    # The metric whose presence in a baseline entry means "recorded".
+    key_metric = "fmax_mhz"
+    # The flow's one-row metric file, in the build's work directory.
+    summary = "synth_summary.csv"
+    # Default gate tolerance, overridden by --threshold and the catalog.
+    tolerance = TOLERANCE
     integral = ()      # recorded as ints; every other metric is a rounded float
     columns = ()       # (header, metric, format, width) for the report table
 
@@ -141,6 +149,12 @@ class Tool:
     def extras(self, work):
         """Diagnostics recorded next to the metrics, never gated."""
         return {}
+
+    def compare(self, metrics, base):
+        """Reasons beyond the per-metric tolerance check, as gate() words them:
+        a reason containing "improvement" asks for a re-record, any other
+        fails."""
+        return []
 
     def incomplete(self, metrics):
         """Whether a cached result predates something this tool now records.
@@ -428,7 +442,144 @@ class Yosys(Tool):
                                                  base.get("cell_area_um2") or 0)
 
 
-TOOLS = {t.name: t for t in (Xilinx(), Yosys())}
+class Screen(Tool):
+    """The timing screen: logic levels per RTL unit (hw/syn/xilinx/dut, target
+    `screen`).
+
+    foldsim-estimate-timing ranks every register-to-register path of the CIRCT
+    netlist the Xilinx flow elaborates by its logic levels, counted as Vivado
+    counts them on the V80. It needs no Vivado and no licence and takes seconds
+    per DUT, so it can run on every change where the Fmax gate runs nightly.
+
+    Depth is deterministic -- the same RTL and tools give the same levels -- so
+    the gate has no tolerance: a unit that gets deeper fails, by name, until it
+    is fixed or a human re-records it. What it gates is depth, not Fmax: the
+    screen does not see wires (docs/designs/continuous_integration.md 3.5).
+    """
+
+    name = "screen"
+    gate = "timing_gate"
+    flow = "hw/syn/xilinx/dut"
+
+    metrics = ("max_levels", "deep_endpoints", "watch_endpoints", "endpoints",
+               "build_time_s")
+    gated = ("max_levels",)
+    integral = metrics
+    key_metric = "max_levels"
+    summary = "screen_summary.csv"
+    tolerance = 0.0
+    columns = (("max_lv", "max_levels", "%d", 7),
+               ("deep", "deep_endpoints", "%d", 9),
+               ("watch", "watch_endpoints", "%d", 9),
+               ("ends", "endpoints", "%d", 9))
+
+    # Elaboration and mapping of the widest DUTs; the screen itself is seconds.
+    weights = {"top": 600, "vortex": 600, "gfx": 600, "core": 300,
+               "tensor": 300, "tcu": 300}
+    fallback_weight = 120
+    job_label = "make"
+
+    # The netlist exists once foldsim-opt starts mapping it; a typo in a define
+    # or an include dies in gen_sources.sh or circt_elaborate.sh before that.
+    elab_done = "foldsim-timing-map"
+    elab_label = "elaboration"
+    phases = (
+        ("gen_sources.sh", "sources"),
+        ("circt_elaborate.sh", "elaboration"),
+        (elab_done, "mapping"),
+        ("foldsim-estimate-timing", "screen"),
+        ("screen_summary.py", "reporting"),
+    )
+    error_re = re.compile(r"^(?:ERROR|FATAL|Error)\b|: error:|^\S+: \*\*\* ")
+
+    UNITS = "screen_units.json"
+
+    def env(self, args):
+        return {"circt": tool_version("circt-verilog", "--version",
+                                      package="circt", line_prefix="CIRCT"),
+                "foldsim": tool_version("foldsim-opt", "--version",
+                                        package="foldsim",
+                                        line_prefix="foldsim"),
+                "xlen": args.xlen}
+
+    def hash_key(self, env):
+        # The levels are the model's: a new foldsim or CIRCT can map the same
+        # RTL to other levels, which must read as STALE, not as a regression.
+        return [env["circt"], env["foldsim"], str(env["xlen"])]
+
+    def env_warning(self, build, env):
+        for key, label in (("foldsim", "foldsim"), ("circt", "CIRCT")):
+            ref = build.get("baseline_env", {}).get(key)
+            if ref and env.get(key) and ref != env[key]:
+                return ("baseline was recorded on %s %s, running %s -- this "
+                        "reads as STALE until re-recorded" % (label, ref, env[key]))
+        return None
+
+    def work_dir(self, dut_root, prefix, build):
+        return os.path.join(dut_root, "%s_%s" % (prefix, build["dut"]))
+
+    def clean(self, dut_root, work, build, benv):
+        subprocess.run(["make", "-C", work, "clean"], env=benv,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT,
+                       check=True)
+
+    def build_command(self, dut_root, work, build, env, args):
+        os.makedirs(work, exist_ok=True)
+        shutil.copy2(os.path.join(dut_root, "build.mk"),
+                     os.path.join(work, "Makefile"))
+        return ["make", "-C", work, "screen"], dict(DUT=build["dut"],
+                                                    CONFIGS=build["configs"])
+
+    def extras(self, work):
+        try:
+            with open(os.path.join(work, self.UNITS)) as fh:
+                doc = json.load(fh)
+        except (OSError, ValueError):
+            return {}
+        return {"units": doc.get("units", {}),
+                "deepest_paths": doc.get("deepest_paths", []),
+                "fix_levels": doc.get("fix_levels"),
+                "watch_levels": doc.get("watch_levels")}
+
+    def incomplete(self, metrics):
+        return metrics.get("units") is None
+
+    def compare(self, metrics, base):
+        """Per unit: deeper than its baseline fails; a new unit at the fix
+        threshold fails; shallower, or gone from the watch list, is an
+        improvement to lock in."""
+        cur, ref = metrics.get("units"), base.get("units")
+        if cur is None or ref is None:
+            return []
+        fix = metrics.get("fix_levels") or 0
+        reasons = []
+        for unit in sorted(set(cur) | set(ref)):
+            now, was = cur.get(unit), ref.get(unit)
+            if was is None:
+                if now >= fix:
+                    reasons.append("unit %s: new at %d levels (fix threshold "
+                                   "%d) -- REGRESSION" % (unit, now, fix))
+            elif now is None:
+                reasons.append("unit %s: %d levels -> below the watch threshold "
+                               "-- improvement, update the baseline to lock it "
+                               "in" % (unit, was))
+            elif now != was:
+                reasons.append("unit %s: %d -> %d levels -- %s"
+                               % (unit, was, now,
+                                  "REGRESSION" if now > was else
+                                  "improvement, update the baseline to lock "
+                                  "it in"))
+        return reasons
+
+    def describe(self, m):
+        return "max %d levels, %d end points >= %s" % (
+            m["max_levels"], m["deep_endpoints"], m.get("fix_levels"))
+
+    def describe_baseline(self, base):
+        return "max %d levels" % base["max_levels"]
+
+
+TOOLS = {t.name: t for t in (Xilinx(), Yosys(), Screen())}
 
 
 def tool_version(name, flag, package=None, line_prefix=None):
@@ -439,7 +590,11 @@ def tool_version(name, flag, package=None, line_prefix=None):
     copy of yosys would make the baseline's tool env a lie.
     """
     tooldir = os.environ.get("TOOLDIR") or os.path.expanduser("~/tools")
-    binary = os.path.join(tooldir, package or name, "bin", name)
+    package = package or name
+    # <PACKAGE>_PATH overrides the toolchain copy, as in hw/syn/common.mk.
+    root = os.environ.get(package.upper() + "_PATH") or \
+        os.path.join(tooldir, package)
+    binary = os.path.join(root, "bin", name)
     if not os.path.exists(binary):
         binary = name
     try:
@@ -538,7 +693,8 @@ def load_catalog(root, tool):
         result = recorded.get("result") or {}
         # An all-null skeleton means "never recorded" -- the file ships with the
         # shape visible, not with numbers.
-        build["baseline"] = result if result.get("fmax_mhz") is not None else None
+        build["baseline"] = result if result.get(tool.key_metric) is not None \
+            else None
         build["baseline_env"] = result.get("env") or {}
         build["config_hash"] = recorded.get("config_hash")
         builds[bid] = build
@@ -907,10 +1063,10 @@ def run_build(build, build_dir, env, args, tool):
                             rc, elapsed // 60,
                             "".join("\n      | " + e for e in errors), log))
 
-    summary = os.path.join(work, "synth_summary.csv")
+    summary = os.path.join(work, tool.summary)
     if not os.path.exists(summary):
-        raise BuildError("no synth_summary.csv (the flow did not reach report), "
-                         "see %s" % log)
+        raise BuildError("no %s (the flow did not reach report), see %s"
+                         % (tool.summary, log))
     metrics = read_summary(summary, tool)
     metrics["build_time_s"] = elapsed
     metrics.update(tool.extras(work))
@@ -1019,6 +1175,8 @@ def gate(result, env, args, gated, tool):
                        % (m, ref, cur, 100 * delta, 100 * tol,
                           "improvement, update the baseline to lock it in"
                           if better else "REGRESSION"))
+
+    reasons += tool.compare(result["metrics"], base)
 
     # Target-frequency gate: Fmax must be within tolerance of the clock the design
     # was BUILT for, independent of the baseline. A baseline recorded below target
@@ -1136,8 +1294,9 @@ def main(argv=None, default_tool="xilinx"):
                          "ci/testcases/<gate>.yaml and the golden file tree "
                          "ci/baselines/synthesis/<tool>/ (default: %s)"
                          % default_tool)
-    ap.add_argument("--threshold", type=float, default=TOLERANCE, metavar="F",
-                    help="global gate tolerance, fraction (default: %.2f). "
+    ap.add_argument("--threshold", type=float, default=None, metavar="F",
+                    help="global gate tolerance, fraction (default: the "
+                         "tool's, %.2f for synthesis, 0 for the screen). "
                          "Overridden per-metric by --metric-threshold and "
                          "per-build by the catalog's \"thresholds\"."
                          % TOLERANCE)
@@ -1179,6 +1338,8 @@ def main(argv=None, default_tool="xilinx"):
                     help="print the schedule without running the tool")
     args = ap.parse_args(argv)
     tool = TOOLS[args.tool]
+    if args.threshold is None:
+        args.threshold = tool.tolerance
 
     # Line-buffer stdout: progress is the point of the elaboration watch, and it
     # is worthless if it sits in a block buffer until the run ends (which is what
@@ -1215,7 +1376,8 @@ def main(argv=None, default_tool="xilinx"):
             print("%-10s [%s] dut=%-8s %4d MHz  %s%s"
                   % (b["id"], b["group"], b["dut"], b["clock_mhz"],
                      "baseline: " + tool.describe_baseline(base)
-                     if base.get("fmax_mhz") else "no baseline",
+                     if base.get(tool.key_metric) is not None
+                     else "no baseline",
                      "  KNOWN ISSUE: " + b["known_issue"]
                      if b.get("known_issue") else ""))
             print("    %s" % b["configs"])

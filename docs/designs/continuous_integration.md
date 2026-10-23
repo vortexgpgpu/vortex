@@ -264,22 +264,25 @@ so the parity and perf views of one workload are two cases.
 
 `perf_gate` catches a change that costs cycles. The synthesis gates catch one
 that costs **timing closure or area**: they synthesize a catalog of designs
-and assert the results against golden baselines.
+and assert the results against golden baselines. The timing gate catches one
+that makes a unit **deeper**, in seconds and without synthesis.
 
-| | `fpga_gate` | `asic_gate` |
-|---|---|---|
-| flow | Vivado synthesis, place and route | CIRCT → Yosys → ABC → OpenSTA, on ASAP7 |
-| design tree | `hw/syn/xilinx/dut` | `hw/syn/yosys/dut` |
-| gated against the baseline | `fmax_mhz`, `lut` | `cell_area_um2` (Fmax only against the target clock) |
-| also recorded | `wns_ns`, `lutram`, `ff`, `bram`, `uram`, `dsp`, critical paths, high-fanout nets | `wns_ns`, `tns_ns`, `seq_area_um2`, `sram_area_um2`, `cell_count`, `power_mw` |
-| comparable when | same device, optimization level, xlen | same PDK, VT, corner, xlen |
-| runner | self-hosted, licensed Vivado | hosted, one job per design |
-| default tolerance | 5 % | 5 % |
+| | `fpga_gate` | `asic_gate` | `timing_gate` |
+|---|---|---|---|
+| flow | Vivado synthesis, place and route | CIRCT → Yosys → ABC → OpenSTA, on ASAP7 | CIRCT → `foldsim-estimate-timing` (logic levels as Vivado counts them on the V80) |
+| design tree | `hw/syn/xilinx/dut` | `hw/syn/yosys/dut` | `hw/syn/xilinx/dut`, target `screen` |
+| gated against the baseline | `fmax_mhz`, `lut` | `cell_area_um2` (Fmax only against the target clock) | `max_levels`, and the deepest end point of every RTL unit |
+| also recorded | `wns_ns`, `lutram`, `ff`, `bram`, `uram`, `dsp`, critical paths, high-fanout nets | `wns_ns`, `tns_ns`, `seq_area_um2`, `sram_area_um2`, `cell_count`, `power_mw` | end point bits at ≥ 12 and ≥ 8 levels, the deepest paths |
+| comparable when | same device, optimization level, xlen | same PDK, VT, corner, xlen | same CIRCT, foldsim, xlen |
+| runner | self-hosted, licensed Vivado | hosted, one job per design | hosted, one job for the catalog |
+| default tolerance | 5 % | 5 % | none: the screen is deterministic |
 
-Neither is a pytest cell. A cell is a build tree plus a driver; a synthesis
-build is neither, and both gates are hours long. They are standalone scripts
+None is a pytest cell. A cell is a build tree plus a driver; a gate build is
+neither, and the synthesis gates are hours long. They are standalone scripts
 driven by their own workflows, and their tiers are **opt-in**: an empty tier
-selection means "everything a cell can run", which excludes them.
+selection means "everything a cell can run", which excludes them. The timing
+gate's tier is opt-in because it needs foldsim, which the base toolchain does
+not install.
 
 #### One implementation, two adapters
 
@@ -287,21 +290,23 @@ selection means "everything a cell can run", which excludes them.
 tool-specific — catalog loading, the config hash, threshold resolution,
 `known_issue`, the resumable session, the scheduler, the gate and the report.
 A tool adapter supplies only what differs: metric names, how the flow is
-invoked, what its log looks like, and which environment fields make two runs
-comparable. `fpga_gate.py` and `asic_gate.py` are entry points that pin the
-tool.
+invoked, what its log looks like, which environment fields make two runs
+comparable, and any assertion beyond the per-metric check (the timing gate's
+per-unit depths). `fpga_gate.py`, `asic_gate.py` and `timing_gate.py` are
+entry points that pin the tool.
 
 #### Spec and baseline
 
 | file | written by | holds |
 |---|---|---|
-| `ci/testcases/{fpga,asic}_gate.yaml` | a person | per build: a design, a target clock, `CONFIGS`, a group, optional `thresholds` and `known_issue` |
-| `ci/baselines/synthesis/{xilinx,yosys}/<group>.json` | the gate | measured metrics, the config hash, the tool versions and environment |
+| `ci/testcases/{fpga,asic,timing}_gate.yaml` | a person | per build: a design, a target clock, `CONFIGS`, a group, optional `thresholds` and `known_issue` |
+| `ci/baselines/synthesis/{xilinx,yosys,screen}/<group>.json` | the gate | measured metrics, the config hash, the tool versions and environment |
 
 Groups are `core`, `tensor`, `graphics`, `dxa` and `vm`. `asic_gate` uses the
 same group names and gates a subset of the builds (§4.5), so where the two
 gates share a design, a divergence between the tools on the same module is a
-finding, not noise.
+finding, not noise. `timing_gate` screens exactly `fpga_gate`'s builds, so a
+unit it flags can be read against the Fmax gate's critical paths.
 
 The config hash ties the two files together: edit the spec, and the gate
 refuses to compare against numbers recorded for the old one. Its
@@ -344,6 +349,26 @@ so the flow reports the signed worst slack instead.
 | `KNOWN-ISSUE` | a tracked expected failure | no |
 | `XPASS` | a known issue stopped reproducing; clear the flag | no |
 | `RECORDED` | a baseline was written | no |
+
+#### What the timing gate asserts
+
+The screen counts logic levels, not slack: it does not see wires, so it gates
+depth, which it predicts (Spearman 0.49–0.93 against Vivado per register on the
+V80 gates), and leaves Fmax to `fpga_gate`. A **unit** is an end point's
+instance path with generate indices folded (`g_banks_3_bank` →
+`g_banks_*_bank`).
+
+| assertion | reason |
+|---|---|
+| no unit deeper than its baseline | the change that adds a level is named, by unit |
+| no new unit at the fix threshold (12 levels at 300 MHz) | a new deep cone is a regression even with no baseline to compare |
+| a shallower unit, or one that drops below the watch threshold (8), reads `IMPROVED` | the gain must be recorded |
+
+There is no tolerance: the same RTL and tools give the same levels. A new CIRCT
+or foldsim can map the same RTL differently, so both versions are in the config
+hash and a tool change reads `STALE`. `make -C hw/syn/xilinx/dut <dut>-screen`
+runs one screen by hand; its `screen/report.txt` prints the deepest paths op by
+op.
 
 #### Running a multi-hour sweep
 
@@ -491,6 +516,17 @@ job ends with no report, indistinguishable from an infrastructure outage.
 The largest designs — `top`, `gfx`, `tensor`, `vm` — are therefore gated on
 `fpga_gate` only, and `core` and `tex` are gated at a reduced width. Measure a design's peak memory before
 adding it: an over-budget design costs a silent job kill, not a red gate.
+
+### 4.6 `timing_gate.yml`
+
+On every pull request and push to master that touches the RTL, the DUT
+wrappers, the screen's scripts, the gate or its baselines; and by manual
+dispatch. One hosted job screens the whole catalog: it restores the toolchain,
+installs foldsim (`ci/toolchain_install.sh --foldsim`), runs the catalog's
+`run:` command with `--report`, and renders the report with
+[`synth_report.py`](../../ci/synth_report.py) into the workflow summary. The
+artifacts are the report and, per design, the build log, the summary and the
+screen's deepest paths.
 
 ---
 

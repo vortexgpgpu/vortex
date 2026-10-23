@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """synth_report — render synthesis-gate reports as one Markdown summary.
 
-Both gates end a run with `--report` JSON: asic_gate.yml one per DUT job,
-fpga_gate.yml one for the whole sweep. This joins them into a single Markdown
-document for the workflow summary -- every build's metrics against its
-baseline, why each build that did not pass did not, and where each design is
-tight -- so a run is diagnosed from its GitHub page rather than from the machine
-that built it. It exits with the worst outcome so the caller can decide whether
+Every gate ends a run with `--report` JSON: asic_gate.yml one per DUT job,
+fpga_gate.yml and timing_gate.yml one for the whole sweep. This joins them
+into a single Markdown document for the workflow summary -- every build's
+metrics against its baseline, why each build that did not pass did not, and
+where each design is tight -- so a run is diagnosed from its GitHub page
+rather than from the machine that built it. It exits with the worst outcome so the caller can decide whether
 the commit was actually gated:
 
   0  every build passed (or is a tracked known issue)
@@ -28,7 +28,7 @@ import traceback
 # pass are reported, not failed.
 PASSING = ("PASS", "RECORDED", "KNOWN-ISSUE", "XPASS")
 
-# Every metric either tool records, shown in this order when a build reports it.
+# Every metric any tool records, shown in this order when a build reports it.
 COLUMNS = (("Fmax (MHz)", "fmax_mhz", "%.1f"),
            ("WNS (ns)", "wns_ns", "%.3f"),
            ("TNS (ns)", "tns_ns", "%.1f"),
@@ -42,7 +42,10 @@ COLUMNS = (("Fmax (MHz)", "fmax_mhz", "%.1f"),
            ("LUTRAM", "lutram", "%d"),
            ("BRAM", "bram", "%d"),
            ("URAM", "uram", "%d"),
-           ("DSP", "dsp", "%d"))
+           ("DSP", "dsp", "%d"),
+           ("Max levels", "max_levels", "%d"),
+           ("End points >= 12", "deep_endpoints", "%d"),
+           ("End points >= 8", "watch_endpoints", "%d"))
 
 # Slack sits near zero by design, so a relative change of it says nothing.
 NO_DELTA = ("wns_ns", "tns_ns")
