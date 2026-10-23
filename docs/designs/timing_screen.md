@@ -74,13 +74,13 @@ foldsim-opt mapped.mlirbc -o /dev/null --pass-pipeline='builtin.module(
 | `foldsim-estimate-timing` option | meaning |
 |---|---|
 | `top=` | the top module (default: the one nothing instantiates) |
-| `family=` | `versal` (V80, default) or `virtexuplusHBM` (U55C) |
+| `family=` | `versal` (V80, default), `virtexuplusHBM` (U55C), or `asap7` (ASIC, §4.3) |
 | `black-boxes=` | modules to treat as external, as a harness stubs them |
 | `output=`, `instances=`, `report=` | the files of §5 |
 | `min-levels=` | write only end points at or above this many levels |
 | `top-paths=` | deepest paths to print op by op (default 50) |
 | `trace=` | also print the deepest path of each end point whose name contains this |
-| `retime-levels=` | also estimate the depth after Vivado's retiming to this period (§4.3) |
+| `retime-levels=` | also estimate the depth after Vivado's retiming to this period (§4.4) |
 
 ## 2. System architecture
 
@@ -197,7 +197,39 @@ register back, its clock enable or feedback; any other load pays the output
 stage. The fabric-to-product value is fitted on the V80 data. Any other
 family is an error.
 
-### 4.3 Retiming (optional)
+### 4.3 ASAP7
+
+For the ASIC flow (`hw/syn/yosys`, ASAP7 7.5-track RVT, TT corner) the
+screen counts **cell stages**, not LUT levels. `foldsim-timing-map-asic`
+maps the same balanced and-inverter graph to 3-input cuts, each one cell
+(NAND, AOI, MAJ, XOR), and `family=asap7` models the word-level operators
+as an ASIC builds them:
+
+| Element | Stages |
+|---|---|
+| cell (`comb.truth_table`, 3 inputs) or unmapped and-inverter gate | 1 |
+| adder, input bit j to output bit i | 2 + ⌈log₂(i − j + 1)⌉: a prefix adder |
+| order compare | 1 + ⌈log₂ span⌉ |
+| multiply | partial products, a Dadda tree of full adders (2 stages each), a prefix adder |
+| table of k inputs (small products and dividers) | k (a multiplexer tree) |
+| memory of flops (no macro) | 1 + ⌈log₂ depth⌉: a decoder and a multiplexer tree |
+
+SRAM macros (`VX_dp_ram_asic`, `VX_sp_ram_asic`) are black boxes, as in the
+flow's synthesis: their pins end and start paths. The report converts the
+deepest path to a period:
+
+```
+deepest path 45 stages: 58 + 167 + 45 x 24 + 6 = 1311 ps (763 MHz)
+                        clk→Q  path  stages × cell  setup
+```
+
+The cell (24 ps at fanout 3 and its own slew), clock-to-output (58 ps) and
+setup (6 ps) delays come from the Liberty, by `hw/syn/yosys/liberty_stage.py`;
+the path term (167 ps: the inverter after a DFFHQN's QN, buffering, slew) is
+fitted on OpenSTA (§7). Re-derive them for another corner or threshold
+voltage.
+
+### 4.4 Retiming (optional)
 
 All of Vortex's Vivado runs retime. With `retime-levels=N`, the `retimed`
 column estimates each end point's depth after one hop of balancing to a
@@ -245,6 +277,14 @@ its kind, the fanout of its bit, and its instance path and name:
 3. `foldsim-timing-map`, then `foldsim-estimate-timing` with
    `family=$(gen_platform.py --device=$(DEVICE) --emit=family)`;
 4. `screen_summary.py`.
+
+The ASIC flow has the same target, with the same sources, defines and SRAM
+black boxes as its synthesis, and `family=$(PDK)`:
+
+```bash
+make -C hw/syn/yosys/dut om TARGET=screen
+# om_VX_om_core_top/screen/report.txt: the deepest paths and the period
+```
 
 ### 6.2 `timing_gate`
 
@@ -300,6 +340,25 @@ profile was checked against `fpga_gate`'s critical paths: it agrees with
 the V80 profile wherever no DSP is on the path, and the remaining
 disagreement is the same on both devices.
 
+**ASAP7**, against OpenSTA on fresh syntheses of five DUTs (Yosys + ABC as
+`hw/syn/yosys` builds them, flip-flops named after their registers,
+`hw/syn/yosys/sta_endpoints.tcl` for the slack of each):
+
+| DUT | Registers | Spearman, stages vs arrival | Worst path: OpenSTA → screen |
+|---|---|---|---|
+| om | 93 | 0.91 | 827 → 879 ps |
+| cache | 526 | 0.82 | 1450 → 1311 ps |
+| dxa | 169 | 0.56 | 1018 → 1215 ps |
+| raster | 134 | 0.58 | 879 → 879 ps |
+| tex | 1002 | 0.93 | 840 → 807 ps |
+
+Per register, the fitted delay per stage is 17–25 ps, the library's 24.
+The worst path is within a mean 8 % on these five, from which the path term
+was fitted; on the six larger DUTs, the predicted Fmax is within a mean
+13 % (−32 % to +3 %) of the asic_gate baselines, some of which predate the
+current RTL. A DUT screens in 2–52 s, where Yosys and OpenSTA take
+2.5–37 min.
+
 ## 8. Diagnostics beyond levels
 
 `hw/scripts` has three Vivado Tcl probes for questions the
@@ -329,7 +388,9 @@ screen cannot answer, run on a checkpoint
   native gates are the reference for native RTL.
 - **Black boxes.** Vendor IPs and `black-boxes=` modules end and start
   paths at their pins: their insides are not timed.
-- **Devices.** The V80 and the U55C only.
+- **Devices.** The V80 and the U55C (Vivado), and ASAP7 RVT TT (the Yosys
+  flow). The ASAP7 numbers are the screen's period estimate, a sizing
+  guide, not a sign-off: they come within about 10–30 % of OpenSTA.
 - **Toolchain.** The catalog maps only with three CIRCT Synth fixes
   (zero-width mux, constant SOP cut, a failing longest-path query), which
   reach CI through the foldsim prebuilt.
