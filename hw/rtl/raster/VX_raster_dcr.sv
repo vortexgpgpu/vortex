@@ -32,13 +32,11 @@ module VX_raster_dcr import VX_gpu_pkg::*, VX_raster_pkg::*;
     output raster_dcrs_t    raster_dcrs
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    `UNUSED_VAR (reset)
 
     // Decode write strobe from the req-style DCR bus
     wire write_valid = dcr_bus_if.req_valid && dcr_bus_if.req_data.rw;
     wire [VX_DCR_ADDR_WIDTH-1:0] write_addr = dcr_bus_if.req_data.addr;
     wire [VX_DCR_DATA_WIDTH-1:0] write_data = dcr_bus_if.req_data.data;
-    `UNUSED_VAR (write_data[31])
 
     // Tie off response side
     assign dcr_bus_if.rsp_valid = 1'b0;
@@ -49,6 +47,12 @@ module VX_raster_dcr import VX_gpu_pkg::*, VX_raster_pkg::*;
 
     // DCRs write
     always @(posedge clk) begin
+        // Resets, so a single-sample driver never has to write it.
+        if (reset) begin
+            dcrs.msaa <= 1'b0;
+        end else if (write_valid && write_addr == `VX_DCR_RASTER_SAMPLES) begin
+            dcrs.msaa <= (write_data == VX_DCR_DATA_WIDTH'(RASTER_SAMPLES));
+        end
     `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
         // Snooped from the OM, which resets it too: a D24S8-only driver never
         // writes it.
@@ -89,6 +93,9 @@ module VX_raster_dcr import VX_gpu_pkg::*, VX_raster_pkg::*;
                 end
                 `VX_DCR_OM_ZBUF_PITCH: begin
                     dcrs.zbuf_pitch <= write_data[OM_PITCH_BITS-1:0];
+                end
+                `VX_DCR_OM_ZBUF_SAMPLE_STRIDE: begin
+                    dcrs.zbuf_sample_stride <= write_data[2 +: OM_SAMPLE_STRIDE_BITS];
                 end
                 `VX_DCR_OM_DEPTH_FUNC: begin
                     dcrs.depth_func <= write_data[OM_DEPTH_FUNC_BITS-1:0];

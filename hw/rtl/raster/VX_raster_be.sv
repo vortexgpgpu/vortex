@@ -58,10 +58,44 @@ module VX_raster_be import VX_raster_pkg::*; #(
     localparam OUTPUT_BATCHES  = (PER_BLOCK_QUADS + OUTPUT_QUADS - 1) / OUTPUT_QUADS;
     localparam OUTPUT_SEL_BITS = `LOG2UP(OUTPUT_BATCHES);
     localparam FIFO_DATA_WIDTH = OUTPUT_QUADS * $bits(raster_stamp_t);
+    localparam SAMPLE_BITS     = `CLOG2(RASTER_SAMPLES);
 
     wire stall;
 
+    // Under multisampling a block is evaluated once per sample. It is held at the
+    // input: its first cycle computes the block's origin term moved to sample 0,
+    // and on each of the next RASTER_SAMPLES cycles that registered term of sample
+    // k stands in for the origin term of every quad -- so the quad evaluator's
+    // per-pixel tests give sample k's coverage bit -- while sample k+1's is
+    // computed. The four bits assemble after the evaluator.
+    wire msaa = dcrs.msaa;
+    reg  [SAMPLE_BITS:0]   phase_r;   // 0: sample 0's term; k+1: sample k evaluated
+    reg  [2:0][`RASTER_DATA_BITS-1:0] corg_r;
+    wire [SAMPLE_BITS-1:0] sample_in      = SAMPLE_BITS'(phase_r - (SAMPLE_BITS+1)'(1));
+    wire [SAMPLE_BITS-1:0] offset_sample  = SAMPLE_BITS'(phase_r);
+    wire                   eval_in        = ~msaa || (phase_r != '0);
+    wire                   last_sample_in = ~msaa || (phase_r == (SAMPLE_BITS+1)'(RASTER_SAMPLES));
+
+    `STATIC_ASSERT((RASTER_SAMPLES == 4), ("the sample offsets are the 4x pattern's"))
+
+    wire [2:0][`RASTER_DATA_BITS-1:0] corg_n;
+    for (genvar k = 0; k < 3; ++k) begin : g_corg
+        assign corg_n[k] = edges_in[k][2] + raster_sample_offset(edges_in[k][0], edges_in[k][1], offset_sample);
+    end
+
+    always @(posedge clk) begin
+        if (reset) begin
+            phase_r <= '0;
+        end else if (valid_in && ~stall && msaa) begin
+            phase_r <= last_sample_in ? '0 : (phase_r + (SAMPLE_BITS+1)'(1));
+        end
+        if (valid_in && ~stall) begin
+            corg_r <= corg_n;
+        end
+    end
+
     wire valid_r;
+    wire [SAMPLE_BITS-1:0] sample_r;
     wire [`VX_RASTER_PID_BITS-1:0] pid_r;
     raster_rect_t scissor_r;
 `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
@@ -79,7 +113,8 @@ module VX_raster_be import VX_raster_pkg::*; #(
         assign quad_yloc[i] = yloc_in + `VX_RASTER_DIM_BITS'(2 * jj);
         wire [2:0][`RASTER_DATA_BITS-1:0] quad_edge_eval;
         for (genvar k = 0; k < 3; ++k) begin : g_k
-            assign quad_edge_eval[k] = ii * 2 * edges_in[k][0] + jj * 2 * edges_in[k][1] + edges_in[k][2];
+            wire [`RASTER_DATA_BITS-1:0] corg = msaa ? corg_r[k] : edges_in[k][2];
+            assign quad_edge_eval[k] = ii * 2 * edges_in[k][0] + jj * 2 * edges_in[k][1] + corg;
         end
         `EDGE_UPDATE (quad_edges[i], edges_in, quad_edge_eval);
     end
@@ -87,30 +122,29 @@ module VX_raster_be import VX_raster_pkg::*; #(
 `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
     // Carry the constant depth plane through the block-eval pipe with the quads.
     VX_pipe_register #(
-        .DATAW  (1 + `VX_RASTER_PID_BITS + RASTER_RECT_BITS + 3 * `RASTER_DATA_BITS + PER_BLOCK_QUADS * (2 * `VX_RASTER_DIM_BITS + 9 * `RASTER_DATA_BITS)),
+        .DATAW  (1 + SAMPLE_BITS + `VX_RASTER_PID_BITS + RASTER_RECT_BITS + 3 * `RASTER_DATA_BITS + PER_BLOCK_QUADS * (2 * `VX_RASTER_DIM_BITS + 9 * `RASTER_DATA_BITS)),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall),
-        .data_in  ({valid_in, pid_in, scissor_in, zplane_in, quad_xloc,   quad_yloc,   quad_edges}),
-        .data_out ({valid_r,  pid_r,  scissor_r,  zplane_r,  quad_xloc_r, quad_yloc_r, quad_edges_r})
+        .data_in  ({valid_in && eval_in, sample_in, pid_in, scissor_in, zplane_in, quad_xloc, quad_yloc, quad_edges}),
+        .data_out ({valid_r,  sample_r,  pid_r,  scissor_r,  zplane_r,  quad_xloc_r, quad_yloc_r, quad_edges_r})
     );
 `else
     VX_pipe_register #(
-        .DATAW  (1 + `VX_RASTER_PID_BITS + RASTER_RECT_BITS + PER_BLOCK_QUADS * (2 * `VX_RASTER_DIM_BITS + 9 * `RASTER_DATA_BITS)),
+        .DATAW  (1 + SAMPLE_BITS + `VX_RASTER_PID_BITS + RASTER_RECT_BITS + PER_BLOCK_QUADS * (2 * `VX_RASTER_DIM_BITS + 9 * `RASTER_DATA_BITS)),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall),
-        .data_in  ({valid_in, pid_in, scissor_in, quad_xloc,   quad_yloc,   quad_edges}),
-        .data_out ({valid_r,  pid_r,  scissor_r,  quad_xloc_r, quad_yloc_r, quad_edges_r})
+        .data_in  ({valid_in && eval_in, sample_in, pid_in, scissor_in, quad_xloc, quad_yloc, quad_edges}),
+        .data_out ({valid_r,  sample_r,  pid_r,  scissor_r,  quad_xloc_r, quad_yloc_r, quad_edges_r})
     );
 `endif
 
     wire qe_valid;
-    wire [PER_BLOCK_QUADS-1:0]  qe_overlap;
     wire [`VX_RASTER_PID_BITS-1:0] qe_pid;
     wire [PER_BLOCK_QUADS-1:0][3:0] qe_mask;
     wire [PER_BLOCK_QUADS-1:0][`VX_RASTER_DIM_BITS-1:0] qe_xloc;
@@ -138,12 +172,51 @@ module VX_raster_be import VX_raster_pkg::*; #(
         .edges_in   (quad_edges_r),
 
         .valid_out  (qe_valid),
-        .overlap_out(qe_overlap),
         .pid_out    (qe_pid),
         .mask_out   (qe_mask),
         .xloc_out   (qe_xloc),
         .yloc_out   (qe_yloc)
     );
+
+    // The quad evaluator registers its outputs once; the sample index follows it.
+    wire [SAMPLE_BITS-1:0] qe_sample;
+
+    VX_pipe_register #(
+        .DATAW  (SAMPLE_BITS)
+    ) qe_sample_reg (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (~stall),
+        .data_in  (sample_r),
+        .data_out (qe_sample)
+    );
+
+    // A pixel's sample mask: the bits of samples 0..2 accumulate here while their
+    // evaluations go past, and the block leaves with its last sample's. At one
+    // sample a pixel's coverage is bit 0.
+    reg  [PER_BLOCK_QUADS-1:0][3:0][RASTER_SAMPLES-2:0] smask_acc_r;
+    wire [PER_BLOCK_QUADS-1:0][3:0][RASTER_SAMPLES-1:0] qe_smask;
+    wire [PER_BLOCK_QUADS-1:0] qe_covered;
+    wire qe_last = ~msaa || (qe_sample == SAMPLE_BITS'(RASTER_SAMPLES - 1));
+    wire qe_valid_block = qe_valid && qe_last;
+
+    for (genvar i = 0; i < PER_BLOCK_QUADS; ++i) begin : g_smask
+        for (genvar p = 0; p < 4; ++p) begin : g_p
+            assign qe_smask[i][p] = msaa ? {qe_mask[i][p], smask_acc_r[i][p]}
+                                         : RASTER_SAMPLES'(qe_mask[i][p]);
+        end
+        assign qe_covered[i] = (| qe_smask[i]);
+    end
+
+    always @(posedge clk) begin
+        if (qe_valid && ~stall && ~qe_last) begin
+            for (integer i = 0; i < PER_BLOCK_QUADS; ++i) begin
+                for (integer p = 0; p < 4; ++p) begin
+                    smask_acc_r[i][p][qe_sample] <= qe_mask[i][p];
+                end
+            end
+        end
+    end
 
 `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
     // The quad evaluator registers its outputs once; delay the plane the same
@@ -171,10 +244,10 @@ module VX_raster_be import VX_raster_pkg::*; #(
         localparam q = i % OUTPUT_QUADS;
         localparam b = i / OUTPUT_QUADS;
         if (i < PER_BLOCK_QUADS) begin : g_valid
-            assign fifo_mask_in [b][q]         = qe_overlap[i];
+            assign fifo_mask_in [b][q]         = qe_covered[i];
             assign fifo_stamp_in[b][q].pos_x   = qe_xloc[i][`VX_RASTER_DIM_BITS-1:1];
             assign fifo_stamp_in[b][q].pos_y   = qe_yloc[i][`VX_RASTER_DIM_BITS-1:1];
-            assign fifo_stamp_in[b][q].mask    = qe_mask[i];
+            assign fifo_stamp_in[b][q].mask    = qe_smask[i];
             assign fifo_stamp_in[b][q].pid     = qe_pid;
         end else begin : g_extra
             assign fifo_mask_in[b][q]  = 0;
@@ -194,7 +267,7 @@ module VX_raster_be import VX_raster_pkg::*; #(
     wire fifo_fire;
 
     for (genvar i = 0; i < OUTPUT_BATCHES; ++i) begin : g_batch_valid
-        assign batch_valid[i] = qe_valid && (| fifo_mask_in[i]);
+        assign batch_valid[i] = qe_valid_block && (| fifo_mask_in[i]);
     end
 
     VX_priority_arbiter #(
@@ -230,7 +303,7 @@ module VX_raster_be import VX_raster_pkg::*; #(
     // output queue
 
     wire fifo_valid_in, fifo_ready_in;
-    assign fifo_valid_in = qe_valid && (| fifo_mask_in[fifo_arb_index]);
+    assign fifo_valid_in = qe_valid_block && (| fifo_mask_in[fifo_arb_index]);
     assign fifo_fire = fifo_valid_in && fifo_ready_in;
 
 `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
@@ -265,7 +338,7 @@ module VX_raster_be import VX_raster_pkg::*; #(
 
     assign stall = fifo_valid_in && (~fifo_ready_in || ~batch_sent_all);
 
-    assign ready_in = ~stall;
+    assign ready_in = ~stall && last_sample_in;
 
     assign busy_out = valid_r || qe_valid;
 
@@ -281,7 +354,7 @@ module VX_raster_be import VX_raster_pkg::*; #(
 
         for (integer i = 0; i < OUTPUT_QUADS; ++i) begin
             if (valid_out && ready_out) begin
-                `TRACE(2, ("%d: %s-be-out[%0d]: x=%0d, y=%0d, mask=%0d, pid=%0d\n",
+                `TRACE(2, ("%d: %s-be-out[%0d]: x=%0d, y=%0d, mask=0x%0h, pid=%0d\n",
                     $time, INSTANCE_ID, i, stamps_out[i].pos_x, stamps_out[i].pos_y, stamps_out[i].mask, stamps_out[i].pid))
             end
         end

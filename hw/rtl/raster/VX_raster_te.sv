@@ -29,6 +29,9 @@ module VX_raster_te import VX_raster_pkg::*; #(
     input wire clk,
     input wire reset,
 
+    // 4 samples per pixel
+    input wire                          msaa,
+
     // Inputs
     input wire                          valid_in,
     input wire [`VX_RASTER_DIM_BITS-1:0] xloc_in,
@@ -64,6 +67,10 @@ module VX_raster_te import VX_raster_pkg::*; #(
     wire stall;
 
     reg [2:0][`RASTER_DATA_BITS-1:0] tile_extents;
+    // Edge value at a pixel's centre minus that at its top-left corner, per edge:
+    // the multisample footprint reaches half a pixel either side of the centre,
+    // so a 4x tile is bounded from its first pixel's corner.
+    reg [2:0][`RASTER_DATA_BITS-1:0] tile_cbias;
     reg [(3 * 3 * `RASTER_DATA_BITS)-1:0] tile_edges;
 `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
     reg [2:0][`RASTER_DATA_BITS-1:0]    tile_zplane;
@@ -127,6 +134,9 @@ module VX_raster_te import VX_raster_pkg::*; #(
                     // select new tile input
                     tile_valid          <= 1;
                     tile_extents        <= extents_in;
+                    for (integer k = 0; k < 3; ++k) begin
+                        tile_cbias[k]   <= `RASTER_DATA_BITS'($signed(edges_in[k][0] + edges_in[k][1]) >>> 1);
+                    end
                     tile_edges          <= edges_in;
                 `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
                     tile_zplane         <= zplane_in;
@@ -164,7 +174,8 @@ module VX_raster_te import VX_raster_pkg::*; #(
 
     wire [2:0][`RASTER_DATA_BITS-1:0] edge_eval;
     for (genvar i = 0; i < 3; ++i) begin : g_edge_eval
-        assign edge_eval[i] = tile_edge_eval[i] + (tile_extents[i] >> tile_level);
+        wire [`RASTER_DATA_BITS-1:0] cbias = msaa ? tile_cbias[i] : '0;
+        assign edge_eval[i] = tile_edge_eval[i] + (tile_extents[i] >> tile_level) - cbias;
     end
 
     wire overlap = ~(edge_eval[0][`RASTER_DATA_BITS-1]

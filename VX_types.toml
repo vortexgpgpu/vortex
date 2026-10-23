@@ -369,6 +369,9 @@ VX_RASTER_PID_BITS    = 16
 
 [om_const]
 VX_OM_DIM_BITS    = 15
+# Width of a row pitch in bytes (VX_DCR_OM_CBUF_PITCH, VX_DCR_OM_ZBUF_PITCH): a
+# row of 2^VX_OM_DIM_BITS columns of up to 8-byte texels, less one byte.
+VX_OM_PITCH_BITS  = 18
 VX_OM_DEPTH_BITS  = 24
 VX_OM_STENCIL_BITS = 8
 # Width of a fragment's depth through the merger: the whole word of a float
@@ -383,6 +386,10 @@ VX_OM_MAX_RT      = 8
 # fills the word, and its pair carries the face and attachment in the address.
 VX_OM_DEPTH_WORD_RT_SHIFT   = 24
 VX_OM_DEPTH_WORD_FACE_SHIFT = 27
+# The sample a 4x export merges (VX_DCR_OM_SAMPLES), two bits. A record whose
+# face rides its address carries the sample there too, directly above y and
+# below the face.
+VX_OM_DEPTH_WORD_SAMPLE_SHIFT = 28
 
 VX_OM_DEPTH_FUNC_ALWAYS   = 0
 VX_OM_DEPTH_FUNC_NEVER    = 1
@@ -546,7 +553,12 @@ VX_DCR_RASTER_FRAG_ENTRY_LO = 0x066
 VX_DCR_RASTER_FRAG_ENTRY_HI = 0x067
 VX_DCR_RASTER_FRAG_PARAM_LO = 0x068
 VX_DCR_RASTER_FRAG_PARAM_HI = 0x069
-VX_DCR_RASTER_STATE_END     = 0x06A
+# Samples per pixel: 1, or 4 at the standard positions (GFX_MSAA4_SAMPLE_DX16/DY16).
+# At 4 the unit tests every sample and each pixel of a quad record carries its
+# 4-bit sample mask (VX_CSR_FRAG_MASK); a quad is emitted when any sample is
+# covered. Other values are reserved.
+VX_DCR_RASTER_SAMPLES       = 0x06A
+VX_DCR_RASTER_STATE_END     = 0x06B
 
 [dcr_om]
 VX_DCR_OM_STATE_BEGIN       = 0x080
@@ -590,6 +602,11 @@ VX_DCR_OM_EARLYZ_SAFE       = 0x092
 # targets attachment zero. On a float depth target the depth fills the pair's
 # word, so the pair takes the face and attachment in the address instead:
 #     float pair:        offset = ((rt << 1 | face) << YBITS | y) << XBITS | x) << RECORD_SHIFT
+# Under 4x multisampling (VX_DCR_OM_SAMPLES) a record names one sample k. A
+# colour+depth pair carries it in its depth word; the other records carry it
+# directly above y, below the face, so their meta fields move up two bits:
+#     one-word record:   offset = (((face << 2 | k) << YBITS | y) << XBITS | x) << RECORD_SHIFT
+#     float pair:        offset = ((((rt << 1 | face) << 2 | k) << YBITS | y) << XBITS | x) << RECORD_SHIFT
 #
 # The window is bounded by VX_MEM_OM_END_ADDR and cannot grow -- the page table
 # starts immediately above it -- so the encoding must satisfy
@@ -635,7 +652,17 @@ VX_DCR_OM_CBUF_FORMAT       = 0x099
 # so a query is the difference of two reads modulo 2^32.
 VX_DCR_OM_OCC_CTRL          = 0x09A
 VX_DCR_OM_OCC_COUNT         = 0x09B
-VX_DCR_OM_STATE_END         = 0x09C
+# Samples per pixel of every attachment, colour and depth/stencil: 1, or 4. A 4x
+# attachment holds an image per sample: sample k's image starts k sample strides
+# past sample 0's, which CBUF_ADDR/ZBUF_ADDR name, and keeps their pitch. A
+# fragment export names one sample (VX_OM_DEPTH_WORD_SAMPLE_SHIFT, or the
+# address bits above y) and merges that sample alone. Resets to 1.
+VX_DCR_OM_SAMPLES           = 0x09C
+# Bytes between the sample images of the depth/stencil attachment, and of the
+# colour attachment RT_SELECT names; multiples of 4. Read under 4x only.
+VX_DCR_OM_ZBUF_SAMPLE_STRIDE = 0x09D
+VX_DCR_OM_CBUF_SAMPLE_STRIDE = 0x09E
+VX_DCR_OM_STATE_END         = 0x09F
 
 [dcr_rtu]
 # Ray-Tracing Unit DCRs.
@@ -841,6 +868,7 @@ VX_CSR_CTA_ENTRY = 0xCE1  # kernel entry PC, supplied per-CTA by the KMU
 # before the warp is activated). The fragment shader reads its own pixel here.
 VX_CSR_FRAG_POS     = 0xCE2  # {covered[31], y[30:16], x[15:0]} of this lane's pixel
 VX_CSR_FRAG_PID     = 0xCE3  # primitive index of this lane's quad
+VX_CSR_FRAG_MASK    = 0xCE4  # this lane's sample coverage: bit k = sample k (bit 0 alone at one sample)
 
 [dcr_mpm_class]
 VX_DCR_MPM_CLASS_BASE    = 0

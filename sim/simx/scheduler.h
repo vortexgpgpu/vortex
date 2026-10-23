@@ -102,6 +102,8 @@ struct warp_t {
   // it into the launch message) and read back as the FRAG_* CSRs. The shader no
   // longer fetches its own stamp out of a window.
   std::array<graphics::frag_payload_t, VX_CFG_NUM_THREADS> frag;
+  // Each lane's sample coverage, read as VX_CSR_FRAG_MASK.
+  std::array<uint32_t, VX_CFG_NUM_THREADS> frag_mask = {};
 #endif
 
   warp_t(uint32_t num_threads);
@@ -139,6 +141,7 @@ public:
   struct FwdWave {
     ThreadMask tmask;
     std::array<graphics::frag_payload_t, VX_CFG_NUM_THREADS> payload;
+    std::array<uint32_t, VX_CFG_NUM_THREADS> mask = {};   // sample coverage (FRAG_MASK)
     FwdWave() : tmask(VX_CFG_NUM_THREADS) {}
   };
   // Arm from the RASTER fragment-dispatch descriptor (RASTER_FRAG_* DCRs):

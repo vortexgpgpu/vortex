@@ -112,3 +112,51 @@ __kernel void kernel_main_mrt_float(kernel_arg_t* __UNIFORM__ arg) {
                                        arg->aperture_record_shift, x, y, arg->backface, arg->rt2),
         color, arg->depth);
 }
+
+// One fragment per pixel, exported once for each sample it covers, with that
+// sample's depth: under 4x the samples msaa_frag_mask names, at one sample the
+// pixel. A separate entry for the same reason as kernel_main_mrt.
+__kernel void kernel_main_msaa(kernel_arg_t* __UNIFORM__ arg) {
+    uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
+    uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
+    if (x >= arg->dst_width || y >= arg->dst_height) {
+        return;
+    }
+
+    const uint32_t color = frag_color(arg, x, y);
+    const bool     ms    = arg->samples > 1;
+    const uint32_t mask  = ms ? msaa_frag_mask(x, y) : 1u;
+    const uint32_t xb = arg->aperture_xbits, yb = arg->aperture_ybits;
+    const uint32_t sh = arg->aperture_record_shift;
+    for (uint32_t k = 0; k < 4; ++k) {
+        if (!((mask >> k) & 1)) {
+            continue;
+        }
+        // A float target stores the depth's ordered key.
+        uint32_t depth = msaa_frag_depth(x, y, k);
+        if (arg->depth_float) {
+            float f = msaa_frag_depth_f(x, y, k);
+            uint32_t bits;
+            __builtin_memcpy(&bits, &f, 4);
+            depth = gfx_sw::om_float_depth_key(bits);
+        }
+        if (arg->depth_only) {
+            vx_om_export_depth(ms ? VX_OM_APERTURE_ADDR_SAMPLE(xb, yb, sh, x, y, arg->backface, k)
+                                  : VX_OM_APERTURE_ADDR(xb, yb, sh, x, y, arg->backface),
+                               depth);
+        } else if (arg->depth_float) {
+            vx_om_export_both(
+                ms ? VX_OM_APERTURE_ADDR_FLOAT_PAIR_SAMPLE(xb, yb, sh, x, y, arg->backface, 0, k)
+                   : VX_OM_APERTURE_ADDR_FLOAT_PAIR(xb, yb, sh, x, y, arg->backface, 0),
+                color, depth);
+        } else {
+            const uint32_t addr = VX_OM_APERTURE_ADDR_PAIR(xb, sh, x, y);
+            vx_om_export_both(addr, color,
+                VX_OM_DEPTH_WORD_SAMPLE(msaa_frag_depth(x, y, k), 0, arg->backface, k));
+            if (arg->mrt) {
+                vx_om_export_both(addr, color,
+                    VX_OM_DEPTH_WORD_SAMPLE(msaa_frag_depth(x, y, k), arg->rt2, arg->backface, k));
+            }
+        }
+    }
+}

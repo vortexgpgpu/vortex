@@ -22,4 +22,6 @@ SHADERS := $(SRC_DIR)/mrt.vert \
            $(SRC_DIR)/mrt_quad.vert \
            $(SRC_DIR)/mrt_read.frag
 
+FF_RASTER := 1
+
 include ../common.mk

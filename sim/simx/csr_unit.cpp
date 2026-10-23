@@ -108,6 +108,7 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
 #ifdef VX_CFG_EXT_RASTER_ENABLE
   case VX_CSR_FRAG_POS: return warp.frag[tid].pos;
   case VX_CSR_FRAG_PID: return warp.frag[tid].pid;
+  case VX_CSR_FRAG_MASK: return warp.frag_mask[tid];
 #endif
   case VX_CSR_CTA_BLOCK_ID_X:  return warp.cta_csrs.block_idx[0];
   case VX_CSR_CTA_BLOCK_ID_Y:  return warp.cta_csrs.block_idx[1];

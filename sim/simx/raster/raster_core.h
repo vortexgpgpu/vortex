@@ -59,6 +59,13 @@ public:
   std::vector<SimChannel<MemReq>>     rcache_req_out;
   std::vector<SimChannel<MemRsp>>     rcache_rsp_in;
 
+#if VX_CFG_RASTER_EARLYZ_ENABLED
+  // Early-Z committed-depth read ports, sharing the ocache with the OM.
+  // Size = OCACHE_NUM_BANKS.
+  std::vector<SimChannel<MemReq>>     ocache_req_out;
+  std::vector<SimChannel<MemRsp>>     ocache_rsp_in;
+#endif
+
   // Fragment-work-distributor control links: one arm strobe per owned core;
   // every core reports its drain back on the shared done link.
   std::vector<SimEventLink<FwdArm>>   fwd_arm_out;

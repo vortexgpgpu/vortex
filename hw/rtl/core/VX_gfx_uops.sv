@@ -46,16 +46,16 @@
 //     colour only (early-Z owns the depth test AND write -- the common case)
 //       uop 0 : sw rs2 (colour), [rs1 + 0]
 //     depth only (z-prepass / shadow map -- no colour target exists)
-//       uop 0 : sw rs3 (depth),  [rs1 + 4]
+//       uop 0 : sw rs3 (depth),  [rs1 + 0]
 //     both (gl_FragDepth)
 //       uop 0 : sw rs2 (colour), [rs1 + 0]
 //       uop 1 : sw rs3 (depth),  [rs1 + 4]
 //
 //   Every export uop is an ORDINARY store. The LSU learns nothing about OM: a
-//   depth uop simply renames its source register (rs2 := rs3) and bumps the
-//   immediate, so the address falls out of the existing AGU (addr = base +
-//   sext(offset) at pack == 0 -- which is why VX_lsu_agu's header can still claim
-//   it owns every address form).
+//   depth uop simply renames its source register (rs2 := rs3), and the second
+//   uop of a pair bumps the immediate, so the address falls out of the existing
+//   AGU (addr = base + sext(offset) at pack == 0 -- which is why VX_lsu_agu's
+//   header can still claim it owns every address form).
 //
 //   The two-word case is ATOMIC against other warps, and that is why it belongs
 //   here and not in the LSU. A uop burst carries fu_lock on its first uop and
@@ -134,8 +134,9 @@ module VX_gfx_uops import VX_gpu_pkg::*; (
         ibuf_r = ibuf_in;
 `ifdef VX_CFG_EXT_OM_ENABLE
         if (is_export) begin
-            // colour at record+0, depth at record+4
-            ibuf_r.op_args.lsu.offset = is_depth_uop ? 12'd4 : 12'd0;
+            // A one-word record's word is at record+0; a colour+depth pair has
+            // its depth at record+4.
+            ibuf_r.op_args.lsu.offset = (is_depth_uop && has_colour) ? 12'd4 : 12'd0;
             // a depth uop stores rs3 -- rename it into the store-data slot so the
             // LSU sees a plain `sw rs2`
             if (is_depth_uop) begin

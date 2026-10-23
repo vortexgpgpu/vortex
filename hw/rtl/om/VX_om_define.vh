@@ -47,6 +47,9 @@
         `VX_DCR_OM_LOGIC_OP:            `TRACE(level, ("LOGIC_OP")) \
         `VX_DCR_OM_DEPTH_FORMAT:        `TRACE(level, ("DEPTH_FORMAT")) \
         `VX_DCR_OM_OCC_CTRL:            `TRACE(level, ("OCC_CTRL")) \
+        `VX_DCR_OM_SAMPLES:             `TRACE(level, ("SAMPLES")) \
+        `VX_DCR_OM_ZBUF_SAMPLE_STRIDE:  `TRACE(level, ("ZBUF_SAMPLE_STRIDE")) \
+        `VX_DCR_OM_CBUF_SAMPLE_STRIDE:  `TRACE(level, ("CBUF_SAMPLE_STRIDE")) \
         default:                        `TRACE(level, ("?")) \
     endcase
 

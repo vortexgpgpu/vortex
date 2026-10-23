@@ -25,4 +25,6 @@ SHADERS := $(SRC_DIR)/resolve.vert \
 
 LDLIBS += -lm
 
+FF_RASTER := 1
+
 include ../common.mk

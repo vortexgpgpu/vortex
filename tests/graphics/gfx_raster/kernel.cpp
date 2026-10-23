@@ -25,7 +25,9 @@ static void sw_raster_main(kernel_arg_t* arg) {
     uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
     uint32_t pid = gid / VX_FRAG_QUAD_LANES;
     uint32_t sub = gid % VX_FRAG_QUAD_LANES;
-    if (pid >= arg->num_prims) return;
+    if (pid >= arg->num_prims) {
+        return;
+    }
 
     const rast_prim_t* prim =
         reinterpret_cast<const rast_prim_t*>(
@@ -73,5 +75,70 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
             arg->cbuf_addr + vx_frag_x(p) * arg->cbuf_stride
                            + vx_frag_y(p) * arg->cbuf_pitch);
         *dst_ptr = arg->pid_color ? prim_id_color(arg->pid_base + p.pid) : out_color;
+    }
+}
+
+// 4x multisampling: the colour buffer is sample-interleaved and every covered
+// sample of a covered pixel takes the colour. A separate entry, so the
+// single-sample shader's instruction sequence is unchanged.
+static void sw_raster_msaa(kernel_arg_t* arg) {
+    uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
+    uint32_t pid = gid / VX_FRAG_QUAD_LANES;
+    uint32_t sub = gid % VX_FRAG_QUAD_LANES;
+    if (pid >= arg->num_prims) {
+        return;
+    }
+
+    const rast_prim_t* prim =
+        reinterpret_cast<const rast_prim_t*>(
+            (uintptr_t)(arg->prim_addr + (uint64_t)pid * sizeof(rast_prim_t)));
+
+    uint32_t tile = 1u << arg->tile_logsize;
+    const gfx_rast::RastConfig cfg = gfx_rast::rast_prim_config(
+        { arg->tile_logsize, RAST_SCISSOR_LO(arg->scissor_x), RAST_SCISSOR_LO(arg->scissor_y),
+          RAST_SCISSOR_HI(arg->scissor_x), RAST_SCISSOR_HI(arg->scissor_y) },
+        prim->scissor_x, prim->scissor_y);
+    const uint32_t color = arg->pid_color ? prim_id_color(arg->pid_base + pid) : out_color;
+
+    for (uint32_t ty = 0; ty < arg->dst_height; ty += tile) {
+        for (uint32_t tx = 0; tx < arg->dst_width; tx += tile) {
+            gfx_rast::rast_walk_primitive_msaa(cfg, tx, ty, pid, prim->edges,
+                [&](uint32_t pos_mask, const vec3e_t*, const uint32_t* sample_masks, uint32_t) {
+                    uint32_t qx = (pos_mask >> 4) & ((1u << (VX_RASTER_DIM_BITS - 1)) - 1);
+                    uint32_t qy =  pos_mask >> (4 + (VX_RASTER_DIM_BITS - 1));
+                    uint32_t px = (qx << 1) + (sub & 1);
+                    uint32_t py = (qy << 1) + (sub >> 1);
+                    if (px >= arg->dst_width || py >= arg->dst_height) {
+                        return;
+                    }
+                    for (uint32_t k = 0; k < arg->samples; ++k) {
+                        if ((sample_masks[sub] >> k) & 1) {
+                            *reinterpret_cast<uint32_t*>(
+                                (uintptr_t)(arg->cbuf_addr + px * arg->cbuf_stride + k * 4
+                                                           + py * arg->cbuf_pitch)) = color;
+                        }
+                    }
+                });
+        }
+    }
+}
+
+__kernel void kernel_main_msaa(kernel_arg_t* __UNIFORM__ arg) {
+
+    if (arg->sw_path) {
+        sw_raster_msaa(arg);
+        return;
+    }
+
+    frag_payload_t p;
+    vx_frag_load(p);
+    const uint32_t mask  = vx_frag_mask();
+    const uint32_t color = arg->pid_color ? prim_id_color(arg->pid_base + p.pid) : out_color;
+    for (uint32_t k = 0; k < arg->samples; ++k) {
+        if ((mask >> k) & 1) {
+            *reinterpret_cast<uint32_t*>(
+                arg->cbuf_addr + vx_frag_x(p) * arg->cbuf_stride + k * 4
+                               + vx_frag_y(p) * arg->cbuf_pitch) = color;
+        }
     }
 }

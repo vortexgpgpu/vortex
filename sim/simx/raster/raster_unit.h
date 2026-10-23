@@ -50,6 +50,10 @@ struct RasterReq {
 struct RasterStamp {
   uint32_t pos_mask = 0;                                  // (pos_y<<18) | (pos_x<<4) | mask
   uint32_t pid      = 0;
+  // Pixel p's sample coverage in bits [4p, 4p+4): all four samples under 4x
+  // multisampling, bit 0 alone at one sample. A pixel's bit in pos_mask is set
+  // when any of its samples is.
+  uint32_t smask    = 0;
 };
 
 // RasterRsp — per-lane raster payload returned to SfuUnit, which stages each

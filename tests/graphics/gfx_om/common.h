@@ -29,6 +29,33 @@ typedef struct {
   // instead of vx_om4. Validates the SW OM against the FF golden on real HW.
   uint32_t           sw_path;
   gfx_sw::om_state_t om;
+
+  // Per-sample merging (kernel_main_msaa): under 4x every fragment covers the
+  // samples msaa_frag_mask names, each at its own depth, and exports once per
+  // sample; at one sample it exports sample 0 alone.
+  uint32_t  samples;
+  uint32_t  depth_float;   // D32F: the depth is the whole word, face in the address
+  uint32_t  depth_only;    // one-word depth records, colour masked off
+  uint32_t  mrt;           // also export to attachment rt2
 } kernel_arg_t;
+
+// The 4x pattern the multisample kernel draws and the host reference replays:
+// the samples (x, y) covers (never none, sometimes all), the depth of sample k
+// (Q24 for a unorm target, a float for D32F) and the depth each sample starts at.
+static inline uint32_t msaa_frag_mask(uint32_t x, uint32_t y) {
+  return ((x * 5u + y * 3u) % 15u) + 1u;
+}
+static inline uint32_t msaa_frag_depth(uint32_t x, uint32_t y, uint32_t k) {
+  return ((x * 37u + y * 11u + k * 53u) & 0xffu) << 16;
+}
+static inline float msaa_frag_depth_f(uint32_t x, uint32_t y, uint32_t k) {
+  return (float)((x * 37u + y * 11u + k * 53u) & 0xffu) / 128.0f - 1.0f;
+}
+static inline uint32_t msaa_init_depth(uint32_t x, uint32_t y, uint32_t k) {
+  return ((x * 13u + y * 7u + k * 29u) & 0xffu) << 16;
+}
+static inline float msaa_init_depth_f(uint32_t x, uint32_t y, uint32_t k) {
+  return (float)((x * 13u + y * 7u + k * 29u) & 0xffu) / 128.0f - 1.0f;
+}
 
 #endif

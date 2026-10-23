@@ -467,6 +467,7 @@ void Scheduler::fwd_try_inject() {
     // The stamp arrives with the launch: land it in this warp's launch registers
     // (read back as the FRAG_* CSRs). No window tenancy, no slot, no window op.
     warps_.at(wid).frag = wave.payload;
+    warps_.at(wid).frag_mask = wave.mask;
 
     fwd_is_fragment_[wid] = true;
     ++fwd_launched_;

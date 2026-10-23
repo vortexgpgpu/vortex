@@ -126,6 +126,7 @@ private:
     switch (addr) {
     case VX_DCR_OM_CBUF_ADDR:
     case VX_DCR_OM_CBUF_PITCH:
+    case VX_DCR_OM_CBUF_SAMPLE_STRIDE:
     case VX_DCR_OM_CBUF_FORMAT:
     case VX_DCR_OM_CBUF_WRITEMASK:
     case VX_DCR_OM_BLEND_MODE:

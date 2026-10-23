@@ -46,6 +46,7 @@
         `VX_DCR_RASTER_PBUF_STRIDE: `TRACE(level, ("PBUF_STRIDE")) \
         `VX_DCR_RASTER_SCISSOR_X:   `TRACE(level, ("SCISSOR_X")) \
         `VX_DCR_RASTER_SCISSOR_Y:   `TRACE(level, ("SCISSOR_Y")) \
+        `VX_DCR_RASTER_SAMPLES:     `TRACE(level, ("SAMPLES")) \
         default:                    `TRACE(level, ("?")) \
     endcase
 

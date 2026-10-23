@@ -689,7 +689,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     always @(posedge clk) begin
         if (raster_bus_tmp_if[0].req_valid && raster_bus_tmp_if[0].req_ready) begin
             for (integer i = 0; i < OUTPUT_QUADS; ++i) begin
-                `TRACE(1, ("%d: %s-out[%0d]: armed=%b, x=%0d, y=%0d, mask=%0d, pid=%0d\n",
+                `TRACE(1, ("%d: %s-out[%0d]: armed=%b, x=%0d, y=%0d, mask=0x%0h, pid=%0d\n",
                     $time, INSTANCE_ID, i, armed_r,
                     raster_bus_tmp_if[0].req_data.stamps[i].pos_x, raster_bus_tmp_if[0].req_data.stamps[i].pos_y, raster_bus_tmp_if[0].req_data.stamps[i].mask, raster_bus_tmp_if[0].req_data.stamps[i].pid))
             end

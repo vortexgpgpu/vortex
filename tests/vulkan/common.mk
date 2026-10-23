@@ -136,7 +136,10 @@ endif
 # so the run logs every fragment variant vortexpipe compiles and fails if any of
 # them merges in software.
 FF_OM ?= 0
-ifeq ($(FF_OM),1)
+# FF_RASTER := 1 likewise fails the run if any fragment variant rasterizes in
+# software rather than on the RASTER unit.
+FF_RASTER ?= 0
+ifneq ($(FF_OM)$(FF_RASTER),00)
 RUN_ENV += VORTEXPIPE_DEBUG=1
 endif
 # A test that runs some of its work on llvmpipe on purpose (STRICT := 0) can
@@ -193,6 +196,14 @@ define check_run
 	fi; \
 	if [ "$(FF_OM)" = 1 ] && ! echo "$$out" | grep -q 'compiled FS variant.*sw_om=0'; then \
 	   echo "FAIL: $(PROJECT) reported no fragment variant, so the merger path is unverified"; \
+	   exit 1; \
+	fi; \
+	if [ "$(FF_RASTER)" = 1 ] && echo "$$out" | grep -q 'compiled FS variant.*sw_raster=1'; then \
+	   echo "FAIL: $(PROJECT) rasterized a draw in software, not on the rasterizer"; \
+	   exit 1; \
+	fi; \
+	if [ "$(FF_RASTER)" = 1 ] && ! echo "$$out" | grep -q 'compiled FS variant.*sw_raster=0'; then \
+	   echo "FAIL: $(PROJECT) reported no fragment variant, so the rasterizer path is unverified"; \
 	   exit 1; \
 	fi; \
 	for p in $(EXPECT_ATTRIB); do \

@@ -124,6 +124,20 @@ inline void vx_tex_cmp_uv(int u_fx, int v_fx, unsigned layer, unsigned level,
    | ((uint32_t)(rt) << VX_OM_DEPTH_WORD_RT_SHIFT)                             \
    | ((uint32_t)(face) << VX_OM_DEPTH_WORD_FACE_SHIFT))
 
+// Under 4x multisampling (VX_DCR_OM_SAMPLES) an export merges one sample k of its
+// pixel. A colour+depth pair carries k in its depth word; a record whose face
+// rides the address carries k there, between y and the face.
+#define VX_OM_DEPTH_WORD_SAMPLE(depth, rt, face, k)                            \
+  (VX_OM_DEPTH_WORD(depth, rt, face) | ((uint32_t)(k) << VX_OM_DEPTH_WORD_SAMPLE_SHIFT))
+
+#define VX_OM_APERTURE_ADDR_SAMPLE(xbits, ybits, record_shift, x, y, face, k)  \
+  VX_OM_APERTURE_ADDR(xbits, ybits, record_shift, x, y,                        \
+                      ((uint32_t)(face) << 2) | (uint32_t)(k))
+
+#define VX_OM_APERTURE_ADDR_FLOAT_PAIR_SAMPLE(xbits, ybits, record_shift, x, y, face, rt, k) \
+  VX_OM_APERTURE_ADDR(xbits, ybits, record_shift, x, y,                        \
+                      ((((uint32_t)(rt) << 1) | (uint32_t)(face)) << 2) | (uint32_t)(k))
+
 // vx_om_export — one fragment. CUSTOM1 funct3=3, R4-type, rd=x0 (posted).
 // funct7[1:0] = {has_depth, has_colour}: a shader may emit colour only (the
 // common case — early-Z owns the depth test AND the depth write), depth only
@@ -148,6 +162,9 @@ inline void vx_tex_cmp_uv(int u_fx, int v_fx, unsigned layer, unsigned level,
 // This lane's fragment stamp, straight out of its launch registers.
 #define vx_frag_pos()     ((uint32_t)csr_read(VX_CSR_FRAG_POS))
 #define vx_frag_pid()     ((uint32_t)csr_read(VX_CSR_FRAG_PID))
+// This lane's sample coverage as rasterized: bit k = sample k under 4x
+// multisampling (VX_DCR_RASTER_SAMPLES), bit 0 alone at one sample.
+#define vx_frag_mask()    ((uint32_t)csr_read(VX_CSR_FRAG_MASK))
 
 // Primitive-order merge. Warps run in any order, so two fragments of one pixel
 // can reach the merge out of primitive order. Each fragment warp takes a ticket

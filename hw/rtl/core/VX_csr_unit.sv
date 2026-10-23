@@ -129,16 +129,18 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     wire is_cta_y_w   = (csr_addr == `VX_CSR_CTA_THREAD_ID_Y);
     wire is_cta_z_w   = (csr_addr == `VX_CSR_CTA_THREAD_ID_Z);
 `ifdef VX_CFG_EXT_RASTER_ENABLE
-    wire is_frag_pos_w = (csr_addr == `VX_CSR_FRAG_POS);
-    wire is_frag_pid_w = (csr_addr == `VX_CSR_FRAG_PID);
+    wire is_frag_pos_w  = (csr_addr == `VX_CSR_FRAG_POS);
+    wire is_frag_pid_w  = (csr_addr == `VX_CSR_FRAG_PID);
+    wire is_frag_mask_w = (csr_addr == `VX_CSR_FRAG_MASK);
 `else
-    wire is_frag_pos_w = 1'b0;
-    wire is_frag_pid_w = 1'b0;
+    wire is_frag_pos_w  = 1'b0;
+    wire is_frag_pid_w  = 1'b0;
+    wire is_frag_mask_w = 1'b0;
 `endif
     wire [`VX_CFG_XLEN-1:0] tid_base_w = is_gtid_w ? gtid_base : wtid_base;
 
     // Registered with the scalar decode, in the cycle before the request fires.
-    reg is_tid_r, is_cta_x_r, is_cta_y_r, is_cta_z_r, is_frag_pos_r, is_frag_pid_r;
+    reg is_tid_r, is_cta_x_r, is_cta_y_r, is_cta_z_r, is_frag_pos_r, is_frag_pid_r, is_frag_mask_r;
     reg [`VX_CFG_XLEN-1:0] tid_base_r;
     always @(posedge clk) begin
         is_tid_r      <= is_wtid_w || is_gtid_w;
@@ -147,6 +149,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         is_cta_z_r    <= is_cta_z_w;
         is_frag_pos_r <= is_frag_pos_w;
         is_frag_pid_r <= is_frag_pid_w;
+        is_frag_mask_r <= is_frag_mask_w;
         tid_base_r    <= tid_base_w;
     end
 
@@ -155,6 +158,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         if (~reset && csr_req_fire) begin
             `ASSERT(is_tid_r == (is_wtid_w || is_gtid_w) && is_cta_x_r == is_cta_x_w && is_cta_y_r == is_cta_y_w
                  && is_cta_z_r == is_cta_z_w && is_frag_pos_r == is_frag_pos_w && is_frag_pid_r == is_frag_pid_w
+                 && is_frag_mask_r == is_frag_mask_w
                  && (~is_tid_r || tid_base_r == tid_base_w),
                 ("%t: *** %s lane CSR 0x%0h changed between decode and fire (#%0d)", $time, INSTANCE_ID, csr_addr, execute_if.data.header.uuid));
         end
@@ -209,7 +213,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     // x occupies pos[15:0] and y pos[30:16], so a pixel coordinate has 15 bits + 1.
     `STATIC_ASSERT(FRAG_PIX_BITS <= 15, ("VX_RASTER_DIM_BITS=%0d overflows the FRAG_POS packing", `VX_RASTER_DIM_BITS))
 
-    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] frag_pos, frag_pid;
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] frag_pos, frag_pid, frag_mask;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_frag
         wire [NT_WIDTH-1:0] lane_idx = (PID_BITS != 0)
             ? NT_WIDTH'(execute_if.data.header.pid * NUM_LANES + i)
@@ -223,11 +227,12 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
                 sched_csr_if.cta_lane[quad_base + NT_WIDTH'(s)][0 +: FRAG_LANE_BITS];
         end
 
-        // raster_stamp_t layout: {pos_x, pos_y, mask[4], pid} (pid in the low bits)
+        // raster_stamp_t layout: {pos_x, pos_y, mask[4][4], pid} (pid in the low
+        // bits), mask[p] being pixel p's sample coverage
         wire [`VX_RASTER_PID_BITS-1:0] s_pid  = st[0 +: `VX_RASTER_PID_BITS];
-        wire [3:0]                     s_mask = st[`VX_RASTER_PID_BITS +: 4];
-        wire [FRAG_POS_BITS-1:0]       s_y    = st[`VX_RASTER_PID_BITS + 4 +: FRAG_POS_BITS];
-        wire [FRAG_POS_BITS-1:0]       s_x    = st[`VX_RASTER_PID_BITS + 4 + FRAG_POS_BITS +: FRAG_POS_BITS];
+        wire [3:0][3:0]                s_mask = st[`VX_RASTER_PID_BITS +: 16];
+        wire [FRAG_POS_BITS-1:0]       s_y    = st[`VX_RASTER_PID_BITS + 16 +: FRAG_POS_BITS];
+        wire [FRAG_POS_BITS-1:0]       s_x    = st[`VX_RASTER_PID_BITS + 16 + FRAG_POS_BITS +: FRAG_POS_BITS];
 
         // this lane's pixel within the quad: x = 2*qx + (sub & 1), y = 2*qy + (sub >> 1)
         wire [1:0]                sub = lane_idx[1:0];
@@ -236,22 +241,24 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         // A lane whose pixel the primitive misses is a HELPER: it runs so its
         // covered neighbours have a value to shuffle for derivatives, and the
         // coverage bit is what tells the shader not to export it.
-        wire covered = s_mask[sub];
+        wire covered = (| s_mask[sub]);
 
-        assign frag_pos[i] = `VX_CFG_XLEN'({covered, 15'(py), 16'(px)});
-        assign frag_pid[i] = `VX_CFG_XLEN'(s_pid);
+        assign frag_pos[i]  = `VX_CFG_XLEN'({covered, 15'(py), 16'(px)});
+        assign frag_pid[i]  = `VX_CFG_XLEN'(s_pid);
+        assign frag_mask[i] = `VX_CFG_XLEN'(s_mask[sub]);
     end
 `endif
 
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] lane_frag;
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_lane_frag
-        assign lane_frag[i] = (is_frag_pos_r ? frag_pos[i] : '0)
-                            | (is_frag_pid_r ? frag_pid[i] : '0);
+        assign lane_frag[i] = (is_frag_pos_r  ? frag_pos[i]  : '0)
+                            | (is_frag_pid_r  ? frag_pid[i]  : '0)
+                            | (is_frag_mask_r ? frag_mask[i] : '0);
     end
 `else
     assign lane_frag = '0;
-    `UNUSED_VAR ({is_frag_pos_r, is_frag_pid_r})
+    `UNUSED_VAR ({is_frag_pos_r, is_frag_pid_r, is_frag_mask_r})
 `endif
 
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] csr_read_data;

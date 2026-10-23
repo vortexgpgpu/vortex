@@ -33,6 +33,11 @@ constexpr uint32_t kOcacheMemPorts = 1;
 constexpr uint32_t kOcacheLineSize = VX_CFG_MEM_BLOCK_SIZE;
 constexpr uint64_t kOcacheLineMask = ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
 
+// Samples of a multisampled pixel, each its own column of the planes.
+constexpr uint32_t kMsaaSamples    = 4;
+constexpr uint32_t kMsaaSampleBits = 2;
+static_assert((1u << kMsaaSampleBits) == kMsaaSamples, "sample bits");
+
 // Inflight OmReq slot count.
 constexpr uint32_t kInflight = VX_CFG_OM_MEM_QUEUE_SIZE;
 
@@ -217,6 +222,7 @@ private:
   void recompute_state() {
     zbuf_baseaddr_           = uint64_t(dcrs_.read(VX_DCR_OM_ZBUF_ADDR)) << 6;
     zbuf_pitch_              = dcrs_.read(VX_DCR_OM_ZBUF_PITCH);
+    zbuf_sample_stride_      = dcrs_.read(VX_DCR_OM_ZBUF_SAMPLE_STRIDE);
     depth_writemask_         = dcrs_.read(VX_DCR_OM_DEPTH_WRITEMASK) & 0x1;
     stencil_front_writemask_ = dcrs_.read(VX_DCR_OM_STENCIL_WRITEMASK) & 0xffff;
     stencil_back_writemask_  = dcrs_.read(VX_DCR_OM_STENCIL_WRITEMASK) >> 16;
@@ -226,6 +232,7 @@ private:
     for (uint32_t rt = 0; rt < VX_OM_MAX_RT; ++rt) {
       cbuf_baseaddr_[rt] = uint64_t(dcrs_.read(rt, VX_DCR_OM_CBUF_ADDR)) << 6;
       cbuf_pitch_[rt]    = dcrs_.read(rt, VX_DCR_OM_CBUF_PITCH);
+      cbuf_sample_stride_[rt] = dcrs_.read(rt, VX_DCR_OM_CBUF_SAMPLE_STRIDE);
       cbuf_format_[rt]   = dcrs_.read(rt, VX_DCR_OM_CBUF_FORMAT);
       cbuf_bpp_[rt]      = gfx_sw::om_color_bpp(cbuf_format_[rt]);
       uint32_t cbuf_writemask = dcrs_.read(rt, VX_DCR_OM_CBUF_WRITEMASK) & 0xf;
@@ -290,27 +297,38 @@ private:
   //                        attachment and face in the depth word
   //     float pair:        offset = (((rt << 1 | face) << ybits | y) << xbits | x)
   //                        << record_shift, the depth word all depth
+  // Under 4x multisampling a record names one sample k, carried as column x*4 + k:
+  // in the depth word of a colour+depth pair, else in the address between y and
+  // the face.
   static_assert(VX_OM_DEPTH_WORD_RT_SHIFT >= VX_OM_DEPTH_BITS
              && (1u << (VX_OM_DEPTH_WORD_FACE_SHIFT - VX_OM_DEPTH_WORD_RT_SHIFT)) >= VX_OM_MAX_RT
-             && VX_OM_DEPTH_WORD_FACE_SHIFT < 32, "depth word fields overlap");
+             && VX_OM_DEPTH_WORD_FACE_SHIFT < VX_OM_DEPTH_WORD_SAMPLE_SHIFT
+             && VX_OM_DEPTH_WORD_SAMPLE_SHIFT + 2 <= 32, "depth word fields overlap");
   void decode_aperture(OmReq& req) const {
     uint32_t xbits = dcrs_.read(VX_DCR_OM_APERTURE_XBITS);
     uint32_t ybits = dcrs_.read(VX_DCR_OM_APERTURE_YBITS);
     uint32_t shift = dcrs_.read(VX_DCR_OM_APERTURE_RECORD_SHIFT);
     const bool pair = (shift == 3);
     const bool depth_float = depth_stencil_.depth_float();
+    const uint32_t sbits = msaa() ? kMsaaSampleBits : 0u;
     bool rt_seen = false;
     req.rt = 0;
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       if (!(req.tmask_bits & (1u << t))) continue;
       uint64_t off = req.addr[t] - uint64_t(VX_MEM_OM_BASE_ADDR);
       uint64_t rec = off >> shift;
-      req.pos_x[t] = uint32_t(rec & ((1ull << xbits) - 1));
+      const uint32_t x = uint32_t(rec & ((1ull << xbits) - 1));
+      // A 4x column holds the pixel's x in all but its sample bits.
+      assert((x >> (VX_OM_DIM_BITS - sbits)) == 0 && "OM: 4x fragment column past the position field");
       req.pos_y[t] = uint32_t((rec >> xbits) & ((1ull << ybits) - 1));
+      const uint32_t smask = (1u << sbits) - 1;
+      uint32_t sample = 0;
       if (!pair || depth_float) {
-        req.face[t] = uint8_t((rec >> (xbits + ybits)) & 0x1);
+        sample      = uint32_t(rec >> (xbits + ybits)) & smask;
+        req.face[t] = uint8_t((rec >> (xbits + ybits + sbits)) & 0x1);
       }
       if (!pair) {
+        req.pos_x[t] = (x << sbits) | sample;
         if (!depth_float) {
           req.depth[t] &= (1u << VX_OM_DEPTH_BITS) - 1;
         }
@@ -318,13 +336,15 @@ private:
       }
       uint32_t rt;
       if (depth_float) {
-        rt = uint32_t(rec >> (xbits + ybits + 1)) & (VX_OM_MAX_RT - 1);
+        rt = uint32_t(rec >> (xbits + ybits + sbits + 1)) & (VX_OM_MAX_RT - 1);
       } else {
         const uint32_t word = req.depth[t];
         req.face[t]  = uint8_t((word >> VX_OM_DEPTH_WORD_FACE_SHIFT) & 0x1);
         req.depth[t] = word & ((1u << VX_OM_DEPTH_BITS) - 1);
         rt = (word >> VX_OM_DEPTH_WORD_RT_SHIFT) & (VX_OM_MAX_RT - 1);
+        sample = (word >> VX_OM_DEPTH_WORD_SAMPLE_SHIFT) & smask;
       }
+      req.pos_x[t] = (x << sbits) | sample;
       // The attachment names the whole record, so every lane of one export
       // must agree.
       assert((!rt_seen || rt == req.rt) && "OM: one export spans two colour attachments");
@@ -421,11 +441,17 @@ private:
       // The unit addresses depth a word at a time: a D16 or S8 row starts on one.
       assert(((!depth_stencil_.depth_d16() && !depth_stencil_.depth_s8()) || (zbuf_pitch_ & 3u) == 0)
              && "OM: a D16 or S8 depth/stencil pitch is a multiple of 4 bytes");
-      l.zbuf_addr_byte = zbuf_baseaddr_ + uint64_t(l.pos_y) * zbuf_pitch_ + l.pos_x * zbpp;
+      // Under 4x the column is x*4 + k: pixel x of sample k's image.
+      const uint32_t sbits = msaa() ? kMsaaSampleBits : 0u;
+      const uint32_t px     = l.pos_x >> sbits;
+      const uint32_t sample = l.pos_x & ((1u << sbits) - 1);
+      l.zbuf_addr_byte = zbuf_baseaddr_ + uint64_t(sample) * zbuf_sample_stride_
+                       + uint64_t(l.pos_y) * zbuf_pitch_ + uint64_t(px) * zbpp;
       assert((!has_color || cbuf_ff_ok_[s.req.rt])
              && "OM: a colour format and writemask the merger stores");
-      l.cbuf_addr_byte = cbuf_baseaddr_[s.req.rt] + uint64_t(l.pos_y) * cbuf_pitch_[s.req.rt]
-                       + l.pos_x * cbuf_bpp_[s.req.rt];
+      l.cbuf_addr_byte = cbuf_baseaddr_[s.req.rt] + uint64_t(sample) * cbuf_sample_stride_[s.req.rt]
+                       + uint64_t(l.pos_y) * cbuf_pitch_[s.req.rt]
+                       + uint64_t(px) * cbuf_bpp_[s.req.rt];
 
       bool stencil_enabled = depth_stencil_.stencil_enabled(l.face);
       l.need_z_read = has_depth && (depth_enabled || stencil_enabled);
@@ -830,6 +856,11 @@ private:
     return true;
   }
 
+  // 4x multisampling (VX_DCR_OM_SAMPLES).
+  bool msaa() const {
+    return dcrs_.read(VX_DCR_OM_SAMPLES) == kMsaaSamples;
+  }
+
   // Bytes of the depth/stencil word a port-0 access moves.
   uint32_t zbuf_bytes() const {
     return depth_stencil_.depth_d16() ? 2u : depth_stencil_.depth_s8() ? 1u : 4u;
@@ -853,6 +884,7 @@ private:
   // DCR-derived cache (recomputed on every dcr_write).
   uint64_t  cbuf_baseaddr_[VX_OM_MAX_RT]  = {};
   uint32_t  cbuf_pitch_[VX_OM_MAX_RT]     = {};
+  uint32_t  cbuf_sample_stride_[VX_OM_MAX_RT] = {};
   uint32_t  cbuf_format_[VX_OM_MAX_RT]    = {};
   uint32_t  cbuf_bpp_[VX_OM_MAX_RT]       = {};
   bool      cbuf_ff_ok_[VX_OM_MAX_RT]     = {};
@@ -861,6 +893,7 @@ private:
   bool      color_write_[VX_OM_MAX_RT]    = {};
   uint64_t  zbuf_baseaddr_   = 0;
   uint32_t  zbuf_pitch_      = 0;
+  uint32_t  zbuf_sample_stride_ = 0;
   bool      depth_writemask_ = false;
   uint32_t  stencil_front_writemask_ = 0;
   uint32_t  stencil_back_writemask_  = 0;

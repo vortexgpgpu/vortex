@@ -14,7 +14,7 @@
 // limitations under the License.
 
 // Rasterizer Quad Evaluator: receives 2x2 quads, tests each pixel against
-// all three triangle edges, and emits the overlap mask and barycentric coordinates.
+// all three triangle edges, and emits each pixel's coverage.
 
 `include "VX_raster_define.vh"
 
@@ -43,7 +43,6 @@ module VX_raster_qe import VX_raster_pkg::*; #(
 
     // Outputs
     output wire                                         valid_out,
-    output wire [NUM_QUADS-1:0]                         overlap_out,
     output wire [`VX_RASTER_PID_BITS-1:0]               pid_out,
     output wire [NUM_QUADS-1:0][3:0]                    mask_out,
     output wire [NUM_QUADS-1:0][`VX_RASTER_DIM_BITS-1:0] xloc_out,
@@ -53,7 +52,6 @@ module VX_raster_qe import VX_raster_pkg::*; #(
 
     `UNUSED_VAR (dcrs)
 
-    wire [NUM_QUADS-1:0] overlap;
     wire [NUM_QUADS-1:0][2:0][3:0][`RASTER_DATA_BITS-1:0] edge_eval;
     wire [NUM_QUADS-1:0][3:0] overlap_mask;
 
@@ -97,18 +95,17 @@ module VX_raster_qe import VX_raster_pkg::*; #(
             end
         end
 
-        assign overlap[q] = (| overlap_mask[q]);
     end
 
     VX_pipe_register #(
-        .DATAW  (1 + NUM_QUADS + `VX_RASTER_PID_BITS + NUM_QUADS * (4 + 2 * `VX_RASTER_DIM_BITS)),
+        .DATAW  (1 + `VX_RASTER_PID_BITS + NUM_QUADS * (4 + 2 * `VX_RASTER_DIM_BITS)),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (enable),
-        .data_in  ({valid_in,  overlap,     pid_in,  overlap_mask, xloc_in,  yloc_in}),
-        .data_out ({valid_out, overlap_out, pid_out, mask_out,     xloc_out, yloc_out})
+        .data_in  ({valid_in,  pid_in,  overlap_mask, xloc_in,  yloc_in}),
+        .data_out ({valid_out, pid_out, mask_out,     xloc_out, yloc_out})
     );
 
 endmodule

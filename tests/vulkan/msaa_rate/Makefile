@@ -26,4 +26,6 @@ SHADERS := $(SRC_DIR)/rate.vert \
 
 LDLIBS += -lm
 
+FF_RASTER := 1
+
 include ../common.mk

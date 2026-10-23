@@ -7,6 +7,7 @@
 // the per-core MMU; under VM the buffers must be identity-mapped.
 
 #include <iostream>
+#include <cstring>
 #include <vector>
 #include <unistd.h>
 #include <string.h>
@@ -76,6 +77,12 @@ uint32_t mrt_rt   = 0;       // -n : which attachment that is (default 1)
 // depth nor colour written.
 bool occ_query    = false;
 bool occ_proxy    = false;
+// -M: 4x multisampling. Every fragment covers the samples msaa_frag_mask names,
+// each at its own depth, and the buffers are checked sample by sample against the
+// software merger (gfx_sw::om_fragment_ms) replayed on the host. -O exports
+// one-word depth records with the colour masked off.
+bool msaa         = false;
+bool depth_only   = false;
 // -F fmt: the colour attachment's VX_OM_COLOR_FORMAT_*, checked texel by texel
 // against the blend of the kernel's colour with the packed clear.
 uint32_t cbuf_format = VX_OM_COLOR_FORMAT_A8R8G8B8;
@@ -176,7 +183,7 @@ static void show_usage() {
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "o:r:k:w:h:c:n:F:bdfmszZyS8qQ?")) != -1) {
+  while ((c = getopt(argc, argv, "o:r:k:w:h:c:n:F:bdfmszZyS8qQMO?")) != -1) {
     switch (c) {
     case 'o': output_file = optarg; break;
     case 'r': reference_file = optarg; break;
@@ -198,12 +205,24 @@ static void parse_args(int argc, char **argv) {
     case 'q': occ_query = true; break;
     case 'Q': occ_query = occ_proxy = depth_enable = true; break;
     case 'F': cbuf_format = (uint32_t)std::atoi(optarg); break;
+    case 'M': msaa = true; break;
+    case 'O': depth_only = depth_enable = true; break;
     case '?': show_usage(); exit(0);
     default:  show_usage(); exit(-1);
     }
   }
   if (output_file && strcmp(output_file, "null") == 0 && reference_file) {
     std::cout << "Error: output file is missing for reference validation" << std::endl;
+    exit(1);
+  }
+  if (depth_only && (mrt_enable || blend_enable)) {
+    std::cout << "Error: -O takes neither -m nor -b" << std::endl;
+    exit(1);
+  }
+  if ((msaa || depth_only) && (depth16 || sw_path || occ_proxy || reference_file ||
+               cbuf_format != VX_OM_COLOR_FORMAT_A8R8G8B8)) {
+    std::cout << "Error: -M checks every sample itself; it takes none of -y, -S, -Q, -r "
+                 "or -F" << std::endl;
     exit(1);
   }
   // The attachments share one depth buffer, so a fragment covering several of
@@ -325,6 +344,286 @@ static uint32_t read_occ_count(uint32_t num_clusters) {
   return sum;
 }
 
+// -M: draw msaa_frag_mask's samples of every pixel into 4x attachments, an
+// image per sample, and check every sample against the software merger replayed
+// on the host from the same starting images. -O alone runs the same check at one
+// sample.
+static int run_msaa(uint64_t num_threads, uint64_t num_warps, uint64_t num_clusters) {
+  const uint32_t S = msaa ? 4 : 1;
+  // A D32F_S8 texel is the key and then the stencil word; an S8 texel a byte,
+  // its rows starting on a word.
+  const uint32_t zw = stencil_word ? 2 : 1;
+  const uint32_t zbpp = stencil8 ? 1 : 4 * zw, cbpp = 4;
+  zbuf_pitch = (dst_width * zbpp + 3) & ~3u;
+  cbuf_pitch = dst_width * cbpp;
+  // Sample k's image starts k images past sample 0's.
+  const uint32_t zimage = dst_height * zbuf_pitch, cimage = dst_height * cbuf_pitch;
+  zbuf_size  = S * zimage;
+  cbuf_size  = S * cimage;
+
+  RT_CHECK(vx_buffer_create(device, zbuf_size, VX_MEM_READ_WRITE | VX_MEM_PHYS, &depth_buffer));
+  RT_CHECK(vx_buffer_address(depth_buffer, &zbuf_addr));
+  RT_CHECK(vx_buffer_create(device, cbuf_size, VX_MEM_READ_WRITE | VX_MEM_PHYS, &color_buffer));
+  RT_CHECK(vx_buffer_address(color_buffer, &cbuf_addr));
+  if (mrt_enable) {
+    RT_CHECK(vx_buffer_create(device, cbuf_size, VX_MEM_READ_WRITE | VX_MEM_PHYS, &color_buffer1));
+    RT_CHECK(vx_buffer_address(color_buffer1, &cbuf1_addr));
+  }
+
+  // The starting images: every sample its own depth, under -s a stencil of
+  // (y + k) & 1 -- an S8 texel instead takes the value initial_stencil8 gives
+  // pixel x + k, so a byte merged into its neighbour's slot of the word shows --
+  // and colour attachment 1 cleared to a value no fragment makes.
+  std::vector<uint8_t> zinit(zbuf_size, 0), cinit(cbuf_size), c1init(cbuf_size);
+  auto put32 = [](std::vector<uint8_t>& v, size_t off, uint32_t w) {
+    std::memcpy(v.data() + off, &w, 4);
+  };
+  for (size_t i = 0; i < cbuf_size; i += 4) {
+    put32(cinit, i, clear_color);
+    put32(c1init, i, kRt1Clear);
+  }
+  for (uint32_t k = 0; k < S; ++k) {
+    for (uint32_t y = 0; y < dst_height; ++y) {
+      for (uint32_t x = 0; x < dst_width; ++x) {
+        const uint32_t st = !stencil_enable ? 0
+                          : stencil8 ? initial_stencil8(x + k, y + k) : ((y + k) & 1);
+        const size_t off = size_t(k) * zimage + size_t(y) * zbuf_pitch + size_t(x) * zbpp;
+        if (stencil8) {
+          zinit[off] = uint8_t(st);
+        } else if (float_depth) {
+          put32(zinit, off, gfx_sw::om_float_depth_key(float_bits(msaa_init_depth_f(x, y, k))));
+          if (stencil_word) {
+            put32(zinit, off + 4, st);
+          }
+        } else {
+          put32(zinit, off, msaa_init_depth(x, y, k) | (st << VX_OM_DEPTH_BITS));
+        }
+      }
+    }
+  }
+  auto upload = [&](vx_buffer_h buf, const std::vector<uint8_t>& v) {
+    vx_event_h ev = nullptr;
+    RT_CHECK(vx_enqueue_write(queue, buf, 0, v.data(), v.size(), 0, nullptr, &ev));
+    RT_CHECK(vx_event_wait_value(ev, 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(ev);
+    return 0;
+  };
+  upload(depth_buffer, zinit);
+  upload(color_buffer, cinit);
+  if (mrt_enable) {
+    upload(color_buffer1, c1init);
+  }
+
+  auto ceil_log2 = [](uint32_t v) { uint32_t b = 0; while ((1u << b) < v) ++b; return b; };
+  const uint32_t ap_xbits = ceil_log2(dst_width);
+  const uint32_t ap_ybits = ceil_log2(dst_height);
+  const uint32_t ap_shift = depth_only ? 2 : 3;
+  const uint32_t cmask = depth_only ? 0x0 : 0xf;
+  auto both = [](uint32_t v) { return (v << 16) | v; };
+  auto dcr = [&](uint32_t a, uint32_t v) { RT_CHECK(vx_enqueue_dcr_write(queue, a, v, 0, nullptr, nullptr)); return 0; };
+  dcr(VX_DCR_OM_SAMPLES,              S);
+  dcr(VX_DCR_OM_CBUF_ADDR,            cbuf_addr / 64);
+  dcr(VX_DCR_OM_CBUF_PITCH,           cbuf_pitch);
+  dcr(VX_DCR_OM_CBUF_SAMPLE_STRIDE,   cimage);
+  dcr(VX_DCR_OM_CBUF_WRITEMASK,       cmask);
+  dcr(VX_DCR_OM_CBUF_FORMAT,          VX_OM_COLOR_FORMAT_A8R8G8B8);
+  dcr(VX_DCR_OM_ZBUF_ADDR,            zbuf_addr / 64);
+  dcr(VX_DCR_OM_ZBUF_PITCH,           zbuf_pitch);
+  dcr(VX_DCR_OM_ZBUF_SAMPLE_STRIDE,   zimage);
+  dcr(VX_DCR_OM_APERTURE_XBITS,       ap_xbits);
+  dcr(VX_DCR_OM_APERTURE_YBITS,       ap_ybits);
+  dcr(VX_DCR_OM_APERTURE_RECORD_SHIFT, ap_shift);
+  dcr(VX_DCR_OM_APERTURE_DEPTH_ONLY,  depth_only ? 1 : 0);
+  const uint32_t depth_format = stencil8 ? VX_OM_DEPTH_FORMAT_S8
+                              : stencil_word ? VX_OM_DEPTH_FORMAT_D32FS8
+                              : float_depth ? VX_OM_DEPTH_FORMAT_D32F : VX_OM_DEPTH_FORMAT_D24S8;
+  dcr(VX_DCR_OM_DEPTH_FORMAT,         depth_format);
+  dcr(VX_DCR_OM_DEPTH_FUNC,           depth_enable ? VX_OM_DEPTH_FUNC_LESS : VX_OM_DEPTH_FUNC_ALWAYS);
+  dcr(VX_DCR_OM_DEPTH_WRITEMASK,      depth_enable ? 1 : 0);
+  dcr(VX_DCR_OM_STENCIL_FUNC,         both(kStencil.func));
+  dcr(VX_DCR_OM_STENCIL_ZPASS,        both(kStencil.zpass));
+  dcr(VX_DCR_OM_STENCIL_ZFAIL,        both(kStencil.zfail));
+  dcr(VX_DCR_OM_STENCIL_FAIL,         both(kStencil.fail));
+  dcr(VX_DCR_OM_STENCIL_REF,          (stencil_back_ref() << 16) | kStencil.ref);
+  dcr(VX_DCR_OM_STENCIL_MASK,         both(OM_STENCIL_MASK));
+  dcr(VX_DCR_OM_STENCIL_WRITEMASK,    both(kStencil.writemask));
+  const uint32_t bmode = (VX_OM_BLEND_MODE_ADD << 16) | VX_OM_BLEND_MODE_ADD;
+  const uint32_t bfunc = blend_enable
+    ? ((VX_OM_BLEND_FUNC_ONE_MINUS_SRC_A << 24) | (VX_OM_BLEND_FUNC_ONE_MINUS_SRC_A << 16)
+     | (VX_OM_BLEND_FUNC_ONE << 8) | VX_OM_BLEND_FUNC_ONE)
+    : ((VX_OM_BLEND_FUNC_ZERO << 24) | (VX_OM_BLEND_FUNC_ZERO << 16)
+     | (VX_OM_BLEND_FUNC_ONE << 8) | VX_OM_BLEND_FUNC_ONE);
+  dcr(VX_DCR_OM_BLEND_MODE,  bmode);
+  dcr(VX_DCR_OM_BLEND_FUNC,  bfunc);
+  dcr(VX_DCR_OM_BLEND_CONST, 0);
+  dcr(VX_DCR_OM_LOGIC_OP,    VX_OM_LOGIC_OP_COPY);
+  if (mrt_enable) {
+    const uint32_t pass = (VX_OM_BLEND_FUNC_ZERO << 24) | (VX_OM_BLEND_FUNC_ZERO << 16)
+                        | (VX_OM_BLEND_FUNC_ONE << 8) | VX_OM_BLEND_FUNC_ONE;
+    dcr(VX_DCR_OM_RT_SELECT,      mrt_rt);
+    dcr(VX_DCR_OM_CBUF_ADDR,      cbuf1_addr / 64);
+    dcr(VX_DCR_OM_CBUF_PITCH,     cbuf_pitch);
+    dcr(VX_DCR_OM_CBUF_SAMPLE_STRIDE, cimage);
+    dcr(VX_DCR_OM_CBUF_WRITEMASK, 0x2);
+    dcr(VX_DCR_OM_CBUF_FORMAT,    VX_OM_COLOR_FORMAT_A8R8G8B8);
+    dcr(VX_DCR_OM_BLEND_MODE,     bmode);
+    dcr(VX_DCR_OM_BLEND_FUNC,     pass);
+    dcr(VX_DCR_OM_BLEND_CONST,    0);
+    dcr(VX_DCR_OM_LOGIC_OP,       VX_OM_LOGIC_OP_COPY);
+    dcr(VX_DCR_OM_RT_SELECT,      0);
+  }
+
+  uint32_t occ_before = 0;
+  if (occ_query) {
+    vx_event_h ev = nullptr;
+    RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_OCC_CTRL, 1, 0, nullptr, &ev));
+    RT_CHECK(vx_event_wait_value(ev, 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(ev);
+    occ_before = read_occ_count((uint32_t)num_clusters);
+  }
+
+  kernel_arg_t kernel_arg = {};
+  kernel_arg.dst_width    = dst_width;
+  kernel_arg.dst_height   = dst_height;
+  kernel_arg.backface     = backface ? 1 : 0;
+  kernel_arg.rt2          = mrt_rt;
+  kernel_arg.blend_enable = blend_enable ? 1 : 0;
+  kernel_arg.aperture_xbits        = ap_xbits;
+  kernel_arg.aperture_ybits        = ap_ybits;
+  kernel_arg.aperture_record_shift = ap_shift;
+  kernel_arg.samples      = S;
+  kernel_arg.depth_float  = float_depth ? 1 : 0;
+  kernel_arg.depth_only   = depth_only ? 1 : 0;
+  kernel_arg.mrt          = mrt_enable ? 1 : 0;
+  const uint32_t r = (color >> 16) & 0xff, g = (color >> 8) & 0xff, b = color & 0xff;
+  kernel_arg.a_scale_q16 = (255u << 16) / dst_height;
+  kernel_arg.r_scale_q16 = (r << 16) / dst_width;
+  kernel_arg.g_scale_q16 = (g << 16) / dst_height;
+  kernel_arg.b_scale_q16 = (b << 16) / (dst_width + dst_height);
+
+  const uint32_t block_x = std::min<uint32_t>((uint32_t)(num_threads * num_warps), dst_width);
+  vx_launch_info_t li = {};
+  li.struct_size  = sizeof(li);
+  li.kernel       = kernel;
+  li.args_host    = &kernel_arg;
+  li.args_size    = sizeof(kernel_arg);
+  li.ndim         = 2;
+  li.grid_dim[0]  = (dst_width + block_x - 1) / block_x;
+  li.grid_dim[1]  = dst_height;
+  li.block_dim[0] = block_x;
+  li.block_dim[1] = 1;
+  vx_event_h launch_ev = nullptr;
+  RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
+  RT_CHECK(vx_event_wait_value(launch_ev, 1, VX_TIMEOUT_INFINITE));
+  vx_event_release(launch_ev);
+
+  // The reference: the software merger over the same starting planes, every
+  // fragment's samples in the order the kernel exports them.
+  std::vector<uint8_t> zref = zinit, cref = cinit, c1ref = c1init;
+  gfx_sw::om_state_t om = {};
+  om.depth_func      = depth_enable ? VX_OM_DEPTH_FUNC_LESS : VX_OM_DEPTH_FUNC_ALWAYS;
+  om.depth_writemask = depth_enable ? 1u : 0u;
+  for (int f = 0; f < 2; ++f) {
+    om.stencil_func[f]      = kStencil.func;
+    om.stencil_zpass[f]     = kStencil.zpass;
+    om.stencil_zfail[f]     = kStencil.zfail;
+    om.stencil_fail[f]      = kStencil.fail;
+    om.stencil_ref[f]       = f ? stencil_back_ref() : kStencil.ref;
+    om.stencil_mask[f]      = OM_STENCIL_MASK;
+    om.stencil_writemask[f] = kStencil.writemask;
+  }
+  om.blend_mode_rgb  = VX_OM_BLEND_MODE_ADD;
+  om.blend_mode_a    = VX_OM_BLEND_MODE_ADD;
+  om.blend_src_rgb   = VX_OM_BLEND_FUNC_ONE;
+  om.blend_src_a     = VX_OM_BLEND_FUNC_ONE;
+  om.blend_dst_rgb   = blend_enable ? VX_OM_BLEND_FUNC_ONE_MINUS_SRC_A : VX_OM_BLEND_FUNC_ZERO;
+  om.blend_dst_a     = blend_enable ? VX_OM_BLEND_FUNC_ONE_MINUS_SRC_A : VX_OM_BLEND_FUNC_ZERO;
+  om.logic_op        = VX_OM_LOGIC_OP_COPY;
+  om.zbuf_base       = (uintptr_t)zref.data();
+  om.cbuf_base       = (uintptr_t)cref.data();
+  om.zbuf_pitch      = zbuf_pitch;
+  om.cbuf_pitch      = cbuf_pitch;
+  om.zbuf_sample_stride = zimage;
+  om.cbuf_sample_stride = cimage;
+  om.cbuf_writemask4 = cmask;
+  om.color_format    = VX_OM_COLOR_FORMAT_A8R8G8B8;
+  om.depth_format    = depth_format;
+  gfx_sw::resolve_om_state(om);
+  gfx_sw::om_color_t rts[2] = { gfx_sw::om_state_color(om), gfx_sw::om_state_color(om) };
+  rts[1].cbuf_base = (uintptr_t)c1ref.data();
+  rts[1].blend_mode_rgb = rts[1].blend_mode_a = VX_OM_BLEND_MODE_ADD;
+  rts[1].blend_src_rgb = rts[1].blend_src_a = VX_OM_BLEND_FUNC_ONE;
+  rts[1].blend_dst_rgb = rts[1].blend_dst_a = VX_OM_BLEND_FUNC_ZERO;
+  rts[1].cbuf_writemask4 = 0x2;
+  gfx_sw::resolve_om_color(rts[1]);
+  uint32_t want_occ = 0;
+  for (uint32_t y = 0; y < dst_height; ++y) {
+    for (uint32_t x = 0; x < dst_width; ++x) {
+      const uint32_t alpha = blend_enable ? ((y * kernel_arg.a_scale_q16) >> 16) : 0xff;
+      const uint32_t src = (alpha << 24)
+                         | (((x * kernel_arg.r_scale_q16) >> 16) << 16)
+                         | (((y * kernel_arg.g_scale_q16) >> 16) <<  8)
+                         |  (((x + y) * kernel_arg.b_scale_q16) >> 16);
+      const uint32_t lanes[8] = { src, 0, 0, 0, src, 0, 0, 0 };
+      uint32_t depths[4];
+      for (uint32_t k = 0; k < S; ++k) {
+        depths[k] = float_depth ? gfx_sw::om_float_depth_key(float_bits(msaa_frag_depth_f(x, y, k)))
+                                : msaa_frag_depth(x, y, k);
+      }
+      want_occ += gfx_sw::om_fragment_ms(om, rts, mrt_enable ? 2 : 1, S,
+                                         msaa ? msaa_frag_mask(x, y) : 1u,
+                                         x, y, backface ? 1 : 0, lanes, depths, 0, false);
+    }
+  }
+
+  int errors = 0;
+  if (occ_query) {
+    const uint32_t occ_count = read_occ_count((uint32_t)num_clusters) - occ_before;
+    if (occ_count != want_occ) {
+      std::cout << "FAILED: occlusion count " << occ_count << ", expected " << want_occ << std::endl;
+      ++errors;
+    } else {
+      std::cout << "occlusion: " << occ_count << " samples passed" << std::endl;
+    }
+  }
+  // A byte of an attachment whose images are `image` bytes and rows `pitch`
+  // bytes, its texels `bpp` bytes.
+  auto check = [&](vx_buffer_h buf, const std::vector<uint8_t>& want, uint32_t image,
+                   uint32_t pitch, uint32_t bpp, const char* what) {
+    std::vector<uint8_t> got(want.size());
+    vx_event_h ev = nullptr;
+    RT_CHECK(vx_enqueue_read(queue, got.data(), buf, 0, got.size(), 0, nullptr, &ev));
+    RT_CHECK(vx_event_wait_value(ev, 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(ev);
+    for (size_t i = 0; i < want.size(); ++i) {
+      if (got[i] != want[i]) {
+        if (errors < 16) {
+          const uint32_t smp = uint32_t(i / image), row = uint32_t(i % image);
+          std::cout << "FAILED: " << what << " at (" << (row % pitch) / bpp << "," << row / pitch
+                    << ") sample " << smp << " byte " << (row % pitch) % bpp << ": got 0x"
+                    << std::hex << uint32_t(got[i]) << ", expected 0x" << uint32_t(want[i])
+                    << std::dec << std::endl;
+        }
+        ++errors;
+      }
+    }
+    return 0;
+  };
+  check(depth_buffer, zref, zimage, zbuf_pitch, zbpp, "depth/stencil");
+  check(color_buffer, cref, cimage, cbuf_pitch, cbpp, "colour");
+  if (mrt_enable) {
+    check(color_buffer1, c1ref, cimage, cbuf_pitch, cbpp, "attachment 1");
+  }
+  cleanup();
+  if (errors) {
+    std::cout << "FAILED! " << errors << " bytes differ" << std::endl;
+    return 1;
+  }
+  std::cout << S << "x: " << dst_width * dst_height * S << " samples match" << std::endl;
+  std::cout << "PASSED!" << std::endl;
+  return 0;
+}
+
 int main(int argc, char *argv[]) {
   parse_args(argc, argv);
   if (stencil_enable) {
@@ -350,6 +649,10 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_device_query(device, VX_CAPS_NUM_CLUSTERS, &num_clusters));
 
   RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
+  if (msaa || depth_only) {
+    RT_CHECK(vx_module_get_kernel(module_, "kernel_main_msaa", &kernel));
+    return run_msaa(num_threads, num_warps, num_clusters);
+  }
   RT_CHECK(vx_module_get_kernel(module_, float_depth ? (mrt_enable ? "kernel_main_mrt_float"
                                                                    : "kernel_main_float")
                                                      : (mrt_enable ? "kernel_main_mrt" : "main"),
@@ -456,7 +759,13 @@ int main(int argc, char *argv[]) {
   // ingress bit-slices the offset back into (x, y, face), which is why the pitch
   // is padded to a power of two. Derived once and passed to the kernel arg too --
   // if the two ever disagree the ingress silently misreads every record.
-  auto ceil_log2 = [](uint32_t v) { uint32_t b = 0; while ((1u << b) < v) ++b; return b; };
+  auto ceil_log2 = [](uint32_t v) {
+    uint32_t b = 0;
+    while ((1u << b) < v) {
+      ++b;
+    }
+    return b;
+  };
   uint32_t ap_xbits = ceil_log2(dst_width);
   uint32_t ap_ybits = ceil_log2(dst_height);
   uint32_t ap_shift = 3;   // this kernel exports colour AND depth

@@ -10,7 +10,7 @@
 # Add a DUT: append its name to DUTS and define the five variables. No new
 # directory, no dispatcher edit.
 
-DUTS := cache core cp dxa fpu gfx issue lmem mem_unit om raster rtu \
+DUTS := cache core cp dxa fpu gfx issue lmem mem_unit om om_unit raster raster_ez rtu \
         scope tcu tensor tex top unittest vm vortex
 
 # ---------------------------------------------------------------------------
@@ -91,10 +91,22 @@ om_CFG := -DVX_CFG_EXT_OM_ENABLE
 om_INC  = $(BASE_INC) -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(RTL_DIR)/om -I$(UNITTEST_DIR)/om_core
 om_PKG  = $(RTL_DIR)/om/VX_om_pkg.sv
 
+# The OM with its export-aperture ingress in front, as a cluster attaches it.
+om_unit_PRJ := VX_om_unit_top
+om_unit_CFG := -DVX_CFG_EXT_OM_ENABLE
+om_unit_INC  = $(BASE_INC) -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(RTL_DIR)/om -I$(UNITTEST_DIR)/om_core
+om_unit_PKG  = $(RTL_DIR)/om/VX_om_pkg.sv
+
 raster_PRJ := VX_raster_core_top
 raster_CFG := -DVX_CFG_EXT_RASTER_ENABLE
 raster_INC  = $(BASE_INC) -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(RTL_DIR)/raster -I$(UNITTEST_DIR)/raster_core
 raster_PKG  = $(RTL_DIR)/raster/VX_raster_pkg.sv
+
+# The raster engine with OM present, so its early-Z stage is built.
+raster_ez_PRJ := VX_raster_core_top
+raster_ez_CFG := -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
+raster_ez_INC  = $(BASE_INC) -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(RTL_DIR)/raster -I$(RTL_DIR)/om -I$(UNITTEST_DIR)/raster_core
+raster_ez_PKG  = $(RTL_DIR)/om/VX_om_pkg.sv $(RTL_DIR)/raster/VX_raster_pkg.sv
 
 rtu_PRJ := VX_rtu_core_top
 rtu_IP  := 1

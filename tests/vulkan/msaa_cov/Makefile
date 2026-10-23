@@ -26,4 +26,7 @@ SHADERS := $(SRC_DIR)/cov.vert \
 
 LDLIBS += -lm
 
+FF_RASTER := 1
+FF_OM := 1
+
 include ../common.mk

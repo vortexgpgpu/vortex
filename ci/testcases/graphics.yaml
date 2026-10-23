@@ -331,6 +331,104 @@ tests:
   app: gfx_om
   configs: -DVX_CFG_EXT_OM_ENABLE
   args: -w 127 -h 64 -y -S
+# 4x multisampling: every fragment covers its own subset of samples, each at its
+# own depth, and exports once per covered sample. Every sample of every plane is
+# checked against the software merger (gfx_sw::om_fragment_ms) replayed on the
+# host. The sample rides the depth word of a D24S8 pair and the address of a
+# float pair or a one-word depth record.
+- id: gfx_om-msaa
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 64 -h 32 -M -o null
+- id: gfx_om-msaa-depth
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 64 -h 32 -M -d -b -o null
+- id: gfx_om-msaa-stencil
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 64 -h 32 -M -s -f -o null
+- id: gfx_om-msaa-float
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 64 -h 32 -M -z -d -o null
+# One-word depth records (colour masked off), whose word is the record itself.
+- id: gfx_om-depthonly
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 64 -h 32 -O -f -o null
+# Per-sample images of the narrow and the wide depth/stencil texels: an S8
+# byte and a D32F_S8 two-word texel, each pixel x of sample k's image.
+- id: gfx_om-msaa-s8
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 64 -h 32 -M -8 -s -o null
+- id: gfx_om-msaa-d32fs8
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 64 -h 32 -M -Z -s -d -o null
+- id: gfx_om-msaa-depthonly
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 64 -h 32 -M -O -f -o null
+- id: gfx_om-msaa-mrt
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 64 -h 32 -M -m -n 5 -b -o null
+- id: gfx_om-msaa-occ
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 64 -h 32 -M -d -q -o null
+- id: gfx_om-msaa-nt16
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  shape:
+    threads: 16
+  args: -w 64 -h 32 -M -d -o null
 - id: gfx_raster-1
   via: blackbox
   drivers:
@@ -448,6 +546,97 @@ tests:
   app: gfx_raster
   configs: -DVX_CFG_EXT_RASTER_ENABLE
   args: -w 128 -h 128 -n 4096 -L
+# 4x multisampling: every sample of every pixel is tested, and the colour buffer
+# holds each sample, checked against the shared multisample coverage walk sample
+# by sample -- the conservative tile bound, the per-sample top-left rule and the
+# per-primitive scissor on every sample.
+- id: gfx_raster-msaa-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: gfx_raster
+  configs: -DVX_CFG_EXT_RASTER_ENABLE
+  args: -w 128 -h 128 -t triangle.cgltrace -M -o null
+- id: gfx_raster-msaa-scissor
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: gfx_raster
+  configs: -DVX_CFG_EXT_RASTER_ENABLE
+  args: -w 128 -h 128 -t carnival.cgltrace -s -M -o null
+# Single-pixel triangles: most cover no sample, the rest only some.
+- id: gfx_raster-msaa-tiny
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: gfx_raster
+  configs: -DVX_CFG_EXT_RASTER_ENABLE
+  args: -w 64 -h 64 -n 4096 -M -o null
+- id: gfx_raster-msaa-tile4
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_raster
+  configs: -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_RASTER_TILE_LOG_SIZE=4
+  args: -w 128 -h 128 -t carnival.cgltrace -M -o null
+- id: gfx_raster-msaa-nt16
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: gfx_raster
+  configs: -DVX_CFG_EXT_RASTER_ENABLE
+  shape:
+    threads: 16
+  args: -w 128 -h 128 -t carnival.cgltrace -s -M -o null
+# Early-Z against depth images that start with every sample's own depth; a
+# sample is drawn exactly when it is covered and not strictly behind.
+- id: gfx_raster-earlyz
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: gfx_raster
+  configs: -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -t carnival.cgltrace -E -o null
+- id: gfx_raster-msaa-earlyz
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: gfx_raster
+  configs: -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -t carnival.cgltrace -E -M -o null
+- id: gfx_raster-msaa-earlyz-scissor
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: gfx_raster
+  configs: -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -t triangle.cgltrace -s -E -M -o null
+# Slivers steep in depth: between a pixel's centre and its samples the plane
+# moves by many depth ranges, past what a 32-bit offset sum holds before its
+# shift.
+- id: gfx_raster-msaa-earlyz-sliver
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: gfx_raster
+  configs: -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
+  args: -w 64 -h 64 -S -E -M -o null
+# The on-device software walk takes the same reference.
+- id: gfx_raster-msaa-sw
+  via: blackbox
+  drivers:
+  - simx
+  app: gfx_raster
+  configs: -DVX_CFG_EXT_RASTER_ENABLE
+  args: -w 128 -h 128 -t carnival.cgltrace -s -M -z -o null
 - id: gfx_draw3d-1
   via: blackbox
   drivers:
@@ -730,12 +919,48 @@ tests:
   app: gfx_raster
   configs: -DVX_CFG_EXT_RASTER_ENABLE
   args: -w 128 -h 128 -n 4096
+- id: model_parity-raster-msaa
+  check: model_parity
+  via: blackbox
+  app: gfx_raster
+  configs: -DVX_CFG_EXT_RASTER_ENABLE
+  args: -w 128 -h 128 -t triangle.cgltrace -M -o null
+- id: model_parity-raster-msaa-scissor
+  check: model_parity
+  via: blackbox
+  app: gfx_raster
+  configs: -DVX_CFG_EXT_RASTER_ENABLE
+  args: -w 128 -h 128 -t carnival.cgltrace -s -M -o null
 - id: model_parity-om
   check: model_parity
   via: blackbox
   app: gfx_om
   configs: -DVX_CFG_EXT_OM_ENABLE
   args: -w 128 -h 128 -r whitebox_128.png
+- id: model_parity-om-msaa
+  check: model_parity
+  via: blackbox
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 64 -h 32 -M -d -b -o null
+- id: model_parity-om-depthonly
+  check: model_parity
+  via: blackbox
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 64 -h 32 -M -O -f -o null
+- id: model_parity-om-msaa-float
+  check: model_parity
+  via: blackbox
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 64 -h 32 -M -z -d -o null
+- id: model_parity-raster-msaa-earlyz
+  check: model_parity
+  via: blackbox
+  app: gfx_raster
+  configs: -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -t carnival.cgltrace -E -M -o null
 - id: model_parity-om-mrt7
   check: model_parity
   via: blackbox

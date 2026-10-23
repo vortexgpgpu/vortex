@@ -64,6 +64,7 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     localparam NUM_REQS    = OM_MEM_REQS;
     localparam W_ADDR_BITS = (`OM_ADDR_BITS + 6) - 2;
     localparam B_ADDR_BITS = `OM_ADDR_BITS + 6;
+    localparam SAMPLE_BITS = `CLOG2(OM_MSAA_SAMPLES);
     // A colour read returns words; the format and each lane's byte offset ride
     // with the request so the response can be shifted down and unpacked.
     // A D16 or S8 read likewise carries the byte offset of its texel in the word.
@@ -199,16 +200,20 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         );
 
         // A D32F_S8 texel is two words wide, a D16 one half a word, an S8 one a
-        // byte.
-        wire [W_ADDR_BITS-1:0] xoff = dcrs.depth_stencil_word ? (W_ADDR_BITS'(req_pos_x[i]) << 1)
-                                    : dcrs.depth_d16 ? (W_ADDR_BITS'(req_pos_x[i]) >> 1)
-                                    : dcrs.depth_s8 ? (W_ADDR_BITS'(req_pos_x[i]) >> 2)
-                                    : W_ADDR_BITS'(req_pos_x[i]);
+        // byte. Under 4x the texel is pixel x's in sample k's image.
+        wire [`VX_OM_DIM_BITS-1:0] px = dcrs.msaa ? (req_pos_x[i] >> SAMPLE_BITS) : req_pos_x[i];
+        wire [SAMPLE_BITS-1:0]     k  = dcrs.msaa ? req_pos_x[i][SAMPLE_BITS-1:0] : '0;
+        wire [W_ADDR_BITS-1:0] xoff = dcrs.depth_stencil_word ? (W_ADDR_BITS'(px) << 1)
+                                    : dcrs.depth_d16 ? (W_ADDR_BITS'(px) >> 1)
+                                    : dcrs.depth_s8 ? (W_ADDR_BITS'(px) >> 2)
+                                    : W_ADDR_BITS'(px);
+        wire [W_ADDR_BITS-1:0] soff = (k[0] ? W_ADDR_BITS'(dcrs.zbuf_sample_stride) : '0)
+                                    + (k[1] ? (W_ADDR_BITS'(dcrs.zbuf_sample_stride) << 1) : '0);
         wire [W_ADDR_BITS-1:0] baddr, baddr_s;
-        assign baddr = {dcrs.zbuf_addr, 4'b0} + xoff;
+        assign baddr = {dcrs.zbuf_addr, 4'b0} + xoff + soff;
 
-        wire [1:0] sel = dcrs.depth_d16 ? {req_pos_x[i][0], 1'b0}
-                       : dcrs.depth_s8 ? req_pos_x[i][1:0]
+        wire [1:0] sel = dcrs.depth_d16 ? {px[0], 1'b0}
+                       : dcrs.depth_s8 ? px[1:0]
                        : 2'b00;
         wire [3:0] d16_byteen = 4'({2{dcrs.depth_writemask}}) << sel;
         wire [3:0] s8_byteen  = 4'(stencil_byteen[i]) << sel;
@@ -282,8 +287,14 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
             .result (m_y_pitch)
         );
 
+        // Under 4x the texel is pixel x's in sample k's image.
+        wire [`VX_OM_DIM_BITS-1:0] cx = req_pos_x[i - NUM_LANES];
+        wire [`VX_OM_DIM_BITS-1:0] px = dcrs.msaa ? (cx >> SAMPLE_BITS) : cx;
+        wire [SAMPLE_BITS-1:0]     k  = dcrs.msaa ? cx[SAMPLE_BITS-1:0] : '0;
+        wire [B_ADDR_BITS-1:0] soff = (k[0] ? (B_ADDR_BITS'(rt_dcrs.cbuf_sample_stride) << 2) : '0)
+                                    + (k[1] ? (B_ADDR_BITS'(rt_dcrs.cbuf_sample_stride) << 3) : '0);
         wire [B_ADDR_BITS-1:0] baddr, baddr_s;
-        assign baddr = {rt_dcrs.cbuf_addr, 6'b0} + (B_ADDR_BITS'(req_pos_x[i - NUM_LANES]) << c_lgbpp);
+        assign baddr = {rt_dcrs.cbuf_addr, 6'b0} + (B_ADDR_BITS'(px) << c_lgbpp) + soff;
 
         wire [3:0]  byteen = req_rw ? c_texel_byteen : 4'b1111;
         wire [31:0] data = cfmt_pack(cfmt, req_color[i - NUM_LANES]);

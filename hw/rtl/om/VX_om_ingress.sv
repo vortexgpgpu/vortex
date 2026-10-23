@@ -30,6 +30,12 @@
 // and 3 for the two-word mode; the DCR tells us which, because it is a property
 // of the draw, not of the beat.
 //
+// MULTISAMPLING: a 4x export names one sample k, and the fragment it becomes
+// carries column x*4 + k, so the merger orders same-pixel fragments per sample;
+// its memory stage splits the column back into the pixel and the sample image it
+// addresses. A colour+depth pair carries k in its depth word next to the face;
+// every other record carries it in the address directly above y.
+//
 // PAIRING (two-word mode only): the colour beat is held until its depth beat
 // arrives, then one om_bus request fires. The hold table is sized so it CANNOT
 // fill -- see MAX_OPEN below. That is the deadlock argument: if an allocating
@@ -65,6 +71,7 @@ module VX_om_ingress import VX_gpu_pkg::*, VX_om_pkg::*; #(
     localparam WORDS_PER_LINE = DATA_SIZE / WORD_SIZE;
     localparam WSEL_BITS      = `CLOG2(WORDS_PER_LINE);
     localparam LINE_ADDRW     = `VX_CFG_MEM_ADDR_WIDTH - `CLOG2(DATA_SIZE);
+    localparam SAMPLE_BITS    = `CLOG2(OM_MSAA_SAMPLES);
 
     // A colour beat stays open until its depth beat lands. The open set must be
     // bounded, and the table sized to that bound, or the pairing is not
@@ -143,6 +150,8 @@ module VX_om_ingress import VX_gpu_pkg::*, VX_om_pkg::*; #(
 
     wire [31:0] xb = 32'(dcrs.aperture_xbits);
     wire [31:0] yb = 32'(dcrs.aperture_ybits);
+    // The sample index's width, above y in an address-meta record.
+    wire [31:0] sb = dcrs.msaa ? 32'(SAMPLE_BITS) : 32'd0;
 
     // The record index packs {face, y, x} in xbits/ybits-wide fields, so each
     // field must be masked to its own width on the way out. Slicing DIM_BITS off
@@ -159,16 +168,19 @@ module VX_om_ingress import VX_gpu_pkg::*, VX_om_pkg::*; #(
     // A float depth fills the depth word, so its pair carries both above y, the
     // attachment above the face.
     wire                       addr_meta = ~is_pair || dcrs.depth_float;
-    wire                       face_addr = addr_meta && rec_ext[xb + yb];
+    wire [SAMPLE_BITS-1:0]     sample_addr = dcrs.msaa ? rec_ext[xb + yb +: SAMPLE_BITS] : '0;
+    wire                       face_addr = addr_meta && rec_ext[xb + yb + sb];
     wire [OM_RT_IDX_BITS-1:0]  rt_addr   = (is_pair && dcrs.depth_float)
-                                         ? rec_ext[xb + yb + 1 +: OM_RT_IDX_BITS] : '0;
+                                         ? rec_ext[xb + yb + sb + 1 +: OM_RT_IDX_BITS] : '0;
 
-    localparam OM_DEPTH_WORD_RT   = `VX_OM_DEPTH_WORD_RT_SHIFT;
-    localparam OM_DEPTH_WORD_FACE = `VX_OM_DEPTH_WORD_FACE_SHIFT;
+    localparam OM_DEPTH_WORD_RT     = `VX_OM_DEPTH_WORD_RT_SHIFT;
+    localparam OM_DEPTH_WORD_FACE   = `VX_OM_DEPTH_WORD_FACE_SHIFT;
+    localparam OM_DEPTH_WORD_SAMPLE = `VX_OM_DEPTH_WORD_SAMPLE_SHIFT;
 
     `STATIC_ASSERT((OM_DEPTH_WORD_RT >= `VX_OM_DEPTH_BITS)
                 && (OM_DEPTH_WORD_RT + OM_RT_IDX_BITS <= OM_DEPTH_WORD_FACE)
-                && (OM_DEPTH_WORD_FACE < 32), ("depth word fields overlap"))
+                && (OM_DEPTH_WORD_FACE < OM_DEPTH_WORD_SAMPLE)
+                && (OM_DEPTH_WORD_SAMPLE + SAMPLE_BITS <= 32), ("depth word fields overlap"))
 
     wire [31:0] wsel_ext = 32'(wsel);
     wire [31:0] beat_word = mem_bus_if.req_data.data[wsel_ext * 32 +: 32];
@@ -190,6 +202,7 @@ module VX_om_ingress import VX_gpu_pkg::*, VX_om_pkg::*; #(
     wire [`VX_OM_DIM_BITS-1:0] s2_px;
     wire [`VX_OM_DIM_BITS-1:0] s2_py;
     wire                       s2_face_addr;
+    wire [SAMPLE_BITS-1:0]     s2_sample_addr;
     wire [OM_RT_IDX_BITS-1:0]  s2_rt_addr;
     wire                       s2_addr_meta;
     wire                       s2_is_depth;
@@ -197,7 +210,7 @@ module VX_om_ingress import VX_gpu_pkg::*, VX_om_pkg::*; #(
     wire                       s2_ready;
 
     VX_elastic_buffer #(
-        .DATAW   (UUID_WIDTH + 32 + `VX_CFG_XLEN + 2 * `VX_OM_DIM_BITS + OM_RT_IDX_BITS + 4),
+        .DATAW   (UUID_WIDTH + 32 + `VX_CFG_XLEN + 2 * `VX_OM_DIM_BITS + SAMPLE_BITS + OM_RT_IDX_BITS + 4),
         .SIZE    (2),
         .OUT_REG (1)
     ) rec_buf (
@@ -206,9 +219,9 @@ module VX_om_ingress import VX_gpu_pkg::*, VX_om_pkg::*; #(
         .valid_in  (mem_bus_if.req_valid),
         .ready_in  (rec_ready),
         .data_in   ({mem_bus_if.req_data.tag.uuid, beat_word, record_idx,
-                     px, py, face_addr, rt_addr, addr_meta, beat_is_depth, is_pair}),
+                     px, py, face_addr, sample_addr, rt_addr, addr_meta, beat_is_depth, is_pair}),
         .data_out  ({s2_uuid, s2_word, s2_record_idx,
-                     s2_px, s2_py, s2_face_addr, s2_rt_addr, s2_addr_meta, s2_is_depth, s2_is_pair}),
+                     s2_px, s2_py, s2_face_addr, s2_sample_addr, s2_rt_addr, s2_addr_meta, s2_is_depth, s2_is_pair}),
         .valid_out (rec_valid),
         .ready_out (s2_ready)
     );
@@ -264,6 +277,11 @@ module VX_om_ingress import VX_gpu_pkg::*, VX_om_pkg::*; #(
                                                      : frag_word[OM_DEPTH_WORD_FACE];
     wire [OM_RT_IDX_BITS-1:0] s2_rt   = s2_addr_meta ? s2_rt_addr
                                                      : frag_word[OM_DEPTH_WORD_RT +: OM_RT_IDX_BITS];
+    // The fragment's column: under 4x its sample's, within the pixel's four.
+    wire [SAMPLE_BITS-1:0]    s2_sample = s2_addr_meta ? s2_sample_addr
+                                                     : (dcrs.msaa ? frag_word[OM_DEPTH_WORD_SAMPLE +: SAMPLE_BITS] : '0);
+    wire [`VX_OM_DIM_BITS-1:0] s2_col = dcrs.msaa ? {s2_px[`VX_OM_DIM_BITS-SAMPLE_BITS-1:0], s2_sample}
+                                                  : s2_px;
     wire [`VX_OM_DEPTH_BUS_BITS-1:0] frag_depth = dcrs.depth_float
         ? `VX_OM_DEPTH_BUS_BITS'(frag_word)
         : `VX_OM_DEPTH_BUS_BITS'(frag_word[`VX_OM_DEPTH_BITS-1:0]);
@@ -283,7 +301,7 @@ module VX_om_ingress import VX_gpu_pkg::*, VX_om_pkg::*; #(
         .ready_in  (om_ready),
         .data_in   ({s2_uuid,
                      frag_mask,
-                     {NUM_LANES{s2_px}},
+                     {NUM_LANES{s2_col}},
                      {NUM_LANES{s2_py}},
                      {NUM_LANES{frag_colour}},
                      {NUM_LANES{frag_depth}},
@@ -333,6 +351,9 @@ module VX_om_ingress import VX_gpu_pkg::*, VX_om_pkg::*; #(
         ("%t: *** %s: OM ingress hold table overflow — MAX_OPEN bound is wrong", $time, INSTANCE_ID))
     `RUNTIME_ASSERT(~(s2_fire && s2_is_pair && s2_is_depth && ~hit),
         ("%t: *** %s: depth word with no open colour record — the fu_lock pair was split", $time, INSTANCE_ID))
+    // A 4x column holds the pixel's x in all but its sample bits.
+    `RUNTIME_ASSERT(~(rec_valid && fire && dcrs.msaa && (s2_px >> (`VX_OM_DIM_BITS - SAMPLE_BITS)) != '0),
+        ("%t: *** %s: 4x fragment x=%0d past the column field", $time, INSTANCE_ID, s2_px))
 
     `UNUSED_VAR (mem_bus_if.req_data.rw)
     `UNUSED_VAR (mem_bus_if.req_data.attr)

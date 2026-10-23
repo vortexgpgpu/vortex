@@ -27,4 +27,7 @@ STRICT := 1
 
 LDLIBS += -lm
 
+FF_RASTER := 1
+FF_OM := 1
+
 include ../common.mk

@@ -23,6 +23,10 @@
  *               set bit of the pattern repeated `factor` times.
  * Pixels whose centre lies within a hair of an edge go unchecked: either
  * answer is right there.
+ *
+ * Built with PRIM_SAMPLES=4 (msaa_lines) it draws the lines rasterized at the
+ * pixel centre -- Bresenham and smooth -- into a 4x target, which then covers
+ * every sample of a covered pixel, and checks the resolved image the same way.
  */
 
 #include <vulkan/vulkan.h>
@@ -34,6 +38,10 @@
 
 #define SIZE 32u
 #define TIE  1e-3f
+
+#ifndef PRIM_SAMPLES
+#define PRIM_SAMPLES 1
+#endif
 
 #define CHECK(x) do {                                              \
    VkResult _r = (x);                                              \
@@ -298,28 +306,73 @@ run_pass(const struct ctx *x, const struct pass *p)
    VkImageView view;
    CHECK(vkCreateImageView(x->dev, &ivci, NULL, &view));
 
-   VkAttachmentDescription att = {
-      .format = fmt, .samples = VK_SAMPLE_COUNT_1_BIT,
-      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-      .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-      .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-      .finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+   /* Under multisampling the pass draws into a 4x image and resolves into the
+    * one read back. */
+   const VkSampleCountFlagBits samples = (VkSampleCountFlagBits)PRIM_SAMPLES;
+   VkImage msimg = VK_NULL_HANDLE;
+   VkDeviceMemory msmem = VK_NULL_HANDLE;
+   VkImageView msview = VK_NULL_HANDLE;
+   if (PRIM_SAMPLES > 1) {
+      VkImageCreateInfo msci = imci;
+      msci.samples = samples;
+      msci.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+      CHECK(vkCreateImage(x->dev, &msci, NULL, &msimg));
+      VkMemoryRequirements msr;
+      vkGetImageMemoryRequirements(x->dev, msimg, &msr);
+      VkMemoryAllocateInfo msai = {
+         .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+         .allocationSize = msr.size, .memoryTypeIndex = find_mem(&x->mp, msr.memoryTypeBits, 0),
+      };
+      if (msai.memoryTypeIndex == UINT32_MAX) {
+         fprintf(stderr, "FAILED: no image memory\n");
+         return false;
+      }
+      CHECK(vkAllocateMemory(x->dev, &msai, NULL, &msmem));
+      CHECK(vkBindImageMemory(x->dev, msimg, msmem, 0));
+      VkImageViewCreateInfo msvci = ivci;
+      msvci.image = msimg;
+      CHECK(vkCreateImageView(x->dev, &msvci, NULL, &msview));
+   }
+
+   VkAttachmentDescription att[2] = {
+      {
+         .format = fmt, .samples = samples,
+         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+         .storeOp = PRIM_SAMPLES > 1 ? VK_ATTACHMENT_STORE_OP_DONT_CARE
+                                     : VK_ATTACHMENT_STORE_OP_STORE,
+         .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+         .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+         .finalLayout = PRIM_SAMPLES > 1 ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+                                         : VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+      },
+      {
+         .format = fmt, .samples = VK_SAMPLE_COUNT_1_BIT,
+         .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE, .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+         .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+         .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+         .finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+      },
    };
    VkAttachmentReference ref = { 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+   VkAttachmentReference rref = { 1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
    VkSubpassDescription sub = {
       .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
       .colorAttachmentCount = 1, .pColorAttachments = &ref,
+      .pResolveAttachments = PRIM_SAMPLES > 1 ? &rref : NULL,
    };
    VkRenderPassCreateInfo rpci = {
       .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-      .attachmentCount = 1, .pAttachments = &att, .subpassCount = 1, .pSubpasses = &sub,
+      .attachmentCount = PRIM_SAMPLES > 1 ? 2 : 1, .pAttachments = att,
+      .subpassCount = 1, .pSubpasses = &sub,
    };
    VkRenderPass rp;
    CHECK(vkCreateRenderPass(x->dev, &rpci, NULL, &rp));
+   const VkImageView fbviews[2] = { PRIM_SAMPLES > 1 ? msview : view, view };
    VkFramebufferCreateInfo fbci = {
       .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-      .renderPass = rp, .attachmentCount = 1, .pAttachments = &view,
+      .renderPass = rp, .attachmentCount = PRIM_SAMPLES > 1 ? 2 : 1, .pAttachments = fbviews,
       .width = SIZE, .height = SIZE, .layers = 1,
    };
    VkFramebuffer fb;
@@ -375,7 +428,7 @@ run_pass(const struct ctx *x, const struct pass *p)
    };
    VkPipelineMultisampleStateCreateInfo mss = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-      .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+      .rasterizationSamples = samples,
    };
    VkPipelineColorBlendAttachmentState cba = {
       .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
@@ -561,6 +614,11 @@ run_pass(const struct ctx *x, const struct pass *p)
    vkDestroyImageView(x->dev, view, NULL);
    vkFreeMemory(x->dev, imem, NULL);
    vkDestroyImage(x->dev, img, NULL);
+   if (PRIM_SAMPLES > 1) {
+      vkDestroyImageView(x->dev, msview, NULL);
+      vkFreeMemory(x->dev, msmem, NULL);
+      vkDestroyImage(x->dev, msimg, NULL);
+   }
 
    printf("%-22s %s (%u wrong of %u checked)\n", p->name, bad ? "FAIL" : "ok", bad, checked);
    return bad == 0;
@@ -686,8 +744,13 @@ main(int argc, char **argv)
         { { 1.3f, 4.6f, 0 }, { 30.2f, 7.1f, 0 }, { 2.4f, 24.3f, 0 }, { 29.7f, 28.8f, 0 } } },
    };
    unsigned failed = 0;
-   for (unsigned i = 0; i < sizeof(passes) / sizeof(passes[0]); i++)
+   for (unsigned i = 0; i < sizeof(passes) / sizeof(passes[0]); i++) {
+      /* Under multisampling, the lines rasterized at the pixel centre. */
+      if (PRIM_SAMPLES > 1 && passes[i].shape != BRESENHAM_LINES &&
+          passes[i].shape != SMOOTH_LINES)
+         continue;
       failed += !run_pass(&x, &passes[i]);
+   }
 
    vkDestroyShaderModule(x.dev, x.vs, NULL);
    vkDestroyShaderModule(x.dev, x.fs, NULL);
@@ -698,7 +761,11 @@ main(int argc, char **argv)
       printf("FAILED (primitives: %u pass(es) wrong)\n", failed);
       return 1;
    }
-   printf("PASSED (primitives: points, rectangular/wide/Bresenham lines, polygon "
-          "modes, smooth lines, stipple, stipple with restart, instancing)\n");
+   if (PRIM_SAMPLES > 1)
+      printf("PASSED (primitives at %ux: Bresenham lines, smooth and wide smooth lines, "
+             "every sample of a covered pixel)\n", PRIM_SAMPLES);
+   else
+      printf("PASSED (primitives: points, rectangular/wide/Bresenham lines, polygon "
+             "modes, smooth lines, stipple, stipple with restart, instancing)\n");
    return 0;
 }

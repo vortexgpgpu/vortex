@@ -25,6 +25,11 @@ typedef struct {
   // draw-wide index of the record the stamp's pass-local pid names.
   uint32_t pid_color;
   uint32_t pid_base;      // draw-wide index of the pass's first record
+
+  // Samples per pixel (1 or 4). At 4 the colour buffer is sample-interleaved --
+  // sample k of (x, y) at cbuf_addr + y*cbuf_pitch + x*cbuf_stride + k*4 -- and a
+  // covered pixel writes every sample its coverage mask names.
+  uint32_t samples;
 } kernel_arg_t;
 
 // A distinct colour per draw-wide primitive index, never the clear colour.

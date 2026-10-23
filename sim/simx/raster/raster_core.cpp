@@ -14,6 +14,7 @@
 #include "raster_core.h"
 #include <algorithm>
 #include <array>
+#include <bitset>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -24,6 +25,7 @@
 #include <utility>
 #include <vector>
 #include "gfx_ff_model.h"
+#include "gfx_frag_rast.h"
 #include "cluster.h"
 #include "processor_impl.h"   // ProcessorImpl::ram() — early-Z committed-depth peek
 #include "core.h"
@@ -83,6 +85,21 @@ static_assert(kOutputBatches <= 32, "batch mask is 32 bits");
 constexpr uint32_t kBlockBufSize  = 2 * kOutputBatches;
 constexpr uint32_t kQuadFifoDepth = VX_CFG_RASTER_QUAD_FIFO_DEPTH;
 
+#if VX_CFG_RASTER_EARLYZ_ENABLED
+// Early-Z reads committed depth through the ocache: one word per covered pixel
+// per sample, a scheduler request per sample, in batches of one word per ocache
+// port.
+constexpr uint32_t kEzPixels      = kOutputQuads * 4;
+using EzLanes = std::bitset<kEzPixels>;
+constexpr uint32_t kEzQueueSize   = VX_CFG_RASTER_MEM_QUEUE_SIZE;
+constexpr uint32_t kOcacheNumReqs = VX_CFG_OCACHE_NUM_BANKS;
+constexpr uint64_t kOcacheLineMask = ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
+// The request leaves through the scheduler's output register and the slice
+// merge's; a completed response through the merge's and the scheduler's.
+constexpr uint32_t kEzReqDelay    = 2;
+constexpr uint32_t kEzRspLatency  = 2;
+#endif
+
 // A pass addresses at most GFX_RASTER_MAX_PRIMS primitives: the hardware carries
 // a pid, and counts a bin's pids, in VX_RASTER_PID_BITS bits. A pass beyond that
 // is one the hardware cannot render, so the model stops on it rather than
@@ -106,14 +123,24 @@ inline uint32_t encode_pos_mask(uint32_t pos_x, uint32_t pos_y, uint32_t mask) {
 
 #if VX_CFG_RASTER_EARLYZ_ENABLED
 
-// Early-Z: evaluate the screen-space depth plane at pixel center (X,Y) and
-// quantize to the 24-bit zbuf value. Bit-identical to the FS late-Z path (kernel
-// PLANE_Z Q7.24 plane MAC written SATURATED to [0, OM_DEPTH_MASK]), so early-Z
-// culls exactly the fragments late-Z would reject.
-inline uint32_t earlyz_plane_depth(const graphics::rast_attrib_t& zp, int X, int Y) {
+// The plane's move from a pixel's centre to sample k of the 4x pattern, in
+// 64 bits as the FS late-Z computes it: (A'*DX16[k] + B'*DY16[k]) >> 4.
+inline int32_t earlyz_sample_offset(const graphics::rast_attrib_t& zp, uint32_t k) {
+  static constexpr int dx16[gfx_rast::RAST_MSAA_SAMPLES] = GFX_MSAA4_SAMPLE_DX16;
+  static constexpr int dy16[gfx_rast::RAST_MSAA_SAMPLES] = GFX_MSAA4_SAMPLE_DY16;
+  return int32_t(((int64_t)zp.x.data() * dx16[k] + (int64_t)zp.y.data() * dy16[k]) >> 4);
+}
+
+// Early-Z: evaluate the screen-space depth plane at pixel center (X,Y), moved by
+// `zoff` to a sample, and quantize to the 24-bit zbuf value. Bit-identical to the
+// FS late-Z path (kernel PLANE_Z Q7.24 plane MAC written SATURATED to
+// [0, OM_DEPTH_MASK]), so early-Z culls exactly the fragments late-Z would reject.
+inline uint32_t earlyz_plane_depth(const graphics::rast_attrib_t& zp, int X, int Y,
+                                   int32_t zoff = 0) {
   int32_t zbits = (int32_t)( (int64_t)zp.x.data() * X
                            + (int64_t)zp.y.data() * Y
-                           + (int64_t)zp.z.data() );
+                           + (int64_t)zp.z.data()
+                           + zoff );
   if (zbits < 0) {
     return 0;
   }
@@ -292,6 +319,7 @@ public:
     switch (addr) {
     case VX_DCR_OM_ZBUF_ADDR:    zbuf_base_  = uint64_t(value) << 6; break;
     case VX_DCR_OM_ZBUF_PITCH:   zbuf_pitch_ = value; break;
+    case VX_DCR_OM_ZBUF_SAMPLE_STRIDE: zbuf_sample_stride_ = value; break;
     case VX_DCR_OM_DEPTH_FUNC:   depth_func_ = value; break;
     case VX_DCR_OM_EARLYZ_SAFE:  earlyz_safe_ = value; break;
     case VX_DCR_OM_DEPTH_FORMAT:
@@ -337,7 +365,13 @@ public:
     // 1) Consumers, then the pipeline from its output back to the fetch FSM.
     serve_consumers();
     drain_slices();
+  #if VX_CFG_RASTER_EARLYZ_ENABLED
+    ez_mem_step();
+  #endif
     for (auto& slice : slices_) {
+    #if VX_CFG_RASTER_EARLYZ_ENABLED
+      ez_step(slice);
+    #endif
       be_step(slice);
       te_step(slice);
     }
@@ -370,6 +404,9 @@ private:
     uint32_t          xloc, yloc; // bin origin in pixels
     graphics::vec3e_t edges[3];
     graphics::vec3e_t extents;
+    // Edge value at a pixel's centre minus that at its top-left corner (zero at
+    // one sample): a 4x tile is bounded from its first pixel's corner.
+    graphics::vec3e_t cbias;
     // The record's rectangle intersected with the DCR one: [left, right) x [top, bottom).
     uint32_t          scissor_left, scissor_right, scissor_top, scissor_bottom;
     graphics::rast_attrib_t zplane;
@@ -446,8 +483,68 @@ private:
     uint32_t qx_pix[kPerBlockQuads];
     uint32_t qy_pix[kPerBlockQuads];
     uint32_t mask[kPerBlockQuads];
+    uint32_t smask[kPerBlockQuads];   // pixel p's sample coverage in bits [4p, 4p+4)
     PrimRef  prim;
   };
+
+#if VX_CFG_RASTER_EARLYZ_ENABLED
+  // ── Early-Z stage, one per slice, between its quad FIFO and the bus ───
+  enum class EzState : uint8_t { IDLE, EVAL1, EVAL1B, EVAL2, RUN, SEND };
+
+  // A scheduler request: one sample's reads for the wave's covering pixels.
+  struct EzSlot {
+    bool     busy    = false;
+    uint32_t sample  = 0;
+    EzLanes  lanes;         // pixels read
+    EzLanes  waiting;       // pixels whose word is still to arrive
+    std::array<uint64_t, kEzPixels> addr{};
+    std::array<uint32_t, kEzPixels> data{};
+  };
+
+  struct EarlyZ {
+    EzState   state = EzState::IDLE;
+    QuadBatch wave;
+    std::array<uint32_t, kEzPixels> mask{};   // each pixel's sample coverage
+    std::array<int32_t, gfx_rast::RAST_MSAA_SAMPLES> zoff{};
+    uint32_t  issue_k    = 0;      // next sample to read
+    bool      issue_done = false;
+    uint32_t  pending    = 0;      // samples read, not yet compared
+    uint32_t  cand_k     = 0;      // the sample whose candidates are registered
+    bool      sent       = false;  // SEND: the wave left this cycle
+    // Memory scheduler.
+    StageQueue<uint32_t> req_queue{kEzQueueSize, 1};
+    std::array<EzSlot, kEzQueueSize> slots;
+    uint32_t  slots_busy = 0;
+    bool      slots_full = false;
+    uint32_t  batch_idx  = 0;
+    StageQueue<uint32_t> rsp_buf{2, kEzRspLatency};
+
+    bool idle() const {
+      return state == EzState::IDLE && slots_busy == 0;
+    }
+
+    void clear() {
+      state = EzState::IDLE;
+      issue_k = 0;
+      issue_done = false;
+      pending = 0;
+      cand_k = 0;
+      sent = false;
+      req_queue.clear();
+      slots = {};
+      slots_busy = 0;
+      slots_full = false;
+      batch_idx = 0;
+      rsp_buf.clear();
+    }
+
+    void begin_cycle() {
+      req_queue.begin_cycle();
+      rsp_buf.begin_cycle();
+      slots_full = (slots_busy == kEzQueueSize);
+    }
+  };
+#endif
 
   struct Slice {
     // Primitive input to the walker.
@@ -462,8 +559,12 @@ private:
     std::optional<TileWork> be_block;
     std::optional<QuadEval> be_quads;
     uint32_t              batch_sent = 0;
+    uint32_t              be_phase   = 0;   // 4x: cycles the input block has held
     // BE output.
     StageQueue<QuadBatch> quads{kQuadFifoDepth, 1};
+#if VX_CFG_RASTER_EARLYZ_ENABLED
+    EarlyZ                ez;
+#endif
 
     bool te_idle() const {
       if (s1 || s2) {
@@ -478,6 +579,11 @@ private:
     }
 
     bool idle() const {
+    #if VX_CFG_RASTER_EARLYZ_ENABLED
+      if (!ez.idle()) {
+        return false;
+      }
+    #endif
       return prim_in.empty() && te_idle() && blocks.empty()
           && !be_block && !be_quads && quads.empty();
     }
@@ -491,13 +597,20 @@ private:
       be_block.reset();
       be_quads.reset();
       batch_sent = 0;
+      be_phase = 0;
       quads.clear();
+    #if VX_CFG_RASTER_EARLYZ_ENABLED
+      ez.clear();
+    #endif
     }
 
     void begin_cycle() {
       prim_in.begin_cycle();
       blocks.begin_cycle();
       quads.begin_cycle();
+    #if VX_CFG_RASTER_EARLYZ_ENABLED
+      ez.begin_cycle();
+    #endif
     }
   };
 
@@ -648,6 +761,7 @@ private:
     scissor_right_  = dcrs_.read(VX_DCR_RASTER_SCISSOR_X) >> 16;
     scissor_top_    = dcrs_.read(VX_DCR_RASTER_SCISSOR_Y) & 0xffff;
     scissor_bottom_ = dcrs_.read(VX_DCR_RASTER_SCISSOR_Y) >> 16;
+    msaa_ = dcrs_.read(VX_DCR_RASTER_SAMPLES) == gfx_rast::RAST_MSAA_SAMPLES;
 
     uint32_t first = next_owned_bin(0);
     if (first < tile_count_) {
@@ -695,6 +809,12 @@ private:
       ctx->edges[k].z = graphics::FloatE::make(int32_t(w[base + 2]));
     }
     ctx->extents = compute_extents(ctx->edges);
+    ctx->cbias   = graphics::vec3e_t{};
+    if (msaa_) {
+      ctx->cbias = graphics::vec3e_t{ (ctx->edges[0].x + ctx->edges[0].y) >> 1,
+                                      (ctx->edges[1].x + ctx->edges[1].y) >> 1,
+                                      (ctx->edges[2].x + ctx->edges[2].y) >> 1 };
+    }
     ctx->scissor_left   = std::max(scissor_left_,   RAST_SCISSOR_LO(w[0]));
     ctx->scissor_right  = std::min(scissor_right_,  RAST_SCISSOR_HI(w[0]));
     ctx->scissor_top    = std::max(scissor_top_,    RAST_SCISSOR_LO(w[1]));
@@ -965,12 +1085,13 @@ private:
   // (corner + extents·tile_size) is negative.
   static bool tile_overlaps(const graphics::vec3e_t& edge_eval,
                             const graphics::vec3e_t& extents,
+                            const graphics::vec3e_t& cbias,
                             uint32_t tile_logsize) {
     graphics::FloatE z(0);
     uint32_t shift = tile_logsize + 1;  // tile size in log2 pixels
-    return  (edge_eval.x + (extents.x << shift)) >= z
-         && (edge_eval.y + (extents.y << shift)) >= z
-         && (edge_eval.z + (extents.z << shift)) >= z;
+    return  (edge_eval.x + (extents.x << shift) - cbias.x) >= z
+         && (edge_eval.y + (extents.y << shift) - cbias.y) >= z
+         && (edge_eval.z + (extents.z << shift) - cbias.z) >= z;
   }
 
   // Stage-1 evaluation: nothing when the primitive misses the tile, the block
@@ -979,7 +1100,7 @@ private:
     constexpr uint32_t kTopLog = kTileLogSize - 1;
     const graphics::vec3e_t* edges = tile.prim->edges;
     uint32_t tile_logsize = kTopLog - tile.level;
-    if (!tile_overlaps(tile.edge_eval, tile.prim->extents, tile_logsize)) {
+    if (!tile_overlaps(tile.edge_eval, tile.prim->extents, tile.prim->cbias, tile_logsize)) {
       return std::nullopt;
     }
     PipeEntry pe;
@@ -1088,13 +1209,16 @@ private:
   // carrying all of its stamps (non-overlapping ones carry mask=0 but valid
   // pos_x/pos_y). The block holds the evaluator until its last batch leaves.
 
-  // Per-pixel coverage + scissor test for a quad.
+  // Per-pixel coverage + scissor test for a quad: a bit per pixel, and in
+  // `smask` the pixel's sample coverage (bit 0 alone at one sample). Under 4x
+  // multisampling a pixel is covered when any of its samples is.
   static uint32_t compute_quad(uint32_t qx, uint32_t qy,
                                const graphics::vec3e_t& edge_eval_corner,
-                               const PrimCtx& prim) {
+                               const PrimCtx& prim, bool msaa, uint32_t& smask) {
     const graphics::vec3e_t* edges = prim.edges;
     graphics::FloatE z(0);
     uint32_t mask = 0;
+    smask = 0;
     // Vulkan top-left fill rule: a sample exactly on an edge (value == 0) is
     // covered only if that edge is a top or left edge (gradient a > 0, or
     // a == 0 && b > 0); otherwise the boundary sample belongs to the abutting
@@ -1113,18 +1237,23 @@ private:
         bool in0 = tl0 ? (ee0 >= z) : (ee0 > z);
         bool in1 = tl1 ? (ee1 >= z) : (ee1 > z);
         bool in2 = tl2 ? (ee2 >= z) : (ee2 > z);
-        bool covered = in0 && in1 && in2
-                    && (px >= prim.scissor_left) && (px <  prim.scissor_right)
-                    && (py >= prim.scissor_top)  && (py <  prim.scissor_bottom);
-        if (covered) {
+        bool in_scissor = (px >= prim.scissor_left) && (px <  prim.scissor_right)
+                       && (py >= prim.scissor_top)  && (py <  prim.scissor_bottom);
+        uint32_t samples = 0;
+        if (in_scissor) {
+          samples = msaa ? gfx_rast::rast_sample_mask(edges, graphics::vec3e_t{ ee0, ee1, ee2 })
+                         : uint32_t(in0 && in1 && in2);
+        }
+        if (samples) {
           mask |= 1u << (pj * 2 + pi);
         }
+        smask |= samples << (4 * (pj * 2 + pi));
       }
     }
     return mask;
   }
 
-  static QuadEval evaluate_block(const TileWork& block) {
+  static QuadEval evaluate_block(const TileWork& block, bool msaa) {
     const graphics::vec3e_t* edges = block.prim->edges;
     QuadEval qe;
     qe.prim = block.prim;
@@ -1138,7 +1267,7 @@ private:
       corner.x = block.edge_eval.x + edges[0].x * int(2 * ii) + edges[0].y * int(2 * jj);
       corner.y = block.edge_eval.y + edges[1].x * int(2 * ii) + edges[1].y * int(2 * jj);
       corner.z = block.edge_eval.z + edges[2].x * int(2 * ii) + edges[2].y * int(2 * jj);
-      qe.mask[i] = compute_quad(qe.qx_pix[i], qe.qy_pix[i], corner, *block.prim);
+      qe.mask[i] = compute_quad(qe.qx_pix[i], qe.qy_pix[i], corner, *block.prim, msaa, qe.smask[i]);
     }
     return qe;
   }
@@ -1175,6 +1304,7 @@ private:
             }
             batch.stamps[q].pos_mask = encode_pos_mask(qe.qx_pix[idx] >> 1, qe.qy_pix[idx] >> 1, qe.mask[idx]);
             batch.stamps[q].pid      = qe.prim->pid;
+            batch.stamps[q].smask    = qe.smask[idx];
           }
           DT(4, simobject_->name() << " be-out: x=" << (qe.qx_pix[b * kOutputQuads] >> 1)
              << ", y=" << (qe.qy_pix[b * kOutputQuads] >> 1) << ", pid=" << qe.prim->pid);
@@ -1187,14 +1317,22 @@ private:
       return;
     }
     if (slice.be_block) {
-      slice.be_quads = evaluate_block(*slice.be_block);
+      slice.be_quads = evaluate_block(*slice.be_block, msaa_);
     } else {
       slice.be_quads.reset();
     }
     slice.be_block.reset();
+    // Under 4x multisampling a block holds the evaluator's input for a cycle
+    // that computes sample 0's edge offsets and then a cycle per sample; it
+    // leaves the block buffer with its last sample.
     if (slice.blocks.valid(cycle_)) {
-      slice.be_block = slice.blocks.front();
-      slice.blocks.pop();
+      if (msaa_ && slice.be_phase < gfx_rast::RAST_MSAA_SAMPLES) {
+        ++slice.be_phase;
+      } else {
+        slice.be_block = slice.blocks.front();
+        slice.blocks.pop();
+        slice.be_phase = 0;
+      }
     }
   }
 
@@ -1206,6 +1344,18 @@ private:
     }
     for (uint32_t n = 0; n < kNumSlices; ++n) {
       uint32_t s = (out_slice_rr_ + n) % kNumSlices;
+    #if VX_CFG_RASTER_EARLYZ_ENABLED
+      if (earlyz_active()) {
+        auto& ez = slices_.at(s).ez;
+        if (ez.state == EzState::SEND && !ez_wave_empty(ez)) {
+          out_buf_.push(ez_narrowed_wave(ez), cycle_);
+          ez.sent = true;
+          out_slice_rr_ = (s + 1) % kNumSlices;
+          break;
+        }
+        continue;
+      }
+    #endif
       auto& quads = slices_.at(s).quads;
       if (quads.valid(cycle_)) {
         out_buf_.push(quads.front(), cycle_);
@@ -1218,46 +1368,279 @@ private:
 
 #if VX_CFG_RASTER_EARLYZ_ENABLED
 
-  // ── Early-Z: narrow a served quad's coverage against committed depth ──
-  // Tests each covered pixel's plane depth against the depth buffer and clears
-  // its coverage bit only when the fragment is STRICTLY behind (earlyz_occluded).
-  // The plane depth is bit-identical to the FS late-Z, and the strict-behind
-  // (reflexive-relaxed) test can never drop a visible fragment, so enabling
-  // early-Z is image-identical to the ROP-only path.
+  // ── Early-Z: narrow each wave's coverage against committed depth ──
+  // Tests each covered sample's plane depth against the depth buffer and drops
+  // a pixel only when every sample it covers is STRICTLY behind
+  // (earlyz_occluded). The plane depth is bit-identical to the FS late-Z, and
+  // the strict-behind (reflexive-relaxed) test can never drop a visible
+  // fragment, so enabling early-Z is image-identical to the ROP-only path. A
+  // pixel that keeps any sample keeps its whole mask: the shader sees the
+  // rasterized coverage (gl_SampleMaskIn, the centroid), before the depth test.
   //
-  // SimX model note: the committed depth is peeked from the functional RAM, which
-  // is written by the OM as warps execute — not causally pinned to this
-  // fragment's submission slot (it may already hold this fragment's own, a
-  // co-planar, or a causally-later nearer write). The strict-behind rule makes
-  // the cull correct regardless: it is an ordering-independent condition that
-  // holds whatever the read freshness or pipeline ordering.
-  void early_z_cull(RasterStamp& s, const graphics::rast_attrib_t& zp) {
-    uint32_t cov = s.pos_mask & 0xfu;
-    if (cov == 0) {
-      return;
+  // The stage holds one wave: three cycles evaluate its plane, then
+  // a request per sample goes to the memory scheduler while earlier samples'
+  // responses are compared, and the narrowed wave leaves (a fully culled one is
+  // dropped). A response is compared once its sample's candidates are
+  // registered: at once when they already are, else a cycle later. The committed
+  // depth is the ocache's word when the response arrives; it is not causally
+  // pinned to this fragment, which the strict-behind rule makes harmless.
+
+  bool earlyz_active() const {
+    return earlyz_safe_ && depth_d24_;
+  }
+
+  static bool ez_wave_empty(const EarlyZ& ez) {
+    for (uint32_t m : ez.mask) {
+      if (m != 0) {
+        return false;
+      }
     }
-    RAM* ram = cluster_->processor()->ram();
-    uint32_t qx = (s.pos_mask >> 4) & ((1u << kPosBits) - 1u);
-    uint32_t qy = (s.pos_mask >> (4 + kPosBits)) & ((1u << kPosBits) - 1u);
-    uint32_t new_cov = cov;
-    for (uint32_t i = 0; i < 4; ++i) {
-      if (!((cov >> i) & 1u)) {
+    return true;
+  }
+
+  // A pixel keeps its rasterized mask while any of its samples survives.
+  static QuadBatch ez_narrowed_wave(const EarlyZ& ez) {
+    QuadBatch out = ez.wave;
+    for (uint32_t q = 0; q < kOutputQuads; ++q) {
+      auto& st = out.stamps[q];
+      for (uint32_t i = 0; i < 4; ++i) {
+        if (ez.mask[q * 4 + i] == 0) {
+          st.pos_mask &= ~(1u << i);
+          st.smask    &= ~(0xfu << (4 * i));
+        }
+      }
+    }
+    return out;
+  }
+
+  // Pixel p's position: X = pos_x*2 + (i&1), Y = pos_y*2 + (i>>1).
+  static void ez_pixel_pos(const EarlyZ& ez, uint32_t p, int& X, int& Y) {
+    const auto& st = ez.wave.stamps[p / 4];
+    uint32_t qx = (st.pos_mask >> 4) & ((1u << kPosBits) - 1u);
+    uint32_t qy = (st.pos_mask >> (4 + kPosBits)) & ((1u << kPosBits) - 1u);
+    X = int(qx) * 2 + int(p & 1u);
+    Y = int(qy) * 2 + int((p >> 1) & 1u);
+  }
+
+  uint64_t ez_tag(uint32_t slice, uint32_t slot, uint32_t lane) const {
+    return (uint64_t(slice) * kEzQueueSize + slot) * kEzPixels + lane;
+  }
+
+  // The scheduler: responses fill their request, a completed request leaves
+  // through its response buffer (one per slice per cycle); the head request of
+  // each slice issues a batch of a word per ocache port, slices taking turns
+  // for a port.
+  void ez_mem_step() {
+    std::array<bool, kNumSlices> completed{};
+    for (uint32_t ch = 0; ch < kOcacheNumReqs; ++ch) {
+      auto& rsp_ch = simobject_->ocache_rsp_in.at(ch);
+      if (rsp_ch.empty()) {
         continue;
       }
-      int X = int(qx) * 2 + int(i & 1u);
-      int Y = int(qy) * 2 + int(i >> 1);
-      uint32_t cand = earlyz_plane_depth(zp, X, Y);
-      uint64_t addr = zbuf_base_ + uint64_t(Y) * zbuf_pitch_ + uint64_t(X) * 4;
-      uint32_t stored = 0;
-      ram->read(&stored, addr, 4);
-      stored &= OM_DEPTH_MASK;
-      ++perf_stats_.earlyz_tested;
-      if (earlyz_occluded(depth_func_, cand, stored)) {
-        new_cov &= ~(1u << i);
-        ++perf_stats_.earlyz_culled;
+      const auto& mrsp = rsp_ch.peek();
+      uint32_t lane  = uint32_t(mrsp.tag % kEzPixels);
+      uint32_t slot  = uint32_t((mrsp.tag / kEzPixels) % kEzQueueSize);
+      uint32_t s     = uint32_t(mrsp.tag / (uint64_t(kEzPixels) * kEzQueueSize));
+      auto& ez = slices_.at(s).ez;
+      auto& sl = ez.slots.at(slot);
+      if (!sl.busy || !sl.waiting.test(lane)) {
+        rsp_ch.pop();   // a read of a walk the producer has since reset
+        continue;
+      }
+      bool completes = (sl.waiting.count() == 1);
+      if (completes && (completed.at(s) || !ez.rsp_buf.ready())) {
+        continue;
+      }
+      uint32_t value = 0;
+      if (mrsp.data) {
+        uint32_t offset = uint32_t(sl.addr[lane] & ~kOcacheLineMask);
+        std::memcpy(&value, mrsp.data->data() + offset, sizeof(value));
+      } else {
+        cluster_->processor()->ram()->read(&value, sl.addr[lane], sizeof(value));
+      }
+      sl.data[lane] = value;
+      sl.waiting.reset(lane);
+      rsp_ch.pop();
+      if (completes) {
+        ez.rsp_buf.push(slot, cycle_);
+        completed.at(s) = true;
       }
     }
-    s.pos_mask = (s.pos_mask & ~0xfu) | new_cov;
+
+    uint32_t ports_used = 0;
+    for (uint32_t n = 0; n < kNumSlices; ++n) {
+      uint32_t s = (ez_issue_rr_ + n) % kNumSlices;
+      auto& ez = slices_.at(s).ez;
+      if (!ez.req_queue.valid(cycle_)) {
+        continue;
+      }
+      uint32_t slot = ez.req_queue.front();
+      const auto& sl = ez.slots.at(slot);
+      uint32_t base = ez.batch_idx * kOcacheNumReqs;
+      uint32_t batch_mask = 0;
+      for (uint32_t ch = 0; ch < kOcacheNumReqs && base + ch < kEzPixels; ++ch) {
+        batch_mask |= uint32_t(sl.lanes.test(base + ch)) << ch;
+      }
+      bool can_send = true;
+      for (uint32_t ch = 0; ch < kOcacheNumReqs; ++ch) {
+        if ((batch_mask >> ch) & 1) {
+          can_send &= !((ports_used >> ch) & 1) && !simobject_->ocache_req_out.at(ch).full();
+        }
+      }
+      if (!can_send) {
+        continue;
+      }
+      for (uint32_t ch = 0; ch < kOcacheNumReqs; ++ch) {
+        if (!((batch_mask >> ch) & 1)) {
+          continue;
+        }
+        uint32_t lane = base + ch;
+        MemReq mreq;
+        mreq.addr    = sl.addr[lane] & kOcacheLineMask;
+        mreq.op      = MemOp::LD;
+        mreq.tag     = uint32_t(ez_tag(s, slot, lane));
+        mreq.hart_id = 0;
+        mreq.uuid    = 0;
+        simobject_->ocache_req_out.at(ch).send(mreq, kEzReqDelay);
+        ++perf_stats_.mem_reads;
+      }
+      ports_used |= batch_mask;
+      uint32_t last_lane = kEzPixels - 1;
+      while (!sl.lanes.test(last_lane)) {
+        --last_lane;
+      }
+      uint32_t last_batch = last_lane / kOcacheNumReqs;
+      if (ez.batch_idx == last_batch) {
+        ez.batch_idx = 0;
+        ez.req_queue.pop();
+      } else {
+        ++ez.batch_idx;
+      }
+    }
+    ez_issue_rr_ = (ez_issue_rr_ + 1) % kNumSlices;
+  }
+
+  void ez_step(Slice& slice) {
+    auto& ez = slice.ez;
+    switch (ez.state) {
+    case EzState::IDLE:
+      if (earlyz_active() && slice.quads.valid(cycle_)) {
+        ez.wave = slice.quads.front();
+        slice.quads.pop();
+        for (uint32_t p = 0; p < kEzPixels; ++p) {
+          ez.mask[p] = (ez.wave.stamps[p / 4].smask >> (4 * (p % 4))) & 0xfu;
+        }
+        ez.state = EzState::EVAL1;
+      }
+      break;
+    case EzState::EVAL1: {
+      const auto& zp = ez.wave.prim->zplane;
+      for (uint32_t k = 0; k < gfx_rast::RAST_MSAA_SAMPLES; ++k) {
+        ez.zoff[k] = msaa_ ? earlyz_sample_offset(zp, k) : 0;
+      }
+      ez.issue_k = 0;
+      ez.state = EzState::EVAL1B;
+      break;
+    }
+    case EzState::EVAL1B:
+      ez.state = EzState::EVAL2;
+      break;
+    case EzState::EVAL2:
+      ez.cand_k     = 0;
+      ez.issue_done = false;
+      ez.state      = EzState::RUN;
+      break;
+    case EzState::RUN:
+      ez_run(slice);
+      break;
+    case EzState::SEND:
+      if (ez.sent || ez_wave_empty(ez)) {
+        ez.sent  = false;
+        ez.state = EzState::IDLE;
+      }
+      break;
+    }
+  }
+
+  void ez_run(Slice& slice) {
+    auto& ez = slice.ez;
+    const uint32_t samples = msaa_ ? gfx_rast::RAST_MSAA_SAMPLES : 1u;
+    const bool issue_last = (ez.issue_k == samples - 1);
+
+    // Issue: the pixels covering the next sample, one request; a sample no
+    // pixel covers is skipped without one.
+    EzLanes issue_cov;
+    for (uint32_t p = 0; p < kEzPixels; ++p) {
+      issue_cov[p] = (ez.mask[p] >> ez.issue_k) & 1;
+    }
+    bool req_fire = false;
+    if (!ez.issue_done && issue_cov.any() && ez.req_queue.ready() && !ez.slots_full) {
+      uint32_t slot = 0;
+      while (ez.slots.at(slot).busy) {
+        ++slot;
+      }
+      auto& sl = ez.slots.at(slot);
+      sl.busy    = true;
+      sl.sample  = ez.issue_k;
+      sl.lanes   = issue_cov;
+      sl.waiting = issue_cov;
+      for (uint32_t p = 0; p < kEzPixels; ++p) {
+        int X, Y;
+        ez_pixel_pos(ez, p, X, Y);
+        sl.addr[p] = zbuf_base_ + uint64_t(ez.issue_k) * zbuf_sample_stride_
+                   + uint64_t(Y) * zbuf_pitch_ + uint64_t(X) * 4;
+      }
+      ++ez.slots_busy;
+      ez.req_queue.push(slot, cycle_);
+      req_fire = true;
+    }
+    bool issue_step = !ez.issue_done && (req_fire || issue_cov.none());
+
+    // Compare: a completed request whose sample's candidates are registered.
+    bool rsp_valid = ez.rsp_buf.valid(cycle_);
+    uint32_t rsp_k = 0;
+    bool rsp_fire = false;
+    if (rsp_valid) {
+      uint32_t slot = ez.rsp_buf.front();
+      auto& sl = ez.slots.at(slot);
+      rsp_k = sl.sample;
+      if (ez.cand_k == rsp_k) {
+        const auto& zp = ez.wave.prim->zplane;
+        for (uint32_t p = 0; p < kEzPixels; ++p) {
+          if (!sl.lanes.test(p)) {
+            continue;
+          }
+          int X, Y;
+          ez_pixel_pos(ez, p, X, Y);
+          uint32_t cand   = earlyz_plane_depth(zp, X, Y, ez.zoff[rsp_k]);
+          uint32_t stored = sl.data[p] & OM_DEPTH_MASK;
+          ++perf_stats_.earlyz_tested;
+          if (earlyz_occluded(depth_func_, cand, stored)) {
+            ez.mask[p] &= ~(1u << rsp_k);
+            ++perf_stats_.earlyz_culled;
+          }
+        }
+        sl.busy = false;
+        --ez.slots_busy;
+        ez.rsp_buf.pop();
+        rsp_fire = true;
+      }
+    }
+
+    // The candidates registered next: a waiting response's sample, else the
+    // oldest still in flight, else the one being read.
+    uint32_t in_flight = ez.pending & ~(rsp_fire ? (1u << rsp_k) : 0u);
+    uint32_t pending_n = in_flight | (req_fire ? (1u << ez.issue_k) : 0u);
+    uint32_t next_k = in_flight ? uint32_t(__builtin_ctz(in_flight)) : ez.issue_k;
+    ez.cand_k  = (rsp_valid && !rsp_fire) ? rsp_k : next_k;
+    ez.pending = pending_n;
+    if (issue_step && !issue_last) {
+      ++ez.issue_k;
+    }
+    ez.issue_done = ez.issue_done || (issue_step && issue_last);
+    if (ez.issue_done && pending_n == 0) {
+      ez.state = EzState::SEND;
+    }
   }
 
 #endif
@@ -1299,11 +1682,6 @@ private:
           continue;
         }
         rsp.stamps[t] = batch.stamps[t];
-      #if VX_CFG_RASTER_EARLYZ_ENABLED
-        if (earlyz_safe_ && depth_d24_) {
-          early_z_cull(rsp.stamps[t], batch.prim->zplane);
-        }
-      #endif
       }
       DT(4, simobject_->name() << " out: core=" << req.core_id << ", pid=" << batch.prim->pid);
       rsp_ch.send(rsp);
@@ -1343,7 +1721,9 @@ private:
   bool                       depth_d24_ = true;
   uint64_t                   zbuf_base_   = 0;   // byte address (ZBUF_ADDR << 6)
   uint32_t                   zbuf_pitch_  = 0;
+  uint32_t                   zbuf_sample_stride_ = 0;   // bytes between sample images
   uint32_t                   depth_func_  = VX_OM_DEPTH_FUNC_ALWAYS;
+  uint32_t                   ez_issue_rr_ = 0;
 #endif
 
   // Fragment-shader dispatch descriptor (RASTER_FRAG_* DCRs). Persists across
@@ -1384,6 +1764,8 @@ private:
   uint64_t                   pbuf_addr_   = 0;
   uint32_t                   pbuf_stride_ = 0;
   uint64_t                   pids_base_   = 0;
+  // 4x multisampling (VX_DCR_RASTER_SAMPLES).
+  bool                       msaa_ = false;
   // Draw-wide scissor; every primitive narrows it to its record's own rectangle.
   uint32_t                   scissor_left_   = 0;
   uint32_t                   scissor_top_    = 0;
@@ -1443,6 +1825,10 @@ RasterCore::RasterCore(const SimContext& ctx, const char* name, Cluster* cluster
   , raster_rsp_out(kNumRasterLanes, this)
   , rcache_req_out(kRcacheNumReqs, this)
   , rcache_rsp_in(kRcacheNumReqs, this)
+#if VX_CFG_RASTER_EARLYZ_ENABLED
+  , ocache_req_out(kOcacheNumReqs, this)
+  , ocache_rsp_in(kOcacheNumReqs, this)
+#endif
   , fwd_arm_out(NUM_SOCKETS * VX_CFG_SOCKET_SIZE, this)
   , fwd_done_in(this)
 {

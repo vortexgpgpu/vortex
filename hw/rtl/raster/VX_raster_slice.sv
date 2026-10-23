@@ -84,6 +84,8 @@ module VX_raster_slice import VX_raster_pkg::*; #(
         .clk         (clk),
         .reset       (reset),
 
+        .msaa        (dcrs.msaa),
+
         .valid_in    (valid_in),
         .xloc_in     (xloc_in),
         .yloc_in     (yloc_in),

@@ -701,7 +701,8 @@ package VX_gpu_pkg;
     // Per-quad fragment stamp, delivered inside the launch (see VX_raster_launch)
     // and read back as the FRAG_* CSRs. Same layout as raster_stamp_t; spelled
     // from the VX_types macros because VX_raster_pkg is compiled after this one.
-    localparam FRAG_STAMP_BITS = 2 * (`VX_RASTER_DIM_BITS - 1) + 4 + `VX_RASTER_PID_BITS;
+    // Each pixel of the quad carries its 4-bit sample coverage.
+    localparam FRAG_STAMP_BITS = 2 * (`VX_RASTER_DIM_BITS - 1) + 4 * 4 + `VX_RASTER_PID_BITS;
 
     // A pixel quad occupies four adjacent lanes, so its four lanes share ONE
     // stamp: lane l holds slice (l & 3) of its quad's stamp and the CSR read

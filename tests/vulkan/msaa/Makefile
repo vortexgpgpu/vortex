@@ -20,4 +20,7 @@ SHADERS := $(SRC_DIR)/msaa.vert \
            $(SRC_DIR)/msaa_tri.vert \
            $(SRC_DIR)/msaa.frag
 
+FF_RASTER := 1
+FF_OM := 1
+
 include ../common.mk

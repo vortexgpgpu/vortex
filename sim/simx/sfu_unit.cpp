@@ -203,6 +203,7 @@ void SfuUnit::on_tick() {
 					wave.tmask.set(l);
 					wave.payload[l].pos = x | (y << 16) | (covered << 31);
 					wave.payload[l].pid = s.pid;
+					wave.mask[l]        = (s.smask >> (4 * sub)) & 0xfu;
 				}
 			}
 			sched.fwd_push_wave(wave);

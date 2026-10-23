@@ -127,6 +127,21 @@ bool use_sw = false;
 bool prim_scissor = false;   // -s: a distinct scissor rectangle in every primitive record
 uint32_t num_generated = 0;  // -n: draw this many generated triangles instead of the trace
 bool relaunch = false;       // -L: launch every pass twice, with no DCR write in between
+// -M: 4x multisampling. The colour buffer holds every sample, interleaved within
+// its pixel, and the image is checked sample by sample against the shared
+// multisample coverage walk.
+uint32_t num_samples = 1;
+// -E: raster early-Z against depth images that start with every sample's own
+// depth (the build needs OM, which brings early-Z). Nothing writes depth, so a
+// pixel is drawn, with every sample the walk covers, exactly when one of those
+// samples has a plane depth not strictly behind the stored one.
+bool early_z = false;
+// -S: draw a sliver per row, thin across one sample row and steep in depth, in
+// place of the trace: the plane moves by many depth ranges between a pixel's
+// centre and its samples, so a sample's depth tests the offset's full range.
+bool slivers = false;
+uint64_t zbuf_addr = 0;
+vx_buffer_h depth_buffer = nullptr;
 // -L: the second launch's records take colours this far past the first's.
 constexpr uint32_t kRelaunchIdOffset = 1u << 20;
 std::vector<uint32_t> ref_pixels;
@@ -146,12 +161,12 @@ uint32_t tileLogSize = VX_CFG_RASTER_BIN_LOG_SIZE;
 
 static void show_usage() {
    std::cout << "Vortex rasterizer Test." << std::endl;
-   std::cout << "Usage: [-t trace] [-o output] [-r reference] [-w width] [-h height] [-z no_hw] [-k tilelogsize] [-s prim_scissor] [-n generated_triangles] [-L relaunch]" << std::endl;
+   std::cout << "Usage: [-t trace] [-o output] [-r reference] [-w width] [-h height] [-z no_hw] [-k tilelogsize] [-s prim_scissor] [-n generated_triangles] [-L relaunch] [-M 4x multisampling] [-E early-Z] [-S slivers]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "t:i:o:r:w:h:t:k:n:zsL?")) != -1) {
+  while ((c = getopt(argc, argv, "t:i:o:r:w:h:t:k:n:zsLMES?")) != -1) {
     switch (c) {
     case 't':
       trace_file = optarg;
@@ -183,6 +198,15 @@ static void parse_args(int argc, char **argv) {
     case 'L':
       relaunch = true;
       break;
+    case 'M':
+      num_samples = gfx_rast::RAST_MSAA_SAMPLES;
+      break;
+    case 'E':
+      early_z = true;
+      break;
+    case 'S':
+      slivers = true;
+      break;
     case '?': {
       show_usage();
       exit(0);
@@ -200,6 +224,14 @@ static void parse_args(int argc, char **argv) {
     std::cout << "Error: the output file is missing for reference validation!" << std::endl;
     exit(1);
   }
+  if (num_samples > 1 && reference_file) {
+    std::cout << "Error: -M checks every sample against the coverage walk and takes no -r!" << std::endl;
+    exit(1);
+  }
+  if (early_z && (reference_file || use_sw)) {
+    std::cout << "Error: -E checks the early-Z outcome itself, on the hardware rasterizer; it takes no -r or -z!" << std::endl;
+    exit(1);
+  }
 }
 
 void cleanup() {
@@ -207,6 +239,7 @@ void cleanup() {
   if (tile_buffer)  vx_buffer_release(tile_buffer);
   if (prim_buffer)  vx_buffer_release(prim_buffer);
   if (frag_arg_buffer) vx_buffer_release(frag_arg_buffer);
+  if (depth_buffer) vx_buffer_release(depth_buffer);
   if (kernel)  vx_kernel_release(kernel);
   if (module_) vx_module_release(module_);
   if (queue)   vx_queue_release(queue);
@@ -243,7 +276,27 @@ static void patch_prim_scissors(std::vector<uint8_t>& primbuf) {
 
 // Whether the image is checked pixel-exactly against reference_draw.
 static bool exact_check() {
-  return prim_scissor || num_generated != 0;
+  return prim_scissor || num_generated != 0 || num_samples > 1 || early_z || slivers;
+}
+
+// -E: the D24 depth each sample's slot starts with.
+static uint32_t initial_depth(uint32_t x, uint32_t y, uint32_t k) {
+  return ((x * 7u + y * 13u + k * 5u) & 0xffu) << 16;
+}
+
+// Whether early-Z keeps sample k of (x, y) under LESS: its plane depth, as the
+// fragment shader evaluates it at the sample, is not strictly behind the stored
+// one.
+static bool early_z_keeps(const graphics::rast_attrib_t& zp, uint32_t x, uint32_t y, uint32_t k) {
+  static constexpr int dx16[4] = GFX_MSAA4_SAMPLE_DX16;
+  static constexpr int dy16[4] = GFX_MSAA4_SAMPLE_DY16;
+  // As the fragment shader evaluates it: in 64 bits, saturated.
+  int64_t z = int64_t(zp.x.data()) * x + int64_t(zp.y.data()) * y + int64_t(zp.z.data());
+  if (num_samples > 1) {
+    z += (int64_t(zp.x.data()) * dx16[k] + int64_t(zp.y.data()) * dy16[k]) >> 4;
+  }
+  const uint32_t cand = z < 0 ? 0u : uint32_t(std::min<int64_t>(z, OM_DEPTH_MASK));
+  return cand <= initial_depth(x, y, k);
 }
 
 // The colour the kernel writes for the record at draw-wide index `id`.
@@ -265,13 +318,37 @@ static void reference_draw(const std::vector<uint8_t>& primbuf, uint32_t pid_bas
         { tileLogSize, left, top, right, bottom }, prims[pid].scissor_x, prims[pid].scissor_y);
     for (uint32_t ty = 0; ty < dst_height; ty += tile) {
       for (uint32_t tx = 0; tx < dst_width; tx += tile) {
+        if (num_samples > 1) {
+          gfx_rast::rast_walk_primitive_msaa(cfg, tx, ty, pid, prims[pid].edges,
+            [&](uint32_t pos_mask, const graphics::vec3e_t*, const uint32_t* sample_masks, uint32_t) {
+              const uint32_t qx = (pos_mask >> 4) & ((1u << (VX_RASTER_DIM_BITS - 1)) - 1);
+              const uint32_t qy = pos_mask >> (4 + (VX_RASTER_DIM_BITS - 1));
+              for (uint32_t c = 0; c < 4; ++c) {
+                const uint32_t px = (qx << 1) + (c & 1), py = (qy << 1) + (c >> 1);
+                if (px >= dst_width || py >= dst_height) {
+                  continue;
+                }
+                bool kept = !early_z;
+                for (uint32_t k = 0; k < num_samples; ++k) {
+                  kept |= ((sample_masks[c] >> k) & 1) && early_z_keeps(prims[pid].attribs.z, px, py, k);
+                }
+                for (uint32_t k = 0; k < num_samples; ++k) {
+                  if (kept && ((sample_masks[c] >> k) & 1)) {
+                    ref_pixels[(py * dst_width + px) * num_samples + k] = record_color(pid_base + pid);
+                  }
+                }
+              }
+            });
+          continue;
+        }
         gfx_rast::rast_walk_primitive(cfg, tx, ty, pid, prims[pid].edges,
           [&](uint32_t pos_mask, const graphics::vec3e_t*, uint32_t) {
             const uint32_t qx = (pos_mask >> 4) & ((1u << (VX_RASTER_DIM_BITS - 1)) - 1);
             const uint32_t qy = pos_mask >> (4 + (VX_RASTER_DIM_BITS - 1));
             for (uint32_t k = 0; k < 4; ++k) {
               const uint32_t px = (qx << 1) + (k & 1), py = (qy << 1) + (k >> 1);
-              if (((pos_mask >> k) & 1) && px < dst_width && py < dst_height) {
+              if (((pos_mask >> k) & 1) && px < dst_width && py < dst_height
+               && (!early_z || early_z_keeps(prims[pid].attribs.z, px, py, 0))) {
                 ref_pixels[py * dst_width + px] = record_color(pid_base + pid);
               }
             }
@@ -316,6 +393,44 @@ static void generated_draw(uint32_t count,
     verts[3 * i + 1] = vertex(x + hi, y + lo);
     verts[3 * i + 2] = vertex(x + lo, y + hi);
     prims.push_back({3 * i, 3 * i + 1, 3 * i + 2});
+  }
+}
+
+// Slivers along the diagonal, each 0.008 px across around the line where
+// x - y = m + o_k, the offset o_k of sample k from its pixel's centre (m in
+// -1..1), so it covers sample k of the pixels it crosses. The depth rises 0.4
+// across a sliver's width: 50 depth ranges a pixel, while near the origin the
+// plane stays within its range.
+static void sliver_draw(std::unordered_map<uint32_t, graphics::vertex_t>& verts,
+                        std::vector<graphics::primitive_t>& prims) {
+  static constexpr int dx16[4] = GFX_MSAA4_SAMPLE_DX16;
+  static constexpr int dy16[4] = GFX_MSAA4_SAMPLE_DY16;
+  constexpr float kHalfWidth = 0.004f;
+  auto vertex = [&](float sx, float sy, float z) {
+    graphics::vertex_t v{};
+    v.pos[0] = 2.0f * sx / dst_width - 1.0f;
+    v.pos[1] = 2.0f * sy / dst_height - 1.0f;
+    v.pos[2] = z;
+    v.pos[3] = 1.0f;
+    return v;
+  };
+  verts.clear();
+  prims.clear();
+  const float t0 = 2.0f, t1 = float(std::min(dst_width, dst_height)) - 2.0f;
+  uint32_t n = 0;
+  for (int m = -1; m <= 1; ++m) {
+    for (uint32_t k = 0; k < 4; ++k) {
+      // The pixel's centre (t + 0.5, t + 0.5) moved to the line through sample k.
+      const float d = float(m) + float(dx16[k] - dy16[k]) / 16.0f;
+      auto on_line = [&](float t, float e, float z) {
+        return vertex(t + 0.5f + 0.5f * (d + e), t + 0.5f - 0.5f * (d + e), z);
+      };
+      verts[3 * n + 0] = on_line(t0, -kHalfWidth, -0.2f);
+      verts[3 * n + 1] = on_line(t1, -kHalfWidth, -0.2f);
+      verts[3 * n + 2] = on_line(t0,  kHalfWidth,  0.6f);
+      prims.push_back({3 * n, 3 * n + 1, 3 * n + 2});
+      ++n;
+    }
   }
 }
 
@@ -391,6 +506,7 @@ static int draw_pass(const std::unordered_map<uint32_t, graphics::vertex_t>& ver
     kernel_arg.scissor_y = RAST_SCISSOR_PACK(t, b);
     kernel_arg.pid_color = num_generated ? 1u : 0u;
     kernel_arg.pid_base  = pid_base;
+    kernel_arg.samples   = num_samples;
   }
   if (use_sw)
     std::cout << "[gfx_raster] software fine-rasterizer path "
@@ -408,6 +524,18 @@ static int draw_pass(const std::unordered_map<uint32_t, graphics::vertex_t>& ver
   draw_scissor(sc_left, sc_right, sc_top, sc_bottom);
   vx_enqueue_dcr_write(queue, VX_DCR_RASTER_SCISSOR_X, RAST_SCISSOR_PACK(sc_left, sc_right), 0, nullptr, nullptr);
   vx_enqueue_dcr_write(queue, VX_DCR_RASTER_SCISSOR_Y, RAST_SCISSOR_PACK(sc_top, sc_bottom), 0, nullptr, nullptr);
+  if (num_samples > 1) {
+    vx_enqueue_dcr_write(queue, VX_DCR_RASTER_SAMPLES, num_samples, 0, nullptr, nullptr);
+  }
+  if (early_z) {
+    vx_enqueue_dcr_write(queue, VX_DCR_OM_ZBUF_ADDR, zbuf_addr / 64, 0, nullptr, nullptr);
+    vx_enqueue_dcr_write(queue, VX_DCR_OM_ZBUF_PITCH, dst_width * 4, 0, nullptr, nullptr);
+    vx_enqueue_dcr_write(queue, VX_DCR_OM_ZBUF_SAMPLE_STRIDE, dst_width * dst_height * 4, 0, nullptr, nullptr);
+    vx_enqueue_dcr_write(queue, VX_DCR_OM_DEPTH_FORMAT, VX_OM_DEPTH_FORMAT_D24S8, 0, nullptr, nullptr);
+    vx_enqueue_dcr_write(queue, VX_DCR_OM_DEPTH_FUNC, VX_OM_DEPTH_FUNC_LESS, 0, nullptr, nullptr);
+    vx_enqueue_dcr_write(queue, VX_DCR_OM_SAMPLES, num_samples, 0, nullptr, nullptr);
+    vx_enqueue_dcr_write(queue, VX_DCR_OM_EARLYZ_SAFE, 1, 0, nullptr, nullptr);
+  }
 
   // RASTER dispatch v2 (push, HW path only): stage the FS args and program the
   // fragment-dispatch descriptor (FS entry PC + args pointer). The work
@@ -497,7 +625,12 @@ static int draw(const std::unordered_map<uint32_t, graphics::vertex_t>& verts,
 }
 
 int render(const CGLTrace& trace) {
-  if (num_generated) {
+  if (slivers) {
+    std::unordered_map<uint32_t, graphics::vertex_t> verts;
+    std::vector<graphics::primitive_t> prims;
+    sliver_draw(verts, prims);
+    RT_CHECK(draw(verts, prims, 0.0f, 1.0f));
+  } else if (num_generated) {
     std::unordered_map<uint32_t, graphics::vertex_t> verts;
     std::vector<graphics::primitive_t> prims;
     generated_draw(num_generated, verts, prims);
@@ -521,27 +654,36 @@ int render(const CGLTrace& trace) {
     }
     if (strcmp(output_file, "null") != 0) {
       std::cout << "save output image" << std::endl;
-      auto bits = dst_pixels.data() + (dst_height-1) * cbuf_pitch;
-      RT_CHECK(SaveImage(output_file, FORMAT_A8R8G8B8, bits, dst_width, dst_height, -cbuf_pitch));
+      // A multisample buffer is saved as its sample-0 plane.
+      std::vector<uint32_t> plane(dst_width * dst_height);
+      for (uint32_t y = 0; y < dst_height; ++y) {
+        for (uint32_t x = 0; x < dst_width; ++x) {
+          std::memcpy(&plane[y * dst_width + x], dst_pixels.data() + y * cbuf_pitch + x * cbuf_stride, 4);
+        }
+      }
+      auto bits = reinterpret_cast<const uint8_t*>(plane.data()) + (dst_height-1) * dst_width * 4;
+      RT_CHECK(SaveImage(output_file, FORMAT_A8R8G8B8, bits, dst_width, dst_height, -int(dst_width * 4)));
     }
     if (exact_check()) {
       uint32_t errors = 0, covered = 0;
       for (uint32_t y = 0; y < dst_height; ++y) {
         for (uint32_t x = 0; x < dst_width; ++x) {
-          uint32_t got;
-          std::memcpy(&got, dst_pixels.data() + y * cbuf_pitch + x * cbuf_stride, 4);
-          const uint32_t want = ref_pixels[y * dst_width + x];
-          covered += (want != clear_color);
-          if (got != want) {
-            if (errors < 10) {
-              printf("*** error: pixel (%u, %u) = 0x%08x, expected 0x%08x\n", x, y, got, want);
+          for (uint32_t k = 0; k < num_samples; ++k) {
+            uint32_t got;
+            std::memcpy(&got, dst_pixels.data() + y * cbuf_pitch + x * cbuf_stride + k * 4, 4);
+            const uint32_t want = ref_pixels[(y * dst_width + x) * num_samples + k];
+            covered += (want != clear_color);
+            if (got != want) {
+              if (errors < 10) {
+                printf("*** error: pixel (%u, %u) sample %u = 0x%08x, expected 0x%08x\n", x, y, k, got, want);
+              }
+              ++errors;
             }
-            ++errors;
           }
         }
       }
-      printf("exact check: %u of %u pixels covered, %u mismatches\n",
-             covered, dst_width * dst_height, errors);
+      printf("exact check: %u of %u samples covered, %u mismatches\n",
+             covered, dst_width * dst_height * num_samples, errors);
       exact_errors = errors;
     }
   }
@@ -582,9 +724,9 @@ int main(int argc, char *argv[]) {
   // load kernel module
   std::cout << "load kernel module" << std::endl;
   RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
-  RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
+  RT_CHECK(vx_module_get_kernel(module_, num_samples > 1 ? "kernel_main_msaa" : "main", &kernel));
 
-  cbuf_stride = 4;
+  cbuf_stride = 4 * num_samples;
   cbuf_pitch  = dst_width * cbuf_stride;
   cbuf_size   = dst_height * cbuf_pitch;
 
@@ -606,6 +748,25 @@ int main(int argc, char *argv[]) {
     vx_event_release(ev);
   }
 
+  // The depth images early-Z reads, through the OM's cache: one per sample.
+  if (early_z) {
+    const uint32_t zsize = dst_width * dst_height * num_samples * 4;
+    RT_CHECK(vx_buffer_create(device, zsize, VX_MEM_READ_WRITE | VX_MEM_PHYS, &depth_buffer));
+    RT_CHECK(vx_buffer_address(depth_buffer, &zbuf_addr));
+    std::vector<uint32_t> zinit(zsize / 4);
+    for (uint32_t y = 0; y < dst_height; ++y) {
+      for (uint32_t x = 0; x < dst_width; ++x) {
+        for (uint32_t k = 0; k < num_samples; ++k) {
+          zinit[(k * dst_height + y) * dst_width + x] = initial_depth(x, y, k);
+        }
+      }
+    }
+    vx_event_h ev = nullptr;
+    RT_CHECK(vx_enqueue_write(queue, depth_buffer, 0, zinit.data(), zsize, 0, nullptr, &ev));
+    RT_CHECK(vx_event_wait_value(ev, 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(ev);
+  }
+
   // update kernel arguments
   kernel_arg.dst_width  = dst_width;
   kernel_arg.dst_height = dst_height;
@@ -616,7 +777,7 @@ int main(int argc, char *argv[]) {
 
   // run tests
   std::cout << "render" << std::endl;
-  ref_pixels.assign(dst_width * dst_height, clear_color);
+  ref_pixels.assign(dst_width * dst_height * num_samples, clear_color);
   RT_CHECK(render(trace));
 
   // cleanup

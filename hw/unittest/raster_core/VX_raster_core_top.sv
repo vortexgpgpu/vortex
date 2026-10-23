@@ -52,6 +52,19 @@ module VX_raster_core_top import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     input wire  [RCACHE_NUM_REQS-1:0][RCACHE_WORD_SIZE*8-1:0] cache_rsp_data,
     input wire  [RCACHE_NUM_REQS-1:0][RCACHE_TAG_WIDTH-1:0] cache_rsp_tag,
     output wire [RCACHE_NUM_REQS-1:0]       cache_rsp_ready
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
+    ,
+    // Early-Z committed-depth reads, on the OM's cache.
+    output wire [OCACHE_NUM_REQS-1:0]       ez_req_valid,
+    output wire [OCACHE_NUM_REQS-1:0][OCACHE_ADDR_WIDTH-1:0] ez_req_addr,
+    output wire [OCACHE_NUM_REQS-1:0][OCACHE_EARLYZ_TAG_WIDTH-1:0] ez_req_tag,
+    input  wire [OCACHE_NUM_REQS-1:0]       ez_req_ready,
+
+    input wire  [OCACHE_NUM_REQS-1:0]       ez_rsp_valid,
+    input wire  [OCACHE_NUM_REQS-1:0][OCACHE_WORD_SIZE*8-1:0] ez_rsp_data,
+    input wire  [OCACHE_NUM_REQS-1:0][OCACHE_EARLYZ_TAG_WIDTH-1:0] ez_rsp_tag,
+    output wire [OCACHE_NUM_REQS-1:0]       ez_rsp_ready
+`endif
 );
 
     VX_raster_perf_if perf_raster_if();
@@ -106,6 +119,29 @@ module VX_raster_core_top import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     assign cache_bus_if[0].rsp_data.data = cache_rsp_data;
     assign cache_rsp_ready = cache_bus_if[0].rsp_ready;
 
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
+    VX_mem_bus_if #(
+        .DATA_SIZE (OCACHE_WORD_SIZE),
+        .TAG_WIDTH (OCACHE_EARLYZ_TAG_WIDTH)
+    ) ez_bus_if[OCACHE_NUM_REQS]();
+
+    for (genvar i = 0; i < OCACHE_NUM_REQS; ++i) begin : g_ez
+        assign ez_req_valid[i] = ez_bus_if[i].req_valid;
+        assign ez_req_addr[i]  = ez_bus_if[i].req_data.addr;
+        assign ez_req_tag[i]   = ez_bus_if[i].req_data.tag;
+        assign ez_bus_if[i].req_ready = ez_req_ready[i];
+        `UNUSED_VAR (ez_bus_if[i].req_data.rw)
+        `UNUSED_VAR (ez_bus_if[i].req_data.byteen)
+        `UNUSED_VAR (ez_bus_if[i].req_data.data)
+        `UNUSED_VAR (ez_bus_if[i].req_data.attr)
+
+        assign ez_bus_if[i].rsp_valid     = ez_rsp_valid[i];
+        assign ez_bus_if[i].rsp_data.tag  = ez_rsp_tag[i];
+        assign ez_bus_if[i].rsp_data.data = ez_rsp_data[i];
+        assign ez_rsp_ready[i] = ez_bus_if[i].rsp_ready;
+    end
+`endif
+
     VX_raster_core #(
         .INSTANCE_ID     (INSTANCE_ID),
         .INSTANCE_IDX    (INSTANCE_IDX),
@@ -127,6 +163,9 @@ module VX_raster_core_top import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .launch_if     (launch_if),
         .kmu_bus_if    (kmu_bus_if),
         .cache_bus_if  (cache_bus_if),
+    `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
+        .earlyz_cache_bus_if (ez_bus_if),
+    `endif
         .busy          (raster_busy)
     );
 

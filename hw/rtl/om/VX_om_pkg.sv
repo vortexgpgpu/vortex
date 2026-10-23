@@ -29,13 +29,17 @@ localparam OM_BLEND_FUNC_BITS = `CLOG2(`VX_OM_BLEND_FUNC_ALPHA_SAT + 1);
 localparam OM_LOGIC_OP_BITS   = `CLOG2(`VX_OM_LOGIC_OP_SET + 1);
 // Colour formats the merger stores (the narrow ones it packs and unpacks).
 localparam OM_CFMT_BITS       = `CLOG2(`VX_OM_COLOR_FORMAT_A1R5G5B5 + 1);
-localparam OM_PITCH_BITS      = `VX_OM_DIM_BITS + `CLOG2(4) + 1;
+localparam OM_PITCH_BITS      = `VX_OM_PITCH_BITS;
 localparam OM_DEPTH_MASK      = (1 << `VX_OM_DEPTH_BITS) - 1;
 // Width of an aperture shift amount (xbits/ybits hold a log2 dimension).
 localparam OM_APERTURE_BITS_W = `CLOG2(`VX_OM_DIM_BITS + 1);
 localparam OM_STENCIL_MASK    = (1 << `VX_OM_STENCIL_BITS) - 1;
 // Index of the colour attachment a fragment targets.
 localparam OM_RT_IDX_BITS     = `CLOG2(`VX_OM_MAX_RT);
+// Samples of a multisampled pixel, each in its own image of an attachment, a
+// sample stride (in words) after the previous one.
+localparam OM_MSAA_SAMPLES    = 4;
+localparam OM_SAMPLE_STRIDE_BITS = 30;
 
 typedef struct packed {
     logic [31:0] argb;
@@ -47,6 +51,7 @@ typedef struct packed {
 typedef struct packed {
     logic [`OM_ADDR_BITS-1:0]           cbuf_addr;
     logic [OM_PITCH_BITS-1:0]           cbuf_pitch;
+    logic [OM_SAMPLE_STRIDE_BITS-1:0]   cbuf_sample_stride;
     logic [3:0]                         cbuf_writemask;
     logic [OM_CFMT_BITS-1:0]            cbuf_format;
 
@@ -68,6 +73,7 @@ typedef struct packed {
 typedef struct packed {
     logic [`OM_ADDR_BITS-1:0]           zbuf_addr;
     logic [OM_PITCH_BITS-1:0]           zbuf_pitch;
+    logic [OM_SAMPLE_STRIDE_BITS-1:0]   zbuf_sample_stride;
 
     logic                               depth_enable;
     logic [OM_DEPTH_FUNC_BITS-1:0]      depth_func;
@@ -99,6 +105,10 @@ typedef struct packed {
     logic [OM_APERTURE_BITS_W-1:0]      aperture_ybits;
     logic [1:0]                         aperture_record_shift;  // 2 = one word, 3 = colour+depth
     logic                               aperture_depth_only;    // disambiguates the one-word modes
+
+    // OM_MSAA_SAMPLES per pixel: a fragment names one sample k and travels the
+    // merger as column x*4 + k.
+    logic                               msaa;
 } om_dcrs_t;
 
 endpackage

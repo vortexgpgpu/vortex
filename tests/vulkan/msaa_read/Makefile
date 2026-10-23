@@ -24,4 +24,7 @@ SHADERS := $(SRC_DIR)/msaa_read.vert \
            $(SRC_DIR)/msaa_fill.frag \
            $(SRC_DIR)/msaa_fetch.frag
 
+FF_RASTER := 1
+FF_OM := 1
+
 include ../common.mk

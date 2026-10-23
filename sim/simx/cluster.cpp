@@ -181,11 +181,24 @@ public:
     });
     ocache_ = ocache;
 
-    // om_core ↔ ocache (per-port).
+    // om_core ↔ ocache (per-port). With early-Z the raster engine's depth
+    // reader shares each port with the OM: input 2i is the OM's port i, 2i+1
+    // the reader's.
+  #if VX_CFG_RASTER_EARLYZ_ENABLED
+    snprintf(sname, 100, "%s-ocache-arb", name.c_str());
+    ocache_arb_ = MemArbiter::Create(sname, ArbiterType::RoundRobin, 2 * kOcacheNumReqs, kOcacheNumReqs);
+    for (uint32_t i = 0; i < kOcacheNumReqs; ++i) {
+      om_core_->ocache_req_out.at(i).bind(&ocache_arb_->ReqIn.at(2 * i));
+      ocache_arb_->RspOut.at(2 * i).bind(&om_core_->ocache_rsp_in.at(i));
+      ocache_arb_->ReqOut.at(i).bind(&ocache->core_req_in.at(i));
+      ocache->core_rsp_out.at(i).bind(&ocache_arb_->RspIn.at(i));
+    }
+  #else
     for (uint32_t i = 0; i < kOcacheNumReqs; ++i) {
       om_core_->ocache_req_out.at(i).bind(&ocache->core_req_in.at(i));
       ocache->core_rsp_out.at(i).bind(&om_core_->ocache_rsp_in.at(i));
     }
+  #endif
 
     // ocache memory side → l2arb.
     constexpr uint32_t kOmRow = 1;
@@ -250,6 +263,14 @@ public:
       raster_core_->rcache_req_out.at(i).bind(&rcache->core_req_in.at(i));
       rcache->core_rsp_out.at(i).bind(&raster_core_->rcache_rsp_in.at(i));
     }
+
+  #if VX_CFG_RASTER_EARLYZ_ENABLED
+    // The early-Z depth reader → its ocache arbiter inputs.
+    for (uint32_t i = 0; i < VX_CFG_OCACHE_NUM_BANKS; ++i) {
+      raster_core_->ocache_req_out.at(i).bind(&ocache_arb_->ReqIn.at(2 * i + 1));
+      ocache_arb_->RspOut.at(2 * i + 1).bind(&raster_core_->ocache_rsp_in.at(i));
+    }
+  #endif
 
     // rcache memory side → l2arb.
     constexpr uint32_t kRasterRow = 1 + VX_CFG_EXT_OM_ENABLED;
@@ -585,6 +606,9 @@ private:
 #ifdef VX_CFG_EXT_OM_ENABLE
   OmCore::Ptr                 om_core_;
   Cache::Ptr                  ocache_;
+#if VX_CFG_RASTER_EARLYZ_ENABLED
+  MemArbiter::Ptr             ocache_arb_;
+#endif
 #endif
 #ifdef VX_CFG_EXT_RASTER_ENABLE
   RasterCore::Ptr             raster_core_;
