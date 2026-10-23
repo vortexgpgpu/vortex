@@ -117,10 +117,11 @@
   <text x="1025" y="594" class="ts">histogram; top-paths and trace= op by op</text>
   <text x="1025" y="612" class="ts">endpoints.csv, instances.csv, report.txt</text>
 
-  <rect x="630" y="646" width="730" height="74" class="box"/>
-  <text x="645" y="668" class="t">Device profiles (family=): only the DSPs differ</text>
+  <rect x="630" y="646" width="730" height="88" class="box"/>
+  <text x="645" y="668" class="t">Device profiles (family=): the FPGAs differ only in their DSPs</text>
   <text x="645" y="690" class="mono">versal          DSP58   27×24  in 1  out 6  cascade 3</text>
   <text x="645" y="708" class="mono">virtexuplusHBM  DSP48E2 27×18  in 1  out 5  cascade 2</text>
+  <text x="645" y="726" class="mono">asap7           cell stages (3-input cuts), prefix adders, Dadda products</text>
 
   <path d="M980,164 L1010,164" class="flow"/>
   <path d="M805,234 L805,256" class="flow"/>
