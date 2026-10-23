@@ -132,6 +132,13 @@ tests:
 # on a 32-bit device the driver runs them as register-pair atomics.
 - {id: shader-atomic64-tear, via: make-run, drivers: [simx, rtlsim], dir: tests/vulkan/atomic64_tear, target: "run-{driver}",
    touches: [sim/simx/lsu_unit.cpp, sim/simx/mem/, hw/rtl/core/VX_lsu_slice.sv, hw/rtl/mem/VX_local_mem.sv, tests/vulkan/atomic64_tear]}
+# The same at 32 warps x 32 threads (WIDE=1), where concurrent stores to one
+# word race often enough to expose a store done as two word writes; imported
+# and mirrored (NO_IMPORT=1) buffers.
+- {id: shader-atomic64-tear-wide, via: make-run, drivers: [simx], dir: tests/vulkan/atomic64_tear, target: "run-{driver}",
+   vars: {WIDE: 1}, touches: [tests/vulkan/atomic64_tear]}
+- {id: shader-atomic64-tear-wide-mirror, via: make-run, drivers: [simx], dir: tests/vulkan/atomic64_tear, target: "run-{driver}",
+   vars: {WIDE: 1, NO_IMPORT: 1}, touches: [tests/vulkan/atomic64_tear]}
 
 # sparseImageLoadARB on ordinary storage images (2D, 2D array, cube, 3D, a packed
 # RGBA8 view and a format-less read): the seeded texel and a resident code; and
