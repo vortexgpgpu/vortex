@@ -205,11 +205,15 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
     wire                  store_phase_wdata = gbar_rsp_apply ? ~gbar_pending_phase_r[gbar_bus_if.rsp_data.id] : phase_n;
     wire                  store_phase_write = req_valid || gbar_rsp_apply;
 
+    // The state is read, updated and written back every cycle: in distributed
+    // RAM the loop starts from a fabric read rather than a block RAM's
+    // clock-to-out.
     VX_dp_ram #(
         .DATAW    (BAR_STATEW),
         .SIZE     (1 << BAR_ADDR_BITS),
         .RDW_MODE ("W"),
-        .OUT_REG  (1)
+        .OUT_REG  (1),
+        .LUTRAM   (1)
     ) barrier_state_store (
         .clk   (clk),
         .reset (reset),
@@ -245,20 +249,27 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
 
     wire store_phase_rdata_v = store_valids[store_raddr] ? store_phase_rdata : '0;
 
+    // The state read's valid bit is registered with its address (forwarding a
+    // same-cycle write), so the state's consumers start from a flop rather than
+    // a store_valids lookup.
+    reg store_state_valid;
+
     always @(posedge clk) begin
         if (reset) begin
             store_valids <= '0;
+            store_state_valid <= 0;
             phase_r <= '0;
         end else begin
             if (store_state_write) begin
                 store_valids[store_waddr] <= 1'b1;
             end
+            store_state_valid <= store_valids[store_raddr] || (store_state_write && (store_waddr == store_raddr));
             phase_r <= is_phase_rdw_hazard ? store_phase_wdata : store_phase_rdata_v;
         end
         store_waddr <= store_raddr;
     end
 
-    assign {mask_r, count_r, events_r} = store_valids[store_waddr] ? store_state_rdata : '0;
+    assign {mask_r, count_r, events_r} = store_state_valid ? store_state_rdata : '0;
 
     wire phase_async = is_phase_rdw_hazard ? store_phase_wdata : store_phase_rdata_v;
 
