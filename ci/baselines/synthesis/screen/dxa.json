@@ -1,45 +1,43 @@
 {
   "dxa": {
     "clock_mhz": 300,
-    "config_hash": "cc1727a28fed7ac3",
+    "config_hash": "fe45dbbdea14633f",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
     "dut": "dxa",
     "result": {
       "build_time_s": 5,
-      "deep_endpoints": 2298,
+      "deep_endpoints": 2255,
       "deepest_paths": [
-        "23  dxa_core/g_workers_0.worker/smem_wr/lg_tcN_q[0] -> dxa_core/g_workers_0.worker/smem_wr/calc_intra_r.d[24]",
-        "23  dxa_core/g_workers_0.worker/smem_wr/lg_tcN_q[0] -> dxa_core/g_workers_0.worker/smem_wr/calc_intra_r.d[25]",
-        "23  dxa_core/g_workers_0.worker/smem_wr/lg_tcN_q[0] -> dxa_core/g_workers_0.worker/smem_wr/calc_intra_r.d[26]",
-        "23  dxa_core/g_workers_0.worker/smem_wr/lg_tcN_q[0] -> dxa_core/g_workers_0.worker/smem_wr/calc_intra_r.d[27]",
-        "23  dxa_core/g_workers_0.worker/smem_wr/lg_tcN_q[0] -> dxa_core/g_workers_0.worker/smem_wr/calc_intra_r.d[28]",
-        "23  dxa_core/g_workers_0.worker/smem_wr/lg_tcN_q[0] -> dxa_core/g_workers_0.worker/smem_wr/calc_intra_r.d[29]",
-        "23  dxa_core/g_workers_0.worker/smem_wr/lg_tcN_q[0] -> dxa_core/g_workers_0.worker/smem_wr/calc_intra_r.d[30]",
-        "23  dxa_core/g_workers_0.worker/smem_wr/lg_tcN_q[0] -> dxa_core/g_workers_0.worker/smem_wr/calc_intra_r.d[31]",
-        "22  dxa_core/g_workers_0.worker/smem_wr/lg_tcN_q[0] -> dxa_core/g_workers_0.worker/smem_wr/calc_intra_r.d[16]",
-        "22  dxa_core/g_workers_0.worker/smem_wr/lg_tcN_q[0] -> dxa_core/g_workers_0.worker/smem_wr/calc_intra_r.d[17]"
+        "22  dxa_core/g_workers_0.worker/smem_wr/lg_tcN_q[0] -> dxa_core/g_workers_0.worker/smem_wr/calc_intra_r.d[24]",
+        "22  dxa_core/g_workers_0.worker/smem_wr/lg_tcN_q[0] -> dxa_core/g_workers_0.worker/smem_wr/calc_intra_r.d[25]",
+        "22  dxa_core/g_workers_0.worker/smem_wr/lg_tcN_q[0] -> dxa_core/g_workers_0.worker/smem_wr/calc_intra_r.d[26]",
+        "22  dxa_core/g_workers_0.worker/smem_wr/lg_tcN_q[0] -> dxa_core/g_workers_0.worker/smem_wr/calc_intra_r.d[27]",
+        "22  dxa_core/g_workers_0.worker/smem_wr/lg_tcN_q[0] -> dxa_core/g_workers_0.worker/smem_wr/calc_intra_r.d[28]",
+        "22  dxa_core/g_workers_0.worker/smem_wr/lg_tcN_q[0] -> dxa_core/g_workers_0.worker/smem_wr/calc_intra_r.d[29]",
+        "22  dxa_core/g_workers_0.worker/smem_wr/lg_tcN_q[0] -> dxa_core/g_workers_0.worker/smem_wr/calc_intra_r.d[30]",
+        "22  dxa_core/g_workers_0.worker/smem_wr/lg_tcN_q[0] -> dxa_core/g_workers_0.worker/smem_wr/calc_intra_r.d[31]",
+        "21  dxa_core/g_workers_0.worker/smem_wr/lg_tcN_q[0] -> dxa_core/g_workers_0.worker/smem_wr/calc_intra_r.d[16]",
+        "21  dxa_core/g_workers_0.worker/smem_wr/lg_tcN_q[0] -> dxa_core/g_workers_0.worker/smem_wr/calc_intra_r.d[17]"
       ],
       "endpoints": 11535,
       "env": {
         "circt": "CIRCT 48b64cdd6",
         "device": "xcu55c-fsvh2892-2L-e",
-        "foldsim": "foldsim 7c7a926f8",
+        "foldsim": "foldsim 5f2469cf0-dirty",
         "xlen": 32
       },
       "fix_levels": 12,
-      "max_levels": 23,
+      "max_levels": 22,
       "units": {
-        "dxa_core/desc_table/desc_store": 9,
-        "dxa_core/g_workers_*_worker/addr_gen": 17,
+        "dxa_core/desc_table/desc_store": 8,
+        "dxa_core/g_workers_*_worker/addr_gen": 16,
         "dxa_core/g_workers_*_worker/gmem_req": 9,
-        "dxa_core/g_workers_*_worker/setup": 14,
-        "dxa_core/g_workers_*_worker/setup/mul_dlt/pipe_reg": 10,
-        "dxa_core/g_workers_*_worker/setup/mul_off/pipe_reg": 10,
-        "dxa_core/g_workers_*_worker/smem_wr": 23,
+        "dxa_core/g_workers_*_worker/setup": 12,
+        "dxa_core/g_workers_*_worker/smem_wr": 22,
         "dxa_core/g_workers_*_worker/watchdog": 9,
-        "dxa_core/lmem_arb/req_arb/g_passthru_g_out_buf_*_out_buf/g_eb2_stream_buffer": 16
+        "dxa_core/lmem_arb/req_arb/g_passthru_g_out_buf_*_out_buf/g_eb2_stream_buffer": 15
       },
-      "watch_endpoints": 5556,
+      "watch_endpoints": 4579,
       "watch_levels": 8
     }
   }
