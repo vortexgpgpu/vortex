@@ -480,7 +480,45 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // width -- invisible at 4 threads, and a fragment-dropping race by 16. Holding the
     // header off costs a launch bubble; pipelining the stamps instead would cost
     // NUM_THREADS x LANE_LAUNCH_BITS per stage -- the whole record replicated.
-    assign kmu_bus_if.ready = (state == IDLE) && admit_ok && !rem_warps_write_r
+    // Over many slots the admission (tail normalize, cluster pre-wrap, window
+    // check) is too deep to drive the accept and its enables in one cycle, so
+    // it is registered: an accept uses the admission of the previous cycle,
+    // which describes this head once it has been waiting, idle, for two cycles
+    // (usable_slots_r follows the head's stride a cycle late). A slot freed
+    // meanwhile only delays the accept by a cycle.
+    localparam ADMIT_REG = (NUM_CTA_SLOTS > 8);
+    wire                admit_ok_a;
+    wire [CS_BITS-1:0]  base_slot_a, next_tail_a;
+    wire [LMEM_LOG-1:0] base_lmem_a;
+    if (ADMIT_REG) begin : g_admit_reg
+        reg                admit_ok_r;
+        reg [CS_BITS-1:0]  base_slot_r, next_tail_r;
+        reg [LMEM_LOG-1:0] base_lmem_r;
+        reg [1:0]          waited_r;
+        wire waiting = kmu_bus_if.valid && (state == IDLE) && ~kmu_bus_if_fire;
+        always @(posedge clk) begin
+            admit_ok_r  <= admit_ok;
+            base_slot_r <= base_slot;
+            next_tail_r <= next_tail;
+            base_lmem_r <= base_lmem;
+            if (reset) begin
+                waited_r <= '0;
+            end else begin
+                waited_r <= {waited_r[0] && waiting, waiting};
+            end
+        end
+        assign admit_ok_a  = admit_ok_r && waited_r[1];
+        assign base_slot_a = base_slot_r;
+        assign next_tail_a = next_tail_r;
+        assign base_lmem_a = base_lmem_r;
+    end else begin : g_admit_now
+        assign admit_ok_a  = admit_ok;
+        assign base_slot_a = base_slot;
+        assign next_tail_a = next_tail;
+        assign base_lmem_a = base_lmem;
+    end
+
+    assign kmu_bus_if.ready = (state == IDLE) && admit_ok_a && !rem_warps_write_r
                            && !frag_inflight;
 
     // -------------------------------------------------------------------------
@@ -493,7 +531,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     assign rem_warps_raddr = done_slot_r;
 
     assign rem_warps_write = (kmu_bus_if_fire && state == IDLE) || rem_warps_write_r;
-    assign rem_warps_waddr = (kmu_bus_if_fire && state == IDLE) ? base_slot : rem_warps_waddr_r;
+    assign rem_warps_waddr = (kmu_bus_if_fire && state == IDLE) ? base_slot_a : rem_warps_waddr_r;
     assign rem_warps_wdata = (kmu_bus_if_fire && state == IDLE) ? (NW_WIDTH+1)'(kmu_num_warps) : rem_warps_wdata_r;
 
     // -------------------------------------------------------------------------
@@ -609,10 +647,10 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                         // free out of order on retirement, so a cluster's window is
                         // checked free up front (admit_ok) rather than reclaimed
                         // in order.
-                        cur_lmem_base_r <= base_lmem;
-                        slot_valid_r[base_slot] <= 1'b1;
-                        tail_r     <= (`VX_CFG_NUM_WARPS > 1) ? next_tail : CS_BITS'(0);
-                        cur_slot_r <= base_slot;
+                        cur_lmem_base_r <= base_lmem_a;
+                        slot_valid_r[base_slot_a] <= 1'b1;
+                        tail_r     <= (`VX_CFG_NUM_WARPS > 1) ? next_tail_a : CS_BITS'(0);
+                        cur_slot_r <= base_slot_a;
                         dispatched_warps <= '0;
                         state <= DISPATCH;
                     end

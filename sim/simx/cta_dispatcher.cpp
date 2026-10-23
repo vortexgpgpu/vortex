@@ -63,6 +63,7 @@ void CtaDispatcher::on_reset() {
   cta_done_   = false;
   cta_wids_.reset();
   tail_slot_  = 0;
+  admit_wait_ = 0;
   init_wait_  = 0;
   for (uint32_t i = 0; i < num_warps_; ++i) {
     slot_rem_warps_[i] = 0;
@@ -113,8 +114,16 @@ uint32_t CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wids, cta_w
     // endpoint holds the one CTA committed to this core. It is popped only on
     // admission — an unadmitted CTA keeps the lane's credit, so the KMU
     // cannot over-commit work to a busy core.
-    if (bus_in.empty())
+    if (bus_in.empty()) {
+      admit_wait_ = 0;
       return 0;
+    }
+    // Over more than 8 slots the RTL registers the admission: a head is
+    // admitted once it has waited two cycles.
+    if (num_warps_ > 8 && admit_wait_ < 2) {
+      ++admit_wait_;
+      return 0;
+    }
     const kmu_req_t& next = bus_in.peek();
 
     // Fixed-stride admission. Round the per-CTA LMEM size up to a
@@ -172,6 +181,7 @@ uint32_t CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wids, cta_w
     // the admission is reported back to the KMU's launch accounting.
     cta_ = next;
     bus_in.pop();
+    admit_wait_ = 0;
     credit_out.send(1, 1);
 
     cta_size_       = (cta_.block_size + num_threads_ - 1) / num_threads_;
