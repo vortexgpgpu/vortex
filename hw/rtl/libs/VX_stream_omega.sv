@@ -51,6 +51,10 @@ module VX_stream_omega #(
     localparam VALID_HOLDS  = (BUF_KIND >= 1 && BUF_KIND <= 3)
                            && (MAX_FANOUT == 0 || RADIX <= (MAX_FANOUT + MAX_FANOUT / 2));
 
+    // An inner stage of pipe buffers would pass ready combinationally through
+    // every stage: it registers its ready instead, at the same latency.
+    localparam INNER_BUF    = (BUF_KIND == 1) ? ((OUT_BUF & 8) | 2) : OUT_BUF;
+
     wire buf_any_valid;
 
     // If network size smaller than radix, simply use a crossbar.
@@ -149,7 +153,7 @@ module VX_stream_omega #(
                     .NUM_OUTPUTS  (RADIX),
                     .DATAW        ($bits(omega_t)),
                     .ARBITER      (ARBITER),
-                    .OUT_BUF      (OUT_BUF),
+                    .OUT_BUF      ((stage < NUM_STAGES-1) ? INNER_BUF : OUT_BUF),
                     .MAX_FANOUT   (MAX_FANOUT),
                     .PERF_CTR_BITS(PERF_CTR_BITS)
                  ) xbar_switch (
