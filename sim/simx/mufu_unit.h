@@ -24,9 +24,8 @@ namespace vortex {
 // datapath lanes, one batch per cycle, and a warp is accepted on its last batch.
 class MufuUnit {
 public:
-  // Cycles a result spends in the datapath and its registered output after the
-  // warp is accepted.
-  static constexpr uint32_t kLatency = VX_MUFU_LATENCY + 1;
+  // Cycles a result spends in the datapath after the warp is accepted.
+  static constexpr uint32_t kLatency = VX_MUFU_LATENCY;
 
   // Returns false while the warp's batches are still being issued; on the
   // accepting cycle computes the results and returns true.

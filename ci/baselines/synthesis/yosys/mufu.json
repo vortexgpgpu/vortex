@@ -5,9 +5,9 @@
     "configs": "",
     "dut": "mufu",
     "result": {
-      "build_time_s": 130,
-      "cell_area_um2": 2700.974,
-      "cell_count": 26212,
+      "build_time_s": 195,
+      "cell_area_um2": 2073.466,
+      "cell_count": 20518,
       "env": {
         "corner": "tt",
         "pdk": "asap7",
@@ -17,12 +17,12 @@
         "xlen": 32,
         "yosys": "Yosys 0.69"
       },
-      "fmax_mhz": 1069.519,
-      "power_mw": 19.1,
-      "seq_area_um2": 847.973,
+      "fmax_mhz": 1039.501,
+      "power_mw": 17.3,
+      "seq_area_um2": 507.384,
       "sram_area_um2": 0.0,
       "tns_ns": 0.0,
-      "wns_ns": 0.315
+      "wns_ns": 0.288
     }
   }
 }

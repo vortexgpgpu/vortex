@@ -6,107 +6,107 @@
     "dut": "mufu",
     "result": {
       "bram": 1,
-      "build_time_s": 796,
+      "build_time_s": 712,
       "critical_paths": [
         {
-          "endpoint": "mufu_unit/g_pes[0].pe/s1_reg/g_pipe.g_no_reset.pipe_reg[0][80]/S",
+          "endpoint": "mufu_unit/g_pes[0].pe/s1_reg/g_pipe.g_no_reset.pipe_reg[0][16]/D",
           "group": "core_clock",
           "levels": 12,
-          "logic_ns": 1.126,
-          "route_ns": 1.709,
-          "route_pct": 60.288,
-          "slack_ns": 0.381,
+          "logic_ns": 1.33,
+          "route_ns": 1.795,
+          "route_pct": 57.443,
+          "slack_ns": 0.187,
           "startpoint": "mufu_unit/pe_serializer/g_serialize.batch_in_idx_reg[1]/C"
         },
         {
-          "endpoint": "mufu_unit/g_pes[0].pe/s1_reg/g_pipe.g_no_reset.pipe_reg[0][80]/S",
+          "endpoint": "mufu_unit/g_pes[0].pe/s1_reg/g_pipe.g_no_reset.pipe_reg[0][16]/D",
           "group": "core_clock",
           "levels": 12,
-          "logic_ns": 1.127,
-          "route_ns": 1.707,
-          "route_pct": 60.239,
-          "slack_ns": 0.382,
+          "logic_ns": 1.33,
+          "route_ns": 1.792,
+          "route_pct": 57.397,
+          "slack_ns": 0.191,
           "startpoint": "mufu_unit/pe_serializer/g_serialize.batch_in_idx_reg[1]/C"
         },
         {
-          "endpoint": "mufu_unit/g_pes[0].pe/s1_reg/g_pipe.g_no_reset.pipe_reg[0][80]/S",
+          "endpoint": "mufu_unit/g_pes[0].pe/s1_reg/g_pipe.g_no_reset.pipe_reg[0][16]/D",
           "group": "core_clock",
           "levels": 12,
-          "logic_ns": 1.128,
-          "route_ns": 1.705,
-          "route_pct": 60.18,
-          "slack_ns": 0.383,
-          "startpoint": "mufu_unit/pe_serializer/g_serialize.batch_in_idx_reg[0]/C"
-        },
-        {
-          "endpoint": "mufu_unit/g_pes[0].pe/s1_reg/g_pipe.g_no_reset.pipe_reg[0][77]/S",
-          "group": "core_clock",
-          "levels": 12,
-          "logic_ns": 1.126,
-          "route_ns": 1.706,
-          "route_pct": 60.246,
-          "slack_ns": 0.384,
+          "logic_ns": 1.328,
+          "route_ns": 1.793,
+          "route_pct": 57.452,
+          "slack_ns": 0.191,
           "startpoint": "mufu_unit/pe_serializer/g_serialize.batch_in_idx_reg[1]/C"
         },
         {
-          "endpoint": "mufu_unit/g_pes[0].pe/s1_reg/g_pipe.g_no_reset.pipe_reg[0][79]/S",
+          "endpoint": "mufu_unit/g_pes[0].pe/s1_reg/g_pipe.g_no_reset.pipe_reg[0][16]/D",
           "group": "core_clock",
           "levels": 12,
-          "logic_ns": 1.126,
-          "route_ns": 1.706,
-          "route_pct": 60.246,
-          "slack_ns": 0.384,
+          "logic_ns": 1.329,
+          "route_ns": 1.791,
+          "route_pct": 57.402,
+          "slack_ns": 0.193,
           "startpoint": "mufu_unit/pe_serializer/g_serialize.batch_in_idx_reg[1]/C"
         },
         {
-          "endpoint": "mufu_unit/g_pes[0].pe/s1_reg/g_pipe.g_no_reset.pipe_reg[0][77]/S",
+          "endpoint": "mufu_unit/g_pes[0].pe/s1_reg/g_pipe.g_no_reset.pipe_reg[0][16]/D",
           "group": "core_clock",
-          "levels": 12,
-          "logic_ns": 1.127,
-          "route_ns": 1.704,
-          "route_pct": 60.197,
-          "slack_ns": 0.385,
+          "levels": 11,
+          "logic_ns": 1.225,
+          "route_ns": 1.879,
+          "route_pct": 60.54,
+          "slack_ns": 0.209,
+          "startpoint": "mufu_unit/pe_serializer/g_serialize.batch_in_idx_reg[3]/C"
+        },
+        {
+          "endpoint": "mufu_unit/g_pes[0].pe/s1_reg/g_pipe.g_no_reset.pipe_reg[0][16]/D",
+          "group": "core_clock",
+          "levels": 13,
+          "logic_ns": 1.333,
+          "route_ns": 1.739,
+          "route_pct": 56.615,
+          "slack_ns": 0.24,
           "startpoint": "mufu_unit/pe_serializer/g_serialize.batch_in_idx_reg[1]/C"
         },
         {
-          "endpoint": "mufu_unit/g_pes[0].pe/s1_reg/g_pipe.g_no_reset.pipe_reg[0][79]/S",
+          "endpoint": "mufu_unit/g_pes[0].pe/s1_reg/g_pipe.g_no_reset.pipe_reg[0][16]/D",
           "group": "core_clock",
-          "levels": 12,
-          "logic_ns": 1.127,
-          "route_ns": 1.704,
-          "route_pct": 60.197,
-          "slack_ns": 0.385,
+          "levels": 13,
+          "logic_ns": 1.335,
+          "route_ns": 1.737,
+          "route_pct": 56.545,
+          "slack_ns": 0.24,
           "startpoint": "mufu_unit/pe_serializer/g_serialize.batch_in_idx_reg[1]/C"
         },
         {
-          "endpoint": "mufu_unit/g_pes[0].pe/s1_reg/g_pipe.g_no_reset.pipe_reg[0][77]/S",
+          "endpoint": "mufu_unit/g_pes[0].pe/s1_reg/g_pipe.g_no_reset.pipe_reg[0][16]/D",
           "group": "core_clock",
-          "levels": 12,
-          "logic_ns": 1.128,
-          "route_ns": 1.702,
-          "route_pct": 60.138,
-          "slack_ns": 0.386,
-          "startpoint": "mufu_unit/pe_serializer/g_serialize.batch_in_idx_reg[0]/C"
+          "levels": 13,
+          "logic_ns": 1.334,
+          "route_ns": 1.737,
+          "route_pct": 56.568,
+          "slack_ns": 0.241,
+          "startpoint": "mufu_unit/pe_serializer/g_serialize.batch_in_idx_reg[1]/C"
         },
         {
-          "endpoint": "mufu_unit/g_pes[0].pe/s1_reg/g_pipe.g_no_reset.pipe_reg[0][79]/S",
+          "endpoint": "mufu_unit/g_pes[0].pe/s1_reg/g_pipe.g_no_reset.pipe_reg[0][16]/D",
           "group": "core_clock",
-          "levels": 12,
-          "logic_ns": 1.128,
-          "route_ns": 1.702,
-          "route_pct": 60.138,
-          "slack_ns": 0.386,
-          "startpoint": "mufu_unit/pe_serializer/g_serialize.batch_in_idx_reg[0]/C"
+          "levels": 13,
+          "logic_ns": 1.332,
+          "route_ns": 1.733,
+          "route_pct": 56.544,
+          "slack_ns": 0.247,
+          "startpoint": "mufu_unit/pe_serializer/g_serialize.batch_in_idx_reg[1]/C"
         },
         {
-          "endpoint": "mufu_unit/g_pes[0].pe/s1_reg/g_pipe.g_no_reset.pipe_reg[0][80]/S",
+          "endpoint": "mufu_unit/g_pes[0].pe/s1_reg/g_pipe.g_no_reset.pipe_reg[0][16]/D",
           "group": "core_clock",
-          "levels": 12,
-          "logic_ns": 1.125,
-          "route_ns": 1.703,
-          "route_pct": 60.216,
-          "slack_ns": 0.388,
-          "startpoint": "mufu_unit/pe_serializer/g_serialize.batch_in_idx_reg[0]/C"
+          "levels": 13,
+          "logic_ns": 1.31,
+          "route_ns": 1.752,
+          "route_pct": 57.215,
+          "slack_ns": 0.251,
+          "startpoint": "mufu_unit/pe_serializer/g_serialize.batch_in_idx_reg[1]/C"
         }
       ],
       "dsp": 3,
@@ -116,28 +116,23 @@
         "vivado": "2024.2",
         "xlen": 32
       },
-      "ff": 2278,
-      "fmax_mhz": 338.8,
+      "ff": 1105,
+      "fmax_mhz": 317.9,
       "high_fanout_nets": [
         {
           "driver": "FDRE",
-          "fanout": 1556,
+          "fanout": 1044,
           "net": "mufu_unit/pe_serializer/shift_reg/pe_valid_in"
         },
         {
           "driver": "LUT2",
           "fanout": 718,
-          "net": "mufu_unit/pe_serializer/out_buf/g_eb2.stream_buffer/g_buffer.valid_in_r_reg_rep_0"
+          "net": "mufu_unit/pe_serializer/pe_enable"
         },
         {
-          "driver": "LUT2",
-          "fanout": 583,
-          "net": "mufu_unit/pe_serializer/out_buf/g_eb2.stream_buffer/g_buffer.fire_in"
-        },
-        {
-          "driver": "LUT2",
-          "fanout": 583,
-          "net": "mufu_unit/pe_serializer/out_buf/g_eb2.stream_buffer/g_buffer.flow_out"
+          "driver": "FDRE",
+          "fanout": 165,
+          "net": "mufu_unit/pe_serializer/g_serialize.batch_out_idx_reg[3]_rep_n_0"
         },
         {
           "driver": "MUXF8",
@@ -151,7 +146,7 @@
         },
         {
           "driver": "FDRE",
-          "fanout": 162,
+          "fanout": 154,
           "net": "mufu_unit/pe_serializer/g_serialize.batch_out_idx[3]"
         },
         {
@@ -160,20 +155,25 @@
           "net": "mufu_unit/pe_serializer/pe_data_in[0]_39[25]"
         },
         {
-          "driver": "FDSE",
-          "fanout": 146,
-          "net": "mufu_unit/pe_serializer/out_buf/g_eb2.stream_buffer/g_buffer.valid_in_r_reg_rep_n_0"
+          "driver": "FDRE",
+          "fanout": 133,
+          "net": "mufu_unit/pe_serializer/g_serialize.batch_in_idx[0]"
         },
         {
-          "driver": "FDSE",
-          "fanout": 143,
-          "net": "mufu_unit/pe_serializer/out_buf/g_eb2.stream_buffer/g_buffer.valid_in_r_reg_rep__3_n_0"
+          "driver": "FDRE",
+          "fanout": 132,
+          "net": "mufu_unit/pe_serializer/g_serialize.batch_in_idx[1]"
+        },
+        {
+          "driver": "FDRE",
+          "fanout": 131,
+          "net": "mufu_unit/pe_serializer/g_serialize.batch_out_idx[1]"
         }
       ],
-      "lut": 2624,
+      "lut": 2030,
       "lutram": 64,
       "uram": 0,
-      "wns_ns": 0.381
+      "wns_ns": 0.187
     }
   }
 }

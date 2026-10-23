@@ -48,7 +48,7 @@ module VX_mufu_unit import VX_gpu_pkg::*; #(
         .SHARED_WIDTH   (INST_MUFU_BITS),
         .TAG_WIDTH      (HDR_WIDTH),
         .PE_REG         (0),
-        .OUT_BUF        (3)
+        .OUT_BUF        (0)
     ) pe_serializer (
         .clk           (clk),
         .reset         (reset),
