@@ -78,8 +78,10 @@ module VX_ipdom_stack import VX_gpu_pkg::*; #(
     wire [BRAW_ADDRW-1:0] raddr, waddr;
 
     if (DEPTH > 1 && NUM_WARPS > 1) begin : g_DW
-        assign waddr = push ? {wr_ptr_w[wid], wid} : {rd_ptr, wid};
-        assign raddr = {rd_ptr, wid};
+        // entry = ptr * NUM_WARPS + wid keeps the store dense when NUM_WARPS is not a power of two
+        wire [ADDRW-1:0] waddr_ptr = push ? wr_ptr_w[wid] : rd_ptr;
+        assign waddr = BRAW_ADDRW'(waddr_ptr * NUM_WARPS + wid);
+        assign raddr = BRAW_ADDRW'(rd_ptr * NUM_WARPS + wid);
     end else if (DEPTH > 1) begin : g_D
         `UNUSED_VAR (wid)
         assign waddr = push ? wr_ptr_w : rd_ptr;
