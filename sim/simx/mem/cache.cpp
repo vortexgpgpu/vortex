@@ -2440,7 +2440,11 @@ protected:
     if (!stage_.empty()) {
       this->arbitrate_stage();
     }
-    const bool hold = this->any_token();
+    // Over more than four ports the RTL registers the hold: the other ports
+    // close a cycle after a token shows (a token itself never passes).
+    const bool token_now = this->any_token();
+    const bool hold = (n > 4) ? hold_r_ : token_now;
+    hold_r_ = token_now;
     // merged ports riding each leader's bank access, by offset in its group
     std::vector<bool> followers(n, false);
     std::vector<uint64_t> merged(n, 0);
@@ -2621,6 +2625,7 @@ private:
   std::vector<std::vector<SimChannel<MemReq>>> tree_stage_; // [level][bank][slice]
   std::vector<std::vector<uint32_t>> rr_;                   // [arbiter level][bank][slice] next to grant
   std::vector<SimChannel<MemReq>> stage_;                   // [port] request stage, bank tag applied
+  bool hold_r_ = false;                                     // a token showed last cycle
   uint32_t merge_group_;
   uint64_t collisions_ = 0;
 

@@ -95,6 +95,25 @@ module VX_cache_init import VX_gpu_pkg::*; #(
         assign flush_req_mask[i] = core_bus_in_if[i].req_valid && core_bus_in_if[i].req_data.attr[MEM_ATTR_FLUSH_OFFS];
     end
     wire flush_req_enable = (| flush_req_mask);
+    // Over many inputs the hold of every input on any input's token is
+    // registered: the other inputs close a cycle after a token shows (they are
+    // not ordered against it, and the walk waits for what they sent), while a
+    // token's own input never passes it.
+    localparam HOLD_REG = (NUM_REQS > 4);
+    wire flush_hold;
+    if (HOLD_REG) begin : g_hold_reg
+        reg flush_hold_r;
+        always @(posedge clk) begin
+            if (reset) begin
+                flush_hold_r <= 1'b0;
+            end else begin
+                flush_hold_r <= flush_req_enable;
+            end
+        end
+        assign flush_hold = flush_hold_r;
+    end else begin : g_hold_now
+        assign flush_hold = flush_req_enable;
+    end
 
     wire [NUM_REQS-1:0] flush_l1_mask, flush_io_mask;
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_flush_kind_mask
@@ -177,7 +196,7 @@ module VX_cache_init import VX_gpu_pkg::*; #(
         // Normal requests stay blocked while any token is visible. A token is
         // consumed here when its answer is sent and never reaches the banks.
         wire take_token = flush_rsp_fire && rsp_sel_onehot[i];
-        wire input_enable = ~flush_req_enable && ~dbg_stall[i];
+        wire input_enable = ~flush_hold && ~flush_req_mask[i] && ~dbg_stall[i];
         assign core_bus_out_if[i].req_valid = core_bus_in_if[i].req_valid && input_enable;
         assign core_bus_out_if[i].req_data  = core_bus_in_if[i].req_data;
         assign core_bus_in_if[i].req_ready  = take_token || (core_bus_out_if[i].req_ready && input_enable);
@@ -216,7 +235,7 @@ module VX_cache_init import VX_gpu_pkg::*; #(
         case (state)
             // STATE_IDLE:
             default: begin
-                if (flush_req_enable) begin
+                if (flush_hold && flush_req_enable) begin
                     if (REQ_STAGE != 0) begin
                         state_n = STATE_WAIT1;
                     end else if (~flush_walk && ~any_io) begin
