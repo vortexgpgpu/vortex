@@ -726,7 +726,8 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // TID_STEP lanes/cycle to meet timing; each launch lane has its own pipeline.
     // cta_warp_ram is read many cycles after a warp launches (fetch/decode/issue
     // latency >> TID_STAGES), so the added write latency is hidden.
-    localparam TID_STEP   = 2;
+    // one step per stage once the ripple across many threads is the long path
+    localparam TID_STEP   = (`VX_CFG_NUM_THREADS > 8) ? 1 : 2;
     localparam TID_STAGES = (`VX_CFG_NUM_THREADS - 1 + TID_STEP - 1) / TID_STEP;
 
     function automatic logic [2:0][CTA_TID_WIDTH-1:0] tid_next (
