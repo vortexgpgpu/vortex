@@ -1,0 +1,174 @@
+# Logic-level regression gate (the timing screen): the deepest end point of
+# every RTL unit must not get deeper than a checked-in golden result
+# (ci/baselines/synthesis/screen/<group>.json). See ci/timing_gate.py.
+#
+# Sibling of fpga_gate (fpga_gate.yaml) and asic_gate (asic_gate.yaml): same
+# discipline -- golden baseline, results only ever re-recorded by a human --
+# over foldsim-estimate-timing instead of a synthesis tool. It counts logic
+# levels as Vivado counts them on the V80 (LUTs, CARRY8s, distributed-RAM
+# reads) on the CIRCT netlist the Xilinx flow elaborates, so it gates depth,
+# not Fmax: wires are not in it.
+#
+#   - Per unit. A unit is an end point's instance path with generate indices
+#     folded (g_banks_3_bank -> g_banks_*_bank). Every unit at or above the
+#     watch threshold (8 levels at 300 MHz) is recorded; a unit that gets deeper
+#     fails, and so does a new unit at or above the fix threshold (12).
+#   - No tolerance. The screen is deterministic, so any change in depth is a
+#     real one; a shallower unit reads IMPROVED, to be locked in by a re-record.
+#   - The tool versions (CIRCT, foldsim) are part of config_hash: a new model
+#     reads STALE, not as a regression.
+#
+# ---------------------------------------------------------------------------
+# Two blocks, two consumers, as in the synthesis gates:
+#
+#   tests:   what pytest/CI sees -- ONE case, whose `run:` is literally the
+#            command CI executes.
+#   builds:  what ci/timing_gate.py reads -- the build list. The pytest loader
+#            ignores this key.
+#
+# The builds are fpga_gate.yaml's, DUT for DUT and config for config (all but
+# `top`, see below), so where both gates run a DUT they measure the same RTL, and a unit this gate flags
+# can be read against the Fmax gate's critical paths. clock_mhz is the Fmax
+# gate's target, recorded for that comparison; the screen's thresholds are
+# 300 MHz ones.
+#
+# Tier `timing` is OPT-IN (OPT_IN_TIERS in testcase.py): it needs foldsim,
+# which the base toolchain does not install. .github/workflows/timing_gate.yml
+# installs it and runs the gate.
+#
+# Run one by name:  ci/timing_gate.py -b tcu
+# By hand, no gate: make -C hw/syn/xilinx/dut tcu-screen
+# Re-record:        ci/timing_gate.py --update-baseline   (human-reviewed, never CI)
+# ---------------------------------------------------------------------------
+category: timing_gate
+defaults:
+  # 32-bit only, as the synthesis gates.
+  xlen:
+  - 32
+  tier: timing
+  via: script
+  # Any RTL change can move depth.
+  touches:
+  - hw/rtl/
+tests:
+# Seconds to minutes per DUT: the whole catalog runs in one job.
+- id: gate
+  run: ci/timing_gate.py -j 2
+
+# ---------------------------------------------------------------------------
+# builds — read by ci/timing_gate.py, ignored by the pytest catalog loader.
+#
+#   dut         hw/syn/xilinx/dut/catalog.mk target to screen
+#   clock_mhz   the Fmax gate's target for this DUT (recorded, not asserted)
+#   configs     EXTRA defines, appended to the catalog's
+#   group       which golden file the results land in
+#   known_issue tracked expected failure: still screens and reports, does not
+#               fail the run
+# ---------------------------------------------------------------------------
+builds:
+
+# --- core: the base pipeline and its memory system ---------------------------
+
+# L1/LLC datapath with atomics: tag/data pipeline, MSHR, AMO unit.
+- id: cache
+  group: core
+  dut: cache
+  clock_mhz: 300
+  configs: -DVX_CFG_EXT_A_ENABLE
+
+# Wide-SIMD core: issue/operand-collect/LSU/FPU at NT=NW=16, plus the RVC
+# decompressor and atomics.
+- id: core
+  group: core
+  dut: core
+  clock_mhz: 300
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_EXT_C_ENABLE -DVX_CFG_EXT_A_ENABLE
+
+# fpga_gate's `top` is not screened: CIRCT's import leaves the command
+# processor's AXI-Lite response ports (VX_cp_core) as LLHD references, which
+# no HW/Comb/Seq tool reads. It joins this list when the import lowers them.
+
+# --- dxa ---------------------------------------------------------------------
+
+# DXA engine: descriptor queue, address generation, multicast distribution.
+- id: dxa
+  group: dxa
+  dut: dxa
+  clock_mhz: 300
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+
+# --- tensor ------------------------------------------------------------------
+
+# TFR tensor core with every datatype plus sparsity and WGMMA.
+- id: tcu
+  group: tensor
+  dut: tcu
+  clock_mhz: 300
+  configs: >-
+    -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_TCU_TYPE_TFR
+    -DVX_CFG_TCU_FP16_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DVX_CFG_TCU_INT8_ENABLE
+    -DVX_CFG_TCU_INT4_ENABLE -DVX_CFG_TCU_TF32_ENABLE
+    -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+
+# --- graphics ----------------------------------------------------------------
+
+# Ray-tracing unit: CW-BVH4 walker, box/triangle PEs, short stack.
+- id: rtu
+  group: graphics
+  dut: rtu
+  clock_mhz: 300
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+
+# Rasterizer: bin/block/quad walker, edge evaluators, rcache port.
+- id: raster
+  group: graphics
+  dut: raster
+  clock_mhz: 300
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+
+# Output merger: depth/stencil test, blend, ocache port.
+- id: om
+  group: graphics
+  dut: om
+  clock_mhz: 300
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+
+# Texture unit: address generation, LOD, bilinear filter, tcache port.
+- id: tex
+  group: graphics
+  dut: tex
+  clock_mhz: 300
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+
+# --- vm ----------------------------------------------------------------------
+
+# Standalone MMU network: dTLB + iTLB, pooled L1 TLB MSHR, L2 TLB, PTW walker
+# hierarchy, fed by a shared L2. The memory-translation bellwether; the rest of
+# the extension config comes from hw/syn/xilinx/dut/vm/Makefile.
+- id: vm
+  group: vm
+  dut: vm
+  clock_mhz: 250
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_NUM_CORES=2
+
+# --- graphics (combined subsystem) -------------------------------------------
+
+# Full graphics subsystem in one wrapper: raster + om + tex + rtu + dxa behind a
+# shared L2, 2 cores / socket. Closes the graphics cross-unit boundaries that the
+# per-unit DUTs above do not. Subsystem enables come from
+# hw/syn/xilinx/dut/gfx/Makefile.
+- id: gfx
+  group: graphics
+  dut: gfx
+  clock_mhz: 250
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+
+# --- tensor (combined subsystem) ---------------------------------------------
+
+# Full tensor subsystem in one wrapper: TCU (WGMMA + MX) + dxa behind a shared L2,
+# 2 cores / socket. Enables come from hw/syn/xilinx/dut/tensor/Makefile.
+- id: tensor
+  group: tensor
+  dut: tensor
+  clock_mhz: 250
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
