@@ -229,7 +229,12 @@ import VX_fpu_pkg::*;
     assign live_src[LIVE_INSTRET_H] = 32'(sched_csr_if.instret[PERF_CTR_BITS-1:32]);
 `endif
     assign live_src[LIVE_THREADS]   = `VX_CFG_XLEN'(sched_csr_if.thread_mask);
-    assign live_src[LIVE_WARPS]     = `VX_CFG_XLEN'(sched_csr_if.active_warps);
+    // the CSR is XLEN wide: it holds warps 0..XLEN-1
+    wire [`VX_CFG_NUM_WARPS-1:0] active_warps = sched_csr_if.active_warps;
+    assign live_src[LIVE_WARPS]     = `VX_CFG_XLEN'(active_warps);
+    if (`VX_CFG_NUM_WARPS > `VX_CFG_XLEN) begin : g_active_warps_hi
+        `UNUSED_VAR (active_warps[`VX_CFG_NUM_WARPS-1:`VX_CFG_XLEN])
+    end
 `ifdef VX_CFG_EXT_F_ENABLE
     assign live_src[LIVE_FFLAGS]    = `VX_CFG_XLEN'(req_fcsr[`FP_FLAGS_BITS-1:0]);
     assign live_src[LIVE_FRM]       = `VX_CFG_XLEN'(req_fcsr[INST_FRM_BITS+`FP_FLAGS_BITS-1:`FP_FLAGS_BITS]);
