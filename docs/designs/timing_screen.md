@@ -81,6 +81,7 @@ foldsim-opt mapped.mlirbc -o /dev/null --pass-pipeline='builtin.module(
 | `top-paths=` | deepest paths to print op by op (default 50) |
 | `trace=` | also print the deepest path of each end point whose name contains this |
 | `retime-levels=` | also estimate the depth after Vivado's retiming to this period (§4.4) |
+| `ports=`, `port-modules=` | the depth at each port of the named modules' instances (§8) |
 
 ## 2. System architecture
 
@@ -360,6 +361,32 @@ current RTL. A DUT screens in 2–52 s, where Yosys and OpenSTA take
 2.5–37 min.
 
 ## 8. Diagnostics beyond levels
+
+**Port depths.** `port-modules=` names modules whose instances' ports the
+screen reports: the levels at which each input arrives and the levels behind
+each output. Small modules are inlined by the mapping, so keep them with
+`screen --keep`:
+
+```bash
+ci/timing_screen.py screen --keep VX_elastic_buffer design.mlir runs/eb \
+    port-modules=VX_elastic_buffer
+ci/timing_screen.py buffers runs/eb      # the OUT_BUF advisor
+ci/timing_screen.py ports runs/eb        # every kept module, by unit
+```
+
+- The **buffer advisor** lists the `VX_elastic_buffer`s that pass a deep
+  ready chain through combinationally (`ready_in`, upstream, driven at
+  least as deep as `ready_out` arrives from downstream), where a skid
+  buffer (SIZE 2) or `OUT_BUF` would cut it, and those whose output is
+  computed rather than registered, where `OUT_REG` would register it. It
+  is evidence for an RTL review: the change also moves cycles, so it comes
+  with the matching SimX timing update.
+- For foldsim, the ports of the class modules (`VX_socket__lift`,
+  `VX_core__lift`, ...) show the outputs computed from logic, and how deep,
+  rather than registered: in the fold they cost host cycles on the class's
+  links.
+
+**Vivado probes.**
 
 `hw/scripts` has three Vivado Tcl probes for questions the
 screen cannot answer, run on a checkpoint
