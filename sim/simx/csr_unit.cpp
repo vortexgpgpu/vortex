@@ -398,48 +398,47 @@ void CsrUnit::process(instr_trace_t* trace) {
   uint32_t num_threads = VX_CFG_NUM_THREADS;
   auto& rs1_data = trace->src_data[0];
 
-  uint32_t thread_start = 0;
-  for (; thread_start < num_threads; ++thread_start) {
-    if (tmask.test(thread_start)) break;
-  }
-
   trace->dst_data.assign(num_threads, reg_data_t{});
   auto& rd_data = trace->dst_data;
 
-  switch (csr_type) {
-  case CsrType::CSRRW:
-    for (uint32_t t = thread_start; t < num_threads; ++t) {
-      if (!tmask.test(t)) continue;
-      Word csr_value = this->get_csr(csr_addr, wid, t);
-      auto src_v = csrArgs.is_imm ? csrArgs.imm : rs1_data[t].i;
-      this->set_csr(csr_addr, src_v, wid, t);
-      rd_data[t].i = csr_value;
-    }
-    break;
-  case CsrType::CSRRS:
-    for (uint32_t t = thread_start; t < num_threads; ++t) {
-      if (!tmask.test(t)) continue;
-      Word csr_value = this->get_csr(csr_addr, wid, t);
-      auto src_v = csrArgs.is_imm ? csrArgs.imm : rs1_data[t].i;
-      if (src_v != 0) {
-        this->set_csr(csr_addr, csr_value | src_v, wid, t);
+  // The warp is processed one SFU-width packet at a time: a packet's active
+  // lanes read the CSR, then its first active lane supplies the write.
+  constexpr uint32_t kPacketLanes = VX_CFG_NUM_SFU_LANES;
+  for (uint32_t base = 0; base < num_threads; base += kPacketLanes) {
+    uint32_t first = num_threads;
+    for (uint32_t t = base; t < base + kPacketLanes; ++t) {
+      if (tmask.test(t)) {
+        first = t;
+        break;
       }
-      rd_data[t].i = csr_value;
     }
-    break;
-  case CsrType::CSRRC:
-    for (uint32_t t = thread_start; t < num_threads; ++t) {
-      if (!tmask.test(t)) continue;
-      Word csr_value = this->get_csr(csr_addr, wid, t);
-      auto src_v = csrArgs.is_imm ? csrArgs.imm : rs1_data[t].i;
-      if (src_v != 0) {
-        this->set_csr(csr_addr, csr_value & ~src_v, wid, t);
+    if (first == num_threads) {
+      continue;
+    }
+    for (uint32_t t = first; t < base + kPacketLanes; ++t) {
+      if (tmask.test(t)) {
+        rd_data[t].i = this->get_csr(csr_addr, wid, t);
       }
-      rd_data[t].i = csr_value;
     }
-    break;
-  default:
-    std::abort();
+    Word csr_value = rd_data[first].i;
+    Word src_v = csrArgs.is_imm ? csrArgs.imm : rs1_data[first].i;
+    switch (csr_type) {
+    case CsrType::CSRRW:
+      this->set_csr(csr_addr, src_v, wid, first);
+      break;
+    case CsrType::CSRRS:
+      if (src_v != 0) {
+        this->set_csr(csr_addr, csr_value | src_v, wid, first);
+      }
+      break;
+    case CsrType::CSRRC:
+      if (src_v != 0) {
+        this->set_csr(csr_addr, csr_value & ~src_v, wid, first);
+      }
+      break;
+    default:
+      std::abort();
+    }
   }
   DT(3, "csr-unit process: op=" << csr_type << ", " << *trace);
 }

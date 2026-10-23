@@ -56,6 +56,9 @@ VX_MEM_IO_END_ADDR          = "expr: $VX_MEM_USER_BASE_ADDR"
 VX_MEM_OM_BASE_ADDR         = "expr: 0x00000000E0000000 if ($XLEN == 64) else 0xE0000000"
 VX_MEM_OM_END_ADDR          = "expr: $VX_MEM_PAGE_TABLE_BASE_ADDR"
 
+[mufu]
+VX_MUFU_LATENCY = 7
+
 # VM page-table format — RISC-V architectural constants fixed by the SATP mode
 # (SV32 vs SV39, selected by XLEN). Relocated from VX_config.toml.
 [vm]
