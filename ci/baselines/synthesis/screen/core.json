@@ -1,7 +1,7 @@
 {
   "cache": {
     "clock_mhz": 300,
-    "config_hash": "d1c790a717e70701",
+    "config_hash": "2ffb51f782b0cb2f",
     "configs": "-DVX_CFG_EXT_A_ENABLE",
     "dut": "cache",
     "result": {
@@ -22,7 +22,8 @@
       "endpoints": 38324,
       "env": {
         "circt": "CIRCT 48b64cdd6",
-        "foldsim": "foldsim 2d08c7d4c",
+        "device": "xcu55c-fsvh2892-2L-e",
+        "foldsim": "foldsim 7c7a926f8",
         "xlen": 32
       },
       "fix_levels": 12,
@@ -64,7 +65,7 @@
   },
   "core": {
     "clock_mhz": 300,
-    "config_hash": "1e7c0dde7341b224",
+    "config_hash": "f73ea93f303a357f",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_EXT_C_ENABLE -DVX_CFG_EXT_A_ENABLE",
     "dut": "core",
     "result": {
@@ -85,7 +86,8 @@
       "endpoints": 139151,
       "env": {
         "circt": "CIRCT 48b64cdd6",
-        "foldsim": "foldsim 2d08c7d4c",
+        "device": "xcu55c-fsvh2892-2L-e",
+        "foldsim": "foldsim 7c7a926f8",
         "xlen": 32
       },
       "fix_levels": 12,
@@ -94,6 +96,7 @@
         "<top>": 8,
         "core/g_compute_slices_g_slices_*_compute_slice/backend_slice/commit_slice/commit_arb/g_input_select_g_arbiter_g_out_buf_*_out_buf/g_eb1_pipe_buffer/g_register_g_pipe_regs_*_pipe_register": 8,
         "core/g_compute_slices_g_slices_*_compute_slice/backend_slice/execute_slice/alu_block/alu_int/rsp_buf/g_eb1_pipe_buffer/g_register_g_pipe_regs_*_pipe_register": 13,
+        "core/g_compute_slices_g_slices_*_compute_slice/backend_slice/execute_slice/alu_block/muldiv_unit/g_multiplier_*_multiplier/pipe_reg": 11,
         "core/g_compute_slices_g_slices_*_compute_slice/backend_slice/execute_slice/alu_block/muldiv_unit/serial_div": 8,
         "core/g_compute_slices_g_slices_*_compute_slice/backend_slice/execute_slice/alu_block/pe_switch/rsp_arb/g_input_select_g_arbiter_g_out_buf_*_out_buf/g_eb2_stream_buffer": 8,
         "core/g_compute_slices_g_slices_*_compute_slice/backend_slice/execute_slice/fpu_block/fpu_dsp/g_cvt_g_units_*_fcvt_unit/pipe_reg2": 10,
@@ -147,7 +150,7 @@
         "core/scheduler/warp_shared_unit/bar_unit/barrier_state_store": 8,
         "core/scheduler/warp_shared_unit/g_act_reg_act_reg": 9
       },
-      "watch_endpoints": 15593,
+      "watch_endpoints": 16649,
       "watch_levels": 8
     }
   }

@@ -1,12 +1,12 @@
 {
   "gfx": {
     "clock_mhz": 250,
-    "config_hash": "5fbdbb6dfde22df1",
+    "config_hash": "37025262f82fee52",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
     "dut": "gfx",
     "result": {
-      "build_time_s": 90,
-      "deep_endpoints": 13414,
+      "build_time_s": 95,
+      "deep_endpoints": 13976,
       "deepest_paths": [
         "23  g_rtu_core_0.rtu_core/fill_lane[0] -> g_rtu_core_0.rtu_core/scheduler/ctx_arbiter/g_model1.reqs_mask.d[0]",
         "23  g_rtu_core_0.rtu_core/fill_lane[0] -> g_rtu_core_0.rtu_core/scheduler/ctx_arbiter/g_model1.reqs_mask.d[1]",
@@ -22,7 +22,8 @@
       "endpoints": 335965,
       "env": {
         "circt": "CIRCT 48b64cdd6",
-        "foldsim": "foldsim 2d08c7d4c",
+        "device": "xcu55c-fsvh2892-2L-e",
+        "foldsim": "foldsim 7c7a926f8",
         "xlen": 32
       },
       "fix_levels": 12,
@@ -58,7 +59,7 @@
         "graphics/g_om_core_*_om_core/mem_req_buf/g_ebN_fifo_queue": 11,
         "graphics/g_om_core_*_om_core/mem_req_buf/g_ebN_fifo_queue/g_depth_n_dp_ram": 8,
         "graphics/g_om_core_*_om_core/mem_req_buf/g_ebN_fifo_queue/pending_size": 11,
-        "graphics/g_om_core_*_om_core/om_blend/g_blend_multadd_*_blend_multadd": 9,
+        "graphics/g_om_core_*_om_core/om_blend/g_blend_multadd_*_blend_multadd": 10,
         "graphics/g_om_core_*_om_core/om_blend/g_blend_multadd_*_blend_multadd/pipe_reg": 12,
         "graphics/g_om_core_*_om_core/om_blend/pipe_reg1": 15,
         "graphics/g_om_core_*_om_core/om_ds/pipe_reg1": 9,
@@ -72,8 +73,8 @@
         "graphics/g_om_steer_*_om_steer/om_req_buf/g_eb2_stream_buffer": 9,
         "graphics/g_om_steer_*_steer_pending/pending": 17,
         "graphics/g_raster_core_*_raster_core/packer": 10,
-        "graphics/g_raster_core_*_raster_core/raster_mem": 12,
-        "graphics/g_raster_core_*_raster_core/raster_slices_*_raster_earlyz": 10,
+        "graphics/g_raster_core_*_raster_core/raster_mem": 15,
+        "graphics/g_raster_core_*_raster_core/raster_slices_*_raster_earlyz": 18,
         "graphics/g_raster_core_*_raster_core/raster_slices_*_raster_earlyz/mem_scheduler/g_req_queue_ro_req_queue/g_ebN_fifo_queue": 8,
         "graphics/g_raster_core_*_raster_core/raster_slices_*_raster_earlyz/mem_scheduler/g_req_queue_ro_req_queue/g_ebN_fifo_queue/g_depth_n_dp_ram": 9,
         "graphics/g_raster_core_*_raster_core/raster_slices_*_raster_earlyz/mem_scheduler/g_req_queue_ro_req_queue/g_ebN_fifo_queue/pending_size": 8,
@@ -152,13 +153,13 @@
         "tcache/g_cache_wrap_*_cache_wrap/g_cache_cache/g_banks_*_bank/reg_s0": 8,
         "tcache/g_cache_wrap_*_cache_wrap/g_cache_cache/g_banks_*_bank/reg_s1": 10
       },
-      "watch_endpoints": 28705,
+      "watch_endpoints": 29109,
       "watch_levels": 8
     }
   },
   "om": {
     "clock_mhz": 300,
-    "config_hash": "da42656f70e9c1a2",
+    "config_hash": "c2014a358454d47a",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
     "dut": "om",
     "result": {
@@ -179,7 +180,8 @@
       "endpoints": 5192,
       "env": {
         "circt": "CIRCT 48b64cdd6",
-        "foldsim": "foldsim 2d08c7d4c",
+        "device": "xcu55c-fsvh2892-2L-e",
+        "foldsim": "foldsim 7c7a926f8",
         "xlen": 32
       },
       "fix_levels": 12,
@@ -190,7 +192,7 @@
         "om_core/mem_req_buf/g_ebN_fifo_queue": 11,
         "om_core/mem_req_buf/g_ebN_fifo_queue/g_depth_n_dp_ram": 8,
         "om_core/mem_req_buf/g_ebN_fifo_queue/pending_size": 11,
-        "om_core/om_blend/g_blend_multadd_*_blend_multadd": 9,
+        "om_core/om_blend/g_blend_multadd_*_blend_multadd": 10,
         "om_core/om_blend/g_blend_multadd_*_blend_multadd/pipe_reg": 12,
         "om_core/om_blend/pipe_reg1": 15,
         "om_core/om_ds/pipe_reg1": 9,
@@ -198,53 +200,54 @@
         "om_core/om_mem/landing_buf/g_ebN_fifo_queue": 8,
         "om_core/pending_reads": 11
       },
-      "watch_endpoints": 422,
+      "watch_endpoints": 550,
       "watch_levels": 8
     }
   },
   "raster": {
     "clock_mhz": 300,
-    "config_hash": "64018e85d4da26cb",
+    "config_hash": "17de72dd0ea2aab0",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
     "dut": "raster",
     "result": {
       "build_time_s": 5,
-      "deep_endpoints": 207,
+      "deep_endpoints": 257,
       "deepest_paths": [
+        "15  raster_core/raster_dcr/dcrs[0] -> raster_core/raster_mem/mem_req_addr.d[24]",
+        "15  raster_core/raster_dcr/dcrs[0] -> raster_core/raster_mem/mem_req_addr.d[25]",
+        "15  raster_core/raster_dcr/dcrs[0] -> raster_core/raster_mem/mem_req_addr.d[26]",
+        "15  raster_core/raster_dcr/dcrs[0] -> raster_core/raster_mem/mem_req_addr.d[27]",
+        "15  raster_core/raster_dcr/dcrs[0] -> raster_core/raster_mem/mem_req_addr.d[28]",
         "15  raster_core/raster_slices_0.raster_slice/tile_evaluator/tile_level[0] -> raster_core/raster_slices_0.raster_slice/tile_evaluator/pipe_reg/g_pipe.g_partial_reset.pipe_free.d[446]",
         "15  raster_core/raster_slices_0.raster_slice/tile_evaluator/tile_level[0] -> raster_core/raster_slices_0.raster_slice/tile_evaluator/pipe_reg/g_pipe.g_partial_reset.pipe_free.d[447]",
         "15  raster_core/raster_slices_0.raster_slice/tile_evaluator/tile_level[0] -> raster_core/raster_slices_0.raster_slice/tile_evaluator/pipe_reg/g_pipe.g_partial_reset.pipe_free.d[448]",
         "15  raster_core/raster_slices_0.raster_slice/tile_evaluator/tile_level[0] -> raster_core/raster_slices_0.raster_slice/tile_evaluator/pipe_reg/g_pipe.g_partial_reset.pipe_free.d[449]",
-        "15  raster_core/raster_slices_0.raster_slice/tile_evaluator/tile_level[0] -> raster_core/raster_slices_0.raster_slice/tile_evaluator/pipe_reg/g_pipe.g_partial_reset.pipe_free.d[450]",
-        "15  raster_core/raster_slices_0.raster_slice/tile_evaluator/tile_level[0] -> raster_core/raster_slices_0.raster_slice/tile_evaluator/pipe_reg/g_pipe.g_partial_reset.pipe_free.d[451]",
-        "15  raster_core/raster_slices_0.raster_slice/tile_evaluator/tile_level[0] -> raster_core/raster_slices_0.raster_slice/tile_evaluator/pipe_reg/g_pipe.g_partial_reset.pipe_free.d[452]",
-        "15  raster_core/raster_slices_0.raster_slice/tile_evaluator/tile_level[0] -> raster_core/raster_slices_0.raster_slice/tile_evaluator/pipe_reg/g_pipe.g_partial_reset.pipe_free.d[453]",
-        "15  raster_core/raster_slices_0.raster_slice/tile_evaluator/tile_level[0] -> raster_core/raster_slices_0.raster_slice/tile_evaluator/pipe_reg/g_pipe.g_partial_reset.pipe_free.d[478]",
-        "15  raster_core/raster_slices_0.raster_slice/tile_evaluator/tile_level[0] -> raster_core/raster_slices_0.raster_slice/tile_evaluator/pipe_reg/g_pipe.g_partial_reset.pipe_free.d[479]"
+        "15  raster_core/raster_slices_0.raster_slice/tile_evaluator/tile_level[0] -> raster_core/raster_slices_0.raster_slice/tile_evaluator/pipe_reg/g_pipe.g_partial_reset.pipe_free.d[450]"
       ],
       "endpoints": 13521,
       "env": {
         "circt": "CIRCT 48b64cdd6",
-        "foldsim": "foldsim 2d08c7d4c",
+        "device": "xcu55c-fsvh2892-2L-e",
+        "foldsim": "foldsim 7c7a926f8",
         "xlen": 32
       },
       "fix_levels": 12,
       "max_levels": 15,
       "units": {
         "raster_core/packer": 10,
-        "raster_core/raster_mem": 12,
+        "raster_core/raster_mem": 15,
         "raster_core/raster_slices_*_raster_slice/block_evaluator/pipe_reg": 9,
         "raster_core/raster_slices_*_raster_slice/block_evaluator/quad_evaluator/pipe_reg": 12,
         "raster_core/raster_slices_*_raster_slice/tile_evaluator/pipe_reg": 15,
         "raster_core/slice_req_arb/g_passthru_g_out_buf_*_out_buf/g_eb2_stream_buffer": 8
       },
-      "watch_endpoints": 921,
+      "watch_endpoints": 941,
       "watch_levels": 8
     }
   },
   "rtu": {
     "clock_mhz": 300,
-    "config_hash": "bc73bb4f5753282d",
+    "config_hash": "26cc90a49f973dab",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
     "dut": "rtu",
     "result": {
@@ -265,7 +268,8 @@
       "endpoints": 79526,
       "env": {
         "circt": "CIRCT 48b64cdd6",
-        "foldsim": "foldsim 2d08c7d4c",
+        "device": "xcu55c-fsvh2892-2L-e",
+        "foldsim": "foldsim 7c7a926f8",
         "xlen": 32
       },
       "fix_levels": 12,
@@ -295,7 +299,7 @@
   },
   "tex": {
     "clock_mhz": 300,
-    "config_hash": "63d6c9c022707b8a",
+    "config_hash": "83aa08bb1d2402db",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
     "dut": "tex",
     "result": {
@@ -316,7 +320,8 @@
       "endpoints": 102476,
       "env": {
         "circt": "CIRCT 48b64cdd6",
-        "foldsim": "foldsim 2d08c7d4c",
+        "device": "xcu55c-fsvh2892-2L-e",
+        "foldsim": "foldsim 7c7a926f8",
         "xlen": 32
       },
       "fix_levels": 12,

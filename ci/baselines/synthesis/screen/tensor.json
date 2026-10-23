@@ -1,12 +1,12 @@
 {
   "tcu": {
     "clock_mhz": 300,
-    "config_hash": "55534b7336b54af3",
+    "config_hash": "0998565fa51e3798",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_TCU_TYPE_TFR -DVX_CFG_TCU_FP16_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DVX_CFG_TCU_INT8_ENABLE -DVX_CFG_TCU_INT4_ENABLE -DVX_CFG_TCU_TF32_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE",
     "dut": "tcu",
     "result": {
-      "build_time_s": 25,
-      "deep_endpoints": 7880,
+      "build_time_s": 30,
+      "deep_endpoints": 7910,
       "deepest_paths": [
         "26  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[6]",
         "26  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[9]",
@@ -22,7 +22,8 @@
       "endpoints": 51412,
       "env": {
         "circt": "CIRCT 48b64cdd6",
-        "foldsim": "foldsim 2d08c7d4c",
+        "device": "xcu55c-fsvh2892-2L-e",
+        "foldsim": "foldsim 7c7a926f8",
         "xlen": 32
       },
       "fix_levels": 12,
@@ -31,7 +32,7 @@
         "tcu_shared/agu": 8,
         "tcu_shared/wgmma": 10,
         "tcu_shared/wgmma/lockstep": 10,
-        "tcu_shared/wgmma/tbuf/bbuf": 13,
+        "tcu_shared/wgmma/tbuf/bbuf": 19,
         "tcu_shared/wgmma/tbuf/g_abufs_*_abuf": 11,
         "tcu_shared/wgmma/tbuf/g_abufs_*_abuf/storage_ram": 26,
         "tcu_unit/g_blocks_*_tcu_block/tcu_core": 10,
@@ -54,12 +55,12 @@
   },
   "tensor": {
     "clock_mhz": 250,
-    "config_hash": "b221aafe9b30ca3f",
+    "config_hash": "3d51d00a8f947c2e",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
     "dut": "tensor",
     "result": {
       "build_time_s": 35,
-      "deep_endpoints": 16392,
+      "deep_endpoints": 16784,
       "deepest_paths": [
         "26  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[14]",
         "26  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[17]",
@@ -75,7 +76,8 @@
       "endpoints": 206376,
       "env": {
         "circt": "CIRCT 48b64cdd6",
-        "foldsim": "foldsim 2d08c7d4c",
+        "device": "xcu55c-fsvh2892-2L-e",
+        "foldsim": "foldsim 7c7a926f8",
         "xlen": 32
       },
       "fix_levels": 12,
@@ -102,9 +104,11 @@
         "dcache/g_core_arb_*_core_arb/req_arb/g_input_select_g_arbiter_g_out_buf_*_out_buf/g_eb2_stream_buffer": 9,
         "dcache/g_core_arb_*_g_core_arb_pending_core_arb_pending/pending": 14,
         "dxa_core/desc_table/desc_store": 9,
-        "dxa_core/g_workers_*_worker/addr_gen": 16,
+        "dxa_core/g_workers_*_worker/addr_gen": 17,
         "dxa_core/g_workers_*_worker/gmem_req": 9,
         "dxa_core/g_workers_*_worker/setup": 14,
+        "dxa_core/g_workers_*_worker/setup/mul_dlt/pipe_reg": 10,
+        "dxa_core/g_workers_*_worker/setup/mul_off/pipe_reg": 10,
         "dxa_core/g_workers_*_worker/smem_wr": 23,
         "dxa_core/g_workers_*_worker/watchdog": 9,
         "dxa_core/lmem_arb/req_arb/g_passthru_g_out_buf_*_out_buf/g_eb2_stream_buffer": 16,
@@ -135,7 +139,7 @@
         "g_cores_*_tcu_shared/agu": 12,
         "g_cores_*_tcu_shared/wgmma": 12,
         "g_cores_*_tcu_shared/wgmma/lockstep": 12,
-        "g_cores_*_tcu_shared/wgmma/tbuf/bbuf": 15,
+        "g_cores_*_tcu_shared/wgmma/tbuf/bbuf": 18,
         "g_cores_*_tcu_shared/wgmma/tbuf/bbuf/storage_a_ram": 20,
         "g_cores_*_tcu_shared/wgmma/tbuf/g_abufs_*_abuf": 15,
         "g_cores_*_tcu_shared/wgmma/tbuf/g_abufs_*_abuf/storage_ram": 26,
@@ -175,7 +179,7 @@
         "l2cache/g_cache_cache/g_banks_*_bank/reg_s0": 8,
         "l2cache/g_cache_cache/g_banks_*_bank/reg_s1": 10
       },
-      "watch_endpoints": 57574,
+      "watch_endpoints": 57638,
       "watch_levels": 8
     }
   }
