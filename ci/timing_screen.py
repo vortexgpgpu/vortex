@@ -172,11 +172,15 @@ def cmd_screen(args):
     asic = any(o == "family=asap7" for o in args.options)
     mapped = args.design
     steps = []
+    # MLIR maps modules in parallel: the full GPU maps in 53 s and 18 GB, or
+    # 107 s and 9 GB on one thread.
+    threads = ["--mlir-disable-threading"] if args.no_threads else []
     if not args.design.endswith(".mlirbc"):
         mapped = os.path.join(args.out, "mapped.mlirbc")
         pipeline = "foldsim-timing-map-asic" if asic else "foldsim-timing-map"
         steps.append(("map", [opt, args.design, "--emit-bytecode", "-o", mapped,
-                              "--pass-pipeline=builtin.module(%s)" % pipeline]))
+                              "--pass-pipeline=builtin.module(%s)" % pipeline]
+                      + threads))
     opts = " ".join(["output=%s/endpoints.csv" % args.out,
                      "instances=%s/instances.csv" % args.out,
                      "report=%s/report.txt" % args.out] + args.options)
@@ -459,6 +463,8 @@ def main():
     p.add_argument("options", nargs="*",
                    help="foldsim-estimate-timing options (top=, family=, black-boxes=, "
                    "trace=, retime-levels=, ...); family=asap7 maps for the ASIC library")
+    p.add_argument("--no-threads", action="store_true",
+                   help="map on one thread: half the peak memory, twice the time")
     p.set_defaults(fn=cmd_screen)
 
     p = sub.add_parser("summarize", help="deep end points by RTL unit")
