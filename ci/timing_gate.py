@@ -3,8 +3,8 @@
 
 Gates the depth of every RTL unit of the DUT catalog: foldsim-estimate-timing
 counts the logic levels of every register-to-register path of the CIRCT netlist
-the Xilinx flow elaborates, as Vivado counts them on the V80, without running
-Vivado. A unit that gets one level deeper than its baseline fails, by name, in
+the Xilinx flow elaborates, as Vivado counts them on DEVICE's family, without
+running Vivado. A unit that gets one level deeper than its baseline fails, by name, in
 seconds -- where ci/fpga_gate.py finds the Fmax it costs the next night. The
 gating machinery is shared with the synthesis gates and lives in
 ci/synth_gate.py; this entry point only pins the tool.
