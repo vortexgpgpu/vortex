@@ -498,6 +498,29 @@ public:
 
   // ----- Pipeline stages (private) -----
 
+  // Abort when a warp's staged instruction has not issued for STALL_TIMEOUT
+  // cycles, naming the registers it still waits on.
+  void check_issue_timeout(uint32_t iw, uint32_t wid, instr_trace_t* trace, instr_trace_t* uop_trace) {
+    uint64_t staged = std::max(last_issue_.at(wid), trace->ibuf_time);
+    uint64_t stall_cycles = SimPlatform::instance().cycles() - staged;
+    if (stall_cycles < VX_DBG_STALL_TIMEOUT) {
+      return;
+    }
+    std::cerr << "*** " << simobject_->name() << " issue timeout: wid=" << wid
+              << " (issue" << iw << "), PC=0x" << std::hex << uop_trace->PC << std::dec
+              << ", tmask=" << uop_trace->tmask << " (lane 0 first), cycles=" << stall_cycles
+              << ", inuse={";
+    if (scoreboard_->in_use(uop_trace)) {
+      auto uses = scoreboard_->get_uses(uop_trace);
+      for (uint32_t j = 0; j < uses.size(); ++j) {
+        auto& use = uses.at(j);
+        std::cerr << (j ? ", " : "") << use.reg_type << use.reg_id << " (#" << use.uuid << ")";
+      }
+    }
+    std::cerr << "}, " << *uop_trace << std::endl;
+    std::abort();
+  }
+
   void schedule() {
     // profiling
     perf_stats_.active_warps += scheduler_->active_warps().count();
@@ -813,6 +836,8 @@ public:
           uint64_t ready = std::max(staged_since_.at(wid), trace->ibuf_time) + 2;
           seq_starting = (SimPlatform::instance().cycles() < ready);
         }
+
+        this->check_issue_timeout(iw, wid, trace, uop_trace);
 
         if (scoreboard_->in_use(uop_trace)) {
           auto uses = scoreboard_->get_uses(uop_trace);
