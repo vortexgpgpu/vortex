@@ -170,6 +170,7 @@
 `define FORCE_BRAM(d,w) (((d) >= 64) && (((d) * (w)) >= 2048))
 `define FORCE_BUILTIN_ADDER(w)  ((w) <= 27)
 `define USE_BLOCK_BRAM  (* ramstyle = "block" *)
+`define USE_BLOCK_ROM   (* romstyle = "M20K" *)
 `define USE_FAST_BRAM   (* ramstyle = "MLAB, no_rw_check" *)
 `define NO_RW_RAM_CHECK (* altera_attribute = "-name add_pass_through_logic_to_inferred_rams off" *)
 `define RW_RAM_CHECK    (* altera_attribute = "-name add_pass_through_logic_to_inferred_rams on" *)
@@ -183,6 +184,7 @@
 `define FORCE_BRAM(d,w) (((d) >= 64) && (((d) * (w)) >= 2048))
 `define FORCE_BUILTIN_ADDER(w)  ((w) <= 27)
 `define USE_BLOCK_BRAM  (* ram_style = "block" *)
+`define USE_BLOCK_ROM   (* rom_style = "block" *)
 `define USE_FAST_BRAM   (* ram_style = "distributed" *)
 `define NO_RW_RAM_CHECK (* rw_addr_collision = "no" *)
 `define RW_RAM_CHECK    (* rw_addr_collision = "yes" *)
@@ -208,6 +210,7 @@
 `define FORCE_BRAM(d,w) (((d) >= 64) && (((d) * (w)) >= 2048))
 `define FORCE_BUILTIN_ADDER(w)  0
 `define USE_BLOCK_BRAM
+`define USE_BLOCK_ROM
 `define USE_FAST_BRAM
 `define NO_RW_RAM_CHECK
 `define RW_RAM_CHECK
@@ -221,6 +224,7 @@
 `define FORCE_BRAM(d,w) (((d) >= 64) && (((d) * (w)) >= 2048))
 `define FORCE_BUILTIN_ADDER(w)  ((w) <= 27)
 `define USE_BLOCK_BRAM
+`define USE_BLOCK_ROM
 `define USE_FAST_BRAM
 `define NO_RW_RAM_CHECK
 `define RW_RAM_CHECK

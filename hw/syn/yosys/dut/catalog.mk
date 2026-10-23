@@ -9,7 +9,7 @@
 # synthesizes, so both gates measure the same modules and a divergence between
 # them is meaningful rather than an artefact of two DUT lists.
 
-DUTS := cache core tcu gfx tex raster om rtu dxa vm tensor top vortex
+DUTS := cache core tcu gfx tex raster om rtu dxa mufu vm tensor top vortex
 
 UNITTEST_DIR ?= $(VORTEX_HOME)/hw/unittest
 AFU_RTL_DIR  ?= $(VORTEX_HOME)/hw/rtl/afu
@@ -59,6 +59,10 @@ rtu_CFG := -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_EXT_RTU_ENABLE
 dxa_TOP := VX_dxa_core_top
 dxa_INC := -I$(UNITTEST_DIR)/dxa_core
 dxa_CFG := -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_EXT_DXA_ENABLE
+
+mufu_TOP := VX_mufu_unit_top
+mufu_INC := -I$(UNITTEST_DIR)/mufu_unit
+mufu_CFG := -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_EXT_MUFU_ENABLE
 
 vm_TOP := VX_vm_top
 vm_INC := -I$(UNITTEST_DIR)/vm

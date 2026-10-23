@@ -214,6 +214,27 @@ A register **field** may also carry an immediate. The tensor instructions
 put formats and flags in `rd`, `rs1` and `rs2`; decode reads the field
 without reading a register.
 
+### Opcode map
+
+Allocated custom opcode space. Check here before claiming a slot, and update
+the table in the same change.
+
+| Opcode | Split by | Value | Extension | Format |
+|---|---|---|---|---|
+| custom-0 `0x0B` | `funct7` | `0x00` | warp control (`tmc`, `wspawn`, `split`, `join`, `bar`, `pred`, `wsync`) | R |
+| | | `0x01` | vote / shuffle | R |
+| | | `0x02` | tensor core (WMMA/WGMMA) | R |
+| | | `0x03` | DXA async copy | R |
+| | | `0x04` | packed loads (`vx_packl*`) | R |
+| custom-1 `0x2B` | `funct3` | `0` | `vx_wgather` | R4 |
+| | | `3` | `vx_om_export` | R4 |
+| | | `5` | `vx_tex` | R4 |
+| | | `6` | RTU hit window / callback return | R4 |
+| | | `7` | `vx_rt_trace`, `vx_rt_wait` | R4 |
+| | | `1`, `2`, `4` | free | |
+| custom-2 `0x5B` | `funct7` | `0x00` | MUFU special functions; `fn` in `rs2`, `fmt` in `funct3` | R |
+| custom-3 `0x7B` | | | free | |
+
 ---
 
 ## 4. How a wide-operand instruction executes
