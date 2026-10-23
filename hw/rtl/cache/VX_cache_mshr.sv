@@ -619,11 +619,27 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     assign allocate_id = allocate_id_r;
     assign allocate_previd = prev_idx;
 
+    // The probes below exclude the entry a replay frees this cycle, but
+    // dequeue_free resolves late (it waits on the bank's input arbitration and
+    // stall) and their results gate the bank's data array. Each reduction is
+    // therefore formed twice from early terms, without that entry and with it
+    // alone, and dequeue_free selects at the end.
+    wire [MSHR_SIZE-1:0] probe_base;
+    wire [MSHR_SIZE-1:0] dequeue_oh;
+    for (genvar i = 0; i < MSHR_SIZE; ++i) begin : g_probe_base
+        assign probe_base[i] = valid_table[i] && entry_match[i] && ~amo_mask[i]
+                            && ~(finalize_valid && finalize_is_release && (finalize_id == MSHR_ADDR_WIDTH'(i)));
+        assign dequeue_oh[i] = (dequeue_id == MSHR_ADDR_WIDTH'(i));
+    end
+    wire [MSHR_SIZE-1:0] probe_rest = probe_base & ~dequeue_oh;
+    wire [MSHR_SIZE-1:0] probe_deq  = probe_base & dequeue_oh;
+    `define MSHR_PROBE(mask) ((| (probe_rest & (mask))) || ((| (probe_deq & (mask))) && ~dequeue_free))
+
     if (WRITEBACK) begin : g_pending_wb
-        assign allocate_pending = |addr_matches;
+        assign allocate_pending = `MSHR_PROBE({MSHR_SIZE{1'b1}});
     end else begin : g_pending_wt
         // exclude write requests if writethrough
-        assign allocate_pending = |(addr_matches & ~write_table);
+        assign allocate_pending = `MSHR_PROBE(~write_table);
     end
 
     // Word-granular order-hazard probes. A chained entry only constrains a
@@ -638,10 +654,11 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     // yet. A same-word hit completing ahead of it would read pre-store data (or
     // a write-hit would be overwritten by the older store's replay), inverting
     // arrival order — the bank demotes such a hit to a chained miss.
-    assign allocate_pending_wr  = |(addr_matches & write_table & word_matches);
+    assign allocate_pending_wr  = `MSHR_PROBE(write_table & word_matches);
     // Any undrained same-word entry: an incoming WRITE hit must not land ahead
     // of an older chained read of the same word.
-    assign allocate_pending_ovl = |(addr_matches & word_matches);
+    assign allocate_pending_ovl = `MSHR_PROBE(word_matches);
+    `undef MSHR_PROBE
 
     assign dequeue_valid = dequeue_val && ~((LAZY_FETCH != 0) && dequeue_block);
     // Sampled with dequeue_id_n, alongside the payload in mshr_store, rather
