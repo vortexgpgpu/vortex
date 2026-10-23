@@ -112,6 +112,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     wire [NUM_REQS-1:0]                  wide_rsp_valid;
     wire [NUM_REQS-1:0][WORD_WIDTH-1:0]  wide_rsp_data;
     wire [NUM_REQS-1:0][TAG_WIDTH-1:0]   wide_rsp_tag;
+    `UNUSED_VAR (wide_hart_id) // read only by the reservation stage
 
     // bank selection
 

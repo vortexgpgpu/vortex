@@ -41,7 +41,7 @@ module VX_uop_packld import VX_gpu_pkg::*; (
     input wire [UOP_CTR_W-1:0] uop_idx,
     output wire [UOP_CTR_W-1:0] uop_count
 );
-    `UNUSED_VAR ({clk, reset, start, advance})
+    `UNUSED_VAR ({clk, reset, start, advance, uop_idx})
 
     // pack==1 → PACKLB: 4 byte-load uops;
     // pack==2 → PACKLH: 2 halfword-load uops
