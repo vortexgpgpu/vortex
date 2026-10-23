@@ -272,6 +272,7 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0][`CS_WORD_WIDTH-1:0]    per_bank_core_rsp_data;
     wire [NUM_BANKS-1:0][BANK_TAG_WIDTH-1:0]    per_bank_core_rsp_tag;
     wire [NUM_BANKS-1:0][REQ_SEL_WIDTH-1:0]     per_bank_core_rsp_idx;
+    wire [NUM_BANKS-1:0][NUM_REQS-1:0]          per_bank_core_rsp_targets;
     wire [NUM_BANKS-1:0]                        per_bank_core_rsp_ready;
     wire [NUM_BANKS-1:0]                        per_bank_mem_req_valid;
     wire [NUM_BANKS-1:0][`CS_LINE_SECTOR_ADDR_WIDTH-1:0] per_bank_mem_req_addr;
@@ -451,6 +452,7 @@ module VX_cache import VX_gpu_pkg::*; #(
             .MRSQ_SIZE    (MRSQ_SIZE),
             .MREQ_SIZE    (MREQ_SIZE),
             .LATENCY      (LATENCY),
+            .MERGE_GROUP  (DO_READ_MERGE ? MERGE_GROUP : 0),
             .TAG_WIDTH    (BANK_TAG_WIDTH),
             .CORE_OUT_BUF (CORE_RSP_BUF_ENABLE ? 3 : 0),
             .MEM_OUT_BUF  (MEM_REQ_BUF_ENABLE ? 3 : 0),
@@ -479,6 +481,7 @@ module VX_cache import VX_gpu_pkg::*; #(
             .core_rsp_data      (per_bank_core_rsp_data[bank_id]),
             .core_rsp_tag       (per_bank_core_rsp_tag[bank_id]),
             .core_rsp_idx       (per_bank_core_rsp_idx[bank_id]),
+            .core_rsp_targets   (per_bank_core_rsp_targets[bank_id]),
             .core_rsp_ready     (per_bank_core_rsp_ready[bank_id]),
             .mem_req_valid      (per_bank_mem_req_valid[bank_id]),
             .mem_req_addr       (per_bank_mem_req_addr[bank_id]),
@@ -531,21 +534,20 @@ module VX_cache import VX_gpu_pkg::*; #(
         // A merged read's response goes to its leader's port and to every
         // merged port: each output takes it when its arbiter grants it, and the
         // bank's response is released once all its targets have taken it.
-        localparam GROUP_BITS = `CLOG2(MERGE_GROUP);
+        // the targets carry the port index
+        `UNUSED_VAR (core_rsp_xbar_idx)
         wire [NUM_BANKS-1:0][NUM_REQS-1:0] lane_pending;
         wire [NUM_BANKS-1:0][NUM_REQS-1:0] lane_taken;
         wire [NUM_REQS-1:0][NUM_BANKS-1:0] per_output_valid;
         wire [NUM_REQS-1:0][NUM_BANKS-1:0] per_output_ready;
         for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_lanes
-            wire [MERGE_GROUP-1:0] merged_mask;
-            if (i == 0) begin : g_flush_mask
-                assign merged_mask = per_bank_core_rsp_valid[0] ? per_bank_core_rsp_tag[0][MERGE_GROUP-1:0] : '0;
-            end else begin : g_bank_mask
-                assign merged_mask = per_bank_core_rsp_tag[i][MERGE_GROUP-1:0];
+            wire [NUM_REQS-1:0] targets;
+            if (i == 0) begin : g_flush_targets
+                assign targets = per_bank_core_rsp_valid[0] ? per_bank_core_rsp_targets[0]
+                                                           : (NUM_REQS'(1) << flush_rsp_idx);
+            end else begin : g_bank_targets
+                assign targets = per_bank_core_rsp_targets[i];
             end
-            wire [REQ_SEL_WIDTH-1:0] group_base = (core_rsp_xbar_idx[i] >> GROUP_BITS) << GROUP_BITS;
-            wire [NUM_REQS-1:0] targets = (NUM_REQS'(1) << core_rsp_xbar_idx[i])
-                                        | (NUM_REQS'(merged_mask) << group_base);
             reg [NUM_REQS-1:0] sent_r;
             assign lane_pending[i] = targets & ~sent_r & {NUM_REQS{core_rsp_xbar_valid[i]}};
             for (genvar j = 0; j < NUM_REQS; ++j) begin : g_taken
@@ -581,6 +583,7 @@ module VX_cache import VX_gpu_pkg::*; #(
             );
         end
     end else begin : g_core_rsp_xbar
+        `UNUSED_VAR (per_bank_core_rsp_targets)
         VX_stream_omega #(
             .NUM_INPUTS  (NUM_BANKS),
             .NUM_OUTPUTS (NUM_REQS),
