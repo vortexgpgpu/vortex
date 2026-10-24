@@ -2659,6 +2659,15 @@ public:
     , join_rr_(num_outputs, slices_ - 1)
     , tree_stage_((slices_ > 1) ? num_outputs * slices_ : 0, this)
   {
+    // Over more than two ports a response stage with a registered ready sits
+    // between each bank and the merged response arbiters.
+    if (num_outputs > 2) {
+      stage_.reserve(num_banks);
+      for (uint32_t b = 0; b < num_banks; ++b) {
+        stage_.emplace_back(this, 2);
+        stage_.back().set_registered_ready(true);
+      }
+    }
     __assert(num_outputs <= 64 && merge_group < 64, "the read-merge response network takes at most 64 ports");
     __assert(arb_tree_levels(num_banks).size() <= 1, "the read-merge response network takes one tree level");
   }
@@ -2692,13 +2701,20 @@ protected:
     for (auto& stage : tree_stage_) {
       idle &= (stage.size() == 0);
     }
+    for (auto& stage : stage_) {
+      idle &= (stage.size() == 0);
+    }
+    for (uint32_t b = 0; b < nb && !stage_.empty(); ++b) {
+      idle &= RspIn.at(b).empty();
+    }
     std::vector<uint64_t> pending(nb, 0);
     for (uint32_t b = 0; b < nb; ++b) {
-      if (RspIn.at(b).empty()) {
+      auto& head = this->head(b);
+      if (head.empty()) {
         continue;
       }
       idle = false;
-      auto tag = RspIn.at(b).peek().tag;
+      auto tag = head.peek().tag;
       uint32_t port = tag & ((1u << lg2_outputs_) - 1);
       uint64_t mask = (tag >> lg2_outputs_) & ((1ull << merge_group_) - 1);
       uint64_t targets = (1ull << port) | (mask << ((port / merge_group_) * merge_group_));
@@ -2719,7 +2735,7 @@ protected:
           if (b < lo || b >= hi || !(pending.at(b) & (1ull << o))) {
             continue;
           }
-          auto rsp = RspIn.at(b).peek();
+          auto rsp = this->head(b).peek();
           rsp.tag >>= (lg2_outputs_ + merge_group_);
           if (out.try_send(rsp, (slices_ > 1) ? 1 : 0)) {
             DT(4, this->name() << " rsp" << b << "_" << o << ": " << rsp);
@@ -2732,10 +2748,23 @@ protected:
     }
     for (uint32_t b = 0; b < nb; ++b) {
       if (pending.at(b) != 0 && (pending.at(b) & ~sent_.at(b)) == 0) {
-        RspIn.at(b).pop();
+        this->head(b).pop();
         sent_.at(b) = 0;
       }
     }
+    // the stage takes each bank's next response, visible a cycle later
+    for (uint32_t b = 0; b < nb && !stage_.empty(); ++b) {
+      auto& stage = stage_.at(b);
+      if (!RspIn.at(b).empty() && !stage.full()) {
+        stage.send(RspIn.at(b).peek(), 1);
+        RspIn.at(b).pop();
+      }
+    }
+  }
+
+  // a bank's response at the arbiters: its stage, or the bank itself
+  SimChannel<MemRsp>& head(uint32_t b) {
+    return stage_.empty() ? RspIn.at(b) : stage_.at(b);
   }
 
 private:
@@ -2747,6 +2776,7 @@ private:
   std::vector<uint32_t> last_grant_; // [port][slice] round-robin pointer
   std::vector<uint32_t> join_rr_;    // [port]
   std::vector<SimChannel<MemRsp>> tree_stage_; // [port][slice]
+  std::vector<SimChannel<MemRsp>> stage_;      // [bank] response stage
 
   friend class SimObject<CacheRspMcast>;
 };

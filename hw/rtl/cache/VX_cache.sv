@@ -109,6 +109,11 @@ module VX_cache import VX_gpu_pkg::*; #(
     // the bank arbitration on the stage, two short handshake loops instead of
     // one through both.
     localparam CORE_REQ_STAGE  = (NUM_REQS > 2);
+    // The response side mirrors it: with read merging, a response is released
+    // only once every port it targets has taken it, so a stage with its own
+    // registered ready sits between the bank response queues and the merged
+    // response arbiters, keeping that release off the queues' registers.
+    localparam CORE_RSP_STAGE  = DO_READ_MERGE && (NUM_REQS > 2);
     localparam CORE_RSP_BUF_ENABLE = (NUM_BANKS != 1) || (NUM_REQS != 1);
     localparam MEM_REQ_BUF_ENABLE = (NUM_BANKS != 1);
     `STATIC_ASSERT(!DO_READ_MERGE || (`IS_POW2(MERGE_GROUP) && `IS_DIVISBLE(NUM_REQS, MERGE_GROUP)), ("invalid parameter: read merge group"))
@@ -276,6 +281,13 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0][REQ_SEL_WIDTH-1:0]     per_bank_core_rsp_idx;
     wire [NUM_BANKS-1:0][NUM_REQS-1:0]          per_bank_core_rsp_targets;
     wire [NUM_BANKS-1:0]                        per_bank_core_rsp_ready;
+    // the banks' own response outputs, ahead of the response stage
+    wire [NUM_BANKS-1:0]                        bank_core_rsp_valid;
+    wire [NUM_BANKS-1:0][`CS_WORD_WIDTH-1:0]    bank_core_rsp_data;
+    wire [NUM_BANKS-1:0][BANK_TAG_WIDTH-1:0]    bank_core_rsp_tag;
+    wire [NUM_BANKS-1:0][REQ_SEL_WIDTH-1:0]     bank_core_rsp_idx;
+    wire [NUM_BANKS-1:0][NUM_REQS-1:0]          bank_core_rsp_targets;
+    wire [NUM_BANKS-1:0]                        bank_core_rsp_ready;
     wire [NUM_BANKS-1:0]                        per_bank_mem_req_valid;
     wire [NUM_BANKS-1:0][`CS_LINE_SECTOR_ADDR_WIDTH-1:0] per_bank_mem_req_addr;
     wire [NUM_BANKS-1:0]                        per_bank_mem_req_rw;
@@ -513,12 +525,12 @@ module VX_cache import VX_gpu_pkg::*; #(
             .core_req_idx       (per_bank_core_req_idx[bank_id]),
             .core_req_attr      (per_bank_core_req_attr[bank_id]),
             .core_req_ready     (per_bank_core_req_ready[bank_id]),
-            .core_rsp_valid     (per_bank_core_rsp_valid[bank_id]),
-            .core_rsp_data      (per_bank_core_rsp_data[bank_id]),
-            .core_rsp_tag       (per_bank_core_rsp_tag[bank_id]),
-            .core_rsp_idx       (per_bank_core_rsp_idx[bank_id]),
-            .core_rsp_targets   (per_bank_core_rsp_targets[bank_id]),
-            .core_rsp_ready     (per_bank_core_rsp_ready[bank_id]),
+            .core_rsp_valid     (bank_core_rsp_valid[bank_id]),
+            .core_rsp_data      (bank_core_rsp_data[bank_id]),
+            .core_rsp_tag       (bank_core_rsp_tag[bank_id]),
+            .core_rsp_idx       (bank_core_rsp_idx[bank_id]),
+            .core_rsp_targets   (bank_core_rsp_targets[bank_id]),
+            .core_rsp_ready     (bank_core_rsp_ready[bank_id]),
             .mem_req_valid      (per_bank_mem_req_valid[bank_id]),
             .mem_req_addr       (per_bank_mem_req_addr[bank_id]),
             .mem_req_rw         (per_bank_mem_req_rw[bank_id]),
@@ -537,6 +549,32 @@ module VX_cache import VX_gpu_pkg::*; #(
             .flush_end          (per_bank_flush_end[bank_id])
         );
     end
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_core_rsp_stage
+        if (CORE_RSP_STAGE) begin : g_stage
+            VX_elastic_buffer #(
+                .DATAW   (`CS_WORD_WIDTH + BANK_TAG_WIDTH + REQ_SEL_WIDTH + NUM_REQS),
+                .SIZE    (2),
+                .OUT_REG (0)
+            ) rsp_stage (
+                .clk       (clk),
+                .reset     (reset),
+                .valid_in  (bank_core_rsp_valid[i]),
+                .ready_in  (bank_core_rsp_ready[i]),
+                .data_in   ({bank_core_rsp_data[i], bank_core_rsp_tag[i], bank_core_rsp_idx[i], bank_core_rsp_targets[i]}),
+                .data_out  ({per_bank_core_rsp_data[i], per_bank_core_rsp_tag[i], per_bank_core_rsp_idx[i], per_bank_core_rsp_targets[i]}),
+                .valid_out (per_bank_core_rsp_valid[i]),
+                .ready_out (per_bank_core_rsp_ready[i])
+            );
+        end else begin : g_direct
+            assign per_bank_core_rsp_valid[i]   = bank_core_rsp_valid[i];
+            assign per_bank_core_rsp_data[i]    = bank_core_rsp_data[i];
+            assign per_bank_core_rsp_tag[i]     = bank_core_rsp_tag[i];
+            assign per_bank_core_rsp_idx[i]     = bank_core_rsp_idx[i];
+            assign per_bank_core_rsp_targets[i] = bank_core_rsp_targets[i];
+            assign bank_core_rsp_ready[i]       = per_bank_core_rsp_ready[i];
+        end
+    end
+
     wire [NUM_REQS-1:0]                  core_rsp_valid;
     wire [NUM_REQS-1:0][CORE_RSP_DATAW-1:0] core_rsp_pdata;
     wire [NUM_REQS-1:0]                  core_rsp_ready;
