@@ -9,6 +9,8 @@ this collapses the table into what it compares:
                       above the fix and watch thresholds, and all end points
   screen_units.json   the deepest end point of every unit at or above the
                       watch threshold, and the deepest paths (diagnostics)
+  screen_paths.txt    if the screen wrote paths.jsonl: every path at or above
+                      the watch threshold, op by op, by unit (write_paths)
 
 A unit is an end point's instance path with generate indices folded
 (g_banks_3_bank -> g_banks_*_bank), so one deep bank reads as one unit.
@@ -121,6 +123,77 @@ def main():
     print("screen: %s max %d levels, %d end point bits >= %d, %d units >= %d"
           % (args.top, summary["max_levels"], summary["deep_endpoints"],
              FIX_LEVELS, len(units), WATCH_LEVELS))
+    if os.path.exists(os.path.join(args.screen, "paths.jsonl")):
+        with open(os.path.join(args.output_dir, "screen_paths.txt"), "w") as fh:
+            n, u = write_paths(fh, args.screen, WATCH_LEVELS, paths=paths)
+        print("screen: %d paths >= %d levels in %d units -> screen_paths.txt"
+              % (n, WATCH_LEVELS, u))
+
+
+def fold(name):
+    return INDEX.sub("_*", norm(name))
+
+
+def write_paths(out, screen, min_levels, unit_filter=None, paths=None):
+    """Write the screen's deep paths (paths.jsonl) by unit, op by op.
+
+    The screen lists one path per pair of start and end registers; this folds
+    the pairs whose names differ only in generate indices and bits, as units
+    fold them, keeping the deepest. Returns (paths, units) written.
+    """
+    if paths is None:
+        paths = instance_paths(os.path.join(screen, "instances.csv"))
+
+    def full(ctx, name):
+        return "%s/%s" % (paths[ctx], name) if paths[ctx] else name
+
+    units = collections.defaultdict(dict)
+    with open(os.path.join(screen, "paths.jsonl")) as fh:
+        for line in fh:
+            p = json.loads(line)
+            if p["levels"] < min_levels:
+                continue
+            start = full(p["start_inst"], p["start"])
+            end = full(p["end_inst"], p["end"])
+            u = unit(end)
+            if unit_filter and unit_filter not in u:
+                continue
+            group = units[u]
+            key = (fold(start), fold(end))
+            if key in group:
+                group[key]["copies"] += 1
+                group[key]["bits"] += p["bits"]
+            else:
+                group[key] = {"path": p, "copies": 1, "bits": p["bits"],
+                              "start": start, "end": end}
+
+    def deepest(u):
+        return max(g["path"]["levels"] for g in units[u].values())
+
+    order = sorted(units, key=lambda u: (-deepest(u), u))
+    count = sum(len(g) for g in units.values())
+    out.write("%d paths at or above %d levels in %d units, deepest unit "
+              "first.\n" % (count, min_levels, len(units)))
+    out.write("A path is its deepest end point bit, op by op from the end "
+              "point back to its\nstart: levels, kind, fanout, source line, "
+              "instance/name. Bits of the same pair\nof registers, and "
+              "generate copies (_0, _1, ...), are folded into it.\n")
+    for u in order:
+        group = sorted(units[u].values(), key=lambda g: -g["path"]["levels"])
+        out.write("\n== %s: %d levels, %d paths\n" % (u, deepest(u),
+                                                       len(group)))
+        for g in group:
+            p = g["path"]
+            retimed = (", %d after retiming" % p["retimed"]
+                       if p["retimed"] != p["levels"] else "")
+            copies = " in %d copies" % g["copies"] if g["copies"] > 1 else ""
+            out.write("\n  %d levels%s, %d %s bits%s\n  from %s\n  to   %s\n"
+                      % (p["levels"], retimed, g["bits"], p["kind"], copies,
+                         g["start"], g["end"]))
+            for levels, kind, fanout, ctx, name, source in p["ops"]:
+                out.write("    %4d %-6s fo %-5d %-24s %s\n"
+                          % (levels, kind, fanout, source, full(ctx, name)))
+    return count, len(units)
 
 
 if __name__ == "__main__":

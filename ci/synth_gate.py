@@ -156,6 +156,10 @@ class Tool:
         fails."""
         return []
 
+    def evidence(self, work):
+        """Files of a finished build that explain its reasons."""
+        return []
+
     def incomplete(self, metrics):
         """Whether a cached result predates something this tool now records.
 
@@ -494,6 +498,7 @@ class Screen(Tool):
     error_re = re.compile(r"^(?:ERROR|FATAL|Error)\b|: error:|^\S+: \*\*\* ")
 
     UNITS = "screen_units.json"
+    PATHS = "screen_paths.txt"
 
     def env(self, args):
         return {"circt": tool_version("circt-verilog", "--version",
@@ -573,6 +578,12 @@ class Screen(Tool):
                                   "improvement, update the baseline to lock "
                                   "it in"))
         return reasons
+
+    def evidence(self, work):
+        # Every unit at or above the watch threshold, its paths op by op: a
+        # failing unit is a heading there.
+        path = os.path.join(work, self.PATHS)
+        return [path] if os.path.exists(path) else []
 
     def describe(self, m):
         return "max %d levels, %d end points >= %s" % (
@@ -992,6 +1003,18 @@ def save_stamp(work, chash, status, stamp_file, metrics=None):
         fh.write("\n")
 
 
+def build_work(build, build_dir, tool):
+    """A build's work directory.
+
+    Unique PREFIX per build id: its own build tree and its own log, so parallel
+    builds (and other synthesis runs on this machine) cannot collide. It is
+    also what keeps the Yosys flow's cached $(BUILD_DIR)/src from serving one
+    DUT's sources to the next.
+    """
+    return tool.work_dir(tool.dut_root(build_dir), tool.gate + "_" + build["id"],
+                         build)
+
+
 def run_build(build, build_dir, env, args, tool):
     """Synthesize one DUT; return its metrics. Raises BuildError on failure."""
     dut_root = tool.dut_root(build_dir)
@@ -999,12 +1022,7 @@ def run_build(build, build_dir, env, args, tool):
         raise BuildError("no DUT target '%s' in %s/catalog.mk"
                          % (build["dut"], dut_root))
 
-    # Unique PREFIX per build id: its own build tree and its own log, so parallel
-    # builds (and other synthesis runs on this machine) cannot collide. It is
-    # also what keeps the Yosys flow's cached $(BUILD_DIR)/src from serving one
-    # DUT's sources to the next.
-    prefix = tool.gate + "_" + build["id"]
-    work = tool.work_dir(dut_root, prefix, build)
+    work = build_work(build, build_dir, tool)
     stamp_file = tool.gate + ".json"
     chash = config_hash(build, env, tool)
 
@@ -1108,14 +1126,17 @@ def run_all(builds, build_dir, env, args, tool):
                    for b in order}
         for fut in concurrent.futures.as_completed(futures):
             b = futures[fut]
+            work = build_work(b, build_dir, tool)
             try:
                 metrics = fut.result()
                 say(b, "done", "%s  (%dm)" % (tool.describe(metrics),
                                               metrics["build_time_s"] // 60))
-                results.append({"build": b, "metrics": metrics, "error": None})
+                results.append({"build": b, "metrics": metrics, "error": None,
+                                "work": work})
             except (BuildError, subprocess.CalledProcessError) as e:
                 say(b, "FAIL", str(e))
-                results.append({"build": b, "metrics": None, "error": str(e)})
+                results.append({"build": b, "metrics": None, "error": str(e),
+                                "work": work})
     return sorted(results, key=lambda r: r["build"]["id"])
 
 
@@ -1271,10 +1292,15 @@ def report(results, env, args, gated, tool, record=False):
                       + tuple(cell(c[1], c[2]) for c in tool.columns))
               + " %5dm  %s" % (m["build_time_s"] // 60, verdict))
 
+    works = {r["build"]["id"]: r.get("work") for r in results}
     for bid, verdict, reasons in failures:
         print("\n%s: %s" % (bid, verdict))
         for reason in reasons:
             print("  - %s" % reason)
+        if works.get(bid) and verdict not in ("BUILD-FAIL", "STALE",
+                                              "NO-BASELINE"):
+            for path in tool.evidence(works[bid]):
+                print("  see %s" % path)
     return failures
 
 

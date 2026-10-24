@@ -363,8 +363,8 @@ screen has profiles for the V80 and the U55C only, and fails on any other
 There is no tolerance: the same RTL and tools give the same levels. A new CIRCT
 or foldsim can map the same RTL differently, so both versions are in the config
 hash and a tool change reads `STALE`. `make -C hw/syn/xilinx/dut <dut>-screen`
-runs one screen by hand; its `screen/report.txt` prints the deepest paths op by
-op.
+runs one screen by hand; its `screen_paths.txt` lists every deep path op by op,
+by unit, with source lines, and a failing build names it.
 
 #### Running a multi-hour sweep
 

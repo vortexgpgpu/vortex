@@ -110,12 +110,13 @@
   <text x="645" y="594" class="ts">DSP absorbs (with its enable logic)</text>
   <text x="645" y="612" class="ts">optional retime-levels=: one-hop balancing</text>
 
-  <rect x="1010" y="514" width="350" height="110" class="mem"/>
+  <rect x="1010" y="514" width="350" height="128" class="mem"/>
   <text x="1025" y="536" class="t">Report</text>
   <text x="1025" y="558" class="ts">walk worst predecessors back to the start:</text>
   <text x="1025" y="576" class="ts">start, largest fanout, module crossings;</text>
-  <text x="1025" y="594" class="ts">histogram; top-paths and trace= op by op</text>
-  <text x="1025" y="612" class="ts">endpoints.csv, instances.csv, report.txt</text>
+  <text x="1025" y="594" class="ts">histogram; top-paths and trace= op by op;</text>
+  <text x="1025" y="612" class="ts">paths=: each deep register pair, op by op</text>
+  <text x="1025" y="630" class="ts">endpoints.csv, instances.csv, report.txt</text>
 
   <rect x="630" y="646" width="730" height="88" class="box"/>
   <text x="645" y="668" class="t">Device profiles (family=): the FPGAs differ only in their DSPs</text>
