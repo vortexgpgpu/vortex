@@ -5,7 +5,8 @@
     "VX_CFG_NUM_WARPS": 64,
     "VX_CFG_NUM_THREADS": 32,
     "VX_CFG_ISSUE_WIDTH": 4,
-    "VX_CFG_DCACHE_SIZE": 131072
+    "VX_CFG_DCACHE_SIZE": 131072,
+    "VX_CFG_FETCH_WIDTH": 4
   },
   "chip": {
     "VX_CFG_NUM_CLUSTERS": 1,
@@ -13,7 +14,8 @@
     "VX_CFG_L2_ENABLE": true,
     "VX_CFG_L2_SIZE": 33554432,
     "VX_CFG_L2_NUM_WAYS": 16,
-    "VX_CFG_L2_NUM_BANKS": 32
+    "VX_CFG_L2_NUM_BANKS": 32,
+    "VX_CFG_CP_LLC_CLIENT": 1
   },
   "platform": {
     "VX_CFG_PLATFORM_MEMORY_NUM_BANKS": 32,
@@ -30,6 +32,8 @@
     "L2_SIZE, L2_NUM_WAYS, L2_NUM_BANKS": "40 MB L2 in 80 slices (whitepaper), rounded down to 32 MB and 32 banks; 16 ways as in GPGPU-Sim's SM80_A100 dl2",
     "PLATFORM_MEMORY_TYPE, PLATFORM_MEMORY_NUM_BANKS, PLATFORM_MEMORY_DATA_RATE": "5 HBM2 stacks x 8 128-bit channels = 40 channels at 2430 MT/s, modelled as 32 channels at 3038 MT/s for a power-of-two interleave: 32 x 16 B x 3038 MT/s = 1555 GB/s, the card's bandwidth; the array timing is in nanoseconds, so latency is unchanged",
     "PLATFORM_MEMORY_LATENCY, PLATFORM_MEMORY_QUEUE_SIZE": "Fixed DRAM latency and per-channel request queue of GPGPU-Sim's SM80_A100 configuration (accel-sim gpu-simulator/configs/tested-cfgs/SM80_A100/gpgpusim.config)",
-    "PLATFORM_CLOCK_RATE, PLATFORM_MEMORY_PEAK_BW": "1410 MHz boost clock, 1555 GB/s (whitepaper, Table 3)"
+    "PLATFORM_CLOCK_RATE, PLATFORM_MEMORY_PEAK_BW": "1410 MHz boost clock, 1555 GB/s (whitepaper, Table 3)",
+    "FETCH_WIDTH": "4 SM processing blocks, each with its own warp scheduler, dispatch unit and L0 instruction cache (NVIDIA A100 Tensor Core GPU Architecture whitepaper)",
+    "CP_LLC_CLIENT": "Host copies reach device memory through the L2 like every other client, so uploaded data is L2-resident at launch"
   }
 }
