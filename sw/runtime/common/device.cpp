@@ -1237,7 +1237,7 @@ vx_result_t Device::memory_info(uint64_t* out_free, uint64_t* out_used) {
 
 vx_result_t Device::query_caps(uint32_t caps_id, uint64_t* out_value) {
     if (!out_value) return VX_ERR_INVALID_VALUE;
-    // The two static caps words are read once from the CP regfile caps
+    // The static caps words are read once from the CP regfile caps
     // window; serialize the load against concurrent cp_reg_* traffic.
     if (!caps_loaded_) {
         std::lock_guard<std::mutex> g(cp_mu_);
@@ -1245,12 +1245,12 @@ vx_result_t Device::query_caps(uint32_t caps_id, uint64_t* out_value) {
             auto rd = [this](uint32_t off, uint32_t* v) -> int {
                 return platform_->cp_reg_read(off, v) == VX_SUCCESS ? 0 : -1;
             };
-            if (vortex::load_caps(rd, &dev_caps_, &isa_caps_) != 0)
+            if (vortex::load_caps(rd, &dev_caps_, &dev_caps_ext_, &isa_caps_) != 0)
                 return VX_ERR_DEVICE_LOST;
             caps_loaded_ = true;
         }
     }
-    if (vortex::decode_caps(dev_caps_, isa_caps_, caps_id, out_value))
+    if (vortex::decode_caps(dev_caps_, dev_caps_ext_, isa_caps_, caps_id, out_value))
         return VX_SUCCESS;
     // Caps not encoded in the CP words — platform/runtime constants.
     switch (caps_id) {

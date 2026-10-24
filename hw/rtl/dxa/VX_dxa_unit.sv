@@ -59,10 +59,8 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     // Build dxa_req payload
     dxa_req_data_t dxa_req_data_in;
-    assign dxa_req_data_in.core_id   = NC_WIDTH'(core_id);
-    if (CORE_ID_WIDTH > NC_WIDTH) begin : g_core_id_hi_unused
-        `UNUSED_VAR (core_id[CORE_ID_WIDTH-1:NC_WIDTH])
-    end
+    // cluster-local core index
+    assign dxa_req_data_in.core_id   = NC_WIDTH'(core_id % `VX_CFG_NUM_CORES);
     assign dxa_req_data_in.uuid      = execute_if.data.header.uuid;
     assign dxa_req_data_in.wid       = execute_if.data.header.wid;
     assign dxa_req_data_in.smem_addr = lmem_rel_byte_addr[DXA_SMEM_ADDR_W-1:0];

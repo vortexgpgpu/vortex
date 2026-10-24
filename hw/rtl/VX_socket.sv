@@ -78,7 +78,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     VX_kmu_bus_arb #(
         .NUM_INPUTS (1),
         .NUM_OUTPUTS (`VX_CFG_SOCKET_SIZE),
-        .DEST_LSB   (KMU_DEST_LSB_SOCKET),
+        .DEST_DIV   (KMU_DEST_DIV_SOCKET),
         .OUT_BUF    ((`VX_CFG_SOCKET_SIZE > 1) ? 3 : 0)
     ) kmu_arb (
         .clk        (clk),
@@ -727,9 +727,9 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
         `UNUSED_PIN (busy)
     );
 
-    // Route DXA lmem requests to per-core buses using core_local_id from tag.
-    // Tag value layout: {core_id[NC_BITS-1:0], engine_value[0]}
-    // core_local_id = core_id[CORE_LOCAL_BITS-1:0]
+    // Route DXA lmem requests to per-core buses by the core named in the tag.
+    // Tag value layout: {core_id[NC_BITS-1:0], engine_value[0]}, core_id being
+    // the cluster-local index, so the core within this socket is core_id % SOCKET_SIZE.
     localparam DXA_LMEM_CORE_LOCAL_BITS = `CLOG2(`VX_CFG_SOCKET_SIZE);
     VX_mem_bus_if #(
         .DATA_SIZE   (DXA_LMEM_WORD_SIZE),
@@ -740,7 +740,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
 
     wire [`UP(DXA_LMEM_CORE_LOCAL_BITS)-1:0] dxa_lmem_core_sel;
     if (`VX_CFG_SOCKET_SIZE > 1) begin : g_dxa_lmem_sel
-        assign dxa_lmem_core_sel = dxa_lmem_bus_if[0].req_data.tag.value[1 +: DXA_LMEM_CORE_LOCAL_BITS];
+        assign dxa_lmem_core_sel = DXA_LMEM_CORE_LOCAL_BITS'(dxa_lmem_bus_if[0].req_data.tag.value[1 +: NC_BITS] % `VX_CFG_SOCKET_SIZE);
     end else begin : g_dxa_lmem_sel
         assign dxa_lmem_core_sel = '0;
     end

@@ -155,8 +155,9 @@ package VX_gpu_pkg;
     // table keys on hart_id = make_hart_id(cid, wid, tid).
     // MINU/MAXU collapse into MIN/MAX + amo_unsigned.
 
-    // make_hart_id(cid, wid, tid) — packed concatenation, low bits = tid.
-    localparam HART_ID_BITS = NC_BITS + NW_BITS + NT_BITS;
+    // make_hart_id(cid, wid, tid) — packed concatenation, low bits = tid; cid is
+    // device-wide, so harts of different clusters stay distinct at a shared LLC.
+    localparam HART_ID_BITS = CORE_ID_BITS + NW_BITS + NT_BITS;
     localparam HART_ID_WIDTH = `UP(HART_ID_BITS);
 
     // ───────────────────────────────────────────────────────────────────────
@@ -944,16 +945,17 @@ package VX_gpu_pkg;
     // Placement hint: the global index of the core a fragment launch must land
     // on. Fragment work is bin->core affine (that is what makes same-pixel blend
     // order safe), so a fragment message cannot be load-balanced like a compute
-    // CTA. Each fan-out level consumes its own slice of this index, LSB first:
-    // core-in-socket, then socket-in-cluster, then cluster (see KMU_DEST_LSB_*).
+    // CTA. Each fan-out level picks its output as (dest / DIV) % NUM_OUTPUTS,
+    // where DIV is the number of cores below each of its outputs: core-in-socket,
+    // then socket-in-cluster, then cluster (see KMU_DEST_DIV_*).
     // Device-wide, so the hint can name any core: VX_CFG_NUM_CORES is per-cluster.
     // `UP` so a single-core build still has a 1-bit (unused) hint rather than a
     // zero-width vector.
     localparam KMU_DEST_W = `UP(`CLOG2(`VX_CFG_NUM_CLUSTERS * `VX_CFG_NUM_CORES));
 
-    localparam KMU_DEST_LSB_SOCKET  = 0;
-    localparam KMU_DEST_LSB_CLUSTER = `CLOG2(`VX_CFG_SOCKET_SIZE);
-    localparam KMU_DEST_LSB_DEVICE  = KMU_DEST_LSB_CLUSTER + `CLOG2(NUM_SOCKETS);
+    localparam KMU_DEST_DIV_SOCKET  = 1;
+    localparam KMU_DEST_DIV_CLUSTER = `VX_CFG_SOCKET_SIZE;
+    localparam KMU_DEST_DIV_DEVICE  = KMU_DEST_DIV_CLUSTER * NUM_SOCKETS;
 
     typedef struct packed {
         logic [NCTA_WIDTH-1:0] cta_id;

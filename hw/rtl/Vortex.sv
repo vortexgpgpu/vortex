@@ -64,10 +64,7 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*, VX_tlb_pkg::*; (
     input  wire                             start,
     output wire                             busy
 );
-    // Check clustering configuration
-    `STATIC_ASSERT(`IS_POW2(`VX_CFG_NUM_CLUSTERS), ("NUM_CLUSTERS must be a power of 2"));
-    `STATIC_ASSERT(`IS_POW2(`VX_CFG_NUM_CORES), ("NUM_CORES must be a power of 2"));
-    `STATIC_ASSERT(`IS_POW2(`VX_CFG_SOCKET_SIZE), ("SOCKET_SIZE must be a power of 2"));
+    `STATIC_ASSERT((`VX_CFG_NUM_CORES % `VX_CFG_SOCKET_SIZE) == 0, ("NUM_CORES must be a multiple of SOCKET_SIZE"));
 
     // A write-back LLC must be the only instance: replicated ones never make
     // their dirty lines visible to each other.
@@ -279,7 +276,7 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*, VX_tlb_pkg::*; (
     VX_kmu_bus_arb #(
         .NUM_INPUTS (1),
         .NUM_OUTPUTS (`VX_CFG_NUM_CLUSTERS),
-        .DEST_LSB   (KMU_DEST_LSB_DEVICE),
+        .DEST_DIV   (KMU_DEST_DIV_DEVICE),
         .OUT_BUF    ((`VX_CFG_NUM_CLUSTERS > 1) ? 3 : 0)  // register per-cluster kmu fan-out (SLR-crossing skid)
     ) kmu_arb (
         .clk        (clk),

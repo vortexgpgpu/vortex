@@ -15,7 +15,8 @@ namespace vortex {
 // ============================================================================
 // Static GPU capability words
 //
-// GPU_DEV_CAPS / GPU_ISA_CAPS register values exposed as read-only MMIO.
+// GPU_DEV_CAPS / GPU_DEV_CAPS_EXT / GPU_ISA_CAPS register values exposed as
+// read-only MMIO.
 // sw/runtime/common/vx_caps.h is the matching decoder.
 // ============================================================================
 namespace {
@@ -44,6 +45,10 @@ uint64_t gpu_dev_caps() {
          | ((uint64_t(VX_CFG_NUM_WARPS)    & 0x7F) << 42)
          | ((uint64_t(cluster_size)        & 0xFF) << 49)
          | ((uint64_t(VX_CFG_NUM_CLUSTERS) & 0x7F) << 57);
+}
+uint32_t gpu_dev_caps_ext() {
+    static_assert(VX_CFG_SOCKET_SIZE < 256, "GPU_DEV_CAPS_EXT socket size overflows");
+    return uint32_t(VX_CFG_SOCKET_SIZE);
 }
 uint64_t gpu_isa_caps() {
     return  (uint64_t(VX_CFG_MISA_EXT) << 32)
@@ -78,7 +83,7 @@ void CommandProcessor::mmio_write(uint32_t off, uint32_t value) {
         case 0x028: satp_ = (satp_ & 0xFFFFFFFF00000000ULL) |  uint64_t(value);         return;
         case 0x02C: satp_ = (satp_ & 0x00000000FFFFFFFFULL) | (uint64_t(value) << 32);  return;
         // STATUS / DEV_CAPS / CYCLE / GPU caps are RO; ignore writes.
-        case 0x004: case 0x008: case 0x010: case 0x014:
+        case 0x004: case 0x008: case 0x00C: case 0x010: case 0x014:
         case 0x018: case 0x01C: case 0x020: case 0x024: return;
     }
     // Queue 0 (offsets 0x100..0x12F)
@@ -130,6 +135,7 @@ uint32_t CommandProcessor::mmio_read(uint32_t off) const {
             return llc_client | supports_qmd | supports_draw | vm_enabled | fault_report
                  | (uint32_t(6) << 16) | (uint32_t(16) << 8) | uint32_t(1);
         }
+        case 0x00C: return gpu_dev_caps_ext();
         case 0x010: return uint32_t(cycle_counter_ & 0xFFFFFFFF);
         case 0x014: return uint32_t(cycle_counter_ >> 32);
         case 0x018: return uint32_t(gpu_dev_caps() & 0xFFFFFFFF);

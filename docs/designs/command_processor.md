@@ -349,6 +349,7 @@ subtracts it first.
 | `0x000` | `CP_CTRL` | RW | bit0 = enable_global, bit1 = reset_all |
 | `0x004` | `CP_STATUS` | RO | bit0 = busy, bit1 = error |
 | `0x008` | `CP_DEV_CAPS` | RO | `[7:0]` NUM_QUEUES, `[15:8]` RING_SIZE_LOG2_MAX, `[23:16]` AXI_TID_WIDTH — plus feature bits 24-26 on the Emulation CP (§6) |
+| `0x00C` | `GPU_DEV_CAPS_EXT` | RO | device-config caps extension (§6) |
 | `0x010` | `CP_CYCLE_LO` | RO | free-running cycle counter, low 32 |
 | `0x014` | `CP_CYCLE_HI` | RO | high 32 |
 | `0x018` / `0x01C` | `GPU_DEV_CAPS_LO/HI` | RO | device-config caps (§6) |
@@ -433,6 +434,11 @@ The exact counts in `[63:42]` let a machine that is not a power of two
 (e.g. 48 warps, 84 cores) report its true shape; the decoder prefers them and
 falls back to the log2 fields only when they read zero, as on devices built
 before they existed.
+
+**`GPU_DEV_CAPS_EXT`** (`0x00C`) carries the exact counts that no longer fit
+in `GPU_DEV_CAPS`: `[7:0]` socket_size (`VX_CAPS_SOCKET_SIZE`), the rest zero.
+It reads zero on devices built before it existed, so the decoder falls back to
+the log2 socket_size field `[16:14]`.
 
 `VX_CAPS_NUM_CORES` is derived, not a field:
 `num_clusters × cluster_size × socket_size`, from the exact counts. `CACHE_LINE_SIZE`,

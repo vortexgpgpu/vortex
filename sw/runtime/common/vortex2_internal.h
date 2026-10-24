@@ -435,8 +435,9 @@ private:
     std::map<uint64_t, HostMem>    host_mems_;
 
     // Lazily-loaded device/ISA caps words (read once from the CP regfile).
-    uint64_t                       dev_caps_    = 0;
-    uint64_t                       isa_caps_    = 0;
+    uint64_t                       dev_caps_     = 0;
+    uint32_t                       dev_caps_ext_ = 0;
+    uint64_t                       isa_caps_     = 0;
     bool                           caps_loaded_ = false;
 
     std::mutex                     mu_;

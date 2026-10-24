@@ -81,6 +81,8 @@ inline constexpr uint32_t DCACHE_CHANNELS = __UP((VX_CFG_NUM_LSU_LANES * XLENB) 
 inline constexpr uint32_t VX_CFG_DCACHE_NUM_REQS	= (VX_CFG_NUM_LSU_BLOCKS * DCACHE_CHANNELS);
 
 inline constexpr uint32_t NUM_SOCKETS     = __UP(VX_CFG_NUM_CORES / VX_CFG_SOCKET_SIZE);
+static_assert((VX_CFG_NUM_CORES % VX_CFG_SOCKET_SIZE) == 0,
+              "NUM_CORES must be a multiple of SOCKET_SIZE");
 
 // Demand clients of the cluster L2 (sockets and gfx caches), excluding the
 // walker's PTE-fetch slot.
