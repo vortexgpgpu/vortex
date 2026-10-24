@@ -1,177 +1,177 @@
 {
   "core:raycast-nt16:rtlsim": {
     "32": {
-      "cycles": 564053,
-      "instrs": 137486
+      "cycles": 11185799,
+      "instrs": 2241925
     },
     "app": "raycast",
     "args": "",
-    "config_hash": "7a2c92e634460e90",
+    "config_hash": "ef7e97261abf3c7e",
     "configs": "-DVX_CFG_NUM_THREADS=16",
     "driver": "rtlsim"
   },
   "core:raycast-nt4:rtlsim": {
     "32": {
-      "cycles": 1498642,
-      "instrs": 259228
+      "cycles": 21106013,
+      "instrs": 5664693
     },
     "app": "raycast",
     "args": "",
-    "config_hash": "2532cbe6c87ca233",
+    "config_hash": "4a346b970c5d5f4e",
     "configs": "-DVX_CFG_NUM_THREADS=4",
     "driver": "rtlsim"
   },
   "core:sgemm-mc-nt16:rtlsim": {
     "32": {
-      "cycles": 720350,
+      "cycles": 632919,
       "instrs": 623680
     },
     "app": "sgemm",
     "args": "-n128",
-    "config_hash": "6106872241e50c60",
+    "config_hash": "12eb01a0cf320bec",
     "configs": "-DVX_CFG_NUM_WARPS=8 -DVX_CFG_NUM_CORES=2 -DVX_CFG_NUM_THREADS=16 -DVX_CFG_L2_ENABLE",
     "driver": "rtlsim"
   },
   "core:sgemm-mc-nt4:rtlsim": {
     "32": {
-      "cycles": 2227069,
+      "cycles": 2251795,
       "instrs": 2494528
     },
     "app": "sgemm",
     "args": "-n128",
-    "config_hash": "ecbd8e8a804188dd",
+    "config_hash": "a5cc1a944ac4fc92",
     "configs": "-DVX_CFG_NUM_WARPS=8 -DVX_CFG_NUM_CORES=2 -DVX_CFG_NUM_THREADS=4 -DVX_CFG_L2_ENABLE",
     "driver": "rtlsim"
   },
   "core:sgemm-nt16:rtlsim": {
     "32": {
-      "cycles": 1782470,
+      "cycles": 1665973,
       "instrs": 623632
     },
     "app": "sgemm",
     "args": "-n128",
-    "config_hash": "6dcefd7e66ed0cc0",
+    "config_hash": "dcf77cabb080bf39",
     "configs": "-DVX_CFG_NUM_THREADS=16",
     "driver": "rtlsim"
   },
   "core:sgemm-nt4:rtlsim": {
     "32": {
-      "cycles": 5939731,
+      "cycles": 5943507,
       "instrs": 2494480
     },
     "app": "sgemm",
     "args": "-n128",
-    "config_hash": "74a554f940a83c4a",
+    "config_hash": "9b7d85b091d9be08",
     "configs": "-DVX_CFG_NUM_THREADS=4",
     "driver": "rtlsim"
   },
   "core:sgemmx-nt16:rtlsim": {
     "32": {
-      "cycles": 1226398,
+      "cycles": 1225395,
       "instrs": 266896
     },
     "app": "sgemmx",
     "args": "-n128",
-    "config_hash": "efc73b5e23a33b8f",
+    "config_hash": "1181ce2dd247a573",
     "configs": "-DVX_CFG_NUM_THREADS=16",
     "driver": "rtlsim"
   },
   "core:sgemmx-nt4:rtlsim": {
     "32": {
-      "cycles": 4219466,
+      "cycles": 4218769,
       "instrs": 1067536
     },
     "app": "sgemmx",
     "args": "-n128",
-    "config_hash": "0f2e76cd4d21f998",
+    "config_hash": "b8d3bbe9aaa587a9",
     "configs": "-DVX_CFG_NUM_THREADS=4",
     "driver": "rtlsim"
   },
   "core:sgemv-nt16:rtlsim": {
     "32": {
-      "cycles": 460344,
+      "cycles": 408992,
       "instrs": 66800
     },
     "app": "sgemv",
     "args": "-m512 -n512",
-    "config_hash": "bc1d0a1801524d27",
+    "config_hash": "a2e93b1416c1222b",
     "configs": "-DVX_CFG_NUM_THREADS=16",
     "driver": "rtlsim"
   },
   "core:sgemv-nt4:rtlsim": {
     "32": {
-      "cycles": 872926,
+      "cycles": 883260,
       "instrs": 267152
     },
     "app": "sgemv",
     "args": "-m512 -n512",
-    "config_hash": "7fbf266181d2ec8b",
+    "config_hash": "212b79b7b9e0df8d",
     "configs": "-DVX_CFG_NUM_THREADS=4",
     "driver": "rtlsim"
   },
   "core:softmax-nt16:rtlsim": {
     "32": {
-      "cycles": 1271056,
+      "cycles": 1270578,
       "instrs": 464089
     },
     "app": "softmax",
     "args": "-n64",
-    "config_hash": "c53ddc9ba2cd96bd",
+    "config_hash": "4a980cd3436e0491",
     "configs": "-DVX_CFG_NUM_THREADS=16",
     "driver": "rtlsim"
   },
   "core:softmax-nt4:rtlsim": {
     "32": {
-      "cycles": 4860309,
+      "cycles": 4860082,
       "instrs": 1789797
     },
     "app": "softmax",
     "args": "-n64",
-    "config_hash": "6dea102e1b20464c",
+    "config_hash": "3d84ea77567e034e",
     "configs": "-DVX_CFG_NUM_THREADS=4",
     "driver": "rtlsim"
   },
   "core:stencil3d-nt16:rtlsim": {
     "32": {
-      "cycles": 2272549,
+      "cycles": 2283980,
       "instrs": 892944
     },
     "app": "stencil3d",
     "args": "-n32",
-    "config_hash": "542851d41daf9431",
+    "config_hash": "5b78acb9a50222ff",
     "configs": "-DVX_CFG_NUM_THREADS=16",
     "driver": "rtlsim"
   },
   "core:stencil3d-nt4:rtlsim": {
     "32": {
-      "cycles": 4180969,
+      "cycles": 4185784,
       "instrs": 1785872
     },
     "app": "stencil3d",
     "args": "-n32",
-    "config_hash": "fa607fa9e1280813",
+    "config_hash": "dc41c57ce7819a59",
     "configs": "-DVX_CFG_NUM_THREADS=4",
     "driver": "rtlsim"
   },
   "core:vecadd-nt16:rtlsim": {
     "32": {
-      "cycles": 99953,
+      "cycles": 95240,
       "instrs": 29712
     },
     "app": "vecadd",
     "args": "-n16384",
-    "config_hash": "0f4e3087ce474e4b",
+    "config_hash": "652eaf7c4099617d",
     "configs": "-DVX_CFG_NUM_THREADS=16",
     "driver": "rtlsim"
   },
   "core:vecadd-nt4:rtlsim": {
     "32": {
-      "cycles": 367765,
+      "cycles": 368717,
       "instrs": 118800
     },
     "app": "vecadd",
     "args": "-n16384",
-    "config_hash": "0169f39a14561223",
+    "config_hash": "c602c9c37a145297",
     "configs": "-DVX_CFG_NUM_THREADS=4",
     "driver": "rtlsim"
   }
