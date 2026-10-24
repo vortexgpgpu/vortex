@@ -22,11 +22,11 @@
   </style>
 
   <rect x="0" y="0" width="1400" height="760" fill="#ffffff"/>
-  <text x="24" y="34" class="tb" font-size="20">Timing screen — the two passes</text>
+  <text x="24" y="34" class="tb" font-size="20">Logic screen — the two passes</text>
 
   <!-- mapping pipeline -->
   <rect x="20" y="56" width="560" height="684" class="grp"/>
-  <text x="34" y="78" class="tb">foldsim-timing-map (per module)</text>
+  <text x="34" y="78" class="tb">foldsim-screen-map (per module)</text>
 
   <rect x="40" y="94" width="520" height="56" class="box"/>
   <text x="55" y="116" class="t">1. hw-flatten-modules: inline modules &lt; 300 ops</text>

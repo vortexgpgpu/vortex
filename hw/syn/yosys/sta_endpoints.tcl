@@ -12,8 +12,8 @@
 # limitations under the License.
 
 # sta_endpoints.tcl: OpenSTA, the worst setup slack at the data input of
-# every flip-flop, for comparing the timing screen per register with an
-# ASIC flow (a CSV in the end point table format of ci/timing_screen.py).
+# every flip-flop, for comparing the logic screen per register with an
+# ASIC flow (a CSV in the end point table format of ci/logic_screen.py).
 # env: LIB NETLIST TOP SDC OUT
 proc env {name} { return $::env($name) }
 read_liberty [env LIB]

@@ -1,9 +1,9 @@
-# Timing screen — logic depth of every path, before Vivado
+# Logic screen — logic depth of every path, before Vivado
 
-The timing screen counts the logic levels of every register-to-register path
+The logic screen counts the logic levels of every register-to-register path
 of a Vortex design the way Vivado counts them, in seconds and without
 Vivado. It names the RTL units whose paths are too deep for the target clock,
-gates their depth on every RTL change (`timing_gate`), and is the first step
+gates their depth on every RTL change (`logic_gate`), and is the first step
 of RTL timing work: screen, fix the deep units, then confirm with one Vivado
 run.
 
@@ -14,7 +14,7 @@ run.
 | [3](#3-compiler-architecture) | Compiler architecture: the two passes |
 | [4](#4-the-model) | The model: levels per element, devices |
 | [5](#5-outputs) | Outputs |
-| [6](#6-integration) | Integration: the DUT flow, `timing_gate`, timing work |
+| [6](#6-integration) | Integration: the DUT flow, `logic_gate`, timing work |
 | [7](#7-validation) | Validation against Vivado |
 | [8](#8-diagnostics) | Diagnostics beyond levels |
 | [9](#9-invariants-and-limitations) | Invariants and limitations |
@@ -44,27 +44,27 @@ make -C hw/syn/xilinx/dut tcu-screen
 The whole catalog as a gate, and a baseline update (a human step):
 
 ```bash
-ci/timing_gate.py -j 2
-ci/timing_gate.py -b om --update-baseline
+ci/logic_gate.py -j 2
+ci/logic_gate.py -b om --update-baseline
 ```
 
-Any CIRCT netlist, with `ci/timing_screen.py` (subcommands `screen`,
+Any CIRCT netlist, with `ci/logic_screen.py` (subcommands `screen`,
 `summarize`, `validate`, `retime-split`; `foldsim-opt` from the `PATH` or
 `FOLDSIM_OPT`):
 
 ```bash
-ci/timing_screen.py screen design.mlir runs/full            # map, then screen
-ci/timing_screen.py screen runs/full/mapped.mlirbc runs/socket \
+ci/logic_screen.py screen design.mlir runs/full            # map, then screen
+ci/logic_screen.py screen runs/full/mapped.mlirbc runs/socket \
     top=VX_socket__lift black-boxes=VX_core__lift           # one unit of a mapped design
-ci/timing_screen.py summarize runs/full --min-levels 12     # deep end points by RTL unit
-ci/timing_screen.py validate runs/socket ep.csv --native VX_socket__lift=dut
+ci/logic_screen.py summarize runs/full --min-levels 12     # deep end points by RTL unit
+ci/logic_screen.py validate runs/socket ep.csv --native VX_socket__lift=dut
 ```
 
 Or the two passes directly:
 
 ```bash
 foldsim-opt design.mlir --emit-bytecode -o mapped.mlirbc \
-  --pass-pipeline='builtin.module(foldsim-timing-map)'
+  --pass-pipeline='builtin.module(foldsim-screen-map)'
 foldsim-opt mapped.mlirbc -o /dev/null --pass-pipeline='builtin.module(
   foldsim-estimate-timing{top=VX_core_top family=virtexuplusHBM
     output=endpoints.csv instances=instances.csv report=report.txt
@@ -85,7 +85,7 @@ foldsim-opt mapped.mlirbc -o /dev/null --pass-pipeline='builtin.module(
 
 ## 2. System architecture
 
-![Timing screen system](../assets/img/timing_screen_system.svg)
+![Logic screen system](../assets/img/logic_screen_system.svg)
 
 The engine is two compiler passes of **foldsim** (`foldsim-opt`), built on
 CIRCT like the rest of foldsim, and shipped in the foldsim prebuilt. Vortex
@@ -93,15 +93,15 @@ never builds it. The integration is in Vortex:
 
 | Piece | Where | Role |
 |---|---|---|
-| `foldsim-timing-map`, `foldsim-estimate-timing` | foldsim `lib/Transforms/EstimateTiming.cpp` | map to LUTs; count levels |
-| `ci/timing_screen.py` | `ci/` | screen any netlist; read it by unit; compare with Vivado |
+| `foldsim-screen-map`, `foldsim-estimate-timing` | foldsim `lib/Transforms/EstimateTiming.cpp` | map to LUTs; count levels |
+| `ci/logic_screen.py` | `ci/` | screen any netlist; read it by unit; compare with Vivado |
 | `xilinx_cone_dump.tcl`, `xilinx_cone_probe.tcl`, `xilinx_wire_probe.tcl` | `hw/scripts` | Vivado probes for what levels cannot show (§8) |
 | target `screen` | `hw/syn/xilinx/dut/common.mk` | one DUT: sources → netlist → screen → summary |
 | `circt_elaborate.sh -f mlir` | `hw/scripts` | the lowered HW/Comb/Seq netlist, no `firtool` |
 | `gen_platform.py --emit=family` | `hw/scripts` | the family of `DEVICE`, from `hw/syn/xilinx/platforms` |
 | `screen_summary.py` | `hw/scripts` | `screen_summary.csv` and per-unit `screen_units.json` |
-| `Screen` backend, `timing_gate.py` | `ci/synth_gate.py`, `ci/` | the gate, beside `fpga_gate` and `asic_gate` |
-| `timing_gate.yml` | `.github/workflows` | runs it on pull requests that touch RTL |
+| `Screen` backend, `logic_gate.py` | `ci/synth_gate.py`, `ci/` | the gate, beside `fpga_gate` and `asic_gate` |
+| `logic_gate.yml` | `.github/workflows` | runs it on pull requests that touch RTL |
 
 The screen reads the same CIRCT import that foldsim and the Yosys flow
 use (`circt-verilog --ir-hw`), elaborated from the sources and defines
@@ -110,9 +110,9 @@ black boxes (`xilinx_ip_stubs.sv`).
 
 ## 3. Compiler architecture
 
-![Timing screen compiler](../assets/img/timing_screen_compiler.svg)
+![Logic screen compiler](../assets/img/logic_screen_compiler.svg)
 
-### 3.1 `foldsim-timing-map`
+### 3.1 `foldsim-screen-map`
 
 A pipeline of CIRCT's synthesis passes plus three of foldsim's, per module:
 
@@ -201,7 +201,7 @@ family is an error.
 ### 4.3 ASAP7
 
 For the ASIC flow (`hw/syn/yosys`, ASAP7 7.5-track RVT, TT corner) the
-screen counts **cell stages**, not LUT levels. `foldsim-timing-map-asic`
+screen counts **cell stages**, not LUT levels. `foldsim-screen-map-asic`
 maps the same balanced and-inverter graph to 3-input cuts, each one cell
 (NAND, AOI, MAJ, XOR), and `family=asap7` models the word-level operators
 as an ASIC builds them:
@@ -275,7 +275,7 @@ its kind, the fanout of its bit, and its instance path and name:
 1. `gen_sources.sh -P` into `screen/src`;
 2. `circt_elaborate.sh -f mlir` into `screen/netlist.mlir`, the FP IPs as
    black boxes;
-3. `foldsim-timing-map`, then `foldsim-estimate-timing` with
+3. `foldsim-screen-map`, then `foldsim-estimate-timing` with
    `family=$(gen_platform.py --device=$(DEVICE) --emit=family)`;
 4. `screen_summary.py`.
 
@@ -287,12 +287,12 @@ make -C hw/syn/yosys/dut om TARGET=screen
 # om_VX_om_core_top/screen/report.txt: the deepest paths and the period
 ```
 
-### 6.2 `timing_gate`
+### 6.2 `logic_gate`
 
 The third synthesis gate, beside `fpga_gate` (Vivado, nightly) and
 `asic_gate` (Yosys + OpenSTA, nightly); see
 [continuous_integration.md §3.5](continuous_integration.md). It screens
-`fpga_gate`'s builds (`ci/testcases/timing_gate.yaml`, all but `top`, whose
+`fpga_gate`'s builds (`ci/testcases/logic_gate.yaml`, all but `top`, whose
 `VX_cp_core` keeps LLHD reference ports) in about four minutes, and checks
 each against `ci/baselines/synthesis/screen/`:
 
@@ -312,8 +312,8 @@ by a human (`--update-baseline`), as for the other gates.
 Screen first, then Vivado:
 
 ```bash
-ci/timing_screen.py screen gen/design.mlir runs/full
-ci/timing_screen.py summarize runs/full --min-levels 12     # the fix list, by unit
+ci/logic_screen.py screen gen/design.mlir runs/full
+ci/logic_screen.py summarize runs/full --min-levels 12     # the fix list, by unit
 ```
 
 The screen ranks the units; one Vivado run confirms the fix. Compare a fix
@@ -324,7 +324,7 @@ folded design (§9).
 
 Against Vivado, per RTL register or memory: the screen's deepest bit
 against Vivado's deepest failing path and worst slack, on seven V80 datasets
-with no new Vivado runs (`ci/timing_screen.py validate`):
+with no new Vivado runs (`ci/logic_screen.py validate`):
 
 | Dataset | Vivado run | Spearman vs levels | Spearman vs slack | ≥ 12: precision / recall |
 |---|---|---|---|---|
@@ -368,10 +368,10 @@ each output. Small modules are inlined by the mapping, so keep them with
 `screen --keep`:
 
 ```bash
-ci/timing_screen.py screen --keep VX_elastic_buffer design.mlir runs/eb \
+ci/logic_screen.py screen --keep VX_elastic_buffer design.mlir runs/eb \
     port-modules=VX_elastic_buffer
-ci/timing_screen.py buffers runs/eb      # the OUT_BUF advisor
-ci/timing_screen.py ports runs/eb        # every kept module, by unit
+ci/logic_screen.py buffers runs/eb      # the OUT_BUF advisor
+ci/logic_screen.py ports runs/eb        # every kept module, by unit
 ```
 
 - The **buffer advisor** lists the `VX_elastic_buffer`s that pass a deep

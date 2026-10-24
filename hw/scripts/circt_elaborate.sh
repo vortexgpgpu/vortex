@@ -35,7 +35,7 @@
 #     v2005 writes Verilog-2005 for tools with a Verilog frontend (yosys): no
 #     packed arrays or structs, no local variables, no size casts; -f mlir
 #     writes the HW/Comb/Seq netlist itself, for tools built on CIRCT (the
-#     timing screen), and exports nothing.
+#     logic screen), and exports nothing.
 #
 # The sources are a filelist (-l, as gen_sources.sh writes it: +define+,
 # +incdir+ and files in compile order), or include directories whose sources

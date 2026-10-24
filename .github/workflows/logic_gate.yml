@@ -2,8 +2,8 @@
 #
 # Licensed under the Apache License, Version 2.0 (the "License").
 #
-# timing_gate — logic-level regression gate on hosted runners.
-# Screens the DUT catalog (ci/testcases/timing_gate.yaml) with
+# logic_gate — logic-level regression gate on hosted runners.
+# Screens the DUT catalog (ci/testcases/logic_gate.yaml) with
 # foldsim-estimate-timing and asserts the depth of every RTL unit against the
 # golden results in ci/baselines/synthesis/screen/, so an RTL change that makes
 # a unit deeper is named on the change that does it, not the next night.
@@ -26,8 +26,8 @@ on:
       - 'hw/scripts/**'
       - 'hw/syn/xilinx/dut/**'
       - 'ci/synth_gate.py'
-      - 'ci/timing_gate.py'
-      - 'ci/testcases/timing_gate.yaml'
+      - 'ci/logic_gate.py'
+      - 'ci/testcases/logic_gate.yaml'
       - 'ci/baselines/synthesis/screen/**'
   push:
     branches: [master]
@@ -37,8 +37,8 @@ on:
       - 'hw/scripts/**'
       - 'hw/syn/xilinx/dut/**'
       - 'ci/synth_gate.py'
-      - 'ci/timing_gate.py'
-      - 'ci/testcases/timing_gate.yaml'
+      - 'ci/logic_gate.py'
+      - 'ci/testcases/logic_gate.yaml'
       - 'ci/baselines/synthesis/screen/**'
   workflow_dispatch:
     inputs:
@@ -47,7 +47,7 @@ on:
         default: ""
 
 concurrency:
-  group: timing-gate-${{ github.ref }}
+  group: logic-gate-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -78,7 +78,7 @@ jobs:
           ci/toolchain_install.sh --foldsim
 
       # The command is the one the catalog declares (the single `run:` case of
-      # ci/testcases/timing_gate.yaml), so what CI runs and what the catalog
+      # ci/testcases/logic_gate.yaml), so what CI runs and what the catalog
       # says cannot drift apart.
       - name: Gate
         id: run
@@ -86,13 +86,13 @@ jobs:
           IN_BUILDS: ${{ github.event.inputs.builds }}
         run: |
           set -uo pipefail
-          CMD=$(python3 -c "import yaml; print(yaml.safe_load(open('ci/testcases/timing_gate.yaml'))['tests'][0]['run'])")
+          CMD=$(python3 -c "import yaml; print(yaml.safe_load(open('ci/testcases/logic_gate.yaml'))['tests'][0]['run'])")
           # Dispatch inputs reach the shell through an env var, never
           # interpolated into the script.
           ARGS=()
           for b in ${IN_BUILDS:-}; do ARGS+=(-b "$b"); done
           rc=0
-          $CMD "${ARGS[@]}" --timeout 3600 --report timing_gate.json || rc=$?
+          $CMD "${ARGS[@]}" --timeout 3600 --report logic_gate.json || rc=$?
           echo "rc=$rc" >> "$GITHUB_OUTPUT"
           exit 0
 
@@ -100,26 +100,26 @@ jobs:
         if: always()
         run: |
           set -uo pipefail
-          python3 ci/synth_report.py --annotate error timing_gate.json \
-            > timing_gate_report.md || true
-          cat timing_gate_report.md >> "$GITHUB_STEP_SUMMARY"
+          python3 ci/synth_report.py --annotate error logic_gate.json \
+            > logic_gate_report.md || true
+          cat logic_gate_report.md >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: timing-gate
+          name: logic-gate
           path: |
-            timing_gate.json
-            timing_gate_report.md
-            build32_timing_gate/hw/syn/xilinx/dut/timing_gate_*/build.log
-            build32_timing_gate/hw/syn/xilinx/dut/timing_gate_*/screen_*
-            build32_timing_gate/hw/syn/xilinx/dut/timing_gate_*/screen/report.txt
+            logic_gate.json
+            logic_gate_report.md
+            build32_logic_gate/hw/syn/xilinx/dut/logic_gate_*/build.log
+            build32_logic_gate/hw/syn/xilinx/dut/logic_gate_*/screen_*
+            build32_logic_gate/hw/syn/xilinx/dut/logic_gate_*/screen/report.txt
           if-no-files-found: warn
 
       - name: Verdict
         run: |
           case "${{ steps.run.outputs.rc }}" in
-            0) echo "timing_gate passed" ;;
-            1) echo "::error::timing_gate FAILED — a unit got deeper than its baseline"; exit 1 ;;
-            *) echo "::error::timing_gate build error (see logs)"; exit 1 ;;
+            0) echo "logic_gate passed" ;;
+            1) echo "::error::logic_gate FAILED — a unit got deeper than its baseline"; exit 1 ;;
+            *) echo "::error::logic_gate build error (see logs)"; exit 1 ;;
           esac

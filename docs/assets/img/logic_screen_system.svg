@@ -26,7 +26,7 @@
   </style>
 
   <rect x="0" y="0" width="1400" height="730" fill="#ffffff"/>
-  <text x="24" y="34" class="tb" font-size="20">Timing screen — where each piece lives, and what flows between them</text>
+  <text x="24" y="34" class="tb" font-size="20">Logic screen — where each piece lives, and what flows between them</text>
 
   <!-- Vortex repository -->
   <rect x="20" y="60" width="430" height="610" class="grp"/>
@@ -49,10 +49,10 @@
   <text x="55" y="491" class="ts">units = instance paths, generate indices folded</text>
 
   <rect x="40" y="530" width="390" height="120" class="sw"/>
-  <text x="55" y="554" class="t">ci/timing_gate.py  (synth_gate.py Screen backend)</text>
-  <text x="55" y="576" class="mono">ci/testcases/timing_gate.yaml</text>
+  <text x="55" y="554" class="t">ci/logic_gate.py  (synth_gate.py Screen backend)</text>
+  <text x="55" y="576" class="mono">ci/testcases/logic_gate.yaml</text>
   <text x="55" y="594" class="mono">ci/baselines/synthesis/screen/*.json</text>
-  <text x="55" y="612" class="mono">.github/workflows/timing_gate.yml</text>
+  <text x="55" y="612" class="mono">.github/workflows/logic_gate.yml</text>
   <text x="55" y="636" class="ts">PASS / FAIL per unit, zero tolerance on depth</text>
 
   <!-- toolchain -->
@@ -67,7 +67,7 @@
   <rect x="510" y="200" width="400" height="300" class="core"/>
   <text x="525" y="224" class="tb">foldsim-opt (foldsim, on CIRCT)</text>
   <rect x="530" y="240" width="360" height="100" class="box"/>
-  <text x="545" y="264" class="t">foldsim-timing-map</text>
+  <text x="545" y="264" class="t">foldsim-screen-map</text>
   <text x="545" y="286" class="ts">inline small modules, balance, lower to AIG,</text>
   <text x="545" y="304" class="ts">map to 6-input LUTs; adders, compares,</text>
   <text x="545" y="322" class="ts">multipliers and dividers stay word-level</text>
@@ -91,7 +91,7 @@
 
   <rect x="990" y="100" width="370" height="110" class="sw"/>
   <text x="1005" y="124" class="t">Pull requests touching RTL</text>
-  <text x="1005" y="146" class="ts">timing_gate.yml, ~4 min for the 11 DUTs,</text>
+  <text x="1005" y="146" class="ts">logic_gate.yml, ~4 min for the 11 DUTs,</text>
   <text x="1005" y="164" class="ts">no Vivado, no licence: names the unit that</text>
   <text x="1005" y="182" class="ts">got deeper on the change that did it</text>
 
@@ -102,7 +102,7 @@
   <text x="1005" y="322" class="ts">≥ 12 levels, watch list ≥ 8 (300 MHz)</text>
 
   <rect x="990" y="380" width="370" height="130" class="box"/>
-  <text x="1005" y="404" class="t">ci/timing_screen.py, hw/scripts/xilinx_*.tcl</text>
+  <text x="1005" y="404" class="t">ci/logic_screen.py, hw/scripts/xilinx_*.tcl</text>
   <text x="1005" y="426" class="mono">screen  summarize  validate  retime-split</text>
   <text x="1005" y="444" class="mono">xilinx_cone_dump.tcl  xilinx_cone_probe.tcl</text>
   <text x="1005" y="462" class="mono">xilinx_wire_probe.tcl</text>

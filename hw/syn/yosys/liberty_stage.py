@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""The delays the timing screen's ASIC profile (foldsim-estimate-timing
+"""The delays the logic screen's ASIC profile (foldsim-estimate-timing
 family=asap7) converts stages with, read from a Liberty library.
 
 usage: liberty_stage.py <lib> [--fanout N] [--suffix _ASAP7_75t_R]

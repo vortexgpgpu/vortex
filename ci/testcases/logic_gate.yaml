@@ -1,6 +1,6 @@
-# Logic-level regression gate (the timing screen): the deepest end point of
+# Logic-level regression gate (the logic screen): the deepest end point of
 # every RTL unit must not get deeper than a checked-in golden result
-# (ci/baselines/synthesis/screen/<group>.json). See ci/timing_gate.py.
+# (ci/baselines/synthesis/screen/<group>.json). See ci/logic_gate.py.
 #
 # Sibling of fpga_gate (fpga_gate.yaml) and asic_gate (asic_gate.yaml): same
 # discipline -- golden baseline, results only ever re-recorded by a human --
@@ -23,7 +23,7 @@
 #
 #   tests:   what pytest/CI sees -- ONE case, whose `run:` is literally the
 #            command CI executes.
-#   builds:  what ci/timing_gate.py reads -- the build list. The pytest loader
+#   builds:  what ci/logic_gate.py reads -- the build list. The pytest loader
 #            ignores this key.
 #
 # The builds are fpga_gate.yaml's, DUT for DUT and config for config (all but
@@ -33,14 +33,14 @@
 # 300 MHz ones.
 #
 # Tier `timing` is OPT-IN (OPT_IN_TIERS in testcase.py): it needs foldsim,
-# which the base toolchain does not install. .github/workflows/timing_gate.yml
+# which the base toolchain does not install. .github/workflows/logic_gate.yml
 # installs it and runs the gate.
 #
-# Run one by name:  ci/timing_gate.py -b tcu
+# Run one by name:  ci/logic_gate.py -b tcu
 # By hand, no gate: make -C hw/syn/xilinx/dut tcu-screen
-# Re-record:        ci/timing_gate.py --update-baseline   (human-reviewed, never CI)
+# Re-record:        ci/logic_gate.py --update-baseline   (human-reviewed, never CI)
 # ---------------------------------------------------------------------------
-category: timing_gate
+category: logic_gate
 defaults:
   # 32-bit only, as the synthesis gates.
   xlen:
@@ -53,10 +53,10 @@ defaults:
 tests:
 # Seconds to minutes per DUT: the whole catalog runs in one job.
 - id: gate
-  run: ci/timing_gate.py -j 2
+  run: ci/logic_gate.py -j 2
 
 # ---------------------------------------------------------------------------
-# builds — read by ci/timing_gate.py, ignored by the pytest catalog loader.
+# builds — read by ci/logic_gate.py, ignored by the pytest catalog loader.
 #
 #   dut         hw/syn/xilinx/dut/catalog.mk target to screen
 #   clock_mhz   the Fmax gate's target for this DUT (recorded, not asserted)
