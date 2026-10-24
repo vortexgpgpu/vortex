@@ -271,6 +271,8 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         .core_req_data  (mreq_data_r),
         .core_req_tag   (mreq_tag_r),
         .core_req_ready (mreq_ready_r),
+        `UNUSED_PIN (core_req_ready_rd),
+        `UNUSED_PIN (core_req_ready_wr),
         .req_queue_rw_notify (write_notify),
         .req_queue_empty (req_queue_empty_w),
 
