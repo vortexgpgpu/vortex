@@ -104,12 +104,26 @@ module VX_cache import VX_gpu_pkg::*; #(
     localparam MEM_PORTS_SEL_WIDTH = `UP(MEM_PORTS_SEL_BITS);
     localparam MEM_ARB_SEL_BITS = `CLOG2(`CDIV(NUM_BANKS, MEM_PORTS));
     localparam REQ_XBAR_BUF    = (NUM_REQS > 2) ? 2 : 0;
+    // A bank's request arbiter splits a fan-in wider than 1.5 x MAX_FANOUT
+    // into registered two-entry slices, where requests from different inputs
+    // wait apart: entries per bank over all slice levels (0 without slices).
+    function automatic integer req_xbar_slice_slots(integer n);
+        integer m, slots;
+        m = n;
+        slots = 0;
+        while (m > (`MAX_FANOUT + `MAX_FANOUT / 2)) begin
+            m = `CDIV(m, `MAX_FANOUT);
+            slots = slots + 2 * m;
+        end
+        return slots;
+    endfunction
+    localparam REQ_XBAR_SLICE_SLOTS = req_xbar_slice_slots(NUM_REQS);
+    // requests the crossbar can hold when slices let them pass each other;
+    // the flush sequencer drains them before it walks or answers a token
+    localparam REQ_XBAR_SIZE   = (REQ_XBAR_SLICE_SLOTS != 0) ? (NUM_BANKS * (REQ_XBAR_SLICE_SLOTS + `TO_OUT_BUF_SIZE(REQ_XBAR_BUF))) : 0;
     localparam CORE_RSP_BUF_ENABLE = (NUM_BANKS != 1) || (NUM_REQS != 1);
     localparam MEM_REQ_BUF_ENABLE = (NUM_BANKS != 1);
     `STATIC_ASSERT(!DO_READ_MERGE || (`IS_POW2(MERGE_GROUP) && `IS_DIVISBLE(NUM_REQS, MERGE_GROUP)), ("invalid parameter: read merge group"))
-    // a merged request is one bank access for several port handshakes, which
-    // the in-flight request count of a registered request crossbar would miss
-    `STATIC_ASSERT(!DO_READ_MERGE || (`TO_OUT_BUF_REG(REQ_XBAR_BUF) == 0), ("invalid parameter: read merge with a registered request crossbar"))
 `ifdef PERF_ENABLE
     wire [NUM_BANKS-1:0] perf_read_miss_per_bank;
     wire [NUM_BANKS-1:0] perf_write_miss_per_bank;
@@ -124,6 +138,7 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire                 flush_skip;
     wire [`UP(UUID_WIDTH)-1:0] flush_uuid;
     wire [NUM_BANKS-1:0] per_bank_flush_end;
+    wire [NUM_REQS-1:0]  core_req_xbar_fire;
     wire [NUM_BANKS-1:0] per_bank_core_req_fire;
     wire                     mem_req_empty;
     wire [MEM_PORTS-1:0]     mem_flush_valid;
@@ -143,13 +158,14 @@ module VX_cache import VX_gpu_pkg::*; #(
         .FLUSH_FORWARD    (FLUSH_FORWARD),
         .SHARED_LLC       (SHARED_LLC),
         .TAG_WIDTH        (TAG_WIDTH),
-        .BANK_SEL_LATENCY (`TO_OUT_BUF_REG(REQ_XBAR_BUF)), // request xbar latency
+        .XBAR_SIZE        (REQ_XBAR_SIZE),
         .REQ_SEL_WIDTH    (REQ_SEL_WIDTH)
     ) cache_init (
         .clk                 (clk),
         .reset               (reset),
         .core_bus_in_if      (core_bus_if),
         .core_bus_out_if     (core_bus2_if),
+        .xbar_req_fire       (core_req_xbar_fire),
         .bank_req_fire       (per_bank_core_req_fire),
         .flush_begin         (per_bank_flush_begin),
         .flush_skip          (flush_skip),
@@ -387,7 +403,9 @@ module VX_cache import VX_gpu_pkg::*; #(
             core_req_attr[i]
         };
     end
-    assign per_bank_core_req_fire = per_bank_core_req_valid & per_bank_mem_req_ready;
+    // a merged read enters the crossbar once, as its leader
+    assign core_req_xbar_fire     = core_req_valid & ~core_req_follower & core_req_xbar_ready;
+    assign per_bank_core_req_fire = per_bank_core_req_valid & per_bank_core_req_ready;
 `ifdef PERF_ENABLE
     wire [PERF_CTR_BITS-1:0] perf_collisions;
 `endif

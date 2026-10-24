@@ -63,8 +63,11 @@ module VX_stream_xbar #(
                 .data_out (per_output_ready_in_w)
             );
 
+            // An output arbiter may assert ready for an input that does not
+            // target it (a single-input fan-in slice passes its buffer's
+            // ready through), so take the ready of the selected output only.
             for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_ready_in
-                assign ready_in[i] = | per_output_ready_in_w[i];
+                assign ready_in[i] = per_output_ready_in_w[i][sel_in[i]];
             end
 
             for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_sel_in_demux
