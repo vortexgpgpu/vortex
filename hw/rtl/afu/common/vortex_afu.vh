@@ -163,6 +163,69 @@
 	assign m_axi_mem_bresp_a[i] = m_axi_mem_``i``_bresp; \
 	assign m_axi_mem_bid_a[i] = m_axi_mem_``i``_bid
 
+// AXI memory masters the AFU exposes: one per GPU memory port, rounded up to
+// a power of two so that address bits select the port, and at most one per
+// platform memory channel. A platform top must spell its ports out, so the
+// build resolves this to the literal AFU_MEM_PORTS
+// (hw/scripts/afu_mem_ports.sh) and VX_afu_wrap checks that the two agree.
+`define AFU_MEM_PORTS_OF(n) `MIN(1 << `CLOG2(n), `VX_CFG_PLATFORM_MEMORY_NUM_BANKS)
+
+// Per-port arrays connecting a platform top's flat m_axi_mem_<i> ports to
+// VX_afu_wrap (see AXI_MEM_TO_ARRAY).
+`define AXI_MEM_ARRAYS(n) \
+    wire                                   m_axi_mem_awvalid_a [n]; \
+    wire                                   m_axi_mem_awready_a [n]; \
+    wire [C_M_AXI_MEM_ADDR_WIDTH-1:0]      m_axi_mem_awaddr_a [n]; \
+    wire [C_M_AXI_MEM_ID_WIDTH-1:0]        m_axi_mem_awid_a [n]; \
+    wire [7:0]                             m_axi_mem_awlen_a [n]; \
+    wire                                   m_axi_mem_wvalid_a [n]; \
+    wire                                   m_axi_mem_wready_a [n]; \
+    wire [C_M_AXI_MEM_DATA_WIDTH-1:0]      m_axi_mem_wdata_a [n]; \
+    wire [C_M_AXI_MEM_DATA_WIDTH/8-1:0]    m_axi_mem_wstrb_a [n]; \
+    wire                                   m_axi_mem_wlast_a [n]; \
+    wire                                   m_axi_mem_arvalid_a [n]; \
+    wire                                   m_axi_mem_arready_a [n]; \
+    wire [C_M_AXI_MEM_ADDR_WIDTH-1:0]      m_axi_mem_araddr_a [n]; \
+    wire [C_M_AXI_MEM_ID_WIDTH-1:0]        m_axi_mem_arid_a [n]; \
+    wire [7:0]                             m_axi_mem_arlen_a [n]; \
+    wire                                   m_axi_mem_rvalid_a [n]; \
+    wire                                   m_axi_mem_rready_a [n]; \
+    wire [C_M_AXI_MEM_DATA_WIDTH-1:0]      m_axi_mem_rdata_a [n]; \
+    wire                                   m_axi_mem_rlast_a [n]; \
+    wire [C_M_AXI_MEM_ID_WIDTH-1:0]        m_axi_mem_rid_a [n]; \
+    wire [1:0]                             m_axi_mem_rresp_a [n]; \
+    wire                                   m_axi_mem_bvalid_a [n]; \
+    wire                                   m_axi_mem_bready_a [n]; \
+    wire [1:0]                             m_axi_mem_bresp_a [n]; \
+    wire [C_M_AXI_MEM_ID_WIDTH-1:0]        m_axi_mem_bid_a [n];
+
+`define AXI_MEM_ARRAY_ARGS \
+    .m_axi_mem_awvalid_a(m_axi_mem_awvalid_a), \
+    .m_axi_mem_awready_a(m_axi_mem_awready_a), \
+    .m_axi_mem_awaddr_a(m_axi_mem_awaddr_a), \
+    .m_axi_mem_awid_a(m_axi_mem_awid_a), \
+    .m_axi_mem_awlen_a(m_axi_mem_awlen_a), \
+    .m_axi_mem_wvalid_a(m_axi_mem_wvalid_a), \
+    .m_axi_mem_wready_a(m_axi_mem_wready_a), \
+    .m_axi_mem_wdata_a(m_axi_mem_wdata_a), \
+    .m_axi_mem_wstrb_a(m_axi_mem_wstrb_a), \
+    .m_axi_mem_wlast_a(m_axi_mem_wlast_a), \
+    .m_axi_mem_arvalid_a(m_axi_mem_arvalid_a), \
+    .m_axi_mem_arready_a(m_axi_mem_arready_a), \
+    .m_axi_mem_araddr_a(m_axi_mem_araddr_a), \
+    .m_axi_mem_arid_a(m_axi_mem_arid_a), \
+    .m_axi_mem_arlen_a(m_axi_mem_arlen_a), \
+    .m_axi_mem_rvalid_a(m_axi_mem_rvalid_a), \
+    .m_axi_mem_rready_a(m_axi_mem_rready_a), \
+    .m_axi_mem_rdata_a(m_axi_mem_rdata_a), \
+    .m_axi_mem_rlast_a(m_axi_mem_rlast_a), \
+    .m_axi_mem_rid_a(m_axi_mem_rid_a), \
+    .m_axi_mem_rresp_a(m_axi_mem_rresp_a), \
+    .m_axi_mem_bvalid_a(m_axi_mem_bvalid_a), \
+    .m_axi_mem_bready_a(m_axi_mem_bready_a), \
+    .m_axi_mem_bresp_a(m_axi_mem_bresp_a), \
+    .m_axi_mem_bid_a(m_axi_mem_bid_a)
+
 `include "VX_define.vh"
 
 `endif // VORTEX_AFU_VH

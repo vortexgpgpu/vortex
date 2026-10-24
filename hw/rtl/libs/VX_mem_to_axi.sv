@@ -19,6 +19,11 @@
 // (interface-free) so it can sit directly at a platform pin boundary; the
 // optional AXI sideband (lock/cache/prot/qos/region) is driven to constants.
 // The inverse of VX_membus_from_axi.
+//
+// The M masters share one ADDR_WIDTH_OUT byte address space, and each request
+// leaves on its bank's master with its own address unchanged. INTERLEAVE
+// selects the bank from the low line-address bits; otherwise from the top
+// bits, so bank i serves the i-th contiguous 1/M of the space.
 // ============================================================================
 
 `TRACING_OFF
@@ -108,7 +113,7 @@ module VX_mem_to_axi #(
     localparam LOG2_DATA_SIZE = `CLOG2(DATA_SIZE);
     localparam BANK_SEL_BITS  = `CLOG2(NUM_BANKS_OUT);
     localparam BANK_SEL_WIDTH = `UP(BANK_SEL_BITS);
-    localparam DST_ADDR_WDITH = (ADDR_WIDTH_OUT - LOG2_DATA_SIZE) + BANK_SEL_BITS; // convert byte-addressable output addresss to block-addressable input space
+    localparam DST_ADDR_WDITH = ADDR_WIDTH_OUT - LOG2_DATA_SIZE; // line address width of the output space
     localparam BANK_ADDR_WIDTH = DST_ADDR_WDITH - BANK_SEL_BITS;
     localparam NUM_PORTS_IN_BITS = `CLOG2(NUM_PORTS_IN);
     localparam NUM_PORTS_IN_WIDTH = `UP(NUM_PORTS_IN_BITS);

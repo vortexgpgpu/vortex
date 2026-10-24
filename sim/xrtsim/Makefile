@@ -138,6 +138,17 @@ RTL_PKGS += $(RTL_DIR)/VX_trace_pkg.sv
 # Verilator from the -I path above.
 RTL_PKGS += $(RTL_DIR)/cp/VX_cp_pkg.sv
 
+# One AXI memory master per GPU memory port. The platform top must declare
+# its ports literally, so resolve the count from the elaborated configuration.
+AFU_MEM_PORTS := $(shell $(SCRIPT_DIR)/afu_mem_ports.sh -c $(DESTDIR)/.afu_mem_ports $(VERILATOR_PATH)/bin/verilator \
+                   -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN) \
+                   $(CONFIGS) $(filter -DVX_CFG_TCU_TYPE_% -DVX_CFG_FPU_TYPE_%,$(XCONFIGS)) \
+                   $(RTL_INCLUDE) $(RTL_PKGS))
+ifeq ($(AFU_MEM_PORTS),)
+$(error cannot resolve the AFU memory port count for this configuration)
+endif
+CXXFLAGS += -DAFU_MEM_PORTS=$(AFU_MEM_PORTS)
+
 TOP = vortex_afu_shim
 
 VL_FLAGS += --language 1800-2012 --assert -Wall -Wpedantic
@@ -152,6 +163,7 @@ VL_FLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
 # VX_CFG_TCU_TYPE_DPI) unmatched. Add just the enum companions gen_config
 # resolves, so a CONFIGS enum override actually selects its RTL implementation.
 VL_FLAGS += $(CONFIGS) $(filter -DVX_CFG_TCU_TYPE_% -DVX_CFG_FPU_TYPE_%,$(XCONFIGS))
+VL_FLAGS += -DAFU_MEM_PORTS=$(AFU_MEM_PORTS)
 VL_FLAGS += $(RTL_INCLUDE)
 VL_FLAGS += $(RTL_PKGS)
 

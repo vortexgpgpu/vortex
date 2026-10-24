@@ -8,10 +8,10 @@ override CONFIGS += -DPLATFORM_MEMORY_DATA_WIDTH=512
 # The V80 exposes its HBM stacks through the linker's HBM connectivity tags.
 # A single wide master fanned across the channels avoids the per-bank base
 # address problem: the linker assigns each memory range independently, and
-# those bases are not known at synthesis time.
+# those bases are not known at synthesis time. One memory channel caps the
+# AFU at one memory master whatever the GPU's memory port count.
 override CONFIGS += -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=1
 override CONFIGS += -DVX_CFG_PLATFORM_MEMORY_ADDR_WIDTH=34
-override CONFIGS += -DPLATFORM_MERGED_MEMORY_INTERFACE
 
 # Device-memory aperture base. The V80 maps the AFU's m_axi_mem_0 port at
 # 0x40_0000_0000 in both build flavours -- simulation puts the BRAM model there

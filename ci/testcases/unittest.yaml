@@ -46,6 +46,14 @@ tests:
     via: script
     run: "make -C hw/unittest/stream_arb run"
     touches: [hw/rtl/libs/VX_stream_arb.sv, hw/unittest/stream_arb]
+  # The ID-routed AXI arbiter shared by the AFU and the command processor:
+  # write data must reach the slave in address order whichever channel a
+  # master offers first, and a slave that takes data before the address must
+  # not deadlock it. xrtsim's always-ready slave exercises neither.
+  - id: hw-mm-axi-arb
+    via: script
+    run: "make -C hw/unittest/mm_axi_arb run"
+    touches: [hw/rtl/libs/VX_mm_axi_arb.sv, hw/unittest/mm_axi_arb]
   # Texel blend (VX_tex_lerp, both forms the sampler uses) against the C model
   # the SW sampler and SimX share, and the exact Vulkan f/256 blend, over every
   # input.

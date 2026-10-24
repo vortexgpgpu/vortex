@@ -30,6 +30,7 @@ module VX_afu_reset_seq_top #(
 
     // AXI handshakes, driven directly by the testbench.
     input  wire aw_fire,
+    input  wire w_fire,
     input  wire w_fire_last,
     input  wire b_fire,
     input  wire ar_fire,
@@ -42,6 +43,18 @@ module VX_afu_reset_seq_top #(
     input  wire gate_out_ready,
     output wire gate_in_ready,
     output wire gate_out_valid,
+
+    // A real write gate on the same stop_req, the testbench again playing
+    // both the AFU-internal master (wg_in_*) and the shell (wg_out_*).
+    input  wire wg_in_awvalid,
+    input  wire wg_out_awready,
+    output wire wg_in_awready,
+    output wire wg_out_awvalid,
+    input  wire wg_in_wvalid,
+    input  wire wg_in_wlast,
+    input  wire wg_out_wready,
+    output wire wg_in_wready,
+    output wire wg_out_wvalid,
 
     output wire stop_req,
     output wire rst_assert,
@@ -60,10 +73,26 @@ module VX_afu_reset_seq_top #(
         .out_ready (gate_out_ready)
     );
 
+    VX_afu_wr_gate wr_gate (
+        .clk         (clk),
+        .reset       (reset),
+        .stop_req    (stop_req),
+        .in_awvalid  (wg_in_awvalid),
+        .in_awready  (wg_in_awready),
+        .out_awvalid (wg_out_awvalid),
+        .out_awready (wg_out_awready),
+        .in_wvalid   (wg_in_wvalid),
+        .in_wlast    (wg_in_wlast),
+        .in_wready   (wg_in_wready),
+        .out_wvalid  (wg_out_wvalid),
+        .out_wready  (wg_out_wready)
+    );
+
     VX_afu_axi_drain drain (
         .clk          (clk),
         .reset        (reset),
         .aw_fire      (aw_fire),
+        .w_fire       (w_fire),
         .w_fire_last  (w_fire_last),
         .b_fire       (b_fire),
         .ar_fire      (ar_fire),

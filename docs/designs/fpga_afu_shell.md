@@ -26,7 +26,8 @@ DMA-command engine have been removed.
 | [`VX_afu_wrap.sv`](../../hw/rtl/afu/common/VX_afu_wrap.sv) | The real shell (~1,200 LOC): AXI-Lite bit-12 demux, `VX_cp_core`, `m_axi_host`, the Vortex instance and the device-memory path shared with the CP. |
 | [`VX_afu_ctrl.sv`](../../hw/rtl/afu/xrt/VX_afu_ctrl.sv) | Slimmed AXI-Lite slave (~322 LOC): `ap_ctrl` stub at 0x00 + a SCOPE serial register pair + SCOPE watchdog. |
 | [`VX_afu_axil_demux.sv`](../../hw/rtl/afu/common/VX_afu_axil_demux.sv) | AXI-Lite demux splitting the control space on `addr[12]`, one outstanding transaction per direction. |
-| [`VX_afu_axi_drain.sv`](../../hw/rtl/afu/common/VX_afu_axi_drain.sv) | Outstanding-transaction tracker per AXI master; reports when a port owes the interconnect nothing. |
+| [`VX_afu_axi_drain.sv`](../../hw/rtl/afu/common/VX_afu_axi_drain.sv) | Outstanding-transaction tracker per AXI master; reports when a port owes the interconnect nothing, including a write burst under way ahead of its AW. |
+| [`VX_afu_req_gate.sv`](../../hw/rtl/afu/common/VX_afu_req_gate.sv) / [`VX_afu_wr_gate.sv`](../../hw/rtl/afu/common/VX_afu_wr_gate.sv) | Withhold new reads / whole new writes while the reset sequencer quiesces, never withdrawing an offer. |
 | [`VX_afu_reset_seq.sv`](../../hw/rtl/afu/common/VX_afu_reset_seq.sv) | Quiesce-before-reset sequencer for the soft reset; refuses rather than resetting a master that will not drain. |
 
 - **Control.** Host AXI-Lite `addr[12]` splits the slave: `addr[12]=0` →
@@ -39,19 +40,43 @@ DMA-command engine have been removed.
   with its address, and routing W by a register that only updates at the AW
   handshake sent AW and W to different slaves and deadlocked the interface.
   Covered by `hw/unittest/afu_axil_demux`.
-- **Memory.** Two structures, selected by the number of memory ports.
-  *One port* (the merged platforms): `Vortex_axi` and the CP's `axi_dev`
+- **Memory.** The AFU exposes one AXI master per GPU memory port:
+  `AFU_MEM_PORTS_OF(VX_MEM_PORTS)` ([`vortex_afu.vh`](../../hw/rtl/afu/common/vortex_afu.vh)),
+  the last-level cache's memory ports (already capped by the platform's
+  channel count, `PLATFORM_MEMORY_NUM_BANKS`) rounded up to a power of two.
+  The kernel top must spell its ports out, so every flow resolves the count
+  to the literal `AFU_MEM_PORTS` by elaborating a probe against its own flags
+  ([`afu_mem_ports.sh`](../../hw/scripts/afu_mem_ports.sh)); `VX_afu_wrap`
+  asserts the two agree, `package_kernel.tcl` checks the packaged kernel's
+  master count, and the XRT Makefile generates the `--connectivity.sp` lines
+  from the same value. Lines interleave across the N ports
+  (`PLATFORM_MEMORY_INTERLEAVE`; without it each port takes a contiguous range), and port *i* owns the *i*-th contiguous
+  1/N of device memory: its AXI address is the line index divided by N
+  within that share. The platform maps the share to its own contiguous group
+  of `PLATFORM_MEMORY_CHANNELS / N` channels (`HBM[2i:2i+1]` for 16 ports on
+  a U55C), so ports never contend for a channel. `PLATFORM_MEMORY_OFFSET` is
+  applied once, at every port.
+  Two structures, selected by N.
+  *One port*: `Vortex_axi` and the CP's `axi_dev`
   share the port through a 2:1 `VX_mm_axi_arb` in its ID-routed
   multi-outstanding mode (`MULTI_OUT=1`: the top ID bit names the source,
   Vortex gets the remaining ID bits), and CP bursts reach the platform as
-  bursts. *Several ports*: Vortex's memory ports and `axi_dev` (bridged by
+  bursts. Writes keep AW order on the shared W channel, and a write's data
+  goes with its address, so single-beat writes issue one per cycle.
+  *Several ports*: Vortex's memory ports and `axi_dev` (bridged by
   `VX_membus_from_axi`) are the inputs of one bank adapter, `VX_mem_to_axi`,
   so the CP is merged **upstream** of bank selection and reaches every bank.
   In both, every port carries as many reads and writes in flight as its
   masters issue; one outstanding transaction per direction would cap a port
   at one line per DRAM round trip. CP `axi_host` drives a
   **dedicated `m_axi_host` AXI master** for the command ring + host DMA.
-  `PLATFORM_MEMORY_OFFSET` is applied per bank, at the port.
+  While the reset sequencer quiesces, `VX_afu_req_gate` holds new reads and
+  `VX_afu_wr_gate` holds new writes on both channels together: AXI4 lets a
+  master present write data before or with its address, so gating AW alone
+  would strand data the slave can never pair. An address or data offer
+  already on the bus obliges the other channel, since a slave may wait for
+  one before accepting the other. xrtsim aborts on a request outside the
+  issuing port's share of memory.
 - **Interrupt.** The AFU `interrupt` pin is driven from `cp_interrupt`
   ([`:335`](../../hw/rtl/afu/xrt/VX_afu_wrap.sv#L335)).
 

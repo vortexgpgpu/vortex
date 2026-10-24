@@ -172,6 +172,18 @@ CFLAGS += $(RTL_INCLUDE)
 # ast dump flags
 XML_CFLAGS = $(filter-out -DSYNTHESIS -DVIVADO, $(CFLAGS)) $(RTL_PKGS) -I$(DPI_DIR) -DSV_DPI
 
+# One AXI memory master per GPU memory port. The kernel top must declare its
+# ports literally, so resolve the count from the elaborated configuration.
+AFU_MEM_PORTS := $(shell $(SCRIPT_DIR)/afu_mem_ports.sh -c $(BUILD_DIR)/.afu_mem_ports $(VERILATOR_PATH)/bin/verilator $(filter-out -J%,$(XML_CFLAGS)))
+ifeq ($(AFU_MEM_PORTS),)
+$(error cannot resolve the AFU memory port count for this configuration)
+endif
+# config.cfg.tmpl binds the single device-memory master to MEM_TAG.
+ifneq ($(AFU_MEM_PORTS),1)
+$(error the V80 link binds one device-memory master, but this configuration has AFU_MEM_PORTS=$(AFU_MEM_PORTS))
+endif
+CFLAGS += -DAFU_MEM_PORTS=$(AFU_MEM_PORTS)
+
 .PHONY: all clean gen-sources gen-ast scope-json package-ip gen-bin check-axil-blocks
 
 # Fail before synthesis if any 16-byte block in the CP AXI-Lite regfile is only
@@ -188,8 +200,17 @@ check-axil-blocks:
 all: check-axil-blocks $(VBIN_CONTAINER)
 
 gen-sources: $(BUILD_DIR)/sources.txt
-$(BUILD_DIR)/sources.txt:
+$(BUILD_DIR)/sources.txt: $(BUILD_DIR)/afu_mem_ports.stamp
 	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/gen_sources.sh -P $(CFLAGS) -Csrc -Osources.txt
+
+# The preprocessed sources bake in the kernel's port count: regenerate them
+# whenever the configuration changes it.
+$(BUILD_DIR)/afu_mem_ports.stamp: force-afu-mem-ports
+	@mkdir -p $(BUILD_DIR)
+	@if [ "$$(cat $@ 2>/dev/null)" != "$(AFU_MEM_PORTS)" ]; then echo "$(AFU_MEM_PORTS)" > $@; fi
+
+.PHONY: force-afu-mem-ports
+force-afu-mem-ports:
 
 gen-ast: $(BUILD_DIR)/vortex.xml
 $(BUILD_DIR)/vortex.xml:
