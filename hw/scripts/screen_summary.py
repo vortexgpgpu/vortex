@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Summarize a timing screen (foldsim-estimate-timing) for the timing gate.
+"""Summarize a logic screen (foldsim-estimate-timing) for logic_gate.
 
 The screen writes one row per end point bit: the logic levels of its longest
-path, its start and its end. ci/timing_gate.py gates depth per RTL unit, so
+path, its start and its end. ci/logic_gate.py gates depth per RTL unit, so
 this collapses the table into what it compares:
 
   screen_summary.csv  one row: the deepest end point, the end point bits at or
@@ -24,7 +24,8 @@ import os
 import re
 
 # 300 MHz on the V80: failing end points have a median of 7-8 levels, and
-# about 55-60% of the registers at 12 or more fail (timing_screen_proposal.md).
+# about 55-60% of the registers at 12 or more fail
+# (docs/designs/logic_screen.md §7).
 FIX_LEVELS = 12
 WATCH_LEVELS = 8
 NUM_PATHS = 10

@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""timing_screen -- run foldsim's timing screen on a Vortex netlist, and read
+"""logic_screen -- run foldsim's logic screen on a Vortex netlist, and read
 its results by RTL unit or against Vivado.
 
   screen        map an elaborated CIRCT netlist and count the logic levels of
-                every end point (foldsim-timing-map, foldsim-estimate-timing)
+                every end point (foldsim-screen-map, foldsim-estimate-timing)
   summarize     the deep end points grouped by RTL unit, optionally beside
                 Vivado's failing ones
   validate      agreement per register with a Vivado end point table
@@ -25,19 +25,19 @@ its results by RTL unit or against Vivado.
   buffers       which elastic buffers pass a deep ready chain or a computed
                 output through: evidence for an OUT_BUF (OUT_REG) change
 
-  ci/timing_screen.py screen gen/design.mlir runs/full
-  ci/timing_screen.py screen runs/full/mapped.mlirbc runs/socket \\
+  ci/logic_screen.py screen gen/design.mlir runs/full
+  ci/logic_screen.py screen runs/full/mapped.mlirbc runs/socket \\
       top=VX_socket__lift black-boxes=VX_core__lift
-  ci/timing_screen.py summarize runs/full --min-levels 12
-  ci/timing_screen.py validate runs/socket ep.csv --native VX_socket__lift=dut
-  ci/timing_screen.py screen --keep VX_elastic_buffer design.mlir runs/eb \\
+  ci/logic_screen.py summarize runs/full --min-levels 12
+  ci/logic_screen.py validate runs/socket ep.csv --native VX_socket__lift=dut
+  ci/logic_screen.py screen --keep VX_elastic_buffer design.mlir runs/eb \\
       port-modules=VX_elastic_buffer
-  ci/timing_screen.py buffers runs/eb
+  ci/logic_screen.py buffers runs/eb
 
 A Vivado end point table is a CSV of `slack,levels,logic,net,start,end`, one
-row per failing end point (a gate's ep.csv). The DUT flow and the timing gate
+row per failing end point (a gate's ep.csv). The DUT flow and logic_gate
 screen with the Makefiles instead (make -C hw/syn/xilinx/dut <dut>-screen,
-ci/timing_gate.py); see docs/designs/timing_screen.md.
+ci/logic_gate.py); see docs/designs/logic_screen.md.
 """
 import argparse
 import collections
@@ -183,7 +183,7 @@ def cmd_screen(args):
     threads = ["--mlir-disable-threading"] if args.no_threads else []
     if not args.design.endswith(".mlirbc"):
         mapped = os.path.join(args.out, "mapped.mlirbc")
-        pipeline = "foldsim-timing-map-asic" if asic else "foldsim-timing-map"
+        pipeline = "foldsim-screen-map-asic" if asic else "foldsim-screen-map"
         if args.keep:
             # Keep these modules' instances through inlining, so their ports
             # can be reported (ports=, port-modules=).
