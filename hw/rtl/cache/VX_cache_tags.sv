@@ -68,6 +68,8 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
     // the binary evict_way round trip (encode, mux, per-way compare) put the
     // tag-read cone on this array's own write-enable pins.
     input wire [NUM_WAYS-1:0]           fill_way_oh,
+    // the replacement victim as one-hot: the tag store's write enable
+    input wire [NUM_WAYS-1:0]           victim_way_oh,
 
     // outputs
     output wire [NUM_WAYS-1:0]          tag_matches,
@@ -143,6 +145,9 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
     wire [NUM_WAYS-1:0][SEC-1:0] partial_wdata;
     wire [NUM_WAYS-1:0][SEC-1:0] partial_rdata;
 
+    // a sector refill rewrites the line's own tags; a line fill writes the
+    // victim way's new tag
+    wire fill_refill_any;
     for (genvar i = 0; i < NUM_WAYS; ++i) begin : g_way_decode
         wire way_en   = (NUM_WAYS == 1) || (flush_way == i);
         wire do_init  = init; // init all ways
@@ -159,7 +164,7 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
         // (a refill targets the resident way), so a fill rewrites every way --
         // the filled one with line_tag, the others with their current tag --
         // and the compare reaches the array's data, not its write enables.
-        assign line_wdata[i] = do_fill ? line_tag : read_tag[i];
+        assign line_wdata[i] = fill_refill_any ? read_tag[i] : line_tag;
 
         // Read-First BRAM: a fill committed on the previous cycle isn't yet in
         // the readout. The bypass is keyed on the SET and the FILLED WAY: that
@@ -297,12 +302,14 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
         // (a same-cycle-prior fill is folded into tag_eq/read_valid).
         assign line_present[i] = tag_eq && (| read_valid[i]);
     end
+    assign fill_refill_any = (SEC > 1) && (| line_present);
 
     // Single tag array: one BRAM word holds all ways' tags; per-way write-enable
     // updates a single way on a fill. Read at line_idx_n (one cycle ahead),
     // written at line_idx, read-first to match the fill/replay ordering.
     VX_dp_ram #(
         .DATAW (NUM_WAYS * `CS_TAG_SEL_BITS),
+        .WRENW (NUM_WAYS),
         .SIZE  (`CS_LINES_PER_BANK),
         .OUT_REG (1),
         .RDW_MODE ("R")
@@ -310,9 +317,9 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
         .clk   (clk),
         .reset (reset),
         .read  (~stall),
-        // a fill writes the whole set's tags (see line_wdata)
+        // a fill writes the victim way's tag (see line_wdata)
         .write (fill),
-        .wren  (1'b1),
+        .wren  (victim_way_oh),
         .waddr (line_idx),
         .raddr (line_idx_n),
         .wdata (line_wdata),
