@@ -665,6 +665,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .sector_idx  (sector_idx_st0),
         .evict_way   (evict_way_st0),
         .flush_way   (st0.req.way_idx),
+        // a writeback leaves only from a fresh fill's victim or a flushed way
+        .wb_way      (st0.req.is_fill ? victim_way : st0.req.way_idx),
         .fill_way_oh (fill_way_oh_st0),
         .tag_matches (tag_matches_st0),
         .line_present (line_present_st0),
