@@ -39,14 +39,15 @@
 
   <rect x="40" y="200" width="390" height="92" class="unit"/>
   <text x="55" y="224" class="t">hw/syn/xilinx/dut — target screen</text>
-  <text x="55" y="246" class="mono">gen_sources.sh -P   (defines from the toml)</text>
+  <text x="55" y="246" class="mono">gen_sources.sh      (hw/rtl, toml defines)</text>
   <text x="55" y="264" class="mono">circt_elaborate.sh -f mlir -x xilinx_ip_stubs.sv</text>
   <text x="55" y="282" class="mono">gen_platform.py --device=$(DEVICE) --emit=family</text>
 
-  <rect x="40" y="430" width="390" height="70" class="unit"/>
-  <text x="55" y="454" class="t">hw/scripts/screen_summary.py</text>
-  <text x="55" y="474" class="mono">screen_summary.csv, screen_units.json</text>
-  <text x="55" y="491" class="ts">units = instance paths, generate indices folded</text>
+  <rect x="40" y="420" width="390" height="90" class="unit"/>
+  <text x="55" y="444" class="t">hw/scripts/screen_summary.py</text>
+  <text x="55" y="464" class="mono">screen_summary.csv, screen_units.json</text>
+  <text x="55" y="482" class="mono">screen_paths.txt  (deep paths by unit)</text>
+  <text x="55" y="500" class="ts">units = instance paths, generate indices folded</text>
 
   <rect x="40" y="530" width="390" height="120" class="sw"/>
   <text x="55" y="554" class="t">ci/logic_gate.py  (synth_gate.py Screen backend)</text>
@@ -78,12 +79,13 @@
   <text x="545" y="442" class="mono">versal (V80) | virtexuplusHBM (U55C)</text>
   <text x="545" y="464" class="ts">optional: retime-levels=, trace=, black-boxes=</text>
 
-  <rect x="510" y="530" width="400" height="120" class="mem"/>
+  <rect x="510" y="530" width="400" height="132" class="mem"/>
   <text x="525" y="554" class="t">Outputs (per DUT, screen/)</text>
   <text x="525" y="576" class="mono">endpoints.csv   one row per end point bit</text>
   <text x="525" y="594" class="mono">instances.csv   the elaborated instance tree</text>
   <text x="525" y="612" class="mono">report.txt      histogram, deepest paths op by op</text>
-  <text x="525" y="636" class="ts">mapped.mlirbc kept for re-screening other tops</text>
+  <text x="525" y="630" class="mono">paths.jsonl     every deep path, source lines</text>
+  <text x="525" y="652" class="ts">mapped.mlirbc kept for re-screening other tops</text>
 
   <!-- consumers -->
   <rect x="970" y="60" width="410" height="610" class="grp"/>
@@ -126,7 +128,7 @@
   <path d="M710,480 L710,530" class="flow"/>
   <path d="M510,590 L430,470" class="flow"/>
   <text x="440" y="520" class="lbl">endpoints, instances</text>
-  <path d="M235,500 L235,530" class="flow"/>
+  <path d="M235,510 L235,530" class="flow"/>
   <path d="M235,650 L235,690 L955,690 L955,155 L990,155" class="flowb"/>
   <path d="M910,600 L990,300" class="flowb"/>
   <path d="M910,620 L990,440" class="flowb"/>
