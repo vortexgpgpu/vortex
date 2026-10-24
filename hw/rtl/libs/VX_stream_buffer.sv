@@ -67,8 +67,11 @@ module VX_stream_buffer #(
 
 		if (OUT_REG != 0) begin : g_out_reg
 
+			// The skid register is read only once the input side closes, which
+			// takes an accepted input; while open it may follow the input bus,
+			// so its wide enable does not wait on valid_in.
 			always @(posedge clk) begin
-				if (fire_in) begin
+				if (valid_in_r) begin
 					buffer_r <= data_in;
 				end
 			end
