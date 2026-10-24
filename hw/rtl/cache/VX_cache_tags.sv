@@ -61,6 +61,9 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
     // the way a flush walks: the request's registered way, never a fill's
     // compare-derived target, so the flush's clears stay off the tag read
     input wire [`CS_WAY_SEL_WIDTH-1:0]  flush_way,
+    // the way a writeback evicts, for evict_tag: a fill's replacement victim
+    // (a refill evicts nothing) or a flush's way -- never the tag compare
+    input wire [`CS_WAY_SEL_WIDTH-1:0]  wb_way,
     // fill target way as one-hot, taken from line_present/victim directly:
     // the binary evict_way round trip (encode, mux, per-way compare) put the
     // tag-read cone on this array's own write-enable pins.
@@ -102,10 +105,11 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
     if (WRITEBACK) begin : g_evict_tag_wb
         assign evict_dirty = (| read_dirty[evict_way]); // dirty if any sector dirty
         assign evict_dirty_mask = read_dirty[evict_way];
-        assign evict_tag = read_tag[evict_way];
+        assign evict_tag = read_tag[wb_way];
     end else begin : g_evict_tag_wt
         `UNUSED_VAR (read_dirty)
         `UNUSED_VAR (read_tag)
+        `UNUSED_VAR (wb_way)
         assign evict_dirty = 1'b0;
         assign evict_dirty_mask = '0;
         assign evict_tag = '0;
