@@ -664,6 +664,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .line_tag    (line_tag_st0),
         .sector_idx  (sector_idx_st0),
         .evict_way   (evict_way_st0),
+        .flush_way   (st0.req.way_idx),
         .fill_way_oh (fill_way_oh_st0),
         .tag_matches (tag_matches_st0),
         .line_present (line_present_st0),
