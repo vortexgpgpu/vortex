@@ -290,7 +290,7 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         always @(posedge clk) begin
             if (~pipe_stall) begin
                 lane_st1    <= (NUM_LANES > 1) ? LANE_IDXW'(byte_off_n >> `CLOG2(LANE_SIZE)) : '0;
-                bit_off_st1 <= LANE_OFF_BITS'(((byte_off_n % LANE_SIZE) >> 2) << 5);
+                bit_off_st1 <= LANE_OFF_BITS'(((32'(byte_off_n) % LANE_SIZE) >> 2) << 5);
             end
         end
         // This AMO's byteen slice within its lane.

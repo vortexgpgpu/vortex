@@ -46,7 +46,6 @@ module VX_stream_buffer #(
 		reg [DATAW-1:0] data_out_r, buffer_r;
 		reg valid_out_r, valid_in_r;
 
-		wire fire_in = valid_in && ready_in;
 		wire flow_out = ready_out || ~valid_out;
 
 		always @(posedge clk) begin
@@ -85,6 +84,8 @@ module VX_stream_buffer #(
 			assign data_out = data_out_r;
 
 		end else begin : g_no_out_reg
+
+			wire fire_in = valid_in && ready_in;
 
 			always @(posedge clk) begin
 				if (fire_in) begin
