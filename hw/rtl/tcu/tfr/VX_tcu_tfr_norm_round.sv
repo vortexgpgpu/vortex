@@ -17,9 +17,12 @@ module VX_tcu_tfr_norm_round import VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter WA = 30,
     parameter EXP_W = 10,
-    parameter C_HI_W = 8
+    parameter C_HI_W = 8,
+    // 2 registers the normalized sum and its exponent ahead of the rounding
+    parameter LATENCY = 1
 ) (
     input wire          clk,
+    input wire          enable,
     input wire          valid_in,
     input wire [31:0]   req_id,
     input wire [EXP_W-1:0] max_exp,
@@ -34,23 +37,26 @@ module VX_tcu_tfr_norm_round import VX_tcu_pkg::*; #(
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR ({clk, req_id, valid_in, is_int, cval_hi})
 
+    `STATIC_ASSERT (LATENCY == 1 || LATENCY == 2, ("invalid parameter: LATENCY=%0d", LATENCY))
+
     // The accumulator resolves the sum in sign-magnitude form, so the leading
     // zero count runs directly on the exact magnitude: no abs conversion, no
     // prediction slack, and the normalized MSB always lands on bit WA-1.
-    wire sum_sign = acc_sign;
-    wire [WA-1:0] abs_sum = acc_sig;
-    wire zero_sum = ~|acc_sig;
+    wire sum_sign_w = acc_sign;
+    wire [WA-1:0] abs_sum_w = acc_sig;
+    wire zero_sum_w = ~|acc_sig;
 
     wire [$clog2(WA)-1:0] lz_count;
     VX_lzc #(
         .N(WA)
     ) lzc_inst (
-        .data_in   (abs_sum),
+        .data_in   (abs_sum_w),
         .data_out  (lz_count),
         `UNUSED_PIN (valid_out)
     );
 
     // Parallel exponent calculation: norm_exp_base = max_exp - (lz_count + 128)
+    wire signed [EXP_W-1:0] norm_exp_base_w;
     wire signed [EXP_W-1:0] norm_exp_base;
     wire signed [EXP_W-1:0] norm_exp_plus1;
 
@@ -62,14 +68,37 @@ module VX_tcu_tfr_norm_round import VX_tcu_pkg::*; #(
         .cin   (1'b1),
         .dataa (max_exp),
         .datab (~sub_term),
-        .sum   (norm_exp_base),
+        .sum   (norm_exp_base_w),
         `UNUSED_PIN (cout)
     );
 
-    assign norm_exp_plus1 = norm_exp_base + EXP_W'(1'b1);
-
     // Normalization shift: exact count, fixed window
-    wire [WA-1:0] shifted_sum = abs_sum << lz_count;
+    wire [WA-1:0] shifted_sum_w = abs_sum_w << lz_count;
+
+    // The rounding and the result packing see the normalized sum at the cut.
+    wire                 sum_sign;
+    wire [WA-1:0]        abs_sum;
+    wire                 zero_sum;
+    wire [WA-1:0]        shifted_sum;
+    wire                 sticky_c;
+    fedp_excep_t         exceptions_c;
+    wire                 is_int_c;
+    wire [C_HI_W-1:0]    cval_hi_c;
+    wire                 valid_c;
+    wire [31:0]          req_id_c;
+    VX_pipe_register #(
+        .DATAW (1 + WA + 1 + WA + EXP_W + 1 + $bits(fedp_excep_t) + 1 + C_HI_W + 1 + 32),
+        .DEPTH (LATENCY - 1)
+    ) pipe_cut (
+        .clk      (clk),
+        .reset    (1'b0),
+        .enable   (enable),
+        .data_in  ({sum_sign_w, abs_sum_w, zero_sum_w, shifted_sum_w, norm_exp_base_w, sticky_in, exceptions,   is_int,   cval_hi,   valid_in, req_id}),
+        .data_out ({sum_sign,   abs_sum,   zero_sum,   shifted_sum,   norm_exp_base,   sticky_c,  exceptions_c, is_int_c, cval_hi_c, valid_c,  req_id_c})
+    );
+    `UNUSED_VAR ({valid_c, req_id_c, is_int_c, cval_hi_c, abs_sum})
+
+    assign norm_exp_plus1 = norm_exp_base + EXP_W'(1'b1);
 
     wire [26:0] aligned_bits = shifted_sum[WA-1 -: 27];
 
@@ -78,7 +107,7 @@ module VX_tcu_tfr_norm_round import VX_tcu_pkg::*; #(
     wire [23:0] norm_man   = aligned_bits[26:3];
     wire        guard_bit  = aligned_bits[2];
     wire        round_bit  = aligned_bits[1];
-    wire        sticky_bit = aligned_bits[0] | (|shifted_sum[WA-27:0]) | sticky_in;
+    wire        sticky_bit = aligned_bits[0] | (|shifted_sum[WA-27:0]) | sticky_c;
     wire        lsb_bit    = norm_man[0];
     wire round_up = guard_bit && (round_bit || sticky_bit || lsb_bit);
 
@@ -121,16 +150,16 @@ module VX_tcu_tfr_norm_round import VX_tcu_pkg::*; #(
     end
 
     wire [31:0] fp_nan_result = {1'b0, 8'hFF, 1'b1, 22'd0};
-    wire [31:0] fp_inf_result = {exceptions.sign, 8'hFF, 23'd0};
+    wire [31:0] fp_inf_result = {exceptions_c.sign, 8'hFF, 23'd0};
     wire [31:0] fp_zero_result = {sum_sign, 8'd0, 23'd0};
     wire [31:0] fp_overflow_result = {sum_sign, 8'hFF, 23'd0};
     wire [31:0] fp_normal_result = {sum_sign, packed_exp, final_man};
 
     logic [31:0] fp_result;
     always_comb begin
-        if (exceptions.is_nan) begin
+        if (exceptions_c.is_nan) begin
             fp_result = fp_nan_result;
-        end else if (exceptions.is_inf) begin
+        end else if (exceptions_c.is_inf) begin
             fp_result = fp_inf_result;
         end else begin
             if (zero_sum || exp_underflow) begin
@@ -155,23 +184,23 @@ module VX_tcu_tfr_norm_round import VX_tcu_pkg::*; #(
     ) int_adder (
         .cin   (0),
         .dataa (ext_acc_int),
-        .datab (cval_hi),
+        .datab (cval_hi_c),
         .sum   (int_hi),
         `UNUSED_PIN (cout)
     );
 
     wire [31:0] int_result = {int_hi, acc_tc[24:0]};
 
-    assign result = is_int ? int_result : fp_result;
+    assign result = is_int_c ? int_result : fp_result;
 `else
     assign result = fp_result;
 `endif
 
 `ifndef SYNTHESIS
     always @(posedge clk) begin
-        if (valid_in && !is_int && !zero_sum
+        if (valid_in && !is_int && !zero_sum_w
          && !exceptions.is_nan && !exceptions.is_inf) begin
-            `ASSERT(shifted_sum[WA-1],
+            `ASSERT(shifted_sum_w[WA-1],
                 ("%t: %s FEDP-NORM(%0d): normalized MSB missing, mag=0x%0h lzc=%0d",
                  $time, INSTANCE_ID, req_id, acc_sig, lz_count));
         end
@@ -180,9 +209,9 @@ module VX_tcu_tfr_norm_round import VX_tcu_pkg::*; #(
 
 `ifdef DBG_TRACE_TCU
     always_ff @(posedge clk) begin
-        if (valid_in) begin
-            `TRACE(4, ("%t: %s FEDP-NORM(%0d): is_int=%b, abs_sum=0x%0h, sign=%b, lzc=%0d, norm_exp=%0d, shifted=0x%0h, R=%b, S=%b, Rup=%b, carry=%b, final_exp=%0d, result=0x%0h\n",
-                $time, INSTANCE_ID, req_id, is_int, abs_sum, sum_sign, lz_count, norm_exp_base, shifted_sum, round_bit, sticky_bit, round_up, carry_out, final_exp_s, result));
+        if (valid_c) begin
+            `TRACE(4, ("%t: %s FEDP-NORM(%0d): is_int=%b, abs_sum=0x%0h, sign=%b, norm_exp=%0d, shifted=0x%0h, R=%b, S=%b, Rup=%b, carry=%b, final_exp=%0d, result=0x%0h\n",
+                $time, INSTANCE_ID, req_id_c, is_int_c, abs_sum, sum_sign, norm_exp_base, shifted_sum, round_bit, sticky_bit, round_up, carry_out, final_exp_s, result));
         end
     end
 `endif
