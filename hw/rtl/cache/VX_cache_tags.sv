@@ -301,10 +301,18 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
     // Single tag array: one BRAM word holds all ways' tags; per-way write-enable
     // updates a single way on a fill. Read at line_idx_n (one cycle ahead),
     // written at line_idx, read-first to match the fill/replay ordering.
+    // The tag readout starts the bank's whole lookup (compare, way select,
+    // the side stores' and the tag store's own writes, the commit register),
+    // so up to 512 sets the store is distributed RAM, read from a fabric
+    // register rather than a block RAM's clock-to-out; larger stores stay in
+    // block RAM.
+    localparam TAG_LUTRAM = (`CS_LINES_PER_BANK <= 512);
+
     VX_dp_ram #(
         .DATAW (NUM_WAYS * `CS_TAG_SEL_BITS),
         .SIZE  (`CS_LINES_PER_BANK),
         .OUT_REG (1),
+        .LUTRAM  (TAG_LUTRAM),
         .RDW_MODE ("R")
     ) tag_store (
         .clk   (clk),
