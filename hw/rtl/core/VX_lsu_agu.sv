@@ -32,7 +32,10 @@ module VX_lsu_agu import VX_gpu_pkg::*; (
     input  wire [`VX_CFG_XLEN-1:0] stride,  // rs2 (pack stride)
     input  wire [11:0]             offset,  // immediate offset; [1:0] = pack uop_idx
     input  wire [1:0]              pack,    // 0 = plain, non-zero = pack-load
-    output wire [`VX_CFG_XLEN-1:0] addr
+    output wire [`VX_CFG_XLEN-1:0] addr,
+    // the address before the stack interleave, which maps the stack window
+    // onto itself: any window disjoint from it classifies both alike
+    output wire [`VX_CFG_XLEN-1:0] lin_addr
 );
     wire is_pack = (pack != 2'b00);
     wire [1:0] uop_idx = offset[1:0];
@@ -54,7 +57,7 @@ module VX_lsu_agu import VX_gpu_pkg::*; (
         .sum   (csa_sum),
         .carry (csa_carry)
     );
-    wire [`VX_CFG_XLEN-1:0] lin_addr = csa_sum[`VX_CFG_XLEN-1:0] + csa_carry[`VX_CFG_XLEN-1:0];
+    assign lin_addr = csa_sum[`VX_CFG_XLEN-1:0] + csa_carry[`VX_CFG_XLEN-1:0];
     `UNUSED_VAR ({csa_sum[`VX_CFG_XLEN+1:`VX_CFG_XLEN], csa_carry[`VX_CFG_XLEN+1:`VX_CFG_XLEN]})
 
 `ifdef VX_CFG_LSU_STACK_INTERLEAVE_ENABLE
