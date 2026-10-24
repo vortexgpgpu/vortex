@@ -1,7 +1,7 @@
 {
   "cache": {
     "clock_mhz": 300,
-    "config_hash": "1b4b55b098be1ae2",
+    "config_hash": "de64f159f8679ea2",
     "configs": "-DVX_CFG_EXT_A_ENABLE",
     "dut": "cache",
     "result": {
@@ -23,7 +23,7 @@
       "env": {
         "circt": "CIRCT 48b64cdd6",
         "device": "xcu55c-fsvh2892-2L-e",
-        "foldsim": "foldsim 5f2469cf0-dirty",
+        "foldsim": "foldsim 8b4d63ae8",
         "xlen": 32
       },
       "fix_levels": 12,
@@ -64,11 +64,11 @@
   },
   "core": {
     "clock_mhz": 300,
-    "config_hash": "ce67fbf6e5fff3de",
+    "config_hash": "50d4dbd03ba09017",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_EXT_C_ENABLE -DVX_CFG_EXT_A_ENABLE",
     "dut": "core",
     "result": {
-      "build_time_s": 30,
+      "build_time_s": 35,
       "deep_endpoints": 2446,
       "deepest_paths": [
         "25  core/g_compute_slices.g_slices_0.compute_slice/backend_slice/execute_slice/lsu_dispatch/g_blocks_0.buf_out/g_eb2.stream_buffer/g_buffer.data_out_r[1551] -> core/g_lsu_scheduler_0.lsu_scheduler/mem_scheduler/g_req_queue_rw.req_queue/g_ebN.fifo_queue/g_depth_n.g_out_reg.data_out_r.d[519]",
@@ -86,7 +86,7 @@
       "env": {
         "circt": "CIRCT 48b64cdd6",
         "device": "xcu55c-fsvh2892-2L-e",
-        "foldsim": "foldsim 5f2469cf0-dirty",
+        "foldsim": "foldsim 8b4d63ae8",
         "xlen": 32
       },
       "fix_levels": 12,
