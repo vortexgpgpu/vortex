@@ -2,7 +2,7 @@
 """synth_report — render synthesis-gate reports as one Markdown summary.
 
 Every gate ends a run with `--report` JSON: asic_gate.yml one per DUT job,
-fpga_gate.yml and timing_gate.yml one for the whole sweep. This joins them
+fpga_gate.yml and logic_gate.yml one for the whole sweep. This joins them
 into a single Markdown document for the workflow summary -- every build's
 metrics against its baseline, why each build that did not pass did not, and
 where each design is tight -- so a run is diagnosed from its GitHub page

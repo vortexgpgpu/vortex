@@ -23,7 +23,7 @@ $(DUTS):
 	cp build.mk $(PREFIX)_$@/Makefile
 	$(MAKE) -C $(PREFIX)_$@ DUT=$@ clean && $(MAKE) -C $(PREFIX)_$@ DUT=$@ > $(PREFIX)_$@/build.log 2>&1 &
 
-# The timing screen of one DUT, in the foreground: make tcu-screen
+# The logic screen of one DUT, in the foreground: make tcu-screen
 %-screen:
 	mkdir -p $(PREFIX)_$*
 	cp build.mk $(PREFIX)_$*/Makefile

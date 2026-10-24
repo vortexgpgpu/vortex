@@ -264,10 +264,10 @@ so the parity and perf views of one workload are two cases.
 
 `perf_gate` catches a change that costs cycles. The synthesis gates catch one
 that costs **timing closure or area**: they synthesize a catalog of designs
-and assert the results against golden baselines. The timing gate catches one
+and assert the results against golden baselines. `logic_gate` catches one
 that makes a unit **deeper**, in seconds and without synthesis.
 
-| | `fpga_gate` | `asic_gate` | `timing_gate` |
+| | `fpga_gate` | `asic_gate` | `logic_gate` |
 |---|---|---|---|
 | flow | Vivado synthesis, place and route | CIRCT → Yosys → ABC → OpenSTA, on ASAP7 | CIRCT → `foldsim-estimate-timing` (logic levels as Vivado counts them on `DEVICE`'s family) |
 | design tree | `hw/syn/xilinx/dut` | `hw/syn/yosys/dut` | `hw/syn/xilinx/dut`, target `screen` |
@@ -291,8 +291,8 @@ tool-specific — catalog loading, the config hash, threshold resolution,
 `known_issue`, the resumable session, the scheduler, the gate and the report.
 A tool adapter supplies only what differs: metric names, how the flow is
 invoked, what its log looks like, which environment fields make two runs
-comparable, and any assertion beyond the per-metric check (the timing gate's
-per-unit depths). `fpga_gate.py`, `asic_gate.py` and `timing_gate.py` are
+comparable, and any assertion beyond the per-metric check (`logic_gate`'s
+per-unit depths). `fpga_gate.py`, `asic_gate.py` and `logic_gate.py` are
 entry points that pin the tool.
 
 #### Spec and baseline
@@ -305,7 +305,7 @@ entry points that pin the tool.
 Groups are `core`, `tensor`, `graphics`, `dxa` and `vm`. `asic_gate` uses the
 same group names and gates a subset of the builds (§4.5), so where the two
 gates share a design, a divergence between the tools on the same module is a
-finding, not noise. `timing_gate` screens exactly `fpga_gate`'s builds, so a
+finding, not noise. `logic_gate` screens exactly `fpga_gate`'s builds, so a
 unit it flags can be read against the Fmax gate's critical paths.
 
 The config hash ties the two files together: edit the spec, and the gate
@@ -350,9 +350,9 @@ so the flow reports the signed worst slack instead.
 | `XPASS` | a known issue stopped reproducing; clear the flag | no |
 | `RECORDED` | a baseline was written | no |
 
-#### What the timing gate asserts
+#### What `logic_gate` asserts
 
-The screen ([timing_screen.md](timing_screen.md)) counts logic levels, not
+The screen ([logic_screen.md](logic_screen.md)) counts logic levels, not
 slack: it does not see wires, so it gates depth, which it predicts (Spearman
 0.50–0.93 against Vivado per register on the V80 gates), and leaves Fmax to
 `fpga_gate`. It counts them for the family of
@@ -523,7 +523,7 @@ The largest designs — `top`, `gfx`, `tensor`, `vm` — are therefore gated on
 `fpga_gate` only, and `core` and `tex` are gated at a reduced width. Measure a design's peak memory before
 adding it: an over-budget design costs a silent job kill, not a red gate.
 
-### 4.6 `timing_gate.yml`
+### 4.6 `logic_gate.yml`
 
 On every pull request and push to master that touches the RTL, the DUT
 wrappers, the screen's scripts, the gate or its baselines; and by manual

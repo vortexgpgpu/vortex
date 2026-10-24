@@ -12,7 +12,7 @@ what does it call its numbers" is shared:
 
   --tool=xilinx  Vivado synthesis + place-and-route      -> ci/fpga_gate.py
   --tool=yosys   Yosys + OpenSTA on an ASIC PDK          -> ci/asic_gate.py
-  --tool=screen  logic levels per RTL unit, no synthesis -> ci/timing_gate.py
+  --tool=screen  logic levels per RTL unit, no synthesis -> ci/logic_gate.py
 
   Spec      : ci/testcases/<gate>.yaml                  (what to build)
   Baselines : ci/baselines/synthesis/<tool>/<group>.json (last accepted metrics)
@@ -443,7 +443,7 @@ class Yosys(Tool):
 
 
 class Screen(Tool):
-    """The timing screen: logic levels per RTL unit (hw/syn/xilinx/dut, target
+    """The logic screen: logic levels per RTL unit (hw/syn/xilinx/dut, target
     `screen`).
 
     foldsim-estimate-timing ranks every register-to-register path of the CIRCT
@@ -459,7 +459,7 @@ class Screen(Tool):
     """
 
     name = "screen"
-    gate = "timing_gate"
+    gate = "logic_gate"
     flow = "hw/syn/xilinx/dut"
 
     metrics = ("max_levels", "deep_endpoints", "watch_endpoints", "endpoints",
@@ -482,7 +482,7 @@ class Screen(Tool):
 
     # The netlist exists once foldsim-opt starts mapping it; a typo in a define
     # or an include dies in gen_sources.sh or circt_elaborate.sh before that.
-    elab_done = "foldsim-timing-map"
+    elab_done = "foldsim-screen-map"
     elab_label = "elaboration"
     phases = (
         ("gen_sources.sh", "sources"),
