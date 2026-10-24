@@ -140,11 +140,17 @@ for stub in "${stubs[@]}"; do
 done
 
 stem="${output_file%.*}"
-# The netlist is the output itself in mlir format; keep the import beside it.
-[ "$format" = mlir ] && stem="$stem.import"
+# The netlist is the output itself in mlir format; keep the import beside it,
+# and every op's source location: the tools built on the netlist name logic
+# that has no name of its own by its file and line.
+debuginfo=()
+if [ "$format" = mlir ]; then
+    stem="$stem.import"
+    debuginfo=(--mlir-print-debuginfo)
+fi
 "$CIRCT_VERILOG" --ir-hw --top="$top" --detect-memories --allow-use-before-declare \
     --allow-hierarchical-const --ignore-uninstantiated-modules "${blackboxes[@]}" \
-    "${defines[@]}" "${args[@]}" "${files[@]}" -o "$stem.mlir"
+    "${defines[@]}" "${args[@]}" "${files[@]}" "${debuginfo[@]}" -o "$stem.mlir"
 
 # Memories are detected on import; what remains of a conditional write at a
 # dynamic index (`if (c) x[i] = v`) is expanded into per-element selects.
@@ -160,7 +166,7 @@ fi
 # users come first; sorting the ops first lets it merge every duplicate.
 if [ "$format" = mlir ]; then
     "$CIRCT_OPT" "$stem.mlir" "${passes[@]}" --canonicalize --topological-sort --cse \
-        -o "$output_file"
+        "${debuginfo[@]}" -o "$output_file"
     exit 0
 fi
 "$CIRCT_OPT" "$stem.mlir" "${passes[@]}" --canonicalize --topological-sort --cse \

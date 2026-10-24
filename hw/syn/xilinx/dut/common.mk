@@ -90,22 +90,24 @@ power:
 # without Vivado. It elaborates the same sources and
 # defines as gen-sources into a CIRCT netlist of its own, with the Xilinx
 # floating-point cores as black boxes. ci/logic_gate.py gates
-# screen_summary.csv and screen_units.json; screen/report.txt has the deepest
-# paths op by op.
+# screen_summary.csv and screen_units.json; screen_paths.txt has every path
+# of at least SCREEN_PATH_LEVELS (screen_summary.py's watch threshold), op by
+# op, by unit.
+SCREEN_PATH_LEVELS ?= 8
 screen:
 	mkdir -p screen
-	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -T$(TOP_LEVEL_ENTITY) -P -Cscreen/src -Oscreen/sources.f $(RTL_PKGS)
+	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -T$(TOP_LEVEL_ENTITY) -Oscreen/sources.f $(RTL_PKGS)
 	$(SCRIPT_DIR)/circt_elaborate.sh -f mlir -t $(TOP_LEVEL_ENTITY) -l screen/sources.f \
 		-x $(SCRIPT_DIR)/xilinx_ip_stubs.sv -r screen/memories.rpt -o screen/netlist.mlir
 	$(FOLDSIM_OPT) screen/netlist.mlir --pass-pipeline='builtin.module(foldsim-screen-map)' \
 		--emit-bytecode -o screen/mapped.mlirbc
 	family=$$(python3 $(SCRIPT_DIR)/gen_platform.py --device=$(DEVICE) --emit=family) && \
-	$(FOLDSIM_OPT) screen/mapped.mlirbc -o /dev/null --pass-pipeline="builtin.module(foldsim-estimate-timing{top=$(TOP_LEVEL_ENTITY) family=$$family output=screen/endpoints.csv instances=screen/instances.csv report=screen/report.txt})"
+	$(FOLDSIM_OPT) screen/mapped.mlirbc -o /dev/null --pass-pipeline="builtin.module(foldsim-estimate-timing{top=$(TOP_LEVEL_ENTITY) family=$$family output=screen/endpoints.csv instances=screen/instances.csv report=screen/report.txt paths=screen/paths.jsonl path-levels=$(SCREEN_PATH_LEVELS)})"
 	python3 $(SCRIPT_DIR)/screen_summary.py screen --top $(TOP_LEVEL_ENTITY)
 
 clean:
 ifndef RESUME
-	rm -rf project_1 screen screen_summary.csv screen_units.json
+	rm -rf project_1 screen screen_summary.csv screen_units.json screen_paths.txt
 	rm -rf .Xil
 	rm -f *.rpt
 	rm -f *.log

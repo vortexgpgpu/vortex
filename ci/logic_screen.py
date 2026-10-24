@@ -19,6 +19,8 @@ its results by RTL unit or against Vivado.
                 every end point (foldsim-screen-map, foldsim-estimate-timing)
   summarize     the deep end points grouped by RTL unit, optionally beside
                 Vivado's failing ones
+  paths         every deep path op by op, by RTL unit (one per pair of
+                registers, generate copies folded)
   validate      agreement per register with a Vivado end point table
   retime-split  the same agreement, split by whether Vivado retimed the paths
   ports         the depth at the ports of chosen modules' instances, by unit
@@ -29,6 +31,7 @@ its results by RTL unit or against Vivado.
   ci/logic_screen.py screen runs/full/mapped.mlirbc runs/socket \\
       top=VX_socket__lift black-boxes=VX_core__lift
   ci/logic_screen.py summarize runs/full --min-levels 12
+  ci/logic_screen.py paths runs/full --unit lsu_unit
   ci/logic_screen.py validate runs/socket ep.csv --native VX_socket__lift=dut
   ci/logic_screen.py screen --keep VX_elastic_buffer design.mlir runs/eb \\
       port-modules=VX_elastic_buffer
@@ -194,7 +197,8 @@ def cmd_screen(args):
                       + threads))
     files = ["output=%s/endpoints.csv" % args.out,
              "instances=%s/instances.csv" % args.out,
-             "report=%s/report.txt" % args.out]
+             "report=%s/report.txt" % args.out,
+             "paths=%s/paths.jsonl" % args.out]
     if any(o.startswith("port-modules=") for o in args.options):
         files.append("ports=%s/ports.csv" % args.out)
     opts = " ".join(files + args.options)
@@ -427,6 +431,18 @@ def cmd_summarize(args):
 
 
 
+def cmd_paths(args):
+    """Every path of at least --min-levels, by unit, op by op."""
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                    '..', 'hw', 'scripts'))
+    import screen_summary
+    count, _ = screen_summary.write_paths(sys.stdout, args.screen,
+                                          args.min_levels, args.unit)
+    if not count:
+        print('(the screen lists paths from its path-levels= on, 12 by '
+              'default)')
+
+
 def load_ports(screen):
     """instance -> {port: (direction, levels)} from a screen's ports.csv."""
     ports = collections.defaultdict(dict)
@@ -562,6 +578,12 @@ def main():
     p.add_argument('--metric', default='levels', choices=['levels', 'retimed'],
                    help="the screen's column to group by")
     p.set_defaults(fn=cmd_summarize)
+
+    p = sub.add_parser("paths", help="deep paths op by op, by RTL unit")
+    p.add_argument('screen')
+    p.add_argument('--min-levels', type=int, default=12)
+    p.add_argument('--unit', help="only the units whose name contains this")
+    p.set_defaults(fn=cmd_paths)
 
     p = sub.add_parser("validate", help="agreement per register with Vivado")
     p.add_argument('screen')

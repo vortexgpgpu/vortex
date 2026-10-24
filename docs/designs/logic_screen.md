@@ -37,7 +37,7 @@ One DUT of the synthesis catalog, from a configured build tree:
 
 ```bash
 make -C hw/syn/xilinx/dut tcu-screen
-# build_tcu/screen/report.txt    deepest paths, op by op
+# build_tcu/screen_paths.txt     every path at >= 8 levels, op by op, by unit
 # build_tcu/screen_units.json    deepest end point per RTL unit
 ```
 
@@ -49,14 +49,15 @@ ci/logic_gate.py -b om --update-baseline
 ```
 
 Any CIRCT netlist, with `ci/logic_screen.py` (subcommands `screen`,
-`summarize`, `validate`, `retime-split`; `foldsim-opt` from the `PATH` or
-`FOLDSIM_OPT`):
+`summarize`, `paths`, `validate`, `retime-split`, `ports`, `buffers`;
+`foldsim-opt` from the `PATH` or `FOLDSIM_OPT`):
 
 ```bash
 ci/logic_screen.py screen design.mlir runs/full            # map, then screen
 ci/logic_screen.py screen runs/full/mapped.mlirbc runs/socket \
     top=VX_socket__lift black-boxes=VX_core__lift           # one unit of a mapped design
 ci/logic_screen.py summarize runs/full --min-levels 12     # deep end points by RTL unit
+ci/logic_screen.py paths runs/full --unit lsu_unit         # its paths, op by op (§5)
 ci/logic_screen.py validate runs/socket ep.csv --native VX_socket__lift=dut
 ```
 
@@ -80,6 +81,7 @@ foldsim-opt mapped.mlirbc -o /dev/null --pass-pipeline='builtin.module(
 | `min-levels=` | write only end points at or above this many levels |
 | `top-paths=` | deepest paths to print op by op (default 50) |
 | `trace=` | also print the deepest path of each end point whose name contains this |
+| `paths=`, `path-levels=` | every path of at least `path-levels` (12) levels, one per pair of registers, op by op (§5) |
 | `retime-levels=` | also estimate the depth after Vivado's retiming to this period (§4.4) |
 | `ports=`, `port-modules=` | the depth at each port of the named modules' instances (§8) |
 
@@ -251,7 +253,9 @@ candidates retiming is unlikely to absorb.
 | `instances.csv` | the instance tree: `id,parent,instance,module` (the `*_inst` columns' ids) |
 | `report.txt` | counts, combinational loops, ops without a model, the histogram of end points by levels, the `top-paths` deepest paths op by op, and the deepest path of each `trace=` match |
 | `screen_summary.csv` | the DUT flow's one row: max levels, end points ≥ 12, ≥ 8, all |
+| `paths.jsonl` | `paths=`: one JSON line per pair of start and end registers whose deepest bit has at least `path-levels` levels: that bit's levels, the pair's bit count, start, end, and `ops`, the path from the end back to the start as `[levels, kind, fanout, instance id, name, source]` |
 | `screen_units.json` | the deepest end point of every unit at ≥ 8 levels, and the 10 deepest paths |
+| `screen_paths.txt` | the DUT flow's `paths.jsonl` at ≥ 8 levels, by unit (`ci/logic_screen.py paths` for any screen) |
 
 A path in `report.txt`, deepest first, one op per line: levels at the op,
 its kind, the fanout of its bit, and its instance path and name:
@@ -264,6 +268,37 @@ its kind, the fanout of its bit, and its instance path and name:
      0 reg    fo 59    .../req_pending/in_fire_r[13]
 ```
 
+`report.txt`'s deepest paths are often one pair of registers, bit after bit.
+The path list has **every** deep path once:
+
+- one per pair of start and end registers, its deepest bit, with the
+  number of bits it stands for;
+- pairs whose names differ only in generate indices (`g_banks_0`,
+  `g_banks_1`) and bits fold into one, as units fold them, so a unit the
+  gate names is a heading of the list;
+- units deepest first, and in each unit its paths deepest first;
+- each op with the **source line** it came from. Mapped LUTs have no name
+  of their own, so the file and line are what locate them in the RTL. The
+  DUT flow elaborates `hw/rtl` itself (not preprocessed copies), so the
+  lines are the repository's.
+
+```
+== cache/g_cache_cache/g_banks_*_bank/g_amo_amo: 24 levels, 23 paths
+
+  24 levels, 1024 d bits in 4 copies
+  from cache/g_cache.cache/g_banks_0.bank/g_amo.amo/g_commit.chain_match_r[0]
+  to   cache/g_cache.cache/g_banks_0.bank/g_amo.amo/g_commit.wbq_data.d[6]
+      24 lut    fo 0     VX_cache_amo.sv:211      .../g_amo.amo/comb.truth_table[0]
+      22 lut    fo 1     VX_cache_amo.sv:700      .../g_amo.amo/comb.truth_table[0]
+      ...
+      10 carry  fo 839   VX_cache_amo.sv:689      .../g_amo.amo/comb.sub[1]
+      ...
+       0 reg    fo 2     VX_cache_amo.sv:773      .../g_commit.chain_match_r[0]
+```
+
+On the full GPU, the 3,283 pairs at ≥ 12 levels fold into 169 paths in
+69 units.
+
 ## 6. Integration
 
 ### 6.1 The DUT flow
@@ -272,12 +307,15 @@ its kind, the fanout of its bit, and its instance path and name:
 `screen` target screens the same DUT with the same sources, defines and
 `DEVICE` (the U55C by default):
 
-1. `gen_sources.sh -P` into `screen/src`;
+1. `gen_sources.sh` into `screen/sources.f`, a filelist of `hw/rtl` with
+   the defines (not preprocessed copies, so source lines are the
+   repository's);
 2. `circt_elaborate.sh -f mlir` into `screen/netlist.mlir`, the FP IPs as
-   black boxes;
+   black boxes, with every op's source location;
 3. `foldsim-screen-map`, then `foldsim-estimate-timing` with
    `family=$(gen_platform.py --device=$(DEVICE) --emit=family)`;
-4. `screen_summary.py`.
+4. `screen_summary.py`: `screen_summary.csv`, `screen_units.json` and
+   `screen_paths.txt` (§5).
 
 The ASIC flow has the same target, with the same sources, defines and SRAM
 black boxes as its synthesis, and `family=$(PDK)`:
@@ -301,6 +339,9 @@ each against `ci/baselines/synthesis/screen/`:
 - a unit that gets shallower, or leaves the watch list, is an improvement
   to lock in by re-recording;
 - end point counts are recorded, not gated (they grow with lanes and warps).
+
+A failing build names its `screen_paths.txt`, where the failing unit is a
+heading with its paths op by op; CI uploads it with the build's logs.
 
 Depth is deterministic, so the tolerance is zero. The baseline fingerprint
 is the CIRCT and foldsim versions, `DEVICE` and `XLEN`: a new foldsim reads
