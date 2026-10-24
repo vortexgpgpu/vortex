@@ -282,13 +282,15 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         // Lane select and intra-lane bit offset, split from the encoded byte
         // offset. The AMO's byteen always sits inside one lane (natural
         // alignment), so the lane of its lowest set byte is the lane of all of
-        // them (asserted below).
+        // them (asserted below). A naturally aligned 4- or 8-byte operand starts
+        // on a 32-bit boundary, so the offset keeps only its word bit: the
+        // operand and result shifts are a select, not a funnel.
         reg [LANE_IDXW-1:0]     lane_st1;
         reg [LANE_OFF_BITS-1:0] bit_off_st1;
         always @(posedge clk) begin
             if (~pipe_stall) begin
                 lane_st1    <= (NUM_LANES > 1) ? LANE_IDXW'(byte_off_n >> `CLOG2(LANE_SIZE)) : '0;
-                bit_off_st1 <= LANE_OFF_BITS'({byte_off_n[`UP(`CLOG2(LANE_SIZE))-1:0], 3'b0});
+                bit_off_st1 <= LANE_OFF_BITS'(((byte_off_n % LANE_SIZE) >> 2) << 5);
             end
         end
         // This AMO's byteen slice within its lane.
@@ -618,6 +620,66 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         wire post_push_head = wb_push && (wbq_addr[0] == cmp_addr) && (wbq_wsel[0] == cmp_wsel)
                            && (wbq_lane[0] == cmp_lane);
 
+        // Writeback queue: a drain (wb_fire) shifts every entry toward the head;
+        // a completed compute (wb_push) enqueues at the tail or byte-merges into
+        // its word's entry, written after the shift so it wins when both target
+        // the same slot. Both handshakes follow the bank's stall, the latest
+        // signals here, so each slot's next entry is formed for either drain
+        // outcome from early terms (target slot, coalesce, merged bytes) and
+        // the drain, then the push, select last.
+        wire [WBQ_SIZE-1:0][LINE_ADDR_BITS-1:0] wbq_addr_n;
+        wire [WBQ_SIZE-1:0][WORD_SEL_WIDTH-1:0] wbq_wsel_n;
+        wire [WBQ_SIZE-1:0][LANE_IDXW-1:0]      wbq_lane_n;
+        wire [WBQ_SIZE-1:0][LANE_SIZE-1:0]      wbq_byteen_n;
+        wire [WBQ_SIZE-1:0][LANE_WIDTH-1:0]     wbq_data_n;
+        wire [WBQ_SIZE-1:0][TAG_WIDTH-1:0]      wbq_tag_n;
+        wire [WBQ_SIZE-1:0][REQ_SEL_WIDTH-1:0]  wbq_idx_n;
+        wire [WBQ_SIZE-1:0][ATTR_WIDTH-1:0]     wbq_attr_n;
+        wire [LANE_SIZE-1:0] pbyteen_d = cmp_byteen | (wb_coalesce_drain ? coal_src_byteen : {LANE_SIZE{1'b0}});
+        wire [LANE_SIZE-1:0] pbyteen_h = cmp_byteen | (wb_coalesce_hold ? coal_src_byteen : {LANE_SIZE{1'b0}});
+        for (genvar i = 0; i < WBQ_SIZE; ++i) begin : g_wbq_next
+            // a drain moves slot i+1 into slot i; the last slot keeps its entry
+            localparam J = (i < WBQ_SIZE-1) ? (i + 1) : i;
+            wire [LANE_SIZE-1:0] byteen_d = (i < WBQ_SIZE-1)
+                ? (wbq_byteen[J] & ~(wbq_clr_hit[J] ? clr_byteen[J] : {LANE_SIZE{1'b0}}))
+                : wbq_byteen[i];
+            wire [LANE_SIZE-1:0] byteen_h = wbq_byteen[i] & ~(wbq_clr_hit[i] ? clr_byteen[i] : {LANE_SIZE{1'b0}});
+            wire [LANE_WIDTH-1:0] data_d = wbq_data[J];
+            wire [LANE_WIDTH-1:0] data_h = wbq_data[i];
+            wire [LANE_WIDTH-1:0] pdata_d, pdata_h;
+            for (genvar b = 0; b < LANE_SIZE; ++b) begin : g_bytes
+                assign pdata_d[b*8 +: 8] = cmp_byteen[b] ? wb_data_w[b*8 +: 8]
+                                         : (wb_coalesce_drain ? coal_src_data[b*8 +: 8] : data_d[b*8 +: 8]);
+                assign pdata_h[b*8 +: 8] = cmp_byteen[b] ? wb_data_w[b*8 +: 8]
+                                         : (wb_coalesce_hold ? coal_src_data[b*8 +: 8] : data_h[b*8 +: 8]);
+            end
+            wire push_d = wb_push && (wb_slot_drain == WBQ_IDXW'(i));
+            wire push_h = wb_push && (wb_slot_hold == WBQ_IDXW'(i));
+            assign wbq_addr_n[i]   = wb_fire ? (push_d ? cmp_addr  : wbq_addr[J]) : (push_h ? cmp_addr  : wbq_addr[i]);
+            assign wbq_wsel_n[i]   = wb_fire ? (push_d ? cmp_wsel  : wbq_wsel[J]) : (push_h ? cmp_wsel  : wbq_wsel[i]);
+            assign wbq_lane_n[i]   = wb_fire ? (push_d ? cmp_lane  : wbq_lane[J]) : (push_h ? cmp_lane  : wbq_lane[i]);
+            assign wbq_byteen_n[i] = wb_fire ? (push_d ? pbyteen_d : byteen_d)    : (push_h ? pbyteen_h : byteen_h);
+            assign wbq_data_n[i]   = wb_fire ? (push_d ? pdata_d   : data_d)      : (push_h ? pdata_h   : data_h);
+            assign wbq_tag_n[i]    = wb_fire ? (push_d ? cmp_tag   : wbq_tag[J])  : (push_h ? cmp_tag   : wbq_tag[i]);
+            assign wbq_idx_n[i]    = wb_fire ? (push_d ? cmp_idx   : wbq_idx[J])  : (push_h ? cmp_idx   : wbq_idx[i]);
+            assign wbq_attr_n[i]   = wb_fire ? (push_d ? cmp_attr  : wbq_attr[J]) : (push_h ? cmp_attr  : wbq_attr[i]);
+        end
+
+        always @(posedge clk) begin
+            if (~reset) begin
+                for (integer i = 0; i < WBQ_SIZE; ++i) begin
+                    wbq_addr[i]   <= wbq_addr_n[i];
+                    wbq_wsel[i]   <= wbq_wsel_n[i];
+                    wbq_lane[i]   <= wbq_lane_n[i];
+                    wbq_byteen[i] <= wbq_byteen_n[i];
+                    wbq_data[i]   <= wbq_data_n[i];
+                    wbq_tag[i]    <= wbq_tag_n[i];
+                    wbq_idx[i]    <= wbq_idx_n[i];
+                    wbq_attr[i]   <= wbq_attr_n[i];
+                end
+            end
+        end
+
         always @(posedge clk) begin
             if (reset) begin
                 cmp_valid   <= 1'b0;
@@ -663,45 +725,6 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
                     cmp_valid <= 1'b0;
                 end
 
-                // Writeback queue: a drain (wb_fire) shifts every entry toward
-                // the head; a completed compute (wb_push) enqueues at the tail or
-                // byte-merges into its word's entry. The push is written after
-                // the shift so it wins when both target the same slot.
-                if (wb_fire) begin
-                    for (integer i = 0; i < WBQ_SIZE-1; ++i) begin
-                        wbq_addr[i]   <= wbq_addr[i+1];
-                        wbq_wsel[i]   <= wbq_wsel[i+1];
-                        wbq_lane[i]   <= wbq_lane[i+1];
-                        wbq_byteen[i] <= wbq_byteen[i+1] & ~(wbq_clr_hit[i+1] ? clr_byteen[i+1] : {LANE_SIZE{1'b0}});
-                        wbq_data[i]   <= wbq_data[i+1];
-                        wbq_tag[i]    <= wbq_tag[i+1];
-                        wbq_idx[i]    <= wbq_idx[i+1];
-                        wbq_attr[i]   <= wbq_attr[i+1];
-                    end
-                end else begin
-                    for (integer i = 0; i < WBQ_SIZE; ++i) begin
-                        if (wbq_clr_hit[i]) begin
-                            wbq_byteen[i] <= wbq_byteen[i] & ~clr_byteen[i];
-                        end
-                    end
-                end
-                if (wb_push) begin
-                    wbq_addr[wb_slot] <= cmp_addr;
-                    wbq_wsel[wb_slot] <= cmp_wsel;
-                    wbq_lane[wb_slot] <= cmp_lane;
-                    wbq_tag[wb_slot]  <= cmp_tag;
-                    wbq_idx[wb_slot]  <= cmp_idx;
-                    wbq_attr[wb_slot] <= cmp_attr;
-                    // byte-merge: this AMO's bytes take the new result; a coalesce
-                    // keeps the target entry's other bytes; a fresh entry zero-fills.
-                    wbq_byteen[wb_slot] <= cmp_byteen | (wb_coalesce ? coal_src_byteen : {LANE_SIZE{1'b0}});
-                    for (integer b = 0; b < LANE_SIZE; ++b) begin
-                        if (cmp_byteen[b])
-                            wbq_data[wb_slot][b*8 +: 8] <= wb_data_w[b*8 +: 8];
-                        else if (wb_coalesce)
-                            wbq_data[wb_slot][b*8 +: 8] <= coal_src_data[b*8 +: 8];
-                    end
-                end
                 // Count grows only on a new (non-coalescing) enqueue; a coalesce
                 // updates in place. Pop removes the head.
                 wbq_count <= wbq_count_n;
@@ -820,6 +843,11 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         `RUNTIME_ASSERT (~(amo_st1.amo_valid && valid_st1 && is_creq_st1)
             || ((byteen_st1 & ~(WORD_SIZE'({LANE_SIZE{1'b1}}) << (lane_st1 * LANE_SIZE))) == '0),
             ("%t: AMO byteen crosses its lane (addr=0x%0h)", $time, addr_st1))
+        // The word-granular offset rests on natural alignment as well.
+        `RUNTIME_ASSERT (~(amo_st1.amo_valid && valid_st1 && is_creq_st1)
+            || (&lane_byteen_st1) || (lane_byteen_st1 == LANE_SIZE'(4'hF))
+            || ((LANE_SIZE == 8) && (lane_byteen_st1 == LANE_SIZE'(8'hF0))),
+            ("%t: AMO operand is not a naturally aligned word or doubleword (addr=0x%0h)", $time, addr_st1))
         // The narrowed arithmetic width rests on the ISA: on a 32-bit hart
         // only the Zacas pair carries a 64-bit operand.
         if (`MIN(`VX_CFG_XLEN, AMO_OLD_BITS) < AMO_OLD_BITS) begin : g_arith_width_guard
