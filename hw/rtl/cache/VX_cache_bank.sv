@@ -668,6 +668,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         // a writeback leaves only from a fresh fill's victim or a flushed way
         .wb_way      (st0.req.is_fill ? victim_way : st0.req.way_idx),
         .fill_way_oh (fill_way_oh_st0),
+        .victim_way_oh (victim_way_oh),
         .tag_matches (tag_matches_st0),
         .line_present (line_present_st0),
         .evict_dirty (evict_dirty_st0),
