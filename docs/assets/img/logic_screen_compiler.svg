@@ -1,0 +1,133 @@
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" viewBox="0 0 1400 760" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+  </defs>
+
+  <style>
+    .box     { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.5; }
+    .unit    { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .mem     { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .sw      { fill:#eef7ee; stroke:#3a7d44; stroke-width:1.5; }
+    .core    { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.5; }
+    .grp     { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .t       { fill:#1b2733; font-size:15px; }
+    .tb      { fill:#1b2733; font-size:16px; font-weight:bold; }
+    .ts      { fill:#44525f; font-size:12.5px; }
+    .tt      { fill:#5a6772; font-size:12px; font-style:italic; }
+    .mono    { font-family:'SF Mono',Consolas,monospace; font-size:12px; fill:#1b2733; white-space:pre; }
+    .flow    { stroke:#444; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+    .lbl     { fill:#1c6ca8; font-size:12px; }
+  </style>
+
+  <rect x="0" y="0" width="1400" height="760" fill="#ffffff"/>
+  <text x="24" y="34" class="tb" font-size="20">Logic screen — the two passes</text>
+
+  <!-- mapping pipeline -->
+  <rect x="20" y="56" width="560" height="684" class="grp"/>
+  <text x="34" y="78" class="tb">foldsim-screen-map (per module)</text>
+
+  <rect x="40" y="94" width="520" height="56" class="box"/>
+  <text x="55" y="116" class="t">1. hw-flatten-modules: inline modules &lt; 300 ops</text>
+  <text x="55" y="136" class="ts">LUTs pack across buffers and arbiters, as Vivado flattens</text>
+
+  <rect x="40" y="162" width="520" height="56" class="box"/>
+  <text x="55" y="184" class="t">2. canonicalize, CSE, comb-balance-mux</text>
+  <text x="55" y="204" class="ts">mux chains become balanced trees</text>
+
+  <rect x="40" y="230" width="520" height="74" class="unit"/>
+  <text x="55" y="252" class="t">3. foldsim passes</text>
+  <text x="55" y="272" class="mono">lower-equality   lower-constant-division</text>
+  <text x="55" y="290" class="mono">fold-zero-width</text>
+
+  <rect x="40" y="316" width="520" height="74" class="box"/>
+  <text x="55" y="338" class="t">4. convert-comb-to-synth</text>
+  <text x="55" y="358" class="ts">to an and-inverter graph; add, sub, icmp, mul,</text>
+  <text x="55" y="376" class="ts">div and mod stay word-level ops</text>
+
+  <rect x="40" y="402" width="520" height="74" class="box"/>
+  <text x="55" y="424" class="t">5. lower-word-to-bits, timing-aware variadic</text>
+  <text x="55" y="444" class="t">   lowering, maximum-and-cover, SOP balancing</text>
+  <text x="55" y="464" class="ts">depth-optimal AIG, structurally hashed</text>
+
+  <rect x="40" y="488" width="520" height="56" class="box"/>
+  <text x="55" y="510" class="t">6. synth-generic-lut-mapper (6 inputs, timing)</text>
+  <text x="55" y="530" class="ts">comb.truth_table ops: one LUT6 each</text>
+
+  <rect x="40" y="566" width="520" height="150" class="mem"/>
+  <text x="55" y="590" class="t">Result: mapped.mlirbc</text>
+  <text x="55" y="612" class="ts">LUT6s, word-level arithmetic, registers (seq.firreg,</text>
+  <text x="55" y="630" class="ts">seq.compreg), memories (seq.firmem: distributed RAM</text>
+  <text x="55" y="648" class="ts">if read latency 0, block RAM otherwise), instances of</text>
+  <text x="55" y="666" class="ts">the modules not inlined, external modules (vendor IP)</text>
+  <text x="55" y="696" class="tt">CIRCT upstream passes + three foldsim passes</text>
+
+  <path d="M300,150 L300,162" class="flow"/>
+  <path d="M300,218 L300,230" class="flow"/>
+  <path d="M300,304 L300,316" class="flow"/>
+  <path d="M300,390 L300,402" class="flow"/>
+  <path d="M300,476 L300,488" class="flow"/>
+  <path d="M300,544 L300,566" class="flow"/>
+
+  <!-- estimator -->
+  <rect x="610" y="56" width="770" height="684" class="grp"/>
+  <text x="624" y="78" class="tb">foldsim-estimate-timing (whole design, elaborated)</text>
+
+  <rect x="630" y="94" width="350" height="140" class="unit"/>
+  <text x="645" y="116" class="t">Collect end points</text>
+  <text x="645" y="138" class="ts">walk the instance tree from top=; one context</text>
+  <text x="645" y="156" class="ts">per instance. End points: register D, reset and</text>
+  <text x="645" y="174" class="ts">enable; memory write ports and registered read</text>
+  <text x="645" y="192" class="ts">address; inputs of vendor IP and black boxes;</text>
+  <text x="645" y="210" class="ts">top outputs</text>
+
+  <rect x="1010" y="94" width="350" height="140" class="unit"/>
+  <text x="1025" y="116" class="t">Resolve a bit</text>
+  <text x="1025" y="138" class="ts">see through wires, extracts, concats, replicates</text>
+  <text x="1025" y="156" class="ts">and instance ports to the op that drives it: one</text>
+  <text x="1025" y="174" class="ts">node per (instance, value, bit). Start points:</text>
+  <text x="1025" y="192" class="ts">registers, block-RAM reads, vendor IP outputs,</text>
+  <text x="1025" y="210" class="ts">black-box outputs, top inputs</text>
+
+  <rect x="630" y="256" width="730" height="236" class="core"/>
+  <text x="645" y="280" class="t">Evaluate: iterative depth-first, one worst predecessor per bit</text>
+  <text x="645" y="304" class="mono">levels(node) = max over inputs ( levels(input) + edge(input → node) )</text>
+  <text x="645" y="330" class="ts">edge levels per op kind, for the device's family:</text>
+  <text x="660" y="352" class="mono">LUT                1</text>
+  <text x="660" y="370" class="mono">add/sub  bit j→i   2 + ⌊i/8⌋ − ⌊j/8⌋   (1 if the bit reads ≤ 6 inputs)</text>
+  <text x="660" y="388" class="mono">compare            as an adder, to the top non-constant bit</text>
+  <text x="660" y="406" class="mono">multiply           ≤ 10 variable bits: a table; else DSP cascade</text>
+  <text x="660" y="424" class="mono">divide             ≤ 10 support bits: a table; else a ripple</text>
+  <text x="660" y="442" class="mono">LUTRAM read        1 + doublings past 64 words</text>
+  <text x="645" y="468" class="ts">a combinational loop's closing edge is left out and counted; time and memory are</text>
+  <text x="645" y="484" class="ts">linear in the design's bits (full GPU: 16-21 s, 2.7 GB)</text>
+
+  <rect x="630" y="514" width="350" height="110" class="sw"/>
+  <text x="645" y="536" class="t">End point levels</text>
+  <text x="645" y="558" class="ts">the input node's levels, plus a DSP's output</text>
+  <text x="645" y="576" class="ts">stage unless the end point is a register the</text>
+  <text x="645" y="594" class="ts">DSP absorbs (with its enable logic)</text>
+  <text x="645" y="612" class="ts">optional retime-levels=: one-hop balancing</text>
+
+  <rect x="1010" y="514" width="350" height="128" class="mem"/>
+  <text x="1025" y="536" class="t">Report</text>
+  <text x="1025" y="558" class="ts">walk worst predecessors back to the start:</text>
+  <text x="1025" y="576" class="ts">start, largest fanout, module crossings;</text>
+  <text x="1025" y="594" class="ts">histogram; top-paths and trace= op by op;</text>
+  <text x="1025" y="612" class="ts">paths=: each deep register pair, op by op</text>
+  <text x="1025" y="630" class="ts">endpoints.csv, instances.csv, report.txt</text>
+
+  <rect x="630" y="646" width="730" height="88" class="box"/>
+  <text x="645" y="668" class="t">Device profiles (family=): the FPGAs differ only in their DSPs</text>
+  <text x="645" y="690" class="mono">versal          DSP58   27×24  in 1  out 6  cascade 3</text>
+  <text x="645" y="708" class="mono">virtexuplusHBM  DSP48E2 27×18  in 1  out 5  cascade 2</text>
+  <text x="645" y="726" class="mono">asap7           cell stages (3-input cuts), prefix adders, Dadda products</text>
+
+  <path d="M980,164 L1010,164" class="flow"/>
+  <path d="M805,234 L805,256" class="flow"/>
+  <path d="M805,492 L805,514" class="flow"/>
+  <path d="M980,569 L1010,569" class="flow"/>
+  <path d="M560,640 L630,600" class="flow"/>
+  <text x="572" y="660" class="lbl">mapped</text>
+</svg>

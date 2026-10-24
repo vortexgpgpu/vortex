@@ -1,0 +1,125 @@
+# Copyright © 2019-2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License").
+#
+# logic_gate — logic-level regression gate on hosted runners.
+# Screens the DUT catalog (ci/testcases/logic_gate.yaml) with
+# foldsim-estimate-timing and asserts the depth of every RTL unit against the
+# golden results in ci/baselines/synthesis/screen/, so an RTL change that makes
+# a unit deeper is named on the change that does it, not the next night.
+#
+# Why its own workflow rather than a cell in ci.yml: it needs foldsim, which the
+# base toolchain does not install (ci/toolchain_install.sh --foldsim), and it
+# reads the synthesis gates' DUT flow rather than a pytest build tree. Unlike
+# the synthesis gates it is cheap -- seconds to minutes per DUT, no licence --
+# so it runs on every pull request and push that touches the RTL, in one job.
+#
+# See docs/designs/continuous_integration.md §3.5.
+
+name: Timing Gate
+
+on:
+  pull_request:
+    paths:
+      - 'hw/rtl/**'
+      - 'hw/unittest/**'
+      - 'hw/scripts/**'
+      - 'hw/syn/xilinx/dut/**'
+      - 'ci/synth_gate.py'
+      - 'ci/logic_gate.py'
+      - 'ci/testcases/logic_gate.yaml'
+      - 'ci/baselines/synthesis/screen/**'
+  push:
+    branches: [master]
+    paths:
+      - 'hw/rtl/**'
+      - 'hw/unittest/**'
+      - 'hw/scripts/**'
+      - 'hw/syn/xilinx/dut/**'
+      - 'ci/synth_gate.py'
+      - 'ci/logic_gate.py'
+      - 'ci/testcases/logic_gate.yaml'
+      - 'ci/baselines/synthesis/screen/**'
+  workflow_dispatch:
+    inputs:
+      builds:
+        description: "build ids/groups, space separated (blank = all)"
+        default: ""
+
+concurrency:
+  group: logic-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CCACHE_DISABLE: 1
+
+jobs:
+  screen:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # Restores the prebuilt toolchain (CIRCT among it) and exports TOOLDIR;
+      # prepare=true installs it on a cache miss.
+      - name: Setup Vortex
+        uses: ./.github/actions/setup-vortex
+        with:
+          prepare: true
+
+      # foldsim is not in the base toolchain. Its prebuilt is a small fetch.
+      - name: Install foldsim
+        run: |
+          set -euo pipefail
+          mkdir -p tc_foldsim && cd tc_foldsim
+          ../configure --tooldir=$TOOLDIR
+          ci/toolchain_install.sh --foldsim
+
+      # The command is the one the catalog declares (the single `run:` case of
+      # ci/testcases/logic_gate.yaml), so what CI runs and what the catalog
+      # says cannot drift apart.
+      - name: Gate
+        id: run
+        env:
+          IN_BUILDS: ${{ github.event.inputs.builds }}
+        run: |
+          set -uo pipefail
+          CMD=$(python3 -c "import yaml; print(yaml.safe_load(open('ci/testcases/logic_gate.yaml'))['tests'][0]['run'])")
+          # Dispatch inputs reach the shell through an env var, never
+          # interpolated into the script.
+          ARGS=()
+          for b in ${IN_BUILDS:-}; do ARGS+=(-b "$b"); done
+          rc=0
+          $CMD "${ARGS[@]}" --timeout 3600 --report logic_gate.json || rc=$?
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Summarize
+        if: always()
+        run: |
+          set -uo pipefail
+          python3 ci/synth_report.py --annotate error logic_gate.json \
+            > logic_gate_report.md || true
+          cat logic_gate_report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: logic-gate
+          path: |
+            logic_gate.json
+            logic_gate_report.md
+            build32_logic_gate/hw/syn/xilinx/dut/logic_gate_*/build.log
+            build32_logic_gate/hw/syn/xilinx/dut/logic_gate_*/screen_*
+            build32_logic_gate/hw/syn/xilinx/dut/logic_gate_*/screen/report.txt
+          if-no-files-found: warn
+
+      - name: Verdict
+        run: |
+          case "${{ steps.run.outputs.rc }}" in
+            0) echo "logic_gate passed" ;;
+            1) echo "::error::logic_gate FAILED — a unit got deeper than its baseline"; exit 1 ;;
+            *) echo "::error::logic_gate build error (see logs)"; exit 1 ;;
+          esac

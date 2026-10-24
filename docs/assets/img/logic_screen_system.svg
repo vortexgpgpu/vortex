@@ -1,0 +1,136 @@
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" viewBox="0 0 1400 730" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="arrb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1c6ca8"/>
+    </marker>
+  </defs>
+
+  <style>
+    .box     { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.5; }
+    .unit    { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .mem     { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .sw      { fill:#eef7ee; stroke:#3a7d44; stroke-width:1.5; }
+    .core    { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.5; }
+    .grp     { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .t       { fill:#1b2733; font-size:15px; }
+    .tb      { fill:#1b2733; font-size:16px; font-weight:bold; }
+    .ts      { fill:#44525f; font-size:12.5px; }
+    .tt      { fill:#5a6772; font-size:12px; font-style:italic; }
+    .mono    { font-family:'SF Mono',Consolas,monospace; font-size:12px; fill:#1b2733; white-space:pre; }
+    .flow    { stroke:#444; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+    .flowb   { stroke:#1c6ca8; stroke-width:1.8; fill:none; marker-end:url(#arrb); stroke-dasharray:7 4; }
+    .lbl     { fill:#1c6ca8; font-size:12px; }
+  </style>
+
+  <rect x="0" y="0" width="1400" height="730" fill="#ffffff"/>
+  <text x="24" y="34" class="tb" font-size="20">Logic screen — where each piece lives, and what flows between them</text>
+
+  <!-- Vortex repository -->
+  <rect x="20" y="60" width="430" height="610" class="grp"/>
+  <text x="34" y="82" class="tb">Vortex repository</text>
+
+  <rect x="40" y="100" width="390" height="70" class="box"/>
+  <text x="55" y="124" class="t">RTL + VX_config.toml</text>
+  <text x="55" y="146" class="mono">hw/rtl/**, hw/unittest/*/VX_*_top.sv</text>
+  <text x="55" y="162" class="ts">the DUT catalog: hw/syn/xilinx/dut/catalog.mk</text>
+
+  <rect x="40" y="200" width="390" height="92" class="unit"/>
+  <text x="55" y="224" class="t">hw/syn/xilinx/dut — target screen</text>
+  <text x="55" y="246" class="mono">gen_sources.sh      (hw/rtl, toml defines)</text>
+  <text x="55" y="264" class="mono">circt_elaborate.sh -f mlir -x xilinx_ip_stubs.sv</text>
+  <text x="55" y="282" class="mono">gen_platform.py --device=$(DEVICE) --emit=family</text>
+
+  <rect x="40" y="420" width="390" height="90" class="unit"/>
+  <text x="55" y="444" class="t">hw/scripts/screen_summary.py</text>
+  <text x="55" y="464" class="mono">screen_summary.csv, screen_units.json</text>
+  <text x="55" y="482" class="mono">screen_paths.txt  (deep paths by unit)</text>
+  <text x="55" y="500" class="ts">units = instance paths, generate indices folded</text>
+
+  <rect x="40" y="530" width="390" height="120" class="sw"/>
+  <text x="55" y="554" class="t">ci/logic_gate.py  (synth_gate.py Screen backend)</text>
+  <text x="55" y="576" class="mono">ci/testcases/logic_gate.yaml</text>
+  <text x="55" y="594" class="mono">ci/baselines/synthesis/screen/*.json</text>
+  <text x="55" y="612" class="mono">.github/workflows/logic_gate.yml</text>
+  <text x="55" y="636" class="ts">PASS / FAIL per unit, zero tolerance on depth</text>
+
+  <!-- toolchain -->
+  <rect x="490" y="60" width="440" height="610" class="grp"/>
+  <text x="504" y="82" class="tb">Toolchain ($(TOOLDIR), prebuilt)</text>
+
+  <rect x="510" y="100" width="400" height="70" class="box"/>
+  <text x="525" y="124" class="t">CIRCT: circt-verilog, circt-opt</text>
+  <text x="525" y="146" class="ts">SystemVerilog → HW / Comb / Seq netlist</text>
+  <text x="525" y="162" class="ts">(the same import foldsim and the Yosys flow use)</text>
+
+  <rect x="510" y="200" width="400" height="300" class="core"/>
+  <text x="525" y="224" class="tb">foldsim-opt (foldsim, on CIRCT)</text>
+  <rect x="530" y="240" width="360" height="100" class="box"/>
+  <text x="545" y="264" class="t">foldsim-screen-map</text>
+  <text x="545" y="286" class="ts">inline small modules, balance, lower to AIG,</text>
+  <text x="545" y="304" class="ts">map to 6-input LUTs; adders, compares,</text>
+  <text x="545" y="322" class="ts">multipliers and dividers stay word-level</text>
+  <rect x="530" y="360" width="360" height="120" class="box"/>
+  <text x="545" y="384" class="t">foldsim-estimate-timing</text>
+  <text x="545" y="406" class="ts">per-bit arrival over the elaborated instances,</text>
+  <text x="545" y="424" class="ts">levels as Vivado counts them on family=</text>
+  <text x="545" y="442" class="mono">versal (V80) | virtexuplusHBM (U55C)</text>
+  <text x="545" y="464" class="ts">optional: retime-levels=, trace=, black-boxes=</text>
+
+  <rect x="510" y="530" width="400" height="132" class="mem"/>
+  <text x="525" y="554" class="t">Outputs (per DUT, screen/)</text>
+  <text x="525" y="576" class="mono">endpoints.csv   one row per end point bit</text>
+  <text x="525" y="594" class="mono">instances.csv   the elaborated instance tree</text>
+  <text x="525" y="612" class="mono">report.txt      histogram, deepest paths op by op</text>
+  <text x="525" y="630" class="mono">paths.jsonl     every deep path, source lines</text>
+  <text x="525" y="652" class="ts">mapped.mlirbc kept for re-screening other tops</text>
+
+  <!-- consumers -->
+  <rect x="970" y="60" width="410" height="610" class="grp"/>
+  <text x="984" y="82" class="tb">Who reads it</text>
+
+  <rect x="990" y="100" width="370" height="110" class="sw"/>
+  <text x="1005" y="124" class="t">Pull requests touching RTL</text>
+  <text x="1005" y="146" class="ts">logic_gate.yml, ~4 min for the 11 DUTs,</text>
+  <text x="1005" y="164" class="ts">no Vivado, no licence: names the unit that</text>
+  <text x="1005" y="182" class="ts">got deeper on the change that did it</text>
+
+  <rect x="990" y="240" width="370" height="110" class="unit"/>
+  <text x="1005" y="264" class="t">RTL timing work (native-timing loop)</text>
+  <text x="1005" y="286" class="ts">screen a whole GPU in ~1 min before a</text>
+  <text x="1005" y="304" class="ts">20-40 min Vivado run; fix list = units at</text>
+  <text x="1005" y="322" class="ts">≥ 12 levels, watch list ≥ 8 (300 MHz)</text>
+
+  <rect x="990" y="380" width="370" height="130" class="box"/>
+  <text x="1005" y="404" class="t">ci/logic_screen.py, hw/scripts/xilinx_*.tcl</text>
+  <text x="1005" y="426" class="mono">screen  summarize  validate  retime-split</text>
+  <text x="1005" y="444" class="mono">xilinx_cone_dump.tcl  xilinx_cone_probe.tcl</text>
+  <text x="1005" y="462" class="mono">xilinx_wire_probe.tcl</text>
+  <text x="1005" y="486" class="ts">screen ↔ Vivado agreement, and the Vivado</text>
+  <text x="1005" y="502" class="ts">probes for what levels cannot show</text>
+
+  <rect x="990" y="540" width="370" height="110" class="core"/>
+  <text x="1005" y="564" class="t">fpga_gate (nightly, Vivado)</text>
+  <text x="1005" y="586" class="ts">same DUTs and configurations: a unit the</text>
+  <text x="1005" y="604" class="ts">screen flags is checked against its</text>
+  <text x="1005" y="622" class="ts">critical paths; Fmax stays its job</text>
+
+  <!-- flows -->
+  <path d="M235,170 L235,200" class="flow"/>
+  <path d="M430,240 L510,140" class="flow"/>
+  <text x="440" y="186" class="lbl">sources, defines</text>
+  <path d="M710,170 L710,200" class="flow"/>
+  <text x="718" y="190" class="lbl">netlist.mlir</text>
+  <path d="M710,340 L710,360" class="flow"/>
+  <text x="718" y="355" class="lbl">mapped.mlirbc</text>
+  <path d="M710,480 L710,530" class="flow"/>
+  <path d="M510,590 L430,470" class="flow"/>
+  <text x="440" y="520" class="lbl">endpoints, instances</text>
+  <path d="M235,510 L235,530" class="flow"/>
+  <path d="M235,650 L235,690 L955,690 L955,155 L990,155" class="flowb"/>
+  <path d="M910,600 L990,300" class="flowb"/>
+  <path d="M910,620 L990,440" class="flowb"/>
+  <text x="560" y="720" class="tt">solid: data; dashed: who consumes it. Engine in foldsim (ships in the prebuilt); scripts and integration in Vortex.</text>
+</svg>

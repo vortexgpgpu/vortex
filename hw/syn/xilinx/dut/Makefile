@@ -23,6 +23,12 @@ $(DUTS):
 	cp build.mk $(PREFIX)_$@/Makefile
 	$(MAKE) -C $(PREFIX)_$@ DUT=$@ clean && $(MAKE) -C $(PREFIX)_$@ DUT=$@ > $(PREFIX)_$@/build.log 2>&1 &
 
+# The logic screen of one DUT, in the foreground: make tcu-screen
+%-screen:
+	mkdir -p $(PREFIX)_$*
+	cp build.mk $(PREFIX)_$*/Makefile
+	$(MAKE) -C $(PREFIX)_$* DUT=$* clean screen
+
 # Re-run power analysis on an existing build without rebuilding the design.
 # Usage: make <target>-power SAIF_FILE=<saif-path> [SAIF_INST=<top-module-instance-path>]
 %-power:

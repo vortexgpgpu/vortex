@@ -33,7 +33,9 @@
 #     colliding with a write undefined in block RAM; other tools ignore it;
 #   - -f sv (the default) writes SystemVerilog, for Vivado and Quartus; -f
 #     v2005 writes Verilog-2005 for tools with a Verilog frontend (yosys): no
-#     packed arrays or structs, no local variables, no size casts.
+#     packed arrays or structs, no local variables, no size casts; -f mlir
+#     writes the HW/Comb/Seq netlist itself, for tools built on CIRCT (the
+#     logic screen), and exports nothing.
 #
 # The sources are a filelist (-l, as gen_sources.sh writes it: +define+,
 # +incdir+ and files in compile order), or include directories whose sources
@@ -85,7 +87,7 @@ while getopts "t:l:o:I:D:b:x:f:m:r:h" arg; do
     x) # file of black-box declarations (vendor IP)
         stubs+=("${OPTARG}")
         ;;
-    f) # output format: sv or v2005
+    f) # output format: sv, v2005 or mlir
         format=${OPTARG}
         ;;
     m) # RAMs without a hint: off or auto
@@ -106,8 +108,8 @@ if [ -z "$top" ]; then
     exit 1
 fi
 case "$format" in
-    sv|v2005) ;;
-    *) echo "circt_elaborate.sh: error: format must be sv or v2005, not '$format'" >&2
+    sv|v2005|mlir) ;;
+    *) echo "circt_elaborate.sh: error: format must be sv, v2005 or mlir, not '$format'" >&2
        exit 1 ;;
 esac
 [ -z "$report" ] && report="${output_file%.*}.memories.rpt"
@@ -138,9 +140,17 @@ for stub in "${stubs[@]}"; do
 done
 
 stem="${output_file%.*}"
+# The netlist is the output itself in mlir format; keep the import beside it,
+# and every op's source location: the tools built on the netlist name logic
+# that has no name of its own by its file and line.
+debuginfo=()
+if [ "$format" = mlir ]; then
+    stem="$stem.import"
+    debuginfo=(--mlir-print-debuginfo)
+fi
 "$CIRCT_VERILOG" --ir-hw --top="$top" --detect-memories --allow-use-before-declare \
     --allow-hierarchical-const --ignore-uninstantiated-modules "${blackboxes[@]}" \
-    "${defines[@]}" "${args[@]}" "${files[@]}" -o "$stem.mlir"
+    "${defines[@]}" "${args[@]}" "${files[@]}" "${debuginfo[@]}" -o "$stem.mlir"
 
 # Memories are detected on import; what remains of a conditional write at a
 # dynamic index (`if (c) x[i] = v`) is expanded into per-element selects.
@@ -154,6 +164,11 @@ else
 fi
 # A module body is a graph region, where CSE cannot replace a duplicate whose
 # users come first; sorting the ops first lets it merge every duplicate.
+if [ "$format" = mlir ]; then
+    "$CIRCT_OPT" "$stem.mlir" "${passes[@]}" --canonicalize --topological-sort --cse \
+        "${debuginfo[@]}" -o "$output_file"
+    exit 0
+fi
 "$CIRCT_OPT" "$stem.mlir" "${passes[@]}" --canonicalize --topological-sort --cse \
     -o "$stem.lowered.mlir"
 "$FIRTOOL" --format=mlir "$stem.lowered.mlir" --disable-all-randomization \
