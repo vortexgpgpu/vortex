@@ -42,36 +42,87 @@ static inline void pipe_bin_range(const setup_bbox_t& p, int& bL, int& bR, int& 
 struct pipe_prim_ref {
   uint32_t rec[3];
   uint32_t sub;
+  uint32_t id;     // gl_PrimitiveID
 };
 
 static inline pipe_prim_ref pipe_prim_records(const pipe_arg_t* arg, uint32_t t) {
   pipe_prim_ref r{};
+  if (arg->prim_index_addr) {
+    // A polygon drawn as lines or points still takes three primitives per
+    // triangle, so the list entry is the triangle's.
+    uint32_t e = t;
+    if (arg->prim_type == SETUP_PRIM_POLYGON) {
+      e = t / 3;
+      r.sub = t % 3;
+    }
+    const pipe_list_entry_t& w = reinterpret_cast<const pipe_list_entry_t*>(arg->prim_index_addr)[e];
+    r.id = arg->list_aux == PIPE_LIST_AUX_PRIMID ? (w.aux & PIPE_LIST_AUX_MASK) : e;
+    switch (arg->prim_type) {
+    case SETUP_PRIM_LINE:
+      r.rec[0] = w.rec[0]; r.rec[1] = r.rec[2] = w.rec[1];
+      break;
+    case SETUP_PRIM_POINT:
+      r.rec[0] = r.rec[1] = r.rec[2] = w.rec[0];
+      break;
+    default:
+      r.rec[0] = w.rec[0]; r.rec[1] = w.rec[1]; r.rec[2] = w.rec[2];
+      break;
+    }
+    return r;
+  }
   uint32_t base = 0;
   if (arg->inst_prims) {
     const uint32_t i = t / arg->inst_prims;
     t -= i * arg->inst_prims;
     base = i * arg->inst_verts;
   }
+  // The primitive counts from 0 in each instance; a polygon's three
+  // primitives are one triangle's.
+  r.id = arg->prim_type == SETUP_PRIM_POLYGON ? t / 3 : t;
+  // An adjacency group's primitive is its odd-numbered line ends or its
+  // even-numbered triangle corners.
+  const uint32_t adj = arg->adjacency;
   switch (arg->prim_type) {
   case SETUP_PRIM_LINE:
-    r.rec[0] = 2 * t; r.rec[1] = r.rec[2] = 2 * t + 1;
+    if (adj) {
+      r.rec[0] = 4 * t + 1; r.rec[1] = r.rec[2] = 4 * t + 2;
+    } else {
+      r.rec[0] = 2 * t; r.rec[1] = r.rec[2] = 2 * t + 1;
+    }
     break;
   case SETUP_PRIM_POINT:
     r.rec[0] = r.rec[1] = r.rec[2] = t;
     break;
   case SETUP_PRIM_POLYGON: {
-    const uint32_t base = 3 * (t / 3);
-    r.rec[0] = base; r.rec[1] = base + 1; r.rec[2] = base + 2;
+    const uint32_t tri = t / 3;
+    for (uint32_t k = 0; k < 3; ++k) {
+      r.rec[k] = adj ? 6 * tri + 2 * k : 3 * tri + k;
+    }
     r.sub = t % 3;
   } break;
   default:
-    r.rec[0] = 3 * t; r.rec[1] = 3 * t + 1; r.rec[2] = 3 * t + 2;
+    for (uint32_t k = 0; k < 3; ++k) {
+      r.rec[k] = adj ? 6 * t + 2 * k : 3 * t + k;
+    }
     break;
   }
   for (uint32_t k = 0; k < 3; ++k) {
     r.rec[k] += base;
   }
   return r;
+}
+
+// The primitives this pass sets up: num_tris, or with a device-side count the
+// part of the list from prim_base on, up to num_tris. A polygon drawn as lines
+// or points takes three primitives per list entry.
+static inline uint32_t pipe_prim_count(const pipe_arg_t* arg) {
+  if (!arg->num_tris_addr) {
+    return arg->num_tris;
+  }
+  const uint32_t per = arg->prim_type == SETUP_PRIM_POLYGON ? 3u : 1u;
+  const uint32_t total = per * *reinterpret_cast<const volatile uint32_t*>(arg->num_tris_addr);
+  const uint32_t left = total > arg->prim_base ? total - arg->prim_base : 0u;
+  return left < arg->num_tris ? left : arg->num_tris;
 }
 
 // Clip + setup of one triangle into at most SETUP_MAX_SUB records.
@@ -152,6 +203,10 @@ static inline float pipe_stipple_length(const gfx_setup::vec4f& sa, const gfx_se
 // one, and `heads` (may be null) marks the restarts within an instance.
 #define PIPE_SCAN_HEAD 0x80000000u
 static inline bool pipe_strip_head(const pipe_arg_t* arg, const uint32_t* heads, uint32_t i) {
+  if (arg->prim_index_addr) {
+    return (reinterpret_cast<const pipe_list_entry_t*>(arg->prim_index_addr)[i].aux
+            & PIPE_LIST_HEAD) != 0;
+  }
   if (arg->inst_prims) {
     i %= arg->inst_prims;
     if (i == 0) {
@@ -512,7 +567,7 @@ __kernel void setup_k(pipe_arg_t* __UNIFORM__ arg) {
   // primitive record carries coverage edges and depth only.
   const bool coverage_only = (arg->vsrec_addr != 0);
 
-  const uint32_t ntri = arg->num_tris;
+  const uint32_t ntri = pipe_prim_count(arg);
   const int      W = (int)arg->width;
   const int      H = (int)arg->height;
   const uint32_t tid = threadIdx.x;
@@ -636,6 +691,7 @@ __kernel void setup_k(pipe_arg_t* __UNIFORM__ arg) {
                                vary ? &vr : nullptr);
         kept = pipe_prim_scissor(pr, bb, kept, view);
         vr.vp_layer = RAST_VARY_VP_LAYER(view.index, view.layer);
+        vr.prim_id = ref.id;
       }
       uint32_t w = offset[t];
       for (uint32_t s = 0; s < kept; ++s) {

@@ -42,6 +42,11 @@
  * device from the size llvmpipe left, without losing llvmpipe's bytes. The
  * invocation counter must read 3: a draw replayed per layer would count 6.
  *
+ * The same segment runs again captured by geometry shaders behind a vertex
+ * shader that only hands them the index (xfbmix_gv.vert): xfbmix_ga.geom
+ * captures, xfbmix_gb.geom also counts its invocations (1, one triangle), and
+ * draw 3 reads its index through xfbmix_gc.vert's null attribute.
+ *
  * Run against lavapipe with GALLIUM_DRIVER=vortexpipe.
  */
 
@@ -148,8 +153,10 @@ xm_buffer(VkDevice dev, const VkPhysicalDeviceMemoryProperties *mp, VkDeviceSize
 /* The capture segment described at the top; 0 on success. */
 static int
 xfb_mix(VkPhysicalDevice pd, const char *vs_a_path, const char *vs_b_path,
-        const char *vs_c_path, const char *fs_path)
+        const char *vs_c_path, const char *fs_path, const char *gs_a_path,
+        const char *gs_b_path)
 {
+   const bool geom = gs_a_path != NULL;
    VkPhysicalDeviceRobustness2FeaturesEXT rb2_have = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT,
    };
@@ -204,7 +211,8 @@ xfb_mix(VkPhysicalDevice pd, const char *vs_a_path, const char *vs_b_path,
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES, .pNext = &xfb_on,
       .shaderOutputLayer = VK_TRUE,
    };
-   VkPhysicalDeviceFeatures feats = { .vertexPipelineStoresAndAtomics = VK_TRUE };
+   VkPhysicalDeviceFeatures feats = { .vertexPipelineStoresAndAtomics = VK_TRUE,
+                                      .geometryShader = geom };
    const char *exts[2] = { VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME,
                            VK_EXT_ROBUSTNESS_2_EXTENSION_NAME };
    VkDeviceCreateInfo dci = {
@@ -228,7 +236,10 @@ xfb_mix(VkPhysicalDevice pd, const char *vs_a_path, const char *vs_b_path,
    VkShaderModule vs_b = xm_module(dev, vs_b_path);
    VkShaderModule vs_c = xm_module(dev, vs_c_path);
    VkShaderModule fs = xm_module(dev, fs_path);
-   if (!bind_xfb || !begin_xfb || !end_xfb || !vs_a || !vs_b || !vs_c || !fs) {
+   VkShaderModule gs_a = geom ? xm_module(dev, gs_a_path) : VK_NULL_HANDLE;
+   VkShaderModule gs_b = geom ? xm_module(dev, gs_b_path) : VK_NULL_HANDLE;
+   if (!bind_xfb || !begin_xfb || !end_xfb || !vs_a || !vs_b || !vs_c || !fs ||
+       (geom && (!gs_a || !gs_b))) {
       printf("FAILED (capture: entry points or shaders missing)\n");
       return 1;
    }
@@ -303,7 +314,8 @@ xfb_mix(VkPhysicalDevice pd, const char *vs_a_path, const char *vs_b_path,
 
    VkDescriptorSetLayoutBinding dslb = {
       .binding = 0, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-      .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+      .descriptorCount = 1,
+      .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | (geom ? VK_SHADER_STAGE_GEOMETRY_BIT : 0u),
    };
    VkDescriptorSetLayoutCreateInfo dslci = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
@@ -338,11 +350,13 @@ xfb_mix(VkPhysicalDevice pd, const char *vs_a_path, const char *vs_b_path,
    };
    vkUpdateDescriptorSets(dev, 1, &wds, 0, NULL);
 
-   VkPipelineShaderStageCreateInfo stages[2] = {
+   VkPipelineShaderStageCreateInfo stages[3] = {
       { .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
         .stage = VK_SHADER_STAGE_VERTEX_BIT, .module = vs_a, .pName = "main" },
       { .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
         .stage = VK_SHADER_STAGE_FRAGMENT_BIT, .module = fs, .pName = "main" },
+      { .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .stage = VK_SHADER_STAGE_GEOMETRY_BIT, .module = gs_a, .pName = "main" },
    };
    VkPipelineVertexInputStateCreateInfo vi = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
@@ -373,13 +387,16 @@ xfb_mix(VkPhysicalDevice pd, const char *vs_a_path, const char *vs_b_path,
    };
    VkGraphicsPipelineCreateInfo gpci = {
       .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-      .stageCount = 2, .pStages = stages, .pVertexInputState = &vi,
+      .stageCount = geom ? 3u : 2u, .pStages = stages, .pVertexInputState = &vi,
       .pInputAssemblyState = &ia, .pViewportState = &vps, .pRasterizationState = &rs,
       .pMultisampleState = &ms, .pColorBlendState = &cbs, .layout = pl, .renderPass = rp,
    };
    VkPipeline pipe_a, pipe_b, pipe_c;
    CHECK(vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &gpci, NULL, &pipe_a));
-   stages[0].module = vs_b;
+   if (geom)
+      stages[2].module = gs_b;
+   else
+      stages[0].module = vs_b;
    CHECK(vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &gpci, NULL, &pipe_b));
    /* Draw 3's one attribute, fetched from binding 0, which is bound to no
     * buffer. */
@@ -391,6 +408,7 @@ xfb_mix(VkPhysicalDevice pd, const char *vs_a_path, const char *vs_b_path,
       .vertexAttributeDescriptionCount = 1, .pVertexAttributeDescriptions = &via,
    };
    stages[0].module = vs_c;
+   stages[2].module = gs_a;
    gpci.pVertexInputState = &vi_c;
    CHECK(vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &gpci, NULL, &pipe_c));
 
@@ -456,8 +474,10 @@ xfb_mix(VkPhysicalDevice pd, const char *vs_a_path, const char *vs_b_path,
       printf("  counter %u, want %u\n", cmap[1], XM_VERTS * XM_STRIDE);
       bad++;
    }
-   if (smap[0] != 3u) {
-      printf("  the side-effect draw ran %u vertex invocations, want 3\n", smap[0]);
+   const uint32_t invocations = geom ? 1u : 3u;
+   if (smap[0] != invocations) {
+      printf("  the side-effect draw ran %u %s invocations, want %u\n", smap[0],
+             geom ? "geometry" : "vertex", invocations);
       bad++;
    }
    vkDestroyCommandPool(dev, cp, NULL);
@@ -482,10 +502,15 @@ xfb_mix(VkPhysicalDevice pd, const char *vs_a_path, const char *vs_b_path,
    vkDestroyShaderModule(dev, vs_b, NULL);
    vkDestroyShaderModule(dev, vs_c, NULL);
    vkDestroyShaderModule(dev, fs, NULL);
+   if (geom) {
+      vkDestroyShaderModule(dev, gs_a, NULL);
+      vkDestroyShaderModule(dev, gs_b, NULL);
+   }
    vkDestroyDevice(dev, NULL);
    if (bad) {
-      printf("FAILED (capture: %u words wrong across device/llvmpipe/device draws; a "
-             "gap or overwrite means a draw resumed from a stale filled size)\n", bad);
+      printf("FAILED (%s capture: %u words wrong across device/llvmpipe/device draws; "
+             "a gap or overwrite means a draw resumed from a stale filled size)\n",
+             geom ? "geometry" : "vertex", bad);
       return 1;
    }
    return 0;
@@ -500,6 +525,10 @@ main(int argc, char **argv)
    const char *vs_b_path = (argc > 4) ? argv[4] : "xfbmix_b.vert.spv";
    const char *fs_path   = (argc > 5) ? argv[5] : "xfbmix.frag.spv";
    const char *vs_c_path = (argc > 6) ? argv[6] : "xfbmix_c.vert.spv";
+   const char *gv_path   = (argc > 7) ? argv[7] : "xfbmix_gv.vert.spv";
+   const char *ga_path   = (argc > 8) ? argv[8] : "xfbmix_ga.geom.spv";
+   const char *gb_path   = (argc > 9) ? argv[9] : "xfbmix_gb.geom.spv";
+   const char *gc_path   = (argc > 10) ? argv[10] : "xfbmix_gc.vert.spv";
 
    /* --- instance --------------------------------------------------- */
    VkApplicationInfo app = {
@@ -781,7 +810,9 @@ main(int argc, char **argv)
    vkFreeMemory(dev, mem, NULL);
    vkDestroyBuffer(dev, buf, NULL);
    vkDestroyDevice(dev, NULL);
-   const int capture_failed = xfb_mix(pd, vs_a_path, vs_b_path, vs_c_path, fs_path);
+   const int capture_failed =
+      xfb_mix(pd, vs_a_path, vs_b_path, vs_c_path, fs_path, NULL, NULL) |
+      xfb_mix(pd, gv_path, gv_path, gc_path, fs_path, ga_path, gb_path);
    vkDestroyInstance(inst, NULL);
    if (capture_failed)
       return 1;

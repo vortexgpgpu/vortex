@@ -147,7 +147,18 @@
 // capture is active.
 #define GFX_QC_XFB_WRITTEN    9u
 #define GFX_QC_XFB_NEEDED     10u
-#define GFX_QC_COUNT          11u
+// Geometry-shader invocations (every instanced invocation) and the primitives
+// they emit on every stream.
+#define GFX_QC_GS_INVOCATIONS 11u
+#define GFX_QC_GS_PRIMITIVES  12u
+// Vertex streams 1-3: primitives generated (k = 0), written to the bound
+// buffers (k = 1) and needed (k = 2); stream 0 has the three counters above.
+#define GFX_QC_STREAM(s, k)   (13u + 3u * ((s) - 1u) + (k))
+// Stream s's generated, written and needed primitive counters.
+#define GFX_QC_GENERATED(s)   ((s) ? GFX_QC_STREAM(s, 0u) : GFX_QC_PRIMS_GENERATED)
+#define GFX_QC_WRITTEN(s)     ((s) ? GFX_QC_STREAM(s, 1u) : GFX_QC_XFB_WRITTEN)
+#define GFX_QC_NEEDED(s)      ((s) ? GFX_QC_STREAM(s, 2u) : GFX_QC_XFB_NEEDED)
+#define GFX_QC_COUNT          22u
 
 #define GFX_FS_ZPAIR(lo, hi) \
    ((uint64_t)(uint32_t)(int32_t)(lo) | ((uint64_t)(uint32_t)(int32_t)(hi) << 32))

@@ -58,6 +58,9 @@
  *   layers3d   a 2D array view of slices 1..4 of a six-slice 3D image.
  *   layersms   four layers at 4 samples, blended and resolved, with every
  *              edge on a pixel boundary so the resolve is exact.
+ *   gsfan      the same tests over four quadrant viewports and six layers,
+ *              with gl_ViewportIndex and gl_Layer written by a geometry shader
+ *              that draws every triangle once per viewport and layer.
  *
  * A driver that draws every primitive through viewport 0, scissors them all
  * with scissor 0, or renders every layer into layer 0 fails each case on most
@@ -98,7 +101,7 @@ struct ctx {
    VkDevice dev;
    VkQueue queue;
    uint32_t qf;
-   VkShaderModule vs_viewport, vs_layer, vs_attr, fs;
+   VkShaderModule vs_viewport, vs_layer, vs_attr, fs, gs_fan;
 };
 
 /* One case: the target, the viewport array, and the draw. */
@@ -486,6 +489,10 @@ struct scene {
    VkCompareOp depth_op;
    bool depth_clamp;
    bool blend_add;         /* ONE + ONE on every channel */
+   /* Every primitive goes through mvp_fan.geom, which draws it into each of
+    * the four viewports' six layers, primitive by primitive: the viewport index
+    * and layer it carries are ignored. */
+   bool fan;
    uint32_t ndraws;
    struct draw_range draws[MAX_DRAWS];
    uint32_t nprims;
@@ -587,8 +594,14 @@ model_scene(const struct scene *s, uint8_t *col, float *dep)
       memcpy(col + 4 * i, k_clear, 4);
       dep[i] = s->depth_clear;
    }
-   for (uint32_t n = 0; n < s->nprims; n++) {
-      const struct prim *p = &s->p[n];
+   const uint32_t copies = s->fan ? 24u : 1u;
+   for (uint32_t m = 0; m < s->nprims * copies; m++) {
+      struct prim fanned = s->p[m / copies];
+      if (s->fan) {
+         fanned.vpi = (int32_t)(m % copies) / 6;
+         fanned.layer = (int32_t)(m % copies) % 6;
+      }
+      const struct prim *p = &fanned;
       const uint32_t vi = (uint32_t)p->vpi < s->vp_count ? (uint32_t)p->vpi : 0u;
       const uint32_t li = (uint32_t)p->layer < s->layers ? (uint32_t)p->layer : s->layers - 1;
       const VkViewport *v = &s->vp[vi];
@@ -798,11 +811,13 @@ run_scene(struct ctx *c, const struct scene *s, unsigned *failed)
    VkPipelineLayoutCreateInfo plci = { .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
    VkPipelineLayout pl;
    CHECK(vkCreatePipelineLayout(c->dev, &plci, NULL, &pl));
-   VkPipelineShaderStageCreateInfo stages[2] = {
+   VkPipelineShaderStageCreateInfo stages[3] = {
       { .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
         .stage = VK_SHADER_STAGE_VERTEX_BIT, .module = c->vs_attr, .pName = "main" },
       { .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
         .stage = VK_SHADER_STAGE_FRAGMENT_BIT, .module = c->fs, .pName = "main" },
+      { .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .stage = VK_SHADER_STAGE_GEOMETRY_BIT, .module = c->gs_fan, .pName = "main" },
    };
    VkVertexInputBindingDescription vib = { 0, sizeof(struct vtx), VK_VERTEX_INPUT_RATE_VERTEX };
    VkVertexInputAttributeDescription via[2] = {
@@ -851,7 +866,7 @@ run_scene(struct ctx *c, const struct scene *s, unsigned *failed)
    };
    VkGraphicsPipelineCreateInfo gpci = {
       .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-      .stageCount = 2, .pStages = stages,
+      .stageCount = s->fan ? 3u : 2u, .pStages = stages,
       .pVertexInputState = &vi, .pInputAssemblyState = &ia,
       .pViewportState = &vps, .pRasterizationState = &rs,
       .pMultisampleState = &msi, .pDepthStencilState = &dss, .pColorBlendState = &cb,
@@ -1048,7 +1063,7 @@ main(int argc, char **argv)
    };
    vkGetPhysicalDeviceFeatures2(pd, &f2);
    if (!f2.features.multiViewport || !f12.shaderOutputViewportIndex || !f12.shaderOutputLayer ||
-       !f2.features.depthClamp || !f2.features.largePoints) {
+       !f2.features.depthClamp || !f2.features.largePoints || !f2.features.geometryShader) {
       fprintf(stderr, "FAILED: multiViewport=%u shaderOutputViewportIndex=%u "
               "shaderOutputLayer=%u depthClamp=%u largePoints=%u\n", f2.features.multiViewport,
               f12.shaderOutputViewportIndex, f12.shaderOutputLayer, f2.features.depthClamp,
@@ -1082,6 +1097,7 @@ main(int argc, char **argv)
    };
    VkPhysicalDeviceFeatures en = {
       .multiViewport = VK_TRUE, .depthClamp = VK_TRUE, .largePoints = VK_TRUE,
+      .geometryShader = VK_TRUE,
    };
    VkDeviceCreateInfo dci = {
       .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, .pNext = &e12,
@@ -1094,7 +1110,8 @@ main(int argc, char **argv)
    c.vs_layer = load_module(c.dev, vsl_path);
    c.fs = load_module(c.dev, fs_path);
    c.vs_attr = load_module(c.dev, vsa_path);
-   if (!c.vs_viewport || !c.vs_layer || !c.fs || !c.vs_attr) return 1;
+   c.gs_fan = load_module(c.dev, (argc > 5) ? argv[5] : "mvp_fan.geom.spv");
+   if (!c.vs_viewport || !c.vs_layer || !c.fs || !c.vs_attr || !c.gs_fan) return 1;
 
    /* Quadrant viewports, the last y-flipped; each scissor crosses its quad's
     * edges at odd offsets, scissor 0 reaching into viewport 1's quadrant. */
@@ -1213,6 +1230,22 @@ main(int argc, char **argv)
              RECT(N32(8), N32(8), N32(24), N32(24), 0.375f, 0, 2),
              RECT(N32(20), N32(20), N32(28), N32(28), 0.875f, 0, 2) },
    };
+   /* Two overlapping quads through the geometry stage, which draws each into
+    * all four quadrant viewports' six layers: every layer of every quadrant
+    * shows both, depth-tested and blended per layer. */
+   const struct scene gsfan = {
+      .name = "gsfan", .width = 32, .height = 32, .layers = 6,
+      .vp_count = 4,
+      .vp = { { 0, 0, 16, 16, 0, 1 }, { 16, 0, 16, 16, 0, 1 }, { 0, 16, 16, 16, 0, 1 },
+              { 16, 32, 16, -16, 0, 1 } },
+      .sc = { { { 1, 2 }, { 14, 13 } }, { { 16, 0 }, { 13, 16 } }, { { 3, 16 }, { 13, 11 } },
+              { { 18, 19 }, { 14, 13 } } },
+      .depth = true, .depth_clear = 1.0f, .depth_op = VK_COMPARE_OP_LESS, .blend_add = true,
+      .fan = true,
+      .ndraws = 1, .draws = { { 0, 2 } }, .nprims = 2,
+      .p = { RECT(N32(4), N32(4), N32(24), N32(20), 0.5f, 0, 0),
+             RECT(N32(12), N32(8), N32(32), N32(28), 0.25f, 0, 0) },
+   };
    /* Six layers of an eight-layer image from its layer 1: one quad per layer,
     * then a second per layer from in front or behind, depth tested and
     * blended. */
@@ -1292,13 +1325,14 @@ main(int argc, char **argv)
 #undef N32
    const struct scene *scenes[] = {
       &depthclip, &depthclamp, &vpclamp, &layerclamp, &linepoint, &layerblend,
-      &layers6, &layers64, &layersR, &layers3d, &layersms,
+      &layers6, &layers64, &layersR, &layers3d, &layersms, &gsfan,
    };
    for (unsigned i = 0; i < sizeof scenes / sizeof scenes[0]; i++)
       if (run_scene(&c, scenes[i], &failed))
          return 1;
 
    vkDestroyShaderModule(c.dev, c.vs_attr, NULL);
+   vkDestroyShaderModule(c.dev, c.gs_fan, NULL);
    vkDestroyShaderModule(c.dev, c.fs, NULL);
    vkDestroyShaderModule(c.dev, c.vs_layer, NULL);
    vkDestroyShaderModule(c.dev, c.vs_viewport, NULL);

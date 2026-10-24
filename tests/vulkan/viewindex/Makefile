@@ -16,7 +16,7 @@ SRC_DIR := $(VORTEX_HOME)/tests/vulkan/$(PROJECT)
 
 SRCS := $(SRC_DIR)/main.c
 
-SHADERS := $(SRC_DIR)/viewindex.vert \
-           $(SRC_DIR)/viewindex.frag
+SHADERS := $(SRC_DIR)/viewindex.vert $(SRC_DIR)/viewindex.frag \
+           $(SRC_DIR)/viewindex.geom $(SRC_DIR)/viewindex_gs.frag
 
 include ../common.mk

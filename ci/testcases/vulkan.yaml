@@ -151,6 +151,23 @@ tests:
 - {id: gfx-varypack, via: make-run, drivers: [simx], dir: tests/vulkan/varypack, target: "run-{driver}",
    touches: [sw/gfx/, hw/rtl/raster/, sim/simx/raster/, tests/vulkan/varypack]}
 
+# Geometry shaders on the device: pass-through, strips split with their odd
+# triangles wound back, expansion, point size, polygon mode, counts known only
+# at run time ordered by the device-wide scan (from a vertex, a push constant
+# and a texture, side effects counted exactly), GS instancing, adjacency in
+# every topology with and without a geometry shader, and gl_PrimitiveID.
+- {id: gfx-geometry, via: make-run, drivers: [simx], dir: tests/vulkan/geometry, target: "run-{driver}",
+   touches: [sw/common/gfx_frontend_abi.h, sw/gfx/, tests/vulkan/geometry]}
+# Transform feedback, vertex streams and queries from a geometry shader.
+- {id: gfx-gsxfb, via: make-run, drivers: [simx], dir: tests/vulkan/gsxfb, target: "run-{driver}",
+   touches: [sw/common/gfx_frontend_abi.h, sw/common/gfx_fs_desc_abi.h, sw/gfx/, tests/vulkan/gsxfb]}
+# Draws past one rasterizer pass's primitives (GFX_RASTER_MAX_PRIMS) from a
+# geometry stage, with static and with dynamic counts, split into front-end
+# passes. Full tier, 32-bit only, outside the suite list: the stages run
+# ~210,000 vertices.
+- {id: gfx-bigdraw, via: make-run, drivers: [simx], dir: tests/vulkan/bigdraw, target: "run-{driver}", tier: full, xlen: [32],
+   touches: [sw/common/gfx_frontend_abi.h, sw/gfx/, hw/rtl/raster/, sim/simx/raster/, tests/vulkan/bigdraw]}
+
 # Viewport arrays: per-primitive viewport and scissor selection through
 # gl_ViewportIndex on the fixed-function and the software rasterizer (4x),
 # gl_Layer into a layered target, and both read back in the fragment shader.

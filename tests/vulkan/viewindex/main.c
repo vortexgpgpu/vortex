@@ -14,7 +14,9 @@
  *
  * So this test makes the views differ only through gl_ViewIndex. Three views
  * stamp 60, 140 and 220 into red; a driver that reads the intrinsic as a
- * constant fails on the second and third views while still filling them.
+ * constant fails on the second and third views while still filling them. The
+ * pass runs twice: with the fragment shader reading gl_ViewIndex, and with a
+ * geometry shader reading it and passing it on as a flat varying.
  *
  * The assertion is on the pixels, not on which path produced them: rendering
  * this on the device and falling back to llvmpipe are both correct, and only a
@@ -100,6 +102,8 @@ main(int argc, char **argv)
 {
    const char *vs_path = (argc > 1) ? argv[1] : "viewindex.vert.spv";
    const char *fs_path = (argc > 2) ? argv[2] : "viewindex.frag.spv";
+   const char *gs_path = (argc > 3) ? argv[3] : "viewindex.geom.spv";
+   const char *gfs_path = (argc > 4) ? argv[4] : "viewindex_gs.frag.spv";
 
    /* --- instance / device / queue --------------------------------- */
    VkApplicationInfo app = {
@@ -133,8 +137,8 @@ main(int argc, char **argv)
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &mvf,
    };
    vkGetPhysicalDeviceFeatures2(pd, &f2);
-   if (!mvf.multiview) {
-      fprintf(stderr, "FAILED: device does not support multiview\n");
+   if (!mvf.multiview || !mvf.multiviewGeometryShader) {
+      fprintf(stderr, "FAILED: device does not support multiview with a geometry shader\n");
       return 1;
    }
 
@@ -155,12 +159,14 @@ main(int argc, char **argv)
    };
    VkPhysicalDeviceMultiviewFeatures enable_mv = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES,
-      .multiview = VK_TRUE,
+      .multiview = VK_TRUE, .multiviewGeometryShader = VK_TRUE,
    };
+   VkPhysicalDeviceFeatures enable = { .geometryShader = VK_TRUE };
    VkDeviceCreateInfo dci = {
       .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
       .pNext = &enable_mv,
       .queueCreateInfoCount = 1, .pQueueCreateInfos = &qci,
+      .pEnabledFeatures = &enable,
    };
    VkDevice dev;
    CHECK(vkCreateDevice(pd, &dci, NULL, &dev));
@@ -304,6 +310,22 @@ main(int argc, char **argv)
    };
    VkPipeline pipe;
    CHECK(vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &gpci, NULL, &pipe));
+   /* The same views with gl_ViewIndex read by a geometry shader instead, and
+    * passed to a fragment shader that does not read it. */
+   VkShaderModule gs = load_module(dev, gs_path);
+   VkShaderModule gfs = load_module(dev, gfs_path);
+   if (!gs || !gfs) return 1;
+   VkPipelineShaderStageCreateInfo gstages[3] = {
+      stages[0],
+      { .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .stage = VK_SHADER_STAGE_FRAGMENT_BIT, .module = gfs, .pName = "main" },
+      { .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .stage = VK_SHADER_STAGE_GEOMETRY_BIT, .module = gs, .pName = "main" },
+   };
+   gpci.stageCount = 3;
+   gpci.pStages = gstages;
+   VkPipeline pipe_gs;
+   CHECK(vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &gpci, NULL, &pipe_gs));
 
    /* --- draw + read back every layer ------------------------------- */
    const VkDeviceSize bytes = (VkDeviceSize)WIDTH * HEIGHT * 4 * VIEWS;
@@ -328,6 +350,7 @@ main(int argc, char **argv)
 
    VkCommandPoolCreateInfo cmpci = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+      .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
       .queueFamilyIndex = qf,
    };
    VkCommandPool cp;
@@ -340,70 +363,76 @@ main(int argc, char **argv)
    VkCommandBuffer cmd;
    CHECK(vkAllocateCommandBuffers(dev, &cbai, &cmd));
 
-   VkCommandBufferBeginInfo cbbi = {
-      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-      .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-   };
-   CHECK(vkBeginCommandBuffer(cmd, &cbbi));
-   VkClearValue clear = { .color = { .float32 = { 0.0f, 1.0f, 0.0f, 1.0f } } };
-   VkRenderPassBeginInfo rpbi = {
-      .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-      .renderPass = rp, .framebuffer = fb,
-      .renderArea = { { 0, 0 }, { WIDTH, HEIGHT } },
-      .clearValueCount = 1, .pClearValues = &clear,
-   };
-   vkCmdBeginRenderPass(cmd, &rpbi, VK_SUBPASS_CONTENTS_INLINE);
-   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe);
-   vkCmdDraw(cmd, 6, 1, 0, 0);
-   vkCmdEndRenderPass(cmd);
-   VkBufferImageCopy region = {
-      /* Every layer in one copy: the destination is tightly packed, so view v
-       * starts at v * WIDTH * HEIGHT * 4. */
-      .imageSubresource = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                            .layerCount = VIEWS },
-      .imageExtent = { WIDTH, HEIGHT, 1 },
-   };
-   vkCmdCopyImageToBuffer(cmd, img, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                          rb, 1, &region);
-   CHECK(vkEndCommandBuffer(cmd));
-
-   VkSubmitInfo si = {
-      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-      .commandBufferCount = 1, .pCommandBuffers = &cmd,
-   };
-   CHECK(vkQueueSubmit(queue, 1, &si, VK_NULL_HANDLE));
-   CHECK(vkQueueWaitIdle(queue));
-
    unsigned failed = 0;
-   uint8_t *px;
-   CHECK(vkMapMemory(dev, bmem, 0, bytes, 0, (void **)&px));
-   for (uint32_t v = 0; v < VIEWS; v++) {
-      const uint8_t *layer = px + (size_t)v * WIDTH * HEIGHT * 4;
-      const uint8_t want = expect_red(v);
-      uint32_t right = 0, cleared = 0;
-      uint8_t seen = layer[0];
-      for (uint32_t i = 0; i < WIDTH * HEIGHT; i++) {
-         const uint8_t *p = layer + (size_t)i * 4;
-         if (p[0] == want) {
-            right++;
-         } else {
-            seen = p[0];
-            if (p[1] == CLEAR_G) cleared++;
+   for (int use_gs = 0; use_gs < 2; use_gs++) {
+   CHECK(vkResetCommandBuffer(cmd, 0));
+      VkCommandBufferBeginInfo cbbi = {
+         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+         .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+      };
+      CHECK(vkBeginCommandBuffer(cmd, &cbbi));
+      VkClearValue clear = { .color = { .float32 = { 0.0f, 1.0f, 0.0f, 1.0f } } };
+      VkRenderPassBeginInfo rpbi = {
+         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+         .renderPass = rp, .framebuffer = fb,
+         .renderArea = { { 0, 0 }, { WIDTH, HEIGHT } },
+         .clearValueCount = 1, .pClearValues = &clear,
+      };
+      vkCmdBeginRenderPass(cmd, &rpbi, VK_SUBPASS_CONTENTS_INLINE);
+      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, use_gs ? pipe_gs : pipe);
+      vkCmdDraw(cmd, 6, 1, 0, 0);
+      vkCmdEndRenderPass(cmd);
+      VkBufferImageCopy region = {
+         /* Every layer in one copy: the destination is tightly packed, so view v
+          * starts at v * WIDTH * HEIGHT * 4. */
+         .imageSubresource = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                               .layerCount = VIEWS },
+         .imageExtent = { WIDTH, HEIGHT, 1 },
+      };
+      vkCmdCopyImageToBuffer(cmd, img, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                             rb, 1, &region);
+      CHECK(vkEndCommandBuffer(cmd));
+
+      VkSubmitInfo si = {
+         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+         .commandBufferCount = 1, .pCommandBuffers = &cmd,
+      };
+      CHECK(vkQueueSubmit(queue, 1, &si, VK_NULL_HANDLE));
+      CHECK(vkQueueWaitIdle(queue));
+
+      uint8_t *px;
+      CHECK(vkMapMemory(dev, bmem, 0, bytes, 0, (void **)&px));
+      for (uint32_t v = 0; v < VIEWS; v++) {
+         const uint8_t *layer = px + (size_t)v * WIDTH * HEIGHT * 4;
+         const uint8_t want = expect_red(v);
+         uint32_t right = 0, cleared = 0;
+         uint8_t seen = layer[0];
+         for (uint32_t i = 0; i < WIDTH * HEIGHT; i++) {
+            const uint8_t *p = layer + (size_t)i * 4;
+            if (p[0] == want) {
+               right++;
+            } else {
+               seen = p[0];
+               if (p[1] == CLEAR_G) cleared++;
+            }
          }
+         bool ok = right == WIDTH * HEIGHT;
+         printf("%sview %u: %s  %u/%u px red=%u (want %u)%s\n", use_gs ? "geometry " : "", v,
+                ok ? "pass" : "FAIL", right, WIDTH * HEIGHT, seen, want,
+                cleared ? ", some still at the clear" : "");
+         if (!ok) failed++;
       }
-      bool ok = right == WIDTH * HEIGHT;
-      printf("view %u: %s  %u/%u px red=%u (want %u)%s\n", v,
-             ok ? "pass" : "FAIL", right, WIDTH * HEIGHT, seen, want,
-             cleared ? ", some still at the clear" : "");
-      if (!ok) failed++;
+      vkUnmapMemory(dev, bmem);
    }
-   vkUnmapMemory(dev, bmem);
 
    /* cleanup (best-effort; a smoke test exits anyway) */
    vkDestroyCommandPool(dev, cp, NULL);
    vkFreeMemory(dev, bmem, NULL);
    vkDestroyBuffer(dev, rb, NULL);
    vkDestroyPipeline(dev, pipe, NULL);
+   vkDestroyPipeline(dev, pipe_gs, NULL);
+   vkDestroyShaderModule(dev, gs, NULL);
+   vkDestroyShaderModule(dev, gfs, NULL);
    vkDestroyPipelineLayout(dev, pl, NULL);
    vkDestroyShaderModule(dev, fs, NULL);
    vkDestroyShaderModule(dev, vs, NULL);

@@ -231,6 +231,7 @@ typedef struct {
   float    bary[3][3];
   uint32_t vrec[3];
   uint32_t vp_layer;   // RAST_VARY_VP_LAYER: the primitive's viewport and layer
+  uint32_t prim_id;    // gl_PrimitiveID
 } rast_vary_t;
 
 // ViewportIndex and Layer of a primitive as the fragment stage reads them, after
@@ -329,7 +330,99 @@ typedef struct {
   uint64_t tilebuf_addr;   // rast_tile_header_t[num_bins] then uint32 pids[keys]  (out, pinned)
   uint64_t meta_addr;      // uint32[PIPE_META_WORDS]         (out)
   uint64_t vary_addr;      // rast_vary_t[P]                  (out, with vsrec_addr)
+  // An indexed primitive list (pipe_list_entry_t[]), the output of a shader
+  // stage that makes its own primitives: draw primitive t reads its records
+  // from entry t instead of by the implicit rule above, and a polygon drawn as
+  // lines or points takes entry t / 3. 0 = implicit records.
+  uint64_t prim_index_addr;
+  // The list's length on the device (uint32), which this pass clamps to
+  // num_tris primitives from prim_base; 0 = num_tris is the count.
+  uint64_t num_tris_addr;
+  uint32_t list_aux;       // PIPE_LIST_AUX_*: what an entry's aux word holds
+  // 1: the implicit records come in adjacency groups -- four per line, six per
+  // triangle -- of which the primitive is records 1 and 2, or 0, 2 and 4.
+  uint32_t adjacency;
 } pipe_arg_t;
+
+// One entry of an indexed primitive list. A triangle names its three records in
+// winding order with its provoking vertex where flat inputs read it, a line its
+// two ends in rec[0..1], a point its record in rec[0]. `aux` is per-primitive
+// data in the meaning pipe_arg_t::list_aux gives it, and its top bit marks a
+// line that begins a strip, where a stipple counter restarts.
+typedef struct {
+  uint32_t rec[3];
+  uint32_t aux;
+} pipe_list_entry_t;
+
+#define PIPE_LIST_AUX_NONE   0u
+#define PIPE_LIST_AUX_PRIMID 1u   // aux holds the primitive's gl_PrimitiveID
+#define PIPE_LIST_HEAD       0x80000000u
+#define PIPE_LIST_AUX_MASK   0x7fffffffu
+
+// A capturing draw's transform feedback, as the stage that captures reads it
+// and, when a geometry stage's counts are found on the device, as the scan that
+// orders them commits it (gfx_xfb_commit). A primitive is written only when
+// every captured buffer of its vertex stream has room for all of it, so a
+// stream writes its first W primitives and none after. The filled sizes are
+// device words: the draw reads them at off_rd and leaves the advanced ones at
+// off_wr, a different four, so no thread reads a word another writes.
+typedef struct {
+  uint64_t base[4];          // device address of each bound range
+  uint32_t size[4];          // bytes in each bound range
+  uint64_t off_rd;           // device address of the uint32_t[4] filled sizes
+  uint64_t off_wr;           // ... and of the four the draw leaves behind
+  uint64_t query_block;      // GFX_QC_* counters, 0 when no query counts
+  uint32_t prims;            // vertex stage: primitives in the draw, every instance
+  uint32_t per;              // vertices per primitive: 1, 2 or 3
+  uint32_t mask;             // buffers captured into: written by the shader, bound
+  uint32_t streams;          // geometry stage: the vertex streams it captures
+  uint32_t stride[4];        // bytes per captured vertex in each buffer
+  uint32_t stream_prims[4];  // geometry stage, static counts: each stream's primitives
+  uint8_t  buffer_stream[4]; // the vertex stream each buffer captures
+  // Vertex stage: records per primitive, `per` or with adjacency 4 or 6, of
+  // which only the primitive's own vertices are captured.
+  uint32_t group;
+} gfx_xfb_desc_t;
+
+// Device-wide exclusive prefix sum (scan_k, gfx_scan_k.h) over n elements of
+// `lanes` uint32 lanes each, lane by lane, in three launches the command
+// processor drains one after the other, so no CTA waits on another:
+//   UP    `parts` CTAs, CTA j summing elements [j * chunk, (j + 1) * chunk) of
+//         each lane into part[j]
+//   TOP   one CTA: the partials scanned in place, the totals written
+//   DOWN  `parts` CTAs again, each writing its elements' exclusive prefixes from
+//         its partial on
+// Every step inside a CTA is a log-depth scan of its threads' sums.
+#define PIPE_SCAN_UP   0u
+#define PIPE_SCAN_TOP  1u
+#define PIPE_SCAN_DOWN 2u
+#define PIPE_SCAN_MAX_LANES 4u
+
+typedef struct {
+  uint32_t stage;
+  uint32_t n;              // elements, or a bound on them with n_addr
+  uint32_t lanes;          // 1 .. PIPE_SCAN_MAX_LANES
+  uint32_t chunk;          // elements per CTA in UP and DOWN
+  uint32_t parts;          // CTAs of UP and DOWN
+  // TOP also adds the totals to the query counter block (GFX_QC_*) when one
+  // is given: every lane's to counter query_sum, and lane k's to the counters
+  // named in byte k of each query_lane word (PIPE_SCAN_QC_NONE: none).
+  uint32_t query_sum;
+  uint32_t query_lane[3];
+  uint32_t streams;        // the vertex streams the lanes scan, lane k the k-th
+  uint64_t n_addr;         // the element count on the device (uint32), 0 = n
+  uint64_t in_addr;        // uint32[n * lanes]
+  uint64_t out_addr;       // uint32[n * lanes]: the exclusive prefixes
+  uint64_t part_addr;      // uint32[parts * lanes]
+  uint64_t total_addr;     // uint32[lanes]
+  uint64_t scratch_addr;   // uint32[parts * 2 * blockDim]
+  uint64_t query_addr;     // the query counter block, 0 = none
+  // A geometry stage's transform feedback (gfx_xfb_desc_t), which TOP commits
+  // from the totals, lane k being the k-th stream it emits to; 0 = none.
+  uint64_t xfb_addr;
+} pipe_scan_arg_t;
+
+#define PIPE_SCAN_QC_NONE 0xffu
 
 // Multisample colour resolve. A multisample image keeps one whole image per
 // sample, src_sample_stride bytes apart; the resolve folds a pixel's samples with

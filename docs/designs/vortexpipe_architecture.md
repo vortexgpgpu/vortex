@@ -795,6 +795,53 @@ DCR writes, drained in order by the CP's launch-barrier:
    offset/count fields) + sorted PID array. The RASTER unit then
    descends bin → block → quad.
 
+#### 3.2.1 The geometry stage
+
+A bound geometry shader runs as a SIMT kernel stage between the VS and
+setup, in the same batch. It is translated (`vp_nir_to_llvm_gs`) after
+`nir_lower_gs_intrinsics`, which counts each stream's vertices, the
+vertices of the current strip and its decomposed primitives, and loaded at
+its own fixed address (`VP_STARTUP_GS`).
+
+- **Threads.** Thread `g` runs invocation `g % Invocations` of input
+  primitive `g / Invocations`, so thread order is the order the
+  specification gives the output (input primitive by input primitive, then
+  invocation). The host walk expands strips, fans, restart and the four
+  adjacency topologies into a list, so input primitive `p` reads vertex
+  records `p * per_in .. p * per_in + per_in - 1` with no index buffer;
+  `gl_PointSize` and the clip/cull distances come from the bound VS's record
+  offsets (`VP_GS_ARG_INPUTS`).
+- **Output.** `EmitStreamVertex` stores the vertex to the stream's next
+  record of the thread's own region, in the VS record layout, so setup and
+  the fragment stage read GS records as they read VS ones. A vertex that
+  completes a primitive on stream 0 appends a `pipe_list_entry_t`
+  `(r0, r1, r2, aux)`: strips become lists at emit time, odd triangles wound
+  back with the provoking vertex where flat inputs read it; `aux` holds the
+  primitive's `gl_PrimitiveID` and, for a line, the strip-head mark.
+- **Order.** With static counts (`nir_gs_count_vertices_and_primitives`)
+  thread `g`'s `k`-th primitive is entry `g * S + k` of the list setup reads,
+  closed form, no further launch. Otherwise each thread stages its entries
+  and counts; a three-launch device-wide scan (`scan_k`, UP/TOP/DOWN on the
+  front-end module) orders the counts, and `gs_post` copies every thread's
+  entries to the dense list at its offset. Setup reads the list through
+  `pipe_arg_t::prim_index_addr`, its length from `num_tris_addr`.
+- **Passes and batches.** A front-end pass holds at most
+  `PIPE_PASS_MAX_PRIMS` primitives (the RASTER primitive id is
+  `VX_RASTER_PID_BITS` wide); longer draws run several passes in order, a
+  run-time count that may exceed one pass being read back after the scan.
+  Input primitives are batched so a batch's records and lists stay within
+  `VP_GS_BATCH_BYTES`.
+- **Capture and queries.** Transform feedback is written by the GS as each
+  primitive completes (static counts) or by `gs_post` at the scanned
+  offsets, per stream, a primitive written only where every buffer of its
+  stream has room; thread 0 or the scan's TOP launch commits the filled
+  sizes and the stream counters (`gfx_xfb_desc_t`). GS invocations count
+  every instanced invocation; emitted, generated and clipper counts are
+  host-known with static counts and added by the scan otherwise. Without a
+  GS, the VS captures an adjacency topology's primitives from its expanded
+  groups of 4 or 6 records (`gfx_xfb_desc_t::group`), only each primitive's
+  own vertices.
+
 Colour and depth/stencil are reached by the FF units through their
 DCRs: the attachments themselves when their allocations are imported,
 otherwise device planes allocated and *seeded* once per render pass

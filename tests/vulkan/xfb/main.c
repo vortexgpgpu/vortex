@@ -18,7 +18,9 @@
  *   topology  list, strip and fan in both provoking-vertex modes, an indexed
  *             strip cut by primitive restart, an instanced list starting at
  *             instance 1, an instanced strip, points, a line strip and a line
- *             list; each in its own
+ *             list, and the four adjacency topologies -- the triangle strip in
+ *             both modes -- of which only each primitive's own vertices are
+ *             captured, never the adjacent ones; each in its own
  *             Begin/End over its own buffer ranges, the filled sizes saved to
  *             counter buffers at End
  *   overflow  four triangles into ranges with room for three in buffer 0 and
@@ -66,7 +68,7 @@
 #define STRIDE1   24u
 /* Each case captures into its own 4 KiB range of each buffer. */
 #define SLICE     4096u
-#define NSLICES   20u
+#define NSLICES   24u
 /* The many-vertex and huge cases capture into buffers of their own. */
 #define NBIG      4608u
 #define NHUGE     33000u
@@ -172,6 +174,39 @@ expect_draw(const struct draw *d, struct vtx *out)
                out[n++] = V(p - 2); out[n++] = V(p); out[n++] = V(p - 1);
             } else {
                out[n++] = V(p - 1); out[n++] = V(p - 2); out[n++] = V(p);
+            }
+            break;
+         }
+         case VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY:   /* (a, 1, 2, b) */
+            if (k % 4u == 3u) {
+               out[n++] = V(p - 2);
+               out[n++] = V(p - 1);
+            }
+            break;
+         case VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY:  /* segment (t+1, t+2) */
+            if (k >= 3) {
+               out[n++] = V(p - 2);
+               out[n++] = V(p - 1);
+            }
+            break;
+         case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY:   /* 0, 2, 4 of six */
+            if (k % 6u == 5u) {
+               out[n++] = V(p - 5); out[n++] = V(p - 3); out[n++] = V(p - 1);
+            }
+            break;
+         case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY: {
+            /* Triangle t closes at position 2t+5; its own vertices are 2t,
+             * 2t+2 and 2t+4, an odd one wound back like a strip's. */
+            if (k < 5 || (k - 5u) % 2u) {
+               break;
+            }
+            const uint32_t t = (k - 5u) / 2u, a = p - 5, b = p - 3, c = p - 1;
+            if (!(t & 1u)) {
+               out[n++] = V(a); out[n++] = V(b); out[n++] = V(c);
+            } else if (!d->last) {
+               out[n++] = V(a); out[n++] = V(c); out[n++] = V(b);
+            } else {
+               out[n++] = V(b); out[n++] = V(a); out[n++] = V(c);
             }
             break;
          }
@@ -399,12 +434,15 @@ static const uint16_t restart_idx[] = { 0, 1, 2, 3, 0xffff, 4, 5, 6, 7 };
 
 enum {
    C_LIST, C_STRIP_F, C_STRIP_L, C_FAN_F, C_FAN_L, C_RESTART, C_INST, C_POINTS,
-   C_LINES, C_INST_STRIP, C_LINE_LIST, NTOPO,
+   C_LINES, C_INST_STRIP, C_LINE_LIST, C_LINES_ADJ, C_LINE_STRIP_ADJ, C_TRIS_ADJ,
+   C_TRI_STRIP_ADJ_F, C_TRI_STRIP_ADJ_L, NTOPO,
 };
 
 static const char *const topo_names[NTOPO] = {
    "list", "strip", "strip-last", "fan", "fan-last", "restart", "instanced",
-   "points", "line-strip", "instanced-strip", "line-list",
+   "points", "line-strip", "instanced-strip", "line-list", "line-list-adjacency",
+   "line-strip-adjacency", "triangle-list-adjacency", "triangle-strip-adjacency",
+   "triangle-strip-adjacency-last",
 };
 
 static const struct draw topo_draws[NTOPO] = {
@@ -419,6 +457,13 @@ static const struct draw topo_draws[NTOPO] = {
    [C_LINES]   = { VK_PRIMITIVE_TOPOLOGY_LINE_STRIP, false, 4, NULL, 0, 1, 0 },
    [C_INST_STRIP] = { VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP, false, 5, NULL, 0, 3, 0 },
    [C_LINE_LIST]  = { VK_PRIMITIVE_TOPOLOGY_LINE_LIST, false, 6, NULL, 0, 1, 0 },
+   [C_LINES_ADJ]  = { VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY, false, 8, NULL, 0, 1, 0 },
+   [C_LINE_STRIP_ADJ] = { VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY, false, 6, NULL, 0, 1, 0 },
+   [C_TRIS_ADJ]   = { VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY, false, 12, NULL, 0, 1, 0 },
+   [C_TRI_STRIP_ADJ_F] = { VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY, false, 10, NULL,
+                           0, 1, 0 },
+   [C_TRI_STRIP_ADJ_L] = { VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY, true, 10, NULL,
+                           0, 1, 0 },
 };
 
 /* Slices of the capture buffers. */
@@ -521,14 +566,17 @@ main(int argc, char **argv)
    if (!xfb_have.transformFeedback || !pv_have.provokingVertexLast ||
        !pv_have.transformFeedbackPreservesProvokingVertex ||
        !pgq_have.primitivesGeneratedQuery || !have.features.shaderClipDistance ||
+       !have.features.geometryShader ||
        !xfb_props.transformFeedbackQueries || xfb_props.maxTransformFeedbackBuffers < 2 ||
        !pv_props.transformFeedbackPreservesTriangleFanProvokingVertex) {
       printf("FAILED (xfb: a required feature is missing: transformFeedback %u, "
              "provokingVertexLast %u, preserves provoking %u/%u, queries %u, "
-             "buffers %u)\n", xfb_have.transformFeedback, pv_have.provokingVertexLast,
+             "buffers %u, geometryShader %u)\n", xfb_have.transformFeedback,
+             pv_have.provokingVertexLast,
              pv_have.transformFeedbackPreservesProvokingVertex,
              pv_props.transformFeedbackPreservesTriangleFanProvokingVertex,
-             xfb_props.transformFeedbackQueries, xfb_props.maxTransformFeedbackBuffers);
+             xfb_props.transformFeedbackQueries, xfb_props.maxTransformFeedbackBuffers,
+             have.features.geometryShader);
       return 1;
    }
    /* Without geometry streams Vulkan requires exactly one stream. */
@@ -571,7 +619,8 @@ main(int argc, char **argv)
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIMITIVES_GENERATED_QUERY_FEATURES_EXT,
       .pNext = &pv_on, .primitivesGeneratedQuery = VK_TRUE,
    };
-   VkPhysicalDeviceFeatures feats = { .shaderClipDistance = VK_TRUE };
+   /* The adjacency topologies need geometryShader, even drawn without one. */
+   VkPhysicalDeviceFeatures feats = { .shaderClipDistance = VK_TRUE, .geometryShader = VK_TRUE };
    VkDeviceCreateInfo dci = {
       .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, .pNext = &pgq_on,
       .queueCreateInfoCount = 1, .pQueueCreateInfos = &qci,

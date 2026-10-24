@@ -24,7 +24,8 @@ SRCS := $(SRC_DIR)/main.c
 SHADERS := $(SRC_DIR)/mvp_viewport.vert \
            $(SRC_DIR)/mvp_layer.vert \
            $(SRC_DIR)/mvp.frag \
-           $(SRC_DIR)/mvp_attr.vert
+           $(SRC_DIR)/mvp_attr.vert \
+           $(SRC_DIR)/mvp_fan.geom
 
 include ../common.mk
 

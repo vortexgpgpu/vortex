@@ -31,6 +31,8 @@ SRCS := $(SRC_DIR)/main.c
 
 SHADERS := $(SRC_DIR)/add1.comp $(SRC_DIR)/add1_shared.comp \
            $(SRC_DIR)/xfbmix_a.vert $(SRC_DIR)/xfbmix_b.vert $(SRC_DIR)/xfbmix.frag \
-           $(SRC_DIR)/xfbmix_c.vert
+           $(SRC_DIR)/xfbmix_c.vert \
+           $(SRC_DIR)/xfbmix_gv.vert $(SRC_DIR)/xfbmix_ga.geom $(SRC_DIR)/xfbmix_gb.geom \
+           $(SRC_DIR)/xfbmix_gc.vert
 
 include ../common.mk
