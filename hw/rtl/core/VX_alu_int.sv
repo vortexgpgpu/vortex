@@ -228,7 +228,10 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     end
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_alu_result
-        wire [`VX_CFG_XLEN-1:0] slt_br_result = `VX_CFG_XLEN'({is_br_op && ~(| sub_result[i][`VX_CFG_XLEN-1:0]), sub_result[i][`VX_CFG_XLEN]});
+        // the difference is zero exactly when the operands are equal, which
+        // a compare decides alongside the subtractor rather than after it
+        wire is_equal_i = (alu_in1[i] == sub_in2_imm[i]);
+        wire [`VX_CFG_XLEN-1:0] slt_br_result = `VX_CFG_XLEN'({is_br_op && is_equal_i, sub_result[i][`VX_CFG_XLEN]});
         wire [`VX_CFG_XLEN-1:0] sub_slt_br_result = (is_sub_op && ~is_br_op) ? sub_result[i][`VX_CFG_XLEN-1:0] : slt_br_result;
         always @(*) begin
             if (execute_if.data.op_args.alu.xtype == ALU_TYPE_OTHER) begin
