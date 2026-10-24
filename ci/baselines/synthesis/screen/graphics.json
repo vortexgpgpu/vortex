@@ -1,11 +1,11 @@
 {
   "gfx": {
     "clock_mhz": 250,
-    "config_hash": "71b9aba5753d9734",
+    "config_hash": "4110e7360be19f6a",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
     "dut": "gfx",
     "result": {
-      "build_time_s": 95,
+      "build_time_s": 125,
       "deep_endpoints": 10979,
       "deepest_paths": [
         "26  g_rtu_core_0.rtu_core/fill_lane[0] -> g_rtu_core_0.rtu_core/scheduler/ctx_arbiter/g_model1.reqs_mask.d[0]",
@@ -23,7 +23,7 @@
       "env": {
         "circt": "CIRCT 48b64cdd6",
         "device": "xcu55c-fsvh2892-2L-e",
-        "foldsim": "foldsim 5f2469cf0-dirty",
+        "foldsim": "foldsim 8b4d63ae8",
         "xlen": 32
       },
       "fix_levels": 12,
@@ -127,7 +127,7 @@
   },
   "om": {
     "clock_mhz": 300,
-    "config_hash": "c347cac0b1957543",
+    "config_hash": "d6278104f499d0a9",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
     "dut": "om",
     "result": {
@@ -149,7 +149,7 @@
       "env": {
         "circt": "CIRCT 48b64cdd6",
         "device": "xcu55c-fsvh2892-2L-e",
-        "foldsim": "foldsim 5f2469cf0-dirty",
+        "foldsim": "foldsim 8b4d63ae8",
         "xlen": 32
       },
       "fix_levels": 12,
@@ -172,7 +172,7 @@
   },
   "raster": {
     "clock_mhz": 300,
-    "config_hash": "2a4bae90afca64a1",
+    "config_hash": "7dadf6d96a80c48a",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
     "dut": "raster",
     "result": {
@@ -194,7 +194,7 @@
       "env": {
         "circt": "CIRCT 48b64cdd6",
         "device": "xcu55c-fsvh2892-2L-e",
-        "foldsim": "foldsim 5f2469cf0-dirty",
+        "foldsim": "foldsim 8b4d63ae8",
         "xlen": 32
       },
       "fix_levels": 12,
@@ -213,11 +213,11 @@
   },
   "rtu": {
     "clock_mhz": 300,
-    "config_hash": "d367d125a25c1a41",
+    "config_hash": "6e5bfce964b8451c",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
     "dut": "rtu",
     "result": {
-      "build_time_s": 25,
+      "build_time_s": 35,
       "deep_endpoints": 6740,
       "deepest_paths": [
         "22  rtu_core/scheduler/coll_ordt[1920] -> rtu_core/scheduler/coll_ordt.d[0]",
@@ -235,7 +235,7 @@
       "env": {
         "circt": "CIRCT 48b64cdd6",
         "device": "xcu55c-fsvh2892-2L-e",
-        "foldsim": "foldsim 5f2469cf0-dirty",
+        "foldsim": "foldsim 8b4d63ae8",
         "xlen": 32
       },
       "fix_levels": 12,
@@ -263,11 +263,11 @@
   },
   "tex": {
     "clock_mhz": 300,
-    "config_hash": "7eed53233d025454",
+    "config_hash": "c1fb0e60e4aadb2f",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
     "dut": "tex",
     "result": {
-      "build_time_s": 25,
+      "build_time_s": 40,
       "deep_endpoints": 3072,
       "deepest_paths": [
         "14  tex_core/pipe_reg/g_eb1.pipe_buffer/g_register.g_pipe_regs_0.pipe_register/g_pipe.g_partial_reset.pipe_free[2337] -> tex_core/tex_addr/pipe_reg0/g_pipe.g_partial_reset.pipe_free.d[128]",
@@ -285,7 +285,7 @@
       "env": {
         "circt": "CIRCT 48b64cdd6",
         "device": "xcu55c-fsvh2892-2L-e",
-        "foldsim": "foldsim 5f2469cf0-dirty",
+        "foldsim": "foldsim 8b4d63ae8",
         "xlen": 32
       },
       "fix_levels": 12,

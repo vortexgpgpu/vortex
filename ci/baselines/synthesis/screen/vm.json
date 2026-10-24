@@ -1,11 +1,11 @@
 {
   "vm": {
     "clock_mhz": 250,
-    "config_hash": "80ca293dd68e74c8",
+    "config_hash": "4f09040fa4a5d37f",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_NUM_CORES=2",
     "dut": "vm",
     "result": {
-      "build_time_s": 15,
+      "build_time_s": 25,
       "deep_endpoints": 7129,
       "deepest_paths": [
         "33  g_sockets_0.g_immu.immu/tlb/cam/entries_r[391] -> g_sockets_0.g_immu.immu/g_pipe_0.out_pipe/g_eb2.stream_buffer/g_buffer.buffer_r.d[88]",
@@ -23,7 +23,7 @@
       "env": {
         "circt": "CIRCT 48b64cdd6",
         "device": "xcu55c-fsvh2892-2L-e",
-        "foldsim": "foldsim 5f2469cf0-dirty",
+        "foldsim": "foldsim 8b4d63ae8",
         "xlen": 32
       },
       "fix_levels": 12,

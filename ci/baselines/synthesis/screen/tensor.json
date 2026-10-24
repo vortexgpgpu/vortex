@@ -1,11 +1,11 @@
 {
   "tcu": {
     "clock_mhz": 300,
-    "config_hash": "0a03f1f3553d4713",
+    "config_hash": "6d97bf9c88d8cf3b",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_TCU_TYPE_TFR -DVX_CFG_TCU_FP16_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DVX_CFG_TCU_INT8_ENABLE -DVX_CFG_TCU_INT4_ENABLE -DVX_CFG_TCU_TF32_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE",
     "dut": "tcu",
     "result": {
-      "build_time_s": 25,
+      "build_time_s": 35,
       "deep_endpoints": 8102,
       "deepest_paths": [
         "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[6]",
@@ -19,11 +19,11 @@
         "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[16]",
         "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[17]"
       ],
-      "endpoints": 51412,
+      "endpoints": 51413,
       "env": {
         "circt": "CIRCT 48b64cdd6",
         "device": "xcu55c-fsvh2892-2L-e",
-        "foldsim": "foldsim 5f2469cf0-dirty",
+        "foldsim": "foldsim 8b4d63ae8",
         "xlen": 32
       },
       "fix_levels": 12,
@@ -49,18 +49,18 @@
         "tcu_unit/g_blocks_*_tcu_block/tcu_core/mdata_queue/pending_size": 12,
         "tcu_unit/lane_dispatch/g_blocks_*_buf_out/g_eb2_stream_buffer": 10
       },
-      "watch_endpoints": 16728,
+      "watch_endpoints": 16729,
       "watch_levels": 8
     }
   },
   "tensor": {
     "clock_mhz": 250,
-    "config_hash": "4bee3bfb901523a1",
+    "config_hash": "5bc15c58fcd5b37c",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
     "dut": "tensor",
     "result": {
-      "build_time_s": 35,
-      "deep_endpoints": 14017,
+      "build_time_s": 45,
+      "deep_endpoints": 14019,
       "deepest_paths": [
         "25  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[14]",
         "25  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[17]",
@@ -73,11 +73,11 @@
         "25  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_1.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_1.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[17]",
         "25  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_1.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_1.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[18]"
       ],
-      "endpoints": 206376,
+      "endpoints": 206378,
       "env": {
         "circt": "CIRCT 48b64cdd6",
         "device": "xcu55c-fsvh2892-2L-e",
-        "foldsim": "foldsim 5f2469cf0-dirty",
+        "foldsim": "foldsim 8b4d63ae8",
         "xlen": 32
       },
       "fix_levels": 12,
@@ -163,7 +163,7 @@
         "l2cache/g_cache_cache/g_banks_*_bank/reg_s0": 8,
         "l2cache/g_cache_cache/g_banks_*_bank/reg_s1": 10
       },
-      "watch_endpoints": 42154,
+      "watch_endpoints": 42156,
       "watch_levels": 8
     }
   }
