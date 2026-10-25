@@ -70,6 +70,7 @@ public:
       VX_CFG_ICACHE_LATENCY,         // pipeline latency (capacity-scaled, matches hardware)
       VX_CFG_ICACHE_REPL_POLICY,     // replacement policy
       false,                  // is_llc (icache never carries AMO state)
+      false,                  // is_coherent
     });
 
     snprintf(sname, 100, "%s-dcache", name.c_str());
@@ -91,6 +92,8 @@ public:
       VX_CFG_DCACHE_LATENCY,         // pipeline latency (capacity-scaled, matches hardware)
       VX_CFG_DCACHE_REPL_POLICY,     // replacement policy
       (VX_CFG_DCACHE_ENABLED != 0) && (VX_CFG_L2_ENABLED == 0) && (VX_CFG_L3_ENABLED == 0), // is_llc
+      (VX_CFG_DCACHE_ENABLED != 0) && (VX_CFG_L2_ENABLED == 0) && (VX_CFG_L3_ENABLED == 0)
+        && (VX_CFG_NUM_CLUSTERS * NUM_SOCKETS * VX_CFG_NUM_DCACHES == 1), // is_coherent
     });
 
 #ifdef VX_CFG_EXT_TEX_ENABLE
@@ -120,6 +123,7 @@ public:
       2,                           // pipeline latency
       uint8_t(VX_CFG_L2_REPL_POLICY),     // replacement policy (use L2 policy as default)
       false,                       // is_llc (TCACHE is auxiliary, not LLC)
+      false,                       // is_coherent
     });
     tcache_ = tcache;
 
@@ -160,6 +164,7 @@ public:
       2,                                  // pipeline latency
       uint8_t(VX_CFG_L2_REPL_POLICY),     // replacement policy
       false,                              // is_llc
+      false,                              // is_coherent
     });
     rtcache_ = rtcache;
 

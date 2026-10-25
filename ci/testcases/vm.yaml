@@ -126,6 +126,22 @@ tests:
     OPTS: -t1 -n16 -p1
   env:
     VORTEX_RANDOMIZE_VA: 1
+# Release through a fence with no barrier or kernel end after it: the
+# writer's page store parks on a TLB miss behind fifteen cold walks (one
+# walker, a deep MSHR), and the guard swap behind the fence is a TLB hit.
+# Two clusters keep the reader's translation out of the writer's L2 TLB.
+- id: vm-release
+  via: make-run
+  drivers:
+  - simx
+  - rtlsim
+  dir: tests/regression/vm_test
+  target: run-{driver}
+  configs+: -DVX_CFG_EXT_A_ENABLE -DVX_CFG_NUM_CLUSTERS=2 -DVX_CFG_NUM_CORES=1 -DVX_CFG_L3_ENABLE -DVX_CFG_L1_TLB_MSHR_SIZE=16 -DVX_CFG_PTW_NUM_WALKERS=1
+  vars:
+    OPTS: -t5 -n8 -p2048
+  env:
+    VORTEX_RANDOMIZE_VA: 1
 - id: vm-drain
   via: make-run
   drivers:

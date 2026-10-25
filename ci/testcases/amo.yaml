@@ -128,3 +128,64 @@ tests:
     shape: {cores: 4, l2cache: true, l3cache: true}
     args: "-n8"
     tier: full
+  # Fence-managed visibility of plain data across cores (fence_mp): a store
+  # published by a fence and an atomic guard must be read back, after the
+  # consumer's atomic and fence, through a data cache that already held the
+  # line. The fence drains the issuing core's stores to the LLC and invalidates
+  # every cache above it; the LLC itself is never flushed by a fence.
+  - id: fence-mp-1c
+    touches: [hw/rtl/cache, hw/rtl/core/VX_lsu_slice.sv, hw/rtl/VX_gpu_pkg.sv, sim/simx/mem, sim/simx/lsu_unit.cpp, tests/regression/fence_mp]
+    app: fence_mp
+    drivers: [simx, rtlsim]
+    args: "-r8"
+  - id: fence-mp-mc-l2
+    touches: [hw/rtl/cache, hw/rtl/core/VX_lsu_slice.sv, hw/rtl/VX_gpu_pkg.sv, sim/simx/mem, sim/simx/lsu_unit.cpp, tests/regression/fence_mp]
+    app: fence_mp
+    drivers: [simx, rtlsim]
+    shape: {cores: 4, l2cache: true}
+    args: "-r8"
+  - id: fence-mp-mc-l3
+    touches: [hw/rtl/cache, hw/rtl/core/VX_lsu_slice.sv, hw/rtl/VX_gpu_pkg.sv, sim/simx/mem, sim/simx/lsu_unit.cpp, tests/regression/fence_mp]
+    app: fence_mp
+    drivers: [simx, rtlsim]
+    configs+: "-DVX_CFG_L2_WRITEBACK=0"
+    shape: {cores: 4, l2cache: true, l3cache: true}
+    args: "-r8"
+    tier: full
+  # A fence publishes every older store of its warp, whichever thread made it:
+  # the payload store waits on a lane backed up by misses while the fence,
+  # from threads whose lanes are free, reaches the data cache first. That
+  # cache is write-back and not the coherence point, so a store let in after
+  # its walk stays there; the writer publishes the guard by evicting its line,
+  # without atomics, which a write-back data cache does not support.
+  - id: fence-mp-lanes
+    touches: [hw/rtl/cache, hw/rtl/core/VX_lsu_slice.sv, hw/rtl/VX_gpu_pkg.sv, sim/simx/mem, sim/simx/lsu_unit.cpp, tests/regression/fence_mp]
+    app: fence_mp
+    drivers: [simx, rtlsim]
+    configs: "-DVX_CFG_DCACHE_WRITEBACK=1 -DVX_CFG_DCACHE_MSHR_SIZE=2"
+    shape: {cores: 2, l2cache: true}
+    args: "-m1"
+  # A fence publishes the stores its data cache sent out on each memory port:
+  # the payload queues on the second port behind stores to a next-level bank
+  # that six other cores keep busy, while the reader's read finds its own bank
+  # free. The addresses assume two data-cache banks, as at XLEN 32.
+  - id: fence-mp-ports
+    touches: [hw/rtl/cache, hw/rtl/core/VX_lsu_slice.sv, hw/rtl/VX_gpu_pkg.sv, sim/simx/mem, sim/simx/lsu_unit.cpp, tests/regression/fence_mp]
+    app: fence_mp
+    drivers: [simx, rtlsim]
+    xlen: [32]
+    configs+: "-DVX_CFG_L2_NUM_BANKS=2 -DVX_CFG_L2_MSHR_SIZE=2"
+    shape: {cores: 8, l2cache: true}
+    args: "-m2"
+  # SimX models the fence's drain, walk and pass at each level as the RTL runs
+  # it. The guard is a plain word here: the retired instructions are fixed
+  # either way, and the cycles stay those of the fences and the misses they
+  # cause rather than of the atomics' round trips.
+  - id: parity-fence-mp
+    touches: [hw/rtl/cache, hw/rtl/core/VX_lsu_slice.sv, hw/rtl/VX_gpu_pkg.sv, sim/simx/mem, sim/simx/lsu_unit.cpp, tests/regression/fence_mp]
+    check: model_parity
+    via: blackbox
+    app: fence_mp
+    shape: {cores: 2, l2cache: true}
+    args: "-r256 -g"
+    xlen: [32]

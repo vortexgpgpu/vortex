@@ -474,6 +474,16 @@ void LsuUnit::process_response_step(uint32_t b) {
 	}
 #endif
 
+	if (entry.is_fence) {
+		DT(3, this->name() << " fence-rsp: " << lsu_rsp);
+		entry.count -= lsu_rsp.mask.count();
+		if (entry.count == 0) {
+			state.pending_reqs.release(lsu_rsp.tag);
+		}
+		lsu_rsp_in.pop();
+		return;
+	}
+
 	auto trace = entry.trace;
 	auto& output = Outputs.at(b);
 	// Every response fragment retires through its own writeback slot, one
@@ -567,7 +577,9 @@ void LsuUnit::ingest_inputs(uint32_t b) {
 	auto lsu_type_tag = std::get_if<LsuType>(&trace->op_type);
 	if (lsu_type_tag && *lsu_type_tag == LsuType::FENCE && !state.req_queue.empty())
 		return;
-	const bool is_read = !lsu_type_tag || *lsu_type_tag == LsuType::LOAD;
+	// A fence holds a pending slot for its memory request, as a read does.
+	const bool is_read = !lsu_type_tag || *lsu_type_tag == LsuType::LOAD
+	                  || *lsu_type_tag == LsuType::FENCE;
 	if (is_read) {
 		if (state.pending_reqs.size() + state.staged_reads >= VX_CFG_LSU_PENDING_SIZE) {
 			return;
@@ -672,8 +684,33 @@ void LsuUnit::process_request_step(uint32_t b) {
 	const uint32_t beat_lanes = is_pair ? 1 : VX_CFG_NUM_LSU_LANES;
 
 	if (is_fence) {
-		// Engage fence lock; the next call will try to release it once
-		// the pending-reqs table drains.
+		// The fence goes to the data cache as a request behind every earlier
+		// one: each cache it passes drains its banks and, unless every core's
+		// requests pass that cache too, drops its lines before passing it on.
+		// It goes out on every lane, whatever the thread mask: the block's
+		// older requests travel on all of them, and each copy can only follow
+		// those on its own lane. Its response therefore means this core's
+		// stores have reached the device's coherence point and no stale line
+		// is left in front of it. The lock holds the block until every copy's
+		// response and every older one are back.
+		if (core_->lmem_switch(b)->ReqIn.full()) {
+			return; // stall
+		}
+		LsuReq fence_req(VX_CFG_NUM_LSU_LANES);
+		fence_req.op = MemOp::LD;
+		fence_req.flags.fence = 1;
+		for (uint32_t i = 0; i < VX_CFG_NUM_LSU_LANES; ++i) {
+			fence_req.mask.set(i);
+		}
+		fence_req.wid  = trace->wid;
+		fence_req.cid  = trace->cid;
+		fence_req.uuid = trace->uuid;
+		pending_req_t entry{nullptr, VX_CFG_NUM_LSU_LANES, true, std::vector<mem_addr_size_t>(VX_CFG_NUM_LSU_LANES), IntrLsuArgs{}, false};
+		entry.is_fence = true;
+		--state.staged_reads;
+		fence_req.tag = state.pending_reqs.allocate(std::move(entry));
+		core_->lmem_switch(b)->ReqIn.send(fence_req);
+		DT(3, this->name() << " fence-req: " << fence_req);
 		state.fence.engage(trace);
 		DT(3, this->name() << " fence-lock: " << *trace);
 		state.req_queue.pop();

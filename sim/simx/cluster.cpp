@@ -84,6 +84,7 @@ public:
       VX_CFG_L2_LATENCY,             // pipeline latency
       VX_CFG_L2_REPL_POLICY,         // replacement policy
       (VX_CFG_L2_ENABLED != 0) && (VX_CFG_L3_ENABLED == 0), // is_llc
+      (VX_CFG_L2_ENABLED != 0) && (VX_CFG_L3_ENABLED == 0) && (VX_CFG_NUM_CLUSTERS == 1), // is_coherent
     });
 
 
@@ -178,6 +179,7 @@ public:
       2,                            // pipeline latency
       uint8_t(VX_CFG_L2_REPL_POLICY),      // replacement policy
       false,                        // is_llc (OCACHE is auxiliary, not LLC)
+      false,                        // is_coherent
     });
     ocache_ = ocache;
 
@@ -255,6 +257,7 @@ public:
       2,                            // pipeline latency
       uint8_t(VX_CFG_L2_REPL_POLICY),      // replacement policy
       false,                        // is_llc (RCACHE is auxiliary, not LLC)
+      false,                        // is_coherent
     });
     rcache_ = rcache;
 

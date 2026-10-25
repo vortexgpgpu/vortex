@@ -35,6 +35,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     parameter CORE_OUT_BUF      = 0,
     parameter MEM_OUT_BUF       = 0,
     parameter IS_LLC            = 0,        // last-level cache: AMOs commit locally here
+    parameter PORT_FENCE        = 0,        // a flush ends with a fence on every memory port
     parameter AMO_ENABLE        = 0,        // synthesize atomic-op logic
     parameter LATENCY           = 2,        // pipeline depth; >2 defers the data array to break the tag->data path
     parameter MSHR_ADDR_WIDTH   = `LOG2UP(MSHR_SIZE),
@@ -290,7 +291,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .LINE_SIZE  (LINE_SIZE),
         .NUM_BANKS  (NUM_BANKS),
         .NUM_WAYS   (NUM_WAYS),
-        .WRITEBACK  (WRITEBACK)
+        .WRITEBACK  (WRITEBACK),
+        .PORT_FENCE (PORT_FENCE)
     ) cache_flush (
         .clk         (clk),
         .reset       (reset),

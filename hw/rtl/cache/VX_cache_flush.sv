@@ -19,7 +19,8 @@ module VX_cache_flush import VX_gpu_pkg::*; #(
     parameter LINE_SIZE  = 64,                // Size of line inside a bank in bytes
     parameter NUM_BANKS  = 1,                 // Number of banks
     parameter NUM_WAYS   = 1,                 // Number of associative ways
-    parameter WRITEBACK  = 0                  // Enable cache writeback
+    parameter WRITEBACK  = 0,                 // Enable cache writeback
+    parameter PORT_FENCE = 0                  // the walk ends with a fence on every memory port
 ) (
     input  wire clk,
     input  wire reset,
@@ -80,13 +81,14 @@ module VX_cache_flush import VX_gpu_pkg::*; #(
             end
             STATE_FLUSH: begin
                 if (counter == ((2 ** CTR_WIDTH)-1) && flush_ready) begin
-                    state_n = (BANK_ID == 0) ? STATE_DONE : STATE_WAIT2;
+                    state_n = (BANK_ID == 0 && PORT_FENCE == 0) ? STATE_DONE : STATE_WAIT2;
                 end
             end
             STATE_WAIT2: begin
                 // ensure the bank is empty before notifying the cache flush unit,
-                // because the flush request to lower caches only goes through bank0
-                // and it is important that request gets send out last.
+                // because the flush request to lower caches goes out after every
+                // bank's requests: through its own bank's queue behind them, or,
+                // with a fence on every memory port, once all queues are empty.
                 if (bank_empty) begin
                     state_n = STATE_DONE;
                 end

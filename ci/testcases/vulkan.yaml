@@ -77,6 +77,13 @@ tests:
 - {id: rt-rtqdraw-cpu, via: make-run, drivers: [simx], dir: tests/vulkan/rtqdraw_cpu,
    target: "run-{driver}", touches: [tests/vulkan/rtqdraw]}
 
+# Vulkan memory-model message passing on the CTS runtime shape (four 32x32
+# cores, L2): device-scope release/acquire through a storage image and a
+# buffer, whose partners sit on other cores, and subgroup-scope passing
+# through shared memory with a subgroup that returns before the barrier.
+- {id: mm-msgpass, via: make-run, drivers: [simx], dir: tests/vulkan/msgpass, target: "run-{driver}", xlen: [32],
+   touches: [hw/rtl/cache/, hw/rtl/core/VX_lsu_slice.sv, sim/simx/mem/, sim/simx/lsu_unit.cpp, tests/vulkan/msgpass]}
+
 # Rasterized 3D with multiple draw calls into one attachment.
 - {id: gfx-multidraw, via: make-run, drivers: [simx, rtlsim], dir: tests/vulkan/multidraw, target: "run-{driver}",
    touches: [hw/rtl/raster/, hw/rtl/om/, sim/simx/raster/, sim/simx/om/]}

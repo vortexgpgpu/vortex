@@ -87,6 +87,8 @@ private:
 
   bool needs_translation(const MemReq& req) const;
   int  mshr_find(uint64_t vpn) const;
+  // No miss is parked and no translated request waits to replay.
+  bool misses_drained() const;
   int  mshr_alloc(uint64_t vpn);
   TlbAccess access_of(const MemReq& req) const;
   void kill_request(uint32_t port, const MemReq& req);

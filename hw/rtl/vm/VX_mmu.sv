@@ -312,7 +312,12 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
                 req_attr[l],
                 req_fields[l][F_TAG_LO +: TAG_WIDTH] };
 
-        wire forward_new = (cat_bypass[l] || cat_hit[l]) && !replay_to_lane[l];
+        // A fence orders every older request behind it, and those include the
+        // misses parked here: it bypasses translation only once none is parked
+        // or replaying.
+        wire fence_hold = req_attr[l][MEM_ATTR_FLUSH_OFFS] && !(tlb_empty && !replay_valid);
+
+        wire forward_new = (cat_bypass[l] || cat_hit[l]) && !replay_to_lane[l] && !fence_hold;
 
         wire                pipe_valid_in = replay_to_lane[l] || forward_new;
         wire [FIELDS_W-1:0] pipe_data_in  = replay_to_lane[l] ? replay_out_fields : new_fields;
@@ -339,7 +344,7 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
 
         // Request accept back to the client.
         assign core_bus_if[l].req_ready =
-              cat_bypass[l] ? (!replay_to_lane[l] && pipe_ready[l])
+              cat_bypass[l] ? (!replay_to_lane[l] && pipe_ready[l] && !fence_hold)
             : cat_hit[l]    ? (!replay_to_lane[l] && pipe_ready[l])
             : cat_park[l]   ? (park_sel[l] && park_ready)
             : cat_pfault[l] ? 1'b1

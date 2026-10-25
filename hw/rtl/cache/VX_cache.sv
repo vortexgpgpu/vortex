@@ -84,6 +84,11 @@ module VX_cache import VX_gpu_pkg::*; #(
     localparam REQ_XBAR_BUF    = (NUM_REQS > 2) ? 2 : 0;
     localparam CORE_RSP_BUF_ENABLE = (NUM_BANKS != 1) || (NUM_REQS != 1);
     localparam MEM_REQ_BUF_ENABLE = (NUM_BANKS != 1);
+    // A cache with another cache below it and several memory ports ends a
+    // flush with a fence on each port: the next level then sees the flush
+    // behind every port's older requests, where a flush sent through one
+    // port would not wait for the others.
+    localparam PORT_FENCE = (MEM_PORTS > 1) && (IS_LLC == 0) && (WRITE_ENABLE != 0);
 `ifdef PERF_ENABLE
     wire [NUM_BANKS-1:0] perf_read_miss_per_bank;
     wire [NUM_BANKS-1:0] perf_write_miss_per_bank;
@@ -98,11 +103,14 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [`UP(UUID_WIDTH)-1:0] flush_uuid;
     wire [NUM_BANKS-1:0] per_bank_flush_end;
     wire [NUM_BANKS-1:0] per_bank_core_req_fire;
+    wire port_fence_begin, port_fence_is_fence, port_fence_end;
     VX_cache_init #(
         .NUM_REQS  (NUM_REQS),
         .NUM_BANKS (NUM_BANKS),
         .TAG_WIDTH (TAG_WIDTH),
-        .BANK_SEL_LATENCY (`TO_OUT_BUF_REG(REQ_XBAR_BUF)) // request xbar latency
+        .BANK_SEL_LATENCY (`TO_OUT_BUF_REG(REQ_XBAR_BUF)), // request xbar latency
+        .IS_LLC    (IS_LLC),
+        .PORT_FENCE (PORT_FENCE)
     ) cache_init (
         .clk             (clk),
         .reset           (reset),
@@ -111,7 +119,10 @@ module VX_cache import VX_gpu_pkg::*; #(
         .bank_req_fire   (per_bank_core_req_fire),
         .flush_begin     (per_bank_flush_begin),
         .flush_uuid      (flush_uuid),
-        .flush_end       (per_bank_flush_end)
+        .flush_end       (per_bank_flush_end),
+        .port_fence_begin (port_fence_begin),
+        .port_fence_is_fence (port_fence_is_fence),
+        .port_fence_end  (port_fence_end)
     );
     VX_mem_bus_if #(
         .DATA_SIZE (SECTOR_SIZE),
@@ -120,7 +131,13 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [MEM_PORTS-1:0]                    mem_rsp_queue_valid;
     wire [MEM_PORTS-1:0][MEM_RSP_DATAW-1:0] mem_rsp_queue_data;
     wire [MEM_PORTS-1:0]                    mem_rsp_queue_ready;
+    // port fence: to send on each port, and sent with its response pending
+    wire [MEM_PORTS-1:0] port_fence_send;
+    wire [MEM_PORTS-1:0] port_fence_wait;
     for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_rsp_queue
+        // While a port's fence is out, the walk has drained every fill and
+        // no request is admitted, so the port's one response is the fence's.
+        wire mem_rsp_queue_ready_in;
         VX_elastic_buffer #(
             .DATAW   (MEM_RSP_DATAW),
             .SIZE    (MRSQ_SIZE),
@@ -128,13 +145,14 @@ module VX_cache import VX_gpu_pkg::*; #(
         ) mem_rsp_queue (
             .clk        (clk),
             .reset      (reset),
-            .valid_in   (mem_bus_tmp_if[i].rsp_valid),
+            .valid_in   (mem_bus_tmp_if[i].rsp_valid && ~port_fence_wait[i]),
             .data_in    (mem_bus_tmp_if[i].rsp_data),
-            .ready_in   (mem_bus_tmp_if[i].rsp_ready),
+            .ready_in   (mem_rsp_queue_ready_in),
             .valid_out  (mem_rsp_queue_valid[i]),
             .data_out   (mem_rsp_queue_data[i]),
             .ready_out  (mem_rsp_queue_ready[i])
         );
+        assign mem_bus_tmp_if[i].rsp_ready = mem_rsp_queue_ready_in || port_fence_wait[i];
     end
     wire [MEM_PORTS-1:0][MEM_RSP_DATAW-MEM_ARB_SEL_BITS-1:0] mem_rsp_queue_data_s;
     wire [MEM_PORTS-1:0][BANK_SEL_WIDTH-1:0] mem_rsp_queue_sel;
@@ -330,6 +348,7 @@ module VX_cache import VX_gpu_pkg::*; #(
             .CORE_OUT_BUF (CORE_RSP_BUF_ENABLE ? 3 : 0),
             .MEM_OUT_BUF  (MEM_REQ_BUF_ENABLE ? 3 : 0),
             .IS_LLC       (IS_LLC),
+            .PORT_FENCE   (PORT_FENCE),
             .AMO_ENABLE   (AMO_ENABLE)
         ) bank (
             .clk                (clk),
@@ -445,6 +464,67 @@ module VX_cache import VX_gpu_pkg::*; #(
         .ready_out (mem_req_tmp_ready),
         `UNUSED_PIN (collisions)
     );
+    // Port fences, sent once the walk is over and every request the banks
+    // issued before it has left the crossbar, so none of them can follow its
+    // port's fence. The flush lets its requests through when all have come
+    // back.
+    wire [`UP(MEM_ATTR_WIDTH)-1:0] port_fence_attr;
+    if (PORT_FENCE) begin : g_port_fence
+        localparam XBAR_CNT_W = `CLOG2(NUM_BANKS * 8 + 1);
+        wire [NUM_BANKS-1:0] xbar_in_fire = per_bank_mem_req_valid & per_bank_mem_req_ready;
+        wire [MEM_PORTS-1:0] xbar_out_fire = mem_req_tmp_valid & mem_req_tmp_ready;
+        wire [`CLOG2(NUM_BANKS+1)-1:0] xbar_in_cnt;
+        wire [`CLOG2(MEM_PORTS+1)-1:0] xbar_out_cnt;
+        `POP_COUNT(xbar_in_cnt, xbar_in_fire);
+        `POP_COUNT(xbar_out_cnt, xbar_out_fire);
+        reg [XBAR_CNT_W-1:0] xbar_cnt;
+        reg [MEM_PORTS-1:0] send_r, wait_r;
+        reg active_r, is_fence_r;
+        wire [MEM_PORTS-1:0] fence_fire;
+        for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_fence_fire
+            assign fence_fire[i] = port_fence_send[i] && mem_bus_tmp_if[i].req_ready;
+        end
+        wire [MEM_PORTS-1:0] fence_rsp_fire;
+        for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_fence_rsp_fire
+            assign fence_rsp_fire[i] = wait_r[i] && mem_bus_tmp_if[i].rsp_valid;
+        end
+        always @(posedge clk) begin
+            if (reset) begin
+                xbar_cnt <= '0;
+                send_r   <= '0;
+                wait_r   <= '0;
+                active_r <= 1'b0;
+            end else begin
+                xbar_cnt <= xbar_cnt + XBAR_CNT_W'(xbar_in_cnt) - XBAR_CNT_W'(xbar_out_cnt);
+                if (port_fence_begin) begin
+                    send_r   <= {MEM_PORTS{1'b1}};
+                    active_r <= 1'b1;
+                end else begin
+                    send_r <= send_r & ~fence_fire;
+                    if (port_fence_end) begin
+                        active_r <= 1'b0;
+                    end
+                end
+                wait_r <= (wait_r | fence_fire) & ~fence_rsp_fire;
+            end
+            if (port_fence_begin) begin
+                is_fence_r <= port_fence_is_fence;
+            end
+        end
+        assign port_fence_send = send_r & {MEM_PORTS{(xbar_cnt == '0)}};
+        assign port_fence_wait = wait_r;
+        assign port_fence_end  = active_r && (send_r == '0) && (wait_r == '0);
+        assign port_fence_attr = `UP(MEM_ATTR_WIDTH)'((MEM_ATTR_WIDTH'(1) << MEM_ATTR_FLUSH_OFFS)
+                                                    | (MEM_ATTR_WIDTH'(is_fence_r) << MEM_ATTR_FENCE_OFFS));
+        `RUNTIME_ASSERT (~(port_fence_begin && active_r), ("%t: *** %s port fence begins while one is out", $time, INSTANCE_ID))
+        `RUNTIME_ASSERT (~(|(port_fence_send & mem_req_tmp_valid)), ("%t: *** %s port fence meets a request in the crossbar", $time, INSTANCE_ID))
+    end else begin : g_no_port_fence
+        assign port_fence_send = '0;
+        assign port_fence_wait = '0;
+        assign port_fence_end  = 1'b0;
+        assign port_fence_attr = '0;
+        `UNUSED_VAR ({port_fence_begin, port_fence_is_fence})
+    end
     for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_bus_tmp_if
         wire                            mem_req_rw_w;
         wire [`CS_LINE_SECTOR_ADDR_WIDTH-1:0] mem_req_addr_w;
@@ -460,11 +540,16 @@ module VX_cache import VX_gpu_pkg::*; #(
             mem_req_tag_w,
             mem_req_attr_w
         } = mem_req_pdata[i];
-        assign mem_bus_tmp_if[i].req_valid       = mem_req_tmp_valid[i];
-        assign mem_bus_tmp_if[i].req_data.rw     = mem_req_rw_w;
-        assign mem_bus_tmp_if[i].req_data.byteen = mem_req_byteen_w;
-        assign mem_bus_tmp_if[i].req_data.data   = mem_req_data_w;
-        assign mem_bus_tmp_if[i].req_data.attr   = mem_req_attr_w;
+        wire [`CS_MEM_SECTOR_ADDR_WIDTH-1:0] mem_req_addr_x;
+        wire [MEM_TAG_WIDTH-1:0] mem_req_tag_x;
+        wire fence_sel = port_fence_send[i];
+        assign mem_bus_tmp_if[i].req_valid       = mem_req_tmp_valid[i] || fence_sel;
+        assign mem_bus_tmp_if[i].req_data.rw     = fence_sel ? 1'b0 : mem_req_rw_w;
+        assign mem_bus_tmp_if[i].req_data.byteen = fence_sel ? {SECTOR_SIZE{1'b1}} : mem_req_byteen_w;
+        assign mem_bus_tmp_if[i].req_data.data   = fence_sel ? '0 : mem_req_data_w;
+        assign mem_bus_tmp_if[i].req_data.attr   = fence_sel ? port_fence_attr : mem_req_attr_w;
+        assign mem_bus_tmp_if[i].req_data.addr   = fence_sel ? '0 : mem_req_addr_x;
+        assign mem_bus_tmp_if[i].req_data.tag    = fence_sel ? '0 : mem_req_tag_x;
         wire [`CS_LINE_ADDR_WIDTH-1:0] mem_req_line_w = mem_req_addr_w[`CS_LINE_SECTOR_ADDR_WIDTH-1 -: `CS_LINE_ADDR_WIDTH];
         wire [`UP(`CS_SECTOR_SEL_BITS)-1:0] mem_req_sec_w;
         if (`CS_SECTOR_SEL_BITS != 0) begin : g_sec_w
@@ -476,23 +561,23 @@ module VX_cache import VX_gpu_pkg::*; #(
             if (NUM_BANKS != MEM_PORTS) begin : g_arb_sel
                 wire [MEM_ARB_SEL_BITS-1:0] mem_req_arb_sel;
                 assign mem_req_arb_sel = mem_req_tmp_idx[i][`LOG2UP(NUM_BANKS)-1 -: MEM_ARB_SEL_BITS];
-                assign mem_bus_tmp_if[i].req_data.addr = (`CS_MEM_SECTOR_ADDR_WIDTH'({mem_req_line_w, mem_req_tmp_idx[i]}) << `CS_SECTOR_SEL_BITS)
-                                                       | `CS_MEM_SECTOR_ADDR_WIDTH'(mem_req_sec_w);
-                assign mem_bus_tmp_if[i].req_data.tag  = {mem_req_tag_w, mem_req_arb_sel};
+                assign mem_req_addr_x = (`CS_MEM_SECTOR_ADDR_WIDTH'({mem_req_line_w, mem_req_tmp_idx[i]}) << `CS_SECTOR_SEL_BITS)
+                                      | `CS_MEM_SECTOR_ADDR_WIDTH'(mem_req_sec_w);
+                assign mem_req_tag_x  = {mem_req_tag_w, mem_req_arb_sel};
             end else begin : g_no_arb_sel
                 `UNUSED_VAR (mem_req_tmp_idx)
-                assign mem_bus_tmp_if[i].req_data.addr = (`CS_MEM_SECTOR_ADDR_WIDTH'({mem_req_line_w, MEM_PORTS_SEL_WIDTH'(i)}) << `CS_SECTOR_SEL_BITS)
-                                                       | `CS_MEM_SECTOR_ADDR_WIDTH'(mem_req_sec_w);
-                assign mem_bus_tmp_if[i].req_data.tag  = MEM_TAG_WIDTH'(mem_req_tag_w);
+                assign mem_req_addr_x = (`CS_MEM_SECTOR_ADDR_WIDTH'({mem_req_line_w, MEM_PORTS_SEL_WIDTH'(i)}) << `CS_SECTOR_SEL_BITS)
+                                      | `CS_MEM_SECTOR_ADDR_WIDTH'(mem_req_sec_w);
+                assign mem_req_tag_x  = MEM_TAG_WIDTH'(mem_req_tag_w);
             end
         end else begin : g_singlebank
             `UNUSED_VAR (mem_req_tmp_idx)
             `UNUSED_VAR (mem_req_line_w)
             `UNUSED_VAR (mem_req_sec_w)
-            assign mem_bus_tmp_if[i].req_data.addr = `CS_MEM_SECTOR_ADDR_WIDTH'(mem_req_addr_w);
-            assign mem_bus_tmp_if[i].req_data.tag  = MEM_TAG_WIDTH'(mem_req_tag_w);
+            assign mem_req_addr_x = `CS_MEM_SECTOR_ADDR_WIDTH'(mem_req_addr_w);
+            assign mem_req_tag_x  = MEM_TAG_WIDTH'(mem_req_tag_w);
         end
-        assign mem_req_tmp_ready[i] = mem_bus_tmp_if[i].req_ready;
+        assign mem_req_tmp_ready[i] = mem_bus_tmp_if[i].req_ready && ~fence_sel;
     end
     for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_bus_if
         if (WRITE_ENABLE) begin : g_rw

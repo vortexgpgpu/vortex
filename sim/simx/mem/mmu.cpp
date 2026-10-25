@@ -91,12 +91,27 @@ bool Mmu::needs_translation(const MemReq& req) const {
   // needed. BARE mode (SATP unprogrammed) skips translation, covering
   // the few instruction fetches between reset and the kernel's csrw
   // satp. IO-flagged requests skip it too: the IO/OM apertures carry
-  // device registers or encoded coordinates, not virtual addresses.
+  // device registers or encoded coordinates, not virtual addresses. A fence
+  // carries no address at all.
   if (!satp_ || satp_->get_mode() == BARE) {
     return false;
   }
-  if (req.flags.io) {
+  if (req.flags.io || req.flags.fence) {
     return false;
+  }
+  return true;
+}
+
+bool Mmu::misses_drained() const {
+  for (const auto& e : mshr_) {
+    if (e.valid) {
+      return false;
+    }
+  }
+  for (const auto& q : replay_) {
+    if (!q.empty()) {
+      return false;
+    }
   }
   return true;
 }
@@ -264,6 +279,13 @@ void Mmu::on_tick() {
       continue;
     }
     const MemReq& req = ReqIn.at(p).peek();
+
+    // A fence orders every older request behind it, and those include the
+    // ones parked on a miss here or waiting to replay: it leaves only once
+    // they have all gone ahead.
+    if (req.flags.fence && !this->misses_drained()) {
+      continue;
+    }
 
     if (!needs_translation(req)) {
       if (ReqOut.at(p).try_send(req)) {

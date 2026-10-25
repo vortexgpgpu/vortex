@@ -240,22 +240,24 @@ updates it, core 0's copy is stale. The LLC never reaches up. The weak model
 resolves this the way a GPU does: the **consumer** discards its own copies at
 an acquire point and refetches.
 
-There is no dedicated acquire-invalidate. What exists today:
+The consumer-side invalidate is the RISC-V `fence`, which acts as a device
+fence, modeled the same way in RTL and SimX:
 
-| model | what a `fence` does to the issuing core's data cache |
-|---|---|
-| RTL | the LSU sends the fence as a request with `is_flush` set, which starts the **whole-cache flush**; on a write-through cache the walk clears every valid bit |
-| SimX | the fence is an ordering barrier in the LSU only; a flush of a write-through cache is a no-op and no line is invalidated |
+| step | where | what happens |
+|---|---|---|
+| issue | LSU | the fence goes to the data cache as a request (`is_flush` and `is_fence` set) behind every earlier request of the block, and the block holds until its response |
+| drain | every cache it reaches | the cache holds its inputs until the admitted requests reach their banks; each bank drains its pipe, MSHR and memory-side queue, so every older write-through has left it |
+| invalidate | every cache other cores' requests bypass | the banks walk their sets and clear every valid bit (a write-back bank writes its dirty sectors back first); the fence then misses in bank 0 and continues to the next level |
+| pass | the coherence point | the single cache every core's requests pass (the L3, an L2 of a single cluster, or the data cache of a single-core device) only waits for its admitted requests and lets the fence through without a walk |
 
-So an RTL `fence` happens to give the consumer-side invalidate, at the cost
-of a full flush walk that locks the cache's inputs for its duration, and
-SimX does not model it. **The two models disagree, and no regression case
-exercises fence-managed cross-core visibility** — `atomic_critical`, which
-runs plain loads and stores inside a lock, is skipped on multi-core
-configurations for exactly this reason.
+So a fence makes this core's stores visible at the coherence point and leaves
+no stale line in front of it: release and acquire at device scope, as GPU
+memory models need. It never writes back the coherence point itself; host
+visibility comes from the kernel-boundary flush (the DCR flush, which walks
+every level). On a multi-core device without a shared cache level, the
+coherence point is memory and every data cache is walked.
 
-Programs that share data across cores through plain memory are outside what
-is validated. Share through atomics, or through the single shared level.
+---
 
 ---
 
@@ -323,16 +325,22 @@ Two cases in the suite exist for this design:
   fails on a design without the self-invalidate (§5.2) or without commit
   serialization (§5.6).
 
-`atomic_critical` is skipped when `cores > 1` (§6.2).
+`atomic_critical` is skipped when `cores > 1` (§6.2): it shares plain data
+inside a lock without fences.
+
+`fence_mp` covers fence-managed visibility (§6.2): mirrored tasks on
+different cores publish a payload with a plain store, a fence and an atomic
+guard, and read the partner's payload back through a data cache that already
+held its line. It runs on one core, `mc-l2` and `mc-l3`, on both drivers, and
+as the `parity-fence-mp` model_parity case (2 cores, plain-store guard).
 
 ---
 
 ## 10. Not implemented
 
-- **A dedicated acquire-invalidate** (§6.2) — a consumer-side invalidate that
-  clears the inner cache's valid bits without the full flush walk, modeled
-  identically in RTL and SimX, with a regression case for fence-managed
-  visibility.
+- **A flash invalidate** (§6.2) in place of the per-set walk, and an
+  acquire-only or release-only fence (from the fence's predecessor and
+  successor sets) that skips the walk or the drain.
 - **rtlsim coverage of the L2-as-LLC hierarchy.** `mc-l2` runs on SimX only.
 - **Push coherence** with a directory or snoop filter (§4) — revisit only if
   a strong cross-core guarantee is ever required.

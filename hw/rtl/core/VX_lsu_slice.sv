@@ -102,10 +102,12 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 
     wire req_is_fence, rsp_is_fence;
 
+    // A fence goes out on every lane at address 0, which inactive lanes'
+    // register values would otherwise decide.
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] full_addr;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_full_addr
         VX_lsu_agu lsu_agu (
-            .base   (execute_if.data.rs1_data[i]),
+            .base   (execute_if.data.rs1_data[i] & {`VX_CFG_XLEN{~req_is_fence}}),
             .stride (execute_if.data.rs2_data[i]),
             .offset (execute_if.data.op_args.lsu.offset),
             .pack   (execute_if.data.op_args.lsu.pack),
@@ -152,6 +154,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         wire [MEM_ADDRW-1:0] io_addr_start = MEM_ADDRW'(`VX_CFG_XLEN'(`VX_MEM_IO_BASE_ADDR) >> MEM_ASHIFT);
         wire [MEM_ADDRW-1:0] io_addr_end = MEM_ADDRW'(`VX_CFG_XLEN'(`VX_MEM_IO_END_ADDR) >> MEM_ASHIFT);
         assign mem_req_attr_struct[i].is_flush  = req_is_fence;
+        assign mem_req_attr_struct[i].is_fence  = req_is_fence;
     `ifdef VX_CFG_EXT_OM_ENABLE
         // OM fragment-export aperture.
         //
@@ -352,7 +355,12 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
                              && ~(no_rsp_buf_enable && ~no_rsp_buf_ready)))
                            && ~fence_lock;
 
-    assign mem_req_mask = req_is_pair ? pair_lanes : execute_if.data.header.tmask;
+    // A fence is sent on every lane, whatever the thread mask: the block's
+    // older requests travel on all of them, and each copy only follows those
+    // on its own lane.
+    assign mem_req_mask = req_is_pair  ? pair_lanes
+                        : req_is_fence ? {NUM_LANES{1'b1}}
+                                       : execute_if.data.header.tmask;
 
 `ifdef VX_CFG_EXT_AMO64_ENABLE
     always @(posedge clk) begin

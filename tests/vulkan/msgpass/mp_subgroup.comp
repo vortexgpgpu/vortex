@@ -1,0 +1,53 @@
+/*
+ * Copyright © 2026  Vortex GPGPU
+ * SPDX-License-Identifier: MIT
+ *
+ * Subgroup-scope message passing through shared memory, the partner being the
+ * lane mirrored within the subgroup. A lane whose partner is not active
+ * returns first, so a subgroup with too few active lanes leaves before the
+ * subgroup barrier, which must not wait for it. Dispatch a workgroup size that
+ * is not a multiple of the subgroup size to have such a subgroup.
+ */
+#version 450 core
+#pragma use_vulkan_memory_model
+#extension GL_KHR_memory_scope_semantics : enable
+#extension GL_KHR_shader_subgroup_basic : enable
+#extension GL_KHR_shader_subgroup_shuffle : enable
+#extension GL_KHR_shader_subgroup_ballot : enable
+#extension GL_EXT_buffer_reference : enable
+
+layout(constant_id = 0) const int DIM = 1;
+layout(constant_id = 1) const int NUM_WG = 1;
+layout(local_size_x_id = 0, local_size_y_id = 0, local_size_z = 1) in;
+
+shared uint payload[DIM * DIM];
+layout(set = 0, binding = 1) buffer Result { uint x[]; } result;
+layout(buffer_reference) buffer GuardRef { uint x[]; };
+layout(push_constant, std430) uniform PC { GuardRef guard; };
+
+void main()
+{
+   uvec4 ballot = subgroupBallot(true);
+   if (!subgroupBallotBitExtract(ballot, gl_SubgroupInvocationID ^ (gl_SubgroupSize - 1)))
+      return;
+
+   ivec2 localId        = ivec2(gl_LocalInvocationID.xy);
+   ivec2 partnerLocalId = subgroupShuffleXor(localId, gl_SubgroupSize - 1);
+   uint sharedCoord        = uint(localId.y * DIM + localId.x);
+   uint partnerSharedCoord = uint(partnerLocalId.y * DIM + partnerLocalId.x);
+   uint wg                 = gl_WorkGroupID.y * NUM_WG + gl_WorkGroupID.x;
+   uint coord              = wg * DIM * DIM + sharedCoord;
+   uint partnerCoord       = wg * DIM * DIM + partnerSharedCoord;
+
+   payload[sharedCoord] = 0u;
+   subgroupBarrier();
+   payload[sharedCoord] = coord + (payload[partnerSharedCoord] >> 31);
+   atomicExchange(guard.x[coord], 1u, gl_ScopeSubgroup, gl_StorageSemanticsShared,
+                  gl_SemanticsRelease);
+   bool skip = atomicExchange(guard.x[partnerCoord], 2u, gl_ScopeSubgroup,
+                              gl_StorageSemanticsShared, gl_SemanticsAcquire) == 0u;
+   uint r = payload[partnerSharedCoord];
+   uint flags = (skip ? 0u : 2u) | ((!skip && r != partnerCoord) ? 1u : 0u);
+   if (flags != 0u)
+      result.x[coord] |= flags;
+}

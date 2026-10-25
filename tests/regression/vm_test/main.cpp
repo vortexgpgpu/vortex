@@ -36,7 +36,7 @@ kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
   std::cout << "Usage: [-t mode] [-n tasks] [-p pages/task] [-h]" << std::endl;
-  std::cout << "  modes: 0=stride 1=fence 2=drain 3=amo 4=superpage" << std::endl;
+  std::cout << "  modes: 0=stride 1=fence 2=drain 3=amo 4=superpage 5=release" << std::endl;
 }
 
 static void parse_args(int argc, char** argv) {
@@ -128,6 +128,17 @@ int main(int argc, char* argv[]) {
   uint32_t max_bx = 1, max_by = 1, max_bz = 1;
   RT_CHECK(vx_kernel_get_max_block_size(kernel, &max_bx, &max_by, &max_bz));
   uint32_t block_x = std::min(num_tasks, max_bx * max_by * max_bz);
+  // Release mode pairs a writer block with a reader block on another core:
+  // a block of four threads, so the writer has several lanes.
+  if (test_mode == VM_MODE_RELEASE) {
+    if (num_tasks < 2 * RELEASE_BLOCK_SIZE || buf_size < uint64_t(RELEASE_REGIONS) * VM_REGION_PAGES * PAGE_SIZE) {
+      std::cout << "Error: release mode needs " << 2 * RELEASE_BLOCK_SIZE << " tasks and "
+                << RELEASE_REGIONS * VM_REGION_PAGES << " pages in all" << std::endl;
+      cleanup();
+      return -1;
+    }
+    block_x = RELEASE_BLOCK_SIZE;
+  }
   {
     vx_launch_info_t li = {};
     li.struct_size  = sizeof(li);
@@ -173,6 +184,16 @@ int main(int argc, char* argv[]) {
         }
         ++errors;
       }
+    }
+    break;
+  }
+  case VM_MODE_RELEASE: {
+    // The reader, block 1's first thread, must have seen the guard and then
+    // the writer's store.
+    uint32_t reader = RELEASE_BLOCK_SIZE;
+    if (dst[reader] != 0xAB000000u) {
+      printf("*** error: reader read 0x%x, expected 0x%x\n", dst[reader], 0xAB000000u);
+      ++errors;
     }
     break;
   }

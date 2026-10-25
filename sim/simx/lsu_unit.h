@@ -148,6 +148,9 @@ private:
 		uint32_t    client_tag = 0;
 		// Register-pair atomic beat: one thread's 64-bit operation.
 		pair_state_t* pair     = nullptr;
+		// The fence's own request: its response completes the fence and
+		// writes no register.
+		bool        is_fence   = false;
 	};
 
 	// Per-block LSU state. Each member is a named hardware sub-block.

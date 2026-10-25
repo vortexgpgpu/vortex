@@ -47,6 +47,46 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     dst[gid] = buf[peer * pages * WORDS_PER_PAGE];
     break;
   }
+  case VM_MODE_RELEASE: {
+    // Release and acquire between block 0, the writer, and block 1, whose
+    // first thread reads; the blocks run in different clusters. The writer
+    // stores to its page, fences, and sets the guard with an atomic; the
+    // reader waits for the guard, fences, and reads the page. The guard page
+    // is translated on both sides up front, and the page on the reader's
+    // side. The writer's lanes first store to cold pages, one per page-table
+    // region, and the page store goes out in the last burst, so it parks on a
+    // TLB miss behind all their walks while the guard swap, a TLB hit, could
+    // overtake it. No barrier or kernel end comes in between: the fence alone
+    // must keep the parked store ahead of the guard.
+    auto guard = reinterpret_cast<uint32_t*>(arg->aux_addr);
+    volatile uint32_t* page = buf;
+    uint32_t lane = threadIdx.x;
+    (void)__atomic_fetch_add(&guard[0], 0u, __ATOMIC_RELAXED);
+    if (blockIdx.x == 0) {
+      vx_fence();  // the guard translation is in before the cold stores go out
+      #pragma unroll
+      for (uint32_t r = 0; r < RELEASE_PAD_BURSTS; ++r) {
+        uint32_t region = 1 + r * RELEASE_BLOCK_SIZE + lane;
+        page[region * VM_REGION_PAGES * WORDS_PER_PAGE] = region;
+      }
+      uint32_t region = (lane == 0) ? 0 : (RELEASE_PAD_BURSTS * RELEASE_BLOCK_SIZE + lane);
+      page[region * VM_REGION_PAGES * WORDS_PER_PAGE] = (lane == 0) ? 0xAB000000u : region;
+      vx_fence();
+      if (lane == 0) {
+        __atomic_exchange_n(&guard[0], 1u, __ATOMIC_RELAXED);
+      }
+      dst[gid] = 0xAB000000u;
+    } else if (blockIdx.x == 1 && lane == 0) {
+      (void)page[0];
+      uint32_t seen = 0;
+      for (uint32_t i = 0; i < 65536 && !seen; ++i) {
+        seen = __atomic_fetch_add(&guard[0], 0u, __ATOMIC_RELAXED);
+      }
+      vx_fence();
+      dst[gid] = seen ? page[0] : 0u;
+    }
+    break;
+  }
   case VM_MODE_DRAIN: {
     // Trailing store burst to fresh pages with no fence: completion
     // must not be signaled while any store is still parked on a miss.

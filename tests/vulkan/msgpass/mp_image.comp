@@ -1,0 +1,40 @@
+/*
+ * Copyright © 2026  Vortex GPGPU
+ * SPDX-License-Identifier: MIT
+ *
+ * Device-scope message passing with a storage-image payload: each invocation
+ * stores its payload texel, releases its guard word, then acquires its
+ * partner's guard; a partner seen as released must have its payload visible.
+ * The partner of (x, y) is the mirrored invocation, in another workgroup.
+ */
+#version 450 core
+#pragma use_vulkan_memory_model
+#extension GL_KHR_memory_scope_semantics : enable
+#extension GL_EXT_buffer_reference : enable
+
+layout(constant_id = 0) const int DIM = 1;
+layout(constant_id = 1) const int NUM_WG = 1;
+layout(local_size_x_id = 0, local_size_y_id = 0, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, r32ui) uniform devicecoherent uimage2D payload;
+layout(set = 0, binding = 1) buffer Result { uint x[]; } result;
+layout(buffer_reference) buffer GuardRef { uint x[]; };
+layout(push_constant, std430) uniform PC { GuardRef guard; };
+
+void main()
+{
+   ivec2 id      = ivec2(gl_GlobalInvocationID.xy);
+   ivec2 partner = ivec2(DIM * NUM_WG - 1) - id;
+   uint coord        = uint(id.y * DIM * NUM_WG + id.x);
+   uint partnerCoord = uint(partner.y * DIM * NUM_WG + partner.x);
+
+   imageStore(payload, id, uvec4(coord + (imageLoad(payload, partner).x >> 31), 0, 0, 0));
+   atomicExchange(guard.x[coord], 1u, gl_ScopeDevice, gl_StorageSemanticsImage,
+                  gl_SemanticsRelease);
+   bool skip = atomicExchange(guard.x[partnerCoord], 2u, gl_ScopeDevice,
+                              gl_StorageSemanticsImage, gl_SemanticsAcquire) == 0u;
+   uint r = imageLoad(payload, partner).x;
+   uint flags = (skip ? 0u : 2u) | ((!skip && r != partnerCoord) ? 1u : 0u);
+   if (flags != 0u)
+      result.x[coord] |= flags;
+}

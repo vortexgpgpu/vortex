@@ -222,8 +222,11 @@ package VX_gpu_pkg;
     // is_flush at LSB so dcr_flush can drive it deterministically.
     // is_addr_om is appended ABOVE amo, deliberately: the amo field is cast by
     // offset (VX_cache_bank), so inserting a bit below it would silently shift
-    // MEM_ATTR_AMO_OFFS and reinterpret the AMO sideband.
+    // MEM_ATTR_AMO_OFFS and reinterpret the AMO sideband. is_fence sits above
+    // amo for the same reason: it marks a flush request that comes from a
+    // memory fence, which the last-level cache passes without flushing.
     typedef struct packed {
+        logic                        is_fence;      // MEM_ATTR_FENCE_OFFS
         amo_req_t                    amo;           // MEM_ATTR_AMO_OFFS   = 4
         logic                        is_addr_om;    // MEM_ATTR_OM_OFFS    = 3
         logic                        is_addr_local; // MEM_ATTR_LOCAL_OFFS = 2
@@ -236,6 +239,7 @@ package VX_gpu_pkg;
     localparam MEM_ATTR_LOCAL_OFFS  = 2;
     localparam MEM_ATTR_OM_OFFS     = 3;
     localparam MEM_ATTR_AMO_OFFS    = 4;
+    localparam MEM_ATTR_FENCE_OFFS  = MEM_ATTR_AMO_OFFS + AMO_REQ_BITS;
 
     // Total width of the mem-bus attr field. Use this as the parameter
     // default for VX_mem_bus_if's ATTR_WIDTH parameter and as the
@@ -1813,6 +1817,13 @@ package VX_gpu_pkg;
 `endif
     // L3 is the LLC whenever it is enabled.
     localparam L3_IS_LLC            = `VX_CFG_L3_ENABLED;
+
+    // The last-level cache is the device's coherence point only when a single
+    // instance of it serves every core.
+    localparam LLC_IS_COHERENT      = L3_IS_LLC
+                                   || (L2_IS_LLC && (`VX_CFG_NUM_CLUSTERS == 1))
+                                   || (DCACHE_IS_LLC && `VX_CFG_DCACHE_ENABLED
+                                       && ((`VX_CFG_NUM_CLUSTERS * NUM_SOCKETS * `VX_CFG_NUM_DCACHES) == 1));
 
     ///////////////////////////////////////////////////////////////////////////
 

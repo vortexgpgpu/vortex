@@ -43,6 +43,7 @@ public:
 		uint8_t latency;        // pipeline latency
 		uint8_t repl_policy;    // replacement policy (ReplPolicy)
 		bool    is_llc;					// is last-level cache
+		bool    is_coherent;    // every core reaches memory through this one cache
 	};
 
 	struct PerfStats {

@@ -685,6 +685,25 @@ public:
     return !flushing_;
   }
 
+  // Fence invalidate: once the bank has drained (no fill or passthrough in
+  // flight, an empty pipe and an empty memory-side queue, so every older
+  // write-through has left it), drop every line: a set per cycle, or, in a
+  // write-back bank, a way per cycle after writing back its dirty sectors.
+  // The walk's lookups ride the pipeline behind the last line, which a bank
+  // other than 0 waits out; bank 0 forwards the fence itself and finishes the
+  // cycle after its last line.
+  void inval_begin() {
+    inval_state_ = InvalState::Drain;
+    inval_set_idx_ = 0;
+    inval_way_idx_ = 0;
+    inval_wait_ = 0;
+    this->tick_wake();
+  }
+
+  bool inval_done() const {
+    return inval_state_ == InvalState::Idle;
+  }
+
 protected:
   void on_reset() {
     perf_stats_ = Cache::PerfStats();
@@ -710,6 +729,10 @@ protected:
     flush_set_idx_ = 0;
     flush_way_idx_ = 0;
     flush_sector_idx_ = 0;
+    inval_state_ = InvalState::Idle;
+    inval_set_idx_ = 0;
+    inval_way_idx_ = 0;
+    inval_wait_ = 0;
 #if VX_CFG_EXT_A_ENABLED
     amo_unit_.reset();
     for (auto &e : amo_passthru_) {
@@ -746,6 +769,10 @@ protected:
       this->processFlush();
     }
 
+    if (inval_state_ != InvalState::Idle) {
+      this->processInvalidate();
+    }
+
     // calculate memory latency
     perf_stats_.mem_latency += pending_fill_reqs_;
 
@@ -755,7 +782,8 @@ protected:
     // any packet reserved toward core_req_in/mem_rsp_in re-arms on arrival.
     if (this->core_req_in.size() == 0 && this->mem_rsp_in.size() == 0
      && pipe_req_->size() == 0 && !mshr_.has_ready_reqs()
-     && !fwd_active_ && !flushing_ && pending_fill_reqs_ == 0) {
+     && !fwd_active_ && !flushing_ && pending_fill_reqs_ == 0
+     && inval_state_ == InvalState::Idle) {
       this->tick_sleep();
     }
   }
@@ -1632,6 +1660,8 @@ private:
             fill.tag   = mshr_id; // routes the fill response back here
             fill.hart_id   = bank_req.hart_id;
             fill.uuid  = bank_req.uuid;
+            // a fence continues to the next level as this miss
+            fill.flags.fence = bank_req.flags.fence;
             this->mem_req_out.send(fill, MEM_REQ_DELAY);
             DT(3, this->name() << " fill-req: " << fill);
             ++pending_fill_reqs_;
@@ -1650,6 +1680,71 @@ private:
 
     default:
       std::abort();
+    }
+  }
+
+  void processInvalidate() {
+    switch (inval_state_) {
+    case InvalState::Drain:
+      if (pending_fill_reqs_ == 0 && mshr_.empty() && pipe_req_->size() == 0
+       && this->mem_req_out.size() == 0) {
+        inval_state_ = InvalState::Walk;
+      }
+      break;
+    case InvalState::Walk: {
+      auto &set = sets_.at(inval_set_idx_);
+      if (config_.write_back) {
+        auto &line = set.lines.at(inval_way_idx_);
+        uint32_t wb_count = 0;
+        for (const auto &sec : line.sectors) {
+          wb_count += (sec.valid && sec.dirty) ? 1 : 0;
+        }
+        if (wb_count > 0 && (this->mem_req_out.size() + wb_count) > this->mem_req_out.capacity()) {
+          break; // stall
+        }
+        for (uint32_t i = 0; i < line.sectors.size(); ++i) {
+          auto &sec = line.sectors.at(i);
+          if (!(sec.valid && sec.dirty)) {
+            continue;
+          }
+          MemReq wb;
+          wb.addr   = params_.mem_addr_sector(bank_id_, inval_set_idx_, line.tag, i);
+          wb.op     = MemOp::ST;
+          wb.data   = sec.data;
+          wb.byteen = sec.dirty_mask;
+          this->mem_req_out.send(wb, MEM_REQ_DELAY);
+          DT(3, this->name() << " fence-wb: " << wb);
+          ++perf_stats_.evictions;
+        }
+        line.reset();
+        if (++inval_way_idx_ < set.lines.size()) {
+          break;
+        }
+        inval_way_idx_ = 0;
+      } else {
+        for (auto &line : set.lines) {
+          line.reset();
+        }
+      }
+      if (++inval_set_idx_ == params_.sets_per_bank) {
+        DT(3, this->name() << " fence-invalidate-done");
+        inval_wait_ = config_.latency;
+        inval_state_ = (bank_id_ == 0) ? InvalState::Done : InvalState::Settle;
+      }
+    } break;
+    case InvalState::Settle:
+      if (inval_wait_ != 0) {
+        --inval_wait_;
+      }
+      if (inval_wait_ == 0 && this->mem_req_out.size() == 0) {
+        inval_state_ = InvalState::Done;
+      }
+      break;
+    case InvalState::Done:
+      inval_state_ = InvalState::Idle;
+      break;
+    default:
+      break;
     }
   }
 
@@ -1744,6 +1839,13 @@ private:
   uint32_t flush_way_idx_;
   uint32_t flush_sector_idx_;
 
+  // Fence invalidate walk state.
+  enum class InvalState { Idle, Drain, Walk, Settle, Done };
+  InvalState inval_state_;
+  uint32_t   inval_set_idx_;
+  uint32_t   inval_way_idx_;
+  uint32_t   inval_wait_;
+
 #if VX_CFG_EXT_A_ENABLED
   AmoUnit  amo_unit_;
 
@@ -1790,10 +1892,15 @@ public:
       return;
     }
 
-    // create non-cacheable arbiter
+    // A fence leaves a cache that walks on every memory port, so the next
+    // cache sees it behind each port's older requests; one port suffices
+    // where there is one, or where memory is next.
+    port_fence_ = !config_.is_llc && !config_.is_coherent && (config_.mem_ports > 1);
+
+    // create non-cacheable arbiter: banks, bypass, and the port fence
     for (uint32_t i = 0; i < config_.mem_ports; ++i) {
       snprintf(sname, 100, "%s-nc_arb%d", simobject->name().c_str(), i);
-      nc_mem_arbs_.at(i) = MemArbiter::Create(sname, ArbiterType::Priority, 2, 1);
+      nc_mem_arbs_.at(i) = MemArbiter::Create(sname, ArbiterType::Priority, port_fence_ ? 3 : 2, 1);
     }
 
     // Connect non-cacheable arbiter output port 0 to outgoing memory ports
@@ -1839,6 +1946,9 @@ public:
       return;
     // calculate cache initialization cycles
     init_cycles_ = params_.sets_per_bank;
+    fence_state_ = FenceState::Idle;
+    fence_released_.assign(config_.num_inputs, false);
+    port_fences_ = 0;
   }
 
   void tick() {
@@ -1877,17 +1987,30 @@ public:
     }
 
     // schedule core requests
+    const bool fence_hold = this->fenceStep();
     for (uint32_t req_id = 0, n = config_.num_inputs; req_id < n; ++req_id) {
       auto &core_req_in = simobject_->core_req_in.at(req_id);
       if (core_req_in.empty())
         continue;
+      if (fence_hold && !fence_released_.at(req_id)) {
+        continue;
+      }
       auto &core_req = core_req_in.peek();
       if (core_req.flags.io) {
         if (this->processBypassRequest(core_req, req_id)) {
           core_req_in.pop();
         }
       } else {
-        if (bank_core_xbar_->ReqIn.at(req_id).try_send(core_req, 0)) {
+        // Once the ports' fences have carried a fence down, the released one
+        // only waits for its response: it goes on as a plain read.
+        MemReq bank_req = core_req;
+        if (port_fence_) {
+          bank_req.flags.fence = 0;
+        }
+        if (bank_core_xbar_->ReqIn.at(req_id).try_send(bank_req, 0)) {
+          if (core_req.flags.fence) {
+            fence_released_.at(req_id) = false;
+          }
           core_req_in.pop();
         }
       }
@@ -1922,6 +2045,125 @@ public:
 
 private:
 
+  // A fence at the head of any input holds every input. Once the requests
+  // already admitted have reached their banks, a cache that other cores'
+  // requests bypass invalidates all its banks and then lets the fence through,
+  // to miss in its bank and continue down; the one cache every core's requests
+  // pass, which the device stays coherent at, lets it through at once. With
+  // several memory ports, the walk ends with a fence sent on each port once
+  // every older request has left the banks, and the fence is let through when
+  // all of them have come back. Other inputs stay held until each released
+  // fence has entered. Returns whether the inputs are held.
+  bool fenceStep() {
+    uint32_t n = config_.num_inputs;
+    bool any_fence = false;
+    for (uint32_t i = 0; i < n; ++i) {
+      auto &in = simobject_->core_req_in.at(i);
+      if (!in.empty() && in.peek().flags.fence) {
+        any_fence = true;
+      }
+    }
+    switch (fence_state_) {
+    case FenceState::Idle:
+      if (any_fence) {
+        fence_state_ = FenceState::Admit;
+      }
+      break;
+    case FenceState::Admit:
+      if (this->banksAdmitted()) {
+        fence_state_ = config_.is_coherent ? FenceState::Release : FenceState::Begin;
+      }
+      break;
+    case FenceState::Begin:
+      for (auto &bank : banks_) {
+        bank->inval_begin();
+      }
+      fence_state_ = FenceState::Walk;
+      break;
+    case FenceState::Walk: {
+      bool done = true;
+      for (auto &bank : banks_) {
+        done = done && bank->inval_done();
+      }
+      if (done) {
+        fence_state_ = port_fence_ ? FenceState::PortSend : FenceState::Release;
+      }
+    } break;
+    case FenceState::PortSend:
+      if (this->memPathDrained()) {
+        for (uint32_t p = 0; p < config_.mem_ports; ++p) {
+          MemReq fence;
+          fence.flags.fence = 1;
+          nc_mem_arbs_.at(p)->ReqIn.at(2).send(fence, 0);
+          DT(3, simobject_->name() << " port-fence-req: port=" << p);
+        }
+        port_fences_ = config_.mem_ports;
+        fence_state_ = FenceState::PortWait;
+      }
+      break;
+    case FenceState::PortWait:
+      for (uint32_t p = 0; p < config_.mem_ports; ++p) {
+        auto &rsp = nc_mem_arbs_.at(p)->RspOut.at(2);
+        if (!rsp.empty()) {
+          DT(3, simobject_->name() << " port-fence-rsp: port=" << p);
+          rsp.pop();
+          --port_fences_;
+        }
+      }
+      if (port_fences_ == 0) {
+        fence_state_ = FenceState::Release;
+      }
+      break;
+    case FenceState::Release:
+      for (uint32_t i = 0; i < n; ++i) {
+        auto &in = simobject_->core_req_in.at(i);
+        fence_released_.at(i) = !in.empty() && in.peek().flags.fence;
+      }
+      fence_state_ = FenceState::Pass;
+      break;
+    case FenceState::Pass: {
+      bool pending = false;
+      for (uint32_t i = 0; i < n; ++i) {
+        pending = pending || fence_released_.at(i);
+      }
+      if (!pending) {
+        fence_state_ = FenceState::Idle;
+      }
+    } break;
+    }
+    return any_fence || fence_state_ != FenceState::Idle;
+  }
+
+  // Every request the banks sent before now has passed the arbiters onto a
+  // memory port's queue, where nothing sent later can overtake it.
+  bool memPathDrained() const {
+    for (const auto &bank : banks_) {
+      if (bank->mem_req_out.size() != 0) {
+        return false;
+      }
+    }
+    for (const auto &arb : nc_mem_arbs_) {
+      if (arb->ReqIn.at(0).size() != 0 || arb->ReqIn.at(2).full()) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool banksAdmitted() const {
+    for (uint32_t i = 0, n = config_.num_inputs; i < n; ++i) {
+      if (bank_core_xbar_->ReqIn.at(i).size() != 0) {
+        return false;
+      }
+    }
+    for (const auto &bank : banks_) {
+      if (bank->core_req_in.size() != 0) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   bool processBypassResponse(const MemRsp &mem_rsp) {
     // core response backpressure check
     uint32_t req_id = mem_rsp.tag & ((1 << params_.log2_num_inputs) - 1);
@@ -1955,6 +2197,12 @@ private:
   std::vector<MemArbiter::Ptr> nc_mem_arbs_;
   MemCrossBar::Ptr bank_core_xbar_;
   uint32_t init_cycles_;
+
+  enum class FenceState { Idle, Admit, Begin, Walk, PortSend, PortWait, Release, Pass };
+  FenceState fence_state_ = FenceState::Idle;
+  std::vector<bool> fence_released_;
+  bool port_fence_ = false;
+  uint32_t port_fences_ = 0;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
