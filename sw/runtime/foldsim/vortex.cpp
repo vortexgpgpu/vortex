@@ -122,9 +122,20 @@ public:
     }
     VRT_TRY()
       device_ = std::make_unique<vrt::Device>(bdf, vbin, /*program=*/true);
-      // Clock the kernel at the rate the image was timed for.
+      // Clock the kernel at the rate the image was timed for, or lower if
+      // VORTEX_FOLDSIM_CLOCK_HZ locks it there.
       const uint64_t timed_hz = device_->getMaxFrequency();
-      device_->setFrequency(timed_hz);
+      uint64_t want_hz = timed_hz;
+      if (const char* s = getenv("VORTEX_FOLDSIM_CLOCK_HZ")) {
+        const uint64_t hz = strtoull(s, nullptr, 0);
+        if (hz == 0 || hz > timed_hz) {
+          fprintf(stderr, "[VXDRV] VORTEX_FOLDSIM_CLOCK_HZ=%s: must be in (0, %lu]\n",
+                  s, (unsigned long)timed_hz);
+          return -1;
+        }
+        want_hz = hz;
+      }
+      device_->setFrequency(want_hz);
       const uint64_t clk_hz = device_->getFrequency();
       if (clk_hz == 0 || clk_hz > timed_hz + timed_hz / 200) {
         fprintf(stderr, "[VXDRV] user clock reads %lu Hz, image is timed for %lu Hz\n",
