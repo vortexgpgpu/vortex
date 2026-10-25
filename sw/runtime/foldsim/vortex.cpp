@@ -135,9 +135,18 @@ public:
         }
         want_hz = hz;
       }
-      device_->setFrequency(want_hz);
-      const uint64_t clk_hz = device_->getFrequency();
-      if (clk_hz == 0 || clk_hz > timed_hz + timed_hz / 200) {
+      // The wizard settles on the nearest rate its dividers reach, which can
+      // be a step above the request: lower the request below that step.
+      const uint64_t limit_hz = want_hz;
+      uint64_t clk_hz = 0;
+      for (int i = 0; i < 8; ++i) {
+        device_->setFrequency(want_hz);
+        clk_hz = device_->getFrequency();
+        if (clk_hz == 0 || clk_hz <= limit_hz)
+          break;
+        want_hz -= (clk_hz - want_hz) + limit_hz / 100;
+      }
+      if (clk_hz == 0 || clk_hz > limit_hz) {
         fprintf(stderr, "[VXDRV] user clock reads %lu Hz, image is timed for %lu Hz\n",
                 (unsigned long)clk_hz, (unsigned long)timed_hz);
         return -1;
