@@ -327,6 +327,8 @@ public:
     std::fill(issue_lock_owner_.begin(), issue_lock_owner_.end(), kLockOpen);
     std::fill(last_issue_.begin(), last_issue_.end(), 0);
     std::fill(staged_since_.begin(), staged_since_.end(), 0);
+    sched_stall_cycles_ = 0;
+    sched_timeout_enable_ = false;
 
     pending_instrs_.clear();
     pending_ifetches_ = 0;
@@ -359,6 +361,26 @@ public:
     // profiling
     perf_stats_.active_warps += scheduler_->active_warps().count();
     perf_stats_.stalled_warps += scheduler_->stalled_warps().count();
+
+    // Stall watchdog to prevent a model deadlock from spinning forever silently.
+    const auto& active_warps = scheduler_->active_warps();
+    if (sched_timeout_enable_ && active_warps.any() && active_warps == scheduler_->stalled_warps()) {
+      if (++sched_stall_cycles_ >= kSchedStallTimeout) {
+        std::cerr << "*** " << simobject_->name() << " scheduler timeout: active_warps="
+                  << active_warps.to_string().substr(MAX_NUM_WARPS - VX_CFG_NUM_WARPS)
+                  << " (big-endian), cycles=" << sched_stall_cycles_ << std::endl;
+        for (uint32_t w = 0; w < VX_CFG_NUM_WARPS; ++w) {
+          if (!active_warps.test(w))
+            continue;
+          auto& warp = scheduler_->warp(w);
+          std::cerr << "    wid=" << w << ", PC=0x" << std::hex << warp.PC << std::dec
+                    << ", tmask=" << warp.tmask << " (little-endian)" << std::endl;
+        }
+        std::abort();
+      }
+    } else if (active_warps.none() || active_warps != scheduler_->stalled_warps()) {
+      sched_stall_cycles_ = 0;
+    }
 
     // stop when fetch_latch cannot accept
     if (fetch_latch_.full())
@@ -541,6 +563,7 @@ public:
     // stalling instructions (LSU, SFU, TCU, branches) stay suspended until commit
     if (!trace->fetch_stall) {
       scheduler_->resume(trace->wid);
+      sched_timeout_enable_ = true;
     }
 
     DT(3, simobject_->name() << "-pipeline decode: " << *trace);
@@ -590,6 +613,26 @@ public:
         auto trace = ibuffer->peek();
         auto seq = sequencers_.at(wid);
         auto uop_trace = seq->get(trace);  // returns cached uop or generates next
+
+        // Stall watchdog on a staged instruction that never issues.
+        {
+          uint64_t staged = std::max(last_issue_.at(wid), trace->ibuf_time);
+          uint64_t stall_cycles = SimPlatform::instance().cycles() - staged;
+          if (stall_cycles >= VX_DBG_STALL_TIMEOUT) {
+            std::cerr << "*** " << simobject_->name() << " issue timeout: wid=" << wid
+                      << " (issue" << iw << ", w=" << w << "), PC=0x" << std::hex << uop_trace->PC << std::dec
+                      << ", tmask=" << uop_trace->tmask << " (little-endian), cycles=" << stall_cycles << ", inuse={";
+            if (scoreboard_->in_use(uop_trace)) {
+              auto uses = scoreboard_->get_uses(uop_trace);
+              for (uint32_t j = 0; j < uses.size(); ++j) {
+                std::cerr << (j ? ", " : "") << uses.at(j).reg_type << uses.at(j).reg_id
+                          << " (#" << uses.at(j).uuid << ")";
+              }
+            }
+            std::cerr << "}, " << *uop_trace << std::endl;
+            std::abort();
+          }
+        }
 
         // The uop sequencer starts a macro-op once it reaches the front of the
         // buffer behind the staged instruction, and offers its first uop the
@@ -1117,6 +1160,13 @@ private:
   std::vector<uint32_t> ibuf_inflight_;
   std::vector<uint64_t> last_issue_;   // [wid] cycle of the warp's last issue
   std::vector<uint64_t> staged_since_; // [wid] cycle the last issued candidate was staged
+  uint64_t sched_stall_cycles_ = 0;    // consecutive cycles with every active warp stalled
+  bool sched_timeout_enable_ = false;  // armed by the first decode unlock
+#ifdef EXT_SCHED_STALL_TIMEOUT
+  static constexpr uint64_t kSchedStallTimeout = EXT_SCHED_STALL_TIMEOUT;
+#else
+  static constexpr uint64_t kSchedStallTimeout = VX_DBG_STALL_TIMEOUT;
+#endif
 
   PoolAllocator<instr_trace_t, 64> trace_pool_;
 
