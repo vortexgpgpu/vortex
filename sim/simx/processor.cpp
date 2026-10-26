@@ -120,6 +120,7 @@ ProcessorImpl::ProcessorImpl()
     0,                               // read_merge
     VX_CFG_L3_MSHR_LINES,            // mshr_lines
     CP_ON_L3 != 0,                   // write_around
+    VX_CFG_L3_MRSQ_SIZE != 0,        // memory-response queue
     }
   );
 

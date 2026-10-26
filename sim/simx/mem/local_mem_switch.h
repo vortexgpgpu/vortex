@@ -33,7 +33,8 @@ public:
   LocalMemSwitch(
     const SimContext& ctx,
     const char* name,
-    uint32_t delay
+    uint32_t delay,
+    uint32_t dc_rsp_size = 2
   );
 
 protected:

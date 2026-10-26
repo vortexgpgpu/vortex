@@ -18,7 +18,8 @@ using namespace vortex;
 LocalMemSwitch::LocalMemSwitch(
   const SimContext& ctx,
   const char* name,
-  uint32_t delay
+  uint32_t delay,
+  uint32_t dc_rsp_size
 ) : SimObject<LocalMemSwitch>(ctx, name)
   // Single-entry ingress: the switch accepts a new request only as its
   // current one drains, so upstream issue feels downstream cadence
@@ -28,7 +29,7 @@ LocalMemSwitch::LocalMemSwitch(
   , ReqOutLmem(this)
   , RspInLmem(this)
   , ReqOutDC(this)
-  , RspInDC(this)
+  , RspInDC(this, dc_rsp_size)
   , delay_(delay)
 {}
 

@@ -2262,7 +2262,7 @@ public:
   std::vector<SimChannel<MemReq>> IoOut;  // non-cacheable requests, per port
 
   CachePortArb(const SimContext& ctx, const char* name, const params_t& params,
-               uint32_t num_inputs, uint32_t num_banks, uint32_t merge_group)
+               uint32_t num_inputs, uint32_t num_banks, uint32_t merge_group, bool merge_port0)
     : SimObject<CachePortArb>(ctx, name)
     , ReqIn(num_inputs, this)
     , ReqOut(num_banks, this)
@@ -2273,6 +2273,7 @@ public:
     , delay_((num_inputs > 2) ? 1 : 0)
     , levels_(arb_tree_levels(num_inputs))
     , merge_group_(merge_group)
+    , merge_port0_(merge_port0)
   {
     __assert(merge_group_ <= 1 || (merge_group_ <= 64 && ispow2(merge_group_) && (num_inputs % merge_group_) == 0),
              "a read-merge group must be a power of two of at most 64 dividing the ports");
@@ -2425,7 +2426,7 @@ protected:
         auto& req_i = ReqIn.at(i).peek();
         uint32_t base = (i / merge_group_) * merge_group_;
         for (uint32_t j = base; j < i; ++j) {
-          if (followers.at(j) || !this->is_plain_read(j)) {
+          if (followers.at(j) || !this->is_plain_read(j) || (j == 0 && !merge_port0_)) {
             continue;
           }
           auto& req_j = ReqIn.at(j).peek();
@@ -2531,6 +2532,7 @@ private:
   std::vector<std::vector<SimChannel<MemReq>>> tree_stage_; // [level][bank][slice]
   std::vector<std::vector<uint32_t>> rr_;                   // [arbiter level][bank][slice] next to grant
   uint32_t merge_group_;
+  bool merge_port0_;
   uint64_t collisions_ = 0;
 
   friend class SimObject<CachePortArb>;
@@ -2656,7 +2658,7 @@ private:
 // Sits on one memory port's cache-side response path, ahead of the response
 // network. While the port's flush token is out the cache is quiescent, so the
 // port's next response is the token's answer and stops here; every other
-// response passes in the same cycle.
+// response passes on, crossing the port's registered response stages.
 class FlushTap : public SimObject<FlushTap> {
 public:
   using Ptr = std::shared_ptr<FlushTap>;
@@ -2664,10 +2666,11 @@ public:
   SimChannel<MemRsp> RspIn;
   SimChannel<MemRsp> RspOut;
 
-  FlushTap(const SimContext& ctx, const char* name)
+  FlushTap(const SimContext& ctx, const char* name, uint32_t delay)
     : SimObject<FlushTap>(ctx, name)
     , RspIn(this)
     , RspOut(this)
+    , delay_(delay)
   {}
 
   // the port's flush token has been sent
@@ -2699,12 +2702,13 @@ protected:
       armed_ = false;
       answered_ = true;
       RspIn.pop();
-    } else if (RspOut.try_send(RspIn.peek(), 0)) {
+    } else if (RspOut.try_send(RspIn.peek(), delay_)) {
       RspIn.pop();
     }
   }
 
 private:
+  uint32_t delay_;
   bool armed_ = false;
   bool answered_ = false;
 
@@ -2739,12 +2743,30 @@ public:
       nc_mem_arbs_.at(i) = MemArbiter::Create(sname, ArbiterType::Priority, 2, 1);
     }
 
+    // Bank memory arbiter delays. Each level of the memory-side request
+    // network beyond the first is a registered stage; the request path
+    // buffers the levels the arbiter's own register does not cover in
+    // mem_req_net_.
+    uint32_t mem_arb_delay = ((num_banks != config_.mem_ports) && (num_banks > 2 || config_.mem_ports > 2)) ? 1 : 0;
+    uint32_t mem_net_delay = omega_stages(num_banks, config_.mem_ports) - 1;
+    uint32_t mem_net_extra = (mem_net_delay > mem_arb_delay) ? (mem_net_delay - mem_arb_delay) : 0;
+    uint32_t mem_arb_rsp_delay = (num_banks != config_.mem_ports) ? (mem_arb_delay + mem_net_extra) : 0;
+    __assert(num_banks >= config_.mem_ports, "a cache needs a bank per memory port");
+
+    // A memory response reaches its bank through the port's response queue,
+    // when there is one, and a response network registered at every level.
+    // The taps carry what the bank arbiter's response delay does not.
+    uint32_t mem_rsp_regs = omega_stages(config_.mem_ports, num_banks) + (config_.mem_rsp_queue ? 1 : 0);
+    uint32_t mem_rsp_credit = mem_arb_rsp_delay + (config_.mem_rsp_slice ? 1 : 0);
+    __assert(mem_rsp_regs >= mem_rsp_credit, "memory response path shorter than its arbiter");
+    uint32_t tap_delay = mem_rsp_regs - mem_rsp_credit;
+
     // flush-token taps, ticking after the arbiters that feed them and before
     // the response network they feed
     flush_taps_.resize(config_.mem_ports);
     for (uint32_t i = 0; i < config_.mem_ports; ++i) {
       snprintf(sname, 100, "%s-flush_tap%d", simobject->name().c_str(), i);
-      flush_taps_.at(i) = FlushTap::Create(sname);
+      flush_taps_.at(i) = FlushTap::Create(sname, tap_delay);
       nc_mem_arbs_.at(i)->RspOut.at(0).bind(&flush_taps_.at(i)->RspIn);
     }
 
@@ -2754,17 +2776,9 @@ public:
       simobject->mem_rsp_in.at(i).bind(&nc_mem_arbs_.at(i)->RspIn.at(0));
     }
 
-    // Create bank's memory arbiter. Each level of the memory-side networks
-    // beyond the first is a registered stage; the request path buffers the
-    // levels the arbiter's own register does not cover in mem_req_net_, the
-    // response path in the bank's memory-response queue.
     snprintf(sname, 100, "%s-mem_arb", simobject->name().c_str());
-    uint32_t mem_arb_delay = ((num_banks != config_.mem_ports) && (num_banks > 2 || config_.mem_ports > 2)) ? 1 : 0;
-    uint32_t mem_net_delay = omega_stages(num_banks, config_.mem_ports) - 1;
-    uint32_t mem_net_extra = (mem_net_delay > mem_arb_delay) ? (mem_net_delay - mem_arb_delay) : 0;
-    __assert(num_banks >= config_.mem_ports, "a cache needs a bank per memory port");
     auto bank_mem_arb = MemArbiter::Create(sname, ArbiterType::RoundRobin, num_banks, config_.mem_ports,
-                                           mem_arb_delay + mem_net_extra, mem_arb_delay + mem_net_extra);
+                                           mem_arb_delay + mem_net_extra, mem_arb_rsp_delay);
 
     // Connect bank's memory arbiter to non-cacheable arbiter's input port 0
     if (mem_net_extra != 0) {
@@ -2788,7 +2802,7 @@ public:
     // Create the core-port arbiter ahead of the banks it feeds
     snprintf(sname, 100, "%s-port_arb", simobject->name().c_str());
     uint32_t merge_group = std::min<uint32_t>(config_.read_merge, config_.num_inputs);
-    port_arb_ = CachePortArb::Create(sname, params_, config_.num_inputs, num_banks, merge_group);
+    port_arb_ = CachePortArb::Create(sname, params_, config_.num_inputs, num_banks, merge_group, config_.merge_port0);
     for (uint32_t i = 0; i < config_.num_inputs; ++i) {
       simobject->core_req_in.at(i).bind(&port_arb_->ReqIn.at(i));
     }

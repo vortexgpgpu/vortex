@@ -28,7 +28,6 @@ LsuMemAdapter::LsuMemAdapter(
   , RspIn(num_inputs, this)
   , delay_(delay)
   , rsp_delay_(rsp_delay)
-  , port_delay_(num_inputs, 0)
   , pending_mask_(num_inputs)
 {
   assert(num_inputs > 0);
@@ -146,7 +145,7 @@ void LsuMemAdapter::on_tick() {
         out_req.flags.local = (t == AddrType::Shared);
       }
 
-      if (ReqOut.at(i).try_send(out_req, delay_ + port_delay_.at(i))) {
+      if (ReqOut.at(i).try_send(out_req, delay_)) {
         DT(4, this->name() << " req" << i << ": " << out_req);
         pending_mask_.reset(i);
       }

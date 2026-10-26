@@ -108,8 +108,9 @@ Operands::Operands(const SimContext &ctx, const char* name, Core* core)
   }
 
   if (VX_CFG_NUM_OPCS >= 2) {
+    // the collectors' round-robin merge registers its output
     snprintf(sname, 100, "%s-rsp_arb", name);
-    rsp_arb_ = TraceArbiter::Create(sname, ArbiterType::RoundRobin, VX_CFG_NUM_OPCS, 1);
+    rsp_arb_ = TraceArbiter::Create(sname, ArbiterType::RoundRobin, VX_CFG_NUM_OPCS, 1, 1);
     for (uint32_t i = 0; i < VX_CFG_NUM_OPCS; ++i) {
       opc_units_.at(i)->Output.bind(&rsp_arb_->Inputs.at(i));
     }

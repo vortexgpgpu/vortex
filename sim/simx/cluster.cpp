@@ -98,6 +98,7 @@ public:
       0,                             // read_merge
       VX_CFG_L2_MSHR_LINES,          // mshr_lines
       CP_ON_L2 != 0,                 // write_around
+      VX_CFG_L2_MRSQ_SIZE != 0,      // memory-response queue
     });
 
 

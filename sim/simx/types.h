@@ -1428,6 +1428,39 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
+// A registered elastic buffer: In holds its entries, and the head moves on
+// through Out one register later, one per cycle.
+template <typename Type>
+class TxBuffer : public SimObject<TxBuffer<Type>> {
+public:
+  using Ptr = std::shared_ptr<TxBuffer<Type>>;
+
+  SimChannel<Type> In;
+  SimChannel<Type> Out;
+
+  TxBuffer(const SimContext& ctx, const char* name, uint32_t size)
+    : SimObject<TxBuffer<Type>>(ctx, name)
+    , In(this, size)
+    , Out(this)
+  {}
+
+protected:
+  void on_reset() {}
+
+  void on_tick() {
+    if (!In.empty() && Out.try_send(In.peek(), 1)) {
+      In.pop();
+    }
+    if (In.size() == 0) {
+      this->tick_sleep();
+    }
+  }
+
+  friend class SimObject<TxBuffer<Type>>;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
 template <typename Type>
 class TxArbiter : public SimObject<TxArbiter<Type>> {
 public:

@@ -157,10 +157,14 @@ public:
       VX_CFG_EXT_DXA_ENABLED + VX_CFG_TCU_WGMMA_ENABLED
     });
 
-    // create lmem switch
+    // create lmem switch. A data-cache response reaches its response
+    // arbiter combinationally through the coalescer or the lane adapter, so
+    // the switch holds it in one entry, the least a channel holds; without
+    // either, the channel is the cache's own two-entry output buffer.
+    const bool dc_rsp_comb = dcache_coalescing || (DCACHE_CHANNELS > 1);
     for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
       snprintf(sname, 100, "%s-lmem_switch%d", name.c_str(), b);
-      lmem_switch_.at(b) = LocalMemSwitch::Create(sname, 1);
+      lmem_switch_.at(b) = LocalMemSwitch::Create(sname, 1, dc_rsp_comb ? 1 : 2);
     }
 
     // create per-block lmem adapters
@@ -188,8 +192,6 @@ public:
     std::vector<SimChannel<MemReq>*> dc_req_out(VX_CFG_NUM_LSU_BLOCKS * DCACHE_CHANNELS);
     std::vector<SimChannel<MemRsp>*> dc_rsp_in(VX_CFG_NUM_LSU_BLOCKS * DCACHE_CHANNELS);
 
-    // The first data-cache port also carries the cache-flush injection, which
-    // registers its requests once more.
     if (dcache_coalescing) {
       // connect memory coalescer; its memory side drives the dcache
       // channels directly (combinational lane fan-out/fan-in).
@@ -201,7 +203,6 @@ public:
           dc_rsp_in.at(b * DCACHE_CHANNELS + c) = &mem_coalescers_.at(b)->RspIn.at(c);
         }
       }
-      mem_coalescers_.at(0)->set_port_delay(0, 1);
     } else {
       // bypass memory coalescer: per-block lane adapter (channel-fused
       // pass-through when DCACHE_CHANNELS == 1)
@@ -213,8 +214,18 @@ public:
           dc_rsp_in.at(b * DCACHE_CHANNELS + c) = &lsu_dcache_adapter.at(b)->RspIn.at(c);
         }
       }
-      lsu_dcache_adapter.at(0)->set_port_delay(0, 1);
     }
+
+    // The first data-cache port also carries the cache-flush injection, whose
+    // arbiter buffers and registers its requests once more.
+    snprintf(sname, 100, "%s-dcache_flush_buf", name.c_str());
+    dcache_flush_buf_ = TxBuffer<MemReq>::Create(sname, 2);
+    dc_req_out.at(0)->bind(&dcache_flush_buf_->In);
+    dc_req_out.at(0) = &dcache_flush_buf_->Out;
+
+    // The first icache port does the same for the icache.
+    snprintf(sname, 100, "%s-icache_flush_buf", name.c_str());
+    icache_flush_buf_ = TxBuffer<MemReq>::Create(sname, 2);
 
   #ifdef VX_CFG_VM_ENABLE
     // Per-core L1 TLB stages: hits translate in place, misses park in
@@ -247,12 +258,14 @@ public:
       icache_mmu_->ReqOut.at(f).bind(&simobject_->icache_req_out.at(f));
       simobject_->icache_rsp_in.at(f).bind(&icache_mmu_->RspIn.at(f));
     }
+    icache_flush_buf_->Out.bind(&icache_mmu_->ReqIn.at(0));
   #else
     // No-VM: direct passthrough.
     for (uint32_t p = 0; p < VX_CFG_NUM_LSU_BLOCKS * DCACHE_CHANNELS; ++p) {
       dc_req_out.at(p)->bind(&simobject_->dcache_req_out.at(p));
       simobject_->dcache_rsp_in.at(p).bind(dc_rsp_in.at(p));
     }
+    icache_flush_buf_->Out.bind(&simobject_->icache_req_out.at(0));
   #endif
 
     // initialize execute units
@@ -326,9 +339,11 @@ public:
     for (uint32_t iw = 0; iw < VX_CFG_ISSUE_WIDTH; ++iw) {
       auto& queues = commit_queues_.emplace_back();
       for (uint32_t fu = 0; fu < (uint32_t)FUType::Count; ++fu) {
-        // Covers the results still crossing into the queue, so a unit can
-        // retire one result per cycle.
-        queues.emplace_back(std::make_unique<SimChannel<instr_trace_t*>>(simobject_, 3));
+        // A unit's lane gather holds two results. The LSU's crosses one
+        // register into it; the others cross two and take a third slot so
+        // that they still retire one result per cycle.
+        uint32_t capacity = (fu == (uint32_t)FUType::LSU) ? 2 : 3;
+        queues.emplace_back(std::make_unique<SimChannel<instr_trace_t*>>(simobject_, capacity));
       }
     }
 
@@ -456,11 +471,12 @@ public:
     // The MMU translates and forwards to simobject_->icache_req_out
     // downstream (driven by SimChannel binding in the constructor).
     auto& icache_rsp = icache_mmu_->RspOut.at(f);
-    auto& icache_req = icache_mmu_->ReqIn.at(f);
+    auto& icache_port = icache_mmu_->ReqIn.at(f);
   #else
     auto& icache_rsp = simobject_->icache_rsp_in.at(f);
-    auto& icache_req = simobject_->icache_req_out.at(f);
+    auto& icache_port = simobject_->icache_req_out.at(f);
   #endif
+    auto& icache_req = (f == 0) ? icache_flush_buf_->In : icache_port;
 
     // handle icache response — extract instruction word from the TLM line payload
     if (!icache_rsp.empty()){
@@ -532,9 +548,7 @@ public:
     mem_req.tag   = tag;
     mem_req.hart_id   = trace->cid;
     mem_req.uuid  = trace->uuid;
-    // The first icache port also carries the cache-flush injection, which
-    // registers its requests once more.
-    if (icache_req.try_send(mem_req, (f == 0) ? 2 : 1)) {
+    if (icache_req.try_send(mem_req, 1)) {
       DT(3, simobject_->name() << " icache-req: addr=0x" << std::hex << mem_req.addr << ", tag=0x" << mem_req.tag << std::dec << ", " << *trace);
     #ifdef VX_CFG_EXT_C_ENABLE
       decompressor->commit_request(from_refetch);
@@ -1192,6 +1206,8 @@ private:
   LocalMem::Ptr local_mem_;
   std::vector<LocalMemSwitch::Ptr> lmem_switch_;
   std::vector<MemCoalescer::Ptr> mem_coalescers_;
+  TxBuffer<MemReq>::Ptr dcache_flush_buf_;
+  TxBuffer<MemReq>::Ptr icache_flush_buf_;
 
   std::vector<std::unique_ptr<TFifo<instr_trace_t*>>> fetch_latch_;
   std::vector<std::unique_ptr<TFifo<instr_trace_t*>>> decode_latch_;

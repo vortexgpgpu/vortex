@@ -180,10 +180,21 @@ tests:
 # two-port icache, CTAs as wide as the core, a 16-port dcache.
 - id: parity-sgemm-fw2
   check: model_parity
+  # Tighter than the default: icache port 0, which carries the flush
+  # injection, holds four requests, and the shape exercises all of them.
+  tolerance: 0.03
   via: blackbox
   app: sgemm
   args: -n128
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_FETCH_WIDTH=2
+# Four frontend slices on a four-port icache: every slice but the first fetches
+# through two request entries, the first through four.
+- id: parity-sgemm-fw4
+  check: model_parity
+  via: blackbox
+  app: sgemm
+  args: -n128
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_FETCH_WIDTH=4
 # Device printf: per-character IO ring stores, each published behind a fence
 # that drains, flushes and invalidates the data cache.
 - id: parity-printf

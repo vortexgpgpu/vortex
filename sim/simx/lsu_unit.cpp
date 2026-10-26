@@ -73,10 +73,8 @@ Instr::Ptr LsuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
 }
 
 LsuUnit::LsuUnit(const SimContext& ctx, const char* name, Core* core)
-	// Commit-side elasticity of 6 beats: the writeback path buffers a whole
-	// coalesced fragment burst, so a denied commit grant queues beats there
-	// instead of throttling the memory response stream.
-	: FuncUnit<VX_CFG_NUM_LSU_BLOCKS>(ctx, name, core, 6)
+	// the response buffer and the result arbiter, two entries each
+	: FuncUnit<VX_CFG_NUM_LSU_BLOCKS>(ctx, name, core, 4)
 #ifdef TCU_META_ENABLE
 	, TcuReqIn(TCU_AGU_PORTS, this)
 	, TcuRspOut(TCU_AGU_PORTS, this)
