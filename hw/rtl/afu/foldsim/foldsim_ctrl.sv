@@ -152,6 +152,7 @@ module foldsim_ctrl #(
                            : 32'd0;
 
     wire finish;
+    wire finish_in;
     wire [6+MEM_PORTS-1:0] done;
     wire [2:0] have;
     foldsim_token_out #(1) o_reset   (clk, reset, reset_valid,         reset_ready,         run, finish, done[0]);
@@ -173,13 +174,17 @@ module foldsim_ctrl #(
 
     wire                  rsp_v, busy;
     wire [DCR_DATA_W-1:0] rsp_d;
-    foldsim_token_in #(1, 1)          t_rspv (clk, reset, dcr_rsp_valid_valid, dcr_rsp_valid_ready, dcr_rsp_valid_bits, finish, have[0], rsp_v);
-    foldsim_token_in #(DCR_DATA_W, 1) t_rspd (clk, reset, dcr_rsp_data_valid,  dcr_rsp_data_ready,  dcr_rsp_data_bits,  finish, have[1], rsp_d);
-    foldsim_token_in #(1, 1)          t_busy (clk, reset, busy_valid,          busy_ready,          busy_bits,          finish, have[2], busy);
+    foldsim_token_in #(1, 1)          t_rspv (clk, reset, dcr_rsp_valid_valid, dcr_rsp_valid_ready, dcr_rsp_valid_bits, finish_in, have[0], rsp_v);
+    foldsim_token_in #(DCR_DATA_W, 1) t_rspd (clk, reset, dcr_rsp_data_valid,  dcr_rsp_data_ready,  dcr_rsp_data_bits,  finish_in, have[1], rsp_d);
+    foldsim_token_in #(1, 1)          t_busy (clk, reset, busy_valid,          busy_ready,          busy_bits,          finish_in, have[2], busy);
 
     // Staged token ends: the cycle finishes from the endpoint's registers, a
-    // host cycle after its last token.
-    assign finish = run & (&have) & (&done);
+    // host cycle after its last token. The target's control tokens depend on
+    // none of its outputs, so the cycle finishes on its own tokens alone; its
+    // outputs (a DCR response, busy) are taken as they come, in cycle order,
+    // and only tell the host.
+    assign finish = run & (&done);
+    assign finish_in = &have;
 
     // ---- The host's registers ----
     reg       aw_got, w_got, ar_got;
@@ -244,25 +249,28 @@ module foldsim_ctrl #(
                 cur_op        <= pop ? q_op[q_head] : `FOLDSIM_CMD_NONE;
                 cur_addr      <= q_addr[q_head];
                 cur_data      <= q_data[q_head];
+                // A reset command's address chooses the refresh the target
+                // has from the reset on.
+                if (cur_op == `FOLDSIM_CMD_RESET)
+                    mem_refresh_r <= cur_addr[1:0];
+            end
+            // The target's outputs of a cycle.
+            if (finish_in) begin
                 if (rsp_v) begin
                     rsp_valid <= 1'b1;
                     rsp_data  <= rsp_d;
                 end
                 target_busy <= busy;
-                // A reset command's address chooses the refresh the target
-                // has from the reset on.
-                if (cur_op == `FOLDSIM_CMD_RESET)
-                    mem_refresh_r <= cur_addr[1:0];
-                // A start counts as busy until the target says it is, or plainly
-                // never will.
-                if (do_start) begin
-                    start_pending <= 1'b1;
-                    start_wait    <= 16'hffff;
-                end else if (start_pending) begin
-                    if (busy || start_wait == 0)
-                        start_pending <= 1'b0;
-                    start_wait <= start_wait - 16'd1;
-                end
+            end
+            // A start counts as busy until the target says it is, or plainly
+            // never will.
+            if (finish & do_start) begin
+                start_pending <= 1'b1;
+                start_wait    <= 16'hffff;
+            end else if (finish_in & start_pending) begin
+                if (busy || start_wait == 0)
+                    start_pending <= 1'b0;
+                start_wait <= start_wait - 16'd1;
             end
             if (pop)
                 q_head <= q_head + 1'b1;

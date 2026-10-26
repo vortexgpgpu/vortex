@@ -89,6 +89,14 @@ module foldsim_afu #(
 `undef FOLDSIM_AXI_MEM
     localparam DATA_W = C_M_AXI_MEM_DATA_WIDTH;
     localparam PORTS  = `FOLDSIM_MEM_PORTS;
+    // The memory endpoints offer R and AR's ready for either fire of R in the
+    // cycle before (foldsim_mem's SPEC): those channels carry both values.
+`ifdef FOLDSIM_MEM_SPEC
+    localparam MEM_SPEC = 1;
+`else
+    localparam MEM_SPEC = 0;
+`endif
+    localparam NC = MEM_SPEC ? 2 : 1;
 
     // A registered reset, so it reaches the whole kernel in one cycle's time.
     reg reset;
@@ -119,12 +127,12 @@ module foldsim_afu #(
 
     `FOLDSIM_MCH(awready, 1)
     `FOLDSIM_MCH(wready, 1)
-    `FOLDSIM_MCH(arready, 1)
-    `FOLDSIM_MCH(rvalid, 1)
-    `FOLDSIM_MCH(rdata, DATA_W)
-    `FOLDSIM_MCH(rlast, 1)
-    `FOLDSIM_MCH(rid, TARGET_ID_W)
-    `FOLDSIM_MCH(rresp, 2)
+    `FOLDSIM_MCH(arready, NC)
+    `FOLDSIM_MCH(rvalid, NC)
+    `FOLDSIM_MCH(rdata, NC*DATA_W)
+    `FOLDSIM_MCH(rlast, NC)
+    `FOLDSIM_MCH(rid, NC*TARGET_ID_W)
+    `FOLDSIM_MCH(rresp, NC*2)
     `FOLDSIM_MCH(bvalid, 1)
     `FOLDSIM_MCH(bresp, 2)
     `FOLDSIM_MCH(bid, TARGET_ID_W)
@@ -252,7 +260,8 @@ module foldsim_afu #(
             .SLOTS    (MEM_SLOTS),
             .HLOG2    (MEM_HLOG2),
             .STAGED   (MEM_STAGED),
-            .CH_SHIFT (`FOLDSIM_MEM_CH_SHIFT)
+            .CH_SHIFT (`FOLDSIM_MEM_CH_SHIFT),
+            .SPEC     (MEM_SPEC)
         ) mem (
             .clk           (ap_clk),
             .reset         (reset),
