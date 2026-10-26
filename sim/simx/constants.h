@@ -40,11 +40,13 @@ namespace vortex {
 inline constexpr uint32_t XLENB           = (VX_CFG_XLEN / 8);
 
 // A last-level cache that alone serves every memory client is the point of
-// coherence between kernels. The texture, ray-tracing and DXA ports join below
-// the dcache and the raster and OM caches beside it, so a dcache with any of
-// them is not one.
+// coherence between kernels. A dcache is one when it is the only dcache,
+// shared by every core of the one socket. The texture, ray-tracing and DXA
+// ports join below the dcache and the raster and OM caches beside it, so a
+// dcache with any of them is not one.
 inline constexpr bool DCACHE_SHARED_LLC = (VX_CFG_DCACHE_ENABLED != 0) && (VX_CFG_L2_ENABLED == 0) && (VX_CFG_L3_ENABLED == 0)
-                                       && (VX_CFG_NUM_CORES == 1) && (VX_CFG_NUM_CLUSTERS == 1)
+                                       && (VX_CFG_NUM_CLUSTERS == 1) && (VX_CFG_NUM_CORES == VX_CFG_SOCKET_SIZE)
+                                       && (VX_CFG_NUM_DCACHES == 1)
                                        && !VX_CFG_EXT_TEX_ENABLED && !VX_CFG_EXT_RTU_ENABLED
                                        && !VX_CFG_EXT_RASTER_ENABLED && !VX_CFG_EXT_OM_ENABLED
                                        && !VX_CFG_EXT_DXA_ENABLED;

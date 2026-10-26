@@ -517,6 +517,26 @@ module VX_graphics import VX_gpu_pkg::*
     end
     wire omf_drained = ~(| om_busy_w) && ~(| om_ingress_pending) && ~(| steer_om_pending);
 
+`ifndef SYNTHESIS
+    // Each cluster flush round must find the latch written for it, strictly
+    // before the round takes the request.
+    wire cluster_flush_kind_wr = dcr_bus_if.req_valid && dcr_bus_if.req_data.rw
+                              && (dcr_bus_if.req_data.addr == `VX_DCR_BASE_CACHE_FLUSH);
+    wire omf_cluster_take = (omf_state_r == OMF_IDLE) && omf_cluster_req;
+    reg  cluster_flush_kind_new_r;
+    always @(posedge clk) begin
+        if (reset) begin
+            cluster_flush_kind_new_r <= 1'b0;
+        end else if (cluster_flush_kind_wr) begin
+            cluster_flush_kind_new_r <= 1'b1;
+        end else if (omf_cluster_take) begin
+            cluster_flush_kind_new_r <= 1'b0;
+        end
+    end
+    `RUNTIME_ASSERT (~omf_cluster_take || (cluster_flush_kind_new_r && ~cluster_flush_kind_wr),
+        ("%t: cluster flush taken before its kind was latched", $time))
+`endif
+
     always @(posedge clk) begin
         if (reset) begin
             omf_state_r        <= OMF_IDLE;

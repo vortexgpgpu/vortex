@@ -157,8 +157,8 @@ Device::~Device() {
     // Drain the kernel-args scratch pool.
     {
         std::lock_guard<std::mutex> g(args_pool_mu_);
-        for (uint64_t addr : args_pool_free_)
-            this->mem_free(addr);
+        for (const auto& slot : args_pool_free_)
+            this->mem_free(slot.addr);
         args_pool_free_.clear();
     }
     // Park the CP before releasing the buffers it masters into. Ordering is
@@ -182,10 +182,13 @@ Device::~Device() {
 // ============================================================================
 
 vx_result_t Device::args_slot_acquire(uint64_t size, uint64_t* out_addr,
-                                      bool* out_pooled) {
+                                      bool* out_pooled, bool* out_llc_clean) {
     if (!out_addr || !out_pooled) return VX_ERR_INVALID_VALUE;
+    bool llc_clean = false;
+    if (out_llc_clean) *out_llc_clean = false;
     if (size > ARGS_SLOT_SIZE) {
-        // Oversized args block — one-off allocation, not pooled.
+        // Oversized args block — one-off allocation, not pooled. The range may
+        // have been another buffer the cache still holds.
         *out_pooled = false;
         return this->mem_alloc(size, /*VX_MEM_READ*/ 0x1, out_addr);
     }
@@ -193,8 +196,18 @@ vx_result_t Device::args_slot_acquire(uint64_t size, uint64_t* out_addr,
     {
         std::lock_guard<std::mutex> g(args_pool_mu_);
         if (!args_pool_free_.empty()) {
-            *out_addr = args_pool_free_.back();
-            args_pool_free_.pop_back();
+            const uint64_t epoch = llc_epoch_.load();
+            size_t pick = args_pool_free_.size() - 1;
+            for (size_t i = 0; i < args_pool_free_.size(); ++i) {
+                if (args_pool_free_[i].clean_epoch <= epoch) {
+                    pick = i;
+                    break;
+                }
+            }
+            *out_addr = args_pool_free_[pick].addr;
+            llc_clean = (args_pool_free_[pick].clean_epoch <= epoch);
+            args_pool_free_.erase(args_pool_free_.begin() + pick);
+            if (out_llc_clean) *out_llc_clean = llc_clean;
             return VX_SUCCESS;
         }
     }
@@ -208,7 +221,7 @@ void Device::args_slot_release(uint64_t addr, bool pooled) {
         return;
     }
     std::lock_guard<std::mutex> g(args_pool_mu_);
-    args_pool_free_.push_back(addr);
+    args_pool_free_.push_back({addr, llc_epoch_.load() + 1});
 }
 
 vx_result_t Device::open(uint32_t index, Device** out) {
@@ -475,6 +488,17 @@ vx_result_t Device::cp_init() {
         }
     }
 
+    // No kernel has run yet, so the last-level cache holds none of these.
+    {
+        std::lock_guard<std::mutex> g(args_pool_mu_);
+        for (uint32_t i = 0; i < ARGS_POOL_CLEAN; ++i) {
+            uint64_t addr = 0;
+            auto r = this->mem_alloc(ARGS_SLOT_SIZE, /*VX_MEM_READ*/ 0x1, &addr);
+            if (r != VX_SUCCESS) return r;
+            args_pool_free_.push_back({addr, 0});
+        }
+    }
+
     return VX_SUCCESS;
 }
 
@@ -551,7 +575,7 @@ bool cp_dma_touches_device_mem(const uint8_t* cl) {
 }
 } // namespace
 
-vx_result_t Device::cp_ring_append_(const void* cl) {
+vx_result_t Device::cp_ring_append_(const void* cl, bool llc_clean) {
     // Caller holds cp_mu_. A kernel's results are flushed lazily, by the
     // next command that needs them: the next launch gets an L1-only flush
     // (the last-level cache is the point of coherence between kernels), and
@@ -560,7 +584,10 @@ vx_result_t Device::cp_ring_append_(const void* cl) {
     // it is a client of that cache. Appending the flush under the same lock
     // keeps any other command from slipping between.
     const uint8_t* b = static_cast<const uint8_t*>(cl);
-    const bool dma = cp_dma_touches_device_mem(b);
+    // A write into memory the last-level cache holds no line of has nothing
+    // to wait for: the cache cannot serve stale data from it or write a
+    // dirty line back over it.
+    const bool dma = cp_dma_touches_device_mem(b) && !(llc_clean && b[0] == CP_OPCODE_MEM_WRITE);
     const bool launch = (b[0] == CP_OPCODE_LAUNCH)
                      || (b[0] == CP_OPCODE_LAUNCH_QMD)
                      || (b[0] == CP_OPCODE_DRAW);
@@ -572,6 +599,9 @@ vx_result_t Device::cp_ring_append_(const void* cl) {
         if (r != VX_SUCCESS) return r;
         l1_dirty_ = false;
         llc_dirty_ = llc_dirty_ && !full;
+        if (full) {
+            ++llc_epoch_;
+        }
     }
     assert(!(dma && (l1_dirty_ || llc_dirty_)));
     auto r = cp_ring_write_(cl);
@@ -583,6 +613,9 @@ vx_result_t Device::cp_ring_append_(const void* cl) {
     } else if (b[0] == CP_OPCODE_CACHE_FLUSH) {
         l1_dirty_ = false;
         llc_dirty_ = llc_dirty_ && (b[1] & CP_FLUSH_FLAG_L1_ONLY);
+        if (!(b[1] & CP_FLUSH_FLAG_L1_ONLY)) {
+            ++llc_epoch_;
+        }
     }
     return VX_SUCCESS;
 }
@@ -655,14 +688,14 @@ vx_result_t Device::cp_batch_end() {
     return drain_cout();
 }
 
-vx_result_t Device::cp_submit_cl_(const void* cl) {
+vx_result_t Device::cp_submit_cl_(const void* cl, bool llc_clean) {
     auto* p = platform();
 
     // Batch mode: append only — cp_mu_ is already held for the batch, and
     // the single doorbell + poll happen in cp_batch_end. Only the thread that
     // owns the batch may take this path; anyone else must block on cp_mu_.
     if (tls_batch_owner == this) {
-        auto r = cp_ring_append_(cl);
+        auto r = cp_ring_append_(cl, llc_clean);
         if (r == VX_SUCCESS) cp_batch_target_ = cp_expected_seqnum_;
         return r;
     }
@@ -675,7 +708,7 @@ vx_result_t Device::cp_submit_cl_(const void* cl) {
         std::lock_guard<std::mutex> g(cp_mu_);
 
         // 1) Write the CL into the ring and reserve its seqnum.
-        auto r = cp_ring_append_(cl);
+        auto r = cp_ring_append_(cl, llc_clean);
         if (r != VX_SUCCESS) return r;
         target = cp_expected_seqnum_;
 
@@ -1009,7 +1042,7 @@ vx_result_t Device::cp_submit_dcr_read(uint32_t addr, uint32_t tag,
 
 vx_result_t Device::cp_submit_mem_(uint8_t opcode, uint64_t arg0,
                                    uint64_t arg1, uint64_t arg2,
-                                   bool physical) {
+                                   bool physical, bool llc_clean) {
     // CMD_MEM_* on-wire layout (cmd_size=28):
     //   bytes 0..3   header  { opcode, flags, reserved=0 }
     //   bytes 4..11  arg0    dst address
@@ -1021,7 +1054,7 @@ vx_result_t Device::cp_submit_mem_(uint8_t opcode, uint64_t arg0,
     std::memcpy(cl + 4,  &arg0, sizeof(arg0));
     std::memcpy(cl + 12, &arg1, sizeof(arg1));
     std::memcpy(cl + 20, &arg2, sizeof(arg2));
-    return cp_submit_cl_(cl);
+    return cp_submit_cl_(cl, llc_clean);
 }
 
 vx_result_t Device::cp_submit_mem_copy(uint64_t dst, uint64_t src,
@@ -1031,7 +1064,7 @@ vx_result_t Device::cp_submit_mem_copy(uint64_t dst, uint64_t src,
 }
 
 vx_result_t Device::cp_submit_mem_write(uint64_t dev_dst, const void* host_src,
-                                        uint64_t size, bool physical) {
+                                        uint64_t size, bool physical, bool llc_clean) {
     if (size == 0)  return VX_SUCCESS;
     if (!host_src)  return VX_ERR_INVALID_VALUE;
     // Stage through a bounded CP-visible host buffer, one chunk at a time:
@@ -1054,7 +1087,7 @@ vx_result_t Device::cp_submit_mem_write(uint64_t dev_dst, const void* host_src,
         r = platform()->host_mem_push(staging.cp_addr);
         if (r == VX_SUCCESS)
             r = cp_submit_mem_(CP_OPCODE_MEM_WRITE, dev_dst + off,
-                               staging.cp_addr, n, physical);
+                               staging.cp_addr, n, physical, llc_clean);
     }
     host_free(staging.cp_addr);
     return r;
@@ -1275,8 +1308,8 @@ vx_result_t Device::query_caps(uint32_t caps_id, uint64_t* out_value) {
 // ============================================================================
 
 vx_result_t Device::dev_write(uint64_t dev_addr, const void* src,
-                              uint64_t size) {
-    return cp_submit_mem_write(dev_addr, src, size);
+                              uint64_t size, bool llc_clean) {
+    return cp_submit_mem_write(dev_addr, src, size, /*physical=*/false, llc_clean);
 }
 
 vx_result_t Device::dev_read(void* dst, uint64_t dev_addr, uint64_t size) {

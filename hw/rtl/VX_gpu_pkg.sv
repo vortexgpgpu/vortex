@@ -1747,10 +1747,12 @@ package VX_gpu_pkg;
 
     // L1 dcache is the LLC iff neither L2 nor L3 is enabled.
     localparam DCACHE_IS_LLC        = !`VX_CFG_L2_ENABLED && !`VX_CFG_L3_ENABLED;
-    // It is the point of coherence between kernels only as the one dcache with
-    // no other memory client beside it (the texture, ray-tracing and DXA ports
-    // join below it, the raster and OM caches beside it).
-    localparam DCACHE_SHARED_LLC    = DCACHE_IS_LLC && (`VX_CFG_NUM_CORES == 1) && (`VX_CFG_NUM_CLUSTERS == 1)
+    // It is the point of coherence between kernels only as the one dcache,
+    // shared by every core of the one socket, with no other memory client
+    // beside it (the texture, ray-tracing and DXA ports join below it, the
+    // raster and OM caches beside it).
+    localparam DCACHE_SHARED_LLC    = DCACHE_IS_LLC && (`VX_CFG_NUM_CLUSTERS == 1)
+                                   && (`VX_CFG_NUM_CORES == `VX_CFG_SOCKET_SIZE) && (`VX_CFG_NUM_DCACHES == 1)
                                    && !`VX_CFG_EXT_TEX_ENABLED && !`VX_CFG_EXT_RTU_ENABLED
                                    && !`VX_CFG_EXT_RASTER_ENABLED && !`VX_CFG_EXT_OM_ENABLED
                                    && !`VX_CFG_EXT_DXA_ENABLED;

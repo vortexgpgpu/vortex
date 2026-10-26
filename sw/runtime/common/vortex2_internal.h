@@ -300,8 +300,11 @@ public:
     // cp_submit_mem_read posts CMD_MEM_READ (device->host) into a
     // VX_MEM_HOST buffer and copies it back to `host_dst`. Synchronous.
     vx_result_t cp_submit_mem_copy (uint64_t dst, uint64_t src, uint64_t size);
+    // `llc_clean`: the last-level cache holds no line of the destination, so
+    // the write needs no cache flush ahead of it.
     vx_result_t cp_submit_mem_write(uint64_t dev_dst, const void* host_src,
-                                    uint64_t size, bool physical = false);
+                                    uint64_t size, bool physical = false,
+                                    bool llc_clean = false);
     vx_result_t cp_submit_mem_read (void* host_dst, uint64_t dev_src,
                                     uint64_t size, bool physical = false);
 
@@ -312,7 +315,8 @@ public:
     // engine (CMD_MEM_*) — identically on every backend. The runtime never
     // touches device memory directly: it only appends commands to the host
     // ring and the CP executes them.
-    vx_result_t dev_write(uint64_t dev_addr, const void* src, uint64_t size);
+    vx_result_t dev_write(uint64_t dev_addr, const void* src, uint64_t size,
+                          bool llc_clean = false);
     vx_result_t dev_read (void* dst, uint64_t dev_addr, uint64_t size);
     vx_result_t dev_copy (uint64_t dst, uint64_t src, uint64_t size);
 
@@ -329,8 +333,11 @@ public:
     // args_slot_release frees correctly. Because vx_enqueue_launch holds
     // a slot only for the duration of one synchronous CP launch, the
     // free-list naturally settles at the count of concurrent launches.
+    // `*out_llc_clean` reports a slot no kernel has read since the last full
+    // cache flush: the last-level cache holds none of its lines, so staging
+    // into it needs no flush (see args_pool_free_).
     vx_result_t args_slot_acquire(uint64_t size, uint64_t* out_addr,
-                                  bool* out_pooled);
+                                  bool* out_pooled, bool* out_llc_clean = nullptr);
     void        args_slot_release(uint64_t addr, bool pooled);
 
     // ----- Device-memory allocation (common-core allocator) -----
@@ -366,7 +373,7 @@ private:
     // cp_submit_dcr_write / cp_submit_launch — they just build the CL.
     // While this thread has a batch open it appends only; the single
     // doorbell + poll are deferred to cp_batch_end.
-    vx_result_t cp_submit_cl_(const void* cl);
+    vx_result_t cp_submit_cl_(const void* cl, bool llc_clean = false);
 
     // Block until the CP has retired seqnum >= target.
     //
@@ -389,14 +396,15 @@ private:
     // model) under the same lock: L1-only ahead of a launch while
     // l1_dirty_, and ahead of a CMD_MEM_* touching device memory while
     // either flag is set -- full while llc_dirty_.
-    vx_result_t cp_ring_append_(const void* cl);
+    vx_result_t cp_ring_append_(const void* cl, bool llc_clean = false);
     vx_result_t cp_ring_write_(const void* cl);
 
     // Build + submit a CMD_MEM_* descriptor (opcode, dst, src, size).
     // `physical` sets the CMD_MEM header flag so the CP DMA skips VM
     // translation — used for page-table writes / the PT region.
     vx_result_t cp_submit_mem_(uint8_t opcode, uint64_t arg0, uint64_t arg1,
-                               uint64_t arg2, bool physical = false);
+                               uint64_t arg2, bool physical = false,
+                               bool llc_clean = false);
 
     // ----- CP-visible host memory (command ring + DMA staging) -----
     // host_alloc wraps platform()->host_mem_alloc and records the region
@@ -464,6 +472,8 @@ private:
     // may hold lines the CP DMA (when it reaches device memory beneath it)
     // would miss or later overwrite. Both flags are guarded by cp_mu_.
     bool                           llc_dirty_          = false;
+    // Full cache flushes appended to the ring so far.
+    std::atomic<uint64_t>          llc_epoch_{0};
     std::mutex                     cp_mu_;             // serialize ring writes
     // Seqnum the last command appended to the open batch will reach;
     // cp_batch_end polls for it once. Touched only by the batch owner, which
@@ -512,9 +522,20 @@ private:
 
     // Kernel-args scratch pool. Free-list of recycled fixed-size device slots;
     // ARGS_SLOT_SIZE covers typical kernel arg blocks. Drained in ~Device.
+    // Each free slot records the flush epoch from which the last-level cache
+    // holds none of its lines: a kernel that read the slot may have left them
+    // there until the next full flush. The pool starts with ARGS_POOL_CLEAN
+    // slots allocated at open, when no kernel has run, so a run of launches
+    // stages its arguments without flushing until it has used them all; the
+    // next transfer that needs a full flush makes them clean again.
     static constexpr uint64_t      ARGS_SLOT_SIZE = 4096;
+    static constexpr uint32_t      ARGS_POOL_CLEAN = 32;
+    struct ArgsSlot {
+        uint64_t addr;
+        uint64_t clean_epoch;
+    };
     std::mutex                     args_pool_mu_;
-    std::vector<uint64_t>          args_pool_free_;
+    std::vector<ArgsSlot>          args_pool_free_;
 };
 
 // ============================================================================
