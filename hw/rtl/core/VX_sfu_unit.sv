@@ -132,18 +132,6 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     );
 `endif
 
-`ifdef VX_CFG_EXT_MUFU_ENABLE
-    VX_mufu_unit #(
-        .INSTANCE_ID (`SFORMATF(("%s-mufu", INSTANCE_ID))),
-        .NUM_LANES   (NUM_LANES)
-    ) mufu_unit (
-        .clk        (clk),
-        .reset      (reset),
-        .execute_if (pe_execute_if[PE_IDX_MUFU]),
-        .result_if  (pe_result_if[PE_IDX_MUFU])
-    );
-`endif
-
     VX_lane_gather #(
         .BLOCK_SIZE (BLOCK_SIZE),
         .NUM_LANES  (NUM_LANES),
