@@ -91,6 +91,11 @@ private:
   bool awaiting_busy_;
   uint64_t idle_cycles_;
 
+  // Fabric (host) cycles and target cycles stepped since the launch started.
+  uint64_t launch_hcycles_ = 0;
+  uint64_t launch_tcycles_ = 0;
+  uint64_t launch_steps_ = 0;
+
   // Set when the launch watchdog (VORTEX_FIRESIM_TIMEOUT_S) or a stop signal
   // gives up on a launch. The launch is then completed -- busy once, then idle
   // -- so the application finishes through its own teardown rather than being
