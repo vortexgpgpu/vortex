@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 170" role="img" aria-label="Flush cycles per launch, drawn to scale: a full flush walks the L2; an L1-only flush skips it.">
+  <title>Flush cycles per launch, drawn to scale: a full flush walks the L2; an L1-only flush skips it.</title>
+  <defs><marker id="launch_a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1b2733"/></marker><marker id="launch_g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1f7a4d"/></marker><marker id="launch_b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#b3261e"/></marker></defs>
+  <style>
+    text { font-family: Helvetica, Arial, sans-serif; fill: #1b2733; font-size: 11.5px; }
+    .dh { font-size: 13px; font-weight: bold; }
+    .dm { fill: #5a6772; font-size: 11px; }
+    .ds { font-size: 10.5px; }
+    .db { fill: #fbfcfd; stroke: #5a7184; stroke-width: 1.2; }
+    .dbad { fill: #fbe5e3; stroke: #b3261e; stroke-width: 1.2; }
+    .dgood { fill: #e3f3ea; stroke: #1f7a4d; stroke-width: 1.2; }
+    .didle { fill: #f3f5f8; stroke: #c9d1d9; stroke-width: 1.2; }
+    .dwait { fill: #fbe5e3; stroke: #b3261e; stroke-width: 1.2; stroke-dasharray: 4 3; }
+    .ln { stroke: #1b2733; stroke-width: 1.3; fill: none; }
+    .lb { stroke: #b3261e; stroke-width: 1.5; fill: none; }
+    .lg { stroke: #1f7a4d; stroke-width: 1.5; }
+    .dash { stroke-dasharray: 4 3; }
+    .sep { stroke: #c9d1d9; stroke-width: 1; stroke-dasharray: 2 4; }
+    text.db-t { fill: #b3261e; } text.g-t { fill: #1f7a4d; }
+  </style>
+  <rect width="640" height="170" fill="#ffffff"/>
+<g class="dl">
+<text x="20" y="34" class="dm">1 core, full flush</text><rect x="180" y="22" width="64" height="16" class="dbad"/><text x="250" y="34" class="dm">422</text>
+<text x="20" y="58" class="dm">1 core, L1-only</text><rect x="180" y="46" width="23" height="16" class="dgood"/><text x="209" y="58" class="dm">152</text>
+<text x="20" y="98" class="dm">4 cores + L2, full flush</text><rect x="180" y="86" width="420" height="16" class="dbad"/><text x="596" y="98" class="dm" text-anchor="end">2,750</text>
+<text x="20" y="122" class="dm">4 cores + L2, L1-only</text><rect x="180" y="110" width="28" height="16" class="dgood"/><text x="214" y="122" class="dm">180</text>
+<line x1="180" y1="146" x2="600" y2="146" class="ln"/>
+<text x="180" y="162" class="dm">0</text><text x="600" y="162" class="dm" text-anchor="end">2,750 cycles per launch</text>
+</g>
+</svg>
