@@ -668,6 +668,30 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0]                    mem_req_xbar_valid;
     wire [NUM_BANKS-1:0][MEM_REQ_DATAW-1:0] mem_req_xbar_pdata;
     wire [NUM_BANKS-1:0]                    mem_req_xbar_ready;
+
+    // Debug: a write-through cache holds each write of bank 0 for a fixed
+    // delay before it leaves, so requests through the other banks overtake it
+    // unless something orders them.
+    wire [NUM_BANKS-1:0] dbg_mem_req_hold;
+`ifdef DBG_MEM_BANK0_WDELAY
+    if (WRITEBACK == 0) begin : g_dbg_wdelay
+        localparam DBG_WDELAY = 2048;
+        reg [`CLOG2(DBG_WDELAY+1)-1:0] dbg_wdelay_cnt;
+        wire dbg_wait = per_bank_mem_req_valid[0] && per_bank_mem_req_rw[0];
+        always @(posedge clk) begin
+            if (reset || ~dbg_wait || (mem_req_xbar_valid[0] && mem_req_xbar_ready[0])) begin
+                dbg_wdelay_cnt <= '0;
+            end else if (dbg_wdelay_cnt != DBG_WDELAY) begin
+                dbg_wdelay_cnt <= dbg_wdelay_cnt + 1;
+            end
+        end
+        assign dbg_mem_req_hold = NUM_BANKS'(dbg_wait && (dbg_wdelay_cnt != DBG_WDELAY));
+    end else begin : g_no_dbg_wdelay
+        assign dbg_mem_req_hold = '0;
+    end
+`else
+    assign dbg_mem_req_hold = '0;
+`endif
     for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_mem_req_xbar_in
         if (i < MEM_PORTS) begin : g_flush_req
             // line 0 hashes to 0, so the raw bank bits are the lane's bank id
@@ -681,15 +705,15 @@ module VX_cache import VX_gpu_pkg::*; #(
                 (`UP(MEM_ATTR_WIDTH)'(1) << MEM_ATTR_FLUSH_OFFS) | (`UP(MEM_ATTR_WIDTH)'(mem_flush_io) << MEM_ATTR_IO_OFFS)
                 | (`UP(MEM_ATTR_WIDTH)'(mem_flush_noalloc) << MEM_ATTR_NOALLOC_OFFS)
             };
-            assign mem_req_xbar_valid[i] = per_bank_mem_req_valid[i] || mem_flush_valid[i];
+            assign mem_req_xbar_valid[i] = (per_bank_mem_req_valid[i] && ~dbg_mem_req_hold[i]) || mem_flush_valid[i];
             assign mem_req_xbar_pdata[i] = per_bank_mem_req_valid[i] ? per_bank_mem_req_pdata[i] : mem_flush_pdata;
             assign mem_flush_ready[i]    = mem_req_xbar_ready[i] && ~per_bank_mem_req_valid[i];
             `RUNTIME_ASSERT (~(mem_flush_valid[i] && per_bank_mem_req_valid[i]), ("%t: %s flush token collides with a bank %0d request", $time, INSTANCE_ID, i))
         end else begin : g_bank_req
-            assign mem_req_xbar_valid[i] = per_bank_mem_req_valid[i];
+            assign mem_req_xbar_valid[i] = per_bank_mem_req_valid[i] && ~dbg_mem_req_hold[i];
             assign mem_req_xbar_pdata[i] = per_bank_mem_req_pdata[i];
         end
-        assign per_bank_mem_req_ready[i] = mem_req_xbar_ready[i];
+        assign per_bank_mem_req_ready[i] = mem_req_xbar_ready[i] && ~dbg_mem_req_hold[i];
     end
     // Write-backs from different banks are not ordered with each other inside
     // the crossbar, so the tokens wait until it has drained.

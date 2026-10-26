@@ -416,7 +416,8 @@ struct bank_req_t {
     Replay = 2,
     Core = 3,
     AmoProbe = 4, // non-LLC AMO passthrough: probe-and-invalidate then forward
-    Park = 5      // chain head parked on a partial sector: issues its refetch
+    Park = 5,     // chain head parked on a partial sector: issues its refetch
+    AmoWb = 6     // an LLC atomic's result written back through the pipe
   };
 
   uint64_t addr;
@@ -872,6 +873,7 @@ public:
     token_flushing_ = true;
     token_flush_skip_ = skip;
     token_flush_idx_ = 0;
+    token_flush_settle_ = 0;
     flush_sector_idx_ = 0;
     this->tick_wake();
   }
@@ -892,6 +894,9 @@ protected:
     pending_fill_reqs_ = 0;
     rand_ctr_ = 0;
     adm_seq_ctr_ = 0;
+  #ifdef DBG_MEM_BANK0_WDELAY
+    dbg_mem_req_free_ = 0;
+  #endif
     if (!keep_lines_) {
       for (auto &set : sets_) {
         set.reset();
@@ -912,6 +917,9 @@ protected:
     chain_sector_  = 0;
     refetch_hold_  = false;
     refetch_hold_retry_ = false;
+    amo_busy_ = false;
+    amo_wb_pending_ = false;
+    amo_wb_tick_ = 0;
     flushing_ = false;
     flush_set_idx_ = 0;
     flush_way_idx_ = 0;
@@ -970,7 +978,8 @@ protected:
     // any packet reserved toward core_req_in/mem_rsp_in re-arms on arrival.
     if (this->core_req_in.size() == 0 && this->mem_rsp_in.size() == 0
      && pipe_req_->size() == 0 && lazy_q_->size() == 0 && !mshr_.has_ready_reqs()
-     && !fwd_active_ && !flushing_ && !token_flushing_ && pending_fill_reqs_ == 0) {
+     && !fwd_active_ && !flushing_ && !token_flushing_ && pending_fill_reqs_ == 0
+     && !amo_wb_pending_) {
       this->tick_sleep();
     }
   }
@@ -1148,8 +1157,29 @@ private:
       }
     }
 
+#if VX_CFG_EXT_A_ENABLED
+    // An LLC atomic's result goes back into the line as a synthetic write
+    // through the core-request slot, one compute cycle after its commit.
+    if (amo_wb_pending_ && SimPlatform::instance().cycles() >= amo_wb_tick_) {
+      bank_req_t wb_req;
+      wb_req.reset();
+      wb_req.type = bank_req_t::AmoWb;
+      pipe_req_->push(wb_req);
+      amo_wb_pending_ = false;
+      amo_busy_ = false;
+      return;
+    }
+#endif
+
     // 3) core request
     if (!this->core_req_in.empty()) {
+#if VX_CFG_EXT_A_ENABLED
+      // A store-bearing atomic holds new core requests off from its lookup
+      // until its result is written back.
+      if (amo_busy_) {
+        return;
+      }
+#endif
       auto &core_req = this->core_req_in.peek();
       if (fill_held
        && params_.addr_set_id(core_req.addr) == held_set_id
@@ -1322,6 +1352,9 @@ private:
       }
 #if VX_CFG_EXT_A_ENABLED
       if (is_amo_passthru) ++pending_amo_probes_;
+      if (is_amo && config_.is_llc && core_req.op != MemOp::AMO_LR) {
+        amo_busy_ = true;
+      }
 #endif
       if (core_req.is_write()) ++perf_stats_.writes;
       else                ++perf_stats_.reads;
@@ -1414,7 +1447,7 @@ private:
         wb.uuid   = bank_req.uuid;
         wb.data   = sec.data;
         wb.byteen = sec.dirty_mask;
-        this->mem_req_out.send(wb, MEM_REQ_DELAY);
+        this->send_mem_req(wb);
         DT(3, this->name() << " writeback: " << wb);
         ++perf_stats_.evictions;
       }
@@ -1586,11 +1619,20 @@ private:
         w.uuid   = bank_req.uuid;
         w.data   = store_block;
         w.byteen = byteen;
-        this->mem_req_out.send(w, MEM_REQ_DELAY);
+        this->send_mem_req(w);
         DT(3, this->name() << " amo-writethrough: " << w);
       }
       // Break other harts' reservations on this line.
       amo_unit_.invalidate(line_addr, /*except=*/hid);
+    }
+
+    // A stored result is written back into the line through the pipe; without
+    // a store the commit frees the bank at once.
+    if (do_store) {
+      amo_wb_pending_ = true;
+      amo_wb_tick_ = SimPlatform::instance().cycles() + 2;
+    } else {
+      amo_busy_ = false;
     }
 
     // Send AMO response.
@@ -1604,6 +1646,25 @@ private:
 #endif
 
   // Pipeline tail: process the head of pipe_req_ — at most one bank_req_t per tick.
+
+  // Send a request down the bank's in-order memory queue.
+  // Debug: a write-through cache holds each write at the head of bank 0's
+  // queue for a fixed delay, the requests behind it included, so requests
+  // through the other banks overtake it unless something orders them.
+  void send_mem_req(const MemReq& req) {
+  #ifdef DBG_MEM_BANK0_WDELAY
+    if (bank_id_ == 0 && !config_.write_back) {
+      constexpr uint64_t DBG_WDELAY = 2048;
+      uint64_t now  = SimPlatform::instance().cycles();
+      uint64_t head = std::max(now, dbg_mem_req_free_);
+      uint64_t leave = head + (req.is_write() ? DBG_WDELAY : 0);
+      dbg_mem_req_free_ = leave + 1;
+      this->mem_req_out.send(req, MEM_REQ_DELAY + (leave - now));
+      return;
+    }
+  #endif
+    this->mem_req_out.send(req, MEM_REQ_DELAY);
+  }
 
   // Emit a write-through store downstream, with the optional core response.
   // All backpressure is checked before any send, so a false return stalls
@@ -1626,7 +1687,7 @@ private:
     w.uuid    = uuid;
     w.data    = data;
     w.byteen  = byteen;
-    this->mem_req_out.send(w, MEM_REQ_DELAY);
+    this->send_mem_req(w);
     DT(3, this->name() << " writethrough: " << w);
 #if VX_CFG_EXT_A_ENABLED
     // Committed write: break other harts' reservations.
@@ -1656,6 +1717,7 @@ private:
 
     switch (bank_req.type) {
     case bank_req_t::None:
+    case bank_req_t::AmoWb:
       pipe_req_->pop();
       return;
 
@@ -1705,7 +1767,7 @@ private:
         wb.uuid   = bank_req.uuid;
         wb.data   = sec.data;
         wb.byteen = sec.dirty_mask;
-        this->mem_req_out.send(wb, MEM_REQ_DELAY);
+        this->send_mem_req(wb);
         DT(3, this->name() << " amo-probe-wb: " << wb);
         ++perf_stats_.evictions;
       }
@@ -1731,7 +1793,7 @@ private:
       amo_fwd.amo_cmp = bank_req.amo_cmp;
       amo_fwd.data    = bank_req.data;    // carries rhs (extracted at LLC)
       amo_fwd.flags   = bank_req.flags;   // carry amo_unsigned (signed vs unsigned MIN/MAX)
-      this->mem_req_out.send(amo_fwd, MEM_REQ_DELAY);
+      this->send_mem_req(amo_fwd);
       DT(3, this->name() << " amo-probe-fwd: " << amo_fwd);
       ++pending_fill_reqs_; // counts as an outstanding mem-roundtrip for perf
       --pending_amo_probes_; // reservation transferred to the table entry
@@ -1771,7 +1833,7 @@ private:
       fill.tag     = bank_req.mshr_id;
       fill.hart_id = bank_req.hart_id;
       fill.uuid    = bank_req.uuid;
-      this->mem_req_out.send(fill, MEM_REQ_DELAY);
+      this->send_mem_req(fill);
       DT(3, this->name() << " refetch-req: " << fill);
       ++pending_fill_reqs_;
       pipe_req_->pop();
@@ -1823,7 +1885,7 @@ private:
           fill.tag     = mshr_id;
           fill.hart_id = bank_req.hart_id;
           fill.uuid    = bank_req.uuid;
-          this->mem_req_out.send(fill, MEM_REQ_DELAY);
+          this->send_mem_req(fill);
           ++pending_fill_reqs_;
         }
         pipe_req_->pop();
@@ -1976,7 +2038,7 @@ private:
             w.uuid   = bank_req.uuid;
             w.data   = bank_req.data;
             w.byteen = bank_req.byteen;
-            this->mem_req_out.send(w, MEM_REQ_DELAY);
+            this->send_mem_req(w);
             DT(3, this->name() << " writethrough: " << w);
 #if VX_CFG_EXT_A_ENABLED
             // Writethrough commit: break other harts' reservations.
@@ -2073,7 +2135,7 @@ private:
             fill.tag   = mshr_id; // routes the fill response back here
             fill.hart_id   = bank_req.hart_id;
             fill.uuid  = bank_req.uuid;
-            this->mem_req_out.send(fill, MEM_REQ_DELAY);
+            this->send_mem_req(fill);
             DT(3, this->name() << " fill-req: " << fill);
             ++pending_fill_reqs_;
           }
@@ -2121,7 +2183,7 @@ private:
             mem_req.op   = MemOp::ST;
             mem_req.data = sec.data;
             mem_req.byteen = sec.dirty_mask;
-            this->mem_req_out.send(mem_req, MEM_REQ_DELAY);
+            this->send_mem_req(mem_req);
             DT(3, this->name() << " flush-wb: " << mem_req);
             ++perf_stats_.evictions;
             sec.dirty = false;
@@ -2140,14 +2202,21 @@ private:
   }
 
   void processTokenFlush() {
+    // the bank leaves its write-backs, then signals the end, a cycle each
+    if (token_flush_settle_ != 0) {
+      if (--token_flush_settle_ == 0) {
+        token_flushing_ = false;
+        DT(3, this->name() << (token_flush_skip_ ? " token-quiesce-done" : " token-flush-done"));
+      }
+      return;
+    }
     if (pending_fill_reqs_ != 0
      || pipe_req_->size() != 0
      || !mshr_.empty()) {
       return;
     }
     if (token_flush_skip_) {
-      token_flushing_ = false;
-      DT(3, this->name() << " token-quiesce-done");
+      token_flush_settle_ = TOKEN_FLUSH_SETTLE;
       return;
     }
     uint32_t ways = config_.write_back ? params_.lines_per_set : 1;
@@ -2167,7 +2236,7 @@ private:
           mem_req.op   = MemOp::ST;
           mem_req.data = sec.data;
           mem_req.byteen = sec.dirty_mask;
-          this->mem_req_out.send(mem_req, MEM_REQ_DELAY);
+          this->send_mem_req(mem_req);
           DT(3, this->name() << " flush-wb: " << mem_req);
           ++perf_stats_.evictions;
         }
@@ -2181,8 +2250,7 @@ private:
       }
     }
     if (++token_flush_idx_ == params_.sets_per_bank * ways) {
-      token_flushing_ = false;
-      DT(3, this->name() << " token-flush-done");
+      token_flush_settle_ = TOKEN_FLUSH_SETTLE;
     }
   }
 
@@ -2272,6 +2340,12 @@ private:
   uint32_t chain_sector_;
   bool     refetch_hold_; // a refetch fill is at its tag lookup: its chain waits
   bool     refetch_hold_retry_;
+  bool     amo_busy_;       // a store-bearing LLC atomic holds core requests off
+  bool     amo_wb_pending_; // its result still has to be written back
+  uint64_t amo_wb_tick_;    // ... from this cycle on
+#ifdef DBG_MEM_BANK0_WDELAY
+  uint64_t dbg_mem_req_free_ = 0; // the memory queue's next free departure cycle
+#endif
 
   // Flush walk state.
   bool     flushing_;
@@ -2281,6 +2355,8 @@ private:
   uint32_t flush_sector_idx_;
   bool     token_flushing_;
   bool     token_flush_skip_ = false;
+  static constexpr uint32_t TOKEN_FLUSH_SETTLE = 2;
+  uint32_t token_flush_settle_ = 0;
   uint32_t token_flush_idx_;
 
 #if VX_CFG_EXT_A_ENABLED

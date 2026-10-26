@@ -21,6 +21,7 @@
 #include <unordered_map>
 #include <util.h>
 #include "debug.h"
+#include "constants.h"
 #include "types.h"
 #include "decode.h"
 #include "decompressor.h"
@@ -671,8 +672,9 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       std::abort();
     }
     instr->set_args(IntrAmoArgs{funct3, aq, rl});
-    // .aq/.rl order the atomic with fences around it (LsuUopGen)
-    if (aq || rl) {
+    // .aq/.rl order the atomic with fences around it (LsuUopGen), unless the
+    // dcache is itself the point of coherence
+    if ((aq || rl) && !DCACHE_SHARED_LLC) {
       instr->set_macro_op();
     }
     instr->set_dest_reg(rd, RegType::Integer);

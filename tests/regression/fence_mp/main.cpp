@@ -79,18 +79,20 @@ int main(int argc, char *argv[]) {
   kernel_arg.spin_limit = spin_limit;
   kernel_arg.mode       = mode;
 
-  std::vector<uint32_t> zeros(count, 0);
+  std::vector<uint32_t> zeros(mp_data_words(count), 0);
   std::vector<uint32_t> out(4, 0);
-  uint32_t data_size = count * sizeof(uint32_t);
+  uint32_t data_size = mp_data_words(count) * sizeof(uint32_t);
   uint32_t out_size  = out.size() * sizeof(uint32_t);
   RT_CHECK(vx_buffer_create(device, data_size, VX_MEM_READ_WRITE, &data_buffer));
   RT_CHECK(vx_buffer_address(data_buffer, &kernel_arg.data_addr));
-  RT_CHECK(vx_buffer_create(device, sizeof(uint32_t), VX_MEM_READ_WRITE, &flag_buffer));
+  // the flag sits in the buffer's second (odd) line
+  RT_CHECK(vx_buffer_create(device, 2 * MP_LINE_WORDS * sizeof(uint32_t), VX_MEM_READ_WRITE, &flag_buffer));
   RT_CHECK(vx_buffer_address(flag_buffer, &kernel_arg.flag_addr));
+  kernel_arg.flag_addr += MP_LINE_WORDS * sizeof(uint32_t);
   RT_CHECK(vx_buffer_create(device, out_size, VX_MEM_READ_WRITE, &out_buffer));
   RT_CHECK(vx_buffer_address(out_buffer, &kernel_arg.out_addr));
   RT_CHECK(vx_enqueue_write(queue, data_buffer, 0, zeros.data(), data_size, 0, nullptr, nullptr));
-  RT_CHECK(vx_enqueue_write(queue, flag_buffer, 0, zeros.data(), sizeof(uint32_t), 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_write(queue, flag_buffer, MP_LINE_WORDS * sizeof(uint32_t), zeros.data(), sizeof(uint32_t), 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_write(queue, out_buffer, 0, out.data(), out_size, 0, nullptr, nullptr));
 
   RT_CHECK(vx_module_load_file(device, kernel_file, &module_));

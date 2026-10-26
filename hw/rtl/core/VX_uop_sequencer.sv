@@ -197,7 +197,10 @@ module VX_uop_sequencer import
     // ------------------------------------------------------------------
     // Atomic ordering uop expander: fences around an AMO/LR/SC with .aq/.rl
     // ------------------------------------------------------------------
-    assign uop_in_valid[UOP_AMO] = (uop_in_data.ex_type == EX_LSU)
+    // A dcache that is itself the point of coherence orders the atomic with
+    // the hart's other accesses already: no fence is owed.
+    assign uop_in_valid[UOP_AMO] = !DCACHE_SHARED_LLC
+                                && (uop_in_data.ex_type == EX_LSU)
                                 && uop_in_data.op_args.lsu.amo_valid
                                 && (uop_in_data.op_args.lsu.amo_aq || uop_in_data.op_args.lsu.amo_rl);
     VX_uop_amo uop_amo (

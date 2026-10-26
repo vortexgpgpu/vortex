@@ -48,13 +48,13 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   auto out  = reinterpret_cast<volatile uint32_t*>(arg->out_addr);
   if (gid == 0) {
     for (uint32_t k = 0; k < arg->count; ++k) {
-      data[k] = FENCE_MP_MAGIC + k;
+      data[mp_data_index(k)] = FENCE_MP_MAGIC + k;
     }
     publish(flag, arg->mode);
   } else if (gid == arg->num_tasks - 1) {
     uint32_t sum = 0;
     for (uint32_t k = 0; k < arg->count; ++k) {
-      sum += data[k];
+      sum += data[mp_data_index(k)];
     }
     out[2] = sum;
     uint32_t timeout = 1;
@@ -67,9 +67,10 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     if (arg->mode == MP_FENCE) {
       vx_fence();
     }
+    // newest first: the words written last are the ones still in flight
     uint32_t errors = 0;
-    for (uint32_t k = 0; k < arg->count; ++k) {
-      errors += (data[k] != FENCE_MP_MAGIC + k);
+    for (uint32_t k = arg->count; k-- > 0;) {
+      errors += (data[mp_data_index(k)] != FENCE_MP_MAGIC + k);
     }
     out[0] = errors;
     out[1] = timeout;
