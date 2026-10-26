@@ -288,8 +288,20 @@ module foldsim_mem_bank #(
     reg [ROW_W-1:0]  rb_row [BQ], wb_row [BQ];
     reg [BQW-1:0]    rb_head, rb_tail, wb_head, wb_tail;
     reg [BQW:0]      rb_count, wb_count;
+    // The clock each entry entered its buffer at, and the entries the
+    // reservations' clock has reached.
+    reg [15:0]       rb_stamp [BQ], wb_stamp [BQ];
+    reg [BQW:0]      rb_vis, wb_vis;
 
-    reg [15:0]       d;              // the DRAM clock, modulo
+    // Two engines share the channel. The clock engine runs each target
+    // cycle's DRAM clocks with it: requests enter the buffers, writes are
+    // acknowledged and reads depart. The reservations' engine follows it,
+    // clock by clock, placing the buffers' heads; it may lag the clock engine
+    // by less than tCL + tBL, which no departure can tell from no lag. A
+    // request enters its buffer without waiting for the reservations only
+    // when room is certain.
+    reg [15:0]       d;              // the reservations' DRAM clock, modulo
+    reg [15:0]       da;             // the clock engine's
     reg [31:0]       credit;
     reg [15:0]       ingress_ready;
     reg [7:0]        rq_cnt, wq_cnt; // reserved bursts whose column has not issued
@@ -335,6 +347,9 @@ module foldsim_mem_bank #(
     reg [2:0]        op_pg;
 
     wire [WW-1:0]    end_word = WW'(base >> 6);
+    wire [15:0]      ea      = da + 16'd1;
+    wire [HLOG2-1:0] base_a  = HLOG2'(ea);
+    wire [WW-1:0]    end_word_a = WW'(base_a >> 6);
     reg              bm_clear;
     reg  [WW-1:0]    bm_clear_word;
     // A target reset (or the port leaving the bank model) clears the
@@ -372,7 +387,7 @@ module foldsim_mem_bank #(
         .we(wr_en[B_KW]), .wr_inst(1'b0), .wr_word(wr_word[B_KW]), .wr_mask(wr_mask[B_KW]));
     foldsim_mem_bmap #(.INST(1), .WORDS(WORDS), .NREAD(1)) m_depv (
         .clk, .reset, .clear_all(bm_clear_all), .clear(bm_clear), .clear_word(bm_clear_word),
-        .rd_inst(1'b0), .rd_word(end_word), .rd_data(rd_depv),
+        .rd_inst(1'b0), .rd_word(end_word_a), .rd_data(rd_depv),
         .we(wr_en[B_DEPV]), .wr_inst(1'b0), .wr_word(wr_word[B_DEPV]), .wr_mask(wr_mask[B_DEPV]));
     foldsim_mem_bmap #(.INST(2), .WORDS(WORDS), .NREAD(1)) m_frp (
         .clk, .reset, .clear_all(bm_clear_all), .clear(bm_clear), .clear_word(bm_clear_word),
@@ -403,14 +418,19 @@ module foldsim_mem_bank #(
     reg [SW-1:0]     dep_slot [H];
 
     // ---- The engine ----
-    localparam S_IDLE = 4'd0, S_PUSH = 4'd1, S_TICK = 4'd2, S_MODE = 4'd3, S_BANK = 4'd4,
+    localparam S_IDLE = 4'd0, S_TICK = 4'd2, S_MODE = 4'd3, S_BANK = 4'd4,
                S_BANK2 = 4'd5, S_SETUP = 4'd6, S_SETUP2 = 4'd7, S_SRCH = 4'd8, S_CHECK = 4'd9,
-               S_CHECK2 = 4'd10, S_COMMIT = 4'd11, S_END = 4'd12, S_WALK = 4'd13,
+               S_CHECK2 = 4'd10, S_COMMIT = 4'd11, S_END = 4'd12,
                S_RBANK = 4'd14, S_RBANK2 = 4'd15;
     localparam K_PRE = 3'd0, K_ACT = 3'd1, K_C0 = 3'd2, K_C1 = 3'd3, K_REF = 3'd4;
     reg [3:0]        state;
+    localparam A_IDLE = 3'd0, A_PUSH = 3'd1, A_TICK = 3'd2, A_END = 3'd3, A_WALK = 3'd4;
+    reg [2:0]        a_state;
 
-    assign done = (state == S_IDLE);
+    // A cycle finishes once the clock engine is done with it; the
+    // reservations may still follow, except into a target reset, which drops
+    // everything.
+    assign done = (a_state == A_IDLE) & (~treset | ((state == S_IDLE) & (d == da)));
 
     // The operation: the request being reserved, and its commands, as clocks
     // relative to e.
@@ -486,16 +506,24 @@ module foldsim_mem_bank #(
     wire               ih_w    = iq_w[iq_head];
     wire [8:0]         wb_after = 9'(wq_cnt) + 9'(NB) * (9'(wb_count) + 9'd1);
     wire [8:0]         rb_after = 9'(rq_cnt) + 9'(NB) * (9'(rb_count) + 9'd1);
-    wire               ih_time = ($signed(d - ingress_ready) >= 0);
+    // Bursts reserved and not yet issued count columns only up to the
+    // reservations' clock: past it, room is an upper bound, exact once they
+    // have caught up (a reservation leaves a buffer's bursts unchanged).
+    wire               ih_time = ($signed(da - ingress_ready) >= 0);
     wire               ih_room = ih_w ? (wb_after <= 9'(cfg_wq)) : (rb_after <= 9'(cfg_rq));
+    wire               caught  = (d == da);
     wire               move    = (iq_count != 0) & ih_time & ih_room;
-    // The buffers' bursts, and the mode they put the channel in.
-    wire [8:0]         wn = 9'(wq_cnt) + 9'(NB) * 9'(wb_count);
-    wire [8:0]         rn = 9'(rq_cnt) + 9'(NB) * 9'(rb_count);
+    wire               a_wait_room = (iq_count != 0) & ih_time & ~ih_room & ~caught;
+    // No departure is placed within tCL + tBL of its reservation.
+    wire               a_wait_lag  = ($signed(da - d) > k_dep - 16'sd1);
+    // The buffers' bursts as the reservations' clock sees them, and the mode
+    // they put the channel in.
+    wire [8:0]         wn = 9'(wq_cnt) + 9'(NB) * 9'(wb_vis);
+    wire [8:0]         rn = 9'(rq_cnt) + 9'(NB) * 9'(rb_vis);
     wire               to_write = ~wmode & ((wn >= 9'(cfg_wr_high)) | (rn == 0));
     wire               to_read  = wmode & (wn < 9'(cfg_wr_low)) & (rn != 0);
     wire               wmode_n  = to_write | (wmode & ~to_read);
-    wire               sel_any  = wmode_n ? (wb_count != 0) : (rb_count != 0);
+    wire               sel_any  = wmode_n ? (wb_vis != 0) : (rb_vis != 0);
     wire               ref_now  = cfg_refresh[0] & (cfg_refi != 16'd0) & ($signed(e - ref_due) >= 0);
 
     // The bank table's port: a reservation's bank, or the scrub's.
@@ -522,10 +550,9 @@ module foldsim_mem_bank #(
 
     // The end of DRAM clock d: clock d+1's departing read and the columns it
     // issues leave the controller; then the next clock.
+    // The reservations' clock d ends: the columns of clock d+1 leave the
+    // controller.
     task automatic end_clock();
-        rfp_valid <= ed_depv;
-        rfp_slot  <= ed_slot;
-        rfp_cyc   <= 24'(tcyc1 + 32'(cfg_latency));
         rq_cnt <= rq_cnt - (ed_kr ? 8'd1 : 8'd0);
         wq_cnt <= wq_cnt - (ed_kw ? 8'd1 : 8'd0);
         // The ring's word ends with this clock: it is all past.
@@ -537,14 +564,30 @@ module foldsim_mem_bank #(
         if ($signed(batch_last - e) < 0)    batch_last    <= e;
         if ($signed(batch_floor - e) < 0)   batch_floor   <= e;
         if ($signed(read_floor - e) < 0)    read_floor    <= e;
-        if ($signed(ingress_ready - e) < 0) ingress_ready <= e;
         if ($signed(ab_prer - e) < 0)       ab_prer       <= e;
         if ($signed(ab_actrc - e) < 0)      ab_actrc      <= e;
         if ($signed(ab_floor - e) < 0)      ab_floor      <= e;
         d <= d + 16'd1;
     endtask
 
-    always @(posedge clk) begin
+    // The clock engine's clock da ends: clock da+1's departing read leaves
+    // the controller.
+    task automatic end_clock_a();
+        rfp_valid <= ed_depv;
+        rfp_slot  <= ed_slot;
+        rfp_cyc   <= 24'(tcyc1 + 32'(cfg_latency));
+        if ($signed(ingress_ready - ea) < 0) ingress_ready <= ea;
+        da <= da + 16'd1;
+    endtask
+
+    always @(posedge clk) begin : engines
+        // A buffer may gain an entry from the clock engine and lose one to a
+        // reservation in the same host cycle.
+        reg rb_add, rb_sub, wb_add, wb_sub;
+        rb_add = 1'b0;
+        rb_sub = 1'b0;
+        wb_add = 1'b0;
+        wb_sub = 1'b0;
         bm_clear     <= 1'b0;
         bm_clear_all <= 1'b0;
         cm_start     <= 1'b0;
@@ -564,8 +607,9 @@ module foldsim_mem_bank #(
 
         // The engine runs while the target evaluates its cycle; the cycle
         // finishes only once the engine is idle.
-        case (state)
-        S_PUSH: begin
+        // ---- The clock engine ----
+        case (a_state)
+        A_PUSH: begin
             // A cycle's write reaches the channel before its read.
             if (st_w_valid) begin
                 iq_w[iq_tail]    <= 1'b1;
@@ -583,53 +627,89 @@ module foldsim_mem_bank #(
                     iq_count         <= iq_count + 1'b1;
                     st_r_valid       <= 1'b0;
                 end
-                state <= S_TICK;
+                a_state <= A_TICK;
             end
         end
-        S_TICK: begin
+        A_TICK: begin
             if (credit >= 32'(k_twoclk)) begin
-                // One DRAM clock d: the ingress head enters its buffer if it
-                // may.
-                credit <= credit - 32'(k_twoclk);
-                if (move) begin
-                    iq_head  <= iq_head + 1'b1;
-                    iq_count <= iq_count - 1'b1;
-                    ingress_ready <= d + 16'(NB);
-                    if (ih_w) begin
-                        wb_tag[wb_tail]  <= iq_tag[iq_head];
-                        wb_bank[wb_tail] <= iq_bank[iq_head];
-                        wb_row[wb_tail]  <= iq_row[iq_head];
-                        wb_tail          <= wb_tail + 1'b1;
-                        wb_count         <= wb_count + 1'b1;
-                        af_id[af_tail]   <= ID_W'(iq_tag[iq_head]);
-                        af_tail          <= af_tail + 1'b1;
-                        af_count         <= af_count + 1'b1;
-                        new_acks         <= new_acks + 1'b1;
-                    end else begin
-                        rb_tag[rb_tail]  <= iq_tag[iq_head];
-                        rb_bank[rb_tail] <= iq_bank[iq_head];
-                        rb_row[rb_tail]  <= iq_row[iq_head];
-                        rb_tail          <= rb_tail + 1'b1;
-                        rb_count         <= rb_count + 1'b1;
+                // One DRAM clock da, once the reservations are close enough
+                // behind: the ingress head enters its buffer if it may.
+                if (~a_wait_lag & ~a_wait_room) begin
+                    credit <= credit - 32'(k_twoclk);
+                    if (move) begin
+                        iq_head  <= iq_head + 1'b1;
+                        iq_count <= iq_count - 1'b1;
+                        ingress_ready <= da + 16'(NB);
+                        if (ih_w) begin
+                            wb_tag[wb_tail]   <= iq_tag[iq_head];
+                            wb_bank[wb_tail]  <= iq_bank[iq_head];
+                            wb_row[wb_tail]   <= iq_row[iq_head];
+                            wb_stamp[wb_tail] <= da;
+                            wb_tail           <= wb_tail + 1'b1;
+                            wb_add             = 1'b1;
+                            af_id[af_tail]    <= ID_W'(iq_tag[iq_head]);
+                            af_tail           <= af_tail + 1'b1;
+                            af_count          <= af_count + 1'b1;
+                            new_acks          <= new_acks + 1'b1;
+                        end else begin
+                            rb_tag[rb_tail]   <= iq_tag[iq_head];
+                            rb_bank[rb_tail]  <= iq_bank[iq_head];
+                            rb_row[rb_tail]   <= iq_row[iq_head];
+                            rb_stamp[rb_tail] <= da;
+                            rb_tail           <= rb_tail + 1'b1;
+                            rb_add             = 1'b1;
+                        end
                     end
+                    ed_depv <= rd_depv[base_a[5:0]];
+                    ed_slot <= dep_slot[base_a];
+                    a_state <= A_END;
                 end
-                ed_depv <= rd_depv[base[5:0]];
-                ed_kr   <= rd_kr[base[5:0]];
-                ed_kw   <= rd_kw[base[5:0]];
-                ed_slot <= dep_slot[base];
-                state   <= S_MODE;
             end else begin
-                // The cycle's clocks are done; a bank's times move up (the
-                // table's port is free), and the ready reads are counted.
-                sc_pend <= ~bt_fresh[scrub_b];
-                sc_b    <= scrub_b;
-                sc_row  <= bt_row[scrub_b];
-                sc_act  <= scrubbed(bt_act[scrub_b]);
-                sc_colr <= scrubbed(bt_colr[scrub_b]);
-                sc_prer <= scrubbed(bt_prer[scrub_b]);
-                scrub_b <= scrub_b + 1'b1;
-                state   <= S_WALK;
+                a_state <= A_WALK;
             end
+        end
+        A_END: begin
+            end_clock_a();
+            a_state <= A_TICK;
+        end
+        A_WALK: begin
+            // Reads that are ready in the next target cycle.
+            if (rf_ready != rf_count && $signed(rf_cyc[rf_scan] - tcyc1[23:0]) <= 0) begin
+                rf_ready  <= rf_ready + 1'b1;
+                rf_scan   <= rf_scan + 1'b1;
+                new_ready <= new_ready + 1'b1;
+            end else begin
+                a_state <= A_IDLE;
+            end
+        end
+        default:;
+        endcase
+
+        // ---- The reservations' engine ----
+        case (state)
+        S_IDLE: begin
+            // The next clock, once the clock engine has had its ingress.
+            if (active & ~bm_clear_all & ($signed(d - da) < 0))
+                state <= S_TICK;
+        end
+        S_TICK: begin
+            // Clock d: the entry that entered a buffer in it, if any, is
+            // reached; clock d+1's columns are read; a bank's times move up
+            // (the table's port is free).
+            if (rb_count > rb_vis && rb_stamp[BQW'(rb_head + BQW'(rb_vis))] == d)
+                rb_vis <= rb_vis + 1'b1;
+            if (wb_count > wb_vis && wb_stamp[BQW'(wb_head + BQW'(wb_vis))] == d)
+                wb_vis <= wb_vis + 1'b1;
+            ed_kr   <= rd_kr[base[5:0]];
+            ed_kw   <= rd_kw[base[5:0]];
+            sc_pend <= ~bt_fresh[scrub_b];
+            sc_b    <= scrub_b;
+            sc_row  <= bt_row[scrub_b];
+            sc_act  <= scrubbed(bt_act[scrub_b]);
+            sc_colr <= scrubbed(bt_colr[scrub_b]);
+            sc_prer <= scrubbed(bt_prer[scrub_b]);
+            scrub_b <= scrub_b + 1'b1;
+            state   <= S_MODE;
         end
         S_MODE: begin
             // The channel picks reads or writes; the head of that buffer is
@@ -646,7 +726,7 @@ module foldsim_mem_bank #(
                 state <= S_BANK;
             end else begin
                 end_clock();
-                state <= S_TICK;
+                state <= S_IDLE;
             end
         end
         S_BANK: begin
@@ -803,14 +883,16 @@ module foldsim_mem_bank #(
                 if (op_w) begin
                     wq_cnt     <= wq_cnt + 8'(NB);
                     wb_head    <= wb_head + 1'b1;
-                    wb_count   <= wb_count - 1'b1;
+                    wb_vis     <= wb_vis - 1'b1;
+                    wb_sub      = 1'b1;
                     batch_last <= ($signed(e + ck_lastcol - batch_last) > 0) ? e + ck_lastcol : batch_last;
                     stat_writes <= stat_writes + 64'd1;
                     if (c_col0 == 0) ed_kw <= 1'b1;
                 end else begin
                     rq_cnt     <= rq_cnt + 8'(NB);
                     rb_head    <= rb_head + 1'b1;
-                    rb_count   <= rb_count - 1'b1;
+                    rb_vis     <= rb_vis - 1'b1;
+                    rb_sub      = 1'b1;
                     dep_slot[HLOG2'(base + HLOG2'(ck_lastcol + k_dep))] <= SW'(op_tag);
                     stat_reads <= stat_reads + 64'd1;
                     if (c_col0 == 0) ed_kr <= 1'b1;
@@ -828,7 +910,7 @@ module foldsim_mem_bank #(
         end
         S_END: begin
             end_clock();
-            state <= S_TICK;
+            state <= S_IDLE;
         end
         S_RBANK: begin
             // A refresh: the bank in turn.
@@ -854,18 +936,11 @@ module foldsim_mem_bank #(
             end
             state <= S_SETUP;
         end
-        S_WALK: begin
-            // Reads that are ready in the next target cycle.
-            if (rf_ready != rf_count && $signed(rf_cyc[rf_scan] - tcyc1[23:0]) <= 0) begin
-                rf_ready  <= rf_ready + 1'b1;
-                rf_scan   <= rf_scan + 1'b1;
-                new_ready <= new_ready + 1'b1;
-            end else begin
-                state <= S_IDLE;
-            end
-        end
         default:;
         endcase
+
+        rb_count <= rb_count + (BQW+1)'(rb_add) - (BQW+1)'(rb_sub);
+        wb_count <= wb_count + (BQW+1)'(wb_add) - (BQW+1)'(wb_sub);
 
         if (reset || finish) begin
             // ---- The target cycle ends: the port's state for the next ----
@@ -899,6 +974,10 @@ module foldsim_mem_bank #(
                 wb_tail     <= '0;
                 wb_count    <= '0;
                 d           <= '0;
+                da          <= '0;
+                rb_vis      <= '0;
+                wb_vis      <= '0;
+                state       <= S_IDLE;
                 credit      <= 32'(cfg_data_rate);
                 ingress_ready <= '0;
                 rq_cnt      <= '0;
@@ -967,14 +1046,15 @@ module foldsim_mem_bank #(
                 credit     <= credit + 32'(cfg_data_rate);
             end
             // A clearing cycle's next host cycle clears the calendars, so the
-            // first DRAM clock waits a host cycle (in S_PUSH).
-            state <= ~(treset | active) ? S_IDLE
-                   : (((treset | ~active) | new_write | ar_fire) ? S_PUSH : S_TICK);
+            // first DRAM clock waits a host cycle (in A_PUSH).
+            a_state <= ~(treset | active) ? A_IDLE
+                     : (((treset | ~active) | new_write | ar_fire) ? A_PUSH : A_TICK);
             new_ready <= '0;
             new_acks  <= '0;
         end
         if (reset) begin
             state          <= S_IDLE;
+            a_state        <= A_IDLE;
             active         <= 1'b0;
             stat_reads     <= '0;
             stat_writes    <= '0;
