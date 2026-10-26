@@ -610,9 +610,32 @@ module foldsim_mem_bank #(
     // issues leave the controller; then the next clock.
     // The reservations' clock d ends: the columns of clock d+1 leave the
     // controller.
+    // S_MODE's choice as S_TICK sees it, the entries reached in clock d
+    // counted: a clock with nothing to reserve and no refresh ends in S_TICK.
+    wire             tk_rb = (rb_count > rb_vis) && (rb_stamp[BQW'(rb_head + BQW'(rb_vis))] == d);
+    wire             tk_wb = (wb_count > wb_vis) && (wb_stamp[BQW'(wb_head + BQW'(wb_vis))] == d);
+    wire [BQW:0]     tk_rb_vis = rb_vis + (BQW+1)'(tk_rb);
+    wire [BQW:0]     tk_wb_vis = wb_vis + (BQW+1)'(tk_wb);
+    wire [8:0]       tk_wn = 9'(wq_cnt) + 9'(NB) * 9'(tk_wb_vis);
+    wire [8:0]       tk_rn = 9'(rq_cnt) + 9'(NB) * 9'(tk_rb_vis);
+    wire             tk_to_write = ~wmode & ((tk_wn >= 9'(cfg_wr_high)) | (tk_rn == 0));
+    wire             tk_to_read  = wmode & (tk_wn < 9'(cfg_wr_low)) & (tk_rn != 0);
+    wire             tk_wmode_n  = tk_to_write | (wmode & ~tk_to_read);
+    wire             tk_sel_any  = tk_wmode_n ? (tk_wb_vis != 0) : (tk_rb_vis != 0);
+    wire             tk_empty    = ~ref_now & ~tk_sel_any;
+
+    // As a clock ends, whether the next is already due (S_IDLE's test, a host
+    // cycle early): the reservations then go straight on to it.
+    wire next_clock = active & ~bm_clear_all & ($signed(d + 16'd1 - da) < 0);
+
     task automatic end_clock();
-        rq_cnt <= rq_cnt - (ed_kr ? 8'd1 : 8'd0);
-        wq_cnt <= wq_cnt - (ed_kw ? 8'd1 : 8'd0);
+        end_clock_cols(ed_kr, ed_kw);
+    endtask
+
+    // Clock d ends, with clock d+1's columns as given.
+    task automatic end_clock_cols(input kr, input kw);
+        rq_cnt <= rq_cnt - (kr ? 8'd1 : 8'd0);
+        wq_cnt <= wq_cnt - (kw ? 8'd1 : 8'd0);
         // The ring's word ends with this clock: it is all past.
         if (base[5:0] == 6'd63) begin
             bm_clear      <= 1'b1;
@@ -846,10 +869,10 @@ module foldsim_mem_bank #(
             // Clock d: the entry that entered a buffer in it, if any, is
             // reached; clock d+1's columns are read; a bank's times move up
             // (the table's port is free).
-            if (rb_count > rb_vis && rb_stamp[BQW'(rb_head + BQW'(rb_vis))] == d)
-                rb_vis <= rb_vis + 1'b1;
-            if (wb_count > wb_vis && wb_stamp[BQW'(wb_head + BQW'(wb_vis))] == d)
-                wb_vis <= wb_vis + 1'b1;
+            if (tk_rb)
+                rb_vis <= tk_rb_vis;
+            if (tk_wb)
+                wb_vis <= tk_wb_vis;
             ed_kr   <= rd_kr[base[5:0]];
             ed_kw   <= rd_kw[base[5:0]];
             sc_pend <= ~bt_fresh[scrub_b];
@@ -859,7 +882,18 @@ module foldsim_mem_bank #(
             sc_colr <= scrubbed(bt_colr[scrub_b]);
             sc_prer <= scrubbed(bt_prer[scrub_b]);
             scrub_b <= scrub_b + 1'b1;
-            state   <= S_MODE;
+            if (tk_empty) begin
+                // S_MODE's work for a clock with nothing to reserve.
+                wmode <= tk_wmode_n;
+                if (tk_to_write)
+                    batch_floor <= ($signed(frontier + 16'd1 - e) > 0) ? frontier + 16'd1 : e;
+                if (tk_to_read)
+                    read_floor <= batch_last + 16'd1;
+                end_clock_cols(rd_kr[base[5:0]], rd_kw[base[5:0]]);
+                state <= next_clock ? S_TICK : S_IDLE;
+            end else begin
+                state <= S_MODE;
+            end
         end
         S_MODE: begin
             // The channel picks reads or writes; the head of that buffer is
@@ -876,7 +910,7 @@ module foldsim_mem_bank #(
                 state <= S_BANK;
             end else begin
                 end_clock();
-                state <= S_IDLE;
+                state <= next_clock ? S_TICK : S_IDLE;
             end
         end
         S_BANK: begin
@@ -1060,7 +1094,7 @@ module foldsim_mem_bank #(
         end
         S_END: begin
             end_clock();
-            state <= S_IDLE;
+            state <= next_clock ? S_TICK : S_IDLE;
         end
         S_RBANK: begin
             // A refresh: the bank in turn.
