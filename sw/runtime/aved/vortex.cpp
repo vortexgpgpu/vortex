@@ -240,18 +240,35 @@ public:
       // previous image set, which can be far above or below this one's.
       if (!sim_mode_) {
         const uint64_t timed_hz = vrtDevice_.getMaxFrequency();
-        vrtDevice_.setFrequency(timed_hz);
-        const uint64_t clk_hz = vrtDevice_.getFrequency();
-        if (clk_hz == 0 || clk_hz > timed_hz + timed_hz / 200) {
+        // The wizard settles on the nearest rate its dividers reach, which can
+        // be a step above the request: lower the request below that step.
+        uint64_t want_hz = timed_hz, clk_hz = 0;
+        for (int i = 0; i < 8; ++i) {
+          vrtDevice_.setFrequency(want_hz);
+          clk_hz = vrtDevice_.getFrequency();
+          if (clk_hz == 0 || clk_hz <= timed_hz)
+            break;
+          want_hz -= (clk_hz - want_hz) + timed_hz / 100;
+        }
+        if (clk_hz == 0 || clk_hz > timed_hz) {
           fprintf(stderr, "[VXDRV] Error: user clock reads %lu Hz, image is timed for %lu Hz\n",
                   (unsigned long)clk_hz, (unsigned long)timed_hz);
+          park_clock();
           return -1;
         }
         printf("[VXDRV] kernel clock %lu Hz (image timed for %lu Hz)\n",
                (unsigned long)clk_hz, (unsigned long)timed_hz);
       }
       vrtKernel_ = vrt::Kernel(vrtDevice_, KERNEL_NAME);
-    VRT_CATCH(-1)
+    } catch (const std::exception& e) {
+      fprintf(stderr, "[VXDRV] VRT exception: %s\n", e.what());
+      park_clock();
+      return -1;
+    } catch (...) {
+      fprintf(stderr, "[VXDRV] VRT exception (unknown)\n");
+      park_clock();
+      return -1;
+    }
 
     // Must follow vrtKernel_: the connection map comes from the vbin's
     // system_map.xml, which the kernel handle parses.
@@ -818,6 +835,20 @@ public:
 private:
 
 #ifdef CPP_API
+  // A design that fails to come up stays loaded: leave it clocked below any
+  // image's timing so it cannot disturb the shell before the next load.
+  void park_clock() noexcept {
+    constexpr uint64_t kSafeHz = 50000000;
+    if (sim_mode_)
+      return;
+    try {
+      vrtDevice_.setFrequency(kSafeHz);
+      fprintf(stderr, "[VXDRV] kernel clock parked at %lu Hz\n",
+              (unsigned long)vrtDevice_.getFrequency());
+    } catch (...) {
+    }
+  }
+
   // ----- Staged CP memory (m_axi_host wired to device memory) -----
   //
   // WHY THIS EXISTS
