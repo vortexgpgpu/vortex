@@ -33,6 +33,10 @@ public:
 
 	virtual ~Dispatcher();
 
+	// The unit takes ops straight off the slot queue, so the credit returns as
+	// the unit accepts the op, from the unit itself.
+	void set_release_on_accept() { release_on_accept_ = true; }
+
 protected:
 	virtual void on_reset();
 	virtual void on_tick();
@@ -46,6 +50,7 @@ private:
 	uint32_t batch_idx_;
 	uint32_t out_delay_;
 	std::vector<int> block_pids_;
+	bool release_on_accept_ = false;
 
 	friend class SimObject<Dispatcher>;
 };

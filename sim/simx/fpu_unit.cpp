@@ -44,7 +44,16 @@ FpuUnit::FpuUnit(const SimContext& ctx, const char* name, Core* core)
 	// until its result is taken off the response port, however deep the
 	// pipelines are.
 	: FuncUnit<VX_CFG_NUM_FPU_BLOCKS>(ctx, name, core, VX_CFG_FPU_QUEUE_SIZE)
-{}
+	, ReleaseOut(this, VX_CFG_ISSUE_WIDTH)
+{
+	if (!kGather) {
+		// No buffer between the dispatch queue and the unit: the input holds
+		// only the queue's head.
+		for (auto& input : Inputs) {
+			input = SimChannel<instr_trace_t*>(this, 1);
+		}
+	}
+}
 
 uint32_t FpuUnit::latency_of(const instr_trace_t* trace) const {
 	auto fpu_type = std::get<FpuType>(trace->op_type);
@@ -390,6 +399,9 @@ void FpuUnit::on_tick() {
         uint32_t delay = this->latency_of(trace) + (kGather ? 0 : 1);
         output.send(trace, delay);
         input.pop();
+        if (!kGather && trace->eop) {
+          ReleaseOut.send(trace, 0);
+        }
       }
     }
     idle &= (input.size() == 0);

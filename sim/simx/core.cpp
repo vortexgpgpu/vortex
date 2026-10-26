@@ -269,16 +269,28 @@ public:
     icache_flush_buf_->Out.bind(&simobject_->icache_req_out.at(0));
   #endif
 
-    // initialize execute units
-    snprintf(sname, 100, "%s-alu", name.c_str());
-    func_units_.at((int)FUType::ALU) = SimPlatform::instance().create_object<AluUnit>(sname, simobject_);
-    snprintf(sname, 100, "%s-fpu", name.c_str());
-    func_units_.at((int)FUType::FPU) = SimPlatform::instance().create_object<FpuUnit>(sname, simobject_);
+    // initialize execute units. A full-bandwidth ALU or FPU takes its op
+    // straight off the dispatch queue, in the cycle the queue releases it, so
+    // it is created (and ticks) after its dispatcher; the others take their
+    // input before the dispatcher fills it in the same cycle.
+    auto create_alu = [&]() {
+      snprintf(sname, 100, "%s-alu", name.c_str());
+      func_units_.at((int)FUType::ALU) = SimPlatform::instance().create_object<AluUnit>(sname, simobject_);
+    };
+    auto create_fpu = [&]() {
+      snprintf(sname, 100, "%s-fpu", name.c_str());
+      func_units_.at((int)FUType::FPU) = SimPlatform::instance().create_object<FpuUnit>(sname, simobject_);
+    };
+    if (AluUnit::kGather) {
+      create_alu();
+    }
+    if (FpuUnit::kGather) {
+      create_fpu();
+    }
     snprintf(sname, 100, "%s-lsu", name.c_str());
     func_units_.at((int)FUType::LSU) = SimPlatform::instance().create_object<LsuUnit>(sname, simobject_);
     snprintf(sname, 100, "%s-sfu", name.c_str());
     func_units_.at((int)FUType::SFU) = SimPlatform::instance().create_object<SfuUnit>(sname, simobject_);
-    std::static_pointer_cast<AluUnit>(func_units_.at((int)FUType::ALU))->branch_ctl_out.bind(&simobject_->branch_ctl_in);
     std::static_pointer_cast<SfuUnit>(func_units_.at((int)FUType::SFU))->warp_ctl_out.bind(&simobject_->warp_ctl_in);
     scheduler_->barrier_unit().unlock_out.bind(&simobject_->bar_unlock_in);
   #ifdef VX_CFG_EXT_TCU_ENABLE
@@ -310,12 +322,13 @@ public:
   #endif
   #endif
 
-    // initialize dispatchers after the units they feed, so a unit takes its
-    // input before the dispatcher fills it in the same cycle.
+    // initialize dispatchers after the buffered units they feed, so such a
+    // unit takes its input before the dispatcher fills it in the same cycle.
     {
-      // A reduced-width ALU or FPU registers the op once more on its way in.
-      uint32_t alu_dly = AluUnit::kGather ? 2 : 1;
-      uint32_t fpu_dly = FpuUnit::kGather ? 2 : 1;
+      // A reduced-width ALU or FPU takes the op through its lane-dispatch
+      // buffer; a full-bandwidth one takes it as the queue releases it.
+      uint32_t alu_dly = AluUnit::kGather ? 2 : 0;
+      uint32_t fpu_dly = FpuUnit::kGather ? 2 : 0;
       dispatchers_.at((int)FUType::ALU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_ALU_BLOCKS, VX_CFG_NUM_ALU_LANES, alu_dly);
       dispatchers_.at((int)FUType::FPU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_FPU_BLOCKS, VX_CFG_NUM_FPU_LANES, fpu_dly);
       dispatchers_.at((int)FUType::LSU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_LSU_BLOCKS, VX_CFG_NUM_LSU_LANES, 1);
@@ -323,6 +336,19 @@ public:
     #ifdef VX_CFG_EXT_TCU_ENABLE
       dispatchers_.at((int)FUType::TCU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_TCU_BLOCKS, VX_CFG_NUM_TCU_LANES, 1);
     #endif
+      if (!AluUnit::kGather) {
+        create_alu();
+        auto& dispatch = dispatchers_.at((int)FUType::ALU);
+        dispatch->set_release_on_accept();
+        std::static_pointer_cast<AluUnit>(func_units_.at((int)FUType::ALU))->ReleaseOut.bind(&dispatch->ReleaseOut);
+      }
+      if (!FpuUnit::kGather) {
+        create_fpu();
+        auto& dispatch = dispatchers_.at((int)FUType::FPU);
+        dispatch->set_release_on_accept();
+        std::static_pointer_cast<FpuUnit>(func_units_.at((int)FUType::FPU))->ReleaseOut.bind(&dispatch->ReleaseOut);
+      }
+      std::static_pointer_cast<AluUnit>(func_units_.at((int)FUType::ALU))->branch_ctl_out.bind(&simobject_->branch_ctl_in);
       for (uint32_t fu = 0; fu < (uint32_t)FUType::Count; ++fu) {
         auto& dispatch = dispatchers_.at(fu);
         auto& func_unit = func_units_.at(fu);
@@ -340,10 +366,10 @@ public:
     for (uint32_t iw = 0; iw < VX_CFG_ISSUE_WIDTH; ++iw) {
       auto& queues = commit_queues_.emplace_back();
       for (uint32_t fu = 0; fu < (uint32_t)FUType::Count; ++fu) {
-        // A unit's lane gather holds two results. The LSU's crosses one
-        // register into it; the others cross two and take a third slot so
-        // that they still retire one result per cycle.
-        uint32_t capacity = (fu == (uint32_t)FUType::LSU) ? 2 : 3;
+        // A unit's lane gather holds two results. The LSU's and the SFU's
+        // cross one register into it; the others cross two and take a third
+        // slot so that they still retire one result per cycle.
+        uint32_t capacity = (fu == (uint32_t)FUType::LSU || fu == (uint32_t)FUType::SFU) ? 2 : 3;
         queues.emplace_back(std::make_unique<SimChannel<instr_trace_t*>>(simobject_, capacity));
       }
     }
@@ -907,8 +933,9 @@ public:
         auto& arb_in = *commit_queues_.at(iw).at(fu);
         // The unit's output registers ahead of the commit arbiter that its
         // output channel does not already carry: the LSU's response buffer and
-        // result arbiter are in its channel, leaving its lane gather.
-        uint32_t commit_delay = (fu == (uint32_t)FUType::LSU) ? 1 : 2;
+        // result arbiter, and the SFU's result buffer and response switch, are
+        // in their channels, leaving each its lane gather.
+        uint32_t commit_delay = (fu == (uint32_t)FUType::LSU || fu == (uint32_t)FUType::SFU) ? 1 : 2;
         if (arb_in.try_send(trace, commit_delay)) {
           // Release the warp as soon as its stalling instruction's result leaves
           // the functional unit — the branch target / fence / warp-control is

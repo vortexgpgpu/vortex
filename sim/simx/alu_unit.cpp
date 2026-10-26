@@ -30,7 +30,16 @@ AluUnit::AluUnit(const SimContext& ctx, const char* name, Core* core)
 	// multiplier keeps one result per cycle.
 	: FuncUnit<VX_CFG_NUM_ALU_BLOCKS>(ctx, name, core, kMulDivLatency + (kGather ? 1 : 0) + 2)
 	, branch_ctl_out(this, VX_CFG_NUM_WARPS)
-{}
+	, ReleaseOut(this, VX_CFG_ISSUE_WIDTH)
+{
+	if (!kGather) {
+		// No buffer between the dispatch queue and the unit: the input holds
+		// only the queue's head.
+		for (auto& input : Inputs) {
+			input = SimChannel<instr_trace_t*>(this, 1);
+		}
+	}
+}
 
 // Cycles from this unit's execute to its output, beyond the commit-queue hop.
 // Execute stands for the integer ALU's registered result (the branch_ctl
@@ -572,13 +581,16 @@ void AluUnit::on_tick() {
         auto trace = input.peek();
         this->execute(trace);
         // A branch releases its warp as it resolves, not when its result
-        // retires.
+        // retires: the result register, then the branch register.
         if (std::get_if<BrType>(&trace->op_type) && trace->eop && trace->resume_warp) {
-          branch_ctl_out.send(trace->wid, 1);
+          branch_ctl_out.send(trace->wid, kGather ? 1 : 2);
           trace->resume_warp = false;
         }
         output.send(trace, this->latency_of(trace) + (kGather ? 1 : 0));
         input.pop();
+        if (!kGather && trace->eop) {
+          ReleaseOut.send(trace, 0);
+        }
       }
     }
     idle &= (input.size() == 0);
