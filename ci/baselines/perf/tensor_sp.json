@@ -1,12 +1,12 @@
 {
   "tensor_sp:perf_gate-sparse-fp16:rtlsim": {
     "32": {
-      "cycles": 181992,
+      "cycles": 183077,
       "instrs": 100880
     },
     "app": "sgemm_tcu_sp",
     "args": "-m 128 -n 128 -k 128",
-    "config_hash": "3bb64bb8ac3c1a95",
+    "config_hash": "200d2f36d7530327",
     "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE",
     "driver": "rtlsim"
   }
