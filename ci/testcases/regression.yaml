@@ -288,6 +288,31 @@ tests:
     cores: 2
     l2cache: true
     l3cache: true
+# A release must drain: bank 0's writes are held back by the debug delay, and
+# the flag, in a bank-1 line, overtakes the data in bank-0 lines unless the
+# release fence (-m1) or the .rl atomic (-m2) waits for them.
+- id: fence_mp-5
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: fence_mp
+  args: -n64 -m1
+  configs: -DVX_CFG_EXT_A_ENABLE -DDBG_MEM_BANK0_WDELAY
+  shape:
+    cores: 2
+    l2cache: true
+- id: fence_mp-6
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: fence_mp
+  args: -n64 -m2
+  configs: -DVX_CFG_EXT_A_ENABLE -DDBG_MEM_BANK0_WDELAY
+  shape:
+    cores: 2
+    l2cache: true
 # Kernel to kernel with no host transfer between (one command batch): the
 # launch flushes are L1-only, so the last-level cache alone carries each
 # round's writes to the next round, and the full flush runs before readback.
