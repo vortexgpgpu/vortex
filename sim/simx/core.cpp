@@ -533,6 +533,9 @@ public:
       // queues a refetch internally for cross-word 32-bit completion.
       bool emit = decompressor->on_icache_rsp(trace, *mem_rsp.data);
       bool progressed = !emit || decode_latch.try_push(trace);
+      if (emit && progressed) {
+        decompressor->on_emit(trace);
+      }
     #else
       bool emit = true;
       bool progressed = false;
