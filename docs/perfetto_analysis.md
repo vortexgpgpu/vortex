@@ -1,6 +1,6 @@
 # Vortex Perfetto Trace: Performance Analysis Guide
 
-This guide explains how to **generate** and **interpret** a Vortex GPU trace that has been converted into **Perfetto-compatible Chrome Trace JSON** using `vortex_perfetto.py`.
+This guide explains how to **generate** and **interpret** a Vortex GPU trace that has been converted into **Perfetto-compatible Chrome Trace JSON** using `ci/perfetto.py`.
 
 It is written for people who are:
 - New to Perfetto
@@ -33,13 +33,13 @@ This guide focuses on **Vortex GPU 1**.
 #### SimX (default)
 
 ```bash
-python3 vortex_perfetto.py run_simx.log -t simx -c -o vortex.perfetto.json.gz
+python3 ci/perfetto.py run_simx.log -t simx -c -o vortex.perfetto.json.gz
 ```
 
 #### RTL simulation
 
 ```bash
-python3 vortex_perfetto.py run_rtlsim.log -t rtlsim -c -o vortex.perfetto.json.gz
+python3 ci/perfetto.py run_rtlsim.log -t rtlsim -c -o vortex.perfetto.json.gz
 ```
 
 ### Common options
@@ -47,7 +47,7 @@ python3 vortex_perfetto.py run_rtlsim.log -t rtlsim -c -o vortex.perfetto.json.g
 - **Limit export to a cycle/tick window** (highly recommended for huge logs):
 
 ```bash
-python3 vortex_perfetto.py run_rtlsim.log -t rtlsim \
+python3 ci/perfetto.py run_rtlsim.log -t rtlsim \
   --cycle-min 10000 --cycle-max 20000 -c -o window.json.gz
 ```
 
