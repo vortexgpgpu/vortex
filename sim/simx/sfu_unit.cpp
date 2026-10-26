@@ -96,6 +96,40 @@ bool SfuUnit::rtu_trace2_reserve_slot(uint32_t wid) {
 #endif
 
 
+// Results sent toward commit with the unit that produced them, in the order
+// they reach the output channel (arrival cycle, then send order), which is the
+// order commit pops them in. The oldest PE_SWITCH_SIZE stand in the shared
+// response switch; the rest still wait in their unit's own result buffer.
+void SfuUnit::sync_out(uint32_t b) {
+	auto& q = out_pe_.at(b);
+	uint32_t n = Outputs.at(b).size();
+	while (q.size() > n) {
+		q.pop_front();
+	}
+}
+
+bool SfuUnit::pe_buf_full(uint32_t b, PeClass pe) {
+	this->sync_out(b);
+	auto& q = out_pe_.at(b);
+	uint32_t held = 0;
+	for (size_t i = PE_SWITCH_SIZE; i < q.size(); ++i) {
+		held += (q[i].pe == pe);
+	}
+	return held >= PE_BUF_SIZE;
+}
+
+void SfuUnit::send_out(uint32_t b, instr_trace_t* trace, uint32_t delay, PeClass pe) {
+	this->sync_out(b);
+	Outputs.at(b).send(trace, delay);
+	auto& q = out_pe_.at(b);
+	uint64_t arrive = SimPlatform::instance().cycles() + delay;
+	auto it = q.end();
+	while (it != q.begin() && std::prev(it)->arrive > arrive) {
+		--it;
+	}
+	q.insert(it, OutPe{arrive, pe});
+}
+
 void SfuUnit::on_tick() {
 #ifdef VX_CFG_EXT_RTU_ENABLE
 	// Drain RTU rsps. Two flavors, both completing the warp's parked WAIT
@@ -125,7 +159,7 @@ void SfuUnit::on_tick() {
 		auto wb = is_candidate ? rtu_unit_->on_candidate_rsp(rsp)
 		                       : rtu_unit_->on_terminal_rsp(rsp);
 		if (wb.trace) {
-			Outputs.at(wb.block_id).send(wb.trace, this->latency_of(wb.trace));
+			this->send_out(wb.block_id, wb.trace, this->latency_of(wb.trace), PE_OTHER);
 			DT(3, "rtu-rsp deliver: core=" << core_->id()
 				 << ", wid=" << wb.trace->wid << ", cand=" << is_candidate);
 		} else {
@@ -153,7 +187,7 @@ void SfuUnit::on_tick() {
 		{
 			// Unit latency is already modeled by the TEX pipeline; charge only
 			// the gather/writeback hop.
-			output.send(trace, 2);
+			this->send_out(rsp.block_id, trace, 2, PE_OTHER);
 			DT(3, "tex-rsp deliver: core=" << core_->id() << ", wid=" << trace->wid);
 		}
 		tex_rsp_in.pop();
@@ -337,7 +371,7 @@ void SfuUnit::on_tick() {
 					continue;   // OM back-pressure — nothing was sent; retry
 				}
 			}
-			output.send(trace, 1);
+			this->send_out(b, trace, 1, PE_OTHER);
 			input.pop();
 			continue;
 		}
@@ -369,7 +403,7 @@ void SfuUnit::on_tick() {
 				if (output.full()) continue;
 				if (!rtu_unit_->process_cb_ret(trace, b))
 					continue; // bus backpressure — nothing was sent
-				output.send(trace, this->latency_of(trace));
+				this->send_out(b, trace, this->latency_of(trace), PE_OTHER);
 				input.pop();
 				continue;
 			}
@@ -384,7 +418,7 @@ void SfuUnit::on_tick() {
 				if (output.full()) continue;
 				if (!rtu_unit_->process_trace_uop(trace, b, args.uop))
 					continue;
-				output.send(trace, this->latency_of(trace));
+				this->send_out(b, trace, this->latency_of(trace), PE_OTHER);
 				input.pop();
 				continue;
 			}
@@ -400,7 +434,7 @@ void SfuUnit::on_tick() {
 				}
 				instr_trace_t* wb = rtu_unit_->process_wait(trace, b);
 				if (wb) {
-					output.send(wb, this->latency_of(wb));
+					this->send_out(b, wb, this->latency_of(wb), PE_OTHER);
 				}
 				input.pop();
 				continue;
@@ -414,7 +448,7 @@ void SfuUnit::on_tick() {
 				auto args = std::get<IntrGfxwArgs>(trace->instr_ptr->get_args());
 				if (output.full()) continue;
 				rtu_window_.process_getw_uop(trace, args.uop, *rtu_p == GfxwType::GETWF);
-				output.send(trace, this->latency_of(trace));
+				this->send_out(b, trace, this->latency_of(trace), PE_OTHER);
 				input.pop();
 				continue;
 			}
@@ -465,6 +499,13 @@ void SfuUnit::on_tick() {
 		if (output.full())
 			continue; // stall — no side effects this tick
 
+		// The warp-control and CSR units each answer through their own
+		// two-entry result buffer ahead of the shared response switch.
+		const bool is_wctl = std::get_if<WctlType>(&trace->op_type) != nullptr;
+		const PeClass pe = is_csr ? PE_CSR : (is_wctl ? PE_WCTL : PE_OTHER);
+		if (pe != PE_OTHER && this->pe_buf_full(b, pe))
+			continue;
+
 		// WSYNC has a structural gate: cannot complete until prior insts retire.
 		// BAR (vx_barrier and vx_barrier_arrive) drains LSU before continuing —
 		// implements CUDA __syncthreads / OpenCL barrier(CLK_LOCAL_MEM_FENCE) semantic.
@@ -502,7 +543,7 @@ void SfuUnit::on_tick() {
 		}
 
 		uint32_t delay = this->latency_of(trace);
-		output.send(trace, delay);
+		this->send_out(b, trace, delay, pe);
 		// Warp-control refines the default (fetch_stall) release decision: a
 		// sync-barrier, a not-yet-last barrier arrival, a deferred wspawn, or a
 		// warp that disabled itself (tmask=0) keeps the warp parked — it is
@@ -536,6 +577,9 @@ void SfuUnit::on_reset() {
 	std::fill(std::begin(res_rr_), std::end(res_rr_), 0);
 	csr_read_done_.fill(nullptr);
 	bar_arrive_.fill(BarArrive{});
+	for (auto& q : out_pe_) {
+		q.clear();
+	}
 }
 
 SfuUnit::SharedRes SfuUnit::shared_res(uint32_t block) {

@@ -111,7 +111,7 @@ private:
 	void send_fence_token(uint32_t b);
 
 	// Drain Inputs[b] into req_queue.
-	void ingest_inputs(uint32_t b);
+	void ingest_inputs(uint32_t b, bool queue_room, uint32_t reads_held);
 
   struct mem_addr_size_t {
 		uint64_t addr;

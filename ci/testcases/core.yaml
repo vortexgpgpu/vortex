@@ -188,6 +188,18 @@ tests:
   args: -n128
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8
   shape: {cores: 2, l2cache: true}
+# The same shape at n64: L2 hits on a miss-heavy working set, two operand
+# collectors per issue slice, and the load-response path's exact entry counts.
+- id: parity-sgemm-mc64
+  check: model_parity
+  # Tighter than the default: the shape exercises those entries and the
+  # collectors' output register exactly.
+  tolerance: 0.03
+  via: blackbox
+  app: sgemm
+  args: -n64
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8
+  shape: {cores: 2, l2cache: true}
 # SGEMM on two frontend slices feeding four issue slices: per-slice fetch on a
 # two-port icache, CTAs as wide as the core, a 16-port dcache.
 - id: parity-sgemm-fw2

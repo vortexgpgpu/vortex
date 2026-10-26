@@ -13,6 +13,8 @@
 
 #pragma once
 
+#include <deque>
+
 #include <array>
 #include <memory>
 #include "func_unit.h"
@@ -133,6 +135,23 @@ private:
 
 	std::unique_ptr<WctlUnit> wctl_unit_;
 	std::unique_ptr<CsrUnit>  csr_unit_;
+	// The unit a result in the output channel came from: the warp-control and
+	// CSR units each hold PE_BUF_SIZE results ahead of the shared response
+	// switch, which holds PE_SWITCH_SIZE. Results reach the channel after
+	// different delays, so each is kept at its arrival cycle, in the channel's
+	// own order.
+	enum PeClass : uint8_t { PE_OTHER = 0, PE_WCTL, PE_CSR };
+	static constexpr uint32_t PE_BUF_SIZE    = 2;
+	static constexpr uint32_t PE_SWITCH_SIZE = 2;
+	struct OutPe {
+		uint64_t arrive;
+		PeClass  pe;
+	};
+	std::array<std::deque<OutPe>, VX_CFG_NUM_SFU_BLOCKS> out_pe_;
+	void sync_out(uint32_t b);
+	bool pe_buf_full(uint32_t b, PeClass pe);
+	void send_out(uint32_t b, instr_trace_t* trace, uint32_t delay, PeClass pe);
+
 	// Per block, the CSR op that has spent its one-cycle CTA-context read.
 	std::array<const instr_trace_t*, VX_CFG_NUM_SFU_BLOCKS> csr_read_done_{};
 	// Per block, the barrier arrive waiting for the shared barrier unit's

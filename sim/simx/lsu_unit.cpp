@@ -108,7 +108,12 @@ LsuUnit::LsuUnit(const SimContext& ctx, const char* name, Core* core)
 	, TcuRspOut(TCU_AGU_PORTS, this)
 #endif
 	, pending_loads_(0)
-{}
+{
+	// the lane-dispatch skid buffer's ready is registered
+	for (auto& input : Inputs) {
+		input.set_registered_ready(true);
+	}
+}
 
 LsuUnit::~LsuUnit()
 {}
@@ -354,10 +359,10 @@ void LsuUnit::process_response_step(uint32_t b) {
 // At most one transaction/cycle: the trace is not dispatchable until the next
 // cycle, so req_queue adds a real cycle of latency. A while-loop here would
 // fabricate write bandwidth and collapse that latency to zero.
-void LsuUnit::ingest_inputs(uint32_t b) {
+void LsuUnit::ingest_inputs(uint32_t b, bool queue_room, uint32_t reads_held) {
 	auto& state = states_.at(b);
 	auto& input = Inputs.at(b);
-	if (input.empty() || state.req_queue.full())
+	if (input.empty() || !queue_room)
 		return;
 	auto trace = input.peek();
 	// Hold a fence at the input head until req_queue is empty so the
@@ -368,7 +373,7 @@ void LsuUnit::ingest_inputs(uint32_t b) {
 		return;
 	const bool is_read = !lsu_type_tag || *lsu_type_tag == LsuType::LOAD;
 	if (is_read) {
-		if (state.pending_reqs.size() + state.staged_reads >= VX_CFG_LSU_PENDING_SIZE) {
+		if (reads_held >= VX_CFG_LSU_PENDING_SIZE) {
 			return;
 		}
 		++state.staged_reads;
@@ -715,8 +720,13 @@ void LsuUnit::on_tick() {
 		// as it stood at the start of this cycle, THEN ingest one new trace for
 		// next cycle. Dispatching before ingest makes req_queue a 1-cycle stage
 		// rather than a same-tick passthrough.
+		// The scheduler's request queue and its pending table register their
+		// full flags: a slot freed this cycle takes a new request next cycle.
+		auto& state = states_.at(b);
+		bool queue_room = !state.req_queue.full();
+		uint32_t reads_held = state.pending_reqs.size() + state.staged_reads;
 		this->process_response_step(b);
 		this->process_request_step(b);
-		this->ingest_inputs(b);
+		this->ingest_inputs(b, queue_room, reads_held);
 	}
 }
