@@ -1495,9 +1495,10 @@ private:
     chain_sector_  = sector_id;
   }
 
-  // Lazy-fetch loopback depth: room for every request in the pipe plus one.
+  // Lazy-fetch loopback depth: room for twice the pipe, so a few queued
+  // entries leave admission and the refetch loopback open.
   static uint32_t lazyq_size(const Cache::Config &config) {
-    return 1u << log2ceil(config.latency + 1);
+    return 1u << log2ceil(2 * config.latency);
   }
 
   // The loopback still fits every request in the pipe: a new request may be

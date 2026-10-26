@@ -197,7 +197,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire [`UP(`CS_SECTOR_SEL_BITS)-1:0] mem_rsp_sector; // sector this fill installs
     wire [MSHR_ADDR_WIDTH-1:0] mshr_alloc_id, mshr_previd;
     wire mshr_fill_refetch, mshr_fill_retry, mshr_dequeue_reads;
-    wire lazyq_empty, lazyq_alm_full;
+    wire lazyq_empty, lazyq_alm_full, lazyq_full;
     wire mshr_pending_raw;
     wire mshr_pending_wr_raw;
     wire mshr_pending_ovl_raw;
@@ -433,6 +433,13 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     assign flush_ready    = flush_grant && ~(WRITEBACK && mreq_queue_alm_full) && ~pipe_stall;
     // a core request may become a write-miss root, which pushes to lazyq.
     wire   creq_alm_full  = mreq_queue_alm_full || lazyq_alm_full || replay_block;
+    // A queued AMO result drains through the core-request slot, while a full
+    // AMO writeback queue holds off the fills that drain the lazy queue. So
+    // the writeback is not held to the lazy queue's pipeline reservation when
+    // the pipe is empty: then only the writeback itself can push, and a free
+    // slot is room enough.
+    wire   lazyq_wb_block = lazyq_alm_full && (pipe_inflight || lazyq_full);
+    wire   amo_wb_alm_full = mreq_queue_alm_full || lazyq_wb_block || replay_block;
     assign core_req_ready = creq_grant && ~creq_alm_full && ~mshr_alm_full && ~pipe_stall
                          && ~amo_commit_busy && ~req_input_defer;
 
@@ -445,9 +452,9 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire flush_fire   = flush_valid && flush_ready;
     // amo_wb_path already excludes the cycle a fresh AMO commits at S1, so the
     // writeback never races the chain update.
-    wire amo_wb_fire   = amo_wb_path && creq_grant && ~creq_alm_full && ~mshr_alm_full && ~pipe_stall;
-    wire core_req_fire = (amo_creq_path || amo_wb_path) && creq_grant
-                       && ~creq_alm_full && ~mshr_alm_full && ~pipe_stall;
+    wire amo_wb_fire   = amo_wb_path && creq_grant && ~amo_wb_alm_full && ~mshr_alm_full && ~pipe_stall;
+    wire core_req_fire = ((amo_creq_path && ~creq_alm_full) || (amo_wb_path && ~amo_wb_alm_full))
+                       && creq_grant && ~mshr_alm_full && ~pipe_stall;
 
     wire [MSHR_ADDR_WIDTH-1:0] mem_rsp_id = mem_rsp_tag[MSHR_ADDR_WIDTH-1:0];
     wire [MSHR_ADDR_WIDTH-1:0] fill_id    = lazy_sel ? lazyq_id : mem_rsp_id;
@@ -1628,8 +1635,9 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // Sized like the memory request queue's reservation: a core request is
     // admitted only while every request already in the pipe still fits.
     if (LAZY_FETCH != 0) begin : g_lazyq
-        wire lazyq_full;
-        localparam LAZYQ_SIZE = 1 << `CLOG2(PIPELINE_STAGES + 1);
+        // Room for twice the pipe, so a few queued entries leave the
+        // reservation (and the refetch loopback, which needs it) open.
+        localparam LAZYQ_SIZE = 1 << `CLOG2(2 * PIPELINE_STAGES);
         VX_fifo_queue #(
             .DATAW    (MSHR_ADDR_WIDTH),
             .DEPTH    (LAZYQ_SIZE),
@@ -1702,6 +1710,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         assign lazyq_id       = '0;
         assign lazyq_empty    = 1'b1;
         assign lazyq_alm_full = 1'b0;
+        assign lazyq_full     = 1'b0;
         assign chain_partial    = 1'b0;
         assign chain_retry      = 1'b0;
         assign refetch_inflight = 1'b0;

@@ -362,6 +362,16 @@ tests:
   shape:
     cores: 4
     l2cache: true
+# The same on a dcache with a deferred commit stage (latency 3): a queued AMO
+# result drains through the core-request slot while the lazy queue holds its
+# pipeline reservation, and fully written sectors still loop back data-less.
+- id: lazy_fetch-5
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: lazy_fetch
+  configs: -DVX_CFG_EXT_A_ENABLE -DVX_CFG_DCACHE_LAZY_FETCH=1 -DVX_CFG_DCACHE_LATENCY=3
 # Both sectors of one sectored L2 line miss together from different warps and
 # cores: each must get its own fill, never chain behind the other sector's.
 # Run with the address held per request and with the MSHR line table.
