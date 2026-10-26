@@ -70,6 +70,7 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
         assign dispatch_if[i].ready = dispatch_ready[i];
     end
 
+    wire [BLOCK_SIZE-1:0] block_valid;
     wire [BLOCK_SIZE-1:0] block_ready;
     wire [BLOCK_SIZE-1:0][NUM_LANES-1:0] block_tmask;
     wire [BLOCK_SIZE-1:0][2:0][NUM_LANES-1:0][`VX_CFG_XLEN-1:0] block_rsdata;
@@ -187,6 +188,7 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
             assign block_pid[block_idx]   = start_p;
             assign block_sop[block_idx]   = is_first_p;
             assign block_eop[block_idx]   = is_last_p;
+            assign block_valid[block_idx] = valid_p;
             assign block_ready[block_idx] = ready_p;
             assign block_done[block_idx]  = (fire_p && is_last_p) || ~dispatch_valid[issue_idx];
         end else begin : g_full_simd
@@ -196,6 +198,7 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
             assign block_pid[block_idx]   = 0;
             assign block_sop[block_idx]   = 1;
             assign block_eop[block_idx]   = 1;
+            assign block_valid[block_idx] = valid_p;
             assign block_ready[block_idx] = ready_p;
             assign block_done[block_idx]  = ready_p || ~valid_p;
         end
@@ -250,7 +253,7 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
     always @(*) begin
         ready_in = 0;
         for (integer block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin
-            ready_in[issue_indices[block_idx]] = block_ready[block_idx] && block_eop[block_idx];
+            ready_in[issue_indices[block_idx]] = block_valid[block_idx] && block_ready[block_idx] && block_eop[block_idx];
         end
     end
     assign dispatch_ready = ready_in;

@@ -469,12 +469,15 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
 
     reg [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] rsp_data;
 
-`ifdef VX_CFG_XLEN_64
 `ifdef VX_CFG_EXT_F_ENABLE
     // apply nan-boxing to flw outputs
     wire rsp_is_float = (get_reg_type(rsp_hdr.rd) == REG_TYPE_F);
 `else
     wire rsp_is_float = 0;
+`endif
+`ifndef VX_CFG_XLEN_64
+`ifndef VX_CFG_EXT_ZFHMIN_ENABLE
+    `UNUSED_VAR (rsp_is_float)
 `endif
 `endif
 
@@ -491,7 +494,11 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
         always @(*) begin
             case (inst_lsu_fmt(rsp_op_type))
             LSU_FMT_B:  rsp_data[i] = `VX_CFG_XLEN'(signed'(rsp_data8));
+        `ifdef VX_CFG_EXT_ZFHMIN_ENABLE
+            LSU_FMT_H:  rsp_data[i] = rsp_is_float ? {{(`VX_CFG_XLEN-16){1'b1}}, rsp_data16} : `VX_CFG_XLEN'(signed'(rsp_data16));
+        `else
             LSU_FMT_H:  rsp_data[i] = `VX_CFG_XLEN'(signed'(rsp_data16));
+        `endif
             LSU_FMT_BU: rsp_data[i] = `VX_CFG_XLEN'(unsigned'(rsp_data8));
             LSU_FMT_HU: rsp_data[i] = `VX_CFG_XLEN'(unsigned'(rsp_data16));
         `ifdef VX_CFG_XLEN_64

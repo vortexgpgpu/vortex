@@ -56,20 +56,26 @@ module VX_fpu_fpnew
     localparam LATENCY_FDIVSQRT = `MAX(`VX_CFG_FDIV_LATENCY, `VX_CFG_FSQRT_LATENCY);
     localparam RSP_DATAW = (NUM_LANES * `VX_CFG_XLEN) + 1 + $bits(fflags_t) + TAG_WIDTH;
 
+`ifdef VX_CFG_EXT_ZFHMIN_ENABLE
+    localparam [4:0] FP16_FMT_MASK = 5'b00100;
+`else
+    localparam [4:0] FP16_FMT_MASK = 5'b00000;
+`endif
+
     localparam fpnew_pkg::fpu_features_t FPU_FEATURES = '{
         Width:         unsigned'(`VX_CFG_XLEN),
         EnableVectors: 1'b0,
     `ifdef VX_CFG_XLEN_64
         EnableNanBox:  1'b1,
     `ifdef VX_CFG_FLEN_64
-        FpFmtMask:     5'b11000,
+        FpFmtMask:     5'b11000 | FP16_FMT_MASK,
     `else
-        FpFmtMask:     5'b11000, // FP32+FP64 enabled to avoid CVT bug in FpNew
+        FpFmtMask:     5'b11000 | FP16_FMT_MASK, // FP32+FP64 enabled to avoid CVT bug in FpNew
     `endif
         IntFmtMask:    4'b0011
     `else
-        EnableNanBox:  1'b0,
-        FpFmtMask:     5'b10000,
+        EnableNanBox:  (FP16_FMT_MASK != 0),
+        FpFmtMask:     5'b10000 | FP16_FMT_MASK,
         IntFmtMask:    4'b0010
     `endif
     };
@@ -142,7 +148,25 @@ module VX_fpu_fpnew
             INST_FPU_NMADD: begin fpu_op = fpnew_pkg::FNMSUB; fpu_op_mod = ~fmt[1]; end
             INST_FPU_DIV:   begin fpu_op = fpnew_pkg::DIV; end
             INST_FPU_SQRT:  begin fpu_op = fpnew_pkg::SQRT; end
-        `ifdef VX_CFG_FLEN_64
+        `ifdef VX_CFG_EXT_ZFHMIN_ENABLE
+            INST_FPU_F2F: begin
+                fpu_op = fpnew_pkg::F2F;
+            `ifdef VX_CFG_FLEN_64
+                fpu_src_fmt = fmt[1] ? fpnew_pkg::FP16 : (fmt[0] ? fpnew_pkg::FP32 : fpnew_pkg::FP64);
+            `else
+                fpu_src_fmt = fpnew_pkg::FP16;
+            `endif
+            end
+            INST_FPU_F2H: begin
+                fpu_op = fpnew_pkg::F2F;
+                fpu_dst_fmt = fpnew_pkg::FP16;
+            `ifdef VX_CFG_FLEN_64
+                fpu_src_fmt = fmt[0] ? fpnew_pkg::FP64 : fpnew_pkg::FP32;
+            `else
+                fpu_src_fmt = fpnew_pkg::FP32;
+            `endif
+            end
+        `elsif VX_CFG_FLEN_64
             INST_FPU_F2F: begin fpu_op = fpnew_pkg::F2F; fpu_src_fmt = fmt[0] ? fpnew_pkg::FP32 : fpnew_pkg::FP64; end
         `endif
             INST_FPU_F2I,
@@ -154,7 +178,15 @@ module VX_fpu_fpnew
                 case (frm)
                     0,1,2: begin fpu_op = fpnew_pkg::SGNJ; fpu_rnd = {1'b0, frm[1:0]}; fpu_has_fflags = 0; end // FSGNJ
                     3:     begin fpu_op = fpnew_pkg::CLASSIFY; fpu_has_fflags = 0; end // CLASS
-                    4,5:   begin fpu_op = fpnew_pkg::SGNJ; fpu_rnd = 3'b011; fpu_op_mod = ~frm[0]; fpu_has_fflags = 0; end // FMV.X.W, FMV.W.X
+                    4,5:   begin
+                        fpu_op = fpnew_pkg::SGNJ; fpu_rnd = 3'b011; fpu_op_mod = ~frm[0]; fpu_has_fflags = 0;
+                    `ifdef VX_CFG_EXT_ZFHMIN_ENABLE
+                        if (fmt[1]) begin
+                            fpu_src_fmt = fpnew_pkg::FP16;
+                            fpu_dst_fmt = fpnew_pkg::FP16;
+                        end
+                    `endif
+                    end
                     6,7:   begin fpu_op = fpnew_pkg::MINMAX; fpu_rnd = {2'b00, frm[0]}; end // MIN, MAX
                 endcase
             end

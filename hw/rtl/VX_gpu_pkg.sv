@@ -534,6 +534,7 @@ package VX_gpu_pkg;
     localparam INST_FPU_CMP =    4'b1100; // frm: LE=0, LT=1, EQ=2
     localparam INST_FPU_F2F =    4'b1101; // fmt[0]: F32=0, F64=1
     localparam INST_FPU_MISC =   4'b1110; // frm: SGNJ=0, SGNJN=1, SGNJX=2, CLASS=3, MVXW=4, MVWX=5, FMIN=6, FMAX=7
+    localparam INST_FPU_F2H =    4'b1111;
     localparam INST_FPU_BITS =   4;
 
     function automatic logic inst_fpu_is_class(input logic [INST_FPU_BITS-1:0] op, input logic [INST_FRM_BITS-1:0] frm);
@@ -571,6 +572,9 @@ package VX_gpu_pkg;
 `ifdef EXT_GFX_ANY_ENABLE
     localparam INST_SFU_RTUW =   4'hE;  // RTU hit window (GETW/GETWF) + trace ops
 `endif
+`ifdef VX_CFG_EXT_MUFU_ENABLE
+    localparam INST_SFU_MUFU =   4'hF;
+`endif
     localparam INST_SFU_BITS =   4;
 
     function automatic logic [3:0] inst_sfu_csr(input logic [2:0] funct3);
@@ -590,6 +594,17 @@ package VX_gpu_pkg;
     function automatic logic inst_sfu_is_csr(input logic [INST_SFU_BITS-1:0] op);
         return (op >= 6 && op <= 8);
     endfunction
+
+`ifdef VX_CFG_EXT_MUFU_ENABLE
+    localparam INST_MUFU_RCP =   3'h0;
+    localparam INST_MUFU_RSQRT = 3'h1;
+    localparam INST_MUFU_EX2 =   3'h2;
+    localparam INST_MUFU_LG2 =   3'h3;
+    localparam INST_MUFU_SINPI = 3'h4;
+    localparam INST_MUFU_COSPI = 3'h5;
+    localparam INST_MUFU_TANH =  3'h6;
+    localparam INST_MUFU_BITS =  3;
+`endif
 
     /////////////////////////////// Issue parameters //////////////////////////
 
@@ -1191,6 +1206,14 @@ package VX_gpu_pkg;
     `PACKAGE_ASSERT($bits(tcu_args_t) == INST_ARGS_BITS)
 `endif
 
+`ifdef VX_CFG_EXT_MUFU_ENABLE
+    typedef struct packed {
+        logic [INST_ARGS_BITS-INST_MUFU_BITS-1:0] __padding;
+        logic [INST_MUFU_BITS-1:0]                fn;
+    } mufu_args_t;
+    `PACKAGE_ASSERT($bits(mufu_args_t) == INST_ARGS_BITS)
+`endif
+
 `ifdef VX_CFG_EXT_TEX_ENABLE
     // Texture sample op args (vx_tex, CUSTOM1 funct3=5, R4-type): u/v/lod ride
     // rs1/rs2/rs3, the texel lands in rd, and `stage` (funct2) selects the
@@ -1249,6 +1272,9 @@ package VX_gpu_pkg;
     `endif
     `ifdef VX_CFG_EXT_TCU_ENABLE
         tcu_args_t  tcu;
+    `endif
+    `ifdef VX_CFG_EXT_MUFU_ENABLE
+        mufu_args_t mufu;
     `endif
     `ifdef VX_CFG_EXT_TEX_ENABLE
         tex_args_t  tex;
@@ -1522,6 +1548,17 @@ package VX_gpu_pkg;
     } om_perf_t;
 `endif
 
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    typedef struct packed {
+        logic [PERF_CTR_BITS-1:0] rays;
+        logic [PERF_CTR_BITS-1:0] hits;
+        logic [PERF_CTR_BITS-1:0] box_tests;
+        logic [PERF_CTR_BITS-1:0] tri_tests;
+        logic [PERF_CTR_BITS-1:0] callbacks;
+        logic [PERF_CTR_BITS-1:0] busy;
+    } rtu_perf_t;
+`endif
+
     typedef struct packed {
         logic [PERF_CTR_BITS-1:0] idles;
         logic [PERF_CTR_BITS-1:0] active_warps;
@@ -1566,6 +1603,10 @@ package VX_gpu_pkg;
     `ifdef VX_CFG_EXT_OM_ENABLE
         om_perf_t    om;
         cache_perf_t ocache;
+    `endif
+    `ifdef VX_CFG_EXT_RTU_ENABLE
+        rtu_perf_t   rtu;
+        cache_perf_t rtcache;
     `endif
     } sysmem_perf_t;
 

@@ -123,6 +123,9 @@ module VX_rtu_core_top import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     ) rtu_core (
         .clk          (clk),
         .reset        (reset),
+    `ifdef PERF_ENABLE
+        `UNUSED_PIN   (perf_rtu),
+    `endif
         .rtu_bus_if   (rtu_bus_if),
         .cache_bus_if (cache_bus_if)
     );

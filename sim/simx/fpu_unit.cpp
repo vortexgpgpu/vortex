@@ -18,6 +18,7 @@
 #include <assert.h>
 #include <util.h>
 #include <rvfloats.h>
+#include <nan_box.h>
 #include "debug.h"
 #include "core.h"
 #include "csr_unit.h"
@@ -27,15 +28,16 @@ using namespace vortex;
 
 namespace {
 inline uint64_t nan_box(uint32_t value) {
-  return value | 0xffffffff00000000;
-}
-inline bool is_nan_boxed(uint64_t value) {
-  return (uint32_t(value >> 32) == 0xffffffff);
+  return nanbox::box32(value);
 }
 inline int64_t check_boxing(int64_t a) {
-  if (is_nan_boxed(a))
-    return a;
-  return nan_box(0x7fc00000); // NaN
+  return nanbox::box32(nanbox::unbox32(a, 0x7fc00000));
+}
+inline uint64_t nan_box16(uint16_t value) {
+  return nanbox::box16(value);
+}
+inline uint16_t check_boxing16(uint64_t a) {
+  return nanbox::unbox16(a, 0x7e00);
 }
 }
 
@@ -280,7 +282,20 @@ void FpuUnit::execute(instr_trace_t* trace) {
 			if (!tmask.test(t)) continue;
 			uint32_t frm = emu.get_fpu_rm(fpuArgs.frm, wid, t);
 			uint32_t fflags = 0;
-			if (fpuArgs.is_f64) {
+			if (fpuArgs.is_f16) {
+				if (fpuArgs.cvt == 1) {
+					rd_data[t].u64 = nan_box16(rv_dtoh(rs1_data[t].u64, frm, &fflags));
+				} else {
+					rd_data[t].u64 = nan_box16(rv_ftoh_s(check_boxing(rs1_data[t].u64), frm, &fflags));
+				}
+			} else if (fpuArgs.cvt == 2) {
+				auto h = check_boxing16(rs1_data[t].u64);
+				if (fpuArgs.is_f64) {
+					rd_data[t].u64 = rv_htod(h, frm, &fflags);
+				} else {
+					rd_data[t].u64 = nan_box(rv_htof_s(h, frm, &fflags));
+				}
+			} else if (fpuArgs.is_f64) {
 				rd_data[t].u64 = rv_ftod(check_boxing(rs1_data[t].u64), frm, &fflags);
 			} else {
 				rd_data[t].u64 = nan_box(rv_dtof(rs1_data[t].u64, frm, &fflags));
@@ -304,7 +319,9 @@ void FpuUnit::execute(instr_trace_t* trace) {
 		for (uint32_t t = thread_start; t < num_threads; ++t) {
 			if (!tmask.test(t)) continue;
 			uint32_t fflags = 0;
-			if (fpuArgs.is_f64) {
+			if (fpuArgs.is_f16) {
+				rd_data[t].i = sext((uint64_t)uint16_t(rs1_data[t].u64), 16);
+			} else if (fpuArgs.is_f64) {
 				rd_data[t].u64 = rs1_data[t].u64;
 			} else {
 				uint32_t result = (uint32_t)rs1_data[t].u64;
@@ -317,7 +334,9 @@ void FpuUnit::execute(instr_trace_t* trace) {
 		for (uint32_t t = thread_start; t < num_threads; ++t) {
 			if (!tmask.test(t)) continue;
 			uint32_t fflags = 0;
-			if (fpuArgs.is_f64) {
+			if (fpuArgs.is_f16) {
+				rd_data[t].u64 = nan_box16(uint16_t(rs1_data[t].i));
+			} else if (fpuArgs.is_f64) {
 				rd_data[t].u64 = rs1_data[t].i;
 			} else {
 				rd_data[t].u64 = nan_box((uint32_t)rs1_data[t].i);

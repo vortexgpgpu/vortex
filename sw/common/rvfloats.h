@@ -94,6 +94,8 @@ uint64_t rv_ftod(uint32_t a, uint32_t frm, uint32_t* fflags);
 // fp16 <--> fp32 conversions
 uint32_t rv_htof_s(uint16_t a, uint32_t frm, uint32_t* fflags);
 uint16_t rv_ftoh_s(uint32_t a, uint32_t frm, uint32_t* fflags);
+uint64_t rv_htod(uint16_t a, uint32_t frm, uint32_t* fflags);
+uint16_t rv_dtoh(uint64_t a, uint32_t frm, uint32_t* fflags);
 
 // bf16 <--> fp32 conversions
 uint32_t rv_btof_s(uint16_t a, uint32_t frm, uint32_t* fflags);

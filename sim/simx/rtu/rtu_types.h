@@ -544,7 +544,8 @@ struct QueueEntry {
 // ════════════════════════════════════════════════════════════════════
 
 struct PerfStats {
-  uint64_t rays_issued = 0;
+  uint64_t traces      = 0;   // warp-level traces accepted
+  uint64_t rays        = 0;   // active lanes of those traces
   uint64_t rays_hit    = 0;
   uint64_t rays_miss   = 0;
   uint64_t mem_reads   = 0;
@@ -554,12 +555,10 @@ struct PerfStats {
   uint64_t bvh_instance_descents = 0;
   uint64_t bvh_box_tests         = 0;
   uint64_t bvh_tri_tests         = 0;
-  // Short-stack overflow events: pushes past the VX_CFG_RTU_STACK_DEPTH HW
-  // stack. SimX keeps an unbounded stack (never misses a hit); each overflow
-  // entry is one the HW must re-descend for via trail-based restart, charged
-  // in the cost model.
+  // Trail restarts of the VX_CFG_RTU_STACK_DEPTH short stack. The node, box and
+  // descent counts above include the restarted walks' re-descents.
   uint64_t bvh_stack_restarts    = 0;
-  // Callback-pipeline counters.
+  // Callback-pipeline counters: candidate lanes returned to the warp, by type.
   uint64_t ahs_callbacks       = 0;
   uint64_t chs_callbacks       = 0;
   uint64_t miss_callbacks      = 0;
@@ -588,14 +587,15 @@ struct PerfStats {
   uint64_t ctx_bound_ticks     = 0;
   uint64_t ctx_active_ticks    = 0;
   uint64_t slot_busy_ticks     = 0;
-  uint64_t rtu_busy_ticks      = 0;   // ticks with any slot in use
+  uint64_t rtu_busy_ticks      = 0;   // ticks with any slot holding a trace
   // SIMD-PE cycle accounting: pipeline cycles charged across every context's
   // traversal, and ticks where at least one context was draining them.
   uint64_t walker_cycles_total = 0;
   uint64_t walker_busy_ticks   = 0;
 
   PerfStats& operator+=(const PerfStats& rhs) {
-    rays_issued            += rhs.rays_issued;
+    traces                 += rhs.traces;
+    rays                   += rhs.rays;
     rays_hit               += rhs.rays_hit;
     rays_miss              += rhs.rays_miss;
     mem_reads              += rhs.mem_reads;

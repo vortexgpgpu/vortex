@@ -574,6 +574,7 @@ struct IntrFpuArgs {
   uint32_t frm : 3;
   uint32_t cvt : 2;
   uint32_t is_f64 : 1;
+  uint32_t is_f16 : 1;
 };
 
 inline std::ostream &operator<<(std::ostream &os, const FpuType& type) {
@@ -601,6 +602,36 @@ inline std::ostream &operator<<(std::ostream &os, const FpuType& type) {
   }
   return os;
 }
+
+///////////////////////////////////////////////////////////////////////////////
+
+#ifdef VX_CFG_EXT_MUFU_ENABLE
+// Values match the instruction's fn field and vortex::mufu::fn_t.
+enum class MufuType {
+  RCP   = 0,
+  RSQRT = 1,
+  EX2   = 2,
+  LG2   = 3,
+  SINPI = 4,
+  COSPI = 5,
+  TANH  = 6,
+};
+
+inline std::ostream &operator<<(std::ostream &os, const MufuType& type) {
+  switch (type) {
+  case MufuType::RCP:   os << "MUFU.RCP"; break;
+  case MufuType::RSQRT: os << "MUFU.RSQRT"; break;
+  case MufuType::EX2:   os << "MUFU.EX2"; break;
+  case MufuType::LG2:   os << "MUFU.LG2"; break;
+  case MufuType::SINPI: os << "MUFU.SINPI"; break;
+  case MufuType::COSPI: os << "MUFU.COSPI"; break;
+  case MufuType::TANH:  os << "MUFU.TANH"; break;
+  default:
+    assert(false);
+  }
+  return os;
+}
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -832,6 +863,9 @@ using OpType = std::variant<
 #endif
 #ifdef VX_CFG_EXT_TCU_ENABLE
 , TcuType
+#endif
+#ifdef VX_CFG_EXT_MUFU_ENABLE
+, MufuType
 #endif
 #ifdef VX_CFG_EXT_TEX_ENABLE
 , TexType

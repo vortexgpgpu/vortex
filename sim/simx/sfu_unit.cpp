@@ -495,6 +495,20 @@ void SfuUnit::on_tick() {
 				continue;
 			}
 		}
+#ifdef VX_CFG_EXT_MUFU_ENABLE
+		if (std::get_if<MufuType>(&trace->op_type)) {
+			if (output.full()) {
+				continue;
+			}
+			if (!mufu_unit_.process(trace)) {
+				continue;
+			}
+			trace->resume_warp = trace->fetch_stall;
+			this->send_out(b, trace, this->latency_of(trace) + MufuUnit::kLatency, PE_OTHER);
+			input.pop();
+			continue;
+		}
+#endif
 
 		if (output.full())
 			continue; // stall — no side effects this tick

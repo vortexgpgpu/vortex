@@ -85,6 +85,12 @@ tests:
   via: blackbox
   app: rt_raycast
   configs: -DVX_CFG_EXT_RTU_ENABLE
+  # The RTU counters too: the traversal work both models must do identically.
+  # busy is a timing counter and is left out.
+  flags: --perf=15
+  parity_counters:
+    prefix: rtu
+    exact: [rays, hits, box_tests, tri_tests, callbacks]
 
 # Perf-regression twin of the model_parity-rt_raycast benchmark (same run, cycles-vs-baseline).
 - id: perf_gate-rt_raycast

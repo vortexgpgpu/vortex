@@ -111,6 +111,10 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     tex_perf_t   socket_tex_perf;
     cache_perf_t socket_tcache_perf;
 `endif
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    rtu_perf_t   socket_rtu_perf;
+    cache_perf_t socket_rtcache_perf;
+`endif
     sysmem_perf_t sysmem_perf_tmp;
     always @(*) begin
         sysmem_perf_tmp = sysmem_perf;
@@ -122,6 +126,10 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     `ifdef VX_CFG_EXT_TEX_ENABLE
         sysmem_perf_tmp.tex    = socket_tex_perf;
         sysmem_perf_tmp.tcache = socket_tcache_perf;
+    `endif
+    `ifdef VX_CFG_EXT_RTU_ENABLE
+        sysmem_perf_tmp.rtu     = socket_rtu_perf;
+        sysmem_perf_tmp.rtcache = socket_rtcache_perf;
     `endif
     end
 `endif
@@ -603,6 +611,10 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .TAG_WIDTH (RTCACHE_TAG_WIDTH)
     ) rtcache_bus_if [`VX_CFG_NUM_RTU_CORES * RTCACHE_NUM_REQS] ();
 
+`ifdef PERF_ENABLE
+    rtu_perf_t [`VX_CFG_NUM_RTU_CORES-1:0] per_core_rtu_perf;
+`endif
+
     for (genvar i = 0; i < `VX_CFG_NUM_RTU_CORES; ++i) begin : g_rtu_core
         VX_rtu_core #(
             .INSTANCE_ID     (`SFORMATF(("%s-rtu%0d", INSTANCE_ID, i))),
@@ -614,10 +626,29 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
         ) rtu_core (
             .clk          (clk),
             .reset        (reset),
+        `ifdef PERF_ENABLE
+            .perf_rtu     (per_core_rtu_perf[i]),
+        `endif
             .rtu_bus_if   (rtu_bus_if[i]),
             .cache_bus_if (rtcache_bus_if[i * RTCACHE_NUM_REQS])
         );
     end
+
+`ifdef PERF_ENABLE
+    // Every rtu_perf_t field is one PERF_CTR_BITS counter: sum them field-wise.
+    localparam RTU_PERF_FIELDS = $bits(rtu_perf_t) / PERF_CTR_BITS;
+    wire [`VX_CFG_NUM_RTU_CORES-1:0][RTU_PERF_FIELDS-1:0][PERF_CTR_BITS-1:0] rtu_perf_w = per_core_rtu_perf;
+    reg [RTU_PERF_FIELDS-1:0][PERF_CTR_BITS-1:0] rtu_perf_sum;
+    always @(*) begin
+        rtu_perf_sum = '0;
+        for (integer i = 0; i < `VX_CFG_NUM_RTU_CORES; ++i) begin
+            for (integer f = 0; f < RTU_PERF_FIELDS; ++f) begin
+                rtu_perf_sum[f] = rtu_perf_sum[f] + rtu_perf_w[i][f];
+            end
+        end
+    end
+    assign socket_rtu_perf = rtu_perf_sum;
+`endif
 
     VX_mem_bus_if #(
         .DATA_SIZE (RTCACHE_LINE_SIZE),
@@ -678,7 +709,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .clk            (clk),
         .reset          (reset),
     `ifdef PERF_ENABLE
-        `UNUSED_PIN     (cache_perf),
+        .cache_perf     (socket_rtcache_perf),
     `endif
         .core_bus_if    (rtcache_flushable_bus_if),
         .mem_bus_if     (rtcache_mem_bus_tmp_if),
