@@ -88,6 +88,7 @@ private:
   std::string name_;
   bool tick_active_ = true;
   uint32_t domain_ = 0;
+  bool launch_kept_ = false; // built under a LaunchKeepScope
   virtual void do_reset() = 0;
   virtual void do_tick()  = 0;
   friend class SimPlatform;
@@ -265,6 +266,7 @@ public:
   uint32_t alloc_domain() { return num_domains_++; }
   uint32_t num_domains() const { return num_domains_; }
   uint32_t build_domain() const { return build_domain_; }
+  bool build_launch_kept() const { return build_launch_kept_; }
 
   // Cap the parallel thread count (must be called before the first tick).
   // A limit of 1 forces serial execution — required while the configuration
@@ -279,6 +281,25 @@ public:
   void set_num_workers(uint32_t num_workers) {
     req_workers_ = std::max(1u, num_workers);
   }
+
+  // Objects built under a LaunchKeepScope (the last-level cache and the
+  // memory below it, when the command processor writes into that cache)
+  // carry their state and in-flight work across reset_launch().
+  class LaunchKeepScope {
+  public:
+    explicit LaunchKeepScope(bool keep) {
+      auto& p = SimPlatform::instance();
+      saved_ = p.build_launch_kept_;
+      p.build_launch_kept_ = saved_ || keep;
+    }
+    ~LaunchKeepScope() {
+      SimPlatform::instance().build_launch_kept_ = saved_;
+    }
+    LaunchKeepScope(const LaunchKeepScope&) = delete;
+    LaunchKeepScope& operator=(const LaunchKeepScope&) = delete;
+  private:
+    bool saved_;
+  };
 
   class DomainScope {
   public:
@@ -331,6 +352,7 @@ public:
   void schedule(Func&& func, const Pkt& pkt, uint64_t delay, uint32_t domain);
 
   void reset();
+  void reset_launch();
   void tick();
 
 private:
@@ -395,6 +417,7 @@ private:
 
   uint32_t num_domains_ = 1;
   uint32_t build_domain_ = 0;
+  bool build_launch_kept_ = false;
   static inline thread_local uint32_t tl_exec_domain_ = HOST_DOMAIN;
   static inline thread_local SimObjectBase* tl_exec_object_ = nullptr;
   static inline thread_local uint64_t tl_cross_seq_ = 0;
@@ -1183,6 +1206,22 @@ inline void SimPlatform::validate_topology() {
   }
 }
 
+// A kernel launch resets every object but those built under a
+// LaunchKeepScope: the hardware does not reset between a transfer and the
+// launch that follows it, so the transfer's line fills may still be in
+// flight in the kept memory side when the kernel starts. Their events stay
+// scheduled and time keeps counting; the rest of the model is quiescent.
+inline void SimPlatform::reset_launch() {
+  for (auto* object : active_reset_) {
+    if (!object->launch_kept_) {
+      object->do_reset();
+    }
+  }
+  for (auto& object : objects_) {
+    object->tick_active_ = true;
+  }
+}
+
 inline void SimPlatform::reset() {
   this->validate_topology();
 
@@ -1361,7 +1400,8 @@ void SimChannelEvent<Pkt>::fire() {
 
 inline SimObjectBase::SimObjectBase(const SimContext&, const std::string& name)
     : name_(name)
-    , domain_(SimPlatform::instance().build_domain()) {}
+    , domain_(SimPlatform::instance().build_domain())
+    , launch_kept_(SimPlatform::instance().build_launch_kept()) {}
 
 inline SimChannelBase::SimChannelBase(SimObjectBase* module)
     : module_(module)

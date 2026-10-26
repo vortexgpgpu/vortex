@@ -92,8 +92,9 @@ private:
   // read returned; the last-level cache keeps what it took into the next launch.
   void cp_mem_transfer(uint64_t addr, const uint8_t* src, uint8_t* dst, uint64_t size, bool noalloc);
 
-  // A launch that follows DMA writes waits for the port's fence.
-  void cp_mem_fence();
+  // Reset the model for a launch. After DMA writes it waits for the port's
+  // fence and keeps the memory side, whose line fills may still be in flight.
+  void launch_reset();
 
   void llc_keep_lines();
 

@@ -73,33 +73,38 @@ public:
 
     snprintf(sname, 100, "%s-l2cache", name.c_str());
     // L2 is the LLC iff L2 is enabled and L3 is not.
-    l2cache_ = Cache::Create(sname, Cache::Config{
-      !VX_CFG_L2_ENABLED,
-      log2ceil(VX_CFG_L2_SIZE),// C
-      log2ceil(VX_CFG_L2_LINE_SIZE),// L
-      log2ceil(VX_CFG_L2_SECTOR_SIZE),// S
-      log2ceil(VX_CFG_L1_LINE_SIZE), // W
-      log2ceil(VX_CFG_L2_NUM_WAYS),  // A
-      log2ceil(VX_CFG_L2_NUM_BANKS), // B
-      VX_CFG_XLEN,                   // address bits
-      L2_CACHE_REQS,                 // request size
-      VX_CFG_L2_MEM_PORTS,           // memory ports
-      VX_CFG_L2_WRITEBACK,           // write-back
-      false,                  // write response
-      VX_CFG_L2_MSHR_SIZE,           // mshr size
-      VX_CFG_L2_LATENCY,             // pipeline latency
-      VX_CFG_L2_REPL_POLICY,         // replacement policy
-      (VX_CFG_L2_ENABLED != 0) && (VX_CFG_L3_ENABLED == 0), // is_llc
-      true,                          // non-cacheable bypass
-      (VX_CFG_L2_BANK_HASH != 0) && (VX_CFG_L2_NUM_BANKS > 1), // bank_hash
-      L2_SHARED_LLC,                 // shared_llc
-      VX_CFG_L2_LAZY_FETCH != 0,     // lazy_fetch
-      true,                          // core-response register (behind the bypass layer)
-      0,                             // read_merge
-      VX_CFG_L2_MSHR_LINES,          // mshr_lines
-      CP_ON_L2 != 0,                 // write_around
-      VX_CFG_L2_MRSQ_SIZE != 0,      // memory-response queue
-    });
+    {
+      // the CP writes into this cache when it is the last level: its state
+      // and a transfer's fills carry across the launch reset
+      SimPlatform::LaunchKeepScope keep(CP_ON_L2 != 0);
+      l2cache_ = Cache::Create(sname, Cache::Config{
+        !VX_CFG_L2_ENABLED,
+        log2ceil(VX_CFG_L2_SIZE),// C
+        log2ceil(VX_CFG_L2_LINE_SIZE),// L
+        log2ceil(VX_CFG_L2_SECTOR_SIZE),// S
+        log2ceil(VX_CFG_L1_LINE_SIZE), // W
+        log2ceil(VX_CFG_L2_NUM_WAYS),  // A
+        log2ceil(VX_CFG_L2_NUM_BANKS), // B
+        VX_CFG_XLEN,                   // address bits
+        L2_CACHE_REQS,                 // request size
+        VX_CFG_L2_MEM_PORTS,           // memory ports
+        VX_CFG_L2_WRITEBACK,           // write-back
+        false,                  // write response
+        VX_CFG_L2_MSHR_SIZE,           // mshr size
+        VX_CFG_L2_LATENCY,             // pipeline latency
+        VX_CFG_L2_REPL_POLICY,         // replacement policy
+        (VX_CFG_L2_ENABLED != 0) && (VX_CFG_L3_ENABLED == 0), // is_llc
+        true,                          // non-cacheable bypass
+        (VX_CFG_L2_BANK_HASH != 0) && (VX_CFG_L2_NUM_BANKS > 1), // bank_hash
+        L2_SHARED_LLC,                 // shared_llc
+        VX_CFG_L2_LAZY_FETCH != 0,     // lazy_fetch
+        true,                          // core-response register (behind the bypass layer)
+        0,                             // read_merge
+        VX_CFG_L2_MSHR_LINES,          // mshr_lines
+        CP_ON_L2 != 0,                 // write_around
+        VX_CFG_L2_MRSQ_SIZE != 0,      // memory-response queue
+      });
+    }
 
 
     // connect l2cache memory interface

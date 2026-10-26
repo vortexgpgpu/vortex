@@ -1637,7 +1637,7 @@ public:
     , lg2_outputs_(log2ceil(num_outputs))
     , output_sel_(output_sel)
     , collisions_(0) {
-    assert(num_inputs <= 64);
+    // per-output round-robin pointers only: no bound on the input count
     assert(num_outputs <= 64);
     assert(ispow2(num_outputs));
     assert(output_sel != nullptr);

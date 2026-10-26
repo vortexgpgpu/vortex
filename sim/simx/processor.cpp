@@ -50,10 +50,14 @@ ProcessorImpl::ProcessorImpl()
   constexpr uint32_t total_cores = VX_CFG_NUM_CLUSTERS * NUM_SOCKETS * VX_CFG_SOCKET_SIZE;
   kmu_ = Kmu::Create("kmu", total_cores);
 
-  // create memory simulator
+  // create memory simulator; with the CP writing into the last-level cache,
+  // the memory side carries a transfer's fills across the launch reset
   auto dram_config = DramSim::platform_config();
   dram_config.block_size = VX_CFG_MEM_BLOCK_SIZE;
-  memsim_ = Memory::Create("dram", Memory::Config{VX_CFG_L3_MEM_PORTS, dram_config});
+  {
+    SimPlatform::LaunchKeepScope keep(CP_ON_L2 != 0 || CP_ON_L3 != 0);
+    memsim_ = Memory::Create("dram", Memory::Config{VX_CFG_L3_MEM_PORTS, dram_config});
+  }
 
   char sname[100];
 
@@ -95,34 +99,37 @@ ProcessorImpl::ProcessorImpl()
 
   // create L3 cache; when L3 is enabled it is the LLC, otherwise it is a
   // transparent bypass arbiter and the L2 (or L1) is the LLC.
-  l3cache_ = Cache::Create("l3cache", Cache::Config{
-    !VX_CFG_L3_ENABLED,
-    log2ceil(VX_CFG_L3_SIZE),  // C
-    log2ceil(VX_CFG_L3_LINE_SIZE),   // L
-    log2ceil(VX_CFG_L3_SECTOR_SIZE), // S
-    log2ceil(VX_CFG_L2_SECTOR_SIZE), // W
-    log2ceil(VX_CFG_L3_NUM_WAYS),    // A
-    log2ceil(VX_CFG_L3_NUM_BANKS),   // B
-    VX_CFG_XLEN,                     // address bits
-    L3_CACHE_REQS,                   // request size
-    VX_CFG_L3_MEM_PORTS,             // memory ports
-    VX_CFG_L3_WRITEBACK,             // write-back
-    false,                    // write response
-    VX_CFG_L3_MSHR_SIZE,             // mshr size
-    VX_CFG_L3_LATENCY,               // pipeline latency
-    VX_CFG_L3_REPL_POLICY,           // replacement policy
-    VX_CFG_L3_ENABLED != 0,          // is_llc when L3 is the LLC
-    true,                            // non-cacheable bypass
-    false,                           // bank_hash
-    L3_SHARED_LLC,                   // shared_llc
-    VX_CFG_L3_LAZY_FETCH != 0,       // lazy_fetch
-    true,                            // core-response register (behind the bypass layer)
-    0,                               // read_merge
-    VX_CFG_L3_MSHR_LINES,            // mshr_lines
-    CP_ON_L3 != 0,                   // write_around
-    VX_CFG_L3_MRSQ_SIZE != 0,        // memory-response queue
-    }
-  );
+  {
+    SimPlatform::LaunchKeepScope keep(CP_ON_L2 != 0 || CP_ON_L3 != 0);
+    l3cache_ = Cache::Create("l3cache", Cache::Config{
+      !VX_CFG_L3_ENABLED,
+      log2ceil(VX_CFG_L3_SIZE),  // C
+      log2ceil(VX_CFG_L3_LINE_SIZE),   // L
+      log2ceil(VX_CFG_L3_SECTOR_SIZE), // S
+      log2ceil(VX_CFG_L2_SECTOR_SIZE), // W
+      log2ceil(VX_CFG_L3_NUM_WAYS),    // A
+      log2ceil(VX_CFG_L3_NUM_BANKS),   // B
+      VX_CFG_XLEN,                     // address bits
+      L3_CACHE_REQS,                   // request size
+      VX_CFG_L3_MEM_PORTS,             // memory ports
+      VX_CFG_L3_WRITEBACK,             // write-back
+      false,                    // write response
+      VX_CFG_L3_MSHR_SIZE,             // mshr size
+      VX_CFG_L3_LATENCY,               // pipeline latency
+      VX_CFG_L3_REPL_POLICY,           // replacement policy
+      VX_CFG_L3_ENABLED != 0,          // is_llc when L3 is the LLC
+      true,                            // non-cacheable bypass
+      false,                           // bank_hash
+      L3_SHARED_LLC,                   // shared_llc
+      VX_CFG_L3_LAZY_FETCH != 0,       // lazy_fetch
+      true,                            // core-response register (behind the bypass layer)
+      0,                               // read_merge
+      VX_CFG_L3_MSHR_LINES,            // mshr_lines
+      CP_ON_L3 != 0,                   // write_around
+      VX_CFG_L3_MRSQ_SIZE != 0,        // memory-response queue
+      }
+    );
+  }
 
 #if VX_CFG_EXT_A_ENABLED
   // Build-time invariant: every cache above the LLC must be write-through.
@@ -175,6 +182,7 @@ ProcessorImpl::ProcessorImpl()
 
   // The CP DMA's client slot on the shared last-level cache.
   if constexpr (CP_ON_L2 != 0 || CP_ON_L3 != 0) {
+    SimPlatform::LaunchKeepScope keep(true);
     cp_llc_port_ = CpLlcPort::Create("cp-llc-port");
     if constexpr (CP_ON_L2 != 0) {
       cp_llc_port_->MemReqOut.bind(&clusters_.at(0)->cp_mem_req_in());
@@ -301,8 +309,7 @@ void ProcessorImpl::flush_caches(bool l1_only) {
 }
 
 int ProcessorImpl::run() {
-  this->cp_mem_fence();
-  this->reset();
+  this->launch_reset();
   kmu_->start();
   this->forward_delegated_launch();
 
@@ -373,19 +380,27 @@ void ProcessorImpl::cp_mem_transfer(uint64_t addr, const uint8_t* src, uint8_t* 
   this->llc_keep_lines();
 }
 
-void ProcessorImpl::cp_mem_fence() {
+void ProcessorImpl::launch_reset() {
   if (!cp_llc_port_) {
+    this->reset();
     return;
   }
+  // The launch fence follows the CP's DMA writes, and the kernel starts once
+  // the last-level cache has taken them. A write that missed still has its
+  // line fill in flight, as on the hardware, so the memory side keeps its
+  // state across the reset and the kernel meets those fills.
   if (cp_llc_port_->writes_pending()) {
     cp_llc_port_->fence();
   }
-  // The launch resets the model, so a transfer's fills land first: memory
-  // holds a read in flight without a channel packet.
-  while (!cp_llc_port_->idle() || !SimPlatform::instance().idle() || perf_mem_pending_reads_ != 0) {
+  while (!cp_llc_port_->idle()) {
     SimPlatform::instance().tick();
   }
-  this->llc_keep_lines();
+  SimPlatform::instance().reset_launch();
+  platform_reset_ = true;
+  perf_mem_reads_ = 0;
+  perf_mem_writes_ = 0;
+  perf_mem_latency_ = 0;
+  is_cycle_initialized_ = false;
 }
 
 void ProcessorImpl::llc_keep_lines() {
@@ -427,10 +442,10 @@ void ProcessorImpl::reset() {
 bool ProcessorImpl::cycle() {
   // Lazy first-call init mirrors run()'s top-of-loop sequence so the
   // external driver doesn't need to choreograph reset + kmu start
-  // separately. reset() clears is_cycle_initialized_ so a back-to-back
+  // separately. A reset clears is_cycle_initialized_ so a back-to-back
   // kernel launch re-dispatches.
   if (!is_cycle_initialized_) {
-    this->reset();
+    this->launch_reset();
     kmu_->start();
     this->forward_delegated_launch();
     is_cycle_initialized_ = true;
