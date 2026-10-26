@@ -2423,6 +2423,21 @@ public:
     }
   }
 
+  // Without a registered tree level the hardware crossbar is combinational
+  // (no request buffer ahead of a bank): a request stays at its port until the
+  // bank takes it, where a later same-word read can still merge with it. The
+  // arbiter then offers each bank one request per cycle and dequeues the ports
+  // only when the bank pops the offer; an offer still pending next cycle is
+  // withdrawn and the ports are arbitrated afresh.
+  void attach_bank(uint32_t b, SimChannel<MemReq>* bank_in) {
+    if (!this->offers_enabled()) {
+      return;
+    }
+    offers_.resize(ReqOut.size());
+    offers_.at(b).bank_in = bank_in;
+    bank_in->pop_callback([this, b]() { this->on_bank_pop(b); });
+  }
+
   // Bits of the merged-port mask carried below the request tag.
   uint32_t merge_bits() const { return (merge_group_ > 1) ? merge_group_ : 0; }
 
@@ -2500,6 +2515,10 @@ protected:
       std::fill(rr.begin(), rr.end(), 0);
     }
     collisions_ = 0;
+    for (auto& offer : offers_) {
+      offer.valid = false;
+      offer.withdrawing = false;
+    }
   }
 
   // Slices of the arbiter level s: level 0 grants the ports, each level above
@@ -2524,6 +2543,14 @@ protected:
     }
     uint32_t nb = ReqOut.size();
     uint32_t nl = levels_.size();
+    for (auto& offer : offers_) {
+      if (offer.valid) {
+        offer.withdrawing = true;
+        offer.bank_in->pop();
+        offer.withdrawing = false;
+        offer.valid = false;
+      }
+    }
     // the tree's buffered levels, join first: each slice passes one buffer of
     // the level below per cycle
     for (uint32_t s = nl; s > 0; --s) {
@@ -2622,6 +2649,10 @@ protected:
         while (!(slice_want & (1u << j))) {
           j = (j + 1) % size;
         }
+        if (this->offers_enabled()) {
+          this->offer(b, sl * slice_ports + j, out, merged, wants.at(b) - 1, &rr, (j + 1) % size);
+          continue;
+        }
         this->grant(sl * slice_ports + j, out, merged);
         rr = (j + 1) % size;
         granted = true;
@@ -2631,6 +2662,48 @@ protected:
       }
     }
   }
+
+  // Offer port i's request, with the ports merged into it, to bank b; the
+  // ports are dequeued when the bank takes it (on_bank_pop).
+  void offer(uint32_t b, uint32_t i, SimChannel<MemReq>& out, const std::vector<uint64_t>& merged,
+             uint32_t collisions, uint32_t* rr, uint32_t rr_next) {
+    auto req = ReqIn.at(i).peek();
+    uint64_t mask = (merge_group_ > 1) ? merged.at(i) : 0;
+    uint64_t tag = (((uint64_t(req.tag) << this->merge_bits()) | mask) << lg2_inputs_) | i;
+    __assert((tag >> 32) == 0, "cache bank tag overflow");
+    req.tag = uint32_t(tag);
+    auto& offer = offers_.at(b);
+    offer.valid      = true;
+    offer.port       = i;
+    offer.mask       = mask;
+    offer.collisions = collisions;
+    offer.rr         = rr;
+    offer.rr_next    = rr_next;
+    out.send(req, 0);
+  }
+
+  void on_bank_pop(uint32_t b) {
+    auto& offer = offers_.at(b);
+    if (offer.withdrawing) {
+      return;
+    }
+    __assert(offer.valid, "bank took a request the arbiter did not offer");
+    uint32_t i = offer.port;
+    if (offer.mask != 0) {
+      uint32_t base = (i / merge_group_) * merge_group_;
+      for (uint64_t f = offer.mask; f != 0; f &= f - 1) {
+        uint32_t port = base + __builtin_ctzll(f);
+        DT(3, this->name() << " read-merge: port=" << port << ", leader=" << i << ", " << ReqIn.at(port).peek());
+        ReqIn.at(port).pop();
+      }
+    }
+    ReqIn.at(i).pop();
+    *offer.rr = offer.rr_next;
+    collisions_ += offer.collisions;
+    offer.valid = false;
+  }
+
+  bool offers_enabled() const { return levels_.empty() && delay_ == 0; }
 
   // Send port i's request to its bank, with the ports merged into it.
   void grant(uint32_t i, SimChannel<MemReq>& out, const std::vector<uint64_t>& merged) {
@@ -2671,6 +2744,17 @@ private:
   std::vector<std::vector<uint32_t>> rr_;                   // [arbiter level][bank][slice] next to grant
   uint32_t merge_group_;
   uint64_t collisions_ = 0;
+  struct offer_t {
+    SimChannel<MemReq>* bank_in = nullptr;
+    bool     valid       = false;
+    bool     withdrawing = false;
+    uint32_t port        = 0;
+    uint64_t mask        = 0;
+    uint32_t collisions  = 0;
+    uint32_t* rr         = nullptr;
+    uint32_t rr_next     = 0;
+  };
+  std::vector<offer_t> offers_; // [bank], combinational crossbar only
 
   friend class SimObject<CachePortArb>;
 };
@@ -2973,6 +3057,7 @@ public:
 
       // bind core ports
       port_arb_->ReqOut.at(i).bind(&banks_.at(i)->core_req_in);
+      port_arb_->attach_bank(i, &banks_.at(i)->core_req_in);
       banks_.at(i)->core_rsp_out.bind(rsp_mcast_ ? &rsp_mcast_->RspIn.at(i) : &bank_core_xbar_->RspIn.at(i));
 
       // bind memory ports

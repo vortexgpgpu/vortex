@@ -106,6 +106,12 @@ class Spec:
         # coverage can't creep back in per-file.
         if self.check in ("model_parity", "perf_gate"):
             self.xlens = [32]
+        # release_parity: a debug run (its flags carry --debug) must report
+        # exactly the cycles of the same run built release. A debug build widens
+        # the RTL UUID to 44 bits and enables assertions and traces; none of that
+        # may move timing. The runner adds the release leg itself, at xlen 32
+        # only like the cycle gates; other xlens run the debug leg alone.
+        self.release_parity = bool(entry.get("release_parity", False))
         self.tolerance = float(entry.get("tolerance",
                                          defaults.get("tolerance", DEFAULT_PARITY_TOLERANCE)))
         self.authored_drivers = ("driver" in entry) or ("drivers" in entry)
@@ -575,6 +581,13 @@ def cmd_lint(args):
             errors.append("{}: script case missing 'run'".format(c.id))
         if any(int(x) not in (32, 64) for x in c.xlens):
             errors.append("{}: xlen must be 32 and/or 64".format(c.id))
+        if c.release_parity:
+            if c.via != "blackbox" or "--debug" not in c.flags:
+                errors.append("{}: release_parity needs a blackbox case run "
+                              "with --debug".format(c.id))
+            if c.check:
+                errors.append("{}: release_parity cannot combine with a "
+                              "check".format(c.id))
         if c.check:
             if c.check not in VALID_CHECK:
                 errors.append("{}: invalid check {!r}".format(c.id, c.check))
