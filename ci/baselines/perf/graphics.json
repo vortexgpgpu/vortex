@@ -6,7 +6,7 @@
     },
     "app": "gfx_draw3d",
     "args": "-w 128 -h 128 -t box.cgltrace -r box_ref_128.png",
-    "config_hash": "b05e6b5e6b9ffc06",
+    "config_hash": "02ff3eb8cc7c891c",
     "configs": "-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_NUM_CORES=2 -DVX_CFG_NUM_THREADS=4 -DVX_CFG_L2_ENABLE",
     "driver": "rtlsim"
   },
@@ -17,7 +17,7 @@
     },
     "app": "gfx_draw3d",
     "args": "-w 128 -h 128 -t box.cgltrace -r box_ref_128.png",
-    "config_hash": "6e98bbba0a7822d3",
+    "config_hash": "33bc329a5c31e08d",
     "configs": "-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_NUM_THREADS=16",
     "driver": "rtlsim"
   },
@@ -28,7 +28,7 @@
     },
     "app": "gfx_draw3d",
     "args": "-w 128 -h 128 -t box.cgltrace -r box_ref_128.png",
-    "config_hash": "208358458841bcde",
+    "config_hash": "bd063408e042748e",
     "configs": "-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_NUM_THREADS=4",
     "driver": "rtlsim"
   },
@@ -39,7 +39,7 @@
     },
     "app": "gfx_om",
     "args": "-w 128 -h 128 -r whitebox_128.png",
-    "config_hash": "9d0a1a59914e4ff0",
+    "config_hash": "a283b22b5fc238d4",
     "configs": "-DVX_CFG_EXT_OM_ENABLE -DVX_CFG_NUM_THREADS=16",
     "driver": "rtlsim"
   },
@@ -50,7 +50,7 @@
     },
     "app": "gfx_om",
     "args": "-w 128 -h 128 -r whitebox_128.png",
-    "config_hash": "bbaf6fac9da36d0f",
+    "config_hash": "5b99293235b7c2fa",
     "configs": "-DVX_CFG_EXT_OM_ENABLE -DVX_CFG_NUM_THREADS=4",
     "driver": "rtlsim"
   },
@@ -61,7 +61,7 @@
     },
     "app": "gfx_raster",
     "args": "-w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png",
-    "config_hash": "6f2b1e9c2df8bb37",
+    "config_hash": "e6d78d84f54ee283",
     "configs": "-DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_NUM_THREADS=16",
     "driver": "rtlsim"
   },
@@ -72,7 +72,7 @@
     },
     "app": "gfx_raster",
     "args": "-w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png",
-    "config_hash": "e3036cf5282b4118",
+    "config_hash": "15f7ab48d7b2edce",
     "configs": "-DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_NUM_THREADS=4",
     "driver": "rtlsim"
   },
@@ -83,7 +83,7 @@
     },
     "app": "gfx_tex",
     "args": "-i toad.png -r toad_ref_f0.png -f 0 -g 0",
-    "config_hash": "82f630774395560e",
+    "config_hash": "c808376069d5b819",
     "configs": "-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_NUM_THREADS=16",
     "driver": "rtlsim"
   },
@@ -94,7 +94,7 @@
     },
     "app": "gfx_tex",
     "args": "-i toad.png -r toad_ref_f0.png -f 0 -g 0",
-    "config_hash": "3a44bdd6d3900bb7",
+    "config_hash": "9d3f7a8db252c33d",
     "configs": "-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_NUM_THREADS=4",
     "driver": "rtlsim"
   }
