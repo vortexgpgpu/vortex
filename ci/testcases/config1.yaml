@@ -401,3 +401,21 @@ tests:
   - simx
   app: regression/vecadd
   configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_NUM_LSU_BLOCKS=4 -DVX_CFG_NUM_LSU_LANES=4
+# Fetch slices reading one line in the same cycle share one icache access, and
+# each slice must get its own word: sgemm's three-line loop merges almost every
+# cycle. The second case puts the merged responses behind 16 banks.
+- id: icache_merge-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm
+  args: -n64
+  configs: -DVX_CFG_NUM_WARPS=16 -DVX_CFG_NUM_THREADS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_FETCH_WIDTH=4
+- id: icache_merge-2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: raycast
+  configs: -DVX_CFG_NUM_WARPS=16 -DVX_CFG_NUM_THREADS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_FETCH_WIDTH=4 -DVX_CFG_ICACHE_NUM_BANKS=16

@@ -61,6 +61,7 @@ module VX_cache import VX_gpu_pkg::*; #(
     parameter BANK_HASH             = 0,      // hashed bank select (cache_bank_hash)
 
     parameter READ_MERGE            = 0,      // merge same-word reads within groups of this many adjacent ports (0: off)
+    parameter READ_MERGE_LINE       = 0,      // merge any reads of the same line instead, each port keeping its own tag and word
 
     parameter AMO_ENABLE            = 0       // synthesize atomic-op logic in the banks
  ) (
@@ -95,7 +96,13 @@ module VX_cache import VX_gpu_pkg::*; #(
     // leader's group) below the request tag through the bank.
     localparam MERGE_GROUP     = (READ_MERGE != 0) ? `MIN(READ_MERGE, NUM_REQS) : 1;
     localparam DO_READ_MERGE   = (MERGE_GROUP > 1);
-    localparam BANK_TAG_WIDTH  = TAG_WIDTH + (DO_READ_MERGE ? MERGE_GROUP : 0);
+    // Line merging also carries every group port's {tag, word select}, one
+    // slot per port above the mask, and the bank answers with one word per slot.
+    localparam MERGE_LINE      = DO_READ_MERGE && (READ_MERGE_LINE != 0);
+    localparam SLOT_WIDTH      = TAG_WIDTH + WORD_SEL_WIDTH;
+    localparam SLOTS_WIDTH     = MERGE_LINE ? (MERGE_GROUP * SLOT_WIDTH) : 0;
+    localparam RSP_WORDS       = MERGE_LINE ? MERGE_GROUP : 1;
+    localparam BANK_TAG_WIDTH  = TAG_WIDTH + SLOTS_WIDTH + (DO_READ_MERGE ? MERGE_GROUP : 0);
     localparam CORE_REQ_DATAW  = LINE_ADDR_WIDTH + 1 + WORD_SEL_WIDTH + WORD_SIZE + WORD_WIDTH + BANK_TAG_WIDTH + `UP(MEM_ATTR_WIDTH);
     localparam CORE_RSP_DATAW  = WORD_WIDTH + TAG_WIDTH;
     localparam BANK_MEM_TAG_WIDTH = UUID_WIDTH + MSHR_ADDR_WIDTH;
@@ -288,7 +295,7 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0][`UP(MEM_ATTR_WIDTH)-1:0]  per_bank_core_req_attr;
     wire [NUM_BANKS-1:0]                        per_bank_core_req_ready;
     wire [NUM_BANKS-1:0]                        per_bank_core_rsp_valid;
-    wire [NUM_BANKS-1:0][`CS_WORD_WIDTH-1:0]    per_bank_core_rsp_data;
+    wire [NUM_BANKS-1:0][RSP_WORDS-1:0][`CS_WORD_WIDTH-1:0] per_bank_core_rsp_data;
     wire [NUM_BANKS-1:0][BANK_TAG_WIDTH-1:0]    per_bank_core_rsp_tag;
     wire [NUM_BANKS-1:0][REQ_SEL_WIDTH-1:0]     per_bank_core_rsp_idx;
     wire [NUM_BANKS-1:0]                        per_bank_core_rsp_ready;
@@ -345,11 +352,11 @@ module VX_cache import VX_gpu_pkg::*; #(
             assign core_req_bid[i] = '0;
         end
     end
-    // Read merging: plain reads of the same word with the same tag from ports
-    // of one group in the same cycle are served by one bank access. The lowest
-    // such port leads; the others stay out of the request crossbar and are
-    // accepted in the cycle their leader is, so every port keeps its own
-    // request order into the bank.
+    // Read merging: plain reads of the same word with the same tag (or, under
+    // line merging, of the same line) from ports of one group in the same cycle
+    // are served by one bank access. The lowest such port leads; the others
+    // stay out of the request crossbar and are accepted in the cycle their
+    // leader is, so every port keeps its own request order into the bank.
     wire [NUM_REQS-1:0]                     core_req_follower;
     wire [NUM_REQS-1:0]                     core_req_xbar_ready;
     wire [NUM_REQS-1:0][BANK_TAG_WIDTH-1:0] core_req_bank_tag;
@@ -369,9 +376,15 @@ module VX_cache import VX_gpu_pkg::*; #(
         for (genvar i = 0; i < NUM_REQS; ++i) begin : g_same_i
             for (genvar j = 0; j < NUM_REQS; ++j) begin : g_same_j
                 if (j < i && (j / MERGE_GROUP) == (i / MERGE_GROUP)) begin : g_cmp
-                    assign same_word[i][j] = plain_read[i] && plain_read[j]
-                                          && (core_req_addr[i] == core_req_addr[j])
-                                          && (core_req_tag[i] == core_req_tag[j]);
+                    if (MERGE_LINE) begin : g_line
+                        assign same_word[i][j] = plain_read[i] && plain_read[j]
+                                              && (core_req_line_addr[i] == core_req_line_addr[j])
+                                              && (core_req_bid[i] == core_req_bid[j]);
+                    end else begin : g_word
+                        assign same_word[i][j] = plain_read[i] && plain_read[j]
+                                              && (core_req_addr[i] == core_req_addr[j])
+                                              && (core_req_tag[i] == core_req_tag[j]);
+                    end
                 end else begin : g_none
                     assign same_word[i][j] = 1'b0;
                 end
@@ -387,8 +400,18 @@ module VX_cache import VX_gpu_pkg::*; #(
             for (genvar j = 0; j < NUM_REQS; ++j) begin : g_leader_fire
                 assign leader_fire[j] = same_word[i][j] && ~core_req_follower[j] && core_req_xbar_ready[j];
             end
+            wire [`UP(SLOTS_WIDTH)-1:0] slots;
+            if (MERGE_LINE) begin : g_slots
+                for (genvar k = 0; k < MERGE_GROUP; ++k) begin : g_slot
+                    assign slots[k * SLOT_WIDTH +: SLOT_WIDTH] = {core_req_tag[GROUP_BASE + k], core_req_wsel[GROUP_BASE + k]};
+                end
+                assign core_req_bank_tag[i] = {core_req_tag[i], slots, merged_mask};
+            end else begin : g_no_slots
+                assign slots = '0;
+                `UNUSED_VAR (slots)
+                assign core_req_bank_tag[i] = {core_req_tag[i], merged_mask};
+            end
             assign core_req_follower[i] = (| same_word[i]);
-            assign core_req_bank_tag[i] = {core_req_tag[i], merged_mask};
             assign core_req_ready[i]    = core_req_follower[i] ? (| leader_fire) : core_req_xbar_ready[i];
         end
     end else begin : g_no_read_merge
@@ -473,6 +496,9 @@ module VX_cache import VX_gpu_pkg::*; #(
             .MREQ_SIZE    (MREQ_SIZE),
             .LATENCY      (LATENCY),
             .TAG_WIDTH    (BANK_TAG_WIDTH),
+            .RSP_WORDS    (RSP_WORDS),
+            .RSP_WSEL_OFFS (DO_READ_MERGE ? MERGE_GROUP : 0),
+            .RSP_WSEL_STRIDE (SLOT_WIDTH),
             .CORE_OUT_BUF (CORE_RSP_BUF_ENABLE ? 3 : 0),
             .MEM_OUT_BUF  (MEM_REQ_BUF_ENABLE ? 3 : 0),
             .IS_LLC       (IS_LLC),
@@ -524,7 +550,7 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [NUM_REQS-1:0]                  core_rsp_ready;
     wire [NUM_BANKS-1:0][CORE_RSP_DATAW-1:0] per_bank_core_rsp_pdata;
     for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_per_bank_core_rsp_pdata
-        assign per_bank_core_rsp_pdata[i] = {per_bank_core_rsp_data[i], per_bank_core_rsp_tag[i][BANK_TAG_WIDTH-1 -: TAG_WIDTH]};
+        assign per_bank_core_rsp_pdata[i] = {per_bank_core_rsp_data[i][0], per_bank_core_rsp_tag[i][BANK_TAG_WIDTH-1 -: TAG_WIDTH]};
     end
     // A flush token's answer takes bank 0's lane into the response crossbar
     // when the bank has no response of its own, so it leaves through the same
@@ -557,6 +583,22 @@ module VX_cache import VX_gpu_pkg::*; #(
         wire [NUM_BANKS-1:0][NUM_REQS-1:0] lane_taken;
         wire [NUM_REQS-1:0][NUM_BANKS-1:0] per_output_valid;
         wire [NUM_REQS-1:0][NUM_BANKS-1:0] per_output_ready;
+        wire [NUM_REQS-1:0][NUM_BANKS-1:0][CORE_RSP_DATAW-1:0] per_output_pdata;
+        // Under line merging each port takes its own slot's word and tag; the
+        // leader keeps the lane's tag, which a flush answer also uses.
+        for (genvar j = 0; j < NUM_REQS; ++j) begin : g_output_pdata
+            for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_lane
+                if (MERGE_LINE) begin : g_slot
+                    localparam K = j % MERGE_GROUP;
+                    wire [TAG_WIDTH-1:0] lane_tag = core_rsp_xbar_pdata[i][TAG_WIDTH-1:0];
+                    wire [TAG_WIDTH-1:0] slot_tag = per_bank_core_rsp_tag[i][MERGE_GROUP + K * SLOT_WIDTH + WORD_SEL_WIDTH +: TAG_WIDTH];
+                    wire is_leader = (core_rsp_xbar_idx[i] == REQ_SEL_WIDTH'(j));
+                    assign per_output_pdata[j][i] = {per_bank_core_rsp_data[i][K], (is_leader ? lane_tag : slot_tag)};
+                end else begin : g_word
+                    assign per_output_pdata[j][i] = core_rsp_xbar_pdata[i];
+                end
+            end
+        end
         for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_lanes
             wire [MERGE_GROUP-1:0] merged_mask;
             if (i == 0) begin : g_flush_mask
@@ -593,7 +635,7 @@ module VX_cache import VX_gpu_pkg::*; #(
                 .clk       (clk),
                 .reset     (reset),
                 .valid_in  (per_output_valid[j]),
-                .data_in   (core_rsp_xbar_pdata),
+                .data_in   (per_output_pdata[j]),
                 .ready_in  (per_output_ready[j]),
                 .valid_out (core_rsp_valid[j]),
                 .data_out  (core_rsp_pdata[j]),

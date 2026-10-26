@@ -71,6 +71,7 @@ module VX_cache_data import VX_gpu_pkg::*; #(
     input wire [`CS_WORD_WIDTH-1:0]     write_word,
     input wire [WORD_SIZE-1:0]          write_byteen,
     input wire [`UP(`CS_WORD_SEL_BITS)-1:0] word_idx,
+    input wire [`CS_WORDS_PER_LINE-1:0] read_words, // slices a read returns (word_idx's, plus a merged read's)
     input wire [`UP(`CS_SECTOR_SEL_BITS)-1:0] sector_idx, // sector being filled
     // outputs
     output wire [`CS_LINE_WIDTH-1:0]    read_data,
@@ -180,8 +181,8 @@ module VX_cache_data import VX_gpu_pkg::*; #(
         wire fill_sec_en = (`CS_SECTORS_PER_LINE == 1)
                         || (sector_idx == `UP(`CS_SECTOR_SEL_BITS)'(SLICE_SECTOR));
 
-        // load reads the selected slice; writeback/flush reads all slices.
-        wire slice_read = (read && word_en) || ((fill || flush) && WRITEBACK);
+        // a load reads its words' slices; writeback/flush reads all slices.
+        wire slice_read = (read && read_words[s]) || ((fill || flush) && WRITEBACK);
 
         wire slice_write;
         wire [WRENW-1:0]          slice_wren;
@@ -202,6 +203,7 @@ module VX_cache_data import VX_gpu_pkg::*; #(
             `UNUSED_VAR (write_byteen)
             `UNUSED_VAR (hit_any)
             `UNUSED_VAR ({fill_write, merge_write})
+            `UNUSED_VAR (word_en)
             assign slice_write = fill && fill_sec_en;
             assign slice_wren  = 1'b1;
             assign slice_wdata = fill_data[s];

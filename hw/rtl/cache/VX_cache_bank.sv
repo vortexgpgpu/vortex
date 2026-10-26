@@ -41,6 +41,11 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     parameter IS_LLC            = 0,        // last-level cache: AMOs commit locally here
     parameter AMO_ENABLE        = 0,        // synthesize atomic-op logic
     parameter LATENCY           = 2,        // pipeline depth; >2 defers the data array to break the tag->data path
+    // Words per core response. Above 1, response word k is the line's word
+    // whose select rides in the request tag at RSP_WSEL_OFFS + k * RSP_WSEL_STRIDE.
+    parameter RSP_WORDS         = 1,
+    parameter RSP_WSEL_OFFS     = 0,
+    parameter RSP_WSEL_STRIDE   = 0,
     parameter MSHR_ADDR_WIDTH   = `LOG2UP(MSHR_SIZE),
     parameter MEM_TAG_WIDTH     = UUID_WIDTH + MSHR_ADDR_WIDTH,
     parameter REQ_SEL_WIDTH     = `UP(`CS_REQ_SEL_BITS),
@@ -70,7 +75,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
 
     // Core response
     output wire                         core_rsp_valid,
-    output wire [`CS_WORD_WIDTH-1:0]    core_rsp_data,
+    output wire [RSP_WORDS-1:0][`CS_WORD_WIDTH-1:0] core_rsp_data,
     output wire [TAG_WIDTH-1:0]         core_rsp_tag,
     output wire [REQ_SEL_WIDTH-1:0]     core_rsp_idx,
     input  wire                         core_rsp_ready,
@@ -108,6 +113,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     `STATIC_ASSERT(LATENCY >= 2, ("invalid parameter: cache bank LATENCY must be >= 2"))
     `STATIC_ASSERT(!LAZY_FETCH || (WRITEBACK && DIRTY_BYTES && IS_LLC), ("invalid parameter: lazy fetch requires a write-back LLC with dirty bytes"))
     `STATIC_ASSERT(!WRITE_AROUND || (WRITEBACK && WRITE_ENABLE), ("invalid parameter: write-around requires a write-back cache"))
+    `STATIC_ASSERT(RSP_WORDS == 1 || (!WRITE_ENABLE && !AMO_ENABLE), ("invalid parameter: multi-word responses are read-only"))
     `UNUSED_PARAM (MRSQ_SIZE)
 
     // ========================================================================
@@ -909,6 +915,16 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire mask_clr_line_stc = (mask_fill_stc && ~stC.lk.is_refill) || (stC.req.valid && stC.req.is_flush);
     wire mask_clr_sec_stc  = mask_fill_stc && stC.lk.is_refill;
 
+    // The data slices a read returns: its word's, or under multi-word
+    // responses the whole line, since a merged read may take any word (and
+    // decoding the slots' selects here would sit on the array's enable path).
+    wire [`CS_WORDS_PER_LINE-1:0] read_words_std;
+    if (RSP_WORDS > 1) begin : g_read_words
+        assign read_words_std = '1;
+    end else begin : g_read_word
+        assign read_words_std = `CS_WORDS_PER_LINE'(1) << stD.req.word_idx;
+    end
+
     VX_cache_data #(
         .CACHE_SIZE   (CACHE_SIZE),
         .LINE_SIZE    (LINE_SIZE),
@@ -944,6 +960,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .fill_data    (fbuf_line),
         .write_word   (stD.wdata),
         .word_idx     (stD.req.word_idx),
+        .read_words   (read_words_std),
         .sector_idx   (sector_idx_std),
         .write_byteen (stD.req.byteen),
         .read_data    (read_data_stc),
@@ -1311,11 +1328,33 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         assign fwd_word = fbuf_data_r[`CS_WORD_WIDTH-1:0];
     end
 
+    // A multi-word response takes each word its tag selects, from the line at
+    // commit or from the staged sector on a forward.
+    wire [RSP_WORDS-1:0][`CS_WORD_WIDTH-1:0] crsp_words, fwd_words;
+    if (RSP_WORDS > 1) begin : g_rsp_words
+        for (genvar k = 0; k < RSP_WORDS; ++k) begin : g_word
+            wire [WORD_SEL_WIDTH-1:0] wsel_stc = stC.req.tag[RSP_WSEL_OFFS + k * RSP_WSEL_STRIDE +: WORD_SEL_WIDTH];
+            wire [WORD_SEL_WIDTH-1:0] wsel_fwd = replay_tag[RSP_WSEL_OFFS + k * RSP_WSEL_STRIDE +: WORD_SEL_WIDTH];
+            assign crsp_words[k] = read_data_stc[wsel_stc];
+            if (`CS_WORDS_PER_SECTOR > 1) begin : g_fwd
+                wire [`CLOG2(`CS_WORDS_PER_SECTOR)-1:0] fwd_k = wsel_fwd[`CLOG2(`CS_WORDS_PER_SECTOR)-1:0];
+                assign fwd_words[k] = fbuf_data_r[fwd_k * `CS_WORD_WIDTH +: `CS_WORD_WIDTH];
+            end else begin : g_fwd_1
+                assign fwd_words[k] = fbuf_data_r[`CS_WORD_WIDTH-1:0];
+                `UNUSED_VAR (wsel_fwd)
+            end
+        end
+        `UNUSED_VAR ({crsp_queue_data, fwd_word})
+    end else begin : g_rsp_word
+        assign crsp_words = crsp_queue_data;
+        assign fwd_words  = fwd_word;
+    end
+
     `RUNTIME_ASSERT (~fwd_fire || (replay_addr == fbuf_addr_r), ("%t: %s fill-forward address mismatch: addr=0x%0h, staged=0x%0h", $time, INSTANCE_ID, `CS_BANK_TO_FULL_ADDR(replay_addr, BANK_ID), `CS_BANK_TO_FULL_ADDR(fbuf_addr_r, BANK_ID)))
     `RUNTIME_ASSERT (~(flush_fire && fwd_pending), ("%t: %s flush during fill-forward drain", $time, INSTANCE_ID))
 
     VX_elastic_buffer #(
-        .DATAW   (TAG_WIDTH + `CS_WORD_WIDTH + REQ_SEL_WIDTH),
+        .DATAW   (TAG_WIDTH + RSP_WORDS * `CS_WORD_WIDTH + REQ_SEL_WIDTH),
         .SIZE    (CRSQ_QUEUE_SIZE),
         .OUT_REG (`TO_OUT_BUF_REG(CORE_OUT_BUF))
     ) core_rsp_queue (
@@ -1323,8 +1362,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .reset     (reset),
         .valid_in  (crsp_queue_valid || fwd_head),
         .ready_in  (crsp_queue_ready),
-        .data_in   (crsp_queue_valid ? {stC.req.tag, crsp_queue_data, stC.req.req_idx}
-                                     : {replay_tag, fwd_word, replay_idx}),
+        .data_in   (crsp_queue_valid ? {stC.req.tag, crsp_words, stC.req.req_idx}
+                                     : {replay_tag, fwd_words, replay_idx}),
         .data_out  ({core_rsp_tag, core_rsp_data, core_rsp_idx}),
         .valid_out (core_rsp_valid),
         .ready_out (core_rsp_ready)

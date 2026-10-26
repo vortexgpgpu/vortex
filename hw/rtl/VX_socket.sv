@@ -171,6 +171,9 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .NC_ENABLE      (0),
         // read-only: no dirty data, and the dcache's flush walks the shared levels
         .FLUSH_FORWARD  (0),
+        // a core's fetch slices read different words of the same lines
+        .READ_MERGE     (`VX_CFG_ICACHE_READ_MERGE ? ICACHE_NUM_REQS : 0),
+        .READ_MERGE_LINE (1),
         .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (3)
     ) icache (

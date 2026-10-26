@@ -1245,6 +1245,10 @@ struct MemReq {
   uint32_t hart_id;
   uint64_t uuid;
   MemFlags flags;
+  // Under cache line merging: the tags of the ports merged into this read, by
+  // offset in the leader's merge group. They ride the bank access and its
+  // response, as in the hardware's bank tag.
+  std::shared_ptr<const std::vector<uint32_t>> merged_tags;
 
   MemReq(MemOp _op = MemOp::LD,
          uint64_t _addr = 0,
@@ -1284,6 +1288,7 @@ struct MemRsp {
   uint32_t hart_id;
   uint64_t uuid;
   std::shared_ptr<mem_block_t> data;
+  std::shared_ptr<const std::vector<uint32_t>> merged_tags; // see MemReq
 
   MemRsp(uint64_t _tag = 0,
          uint32_t _hart_id = 0,

@@ -75,11 +75,13 @@ public:
       false,                  // shared_llc
       false,                  // lazy_fetch
       true,                   // core-response register
-      0,                      // read_merge
+      (VX_CFG_ICACHE_READ_MERGE != 0) ? ICACHE_NUM_REQS : 0, // read_merge: the core's fetch slices
       0,                      // mshr_lines
       false,                  // write_around
       VX_CFG_ICACHE_MRSQ_SIZE != 0, // memory-response queue
       true,                   // the socket's registered memory port
+      false,                  // acq_forward
+      true,                   // merge_line: slices fetch different words of a line
     });
 
     snprintf(sname, 100, "%s-dcache", name.c_str());

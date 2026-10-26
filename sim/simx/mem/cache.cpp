@@ -423,6 +423,7 @@ struct bank_req_t {
   uint64_t addr;
   uint32_t hart_id;
   uint64_t req_tag;
+  std::shared_ptr<const std::vector<uint32_t>> merged_tags; // ride to the response
   uint64_t uuid;
   uint32_t mshr_id;
   ReqType type;
@@ -474,6 +475,7 @@ struct bank_req_t {
     addr = 0;
     hart_id = 0;
     req_tag = 0;
+    merged_tags.reset();
     uuid = 0;
     mshr_id = 0;
     type = ReqType::None;
@@ -1290,6 +1292,7 @@ private:
             coalesced.hart_id = core_req.hart_id;
             coalesced.uuid    = core_req.uuid;
             coalesced.req_tag = core_req.tag;
+            coalesced.merged_tags = core_req.merged_tags;
             coalesced.write   = (core_req.op == MemOp::ST);
             coalesced.op      = core_req.op;
             coalesced.data    = core_req.data;
@@ -1328,6 +1331,7 @@ private:
       bank_req.hart_id = core_req.hart_id;
       bank_req.uuid    = core_req.uuid;
       bank_req.req_tag = core_req.tag;
+      bank_req.merged_tags = core_req.merged_tags;
       // bank_req.write means "route through the cache write path" — true only
       // for plain stores. AMOs (op == AMO_SC / AMO RMW) are write-bearing
       // semantically (memop_is_write returns true) but use the dedicated AMO
@@ -1537,6 +1541,7 @@ private:
     mshr_.dequeue(&req);
     MemRsp rsp{req.req_tag, req.hart_id, req.uuid};
     rsp.data = fwd_data_;
+    rsp.merged_tags = req.merged_tags;
     this->core_rsp_out.send(rsp);
     DT(3, this->name() << " fwd-rsp: " << rsp);
     return true;
@@ -1934,6 +1939,7 @@ private:
         MemRsp rsp{bank_req.req_tag, bank_req.hart_id, bank_req.uuid};
         if (!bank_req.write)
           rsp.data = hit_sec.data;
+        rsp.merged_tags = bank_req.merged_tags;
         this->core_rsp_out.send(rsp);
         crsp_sent_ = true;
         DT(3, this->name() << " replay-rsp: " << rsp);
@@ -2060,6 +2066,7 @@ private:
           MemRsp rsp{bank_req.req_tag, bank_req.hart_id, bank_req.uuid};
           if (!bank_req.write)
             rsp.data = hit_sec.data;
+          rsp.merged_tags = bank_req.merged_tags;
           this->core_rsp_out.send(rsp);
           crsp_sent_ = true;
           DT(3, this->name() << " core-rsp: " << rsp);
@@ -2391,7 +2398,9 @@ private:
 // With read merging, plain reads of the same word with the same tag from ports
 // of one group in the same cycle are served by one bank access: the lowest
 // such port leads, the others stay out of arbitration and are accepted with
-// it. The merged ports' mask rides below the tag through the bank.
+// it. The merged ports' mask rides below the tag through the bank. Line
+// merging takes any plain read of the same line instead, whatever its word
+// and tag.
 class CachePortArb : public SimObject<CachePortArb> {
 public:
   std::vector<SimChannel<MemReq>> ReqIn;  // core ports
@@ -2399,7 +2408,8 @@ public:
   std::vector<SimChannel<MemReq>> IoOut;  // non-cacheable requests, per port
 
   CachePortArb(const SimContext& ctx, const char* name, const params_t& params,
-               uint32_t num_inputs, uint32_t num_banks, uint32_t merge_group)
+               uint32_t num_inputs, uint32_t num_banks, uint32_t merge_group,
+               bool merge_line)
     : SimObject<CachePortArb>(ctx, name)
     , ReqIn(num_inputs, this)
     , ReqOut(num_banks, this)
@@ -2410,6 +2420,7 @@ public:
     , delay_((num_inputs > 2) ? 1 : 0)
     , levels_(arb_tree_levels(num_inputs))
     , merge_group_(merge_group)
+    , merge_line_(merge_line)
   {
     __assert(merge_group_ <= 1 || (merge_group_ <= 64 && ispow2(merge_group_) && (num_inputs % merge_group_) == 0),
              "a read-merge group must be a power of two of at most 64 dividing the ports");
@@ -2595,8 +2606,11 @@ protected:
             continue;
           }
           auto& req_j = ReqIn.at(j).peek();
-          if ((req_j.addr >> params_.word_select_addr_start) == (req_i.addr >> params_.word_select_addr_start)
-           && req_j.tag == req_i.tag) {
+          bool same = merge_line_
+            ? ((req_j.addr >> params_.bank_select_addr_start) == (req_i.addr >> params_.bank_select_addr_start))
+            : ((req_j.addr >> params_.word_select_addr_start) == (req_i.addr >> params_.word_select_addr_start)
+               && req_j.tag == req_i.tag);
+          if (same) {
             merged.at(j) |= 1ull << (i - base);
             followers.at(i) = true;
             break;
@@ -2672,6 +2686,7 @@ protected:
     uint64_t tag = (((uint64_t(req.tag) << this->merge_bits()) | mask) << lg2_inputs_) | i;
     __assert((tag >> 32) == 0, "cache bank tag overflow");
     req.tag = uint32_t(tag);
+    req.merged_tags = this->merged_tags(i, mask);
     auto& offer = offers_.at(b);
     offer.valid      = true;
     offer.port       = i;
@@ -2705,6 +2720,21 @@ protected:
 
   bool offers_enabled() const { return levels_.empty() && delay_ == 0; }
 
+  // Under line merging, the merged ports' own tags, which ride the leader's
+  // bank access and its response.
+  std::shared_ptr<const std::vector<uint32_t>> merged_tags(uint32_t i, uint64_t mask) const {
+    if (!merge_line_ || mask == 0) {
+      return nullptr;
+    }
+    uint32_t base = (i / merge_group_) * merge_group_;
+    auto tags = std::make_shared<std::vector<uint32_t>>(merge_group_, 0);
+    for (uint64_t f = mask; f != 0; f &= f - 1) {
+      uint32_t k = __builtin_ctzll(f);
+      tags->at(k) = ReqIn.at(base + k).peek().tag;
+    }
+    return tags;
+  }
+
   // Send port i's request to its bank, with the ports merged into it.
   void grant(uint32_t i, SimChannel<MemReq>& out, const std::vector<uint64_t>& merged) {
     auto req = ReqIn.at(i).peek();
@@ -2712,6 +2742,7 @@ protected:
     if (merge_group_ > 1) {
       uint32_t base = (i / merge_group_) * merge_group_;
       mask = merged.at(i);
+      req.merged_tags = this->merged_tags(i, mask);
       for (uint64_t f = mask; f != 0; f &= f - 1) {
         uint32_t port = base + __builtin_ctzll(f);
         DT(3, this->name() << " read-merge: port=" << port << ", leader=" << i << ", " << req);
@@ -2743,6 +2774,7 @@ private:
   std::vector<std::vector<SimChannel<MemReq>>> tree_stage_; // [level][bank][slice]
   std::vector<std::vector<uint32_t>> rr_;                   // [arbiter level][bank][slice] next to grant
   uint32_t merge_group_;
+  bool merge_line_;
   uint64_t collisions_ = 0;
   struct offer_t {
     SimChannel<MemReq>* bank_in = nullptr;
@@ -2773,12 +2805,13 @@ public:
   std::vector<SimChannel<MemRsp>> RspOut; // core ports
 
   CacheRspMcast(const SimContext& ctx, const char* name, uint32_t num_banks,
-                uint32_t num_outputs, uint32_t merge_group)
+                uint32_t num_outputs, uint32_t merge_group, bool merge_line)
     : SimObject<CacheRspMcast>(ctx, name)
     , RspIn(num_banks, this)
     , RspOut(num_outputs, this)
     , lg2_outputs_(log2ceil(num_outputs))
     , merge_group_(merge_group)
+    , merge_line_(merge_line)
     , slices_(arb_tree_slices(num_banks))
     , sent_(num_banks, 0)
     , last_grant_(num_outputs * slices_, num_banks - 1)
@@ -2846,7 +2879,12 @@ protected:
             continue;
           }
           auto rsp = RspIn.at(b).peek();
+          uint32_t lane_tag = rsp.tag;
           rsp.tag >>= (lg2_outputs_ + merge_group_);
+          if (merge_line_ && o != (lane_tag & ((1u << lg2_outputs_) - 1))) {
+            __assert(rsp.merged_tags, "a line-merged response lost its merged tags");
+            rsp.tag = rsp.merged_tags->at(o % merge_group_);
+          }
           if (out.try_send(rsp, (slices_ > 1) ? 1 : 0)) {
             DT(4, this->name() << " rsp" << b << "_" << o << ": " << rsp);
             sent_.at(b) |= 1ull << o;
@@ -2867,6 +2905,7 @@ protected:
 private:
   uint32_t lg2_outputs_;
   uint32_t merge_group_;
+  bool merge_line_;
   uint32_t slices_;
   std::vector<uint64_t> sent_;       // [bank] ports that took the lane's response
   std::vector<uint32_t> last_grant_; // [port][slice] round-robin pointer
@@ -3023,7 +3062,8 @@ public:
     // Create the core-port arbiter ahead of the banks it feeds
     snprintf(sname, 100, "%s-port_arb", simobject->name().c_str());
     uint32_t merge_group = std::min<uint32_t>(config_.read_merge, config_.num_inputs);
-    port_arb_ = CachePortArb::Create(sname, params_, config_.num_inputs, num_banks, merge_group);
+    const bool merge_line = config_.merge_line && merge_group > 1;
+    port_arb_ = CachePortArb::Create(sname, params_, config_.num_inputs, num_banks, merge_group, merge_line);
     for (uint32_t i = 0; i < config_.num_inputs; ++i) {
       simobject->core_req_in.at(i).bind(&port_arb_->ReqIn.at(i));
     }
@@ -3038,7 +3078,7 @@ public:
     if (port_arb_->merge_bits() != 0) {
       // one buffered arbiter per core port over the bank lanes
       __assert(config_.core_out_buf, "read merging needs a registered core-response port");
-      rsp_mcast_ = CacheRspMcast::Create(sname, num_banks, config_.num_inputs, port_arb_->merge_bits());
+      rsp_mcast_ = CacheRspMcast::Create(sname, num_banks, config_.num_inputs, port_arb_->merge_bits(), merge_line);
       core_rsp_delay_ = 1;
     } else if (config_.core_out_buf) {
       bank_core_xbar_ = MemCrossBar::Create(sname, ArbiterType::RoundRobin, config_.num_inputs, num_banks, bank_sel, 0, 0);
