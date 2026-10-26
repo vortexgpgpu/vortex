@@ -83,7 +83,7 @@ tensor_CFG := -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_EXT_TCU_ENA
 # Multi-core system top behind the AFU control/memory wrapper, as in the Xilinx
 # catalog: 2 cores with atomics and virtual memory.
 top_TOP := VX_afu_wrap
-top_INC := -I$(VORTEX_HOME)/hw/rtl/cp -I$(AFU_RTL_DIR)/xrt -I$(AFU_RTL_DIR)/common
+top_INC := -I$(VORTEX_HOME)/hw/rtl/cp -I$(AFU_RTL_DIR)/common
 top_CFG := -DVX_CFG_NUM_THREADS=4 -DVX_CFG_NUM_WARPS=4 -DVX_CFG_NUM_CORES=2 \
            -DVX_CFG_EXT_A_ENABLE -DVX_CFG_VM_ENABLE -DVX_CFG_DCACHE_LATENCY=3
 
