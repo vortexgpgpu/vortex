@@ -129,6 +129,71 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   uint32_t errors = 0;
   auto err = reinterpret_cast<volatile uint32_t*>(arg->err_addr);
 
+  if (arg->phase == 3) {
+    // Read fresh lines from memory, one word each.
+    auto base = reinterpret_cast<volatile uint32_t*>(arg->full_addr);
+    uint32_t sum = 0;
+    for (uint32_t i = 0; i < arg->full_lines; ++i) {
+      uint32_t line = i * arg->num_threads + gid;
+      sum += base[line * (FLOOD_LINE_BYTES / sizeof(uint32_t))];
+    }
+    asm volatile ("" :: "r"(sum));
+    err[gid] = 0;
+    return;
+  }
+
+  if (arg->phase == 2 && arg->full_mode == FULL_CHAIN) {
+    // The first SECTOR_WORDS threads of a block store one word each of a
+    // sector, every warp at once after a barrier, and load it right away: the
+    // loads reach the cache while the stores' allocation is still pending.
+    // The second store lands while that chain is being refetched.
+    auto base = reinterpret_cast<volatile uint32_t*>(arg->full_addr);
+    uint32_t t = threadIdx.x;
+    for (uint32_t i = 0; i < arg->full_lines; ++i) {
+      uint32_t line = i * arg->num_blocks + blockIdx.x;
+      for (uint32_t s = 0; s < FULL_LINE_WORDS; s += SECTOR_WORDS) {
+        uint32_t idx = line * FULL_LINE_WORDS + s + t;
+        bool skip = full_skipped(line, s + t, arg);
+        // a skipped word is stored to a scratch word: no branch delays the load
+        volatile uint32_t* dst = skip ? &err[arg->num_threads + gid] : &base[idx];
+        __syncthreads();
+        if (t < SECTOR_WORDS) {
+          *dst = full_value(line, s + t);
+          uint32_t first = base[idx];
+          *dst = full_value2(line, s + t);
+          uint32_t second = base[idx];
+          errors += (first != (skip ? pattern_word(idx) : full_value(line, s + t))) ? 1 : 0;
+          errors += (second != full_expected(idx, arg)) ? 1 : 0;
+        }
+      }
+    }
+    err[gid] = errors;
+    return;
+  }
+
+  if (arg->phase == 2) {
+    // Store this thread's lines, all of each sector or all but one word,
+    // then load them all back.
+    auto base = reinterpret_cast<volatile uint32_t*>(arg->full_addr);
+    for (uint32_t i = 0; i < arg->full_lines; ++i) {
+      uint32_t line = i * arg->num_threads + gid;
+      for (uint32_t w = 0; w < FULL_LINE_WORDS; ++w) {
+        if (!full_skipped(line, w, arg)) {
+          base[line * FULL_LINE_WORDS + w] = full_value(line, w);
+        }
+      }
+    }
+    for (uint32_t i = 0; i < arg->full_lines; ++i) {
+      uint32_t line = i * arg->num_threads + gid;
+      for (uint32_t w = 0; w < FULL_LINE_WORDS; ++w) {
+        uint32_t idx = line * FULL_LINE_WORDS + w;
+        errors += (base[idx] != full_expected(idx, arg)) ? 1 : 0;
+      }
+    }
+    err[gid] = errors;
+    return;
+  }
+
   if (arg->phase != 0) {
     // Every region again, from another thread (another core when there are
     // several), after the launch boundary flushed the partial lines.

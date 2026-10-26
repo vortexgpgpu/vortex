@@ -147,6 +147,18 @@ tests:
   via: blackbox
   app: lazy_fetch
   configs: -DVX_CFG_DCACHE_LAZY_FETCH=1
+# Fully written sectors on a lazy-fetch write-back L2 shared by 4 cores:
+# partial-miss loads and parked chain heads refetch them through the loopback.
+- id: parity-lazy-fetch-full
+  check: model_parity
+  via: blackbox
+  app: lazy_fetch
+  args: -f -n1
+  configs: -DVX_CFG_EXT_A_ENABLE -DVX_CFG_SOCKET_SIZE=1 -DVX_CFG_L2_WRITEBACK=1 -DVX_CFG_L2_LAZY_FETCH=1
+  flags: --perf=7
+  shape:
+    cores: 4
+    l2cache: true
 # FPU + LSU locality, multi-warp reuse (~1.29M cycles on the default shape).
 - id: parity-sgemm
   check: model_parity

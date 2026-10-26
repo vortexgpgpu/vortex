@@ -12,6 +12,19 @@
 // Same-set lines: one per thread and round, a page apart, so they compete for
 // one cache set and a line being refetched is often evicted before its fill.
 #define SET_STRIDE_WORDS 1024
+// A whole cache line of the largest configured line size: two 64-byte
+// sectors, stored before any of it is loaded.
+#define FULL_LINE_WORDS 32
+#define SECTOR_WORDS    16
+// Lines a flood launch reads one word of, each a memory block apart.
+#define FLOOD_LINE_BYTES 64
+
+// How a phase-2 launch stores and loads its lines.
+enum {
+  FULL_SEPARATE = 0, // each thread stores its lines, then loads them all back
+  FULL_CHAIN    = 1, // a block's threads store a sector together, load it at once, store, load
+  FULL_MIXED    = 2  // as FULL_SEPARATE, with every odd line left partial
+};
 
 enum {
   CASE_HALF  = 0, // store half the line, then load all of it (same thread)
@@ -31,8 +44,13 @@ typedef struct {
   uint32_t warp_size;
   uint32_t cross_warp;   // blocks hold an even number of warps
   uint32_t amo;          // the device implements the A extension
-  uint32_t phase;        // 0: exercise the cases, 1: re-check every region
+  uint32_t phase;        // 0: exercise the cases, 1: re-check every region, 2: full lines, 3: flood
   uint32_t rotate;       // phase 1: check the regions of thread (gid + rotate)
+  uint64_t full_addr;
+  uint32_t full_lines;   // phase 2: lines per thread (per warp in FULL_CHAIN); 3: lines it reads
+  uint32_t full_mode;    // phase 2: FULL_*
+  uint32_t full_skip;    // phase 2: leave each sector's last word unwritten
+  uint32_t num_blocks;
 } kernel_arg_t;
 
 // Pre-pattern the host writes over the whole buffer.
@@ -50,6 +68,35 @@ static inline uint32_t pattern_word(uint32_t word_idx) {
 
 static inline uint32_t store_value(uint32_t region, uint32_t w) {
   return 0xC0000000u | (region << 4) | w;
+}
+
+// Word w of a line that a phase-2 launch leaves unwritten.
+static inline bool full_skipped(uint32_t line, uint32_t w, const kernel_arg_t* arg) {
+  bool partial = (arg->full_mode == FULL_MIXED) ? ((line & 1) != 0) : (arg->full_skip != 0);
+  return partial && (w % SECTOR_WORDS) == (SECTOR_WORDS - 1);
+}
+
+static inline uint32_t full_value(uint32_t line, uint32_t w) {
+  return 0x50000000u | (line << 5) | w;
+}
+
+// The second store a FULL_CHAIN thread makes to its word of each sector.
+static inline uint32_t full_value2(uint32_t line, uint32_t w) {
+  return 0x60000000u | (line << 5) | w;
+}
+
+// Word `word_idx` of a phase-2 buffer once its launch has run; the host
+// pre-patterns the buffer.
+static inline uint32_t full_expected(uint32_t word_idx, const kernel_arg_t* arg) {
+  uint32_t line = word_idx / FULL_LINE_WORDS;
+  uint32_t w    = word_idx % FULL_LINE_WORDS;
+  if (full_skipped(line, w, arg)) {
+    return pattern_word(word_idx);
+  }
+  if (arg->full_mode == FULL_CHAIN) {
+    return full_value2(line, w);
+  }
+  return full_value(line, w);
 }
 
 static inline uint32_t region_index(uint32_t round, uint32_t num_threads, uint32_t gid, uint32_t c) {

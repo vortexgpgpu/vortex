@@ -220,6 +220,12 @@ static inline bool sector_hit(const sector_t& sec, bool needs_data) {
   return sec.valid && !(needs_data && sec.partial);
 }
 
+// Every byte of the sector has been stored: a refetch of it reads nothing.
+static inline bool sector_written(const sector_t& sec) {
+  constexpr uint64_t full_mask = (VX_CFG_MEM_BLOCK_SIZE >= 64) ? ~0ull : ((1ull << VX_CFG_MEM_BLOCK_SIZE) - 1);
+  return sec.dirty_mask == full_mask;
+}
+
 struct line_t {
   uint64_t tag;
   uint32_t lru_ctr;
@@ -904,6 +910,7 @@ protected:
     chain_tag_     = 0;
     chain_sector_  = 0;
     refetch_hold_  = false;
+    refetch_hold_retry_ = false;
     flushing_ = false;
     flush_set_idx_ = 0;
     flush_way_idx_ = 0;
@@ -977,15 +984,26 @@ private:
   //
   // At most one input fires per tick. All inputs flow through pipe_req_.
   void processInputs(bool fwd_consumed) {
+    // A refetch fill learns whether its sector is still resident at its tag
+    // lookup, the tick after it enters: nothing enters behind it meanwhile,
+    // and its chain then replays, or parks again if the sector was evicted.
+    if (refetch_hold_) {
+      refetch_hold_ = false;
+      bool evicted = false;
+      if (!refetch_hold_retry_) {
+        const auto &set = sets_.at(chain_set_);
+        int resident_id = set.find_resident(chain_tag_);
+        evicted = (resident_id == -1) || !set.lines.at(resident_id).sectors.at(chain_sector_).valid;
+      }
+      chain_partial_ = evicted;
+      chain_retry_   = evicted;
+      return;
+    }
+
     // 1) replay: one chain entry leaves per tick — when the fill-forward
     // drain completed the head this tick, this slot goes to new core
     // requests instead
     if (mshr_.has_ready_reqs() && !fwd_consumed) {
-      // A refetch fill learns whether its sector is still resident when it
-      // installs; its chain waits for that answer.
-      if (refetch_hold_) {
-        return;
-      }
       // A chain whose sector is partial cannot serve a load or AMO: park at
       // that head and refetch the sector; the rest of the chain waits.
       if (chain_partial_) {
@@ -1072,7 +1090,8 @@ private:
         mshr_.replay(mshr_id);
         this->setChain(set_id, addr_tag, sector_id, false);
         if (bank_req.refetch) {
-          refetch_hold_ = true;
+          refetch_hold_       = true;
+          refetch_hold_retry_ = bank_req.refetch_retry;
         } else {
           fwd_active_ = true;
           fwd_set_    = set_id;
@@ -1086,8 +1105,9 @@ private:
         return;
       }
     } else if (!lazy_q_->empty() && !fwd_active_) {
-      // Lazy allocation of a write-miss root: a data-less fill through the
-      // same path, below memory fills in priority.
+      // A data-less fill through the same path, below memory fills in
+      // priority: the allocation of a write-miss root, or the refetch of a
+      // sector every store has covered.
       uint32_t mshr_id = lazy_q_->peek();
       const auto &root_peek = mshr_.peek(mshr_id);
       const uint32_t set_id    = root_peek.set_id;
@@ -1106,9 +1126,17 @@ private:
         bank_req.uuid    = root_peek.bank_req.uuid;
         bank_req.mshr_id = mshr_id;
         bank_req.nodata  = true;
+        bank_req.refetch = root_peek.refetch;
+        bank_req.refetch_retry = root_peek.refetch_retry;
         pipe_req_->push(bank_req);
         mshr_.replay(mshr_id);
-        this->setChain(set_id, addr_tag, sector_id, true);
+        // A looped-back refetch completes a fully written sector: like a
+        // memory refetch, its chain waits for it to install.
+        this->setChain(set_id, addr_tag, sector_id, !bank_req.refetch);
+        if (bank_req.refetch) {
+          refetch_hold_       = true;
+          refetch_hold_retry_ = bank_req.refetch_retry;
+        }
         DT(3, this->name() << " lazy-fill: " << bank_req);
         lazy_q_->pop();
         return;
@@ -1188,7 +1216,7 @@ private:
       }
       // Any admitted request may become a write-miss root: the lazy queue
       // keeps room for every request already in the pipe.
-      if (config_.lazy_fetch && lazy_q_->size() >= lazyq_size(config_) - config_.latency) {
+      if (config_.lazy_fetch && !this->lazyRoom()) {
         return;
       }
 
@@ -1322,16 +1350,17 @@ private:
     const bool refetch_first   = bank_req.refetch && !bank_req.refetch_retry;
     assert(!sector_resident || refetch_first);
     if (refetch_first) {
-      chain_partial_ = !sector_resident;
-      chain_retry_   = !sector_resident;
-      refetch_hold_  = false;
       if (sector_resident) {
         // Memory supplies the bytes no store wrote; the sector stays dirty
         // in exactly the stored bytes, which are not in memory yet.
-        auto &sec   = set.lines.at(resident_id).sectors.at(sector_id);
-        auto written = sec.data;
-        sec.data    = bank_req.data;
-        sector_merge(sec, written, sec.dirty_mask);
+        auto &sec = set.lines.at(resident_id).sectors.at(sector_id);
+        if (bank_req.nodata) {
+          assert(sector_written(sec) && "looped-back refetch of an incompletely written sector");
+        } else {
+          auto written = sec.data;
+          sec.data = bank_req.data;
+          sector_merge(sec, written, sec.dirty_mask);
+        }
         sec.partial = false;
       }
       return true;
@@ -1405,11 +1434,6 @@ private:
       sec.dirty_mask = 0;
       sec.data       = bank_req.data;
     }
-    if (bank_req.refetch) {
-      chain_partial_ = false;
-      chain_retry_   = false;
-      refetch_hold_  = false;
-    }
     return true;
   }
 
@@ -1425,6 +1449,13 @@ private:
   // Lazy-fetch loopback depth: room for every request in the pipe plus one.
   static uint32_t lazyq_size(const Cache::Config &config) {
     return 1u << log2ceil(config.latency + 1);
+  }
+
+  // The loopback still fits every request in the pipe: a new request may be
+  // admitted, and a refetch with no data to read may loop back; one that
+  // cannot reads memory instead.
+  bool lazyRoom() const {
+    return lazy_q_->size() < lazyq_size(config_) - config_.latency;
   }
 
   // Fill-forward drain: complete the oldest ready replay directly when it is
@@ -1705,12 +1736,24 @@ private:
     } break;
 
     case bank_req_t::Park: {
-      if (this->mem_req_out.full()) {
-        return; // stall
-      }
       uint32_t set_id    = params_.addr_set_id(bank_req.addr);
       uint64_t addr_tag  = params_.addr_tag(bank_req.addr);
       uint32_t sector_id = params_.addr_sector_id(bank_req.addr);
+      auto &set          = sets_.at(set_id);
+      // A parked head needs memory room whichever way its refetch goes.
+      if (this->mem_req_out.full()) {
+        return; // stall
+      }
+      int resident_id = set.find_resident(addr_tag);
+      if (resident_id != -1) {
+        const auto &sec = set.lines.at(resident_id).sectors.at(sector_id);
+        if (sec.valid && sec.partial && sector_written(sec) && this->lazyRoom()) {
+          lazy_q_->push(bank_req.mshr_id);
+          DT(3, this->name() << " refetch-loop: " << bank_req);
+          pipe_req_->pop();
+          return;
+        }
+      }
       MemReq fill;
       fill.addr    = params_.mem_addr_sector(bank_id_, set_id, addr_tag, sector_id);
       fill.tag     = bank_req.mshr_id;
@@ -1992,21 +2035,25 @@ private:
           // fill for this fresh miss.
           bool fill_pending = mshr_.has_pending_fill(set_id, addr_tag, sector_id, -1);
           // Lazy fetch: a write-miss root allocates through the loopback
-          // instead of fetching the sector.
+          // instead of fetching the sector, and so does the refetch of a
+          // partial sector every store has already covered.
           const bool lazy_alloc = config_.lazy_fetch && bank_req.write && !fill_pending;
-          if (lazy_alloc && lazy_q_->full()) {
+          const bool refetch_loop = partial_resident && !fill_pending
+                                 && sector_written(set.lines.at(present_id).sectors.at(sector_id))
+                                 && this->lazyRoom();
+          if ((lazy_alloc || refetch_loop) && lazy_q_->full()) {
             return;
           }
-          if (!fill_pending && !lazy_alloc && this->mem_req_out.full()) {
+          if (!fill_pending && !lazy_alloc && !refetch_loop && this->mem_req_out.full()) {
             return;
           }
 
           assert(!mshr_.full());
           int mshr_id = mshr_.enqueue(bank_req, set_id, addr_tag, sector_id, partial_resident);
           DT(3, this->name() << " mshr-enqueue: " << bank_req);
-          if (lazy_alloc) {
+          if (lazy_alloc || refetch_loop) {
             lazy_q_->push(mshr_id);
-            DT(3, this->name() << " lazy-alloc: " << bank_req);
+            DT(3, this->name() << (lazy_alloc ? " lazy-alloc: " : " refetch-loop: ") << bank_req);
           } else if (!fill_pending) {
             MemReq fill;
             fill.addr  = params_.mem_addr_sector(bank_id_, set_id, addr_tag, sector_id);
@@ -2186,7 +2233,7 @@ private:
     return n;
   }
   TFifo<bank_req_t>::Ptr pipe_req_;
-  TFifo<uint32_t>::Ptr   lazy_q_;   // write-miss roots awaiting their data-less fill
+  TFifo<uint32_t>::Ptr   lazy_q_;   // roots awaiting a data-less fill: write misses and written refetches
 
   Cache::PerfStats perf_stats_;
 
@@ -2210,7 +2257,8 @@ private:
   uint32_t chain_set_;
   uint64_t chain_tag_;
   uint32_t chain_sector_;
-  bool     refetch_hold_; // a refetch fill has not installed yet: its chain waits
+  bool     refetch_hold_; // a refetch fill is at its tag lookup: its chain waits
+  bool     refetch_hold_retry_;
 
   // Flush walk state.
   bool     flushing_;

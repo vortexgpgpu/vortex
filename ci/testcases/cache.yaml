@@ -338,6 +338,30 @@ tests:
   shape:
     cores: 4
     l2cache: true
+# A sector every store has covered reads no memory when a load refetches it.
+# The app compares the memory reads of fully written lines against lines with
+# a word per sector unwritten, so it runs with the memory counters.
+- id: lazy_fetch-3
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: lazy_fetch
+  args: -f -n1
+  configs: -DVX_CFG_EXT_A_ENABLE -DVX_CFG_DCACHE_LAZY_FETCH=1
+  flags: --perf=7
+- id: lazy_fetch-4
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: lazy_fetch
+  args: -f -n1
+  configs: -DVX_CFG_EXT_A_ENABLE -DVX_CFG_SOCKET_SIZE=1 -DVX_CFG_L2_WRITEBACK=1 -DVX_CFG_L2_LAZY_FETCH=1
+  flags: --perf=7
+  shape:
+    cores: 4
+    l2cache: true
 # Both sectors of one sectored L2 line miss together from different warps and
 # cores: each must get its own fill, never chain behind the other sector's.
 # Run with the address held per request and with the MSHR line table.
