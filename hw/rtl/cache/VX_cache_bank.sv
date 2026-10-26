@@ -500,6 +500,17 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // pending wb (chained AMO replays from MSHR after a fill) and must not be
     // cleared by amo_wb_pending; the synthetic writeback carries amo.valid=0 so
     // it never re-commits at S1.
+    // The core-request slot's address: a pending LLC AMO writeback or the core
+    // request. The MSHR takes its allocate match against it a cycle early.
+    wire [`CS_LINE_ADDR_WIDTH-1:0] creq_addr_sel = amo_wb_pending ? amo_wb_addr : core_req_addr;
+    wire [WORD_SEL_WIDTH-1:0]      creq_wsel_sel = amo_wb_pending ? amo_wb_word_idx : core_req_wsel;
+    wire [`UP(`CS_SECTOR_SEL_BITS)-1:0] creq_sector_sel;
+    if (`CS_SECTOR_SEL_BITS != 0) begin : g_creq_sector
+        assign creq_sector_sel = creq_wsel_sel[`CS_WORD_SEL_BITS-1 -: `CS_SECTOR_SEL_BITS];
+    end else begin : g_creq_sector_0
+        assign creq_sector_sel = '0;
+    end
+
     always @(*) begin
         sel_req = '0;
         sel_req.req.valid    = init_fire || replay_fire || fill_fire || flush_fire || core_req_fire;
@@ -513,14 +524,13 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         sel_req.req.attr     = amo_wb_pending ? amo_wb_attr : (core_req_valid ? core_req_attr : '0);
         sel_req.req.way_idx  = flush_way;
         sel_req.req.addr     = (init_valid | flush_valid) ? `CS_LINE_ADDR_WIDTH'(flush_sel)
-                             : (replay_mux ? replay_addr : (fill_mux ? mem_rsp_addr
-                             : (amo_wb_pending ? amo_wb_addr : core_req_addr)));
+                             : (replay_mux ? replay_addr : (fill_mux ? mem_rsp_addr : creq_addr_sel));
         sel_req.req.byteen   = replay_mux ? replay_byteen : (amo_wb_pending ? amo_wb_byteen : core_req_byteen);
         // a fill carries the installed sector in its word_idx high bits so the
         // tag/data stages mark/write the right sector (0 when 1 sector/line).
         sel_req.req.word_idx = replay_mux ? replay_wsel
                              : (fill_mux ? fill_word_idx
-                             : (amo_wb_pending ? amo_wb_word_idx : core_req_wsel));
+                             : creq_wsel_sel);
         sel_req.req.req_idx  = replay_mux ? replay_idx : (amo_wb_pending ? amo_wb_idx : core_req_idx);
         sel_req.req.tag      = (init_valid | flush_valid) ? (flush_valid ? flush_tag : '0)
                              : (replay_mux ? replay_tag : (fill_mux ? (lazy_sel ? '0 : mem_rsp_tag_s)
@@ -699,8 +709,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // disjoint words — the common case in streaming, where the whole warp's
     // beats land on one sector — keep the fast release path, as does
     // read-after-read on the same word.
+    // (the probes carry their own pending test; see VX_cache_mshr)
     assign creq_hit_order_hazard_st0 = st0.req.is_creq && ~st0.req.is_replay
-                                    && mshr_pending_raw
                                     && (mshr_pending_wr_raw || (st0.req.rw && mshr_pending_ovl_raw))
                                     && ~is_amo_fwd_st0
                                     && ~((AMO_ENABLE != 0) && st0.req.amo.amo_valid);
@@ -774,15 +784,30 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .data_out (st1)
     );
 
+    // stP is the stage that feeds stC: the dirty-byte mask is read there, so
+    // stC gets it from a register.
+    commit_t stP;
     VX_pipe_register #(
         .DATAW  ($bits(commit_t)),
         .RESETW (1),
-        .DEPTH  (PIPE_EX)
-    ) reg_cmt (
+        .DEPTH  ((PIPE_EX != 0) ? (PIPE_EX - 1) : 0)
+    ) reg_cmt_p (
         .clk      (clk),
         .reset    (reset),
         .enable   (~pipe_stall),
         .data_in  (st1),
+        .data_out (stP)
+    );
+
+    VX_pipe_register #(
+        .DATAW  ($bits(commit_t)),
+        .RESETW (1),
+        .DEPTH  ((PIPE_EX != 0) ? 1 : 0)
+    ) reg_cmt (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (~pipe_stall),
+        .data_in  (stP),
         .data_out (stC)
     );
 
@@ -935,7 +960,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .WRITE_ENABLE (WRITE_ENABLE),
         .WRITEBACK    (WRITEBACK),
         .DIRTY_BYTES  (DIRTY_BYTES),
-        .LAZY_FETCH   (LAZY_FETCH)
+        .LAZY_FETCH   (LAZY_FETCH),
+        .MASK_SYNC    (PIPE_EX != 0)
     ) cache_data (
         .clk          (clk),
         .reset        (reset),
@@ -950,6 +976,9 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .mask_word    (stC.req.word_idx),
         .mask_byteen  (stC.req.byteen),
         .mask_sector  (sector_idx_stc),
+        .mask_read    (~pipe_stall),
+        .mask_rway    (stP.req.way_idx),
+        .mask_rline   (stP.req.addr[`CS_LINE_SEL_BITS-1:0]),
         .merge_write  (do_merge_stc && ~pipe_stall),
         .flush        (do_flush_std && ~pipe_stall),
         .read         (do_read_std && ~pipe_stall),
@@ -1045,7 +1074,6 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .NUM_BANKS   (NUM_BANKS),
         .MSHR_SIZE   (MSHR_SIZE),
         .MSHR_LINES  (MSHR_LINES),
-        .WRITEBACK   (WRITEBACK),
         .AMO_ENABLE  (AMO_ENABLE != 0),
         .AMO_PASSTHRU ((AMO_ENABLE != 0) && (IS_LLC == 0)),
         .WORD_SEL_WIDTH (WORD_SEL_WIDTH),
@@ -1077,12 +1105,16 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .dequeue_data        ({replay_wsel, replay_byteen, replay_data, replay_tag, replay_idx, replay_amo}),
         .dequeue_id          (replay_id),
         .dequeue_ready       (replay_ready || fwd_fire),
+        .dequeue_fwd         (fwd_fire),
         .dequeue_park        (park_sel),
         .dequeue_park_retry  (chain_retry),
         .dequeue_block       (replay_block),
         .allocate_valid      (mshr_allocate_st0 && ~pipe_stall),
         .allocate_addr       (st0.req.addr),
         .allocate_sector     (sector_idx_st0),
+        .allocate_addr_n     (creq_addr_sel),
+        .allocate_sector_n   (creq_sector_sel),
+        .allocate_adv        (~pipe_stall),
         .allocate_word_idx   (st0.req.word_idx),
         .allocate_rw         (st0.req.rw),
         // Only non-LLC AMOs must not coalesce; at the LLC same-line AMOs coalesce

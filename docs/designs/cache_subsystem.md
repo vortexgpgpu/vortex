@@ -411,7 +411,10 @@ to new requests. This removes the read-after-fill round trip from miss latency.
 
 The window closes on the **first write or AMO head**. That head and every later
 chain entry replay through the pipeline as usual, preserving program order: an
-older store must merge before a younger same-line read responds.
+older store must merge before a younger same-line read responds. Stores still
+waiting in the chain keep its line pending, on a write-through cache too, where
+they have already been written through: a same-word access that arrives while
+they drain links behind them instead of hitting the array ahead of them.
 
 Two details make it correct:
 

@@ -322,17 +322,13 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         wire [WBQ_SIZE-1:0][NUM_LANES-1:0] wbq_lane_hit;
         wire [NUM_LANES-1:0]               post_lane_hit;
 
-        if ((PIPE_EX != 0) && (NUM_LANES > 1)) begin : g_hit_reg
-            // A deferred-commit bank has the next commit-stage key a cycle
-            // early. Where the word spans several lanes the forward merge is
-            // wide enough for the {line, word} compare to set the response
-            // path, so the lane hits are registered and the forward network
-            // and the response start from flops: each is taken between the
-            // queue's next contents and the request entering the commit stage
-            // next cycle, with the slot's occupancy folded in. The queue moves
-            // during a stall while the commit request holds, so both keys are
-            // compared and the stall selects. A single-lane word keeps the
-            // live compare, which is cheaper there.
+        // The lane hits are registered so the forward network and the
+        // response start from flops: each is taken between the queue's next
+        // contents and the request entering the commit stage next cycle (S0
+        // itself when the commit is not deferred), with the slot's occupancy
+        // folded in. The queue moves during a stall while the commit request
+        // holds, so both keys are compared and the stall selects.
+        if (1) begin : g_hit_reg
             wire [WBQ_SIZE-1:0] wbq_key_n;
             for (genvar i = 0; i < WBQ_SIZE; ++i) begin : g_wbq_key_n
                 assign wbq_key_n[i] = (wbq_addr[i] == res_addr_n) && (wbq_wsel[i] == word_idx_n);
@@ -386,17 +382,6 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
             end
             assign wbq_lane_hit  = wbq_lane_hit_r;
             assign post_lane_hit = post_lane_hit_r;
-        end else begin : g_hit_live
-            for (genvar i = 0; i < WBQ_SIZE; ++i) begin : g_wbq
-                for (genvar l = 0; l < NUM_LANES; ++l) begin : g_lane
-                    assign wbq_lane_hit[i][l] = (WBQ_CNTW'(i) < wbq_count) && wbq_key_st1[i]
-                                             && (wbq_lane[i] == LANE_IDXW'(l));
-                end
-            end
-            for (genvar l = 0; l < NUM_LANES; ++l) begin : g_post_lane
-                assign post_lane_hit[l] = post_wb_valid && post_key_st1 && (post_wb_lane == LANE_IDXW'(l));
-            end
-            `UNUSED_VAR (word_idx_n)
         end
 
         wire [WBQ_SIZE-1:0] wbq_word_hit;
@@ -585,13 +570,54 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         // independent of the drain: the highest match is the target either way
         // unless it is the draining head, so wb_fire, which arrives late with
         // the bank's stall, only picks between the two precomputed outcomes.
+        // The {line, word, lane} keys against the compute stage are taken a
+        // cycle early, when it loads from the commit stage, against each slot
+        // and the settling entry as they stand after this cycle's update, so
+        // the target select and the merge start from flops. A result pushes
+        // only the cycle after its load, the one cycle these keys are used.
+        wire [WBQ_SIZE-1:0] coal_eq_same, coal_eq_up;
+        for (genvar i = 0; i < WBQ_SIZE; ++i) begin : g_coal_eq
+            assign coal_eq_same[i] = (wbq_addr[i] == addr_st1) && (wbq_wsel[i] == word_idx_st1)
+                                  && (wbq_lane[i] == lane_st1);
+            if (i < WBQ_SIZE-1) begin : g_up
+                assign coal_eq_up[i] = (wbq_addr[i+1] == addr_st1) && (wbq_wsel[i+1] == word_idx_st1)
+                                    && (wbq_lane[i+1] == lane_st1);
+            end else begin : g_last
+                assign coal_eq_up[i] = coal_eq_same[i];
+            end
+        end
+        wire coal_eq_cmp  = (cmp_addr == addr_st1) && (cmp_wsel == word_idx_st1) && (cmp_lane == lane_st1);
+        wire coal_eq_post = (post_wb_addr == addr_st1) && (post_wb_wsel == word_idx_st1)
+                         && (post_wb_lane == lane_st1);
+        reg [WBQ_SIZE-1:0] coal_key_r;
+        reg                post_coal_key_r;
+        always @(posedge clk) begin
+            for (integer i = 0; i < WBQ_SIZE; ++i) begin
+                if (wb_push && (wb_slot == WBQ_IDXW'(i))) begin
+                    coal_key_r[i] <= coal_eq_cmp;
+                end else if (wb_fire) begin
+                    coal_key_r[i] <= coal_eq_up[i];
+                end else begin
+                    coal_key_r[i] <= coal_eq_same[i];
+                end
+            end
+            post_coal_key_r <= wb_fire ? coal_eq_same[0] : coal_eq_post;
+        end
+        for (genvar i = 0; i < WBQ_SIZE; ++i) begin : g_coal_check
+            `RUNTIME_ASSERT (~wb_push || (coal_key_r[i] == ((wbq_addr[i] == cmp_addr) && (wbq_wsel[i] == cmp_wsel)
+                                                         && (wbq_lane[i] == cmp_lane))),
+                ("%t: AMO coalesce key out of sync (slot=%0d)", $time, i))
+        end
+        `RUNTIME_ASSERT (~wb_push || (post_coal_key_r == ((post_wb_addr == cmp_addr) && (post_wb_wsel == cmp_wsel)
+                                                       && (post_wb_lane == cmp_lane))),
+            ("%t: AMO settling-entry coalesce key out of sync", $time))
+
         reg [WBQ_SIZE-1:0]  wb_coal_hit;
         reg [WBQ_IDXW-1:0]  wb_coal_idx;    // pre-shift index of the coalesce target
         always @(*) begin
             wb_coal_idx = '0;
             for (integer i = 0; i < WBQ_SIZE; ++i) begin
-                wb_coal_hit[i] = (WBQ_CNTW'(i) < wbq_count) && (wbq_addr[i] == cmp_addr)
-                              && (wbq_wsel[i] == cmp_wsel) && (wbq_lane[i] == cmp_lane);
+                wb_coal_hit[i] = (WBQ_CNTW'(i) < wbq_count) && coal_key_r[i];
                 if (wb_coal_hit[i]) begin
                     wb_coal_idx = WBQ_IDXW'(i);
                 end
@@ -613,10 +639,8 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         // than it: drop those bytes from the settling entry, so the forward
         // never has two writers for one byte. On a drain the settling entry
         // is reloaded from the head, which a same-key push never coalesces into.
-        wire post_push_post = wb_push && (post_wb_addr == cmp_addr) && (post_wb_wsel == cmp_wsel)
-                           && (post_wb_lane == cmp_lane);
-        wire post_push_head = wb_push && (wbq_addr[0] == cmp_addr) && (wbq_wsel[0] == cmp_wsel)
-                           && (wbq_lane[0] == cmp_lane);
+        wire post_push_post = wb_push && post_coal_key_r;
+        wire post_push_head = wb_push && coal_key_r[0];
 
         always @(posedge clk) begin
             if (reset) begin

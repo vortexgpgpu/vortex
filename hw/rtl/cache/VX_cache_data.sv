@@ -40,7 +40,8 @@ module VX_cache_data import VX_gpu_pkg::*; #(
     parameter WRITE_ENABLE      = 1,          // Enable cache writeable
     parameter WRITEBACK         = 0,          // Enable cache writeback
     parameter DIRTY_BYTES       = 0,          // Enable dirty bytes on writeback
-    parameter LAZY_FETCH        = 0           // Fills may be data-less or merge under the dirty bytes
+    parameter LAZY_FETCH        = 0,          // Fills may be data-less or merge under the dirty bytes
+    parameter MASK_SYNC         = 0           // Dirty-byte mask read one stage ahead of the commit stage
 ) (
     input wire                          clk,
     input wire                          reset,
@@ -58,6 +59,11 @@ module VX_cache_data import VX_gpu_pkg::*; #(
     input wire [`UP(`CS_WORD_SEL_BITS)-1:0] mask_word,
     input wire [WORD_SIZE-1:0]          mask_byteen,
     input wire [`UP(`CS_SECTOR_SEL_BITS)-1:0] mask_sector,
+    // MASK_SYNC: the {way, line} that enters the commit stage next, and its
+    // advance enable
+    input wire                          mask_read,
+    input wire [`CS_WAY_SEL_WIDTH-1:0]  mask_rway,
+    input wire [`CS_LINE_SEL_BITS-1:0]  mask_rline,
     // merge of a refetched sector into its resident copy at the commit stage
     // (the stage behind it is empty): only the clean bytes
     input wire                          merge_write,
@@ -112,8 +118,8 @@ module VX_cache_data import VX_gpu_pkg::*; #(
     end
 
     // Per-byte dirty mask (writeback only), one mask word per {way, line}. It
-    // is read and updated only at the commit stage, so each access sees every
-    // older update with no bypass. A line's mask is cleared when it is
+    // is updated only at the commit stage, in pipeline order, so each access
+    // sees every older update. A line's mask is cleared when it is
     // installed, which leaves nothing for the reset walk to clear.
     if (DIRTY_BYTES != 0) begin : g_dirty_bytes
         wire [`CS_WORDS_PER_LINE-1:0][WORD_SIZE-1:0] set_word;
@@ -131,39 +137,89 @@ module VX_cache_data import VX_gpu_pkg::*; #(
         wire [LINE_SIZE-1:0] set_mask = set_word;
         wire [LINE_SIZE-1:0] clr_mask = clr_sector;
 
-        wire [DATA_ADDR_WIDTH-1:0] mask_addr;
+        wire [DATA_ADDR_WIDTH-1:0] mask_addr, mask_raddr;
         if (NUM_WAYS > 1) begin : g_mask_way_addr
-            assign mask_addr = DATA_ADDR_WIDTH'({mask_way[WAY_SEL_BITS-1:0], mask_line});
+            assign mask_addr  = DATA_ADDR_WIDTH'({mask_way[WAY_SEL_BITS-1:0], mask_line});
+            assign mask_raddr = DATA_ADDR_WIDTH'({mask_rway[WAY_SEL_BITS-1:0], mask_rline});
         end else begin : g_mask_line_addr
-            assign mask_addr = mask_line;
+            `UNUSED_VAR (mask_rway)
+            assign mask_addr  = mask_line;
+            assign mask_raddr = mask_rline;
         end
 
-        // A whole-word read-modify-write shares one write enable across the
-        // mask, so it maps onto wide distributed RAM rather than one cell per
-        // byte (or a shattered block RAM).
         wire [LINE_SIZE-1:0] mask_rdata;
-        VX_sp_ram #(
-            .DATAW       (LINE_SIZE),
-            .SIZE        (DATA_RAM_DEPTH),
-            .OUT_REG     (0),
-            .LUTRAM      (1),
-            .RDW_MODE    ("W"),
-            .INIT_ENABLE (1),
-            .INIT_VALUE  (0)
-        ) byteen_store (
-            .clk   (clk),
-            .reset (reset),
-            .read  (1'b1),
-            .write (mask_write),
-            .wren  (1'b1),
-            .addr  (mask_addr),
-            .wdata ((mask_rdata & ~clr_mask) | set_mask),
-            .rdata (mask_rdata)
-        );
+        wire [LINE_SIZE-1:0] mask_wdata = (mask_rdata & ~clr_mask) | set_mask;
+
+        if (MASK_SYNC != 0) begin : g_mask_sync
+            // Read at the stage ahead, so the commit stage takes the mask from
+            // a register rather than through a deep distributed-RAM read mux
+            // (and a large mask fits block RAM). A write by the request now
+            // committing to the address read behind it is forwarded. The
+            // pipeline holds as a whole, so nothing writes while the read is
+            // held.
+            wire [LINE_SIZE-1:0] mask_ram_rdata;
+            VX_dp_ram #(
+                .DATAW       (LINE_SIZE),
+                .SIZE        (DATA_RAM_DEPTH),
+                .OUT_REG     (1),
+                .RDW_MODE    ("R"),
+                .INIT_ENABLE (1),
+                .INIT_VALUE  (0)
+            ) byteen_store (
+                .clk   (clk),
+                .reset (reset),
+                .read  (mask_read),
+                .write (mask_write),
+                .wren  (1'b1),
+                .waddr (mask_addr),
+                .wdata (mask_wdata),
+                .raddr (mask_raddr),
+                .rdata (mask_ram_rdata)
+            );
+
+            reg mask_fwd_r;
+            reg [LINE_SIZE-1:0] mask_fwd_data_r;
+            reg [DATA_ADDR_WIDTH-1:0] mask_raddr_r;
+            always @(posedge clk) begin
+                if (mask_read) begin
+                    mask_fwd_r      <= mask_write && (mask_addr == mask_raddr);
+                    mask_fwd_data_r <= mask_wdata;
+                    mask_raddr_r    <= mask_raddr;
+                end
+            end
+            assign mask_rdata = mask_fwd_r ? mask_fwd_data_r : mask_ram_rdata;
+
+            `RUNTIME_ASSERT (~mask_write || mask_read, ("%t: dirty-byte mask written while its read is held", $time))
+            `RUNTIME_ASSERT (~mask_write || (mask_addr == mask_raddr_r), ("%t: dirty-byte mask read for another line: 0x%0h, 0x%0h", $time, mask_addr, mask_raddr_r))
+        end else begin : g_mask_async
+            `UNUSED_VAR ({mask_read, mask_raddr})
+            // A whole-word read-modify-write shares one write enable across the
+            // mask, so it maps onto wide distributed RAM rather than one cell per
+            // byte (or a shattered block RAM).
+            VX_sp_ram #(
+                .DATAW       (LINE_SIZE),
+                .SIZE        (DATA_RAM_DEPTH),
+                .OUT_REG     (0),
+                .LUTRAM      (1),
+                .RDW_MODE    ("W"),
+                .INIT_ENABLE (1),
+                .INIT_VALUE  (0)
+            ) byteen_store (
+                .clk   (clk),
+                .reset (reset),
+                .read  (1'b1),
+                .write (mask_write),
+                .wren  (1'b1),
+                .addr  (mask_addr),
+                .wdata (mask_wdata),
+                .rdata (mask_rdata)
+            );
+        end
         assign evict_byteen = mask_rdata;
     end else begin : g_no_dirty_bytes
         `UNUSED_VAR ({mask_write, mask_set, mask_clr_line, mask_clr_sector})
         `UNUSED_VAR ({mask_line, mask_word, mask_byteen, mask_sector})
+        `UNUSED_VAR ({mask_read, mask_rway, mask_rline})
         assign evict_byteen = '1; // update whole line
     end
 

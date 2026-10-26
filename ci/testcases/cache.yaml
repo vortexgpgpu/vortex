@@ -385,3 +385,18 @@ tests:
   shape:
     cores: 4
     l2cache: true
+# A thread's load must return its own earlier store to the same word. On the
+# write-through L1 under an L2, the stores of a miss chain reach the array only
+# as they replay behind the fill: a load landing after the chain's read head
+# has replayed, and before the store has, must link behind the store rather
+# than hit the line ahead of it. The delay sweep lands the load across that
+# window.
+- id: raw_order-wt
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: raw_order
+  args: -n16384 -s64 -d2
+  shape:
+    l2cache: true

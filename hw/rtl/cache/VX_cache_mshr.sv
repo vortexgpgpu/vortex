@@ -61,7 +61,6 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     parameter MSHR_SIZE         = 4,          // Miss Reserv Queue Knob
     parameter MSHR_LINES        = 0,          // distinct line entries (0 = address held per request)
     parameter DATA_WIDTH        = 1,          // MSHR parameters
-    parameter WRITEBACK         = 0,          // Enable cache writeback
     parameter AMO_ENABLE        = 0,          // Per-entry AMO tracking (probe outputs)
     parameter AMO_PASSTHRU      = 0,          // Non-LLC passthrough: AMO entries never coalesce
     parameter WORD_SEL_WIDTH    = 1,          // word-in-line select width (order-hazard granularity)
@@ -115,6 +114,8 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     output wire [DATA_WIDTH-1:0]        dequeue_data,
     output wire [MSHR_ADDR_WIDTH-1:0]   dequeue_id,
     input wire                          dequeue_ready,
+    // the dequeue this cycle is the bank's fill-forward port, not a replay
+    input wire                          dequeue_fwd,
     // park the chain at its head instead of consuming it: the entry stays
     // allocated (it becomes the root of a refetch) and the walk stops.
     input wire                          dequeue_park,
@@ -126,6 +127,10 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     input wire                          allocate_valid,
     input wire [`CS_LINE_ADDR_WIDTH-1:0] allocate_addr,
     input wire [`UP(`CS_SECTOR_SEL_BITS)-1:0] allocate_sector,
+    // the core request entering S0 next cycle, and the S0 advance enable
+    input wire [`CS_LINE_ADDR_WIDTH-1:0] allocate_addr_n,
+    input wire [`UP(`CS_SECTOR_SEL_BITS)-1:0] allocate_sector_n,
+    input wire                          allocate_adv,
     input wire [WORD_SEL_WIDTH-1:0]     allocate_word_idx,
     input wire                          allocate_rw,
     input wire                          allocate_is_amo, // AMO: never coalesce
@@ -321,6 +326,7 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
 
     if (MSHR_LINES != 0) begin : g_line_table
         localparam LINE_ID_W = `LOG2UP(MSHR_LINES);
+        `UNUSED_VAR ({allocate_addr_n, allocate_sector_n, allocate_adv})
         localparam LCNT_W    = `CLOG2(MSHR_SIZE + 1);
 
         reg [`CS_LINE_ADDR_WIDTH-1:0]      line_addr   [0:MSHR_LINES-1];
@@ -440,10 +446,27 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
             end
         end
 
+        // The allocate match is taken a cycle early, against the core request
+        // entering S0 and the table as it stands after this cycle's allocate,
+        // so S0 starts it from flops: it gates the data array's write enable
+        // through the order-hazard probes. A request of another kind entering
+        // S0 does not allocate, so its match is never used. Nothing allocates
+        // while S0 holds.
+        wire alloc_self_match = (allocate_addr == allocate_addr_n) && (allocate_sector == allocate_sector_n);
+        reg [MSHR_SIZE-1:0] entry_match_r;
         for (genvar i = 0; i < MSHR_SIZE; ++i) begin : g_entry_match
-            assign entry_match[i] = (addr_table[i] == allocate_addr) && (sector_table[i] == allocate_sector);
+            wire match_n = (allocate_fire && (allocate_id == MSHR_ADDR_WIDTH'(i))) ? alloc_self_match
+                         : ((addr_table[i] == allocate_addr_n) && (sector_table[i] == allocate_sector_n));
+            always @(posedge clk) begin
+                if (allocate_adv) begin
+                    entry_match_r[i] <= match_n;
+                end
+            end
+            assign entry_match[i] = entry_match_r[i];
             assign entry_probe[i] = (addr_table[i] == probe_addr);
             assign entry_addr[i]  = addr_table[i];
+            `RUNTIME_ASSERT (~allocate_valid || (entry_match_r[i] == ((addr_table[i] == allocate_addr) && (sector_table[i] == allocate_sector))),
+                ("%t: *** %s allocate match out of sync: id=%0d", $time, INSTANCE_ID, i))
         end
 
         assign fill_addr      = addr_table[fill_id];
@@ -619,12 +642,12 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     assign allocate_id = allocate_id_r;
     assign allocate_previd = prev_idx;
 
-    if (WRITEBACK) begin : g_pending_wb
-        assign allocate_pending = |addr_matches;
-    end else begin : g_pending_wt
-        // exclude write requests if writethrough
-        assign allocate_pending = |(addr_matches & ~write_table);
-    end
+    // Any undrained entry of the line is pending, writes included. On a
+    // write-through cache a write entry only lives behind a read root, so once
+    // the root has replayed the writes still waiting are a chain mid-drain: a
+    // same-word access must link behind them, not overtake them through the
+    // array.
+    assign allocate_pending = |addr_matches;
 
     // Word-granular order-hazard probes. A chained entry only constrains a
     // requester that touches the SAME word: the entry's replay reads or
@@ -634,14 +657,35 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     for (genvar i = 0; i < MSHR_SIZE; ++i) begin : g_word_matches
         assign word_matches[i] = (word_table[i] == allocate_word_idx);
     end
+    // These probes gate the data array's write enable at S0, so they leave the
+    // replay dequeue out of their exclusion: a replay that could change them (a
+    // same-word entry, with a write on either side, against an allocating core
+    // request) is held that cycle by the bank's link hold, so the exclusion
+    // never alters them, and dropping it takes the S0 address compare behind
+    // that hold out of the write-enable cone. The forward port is not held, so
+    // its dequeue stays excluded, as does a release.
+    wire [MSHR_SIZE-1:0] hazard_matches;
+    for (genvar i = 0; i < MSHR_SIZE; ++i) begin : g_hazard_matches
+        assign hazard_matches[i] = valid_table[i] && entry_match[i] && ~amo_mask[i]
+                                && ~(dequeue_fwd && ~((LAZY_FETCH != 0) && dequeue_park) && (dequeue_id == MSHR_ADDR_WIDTH'(i)))
+                                && ~(finalize_valid && finalize_is_release && (finalize_id == MSHR_ADDR_WIDTH'(i)));
+    end
+    wire hazard_pending = |hazard_matches;
     // The probed word's chain holds a WRITE that has not reached the data array
     // yet. A same-word hit completing ahead of it would read pre-store data (or
     // a write-hit would be overwritten by the older store's replay), inverting
     // arrival order — the bank demotes such a hit to a chained miss.
-    assign allocate_pending_wr  = |(addr_matches & write_table & word_matches);
+    assign allocate_pending_wr  = hazard_pending && |(hazard_matches & write_table & word_matches);
     // Any undrained same-word entry: an incoming WRITE hit must not land ahead
     // of an older chained read of the same word.
-    assign allocate_pending_ovl = |(addr_matches & word_matches);
+    assign allocate_pending_ovl = hazard_pending && |(hazard_matches & word_matches);
+    // the order hazard the bank derives from the two probes is the one the full
+    // exclusion gives
+    `RUNTIME_ASSERT (~allocate_valid
+                  || ((allocate_pending_wr || (allocate_rw && allocate_pending_ovl))
+                   == (allocate_pending && (|(addr_matches & write_table & word_matches)
+                                        || (allocate_rw && |(addr_matches & word_matches))))),
+        ("%t: *** %s order-hazard probe diverged from the full exclusion", $time, INSTANCE_ID))
 
     assign dequeue_valid = dequeue_val && ~((LAZY_FETCH != 0) && dequeue_block);
     // Sampled with dequeue_id_n, alongside the payload in mshr_store, rather
