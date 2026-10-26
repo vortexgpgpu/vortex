@@ -173,6 +173,12 @@ proc run_setup {} {
 
   # Add the design sources
   add_files -norecurse -verbose $vsources_list
+  # The platform tops (vortex_afu.v) pass unpacked per-port arrays to
+  # VX_afu_wrap, which needs SystemVerilog.
+  set afu_tops [get_files -quiet */vortex_afu.v]
+  if {[llength $afu_tops] > 0} {
+    set_property file_type SystemVerilog $afu_tops
+  }
 
   # process defines
   set_property verilog_define ${vdefines_list} [current_fileset]
