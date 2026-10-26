@@ -38,6 +38,12 @@
 // nowhere. Once nothing is held between the cache's inputs and its memory
 // ports, on the cacheable and the non-cacheable path alike, it goes down every
 // memory port, so its answer proves the earlier IO writes reached memory.
+// The L1-only kind splits by what the fence orders. A release token (noalloc
+// attribute) owes no invalidation: the banks only quiesce and the token goes
+// down to the point of coherence behind the earlier writes. An acquire token
+// (io attribute with byte enables set) owes no drain: the cache walks and
+// answers, forwarding only to a cache below that is not the point of
+// coherence (ACQ_FORWARD).
 // Kinds visible together combine to the weakest one that serves them all.
 module VX_cache_init import VX_gpu_pkg::*; #(
     parameter NUM_REQS         = 4,              // Number of Word requests per cycle
@@ -45,6 +51,7 @@ module VX_cache_init import VX_gpu_pkg::*; #(
     parameter MEM_PORTS        = 1,              // Number of memory ports
     parameter FLUSH_FORWARD    = 1,              // Forward the flush to the next level
     parameter SHARED_LLC       = 0,              // The LLC serving every memory client alone: answers L1-only tokens without a walk
+    parameter ACQ_FORWARD      = 0,              // An acquire token must also invalidate the next level
     parameter TAG_WIDTH        = UUID_WIDTH + 1, // core request tag size
     parameter XBAR_SIZE        = 0,              // Requests the request crossbar can hold apart from input order
     parameter REQ_SEL_WIDTH    = `UP(`CLOG2(NUM_REQS))
@@ -65,6 +72,7 @@ module VX_cache_init import VX_gpu_pkg::*; #(
     output wire [MEM_PORTS-1:0]       mem_flush_valid,
     output wire                       mem_flush_l1_only,
     output wire                       mem_flush_io,
+    output wire                       mem_flush_noalloc,
     input wire [MEM_PORTS-1:0]        mem_flush_ready,
     output wire                       mem_flush_rsp_phase,
     input wire [MEM_PORTS-1:0]        mem_flush_rsp_valid,
@@ -126,18 +134,27 @@ module VX_cache_init import VX_gpu_pkg::*; #(
     end
     wire flush_req_enable = (| flush_req_mask);
 
-    wire [NUM_REQS-1:0] flush_l1_mask, flush_io_mask;
+    wire [NUM_REQS-1:0] flush_l1_mask, flush_io_mask, flush_acq_mask, flush_rel_mask;
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_flush_kind_mask
-        assign flush_io_mask[i] = flush_req_mask[i] && core_bus_in_if[i].req_data.attr[MEM_ATTR_IO_OFFS];
-        assign flush_l1_mask[i] = flush_req_mask[i] && ~flush_io_mask[i] && (| core_bus_in_if[i].req_data.byteen);
+        wire tok_io  = core_bus_in_if[i].req_data.attr[MEM_ATTR_IO_OFFS];
+        wire tok_rel = core_bus_in_if[i].req_data.attr[MEM_ATTR_NOALLOC_OFFS];
+        wire tok_l1  = (| core_bus_in_if[i].req_data.byteen);
+        assign flush_io_mask[i]  = flush_req_mask[i] && tok_io && ~tok_l1;
+        assign flush_acq_mask[i] = flush_req_mask[i] && tok_io && tok_l1;
+        assign flush_rel_mask[i] = flush_req_mask[i] && ~tok_io && tok_l1 && tok_rel;
+        assign flush_l1_mask[i]  = flush_req_mask[i] && ~tok_io && tok_l1 && ~tok_rel;
     end
-    wire any_full = (| (flush_req_mask & ~flush_l1_mask & ~flush_io_mask));
+    wire any_full = (| (flush_req_mask & ~flush_l1_mask & ~flush_io_mask & ~flush_acq_mask & ~flush_rel_mask));
     wire any_l1   = (| flush_l1_mask);
     wire any_io   = (| flush_io_mask);
-    // every visible token is L1-only
-    wire flush_l1_only = any_l1 && ~any_full && ~any_io;
-    // a walk is owed to a full token, and to an L1-only one above the point of coherence
-    wire flush_walk = any_full || (any_l1 && (SHARED_LLC == 0));
+    wire any_acq  = (| flush_acq_mask);
+    wire any_rel  = (| flush_rel_mask);
+    // a walk is owed to a full token, and to an L1-only or acquire one above
+    // the point of coherence
+    wire flush_walk = any_full || ((any_l1 || any_acq) && (SHARED_LLC == 0));
+    // a drain with no walk is owed to an IO token, and to a release one above
+    // the point of coherence
+    wire flush_drain = any_io || (any_rel && (SHARED_LLC == 0));
 
     reg [NUM_BANKS-1:0] flush_done, flush_done_n;
     reg                 fwd_go, fwd_go_n;   // the crossbar drained; only tokens enter it now
@@ -147,6 +164,7 @@ module VX_cache_init import VX_gpu_pkg::*; #(
     reg [`UP(UUID_WIDTH)-1:0] flush_uuid_r, flush_uuid_n;
     reg                 l1_only_r, l1_only_n;
     reg                 io_r, io_n;
+    reg                 noalloc_r, noalloc_n;
     reg                 skip_r, skip_n;
 
     // answer the lowest pending input; its token stays at the input until then
@@ -230,7 +248,13 @@ module VX_cache_init import VX_gpu_pkg::*; #(
 
     // an IO token also waits for the non-cacheable path, which carries the IO
     // writes it orders
-    wire fwd_ready = mem_req_empty && (~io_r || nc_req_empty);
+    wire fwd_ready = mem_req_empty && (~io_r || l1_only_r || nc_req_empty);
+
+    // The kind forwarded after a walk: full if a full token or an IO one asks
+    // for more than the point of coherence, L1-only if any token owes a drain
+    // to it, acquire if only acquire tokens were visible.
+    wire walk_fwd_acq = any_acq && ~any_full && ~any_io && ~any_l1 && ~any_rel;
+    wire walk_fwd_l1  = (any_l1 || any_rel) && ~any_full && ~any_io;
 
     always @(*) begin
         state_n       = state;
@@ -242,6 +266,7 @@ module VX_cache_init import VX_gpu_pkg::*; #(
         flush_uuid_n  = flush_uuid_r;
         l1_only_n     = l1_only_r;
         io_n          = io_r;
+        noalloc_n     = noalloc_r;
         skip_n        = skip_r;
         case (state)
             // STATE_IDLE:
@@ -249,7 +274,7 @@ module VX_cache_init import VX_gpu_pkg::*; #(
                 if (flush_req_enable) begin
                     if (XBAR_SIZE != 0) begin
                         state_n = STATE_WAIT1;
-                    end else if (~flush_walk && ~any_io) begin
+                    end else if (~flush_walk && ~flush_drain) begin
                         rsp_pending_n = flush_req_mask;
                         state_n = STATE_RESPOND;
                     end else begin
@@ -265,7 +290,7 @@ module VX_cache_init import VX_gpu_pkg::*; #(
             end
             STATE_WAIT1: begin
                 if (no_inflight_reqs) begin
-                    if (~flush_walk && ~any_io) begin
+                    if (~flush_walk && ~flush_drain) begin
                         rsp_pending_n = flush_req_mask;
                         state_n = STATE_RESPOND;
                     end else begin
@@ -284,12 +309,17 @@ module VX_cache_init import VX_gpu_pkg::*; #(
                 if (flush_done_n == {NUM_BANKS{1'b1}}) begin
                     flush_done_n = '0;
                     // answer the tokens visible now; later ones start a new walk.
-                    // A quiesce without a walk serves only the tokens owing none.
-                    rsp_pending_n = skip_r ? (flush_io_mask | (SHARED_LLC ? flush_l1_mask : '0))
+                    // A quiesce without a walk serves only the tokens owing none,
+                    // and forwards IO if it serves an IO token, else release.
+                    rsp_pending_n = skip_r ? (flush_io_mask | flush_rel_mask
+                                              | (SHARED_LLC ? (flush_l1_mask | flush_acq_mask) : '0))
                                            : flush_req_mask;
-                    l1_only_n = flush_l1_only && ~skip_r;
-                    io_n = skip_r;
-                    state_n = FLUSH_FORWARD ? STATE_FORWARD : STATE_RESPOND;
+                    l1_only_n = skip_r ? ~any_io : (walk_fwd_l1 || walk_fwd_acq);
+                    io_n      = skip_r ? any_io : walk_fwd_acq;
+                    noalloc_n = skip_r && ~any_io;
+                    // an acquire walk owes the next level nothing unless it too
+                    // may hold stale lines
+                    state_n = (FLUSH_FORWARD && (skip_r || ~walk_fwd_acq || ACQ_FORWARD)) ? STATE_FORWARD : STATE_RESPOND;
                 end
             end
             STATE_FORWARD: begin
@@ -330,6 +360,7 @@ module VX_cache_init import VX_gpu_pkg::*; #(
         flush_uuid_r <= flush_uuid_n;
         l1_only_r    <= l1_only_n;
         io_r         <= io_n;
+        noalloc_r    <= noalloc_n;
         skip_r       <= skip_n;
     end
 
@@ -343,5 +374,6 @@ module VX_cache_init import VX_gpu_pkg::*; #(
     assign mem_flush_rsp_phase = (state == STATE_FORWARD);
     assign mem_flush_l1_only   = l1_only_r;
     assign mem_flush_io        = io_r;
+    assign mem_flush_noalloc   = noalloc_r;
 
 endmodule

@@ -54,6 +54,7 @@ public:
 		bool    mem_rsp_queue = false; // memory responses enter through a response queue
 		bool    mem_rsp_slice = false; // a registered boundary ahead of the memory-response port stands for that queue's register
 		bool    merge_port0 = true;    // port 0's reads match other ports' tags for read merging
+		bool    acq_forward = false;   // an acquire flush also invalidates the next level
 	};
 
 	struct PerfStats {

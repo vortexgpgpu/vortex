@@ -52,6 +52,9 @@ inline constexpr bool DCACHE_SHARED_LLC = (VX_CFG_DCACHE_ENABLED != 0) && (VX_CF
                                        && !VX_CFG_EXT_DXA_ENABLED;
 inline constexpr bool L2_SHARED_LLC     = (VX_CFG_L2_ENABLED != 0) && (VX_CFG_L3_ENABLED == 0) && (VX_CFG_NUM_CLUSTERS == 1);
 inline constexpr bool L3_SHARED_LLC     = (VX_CFG_L3_ENABLED != 0);
+// An acquire must also invalidate the cache below the dcache unless that one
+// is the point of coherence (an L3 always is; memory always is).
+inline constexpr bool DCACHE_ACQ_FORWARD = (VX_CFG_L2_ENABLED != 0) && !L2_SHARED_LLC;
 
 // A write-back LLC must be the only instance: replicated ones never make their
 // dirty lines visible to each other.

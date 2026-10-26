@@ -29,6 +29,10 @@
 using namespace vortex;
 
 uint32_t LsuUopGen::uop_count(const Instr& instr) {
+  // An atomic with .aq/.rl: [release fence] atomic [acquire fence]
+  if (auto amo = std::get_if<IntrAmoArgs>(&instr.get_args())) {
+    return 1 + amo->aq + amo->rl;
+  }
   // PACKLB.F: width=0 (LB), 4 byte-elements
   // PACKLH.F: width=1 (LH), 2 halfword-elements
   auto args = std::get<IntrLsuArgs>(instr.get_args());
@@ -45,6 +49,30 @@ Instr::Ptr LsuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
   uint32_t uuid_lo = parent_uuid & 0xffffffff;
   uint32_t steps_shift = (total > 1) ? (32 - log2ceil(total)) : 0;
   uint64_t uop_uuid = (static_cast<uint64_t>(uuid_hi) << 32) | ((uop_index << steps_shift) | uuid_lo);
+
+  if (auto amo = std::get_if<IntrAmoArgs>(&macro_instr.get_args())) {
+    auto uop_instr = std::allocate_shared<Instr>(pool_, uop_uuid, FUType::LSU);
+    uop_instr->set_parent_uuid(parent_uuid);
+    uint32_t amo_index = amo->rl;
+    if (uop_index == amo_index) {
+      uop_instr->set_op_type(macro_instr.get_op_type());
+      uop_instr->set_args(*amo);
+      // an atomic into x0 writes nothing back
+      auto rd = macro_instr.get_dest_reg();
+      if (!(rd.type == RegType::Integer && rd.idx == 0)) {
+        uop_instr->set_dest_reg(rd.idx, rd.type);
+      }
+      for (uint32_t i = 0; i < Instr::MAX_REG_SOURCES; ++i) {
+        auto rs = macro_instr.get_src_reg(i);
+        uop_instr->set_src_reg(i, rs.idx, rs.type);
+      }
+    } else {
+      auto kind = (uop_index < amo_index) ? FenceKind::RELEASE : FenceKind::ACQUIRE;
+      uop_instr->set_op_type(LsuType::FENCE);
+      uop_instr->set_args(IntrLsuArgs{static_cast<uint32_t>(kind), 0, 0});
+    }
+    return uop_instr;
+  }
 
   auto args = std::get<IntrLsuArgs>(macro_instr.get_args());
   // Macro encodes elem-size as width: 0=byte (PACKLB), 1=halfword (PACKLH).
@@ -375,10 +403,12 @@ void LsuUnit::send_fence_token(uint32_t b) {
 	LsuReq lsu_req(VX_CFG_NUM_LSU_LANES);
 	lsu_req.op = MemOp::LD;
 	lsu_req.flags.flush = 1;
-	// an IO fence's token walks nowhere; a memory fence's stops at the shared LLC
-	auto fence_args = std::get<IntrLsuArgs>(trace->instr_ptr->get_args());
-	lsu_req.flags.io       = lsu_fence_is_io(fence_args);
-	lsu_req.flags.flush_l1 = !lsu_fence_is_io(fence_args);
+	// an IO fence's token walks nowhere; a memory fence's stops at the shared
+	// LLC, an acquire one owing no drain and a release one no invalidation
+	auto kind = lsu_fence_kind(std::get<IntrLsuArgs>(trace->instr_ptr->get_args()));
+	lsu_req.flags.io       = (kind == FenceKind::IO) || (kind == FenceKind::ACQUIRE);
+	lsu_req.flags.flush_l1 = (kind != FenceKind::IO);
+	lsu_req.flags.noalloc  = (kind == FenceKind::RELEASE);
 	std::vector<mem_addr_size_t> lane_entries(VX_CFG_NUM_LSU_LANES);
 	for (uint32_t t = base; t < VX_CFG_NUM_THREADS; ++t) {
 		if (trace->tmask.test(t)) {

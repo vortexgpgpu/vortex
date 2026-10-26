@@ -98,7 +98,9 @@ package VX_gpu_pkg;
     // owning one: the two are combinational rewrites of ibuf_in with mutually
     // exclusive selects (EX_LSU + export_mask vs EX_SFU + INST_SFU_RTUW).
     localparam UOP_GFX = UOP_TCU + `VX_CFG_EXT_TCU_ENABLED;
-    localparam UOP_MAX = UOP_GFX + `EXT_GFX_ANY_ENABLED;
+    // atomics with .aq/.rl expand into fences around the atomic
+    localparam UOP_AMO = UOP_GFX + `EXT_GFX_ANY_ENABLED;
+    localparam UOP_MAX = UOP_AMO + `VX_CFG_EXT_A_ENABLED;
     localparam UOP_CTR_W = 8;
 
     localparam CTA_TID_WIDTH = `UP(NW_BITS + NT_BITS);
@@ -1120,8 +1122,11 @@ package VX_gpu_pkg;
 
     // lsu_args_t carries AMO sideband when EXT_A_ENABLE.
     // amo_valid / amo_op are inspected only when amo_valid==1; for plain
-    // loads/stores they're zero. aq/rl are decoded but unused (sequentially
-    // consistent). amo_unsigned distinguishes the U-variants of MIN/MAX.
+    // loads/stores they're zero. aq/rl order the AMO with the hart's other
+    // accesses (fence uops around it); on a memory fence they say what it
+    // orders: aq = later reads see others' writes (acquire: invalidate),
+    // rl = earlier writes are visible (release: drain). amo_unsigned
+    // distinguishes the U-variants of MIN/MAX.
     // export_mask marks a vx_om_export (OM fragment export) and says which
     // words of the aperture record the shader is writing:
     //   bit 0 = colour (record + 0), bit 1 = depth (record + 4)
@@ -2004,6 +2009,9 @@ package VX_gpu_pkg;
     localparam L2_IS_LLC            = `VX_CFG_L2_ENABLED && !`VX_CFG_L3_ENABLED;
     // Every memory client of a cluster reaches memory through its L2.
     localparam L2_SHARED_LLC        = L2_IS_LLC && (`VX_CFG_NUM_CLUSTERS == 1);
+    // An acquire must also invalidate the cache below the dcache unless that
+    // one is the point of coherence (an L3 always is; memory always is).
+    localparam DCACHE_ACQ_FORWARD   = `VX_CFG_L2_ENABLED && !L2_SHARED_LLC;
 
     /////////////////////////////// L3 Parameters /////////////////////////////
 

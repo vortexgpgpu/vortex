@@ -2371,8 +2371,8 @@ public:
     return mask;
   }
 
-  // Tokens owing no walk: IO tokens, and L1-only ones unless they still need
-  // a walk here.
+  // Tokens owing no walk: IO and release tokens, and L1-only or acquire ones
+  // unless they still need a walk here.
   std::vector<bool> tokens(bool l1_needs_walk) const {
     std::vector<bool> mask(ReqIn.size(), false);
     for (uint32_t i = 0, n = ReqIn.size(); i < n; ++i) {
@@ -2380,7 +2380,9 @@ public:
         continue;
       }
       auto &flags = ReqIn.at(i).peek().flags;
-      mask.at(i) = flags.io || (flags.flush_l1 && !l1_needs_walk);
+      bool io  = flags.io && !flags.flush_l1;
+      bool rel = !flags.io && flags.flush_l1 && flags.noalloc;
+      mask.at(i) = io || rel || (flags.flush_l1 && !l1_needs_walk);
     }
     return mask;
   }
@@ -2986,13 +2988,13 @@ public:
       }
       auto kinds = this->token_kinds();
       bool walk = kinds.walk(config_.shared_llc);
-      if (!walk && !kinds.any_io) {
+      if (!walk && !kinds.drain(config_.shared_llc)) {
         rsp_pending_ = port_arb_->tokens();
         flush_state_ = FlushState::Respond;
         break;
       }
-      // with no walk owed, an IO token still quiesces the banks and goes down
-      // to memory
+      // with no walk owed, an IO or release token still quiesces the banks
+      // and goes down
       walk_skip_ = !walk;
       for (auto &bank : banks_) {
         bank->token_flush_begin(walk_skip_);
@@ -3007,10 +3009,23 @@ public:
         }
       }
       auto kinds = this->token_kinds();
-      // a quiesce without a walk serves only the tokens owing none
+      // a quiesce without a walk serves only the tokens owing none, and
+      // forwards IO if it serves an IO token, else release
       rsp_pending_ = walk_skip_ ? port_arb_->tokens(!config_.shared_llc) : port_arb_->tokens();
-      this->forward_begin(walk_skip_, !walk_skip_ && kinds.any_l1 && !kinds.any_full && !kinds.any_io);
-      flush_state_ = FlushState::Forward;
+      // after a walk: full if a full token or an IO one asks for more than the
+      // point of coherence, L1-only if any token owes a drain to it, acquire
+      // if only acquire tokens were visible
+      bool fwd_acq = !walk_skip_ && kinds.any_acq && !kinds.any_full && !kinds.any_io
+                  && !kinds.any_l1 && !kinds.any_rel;
+      bool fwd_l1  = !walk_skip_ && (kinds.any_l1 || kinds.any_rel) && !kinds.any_full && !kinds.any_io;
+      if (walk_skip_) {
+        this->forward_begin(kinds.any_io, !kinds.any_io, !kinds.any_io);
+      } else {
+        this->forward_begin(fwd_acq, fwd_l1 || fwd_acq, false);
+      }
+      // an acquire walk owes the next level nothing unless it too may hold
+      // stale lines
+      flush_state_ = (fwd_acq && !config_.acq_forward) ? FlushState::Respond : FlushState::Forward;
       break;
     }
     case FlushState::Forward: {
@@ -3023,7 +3038,7 @@ public:
       }
       // an IO token also waits for the non-cacheable path, which carries the
       // IO writes it orders
-      if (fwd_io_ && mem_req_empty) {
+      if (fwd_io_ && !fwd_l1_ && mem_req_empty) {
         for (uint32_t i = 0, n = config_.num_inputs; i < n; ++i) {
           mem_req_empty &= (port_arb_->IoOut.at(i).size() == 0);
         }
@@ -3043,6 +3058,7 @@ public:
         token.flags.flush = 1;
         token.flags.io = fwd_io_;
         token.flags.flush_l1 = fwd_l1_;
+        token.flags.noalloc = fwd_noalloc_;
         token.tag = 0;
         if (bank_arb_->ReqIn.at(this->bank_lane(i)).try_send(token, 1)) {
           DT(3, simobject_->name() << " flush-fwd: " << token);
@@ -3084,8 +3100,14 @@ public:
     bool any_full = false;
     bool any_l1 = false;
     bool any_io = false;
-    // a walk is owed to a full token, and to an L1-only one above the point of coherence
-    bool walk(bool shared_llc) const { return any_full || (any_l1 && !shared_llc); }
+    bool any_acq = false;
+    bool any_rel = false;
+    // a walk is owed to a full token, and to an L1-only or acquire one above
+    // the point of coherence
+    bool walk(bool shared_llc) const { return any_full || ((any_l1 || any_acq) && !shared_llc); }
+    // a drain with no walk is owed to an IO token, and to a release one above
+    // the point of coherence
+    bool drain(bool shared_llc) const { return any_io || (any_rel && !shared_llc); }
   };
 
   // Kinds of the visible tokens. Several kinds together combine to the
@@ -3098,9 +3120,17 @@ public:
       }
       auto &flags = port_arb_->ReqIn.at(i).peek().flags;
       if (flags.io) {
-        kinds.any_io = true;
+        if (flags.flush_l1) {
+          kinds.any_acq = true;
+        } else {
+          kinds.any_io = true;
+        }
       } else if (flags.flush_l1) {
-        kinds.any_l1 = true;
+        if (flags.noalloc) {
+          kinds.any_rel = true;
+        } else {
+          kinds.any_l1 = true;
+        }
       } else {
         kinds.any_full = true;
       }
@@ -3108,9 +3138,10 @@ public:
     return kinds;
   }
 
-  void forward_begin(bool io, bool l1_only) {
+  void forward_begin(bool io, bool l1_only, bool noalloc) {
     fwd_io_ = io;
     fwd_l1_ = l1_only;
+    fwd_noalloc_ = noalloc;
     fwd_go_ = false;
     fwd_sent_ = 0;
     fwd_done_ = 0;
@@ -3200,6 +3231,7 @@ private:
   bool fwd_go_ = false;   // nothing is left ahead of the forwarded tokens
   bool fwd_io_ = false;   // the forwarded tokens' kind
   bool fwd_l1_ = false;
+  bool fwd_noalloc_ = false;
   bool walk_skip_ = false;  // the banks only quiesce: no walk is owed
   std::vector<SimChannel<MemReq>> mem_req_net_;
   std::vector<FlushTap::Ptr> flush_taps_;

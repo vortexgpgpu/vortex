@@ -59,6 +59,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
 
     parameter IS_LLC                = 0,      // Indicates this cache cluster is the LLC (handles AMO completion).
     parameter SHARED_LLC            = 0,      // The LLC serves every memory client alone (point of coherence).
+    parameter ACQ_FORWARD           = 0,      // An acquire flush also invalidates the next level.
     parameter FLUSH_FORWARD         = 1,      // A flush also flushes the next level.
     parameter BANK_HASH             = 0,      // Hashed bank select (cache_bank_hash).
     parameter READ_MERGE            = 0,      // Merge same-word reads within groups of this many adjacent ports (0: off).
@@ -184,6 +185,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .PASSTHRU     (PASSTHRU),
             .IS_LLC       (IS_LLC),
             .SHARED_LLC   (SHARED_LLC),
+            .ACQ_FORWARD  (ACQ_FORWARD),
             .FLUSH_FORWARD (FLUSH_FORWARD),
             .BANK_HASH    (BANK_HASH),
             .READ_MERGE   (READ_MERGE),

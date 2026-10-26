@@ -386,9 +386,14 @@ struct IntrLsuArgs {
   int32_t  offset;      // immediate addr offset (signed); 0 for packLD uops
 };
 
-// A fence carries no access width; its width field says it orders only
-// device (IO) accesses.
-inline bool lsu_fence_is_io(const IntrLsuArgs& args) { return args.width != 0; }
+// A fence carries no access width; its width field says what it orders.
+enum class FenceKind : uint32_t {
+  FULL    = 0, // earlier writes visible and later reads see others' writes
+  IO      = 1, // only device (IO) accesses
+  ACQUIRE = 2, // only later reads see others' writes
+  RELEASE = 3  // only earlier writes visible
+};
+inline FenceKind lsu_fence_kind(const IntrLsuArgs& args) { return static_cast<FenceKind>(args.width); }
 
 inline std::ostream &operator<<(std::ostream &os, const LsuType& type) {
   switch (type) {

@@ -357,6 +357,13 @@ module VX_decode import
                 op_args.lsu.is_float = 0;
                 op_args.lsu.pack     = 0;
                 op_args.lsu.offset   = 0;
+                // A later read must see other harts' data (acquire) when the
+                // successor set reads; earlier writes must be visible (release)
+                // when the predecessor set writes. A fence with neither
+                // releases; one with a device access in its predecessor set,
+                // or fence.i, does both.
+                op_args.lsu.amo_aq = (funct3 != 3'b000) || (instr[27:26] != 2'b00) || instr[21];
+                op_args.lsu.amo_rl = (funct3 != 3'b000) || (instr[27:26] != 2'b00) || instr[24] || ~instr[21];
             end
         `ifdef VX_CFG_EXT_A_ENABLE
             INST_AMO: begin

@@ -18,6 +18,7 @@
 const char* kernel_file = "kernel.vxbin";
 uint32_t count = 64;
 uint32_t spin_limit = 4096;
+uint32_t mode = MP_FENCE;
 
 vx_device_h device = nullptr;
 vx_buffer_h data_buffer = nullptr;
@@ -30,15 +31,16 @@ kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
    std::cout << "Vortex Test." << std::endl;
-   std::cout << "Usage: [-k: kernel] [-n words] [-s spin limit] [-h: help]" << std::endl;
+   std::cout << "Usage: [-k: kernel] [-n words] [-s spin limit] [-m mode: 0 fences, 1 acquire/release fences, 2 .aq/.rl atomics] [-h: help]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "n:s:k:h")) != -1) {
+  while ((c = getopt(argc, argv, "n:s:m:k:h")) != -1) {
     switch (c) {
     case 'n': count = atoi(optarg); break;
     case 's': spin_limit = atoi(optarg); break;
+    case 'm': mode = atoi(optarg); break;
     case 'k': kernel_file = optarg; break;
     case 'h': show_usage(); exit(0); break;
     default: show_usage(); exit(-1);
@@ -75,6 +77,7 @@ int main(int argc, char *argv[]) {
   kernel_arg.num_tasks  = total_threads;
   kernel_arg.count      = count;
   kernel_arg.spin_limit = spin_limit;
+  kernel_arg.mode       = mode;
 
   std::vector<uint32_t> zeros(count, 0);
   std::vector<uint32_t> out(4, 0);

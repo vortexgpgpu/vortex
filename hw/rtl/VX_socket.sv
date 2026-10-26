@@ -234,6 +234,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .MEM_OUT_BUF    (3),
         .IS_LLC         (DCACHE_IS_LLC),
         .SHARED_LLC     (DCACHE_SHARED_LLC),
+        .ACQ_FORWARD    (DCACHE_ACQ_FORWARD),
         .BANK_HASH      (`VX_CFG_DCACHE_BANK_HASH),
         .READ_MERGE     (`VX_CFG_DCACHE_READ_MERGE ? DCACHE_CHANNELS : 0),
         .AMO_ENABLE     (`VX_CFG_EXT_A_ENABLED)
