@@ -47,6 +47,9 @@ module foldsim_mem_bank #(
     parameter BURSTS = 2,
     parameter ROW_W  = 20,
     parameter INQ    = 64,
+    // R's fire of a cycle comes with the next cycle's requests: the port's
+    // state for the next cycle is then offered for either fire of this one.
+    parameter SPEC   = 0,
     parameter SW     = $clog2(SLOTS)
 ) (
     input  wire                  clk,
@@ -98,6 +101,14 @@ module foldsim_mem_bank #(
     output wire [SW-1:0]         r_slot,
     output wire                  b_valid,
     output wire [ID_W-1:0]       b_id,
+    // With SPEC, the outputs above are the next cycle's if R does not fire
+    // in this one, and these if it does.
+    output wire                  slot_free1,
+    output wire                  r_valid1,
+    output wire [ID_W-1:0]       r_id1,
+    output wire [SW-1:0]         r_slot1,
+    // SPEC: R fired in the cycle before (its ready, for the R offered then).
+    output wire                  fire_prev,
     output wire                  no_reads,
     // The target cycle's DRAM clocks are done.
     output wire                  done,
@@ -222,6 +233,15 @@ module foldsim_mem_bank #(
     reg              cur_r_valid, cur_b_valid;
     reg [SW-1:0]     cur_r_slot;
     reg [ID_W-1:0]   cur_r_id, cur_b_id;
+    // SPEC: the second candidate R and whether each takes the ready queue's
+    // head; the R the target was offered in the cycle whose fire comes
+    // next; the slots free for either fire.
+    reg              cr1_valid, cr_pop0, cr_pop1;
+    reg [SW-1:0]     cr1_slot;
+    reg [ID_W-1:0]   cr1_id;
+    reg              pr_valid;
+    reg [SW-1:0]     pr_slot;
+    reg              sf0, sf1;
     reg [31:0]       tcyc, tcyc1;    // the target cycle, and the next
 
     // Reads departed, in order, with the target cycle they are ready in; the
@@ -246,10 +266,14 @@ module foldsim_mem_bank #(
     reg [AQW:0]      new_acks;
     // The last cycle's reads taken by AR and by R, for the latency sum.
     reg              lat_ar, lat_r;
-    reg [31:0]       lat_t;
+    reg [31:0]       lat_t, lat_tr;
 
     assign room       = (cfg_queue == 16'd0) | (inflight < cfg_queue);
-    assign slot_free  = (32'(slots_used) < SLOTS);
+    assign slot_free  = SPEC ? sf0 : (32'(slots_used) < SLOTS);
+    assign slot_free1 = SPEC ? sf1 : slot_free;
+    assign r_valid1   = SPEC ? cr1_valid : cur_r_valid;
+    assign r_id1      = SPEC ? cr1_id : cur_r_id;
+    assign r_slot1    = SPEC ? cr1_slot : cur_r_slot;
     assign r_valid    = cur_r_valid;
     assign r_id       = cur_r_id;
     assign r_slot     = cur_r_slot;
@@ -258,7 +282,11 @@ module foldsim_mem_bank #(
     assign no_reads   = (slots_used == 0);
 
     // The lowest free slot once R has taken its read.
-    wire [SLOTS-1:0] free_slots = ~slot_busy | ((r_fire ? SLOTS'(1) : SLOTS'(0)) << cur_r_slot);
+    // SPEC: r_fire is R's ready of the cycle before, for the R offered then.
+    wire             fire_p     = SPEC ? (pr_valid & r_fire) : r_fire;
+    wire [SW-1:0]    fire_slot  = SPEC ? pr_slot : cur_r_slot;
+    assign fire_prev = fire_p;
+    wire [SLOTS-1:0] free_slots = ~slot_busy | ((fire_p ? SLOTS'(1) : SLOTS'(0)) << fire_slot);
     reg  [SW-1:0]    lowest_free;
     always @(*) begin
         lowest_free = '0;
@@ -272,7 +300,9 @@ module foldsim_mem_bank #(
     reg              st_w_valid, st_r_valid;
     reg [ID_W-1:0]   st_w_id;
     reg [SW-1:0]     st_r_slot;
-    reg [29:5]       st_w_addr, st_r_addr;
+    // Decoded when staged, so the clock engine's cycle carries no decode.
+    reg [BKW-1:0]    st_w_bank, st_r_bank;
+    reg [ROW_W-1:0]  st_w_row, st_r_row;
 
     // ---- The channel ----
     // Requests in the order they formed, decoded; the controller's read and
@@ -424,7 +454,8 @@ module foldsim_mem_bank #(
                S_RBANK = 4'd14, S_RBANK2 = 4'd15;
     localparam K_PRE = 3'd0, K_ACT = 3'd1, K_C0 = 3'd2, K_C1 = 3'd3, K_REF = 3'd4;
     reg [3:0]        state;
-    localparam A_IDLE = 3'd0, A_PUSH = 3'd1, A_TICK = 3'd2, A_END = 3'd3, A_WALK = 3'd4;
+    localparam A_IDLE = 3'd0, A_PUSH = 3'd1, A_TICK = 3'd2, A_END = 3'd3, A_WALK = 3'd4,
+               A_FAST = 3'd5;
     reg [2:0]        a_state;
 
     // A cycle finishes once the clock engine is done with it; the
@@ -514,6 +545,33 @@ module foldsim_mem_bank #(
     wire               caught  = (d == da);
     wire               move    = (iq_count != 0) & ih_time & ih_room;
     wire               a_wait_room = (iq_count != 0) & ih_time & ~ih_room & ~caught;
+
+    // The fast path: the cycle's requests join the ingress queue behind its
+    // head and its one DRAM clock runs, all in the host cycle after the
+    // target cycle's end, whenever no wait would have held the clock.
+    wire               fv_q    = (iq_count != 0);
+    wire               fv_any  = fv_q | st_w_valid | st_r_valid;
+    wire               fh_w    = fv_q ? iq_w[iq_head] : st_w_valid;
+    wire [TAG_W-1:0]   fh_tag  = fv_q ? iq_tag[iq_head] : (st_w_valid ? TAG_W'(st_w_id) : TAG_W'(st_r_slot));
+    wire [BKW-1:0]     fh_bank = fv_q ? iq_bank[iq_head] : (st_w_valid ? st_w_bank : st_r_bank);
+    wire [ROW_W-1:0]   fh_row  = fv_q ? iq_row[iq_head] : (st_w_valid ? st_w_row : st_r_row);
+    wire               fh_room = fh_w ? (wb_after <= 9'(cfg_wq)) : (rb_after <= 9'(cfg_rq));
+    wire               f_move  = fv_any & ih_time & fh_room;
+    wire               f_wait_room = fv_any & ih_time & ~fh_room & ~caught;
+    wire               f_clock = (credit >= 32'(k_twoclk)) & (credit - 32'(k_twoclk) < 32'(k_twoclk))
+                               & ~a_wait_lag & ~f_wait_room;
+    // The clock's departing read, and the reads ready by the next target
+    // cycle: the ready queue's first unwalked entries, then that departure.
+    wire               f_dep   = rd_depv[base_a[5:0]];
+    wire [SW-1:0]      f_dslot = dep_slot[base_a];
+    wire [23:0]        f_dcyc  = 24'(tcyc1 + 32'(cfg_latency));
+    wire [SW:0]        f_unw   = rf_count - rf_ready;
+    function automatic due(input [23:0] cyc);
+        due = ($signed(cyc - tcyc1[23:0]) <= 0);
+    endfunction
+    wire               f_w1    = (f_unw != 0) ? due(rf_cyc[rf_scan]) : (f_dep & due(f_dcyc));
+    wire               f_w2    = (f_unw > 1) ? due(rf_cyc[SW'(rf_scan + 1'b1)])
+                               : ((f_unw == 1) & f_dep & due(f_dcyc));
     // No departure is placed within tCL + tBL of its reservation.
     wire               a_wait_lag  = ($signed(da - d) > k_dep - 16'sd1);
     // The buffers' bursts as the reservations' clock sees them, and the mode
@@ -603,18 +661,109 @@ module foldsim_mem_bank #(
         lat_ar <= 1'b0;
         lat_r  <= 1'b0;
         if (lat_ar | lat_r)
-            stat_latency <= stat_latency + (lat_r ? 64'(lat_t) : 64'd0) - (lat_ar ? 64'(lat_t) : 64'd0);
+            stat_latency <= stat_latency + (lat_r ? 64'(lat_tr) : 64'd0) - (lat_ar ? 64'(lat_t) : 64'd0);
 
         // The engine runs while the target evaluates its cycle; the cycle
         // finishes only once the engine is idle.
         // ---- The clock engine ----
         case (a_state)
+        A_FAST: begin
+            begin : fast_
+                // The staged requests in order, the write first; with the
+                // clock, a head taken from them is not appended.
+                reg              p0v, p1v, p0w;
+                reg [TAG_W-1:0]  p0t;
+                reg [BKW-1:0]    p0b;
+                reg [ROW_W-1:0]  p0r;
+                reg              took;
+                reg [IQW-1:0]    t;
+                reg [IQW:0]      n;
+                p0v  = st_w_valid | st_r_valid;
+                p1v  = st_w_valid & st_r_valid;
+                p0w  = st_w_valid;
+                p0t  = st_w_valid ? TAG_W'(st_w_id) : TAG_W'(st_r_slot);
+                p0b  = st_w_valid ? st_w_bank : st_r_bank;
+                p0r  = st_w_valid ? st_w_row : st_r_row;
+                took = f_clock & f_move & ~fv_q;
+                t    = iq_tail;
+                n    = iq_count;
+                if (p0v & ~took) begin
+                    iq_w[t]    <= p0w;
+                    iq_tag[t]  <= p0t;
+                    iq_bank[t] <= p0b;
+                    iq_row[t]  <= p0r;
+                    t = t + 1'b1;
+                    n = n + 1'b1;
+                end
+                if (p1v) begin
+                    iq_w[t]    <= 1'b0;
+                    iq_tag[t]  <= TAG_W'(st_r_slot);
+                    iq_bank[t] <= st_r_bank;
+                    iq_row[t]  <= st_r_row;
+                    t = t + 1'b1;
+                    n = n + 1'b1;
+                end
+                st_w_valid <= 1'b0;
+                st_r_valid <= 1'b0;
+                if (f_clock) begin
+                    credit <= credit - 32'(k_twoclk);
+                    if (f_move) begin
+                        if (fv_q) begin
+                            iq_head <= iq_head + 1'b1;
+                            n = n - 1'b1;
+                        end
+                        ingress_ready <= da + 16'(NB);
+                        if (fh_w) begin
+                            wb_tag[wb_tail]   <= fh_tag;
+                            wb_bank[wb_tail]  <= fh_bank;
+                            wb_row[wb_tail]   <= fh_row;
+                            wb_stamp[wb_tail] <= da;
+                            wb_tail           <= wb_tail + 1'b1;
+                            wb_add             = 1'b1;
+                            af_id[af_tail]    <= ID_W'(fh_tag);
+                            af_tail           <= af_tail + 1'b1;
+                            af_count          <= af_count + 1'b1;
+                            new_acks          <= new_acks + 1'b1;
+                        end else begin
+                            rb_tag[rb_tail]   <= fh_tag;
+                            rb_bank[rb_tail]  <= fh_bank;
+                            rb_row[rb_tail]   <= fh_row;
+                            rb_stamp[rb_tail] <= da;
+                            rb_tail           <= rb_tail + 1'b1;
+                            rb_add             = 1'b1;
+                        end
+                    end else if ($signed(ingress_ready - ea) < 0) begin
+                        ingress_ready <= ea;
+                    end
+                    // The clock ends: its departing read joins the ready
+                    // queue, and the walk takes what is ready next cycle.
+                    if (f_dep) begin
+                        rf_slot[rf_tail] <= f_dslot;
+                        rf_cyc[rf_tail]  <= f_dcyc;
+                        rf_tail          <= rf_tail + 1'b1;
+                        rf_count         <= rf_count + 1'b1;
+                    end
+                    da <= da + 16'd1;
+                    if (f_w1) begin
+                        rf_ready  <= rf_ready + 1'b1;
+                        rf_scan   <= rf_scan + 1'b1;
+                        new_ready <= new_ready + 1'b1;
+                    end
+                    a_state <= (f_w1 & f_w2) ? A_WALK : A_IDLE;
+                end else begin
+                    a_state <= A_TICK;
+                end
+                iq_tail  <= t;
+                iq_count <= n;
+            end
+        end
         A_PUSH: begin
             // A cycle's write reaches the channel before its read.
             if (st_w_valid) begin
                 iq_w[iq_tail]    <= 1'b1;
                 iq_tag[iq_tail]  <= TAG_W'(st_w_id);
-                {iq_bank[iq_tail], iq_row[iq_tail]} <= decode(st_w_addr[29:5]);
+                iq_bank[iq_tail] <= st_w_bank;
+                iq_row[iq_tail]  <= st_w_row;
                 iq_tail          <= iq_tail + 1'b1;
                 iq_count         <= iq_count + 1'b1;
                 st_w_valid       <= 1'b0;
@@ -622,7 +771,8 @@ module foldsim_mem_bank #(
                 if (st_r_valid) begin
                     iq_w[iq_tail]    <= 1'b0;
                     iq_tag[iq_tail]  <= TAG_W'(st_r_slot);
-                    {iq_bank[iq_tail], iq_row[iq_tail]} <= decode(st_r_addr[29:5]);
+                    iq_bank[iq_tail] <= st_r_bank;
+                    iq_row[iq_tail]  <= st_r_row;
                     iq_tail          <= iq_tail + 1'b1;
                     iq_count         <= iq_count + 1'b1;
                     st_r_valid       <= 1'b0;
@@ -952,6 +1102,12 @@ module foldsim_mem_bank #(
                 inflight    <= '0;
                 cur_r_valid <= 1'b0;
                 cur_b_valid <= 1'b0;
+                cr1_valid   <= 1'b0;
+                cr_pop0     <= 1'b0;
+                cr_pop1     <= 1'b0;
+                pr_valid    <= 1'b0;
+                sf0         <= 1'b1;
+                sf1         <= 1'b1;
                 tcyc        <= '0;
                 tcyc1       <= 32'd1;
                 rf_head     <= '0;
@@ -1000,13 +1156,54 @@ module foldsim_mem_bank #(
             end else begin
                 tcyc  <= tcyc1;
                 tcyc1 <= tcyc1 + 32'd1;
-                if (~(room & slot_free))
+                // The port as the target saw it this cycle.
+                if (~(room & (SPEC ? (fire_p ? sf1 : sf0) : slot_free)))
                     stat_full <= stat_full + 64'd1;
                 // R and B, then what is ready next cycle.
-                begin : release_
-                    reg r_load, b_load;
+                if (SPEC) begin : release_spec_
+                    // This cycle's R is the candidate the last cycle's fire
+                    // chose; then the next cycle's candidates, from the ready
+                    // queue after this one's take.
+                    reg              rv, pop, p0, p1, v0, v1;
+                    reg [SW-1:0]     rs, s0, s1, hd;
+                    reg [ID_W-1:0]   ri, i0, i1;
+                    reg [SW:0]       rdy, used;
+                    rv  = fire_p ? cr1_valid : cur_r_valid;
+                    rs  = fire_p ? cr1_slot  : cur_r_slot;
+                    ri  = fire_p ? cr1_id    : cur_r_id;
+                    pop = fire_p ? cr_pop1   : cr_pop0;
+                    hd  = rf_head + (pop ? SW'(1) : SW'(0));
+                    rdy = rf_ready - (pop ? (SW+1)'(1) : (SW+1)'(0));
+                    p0  = ~rv & (rdy != 0);
+                    v0  = rv | p0;
+                    s0  = p0 ? rf_slot[hd] : rs;
+                    i0  = p0 ? slot_id[rf_slot[hd]] : ri;
+                    p1  = rv & (rdy != 0);
+                    v1  = rv ? (rdy != 0) : v0;
+                    s1  = rv ? rf_slot[hd] : s0;
+                    i1  = rv ? slot_id[rf_slot[hd]] : i0;
+                    if (~rv)
+                        p1 = p0;
+                    cur_r_valid <= v0;
+                    cur_r_slot  <= s0;
+                    cur_r_id    <= i0;
+                    cr1_valid   <= v1;
+                    cr1_slot    <= s1;
+                    cr1_id      <= i1;
+                    cr_pop0     <= p0;
+                    cr_pop1     <= p1;
+                    pr_valid    <= rv;
+                    pr_slot     <= rs;
+                    rf_head     <= hd;
+                    rf_count    <= rf_count - (pop ? (SW+1)'(1) : (SW+1)'(0));
+                    rf_ready    <= rdy;
+                    used = slots_used + (SW+1)'(ar_fire) - (SW+1)'(fire_p);
+                    slots_used  <= used;
+                    sf0 <= (32'(used) < SLOTS);
+                    sf1 <= (32'(used) - 32'(rv) < SLOTS);
+                end else begin : release_
+                    reg r_load;
                     r_load = (~cur_r_valid | r_fire) & (rf_ready != 0);
-                    b_load = (~cur_b_valid | b_fire) & (af_count != 0);
                     if (r_load) begin
                         cur_r_valid <= 1'b1;
                         cur_r_slot  <= rf_slot[rf_head];
@@ -1017,6 +1214,11 @@ module foldsim_mem_bank #(
                     end else if (r_fire) begin
                         cur_r_valid <= 1'b0;
                     end
+                    slots_used <= slots_used + (SW+1)'(ar_fire) - (SW+1)'(r_fire);
+                end
+                begin : release_b_
+                    reg b_load;
+                    b_load = (~cur_b_valid | b_fire) & (af_count != 0);
                     if (b_load) begin
                         cur_b_valid <= 1'b1;
                         cur_b_id    <= af_id[af_head];
@@ -1025,30 +1227,30 @@ module foldsim_mem_bank #(
                     end else if (b_fire) begin
                         cur_b_valid <= 1'b0;
                     end
-                    if (r_fire)
-                        slot_busy[cur_r_slot] <= 1'b0;
+                    if (fire_p)
+                        slot_busy[fire_slot] <= 1'b0;
                     if (ar_fire) begin
                         slot_busy[alloc_slot] <= 1'b1;
                         slot_id[alloc_slot]   <= ar_id;
                     end
-                    slots_used <= slots_used + (SW+1)'(ar_fire) - (SW+1)'(r_fire);
                     inflight <= inflight + 16'(ar_fire) + 16'(aw_fire) - 16'(new_ready) - 16'(new_acks);
                     lat_ar <= ar_fire;
-                    lat_r  <= r_fire;
+                    lat_r  <= fire_p;
                     lat_t  <= tcyc;
+                    lat_tr <= SPEC ? tcyc - 32'd1 : tcyc;
                 end
                 st_w_valid <= new_write;
                 st_w_id    <= nw_id;
-                st_w_addr  <= nw_addr[29:5];
+                {st_w_bank, st_w_row} <= decode(nw_addr[29:5]);
                 st_r_valid <= ar_fire;
                 st_r_slot  <= alloc_slot;
-                st_r_addr  <= ar_addr[29:5];
+                {st_r_bank, st_r_row} <= decode(ar_addr[29:5]);
                 credit     <= credit + 32'(cfg_data_rate);
             end
             // A clearing cycle's next host cycle clears the calendars, so the
             // first DRAM clock waits a host cycle (in A_PUSH).
             a_state <= ~(treset | active) ? A_IDLE
-                     : (((treset | ~active) | new_write | ar_fire) ? A_PUSH : A_TICK);
+                     : ((treset | ~active) ? A_PUSH : A_FAST);
             new_ready <= '0;
             new_acks  <= '0;
         end

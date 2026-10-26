@@ -51,6 +51,14 @@ using namespace vortex;
 namespace {
 
 constexpr int kWords = 16;  // DATA_W = 512
+constexpr int kIdW = 4;     // ID_W
+
+// With SPEC, the endpoint takes R's ready a cycle late and offers R and AR's
+// ready as two candidates, the high one for R having fired the cycle before:
+// the test picks one as the simulator does.
+#ifndef FOLDSIM_MEM_SPEC
+#define FOLDSIM_MEM_SPEC 0
+#endif
 constexpr uint64_t kBase = 0x10000000ull;
 constexpr uint64_t kMagic = 0x3ff7f000ull;      // offered only in reset cycles
 constexpr uint64_t kBurstAddr = 0x3ff7e000ull;  // offered only as a burst
@@ -531,6 +539,7 @@ bool o_awready, o_wready, o_arready, o_rvalid, o_bvalid;
 int o_rid, o_bid;
 Line o_rdata;
 bool after_reset = false;
+bool prev_fire = false;
 uint64_t reset_cycles_done = 0, drained_at_reset = 0, compared = 0;
 
 void drive_tokens() {
@@ -577,16 +586,17 @@ void sample_tokens(bool in_take[NUM_IN], bool out_take[NUM_OUT]) {
 #undef OUT
   if (out_take[O_AWREADY]) o_awready = dut->awready_bits;
   if (out_take[O_WREADY]) o_wready = dut->wready_bits;
-  if (out_take[O_ARREADY]) o_arready = dut->arready_bits;
-  if (out_take[O_RVALID]) o_rvalid = dut->rvalid_bits;
+  const int sel = (FOLDSIM_MEM_SPEC && prev_fire) ? 1 : 0;
+  if (out_take[O_ARREADY]) o_arready = (dut->arready_bits >> sel) & 1;
+  if (out_take[O_RVALID]) o_rvalid = (dut->rvalid_bits >> sel) & 1;
   if (out_take[O_RDATA])
     for (int i = 0; i < kWords; ++i)
-      o_rdata[i] = dut->rdata_bits[i];
-  if (out_take[O_RID]) o_rid = dut->rid_bits;
+      o_rdata[i] = dut->rdata_bits[sel * kWords + i];
+  if (out_take[O_RID]) o_rid = (dut->rid_bits >> (sel * kIdW)) & ((1 << kIdW) - 1);
   if (out_take[O_BVALID]) o_bvalid = dut->bvalid_bits;
   if (out_take[O_BID]) o_bid = dut->bid_bits;
-  if (out_take[O_RLAST]) CHECK(dut->rlast_bits, "RLAST low");
-  if (out_take[O_RRESP]) CHECK(dut->rresp_bits == 0, "RRESP not OKAY");
+  if (out_take[O_RLAST]) CHECK((dut->rlast_bits >> sel) & 1, "RLAST low");
+  if (out_take[O_RRESP]) CHECK(((dut->rresp_bits >> (2 * sel)) & 3) == 0, "RRESP not OKAY");
   if (out_take[O_BRESP]) CHECK(dut->bresp_bits == 0, "BRESP not OKAY");
 }
 
@@ -681,7 +691,9 @@ void run(uint64_t n) {
     if (master.reset)
       after_reset = true;
     golden_cycle();
+    const bool fire = o_rvalid && master.rready;
     master.cycle(o_arready, o_awready, o_wready, o_rvalid, o_rdata, o_rid, o_bvalid, o_bid);
+    prev_fire = fire;
     ++tcycle;
   }
 }
@@ -758,6 +770,7 @@ int run_setup(const Setup& s) {
   setup = &s;
   rng.seed(7);
   host_cycle = tcycle = 0;
+  prev_fire = false;
   reset_cycles_done = drained_at_reset = compared = 0;
   hbm = Hbm();
   master = Master();

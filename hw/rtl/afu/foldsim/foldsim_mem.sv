@@ -50,7 +50,12 @@ module foldsim_mem #(
     // The target's ports interleave its address space by block, 2^CH_SHIFT of
     // them: the bank model sees the block within the port's channel, as
     // dram_sim's banks do. Device memory still takes the target's address.
-    parameter CH_SHIFT = 0
+    parameter CH_SHIFT = 0,
+    // R's ready of a cycle is taken with the next cycle's requests, and R and
+    // AR's ready are offered for either fire of R in the cycle before: the
+    // simulator picks one with its own R fire (low half: no fire).
+    parameter SPEC = 0,
+    parameter NC   = SPEC ? 2 : 1
 ) (
     input  wire                  clk,
     input  wire                  reset,
@@ -101,12 +106,12 @@ module foldsim_mem #(
     // Target inputs: the endpoint's outputs.
     output wire                  awready_valid, input wire awready_ready, output wire              awready_bits,
     output wire                  wready_valid,  input wire wready_ready,  output wire              wready_bits,
-    output wire                  arready_valid, input wire arready_ready, output wire              arready_bits,
-    output wire                  rvalid_valid,  input wire rvalid_ready,  output wire              rvalid_bits,
-    output wire                  rdata_valid,   input wire rdata_ready,   output wire [DATA_W-1:0] rdata_bits,
-    output wire                  rlast_valid,   input wire rlast_ready,   output wire              rlast_bits,
-    output wire                  rid_valid,     input wire rid_ready,     output wire [ID_W-1:0]   rid_bits,
-    output wire                  rresp_valid,   input wire rresp_ready,   output wire [1:0]        rresp_bits,
+    output wire                  arready_valid, input wire arready_ready, output wire [NC-1:0]     arready_bits,
+    output wire                  rvalid_valid,  input wire rvalid_ready,  output wire [NC-1:0]     rvalid_bits,
+    output wire                  rdata_valid,   input wire rdata_ready,   output wire [NC*DATA_W-1:0] rdata_bits,
+    output wire                  rlast_valid,   input wire rlast_ready,   output wire [NC-1:0]     rlast_bits,
+    output wire                  rid_valid,     input wire rid_ready,     output wire [NC*ID_W-1:0] rid_bits,
+    output wire                  rresp_valid,   input wire rresp_ready,   output wire [NC*2-1:0]   rresp_bits,
     output wire                  bvalid_valid,  input wire bvalid_ready,  output wire              bvalid_bits,
     output wire                  bresp_valid,   input wire bresp_ready,   output wire [1:0]        bresp_bits,
     output wire                  bid_valid,     input wire bid_ready,     output wire [ID_W-1:0]   bid_bits,
@@ -163,7 +168,39 @@ module foldsim_mem #(
     foldsim_token_in #(ADDR_W, STAGED)   t_araddr  (clk, reset, araddr_valid,  araddr_ready,  araddr_bits,  finish, have[9],  araddr);
     foldsim_token_in #(ID_W, STAGED)     t_arid    (clk, reset, arid_valid,    arid_ready,    arid_bits,    finish, have[10], arid);
     foldsim_token_in #(8, STAGED)        t_arlen   (clk, reset, arlen_valid,   arlen_ready,   arlen_bits,   finish, have[11], arlen);
-    foldsim_token_in #(1, STAGED)        t_rready  (clk, reset, rready_valid,  rready_ready,  rready_bits,  finish, have[12], rready);
+    if (SPEC) begin : g_rlag
+        // R's ready, a cycle behind: two deep, the cycle before the first
+        // standing as not ready.
+        reg [1:0] cnt;
+        reg       e0, e1;
+        wire      take = rready_valid & (cnt != 2'd2);
+        assign rready_ready = (cnt != 2'd2);
+        assign have[12]     = (cnt != 2'd0);
+        assign rready       = e0;
+        always @(posedge clk) begin
+            if (reset) begin
+                cnt <= 2'd1;
+                e0  <= 1'b0;
+            end else begin : step_
+                reg [1:0] c;
+                c = cnt;
+                if (finish) begin
+                    e0 <= e1;
+                    c  = c - 2'd1;
+                end
+                if (take) begin
+                    if (c == 2'd0)
+                        e0 <= rready_bits;
+                    else
+                        e1 <= rready_bits;
+                    c = c + 2'd1;
+                end
+                cnt <= c;
+            end
+        end
+    end else begin : g_rnow
+        foldsim_token_in #(1, STAGED) t_rready (clk, reset, rready_valid, rready_ready, rready_bits, finish, have[12], rready);
+    end
     foldsim_token_in #(1, STAGED)        t_bready  (clk, reset, bready_valid,  bready_ready,  bready_bits,  finish, have[13], bready);
     foldsim_token_in #(1, STAGED)        t_treset  (clk, reset, treset_valid,  treset_ready,  treset_bits,  finish, have[14], treset);
 
@@ -192,18 +229,29 @@ module foldsim_mem #(
     wire          bk_room, bk_slot_free, bk_r_valid, bk_b_valid, bk_no_reads, bk_done;
     wire [SW-1:0] bk_alloc_slot, bk_r_slot;
     wire [ID_W-1:0] bk_r_id, bk_b_id;
+    // SPEC: the candidates for an R fire in this cycle, and the fire before.
+    wire          bk_slot_free1, bk_r_valid1, bk_fire_prev;
+    wire [SW-1:0] bk_r_slot1;
+    /* verilator lint_off UNUSEDSIGNAL */
+    wire [ID_W-1:0] bk_r_id1;   // unused without SPEC
+    /* verilator lint_on UNUSEDSIGNAL */
     // Read data by slot, and which slots memory has answered.
     reg [DATA_W-1:0] slot_data [SLOTS];
     reg [SLOTS-1:0]  arrived;
 
     // ---- The model's outputs: functions of its state ----
-    wire ar_ready = ~error & bk_room & bk_slot_free;
+    // The AR ready the target was offered: with SPEC, the candidate its R
+    // fire of the cycle before chose.
+    wire ar_ready0 = ~error & bk_room & bk_slot_free;
+    wire ar_ready1 = ~error & bk_room & bk_slot_free1;
+    wire ar_ready  = (SPEC && bk_fire_prev) ? ar_ready1 : ar_ready0;
     wire aw_ready = ~error & bk_room & (32'(pending_aw) < DEPTH);
     wire w_ready  = ~error & (32'(pending_w) < DEPTH);
     wire r_valid  = bk_r_valid;
     wire b_valid  = bk_b_valid;
     // R needs its data back from memory, and B its write acknowledged.
-    wire ok = (~bk_r_valid | arrived[bk_r_slot]) & (~bk_b_valid | (b_acked != b_given));
+    wire ok = (~bk_r_valid | arrived[bk_r_slot]) & (~(SPEC && bk_r_valid1) | arrived[bk_r_slot1])
+            & (~bk_b_valid | (b_acked != b_given));
     wire [10:0] done;
 
     foldsim_token_out #(STAGED) o_awready (clk, reset, awready_valid, awready_ready, ok, finish, done[0]);
@@ -220,12 +268,21 @@ module foldsim_mem #(
 
     assign awready_bits = aw_ready;
     assign wready_bits  = w_ready;
-    assign arready_bits = ar_ready;
-    assign rvalid_bits  = r_valid;
-    assign rdata_bits   = slot_data[bk_r_slot];
-    assign rlast_bits   = 1'b1;
-    assign rid_bits     = bk_r_id;
-    assign rresp_bits   = 2'b00;
+    if (SPEC) begin : g_spec_out
+        assign arready_bits = {ar_ready1, ar_ready0};
+        assign rvalid_bits  = {bk_r_valid1, bk_r_valid};
+        assign rdata_bits   = {slot_data[bk_r_slot1], slot_data[bk_r_slot]};
+        assign rlast_bits   = 2'b11;
+        assign rid_bits     = {bk_r_id1, bk_r_id};
+        assign rresp_bits   = 4'b0000;
+    end else begin : g_out
+        assign arready_bits = ar_ready;
+        assign rvalid_bits  = r_valid;
+        assign rdata_bits   = slot_data[bk_r_slot];
+        assign rlast_bits   = 1'b1;
+        assign rid_bits     = bk_r_id;
+        assign rresp_bits   = 2'b00;
+    end
     assign bvalid_bits  = b_valid;
     assign bresp_bits   = 2'b00;
     assign bid_bits     = bk_b_id;
@@ -246,7 +303,8 @@ module foldsim_mem #(
     wire ar_fire = ar_hs & (arlen == 0);
     wire aw_fire = aw_hs & (awlen == 0);
     wire w_fire  = w_hs & wlast;
-    wire r_fire  = r_valid & rready;
+    // With SPEC, the bank model takes R's ready of the cycle before.
+    wire r_fire  = SPEC ? rready : (r_valid & rready);
     wire b_fire  = b_valid & bready;
 
     // Writes: an AW and its W, in either order, form one write.
@@ -419,7 +477,8 @@ module foldsim_mem #(
         .SLOTS  (SLOTS),
         .WSLOTS (DEPTH),
         .HLOG2  (HLOG2),
-        .BURSTS (DATA_W / 256)
+        .BURSTS (DATA_W / 256),
+        .SPEC   (SPEC)
     ) bank_model (
         .clk            (clk),
         .reset          (reset),
@@ -455,6 +514,11 @@ module foldsim_mem #(
         .r_slot         (bk_r_slot),
         .b_valid        (bk_b_valid),
         .b_id           (bk_b_id),
+        .slot_free1     (bk_slot_free1),
+        .r_valid1       (bk_r_valid1),
+        .r_id1          (bk_r_id1),
+        .r_slot1        (bk_r_slot1),
+        .fire_prev      (bk_fire_prev),
         .no_reads       (bk_no_reads),
         .done           (bk_done),
         .stat_reads     (stats[0*64 +: 64]),
