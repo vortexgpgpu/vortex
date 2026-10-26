@@ -22,6 +22,10 @@ all:
 	$(MAKE) -C foldsim_mem
 	$(MAKE) -C foldsim_mem_staged
 	$(MAKE) -C foldsim_mem_spec
+	$(MAKE) -C foldsim_mem_spec2
+	$(MAKE) -C foldsim_mem_s8
+	$(MAKE) -C foldsim_mem_spec_s8
+	$(MAKE) -C foldsim_mem_spec2_s8
 	$(MAKE) -C foldsim_mem_ch2
 	$(MAKE) -C cp_axi_path
 	$(MAKE) -C cp_dma
@@ -59,6 +63,10 @@ run:
 	$(MAKE) -C foldsim_mem run
 	$(MAKE) -C foldsim_mem_staged run
 	$(MAKE) -C foldsim_mem_spec run
+	$(MAKE) -C foldsim_mem_spec2 run
+	$(MAKE) -C foldsim_mem_s8 run
+	$(MAKE) -C foldsim_mem_spec_s8 run
+	$(MAKE) -C foldsim_mem_spec2_s8 run
 	$(MAKE) -C foldsim_mem_ch2 run
 	$(MAKE) -C cp_axi_path run
 	$(MAKE) -C cp_dma run
@@ -165,6 +173,10 @@ clean:
 	$(MAKE) -C foldsim_mem clean
 	$(MAKE) -C foldsim_mem_staged clean
 	$(MAKE) -C foldsim_mem_spec clean
+	$(MAKE) -C foldsim_mem_spec2 clean
+	$(MAKE) -C foldsim_mem_s8 clean
+	$(MAKE) -C foldsim_mem_spec_s8 clean
+	$(MAKE) -C foldsim_mem_spec2_s8 clean
 	$(MAKE) -C foldsim_mem_ch2 clean
 	$(MAKE) -C fma_unit clean
 	$(MAKE) -C fdiv_unit clean

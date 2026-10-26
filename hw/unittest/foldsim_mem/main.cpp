@@ -53,9 +53,15 @@ namespace {
 constexpr int kWords = 16;  // DATA_W = 512
 constexpr int kIdW = 4;     // ID_W
 
-// With SPEC, the endpoint takes R's ready a cycle late and offers R and AR's
-// ready as two candidates, the high one for R having fired the cycle before:
-// the test picks one as the simulator does.
+// With SPEC, the endpoint takes R's ready SPEC cycles late and offers R and
+// AR's ready (and with SPEC 2, AW and W's too) as candidates, by R having fired
+// the cycle before (bit 0) and, with SPEC 2, the one before that (bit 1): the
+// test picks one as the simulator does.
+// The endpoint's read slots (its SLOTS): fewer than the reads the test keeps
+// in flight, the port runs out of them.
+#ifndef FOLDSIM_MEM_READ_SLOTS
+#define FOLDSIM_MEM_READ_SLOTS 32
+#endif
 #ifndef FOLDSIM_MEM_SPEC
 #define FOLDSIM_MEM_SPEC 0
 #endif
@@ -115,6 +121,9 @@ const Setup kSetups[] = {
    Traffic::Random, 0.6, 0.5, 0.7, 4000},
   {"bank_reads",     dram_timing::Standard::HBM2, 400, 800, 0, 0, 32, 32, 26, 7,
    Traffic::Random, 0.9, 0.05, 0.9, 4000},
+  // R seldom taken: every read slot held, AR's ready turning on R's fires.
+  {"bank_full",      dram_timing::Standard::HBM2, 400, 800, 0, 0, 32, 32, 26, 7,
+   Traffic::Random, 0.9, 0.1, 0.15, 4000},
   {"bank_onebank",   dram_timing::Standard::HBM3, 1980, 6545, 0, 0, 32, 32, 26, 7,
    Traffic::OneBank, 0.9, 0.1, 0.9, 4000},
   {"bank_onebank2",  dram_timing::Standard::HBM2, 400, 800, 11, 3, 32, 32, 26, 7,
@@ -178,7 +187,7 @@ DramBankAxi::Config bank_config(const Setup& s) {
   c.data_rate = s.data_rate;
   c.latency = s.latency;
   c.queue = s.queue;
-  c.read_slots = 32;
+  c.read_slots = FOLDSIM_MEM_READ_SLOTS;
   c.write_slots = 16;
   return c;
 }
@@ -539,7 +548,7 @@ bool o_awready, o_wready, o_arready, o_rvalid, o_bvalid;
 int o_rid, o_bid;
 Line o_rdata;
 bool after_reset = false;
-bool prev_fire = false;
+bool prev_fire = false, prev_fire2 = false;
 uint64_t reset_cycles_done = 0, drained_at_reset = 0, compared = 0;
 
 void drive_tokens() {
@@ -584,9 +593,12 @@ void sample_tokens(bool in_take[NUM_IN], bool out_take[NUM_OUT]) {
   OUT(O_RVALID, rvalid); OUT(O_RDATA, rdata); OUT(O_RLAST, rlast); OUT(O_RID, rid);
   OUT(O_RRESP, rresp); OUT(O_BVALID, bvalid); OUT(O_BRESP, bresp); OUT(O_BID, bid);
 #undef OUT
-  if (out_take[O_AWREADY]) o_awready = dut->awready_bits;
-  if (out_take[O_WREADY]) o_wready = dut->wready_bits;
-  const int sel = (FOLDSIM_MEM_SPEC && prev_fire) ? 1 : 0;
+  const int sel = FOLDSIM_MEM_SPEC
+                      ? (prev_fire ? 1 : 0) + ((FOLDSIM_MEM_SPEC == 2 && prev_fire2) ? 2 : 0)
+                      : 0;
+  const int wsel = (FOLDSIM_MEM_SPEC == 2) ? sel : 0;
+  if (out_take[O_AWREADY]) o_awready = (dut->awready_bits >> wsel) & 1;
+  if (out_take[O_WREADY]) o_wready = (dut->wready_bits >> wsel) & 1;
   if (out_take[O_ARREADY]) o_arready = (dut->arready_bits >> sel) & 1;
   if (out_take[O_RVALID]) o_rvalid = (dut->rvalid_bits >> sel) & 1;
   if (out_take[O_RDATA])
@@ -693,6 +705,7 @@ void run(uint64_t n) {
     golden_cycle();
     const bool fire = o_rvalid && master.rready;
     master.cycle(o_arready, o_awready, o_wready, o_rvalid, o_rdata, o_rid, o_bvalid, o_bid);
+    prev_fire2 = prev_fire;
     prev_fire = fire;
     ++tcycle;
   }
@@ -770,7 +783,7 @@ int run_setup(const Setup& s) {
   setup = &s;
   rng.seed(7);
   host_cycle = tcycle = 0;
-  prev_fire = false;
+  prev_fire = prev_fire2 = false;
   reset_cycles_done = drained_at_reset = compared = 0;
   hbm = Hbm();
   master = Master();
@@ -801,6 +814,9 @@ int run_setup(const Setup& s) {
     hbm.lat_hi = 400;
     hbm.ready_p = 0.3;
     run(rand_int(50, 300));
+    // Few read slots can leave HBM idle at the random point; reset once it is not.
+    for (int t = 0; t < 2000 && hbm.outstanding() == 0; ++t)
+      run(1);
     hbm.lat_lo = 1;
     hbm.lat_hi = 40;
     hbm.ready_p = 0.7;
