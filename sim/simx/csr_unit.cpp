@@ -263,15 +263,15 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
     #endif
     #ifdef VX_CFG_EXT_TEX_ENABLE
       case VX_DCR_MPM_CLASS_TEX: {
-        auto cluster_perf = core_->socket()->cluster()->perf_stats();
+        auto socket_perf = core_->socket()->perf_stats();
         switch (addr) {
-        CSR_READ_64(VX_CSR_MPM_TEX_READS,     cluster_perf.tex.mem_reads);
-        CSR_READ_64(VX_CSR_MPM_TEX_LAT,       cluster_perf.tex.mem_latency);
-        CSR_READ_64(VX_CSR_MPM_TEX_ST,        cluster_perf.tex.stall_cycles);
-        CSR_READ_64(VX_CSR_MPM_TCACHE_READS,  cluster_perf.tcache.reads);
-        CSR_READ_64(VX_CSR_MPM_TCACHE_MISS_R, cluster_perf.tcache.read_misses);
-        CSR_READ_64(VX_CSR_MPM_TCACHE_BANK_ST,cluster_perf.tcache.bank_stalls);
-        CSR_READ_64(VX_CSR_MPM_TCACHE_MSHR_ST,cluster_perf.tcache.mshr_stalls);
+        CSR_READ_64(VX_CSR_MPM_TEX_READS,     socket_perf.tex.mem_reads);
+        CSR_READ_64(VX_CSR_MPM_TEX_LAT,       socket_perf.tex.mem_latency);
+        CSR_READ_64(VX_CSR_MPM_TEX_ST,        socket_perf.tex.stall_cycles);
+        CSR_READ_64(VX_CSR_MPM_TCACHE_READS,  socket_perf.tcache.reads);
+        CSR_READ_64(VX_CSR_MPM_TCACHE_MISS_R, socket_perf.tcache.read_misses);
+        CSR_READ_64(VX_CSR_MPM_TCACHE_BANK_ST,socket_perf.tcache.bank_stalls);
+        CSR_READ_64(VX_CSR_MPM_TCACHE_MSHR_ST,socket_perf.tcache.mshr_stalls);
         }
       } break;
     #endif

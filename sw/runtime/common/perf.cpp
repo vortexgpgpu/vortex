@@ -661,9 +661,14 @@ extern "C" vx_result_t vx_device_dump_perf(vx_device_h hdevice, FILE *stream) {
       perf_print(stream, "TEX not supported");
       break;
     }
+    // Socket-scoped counters: every core of a socket reads the same values.
+    const uint64_t num_sockets = (num_cores + socket_size - 1) / socket_size;
     uint64_t tot_reads = 0, tot_lat = 0, tot_st = 0;
     CacheCounters tcache_tot;
-    for (uint32_t core_id = 0; core_id < num_cores; ++core_id) {
+    for (uint32_t s = 0; s < num_sockets; ++s) {
+      uint32_t core_id = s * (uint32_t)socket_size;
+      if (core_id >= num_cores)
+        break;
       uint64_t reads = 0, lat = 0, st = 0;
       CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_TEX_READS, core_id, &reads), { return err; });
       CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_TEX_LAT,   core_id, &lat),   { return err; });
@@ -696,9 +701,14 @@ extern "C" vx_result_t vx_device_dump_perf(vx_device_h hdevice, FILE *stream) {
       perf_print(stream, "RASTER not supported");
       break;
     }
+    // Cluster-scoped counters: every core of a cluster reads the same values.
+    const uint64_t cores_per_cluster = (num_cores + num_clusters - 1) / num_clusters;
     uint64_t tot_reads = 0, tot_lat = 0, tot_st = 0;
     CacheCounters rcache_tot;
-    for (uint32_t core_id = 0; core_id < num_cores; ++core_id) {
+    for (uint32_t c = 0; c < num_clusters; ++c) {
+      uint32_t core_id = c * (uint32_t)cores_per_cluster;
+      if (core_id >= num_cores)
+        break;
       uint64_t reads = 0, lat = 0, st = 0;
       CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_RASTER_READS, core_id, &reads), { return err; });
       CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_RASTER_LAT,   core_id, &lat),   { return err; });
@@ -731,9 +741,14 @@ extern "C" vx_result_t vx_device_dump_perf(vx_device_h hdevice, FILE *stream) {
       perf_print(stream, "OM not supported");
       break;
     }
+    // Cluster-scoped counters: every core of a cluster reads the same values.
+    const uint64_t cores_per_cluster = (num_cores + num_clusters - 1) / num_clusters;
     uint64_t tot_reads = 0, tot_writes = 0, tot_lat = 0, tot_st = 0;
     CacheCounters ocache_tot;
-    for (uint32_t core_id = 0; core_id < num_cores; ++core_id) {
+    for (uint32_t c = 0; c < num_clusters; ++c) {
+      uint32_t core_id = c * (uint32_t)cores_per_cluster;
+      if (core_id >= num_cores)
+        break;
       uint64_t reads = 0, writes = 0, lat = 0, st = 0;
       CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_OM_READS,  core_id, &reads),  { return err; });
       CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_OM_WRITES, core_id, &writes), { return err; });
