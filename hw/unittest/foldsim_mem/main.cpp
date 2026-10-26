@@ -19,7 +19,8 @@
 //   * every target cycle's outputs equal the C++ model's
 //     (sim/common/dram_bank_model.h's DramBankAxi), the model stepped on the
 //     same requests;
-//   * read data, write acknowledgements and ids are right;
+//   * read data, write acknowledgements and ids are right, including a read
+//     of a block whose write the target has been acknowledged and HBM has not;
 //   * a reset with HBM transactions in flight finishes only once HBM has
 //     answered them all, takes no request, and delivers nothing from before
 //     it to the target after it;
@@ -100,6 +101,8 @@ struct Setup {
   // Refresh, and its interval and busy time if not the standard's (0).
   DramBankModel::Refresh refresh = DramBankModel::Refresh::Off;
   uint32_t refi = 0, rfc = 0;
+  // HBM's slowest answer, in host cycles, outside the busy windows.
+  int hbm_lat = 40;
 };
 
 const Setup kSetups[] = {
@@ -140,6 +143,10 @@ const Setup kSetups[] = {
    Traffic::Random, 0.6, 0.3, 0.9, 4000, DramBankModel::Refresh::AllBank, 600, 0},
   {"ref_bank_fast",  dram_timing::Standard::HBM3, 1980, 6545, 0, 0, 32, 32, 26, 7,
    Traffic::Rows, 0.8, 0.2, 0.9, 4000, DramBankModel::Refresh::PerBank, 60, 0},
+  // Few blocks read and written back to back: reads that meet a write the
+  // model has acknowledged and HBM has not taken yet.
+  {"early_b",        dram_timing::Standard::HBM2, 400, 800, 0, 0, 32, 32, 26, 7,
+   Traffic::Small, 0.9, 0.3, 1.0, 4000, DramBankModel::Refresh::Off, 0, 0, 300},
 };
 
 const Setup* setup = nullptr;
@@ -328,6 +335,8 @@ struct Master {
   int next_wid = 0;
   uint64_t stream = 0;
   uint64_t n_r = 0, n_b = 0, stale = 0;
+  // Reads made of a block whose acknowledged write HBM does not hold yet.
+  uint64_t early_reads = 0;
 
   Master() { this->clear_ids(); }
 
@@ -506,6 +515,11 @@ struct Master {
         const bool k = !unknown.count(ar.addr);
         ReadExp e{ar, k, tcycle};
         e.op.data = (it != known.end()) ? it->second : Line{};
+        if (k && it != known.end()) {
+          const auto m = hbm.mem.find(kBase + ar.addr);
+          if (m == hbm.mem.end() || m->second != it->second)
+            ++early_reads;
+        }
         reads[ar.id] = e;
       } else {
         burst = 0;
@@ -550,6 +564,7 @@ Line o_rdata;
 bool after_reset = false;
 bool prev_fire = false, prev_fire2 = false;
 uint64_t reset_cycles_done = 0, drained_at_reset = 0, compared = 0;
+uint64_t total_early_reads = 0;
 
 void drive_tokens() {
   const Master& m = master;
@@ -786,6 +801,7 @@ int run_setup(const Setup& s) {
   prev_fire = prev_fire2 = false;
   reset_cycles_done = drained_at_reset = compared = 0;
   hbm = Hbm();
+  hbm.lat_hi = s.hbm_lat;
   master = Master();
   for (int i = 0; i < NUM_IN; ++i) taken[i] = false;
   for (int j = 0; j < NUM_OUT; ++j) got[j] = false;
@@ -818,7 +834,7 @@ int run_setup(const Setup& s) {
     for (int t = 0; t < 2000 && hbm.outstanding() == 0; ++t)
       run(1);
     hbm.lat_lo = 1;
-    hbm.lat_hi = 40;
+    hbm.lat_hi = s.hbm_lat;
     hbm.ready_p = 0.7;
     reset_cycles(rand_int(1, 4), true);
     run(s.cycles / 2);
@@ -840,12 +856,15 @@ int run_setup(const Setup& s) {
   if (s.traffic != Traffic::OneBank)
     CHECK(drained_at_reset >= 4, "only %lu resets found HBM busy", (unsigned long)drained_at_reset);
 
+  total_early_reads += master.early_reads;
   const auto& st = golden_bank->model().stats();
-  printf("%-12s target cycles %lu, host cycles %lu, %lu compared; %lu reads, %lu writes; "
+  printf("%-12s target cycles %lu, host cycles %lu, %lu compared; %lu reads (%lu ahead of HBM's "
+         "write), %lu writes; "
          "%lu reset cycles, %lu with HBM busy; model since last reset: %lu reads, %lu writes, "
          "%lu hits, %lu misses, %lu conflicts, %lu refreshes, %lu deferred: %s\n",
          s.name, (unsigned long)tcycle, (unsigned long)host_cycle, (unsigned long)compared,
-         (unsigned long)master.n_r, (unsigned long)master.n_b, (unsigned long)reset_cycles_done,
+         (unsigned long)master.n_r, (unsigned long)master.early_reads, (unsigned long)master.n_b,
+         (unsigned long)reset_cycles_done,
          (unsigned long)drained_at_reset, (unsigned long)st.reads, (unsigned long)st.writes,
          (unsigned long)st.hits, (unsigned long)st.misses, (unsigned long)st.conflicts,
          (unsigned long)st.refreshes, (unsigned long)st.deferred,
@@ -868,6 +887,10 @@ int main(int argc, char** argv) {
       continue;
     run_setup(s);
   }
+  // Writes are acknowledged by the model, ahead of HBM: some reads must have
+  // met a block HBM did not hold yet.
+  if (!only)
+    CHECK(total_early_reads != 0, "no read was made ahead of HBM's write");
   if (failures != 0) {
     printf("FAILED: %d check(s)\n", failures);
     return 1;

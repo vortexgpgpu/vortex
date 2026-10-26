@@ -24,8 +24,9 @@
 // its AW and its W; the response is offered to
 // the target when the model releases it, and a target cycle that would offer
 // one memory has not returned yet simply does not finish until it has. A
-// write is acknowledged to the target only once memory has acknowledged it,
-// so any later request of the target sees it.
+// write is acknowledged to the target when the model completes it; until
+// memory has acknowledged it, a read of its block, and a later write of it,
+// wait to go to memory, so any later request of the target sees it.
 //
 // Single-beat transactions only, as Vortex issues them: a burst sets `error`,
 // goes nowhere, and from the next cycle on the endpoint is ready for nothing.
@@ -226,8 +227,6 @@ module foldsim_mem #(
     reg [PW-1:0] awq_head, awq_tail;
     reg [CW-1:0] awq_count;
 
-    // Writes memory has acknowledged, and the target has been given.
-    reg [7:0]    b_acked, b_given;
     // Reads memory has not answered, and writes it has not acknowledged.
     reg [HCW-1:0] rd_out, wr_out;
     wire         drained = (rd_out == 0) & (wr_out == 0);
@@ -293,7 +292,7 @@ module foldsim_mem #(
             r_ok = (~bk_r_valid | arrived[bk_r_slot]) & (~(SPEC != 0 && bk_r_valid1) | arrived[bk_r_slot1]);
         end
     end
-    wire ok = r_ok & (~bk_b_valid | (b_acked != b_given));
+    wire ok = r_ok;
     wire [10:0] done;
 
     foldsim_token_out #(STAGED) o_awready (clk, reset, awready_valid, awready_ready, ok, finish, done[0]);
@@ -346,8 +345,10 @@ module foldsim_mem #(
     // cycle for the bank model's DRAM clocks of it.
     wire drain_wait = have[14] & treset & ~drained;
     wire tokens_in  = (&have) & (&done);
-    assign finish = tokens_in & ~drain_wait & bk_done;
-    assign stall  = ~ok | drain_wait | (tokens_in & ~bk_done);
+    // A write's halves wait for memory to take or acknowledge earlier ones.
+    wire full_wait;
+    assign finish = tokens_in & ~drain_wait & bk_done & ~full_wait;
+    assign stall  = ~ok | drain_wait | (tokens_in & ~bk_done) | (tokens_in & full_wait);
     assign idle   = bk_no_reads & (pending_aw == 0) & (pending_w == 0) & drained;
 
     // ---- One target cycle, on the request side's tokens ----
@@ -430,11 +431,15 @@ module foldsim_mem #(
     reg [SW-1:0] arq_slot [HD];
     reg [HPW-1:0] arq_head, arq_tail, rs_head;
     reg [HCW-1:0] arq_count;
+    // AW addresses from the target's AW until memory acknowledges the write
+    // (awm_ack .. awm_head: taken by memory; .. awm_tail: not yet).
     reg [63:0] awm_addr [DEPTH];
-    reg [PW-1:0] awm_head, awm_tail;
+    reg [PW-1:0] awm_ack, awm_head, awm_tail;
+    reg [CW-1:0] awm_live;
     reg [DATA_W-1:0]   wm_data [DEPTH];
     reg [DATA_W/8-1:0] wm_strb [DEPTH];
     reg [PW-1:0] wm_head, wm_tail;
+    reg [CW-1:0] wm_count;
     // Whole writes whose AW, and whose W, memory has not taken yet.
     reg [CW-1:0] aw_formed, w_formed;
 
@@ -456,12 +461,33 @@ module foldsim_mem #(
     wire form     = take & new_write;
     wire rd_push  = m_rvalid & m_rready;
     wire b_push   = m_bvalid & m_bready;
+    assign full_wait = ~treset & ((aw_fire & (awm_live == CW'(DEPTH))) | (w_fire & (wm_count == CW'(DEPTH))));
 
-    assign m_arvalid = (arq_count != 0);
+    // A request waits while a write of its block is unacknowledged: a read
+    // for every whole write before it (memory answers reads and writes apart),
+    // a write for those memory has taken (same-id writes complete in order,
+    // but need not reach memory in it). Once offered, it stays offered.
+    function automatic [CW-1:0] off(input [PW-1:0] i);
+        off = CW'(PW'(i - awm_ack));
+    endfunction
+    wire [CW-1:0] aw_taken = wr_out[CW-1:0] - aw_formed;
+    reg ar_hit, aw_hit, ar_shown, aw_shown;
+    always @(*) begin
+        ar_hit = 1'b0;
+        aw_hit = 1'b0;
+        for (integer i = 0; i < DEPTH; ++i) begin
+            if ((off(PW'(i)) < wr_out[CW-1:0]) && (awm_addr[i][63:LB] == arq_addr[arq_head][63:LB]))
+                ar_hit = 1'b1;
+            if ((off(PW'(i)) < aw_taken) && (awm_addr[i][63:LB] == awm_addr[awm_head][63:LB]))
+                aw_hit = 1'b1;
+        end
+    end
+
+    assign m_arvalid = (arq_count != 0) & (ar_shown | ~ar_hit);
     assign m_araddr  = arq_addr[arq_head];
     assign m_arlen   = 8'd0;
     assign m_rready  = 1'b1;
-    assign m_awvalid = (aw_formed != 0);
+    assign m_awvalid = (aw_formed != 0) & (aw_shown | ~aw_hit);
     assign m_awaddr  = awm_addr[awm_head];
     assign m_awlen   = 8'd0;
     assign m_wvalid  = (w_formed != 0);
@@ -497,16 +523,19 @@ module foldsim_mem #(
             arq_count <= 0;
             rs_head   <= 0;
             arrived   <= '0;
+            awm_ack   <= 0;
             awm_head  <= 0;
             awm_tail  <= 0;
+            awm_live  <= 0;
             wm_head   <= 0;
             wm_tail   <= 0;
+            wm_count  <= 0;
             aw_formed <= 0;
             w_formed  <= 0;
             rd_out    <= 0;
             wr_out    <= 0;
-            b_acked   <= 0;
-            b_given   <= 0;
+            ar_shown  <= 1'b0;
+            aw_shown  <= 1'b0;
         end else begin
             if (arq_push)
                 arq_tail <= arq_tail + 1'b1;
@@ -534,15 +563,17 @@ module foldsim_mem #(
                 wm_tail <= wm_tail + 1'b1;
             if (wm_pop)
                 wm_head <= wm_head + 1'b1;
+            wm_count  <= wm_count + CW'(wm_push) - CW'(wm_pop);
+            if (b_push)
+                awm_ack <= awm_ack + 1'b1;
+            awm_live  <= awm_live + CW'(awm_push) - CW'(b_push);
             aw_formed <= aw_formed + CW'(form) - CW'(awm_pop);
             w_formed  <= w_formed + CW'(form) - CW'(wm_pop);
+            ar_shown  <= m_arvalid & ~m_arready;
+            aw_shown  <= m_awvalid & ~m_awready;
 
             rd_out <= rd_out + HCW'(arq_push) - HCW'(rd_push);
             wr_out <= wr_out + HCW'(form) - HCW'(b_push);
-            if (b_push)
-                b_acked <= b_acked + 8'd1;
-            if (take & b_fire)
-                b_given <= b_given + 8'd1;
         end
     end
 
