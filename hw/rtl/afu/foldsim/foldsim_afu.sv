@@ -90,13 +90,16 @@ module foldsim_afu #(
     localparam DATA_W = C_M_AXI_MEM_DATA_WIDTH;
     localparam PORTS  = `FOLDSIM_MEM_PORTS;
     // The memory endpoints offer R and AR's ready for either fire of R in the
-    // cycle before (foldsim_mem's SPEC): those channels carry both values.
+    // cycle before (foldsim_mem's SPEC): those channels carry both values. At
+    // depth 2, for the fires of the two cycles before, and AW's and W's ready
+    // too: four values each.
 `ifdef FOLDSIM_MEM_SPEC
-    localparam MEM_SPEC = 1;
+    localparam MEM_SPEC = `FOLDSIM_MEM_SPEC;
 `else
     localparam MEM_SPEC = 0;
 `endif
-    localparam NC = MEM_SPEC ? 2 : 1;
+    localparam NC = (MEM_SPEC == 2) ? 4 : ((MEM_SPEC != 0) ? 2 : 1);
+    localparam NW = (MEM_SPEC == 2) ? 4 : 1;
 
     // A registered reset, so it reaches the whole kernel in one cycle's time.
     reg reset;
@@ -125,8 +128,8 @@ module foldsim_afu #(
     wire         mem_``name``_ready [PORTS]; \
     wire [w-1:0] mem_``name``_bits  [PORTS];
 
-    `FOLDSIM_MCH(awready, 1)
-    `FOLDSIM_MCH(wready, 1)
+    `FOLDSIM_MCH(awready, NW)
+    `FOLDSIM_MCH(wready, NW)
     `FOLDSIM_MCH(arready, NC)
     `FOLDSIM_MCH(rvalid, NC)
     `FOLDSIM_MCH(rdata, NC*DATA_W)
