@@ -18,18 +18,17 @@ using namespace vortex;
 LocalMemSwitch::LocalMemSwitch(
   const SimContext& ctx,
   const char* name,
-  uint32_t delay,
-  uint32_t dc_rsp_size
+  uint32_t delay
 ) : SimObject<LocalMemSwitch>(ctx, name)
-  // Single-entry ingress: the switch accepts a new request only as its
-  // current one drains, so upstream issue feels downstream cadence
-  // immediately instead of running ahead into queue slack.
+  // The split is combinational: a request handed over is routed into the
+  // output buffers in the same cycle, and ReqIn holds nothing across cycles.
   , ReqIn(this, 1)
-  , RspOut(this)
+  // the response arbiter's one-entry output buffer
+  , RspOut(this, 1)
   , ReqOutLmem(this)
   , RspInLmem(this)
   , ReqOutDC(this)
-  , RspInDC(this, dc_rsp_size)
+  , RspInDC(this)
   , delay_(delay)
 {}
 

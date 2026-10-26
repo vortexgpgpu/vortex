@@ -111,9 +111,6 @@ public:
       false,                         // write_around
       VX_CFG_DCACHE_MRSQ_SIZE != 0,  // memory-response queue
       true,                          // the socket's registered memory port
-      // A private cache takes the flush injection on port 0 alone, and its
-      // arbiter re-tags that port's requests apart from the others.
-      VX_CFG_SOCKET_SIZE != VX_CFG_NUM_DCACHES, // port 0 merges reads
       DCACHE_ACQ_FORWARD,            // acq_forward
     });
 

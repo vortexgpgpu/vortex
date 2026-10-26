@@ -255,22 +255,22 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
                 .cache_bus_if (dcache_bus_if[i])
             );
         end else begin : g_passthru_lane
-            // the cache sees the select bit as a clear tag MSB
+            // The tag passes unchanged: its clear LSB stands where the flush lane's
+            // select bit does, so every lane encodes one request's tag alike and
+            // the cache's read merge compares like with like.
             assign dcache_bus_if[i].req_valid       = lsu_dcache_bus_if[i].req_valid;
             assign dcache_bus_if[i].req_data.rw     = lsu_dcache_bus_if[i].req_data.rw;
             assign dcache_bus_if[i].req_data.addr   = lsu_dcache_bus_if[i].req_data.addr;
             assign dcache_bus_if[i].req_data.data   = lsu_dcache_bus_if[i].req_data.data;
             assign dcache_bus_if[i].req_data.byteen = lsu_dcache_bus_if[i].req_data.byteen;
             assign dcache_bus_if[i].req_data.attr   = lsu_dcache_bus_if[i].req_data.attr;
-            assign dcache_bus_if[i].req_data.tag    = {1'b0, lsu_dcache_bus_if[i].req_data.tag[DCACHE_TAG_WIDTH-1:1]};
+            assign dcache_bus_if[i].req_data.tag    = lsu_dcache_bus_if[i].req_data.tag;
             assign lsu_dcache_bus_if[i].req_ready   = dcache_bus_if[i].req_ready;
-            `UNUSED_VAR (lsu_dcache_bus_if[i].req_data.tag[0])
 
             assign lsu_dcache_bus_if[i].rsp_valid     = dcache_bus_if[i].rsp_valid;
             assign lsu_dcache_bus_if[i].rsp_data.data = dcache_bus_if[i].rsp_data.data;
-            assign lsu_dcache_bus_if[i].rsp_data.tag  = {dcache_bus_if[i].rsp_data.tag[DCACHE_TAG_WIDTH-2:0], 1'b0};
+            assign lsu_dcache_bus_if[i].rsp_data.tag  = dcache_bus_if[i].rsp_data.tag;
             assign dcache_bus_if[i].rsp_ready         = lsu_dcache_bus_if[i].rsp_ready;
-            `UNUSED_VAR (dcache_bus_if[i].rsp_data.tag[DCACHE_TAG_WIDTH-1])
         end
     end
 

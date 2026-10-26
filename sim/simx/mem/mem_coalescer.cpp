@@ -107,8 +107,8 @@ void MemCoalescer::on_tick() {
       }
     }
 
-    // the response path is combinational; the cache registers its output
-    RspOut.send(out_rsp, 0);
+    // packed combinationally into the lmem switch's response buffer
+    RspOut.send(out_rsp, 1);
     DT(4, this->name() << " mem-rsp: " << out_rsp);
 
     // track remaining responses

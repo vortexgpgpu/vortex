@@ -395,7 +395,8 @@ void LsuUnit::ingest_inputs(uint32_t b) {
 // the block until the token's response returns.
 void LsuUnit::send_fence_token(uint32_t b) {
 	auto& state = states_.at(b);
-	if (state.pending_reqs.full() || core_->lmem_switch(b)->ReqIn.full()) {
+	// the token's lanes carry no address: it goes to the data cache
+	if (state.pending_reqs.full() || !core_->lmem_switch(b)->req_ready(true, false)) {
 		return;
 	}
 	auto trace = state.fence.trace();
@@ -427,7 +428,7 @@ void LsuUnit::send_fence_token(uint32_t b) {
 	lsu_req.cid  = trace->cid;
 	lsu_req.wid  = trace->wid;
 	lsu_req.uuid = trace->uuid;
-	core_->lmem_switch(b)->ReqIn.send(lsu_req);
+	core_->lmem_switch(b)->ReqIn.send(lsu_req, 0);
 	DT(3, this->name() << " fence-token: " << lsu_req);
 	state.fence_token = false;
 }
@@ -459,8 +460,17 @@ void LsuUnit::process_request_step(uint32_t b) {
 	// not gated by the fence lock — its entries still hold fence release via
 	// pending_reqs.empty().
 	if (b < TCU_AGU_PORTS && !TcuReqIn.at(b).empty()) {
-		if (!state.pending_reqs.full() && !core_->lmem_switch(b)->ReqIn.full()) {
-			LsuReq lsu_req = TcuReqIn.at(b).peek();
+		const LsuReq& meta_req = TcuReqIn.at(b).peek();
+		bool to_dc = false, to_lmem = false;
+		for (uint32_t i = 0; i < VX_CFG_NUM_LSU_LANES; ++i) {
+			if (meta_req.mask.test(i)) {
+				bool local = (get_addr_type(meta_req.addrs.at(i)) == AddrType::Shared);
+				to_lmem |= local;
+				to_dc   |= !local;
+			}
+		}
+		if (!state.pending_reqs.full() && core_->lmem_switch(b)->req_ready(to_dc, to_lmem)) {
+			LsuReq lsu_req = meta_req;
 			uint32_t count = lsu_req.mask.count();
 			std::vector<mem_addr_size_t> lane_entries(VX_CFG_NUM_LSU_LANES);
 			for (uint32_t i = 0; i < VX_CFG_NUM_LSU_LANES; ++i) {
@@ -482,7 +492,7 @@ void LsuUnit::process_request_step(uint32_t b) {
 			entry.client_tag = lsu_req.tag;
 			uint32_t tag = state.pending_reqs.allocate(std::move(entry));
 			lsu_req.tag = tag;
-			core_->lmem_switch(b)->ReqIn.send(lsu_req);
+			core_->lmem_switch(b)->ReqIn.send(lsu_req, 0);
 			DT(3, this->name() << " tcu-meta-req: " << lsu_req);
 			TcuReqIn.at(b).pop();
 			return; // one request per cycle into the switch
@@ -579,8 +589,19 @@ void LsuUnit::process_request_step(uint32_t b) {
 	}
 
 	if (state.remain_addrs != 0) {
-		// check lmem switch backpressure
-		if (core_->lmem_switch(b)->ReqIn.full())
+		// check backpressure at the switch buffers this beat addresses
+		uint32_t beat_t0 = state.addr_list.size() - state.remain_addrs;
+		uint32_t beat_len = std::min<uint32_t>(VX_CFG_NUM_LSU_LANES, state.remain_addrs);
+		bool to_dc = false, to_lmem = false;
+		for (uint32_t i = 0; i < beat_len; ++i) {
+			auto& entry = state.addr_list.at(beat_t0 + i);
+			if (entry.size == 0)
+				continue;
+			bool local = (get_addr_type(entry.addr) == AddrType::Shared);
+			to_lmem |= local;
+			to_dc   |= !local;
+		}
+		if (!core_->lmem_switch(b)->req_ready(to_dc, to_lmem))
 			return; // stall
 
 		// setup memory request
@@ -657,7 +678,7 @@ void LsuUnit::process_request_step(uint32_t b) {
 		lsu_req.uuid = trace->uuid;
 
 		// send memory request
-		core_->lmem_switch(b)->ReqIn.send(lsu_req);
+		core_->lmem_switch(b)->ReqIn.send(lsu_req, 0);
 		DT(3, this->name() << " mem-req: " << lsu_req);
 
 		// update stats

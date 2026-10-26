@@ -33,9 +33,16 @@ public:
   LocalMemSwitch(
     const SimContext& ctx,
     const char* name,
-    uint32_t delay,
-    uint32_t dc_rsp_size = 2
+    uint32_t delay
   );
+
+  // The output buffers a request addresses can take it this cycle: to the data
+  // cache, to local memory, or both.
+  bool req_ready(bool to_dc, bool to_lmem) const {
+    return ReqIn.size() == 0
+        && !(to_dc && ReqOutDC.full())
+        && !(to_lmem && ReqOutLmem.full());
+  }
 
 protected:
   void on_tick();

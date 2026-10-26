@@ -131,17 +131,26 @@ public:
       ibuffers_.at(i) = TFifo<instr_trace_t*>::Create(sname, 1, VX_CFG_IBUF_SIZE + 1);
     }
 
+    // The LSU ticks ahead of the coalescer, the lane adapters and the lmem
+    // switch. The switch routes a request into its output buffers in the cycle
+    // the LSU hands it over, as the RTL's combinational split does. The
+    // switch's one-entry response buffer is drained by the LSU before the
+    // coalescer or an adapter refills it, its ready being combinational in the
+    // RTL.
+    snprintf(sname, 100, "%s-lsu", name.c_str());
+    func_units_.at((int)FUType::LSU) = SimPlatform::instance().create_object<LsuUnit>(sname, simobject_);
+
     // create the memory coalescer, or the lane adapter that replaces it.
-    // Both tick ahead of the lmem switch: their response paths are
-    // combinational, and the dcache registers its output.
     const bool dcache_coalescing = (VX_CFG_NUM_LSU_LANES > 1) && (DCACHE_WORD_SIZE > LSU_WORD_SIZE);
     std::vector<LsuMemAdapter::Ptr> lsu_dcache_adapter(VX_CFG_NUM_LSU_BLOCKS);
     for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
       snprintf(sname, 100, "%s-coalescer%d", name.c_str(), b);
-      mem_coalescers_.at(b) = MemCoalescer::Create(sname, LSU_CHANNELS, DCACHE_CHANNELS, DCACHE_WORD_SIZE, LSU_QUEUE_OUT_SIZE, 1);
+      // a batch crosses the coalescer's output register, then the lane
+      // adapter's request buffer, on its way to the data cache
+      mem_coalescers_.at(b) = MemCoalescer::Create(sname, LSU_CHANNELS, DCACHE_CHANNELS, DCACHE_WORD_SIZE, LSU_QUEUE_OUT_SIZE, 2);
       if (!dcache_coalescing) {
         snprintf(sname, 100, "%s-lsu_dcache_adapter%d", name.c_str(), b);
-        lsu_dcache_adapter.at(b) = LsuMemAdapter::Create(sname, DCACHE_CHANNELS, 1, 0);
+        lsu_dcache_adapter.at(b) = LsuMemAdapter::Create(sname, DCACHE_CHANNELS, 1, 1);
       }
     }
 
@@ -158,14 +167,10 @@ public:
       VX_CFG_EXT_DXA_ENABLED + VX_CFG_TCU_WGMMA_ENABLED
     });
 
-    // create lmem switch. A data-cache response reaches its response
-    // arbiter combinationally through the coalescer or the lane adapter, so
-    // the switch holds it in one entry, the least a channel holds; without
-    // either, the channel is the cache's own two-entry output buffer.
-    const bool dc_rsp_comb = dcache_coalescing || (DCACHE_CHANNELS > 1);
+    // create lmem switch
     for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
       snprintf(sname, 100, "%s-lmem_switch%d", name.c_str(), b);
-      lmem_switch_.at(b) = LocalMemSwitch::Create(sname, 1, dc_rsp_comb ? 1 : 2);
+      lmem_switch_.at(b) = LocalMemSwitch::Create(sname, 1);
     }
 
     // create per-block lmem adapters
@@ -198,7 +203,9 @@ public:
       // channels directly (combinational lane fan-out/fan-in).
       for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
         lmem_switch_.at(b)->ReqOutDC.bind(&mem_coalescers_.at(b)->ReqIn);
-        mem_coalescers_.at(b)->RspOut.bind(&lmem_switch_.at(b)->RspInDC);
+        // the coalescer's response reaches the switch's response buffer
+        // combinationally, ahead of a local-memory response
+        mem_coalescers_.at(b)->RspOut.bind(&lmem_switch_.at(b)->RspOut);
         for (uint32_t c = 0; c < DCACHE_CHANNELS; ++c) {
           dc_req_out.at(b * DCACHE_CHANNELS + c) = &mem_coalescers_.at(b)->ReqOut.at(c);
           dc_rsp_in.at(b * DCACHE_CHANNELS + c) = &mem_coalescers_.at(b)->RspIn.at(c);
@@ -209,7 +216,14 @@ public:
       // pass-through when DCACHE_CHANNELS == 1)
       for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
         lmem_switch_.at(b)->ReqOutDC.bind(&lsu_dcache_adapter.at(b)->ReqIn);
-        lsu_dcache_adapter.at(b)->RspOut.bind(&lmem_switch_.at(b)->RspInDC);
+        // A multi-channel adapter packs its response combinationally into the
+        // switch's response buffer; a single-channel one passes the cache's
+        // own output buffer through, which the switch then drains.
+        if (DCACHE_CHANNELS > 1) {
+          lsu_dcache_adapter.at(b)->RspOut.bind(&lmem_switch_.at(b)->RspOut);
+        } else {
+          lsu_dcache_adapter.at(b)->RspOut.bind(&lmem_switch_.at(b)->RspInDC);
+        }
         for (uint32_t c = 0; c < DCACHE_CHANNELS; ++c) {
           dc_req_out.at(b * DCACHE_CHANNELS + c) = &lsu_dcache_adapter.at(b)->ReqOut.at(c);
           dc_rsp_in.at(b * DCACHE_CHANNELS + c) = &lsu_dcache_adapter.at(b)->RspIn.at(c);
@@ -287,8 +301,6 @@ public:
     if (FpuUnit::kGather) {
       create_fpu();
     }
-    snprintf(sname, 100, "%s-lsu", name.c_str());
-    func_units_.at((int)FUType::LSU) = SimPlatform::instance().create_object<LsuUnit>(sname, simobject_);
     snprintf(sname, 100, "%s-sfu", name.c_str());
     func_units_.at((int)FUType::SFU) = SimPlatform::instance().create_object<SfuUnit>(sname, simobject_);
     std::static_pointer_cast<SfuUnit>(func_units_.at((int)FUType::SFU))->warp_ctl_out.bind(&simobject_->warp_ctl_in);

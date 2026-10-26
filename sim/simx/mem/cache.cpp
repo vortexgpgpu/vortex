@@ -884,6 +884,7 @@ protected:
   void on_reset() {
     perf_stats_ = Cache::PerfStats();
     pending_mshr_size_ = 0;
+    mshr_occupancy_ = 0;
     pending_amo_probes_ = 0;
     pipe_core_lines_.clear();
     pending_read_reqs_ = 0;
@@ -929,6 +930,10 @@ protected:
     // The core-response port takes one response per tick; the pipeline has
     // priority and the forward drain yields (crsp_sent_).
     crsp_sent_ = false;
+
+    // MSHR occupancy is a registered count: slots a forward, replay or
+    // release frees this tick admit a new request only from the next one.
+    mshr_occupancy_ = mshr_.size() + pending_mshr_size_;
 
     // Process next request at the head of the pipeline.
     if (!pipe_req_->empty()) {
@@ -1203,7 +1208,7 @@ private:
       // responses from draining — a deadlock. Reserve at admission.
       bool needs_mshr = !is_amo_passthru;
       (void)is_amo;
-      if (needs_mshr && (mshr_.size() + pending_mshr_size_) >= mshr_.capacity()) {
+      if (needs_mshr && mshr_occupancy_ >= mshr_.capacity()) {
         ++perf_stats_.mshr_stalls;
         return;
       }
@@ -2188,6 +2193,7 @@ private:
   std::vector<set_t> sets_;
   MSHR mshr_;
   uint32_t pending_mshr_size_;
+  uint32_t mshr_occupancy_;
   uint32_t pending_amo_probes_; // AmoProbe requests in the pipe, each holding a table reservation
   // {set, tag, sector} of Core requests inside the pipe: their MSHR entries
   // exist only from pipe exit, so ordering checks against in-flight lines (the
@@ -2317,7 +2323,7 @@ public:
   std::vector<SimChannel<MemReq>> IoOut;  // non-cacheable requests, per port
 
   CachePortArb(const SimContext& ctx, const char* name, const params_t& params,
-               uint32_t num_inputs, uint32_t num_banks, uint32_t merge_group, bool merge_port0)
+               uint32_t num_inputs, uint32_t num_banks, uint32_t merge_group)
     : SimObject<CachePortArb>(ctx, name)
     , ReqIn(num_inputs, this)
     , ReqOut(num_banks, this)
@@ -2328,7 +2334,6 @@ public:
     , delay_((num_inputs > 2) ? 1 : 0)
     , levels_(arb_tree_levels(num_inputs))
     , merge_group_(merge_group)
-    , merge_port0_(merge_port0)
   {
     __assert(merge_group_ <= 1 || (merge_group_ <= 64 && ispow2(merge_group_) && (num_inputs % merge_group_) == 0),
              "a read-merge group must be a power of two of at most 64 dividing the ports");
@@ -2483,7 +2488,7 @@ protected:
         auto& req_i = ReqIn.at(i).peek();
         uint32_t base = (i / merge_group_) * merge_group_;
         for (uint32_t j = base; j < i; ++j) {
-          if (followers.at(j) || !this->is_plain_read(j) || (j == 0 && !merge_port0_)) {
+          if (followers.at(j) || !this->is_plain_read(j)) {
             continue;
           }
           auto& req_j = ReqIn.at(j).peek();
@@ -2589,7 +2594,6 @@ private:
   std::vector<std::vector<SimChannel<MemReq>>> tree_stage_; // [level][bank][slice]
   std::vector<std::vector<uint32_t>> rr_;                   // [arbiter level][bank][slice] next to grant
   uint32_t merge_group_;
-  bool merge_port0_;
   uint64_t collisions_ = 0;
 
   friend class SimObject<CachePortArb>;
@@ -2859,7 +2863,7 @@ public:
     // Create the core-port arbiter ahead of the banks it feeds
     snprintf(sname, 100, "%s-port_arb", simobject->name().c_str());
     uint32_t merge_group = std::min<uint32_t>(config_.read_merge, config_.num_inputs);
-    port_arb_ = CachePortArb::Create(sname, params_, config_.num_inputs, num_banks, merge_group, config_.merge_port0);
+    port_arb_ = CachePortArb::Create(sname, params_, config_.num_inputs, num_banks, merge_group);
     for (uint32_t i = 0; i < config_.num_inputs; ++i) {
       simobject->core_req_in.at(i).bind(&port_arb_->ReqIn.at(i));
     }
