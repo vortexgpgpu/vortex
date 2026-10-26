@@ -306,6 +306,21 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
         }
       } break;
     #endif
+    #ifdef VX_CFG_EXT_RTU_ENABLE
+      case VX_DCR_MPM_CLASS_RTU: {
+        auto socket_perf = core_->socket()->perf_stats();
+        switch (addr) {
+        CSR_READ_64(VX_CSR_MPM_RTU_RAYS,       socket_perf.rtu.rays);
+        CSR_READ_64(VX_CSR_MPM_RTU_HITS,       socket_perf.rtu.rays_hit);
+        CSR_READ_64(VX_CSR_MPM_RTU_BOX_TESTS,  socket_perf.rtu.bvh_box_tests);
+        CSR_READ_64(VX_CSR_MPM_RTU_TRI_TESTS,  socket_perf.rtu.bvh_tri_tests);
+        CSR_READ_64(VX_CSR_MPM_RTU_CALLBACKS,  (socket_perf.rtu.ahs_callbacks + socket_perf.rtu.is_callbacks));
+        CSR_READ_64(VX_CSR_MPM_RTU_BUSY,       socket_perf.rtu.rtu_busy_ticks);
+        CSR_READ_64(VX_CSR_MPM_RTCACHE_READS,  socket_perf.rtcache.reads);
+        CSR_READ_64(VX_CSR_MPM_RTCACHE_MISS_R, socket_perf.rtcache.read_misses);
+        }
+      } break;
+    #endif
       default:
         std::cerr << "Error: invalid MPM CLASS: value=" << perf_class << std::endl;
         std::abort();

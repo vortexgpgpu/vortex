@@ -104,7 +104,8 @@ been **retired** in favor of this push/launch path (§4).
     rides the aperture address.
   DCRs are broadcast to all cluster instances; each raster instance
   self-selects its tile stripe by `INSTANCE_IDX`.
-- **Perf** MPM classes RASTER=12, TEX=13, OM=14.
+- **Perf** MPM classes RASTER=12, TEX=13, OM=14, RTU=15 (ray tracing, see
+  [ray_tracing_architecture.md §8.1](ray_tracing_architecture.md#81-performance-counters-mpm-class-15)).
 
 ### 2.1 The graphics register window (FF↔SIMT handoff)
 
