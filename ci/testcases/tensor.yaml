@@ -31,7 +31,7 @@ tests:
   drivers:
   - simx
   app: sgemm_tcu
-  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=bf16 -DOTYPE=bf16
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=bf16 -DOTYPE=fp32
 - id: sgemm_tcu-5
   via: blackbox
   drivers:
@@ -43,7 +43,7 @@ tests:
   drivers:
   - simx
   app: sgemm_tcu
-  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DITYPE=bf8 -DOTYPE=bf8
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DITYPE=bf8 -DOTYPE=fp32
 - id: sgemm_tcu-7
   via: blackbox
   drivers:

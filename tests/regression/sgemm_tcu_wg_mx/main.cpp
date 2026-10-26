@@ -35,6 +35,9 @@ static constexpr uint32_t kTileN = cfg::xtileN;
 using itype_t = typename vt::ITYPE::dtype;
 using otype_t = typename vt::OTYPE::dtype;
 
+static_assert(vt::tcu_output_valid(vt::ITYPE::id, vt::OTYPE::id),
+              "TCU output type must be fp32 (int32 for integer inputs)");
+
 static constexpr uint32_t kElemsPerByte = (vt::ITYPE::bits < 8) ? (8 / vt::ITYPE::bits) : 1;
 static constexpr uint32_t kScalePack = 4;
 

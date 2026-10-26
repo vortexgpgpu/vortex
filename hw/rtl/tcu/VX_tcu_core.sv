@@ -153,6 +153,10 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire setup_enqueue = execute_fire && is_wgmma_setup;
     wire fedp_enqueue  = execute_fire && !is_wgmma_setup;
 
+    // The accumulator is fp32 (int32 for integer inputs); no other fmt_d exists.
+    `RUNTIME_ASSERT (~fedp_enqueue || (fmt_d == (tcu_fmt_is_int(fmt_s) ? TCU_FMT_WIDTH'(TCU_I32_ID) : TCU_FMT_WIDTH'(TCU_FP32_ID))),
+        ("%t: *** %s unsupported TCU output format: fmt_s=%0d, fmt_d=%0d (fp32 only)", $time, INSTANCE_ID, fmt_s, fmt_d))
+
     // -----------------------------------------------------------------------
     // Sparse metadata: VX_tcu_sp_meta (for WMMA_SP) + optional tile-buffer mux
     // -----------------------------------------------------------------------

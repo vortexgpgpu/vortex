@@ -173,6 +173,9 @@ private:
 
 public:
 
+  static_assert(tcu_output_valid(It::id, Ot::id),
+                "TCU output type must be fp32 (int32 for integer inputs)");
+
   using input_t  = typename It::dtype;
   using output_t = typename Ot::dtype;
 
@@ -675,6 +678,9 @@ template <uint32_t NT,
           bool is_sparse = false,
           uint32_t NRC_ = 8>
 struct wgmma_context {
+  static_assert(tcu_output_valid(It::id, Ot::id),
+                "TCU output type must be fp32 (int32 for integer inputs)");
+
 private:
   static constexpr uint32_t NRA = 4;
 

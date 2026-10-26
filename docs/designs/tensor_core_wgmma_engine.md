@@ -67,6 +67,11 @@ Flags of an MMA instruction:
 | `rs2[2:1]` | `cd_nregs` — accumulator registers: 0 = 8, 1 = 16, 2 = 32 |
 | `rs2[3]` | `a_from_smem` — A comes from shared memory; B always does for WGMMA |
 
+`fmt_d` is fp32 for float and MX inputs and int32 for integer inputs; the
+tensor core has no other output format. The kernel API rejects any other output
+type at compile time (`static_assert` in `vx_tensor.h`). An instruction that
+encodes one anyway trips an assertion in the RTL (`VX_tcu_core`) and in SimX.
+
 | `op_type` | value | operation |
 |---|---|---|
 | `INST_TCU_WMMA` | 0 | warp MMA |
@@ -91,6 +96,16 @@ micro-op arguments do not carry a sparse bit.
 
 An MX format has bit 3 of the id set, which is how decode recognizes that
 the instruction depends on scale metadata.
+
+Scales follow the OCP MX and NVFP4 definitions:
+
+- **mxfp8, mxbf8, mxfp4** take an E8M0 scale per 32 elements, worth
+  2^(e-127). A product of two scales spans 2^-254 to 2^254. 0xFF is NaN.
+- **nvfp4** takes a UE4M3 scale per 16 elements: unsigned, so bit 7 is
+  padding, and 0x7F is NaN (PTX `.ue4m3`). A zero exponent field is read as a
+  normal; subnormal scales are an open question.
+- **Out-of-range products.** A NaN scale makes its block NaN. A product scaled
+  below the datapath's exponent range only reaches the sticky bit.
 
 ### 2.2 Metadata dependencies
 
@@ -398,9 +413,10 @@ MMA (§2.2).
 
 ## 8. FEDP backends
 
-`VX_CFG_TCU_TYPE` selects one implementation of the dot product. All compute
-the same function; each asserts the configured latency against its own
-stage structure.
+`VX_CFG_TCU_TYPE` selects one implementation of the dot product. Each asserts
+the configured latency against its own stage structure. They agree up to
+rounding, not bit for bit: `TFR` rounds once over a fixed window, the others
+round each multiply and add.
 
 | backend | implementation | latency |
 |---|---|---|
@@ -412,8 +428,13 @@ stage structure.
 
 `TFR` is the universal default. It is the only backend that does not pay a
 full floating-point rounding per tree level: it aligns every product to one
-exponent and adds them as integers, rounding once. On an FPGA its
-multipliers map onto DSP blocks through `VX_CFG_TCU_USE_DSP`.
+exponent and adds them as integers, rounding once. The alignment keeps a
+25-bit window below the largest product's exponent field, with a sticky bit
+for what falls out of it. A row of subnormals, or products that nearly cancel,
+can therefore round a few ULP away from the exact sum.
+[`sw/common/fedp.h`](../../sw/common/fedp.h) (`TfrFedp`) models it bit for
+bit. On an FPGA its multipliers map onto DSP blocks through
+`VX_CFG_TCU_USE_DSP`.
 
 ---
 
@@ -431,6 +452,13 @@ multipliers map onto DSP blocks through `VX_CFG_TCU_USE_DSP`.
 
 Operand loads go through simulation channels; the tensor path never reads
 memory directly.
+
+Numerics follow the configured backend for fp32 results from float and
+block-scaled (MX, NVFP4) sources. Under `TFR`, each dot product is the
+`TfrFedp` model, the same one the RTL is checked against bit for bit in
+`hw-tcu-unit`. Otherwise it is a discrete fp32 multiply-add: in the DPI
+backend's order for unscaled formats, and per element for block-scaled ones.
+C and D are fp32 (int32 for integer inputs) in both models; see §2.
 
 Perf: MPM class `TCU` — `TCU_TBUF_STALLS` (0xB03, cycles a WGMMA micro-op
 waited on tile-buffer data), `TCU_TBUF_CACHE_HITS` (0xB04, B rows reused),

@@ -94,6 +94,7 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
         wire [3:0][23:0] term_mag_shifted;
         wire [3:0][EXP_TERM_W_MXFP4-1:0] term_exp_biased;
         wire [3:0] term_valid;
+        wire [3:0] term_on;
         wire [3:0] term_sign;
         wire [3:0][1:0] a_man, b_man;
         wire [3:0][3:0] f4_man_prod;
@@ -102,6 +103,7 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             localparam OFF = (i % 2) * 16 + j * 4;
 
             wire lane_valid = vld_mask[i * 4 + j];
+            assign term_on[j] = lane_valid;
             wire [3:0] raw_a = a_row[K_WORD][OFF +: 4];
             wire [3:0] raw_b = b_col[K_WORD][OFF +: 4];
 
@@ -119,13 +121,11 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             assign b_exp[0] = raw_b[2] & ~raw_b[1];
             assign b_exp[1] = raw_b[2] & raw_b[1];
 
-            wire signed [9:0] sf_exp_a = $signed({1'b0, sf_a}) - 10'sd127;
-            wire signed [9:0] sf_exp_b = $signed({1'b0, sf_b}) - 10'sd127;
-            wire signed [5:0] exp_biased_raw = 6'(10'(EXP_ADJ_MXFP4)
-                                                + sf_exp_a
-                                                + sf_exp_b
-                                                + 10'(a_exp)
-                                                + 10'(b_exp));
+            // the block scales are common to the lane's terms: they join its
+            // exponent, not this alignment field
+            wire [EXP_TERM_W_MXFP4-1:0] exp_biased_raw = EXP_ADJ_MXFP4
+                                                + EXP_TERM_W_MXFP4'(a_exp)
+                                                + EXP_TERM_W_MXFP4'(b_exp);
 
             assign term_exp_biased[j] = term_valid[j] ? exp_biased_raw : '0;
         end
@@ -250,10 +250,16 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
 
         assign result_sig_mxfp4[i] = {sum_sign & ~is_zero_out, abs_sum[23:0]};
         assign sig_zero_mxfp4[i]   = is_zero_out;
-        assign result_exp_mxfp4[i] = EXP_W'(max_exp_biased) + EXP_W'(EXP_BASE_BIASED_MXFP4);
+
+        // The E8M0 scales (2^-254 .. 2^256 together) join the lane exponent.
+        // A lane with a term stays within [15, 529]; an empty one wraps, but
+        // its exponent is cleared with its zero significand.
+        assign result_exp_mxfp4[i] = EXP_W'(max_exp_biased) + EXP_BASE_BIASED_MXFP4
+                                   + EXP_W'(sf_a) + EXP_W'(sf_b) - EXP_W'(254);
 
         // The sign field is only consumed for infinity lanes downstream.
-        assign exceptions_mxfp4[i].is_nan = 1'b0;
+        // An E8M0 scale of 0xFF is NaN, and so is every element it scales.
+        assign exceptions_mxfp4[i].is_nan = ((sf_a == 8'hFF) || (sf_b == 8'hFF)) && (|term_on);
         assign exceptions_mxfp4[i].is_inf = 1'b0;
         assign exceptions_mxfp4[i].sign   = 1'b0;
     end
@@ -284,13 +290,14 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
 
     for (genvar i = 0; i < TCK; ++i) begin : g_lane_nvfp4
         localparam K_WORD = i / 2;
-        `UNUSED_VAR ({sf_a[7], sf_b[7]})
 
-        // e4m3 scale factor mantissa mul
+        // UE4M3 scale factors (unsigned: bit 7 is padding); 0x7F is NaN.
+        `UNUSED_VAR ({sf_a[7], sf_b[7]})
         wire [3:0] sf_man_a = {1'b1, sf_a[2:0]};
         wire [3:0] sf_man_b = {1'b1, sf_b[2:0]};
         wire [3:0] sf_exp_a = sf_a[6:3];
         wire [3:0] sf_exp_b = sf_b[6:3];
+        wire sf_nan = (sf_a[6:0] == 7'h7F) || (sf_b[6:0] == 7'h7F);
 
         wire [7:0] sf_man_prod;
         VX_tcu_tfr_wmul #(
@@ -307,6 +314,7 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
         wire [3:0][23:0] term_mag_shifted;
         wire [3:0][5:0]  term_exp_biased;
         wire [3:0]       term_valid;
+        wire [3:0]       term_on;
         wire [3:0]       term_sign;
         wire [3:0][1:0]  a_man, b_man;
         wire [3:0][3:0]  f4_man_prod;
@@ -316,6 +324,7 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             localparam OFF = (i % 2) * 16 + j * 4;
 
             wire lane_valid = vld_mask[i * 4 + j];
+            assign term_on[j] = lane_valid;
             wire [3:0] raw_a = a_row[K_WORD][OFF +: 4];
             wire [3:0] raw_b = b_col[K_WORD][OFF +: 4];
 
@@ -511,7 +520,7 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
         assign result_exp_nvfp4[i] = EXP_W'(max_exp_biased) + EXP_W'(EXP_BASE_BIASED);
 
         // The sign field is only consumed for infinity lanes downstream.
-        assign exceptions_nvfp4[i].is_nan = 1'b0;
+        assign exceptions_nvfp4[i].is_nan = sf_nan && (|term_on);
         assign exceptions_nvfp4[i].is_inf = 1'b0;
         assign exceptions_nvfp4[i].sign   = 1'b0;
     end

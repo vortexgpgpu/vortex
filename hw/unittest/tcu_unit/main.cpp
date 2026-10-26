@@ -43,6 +43,9 @@
 #include "VX_config.h"
 #include "softfloat_ext.h"
 #include <bitmanip.h>
+#ifdef USE_FEDP
+#include "fedp.h"
+#endif
 
 bool sim_trace_enabled() { return true; }
 
@@ -74,9 +77,9 @@ constexpr int LANE_WORDS = VX_CFG_XLEN / 32;
 
 // TCU format IDs (must match VX_tcu_pkg.sv)
 constexpr uint32_t TCU_FP32_ID = 0;
-constexpr uint32_t TCU_FP16_ID = 1;
-constexpr uint32_t TCU_BF16_ID = 2;
-constexpr uint32_t TCU_TF32_ID = 5;
+constexpr uint32_t TCU_TF32_ID = 1;
+constexpr uint32_t TCU_FP16_ID = 2;
+constexpr uint32_t TCU_BF16_ID = 3;
 
 // WMMA op_type (INST_TCU_WMMA = 4'h0 from VX_gpu_pkg.sv)
 constexpr uint32_t INST_TCU_WMMA = 0;
@@ -114,6 +117,8 @@ struct FmtInfo {
     int exp_bits;
     int sig_bits;
     int width_bits; // 16, 19 (tf32), or 32
+    // a 32-bit register packs this many elements, element e in bits [e*width +: width]
+    int per_word() const { return 32 / width_bits; }
 };
 
 static FmtInfo get_fmt_info(uint32_t fmt_id) {
@@ -129,41 +134,54 @@ static FmtInfo get_fmt_info(uint32_t fmt_id) {
 }
 
 // Convert a packed source-format element to float (for software reference).
-static float elem_to_float(uint32_t raw, const FmtInfo &fi) {
+[[maybe_unused]] static float elem_to_float(uint32_t raw, const FmtInfo &fi) {
     return cvt_custom_to_f32(raw, fi.exp_bits, fi.sig_bits, 0 /*RNE*/, nullptr);
 }
 
 // ---- Software WMMA reference -----------------------------------------------
-// Computes D[t] = sum_k(A[i][k] * B[k][j]) + C[t]
-// where t = i*TC_N + j, A in row-major, B in col-major (each column consecutive).
-//
-// rs1_data layout: lane t -> A[i][k] for t = i*TC_K + k (A in row-major)
-//   BUT each OUTPUT thread t=(i,j) shares the same A row.
-//   a_row[k] = rs1_data[i * TC_K + k] (all TC_N output threads in the same row share this)
-// rs2_data layout: lane t -> B[k][j] for t = j*TC_K + k (B^T in row-major, i.e. B columns packed)
-//   b_col[k] = rs2_data[j * TC_K + k]
-// rs3_data layout: lane t -> C[i][j] where t = i*TC_N + j
-//
+// D[t] = sum_k(A[i][k] * B[k][j]) + C[t], t = i*TC_N + j. Each register lane
+// packs per_word() elements:
+//   rs1 lane i*TC_K + w holds A[i][w*per_word() ...]   (row i of A)
+//   rs2 lane j*TC_K + w holds B[w*per_word() ...][j]   (column j of B)
+//   rs3 lane t holds C[t] (fp32)
+// The native TFR datapath is checked against the windowed FEDP model
+// (USE_FEDP, as tcu_fedp); the DPI datapath against its discrete fp32 mul/add.
 static std::vector<float> wmma_ref(
-    const std::vector<uint32_t> &rs1,  // VX_CFG_NUM_THREADS elements (A, row-major)
-    const std::vector<uint32_t> &rs2,  // VX_CFG_NUM_THREADS elements (B columns, col-major)
-    const std::vector<uint32_t> &rs3,  // VX_CFG_NUM_THREADS elements (C, row-major)
-    const FmtInfo &fi_s)               // source format (for A and B)
+    const std::vector<uint32_t> &rs1,
+    const std::vector<uint32_t> &rs2,
+    const std::vector<uint32_t> &rs3,
+    const FmtInfo &fi_s,
+    int window)
 {
     std::vector<float> result(VX_CFG_NUM_THREADS);
-
+#ifdef USE_FEDP
+    TfrFedp fedp(fi_s.exp_bits, fi_s.sig_bits, 0 /*RNE*/, window);
+#else
+    (void)window;
+#endif
     for (int i = 0; i < TCU_TC_M; i++) {
         for (int j = 0; j < TCU_TC_N; j++) {
             int t = i * TCU_TC_N + j;
-            // Accumulate with fp32 rounding at each multiply-add step (matches DPI model).
-            float prod = 0.0f;
+            float c = bit_cast<float>(rs3[t]);
+#ifdef USE_FEDP
+            result[t] = fedp(&rs1[i * TCU_TC_K], &rs2[j * TCU_TC_K], c, TCU_TC_K);
+#else
+            const int epw = fi_s.per_word();
+            const uint32_t emask = (fi_s.width_bits == 32) ? ~0u : ((1u << fi_s.width_bits) - 1u);
+            // the DPI datapath's order: each register's products summed in
+            // fp32, then the register sums in order, then C
+            float sum = 0.0f;
             for (int k = 0; k < TCU_TC_K; k++) {
-                float a = elem_to_float(rs1[i * TCU_TC_K + k], fi_s);
-                float b = elem_to_float(rs2[j * TCU_TC_K + k], fi_s);
-                prod += a * b;
+                float word_sum = 0.0f;
+                for (int e = 0; e < epw; e++) {
+                    uint32_t ea = (rs1[i * TCU_TC_K + k] >> (e * fi_s.width_bits)) & emask;
+                    uint32_t eb = (rs2[j * TCU_TC_K + k] >> (e * fi_s.width_bits)) & emask;
+                    word_sum += elem_to_float(ea, fi_s) * elem_to_float(eb, fi_s);
+                }
+                sum += word_sum;
             }
-            float c = bit_cast<float>(rs3[t]);  // C is always fp32
-            result[t] = prod + c;
+            result[t] = sum + c;
+#endif
         }
     }
     return result;
@@ -208,7 +226,9 @@ struct TestConfig {
     RoundingMode frm        = RoundingMode::RNE;
     uint32_t    num_tests   = 1000;
     int         ulp         = 1;
+    int         window      = 25;   // TFR accumulator window (FEDP model)
     int32_t     test_id     = -1;
+    bool        directed_only = false;
     std::vector<std::string> features = {"infinities","nans","subnormals","normals","zeros"};
 };
 
@@ -249,6 +269,30 @@ static uint32_t gen_fp_value(const std::string &feat, uint32_t eb, uint32_t sb,
     std::cerr << "Unknown feature: " << feat << "\n";
     std::abort();
 }
+
+// ---- Directed vectors -------------------------------------------------------
+// Register contents (rs1 = A rows, rs2 = B columns, rs3 = C) on which the native
+// datapath's windowed reduction and a discrete fp32 dot product round apart;
+// each runs ahead of the random tests for its format and shape.
+struct DirectedVec {
+    const char *name;
+    uint32_t fmt;
+    int num_threads;
+    uint32_t rs1[4], rs2[4], rs3[4];
+};
+static const DirectedVec kDirected[] = {
+    // fp16 rows of subnormals only: the window aligns on the products'
+    // exponent fields, so their few significant bits sit low in it
+    {"fp16 subnormal row", TCU_FP16_ID, 4,
+     {0x015e005e, 0x024080e2, 0x81fb0228, 0x820c8134},
+     {0x41389f40, 0x96d5bc23, 0x285ac58a, 0x7044a57d},
+     {0x4feb0a36, 0x4ca6e55a, 0x9a3df577, 0xfa232341}},
+    // fp16 products that nearly cancel: the window truncates the residue
+    {"fp16 cancellation", TCU_FP16_ID, 4,
+     {0x2f13b5fb, 0x1f98ae04, 0xbdc6632b, 0xc171dfc8},
+     {0xb03832e2, 0x2f380ce8, 0x609b8940, 0x7507d768},
+     {0x387492a6, 0x2b2843b3, 0xad72f4f6, 0x858ca727}},
+};
 
 // ---- Testbench class -------------------------------------------------------
 class Testbench {
@@ -300,6 +344,25 @@ public:
                   << " VX_CFG_NUM_THREADS=" << VX_CFG_NUM_THREADS
                   << "\n";
 
+        // directed vectors for this format and tile shape
+        uint32_t directed_done = 0;
+        for (const auto &v : kDirected) {
+            if (v.fmt != cfg_.fmt_s || v.num_threads != VX_CFG_NUM_THREADS)
+                continue;
+            std::vector<uint32_t> rs1(v.rs1, v.rs1 + VX_CFG_NUM_THREADS);
+            std::vector<uint32_t> rs2(v.rs2, v.rs2 + VX_CFG_NUM_THREADS);
+            std::vector<uint32_t> rs3(v.rs3, v.rs3 + VX_CFG_NUM_THREADS);
+            if (!this->check(rs1, rs2, rs3, fi, std::string("Directed (") + v.name + ")"))
+                return false;
+            ++directed_done;
+        }
+        if (directed_done != 0) {
+            std::cout << directed_done << " directed test(s) PASSED!\n";
+        }
+        if (cfg_.directed_only) {
+            return true;
+        }
+
         uint32_t tests_done = 0;
         for (uint32_t test_id = 0; test_id < cfg_.num_tests; test_id++) {
             if (cfg_.test_id >= 0 && (int)test_id != cfg_.test_id)
@@ -309,37 +372,30 @@ public:
             size_t feat_idx = test_id % cfg_.features.size();
             const std::string &feat = cfg_.features[feat_idx];
 
-            // Generate source elements for A and B (VX_CFG_NUM_THREADS values each)
-            std::vector<uint32_t> rs1(VX_CFG_NUM_THREADS), rs2(VX_CFG_NUM_THREADS), rs3(VX_CFG_NUM_THREADS);
-            for (int t = 0; t < VX_CFG_NUM_THREADS; t++) {
-                rs1[t] = gen_fp_value(feat, fi.exp_bits, fi.sig_bits, test_id * VX_CFG_NUM_THREADS + t, rng_);
-                rs2[t] = gen_fp_value("normals", fi.exp_bits, fi.sig_bits, test_id * VX_CFG_NUM_THREADS + t, rng_);
-                        float c = bit_cast<float>(gen_fp_value("normals", 8, 23, test_id * VX_CFG_NUM_THREADS + t + 1, rng_));
-                rs3[t] = bit_cast<uint32_t>(c);
-            }
-
-            // Compute software reference
-            std::vector<float> expected = wmma_ref(rs1, rs2, rs3, fi);
-            // Drive DUT
-            std::vector<uint32_t> result = drive_and_collect(rs1, rs2, rs3, fi);
-
-            bool test_pass = true;
-            for (int t = 0; t < VX_CFG_NUM_THREADS; t++) {
-                float act = bit_cast<float>(result[t]);
-                int delta = approx_equal(act, expected[t]);
-                if (std::abs(delta) > cfg_.ulp) {
-                    if (test_pass) {
-                        // First failure for this test
-                        std::cout << "Test #" << test_id << " (" << feat << ") FAILED:\n";
-                    }
-                    std::cout << "  thread=" << t
-                              << "  expected="; print_float("", expected[t], false);
-                    std::cout << "  actual=";  print_float("", act, false);
-                    std::cout << "  delta=" << delta << "\n";
-                    test_pass = false;
+            // A carries the feature, B and C are normals; each register lane
+            // packs per_word() source elements.
+            const int epw = fi.per_word();
+            std::vector<uint32_t> rs1(VX_CFG_NUM_THREADS, 0), rs2(VX_CFG_NUM_THREADS, 0), rs3(VX_CFG_NUM_THREADS);
+            for (int t = 0; t < TCU_TC_M * TCU_TC_K; t++) {
+                for (int e = 0; e < epw; e++) {
+                    uint32_t elem_id = (test_id * VX_CFG_NUM_THREADS + t) * epw + e;
+                    rs1[t] |= gen_fp_value(feat, fi.exp_bits, fi.sig_bits, elem_id, rng_) << (e * fi.width_bits);
                 }
             }
-            if (!test_pass) return false;
+            for (int t = 0; t < TCU_TC_N * TCU_TC_K; t++) {
+                for (int e = 0; e < epw; e++) {
+                    uint32_t elem_id = (test_id * VX_CFG_NUM_THREADS + t) * epw + e;
+                    rs2[t] |= gen_fp_value("normals", fi.exp_bits, fi.sig_bits, elem_id, rng_) << (e * fi.width_bits);
+                }
+            }
+            for (int t = 0; t < VX_CFG_NUM_THREADS; t++) {
+                rs3[t] = gen_fp_value("normals", 8, 23, test_id * VX_CFG_NUM_THREADS + t + 1, rng_);
+            }
+
+            std::ostringstream label;
+            label << "Test #" << test_id << " (" << feat << ")";
+            if (!this->check(rs1, rs2, rs3, fi, label.str()))
+                return false;
 
             tests_done++;
         }
@@ -354,6 +410,38 @@ public:
     }
 
 private:
+    // Drive one packet and compare every thread against the reference.
+    bool check(const std::vector<uint32_t> &rs1, const std::vector<uint32_t> &rs2,
+               const std::vector<uint32_t> &rs3, const FmtInfo &fi, const std::string &label) {
+        std::vector<float> expected = wmma_ref(rs1, rs2, rs3, fi, cfg_.window);
+        std::vector<uint32_t> result = drive_and_collect(rs1, rs2, rs3, fi);
+        bool pass = true;
+        for (int t = 0; t < VX_CFG_NUM_THREADS; t++) {
+            float act = bit_cast<float>(result[t]);
+            int delta = approx_equal(act, expected[t]);
+            if (std::abs(delta) > cfg_.ulp) {
+                if (pass) {
+                    std::cout << label << " FAILED:\n";
+                }
+                std::cout << "  thread=" << t
+                          << "  expected="; print_float("", expected[t], false);
+                std::cout << "  actual=";  print_float("", act, false);
+                std::cout << "  delta=" << delta << "\n";
+                pass = false;
+            }
+        }
+        if (!pass) {
+            std::cout << std::hex << "  rs1=";
+            for (int t = 0; t < VX_CFG_NUM_THREADS; t++) std::cout << " 0x" << rs1[t];
+            std::cout << "\n  rs2=";
+            for (int t = 0; t < VX_CFG_NUM_THREADS; t++) std::cout << " 0x" << rs2[t];
+            std::cout << "\n  rs3=";
+            for (int t = 0; t < VX_CFG_NUM_THREADS; t++) std::cout << " 0x" << rs3[t];
+            std::cout << std::dec << "\n";
+        }
+        return pass;
+    }
+
     TestConfig cfg_;
     uint64_t cycle_;
     std::mt19937 rng_;
@@ -454,7 +542,8 @@ private:
             write_lane(&dut_->dispatch_rs3_data, t, rs3[t]);
         }
 
-        // Clock until dispatch fires (ready goes high)
+        // The packet fires on the edge that samples valid with ready: test
+        // ready ahead of each edge, so it is sent exactly once.
         dut_->commit_ready = 1;
         uint64_t start_cycle = cycle_;
         while (true) {
@@ -462,10 +551,12 @@ private:
                 std::cerr << "TIMEOUT waiting for dispatch_ready\n";
                 std::abort();
             }
+            dut_->clk = 0;
+            dut_->eval();
+            bool fire = dut_->dispatch_ready;
             tick();
-            if (dut_->dispatch_ready) break;
+            if (fire) break;
         }
-        // Dispatch fired: de-assert valid
         idle_dispatch();
 
         // Wait for commit result
@@ -508,6 +599,10 @@ static TestConfig parse_args(int argc, char **argv) {
             cfg.random_seed = std::stoi(arg.substr(7));
         } else if (arg.substr(0, 6) == "--ulp=") {
             cfg.ulp = std::stoi(arg.substr(6));
+        } else if (arg == "--directed") {
+            cfg.directed_only = true;
+        } else if (arg.substr(0, 4) == "--W=") {
+            cfg.window = std::stoi(arg.substr(4));
         } else if (arg.substr(0, 14) == "--trace-start=") {
             cfg.trace_start = std::stoull(arg.substr(14));
         } else if (arg.substr(0, 12) == "--trace-end=") {
@@ -519,12 +614,14 @@ static TestConfig parse_args(int argc, char **argv) {
             while (std::getline(ss, item, ',')) cfg.features.push_back(item);
         } else {
             std::cout << "Usage: " << argv[0] << " [options]\n"
-                      << "  --fmt=<id>        Source format (0=fp32,1=fp16,2=bf16,5=tf32)\n"
+                      << "  --fmt=<id>        Source format (1=tf32,2=fp16,3=bf16)\n"
                       << "  --frm=<mode>      Rounding mode (RNE,RTZ,RDN,RUP,RMM)\n"
                       << "  --tests=<N>       Number of test cases (default 1000)\n"
                       << "  --test=<id>       Run a single test by id\n"
                       << "  --seed=<N>        Random seed\n"
                       << "  --ulp=<N>         ULP tolerance (default 1)\n"
+                      << "  --W=<N>           TFR accumulator window of the FEDP model (default 25)\n"
+                      << "  --directed        Run only the directed vectors\n"
                       << "  --no-trace        Disable VCD output\n"
                       << "  --features=LIST   Comma-separated list of features to test\n"
                       << "  --trace-start=N   Start VCD trace at timestamp N\n"
