@@ -688,7 +688,7 @@ public:
 
 protected:
   void on_reset() {
-    perf_stats_ = Cache::PerfStats();
+    // perf_stats_ survives: the MPM counters run from device reset.
     pending_mshr_size_ = 0;
     pending_amo_probes_ = 0;
     pipe_fill_count_ = 0;
