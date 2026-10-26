@@ -148,7 +148,8 @@ void Kmu::on_tick() {
   kmu_req_t req{};
   if (!this->next_cta(&req, target))
     return;
-  bus_out.at(target).send(req, 1);
+  // the lane slice ticks after the KMU and registers the CTA into the core
+  bus_out.at(target).send(req, 0);
   ++inflight_[target];
   if (!cluster_locked_) {
     // Message complete: advance past the granted core.

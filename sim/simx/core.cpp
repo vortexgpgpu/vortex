@@ -72,6 +72,7 @@ public:
     , fu_full_(VX_CFG_ISSUE_WIDTH, BitVector<>((uint32_t)FUType::Count, 0))
     , fu_full_seen_(VX_CFG_ISSUE_WIDTH, BitVector<>((uint32_t)FUType::Count, 0))
     , ibuf_inflight_(VX_CFG_NUM_WARPS, 0)
+    , ibuf_full_r_(VX_CFG_NUM_WARPS, false)
     , last_issue_(VX_CFG_NUM_WARPS, 0)
     , staged_since_(VX_CFG_NUM_WARPS, 0)
     , head_staged_(VX_CFG_NUM_WARPS, false)
@@ -370,6 +371,7 @@ public:
     pending_ifetches_ = 0;
 
     std::fill(ibuf_inflight_.begin(), ibuf_inflight_.end(), 0);
+    std::fill(ibuf_full_r_.begin(), ibuf_full_r_.end(), false);
 
     // perf_stats_ deliberately survives: these are the MPM counters, which
     // accumulate from device reset. A kernel launch re-enters reset() here but
@@ -407,11 +409,12 @@ public:
     scheduler_->schedule_begin();
 
     // Each frontend slice picks among its own warps whose ibuffer is not full; a
-    // buffer is full at exactly IBUF_SIZE entries. With an L1, once every warp's
-    // buffer is full any ready warp may fetch, its instruction waiting at decode.
+    // buffer is full at exactly IBUF_SIZE entries, a flag registered at the end
+    // of the previous cycle. With an L1, once every warp's buffer is full any
+    // ready warp may fetch, its instruction waiting at decode.
     bool all_full = (VX_CFG_ICACHE_ENABLED || VX_CFG_DCACHE_ENABLED);
     for (uint32_t w = 0; w < VX_CFG_NUM_WARPS && all_full; ++w) {
-      all_full = (ibuf_inflight_.at(w) == VX_CFG_IBUF_SIZE);
+      all_full = ibuf_full_r_.at(w);
     }
     // the cycle is idle when no slice has a warp to fetch, its latch free or not
     bool any_cand = false;
@@ -419,7 +422,7 @@ public:
       auto& fetch_latch = fetch_latch_.at(f);
       WarpMask warp_mask;
       for (uint32_t w = f; w < VX_CFG_NUM_WARPS; w += VX_CFG_FETCH_WIDTH) {
-        if (all_full || ibuf_inflight_.at(w) != VX_CFG_IBUF_SIZE) {
+        if (all_full || !ibuf_full_r_.at(w)) {
           warp_mask.set(w);
         }
       }
@@ -444,6 +447,9 @@ public:
     }
     if (!any_cand) {
       ++perf_stats_.sched_idle;
+    }
+    for (uint32_t w = 0; w < VX_CFG_NUM_WARPS; ++w) {
+      ibuf_full_r_.at(w) = (ibuf_inflight_.at(w) == VX_CFG_IBUF_SIZE);
     }
 
     scheduler_->schedule_end();
@@ -1232,6 +1238,7 @@ private:
   std::vector<BitVector<>> fu_full_seen_; // [iw] that flag one cycle later, as issue sees it
 
   std::vector<uint32_t> ibuf_inflight_;
+  std::vector<bool> ibuf_full_r_;
   std::vector<uint64_t> last_issue_;   // [wid] cycle of the warp's last issue
   std::vector<uint64_t> staged_since_; // [wid] cycle the last issued candidate was staged
   std::vector<bool>     head_staged_;  // [wid] the buffer head has left for staging

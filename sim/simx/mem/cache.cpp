@@ -1372,6 +1372,10 @@ private:
     } else {
       int32_t free_id = -1, repl_id = 0;
       line_id = set.select_victim(config_.repl_policy, rand_ctr_, &free_id, &repl_id);
+      // The FIFO pointer names the victim even when another way is free.
+      if (config_.repl_policy == Cache::FIFO) {
+        line_id = repl_id;
+      }
       auto &victim_line = set.lines.at(line_id);
 
       // Count the victim's dirty sectors; the egress queue must accept all
@@ -1388,9 +1392,7 @@ private:
         return false; // stall
       }
 
-      if (config_.repl_policy == Cache::FIFO) {
-        set.fifo_ptr = (set.fifo_ptr + 1) % set.lines.size();
-      } else if (config_.repl_policy == Cache::RANDOM) {
+      if (config_.repl_policy == Cache::RANDOM) {
         ++rand_ctr_;
       }
 
@@ -1415,6 +1417,11 @@ private:
       // Repurpose the victim way for the new line: all sectors invalid.
       victim_line.reset();
       victim_line.tag = addr_tag;
+    }
+    // Every installed fill advances the set's FIFO pointer, a sector refill
+    // into the resident way included.
+    if (config_.repl_policy == Cache::FIFO) {
+      set.fifo_ptr = (set.fifo_ptr + 1) % set.lines.size();
     }
 
     auto &line = set.lines.at(line_id);

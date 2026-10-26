@@ -24,10 +24,11 @@ using namespace vortex;
 // Cycles from an SFU barrier op to its effect in the barrier store: the store
 // is read a cycle before an arrival applies, and with several SFU blocks the
 // request is also registered out of its block. A transaction-barrier
-// completion is registered once before it applies; a global-barrier release
-// applies as it arrives. A release then reaches the warp scheduler registered.
+// completion crosses the completion queue and a register before it applies; a
+// global-barrier release applies as it arrives. A release then reaches the
+// warp scheduler registered.
 static constexpr uint32_t kOpApplyLag    = (VX_CFG_NUM_SFU_BLOCKS > 1) ? 2 : 1;
-static constexpr uint32_t kEventApplyLag = 1;
+static constexpr uint32_t kEventApplyLag = 2;
 
 BarrierUnit::BarrierUnit(const SimContext& ctx, const char* name, Core* core, Scheduler* scheduler)
   : SimObject<BarrierUnit>(ctx, name)

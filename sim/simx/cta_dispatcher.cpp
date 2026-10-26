@@ -64,6 +64,7 @@ void CtaDispatcher::on_reset() {
   cta_wids_.reset();
   tail_slot_  = 0;
   init_wait_  = 0;
+  retiring_.clear();
   for (uint32_t i = 0; i < num_warps_; ++i) {
     slot_rem_warps_[i] = 0;
     wid_to_slot_[i]    = num_warps_;  // invalid
@@ -103,6 +104,22 @@ uint32_t CtaDispatcher::usable_slots(uint32_t stride) const {
 }
 
 uint32_t CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wids, cta_warp_record_t* recs) {
+  // A retirement is registered, reads its slot's count from the table and
+  // writes it back: it updates the slot in its fourth cycle, and the write
+  // holds admission off for that cycle.
+  uint64_t now = SimPlatform::instance().cycles();
+  bool retire_write = false;
+  for (size_t i = 0; i < retiring_.size();) {
+    if (retiring_[i].second > now) {
+      ++i;
+      continue;
+    }
+    assert(slot_rem_warps_[retiring_[i].first] > 0);
+    --slot_rem_warps_[retiring_[i].first];
+    retire_write |= (retiring_[i].second == now);
+    retiring_.erase(retiring_.begin() + i);
+  }
+
   if (cta_done_) {
     cta_done_ = false;
     has_cta_  = false;
@@ -113,7 +130,7 @@ uint32_t CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wids, cta_w
     // endpoint holds the one CTA committed to this core. It is popped only on
     // admission — an unadmitted CTA keeps the lane's credit, so the KMU
     // cannot over-commit work to a busy core.
-    if (bus_in.empty())
+    if (bus_in.empty() || retire_write)
       return 0;
     const kmu_req_t& next = bus_in.peek();
 
@@ -172,7 +189,8 @@ uint32_t CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wids, cta_w
     // the admission is reported back to the KMU's launch accounting.
     cta_ = next;
     bus_in.pop();
-    credit_out.send(1, 1);
+    // the lane's buffer offers the freed entry to the KMU next cycle
+    credit_out.send(1, 0);
 
     cta_size_       = (cta_.block_size + num_threads_ - 1) / num_threads_;
     rank_           = 0;
@@ -255,10 +273,9 @@ void CtaDispatcher::warp_done(uint32_t wid) {
   uint32_t slot = wid_to_slot_[wid];
   if (slot >= num_warps_) return;  // not a CTA-dispatcher warp
   wid_to_slot_[wid] = num_warps_;  // clear assignment
-  assert(slot_rem_warps_[slot] > 0);
   // When the last warp of a CTA exits, its slot (and the LMEM region at
-  // slot × stride) frees immediately for reuse — no in-order reclaim.
-  --slot_rem_warps_[slot];
+  // slot × stride) frees for reuse as the retirement lands — no in-order reclaim.
+  retiring_.emplace_back(slot, SimPlatform::instance().cycles() + 3);
 }
 
 bool CtaDispatcher::slot_needs_init(uint32_t wid, const ThreadMask& tmask) const {

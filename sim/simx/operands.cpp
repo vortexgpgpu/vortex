@@ -115,6 +115,19 @@ Operands::Operands(const SimContext &ctx, const char* name, Core* core)
       opc_units_.at(i)->Output.bind(&rsp_arb_->Inputs.at(i));
     }
     rsp_arb_->Outputs.at(0).bind(&this->Output);
+    // The scoreboard's output skid buffer feeds the collectors through a
+    // demux: its head waits for its own collector, the entries behind it too.
+    // The head leaves the buffer at its last operand read, when its collector
+    // pops it, and the next head is offered from the following cycle.
+    Input.set_registered_ready(true);
+    Input.tx_callback([this](instr_trace_t* const& trace, uint64_t) {
+      if (!head_offered_ && this->Input.empty()) {
+        this->offer_head(trace, 0);
+      }
+    });
+    for (uint32_t i = 0; i < VX_CFG_NUM_OPCS; ++i) {
+      opc_units_.at(i)->Input.pop_callback([this]() { this->on_head_consumed(); });
+    }
   } else {
     // pass-thru
     this->Input.bind(&opc_units_.at(0)->Input);
@@ -127,19 +140,23 @@ Operands::~Operands() {
 }
 
 void Operands::on_reset() {
-  //--
+  head_offered_ = false;
 }
 
 void Operands::on_tick() {
-  if (VX_CFG_NUM_OPCS < 2)
-    return; // pass-thru
+  this->tick_sleep(); // the demux runs on Input's delivery and pop events
+}
 
-  // process requests
-  if (Input.empty())
-    return;
-  auto trace = this->Input.peek();
-  if (opc_units_.at(wid_to_opc_idx(trace->wid))->Input.try_send(trace)) {
-    Input.pop();
+void Operands::offer_head(instr_trace_t* trace, uint64_t delay) {
+  opc_units_.at(wid_to_opc_idx(trace->wid))->Input.send(trace, delay);
+  head_offered_ = true;
+}
+
+void Operands::on_head_consumed() {
+  this->Input.pop();
+  head_offered_ = false;
+  if (!this->Input.empty()) {
+    this->offer_head(this->Input.peek(), 1);
   }
 }
 
