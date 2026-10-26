@@ -131,6 +131,7 @@ public:
         if (hz == 0 || hz > timed_hz) {
           fprintf(stderr, "[VXDRV] VORTEX_FOLDSIM_CLOCK_HZ=%s: must be in (0, %lu]\n",
                   s, (unsigned long)timed_hz);
+          park_clock();
           return -1;
         }
         want_hz = hz;
@@ -149,6 +150,7 @@ public:
       if (clk_hz == 0 || clk_hz > limit_hz) {
         fprintf(stderr, "[VXDRV] user clock reads %lu Hz, image is timed for %lu Hz\n",
                 (unsigned long)clk_hz, (unsigned long)timed_hz);
+        park_clock();
         return -1;
       }
       printf("[VXDRV] foldsim kernel clock %lu Hz\n", (unsigned long)clk_hz);
@@ -160,7 +162,11 @@ public:
       auto vdev = session_->getDeviceByBdf(bdf);
       dma_ = std::make_unique<vrtd::Buffer>(vdev.openHbmBuffer(/*region=*/8, kDmaChunk));
       fd_ = dma_->getFd();
-    VRT_CATCH(-1)
+    } catch (const std::exception& e) {
+      fprintf(stderr, "[VXDRV] VRT exception: %s\n", e.what());
+      park_clock();
+      return -1;
+    }
     // The host side of the transfers: a kernel DMA buffer, mapped.
     struct slash_qdma_buf_create create = {};
     create.size = sizeof(create);
@@ -178,6 +184,20 @@ public:
     }
     staging_ = static_cast<uint8_t*>(p);
     return 0;
+  }
+
+  // A design that fails to come up stays loaded: leave it clocked below any
+  // image's timing so it cannot disturb the shell before the next load.
+  void park_clock() noexcept {
+    constexpr uint64_t kSafeHz = 50000000;
+    if (!device_)
+      return;
+    try {
+      device_->setFrequency(kSafeHz);
+      fprintf(stderr, "[VXDRV] kernel clock parked at %lu Hz\n",
+              (unsigned long)device_->getFrequency());
+    } catch (...) {
+    }
   }
 
   ~transport_t() {
