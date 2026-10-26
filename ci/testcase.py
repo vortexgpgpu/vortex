@@ -61,6 +61,8 @@ DEFAULT_PARITY_TOLERANCE = 0.05
 # into the tests job's timeout.
 RUNTIMES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "runtimes.json")
 SHARD_BUDGET_S = 150 * 60
+# Cells of long rtlsim runs split finer: each shard of these stays near an hour.
+CELL_SHARD_BUDGET_S = {"model_parity": 60 * 60, "perf_gate": 60 * 60}
 # Weight of a case with no recorded time (new, or not yet run on that xlen).
 DEFAULT_CASE_S = 120
 
@@ -421,19 +423,19 @@ def cell_name(case):
     return case.check or case.category
 
 
-def shard_plan(case_ids, xlen, shards=None):
+def shard_plan(case_ids, xlen, shards=None, budget=SHARD_BUDGET_S):
     """Split a cell's cases into shards balanced on their recorded runtimes.
 
     Longest case first onto the least-loaded shard, with ties broken on case id
     and shard index, so the planner and every shard derive the same split from
     the same ids. Unless `shards` is given, the count is the fewest that keep
-    the cell's recorded total within SHARD_BUDGET_S per shard.
+    the cell's recorded total within `budget` per shard.
     Returns (shards, {case id: 0-based shard}).
     """
     runtimes = load_runtimes(xlen)
     weight = {i: runtimes.get(i, DEFAULT_CASE_S) for i in case_ids}
     if shards is None:
-        shards = max(1, math.ceil(sum(weight.values()) / SHARD_BUDGET_S))
+        shards = max(1, math.ceil(sum(weight.values()) / budget))
     load = [0.0] * shards
     plan = {}
     for i in sorted(weight, key=lambda i: (-weight[i], i)):
@@ -472,7 +474,7 @@ def cmd_matrix(args):
     # the CHECK, not on a category that happens to share its name -- a check is a
     # marker across suites, and no category name may control whether it runs.
     #
-    # A cell whose recorded runtime exceeds SHARD_BUDGET_S is emitted as `shards`
+    # A cell whose recorded runtime exceeds its budget is emitted as `shards`
     # cells, each running shard `shard` of the split (shard_plan). The split is
     # over every case the cell's -m expression selects, not only those this
     # event's filters planned the cell for, because that is what the cell runs.
@@ -499,7 +501,8 @@ def cmd_matrix(args):
     out = []
     for key, cell in cells.items():
         cell["needs"] = sorted(cell["needs"])
-        shards, _ = shard_plan(members.get(key, []), key[2])
+        shards, _ = shard_plan(members.get(key, []), key[2],
+                               budget=CELL_SHARD_BUDGET_S.get(key[0], SHARD_BUDGET_S))
         if shards == 1:
             out.append(cell)
             continue
