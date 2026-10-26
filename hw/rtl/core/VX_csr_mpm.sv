@@ -236,6 +236,21 @@ module VX_csr_mpm import VX_gpu_pkg::*; #(
                         endcase
                     end
                 `endif
+                `ifdef VX_CFG_EXT_RTU_ENABLE
+                    `VX_DCR_MPM_CLASS_RTU: begin
+                        case (dcr_addr)
+                        `CSR_READ_64(`VX_CSR_MPM_RTU_RAYS,       dcr_data_w, sysmem_perf.rtu.rays);
+                        `CSR_READ_64(`VX_CSR_MPM_RTU_HITS,       dcr_data_w, sysmem_perf.rtu.hits);
+                        `CSR_READ_64(`VX_CSR_MPM_RTU_BOX_TESTS,  dcr_data_w, sysmem_perf.rtu.box_tests);
+                        `CSR_READ_64(`VX_CSR_MPM_RTU_TRI_TESTS,  dcr_data_w, sysmem_perf.rtu.tri_tests);
+                        `CSR_READ_64(`VX_CSR_MPM_RTU_CALLBACKS,  dcr_data_w, sysmem_perf.rtu.callbacks);
+                        `CSR_READ_64(`VX_CSR_MPM_RTU_BUSY,       dcr_data_w, sysmem_perf.rtu.busy);
+                        `CSR_READ_64(`VX_CSR_MPM_RTCACHE_READS,  dcr_data_w, sysmem_perf.rtcache.reads);
+                        `CSR_READ_64(`VX_CSR_MPM_RTCACHE_MISS_R, dcr_data_w, sysmem_perf.rtcache.read_misses);
+                        default:;
+                        endcase
+                    end
+                `endif
                     default:;
                     endcase
                 end
