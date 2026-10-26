@@ -138,7 +138,7 @@ public:
   void reset() {
     cycle_ = 0;
     queue_.clear();
-    perf_stats_ = DxaCore::PerfStats();
+    // perf_stats_ survives: the MPM counters run from device reset.
     for (auto& w : workers_) {
       w.state = WState::IDLE;
       w.work_list.clear();

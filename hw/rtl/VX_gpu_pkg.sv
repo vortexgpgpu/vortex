@@ -1316,6 +1316,17 @@ package VX_gpu_pkg;
     } om_perf_t;
 `endif
 
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    typedef struct packed {
+        logic [PERF_CTR_BITS-1:0] rays;
+        logic [PERF_CTR_BITS-1:0] hits;
+        logic [PERF_CTR_BITS-1:0] box_tests;
+        logic [PERF_CTR_BITS-1:0] tri_tests;
+        logic [PERF_CTR_BITS-1:0] callbacks;
+        logic [PERF_CTR_BITS-1:0] busy;
+    } rtu_perf_t;
+`endif
+
     typedef struct packed {
         logic [PERF_CTR_BITS-1:0] idles;
         logic [PERF_CTR_BITS-1:0] active_warps;
@@ -1360,6 +1371,10 @@ package VX_gpu_pkg;
     `ifdef VX_CFG_EXT_OM_ENABLE
         om_perf_t    om;
         cache_perf_t ocache;
+    `endif
+    `ifdef VX_CFG_EXT_RTU_ENABLE
+        rtu_perf_t   rtu;
+        cache_perf_t rtcache;
     `endif
     } sysmem_perf_t;
 

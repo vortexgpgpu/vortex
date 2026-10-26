@@ -88,11 +88,13 @@ void LocalMemSwitch::on_tick() {
           out_lmem_req.addrs.at(i)  = in_req.addrs.at(i);
           out_lmem_req.data.at(i)   = in_req.data.at(i);
           out_lmem_req.byteen.at(i) = in_req.byteen.at(i);
+          out_lmem_req.amo_cmp.at(i) = in_req.amo_cmp.at(i);
         } else {
           out_dc_req.mask.set(i);
           out_dc_req.addrs.at(i)  = in_req.addrs.at(i);
           out_dc_req.data.at(i)   = in_req.data.at(i);
           out_dc_req.byteen.at(i) = in_req.byteen.at(i);
+          out_dc_req.amo_cmp.at(i) = in_req.amo_cmp.at(i);
         }
       }
     }

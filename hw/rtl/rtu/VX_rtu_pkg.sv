@@ -303,6 +303,13 @@ package VX_rtu_pkg;
     localparam RTU_WS_WORDS     = 32;  // rows per slot (power of two for addressing)
     localparam RTU_WS_WORD_BITS = `CLOG2(RTU_WS_WORDS);
 
+    // Per-cycle traversal events the scheduler reports for the performance
+    // counters: strobes only, the counting lives in the core.
+    typedef struct packed {
+        logic box_test;   // a ray/AABB test issued
+        logic tri_test;   // a ray/triangle test issued
+    } rtu_sched_events_t;
+
 `IGNORE_UNUSED_END
 
 endpackage
