@@ -136,6 +136,12 @@ python3 ci/roofline.py --app=sgemm --driver=simx --args="-n128" --flops=4194304 
 
 - **Align with mainstream CUDA, HIP, OpenCL, and Vulkan API and driver stacks.** For any design question — driver surface, command-processor model, memory model, scheduling — pick the solution those stacks would use. This keeps Vortex's externals familiar to mainstream software and avoids one-off abstractions.
 
+- **Vivado floating-point IP latency is an Fmax knob, and it is already at its maximum.**
+  - `hw/scripts/xilinx_ip_gen.tcl` sets each `floating_point` IP's `C_Latency`. More cycles means more internal pipelining, up to a per-operation maximum; Vivado rejects any value above it.
+  - The single-precision maxima on V80 and U55C are: FMA 16 (`Medium_Usage`; 19 with `Full_Usage`), divide 28, square root 28, multiply 8, add 11. `xil_fma`, `xil_fdiv`, `xil_fsqrt` and the TCU's `xil_fmul`/`xil_fadd` already use them, so FMA with `Full_Usage` (more DSPs) is the only headroom left.
+  - A change must move together: `C_Latency`, the matching `VX_CFG_*_LATENCY` in `VX_config.toml` (checked by the `STATIC_ASSERT`s in `hw/rtl/fpu/VX_f*_unit.sv`), and the SimX timing that reads it.
+  - This applies only to `FPU_TYPE_DSP`. The STD FPU's div/sqrt latency is fixed by its SRT stage count, and only its FMA latency is configurable.
+
 - **SimX Cardinal Rule — modules communicate *only* through channels.** A `SimObject` may observe or mutate another module's state *only* via its bound `SimChannel` ports (`MemReq`/`MemRsp`, `result_if`, …). **Never reach across the ownership hierarchy** to touch another object directly (`core_->processor()->memsim()`, `parent()->child()->field`, a leaf unit grabbing the global `Memory`). See [docs/designs/simobject.md](docs/designs/simobject.md#the-cardinal-rule).
 
 ---
