@@ -660,7 +660,7 @@ module foldsim_mem_bank #(
         r_abf   <= rel(ab_floor);
         t_act   <= smax(r_actrc, r_abf);
         t_c0    <= smax(16'sd0, r_floor);
-        t_act_m <= t_act - k_rp;
+        t_act_m <= smax(r_actrc, r_abf) - k_rp;
         t_ref_m <= r_actrc - k_rp;
         t_c0_m  <= t_c0 - k_rcd;
     end
@@ -706,6 +706,41 @@ module foldsim_mem_bank #(
     end
     reg signed [15:0] s_lbr;
     reg [HLOG2-1:0]   s_lpr;
+
+    // A precharge's or an activate's search goes on to the next command's
+    // once it finds its clock c: from c + k, or a bound t not depending on c
+    // if that is later. Kept for the word searched, from its first: c
+    // is later where its place in the word exceeds ch_x; c + k relative to
+    // e and on the ring, less that place; t, and its place on the ring.
+    reg signed [15:0] ch_x, ch_ck, ch_t;
+    reg               ch_neg, ch_big;
+    reg [HLOG2-1:0]   ch_pk, ch_pt;
+    always @(posedge clk) begin : chain_
+        reg signed [15:0] x, k, t, tm;
+        k  = (kind == K_PRE) ? k_rp : k_rcd;
+        t  = (kind == K_PRE) ? (op_ref ? r_actrc : t_act) : t_c0;
+        tm = (kind == K_PRE) ? (op_ref ? t_ref_m : t_act_m) : t_c0_m - 16'sd1;
+        if (state == S_START) begin
+            x      = tm - s_lbr + 16'(s_lpr[5:0]);
+            ch_x   <= x;
+            ch_neg <= (x < 0);
+            ch_big <= (x >= 16'sd63);
+            ch_ck  <= s_lbr - 16'(s_lpr[5:0]) + k;
+            ch_pk  <= HLOG2'({s_lpr[HLOG2-1:6], 6'd0}) + HLOG2'(k);
+        end else begin
+            x      = ch_x - 16'sd64;
+            ch_x   <= x;
+            ch_neg <= (x < 0);
+            ch_big <= (x >= 16'sd63);
+            ch_ck  <= ch_ck + 16'sd64;
+            ch_pk  <= ch_pk + HLOG2'(64);
+        end
+        ch_t  <= t;
+        ch_pt <= base + HLOG2'(t);
+    end
+    wire              ch_win = ch_neg | (~ch_big & (s_ffs > ch_x[5:0]));
+    wire signed [15:0] ch_lb = ch_win ? ch_ck + 16'(s_ffs) : ch_t;
+    wire [HLOG2-1:0]  ch_lp  = ch_win ? ch_pk + HLOG2'(s_ffs) : ch_pt;
     assign s_rword = (state == S_START) ? WW'(s_lpr >> 6) : s_word1;
 
     // ---- Commit: per calendar, up to two ranges of clocks to mark ----
@@ -1422,9 +1457,21 @@ module foldsim_mem_bank #(
             s_mask <= (s_word1 == s_lw) ? s_hmask : ~64'd0;
             if (s_cand != 0) begin
                 case (kind)
-                K_PRE: begin c_pre <= s_rel; kind <= op_ref ? K_REF : K_ACT; state <= S_SETUP; end
+                K_PRE: begin
+                    c_pre <= s_rel;
+                    kind  <= op_ref ? K_REF : K_ACT;
+                    s_lbr <= ch_lb;
+                    s_lpr <= ch_lp;
+                    state <= S_START;
+                end
                 K_REF: begin c_ref <= s_rel; state <= S_CHECK2; end
-                K_ACT: begin c_act <= s_rel; kind <= K_C0; state <= S_SETUP; end
+                K_ACT: begin
+                    c_act <= s_rel;
+                    kind  <= K_C0;
+                    s_lbr <= ch_lb;
+                    s_lpr <= ch_lp;
+                    state <= S_START;
+                end
                 K_C0:  begin
                     c_col0  <= s_rel;
                     c1_m    <= (($signed(k_ccdl1) >= 16'sd64) ? 64'd0 : (s_cand >> k_ccdl1[5:0]))
