@@ -15,6 +15,7 @@
 //   - predicate true / false / inverted, and a predicate-only command
 //   - a skip range spanning launches and DCR writes, in a ring batch and in a
 //     draw bundle
+//   - a draw bundle of several hundred launches, run to its last command
 //   - an indirect-count unroll with the count below, at and above the bound
 //   - byte-count derivation (bias, odd divisor, ceil-shift)
 //   - a record whose words straddle a cache line
@@ -453,6 +454,29 @@ int test_no_launch(bool bundle) {
     return 0;
 }
 
+// A draw bundle runs every command it holds, however many: the same commands
+// as a ring batch, which the command processor streams to the end. Each launch
+// is two of the bundle's steps, a launch and a flush.
+int test_long_bundle() {
+    constexpr uint32_t N = 300;
+    Mark ma, mb;
+    if (mark_create(ma) || mark_create(mb) || mark_clear(ma) || mark_clear(mb)) {
+        return 1;
+    }
+    vx_launch_info_t la = mark_launch(ma, 1, 1, 1, 1);
+    vx_launch_info_t lb = mark_launch(mb, 1, 2, 1, 1);
+    std::vector<vx_command_t> cmds(N, launch_cmd(&la));
+    cmds.push_back(launch_cmd(&lb));
+    CHECK_VX(submit(cmds, true));
+    if (mark_expect(ma, N, 1, 1, 1, "every launch of a long bundle") ||
+        mark_expect(mb, 1, 2, 1, 1, "the bundle's last launch")) {
+        return 1;
+    }
+    mark_release(ma);
+    mark_release(mb);
+    return 0;
+}
+
 // Indirect count with a recording bound: launch d runs iff count > d.
 int test_count_unroll() {
     constexpr uint32_t MAX = 4;
@@ -734,6 +758,7 @@ int main(int argc, char** argv) {
         {"skip into a guard (bundle)", [] { return test_skip_into_guard(true); }},
         {"predicate-only (ring)",   [] { return test_no_launch(false); }},
         {"predicate-only (bundle)", [] { return test_no_launch(true); }},
+        {"long draw bundle",     test_long_bundle},
         {"count unroll",         test_count_unroll},
         {"byte count",           test_byte_count},
         {"line-crossing record", test_line_crossing},

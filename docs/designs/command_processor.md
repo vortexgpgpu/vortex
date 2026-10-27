@@ -607,8 +607,9 @@ DCR writes. `CMD_DRAW`'s `arg0` points at a resident **draw descriptor**
 issuing each stage's DCR config + KMU launch and **draining each launch as the
 inter-stage barrier** — the same drain-ordering the sort-middle front end
 (expand→setup→bin→RASTER→FS→OM) needs, with no host round-trip mid-draw. The host
-records the descriptor once and rings the doorbell once. A corrupt `num_steps` is
-clamped to 256.
+records the descriptor once and rings the doorbell once. The CP walks every one
+of the `num_steps` steps, as it would stream the same commands through the ring:
+a draw's length is not bounded by the descriptor.
 
 ![CMD_DRAW device-orchestrated draw](../assets/img/cp_draw_sequence.svg)
 

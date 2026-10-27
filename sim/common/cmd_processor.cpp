@@ -572,8 +572,6 @@ void CommandProcessor::tick_engine() {
                 if (hooks_.dram_read)
                     hooks_.dram_read(draw_phys_, &draw_num_steps_,
                                      sizeof(draw_num_steps_));
-                if (draw_num_steps_ > MAX_DRAW_STEPS)
-                    draw_num_steps_ = MAX_DRAW_STEPS;
                 draw_step_ = 0;
                 eng_state_ = EngState::DrawStep;
             } else if (cur_cmd_.opcode == OP_DCR_WRITE) {

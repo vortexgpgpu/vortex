@@ -166,7 +166,6 @@ private:
     // prefix (opcode/flags/reserved + arg0/arg1/arg2). A uniform stride keeps
     // the descriptor walk (and the RTL CP mirror) simple.
     static constexpr int DRAW_STEP_BYTES = 28;
-    static constexpr uint32_t MAX_DRAW_STEPS = 256;  // corrupt-count backstop
 
     // CMD_MEM_* header flag (cmd_t.flags bit2 = F_MEM_PHYSICAL): the device
     // operand is a physical address — the MMU-aware CP DMA skips translation.
