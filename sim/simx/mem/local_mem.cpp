@@ -112,7 +112,7 @@ public:
 	virtual ~Impl() {}
 
 	void reset() {
-		perf_stats_ = PerfStats();
+		// perf_stats_ survives: the MPM counters run from device reset.
 		dma_last_grant_ = config_.dma_clients ? (config_.dma_clients - 1) : 0;
 #if VX_CFG_EXT_A_ENABLED
 		amo_unit_.reset();

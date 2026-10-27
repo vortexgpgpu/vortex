@@ -77,7 +77,7 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     reg [FPC_BITS-1:0] core_select;
 
     reg is_fadd, is_fsub, is_fmul, is_fmadd, is_fmsub, is_fnmadd, is_fnmsub;
-    reg is_div, is_fcmp, is_itof, is_utof, is_ftoi, is_ftou, is_f2f;
+    reg is_div, is_fcmp, is_itof, is_utof, is_ftoi, is_ftou, is_f2f, is_f2h;
 
     reg [NUM_LANES-1:0][63:0] operands [3];
 
@@ -107,6 +107,7 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         is_ftoi   = 0;
         is_ftou   = 0;
         is_f2f    = 0;
+        is_f2h    = 0;
 
         case (op_type)
             INST_FPU_ADD:   begin core_select = FPU_FMA; is_fadd = ~i_fmt; is_fsub = i_fmt; end
@@ -121,6 +122,7 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             INST_FPU_I2F:   begin core_select = FPU_CVT; is_itof = 1; end
             INST_FPU_U2F:   begin core_select = FPU_CVT; is_utof = 1; end
             INST_FPU_F2F:   begin core_select = FPU_CVT; is_f2f  = 1; end
+            INST_FPU_F2H:   begin core_select = FPU_CVT; is_f2h  = 1; end
             default:         begin core_select = FPU_NCP; end
         endcase
     end
@@ -293,26 +295,29 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         wire fcvt_ready = per_core_ready_out[FPU_CVT] || ~per_core_valid_out[FPU_CVT];
         wire fcvt_fire  = fcvt_valid && fcvt_ready;
 
+        wire [1:0] f2f_dst_fmt = is_f2h ? 2'd2 : {1'b0, f_fmt};
+        wire [1:0] f2f_src_fmt = is_f2h ? {1'b0, f_fmt} : (i_fmt ? 2'd2 : {1'b0, ~f_fmt});
+
         always @(*) begin
             for (integer i = 0; i < NUM_LANES; ++i) begin
                 dpi_itof (fcvt_fire, int'(f_fmt), int'(i_fmt), operands[0][i], frm, result_itof[i], fflags_itof[i]);
                 dpi_utof (fcvt_fire, int'(f_fmt), int'(i_fmt), operands[0][i], frm, result_utof[i], fflags_utof[i]);
                 dpi_ftoi (fcvt_fire, int'(i_fmt), int'(f_fmt), operands[0][i], frm, result_ftoi[i], fflags_ftoi[i]);
                 dpi_ftou (fcvt_fire, int'(i_fmt), int'(f_fmt), operands[0][i], frm, result_ftou[i], fflags_ftou[i]);
-                dpi_f2f  (fcvt_fire, int'(f_fmt), int'($bits(f_fmt)'(~f_fmt)), operands[0][i], frm, result_f2f[i], fflags_f2f[i]);
+                dpi_f2f  (fcvt_fire, int'(f2f_dst_fmt), int'(f2f_src_fmt), operands[0][i], frm, result_f2f[i], fflags_f2f[i]);
 
                 result_fcvt[i] = is_itof ? result_itof[i][`VX_CFG_XLEN-1:0] :
                                  is_utof ? result_utof[i][`VX_CFG_XLEN-1:0] :
                                  is_ftoi ? result_ftoi[i][`VX_CFG_XLEN-1:0] :
                                  is_ftou ? result_ftou[i][`VX_CFG_XLEN-1:0] :
-                                 is_f2f  ? result_f2f[i][`VX_CFG_XLEN-1:0] :
+                                 (is_f2f || is_f2h) ? result_f2f[i][`VX_CFG_XLEN-1:0] :
                                         '0;
 
                 fflags_fcvt[i] = is_itof ? fflags_itof[i] :
                                  is_utof ? fflags_utof[i] :
                                  is_ftoi ? fflags_ftoi[i] :
                                  is_ftou ? fflags_ftou[i] :
-                                 is_f2f  ? fflags_f2f[i] :
+                                 (is_f2f || is_f2h) ? fflags_f2f[i] :
                                         '0;
             end
         end
@@ -376,6 +381,12 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 dpi_fsgnjx (fncp_fire, int'(f_fmt), operands[0][i], operands[1][i], result_fsgnjx[i]);
                 result_fmvx[i] = f_fmt ? operands[0][i] : 64'($signed(operands[0][i][31:0]));      // sign-extension
                 result_fmvf[i] = f_fmt ? operands[0][i] : (operands[0][i] | 64'hffffffff00000000); // nan-boxing
+            `ifdef VX_CFG_EXT_ZFHMIN_ENABLE
+                if (i_fmt) begin
+                    result_fmvx[i] = 64'($signed(operands[0][i][15:0]));
+                    result_fmvf[i] = operands[0][i] | 64'hffffffffffff0000;
+                end
+            `endif
             end
         end
 

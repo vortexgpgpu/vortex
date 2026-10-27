@@ -380,7 +380,7 @@ public:
   ~Impl() {}
 
   void reset() {
-    perf_stats_ = PerfStats();
+    // perf_stats_ survives: the MPM counters run from device reset.
     for (auto& sparse_meta : sparse_meta_) {
       std::fill(sparse_meta.begin(), sparse_meta.end(), 0);
     }

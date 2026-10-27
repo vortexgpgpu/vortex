@@ -71,7 +71,7 @@ struct Buffer {
     this->invalidate();
     rsp_seen_ = false;
     next_tag_ = 0;
-    reads_ = 0;
+    // reads_ survives: it backs an MPM counter, which runs from device reset.
   }
 };
 

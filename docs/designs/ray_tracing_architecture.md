@@ -467,10 +467,49 @@ oracle**:
 
 SimX additionally models **per-warp multi-trace concurrency** (several traces in
 flight from one warp), which the RTL core does not implement — SimX remains the
-oracle for that. Perf: MPM class `RTU` plus the SimX `PerfStats` (context/slot
-occupancy, front-end busy ticks, box/tri test counts); the RTL core keeps its own
-per-slot occupancy counters (busy / write / callback / fill and the two idle
-causes: idle-with-a-ray vs starved) under `DBG_RTU_OCC`.
+oracle for that. Its exploration counters (context occupancy, fetch merging,
+walker cycle accounting) stay in `PerfStats` and the `VX_RTU_STATS=1` teardown
+dump; the architectural set below is what both models expose.
+
+### 8.1 Performance counters (MPM class 15)
+
+`--perf=15` (`VORTEX_PROFILING=15`, or `vx_device_mpm_query` with
+`VX_DCR_MPM_CLASS_RTU`) reads the RTU counters on every driver. They are
+**socket-scoped**: a socket sums its RTU cores and hands the result to each of its
+cores' CSR file, so every core of a socket reads the same values. The runtime
+queries one core per socket, prints a per-socket line when there is more than one
+socket, and always prints the device total.
+
+The set is kept to quantities every BVH ray-tracing unit has, whatever its
+internal organization, so the counters stay meaningful as the RTU evolves.
+Microarchitecture-specific measures (slots, short-stack restarts, front-end steps)
+are left to `PerfStats`; the class's CSR window (B03–B1F) leaves room for
+future counters.
+
+| CSR | Counter | Definition |
+|---|---|---|
+| B03 | `RTU_RAYS` | rays traced: the active lanes of the trace instructions |
+| B04 | `RTU_HITS` | rays whose final result is a hit (misses = rays − hits) |
+| B05 | `RTU_BOX_TESTS` | ray/box intersection tests (node children and procedural boxes) |
+| B06 | `RTU_TRI_TESTS` | ray/triangle intersection tests |
+| B07 | `RTU_CALLBACKS` | any-hit and intersection candidates returned to the shader (one per ray per candidate) |
+| B08 | `RTU_BUSY` | cycles with at least one ray in flight |
+| B09 | `RTCACHE_READS` | RTU memory requests (RTCache reads) |
+| B0A | `RTCACHE_MISS_R` | RTCache read misses |
+
+Box and triangle tests include the re-descents of restarted walks: SimX runs the
+same `VX_CFG_RTU_STACK_DEPTH` short stack and trail restart as the RTL, so both
+models do the same intersection work. Invariants: `RTU_HITS ≤ RTU_RAYS`,
+`RTU_BUSY ≤ cycles`.
+
+The `model_parity-rt_raycast` case requires rays, hits, box tests, triangle tests
+and callbacks to match SimX exactly. `RTU_BUSY` and the RTCache counters are
+timing and memory-system measures and are not gated: SimX keeps a ray's fetched
+lines where the RTL refetches per structure access.
+
+The runtime also derives the hit rate, box and triangle tests per ray, memory
+requests per ray, RTU utilization and the RTCache hit rate. In RTL the counters
+exist only in `PERF_ENABLE` builds.
 
 ---
 

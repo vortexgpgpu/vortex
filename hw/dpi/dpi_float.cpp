@@ -16,6 +16,7 @@
 #include <iostream>
 #include <rvfloats.h>
 #include <util.h>
+#include <nan_box.h>
 #include "svdpi.h"
 #include "verilated_vpi.h"
 
@@ -51,116 +52,47 @@ extern "C" {
   void dpi_fmax(bool enable, int dst_fmt, int64_t a, int64_t b, int64_t* result, svBitVecVal* fflags);
 }
 
+constexpr uint32_t kRegBits = VX_CFG_XLEN;
+
 inline uint64_t nan_box(uint32_t value) {
-#ifdef VX_CFG_XLEN_64
-  return value | 0xffffffff00000000;
-#else
-  return value;
-#endif
+  return nanbox::box(value, 32, kRegBits);
 }
 
 inline uint64_t nan_box16(uint32_t value) {
-#ifdef VX_CFG_XLEN_64
-  return value | 0xffffffffffff0000;
-#else
-  return value;
-#endif
+  return nanbox::box(value, 16, kRegBits);
 }
 
 inline uint64_t nan_box19(uint32_t value) {
-#ifdef VX_CFG_XLEN_64
-  return value | 0xfffffffffff80000;
-#else
-  return value;
-#endif
+  return nanbox::box(value, 19, kRegBits);
 }
 
 inline uint64_t nan_box8(uint32_t value) {
-#ifdef VX_CFG_XLEN_64
-  return value | 0xffffffffffffff00;
-#else
-  return value;
-#endif
+  return nanbox::box(value, 8, kRegBits);
 }
 
 inline uint64_t nan_box4(uint32_t value) {
-#ifdef VX_CFG_XLEN_64
-  return value | 0xfffffffffffffff0;
-#else
-  return value;
-#endif
-}
-
-inline bool is_nan_boxed(uint64_t value) {
-#ifdef VX_CFG_XLEN_64
-  return (uint32_t(value >> 32) == 0xffffffff);
-#else
-  return true;
-#endif
-}
-
-inline bool is_nan_boxed16(uint64_t value) {
-#ifdef VX_CFG_XLEN_64
-  return (uint64_t(value >> 16) == 0xffffffffffff);
-#else
-  return true;
-#endif
-}
-
-inline bool is_nan_boxed19(uint64_t value) {
-#ifdef VX_CFG_XLEN_64
-  return (uint64_t(value >> 19) == 0xffffffffffff);
-#else
-  return true;
-#endif
-}
-
-inline bool is_nan_boxed8(uint64_t value) {
-#ifdef VX_CFG_XLEN_64
-  return (uint64_t(value >> 8) == 0xffffffffffffff);
-#else
-  return true;
-#endif
-}
-
-inline bool is_nan_boxed4(uint64_t value) {
-#ifdef VX_CFG_XLEN_64
-  return (uint64_t(value >> 4) == 0xfffffffffffffff);
-#else
-  return true;
-#endif
+  return nanbox::box(value, 4, kRegBits);
 }
 
 inline int64_t check_boxing(int64_t a) {
-  if (is_nan_boxed(a))
-    return a;
-  return nan_box(0x7fc00000); // NaN
+  return nanbox::is_boxed(a, 32, kRegBits) ? a : nan_box(0x7fc00000);
 }
 
 inline int64_t check_boxing16(int64_t a, uint16_t nan_value) {
-  if (is_nan_boxed16(a))
-    return a;
-  return nan_box16(nan_value); // NaN
+  return nanbox::is_boxed(a, 16, kRegBits) ? a : nan_box16(nan_value);
 }
 
 inline int64_t check_boxing19(int64_t a, uint32_t nan_value) {
-  if (is_nan_boxed19(a))
-    return a;
-  return nan_box19(nan_value); // NaN
+  return nanbox::is_boxed(a, 19, kRegBits) ? a : nan_box19(nan_value);
 }
 
 inline int64_t check_boxing8(int64_t a, uint8_t nan_value) {
-  if (is_nan_boxed8(a))
-    return a;
-  return nan_box8(nan_value); // NaN
+  return nanbox::is_boxed(a, 8, kRegBits) ? a : nan_box8(nan_value);
 }
 
 inline int64_t check_boxing4(int64_t a, uint8_t nan_value) {
-  if (is_nan_boxed4(a))
-    return a;
-  return nan_box4(nan_value); // NaN
+  return nanbox::is_boxed(a, 4, kRegBits) ? a : nan_box4(nan_value);
 }
-
 
 void dpi_fadd(bool enable, int dst_fmt, int64_t a, int64_t b, const svBitVecVal* frm, int64_t* result, svBitVecVal* fflags) {
   if (!enable)
@@ -360,6 +292,9 @@ void dpi_f2f(bool enable, int dst_fmt, int src_fmt, int64_t a, const svBitVecVal
     case 0: // fp32
       *result = rv_ftod(check_boxing(a), *frm, fflags);
       break;
+    case 2: // fp16
+      *result = rv_htod(check_boxing16(a, 0x7E00), *frm, fflags);
+      break;
     default:
       std::abort();
     }
@@ -368,6 +303,9 @@ void dpi_f2f(bool enable, int dst_fmt, int src_fmt, int64_t a, const svBitVecVal
     switch (src_fmt) {
     case 0: // fp32
       *result = nan_box16(rv_ftoh_s(check_boxing(a), *frm, fflags));
+      break;
+    case 1: // fp64
+      *result = nan_box16(rv_dtoh(a, *frm, fflags));
       break;
     default:
       std::abort();

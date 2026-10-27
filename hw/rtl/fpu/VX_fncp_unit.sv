@@ -47,6 +47,11 @@ module VX_fncp_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
     `UNUSED_VAR (fmt)
     wire is_d = HAS_D ? fmt[0] : 1'b0;
+`ifdef VX_CFG_EXT_ZFHMIN_ENABLE
+    wire is_h = fmt[1] && (op_type != INST_FPU_CMP) && (frm[2:1] == 2'b10);
+`else
+    wire is_h = 1'b0;
+`endif
 
     // F32 NaN-boxing (RISC-V spec): on a FLEN>32 register file a single-precision
     // operand is valid only if the upper bits are all ones; otherwise the operand
@@ -149,6 +154,7 @@ module VX_fncp_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     fclass_t        a_fclass_s0, b_fclass_s0;
     wire            a_smaller_s0, ab_equal_s0;
     wire            is_d_s0;
+    wire            is_h_s0;
     wire            a32_boxed_s0;
 
     wire [3:0] op_mod = {(op_type == INST_FPU_CMP), frm};
@@ -158,14 +164,14 @@ module VX_fncp_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     // a non-NaN-boxed single-precision source. Sign/class/ordering are already
     // derived above from the NaN-box-checked operands.
     VX_pipe_register #(
-        .DATAW (4 + 2 * FLEN + 1 + 1 + 2 * $bits(fclass_t) + 1 + 1 + 1 + 1),
+        .DATAW (4 + 2 * FLEN + 1 + 1 + 2 * $bits(fclass_t) + 1 + 1 + 1 + 1 + 1),
         .DEPTH (LATENCY > 0)
     ) pipe_reg0 (
         .clk      (clk),
         .reset    (reset),
         .enable   (enable && mask),
-        .data_in  ({op_mod,    dataa,    datab,    a_sign_sel, b_sign_sel, a_class_sel, b_class_sel, a_smaller_sel, ab_equal_sel, is_d,    a32_boxed}),
-        .data_out ({op_mod_s0, dataa_s0, datab_s0, a_sign_s0,  b_sign_s0,  a_fclass_s0, b_fclass_s0, a_smaller_s0,  ab_equal_s0,  is_d_s0, a32_boxed_s0})
+        .data_in  ({op_mod,    dataa,    datab,    a_sign_sel, b_sign_sel, a_class_sel, b_class_sel, a_smaller_sel, ab_equal_sel, is_d,    is_h,    a32_boxed}),
+        .data_out ({op_mod_s0, dataa_s0, datab_s0, a_sign_s0,  b_sign_s0,  a_fclass_s0, b_fclass_s0, a_smaller_s0,  ab_equal_s0,  is_d_s0, is_h_s0, a32_boxed_s0})
     );
 
     `UNUSED_VAR (b_fclass_s0)
@@ -324,6 +330,16 @@ module VX_fncp_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         assign result_xlen_s0 = result_s0;
     end
 
+    wire [`VX_CFG_XLEN-1:0] result_out_s0;
+`ifdef VX_CFG_EXT_ZFHMIN_ENABLE
+    wire [`VX_CFG_XLEN-1:0] result_h_s0 = op_mod_s0[0] ? {{(`VX_CFG_XLEN-16){1'b1}}, dataa_s0[15:0]}
+                                                       : {{(`VX_CFG_XLEN-16){dataa_s0[15]}}, dataa_s0[15:0]};
+    assign result_out_s0 = is_h_s0 ? result_h_s0 : result_xlen_s0;
+`else
+    `UNUSED_VAR (is_h_s0)
+    assign result_out_s0 = result_xlen_s0;
+`endif
+
     wire fflags_NV;
 
     VX_pipe_register #(
@@ -333,7 +349,7 @@ module VX_fncp_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         .clk      (clk),
         .reset    (reset),
         .enable   (enable && mask_pipe[LATENCY-2]),
-        .data_in  ({result_xlen_s0, fflags_NV_s0}),
+        .data_in  ({result_out_s0, fflags_NV_s0}),
         .data_out ({result,         fflags_NV})
     );
                     // NV,      DZ,   OF,   UF,   NX

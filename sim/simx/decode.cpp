@@ -219,7 +219,15 @@ static op_string_t op_string(const Instr &instr) {
           std::abort();
         }
       }
-      case FpuType::F2F: return {fpuArgs.is_f64 ? "FCVT.D.S":"FCVT.S.D", ""};
+      case FpuType::F2F: {
+        if (fpuArgs.is_f16) {
+          return {(fpuArgs.cvt == 1) ? "FCVT.H.D":"FCVT.H.S", ""};
+        }
+        if (fpuArgs.cvt == 2) {
+          return {fpuArgs.is_f64 ? "FCVT.D.H":"FCVT.S.H", ""};
+        }
+        return {fpuArgs.is_f64 ? "FCVT.D.S":"FCVT.S.D", ""};
+      }
       case FpuType::FCMP: {
         switch (fpuArgs.frm) {
         case 0: return {fpuArgs.is_f64 ? "FLE.D":"FLE.S", ""};
@@ -239,8 +247,8 @@ static op_string_t op_string(const Instr &instr) {
         }
       }
       case FpuType::FCLASS: return {fpuArgs.is_f64 ? "FCLASS.D":"FCLASS.S", ""};
-      case FpuType::FMVXW:  return {fpuArgs.is_f64 ? "FMV.X.D":"FMV.X.S", ""};
-      case FpuType::FMVWX:  return {fpuArgs.is_f64 ? "FMV.D.X":"FMV.S.X", ""};
+      case FpuType::FMVXW:  return {fpuArgs.is_f16 ? "FMV.X.H" : fpuArgs.is_f64 ? "FMV.X.D":"FMV.X.S", ""};
+      case FpuType::FMVWX:  return {fpuArgs.is_f16 ? "FMV.H.X" : fpuArgs.is_f64 ? "FMV.D.X":"FMV.S.X", ""};
       case FpuType::FMINMAX: {
         switch (fpuArgs.frm) {
         case 0: return {fpuArgs.is_f64 ? "FMIN.D":"FMIN.S", ""};
@@ -258,11 +266,15 @@ static op_string_t op_string(const Instr &instr) {
       case LsuType::LOAD: {
         auto lsuArgs = std::get<IntrLsuArgs>(instrArgs);
         bool dst_float = (instr.get_dest_reg().type == RegType::Float);
-        // packLD detection: Float dest with sub-word width (LB or LH).
-        if (dst_float && lsuArgs.width == 0) return {"PACKLB.F", ""};
-        if (dst_float && lsuArgs.width == 1) return {"PACKLH.F", ""};
+        if (instr.is_macro_op() && dst_float && lsuArgs.width == 0) {
+          return {"PACKLB.F", ""};
+        }
+        if (instr.is_macro_op() && dst_float && lsuArgs.width == 1) {
+          return {"PACKLH.F", ""};
+        }
         if (dst_float) {
           switch (lsuArgs.width) {
+          case 1: return {"FLH", to_hex_str(lsuArgs.offset)};
           case 2: return {"FLW", to_hex_str(lsuArgs.offset)};
           case 3: return {"FLD", to_hex_str(lsuArgs.offset)};
           default:
@@ -288,6 +300,7 @@ static op_string_t op_string(const Instr &instr) {
         bool src_float = (instr.get_src_reg(1).type == RegType::Float);
         if (src_float) {
           switch (lsuArgs.width) {
+          case 1: return {"FSH", to_hex_str(lsuArgs.offset)};
           case 2: return {"FSW", to_hex_str(lsuArgs.offset)};
           case 3: return {"FSD", to_hex_str(lsuArgs.offset)};
           default:
@@ -404,6 +417,13 @@ static op_string_t op_string(const Instr &instr) {
       return TcuUnit::op_string(tcu_type, tpuArgs);
     }
   #endif // VX_CFG_EXT_TCU_ENABLE
+  #ifdef VX_CFG_EXT_MUFU_ENABLE
+    ,[&](MufuType mufu_type)-> op_string_t {
+      std::ostringstream os;
+      os << mufu_type;
+      return {os.str(), ""};
+    }
+  #endif
   #ifdef VX_CFG_EXT_TEX_ENABLE
     ,[&](TexType /*tex_type*/)-> op_string_t {
       return {"TEX", ""};
@@ -706,7 +726,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
   } break;
   case Opcode::FCI: {
     instr->set_fu_type(FUType::FPU);
-    instr->set_args(IntrFpuArgs{funct3, rs2, (funct7 & 0x1)});
+    instr->set_args(IntrFpuArgs{funct3, rs2, (funct7 & 0x1), ((funct7 & 0x3) == 0x2)});
     // Most FP ops raise exception flags; a dynamic rounding mode reads frm.
     uint8_t frm_rd = (funct3 == 0x7) ? Instr::FCSR_FRM : 0;
     switch (funct7) {
@@ -757,13 +777,39 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       instr->set_src_reg(1, rs2, RegType::Float);
       instr->set_fcsr_use(frm_rd, Instr::FCSR_FFLAGS);
       break;
-    case 0x20: // FCVT.S.D
-    case 0x21: // FCVT.D.S
+    case 0x20: // FCVT.S.D, FCVT.S.H
+    case 0x21: // FCVT.D.S, FCVT.D.H
+    case 0x22: { // FCVT.H.S, FCVT.H.D
+      // fmt codes: 0 = S, 1 = D, 2 = H
+      uint32_t dst_fmt = funct7 & 0x3;
+      uint32_t src_fmt = rs2;
+      bool supported = (src_fmt <= 2) && (src_fmt != dst_fmt);
+#ifndef VX_CFG_EXT_ZFHMIN_ENABLE
+      supported = supported && (dst_fmt != 2) && (src_fmt != 2);
+#endif
+      if (!supported) {
+        std::abort();
+      }
       instr->set_op_type(FpuType::F2F);
       instr->set_dest_reg(rd, RegType::Float);
       instr->set_src_reg(0, rs1, RegType::Float);
       instr->set_fcsr_use(frm_rd, Instr::FCSR_FFLAGS);
+    } break;
+#ifdef VX_CFG_EXT_ZFHMIN_ENABLE
+    case 0x72: // FMV.X.H
+      if (funct3 != 0) {
+        std::abort();
+      }
+      instr->set_op_type(FpuType::FMVXW);
+      instr->set_dest_reg(rd, RegType::Integer);
+      instr->set_src_reg(0, rs1, RegType::Float);
       break;
+    case 0x7a: // FMV.H.X
+      instr->set_op_type(FpuType::FMVWX);
+      instr->set_dest_reg(rd, RegType::Float);
+      instr->set_src_reg(0, rs1, RegType::Integer);
+      break;
+#endif
     case 0x2c: // FSQRT.S
     case 0x2d: // FSQRT.D
       instr->set_op_type(FpuType::FSQRT);
@@ -819,7 +865,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     instr->set_op_type((op == Opcode::FMADD) ? FpuType::FMADD :
                      (op == Opcode::FMSUB) ? FpuType::FMSUB :
                      (op == Opcode::FNMADD) ? FpuType::FNMADD : FpuType::FNMSUB);
-    instr->set_args(IntrFpuArgs{funct3, funct2, (funct7 & 0x1)});
+    instr->set_args(IntrFpuArgs{funct3, funct2, (funct7 & 0x1), 0});
     instr->set_dest_reg(rd, RegType::Float);
     instr->set_src_reg(0, rs1, RegType::Float);
     instr->set_src_reg(1, rs2, RegType::Float);
@@ -1147,6 +1193,17 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     // known-violation handoff class, checked against its decoded destination.
     gfx_doctrine::check(*instr);
   } break;
+#ifdef VX_CFG_EXT_MUFU_ENABLE
+  case Opcode::EXT3: {
+    if (funct7 != 0 || funct3 != 0 || rs2 > uint32_t(MufuType::TANH)) {
+      std::abort();
+    }
+    instr->set_fu_type(FUType::SFU);
+    instr->set_op_type(MufuType(rs2));
+    instr->set_dest_reg(rd, RegType::Float);
+    instr->set_src_reg(0, rs1, RegType::Float);
+  } break;
+#endif
   default:
     std::abort();
   }

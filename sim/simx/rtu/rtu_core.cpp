@@ -184,8 +184,6 @@ public:
       port.send(rsp);
       warp_cb_inflight_[anchor_warp] = true;
       ++perf_.reformation_yields;
-      // cb_type is uniform within a batched yield (grouped by sbt_idx), so one
-      // sample names the per-yield-type counter.
       for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
         if (!(cb_mask & (1u << t))) continue;
         switch (rsp.cb_type[t]) {
@@ -195,7 +193,6 @@ public:
           case VX_RT_CB_TYPE_MISS:   ++perf_.miss_callbacks; break;
           default:                                            break;
         }
-        break;
       }
       DT(3, "rtu-core reform cb_yield: warp=" << anchor_warp
             << ", sbt=" << anchor_sbt
@@ -255,7 +252,7 @@ public:
     const auto& p = perf_stats_;
     std::fprintf(stderr,
         "[rtu-stats] slots=%u ctx=%u merge=%u\n"
-        "[rtu-stats] rays_issued=%llu rays_hit=%llu rays_miss=%llu\n"
+        "[rtu-stats] traces=%llu rays=%llu rays_hit=%llu rays_miss=%llu\n"
         "[rtu-stats] mem_reads=%llu fetches_merged=%llu mshr_full=%llu\n"
         "[rtu-stats] bvh_nodes=%llu bvh_leaves=%llu box_tests=%llu tri_tests=%llu\n"
         "[rtu-stats] busy_ticks=%llu front_end_ticks=%llu mem_issue_ticks=%llu\n"
@@ -263,7 +260,8 @@ public:
         "[rtu-stats] cb_ahs=%llu cb_chs=%llu cb_miss=%llu cb_is=%llu reform=%llu\n",
         uint32_t(VX_CFG_RTU_NUM_SLOTS), uint32_t(VX_CFG_RTU_NUM_CTX),
         uint32_t(VX_CFG_RTU_MERGE_DEPTH),
-        (unsigned long long)p.rays_issued,
+        (unsigned long long)p.traces,
+        (unsigned long long)p.rays,
         (unsigned long long)p.rays_hit,
         (unsigned long long)p.rays_miss,
         (unsigned long long)p.mem_reads,
@@ -291,7 +289,8 @@ public:
     for (auto& cx : contexts_) cx = Context{};
     mem_engine_.reset();
     reform_.reset();
-    perf_stats_ = RtuCore::PerfStats();
+    // perf_stats_ survives: the MPM counters run from device reset, and every
+    // kernel launch re-enters reset().
     last_signature_ = 0;
     rr_exec_ = 0;
     step_cycles_left_   = 0;
@@ -359,7 +358,8 @@ public:
       }
       if (raylog::enabled()) raylog::on_accept(this, idx, s.req);
       ch.pop();
-      ++perf_stats_.rays_issued;
+      ++perf_stats_.traces;
+      perf_stats_.rays += __builtin_popcount(s.req.tmask_bits);
       DT(3, "rtu-core accept: tag=" << s.req.tag << ", slot=" << idx);
       rr_req_ = (cid + 1) % chs.size();
       return;
@@ -569,13 +569,12 @@ public:
                   + inst   * kRtuImageStatesPerInst;
     // Behind the last test fed, the PE pipeline drains while the context is
     // PARKED — box and tri results both carry their context id, so waiting for
-    // one costs the shared front end nothing. A trail restart re-descends every
-    // subtree the short stack had to evict.
+    // one costs the shared front end nothing. A trail restart's re-descent is
+    // already in the node and box counts above.
     uint32_t lat = 0;
     if (box) lat = std::max(lat, BoxPe::pipe_depth());
     if (tri) lat = std::max(lat, TriPe::pipe_depth());
     lat += kRtuXformLatency * inst;
-    lat += VX_CFG_RTU_STACK_DEPTH * restart;
     cx.pe_lat = lat;
     perf_stats_.walker_cycles_total += cx.fsm_states * kRtuPhasesPerStep
                                      + cx.img_states * kRtuPhasesImageAdd + lat;
@@ -723,8 +722,18 @@ public:
 
   void sample_occupancy() {
     uint32_t slots_used = 0;
+    bool busy = false;
     for (uint32_t i = 0; i < pool_.size(); ++i) {
-      if (pool_.at(i).in_use) ++slots_used;
+      const Slot& s = pool_.at(i);
+      if (s.in_use) ++slots_used;
+      // A slot is reserved before its rays arrive and stays emitted until the
+      // warp consumes its record; it holds no trace in either state.
+      if (s.in_use && s.state != SlotState::RESERVED && s.state != SlotState::EMITTED) {
+        busy = true;
+      }
+    }
+    if (busy) {
+      ++perf_stats_.rtu_busy_ticks;
     }
     uint32_t bound = 0, active = 0;
     for (const auto& cx : contexts_) {
@@ -738,7 +747,6 @@ public:
     perf_stats_.slot_busy_ticks  += slots_used;
     perf_stats_.ctx_bound_ticks  += bound;
     perf_stats_.ctx_active_ticks += active;
-    if (slots_used != 0) ++perf_stats_.rtu_busy_ticks;
   }
 
   const RtuCore::PerfStats& perf_stats() const { return perf_stats_; }

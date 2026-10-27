@@ -34,6 +34,9 @@ VX_CFG_EXT_A_ENABLE = false
 VX_CFG_EXT_ZACAS_ENABLE = false
 
 VX_CFG_EXT_ZICOND_ENABLE = true
+# Zfhmin: half-precision load/store, move and fp16<->fp32/fp64 conversion (no
+# half arithmetic). Requires F.
+VX_CFG_EXT_ZFHMIN_ENABLE = false
 VX_CFG_EXT_TCU_ENABLE = false
 VX_CFG_EXT_DMA_ENABLE = false
 VX_CFG_EXT_DXA_ENABLE = false
@@ -41,6 +44,7 @@ VX_CFG_EXT_TEX_ENABLE = false
 VX_CFG_EXT_RASTER_ENABLE = false
 VX_CFG_EXT_OM_ENABLE = false
 VX_CFG_EXT_RTU_ENABLE = false
+VX_CFG_EXT_MUFU_ENABLE = false
 VX_CFG_VLEN = "expr: $VX_CFG_XLEN * 4"
 
 [pipeline]
@@ -150,6 +154,10 @@ VX_CFG_FDIV_PE_RATIO = 1
 VX_CFG_FSQRT_PE_RATIO= 1
 VX_CFG_FCVT_PE_RATIO = 1
 VX_CFG_FNCP_PE_RATIO = 1
+
+[mufu]
+# MUFU datapath lanes inside the SFU; the SFU's lanes are serialized onto them.
+VX_CFG_NUM_MUFU_LANES = 1
 
 [amo]
 # LR/SC reservation stations per LLC bank; line-indexed in BRAM, eviction yields legal spurious SC failures
@@ -489,7 +497,7 @@ VX_CFG_NUM_OCACHES      = "expr: max(1, up($VX_CFG_NUM_OM_CORES / 4))"
 VX_CFG_MISA_STD = "expr: ($VX_CFG_EXT_A_ENABLED << 0) | (0 << 1) | ($VX_CFG_EXT_C_ENABLED << 2) | ($VX_CFG_EXT_D_ENABLED << 3) | (0 << 4) | ($VX_CFG_EXT_F_ENABLED << 5) | (0 << 6) | (0 << 7) | (1 << 8) | (0 << 9) | (0 << 10) | (0 << 11) | ($VX_CFG_EXT_M_ENABLED << 12) | (0 << 13) | (0 << 14) | (0 << 15) | (0 << 16) | (0 << 17) | (0 << 18) | (0 << 19) | (1 << 20) | (0 << 21) | (0 << 22) | (1 << 23) | (0 << 24) | (0 << 25)"
 
 # Custom extensions signature
-VX_CFG_MISA_EXT = "expr: ($VX_CFG_ICACHE_ENABLED << 0) | ($VX_CFG_DCACHE_ENABLED << 1) | ($VX_CFG_L2_ENABLED << 2) | ($VX_CFG_L3_ENABLED << 3) | ($VX_CFG_LMEM_ENABLED << 4) | ($VX_CFG_EXT_ZICOND_ENABLED << 5) | ($VX_CFG_EXT_TCU_ENABLED << 9) | ($VX_CFG_EXT_DXA_ENABLED << 10) | ($VX_CFG_EXT_TEX_ENABLED << 6) | ($VX_CFG_EXT_RASTER_ENABLED << 7) | ($VX_CFG_EXT_OM_ENABLED << 8) | ($VX_CFG_EXT_RTU_ENABLED << 11)"
+VX_CFG_MISA_EXT = "expr: ($VX_CFG_ICACHE_ENABLED << 0) | ($VX_CFG_DCACHE_ENABLED << 1) | ($VX_CFG_L2_ENABLED << 2) | ($VX_CFG_L3_ENABLED << 3) | ($VX_CFG_LMEM_ENABLED << 4) | ($VX_CFG_EXT_ZICOND_ENABLED << 5) | ($VX_CFG_EXT_TCU_ENABLED << 9) | ($VX_CFG_EXT_DXA_ENABLED << 10) | ($VX_CFG_EXT_TEX_ENABLED << 6) | ($VX_CFG_EXT_RASTER_ENABLED << 7) | ($VX_CFG_EXT_OM_ENABLED << 8) | ($VX_CFG_EXT_RTU_ENABLED << 11) | ($VX_CFG_EXT_MUFU_ENABLED << 12) | ($VX_CFG_EXT_ZFHMIN_ENABLED << 13)"
 
 [toolchain]
 ASIC = false

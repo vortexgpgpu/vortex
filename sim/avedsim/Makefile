@@ -133,6 +133,11 @@ ifneq (,$(filter -DVX_CFG_EXT_RTU_ENABLE, $(XCONFIGS)))
 	RTL_INCLUDE += -I$(RTL_DIR)/rtu
 endif
 
+# Add MUFU extension sources
+ifneq (,$(filter -DVX_CFG_EXT_MUFU_ENABLE, $(XCONFIGS)))
+	RTL_INCLUDE += -I$(RTL_DIR)/mufu
+endif
+
 RTL_PKGS += $(RTL_DIR)/VX_trace_pkg.sv
 
 # Command Processor: declare the package only. Interfaces live in

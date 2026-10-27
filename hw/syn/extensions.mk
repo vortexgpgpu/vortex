@@ -90,3 +90,8 @@ ifneq (,$(filter -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_EXT_OM_ENABLE=1 -DVX_CFG_EXT_OM
 	RTL_PKGS += $(RTL_DIR)/om/VX_om_pkg.sv
 	RTL_INCLUDE += -I$(RTL_DIR)/om
 endif
+
+# Add MUFU extension sources
+ifneq (,$(filter -DVX_CFG_EXT_MUFU_ENABLE -DVX_CFG_EXT_MUFU_ENABLE=1 -DVX_CFG_EXT_MUFU_ENABLED=1, $(XCONFIGS)))
+	RTL_INCLUDE += -I$(RTL_DIR)/mufu
+endif

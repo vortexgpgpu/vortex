@@ -17,6 +17,7 @@ cycles=…` summary: retired instructions must match exactly (both are
 deterministic ISA-level executions, so any delta is functional divergence) and
 cycles must agree within the case's `tolerance` (SimX is the timing model of the
 RTL, not just a functional oracle; Foldsim is cycle-exact, so its tolerance is 0).
+A case with `parity_counters` also compares that MPM class's counters.
 """
 
 import os
@@ -33,7 +34,7 @@ _PERF_RE = re.compile(r"^PERF: instrs=(\d+), cycles=(\d+), IPC=", re.M)
 
 
 def _run_one(case, xlen, driver):
-    """One parity leg: run under `driver`, return (instrs, cycles)."""
+    """One parity leg: run under `driver`, return (instrs, cycles, output)."""
     argv, env = case.run_command(xlen, driver=driver)
     rc, out = tc.execute_capture(argv, env)
     assert rc == 0, "{} [{}] failed (exit {}): {}".format(
@@ -42,13 +43,63 @@ def _run_one(case, xlen, driver):
     assert perf, "{} [{}]: no 'PERF: instrs=…, cycles=…' summary in output " \
                  "(app must call vx_device_dump_perf)".format(case.id, driver)
     instrs, cycles = perf[-1]
-    return int(instrs), int(cycles)
+    return int(instrs), int(cycles), out
+
+
+def parse_counters(out, prefix):
+    """The raw `name=value` counters of an MPM class's device-total line
+    (`PERF: <prefix>: ...`; per-unit lines carry a `coreN:` prefix and do not
+    match). Derived metrics in parentheses are dropped."""
+    lines = re.findall(r"^PERF: {}: (.*)$".format(re.escape(prefix)), out, re.M)
+    if not lines:
+        return None
+    raw = re.sub(r"\([^)]*\)", "", lines[-1].split(";")[0])
+    return {k: int(v) for k, v in re.findall(r"(\w+)=(\d+)", raw)}
+
+
+def rtu_invariants(c, cycles):
+    """Violations of the RTU counters' definitions (empty when consistent)."""
+    errs = []
+    if c["hits"] > c["rays"]:
+        errs.append("hits {} > rays {}".format(c["hits"], c["rays"]))
+    if c["busy"] > cycles:
+        errs.append("busy {} > cycles {}".format(c["busy"], cycles))
+    return errs
+
+
+def _compare_counters(case, model_leg, ref_leg):
+    """Compare an MPM class's counters between the two legs, each given as
+    (driver, output, cycles)."""
+    pc = case.parity_counters
+    prefix = pc["prefix"]
+    (m, m_out, m_cycles), (r, r_out, r_cycles) = model_leg, ref_leg
+    mc = parse_counters(m_out, prefix)
+    rc = parse_counters(r_out, prefix)
+    assert mc and rc, "{}: no 'PERF: {}: ...' counter line ({}={}, {}={})".format(
+        case.id, prefix, m, mc is not None, r, rc is not None)
+    if prefix == "rtu":
+        for drv, c, cyc in ((m, mc, m_cycles), (r, rc, r_cycles)):
+            errs = rtu_invariants(c, cyc)
+            assert not errs, "{} [{}]: RTU counter invariants violated: {}".format(
+                case.id, drv, "; ".join(errs))
+    fails = []
+    for name in pc.get("exact", []):
+        print("PARITY: {}: {} {}={} {}={}".format(case.id, name, m, mc.get(name), r, rc.get(name)))
+        if name not in mc or mc[name] != rc.get(name):
+            fails.append("{} {}={} {}={}".format(name, m, mc.get(name), r, rc.get(name)))
+    for name in pc.get("tolerance", []):
+        s, t = mc.get(name), rc.get(name)
+        gap = abs(t - s) / float(max(t, 1)) if (s is not None and t is not None) else 1.0
+        print("PARITY: {}: {} {}={} {}={} gap={:.2%}".format(case.id, name, m, s, r, t, gap))
+        if gap > case.tolerance:
+            fails.append("{} {}={} {}={} gap={:.2%}".format(name, m, s, r, t, gap))
+    assert not fails, "{}: {} counter mismatch: {}".format(case.id, prefix, "; ".join(fails))
 
 
 def _model_parity(case, xlen):
     model, ref = case.legs
-    model_instrs, model_cycles = _run_one(case, xlen, model)
-    ref_instrs, ref_cycles = _run_one(case, xlen, ref)
+    model_instrs, model_cycles, model_out = _run_one(case, xlen, model)
+    ref_instrs, ref_cycles, ref_out = _run_one(case, xlen, ref)
     gap = abs(ref_cycles - model_cycles) / float(ref_cycles)
     print("PARITY: {}: instrs {m}={} {r}={}, cycles {m}={} {r}={}, "
           "gap={:.2%} (tolerance {:.0%})".format(
@@ -61,11 +112,14 @@ def _model_parity(case, xlen):
     assert gap <= case.tolerance, \
         "{}: cycle gap {:.2%} exceeds tolerance {:.0%} ({m}={}, {r}={})".format(
             case.id, gap, case.tolerance, model_cycles, ref_cycles, m=model, r=ref)
+    if case.parity_counters:
+        _compare_counters(case, (model, model_out, model_cycles),
+                          (ref, ref_out, ref_cycles))
 
 
 def _perf_gate(case, xlen, update):
     """Run the benchmark on rtlsim; record or compare its cycles vs baseline."""
-    instrs, cycles = _run_one(case, xlen, "rtlsim")
+    instrs, cycles, _ = _run_one(case, xlen, "rtlsim")
     if update:
         pb.record(case, xlen, cycles, instrs)
         print("PERF-BASELINE: {} xlen={} record cycles={} instrs={}".format(

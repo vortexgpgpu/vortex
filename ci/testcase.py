@@ -116,6 +116,11 @@ class Spec:
         # The two drivers a model_parity case runs: the model, then the RTL it
         # is checked against.
         self.legs = list(entry.get("legs", defaults.get("legs", DEFAULT_PARITY_LEGS)))
+        # model_parity can also compare an MPM class's counters, read from the
+        # runtime's `PERF: <prefix>: name=value, ...` device-total line (the run
+        # must pass the class with --perf=N): `exact` counters must match, and
+        # `tolerance` counters must agree within the case tolerance.
+        self.parity_counters = dict(entry.get("parity_counters", {}))
         self.authored_drivers = ("driver" in entry) or ("drivers" in entry)
         # make-run / script fields
         self.dir = entry.get("dir", "")
@@ -601,6 +606,18 @@ def cmd_lint(args):
             # construction.
             if not (0.0 <= c.tolerance < 1.0):
                 errors.append("{}: tolerance must be in [0, 1)".format(c.id))
+        if c.parity_counters:
+            pc = c.parity_counters
+            if c.check != "model_parity":
+                errors.append("{}: parity_counters needs check: model_parity".format(c.id))
+            if not isinstance(pc.get("prefix"), str) or not pc.get("prefix"):
+                errors.append("{}: parity_counters needs a 'prefix'".format(c.id))
+            if set(pc) - {"prefix", "exact", "tolerance"}:
+                errors.append("{}: parity_counters keys are prefix/exact/tolerance".format(c.id))
+            if not (pc.get("exact") or pc.get("tolerance")):
+                errors.append("{}: parity_counters compares nothing".format(c.id))
+            if "--perf=" not in c.flags:
+                errors.append("{}: parity_counters needs --perf=<class> in flags".format(c.id))
     if errors:
         for e in errors:
             sys.stderr.write("LINT ERROR: " + e + "\n")

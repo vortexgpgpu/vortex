@@ -103,6 +103,16 @@ builds:
   clock_mhz: 300
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
 
+# --- mufu --------------------------------------------------------------------
+
+# Special-function datapath at its default single lane, serialized from a
+# 16-lane SFU: the 7-stage table+polynomial pipeline and the 512x72 table ROM.
+- id: mufu
+  group: mufu
+  dut: mufu
+  clock_mhz: 300
+  configs: "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16"
+
 # --- tensor ------------------------------------------------------------------
 
 # TFR tensor core with every datatype plus sparsity and WGMMA. Widest FEDP/DSP48

@@ -115,10 +115,10 @@ private:
   Cache::Ptr l3cache_;
   CpLlcPort::Ptr cp_llc_port_;  // CP DMA client of the last-level cache
   bool platform_reset_ = false;
-  uint64_t perf_mem_reads_;
-  uint64_t perf_mem_writes_;
-  uint64_t perf_mem_latency_;
-  uint64_t perf_mem_pending_reads_;
+  uint64_t perf_mem_reads_ = 0;
+  uint64_t perf_mem_writes_ = 0;
+  uint64_t perf_mem_latency_ = 0;
+  uint64_t perf_mem_pending_reads_ = 0;
   // Tracks whether cycle() has done its first-call init (reset +
   // kmu_->start()). reset() clears it so a back-to-back kernel launch
   // via cycle() re-dispatches the KMU.
