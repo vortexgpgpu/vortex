@@ -56,7 +56,19 @@ import VX_tcu_pkg::*;
 `endif
 
     // LSU
-    VX_lsu_sched_if.master  lsu_client_if,
+`ifdef PERF_ENABLE
+    output wire [`VX_CFG_NUM_LSU_LANES-1:0] lsu_perf_rd_req_fire,
+    output wire [`VX_CFG_NUM_LSU_LANES-1:0] lsu_perf_wr_req_fire,
+    output wire [`VX_CFG_NUM_LSU_LANES-1:0] lsu_perf_rsp_fire,
+    output wire [PERF_CTR_BITS-1:0] lsu_coalescer_misses,
+`endif
+    output wire             lsu_sched_empty,
+    output wire             lsu_store_empty,
+    output wire             lsu_busy,
+`ifdef VX_CFG_LMEM_ENABLE
+    VX_mem_bus_if.master    lmem_bus_if [`VX_CFG_NUM_LSU_LANES],
+`endif
+    VX_mem_bus_if.master    dcache_bus_if [DCACHE_CHANNELS],
 
     // SFU
 `ifdef VX_CFG_EXT_DXA_ENABLE
@@ -78,21 +90,10 @@ import VX_tcu_pkg::*;
     input wire [TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0]   tcu_tbuf_rs2_data,
     input wire              tcu_tbuf_ready,
 `endif
-`ifdef TCU_META_ENABLE
-    output wire             tcu_agu_ld_valid,
-    output tcu_execute_t    tcu_agu_ld_data,
-    input wire              tcu_agu_ld_ready,
-    input wire              tcu_agu_result_valid,
-    input tcu_result_t      tcu_agu_result_data,
-    output wire             tcu_agu_result_ready,
-    input wire              tcu_meta_wr_en,
-    input wire [NW_WIDTH-1:0] tcu_meta_wr_wid,
-    input wire [4:0]        tcu_meta_wr_idx,
-    input wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0] tcu_meta_wr_data,
-`endif
 
-    // core-wide warp control
-    VX_warp_shared_if.master warp_shared_if
+    // core-wide warp control and CTA contexts
+    VX_warp_shared_if.master warp_shared_if,
+    input cta_bcast_t       cta_bcast
 );
     `STATIC_ASSERT (BACKEND_SLICES, ("invalid parameter"))
 
@@ -141,7 +142,19 @@ import VX_tcu_pkg::*;
         .dispatch_if          (dispatch_if),
         .commit_if            (commit_if),
         .branch_ctl_if        (branch_ctl_if),
-        .lsu_client_if        (lsu_client_if),
+    `ifdef PERF_ENABLE
+        .lsu_perf_rd_req_fire (lsu_perf_rd_req_fire),
+        .lsu_perf_wr_req_fire (lsu_perf_wr_req_fire),
+        .lsu_perf_rsp_fire    (lsu_perf_rsp_fire),
+        .lsu_coalescer_misses (lsu_coalescer_misses),
+    `endif
+        .lsu_sched_empty      (lsu_sched_empty),
+        .lsu_store_empty      (lsu_store_empty),
+        .lsu_busy             (lsu_busy),
+    `ifdef VX_CFG_LMEM_ENABLE
+        .lmem_bus_if          (lmem_bus_if),
+    `endif
+        .dcache_bus_if        (dcache_bus_if),
     `ifdef VX_CFG_EXT_DXA_ENABLE
         .dxa_req_bus_if       (dxa_req_bus_if),
     `endif
@@ -160,21 +173,10 @@ import VX_tcu_pkg::*;
         .tcu_tbuf_rs2_data    (tcu_tbuf_rs2_data),
         .tcu_tbuf_ready       (tcu_tbuf_ready),
     `endif
-    `ifdef TCU_META_ENABLE
-        .tcu_agu_ld_valid     (tcu_agu_ld_valid),
-        .tcu_agu_ld_data      (tcu_agu_ld_data),
-        .tcu_agu_ld_ready     (tcu_agu_ld_ready),
-        .tcu_agu_result_valid (tcu_agu_result_valid),
-        .tcu_agu_result_data  (tcu_agu_result_data),
-        .tcu_agu_result_ready (tcu_agu_result_ready),
-        .tcu_meta_wr_en       (tcu_meta_wr_en),
-        .tcu_meta_wr_wid      (tcu_meta_wr_wid),
-        .tcu_meta_wr_idx      (tcu_meta_wr_idx),
-        .tcu_meta_wr_data     (tcu_meta_wr_data),
-    `endif
         .warp_shared_if       (warp_shared_if),
         .warp_ctl_if          (warp_ctl_if),
-        .sched_csr_if         (sched_csr_if)
+        .sched_csr_if         (sched_csr_if),
+        .cta_bcast            (cta_bcast)
     );
 
     // commit

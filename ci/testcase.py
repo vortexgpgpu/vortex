@@ -55,6 +55,10 @@ OPT_IN_TIERS = {"fpga", "asic", "timing"}
 
 # simx<->rtlsim cycle-parity default: both timing models must agree within 5%.
 DEFAULT_PARITY_TOLERANCE = 0.05
+DEFAULT_PARITY_LEGS = ["simx", "rtlsim"]
+# A parity leg runs through blackbox. foldsim is a leg but not a cell driver: it
+# generates and builds its simulator inside the run, so there is no sim build.
+PARITY_DRIVERS = VALID_DRIVERS | {"foldsim"}
 
 # Per-case wall times (seconds, per xlen) measured by a CI run, recorded by
 # ci/record_runtimes.py from the run's junit reports. A cell whose recorded total
@@ -109,6 +113,9 @@ class Spec:
             self.xlens = [32]
         self.tolerance = float(entry.get("tolerance",
                                          defaults.get("tolerance", DEFAULT_PARITY_TOLERANCE)))
+        # The two drivers a model_parity case runs: the model, then the RTL it
+        # is checked against.
+        self.legs = list(entry.get("legs", defaults.get("legs", DEFAULT_PARITY_LEGS)))
         self.authored_drivers = ("driver" in entry) or ("drivers" in entry)
         # make-run / script fields
         self.dir = entry.get("dir", "")
@@ -475,20 +482,22 @@ def cmd_matrix(args):
             if xfilter and xlen not in xfilter:
                 continue
             name = cell_name(c)
-            key = (name, drv, xlen)
-            cell = cells.setdefault(key, {
-                "category": name, "driver": drv, "xlen": xlen, "needs": set(),
+            cells.setdefault((name, drv, xlen), {
+                "category": name, "driver": drv, "xlen": xlen,
             })
-            cell["needs"].update(c.needs)
-    members = {}
+    # A cell's needs are those of every case its -m expression runs, not only of
+    # the cases this event's filters planned it for.
+    members, needs = {}, {}
     for c in cases:
         if c.tier in OPT_IN_TIERS:
             continue
         for xlen in c.xlens:
-            members.setdefault((cell_name(c), c.marker_driver or "host", xlen), []).append(c.id)
+            key = (cell_name(c), c.marker_driver or "host", xlen)
+            members.setdefault(key, []).append(c.id)
+            needs.setdefault(key, set()).update(c.needs)
     out = []
     for key, cell in cells.items():
-        cell["needs"] = sorted(cell["needs"])
+        cell["needs"] = sorted(needs.get(key, ()))
         shards, _ = shard_plan(members.get(key, []), key[2])
         if shards == 1:
             out.append(cell)
@@ -583,9 +592,15 @@ def cmd_lint(args):
                 errors.append("{}: check cases must be via blackbox".format(c.id))
             if c.authored_drivers:
                 errors.append("{}: check cases must not set driver/drivers "
-                              "(the runner drives simx and rtlsim)".format(c.id))
-            if not (0.0 < c.tolerance < 1.0):
-                errors.append("{}: tolerance must be in (0, 1)".format(c.id))
+                              "(the runner drives the legs itself)".format(c.id))
+            if len(c.legs) != 2 or len(set(c.legs)) != 2 or \
+                    not set(c.legs) <= PARITY_DRIVERS:
+                errors.append("{}: legs must be two distinct drivers of {}".format(
+                    c.id, sorted(PARITY_DRIVERS)))
+            # 0 asks for exact cycles, from a model that is cycle-exact by
+            # construction.
+            if not (0.0 <= c.tolerance < 1.0):
+                errors.append("{}: tolerance must be in [0, 1)".format(c.id))
     if errors:
         for e in errors:
             sys.stderr.write("LINT ERROR: " + e + "\n")

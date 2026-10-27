@@ -162,7 +162,10 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .LATENCY      (LATENCY),
             .TAG_WIDTH    (TAG_WIDTH),
             .CORE_OUT_BUF (BYPASS_ENABLE ? 1 : CORE_OUT_BUF),
-            .MEM_OUT_BUF  (BYPASS_ENABLE ? 1 : MEM_OUT_BUF),
+            // with several banks the memory-request crossbar's arbitration
+            // sits between the bypass arbiter and the bank queues, so its
+            // output takes a registered ready (same latency, one more slot)
+            .MEM_OUT_BUF  (BYPASS_ENABLE ? ((NUM_BANKS > 1) ? 2 : 1) : MEM_OUT_BUF),
             .IS_LLC       (IS_LLC),
             .SHARED_LLC   (SHARED_LLC),
             .FLUSH_FORWARD (FLUSH_FORWARD),

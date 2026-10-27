@@ -27,6 +27,13 @@
 #define TCU_META_ENABLE
 #endif
 
+// TCU_LD memory ports: one per TCU block, through the LSU block that serves
+// the same warps, when the LSU has one block per TCU block; otherwise all
+// TCU blocks share LSU block 0, as in the RTL (VX_tcu_unit).
+#ifndef TCU_AGU_PORTS
+#define TCU_AGU_PORTS (uint32_t((VX_CFG_NUM_LSU_BLOCKS == VX_CFG_NUM_TCU_BLOCKS) ? VX_CFG_NUM_TCU_BLOCKS : 1))
+#endif
+
 namespace vortex {
 
 // Micro-op generator for packed-load macro instructions (PACKLB.F / PACKLH.F).
@@ -79,11 +86,12 @@ public:
 	~LsuUnit();
 
 #ifdef TCU_META_ENABLE
-	// TCU metadata client port on block 0: TCU_LD load requests arbitrate
-	// with the LSU's own traffic into lmem_switch; response fragments return
-	// here with the client's own tag restored.
-	SimChannel<LsuReq> TcuReqIn;
-	SimChannel<LsuRsp> TcuRspOut;
+	// TCU metadata client ports (TCU_AGU_PORTS, starting at block 0): TCU_LD
+	// load requests arbitrate with the block's own traffic into its
+	// lmem_switch; response fragments return here with the client's own tag
+	// restored.
+	std::vector<SimChannel<LsuReq>> TcuReqIn;
+	std::vector<SimChannel<LsuRsp>> TcuRspOut;
 #endif
 
 	// Returns true when all LSU blocks have no in-flight requests.

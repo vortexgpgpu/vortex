@@ -232,6 +232,13 @@ jobs:
             mpi)    sudo bash ./ci/install_dependencies.sh --mpi ;;
             gem5)   sudo bash ./ci/install_dependencies.sh --gem5 ;;
           esac
+      # A check's cell gathers cases from every category, so per-case tools are
+      # keyed on the cell's needs, not its name.
+      - name: Per-case tools
+        if: contains(matrix.needs, 'foldsim')
+        run: |
+          (cd build${{ matrix.xlen }} && bash ci/toolchain_install.sh --foldsim)
+          pip install --quiet pyslang==12.0.0
       - name: Run cell
         run: |
           cd build${{ matrix.xlen }}

@@ -78,8 +78,8 @@ LsuUnit::LsuUnit(const SimContext& ctx, const char* name, Core* core)
 	// instead of throttling the memory response stream.
 	: FuncUnit<VX_CFG_NUM_LSU_BLOCKS>(ctx, name, core, 6)
 #ifdef TCU_META_ENABLE
-	, TcuReqIn(this)
-	, TcuRspOut(this)
+	, TcuReqIn(TCU_AGU_PORTS, this)
+	, TcuRspOut(TCU_AGU_PORTS, this)
 #endif
 	, pending_loads_(0)
 {}
@@ -94,8 +94,10 @@ bool LsuUnit::drained() const {
 #ifdef TCU_META_ENABLE
 	// TcuRspOut forwards to the TCU's endpoint, so query via size() (empty()
 	// asserts on forwarding channels).
-	if (!TcuReqIn.empty() || TcuRspOut.size() != 0) {
-		return false;
+	for (uint32_t p = 0; p < TCU_AGU_PORTS; ++p) {
+		if (!TcuReqIn.at(p).empty() || TcuRspOut.at(p).size() != 0) {
+			return false;
+		}
 	}
 #endif
 	for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
@@ -221,11 +223,11 @@ void LsuUnit::process_response_step(uint32_t b) {
 	// TCU metadata response: forward the fragment with the client's tag
 	// restored; no register writeback, no trace retirement.
 	if (entry.is_tcu) {
-		if (TcuRspOut.full())
+		if (TcuRspOut.at(b).full())
 			return; // stall
 		LsuRsp fwd = lsu_rsp;
 		fwd.tag = entry.client_tag;
-		TcuRspOut.send(fwd);
+		TcuRspOut.at(b).send(fwd);
 		DT(3, this->name() << " tcu-meta-rsp: " << fwd);
 		entry.count -= lsu_rsp.mask.count();
 		if (entry.count == 0) {
@@ -422,15 +424,15 @@ void LsuUnit::process_request_step(uint32_t b) {
 	}
 
 #ifdef TCU_META_ENABLE
-	// TCU metadata client (block 0 only): forward one pending request per
+	// TCU metadata client (blocks below TCU_AGU_PORTS): forward one pending request per
 	// cycle into lmem_switch, ahead of the block's own dispatch. The wire tag
 	// is re-allocated from pending_reqs so it stays unique on the switch; the
 	// client's own tag is restored on the response. An independent client, so
 	// not gated by the fence lock — its entries still hold fence release via
 	// pending_reqs.empty().
-	if (b == 0 && !TcuReqIn.empty()) {
-		if (!state.pending_reqs.full() && !core_->lmem_switch(0)->ReqIn.full()) {
-			LsuReq lsu_req = TcuReqIn.peek();
+	if (b < TCU_AGU_PORTS && !TcuReqIn.at(b).empty()) {
+		if (!state.pending_reqs.full() && !core_->lmem_switch(b)->ReqIn.full()) {
+			LsuReq lsu_req = TcuReqIn.at(b).peek();
 			uint32_t count = lsu_req.mask.count();
 			std::vector<mem_addr_size_t> lane_entries(VX_CFG_NUM_LSU_LANES);
 			for (uint32_t i = 0; i < VX_CFG_NUM_LSU_LANES; ++i) {
@@ -452,9 +454,9 @@ void LsuUnit::process_request_step(uint32_t b) {
 			entry.client_tag = lsu_req.tag;
 			uint32_t tag = state.pending_reqs.allocate(std::move(entry));
 			lsu_req.tag = tag;
-			core_->lmem_switch(0)->ReqIn.send(lsu_req);
+			core_->lmem_switch(b)->ReqIn.send(lsu_req);
 			DT(3, this->name() << " tcu-meta-req: " << lsu_req);
-			TcuReqIn.pop();
+			TcuReqIn.at(b).pop();
 			return; // one request per cycle into the switch
 		}
 	}

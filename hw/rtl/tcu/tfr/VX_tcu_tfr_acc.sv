@@ -19,9 +19,12 @@
 module VX_tcu_tfr_acc import VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter N  = 5,
-    parameter WO = 30
+    parameter WO = 30,
+    // 2 registers the carry-save sum ahead of the carry-propagate adders
+    parameter LATENCY = 1
 ) (
     input  wire                 clk,
+    input  wire                 enable,
     input  wire                 valid_in,
     input  wire [31:0]          req_id,
     input  wire [N-1:0][WO-1:0] sigs_in,
@@ -33,6 +36,8 @@ module VX_tcu_tfr_acc import VX_tcu_pkg::*; #(
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR ({clk, valid_in, req_id})
+
+    `STATIC_ASSERT (LATENCY == 1 || LATENCY == 2, ("invalid parameter: LATENCY=%0d", LATENCY))
 
     // Count number of negative FP terms for final correction
     wire [`CLOG2(N+1)-1:0] fp_neg_count;
@@ -50,8 +55,8 @@ module VX_tcu_tfr_acc import VX_tcu_pkg::*; #(
     assign sig_operands[N] = WO'(fp_neg_count);
 
     // Fast Reduction (CSA Tree)
-    wire [WO-1:0] sum_vec;
-    wire [WO-1:0] carry_vec;
+    wire [WO-1:0] sum_w;
+    wire [WO-1:0] carry_w;
 
     VX_csa_tree #(
         .N (N+1),
@@ -59,9 +64,27 @@ module VX_tcu_tfr_acc import VX_tcu_pkg::*; #(
         .S (WO)
     ) sig_csa (
         .operands (sig_operands),
-        .sum      (sum_vec),
-        .carry    (carry_vec)
+        .sum      (sum_w),
+        .carry    (carry_w)
     );
+
+    // The adders see the carry-save sum at the cut.
+    wire [WO-1:0] sum_vec;
+    wire [WO-1:0] carry_vec;
+    wire          sticky_c;
+    wire          valid_c;
+    wire [31:0]   req_id_c;
+    VX_pipe_register #(
+        .DATAW (2 * WO + 1 + 1 + 32),
+        .DEPTH (LATENCY - 1)
+    ) pipe_cut (
+        .clk      (clk),
+        .reset    (1'b0),
+        .enable   (enable),
+        .data_in  ({sum_w,   carry_w,   (| sticky_in), valid_in, req_id}),
+        .data_out ({sum_vec, carry_vec, sticky_c,      valid_c,  req_id_c})
+    );
+    `UNUSED_VAR ({valid_c, req_id_c})
 
     // Resolve the sum in sign-magnitude form with two parallel adders, so the
     // norm stage can run its LZC directly on the exact magnitude.
@@ -95,17 +118,12 @@ module VX_tcu_tfr_acc import VX_tcu_pkg::*; #(
     assign sig_out  = sign_out ? sig_neg : sig_pos;
 
     // Sticky bit aggregation
-    assign sticky_out = |sticky_in;
+    assign sticky_out = sticky_c;
 
 `ifdef DBG_TRACE_TCU
     always_ff @(posedge clk) begin
-        if (valid_in) begin
-            `TRACE(4, ("%t: %s FEDP-ACC(%0d): sigs_in=", $time, INSTANCE_ID, req_id));
-            `TRACE_ARRAY1D(4, "0x%0h", sigs_in, N)
-            `TRACE(4, (", sticky_in="));
-            `TRACE_ARRAY1D(4, "%0d", sticky_in, N)
-            `TRACE(4, (", fp_negs="));
-            `TRACE_ARRAY1D(4, "%0d", fp_negs, N)
+        if (valid_c) begin
+            `TRACE(4, ("%t: %s FEDP-ACC(%0d): sum=0x%0h, carry=0x%0h", $time, INSTANCE_ID, req_id_c, sum_vec, carry_vec));
             `TRACE(4, (", sig_out=0x%0h, sign_out=%0d, sticky_out=%0d\n", sig_out, sign_out, sticky_out));
         end
     end

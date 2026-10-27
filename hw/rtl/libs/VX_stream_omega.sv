@@ -39,9 +39,23 @@ module VX_stream_omega #(
     output wire [NUM_OUTPUTS-1:0][IN_WIDTH-1:0] sel_out,
     input  wire [NUM_OUTPUTS-1:0]           ready_out,
 
-    output wire [PERF_CTR_BITS-1:0]         collisions
+    output wire [PERF_CTR_BITS-1:0]         collisions,
+    output wire                             empty
 );
     `STATIC_ASSERT (`IS_POW2(RADIX), ("inavlid parameters"))
+
+    // With one or two entries per switch output and no arbiter tree, an
+    // output buffer holds an item exactly when its registered valid is set,
+    // so the network is empty when no switch output is valid.
+    localparam BUF_KIND     = OUT_BUF & 7;
+    localparam VALID_HOLDS  = (BUF_KIND >= 1 && BUF_KIND <= 3)
+                           && (MAX_FANOUT == 0 || RADIX <= (MAX_FANOUT + MAX_FANOUT / 2));
+
+    // An inner stage of pipe buffers would pass ready combinationally through
+    // every stage: it registers its ready instead, at the same latency.
+    localparam INNER_BUF    = (BUF_KIND == 1) ? ((OUT_BUF & 8) | 2) : OUT_BUF;
+
+    wire buf_any_valid;
 
     // If network size smaller than radix, simply use a crossbar.
     if (NUM_INPUTS <= RADIX && NUM_OUTPUTS <= RADIX) begin : g_fallback
@@ -66,6 +80,7 @@ module VX_stream_omega #(
             .ready_out,
             .collisions
         );
+        assign buf_any_valid = (| valid_out);
     end else begin : g_omega
         localparam RADIX_LG     = `LOG2UP(RADIX);
         localparam N_INPUTS_M   = `MAX(NUM_INPUTS, NUM_OUTPUTS);
@@ -138,7 +153,7 @@ module VX_stream_omega #(
                     .NUM_OUTPUTS  (RADIX),
                     .DATAW        ($bits(omega_t)),
                     .ARBITER      (ARBITER),
-                    .OUT_BUF      (OUT_BUF),
+                    .OUT_BUF      ((stage < NUM_STAGES-1) ? INNER_BUF : OUT_BUF),
                     .MAX_FANOUT   (MAX_FANOUT),
                     .PERF_CTR_BITS(PERF_CTR_BITS)
                  ) xbar_switch (
@@ -207,6 +222,40 @@ module VX_stream_omega #(
         end
 
         assign collisions = collisions_r;
+        assign buf_any_valid = (| switch_valid_out);
+    end
+
+    if (BUF_KIND == 0) begin : g_empty_passthru
+        `UNUSED_VAR (buf_any_valid)
+        assign empty = 1'b1;
+    end else if (VALID_HOLDS) begin : g_empty_valid
+        assign empty = ~buf_any_valid;
+    end else begin : g_empty_count
+        // Deeper output buffers hide items behind an invalid output, so the
+        // network counts what it takes and gives.
+        localparam IN_W  = `CLOG2(NUM_INPUTS+1);
+        localparam OUT_W = `CLOG2(NUM_OUTPUTS+1);
+        localparam CAPACITY = 4 * `MAX(NUM_INPUTS, NUM_OUTPUTS) * (`CLOG2(`MAX(NUM_INPUTS, NUM_OUTPUTS)) + 1);
+        wire [IN_W-1:0]  in_cnt;
+        wire [OUT_W-1:0] out_cnt;
+        `POP_COUNT(in_cnt, valid_in & ready_in);
+        `POP_COUNT(out_cnt, valid_out & ready_out);
+        `UNUSED_VAR (buf_any_valid)
+        VX_pending_size #(
+            .SIZE  (CAPACITY),
+            .INCRW (IN_W),
+            .DECRW (OUT_W)
+        ) pending (
+            .clk   (clk),
+            .reset (reset),
+            .incr  (in_cnt),
+            .decr  (out_cnt),
+            .empty (empty),
+            `UNUSED_PIN (alm_empty),
+            `UNUSED_PIN (full),
+            `UNUSED_PIN (alm_full),
+            `UNUSED_PIN (size)
+        );
     end
 
 endmodule

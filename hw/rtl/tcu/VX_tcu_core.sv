@@ -27,12 +27,13 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input wire          tbuf_ready,
 `endif
 
-    // External metadata write port from the shared VX_tcu_agu.
+    // Metadata write port from the block's VX_tcu_agu.
 `ifdef TCU_META_ENABLE
     input wire                     ext_meta_wr_en,
     input wire [NW_WIDTH-1:0]      ext_meta_wr_wid,
     input wire [4:0]               ext_meta_wr_idx,
-    input wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0] ext_meta_wr_data,
+    input wire [TCU_BLOCK_CAP-1:0] ext_meta_wr_mask,
+    input wire [TCU_BLOCK_CAP-1:0][31:0] ext_meta_wr_data,
 `endif
 
     // Inputs
@@ -318,6 +319,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .wr_en  (ext_meta_wr_en),
         .wr_wid (ext_meta_wr_wid),
         .wr_idx (ext_meta_wr_idx),
+        .wr_mask(ext_meta_wr_mask),
         .wr_data(ext_meta_wr_data),
         .rd_wid (execute_if.data.header.wid)
     `ifdef VX_CFG_TCU_SPARSE_ENABLE

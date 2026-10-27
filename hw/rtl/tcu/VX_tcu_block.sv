@@ -13,8 +13,9 @@
 
 `include "VX_define.vh"
 
-// One TCU block: the MMA datapath, with TCU_LD handed to the core-wide AGU and
-// WGMMA operands supplied by the core-wide tile buffers (VX_tcu_shared).
+// One TCU block: the MMA datapath and the TCU_LD unit that fills its metadata
+// RAM, with WGMMA operands supplied by the core-wide tile buffers
+// (VX_tcu_shared).
 module VX_tcu_block import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter `STRING BLOCK_STR   = ""
@@ -35,17 +36,8 @@ module VX_tcu_block import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
 
 `ifdef TCU_META_ENABLE
-    // TCU_LD to and from the AGU
-    output wire             agu_ld_valid,
-    output tcu_execute_t    agu_ld_data,
-    input wire              agu_ld_ready,
-    input wire              agu_result_valid,
-    input tcu_result_t      agu_result_data,
-    output wire             agu_result_ready,
-    input wire              meta_wr_en,
-    input wire [NW_WIDTH-1:0] meta_wr_wid,
-    input wire [4:0]        meta_wr_idx,
-    input wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0] meta_wr_data,
+    // TCU_LD memory client of an LSU scheduler
+    VX_lsu_sched_if.master  tcu_mem_if,
 `endif
 
     VX_execute_if.slave     execute_if,
@@ -63,11 +55,38 @@ module VX_tcu_block import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     ) core_result_if();
 
 `ifdef TCU_META_ENABLE
+    wire                    agu_ld_valid, agu_ld_ready;
+    wire                    agu_result_valid, agu_result_ready;
+    tcu_result_t            agu_result_data;
+    wire                    meta_wr_en;
+    wire [NW_WIDTH-1:0]     meta_wr_wid;
+    wire [4:0]              meta_wr_idx;
+    wire [TCU_BLOCK_CAP-1:0] meta_wr_mask;
+    wire [TCU_BLOCK_CAP-1:0][31:0] meta_wr_data;
+
+    VX_tcu_agu #(
+        .INSTANCE_ID (`SFORMATF(("%s-agu%s", INSTANCE_ID, BLOCK_STR)))
+    ) agu (
+        .clk          (clk),
+        .reset        (reset),
+        .ld_valid     (agu_ld_valid),
+        .ld_data      (execute_if.data),
+        .ld_ready     (agu_ld_ready),
+        .client_if    (tcu_mem_if),
+        .meta_wr_en   (meta_wr_en),
+        .meta_wr_wid  (meta_wr_wid),
+        .meta_wr_idx  (meta_wr_idx),
+        .meta_wr_mask (meta_wr_mask),
+        .meta_wr_data (meta_wr_data),
+        .result_valid (agu_result_valid),
+        .result_data  (agu_result_data),
+        .result_ready (agu_result_ready)
+    );
+
     // TCU_LD goes to the AGU, every MMA op to the core
     wire is_tcu_ld = (execute_if.data.op_type == INST_TCU_LD);
 
     assign agu_ld_valid          = execute_if.valid && is_tcu_ld;
-    assign agu_ld_data           = execute_if.data;
     assign core_execute_if.valid = execute_if.valid && !is_tcu_ld;
     assign core_execute_if.data  = execute_if.data;
     assign execute_if.ready      = is_tcu_ld ? agu_ld_ready : core_execute_if.ready;
@@ -112,6 +131,7 @@ module VX_tcu_block import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .ext_meta_wr_en   (meta_wr_en),
         .ext_meta_wr_wid  (meta_wr_wid),
         .ext_meta_wr_idx  (meta_wr_idx),
+        .ext_meta_wr_mask (meta_wr_mask),
         .ext_meta_wr_data (meta_wr_data),
     `endif
         .execute_if (core_execute_if),

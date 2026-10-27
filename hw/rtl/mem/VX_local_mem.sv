@@ -177,6 +177,9 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         .DATAW       (REQ_DATAW),
         .PERF_CTR_BITS (PERF_CTR_BITS),
         .ARBITER     ("P"),
+        // over more than 12 ports the arbiters are a tree; slices of four keep
+        // its depth and shorten the grant each request waits on
+        .MAX_FANOUT  ((NUM_REQS > 12) ? 4 : `MAX_FANOUT),
         .OUT_BUF     (3) // output should be registered for the data_store addressing
     ) req_xbar (
         .clk       (clk),

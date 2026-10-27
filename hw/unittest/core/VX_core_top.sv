@@ -209,6 +209,10 @@ module VX_core_top import VX_gpu_pkg::*;
     `UNUSED_VAR (scope_bus_out_w)
 `endif
 
+    wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] core_lsu_busy;
+    wire core_busy;
+    assign busy = core_busy || (| core_lsu_busy);
+
     VX_core #(
         .INSTANCE_ID (`SFORMATF(("core")))
     ) core (
@@ -245,7 +249,8 @@ module VX_core_top import VX_gpu_pkg::*;
     `endif
 
         .kmu_bus_if     (kmu_bus_if),
-        .busy           (busy)
+        .lsu_busy       (core_lsu_busy),
+        .busy           (core_busy)
     );
 
 endmodule

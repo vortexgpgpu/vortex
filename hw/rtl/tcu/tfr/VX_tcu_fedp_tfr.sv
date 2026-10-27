@@ -61,21 +61,25 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
         ("unsupported accumulator width! expected 27..32, actual=%0d (N=%0d, W=%0d)", ACC_SIG_W, N, W))
 
     // Latency Configuration
-    // The multiply-stage depth derives from the configured total latency.
-    // USE_DSP swaps the mantissa Wallace tree for an inferred DSP48 multiply at
-    // the SAME latency. At MUL_LATENCY=2 the format banks register their raw
-    // products (DSP48 PREG with USE_DSP), splitting the classify/multiply and
-    // reduce/join cones across two cycles; pipe_mul stays DEPTH 1 — the
-    // lane-masked pipe register only aligns correctly at DEPTH 1.
-    localparam ALN_LATENCY = 1;
-    localparam ACC_LATENCY = 1;
-    localparam NRM_LATENCY = 1;
-    localparam MUL_LATENCY = `VX_CFG_TCU_LATENCY - (ALN_LATENCY + ACC_LATENCY + NRM_LATENCY);
+    // The stage depths derive from the configured total latency. The multiply
+    // takes a second cycle first: USE_DSP swaps the mantissa Wallace tree for an
+    // inferred DSP48 multiply at the SAME latency, and at MUL_LATENCY=2 the
+    // format banks register their raw products (DSP48 PREG with USE_DSP),
+    // splitting the classify/multiply and reduce/join cones across two cycles;
+    // pipe_mul stays DEPTH 1 — the lane-masked pipe register only aligns
+    // correctly at DEPTH 1. Further cycles cut the accumulate (carry-save sum |
+    // carry-propagate adders), then the align (max exponent and shift distances
+    // | shifters), then the normalize stage (normalized sum | rounding).
+    localparam MUL_LATENCY = (`VX_CFG_TCU_LATENCY >= 5) ? 2 : 1;
+    localparam EXTRA_LATENCY = `VX_CFG_TCU_LATENCY - MUL_LATENCY - 3;
+    localparam ACC_LATENCY = 1 + ((EXTRA_LATENCY >= 1) ? 1 : 0);
+    localparam ALN_LATENCY = 1 + ((EXTRA_LATENCY >= 2) ? 1 : 0);
+    localparam NRM_LATENCY = 1 + ((EXTRA_LATENCY >= 3) ? 1 : 0);
     localparam PROD_REG    = MUL_LATENCY - 1;
     localparam TOTAL_LATENCY = MUL_LATENCY + ALN_LATENCY + ACC_LATENCY + NRM_LATENCY;
 
-    `STATIC_ASSERT (MUL_LATENCY == 1 || MUL_LATENCY == 2,
-        ("invalid VX_CFG_TCU_LATENCY! expected 4 or 5, actual=%0d", `VX_CFG_TCU_LATENCY))
+    `STATIC_ASSERT (`VX_CFG_TCU_LATENCY >= 4 && `VX_CFG_TCU_LATENCY <= 8,
+        ("invalid VX_CFG_TCU_LATENCY! expected 4 to 8, actual=%0d", `VX_CFG_TCU_LATENCY))
     `STATIC_ASSERT (LATENCY == 0 || LATENCY == TOTAL_LATENCY,
         ("invalid latency! expected=%0d, actual=%0d", TOTAL_LATENCY, LATENCY))
 
@@ -206,9 +210,11 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     VX_tcu_tfr_align #(
         .N (TCK+1),
         .WI(W),
-        .WO(ACC_SIG_W)
+        .WO(ACC_SIG_W),
+        .LATENCY(ALN_LATENCY)
     ) align (
         .clk(clk),
+        .enable(enable),
         .valid_in(vld_pipe[S1_IDX]),
         .req_id(req_pipe[S1_IDX]),
         .exponents(s1_exponents),
@@ -220,6 +226,22 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
         .sigs_out(s1_aln_sigs),
         .sticky_bits(s1_aln_sticky),
         .fp_negs(s1_fp_negs)
+    );
+
+    // The align stage's side signals wait out its cut.
+    fedp_excep_t                s1_exceptions_a;
+    wire [TCK-1:0]              s1_lane_mask_a;
+    wire                        s1_is_int_a;
+    wire [C_HI_W-1:0]           s1_cval_hi_a;
+    VX_pipe_register #(
+        .DATAW (EXC_W + TCK + 1 + C_HI_W),
+        .DEPTH (ALN_LATENCY - 1)
+    ) pipe_aln_side (
+        .clk      (clk),
+        .reset    (1'b0),
+        .enable   (enable),
+        .data_in  ({s1_exceptions,   s1_lane_mask,   s1_is_int,   s1_cval_hi}),
+        .data_out ({s1_exceptions_a, s1_lane_mask_a, s1_is_int_a, s1_cval_hi_a})
     );
 
     wire [EXP_W-1:0]            s2_max_exp;
@@ -238,14 +260,14 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
         .NUM_LANES  (TCK),
         .SHARED_DATAW(EXP_W + EXC_W + ACC_SIG_W + 1 + 1 + C_HI_W + 1),
         .LANE_DATAW (ACC_SIG_W + 2),
-        .DEPTH      (ALN_LATENCY),
+        .DEPTH      (1),
         .LANE_MASK  (LANE_MASK)
     ) pipe_aln (
         .clk(clk),
         .reset(reset),
         .enable(enable),
-        .lane_mask (s1_lane_mask),
-        .shared_data_in ({s1_max_exp, s1_exceptions, s1_aln_sigs[TCK], s1_aln_sticky[TCK], s1_fp_negs[TCK], s1_cval_hi, s1_is_int}),
+        .lane_mask (s1_lane_mask_a),
+        .shared_data_in ({s1_max_exp, s1_exceptions_a, s1_aln_sigs[TCK], s1_aln_sticky[TCK], s1_fp_negs[TCK], s1_cval_hi_a, s1_is_int_a}),
         .shared_data_out({s2_max_exp, s2_exceptions, s2_aln_sigs[TCK], s2_aln_sticky[TCK], s2_fp_negs[TCK], s2_cval_hi, s2_is_int}),
         .lane_data_in (pipe_aln_lane_din),
         .lane_data_out(pipe_aln_lane_dout)
@@ -261,9 +283,11 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
 
     VX_tcu_tfr_acc #(
         .N (TCK+1),
-        .WO(ACC_SIG_W)
+        .WO(ACC_SIG_W),
+        .LATENCY(ACC_LATENCY)
     ) acc (
         .clk(clk),
+        .enable(enable),
         .valid_in(vld_pipe[S2_IDX]),
         .req_id(req_pipe[S2_IDX]),
         .sigs_in(s2_aln_sigs),
@@ -272,6 +296,22 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
         .sig_out(s2_acc_mag),
         .sign_out(s2_acc_sign),
         .sticky_out(s2_acc_sticky)
+    );
+
+    // The accumulate stage's side signals wait out its cut.
+    wire [EXP_W-1:0]      s2_max_exp_a;
+    fedp_excep_t          s2_exceptions_a;
+    wire                  s2_is_int_a;
+    wire [C_HI_W-1:0]     s2_cval_hi_a;
+    VX_pipe_register #(
+        .DATAW (EXP_W + EXC_W + 1 + C_HI_W),
+        .DEPTH (ACC_LATENCY - 1)
+    ) pipe_acc_side (
+        .clk      (clk),
+        .reset    (1'b0),
+        .enable   (enable),
+        .data_in  ({s2_max_exp,   s2_exceptions,   s2_is_int,   s2_cval_hi}),
+        .data_out ({s2_max_exp_a, s2_exceptions_a, s2_is_int_a, s2_cval_hi_a})
     );
 
     wire [EXP_W-1:0]      s3_max_exp;
@@ -284,12 +324,12 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
 
     VX_pipe_register #(
         .DATAW (EXP_W + ACC_SIG_W + 1 + EXC_W + 1 + C_HI_W + 1),
-        .DEPTH (ACC_LATENCY)
+        .DEPTH (1)
     ) pipe_acc (
         .clk(clk),
         .reset(reset),
         .enable(enable),
-        .data_in ({s2_max_exp, s2_acc_mag, s2_acc_sign, s2_exceptions, s2_acc_sticky, s2_cval_hi, s2_is_int}),
+        .data_in ({s2_max_exp_a, s2_acc_mag, s2_acc_sign, s2_exceptions_a, s2_acc_sticky, s2_cval_hi_a, s2_is_int_a}),
         .data_out({s3_max_exp, s3_acc_mag, s3_acc_sign, s3_exceptions, s3_acc_sticky, s3_cval_hi, s3_is_int})
     );
 
@@ -302,9 +342,11 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     VX_tcu_tfr_norm_round #(
         .EXP_W (EXP_W),
         .C_HI_W(C_HI_W),
-        .WA (ACC_SIG_W)
+        .WA (ACC_SIG_W),
+        .LATENCY(NRM_LATENCY)
     ) norm_round (
         .clk(clk),
+        .enable(enable),
         .valid_in(vld_pipe[S3_IDX]),
         .req_id(req_pipe[S3_IDX]),
         .max_exp(s3_max_exp),
@@ -319,7 +361,7 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
 
     VX_pipe_register #(
         .DATAW (32),
-        .DEPTH (NRM_LATENCY)
+        .DEPTH (1)
     ) pipe_norm_round (
         .clk(clk),
         .reset(reset),

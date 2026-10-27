@@ -111,6 +111,7 @@ private:
   // Reverse lookup: wid → slot index
   std::vector<uint32_t> wid_to_slot_;
   uint32_t  tail_slot_;   // next slot to allocate (round-robin over usable slots)
+  uint32_t  admit_wait_ = 0; // cycles the head has waited (registered admission)
 
   // Currently-in-flight CTA (being dispatched warp-rank by warp-rank)
   bool      has_cta_;

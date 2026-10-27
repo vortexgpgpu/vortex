@@ -32,17 +32,8 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
 
 `ifdef TCU_META_ENABLE
-    // per-block ports of the core-wide metadata AGU (VX_tcu_shared)
-    output wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] agu_ld_valid,
-    output tcu_execute_t    agu_ld_data [`VX_CFG_NUM_TCU_BLOCKS],
-    input wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] agu_ld_ready,
-    input wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] agu_result_valid,
-    input tcu_result_t      agu_result_data [`VX_CFG_NUM_TCU_BLOCKS],
-    output wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] agu_result_ready,
-    input wire              meta_wr_en,
-    input wire [NW_WIDTH-1:0] meta_wr_wid,
-    input wire [4:0]        meta_wr_idx,
-    input wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0] meta_wr_data,
+    // TCU_LD memory clients of the LSU blocks' schedulers
+    VX_lsu_sched_if.master  tcu_mem_if [`VX_CFG_NUM_LSU_BLOCKS],
 `endif
 
     // Inputs
@@ -78,11 +69,77 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .data_t (tcu_result_t)
     ) per_block_result_if[BLOCK_SIZE]();
 
+`ifdef TCU_META_ENABLE
+    VX_lsu_sched_if block_mem_if [BLOCK_SIZE]();
+
+    if (`VX_CFG_NUM_LSU_BLOCKS == BLOCK_SIZE) begin : g_mem_per_block
+        // each TCU block loads through the LSU block serving the same warps
+        for (genvar b = 0; b < BLOCK_SIZE; ++b) begin : g_port
+            assign tcu_mem_if[b].req_valid   = block_mem_if[b].req_valid;
+            assign tcu_mem_if[b].req_data    = block_mem_if[b].req_data;
+            assign block_mem_if[b].req_ready = tcu_mem_if[b].req_ready;
+            assign block_mem_if[b].rsp_valid = tcu_mem_if[b].rsp_valid;
+            assign block_mem_if[b].rsp_data  = tcu_mem_if[b].rsp_data;
+            assign tcu_mem_if[b].rsp_ready   = block_mem_if[b].rsp_ready;
+        end
+    end else begin : g_mem_shared
+        // the TCU blocks share LSU block 0's client, tagged by block
+        localparam BLOCK_IDX_BITS = `CLOG2(BLOCK_SIZE);
+        `STATIC_ASSERT (LSU_CLIENT_TAG_WIDTH >= BLOCK_IDX_BITS, ("LSU client tag cannot encode TCU block"))
+
+        wire [BLOCK_SIZE-1:0] req_valids;
+        wire [`UP(BLOCK_IDX_BITS)-1:0] req_idx;
+        wire [BLOCK_SIZE-1:0] req_grant;
+        wire req_valid;
+        lsu_req_data_t req_datas [BLOCK_SIZE];
+        for (genvar b = 0; b < BLOCK_SIZE; ++b) begin : g_req
+            assign req_valids[b] = block_mem_if[b].req_valid;
+            assign req_datas[b]  = block_mem_if[b].req_data;
+            assign block_mem_if[b].req_ready = tcu_mem_if[0].req_ready && req_grant[b];
+        end
+
+        VX_generic_arbiter #(
+            .NUM_REQS (BLOCK_SIZE),
+            .TYPE     ("R")
+        ) req_arb (
+            .clk          (clk),
+            .reset        (reset),
+            .requests     (req_valids),
+            .grant_index  (req_idx),
+            .grant_onehot (req_grant),
+            .grant_valid  (req_valid),
+            .grant_ready  (tcu_mem_if[0].req_ready)
+        );
+
+        lsu_req_data_t req_data;
+        always_comb begin
+            req_data = req_datas[req_idx];
+            req_data.tag[`UP(BLOCK_IDX_BITS)-1:0] = req_idx;
+        end
+        assign tcu_mem_if[0].req_valid = req_valid;
+        assign tcu_mem_if[0].req_data  = req_data;
+
+        wire [`UP(BLOCK_IDX_BITS)-1:0] rsp_idx = tcu_mem_if[0].rsp_data.tag[`UP(BLOCK_IDX_BITS)-1:0];
+        wire [BLOCK_SIZE-1:0] rsp_readys;
+        for (genvar b = 0; b < BLOCK_SIZE; ++b) begin : g_rsp
+            assign block_mem_if[b].rsp_valid = tcu_mem_if[0].rsp_valid && (rsp_idx == `UP(BLOCK_IDX_BITS)'(b));
+            assign block_mem_if[b].rsp_data  = tcu_mem_if[0].rsp_data;
+            assign rsp_readys[b] = block_mem_if[b].rsp_ready;
+        end
+        assign tcu_mem_if[0].rsp_ready = rsp_readys[rsp_idx];
+
+        for (genvar b = 1; b < `VX_CFG_NUM_LSU_BLOCKS; ++b) begin : g_tieoff
+            assign tcu_mem_if[b].req_valid = 1'b0;
+            assign tcu_mem_if[b].req_data  = '0;
+            assign tcu_mem_if[b].rsp_ready = 1'b1;
+            `UNUSED_VAR (tcu_mem_if[b].req_ready)
+            `UNUSED_VAR (tcu_mem_if[b].rsp_valid)
+            `UNUSED_VAR (tcu_mem_if[b].rsp_data)
+        end
+    end
+`endif
+
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_blocks
-    `ifdef TCU_META_ENABLE
-        wire block_meta_wr_en = meta_wr_en
-                             && (NW_WIDTH'(meta_wr_wid % `VX_CFG_NUM_TCU_BLOCKS) == NW_WIDTH'(block_idx));
-    `endif
 
         VX_tcu_block #(
             .INSTANCE_ID (INSTANCE_ID),
@@ -100,16 +157,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             .tbuf_ready       (tbuf_ready[block_idx]),
         `endif
         `ifdef TCU_META_ENABLE
-            .agu_ld_valid     (agu_ld_valid[block_idx]),
-            .agu_ld_data      (agu_ld_data[block_idx]),
-            .agu_ld_ready     (agu_ld_ready[block_idx]),
-            .agu_result_valid (agu_result_valid[block_idx]),
-            .agu_result_data  (agu_result_data[block_idx]),
-            .agu_result_ready (agu_result_ready[block_idx]),
-            .meta_wr_en       (block_meta_wr_en),
-            .meta_wr_wid      (meta_wr_wid),
-            .meta_wr_idx      (meta_wr_idx),
-            .meta_wr_data     (meta_wr_data),
+            .tcu_mem_if       (block_mem_if[block_idx]),
         `endif
             .execute_if       (per_block_execute_if[block_idx]),
             .result_if        (per_block_result_if[block_idx])

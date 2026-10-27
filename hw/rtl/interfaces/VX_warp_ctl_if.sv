@@ -27,12 +27,14 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
     // Pipeline drain status of the scheduler's warps, by SFU-block-local warp id
     wire [SFU_BLOCK_WARPS-1:0] warp_pending_alm_empty;
 
-    // LSU memory-scheduler drained signal (AND-reduced across all LSU blocks).
-    // Used by VX_wctl_unit to gate BAR (both vx_barrier and vx_barrier_arrive)
-    // so the barrier acts as a SMEM/GMEM fence — pending LSU memory ops finish
-    // before the warp suspends or the barrier arrival is registered. This is
-    // the CUDA __syncthreads / OpenCL barrier(CLK_LOCAL_MEM_FENCE) contract.
-    wire lsu_sched_drained;
+    // Every LSU block's memory scheduler is empty, and the translation path
+    // drained. VX_wctl_unit ANDs them to gate BAR (both vx_barrier and
+    // vx_barrier_arrive) so the barrier acts as a SMEM/GMEM fence — pending
+    // LSU memory ops finish before the warp suspends or the barrier arrival is
+    // registered. This is the CUDA __syncthreads / OpenCL
+    // barrier(CLK_LOCAL_MEM_FENCE) contract.
+    wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] lsu_sched_empty;
+    wire mmu_empty;
 
     // IPDOM stack address and mscratch of the warp at dvstack_wid
     wire [NW_WIDTH-1:0] dvstack_wid;
@@ -49,7 +51,8 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
         output split,
         output sjoin,
         input  warp_pending_alm_empty,
-        input  lsu_sched_drained,
+        input  lsu_sched_empty,
+        input  mmu_empty,
         output dvstack_wid,
         input  dvstack_ptr,
         input  mscratch
@@ -65,7 +68,8 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
         input  split,
         input  sjoin,
         output warp_pending_alm_empty,
-        output lsu_sched_drained,
+        output lsu_sched_empty,
+        output mmu_empty,
         input  dvstack_wid,
         output dvstack_ptr,
         output mscratch

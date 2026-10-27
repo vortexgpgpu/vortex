@@ -49,9 +49,9 @@ import VX_tcu_pkg::*;
     input wire [PERF_CTR_BITS-1:0] cycles,
     input wire [PERF_CTR_BITS-1:0] instret,
     input wire [`VX_CFG_NUM_WARPS-1:0] active_warps,
-    input wire              lsu_sched_drained,
-    output wire [NCTA_WIDTH-1:0] csr_rd_cta_id,
-    input cta_ctx_t         csr_rd_ctx,
+    input wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] all_lsu_sched_empty,
+    input wire              mmu_empty,
+    input cta_bcast_t       cta_bcast,
 `ifdef VX_CFG_VM_ENABLE
     input wire [`VX_CFG_XLEN-1:0] satp,
     output wire             satp_wr_valid,
@@ -59,7 +59,19 @@ import VX_tcu_pkg::*;
 `endif
 
     // LSU
-    VX_lsu_sched_if.master  lsu_client_if,
+`ifdef PERF_ENABLE
+    output wire [`VX_CFG_NUM_LSU_LANES-1:0] lsu_perf_rd_req_fire,
+    output wire [`VX_CFG_NUM_LSU_LANES-1:0] lsu_perf_wr_req_fire,
+    output wire [`VX_CFG_NUM_LSU_LANES-1:0] lsu_perf_rsp_fire,
+    output wire [PERF_CTR_BITS-1:0] lsu_coalescer_misses,
+`endif
+    output wire             lsu_sched_empty,
+    output wire             lsu_store_empty,
+    output wire             lsu_busy,
+`ifdef VX_CFG_LMEM_ENABLE
+    VX_mem_bus_if.master    lmem_bus_if [`VX_CFG_NUM_LSU_LANES],
+`endif
+    VX_mem_bus_if.master    dcache_bus_if [DCACHE_CHANNELS],
 
     // SFU
 `ifdef VX_CFG_EXT_DXA_ENABLE
@@ -80,18 +92,6 @@ import VX_tcu_pkg::*;
     input wire [TCU_WG_A_DATA_SIZE-1:0][`VX_CFG_XLEN-1:0] tcu_tbuf_rs1_data,
     input wire [TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0]   tcu_tbuf_rs2_data,
     input wire              tcu_tbuf_ready,
-`endif
-`ifdef TCU_META_ENABLE
-    output wire             tcu_agu_ld_valid,
-    output tcu_execute_t    tcu_agu_ld_data,
-    input wire              tcu_agu_ld_ready,
-    input wire              tcu_agu_result_valid,
-    input tcu_result_t      tcu_agu_result_data,
-    output wire             tcu_agu_result_ready,
-    input wire              tcu_meta_wr_en,
-    input wire [NW_WIDTH-1:0] tcu_meta_wr_wid,
-    input wire [4:0]        tcu_meta_wr_idx,
-    input wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0] tcu_meta_wr_data,
 `endif
 
     // core-wide warp control
@@ -131,6 +131,59 @@ import VX_tcu_pkg::*;
     wire [SW-1:0] issued;
     wire [SW-1:0] pending_alm_empty;
 
+    // The core-wide accounting retires an exiting warp when the shared unit grants
+    // its exit request. With several requesters, the slice sees that grant on its
+    // own request (registered toward the unit) and retires the warp in the same
+    // cycle, so the retirement does not cross the core's arbiter; with a sole
+    // requester, the core's retirement is already registered.
+    VX_slice_sched_if fs_sched_if();
+
+    assign fs_sched_if.cta_fire         = slice_sched_if.cta_fire;
+    assign fs_sched_if.cta_lid          = slice_sched_if.cta_lid;
+    assign fs_sched_if.cta_PC           = slice_sched_if.cta_PC;
+    assign fs_sched_if.cta_tmask        = slice_sched_if.cta_tmask;
+    assign fs_sched_if.cta_param        = slice_sched_if.cta_param;
+    assign fs_sched_if.cta_init         = slice_sched_if.cta_init;
+    assign fs_sched_if.warp_write       = slice_sched_if.warp_write;
+    assign fs_sched_if.warp_waddr       = slice_sched_if.warp_waddr;
+    assign fs_sched_if.warp_wdata       = slice_sched_if.warp_wdata;
+    assign fs_sched_if.id_write         = slice_sched_if.id_write;
+    assign fs_sched_if.id_waddr         = slice_sched_if.id_waddr;
+    assign fs_sched_if.id_wdata         = slice_sched_if.id_wdata;
+    assign fs_sched_if.wspawn_apply     = slice_sched_if.wspawn_apply;
+    assign fs_sched_if.wspawn_wmask     = slice_sched_if.wspawn_wmask;
+    assign fs_sched_if.wspawn_pc        = slice_sched_if.wspawn_pc;
+    assign fs_sched_if.wspawn_src       = slice_sched_if.wspawn_src;
+    assign fs_sched_if.wspawn_src_lid   = slice_sched_if.wspawn_src_lid;
+    assign fs_sched_if.wspawn_mscratch  = slice_sched_if.wspawn_mscratch;
+    assign fs_sched_if.bar_unlock_valid = slice_sched_if.bar_unlock_valid;
+    assign fs_sched_if.bar_unlock_mask  = slice_sched_if.bar_unlock_mask;
+    assign fs_sched_if.slice_ibuf_full  = slice_sched_if.slice_ibuf_full;
+`ifdef EXT_SCHED_TIMEOUT_DUMP
+    assign fs_sched_if.timeout_dump     = slice_sched_if.timeout_dump;
+`endif
+
+    if (SLICE_RETIRE) begin : g_retire
+        assign fs_sched_if.retire_valid = warp_shared_if.req_valid && warp_shared_if.req_ready
+                                       && (warp_shared_if.req_data.kind == WSH_EXIT);
+        assign fs_sched_if.retire_lid   = wid_to_wfs(warp_shared_if.req_data.wid);
+        `UNUSED_VAR ({slice_sched_if.retire_valid, slice_sched_if.retire_lid})
+    end else begin : g_retire_core
+        assign fs_sched_if.retire_valid = slice_sched_if.retire_valid;
+        assign fs_sched_if.retire_lid   = slice_sched_if.retire_lid;
+    end
+
+    assign slice_sched_if.active           = fs_sched_if.active;
+    assign slice_sched_if.stalled          = fs_sched_if.stalled;
+    assign slice_sched_if.ibuf_full        = fs_sched_if.ibuf_full;
+    assign slice_sched_if.pending_empty    = fs_sched_if.pending_empty;
+    assign slice_sched_if.branch_valid     = fs_sched_if.branch_valid;
+    assign slice_sched_if.divergence       = fs_sched_if.divergence;
+    assign slice_sched_if.sched_valid_room = fs_sched_if.sched_valid_room;
+    assign slice_sched_if.sched_valid_full = fs_sched_if.sched_valid_full;
+    assign slice_sched_if.sched_fire       = fs_sched_if.sched_fire;
+    assign slice_sched_if.sched_tmask      = fs_sched_if.sched_tmask;
+
     VX_frontend_slice #(
         .INSTANCE_ID (INSTANCE_ID),
         .SLICE_STR   ((`VX_CFG_FETCH_WIDTH > 1) ? SLICE_STR : "")
@@ -143,7 +196,7 @@ import VX_tcu_pkg::*;
     `ifdef PERF_ENABLE
         .fetch_perf        (fetch_perf),
     `endif
-        .slice_sched_if    (slice_sched_if),
+        .slice_sched_if    (fs_sched_if),
         .icache_bus_if     (icache_bus_if),
         .decode_if         (decode_if),
         .branch            (branch),
@@ -187,10 +240,10 @@ import VX_tcu_pkg::*;
     assign warp_ctl_if.dvstack_ptr = dvstack_ptr[0];
     assign warp_ctl_if.mscratch    = dvstack_mscratch[0];
     assign warp_ctl_if.warp_pending_alm_empty = pending_alm_empty;
-    assign warp_ctl_if.lsu_sched_drained      = lsu_sched_drained;
+    assign warp_ctl_if.lsu_sched_empty        = all_lsu_sched_empty;
+    assign warp_ctl_if.mmu_empty              = mmu_empty;
 
     assign csr_rd_wid[0]        = sched_csr_if.csr_rd_wid;
-    assign csr_rd_cta_id        = sched_csr_if.csr_rd_cta_id;
     assign csr_wr[0].valid      = sched_csr_if.csr_wr_valid;
     assign csr_wr[0].wid        = sched_csr_if.csr_wr_wid;
     assign csr_wr[0].data       = sched_csr_if.csr_wr_data;
@@ -207,16 +260,7 @@ import VX_tcu_pkg::*;
     assign sched_csr_if.csr_mepc     = csr_rd[0].mepc;
     assign sched_csr_if.csr_mcause   = csr_rd[0].mcause;
     assign sched_csr_if.csr_mtval    = csr_rd[0].mtval;
-    assign sched_csr_if.cta_csrs.cta_id       = sched_csr_if.csr_rd_cta_id;
-    assign sched_csr_if.cta_csrs.cta_rank     = csr_rd[0].cta_rank;
-    assign sched_csr_if.cta_csrs.cta_size     = csr_rd_ctx.cta_size;
-    assign sched_csr_if.cta_csrs.block_idx    = csr_rd_ctx.block_idx;
-    assign sched_csr_if.cta_csrs.block_dim    = csr_rd_ctx.block_dim;
-    assign sched_csr_if.cta_csrs.grid_dim     = csr_rd_ctx.grid_dim;
-    assign sched_csr_if.cta_csrs.entry        = csr_rd_ctx.entry;
-    assign sched_csr_if.cta_csrs.param        = csr_rd_ctx.param;
-    assign sched_csr_if.cta_csrs.lmem_addr    = csr_rd_ctx.lmem_addr;
-    assign sched_csr_if.cta_csrs.cluster_size = csr_rd_ctx.cluster_size;
+    assign sched_csr_if.cta_rank     = csr_rd[0].cta_rank;
     assign sched_csr_if.cta_lane     = csr_rd[0].cta_lane;
 `ifdef VX_CFG_VM_ENABLE
     assign sched_csr_if.csr_satp     = satp;
@@ -251,7 +295,19 @@ import VX_tcu_pkg::*;
     `ifdef VX_CFG_EXT_RTU_ENABLE
         .sched_unlock_if      (sched_unlock_if),
     `endif
-        .lsu_client_if        (lsu_client_if),
+    `ifdef PERF_ENABLE
+        .lsu_perf_rd_req_fire (lsu_perf_rd_req_fire),
+        .lsu_perf_wr_req_fire (lsu_perf_wr_req_fire),
+        .lsu_perf_rsp_fire    (lsu_perf_rsp_fire),
+        .lsu_coalescer_misses (lsu_coalescer_misses),
+    `endif
+        .lsu_sched_empty      (lsu_sched_empty),
+        .lsu_store_empty      (lsu_store_empty),
+        .lsu_busy             (lsu_busy),
+    `ifdef VX_CFG_LMEM_ENABLE
+        .lmem_bus_if          (lmem_bus_if),
+    `endif
+        .dcache_bus_if        (dcache_bus_if),
     `ifdef VX_CFG_EXT_DXA_ENABLE
         .dxa_req_bus_if       (dxa_req_bus_if),
     `endif
@@ -269,19 +325,8 @@ import VX_tcu_pkg::*;
         .tcu_tbuf_rs2_data    (tcu_tbuf_rs2_data),
         .tcu_tbuf_ready       (tcu_tbuf_ready),
     `endif
-    `ifdef TCU_META_ENABLE
-        .tcu_agu_ld_valid     (tcu_agu_ld_valid),
-        .tcu_agu_ld_data      (tcu_agu_ld_data),
-        .tcu_agu_ld_ready     (tcu_agu_ld_ready),
-        .tcu_agu_result_valid (tcu_agu_result_valid),
-        .tcu_agu_result_data  (tcu_agu_result_data),
-        .tcu_agu_result_ready (tcu_agu_result_ready),
-        .tcu_meta_wr_en       (tcu_meta_wr_en),
-        .tcu_meta_wr_wid      (tcu_meta_wr_wid),
-        .tcu_meta_wr_idx      (tcu_meta_wr_idx),
-        .tcu_meta_wr_data     (tcu_meta_wr_data),
-    `endif
-        .warp_shared_if       (warp_shared_if)
+        .warp_shared_if       (warp_shared_if),
+        .cta_bcast            (cta_bcast)
     );
 
 endmodule

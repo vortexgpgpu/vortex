@@ -48,7 +48,7 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
     input wire                          fill,
     input wire                          read,
     input wire                          write,
-    input wire                          invalidate, // clear valid on the hit way
+    input wire                          invalidate, // clear valid on the hit way (qualifies the way's own match)
     // the fill installs no data: the sector becomes partial (cleared otherwise)
     input wire                          fill_nodata,
     // a refetch completes its resident partial sector: clear its partial bit
@@ -58,10 +58,18 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
     input wire [`CS_TAG_SEL_BITS-1:0]   line_tag,
     input wire [`UP(`CS_SECTOR_SEL_BITS)-1:0] sector_idx, // requested sector within the line
     input wire [`CS_WAY_SEL_WIDTH-1:0]  evict_way,
+    // the way a flush walks: the request's registered way, never a fill's
+    // compare-derived target, so the flush's clears stay off the tag read
+    input wire [`CS_WAY_SEL_WIDTH-1:0]  flush_way,
+    // the way a writeback evicts, for evict_tag: a fill's replacement victim
+    // (a refill evicts nothing) or a flush's way -- never the tag compare
+    input wire [`CS_WAY_SEL_WIDTH-1:0]  wb_way,
     // fill target way as one-hot, taken from line_present/victim directly:
     // the binary evict_way round trip (encode, mux, per-way compare) put the
     // tag-read cone on this array's own write-enable pins.
     input wire [NUM_WAYS-1:0]           fill_way_oh,
+    // the replacement victim as one-hot: the tag store's write enable
+    input wire [NUM_WAYS-1:0]           victim_way_oh,
 
     // outputs
     output wire [NUM_WAYS-1:0]          tag_matches,
@@ -99,10 +107,11 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
     if (WRITEBACK) begin : g_evict_tag_wb
         assign evict_dirty = (| read_dirty[evict_way]); // dirty if any sector dirty
         assign evict_dirty_mask = read_dirty[evict_way];
-        assign evict_tag = read_tag[evict_way];
+        assign evict_tag = read_tag[wb_way];
     end else begin : g_evict_tag_wt
         `UNUSED_VAR (read_dirty)
         `UNUSED_VAR (read_tag)
+        `UNUSED_VAR (wb_way)
         assign evict_dirty = 1'b0;
         assign evict_dirty_mask = '0;
         assign evict_tag = '0;
@@ -110,9 +119,8 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
 
     // Per-way decoded write strobes and payloads. At most one operation type
     // fires per cycle (input arbitration in the bank). The tag store holds the
-    // tag only and is written (with the registered line_tag) only on a fill, so
-    // its write never depends on the tag compare.
-    wire [NUM_WAYS-1:0] line_write;
+    // tag only and is written only on a fill, so its write never depends on
+    // the tag compare.
     wire [NUM_WAYS-1:0][`CS_TAG_SEL_BITS-1:0] line_wdata;
     wire [NUM_WAYS-1:0][`CS_TAG_SEL_BITS-1:0] tag_rdata;
 
@@ -137,8 +145,11 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
     wire [NUM_WAYS-1:0][SEC-1:0] partial_wdata;
     wire [NUM_WAYS-1:0][SEC-1:0] partial_rdata;
 
+    // a sector refill rewrites the line's own tags; a line fill writes the
+    // victim way's new tag
+    wire fill_refill_any;
     for (genvar i = 0; i < NUM_WAYS; ++i) begin : g_way_decode
-        wire way_en   = (NUM_WAYS == 1) || (evict_way == i);
+        wire way_en   = (NUM_WAYS == 1) || (flush_way == i);
         wire do_init  = init; // init all ways
         // The fill way select comes in one-hot (line_present or the registered
         // victim decode); the binary way_en compare stays only for flush, whose
@@ -148,11 +159,12 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
         wire do_write = WRITEBACK && write && tag_matches[i]; // only write on tag hit
 
         // Tag store: the tag changes only on a fill (a refill rewrites the
-        // identical tag, harmless), so its write-enable does not depend on the
-        // compare and its write-data is the registered line_tag. init/flush/
-        // invalidate only touch the valid vector (below), never the tag.
-        assign line_write[i] = do_fill;
-        assign line_wdata[i] = line_tag;
+        // identical tag, harmless). init/flush/invalidate only touch the valid
+        // vector (below), never the tag. The fill way follows the tag compare
+        // (a refill targets the resident way), so a fill rewrites every way --
+        // the filled one with line_tag, the others with their current tag --
+        // and the compare reaches the array's data, not its write enables.
+        assign line_wdata[i] = fill_refill_any ? read_tag[i] : line_tag;
 
         // Read-First BRAM: a fill committed on the previous cycle isn't yet in
         // the readout. The bypass is keyed on the SET and the FILLED WAY: that
@@ -203,12 +215,21 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
         // read-modify-write): set the filled sector; clear the whole line on
         // init/flush, the other sectors on a fresh victim install, the requested
         // sector on invalidate.
-        wire [SEC-1:0] vset_oh = do_fill ? sec_oh : {SEC{1'b0}};
-        wire [SEC-1:0] vclr_oh = ((do_init || do_flush)     ? {SEC{1'b1}} : {SEC{1'b0}})
-                               | ((do_fill && ~fill_refill) ? ~sec_oh     : {SEC{1'b0}})
-                               | (do_inval                  ? sec_oh      : {SEC{1'b0}});
-        assign valid_wren[i]  = vset_oh | vclr_oh;
-        assign valid_wdata[i] = vset_oh;
+        // The fill way follows the tag compare (a refill targets the resident
+        // way), so a fill rewrites every way's valid bits -- the filled way
+        // with its update, the others with their current bits -- and the
+        // compare reaches the store's data, not its write enables. The current
+        // bits are read_valid, which already carries last cycle's fill, with
+        // last cycle's other same-set clears applied here, off the hit path.
+        wire [SEC-1:0] vclr_op = ((do_init || do_flush) ? {SEC{1'b1}} : {SEC{1'b0}})
+                               | (do_inval              ? sec_oh      : {SEC{1'b0}});
+        wire same_set_v = (line_idx == line_idx_n);
+        wire [SEC-1:0] rdw_vclr;
+        `BUFFER_EX(rdw_vclr, (same_set_v ? vclr_op : {SEC{1'b0}}), ~stall, SEC, 1);
+        wire [SEC-1:0] cur_valid = read_valid[i] & ~rdw_vclr;
+        wire [SEC-1:0] fill_valid = do_fill ? (fill_refill ? (cur_valid | sec_oh) : sec_oh) : cur_valid;
+        assign valid_wren[i]  = (fill ? {SEC{1'b1}} : {SEC{1'b0}}) | vclr_op;
+        assign valid_wdata[i] = fill ? fill_valid : {SEC{1'b0}};
 
         // Tag from the tag BRAM, valid from the decoupled LUTRAM. Both share the
         // same look-ahead read / read-first access pattern, so the way_filled
@@ -223,12 +244,23 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
         if (WRITEBACK) begin : g_dirty
             // set the written sector on a write hit; clear sectors on
             // fill/inval; clear all on init/flush or a fresh (evicting) fill.
+            // The hit way of a write and the target way of a fill follow the
+            // tag compare, so those operations rewrite every way -- the target
+            // with its update, the others with their current bits (read_dirty
+            // is exact: it forwards last cycle's update) -- and the compare
+            // reaches the store's data, not its write enables.
+            wire           write_op = WRITEBACK && write;
             wire [SEC-1:0] dset_oh  = do_write ? sec_oh : {SEC{1'b0}};
             wire           dclr_all = do_init || do_flush || (do_fill && ~fill_refill);
             wire [SEC-1:0] dclr_oh  = (do_inval ? sec_oh : {SEC{1'b0}})
                                     | ((do_fill && fill_refill) ? sec_oh : {SEC{1'b0}});
-            assign dirty_wren[i]  = dset_oh | dclr_oh | {SEC{dclr_all}};
-            assign dirty_wdata[i] = dset_oh; // 1 only where setting; 0 on any clear
+            wire [SEC-1:0] fill_keep = do_fill ? (fill_refill ? (read_dirty[i] & ~sec_oh) : {SEC{1'b0}})
+                                               : read_dirty[i];
+            assign dirty_wren[i]  = (write_op ? sec_oh : {SEC{1'b0}})
+                                  | {SEC{fill || do_init || do_flush}}
+                                  | (do_inval ? sec_oh : {SEC{1'b0}});
+            assign dirty_wdata[i] = fill ? fill_keep
+                                  : ((write_op ? read_dirty[i] : {SEC{1'b0}}) | dset_oh); // 0 on any clear
 
             // Read-first forwarding for the dirty LUTRAM (same-set, 1 cycle, held
             // across stall): a dirty update to this set last cycle isn't in the
@@ -270,6 +302,7 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
         // (a same-cycle-prior fill is folded into tag_eq/read_valid).
         assign line_present[i] = tag_eq && (| read_valid[i]);
     end
+    assign fill_refill_any = (SEC > 1) && (| line_present);
 
     // Single tag array: one BRAM word holds all ways' tags; per-way write-enable
     // updates a single way on a fill. Read at line_idx_n (one cycle ahead),
@@ -284,17 +317,22 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
         .clk   (clk),
         .reset (reset),
         .read  (~stall),
-        // fill alone: only fills write the tag store, and the fill way select
-        // (one-hot) always names exactly one way, so |line_write == fill --
-        // an identity synthesis cannot prove, leaving the way-select cone on
-        // the array's global enable.
+        // a fill writes the victim way's tag (see line_wdata)
         .write (fill),
-        .wren  (line_write),
+        .wren  (victim_way_oh),
         .waddr (line_idx),
         .raddr (line_idx_n),
         .wdata (line_wdata),
         .rdata (tag_rdata)
     );
+
+    // The side stores' array enables are the operations that may write them,
+    // never the OR of their per-bit enables: those carry the tag compare, which
+    // would otherwise fan into every LUTRAM write enable. A bit still changes
+    // only where its own enable is set.
+    wire valid_write   = init || flush || fill || ((AMO_ENABLE != 0) && invalidate);
+    wire dirty_write   = init || flush || fill || write || ((AMO_ENABLE != 0) && invalidate);
+    wire partial_write = fill || refetch;
 
     // Decoupled per-sector valid store: mirrors the tag BRAM's access pattern
     // (look-ahead read, read-first) so pipeline alignment is identical, with
@@ -310,7 +348,7 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
         .clk   (clk),
         .reset (reset),
         .read  (~stall),
-        .write (| valid_wren),
+        .write (valid_write),
         .wren  (valid_wren),
         .waddr (line_idx),
         .raddr (line_idx_n),
@@ -333,7 +371,7 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
             .clk   (clk),
             .reset (reset),
             .read  (~stall),
-            .write (| dirty_wren),
+            .write (dirty_write),
             .wren  (dirty_wren),
             .waddr (line_idx),
             .raddr (line_idx_n),
@@ -342,7 +380,7 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
         );
     end else begin : g_no_dirty_store
         assign dirty_rdata = '0;
-        `UNUSED_VAR ({dirty_wren, dirty_wdata, dirty_rdata})
+        `UNUSED_VAR ({dirty_wren, dirty_wdata, dirty_rdata, dirty_write})
     end
 
     if (LAZY_FETCH != 0) begin : g_partial_store
@@ -357,7 +395,7 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
             .clk   (clk),
             .reset (reset),
             .read  (~stall),
-            .write (| partial_wren),
+            .write (partial_write),
             .wren  (partial_wren),
             .waddr (line_idx),
             .raddr (line_idx_n),
@@ -368,7 +406,7 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
     end else begin : g_no_partial_store
         assign partial_rdata = '0;
         assign partial_match = 1'b0;
-        `UNUSED_VAR ({partial_wren, partial_wdata, partial_rdata, partial_hit, read_partial, fill_nodata, refetch})
+        `UNUSED_VAR ({partial_wren, partial_wdata, partial_rdata, partial_hit, read_partial, fill_nodata, refetch, partial_write})
     end
 
 endmodule

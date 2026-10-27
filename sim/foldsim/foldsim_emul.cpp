@@ -27,6 +27,7 @@
 #include <deque>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <unordered_map>
 
 using namespace vortex;
@@ -42,6 +43,11 @@ uint64_t env_or(const char* name, uint64_t value) {
 
 constexpr uint64_t kPage = 4096;
 constexpr uint32_t kBeat = 64;
+
+#ifndef FOLDSIM_MEM_PORTS
+#error "FOLDSIM_MEM_PORTS comes from the generated foldsim_kernel.vh"
+#endif
+static_assert(FOLDSIM_MEM_PORTS >= 1 && FOLDSIM_MEM_PORTS <= 8, "the kernel has 1 to 8 memory ports");
 
 // Device memory: sparse, zero where never written.
 class memory_t {
@@ -104,6 +110,7 @@ public:
       reg_trace_ = fopen(path, "w");
     context_ = std::make_unique<VerilatedContext>();
     top_ = std::make_unique<Vfoldsim_afu>(context_.get());
+    bind_ports();
 #ifdef VM_TRACE
     // FOLDSIM_EMUL_VCD=<file>: a waveform of the kernel, in a build with --trace,
     // from kernel cycle FOLDSIM_EMUL_VCD_FROM on, FOLDSIM_EMUL_VCD_DEPTH levels
@@ -197,6 +204,52 @@ private:
     std::array<uint8_t, kBeat> data;
   };
 
+  // One of the kernel's device-memory masters: its signals, and what memory
+  // has in flight on it.
+  struct port_t {
+    CData *awvalid, *awready, *wvalid, *wready, *arvalid, *arready;
+    CData *rvalid, *rready, *rlast, *rid, *rresp, *bvalid, *bready, *bid, *bresp;
+    QData *awaddr, *araddr, *wstrb;
+    VlWide<16> *wdata, *rdata;
+    std::deque<request_t> reads;
+    std::deque<uint64_t> aw;
+    std::deque<std::array<uint8_t, 2 * kBeat>> w;
+    std::deque<uint64_t> writes;
+  };
+
+#define FOLDSIM_PORT(i)                                                                     \
+  {                                                                                         \
+    port_t& p = ports_[i];                                                                  \
+    p.awvalid = &top_->m_axi_mem_##i##_awvalid; p.awready = &top_->m_axi_mem_##i##_awready; \
+    p.wvalid = &top_->m_axi_mem_##i##_wvalid;   p.wready = &top_->m_axi_mem_##i##_wready;   \
+    p.arvalid = &top_->m_axi_mem_##i##_arvalid; p.arready = &top_->m_axi_mem_##i##_arready; \
+    p.rvalid = &top_->m_axi_mem_##i##_rvalid;   p.rready = &top_->m_axi_mem_##i##_rready;   \
+    p.rlast = &top_->m_axi_mem_##i##_rlast;     p.rid = &top_->m_axi_mem_##i##_rid;         \
+    p.rresp = &top_->m_axi_mem_##i##_rresp;     p.bvalid = &top_->m_axi_mem_##i##_bvalid;   \
+    p.bready = &top_->m_axi_mem_##i##_bready;   p.bid = &top_->m_axi_mem_##i##_bid;         \
+    p.bresp = &top_->m_axi_mem_##i##_bresp;     p.awaddr = &top_->m_axi_mem_##i##_awaddr;   \
+    p.araddr = &top_->m_axi_mem_##i##_araddr;   p.wstrb = &top_->m_axi_mem_##i##_wstrb;     \
+    p.wdata = &top_->m_axi_mem_##i##_wdata;     p.rdata = &top_->m_axi_mem_##i##_rdata;     \
+  }
+
+  void bind_ports() {
+    FOLDSIM_PORT(0)
+#if FOLDSIM_MEM_PORTS > 1
+    FOLDSIM_PORT(1)
+#endif
+#if FOLDSIM_MEM_PORTS > 2
+    FOLDSIM_PORT(2)
+    FOLDSIM_PORT(3)
+#endif
+#if FOLDSIM_MEM_PORTS > 4
+    FOLDSIM_PORT(4)
+    FOLDSIM_PORT(5)
+    FOLDSIM_PORT(6)
+    FOLDSIM_PORT(7)
+#endif
+  }
+#undef FOLDSIM_PORT
+
   void idle_master() {
     top_->s_axi_control_awvalid = 0;
     top_->s_axi_control_wvalid = 0;
@@ -216,43 +269,56 @@ private:
     edge();
   }
 
-  // The memory's side of the kernel's AXI4 port: every request accepted, and
-  // answered in order once its latency has passed.
+  // The memory's side of the kernel's AXI4 ports: every request accepted, and
+  // answered in order on its port once its latency has passed.
   void drive_memory() {
-    top_->m_axi_mem_0_awready = 1;
-    top_->m_axi_mem_0_wready = 1;
-    top_->m_axi_mem_0_arready = 1;
-    bool r = !reads_.empty() && reads_.front().at <= cycle_;
-    top_->m_axi_mem_0_rvalid = r;
-    if (r)
-      std::memcpy(top_->m_axi_mem_0_rdata.data(), reads_.front().data.data(), kBeat);
-    top_->m_axi_mem_0_rlast = 1;
-    top_->m_axi_mem_0_rid = 0;
-    top_->m_axi_mem_0_rresp = 0;
-    top_->m_axi_mem_0_bvalid = !writes_.empty() && writes_.front() <= cycle_;
-    top_->m_axi_mem_0_bid = 0;
-    top_->m_axi_mem_0_bresp = 0;
+    for (auto& p : ports_) {
+      *p.awready = 1;
+      *p.wready = 1;
+      *p.arready = 1;
+      bool r = !p.reads.empty() && p.reads.front().at <= cycle_;
+      *p.rvalid = r;
+      if (r)
+        std::memcpy(p.rdata->data(), p.reads.front().data.data(), kBeat);
+      *p.rlast = 1;
+      *p.rid = 0;
+      *p.rresp = 0;
+      *p.bvalid = !p.writes.empty() && p.writes.front() <= cycle_;
+      *p.bid = 0;
+      *p.bresp = 0;
+    }
   }
+
+  // What a port did on the edge, as the kernel offered it before the edge.
+  struct sample_t {
+    bool ar, aw, w, r_fire, b_fire;
+    uint64_t araddr, awaddr;
+    uint8_t wdata[kBeat], strobe[kBeat];
+  };
 
   // The rising edge: the handshakes as the kernel saw them before it, then
   // the edge itself.
   void edge() {
     drive_memory();
     top_->eval();
-    bool ar = top_->m_axi_mem_0_arvalid;
-    uint64_t araddr = top_->m_axi_mem_0_araddr;
-    bool aw = top_->m_axi_mem_0_awvalid;
-    uint64_t awaddr = top_->m_axi_mem_0_awaddr;
-    bool w = top_->m_axi_mem_0_wvalid;
-    uint8_t wdata[kBeat], strobe[kBeat];
-    if (w) {
-      std::memcpy(wdata, top_->m_axi_mem_0_wdata.data(), kBeat);
-      uint64_t s = top_->m_axi_mem_0_wstrb;
-      for (uint32_t i = 0; i < kBeat; ++i)
-        strobe[i] = (s >> i) & 1;
+    std::array<sample_t, FOLDSIM_MEM_PORTS> smp;
+    for (int k = 0; k < FOLDSIM_MEM_PORTS; ++k) {
+      auto& p = ports_[k];
+      auto& x = smp[k];
+      x.ar = *p.arvalid;
+      x.araddr = *p.araddr;
+      x.aw = *p.awvalid;
+      x.awaddr = *p.awaddr;
+      x.w = *p.wvalid;
+      if (x.w) {
+        std::memcpy(x.wdata, p.wdata->data(), kBeat);
+        uint64_t s = *p.wstrb;
+        for (uint32_t i = 0; i < kBeat; ++i)
+          x.strobe[i] = (s >> i) & 1;
+      }
+      x.r_fire = *p.rvalid && *p.rready;
+      x.b_fire = *p.bvalid && *p.bready;
     }
-    bool r_fire = top_->m_axi_mem_0_rvalid && top_->m_axi_mem_0_rready;
-    bool b_fire = top_->m_axi_mem_0_bvalid && top_->m_axi_mem_0_bready;
 
     if (trace_ != nullptr)
       fputc(top_->rootp->foldsim_afu__DOT__profile_finish & 0xff, trace_);
@@ -264,42 +330,50 @@ private:
 #endif
     ++cycle_;
 
-    if (axi_trace_ != nullptr) {
-      if (ar)
-        fprintf(axi_trace_, "%lu AR %lx\n", (unsigned long)cycle_, (unsigned long)araddr);
-      if (aw)
-        fprintf(axi_trace_, "%lu AW %lx\n", (unsigned long)cycle_, (unsigned long)awaddr);
-      if (w)
-        fprintf(axi_trace_, "%lu W\n", (unsigned long)cycle_);
-      if (r_fire)
-        fprintf(axi_trace_, "%lu R\n", (unsigned long)cycle_);
-      if (b_fire)
-        fprintf(axi_trace_, "%lu B\n", (unsigned long)cycle_);
+    // Each block of the target's memory belongs to one port, so the order
+    // the ports are served in is not visible.
+    for (int k = 0; k < FOLDSIM_MEM_PORTS; ++k) {
+      auto& p = ports_[k];
+      const auto& x = smp[k];
+      if (axi_trace_ != nullptr) {
+        // Port 0's lines keep the single-port format.
+        const char* tag = (k == 0) ? "" : port_tag_[k].c_str();
+        if (x.ar)
+          fprintf(axi_trace_, "%lu %sAR %lx\n", (unsigned long)cycle_, tag, (unsigned long)x.araddr);
+        if (x.aw)
+          fprintf(axi_trace_, "%lu %sAW %lx\n", (unsigned long)cycle_, tag, (unsigned long)x.awaddr);
+        if (x.w)
+          fprintf(axi_trace_, "%lu %sW\n", (unsigned long)cycle_, tag);
+        if (x.r_fire)
+          fprintf(axi_trace_, "%lu %sR\n", (unsigned long)cycle_, tag);
+        if (x.b_fire)
+          fprintf(axi_trace_, "%lu %sB\n", (unsigned long)cycle_, tag);
+      }
+      if (x.ar) {
+        request_t req;
+        req.at = cycle_ + mem_latency_;
+        memory_.read(x.araddr, req.data.data(), kBeat);
+        p.reads.push_back(req);
+      }
+      if (x.r_fire)
+        p.reads.pop_front();
+      if (x.aw)
+        p.aw.push_back(x.awaddr);
+      if (x.w) {
+        std::array<uint8_t, 2 * kBeat> beat;
+        std::memcpy(beat.data(), x.wdata, kBeat);
+        std::memcpy(beat.data() + kBeat, x.strobe, kBeat);
+        p.w.push_back(beat);
+      }
+      while (!p.aw.empty() && !p.w.empty()) {
+        memory_.write(p.aw.front(), p.w.front().data(), kBeat, p.w.front().data() + kBeat);
+        p.aw.pop_front();
+        p.w.pop_front();
+        p.writes.push_back(cycle_ + mem_latency_);
+      }
+      if (x.b_fire)
+        p.writes.pop_front();
     }
-    if (ar) {
-      request_t req;
-      req.at = cycle_ + mem_latency_;
-      memory_.read(araddr, req.data.data(), kBeat);
-      reads_.push_back(req);
-    }
-    if (r_fire)
-      reads_.pop_front();
-    if (aw)
-      aw_.push_back(awaddr);
-    if (w) {
-      std::array<uint8_t, 2 * kBeat> beat;
-      std::memcpy(beat.data(), wdata, kBeat);
-      std::memcpy(beat.data() + kBeat, strobe, kBeat);
-      w_.push_back(beat);
-    }
-    while (!aw_.empty() && !w_.empty()) {
-      memory_.write(aw_.front(), w_.front().data(), kBeat, w_.front().data() + kBeat);
-      aw_.pop_front();
-      w_.pop_front();
-      writes_.push_back(cycle_ + mem_latency_);
-    }
-    if (b_fire)
-      writes_.pop_front();
   }
 
   std::unique_ptr<VerilatedContext> context_;
@@ -315,10 +389,8 @@ private:
   FILE* trace_ = nullptr;
   FILE* axi_trace_ = nullptr;
   FILE* reg_trace_ = nullptr;
-  std::deque<request_t> reads_;
-  std::deque<uint64_t> aw_;
-  std::deque<std::array<uint8_t, 2 * kBeat>> w_;
-  std::deque<uint64_t> writes_;
+  std::array<port_t, FOLDSIM_MEM_PORTS> ports_;
+  const std::array<std::string, 8> port_tag_ = {"", "1:", "2:", "3:", "4:", "5:", "6:", "7:"};
 };
 
 foldsim_emul::foldsim_emul() : impl_(new Impl()) {}

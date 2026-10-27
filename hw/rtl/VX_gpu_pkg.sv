@@ -739,6 +739,10 @@ package VX_gpu_pkg;
                              && (!`VX_CFG_EXT_F_ENABLED || (`VX_CFG_NUM_FPU_BLOCKS == `VX_CFG_ISSUE_WIDTH))
                              && (!`VX_CFG_EXT_TCU_ENABLED || (`VX_CFG_NUM_TCU_BLOCKS == `VX_CFG_ISSUE_WIDTH));
     localparam COMPUTE_SLICES = BACKEND_SLICES && (`VX_CFG_FETCH_WIDTH == `VX_CFG_ISSUE_WIDTH);
+    // A compute slice whose warp-control requests are arbitrated with other
+    // slices' retires its own warps when its exit request is granted. With a
+    // sole requester, the core retires them from its registered request.
+    localparam SLICE_RETIRE = COMPUTE_SLICES && (`VX_CFG_NUM_SFU_BLOCKS > 1);
 
     /////////////////////////////// TENSOR UNIT ///////////////////////////////
 
@@ -1721,7 +1725,7 @@ package VX_gpu_pkg;
     localparam DCACHE_CORE_TAG_WIDTH = (UUID_WIDTH + DCACHE_TAG_ID_BITS);
 
     // Core request tag bits on dcache_bus_if port of VX_core (+1 for flush-arb sel bit)
-    // Pre-MMU width (what VX_mem_unit produces, including the flush sel bit).
+    // Pre-MMU width (an LSU block's D-cache port, including the flush sel bit).
     // When VM_ENABLE is on, the dMMU widens this by DCACHE_TLB_SOURCE_BITS
     // for its internal bypass/TLB/PTW arbiter, so the cache cluster sees
     // the wider DCACHE_TAG_WIDTH below.

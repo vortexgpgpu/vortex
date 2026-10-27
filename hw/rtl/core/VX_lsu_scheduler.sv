@@ -60,6 +60,7 @@ module VX_lsu_scheduler import VX_gpu_pkg::*; #(
     wire [NUM_LANES-1:0][(LSU_WORD_SIZE*8)-1:0] sched_req_data;
     wire [SCHED_TAG_WIDTH-1:0]      sched_req_tag;
     wire                            sched_req_ready;
+    wire                            sched_req_ready_rd, sched_req_ready_wr;
 
     wire                            sched_rsp_valid;
     wire [NUM_LANES-1:0]            sched_rsp_mask;
@@ -100,6 +101,7 @@ module VX_lsu_scheduler import VX_gpu_pkg::*; #(
         assign sched_req_data     = cli_req_data[0].data;
         assign sched_req_tag      = cli_req_data[0].tag;
         assign cli_req_ready[0]   = sched_req_ready;
+        `UNUSED_VAR ({sched_req_ready_rd, sched_req_ready_wr})
 
         assign cli_rsp_valid[0]   = sched_rsp_valid;
         assign cli_rsp_data[0].mask  = sched_rsp_mask;
@@ -154,10 +156,26 @@ module VX_lsu_scheduler import VX_gpu_pkg::*; #(
         assign sched_req_data   = cli_req_data[grant_idx].data;
         assign sched_req_tag    = {grant_idx, cli_req_data[grant_idx].tag};
 
-        // Drive per-client ready: only the granted client sees ready high.
+        // Per-client ready: a client is granted unless a client ahead of it in
+        // the rotation is requesting, and it takes the scheduler's ready for its
+        // own rw. This equals the granted ready whenever the client requests --
+        // the only time a ready is consumed -- without the client's own valid,
+        // the grant and the request mux in front of the requester's enables.
         for (genvar i = 0; i < NUM_CLIENTS; ++i) begin : g_creq_rdy
-            assign cli_req_ready[i] = sched_req_ready && (grant_idx == CLIENT_ID_BITS'(i));
+            reg blocked;
+            always @(*) begin
+                blocked = 1'b0;
+                for (integer k = 0; k < NUM_CLIENTS; ++k) begin
+                    if ((k != i) && cli_req_valid[k]
+                     && (((k - int'(rr_ptr_r) + NUM_CLIENTS) % NUM_CLIENTS) < ((i - int'(rr_ptr_r) + NUM_CLIENTS) % NUM_CLIENTS))) begin
+                        blocked = 1'b1;
+                    end
+                end
+            end
+            assign cli_req_ready[i] = ~blocked && (cli_req_data[i].rw ? sched_req_ready_wr : sched_req_ready_rd);
         end
+        `RUNTIME_ASSERT (~any_valid || (cli_req_ready[grant_idx] == sched_req_ready),
+            ("%t: %s client ready out of sync with the granted ready", $time, INSTANCE_ID))
 
         // Demux response: extract client_id from extended tag.
         wire [CLIENT_ID_BITS-1:0] rsp_cid = sched_rsp_tag[SCHED_TAG_WIDTH-1 -: CLIENT_ID_BITS];
@@ -231,6 +249,8 @@ module VX_lsu_scheduler import VX_gpu_pkg::*; #(
         .core_req_data  (sched_req_data),
         .core_req_tag   (sched_req_tag),
         .core_req_ready (sched_req_ready),
+        .core_req_ready_rd (sched_req_ready_rd),
+        .core_req_ready_wr (sched_req_ready_wr),
         .req_queue_empty(sched_req_queue_empty),
         `UNUSED_PIN (req_queue_rw_notify),
 

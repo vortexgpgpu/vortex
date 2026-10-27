@@ -43,8 +43,8 @@ module VX_frontend_xbar import VX_gpu_pkg::*; (
     input wire [PERF_CTR_BITS-1:0] cycles,
     input wire [PERF_CTR_BITS-1:0] instret,
     input wire [`VX_CFG_NUM_WARPS-1:0] active_warps,
-    input wire              lsu_sched_drained,
-    input cta_ctx_t [`VX_CFG_NUM_SFU_BLOCKS-1:0] csr_rd_ctx,
+    input wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] lsu_sched_empty,
+    input wire              mmu_empty,
 `ifdef VX_CFG_VM_ENABLE
     input wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] satp,
     output wire [`VX_CFG_NUM_SFU_BLOCKS-1:0] satp_wr_valid,
@@ -196,7 +196,8 @@ module VX_frontend_xbar import VX_gpu_pkg::*; (
         for (genvar k = 0; k < SFU_BLOCK_WARPS; ++k) begin : g_pending
             assign warp_ctl_if[b].warp_pending_alm_empty[k] = pending_alm_empty[k * BS + b];
         end
-        assign warp_ctl_if[b].lsu_sched_drained = lsu_sched_drained;
+        assign warp_ctl_if[b].lsu_sched_empty = lsu_sched_empty;
+        assign warp_ctl_if[b].mmu_empty       = mmu_empty;
 
         assign sched_csr_if[b].cycles       = cycles;
         assign sched_csr_if[b].instret      = instret;
@@ -208,16 +209,7 @@ module VX_frontend_xbar import VX_gpu_pkg::*; (
         assign sched_csr_if[b].csr_mepc     = csr_rd.mepc;
         assign sched_csr_if[b].csr_mcause   = csr_rd.mcause;
         assign sched_csr_if[b].csr_mtval    = csr_rd.mtval;
-        assign sched_csr_if[b].cta_csrs.cta_id       = sched_csr_if[b].csr_rd_cta_id;
-        assign sched_csr_if[b].cta_csrs.cta_rank     = csr_rd.cta_rank;
-        assign sched_csr_if[b].cta_csrs.cta_size     = csr_rd_ctx[b].cta_size;
-        assign sched_csr_if[b].cta_csrs.block_idx    = csr_rd_ctx[b].block_idx;
-        assign sched_csr_if[b].cta_csrs.block_dim    = csr_rd_ctx[b].block_dim;
-        assign sched_csr_if[b].cta_csrs.grid_dim     = csr_rd_ctx[b].grid_dim;
-        assign sched_csr_if[b].cta_csrs.entry        = csr_rd_ctx[b].entry;
-        assign sched_csr_if[b].cta_csrs.param        = csr_rd_ctx[b].param;
-        assign sched_csr_if[b].cta_csrs.lmem_addr    = csr_rd_ctx[b].lmem_addr;
-        assign sched_csr_if[b].cta_csrs.cluster_size = csr_rd_ctx[b].cluster_size;
+        assign sched_csr_if[b].cta_rank     = csr_rd.cta_rank;
         assign sched_csr_if[b].cta_lane     = csr_rd.cta_lane;
     `ifdef VX_CFG_VM_ENABLE
         assign sched_csr_if[b].csr_satp     = satp[b];

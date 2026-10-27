@@ -35,9 +35,8 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 `endif
     input wire [`VX_CFG_NUM_WARPS-1:0] committed_warps,
 
-    // CTA context read by each SFU block's CSR unit, valid a cycle after the address
-    input wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][NCTA_WIDTH-1:0] csr_rd_cta_id,
-    output cta_ctx_t [`VX_CFG_NUM_SFU_BLOCKS-1:0] csr_rd_ctx,
+    // CTA context writes, to every SFU block's copy
+    output cta_bcast_t      cta_bcast,
 
     VX_kmu_bus_if.slave     kmu_bus_if,
 
@@ -62,12 +61,16 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 
     // slice status in wid order (wid = {wfs, fsw})
     wire [`VX_CFG_NUM_WARPS-1:0] stalled_warps;
-    wire [`VX_CFG_NUM_WARPS-1:0] ibuf_full_n, pending_warp_empty;
+    wire [`VX_CFG_NUM_WARPS-1:0] pending_warp_empty;
     for (genvar w = 0; w < `VX_CFG_NUM_WARPS; ++w) begin : g_interleave
         assign active_warps[w]       = slice_if[w % FW].active[w / FW];
         assign stalled_warps[w]      = slice_if[w % FW].stalled[w / FW];
-        assign ibuf_full_n[w]        = slice_if[w % FW].ibuf_full_n[w / FW];
         assign pending_warp_empty[w] = slice_if[w % FW].pending_empty[w / FW];
+    end
+
+    wire [FW-1:0] slice_ibuf_full;
+    for (genvar p = 0; p < FW; ++p) begin : g_slice_ibuf_full
+        assign slice_ibuf_full[p] = slice_if[p].ibuf_full;
     end
 
     // CTA dispatcher: lane p launches frontend slice p's warps
@@ -77,7 +80,6 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     wire [FW-1:0][`VX_CFG_NUM_THREADS-1:0] cta_tmask;
     wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] cta_param;
     wire [FW-1:0] cta_init;
-    cta_bcast_t cta_bcast;
     cta_lane_bcast_t [FW-1:0] cta_lane_bcast;
     wire cta_dispatcher_busy;
     wire cta_warp_done;
@@ -103,26 +105,6 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         .cta_lane_bcast(cta_lane_bcast),
         .busy         (cta_dispatcher_busy)
     );
-
-    // CTA contexts, one read port per SFU block
-    for (genvar b = 0; b < `VX_CFG_NUM_SFU_BLOCKS; ++b) begin : g_cta_ctx
-        VX_dp_ram #(
-            .DATAW     ($bits(cta_ctx_t)),
-            .SIZE      (NUM_CTA_MAX),
-            .RDW_MODE  ("R"),
-            .OUT_REG   (1)
-        ) cta_ctx_ram (
-            .clk   (clk),
-            .reset (reset),
-            .read  (1'b1),
-            .write (cta_bcast.ctx_write),
-            .wren  (1'b1),
-            .waddr (cta_bcast.ctx_waddr),
-            .wdata (cta_bcast.ctx_wdata),
-            .raddr (csr_rd_cta_id[b]),
-            .rdata (csr_rd_ctx[b])
-        );
-    end
 
     // core-wide warp-control resources
     wire bar_unlock_valid;
@@ -160,6 +142,9 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 
     // counters
 
+    // a CTA counts from its accept cycle, which busy leaves to the issuer
+    wire kmu_fire = kmu_bus_if.valid && kmu_bus_if.ready;
+
     reg [PERF_CTR_BITS-1:0] cycles_r;
     reg [PERF_CTR_BITS-1:0] instret_r;
     wire [`CLOG2(`VX_CFG_NUM_WARPS+1)-1:0] committed_warps_cnt;
@@ -169,7 +154,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             cycles_r  <= '0;
             instret_r <= '0;
         end else begin
-            if (busy) begin
+            if (busy || kmu_fire) begin
                 cycles_r <= cycles_r + 1;
             end
             instret_r <= instret_r + PERF_CTR_BITS'(committed_warps_cnt);
@@ -177,16 +162,6 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     end
     assign cycles  = cycles_r;
     assign instret = instret_r;
-
-    // from the slices' next-state full, so it is valid the same cycle as their full flags
-    reg all_ibuf_full;
-    always @(posedge clk) begin
-        if (reset) begin
-            all_ibuf_full <= 1'b0;
-        end else begin
-            all_ibuf_full <= (& ibuf_full_n);
-        end
-    end
 
 `ifdef VX_CFG_VM_ENABLE
     // Per-core SATP CSR, written by any SFU block's CSR unit. Accesses in one
@@ -238,21 +213,28 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 
         assign slice_if[p].bar_unlock_valid = bar_unlock_valid;
 
-        assign slice_if[p].retire_valid = cta_warp_done && (wid_to_fsw(cta_warp_done_wid) == FSW);
-        assign slice_if[p].retire_lid   = wid_to_wfs(cta_warp_done_wid);
+        if (SLICE_RETIRE) begin : g_retire_in_slice
+            assign slice_if[p].retire_valid = 1'b0;
+            assign slice_if[p].retire_lid   = '0;
+        end else begin : g_retire
+            assign slice_if[p].retire_valid = cta_warp_done && (wid_to_fsw(cta_warp_done_wid) == FSW);
+            assign slice_if[p].retire_lid   = wid_to_wfs(cta_warp_done_wid);
+        end
 
         for (genvar l = 0; l < SW; ++l) begin : g_lw
             assign slice_if[p].wspawn_wmask[l]    = wspawn_wmask[l * FW + p];
             assign slice_if[p].bar_unlock_mask[l] = bar_unlock_mask[l * FW + p];
         end
 
-        assign slice_if[p].all_ibuf_full = all_ibuf_full;
+        assign slice_if[p].slice_ibuf_full = slice_ibuf_full;
     end
 
+    // the slices schedule from the core-wide view: every ibuffer of the core is full
+    wire all_ibuf_full = (& slice_ibuf_full);
     wire [FW-1:0] sched_valid, sched_fire;
     wire [FW-1:0][`VX_CFG_NUM_THREADS-1:0] sched_tmask;
     for (genvar p = 0; p < FW; ++p) begin : g_sched_status
-        assign sched_valid[p] = slice_if[p].sched_valid;
+        assign sched_valid[p] = all_ibuf_full ? slice_if[p].sched_valid_full : slice_if[p].sched_valid_room;
         assign sched_fire[p]  = slice_if[p].sched_fire;
         assign sched_tmask[p] = slice_if[p].sched_tmask;
     end

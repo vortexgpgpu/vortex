@@ -1,0 +1,52 @@
+# Foldsim suite: the threaded simulator hw/syn/foldsim compiles from Vortex
+# (docs/designs/foldsim.md), checked against the RTL it was compiled from.
+#
+#   check: model_parity with legs [foldsim, rtlsim] and tolerance 0. Foldsim is
+#     cycle-exact by construction, so retired instructions AND cycles must be
+#     identical. The reference is rtlsim behind the AXI4 adapter on the same
+#     DRAM bank model (AXI_BUS=1 AXI_MEM_MODEL=bank); the env reaches only
+#     rtlsim's build. Exactness holds at any workload size, so the configuration
+#     is the smallest: tinygpu, generated and simulated in Verilator by the
+#     foldsim driver's in-process target.
+#
+# The configuration is the toml's but for two choices of the test:
+#   - FPU_TYPE_STD: the toml's FPU under Vivado synthesis is the Xilinx cores,
+#     whose simulation models need a Vivado install.
+#   - PLATFORM_MEMORY_ID_WIDTH=5 for rtlsim: the AXI id width the Foldsim kernel
+#     drives with Vortex's tag buffer engaged, 4 + log2(memory banks), which the
+#     flow derives from the toml's 2 banks. At rtlsim's default of 32 there is no
+#     tag buffer and cycles differ.
+#
+# needs: foldsim -- the foldsim prebuilt and pyslang (the boundary lifting); ci.yml
+# installs them in a cell whose cases need them. circt is in the lite toolchain.
+category: foldsim
+defaults:
+  xlen:
+  - 32
+  tier: full
+  needs:
+  - foldsim
+  legs:
+  - foldsim
+  - rtlsim
+  tolerance: 0
+  configs: >-
+    -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=1 -DVX_CFG_NUM_WARPS=2
+    -DVX_CFG_NUM_THREADS=2 -DVX_CFG_ICACHE_DISABLE -DVX_CFG_DCACHE_DISABLE
+    -DVX_CFG_LMEM_DISABLE -DVX_CFG_FPU_TYPE_STD -DPLATFORM_MEMORY_ID_WIDTH=5
+tests:
+- id: parity-demo
+  check: model_parity
+  via: blackbox
+  app: demo
+  env:
+    AXI_BUS: 1
+    AXI_MEM_MODEL: bank
+- id: parity-sgemm
+  check: model_parity
+  via: blackbox
+  app: sgemm
+  args: -n16
+  env:
+    AXI_BUS: 1
+    AXI_MEM_MODEL: bank

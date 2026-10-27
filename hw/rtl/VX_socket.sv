@@ -842,6 +842,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     ///////////////////////////////////////////////////////////////////////////
 
     wire [`VX_CFG_SOCKET_SIZE-1:0] per_core_busy;
+    wire [`VX_CFG_SOCKET_SIZE-1:0][`VX_CFG_NUM_LSU_BLOCKS-1:0] per_core_lsu_busy;
 `ifdef EXT_GFX_ANY_ENABLE
     // Core flush requests fan out to the socket-local gfx caches (tcache,
     // rtcache) and up to the cluster (rcache, ocache); each leg's done is
@@ -936,18 +937,28 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
 
             .gbar_bus_if    (per_core_gbar_bus_if[core_id]),
 
+            .lsu_busy       (per_core_lsu_busy[core_id]),
             .busy           (per_core_busy[core_id])
         );
     end
 
-    // Launch liveness: fold this level's launch-link `valid` at both ends into busy
-    // combinationally -- the beat presented at the socket input and any beat resident
-    // in a per-core output skid -- so an in-transit launch stays visible on the
-    // presented cycle. The child (per_core_busy) aggregation stays registered.
+    // Launch liveness: a request is covered by its issuer, so busy has no path from
+    // the socket's inputs. The cluster covers the launch and DCR beats it presents
+    // here; this socket covers the beats resident in its per-core output skids and
+    // the cycle a core accepts one, which the core leaves out of its busy. With a
+    // single core, the skid is a wire from the input and the cluster covers it.
+    localparam BUSY_REG = (`VX_CFG_SOCKET_SIZE > 1);
     wire [`VX_CFG_SOCKET_SIZE-1:0] per_core_kmu_valid;
+    wire [`VX_CFG_SOCKET_SIZE-1:0] per_core_kmu_fire;
     for (genvar i = 0; i < `VX_CFG_SOCKET_SIZE; ++i) begin : g_kmu_link_valid
         assign per_core_kmu_valid[i] = per_core_kmu_bus_if[i].valid;
+        assign per_core_kmu_fire[i]  = per_core_kmu_bus_if[i].valid && per_core_kmu_bus_if[i].ready;
     end
+`ifdef VX_CFG_VM_ENABLE
+    wire mmu_busy = ~socket_mmu_drained;
+`else
+    wire mmu_busy = 1'b0;
+`endif
     // Stores are ack-less, so the cores go idle with their last requests still
     // on the way out; the socket stays busy until none is held in its caches'
     // uncached paths or arbiters.
@@ -959,8 +970,10 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
 `endif
     wire mem_req_empty = icache_req_empty && dcache_req_empty && tcache_req_empty
                       && rtcache_req_empty && mem_arb_empty;
+    wire issued_busy = BUSY_REG ? (dcr_bus_if.req_valid | (| per_core_kmu_fire)) : 1'b0;
+    wire skid_busy   = BUSY_REG ? (| per_core_kmu_valid) : 1'b0;
     wire busy_r;
-    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_core_busy) | ~mem_req_empty, 1'b1, 1, (`VX_CFG_SOCKET_SIZE > 1));
-    assign busy = busy_r | dcr_bus_if.req_valid | kmu_bus_if[0].valid | (|per_core_kmu_valid);
+    `BUFFER_EX(busy_r, (|per_core_busy) | (|per_core_lsu_busy) | ~mem_req_empty | mmu_busy | issued_busy, 1'b1, 1, BUSY_REG);
+    assign busy = busy_r | skid_busy;
 
 endmodule

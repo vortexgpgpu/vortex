@@ -285,11 +285,13 @@ public:
     }
   #endif
   #ifdef TCU_META_ENABLE
-    // Bind the TCU metadata AGU to the LSU block-0 client port.
+    // Bind the TCU metadata AGU ports to the LSU client ports.
     {
       auto lsu = std::static_pointer_cast<LsuUnit>(func_units_.at((int)FUType::LSU));
-      tcu_unit_->agu_req_out.bind(&lsu->TcuReqIn);
-      lsu->TcuRspOut.bind(&tcu_unit_->agu_rsp_in);
+      for (uint32_t p = 0; p < TCU_AGU_PORTS; ++p) {
+        tcu_unit_->agu_req_out.at(p).bind(&lsu->TcuReqIn.at(p));
+        lsu->TcuRspOut.at(p).bind(&tcu_unit_->agu_rsp_in.at(p));
+      }
     }
   #endif
   #endif

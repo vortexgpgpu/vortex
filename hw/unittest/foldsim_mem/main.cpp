@@ -13,41 +13,143 @@
 
 // foldsim's memory endpoint (hw/rtl/afu/foldsim/foldsim_mem.sv), driven as the
 // simulator and the control endpoint drive it -- one token per channel per
-// target cycle -- by a model of an AXI4 master, against a model of HBM that
-// checks the AXI4 protocol on the device side. The properties under test:
-//   * read data, write acknowledgements and ids are right, and no response
-//     comes before its latency;
+// target cycle -- by a model of an AXI4 master, against a model of HBM with
+// random ready and latency that checks the AXI4 protocol on the device side.
+// Under a range of the bank model's settings:
+//   * every target cycle's outputs equal the C++ model's
+//     (sim/common/dram_bank_model.h's DramBankAxi), the model stepped on the
+//     same requests;
+//   * read data, write acknowledgements and ids are right, including a read
+//     of a block whose write the target has been acknowledged and HBM has not;
 //   * a reset with HBM transactions in flight finishes only once HBM has
 //     answered them all, takes no request, and delivers nothing from before
 //     it to the target after it;
 //   * a burst sets `error` and reaches HBM in no part, and a reset clears it.
+//
+//   ./foldsim_mem            every setup
+//   ./foldsim_mem <name>     one setup
 
 #include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <deque>
 #include <map>
+#include <memory>
 #include <random>
 #include <set>
 #include <vector>
 
+#include <dram_bank_model.h>
+
 #include "Vfoldsim_mem.h"
 #include "verilated.h"
+
+using namespace vortex;
 
 namespace {
 
 constexpr int kWords = 16;  // DATA_W = 512
-constexpr uint32_t kReadLatency = 10;
-constexpr uint32_t kWriteLatency = 12;
+constexpr int kIdW = 4;     // ID_W
+
+// With SPEC, the endpoint takes R's ready SPEC cycles late and offers R and
+// AR's ready (and with SPEC 2, AW and W's too) as candidates, by R having fired
+// the cycle before (bit 0) and, with SPEC 2, the one before that (bit 1): the
+// test picks one as the simulator does.
+// The endpoint's read slots (its SLOTS): fewer than the reads the test keeps
+// in flight, the port runs out of them.
+#ifndef FOLDSIM_MEM_READ_SLOTS
+#define FOLDSIM_MEM_READ_SLOTS 32
+#endif
+#ifndef FOLDSIM_MEM_SPEC
+#define FOLDSIM_MEM_SPEC 0
+#endif
 constexpr uint64_t kBase = 0x10000000ull;
-constexpr uint64_t kLines = 64;              // target addresses in use
-constexpr uint64_t kMagic = 0x7f000ull;      // offered only in reset cycles
-constexpr uint64_t kBurstAddr = 0x7e000ull;  // offered only as a burst
+constexpr uint64_t kMagic = 0x3ff7f000ull;      // offered only in reset cycles
+constexpr uint64_t kBurstAddr = 0x3ff7e000ull;  // offered only as a burst
 
 using Line = std::array<uint32_t, kWords>;
 
+// The endpoint's CH_SHIFT: the port is one of 2^shift, and the bank model
+// sees the block within the port's channel.
+#ifndef FOLDSIM_MEM_CH_SHIFT
+#define FOLDSIM_MEM_CH_SHIFT 0
+#endif
+uint64_t channel_addr(uint64_t a) {
+  return ((a >> (6 + FOLDSIM_MEM_CH_SHIFT)) << 6) | (a & 63);
+}
+
+// The traffic a setup makes: the addresses its requests take.
+enum class Traffic {
+  Small,     // 64 lines, 4 KB: row hits
+  Random,    // anywhere in 64 MB
+  Rows,      // random rows 32 KB apart: row conflicts
+  Stream,    // sequential, a few streams
+  OneBank,   // random rows of one bank: conflicts back to back, to the horizon
+};
+
+struct Setup {
+  const char* name;
+  dram_timing::Standard type;
+  uint32_t core_clock, data_rate, latency, queue;
+  uint32_t rq, wq, wr_high, wr_low;
+  Traffic traffic;
+  double p_read, p_write, p_ready;
+  uint64_t cycles;
+  // Refresh, and its interval and busy time if not the standard's (0).
+  DramBankModel::Refresh refresh = DramBankModel::Refresh::Off;
+  uint32_t refi = 0, rfc = 0;
+  // HBM's slowest answer, in host cycles, outside the busy windows.
+  int hbm_lat = 40;
+};
+
+const Setup kSetups[] = {
+  {"bank",           dram_timing::Standard::HBM2, 400, 800, 0, 0, 32, 32, 26, 7,
+   Traffic::Small, 0.3, 0.25, 1.0, 3000},
+  {"bank_random",    dram_timing::Standard::HBM2, 400, 800, 0, 0, 32, 32, 26, 7,
+   Traffic::Random, 0.5, 0.3, 0.8, 4000},
+  {"bank_rows",      dram_timing::Standard::HBM2, 400, 800, 3, 0, 32, 32, 26, 7,
+   Traffic::Rows, 0.6, 0.2, 0.9, 4000},
+  {"bank_stream",    dram_timing::Standard::HBM2, 400, 800, 0, 0, 32, 32, 26, 7,
+   Traffic::Stream, 0.7, 0.4, 0.9, 4000},
+  {"bank_a100",      dram_timing::Standard::HBM2, 1410, 3038, 190, 257, 32, 32, 26, 7,
+   Traffic::Random, 0.5, 0.3, 0.8, 4000},
+  {"bank_h100",      dram_timing::Standard::HBM3, 1980, 6545, 0, 0, 32, 32, 26, 7,
+   Traffic::Rows, 0.5, 0.3, 0.8, 4000},
+  {"bank_h100_s",    dram_timing::Standard::HBM3, 1980, 6545, 0, 0, 32, 32, 26, 7,
+   Traffic::Stream, 0.8, 0.5, 0.95, 4000},
+  {"bank_queues",    dram_timing::Standard::HBM2, 700, 3200, 7, 5, 6, 4, 3, 2,
+   Traffic::Random, 0.6, 0.5, 0.7, 4000},
+  {"bank_reads",     dram_timing::Standard::HBM2, 400, 800, 0, 0, 32, 32, 26, 7,
+   Traffic::Random, 0.9, 0.05, 0.9, 4000},
+  // R seldom taken: every read slot held, AR's ready turning on R's fires.
+  {"bank_full",      dram_timing::Standard::HBM2, 400, 800, 0, 0, 32, 32, 26, 7,
+   Traffic::Random, 0.9, 0.1, 0.15, 4000},
+  {"bank_onebank",   dram_timing::Standard::HBM3, 1980, 6545, 0, 0, 32, 32, 26, 7,
+   Traffic::OneBank, 0.9, 0.1, 0.9, 4000},
+  {"bank_onebank2",  dram_timing::Standard::HBM2, 400, 800, 11, 3, 32, 32, 26, 7,
+   Traffic::OneBank, 0.7, 0.3, 0.8, 4000},
+  {"bank_v100",      dram_timing::Standard::HBM2, 1530, 1752, 0, 0, 32, 32, 26, 7,
+   Traffic::Rows, 0.8, 0.2, 0.9, 4000},
+  {"ref_bank",       dram_timing::Standard::HBM2, 400, 800, 0, 0, 32, 32, 26, 7,
+   Traffic::Random, 0.5, 0.3, 0.8, 4000, DramBankModel::Refresh::PerBank},
+  {"ref_bank_s",     dram_timing::Standard::HBM2, 1410, 3038, 190, 257, 32, 32, 26, 7,
+   Traffic::Stream, 0.8, 0.4, 0.9, 4000, DramBankModel::Refresh::PerBank},
+  {"ref_all",        dram_timing::Standard::HBM3, 1980, 6545, 0, 0, 32, 32, 26, 7,
+   Traffic::Rows, 0.5, 0.3, 0.8, 4000, DramBankModel::Refresh::AllBank},
+  {"ref_all_fast",   dram_timing::Standard::HBM2, 400, 800, 3, 0, 32, 32, 26, 7,
+   Traffic::Random, 0.6, 0.3, 0.9, 4000, DramBankModel::Refresh::AllBank, 600, 0},
+  {"ref_bank_fast",  dram_timing::Standard::HBM3, 1980, 6545, 0, 0, 32, 32, 26, 7,
+   Traffic::Rows, 0.8, 0.2, 0.9, 4000, DramBankModel::Refresh::PerBank, 60, 0},
+  // Few blocks read and written back to back: reads that meet a write the
+  // model has acknowledged and HBM has not taken yet.
+  {"early_b",        dram_timing::Standard::HBM2, 400, 800, 0, 0, 32, 32, 26, 7,
+   Traffic::Small, 0.9, 0.3, 1.0, 4000, DramBankModel::Refresh::Off, 0, 0, 300},
+};
+
+const Setup* setup = nullptr;
 Vfoldsim_mem* dut = nullptr;
 std::mt19937 rng(7);
 uint64_t host_cycle = 0;
@@ -58,8 +160,8 @@ int failures = 0;
   do {                                                                         \
     if (!(cond)) {                                                             \
       if (failures++ < 20) {                                                   \
-        printf("FAIL host %lu target %lu: ", (unsigned long)host_cycle,        \
-               (unsigned long)tcycle);                                         \
+        printf("FAIL %s host %lu target %lu: ", setup->name,                   \
+               (unsigned long)host_cycle, (unsigned long)tcycle);              \
         printf(__VA_ARGS__);                                                   \
         printf("\n");                                                          \
       }                                                                        \
@@ -76,16 +178,37 @@ Line make_line(uint64_t addr, uint32_t version) {
   return l;
 }
 
+// ---- The C++ models, stepped on what the target offered ----
+std::unique_ptr<DramBankAxi> golden_bank;
+
+DramBankAxi::Config bank_config(const Setup& s) {
+  DramBankAxi::Config c;
+  c.model = DramBankModel::Config::make(s.type, s.data_rate, 64, s.refresh);
+  if (s.refi) c.model.refi = s.refi;
+  if (s.rfc) c.model.rfc = s.rfc;
+  c.model.read_queue = s.rq;
+  c.model.write_queue = s.wq;
+  c.model.wr_high = s.wr_high;
+  c.model.wr_low = s.wr_low;
+  c.core_clock = s.core_clock;
+  c.data_rate = s.data_rate;
+  c.latency = s.latency;
+  c.queue = s.queue;
+  c.read_slots = FOLDSIM_MEM_READ_SLOTS;
+  c.write_slots = 16;
+  return c;
+}
+
 // ---- HBM: an AXI4 slave with random ready and latency ----
 struct Hbm {
   std::map<uint64_t, Line> mem;
   double ready_p = 0.7;
   int lat_lo = 1, lat_hi = 40;
   struct Pending { uint64_t at; Line data; };
-  std::deque<Pending> r;         // reads accepted, not returned
-  std::deque<uint64_t> b;        // writes done, not acknowledged
-  std::deque<uint64_t> aw;       // AWs waiting for their W
-  std::deque<std::pair<Line, uint64_t>> w;  // Ws waiting for their AW
+  std::deque<Pending> r;
+  std::deque<uint64_t> b;
+  std::deque<uint64_t> aw;
+  std::deque<std::pair<Line, uint64_t>> w;
   std::set<uint64_t> ar_seen;
   uint64_t n_ar = 0, n_aw = 0, n_w = 0;
   bool arready = false, awready = false, wready = false;
@@ -181,55 +304,93 @@ struct Hbm {
 Hbm hbm;
 
 // ---- The target: an AXI4 master issuing single-beat reads and writes ----
+// Like Vortex's AXI adapter, it has no two reads with one id outstanding.
 struct Op { uint64_t addr; int id; Line data; };
 
 struct Master {
   bool generate = false;
-  bool reset = false;      // this target cycle is a reset cycle
+  bool reset = false;
   bool offer_magic = false;
-  // A burst to offer: 0 none, 1 AR, 2 AW, 3 a W without WLAST.
-  int burst = 0;
+  int burst = 0;  // 0 none, 1 AR, 2 AW, 3 a W without WLAST
+  bool rready = true, bready = true;
 
-  // What each channel offers this cycle, held until it fires.
   bool ar_v = false, aw_v = false, w_v = false;
   Op ar{}, aw{}, w{};
   int ar_len = 0, aw_len = 0;
   bool w_last = true;
 
-  std::deque<Op> ar_q, aw_q, w_q;  // queued, not yet offered
+  std::deque<Op> ar_q, aw_q, w_q;
   struct ReadExp { Op op; bool known; uint64_t fired; };
-  std::deque<ReadExp> reads;       // fired, awaiting R
-  std::deque<Op> aw_only, w_only;  // fired halves not yet formed
+  std::map<int, ReadExp> reads;    // fired, awaiting R, by id
+  std::deque<Op> aw_only, w_only;
   struct WriteExp { Op op; uint64_t formed; };
-  std::deque<WriteExp> writes;     // formed, awaiting B
+  std::deque<WriteExp> writes;
 
-  std::map<uint64_t, Line> known;  // data of every acknowledged write
-  std::set<uint64_t> unknown;      // writes a reset left undecided
-  std::map<uint64_t, int> busy;    // reads or writes in flight per address
+  std::map<uint64_t, Line> known;
+  std::set<uint64_t> unknown;
+  std::map<uint64_t, int> busy;
+  std::set<uint64_t> pending_writes;
+  std::set<int> free_rids;
   uint32_t version = 1;
-  int next_id = 0;
+  int next_wid = 0;
+  uint64_t stream = 0;
   uint64_t n_r = 0, n_b = 0, stale = 0;
+  // Reads made of a block whose acknowledged write HBM does not hold yet.
+  uint64_t early_reads = 0;
+
+  Master() { this->clear_ids(); }
+
+  void clear_ids() {
+    free_rids.clear();
+    for (int i = 0; i < 16; ++i)
+      free_rids.insert(i);
+  }
 
   bool idle() const {
     return ar_q.empty() && aw_q.empty() && w_q.empty() && reads.empty() && aw_only.empty()
         && w_only.empty() && writes.empty() && !ar_v && !aw_v && !w_v;
   }
 
+  uint64_t pick_addr() {
+    switch (setup->traffic) {
+    case Traffic::Small:  return uint64_t(rand_int(0, 63)) * 64;
+    case Traffic::Random: return uint64_t(rand_int(0, (1 << 20) - 1)) * 64;
+    case Traffic::Rows:   return uint64_t(rand_int(0, 63)) * 32768 + uint64_t(rand_int(0, 3)) * 64;
+    case Traffic::Stream: {
+      uint64_t s = uint64_t(rand_int(0, 3));
+      return (s << 22) + ((stream++ & 0xfff) * 64);
+    }
+    case Traffic::OneBank: {
+      // A random row, and the block of it the bank model maps to bank 5.
+      for (;;) {
+        uint64_t a = uint64_t(rand_int(0, 255)) * 32768 + uint64_t(rand_int(0, 511)) * 64;
+        uint32_t bank, row;
+        golden_bank->model().decode(a, &bank, &row);
+        if (bank == 5)
+          return a;
+      }
+    }
+    }
+    return 0;
+  }
+
   void make_requests() {
     if (!generate || reset)
       return;
-    if (ar_q.size() + reads.size() < 24 && chance(0.3)) {
-      const uint64_t a = uint64_t(rand_int(0, kLines - 1)) * 64;
-      if (busy[a] == 0 || (writes_to(a) == 0)) {
+    if (ar_q.size() + reads.size() < 16 && !free_rids.empty() && chance(setup->p_read)) {
+      const uint64_t a = this->pick_addr();
+      if (!pending_writes.count(a)) {
         ++busy[a];
-        ar_q.push_back({a, next_id++ & 15, {}});
+        const int id = *free_rids.begin();
+        free_rids.erase(free_rids.begin());
+        ar_q.push_back({a, id, {}});
       }
     }
-    if (aw_q.size() + writes.size() < 24 && chance(0.25)) {
-      const uint64_t a = uint64_t(rand_int(0, kLines - 1)) * 64;
+    if (aw_q.size() + writes.size() < 24 && chance(setup->p_write)) {
+      const uint64_t a = this->pick_addr();
       if (busy[a] == 0) {
         ++busy[a];
-        Op op{a, next_id++ & 15, make_line(a, version++)};
+        Op op{a, next_wid++ & 15, make_line(a, version++)};
         aw_q.push_back(op);
         w_q.push_back(op);
         pending_writes.insert(a);
@@ -237,11 +398,9 @@ struct Master {
     }
   }
 
-  std::set<uint64_t> pending_writes;
-  int writes_to(uint64_t a) const { return pending_writes.count(a) ? 1 : 0; }
-
-  // The channels' tokens for this cycle.
   void offer() {
+    rready = chance(setup->p_ready);
+    bready = chance(setup->p_ready);
     if (reset) {
       ar_v = offer_magic;
       ar = {kMagic, 0, {}};
@@ -287,21 +446,18 @@ struct Master {
       busy.erase(a);
   }
 
-  // One target cycle, given the endpoint's tokens for it.
   void cycle(bool arready, bool awready, bool wready, bool rvalid, const Line& rdata, int rid,
              bool bvalid, int bid) {
     if (reset) {
-      // The target is in reset: it ignores its inputs and loses its state.
-      for (auto& r : reads)
-        read_done(r.op.addr);
+      for (auto& kv : reads)
+        read_done(kv.second.op.addr);
       for (auto* q : {&aw_only, &w_only})
         for (auto& op : *q)
           unknown.insert(op.addr);
       for (auto& wr : writes)
         unknown.insert(wr.op.addr);
-      for (auto* q : {&ar_q})
-        for (auto& op : *q)
-          read_done(op.addr);
+      for (auto& op : ar_q)
+        read_done(op.addr);
       for (auto& op : aw_q)
         unknown.insert(op.addr);
       for (auto& op : w_q)
@@ -319,25 +475,25 @@ struct Master {
       ar_v = aw_v = w_v = false;
       busy.clear();
       pending_writes.clear();
+      this->clear_ids();
       return;
     }
-    if (rvalid) {
+    if (rvalid && rready) {
       ++n_r;
-      if (reads.empty()) {
+      auto it = reads.find(rid);
+      if (it == reads.end()) {
         ++stale;
-        CHECK(false, "R with no read outstanding");
+        CHECK(false, "R id %d with no read outstanding", rid);
       } else {
-        const ReadExp e = reads.front();
-        reads.pop_front();
-        CHECK(rid == e.op.id, "R id %d, expected %d", rid, e.op.id);
-        CHECK(tcycle >= e.fired + kReadLatency, "R at %lu for a read fired at %lu",
-              (unsigned long)tcycle, (unsigned long)e.fired);
+        const ReadExp e = it->second;
+        reads.erase(it);
+        free_rids.insert(rid);
         if (e.known)
           CHECK(rdata == e.op.data, "R data wrong at 0x%lx", (unsigned long)e.op.addr);
         read_done(e.op.addr);
       }
     }
-    if (bvalid) {
+    if (bvalid && bready) {
       ++n_b;
       if (writes.empty()) {
         ++stale;
@@ -346,8 +502,6 @@ struct Master {
         const WriteExp e = writes.front();
         writes.pop_front();
         CHECK(bid == e.op.id, "B id %d, expected %d", bid, e.op.id);
-        CHECK(tcycle >= e.formed + kWriteLatency, "B at %lu for a write formed at %lu",
-              (unsigned long)tcycle, (unsigned long)e.formed);
         known[e.op.addr] = e.op.data;
         unknown.erase(e.op.addr);
         pending_writes.erase(e.op.addr);
@@ -361,7 +515,12 @@ struct Master {
         const bool k = !unknown.count(ar.addr);
         ReadExp e{ar, k, tcycle};
         e.op.data = (it != known.end()) ? it->second : Line{};
-        reads.push_back(e);
+        if (k && it != known.end()) {
+          const auto m = hbm.mem.find(kBase + ar.addr);
+          if (m == hbm.mem.end() || m->second != it->second)
+            ++early_reads;
+        }
+        reads[ar.id] = e;
       } else {
         burst = 0;
       }
@@ -402,10 +561,10 @@ bool taken[NUM_IN], got[NUM_OUT];
 bool o_awready, o_wready, o_arready, o_rvalid, o_bvalid;
 int o_rid, o_bid;
 Line o_rdata;
-// Set when a reset cycle's tokens are all exchanged: the endpoint's next
-// output token says it has finished that cycle.
 bool after_reset = false;
-uint64_t reset_cycles_done = 0, drained_at_reset = 0;
+bool prev_fire = false, prev_fire2 = false;
+uint64_t reset_cycles_done = 0, drained_at_reset = 0, compared = 0;
+uint64_t total_early_reads = 0;
 
 void drive_tokens() {
   const Master& m = master;
@@ -426,8 +585,8 @@ void drive_tokens() {
   IN(I_ARADDR, araddr, m.ar.addr);
   IN(I_ARID, arid, m.ar.id);
   IN(I_ARLEN, arlen, m.ar_len);
-  IN(I_RREADY, rready, 1);
-  IN(I_BREADY, bready, 1);
+  IN(I_RREADY, rready, m.rready);
+  IN(I_BREADY, bready, m.bready);
   IN(I_TRESET, treset, m.reset);
 #undef IN
 #define OUT(ch, name) dut->name##_ready = !got[ch]
@@ -449,18 +608,22 @@ void sample_tokens(bool in_take[NUM_IN], bool out_take[NUM_OUT]) {
   OUT(O_RVALID, rvalid); OUT(O_RDATA, rdata); OUT(O_RLAST, rlast); OUT(O_RID, rid);
   OUT(O_RRESP, rresp); OUT(O_BVALID, bvalid); OUT(O_BRESP, bresp); OUT(O_BID, bid);
 #undef OUT
-  if (out_take[O_AWREADY]) o_awready = dut->awready_bits;
-  if (out_take[O_WREADY]) o_wready = dut->wready_bits;
-  if (out_take[O_ARREADY]) o_arready = dut->arready_bits;
-  if (out_take[O_RVALID]) o_rvalid = dut->rvalid_bits;
+  const int sel = FOLDSIM_MEM_SPEC
+                      ? (prev_fire ? 1 : 0) + ((FOLDSIM_MEM_SPEC == 2 && prev_fire2) ? 2 : 0)
+                      : 0;
+  const int wsel = (FOLDSIM_MEM_SPEC == 2) ? sel : 0;
+  if (out_take[O_AWREADY]) o_awready = (dut->awready_bits >> wsel) & 1;
+  if (out_take[O_WREADY]) o_wready = (dut->wready_bits >> wsel) & 1;
+  if (out_take[O_ARREADY]) o_arready = (dut->arready_bits >> sel) & 1;
+  if (out_take[O_RVALID]) o_rvalid = (dut->rvalid_bits >> sel) & 1;
   if (out_take[O_RDATA])
     for (int i = 0; i < kWords; ++i)
-      o_rdata[i] = dut->rdata_bits[i];
-  if (out_take[O_RID]) o_rid = dut->rid_bits;
+      o_rdata[i] = dut->rdata_bits[sel * kWords + i];
+  if (out_take[O_RID]) o_rid = (dut->rid_bits >> (sel * kIdW)) & ((1 << kIdW) - 1);
   if (out_take[O_BVALID]) o_bvalid = dut->bvalid_bits;
   if (out_take[O_BID]) o_bid = dut->bid_bits;
-  if (out_take[O_RLAST]) CHECK(dut->rlast_bits, "RLAST low");
-  if (out_take[O_RRESP]) CHECK(dut->rresp_bits == 0, "RRESP not OKAY");
+  if (out_take[O_RLAST]) CHECK((dut->rlast_bits >> sel) & 1, "RLAST low");
+  if (out_take[O_RRESP]) CHECK(((dut->rresp_bits >> (2 * sel)) & 3) == 0, "RRESP not OKAY");
   if (out_take[O_BRESP]) CHECK(dut->bresp_bits == 0, "BRESP not OKAY");
 }
 
@@ -475,8 +638,6 @@ void host_step() {
   for (int j = 0; j < NUM_OUT; ++j)
     any_out |= out_take[j];
   if (after_reset && any_out) {
-    // The first token of the cycle after a reset cycle: that cycle has
-    // finished, so HBM has answered everything and nothing is offered to it.
     after_reset = false;
     ++reset_cycles_done;
     CHECK(hbm.outstanding() == 0, "reset cycle finished with %zu HBM transactions open",
@@ -494,7 +655,41 @@ void host_step() {
     got[j] |= out_take[j];
 }
 
-// Runs target cycles until `n` have completed.
+// The cycle's outputs against the C++ model's; then the model takes the
+// cycle's requests.
+void golden_cycle() {
+  const Master& m = master;
+  auto& g = *golden_bank;
+  if (m.reset) {
+    g.reset();
+    return;
+  }
+  ++compared;
+  CHECK(o_arready == g.ar_ready(), "ARREADY %d, model %d", o_arready, g.ar_ready());
+  CHECK(o_awready == g.aw_ready(), "AWREADY %d, model %d", o_awready, g.aw_ready());
+  CHECK(o_wready == g.w_ready(), "WREADY %d, model %d", o_wready, g.w_ready());
+  CHECK(o_rvalid == g.r_valid(), "RVALID %d, model %d", o_rvalid, g.r_valid());
+  if (o_rvalid && g.r_valid())
+    CHECK(uint32_t(o_rid) == g.r_id(), "RID %d, model %u", o_rid, g.r_id());
+  CHECK(o_bvalid == g.b_valid(), "BVALID %d, model %d", o_bvalid, g.b_valid());
+  if (o_bvalid && g.b_valid())
+    CHECK(uint32_t(o_bid) == g.b_id(), "BID %d, model %u", o_bid, g.b_id());
+  DramBankAxi::Inputs in;
+  in.ar_valid = m.ar_v;
+  in.ar_id = m.ar.id;
+  in.ar_addr = channel_addr(m.ar.addr);
+  in.ar_len = m.ar_len;
+  in.aw_valid = m.aw_v;
+  in.aw_id = m.aw.id;
+  in.aw_addr = channel_addr(m.aw.addr);
+  in.aw_len = m.aw_len;
+  in.w_valid = m.w_v;
+  in.w_last = m.w_last;
+  in.r_ready = m.rready;
+  in.b_ready = m.bready;
+  g.step(in);
+}
+
 void run(uint64_t n) {
   for (uint64_t k = 0; k < n; ++k) {
     master.make_requests();
@@ -516,13 +711,17 @@ void run(uint64_t n) {
         break;
       host_step();
       if (++spins > 200000) {
-        printf("FAIL: target cycle %lu never completes\n", (unsigned long)tcycle);
+        printf("FAIL %s: target cycle %lu never completes\n", setup->name, (unsigned long)tcycle);
         exit(1);
       }
     }
     if (master.reset)
       after_reset = true;
+    golden_cycle();
+    const bool fire = o_rvalid && master.rready;
     master.cycle(o_arready, o_awready, o_wready, o_rvalid, o_rdata, o_rid, o_bvalid, o_bid);
+    prev_fire2 = prev_fire;
+    prev_fire = fire;
     ++tcycle;
   }
 }
@@ -540,6 +739,9 @@ void drain() {
   for (int i = 0; i < 100000 && !master.idle(); ++i)
     run(1);
   CHECK(master.idle(), "the target's transactions never complete");
+  // A write acknowledged to the target may still be on its way to HBM.
+  for (int i = 0; i < 100000 && !(dut->idle && hbm.outstanding() == 0); ++i)
+    run(1);
   run(4);
 }
 
@@ -553,7 +755,6 @@ void burst_case(int kind, const char* what) {
   run(2);
   CHECK(dut->error, "%s: no error", what);
   CHECK(!o_arready && !o_awready && !o_wready, "%s: still ready after the error", what);
-  // Requests now wait; the endpoint stays stopped.
   master.generate = true;
   run(50);
   master.generate = false;
@@ -565,16 +766,53 @@ void burst_case(int kind, const char* what) {
   run(800);
 }
 
-}  // namespace
-
-int main(int argc, char** argv) {
-  Verilated::commandArgs(argc, argv);
-  dut = new Vfoldsim_mem();
-  dut->read_latency = kReadLatency;
-  dut->write_latency = kWriteLatency;
-  dut->max_reads = 16;
-  dut->max_writes = 16;
+void configure() {
+  const Setup& s = *setup;
   dut->base = kBase;
+  const auto cfg = bank_config(s);
+  const auto& t = cfg.model.t;
+  const auto& g = cfg.model.geom;
+  dut->cfg_data_rate = s.data_rate;
+  dut->cfg_core_clock = s.core_clock;
+  dut->cfg_latency = s.latency;
+  dut->cfg_queue = s.queue;
+  dut->cfg_rq = s.rq;
+  dut->cfg_wq = s.wq;
+  dut->cfg_wr_high = s.wr_high;
+  dut->cfg_wr_low = s.wr_low;
+  dut->cfg_geom = g.log2_pcs | (g.log2_bgs << 2) | (g.log2_banks << 4) | (g.log2_row_bursts << 6)
+                | (g.log2_visit << 10) | (uint32_t(g.two_clock_act) << 12);
+  dut->cfg_refresh = (cfg.model.refresh != DramBankModel::Refresh::Off)
+                   | (uint32_t(cfg.model.refresh == DramBankModel::Refresh::AllBank) << 1);
+  dut->cfg_refi = cfg.model.refi;
+  dut->cfg_rfc = cfg.model.rfc;
+  const uint32_t v[18] = {t.BL, t.CCDS, t.CCDL, t.CL, t.CWL, t.RCDRD, t.RCDWR, t.RP, t.RAS, t.RC,
+                          t.RTP, t.WR, t.RRDS, t.RRDL, t.FAW, t.WTRS, t.WTRL, g.rtw_extra};
+  for (int w = 0; w < 7; ++w)
+    dut->cfg_t[w] = 0;
+  for (int i = 0; i < 18; ++i)
+    for (int b = 0; b < 12; ++b)
+      if ((v[i] >> b) & 1)
+        dut->cfg_t[(i * 12 + b) / 32] |= 1u << ((i * 12 + b) % 32);
+  golden_bank = std::make_unique<DramBankAxi>(cfg);
+}
+
+int run_setup(const Setup& s) {
+  setup = &s;
+  rng.seed(7);
+  host_cycle = tcycle = 0;
+  prev_fire = prev_fire2 = false;
+  reset_cycles_done = drained_at_reset = compared = 0;
+  hbm = Hbm();
+  hbm.lat_hi = s.hbm_lat;
+  master = Master();
+  for (int i = 0; i < NUM_IN; ++i) taken[i] = false;
+  for (int j = 0; j < NUM_OUT; ++j) got[j] = false;
+  after_reset = false;
+  const int failures_before = failures;
+
+  dut = new Vfoldsim_mem();
+  configure();
   dut->reset = 1;
   for (int i = 0; i < 8; ++i) {
     hbm.drive();
@@ -587,7 +825,7 @@ int main(int argc, char** argv) {
 
   reset_cycles(4, true);
   master.generate = true;
-  run(3000);
+  run(s.cycles);
 
   // Resets with HBM slow and busy, at random points.
   for (int k = 0; k < 8; ++k) {
@@ -595,11 +833,14 @@ int main(int argc, char** argv) {
     hbm.lat_hi = 400;
     hbm.ready_p = 0.3;
     run(rand_int(50, 300));
+    // Few read slots can leave HBM idle at the random point; reset once it is not.
+    for (int t = 0; t < 2000 && hbm.outstanding() == 0; ++t)
+      run(1);
     hbm.lat_lo = 1;
-    hbm.lat_hi = 40;
+    hbm.lat_hi = s.hbm_lat;
     hbm.ready_p = 0.7;
     reset_cycles(rand_int(1, 4), true);
-    run(1500);
+    run(s.cycles / 2);
   }
 
   burst_case(1, "AR burst");
@@ -614,14 +855,45 @@ int main(int argc, char** argv) {
   CHECK(!hbm.ar_seen.count(kBase + kBurstAddr), "a burst reached HBM");
   CHECK(dut->idle, "endpoint not idle at the end");
   CHECK(master.stale == 0, "%lu stale responses", (unsigned long)master.stale);
-  CHECK(drained_at_reset >= 4, "only %lu resets found HBM busy", (unsigned long)drained_at_reset);
+  // One bank's conflicts leave too little in flight for every reset to meet.
+  if (s.traffic != Traffic::OneBank)
+    CHECK(drained_at_reset >= 4, "only %lu resets found HBM busy", (unsigned long)drained_at_reset);
 
-  printf("target cycles %lu, host cycles %lu; %lu reads, %lu writes acknowledged; "
-         "%lu reset cycles, %lu of them with HBM busy\n",
-         (unsigned long)tcycle, (unsigned long)host_cycle, (unsigned long)master.n_r,
-         (unsigned long)master.n_b, (unsigned long)reset_cycles_done,
-         (unsigned long)drained_at_reset);
+  total_early_reads += master.early_reads;
+  const auto& st = golden_bank->model().stats();
+  printf("%-12s target cycles %lu, host cycles %lu, %lu compared; %lu reads (%lu ahead of HBM's "
+         "write), %lu writes; "
+         "%lu reset cycles, %lu with HBM busy; model since last reset: %lu reads, %lu writes, "
+         "%lu hits, %lu misses, %lu conflicts, %lu refreshes, %lu deferred: %s\n",
+         s.name, (unsigned long)tcycle, (unsigned long)host_cycle, (unsigned long)compared,
+         (unsigned long)master.n_r, (unsigned long)master.early_reads, (unsigned long)master.n_b,
+         (unsigned long)reset_cycles_done,
+         (unsigned long)drained_at_reset, (unsigned long)st.reads, (unsigned long)st.writes,
+         (unsigned long)st.hits, (unsigned long)st.misses, (unsigned long)st.conflicts,
+         (unsigned long)st.refreshes, (unsigned long)st.deferred,
+         failures == failures_before ? "ok" : "FAILED");
   delete dut;
+  dut = nullptr;
+  return failures - failures_before;
+}
+
+}  // namespace
+
+int main(int argc, char** argv) {
+  Verilated::commandArgs(argc, argv);
+  const char* only = nullptr;
+  for (int i = 1; i < argc; ++i)
+    if (argv[i][0] != '+')
+      only = argv[i];
+  for (const auto& s : kSetups) {
+    if (only && std::strcmp(only, s.name))
+      continue;
+    run_setup(s);
+  }
+  // Writes are acknowledged by the model, ahead of HBM: some reads must have
+  // met a block HBM did not hold yet.
+  if (!only)
+    CHECK(total_early_reads != 0, "no read was made ahead of HBM's write");
   if (failures != 0) {
     printf("FAILED: %d check(s)\n", failures);
     return 1;

@@ -11,11 +11,12 @@ catalog, which conftest turns into a tracked xfail: it still builds and runs, bu
 its failure is expected and does not fail CI (and an unexpected pass shows as
 XPASS). Use it only for triaged, documented breakage.
 
-A `check: model_parity` case runs the same app/args/configs on simx and rtlsim
-and compares the runtime's final `PERF: instrs=…, cycles=…` summary: retired
-instructions must match exactly (both are deterministic ISA-level executions,
-so any delta is functional divergence) and cycles must agree within the case's
-`tolerance` (SimX is the timing model of the RTL, not just a functional oracle).
+A `check: model_parity` case runs the same app/args/configs on its two `legs`
+(simx and rtlsim by default) and compares the runtime's final `PERF: instrs=…,
+cycles=…` summary: retired instructions must match exactly (both are
+deterministic ISA-level executions, so any delta is functional divergence) and
+cycles must agree within the case's `tolerance` (SimX is the timing model of the
+RTL, not just a functional oracle; Foldsim is cycle-exact, so its tolerance is 0).
 """
 
 import os
@@ -45,19 +46,21 @@ def _run_one(case, xlen, driver):
 
 
 def _model_parity(case, xlen):
-    simx_instrs, simx_cycles = _run_one(case, xlen, "simx")
-    rtl_instrs, rtl_cycles = _run_one(case, xlen, "rtlsim")
-    gap = abs(rtl_cycles - simx_cycles) / float(rtl_cycles)
-    print("PARITY: {}: instrs simx={} rtlsim={}, cycles simx={} rtlsim={}, "
+    model, ref = case.legs
+    model_instrs, model_cycles = _run_one(case, xlen, model)
+    ref_instrs, ref_cycles = _run_one(case, xlen, ref)
+    gap = abs(ref_cycles - model_cycles) / float(ref_cycles)
+    print("PARITY: {}: instrs {m}={} {r}={}, cycles {m}={} {r}={}, "
           "gap={:.2%} (tolerance {:.0%})".format(
-              case.id, simx_instrs, rtl_instrs, simx_cycles, rtl_cycles,
-              gap, case.tolerance))
-    assert simx_instrs == rtl_instrs, \
-        "{}: retired-instruction mismatch (simx={}, rtlsim={}) — functional " \
-        "divergence, not a timing gap".format(case.id, simx_instrs, rtl_instrs)
+              case.id, model_instrs, ref_instrs, model_cycles, ref_cycles,
+              gap, case.tolerance, m=model, r=ref))
+    assert model_instrs == ref_instrs, \
+        "{}: retired-instruction mismatch ({m}={}, {r}={}) — functional " \
+        "divergence, not a timing gap".format(case.id, model_instrs, ref_instrs,
+                                              m=model, r=ref)
     assert gap <= case.tolerance, \
-        "{}: cycle gap {:.2%} exceeds tolerance {:.0%} (simx={}, rtlsim={})".format(
-            case.id, gap, case.tolerance, simx_cycles, rtl_cycles)
+        "{}: cycle gap {:.2%} exceeds tolerance {:.0%} ({m}={}, {r}={})".format(
+            case.id, gap, case.tolerance, model_cycles, ref_cycles, m=model, r=ref)
 
 
 def _perf_gate(case, xlen, update):

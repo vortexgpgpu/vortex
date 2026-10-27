@@ -116,14 +116,12 @@ module VX_mem_to_axi #(
     localparam NEEDED_TAG_WIDTH = TAG_WIDTH_IN + NUM_PORTS_IN_BITS;
     localparam READ_TAG_WIDTH = (NEEDED_TAG_WIDTH > TAG_WIDTH_OUT) ? TAG_BUFFER_ADDRW : TAG_WIDTH_IN;
     localparam READ_FULL_TAG_WIDTH = READ_TAG_WIDTH + NUM_PORTS_IN_BITS;
-    localparam WRITE_TAG_WIDTH = `MIN(TAG_WIDTH_IN, TAG_WIDTH_OUT);
-    localparam DST_TAG_WIDTH  = `MAX(READ_FULL_TAG_WIDTH, WRITE_TAG_WIDTH);
-    localparam XBAR_TAG_WIDTH = `MAX(READ_TAG_WIDTH, WRITE_TAG_WIDTH);
-    localparam REQ_XBAR_DATAW = 1 + BANK_ADDR_WIDTH + DATA_SIZE + DATA_WIDTH + XBAR_TAG_WIDTH;
+    // Writes carry no tag: every write leaves with AXI id 0 (the write tracker).
+    localparam REQ_XBAR_DATAW = 1 + BANK_ADDR_WIDTH + DATA_SIZE + DATA_WIDTH + READ_TAG_WIDTH;
     localparam RSP_XBAR_DATAW = DATA_WIDTH + READ_TAG_WIDTH;
 
     `STATIC_ASSERT ((DST_ADDR_WDITH >= ADDR_WIDTH_IN), ("invalid address width: current=%0d, expected=%0d", DST_ADDR_WDITH, ADDR_WIDTH_IN))
-    `STATIC_ASSERT ((TAG_WIDTH_OUT >= DST_TAG_WIDTH), ("invalid output tag width: current=%0d, expected=%0d", TAG_WIDTH_OUT, DST_TAG_WIDTH))
+    `STATIC_ASSERT ((TAG_WIDTH_OUT >= READ_FULL_TAG_WIDTH), ("invalid output tag width: current=%0d, expected=%0d", TAG_WIDTH_OUT, READ_FULL_TAG_WIDTH))
     `STATIC_ASSERT ((WRITE_TRACK_DEPTH >= 2) && `IS_POW2(WRITE_TRACK_DEPTH), ("WRITE_TRACK_DEPTH must be a power of 2 >= 2: current=%0d", WRITE_TRACK_DEPTH))
 
     // Bank selection
@@ -197,7 +195,7 @@ module VX_mem_to_axi #(
 
     for (genvar i = 0; i < NUM_PORTS_IN; ++i) begin : g_req_xbar_data_in
         wire tag_ready = mem_req_rw[i] || mem_rd_req_tag_ready[i];
-        wire [XBAR_TAG_WIDTH-1:0] tag_value = mem_req_rw[i] ? XBAR_TAG_WIDTH'(mem_req_tag[i]) : XBAR_TAG_WIDTH'(mem_rd_req_tag[i]);
+        wire [READ_TAG_WIDTH-1:0] tag_value = mem_req_rw[i] ? '0 : mem_rd_req_tag[i];
         assign req_xbar_valid_in[i] = mem_req_valid[i] && tag_ready;
         assign req_xbar_data_in[i]  = {mem_req_rw[i], req_bank_addr[i], mem_req_byteen[i], mem_req_data[i], tag_value};
         assign mem_req_ready[i]  = req_xbar_ready_in[i] && tag_ready;
@@ -227,7 +225,7 @@ module VX_mem_to_axi #(
 
         wire xbar_rw_out;
         wire [BANK_ADDR_WIDTH-1:0] xbar_addr_out;
-        wire [XBAR_TAG_WIDTH-1:0] xbar_tag_out;
+        wire [READ_TAG_WIDTH-1:0] xbar_tag_out;
         wire [DATA_WIDTH-1:0] xbar_data_out;
         wire [DATA_SIZE-1:0] xbar_byteen_out;
 
@@ -347,7 +345,7 @@ module VX_mem_to_axi #(
             assign xbar_tag_r_out = READ_FULL_TAG_WIDTH'({xbar_tag_out, req_xbar_sel_out[i]});
         end else begin : g_no_input_sel
             `UNUSED_VAR (req_xbar_sel_out)
-            assign xbar_tag_r_out = READ_TAG_WIDTH'(xbar_tag_out);
+            assign xbar_tag_r_out = xbar_tag_out;
         end
 
         assign m_axi_arvalid[i] = req_xbar_valid_out[i] && ~xbar_rw_out && ~rd_hazard;

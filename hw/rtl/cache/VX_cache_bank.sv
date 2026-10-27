@@ -41,6 +41,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     parameter IS_LLC            = 0,        // last-level cache: AMOs commit locally here
     parameter AMO_ENABLE        = 0,        // synthesize atomic-op logic
     parameter LATENCY           = 2,        // pipeline depth; >2 defers the data array to break the tag->data path
+    parameter MERGE_GROUP       = 0,        // read-merge group: the tag's low bits mark the merged ports (0: none)
     parameter MSHR_ADDR_WIDTH   = `LOG2UP(MSHR_SIZE),
     parameter MEM_TAG_WIDTH     = UUID_WIDTH + MSHR_ADDR_WIDTH,
     parameter REQ_SEL_WIDTH     = `UP(`CS_REQ_SEL_BITS),
@@ -73,6 +74,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     output wire [`CS_WORD_WIDTH-1:0]    core_rsp_data,
     output wire [TAG_WIDTH-1:0]         core_rsp_tag,
     output wire [REQ_SEL_WIDTH-1:0]     core_rsp_idx,
+    output wire [NUM_REQS-1:0]          core_rsp_targets, // the ports the response goes to
     input  wire                         core_rsp_ready,
 
     // Memory request (sector-granular; = line when 1 sector/line)
@@ -651,15 +653,22 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .read        (do_read_st0 && ~pipe_stall),
         .write       (do_write_st0 && ~pipe_stall),
         // non-LLC AMO forwards downstream and invalidates its own copy so the
-        // issuer's later plain load refetches the new value.
-        .invalidate  (is_amo_fwd_st0 && lk_st0.is_hit && ~pipe_stall),
+        // issuer's later plain load refetches the new value. Only the hit's
+        // qualifiers are passed (a forwarded AMO has no order hazard): the
+        // array ANDs in each way's own tag match, which keeps the OR over the
+        // ways off the valid store's write enables.
+        .invalidate  (is_amo_fwd_st0 && ~partial_miss_st0 && ~pipe_stall),
         .fill_nodata (lazy_st0),
         .line_idx    (line_idx_st0),
         .line_idx_n  (sel_req.req.addr[`CS_LINE_SEL_BITS-1:0]),
         .line_tag    (line_tag_st0),
         .sector_idx  (sector_idx_st0),
         .evict_way   (evict_way_st0),
+        .flush_way   (st0.req.way_idx),
+        // a writeback leaves only from a fresh fill's victim or a flushed way
+        .wb_way      (st0.req.is_fill ? victim_way : st0.req.way_idx),
         .fill_way_oh (fill_way_oh_st0),
+        .victim_way_oh (victim_way_oh),
         .tag_matches (tag_matches_st0),
         .line_present (line_present_st0),
         .evict_dirty (evict_dirty_st0),
@@ -1309,8 +1318,23 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     `RUNTIME_ASSERT (~fwd_fire || (replay_addr == fbuf_addr_r), ("%t: %s fill-forward address mismatch: addr=0x%0h, staged=0x%0h", $time, INSTANCE_ID, `CS_BANK_TO_FULL_ADDR(replay_addr, BANK_ID), `CS_BANK_TO_FULL_ADDR(fbuf_addr_r, BANK_ID)))
     `RUNTIME_ASSERT (~(flush_fire && fwd_pending), ("%t: %s flush during fill-forward drain", $time, INSTANCE_ID))
 
+    // The ports a response goes to, decoded as it enters the queue so that
+    // the response arbiters start from registers: its own port and, under
+    // read merging, the merged ports of its group the tag's low bits mark.
+    wire [TAG_WIDTH-1:0]     crsp_in_tag = crsp_queue_valid ? stC.req.tag : replay_tag;
+    wire [REQ_SEL_WIDTH-1:0] crsp_in_idx = crsp_queue_valid ? stC.req.req_idx : replay_idx;
+    wire [NUM_REQS-1:0]      crsp_in_targets;
+    if (MERGE_GROUP > 1) begin : g_merge_targets
+        localparam GROUP_BITS = `CLOG2(MERGE_GROUP);
+        wire [REQ_SEL_WIDTH-1:0] group_base = (crsp_in_idx >> GROUP_BITS) << GROUP_BITS;
+        assign crsp_in_targets = (NUM_REQS'(1) << crsp_in_idx)
+                               | (NUM_REQS'(crsp_in_tag[MERGE_GROUP-1:0]) << group_base);
+    end else begin : g_port_target
+        assign crsp_in_targets = NUM_REQS'(1) << crsp_in_idx;
+    end
+
     VX_elastic_buffer #(
-        .DATAW   (TAG_WIDTH + `CS_WORD_WIDTH + REQ_SEL_WIDTH),
+        .DATAW   (NUM_REQS + TAG_WIDTH + `CS_WORD_WIDTH + REQ_SEL_WIDTH),
         .SIZE    (CRSQ_QUEUE_SIZE),
         .OUT_REG (`TO_OUT_BUF_REG(CORE_OUT_BUF))
     ) core_rsp_queue (
@@ -1318,9 +1342,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .reset     (reset),
         .valid_in  (crsp_queue_valid || fwd_head),
         .ready_in  (crsp_queue_ready),
-        .data_in   (crsp_queue_valid ? {stC.req.tag, crsp_queue_data, stC.req.req_idx}
-                                     : {replay_tag, fwd_word, replay_idx}),
-        .data_out  ({core_rsp_tag, core_rsp_data, core_rsp_idx}),
+        .data_in   ({crsp_in_targets, crsp_in_tag, (crsp_queue_valid ? crsp_queue_data : fwd_word), crsp_in_idx}),
+        .data_out  ({core_rsp_targets, core_rsp_tag, core_rsp_data, core_rsp_idx}),
         .valid_out (core_rsp_valid),
         .ready_out (core_rsp_ready)
     );

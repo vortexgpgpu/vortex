@@ -13,43 +13,75 @@
 
 // The target's AXI4 memory port, as a foldsim endpoint.
 //
-// Timing is a latency-bandwidth pipe, cycle for cycle the model of
-// sim/common/axi_latency_pipe.h: a
-// fixed latency per transaction, at most `max_reads` reads and `max_writes`
-// writes in flight, one beat per cycle on each response channel, responses in
-// the order their requests were accepted. Every output is a function of the
-// pipe's state, so all of them are offered at the start of a target cycle.
+// Timing is a DRAM channel's banks (foldsim_mem_bank, cycle for cycle
+// sim/common/dram_bank_model.h's DramBankAxi): each read holds a slot, and
+// responses leave in the order their data departs. Every output is a function
+// of the model's state, so all of them are offered at the start of a target
+// cycle.
 //
 // Data lives in device memory at `base` plus the target's address. A read
 // goes to memory the cycle the target makes it, a write the cycle it has both
 // its AW and its W; the response is offered to
-// the target when the pipe releases it, and a target cycle that would offer
+// the target when the model releases it, and a target cycle that would offer
 // one memory has not returned yet simply does not finish until it has. A
-// write is acknowledged to the target only once memory has acknowledged it,
-// so any later request of the target sees it.
+// write is acknowledged to the target when the model completes it; until
+// memory has acknowledged it, a read of its block, and a later write of it,
+// wait to go to memory, so any later request of the target sees it.
 //
 // Single-beat transactions only, as Vortex issues them: a burst sets `error`,
 // goes nowhere, and from the next cycle on the endpoint is ready for nothing.
 //
 // The target's reset is a token of the control endpoint's. A target cycle in
 // reset takes no request; it finishes once every transaction memory has from
-// before it has completed, and drops the pipe -- requests not answered, data
-// not delivered, a write's lone half -- and `error`. A response from before a
+// before it has completed, and drops the model's state -- requests not
+// answered, data not delivered, a write's lone half -- and `error`. A response from before a
 // reset never reaches the target after it.
 module foldsim_mem #(
     parameter ID_W   = 4,
     parameter ADDR_W = 64,
     parameter DATA_W = 512,
-    parameter DEPTH  = 16
+    // Writes in flight.
+    parameter DEPTH  = 16,
+    // The bank model: read slots, and a ring of 2^HLOG2 DRAM clocks.
+    parameter SLOTS  = 32,
+    parameter HLOG2  = 9,
+    // Token ends with registered have and done (foldsim_token): the cycle's
+    // finish starts at the endpoint's own registers, a host cycle later.
+    parameter STAGED = 0,
+    // The target's ports interleave its address space by block, 2^CH_SHIFT of
+    // them: the bank model sees the block within the port's channel, as
+    // dram_sim's banks do. Device memory still takes the target's address.
+    parameter CH_SHIFT = 0,
+    // R's ready of a cycle is taken with the next cycle's requests, and R and
+    // AR's ready are offered for either fire of R in the cycle before: the
+    // simulator picks one with its own R fire (low half: no fire).
+    // SPEC 2: R's ready two cycles late, and AW and W's ready too offered for
+    // each pair of R fires in the two cycles before ({before, last}).
+    parameter SPEC = 0,
+    parameter NC   = (SPEC == 2) ? 4 : ((SPEC != 0) ? 2 : 1),
+    parameter NW   = (SPEC == 2) ? 4 : 1
 ) (
     input  wire                  clk,
     input  wire                  reset,
 
-    input  wire [31:0]           read_latency,
-    input  wire [31:0]           write_latency,
-    input  wire [7:0]            max_reads,
-    input  wire [7:0]            max_writes,
     input  wire [63:0]           base,
+    // The bank model's settings (foldsim_mem_bank).
+    input  wire [15:0]           cfg_data_rate,
+    input  wire [15:0]           cfg_core_clock,
+    input  wire [15:0]           cfg_latency,
+    input  wire [15:0]           cfg_queue,
+    input  wire [7:0]            cfg_rq,
+    input  wire [7:0]            cfg_wq,
+    input  wire [7:0]            cfg_wr_high,
+    input  wire [7:0]            cfg_wr_low,
+    input  wire [12:0]           cfg_geom,
+    input  wire [18*12-1:0]      cfg_t,
+    input  wire [1:0]            cfg_refresh,
+    input  wire [15:0]           cfg_refi,
+    input  wire [15:0]           cfg_rfc,
+    // Reads, writes, row hits, misses, conflicts, read latency sum,
+    // refreshes, target cycles the port could take no read.
+    output wire [8*64-1:0]       stats,
     // No transaction in flight, at the target or in memory.
     output wire                  idle,
     output reg                   error,
@@ -76,14 +108,14 @@ module foldsim_mem #(
     input  wire                  bready_valid,  output wire bready_ready,  input wire              bready_bits,
 
     // Target inputs: the endpoint's outputs.
-    output wire                  awready_valid, input wire awready_ready, output wire              awready_bits,
-    output wire                  wready_valid,  input wire wready_ready,  output wire              wready_bits,
-    output wire                  arready_valid, input wire arready_ready, output wire              arready_bits,
-    output wire                  rvalid_valid,  input wire rvalid_ready,  output wire              rvalid_bits,
-    output wire                  rdata_valid,   input wire rdata_ready,   output wire [DATA_W-1:0] rdata_bits,
-    output wire                  rlast_valid,   input wire rlast_ready,   output wire              rlast_bits,
-    output wire                  rid_valid,     input wire rid_ready,     output wire [ID_W-1:0]   rid_bits,
-    output wire                  rresp_valid,   input wire rresp_ready,   output wire [1:0]        rresp_bits,
+    output wire                  awready_valid, input wire awready_ready, output wire [NW-1:0]     awready_bits,
+    output wire                  wready_valid,  input wire wready_ready,  output wire [NW-1:0]     wready_bits,
+    output wire                  arready_valid, input wire arready_ready, output wire [NC-1:0]     arready_bits,
+    output wire                  rvalid_valid,  input wire rvalid_ready,  output wire [NC-1:0]     rvalid_bits,
+    output wire                  rdata_valid,   input wire rdata_ready,   output wire [NC*DATA_W-1:0] rdata_bits,
+    output wire                  rlast_valid,   input wire rlast_ready,   output wire [NC-1:0]     rlast_bits,
+    output wire                  rid_valid,     input wire rid_ready,     output wire [NC*ID_W-1:0] rid_bits,
+    output wire                  rresp_valid,   input wire rresp_ready,   output wire [NC*2-1:0]   rresp_bits,
     output wire                  bvalid_valid,  input wire bvalid_ready,  output wire              bvalid_bits,
     output wire                  bresp_valid,   input wire bresp_ready,   output wire [1:0]        bresp_bits,
     output wire                  bid_valid,     input wire bid_ready,     output wire [ID_W-1:0]   bid_bits,
@@ -110,6 +142,15 @@ module foldsim_mem #(
 );
     localparam CW = $clog2(DEPTH + 1);
     localparam PW = $clog2(DEPTH);
+    // Memory's side holds every read and write the model may have in flight.
+    // The slots kept: with SPEC 2 a slot R gave back is known two cycles
+    // later, so more are kept than the port may hold.
+    localparam PSLOTS = (SPEC == 2) ? 2 * SLOTS : SLOTS;
+    localparam HD  = (PSLOTS > DEPTH) ? PSLOTS : DEPTH;
+    localparam HCW = $clog2(HD + 1);
+    localparam HPW = $clog2(HD);
+    localparam SW  = $clog2(PSLOTS);
+    localparam LB  = $clog2(DATA_W / 8);
 
     wire finish;
 
@@ -122,134 +163,221 @@ module foldsim_mem #(
     wire [DATA_W/8-1:0] wstrb;
     wire [14:0]         have;
 
-    foldsim_token_in #(1)        t_awvalid (clk, reset, awvalid_valid, awvalid_ready, awvalid_bits, finish, have[0],  awvalid);
-    foldsim_token_in #(ADDR_W)   t_awaddr  (clk, reset, awaddr_valid,  awaddr_ready,  awaddr_bits,  finish, have[1],  awaddr);
-    foldsim_token_in #(ID_W)     t_awid    (clk, reset, awid_valid,    awid_ready,    awid_bits,    finish, have[2],  awid);
-    foldsim_token_in #(8)        t_awlen   (clk, reset, awlen_valid,   awlen_ready,   awlen_bits,   finish, have[3],  awlen);
-    foldsim_token_in #(1)        t_wvalid  (clk, reset, wvalid_valid,  wvalid_ready,  wvalid_bits,  finish, have[4],  wvalid);
-    foldsim_token_in #(DATA_W)   t_wdata   (clk, reset, wdata_valid,   wdata_ready,   wdata_bits,   finish, have[5],  wdata);
-    foldsim_token_in #(DATA_W/8) t_wstrb   (clk, reset, wstrb_valid,   wstrb_ready,   wstrb_bits,   finish, have[6],  wstrb);
-    foldsim_token_in #(1)        t_wlast   (clk, reset, wlast_valid,   wlast_ready,   wlast_bits,   finish, have[7],  wlast);
-    foldsim_token_in #(1)        t_arvalid (clk, reset, arvalid_valid, arvalid_ready, arvalid_bits, finish, have[8],  arvalid);
-    foldsim_token_in #(ADDR_W)   t_araddr  (clk, reset, araddr_valid,  araddr_ready,  araddr_bits,  finish, have[9],  araddr);
-    foldsim_token_in #(ID_W)     t_arid    (clk, reset, arid_valid,    arid_ready,    arid_bits,    finish, have[10], arid);
-    foldsim_token_in #(8)        t_arlen   (clk, reset, arlen_valid,   arlen_ready,   arlen_bits,   finish, have[11], arlen);
-    foldsim_token_in #(1)        t_rready  (clk, reset, rready_valid,  rready_ready,  rready_bits,  finish, have[12], rready);
-    foldsim_token_in #(1)        t_bready  (clk, reset, bready_valid,  bready_ready,  bready_bits,  finish, have[13], bready);
-    foldsim_token_in #(1)        t_treset  (clk, reset, treset_valid,  treset_ready,  treset_bits,  finish, have[14], treset);
+    foldsim_token_in #(1, STAGED)        t_awvalid (clk, reset, awvalid_valid, awvalid_ready, awvalid_bits, finish, have[0],  awvalid);
+    foldsim_token_in #(ADDR_W, STAGED)   t_awaddr  (clk, reset, awaddr_valid,  awaddr_ready,  awaddr_bits,  finish, have[1],  awaddr);
+    foldsim_token_in #(ID_W, STAGED)     t_awid    (clk, reset, awid_valid,    awid_ready,    awid_bits,    finish, have[2],  awid);
+    foldsim_token_in #(8, STAGED)        t_awlen   (clk, reset, awlen_valid,   awlen_ready,   awlen_bits,   finish, have[3],  awlen);
+    foldsim_token_in #(1, STAGED)        t_wvalid  (clk, reset, wvalid_valid,  wvalid_ready,  wvalid_bits,  finish, have[4],  wvalid);
+    foldsim_token_in #(DATA_W, STAGED)   t_wdata   (clk, reset, wdata_valid,   wdata_ready,   wdata_bits,   finish, have[5],  wdata);
+    foldsim_token_in #(DATA_W/8, STAGED) t_wstrb   (clk, reset, wstrb_valid,   wstrb_ready,   wstrb_bits,   finish, have[6],  wstrb);
+    foldsim_token_in #(1, STAGED)        t_wlast   (clk, reset, wlast_valid,   wlast_ready,   wlast_bits,   finish, have[7],  wlast);
+    foldsim_token_in #(1, STAGED)        t_arvalid (clk, reset, arvalid_valid, arvalid_ready, arvalid_bits, finish, have[8],  arvalid);
+    foldsim_token_in #(ADDR_W, STAGED)   t_araddr  (clk, reset, araddr_valid,  araddr_ready,  araddr_bits,  finish, have[9],  araddr);
+    foldsim_token_in #(ID_W, STAGED)     t_arid    (clk, reset, arid_valid,    arid_ready,    arid_bits,    finish, have[10], arid);
+    foldsim_token_in #(8, STAGED)        t_arlen   (clk, reset, arlen_valid,   arlen_ready,   arlen_bits,   finish, have[11], arlen);
+    if (SPEC != 0) begin : g_rlag
+        // R's ready, SPEC cycles behind: SPEC + 1 deep, the cycles before the
+        // first standing as not ready.
+        reg [1:0] cnt;
+        reg       e [3];
+        wire      take = rready_valid & (cnt != 2'(SPEC + 1));
+        assign rready_ready = (cnt != 2'(SPEC + 1));
+        assign have[12]     = (cnt != 2'd0);
+        assign rready       = e[0];
+        assign rr_peek_valid = (cnt != 2'd0);
+        always @(posedge clk) begin
+            if (reset) begin
+                cnt  <= 2'(SPEC);
+                e[0] <= 1'b0;
+                e[1] <= 1'b0;
+            end else begin : step_
+                reg [1:0] c;
+                c = cnt;
+                if (finish) begin
+                    e[0] <= e[1];
+                    e[1] <= e[2];
+                    c = c - 2'd1;
+                end
+                if (take)
+                    e[c] <= rready_bits;
+                if (take)
+                    c = c + 2'd1;
+                cnt <= c;
+            end
+        end
+    end else begin : g_rnow
+        foldsim_token_in #(1, STAGED) t_rready (clk, reset, rready_valid, rready_ready, rready_bits, finish, have[12], rready);
+        assign rr_peek_valid = 1'b0;
+    end
+    foldsim_token_in #(1, STAGED)        t_bready  (clk, reset, bready_valid,  bready_ready,  bready_bits,  finish, have[13], bready);
+    foldsim_token_in #(1, STAGED)        t_treset  (clk, reset, treset_valid,  treset_ready,  treset_bits,  finish, have[14], treset);
 
-    // ---- The pipe's state ----
-    reg [31:0]   cycle;
-    reg [CW-1:0] pending_reads, pending_aw, pending_w;
+    // The requests' addresses within the port's channel, the bits the bank
+    // model takes: the block index drops the port's.
+    wire [29:5] ar_ch = {araddr[29 + CH_SHIFT -: 30 - LB], araddr[LB-1:5]};
+    wire [29:5] aw_ch = {awaddr[29 + CH_SHIFT -: 30 - LB], awaddr[LB-1:5]};
 
-    // Reads accepted and not yet driving R, and the one that is.
-    reg [31:0]   rp_release [DEPTH];
-    reg [ID_W-1:0] rp_id    [DEPTH];
-    reg [PW-1:0] rp_head, rp_tail;
-    reg [CW-1:0] rp_count;
-    reg          cur_r_valid;
-    reg [ID_W-1:0] cur_r_id;
+    // ---- The endpoint's state ----
+    // Requests in flight: writes' halves taken and not yet acknowledged.
+    reg [CW-1:0] pending_aw, pending_w;
 
-    // AW ids waiting for their write data, writes formed and not yet driving
-    // B, and the one that is.
+    // AW ids and channel addresses waiting for their write data.
     reg [ID_W-1:0] awq_id [DEPTH];
+    reg [29:5]     awq_addr [DEPTH];
     reg [PW-1:0] awq_head, awq_tail;
     reg [CW-1:0] awq_count;
-    reg [31:0]   wp_release [DEPTH];
-    reg [ID_W-1:0] wp_id    [DEPTH];
-    reg [PW-1:0] wp_head, wp_tail;
-    reg [CW-1:0] wp_count;
-    reg          cur_w_valid;
-    reg [ID_W-1:0] cur_w_id;
 
-    // Memory's side: read data in order, and writes acknowledged.
-    reg [DATA_W-1:0] rd_data [DEPTH];
-    reg [PW-1:0] rd_head, rd_tail;
-    reg [CW-1:0] rd_count;
-    reg [7:0]    b_acked, b_given;
     // Reads memory has not answered, and writes it has not acknowledged.
-    reg [CW-1:0] rd_out, wr_out;
+    reg [HCW-1:0] rd_out, wr_out;
     wire         drained = (rd_out == 0) & (wr_out == 0);
 
-    // ---- The pipe's outputs: functions of its state ----
-    wire ar_ready = ~error & (32'(pending_reads) < 32'(max_reads));
-    wire aw_ready = ~error & (32'(pending_aw) < 32'(max_writes));
-    wire w_ready  = ~error & (32'(pending_w) < 32'(max_writes));
+    // The bank model's state: the port's readiness, R and B.
+    wire          bk_room, bk_slot_free, bk_r_valid, bk_b_valid, bk_no_reads, bk_done;
+    wire [SW-1:0] bk_alloc_slot, bk_r_slot;
+    wire [ID_W-1:0] bk_b_id;
+    /* verilator lint_off UNUSEDSIGNAL */
+    wire [ID_W-1:0] bk_r_id;    // unused with SPEC 2
+    /* verilator lint_on UNUSEDSIGNAL */
+    // SPEC: the candidates for an R fire in this cycle, and the fire before.
+    wire          bk_slot_free1, bk_r_valid1, bk_fire_prev;
+    wire [SW-1:0] bk_r_slot1;
+    /* verilator lint_off UNUSEDSIGNAL */
+    wire [ID_W-1:0] bk_r_id1;   // unused without SPEC
+    /* verilator lint_on UNUSEDSIGNAL */
+    // SPEC 2: the bank model's candidates, a read it takes, and R's ready of
+    // the cycle before for an AR it resolves late.
+    /* verilator lint_off UNUSEDSIGNAL */
+    wire          rr_peek_valid;
+    wire [3:0]    bk_c_valid, bk_c_sf;
+    wire [4*SW-1:0] bk_c_slot;
+    wire [4*ID_W-1:0] bk_c_id;
+    wire [1:0]    bk_c_room;
+    wire          bk_ar_take;
+    wire [SW-1:0] bk_ar_take_slot;
+    /* verilator lint_on UNUSEDSIGNAL */
+    // Read data by slot, and which slots memory has answered.
+    reg [DATA_W-1:0] slot_data [PSLOTS];
+    reg [PSLOTS-1:0] arrived;
+
+    // ---- The model's outputs: functions of its state ----
+    // The AR ready the target was offered: with SPEC, the candidate its R
+    // fire of the cycle before chose.
+    wire ar_ready0 = ~error & bk_room & bk_slot_free;
+    wire ar_ready1 = ~error & bk_room & bk_slot_free1;
+    // SPEC 2: the candidates, the error each pair of fires leaves (by the
+    // one before), and the ready the target was offered this cycle by the
+    // fire two cycles before (AR's for either fire the cycle before).
+    reg  [1:0] errn;
+    wire [3:0] c_arready, c_awready, c_wready;
+    for (genvar x = 0; x < 4; ++x) begin : g_c
+        assign c_arready[x] = ~errn[x >> 1] & bk_c_room[x >> 1] & bk_c_sf[x];
+        assign c_awready[x] = ~errn[x >> 1] & bk_c_room[x >> 1] & (32'(pending_aw) < DEPTH);
+        assign c_wready[x]  = ~errn[x >> 1] & (32'(pending_w) < DEPTH);
+    end
+    wire       error_cur = errn[bk_fire_prev];
+    wire [1:0] ar_ready_c = {c_arready[{bk_fire_prev, 1'b1}], c_arready[{bk_fire_prev, 1'b0}]};
+    wire ar_ready  = (SPEC == 2) ? ar_ready_c[0] : (((SPEC != 0) && bk_fire_prev) ? ar_ready1 : ar_ready0);
+    wire aw_ready  = (SPEC == 2) ? c_awready[{bk_fire_prev, 1'b0}] : (~error & bk_room & (32'(pending_aw) < DEPTH));
+    wire w_ready   = (SPEC == 2) ? c_wready[{bk_fire_prev, 1'b0}] : (~error & (32'(pending_w) < DEPTH));
+    wire r_valid  = bk_r_valid;
+    wire b_valid  = bk_b_valid;
     // R needs its data back from memory, and B its write acknowledged.
-    wire ok = (~cur_r_valid | (rd_count != 0)) & (~cur_w_valid | (b_acked != b_given));
+    reg r_ok;
+    always @(*) begin
+        r_ok = 1'b1;
+        if (SPEC == 2) begin
+            for (integer x = 0; x < 4; ++x)
+                r_ok = r_ok & (~bk_c_valid[x] | arrived[bk_c_slot[x*SW +: SW]]);
+        end else begin
+            r_ok = (~bk_r_valid | arrived[bk_r_slot]) & (~(SPEC != 0 && bk_r_valid1) | arrived[bk_r_slot1]);
+        end
+    end
+    wire ok = r_ok;
     wire [10:0] done;
 
-    foldsim_token_out o_awready (clk, reset, awready_valid, awready_ready, ok, finish, done[0]);
-    foldsim_token_out o_wready  (clk, reset, wready_valid,  wready_ready,  ok, finish, done[1]);
-    foldsim_token_out o_arready (clk, reset, arready_valid, arready_ready, ok, finish, done[2]);
-    foldsim_token_out o_rvalid  (clk, reset, rvalid_valid,  rvalid_ready,  ok, finish, done[3]);
-    foldsim_token_out o_rdata   (clk, reset, rdata_valid,   rdata_ready,   ok, finish, done[4]);
-    foldsim_token_out o_rlast   (clk, reset, rlast_valid,   rlast_ready,   ok, finish, done[5]);
-    foldsim_token_out o_rid     (clk, reset, rid_valid,     rid_ready,     ok, finish, done[6]);
-    foldsim_token_out o_rresp   (clk, reset, rresp_valid,   rresp_ready,   ok, finish, done[7]);
-    foldsim_token_out o_bvalid  (clk, reset, bvalid_valid,  bvalid_ready,  ok, finish, done[8]);
-    foldsim_token_out o_bresp   (clk, reset, bresp_valid,   bresp_ready,   ok, finish, done[9]);
-    foldsim_token_out o_bid     (clk, reset, bid_valid,     bid_ready,     ok, finish, done[10]);
+    foldsim_token_out #(STAGED) o_awready (clk, reset, awready_valid, awready_ready, ok, finish, done[0]);
+    foldsim_token_out #(STAGED) o_wready  (clk, reset, wready_valid,  wready_ready,  ok, finish, done[1]);
+    foldsim_token_out #(STAGED) o_arready (clk, reset, arready_valid, arready_ready, ok, finish, done[2]);
+    foldsim_token_out #(STAGED) o_rvalid  (clk, reset, rvalid_valid,  rvalid_ready,  ok, finish, done[3]);
+    foldsim_token_out #(STAGED) o_rdata   (clk, reset, rdata_valid,   rdata_ready,   ok, finish, done[4]);
+    foldsim_token_out #(STAGED) o_rlast   (clk, reset, rlast_valid,   rlast_ready,   ok, finish, done[5]);
+    foldsim_token_out #(STAGED) o_rid     (clk, reset, rid_valid,     rid_ready,     ok, finish, done[6]);
+    foldsim_token_out #(STAGED) o_rresp   (clk, reset, rresp_valid,   rresp_ready,   ok, finish, done[7]);
+    foldsim_token_out #(STAGED) o_bvalid  (clk, reset, bvalid_valid,  bvalid_ready,  ok, finish, done[8]);
+    foldsim_token_out #(STAGED) o_bresp   (clk, reset, bresp_valid,   bresp_ready,   ok, finish, done[9]);
+    foldsim_token_out #(STAGED) o_bid     (clk, reset, bid_valid,     bid_ready,     ok, finish, done[10]);
 
-    assign awready_bits = aw_ready;
-    assign wready_bits  = w_ready;
-    assign arready_bits = ar_ready;
-    assign rvalid_bits  = cur_r_valid;
-    assign rdata_bits   = rd_data[rd_head];
-    assign rlast_bits   = 1'b1;
-    assign rid_bits     = cur_r_id;
-    assign rresp_bits   = 2'b00;
-    assign bvalid_bits  = cur_w_valid;
+    if (SPEC == 2) begin : g_spec2_out
+        assign awready_bits = c_awready;
+        assign wready_bits  = c_wready;
+        assign arready_bits = c_arready;
+        assign rvalid_bits  = bk_c_valid;
+        for (genvar x = 0; x < 4; ++x) begin : g_r
+            assign rdata_bits[x*DATA_W +: DATA_W] = slot_data[bk_c_slot[x*SW +: SW]];
+        end
+        assign rlast_bits   = 4'b1111;
+        assign rid_bits     = bk_c_id;
+        assign rresp_bits   = 8'b0;
+    end else if (SPEC != 0) begin : g_spec_out
+        assign awready_bits = aw_ready;
+        assign wready_bits  = w_ready;
+        assign arready_bits = {ar_ready1, ar_ready0};
+        assign rvalid_bits  = {bk_r_valid1, bk_r_valid};
+        assign rdata_bits   = {slot_data[bk_r_slot1], slot_data[bk_r_slot]};
+        assign rlast_bits   = 2'b11;
+        assign rid_bits     = {bk_r_id1, bk_r_id};
+        assign rresp_bits   = 4'b0000;
+    end else begin : g_out
+        assign awready_bits = aw_ready;
+        assign wready_bits  = w_ready;
+        assign arready_bits = ar_ready;
+        assign rvalid_bits  = r_valid;
+        assign rdata_bits   = slot_data[bk_r_slot];
+        assign rlast_bits   = 1'b1;
+        assign rid_bits     = bk_r_id;
+        assign rresp_bits   = 2'b00;
+    end
+    assign bvalid_bits  = b_valid;
     assign bresp_bits   = 2'b00;
-    assign bid_bits     = cur_w_id;
+    assign bid_bits     = bk_b_id;
 
-    // A reset cycle waits for memory to answer everything it has.
+    // A reset cycle waits for memory to answer everything it has, and every
+    // cycle for the bank model's DRAM clocks of it.
     wire drain_wait = have[14] & treset & ~drained;
-    assign finish = (&have) & (&done) & ~drain_wait;
-    assign stall  = ~ok | drain_wait;
-    assign idle   = (pending_reads == 0) & (pending_aw == 0) & (pending_w == 0) & drained;
+    wire tokens_in  = (&have) & (&done);
+    // A write's halves wait for memory to take or acknowledge earlier ones.
+    wire full_wait;
+    assign finish = tokens_in & ~drain_wait & bk_done & ~full_wait;
+    assign stall  = ~ok | drain_wait | (tokens_in & ~bk_done) | (tokens_in & full_wait);
+    assign idle   = bk_no_reads & (pending_aw == 0) & (pending_w == 0) & drained;
 
-    // ---- One target cycle of the pipe, on the request side's tokens ----
+    // ---- One target cycle, on the request side's tokens ----
     wire ar_hs = arvalid & ar_ready;
     wire aw_hs = awvalid & aw_ready;
     wire w_hs  = wvalid & w_ready;
     wire burst = (ar_hs & (arlen != 0)) | (aw_hs & (awlen != 0)) | (w_hs & ~wlast);
+    // SPEC 2: AR's handshake, fire and burst for either fire of R the cycle
+    // before.
+    wire [1:0] ar_hs_c   = {arvalid & ar_ready_c[1], arvalid & ar_ready_c[0]};
+    wire [1:0] ar_fire_c = ar_hs_c & {2{arlen == 0}};
+    wire       wburst    = (aw_hs & (awlen != 0)) | (w_hs & ~wlast);
+    wire [1:0] burst_c   = (ar_hs_c & {2{arlen != 0}}) | {2{wburst}};
     wire ar_fire = ar_hs & (arlen == 0);
     wire aw_fire = aw_hs & (awlen == 0);
     wire w_fire  = w_hs & wlast;
-    wire r_fire  = cur_r_valid & rready;
-    wire b_fire  = cur_w_valid & bready;
+    // With SPEC, the bank model takes R's ready of the cycle before.
+    wire r_fire  = (SPEC != 0) ? rready : (r_valid & rready);
+    wire b_fire  = b_valid & bready;
 
-    // Reads: the latency pipe, into the stage driving R; a read released the
-    // cycle it arrives skips the pipe.
-    wire [31:0]   ar_release = cycle + read_latency - 32'd1;
-    wire          rp_empty   = (rp_count == 0);
-    wire          r_head     = ~rp_empty | ar_fire;
-    wire [31:0]   r_head_rel = rp_empty ? ar_release : rp_release[rp_head];
-    wire [ID_W-1:0] r_head_id = rp_empty ? arid : rp_id[rp_head];
-    wire          r_release  = r_head & ($signed(cycle - r_head_rel) >= 0);
-    wire          r_take     = r_release & (~cur_r_valid | r_fire);
-    wire          rp_push    = ar_fire & ~(r_take & rp_empty);
-    wire          rp_pop     = r_take & ~rp_empty;
-
-    // Writes: an AW and its W, in either order, form one write, its latency
-    // counted from the cycle both are in.
+    // Writes: an AW and its W, in either order, form one write.
     wire          new_write = ((pending_w > pending_aw) & aw_fire)
                             | ((pending_w < pending_aw) & w_fire)
                             | (aw_fire & w_fire);
     wire          awq_empty = (awq_count == 0);
     wire [ID_W-1:0] w_form_id = awq_empty ? awid : awq_id[awq_head];
+    wire [29:5]   w_form_addr = awq_empty ? aw_ch : awq_addr[awq_head];
     wire          awq_pop   = new_write & ~awq_empty;
     wire          awq_push  = aw_fire & ~(new_write & awq_empty);
-    wire [31:0]   w_release = cycle + write_latency - 32'd1;
-    wire          wp_empty  = (wp_count == 0);
-    wire          w_head    = ~wp_empty | new_write;
-    wire [31:0]   w_head_rel = wp_empty ? w_release : wp_release[wp_head];
-    wire [ID_W-1:0] w_head_id = wp_empty ? w_form_id : wp_id[wp_head];
-    wire          w_rel      = w_head & ($signed(cycle - w_head_rel) >= 0);
-    wire          w_take     = w_rel & (~cur_w_valid | b_fire);
-    wire          wp_push    = new_write & ~(w_take & wp_empty);
-    wire          wp_pop     = w_take & ~wp_empty;
 
     function automatic [CW-1:0] count(input [CW-1:0] value, input inc, input dec);
         count = (inc & ~dec) ? value + 1'b1 : ((dec & ~inc & (value != 0)) ? value - 1'b1 : value);
@@ -257,82 +385,40 @@ module foldsim_mem #(
 
     always @(posedge clk) begin
         if (reset) begin
-            cycle         <= 0;
-            pending_reads <= 0;
             pending_aw    <= 0;
             pending_w     <= 0;
-            rp_head       <= 0;
-            rp_tail       <= 0;
-            rp_count      <= 0;
-            cur_r_valid   <= 1'b0;
             awq_head      <= 0;
             awq_tail      <= 0;
             awq_count     <= 0;
-            wp_head       <= 0;
-            wp_tail       <= 0;
-            wp_count      <= 0;
-            cur_w_valid   <= 1'b0;
             error         <= 1'b0;
+            errn          <= 2'b00;
         end else if (finish) begin
-            cycle <= cycle + 32'd1;
             if (treset) begin
-                pending_reads <= 0;
                 pending_aw    <= 0;
                 pending_w     <= 0;
-                rp_head       <= 0;
-                rp_tail       <= 0;
-                rp_count      <= 0;
-                cur_r_valid   <= 1'b0;
                 awq_head      <= 0;
                 awq_tail      <= 0;
                 awq_count     <= 0;
-                wp_head       <= 0;
-                wp_tail       <= 0;
-                wp_count      <= 0;
-                cur_w_valid   <= 1'b0;
                 error         <= 1'b0;
+                errn          <= 2'b00;
             end else begin
-                if (rp_push) begin
-                    rp_release[rp_tail] <= ar_release;
-                    rp_id[rp_tail]      <= arid;
-                    rp_tail             <= rp_tail + 1'b1;
-                end
-                if (rp_pop)
-                    rp_head <= rp_head + 1'b1;
-                rp_count <= rp_count + CW'(rp_push) - CW'(rp_pop);
-                if (r_take) begin
-                    cur_r_valid <= 1'b1;
-                    cur_r_id    <= r_head_id;
-                end else if (r_fire) begin
-                    cur_r_valid <= 1'b0;
-                end
-
+                // SPEC 2: the error after this cycle, for each fire of R in
+                // the cycle before; it is known two cycles later.
+                errn  <= {2{error_cur}} | burst_c;
+                if (SPEC == 2)
+                    error <= error_cur;
                 if (awq_push) begin
-                    awq_id[awq_tail] <= awid;
-                    awq_tail         <= awq_tail + 1'b1;
+                    awq_id[awq_tail]   <= awid;
+                    awq_addr[awq_tail] <= aw_ch;
+                    awq_tail           <= awq_tail + 1'b1;
                 end
                 if (awq_pop)
                     awq_head <= awq_head + 1'b1;
                 awq_count <= awq_count + CW'(awq_push) - CW'(awq_pop);
-                if (wp_push) begin
-                    wp_release[wp_tail] <= w_release;
-                    wp_id[wp_tail]      <= w_form_id;
-                    wp_tail             <= wp_tail + 1'b1;
-                end
-                if (wp_pop)
-                    wp_head <= wp_head + 1'b1;
-                wp_count <= wp_count + CW'(wp_push) - CW'(wp_pop);
-                if (w_take) begin
-                    cur_w_valid <= 1'b1;
-                    cur_w_id    <= w_head_id;
-                end else if (b_fire) begin
-                    cur_w_valid <= 1'b0;
-                end
 
-                pending_reads <= count(pending_reads, ar_fire, r_fire);
                 pending_aw    <= count(pending_aw, aw_fire, b_fire);
                 pending_w     <= count(pending_w, w_fire, b_fire);
-                if (burst)
+                if ((SPEC != 2) && burst)
                     error <= 1'b1;
             end
         end
@@ -341,20 +427,32 @@ module foldsim_mem #(
     // ---- Memory: requests as the target makes them, in order ----
     // A write goes to memory once both its halves are in: only whole writes
     // are offered, so a lone half can be dropped without breaking AXI.
-    reg [63:0] arq_addr [DEPTH];
-    reg [PW-1:0] arq_head, arq_tail;
-    reg [CW-1:0] arq_count;
+    reg [63:0] arq_addr [HD];
+    reg [SW-1:0] arq_slot [HD];
+    reg [HPW-1:0] arq_head, arq_tail, rs_head;
+    reg [HCW-1:0] arq_count;
+    // AW addresses from the target's AW until memory acknowledges the write
+    // (awm_ack .. awm_head: taken by memory; .. awm_tail: not yet).
     reg [63:0] awm_addr [DEPTH];
-    reg [PW-1:0] awm_head, awm_tail;
+    reg [PW-1:0] awm_ack, awm_head, awm_tail;
+    reg [CW-1:0] awm_live;
     reg [DATA_W-1:0]   wm_data [DEPTH];
     reg [DATA_W/8-1:0] wm_strb [DEPTH];
     reg [PW-1:0] wm_head, wm_tail;
+    reg [CW-1:0] wm_count;
     // Whole writes whose AW, and whose W, memory has not taken yet.
     reg [CW-1:0] aw_formed, w_formed;
 
     wire take     = finish & ~treset;
     wire flush    = finish & treset;
-    wire arq_push = take & ar_fire;
+    // SPEC 2: a read goes to memory when the bank model takes it, at its
+    // cycle's end or, if its fire waited for R's ready, a little later.
+    wire arq_push = (SPEC == 2) ? bk_ar_take : (take & ar_fire);
+    wire [SW-1:0] arq_new_slot = (SPEC == 2) ? bk_ar_take_slot : bk_alloc_slot;
+    reg  [63:0]   ar_held_addr;
+    always @(posedge clk)
+        if (finish)
+            ar_held_addr <= base + 64'(araddr);
     wire arq_pop  = m_arvalid & m_arready;
     wire awm_push = take & aw_fire;
     wire awm_pop  = m_awvalid & m_awready;
@@ -362,14 +460,34 @@ module foldsim_mem #(
     wire wm_pop   = m_wvalid & m_wready;
     wire form     = take & new_write;
     wire rd_push  = m_rvalid & m_rready;
-    wire rd_pop   = take & r_fire;
     wire b_push   = m_bvalid & m_bready;
+    assign full_wait = ~treset & ((aw_fire & (awm_live == CW'(DEPTH))) | (w_fire & (wm_count == CW'(DEPTH))));
 
-    assign m_arvalid = (arq_count != 0);
+    // A request waits while a write of its block is unacknowledged: a read
+    // for every whole write before it (memory answers reads and writes apart),
+    // a write for those memory has taken (same-id writes complete in order,
+    // but need not reach memory in it). Once offered, it stays offered.
+    function automatic [CW-1:0] off(input [PW-1:0] i);
+        off = CW'(PW'(i - awm_ack));
+    endfunction
+    wire [CW-1:0] aw_taken = wr_out[CW-1:0] - aw_formed;
+    reg ar_hit, aw_hit, ar_shown, aw_shown;
+    always @(*) begin
+        ar_hit = 1'b0;
+        aw_hit = 1'b0;
+        for (integer i = 0; i < DEPTH; ++i) begin
+            if ((off(PW'(i)) < wr_out[CW-1:0]) && (awm_addr[i][63:LB] == arq_addr[arq_head][63:LB]))
+                ar_hit = 1'b1;
+            if ((off(PW'(i)) < aw_taken) && (awm_addr[i][63:LB] == awm_addr[awm_head][63:LB]))
+                aw_hit = 1'b1;
+        end
+    end
+
+    assign m_arvalid = (arq_count != 0) & (ar_shown | ~ar_hit);
     assign m_araddr  = arq_addr[arq_head];
     assign m_arlen   = 8'd0;
     assign m_rready  = 1'b1;
-    assign m_awvalid = (aw_formed != 0);
+    assign m_awvalid = (aw_formed != 0) & (aw_shown | ~aw_hit);
     assign m_awaddr  = awm_addr[awm_head];
     assign m_awlen   = 8'd0;
     assign m_wvalid  = (w_formed != 0);
@@ -379,16 +497,20 @@ module foldsim_mem #(
     assign m_bready  = 1'b1;
 
     always @(posedge clk) begin
-        if (arq_push)
-            arq_addr[arq_tail] <= base + 64'(araddr);
+        if (arq_push) begin
+            arq_addr[arq_tail] <= finish ? base + 64'(araddr) : ar_held_addr;
+            arq_slot[arq_tail] <= arq_new_slot;
+        end
         if (awm_push)
             awm_addr[awm_tail] <= base + 64'(awaddr);
         if (wm_push) begin
             wm_data[wm_tail] <= wdata;
             wm_strb[wm_tail] <= wstrb;
         end
+        // Memory answers reads in the order they were made: the data goes
+        // to the read's slot.
         if (rd_push)
-            rd_data[rd_tail] <= m_rdata;
+            slot_data[arq_slot[rs_head]] <= m_rdata;
     end
 
     // A flush comes once memory has answered everything: nothing is offered
@@ -399,25 +521,39 @@ module foldsim_mem #(
             arq_head  <= 0;
             arq_tail  <= 0;
             arq_count <= 0;
+            rs_head   <= 0;
+            arrived   <= '0;
+            awm_ack   <= 0;
             awm_head  <= 0;
             awm_tail  <= 0;
+            awm_live  <= 0;
             wm_head   <= 0;
             wm_tail   <= 0;
+            wm_count  <= 0;
             aw_formed <= 0;
             w_formed  <= 0;
-            rd_head   <= 0;
-            rd_tail   <= 0;
-            rd_count  <= 0;
             rd_out    <= 0;
             wr_out    <= 0;
-            b_acked   <= 0;
-            b_given   <= 0;
+            ar_shown  <= 1'b0;
+            aw_shown  <= 1'b0;
         end else begin
             if (arq_push)
                 arq_tail <= arq_tail + 1'b1;
             if (arq_pop)
                 arq_head <= arq_head + 1'b1;
-            arq_count <= arq_count + CW'(arq_push) - CW'(arq_pop);
+            arq_count <= arq_count + HCW'(arq_push) - HCW'(arq_pop);
+            if (rd_push)
+                rs_head <= rs_head + 1'b1;
+            // A slot's data has not arrived from the cycle its read is taken.
+            begin : arrived_
+                reg [PSLOTS-1:0] a;
+                a = arrived;
+                if (arq_push)
+                    a[arq_new_slot] = 1'b0;
+                if (rd_push)
+                    a[arq_slot[rs_head]] = 1'b1;
+                arrived <= a;
+            end
 
             if (awm_push)
                 awm_tail <= awm_tail + 1'b1;
@@ -427,22 +563,89 @@ module foldsim_mem #(
                 wm_tail <= wm_tail + 1'b1;
             if (wm_pop)
                 wm_head <= wm_head + 1'b1;
+            wm_count  <= wm_count + CW'(wm_push) - CW'(wm_pop);
+            if (b_push)
+                awm_ack <= awm_ack + 1'b1;
+            awm_live  <= awm_live + CW'(awm_push) - CW'(b_push);
             aw_formed <= aw_formed + CW'(form) - CW'(awm_pop);
             w_formed  <= w_formed + CW'(form) - CW'(wm_pop);
+            ar_shown  <= m_arvalid & ~m_arready;
+            aw_shown  <= m_awvalid & ~m_awready;
 
-            if (rd_push)
-                rd_tail <= rd_tail + 1'b1;
-            if (rd_pop)
-                rd_head <= rd_head + 1'b1;
-            rd_count <= rd_count + CW'(rd_push) - CW'(rd_pop);
-
-            rd_out <= rd_out + CW'(arq_push) - CW'(rd_push);
-            wr_out <= wr_out + CW'(form) - CW'(b_push);
-            if (b_push)
-                b_acked <= b_acked + 8'd1;
-            if (take & b_fire)
-                b_given <= b_given + 8'd1;
+            rd_out <= rd_out + HCW'(arq_push) - HCW'(rd_push);
+            wr_out <= wr_out + HCW'(form) - HCW'(b_push);
         end
     end
+
+    // ---- The bank model ----
+    foldsim_mem_bank #(
+        .ID_W   (ID_W),
+        .SLOTS  (PSLOTS),
+        .LSLOTS (SLOTS),
+        .WSLOTS (DEPTH),
+        .HLOG2  (HLOG2),
+        .BURSTS (DATA_W / 256),
+        .SPEC   (SPEC)
+    ) bank_model (
+        .clk            (clk),
+        .reset          (reset),
+        .cfg_data_rate  (cfg_data_rate),
+        .cfg_core_clock (cfg_core_clock),
+        .cfg_latency    (cfg_latency),
+        .cfg_queue      (cfg_queue),
+        .cfg_rq         (cfg_rq),
+        .cfg_wq         (cfg_wq),
+        .cfg_wr_high    (cfg_wr_high),
+        .cfg_wr_low     (cfg_wr_low),
+        .cfg_geom       (cfg_geom),
+        .cfg_t          (cfg_t),
+        .cfg_refresh    (cfg_refresh),
+        .cfg_refi       (cfg_refi),
+        .cfg_rfc        (cfg_rfc),
+        .finish         (finish),
+        .treset         (treset),
+        .ar_fire        (ar_fire),
+        .ar_id          (arid),
+        .ar_addr        (ar_ch),
+        .aw_fire        (aw_fire),
+        .new_write      (new_write),
+        .nw_id          (w_form_id),
+        .nw_addr        (w_form_addr),
+        .r_fire         (r_fire),
+        .b_fire         (b_fire),
+        .room           (bk_room),
+        .slot_free      (bk_slot_free),
+        .alloc_slot     (bk_alloc_slot),
+        .r_valid        (bk_r_valid),
+        .r_id           (bk_r_id),
+        .r_slot         (bk_r_slot),
+        .b_valid        (bk_b_valid),
+        .b_id           (bk_b_id),
+        .slot_free1     (bk_slot_free1),
+        .r_valid1       (bk_r_valid1),
+        .r_id1          (bk_r_id1),
+        .r_slot1        (bk_r_slot1),
+        .fire_prev      (bk_fire_prev),
+        .ar_fire_c      (ar_fire_c),
+        .rr_peek_valid  (rr_peek_valid),
+        .rr_peek        (rready),
+        .c_valid        (bk_c_valid),
+        .c_slot         (bk_c_slot),
+        .c_id           (bk_c_id),
+        .c_room         (bk_c_room),
+        .c_sf           (bk_c_sf),
+        .ar_take        (bk_ar_take),
+        .ar_take_slot   (bk_ar_take_slot),
+        .no_reads       (bk_no_reads),
+        .done           (bk_done),
+        .stat_reads     (stats[0*64 +: 64]),
+        .stat_writes    (stats[1*64 +: 64]),
+        .stat_hits      (stats[2*64 +: 64]),
+        .stat_misses    (stats[3*64 +: 64]),
+        .stat_conflicts (stats[4*64 +: 64]),
+        .stat_latency   (stats[5*64 +: 64]),
+        .stat_refreshes (stats[6*64 +: 64]),
+        .stat_full      (stats[7*64 +: 64])
+    );
 
 endmodule

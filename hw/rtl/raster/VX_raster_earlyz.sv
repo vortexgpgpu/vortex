@@ -324,6 +324,8 @@ module VX_raster_earlyz import VX_gpu_pkg::*; import VX_raster_pkg::*; import VX
         .core_req_data  ('0),
         .core_req_tag   (SCHED_TAG_WIDTH'(0)),
         .core_req_ready (mreq_ready),
+        `UNUSED_PIN (core_req_ready_rd),
+        `UNUSED_PIN (core_req_ready_wr),
         `UNUSED_PIN (req_queue_empty),
         `UNUSED_PIN (req_queue_rw_notify),
 

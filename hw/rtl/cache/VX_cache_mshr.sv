@@ -291,6 +291,20 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
         end
     end
 
+    // The pointer's next entry, as the update above chooses it: a fill opens a
+    // chain, a dequeue walks to the chained successor or to a late joiner
+    // spliced this cycle. The dequeue handshake arrives late, so the address
+    // and the write flag of every candidate are looked up in parallel and the
+    // same choice selects among them, instead of the late pointer indexing the
+    // tables.
+    wire deq_to_next = ~dequeue_park_fire && dequeue_fire && next_table[dequeue_id];
+    wire deq_to_fin  = ~dequeue_park_fire && dequeue_fire && ~next_table[dequeue_id]
+                    && finalize_valid && finalize_is_pending && (finalize_previd == dequeue_id);
+    wire [MSHR_ADDR_WIDTH-1:0] deq_next_id = next_index[dequeue_id];
+    wire [`CS_LINE_ADDR_WIDTH-1:0] deq_addr_cur, deq_addr_next, deq_addr_fin;
+    wire [`CS_LINE_ADDR_WIDTH-1:0] deq_addr_base = fill_valid ? fill_addr : deq_addr_cur;
+    wire deq_rw_base = write_table[fill_valid ? fill_id : dequeue_id];
+
     always @(posedge clk) begin
         if (reset) begin
             valid_table  <= '0;
@@ -409,7 +423,9 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
 
         assign fill_addr      = line_addr[entry_line[fill_id]];
         assign fill_sector    = line_sector[entry_line[fill_id]];
-        assign dequeue_addr_n = line_addr[entry_line[dequeue_id_n]];
+        assign deq_addr_cur   = line_addr[entry_line[dequeue_id]];
+        assign deq_addr_next  = line_addr[entry_line[deq_next_id]];
+        assign deq_addr_fin   = line_addr[entry_line[finalize_id]];
         assign allocate_line_ready = line_ready_r;
 
         `RUNTIME_ASSERT(~(allocate_fire && ~line_hit && ~line_free_r), ("*** %s line table overflow: addr=0x%0h (#%0d)", INSTANCE_ID,
@@ -448,7 +464,9 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
 
         assign fill_addr      = addr_table[fill_id];
         assign fill_sector    = sector_table[fill_id];
-        assign dequeue_addr_n = addr_table[dequeue_id_n];
+        assign deq_addr_cur   = addr_table[dequeue_id];
+        assign deq_addr_next  = addr_table[deq_next_id];
+        assign deq_addr_fin   = addr_table[finalize_id];
         assign allocate_line_ready = 1'b1;
     end
 
@@ -619,11 +637,27 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     assign allocate_id = allocate_id_r;
     assign allocate_previd = prev_idx;
 
+    // The probes below exclude the entry a replay frees this cycle, but
+    // dequeue_free resolves late (it waits on the bank's input arbitration and
+    // stall) and their results gate the bank's data array. Each reduction is
+    // therefore formed twice from early terms, without that entry and with it
+    // alone, and dequeue_free selects at the end.
+    wire [MSHR_SIZE-1:0] probe_base;
+    wire [MSHR_SIZE-1:0] dequeue_oh;
+    for (genvar i = 0; i < MSHR_SIZE; ++i) begin : g_probe_base
+        assign probe_base[i] = valid_table[i] && entry_match[i] && ~amo_mask[i]
+                            && ~(finalize_valid && finalize_is_release && (finalize_id == MSHR_ADDR_WIDTH'(i)));
+        assign dequeue_oh[i] = (dequeue_id == MSHR_ADDR_WIDTH'(i));
+    end
+    wire [MSHR_SIZE-1:0] probe_rest = probe_base & ~dequeue_oh;
+    wire [MSHR_SIZE-1:0] probe_deq  = probe_base & dequeue_oh;
+    `define MSHR_PROBE(mask) ((| (probe_rest & (mask))) || ((| (probe_deq & (mask))) && ~dequeue_free))
+
     if (WRITEBACK) begin : g_pending_wb
-        assign allocate_pending = |addr_matches;
+        assign allocate_pending = `MSHR_PROBE({MSHR_SIZE{1'b1}});
     end else begin : g_pending_wt
         // exclude write requests if writethrough
-        assign allocate_pending = |(addr_matches & ~write_table);
+        assign allocate_pending = `MSHR_PROBE(~write_table);
     end
 
     // Word-granular order-hazard probes. A chained entry only constrains a
@@ -638,10 +672,11 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     // yet. A same-word hit completing ahead of it would read pre-store data (or
     // a write-hit would be overwritten by the older store's replay), inverting
     // arrival order — the bank demotes such a hit to a chained miss.
-    assign allocate_pending_wr  = |(addr_matches & write_table & word_matches);
+    assign allocate_pending_wr  = `MSHR_PROBE(write_table & word_matches);
     // Any undrained same-word entry: an incoming WRITE hit must not land ahead
     // of an older chained read of the same word.
-    assign allocate_pending_ovl = |(addr_matches & word_matches);
+    assign allocate_pending_ovl = `MSHR_PROBE(word_matches);
+    `undef MSHR_PROBE
 
     assign dequeue_valid = dequeue_val && ~((LAZY_FETCH != 0) && dequeue_block);
     // Sampled with dequeue_id_n, alongside the payload in mshr_store, rather
@@ -663,9 +698,13 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     // stalls and the replay never drains.
     reg [`CS_LINE_ADDR_WIDTH-1:0] dequeue_addr_r;
     reg dequeue_rw_r;
+    assign dequeue_addr_n = deq_to_next ? deq_addr_next : (deq_to_fin ? deq_addr_fin : deq_addr_base);
+    wire dequeue_rw_n = deq_to_next ? write_table[deq_next_id] : (deq_to_fin ? write_table[finalize_id] : deq_rw_base);
+    `RUNTIME_ASSERT((dequeue_addr_n == entry_addr[dequeue_id_n]) && (dequeue_rw_n == write_table[dequeue_id_n]),
+        ("*** %s dequeue candidate select out of sync: id=%0d", INSTANCE_ID, dequeue_id_n))
     always @(posedge clk) begin
         dequeue_addr_r <= dequeue_addr_n;
-        dequeue_rw_r   <= write_table[dequeue_id_n];
+        dequeue_rw_r   <= dequeue_rw_n;
     end
 
     assign dequeue_addr  = dequeue_addr_r;

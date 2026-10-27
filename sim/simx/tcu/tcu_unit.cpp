@@ -412,8 +412,8 @@ public:
   }
 
 #ifdef TCU_META_ENABLE
-  // Each TCU block tracks one metadata transaction. Requests share the LSU
-  // client port, while tags allow their memory latency to overlap.
+  // Each TCU block's AGU tracks one metadata load and writes each returned
+  // lane straight into the block's metadata SRAM.
   static constexpr uint32_t kAguBeats =
       (VX_CFG_NUM_THREADS + VX_CFG_NUM_LSU_LANES - 1) / VX_CFG_NUM_LSU_LANES;
 
@@ -426,7 +426,6 @@ public:
     uint32_t next_beat = 0;
     uint32_t rsp_count = 0;
     std::array<uint64_t, VX_CFG_NUM_THREADS> addrs{};
-    std::array<uint32_t, VX_CFG_NUM_THREADS> words{};
   };
   std::array<agu_state_t, VX_CFG_NUM_TCU_BLOCKS> agu_;
   uint32_t agu_issue_rr_ = 0;
@@ -452,70 +451,91 @@ public:
     }
   }
 
-  void agu_step() {
-    if (!simobject_->agu_req_out.full()) {
-      for (uint32_t offset = 0; offset < VX_CFG_NUM_TCU_BLOCKS; ++offset) {
-        uint32_t block = (agu_issue_rr_ + offset) % VX_CFG_NUM_TCU_BLOCKS;
-        auto& agu = agu_.at(block);
-        if (!agu.busy || agu.next_beat >= kAguBeats) {
-          continue;
-        }
-        LsuReq req(VX_CFG_NUM_LSU_LANES);
-        req.op   = MemOp::LD;
-        req.tag  = block * kAguBeats + agu.next_beat;
-        req.wid  = agu.wid;
-        req.cid  = agu.trace->cid;
-        req.uuid = agu.trace->uuid;
-        for (uint32_t i = 0; i < VX_CFG_NUM_LSU_LANES; ++i) {
-          uint32_t idx = agu.next_beat * VX_CFG_NUM_LSU_LANES + i;
-          if (idx >= VX_CFG_NUM_THREADS) {
-            break;
-          }
-          req.mask.set(i);
-          req.addrs.at(i) = agu.addrs.at(idx);
-          req.tids.at(i)  = idx % VX_CFG_NUM_THREADS;
-        }
-        simobject_->agu_req_out.send(req);
-        ++agu.next_beat;
-        agu_issue_rr_ = (block + 1) % VX_CFG_NUM_TCU_BLOCKS;
+  LsuReq agu_make_req(uint32_t block, agu_state_t& agu) {
+    LsuReq req(VX_CFG_NUM_LSU_LANES);
+    req.op   = MemOp::LD;
+    req.tag  = block * kAguBeats + agu.next_beat;
+    req.wid  = agu.wid;
+    req.cid  = agu.trace->cid;
+    req.uuid = agu.trace->uuid;
+    for (uint32_t i = 0; i < VX_CFG_NUM_LSU_LANES; ++i) {
+      uint32_t idx = agu.next_beat * VX_CFG_NUM_LSU_LANES + i;
+      if (idx >= VX_CFG_NUM_THREADS) {
         break;
       }
+      req.mask.set(i);
+      req.addrs.at(i) = agu.addrs.at(idx);
+      req.tids.at(i)  = idx % VX_CFG_NUM_THREADS;
     }
+    ++agu.next_beat;
+    return req;
+  }
 
-    if (!simobject_->agu_rsp_in.empty()) {
-      auto& rsp = simobject_->agu_rsp_in.peek();
-      uint32_t block = (uint32_t)rsp.tag / kAguBeats;
-      uint32_t beat = (uint32_t)rsp.tag % kAguBeats;
-      auto& agu = agu_.at(block);
-      for (uint32_t lane = 0; lane < rsp.mask.size(); ++lane) {
-        if (!rsp.mask.test(lane)) {
-          continue;
-        }
-        uint32_t idx = beat * VX_CFG_NUM_LSU_LANES + lane;
-        assert(idx < VX_CFG_NUM_THREADS && rsp.data.at(lane));
-        uint32_t off = agu.addrs.at(idx) & (VX_CFG_MEM_BLOCK_SIZE - 1);
-        uint32_t word = 0;
-        std::memcpy(&word, rsp.data.at(lane)->data() + off, 4);
-        agu.words.at(idx) = word;
-        ++agu.rsp_count;
+  void agu_receive(const LsuRsp& rsp) {
+    uint32_t block = (uint32_t)rsp.tag / kAguBeats;
+    uint32_t beat = (uint32_t)rsp.tag % kAguBeats;
+    auto& agu = agu_.at(block);
+    for (uint32_t lane = 0; lane < rsp.mask.size(); ++lane) {
+      if (!rsp.mask.test(lane)) {
+        continue;
       }
-      simobject_->agu_rsp_in.pop();
-      if (agu.busy && !agu.complete && agu.rsp_count == VX_CFG_NUM_THREADS) {
-        this->agu_deposit(agu);
-        agu.complete = true;
-      }
+      uint32_t idx = beat * VX_CFG_NUM_LSU_LANES + lane;
+      assert(idx < VX_CFG_NUM_THREADS && rsp.data.at(lane));
+      uint32_t off = agu.addrs.at(idx) & (VX_CFG_MEM_BLOCK_SIZE - 1);
+      uint32_t word = 0;
+      std::memcpy(&word, rsp.data.at(lane)->data() + off, 4);
+      this->agu_write(agu, idx, word);
+      ++agu.rsp_count;
+    }
+    if (agu.busy && !agu.complete && agu.rsp_count == VX_CFG_NUM_THREADS) {
+      agu.complete = true;
     }
   }
 
-  // Deposit the fetched words into the selected metadata SRAM.
-  void agu_deposit(const agu_state_t& agu) {
+  void agu_step() {
+    if (TCU_AGU_PORTS == 1) {
+      // every block shares one port: round-robin one request per cycle
+      if (!simobject_->agu_req_out.at(0).full()) {
+        for (uint32_t offset = 0; offset < VX_CFG_NUM_TCU_BLOCKS; ++offset) {
+          uint32_t block = (agu_issue_rr_ + offset) % VX_CFG_NUM_TCU_BLOCKS;
+          auto& agu = agu_.at(block);
+          if (!agu.busy || agu.next_beat >= kAguBeats) {
+            continue;
+          }
+          simobject_->agu_req_out.at(0).send(this->agu_make_req(block, agu));
+          agu_issue_rr_ = (block + 1) % VX_CFG_NUM_TCU_BLOCKS;
+          break;
+        }
+      }
+    } else {
+      // each block issues on its own port
+      for (uint32_t block = 0; block < VX_CFG_NUM_TCU_BLOCKS; ++block) {
+        auto& agu = agu_.at(block);
+        if (!agu.busy || agu.next_beat >= kAguBeats
+         || simobject_->agu_req_out.at(block).full()) {
+          continue;
+        }
+        simobject_->agu_req_out.at(block).send(this->agu_make_req(block, agu));
+      }
+    }
+
+    for (uint32_t p = 0; p < TCU_AGU_PORTS; ++p) {
+      auto& rsp_in = simobject_->agu_rsp_in.at(p);
+      if (rsp_in.empty()) {
+        continue;
+      }
+      this->agu_receive(rsp_in.peek());
+      rsp_in.pop();
+    }
+  }
+
+  // Write lane T's fetched word into the selected metadata SRAM.
+  void agu_write(const agu_state_t& agu, uint32_t T, uint32_t word) {
     uint32_t wid = agu.wid;
   #ifdef VX_CFG_TCU_MX_ENABLE
     if (agu.selector & 0x10) {
       auto& dst = (agu.selector & 1) ? mx_meta_b_.at(wid) : mx_meta_a_.at(wid);
-      for (uint32_t lane = 0; lane < VX_CFG_NUM_THREADS; ++lane) {
-        dst.at(lane) = agu.words.at(lane);
-      }
+      dst.at(T) = word;
       return;
     }
   #endif
@@ -530,26 +550,25 @@ public:
     constexpr uint32_t BPS = cfg::banks_per_store;
     constexpr uint32_t SPC = cfg::stores_per_col;
     constexpr uint32_t CPL = cfg::meta_cols_per_load;
-    for (uint32_t T = 0; T < VX_CFG_NUM_THREADS; ++T) {
-      uint32_t store_in_load   = T / BPS;
-      uint32_t thread_in_store = T % BPS;
-      uint32_t flat_store      = slot_idx * CPL + store_in_load;
-      uint32_t col             = flat_store / SPC;
-      uint32_t store_in_col    = flat_store % SPC;
-      uint32_t bank            = store_in_col * BPS + thread_in_store;
-      if (bank >= PWD || col >= kMaxMetaCols) {
-        continue;
-      }
-      uint32_t word = agu.words.at(T);
-      sparse_meta_.at(wid).at(bank * kMaxMetaCols + col) = word;
-      // Trace: META_SRAM write (CSV: wid,bank,col,addr,value).
-      if (const char* p = std::getenv("VORTEX_TCU_TRACE")) {
-        if (p[0] == '1') {
-          fprintf(stderr, "META_TRC,%u,%u,%u,0x%lx,0x%08x\n",
-                  wid, bank, col, (unsigned long)agu.addrs.at(T), word);
-        }
+    uint32_t store_in_load   = T / BPS;
+    uint32_t thread_in_store = T % BPS;
+    uint32_t flat_store      = slot_idx * CPL + store_in_load;
+    uint32_t col             = flat_store / SPC;
+    uint32_t store_in_col    = flat_store % SPC;
+    uint32_t bank            = store_in_col * BPS + thread_in_store;
+    if (bank >= PWD || col >= kMaxMetaCols) {
+      return;
+    }
+    sparse_meta_.at(wid).at(bank * kMaxMetaCols + col) = word;
+    // Trace: META_SRAM write (CSV: wid,bank,col,addr,value).
+    if (const char* p = std::getenv("VORTEX_TCU_TRACE")) {
+      if (p[0] == '1') {
+        fprintf(stderr, "META_TRC,%u,%u,%u,0x%lx,0x%08x\n",
+                wid, bank, col, (unsigned long)agu.addrs.at(T), word);
       }
     }
+  #else
+    __unused(T, word);
   #endif
   }
 #endif // TCU_META_ENABLE
@@ -1834,8 +1853,8 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
 TcuUnit::TcuUnit(const SimContext &ctx, const char* name, Core* core)
 	: FuncUnit(ctx, name, core, 1u << log2ceil(VX_CFG_TCU_LATENCY + 1)) // landing-queue depth bounds results awaiting the consumer
 #ifdef TCU_META_ENABLE
-	, agu_req_out(this)
-	, agu_rsp_in(this)
+	, agu_req_out(TCU_AGU_PORTS, this)
+	, agu_rsp_in(TCU_AGU_PORTS, this)
 #endif
 	, impl_(new Impl(this, core))
 {

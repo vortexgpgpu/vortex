@@ -69,6 +69,10 @@ module VX_mem_scheduler #(
     input wire [CORE_REQS-1:0][WORD_WIDTH-1:0] core_req_data,
     input wire [TAG_WIDTH-1:0]              core_req_tag,
     output wire                             core_req_ready,
+    // core_req_ready for a read and for a write request: a requester whose
+    // rw is known ahead of a shared request mux can take its own
+    output wire                             core_req_ready_rd,
+    output wire                             core_req_ready_wr,
 
     // Core request queue
     output wire                             req_queue_empty,
@@ -223,6 +227,8 @@ module VX_mem_scheduler #(
 
     // can accept another request?
     assign core_req_ready = reqq_ready_in && ibuf_ready;
+    assign core_req_ready_rd = reqq_ready_in && ~ibuf_full;
+    assign core_req_ready_wr = reqq_ready_in;
 
     // request queue status. `coalescer_empty` (1 when no coalescer) keeps a
     // store still buffered in the coalescer from prematurely signalling empty.

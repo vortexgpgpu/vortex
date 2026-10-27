@@ -29,9 +29,25 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
     // Outputs
     VX_result_if.master     result_if,
 
-    // The slice exposes the memory-client side as a VX_lsu_sched_if master;
-    // the parent wires it into VX_lsu_scheduler.
-    VX_lsu_sched_if.master  client_if
+`ifdef PERF_ENABLE
+    output wire [`VX_CFG_NUM_LSU_LANES-1:0] perf_rd_req_fire,
+    output wire [`VX_CFG_NUM_LSU_LANES-1:0] perf_wr_req_fire,
+    output wire [`VX_CFG_NUM_LSU_LANES-1:0] perf_rsp_fire,
+    output wire [PERF_CTR_BITS-1:0] coalescer_misses,
+`endif
+
+`ifdef TCU_META_ENABLE
+    VX_lsu_sched_if.slave   tcu_mem_if,
+`endif
+
+    output wire             sched_empty,
+    output wire             store_empty,
+    output wire             busy,
+
+`ifdef VX_CFG_LMEM_ENABLE
+    VX_mem_bus_if.master    lmem_bus_if [`VX_CFG_NUM_LSU_LANES],
+`endif
+    VX_mem_bus_if.master    dcache_bus_if [DCACHE_CHANNELS]
 );
     localparam NUM_LANES    = `VX_CFG_NUM_LSU_LANES;
     localparam PID_BITS     = `CLOG2(`VX_CFG_NUM_THREADS / NUM_LANES);
@@ -51,7 +67,6 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
 `ifndef VX_CFG_EXT_A_ENABLE
     `UNUSED_VAR (core_id)
 `endif
-    `UNUSED_SPARAM (INSTANCE_ID)
 
     // tag_width = header + op_type + align + pkt_addr + fence
     localparam TAG_WIDTH = $bits(lsu_header_t) + INST_LSU_BITS + (NUM_LANES * REQ_ASHIFT) + LSUQ_SIZEW + 1;
@@ -82,15 +97,37 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
     wire req_fence_io = inst_lsu_is_fence_io(execute_if.data.op_type);
 
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] full_addr;
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] lin_addr;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_full_addr
         VX_lsu_agu lsu_agu (
-            .base   (execute_if.data.rs1_data[i]),
-            .stride (execute_if.data.rs2_data[i]),
-            .offset (execute_if.data.op_args.lsu.offset),
-            .pack   (execute_if.data.op_args.lsu.pack),
-            .addr   (full_addr[i])
+            .base     (execute_if.data.rs1_data[i]),
+            .stride   (execute_if.data.rs2_data[i]),
+            .offset   (execute_if.data.op_args.lsu.offset),
+            .pack     (execute_if.data.op_args.lsu.pack),
+            .addr     (full_addr[i]),
+            .lin_addr (lin_addr[i])
         );
     end
+
+    // The address windows are classified on the address before the stack
+    // interleave, which keeps the interleave off the request's attribute
+    // path. The interleave maps the stack window onto itself, so this holds
+    // for every window outside it.
+`ifdef VX_CFG_LSU_STACK_INTERLEAVE_ENABLE
+    `STATIC_ASSERT((`VX_CFG_XLEN'(`VX_MEM_IO_END_ADDR) <= STACK_WINDOW_BOTTOM)
+                || (`VX_CFG_XLEN'(`VX_MEM_IO_BASE_ADDR) >= STACK_WINDOW_TOP),
+                   ("the I/O window overlaps the stack window"))
+`ifdef VX_CFG_LMEM_ENABLE
+    `STATIC_ASSERT((`VX_CFG_XLEN'(`VX_MEM_LMEM_BASE_ADDR) >= STACK_WINDOW_TOP)
+                || ((`VX_CFG_XLEN'(`VX_MEM_LMEM_BASE_ADDR) + (`VX_CFG_XLEN'(1) << `VX_CFG_LMEM_LOG_SIZE)) <= STACK_WINDOW_BOTTOM),
+                   ("the local memory window overlaps the stack window"))
+`endif
+`ifdef VX_CFG_EXT_OM_ENABLE
+    `STATIC_ASSERT((`VX_CFG_XLEN'(`VX_MEM_OM_END_ADDR) <= STACK_WINDOW_BOTTOM)
+                || (`VX_CFG_XLEN'(`VX_MEM_OM_BASE_ADDR) >= STACK_WINDOW_TOP),
+                   ("the OM aperture overlaps the stack window"))
+`endif
+`endif
 
     // address type + AMO classification — per-lane mem_bus_attr_t
     // carried through the scheduler's USER channel and out via the
@@ -99,7 +136,7 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
     mem_bus_attr_t [NUM_LANES-1:0] mem_req_attr_struct;
     wire [NUM_LANES-1:0][MEM_ATTR_WIDTH-1:0] mem_req_attr;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mem_req_attr
-        wire [MEM_ADDRW-1:0] block_addr = full_addr[i][MEM_ASHIFT +: MEM_ADDRW];
+        wire [MEM_ADDRW-1:0] block_addr = lin_addr[i][MEM_ASHIFT +: MEM_ADDRW];
         // is I/O address
         wire [MEM_ADDRW-1:0] io_addr_start = MEM_ADDRW'(`VX_CFG_XLEN'(`VX_MEM_IO_BASE_ADDR) >> MEM_ASHIFT);
         wire [MEM_ADDRW-1:0] io_addr_end = MEM_ADDRW'(`VX_CFG_XLEN'(`VX_MEM_IO_END_ADDR) >> MEM_ASHIFT);
@@ -384,6 +421,32 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
         pkt_waddr,
         req_is_fence
     };
+
+    VX_lsu_sched_if client_if();
+
+    VX_lsu_mem_path #(
+        .INSTANCE_ID (INSTANCE_ID)
+    ) mem_path (
+        .clk              (clk),
+        .reset            (reset),
+    `ifdef PERF_ENABLE
+        .perf_rd_req_fire (perf_rd_req_fire),
+        .perf_wr_req_fire (perf_wr_req_fire),
+        .perf_rsp_fire    (perf_rsp_fire),
+        .coalescer_misses (coalescer_misses),
+    `endif
+        .client_if        (client_if),
+    `ifdef TCU_META_ENABLE
+        .tcu_mem_if       (tcu_mem_if),
+    `endif
+        .sched_empty      (sched_empty),
+        .store_empty      (store_empty),
+        .busy             (busy),
+    `ifdef VX_CFG_LMEM_ENABLE
+        .lmem_bus_if      (lmem_bus_if),
+    `endif
+        .dcache_bus_if    (dcache_bus_if)
+    );
 
     // Pack per-lane mem_req signals into the client_if request payload;
     // unpack the response payload into per-lane mem_rsp signals.
