@@ -18,6 +18,35 @@ tests:
   - rtlsim
   dir: tests/regression
   target: run-{driver}
+# Local-memory read merging: shared-word reads, partial masks, lanes of
+# different LSU blocks, and per-lane order against the lane's own stores.
+- id: lmem-merge-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: lmem_merge
+  shape:
+    threads: 16
+- id: lmem-merge-2
+  via: blackbox
+  drivers:
+  - simx
+  app: lmem_merge
+  configs: -DVX_CFG_ISSUE_WIDTH=2
+  shape:
+    threads: 32
+    warps: 8
+# The same test with merging off: every lane takes its own bank access.
+- id: lmem-merge-off
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: lmem_merge
+  configs: -DVX_CFG_LMEM_READ_MERGE=0
+  shape:
+    threads: 16
 - id: occupancy-1
   via: blackbox
   drivers:

@@ -244,6 +244,19 @@ tests:
   via: blackbox
   app: uniform_ld
   configs: -DVX_CFG_NUM_THREADS=16
+# Same-word local-memory reads of one LSU block, served by one bank access and
+# returned to every lane.
+- id: parity-lmem-merge
+  check: model_parity
+  via: blackbox
+  app: lmem_merge
+  configs: -DVX_CFG_NUM_THREADS=16
+- id: parity-sgemm2-lmem-merge
+  check: model_parity
+  via: blackbox
+  app: sgemm2
+  args: -n32 -t4
+  configs: -DVX_CFG_NUM_THREADS=16
 # SGEMM with local-memory tiling (kernel-managed shared memory).
 - id: parity-sgemmx
   check: model_parity

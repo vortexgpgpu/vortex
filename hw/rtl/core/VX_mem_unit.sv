@@ -175,6 +175,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         .DMA_ENABLE  (LMEM_DMA_EN),
         .DMA_TAG_WIDTH (LMEM_DMA_TAG_WIDTH),
         .AMO_ENABLE  (`VX_CFG_EXT_A_ENABLED),
+        .READ_MERGE  (`VX_CFG_LMEM_READ_MERGE ? `VX_CFG_NUM_LSU_LANES : 0),
         .OUT_BUF     (3)
     ) local_mem (
         .clk         (clk),

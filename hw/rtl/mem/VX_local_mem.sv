@@ -39,6 +39,9 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     // Synthesize atomic-op + LR/SC logic in the banks
     parameter AMO_ENABLE        = 0,
 
+    // Merge same-word reads within groups of this many adjacent ports (0: off)
+    parameter READ_MERGE        = 0,
+
     // Response buffer
     parameter OUT_BUF           = 0
  ) (
@@ -78,10 +81,17 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     localparam AMO_CMP_WIDTH   = 0;
 `endif
     localparam AMO_SB_WIDTH    = 1 + $bits(amo_op_e) + 1 + HART_ID_WIDTH + AMO_CMP_WIDTH;
-    localparam REQ_DATAW       = 1 + BANK_ADDR_WIDTH + WORD_SIZE + WORD_WIDTH + TAG_WIDTH + AMO_SB_WIDTH;
+    // A merged read carries its group's merged-port mask under its tag, through
+    // the bank, to the response multicast.
+    localparam MERGE_GROUP     = (READ_MERGE != 0) ? `MIN(READ_MERGE, NUM_REQS) : 1;
+    localparam DO_READ_MERGE   = (MERGE_GROUP > 1);
+    localparam MERGE_BITS      = DO_READ_MERGE ? MERGE_GROUP : 0;
+    localparam BANK_TAG_WIDTH  = TAG_WIDTH + MERGE_BITS;
+    localparam REQ_DATAW       = 1 + BANK_ADDR_WIDTH + WORD_SIZE + WORD_WIDTH + BANK_TAG_WIDTH + AMO_SB_WIDTH;
     localparam RSP_DATAW       = WORD_WIDTH + TAG_WIDTH;
 
     `STATIC_ASSERT(ADDR_WIDTH == (BANK_ADDR_WIDTH + `CLOG2(NUM_BANKS)), ("invalid parameter"))
+    `STATIC_ASSERT(!DO_READ_MERGE || (`IS_POW2(MERGE_GROUP) && `IS_DIVISBLE(NUM_REQS, MERGE_GROUP)), ("invalid parameter: read merge group"))
 
     // bank selection
 
@@ -131,7 +141,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0][BANK_ADDR_WIDTH-1:0] per_bank_req_addr;
     wire [NUM_BANKS-1:0][WORD_SIZE-1:0]     per_bank_req_byteen;
     wire [NUM_BANKS-1:0][WORD_WIDTH-1:0]    per_bank_req_data;
-    wire [NUM_BANKS-1:0][TAG_WIDTH-1:0]     per_bank_req_tag;
+    wire [NUM_BANKS-1:0][BANK_TAG_WIDTH-1:0] per_bank_req_tag;
     wire [NUM_BANKS-1:0]                    per_bank_req_amo_valid;
     wire [NUM_BANKS-1:0][$bits(amo_op_e)-1:0] per_bank_req_amo_op;
     wire [NUM_BANKS-1:0]                    per_bank_req_amo_unsigned;
@@ -152,8 +162,56 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     wire [PERF_CTR_BITS-1:0] perf_collisions;
 `endif
 
+    // Read merging: plain reads of the same word with the same tag from ports
+    // of one group in the same cycle are served by one bank access. The lowest
+    // such port leads; the others stay out of the request crossbar and are
+    // accepted in the cycle their leader is, so every port keeps its own
+    // request order into the bank.
+    wire [NUM_REQS-1:0]                     req_follower;
+    wire [NUM_REQS-1:0][BANK_TAG_WIDTH-1:0] req_bank_tag;
+    if (DO_READ_MERGE) begin : g_read_merge
+        wire [NUM_REQS-1:0] plain_read;
+        for (genvar i = 0; i < NUM_REQS; ++i) begin : g_plain_read
+            assign plain_read[i] = lsu_bus_if[i].req_valid && ~lsu_bus_if[i].req_data.rw && ~req_amo_valid[i];
+        end
+        // same_word[i][j]: port i reads what a lower port j of its group reads
+        wire [NUM_REQS-1:0][NUM_REQS-1:0] same_word;
+        for (genvar i = 0; i < NUM_REQS; ++i) begin : g_same_i
+            for (genvar j = 0; j < NUM_REQS; ++j) begin : g_same_j
+                if (j < i && (j / MERGE_GROUP) == (i / MERGE_GROUP)) begin : g_cmp
+                    assign same_word[i][j] = plain_read[i] && plain_read[j]
+                                          && (lsu_bus_if[i].req_data.addr == lsu_bus_if[j].req_data.addr)
+                                          && (lsu_bus_if[i].req_data.tag == lsu_bus_if[j].req_data.tag);
+                end else begin : g_none
+                    assign same_word[i][j] = 1'b0;
+                end
+            end
+        end
+        for (genvar i = 0; i < NUM_REQS; ++i) begin : g_merge
+            localparam GROUP_BASE = (i / MERGE_GROUP) * MERGE_GROUP;
+            wire [MERGE_GROUP-1:0] merged_mask;
+            wire [NUM_REQS-1:0] leader_fire;
+            for (genvar k = 0; k < MERGE_GROUP; ++k) begin : g_merged_mask
+                assign merged_mask[k] = same_word[GROUP_BASE + k][i];
+            end
+            for (genvar j = 0; j < NUM_REQS; ++j) begin : g_leader_fire
+                assign leader_fire[j] = same_word[i][j] && ~req_follower[j] && req_ready_in[j];
+            end
+            assign req_bank_tag[i] = {lsu_bus_if[i].req_data.tag, merged_mask};
+            assign req_follower[i] = (| same_word[i]);
+            assign lsu_bus_if[i].req_ready = req_follower[i] ? (| leader_fire) : req_ready_in[i];
+        end
+    end else begin : g_no_read_merge
+        assign req_follower = '0;
+        for (genvar i = 0; i < NUM_REQS; ++i) begin : g_req_bank_tag
+            assign req_bank_tag[i] = lsu_bus_if[i].req_data.tag;
+            assign lsu_bus_if[i].req_ready = req_ready_in[i];
+        end
+    end
+
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_req_data_in
-        assign req_valid_in[i] = lsu_bus_if[i].req_valid;
+        // a merged read enters the crossbar once, as its leader
+        assign req_valid_in[i] = lsu_bus_if[i].req_valid && ~req_follower[i];
         assign req_data_in[i] = {
             req_amo_valid[i],
             req_amo_op[i],
@@ -166,9 +224,8 @@ module VX_local_mem import VX_gpu_pkg::*; #(
             req_bank_addr[i],
             lsu_bus_if[i].req_data.data,
             lsu_bus_if[i].req_data.byteen,
-            lsu_bus_if[i].req_data.tag
+            req_bank_tag[i]
         };
-        assign lsu_bus_if[i].req_ready = req_ready_in[i];
     end
 
     VX_stream_xbar #(
@@ -220,7 +277,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     // Back-pressure-safe copy of the LSU response data (see g_data_store).
     wire [NUM_BANKS-1:0][WORD_WIDTH-1:0] bank_lsu_rsp_data;
     wire [NUM_BANKS-1:0][REQ_SEL_WIDTH-1:0] per_bank_rsp_idx;
-    wire [NUM_BANKS-1:0][TAG_WIDTH-1:0]  per_bank_rsp_tag;
+    wire [NUM_BANKS-1:0][BANK_TAG_WIDTH-1:0] per_bank_rsp_tag;
     wire [NUM_BANKS-1:0]                 per_bank_rsp_ready;
 
     // DMA port handshake
@@ -608,7 +665,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
 
         // Delay tag/idx to align with SRAM 1-cycle output latency
         VX_pipe_buffer #(
-            .DATAW (REQ_SEL_WIDTH + TAG_WIDTH)
+            .DATAW (REQ_SEL_WIDTH + BANK_TAG_WIDTH)
         ) bram_buf (
             .clk       (clk),
             .reset     (reset),
@@ -659,35 +716,86 @@ module VX_local_mem import VX_gpu_pkg::*; #(
 
     // bank responses gather
 
-    wire [NUM_BANKS-1:0][RSP_DATAW-1:0] per_bank_rsp_data_aos;
-
-    for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_per_bank_rsp_data_aos
-        assign per_bank_rsp_data_aos[i] = {bank_lsu_rsp_data[i], per_bank_rsp_tag[i]};
-    end
-
     wire [NUM_REQS-1:0]                 rsp_valid_out;
     wire [NUM_REQS-1:0][RSP_DATAW-1:0]  rsp_data_out;
     wire [NUM_REQS-1:0]                 rsp_ready_out;
 
-    VX_stream_xbar #(
-        .NUM_INPUTS  (NUM_BANKS),
-        .NUM_OUTPUTS (NUM_REQS),
-        .DATAW       (RSP_DATAW),
-        .ARBITER     ("P"), // this priority arbiter has negligeable impact on performance
-        .OUT_BUF     (OUT_BUF)
-    ) rsp_xbar (
-        .clk       (clk),
-        .reset     (reset),
-        `UNUSED_PIN (collisions),
-        .sel_in    (per_bank_rsp_idx),
-        .valid_in  (per_bank_rsp_valid),
-        .data_in   (per_bank_rsp_data_aos),
-        .ready_in  (per_bank_rsp_ready),
-        .valid_out (rsp_valid_out),
-        .data_out  (rsp_data_out),
-        .ready_out (rsp_ready_out),
-        `UNUSED_PIN (sel_out)
-    );
+    if (DO_READ_MERGE) begin : g_rsp_mcast
+        // A merged read's response goes to its leader's port and to every
+        // merged port: each output takes it when its arbiter grants it, and the
+        // bank's response is released once all its targets have taken it.
+        localparam GROUP_BITS = `CLOG2(MERGE_GROUP);
+        wire [NUM_BANKS-1:0][NUM_REQS-1:0] lane_pending;
+        wire [NUM_BANKS-1:0][NUM_REQS-1:0] lane_taken;
+        wire [NUM_REQS-1:0][NUM_BANKS-1:0] per_output_valid;
+        wire [NUM_REQS-1:0][NUM_BANKS-1:0] per_output_ready;
+        wire [NUM_BANKS-1:0][RSP_DATAW-1:0] per_bank_rsp_pdata;
+        for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_banks
+            wire [MERGE_GROUP-1:0] merged_mask = per_bank_rsp_tag[i][MERGE_GROUP-1:0];
+            wire [REQ_SEL_WIDTH-1:0] group_base = (per_bank_rsp_idx[i] >> GROUP_BITS) << GROUP_BITS;
+            wire [NUM_REQS-1:0] targets = (NUM_REQS'(1) << per_bank_rsp_idx[i])
+                                        | (NUM_REQS'(merged_mask) << group_base);
+            reg [NUM_REQS-1:0] sent_r;
+            assign per_bank_rsp_pdata[i] = {bank_lsu_rsp_data[i], per_bank_rsp_tag[i][MERGE_BITS +: TAG_WIDTH]};
+            assign lane_pending[i] = targets & ~sent_r & {NUM_REQS{per_bank_rsp_valid[i]}};
+            for (genvar j = 0; j < NUM_REQS; ++j) begin : g_taken
+                assign per_output_valid[j][i] = lane_pending[i][j];
+                assign lane_taken[i][j] = lane_pending[i][j] && per_output_ready[j][i];
+            end
+            assign per_bank_rsp_ready[i] = per_bank_rsp_valid[i] && ((lane_pending[i] & ~lane_taken[i]) == '0);
+            always @(posedge clk) begin
+                if (reset) begin
+                    sent_r <= '0;
+                end else if (per_bank_rsp_valid[i]) begin
+                    sent_r <= per_bank_rsp_ready[i] ? '0 : (sent_r | lane_taken[i]);
+                end
+            end
+        end
+        for (genvar j = 0; j < NUM_REQS; ++j) begin : g_outputs
+            VX_stream_arb #(
+                .NUM_INPUTS  (NUM_BANKS),
+                .NUM_OUTPUTS (1),
+                .DATAW       (RSP_DATAW),
+                .ARBITER     ("P"),
+                .OUT_BUF     (OUT_BUF)
+            ) rsp_arb (
+                .clk       (clk),
+                .reset     (reset),
+                .valid_in  (per_output_valid[j]),
+                .data_in   (per_bank_rsp_pdata),
+                .ready_in  (per_output_ready[j]),
+                .valid_out (rsp_valid_out[j]),
+                .data_out  (rsp_data_out[j]),
+                `UNUSED_PIN (sel_out),
+                .ready_out (rsp_ready_out[j])
+            );
+        end
+    end else begin : g_rsp_xbar
+        wire [NUM_BANKS-1:0][RSP_DATAW-1:0] per_bank_rsp_data_aos;
+        for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_per_bank_rsp_data_aos
+            assign per_bank_rsp_data_aos[i] = {bank_lsu_rsp_data[i], per_bank_rsp_tag[i]};
+        end
+
+        VX_stream_xbar #(
+            .NUM_INPUTS  (NUM_BANKS),
+            .NUM_OUTPUTS (NUM_REQS),
+            .DATAW       (RSP_DATAW),
+            .ARBITER     ("P"), // this priority arbiter has negligeable impact on performance
+            .OUT_BUF     (OUT_BUF)
+        ) rsp_xbar (
+            .clk       (clk),
+            .reset     (reset),
+            `UNUSED_PIN (collisions),
+            .sel_in    (per_bank_rsp_idx),
+            .valid_in  (per_bank_rsp_valid),
+            .data_in   (per_bank_rsp_data_aos),
+            .ready_in  (per_bank_rsp_ready),
+            .valid_out (rsp_valid_out),
+            .data_out  (rsp_data_out),
+            .ready_out (rsp_ready_out),
+            `UNUSED_PIN (sel_out)
+        );
+    end
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_lsu_bus_if
         assign lsu_bus_if[i].rsp_valid = rsp_valid_out[i];
@@ -709,6 +817,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     wire [NUM_REQS-1:0] perf_reads_per_req, perf_writes_per_req;
     wire [NUM_REQS-1:0] perf_crsp_stall_per_req = rsp_valid_out & ~rsp_ready_out;
 
+    // a merged read counts once, as the bank access that serves it
     `BUFFER(perf_reads_per_req, req_valid_in & req_ready_in & ~req_rw);
     `BUFFER(perf_writes_per_req, req_valid_in & req_ready_in & req_rw);
 
@@ -748,11 +857,11 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0][UUID_WIDTH-1:0] per_bank_rsp_uuid;
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_per_bank_req_uuid
-        assign per_bank_req_tag_value[i] = per_bank_req_tag[i][TAG_WIDTH-UUID_WIDTH-1:0];
-        assign per_bank_rsp_tag_value[i] = per_bank_rsp_tag[i][TAG_WIDTH-UUID_WIDTH-1:0];
+        assign per_bank_req_tag_value[i] = per_bank_req_tag[i][MERGE_BITS +: (TAG_WIDTH-UUID_WIDTH)];
+        assign per_bank_rsp_tag_value[i] = per_bank_rsp_tag[i][MERGE_BITS +: (TAG_WIDTH-UUID_WIDTH)];
         if (UUID_WIDTH != 0) begin : g_uuid
-            assign per_bank_req_uuid[i] = per_bank_req_tag[i][TAG_WIDTH-1 -: UUID_WIDTH];
-            assign per_bank_rsp_uuid[i] = per_bank_rsp_tag[i][TAG_WIDTH-1 -: UUID_WIDTH];
+            assign per_bank_req_uuid[i] = per_bank_req_tag[i][BANK_TAG_WIDTH-1 -: UUID_WIDTH];
+            assign per_bank_rsp_uuid[i] = per_bank_rsp_tag[i][BANK_TAG_WIDTH-1 -: UUID_WIDTH];
         end else begin : g_no_uuid
             assign per_bank_req_uuid[i] = 0;
             assign per_bank_rsp_uuid[i] = 0;

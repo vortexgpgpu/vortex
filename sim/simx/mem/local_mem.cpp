@@ -16,6 +16,7 @@
 #include <mem.h>
 #include <bitmanip.h>
 #include <vector>
+#include <unordered_map>
 #include <cstring>
 #include <algorithm>
 #include "types.h"
@@ -25,6 +26,190 @@
 #endif
 
 using namespace vortex;
+
+// The lane-to-bank crossbar under read merging. Each bank grants its lowest
+// requesting lane per cycle, as the plain crossbar does. A plain read of the
+// same word with the same tag as a lower lane of its LSU block follows the
+// lowest such lane: it stays out of arbitration, is accepted when that leader
+// is, and the bank's response returns to every one of them.
+class LmemMergeXbar : public SimObject<LmemMergeXbar> {
+public:
+	using Ptr = std::shared_ptr<LmemMergeXbar>;
+
+	std::vector<SimChannel<MemReq>> ReqIn;  // lanes
+	std::vector<SimChannel<MemRsp>> RspOut; // lanes
+	std::vector<SimChannel<MemReq>> ReqOut; // banks
+	std::vector<SimChannel<MemRsp>> RspIn;  // banks
+
+	LmemMergeXbar(const SimContext& ctx, const char* name, uint32_t num_inputs, uint32_t num_banks,
+	              uint32_t group, uint32_t lg2_word, uint32_t req_delay, uint32_t rsp_delay)
+		: SimObject<LmemMergeXbar>(ctx, name)
+		, ReqIn(num_inputs, this)
+		, RspOut(num_inputs, this)
+		, ReqOut(num_banks, this)
+		, RspIn(num_banks, this)
+		, group_(group)
+		, lg2_word_(lg2_word)
+		, lg2_inputs_(log2ceil(num_inputs))
+		, req_delay_(req_delay)
+		, rsp_delay_(rsp_delay)
+		, followers_(num_banks)
+		, sent_(num_banks, 0)
+	{
+		__assert(group_ >= 1 && group_ <= 64 && (num_inputs % group_) == 0,
+		         "a merge group must be at most 64 lanes dividing the ports");
+	}
+
+	uint64_t collisions() const { return collisions_; }
+
+protected:
+	void on_reset() {
+		for (auto& f : followers_) {
+			f.clear();
+		}
+		std::fill(sent_.begin(), sent_.end(), 0);
+	}
+
+	void on_tick() {
+		uint32_t I = ReqIn.size();
+		uint32_t B = ReqOut.size();
+		uint32_t R = 1 << lg2_inputs_;
+
+		// responses: each lane takes one bank per cycle, lowest first, and a
+		// bank's response leaves once every lane it serves has taken it
+		std::vector<uint64_t> targets(B, 0);
+		std::vector<uint32_t> bases(B, 0);
+		bool idle = true;
+		for (uint32_t b = 0; b < B; ++b) {
+			if (RspIn.at(b).empty()) {
+				continue;
+			}
+			idle = false;
+			auto& rsp = RspIn.at(b).peek();
+			uint32_t lane = rsp.tag & (R - 1);
+			bases.at(b) = (lane / group_) * group_;
+			uint64_t mask = 0;
+			auto it = followers_.at(b).find(rsp.tag);
+			if (it != followers_.at(b).end()) {
+				mask = it->second;
+			}
+			targets.at(b) = (mask | (1ull << (lane - bases.at(b)))) & ~sent_.at(b);
+		}
+		for (uint32_t o = 0; o < I; ++o) {
+			for (uint32_t b = 0; b < B; ++b) {
+				if (o < bases.at(b) || o >= bases.at(b) + group_
+				 || !(targets.at(b) & (1ull << (o - bases.at(b))))) {
+					continue;
+				}
+				MemRsp out(RspIn.at(b).peek());
+				out.tag >>= lg2_inputs_;
+				if (RspOut.at(o).try_send(out, rsp_delay_)) {
+					DT(4, this->name() << " rsp" << b << "_" << o << ": " << out);
+					sent_.at(b) |= 1ull << (o - bases.at(b));
+				}
+				break;
+			}
+		}
+		for (uint32_t b = 0; b < B; ++b) {
+			if (targets.at(b) != 0 && (targets.at(b) & ~sent_.at(b)) == 0) {
+				followers_.at(b).erase(RspIn.at(b).peek().tag);
+				RspIn.at(b).pop();
+				sent_.at(b) = 0;
+			}
+		}
+
+		// requests: find each follower's leader, then let each bank grant its
+		// lowest requesting lane that follows no other. A lane presents one
+		// request per cycle, so a lane granted or released this cycle sits out
+		// the remaining banks even when its next request is already queued.
+		std::vector<int32_t> lead(I, -1);
+		std::vector<bool> taken(I, false);
+		for (uint32_t base = 0; base < I; base += group_) {
+			for (uint32_t i = base; i < base + group_; ++i) {
+				if (!this->is_plain_read(i)) {
+					continue;
+				}
+				auto& req = ReqIn.at(i).peek();
+				for (uint32_t j = base; j < i; ++j) {
+					if (!this->is_plain_read(j)) {
+						continue;
+					}
+					auto& lreq = ReqIn.at(j).peek();
+					if ((lreq.addr >> lg2_word_) == (req.addr >> lg2_word_) && lreq.tag == req.tag) {
+						lead.at(i) = j;
+						break;
+					}
+				}
+			}
+		}
+		for (uint32_t o = 0; o < B; ++o) {
+			int32_t g = -1;
+			bool has_collision = false;
+			for (uint32_t i = 0; i < I; ++i) {
+				if (taken.at(i) || ReqIn.at(i).empty() || lead.at(i) != -1 || this->bank_of(ReqIn.at(i).peek()) != o) {
+					continue;
+				}
+				if (g != -1) {
+					has_collision = true;
+					break;
+				}
+				g = i;
+			}
+			if (g == -1) {
+				continue;
+			}
+			idle = false;
+			MemReq out(ReqIn.at(g).peek());
+			out.tag = (out.tag << lg2_inputs_) | g;
+			if (ReqOut.at(o).try_send(out, req_delay_)) {
+				DT(4, this->name() << " req" << g << "_" << o << ": " << out);
+				uint32_t base = (g / group_) * group_;
+				uint64_t mask = 0;
+				for (uint32_t i = base; i < base + group_; ++i) {
+					if (lead.at(i) == g && !taken.at(i)) {
+						DT(3, this->name() << " read-merge: lane=" << i << ", leader=" << g << ", " << ReqIn.at(i).peek());
+						mask |= 1ull << (i - base);
+						ReqIn.at(i).pop();
+						taken.at(i) = true;
+					}
+				}
+				if (mask != 0) {
+					followers_.at(o)[out.tag] = mask;
+				}
+				ReqIn.at(g).pop();
+				taken.at(g) = true;
+			}
+			collisions_ += has_collision;
+		}
+
+		for (uint32_t i = 0; i < I && idle; ++i) {
+			idle = ReqIn.at(i).empty();
+		}
+		if (idle) {
+			this->tick_sleep();
+		}
+	}
+
+	uint32_t bank_of(const MemReq& req) const {
+		return (uint32_t)((req.addr >> lg2_word_) & (ReqOut.size() - 1));
+	}
+
+	bool is_plain_read(uint32_t i) const {
+		return !ReqIn.at(i).empty() && ReqIn.at(i).peek().op == MemOp::LD;
+	}
+
+private:
+	uint32_t group_;
+	uint32_t lg2_word_;
+	uint32_t lg2_inputs_;
+	uint32_t req_delay_;
+	uint32_t rsp_delay_;
+	std::vector<std::unordered_map<uint64_t, uint64_t>> followers_; // [bank] leader's tag -> lanes riding it, from the group base
+	std::vector<uint64_t> sent_; // [bank] lanes that took the response, from the group base
+	uint64_t collisions_ = 0;
+
+	friend class SimObject<LmemMergeXbar>;
+};
 
 class LocalMem::Impl {
 protected:
@@ -54,6 +239,7 @@ protected:
 	std::vector<uint64_t> rdw_cur_addr_;
 	std::vector<bool>     rdw_cur_valid_;
 	MemCrossBar::Ptr mem_xbar_;
+	LmemMergeXbar::Ptr merge_xbar_;
 	mutable PerfStats perf_stats_;
 	uint32_t dma_last_grant_ = 0;
 
@@ -98,6 +284,15 @@ public:
 			constexpr uint32_t kMaxFanout = 8;
 			return (requesters > kMaxFanout + kMaxFanout / 2) ? 1 : 0;
 		};
+		if (config.read_merge != 0) {
+			merge_xbar_ = LmemMergeXbar::Create(sname, config.num_reqs, num_banks, config.read_merge,
+			 lg2_line_size, 1 + tree_delay(config.num_reqs), tree_delay(num_banks));
+			for (uint32_t i = 0; i < config.num_reqs; ++i) {
+				simobject->Inputs.at(i).bind(&merge_xbar_->ReqIn.at(i));
+				merge_xbar_->RspOut.at(i).bind(&simobject->Outputs.at(i));
+			}
+			return;
+		}
 		mem_xbar_ = MemCrossBar::Create(sname, ArbiterType::Priority, config.num_reqs, num_banks,
 		 [lg2_line_size, num_banks](const MemCrossBar::ReqType& req) {
     	// Custom logic to calculate the output index using bank interleaving
@@ -107,6 +302,14 @@ public:
 			simobject->Inputs.at(i).bind(&mem_xbar_->ReqIn.at(i));
 			mem_xbar_->RspOut.at(i).bind(&simobject->Outputs.at(i));
 		}
+	}
+
+	SimChannel<MemReq>& bank_req(uint32_t b) {
+		return merge_xbar_ ? merge_xbar_->ReqOut.at(b) : mem_xbar_->ReqOut.at(b);
+	}
+
+	SimChannel<MemRsp>& bank_rsp(uint32_t b) {
+		return merge_xbar_ ? merge_xbar_->RspIn.at(b) : mem_xbar_->RspIn.at(b);
 	}
 
 	virtual ~Impl() {}
@@ -217,7 +420,7 @@ public:
 			if ((dma_banks >> i) & 1) {
 				continue;
 			}
-			auto& xbar_req_out = mem_xbar_->ReqOut.at(i);
+			auto& xbar_req_out = this->bank_req(i);
 			if (xbar_req_out.empty())
 				continue;
 
@@ -275,7 +478,7 @@ public:
 				const uint64_t ret_word = is_sc ? (sc_fail ? 1ull : 0ull) : rmw.ret_word;
 				amo_store_word(rsp_data->data(), byte_off, width, ret_word);
 				bank_rsp.data = rsp_data;
-				if (!mem_xbar_->RspIn.at(i).try_send(bank_rsp))
+				if (!this->bank_rsp(i).try_send(bank_rsp))
 					continue; // stall; no state mutated yet
 
 				// An SC gives up its own reservation whether it succeeds or
@@ -335,7 +538,7 @@ public:
 					ram_.read(rsp_data->data(), line_addr, VX_CFG_MEM_BLOCK_SIZE);
 					bank_rsp.data = rsp_data;
 				}
-				if (!mem_xbar_->RspIn.at(i).try_send(bank_rsp))
+				if (!this->bank_rsp(i).try_send(bank_rsp))
 					continue; // stall
 			}
 
@@ -351,7 +554,7 @@ public:
 	}
 
 	const PerfStats& perf_stats() const {
-		perf_stats_.bank_stalls = mem_xbar_->collisions();
+		perf_stats_.bank_stalls = merge_xbar_ ? merge_xbar_->collisions() : mem_xbar_->collisions();
 		return perf_stats_;
 	}
 

@@ -32,6 +32,7 @@ public:
     uint32_t B; // log2 number of banks
     bool write_reponse;
     uint32_t dma_clients; // row-wide DMA masters, served round-robin
+    uint32_t read_merge;  // same-word reads merge within groups of this many adjacent ports (0: off)
   };
 
   struct PerfStats {

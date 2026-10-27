@@ -164,7 +164,8 @@ public:
       LSU_NUM_REQS,
       log2ceil(VX_CFG_LMEM_NUM_BANKS),
       false,
-      VX_CFG_EXT_DXA_ENABLED + VX_CFG_TCU_WGMMA_ENABLED
+      VX_CFG_EXT_DXA_ENABLED + VX_CFG_TCU_WGMMA_ENABLED,
+      (VX_CFG_LMEM_READ_MERGE != 0 && LSU_CHANNELS > 1) ? LSU_CHANNELS : 0 // read_merge: one LSU block's lanes
     });
 
     // create lmem switch
