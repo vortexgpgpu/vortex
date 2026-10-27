@@ -602,7 +602,7 @@ The vertex stage overlays its own meanings on the compute slots:
 |------|----------------------------------------------------|---------------------------------------------|
 | 0    | push constants                                     | output vertex-record buffer                 |
 | 1    | set-0 descriptor blob                              | vertex attribute table                      |
-| 2    | dispatch base `base_group_x \| base_group_y << 32` | index buffer base (0 = non-indexed)         |
+| 2    | dispatch base `base_group_x \| base_group_y << 32` | input assembly `gfx_ia_t` (0 = unindexed list) |
 | 3    | dispatch base `base_group_z`                       | verts-per-instance (0 = plain draw)         |
 | 4-7  | raw shader-buffer slots (`VP_ARG_SSBO_BASE`, e.g. the RT trace-ray command buffer) | 4 = base instance, 5 = base vertex, 6 = real vertex count (`VP_ARG_VS_COUNT` — launches are warp-padded, a thread past the end has no vertex) |
 | 8    | —                                                  | VS constant-buffer table (`VP_ARG_VS_DESC`, `i64[GFX_FS_DESC_SLOTS]` of per-set blob bases) |
@@ -722,14 +722,40 @@ bool simple =
 
 Much of what this once excluded now runs on the device:
 
-- **Indexed draws**: the index buffer is uploaded widened to u32 and
-  the VS resolves `index_buf[i]` on device.
-- **Strips and fans** are translated on the host into a triangle-LIST
-  index array (`vp_gather_topology_u32`) and run through the
-  list-native front end. **Primitive restart** is resolved in that
-  same translation — the cut lands in the index list, so the device
-  never sees a restart index. (A restart on a list topology has no
-  strip to cut and stays with llvmpipe; so do lines and points.)
+- **Input assembly runs on the device.** The draw's `gfx_ia_t`
+  (`sw/common/gfx_frontend_abi.h`) describes it: the application's
+  index buffer, read where it lives (u8/u16/u32, first index, vertex
+  offset, an index past the buffer reading 0), the topology, the
+  provoking-vertex mode and the restart index. The VS thread for
+  corner k of primitive p places itself at the position the topology
+  gives that corner — strips alternate their winding, fans keep their
+  run's hub — and reads the index there with one aligned word load
+  (`emit_vs_ia_vertex`). The topology, index size, restart and
+  provoking mode are part of the VS variant key (`vp_vs_fetch_key`), so
+  each draw runs code for its own assembly and a list draw without an
+  index buffer runs none; setup likewise has `setup_ia_k` beside
+  `setup_k`. The front end stays list-native over the VS records.
+  Without restart every count is the topology's closed form.
+  A **restart index** makes the primitive count device-known: `ia_k`
+  (`sw/gfx/gfx_ia_k.h`), launched ahead of the VS in the draw's CP
+  batch, scans the positions (COUNT over the grid, SCAN on one CTA,
+  EMIT over the grid; one launch of one CTA, `IA_STAGE_ALL`, for a draw
+  of at most `VP_IA_ONE_CTA` positions per thread) and writes each primitive's (last position, run)
+  to a map plus the count to `gfx_ia_t::prims`. The VS, setup (through
+  `pipe_arg_t::ia_addr`), the stipple heads and the transform-feedback
+  commit read that count; the host's closed form only sizes the
+  launches. A command-processor predicate on that count
+  (`CMD_LAUNCH_INDIRECT`, predicate only) skips the rest of the draw's
+  batch when the restarts leave no primitive: from the map's emission
+  on, or after a VS that captures transform feedback. A draw whose
+  geometry stage captures runs whole, as does every draw on a command
+  processor without indirect launch. The statistics of those
+  primitives are counted on the device into the query block; a draw
+  that rasterizes nothing and has no side effects runs only what counts
+  them (`vp_raster_ia_count`): COUNT and SCAN, or the one `IA_STAGE_ALL`
+  launch, which also emits the map, for a draw short enough for one
+  CTA. The record in device memory is where a device-written draw
+  (indirect) would put its parameters.
 - **Instancing**: a multi-instance draw runs as one device draw over
   `instance_count × verts-per-instance` vertices; the VS resolves
   `gl_InstanceIndex`, and instance-rate attributes ride the divisor
@@ -806,11 +832,16 @@ its own fixed address (`VP_STARTUP_GS`).
 - **Threads.** Thread `g` runs invocation `g % Invocations` of input
   primitive `g / Invocations`, so thread order is the order the
   specification gives the output (input primitive by input primitive, then
-  invocation). The host walk expands strips, fans, restart and the four
-  adjacency topologies into a list, so input primitive `p` reads vertex
-  records `p * per_in .. p * per_in + per_in - 1` with no index buffer;
-  `gl_PointSize` and the clip/cull distances come from the bound VS's record
-  offsets (`VP_GS_ARG_INPUTS`).
+  invocation). The device input assembly makes the VS shade every input
+  primitive's vertices in order, so input primitive `p` reads vertex
+  records `p * per_in .. p * per_in + per_in - 1`; a triangle strip with
+  adjacency keeps one order for the GS whatever the provoking vertex
+  (`vp_vs_fetch_key::ia_gs_input`). Under a restart index only the device
+  knows how many input primitives there are (`VP_GS_ARG_IA`): the kernel
+  then always finds its counts on the device, a shader with static counts
+  translated once more that way, threads past the count make none, and
+  `ia_k` counts the invocations. `gl_PointSize` and the clip/cull distances
+  come from the bound VS's record offsets (`VP_GS_ARG_INPUTS`).
 - **Output.** `EmitStreamVertex` stores the vertex to the stream's next
   record of the thread's own region, in the VS record layout, so setup and
   the fragment stage read GS records as they read VS ones. A vertex that
@@ -1138,7 +1169,7 @@ The on-device setup/binning front end
 | Off-screen after viewport clamp                  | n/a                     | empty bbox → primitive skipped                                                                                       | **Yes** — gated          |
 | Near-plane intersection (w → 0)                  | device clip             | `clip_near` in `setup_k` before any divide by w                                                                      | **Yes**                  |
 | Vulkan y-flip viewport / depth range / clip-Z    | device setup            | the app's viewport transform, `minz/maxz`, and the `[0,w]` `halfz` convention ride `pipe_arg_t`; the face-cull sign follows the flipped winding | **Yes**  |
-| Triangle strips / fans, primitive restart        | host index translation  | rebuilt as a triangle list before the draw (§3.1)                                                                    | **Yes**                  |
+| Triangle strips / fans, primitive restart        | device input assembly   | the VS assembles from the index buffer in place; `ia_k` finds restart runs (§3.1)                                    | **Yes**                  |
 | Lines / points                                   | not wired               | eligibility gate → llvmpipe                                                                                          | **Yes** — gated          |
 | Framebuffer width/height > 65535                 | scissor packs 16 bits   | not checked — DCR wraps silently                                                                                     | **No** — silent overflow |
 | Per-draw primitives > 2^20 (post-clip)           | 20-bit sort key         | not checked — key wraps silently                                                                                     | **No** — silent overflow |

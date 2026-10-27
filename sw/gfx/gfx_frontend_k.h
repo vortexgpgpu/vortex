@@ -2,9 +2,10 @@
 
 // gfx_v2 fused setup -> binning front end — device kernel stages.
 //
-// Defines the two kernel entries that produce RASTER's gfx-v1 buffers: setup_k
-// (clip + triangle setup -> dense primbuf + bbox + P) and binning_k (bin-sort
-// over the dense tile grid -> tilebuf). Include from a test's kernel.cpp; the
+// Defines the kernel entries that produce RASTER's gfx-v1 buffers: setup_k
+// (clip + triangle setup -> dense primbuf + bbox + P; setup_ia_k for a draw
+// with an input assembly) and binning_k (bin-sort over the dense tile grid ->
+// tilebuf). Include from a test's kernel.cpp; the
 // test adds its own fragment/consumer kernel. Device-only (pulls vx_spawn2.h).
 
 #include <vx_spawn2.h>
@@ -45,7 +46,34 @@ struct pipe_prim_ref {
   uint32_t id;     // gl_PrimitiveID
 };
 
-static inline pipe_prim_ref pipe_prim_records(const pipe_arg_t* arg, uint32_t t) {
+// The draw's primitive counts as a launch takes them. Without an input assembly
+// they are the arguments'; with one, its own, which the arguments only bound.
+struct pipe_draw_counts {
+  uint32_t prims;
+  uint32_t inst_prims;
+  uint32_t inst_verts;
+  uint32_t per;                 // vertices per assembled primitive
+  const gfx_ia_prim_t* map;
+};
+
+static inline pipe_draw_counts pipe_arg_counts(const pipe_arg_t* arg) {
+  return pipe_draw_counts{ 0xffffffffu, arg->inst_prims, arg->inst_verts, 0u, nullptr };
+}
+
+static inline pipe_draw_counts pipe_counts(const pipe_arg_t* arg) {
+  const auto* ia = reinterpret_cast<const gfx_ia_t*>(arg->ia_addr);
+  const uint32_t ip = ia->prims * (arg->prim_type == SETUP_PRIM_POLYGON ? 3u : 1u);
+  pipe_draw_counts c{ ip * ia->instances, arg->inst_prims, arg->inst_verts, ia->per,
+                      reinterpret_cast<const gfx_ia_prim_t*>(ia->map_addr) };
+  if (arg->inst_prims) {
+    c.inst_prims = ip;
+    c.inst_verts = ia->prims * ia->per;
+  }
+  return c;
+}
+
+static inline pipe_prim_ref pipe_prim_records(const pipe_arg_t* arg, const pipe_draw_counts& c,
+                                              uint32_t t) {
   pipe_prim_ref r{};
   if (arg->prim_index_addr) {
     // A polygon drawn as lines or points still takes three primitives per
@@ -71,10 +99,10 @@ static inline pipe_prim_ref pipe_prim_records(const pipe_arg_t* arg, uint32_t t)
     return r;
   }
   uint32_t base = 0;
-  if (arg->inst_prims) {
-    const uint32_t i = t / arg->inst_prims;
-    t -= i * arg->inst_prims;
-    base = i * arg->inst_verts;
+  if (c.inst_prims) {
+    const uint32_t i = t / c.inst_prims;
+    t -= i * c.inst_prims;
+    base = i * c.inst_verts;
   }
   // The primitive counts from 0 in each instance; a polygon's three
   // primitives are one triangle's.
@@ -200,20 +228,23 @@ static inline float pipe_stipple_length(const gfx_setup::vec4f& sa, const gfx_se
 }
 
 // Whether draw segment i of a stippled strip begins a run: each instance starts
-// one, and `heads` (may be null) marks the restarts within an instance.
+// one, and so does each segment a restart begins.
 #define PIPE_SCAN_HEAD 0x80000000u
-static inline bool pipe_strip_head(const pipe_arg_t* arg, const uint32_t* heads, uint32_t i) {
+static inline bool pipe_strip_head(const pipe_arg_t* arg, const pipe_draw_counts& c,
+                                   uint32_t i) {
   if (arg->prim_index_addr) {
     return (reinterpret_cast<const pipe_list_entry_t*>(arg->prim_index_addr)[i].aux
             & PIPE_LIST_HEAD) != 0;
   }
-  if (arg->inst_prims) {
-    i %= arg->inst_prims;
+  if (c.inst_prims) {
+    i %= c.inst_prims;
     if (i == 0) {
       return true;
     }
   }
-  return heads && ((heads[i >> 5] >> (i & 31u)) & 1u);
+  // The map holds only the primitives the assembly made; when it made none the
+  // reduction above is skipped and i spans every instance.
+  return c.map && i < c.prims && c.map[i].last == c.map[i].run + c.per - 1u;
 }
 
 // Line a-b's length in whole stipple steps, as drawn after the near clip: how
@@ -550,11 +581,12 @@ static inline uint32_t pipe_prim_scissor(rast_prim_t* pr, setup_bbox_t* bb, uint
   return n;
 }
 
-} // namespace gfx_pipe
-
 // ---- setup front end: clip + setup -> dense primbuf + bbox + P (meta[0]) ----
-__kernel void setup_k(pipe_arg_t* __UNIFORM__ arg) {
-  using namespace gfx_pipe;
+
+// The setup stages, for a draw with an input assembly or without one: without,
+// the arguments' counts are exact and nothing reads the record.
+template <bool kIa>
+static inline __attribute__((always_inline)) void pipe_setup_stages(pipe_arg_t* __UNIFORM__ arg) {
   auto keep      = reinterpret_cast<uint32_t*>(arg->keep_addr);
   auto offset    = reinterpret_cast<uint32_t*>(arg->offset_addr);
   auto tsum      = reinterpret_cast<uint32_t*>(arg->tsum_addr);
@@ -568,6 +600,7 @@ __kernel void setup_k(pipe_arg_t* __UNIFORM__ arg) {
   const bool coverage_only = (arg->vsrec_addr != 0);
 
   const uint32_t ntri = pipe_prim_count(arg);
+  const pipe_draw_counts counts = kIa ? pipe_counts(arg) : pipe_arg_counts(arg);
   const int      W = (int)arg->width;
   const int      H = (int)arg->height;
   const uint32_t tid = threadIdx.x;
@@ -598,10 +631,17 @@ __kernel void setup_k(pipe_arg_t* __UNIFORM__ arg) {
     uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
     uint32_t gstride = gridDim.x * blockDim.x;
     for (uint32_t t = gid; t < ntri; t += gstride) {
+      if (kIa && arg->prim_base + t >= counts.prims) {
+        keep[t] = 0;
+        if (arg->stipple_strip) {
+          stipple[t] = 0;
+        }
+        continue;
+      }
       setup_vertex_t v[3];
       rast_prim_t pr[SETUP_MAX_SUB];
       setup_bbox_t bb[SETUP_MAX_SUB];
-      const pipe_prim_ref ref = pipe_prim_records(arg, arg->prim_base + t);
+      const pipe_prim_ref ref = pipe_prim_records(arg, counts, arg->prim_base + t);
       const float psize = pipe_load_prim(arg, arg->prim_base + t, ref, v);
       const pipe_prim_view view = pipe_prim_viewport(arg, ref, vpp);
       uint32_t kept = 0;
@@ -635,12 +675,11 @@ __kernel void setup_k(pipe_arg_t* __UNIFORM__ arg) {
       // whether it holds a head, which stops the carry from earlier chunks. A
       // pass after the draw's first starts from the counter the previous pass
       // left in meta[3], and leaves its own there for the next.
-      auto heads = reinterpret_cast<const uint32_t*>(arg->strip_head_addr);
       __syncthreads();
       {
         uint32_t s = 0, h = 0;
         for (uint32_t i = lo; i < hi; ++i) {
-          if (pipe_strip_head(arg, heads, arg->prim_base + i)) { s = 0; h = PIPE_SCAN_HEAD; }
+          if (pipe_strip_head(arg, counts, arg->prim_base + i)) { s = 0; h = PIPE_SCAN_HEAD; }
           s += stipple[i];
         }
         tsum[tid] = s | h;
@@ -659,7 +698,7 @@ __kernel void setup_k(pipe_arg_t* __UNIFORM__ arg) {
       {
         uint32_t acc = tsum[tid];
         for (uint32_t i = lo; i < hi; ++i) {
-          if (pipe_strip_head(arg, heads, arg->prim_base + i)) {
+          if (pipe_strip_head(arg, counts, arg->prim_base + i)) {
             acc = 0;
           }
           const uint32_t v = stipple[i];
@@ -677,10 +716,13 @@ __kernel void setup_k(pipe_arg_t* __UNIFORM__ arg) {
     uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
     uint32_t gstride = gridDim.x * blockDim.x;
     for (uint32_t t = gid; t < ntri; t += gstride) {
+      if (kIa && arg->prim_base + t >= counts.prims) {
+        continue;
+      }
       setup_vertex_t v[3];
       rast_prim_t pr[SETUP_MAX_SUB];
       setup_bbox_t bb[SETUP_MAX_SUB];
-      const pipe_prim_ref ref = pipe_prim_records(arg, arg->prim_base + t);
+      const pipe_prim_ref ref = pipe_prim_records(arg, counts, arg->prim_base + t);
       const float psize = pipe_load_prim(arg, arg->prim_base + t, ref, v);
       rast_vary_t vr;
       const float start = arg->stipple_strip ? (float)stipple[t] : 0.0f;
@@ -706,6 +748,17 @@ __kernel void setup_k(pipe_arg_t* __UNIFORM__ arg) {
   } break;
 
   }
+}
+
+} // namespace gfx_pipe
+
+__kernel void setup_k(pipe_arg_t* __UNIFORM__ arg) {
+  gfx_pipe::pipe_setup_stages<false>(arg);
+}
+
+// setup_k for a draw with an input assembly (pipe_arg_t::ia_addr).
+__kernel void setup_ia_k(pipe_arg_t* __UNIFORM__ arg) {
+  gfx_pipe::pipe_setup_stages<true>(arg);
 }
 
 // ---- binning back end: bin-sort dense bbox[] (P=meta[0]) -> dense tilebuf ----

@@ -238,6 +238,82 @@ typedef struct {
 // setup's clamp: viewport in the low half, layer in the high half.
 #define RAST_VARY_VP_LAYER(vp, layer) (((uint32_t)(vp) & 0xffffu) | ((uint32_t)(layer) << 16))
 
+// Input assembly: how a draw's index positions make its primitives. The vertex
+// kernel's thread for vertex k of assembled primitive p reads the index at the
+// position this places there, straight from the application's index buffer.
+// Position `last` ends a primitive; `run` is where its run begins (0, or one
+// past the restart index that began it). With adjacency a primitive's vertices
+// are in geometry-shader input order, adjacent vertices interleaved:
+//   LIST        last-per+1 .. last (point, line and triangle lists, and line and
+//               triangle lists with adjacency: per 4 and 6)
+//   LINE_STRIP  last-per+1 .. last (line strips, and with adjacency: per 4)
+//   TRI_STRIP   last-2, last-1, last, the first two swapped on an odd triangle of
+//               its run when the provoking vertex is last, else the last two
+//   TRI_FAN     run, last-1, last when the provoking vertex is last, else
+//               last-1, last, run
+//   TRI_STRIP_ADJ  triangle i of its run, from b = last-5 = run+2i: b, b-2 (b+1
+//               for the first), b+2, b+6 (b+5 for the last), b+4, b+3; an odd
+//               one permuted to (2, 1, 0, 5, 4, 3) of those when the provoking
+//               vertex is last, else (0, 5, 4, 3, 2, 1)
+#define GFX_IA_LIST          0u
+#define GFX_IA_LINE_STRIP    1u
+#define GFX_IA_TRI_STRIP     2u
+#define GFX_IA_TRI_FAN       3u
+#define GFX_IA_TRI_STRIP_ADJ 4u
+
+// One assembled primitive of a draw whose restart index cuts its runs, written
+// by ia_k: the position of its last vertex and the run it belongs to.
+typedef struct {
+  uint32_t last;
+  uint32_t run;
+} gfx_ia_prim_t;
+
+// A draw's input assembly, in device memory. The draw parameters are those of
+// an indexed draw command; `prims` is the primitives each instance assembles --
+// the closed form of the draw for the host to write, or, when `restart` is set,
+// the count ia_k finds. Every later stage takes the draw's counts from here,
+// and the launches are only sized to bound them, so a device writer of the
+// draw parameters (an indirect draw) only has to fill the closed form too.
+typedef struct {
+  uint64_t index_addr;    // the bound index buffer, from its index 0
+  uint64_t map_addr;      // gfx_ia_prim_t[prims] when `restart` is set (ia_k out)
+  uint64_t query_block;   // GFX_QC_* counters ia_k counts the primitives into; 0 = none
+  uint32_t index_size;    // bytes per index: 1, 2 or 4; 0: the vertex is the position
+  uint32_t index_limit;   // indices the bound buffer holds; an index past it reads as 0
+  uint32_t first;         // the draw's first index
+  uint32_t count;         // the draw's index positions
+  int32_t  base_vertex;   // added to every index read
+  uint32_t instances;
+  uint32_t first_instance;
+  uint32_t topology;      // GFX_IA_*
+  uint32_t per;           // vertices per primitive: 1, 2, 3, 4 or 6
+  uint32_t restart;       // `restart_index` (masked to index_size) cuts the runs
+  uint32_t restart_index;
+  uint32_t prims;         // primitives per instance
+  uint32_t query_scale;   // draws each counted primitive stands for (instances x views)
+  uint32_t query_xfb;     // also count them as needed by a stream query
+  // A geometry stage's invocations per primitive, 0 = none: the primitives
+  // are then its input, counted as its invocations rather than as primitives
+  // the rasterizer and a stream query see, which its own scan counts.
+  uint32_t gs_invocations;
+} gfx_ia_t;
+
+// The three ia_k launches of a draw with restart, in CP order: COUNT and EMIT
+// over the whole grid, each thread a contiguous chunk of positions; SCAN on one
+// CTA, between them. Its partials hold three words per COUNT thread. A draw
+// short enough for one CTA runs the three in one launch of that CTA (ALL).
+#define IA_STAGE_COUNT 0u
+#define IA_STAGE_SCAN  1u
+#define IA_STAGE_EMIT  2u
+#define IA_STAGE_ALL   3u
+typedef struct {
+  uint64_t ia_addr;       // gfx_ia_t                          (in; out: prims)
+  uint64_t part_addr;     // uint32[3 * threads]               (scratch)
+  uint64_t tsum_addr;     // uint32[2 * SCAN's blockDim.x]     (scratch)
+  uint32_t stage;         // IA_STAGE_*
+  uint32_t threads;       // threads of the COUNT and EMIT launches
+} ia_arg_t;
+
 // Per-launch front-end argument block. Addresses are device byte addresses;
 // counts/config are runtime values the kernels read (so launch dims and pool
 // addresses can stay static while the work scales with the in-memory counts).
@@ -308,10 +384,14 @@ typedef struct {
   uint64_t vsrec_addr;
   uint32_t vstride;
   uint32_t inst_verts;
-  // With stipple_strip: a uint32 bitmask over one instance's segments, bit t set
-  // when segment t begins a new run of the strip (primitive restart), where the
-  // counter restarts. 0 = one run.
-  uint64_t strip_head_addr;
+  // The draw's gfx_ia_t, read by setup_ia_k (setup_k takes the counts above as
+  // exact). Its counts are the draw's and the ones above
+  // only bound them: a primitive past what the assembly made is skipped, and
+  // an instance's records are as many as its primitives take. Under a restart
+  // index a stippled strip's segment that begins a run (its map entry's
+  // last == run + per - 1) restarts the counter; otherwise every instance's strip is
+  // one run.
+  uint64_t ia_addr;
   uint64_t slot_prim_addr; // rast_prim_t[num_tris*MAX_SUB]   (scratch)
   uint64_t slot_bbox_addr; // setup_bbox_t[num_tris*MAX_SUB]  (scratch)
   uint64_t keep_addr;      // uint32[num_tris]                (scratch)

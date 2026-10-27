@@ -34,6 +34,10 @@
  *   mixed_points points on stream 0, drawn and not captured, and a run-time
  *               count of points on stream 1, captured into a buffer one
  *               primitive short: stream 1 is committed from its own count
+ *   restart     a triangle strip cut by a restart index into a static-count
+ *               geometry shader, so only the device knows how many input
+ *               triangles it gets: the capture, the stream query and the
+ *               geometry statistics of the triangles the runs make
  *   stats       pipeline statistics around four-invocation geometry shaders:
  *               invocations (every instanced one), primitives, clipper
  *               invocations and primitives; and again under rasterizer
@@ -287,7 +291,8 @@ init(void)
 struct vtx { float x, y; uint32_t n; };
 
 static VkPipeline
-pipeline(const char *geom, VkPrimitiveTopology topo, bool dynamic, bool last, bool discard)
+pipeline_restart(const char *geom, VkPrimitiveTopology topo, bool dynamic, bool last,
+                 bool discard, bool restart)
 {
    VkShaderModule vs = module("gsx.vert.spv"), fs = module("gsx.frag.spv"), gs = module(geom);
    const VkBool32 dyn = dynamic;
@@ -312,7 +317,8 @@ pipeline(const char *geom, VkPrimitiveTopology topo, bool dynamic, bool last, bo
       .vertexBindingDescriptionCount = 1, .pVertexBindingDescriptions = &bind,
       .vertexAttributeDescriptionCount = 2, .pVertexAttributeDescriptions = attr };
    VkPipelineInputAssemblyStateCreateInfo ia = {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO, .topology = topo };
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO, .topology = topo,
+      .primitiveRestartEnable = restart };
    VkViewport vp = { 0, 0, W, H, 0, 1 };
    VkRect2D sc = { { 0, 0 }, { W, H } };
    VkPipelineViewportStateCreateInfo vps = {
@@ -345,6 +351,12 @@ pipeline(const char *geom, VkPrimitiveTopology topo, bool dynamic, bool last, bo
    vkDestroyShaderModule(vk.dev, fs, NULL);
    vkDestroyShaderModule(vk.dev, gs, NULL);
    return p;
+}
+
+static VkPipeline
+pipeline(const char *geom, VkPrimitiveTopology topo, bool dynamic, bool last, bool discard)
+{
+   return pipeline_restart(geom, topo, dynamic, last, discard, false);
 }
 
 static VkCommandBuffer
@@ -724,6 +736,74 @@ case_mixed_points(void)
    vkDestroyQueryPool(vk.dev, xq, NULL);
 }
 
+/* An indexed triangle strip cut by a restart index into strip.geom with its
+ * static count: two runs of five vertices make six input triangles where the
+ * eleven positions would make nine. */
+static void
+case_restart(void)
+{
+   static const uint16_t idx[] = { 0, 1, 2, 3, 4, 0xffff, 5, 6, 7, 8, 9 };
+   const unsigned nidx = sizeof idx / sizeof idx[0], tris = 6;
+   struct vtx v[10];
+   for (unsigned i = 0; i < 10; i++)
+      v[i] = (struct vtx){ -0.9f + 0.15f * i, -0.5f + 0.3f * (i & 1u), 2 };
+   VkBuffer vb = vertices(v, 10);
+   VkBuffer ib;
+   memcpy(buffer(sizeof idx, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, &ib), idx, sizeof idx);
+   VkPipeline p = pipeline_restart("strip.geom.spv", VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP, false,
+                                   false, false, true);
+   VkQueryPool xq = query_pool(VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT, 0, 1);
+   const VkQueryPipelineStatisticFlags flags =
+      VK_QUERY_PIPELINE_STATISTIC_INPUT_ASSEMBLY_PRIMITIVES_BIT |
+      VK_QUERY_PIPELINE_STATISTIC_GEOMETRY_SHADER_INVOCATIONS_BIT |
+      VK_QUERY_PIPELINE_STATISTIC_GEOMETRY_SHADER_PRIMITIVES_BIT;
+   VkQueryPool sq = query_pool(VK_QUERY_TYPE_PIPELINE_STATISTICS, flags, 1);
+   sentinel();
+   VkCommandBuffer cmd = begin();
+   vkCmdResetQueryPool(cmd, xq, 0, 1);
+   vkCmdResetQueryPool(cmd, sq, 0, 1);
+   pass_begin(cmd);
+   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, p);
+   VkDeviceSize zero = 0;
+   vkCmdBindVertexBuffers(cmd, 0, 1, &vb, &zero);
+   vkCmdBindIndexBuffer(cmd, ib, 0, VK_INDEX_TYPE_UINT16);
+   const VkDeviceSize offs[2] = { 0, 0 };
+   const VkDeviceSize sizes[2] = { BUF, BUF };
+   BindXfb(cmd, 0, 2, vk.xb, offs, sizes);
+   BeginQueryIndexed(cmd, xq, 0, 0, 0);
+   vkCmdBeginQuery(cmd, sq, 0, 0);
+   BeginXfb(cmd, 0, 0, NULL, NULL);
+   vkCmdDrawIndexed(cmd, nidx, 1, 0, 0, 0);
+   EndXfb(cmd, 0, 0, NULL, NULL);
+   vkCmdEndQuery(cmd, sq, 0);
+   EndQueryIndexed(cmd, xq, 0, 0);
+   finish(cmd);
+
+   unsigned n[6];
+   for (unsigned i = 0; i < tris; i++)
+      n[i] = 2;
+   static uint32_t w0[BUF / 4], w1[BUF / 4];
+   for (unsigned w = 0; w < BUF / 4; w++)
+      w0[w] = w1[w] = SENTINEL;
+   expect_strip(n, tris, false, ~0u, w0, w1, 0);
+   check_buffer("restart", 0, w0);
+   check_buffer("restart", 1, w1);
+   uint64_t xr[2], sr[3];
+   CHECK(vkGetQueryPoolResults(vk.dev, xq, 0, 1, sizeof xr, xr, 16,
+                               VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT));
+   CHECK(vkGetQueryPoolResults(vk.dev, sq, 0, 1, sizeof sr, sr, sizeof sr,
+                               VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT));
+   check_value("restart", "written", xr[0], 2u * tris);
+   check_value("restart", "needed", xr[1], 2u * tris);
+   /* Counting the positions' closed form of nine triangles is wrong. */
+   check_value("restart", "ia_primitives", sr[0], bite ? 9u : tris);
+   check_value("restart", "gs_invocations", sr[1], bite ? 9u : tris);
+   check_value("restart", "gs_primitives", sr[2], 2u * tris);
+   vkDestroyPipeline(vk.dev, p, NULL);
+   vkDestroyQueryPool(vk.dev, xq, NULL);
+   vkDestroyQueryPool(vk.dev, sq, NULL);
+}
+
 /* Two draws in two Begin/End pairs, the second resuming where the first's
  * counter buffer says it stopped. */
 static void
@@ -828,6 +908,7 @@ main(void)
    case_mixed_strip(false);
    case_mixed_strip(true);
    case_mixed_points();
+   case_restart();
    case_stats(false);
    case_stats(true);
    if (failures) {

@@ -2,6 +2,7 @@
 #include <vx_graphics.h>
 #include "common.h"
 #include <gfx_frontend_k.h>   // setup_k + binning_k (-I gfx_setup_kernel)
+#include <gfx_ia_k.h>         // ia_k, for the pass scenes' input assembly
 
 // gfx_v2 device front end + RASTER fragment kernel in one module: the shared
 // pipeline (setup_k / binning_k) produces RASTER's tilebuf + primbuf; this

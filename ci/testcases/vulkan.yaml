@@ -140,6 +140,17 @@ tests:
 - {id: cp-dispatchindirect, via: make-run, drivers: [simx, xrt], dir: tests/vulkan/dispatchindirect, target: "run-{driver}",
    touches: [sim/common/cmd_processor, hw/rtl/cp/, sw/runtime/, sw/common/cp_launch_abi.h, tests/vulkan/dispatchindirect]}
 
+# Input assembly on the device: index buffers of every width read in place,
+# strips, fans and lists cut by primitive restart (ia_k), instancing, both
+# provoking-vertex modes, each image-exact against the same primitives drawn as
+# a plain list; and the statistics a restart draw counts on the device.
+- {id: gfx-iaasm, via: make-run, drivers: [simx], dir: tests/vulkan/iaasm, target: "run-{driver}",
+   touches: [sw/common/gfx_frontend_abi.h, sw/gfx/, tests/vulkan/iaasm]}
+# Draws whose restarts leave no primitive: the command processor skips each one
+# past its restart scan, bounded by the run's retired instructions.
+- {id: gfx-iacut, via: make-run, drivers: [simx], dir: tests/vulkan/iacut, target: "run-{driver}",
+   touches: [sw/common/gfx_frontend_abi.h, sw/gfx/, sim/common/cmd_processor, tests/vulkan/iaasm, tests/vulkan/iacut]}
+
 # Transform feedback from the vertex stage: byte-exact capture over every
 # topology and provoking-vertex mode, overflow, pause/resume through counter
 # buffers, capture under rasterizer discard, and the stream query.

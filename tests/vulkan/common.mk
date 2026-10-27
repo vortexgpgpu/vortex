@@ -163,6 +163,10 @@ EXPECT_CPU ?=
 # vortexpipe-hostread line, that the host read no indirect dispatch record and
 # no render-condition word: the command processor evaluated them all.
 EXPECT_NO_HOSTREAD ?= 0
+# EXPECT_MAX_INSTRS bounds the instructions the device retires over the run, as
+# the runtime's PERF line reports them: a test whose subject is work the device
+# must not do (a launch a device predicate skips) leaves no other trace.
+EXPECT_MAX_INSTRS ?=
 ifneq ($(EXPECT_ATTRIB)$(EXPECT_CPU)$(filter 1,$(EXPECT_NO_HOSTREAD)),)
 RUN_ENV += VORTEXPIPE_ATTRIB=1
 endif
@@ -223,7 +227,13 @@ define check_run
 	   if ! echo "$$out" | grep -q "^vortexpipe-cpu:.* $$p\( \|$$\)"; then \
 	      echo "FAIL: $(PROJECT) did not report llvmpipe work $$p"; exit 1; \
 	   fi; \
-	done
+	done; \
+	if [ -n "$(EXPECT_MAX_INSTRS)" ]; then \
+	   n=`echo "$$out" | sed -n 's/^PERF: instrs=\([0-9]*\),.*/\1/p' | sort -n | tail -1`; \
+	   if [ -z "$$n" ] || [ "$$n" -gt $(EXPECT_MAX_INSTRS) ]; then \
+	      echo "FAIL: $(PROJECT) retired $${n:-no} instructions, more than $(EXPECT_MAX_INSTRS)"; exit 1; \
+	   fi; \
+	fi
 endef
 
 .PHONY: all run run-simx run-rtlsim run-opae run-xrt clean

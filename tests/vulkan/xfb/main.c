@@ -16,11 +16,16 @@
  * vertex must still hold it.
  *
  *   topology  list, strip and fan in both provoking-vertex modes, an indexed
- *             strip cut by primitive restart, an instanced list starting at
- *             instance 1, an instanced strip, points, a line strip and a line
- *             list, and the four adjacency topologies -- the triangle strip in
- *             both modes -- of which only each primitive's own vertices are
- *             captured, never the adjacent ones; each in its own
+ *             strip cut by primitive restart; that strip, then a restart draw
+ *             whose runs are all too short to make a triangle (it captures
+ *             nothing, and must still leave the filled sizes where the strip
+ *             left them), then the strip instanced from instance 1, all in one
+ *             capture; the too-short draw on its own, an
+ *             instanced list starting at instance 1, an instanced strip,
+ *             points, a line strip and a line list, and the four adjacency
+ *             topologies -- the triangle strip in both modes -- of which only
+ *             each primitive's own vertices are captured, never the adjacent
+ *             ones; each in its own
  *             Begin/End over its own buffer ranges, the filled sizes saved to
  *             counter buffers at End
  *   overflow  four triangles into ranges with room for three in buffer 0 and
@@ -68,7 +73,7 @@
 #define STRIDE1   24u
 /* Each case captures into its own 4 KiB range of each buffer. */
 #define SLICE     4096u
-#define NSLICES   24u
+#define NSLICES   26u
 /* The many-vertex and huge cases capture into buffers of their own. */
 #define NBIG      4608u
 #define NHUGE     33000u
@@ -123,6 +128,7 @@ struct draw {
    const uint16_t *idx;      /* restart value 0xffff cuts a strip */
    uint32_t first_vertex;
    uint32_t instances, first_instance;
+   uint32_t first_index;     /* of idx in the index buffer */
 };
 
 /* The captured vertices of `d` in capture order; returns how many. */
@@ -430,19 +436,25 @@ has_device_extension(VkPhysicalDevice pd, const char *name)
 
 /* ---- cases ------------------------------------------------------------ */
 
-static const uint16_t restart_idx[] = { 0, 1, 2, 3, 0xffff, 4, 5, 6, 7 };
+/* The index buffer: a strip cut once, then one whose every run is too short. */
+static const uint16_t index_data[] = {
+   0, 1, 2, 3, 0xffff, 4, 5, 6, 7,
+   0, 1, 0xffff, 2, 3, 0xffff, 0xffff, 4,
+};
+#define RESTART_IDX index_data
+#define SHORT_IDX   (index_data + 9)
 
 enum {
    C_LIST, C_STRIP_F, C_STRIP_L, C_FAN_F, C_FAN_L, C_RESTART, C_INST, C_POINTS,
-   C_LINES, C_INST_STRIP, C_LINE_LIST, C_LINES_ADJ, C_LINE_STRIP_ADJ, C_TRIS_ADJ,
-   C_TRI_STRIP_ADJ_F, C_TRI_STRIP_ADJ_L, NTOPO,
+   C_LINES, C_INST_STRIP, C_LINE_LIST, C_RESTART_INST, C_RESTART_SHORT, C_LINES_ADJ,
+   C_LINE_STRIP_ADJ, C_TRIS_ADJ, C_TRI_STRIP_ADJ_F, C_TRI_STRIP_ADJ_L, NTOPO,
 };
 
 static const char *const topo_names[NTOPO] = {
    "list", "strip", "strip-last", "fan", "fan-last", "restart", "instanced",
-   "points", "line-strip", "instanced-strip", "line-list", "line-list-adjacency",
-   "line-strip-adjacency", "triangle-list-adjacency", "triangle-strip-adjacency",
-   "triangle-strip-adjacency-last",
+   "points", "line-strip", "instanced-strip", "line-list", "restart-instanced",
+   "restart-short", "line-list-adjacency", "line-strip-adjacency", "triangle-list-adjacency",
+   "triangle-strip-adjacency", "triangle-strip-adjacency-last",
 };
 
 static const struct draw topo_draws[NTOPO] = {
@@ -451,12 +463,14 @@ static const struct draw topo_draws[NTOPO] = {
    [C_STRIP_L] = { VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP, true, 6, NULL, 0, 1, 0 },
    [C_FAN_F]   = { VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN, false, 5, NULL, 0, 1, 0 },
    [C_FAN_L]   = { VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN, true, 5, NULL, 0, 1, 0 },
-   [C_RESTART] = { VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP, false, 9, restart_idx, 0, 1, 0 },
+   [C_RESTART] = { VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP, false, 9, RESTART_IDX, 0, 1, 0 },
    [C_INST]    = { VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, false, 3, NULL, 2, 2, 1 },
    [C_POINTS]  = { VK_PRIMITIVE_TOPOLOGY_POINT_LIST, false, 4, NULL, 0, 1, 0 },
    [C_LINES]   = { VK_PRIMITIVE_TOPOLOGY_LINE_STRIP, false, 4, NULL, 0, 1, 0 },
    [C_INST_STRIP] = { VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP, false, 5, NULL, 0, 3, 0 },
    [C_LINE_LIST]  = { VK_PRIMITIVE_TOPOLOGY_LINE_LIST, false, 6, NULL, 0, 1, 0 },
+   [C_RESTART_INST]  = { VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP, false, 9, RESTART_IDX, 0, 2, 1 },
+   [C_RESTART_SHORT] = { VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP, false, 8, SHORT_IDX, 0, 1, 0, 9 },
    [C_LINES_ADJ]  = { VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY, false, 8, NULL, 0, 1, 0 },
    [C_LINE_STRIP_ADJ] = { VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY, false, 6, NULL, 0, 1, 0 },
    [C_TRIS_ADJ]   = { VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY, false, 12, NULL, 0, 1, 0 },
@@ -760,9 +774,9 @@ main(int argc, char **argv)
    CHECK(host_buffer(dev, &mp, ctr_bytes, VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_COUNTER_BUFFER_BIT_EXT,
                      &ctrbuf, &ctrmem, (void **)&ctrmap));
    memset(ctrmap, 0xff, ctr_bytes);
-   CHECK(host_buffer(dev, &mp, sizeof restart_idx, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+   CHECK(host_buffer(dev, &mp, sizeof index_data, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
                      &ibuf, &imem2, (void **)&imap));
-   memcpy(imap, restart_idx, sizeof restart_idx);
+   memcpy(imap, index_data, sizeof index_data);
    const VkDeviceSize px_bytes = (VkDeviceSize)WIDTH * HEIGHT * 4u;
    CHECK(host_buffer(dev, &mp, px_bytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT, &pxbuf, &pxmem,
                      (void **)&pxmap));
@@ -818,7 +832,8 @@ main(int argc, char **argv)
 #define DRAW(cb, d) do {                                                          \
       if ((d)->idx) {                                                             \
          vkCmdBindIndexBuffer((cb), ibuf, 0, VK_INDEX_TYPE_UINT16);               \
-         vkCmdDrawIndexed((cb), (d)->count, (d)->instances, 0, 0, (d)->first_instance); \
+         vkCmdDrawIndexed((cb), (d)->count, (d)->instances, (d)->first_index, 0,  \
+                          (d)->first_instance);                                   \
       } else {                                                                    \
          vkCmdDraw((cb), (d)->count, (d)->instances, (d)->first_vertex,           \
                    (d)->first_instance);                                          \
@@ -839,6 +854,10 @@ main(int argc, char **argv)
          vkCmdBeginQuery(cmd[0], xqp, 1, 0);
       }
       begin_xfb(cmd[0], 0, 0, NULL, NULL);
+      if (c == C_RESTART_INST) {
+         DRAW(cmd[0], &topo_draws[C_RESTART]);
+         DRAW(cmd[0], &topo_draws[C_RESTART_SHORT]);
+      }
       DRAW(cmd[0], &topo_draws[c]);
       end_xfb(cmd[0], 0, 2, ctrs, ctr_off);
       if (c == C_LIST) {
@@ -999,10 +1018,15 @@ main(int argc, char **argv)
    }
    struct vtx x[64];
    for (unsigned c = 0; c < NTOPO; c++) {
+      uint32_t at = 0;
+      if (c == C_RESTART_INST) {
+         at = expect_draw(&topo_draws[C_RESTART], x);
+         expect_put(want[0], want[1], c * SLICE, c * SLICE, x, at);
+      }
       const uint32_t n = expect_draw(&topo_draws[c], x);
-      expect_put(want[0], want[1], c * SLICE, c * SLICE, x, n);
-      want_ctr[c][0] = n * STRIDE0;
-      want_ctr[c][1] = n * STRIDE1;
+      expect_put(want[0], want[1], c * SLICE + at * STRIDE0, c * SLICE + at * STRIDE1, x, n);
+      want_ctr[c][0] = (at + n) * STRIDE0;
+      want_ctr[c][1] = (at + n) * STRIDE1;
    }
    {
       /* Two of the four triangles fit buffer 1; the points fit after them. */
