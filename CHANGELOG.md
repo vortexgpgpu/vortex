@@ -12,6 +12,31 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
 - **Hardware profiles.** `profiles/<name>.json` names a machine (`tinygpu`, `rtx1080`, `v100`, `a100`, `h100`, `rtx5080`) that every flow
   builds through `configure --profile=<name>` or `blackbox.sh --profile=<name>`; explicit `CONFIGS` win over the profile.
   See [docs/simulation.md](docs/simulation.md#hardware-profiles).
+- **Per-partition fetch (`VX_CFG_FETCH_WIDTH`, default 1).** The front end splits into FETCH_WIDTH slices, each with its own warp
+  scheduler, fetch, decode and icache port, serving the warps with `wid % FETCH_WIDTH == f`; CTA dispatch, barriers and warp control
+  stay core-wide. The core takes one of three structures from the fetch width, issue width and per-unit block counts; with one block
+  of every unit per issue slice and FETCH_WIDTH equal to ISSUE_WIDTH, each slice is a self-contained compute slice (the NVIDIA
+  processing-block organization). *Why:* sgemm at 16 warps x 16 threads, ISSUE_WIDTH 4: -31.6% cycles at FETCH_WIDTH 2.
+- **Hashed cache bank select (`VX_CFG_{DCACHE,L2}_BANK_HASH`).** The bank index is the raw bank bits XORed with a hash of the line
+  address above them (IPOLY(5) for 16 banks, IPOLY(37) for 32, an XOR fold otherwise), so power-of-two strides spread over the banks.
+  On by default for the L2 and for a dcache with 4 or more banks. *Why:* rtlsim sgemv 512x512 at 16 threads -32.8%, fp16 TCU SGEMM
+  on 2 cores + L2 at 16 threads -13.8%, WGMMA with DXA -13.5%.
+- **Dcache read merge (`VX_CFG_DCACHE_READ_MERGE`, on by default).** Plain reads of the same word from the ports of one LSU block in
+  the same cycle are served by one bank access, and the response is multicast to every port; each port's order into the bank is
+  unchanged. *Why:* uniform loads (kernel arguments, SGEMM's shared operand) no longer serialize on one bank: rtlsim sgemm -n128 at
+  16 threads -6.5%, -17.2% with an 8-byte dcache word.
+- **Write-allocate without fetch (`VX_CFG_{DCACHE,L2,L3}_LAZY_FETCH`, off by default).** A store miss in a write-back cache installs
+  the sector with its dirty-byte mask and a partial bit instead of fetching the line; a later load or AMO merges memory data under the
+  unwritten bytes, and evictions write back only dirty bytes. *Why:* streaming writes no longer read every line first: 1-core vecadd
+  DRAM reads -33%.
+- **MSHR line table (`VX_CFG_{DCACHE,L2,L3}_MSHR_LINES`, off by default).** Misses are tracked in a reference-counted table of
+  distinct {line, sector} entries, and request entries keep only an index into it, so the MSHR holds more requests without widening
+  its address compares. *Why:* at 400-cycle memory latency, 64 requests over 16 lines: sgemm -n128 -15.3%, raycast -8.1%.
+- **Command-processor DMA through the shared LLC (`VX_CFG_CP_LLC_CLIENT`, off by default).** When one LLC serves every core, the
+  CP's transfers enter it on their own client slot, so host transfers need only an L1 flush, not a walk of the whole LLC; transfers
+  of at least half the LLC write around it. A launch behind DMA writes waits for an L1-only flush token sent on the slot. The runtime
+  sees the new `DMA_LLC_CLIENT` CP capability. *Why:* rtlsim at 2 clusters + L2 + L3: dogfood -30%, multikernel -42.7%; dogfood
+  -64% with an 8 MB L3.
 
 ### Changed
 
@@ -23,6 +48,48 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
   (JEDEC HBM2/HBM3/GDDR6 organization and nanosecond timing, 32 B bursts, permuted open-page bank interleave, per-channel
   responses), configured from data-sheet values: `VX_CFG_PLATFORM_MEMORY_{TYPE,DATA_RATE,LATENCY,QUEUE_SIZE}`. The default machine
   keeps its idle read latency (14/26 cycles open-row/conflict, was 13/27) and one-block-per-cycle peak.
+- **Cache flush architecture.** The CP starts every core's flush with one broadcast `CACHE_FLUSH` DCR write, then reads each core's
+  completion, so the flushes overlap; a flush read without a preceding write no longer starts one. A cache walks its banks, sends one
+  flush token down every memory port and answers once all ports have; every independently buffered write path (each dcache lane, each
+  OM input of the ocache) carries its own token. Read-only caches (icache, tcache, rtcache, rcache) no longer forward flushes.
+  `DBG_FLUSH_STALL` adds random input backpressure to the flush path for stress tests.
+- **L1-only flush between launches.** When a single LLC serves every memory client it is the point of coherence, so a launch
+  boundary cleans only the L1s: `CMD_CACHE_FLUSH` gains an L1-only flag, carried as a flush-token kind that a shared LLC answers
+  without a walk. Replicated LLCs and LLCs with peer clients (TEX, RTU, RASTER, OM, DXA) still walk. The runtime posts flushes
+  lazily and flushes fully before any device-memory transfer, and device busy stays high until every core write, uncached IO stores
+  included, is visible in memory. *Why:* per-launch flush cost at 4 cores + L2 drops from 2,750 to 180 cycles.
+- **Targeted fences.** A memory fence sends an L1-only flush token that the shared LLC answers without a walk. A fence that orders
+  only device (I/O) accesses decodes as its own LSU op, and its token makes each level drain to its memory ports without walking.
+  *Why:* printf, which fences after each device write, runs 13.6x faster on rtlsim at 2 cores + L2.
+- **LMEM DMA arbitration.** DXA writes into shared memory and the TCU's WGMMA operand reads now share the local-memory DMA port
+  round-robin. DXA had fixed priority and starved the TCU for about 510 cycles per tiled-scatter transfer. *Why:* rtlsim WGMMA with
+  DXA -10.2%, sparse WGMMA with DXA -11.6%.
+- **SimX timing model follows the RTL's structure.** Buffer capacities and registered ready at every pipeline boundary, per-slice
+  cache arbiter trees and network depths, registered cache core-response ports, flush and fence tokens end to end, and CTA launch onto
+  the nearest ready core with two launch credits per core. SimX's per-core cycle counter (`mcycle`) now advances only while the core
+  has work, as the RTL's does. rtlsim completes DRAM requests in per-bank arrival order, as the AXI platform does.
+
+### Fixed
+
+- **Global barriers across clusters.** Each cluster ran its own global-barrier unit that saw only its own cores, while
+  `vx_num_cores()`, and so `vortex::gbarrier`, counts the whole device. On SimX every global barrier hung with more than one
+  cluster; on the RTL, 2 clusters x 1 core timed out and 2 clusters x 2 cores released each cluster on its own arrivals, with no
+  ordering between clusters. One device-level unit now counts every core.
+- **Writes left dirty by a flush.** A cache forwarded its flush token on memory port 0 only, so writes queued on another port could
+  reach the next level after that level's walk and stay dirty there.
+- **Dirty sectors dropped on a sector refill.** With dirty-byte tracking and several sectors per line, installing a sector into a
+  resident line cleared the whole line's byte mask, so a dirty sibling sector wrote back with no bytes enabled and its data was lost
+  (mstress at 4 cores with a write-back, sectored L2).
+- **Local-memory LR/SC livelock at 16 threads.** One warp's per-lane LR burst used up a reservation's fixed hold budget of 7 refusals,
+  so contended LR/SC loops on shared memory stopped making progress. The budget now scales with the core's harts.
+- **`VX_stream_arb` trees with a partial last slice.** When the request count was not a whole number of slices, the last slice's
+  select was sized and placed as if it were full: the build failed lint, and with several outputs requests went to the wrong output.
+- **`-DSCOPE` builds.** The scope buses of fetch, issue, LSU, TCU, TEX, RASTER and OM were declared only under their `DBG_SCOPE_*`
+  taps, left unbound, or did not parse, so debug-scope builds failed to elaborate.
+- **mstress checked no data.** Its host reference was always 0, so the test passed with corrupted loads; it now checks every loaded
+  value exactly.
+- **FPGA run instructions.** The docs exported `TARGET=hw`, which `blackbox.sh` ignores, so runs fell back to xrtsim; they now pass
+  `--target=hw`.
 
 ## [3.0] — 2026-10-07
 

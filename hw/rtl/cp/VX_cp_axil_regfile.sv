@@ -15,7 +15,8 @@
 //     0x000 CP_CTRL     RW   bit0=enable_global, bit1=reset_all
 //     0x004 CP_STATUS   RO   bit0=busy, bit1=error
 //     0x008 CP_DEV_CAPS RO   [7:0]NUM_QUEUES | [15:8]RING_SIZE_LOG2_MAX
-//                            [23:16]AXI_TID_WIDTH
+//                            [23:16]AXI_TID_WIDTH | [28]DMA_LLC_CLIENT
+//     0x00C GPU_DEV_CAPS_EXT RO  device-config caps extension: [7:0]SOCKET_SIZE
 //     0x010 CP_CYCLE_LO RO   free-running cycle counter low 32 bits
 //     0x014 CP_CYCLE_HI RO   high 32 bits
 //     0x018 GPU_DEV_CAPS_LO RO  device-config caps, low 32 bits
@@ -51,7 +52,9 @@ module VX_cp_axil_regfile
   parameter int ADDR_W     = 16,
   // Static device-caps fields (set at synthesis time from VX_cp_pkg).
   parameter int RING_SIZE_LOG2_MAX = VX_CP_RING_SIZE_LOG2_C,
-  parameter int AXI_TID_W          = VX_CP_AXI_TID_WIDTH_C
+  parameter int AXI_TID_W          = VX_CP_AXI_TID_WIDTH_C,
+  // The device-side DMA reaches memory through the last-level cache.
+  parameter int DMA_LLC_CLIENT     = 0
 )(
   input  wire                       clk,
   input  wire                       reset,
@@ -128,7 +131,8 @@ module VX_cp_axil_regfile
   localparam int GPU_BANK_ADDR_W  = `VX_CFG_PLATFORM_MEMORY_ADDR_WIDTH
                                   - `CLOG2(`VX_CFG_PLATFORM_MEMORY_NUM_BANKS);
 
-  `STATIC_ASSERT(`VX_CFG_NUM_WARPS < 128 && `VX_CFG_NUM_CLUSTERS < 128 && GPU_CLUSTER_SIZE < 256,
+  `STATIC_ASSERT(`VX_CFG_NUM_WARPS < 128 && `VX_CFG_NUM_CLUSTERS < 128 && GPU_CLUSTER_SIZE < 256
+                 && `VX_CFG_SOCKET_SIZE < 256,
                  ("GPU_DEV_CAPS exact-count fields overflow"))
 
   wire [63:0] gpu_dev_caps = {
@@ -145,6 +149,11 @@ module VX_cp_axil_regfile
     3'($clog2(`VX_CFG_NUM_WARPS)),
     3'($clog2(`VX_CFG_NUM_THREADS)),
     8'(`VX_ISA_IMPL_ID)
+  };
+
+  wire [31:0] gpu_dev_caps_ext = {
+    24'd0,
+    8'(`VX_CFG_SOCKET_SIZE)
   };
 
   wire [63:0] gpu_isa_caps = {
@@ -204,10 +213,13 @@ module VX_cp_axil_regfile
       case (addr[5:0])
         6'h00: return r_cp_ctrl;
         6'h04: return {30'd0, cp_error, cp_busy};
-        6'h08: return {8'd0,
+        6'h08: return {3'd0,
+                       1'(DMA_LLC_CLIENT),
+                       4'd0,
                        8'(AXI_TID_W),
                        8'(RING_SIZE_LOG2_MAX),
                        8'(NUM_QUEUES)};
+        6'h0C: return gpu_dev_caps_ext;
         6'h10: return r_cycle_count[31:0];
         6'h14: return r_cycle_count[63:32];
         6'h18: return gpu_dev_caps[31:0];
@@ -222,7 +234,7 @@ module VX_cp_axil_regfile
         // reports VM_ENABLED=0 in CP_DEV_CAPS and the runtime never writes
         // them. Reading zero is the honest answer; implement them for real if
         // an MMU is added.
-        6'h0C, 6'h28, 6'h2C: return 32'd0;
+        6'h28, 6'h2C: return 32'd0;
         // AFU host-port drain counters (debug, read-only).
         6'h30: return dbg_host_w_counts;
         6'h34: return dbg_host_r_counts;

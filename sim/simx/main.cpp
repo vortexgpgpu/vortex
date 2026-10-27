@@ -233,6 +233,7 @@ int main(int argc, char **argv) {
       // flush GPU caches before reading back results
       {
         uint32_t dummy;
+        processor.dcr_write(VX_DCR_BASE_CACHE_FLUSH, 0);
         for (uint32_t cid = 0; cid < VX_CFG_NUM_CORES * VX_CFG_NUM_CLUSTERS; ++cid) {
           processor.dcr_read(VX_DCR_BASE_CACHE_FLUSH, cid, &dummy);
         }

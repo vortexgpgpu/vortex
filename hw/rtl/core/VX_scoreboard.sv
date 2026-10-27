@@ -14,8 +14,7 @@
 `include "VX_define.vh"
 
 module VX_scoreboard import VX_gpu_pkg::*; #(
-    parameter `STRING INSTANCE_ID = "",
-    parameter ISSUE_ID = 0
+    parameter `STRING INSTANCE_ID = ""
 ) (
     input wire              clk,
     input wire              reset,
@@ -30,7 +29,6 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     VX_scoreboard_if.master scoreboard_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    `UNUSED_PARAM (ISSUE_ID)
     `UNUSED_VAR ({writeback_if.data.sop, writeback_if.data.eop, writeback_if.data.wis})
 
     localparam NUM_OPDS  = NUM_SRC_OPDS + 1;

@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 220" role="img" aria-label="Each LSU block now owns its path to its dcache ports, so the core no longer funnels every block through one shared memory path.">
+  <title>Each LSU block now owns its path to its dcache ports, so the core no longer funnels every block through one shared memory path.</title>
+  <defs><marker id="lsupat_a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1b2733"/></marker><marker id="lsupat_g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1f7a4d"/></marker><marker id="lsupat_b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#b3261e"/></marker></defs>
+  <style>
+    text { font-family: Helvetica, Arial, sans-serif; fill: #1b2733; font-size: 11.5px; }
+    .dh { font-size: 13px; font-weight: bold; }
+    .dm { fill: #5a6772; font-size: 11px; }
+    .ds { font-size: 10.5px; }
+    .db { fill: #fbfcfd; stroke: #5a7184; stroke-width: 1.2; }
+    .dbad { fill: #fbe5e3; stroke: #b3261e; stroke-width: 1.2; }
+    .dgood { fill: #e3f3ea; stroke: #1f7a4d; stroke-width: 1.2; }
+    .didle { fill: #f3f5f8; stroke: #c9d1d9; stroke-width: 1.2; }
+    .dwait { fill: #fbe5e3; stroke: #b3261e; stroke-width: 1.2; stroke-dasharray: 4 3; }
+    .ln { stroke: #1b2733; stroke-width: 1.3; fill: none; }
+    .lb { stroke: #b3261e; stroke-width: 1.5; fill: none; }
+    .lg { stroke: #1f7a4d; stroke-width: 1.5; }
+    .dash { stroke-dasharray: 4 3; }
+    .sep { stroke: #c9d1d9; stroke-width: 1; stroke-dasharray: 2 4; }
+    text.db-t { fill: #b3261e; } text.g-t { fill: #1f7a4d; }
+  </style>
+  <rect width="640" height="220" fill="#ffffff"/>
+<text x="160" y="20" class="dh" text-anchor="middle">Before: one shared path</text>
+<text x="480" y="20" class="dh" text-anchor="middle">After: a path per LSU block</text>
+<g class="dl">
+<rect x="20" y="40" width="80" height="24" class="db"/><text x="60" y="56" text-anchor="middle" class="ds">LSU block 0</text>
+<rect x="20" y="76" width="80" height="24" class="db"/><text x="60" y="92" text-anchor="middle" class="ds">LSU block 1</text>
+<rect x="20" y="112" width="80" height="24" class="db"/><text x="60" y="128" text-anchor="middle" class="ds">LSU block 2</text>
+<rect x="20" y="148" width="80" height="24" class="db"/><text x="60" y="164" text-anchor="middle" class="ds">LSU block 3</text>
+<rect x="135" y="88" width="80" height="36" class="dbad"/><text x="175" y="104" text-anchor="middle" class="ds">core memory</text><text x="175" y="117" text-anchor="middle" class="ds">path</text>
+<rect x="235" y="88" width="70" height="36" class="db"/><text x="270" y="110" text-anchor="middle" class="ds">dcache</text>
+<line x1="100" y1="52" x2="133" y2="96" class="lb" marker-end="url(#lsupat_b)"/><line x1="100" y1="88" x2="133" y2="102" class="lb" marker-end="url(#lsupat_b)"/><line x1="100" y1="124" x2="133" y2="110" class="lb" marker-end="url(#lsupat_b)"/><line x1="100" y1="160" x2="133" y2="116" class="lb" marker-end="url(#lsupat_b)"/>
+<line x1="215" y1="106" x2="233" y2="106" class="ln" marker-end="url(#lsupat_a)"/>
+<line x1="320" y1="30" x2="320" y2="205" class="sep"/>
+<rect x="340" y="40" width="80" height="24" class="db"/><text x="380" y="56" text-anchor="middle" class="ds">LSU block 0</text>
+<rect x="340" y="76" width="80" height="24" class="db"/><text x="380" y="92" text-anchor="middle" class="ds">LSU block 1</text>
+<rect x="340" y="112" width="80" height="24" class="db"/><text x="380" y="128" text-anchor="middle" class="ds">LSU block 2</text>
+<rect x="340" y="148" width="80" height="24" class="db"/><text x="380" y="164" text-anchor="middle" class="ds">LSU block 3</text>
+<rect x="520" y="40" width="100" height="132" class="db"/><text x="570" y="100" text-anchor="middle" class="ds">dcache</text><text x="570" y="114" text-anchor="middle" class="ds">ports 0–3</text>
+<line x1="420" y1="52" x2="518" y2="52" class="lg" marker-end="url(#lsupat_g)"/><line x1="420" y1="88" x2="518" y2="88" class="lg" marker-end="url(#lsupat_g)"/><line x1="420" y1="124" x2="518" y2="124" class="lg" marker-end="url(#lsupat_g)"/><line x1="420" y1="160" x2="518" y2="160" class="lg" marker-end="url(#lsupat_g)"/>
+<text x="470" y="194" class="dm" text-anchor="middle">own path, own status</text>
+</g>
+</svg>

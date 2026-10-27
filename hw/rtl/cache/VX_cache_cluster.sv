@@ -33,6 +33,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
 
     parameter CRSQ_SIZE             = 0,      // Core Response Queue Size
     parameter MSHR_SIZE             = 16,     // Miss Reserv Queue Knob
+    parameter MSHR_LINES            = 0,      // MSHR distinct line entries (0 = address per request)
     parameter MRSQ_SIZE             = 4,      // Memory Response Queue Size
     parameter MREQ_SIZE             = 0,      // Memory Request Queue Size (0 = derived minimum)
 
@@ -43,6 +44,8 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
     parameter WRITEBACK             = 0,      // Enable cache writeback
 
     parameter DIRTY_BYTES           = 0,      // Enable dirty bytes on writeback
+
+    parameter LAZY_FETCH            = 0,      // Write misses allocate without a fill (write-validate)
 
     parameter REPL_POLICY           = `CS_REPL_FIFO, // Replacement policy
 
@@ -55,6 +58,12 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
     parameter MEM_OUT_BUF           = 3,      // Memory request output buffer
 
     parameter IS_LLC                = 0,      // Indicates this cache cluster is the LLC (handles AMO completion).
+    parameter SHARED_LLC            = 0,      // The LLC serves every memory client alone (point of coherence).
+    parameter ACQ_FORWARD           = 0,      // An acquire flush also invalidates the next level.
+    parameter FLUSH_FORWARD         = 1,      // A flush also flushes the next level.
+    parameter BANK_HASH             = 0,      // Hashed bank select (cache_bank_hash).
+    parameter READ_MERGE            = 0,      // Merge same-word reads within groups of this many adjacent ports (0: off).
+    parameter READ_MERGE_LINE       = 0,      // Merge any reads of the same line instead, each port keeping its own tag and word.
 
     parameter AMO_ENABLE            = 0       // Enable atomic memory operations.
  ) (
@@ -65,7 +74,10 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
     output cache_perf_t     cache_perf,
 `endif
     VX_mem_bus_if.slave     core_bus_if [NUM_INPUTS * NUM_REQS],
-    VX_mem_bus_if.master    mem_bus_if [MEM_PORTS]
+    VX_mem_bus_if.master    mem_bus_if [MEM_PORTS],
+
+    // no uncached or outgoing request waiting in the arbiters or bypass paths
+    output wire             req_empty
 );
     localparam NUM_CACHES = `UP(NUM_UNITS);
     localparam PASSTHRU   = (NUM_UNITS == 0);
@@ -87,6 +99,10 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
         .DATA_SIZE (WORD_SIZE),
         .TAG_WIDTH (ARB_TAG_WIDTH)
     ) arb_core_bus_if[NUM_CACHES * NUM_REQS]();
+    wire [NUM_REQS-1:0]   core_arb_empty;
+    wire [NUM_CACHES-1:0] cache_req_empty;
+    wire [MEM_PORTS-1:0]  mem_arb_empty;
+    assign req_empty = (& core_arb_empty) && (& cache_req_empty) && (& mem_arb_empty);
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_arb
         VX_mem_bus_if #(
             .DATA_SIZE (WORD_SIZE),
@@ -114,6 +130,28 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .bus_in_if  (core_bus_tmp_if),
             .bus_out_if (arb_core_bus_tmp_if)
         );
+        if (NUM_INPUTS != NUM_CACHES) begin : g_core_arb_pending
+            wire [NUM_INPUTS-1:0] in_fire;
+            wire [NUM_CACHES-1:0] out_fire;
+            for (genvar j = 0; j < NUM_INPUTS; ++j) begin : g_in_fire
+                assign in_fire[j] = core_bus_tmp_if[j].req_valid && core_bus_tmp_if[j].req_ready;
+            end
+            for (genvar k = 0; k < NUM_CACHES; ++k) begin : g_out_fire
+                assign out_fire[k] = arb_core_bus_tmp_if[k].req_valid && arb_core_bus_tmp_if[k].req_ready;
+            end
+            VX_mem_req_pending #(
+                .NUM_INPUTS  (NUM_INPUTS),
+                .NUM_OUTPUTS (NUM_CACHES)
+            ) core_arb_pending (
+                .clk      (clk),
+                .reset    (reset),
+                .in_fire  (in_fire),
+                .out_fire (out_fire),
+                .empty    (core_arb_empty[i])
+            );
+        end else begin : g_no_core_arb_pending
+            assign core_arb_empty[i] = 1'b1;
+        end
         for (genvar k = 0; k < NUM_CACHES; ++k) begin : g_arb_core_bus_if
             `ASSIGN_VX_MEM_BUS_IF (arb_core_bus_if[k * NUM_REQS + i], arb_core_bus_tmp_if[k]);
         end
@@ -132,9 +170,11 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .WRITE_ENABLE (WRITE_ENABLE),
             .WRITEBACK    (WRITEBACK),
             .DIRTY_BYTES  (DIRTY_BYTES),
+            .LAZY_FETCH   (LAZY_FETCH),
             .REPL_POLICY  (REPL_POLICY),
             .CRSQ_SIZE    (CRSQ_SIZE),
             .MSHR_SIZE    (MSHR_SIZE),
+            .MSHR_LINES   (MSHR_LINES),
             .MRSQ_SIZE    (MRSQ_SIZE),
             .MREQ_SIZE    (MREQ_SIZE),
             .LATENCY      (LATENCY),
@@ -145,6 +185,12 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .NC_ENABLE (NC_ENABLE),
             .PASSTHRU     (PASSTHRU),
             .IS_LLC       (IS_LLC),
+            .SHARED_LLC   (SHARED_LLC),
+            .ACQ_FORWARD  (ACQ_FORWARD),
+            .FLUSH_FORWARD (FLUSH_FORWARD),
+            .BANK_HASH    (BANK_HASH),
+            .READ_MERGE   (READ_MERGE),
+            .READ_MERGE_LINE (READ_MERGE_LINE),
             .AMO_ENABLE   (AMO_ENABLE)
         ) cache_wrap (
         `ifdef PERF_ENABLE
@@ -153,7 +199,8 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .clk         (clk),
             .reset       (reset),
             .core_bus_if (arb_core_bus_if[i * NUM_REQS +: NUM_REQS]),
-            .mem_bus_if  (cache_mem_bus_if[i * MEM_PORTS +: MEM_PORTS])
+            .mem_bus_if  (cache_mem_bus_if[i * MEM_PORTS +: MEM_PORTS]),
+            .req_empty   (cache_req_empty[i])
         );
     end
     for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_bus_if
@@ -183,6 +230,24 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .bus_in_if  (arb_core_bus_tmp_if),
             .bus_out_if (mem_bus_tmp_if)
         );
+        if (NUM_CACHES > 1) begin : g_mem_arb_pending
+            wire [NUM_CACHES-1:0] in_fire;
+            for (genvar j = 0; j < NUM_CACHES; ++j) begin : g_in_fire
+                assign in_fire[j] = arb_core_bus_tmp_if[j].req_valid && arb_core_bus_tmp_if[j].req_ready;
+            end
+            VX_mem_req_pending #(
+                .NUM_INPUTS  (NUM_CACHES),
+                .NUM_OUTPUTS (1)
+            ) mem_arb_pending (
+                .clk      (clk),
+                .reset    (reset),
+                .in_fire  (in_fire),
+                .out_fire (mem_bus_tmp_if[0].req_valid && mem_bus_tmp_if[0].req_ready),
+                .empty    (mem_arb_empty[i])
+            );
+        end else begin : g_no_mem_arb_pending
+            assign mem_arb_empty[i] = 1'b1;
+        end
         if (WRITE_ENABLE) begin : g_we
             `ASSIGN_VX_MEM_BUS_IF (mem_bus_if[i], mem_bus_tmp_if[0]);
         end else begin : g_ro

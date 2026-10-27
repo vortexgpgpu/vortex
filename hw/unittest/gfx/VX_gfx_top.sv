@@ -292,6 +292,7 @@ module VX_gfx_top import VX_gpu_pkg::*
         .clk          (clk),
         .reset        (reset),
         .dcr_flush_if (tcache_flush_if),
+        .l1_only      (1'b0),
         .core_bus_if  (tcache_bus_if[0]),
         .cache_bus_if (tcache_flushable_bus_if[0])
     );
@@ -322,13 +323,15 @@ module VX_gfx_top import VX_gpu_pkg::*
         .WRITEBACK      (0),
         .DIRTY_BYTES    (0),
         .NC_ENABLE      (0),
+        .FLUSH_FORWARD  (0),
         .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (3)
     ) tcache (
         .clk            (clk),
         .reset          (reset),
         .core_bus_if    (tcache_flushable_bus_if),
-        .mem_bus_if     (tcache_mem_bus_tmp_if)
+        .mem_bus_if     (tcache_mem_bus_tmp_if),
+        `UNUSED_PIN (req_empty)
     );
 `else
     assign flush_done_w[0] = 1'b1;
@@ -443,6 +446,7 @@ module VX_gfx_top import VX_gpu_pkg::*
         .clk          (clk),
         .reset        (reset),
         .dcr_flush_if (rtcache_flush_if),
+        .l1_only      (1'b0),
         .core_bus_if  (rtcache_bus_if[0]),
         .cache_bus_if (rtcache_flushable_bus_if[0])
     );
@@ -473,13 +477,15 @@ module VX_gfx_top import VX_gpu_pkg::*
         .WRITEBACK      (0),
         .DIRTY_BYTES    (0),
         .NC_ENABLE      (0),
+        .FLUSH_FORWARD  (0),
         .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (3)
     ) rtcache (
         .clk            (clk),
         .reset          (reset),
         .core_bus_if    (rtcache_flushable_bus_if),
-        .mem_bus_if     (rtcache_mem_bus_tmp_if)
+        .mem_bus_if     (rtcache_mem_bus_tmp_if),
+        `UNUSED_PIN (req_empty)
     );
 `else
     assign flush_done_w[1] = 1'b1;
@@ -658,10 +664,11 @@ module VX_gfx_top import VX_gpu_pkg::*
 `endif
 
     VX_graphics #(
-        .CLUSTER_ID (0)
+        .INSTANCE_ID ("cluster0")
     ) graphics (
         .clk        (clk),
         .reset      (reset),
+        .cluster_id ('0),
     `ifdef VX_CFG_EXT_RASTER_ENABLE
         .raster_kmu_bus_if (raster_kmu_bus_if),
         .rcache_mem_bus_if (rcache_l2_bus_if),
@@ -752,6 +759,7 @@ module VX_gfx_top import VX_gpu_pkg::*
         .WRITE_ENABLE   (1),
         .WRITEBACK      (`VX_CFG_L2_WRITEBACK),
         .DIRTY_BYTES    (`VX_CFG_L2_DIRTYBYTES),
+        .LAZY_FETCH     (`VX_CFG_L2_LAZY_FETCH),
         .REPL_POLICY    (`VX_CFG_L2_REPL_POLICY),
         .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (3),
@@ -763,7 +771,8 @@ module VX_gfx_top import VX_gpu_pkg::*
         .clk            (clk),
         .reset          (reset),
         .core_bus_if    (l2_core_if),
-        .mem_bus_if     (l2_mem_if)
+        .mem_bus_if     (l2_mem_if),
+        `UNUSED_PIN (req_empty)
     );
 
 endmodule

@@ -45,8 +45,7 @@ set vdefines_list  [lindex $vlist 2]
 #puts ${vdefines_list}
 
 set chipscope 0
-set num_banks 1
-set merged_mem_if 0
+set afu_mem_ports -1
 
 # parse vdefines_list for configuration parameters
 foreach def $vdefines_list {
@@ -55,16 +54,9 @@ foreach def $vdefines_list {
     if { $name == "CHIPSCOPE" } {
         set chipscope 1
     }
-    if { $name == "PLATFORM_MEMORY_NUM_BANKS" } {
-        set num_banks [lindex $fields 1]
+    if { $name == "AFU_MEM_PORTS" } {
+        set afu_mem_ports [lindex $fields 1]
     }
-    if { $name == "PLATFORM_MERGED_MEMORY_INTERFACE" } {
-        set merged_mem_if 1
-    }
-}
-
-if { $merged_mem_if == 1 } {
-    set num_banks 1
 }
 
 create_project -force kernel_pack $path_to_tmp_project
@@ -175,6 +167,14 @@ foreach bif [ipx::get_bus_interfaces -of $core] {
 set axi_masters [lsort $axi_masters]
 foreach m $axi_masters {
     ipx::associate_bus_interfaces -busif $m -clock ap_clk $core
+}
+
+# The build binds AFU_MEM_PORTS memory masters to device memory; a kernel
+# with any other count would leave ports unbound or bind names it lacks.
+set num_mem_masters [llength [lsearch -all -glob $axi_masters "m_axi_mem_*"]]
+if { $num_mem_masters != $afu_mem_ports } {
+    puts "ERROR: packaged kernel has $num_mem_masters m_axi_mem masters, but AFU_MEM_PORTS=$afu_mem_ports"
+    exit 1
 }
 
 set mem_map [::ipx::add_memory_map -quiet "s_axi_ctrl" $core]

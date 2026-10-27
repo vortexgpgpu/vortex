@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-// Flat-port testbench wrapper around VX_tcu_unit.
+// Flat-port testbench wrapper around VX_tcu_unit and VX_tcu_shared.
 // All VX_dispatch_if and VX_commit_if signals are exposed as individual
 // ports so that the Verilator C++ testbench can drive them directly.
 // Only ISSUE_WIDTH == 1 is supported by this wrapper.
@@ -106,13 +106,13 @@ module VX_tcu_unit_top import VX_gpu_pkg::*, VX_tcu_pkg::*; (
 `endif
 
 `ifdef TCU_META_ENABLE
-    VX_lsu_sched_if tcu_mem_if();
-    assign tcu_mem_req_valid    = tcu_mem_if.req_valid;
-    assign tcu_mem_req_data     = tcu_mem_if.req_data;
-    assign tcu_mem_if.req_ready = tcu_mem_req_ready;
-    assign tcu_mem_if.rsp_valid = tcu_mem_rsp_valid;
-    assign tcu_mem_if.rsp_data  = tcu_mem_rsp_data;
-    assign tcu_mem_rsp_ready    = tcu_mem_if.rsp_ready;
+    VX_lsu_sched_if tcu_mem_if [`VX_CFG_NUM_LSU_BLOCKS]();
+    assign tcu_mem_req_valid       = tcu_mem_if[0].req_valid;
+    assign tcu_mem_req_data        = tcu_mem_if[0].req_data;
+    assign tcu_mem_if[0].req_ready = tcu_mem_req_ready;
+    assign tcu_mem_if[0].rsp_valid = tcu_mem_rsp_valid;
+    assign tcu_mem_if[0].rsp_data  = tcu_mem_rsp_data;
+    assign tcu_mem_rsp_ready       = tcu_mem_if[0].rsp_ready;
 `endif
 
     VX_dispatch_if dispatch_if[`VX_CFG_ISSUE_WIDTH]();
@@ -164,20 +164,51 @@ module VX_tcu_unit_top import VX_gpu_pkg::*, VX_tcu_pkg::*; (
     `UNUSED_VAR (commit_if[0].data.cta_id)
 
     // ---- DUT -------------------------------------------------------------
+`ifdef VX_CFG_TCU_WGMMA_ENABLE
+    wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tcu_exec_valid, tcu_exec_ready;
+    tcu_execute_t                     tcu_exec_data [`VX_CFG_NUM_TCU_BLOCKS];
+    wire [`VX_CFG_NUM_TCU_BLOCKS-1:0][TCU_WG_A_DATA_SIZE-1:0][`VX_CFG_XLEN-1:0] tcu_tbuf_rs1_data;
+    wire [`VX_CFG_NUM_TCU_BLOCKS-1:0][TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0]   tcu_tbuf_rs2_data;
+    wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tcu_tbuf_ready;
+`endif
+
     VX_tcu_unit #(
         .INSTANCE_ID ("tcu_unit_top")
     ) tcu_unit (
         `SCOPE_IO_BIND (0)
-        .clk         (clk),
-        .reset       (reset),
+        .clk              (clk),
+        .reset            (reset),
     `ifdef VX_CFG_TCU_WGMMA_ENABLE
-        .tcu_lmem_if (tcu_lmem_if),
+        .exec_valid       (tcu_exec_valid),
+        .exec_ready       (tcu_exec_ready),
+        .exec_data        (tcu_exec_data),
+        .tbuf_rs1_data    (tcu_tbuf_rs1_data),
+        .tbuf_rs2_data    (tcu_tbuf_rs2_data),
+        .tbuf_ready       (tcu_tbuf_ready),
     `endif
     `ifdef TCU_META_ENABLE
-        .tcu_mem_if  (tcu_mem_if),
+        .tcu_mem_if       (tcu_mem_if),
     `endif
-        .dispatch_if (dispatch_if),
-        .commit_if   (commit_if)
+        .dispatch_if      (dispatch_if),
+        .commit_if        (commit_if)
+    );
+
+    // the core-wide WGMMA tile buffers the TCU blocks share
+    VX_tcu_shared #(
+        .INSTANCE_ID ("tcu_unit_top"),
+        .BLOCK_SIZE  (`VX_CFG_NUM_TCU_BLOCKS)
+    ) tcu_shared (
+    `ifdef VX_CFG_TCU_WGMMA_ENABLE
+        .exec_valid       (tcu_exec_valid),
+        .exec_ready       (tcu_exec_ready),
+        .exec_data        (tcu_exec_data),
+        .tbuf_rs1_data    (tcu_tbuf_rs1_data),
+        .tbuf_rs2_data    (tcu_tbuf_rs2_data),
+        .tbuf_ready_eff   (tcu_tbuf_ready),
+        .tcu_lmem_if      (tcu_lmem_if),
+    `endif
+        .clk              (clk),
+        .reset            (reset)
     );
 
 endmodule

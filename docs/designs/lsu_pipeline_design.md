@@ -6,7 +6,7 @@ interleave, per-lane classification and formatting, fence ordering,
 multi-packet tracking, the shared memory scheduler and its outstanding pool,
 address-class steering, coalescing, and the response path. Covers the RTL
 ([`VX_lsu_unit.sv`](../../hw/rtl/core/VX_lsu_unit.sv),
-[`VX_lsu_slice.sv`](../../hw/rtl/core/VX_lsu_slice.sv),
+[`VX_lsu_block.sv`](../../hw/rtl/core/VX_lsu_block.sv),
 [`VX_lsu_agu.sv`](../../hw/rtl/core/VX_lsu_agu.sv),
 [`VX_lsu_scheduler.sv`](../../hw/rtl/core/VX_lsu_scheduler.sv),
 [`VX_mem_scheduler.sv`](../../hw/rtl/libs/VX_mem_scheduler.sv),
@@ -104,7 +104,7 @@ that is provably equivalent.
 
 ## 3. The slice — request side
 
-[`VX_lsu_slice.sv`](../../hw/rtl/core/VX_lsu_slice.sv).
+[`VX_lsu_block.sv`](../../hw/rtl/core/VX_lsu_block.sv).
 
 ### 3.1 Classification
 
@@ -148,7 +148,9 @@ A fence is a **total barrier on its slice**. The slice sets `fence_lock` when
 a fence's last packet is accepted and clears it when that fence's response
 returns. While locked, the slice accepts nothing.
 
-The fence itself travels to memory as a request with `is_flush`, behind every
+The fence itself travels to memory as a request with `is_flush` (an IO token,
+the `io` attribute set, for a fence ordering only device accesses; otherwise an
+L1-only token, byte enables set), behind every
 request the slice issued before it, so its response proves they have drained.
 Only the last packet of a multi-packet fence is sent; the earlier packets
 complete immediately.
@@ -208,7 +210,7 @@ library block also used by the caches' other clients.
 
 | client | source | present |
 |---|---|---|
-| 0 | the block's `VX_lsu_slice` | always |
+| 0 | the block's `VX_lsu_block` | always |
 | 1 | the tensor unit's warp-level address generator | on block 0, when the tensor metadata path is enabled |
 
 Arbitration is round-robin, and the granted client's index is prepended to
@@ -318,7 +320,7 @@ the DXA writes and the tensor unit's reads.
 |---|---|
 | `VX_mem_coalescer` | merges word-sized lanes onto data-cache-word channels; lanes addressing the same cache word become one request |
 | `VX_lsu_adapter` | turns the lane bundle into one memory bus per channel; registers the request boundary |
-| `VX_dcr_flush` | injects the host's cache-flush request, on channel 0 of block 0 |
+| `VX_dcr_flush` | injects the host's cache-flush token on lane 0 of a private dcache, and on every lane otherwise (a shared dcache's socket arbiter, or a disabled dcache's passthrough, buffers each lane on its own) |
 
 The coalescer exists when there is more than one lane and the data-cache
 word is wider than an LSU word; otherwise the path is a pass-through that

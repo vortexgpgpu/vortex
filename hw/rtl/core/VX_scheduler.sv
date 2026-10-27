@@ -13,559 +13,239 @@
 
 `include "VX_define.vh"
 
+// The core-level part of scheduling: CTA dispatch and the core-wide warp-control
+// resources. Each frontend slice schedules and fetches its own warps (VX_warp_sched,
+// VX_fetch); core-wide events are handed to it with slice-local warp ids.
 module VX_scheduler import VX_gpu_pkg::*; #(
-    parameter `STRING INSTANCE_ID = "",
-    parameter CORE_ID = 0
+    parameter `STRING INSTANCE_ID = ""
 ) (
     input wire              clk,
     input wire              reset,
+
+    input wire [CORE_ID_WIDTH-1:0] core_id,
 
 `ifdef PERF_ENABLE
     output sched_perf_t     sched_perf,
 `endif
 
-    // inputs
-    VX_warp_ctl_if.slave    warp_ctl_if,
-`ifdef VX_CFG_EXT_RTU_ENABLE
-    VX_sched_unlock_if.slave sched_unlock_if,  // RTU TRACE wstall release
+    VX_slice_sched_if.master slice_if [`VX_CFG_FETCH_WIDTH],
+    VX_warp_shared_if.slave warp_shared_if [`VX_CFG_NUM_SFU_BLOCKS],
+`ifdef VX_CFG_EXT_DXA_ENABLE
+    VX_txbar_bus_if.slave   txbar_bus_if,
 `endif
-    VX_branch_ctl_if.slave  branch_ctl_if [`VX_CFG_NUM_ALU_BLOCKS],
-    VX_decode_sched_if.slave decode_sched_if,
-    VX_issue_sched_if.slave issue_sched_if [`VX_CFG_ISSUE_WIDTH],
-    VX_commit_sched_if.slave commit_sched_if,
+    input wire [`VX_CFG_NUM_WARPS-1:0] committed_warps,
 
-    // KMU bus
+    // CTA context writes, to every SFU block's copy
+    output cta_bcast_t      cta_bcast,
+
     VX_kmu_bus_if.slave     kmu_bus_if,
 
-    // outputs
-    VX_schedule_if.master   schedule_if,
-    VX_sched_csr_if.master  sched_csr_if,
     VX_gbar_bus_if.master   gbar_bus_if,
 
-    // status
+    // per-core CSR state
+    output wire [PERF_CTR_BITS-1:0] cycles,
+    output wire [PERF_CTR_BITS-1:0] instret,
+    output wire [`VX_CFG_NUM_WARPS-1:0] active_warps,
+`ifdef VX_CFG_VM_ENABLE
+    output wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] satp,
+    input wire [`VX_CFG_NUM_SFU_BLOCKS-1:0] satp_wr_valid,
+    input wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] satp_wr_data,
+`endif
+
     output wire             busy
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    `UNUSED_PARAM (CORE_ID)
 
-    reg [`VX_CFG_NUM_WARPS-1:0] active_warps, active_warps_n; // updated when a warp is activated or disabled
-    reg [`VX_CFG_NUM_WARPS-1:0] stalled_warps, stalled_warps_n; // set when branch/gpgpu instructions are issued
+    localparam FW  = `VX_CFG_FETCH_WIDTH;
+    localparam SW  = PER_FETCH_WARPS;
 
-    reg [`VX_CFG_NUM_WARPS-1:0][`VX_CFG_NUM_THREADS-1:0] thread_masks, thread_masks_n;
-    reg [`VX_CFG_NUM_WARPS-1:0][PC_BITS-1:0] warp_pcs, warp_pcs_n;
-    reg [`VX_CFG_NUM_WARPS-1:0][`VX_CFG_MEM_ADDR_WIDTH-1:0] mscratch_r;
+    // slice status in wid order (wid = {wfs, fsw})
+    wire [`VX_CFG_NUM_WARPS-1:0] stalled_warps;
+    wire [`VX_CFG_NUM_WARPS-1:0] ibuf_full_n, pending_warp_empty;
+    for (genvar w = 0; w < `VX_CFG_NUM_WARPS; ++w) begin : g_interleave
+        assign active_warps[w]       = slice_if[w % FW].active[w / FW];
+        assign stalled_warps[w]      = slice_if[w % FW].stalled[w / FW];
+        assign ibuf_full_n[w]        = slice_if[w % FW].ibuf_full_n[w / FW];
+        assign pending_warp_empty[w] = slice_if[w % FW].pending_empty[w / FW];
+    end
 
-    // Per-warp machine-mode trap CSRs. csrw writes arrive on
-    // sched_csr_if.trap_csr_wr_*; ECALL/EBREAK hardware-write mepc/mcause/
-    // mtval; MRET restores the warp PC from mepc.
-    reg [`VX_CFG_NUM_WARPS-1:0][`VX_CFG_XLEN-1:0] mstatus_r, mtvec_r, mepc_r, mcause_r, mtval_r;
-
-    wire [NW_WIDTH-1:0]     schedule_wid;
-    wire [`VX_CFG_NUM_THREADS-1:0] schedule_tmask;
-    wire [PC_BITS-1:0]      schedule_pc;
-    wire                    schedule_valid;
-    wire                    schedule_ready;
-
-    // CTA dispatcher
-    wire cta_fire;
-    wire [NW_WIDTH-1:0] cta_wid;
+    // CTA dispatcher: lane p launches frontend slice p's warps
+    wire [FW-1:0] cta_fire;
+    wire [FW-1:0][NW_WIDTH-1:0] cta_wid;
     wire [PC_BITS-1:0] cta_PC;
-    wire [`VX_CFG_NUM_THREADS-1:0] cta_tmask;
+    wire [FW-1:0][`VX_CFG_NUM_THREADS-1:0] cta_tmask;
     wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] cta_param;
+    wire [FW-1:0] cta_init;
+    cta_lane_bcast_t [FW-1:0] cta_lane_bcast;
     wire cta_dispatcher_busy;
-    wire cta_init;
-
-    // CTA-CSR read-back from the dispatcher (it owns the per-CTA/per-warp tables).
-    cta_csrs_t                                              cta_rd_csrs;
-    cta_lane_t [`VX_CFG_NUM_THREADS-1:0] cta_rd_lane;
-    wire [NCTA_WIDTH-1:0]                                   schedule_cta_id;
-
-    // Warp retirement: TMC with tmask==0 permanently deactivates the warp
-    wire cta_warp_done = warp_ctl_if.tmc_valid && (warp_ctl_if.tmc.tmask == 0);
+    wire cta_warp_done;
+    wire [NW_WIDTH-1:0] cta_warp_done_wid;
 
     VX_cta_dispatch #(
-        .INSTANCE_ID (`SFORMATF(("%s-cta_dispatch", INSTANCE_ID)))
+        .INSTANCE_ID (`SFORMATF(("%s-cta_dispatch", INSTANCE_ID))),
+        .NUM_LANES   (FW)
     ) cta_dispatcher (
-        .clk        (clk),
-        .reset      (reset),
-        .kmu_bus_if (kmu_bus_if),
-        .active_warps(active_warps),
-        .warp_done  (cta_warp_done),
-        .warp_done_wid(warp_ctl_if.wid),
-        .cta_fire   (cta_fire),
-        .cta_wid    (cta_wid),
-        .cta_PC     (cta_PC),
-        .cta_tmask  (cta_tmask),
-        .cta_param  (cta_param),
-        .cta_init   (cta_init),
-        .csr_rd_wid (sched_csr_if.csr_rd_wid),
-        .csr_rd_cta_id(sched_csr_if.csr_rd_cta_id),
-        .cta_rd_csrs(cta_rd_csrs),
-        .cta_rd_lane(cta_rd_lane),
-        .schedule_wid(schedule_wid),
-        .schedule_cta_id(schedule_cta_id),
-        .busy       (cta_dispatcher_busy)
+        .clk          (clk),
+        .reset        (reset),
+        .kmu_bus_if   (kmu_bus_if),
+        .active_warps (active_warps),
+        .warp_done    (cta_warp_done),
+        .warp_done_wid(cta_warp_done_wid),
+        .cta_fire     (cta_fire),
+        .cta_wid      (cta_wid),
+        .cta_PC       (cta_PC),
+        .cta_tmask    (cta_tmask),
+        .cta_param    (cta_param),
+        .cta_init     (cta_init),
+        .cta_bcast    (cta_bcast),
+        .cta_lane_bcast(cta_lane_bcast),
+        .busy         (cta_dispatcher_busy)
     );
 
-    assign sched_csr_if.cta_csrs = cta_rd_csrs;
-    assign sched_csr_if.cta_lane = cta_rd_lane;
-
-    assign sched_csr_if.mscratch  = mscratch_r[sched_csr_if.csr_rd_wid];
-    assign sched_csr_if.csr_mstatus = mstatus_r[sched_csr_if.csr_rd_wid];
-    assign sched_csr_if.csr_mtvec   = mtvec_r  [sched_csr_if.csr_rd_wid];
-    assign sched_csr_if.csr_mepc    = mepc_r   [sched_csr_if.csr_rd_wid];
-    assign sched_csr_if.csr_mcause  = mcause_r [sched_csr_if.csr_rd_wid];
-    assign sched_csr_if.csr_mtval   = mtval_r  [sched_csr_if.csr_rd_wid];
-
-    // split/join
-    wire                    join_valid;
-    wire                    join_is_dvg;
-    wire                    join_is_else;
-    wire [NW_WIDTH-1:0]     join_wid;
-    wire [`VX_CFG_NUM_THREADS-1:0] join_tmask;
-    wire [PC_BITS-1:0]      join_pc;
-
-    reg [PERF_CTR_BITS-1:0] cycles;
-
-    wire schedule_fire = schedule_valid && schedule_ready;
-    wire schedule_if_fire = schedule_if.valid && schedule_if.ready;
-`ifdef VX_CFG_EXT_C_ENABLE
-    // PC advance is driven by decompress_finished under EXT_C;
-    `UNUSED_VAR (schedule_if_fire)
-`endif
-
-    // branch
-    wire [`VX_CFG_NUM_ALU_BLOCKS-1:0]               branch_valid;
-    wire [`VX_CFG_NUM_ALU_BLOCKS-1:0][NW_WIDTH-1:0] branch_wid;
-    wire [`VX_CFG_NUM_ALU_BLOCKS-1:0]               branch_taken;
-    wire [`VX_CFG_NUM_ALU_BLOCKS-1:0][PC_BITS-1:0]  branch_dest;
-    wire [`VX_CFG_NUM_ALU_BLOCKS-1:0]               branch_is_trap;
-    wire [`VX_CFG_NUM_ALU_BLOCKS-1:0]               branch_is_mret;
-    wire [`VX_CFG_NUM_ALU_BLOCKS-1:0][3:0]          branch_trap_cause;
-    for (genvar i = 0; i < `VX_CFG_NUM_ALU_BLOCKS; ++i) begin : g_branch_init
-        assign branch_valid[i]      = branch_ctl_if[i].valid;
-        assign branch_wid[i]        = branch_ctl_if[i].wid;
-        assign branch_taken[i]      = branch_ctl_if[i].taken;
-        assign branch_dest[i]       = branch_ctl_if[i].dest;
-        assign branch_is_trap[i]    = branch_ctl_if[i].is_trap;
-        assign branch_is_mret[i]    = branch_ctl_if[i].is_mret;
-        assign branch_trap_cause[i] = branch_ctl_if[i].trap_cause;
-    end
-
-    // barriers
-    wire [`VX_CFG_NUM_WARPS-1:0] bar_unlock_mask;
+    // core-wide warp-control resources
     wire bar_unlock_valid;
+    wire [`VX_CFG_NUM_WARPS-1:0] bar_unlock_mask;
+    wire wspawn_apply;
+    wire [`VX_CFG_NUM_WARPS-1:0] wspawn_wmask;
+    wire [PC_BITS-1:0] wspawn_pc;
+    wire [NW_WIDTH-1:0] wspawn_wid;
+    wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] wspawn_mscratch;
 
-    // wspawn
-    wspawn_t wspawn;
-    reg wspawn_valid;
-    reg [NW_WIDTH-1:0] wspawn_wid;
-    reg is_single_warp;
-
-    wire [`CLOG2(`VX_CFG_NUM_WARPS+1)-1:0] active_warps_cnt;
-    `POP_COUNT(active_warps_cnt, active_warps);
-
-     always @(*) begin
-        active_warps_n  = active_warps;
-        stalled_warps_n = stalled_warps;
-        thread_masks_n  = thread_masks;
-        warp_pcs_n      = warp_pcs;
-
-        // dispatch warps
-        if (cta_fire) begin
-            active_warps_n[cta_wid] = 1;
-            // Reusing a warp for the next CTA skips the one-time prologue and rewinds to the
-            // kernel's per-CTA dispatch window: a fixed 20-byte (5-instruction) sequence that
-            // reloads the entry pointer and kargs before re-calling.
-            warp_pcs_n[cta_wid] = cta_init ? cta_PC : (warp_pcs[cta_wid] - from_fullPC(`VX_CFG_XLEN'(20)));
-            thread_masks_n[cta_wid] = cta_tmask;
-        end
-
-        // decode unlock
-        if (decode_sched_if.valid && decode_sched_if.unlock) begin
-            stalled_warps_n[decode_sched_if.wid] = 0;
-        end
-
-        // wspawn handling
-        if (wspawn_valid && is_single_warp) begin
-            active_warps_n |= wspawn.wmask;
-            for (integer i = 0; i < `VX_CFG_NUM_WARPS; ++i) begin
-                if (wspawn.wmask[i] && (NW_WIDTH'(i) != wspawn_wid)) begin
-                    thread_masks_n[i][0] = 1;
-                    warp_pcs_n[i] = wspawn.pc;
-                end
-            end
-            stalled_warps_n[wspawn_wid] = 0; // unlock warp
-        end
-
-        // TMC handling
-        if (warp_ctl_if.tmc_valid) begin
-            active_warps_n[warp_ctl_if.wid]  = (warp_ctl_if.tmc.tmask != 0);
-            thread_masks_n[warp_ctl_if.wid]  = warp_ctl_if.tmc.tmask;
-            stalled_warps_n[warp_ctl_if.wid] = 0; // unlock warp
-        end
-
-        // split handling
-        if (warp_ctl_if.split_valid) begin
-            if (warp_ctl_if.split.is_dvg) begin
-                thread_masks_n[warp_ctl_if.wid] = warp_ctl_if.split.then_tmask;
-            end
-            stalled_warps_n[warp_ctl_if.wid] = 0; // unlock warp
-        end
-
-        // join handling
-        if (join_valid) begin
-            if (join_is_dvg) begin
-                if (join_is_else) begin
-                    warp_pcs_n[join_wid] = join_pc;
-                end
-                thread_masks_n[join_wid] = join_tmask;
-            end
-            stalled_warps_n[join_wid] = 0; // unlock warp
-        end
-
-        // barrier unlock handling
-        if (bar_unlock_valid) begin
-            stalled_warps_n &= ~bar_unlock_mask;
-        end
-
-        // wsync unlock: warp pipeline drained
-        if (warp_ctl_if.wsync_valid) begin
-            stalled_warps_n[warp_ctl_if.wid] = 0;
-        end
-
-        // Branch handling
-        for (integer i = 0; i < `VX_CFG_NUM_ALU_BLOCKS; ++i) begin
-            if (branch_valid[i]) begin
-                if (branch_is_trap[i]) begin
-                    // ECALL/EBREAK: redirect to trap vector (mtvec[1:0] = MODE field; mask off to get base address).
-                    warp_pcs_n[branch_wid[i]] = from_fullPC(mtvec_r[branch_wid[i]] & ~`VX_CFG_XLEN'(3));
-                end else if (branch_is_mret[i]) begin
-                    // MRET/SRET/URET: restore the saved PC from mepc. ECALL/EBREAK
-                    // are the only traps and they do not narrow the tmask, so there
-                    // is nothing to restore beyond the PC.
-                    warp_pcs_n[branch_wid[i]] = from_fullPC(mepc_r[branch_wid[i]]);
-                end else if (branch_taken[i]) begin
-                    warp_pcs_n[branch_wid[i]] = branch_dest[i];
-                end
-                stalled_warps_n[branch_wid[i]] = 0; // unlock warp
-            end
-        end
-
-        // stall the warp until decode stage
-        if (schedule_fire) begin
-            stalled_warps_n[schedule_wid] = 1;
-        end
-
-        // advance PC.
-    `ifdef VX_CFG_EXT_C_ENABLE
-        // With RVC, the decompressor may emit a 2-byte instruction. Advance
-        // from the committed warp PC rather than the redirect-muxed next-PC:
-        // every redirect source (branch/trap/mret, split/join, wspawn) stalls
-        // its warp from schedule until it resolves, so no redirect writes a
-        // warp's PC on the same cycle that warp decode-advances. Reading the
-        // registered PC keeps the +2/+4 adder off the branch/trap redirect
-        // cone, matching the non-RVC path which advances the pipeline-carried
-        // PC instead of the combinational next-PC.
-        if (decode_sched_if.valid) begin
-            warp_pcs_n[decode_sched_if.wid] =
-                warp_pcs[decode_sched_if.wid]
-                + from_fullPC(decode_sched_if.is_rvc ? `VX_CFG_XLEN'(2) : `VX_CFG_XLEN'(4));
-        end
-    `else
-        if (schedule_if_fire) begin
-            warp_pcs_n[schedule_if.data.wid] = schedule_if.data.PC + from_fullPC(`VX_CFG_XLEN'(4));
-        end
+    VX_warp_shared_unit #(
+        .INSTANCE_ID (INSTANCE_ID),
+        .NUM_REQS    (`VX_CFG_NUM_SFU_BLOCKS)
+    ) warp_shared_unit (
+        .clk             (clk),
+        .reset           (reset),
+        .core_id         (core_id),
+        .warp_shared_if  (warp_shared_if),
+    `ifdef VX_CFG_EXT_DXA_ENABLE
+        .txbar_bus_if    (txbar_bus_if),
     `endif
+        .active_warps    (active_warps),
+        .bar_unlock_valid(bar_unlock_valid),
+        .bar_unlock_mask (bar_unlock_mask),
+        .gbar_bus_if     (gbar_bus_if),
+        .wspawn_apply    (wspawn_apply),
+        .wspawn_wmask    (wspawn_wmask),
+        .wspawn_pc       (wspawn_pc),
+        .wspawn_wid      (wspawn_wid),
+        .wspawn_mscratch (wspawn_mscratch),
+        .warp_done       (cta_warp_done),
+        .warp_done_wid   (cta_warp_done_wid),
+        `UNUSED_PIN      (wspawn_pending)
+    );
 
-    `ifdef VX_CFG_EXT_RTU_ENABLE
-        // A wstall'd TRACE retires (its traversal's first response landed and the
-        // arm op wrote back the handle): resume the warp so it proceeds to WAIT,
-        // which returns the response status (terminal or candidate). No trap, no
-        // redirect — the candidate is serviced inline by the warp's loop.
-        if (sched_unlock_if.valid) begin
-            stalled_warps_n[sched_unlock_if.wid] = 1'b0;
-        end
-    `endif
-    end
+    // counters
 
+    reg [PERF_CTR_BITS-1:0] cycles_r;
+    reg [PERF_CTR_BITS-1:0] instret_r;
+    wire [`CLOG2(`VX_CFG_NUM_WARPS+1)-1:0] committed_warps_cnt;
+    `POP_COUNT(committed_warps_cnt, committed_warps);
     always @(posedge clk) begin
         if (reset) begin
-            stalled_warps   <= '0;
-            warp_pcs        <= '0;
-            active_warps    <= '0;
-            thread_masks    <= '0;
-            cycles          <= '0;
-            wspawn_valid    <=  0;
-            warp_pcs        <= '0;
-            active_warps    <= '0;
-            thread_masks    <= '0;
-            is_single_warp  <= 0;
-            mscratch_r      <= '0;
-            mstatus_r       <= '0;
-            mtvec_r         <= '0;
-            mepc_r          <= '0;
-            mcause_r        <= '0;
-            mtval_r         <= '0;
+            cycles_r  <= '0;
+            instret_r <= '0;
         end else begin
-            active_warps   <= active_warps_n;
-            stalled_warps  <= stalled_warps_n;
-            thread_masks   <= thread_masks_n;
-            warp_pcs       <= warp_pcs_n;
-            is_single_warp <= (active_warps_cnt == $bits(active_warps_cnt)'(1));
-
-            // wspawn handling
-            if (warp_ctl_if.wspawn_valid) begin
-                wspawn_valid <= 1;
-                wspawn.wmask <= warp_ctl_if.wspawn.wmask;
-                wspawn.pc    <= warp_ctl_if.wspawn.pc;
-                wspawn_wid   <= warp_ctl_if.wid;
-            end
-            if (wspawn_valid && is_single_warp) begin
-                wspawn_valid <= 0;
-                // copy mscratch from spawning warp to all newly spawned warps
-                for (integer i = 0; i < `VX_CFG_NUM_WARPS; ++i) begin
-                    if (wspawn.wmask[i] && (NW_WIDTH'(i) != wspawn_wid)) begin
-                        mscratch_r[i] <= mscratch_r[wspawn_wid];
-                    end
-                end
-            end
-
-            // CTA dispatch: latch this warp's mscratch (param). The per-CTA /
-            // per-warp tables and the wid->cta_id map live in VX_cta_dispatch.
-            if (cta_fire) begin
-                mscratch_r[cta_wid] <= cta_param;
-            end
-
-            // MSCRATCH write-back from CSR unit (CSR instruction)
-            if (sched_csr_if.csr_wr_valid) begin
-                mscratch_r[sched_csr_if.csr_wr_wid] <= sched_csr_if.csr_wr_data;
-            end
-
-            // Trap CSR write-back from CSR unit (csrw mstatus/mtvec/mepc/...)
-            if (sched_csr_if.trap_csr_wr_valid[0]) begin
-                mstatus_r[sched_csr_if.csr_wr_wid] <= sched_csr_if.trap_csr_wr_data;
-            end
-            if (sched_csr_if.trap_csr_wr_valid[1]) begin
-                mtvec_r  [sched_csr_if.csr_wr_wid] <= sched_csr_if.trap_csr_wr_data;
-            end
-            if (sched_csr_if.trap_csr_wr_valid[2]) begin
-                mepc_r   [sched_csr_if.csr_wr_wid] <= sched_csr_if.trap_csr_wr_data;
-            end
-            if (sched_csr_if.trap_csr_wr_valid[3]) begin
-                mcause_r [sched_csr_if.csr_wr_wid] <= sched_csr_if.trap_csr_wr_data;
-            end
-            if (sched_csr_if.trap_csr_wr_valid[4]) begin
-                mtval_r  [sched_csr_if.csr_wr_wid] <= sched_csr_if.trap_csr_wr_data;
-            end
-
-            // Hardware trap entry (ECALL/EBREAK): snapshot the faulting PC
-            // into mepc and the cause into mcause. Ordered after the
-            // software write so a hardware trap wins a same-cycle conflict.
-            for (integer i = 0; i < `VX_CFG_NUM_ALU_BLOCKS; ++i) begin
-                if (branch_valid[i] && branch_is_trap[i]) begin
-                    mepc_r  [branch_wid[i]] <= to_fullPC(branch_dest[i]);
-                    mcause_r[branch_wid[i]] <= `VX_CFG_XLEN'(branch_trap_cause[i]);
-                    mtval_r [branch_wid[i]] <= '0;
-                end
-            end
-
             if (busy) begin
-                cycles <= cycles + 1;
+                cycles_r <= cycles_r + 1;
             end
+            instret_r <= instret_r + PERF_CTR_BITS'(committed_warps_cnt);
         end
     end
+    assign cycles  = cycles_r;
+    assign instret = instret_r;
 
-    // Barrier unit
-
-    VX_bar_unit #(
-        .INSTANCE_ID (`SFORMATF(("%s-barrier", INSTANCE_ID))),
-        .CORE_ID     (CORE_ID)
-    ) bar_unit (
-        .clk        (clk),
-        .reset      (reset),
-        .req_valid  (warp_ctl_if.bar_valid),
-        .req_wid    (warp_ctl_if.wid),
-        .req_data   (warp_ctl_if.bar),
-        .read_addr  (warp_ctl_if.bar_addr),
-        .read_phase (warp_ctl_if.bar_phase),
-        .active_warps(active_warps),
-        .gbar_bus_if(gbar_bus_if),
-        .unlock_valid(bar_unlock_valid),
-        .unlock_mask(bar_unlock_mask)
-    );
-
-    // split/join handling
-
-    VX_split_join #(
-        .INSTANCE_ID (`SFORMATF(("%s-splitjoin", INSTANCE_ID))),
-        .OUT_REG     (1)
-    ) split_join (
-        .clk        (clk),
-        .reset      (reset),
-        .split_valid(warp_ctl_if.split_valid),
-        .sjoin_valid(warp_ctl_if.sjoin_valid),
-        .wid        (warp_ctl_if.wid),
-        .split      (warp_ctl_if.split),
-        .sjoin      (warp_ctl_if.sjoin),
-        .join_valid (join_valid),
-        .join_is_dvg(join_is_dvg),
-        .join_is_else(join_is_else),
-        .join_wid   (join_wid),
-        .join_tmask (join_tmask),
-        .join_pc    (join_pc),
-        .stack_wid  (warp_ctl_if.dvstack_wid),
-        .stack_ptr  (warp_ctl_if.dvstack_ptr)
-    );
-
-    // schedule the next ready warp
-
-    wire [`VX_CFG_NUM_WARPS-1:0] ready_warps = active_warps & ~stalled_warps;
-
-    // Per-warp ibuffer occupancy counter (registered full[i] keeps arbitration
-    // off the critical path; full_n feeds an externally registered aggregate
-    // so all_full is valid the same cycle as full[i]).
-    localparam IBUF_CW = $clog2(`VX_CFG_IBUF_SIZE + 1);
-
-    wire [`VX_CFG_NUM_WARPS-1:0] schedule_onehot;
-    logic [`VX_CFG_NUM_WARPS-1:0] ibuf_full, ibuf_full_n;
-
-    for (genvar i = 0; i < `VX_CFG_NUM_WARPS; ++i) begin : g_ibuf_cnt
-        logic [IBUF_CW-1:0] size_r, size_n;
-        wire incr = schedule_fire && schedule_onehot[i];
-        wire decr = schedule_if.ibuf_pop[i];
-        assign size_n = size_r + IBUF_CW'(incr) - IBUF_CW'(decr);
-        assign ibuf_full_n[i] = (size_n == IBUF_CW'(`VX_CFG_IBUF_SIZE));
-        always @(posedge clk) begin
-            if (reset) begin
-                size_r       <= '0;
-                ibuf_full[i] <= 1'b0;
-            end else begin
-                size_r       <= size_n;
-                ibuf_full[i] <= ibuf_full_n[i];
-            end
-        end
-    end
-
-    wire [`VX_CFG_NUM_WARPS-1:0] preferred_warps = ready_warps & ~ibuf_full;
-`ifndef L1_ENABLE
-    // without L1, we should ensure the icache never stalls,
-    // because it could deadlock dcache response since they share the same bus.
-    wire [`VX_CFG_NUM_WARPS-1:0] schedule_warps = preferred_warps;
-`else
+    // from the slices' next-state full, so it is valid the same cycle as their full flags
     reg all_ibuf_full;
     always @(posedge clk) begin
-        if (reset) all_ibuf_full <= 1'b0;
-        else all_ibuf_full <= (& ibuf_full_n);
-    end
-    wire [`VX_CFG_NUM_WARPS-1:0] schedule_warps = all_ibuf_full ? ready_warps : preferred_warps;
-`endif
-
-    VX_priority_encoder #(
-        .N (`VX_CFG_NUM_WARPS)
-    ) wid_select (
-        .data_in   (schedule_warps),
-        .index_out (schedule_wid),
-        .valid_out (schedule_valid),
-        .onehot_out(schedule_onehot)
-    );
-
-    wire [`VX_CFG_NUM_WARPS-1:0][(`VX_CFG_NUM_THREADS + PC_BITS)-1:0] schedule_data;
-    for (genvar i = 0; i < `VX_CFG_NUM_WARPS; ++i) begin : g_schedule_data
-        assign schedule_data[i] = {thread_masks[i], warp_pcs[i]};
-    end
-
-    assign {schedule_tmask, schedule_pc} = {
-        schedule_data[schedule_wid][(`VX_CFG_NUM_THREADS + PC_BITS)-1:(`VX_CFG_NUM_THREADS + PC_BITS)-4],
-        schedule_data[schedule_wid][(`VX_CFG_NUM_THREADS + PC_BITS)-5:0]
-    };
-
-    wire [UUID_WIDTH-1:0] instr_uuid;
-`ifdef UUID_ENABLE
-    VX_uuid_gen #(
-        .CORE_ID (CORE_ID)
-    ) uuid_gen (
-        .clk   (clk),
-        .reset (reset),
-        .incr  (schedule_fire),
-        .wid   (schedule_wid),
-        .uuid  (instr_uuid)
-    );
-`else
-    assign instr_uuid = '0;
-`endif
-
-    // schedule_cta_id is produced by VX_cta_dispatch from its wid->cta_id map.
-
-    VX_elastic_buffer #(
-        .DATAW (`VX_CFG_NUM_THREADS + PC_BITS + NW_WIDTH + NCTA_WIDTH + UUID_WIDTH),
-        .SIZE  (2),  // need to buffer out ready_in
-        .OUT_REG (1) // should be registered for BRAM acces in fetch unit
-    ) out_buf (
-        .clk       (clk),
-        .reset     (reset),
-        .valid_in  (schedule_valid),
-        .ready_in  (schedule_ready),
-        .data_in   ({schedule_tmask, schedule_pc, schedule_wid, schedule_cta_id, instr_uuid}),
-        .data_out  ({schedule_if.data.tmask, schedule_if.data.PC, schedule_if.data.wid, schedule_if.data.cta_id, schedule_if.data.uuid}),
-        .valid_out (schedule_if.valid),
-        .ready_out (schedule_if.ready)
-    );
-
-    // Track committed instructions
-
-    reg [PERF_CTR_BITS-1:0] instret;
-
-    wire [`VX_CFG_NUM_WARPS-1:0] committed_warps_v = commit_sched_if.committed_warps;
-    wire [`CLOG2(`VX_CFG_NUM_WARPS+1)-1:0] committed_warps_cnt_v;
-    `POP_COUNT(committed_warps_cnt_v, committed_warps_v);
-
-    always @(posedge clk) begin
         if (reset) begin
-            instret <= '0;
+            all_ibuf_full <= 1'b0;
         end else begin
-            instret <= instret + PERF_CTR_BITS'(committed_warps_cnt_v);
+            all_ibuf_full <= (& ibuf_full_n);
         end
     end
 
-    // Track pending instructions per warp
+`ifdef VX_CFG_VM_ENABLE
+    // Per-core SATP CSR, written by any SFU block's CSR unit. Accesses in one
+    // cycle take effect in block order: each block reads the value the lower
+    // blocks leave.
+    reg [`VX_CFG_XLEN-1:0] satp_r;
+    wire [`VX_CFG_NUM_SFU_BLOCKS:0][`VX_CFG_XLEN-1:0] satp_chain;
+    assign satp_chain[0] = satp_r;
+    for (genvar b = 0; b < `VX_CFG_NUM_SFU_BLOCKS; ++b) begin : g_satp
+        assign satp[b] = satp_chain[b];
+        assign satp_chain[b+1] = satp_wr_valid[b] ? satp_wr_data[b] : satp_chain[b];
+    end
+    always @(posedge clk) begin
+        if (reset) begin
+            satp_r <= '0;
+        end else begin
+            satp_r <= satp_chain[`VX_CFG_NUM_SFU_BLOCKS];
+        end
+    end
+`endif
 
-    wire [`VX_CFG_NUM_WARPS-1:0] pending_warp_empty;
-    wire [`VX_CFG_NUM_WARPS-1:0] pending_warp_alm_empty;
+    // per-slice view of the core-wide events
 
-    for (genvar i = 0; i < `VX_CFG_NUM_WARPS; ++i) begin : g_pending_warps
-        localparam logic [ISSUE_ISW_W-1:0] isw = wid_to_isw(i);
-        localparam logic [ISSUE_WIS_W-1:0] wis = wid_to_wis(i);
+    wire [FETCH_FSW_W-1:0] wspawn_fsw = wid_to_fsw(wspawn_wid);
 
-        VX_pending_size #(
-            .SIZE      (256),
-            .ALM_EMPTY (1)
-        ) per_warp_ctr (
-            .clk       (clk),
-            .reset     (reset),
-            .incr      (issue_sched_if[isw].valid && (issue_sched_if[isw].wis == ISSUE_WIS_W'(wis))),
-            .decr      (commit_sched_if.committed_warps[i]),
-            .empty     (pending_warp_empty[i]),
-            .alm_empty (pending_warp_alm_empty[i]),
-            `UNUSED_PIN (full),
-            `UNUSED_PIN (alm_full),
-            `UNUSED_PIN (size)
-        );
+    for (genvar p = 0; p < FW; ++p) begin : g_slices
+        localparam [FETCH_FSW_W-1:0] FSW = FETCH_FSW_W'(p);
+
+        assign slice_if[p].cta_fire     = cta_fire[p];
+        assign slice_if[p].cta_lid      = wid_to_wfs(cta_wid[p]);
+        assign slice_if[p].cta_PC       = cta_PC;
+        assign slice_if[p].cta_tmask    = cta_tmask[p];
+        assign slice_if[p].cta_param    = cta_param;
+        assign slice_if[p].cta_init     = cta_init[p];
+
+        assign slice_if[p].warp_write   = cta_lane_bcast[p].warp_write;
+        assign slice_if[p].warp_waddr   = wid_to_wfs(cta_lane_bcast[p].warp_waddr);
+        assign slice_if[p].warp_wdata   = cta_lane_bcast[p].warp_wdata;
+        assign slice_if[p].id_write     = cta_lane_bcast[p].id_write;
+        assign slice_if[p].id_waddr     = wid_to_wfs(cta_lane_bcast[p].id_wid);
+        assign slice_if[p].id_wdata     = cta_lane_bcast[p].id_cta;
+        `UNUSED_VAR ({wid_to_fsw(cta_wid[p]), wid_to_fsw(cta_lane_bcast[p].warp_waddr), wid_to_fsw(cta_lane_bcast[p].id_wid)})
+
+        assign slice_if[p].wspawn_apply    = wspawn_apply;
+        assign slice_if[p].wspawn_pc       = wspawn_pc;
+        assign slice_if[p].wspawn_src      = (wspawn_fsw == FSW);
+        assign slice_if[p].wspawn_src_lid  = wid_to_wfs(wspawn_wid);
+        assign slice_if[p].wspawn_mscratch = wspawn_mscratch;
+
+        assign slice_if[p].bar_unlock_valid = bar_unlock_valid;
+
+        assign slice_if[p].retire_valid = cta_warp_done && (wid_to_fsw(cta_warp_done_wid) == FSW);
+        assign slice_if[p].retire_lid   = wid_to_wfs(cta_warp_done_wid);
+
+        for (genvar l = 0; l < SW; ++l) begin : g_lw
+            assign slice_if[p].wspawn_wmask[l]    = wspawn_wmask[l * FW + p];
+            assign slice_if[p].bar_unlock_mask[l] = bar_unlock_mask[l * FW + p];
+        end
+
+        assign slice_if[p].all_ibuf_full = all_ibuf_full;
     end
 
+    wire [FW-1:0] sched_valid, sched_fire;
+    wire [FW-1:0][`VX_CFG_NUM_THREADS-1:0] sched_tmask;
+    for (genvar p = 0; p < FW; ++p) begin : g_sched_status
+        assign sched_valid[p] = slice_if[p].sched_valid;
+        assign sched_fire[p]  = slice_if[p].sched_fire;
+        assign sched_tmask[p] = slice_if[p].sched_tmask;
+    end
+`ifndef PERF_ENABLE
+    `UNUSED_VAR ({sched_valid, sched_fire, sched_tmask})
+`endif
+
+    // active_warps is the slices' registered state, so a CTA launch shows there one cycle after
+    // cta_fire; counting the launch itself keeps busy from dropping between the dispatcher going
+    // idle and the launched warps becoming visible (a CTA launched in a single cycle).
     wire busy_buf;
-    `BUFFER_EX(busy_buf, (active_warps_n != 0 || ~(&pending_warp_empty)), 1'b1, 1, 1);
+    `BUFFER_EX(busy_buf, (active_warps != 0 || (| cta_fire) || ~(&pending_warp_empty)), 1'b1, 1, 1);
     assign busy = busy_buf || cta_dispatcher_busy;
 
-    assign warp_ctl_if.warp_pending_alm_empty = pending_warp_alm_empty;
-
-    // export CSRs
-    assign sched_csr_if.cycles = cycles;
-    assign sched_csr_if.instret = instret;
-    assign sched_csr_if.active_warps = active_warps;
-    assign sched_csr_if.thread_masks = thread_masks;
-
-   // timeout handling
+    // timeout handling
     reg [31:0] timeout_ctr;
     reg timeout_enable;
     always @(posedge clk) begin
@@ -573,7 +253,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             timeout_ctr    <= '0;
             timeout_enable <= 0;
         end else begin
-            if (decode_sched_if.valid && decode_sched_if.unlock) begin
+            if (| cta_fire) begin
                 timeout_enable <= 1;
             end
             if (timeout_enable && active_warps !=0 && active_warps == stalled_warps) begin
@@ -590,14 +270,14 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     localparam SCHED_STALL_TIMEOUT = STALL_TIMEOUT;
 `endif
 `ifdef EXT_SCHED_TIMEOUT_DUMP
+    wire timeout_dump = !reset && (timeout_ctr == (SCHED_STALL_TIMEOUT - 1));
     always @(posedge clk) begin
-        if (!reset && (timeout_ctr == (SCHED_STALL_TIMEOUT - 1))) begin
+        if (timeout_dump) begin
             $display("*** %s scheduler-timeout dump: active=%b stalled=%b", INSTANCE_ID, active_warps, stalled_warps);
-            for (integer wi = 0; wi < `VX_CFG_NUM_WARPS; ++wi) begin
-                $display("    wid=%0d stalled=%0d pc=0x%0h tmask=%b",
-                         wi, stalled_warps[wi], to_fullPC(warp_pcs[wi]), thread_masks[wi]);
-            end
         end
+    end
+    for (genvar p = 0; p < FW; ++p) begin : g_timeout_dump
+        assign slice_if[p].timeout_dump = timeout_dump;
     end
 `endif
     `RUNTIME_ASSERT(timeout_ctr < SCHED_STALL_TIMEOUT, ("*** %s timeout: active_warps=%b, stalled_warps=%b", INSTANCE_ID, active_warps, stalled_warps))
@@ -611,17 +291,34 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     reg [PERF_CTR_BITS-1:0] perf_branches;
     reg [PERF_CTR_BITS-1:0] perf_divergence;
 
-    wire [`CLOG2(`VX_CFG_NUM_WARPS+1)-1:0] stalled_warps_cnt;
-    wire [`CLOG2(`VX_CFG_NUM_ALU_BLOCKS+1)-1:0] branches_cnt;
-    wire [`CLOG2(`VX_CFG_NUM_THREADS+1)-1:0] issued_threads_cnt;
+    localparam NPA = FETCH_ALU_PORTS;
+    localparam NPS = FETCH_SFU_PORTS;
 
-    wire schedule_idle = ~schedule_valid;
-    wire has_divergence = warp_ctl_if.split_valid && warp_ctl_if.split.is_dvg;
-    wire [`VX_CFG_NUM_THREADS-1:0] issued_threads = {`VX_CFG_NUM_THREADS{schedule_if_fire}} & schedule_if.data.tmask;
+    wire [FW-1:0][NPA-1:0] slice_branch;
+    wire [FW-1:0][NPS-1:0] slice_divergence;
+    for (genvar p = 0; p < FW; ++p) begin : g_perf_slices
+        assign slice_branch[p]     = slice_if[p].branch_valid;
+        assign slice_divergence[p] = slice_if[p].divergence;
+    end
 
+    wire [`CLOG2(`VX_CFG_NUM_WARPS+1)-1:0] active_warps_cnt, stalled_warps_cnt;
+    wire [`CLOG2(FW*NPA+1)-1:0] branches_cnt;
+    wire [`CLOG2(FW*NPS+1)-1:0] divergence_cnt;
+    wire [`CLOG2(FW+1)-1:0] issued_warps_cnt;
+    wire [`CLOG2(FW*`VX_CFG_NUM_THREADS+1)-1:0] issued_threads_cnt;
+    wire [FW-1:0][`VX_CFG_NUM_THREADS-1:0] issued_threads;
+    for (genvar p = 0; p < FW; ++p) begin : g_issued_threads
+        assign issued_threads[p] = {`VX_CFG_NUM_THREADS{sched_fire[p]}} & sched_tmask[p];
+    end
+
+    `POP_COUNT(active_warps_cnt, active_warps);
     `POP_COUNT(stalled_warps_cnt, stalled_warps);
     `POP_COUNT(issued_threads_cnt, issued_threads);
-    `POP_COUNT(branches_cnt, branch_valid);
+    `POP_COUNT(issued_warps_cnt, sched_fire);
+    `POP_COUNT(branches_cnt, slice_branch);
+    `POP_COUNT(divergence_cnt, slice_divergence);
+
+    wire sched_idle = ~(| sched_valid);
 
     always @(posedge clk) begin
         if (reset) begin
@@ -633,13 +330,13 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             perf_branches      <= '0;
             perf_divergence    <= '0;
         end else begin
-            perf_sched_idles   <= perf_sched_idles + PERF_CTR_BITS'(schedule_idle);
+            perf_sched_idles   <= perf_sched_idles + PERF_CTR_BITS'(sched_idle);
             perf_active_warps  <= perf_active_warps + PERF_CTR_BITS'(active_warps_cnt);
             perf_stalled_warps <= perf_stalled_warps + PERF_CTR_BITS'(stalled_warps_cnt);
-            perf_issued_warps  <= perf_issued_warps + PERF_CTR_BITS'(schedule_if_fire);
+            perf_issued_warps  <= perf_issued_warps + PERF_CTR_BITS'(issued_warps_cnt);
             perf_issued_threads<= perf_issued_threads + PERF_CTR_BITS'(issued_threads_cnt);
             perf_branches      <= perf_branches + PERF_CTR_BITS'(branches_cnt);
-            perf_divergence    <= perf_divergence + PERF_CTR_BITS'(has_divergence);
+            perf_divergence    <= perf_divergence + PERF_CTR_BITS'(divergence_cnt);
         end
     end
 
@@ -650,25 +347,9 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     assign sched_perf.issued_threads= perf_issued_threads;
     assign sched_perf.branches      = perf_branches;
     assign sched_perf.divergence    = perf_divergence;
-`endif
-
-`ifdef DBG_TRACE_PIPELINE
-    for (genvar w = 0; w < `VX_CFG_NUM_WARPS; ++w) begin : g_trace_warp_status
-        always @(posedge clk) begin
-            if (active_warps_n[w] != active_warps[w]
-             || (active_warps[w] && (stalled_warps_n[w] != stalled_warps[w]
-                                  || thread_masks_n[w] != thread_masks[w]))) begin
-                `TRACE(1, ("%t: %s warp-state: wid=%0d, active=%b, stalled=%b, tmask=%b\n",
-                    $time, INSTANCE_ID, w, active_warps_n[w], stalled_warps_n[w], thread_masks_n[w]
-                ))
-            end
-        end
-    end
-
-    always @(posedge clk) begin
-        if (schedule_fire) begin
-            `TRACE(1, ("%t: %s dispatch: wid=%0d, cta_id=%0d, PC=0x%0h, tmask=%b (#%0d)\n", $time, INSTANCE_ID, schedule_wid, schedule_cta_id, to_fullPC(schedule_pc), schedule_tmask, instr_uuid))
-        end
+`else
+    for (genvar p = 0; p < FW; ++p) begin : g_perf_unused
+        `UNUSED_VAR ({slice_if[p].branch_valid, slice_if[p].divergence})
     end
 `endif
 

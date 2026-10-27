@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 210" role="img" aria-label="Before: DXA holds the LMEM port for about 540 cycles while TCU reads wait. After: grants alternate between DXA and TCU every cycle.">
+  <title>Before: DXA holds the LMEM port for about 540 cycles while TCU reads wait. After: grants alternate between DXA and TCU every cycle.</title>
+  <defs><marker id="lmemro_a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1b2733"/></marker><marker id="lmemro_g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1f7a4d"/></marker><marker id="lmemro_b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#b3261e"/></marker></defs>
+  <style>
+    text { font-family: Helvetica, Arial, sans-serif; fill: #1b2733; font-size: 11.5px; }
+    .dh { font-size: 13px; font-weight: bold; }
+    .dm { fill: #5a6772; font-size: 11px; }
+    .ds { font-size: 10.5px; }
+    .db { fill: #fbfcfd; stroke: #5a7184; stroke-width: 1.2; }
+    .dbad { fill: #fbe5e3; stroke: #b3261e; stroke-width: 1.2; }
+    .dgood { fill: #e3f3ea; stroke: #1f7a4d; stroke-width: 1.2; }
+    .didle { fill: #f3f5f8; stroke: #c9d1d9; stroke-width: 1.2; }
+    .dwait { fill: #fbe5e3; stroke: #b3261e; stroke-width: 1.2; stroke-dasharray: 4 3; }
+    .ln { stroke: #1b2733; stroke-width: 1.3; fill: none; }
+    .lb { stroke: #b3261e; stroke-width: 1.5; fill: none; }
+    .lg { stroke: #1f7a4d; stroke-width: 1.5; }
+    .dash { stroke-dasharray: 4 3; }
+    .sep { stroke: #c9d1d9; stroke-width: 1; stroke-dasharray: 2 4; }
+    text.db-t { fill: #b3261e; } text.g-t { fill: #1f7a4d; }
+  </style>
+  <rect width="640" height="210" fill="#ffffff"/>
+<g class="dl">
+          <text x="20" y="22" class="dh">Before: fixed priority</text>
+          <text x="20" y="54" class="dm">DXA writes</text>
+          <rect x="110" y="40" width="430" height="20" class="dbad"/><text x="325" y="54" text-anchor="middle" class="ds">holds the port ~540 cycles</text>
+          <text x="20" y="84" class="dm">TCU reads</text>
+          <rect x="110" y="70" width="430" height="20" class="dwait"/><text x="325" y="84" text-anchor="middle" class="ds">stalled ~510 cycles</text>
+          <rect x="540" y="70" width="80" height="20" class="db"/><text x="580" y="84" text-anchor="middle" class="ds">go</text>
+          <text x="20" y="122" class="dh">After: round-robin</text>
+          <text x="20" y="154" class="dm">DXA writes</text>
+          <text x="20" y="184" class="dm">TCU reads</text>
+          <g class="rr">
+            <rect x="110" y="140" width="20" height="20" class="dgood"/><rect x="150" y="140" width="20" height="20" class="dgood"/><rect x="190" y="140" width="20" height="20" class="dgood"/><rect x="230" y="140" width="20" height="20" class="dgood"/><rect x="270" y="140" width="20" height="20" class="dgood"/><rect x="310" y="140" width="20" height="20" class="dgood"/><rect x="350" y="140" width="20" height="20" class="dgood"/><rect x="390" y="140" width="20" height="20" class="dgood"/>
+            <rect x="130" y="170" width="20" height="20" class="dgood"/><rect x="170" y="170" width="20" height="20" class="dgood"/><rect x="210" y="170" width="20" height="20" class="dgood"/><rect x="250" y="170" width="20" height="20" class="dgood"/><rect x="290" y="170" width="20" height="20" class="dgood"/><rect x="330" y="170" width="20" height="20" class="dgood"/><rect x="370" y="170" width="20" height="20" class="dgood"/><rect x="410" y="170" width="20" height="20" class="dgood"/>
+          </g>
+          <text x="440" y="172" class="dm">grants alternate</text>
+          <line x1="110" y1="203" x2="620" y2="203" class="ln"/><text x="620" y="198" text-anchor="end" class="dm">time →</text>
+        </g>
+</svg>

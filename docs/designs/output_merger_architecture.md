@@ -8,7 +8,7 @@ and deadlock arguments, and the parallelism/scaling model. Covers the RTL
 ([`hw/rtl/om/`](../../hw/rtl/om/)), the SIMT-side plumbing
 ([`VX_decode.sv`](../../hw/rtl/core/VX_decode.sv),
 [`VX_gfx_uops.sv`](../../hw/rtl/core/VX_gfx_uops.sv),
-[`VX_lsu_slice.sv`](../../hw/rtl/core/VX_lsu_slice.sv)), the cluster
+[`VX_lsu_block.sv`](../../hw/rtl/core/VX_lsu_block.sv)), the cluster
 integration ([`VX_graphics.sv`](../../hw/rtl/VX_graphics.sv)), the SimX model
 ([`sim/simx/om/`](../../sim/simx/om/)), and the software contract
 ([`sw/kernel/include/vx_graphics.h`](../../sw/kernel/include/vx_graphics.h),
@@ -170,7 +170,7 @@ byte-enables splitting the write (`byteen[2:0]` = depth writemask,
 
 ### 4.1 LSU attribute tagging
 
-[`VX_lsu_slice.sv`](../../hw/rtl/core/VX_lsu_slice.sv) range-checks every
+[`VX_lsu_block.sv`](../../hw/rtl/core/VX_lsu_block.sv) range-checks every
 lane address against the aperture and sets **two** attribute bits:
 `is_addr_om` (the steer's select) and `is_addr_io` (alongside it). The
 IO bit is not a hack — *uncached, bypassed, posted* is exactly the behaviour
@@ -183,9 +183,21 @@ bit arrives at the cluster untouched.
 One steer per socket→L2 trunk input (`L2_SOCKET_REQS = NUM_SOCKETS ×
 L1_MEM_PORTS` of them, in [`VX_graphics.sv`](../../hw/rtl/VX_graphics.sv)).
 The steer demuxes on the single `is_addr_om` bit: aperture writes go to the
-OM leg (registered), everything else passes **combinationally** to L2 (the
-socket already registers its outgoing bus, and a skid here would sit on the
-critical L1→L2 path).
+OM leg, everything else to L2; each leg presents a registered master
+interface (`OUT_BUF`).
+
+**Flush ordering: the steer is a fork.** A flush token from the socket (a
+dcache's kernel-boundary flush or a fence) bound for L2 is held at the steer
+until the OM side has been flushed. When the token reaches the steer, every
+aperture store its trunk carried before it is already on the OM leg. A
+controller in `VX_graphics` serves the requests present when a round starts
+(the held tokens and the cluster flush), waits until no complete fragment is
+left in the OM (steer OM legs, ingress record stages and OM cores idle),
+flushes the ocache, and then releases those tokens to L2. A half-received
+two-word record is not waited for: its depth beat can be queued behind a held
+token, and the store it belongs to is not one the token orders. So a flush covers the OM writes of the aperture stores
+issued before it, whatever `busy` reports while those stores are in transit
+between the dcache and the ingress (a span no busy signal counts).
 
 **Placement is the deadlock argument.** The join is the last point where a
 request has left the socket but has not touched anything L2-owned. A full OM

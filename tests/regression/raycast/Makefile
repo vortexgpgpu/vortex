@@ -11,8 +11,8 @@ VX_SRCS := $(SRC_DIR)/kernel.cpp
 
 CXXFLAGS += -DASSETS_PATHS='"$(SRC_DIR)"'
 
-# Default workload is small for fast CI sweeps; override OPTS for full-resolution runs.
-OPTS ?= -w 16 -h 12
+# Default workload is a 64x64 render target; override OPTS for other resolutions.
+OPTS ?= -w 64 -h 64
 
 KERNEL_LIB := vortex2
 

@@ -30,6 +30,10 @@
 using namespace vortex;
 
 uint32_t LsuUopGen::uop_count(const Instr& instr) {
+  // An atomic with .aq/.rl: [release fence] atomic [acquire fence]
+  if (auto amo = std::get_if<IntrAmoArgs>(&instr.get_args())) {
+    return 1 + amo->aq + amo->rl;
+  }
   // PACKLB.F: width=0 (LB), 4 byte-elements
   // PACKLH.F: width=1 (LH), 2 halfword-elements
   auto args = std::get<IntrLsuArgs>(instr.get_args());
@@ -46,6 +50,30 @@ Instr::Ptr LsuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
   uint32_t uuid_lo = parent_uuid & 0xffffffff;
   uint32_t steps_shift = (total > 1) ? (32 - log2ceil(total)) : 0;
   uint64_t uop_uuid = (static_cast<uint64_t>(uuid_hi) << 32) | ((uop_index << steps_shift) | uuid_lo);
+
+  if (auto amo = std::get_if<IntrAmoArgs>(&macro_instr.get_args())) {
+    auto uop_instr = std::allocate_shared<Instr>(pool_, uop_uuid, FUType::LSU);
+    uop_instr->set_parent_uuid(parent_uuid);
+    uint32_t amo_index = amo->rl;
+    if (uop_index == amo_index) {
+      uop_instr->set_op_type(macro_instr.get_op_type());
+      uop_instr->set_args(*amo);
+      // an atomic into x0 writes nothing back
+      auto rd = macro_instr.get_dest_reg();
+      if (!(rd.type == RegType::Integer && rd.idx == 0)) {
+        uop_instr->set_dest_reg(rd.idx, rd.type);
+      }
+      for (uint32_t i = 0; i < Instr::MAX_REG_SOURCES; ++i) {
+        auto rs = macro_instr.get_src_reg(i);
+        uop_instr->set_src_reg(i, rs.idx, rs.type);
+      }
+    } else {
+      auto kind = (uop_index < amo_index) ? FenceKind::RELEASE : FenceKind::ACQUIRE;
+      uop_instr->set_op_type(LsuType::FENCE);
+      uop_instr->set_args(IntrLsuArgs{static_cast<uint32_t>(kind), 0, 0});
+    }
+    return uop_instr;
+  }
 
   auto args = std::get<IntrLsuArgs>(macro_instr.get_args());
   // Macro encodes elem-size as width: 0=byte (PACKLB), 1=halfword (PACKLH).
@@ -74,31 +102,37 @@ Instr::Ptr LsuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
 }
 
 LsuUnit::LsuUnit(const SimContext& ctx, const char* name, Core* core)
-	// Commit-side elasticity of 6 beats: the writeback path buffers a whole
-	// coalesced fragment burst, so a denied commit grant queues beats there
-	// instead of throttling the memory response stream.
-	: FuncUnit<VX_CFG_NUM_LSU_BLOCKS>(ctx, name, core, 6)
+	// the response buffer and the result arbiter, two entries each
+	: FuncUnit<VX_CFG_NUM_LSU_BLOCKS>(ctx, name, core, 4)
 #ifdef TCU_META_ENABLE
-	, TcuReqIn(this)
-	, TcuRspOut(this)
+	, TcuReqIn(TCU_AGU_PORTS, this)
+	, TcuRspOut(TCU_AGU_PORTS, this)
 #endif
 	, pending_loads_(0)
-{}
+{
+	// the lane-dispatch skid buffer's ready is registered
+	for (auto& input : Inputs) {
+		input.set_registered_ready(true);
+	}
+}
 
 LsuUnit::~LsuUnit()
 {}
 
-// Returns true when all blocks' input queues are empty and no reads are outstanding.
+// Returns true when no block holds an instruction with requests still to send
+// or a read awaiting its response; ops still in the dispatch buffer do not hold
+// a barrier.
 bool LsuUnit::drained() const {
 #ifdef TCU_META_ENABLE
 	// TcuRspOut forwards to the TCU's endpoint, so query via size() (empty()
 	// asserts on forwarding channels).
-	if (!TcuReqIn.empty() || TcuRspOut.size() != 0) {
-		return false;
+	for (uint32_t p = 0; p < TCU_AGU_PORTS; ++p) {
+		if (!TcuReqIn.at(p).empty() || TcuRspOut.at(p).size() != 0) {
+			return false;
+		}
 	}
 #endif
 	for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
-		if (!Inputs.at(b).empty()) return false;
 		if (!states_.at(b).req_queue.empty()) return false;
 		if (!states_.at(b).pending_reqs.empty()) return false;
 	}
@@ -177,7 +211,7 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 			// The datapath has no misalignment support: only a naturally aligned
 			// access is guaranteed to sit inside one memory block, which is what
 			// lets a lane's payload pack into a single block downstream.
-			// VX_lsu_slice.sv enforces the same contract in hardware, so modelling
+			// The hardware LSU enforces the same contract, so modelling
 			// anything looser here would let a shader pass in simulation and fail
 			// on the device.
 			if ((e.addr % e.size) != 0) {
@@ -221,11 +255,11 @@ void LsuUnit::process_response_step(uint32_t b) {
 	// TCU metadata response: forward the fragment with the client's tag
 	// restored; no register writeback, no trace retirement.
 	if (entry.is_tcu) {
-		if (TcuRspOut.full())
+		if (TcuRspOut.at(b).full())
 			return; // stall
 		LsuRsp fwd = lsu_rsp;
 		fwd.tag = entry.client_tag;
-		TcuRspOut.send(fwd);
+		TcuRspOut.at(b).send(fwd);
 		DT(3, this->name() << " tcu-meta-rsp: " << fwd);
 		entry.count -= lsu_rsp.mask.count();
 		if (entry.count == 0) {
@@ -235,6 +269,16 @@ void LsuUnit::process_response_step(uint32_t b) {
 		return;
 	}
 #endif
+
+	if (entry.is_flush) {
+		DT(3, this->name() << " fence-token-rsp: " << lsu_rsp);
+		entry.count -= lsu_rsp.mask.count();
+		if (entry.count == 0) {
+			state.pending_reqs.release(lsu_rsp.tag);
+		}
+		lsu_rsp_in.pop();
+		return;
+	}
 
 	auto trace = entry.trace;
 	auto& output = Outputs.at(b);
@@ -300,8 +344,7 @@ void LsuUnit::process_response_step(uint32_t b) {
 		state.pending_reqs.release(lsu_rsp.tag);
 	}
 	if (is_final && entry.eop) {
-		// Load writeback crosses one more registered stage than the
-		// direct-commit path before reaching the commit arbiter.
+		// the response buffer, then the result arbiter's register
 		output.send(trace, 2);
 	} else {
 		// A non-final fragment still spends a commit-port slot: it drains
@@ -322,10 +365,10 @@ void LsuUnit::process_response_step(uint32_t b) {
 // At most one transaction/cycle: the trace is not dispatchable until the next
 // cycle, so req_queue adds a real cycle of latency. A while-loop here would
 // fabricate write bandwidth and collapse that latency to zero.
-void LsuUnit::ingest_inputs(uint32_t b) {
+void LsuUnit::ingest_inputs(uint32_t b, bool queue_room, uint32_t reads_held) {
 	auto& state = states_.at(b);
 	auto& input = Inputs.at(b);
-	if (input.empty() || state.req_queue.full())
+	if (input.empty() || !queue_room)
 		return;
 	auto trace = input.peek();
 	// Hold a fence at the input head until req_queue is empty so the
@@ -336,13 +379,69 @@ void LsuUnit::ingest_inputs(uint32_t b) {
 		return;
 	const bool is_read = !lsu_type_tag || *lsu_type_tag == LsuType::LOAD;
 	if (is_read) {
-		if (state.pending_reqs.size() + state.staged_reads >= VX_CFG_LSU_PENDING_SIZE) {
+		if (reads_held >= VX_CFG_LSU_PENDING_SIZE) {
 			return;
 		}
 		++state.staged_reads;
 	}
+	if (lsu_type_tag && *lsu_type_tag == LsuType::STORE) {
+		// A store commits as the request queue accepts it, through the
+		// no-response path, and is sent to memory later. The commit stage
+		// retires the trace, so the queue keeps a copy of its own.
+		if (Outputs.at(b).full()) {
+			return;
+		}
+		auto copy = new (core_->trace_pool().allocate(1)) instr_trace_t(*trace);
+		// the no-response buffer, then the result arbiter's register
+		Outputs.at(b).send(trace, 2);
+		trace = copy;
+	}
 	state.req_queue.push(trace);
 	input.pop();
+}
+
+// The fence travels to the data cache as a flush token on the lanes of its
+// last packet, behind every request the block issued before it. The cache
+// answers once it has drained, flushed and invalidated, so the fence holds
+// the block until the token's response returns.
+void LsuUnit::send_fence_token(uint32_t b) {
+	auto& state = states_.at(b);
+	// the token's lanes carry no address: it goes to the data cache
+	if (state.pending_reqs.full() || !core_->lmem_switch(b)->req_ready(true, false)) {
+		return;
+	}
+	auto trace = state.fence.trace();
+	uint32_t base = ((VX_CFG_NUM_THREADS - 1) / VX_CFG_NUM_LSU_LANES) * VX_CFG_NUM_LSU_LANES;
+	LsuReq lsu_req(VX_CFG_NUM_LSU_LANES);
+	lsu_req.op = MemOp::LD;
+	lsu_req.flags.flush = 1;
+	// an IO fence's token walks nowhere; a memory fence's stops at the shared
+	// LLC, an acquire one owing no drain and a release one no invalidation
+	auto kind = lsu_fence_kind(std::get<IntrLsuArgs>(trace->instr_ptr->get_args()));
+	lsu_req.flags.io       = (kind == FenceKind::IO) || (kind == FenceKind::ACQUIRE);
+	lsu_req.flags.flush_l1 = (kind != FenceKind::IO);
+	lsu_req.flags.noalloc  = (kind == FenceKind::RELEASE);
+	std::vector<mem_addr_size_t> lane_entries(VX_CFG_NUM_LSU_LANES);
+	for (uint32_t t = base; t < VX_CFG_NUM_THREADS; ++t) {
+		if (trace->tmask.test(t)) {
+			lsu_req.mask.set(t - base);
+			lsu_req.tids.at(t - base) = t;
+		}
+	}
+	if (lsu_req.mask.none()) {
+		lsu_req.mask.set(0);
+		lsu_req.tids.at(0) = base;
+	}
+	uint32_t count = lsu_req.mask.count();
+	pending_req_t entry{nullptr, count, true, std::move(lane_entries), IntrLsuArgs{}, false};
+	entry.is_flush = true;
+	lsu_req.tag  = state.pending_reqs.allocate(std::move(entry));
+	lsu_req.cid  = trace->cid;
+	lsu_req.wid  = trace->wid;
+	lsu_req.uuid = trace->uuid;
+	core_->lmem_switch(b)->ReqIn.send(lsu_req, 0);
+	DT(3, this->name() << " fence-token: " << lsu_req);
+	state.fence_token = false;
 }
 
 // Per-cycle request handler. Dispatches at most one batch (one
@@ -354,7 +453,10 @@ void LsuUnit::process_request_step(uint32_t b) {
 	// Attempt fence release first so a steady stream of TCU client forwards
 	// (which consume the dispatch slot and return) cannot starve it.
 	const bool fence_locked = state.fence.locked();
-	if (fence_locked) {
+	if (fence_locked && state.fence_token) {
+		this->send_fence_token(b);
+	}
+	if (fence_locked && !state.fence_token) {
 		bool released = state.fence.try_release(Outputs.at(b), state.pending_reqs.empty());
 		if (released) {
 			DT(3, this->name() << " fence-unlock: " << state.fence.trace());
@@ -362,15 +464,24 @@ void LsuUnit::process_request_step(uint32_t b) {
 	}
 
 #ifdef TCU_META_ENABLE
-	// TCU metadata client (block 0 only): forward one pending request per
+	// TCU metadata client (blocks below TCU_AGU_PORTS): forward one pending request per
 	// cycle into lmem_switch, ahead of the block's own dispatch. The wire tag
 	// is re-allocated from pending_reqs so it stays unique on the switch; the
 	// client's own tag is restored on the response. An independent client, so
 	// not gated by the fence lock — its entries still hold fence release via
 	// pending_reqs.empty().
-	if (b == 0 && !TcuReqIn.empty()) {
-		if (!state.pending_reqs.full() && !core_->lmem_switch(0)->ReqIn.full()) {
-			LsuReq lsu_req = TcuReqIn.peek();
+	if (b < TCU_AGU_PORTS && !TcuReqIn.at(b).empty()) {
+		const LsuReq& meta_req = TcuReqIn.at(b).peek();
+		bool to_dc = false, to_lmem = false;
+		for (uint32_t i = 0; i < VX_CFG_NUM_LSU_LANES; ++i) {
+			if (meta_req.mask.test(i)) {
+				bool local = (get_addr_type(meta_req.addrs.at(i)) == AddrType::Shared);
+				to_lmem |= local;
+				to_dc   |= !local;
+			}
+		}
+		if (!state.pending_reqs.full() && core_->lmem_switch(b)->req_ready(to_dc, to_lmem)) {
+			LsuReq lsu_req = meta_req;
 			uint32_t count = lsu_req.mask.count();
 			std::vector<mem_addr_size_t> lane_entries(VX_CFG_NUM_LSU_LANES);
 			for (uint32_t i = 0; i < VX_CFG_NUM_LSU_LANES; ++i) {
@@ -392,9 +503,9 @@ void LsuUnit::process_request_step(uint32_t b) {
 			entry.client_tag = lsu_req.tag;
 			uint32_t tag = state.pending_reqs.allocate(std::move(entry));
 			lsu_req.tag = tag;
-			core_->lmem_switch(0)->ReqIn.send(lsu_req);
+			core_->lmem_switch(b)->ReqIn.send(lsu_req, 0);
 			DT(3, this->name() << " tcu-meta-req: " << lsu_req);
-			TcuReqIn.pop();
+			TcuReqIn.at(b).pop();
 			return; // one request per cycle into the switch
 		}
 	}
@@ -432,6 +543,7 @@ void LsuUnit::process_request_step(uint32_t b) {
 		// Engage fence lock; the next call will try to release it once
 		// the pending-reqs table drains.
 		state.fence.engage(trace);
+		state.fence_token = true;
 		DT(3, this->name() << " fence-lock: " << *trace);
 		state.req_queue.pop();
 		return;
@@ -457,9 +569,9 @@ void LsuUnit::process_request_step(uint32_t b) {
 		state.head_staged = !is_write || is_amo;
 	}
 
-	// AMO always returns to rd, so it is not direct-commit even though it
-	// carries a side-effect write.
-	bool direct_commit = (is_write || 0 == state.addr_list.size()) && !is_amo;
+	// A store committed when the queue accepted it. AMO always returns to rd,
+	// so it is not direct-commit even though it carries a side-effect write.
+	bool direct_commit = !is_write && 0 == state.addr_list.size() && !is_amo;
 
 	// Skip beats whose tid group is entirely inactive — nothing to issue.
 	while (state.remain_addrs != 0) {
@@ -488,8 +600,19 @@ void LsuUnit::process_request_step(uint32_t b) {
 	}
 
 	if (state.remain_addrs != 0) {
-		// check lmem switch backpressure
-		if (core_->lmem_switch(b)->ReqIn.full())
+		// check backpressure at the switch buffers this beat addresses
+		uint32_t beat_t0 = state.addr_list.size() - state.remain_addrs;
+		uint32_t beat_len = std::min<uint32_t>(VX_CFG_NUM_LSU_LANES, state.remain_addrs);
+		bool to_dc = false, to_lmem = false;
+		for (uint32_t i = 0; i < beat_len; ++i) {
+			auto& entry = state.addr_list.at(beat_t0 + i);
+			if (entry.size == 0)
+				continue;
+			bool local = (get_addr_type(entry.addr) == AddrType::Shared);
+			to_lmem |= local;
+			to_dc   |= !local;
+		}
+		if (!core_->lmem_switch(b)->req_ready(to_dc, to_lmem))
 			return; // stall
 
 		// setup memory request
@@ -566,7 +689,7 @@ void LsuUnit::process_request_step(uint32_t b) {
 		lsu_req.uuid = trace->uuid;
 
 		// send memory request
-		core_->lmem_switch(b)->ReqIn.send(lsu_req);
+		core_->lmem_switch(b)->ReqIn.send(lsu_req, 0);
 		DT(3, this->name() << " mem-req: " << lsu_req);
 
 		// update stats
@@ -588,6 +711,10 @@ void LsuUnit::process_request_step(uint32_t b) {
 			state.head_staged = false;
 		}
 		state.req_queue.pop();
+		if (is_write) {
+			trace->~instr_trace_t();
+			core_->trace_pool().deallocate(trace, 1);
+		}
 	}
 }
 
@@ -599,8 +726,13 @@ void LsuUnit::on_tick() {
 		// as it stood at the start of this cycle, THEN ingest one new trace for
 		// next cycle. Dispatching before ingest makes req_queue a 1-cycle stage
 		// rather than a same-tick passthrough.
+		// The scheduler's request queue and its pending table register their
+		// full flags: a slot freed this cycle takes a new request next cycle.
+		auto& state = states_.at(b);
+		bool queue_room = !state.req_queue.full();
+		uint32_t reads_held = state.pending_reqs.size() + state.staged_reads;
 		this->process_response_step(b);
 		this->process_request_step(b);
-		this->ingest_inputs(b);
+		this->ingest_inputs(b, queue_room, reads_held);
 	}
 }

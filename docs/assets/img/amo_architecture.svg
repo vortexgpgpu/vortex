@@ -44,7 +44,7 @@
   <text x="52" y="250" class="tt">aq / rl are captured and carry no behavior</text>
 
   <rect x="40" y="296" width="388" height="214" rx="6" class="core"/>
-  <text x="52" y="318" class="tb">VX_lsu_slice — per-lane sideband</text>
+  <text x="52" y="318" class="tb">VX_lsu_block — per-lane sideband</text>
   <text x="52" y="340" class="ts">packs amo_req_t into each lane's mem_bus_attr_t:</text>
   <text x="64" y="360" class="mono">hart_id       {core, warp, thread}</text>
   <text x="64" y="376" class="mono">amo_cmp       comparand (Zacas only)</text>

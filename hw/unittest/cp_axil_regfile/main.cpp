@@ -9,8 +9,8 @@
 //   - CP_STATUS reflects the harness-driven cp_busy / cp_error inputs.
 //   - CP_DEV_CAPS returns the configured (NUM_QUEUES, RING_SIZE_LOG2_MAX,
 //     AXI_TID_WIDTH) fields.
-//   - GPU_DEV_CAPS / GPU_ISA_CAPS read back non-DECERR, decode to sane
-//     fields, and ignore writes (read-only).
+//   - GPU_DEV_CAPS / GPU_DEV_CAPS_EXT / GPU_ISA_CAPS read back non-DECERR,
+//     decode to sane fields, and ignore writes (read-only).
 //   - CP_CYCLE counter actually advances per clock.
 //   - Atomic Q_TAIL commit: writing Q_TAIL_LO alone does NOT advance
 //     q_state.tail; writing Q_TAIL_HI atomically commits both halves.
@@ -23,6 +23,7 @@
 
 #include "vl_simulator.h"
 #include "VVX_cp_axil_regfile_top.h"
+#include <VX_config.h>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -152,6 +153,7 @@ template <typename T> static uint8_t  q_profile_en(T* t) { return (uint8_t)read_
 static constexpr uint16_t CP_CTRL          = 0x000;
 static constexpr uint16_t CP_STATUS        = 0x004;
 static constexpr uint16_t CP_DEV_CAPS      = 0x008;
+static constexpr uint16_t GPU_DEV_CAPS_EXT = 0x00C;
 static constexpr uint16_t CP_CYCLE_LO      = 0x010;
 static constexpr uint16_t CP_CYCLE_HI      = 0x014;
 static constexpr uint16_t GPU_DEV_CAPS_LO  = 0x018;
@@ -334,8 +336,12 @@ int main(int argc, char** argv) {
                "T11: caps must not be the DECERR sentinel");
         uint64_t dev_caps = ((uint64_t)dhi << 32) | dlo;
         uint64_t isa_caps = ((uint64_t)ihi << 32) | ilo;
-        // dev_caps reserved bits [63:42] must be zero.
-        EXPECT((dev_caps >> 42) == 0, "T11: dev_caps reserved bits set");
+        // Exact counts: warps [48:42], clusters [63:57], socket size in the extension word.
+        EXPECT(((dev_caps >> 42) & 0x7F) == VX_CFG_NUM_WARPS, "T11: dev_caps exact warps");
+        EXPECT(((dev_caps >> 57) & 0x7F) == VX_CFG_NUM_CLUSTERS, "T11: dev_caps exact clusters");
+        uint64_t de = axil_read(sim, tick, GPU_DEV_CAPS_EXT);
+        EXPECT((de >> 32) == 0, "T11: GPU_DEV_CAPS_EXT DECERR");
+        EXPECT((uint32_t)de == VX_CFG_SOCKET_SIZE, "T11: GPU_DEV_CAPS_EXT socket size");
         // isa_caps XLEN field [31:30] = clog2(XLEN)-4, so 1 (RV32) or 2 (RV64).
         uint32_t xlen_field = (uint32_t)((isa_caps >> 30) & 0x3);
         EXPECT(xlen_field == 1 || xlen_field == 2, "T11: isa_caps XLEN field");

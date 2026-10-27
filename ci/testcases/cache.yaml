@@ -196,6 +196,18 @@ tests:
     clusters: 2
     l2cache: true
     l3cache: true
+# Dirty-byte write-back on a sectored L2: a sector refill keeps the other
+# sectors' dirty bytes.
+- id: mstress-6
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: mstress
+  configs: -DVX_CFG_SOCKET_SIZE=1 -DVX_CFG_L2_WRITEBACK=1 -DVX_CFG_L2_DIRTYBYTES=1
+  shape:
+    cores: 4
+    l2cache: true
 - id: sgemm-20
   via: blackbox
   drivers:
@@ -252,7 +264,7 @@ tests:
   args: -n1
 
 # Non-power-of-two cache sharing: 3 cores over 2 shared icaches exercises the
-# SimX arbiter's ceiling-division input grouping. A floor-grouped arbiter
+# arbiter's ceiling-division input grouping. A floor-grouped arbiter
 # (inputs/outputs) never polls the trailing core's fetch port and the run
 # hangs at boot; VX_stream_arb sizes its groups by ceiling division, so the
 # SimX model must match.
@@ -260,7 +272,141 @@ tests:
   via: blackbox
   drivers:
   - simx
+  - rtlsim
   app: demo
   configs: -DVX_CFG_SOCKET_SIZE=3 -DVX_CFG_NUM_ICACHES=2
   shape:
     cores: 3
+# Hashed bank select, on by default for the dcache and the L2. These cover the
+# hash off at both levels, 16 threads, and a write-back L2, where every fill and
+# write-back rebuilds the address.
+- id: bank_hash-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm
+  configs: -DVX_CFG_SOCKET_SIZE=1 -DVX_CFG_DCACHE_BANK_HASH=0 -DVX_CFG_L2_BANK_HASH=0
+  shape:
+    cores: 2
+    l2cache: true
+- id: bank_hash-2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm
+  shape:
+    threads: 16
+- id: bank_hash-3
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: mstress
+  configs: -DVX_CFG_SOCKET_SIZE=1 -DVX_CFG_L2_WRITEBACK=1
+  shape:
+    cores: 4
+    l2cache: true
+- id: bank_hash-4
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: mstress
+  configs: -DVX_CFG_DCACHE_WRITEBACK=1 -DVX_CFG_DCACHE_DIRTYBYTES=1
+  shape:
+    threads: 16
+# Lazy fetch-on-read on a write-back LLC: a store miss allocates its line
+# without a fill, and a load or AMO of a partially written line fetches it and
+# merges under the dirty bytes. The default 1-core dcache is such an LLC.
+- id: lazy_fetch-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: lazy_fetch
+  configs: -DVX_CFG_EXT_A_ENABLE -DVX_CFG_DCACHE_LAZY_FETCH=1
+# The same on a write-back L2 shared by 4 cores behind write-through L1s.
+- id: lazy_fetch-2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: lazy_fetch
+  configs: -DVX_CFG_EXT_A_ENABLE -DVX_CFG_SOCKET_SIZE=1 -DVX_CFG_L2_WRITEBACK=1 -DVX_CFG_L2_LAZY_FETCH=1
+  shape:
+    cores: 4
+    l2cache: true
+# A sector every store has covered reads no memory when a load refetches it.
+# The app compares the memory reads of fully written lines against lines with
+# a word per sector unwritten, so it runs with the memory counters.
+- id: lazy_fetch-3
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: lazy_fetch
+  args: -f -n1
+  configs: -DVX_CFG_EXT_A_ENABLE -DVX_CFG_DCACHE_LAZY_FETCH=1
+  flags: --perf=7
+- id: lazy_fetch-4
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: lazy_fetch
+  args: -f -n1
+  configs: -DVX_CFG_EXT_A_ENABLE -DVX_CFG_SOCKET_SIZE=1 -DVX_CFG_L2_WRITEBACK=1 -DVX_CFG_L2_LAZY_FETCH=1
+  flags: --perf=7
+  shape:
+    cores: 4
+    l2cache: true
+# The same on a dcache with a deferred commit stage (latency 3): a queued AMO
+# result drains through the core-request slot while the lazy queue holds its
+# pipeline reservation, and fully written sectors still loop back data-less.
+- id: lazy_fetch-5
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: lazy_fetch
+  configs: -DVX_CFG_EXT_A_ENABLE -DVX_CFG_DCACHE_LAZY_FETCH=1 -DVX_CFG_DCACHE_LATENCY=3
+# Both sectors of one sectored L2 line miss together from different warps and
+# cores: each must get its own fill, never chain behind the other sector's.
+# Run with the address held per request and with the MSHR line table.
+- id: sector_merge-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sector_merge
+  configs: -DVX_CFG_SOCKET_SIZE=1
+  shape:
+    cores: 4
+    l2cache: true
+- id: sector_merge-2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sector_merge
+  configs: -DVX_CFG_SOCKET_SIZE=1 -DVX_CFG_DCACHE_MSHR_SIZE=32 -DVX_CFG_DCACHE_MSHR_LINES=8 -DVX_CFG_L2_MSHR_SIZE=32 -DVX_CFG_L2_MSHR_LINES=8
+  shape:
+    cores: 4
+    l2cache: true
+# A thread's load must return its own earlier store to the same word. On the
+# write-through L1 under an L2, the stores of a miss chain reach the array only
+# as they replay behind the fill: a load landing after the chain's read head
+# has replayed, and before the store has, must link behind the store rather
+# than hit the line ahead of it. The delay sweep lands the load across that
+# window.
+- id: raw_order-wt
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: raw_order
+  args: -n16384 -s64 -d2
+  shape:
+    l2cache: true

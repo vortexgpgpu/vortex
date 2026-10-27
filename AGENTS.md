@@ -34,8 +34,7 @@ This is the canonical entry point for **both human contributors and AI coding ag
 - [CONTRIBUTING.md](CONTRIBUTING.md) — public fork/PR contribution flow
 - [docs/bug_fixes.md](docs/bug_fixes.md) — bug-fix discipline (root-cause vs patch)
 - [docs/continuous_integration.md](docs/continuous_integration.md) — CI pipeline
-- [docs/proposals/](docs/proposals/) — design and migration proposals (drafts and in-progress)
-- [docs/designs/](docs/designs/) — accepted designs (post-proposal, post-implementation)
+- [docs/designs/](docs/designs/) — accepted designs (implemented)
 
 ---
 
@@ -154,19 +153,11 @@ See [docs/coding_guidelines_cpp.md](docs/coding_guidelines_cpp.md) and [docs/cod
 
 ---
 
-## 7. Proposals
-
-Design and migration proposals belong in [`docs/proposals/`](docs/proposals/) — never in build dirs or the repo root. A proposal captures the *why* of a non-trivial change before the code lands.
-
-Accepted designs that outlive their proposal phase live in [`docs/designs/`](docs/designs/).
-
----
-
-## 8. Living Document Policy
+## 7. Living Document Policy
 
 This file is versioned alongside the code and evolves with it. Both humans and agents are expected to update it:
 
 - **Add a rule** when you discover a footgun the next contributor will hit. Include the *why*.
 - **Update or remove a rule** that's gone stale. A stale rule is worse than no rule.
 - **Don't duplicate** content from the topic docs in `docs/`. AGENTS.md links; the topic doc explains.
-- **Branch-specific addenda are forbidden.** Branch context goes in a `docs/proposals/<feature>_proposal.md`, not in branch-local `AGENTS.md` variants. If the rule is general, promote it here; if it's a project-tracking detail, keep it in the proposal.
+- **Branch-specific addenda are forbidden.** No branch-local `AGENTS.md` variants: if a rule is general, promote it here; project-tracking details stay out of the repo docs.

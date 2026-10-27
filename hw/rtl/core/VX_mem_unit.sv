@@ -21,7 +21,6 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 
 `ifdef PERF_ENABLE
     output lmem_perf_t      lmem_perf,
-    output coalescer_perf_t coalescer_perf,
 `endif
 
 `ifdef VX_CFG_EXT_DXA_ENABLE
@@ -34,27 +33,22 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     VX_mem_bus_if.slave     tcu_lmem_if,
 `endif
 
-    output wire             empty,
+    // the LSU blocks' memory paths
+`ifdef VX_CFG_LMEM_ENABLE
+    VX_mem_bus_if.slave     lmem_bus_if [LSU_NUM_REQS],
+`endif
+    VX_mem_bus_if.slave     lsu_dcache_bus_if [DCACHE_NUM_REQS],
 
-    VX_lsu_mem_if.slave     lsu_mem_if [`VX_CFG_NUM_LSU_BLOCKS],
     VX_dcr_flush_if.slave   dcr_flush_if,
-    VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS]
-);
-    // Per-block empty: high when the global-store path holds no in-flight
-    // write. Folded into core `busy` so the end-of-kernel cache flush is
-    // ordered strictly behind the last store. Two terms: the coalescer/passthru
-    // producer, and the dcache adapter's request buffer (which carries state
-    // when REQ_OUT_BUF > 0 and would otherwise hide a still-settling store).
-    wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] per_block_path_empty;
-    wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] per_block_adapter_empty;
-    wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] per_block_empty;
-    assign per_block_empty = per_block_path_empty & per_block_adapter_empty;
-    VX_lsu_mem_if #(
-        .NUM_LANES (`VX_CFG_NUM_LSU_LANES),
-        .DATA_SIZE (LSU_WORD_SIZE),
-        .TAG_WIDTH (LSU_TAG_WIDTH)
-    ) lsu_dcache_if[`VX_CFG_NUM_LSU_BLOCKS]();
+    input wire              flush_l1_only,
+    VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS],
 
+    // a flush lane holds a request at the D-cache port
+    output wire             busy
+);
+`ifndef VX_CFG_LMEM_ENABLE
+    `UNUSED_SPARAM (INSTANCE_ID)
+`endif
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
     `STATIC_ASSERT(`VX_CFG_LMEM_ENABLED, ("TCU_WGMMA_ENABLE requires LMEM_ENABLE"))
     // The WGMMA shared-memory descriptor carries the LMEM byte offset in a 16-bit
@@ -69,63 +63,6 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     `STATIC_ASSERT(0 == (`VX_MEM_LMEM_BASE_ADDR % (1 << `VX_CFG_LMEM_LOG_SIZE)), ("invalid parameter"))
 
     localparam LMEM_ADDR_WIDTH = `VX_CFG_LMEM_LOG_SIZE - `CLOG2(LSU_WORD_SIZE);
-
-    VX_lsu_mem_if #(
-        .NUM_LANES (`VX_CFG_NUM_LSU_LANES),
-        .DATA_SIZE (LSU_WORD_SIZE),
-        .TAG_WIDTH (LSU_TAG_WIDTH)
-    ) lsu_lmem_if[`VX_CFG_NUM_LSU_BLOCKS]();
-
-    for (genvar i = 0; i < `VX_CFG_NUM_LSU_BLOCKS; ++i) begin : g_lmem_switches
-        VX_lmem_switch #(
-            .GLOBAL_OUT_BUF(1),
-            .LOCAL_OUT_BUF(1),
-            .RSP_OUT_BUF  (1),
-            .ARBITER      ("P")
-        ) lmem_switch (
-            .clk          (clk),
-            .reset        (reset),
-            .lsu_in_if    (lsu_mem_if[i]),
-            .global_out_if(lsu_dcache_if[i]),
-            .local_out_if (lsu_lmem_if[i])
-        );
-    end
-
-    // Per-block local memory adapters to avoid deadlock when NUM_LSU_BLOCKS > 1.
-    // Each block gets dedicated ports into local memory, eliminating the circular
-    // dependency that arises from sharing a single adapter's unpack/pack buffers.
-
-    VX_mem_bus_if #(
-        .DATA_SIZE (LSU_WORD_SIZE),
-        .TAG_WIDTH (LSU_TAG_WIDTH)
-    ) lmem_adapt_if[LSU_NUM_REQS]();
-
-    for (genvar i = 0; i < `VX_CFG_NUM_LSU_BLOCKS; ++i) begin : g_lmem_adapters
-
-        VX_mem_bus_if #(
-            .DATA_SIZE (LSU_WORD_SIZE),
-            .TAG_WIDTH (LSU_TAG_WIDTH)
-        ) lmem_block_if[`VX_CFG_NUM_LSU_LANES]();
-
-        VX_lsu_adapter #(
-            .NUM_LANES    (`VX_CFG_NUM_LSU_LANES),
-            .DATA_SIZE    (LSU_WORD_SIZE),
-            .TAG_WIDTH    (LSU_TAG_WIDTH),
-            .TAG_SEL_BITS (LSU_TAG_WIDTH - UUID_WIDTH),
-            .ARBITER      ("P"),
-            .REQ_OUT_BUF  (3),
-            .RSP_OUT_BUF  (0)
-        ) lmem_adapter (
-            .clk        (clk),
-            .reset      (reset),
-            .lsu_mem_if (lsu_lmem_if[i]),
-            .mem_bus_if (lmem_block_if)
-        );
-
-        for (genvar j = 0; j < `VX_CFG_NUM_LSU_LANES; ++j) begin : g_lmem_adapt_if
-            `ASSIGN_VX_MEM_BUS_IF (lmem_adapt_if[i * `VX_CFG_NUM_LSU_LANES + j], lmem_block_if[j]);
-        end
-    end
 
     // DMA arbiter: merge DXA writes and/or TCU reads onto single DMA port.
 
@@ -165,6 +102,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         `ASSIGN_VX_MEM_BUS_IF_EX (dma_arb_in_if[LMEM_DMA_TCU_IDX], tcu_lmem_if, LMEM_DMA_IN_TAG_W, TCU_LMEM_TAG_W, UUID_WIDTH);
     `endif
 
+        // Round-robin, so a DXA write stream cannot starve the TCU's operand reads.
         VX_mem_bus_arb #(
             .NUM_INPUTS  (LMEM_DMA_INPUTS),
             .NUM_OUTPUTS (1),
@@ -172,7 +110,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
             .TAG_WIDTH   (LMEM_DMA_IN_TAG_W),
             .ATTR_WIDTH  (LMEM_DMA_ATTR_W),
             .ADDR_WIDTH  (LMEM_DMA_ADDR_WIDTH),
-            .ARBITER     ("P")
+            .ARBITER     ("R")
         ) lmem_dma_arb (
             .clk         (clk),
             .reset       (reset),
@@ -245,14 +183,10 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         .lmem_perf   (lmem_perf),
     `endif
         .dma_bus_if  (lmem_dma_if),
-        .lsu_bus_if  (lmem_adapt_if)
+        .lsu_bus_if  (lmem_bus_if)
     );
 
 `else
-
-    for (genvar i = 0; i < `VX_CFG_NUM_LSU_BLOCKS; ++i) begin : g_lsu_dcache_if
-        `ASSIGN_VX_MEM_BUS_IF (lsu_dcache_if[i], lsu_mem_if[i]);
-    end
 
 `ifdef PERF_ENABLE
     assign lmem_perf = '0;
@@ -260,167 +194,84 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 
 `endif
 
-    VX_lsu_mem_if #(
-        .NUM_LANES (DCACHE_CHANNELS),
-        .DATA_SIZE (DCACHE_WORD_SIZE),
-        .TAG_WIDTH (DCACHE_CORE_TAG_WIDTH)
-    ) dcache_coalesced_if[`VX_CFG_NUM_LSU_BLOCKS]();
+    // A private dcache takes the lanes straight from the adapter, whose drain
+    // store_drained already waits for, so one token suffices. Otherwise (a
+    // shared dcache, or none) the lanes are buffered independently before the
+    // next flush point, so a store on one lane can still be queued when another
+    // lane's token arrives: every lane then carries its own token behind its
+    // stores, and the flush is done when every lane's is.
+    localparam DCACHE_PRIVATE = (`VX_CFG_SOCKET_SIZE == `VX_CFG_NUM_DCACHES);
+    localparam FLUSH_LANES = DCACHE_PRIVATE ? 1 : DCACHE_NUM_REQS;
+    VX_dcr_flush_if lane_flush_if [FLUSH_LANES] ();
+    wire [FLUSH_LANES-1:0] lane_flush_done;
+    for (genvar k = 0; k < FLUSH_LANES; ++k) begin : g_lane_flush
+        assign lane_flush_if[k].req = dcr_flush_if.req;
+        assign lane_flush_done[k] = lane_flush_if[k].done;
+    end
+    assign dcr_flush_if.done = (& lane_flush_done);
 
-`ifdef PERF_ENABLE
-    wire [`VX_CFG_NUM_LSU_BLOCKS-1:0][PERF_CTR_BITS-1:0] per_block_coalescer_misses;
-    wire [PERF_CTR_BITS-1:0] coalescer_misses;
-    VX_reduce_tree #(
-        .IN_W (PERF_CTR_BITS),
-        .N    (`VX_CFG_NUM_LSU_BLOCKS),
-        .OP   ("+")
-    ) coalescer_reduce (
-        .data_in  (per_block_coalescer_misses),
-        .data_out (coalescer_misses)
-    );
-    `BUFFER(coalescer_perf.misses, coalescer_misses);
-`endif
+    wire [FLUSH_LANES-1:0] flush_req_valid;
+    for (genvar k = 0; k < FLUSH_LANES; ++k) begin : g_flush_req_valid
+        assign flush_req_valid[k] = dcache_bus_if[k].req_valid;
+    end
+    assign busy = (| flush_req_valid);
 
-    if ((`VX_CFG_NUM_LSU_LANES > 1) && (DCACHE_WORD_SIZE > LSU_WORD_SIZE)) begin : g_coalescing
+    // A block's D-cache request carries a clear tag LSB, the flush arbiter's
+    // select bit; the block takes the cache response directly and drops the
+    // flush token's.
+    for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin : g_dcache_bus_if
+        if (i < FLUSH_LANES) begin : g_flush_lane
+            VX_mem_bus_if #(
+                .DATA_SIZE (DCACHE_WORD_SIZE),
+                .TAG_WIDTH (DCACHE_CORE_TAG_WIDTH)
+            ) flush_core_if();
 
-        for (genvar i = 0; i < `VX_CFG_NUM_LSU_BLOCKS; ++i) begin : g_coalescers
+            assign flush_core_if.req_valid       = lsu_dcache_bus_if[i].req_valid;
+            assign flush_core_if.req_data.rw     = lsu_dcache_bus_if[i].req_data.rw;
+            assign flush_core_if.req_data.addr   = lsu_dcache_bus_if[i].req_data.addr;
+            assign flush_core_if.req_data.data   = lsu_dcache_bus_if[i].req_data.data;
+            assign flush_core_if.req_data.byteen = lsu_dcache_bus_if[i].req_data.byteen;
+            assign flush_core_if.req_data.attr   = lsu_dcache_bus_if[i].req_data.attr;
+            assign flush_core_if.req_data.tag    = lsu_dcache_bus_if[i].req_data.tag[DCACHE_TAG_WIDTH-1:1];
+            assign lsu_dcache_bus_if[i].req_ready = flush_core_if.req_ready;
+            `UNUSED_VAR (lsu_dcache_bus_if[i].req_data.tag[0])
 
-            VX_mem_coalescer #(
-                .INSTANCE_ID    (`SFORMATF(("%s-coalescer%0d", INSTANCE_ID, i))),
-                .NUM_REQS       (`VX_CFG_NUM_LSU_LANES),
-                .DATA_IN_SIZE   (LSU_WORD_SIZE),
-                .DATA_OUT_SIZE  (DCACHE_WORD_SIZE),
-                .ADDR_WIDTH     (LSU_ADDR_WIDTH),
-                .USER_WIDTH     (MEM_ATTR_WIDTH),
-                .TAG_WIDTH      (LSU_TAG_WIDTH),
-                .UUID_WIDTH     (UUID_WIDTH),
-                .QUEUE_SIZE     (LSU_QUEUE_OUT_SIZE),
-                .PERF_CTR_BITS  (PERF_CTR_BITS)
-            ) mem_coalescer (
-                .clk            (clk),
-                .reset          (reset),
+            assign lsu_dcache_bus_if[i].rsp_valid = dcache_bus_if[i].rsp_valid;
+            assign lsu_dcache_bus_if[i].rsp_data  = dcache_bus_if[i].rsp_data;
+            assign flush_core_if.rsp_ready        = lsu_dcache_bus_if[i].rsp_ready;
+            `UNUSED_VAR (flush_core_if.rsp_valid)
+            `UNUSED_VAR (flush_core_if.rsp_data)
 
-            `ifdef PERF_ENABLE
-                .misses         (per_block_coalescer_misses[i]),
-            `else
-                `UNUSED_PIN (misses),
-            `endif
-
-                .empty          (per_block_path_empty[i]),
-
-                // Input request
-                .in_req_valid   (lsu_dcache_if[i].req_valid),
-                .in_req_mask    (lsu_dcache_if[i].req_data.mask),
-                .in_req_rw      (lsu_dcache_if[i].req_data.rw),
-                .in_req_byteen  (lsu_dcache_if[i].req_data.byteen),
-                .in_req_addr    (lsu_dcache_if[i].req_data.addr),
-                .in_req_user    (lsu_dcache_if[i].req_data.user),
-                .in_req_no_merge(lsu_dcache_if[i].req_data.user[0][MEM_ATTR_AMO_OFFS]),
-                .in_req_data    (lsu_dcache_if[i].req_data.data),
-                .in_req_tag     (lsu_dcache_if[i].req_data.tag),
-                .in_req_ready   (lsu_dcache_if[i].req_ready),
-
-                // Input response
-                .in_rsp_valid   (lsu_dcache_if[i].rsp_valid),
-                .in_rsp_mask    (lsu_dcache_if[i].rsp_data.mask),
-                .in_rsp_data    (lsu_dcache_if[i].rsp_data.data),
-                .in_rsp_tag     (lsu_dcache_if[i].rsp_data.tag),
-                .in_rsp_ready   (lsu_dcache_if[i].rsp_ready),
-
-                // Output request
-                .out_req_valid  (dcache_coalesced_if[i].req_valid),
-                .out_req_mask   (dcache_coalesced_if[i].req_data.mask),
-                .out_req_rw     (dcache_coalesced_if[i].req_data.rw),
-                .out_req_byteen (dcache_coalesced_if[i].req_data.byteen),
-                .out_req_addr   (dcache_coalesced_if[i].req_data.addr),
-                .out_req_user   (dcache_coalesced_if[i].req_data.user),
-                .out_req_data   (dcache_coalesced_if[i].req_data.data),
-                .out_req_tag    (dcache_coalesced_if[i].req_data.tag),
-                .out_req_ready  (dcache_coalesced_if[i].req_ready),
-
-                // Output response
-                .out_rsp_valid  (dcache_coalesced_if[i].rsp_valid),
-                .out_rsp_mask   (dcache_coalesced_if[i].rsp_data.mask),
-                .out_rsp_data   (dcache_coalesced_if[i].rsp_data.data),
-                .out_rsp_tag    (dcache_coalesced_if[i].rsp_data.tag),
-                .out_rsp_ready  (dcache_coalesced_if[i].rsp_ready)
+            VX_dcr_flush #(
+                .WORD_SIZE (DCACHE_WORD_SIZE),
+                .TAG_WIDTH (DCACHE_CORE_TAG_WIDTH),
+                .REQ_OUT_BUF (3) // register core dcache-request boundary; rsp already registered by L1 CORE_OUT_BUF
+            ) dcr_flush (
+                .clk          (clk),
+                .reset        (reset),
+                .dcr_flush_if (lane_flush_if[i]),
+                .l1_only      (flush_l1_only),
+                .core_bus_if  (flush_core_if),
+                .cache_bus_if (dcache_bus_if[i])
             );
+        end else begin : g_passthru_lane
+            // The tag passes unchanged: its clear LSB stands where the flush lane's
+            // select bit does, so every lane encodes one request's tag alike and
+            // the cache's read merge compares like with like.
+            assign dcache_bus_if[i].req_valid       = lsu_dcache_bus_if[i].req_valid;
+            assign dcache_bus_if[i].req_data.rw     = lsu_dcache_bus_if[i].req_data.rw;
+            assign dcache_bus_if[i].req_data.addr   = lsu_dcache_bus_if[i].req_data.addr;
+            assign dcache_bus_if[i].req_data.data   = lsu_dcache_bus_if[i].req_data.data;
+            assign dcache_bus_if[i].req_data.byteen = lsu_dcache_bus_if[i].req_data.byteen;
+            assign dcache_bus_if[i].req_data.attr   = lsu_dcache_bus_if[i].req_data.attr;
+            assign dcache_bus_if[i].req_data.tag    = lsu_dcache_bus_if[i].req_data.tag;
+            assign lsu_dcache_bus_if[i].req_ready   = dcache_bus_if[i].req_ready;
+
+            assign lsu_dcache_bus_if[i].rsp_valid     = dcache_bus_if[i].rsp_valid;
+            assign lsu_dcache_bus_if[i].rsp_data.data = dcache_bus_if[i].rsp_data.data;
+            assign lsu_dcache_bus_if[i].rsp_data.tag  = dcache_bus_if[i].rsp_data.tag;
+            assign dcache_bus_if[i].rsp_ready         = lsu_dcache_bus_if[i].rsp_ready;
         end
-
-    end else begin : g_no_coalescing
-
-        // The passthrough narrows the tag from LSU_TAG_WIDTH to
-        // DCACHE_CORE_TAG_WIDTH: the dcache tag-id space must cover the
-        // mem-scheduler slot id or responses alias.
-        `STATIC_ASSERT (DCACHE_CORE_TAG_WIDTH >= LSU_TAG_WIDTH, ("dcache tag-id space cannot hold the LSU outstanding slot id"))
-
-        for (genvar i = 0; i < `VX_CFG_NUM_LSU_BLOCKS; ++i) begin : g_dcache_coalesced_if
-            `ASSIGN_VX_MEM_BUS_IF (dcache_coalesced_if[i], lsu_dcache_if[i]);
-        `ifdef PERF_ENABLE
-            assign per_block_coalescer_misses[i] = '0;
-        `endif
-            // No coalescer: a store still in flight upstream of the adapter is
-            // one being presented to the adapter input. The adapter's own buffer
-            // is accounted for separately by per_block_adapter_empty.
-            assign per_block_path_empty[i] = ~dcache_coalesced_if[i].req_valid;
-        end
-
     end
-
-    for (genvar i = 0; i < `VX_CFG_NUM_LSU_BLOCKS; ++i) begin : g_dcache_adapters
-
-        VX_mem_bus_if #(
-            .DATA_SIZE (DCACHE_WORD_SIZE),
-            .TAG_WIDTH (DCACHE_CORE_TAG_WIDTH)
-        ) dcache_bus_tmp_if[DCACHE_CHANNELS]();
-
-        VX_lsu_adapter #(
-            .NUM_LANES    (DCACHE_CHANNELS),
-            .DATA_SIZE    (DCACHE_WORD_SIZE),
-            .TAG_WIDTH    (DCACHE_CORE_TAG_WIDTH),
-            .TAG_SEL_BITS (DCACHE_CORE_TAG_WIDTH - UUID_WIDTH),
-            .ARBITER      ("P"),
-            .REQ_OUT_BUF  (3), // register dcache-request master boundary on all channels (passthru ports 1+)
-            .RSP_OUT_BUF  (0)
-        ) dcache_adapter (
-            .clk        (clk),
-            .reset      (reset),
-            .lsu_mem_if (dcache_coalesced_if[i]),
-            .mem_bus_if (dcache_bus_tmp_if)
-        );
-
-        // A store buffered in the adapter's REQ_OUT_BUF has left dcache_coalesced_if
-        // but not yet reached the flush-injection point; keep the block non-empty
-        // until every channel's request has drained past the adapter output.
-        wire [DCACHE_CHANNELS-1:0] adapter_req_valid;
-        for (genvar j = 0; j < DCACHE_CHANNELS; ++j) begin : g_adapter_req_valid
-            assign adapter_req_valid[j] = dcache_bus_tmp_if[j].req_valid;
-        end
-        assign per_block_adapter_empty[i] = ~(| adapter_req_valid);
-
-        for (genvar j = 0; j < DCACHE_CHANNELS; ++j) begin : g_dcache_bus_if
-            if (i == 0 && j == 0) begin : g_flush_port
-                // Port 0: route through VX_dcr_flush to inject flush requests
-                VX_dcr_flush #(
-                    .WORD_SIZE (DCACHE_WORD_SIZE),
-                    .TAG_WIDTH (DCACHE_CORE_TAG_WIDTH),
-                    .REQ_OUT_BUF (3) // register core dcache-request boundary; rsp already registered by L1 CORE_OUT_BUF
-                ) dcr_flush (
-                    .clk          (clk),
-                    .reset        (reset),
-                    .dcr_flush_if (dcr_flush_if),
-                    .core_bus_if  (dcache_bus_tmp_if[0]),
-                    .cache_bus_if (dcache_bus_if[0])
-                );
-            end else begin : g_passthru_port
-                // Ports 1+: pass through; tag is zero-extended from
-                // DCACHE_CORE_TAG_WIDTH to DCACHE_TAG_WIDTH on request,
-                // and MSB-stripped on response.
-                `ASSIGN_VX_MEM_BUS_IF_EX (dcache_bus_if[i * DCACHE_CHANNELS + j], dcache_bus_tmp_if[j], DCACHE_TAG_WIDTH_BASE, DCACHE_CORE_TAG_WIDTH, 0);
-            end
-        end
-
-    end
-
-    assign empty = (& per_block_empty);
 
 endmodule

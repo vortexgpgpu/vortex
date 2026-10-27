@@ -11,7 +11,7 @@
 # directory, no dispatcher edit.
 
 DUTS := cache core cp dxa fpu gfx issue lmem mem_unit mufu om raster rtu \
-        scope tcu tensor tex top unittest vm vortex
+        scope tcu tensor tex top vm vortex
 
 # ---------------------------------------------------------------------------
 # shared include fragments
@@ -138,11 +138,9 @@ tex_PKG  = $(RTL_DIR)/tex/VX_tex_pkg.sv
 top_PRJ := VX_afu_wrap
 top_IP  := 1
 top_EXT := 1
+top_AFU := 1
 top_INC  = $(BASE_INC) -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(RTL_DIR)/cache \
            -I$(RTL_DIR)/cp -I$(AFU_DIR) -I$(AFU_COMMON_DIR) $(FPU_INC)
-
-unittest_PRJ := Unittest
-unittest_INC  = $(BASE_INC) -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(RTL_DIR)/cache $(FPU_INC)
 
 vm_PRJ := VX_vm_top
 vm_CFG := -DVX_CFG_VM_ENABLE -DVX_CFG_EXT_A_ENABLE -DVX_CFG_NUM_CORES=2 \

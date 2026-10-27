@@ -194,24 +194,28 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
 
         wire [7:0] bias_sel = is_bfloat ? BIAS_CONST_BF8 : BIAS_CONST_FP8;
 
-        wire [EXP_W-1:0] max_pre_sum_cpa, bias_sel_cpa;
-        wire [EXP_W-1:0] final_exp;
+        // One bit wider than the exponent, signed: the E8M0 scales (2^-254 ..
+        // 2^256 together) can take a lane below the exponent range, where it
+        // only adds to the sticky bit.
+        localparam SX = EXP_W + 1;
+        wire [SX-1:0] max_pre_sum_cpa, bias_sel_cpa;
+        wire [SX-1:0] final_exp_s;
 
     `ifdef VX_CFG_TCU_MX_ENABLE
-        wire [EXP_W-1:0] bias_cpa_sum, bias_cpa_carry;
-        wire [3*EXP_W-1:0] sf_comp = fmt_f[3] ? {EXP_W'(sf_a), EXP_W'(sf_b), -EXP_W'(254)} : (3*EXP_W)'(0);
+        wire [SX-1:0] bias_cpa_sum, bias_cpa_carry;
+        wire [3*SX-1:0] sf_comp = fmt_f[3] ? {SX'(sf_a), SX'(sf_b), -SX'(254)} : (3*SX)'(0);
         VX_csa_tree #(
             .N(4),
-            .W(EXP_W),
-            .S(EXP_W)
+            .W(SX),
+            .S(SX)
         ) exp_sf_csa (
-            .operands ({EXP_W'(bias_sel), sf_comp}),
+            .operands ({SX'(bias_sel), sf_comp}),
             .sum      (bias_cpa_sum),
             .carry    (bias_cpa_carry)
         );
         VX_ks_adder #(
-            .N(EXP_W),
-            .BYPASS(`FORCE_BUILTIN_ADDER(EXP_W))
+            .N(SX),
+            .BYPASS(`FORCE_BUILTIN_ADDER(SX))
         ) exp_bias_add (
             .dataa(bias_cpa_sum),
             .datab(bias_cpa_carry),
@@ -220,19 +224,20 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
             `UNUSED_PIN(cout)
         );
     `else
-        assign bias_sel_cpa = EXP_W'(bias_sel);
+        assign bias_sel_cpa = SX'(bias_sel);
     `endif
-        assign max_pre_sum_cpa = EXP_W'(max_pre_sum);
+        assign max_pre_sum_cpa = SX'(max_pre_sum);
         VX_ks_adder #(
-            .N(EXP_W),
-            .BYPASS(`FORCE_BUILTIN_ADDER(EXP_W))
+            .N(SX),
+            .BYPASS(`FORCE_BUILTIN_ADDER(SX))
         ) exp_final_add (
-            .dataa(EXP_W'(max_pre_sum_cpa)),
-            .datab(EXP_W'(bias_sel_cpa)),
+            .dataa(max_pre_sum_cpa),
+            .datab(bias_sel_cpa),
             .cin(1'b0),
-            .sum(final_exp),
+            .sum(final_exp_s),
             `UNUSED_PIN(cout)
         );
+        wire [EXP_W-1:0] final_exp = final_exp_s[SX-1] ? '0 : final_exp_s[EXP_W-1:0];
 
         // The two fp8 mantissa products in a lane are independent unsigned 4x4
         // multiplies — small enough to pack into a single DSP48 (USE_DSP),
@@ -335,7 +340,13 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
 
         wire add_nan = (pos_inf_0 && neg_inf_1) || (neg_inf_0 && pos_inf_1);
 
-        wire any_nan = (|(nan_sel & lane_valid)) || add_nan;
+    `ifdef VX_CFG_TCU_MX_ENABLE
+        // an E8M0 scale of 0xFF is NaN, and so is every element it scales
+        wire sf_nan = fmt_f[3] && ((sf_a == 8'hFF) || (sf_b == 8'hFF)) && (|lane_valid);
+    `else
+        wire sf_nan = 1'b0;
+    `endif
+        wire any_nan = (|(nan_sel & lane_valid)) || add_nan || sf_nan;
         wire any_inf = (|(inf_sel & lane_valid)) && ~any_nan;
 
         wire final_sign_inf = inf_sel[0] ? sign_sel[0] : sign_sel[1];

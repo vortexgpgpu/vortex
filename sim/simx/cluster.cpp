@@ -12,6 +12,7 @@
 // limitations under the License.
 
 #include "cluster.h"
+#include <algorithm>
 #include "socket.h"
 #include "core.h"
 #include "local_mem.h"
@@ -30,6 +31,11 @@
 #endif
 
 using namespace vortex;
+
+// Output-buffer stages of the socket and cluster gbar arbiters (OUT_BUF 3, one
+// cycle each), present when the arbiter has more than one input.
+static constexpr uint32_t kSocketArbLag  = (VX_CFG_SOCKET_SIZE > 1) ? 1 : 0;
+static constexpr uint32_t kClusterArbLag = (NUM_SOCKETS > 1) ? 1 : 0;
 
 class Cluster::Impl {
 public:
@@ -67,24 +73,38 @@ public:
 
     snprintf(sname, 100, "%s-l2cache", name.c_str());
     // L2 is the LLC iff L2 is enabled and L3 is not.
-    l2cache_ = Cache::Create(sname, Cache::Config{
-      !VX_CFG_L2_ENABLED,
-      log2ceil(VX_CFG_L2_SIZE),// C
-      log2ceil(VX_CFG_L2_LINE_SIZE),// L
-      log2ceil(VX_CFG_L2_SECTOR_SIZE),// S
-      log2ceil(VX_CFG_L1_LINE_SIZE), // W
-      log2ceil(VX_CFG_L2_NUM_WAYS),  // A
-      log2ceil(VX_CFG_L2_NUM_BANKS), // B
-      VX_CFG_XLEN,                   // address bits
-      VX_CFG_L2_NUM_REQS,            // request size
-      VX_CFG_L2_MEM_PORTS,           // memory ports
-      VX_CFG_L2_WRITEBACK,           // write-back
-      false,                  // write response
-      VX_CFG_L2_MSHR_SIZE,           // mshr size
-      VX_CFG_L2_LATENCY,             // pipeline latency
-      VX_CFG_L2_REPL_POLICY,         // replacement policy
-      (VX_CFG_L2_ENABLED != 0) && (VX_CFG_L3_ENABLED == 0), // is_llc
-    });
+    {
+      // the CP writes into this cache when it is the last level: its state
+      // and a transfer's fills carry across the launch reset
+      SimPlatform::LaunchKeepScope keep(CP_ON_L2 != 0);
+      l2cache_ = Cache::Create(sname, Cache::Config{
+        !VX_CFG_L2_ENABLED,
+        log2ceil(VX_CFG_L2_SIZE),// C
+        log2ceil(VX_CFG_L2_LINE_SIZE),// L
+        log2ceil(VX_CFG_L2_SECTOR_SIZE),// S
+        log2ceil(VX_CFG_L1_LINE_SIZE), // W
+        log2ceil(VX_CFG_L2_NUM_WAYS),  // A
+        log2ceil(VX_CFG_L2_NUM_BANKS), // B
+        VX_CFG_XLEN,                   // address bits
+        L2_CACHE_REQS,                 // request size
+        VX_CFG_L2_MEM_PORTS,           // memory ports
+        VX_CFG_L2_WRITEBACK,           // write-back
+        false,                  // write response
+        VX_CFG_L2_MSHR_SIZE,           // mshr size
+        VX_CFG_L2_LATENCY,             // pipeline latency
+        VX_CFG_L2_REPL_POLICY,         // replacement policy
+        (VX_CFG_L2_ENABLED != 0) && (VX_CFG_L3_ENABLED == 0), // is_llc
+        true,                          // non-cacheable bypass
+        (VX_CFG_L2_BANK_HASH != 0) && (VX_CFG_L2_NUM_BANKS > 1), // bank_hash
+        L2_SHARED_LLC,                 // shared_llc
+        VX_CFG_L2_LAZY_FETCH != 0,     // lazy_fetch
+        true,                          // core-response register (behind the bypass layer)
+        0,                             // read_merge
+        VX_CFG_L2_MSHR_LINES,          // mshr_lines
+        CP_ON_L2 != 0,                 // write_around
+        VX_CFG_L2_MRSQ_SIZE != 0,      // memory-response queue
+      });
+    }
 
 
     // connect l2cache memory interface
@@ -299,6 +319,7 @@ public:
     for (auto& gbar : gbarriers_) {
       gbar.reset();
     }
+    gbar_fwd_next_ = 0;
     // Sockets are SimObjects; reset by SimPlatform.
   }
 
@@ -329,10 +350,7 @@ public:
     auto bar_index = bar_id % gbarriers_.size();
     auto& gbar = gbarriers_.at(bar_index);
 
-    auto sockets_per_cluster = sockets_.size();
-    auto cores_per_socket = cores_per_socket_;
-
-    uint32_t cores_per_cluster = sockets_per_cluster * cores_per_socket;
+    uint32_t cores_per_cluster = sockets_.size() * cores_per_socket_;
     uint32_t local_core_id = core_id % cores_per_cluster;
 
     // set core arrival bit
@@ -340,19 +358,45 @@ public:
 
     DT(4, "*** Global barrier arrive: cluster #" << simobject_->id() << ", core #" << core_id << " at barrier #" << bar_id << ", arrived=" << gbar.mask.count());
 
-    if (gbar.mask.count() == (size_t)count) {
-      // resume all suspended cores
-      for (uint32_t s = 0; s < sockets_per_cluster; ++s) {
-        for (uint32_t c = 0; c < cores_per_socket; ++c) {
-          uint32_t i = s * cores_per_socket + c;
-          if (gbar.mask.test(i)) {
-            simobject_->gbar_resume_out.at(i).send({bar_id});
-          }
+    // Up to the device unit: the socket arbiter's output buffer, then the
+    // cluster arbiter (one arrival per cycle) and its output buffer. A
+    // single-core device has no global-barrier path.
+    uint32_t lag = 0;
+    if constexpr (VX_CFG_NUM_CLUSTERS * VX_CFG_NUM_CORES > 1) {
+      uint64_t now = SimPlatform::instance().cycles();
+      uint64_t out = std::max(now + kSocketArbLag, gbar_fwd_next_);
+      gbar_fwd_next_ = out + 1;
+      lag = out + kClusterArbLag - now;
+    }
+    if constexpr (VX_CFG_NUM_CLUSTERS > 1) {
+      // the device arbiter's output buffer
+      simobject_->gbar_fwd_out.send({bar_id, count, core_id}, lag + 1);
+    } else if (gbar.mask.count() == (size_t)count) {
+      // With one cluster the device arbiter is a wire. The unit registers its
+      // release, which then crosses the cluster's and the socket's response
+      // forks.
+      this->global_barrier_resume(bar_id, lag + 1 + kClusterArbLag + kSocketArbLag);
+    }
+  }
+
+  // The device unit's release crosses the cluster's and the socket's response
+  // forks on its way down.
+  void global_barrier_fwd_resume(uint32_t bar_id) {
+    this->global_barrier_resume(bar_id, 1 + kClusterArbLag + kSocketArbLag);
+  }
+
+  // Resume the cores of this cluster that arrived, then clear the barrier.
+  void global_barrier_resume(uint32_t bar_id, uint32_t delay) {
+    auto& gbar = gbarriers_.at(bar_id % gbarriers_.size());
+    for (uint32_t s = 0; s < sockets_.size(); ++s) {
+      for (uint32_t c = 0; c < cores_per_socket_; ++c) {
+        uint32_t i = s * cores_per_socket_ + c;
+        if (gbar.mask.test(i)) {
+          simobject_->gbar_resume_out.at(i).send({bar_id}, delay);
         }
       }
-      // reset mask and advance phase
-      gbar.mask.reset();
     }
+    gbar.mask.reset();
   }
 
   Cluster::PerfStats perf_stats() const {
@@ -475,9 +519,9 @@ public:
     return 0;
   }
 
-  void dcache_flush_begin() {
+  void dcache_flush_begin(bool l1_only) {
     for (auto& socket : sockets_) {
-      socket->dcache_flush_begin();
+      socket->dcache_flush_begin(l1_only);
     }
   }
 
@@ -539,8 +583,20 @@ public:
   }
 #endif
 
-  void l2_flush_begin() {
-    l2cache_->flush_begin();
+  void l2_flush_begin(bool l1_only) {
+    l2cache_->flush_begin(l1_only);
+  }
+
+  void l2_keep_lines() {
+    l2cache_->keep_lines();
+  }
+
+  SimChannel<MemReq>& cp_mem_req_in() {
+    return l2cache_->core_req_in.at(L2_CP_IDX);
+  }
+
+  SimChannel<MemRsp>& cp_mem_rsp_out() {
+    return l2cache_->core_rsp_out.at(L2_CP_IDX);
   }
 
   bool l2_flush_done() const {
@@ -563,6 +619,7 @@ private:
   Cluster*                    simobject_;
   std::vector<Socket::Ptr>    sockets_;
   std::vector<core_barrier_t> gbarriers_;
+  uint64_t gbar_fwd_next_ = 0;  // next free cycle at the cluster's gbar arbiter
   Cache::Ptr                  l2cache_;
   uint32_t                    cores_per_socket_;
 #ifdef VX_CFG_VM_ENABLE
@@ -593,11 +650,14 @@ Cluster::Cluster(const SimContext& ctx,
   , mem_rsp_in(VX_CFG_L2_MEM_PORTS, this)
   , gbar_arrive_in(this)
   , gbar_resume_out(NUM_SOCKETS * VX_CFG_SOCKET_SIZE, this)
+  , gbar_fwd_out(this)
+  , gbar_fwd_resume_in(this)
   , cluster_id_(cluster_id)
   , processor_(processor)
   , impl_(new Impl(this))
 {
   gbar_arrive_in.bind(this, &Cluster::on_gbar_arrive);
+  gbar_fwd_resume_in.bind(this, &Cluster::on_gbar_fwd_resume);
 }
 
 Cluster::~Cluster() {
@@ -618,6 +678,10 @@ int Cluster::get_exitcode() const {
 
 void Cluster::on_gbar_arrive(const GbarArrive& msg) {
   impl_->global_barrier_arrive(msg.bar_id, msg.count, msg.core_id);
+}
+
+void Cluster::on_gbar_fwd_resume(const GbarResume& msg) {
+  impl_->global_barrier_fwd_resume(msg.bar_id);
 }
 
 Cluster::PerfStats Cluster::perf_stats() const {
@@ -658,8 +722,8 @@ Core* Cluster::get_core(uint32_t idx) const {
   return impl_->get_core(idx);
 }
 
-void Cluster::dcache_flush_begin() {
-  impl_->dcache_flush_begin();
+void Cluster::dcache_flush_begin(bool l1_only) {
+  impl_->dcache_flush_begin(l1_only);
 }
 
 bool Cluster::dcache_flush_done() const {
@@ -694,8 +758,20 @@ void Cluster::rtcache_flush_begin() { impl_->rtcache_flush_begin(); }
 bool Cluster::rtcache_flush_done() const { return impl_->rtcache_flush_done(); }
 #endif
 
-void Cluster::l2_flush_begin() {
-  impl_->l2_flush_begin();
+void Cluster::l2_flush_begin(bool l1_only) {
+  impl_->l2_flush_begin(l1_only);
+}
+
+void Cluster::l2_keep_lines() {
+  impl_->l2_keep_lines();
+}
+
+SimChannel<MemReq>& Cluster::cp_mem_req_in() {
+  return impl_->cp_mem_req_in();
+}
+
+SimChannel<MemRsp>& Cluster::cp_mem_rsp_out() {
+  return impl_->cp_mem_rsp_out();
 }
 
 bool Cluster::l2_flush_done() const {

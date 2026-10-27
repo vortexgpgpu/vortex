@@ -27,12 +27,13 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input wire          tbuf_ready,
 `endif
 
-    // External metadata write port from the shared VX_tcu_agu.
+    // Metadata write port from the block's VX_tcu_agu.
 `ifdef TCU_META_ENABLE
     input wire                     ext_meta_wr_en,
     input wire [NW_WIDTH-1:0]      ext_meta_wr_wid,
     input wire [4:0]               ext_meta_wr_idx,
-    input wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0] ext_meta_wr_data,
+    input wire [TCU_BLOCK_CAP-1:0] ext_meta_wr_mask,
+    input wire [TCU_BLOCK_CAP-1:0][31:0] ext_meta_wr_data,
 `endif
 
     // Inputs
@@ -41,6 +42,11 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // Outputs
     VX_result_if.master result_if
 );
+
+`ifdef SCOPE
+    `SCOPE_IO_SWITCH (1);
+    `SCOPE_IO_UNUSED (0)
+`endif
     `UNUSED_SPARAM (INSTANCE_ID);
 
     // FEDP dot-product width in 32-bit words (doubles under FEDP2K).
@@ -146,6 +152,10 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
     wire setup_enqueue = execute_fire && is_wgmma_setup;
     wire fedp_enqueue  = execute_fire && !is_wgmma_setup;
+
+    // The accumulator is fp32 (int32 for integer inputs); no other fmt_d exists.
+    `RUNTIME_ASSERT (~fedp_enqueue || (fmt_d == (tcu_fmt_is_int(fmt_s) ? TCU_FMT_WIDTH'(TCU_I32_ID) : TCU_FMT_WIDTH'(TCU_FP32_ID))),
+        ("%t: *** %s unsupported TCU output format: fmt_s=%0d, fmt_d=%0d (fp32 only)", $time, INSTANCE_ID, fmt_s, fmt_d))
 
     // -----------------------------------------------------------------------
     // Sparse metadata: VX_tcu_sp_meta (for WMMA_SP) + optional tile-buffer mux
@@ -303,14 +313,17 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
 
 `ifdef TCU_META_ENABLE
+    // a TCU block only executes one residue class of warps modulo NUM_TCU_BLOCKS
     VX_tcu_meta #(
-        .INSTANCE_ID (INSTANCE_ID)
+        .INSTANCE_ID (INSTANCE_ID),
+        .WID_STRIDE  (`VX_CFG_NUM_TCU_BLOCKS)
     ) tcu_meta (
         .clk    (clk),
         .reset  (reset),
         .wr_en  (ext_meta_wr_en),
         .wr_wid (ext_meta_wr_wid),
         .wr_idx (ext_meta_wr_idx),
+        .wr_mask(ext_meta_wr_mask),
         .wr_data(ext_meta_wr_data),
         .rd_wid (execute_if.data.header.wid)
     `ifdef VX_CFG_TCU_SPARSE_ENABLE

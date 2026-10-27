@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 250" role="img" aria-label="Before: a flat MSHR where each of 16 entries stores a full line address. After: 64 small request entries point by index into a 16-entry line table of full addresses.">
+  <title>Before: a flat MSHR where each of 16 entries stores a full line address. After: 64 small request entries point by index into a 16-entry line table of full addresses.</title>
+  <defs><marker id="mshrli_a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1b2733"/></marker><marker id="mshrli_g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1f7a4d"/></marker><marker id="mshrli_b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#b3261e"/></marker></defs>
+  <style>
+    text { font-family: Helvetica, Arial, sans-serif; fill: #1b2733; font-size: 11.5px; }
+    .dh { font-size: 13px; font-weight: bold; }
+    .dm { fill: #5a6772; font-size: 11px; }
+    .ds { font-size: 10.5px; }
+    .db { fill: #fbfcfd; stroke: #5a7184; stroke-width: 1.2; }
+    .dbad { fill: #fbe5e3; stroke: #b3261e; stroke-width: 1.2; }
+    .dgood { fill: #e3f3ea; stroke: #1f7a4d; stroke-width: 1.2; }
+    .didle { fill: #f3f5f8; stroke: #c9d1d9; stroke-width: 1.2; }
+    .dwait { fill: #fbe5e3; stroke: #b3261e; stroke-width: 1.2; stroke-dasharray: 4 3; }
+    .ln { stroke: #1b2733; stroke-width: 1.3; fill: none; }
+    .lb { stroke: #b3261e; stroke-width: 1.5; fill: none; }
+    .lg { stroke: #1f7a4d; stroke-width: 1.5; }
+    .dash { stroke-dasharray: 4 3; }
+    .sep { stroke: #c9d1d9; stroke-width: 1; stroke-dasharray: 2 4; }
+    text.db-t { fill: #b3261e; } text.g-t { fill: #1f7a4d; }
+  </style>
+  <rect width="640" height="250" fill="#ffffff"/>
+<text x="150" y="20" class="dh" text-anchor="middle">Before: flat MSHR (16)</text>
+        <text x="470" y="20" class="dh" text-anchor="middle">After: requests (64) → line table (16)</text>
+        <g class="dl">
+          <rect x="40" y="36" width="160" height="22" class="dbad"/><text x="120" y="51" text-anchor="middle" class="ds">full line addr | request</text>
+          <rect x="40" y="60" width="160" height="22" class="dbad"/><text x="120" y="75" text-anchor="middle" class="ds">full line addr | request</text>
+          <rect x="40" y="84" width="160" height="22" class="dbad"/><text x="120" y="99" text-anchor="middle" class="ds">full line addr | request</text>
+          <text x="120" y="124" text-anchor="middle" class="dm">⋮</text>
+          <rect x="40" y="132" width="160" height="22" class="dbad"/><text x="120" y="147" text-anchor="middle" class="ds">full line addr | request</text>
+          <text x="120" y="178" text-anchor="middle" class="dm">16 wide comparators</text>
+          <text x="120" y="196" text-anchor="middle" class="dm">full at 16 requests</text>
+          <line x1="300" y1="30" x2="300" y2="235" class="sep"/>
+          <rect x="320" y="36" width="120" height="22" class="db"/><text x="380" y="51" text-anchor="middle" class="ds">idx 0 | request</text>
+          <rect x="320" y="60" width="120" height="22" class="db"/><text x="380" y="75" text-anchor="middle" class="ds">idx 0 | request</text>
+          <rect x="320" y="84" width="120" height="22" class="db"/><text x="380" y="99" text-anchor="middle" class="ds">idx 1 | request</text>
+          <rect x="320" y="108" width="120" height="22" class="db"/><text x="380" y="123" text-anchor="middle" class="ds">idx 0 | request</text>
+          <text x="380" y="146" text-anchor="middle" class="dm">⋮</text>
+          <rect x="320" y="154" width="120" height="22" class="db"/><text x="380" y="169" text-anchor="middle" class="ds">idx 2 | request</text>
+          <text x="380" y="200" text-anchor="middle" class="dm">64 narrow entries</text>
+          <rect x="500" y="60" width="128" height="22" class="dgood"/><text x="564" y="75" text-anchor="middle" class="ds">0: line A · refs 3</text>
+          <rect x="500" y="84" width="128" height="22" class="dgood"/><text x="564" y="99" text-anchor="middle" class="ds">1: line B · refs 1</text>
+          <rect x="500" y="108" width="128" height="22" class="dgood"/><text x="564" y="123" text-anchor="middle" class="ds">2: line C · refs 1</text>
+          <text x="564" y="146" text-anchor="middle" class="dm">⋮ 16 lines</text>
+          <line x1="440" y1="47" x2="498" y2="68" class="lg" marker-end="url(#mshrli_g)"/>
+          <line x1="440" y1="71" x2="498" y2="71" class="lg" marker-end="url(#mshrli_g)"/>
+          <line x1="440" y1="95" x2="498" y2="95" class="lg" marker-end="url(#mshrli_g)"/>
+          <line x1="440" y1="119" x2="498" y2="74" class="lg" marker-end="url(#mshrli_g)"/>
+          <line x1="440" y1="165" x2="498" y2="119" class="lg" marker-end="url(#mshrli_g)"/>
+          <text x="564" y="178" text-anchor="middle" class="dm">16 wide comparators</text>
+        </g>
+</svg>

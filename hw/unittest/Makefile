@@ -19,8 +19,11 @@ all:
 	$(MAKE) -C cp_axil_regfile
 	$(MAKE) -C afu_axil_demux
 	$(MAKE) -C afu_reset_seq
+	$(MAKE) -C mm_axi_arb
 	$(MAKE) -C cp_axi_path
 	$(MAKE) -C cp_dma
+	$(MAKE) -C cp_llc_port
+	$(MAKE) -C stream_arb
 	$(MAKE) -C cp_core
 	$(MAKE) -C fma_unit
 	$(MAKE) -C fdiv_unit
@@ -51,8 +54,11 @@ run:
 	$(MAKE) -C cp_axil_regfile run
 	$(MAKE) -C afu_axil_demux run
 	$(MAKE) -C afu_reset_seq run
+	$(MAKE) -C mm_axi_arb run
 	$(MAKE) -C cp_axi_path run
 	$(MAKE) -C cp_dma run
+	$(MAKE) -C cp_llc_port run
+	$(MAKE) -C stream_arb run
 	$(MAKE) -C cp_core run
 	$(MAKE) -C fma_unit run
 	$(MAKE) -C fdiv_unit run
@@ -125,6 +131,50 @@ run-tcu:
 	$(call tcu_int_pair,DPI,INT8,17,18)
 	$(call tcu_int_pair,DPI,INT4,19,20)
 
+# VX_tcu_unit end to end (dispatch, uops, operand routing, commit), bit for bit
+# (--ulp=0) against the reference of each datapath: the native TFR one against
+# the TfrFedp reference model, the DPI one against its discrete fp32 mul/add.
+# One build per tile shape and datapath: 4 threads (2x2) with tf32/fp16/bf16,
+# 8 threads (4x2) fp16 on DPI.
+TCU_UNIT_TFR := $(TCU_BASE) -DVX_CFG_TCU_TYPE_TFR -DVX_CFG_TCU_TF32_ENABLE
+TCU_UNIT_DPI := $(TCU_BASE) -DVX_CFG_TCU_TYPE_DPI
+run-tcu-unit:
+	$(MAKE) -C tcu_unit clean
+	$(MAKE) -C tcu_unit CONFIGS="$(TCU_UNIT_TFR)"
+	$(MAKE) -C tcu_unit run CONFIGS="$(TCU_UNIT_TFR)" OPTS="--fmt=1 --ulp=0 --no-trace"
+	$(MAKE) -C tcu_unit run CONFIGS="$(TCU_UNIT_TFR)" OPTS="--fmt=2 --ulp=0 --no-trace"
+	$(MAKE) -C tcu_unit run CONFIGS="$(TCU_UNIT_TFR)" OPTS="--fmt=3 --ulp=0 --no-trace"
+	$(MAKE) -C tcu_unit clean
+	$(MAKE) -C tcu_unit CONFIGS="$(TCU_UNIT_DPI) -DVX_CFG_TCU_TF32_ENABLE"
+	$(MAKE) -C tcu_unit run CONFIGS="$(TCU_UNIT_DPI) -DVX_CFG_TCU_TF32_ENABLE" OPTS="--fmt=1 --ulp=0 --no-trace"
+	$(MAKE) -C tcu_unit run CONFIGS="$(TCU_UNIT_DPI) -DVX_CFG_TCU_TF32_ENABLE" OPTS="--fmt=2 --ulp=0 --no-trace"
+	$(MAKE) -C tcu_unit run CONFIGS="$(TCU_UNIT_DPI) -DVX_CFG_TCU_TF32_ENABLE" OPTS="--fmt=3 --ulp=0 --no-trace"
+	$(MAKE) -C tcu_unit clean
+	$(MAKE) -C tcu_unit CONFIGS="$(TCU_UNIT_DPI) -DVX_CFG_NUM_THREADS=8"
+	$(MAKE) -C tcu_unit run CONFIGS="$(TCU_UNIT_DPI) -DVX_CFG_NUM_THREADS=8" OPTS="--fmt=2 --ulp=0 --no-trace"
+	$(call tcu_mx_suite,2,1)
+	$(call tcu_mx_suite,4,2)
+
+# The native datapath's fp8 and block-scaled formats against the TfrFedp
+# reference model, bit for bit: fp8/bf8, MXFP8/MXBF8 (E8M0 scales), MXFP4 (E8M0)
+# and NVFP4 (E4M3). VX_tcu_unit takes its block scales from the metadata path,
+# so these run on the FEDP. Two shapes: 2 registers on one scale slot, 4 on two.
+# Directed legs pin zero products in an fp8 lane, MXFP4 scales far from one
+# (2^-34), MXFP8/MXBF8 scales so small the lane underflows, and NaN scales.
+TCU_MX := $(TCU_BASE) -DVX_CFG_TCU_TYPE_TFR -DUSE_FEDP -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP8_ENABLE \
+          -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_MXFP4_ENABLE -DVX_CFG_TCU_NVFP4_ENABLE
+# format:sf_a:sf_b
+TCU_MX_DIRECTED := 10:110:110 8:0:3 9:4:2 8:0xff:127 11:0x7f:0x38
+tcu_mx_opts = --fmt=$(word 1,$(subst :, ,$(1))) --sfa=$(word 2,$(subst :, ,$(1))) --sfb=$(word 3,$(subst :, ,$(1)))
+# $(1)=NUM_REGS $(2)=SF
+define tcu_mx_suite
+	$(MAKE) -C tcu_fedp clean
+	$(MAKE) -C tcu_fedp NUM_REGS=$(1) SF=$(2) CONFIGS="$(TCU_MX)"
+	$(foreach f,4 5 8 9 10 11,$(MAKE) -C tcu_fedp run NUM_REGS=$(1) SF=$(2) CONFIGS="$(TCU_MX)" OPTS="--fmt=$(f) --W=25 --ulp=0 --no-trace" &&) true
+	$(foreach f,4 8 9,$(MAKE) -C tcu_fedp run NUM_REGS=$(1) SF=$(2) CONFIGS="$(TCU_MX)" OPTS="--fmt=$(f) --W=25 --ulp=0 --features=zeros --tests=20000 --no-trace" &&) true
+	$(foreach o,$(TCU_MX_DIRECTED),$(MAKE) -C tcu_fedp run NUM_REGS=$(1) SF=$(2) CONFIGS="$(TCU_MX)" OPTS="$(call tcu_mx_opts,$(o)) --W=25 --ulp=0 --tests=20000 --no-trace" &&) true
+endef
+
 # Same native-TFR formats as run-tcu, but with the multipliers mapped onto DSP48
 # (USE_DSP=1). USE_DSP is bit-identical to the LUT path by contract, so the same
 # references apply — a mismatch here is a DSP-packing bug.
@@ -153,6 +203,9 @@ clean:
 	$(MAKE) -C cp_axil_regfile clean
 	$(MAKE) -C cp_axi_path clean
 	$(MAKE) -C cp_dma clean
+	$(MAKE) -C cp_llc_port clean
+	$(MAKE) -C stream_arb clean
+	$(MAKE) -C mm_axi_arb clean
 	$(MAKE) -C cp_core clean
 	$(MAKE) -C fma_unit clean
 	$(MAKE) -C fdiv_unit clean

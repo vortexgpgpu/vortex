@@ -43,6 +43,18 @@ public:
 		uint16_t latency;       // pipeline latency
 		uint8_t repl_policy;    // replacement policy (ReplPolicy)
 		bool    is_llc;					// is last-level cache
+		bool    nc_enable = false;   // non-cacheable bypass layer in front of the cache
+		bool    bank_hash = false;	// hashed bank select
+		bool    shared_llc = false;	// the LLC serves every memory client alone
+		bool    lazy_fetch = false;	// write miss allocates without a fill (write-back LLC only)
+		bool    core_out_buf = false; // registered core-response port
+		uint8_t read_merge = 0;	// merge same-word reads within groups of this many adjacent ports (0: off)
+		uint16_t mshr_lines = 0;	// MSHR distinct {line, sector} entries (0: one per request)
+		bool    write_around = false; // a no-allocate write miss goes to memory (write-back only)
+		bool    mem_rsp_queue = false; // memory responses enter through a response queue
+		bool    mem_rsp_slice = false; // a registered boundary ahead of the memory-response port stands for that queue's register
+		bool    acq_forward = false;   // an acquire flush also invalidates the next level
+		bool    merge_line = false;    // read merging takes any read of the same line, each merged port keeping its own tag and word
 	};
 
 	struct PerfStats {
@@ -80,9 +92,14 @@ public:
 
 	// Flush API: arm a write-back walk that emits dirty lines via mem_req_out.
 	// flush_done() returns true once the walk completes; the caller is expected
-	// to tick the simulator until then. Write-through caches no-op.
-	void flush_begin();
+	// to tick the simulator until then. Write-through caches no-op. On an
+	// L1-only flush the write-back last-level cache skips the walk and keeps
+	// its lines across the next launch reset.
+	void flush_begin(bool l1_only = false);
 	bool flush_done() const;
+
+	// A shared last-level cache keeps its lines into the next launch.
+	void keep_lines();
 
 protected:
 	void on_reset();

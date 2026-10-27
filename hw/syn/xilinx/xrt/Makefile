@@ -194,6 +194,26 @@ CFLAGS += $(RTL_INCLUDE)
 # ast dump flags
 XML_CFLAGS = $(filter-out -DSYNTHESIS -DVIVADO, $(CFLAGS)) $(RTL_PKGS) -I$(DPI_DIR) -DSV_DPI
 
+# One AXI memory master per GPU memory port. The kernel top must declare its
+# ports literally, so resolve the count from the elaborated configuration.
+AFU_MEM_PORTS := $(shell $(SCRIPT_DIR)/afu_mem_ports.sh -c $(BUILD_DIR)/.afu_mem_ports $(VERILATOR_PATH)/bin/verilator $(filter-out -J%,$(XML_CFLAGS)))
+ifeq ($(AFU_MEM_PORTS),)
+$(error cannot resolve the AFU memory port count for this configuration)
+endif
+CFLAGS += -DAFU_MEM_PORTS=$(AFU_MEM_PORTS)
+
+# Port i owns the i-th contiguous 1/N of device memory (VX_afu_wrap). Bind it
+# to the matching contiguous group of the platform's memory channels, so each
+# port reaches only its own channels and no two ports share one.
+ifdef PLATFORM_MEMORY_TAG
+VPP_FLAGS += $(shell n=$(AFU_MEM_PORTS); g=$$(($(PLATFORM_MEMORY_CHANNELS) / n)); \
+	for i in $$(seq 0 $$((n - 1))); do \
+		lo=$$((i * g)); hi=$$((lo + g - 1)); \
+		if [ $$g -eq 1 ]; then r=$$lo; else r=$$lo:$$hi; fi; \
+		echo "--connectivity.sp vortex_afu_1.m_axi_mem_$$i:$(PLATFORM_MEMORY_TAG)[$$r]"; \
+	done)
+endif
+
 # RTL Kernel only supports Hardware and Hardware Emulation.
 ifneq ($(TARGET),$(findstring $(TARGET), hw hw_emu))
 	$(warning WARNING:Application supports only hw hw_emu TARGET. Please use the target for running the application)
@@ -204,8 +224,17 @@ endif
 all: check-devices emconfig $(XCLBIN_CONTAINER) report
 
 gen-sources: $(BUILD_DIR)/sources.txt
-$(BUILD_DIR)/sources.txt:
+$(BUILD_DIR)/sources.txt: $(BUILD_DIR)/afu_mem_ports.stamp
 	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/gen_sources.sh -P $(CFLAGS) -Csrc -Osources.txt
+
+# The preprocessed sources bake in the kernel's port count: regenerate them
+# whenever the configuration changes it.
+$(BUILD_DIR)/afu_mem_ports.stamp: force-afu-mem-ports
+	@mkdir -p $(BUILD_DIR)
+	@if [ "$$(cat $@ 2>/dev/null)" != "$(AFU_MEM_PORTS)" ]; then echo "$(AFU_MEM_PORTS)" > $@; fi
+
+.PHONY: force-afu-mem-ports
+force-afu-mem-ports:
 
 gen-ast: $(BUILD_DIR)/vortex.xml
 $(BUILD_DIR)/vortex.xml:

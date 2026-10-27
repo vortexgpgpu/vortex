@@ -5,7 +5,8 @@
     "VX_CFG_NUM_WARPS": 64,
     "VX_CFG_NUM_THREADS": 32,
     "VX_CFG_ISSUE_WIDTH": 4,
-    "VX_CFG_DCACHE_SIZE": 262144
+    "VX_CFG_DCACHE_SIZE": 262144,
+    "VX_CFG_FETCH_WIDTH": 4
   },
   "chip": {
     "VX_CFG_NUM_CLUSTERS": 1,
@@ -13,7 +14,8 @@
     "VX_CFG_L2_ENABLE": true,
     "VX_CFG_L2_SIZE": 33554432,
     "VX_CFG_L2_NUM_WAYS": 16,
-    "VX_CFG_L2_NUM_BANKS": 32
+    "VX_CFG_L2_NUM_BANKS": 32,
+    "VX_CFG_CP_LLC_CLIENT": 1
   },
   "platform": {
     "VX_CFG_PLATFORM_MEMORY_NUM_BANKS": 32,
@@ -27,6 +29,8 @@
     "DCACHE_SIZE": "256 KB combined L1/shared per SM (whitepaper)",
     "L2_SIZE, L2_NUM_WAYS, L2_NUM_BANKS": "50 MB L2 (whitepaper), rounded down to the power of two the cache accepts; 16 ways and 32 banks as in the a100 profile",
     "PLATFORM_MEMORY_TYPE, PLATFORM_MEMORY_NUM_BANKS, PLATFORM_MEMORY_DATA_RATE": "5 HBM3 stacks x 16 64-bit channels at 5236 MT/s = 40 128-bit channel pairs, modelled as 32 at 6545 MT/s for a power-of-two interleave: 32 x 16 B x 6545 MT/s = 3.35 TB/s, the card's bandwidth; latency not calibrated",
-    "PLATFORM_CLOCK_RATE, PLATFORM_MEMORY_PEAK_BW": "1980 MHz boost clock, 3.35 TB/s (H100 SXM5 datasheet)"
+    "PLATFORM_CLOCK_RATE, PLATFORM_MEMORY_PEAK_BW": "1980 MHz boost clock, 3.35 TB/s (H100 SXM5 datasheet)",
+    "FETCH_WIDTH": "4 SM processing blocks, each with its own warp scheduler, dispatch unit and L0 instruction cache (NVIDIA H100 Tensor Core GPU Architecture whitepaper)",
+    "CP_LLC_CLIENT": "Host copies reach device memory through the L2 like every other client, so uploaded data is L2-resident at launch"
   }
 }

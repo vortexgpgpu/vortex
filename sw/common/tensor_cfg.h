@@ -156,6 +156,12 @@ inline const char* fmt_string(uint32_t fmt) {
   }
 }
 
+// The TCU accumulates and returns fp32 (int32 for integer inputs); it has no
+// other output format.
+inline constexpr bool tcu_output_valid(uint32_t it, uint32_t ot) {
+  return (it >= int32::id) ? (ot == int32::id) : (ot == fp32::id);
+}
+
 inline constexpr bool mx_scale_format(uint32_t fmt) {
   switch (fmt) {
   case mxfp8::id:

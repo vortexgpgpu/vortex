@@ -62,7 +62,7 @@ instr_trace_t* DxaUnit::process(instr_trace_t* trace) {
   // completion; pre-registration happens explicitly per-CTA so multicast
   // destinations correctly wait.
 
-  req_out_.send(req);
+  req_out_.send(req, 1 + bus_delay_);
   DT(4, "dxa-unit submit: core=" << core_->id() << ", wid=" << trace->wid
      << ", slot=" << desc_slot << ", bar=" << raw_bar
      << ", cta_mask=0x" << std::hex << cta_mask << std::dec);

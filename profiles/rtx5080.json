@@ -6,7 +6,8 @@
     "VX_CFG_NUM_THREADS": 32,
     "VX_CFG_ISSUE_WIDTH": 4,
     "VX_CFG_DCACHE_SIZE": 131072,
-    "VX_CFG_DCACHE_MSHR_SIZE": 24
+    "VX_CFG_DCACHE_MSHR_SIZE": 24,
+    "VX_CFG_FETCH_WIDTH": 4
   },
   "chip": {
     "VX_CFG_NUM_CLUSTERS": 1,
@@ -15,7 +16,8 @@
     "VX_CFG_L2_SIZE": 67108864,
     "VX_CFG_L2_NUM_WAYS": 16,
     "VX_CFG_L2_NUM_BANKS": 32,
-    "VX_CFG_L2_MSHR_SIZE": 192
+    "VX_CFG_L2_MSHR_SIZE": 192,
+    "VX_CFG_CP_LLC_CLIENT": 1
   },
   "platform": {
     "VX_CFG_PLATFORM_MEMORY_NUM_BANKS": 32,
@@ -23,7 +25,7 @@
     "VX_CFG_PLATFORM_MEMORY_PEAK_BW": 960000,
     "VX_CFG_PLATFORM_MEMORY_TYPE": "GDDR6",
     "VX_CFG_PLATFORM_MEMORY_DATA_RATE": 15000,
-    "VX_CFG_PLATFORM_MEMORY_LATENCY": 339
+    "VX_CFG_PLATFORM_MEMORY_LATENCY": 675
   },
   "reference": {
     "clock_mhz": 2295,
@@ -58,6 +60,8 @@
     "PLATFORM_CLOCK_RATE, PLATFORM_MEMORY_PEAK_BW": "2295 MHz base clock, 960 GB/s (whitepaper App. B)",
     "reference": "Nsight Compute on an RTX 5080 at its 2295 MHz base clock with a cold L2, 2026-10-05",
     "PLATFORM_MEMORY_TYPE, PLATFORM_MEMORY_DATA_RATE": "30 Gbps GDDR7 x8 channels modelled as GDDR6 x16 channels at 15000 MT/s: the same channel count, 32 B burst time and 960 GB/s (32 x 2 B x 15 GT/s)",
-    "PLATFORM_MEMORY_LATENCY": "339 core cycles of PHY/NoC latency: the 407 calibrated in SimX against the 802-cycle pointer-chase DRAM latency in 'reference', less the 68 cycles JEDEC GDDR6 timing adds to the device's row-conflict latency (derived, not re-run; recalibrate with a pointer chase when the memory model changes)"
+    "PLATFORM_MEMORY_LATENCY": "675 core cycles of PHY/NoC latency, calibrated in SimX against the 802-cycle pointer-chase DRAM latency in 'reference' with the same chase (random cyclic permutation, 128 B stride, one thread, cold L2 with CP_LLC_CLIENT=0; cycle difference between 128 KiB and 256 KiB footprints over the 1024 extra loads: 802.1). The L2 link latency is not modelled, so an L2 hit is about 79 cycles against the card's 354. Recalibrate when the memory model changes",
+    "FETCH_WIDTH": "4 SM processing blocks, each with its own warp scheduler, dispatch unit and L0 instruction cache (NVIDIA RTX Blackwell GPU Architecture whitepaper)",
+    "CP_LLC_CLIENT": "Host copies reach device memory through the L2 like every other client, so uploaded data is L2-resident at launch"
   }
 }

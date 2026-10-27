@@ -216,9 +216,12 @@ package VX_tcu_pkg;
     localparam TCU_MX_MAX_SF = `MAX(`MAX(TCU_MX_SF_FP8, TCU_MX_SF_MXFP4),
                                     TCU_MX_SF_NVFP4);
 
+    // MX block scales span 2^-254 .. 2^256 on top of the elements' own range.
     `ifdef VX_CFG_TCU_TF32_ENABLE
         localparam TCU_EXP_BITS = 10;
     `elsif VX_CFG_TCU_FP16_ENABLE
+        localparam TCU_EXP_BITS = 10;
+    `elsif VX_CFG_TCU_MX_ENABLE
         localparam TCU_EXP_BITS = 10;
     `else
         localparam TCU_EXP_BITS = 9;

@@ -353,6 +353,45 @@ tests:
   configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4 -DVX_CFG_SOCKET_SIZE=2
   shape:
     cores: 4
+# Shared L2 behind multi-core sockets: the socket routes each DXA lmem write
+# to the core named by its cluster-local index modulo the socket size, at a
+# power-of-two shape and at sockets of three.
+- id: sgemm2_dxa-l2-1
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm2_dxa
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4 -DVX_CFG_SOCKET_SIZE=2
+  shape:
+    cores: 4
+    l2cache: true
+- id: sgemm2_dxa-l2-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm2_dxa
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4 -DVX_CFG_SOCKET_SIZE=2
+  shape:
+    cores: 4
+    l2cache: true
+- id: sgemm2_dxa-npot-1
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm2_dxa
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4 -DVX_CFG_SOCKET_SIZE=3
+  shape:
+    cores: 6
+    l2cache: true
+- id: sgemm2_dxa-npot-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm2_dxa
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4 -DVX_CFG_SOCKET_SIZE=3
+  shape:
+    cores: 6
+    l2cache: true
 - id: sgemm2_dxa-9
   via: blackbox
   drivers:
@@ -388,7 +427,7 @@ tests:
   drivers:
   - rtlsim
   app: sgemm_tcu_wg_dxa
-  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=16 -DVX_CFG_TCU_TYPE=DPI -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=16 -DVX_CFG_TCU_TYPE=DPI -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1 -DVX_CFG_FETCH_WIDTH=2
   shape:
     threads: 32
     warps: 8
@@ -419,7 +458,7 @@ tests:
   drivers:
   - rtlsim
   app: sgemm_tcu_wg_sp_dxa
-  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_TCU_TYPE=DPI
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_TCU_TYPE=DPI -DVX_CFG_FETCH_WIDTH=4
     -DWGMMA_NRC=32 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
   shape:
     threads: 32

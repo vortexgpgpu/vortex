@@ -23,14 +23,46 @@ tests:
   - id: hw-tcu
     via: script
     run: "make -C hw/unittest run-tcu"
-    touches: [hw/rtl/tcu, hw/unittest/tcu_fedp]
+    touches: [hw/rtl/tcu, hw/unittest/tcu_fedp, sw/common/fedp.h]
+  # VX_tcu_unit end to end (dispatch, uops, operand routing, commit), bit-exact
+  # against each datapath's reference: native TFR against the TfrFedp reference
+  # model, DPI against its discrete mul/add. Then the native FEDP's
+  # fp8 and block-scaled (MX/NVFP4) formats against the same model. The `hw`
+  # lane only builds these.
+  - id: hw-tcu-unit
+    via: script
+    run: "make -C hw/unittest run-tcu-unit"
+    touches: [hw/rtl/tcu, hw/dpi, hw/unittest/tcu_unit, hw/unittest/tcu_fedp, sw/common/fedp.h]
   # Same native-TFR formats with the multipliers mapped onto DSP48 (USE_DSP=1) —
   # the FPGA-synthesis path, off by default in sim. Bit-identical to LUT by
   # contract, so a mismatch is a DSP-packing bug.
   - id: hw-tcu-dsp
     via: script
     run: "make -C hw/unittest run-tcu-dsp"
-    touches: [hw/rtl/tcu, hw/unittest/tcu_fedp]
+    touches: [hw/rtl/tcu, hw/unittest/tcu_fedp, sw/common/fedp.h]
+  # The command processor's DMA port into the last-level cache: a launch behind
+  # DMA writes must wait for them to reach the cache. No runtime path launches
+  # right behind a DMA write, so no system test observes this ordering.
+  - id: hw-cp-llc-port
+    via: script
+    run: "make -C hw/unittest/cp_llc_port run"
+    touches: [hw/rtl/mem/VX_cp_llc_port.sv, hw/unittest/cp_llc_port]
+  # Stream arbiters over more than 1.5x MAX_FANOUT requests become trees of
+  # slices; a last slice narrower than the arbiter's other side must keep every
+  # request on its own output and select. The system shapes reach only a few of
+  # these slice shapes.
+  - id: hw-stream-arb
+    via: script
+    run: "make -C hw/unittest/stream_arb run"
+    touches: [hw/rtl/libs/VX_stream_arb.sv, hw/unittest/stream_arb]
+  # The ID-routed AXI arbiter shared by the AFU and the command processor:
+  # write data must reach the slave in address order whichever channel a
+  # master offers first, and a slave that takes data before the address must
+  # not deadlock it. xrtsim's always-ready slave exercises neither.
+  - id: hw-mm-axi-arb
+    via: script
+    run: "make -C hw/unittest/mm_axi_arb run"
+    touches: [hw/rtl/libs/VX_mm_axi_arb.sv, hw/unittest/mm_axi_arb]
   # Texel blend (VX_tex_lerp, both forms the sampler uses) against the C model
   # the SW sampler and SimX share, and the exact Vulkan f/256 blend, over every
   # input.

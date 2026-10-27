@@ -30,6 +30,9 @@ public:
 
   // Resolved branch of a stalled warp, registered toward the scheduler.
   SimChannel<uint32_t> branch_ctl_out;
+  // Full bandwidth: the dispatch queue feeds the unit directly, so an op
+  // returns its issue credit as the unit accepts it.
+  SimChannel<instr_trace_t*> ReleaseOut;
 
 protected:
   void on_tick() override;

@@ -27,6 +27,13 @@
 #define TCU_META_ENABLE
 #endif
 
+// TCU_LD memory ports: one per TCU block, through the LSU block that serves
+// the same warps, when the LSU has one block per TCU block; otherwise all
+// TCU blocks share LSU block 0, as in the RTL (VX_tcu_unit).
+#ifndef TCU_AGU_PORTS
+#define TCU_AGU_PORTS (uint32_t((VX_CFG_NUM_LSU_BLOCKS == VX_CFG_NUM_TCU_BLOCKS) ? VX_CFG_NUM_TCU_BLOCKS : 1))
+#endif
+
 namespace vortex {
 
 // Micro-op generator for packed-load macro instructions (PACKLB.F / PACKLH.F).
@@ -79,11 +86,12 @@ public:
 	~LsuUnit();
 
 #ifdef TCU_META_ENABLE
-	// TCU metadata client port on block 0: TCU_LD load requests arbitrate
-	// with the LSU's own traffic into lmem_switch; response fragments return
-	// here with the client's own tag restored.
-	SimChannel<LsuReq> TcuReqIn;
-	SimChannel<LsuRsp> TcuRspOut;
+	// TCU metadata client ports (TCU_AGU_PORTS, starting at block 0): TCU_LD
+	// load requests arbitrate with the block's own traffic into its
+	// lmem_switch; response fragments return here with the client's own tag
+	// restored.
+	std::vector<SimChannel<LsuReq>> TcuReqIn;
+	std::vector<SimChannel<LsuRsp>> TcuRspOut;
 #endif
 
 	// Returns true when all LSU blocks have no in-flight requests.
@@ -100,9 +108,10 @@ private:
 	// Per-cycle handlers.
 	void process_response_step(uint32_t b);
 	void process_request_step(uint32_t b);
+	void send_fence_token(uint32_t b);
 
 	// Drain Inputs[b] into req_queue.
-	void ingest_inputs(uint32_t b);
+	void ingest_inputs(uint32_t b, bool queue_room, uint32_t reads_held);
 
   struct mem_addr_size_t {
 		uint64_t addr;
@@ -123,6 +132,8 @@ private:
 		// TcuRspOut with client_tag restored instead of written to registers.
 		bool        is_tcu     = false;
 		uint32_t    client_tag = 0;
+		// A fence's flush token: its response only releases the fence.
+		bool        is_flush   = false;
 	};
 
 	// Per-block LSU state. Each member is a named hardware sub-block.
@@ -140,6 +151,8 @@ private:
 		uint32_t                  staged_reads = 0;
 		bool                      head_staged = false;
 		FenceController           fence;
+		// the engaged fence's flush token is still to be sent
+		bool                      fence_token = false;
 		std::vector<mem_addr_size_t> addr_list;
 		uint32_t                  remain_addrs = 0;
 
@@ -149,6 +162,7 @@ private:
 			this->staged_reads = 0;
 			this->head_staged = false;
 			this->fence.reset();
+			this->fence_token = false;
 			this->addr_list.clear();
 			this->remain_addrs = 0;
 		}

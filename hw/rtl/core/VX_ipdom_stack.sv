@@ -14,31 +14,33 @@
 `include "VX_define.vh"
 
 module VX_ipdom_stack import VX_gpu_pkg::*; #(
-    parameter WIDTH = 1,
-    parameter DEPTH = 1,
-    parameter ADDRW = `LOG2UP(DEPTH)
+    parameter WIDTH     = 1,
+    parameter DEPTH     = 1,
+    parameter NUM_WARPS = `VX_CFG_NUM_WARPS,
+    parameter WID_W     = `LOG2UP(NUM_WARPS),
+    parameter ADDRW     = `LOG2UP(DEPTH)
 ) (
     input  wire             clk,
     input  wire             reset,
-    input wire [NW_WIDTH-1:0] wid,
+    input  wire [WID_W-1:0] wid,
     input  wire [WIDTH-1:0] d_val,
     input  wire [ADDRW-1:0] rd_ptr,
     input  wire             push,
     input  wire             pop,
     output wire [WIDTH-1:0] q_val,
     output wire             q_idx,
-    output wire [`VX_CFG_NUM_WARPS-1:0][ADDRW-1:0] wr_ptr,
+    output wire [NUM_WARPS-1:0][ADDRW-1:0] wr_ptr,
     output wire             empty,
     output wire             full
 );
     localparam BRAM_DATAW = 1 + WIDTH;
-    localparam BRAM_SIZE  = DEPTH * `VX_CFG_NUM_WARPS;
+    localparam BRAM_SIZE  = DEPTH * NUM_WARPS;
     localparam BRAW_ADDRW = `LOG2UP(BRAM_SIZE);
 
-    wire [`VX_CFG_NUM_WARPS-1:0][ADDRW-1:0] wr_ptr_w;
-    wire [`VX_CFG_NUM_WARPS-1:0] empty_w, full_w;
+    wire [NUM_WARPS-1:0][ADDRW-1:0] wr_ptr_w;
+    wire [NUM_WARPS-1:0] empty_w, full_w;
 
-    for (genvar i = 0; i < `VX_CFG_NUM_WARPS; i++) begin : g_addressing
+    for (genvar i = 0; i < NUM_WARPS; i++) begin : g_addressing
 
         reg [ADDRW-1:0] wr_ptr_r;
         reg empty_r, full_r;
@@ -75,14 +77,16 @@ module VX_ipdom_stack import VX_gpu_pkg::*; #(
 
     wire [BRAW_ADDRW-1:0] raddr, waddr;
 
-    if (DEPTH > 1 && `VX_CFG_NUM_WARPS > 1) begin : g_DW
-        assign waddr = push ? {wr_ptr_w[wid], wid} : {rd_ptr, wid};
-        assign raddr = {rd_ptr, wid};
+    if (DEPTH > 1 && NUM_WARPS > 1) begin : g_DW
+        // entry = ptr * NUM_WARPS + wid keeps the store dense when NUM_WARPS is not a power of two
+        wire [ADDRW-1:0] waddr_ptr = push ? wr_ptr_w[wid] : rd_ptr;
+        assign waddr = BRAW_ADDRW'(waddr_ptr * NUM_WARPS + wid);
+        assign raddr = BRAW_ADDRW'(rd_ptr * NUM_WARPS + wid);
     end else if (DEPTH > 1) begin : g_D
         `UNUSED_VAR (wid)
         assign waddr = push ? wr_ptr_w : rd_ptr;
         assign raddr = rd_ptr;
-    end else if (`VX_CFG_NUM_WARPS > 1) begin : g_W
+    end else if (NUM_WARPS > 1) begin : g_W
         `UNUSED_VAR (rd_ptr)
         `UNUSED_VAR (wr_ptr_w)
         assign waddr = wid;

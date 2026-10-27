@@ -21,6 +21,7 @@
 #include <unordered_map>
 #include <util.h>
 #include "debug.h"
+#include "constants.h"
 #include "types.h"
 #include "decode.h"
 #include "decompressor.h"
@@ -651,7 +652,24 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
   case Opcode::FENCE: {
     instr->set_fu_type(FUType::LSU);
     instr->set_op_type(LsuType::FENCE);
-    instr->set_args(IntrLsuArgs{0, 0, 0});
+    // pred = code[27:24], succ = code[23:20], IORW. A fence with no memory
+    // read or write in either set orders only device accesses. Otherwise a
+    // later read must see other harts' data (acquire) when the successor set
+    // reads, and earlier writes must be visible (release) when the
+    // predecessor set writes. A fence with neither releases; one with a
+    // device access in its predecessor set, or fence.i, does both.
+    uint32_t pred = (code >> 24) & 0xf;
+    uint32_t succ = (code >> 20) & 0xf;
+    FenceKind kind;
+    if (funct3 == 0 && (pred & 0x3) == 0 && (succ & 0x3) == 0) {
+      kind = FenceKind::IO;
+    } else {
+      bool full = (funct3 != 0) || (pred & 0xc) != 0;
+      bool aq = full || (succ & 0x2) != 0;
+      bool rl = full || (pred & 0x1) != 0 || (succ & 0x2) == 0;
+      kind = (aq && rl) ? FenceKind::FULL : (aq ? FenceKind::ACQUIRE : FenceKind::RELEASE);
+    }
+    instr->set_args(IntrLsuArgs{static_cast<uint32_t>(kind), 0, 0});
   } break;
   case Opcode::AMO: {
     instr->set_fu_type(FUType::LSU);
@@ -674,6 +692,11 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       std::abort();
     }
     instr->set_args(IntrAmoArgs{funct3, aq, rl});
+    // .aq/.rl order the atomic with fences around it (LsuUopGen), unless the
+    // dcache is itself the point of coherence
+    if ((aq || rl) && !DCACHE_SHARED_LLC) {
+      instr->set_macro_op();
+    }
     instr->set_dest_reg(rd, RegType::Integer);
     instr->set_src_reg(0, rs1, RegType::Integer);
     instr->set_src_reg(1, rs2, RegType::Integer);

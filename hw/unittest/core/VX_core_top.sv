@@ -42,23 +42,23 @@ module VX_core_top import VX_gpu_pkg::*;
     input wire  [DCACHE_NUM_REQS-1:0][DCACHE_TAG_WIDTH-1:0] dcache_rsp_tag,
     output wire [DCACHE_NUM_REQS-1:0]       dcache_rsp_ready,
 
-    output wire                             icache_req_valid,
-    output wire                             icache_req_rw,
-    output wire [ICACHE_WORD_SIZE-1:0]      icache_req_byteen,
-    output wire [ICACHE_ADDR_WIDTH-1:0]     icache_req_addr,
-    output wire [ICACHE_WORD_SIZE*8-1:0]    icache_req_data,
-    output wire [ICACHE_TAG_WIDTH-1:0]      icache_req_tag,
-    input  wire                             icache_req_ready,
+    output wire [ICACHE_NUM_REQS-1:0]       icache_req_valid,
+    output wire [ICACHE_NUM_REQS-1:0]       icache_req_rw,
+    output wire [ICACHE_NUM_REQS-1:0][ICACHE_WORD_SIZE-1:0] icache_req_byteen,
+    output wire [ICACHE_NUM_REQS-1:0][ICACHE_ADDR_WIDTH-1:0] icache_req_addr,
+    output wire [ICACHE_NUM_REQS-1:0][ICACHE_WORD_SIZE*8-1:0] icache_req_data,
+    output wire [ICACHE_NUM_REQS-1:0][ICACHE_TAG_WIDTH-1:0] icache_req_tag,
+    input  wire [ICACHE_NUM_REQS-1:0]       icache_req_ready,
 
-    input wire                              icache_rsp_valid,
-    input wire  [ICACHE_WORD_SIZE*8-1:0]    icache_rsp_data,
-    input wire  [ICACHE_TAG_WIDTH-1:0]      icache_rsp_tag,
-    output wire                             icache_rsp_ready,
+    input wire  [ICACHE_NUM_REQS-1:0]       icache_rsp_valid,
+    input wire  [ICACHE_NUM_REQS-1:0][ICACHE_WORD_SIZE*8-1:0] icache_rsp_data,
+    input wire  [ICACHE_NUM_REQS-1:0][ICACHE_TAG_WIDTH-1:0] icache_rsp_tag,
+    output wire [ICACHE_NUM_REQS-1:0]       icache_rsp_ready,
 
     output wire                             gbar_req_valid,
     output wire [NB_WIDTH-1:0]              gbar_req_id,
-    output wire [NC_WIDTH-1:0]              gbar_req_size_m1,
-    output wire [NC_WIDTH-1:0]              gbar_req_core_id,
+    output wire [CORE_ID_WIDTH-1:0]         gbar_req_size_m1,
+    output wire [CORE_ID_WIDTH-1:0]         gbar_req_core_id,
     input wire                              gbar_req_ready,
     input wire                              gbar_rsp_valid,
     input wire [NB_WIDTH-1:0]               gbar_rsp_id,
@@ -174,21 +174,23 @@ module VX_core_top import VX_gpu_pkg::*;
     VX_mem_bus_if #(
         .DATA_SIZE (ICACHE_WORD_SIZE),
         .TAG_WIDTH (ICACHE_TAG_WIDTH)
-    ) icache_bus_if();
+    ) icache_bus_if[ICACHE_NUM_REQS]();
 
-    assign icache_req_valid = icache_bus_if.req_valid;
-    assign icache_req_rw = icache_bus_if.req_data.rw;
-    assign icache_req_byteen = icache_bus_if.req_data.byteen;
-    assign icache_req_addr = icache_bus_if.req_data.addr;
-    assign icache_req_data = icache_bus_if.req_data.data;
-    assign icache_req_tag = icache_bus_if.req_data.tag;
-    assign icache_bus_if.req_ready = icache_req_ready;
-    `UNUSED_VAR (icache_bus_if.req_data.attr)
+    for (genvar i = 0; i < ICACHE_NUM_REQS; ++i) begin : g_icache_bus_if
+        assign icache_req_valid[i] = icache_bus_if[i].req_valid;
+        assign icache_req_rw[i] = icache_bus_if[i].req_data.rw;
+        assign icache_req_byteen[i] = icache_bus_if[i].req_data.byteen;
+        assign icache_req_addr[i] = icache_bus_if[i].req_data.addr;
+        assign icache_req_data[i] = icache_bus_if[i].req_data.data;
+        assign icache_req_tag[i] = icache_bus_if[i].req_data.tag;
+        assign icache_bus_if[i].req_ready = icache_req_ready[i];
+        `UNUSED_VAR (icache_bus_if[i].req_data.attr)
 
-    assign icache_bus_if.rsp_valid = icache_rsp_valid;
-    assign icache_bus_if.rsp_data.tag = icache_rsp_tag;
-    assign icache_bus_if.rsp_data.data = icache_rsp_data;
-    assign icache_rsp_ready = icache_bus_if.rsp_ready;
+        assign icache_bus_if[i].rsp_valid = icache_rsp_valid[i];
+        assign icache_bus_if[i].rsp_data.tag = icache_rsp_tag[i];
+        assign icache_bus_if[i].rsp_data.data = icache_rsp_data[i];
+        assign icache_rsp_ready[i] = icache_bus_if[i].rsp_ready;
+    end
 
 `ifdef PERF_ENABLE
     sysmem_perf_t mem_perf;
@@ -207,13 +209,17 @@ module VX_core_top import VX_gpu_pkg::*;
     `UNUSED_VAR (scope_bus_out_w)
 `endif
 
+    wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] core_lsu_busy;
+    wire core_busy;
+    assign busy = core_busy || (| core_lsu_busy);
+
     VX_core #(
-        .INSTANCE_ID (`SFORMATF(("core"))),
-        .CORE_ID (CORE_ID)
+        .INSTANCE_ID (`SFORMATF(("core")))
     ) core (
         `SCOPE_IO_BIND (0)
         .clk            (clk),
         .reset          (reset),
+        .core_id        (CORE_ID_WIDTH'(CORE_ID)),
 
     `ifdef PERF_ENABLE
         .sysmem_perf    (sysmem_perf),
@@ -243,7 +249,8 @@ module VX_core_top import VX_gpu_pkg::*;
     `endif
 
         .kmu_bus_if     (kmu_bus_if),
-        .busy           (busy)
+        .lsu_busy       (core_lsu_busy),
+        .busy           (core_busy)
     );
 
 endmodule

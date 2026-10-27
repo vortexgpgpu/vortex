@@ -89,7 +89,7 @@ void Scheduler::on_reset() {
   stalled_warps_next_.reset();
   active_warps_.reset();
   cta_active_view_.reset();
-  cta_fire_ = false;
+  cta_fire_cnt_ = 0;
   // Sequencers live on Core now; Core::on_reset() resets them.
   wspawn_.valid = false;
 
@@ -155,26 +155,15 @@ void Scheduler::activate_warp(uint32_t wid, const cta_warp_record_t& rec) {
      << ", mscratch=0x" << std::hex << warp.mscratch << std::dec);
 }
 
-instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
-  int scheduled_warp = -1;
-
-  // Dispatch one CTA warp. The dispatcher picks from the registered active
-  // set and its pick lands the next cycle; the warp it activates becomes
-  // schedulable the cycle after that.
-  if (cta_fire_) {
-    activate_warp(cta_fire_wid_, cta_fire_rec_);
-    stalled_warps_.set(cta_fire_wid_);
-    cta_fire_ = false;
+void Scheduler::schedule_begin() {
+  // Dispatch CTA warps, one per launch lane. The dispatcher picks from the
+  // registered active set and its picks land the next cycle; a warp it
+  // activates becomes schedulable the cycle after that.
+  for (uint32_t i = 0; i < cta_fire_cnt_; ++i) {
+    activate_warp(cta_fire_wids_[i], cta_fire_recs_[i]);
+    stalled_warps_.set(cta_fire_wids_[i]);
   }
-  {
-    uint32_t wid;
-    cta_warp_record_t rec;
-    if (cta_dispatcher_->step(cta_active_view_, &wid, &rec)) {
-      cta_fire_     = true;
-      cta_fire_wid_ = wid;
-      cta_fire_rec_ = rec;
-    }
-  }
+  cta_fire_cnt_ = cta_dispatcher_->step(cta_active_view_, cta_fire_wids_.data(), cta_fire_recs_.data());
 
 #ifdef VX_CFG_EXT_RASTER_ENABLE
   // Inject ready fragment waves into free warp slots.
@@ -200,6 +189,14 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
     wspawn_.valid = false;
     this->resume(0);
   }
+}
+
+bool Scheduler::has_ready(const WarpMask& warp_mask) const {
+  return (active_warps_ & ~stalled_warps_ & warp_mask).any();
+}
+
+instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
+  int scheduled_warp = -1;
 
   // pick next ready warp
   for (size_t wid = 0, nw = VX_CFG_NUM_WARPS; wid < nw; ++wid) {
@@ -244,20 +241,23 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
     this->suspend(scheduled_warp);
   }
 
+  return trace;
+}
+
+void Scheduler::schedule_end() {
   // Clock the registered warp-stall state. The suspend above, or a resume from
   // decode/commit/FU earlier this cycle, drives stalled_warps_next_ and only
   // becomes visible to the pick loop next cycle — so a warp released as its
   // instruction resolves is never re-scheduled the same cycle.
   stalled_warps_ = stalled_warps_next_;
   cta_active_view_ = active_warps_;
-  if (cta_fire_) {
-    cta_active_view_.set(cta_fire_wid_);
+  for (uint32_t i = 0; i < cta_fire_cnt_; ++i) {
+    cta_active_view_.set(cta_fire_wids_[i]);
   }
-  return trace;
 }
 
 bool Scheduler::running() const {
-  return active_warps_.any() || cta_fire_ || cta_dispatcher_->running()
+  return active_warps_.any() || (cta_fire_cnt_ != 0) || cta_dispatcher_->running()
 #ifdef VX_CFG_EXT_RASTER_ENABLE
     || fwd_armed_
 #endif
@@ -417,7 +417,11 @@ void Scheduler::fwd_try_inject() {
     // Find any free warp slot — there is no driver warp to skip in the push model.
     int wid = -1;
     for (uint32_t w = 0; w < VX_CFG_NUM_WARPS; ++w) {
-      if (!active_warps_.test(w) && !(cta_fire_ && w == cta_fire_wid_)) { wid = int(w); break; }
+      bool firing = false;
+      for (uint32_t i = 0; i < cta_fire_cnt_; ++i) {
+        firing = firing || (cta_fire_wids_[i] == w);
+      }
+      if (!active_warps_.test(w) && !firing) { wid = int(w); break; }
     }
     if (wid < 0) break;  // no free slot this cycle
 

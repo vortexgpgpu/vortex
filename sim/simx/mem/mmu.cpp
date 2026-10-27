@@ -91,11 +91,12 @@ bool Mmu::needs_translation(const MemReq& req) const {
   // needed. BARE mode (SATP unprogrammed) skips translation, covering
   // the few instruction fetches between reset and the kernel's csrw
   // satp. IO-flagged requests skip it too: the IO/OM apertures carry
-  // device registers or encoded coordinates, not virtual addresses.
+  // device registers or encoded coordinates, not virtual addresses. So do
+  // flush tokens, which carry no address.
   if (!satp_ || satp_->get_mode() == BARE) {
     return false;
   }
-  if (req.flags.io) {
+  if (req.flags.io || req.flags.flush) {
     return false;
   }
   return true;

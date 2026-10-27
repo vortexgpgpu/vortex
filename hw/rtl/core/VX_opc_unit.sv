@@ -236,14 +236,21 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
         end
     end
 
+    // warps are dealt round-robin across the collectors: slot = wis / NUM_OPCS
+    wire [PER_OPC_NW_W-1:0] wr_slot = PER_OPC_NW_W'(writeback_if.data.wis / `VX_CFG_NUM_OPCS);
+    wire [PER_OPC_NW_W-1:0] rd_slot = PER_OPC_NW_W'(pipe_mdata_st1[META_DATAW-UUID_WIDTH-1 -: ISSUE_WIS_W] / `VX_CFG_NUM_OPCS);
+    if (PER_OPC_NW_BITS == 0) begin : g_slot_unused
+        `UNUSED_VAR ({wr_slot, rd_slot})
+    end
+
     wire [BANK_ADDR_WIDTH-1:0] gpr_wr_addr;
     if (SIMD_COUNT != 1) begin : g_gpr_wr_addr_sid
         wire [PER_OPC_NW_BITS + REG_REM_BITS-1:0] tmp;
-        `CONCAT(tmp, writeback_if.data.wis[ISSUE_WIS_W-1 -: PER_OPC_NW_W],
+        `CONCAT(tmp, wr_slot,
               writeback_if.data.rd[NUM_REGS_BITS-1 -: REG_REM_BITS], PER_OPC_NW_BITS, REG_REM_BITS)
         assign gpr_wr_addr = {writeback_if.data.sid, tmp};
     end else begin : g_gpr_wr_addr
-        `CONCAT(gpr_wr_addr, writeback_if.data.wis[ISSUE_WIS_W-1 -: PER_OPC_NW_W],
+        `CONCAT(gpr_wr_addr, wr_slot,
               writeback_if.data.rd[NUM_REGS_BITS-1 -: REG_REM_BITS], PER_OPC_NW_BITS, REG_REM_BITS)
     end
 
@@ -271,13 +278,13 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
         wire [BANK_ADDR_WIDTH-1:0] gpr_rd_addr;
         if (SIMD_COUNT != 1) begin : g_gpr_rd_addr_sid
             wire [PER_OPC_NW_BITS + REG_REM_BITS-1:0] tmp;
-            `CONCAT(tmp, pipe_mdata_st1[META_DATAW-UUID_WIDTH-1 -: PER_OPC_NW_W],
+            `CONCAT(tmp, rd_slot,
                 gpr_rd_reg_st1[b], PER_OPC_NW_BITS, REG_REM_BITS)
             // pipe_mdata packs {uuid, wis, cta_id, simd_pid, ...}; skip uuid+wis+cta_id
             // to extract simd_pid, which must match writeback_if.data.sid on the write path.
             assign gpr_rd_addr = {pipe_mdata_st1[META_DATAW-UUID_WIDTH-ISSUE_WIS_W-NCTA_WIDTH-1 -: SIMD_IDX_W], tmp};
         end else begin : g_gpr_rd_addr
-            `CONCAT(gpr_rd_addr, pipe_mdata_st1[META_DATAW-UUID_WIDTH-1 -: PER_OPC_NW_W],
+            `CONCAT(gpr_rd_addr, rd_slot,
                 gpr_rd_reg_st1[b], PER_OPC_NW_BITS, REG_REM_BITS)
         end
 

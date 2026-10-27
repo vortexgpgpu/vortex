@@ -17,37 +17,30 @@
 `include "VX_fpu_define.vh"
 `endif
 
-`ifdef VX_CFG_XLEN_64
-    `define CSR_READ_64(addr, dst, src) \
-        addr : dst = `VX_CFG_XLEN'(src)
-`else
-    `define CSR_READ_64(addr, dst, src) \
-        addr : dst = src[31:0]; \
-        addr+12'h80 : dst = 32'(src[$bits(src)-1:32])
-`endif
-
 module VX_csr_data
 import VX_gpu_pkg::*;
 `ifdef VX_CFG_EXT_F_ENABLE
 import VX_fpu_pkg::*;
 `endif
 #(
-    parameter `STRING INSTANCE_ID = "",
-    parameter CORE_ID = 0
+    parameter `STRING INSTANCE_ID = ""
 ) (
     input wire                          clk,
     input wire                          reset,
 
-`ifdef PERF_ENABLE
-    input sysmem_perf_t                 sysmem_perf,
-    input pipeline_perf_t               pipeline_perf,
-`endif
+    input wire [CORE_ID_WIDTH-1:0]      core_id,
 
 `ifdef VX_CFG_EXT_F_ENABLE
-    VX_fpu_csr_if.slave                 fpu_csr_if [`VX_CFG_NUM_FPU_BLOCKS],
+    // FP CSR of the requesting warp: read live, written at fire
+    input wire [INST_FRM_BITS+`FP_FLAGS_BITS-1:0]  fcsr_rd_data,
+    output wire [2:0]                              fcsr_wr_sel,  // {fcsr, frm, fflags}
+    output wire [INST_FRM_BITS+`FP_FLAGS_BITS-1:0] fcsr_wr_data,
 `endif
 
     VX_sched_csr_if.slave               sched_csr_if,
+
+    // context of the request's CTA, read by req_cta_id
+    input cta_ctx_t                     cta_ctx,
 
     // The request is held for at least one cycle before it fires; that cycle
     // decodes it, and the fire cycle only merges the values that can still move.
@@ -58,18 +51,13 @@ import VX_fpu_pkg::*;
     input wire [`VX_CSR_ADDR_BITS-1:0]  req_addr,
     input wire [INST_SFU_BITS-1:0]      req_op,
     input wire [`VX_CFG_XLEN-1:0]       req_src,
-    output wire [`VX_CFG_XLEN-1:0]      read_data,
-
-    // Host performance-counter reads
-    input wire [7:0]                    dcr_mpm_class,
-    input wire [`VX_CSR_ADDR_BITS-1:0]  dcr_addr,
-    output wire [`VX_CFG_XLEN-1:0]      dcr_data
+    output wire [`VX_CFG_XLEN-1:0]      read_data
 );
 
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR (reset)
     `UNUSED_VAR (req_uuid)
-    wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] __cta_param = sched_csr_if.cta_csrs.param;
+    wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] __cta_param = cta_ctx.param;
     `UNUSED_VAR (__cta_param)
 
     // Values that can change between the decode cycle and the fire cycle are
@@ -91,7 +79,8 @@ import VX_fpu_pkg::*;
     localparam LIVE_LMEM_ADDR   = 20;
     localparam LIVE_CLUSTER     = 21;
     localparam LIVE_ENTRY       = 22;
-    localparam NUM_LIVE         = 23;
+    localparam LIVE_SATP        = 23;
+    localparam NUM_LIVE         = 24;
 
     // Writable CSRs
     localparam WR_MSCRATCH      = 0;
@@ -114,15 +103,10 @@ import VX_fpu_pkg::*;
         endcase
     endfunction
 
-`ifdef VX_CFG_VM_ENABLE
-    reg [`VX_CFG_XLEN-1:0] satp;
-`endif
-
     // Decode ////////////////////////////////////////////////////////////////
 
     // Scheduler CSRs read interface
     assign sched_csr_if.csr_rd_wid    = req_wid;
-    assign sched_csr_if.csr_rd_cta_id = req_cta_id;
 
     reg [`VX_CFG_XLEN-1:0] stable_w;
     reg [NUM_LIVE-1:0]     live_sel_w;
@@ -144,7 +128,7 @@ import VX_fpu_pkg::*;
         `endif
             `VX_CSR_MSCRATCH   : begin stable_w = `VX_CFG_XLEN'(sched_csr_if.mscratch); wr_sel_w[WR_MSCRATCH] = 1; end
 
-            `VX_CSR_CTA_ID          : stable_w = `VX_CFG_XLEN'(sched_csr_if.cta_csrs.cta_id);
+            `VX_CSR_CTA_ID          : stable_w = `VX_CFG_XLEN'(req_cta_id);
             `VX_CSR_CTA_RANK        : live_sel_w[LIVE_CTA_RANK] = 1;
             `VX_CSR_CTA_SIZE        : live_sel_w[LIVE_CTA_SIZE] = 1;
             `VX_CSR_CTA_BLOCK_ID_X  : live_sel_w[LIVE_BLOCK_ID + 0] = 1;
@@ -161,7 +145,7 @@ import VX_fpu_pkg::*;
             `VX_CSR_CTA_ENTRY       : live_sel_w[LIVE_ENTRY] = 1;
 
             `VX_CSR_WARP_ID    : stable_w = `VX_CFG_XLEN'(req_wid);
-            `VX_CSR_CORE_ID    : stable_w = `VX_CFG_XLEN'(CORE_ID);
+            `VX_CSR_CORE_ID    : stable_w = `VX_CFG_XLEN'(core_id);
             `VX_CSR_ACTIVE_THREADS: live_sel_w[LIVE_THREADS] = 1;
             `VX_CSR_ACTIVE_WARPS: live_sel_w[LIVE_WARPS] = 1;
             `VX_CSR_NUM_THREADS: stable_w = `VX_CFG_XLEN'(`VX_CFG_NUM_THREADS);
@@ -178,7 +162,7 @@ import VX_fpu_pkg::*;
         `endif
 
         `ifdef VX_CFG_VM_ENABLE
-            `VX_CSR_SATP       : begin stable_w = satp; wr_sel_w[WR_SATP] = 1; end
+            `VX_CSR_SATP       : begin live_sel_w[LIVE_SATP] = 1; wr_sel_w[WR_SATP] = 1; end
         `endif
 
             // Machine-mode trap CSRs (stored in the scheduler).
@@ -228,8 +212,7 @@ import VX_fpu_pkg::*;
     // Live values ///////////////////////////////////////////////////////////
 
 `ifdef VX_CFG_EXT_F_ENABLE
-    reg [`VX_CFG_NUM_WARPS-1:0][INST_FRM_BITS+`FP_FLAGS_BITS-1:0] fcsr, fcsr_n;
-    wire [INST_FRM_BITS+`FP_FLAGS_BITS-1:0] req_fcsr = fcsr[req_wid];
+    wire [INST_FRM_BITS+`FP_FLAGS_BITS-1:0] req_fcsr = fcsr_rd_data;
 `endif
 
     wire [NUM_LIVE-1:0][`VX_CFG_XLEN-1:0] live_src;
@@ -245,8 +228,13 @@ import VX_fpu_pkg::*;
     assign live_src[LIVE_INSTRET]   = sched_csr_if.instret[31:0];
     assign live_src[LIVE_INSTRET_H] = 32'(sched_csr_if.instret[PERF_CTR_BITS-1:32]);
 `endif
-    assign live_src[LIVE_THREADS]   = `VX_CFG_XLEN'(sched_csr_if.thread_masks[req_wid]);
-    assign live_src[LIVE_WARPS]     = `VX_CFG_XLEN'(sched_csr_if.active_warps);
+    assign live_src[LIVE_THREADS]   = `VX_CFG_XLEN'(sched_csr_if.thread_mask);
+    // the CSR is XLEN wide: it holds warps 0..XLEN-1
+    wire [`VX_CFG_NUM_WARPS-1:0] active_warps = sched_csr_if.active_warps;
+    assign live_src[LIVE_WARPS]     = `VX_CFG_XLEN'(active_warps);
+    if (`VX_CFG_NUM_WARPS > `VX_CFG_XLEN) begin : g_active_warps_hi
+        `UNUSED_VAR (active_warps[`VX_CFG_NUM_WARPS-1:`VX_CFG_XLEN])
+    end
 `ifdef VX_CFG_EXT_F_ENABLE
     assign live_src[LIVE_FFLAGS]    = `VX_CFG_XLEN'(req_fcsr[`FP_FLAGS_BITS-1:0]);
     assign live_src[LIVE_FRM]       = `VX_CFG_XLEN'(req_fcsr[INST_FRM_BITS+`FP_FLAGS_BITS-1:`FP_FLAGS_BITS]);
@@ -258,16 +246,21 @@ import VX_fpu_pkg::*;
 `endif
     // The CTA context RAMs are addressed by the held request and return in the
     // fire cycle.
-    assign live_src[LIVE_CTA_RANK]  = `VX_CFG_XLEN'(sched_csr_if.cta_csrs.cta_rank);
-    assign live_src[LIVE_CTA_SIZE]  = `VX_CFG_XLEN'(sched_csr_if.cta_csrs.cta_size);
+    assign live_src[LIVE_CTA_RANK]  = `VX_CFG_XLEN'(sched_csr_if.cta_rank);
+    assign live_src[LIVE_CTA_SIZE]  = `VX_CFG_XLEN'(cta_ctx.cta_size);
     for (genvar i = 0; i < 3; ++i) begin : g_cta_dims
-        assign live_src[LIVE_BLOCK_ID + i]  = `VX_CFG_XLEN'(sched_csr_if.cta_csrs.block_idx[i]);
-        assign live_src[LIVE_BLOCK_DIM + i] = `VX_CFG_XLEN'(sched_csr_if.cta_csrs.block_dim[i]);
-        assign live_src[LIVE_GRID_DIM + i]  = `VX_CFG_XLEN'(sched_csr_if.cta_csrs.grid_dim[i]);
+        assign live_src[LIVE_BLOCK_ID + i]  = `VX_CFG_XLEN'(cta_ctx.block_idx[i]);
+        assign live_src[LIVE_BLOCK_DIM + i] = `VX_CFG_XLEN'(cta_ctx.block_dim[i]);
+        assign live_src[LIVE_GRID_DIM + i]  = `VX_CFG_XLEN'(cta_ctx.grid_dim[i]);
     end
-    assign live_src[LIVE_LMEM_ADDR] = `VX_CFG_XLEN'(sched_csr_if.cta_csrs.lmem_addr);
-    assign live_src[LIVE_CLUSTER]   = `VX_CFG_XLEN'(sched_csr_if.cta_csrs.cluster_size);
-    assign live_src[LIVE_ENTRY]     = `VX_CFG_XLEN'(to_fullPC(sched_csr_if.cta_csrs.entry));
+    assign live_src[LIVE_LMEM_ADDR] = `VX_CFG_XLEN'(cta_ctx.lmem_addr);
+    assign live_src[LIVE_CLUSTER]   = `VX_CFG_XLEN'(cta_ctx.cluster_size);
+    assign live_src[LIVE_ENTRY]     = `VX_CFG_XLEN'(to_fullPC(cta_ctx.entry));
+`ifdef VX_CFG_VM_ENABLE
+    assign live_src[LIVE_SATP]      = sched_csr_if.csr_satp;
+`else
+    assign live_src[LIVE_SATP]      = '0;
+`endif
 
     reg [`VX_CFG_XLEN-1:0] live_data;
     always @(*) begin
@@ -294,66 +287,17 @@ import VX_fpu_pkg::*;
 `ifdef VX_CFG_EXT_F_ENABLE
     // The FP flags keep moving under in-flight FP instructions, so their
     // read-modify-write stays in the fire cycle.
-    wire [INST_FRM_BITS+`FP_FLAGS_BITS-1:0] fcsr_wr_data =
-        (INST_FRM_BITS+`FP_FLAGS_BITS)'(csr_rmw(req_op, live_data, req_src));
-
-    wire [`VX_CFG_NUM_FPU_BLOCKS-1:0]              fpu_write_enable;
-    wire [`VX_CFG_NUM_FPU_BLOCKS-1:0][NW_WIDTH-1:0] fpu_write_wid;
-    fflags_t [`VX_CFG_NUM_FPU_BLOCKS-1:0]          fpu_write_fflags;
-
-    for (genvar i = 0; i < `VX_CFG_NUM_FPU_BLOCKS; ++i) begin : g_fpu_write
-        assign fpu_write_enable[i] = fpu_csr_if[i].write_enable;
-        assign fpu_write_wid[i]    = fpu_csr_if[i].write_wid;
-        assign fpu_write_fflags[i] = fpu_csr_if[i].write_fflags;
-    end
-
-    always @(*) begin
-        fcsr_n = fcsr;
-        for (integer i = 0; i < `VX_CFG_NUM_FPU_BLOCKS; ++i) begin
-            if (fpu_write_enable[i]) begin
-                fcsr_n[fpu_write_wid[i]][`FP_FLAGS_BITS-1:0] = fcsr[fpu_write_wid[i]][`FP_FLAGS_BITS-1:0]
-                                                             | fpu_write_fflags[i];
-            end
-        end
-        if (write_sel[WR_FFLAGS]) begin
-            fcsr_n[req_wid][`FP_FLAGS_BITS-1:0] = fcsr_wr_data[`FP_FLAGS_BITS-1:0];
-        end
-        if (write_sel[WR_FRM]) begin
-            fcsr_n[req_wid][INST_FRM_BITS+`FP_FLAGS_BITS-1:`FP_FLAGS_BITS] = fcsr_wr_data[INST_FRM_BITS-1:0];
-        end
-        if (write_sel[WR_FCSR]) begin
-            fcsr_n[req_wid] = fcsr_wr_data;
-        end
-    end
-
-    for (genvar i = 0; i < `VX_CFG_NUM_FPU_BLOCKS; ++i) begin : g_fpu_csr_read_frm
-        assign fpu_csr_if[i].read_frm = fcsr[fpu_csr_if[i].read_wid][INST_FRM_BITS+`FP_FLAGS_BITS-1:`FP_FLAGS_BITS];
-    end
-
-    always @(posedge clk) begin
-        if (reset) begin
-            fcsr <= '0;
-        end else begin
-            fcsr <= fcsr_n;
-        end
-    end
+    assign fcsr_wr_data = (INST_FRM_BITS+`FP_FLAGS_BITS)'(csr_rmw(req_op, live_data, req_src));
+    assign fcsr_wr_sel  = {write_sel[WR_FCSR], write_sel[WR_FRM], write_sel[WR_FFLAGS]};
 `else
     `UNUSED_VAR ({write_sel[WR_FCSR], write_sel[WR_FRM], write_sel[WR_FFLAGS]})
 `endif
 
 `ifdef VX_CFG_VM_ENABLE
-    // Per-core SATP CSR. Initialized to 0 (BARE mode); kernel writes
-    // it from vx_start.S after the runtime has installed the page table.
-    // Surfaced on sched_csr_if.satp so VX_core can pick it up directly
-    // off the shared interface instead of routing through SFU/execute.
-    always @(posedge clk) begin
-        if (reset) begin
-            satp <= '0;
-        end else if (write_sel[WR_SATP]) begin
-            satp <= wr_data_r;
-        end
-    end
-    assign sched_csr_if.csr_satp = satp;
+    // The per-core SATP CSR lives in the scheduler, shared by every SFU block,
+    // so its read-modify-write stays in the fire cycle.
+    assign sched_csr_if.satp_wr_valid = write_sel[WR_SATP];
+    assign sched_csr_if.satp_wr_data  = csr_rmw(req_op, live_data, req_src);
 `else
     `UNUSED_VAR (write_sel[WR_SATP])
 `endif
@@ -385,226 +329,5 @@ import VX_fpu_pkg::*;
             endcase
         end
     end
-
-    // Host performance-counter reads ////////////////////////////////////////
-
-    reg [`VX_CFG_XLEN-1:0] dcr_data_w;
-
-    always @(*) begin
-        dcr_data_w = '0;
-        case (dcr_addr)
-            `CSR_READ_64(`VX_CSR_MCYCLE, dcr_data_w, sched_csr_if.cycles);
-            `CSR_READ_64(`VX_CSR_MINSTRET, dcr_data_w, sched_csr_if.instret);
-            default: begin
-            `ifdef PERF_ENABLE
-                if ((dcr_addr >= `VX_CSR_MPM_USER   && dcr_addr < (`VX_CSR_MPM_USER + 32))
-                 || (dcr_addr >= `VX_CSR_MPM_USER_H && dcr_addr < (`VX_CSR_MPM_USER_H + 32))) begin
-                    case (dcr_mpm_class)
-                    `VX_DCR_MPM_CLASS_CORE: begin
-                        case (dcr_addr)
-                        // PERF: pipeline
-                        `CSR_READ_64(`VX_CSR_MPM_SCHED_IDLE, dcr_data_w, pipeline_perf.sched.idles);
-                        `CSR_READ_64(`VX_CSR_MPM_ACTIVE_WARPS, dcr_data_w, pipeline_perf.sched.active_warps);
-                        `CSR_READ_64(`VX_CSR_MPM_STALLED_WARPS, dcr_data_w, pipeline_perf.sched.stalled_warps);
-                        `CSR_READ_64(`VX_CSR_MPM_ISSUED_WARPS, dcr_data_w, pipeline_perf.sched.issued_warps);
-                        `CSR_READ_64(`VX_CSR_MPM_ISSUED_THREADS, dcr_data_w, pipeline_perf.sched.issued_threads);
-                        `CSR_READ_64(`VX_CSR_MPM_STALL_FETCH, dcr_data_w, pipeline_perf.fetch.stalls);
-                        `CSR_READ_64(`VX_CSR_MPM_STALL_IBUF, dcr_data_w, pipeline_perf.issue.ibf_stalls);
-                        `CSR_READ_64(`VX_CSR_MPM_STALL_SCRB, dcr_data_w, pipeline_perf.issue.scb_stalls);
-                        `CSR_READ_64(`VX_CSR_MPM_STALL_OPDS, dcr_data_w, pipeline_perf.issue.opd_stalls);
-                        `CSR_READ_64(`VX_CSR_MPM_STALL_ALU, dcr_data_w, pipeline_perf.issue.dispatch_stalls[EX_ALU]);
-                        `CSR_READ_64(`VX_CSR_MPM_INSTR_ALU, dcr_data_w, pipeline_perf.issue.dispatch_instrs[EX_ALU]);
-                        `CSR_READ_64(`VX_CSR_MPM_STALL_LSU, dcr_data_w, pipeline_perf.issue.dispatch_stalls[EX_LSU]);
-                        `CSR_READ_64(`VX_CSR_MPM_INSTR_LSU, dcr_data_w, pipeline_perf.issue.dispatch_instrs[EX_LSU]);
-                        `CSR_READ_64(`VX_CSR_MPM_STALL_SFU, dcr_data_w, pipeline_perf.issue.dispatch_stalls[EX_SFU]);
-                        `CSR_READ_64(`VX_CSR_MPM_INSTR_SFU, dcr_data_w, pipeline_perf.issue.dispatch_instrs[EX_SFU]);
-                    `ifdef VX_CFG_EXT_F_ENABLE
-                        `CSR_READ_64(`VX_CSR_MPM_STALL_FPU, dcr_data_w, pipeline_perf.issue.dispatch_stalls[EX_FPU]);
-                        `CSR_READ_64(`VX_CSR_MPM_INSTR_FPU, dcr_data_w, pipeline_perf.issue.dispatch_instrs[EX_FPU]);
-                    `endif
-                    `ifdef VX_CFG_EXT_TCU_ENABLE
-                        `CSR_READ_64(`VX_CSR_MPM_STALL_TCU, dcr_data_w, pipeline_perf.issue.dispatch_stalls[EX_TCU]);
-                        `CSR_READ_64(`VX_CSR_MPM_INSTR_TCU, dcr_data_w, pipeline_perf.issue.dispatch_instrs[EX_TCU]);
-                    `endif
-                        // PERF: branches
-                        `CSR_READ_64(`VX_CSR_MPM_BRANCHES, dcr_data_w, pipeline_perf.sched.branches);
-                        `CSR_READ_64(`VX_CSR_MPM_DIVERGENCE, dcr_data_w, pipeline_perf.sched.divergence);
-                        // PERF: memory (core-issued requests; DRAM traffic is in the MEM class)
-                        `CSR_READ_64(`VX_CSR_MPM_IFETCHES, dcr_data_w, pipeline_perf.ifetches);
-                        `CSR_READ_64(`VX_CSR_MPM_LOADS, dcr_data_w, pipeline_perf.loads);
-                        `CSR_READ_64(`VX_CSR_MPM_STORES, dcr_data_w, pipeline_perf.stores);
-                        `CSR_READ_64(`VX_CSR_MPM_IFETCH_LT, dcr_data_w, pipeline_perf.ifetch_latency);
-                        `CSR_READ_64(`VX_CSR_MPM_LOAD_LT, dcr_data_w, pipeline_perf.load_latency);
-                        default:;
-                        endcase
-                    end
-                    `VX_DCR_MPM_CLASS_ICACHE: begin
-                        case (dcr_addr)
-                        `CSR_READ_64(`VX_CSR_MPM_ICACHE_READS, dcr_data_w, sysmem_perf.icache.reads);
-                        `CSR_READ_64(`VX_CSR_MPM_ICACHE_MISS_R, dcr_data_w, sysmem_perf.icache.read_misses);
-                        `CSR_READ_64(`VX_CSR_MPM_ICACHE_MSHR_ST, dcr_data_w, sysmem_perf.icache.mshr_stalls);
-                        default:;
-                        endcase
-                    end
-                    `VX_DCR_MPM_CLASS_DCACHE: begin
-                        case (dcr_addr)
-                        `CSR_READ_64(`VX_CSR_MPM_DCACHE_READS, dcr_data_w, sysmem_perf.dcache.reads);
-                        `CSR_READ_64(`VX_CSR_MPM_DCACHE_WRITES, dcr_data_w, sysmem_perf.dcache.writes);
-                        `CSR_READ_64(`VX_CSR_MPM_DCACHE_MISS_R, dcr_data_w, sysmem_perf.dcache.read_misses);
-                        `CSR_READ_64(`VX_CSR_MPM_DCACHE_MISS_W, dcr_data_w, sysmem_perf.dcache.write_misses);
-                        `CSR_READ_64(`VX_CSR_MPM_DCACHE_EVICTS, dcr_data_w, sysmem_perf.dcache.evictions);
-                        `CSR_READ_64(`VX_CSR_MPM_DCACHE_BANK_ST, dcr_data_w, sysmem_perf.dcache.bank_stalls);
-                        `CSR_READ_64(`VX_CSR_MPM_DCACHE_MSHR_ST, dcr_data_w, sysmem_perf.dcache.mshr_stalls);
-                        default:;
-                        endcase
-                    end
-                    `VX_DCR_MPM_CLASS_L2CACHE: begin
-                        case (dcr_addr)
-                        `CSR_READ_64(`VX_CSR_MPM_L2CACHE_READS, dcr_data_w, sysmem_perf.l2cache.reads);
-                        `CSR_READ_64(`VX_CSR_MPM_L2CACHE_WRITES, dcr_data_w, sysmem_perf.l2cache.writes);
-                        `CSR_READ_64(`VX_CSR_MPM_L2CACHE_MISS_R, dcr_data_w, sysmem_perf.l2cache.read_misses);
-                        `CSR_READ_64(`VX_CSR_MPM_L2CACHE_MISS_W, dcr_data_w, sysmem_perf.l2cache.write_misses);
-                        `CSR_READ_64(`VX_CSR_MPM_L2CACHE_EVICTS, dcr_data_w, sysmem_perf.l2cache.evictions);
-                        `CSR_READ_64(`VX_CSR_MPM_L2CACHE_BANK_ST, dcr_data_w, sysmem_perf.l2cache.bank_stalls);
-                        `CSR_READ_64(`VX_CSR_MPM_L2CACHE_MSHR_ST, dcr_data_w, sysmem_perf.l2cache.mshr_stalls);
-                        default:;
-                        endcase
-                    end
-                    `VX_DCR_MPM_CLASS_L3CACHE: begin
-                        case (dcr_addr)
-                        `CSR_READ_64(`VX_CSR_MPM_L3CACHE_READS, dcr_data_w, sysmem_perf.l3cache.reads);
-                        `CSR_READ_64(`VX_CSR_MPM_L3CACHE_WRITES, dcr_data_w, sysmem_perf.l3cache.writes);
-                        `CSR_READ_64(`VX_CSR_MPM_L3CACHE_MISS_R, dcr_data_w, sysmem_perf.l3cache.read_misses);
-                        `CSR_READ_64(`VX_CSR_MPM_L3CACHE_MISS_W, dcr_data_w, sysmem_perf.l3cache.write_misses);
-                        `CSR_READ_64(`VX_CSR_MPM_L3CACHE_EVICTS, dcr_data_w, sysmem_perf.l3cache.evictions);
-                        `CSR_READ_64(`VX_CSR_MPM_L3CACHE_BANK_ST, dcr_data_w, sysmem_perf.l3cache.bank_stalls);
-                        `CSR_READ_64(`VX_CSR_MPM_L3CACHE_MSHR_ST, dcr_data_w, sysmem_perf.l3cache.mshr_stalls);
-                        default:;
-                        endcase
-                    end
-                    `VX_DCR_MPM_CLASS_MEM: begin
-                        case (dcr_addr)
-                        // PERF: off-chip memory
-                        `CSR_READ_64(`VX_CSR_MPM_MEM_READS, dcr_data_w, sysmem_perf.mem.reads);
-                        `CSR_READ_64(`VX_CSR_MPM_MEM_WRITES, dcr_data_w, sysmem_perf.mem.writes);
-                        `CSR_READ_64(`VX_CSR_MPM_MEM_LT, dcr_data_w, sysmem_perf.mem.latency);
-                        // PERF: lmem
-                        `CSR_READ_64(`VX_CSR_MPM_LMEM_READS, dcr_data_w, sysmem_perf.lmem.reads);
-                        `CSR_READ_64(`VX_CSR_MPM_LMEM_WRITES, dcr_data_w, sysmem_perf.lmem.writes);
-                        `CSR_READ_64(`VX_CSR_MPM_LMEM_BANK_ST, dcr_data_w, sysmem_perf.lmem.bank_stalls);
-                        // PERF: coalescer
-                        `CSR_READ_64(`VX_CSR_MPM_COALESCER_MISS, dcr_data_w, sysmem_perf.coalescer.misses);
-                    `ifdef VX_CFG_VM_ENABLE
-                        // PERF: VM/MMU (icache + dcache MMU summed)
-                        `CSR_READ_64(`VX_CSR_MPM_TLB_READS,   dcr_data_w, pipeline_perf.mmu.tlb_reads);
-                        `CSR_READ_64(`VX_CSR_MPM_TLB_HITS,    dcr_data_w, pipeline_perf.mmu.tlb_hits);
-                        `CSR_READ_64(`VX_CSR_MPM_TLB_MISSES,  dcr_data_w, pipeline_perf.mmu.tlb_misses);
-                        `CSR_READ_64(`VX_CSR_MPM_TLB_EVICTS,  dcr_data_w, pipeline_perf.mmu.tlb_evictions);
-                        `CSR_READ_64(`VX_CSR_MPM_PTW_WALKS,   dcr_data_w, pipeline_perf.mmu.ptw_walks);
-                        `CSR_READ_64(`VX_CSR_MPM_PTW_LATENCY, dcr_data_w, pipeline_perf.mmu.ptw_latency);
-                    `endif
-                        default:;
-                        endcase
-                    end
-                `ifdef VX_CFG_EXT_DXA_ENABLE
-                    `VX_DCR_MPM_CLASS_DXA: begin
-                        case (dcr_addr)
-                        `CSR_READ_64(`VX_CSR_MPM_DXA_TRANSFERS,  dcr_data_w, sysmem_perf.dxa.transfers);
-                        `CSR_READ_64(`VX_CSR_MPM_DXA_GMEM_READS, dcr_data_w, sysmem_perf.dxa.gmem_reads);
-                        `CSR_READ_64(`VX_CSR_MPM_DXA_GMEM_DEDUP, dcr_data_w, sysmem_perf.dxa.gmem_dedup);
-                        `CSR_READ_64(`VX_CSR_MPM_DXA_LMEM_WRITES,dcr_data_w, sysmem_perf.dxa.lmem_writes);
-                        `CSR_READ_64(`VX_CSR_MPM_DXA_GMEM_LT,    dcr_data_w, sysmem_perf.dxa.gmem_latency);
-                        `CSR_READ_64(`VX_CSR_MPM_DXA_NOSLOT_STALLS, dcr_data_w, sysmem_perf.dxa.noslot_stalls);
-                        default:;
-                        endcase
-                    end
-                `endif
-                `ifdef VX_CFG_EXT_TCU_ENABLE
-                    `VX_DCR_MPM_CLASS_TCU: begin
-                        case (dcr_addr)
-                        `CSR_READ_64(`VX_CSR_MPM_TCU_TBUF_STALLS,      dcr_data_w, pipeline_perf.tcu.tbuf_stalls);
-                        `CSR_READ_64(`VX_CSR_MPM_TCU_TBUF_CACHE_HITS, dcr_data_w, pipeline_perf.tcu.tbuf_cache_hits);
-                        `CSR_READ_64(`VX_CSR_MPM_TCU_LMEM_READS,     dcr_data_w, pipeline_perf.tcu.lmem_reads);
-                        default:;
-                        endcase
-                    end
-                `endif
-                `ifdef VX_CFG_EXT_TEX_ENABLE
-                    `VX_DCR_MPM_CLASS_TEX: begin
-                        case (dcr_addr)
-                        `CSR_READ_64(`VX_CSR_MPM_TEX_READS,      dcr_data_w, sysmem_perf.tex.mem_reads);
-                        `CSR_READ_64(`VX_CSR_MPM_TEX_LAT,        dcr_data_w, sysmem_perf.tex.mem_latency);
-                        `CSR_READ_64(`VX_CSR_MPM_TEX_ST,         dcr_data_w, sysmem_perf.tex.stall_cycles);
-                        `CSR_READ_64(`VX_CSR_MPM_TCACHE_READS,   dcr_data_w, sysmem_perf.tcache.reads);
-                        `CSR_READ_64(`VX_CSR_MPM_TCACHE_MISS_R,  dcr_data_w, sysmem_perf.tcache.read_misses);
-                        `CSR_READ_64(`VX_CSR_MPM_TCACHE_BANK_ST, dcr_data_w, sysmem_perf.tcache.bank_stalls);
-                        `CSR_READ_64(`VX_CSR_MPM_TCACHE_MSHR_ST, dcr_data_w, sysmem_perf.tcache.mshr_stalls);
-                        default:;
-                        endcase
-                    end
-                `endif
-                `ifdef VX_CFG_EXT_RASTER_ENABLE
-                    `VX_DCR_MPM_CLASS_RASTER: begin
-                        case (dcr_addr)
-                        `CSR_READ_64(`VX_CSR_MPM_RASTER_READS,   dcr_data_w, sysmem_perf.raster.mem_reads);
-                        `CSR_READ_64(`VX_CSR_MPM_RASTER_LAT,     dcr_data_w, sysmem_perf.raster.mem_latency);
-                        `CSR_READ_64(`VX_CSR_MPM_RASTER_ST,      dcr_data_w, sysmem_perf.raster.stall_cycles);
-                        `CSR_READ_64(`VX_CSR_MPM_RCACHE_READS,   dcr_data_w, sysmem_perf.rcache.reads);
-                        `CSR_READ_64(`VX_CSR_MPM_RCACHE_MISS_R,  dcr_data_w, sysmem_perf.rcache.read_misses);
-                        `CSR_READ_64(`VX_CSR_MPM_RCACHE_BANK_ST, dcr_data_w, sysmem_perf.rcache.bank_stalls);
-                        `CSR_READ_64(`VX_CSR_MPM_RCACHE_MSHR_ST, dcr_data_w, sysmem_perf.rcache.mshr_stalls);
-                        default:;
-                        endcase
-                    end
-                `endif
-                `ifdef VX_CFG_EXT_OM_ENABLE
-                    `VX_DCR_MPM_CLASS_OM: begin
-                        case (dcr_addr)
-                        `CSR_READ_64(`VX_CSR_MPM_OM_READS,       dcr_data_w, sysmem_perf.om.mem_reads);
-                        `CSR_READ_64(`VX_CSR_MPM_OM_WRITES,      dcr_data_w, sysmem_perf.om.mem_writes);
-                        `CSR_READ_64(`VX_CSR_MPM_OM_LAT,         dcr_data_w, sysmem_perf.om.mem_latency);
-                        `CSR_READ_64(`VX_CSR_MPM_OM_ST,          dcr_data_w, sysmem_perf.om.stall_cycles);
-                        `CSR_READ_64(`VX_CSR_MPM_OCACHE_READS,   dcr_data_w, sysmem_perf.ocache.reads);
-                        `CSR_READ_64(`VX_CSR_MPM_OCACHE_WRITES,  dcr_data_w, sysmem_perf.ocache.writes);
-                        `CSR_READ_64(`VX_CSR_MPM_OCACHE_MISS_R,  dcr_data_w, sysmem_perf.ocache.read_misses);
-                        `CSR_READ_64(`VX_CSR_MPM_OCACHE_MISS_W,  dcr_data_w, sysmem_perf.ocache.write_misses);
-                        `CSR_READ_64(`VX_CSR_MPM_OCACHE_BANK_ST, dcr_data_w, sysmem_perf.ocache.bank_stalls);
-                        `CSR_READ_64(`VX_CSR_MPM_OCACHE_MSHR_ST, dcr_data_w, sysmem_perf.ocache.mshr_stalls);
-                        default:;
-                        endcase
-                    end
-                `endif
-                `ifdef VX_CFG_EXT_RTU_ENABLE
-                    `VX_DCR_MPM_CLASS_RTU: begin
-                        case (dcr_addr)
-                        `CSR_READ_64(`VX_CSR_MPM_RTU_RAYS,       dcr_data_w, sysmem_perf.rtu.rays);
-                        `CSR_READ_64(`VX_CSR_MPM_RTU_HITS,       dcr_data_w, sysmem_perf.rtu.hits);
-                        `CSR_READ_64(`VX_CSR_MPM_RTU_BOX_TESTS,  dcr_data_w, sysmem_perf.rtu.box_tests);
-                        `CSR_READ_64(`VX_CSR_MPM_RTU_TRI_TESTS,  dcr_data_w, sysmem_perf.rtu.tri_tests);
-                        `CSR_READ_64(`VX_CSR_MPM_RTU_CALLBACKS,  dcr_data_w, sysmem_perf.rtu.callbacks);
-                        `CSR_READ_64(`VX_CSR_MPM_RTU_BUSY,       dcr_data_w, sysmem_perf.rtu.busy);
-                        `CSR_READ_64(`VX_CSR_MPM_RTCACHE_READS,  dcr_data_w, sysmem_perf.rtcache.reads);
-                        `CSR_READ_64(`VX_CSR_MPM_RTCACHE_MISS_R, dcr_data_w, sysmem_perf.rtcache.read_misses);
-                        default:;
-                        endcase
-                    end
-                `endif
-                    default:;
-                    endcase
-                end
-            `endif
-            end
-        endcase
-    end
-
-    assign dcr_data = dcr_data_w;
-`ifndef PERF_ENABLE
-    `UNUSED_VAR (dcr_mpm_class)
-`endif
-
-`ifdef PERF_ENABLE
-    `UNUSED_VAR (sysmem_perf.icache);
-    `UNUSED_VAR (sysmem_perf.lmem);
-`endif
 
 endmodule

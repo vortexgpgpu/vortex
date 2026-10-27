@@ -72,7 +72,13 @@ public:
     //     32-bit. The decoder later detects RVC from code[1:0] and
     //     decompresses internally;
     //   - queues `trace` for refetch internally and returns false.
+    // An emitted response may be refused by a full decode latch and offered
+    // again: the warp's buffered low half is kept until on_emit().
     bool on_icache_rsp(instr_trace_t* trace, const mem_block_t& line);
+
+    // Notify that the instruction emitted for `trace` entered the decode
+    // latch, which frees the warp's half-word buffer.
+    void on_emit(const instr_trace_t* trace);
 
 protected:
     void on_reset();

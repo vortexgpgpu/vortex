@@ -230,6 +230,18 @@ kernel is all boot and dispatch skew, and its gap ratio is noise.
 **Never widen a tolerance to absorb a divergence.** Model the behavior, or
 mark the case `known_issue` while it is investigated.
 
+#### `release_parity`
+
+A debug build must not change timing. A debug build widens the RTL UUID to 44
+bits and enables assertions and traces. A blackbox case run with `--debug` can
+set `release_parity: true`. The runner then reruns it built release, at
+xlen 32, and requires identical instructions and cycles; it reads the debug
+run's counts from its `--log` file. This is a case field, not a check, so the
+case stays in its category cell and costs one extra run there, with no new
+cell. `debug:sgemm_tcu-2` carries it. That case is shaped to keep the data
+cache under pressure, with two channels whose same-word reads merge; a
+debug-only tag width reaching the read merge would show there.
+
 ### 3.4 `perf_gate`
 
 rtlsim cycle counts are deterministic and host-independent, so the threshold

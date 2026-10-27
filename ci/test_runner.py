@@ -92,6 +92,39 @@ def _compare_counters(case, simx_out, rtl_out, simx_cycles, rtl_cycles):
     assert not fails, "{}: {} counter mismatch: {}".format(case.id, prefix, "; ".join(fails))
 
 
+def _perf_of(text, what):
+    perf = _PERF_RE.findall(text)
+    assert perf, "{}: no 'PERF: instrs=…, cycles=…' summary " \
+                 "(app must call vx_device_dump_perf)".format(what)
+    instrs, cycles = perf[-1]
+    return int(instrs), int(cycles)
+
+
+def _release_parity(case, xlen):
+    """Run the debug case, then (xlen 32) the same run built release; both
+    must report identical instructions and cycles."""
+    argv, env = case.run_command(xlen)
+    rc = tc.execute(argv, env)
+    assert rc == 0, "{} failed (exit {}): {}".format(case.id, rc, " ".join(argv))
+    if xlen != 32:
+        return
+    # a debug run sends its output to the --log file (blackbox.sh)
+    log = next((a.split("=", 1)[1] for a in argv if a.startswith("--log=")), "run.log")
+    with open(log, errors="replace") as fh:
+        dbg_instrs, dbg_cycles = _perf_of(fh.read(), case.id + " [debug]")
+    rel_argv = [a for a in argv if not a.startswith(("--debug", "--log="))]
+    rc, out = tc.execute_capture(rel_argv, env)
+    assert rc == 0, "{} [release] failed (exit {}): {}".format(
+        case.id, rc, " ".join(rel_argv))
+    rel_instrs, rel_cycles = _perf_of(out, case.id + " [release]")
+    print("RELEASE-PARITY: {}: instrs debug={} release={}, cycles debug={} "
+          "release={}".format(case.id, dbg_instrs, rel_instrs, dbg_cycles, rel_cycles))
+    assert (dbg_instrs, dbg_cycles) == (rel_instrs, rel_cycles), \
+        "{}: the debug build changes the run (instrs {} vs {}, cycles {} vs {}) " \
+        "-- debug-only state must not reach timing".format(
+            case.id, dbg_instrs, rel_instrs, dbg_cycles, rel_cycles)
+
+
 def _model_parity(case, xlen):
     simx_instrs, simx_cycles, simx_out = _run_one(case, xlen, "simx")
     rtl_instrs, rtl_cycles, rtl_out = _run_one(case, xlen, "rtlsim")
@@ -148,6 +181,9 @@ def test_case(case, sim_build, request):
         return
     if case.check == "perf_gate":
         _perf_gate(case, xlen, request.config.getoption("--update-baselines"))
+        return
+    if case.release_parity:
+        _release_parity(case, xlen)
         return
     argv, env = case.run_command(xlen)
     rc = tc.execute(argv, env)

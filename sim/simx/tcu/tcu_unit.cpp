@@ -16,6 +16,7 @@
 #include "tcu_unit.h"
 #include "tensor_cfg.h"
 #include <rvfloats.h>
+#include <fedp.h>
 #include "core.h"
 #include "scheduler.h"
 #include "local_mem.h"
@@ -75,8 +76,8 @@ static inline uint8_t unpack_u8(uint32_t word, uint32_t idx) {
   return (word >> (idx * 8)) & 0xffu;
 }
 
-// FMA<It, Ot>: fused multiply-add returning an Ot-typed accumulator (bit-packed in uint32).
-// Widens narrow inputs/accumulator to fp32, performs mul+add, rounds once to Ot.
+// FMA<It, Ot>: one multiply-add step into an Ot-typed accumulator (bit-packed
+// in uint32): fp32 for float inputs, int32 for integer inputs.
 template <typename It, typename Ot>
 struct FMA {
   using itype = typename It::dtype;
@@ -97,15 +98,6 @@ template <> struct FMA<vt::fp16, vt::fp32> {
     return rv_fadd_s(rv_fmul_s(fa, fb, 0, nullptr), c, 0, nullptr);
   }
 };
-template <> struct FMA<vt::fp16, vt::fp16> {
-  static uint32_t eval(uint16_t a, uint16_t b, uint32_t c) {
-    auto fa = rv_htof_s(a, 0, nullptr);
-    auto fb = rv_htof_s(b, 0, nullptr);
-    auto fc = rv_htof_s(uint16_t(c), 0, nullptr);
-    return rv_ftoh_s(rv_fmadd_s(fa, fb, fc, 0, nullptr), 0, nullptr);
-  }
-};
-
 // -- bf16 inputs --
 template <> struct FMA<vt::bf16, vt::fp32> {
   static uint32_t eval(uint16_t a, uint16_t b, uint32_t c) {
@@ -114,15 +106,6 @@ template <> struct FMA<vt::bf16, vt::fp32> {
     return rv_fadd_s(rv_fmul_s(fa, fb, 0, nullptr), c, 0, nullptr);
   }
 };
-template <> struct FMA<vt::bf16, vt::bf16> {
-  static uint32_t eval(uint16_t a, uint16_t b, uint32_t c) {
-    auto fa = rv_btof_s(a, 0, nullptr);
-    auto fb = rv_btof_s(b, 0, nullptr);
-    auto fc = rv_btof_s(uint16_t(c), 0, nullptr);
-    return rv_ftob_s(rv_fmadd_s(fa, fb, fc, 0, nullptr), 0, nullptr);
-  }
-};
-
 // -- fp8 inputs --
 template <> struct FMA<vt::fp8, vt::fp32> {
   static uint32_t eval(uint8_t a, uint8_t b, uint32_t c) {
@@ -131,15 +114,6 @@ template <> struct FMA<vt::fp8, vt::fp32> {
     return rv_fadd_s(rv_fmul_s(fa, fb, 0, nullptr), c, 0, nullptr);
   }
 };
-template <> struct FMA<vt::fp8, vt::fp8> {
-  static uint32_t eval(uint8_t a, uint8_t b, uint32_t c) {
-    auto fa = rv_e4m3tof_s(a, 0, nullptr);
-    auto fb = rv_e4m3tof_s(b, 0, nullptr);
-    auto fc = rv_e4m3tof_s(uint8_t(c), 0, nullptr);
-    return rv_ftoe4m3_s(rv_fmadd_s(fa, fb, fc, 0, nullptr), 0, nullptr);
-  }
-};
-
 // -- bf8 inputs --
 template <> struct FMA<vt::bf8, vt::fp32> {
   static uint32_t eval(uint8_t a, uint8_t b, uint32_t c) {
@@ -148,15 +122,6 @@ template <> struct FMA<vt::bf8, vt::fp32> {
     return rv_fadd_s(rv_fmul_s(fa, fb, 0, nullptr), c, 0, nullptr);
   }
 };
-template <> struct FMA<vt::bf8, vt::bf8> {
-  static uint32_t eval(uint8_t a, uint8_t b, uint32_t c) {
-    auto fa = rv_e5m2tof_s(a, 0, nullptr);
-    auto fb = rv_e5m2tof_s(b, 0, nullptr);
-    auto fc = rv_e5m2tof_s(uint8_t(c), 0, nullptr);
-    return rv_ftoe5m2_s(rv_fmadd_s(fa, fb, fc, 0, nullptr), 0, nullptr);
-  }
-};
-
 // -- tf32 inputs --
 template <> struct FMA<vt::tf32, vt::fp32> {
   static uint32_t eval(uint32_t a, uint32_t b, uint32_t c) {
@@ -165,19 +130,21 @@ template <> struct FMA<vt::tf32, vt::fp32> {
     return rv_fadd_s(rv_fmul_s(fa, fb, 0, nullptr), c, 0, nullptr);
   }
 };
-template <> struct FMA<vt::tf32, vt::tf32> {
-  static uint32_t eval(uint32_t a, uint32_t b, uint32_t c) {
-    auto fa = rv_tf32tof_s(a, 0, nullptr);
-    auto fb = rv_tf32tof_s(b, 0, nullptr);
-    auto fc = rv_tf32tof_s(c, 0, nullptr);
-    return rv_ftotf32_s(rv_fmadd_s(fa, fb, fc, 0, nullptr), 0, nullptr);
-  }
-};
+// Float source formats the native TFR datapath reduces (exponent, mantissa bits).
+template <typename It> struct TfrFormat { static constexpr bool valid = false; };
+template <> struct TfrFormat<vt::fp16> { static constexpr bool valid = true; static constexpr int eb = 5, sb = 10; };
+template <> struct TfrFormat<vt::bf16> { static constexpr bool valid = true; static constexpr int eb = 8, sb = 7; };
+template <> struct TfrFormat<vt::fp8>  { static constexpr bool valid = true; static constexpr int eb = 4, sb = 3; };
+template <> struct TfrFormat<vt::bf8>  { static constexpr bool valid = true; static constexpr int eb = 5, sb = 2; };
+template <> struct TfrFormat<vt::tf32> { static constexpr bool valid = true; static constexpr int eb = 8, sb = 10; };
 
-// Generic FEDP: universal rule keyed on output width.
-//   * Wide Ot (fp32): accumulate Σ(a_k*b_k) in fp32, add c_val last.
-//   * Narrow Ot (fp16/bf16/fp8/bf8/…): chain FMA<It,Ot> so the accumulator is
-//     rounded to Ot each step.
+// Generic FEDP, keyed on the output format.
+//   * fp32 Ot on the native TFR datapath: its fixed-point reduction —
+//     products aligned to the largest exponent in a 25-bit window, summed as
+//     integers, rounded once (the TfrFedp model the RTL is checked against).
+//   * fp32 Ot otherwise: accumulate Σ(a_k*b_k) in fp32 per register,
+//     the register sums in order, c_val last (the DPI datapath's order).
+//   * int32 Ot (integer inputs): exact integer accumulation.
 template <typename It, typename Ot>
 struct FEDP {
   using itype = typename It::dtype;
@@ -188,6 +155,22 @@ struct FEDP {
   static uint32_t eval_n(const reg_data_t *a_row, const reg_data_t *b_col, uint32_t c_val, uint32_t k_words) {
     constexpr uint32_t i_ratio = sizeof(uint32_t) / sizeof(itype);
     static_assert(i_ratio * sizeof(itype) == sizeof(uint32_t), "FEDP: tcK * i_ratio must be <= 32");
+#ifdef VX_CFG_TCU_TYPE_TFR
+    if constexpr (std::is_same_v<Ot, vt::fp32> && TfrFormat<It>::valid) {
+      std::vector<uint32_t> a(k_words), b(k_words);
+      for (uint32_t z = 0; z < k_words; ++z) {
+        a[z] = a_row[z].u32;
+        b[z] = b_col[z].u32;
+      }
+      TfrFedp fedp(TfrFormat<It>::eb, TfrFormat<It>::sb);
+      float c;
+      std::memcpy(&c, &c_val, sizeof(c));
+      float d = fedp(a.data(), b.data(), c, k_words);
+      uint32_t d_bits;
+      std::memcpy(&d_bits, &d, sizeof(d_bits));
+      return d_bits;
+    } else
+#endif
     if constexpr (std::is_same_v<Ot, vt::fp32>) {
       uint32_t acc = 0;
       for (uint32_t z = 0; z < k_words; ++z) {
@@ -201,6 +184,7 @@ struct FEDP {
       }
       return rv_fadd_s(c_val, acc, 0, nullptr);
     } else {
+      static_assert(std::is_same_v<Ot, vt::int32>, "TCU output type must be fp32 (int32 for integer inputs)");
       uint32_t acc = c_val;
       for (uint32_t z = 0; z < k_words; ++z) {
         auto a = reinterpret_cast<const itype *>(&a_row[z].u32);
@@ -281,26 +265,6 @@ static PFN_FEDP_N select_FEDP_N(uint32_t IT, uint32_t OT) {
     default:
       break;
     }
-    break;
-  case vt::fp16::id:
-    if (IT == vt::fp16::id)
-      return FEDP<vt::fp16, vt::fp16>::eval_n;
-    break;
-  case vt::bf16::id:
-    if (IT == vt::bf16::id)
-      return FEDP<vt::bf16, vt::bf16>::eval_n;
-    break;
-  case vt::fp8::id:
-    if (IT == vt::fp8::id)
-      return FEDP<vt::fp8, vt::fp8>::eval_n;
-    break;
-  case vt::bf8::id:
-    if (IT == vt::bf8::id)
-      return FEDP<vt::bf8, vt::bf8>::eval_n;
-    break;
-  case vt::tf32::id:
-    if (IT == vt::tf32::id)
-      return FEDP<vt::tf32, vt::tf32>::eval_n;
     break;
   case vt::int32::id:
     switch (IT) {
@@ -412,8 +376,8 @@ public:
   }
 
 #ifdef TCU_META_ENABLE
-  // Each TCU block tracks one metadata transaction. Requests share the LSU
-  // client port, while tags allow their memory latency to overlap.
+  // Each TCU block's AGU tracks one metadata load and writes each returned
+  // lane straight into the block's metadata SRAM.
   static constexpr uint32_t kAguBeats =
       (VX_CFG_NUM_THREADS + VX_CFG_NUM_LSU_LANES - 1) / VX_CFG_NUM_LSU_LANES;
 
@@ -426,7 +390,6 @@ public:
     uint32_t next_beat = 0;
     uint32_t rsp_count = 0;
     std::array<uint64_t, VX_CFG_NUM_THREADS> addrs{};
-    std::array<uint32_t, VX_CFG_NUM_THREADS> words{};
   };
   std::array<agu_state_t, VX_CFG_NUM_TCU_BLOCKS> agu_;
   uint32_t agu_issue_rr_ = 0;
@@ -452,70 +415,91 @@ public:
     }
   }
 
-  void agu_step() {
-    if (!simobject_->agu_req_out.full()) {
-      for (uint32_t offset = 0; offset < VX_CFG_NUM_TCU_BLOCKS; ++offset) {
-        uint32_t block = (agu_issue_rr_ + offset) % VX_CFG_NUM_TCU_BLOCKS;
-        auto& agu = agu_.at(block);
-        if (!agu.busy || agu.next_beat >= kAguBeats) {
-          continue;
-        }
-        LsuReq req(VX_CFG_NUM_LSU_LANES);
-        req.op   = MemOp::LD;
-        req.tag  = block * kAguBeats + agu.next_beat;
-        req.wid  = agu.wid;
-        req.cid  = agu.trace->cid;
-        req.uuid = agu.trace->uuid;
-        for (uint32_t i = 0; i < VX_CFG_NUM_LSU_LANES; ++i) {
-          uint32_t idx = agu.next_beat * VX_CFG_NUM_LSU_LANES + i;
-          if (idx >= VX_CFG_NUM_THREADS) {
-            break;
-          }
-          req.mask.set(i);
-          req.addrs.at(i) = agu.addrs.at(idx);
-          req.tids.at(i)  = idx % VX_CFG_NUM_THREADS;
-        }
-        simobject_->agu_req_out.send(req);
-        ++agu.next_beat;
-        agu_issue_rr_ = (block + 1) % VX_CFG_NUM_TCU_BLOCKS;
+  LsuReq agu_make_req(uint32_t block, agu_state_t& agu) {
+    LsuReq req(VX_CFG_NUM_LSU_LANES);
+    req.op   = MemOp::LD;
+    req.tag  = block * kAguBeats + agu.next_beat;
+    req.wid  = agu.wid;
+    req.cid  = agu.trace->cid;
+    req.uuid = agu.trace->uuid;
+    for (uint32_t i = 0; i < VX_CFG_NUM_LSU_LANES; ++i) {
+      uint32_t idx = agu.next_beat * VX_CFG_NUM_LSU_LANES + i;
+      if (idx >= VX_CFG_NUM_THREADS) {
         break;
       }
+      req.mask.set(i);
+      req.addrs.at(i) = agu.addrs.at(idx);
+      req.tids.at(i)  = idx % VX_CFG_NUM_THREADS;
     }
+    ++agu.next_beat;
+    return req;
+  }
 
-    if (!simobject_->agu_rsp_in.empty()) {
-      auto& rsp = simobject_->agu_rsp_in.peek();
-      uint32_t block = (uint32_t)rsp.tag / kAguBeats;
-      uint32_t beat = (uint32_t)rsp.tag % kAguBeats;
-      auto& agu = agu_.at(block);
-      for (uint32_t lane = 0; lane < rsp.mask.size(); ++lane) {
-        if (!rsp.mask.test(lane)) {
-          continue;
-        }
-        uint32_t idx = beat * VX_CFG_NUM_LSU_LANES + lane;
-        assert(idx < VX_CFG_NUM_THREADS && rsp.data.at(lane));
-        uint32_t off = agu.addrs.at(idx) & (VX_CFG_MEM_BLOCK_SIZE - 1);
-        uint32_t word = 0;
-        std::memcpy(&word, rsp.data.at(lane)->data() + off, 4);
-        agu.words.at(idx) = word;
-        ++agu.rsp_count;
+  void agu_receive(const LsuRsp& rsp) {
+    uint32_t block = (uint32_t)rsp.tag / kAguBeats;
+    uint32_t beat = (uint32_t)rsp.tag % kAguBeats;
+    auto& agu = agu_.at(block);
+    for (uint32_t lane = 0; lane < rsp.mask.size(); ++lane) {
+      if (!rsp.mask.test(lane)) {
+        continue;
       }
-      simobject_->agu_rsp_in.pop();
-      if (agu.busy && !agu.complete && agu.rsp_count == VX_CFG_NUM_THREADS) {
-        this->agu_deposit(agu);
-        agu.complete = true;
-      }
+      uint32_t idx = beat * VX_CFG_NUM_LSU_LANES + lane;
+      assert(idx < VX_CFG_NUM_THREADS && rsp.data.at(lane));
+      uint32_t off = agu.addrs.at(idx) & (VX_CFG_MEM_BLOCK_SIZE - 1);
+      uint32_t word = 0;
+      std::memcpy(&word, rsp.data.at(lane)->data() + off, 4);
+      this->agu_write(agu, idx, word);
+      ++agu.rsp_count;
+    }
+    if (agu.busy && !agu.complete && agu.rsp_count == VX_CFG_NUM_THREADS) {
+      agu.complete = true;
     }
   }
 
-  // Deposit the fetched words into the selected metadata SRAM.
-  void agu_deposit(const agu_state_t& agu) {
+  void agu_step() {
+    if (TCU_AGU_PORTS == 1) {
+      // every block shares one port: round-robin one request per cycle
+      if (!simobject_->agu_req_out.at(0).full()) {
+        for (uint32_t offset = 0; offset < VX_CFG_NUM_TCU_BLOCKS; ++offset) {
+          uint32_t block = (agu_issue_rr_ + offset) % VX_CFG_NUM_TCU_BLOCKS;
+          auto& agu = agu_.at(block);
+          if (!agu.busy || agu.next_beat >= kAguBeats) {
+            continue;
+          }
+          simobject_->agu_req_out.at(0).send(this->agu_make_req(block, agu));
+          agu_issue_rr_ = (block + 1) % VX_CFG_NUM_TCU_BLOCKS;
+          break;
+        }
+      }
+    } else {
+      // each block issues on its own port
+      for (uint32_t block = 0; block < VX_CFG_NUM_TCU_BLOCKS; ++block) {
+        auto& agu = agu_.at(block);
+        if (!agu.busy || agu.next_beat >= kAguBeats
+         || simobject_->agu_req_out.at(block).full()) {
+          continue;
+        }
+        simobject_->agu_req_out.at(block).send(this->agu_make_req(block, agu));
+      }
+    }
+
+    for (uint32_t p = 0; p < TCU_AGU_PORTS; ++p) {
+      auto& rsp_in = simobject_->agu_rsp_in.at(p);
+      if (rsp_in.empty()) {
+        continue;
+      }
+      this->agu_receive(rsp_in.peek());
+      rsp_in.pop();
+    }
+  }
+
+  // Write lane T's fetched word into the selected metadata SRAM.
+  void agu_write(const agu_state_t& agu, uint32_t T, uint32_t word) {
     uint32_t wid = agu.wid;
   #ifdef VX_CFG_TCU_MX_ENABLE
     if (agu.selector & 0x10) {
       auto& dst = (agu.selector & 1) ? mx_meta_b_.at(wid) : mx_meta_a_.at(wid);
-      for (uint32_t lane = 0; lane < VX_CFG_NUM_THREADS; ++lane) {
-        dst.at(lane) = agu.words.at(lane);
-      }
+      dst.at(T) = word;
       return;
     }
   #endif
@@ -530,26 +514,25 @@ public:
     constexpr uint32_t BPS = cfg::banks_per_store;
     constexpr uint32_t SPC = cfg::stores_per_col;
     constexpr uint32_t CPL = cfg::meta_cols_per_load;
-    for (uint32_t T = 0; T < VX_CFG_NUM_THREADS; ++T) {
-      uint32_t store_in_load   = T / BPS;
-      uint32_t thread_in_store = T % BPS;
-      uint32_t flat_store      = slot_idx * CPL + store_in_load;
-      uint32_t col             = flat_store / SPC;
-      uint32_t store_in_col    = flat_store % SPC;
-      uint32_t bank            = store_in_col * BPS + thread_in_store;
-      if (bank >= PWD || col >= kMaxMetaCols) {
-        continue;
-      }
-      uint32_t word = agu.words.at(T);
-      sparse_meta_.at(wid).at(bank * kMaxMetaCols + col) = word;
-      // Trace: META_SRAM write (CSV: wid,bank,col,addr,value).
-      if (const char* p = std::getenv("VORTEX_TCU_TRACE")) {
-        if (p[0] == '1') {
-          fprintf(stderr, "META_TRC,%u,%u,%u,0x%lx,0x%08x\n",
-                  wid, bank, col, (unsigned long)agu.addrs.at(T), word);
-        }
+    uint32_t store_in_load   = T / BPS;
+    uint32_t thread_in_store = T % BPS;
+    uint32_t flat_store      = slot_idx * CPL + store_in_load;
+    uint32_t col             = flat_store / SPC;
+    uint32_t store_in_col    = flat_store % SPC;
+    uint32_t bank            = store_in_col * BPS + thread_in_store;
+    if (bank >= PWD || col >= kMaxMetaCols) {
+      return;
+    }
+    sparse_meta_.at(wid).at(bank * kMaxMetaCols + col) = word;
+    // Trace: META_SRAM write (CSV: wid,bank,col,addr,value).
+    if (const char* p = std::getenv("VORTEX_TCU_TRACE")) {
+      if (p[0] == '1') {
+        fprintf(stderr, "META_TRC,%u,%u,%u,0x%lx,0x%08x\n",
+                wid, bank, col, (unsigned long)agu.addrs.at(T), word);
       }
     }
+  #else
+    __unused(T, word);
   #endif
   }
 #endif // TCU_META_ENABLE
@@ -600,6 +583,12 @@ public:
         auto& rs3_data = trace->src_data[2];
         trace->dst_data.assign(num_threads, reg_data_t{});
         auto& rd_data = trace->dst_data;
+
+        if (tcu_type != TcuType::TCU_LD && !vt::tcu_output_valid(tpuArgs.fmt_s, tpuArgs.fmt_d)) {
+          std::cerr << "*** TCU output format " << tpuArgs.fmt_d << " for input format " << tpuArgs.fmt_s
+                    << " is not supported: the TCU returns fp32 (int32 for integer inputs)" << std::endl;
+          std::abort();
+        }
 
         switch (tcu_type) {
         case TcuType::WMMA:
@@ -1352,6 +1341,46 @@ private:
     };
 
     if (fmt_d == vt::fp32::id) {
+#ifdef VX_CFG_TCU_TYPE_TFR
+      // The native datapath: the TfrFedp model, with each lane's (16 bits of
+      // a register) scales taken at its first element.
+      {
+        int eb = 0, sb = 0;
+        bool e4m3_scale = false;
+        if (fmt_s == vt::mxfp8::id) {
+          eb = 4; sb = 3;
+        } else if (fmt_s == vt::mxbf8::id) {
+          eb = 5; sb = 2;
+        } else if (fmt_s == vt::mxfp4::id) {
+          eb = 2; sb = 1;
+        } else if (fmt_s == vt::nvfp4::id) {
+          eb = 2; sb = 1; e4m3_scale = true;
+        } else {
+          std::abort();
+        }
+        uint32_t sparse_ratio = is_sparse ? 2 : 1;
+        std::vector<uint32_t> a(fedp_words), b(fedp_words);
+        std::vector<uint8_t> sf_a(2 * fedp_words), sf_b(2 * fedp_words);
+        for (uint32_t z = 0; z < fedp_words; ++z) {
+          a[z] = a_row[z].u32;
+          b[z] = b_col[z].u32;
+        }
+        for (uint32_t lane = 0; lane < 2 * fedp_words; ++lane) {
+          uint32_t z = lane / 2;
+          uint32_t e = (lane % 2) * (ratio / 2);
+          uint32_t elem_k = ((step_k * fedp_words + z) * ratio + e) * sparse_ratio;
+          sf_a[lane] = uint8_t(scale_a(elem_k));
+          sf_b[lane] = uint8_t(scale_b(elem_k));
+        }
+        TfrFedp fedp(eb, sb);
+        float c;
+        std::memcpy(&c, &c_val, sizeof(c));
+        float d = fedp(a.data(), b.data(), c, fedp_words, sf_a.data(), sf_b.data(), e4m3_scale);
+        uint32_t d_bits;
+        std::memcpy(&d_bits, &d, sizeof(d_bits));
+        return d_bits;
+      }
+#endif
       uint32_t acc = c_val;
       for (uint32_t z = 0; z < fedp_words; ++z) {
         for (uint32_t e = 0; e < ratio; ++e) {
@@ -1834,8 +1863,8 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
 TcuUnit::TcuUnit(const SimContext &ctx, const char* name, Core* core)
 	: FuncUnit(ctx, name, core, 1u << log2ceil(VX_CFG_TCU_LATENCY + 1)) // landing-queue depth bounds results awaiting the consumer
 #ifdef TCU_META_ENABLE
-	, agu_req_out(this)
-	, agu_rsp_in(this)
+	, agu_req_out(TCU_AGU_PORTS, this)
+	, agu_rsp_in(TCU_AGU_PORTS, this)
 #endif
 	, impl_(new Impl(this, core))
 {

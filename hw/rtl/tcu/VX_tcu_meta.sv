@@ -19,7 +19,7 @@
 // the MX scale-factor stores (A/B) behind a single warp-indexed block RAM.
 //
 // All regions share one warp-indexed address space (SIZE = NUM_WARPS) and the
-// one broadcast write port from VX_tcu_agu. wr_idx[4] selects the namespace
+// one write port from the block's VX_tcu_agu. wr_idx[4] selects the namespace
 // (0 = sparse, 1 = MX); within MX wr_idx[0] selects the axis (0 = A, 1 = B);
 // within sparse wr_idx[3:0] is the column-group index. This matches the
 // TCU_LD destination-register encoding emitted by vx_tensor.h (x0/x1 = SP,
@@ -31,16 +31,20 @@
 // VX_tcu_core consume the result in that same cycle.
 
 module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
-    parameter `STRING INSTANCE_ID = ""
+    parameter `STRING INSTANCE_ID = "",
+    // stores one residue class of warps modulo WID_STRIDE, by wid / WID_STRIDE;
+    // the parent only presents writes for that class
+    parameter WID_STRIDE = 1
 ) (
     input wire          clk,
     input wire          reset,
 
-    // Unified broadcast write port (from VX_tcu_agu).
+    // Write port from the block's VX_tcu_agu; wr_mask selects the lanes written.
     input wire                     wr_en,
     input wire [NW_WIDTH-1:0]      wr_wid,
     input wire [4:0]               wr_idx,
-    input wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0] wr_data,
+    input wire [TCU_BLOCK_CAP-1:0] wr_mask,
+    input wire [TCU_BLOCK_CAP-1:0][31:0] wr_data,
 
     // Unified read port (warp id from the FEDP path).
     input wire [NW_WIDTH-1:0]      rd_wid
@@ -74,8 +78,11 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam MERGED_COLS  = SP_COLS + 2 * MX_COLS;
     localparam MERGED_BITS  = MERGED_COLS * 32;
 
-    localparam META_DEPTH = `VX_CFG_NUM_WARPS;
-    localparam META_ADDRW = `CLOG2(META_DEPTH);
+    localparam META_DEPTH  = `VX_CFG_NUM_WARPS / WID_STRIDE;
+    localparam META_ADDRW  = `CLOG2(META_DEPTH);
+    localparam STRIDE_BITS = `CLOG2(WID_STRIDE);
+
+    `STATIC_ASSERT (`IS_POW2(WID_STRIDE), ("invalid parameter"))
 
     // Namespace decode (mirrors the AGU / vx_tensor.h slot encoding). The
     // per-region write strobes are defined inside each region's block below so
@@ -85,8 +92,8 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [MERGED_BITS-1:0]  merged_wdata;
     wire [MERGED_BITS-1:0]  merged_rdata;
 
-    wire [`UP(META_ADDRW)-1:0] wr_addr = `UP(META_ADDRW)'(wr_wid);
-    wire [`UP(META_ADDRW)-1:0] rd_addr = `UP(META_ADDRW)'(rd_wid);
+    wire [`UP(META_ADDRW)-1:0] wr_addr = `UP(META_ADDRW)'(wr_wid >> STRIDE_BITS);
+    wire [`UP(META_ADDRW)-1:0] rd_addr = `UP(META_ADDRW)'(rd_wid >> STRIDE_BITS);
 
     // -----------------------------------------------------------------------
     // Sparse region: per-thread metadata packed into PER_WARP_DEPTH banks of
@@ -156,15 +163,11 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     for (genvar b = 0; b < PER_WARP_DEPTH; ++b) begin : g_meta_banks
         for (genvar c = 0; c < NUM_COLS; ++c) begin : g_col
             localparam int COL = b * NUM_COLS + c;
-            if (STORES_PER_COL > 1) begin : g_wr
-                assign merged_wdata[COL * 32 +: 32] = 32'(wr_data[b % BANKS_PER_STORE]);
-            end else begin : g_wr
-                // Thread offset for column c within its group: (c % CPL) * PER_WARP_DEPTH + b
-                localparam int COL_IN_GROUP = c % COLS_PER_LOAD;
-                localparam int THREAD_OFF   = COL_IN_GROUP * PER_WARP_DEPTH + b;
-                assign merged_wdata[COL * 32 +: 32] = 32'(wr_data[THREAD_OFF]);
-            end
-            assign merged_wren[COL] = sp_wr && col_wren[c] && meta_wr_bank_en[b];
+            // Thread offset for column c within its group: (c % CPL) * PER_WARP_DEPTH + b
+            localparam int THREAD_OFF = (STORES_PER_COL > 1) ? (b % BANKS_PER_STORE)
+                                                             : ((c % COLS_PER_LOAD) * PER_WARP_DEPTH + b);
+            assign merged_wdata[COL * 32 +: 32] = wr_data[THREAD_OFF];
+            assign merged_wren[COL] = sp_wr && col_wren[c] && meta_wr_bank_en[b] && wr_mask[THREAD_OFF];
         end
     end
 
@@ -190,10 +193,10 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire mx_wr_b = wr_en && wr_idx[4] &&  wr_idx[0];
 
     for (genvar i = 0; i < TCU_BLOCK_CAP; ++i) begin : g_mx_pack
-        assign merged_wdata[(MXA_COL_BASE + i) * 32 +: 32] = 32'(wr_data[i]);
-        assign merged_wdata[(MXB_COL_BASE + i) * 32 +: 32] = 32'(wr_data[i]);
-        assign merged_wren[MXA_COL_BASE + i] = mx_wr_a;
-        assign merged_wren[MXB_COL_BASE + i] = mx_wr_b;
+        assign merged_wdata[(MXA_COL_BASE + i) * 32 +: 32] = wr_data[i];
+        assign merged_wdata[(MXB_COL_BASE + i) * 32 +: 32] = wr_data[i];
+        assign merged_wren[MXA_COL_BASE + i] = mx_wr_a && wr_mask[i];
+        assign merged_wren[MXB_COL_BASE + i] = mx_wr_b && wr_mask[i];
     end
     assign meta_a = merged_rdata[(MXA_COL_BASE * 32) +: (TCU_BLOCK_CAP * 32)];
     assign meta_b = merged_rdata[(MXB_COL_BASE * 32) +: (TCU_BLOCK_CAP * 32)];

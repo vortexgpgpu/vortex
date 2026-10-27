@@ -15,89 +15,64 @@
 
 interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
 
-    wire wspawn_valid;
     wire tmc_valid;
     wire split_valid;
     wire sjoin_valid;
-    wire bar_valid;
     wire wsync_valid;
-
     wire [NW_WIDTH-1:0] wid;
-
     tmc_t     tmc;
-    wspawn_t  wspawn;
     split_t   split;
     join_t    sjoin;
-    barrier_t bar;
 
-    // Per-warp pipeline drain status (from scheduler)
-    wire [`VX_CFG_NUM_WARPS-1:0] warp_pending_alm_empty;
+    // Pipeline drain status of the scheduler's warps, by SFU-block-local warp id
+    wire [SFU_BLOCK_WARPS-1:0] warp_pending_alm_empty;
 
-    // LSU memory-scheduler drained signal (AND-reduced across all LSU blocks).
-    // Used by VX_wctl_unit to gate BAR (both vx_barrier and vx_barrier_arrive)
-    // so the barrier acts as a SMEM/GMEM fence — pending LSU memory ops finish
-    // before the warp suspends or the barrier arrival is registered. This is
-    // the CUDA __syncthreads / OpenCL barrier(CLK_LOCAL_MEM_FENCE) contract.
-    wire lsu_sched_drained;
+    // Every LSU block's memory scheduler is empty, and the translation path
+    // drained. VX_wctl_unit ANDs them to gate BAR (both vx_barrier and
+    // vx_barrier_arrive) so the barrier acts as a SMEM/GMEM fence — pending
+    // LSU memory ops finish before the warp suspends or the barrier arrival is
+    // registered. This is the CUDA __syncthreads / OpenCL
+    // barrier(CLK_LOCAL_MEM_FENCE) contract.
+    wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] lsu_sched_empty;
+    wire mmu_empty;
 
-    // Return IPDOM stack address
+    // IPDOM stack address and mscratch of the warp at dvstack_wid
     wire [NW_WIDTH-1:0] dvstack_wid;
     wire [DV_STACK_SIZEW-1:0] dvstack_ptr;
-
-    // Return barrier phase
-    wire [BAR_ADDR_W-1:0] bar_addr;
-    wire bar_phase;
+    wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] mscratch;
 
     modport master (
-        output wspawn_valid,
         output tmc_valid,
         output split_valid,
         output sjoin_valid,
-        output bar_valid,
         output wsync_valid,
-
         output wid,
-
-        output wspawn,
         output tmc,
         output split,
         output sjoin,
-        output bar,
-
-        output bar_addr,
-        input  bar_phase,
-
         input  warp_pending_alm_empty,
-        input  lsu_sched_drained,
-
+        input  lsu_sched_empty,
+        input  mmu_empty,
         output dvstack_wid,
-        input  dvstack_ptr
+        input  dvstack_ptr,
+        input  mscratch
     );
 
     modport slave (
-        input wspawn_valid,
-        input tmc_valid,
-        input split_valid,
-        input sjoin_valid,
-        input bar_valid,
-        input wsync_valid,
-
-        input wid,
-
-        input wspawn,
-        input tmc,
-        input split,
-        input sjoin,
-        input bar,
-
-        input  bar_addr,
-        output bar_phase,
-
+        input  tmc_valid,
+        input  split_valid,
+        input  sjoin_valid,
+        input  wsync_valid,
+        input  wid,
+        input  tmc,
+        input  split,
+        input  sjoin,
         output warp_pending_alm_empty,
-        output lsu_sched_drained,
-
-        input dvstack_wid,
-        output dvstack_ptr
+        output lsu_sched_empty,
+        output mmu_empty,
+        input  dvstack_wid,
+        output dvstack_ptr,
+        output mscratch
     );
 
 endinterface

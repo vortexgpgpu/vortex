@@ -26,6 +26,10 @@ public:
   static constexpr bool kGather = (VX_CFG_NUM_FPU_BLOCKS != VX_CFG_ISSUE_WIDTH)
                                || (VX_CFG_NUM_FPU_LANES != VX_CFG_SIMD_WIDTH);
 
+  // Full bandwidth: the dispatch queue feeds the unit directly, so an op
+  // returns its issue credit as the unit accepts it.
+  SimChannel<instr_trace_t*> ReleaseOut;
+
 protected:
   void on_tick() override;
 

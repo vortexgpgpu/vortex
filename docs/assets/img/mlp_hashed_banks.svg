@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 230" role="img" aria-label="Four requests with a power-of-two stride all queue on bank 0 with plain bank select; with the hash they spread over banks 0 to 3.">
+  <title>Four requests with a power-of-two stride all queue on bank 0 with plain bank select; with the hash they spread over banks 0 to 3.</title>
+  <defs><marker id="hashed_a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1b2733"/></marker><marker id="hashed_g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1f7a4d"/></marker><marker id="hashed_b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#b3261e"/></marker></defs>
+  <style>
+    text { font-family: Helvetica, Arial, sans-serif; fill: #1b2733; font-size: 11.5px; }
+    .dh { font-size: 13px; font-weight: bold; }
+    .dm { fill: #5a6772; font-size: 11px; }
+    .ds { font-size: 10.5px; }
+    .db { fill: #fbfcfd; stroke: #5a7184; stroke-width: 1.2; }
+    .dbad { fill: #fbe5e3; stroke: #b3261e; stroke-width: 1.2; }
+    .dgood { fill: #e3f3ea; stroke: #1f7a4d; stroke-width: 1.2; }
+    .didle { fill: #f3f5f8; stroke: #c9d1d9; stroke-width: 1.2; }
+    .dwait { fill: #fbe5e3; stroke: #b3261e; stroke-width: 1.2; stroke-dasharray: 4 3; }
+    .ln { stroke: #1b2733; stroke-width: 1.3; fill: none; }
+    .lb { stroke: #b3261e; stroke-width: 1.5; fill: none; }
+    .lg { stroke: #1f7a4d; stroke-width: 1.5; }
+    .dash { stroke-dasharray: 4 3; }
+    .sep { stroke: #c9d1d9; stroke-width: 1; stroke-dasharray: 2 4; }
+    text.db-t { fill: #b3261e; } text.g-t { fill: #1f7a4d; }
+  </style>
+  <rect width="640" height="230" fill="#ffffff"/>
+<text x="160" y="20" class="dh" text-anchor="middle">Before: bank = line[1:0]</text>
+        <text x="480" y="20" class="dh" text-anchor="middle">After: bank = line[1:0] XOR hash(line)</text>
+        <g class="dl">
+          <rect x="20" y="40" width="96" height="26" class="db"/><text x="68" y="57" text-anchor="middle">line 0x000</text>
+          <rect x="20" y="85" width="96" height="26" class="db"/><text x="68" y="102" text-anchor="middle">line 0x100</text>
+          <rect x="20" y="130" width="96" height="26" class="db"/><text x="68" y="147" text-anchor="middle">line 0x200</text>
+          <rect x="20" y="175" width="96" height="26" class="db"/><text x="68" y="192" text-anchor="middle">line 0x300</text>
+          <rect x="210" y="40" width="96" height="26" class="dbad"/><text x="258" y="57" text-anchor="middle">bank 0 · 4 queued</text>
+          <rect x="210" y="85" width="96" height="26" class="didle"/><text x="258" y="102" text-anchor="middle">bank 1 idle</text>
+          <rect x="210" y="130" width="96" height="26" class="didle"/><text x="258" y="147" text-anchor="middle">bank 2 idle</text>
+          <rect x="210" y="175" width="96" height="26" class="didle"/><text x="258" y="192" text-anchor="middle">bank 3 idle</text>
+          <line x1="116" y1="53" x2="208" y2="53" class="lb" marker-end="url(#hashed_b)"/>
+          <line x1="116" y1="98" x2="208" y2="56" class="lb" marker-end="url(#hashed_b)"/>
+          <line x1="116" y1="143" x2="208" y2="59" class="lb" marker-end="url(#hashed_b)"/>
+          <line x1="116" y1="188" x2="208" y2="62" class="lb" marker-end="url(#hashed_b)"/>
+          <line x1="320" y1="34" x2="320" y2="210" class="sep"/>
+          <rect x="340" y="40" width="96" height="26" class="db"/><text x="388" y="57" text-anchor="middle">line 0x000</text>
+          <rect x="340" y="85" width="96" height="26" class="db"/><text x="388" y="102" text-anchor="middle">line 0x100</text>
+          <rect x="340" y="130" width="96" height="26" class="db"/><text x="388" y="147" text-anchor="middle">line 0x200</text>
+          <rect x="340" y="175" width="96" height="26" class="db"/><text x="388" y="192" text-anchor="middle">line 0x300</text>
+          <rect x="530" y="40" width="96" height="26" class="dgood"/><text x="578" y="57" text-anchor="middle">bank 0</text>
+          <rect x="530" y="85" width="96" height="26" class="dgood"/><text x="578" y="102" text-anchor="middle">bank 1</text>
+          <rect x="530" y="130" width="96" height="26" class="dgood"/><text x="578" y="147" text-anchor="middle">bank 2</text>
+          <rect x="530" y="175" width="96" height="26" class="dgood"/><text x="578" y="192" text-anchor="middle">bank 3</text>
+          <line x1="436" y1="53" x2="528" y2="53" class="lg" marker-end="url(#hashed_g)"/>
+          <line x1="436" y1="98" x2="528" y2="143" class="lg" marker-end="url(#hashed_g)"/>
+          <line x1="436" y1="143" x2="528" y2="188" class="lg" marker-end="url(#hashed_g)"/>
+          <line x1="436" y1="188" x2="528" y2="98" class="lg" marker-end="url(#hashed_g)"/>
+          <text x="160" y="224" text-anchor="middle" class="dm">serialized: 4 cycles</text>
+          <text x="480" y="224" text-anchor="middle" class="dm">parallel: 1 cycle</text>
+        </g>
+</svg>

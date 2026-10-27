@@ -174,23 +174,15 @@ struct muladd_t<vt::tf32, vt::fp32> {
   }
 };
 
-template <>
-struct muladd_t<vt::tf32, vt::tf32> {
-  static uint32_t eval(uint32_t a, uint32_t b, uint32_t c) {
-    auto fa = bit_cast<float>(rv_tf32tof_s(a, 0, nullptr));
-    auto fb = bit_cast<float>(rv_tf32tof_s(b, 0, nullptr));
-    auto fc = bit_cast<float>(rv_tf32tof_s(c, 0, nullptr));
-    auto fd = fa * fb + fc;
-    return rv_ftotf32_s(bit_cast<uint32_t>(fd), 0, nullptr);
-  }
-};
-
 ///////////////////////////////////////////////////////////////////////////////
 
 using cfg = vt::wgmma_config_t<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, WGMMA_NRC>;
 
 using itype_t = typename vt::ITYPE::dtype;
 using otype_t = typename vt::OTYPE::dtype;
+
+static_assert(vt::tcu_output_valid(vt::ITYPE::id, vt::OTYPE::id),
+              "TCU output type must be fp32 (int32 for integer inputs)");
 
 static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B,
                        uint32_t M, uint32_t N, uint32_t K) {
@@ -207,8 +199,7 @@ static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B,
         }
         C[m * N + n] = static_cast<otype_t>(acc);
       } else {
-        // Narrow outputs re-round the accumulator to the output type every
-        // step, matching the hardware chain exactly.
+        // int32 output (integer inputs): exact accumulation.
         otype_t sum(0);
         for (uint32_t k = 0; k < K; ++k) {
           sum = muladd_t<vt::ITYPE, vt::OTYPE>::eval(A[m * K + k], B[k * N + n], sum);

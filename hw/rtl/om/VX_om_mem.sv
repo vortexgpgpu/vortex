@@ -245,7 +245,7 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     ) lsu_mem_if();
 
     VX_mem_scheduler #(
-        .INSTANCE_ID  ($sformatf("%s-memsched", INSTANCE_ID)),
+        .INSTANCE_ID  (`SFORMATF(("%s-memsched", INSTANCE_ID))),
         .CORE_REQS    (NUM_REQS),
         .MEM_CHANNELS (MEM_CHANNELS),
         .WORD_SIZE    (4),

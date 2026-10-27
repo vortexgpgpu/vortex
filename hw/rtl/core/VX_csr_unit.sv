@@ -13,25 +13,28 @@
 
 `include "VX_define.vh"
 
+`ifdef VX_CFG_EXT_F_ENABLE
+`include "VX_fpu_define.vh"
+`endif
+
 module VX_csr_unit import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
-    parameter CORE_ID = 0,
     parameter NUM_LANES = 1
 ) (
     input wire                  clk,
     input wire                  reset,
 
-`ifdef PERF_ENABLE
-    input sysmem_perf_t         sysmem_perf,
-    input pipeline_perf_t       pipeline_perf,
-`endif
+    input wire [CORE_ID_WIDTH-1:0] core_id,
 
 `ifdef VX_CFG_EXT_F_ENABLE
-    VX_fpu_csr_if.slave         fpu_csr_if [`VX_CFG_NUM_FPU_BLOCKS],
+    output wire [NW_WIDTH-1:0]  fcsr_wid,
+    input wire [INST_FRM_BITS+`FP_FLAGS_BITS-1:0]  fcsr_rd_data,
+    output wire [2:0]           fcsr_wr_sel,
+    output wire [INST_FRM_BITS+`FP_FLAGS_BITS-1:0] fcsr_wr_data,
 `endif
 
     VX_sched_csr_if.slave       sched_csr_if,
-    VX_dcr_csr_if.slave         dcr_csr_if,
+    input cta_ctx_t             cta_ctx,
     VX_execute_if.slave         execute_if,
     VX_result_if.master         result_if
 );
@@ -91,30 +94,22 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
 
     wire [`VX_CFG_XLEN-1:0] csr_req_src = execute_if.data.op_args.csr.use_imm ? `VX_CFG_XLEN'(csr_imm) : rs1_first;
 
-    wire [`VX_CFG_XLEN-1:0] csr_scalar_data, dcr_read_data;
-
-    // Host counter reads decode their own address and never wait on a request.
-    assign dcr_csr_if.ready = 1'b1;
-    assign dcr_csr_if.value = VX_DCR_DATA_WIDTH'(dcr_read_data);
-    `UNUSED_VAR (dcr_read_data)
-    `UNUSED_VAR (dcr_csr_if.valid)
+    wire [`VX_CFG_XLEN-1:0] csr_scalar_data;
 
     VX_csr_data #(
-        .INSTANCE_ID (INSTANCE_ID),
-        .CORE_ID     (CORE_ID)
+        .INSTANCE_ID (INSTANCE_ID)
     ) csr_data (
         .clk            (clk),
         .reset          (reset),
-
-    `ifdef PERF_ENABLE
-        .sysmem_perf    (sysmem_perf),
-        .pipeline_perf  (pipeline_perf),
-    `endif
+        .core_id        (core_id),
 
         .sched_csr_if   (sched_csr_if),
+        .cta_ctx        (cta_ctx),
 
     `ifdef VX_CFG_EXT_F_ENABLE
-        .fpu_csr_if     (fpu_csr_if),
+        .fcsr_rd_data   (fcsr_rd_data),
+        .fcsr_wr_sel    (fcsr_wr_sel),
+        .fcsr_wr_data   (fcsr_wr_data),
     `endif
 
         .req_fire       (csr_req_fire),
@@ -124,19 +119,20 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         .req_addr       (csr_addr),
         .req_op         (execute_if.data.op_type),
         .req_src        (csr_req_src),
-        .read_data      (csr_scalar_data),
-
-        .dcr_mpm_class  (dcr_csr_if.mpm_class),
-        .dcr_addr       (dcr_csr_if.addr),
-        .dcr_data       (dcr_read_data)
+        .read_data      (csr_scalar_data)
     );
+
+`ifdef VX_CFG_EXT_F_ENABLE
+    assign fcsr_wid = execute_if.data.header.wid;
+`endif
 
     // Per-lane CSRs
 
     // Thread ids are the lane index on top of a per-request base.
     wire [`VX_CFG_XLEN-1:0] wtid_base = (PID_BITS != 0) ? `VX_CFG_XLEN'(execute_if.data.header.pid * NUM_LANES) : '0;
-    wire [`VX_CFG_XLEN-1:0] gtid_base = (`VX_CFG_XLEN'(CORE_ID) << (NW_BITS + NT_BITS))
-                                      + (`VX_CFG_XLEN'(execute_if.data.header.wid) << NT_BITS)
+    // mhartid is dense, (core * NUM_WARPS + wid) * NUM_THREADS + tid, for any NUM_WARPS
+    wire [`VX_CFG_XLEN-1:0] gtid_base = ((`VX_CFG_XLEN'(core_id) * `VX_CFG_XLEN'(`VX_CFG_NUM_WARPS)
+                                       + `VX_CFG_XLEN'(execute_if.data.header.wid)) << NT_BITS)
                                       + wtid_base;
 
     wire is_wtid_w    = (csr_addr == `VX_CSR_THREAD_ID);

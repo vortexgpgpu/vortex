@@ -69,7 +69,9 @@ private:
 // register file. Plain (non-SimObject) helper owned by SfuUnit.
 class RtuUnit {
 public:
-  RtuUnit(Core* core, SimChannel<RtuReq>& req_out, RtuWindow& window);
+  // bus_delay: extra cycles a request spends merging with other SFU blocks'
+  // requests onto the core's RTU bus.
+  RtuUnit(Core* core, SimChannel<RtuReq>& req_out, RtuWindow& window, uint32_t bus_delay = 0);
 
   // Async ray pool. process_wait either:
   //   - returns the trace with the per-lane status word written
@@ -187,6 +189,7 @@ private:
 
   Core*               core_;
   SimChannel<RtuReq>& req_out_;
+  uint32_t            bus_delay_;
   // Async ray pool. Borrowed from the Socket via set_rtu_core();
   // null until the Socket has wired it (TRACE/WAIT paths must NEVER
   // dereference rtu_core_ before that — but in practice the Socket

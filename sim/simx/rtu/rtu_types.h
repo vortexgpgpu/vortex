@@ -259,6 +259,8 @@ static_assert(VX_CFG_RTU_MERGE_DEPTH == 0,
 
 // Cores served by one RTU, and the per-core slot partition.
 constexpr uint32_t kRtuCoresPerRtu = VX_CFG_SOCKET_SIZE / VX_CFG_NUM_RTU_CORES;
+static_assert(!VX_CFG_EXT_RTU_ENABLED || (kRtuCoresPerRtu * VX_CFG_NUM_RTU_CORES == VX_CFG_SOCKET_SIZE),
+              "SOCKET_SIZE must be a multiple of NUM_RTU_CORES");
 constexpr uint32_t kRtuSlotsPerCore = VX_CFG_RTU_NUM_SLOTS / kRtuCoresPerRtu;
 static_assert(kRtuSlotsPerCore >= 1,
               "a core with no slot of its own could never issue a trace");

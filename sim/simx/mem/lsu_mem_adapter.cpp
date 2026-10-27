@@ -19,14 +19,15 @@ LsuMemAdapter::LsuMemAdapter(
   const SimContext& ctx,
   const char* name,
   uint32_t num_inputs,
-  uint32_t delay
+  uint32_t delay,
+  uint32_t rsp_delay
 ) : SimObject<LsuMemAdapter>(ctx, name)
   , ReqIn(this)
   , RspOut(this)
   , ReqOut(num_inputs, this)
   , RspIn(num_inputs, this)
   , delay_(delay)
-  , port_delay_(num_inputs, 0)
+  , rsp_delay_(rsp_delay)
   , pending_mask_(num_inputs)
 {
   assert(num_inputs > 0);
@@ -45,7 +46,7 @@ LsuMemAdapter::LsuMemAdapter(
       mr.flags = req.flags;
       mr.amo_cmp = req.amo_cmp.at(0);
       auto t = get_addr_type(mr.addr);
-      mr.flags.io    = (t == AddrType::IO);
+      mr.flags.io    = mr.flags.flush ? mr.flags.io : (t == AddrType::IO);
       mr.flags.local = (t == AddrType::Shared);
       return mr;
     });
@@ -106,7 +107,7 @@ void LsuMemAdapter::on_tick() {
     }
 
     // send memory response
-    RspOut.send(out_rsp, 1);
+    RspOut.send(out_rsp, rsp_delay_);
 
     // remove input
     DT(4, this->name() << "-rsp" << i << ": " << rsp_in);
@@ -140,11 +141,11 @@ void LsuMemAdapter::on_tick() {
       out_req.flags   = in_req.flags;
       {
         auto t = get_addr_type(out_req.addr);
-        out_req.flags.io    = (t == AddrType::IO);
+        out_req.flags.io    = out_req.flags.flush ? out_req.flags.io : (t == AddrType::IO);
         out_req.flags.local = (t == AddrType::Shared);
       }
 
-      if (ReqOut.at(i).try_send(out_req, delay_ + port_delay_.at(i))) {
+      if (ReqOut.at(i).try_send(out_req, delay_)) {
         DT(4, this->name() << " req" << i << ": " << out_req);
         pending_mask_.reset(i);
       }

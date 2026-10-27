@@ -163,6 +163,97 @@
 	assign m_axi_mem_bresp_a[i] = m_axi_mem_``i``_bresp; \
 	assign m_axi_mem_bid_a[i] = m_axi_mem_``i``_bid
 
+`define AXI_MEM_TO_BUS(i) \
+	assign m_axi_mem_``i``_awvalid = m_axi_mem_awvalid_bus[i]; \
+	assign m_axi_mem_awready_bus[i] = m_axi_mem_``i``_awready; \
+	assign m_axi_mem_``i``_awaddr = m_axi_mem_awaddr_bus[(i)*C_M_AXI_MEM_ADDR_WIDTH +: C_M_AXI_MEM_ADDR_WIDTH]; \
+	assign m_axi_mem_``i``_awid = m_axi_mem_awid_bus[(i)*C_M_AXI_MEM_ID_WIDTH +: C_M_AXI_MEM_ID_WIDTH]; \
+	assign m_axi_mem_``i``_awlen = m_axi_mem_awlen_bus[(i)*8 +: 8]; \
+	assign m_axi_mem_``i``_wvalid = m_axi_mem_wvalid_bus[i]; \
+	assign m_axi_mem_wready_bus[i] = m_axi_mem_``i``_wready; \
+	assign m_axi_mem_``i``_wdata = m_axi_mem_wdata_bus[(i)*C_M_AXI_MEM_DATA_WIDTH +: C_M_AXI_MEM_DATA_WIDTH]; \
+	assign m_axi_mem_``i``_wstrb = m_axi_mem_wstrb_bus[(i)*(C_M_AXI_MEM_DATA_WIDTH/8) +: (C_M_AXI_MEM_DATA_WIDTH/8)]; \
+	assign m_axi_mem_``i``_wlast = m_axi_mem_wlast_bus[i]; \
+	assign m_axi_mem_``i``_arvalid = m_axi_mem_arvalid_bus[i]; \
+	assign m_axi_mem_arready_bus[i] = m_axi_mem_``i``_arready; \
+	assign m_axi_mem_``i``_araddr = m_axi_mem_araddr_bus[(i)*C_M_AXI_MEM_ADDR_WIDTH +: C_M_AXI_MEM_ADDR_WIDTH]; \
+	assign m_axi_mem_``i``_arid = m_axi_mem_arid_bus[(i)*C_M_AXI_MEM_ID_WIDTH +: C_M_AXI_MEM_ID_WIDTH]; \
+	assign m_axi_mem_``i``_arlen = m_axi_mem_arlen_bus[(i)*8 +: 8]; \
+	assign m_axi_mem_rvalid_bus[i] = m_axi_mem_``i``_rvalid; \
+	assign m_axi_mem_``i``_rready = m_axi_mem_rready_bus[i]; \
+	assign m_axi_mem_rdata_bus[(i)*C_M_AXI_MEM_DATA_WIDTH +: C_M_AXI_MEM_DATA_WIDTH] = m_axi_mem_``i``_rdata; \
+	assign m_axi_mem_rlast_bus[i] = m_axi_mem_``i``_rlast; \
+	assign m_axi_mem_rid_bus[(i)*C_M_AXI_MEM_ID_WIDTH +: C_M_AXI_MEM_ID_WIDTH] = m_axi_mem_``i``_rid; \
+	assign m_axi_mem_rresp_bus[(i)*2 +: 2] = m_axi_mem_``i``_rresp; \
+	assign m_axi_mem_bvalid_bus[i] = m_axi_mem_``i``_bvalid; \
+	assign m_axi_mem_``i``_bready = m_axi_mem_bready_bus[i]; \
+	assign m_axi_mem_bresp_bus[(i)*2 +: 2] = m_axi_mem_``i``_bresp; \
+	assign m_axi_mem_bid_bus[(i)*C_M_AXI_MEM_ID_WIDTH +: C_M_AXI_MEM_ID_WIDTH] = m_axi_mem_``i``_bid
+
+// AXI memory masters the AFU exposes: one per GPU memory port, rounded up to
+// a power of two so that address bits select the port, and at most one per
+// platform memory channel. A platform top must spell its ports out, so the
+// build resolves this to the literal AFU_MEM_PORTS
+// (hw/scripts/afu_mem_ports.sh) and VX_afu_wrap checks that the two agree.
+`define AFU_MEM_PORTS_OF(n) `MIN(1 << `CLOG2(n), `VX_CFG_PLATFORM_MEMORY_NUM_BANKS)
+
+// Flat per-field buses connecting a platform top's m_axi_mem_<i> ports to
+// VX_afu_wrap, port i in slice i. They are plain Verilog, so the platform
+// tops stay Verilog, which the Vitis and AVED kernel packagers require.
+`define AXI_MEM_BUSES(n) \
+    wire [(n)-1:0]                              m_axi_mem_awvalid_bus; \
+    wire [(n)-1:0]                              m_axi_mem_awready_bus; \
+    wire [(n)*C_M_AXI_MEM_ADDR_WIDTH-1:0]       m_axi_mem_awaddr_bus; \
+    wire [(n)*C_M_AXI_MEM_ID_WIDTH-1:0]         m_axi_mem_awid_bus; \
+    wire [(n)*8-1:0]                            m_axi_mem_awlen_bus; \
+    wire [(n)-1:0]                              m_axi_mem_wvalid_bus; \
+    wire [(n)-1:0]                              m_axi_mem_wready_bus; \
+    wire [(n)*C_M_AXI_MEM_DATA_WIDTH-1:0]       m_axi_mem_wdata_bus; \
+    wire [(n)*(C_M_AXI_MEM_DATA_WIDTH/8)-1:0]   m_axi_mem_wstrb_bus; \
+    wire [(n)-1:0]                              m_axi_mem_wlast_bus; \
+    wire [(n)-1:0]                              m_axi_mem_arvalid_bus; \
+    wire [(n)-1:0]                              m_axi_mem_arready_bus; \
+    wire [(n)*C_M_AXI_MEM_ADDR_WIDTH-1:0]       m_axi_mem_araddr_bus; \
+    wire [(n)*C_M_AXI_MEM_ID_WIDTH-1:0]         m_axi_mem_arid_bus; \
+    wire [(n)*8-1:0]                            m_axi_mem_arlen_bus; \
+    wire [(n)-1:0]                              m_axi_mem_rvalid_bus; \
+    wire [(n)-1:0]                              m_axi_mem_rready_bus; \
+    wire [(n)*C_M_AXI_MEM_DATA_WIDTH-1:0]       m_axi_mem_rdata_bus; \
+    wire [(n)-1:0]                              m_axi_mem_rlast_bus; \
+    wire [(n)*C_M_AXI_MEM_ID_WIDTH-1:0]         m_axi_mem_rid_bus; \
+    wire [(n)*2-1:0]                            m_axi_mem_rresp_bus; \
+    wire [(n)-1:0]                              m_axi_mem_bvalid_bus; \
+    wire [(n)-1:0]                              m_axi_mem_bready_bus; \
+    wire [(n)*2-1:0]                            m_axi_mem_bresp_bus; \
+    wire [(n)*C_M_AXI_MEM_ID_WIDTH-1:0]         m_axi_mem_bid_bus;
+
+`define AXI_MEM_BUS_ARGS \
+    .m_axi_mem_awvalid_bus(m_axi_mem_awvalid_bus), \
+    .m_axi_mem_awready_bus(m_axi_mem_awready_bus), \
+    .m_axi_mem_awaddr_bus(m_axi_mem_awaddr_bus), \
+    .m_axi_mem_awid_bus(m_axi_mem_awid_bus), \
+    .m_axi_mem_awlen_bus(m_axi_mem_awlen_bus), \
+    .m_axi_mem_wvalid_bus(m_axi_mem_wvalid_bus), \
+    .m_axi_mem_wready_bus(m_axi_mem_wready_bus), \
+    .m_axi_mem_wdata_bus(m_axi_mem_wdata_bus), \
+    .m_axi_mem_wstrb_bus(m_axi_mem_wstrb_bus), \
+    .m_axi_mem_wlast_bus(m_axi_mem_wlast_bus), \
+    .m_axi_mem_arvalid_bus(m_axi_mem_arvalid_bus), \
+    .m_axi_mem_arready_bus(m_axi_mem_arready_bus), \
+    .m_axi_mem_araddr_bus(m_axi_mem_araddr_bus), \
+    .m_axi_mem_arid_bus(m_axi_mem_arid_bus), \
+    .m_axi_mem_arlen_bus(m_axi_mem_arlen_bus), \
+    .m_axi_mem_rvalid_bus(m_axi_mem_rvalid_bus), \
+    .m_axi_mem_rready_bus(m_axi_mem_rready_bus), \
+    .m_axi_mem_rdata_bus(m_axi_mem_rdata_bus), \
+    .m_axi_mem_rlast_bus(m_axi_mem_rlast_bus), \
+    .m_axi_mem_rid_bus(m_axi_mem_rid_bus), \
+    .m_axi_mem_rresp_bus(m_axi_mem_rresp_bus), \
+    .m_axi_mem_bvalid_bus(m_axi_mem_bvalid_bus), \
+    .m_axi_mem_bready_bus(m_axi_mem_bready_bus), \
+    .m_axi_mem_bresp_bus(m_axi_mem_bresp_bus), \
+    .m_axi_mem_bid_bus(m_axi_mem_bid_bus)
+
 `include "VX_define.vh"
 
 `endif // VORTEX_AFU_VH

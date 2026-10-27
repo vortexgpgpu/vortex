@@ -50,10 +50,14 @@ ProcessorImpl::ProcessorImpl()
   constexpr uint32_t total_cores = VX_CFG_NUM_CLUSTERS * NUM_SOCKETS * VX_CFG_SOCKET_SIZE;
   kmu_ = Kmu::Create("kmu", total_cores);
 
-  // create memory simulator
+  // create memory simulator; with the CP writing into the last-level cache,
+  // the memory side carries a transfer's fills across the launch reset
   auto dram_config = DramSim::platform_config();
   dram_config.block_size = VX_CFG_MEM_BLOCK_SIZE;
-  memsim_ = Memory::Create("dram", Memory::Config{VX_CFG_L3_MEM_PORTS, dram_config});
+  {
+    SimPlatform::LaunchKeepScope keep(CP_ON_L2 != 0 || CP_ON_L3 != 0);
+    memsim_ = Memory::Create("dram", Memory::Config{VX_CFG_L3_MEM_PORTS, dram_config});
+  }
 
   char sname[100];
 
@@ -61,6 +65,14 @@ ProcessorImpl::ProcessorImpl()
   for (uint32_t i = 0; i < VX_CFG_NUM_CLUSTERS; ++i) {
     snprintf(sname, 100, "cluster%d", i);
     clusters_.at(i) = Cluster::Create(sname, i, this);
+  }
+
+  if constexpr (VX_CFG_NUM_CLUSTERS > 1) {
+    gbar_unit_ = GbarUnit::Create("gbar", VX_CFG_NUM_CLUSTERS);
+    for (uint32_t i = 0; i < VX_CFG_NUM_CLUSTERS; ++i) {
+      clusters_.at(i)->gbar_fwd_out.bind(&gbar_unit_->arrive_in);
+      gbar_unit_->resume_out.at(i).bind(&clusters_.at(i)->gbar_fwd_resume_in);
+    }
   }
 
   // Launch bus: a registered, credit-gated lane from the KMU to each core's
@@ -87,25 +99,37 @@ ProcessorImpl::ProcessorImpl()
 
   // create L3 cache; when L3 is enabled it is the LLC, otherwise it is a
   // transparent bypass arbiter and the L2 (or L1) is the LLC.
-  l3cache_ = Cache::Create("l3cache", Cache::Config{
-    !VX_CFG_L3_ENABLED,
-    log2ceil(VX_CFG_L3_SIZE),  // C
-    log2ceil(VX_CFG_L3_LINE_SIZE),   // L
-    log2ceil(VX_CFG_L3_SECTOR_SIZE), // S
-    log2ceil(VX_CFG_L2_SECTOR_SIZE), // W
-    log2ceil(VX_CFG_L3_NUM_WAYS),    // A
-    log2ceil(VX_CFG_L3_NUM_BANKS),   // B
-    VX_CFG_XLEN,                     // address bits
-    VX_CFG_L3_NUM_REQS,              // request size
-    VX_CFG_L3_MEM_PORTS,             // memory ports
-    VX_CFG_L3_WRITEBACK,             // write-back
-    false,                    // write response
-    VX_CFG_L3_MSHR_SIZE,             // mshr size
-    VX_CFG_L3_LATENCY,               // pipeline latency
-    VX_CFG_L3_REPL_POLICY,           // replacement policy
-    VX_CFG_L3_ENABLED != 0,          // is_llc when L3 is the LLC
-    }
-  );
+  {
+    SimPlatform::LaunchKeepScope keep(CP_ON_L2 != 0 || CP_ON_L3 != 0);
+    l3cache_ = Cache::Create("l3cache", Cache::Config{
+      !VX_CFG_L3_ENABLED,
+      log2ceil(VX_CFG_L3_SIZE),  // C
+      log2ceil(VX_CFG_L3_LINE_SIZE),   // L
+      log2ceil(VX_CFG_L3_SECTOR_SIZE), // S
+      log2ceil(VX_CFG_L2_SECTOR_SIZE), // W
+      log2ceil(VX_CFG_L3_NUM_WAYS),    // A
+      log2ceil(VX_CFG_L3_NUM_BANKS),   // B
+      VX_CFG_XLEN,                     // address bits
+      L3_CACHE_REQS,                   // request size
+      VX_CFG_L3_MEM_PORTS,             // memory ports
+      VX_CFG_L3_WRITEBACK,             // write-back
+      false,                    // write response
+      VX_CFG_L3_MSHR_SIZE,             // mshr size
+      VX_CFG_L3_LATENCY,               // pipeline latency
+      VX_CFG_L3_REPL_POLICY,           // replacement policy
+      VX_CFG_L3_ENABLED != 0,          // is_llc when L3 is the LLC
+      true,                            // non-cacheable bypass
+      false,                           // bank_hash
+      L3_SHARED_LLC,                   // shared_llc
+      VX_CFG_L3_LAZY_FETCH != 0,       // lazy_fetch
+      true,                            // core-response register (behind the bypass layer)
+      0,                               // read_merge
+      VX_CFG_L3_MSHR_LINES,            // mshr_lines
+      CP_ON_L3 != 0,                   // write_around
+      VX_CFG_L3_MRSQ_SIZE != 0,        // memory-response queue
+      }
+    );
+  }
 
 #if VX_CFG_EXT_A_ENABLED
   // Build-time invariant: every cache above the LLC must be write-through.
@@ -156,6 +180,19 @@ ProcessorImpl::ProcessorImpl()
   }
 #endif
 
+  // The CP DMA's client slot on the shared last-level cache.
+  if constexpr (CP_ON_L2 != 0 || CP_ON_L3 != 0) {
+    SimPlatform::LaunchKeepScope keep(true);
+    cp_llc_port_ = CpLlcPort::Create("cp-llc-port");
+    if constexpr (CP_ON_L2 != 0) {
+      cp_llc_port_->MemReqOut.bind(&clusters_.at(0)->cp_mem_req_in());
+      clusters_.at(0)->cp_mem_rsp_out().bind(&cp_llc_port_->MemRspIn);
+    } else {
+      cp_llc_port_->MemReqOut.bind(&l3cache_->core_req_in.at(L3_CP_IDX));
+      l3cache_->core_rsp_out.at(L3_CP_IDX).bind(&cp_llc_port_->MemRspIn);
+    }
+  }
+
   // connect L3 memory interfaces
   for (uint32_t i = 0; i < VX_CFG_L3_MEM_PORTS; ++i) {
     l3cache_->mem_req_out.at(i).bind(&memsim_->mem_req_in.at(i));
@@ -204,7 +241,7 @@ void ProcessorImpl::attach_ram(RAM* ram) {
 #endif
 }
 
-void ProcessorImpl::flush_caches() {
+void ProcessorImpl::flush_caches(bool l1_only) {
   // Cache hierarchy is drained inside-out: issue all L1 flush_begin() calls
   // up-front so icache, dcache, and graphics caches flush in parallel, then
   // tick until all surfaces report flush_done().
@@ -212,7 +249,7 @@ void ProcessorImpl::flush_caches() {
   // L1 surfaces: dcache + icache + graphics caches.
   // Write-through surfaces early-exit in Cache::flush_begin().
   for (auto& cluster : clusters_) {
-    cluster->dcache_flush_begin();
+    cluster->dcache_flush_begin(l1_only);
     cluster->icache_flush_begin();
 #ifdef VX_CFG_EXT_TEX_ENABLE
     cluster->tcache_flush_begin();
@@ -252,7 +289,7 @@ void ProcessorImpl::flush_caches() {
 
   // L2 caches.
   for (auto& cluster : clusters_) {
-    cluster->l2_flush_begin();
+    cluster->l2_flush_begin(l1_only);
   }
   while (true) {
     bool all_done = true;
@@ -265,14 +302,14 @@ void ProcessorImpl::flush_caches() {
   }
 
   // L3 cache (single instance at processor level).
-  l3cache_->flush_begin();
+  l3cache_->flush_begin(l1_only);
   while (!l3cache_->flush_done() || !SimPlatform::instance().idle()) {
     SimPlatform::instance().tick();
   }
 }
 
 int ProcessorImpl::run() {
-  this->reset();
+  this->launch_reset();
   kmu_->start();
   this->forward_delegated_launch();
 
@@ -311,6 +348,67 @@ int ProcessorImpl::run() {
   return exitcode;
 }
 
+void ProcessorImpl::cp_mem_write(uint64_t addr, const void* src, uint64_t size, bool noalloc) {
+  this->cp_mem_transfer(addr, static_cast<const uint8_t*>(src), nullptr, size, noalloc);
+}
+
+void ProcessorImpl::cp_mem_read(uint64_t addr, void* dst, uint64_t size) {
+  this->cp_mem_transfer(addr, nullptr, static_cast<uint8_t*>(dst), size, false);
+}
+
+void ProcessorImpl::cp_mem_transfer(uint64_t addr, const uint8_t* src, uint8_t* dst, uint64_t size, bool noalloc) {
+  __assert(cp_llc_port_, "no CP port on the last-level cache");
+  if (!platform_reset_) {
+    this->reset();
+  }
+  while (size != 0) {
+    uint32_t offset = uint32_t(addr % CP_MEM_DATA_SIZE);
+    uint32_t n = uint32_t(std::min<uint64_t>(size, CP_MEM_DATA_SIZE - offset));
+    cp_llc_port_->push(addr - offset, src, dst, offset, n, noalloc);
+    addr += n;
+    size -= n;
+    if (src) {
+      src += n;
+    }
+    if (dst) {
+      dst += n;
+    }
+  }
+  while (!cp_llc_port_->idle()) {
+    SimPlatform::instance().tick();
+  }
+  this->llc_keep_lines();
+}
+
+void ProcessorImpl::launch_reset() {
+  if (!cp_llc_port_) {
+    this->reset();
+    return;
+  }
+  // The launch fence follows the CP's DMA writes, and the kernel starts once
+  // the last-level cache has taken them. A write that missed still has its
+  // line fill in flight, as on the hardware, so the memory side keeps its
+  // state across the reset and the kernel meets those fills.
+  if (cp_llc_port_->writes_pending()) {
+    cp_llc_port_->fence();
+  }
+  while (!cp_llc_port_->idle()) {
+    SimPlatform::instance().tick();
+  }
+  SimPlatform::instance().reset_launch();
+  platform_reset_ = true;
+  // The perf_mem_* counters survive: the MPM counters run from device reset.
+  is_cycle_initialized_ = false;
+}
+
+void ProcessorImpl::llc_keep_lines() {
+  if constexpr (CP_ON_L2 != 0) {
+    clusters_.at(0)->l2_keep_lines();
+  } else {
+    l3cache_->keep_lines();
+  }
+}
+
 bool ProcessorImpl::mmu_fault_pending() const {
 #ifdef VX_CFG_VM_ENABLE
   return dev_ptw_->fault_info().valid;
@@ -331,6 +429,7 @@ void ProcessorImpl::forward_delegated_launch() {
 
 void ProcessorImpl::reset() {
   SimPlatform::instance().reset();
+  platform_reset_ = true;
   // The perf_mem_* counters survive: the MPM counters run from device reset.
   perf_mem_pending_reads_ = 0;
   is_cycle_initialized_ = false;
@@ -339,10 +438,10 @@ void ProcessorImpl::reset() {
 bool ProcessorImpl::cycle() {
   // Lazy first-call init mirrors run()'s top-of-loop sequence so the
   // external driver doesn't need to choreograph reset + kmu start
-  // separately. reset() clears is_cycle_initialized_ so a back-to-back
+  // separately. A reset clears is_cycle_initialized_ so a back-to-back
   // kernel launch re-dispatches.
   if (!is_cycle_initialized_) {
-    this->reset();
+    this->launch_reset();
     kmu_->start();
     this->forward_delegated_launch();
     is_cycle_initialized_ = true;
@@ -357,6 +456,11 @@ int ProcessorImpl::dcr_write(uint32_t addr, uint32_t value) {
   bool is_kmu_dcr = (addr >= VX_DCR_KMU_STATE_BEGIN && addr < VX_DCR_KMU_STATE_END);
   if (is_kmu_dcr) {
     kmu_->dcr_write(addr, value);
+    return 0;
+  }
+  if (addr == VX_DCR_BASE_CACHE_FLUSH) {
+    // The flush itself runs on the per-core reads.
+    flush_l1_only_ = (value & VX_CACHE_FLUSH_L1_ONLY) != 0;
     return 0;
   }
 #ifdef VX_CFG_VM_ENABLE
@@ -391,10 +495,10 @@ int ProcessorImpl::dcr_write(uint32_t addr, uint32_t value) {
 
 int ProcessorImpl::dcr_read(uint32_t addr, uint32_t tag, uint32_t* value) {
   if (addr == VX_DCR_BASE_CACHE_FLUSH) {
-    // Drain dirty cache lines to DRAM before the host reads back results.
-    // After flush_caches() returns every dirty line has reached memsim_'s
-    // backing RAM.
-    this->flush_caches();
+    // After flush_caches() returns every dirty line of the flushed levels has
+    // reached memsim_'s backing RAM; an L1-only flush leaves the shared
+    // last-level cache in place.
+    this->flush_caches(flush_l1_only_);
     *value = 0;
     return 0;
   }
@@ -469,6 +573,22 @@ void Processor::attach_ram(RAM* mem) {
 
 void Processor::reset() {
   impl_->reset();
+}
+
+void Processor::cp_mem_write(uint64_t addr, const void* src, uint64_t size, bool noalloc) {
+  impl_->cp_mem_write(addr, src, size, noalloc);
+}
+
+void Processor::cp_mem_read(uint64_t addr, void* dst, uint64_t size) {
+  impl_->cp_mem_read(addr, dst, size);
+}
+
+bool Processor::cp_llc_client() const {
+  return (CP_ON_L2 != 0) || (CP_ON_L3 != 0);
+}
+
+uint64_t Processor::cp_llc_size() const {
+  return (CP_ON_L3 != 0) ? VX_CFG_L3_SIZE : VX_CFG_L2_SIZE;
 }
 
 void Processor::start_kmu() {

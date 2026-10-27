@@ -30,6 +30,11 @@ package VX_gpu_pkg;
     localparam NT_WIDTH = `UP(NT_BITS);
     localparam NB_WIDTH = `UP(NB_BITS);
 
+    // core index across all clusters
+    localparam CORE_ID_BITS  = `CLOG2(`VX_CFG_NUM_CLUSTERS * `VX_CFG_NUM_CORES);
+    localparam CORE_ID_WIDTH = `UP(CORE_ID_BITS);
+    localparam CLUSTER_ID_WIDTH = `LOG2UP(`VX_CFG_NUM_CLUSTERS);
+
     localparam NUM_CTA_MAX = `VX_CFG_NUM_WARPS;
     localparam NCTA_BITS  = `CLOG2(NUM_CTA_MAX);
     localparam NCTA_WIDTH = `UP(NCTA_BITS);
@@ -83,7 +88,7 @@ package VX_gpu_pkg;
     localparam BAR_ADDR_W = `UP(BAR_ADDR_BITS);
     localparam BAR_ID_SHIFT = 8;
 
-    localparam BAR_SIZE_W = `MAX(`MAX(NW_WIDTH, NC_WIDTH), `CLOG2(`VX_CFG_MAX_BAR_EVENTS));
+    localparam BAR_SIZE_W = `MAX(`MAX(NW_WIDTH, CORE_ID_WIDTH), `CLOG2(`VX_CFG_MAX_BAR_EVENTS));
 
     localparam UOP_PACKLD = 0;
     localparam UOP_TCU = UOP_PACKLD + 1;
@@ -93,7 +98,9 @@ package VX_gpu_pkg;
     // owning one: the two are combinational rewrites of ibuf_in with mutually
     // exclusive selects (EX_LSU + export_mask vs EX_SFU + INST_SFU_RTUW).
     localparam UOP_GFX = UOP_TCU + `VX_CFG_EXT_TCU_ENABLED;
-    localparam UOP_MAX = UOP_GFX + `EXT_GFX_ANY_ENABLED;
+    // atomics with .aq/.rl expand into fences around the atomic
+    localparam UOP_AMO = UOP_GFX + `EXT_GFX_ANY_ENABLED;
+    localparam UOP_MAX = UOP_AMO + `VX_CFG_EXT_A_ENABLED;
     localparam UOP_CTR_W = 8;
 
     localparam CTA_TID_WIDTH = `UP(NW_BITS + NT_BITS);
@@ -150,8 +157,9 @@ package VX_gpu_pkg;
     // table keys on hart_id = make_hart_id(cid, wid, tid).
     // MINU/MAXU collapse into MIN/MAX + amo_unsigned.
 
-    // make_hart_id(cid, wid, tid) — packed concatenation, low bits = tid.
-    localparam HART_ID_BITS = NC_BITS + NW_BITS + NT_BITS;
+    // make_hart_id(cid, wid, tid) — packed concatenation, low bits = tid; cid is
+    // device-wide, so harts of different clusters stay distinct at a shared LLC.
+    localparam HART_ID_BITS = CORE_ID_BITS + NW_BITS + NT_BITS;
     localparam HART_ID_WIDTH = `UP(HART_ID_BITS);
 
     // ───────────────────────────────────────────────────────────────────────
@@ -204,8 +212,11 @@ package VX_gpu_pkg;
     // is_flush at LSB so dcr_flush can drive it deterministically.
     // is_addr_om is appended ABOVE amo, deliberately: the amo field is cast by
     // offset (VX_cache_bank), so inserting a bit below it would silently shift
-    // MEM_ATTR_AMO_OFFS and reinterpret the AMO sideband.
+    // MEM_ATTR_AMO_OFFS and reinterpret the AMO sideband. is_noalloc sits above
+    // amo for the same reason: a write that misses a write-around cache goes to
+    // memory instead of allocating.
     typedef struct packed {
+        logic                        is_noalloc;    // MEM_ATTR_NOALLOC_OFFS
         amo_req_t                    amo;           // MEM_ATTR_AMO_OFFS   = 4
         logic                        is_addr_om;    // MEM_ATTR_OM_OFFS    = 3
         logic                        is_addr_local; // MEM_ATTR_LOCAL_OFFS = 2
@@ -218,11 +229,40 @@ package VX_gpu_pkg;
     localparam MEM_ATTR_LOCAL_OFFS  = 2;
     localparam MEM_ATTR_OM_OFFS     = 3;
     localparam MEM_ATTR_AMO_OFFS    = 4;
+    localparam MEM_ATTR_NOALLOC_OFFS = MEM_ATTR_AMO_OFFS + AMO_REQ_BITS;
 
     // Total width of the mem-bus attr field. Use this as the parameter
     // default for VX_mem_bus_if's ATTR_WIDTH parameter and as the
     // wire/reg sizing for any per-cache plumbing.
     localparam MEM_ATTR_WIDTH = $bits(mem_bus_attr_t);
+
+    // Cache bank-select hash: XORed into the raw bank bits, a function of the
+    // line address above them, so XORing it again restores the raw bits. IPOLY
+    // for 16 and 32 banks (Rau, ISCA 1991: conflict-free for power-of-two
+    // strides); an XOR fold of the bits above the bank field otherwise.
+    function automatic logic [7:0] cache_bank_hash(input logic [31:0] hi, input integer bits);
+        logic [7:0] f;
+        f = '0;
+        if (bits == 4) begin
+            f[0] = hi[11] ^ hi[10] ^ hi[9] ^ hi[8] ^ hi[6] ^ hi[4] ^ hi[3] ^ hi[0];
+            f[1] = hi[12] ^ hi[8]  ^ hi[7] ^ hi[6] ^ hi[5] ^ hi[3] ^ hi[1] ^ hi[0];
+            f[2] = hi[9]  ^ hi[8]  ^ hi[7] ^ hi[6] ^ hi[4] ^ hi[2] ^ hi[1];
+            f[3] = hi[10] ^ hi[9]  ^ hi[8] ^ hi[7] ^ hi[5] ^ hi[3] ^ hi[2];
+        end else if (bits == 5) begin
+            f[0] = hi[13] ^ hi[12] ^ hi[11] ^ hi[10] ^ hi[9] ^ hi[6] ^ hi[5] ^ hi[3] ^ hi[0];
+            f[1] = hi[14] ^ hi[13] ^ hi[12] ^ hi[11] ^ hi[10] ^ hi[7] ^ hi[6] ^ hi[4] ^ hi[1];
+            f[2] = hi[14] ^ hi[10] ^ hi[9]  ^ hi[8]  ^ hi[7]  ^ hi[6] ^ hi[3] ^ hi[2] ^ hi[0];
+            f[3] = hi[11] ^ hi[10] ^ hi[9]  ^ hi[8]  ^ hi[7]  ^ hi[4] ^ hi[3] ^ hi[1];
+            f[4] = hi[12] ^ hi[11] ^ hi[10] ^ hi[9]  ^ hi[8]  ^ hi[5] ^ hi[4] ^ hi[2];
+        end else if (bits > 0 && bits <= 8) begin
+            for (integer i = 0; i < 15; ++i) begin
+                if ((i % bits) == 0) begin
+                    f = f ^ (8'(hi >> i) & 8'((1 << bits) - 1));
+                end
+            end
+        end
+        return f;
+    endfunction
 
     localparam VX_DCR_ADDR_WIDTH = `VX_DCR_ADDR_BITS;
     localparam VX_DCR_DATA_WIDTH = `VX_DCR_DATA_BITS;
@@ -455,6 +495,7 @@ package VX_gpu_pkg;
     localparam INST_LSU_SH =     4'b1001;
     localparam INST_LSU_SW =     4'b1010;
     localparam INST_LSU_SD =     4'b1011; // new for RV64I SD
+    localparam INST_LSU_FENCE_IO = 4'b1110; // a fence ordering only device (IO) accesses
     localparam INST_LSU_FENCE =  4'b1111;
     localparam INST_LSU_BITS =   4;
 
@@ -471,7 +512,11 @@ package VX_gpu_pkg;
     endfunction
 
     function automatic logic inst_lsu_is_fence(input logic [INST_LSU_BITS-1:0] op);
-        return (op == INST_LSU_FENCE);
+        return (op[3:1] == 3'b111);
+    endfunction
+
+    function automatic logic inst_lsu_is_fence_io(input logic [INST_LSU_BITS-1:0] op);
+        return (op == INST_LSU_FENCE_IO);
     endfunction
 
     ///////////////////////////////////////////////////////////////////////////
@@ -575,7 +620,7 @@ package VX_gpu_pkg;
 
     localparam DISPATCH_QSIZE = `VX_CFG_DISPATCH_QUEUE_SIZE;
 
-    localparam PER_OPC_WARPS = PER_ISSUE_WARPS / `VX_CFG_NUM_OPCS;
+    localparam PER_OPC_WARPS = `CDIV(PER_ISSUE_WARPS, `VX_CFG_NUM_OPCS);
     localparam PER_OPC_NW_BITS = `CLOG2(PER_OPC_WARPS);
     localparam PER_OPC_NW_W = `UP(PER_OPC_NW_BITS);
 
@@ -611,6 +656,107 @@ package VX_gpu_pkg;
             wid_to_wis = 0;
         end
     endfunction
+
+    // Frontend slice f schedules and fetches the warps with wid mod FETCH_WIDTH == f,
+    // naming them by their local id wfs = wid / FETCH_WIDTH.
+    localparam FETCH_FSW_BITS  = `CLOG2(`VX_CFG_FETCH_WIDTH);
+    localparam FETCH_FSW_W     = `UP(FETCH_FSW_BITS);
+    localparam PER_FETCH_WARPS = `VX_CFG_NUM_WARPS / `VX_CFG_FETCH_WIDTH;
+    localparam FETCH_WFS_BITS  = `CLOG2(PER_FETCH_WARPS);
+    localparam FETCH_WFS_W     = `UP(FETCH_WFS_BITS);
+
+    function automatic logic [NW_WIDTH-1:0] wfs_to_wid(
+        input logic [FETCH_WFS_W-1:0] wfs,
+        input logic [FETCH_FSW_W-1:0] fsw
+    );
+        if (FETCH_WFS_BITS == 0) begin
+            wfs_to_wid = NW_WIDTH'(fsw);
+        end else if (FETCH_FSW_BITS == 0) begin
+            wfs_to_wid = NW_WIDTH'(wfs);
+        end else begin
+            wfs_to_wid = NW_WIDTH'({wfs, fsw});
+        end
+    endfunction
+
+    function automatic logic [FETCH_FSW_W-1:0] wid_to_fsw(
+        input logic [NW_WIDTH-1:0] wid
+    );
+        if (FETCH_FSW_BITS != 0) begin
+            wid_to_fsw = wid[FETCH_FSW_W-1:0];
+        end else begin
+            wid_to_fsw = 0;
+        end
+    endfunction
+
+    // FU block ports per frontend slice: a unit with B blocks serves warps with
+    // wid mod B == b, so B >= FETCH_WIDTH gives each frontend slice B / FETCH_WIDTH
+    // blocks and B < FETCH_WIDTH shares each block among FETCH_WIDTH / B slices.
+    localparam FETCH_ALU_PORTS = (`VX_CFG_NUM_ALU_BLOCKS > `VX_CFG_FETCH_WIDTH) ? (`VX_CFG_NUM_ALU_BLOCKS / `VX_CFG_FETCH_WIDTH) : 1;
+    localparam FETCH_SFU_PORTS = (`VX_CFG_NUM_SFU_BLOCKS > `VX_CFG_FETCH_WIDTH) ? (`VX_CFG_NUM_SFU_BLOCKS / `VX_CFG_FETCH_WIDTH) : 1;
+
+    function automatic logic [FETCH_WFS_W-1:0] wid_to_wfs(
+        input logic [NW_WIDTH-1:0] wid
+    );
+        if (FETCH_WFS_BITS != 0) begin
+            wid_to_wfs = FETCH_WFS_W'(wid >> FETCH_FSW_BITS);
+        end else begin
+            wid_to_wfs = 0;
+        end
+    endfunction
+
+    // A unit with B blocks serves, in block b, exactly the warps with wid mod B == b
+    // (lane dispatch maps issue slot {batch, block} and isw = wid mod ISSUE_WIDTH),
+    // so a block's warp state is indexed by the remaining high wid bits.
+    localparam SFU_BLOCK_BITS  = `CLOG2(`VX_CFG_NUM_SFU_BLOCKS);
+    localparam SFU_BLOCK_W     = `UP(SFU_BLOCK_BITS);
+    localparam SFU_BLOCK_WARPS = `VX_CFG_NUM_WARPS / `VX_CFG_NUM_SFU_BLOCKS;
+    localparam SFU_BLOCK_NW_BITS = `CLOG2(SFU_BLOCK_WARPS);
+    localparam SFU_BLOCK_NW_W  = `UP(SFU_BLOCK_NW_BITS);
+
+    function automatic logic [SFU_BLOCK_W-1:0] wid_to_sfu_block(
+        input logic [NW_WIDTH-1:0] wid
+    );
+        if (SFU_BLOCK_BITS != 0) begin
+            wid_to_sfu_block = wid[SFU_BLOCK_W-1:0];
+        end else begin
+            wid_to_sfu_block = 0;
+        end
+    endfunction
+
+    function automatic logic [SFU_BLOCK_NW_W-1:0] wid_to_sfu_local(
+        input logic [NW_WIDTH-1:0] wid
+    );
+        if (SFU_BLOCK_NW_BITS != 0) begin
+            wid_to_sfu_local = SFU_BLOCK_NW_W'(wid >> SFU_BLOCK_BITS);
+        end else begin
+            wid_to_sfu_local = 0;
+        end
+    endfunction
+
+    function automatic logic [NW_WIDTH-1:0] sfu_local_to_wid(
+        input logic [SFU_BLOCK_NW_W-1:0] lid,
+        input logic [SFU_BLOCK_W-1:0]    block
+    );
+        if (SFU_BLOCK_NW_BITS == 0) begin
+            sfu_local_to_wid = NW_WIDTH'(block);
+        end else if (SFU_BLOCK_BITS == 0) begin
+            sfu_local_to_wid = NW_WIDTH'(lid);
+        end else begin
+            sfu_local_to_wid = NW_WIDTH'({lid, block});
+        end
+    endfunction
+
+    // The core structure follows from the widths. When every execution unit has
+    // one block per issue slice, the back end is ISSUE_WIDTH backend slices
+    // (VX_backend_slice: issue, execute, commit); otherwise it is stage-sliced.
+    // When the fetch width matches too, each backend slice and its frontend slice
+    // form one compute slice (VX_compute_slice), with no frontend crossbar.
+    localparam BACKEND_SLICES = (`VX_CFG_NUM_ALU_BLOCKS == `VX_CFG_ISSUE_WIDTH)
+                             && (`VX_CFG_NUM_LSU_BLOCKS == `VX_CFG_ISSUE_WIDTH)
+                             && (`VX_CFG_NUM_SFU_BLOCKS == `VX_CFG_ISSUE_WIDTH)
+                             && (!`VX_CFG_EXT_F_ENABLED || (`VX_CFG_NUM_FPU_BLOCKS == `VX_CFG_ISSUE_WIDTH))
+                             && (!`VX_CFG_EXT_TCU_ENABLED || (`VX_CFG_NUM_TCU_BLOCKS == `VX_CFG_ISSUE_WIDTH));
+    localparam COMPUTE_SLICES = BACKEND_SLICES && (`VX_CFG_FETCH_WIDTH == `VX_CFG_ISSUE_WIDTH);
 
     /////////////////////////////// TENSOR UNIT ///////////////////////////////
 
@@ -665,10 +811,26 @@ package VX_gpu_pkg;
         logic [BAR_SIZE_W-1:0]  size_m1;
     } barrier_t;
 
+    // Core-wide warp-control requests (barrier, wspawn, warp exit), one per
+    // SFU block, served by VX_warp_shared_unit.
+    localparam WSH_BAR    = 2'd0;
+    localparam WSH_WSPAWN = 2'd1;
+    localparam WSH_EXIT   = 2'd2;
+
+    typedef struct packed {
+        logic [1:0]             kind;
+        logic                   has_rsp;    // the requester waits for its completion
+        logic [NW_WIDTH-1:0]    wid;
+        barrier_t               bar;
+        logic [BAR_ADDR_W-1:0]  bar_addr;
+        wspawn_t                wspawn;
+        logic [`VX_CFG_MEM_ADDR_WIDTH-1:0] mscratch;  // spawning warp's, inherited by the spawned warps
+    } warp_shared_req_t;
+
     typedef struct packed {
         logic [NB_WIDTH-1:0] id;
-        logic [NC_WIDTH-1:0] size_m1;
-        logic [NC_WIDTH-1:0] core_id;
+        logic [CORE_ID_WIDTH-1:0] size_m1;
+        logic [CORE_ID_WIDTH-1:0] core_id;
     } gbar_req_t;
 
     typedef struct packed {
@@ -800,16 +962,17 @@ package VX_gpu_pkg;
     // Placement hint: the global index of the core a fragment launch must land
     // on. Fragment work is bin->core affine (that is what makes same-pixel blend
     // order safe), so a fragment message cannot be load-balanced like a compute
-    // CTA. Each fan-out level consumes its own slice of this index, LSB first:
-    // core-in-socket, then socket-in-cluster, then cluster (see KMU_DEST_LSB_*).
+    // CTA. Each fan-out level picks its output as (dest / DIV) % NUM_OUTPUTS,
+    // where DIV is the number of cores below each of its outputs: core-in-socket,
+    // then socket-in-cluster, then cluster (see KMU_DEST_DIV_*).
     // Device-wide, so the hint can name any core: VX_CFG_NUM_CORES is per-cluster.
     // `UP` so a single-core build still has a 1-bit (unused) hint rather than a
     // zero-width vector.
     localparam KMU_DEST_W = `UP(`CLOG2(`VX_CFG_NUM_CLUSTERS * `VX_CFG_NUM_CORES));
 
-    localparam KMU_DEST_LSB_SOCKET  = 0;
-    localparam KMU_DEST_LSB_CLUSTER = `CLOG2(`VX_CFG_SOCKET_SIZE);
-    localparam KMU_DEST_LSB_DEVICE  = KMU_DEST_LSB_CLUSTER + `CLOG2(NUM_SOCKETS);
+    localparam KMU_DEST_DIV_SOCKET  = 1;
+    localparam KMU_DEST_DIV_CLUSTER = `VX_CFG_SOCKET_SIZE;
+    localparam KMU_DEST_DIV_DEVICE  = KMU_DEST_DIV_CLUSTER * NUM_SOCKETS;
 
     typedef struct packed {
         logic [NCTA_WIDTH-1:0] cta_id;
@@ -872,6 +1035,72 @@ package VX_gpu_pkg;
         cta_lane_t [`VX_CFG_NUM_THREADS-1:0]     lane_launch;
     } cta_warp_t;
 
+    // CTA dispatcher state broadcast to the CTA-CSR stores that serve CSR reads:
+    // the per-CTA context, shared by every launch lane.
+    typedef struct packed {
+        logic                   ctx_write;
+        logic [NCTA_WIDTH-1:0]  ctx_waddr;
+        cta_ctx_t               ctx_wdata;
+    } cta_bcast_t;
+
+    // One launch lane's per-warp state: the warp's rank/lane record and CTA id.
+    typedef struct packed {
+        logic                   warp_write;
+        logic [NW_WIDTH-1:0]    warp_waddr;
+        cta_warp_t              warp_wdata;
+        logic                   id_write;
+        logic [NW_WIDTH-1:0]    id_wid;
+        logic [NCTA_WIDTH-1:0]  id_cta;
+    } cta_lane_bcast_t;
+
+    // Scheduler traffic between an FU block and the frontend slice owning the warp,
+    // addressed by core-wide wid.
+
+    // ALU branch resolution
+    typedef struct packed {
+        logic                   valid;
+        logic [NW_WIDTH-1:0]    wid;
+        logic                   taken;
+        logic [PC_BITS-1:0]     dest;
+        logic                   is_trap;
+        logic                   is_mret;
+        logic [3:0]             trap_cause;
+    } sched_branch_t;
+
+    // SFU warp control
+    typedef struct packed {
+        logic                   tmc_valid;
+        logic                   split_valid;
+        logic                   sjoin_valid;
+        logic                   wsync_valid;
+        logic [NW_WIDTH-1:0]    wid;
+        tmc_t                   tmc;
+        split_t                 split;
+        join_t                  sjoin;
+    } sched_wctl_t;
+
+    // SFU CSR writes to per-warp state
+    typedef struct packed {
+        logic                   valid;
+        logic [NW_WIDTH-1:0]    wid;
+        logic [`VX_CFG_MEM_ADDR_WIDTH-1:0] data;
+        logic [NUM_TRAP_CSRS-1:0] trap_valid;
+        logic [`VX_CFG_XLEN-1:0] trap_data;
+    } sched_csr_wr_t;
+
+    // SFU CSR reads of per-warp state, selected by the read wid and CTA id
+    typedef struct packed {
+        logic [`VX_CFG_NUM_THREADS-1:0] thread_mask;
+        logic [`VX_CFG_MEM_ADDR_WIDTH-1:0] mscratch;
+        logic [`VX_CFG_XLEN-1:0] mstatus;
+        logic [`VX_CFG_XLEN-1:0] mtvec;
+        logic [`VX_CFG_XLEN-1:0] mepc;
+        logic [`VX_CFG_XLEN-1:0] mcause;
+        logic [`VX_CFG_XLEN-1:0] mtval;
+        logic [NW_WIDTH-1:0]    cta_rank;
+        cta_lane_t [`VX_CFG_NUM_THREADS-1:0] cta_lane;
+    } sched_csr_rd_t;
+
     //////////////////////// instruction arguments ////////////////////////////
 
     // tcu_args_t at 27 bits = 1+1+1+2+5+5+4+4+4. Sparse variants are distinct opcodes.
@@ -908,8 +1137,11 @@ package VX_gpu_pkg;
 
     // lsu_args_t carries AMO sideband when EXT_A_ENABLE.
     // amo_valid / amo_op are inspected only when amo_valid==1; for plain
-    // loads/stores they're zero. aq/rl are decoded but unused (sequentially
-    // consistent). amo_unsigned distinguishes the U-variants of MIN/MAX.
+    // loads/stores they're zero. aq/rl order the AMO with the hart's other
+    // accesses (fence uops around it); on a memory fence they say what it
+    // orders: aq = later reads see others' writes (acquire: invalidate),
+    // rl = earlier writes are visible (release: drain). amo_unsigned
+    // distinguishes the U-variants of MIN/MAX.
     // export_mask marks a vx_om_export (OM fragment export) and says which
     // words of the aperture record the shader is writing:
     //   bit 0 = colour (record + 0), bit 1 = depth (record + 4)
@@ -1415,7 +1647,7 @@ package VX_gpu_pkg;
 
     // Width of the tag carried over VX_lsu_sched_if: lsu_header + op_type
     // + per-lane align + packet allocator addr + fence flag (matches the
-    // local TAG_WIDTH built inside VX_lsu_slice).
+    // local TAG_WIDTH built inside VX_lsu_block).
     localparam LSU_CLIENT_TAG_WIDTH = $bits(lsu_header_t) + INST_LSU_BITS
                                     + (`VX_CFG_NUM_LSU_LANES * `CLOG2(LSU_WORD_SIZE))
                                     + `LOG2UP(`VX_CFG_LSU_PENDING_SIZE) + 1;
@@ -1476,8 +1708,12 @@ package VX_gpu_pkg;
     // Block size in bytes
     localparam ICACHE_LINE_SIZE	    = `VX_CFG_L1_LINE_SIZE;
 
-    // Core request tag Id bits
-    localparam ICACHE_TAG_ID_BITS	= NW_WIDTH;
+    // Request ports per core: one per frontend slice, each fetching its own warps
+    localparam ICACHE_NUM_REQS  = `VX_CFG_FETCH_WIDTH;
+    localparam ICACHE_NUM_BANKS = `VX_CFG_ICACHE_NUM_BANKS;
+
+    // Core request tag Id bits: the warp id local to the requesting frontend slice
+    localparam ICACHE_TAG_ID_BITS	= FETCH_WFS_W;
 
     // Core request tag bits as VX_fetch writes them (UUID + warp id).
     localparam ICACHE_FETCH_TAG_WIDTH = (UUID_WIDTH + ICACHE_TAG_ID_BITS);
@@ -1498,9 +1734,9 @@ package VX_gpu_pkg;
 
     // Memory request tag bits
 `ifdef VX_CFG_ICACHE_ENABLE
-    localparam ICACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_MEM_TAG_WIDTH(`VX_CFG_ICACHE_MSHR_SIZE, 1, 1, `VX_CFG_NUM_ICACHES, UUID_WIDTH);
+    localparam ICACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_MEM_TAG_WIDTH(`VX_CFG_ICACHE_MSHR_SIZE, ICACHE_NUM_BANKS, 1, `VX_CFG_NUM_ICACHES, UUID_WIDTH);
 `else
-    localparam ICACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_BYPASS_MEM_TAG_WIDTH(1, 1, ICACHE_LINE_SIZE, ICACHE_WORD_SIZE, ICACHE_TAG_WIDTH, `VX_CFG_SOCKET_SIZE, `VX_CFG_NUM_ICACHES);
+    localparam ICACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_BYPASS_MEM_TAG_WIDTH(ICACHE_NUM_REQS, 1, ICACHE_LINE_SIZE, ICACHE_WORD_SIZE, ICACHE_TAG_WIDTH, `VX_CFG_SOCKET_SIZE, `VX_CFG_NUM_ICACHES);
 `endif
 
     ////////////////////////// Dcache Parameters //////////////////////////////
@@ -1533,7 +1769,7 @@ package VX_gpu_pkg;
     localparam DCACHE_CORE_TAG_WIDTH = (UUID_WIDTH + DCACHE_TAG_ID_BITS);
 
     // Core request tag bits on dcache_bus_if port of VX_core (+1 for flush-arb sel bit)
-    // Pre-MMU width (what VX_mem_unit produces, including the flush sel bit).
+    // Pre-MMU width (an LSU block's D-cache port, including the flush sel bit).
     // When VM_ENABLE is on, the dMMU widens this by DCACHE_TLB_SOURCE_BITS
     // for its internal bypass/TLB/PTW arbiter, so the cache cluster sees
     // the wider DCACHE_TAG_WIDTH below.
@@ -1557,13 +1793,24 @@ package VX_gpu_pkg;
 
     // L1 dcache is the LLC iff neither L2 nor L3 is enabled.
     localparam DCACHE_IS_LLC        = !`VX_CFG_L2_ENABLED && !`VX_CFG_L3_ENABLED;
+    // It is the point of coherence between kernels only as the one dcache,
+    // shared by every core of the one socket, with no other memory client
+    // beside it (the texture, ray-tracing and DXA ports join below it, the
+    // raster and OM caches beside it).
+    localparam DCACHE_SHARED_LLC    = DCACHE_IS_LLC && (`VX_CFG_NUM_CLUSTERS == 1)
+                                   && (`VX_CFG_NUM_CORES == `VX_CFG_SOCKET_SIZE) && (`VX_CFG_NUM_DCACHES == 1)
+                                   && !`VX_CFG_EXT_TEX_ENABLED && !`VX_CFG_EXT_RTU_ENABLED
+                                   && !`VX_CFG_EXT_RASTER_ENABLED && !`VX_CFG_EXT_OM_ENABLED
+                                   && !`VX_CFG_EXT_DXA_ENABLED;
 
     ////////////////////////// Tex / Tcache Parameters ////////////////////////
 `ifdef VX_CFG_EXT_TEX_ENABLE
     // tex unit: per-request queue + per-request tag
     localparam TEX_REQ_TAG_WIDTH      = (UUID_WIDTH + `CLOG2(`VX_CFG_TEX_REQ_QUEUE_SIZE));
+    // core-level arb: SFU blocks -> the core's texture bus
+    localparam TEX_CORE_TAG_WIDTH     = (TEX_REQ_TAG_WIDTH + `ARB_SEL_BITS(`VX_CFG_NUM_SFU_BLOCKS, 1));
     // Single socket-level arb: socket cores -> per-socket TEX units
-    localparam TEX_REQ_ARB1_TAG_WIDTH = (TEX_REQ_TAG_WIDTH + `ARB_SEL_BITS(`VX_CFG_SOCKET_SIZE, `VX_CFG_NUM_TEX_CORES));
+    localparam TEX_REQ_ARB1_TAG_WIDTH = (TEX_CORE_TAG_WIDTH + `ARB_SEL_BITS(`VX_CFG_SOCKET_SIZE, `VX_CFG_NUM_TEX_CORES));
 
     localparam TCACHE_WORD_SIZE     = 4;
     localparam TCACHE_ADDR_WIDTH    = (`VX_CFG_MEM_ADDR_WIDTH - `CLOG2(TCACHE_WORD_SIZE));
@@ -1581,9 +1828,8 @@ package VX_gpu_pkg;
     localparam TCACHE_TAG_ID_BITS    = (`CLOG2(`VX_CFG_TEX_MEM_QUEUE_SIZE) + TCACHE_BATCH_SEL_BITS);
     // Core-side (tex_core's cache_bus_if) tag width.
     localparam TCACHE_TAG_WIDTH      = (UUID_WIDTH + TCACHE_TAG_ID_BITS);
-    // Cache-side tag width = core-side + 1 bit reserved by VX_dcr_flush so a
-    // host-issued CACHE_FLUSH DCR-read can inject a synthetic flush request
-    // onto port 0 without aliasing real requests.
+    // Cache-side tag width = core-side + 1 bit reserved by VX_dcr_flush, so
+    // a flush token can be injected without aliasing real requests.
     localparam TCACHE_BUS_TAG_WIDTH  = (TCACHE_TAG_WIDTH + 1);
     localparam TCACHE_MEM_DATA_WIDTH = (TCACHE_LINE_SIZE * 8);
     localparam TCACHE_MEM_PORTS      = 1;
@@ -1686,8 +1932,10 @@ package VX_gpu_pkg;
 `ifdef VX_CFG_EXT_RTU_ENABLE
     localparam RTU_REQ_QUEUE_SIZE     = 4;
     localparam RTU_REQ_TAG_WIDTH      = (UUID_WIDTH + `CLOG2(RTU_REQ_QUEUE_SIZE));
+    // core-level arb: SFU blocks -> the core's RTU bus
+    localparam RTU_CORE_TAG_WIDTH     = (RTU_REQ_TAG_WIDTH + `ARB_SEL_BITS(`VX_CFG_NUM_SFU_BLOCKS, 1));
     // Single socket-level arb: socket cores -> per-socket RTU units
-    localparam RTU_REQ_ARB1_TAG_WIDTH = (RTU_REQ_TAG_WIDTH + `ARB_SEL_BITS(`VX_CFG_SOCKET_SIZE, `VX_CFG_NUM_RTU_CORES));
+    localparam RTU_REQ_ARB1_TAG_WIDTH = (RTU_CORE_TAG_WIDTH + `ARB_SEL_BITS(`VX_CFG_SOCKET_SIZE, `VX_CFG_NUM_RTU_CORES));
 
     // The RTU fetches a whole CW-BVH node (one 64 B cache line) per request,
     // so its cache is line-granular: word size == line size, one port/core.
@@ -1758,6 +2006,19 @@ package VX_gpu_pkg;
     localparam L2_PTW_IDX           = L2_SOCKET_REQS + L2_GFX_REQS;
 
     localparam L2_NUM_REQS          = L2_SOCKET_REQS + L2_GFX_REQS + L2_PTW_REQS;
+
+    // The command processor's DMA enters the shared LLC on one more client
+    // slot (VX_CFG_CP_ON_LLC): the cluster L2 when it is the LLC of a single
+    // cluster, the L3 otherwise. The slot does not size the banks, so
+    // L2_NUM_REQS / L3_NUM_REQS exclude it and *_CACHE_REQS count it.
+    localparam CP_ON_L2             = ((`VX_CFG_CP_ON_LLC != 0)
+                                    && (`VX_CFG_NUM_CLUSTERS == 1)
+                                    && (`VX_CFG_L2_ENABLED != 0)
+                                    && (`VX_CFG_L3_ENABLED == 0)) ? 1 : 0;
+    localparam CP_ON_L3             = ((`VX_CFG_CP_ON_LLC != 0) && (`VX_CFG_L3_ENABLED != 0)) ? 1 : 0;
+    localparam L2_CP_IDX            = L2_NUM_REQS;
+    localparam L2_CACHE_REQS        = L2_NUM_REQS + CP_ON_L2;
+
     localparam L2_NUM_BANKS         = `VX_CFG_L2_NUM_BANKS;
     localparam L2_MEM_PORTS         = `VX_CFG_L2_MEM_PORTS;
 
@@ -1780,13 +2041,18 @@ package VX_gpu_pkg;
 
     // Memory request tag bits
 `ifdef VX_CFG_L2_ENABLE
-    localparam L2_MEM_TAG_WIDTH     = `CACHE_NC_MEM_TAG_WIDTH(`VX_CFG_L2_MSHR_SIZE, L2_NUM_BANKS, L2_NUM_REQS, L2_MEM_PORTS, L2_SECTOR_SIZE, L2_WORD_SIZE, L2_TAG_WIDTH, UUID_WIDTH);
+    localparam L2_MEM_TAG_WIDTH     = `CACHE_NC_MEM_TAG_WIDTH(`VX_CFG_L2_MSHR_SIZE, L2_NUM_BANKS, L2_CACHE_REQS, L2_MEM_PORTS, L2_SECTOR_SIZE, L2_WORD_SIZE, L2_TAG_WIDTH, UUID_WIDTH);
 `else
-    localparam L2_MEM_TAG_WIDTH     = `CACHE_BYPASS_TAG_WIDTH(L2_NUM_REQS, L2_MEM_PORTS, L2_SECTOR_SIZE, L2_WORD_SIZE, L2_TAG_WIDTH);
+    localparam L2_MEM_TAG_WIDTH     = `CACHE_BYPASS_TAG_WIDTH(L2_CACHE_REQS, L2_MEM_PORTS, L2_SECTOR_SIZE, L2_WORD_SIZE, L2_TAG_WIDTH);
 `endif
 
     // L2 is the LLC iff L2 is enabled and L3 is not.
     localparam L2_IS_LLC            = `VX_CFG_L2_ENABLED && !`VX_CFG_L3_ENABLED;
+    // Every memory client of a cluster reaches memory through its L2.
+    localparam L2_SHARED_LLC        = L2_IS_LLC && (`VX_CFG_NUM_CLUSTERS == 1);
+    // An acquire must also invalidate the cache below the dcache unless that
+    // one is the point of coherence (an L3 always is; memory always is).
+    localparam DCACHE_ACQ_FORWARD   = `VX_CFG_L2_ENABLED && !L2_SHARED_LLC;
 
     /////////////////////////////// L3 Parameters /////////////////////////////
 
@@ -1803,6 +2069,8 @@ package VX_gpu_pkg;
     localparam L3_PTW_IDX           = `VX_CFG_NUM_CLUSTERS * L2_MEM_PORTS;
     localparam L3_NUM_REQS	        = `VX_CFG_NUM_CLUSTERS * L2_MEM_PORTS
                                     + ((`VX_CFG_VM_ENABLED != 0) && (PTW_ON_L2 == 0) ? 1 : 0);
+    localparam L3_CP_IDX            = L3_NUM_REQS;
+    localparam L3_CACHE_REQS        = L3_NUM_REQS + CP_ON_L3;
     localparam L3_NUM_BANKS         = `VX_CFG_L3_NUM_BANKS;
     localparam L3_MEM_PORTS         = `VX_CFG_L3_MEM_PORTS;
 
@@ -1814,12 +2082,20 @@ package VX_gpu_pkg;
 
     // Memory request tag bits
 `ifdef VX_CFG_L3_ENABLE
-    localparam L3_MEM_TAG_WIDTH     = `CACHE_NC_MEM_TAG_WIDTH(`VX_CFG_L3_MSHR_SIZE, L3_NUM_BANKS, L3_NUM_REQS, L3_MEM_PORTS, L3_SECTOR_SIZE, L3_WORD_SIZE, L3_TAG_WIDTH, UUID_WIDTH);
+    localparam L3_MEM_TAG_WIDTH     = `CACHE_NC_MEM_TAG_WIDTH(`VX_CFG_L3_MSHR_SIZE, L3_NUM_BANKS, L3_CACHE_REQS, L3_MEM_PORTS, L3_SECTOR_SIZE, L3_WORD_SIZE, L3_TAG_WIDTH, UUID_WIDTH);
 `else
-    localparam L3_MEM_TAG_WIDTH     = `CACHE_BYPASS_TAG_WIDTH(L3_NUM_REQS, L3_MEM_PORTS, L3_SECTOR_SIZE, L3_WORD_SIZE, L3_TAG_WIDTH);
+    localparam L3_MEM_TAG_WIDTH     = `CACHE_BYPASS_TAG_WIDTH(L3_CACHE_REQS, L3_MEM_PORTS, L3_SECTOR_SIZE, L3_WORD_SIZE, L3_TAG_WIDTH);
 `endif
     // L3 is the LLC whenever it is enabled.
     localparam L3_IS_LLC            = `VX_CFG_L3_ENABLED;
+    localparam L3_SHARED_LLC        = L3_IS_LLC;
+
+    // CP DMA port into the LLC client slot: one LLC word per request. The
+    // slot tag carries the port's tag plus a fence marker.
+    localparam CP_MEM_DATA_SIZE     = (CP_ON_L2 != 0) ? L2_WORD_SIZE : L3_WORD_SIZE;
+    localparam CP_MEM_ADDR_WIDTH    = `VX_CFG_MEM_ADDR_WIDTH - `CLOG2(CP_MEM_DATA_SIZE);
+    localparam CP_SLOT_TAG_WIDTH    = (CP_ON_L2 != 0) ? L2_TAG_WIDTH : L3_TAG_WIDTH;
+    localparam CP_MEM_TAG_WIDTH     = CP_SLOT_TAG_WIDTH - UUID_WIDTH - 1;
 
     ///////////////////////////////////////////////////////////////////////////
 

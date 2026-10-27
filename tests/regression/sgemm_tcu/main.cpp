@@ -369,33 +369,11 @@ struct muladd_t<vt::fp16, vt::fp32> {
 };
 
 template <>
-struct muladd_t<vt::fp16, vt::fp16> {
-  static uint16_t eval(uint16_t a, uint16_t b, uint16_t c) {
-    auto fa = bit_cast<float>(rv_htof_s(a, 0, nullptr));
-    auto fb = bit_cast<float>(rv_htof_s(b, 0, nullptr));
-    auto fc = bit_cast<float>(rv_htof_s(c, 0, nullptr));
-    auto fd = fa * fb + fc;
-    return rv_ftoh_s(bit_cast<uint32_t>(fd), 0, nullptr);
-  }
-};
-
-template <>
 struct muladd_t<vt::bf16, vt::fp32> {
   static float eval(uint16_t a, uint16_t b, float c) {
     auto fa = bit_cast<float>(rv_btof_s(a, 0, nullptr));
     auto fb = bit_cast<float>(rv_btof_s(b, 0, nullptr));
     return fa * fb + c;
-  }
-};
-
-template <>
-struct muladd_t<vt::bf16, vt::bf16> {
-  static uint16_t eval(uint16_t a, uint16_t b, uint16_t c) {
-    auto fa = bit_cast<float>(rv_btof_s(a, 0, nullptr));
-    auto fb = bit_cast<float>(rv_btof_s(b, 0, nullptr));
-    auto fc = bit_cast<float>(rv_btof_s(c, 0, nullptr));
-    auto fd = fa * fb + fc;
-    return rv_ftob_s(bit_cast<uint32_t>(fd), 0, nullptr);
   }
 };
 
@@ -409,17 +387,6 @@ struct muladd_t<vt::fp8, vt::fp32> {
 };
 
 template <>
-struct muladd_t<vt::fp8, vt::fp8> {
-  static uint8_t eval(uint8_t a, uint8_t b, uint8_t c) {
-    auto fa = bit_cast<float>(rv_e4m3tof_s(a, 0, nullptr));
-    auto fb = bit_cast<float>(rv_e4m3tof_s(b, 0, nullptr));
-    auto fc = bit_cast<float>(rv_e4m3tof_s(c, 0, nullptr));
-    auto fd = fa * fb + fc;
-    return rv_ftoe4m3_s(bit_cast<uint32_t>(fd), 0, nullptr);
-  }
-};
-
-template <>
 struct muladd_t<vt::bf8, vt::fp32> {
   static float eval(uint8_t a, uint8_t b, float c) {
     auto fa = bit_cast<float>(rv_e5m2tof_s(a, 0, nullptr));
@@ -429,33 +396,11 @@ struct muladd_t<vt::bf8, vt::fp32> {
 };
 
 template <>
-struct muladd_t<vt::bf8, vt::bf8> {
-  static uint8_t eval(uint8_t a, uint8_t b, uint8_t c) {
-    auto fa = bit_cast<float>(rv_e5m2tof_s(a, 0, nullptr));
-    auto fb = bit_cast<float>(rv_e5m2tof_s(b, 0, nullptr));
-    auto fc = bit_cast<float>(rv_e5m2tof_s(c, 0, nullptr));
-    auto fd = fa * fb + fc;
-    return rv_ftoe5m2_s(bit_cast<uint32_t>(fd), 0, nullptr);
-  }
-};
-
-template <>
 struct muladd_t<vt::tf32, vt::fp32> {
   static float eval(uint32_t a, uint32_t b, float c) {
     auto fa = bit_cast<float>(rv_tf32tof_s(a, 0, nullptr));
     auto fb = bit_cast<float>(rv_tf32tof_s(b, 0, nullptr));
     return fa * fb + c;
-  }
-};
-
-template <>
-struct muladd_t<vt::tf32, vt::tf32> {
-  static uint32_t eval(uint32_t a, uint32_t b, uint32_t c) {
-    auto fa = bit_cast<float>(rv_tf32tof_s(a, 0, nullptr));
-    auto fb = bit_cast<float>(rv_tf32tof_s(b, 0, nullptr));
-    auto fc = bit_cast<float>(rv_tf32tof_s(c, 0, nullptr));
-    auto fd = fa * fb + fc;
-    return rv_ftotf32_s(bit_cast<uint32_t>(fd), 0, nullptr);
   }
 };
 
@@ -495,6 +440,9 @@ inline typename T::dtype generate_B_value() {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+static_assert(vt::tcu_output_valid(vt::ITYPE::id, vt::OTYPE::id),
+              "TCU output type must be fp32 (int32 for integer inputs)");
+
 using cfg = vt::wmma_config_t<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE>;
 
 using itype_t = typename vt::ITYPE::dtype;
@@ -507,10 +455,10 @@ static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B, uint32_t 
   for (uint32_t m = 0; m < M; ++m) {
     for (uint32_t n = 0; n < N; ++n) {
       if constexpr (std::is_same<vt::OTYPE, vt::fp32>::value) {
-        // fp32 output: the tensor core accumulates the K products in a wide
-        // accumulator and rounds to fp32 once; a per-step-rounded reference
-        // drifts by several ULP over K. Each product is exact in fp32, so a
-        // double accumulation reproduces the single-rounding dot product.
+        // The tensor core accumulates the K products in a wide accumulator
+        // and rounds to fp32 once; a per-step-rounded reference drifts by
+        // several ULP over K. Each product is exact in fp32, so a double
+        // accumulation reproduces the single-rounding dot product.
         double acc = 0.0;
         for (uint32_t k = 0; k < KS; ++k) {
           auto a = data_accessor_t<vt::ITYPE>::read(A, m * KS + k);
@@ -519,8 +467,7 @@ static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B, uint32_t 
         }
         data_accessor_t<vt::OTYPE>::write(C, m * N + n, static_cast<otype_t>(acc));
       } else {
-        // Narrow outputs re-round the accumulator to the output type every
-        // step, matching the hardware chain exactly.
+        // int32 output (integer inputs): exact accumulation.
         otype_t sum(0);
         for (uint32_t k = 0; k < KS; ++k) {
           auto a = data_accessor_t<vt::ITYPE>::read(A, m * KS + k);

@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 170" role="img" aria-label="Before, a bank took a new fill every other cycle; now fills enter back to back, one per cycle.">
+  <title>Before, a bank took a new fill every other cycle; now fills enter back to back, one per cycle.</title>
+  <defs><marker id="fillst_a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1b2733"/></marker><marker id="fillst_g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1f7a4d"/></marker><marker id="fillst_b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#b3261e"/></marker></defs>
+  <style>
+    text { font-family: Helvetica, Arial, sans-serif; fill: #1b2733; font-size: 11.5px; }
+    .dh { font-size: 13px; font-weight: bold; }
+    .dm { fill: #5a6772; font-size: 11px; }
+    .ds { font-size: 10.5px; }
+    .db { fill: #fbfcfd; stroke: #5a7184; stroke-width: 1.2; }
+    .dbad { fill: #fbe5e3; stroke: #b3261e; stroke-width: 1.2; }
+    .dgood { fill: #e3f3ea; stroke: #1f7a4d; stroke-width: 1.2; }
+    .didle { fill: #f3f5f8; stroke: #c9d1d9; stroke-width: 1.2; }
+    .dwait { fill: #fbe5e3; stroke: #b3261e; stroke-width: 1.2; stroke-dasharray: 4 3; }
+    .ln { stroke: #1b2733; stroke-width: 1.3; fill: none; }
+    .lb { stroke: #b3261e; stroke-width: 1.5; fill: none; }
+    .lg { stroke: #1f7a4d; stroke-width: 1.5; }
+    .dash { stroke-dasharray: 4 3; }
+    .sep { stroke: #c9d1d9; stroke-width: 1; stroke-dasharray: 2 4; }
+    text.db-t { fill: #b3261e; } text.g-t { fill: #1f7a4d; }
+  </style>
+  <rect width="640" height="170" fill="#ffffff"/>
+<g class="dl">
+<text x="20" y="22" class="dh">Before</text>
+<rect x="110" y="34" width="38" height="22" class="db"/><text x="129" y="49" text-anchor="middle" class="ds">fill 1</text>
+<rect x="150" y="34" width="38" height="22" class="dwait"/><text x="169" y="49" text-anchor="middle" class="ds">busy</text>
+<rect x="190" y="34" width="38" height="22" class="db"/><text x="209" y="49" text-anchor="middle" class="ds">fill 2</text>
+<rect x="230" y="34" width="38" height="22" class="dwait"/><text x="249" y="49" text-anchor="middle" class="ds">busy</text>
+<rect x="270" y="34" width="38" height="22" class="db"/><text x="289" y="49" text-anchor="middle" class="ds">fill 3</text>
+<rect x="310" y="34" width="38" height="22" class="dwait"/><text x="329" y="49" text-anchor="middle" class="ds">busy</text>
+<rect x="350" y="34" width="38" height="22" class="db"/><text x="369" y="49" text-anchor="middle" class="ds">fill 4</text>
+<text x="400" y="49" class="dm">4 fills in 7 cycles</text>
+<text x="20" y="92" class="dh">After</text>
+<rect x="110" y="104" width="38" height="22" class="dgood"/><text x="129" y="119" text-anchor="middle" class="ds">fill 1</text>
+<rect x="150" y="104" width="38" height="22" class="dgood"/><text x="169" y="119" text-anchor="middle" class="ds">fill 2</text>
+<rect x="190" y="104" width="38" height="22" class="dgood"/><text x="209" y="119" text-anchor="middle" class="ds">fill 3</text>
+<rect x="230" y="104" width="38" height="22" class="dgood"/><text x="249" y="119" text-anchor="middle" class="ds">fill 4</text>
+<text x="280" y="119" class="dm">4 fills in 4 cycles</text>
+<line x1="110" y1="150" x2="620" y2="150" class="ln"/><text x="620" y="145" text-anchor="end" class="dm">cycles →</text>
+</g>
+</svg>

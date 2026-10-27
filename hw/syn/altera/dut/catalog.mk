@@ -9,7 +9,7 @@
 # Add a DUT: append its name to DUTS and define its variables. No new directory,
 # no dispatcher edit.
 
-DUTS := cache core fpu issue lmem mem_unit scope top unittest vortex
+DUTS := cache core fpu issue lmem mem_unit scope top vortex
 
 # ---------------------------------------------------------------------------
 # shared include fragments
@@ -74,10 +74,6 @@ top_CFG := -DNOPAE -DPLATFORM_PROVIDES_LOCAL_MEMORY
 top_INC  = $(BASE_INC) -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(RTL_DIR)/cache \
            -I$(AFU_DIR) -I$(AFU_DIR)/ccip -I$(IP_CACHE_DIR) $(FPU_INC) $(TCU_INC) $(DXA_INC)
 top_PKG  = $(TCU_PKG) $(DXA_PKG)
-
-unittest_PRJ := Unittest
-unittest_INC  = $(BASE_INC) -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(RTL_DIR)/cache \
-                -I$(IP_CACHE_DIR) $(FPU_INC)
 
 vortex_PRJ := Vortex
 vortex_INC  = $(BASE_INC) -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(RTL_DIR)/cache \

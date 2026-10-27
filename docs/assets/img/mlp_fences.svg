@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 260" role="img" aria-label="Before: a fence token walks every line in L1 and in the L2 and writes back to DRAM. After: L1 writes back to L2, and the shared L2 acknowledges the token without a walk; DRAM is not touched.">
+  <title>Before: a fence token walks every line in L1 and in the L2 and writes back to DRAM. After: L1 writes back to L2, and the shared L2 acknowledges the token without a walk; DRAM is not touched.</title>
+  <defs><marker id="fences_a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1b2733"/></marker><marker id="fences_g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1f7a4d"/></marker><marker id="fences_b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#b3261e"/></marker></defs>
+  <style>
+    text { font-family: Helvetica, Arial, sans-serif; fill: #1b2733; font-size: 11.5px; }
+    .dh { font-size: 13px; font-weight: bold; }
+    .dm { fill: #5a6772; font-size: 11px; }
+    .ds { font-size: 10.5px; }
+    .db { fill: #fbfcfd; stroke: #5a7184; stroke-width: 1.2; }
+    .dbad { fill: #fbe5e3; stroke: #b3261e; stroke-width: 1.2; }
+    .dgood { fill: #e3f3ea; stroke: #1f7a4d; stroke-width: 1.2; }
+    .didle { fill: #f3f5f8; stroke: #c9d1d9; stroke-width: 1.2; }
+    .dwait { fill: #fbe5e3; stroke: #b3261e; stroke-width: 1.2; stroke-dasharray: 4 3; }
+    .ln { stroke: #1b2733; stroke-width: 1.3; fill: none; }
+    .lb { stroke: #b3261e; stroke-width: 1.5; fill: none; }
+    .lg { stroke: #1f7a4d; stroke-width: 1.5; }
+    .dash { stroke-dasharray: 4 3; }
+    .sep { stroke: #c9d1d9; stroke-width: 1; stroke-dasharray: 2 4; }
+    text.db-t { fill: #b3261e; } text.g-t { fill: #1f7a4d; }
+  </style>
+  <rect width="640" height="260" fill="#ffffff"/>
+<text x="160" y="20" class="dh" text-anchor="middle">Before: full flush per fence</text>
+        <text x="480" y="20" class="dh" text-anchor="middle">After: L1-only token</text>
+        <g class="dl">
+          <rect x="90" y="36" width="140" height="28" class="db"/><text x="160" y="55" text-anchor="middle">core: fence</text>
+          <rect x="90" y="94" width="140" height="28" class="dbad"/><text x="160" y="113" text-anchor="middle">L1: walk all lines</text>
+          <rect x="90" y="152" width="140" height="28" class="dbad"/><text x="160" y="171" text-anchor="middle">L2 (LLC): walk all lines</text>
+          <rect x="90" y="210" width="140" height="28" class="dbad"/><text x="160" y="229" text-anchor="middle">DRAM: write-backs</text>
+          <line x1="160" y1="64" x2="160" y2="92" class="ln" marker-end="url(#fences_a)"/><text x="168" y="83" class="dm">token</text>
+          <line x1="160" y1="122" x2="160" y2="150" class="lb" marker-end="url(#fences_b)"/><text x="168" y="141" class="dm">token + dirty</text>
+          <line x1="160" y1="180" x2="160" y2="208" class="lb" marker-end="url(#fences_b)"/><text x="168" y="199" class="dm">token + dirty</text>
+          <line x1="320" y1="30" x2="320" y2="245" class="sep"/>
+          <rect x="410" y="36" width="140" height="28" class="db"/><text x="480" y="55" text-anchor="middle">core: fence</text>
+          <rect x="410" y="94" width="140" height="28" class="db"/><text x="480" y="113" text-anchor="middle">L1: write back dirty</text>
+          <rect x="410" y="152" width="140" height="28" class="dgood"/><text x="480" y="171" text-anchor="middle">L2 (LLC): ack, no walk</text>
+          <rect x="410" y="210" width="140" height="28" class="didle"/><text x="480" y="229" text-anchor="middle">DRAM: not touched</text>
+          <line x1="480" y1="64" x2="480" y2="92" class="ln" marker-end="url(#fences_a)"/><text x="488" y="83" class="dm">L1-only token</text>
+          <line x1="480" y1="122" x2="480" y2="150" class="ln" marker-end="url(#fences_a)"/><text x="488" y="141" class="dm">dirty lines</text>
+          <path d="M552,166 C600,166 600,50 552,50" class="lg" fill="none" marker-end="url(#fences_g)"/><text x="604" y="112" class="dm" text-anchor="end">ack</text>
+        </g>
+</svg>

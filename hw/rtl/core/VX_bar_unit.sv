@@ -14,11 +14,12 @@
 `include "VX_define.vh"
 
 module VX_bar_unit import VX_gpu_pkg::*; #(
-    parameter `STRING INSTANCE_ID = "",
-    parameter CORE_ID = 0
+    parameter `STRING INSTANCE_ID = ""
 ) (
     input wire                clk,
     input wire                reset,
+
+    input wire [CORE_ID_WIDTH-1:0] core_id,
 
     // local barrier interface
     input wire                req_valid,
@@ -36,16 +37,17 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
     output wire [`VX_CFG_NUM_WARPS-1:0] unlock_mask // warps to unlock
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    `UNUSED_PARAM (CORE_ID)
 
     //                    warp mask + warp count + event count
     localparam EVENT_WIDTH = `CLOG2(`VX_CFG_MAX_BAR_EVENTS + 1);
-    localparam BAR_STATEW = `VX_CFG_NUM_WARPS + NW_WIDTH + EVENT_WIDTH;
-    localparam GBAR_REQW = NB_WIDTH + NC_WIDTH;
-    localparam USE_GBAR = (`VX_CFG_NUM_CORES > 1);
+    // the count holds warps for a local barrier, cores for a global one
+    localparam COUNT_W = `MAX(NW_WIDTH, CORE_ID_WIDTH);
+    localparam BAR_STATEW = `VX_CFG_NUM_WARPS + COUNT_W + EVENT_WIDTH;
+    localparam GBAR_REQW = NB_WIDTH + CORE_ID_WIDTH;
+    localparam USE_GBAR = ((`VX_CFG_NUM_CORES * `VX_CFG_NUM_CLUSTERS) > 1);
 
     logic [`VX_CFG_NUM_WARPS-1:0] mask_r, mask_n;
-    logic [NW_WIDTH-1:0]   count_r, count_n;
+    logic [COUNT_W-1:0]    count_r, count_n;
     logic [EVENT_WIDTH-1:0] events_r, events_n;
     logic                  phase_r, phase_n;
 
@@ -59,14 +61,14 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
 
     logic gbar_enqueue;
     logic [NB_WIDTH-1:0] gbar_enqueue_id;
-    logic [NC_WIDTH-1:0] gbar_enqueue_size_m1;
+    logic [CORE_ID_WIDTH-1:0] gbar_enqueue_size_m1;
 
     wire gbar_rsp_ready = ~req_valid;
     wire gbar_rsp_fire = gbar_bus_if.rsp_valid && gbar_rsp_ready;
     wire gbar_rsp_apply = USE_GBAR && gbar_rsp_fire && gbar_pending_r[gbar_bus_if.rsp_data.id];
 
     wire [`VX_CFG_NUM_WARPS-1:0] wait_mask = ((`VX_CFG_NUM_WARPS)'(1) << req_wid) | mask_r;
-    wire [NW_WIDTH-1:0] next_count  = count_r + NW_WIDTH'(1);
+    wire [COUNT_W-1:0] next_count  = count_r + COUNT_W'(1);
     wire next_phase  = ~phase_r;
 
     always @(*) begin
@@ -104,7 +106,7 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
                 end
             end else if (req_data.is_arrive) begin
                 // barrier arrival
-                if (count_r == NW_WIDTH'(req_data.size_m1)) begin
+                if (count_r == COUNT_W'(NW_WIDTH'(req_data.size_m1))) begin
                     count_n = '0;
                     if (events_r == 0) begin
                         mask_n = '0;
@@ -148,11 +150,11 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
                         mask_n = '0;
                         gbar_enqueue = 1; // notify global barrier
                         gbar_enqueue_id = req_data.id;
-                        gbar_enqueue_size_m1 = NC_WIDTH'(count_r); // was saved in barrier_arrive
+                        gbar_enqueue_size_m1 = CORE_ID_WIDTH'(count_r); // was saved in barrier_arrive
                     end
                 end else if (req_data.is_arrive) begin
                     // barrier arrival
-                    count_n = NW_WIDTH'(req_data.size_m1); // store participating number of cores
+                    count_n = COUNT_W'(req_data.size_m1); // store participating number of cores
                     if (req_data.is_sync) begin
                         gbar_waiters_n[req_data.id][req_wid] = 1;
                     end
@@ -160,7 +162,7 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
                         mask_n = '0;
                         gbar_enqueue = 1; // notify global barrier
                         gbar_enqueue_id = req_data.id;
-                        gbar_enqueue_size_m1 = NC_WIDTH'(req_data.size_m1);
+                        gbar_enqueue_size_m1 = CORE_ID_WIDTH'(req_data.size_m1);
                     end else begin
                         // Add arriving warp to arrival mask
                         mask_n = wait_mask;
@@ -329,12 +331,13 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
 
         assign gbar_bus_if.req_valid        = gbar_req_valid_r;
         assign {gbar_bus_if.req_data.id, gbar_bus_if.req_data.size_m1} = req_queue_data;
-        assign gbar_bus_if.req_data.core_id = NC_WIDTH'(CORE_ID % `VX_CFG_NUM_CORES);
+        assign gbar_bus_if.req_data.core_id = core_id;
         assign gbar_bus_if.rsp_ready        = gbar_rsp_ready;
 
         `RUNTIME_ASSERT(~gbar_enqueue || ~gbar_pending_r[gbar_enqueue_id], ("%s duplicate global barrier generation: id=%0d", INSTANCE_ID, gbar_enqueue_id))
         `RUNTIME_ASSERT(~gbar_enqueue || (store_waddr == BAR_ADDR_W'(gbar_enqueue_id)), ("%s invalid global barrier slot: id=%0d, slot=%0d", INSTANCE_ID, gbar_enqueue_id, store_waddr))
     end else begin : g_nogbar
+        `UNUSED_VAR (core_id)
 
         assign gbar_bus_if.req_valid = 0;
         assign gbar_bus_if.req_data  = 'x;

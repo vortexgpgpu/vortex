@@ -29,7 +29,9 @@
 #endif
 
 
+#include <algorithm>
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
 #include <fstream>
 #include <iomanip>
@@ -39,6 +41,7 @@
 
 #include <VX_config.h>
 #include <ostream>
+#include <deque>
 #include <list>
 #include <queue>
 #include <vector>
@@ -72,8 +75,18 @@ typedef uint64_t Word;
 #define VL_WDATA_GETW(lwp, i, n, w) \
   VL_SEL_IWII(0, n * w, 0, 0, lwp, i * w, w)
 
+// Command-processor DMA port into the last-level cache: one cache word per
+// request, and as many reads in flight as one 4 KB DMA burst holds.
+#if VX_CFG_L3_ENABLED
+#define CP_MEM_DATA_SIZE VX_CFG_L2_SECTOR_SIZE
+#else
+#define CP_MEM_DATA_SIZE VX_CFG_L1_LINE_SIZE
+#endif
+#define CP_MEM_RD_SLOTS (4096 / CP_MEM_DATA_SIZE)
+
 using namespace vortex;
 
+static uint64_t g_mem_done_seq = 0;
 static uint32_t g_mem_bank_addr_width = (VX_CFG_PLATFORM_MEMORY_ADDR_WIDTH - log2ceil(VX_CFG_PLATFORM_MEMORY_NUM_BANKS));
 
 static uint64_t timestamp = 0;
@@ -237,8 +250,8 @@ public:
     device_->dcr_req_data  = tag;
     this->tick();
     device_->dcr_req_valid = 0;
-    this->tick();
-    // READ response is returned when dcr_rsp_valid is high
+    // A core whose flush already finished answers on the next cycle, and the
+    // response is a one-cycle pulse, so start polling right away.
     while (!device_->dcr_rsp_valid) {
       this->tick();
     }
@@ -246,11 +259,72 @@ public:
     return 0;
   }
 
+  void drain() {
+    while (device_->busy) {
+      this->tick();
+    }
+  }
+
+  void cp_mem_write(uint64_t addr, const uint8_t* src, uint64_t size, bool noalloc) {
+    while (size != 0) {
+      uint64_t offset = addr % CP_MEM_DATA_SIZE;
+      uint64_t n = std::min<uint64_t>(size, CP_MEM_DATA_SIZE - offset);
+      cp_req_t req;
+      req.rw      = true;
+      req.noalloc = noalloc;
+      req.addr    = addr / CP_MEM_DATA_SIZE;
+      req.byteen  = 0;
+      req.data.fill(0);
+      for (uint64_t i = 0; i < n; ++i) {
+        req.data[offset + i] = src[i];
+        req.byteen |= uint64_t(1) << (offset + i);
+      }
+      req.tag = 0;
+      cp_reqs_.push_back(req);
+      addr += n;
+      src  += n;
+      size -= n;
+    }
+    while (!cp_reqs_.empty()) {
+      this->tick();
+    }
+  }
+
+  void cp_mem_read(uint64_t addr, uint8_t* dst, uint64_t size) {
+    uint32_t inflight = 0;
+    while (size != 0 || inflight != 0) {
+      // two queued requests keep one read entering the port every cycle
+      while (size != 0 && cp_reqs_.size() < 2 && !cp_free_slots_.empty()) {
+        uint64_t offset = addr % CP_MEM_DATA_SIZE;
+        uint64_t n = std::min<uint64_t>(size, CP_MEM_DATA_SIZE - offset);
+        uint32_t slot = cp_free_slots_.back();
+        cp_free_slots_.pop_back();
+        cp_rd_slots_[slot] = {dst, uint32_t(offset), uint32_t(n)};
+        cp_req_t req;
+        req.rw      = false;
+        req.noalloc = false;
+        req.addr    = addr / CP_MEM_DATA_SIZE;
+        req.byteen  = ~uint64_t(0);
+        req.data.fill(0);
+        req.tag     = slot;
+        cp_reqs_.push_back(req);
+        ++inflight;
+        addr += n;
+        dst  += n;
+        size -= n;
+      }
+      this->tick();
+      inflight -= cp_rd_completed_;
+      cp_rd_completed_ = 0;
+    }
+  }
+
 private:
 
   void reset() {
     this->mem_bus_reset();
     this->dcr_bus_reset();
+    this->cp_mem_reset();
 
     print_bufs_.clear();
 
@@ -294,11 +368,13 @@ private:
     this->eval();
 
     this->mem_bus_eval(0);
+    this->cp_mem_eval(0);
 
     device_->clk = 1;
     this->eval();
 
     this->mem_bus_eval(1);
+    this->cp_mem_eval(1);
 
     dram_sim_.tick();
 
@@ -309,6 +385,7 @@ private:
           // mark completed request as ready
           auto orig_req = reinterpret_cast<mem_req_t*>(arg);
           orig_req->ready = true;
+          orig_req->done_seq = g_mem_done_seq++;
           return true;
         }, mem_req);
         dram_queue_[b].pop();
@@ -355,22 +432,29 @@ private:
       if (device_->mem_rsp_valid[b] && mem_rd_rsp_ready_[b]) {
         device_->mem_rsp_valid[b] = 0;
       }
-      if (device_->mem_rsp_valid[b] == 0) {
-        if (!pending_mem_reqs_[b].empty()) {
-          auto mem_rsp_it = pending_mem_reqs_[b].begin();
-          auto mem_rsp = *mem_rsp_it;
-          if (mem_rsp->ready) {
-            if (!mem_rsp->write) {
-              // return read responses
-              device_->mem_rsp_valid[b] = 1;
-              memcpy(VDataCast<void*, VX_CFG_PLATFORM_MEMORY_DATA_SIZE>::get(device_->mem_rsp_data[b]), mem_rsp->data.data(), VX_CFG_PLATFORM_MEMORY_DATA_SIZE);
-              device_->mem_rsp_tag[b] = mem_rsp->tag;
-            }
-            // delete the request
-            pending_mem_reqs_[b].erase(mem_rsp_it);
-            delete mem_rsp;
-          }
+      // Reads carry distinct AXI IDs, so the memory returns them in the order
+      // they complete; writes are posted and never hold back a read.
+      auto& pending = pending_mem_reqs_[b];
+      auto next_rd = pending.end();
+      for (auto it = pending.begin(); it != pending.end();) {
+        auto mem_req = *it;
+        if (mem_req->ready && mem_req->write) {
+          it = pending.erase(it);
+          delete mem_req;
+          continue;
         }
+        if (mem_req->ready && (next_rd == pending.end() || mem_req->done_seq < (*next_rd)->done_seq)) {
+          next_rd = it;
+        }
+        ++it;
+      }
+      if (next_rd != pending.end() && !device_->mem_rsp_valid[b]) {
+        auto mem_rsp = *next_rd;
+        device_->mem_rsp_valid[b] = 1;
+        memcpy(VDataCast<void*, VX_CFG_PLATFORM_MEMORY_DATA_SIZE>::get(device_->mem_rsp_data[b]), mem_rsp->data.data(), VX_CFG_PLATFORM_MEMORY_DATA_SIZE);
+        device_->mem_rsp_tag[b] = mem_rsp->tag;
+        pending.erase(next_rd);
+        delete mem_rsp;
       }
 
       // process memory requests
@@ -432,6 +516,51 @@ private:
     device_->dcr_req_rw    = 0;
   }
 
+  void cp_mem_reset() {
+    cp_reqs_.clear();
+    cp_free_slots_.clear();
+    for (uint32_t i = 0; i < CP_MEM_RD_SLOTS; ++i) {
+      cp_free_slots_.push_back(CP_MEM_RD_SLOTS - 1 - i);
+    }
+    cp_req_fire_ = false;
+    cp_rd_completed_ = 0;
+    device_->cp_mem_req_valid = 0;
+    device_->cp_mem_rsp_ready = 1;
+  }
+
+  // Inputs change after the rising edge; the handshakes they take part in
+  // are sampled after the falling-edge evaluation, ahead of the next edge.
+  void cp_mem_eval(bool clk) {
+    if (!clk) {
+      cp_req_fire_ = device_->cp_mem_req_valid && device_->cp_mem_req_ready;
+      if (device_->cp_mem_rsp_valid) {
+        uint32_t slot = device_->cp_mem_rsp_tag;
+        auto& rd = cp_rd_slots_.at(slot);
+        auto data = VDataCast<const uint8_t*, CP_MEM_DATA_SIZE>::get(device_->cp_mem_rsp_data);
+        std::memcpy(rd.dst, data + rd.offset, rd.size);
+        cp_free_slots_.push_back(slot);
+        ++cp_rd_completed_;
+      }
+      return;
+    }
+    if (cp_req_fire_) {
+      cp_reqs_.pop_front();
+      cp_req_fire_ = false;
+    }
+    if (cp_reqs_.empty()) {
+      device_->cp_mem_req_valid = 0;
+      return;
+    }
+    auto& req = cp_reqs_.front();
+    device_->cp_mem_req_valid   = 1;
+    device_->cp_mem_req_rw      = req.rw;
+    device_->cp_mem_req_noalloc = req.noalloc;
+    device_->cp_mem_req_addr    = req.addr;
+    device_->cp_mem_req_byteen  = req.byteen;
+    device_->cp_mem_req_tag     = req.tag;
+    memcpy(VDataCast<void*, CP_MEM_DATA_SIZE>::get(device_->cp_mem_req_data), req.data.data(), CP_MEM_DATA_SIZE);
+  }
+
   void wait(uint32_t cycles) {
     for (int i = 0; i < cycles; ++i) {
       this->tick();
@@ -448,9 +577,31 @@ private:
     uint64_t tag;
     bool write;
     bool ready;
+    uint64_t done_seq;
   } mem_req_t;
 
   std::unordered_map<int, std::stringstream> print_bufs_;
+
+  typedef struct {
+    std::array<uint8_t, CP_MEM_DATA_SIZE> data;
+    uint64_t addr;
+    uint64_t byteen;
+    uint32_t tag;
+    bool rw;
+    bool noalloc;
+  } cp_req_t;
+
+  typedef struct {
+    uint8_t* dst;
+    uint32_t offset;
+    uint32_t size;
+  } cp_rd_t;
+
+  std::deque<cp_req_t> cp_reqs_;
+  std::array<cp_rd_t, CP_MEM_RD_SLOTS> cp_rd_slots_;
+  std::vector<uint32_t> cp_free_slots_;
+  uint32_t cp_rd_completed_;
+  bool cp_req_fire_;
 
   std::list<mem_req_t*> pending_mem_reqs_[VX_CFG_PLATFORM_MEMORY_NUM_BANKS];
 
@@ -497,4 +648,24 @@ int Processor::dcr_write(uint32_t addr, uint32_t value) {
 
 int Processor::dcr_read(uint32_t addr, uint32_t tag, uint32_t* value) {
   return impl_->dcr_read(addr, tag, value);
+}
+
+void Processor::cp_mem_write(uint64_t addr, const void* src, uint64_t size, bool noalloc) {
+  impl_->cp_mem_write(addr, static_cast<const uint8_t*>(src), size, noalloc);
+}
+
+void Processor::cp_mem_read(uint64_t addr, void* dst, uint64_t size) {
+  impl_->cp_mem_read(addr, static_cast<uint8_t*>(dst), size);
+}
+
+bool Processor::cp_llc_client() const {
+  return VX_CFG_CP_ON_LLC != 0;
+}
+
+uint64_t Processor::cp_llc_size() const {
+  return VX_CFG_L3_ENABLED ? VX_CFG_L3_SIZE : VX_CFG_L2_SIZE;
+}
+
+void Processor::drain() {
+  impl_->drain();
 }

@@ -143,6 +143,13 @@ private:
         std::memcpy(dst, hp, bytes);
         return;
       }
+      if (processor_.cp_llc_client()) {
+        if (future_.valid()) {
+          future_.wait();
+        }
+        processor_.cp_mem_read(addr, dst, bytes);
+        return;
+      }
       ram_.read(static_cast<uint8_t*>(dst), addr, bytes);
     };
     h.dram_write = [this](uint64_t addr, const void* src, std::size_t bytes) {
@@ -150,9 +157,40 @@ private:
         std::memcpy(hp, src, bytes);
         return;
       }
+      if (processor_.cp_llc_client()) {
+        if (future_.valid()) {
+          future_.wait();
+        }
+        processor_.cp_mem_write(addr, src, bytes, false);
+        return;
+      }
       ram_.write(static_cast<const uint8_t*>(src), addr, bytes);
     };
+    if (processor_.cp_llc_client()) {
+      // The CP DMA is a client of the last-level cache: transfers stay
+      // coherent with it, and those of at least half its size write around it.
+      h.dma_write = [this](uint64_t addr, const void* src, std::size_t bytes, bool no_alloc) {
+        if (void* hp = host_region_ptr(addr)) {
+          std::memcpy(hp, src, bytes);
+          return;
+        }
+        if (future_.valid()) {
+          future_.wait();
+        }
+        processor_.cp_mem_write(addr, src, bytes, no_alloc);
+      };
+      h.dma_llc_client = true;
+      h.dma_no_alloc_min = processor_.cp_llc_size() / 2;
+      if (const char* v = std::getenv("VORTEX_CP_NO_ALLOC_MIN")) {
+        h.dma_no_alloc_min = std::strtoull(v, nullptr, 0);
+      }
+    }
     h.vortex_dcr_write = [this](uint32_t addr, uint32_t value) {
+      // Wait for any background processor_.run() to finish so dcr_write
+      // does not race the Verilator state.
+      if (future_.valid()) {
+        future_.wait();
+      }
       processor_.dcr_write(addr, value);
     };
     h.vortex_dcr_read = [this](uint32_t addr, uint32_t tag) -> uint32_t {
@@ -169,6 +207,10 @@ private:
     h.vortex_busy = [this]() -> bool {
       if (!future_.valid()) return false;
       return future_.wait_for(std::chrono::seconds(0)) != std::future_status::ready;
+    };
+    h.vortex_drain = [this]() {
+      if (future_.valid()) future_.wait();
+      processor_.drain();
     };
 #ifdef VX_CFG_VM_ENABLE
     // The device MMU control surface answers the fault-report DCRs.

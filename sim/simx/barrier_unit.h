@@ -30,10 +30,13 @@ public:
 
   uint32_t get_phase(uint32_t bar_id) const;
   void arrive(uint32_t bar_id, uint32_t count, uint32_t wid, bool is_sync_bar);
-  bool wait(uint32_t bar_id, uint32_t phase, uint32_t wid);
+  void wait(uint32_t bar_id, uint32_t phase, uint32_t wid);
   void global_resume(uint32_t bar_id);
   void event_attach(uint32_t bar_id, uint32_t count = 1);
   void event_release(uint32_t bar_id);
+
+  // warps a local barrier releases, to the core's warp scheduler
+  SimChannel<uint32_t> unlock_out;
 
 protected:
   void on_reset();
@@ -44,7 +47,9 @@ private:
   // send on its own cycle so back-to-back completions serialize here too.
   uint64_t gbar_send_next_;
 
-  void gbar_send(uint32_t bar_id, uint32_t count);
+  // lag: cycles until the triggering request applies in the barrier store
+  void gbar_send(uint32_t bar_id, uint32_t count, uint32_t lag);
+  void release(uint32_t wid, uint32_t lag);
 
   Core*       core_;
   Scheduler*  scheduler_;

@@ -14,11 +14,12 @@
 `include "VX_define.vh"
 
 module VX_dispatcher import VX_gpu_pkg::*; #(
-    parameter `STRING INSTANCE_ID = "",
-    parameter ISSUE_ID = 0
+    parameter `STRING INSTANCE_ID = ""
 ) (
     input wire              clk,
     input wire              reset,
+
+    input wire [ISSUE_ISW_W-1:0] slice_id,
 
 `ifdef PERF_ENABLE
     output wire [NUM_EX_UNITS-1:0][PERF_CTR_BITS-1:0] perf_stalls,
@@ -32,7 +33,9 @@ module VX_dispatcher import VX_gpu_pkg::*; #(
     VX_dispatch_if.master   dispatch_if [NUM_EX_UNITS]
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    `UNUSED_PARAM (ISSUE_ID)
+`ifndef DBG_TRACE_PIPELINE
+    `UNUSED_VAR (slice_id)
+`endif
 
     localparam OUT_DATAW = $bits(dispatch_t);
 
@@ -45,7 +48,7 @@ module VX_dispatcher import VX_gpu_pkg::*; #(
     end
 
     // All execution units pass operand data straight through; LSU address
-    // generation (pack-load included) lives in VX_lsu_slice.
+    // generation (pack-load included) lives in VX_lsu_block.
     for (genvar i = 0; i < NUM_EX_UNITS; ++i) begin : g_buffers
         VX_elastic_buffer #(
             .DATAW   (OUT_DATAW),
@@ -107,7 +110,7 @@ module VX_dispatcher import VX_gpu_pkg::*; #(
     for (genvar ex = 0; ex < NUM_EX_UNITS; ++ex) begin : g_dispatch_trace
         always @(posedge clk) begin
             if (dispatch_if[ex].valid && dispatch_if[ex].ready) begin
-                `TRACE(1, ("%t: %s dispatch: wid=%0d, cta_id=%0d, sid=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, wis_to_wid(dispatch_if[ex].data.wis, ISSUE_ID), dispatch_if[ex].data.cta_id, dispatch_if[ex].data.sid, to_fullPC(dispatch_if[ex].data.PC)))
+                `TRACE(1, ("%t: %s dispatch: wid=%0d, cta_id=%0d, sid=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, wis_to_wid(dispatch_if[ex].data.wis, slice_id), dispatch_if[ex].data.cta_id, dispatch_if[ex].data.sid, to_fullPC(dispatch_if[ex].data.PC)))
                 VX_trace_pkg::trace_ex_type(1, ex);
                 `TRACE(1, (", op="))
                 VX_trace_pkg::trace_ex_op(1, ex, dispatch_if[ex].data.op_type, dispatch_if[ex].data.op_args);

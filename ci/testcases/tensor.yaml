@@ -31,7 +31,7 @@ tests:
   drivers:
   - simx
   app: sgemm_tcu
-  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=bf16 -DOTYPE=bf16
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=bf16 -DOTYPE=fp32
 - id: sgemm_tcu-5
   via: blackbox
   drivers:
@@ -43,7 +43,7 @@ tests:
   drivers:
   - simx
   app: sgemm_tcu
-  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DITYPE=bf8 -DOTYPE=bf8
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DITYPE=bf8 -DOTYPE=fp32
 - id: sgemm_tcu-7
   via: blackbox
   drivers:
@@ -123,13 +123,13 @@ tests:
   drivers:
   - rtlsim
   app: sgemm_tcu
-  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_ISSUE_WIDTH=2 -DITYPE=fp16 -DOTYPE=fp32
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_ISSUE_WIDTH=2 -DITYPE=fp16 -DOTYPE=fp32 -DVX_CFG_FETCH_WIDTH=2 -DVX_CFG_NUM_SFU_BLOCKS=2
 - id: sgemm_tcu-19
   via: blackbox
   drivers:
   - rtlsim
   app: sgemm_tcu
-  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_ISSUE_WIDTH=4 -DITYPE=fp16 -DOTYPE=fp32
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_ISSUE_WIDTH=4 -DITYPE=fp16 -DOTYPE=fp32 -DVX_CFG_FETCH_WIDTH=2 -DVX_CFG_NUM_SFU_BLOCKS=4
     -DPROFILE_ENABLE
 - id: sgemm_tcu-20
   via: blackbox
@@ -148,7 +148,7 @@ tests:
   drivers:
   - rtlsim
   app: sgemm2_tcu
-  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_FETCH_WIDTH=4 -DVX_CFG_NUM_SFU_BLOCKS=4
     -DITYPE=fp16 -DOTYPE=fp32
   args: -w 4
 
@@ -193,6 +193,9 @@ tests:
   check: model_parity
   via: blackbox
   app: sgemm_tcu
+  # Sized like its perf_gate twin: at the default 64^3 the grid is four waves of
+  # CTAs, so one CTA running long moves the per-core split and the cycle count.
+  args: -m 128 -n 128 -k 128
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32
   shape: {cores: 2, l2cache: true}
 

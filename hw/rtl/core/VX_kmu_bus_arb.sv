@@ -27,16 +27,16 @@
 // lock would never release and would starve every other master forever.
 //
 // Fan-out picks the output by kind:
-//   FRAGMENT — routed by `dest`, this level's slice (DEST_LSB). Fragment work is
-//              bin->core affine; load-balancing it would break same-pixel blend
-//              order.
+//   FRAGMENT — routed by `dest`, this level's digit (dest / DEST_DIV) % NUM_OUTPUTS.
+//              Fragment work is bin->core affine; load-balancing it would break
+//              same-pixel blend order.
 //   COMPUTE  — round-robin over the ready outputs, which is what the plain
 //              stream arbiter did before and what keeps CTAs spread across cores.
 
 module VX_kmu_bus_arb import VX_gpu_pkg::*; #(
     parameter NUM_INPUTS  = 1,
     parameter NUM_OUTPUTS = 1,
-    parameter DEST_LSB    = 0,   // bit offset of this level's slice of `dest`
+    parameter DEST_DIV    = 1,   // cores below each output: this level's digit of `dest`
     parameter OUT_BUF     = 0,
     parameter `STRING ARBITER = "R"
 ) (
@@ -167,7 +167,7 @@ module VX_kmu_bus_arb import VX_gpu_pkg::*; #(
         reg [SEL_O-1:0] lock_sel;
         reg [SEL_O-1:0] rr_ptr;
 
-        wire [SEL_O-1:0] dest_sel = SEL_O'(m_data[PW_DEST +: KMU_DEST_W] >> DEST_LSB);
+        wire [SEL_O-1:0] dest_sel = SEL_O'((32'(m_data[PW_DEST +: KMU_DEST_W]) / DEST_DIV) % NUM_OUTPUTS);
 
         // Round-robin over the ready outputs, starting at rr_ptr. Descending
         // scan so the nearest ready output (smallest step from rr_ptr) is the
@@ -213,6 +213,7 @@ module VX_kmu_bus_arb import VX_gpu_pkg::*; #(
 
     end else begin : g_fanout_1
 
+        `UNUSED_PARAM (DEST_DIV)
         assign out_valid[0] = m_valid;
         assign out_data[0]  = m_data;
         assign m_ready      = out_ready[0];

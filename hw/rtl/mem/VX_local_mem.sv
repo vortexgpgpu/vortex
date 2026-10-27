@@ -479,11 +479,16 @@ module VX_local_mem import VX_gpu_pkg::*; #(
             // holder-credit protocol a hot word maps to exactly one station, so
             // depth only reduces false eviction between distinct reserved words
             // aliasing in one bank -- and a spurious SC failure is architecturally
-            // legal. Clamp the depth and shorten the credit budget to the local
-            // round trip instead of inheriting the L1-miss sizing.
+            // legal. Clamp the depth.
+            // A credit is spent per refused LR, not per cycle: a warp's LR reaches
+            // the bank as one request per lane, back to back, so between a holder's
+            // LR and its SC every other hart of the core can be refused, and a
+            // refused hart can retry once more. The budget covers two refusals per
+            // hart; a smaller one lets one warp's own LR burst displace its holder
+            // and a contended retry loop stops making progress.
             VX_amo_unit #(
                 .NUM_RES_ENTRIES  (`MIN(`VX_CFG_AMO_RS_SIZE, 4)),
-                .HOLD_CREDIT_BITS (3),
+                .HOLD_CREDIT_BITS (`CLOG2(`VX_CFG_NUM_WARPS * `VX_CFG_NUM_THREADS) + 1),
                 .LINE_ADDR_BITS   (BANK_ADDR_WIDTH),
                 .DATA_WIDTH       (WORD_WIDTH)
             ) amo_unit (
