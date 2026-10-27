@@ -1549,13 +1549,17 @@ module foldsim_mem_bank #(
                     cx_v[m][k] = 1'b0;
     end
 
-    // A word a cycle per calendar; a range's last word starts the next.
+    // A word a cycle per calendar, the first as the reservation commits; a
+    // range's last word starts the next.
     always @(posedge clk) begin
         wr_en <= '0;
         for (integer m = 0; m < NBM; ++m) begin
-            if (reset) begin
-                cm_busy[m] <= 1'b0;
-            end else if (cm_start) begin : start_
+            reg [HLOG2-1:0]   pos;
+            reg signed [15:0] left, take;
+            reg [63:0]        also;
+            reg               act, nxt;
+            reg [5:0]         off;
+            if (cm_start) begin : start_
                 // Both ranges in one word are marked in one write.
                 reg [HLOG2-1:0] p0, p1;
                 reg [WW-1:0]    w0, x0, w1, x1;
@@ -1566,33 +1570,44 @@ module foldsim_mem_bank #(
                 w1 = WW'(p1 >> 6);
                 x0 = WW'(HLOG2'(base + HLOG2'(cm_hi[m][0])) >> 6);
                 x1 = WW'(HLOG2'(base + HLOG2'(cm_hi[m][1])) >> 6);
-                one = cm_v[m][0] & cm_v[m][1] & (cm_hi[m][0] - cm_lo[m][0] < 16'sd64)
-                    & (cm_hi[m][1] - cm_lo[m][1] < 16'sd64) & (w0 == x0) & (w1 == x1) & (w0 == w1);
-                cm_busy[m] <= cm_v[m][0] | cm_v[m][1];
-                cm_next[m] <= cm_v[m][0] & cm_v[m][1] & ~one;
-                cm_also[m] <= one ? span_mask(p1[5:0], cm_hi[m][1] - cm_lo[m][1] + 16'sd1) : 64'd0;
-                cm_pos[m]  <= cm_v[m][0] ? p0 : p1;
-                cm_left[m] <= cm_v[m][0] ? cm_hi[m][0] - cm_lo[m][0] + 16'sd1
-                                         : cm_hi[m][1] - cm_lo[m][1] + 16'sd1;
-            end else if (cm_busy[m]) begin
-                reg signed [15:0] take;
-                reg [5:0] off;
-                off  = cm_pos[m][5:0];
-                take = (cm_left[m] >= 16'sd64 - 16'(off)) ? 16'sd64 - 16'(off) : cm_left[m];
+                one  = cm_v[m][0] & cm_v[m][1] & (cm_hi[m][0] - cm_lo[m][0] < 16'sd64)
+                     & (cm_hi[m][1] - cm_lo[m][1] < 16'sd64) & (w0 == x0) & (w1 == x1) & (w0 == w1);
+                act  = cm_v[m][0] | cm_v[m][1];
+                nxt  = cm_v[m][0] & cm_v[m][1] & ~one;
+                also = one ? span_mask(p1[5:0], cm_hi[m][1] - cm_lo[m][1] + 16'sd1) : 64'd0;
+                pos  = cm_v[m][0] ? p0 : p1;
+                left = cm_v[m][0] ? cm_hi[m][0] - cm_lo[m][0] + 16'sd1
+                                  : cm_hi[m][1] - cm_lo[m][1] + 16'sd1;
+            end else begin
+                act  = cm_busy[m];
+                nxt  = cm_next[m];
+                also = cm_also[m];
+                pos  = cm_pos[m];
+                left = cm_left[m];
+            end
+            off  = pos[5:0];
+            take = (left >= 16'sd64 - 16'(off)) ? 16'sd64 - 16'(off) : left;
+            cm_also[m] <= 64'd0;
+            if (act) begin
                 wr_en[m]   <= 1'b1;
-                wr_word[m] <= WW'(cm_pos[m] >> 6);
-                wr_mask[m] <= span_mask(off, cm_left[m]) | cm_also[m];
-                cm_also[m] <= 64'd0;
-                if (cm_left[m] == take) begin
-                    cm_busy[m] <= cm_next[m];
+                wr_word[m] <= WW'(pos >> 6);
+                wr_mask[m] <= span_mask(off, left) | also;
+                if (left == take) begin
+                    cm_busy[m] <= nxt;
                     cm_next[m] <= 1'b0;
                     cm_pos[m]  <= HLOG2'(base + HLOG2'(cm_lo[m][1]));
                     cm_left[m] <= cm_hi[m][1] - cm_lo[m][1] + 16'sd1;
                 end else begin
-                    cm_pos[m]  <= HLOG2'(cm_pos[m] + HLOG2'(take));
-                    cm_left[m] <= cm_left[m] - take;
+                    cm_busy[m] <= 1'b1;
+                    cm_next[m] <= nxt;
+                    cm_pos[m]  <= HLOG2'(pos + HLOG2'(take));
+                    cm_left[m] <= left - take;
                 end
+            end else begin
+                cm_busy[m] <= 1'b0;
             end
+            if (reset)
+                cm_busy[m] <= 1'b0;
         end
     end
 
