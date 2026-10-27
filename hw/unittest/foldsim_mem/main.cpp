@@ -739,6 +739,9 @@ void drain() {
   for (int i = 0; i < 100000 && !master.idle(); ++i)
     run(1);
   CHECK(master.idle(), "the target's transactions never complete");
+  // A write acknowledged to the target may still be on its way to HBM.
+  for (int i = 0; i < 100000 && !(dut->idle && hbm.outstanding() == 0); ++i)
+    run(1);
   run(4);
 }
 

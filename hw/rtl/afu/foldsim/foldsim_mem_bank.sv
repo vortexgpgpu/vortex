@@ -423,6 +423,7 @@ module foldsim_mem_bank #(
     reg [2:0]        op_pg;
 
     wire [WW-1:0]    end_word = WW'(base >> 6);
+    wire [WW-1:0]    end_word1 = end_word + WW'(1);
     wire [15:0]      ea      = da + 16'd1;
     wire [HLOG2-1:0] base_a  = HLOG2'(ea);
     wire [WW-1:0]    end_word_a = WW'(base_a >> 6);
@@ -435,6 +436,7 @@ module foldsim_mem_bank #(
     reg  [WW-1:0]    wr_word [NBM];
     reg  [63:0]      wr_mask [NBM];
     wire [63:0]      rd_cmdr, rd_cmdc, rd_row, rd_kr, rd_kw, rd_depv;
+    wire [63:0]      rd_kr1, rd_kw1;
     wire [63:0]      rd_cmd = rd_cmdr | rd_cmdc;
     /* verilator lint_off UNUSEDSIGNAL */
     wire [63:0]      rd_row1;
@@ -453,13 +455,13 @@ module foldsim_mem_bank #(
         .clk, .reset, .clear_all(bm_clear_all), .clear(bm_clear), .clear_word(bm_clear_word),
         .rd_inst(2'b00), .rd_word({s_word1, s_word}), .rd_data({rd_row1, rd_row}),
         .we(wr_en[B_ROW]), .wr_inst(1'b0), .wr_word(wr_word[B_ROW]), .wr_mask(wr_mask[B_ROW]));
-    foldsim_mem_bmap #(.INST(1), .WORDS(WORDS), .NREAD(1)) m_kr (
+    foldsim_mem_bmap #(.INST(1), .WORDS(WORDS), .NREAD(2)) m_kr (
         .clk, .reset, .clear_all(bm_clear_all), .clear(bm_clear), .clear_word(bm_clear_word),
-        .rd_inst(1'b0), .rd_word(end_word), .rd_data(rd_kr),
+        .rd_inst(2'b00), .rd_word({end_word1, end_word}), .rd_data({rd_kr1, rd_kr}),
         .we(wr_en[B_KR]), .wr_inst(1'b0), .wr_word(wr_word[B_KR]), .wr_mask(wr_mask[B_KR]));
-    foldsim_mem_bmap #(.INST(1), .WORDS(WORDS), .NREAD(1)) m_kw (
+    foldsim_mem_bmap #(.INST(1), .WORDS(WORDS), .NREAD(2)) m_kw (
         .clk, .reset, .clear_all(bm_clear_all), .clear(bm_clear), .clear_word(bm_clear_word),
-        .rd_inst(1'b0), .rd_word(end_word), .rd_data(rd_kw),
+        .rd_inst(2'b00), .rd_word({end_word1, end_word}), .rd_data({rd_kw1, rd_kw}),
         .we(wr_en[B_KW]), .wr_inst(1'b0), .wr_word(wr_word[B_KW]), .wr_mask(wr_mask[B_KW]));
     foldsim_mem_bmap #(.INST(1), .WORDS(WORDS), .NREAD(1)) m_depv (
         .clk, .reset, .clear_all(bm_clear_all), .clear(bm_clear), .clear_word(bm_clear_word),
@@ -495,7 +497,7 @@ module foldsim_mem_bank #(
 
     // ---- The engine ----
     localparam S_IDLE = 4'd0, S_TICK = 4'd2, S_MODE = 4'd3, S_BANK = 4'd4,
-               S_BANK2 = 4'd5, S_SETUP = 4'd6, S_SETUP2 = 4'd7, S_SRCH = 4'd8, S_CHECK = 4'd9,
+               S_BANK2 = 4'd5, S_SETUP = 4'd6, S_C1 = 4'd7, S_SRCH = 4'd8, S_CHECK = 4'd9,
                S_CHECK2 = 4'd10, S_COMMIT = 4'd11, S_END = 4'd12,
                S_RBANK = 4'd14, S_RBANK2 = 4'd15;
     localparam K_PRE = 3'd0, K_ACT = 3'd1, K_C0 = 3'd2, K_C1 = 3'd3, K_REF = 3'd4;
@@ -534,16 +536,13 @@ module foldsim_mem_bank #(
     reg signed [15:0] c_pre, c_act, c_col0, c_col1, c_ref;
     reg [2:0]        kind;
 
-    // The search: its lower bound; the next word to read (as the ring
-    // position and the clocks left to the horizon) and the one read last
-    // cycle, to decide on.
-    reg signed [15:0] s_lb;
+    // The search: the word it reads, as the ring position and the clocks
+    // left to the horizon; decided in the cycle the word is read. The free
+    // clocks of a first column's word, and its place in it, for the second.
     reg [HLOG2-1:0]  s_pos;
     reg signed [15:0] s_left;
-    reg              s_fetch;
-    reg              sb_valid, b_last;
-    reg [63:0]       b_cand;
-    reg [WW-1:0]     b_word;
+    reg [63:0]       c1_cand;
+    reg [5:0]        c1_p0;
 
     function automatic [63:0] span_mask(input [5:0] off, input signed [15:0] left);
         reg [6:0] top;
@@ -559,15 +558,31 @@ module foldsim_mem_bank #(
     wire [63:0] f_pre   = rd_cmd | rd_row;
     wire [63:0] forb    = ((kind == K_PRE) | (kind == K_REF)) ? f_pre : ((kind == K_ACT) ? f_act : f_col);
 
-    reg  [5:0]  b_ffs;
-    always @(*) begin
-        b_ffs = '0;
+    function automatic [5:0] ffs64(input [63:0] x);
+        ffs64 = '0;
         for (integer j = 63; j >= 0; --j)
-            if (b_cand[j])
-                b_ffs = 6'(j);
+            if (x[j])
+                ffs64 = 6'(j);
+    endfunction
+    wire [63:0]       s_cand = ~forb & s_mask;
+    wire [5:0]        s_ffs  = ffs64(s_cand);
+    wire signed [15:0] s_rel = 16'(HLOG2'(HLOG2'({s_word, s_ffs}) - base));
+    // The second column: the first free clock tCCD_L after the first, in its
+    // word; the calendars are unchanged until the reservation commits.
+    wire [6:0]        c1_lo   = (k_ccdl1 > 16'sd64) ? 7'd64 : 7'(7'(c1_p0) + 7'(k_ccdl1));
+    wire [63:0]       c1_m    = c1_lo[6] ? 64'd0 : (c1_cand & (~64'd0 << c1_lo[5:0]));
+    // The search's lower bound for the command `kind`.
+    reg signed [15:0] s_lb;
+    always @(*) begin
+        case (kind)
+        K_PRE: s_lb = smax(16'sd0, r_prer);
+        K_ACT: s_lb = smax(smax(op_conf ? c_pre + k_rp : 16'sd0, r_act + k_rc), rel(ab_floor));
+        K_REF: s_lb = smax(op_conf ? c_pre + k_rp : 16'sd0, r_act + k_rc);
+        K_C0:  s_lb = smax(smax(16'sd0, r_floor),
+                           op_hit ? r_colr : c_act + (op_w ? k_rcdwr : k_rcdrd));
+        default: s_lb = c_col0 + k_ccdl1;
+        endcase
     end
-    wire [HLOG2-1:0]  b_pos = HLOG2'({b_word, b_ffs});
-    wire signed [15:0] b_rel = 16'(HLOG2'(b_pos - base));
 
     // ---- Commit: per calendar, up to two ranges of clocks to mark ----
     // (computed from the reservation, registered as the horizon is checked)
@@ -604,11 +619,40 @@ module foldsim_mem_bank #(
     // Bursts reserved and not yet issued count columns only up to the
     // reservations' clock: past it, room is an upper bound, exact once they
     // have caught up (a reservation leaves a buffer's bursts unchanged).
+    // Columns already reserved in clocks d+2 .. da have issued by clock da:
+    // counted a host cycle late, over the two calendar words from clock d+1,
+    // they are still in the counts whether or not d moved up since. Each
+    // clock issues at most one column, so bursts past the queue by more than
+    // the clocks the reservations lag fill it for certain.
+    reg  [7:0]         win_kr, win_kw;
+    always @(posedge clk) begin : col_window_
+        reg [127:0] m;
+        reg [6:0]   lo;
+        reg [15:0]  hi;
+        lo = 7'(base[5:0]) + 7'd1;
+        hi = 16'(base[5:0]) + (da - d) - 16'd1;
+        for (integer i = 0; i < 128; ++i)
+            m[i] = (7'(i) >= lo) & (($signed(da - d) >= 16'sd2) & (16'(i) <= hi));
+        win_kr <= 8'($countones({rd_kr1, rd_kr} & m));
+        win_kw <= 8'($countones({rd_kw1, rd_kw} & m));
+        if (reset | bm_clear_all | ~active) begin
+            win_kr <= '0;
+            win_kw <= '0;
+        end
+    end
+    wire [8:0]         lag_cols = ($signed(da - d) > 16'sd255) ? 9'd255 : 9'(da - d);
+    function automatic room_ok(input w, input [8:0] wa, input [8:0] ra);
+        room_ok = w ? (wa <= 9'(cfg_wq) + 9'(win_kw)) : (ra <= 9'(cfg_rq) + 9'(win_kr));
+    endfunction
+    function automatic room_none(input w, input [8:0] wa, input [8:0] ra);
+        room_none = w ? (wa > 9'(cfg_wq) + lag_cols) : (ra > 9'(cfg_rq) + lag_cols);
+    endfunction
     wire               ih_time = ($signed(da - ingress_ready) >= 0);
-    wire               ih_room = ih_w ? (wb_after <= 9'(cfg_wq)) : (rb_after <= 9'(cfg_rq));
+    wire               ih_room = room_ok(ih_w, wb_after, rb_after);
     wire               caught  = (d == da);
     wire               move    = (iq_count != 0) & ih_time & ih_room;
-    wire               a_wait_room = (iq_count != 0) & ih_time & ~ih_room & ~caught;
+    wire               a_wait_room = (iq_count != 0) & ih_time & ~ih_room & ~caught
+                                   & ~room_none(ih_w, wb_after, rb_after);
 
     // The fast path: the cycle's requests join the ingress queue behind its
     // head and its one DRAM clock runs, all in the host cycle after the
@@ -619,9 +663,10 @@ module foldsim_mem_bank #(
     wire [TAG_W-1:0]   fh_tag  = fv_q ? iq_tag[iq_head] : (st_w_valid ? TAG_W'(st_w_id) : TAG_W'(st_r_slot));
     wire [BKW-1:0]     fh_bank = fv_q ? iq_bank[iq_head] : (st_w_valid ? st_w_bank : st_r_bank);
     wire [ROW_W-1:0]   fh_row  = fv_q ? iq_row[iq_head] : (st_w_valid ? st_w_row : st_r_row);
-    wire               fh_room = fh_w ? (wb_after <= 9'(cfg_wq)) : (rb_after <= 9'(cfg_rq));
+    wire               fh_room = room_ok(fh_w, wb_after, rb_after);
     wire               f_move  = fv_any & ih_time & fh_room;
-    wire               f_wait_room = fv_any & ih_time & ~fh_room & ~caught;
+    wire               f_wait_room = fv_any & ih_time & ~fh_room & ~caught
+                                   & ~room_none(fh_w, wb_after, rb_after);
     wire               f_clock = (credit >= 32'(k_twoclk)) & (credit - 32'(k_twoclk) < 32'(k_twoclk))
                                & ~a_wait_lag & ~f_wait_room;
     // The clock's departing read, and the reads ready by the next target
@@ -1019,62 +1064,48 @@ module foldsim_mem_bank #(
             state   <= S_SETUP;
         end
         S_SETUP: begin
-            // The search's lower bound, the first clock it may place at.
-            case (kind)
-            K_PRE: s_lb <= smax(16'sd0, r_prer);
-            K_ACT: s_lb <= smax(smax(op_conf ? c_pre + k_rp : 16'sd0, r_act + k_rc), rel(ab_floor));
-            K_REF: s_lb <= smax(op_conf ? c_pre + k_rp : 16'sd0, r_act + k_rc);
-            K_C0:  s_lb <= smax(smax(16'sd0, r_floor),
-                                op_hit ? r_colr : c_act + (op_w ? k_rcdwr : k_rcdrd));
-            default: s_lb <= c_col0 + k_ccdl1;
-            endcase
-            state <= S_SETUP2;
-        end
-        S_SETUP2: begin
+            // From the first clock the command may take, to the horizon.
             if (s_lb >= 16'(HE)) begin
                 state <= S_END;
             end else begin
-                s_pos    <= HLOG2'(base + HLOG2'(s_lb));
-                s_left   <= 16'(HE) - s_lb;
-                s_word   <= WW'(HLOG2'(base + HLOG2'(s_lb)) >> 6);
-                s_fetch  <= 1'b1;
-                sb_valid <= 1'b0;
-                state    <= S_SRCH;
+                s_pos  <= HLOG2'(base + HLOG2'(s_lb));
+                s_left <= 16'(HE) - s_lb;
+                s_word <= WW'(HLOG2'(base + HLOG2'(s_lb)) >> 6);
+                state  <= S_SRCH;
             end
         end
         S_SRCH: begin
-            // A word a cycle: the word read now, masked to the clocks left;
-            // and last cycle's word, whose first free clock wins.
-            if (s_fetch) begin
-                b_cand   <= ~forb & s_mask;
-                b_word   <= s_word;
-                sb_valid <= 1'b1;
-                b_last   <= (s_left - s_take == 0);
-                s_pos    <= HLOG2'(s_pos + HLOG2'(s_take));
-                s_word   <= WW'(HLOG2'(s_pos + HLOG2'(s_take)) >> 6);
-                s_left   <= s_left - s_take;
-                s_fetch  <= (s_left - s_take != 0);
-            end
-            if (sb_valid) begin
-                if (b_cand != 0) begin
-                    case (kind)
-                    K_PRE: begin c_pre <= b_rel; kind <= op_ref ? K_REF : K_ACT; state <= S_SETUP; end
-                    K_REF: begin c_ref <= b_rel; state <= S_CHECK; end
-                    K_ACT: begin c_act <= b_rel; kind <= K_C0; state <= S_SETUP; end
-                    K_C0:  begin
-                        c_col0 <= b_rel;
-                        if (NB == 2) begin
-                            kind  <= K_C1;
-                            state <= S_SETUP;
-                        end else begin
-                            state <= S_CHECK;
-                        end
-                    end
-                    default: begin c_col1 <= b_rel; state <= S_CHECK; end
-                    endcase
-                end else if (b_last) begin
-                    state <= S_END;
+            // A word a cycle, masked to the clocks left: its first free clock
+            // wins.
+            if (s_cand != 0) begin
+                case (kind)
+                K_PRE: begin c_pre <= s_rel; kind <= op_ref ? K_REF : K_ACT; state <= S_SETUP; end
+                K_REF: begin c_ref <= s_rel; state <= S_CHECK; end
+                K_ACT: begin c_act <= s_rel; kind <= K_C0; state <= S_SETUP; end
+                K_C0:  begin
+                    c_col0  <= s_rel;
+                    c1_cand <= s_cand;
+                    c1_p0   <= s_ffs;
+                    state   <= (NB == 2) ? S_C1 : S_CHECK;
                 end
+                default: begin c_col1 <= s_rel; state <= S_CHECK; end
+                endcase
+            end else if (s_left - s_take == 0) begin
+                state <= S_END;
+            end else begin
+                s_pos  <= HLOG2'(s_pos + HLOG2'(s_take));
+                s_word <= WW'(HLOG2'(s_pos + HLOG2'(s_take)) >> 6);
+                s_left <= s_left - s_take;
+            end
+        end
+        S_C1: begin
+            // The second column in the first's word, or a search from it.
+            if (c1_m != 0) begin
+                c_col1 <= c_col0 + 16'(ffs64(c1_m)) - 16'(c1_p0);
+                state  <= S_CHECK;
+            end else begin
+                kind  <= K_C1;
+                state <= S_SETUP;
             end
         end
         S_CHECK: begin
