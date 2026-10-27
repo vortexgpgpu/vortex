@@ -496,8 +496,8 @@ module foldsim_mem_bank #(
     reg [SW-1:0]     dep_slot [H];
 
     // ---- The engine ----
-    localparam S_IDLE = 4'd0, S_TICK = 4'd2, S_MODE = 4'd3, S_BANK = 4'd4,
-               S_BANK2 = 4'd5, S_SETUP = 4'd6, S_C1 = 4'd7, S_SRCH = 4'd8, S_CHECK = 4'd9,
+    localparam S_IDLE = 4'd0, S_TICK = 4'd2,
+               S_BANK2 = 4'd5, S_SETUP = 4'd6, S_C1 = 4'd7, S_SRCH = 4'd8,
                S_CHECK2 = 4'd10, S_COMMIT = 4'd11, S_END = 4'd12,
                S_RBANK = 4'd14, S_RBANK2 = 4'd15;
     localparam K_PRE = 3'd0, K_ACT = 3'd1, K_C0 = 3'd2, K_C1 = 3'd3, K_REF = 3'd4;
@@ -571,18 +571,20 @@ module foldsim_mem_bank #(
     // word; the calendars are unchanged until the reservation commits.
     wire [6:0]        c1_lo   = (k_ccdl1 > 16'sd64) ? 7'd64 : 7'(7'(c1_p0) + 7'(k_ccdl1));
     wire [63:0]       c1_m    = c1_lo[6] ? 64'd0 : (c1_cand & (~64'd0 << c1_lo[5:0]));
-    // The search's lower bound for the command `kind`.
-    reg signed [15:0] s_lb;
-    always @(*) begin
-        case (kind)
-        K_PRE: s_lb = smax(16'sd0, r_prer);
-        K_ACT: s_lb = smax(smax(op_conf ? c_pre + k_rp : 16'sd0, r_act + k_rc), rel(ab_floor));
-        K_REF: s_lb = smax(op_conf ? c_pre + k_rp : 16'sd0, r_act + k_rc);
-        K_C0:  s_lb = smax(smax(16'sd0, r_floor),
-                           op_hit ? r_colr : c_act + (op_w ? k_rcdwr : k_rcdrd));
-        default: s_lb = c_col0 + k_ccdl1;
+    // The search's lower bound for a command.
+    function automatic signed [15:0] lower(input [2:0] k, input conf, input hit,
+                                           input signed [15:0] prer, input signed [15:0] act,
+                                           input signed [15:0] colr);
+        case (k)
+        K_PRE: lower = smax(16'sd0, prer);
+        K_ACT: lower = smax(smax(conf ? c_pre + k_rp : 16'sd0, act + k_rc), rel(ab_floor));
+        K_REF: lower = smax(conf ? c_pre + k_rp : 16'sd0, act + k_rc);
+        K_C0:  lower = smax(smax(16'sd0, r_floor),
+                            hit ? colr : c_act + (op_w ? k_rcdwr : k_rcdrd));
+        default: lower = c_col0 + k_ccdl1;
         endcase
-    end
+    endfunction
+    wire signed [15:0] s_lb = lower(kind, op_conf, op_hit, r_prer, r_act, r_colr);
 
     // ---- Commit: per calendar, up to two ranges of clocks to mark ----
     // (computed from the reservation, registered as the horizon is checked)
@@ -596,9 +598,28 @@ module foldsim_mem_bank #(
     reg signed [15:0] cm_left[NBM];
     reg              cm_busy [NBM];
     reg              cm_next [NBM];   // the second range is still to mark
+    reg [63:0]       cm_also [NBM];   // the second range, in the first's only word
     reg              cm_start;
 
+    // How far the reservation reaches, and the bank's new times.
     reg signed [15:0] ck_colr, ck_prer, ck_lastcol, ck_tcol, ck_tdep, ck_tact;
+    always @(*) begin : check_
+        reg signed [15:0] colr, prer;
+        ck_lastcol = (NB == 2) ? c_col1 : c_col0;
+        colr = op_hit ? r_colr : c_act + (op_w ? k_rcdwr : k_rcdrd);
+        prer = op_hit ? r_prer : c_act + k_ras;
+        ck_colr = smax(colr, ck_lastcol + 16'sd1);
+        ck_prer = smax(prer, ck_lastcol + (op_w ? k_wrpre : k_rtp));
+        ck_tcol = ck_lastcol + (op_w ? k_reach_w : k_reach_r);
+        ck_tdep = op_w ? -16'sd16384 : ck_lastcol + k_dep;
+        ck_tact = op_hit ? -16'sd16384 : c_act + k_reach_a;
+        // A refresh's commands are within the horizon by its search.
+        if (op_ref) begin
+            ck_tcol = -16'sd16384;
+            ck_tdep = -16'sd16384;
+            ck_tact = -16'sd16384;
+        end
+    end
     reg              cm_any;
     always @(*) begin
         cm_any = 1'b0;
@@ -683,14 +704,6 @@ module foldsim_mem_bank #(
                                : ((f_unw == 1) & f_dep & due(f_dcyc));
     // No departure is placed within tCL + tBL of its reservation.
     wire               a_wait_lag  = ($signed(da - d) > k_dep - 16'sd1);
-    // The buffers' bursts as the reservations' clock sees them, and the mode
-    // they put the channel in.
-    wire [8:0]         wn = 9'(wq_cnt) + 9'(NB) * 9'(wb_vis);
-    wire [8:0]         rn = 9'(rq_cnt) + 9'(NB) * 9'(rb_vis);
-    wire               to_write = ~wmode & ((wn >= 9'(cfg_wr_high)) | (rn == 0));
-    wire               to_read  = wmode & (wn < 9'(cfg_wr_low)) & (rn != 0);
-    wire               wmode_n  = to_write | (wmode & ~to_read);
-    wire               sel_any  = wmode_n ? (wb_vis != 0) : (rb_vis != 0);
     wire               ref_now  = cfg_refresh[0] & (cfg_refi != 16'd0) & ($signed(e - ref_due) >= 0);
 
     // The bank table's port: a reservation's bank, or the scrub's.
@@ -719,8 +732,9 @@ module foldsim_mem_bank #(
     // issues leave the controller; then the next clock.
     // The reservations' clock d ends: the columns of clock d+1 leave the
     // controller.
-    // S_MODE's choice as S_TICK sees it, the entries reached in clock d
-    // counted: a clock with nothing to reserve and no refresh ends in S_TICK.
+    // The buffers' bursts as the reservations' clock sees them, the entry
+    // reached in clock d counted, and the mode they put the channel in: a
+    // clock with nothing to reserve and no refresh ends in S_TICK.
     wire             tk_rb = (rb_count > rb_vis) && (rb_stamp[BQW'(rb_head + BQW'(rb_vis))] == d);
     wire             tk_wb = (wb_count > wb_vis) && (wb_stamp[BQW'(wb_head + BQW'(wb_vis))] == d);
     wire [BQW:0]     tk_rb_vis = rb_vis + (BQW+1)'(tk_rb);
@@ -732,10 +746,23 @@ module foldsim_mem_bank #(
     wire             tk_wmode_n  = tk_to_write | (wmode & ~tk_to_read);
     wire             tk_sel_any  = tk_wmode_n ? (tk_wb_vis != 0) : (tk_rb_vis != 0);
     wire             tk_empty    = ~ref_now & ~tk_sel_any;
+    wire [15:0]      tk_bfloor   = ($signed(frontier + 16'd1 - e) > 0) ? frontier + 16'd1 : e;
 
     // As a clock ends, whether the next is already due (S_IDLE's test, a host
     // cycle early): the reservations then go straight on to it.
     wire next_clock = active & ~bm_clear_all & ($signed(d + 16'd1 - da) < 0);
+
+    // A search from the first clock the command may take, to the horizon.
+    task automatic search(input signed [15:0] lb);
+        if (lb >= 16'(HE)) begin
+            state <= S_END;
+        end else begin
+            s_pos  <= HLOG2'(base + HLOG2'(lb));
+            s_left <= 16'(HE) - lb;
+            s_word <= WW'(HLOG2'(base + HLOG2'(lb)) >> 6);
+            state  <= S_SRCH;
+        end
+    endtask
 
     task automatic end_clock();
         end_clock_cols(ed_kr, ed_kw);
@@ -1010,69 +1037,60 @@ module foldsim_mem_bank #(
             sc_prer <= scrubbed(bt_prer[scrub_b]);
             scrub_b <= scrub_b + 1'b1;
             if (tk_empty) begin
-                // S_MODE's work for a clock with nothing to reserve.
+                // A clock with nothing to reserve.
                 wmode <= tk_wmode_n;
                 if (tk_to_write)
-                    batch_floor <= ($signed(frontier + 16'd1 - e) > 0) ? frontier + 16'd1 : e;
+                    batch_floor <= tk_bfloor;
                 if (tk_to_read)
                     read_floor <= batch_last + 16'd1;
                 end_clock_cols(rd_kr[base[5:0]], rd_kw[base[5:0]]);
                 state <= next_clock ? S_TICK : S_IDLE;
             end else begin
-                state <= S_MODE;
+                // The channel picks reads or writes, and the head of that
+                // buffer is to be reserved (or the refresh).
+                wmode <= tk_wmode_n;
+                if (tk_to_write)
+                    batch_floor <= tk_bfloor;
+                if (tk_to_read)
+                    read_floor <= batch_last + 16'd1;
+                if (ref_now) begin
+                    state <= S_RBANK;
+                end else begin
+                    op_ref  <= 1'b0;
+                    op_w    <= tk_wmode_n;
+                    op_tag  <= tk_wmode_n ? wb_tag[wb_head] : rb_tag[rb_head];
+                    op_bank <= tk_wmode_n ? wb_bank[wb_head] : rb_bank[rb_head];
+                    op_row  <= tk_wmode_n ? wb_row[wb_head] : rb_row[rb_head];
+                    r_floor <= rel(tk_wmode_n ? (tk_to_write ? tk_bfloor : batch_floor)
+                                              : (tk_to_read ? batch_last + 16'd1 : read_floor));
+                    state   <= S_BANK2;
+                end
             end
         end
-        S_MODE: begin
-            // The channel picks reads or writes; the head of that buffer is
-            // reserved if it can be, and with nothing to reserve the clock
-            // ends now.
-            wmode <= wmode_n;
-            if (to_write)
-                batch_floor <= ($signed(frontier + 16'd1 - e) > 0) ? frontier + 16'd1 : e;
-            if (to_read)
-                read_floor <= batch_last + 16'd1;
-            if (ref_now) begin
-                state <= S_RBANK;
-            end else if (sel_any) begin
-                state <= S_BANK;
-            end else begin
-                end_clock();
-                state <= next_clock ? S_TICK : S_IDLE;
-            end
-        end
-        S_BANK: begin
-            // The request at the head of the buffer the channel serves.
-            op_ref  <= 1'b0;
-            op_w    <= wmode;
-            op_tag  <= wmode ? wb_tag[wb_head] : rb_tag[rb_head];
-            op_bank <= wmode ? wb_bank[wb_head] : rb_bank[rb_head];
-            op_row  <= wmode ? wb_row[wb_head] : rb_row[rb_head];
-            r_floor <= rel(wmode ? batch_floor : read_floor);
-            state   <= S_BANK2;
-        end
-        S_BANK2: begin
-            // Against its bank.
+        S_BANK2: begin : bank2_
+            // Against its bank; the first command's search starts.
+            reg               open, hit;
+            reg [2:0]         k;
+            reg signed [15:0] act, colr, prer, lb;
+            open = bt_open[op_bank];
+            hit  = open & (bt_row[op_bank] == op_row);
+            k    = hit ? K_C0 : (open ? K_PRE : K_ACT);
+            act  = bt_fresh[op_bank] ? -16'sd16384 : rel(bt_act[op_bank]);
+            colr = bt_fresh[op_bank] ? -16'sd1 : rel(bt_colr[op_bank]);
+            prer = bt_fresh[op_bank] ? -16'sd1 : rel(bt_prer[op_bank]);
+            lb   = lower(k, open & ~hit, hit, prer, act, colr);
             op_pc   <= (g_lpcs != 0) ? op_bank[0] : 1'b0;
             op_pg   <= 3'((32'(op_bank) & ((32'd1 << (32'(g_lpcs) + 32'(g_lbgs))) - 32'd1)));
-            op_hit  <= bt_open[op_bank] & (bt_row[op_bank] == op_row);
-            op_conf <= bt_open[op_bank] & (bt_row[op_bank] != op_row);
-            r_act   <= bt_fresh[op_bank] ? -16'sd16384 : rel(bt_act[op_bank]);
-            r_colr  <= bt_fresh[op_bank] ? -16'sd1 : rel(bt_colr[op_bank]);
-            r_prer  <= bt_fresh[op_bank] ? -16'sd1 : rel(bt_prer[op_bank]);
-            kind    <= (bt_open[op_bank] & (bt_row[op_bank] == op_row)) ? K_C0
-                     : (bt_open[op_bank] ? K_PRE : K_ACT);
-            state   <= S_SETUP;
+            op_hit  <= hit;
+            op_conf <= open & ~hit;
+            r_act   <= act;
+            r_colr  <= colr;
+            r_prer  <= prer;
+            kind    <= k;
+            search(lb);
         end
         S_SETUP: begin
-            // From the first clock the command may take, to the horizon.
-            if (s_lb >= 16'(HE)) begin
-                state <= S_END;
-            end else begin
-                s_pos  <= HLOG2'(base + HLOG2'(s_lb));
-                s_left <= 16'(HE) - s_lb;
-                s_word <= WW'(HLOG2'(base + HLOG2'(s_lb)) >> 6);
-                state  <= S_SRCH;
-            end
+            search(s_lb);
         end
         S_SRCH: begin
             // A word a cycle, masked to the clocks left: its first free clock
@@ -1080,15 +1098,15 @@ module foldsim_mem_bank #(
             if (s_cand != 0) begin
                 case (kind)
                 K_PRE: begin c_pre <= s_rel; kind <= op_ref ? K_REF : K_ACT; state <= S_SETUP; end
-                K_REF: begin c_ref <= s_rel; state <= S_CHECK; end
+                K_REF: begin c_ref <= s_rel; state <= S_CHECK2; end
                 K_ACT: begin c_act <= s_rel; kind <= K_C0; state <= S_SETUP; end
                 K_C0:  begin
                     c_col0  <= s_rel;
                     c1_cand <= s_cand;
                     c1_p0   <= s_ffs;
-                    state   <= (NB == 2) ? S_C1 : S_CHECK;
+                    state   <= (NB == 2) ? S_C1 : S_CHECK2;
                 end
-                default: begin c_col1 <= s_rel; state <= S_CHECK; end
+                default: begin c_col1 <= s_rel; state <= S_CHECK2; end
                 endcase
             end else if (s_left - s_take == 0) begin
                 state <= S_END;
@@ -1102,33 +1120,11 @@ module foldsim_mem_bank #(
             // The second column in the first's word, or a search from it.
             if (c1_m != 0) begin
                 c_col1 <= c_col0 + 16'(ffs64(c1_m)) - 16'(c1_p0);
-                state  <= S_CHECK;
+                state  <= S_CHECK2;
             end else begin
                 kind  <= K_C1;
                 state <= S_SETUP;
             end
-        end
-        S_CHECK: begin
-            // How far the reservation reaches, and the bank's new times.
-            begin : check_
-                reg signed [15:0] lastcol, colr, prer;
-                lastcol = (NB == 2) ? c_col1 : c_col0;
-                colr = op_hit ? r_colr : c_act + (op_w ? k_rcdwr : k_rcdrd);
-                prer = op_hit ? r_prer : c_act + k_ras;
-                ck_lastcol <= lastcol;
-                ck_colr    <= smax(colr, lastcol + 16'sd1);
-                ck_prer    <= smax(prer, lastcol + (op_w ? k_wrpre : k_rtp));
-                ck_tcol    <= lastcol + (op_w ? k_reach_w : k_reach_r);
-                ck_tdep    <= op_w ? -16'sd16384 : lastcol + k_dep;
-                ck_tact    <= op_hit ? -16'sd16384 : c_act + k_reach_a;
-                // A refresh's commands are within the horizon by its search.
-                if (op_ref) begin
-                    ck_tcol <= -16'sd16384;
-                    ck_tdep <= -16'sd16384;
-                    ck_tact <= -16'sd16384;
-                end
-            end
-            state <= S_CHECK2;
         end
         S_CHECK2: begin
             // The reservation must reach no further than the horizon.
@@ -1202,7 +1198,8 @@ module foldsim_mem_bank #(
                 else
                     stat_misses <= stat_misses + 64'd1;
             end else if (!cm_any) begin
-                state <= S_END;
+                end_clock();
+                state <= next_clock ? S_TICK : S_IDLE;
             end
         end
         S_END: begin
@@ -1548,10 +1545,23 @@ module foldsim_mem_bank #(
         for (integer m = 0; m < NBM; ++m) begin
             if (reset) begin
                 cm_busy[m] <= 1'b0;
-            end else if (cm_start) begin
+            end else if (cm_start) begin : start_
+                // Both ranges in one word are marked in one write.
+                reg [HLOG2-1:0] p0, p1;
+                reg [WW-1:0]    w0, x0, w1, x1;
+                reg             one;
+                p0 = HLOG2'(base + HLOG2'(cm_lo[m][0]));
+                p1 = HLOG2'(base + HLOG2'(cm_lo[m][1]));
+                w0 = WW'(p0 >> 6);
+                w1 = WW'(p1 >> 6);
+                x0 = WW'(HLOG2'(base + HLOG2'(cm_hi[m][0])) >> 6);
+                x1 = WW'(HLOG2'(base + HLOG2'(cm_hi[m][1])) >> 6);
+                one = cm_v[m][0] & cm_v[m][1] & (cm_hi[m][0] - cm_lo[m][0] < 16'sd64)
+                    & (cm_hi[m][1] - cm_lo[m][1] < 16'sd64) & (w0 == x0) & (w1 == x1) & (w0 == w1);
                 cm_busy[m] <= cm_v[m][0] | cm_v[m][1];
-                cm_next[m] <= cm_v[m][0] & cm_v[m][1];
-                cm_pos[m]  <= HLOG2'(base + HLOG2'(cm_v[m][0] ? cm_lo[m][0] : cm_lo[m][1]));
+                cm_next[m] <= cm_v[m][0] & cm_v[m][1] & ~one;
+                cm_also[m] <= one ? span_mask(p1[5:0], cm_hi[m][1] - cm_lo[m][1] + 16'sd1) : 64'd0;
+                cm_pos[m]  <= cm_v[m][0] ? p0 : p1;
                 cm_left[m] <= cm_v[m][0] ? cm_hi[m][0] - cm_lo[m][0] + 16'sd1
                                          : cm_hi[m][1] - cm_lo[m][1] + 16'sd1;
             end else if (cm_busy[m]) begin
@@ -1561,7 +1571,8 @@ module foldsim_mem_bank #(
                 take = (cm_left[m] >= 16'sd64 - 16'(off)) ? 16'sd64 - 16'(off) : cm_left[m];
                 wr_en[m]   <= 1'b1;
                 wr_word[m] <= WW'(cm_pos[m] >> 6);
-                wr_mask[m] <= span_mask(off, cm_left[m]);
+                wr_mask[m] <= span_mask(off, cm_left[m]) | cm_also[m];
+                cm_also[m] <= 64'd0;
                 if (cm_left[m] == take) begin
                     cm_busy[m] <= cm_next[m];
                     cm_next[m] <= 1'b0;
