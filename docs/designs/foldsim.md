@@ -34,8 +34,8 @@ that builds on CIRCT, as POCL builds on LLVM: the `foldsim` driver and
 `$(TOOLDIR)/circt`. Nothing else is in the flow: no Yosys, no sv2v.
 
 ```bash
-export FOLDSIM_CLASSES="VX_socket__lift VX_issue_slice__lift VX_alu_int__lift VX_alu_muldiv__lift VX_lsu_slice__lift+VX_lsu_scheduler__lift VX_fpu_std"
-export FOLDSIM_LIFT="VX_socket:drop=INSTANCE_ID;port=SOCKET_ID VX_issue_slice:drop=ISSUE_ID VX_alu_int:port=BLOCK_IDX VX_alu_muldiv VX_lsu_slice:port=CORE_ID VX_lsu_scheduler"
+export FOLDSIM_CLASSES="VX_socket__lift VX_core__lift VX_compute_slice__lift"
+export FOLDSIM_LIFT="VX_socket:drop=INSTANCE_ID VX_core:drop=INSTANCE_ID VX_compute_slice:drop=INSTANCE_ID,SLICE_STR"
 CONFIGS="-DVX_CFG_NUM_CORES=2 -DVX_CFG_NUM_WARPS=4 -DVX_CFG_NUM_THREADS=4 -DVX_CFG_ISSUE_WIDTH=2"
 CONFIGS="$CONFIGS" ./ci/blackbox.sh --driver=foldsim --app=sgemm                 # Verilator
 make -C hw/syn/foldsim CONFIGS="$CONFIGS"                                         # the image
@@ -47,10 +47,11 @@ FPGA_BIN_DIR=$PWD/hw/syn/foldsim/build32_foldsim_hw/bin CONFIGS="$CONFIGS" \
 others (the socket contains the issue slices). `FOLDSIM_LIFT` gives
 interface-port units a plain-port boundary first, so they can be classes
 (`hw/syn/foldsim/lift_boundaries.py`, a source-to-source pass on pyslang; the
-RTL is not changed). `port=P` turns an instance-ID parameter into an input
-port, and every parameter derived from it below, so that all instances of the
-class elaborate to one module: the socket's `SOCKET_ID` carries every core's
-`CORE_ID` with it. The tools are found through `FOLDSIM` (the driver) and
+RTL is not changed). `drop=P` removes a parameter that only names an instance (`INSTANCE_ID`), so
+all instances of the class elaborate to one module; instance IDs that reach
+logic are already input ports in the RTL (the socket's `socket_id`).
+`port=P` turns such a parameter into an input port where a unit still has one.
+The tools are found through `FOLDSIM` (the driver) and
 `CIRCT_BIN`, by default `hw/syn/common.mk`'s `FOLDSIM_PATH` and `CIRCT_PATH`.
 
 A class `A+B` fuses two modules of the same parent (`foldsim-fuse-models`):
