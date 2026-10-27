@@ -645,7 +645,12 @@ module foldsim_mem_bank #(
     // they are still in the counts whether or not d moved up since. Each
     // clock issues at most one column, so bursts past the queue by more than
     // the clocks the reservations lag fill it for certain.
-    reg  [7:0]         win_kr, win_kw;
+    reg  [8:0]         ok_r, ok_w;
+    function automatic [7:0] ones128(input [127:0] x);
+        ones128 = '0;
+        for (integer i = 0; i < 128; ++i)
+            ones128 = ones128 + 8'(x[i]);
+    endfunction
     always @(posedge clk) begin : col_window_
         reg [127:0] m;
         reg [6:0]   lo;
@@ -654,17 +659,17 @@ module foldsim_mem_bank #(
         hi = 16'(base[5:0]) + (da - d) - 16'd1;
         for (integer i = 0; i < 128; ++i)
             m[i] = (7'(i) >= lo) & (($signed(da - d) >= 16'sd2) & (16'(i) <= hi));
-        win_kr <= 8'($countones({rd_kr1, rd_kr} & m));
-        win_kw <= 8'($countones({rd_kw1, rd_kw} & m));
+        ok_r   <= 9'(cfg_rq) + 9'(ones128({rd_kr1, rd_kr} & m));
+        ok_w   <= 9'(cfg_wq) + 9'(ones128({rd_kw1, rd_kw} & m));
         if (reset | bm_clear_all | ~active) begin
-            win_kr <= '0;
-            win_kw <= '0;
+            ok_r   <= 9'(cfg_rq);
+            ok_w   <= 9'(cfg_wq);
         end
     end
-    wire [8:0]         lag_cols = ($signed(da - d) > 16'sd255) ? 9'd255 : 9'(da - d);
     function automatic room_ok(input w, input [8:0] wa, input [8:0] ra);
-        room_ok = w ? (wa <= 9'(cfg_wq) + 9'(win_kw)) : (ra <= 9'(cfg_rq) + 9'(win_kr));
+        room_ok = w ? (wa <= ok_w) : (ra <= ok_r);
     endfunction
+    wire [8:0]         lag_cols = ($signed(da - d) > 16'sd255) ? 9'd255 : 9'(da - d);
     function automatic room_none(input w, input [8:0] wa, input [8:0] ra);
         room_none = w ? (wa > 9'(cfg_wq) + lag_cols) : (ra > 9'(cfg_rq) + lag_cols);
     endfunction
@@ -712,8 +717,13 @@ module foldsim_mem_bank #(
     reg [4:0]        sc_b;
     reg [15:0]       sc_act, sc_colr, sc_prer;
     reg [ROW_W-1:0]  sc_row;
-    reg [15:0]       cw_act, cw_colr, cw_prer;   // the reservation's, absolute
+    // The reservation's, absolute; its column and precharge times relative to
+    // e as checked, made absolute as it commits.
+    reg [15:0]       cw_act;
+    reg signed [15:0] rk_colr, rk_prer;
     reg [ROW_W-1:0]  cw_row;
+    wire [15:0]      cw_colr = op_ref ? bt_colr[op_bank] : e + rk_colr;
+    wire [15:0]      cw_prer = op_ref ? bt_prer[op_bank] : e + rk_prer;
     wire             bt_commit = (state == S_COMMIT) & cm_start & ~(op_ref & cfg_refresh[1]);
     wire [4:0]       bt_wa     = bt_commit ? op_bank : sc_b;
     function automatic [15:0] scrubbed(input [15:0] t);
@@ -1137,8 +1147,8 @@ module foldsim_mem_bank #(
             end
             cw_row  <= (op_hit | op_ref) ? bt_row[op_bank] : op_row;
             cw_act  <= op_ref ? e + c_ref + k_rfc - k_rc : (op_hit ? bt_act[op_bank] : e + c_act);
-            cw_colr <= op_ref ? bt_colr[op_bank] : e + ck_colr;
-            cw_prer <= op_ref ? bt_prer[op_bank] : e + ck_prer;
+            rk_colr <= ck_colr;
+            rk_prer <= ck_prer;
             begin : check2_
                 reg ok;
                 ok = (ck_tcol < 16'(HE)) & (ck_tdep < 16'(HE)) & (ck_tact < 16'(HE));
