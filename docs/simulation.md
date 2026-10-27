@@ -99,8 +99,8 @@ it like the native V80 driver does (AXI4-Lite registers, QDMA for memory).
 
 ```bash
 # the classes to thread, and the units to give plain-port boundaries first
-export FOLDSIM_CLASSES="VX_socket__lift VX_issue_slice__lift VX_alu_int__lift VX_alu_muldiv__lift VX_lsu_slice__lift VX_lsu_scheduler__lift VX_fpu_std"
-export FOLDSIM_LIFT="VX_socket:drop=INSTANCE_ID;port=SOCKET_ID VX_issue_slice:drop=ISSUE_ID VX_alu_int:port=BLOCK_IDX VX_alu_muldiv VX_lsu_slice:port=CORE_ID VX_lsu_scheduler"
+export FOLDSIM_CLASSES="VX_socket__lift VX_core__lift VX_compute_slice__lift"
+export FOLDSIM_LIFT="VX_socket:drop=INSTANCE_ID VX_core:drop=INSTANCE_ID VX_compute_slice:drop=INSTANCE_ID,SLICE_STR"
 CONFIGS="-DVX_CFG_NUM_CORES=2 -DVX_CFG_NUM_WARPS=4 -DVX_CFG_NUM_THREADS=4 -DVX_CFG_ISSUE_WIDTH=2"
 
 # in Verilator, no image needed

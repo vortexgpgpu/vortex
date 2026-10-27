@@ -46,7 +46,7 @@ GEN_DIR := $(BUILD_DIR)/gen
 # The classes threaded by FAME-5, and the units given plain-port boundaries
 # first so they can be classes (lift_boundaries.py; <unit>[:drop=P,...][;port=P,...]).
 FOLDSIM_CLASSES ?= VX_socket__lift
-FOLDSIM_LIFT ?= VX_socket:drop=INSTANCE_ID;port=SOCKET_ID
+FOLDSIM_LIFT ?= VX_socket:drop=INSTANCE_ID
 # Where circt-verilog, circt-opt and firtool are (hw/syn/common.mk's CIRCT);
 # the foldsim driver is hw/syn/common.mk's FOLDSIM.
 CIRCT_BIN ?= $(CIRCT_PATH)/bin
