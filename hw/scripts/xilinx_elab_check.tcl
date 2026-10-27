@@ -46,12 +46,6 @@ if {$mic_mode eq "off" || $mic_mode eq "0"} {
     create_project -in_memory
 
     add_files -norecurse ${mic_sources}
-    # The platform tops (vortex_afu.v) pass unpacked per-port arrays to
-    # VX_afu_wrap, which needs SystemVerilog.
-    set mic_afu_tops [get_files -quiet */vortex_afu.v]
-    if {[llength $mic_afu_tops] > 0} {
-        set_property file_type SystemVerilog $mic_afu_tops
-    }
 
     # Black-box every generated vendor IP via its BLOCK_STUB so a -rtl elaboration
     # resolves the IP instances (FPU FMA/DIV/SQRT/MUL/ADD, etc.) without pulling

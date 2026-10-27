@@ -63,13 +63,6 @@ foreach line [split $data "\n"] {
     }
 }
 
-# The platform tops (vortex_afu.v) pass unpacked per-port arrays to
-# VX_afu_wrap, which needs SystemVerilog.
-set afu_tops [get_files -quiet */vortex_afu.v]
-if {[llength $afu_tops] > 0} {
-  set_property file_type SystemVerilog $afu_tops
-}
-
 # Pull in the floating-point cores generated above so they are packaged
 # alongside the RTL. The set matches the XRT flow's package_kernel.tcl.
 set ip_files [list]

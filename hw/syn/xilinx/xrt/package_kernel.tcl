@@ -62,12 +62,6 @@ foreach def $vdefines_list {
 create_project -force kernel_pack $path_to_tmp_project
 
 add_files -norecurse ${vsources_list}
-# The platform tops (vortex_afu.v) pass unpacked per-port arrays to
-# VX_afu_wrap, which needs SystemVerilog.
-set afu_tops [get_files -quiet */vortex_afu.v]
-if {[llength $afu_tops] > 0} {
-  set_property file_type SystemVerilog $afu_tops
-}
 
 set obj [get_filesets sources_1]
 set ip_files [list \

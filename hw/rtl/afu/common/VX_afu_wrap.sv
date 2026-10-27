@@ -48,36 +48,36 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
     input wire clk,
     input wire reset,
 
-    // AXI4 memory masters
-    output wire                                m_axi_mem_awvalid_a [C_M_AXI_MEM_NUM_BANKS],
-    input  wire                                m_axi_mem_awready_a [C_M_AXI_MEM_NUM_BANKS],
-    output wire [C_M_AXI_MEM_ADDR_WIDTH-1:0]   m_axi_mem_awaddr_a [C_M_AXI_MEM_NUM_BANKS],
-    output wire [C_M_AXI_MEM_ID_WIDTH-1:0]     m_axi_mem_awid_a [C_M_AXI_MEM_NUM_BANKS],
-    output wire [7:0]                          m_axi_mem_awlen_a [C_M_AXI_MEM_NUM_BANKS],
+    // AXI4 memory masters, port i in slice i of each bus
+    output wire [C_M_AXI_MEM_NUM_BANKS-1:0]                        m_axi_mem_awvalid_bus,
+    input  wire [C_M_AXI_MEM_NUM_BANKS-1:0]                        m_axi_mem_awready_bus,
+    output wire [C_M_AXI_MEM_NUM_BANKS*C_M_AXI_MEM_ADDR_WIDTH-1:0] m_axi_mem_awaddr_bus,
+    output wire [C_M_AXI_MEM_NUM_BANKS*C_M_AXI_MEM_ID_WIDTH-1:0]   m_axi_mem_awid_bus,
+    output wire [C_M_AXI_MEM_NUM_BANKS*8-1:0]                      m_axi_mem_awlen_bus,
 
-    output wire                                m_axi_mem_wvalid_a [C_M_AXI_MEM_NUM_BANKS],
-    input  wire                                m_axi_mem_wready_a [C_M_AXI_MEM_NUM_BANKS],
-    output wire [C_M_AXI_MEM_DATA_WIDTH-1:0]   m_axi_mem_wdata_a [C_M_AXI_MEM_NUM_BANKS],
-    output wire [C_M_AXI_MEM_DATA_WIDTH/8-1:0] m_axi_mem_wstrb_a [C_M_AXI_MEM_NUM_BANKS],
-    output wire                                m_axi_mem_wlast_a [C_M_AXI_MEM_NUM_BANKS],
+    output wire [C_M_AXI_MEM_NUM_BANKS-1:0]                        m_axi_mem_wvalid_bus,
+    input  wire [C_M_AXI_MEM_NUM_BANKS-1:0]                        m_axi_mem_wready_bus,
+    output wire [C_M_AXI_MEM_NUM_BANKS*C_M_AXI_MEM_DATA_WIDTH-1:0] m_axi_mem_wdata_bus,
+    output wire [C_M_AXI_MEM_NUM_BANKS*(C_M_AXI_MEM_DATA_WIDTH/8)-1:0] m_axi_mem_wstrb_bus,
+    output wire [C_M_AXI_MEM_NUM_BANKS-1:0]                        m_axi_mem_wlast_bus,
 
-    input  wire                                m_axi_mem_bvalid_a [C_M_AXI_MEM_NUM_BANKS],
-    output wire                                m_axi_mem_bready_a [C_M_AXI_MEM_NUM_BANKS],
-    input  wire [C_M_AXI_MEM_ID_WIDTH-1:0]     m_axi_mem_bid_a [C_M_AXI_MEM_NUM_BANKS],
-    input  wire [1:0]                          m_axi_mem_bresp_a [C_M_AXI_MEM_NUM_BANKS],
+    input  wire [C_M_AXI_MEM_NUM_BANKS-1:0]                        m_axi_mem_bvalid_bus,
+    output wire [C_M_AXI_MEM_NUM_BANKS-1:0]                        m_axi_mem_bready_bus,
+    input  wire [C_M_AXI_MEM_NUM_BANKS*C_M_AXI_MEM_ID_WIDTH-1:0]   m_axi_mem_bid_bus,
+    input  wire [C_M_AXI_MEM_NUM_BANKS*2-1:0]                      m_axi_mem_bresp_bus,
 
-    output wire                                m_axi_mem_arvalid_a [C_M_AXI_MEM_NUM_BANKS],
-    input  wire                                m_axi_mem_arready_a [C_M_AXI_MEM_NUM_BANKS],
-    output wire [C_M_AXI_MEM_ADDR_WIDTH-1:0]   m_axi_mem_araddr_a [C_M_AXI_MEM_NUM_BANKS],
-    output wire [C_M_AXI_MEM_ID_WIDTH-1:0]     m_axi_mem_arid_a [C_M_AXI_MEM_NUM_BANKS],
-    output wire [7:0]                          m_axi_mem_arlen_a [C_M_AXI_MEM_NUM_BANKS],
+    output wire [C_M_AXI_MEM_NUM_BANKS-1:0]                        m_axi_mem_arvalid_bus,
+    input  wire [C_M_AXI_MEM_NUM_BANKS-1:0]                        m_axi_mem_arready_bus,
+    output wire [C_M_AXI_MEM_NUM_BANKS*C_M_AXI_MEM_ADDR_WIDTH-1:0] m_axi_mem_araddr_bus,
+    output wire [C_M_AXI_MEM_NUM_BANKS*C_M_AXI_MEM_ID_WIDTH-1:0]   m_axi_mem_arid_bus,
+    output wire [C_M_AXI_MEM_NUM_BANKS*8-1:0]                      m_axi_mem_arlen_bus,
 
-    input  wire                                m_axi_mem_rvalid_a [C_M_AXI_MEM_NUM_BANKS],
-    output wire                                m_axi_mem_rready_a [C_M_AXI_MEM_NUM_BANKS],
-    input  wire [C_M_AXI_MEM_DATA_WIDTH-1:0]   m_axi_mem_rdata_a [C_M_AXI_MEM_NUM_BANKS],
-    input  wire                                m_axi_mem_rlast_a [C_M_AXI_MEM_NUM_BANKS],
-    input  wire [C_M_AXI_MEM_ID_WIDTH-1:0]     m_axi_mem_rid_a [C_M_AXI_MEM_NUM_BANKS],
-    input  wire [1:0]                          m_axi_mem_rresp_a [C_M_AXI_MEM_NUM_BANKS],
+    input  wire [C_M_AXI_MEM_NUM_BANKS-1:0]                        m_axi_mem_rvalid_bus,
+    output wire [C_M_AXI_MEM_NUM_BANKS-1:0]                        m_axi_mem_rready_bus,
+    input  wire [C_M_AXI_MEM_NUM_BANKS*C_M_AXI_MEM_DATA_WIDTH-1:0] m_axi_mem_rdata_bus,
+    input  wire [C_M_AXI_MEM_NUM_BANKS-1:0]                        m_axi_mem_rlast_bus,
+    input  wire [C_M_AXI_MEM_NUM_BANKS*C_M_AXI_MEM_ID_WIDTH-1:0]   m_axi_mem_rid_bus,
+    input  wire [C_M_AXI_MEM_NUM_BANKS*2-1:0]                      m_axi_mem_rresp_bus,
 
     // AXI4 host-memory master interface (CP command ring + host side of DMA)
     `GEN_AXI_HOST,
@@ -112,6 +112,60 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
     // that disagrees with the GPU would leave ports idle or requests unrouted.
     `STATIC_ASSERT(C_M_AXI_MEM_NUM_BANKS == `AFU_MEM_PORTS_OF(VX_MEM_PORTS),
         ("AXI memory port count %0d does not match the GPU's %0d", C_M_AXI_MEM_NUM_BANKS, `AFU_MEM_PORTS_OF(VX_MEM_PORTS)))
+
+    wire                                      m_axi_mem_awvalid_a [C_M_AXI_MEM_NUM_BANKS];
+    wire                                      m_axi_mem_awready_a [C_M_AXI_MEM_NUM_BANKS];
+    wire [C_M_AXI_MEM_ADDR_WIDTH-1:0]         m_axi_mem_awaddr_a [C_M_AXI_MEM_NUM_BANKS];
+    wire [C_M_AXI_MEM_ID_WIDTH-1:0]           m_axi_mem_awid_a [C_M_AXI_MEM_NUM_BANKS];
+    wire [7:0]                                m_axi_mem_awlen_a [C_M_AXI_MEM_NUM_BANKS];
+    wire                                      m_axi_mem_wvalid_a [C_M_AXI_MEM_NUM_BANKS];
+    wire                                      m_axi_mem_wready_a [C_M_AXI_MEM_NUM_BANKS];
+    wire [C_M_AXI_MEM_DATA_WIDTH-1:0]         m_axi_mem_wdata_a [C_M_AXI_MEM_NUM_BANKS];
+    wire [C_M_AXI_MEM_DATA_WIDTH/8-1:0]       m_axi_mem_wstrb_a [C_M_AXI_MEM_NUM_BANKS];
+    wire                                      m_axi_mem_wlast_a [C_M_AXI_MEM_NUM_BANKS];
+    wire                                      m_axi_mem_bvalid_a [C_M_AXI_MEM_NUM_BANKS];
+    wire                                      m_axi_mem_bready_a [C_M_AXI_MEM_NUM_BANKS];
+    wire [C_M_AXI_MEM_ID_WIDTH-1:0]           m_axi_mem_bid_a [C_M_AXI_MEM_NUM_BANKS];
+    wire [1:0]                                m_axi_mem_bresp_a [C_M_AXI_MEM_NUM_BANKS];
+    wire                                      m_axi_mem_arvalid_a [C_M_AXI_MEM_NUM_BANKS];
+    wire                                      m_axi_mem_arready_a [C_M_AXI_MEM_NUM_BANKS];
+    wire [C_M_AXI_MEM_ADDR_WIDTH-1:0]         m_axi_mem_araddr_a [C_M_AXI_MEM_NUM_BANKS];
+    wire [C_M_AXI_MEM_ID_WIDTH-1:0]           m_axi_mem_arid_a [C_M_AXI_MEM_NUM_BANKS];
+    wire [7:0]                                m_axi_mem_arlen_a [C_M_AXI_MEM_NUM_BANKS];
+    wire                                      m_axi_mem_rvalid_a [C_M_AXI_MEM_NUM_BANKS];
+    wire                                      m_axi_mem_rready_a [C_M_AXI_MEM_NUM_BANKS];
+    wire [C_M_AXI_MEM_DATA_WIDTH-1:0]         m_axi_mem_rdata_a [C_M_AXI_MEM_NUM_BANKS];
+    wire                                      m_axi_mem_rlast_a [C_M_AXI_MEM_NUM_BANKS];
+    wire [C_M_AXI_MEM_ID_WIDTH-1:0]           m_axi_mem_rid_a [C_M_AXI_MEM_NUM_BANKS];
+    wire [1:0]                                m_axi_mem_rresp_a [C_M_AXI_MEM_NUM_BANKS];
+
+    for (genvar i = 0; i < C_M_AXI_MEM_NUM_BANKS; ++i) begin : g_axi_mem_bus
+        assign m_axi_mem_awvalid_bus[i] = m_axi_mem_awvalid_a[i];
+        assign m_axi_mem_awready_a[i] = m_axi_mem_awready_bus[i];
+        assign m_axi_mem_awaddr_bus[i * C_M_AXI_MEM_ADDR_WIDTH +: C_M_AXI_MEM_ADDR_WIDTH] = m_axi_mem_awaddr_a[i];
+        assign m_axi_mem_awid_bus[i * C_M_AXI_MEM_ID_WIDTH +: C_M_AXI_MEM_ID_WIDTH] = m_axi_mem_awid_a[i];
+        assign m_axi_mem_awlen_bus[i * 8 +: 8] = m_axi_mem_awlen_a[i];
+        assign m_axi_mem_wvalid_bus[i] = m_axi_mem_wvalid_a[i];
+        assign m_axi_mem_wready_a[i] = m_axi_mem_wready_bus[i];
+        assign m_axi_mem_wdata_bus[i * C_M_AXI_MEM_DATA_WIDTH +: C_M_AXI_MEM_DATA_WIDTH] = m_axi_mem_wdata_a[i];
+        assign m_axi_mem_wstrb_bus[i * (C_M_AXI_MEM_DATA_WIDTH/8) +: (C_M_AXI_MEM_DATA_WIDTH/8)] = m_axi_mem_wstrb_a[i];
+        assign m_axi_mem_wlast_bus[i] = m_axi_mem_wlast_a[i];
+        assign m_axi_mem_bvalid_a[i] = m_axi_mem_bvalid_bus[i];
+        assign m_axi_mem_bready_bus[i] = m_axi_mem_bready_a[i];
+        assign m_axi_mem_bid_a[i] = m_axi_mem_bid_bus[i * C_M_AXI_MEM_ID_WIDTH +: C_M_AXI_MEM_ID_WIDTH];
+        assign m_axi_mem_bresp_a[i] = m_axi_mem_bresp_bus[i * 2 +: 2];
+        assign m_axi_mem_arvalid_bus[i] = m_axi_mem_arvalid_a[i];
+        assign m_axi_mem_arready_a[i] = m_axi_mem_arready_bus[i];
+        assign m_axi_mem_araddr_bus[i * C_M_AXI_MEM_ADDR_WIDTH +: C_M_AXI_MEM_ADDR_WIDTH] = m_axi_mem_araddr_a[i];
+        assign m_axi_mem_arid_bus[i * C_M_AXI_MEM_ID_WIDTH +: C_M_AXI_MEM_ID_WIDTH] = m_axi_mem_arid_a[i];
+        assign m_axi_mem_arlen_bus[i * 8 +: 8] = m_axi_mem_arlen_a[i];
+        assign m_axi_mem_rvalid_a[i] = m_axi_mem_rvalid_bus[i];
+        assign m_axi_mem_rready_bus[i] = m_axi_mem_rready_a[i];
+        assign m_axi_mem_rdata_a[i] = m_axi_mem_rdata_bus[i * C_M_AXI_MEM_DATA_WIDTH +: C_M_AXI_MEM_DATA_WIDTH];
+        assign m_axi_mem_rlast_a[i] = m_axi_mem_rlast_bus[i];
+        assign m_axi_mem_rid_a[i] = m_axi_mem_rid_bus[i * C_M_AXI_MEM_ID_WIDTH +: C_M_AXI_MEM_ID_WIDTH];
+        assign m_axi_mem_rresp_a[i] = m_axi_mem_rresp_bus[i * 2 +: 2];
+    end
 
     reg [`VX_CFG_RESET_DELAY-1:0] vx_reset_shift_r;
     wire vx_reset;

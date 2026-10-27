@@ -54,8 +54,8 @@ module vortex_afu_shim #(
     output wire                                 interrupt
 `IGNORE_WARNINGS_END
 );
-    `AXI_MEM_ARRAYS (C_M_AXI_MEM_NUM_BANKS)
-    `MP_REPEAT (`AFU_MEM_PORTS, AXI_MEM_TO_ARRAY, MP_SEMI);
+    `AXI_MEM_BUSES (C_M_AXI_MEM_NUM_BANKS)
+    `MP_REPEAT (`AFU_MEM_PORTS, AXI_MEM_TO_BUS, MP_SEMI);
 
     VX_afu_wrap #(
 		.C_S_AXI_CTRL_ADDR_WIDTH (C_S_AXI_CTRL_ADDR_WIDTH),
@@ -68,7 +68,7 @@ module vortex_afu_shim #(
 		.clk             	(ap_clk),
 		.reset           	(~ap_rst_n),
 
-		`AXI_MEM_ARRAY_ARGS,
+		`AXI_MEM_BUS_ARGS,
 
 		`AXI_HOST_ARGS,
 
