@@ -56,6 +56,10 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     // Write misses allocate without a fill (write-validate)
     parameter LAZY_FETCH            = `VX_CFG_DCACHE_LAZY_FETCH,
 
+    // Same-word read merge across the ports, as the dcache merges the
+    // channels of one LSU block
+    parameter READ_MERGE            = `VX_CFG_DCACHE_READ_MERGE ? NUM_REQS : 0,
+
     // Bank pipeline depth (capacity-scaled)
     parameter LATENCY               = `VX_CFG_DCACHE_LATENCY,
 
@@ -189,6 +193,7 @@ module VX_cache_top import VX_gpu_pkg::*; #(
         .WRITEBACK      (WRITEBACK),
         .DIRTY_BYTES    (DIRTY_BYTES),
         .LAZY_FETCH     (LAZY_FETCH),
+        .READ_MERGE     (READ_MERGE),
         .AMO_ENABLE     (AMO_ENABLE),
         .IS_LLC         (IS_LLC),
         .BANK_HASH      (BANK_HASH),
