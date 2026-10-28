@@ -1215,8 +1215,11 @@ cmake -G Ninja -S $FOLDSIM_SRC -B $FOLDSIM_SRC/build \
 ### Notes
 
 - `foldsim-opt` links CIRCT statically; the driver finds it next to itself
-  and the CIRCT tools through `--circt-bin`. `hw/syn/common.mk` sets
-  `FOLDSIM_PATH ?= $(TOOLDIR)/foldsim` and `FOLDSIM ?= $(FOLDSIM_PATH)/bin/foldsim`.
+  and the CIRCT tools through `--circt-bin`. `config.mk` sets
+  `FOLDSIM_PATH ?= $(TOOLDIR)/foldsim` and `FOLDSIM_SHELL ?=
+  $(FOLDSIM_PATH)/share/foldsim/shell` (the FPGA shell the simulator runs in);
+  `hw/syn/common.mk` sets `FOLDSIM ?= $(FOLDSIM_PATH)/bin/foldsim` and
+  `FOLDSIM_LIFT_TOOL ?= $(FOLDSIM_PATH)/bin/foldsim-lift`.
 - A CIRCT change Foldsim's passes rely on lands in CIRCT first; both
   prebuilts are refreshed together.
 - The prebuilt is opt-in: `./ci/toolchain_install.sh --foldsim` (or `--all`)

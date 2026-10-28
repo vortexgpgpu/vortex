@@ -26,8 +26,6 @@ endif
 # and its elaboration into the one netlist a synthesis tool reads
 # (circt_elaborate.sh; gen_sources.sh -E).
 CIRCT_PATH ?= $(TOOLDIR)/circt
-# foldsim builds FAME-5 simulators on CIRCT (hw/syn/foldsim).
-FOLDSIM_PATH ?= $(TOOLDIR)/foldsim
 YOSYS_PATH ?= $(TOOLDIR)/yosys
 STA_PATH   ?= $(TOOLDIR)/sta
 VERILATOR_PATH ?= $(TOOLDIR)/verilator
@@ -39,8 +37,9 @@ CIRCT_OPT     ?= $(CIRCT_PATH)/bin/circt-opt
 FIRTOOL       ?= $(CIRCT_PATH)/bin/firtool
 FOLDSIM       ?= $(FOLDSIM_PATH)/bin/foldsim
 FOLDSIM_OPT   ?= $(FOLDSIM_PATH)/bin/foldsim-opt
+FOLDSIM_LIFT_TOOL ?= $(FOLDSIM_PATH)/bin/foldsim-lift
 YOSYS ?= $(YOSYS_PATH)/bin/yosys
 STA   ?= $(STA_PATH)/bin/sta
 VERILATOR ?= $(VERILATOR_PATH)/bin/verilator
 
-export CIRCT_PATH FOLDSIM_PATH YOSYS_PATH STA_PATH VERILATOR_PATH CIRCT_VERILOG CIRCT_OPT FIRTOOL FOLDSIM FOLDSIM_OPT YOSYS STA VERILATOR
+export CIRCT_PATH FOLDSIM_PATH FOLDSIM_SHELL FOLDSIM_LIFT_TOOL YOSYS_PATH STA_PATH VERILATOR_PATH CIRCT_VERILOG CIRCT_OPT FIRTOOL FOLDSIM FOLDSIM_OPT YOSYS STA VERILATOR

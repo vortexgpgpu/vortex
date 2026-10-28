@@ -52,9 +52,12 @@ namespace vortex {
 // every bank with one precharge and one REF. A refresh that would reach past
 // the horizon waits, and the requests with it.
 //
-// This is the normative model: foldsim's memory endpoint
-// (hw/rtl/afu/foldsim/foldsim_mem_bank.sv) implements the same decisions, and
-// the faces below put it behind DramSim's interface and behind an AXI4 port.
+// Foldsim's memory endpoint (its shell's rtl/foldsim_mem_bank.sv) implements
+// the same decisions; the normative copy of this model is the shell's
+// model/dram_bank_model.h, and this one gives Vortex's simulators the same
+// timing (rtlsim's AXI_MEM_MODEL=bank, against which ci/testcases/foldsim.yaml
+// holds Foldsim cycle-exact). The faces below put it behind DramSim's
+// interface and behind an AXI4 port.
 class DramBankModel {
 public:
   enum class Refresh { Off, PerBank, AllBank };

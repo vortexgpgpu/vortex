@@ -45,7 +45,7 @@
   <path d="M550,71 L573,71" class="ln"/>
   <path d="M765,71 L788,71" class="ln"/>
 
-  <text x="20" y="140" class="t">Run: the kernel (hw/rtl/afu/foldsim) and its host</text>
+  <text x="20" y="140" class="t">Run: Foldsim's shell (share/foldsim/shell) and its host</text>
   <rect x="20" y="152" width="700" height="350" rx="8" class="box" fill="#fbfbfb"/>
   <text x="34" y="172" class="lbl" font-weight="bold">foldsim_afu</text>
 

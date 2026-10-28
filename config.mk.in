@@ -44,6 +44,12 @@ RISCV_TOOLCHAIN_PATH ?= $(TOOLDIR)/riscv$(XLEN)-gnu-toolchain
 FIRESIM_PATH ?= $(TOOLDIR)/firesim
 # vortexgpgpu/firesim commit this tree is built and tested against (VERSION).
 FIRESIM_REV := @FIRESIM_REV@
+# A Foldsim installation (ci/foldsim_install.sh): the compiler that builds a
+# FAME-5 simulator of Vortex (hw/syn/foldsim), and the FPGA shell the simulator
+# runs in, which the image, the in-process simulator (sim/foldsim) and the
+# runtime (sw/runtime/foldsim) all take from it.
+FOLDSIM_PATH ?= $(TOOLDIR)/foldsim
+FOLDSIM_SHELL ?= $(FOLDSIM_PATH)/share/foldsim/shell
 
 RISCV_PREFIX  ?= riscv$(XLEN)-unknown-elf
 RISCV_SYSROOT ?= $(RISCV_TOOLCHAIN_PATH)/$(RISCV_PREFIX)

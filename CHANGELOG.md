@@ -43,6 +43,12 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
 
 ### Changed
 
+- **Foldsim's shell lives in the Foldsim repository.** The control and memory endpoints, the DRAM bank timing model, the register
+  map, the in-process host, the endpoint's unit tests and the boundary lifting (`foldsim-lift`) moved out of `hw/rtl/afu/foldsim`,
+  `sim/foldsim`, `sw/common`, `hw/unittest/foldsim_mem*` and `hw/syn/foldsim`; they come with the Foldsim installation
+  (`FOLDSIM_SHELL`, `$(FOLDSIM_PATH)/share/foldsim/shell`). Vortex keeps the target wrapper, the image flow, the runtime driver and
+  the parity case. *Why:* Foldsim is a general-purpose RTL simulator; nothing in the shell is specific to Vortex.
+
 - **RV64 portability.** Device index math, DXA/OM addresses, pack-load strides, RTU scene/payload pointers and the ray log carry full
   width on RV64 (`size_t`/`uintptr_t`, identical RV32 code); RTU slot reads into FP registers are NaN-boxed.
 - **Zero warnings restored.** Every C/C++ build (simulators, runtime, kernel library, tests, OpenCL/HIP/Vulkan apps) is `-Werror` and
