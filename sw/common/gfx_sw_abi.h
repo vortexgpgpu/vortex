@@ -27,6 +27,7 @@
 
 #include <stdint.h>
 #include <VX_types.h>   // VX_TEX_LOD_MAX
+#include "gfx_sparse.h"  // gfx_sparse_t
 
 #ifdef __cplusplus
 extern "C" {
@@ -72,6 +73,10 @@ extern "C" {
 // texels of each level it reads.
 #define GFX_SW_TEX_FILTER_OFFSET_SHIFT 16
 
+// texstate.filter bit 10: the texture is a sparse image stored in 64 KiB tiles,
+// which only the software sampler addresses (texstate.sparse).
+#define GFX_SW_TEX_FILTER_TILED (1u << 10)
+
 // Either axis wraps with CLAMP_TO_BORDER, which the FF unit decodes as REPEAT.
 // Routing only: the software sampler keys off the wrap value itself.
 #define GFX_SW_TEX_FILTER_BORDER (1u << 6)
@@ -97,10 +102,7 @@ typedef struct {
   uint32_t depth;                         // sampler3D: mip-0 depth-slice count; samplerCubeArray: cube count; 0 otherwise
   uint32_t wrap_w;                        // VX_TEX_WRAP_* for the 3D depth (r) axis
   uint32_t levels;                        // mip levels the view exposes
-  uint32_t res_page;                      // sparse page log2 dims: w | h << 8 | d << 16
-  uint32_t res_layer_bits;                // residency bits per array layer
-  uint32_t res_level[VX_TEX_LOD_MAX + 1]; // first residency bit of each level
-  uint64_t residency;                     // sparse page bitmap; 0 => fully resident
+  gfx_sparse_t sparse;                    // a sparse texture's tiles and residency; bitmap 0 => not sparse
   uint32_t border_t[4];                   // border colour R,G,B,A as the format's channel type: float bits, or integers
   uint32_t aniso;                         // sampler's max anisotropy; 0 or 1 => isotropic
   uint32_t samples;                       // samples per texel of a multisample image; 0 or 1 otherwise
@@ -132,6 +134,8 @@ typedef struct {
   uint32_t blend_constf[4];            // float bits, RGBA
   uint32_t zbuf_sample_stride, cbuf_sample_stride;   // bytes between sample planes
   uint32_t zbuf_layer_stride, cbuf_layer_stride;     // bytes between layers
+  uint32_t zbuf_tiles, cbuf_tiles;                   // tiled sparse attachments' shapes
+  uint32_t zbuf_tiles_w, cbuf_tiles_w;               // ... and widths in blocks
 } gfx_sw_omstate_t;
 
 // Per-attachment colour descriptor for MRT (mirror of gfx_sw::om_color_t). The
@@ -151,6 +155,7 @@ typedef struct {
   uint32_t blend_constf[4];            // float bits, RGBA
   uint32_t cbuf_sample_stride;         // bytes between sample planes
   uint32_t cbuf_layer_stride;          // bytes between layers
+  uint32_t cbuf_tiles, cbuf_tiles_w;   // a tiled sparse attachment's shape and width in blocks
 } gfx_sw_omcolor_t;
 
 // Sample the resident texture (software fallback for vx_tex4). `lod` is integer

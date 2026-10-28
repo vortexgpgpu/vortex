@@ -1,0 +1,51 @@
+#version 450
+/*
+ * Copyright © 2026  Vortex GPGPU
+ * SPDX-License-Identifier: MIT
+ *
+ * R32_UINT 2D array sparse image, z = layer.
+ * mode 0 stores every texel's seeded value. mode 1 sparse-loads every texel
+ * into res.v[2i] (packed), its residency into bit 0 of res.v[2i + 1] and a
+ * mismatch between the sparse and the plain load into bit 1, then updates
+ * each resident texel (an atomic add of 7).
+ */
+#extension GL_ARB_sparse_texture2 : require
+
+layout(local_size_x = 4, local_size_y = 4) in;
+
+layout(binding = 0, r32ui) uniform uimage2DArray img;
+
+layout(binding = 1, std430) buffer Out { uint v[]; } res;
+
+layout(push_constant) uniform Params { uvec4 e; uint mode; uint salt; } pc;
+
+uint seed(uvec3 p)
+{
+   return pc.salt ^ (p.x * 2654435761u) ^ (p.y * 40503u) ^ (p.z * 2246822519u);
+}
+
+void main()
+{
+   uvec3 g = gl_GlobalInvocationID;
+   if (g.x >= pc.e.x || g.y >= pc.e.y || g.z >= pc.e.z)
+      return;
+   uint i = (g.z * pc.e.y + g.y) * pc.e.x + g.x;
+   ivec3 c = ivec3(g);
+   if (pc.mode == 0u) {
+      imageStore(img, c, uvec4(seed(g)));
+      return;
+   }
+   uvec4 t;
+   int code = sparseImageLoadARB(img, c, t);
+   uint resident = sparseTexelsResidentARB(code) ? 1u : 0u;
+   uint packed = t.x;
+   uint flags = resident;
+   if (resident != 0u) {
+      uvec4 l = imageLoad(img, c);
+      if (l.x != packed)
+         flags |= 2u;
+      imageAtomicAdd(img, c, 7u);
+   }
+   res.v[2u * i] = packed;
+   res.v[2u * i + 1u] = flags;
+}

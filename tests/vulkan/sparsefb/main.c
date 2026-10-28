@@ -2,19 +2,22 @@
  * Copyright © 2026  Vortex GPGPU
  * SPDX-License-Identifier: MIT
  *
- * Work the device must refuse: a fully bound sparse R32_UINT image 256 texels,
- * two 64 KiB tiles, wide. The reference layout keeps each tile's 128 x 128
- * texels together, which rows running linearly across both tiles do not, so
- * the device's linear addressing would reach the wrong memory. A compute
- * dispatch and a
- * rasterizer-discard draw, whose vertex shader runs alone for its stores, each
- * store into the image and read their texels back into a buffer.
+ * Stores into a sparse image from both kinds of device work: a fully bound
+ * sparse R32_UINT image 256 texels, two 64 KiB tiles, wide. The reference
+ * layout keeps each tile's 128 x 128 texels together, which rows running
+ * linearly across both tiles do not, so the device must address the texels
+ * through the tiles. A compute dispatch and a rasterizer-discard draw, whose
+ * vertex shader runs alone for its stores, each store into the image and read
+ * their texels back into a buffer.
  *
- * Both must be refused with the sparse-image reason and run on llvmpipe, which
- * the Makefile checks from the driver's placement lines, and every value read
- * back must be the one stored.
+ * Both must run on the device, which the Makefile checks from the driver's
+ * placement line, and every value read back must be the one stored. The two
+ * tiles are bound to the two 64 KiB blocks of a host-visible memory in swapped
+ * order, so each tile's texels must also land in its own block, which the host
+ * checks through the memory itself: rows addressed linearly across the tiles
+ * put the right tile's texels in the left tile's block.
  *
- * Run against lavapipe with GALLIUM_DRIVER=vortexpipe, MESA_VORTEX_STRICT=0.
+ * Run against lavapipe with GALLIUM_DRIVER=vortexpipe.
  */
 
 #include <vulkan/vulkan.h>
@@ -111,10 +114,11 @@ main(int argc, char **argv)
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &v13,
    };
    vkGetPhysicalDeviceFeatures2(pd, &f2);
-   if (!f2.features.sparseBinding || !f2.features.vertexPipelineStoresAndAtomics ||
-       !v13.dynamicRendering) {
-      printf("NotSupported: sparseBinding, vertexPipelineStoresAndAtomics or "
-             "dynamicRendering is not offered by this device\n");
+   if (!f2.features.sparseBinding || !f2.features.sparseResidencyImage2D ||
+       !f2.features.vertexPipelineStoresAndAtomics || !v13.dynamicRendering) {
+      printf("NotSupported: sparseBinding, sparseResidencyImage2D, "
+             "vertexPipelineStoresAndAtomics or dynamicRendering is not offered by "
+             "this device\n");
       return 0;
    }
 
@@ -144,7 +148,8 @@ main(int argc, char **argv)
    };
    VkPhysicalDeviceFeatures2 f2_en = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &v13_en,
-      .features = { .sparseBinding = VK_TRUE, .vertexPipelineStoresAndAtomics = VK_TRUE },
+      .features = { .sparseBinding = VK_TRUE, .sparseResidencyImage2D = VK_TRUE,
+                    .vertexPipelineStoresAndAtomics = VK_TRUE },
    };
    VkDeviceCreateInfo dci = {
       .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, .pNext = &f2_en,
@@ -157,10 +162,10 @@ main(int argc, char **argv)
    VkPhysicalDeviceMemoryProperties mp;
    vkGetPhysicalDeviceMemoryProperties(pd, &mp);
 
-   /* --- the sparse image, fully bound ------------------------------- */
+   /* --- the sparse image, its two tiles bound to swapped blocks --- */
    VkImageCreateInfo imci = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-      .flags = VK_IMAGE_CREATE_SPARSE_BINDING_BIT,
+      .flags = VK_IMAGE_CREATE_SPARSE_BINDING_BIT | VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT,
       .imageType = VK_IMAGE_TYPE_2D, .format = VK_FORMAT_R32_UINT,
       .extent = { W, 2u * H, 1 }, .mipLevels = 1, .arrayLayers = 1,
       .samples = VK_SAMPLE_COUNT_1_BIT, .tiling = VK_IMAGE_TILING_OPTIMAL,
@@ -171,19 +176,41 @@ main(int argc, char **argv)
    CHECK(vkCreateImage(dev, &imci, NULL, &img));
    VkMemoryRequirements imr;
    vkGetImageMemoryRequirements(dev, img, &imr);
-   uint32_t imt = find_mem(&mp, imr.memoryTypeBits, 0);
-   if (imt == UINT32_MAX) { fprintf(stderr, "FAILED: no sparse image memory\n"); return 1; }
+   uint32_t imt = find_mem(&mp, imr.memoryTypeBits,
+      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+   if (imt == UINT32_MAX) {
+      printf("FAILED: no host-visible memory for the sparse image\n");
+      return 1;
+   }
+   /* R32 tiles are 128 x 128 texels, 64 KiB, in the standard 2D block shape. */
+   const VkDeviceSize TILE = 65536u;
+   if (imr.alignment != TILE || imr.size < 2u * TILE) {
+      fprintf(stderr, "FAILED: unexpected sparse block size %llu (size %llu)\n",
+              (unsigned long long)imr.alignment, (unsigned long long)imr.size);
+      return 1;
+   }
    VkMemoryAllocateInfo imai = {
       .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-      .allocationSize = imr.size, .memoryTypeIndex = imt,
+      .allocationSize = 2u * TILE, .memoryTypeIndex = imt,
    };
    VkDeviceMemory imem;
    CHECK(vkAllocateMemory(dev, &imai, NULL, &imem));
-   VkSparseMemoryBind bind = { .resourceOffset = 0, .size = imr.size, .memory = imem };
-   VkSparseImageOpaqueMemoryBindInfo obi = { .image = img, .bindCount = 1, .pBinds = &bind };
+   uint32_t *ip;
+   CHECK(vkMapMemory(dev, imem, 0, 2u * TILE, 0, (void **)&ip));
+   memset(ip, 0, (size_t)(2u * TILE));
+   vkUnmapMemory(dev, imem);
+   VkSparseImageMemoryBind tbind[2];
+   for (uint32_t t = 0; t < 2; t++) {
+      tbind[t] = (VkSparseImageMemoryBind){
+         .subresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0 },
+         .offset = { (int32_t)(t * 128u), 0, 0 }, .extent = { 128u, 2u * H, 1 },
+         .memory = imem, .memoryOffset = (1u - t) * TILE,
+      };
+   }
+   VkSparseImageMemoryBindInfo ibi = { .image = img, .bindCount = 2, .pBinds = tbind };
    VkBindSparseInfo bsi = {
       .sType = VK_STRUCTURE_TYPE_BIND_SPARSE_INFO,
-      .imageOpaqueBindCount = 1, .pImageOpaqueBinds = &obi,
+      .imageBindCount = 1, .pImageBinds = &ibi,
    };
    CHECK(vkQueueBindSparse(queue, 1, &bsi, VK_NULL_HANDLE));
    CHECK(vkQueueWaitIdle(queue));
@@ -391,6 +418,27 @@ main(int argc, char **argv)
              0xc0000000u ^ (first * 2654435761u));
       return 1;
    }
+   /* Every stored texel, in the block its tile is bound to, at its place in
+    * the tile. */
+   unsigned misplaced = 0;
+   uint32_t first_mis = UINT32_MAX;
+   CHECK(vkMapMemory(dev, imem, 0, 2u * TILE, 0, (void **)&ip));
+   for (uint32_t k = 0; k < texels; k++) {
+      const uint32_t x = k % W, y = k / W;
+      const uint32_t own = 1u - x / 128u;   /* the block of k's tile */
+      const uint32_t w = own * (TILE / 4u) + (x % 128u) + y * 128u;
+      if (ip[w] != (0xc0000000u ^ (k * 2654435761u))) {
+         if (first_mis == UINT32_MAX)
+            first_mis = k;
+         misplaced++;
+      }
+   }
+   vkUnmapMemory(dev, imem);
+   if (misplaced) {
+      printf("FAILED (%u/%u texels not in the block their tile is bound to; first at "
+             "x %u, y %u)\n", misplaced, texels, first_mis % W, first_mis / W);
+      return 1;
+   }
 
    vkDestroyCommandPool(dev, cp, NULL);
    vkDestroyDescriptorPool(dev, dp, NULL);
@@ -407,6 +455,7 @@ main(int argc, char **argv)
    vkDestroyInstance(inst, NULL);
 
    printf("PASSED (sparsefb: %u texels stored and read back through a two-tile-wide "
-          "sparse image by a dispatch and a discard draw)\n", texels);
+          "sparse image by a dispatch and a discard draw, each in its tile's block)\n",
+          texels);
    return 0;
 }

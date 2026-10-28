@@ -48,7 +48,8 @@ __kernel void blit_k(blit_arg_t* __UNIFORM__ arg) {
     } else {
       gfx_sw::tex_sample_f32_layer(ts, u, v, 0, arg->layer, arg->filter, col);
     }
-    uintptr_t addr = (uintptr_t)(arg->dst_addr + (uint64_t)y * arg->dst_pitch + (uint64_t)x * bpp);
+    uintptr_t addr = (uintptr_t)(arg->dst_addr + gfx_sparse_box_off(&arg->dst_tiles, bpp,
+                                                                     arg->dst_pitch, 0, x, y, 0));
     if (gfx_sw::om_is_wide(fmt)) {
       uint32_t lanes[4];
       for (uint32_t k = 0; k < 4; ++k) {
@@ -92,8 +93,10 @@ __kernel void blit_raw_k(blit_raw_arg_t* __UNIFORM__ arg) {
     uint32_t x = i % w, y = i / w;
     uint32_t sx = blit_raw_coord(arg->src_x0 + ((float)x + 0.5f) * arg->scale_x, arg->src_w);
     uint32_t sy = blit_raw_coord(arg->src_y0 + ((float)y + 0.5f) * arg->scale_y, arg->src_h);
-    uintptr_t s = (uintptr_t)(arg->src_addr + (uint64_t)sy * arg->src_pitch + (uint64_t)sx * tb);
-    uintptr_t d = (uintptr_t)(arg->dst_addr + (uint64_t)y * arg->dst_pitch + (uint64_t)x * tb);
+    uintptr_t s = (uintptr_t)(arg->src_addr + gfx_sparse_box_off(&arg->src_tiles, tb,
+                                                                  arg->src_pitch, 0, sx, sy, 0));
+    uintptr_t d = (uintptr_t)(arg->dst_addr + gfx_sparse_box_off(&arg->dst_tiles, tb,
+                                                                  arg->dst_pitch, 0, x, y, 0));
     if (words) {
       const auto* sw = reinterpret_cast<const uint32_t*>(s);
       auto* dw = reinterpret_cast<uint32_t*>(d);

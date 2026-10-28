@@ -1,0 +1,30 @@
+#version 450
+/*
+ * Copyright © 2026  Vortex GPGPU
+ * SPDX-License-Identifier: MIT
+ *
+ * Contended float atomics on sparse images: invocation i adds 1.0 to
+ * accumulator i % 4 of the 2D image and 2.0 to accumulator i % 4 of the 3D one,
+ * each accumulator in a tile of its own, and exchanges its own texel of row 0
+ * of the 2D image with its index, returning the old value in res.v[i].
+ */
+#extension GL_EXT_shader_atomic_float : require
+
+layout(local_size_x = 16) in;
+
+layout(binding = 0, r32f) uniform image2D img2;
+layout(binding = 1, r32f) uniform image3D img3;
+layout(binding = 2, std430) buffer Out { float v[]; } res;
+
+const ivec2 acc2[4] = ivec2[4](ivec2(5, 1), ivec2(140, 2), ivec2(290, 3), ivec2(200, 130));
+const ivec3 acc3[4] = ivec3[4](ivec3(3, 3, 3), ivec3(40, 5, 2), ivec3(7, 40, 17),
+                               ivec3(45, 45, 19));
+
+void main()
+{
+   uint i = gl_GlobalInvocationID.x;
+   uint k = i % 4u;
+   imageAtomicAdd(img2, acc2[k], 1.0);
+   imageAtomicAdd(img3, acc3[k], 2.0);
+   res.v[i] = imageAtomicExchange(img2, ivec2(int(i % 300u), int(4u + i / 300u)), float(i));
+}

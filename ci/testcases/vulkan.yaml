@@ -221,10 +221,30 @@ tests:
 # load/store through a layer view of a sparse array the device addresses.
 - {id: shader-imgsparse, via: make-run, drivers: [simx], dir: tests/vulkan/imgsparse, target: "run-{driver}",
    touches: [tests/vulkan/imgsparse]}
-# A sparse image the device cannot address: a dispatch and a rasterizer-discard
-# draw that store into it are refused (sparse-image) and run on llvmpipe.
+# A sparse image two tiles wide: a dispatch and a rasterizer-discard draw that
+# store into it both run on the device, addressing it through its tiles.
 - {id: shader-sparsefb, via: make-run, drivers: [simx], dir: tests/vulkan/sparsefb, target: "run-{driver}",
    touches: [tests/vulkan/sparsefb, tests/vulkan/common.mk]}
+# Partially resident sparse images and buffers, several 64 KiB tiles wide, in
+# their own tiles: storage access and sparse loads (sparse_image), transfers
+# (sparse_xfer), sampling with residency codes (sparse_tex), render targets on
+# both mergers (sparse_rt), buffers (sparse_buffer) and float atomics
+# (sparse_atomic), with rebinds the next operation must see; views of slices of a
+# 3D image starting inside its tiles (sparse_layers3d).
+- {id: shader-sparse-image, via: make-run, drivers: [simx], dir: tests/vulkan/sparse_image, target: "run-{driver}",
+   touches: [sw/common/gfx_sparse.h, tests/vulkan/sparse_image]}
+- {id: shader-sparse-xfer, via: make-run, drivers: [simx], dir: tests/vulkan/sparse_xfer, target: "run-{driver}",
+   touches: [sw/common/gfx_sparse.h, sw/gfx/, tests/vulkan/sparse_xfer]}
+- {id: shader-sparse-tex, via: make-run, drivers: [simx], dir: tests/vulkan/sparse_tex, target: "run-{driver}",
+   touches: [sw/common/gfx_sparse.h, sw/common/gfx_sw.h, sw/common/gfx_frag_tex.h, tests/vulkan/sparse_tex]}
+- {id: shader-sparse-rt, via: make-run, drivers: [simx], dir: tests/vulkan/sparse_rt, target: "run-{driver}",
+   touches: [sw/common/gfx_sparse.h, sw/common/gfx_sw.h, tests/vulkan/sparse_rt]}
+- {id: shader-sparse-buffer, via: make-run, drivers: [simx], dir: tests/vulkan/sparse_buffer, target: "run-{driver}",
+   touches: [tests/vulkan/sparse_buffer]}
+- {id: shader-sparse-atomic, via: make-run, drivers: [simx], dir: tests/vulkan/sparse_atomic, target: "run-{driver}",
+   touches: [sim/simx/amo/, tests/vulkan/sparse_atomic]}
+- {id: shader-sparse-layers3d, via: make-run, drivers: [simx], dir: tests/vulkan/sparse_layers3d, target: "run-{driver}",
+   touches: [tests/vulkan/sparse_layers3d]}
 
 # FF/SW-mix matrix — the full 3D pipeline (draw3d) with fixed-function units
 # selectively dropped to SIMT software. Combos that need SW-TEX or SW-RASTER

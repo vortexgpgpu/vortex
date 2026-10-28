@@ -1,0 +1,35 @@
+#version 450
+/*
+ * Copyright © 2026  Vortex GPGPU
+ * SPDX-License-Identifier: MIT
+ *
+ * Invocation i reads word i of pages 0 and 2 of sparse buffer a, word i of b
+ * (bound to the memory of a's page 0), vector i % 64 of a uniform buffer in a
+ * sparse buffer, and word i of a's page 2 through its device address, into
+ * res.o[5i..5i+4]; then stores 3i + pc.mode to word page_words / 2 + i of a's
+ * page 2.
+ */
+#extension GL_EXT_buffer_reference : require
+
+layout(local_size_x = 16) in;
+
+layout(binding = 0, std430) buffer A { uint a[]; };
+layout(binding = 1, std430) buffer B { uint b[]; };
+layout(binding = 2, std140) uniform U { uvec4 u[64]; };
+layout(binding = 3, std430) buffer Out { uint o[]; } res;
+
+layout(buffer_reference, std430) buffer Ptr { uint v[]; };
+
+layout(push_constant) uniform Params { Ptr p; uint page_words; uint mode; } pc;
+
+void main()
+{
+   uint i = gl_GlobalInvocationID.x;
+   uint page2 = 2u * pc.page_words;
+   res.o[5u * i + 0u] = a[i];
+   res.o[5u * i + 1u] = a[page2 + i];
+   res.o[5u * i + 2u] = b[i];
+   res.o[5u * i + 3u] = u[i & 63u].x;
+   res.o[5u * i + 4u] = pc.p.v[page2 + i];
+   a[page2 + pc.page_words / 2u + i] = 3u * i + pc.mode;
+}

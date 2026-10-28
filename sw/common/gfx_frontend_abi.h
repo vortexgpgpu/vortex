@@ -31,6 +31,7 @@
 
 #include <stdint.h>
 #include <VX_types.h>
+#include "gfx_sparse.h"
 
 // Near-plane clip + triangle-setup depth range. The device clip stage uses
 // these directly (see pipe_clip_and_setup), so they are part of the contract.
@@ -538,6 +539,7 @@ typedef struct {
   float inv_src_w, inv_src_h;
   uint32_t src_3d;        // 1: a 3D source, sampled at depth coordinate src_r
   int32_t src_r;          // normalized depth of the slice, TEX_FXD_FRAC fixed point
+  gfx_sparse_box_t dst_tiles; // a tiled destination: dst_addr is the slice's level
 } blit_arg_t;
 
 // Raw nearest blit (blit_raw_k, gfx_blit_k.h): each texel of a dst_w x dst_h
@@ -554,13 +556,21 @@ typedef struct {
   float src_x0, src_y0;   // source texel position of the box's top-left corner
   float scale_x, scale_y; // source texels per destination pixel (negative: flip)
   uint32_t mask[4];       // the texel bits to write
+  // Tiled sides: src_addr / dst_addr is then the slice's level, and the
+  // source's origin is 0.
+  gfx_sparse_box_t src_tiles, dst_tiles;
 } blit_raw_arg_t;
+
+// Texels along a row each thread of texel_copy_k copies: the launch has one
+// work item per run of them.
+#define TEXEL_COPY_RUN 16u
 
 // Texel copy (texel_copy_k, gfx_copy_k.h): for every texel of a w x h x d box,
 // `bytes` bytes starting at byte src_byte of the source texel go to byte
 // dst_byte of the destination texel, under `mask`. The two boxes have their own
 // texel sizes and pitches, so one aspect of a depth/stencil texel can move to or
-// from a buffer holding only that aspect. One thread per texel, grid-strided.
+// from a buffer holding only that aspect. One thread per run of texels along a
+// row, grid-strided.
 //
 // With samples > 1 the source is a multisample image's `samples` planes,
 // sample_stride bytes apart, and the depth field of each texel's first word --
@@ -576,6 +586,7 @@ typedef struct {
   uint32_t mask[4];       // per copied byte: the bits to write
   uint32_t samples, sample_stride;     // 0 or 1: a plain copy
   uint32_t depth_shift, depth_bits, depth_float;
+  gfx_sparse_box_t src_tiles, dst_tiles; // tiled sides: the span is the level
 } texel_copy_arg_t;
 
 // Texture pack (tex_pack_k, gfx_tex_pack_k.h): the TEX unit's copy of a sampled
@@ -600,10 +611,15 @@ typedef struct {
   uint32_t dst_mip_off[VX_TEX_LOD_MAX + 1];
 } tex_pack_arg_t;
 
+// Texels along a row each thread of clear_k fills: the launch has one work item
+// per run of them.
+#define CLEAR_RUN 16u
+
 // Masked texel fill (clear_k, gfx_clear_k.h). Every texel of a w x h x d box of
 // the staging span takes `value` where `mask` is set and keeps its other bits,
 // so one kernel serves colour clears, depth- or stencil-only clears of a
-// combined format, and buffer fills. One thread per texel, grid-strided.
+// combined format, and buffer fills. One thread per run of texels along a row,
+// grid-strided.
 typedef struct {
   uint64_t dst_addr;      // staging span, texel (0,0,0) at its start      (in/out)
   uint32_t texel_bytes;   // 1..16
@@ -611,4 +627,5 @@ typedef struct {
   uint32_t row_pitch, slice_pitch;
   uint32_t value[4];      // the texel, packed in the destination format
   uint32_t mask[4];       // the texel bits to write
+  gfx_sparse_box_t dst_tiles; // a tiled destination: the span is the level
 } clear_arg_t;

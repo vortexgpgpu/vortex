@@ -27,6 +27,7 @@
 #include <VX_types.h>
 #include "gfx_tex_const.h"
 #include "gfx_tex_bc.h"
+#include "gfx_sparse.h"
 #include <vx_gfx_abi.h>                 // Pack8888 / Lerp8888
 #include <cocogfx/include/fixed.hpp>    // cocogfx::TFixed
 
@@ -938,14 +939,20 @@ static inline void TexDecodeBlockF4(uint32_t format, const void* p, uint32_t t, 
 // between the level's rows -- of texels, or of 4x4 blocks -- and 0 for rows
 // packed back to back.
 static inline uint64_t TexTexelOffset(uint32_t format, uint32_t width, uint32_t x, uint32_t y,
-                                      uint32_t* sub, uint32_t pitch = 0) {
+                                      uint32_t* sub, uint32_t pitch = 0, uint32_t tiles = 0) {
   if (TexIsBlockFormat(format)) {
     *sub = ((y & 3u) << 2) | (x & 3u);
+    if (tiles) {
+      return gfx_sparse_off(tiles, (width + 3u) >> 2, 0, x >> 2, y >> 2, 0);
+    }
     const uint32_t bytes = TexBlockBytes(format);
     const uint64_t row = pitch ? pitch : (uint64_t)((width + 3u) >> 2) * bytes;
     return (uint64_t)(y >> 2) * row + (uint64_t)(x >> 2) * bytes;
   }
   *sub = 0;
+  if (tiles) {
+    return gfx_sparse_off(tiles, width, 0, x, y, 0);
+  }
   const uint32_t stride = FormatStride(format);
   const uint64_t row = pitch ? pitch : (uint64_t)width * stride;
   return (uint64_t)y * row + (uint64_t)x * stride;
@@ -1047,7 +1054,8 @@ static inline uint32_t TexFilterPoint(int format, uint32_t texel) {
 // it. `base_addr` is the mip's base (mip_base + mip_off for this lod); `logdim`
 // is {log_h<<16 | log_w} of mip 0; `u`/`v` are TEX_FXD_FRAC fixed-point.
 // `width0`/`height0` are the mip-0 dims; 0 takes the power of two in `logdim`.
-// `pitch` is the level's row pitch in bytes, 0 for the FF unit's packed rows.
+// `pitch` is the level's row pitch in bytes, 0 for the FF unit's packed rows;
+// `tiles` the tile shape of a sparse level stored in tiles (gfx_sparse.h).
 static inline TexelRequest tex_compute_request(uint64_t base_addr,
                                                uint32_t logdim,
                                                uint32_t format,
@@ -1059,7 +1067,8 @@ static inline TexelRequest tex_compute_request(uint64_t base_addr,
                                                uint32_t width0 = 0,
                                                uint32_t height0 = 0,
                                                uint32_t border = 0,
-                                               uint32_t pitch = 0) {
+                                               uint32_t pitch = 0,
+                                               uint32_t tiles = 0) {
   const uint32_t w0 = width0  ? width0  : (1u << (logdim & 0xffff));
   const uint32_t h0 = height0 ? height0 : (1u << (logdim >> 16));
   const uint32_t width  = (uint32_t)tex_imax((int32_t)(w0 >> lod), 1);
@@ -1083,7 +1092,7 @@ static inline TexelRequest tex_compute_request(uint64_t base_addr,
   for (uint32_t i = 0; i < taps; ++i) {
     const uint32_t x = i & 1u, y = i >> 1;
     uint32_t sub;
-    req.addr[i] = base_addr + TexTexelOffset(format, width, xs[x], ys[y], &sub, pitch);
+    req.addr[i] = base_addr + TexTexelOffset(format, width, xs[x], ys[y], &sub, pitch, tiles);
     req.sub[i] = (uint8_t)sub;
     if (bx[x] || by[y]) {
       req.border_mask |= 1u << i;

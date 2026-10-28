@@ -191,6 +191,10 @@ struct om_state_t {
   uint32_t zbuf_sample_stride, cbuf_sample_stride;
   // bytes between a layered attachment's layers (see om_row_offset)
   uint32_t zbuf_layer_stride, cbuf_layer_stride;
+  // a sparse attachment stored in tiles: its tile shape (0: rows of `pitch`)
+  // and its width in blocks (see om_pixel_offset)
+  uint32_t zbuf_tiles, cbuf_tiles;
+  uint32_t zbuf_tiles_w, cbuf_tiles_w;
 };
 
 // The row a merge addresses: `y` holds the pixel row in its low half and, for a
@@ -201,6 +205,20 @@ static inline __attribute__((always_inline)) uint64_t om_row_offset(
     uint32_t y, uint32_t pitch, uint32_t layer_stride) {
   return (uint64_t)(y >> OM_LAYER_SHIFT) * layer_stride
        + (uint64_t)(y & ((1u << OM_LAYER_SHIFT) - 1u)) * pitch;
+}
+
+// The byte offset of pixel (x, y) of an attachment, `y` as om_row_offset reads
+// it: `bpp`-byte texels in rows of `pitch` bytes, or, for a sparse attachment
+// stored in tiles, through the tiles of shape `tiles` across its `tiles_w`
+// blocks. Layers are whole tiles, so they keep the layer stride either way.
+static inline __attribute__((always_inline)) uint64_t om_pixel_offset(
+    uint32_t x, uint32_t y, uint32_t bpp, uint32_t pitch, uint32_t layer_stride,
+    uint32_t tiles, uint32_t tiles_w) {
+  if (tiles) {
+    return (uint64_t)(y >> OM_LAYER_SHIFT) * layer_stride
+         + gfx_sparse_off(tiles, tiles_w, 0, x, y & ((1u << OM_LAYER_SHIFT) - 1u), 0);
+  }
+  return om_row_offset(y, pitch, layer_stride) + (uint64_t)x * bpp;
 }
 
 // Derive the enable flags + expanded color mask exactly as the FF unit does.
@@ -601,14 +619,14 @@ static inline __attribute__((always_inline)) bool om_sample_rmw(
 static inline __attribute__((always_inline)) uintptr_t msaa_color_addr(
     const om_state_t& s, uint32_t x, uint32_t y, uint32_t sample) {
   return (uintptr_t)(s.cbuf_base + (uint64_t)sample * s.cbuf_sample_stride
-                     + om_row_offset(y, s.cbuf_pitch, s.cbuf_layer_stride)
-                     + (uint64_t)x * om_color_bpp(s.color_format));
+                     + om_pixel_offset(x, y, om_color_bpp(s.color_format), s.cbuf_pitch,
+                                       s.cbuf_layer_stride, s.cbuf_tiles, s.cbuf_tiles_w));
 }
 static inline __attribute__((always_inline)) uintptr_t msaa_depth_addr(
     const om_state_t& s, uint32_t x, uint32_t y, uint32_t sample) {
   return (uintptr_t)(s.zbuf_base + (uint64_t)sample * s.zbuf_sample_stride
-                     + om_row_offset(y, s.zbuf_pitch, s.zbuf_layer_stride)
-                     + (uint64_t)x * om_depth_bpp(s.depth_format));
+                     + om_pixel_offset(x, y, om_depth_bpp(s.depth_format), s.zbuf_pitch,
+                                       s.zbuf_layer_stride, s.zbuf_tiles, s.zbuf_tiles_w));
 }
 
 // Box resolve of one pixel's S color samples → a single ARGB8888 value
@@ -659,10 +677,10 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_ext_lod(
     uint64_t base_addr, uint32_t pitch, uint32_t logdim, uint32_t format, uint32_t filter,
     uint32_t wrap, int32_t u, int32_t v, uint32_t lod,
     uint32_t width, uint32_t height, uint32_t border,
-    uint32_t reduce = VX_TEX_REDUCTION_AVG) {
+    uint32_t reduce = VX_TEX_REDUCTION_AVG, uint32_t tiles = 0) {
   gfx_tex::TexelRequest req =
     gfx_tex::tex_compute_request(0, logdim, format, filter, wrap, u, v, lod, width, height,
-                                 0, pitch);
+                                 0, pitch, tiles);
   uint32_t stride = req.stride;
   uint32_t bmask = req.border_mask;
   if (req.filter == VX_TEX_FILTER_BILINEAR) {
@@ -691,7 +709,8 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_ext_lod(
 
 // One LOD's sample (POINT or BILINEAR). `base_addr` is the mip's base for `lod`
 // (mip_base + mip_off) and `pitch` its row pitch in bytes (0: rows packed back to
-// back); `logdim` is mip 0's {log_h<<16|log_w}; u/v are
+// back), or `tiles` its tile shape when it is stored in sparse tiles; `logdim` is
+// mip 0's {log_h<<16|log_w}; u/v are
 // TEX_FXD_FRAC fixed-point. Caller does trilinear by blending two LODs. The
 // FF-format + non-border case keeps the exact bit-identical shared path; the
 // extended-format or border case routes to tex_sample_ext_lod.
@@ -699,14 +718,14 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_sw_lod(
     uint64_t base_addr, uint32_t pitch, uint32_t logdim, uint32_t format, uint32_t filter,
     uint32_t wrap, int32_t u, int32_t v, uint32_t lod,
     uint32_t width = 0, uint32_t height = 0, uint32_t border = 0,
-    uint32_t reduce = VX_TEX_REDUCTION_AVG) {
+    uint32_t reduce = VX_TEX_REDUCTION_AVG, uint32_t tiles = 0) {
   bool has_border = ((wrap & 0xffff) == VX_TEX_WRAP_BORDER) || ((wrap >> 16) == VX_TEX_WRAP_BORDER);
   if (!gfx_tex::TexIsFFFormat(format) || has_border)
     return tex_sample_ext_lod(base_addr, pitch, logdim, format, filter, wrap, u, v, lod,
-                              width, height, border, reduce);
+                              width, height, border, reduce, tiles);
   gfx_tex::TexelRequest req =
     gfx_tex::tex_compute_request(base_addr, logdim, format, filter, wrap, u, v, lod,
-                                 width, height, 0, pitch);
+                                 width, height, 0, pitch, tiles);
   uint32_t texels[4] = {0, 0, 0, 0};
   uint32_t taps = (req.filter == VX_TEX_FILTER_BILINEAR) ? 4u : 1u;
   for (uint32_t i = 0; i < taps; ++i)
@@ -761,11 +780,9 @@ struct TexState {
   uint32_t depth;                         // sampler3D: mip-0 depth-slice count; samplerCubeArray: cube count; 0 otherwise
   uint32_t wrap_w;                        // VX_TEX_WRAP_* for the 3D depth (r) axis
   uint32_t levels;                        // mip levels the view exposes (textureQueryLevels)
-  // Sparse residency: one bit per sparse page, level by level within a layer.
-  uint32_t res_page;                      // log2 page dims: w | h << 8 | d << 16
-  uint32_t res_layer_bits;                // bits per array layer
-  uint32_t res_level[VX_TEX_LOD_MAX + 1]; // first bit of each level (layer 0)
-  uint64_t residency;                     // page bitmap; 0 => fully resident
+  // A sparse texture, sampled where it lives in its tiles: its residency
+  // bitmap, base's offset in the resource, and tile shape; bitmap 0 => not sparse.
+  gfx_sparse_t sparse;
   // The border colour R,G,B,A in the format's channel type -- float bits for a
   // float or normalized format, the integer for an integer one -- for the paths
   // that sample at full precision; `border` is its ARGB8888 form.
@@ -790,9 +807,25 @@ static inline void tex_packed_pitches(TexState& s, uint32_t layer_stride) {
   }
 }
 
+// The extent of level `lod` in blocks of the format (texels, or 4x4 blocks).
+static inline __attribute__((always_inline)) uint32_t tex_level_blocks(
+    const TexState& s, uint32_t dim0, uint32_t logdim0, uint32_t lod) {
+  const uint32_t d0 = dim0 ? dim0 : (1u << logdim0);
+  const uint32_t n = (uint32_t)gfx_tex::tex_imax((int32_t)(d0 >> lod), 1);
+  return gfx_tex::TexIsBlockFormat(s.format) ? (n + 3u) >> 2 : n;
+}
+
 // The first texel of array layer (or cube face, or 3D slice) `layer` at level `lod`.
+// A sparse 3D level's slices lie inside its tiles; mip_off then reaches the
+// tile-aligned slice the view's first slice shares a tile with, Z0 slices up.
 static inline __attribute__((always_inline)) uint64_t tex_level_base(
     const TexState& s, uint32_t layer, uint32_t lod) {
+  if (GFX_SPARSE_LD(s.sparse.shape)) {
+    return s.base + s.mip_off[lod]
+         + gfx_sparse_off(s.sparse.shape, tex_level_blocks(s, s.width, s.logdim & 0xffff, lod),
+                          tex_level_blocks(s, s.height, s.logdim >> 16, lod), 0, 0,
+                          layer + GFX_SPARSE_Z0(s.sparse.shape));
+  }
   return s.base + s.mip_off[lod] + (uint64_t)layer * s.slice_pitch[lod];
 }
 
@@ -848,17 +881,18 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_sw_layer(
     uint32_t c0 = tex_sample_sw_lod(tex_level_base(s, layer, li), s.row_pitch[li],
                                     s.logdim, s.format, tap_filter,
                                     s.wrap, ui, vi, li, s.width, s.height, s.border,
-                                    tex_reduction(s));
+                                    tex_reduction(s), s.sparse.shape);
     uint32_t c1 = tex_sample_sw_lod(tex_level_base(s, layer, lj), s.row_pitch[lj],
                                     s.logdim, s.format, tap_filter,
                                     s.wrap, uj, vj, lj, s.width, s.height, s.border,
-                                    tex_reduction(s));
+                                    tex_reduction(s), s.sparse.shape);
     return tex_combine(c0, c1, frac, tex_reduction(s));
   }
   tex_offset_uv(s, filter, lod, &u, &v);
   return tex_sample_sw_lod(tex_level_base(s, layer, lod), s.row_pitch[lod],
                            s.logdim, s.format, tap_filter, s.wrap,
-                           u, v, lod, s.width, s.height, s.border, tex_reduction(s));
+                           u, v, lod, s.width, s.height, s.border, tex_reduction(s),
+                           s.sparse.shape);
 }
 
 // One LOD's sample of a float-format texture, as four float channels. Mirrors
@@ -870,10 +904,10 @@ static inline __attribute__((always_inline)) void tex_sample_f32_lod(
     uint64_t base_addr, uint32_t pitch, uint32_t logdim, uint32_t format, uint32_t filter,
     uint32_t wrap, int32_t u, int32_t v, uint32_t lod,
     uint32_t width, uint32_t height, const uint32_t border_t[4], float out[4],
-    uint32_t reduce = VX_TEX_REDUCTION_AVG) {
+    uint32_t reduce = VX_TEX_REDUCTION_AVG, uint32_t tiles = 0) {
   gfx_tex::TexelRequest req =
     gfx_tex::tex_compute_request(0, logdim, format, filter, wrap, u, v, lod, width, height,
-                                 0, pitch);
+                                 0, pitch, tiles);
   uint32_t bmask = req.border_mask;
   float bf[4];
   __builtin_memcpy(bf, border_t, sizeof bf);
@@ -940,17 +974,20 @@ static inline __attribute__((always_inline)) void tex_sample_f32_layer(
     tex_offset_uv(s, filter, lj, &uj, &vj);
     tex_sample_f32_lod(tex_level_base(s, layer, li), s.row_pitch[li], s.logdim, s.format,
                        tap_filter, s.wrap,
-                       ui, vi, li, s.width, s.height, s.border_t, c0, tex_reduction(s));
+                       ui, vi, li, s.width, s.height, s.border_t, c0, tex_reduction(s),
+                       s.sparse.shape);
     tex_sample_f32_lod(tex_level_base(s, layer, lj), s.row_pitch[lj], s.logdim, s.format,
                        tap_filter, s.wrap,
-                       uj, vj, lj, s.width, s.height, s.border_t, c1, tex_reduction(s));
+                       uj, vj, lj, s.width, s.height, s.border_t, c1, tex_reduction(s),
+                       s.sparse.shape);
     tex_combine_f4(c0, c1, frac, tex_reduction(s), out);
     return;
   }
   tex_offset_uv(s, filter, lod, &u, &v);
   tex_sample_f32_lod(tex_level_base(s, layer, lod), s.row_pitch[lod], s.logdim, s.format,
                      tap_filter, s.wrap,
-                     u, v, lod, s.width, s.height, s.border_t, out, tex_reduction(s));
+                     u, v, lod, s.width, s.height, s.border_t, out, tex_reduction(s),
+                     s.sparse.shape);
 }
 
 // Sample using the descriptor's own filter (the fixed single-filter path).
@@ -1068,7 +1105,7 @@ static inline __attribute__((always_inline)) void tex_cube_texel(
     uint32_t sub;
     const uint64_t a = tex_level_base(s, layer0 + f, level)
                      + gfx_tex::TexTexelOffset(s.format, (uint32_t)n, (uint32_t)x, (uint32_t)y, &sub,
-                                               s.row_pitch[level]);
+                                               s.row_pitch[level], s.sparse.shape);
     decode((const void*)(uintptr_t)a, sub, stride, t);
   };
   auto across = [&](int32_t x, int32_t y, float t[4]) {
@@ -1274,12 +1311,10 @@ static inline __attribute__((always_inline)) void tex_sample_f32_cube_array(
 // tex_sample_sw_3d.
 // The depth-slice addressing of one 3D mip level, shared by the packed and float
 // samplers so the two cannot drift: level `lod` starts at s.mip_off[lod] and holds
-// d_l = max(depth>>lod,1) slices, slice z at mip_off[lod] + z*slice_pitch[lod].
+// d_l = max(depth>>lod,1) slices, slice z at tex_level_base(s, z, lod).
 // The slices are the depth axis's two taps (tex_axis_taps, as for u and v); a
 // nearest sample reads only z0.
 struct Tex3DSlices {
-  uint64_t lvl_base;
-  uint64_t slice_sz;
   uint32_t pitch;
   gfx_tex::TexAxisTaps z;
 };
@@ -1290,8 +1325,6 @@ static inline __attribute__((always_inline)) Tex3DSlices tex_3d_slices(
   uint32_t d_l = (uint32_t)gfx_tex::tex_imax((int32_t)(depth >> lod), 1);
 
   Tex3DSlices sl{};
-  sl.slice_sz = s.slice_pitch[lod];
-  sl.lvl_base = s.base + s.mip_off[lod];
   sl.pitch = s.row_pitch[lod];
   sl.z = gfx_tex::tex_axis_taps(w, d_l, s.wrap_w, tap == VX_TEX_FILTER_BILINEAR);
   return sl;
@@ -1303,9 +1336,9 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_sw_3d_slice(
   if (border) {
     return s.border;
   }
-  return tex_sample_sw_lod(sl.lvl_base + z * sl.slice_sz, sl.pitch, s.logdim, s.format,
+  return tex_sample_sw_lod(tex_level_base(s, z, lod), sl.pitch, s.logdim, s.format,
                            tap, s.wrap, u, v, lod, s.width, s.height, s.border,
-                           tex_reduction(s));
+                           tex_reduction(s), s.sparse.shape);
 }
 
 static inline __attribute__((always_inline)) uint32_t tex_sample_sw_3d_level(
@@ -1329,8 +1362,9 @@ static inline __attribute__((always_inline)) void tex_sample_f32_3d_slice(
     __builtin_memcpy(out, s.border_t, 4 * sizeof(float));
     return;
   }
-  tex_sample_f32_lod(sl.lvl_base + z * sl.slice_sz, sl.pitch, s.logdim, s.format, tap, s.wrap,
-                     u, v, lod, s.width, s.height, s.border_t, out, tex_reduction(s));
+  tex_sample_f32_lod(tex_level_base(s, z, lod), sl.pitch, s.logdim, s.format, tap, s.wrap,
+                     u, v, lod, s.width, s.height, s.border_t, out, tex_reduction(s),
+                     s.sparse.shape);
 }
 
 // Float twin of tex_sample_sw_3d_level, for a texture whose texels leave [0,1].
@@ -1414,7 +1448,7 @@ static inline __attribute__((always_inline)) uint64_t tex_fetch_addr(
   uint32_t yi = (y < 0) ? 0u : ((uint32_t)y >= h ? h - 1u : (uint32_t)y);
   *stride = gfx_tex::FormatStride(s.format);
   return tex_level_base(s, layer, lod)
-       + gfx_tex::TexTexelOffset(s.format, w, xi, yi, sub, s.row_pitch[lod]);
+       + gfx_tex::TexTexelOffset(s.format, w, xi, yi, sub, s.row_pitch[lod], s.sparse.shape);
 }
 
 // texelFetch: the four channels of the exact texel at (x,y) of integer `lod`, as
@@ -1474,7 +1508,7 @@ static inline __attribute__((always_inline)) uint32_t tex_gather_sw(
   gfx_tex::TexelRequest req = gfx_tex::tex_compute_request(
       tex_level_base(s, array_layer_clamp(s, layer), 0), s.logdim, s.format,
       VX_TEX_FILTER_BILINEAR, s.wrap, u, v, 0,
-      s.width, s.height, 0, s.row_pitch[0]);
+      s.width, s.height, 0, s.row_pitch[0], s.sparse.shape);
   const uint32_t argb_shift[4] = { 16, 8, 0, 24 };   // R,G,B,A within ARGB8888
   const uint32_t order[4]      = { 2, 3, 1, 0 };      // GL gather order over the taps
   uint32_t sh = argb_shift[map & 3];
@@ -1507,7 +1541,7 @@ static inline __attribute__((always_inline)) void tex_gather_f32(
   gfx_tex::TexelRequest req = gfx_tex::tex_compute_request(
       tex_level_base(s, array_layer_clamp(s, layer), 0), s.logdim, s.format,
       VX_TEX_FILTER_BILINEAR, s.wrap, u, v, 0,
-      s.width, s.height, 0, s.row_pitch[0]);
+      s.width, s.height, 0, s.row_pitch[0], s.sparse.shape);
   const uint32_t order[4] = { 2, 3, 1, 0 };
   for (uint32_t i = 0; i < 4; ++i) {
     const uint32_t t = order[i] ^ req.flip;
@@ -1558,24 +1592,16 @@ static inline __attribute__((always_inline)) void tex_gather_cube_f32(
   }
 }
 
-// Whether the texel at integer (x, y, z) of `level` lies on a bound sparse page;
-// z is the 3D slice, or the array layer of a layered view.
+// Whether the texel at integer (x, y) of slice or layer z of `level` lies on a
+// bound tile: the bitmap bit of its byte offset in the resource.
 static inline __attribute__((always_inline)) bool tex_page_resident(
-    const TexState& s, uint32_t x, uint32_t y, uint32_t z, uint32_t level, bool is3d) {
-  const uint32_t lpw = s.res_page & 0xffu, lph = (s.res_page >> 8) & 0xffu,
-                 lpd = (s.res_page >> 16) & 0xffu;
-  const uint32_t w = gfx_tex::tex_imax((int32_t)(s.width >> level), 1);
-  const uint32_t h = gfx_tex::tex_imax((int32_t)(s.height >> level), 1);
-  const uint32_t pw = (w + (1u << lpw) - 1u) >> lpw, ph = (h + (1u << lph) - 1u) >> lph;
-  uint32_t bit = s.res_level[level] + ((y >> lph) * pw + (x >> lpw));
-  if (is3d) {
-    bit += (z >> lpd) * pw * ph;
-  } else {
-    bit += z * s.res_layer_bits;
-  }
-  const uint32_t word = reinterpret_cast<const volatile uint32_t*>(
-      (uintptr_t)s.residency)[bit >> 5];
-  return (word >> (bit & 31u)) & 1u;
+    const TexState& s, uint32_t x, uint32_t y, uint32_t z, uint32_t level) {
+  const uint32_t w = (uint32_t)gfx_tex::tex_imax((int32_t)(s.width >> level), 1);
+  uint32_t sub;
+  const uint64_t addr = tex_level_base(s, z, level)
+                      + gfx_tex::TexTexelOffset(s.format, w, x, y, &sub, s.row_pitch[level],
+                                                s.sparse.shape);
+  return gfx_sparse_resident(s.sparse.bitmap, s.sparse.view_base + (uint32_t)(addr - s.base));
 }
 
 // The sparse residency code of a sample: nonzero when every texel the sample reads
@@ -1586,7 +1612,7 @@ static inline __attribute__((always_inline)) bool tex_page_resident(
 static inline __attribute__((always_inline)) uint32_t tex_residency(
     const TexState& s, int32_t u, int32_t v, int32_t w, uint32_t z, uint32_t lod,
     uint32_t filter, bool is3d, bool fetch) {
-  if (!s.residency) {
+  if (!s.sparse.bitmap) {
     return 1u;
   }
   uint32_t lv[2] = { lod, lod };
@@ -1626,7 +1652,7 @@ static inline __attribute__((always_inline)) uint32_t tex_residency(
             continue;
           }
           const uint32_t zz = is3d ? zs[iz] : z;
-          if (!tex_page_resident(s, xs[ix], ys[iy], zz, l, is3d)) {
+          if (!tex_page_resident(s, xs[ix], ys[iy], zz, l)) {
             return 0u;
           }
         }
@@ -1664,7 +1690,8 @@ static inline __attribute__((always_inline)) float tex_shadow_level(
   gfx_tex::TexelRequest req = gfx_tex::tex_compute_request(
       tex_level_base(s, layer, level), s.logdim, s.format,
       pcf ? VX_TEX_FILTER_BILINEAR : VX_TEX_FILTER_POINT,
-      s.wrap, u, v, level, s.width, s.height, s.border_t[0], s.row_pitch[level]);
+      s.wrap, u, v, level, s.width, s.height, s.border_t[0], s.row_pitch[level],
+      s.sparse.shape);
   // The TEX unit's compare stage (vx_tex_cmp) computes the same Q16 result.
   uint32_t texels[4] = {};
   const uint32_t n = req.stride < 4 ? req.stride : 4;
@@ -1730,7 +1757,7 @@ static inline __attribute__((always_inline)) uint32_t tex_gather_cmp_sw(
   gfx_tex::TexelRequest req = gfx_tex::tex_compute_request(
       tex_level_base(s, ly, 0), s.logdim, s.format,
       VX_TEX_FILTER_BILINEAR, s.wrap, u, v, 0,
-      s.width, s.height, s.border_t[0], s.row_pitch[0]);
+      s.width, s.height, s.border_t[0], s.row_pitch[0], s.sparse.shape);
   const uint32_t order[4] = { 2, 3, 1, 0 };
   uint32_t packed = 0;
   for (uint32_t i = 0; i < 4; ++i) {
@@ -1871,14 +1898,15 @@ struct om_color_t {
   uint32_t blend_constf[4];            // float bits, RGBA
   uint32_t cbuf_sample_stride;         // bytes between its sample planes
   uint32_t cbuf_layer_stride;          // bytes between its layers (om_row_offset)
+  uint32_t cbuf_tiles, cbuf_tiles_w;   // a tiled sparse attachment (om_pixel_offset)
 };
 
 // Sample `sample` of attachment `c` at pixel (x, y), y as om_row_offset reads it.
 static inline __attribute__((always_inline)) uintptr_t om_color_addr(
     const om_color_t& c, uint32_t x, uint32_t y, uint32_t sample) {
   return (uintptr_t)(c.cbuf_base + (uint64_t)sample * c.cbuf_sample_stride
-                     + om_row_offset(y, c.cbuf_pitch, c.cbuf_layer_stride)
-                     + (uint64_t)x * om_color_bpp(c.color_format));
+                     + om_pixel_offset(x, y, om_color_bpp(c.color_format), c.cbuf_pitch,
+                                       c.cbuf_layer_stride, c.cbuf_tiles, c.cbuf_tiles_w));
 }
 
 // Derive a colour attachment's enable flags + expanded mask exactly as
@@ -2278,6 +2306,8 @@ static inline __attribute__((always_inline)) om_color_t om_state_color(const om_
   }
   c.cbuf_sample_stride = s.cbuf_sample_stride;
   c.cbuf_layer_stride = s.cbuf_layer_stride;
+  c.cbuf_tiles = s.cbuf_tiles;
+  c.cbuf_tiles_w = s.cbuf_tiles_w;
   return c;
 }
 

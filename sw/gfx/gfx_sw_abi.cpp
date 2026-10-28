@@ -20,12 +20,15 @@
 #include "gfx_sw.h"      // gfx_sw::TexState / om_state_t / tex_sample_sw / om_fragment
 #include "gfx_frag_rast.h"     // gfx_rast::rast_walk_primitive — SW fine-rasterizer
 #include "vx_gfx_abi.h"  // vortex::graphics::rast_prim_t
+#include <cstddef>
 #include <cstring>
 #include <type_traits>
 
 // The C ABI descriptors must be layout-identical to the C++ state structs so the
 // reinterpret_cast below is sound (and the host can fill either form).
 static_assert(sizeof(gfx_sw_texstate_t) == sizeof(gfx_sw::TexState),
+              "gfx_sw_texstate_t must mirror gfx_sw::TexState");
+static_assert(offsetof(gfx_sw_texstate_t, sparse) == offsetof(gfx_sw::TexState, sparse),
               "gfx_sw_texstate_t must mirror gfx_sw::TexState");
 static_assert(sizeof(gfx_sw_omstate_t) == sizeof(gfx_sw::om_state_t),
               "gfx_sw_omstate_t must mirror gfx_sw::om_state_t");

@@ -289,8 +289,7 @@ BGRA8 colour decoded field by field). The TEX unit addresses a packed
 chain only (pitch `width << lgstride`, a constant layer stride), so a
 draw that may sample on the unit gets a device-built pack instead
 (`tex_pack_k`): A8R8G8B8 for colour, D16 or D32F for its compare stage.
-A sparse texture keeps the host upload (`vp_tex_upload_host`), since
-its page bindings change behind gallium.
+A sparse texture never takes the unit or a pack (see Sparse resources).
 
 **Layered rendering in one pass.** A vertex shader writing `gl_Layer`
 draws every framebuffer layer in one pass. The front end clamps each
@@ -305,6 +304,92 @@ the stack to fit the merger's 15-bit row range; otherwise the draw
 merges in software. Early-Z is off for a layered draw, since RASTER
 tests the layer's own row. A multiview pass draws once per view with
 each attachment's base moved to the view's layer.
+
+**Sparse resources.** llvmpipe reserves a sparse resource's whole
+virtual range as an anonymous mapping and implements every bind as a
+`MAP_FIXED` remap of the bound memory's pages over the tile. The screen
+records each sparse resource at creation (`vp_resource_create_unbacked`)
+and treats its reservation like an allocation: it is imported in place,
+so the device's pages are the host's and follow every remap with no
+device work; a texture also gets a page-aligned residency bitmap in
+llvmpipe's format, one bit per 64 KiB of the resource, imported the
+same way. Every bind passes through `vp_resource_bind_backing`, which
+calls llvmpipe, sets or clears the bits of every tile the bind covers,
+and marks what the remap made stale: a mirrored reservation's pages,
+the bitmap's own device copy, texture packs. In mirror mode the
+reservation and the bitmap are mirrored like any range. The screen
+reports `device_sparse_binding` only when the device can import host
+memory (probed once); without it lavapipe withholds sparse binding and
+residency: every operation would move a copy of the whole virtual range,
+and resources aliased on one memory would be separate copies.
+`VORTEXPIPE_NO_IMPORT` keeps sparse offered on a device that imports, so
+mirror mode stays covered.
+
+A sparse texture stores each level as 64 KiB tiles of the standard
+block shape. `sw/common/gfx_sparse.h` holds the one address rule every
+device path uses: `gfx_sparse_off` (tile `x >> lw + (y >> lh + (z >>
+ld) * TY) * TX`, then the texel's place in it, x then y then z), with
+array layers at the level's layer stride, a whole number of tiles, and
+`gfx_sparse_resident` (bit `offset >> 16` of the bitmap, `offset` from
+the resource's start).
+
+- *Storage images.* The launch completes each relocated image
+  descriptor with a `gfx_sparse_t` in llvmpipe's residency slot
+  (`vp_screen_image_sparse`): the bitmap's device address (0 for any
+  other image), the view's origin in the resource and the tile shape.
+  The translator branches on the bitmap, uniformly per descriptor:
+  stores, loads, atomics (float ones included) and format-less accesses
+  take the tiled offset, and a sparse load's residency code is the
+  texel's bit, its value read from a zeroed texel when it is not
+  resident. A descriptor reached through a run-time index is not
+  relocated and holds no such fields, so a launch whose indexed
+  descriptor blobs hold a sparse storage view is refused
+  (`VP_CPU_SPARSE`). A sliced view of a 3D level
+  (`VK_EXT_image_sliced_view_of_3d`) may start at a slice inside a
+  tile's depth; the shape's `Z0` field carries that depth, read from
+  the view origin's offset inside its tile, and slice `z` of the view is
+  addressed as tile slice `z + Z0`. A 2D-array view of several slices of
+  a 3D image, which Vulkan does not allow on a sparse image, is refused.
+- *Sampling.* A sparse texture is sampled in place by the software
+  sampler: `gfx_sw_texstate_t::sparse` carries the bitmap, the base's
+  offset in the resource and the tile shape, every tap goes through
+  `TexTexelOffset(..., tiles)`, a 3D level's slices through
+  `tex_level_base` (from `Z0` slices into the first tile when a 2D view
+  starts inside a tile's depth), and a residency code ANDs the bits of every texel
+  the sample's footprint reads. `GFX_SW_TEX_FILTER_TILED` routes the
+  sample to software whatever unit the shader was built for; a pack of
+  a virtual texture would cover its whole extent and be rebuilt at
+  every bind.
+- *Transfers.* A level of a sparse texture that linear addressing does
+  not follow (`vp_sparse_level_linear`: wider than a tile, or several
+  tile rows of a 3D level) is copied, cleared and blitted into by the
+  kernels, each side addressed through a `gfx_sparse_box_t`; a level
+  that it does follow keeps the DMA rect. The copy and clear kernels
+  take a run of texels along a row per thread (`TEXEL_COPY_RUN`,
+  `CLEAR_RUN`), split at every tile edge either side crosses, so the
+  tiled offset is computed once a segment and the addresses only step
+  inside it.
+  Resolves into a tiled level are left to llvmpipe.
+- *Render targets.* An attachment one tile wide is its own plane on
+  the fixed-function merger, as any imported attachment; a wider one
+  routes the draw to the software merger, which addresses it through
+  its tiles (`om_pixel_offset`), with early-Z off when it is the depth
+  attachment. llvmpipe's own rasterizer writes such an attachment
+  linearly, rows running across the tiles: lavapipe is no reference for
+  a sparse attachment wider than a tile, and the tests check those against the tile layout, never
+  against llvmpipe's output.
+- *Buffers.* A sparse buffer is linear: its reservation is imported,
+  and it joins the device-address table, since lavapipe hands the
+  reservation out as the buffer's device address.
+
+Unbound tiles read whatever the anonymous pages hold, as on llvmpipe;
+`residencyNonResidentStrict` is not advertised. Importing the
+reservation relies on the host remapping pages under the device, which
+only the simulators follow; the hardware form is a sparse mode of the
+GPU MMU, binds becoming page-table writes and an unbound tile a null
+entry, and tiled address modes in the TEX unit and the output merger
+would take sparse textures and attachments back to the fixed-function
+units.
 
 **Counters.** `VORTEXPIPE_ATTRIB=1` prints, per process, the bytes
 uploaded and read back, the bytes converted on the host, the

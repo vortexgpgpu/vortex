@@ -1,0 +1,43 @@
+#version 450
+/*
+ * Copyright © 2026  Vortex GPGPU
+ * SPDX-License-Identifier: MIT
+ *
+ * Sparse samples of texel at.t[i] of a 3D texture: res.v[8i + 0, 1] a texel fetch
+ * and its residency, [2, 3] a nearest sample at the texel's centre and its
+ * residency, [4] the residency of a linear sample at its corner (a 2x2x2
+ * footprint).
+ */
+#extension GL_ARB_sparse_texture2 : require
+
+layout(local_size_x = 16) in;
+
+layout(binding = 0) uniform sampler3D tex_n;
+layout(binding = 1) uniform sampler3D tex_l;
+layout(binding = 2, std430) buffer Out { uint v[]; } res;
+layout(binding = 3, std430) readonly buffer Texels { uvec4 t[]; } at;
+
+layout(push_constant) uniform Params { uvec4 e; uint level; uint count; } pc;
+
+uint resident(int code)
+{
+   return sparseTexelsResidentARB(code) ? 1u : 0u;
+}
+
+void main()
+{
+   if (gl_GlobalInvocationID.x >= pc.count)
+      return;
+   uvec3 g = at.t[gl_GlobalInvocationID.x].xyz;
+   uint i = 8u * gl_GlobalInvocationID.x;
+   vec3 size = vec3(pc.e.xyz);
+   vec4 t;
+   int code = sparseTexelFetchARB(tex_n, ivec3(g), 0, t);
+   res.v[i + 0u] = packUnorm4x8(t);
+   res.v[i + 1u] = resident(code);
+   code = sparseTextureLodARB(tex_n, (vec3(g) + 0.5) / size, 0.0, t);
+   res.v[i + 2u] = packUnorm4x8(t);
+   res.v[i + 3u] = resident(code);
+   code = sparseTextureLodARB(tex_l, vec3(g) / size, 0.0, t);
+   res.v[i + 4u] = resident(code);
+}

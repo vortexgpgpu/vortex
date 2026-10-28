@@ -1,0 +1,19 @@
+#version 450
+/*
+ * Copyright © 2026  Vortex GPGPU
+ * SPDX-License-Identifier: MIT
+ *
+ * imageLoad of every texel of a sliced 3D storage view into res.v.
+ */
+
+layout(local_size_x = 4, local_size_y = 4) in;
+
+layout(binding = 0, r32ui) uniform readonly uimage3D img;
+
+layout(binding = 1, std430) buffer Out { uint v[]; } res;
+
+void main()
+{
+   uvec3 g = gl_GlobalInvocationID;
+   res.v[(g.z * 32u + g.y) * 64u + g.x] = imageLoad(img, ivec3(g)).x;
+}

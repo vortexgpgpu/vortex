@@ -16,9 +16,8 @@
  *
  * A last case reaches a sparse image: a fully bound R32_UINT 2D array one 64 KiB
  * tile wide and three tall, read and written through a view of its second
- * layer. Its tiled layout matches linear addressing, so it runs on the device,
- * and a view that does not start at the image's origin catches an address that
- * adds the view's offset twice.
+ * layer: a view that does not start at the image's origin catches an address
+ * that adds the view's offset twice.
  *
  * Run against lavapipe with GALLIUM_DRIVER=vortexpipe.
  */
