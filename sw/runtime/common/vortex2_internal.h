@@ -286,6 +286,9 @@ public:
     // Program the device MMU's SATP once, ahead of the first launch that
     // could translate. Called from every launch path.
     vx_result_t ensure_mmu_satp();
+    // Write satp now (SATP_LO, then the committing SATP_HI), flushing every
+    // TLB level once the command processor reaches it.
+    vx_result_t commit_mmu_satp();
 
     // Read the device's page-fault report after a launch retires. Returns
     // VX_ERR_DEVICE_LOST (after printing the faulting access) when the MMU
@@ -507,7 +510,7 @@ private:
     bool                                vm_enabled_ = false;
     // Device MMU SATP is programmed on the command queue before the first
     // launch (the ring is not live during device init).
-    bool                                mmu_satp_programmed_ = false;
+    std::atomic<bool>                   mmu_satp_programmed_{false};
     // Device decodes the MMU fault-report DCRs (CP DEV_CAPS bit 27).
     bool                                mmu_fault_report_ = false;
     // CP advertises CMD_DRAW (OP_DRAW) decode (CP DEV_CAPS bit 25). When false,
@@ -521,6 +524,9 @@ private:
     std::unique_ptr<CpMemIO>            vm_io_;
     std::unique_ptr<vortex::VMManager>  vm_mgr_;
     std::mutex                          vm_mu_;   // serialize VMManager ops
+    // Buffers mapped at a minted VA (not VX_MEM_PHYS), keyed by VA: their
+    // page-rounded size, so mem_free can unmap them. Under vm_mu_.
+    std::map<uint64_t, uint64_t>        vm_maps_;
 
     // COUT stream-ring consumer state. cout_rd_[h] is the host read pointer
     // for hart h's ring; cout_line_[h] holds a partial (not-yet-newline-

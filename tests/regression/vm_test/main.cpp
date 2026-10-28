@@ -36,7 +36,7 @@ kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
   std::cout << "Usage: [-t mode] [-n tasks] [-p pages/task] [-h]" << std::endl;
-  std::cout << "  modes: 0=stride 1=fence 2=drain 3=amo 4=superpage 5=release" << std::endl;
+  std::cout << "  modes: 0=stride 1=fence 2=drain 3=amo 4=superpage 5=release 6=reuse" << std::endl;
 }
 
 static void parse_args(int argc, char** argv) {
@@ -75,6 +75,52 @@ void cleanup() {
     vx_device_dump_perf(device, stdout);
     vx_device_release(device);
   }
+}
+
+// A freed buffer's pages are reused by a larger buffer, and a new buffer
+// follows: each must reach its own pages, through its own VAs.
+static int check_reuse() {
+  const uint32_t big_pages = 8;
+  vx_buffer_h small = nullptr, big = nullptr, next = nullptr;
+  RT_CHECK(vx_buffer_create(device, PAGE_SIZE, VX_MEM_READ_WRITE, &small));
+  RT_CHECK(vx_buffer_release(small));
+  RT_CHECK(vx_buffer_create(device, big_pages * PAGE_SIZE, VX_MEM_READ_WRITE, &big));
+  RT_CHECK(vx_buffer_create(device, PAGE_SIZE, VX_MEM_READ_WRITE, &next));
+  std::vector<uint32_t> a(big_pages * WORDS_PER_PAGE), b(WORDS_PER_PAGE);
+  for (uint32_t i = 0; i < a.size(); ++i) {
+    a[i] = 0xB1000000u | i;
+  }
+  for (uint32_t i = 0; i < b.size(); ++i) {
+    b[i] = 0xC2000000u | i;
+  }
+  vx_event_h ev = nullptr;
+  RT_CHECK(vx_enqueue_write(queue, big, 0, a.data(), a.size() * sizeof(uint32_t), 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_write(queue, next, 0, b.data(), b.size() * sizeof(uint32_t), 0, nullptr, nullptr));
+  std::vector<uint32_t> ra(a.size()), rb(b.size());
+  RT_CHECK(vx_enqueue_read(queue, ra.data(), big, 0, ra.size() * sizeof(uint32_t), 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_read(queue, rb.data(), next, 0, rb.size() * sizeof(uint32_t), 0, nullptr, &ev));
+  RT_CHECK(vx_event_wait_value(ev, 1, VX_TIMEOUT_INFINITE));
+  vx_event_release(ev);
+  int errors = 0;
+  for (uint32_t i = 0; i < a.size(); ++i) {
+    if (ra[i] != a[i]) {
+      if (errors < 16) {
+        printf("*** error: reused buffer [%u] expected=0x%x, actual=0x%x\n", i, a[i], ra[i]);
+      }
+      ++errors;
+    }
+  }
+  for (uint32_t i = 0; i < b.size(); ++i) {
+    if (rb[i] != b[i]) {
+      if (errors < 16) {
+        printf("*** error: next buffer [%u] expected=0x%x, actual=0x%x\n", i, b[i], rb[i]);
+      }
+      ++errors;
+    }
+  }
+  RT_CHECK(vx_buffer_release(next));
+  RT_CHECK(vx_buffer_release(big));
+  return errors;
 }
 
 int main(int argc, char* argv[]) {
@@ -157,7 +203,7 @@ int main(int argc, char* argv[]) {
   vx_event_release(read_ev);
   vx_event_release(launch_ev);
 
-  int errors = 0;
+  int errors = (test_mode == VM_MODE_REUSE) ? check_reuse() : 0;
   switch (test_mode) {
   case VM_MODE_STRIDE: {
     for (uint32_t g = 0; g < num_tasks; ++g) {
@@ -257,7 +303,7 @@ int main(int argc, char* argv[]) {
 
   if (errors != 0) {
     std::cout << "FAILED! - " << errors << " errors" << std::endl;
-    return errors;
+    return 1;
   }
   std::cout << "PASSED!" << std::endl;
   return 0;

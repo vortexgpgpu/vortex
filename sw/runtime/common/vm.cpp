@@ -327,6 +327,37 @@ int16_t VMManager::update_page_table(uint64_t ppn, uint64_t vpn, uint32_t pte_fl
   return 0;
 }
 
+uint64_t VMManager::leaf_pte_addr(uint64_t va) {
+  vAddr_t vaddr(va);
+  uint64_t base_ppn = get_base_ppn();
+  for (int i = VX_VM_PT_LEVEL - 1; i > 0; --i) {
+    const uint64_t pte_addr = base_ppn * VX_VM_PT_SIZE + vaddr.vpn[i] * VX_VM_PTE_SIZE;
+    PTE_t pte(read_pte(pte_addr));
+    if (!pte.v || pte.r || pte.w || pte.x) {
+      return 0;
+    }
+    base_ppn = pte.ppn;
+  }
+  return base_ppn * VX_VM_PT_SIZE + vaddr.vpn[0] * VX_VM_PTE_SIZE;
+}
+
+int VMManager::unmap(uint64_t va, uint64_t size) {
+  for (uint64_t off = 0; off < size; off += VX_VM_PAGE_SIZE) {
+    const uint64_t pte_addr = leaf_pte_addr(va + off);
+    if (pte_addr == 0) {
+      continue;
+    }
+    PTE_t pte(read_pte(pte_addr));
+    auto it = addr_mapping.find(pte.ppn);
+    if (it != addr_mapping.end() && it->second == ((va + off) >> VX_VM_PAGE_LOG2_SIZE)) {
+      addr_mapping.erase(it);
+    }
+    write_pte(pte_addr, 0);
+  }
+  virtual_mem_->release(va & ~uint64_t(VX_VM_PAGE_SIZE - 1));
+  return flush();
+}
+
 int VMManager::install_identity_map(uint64_t addr, uint64_t size) {
   // Per-level page coverage: L0 = VX_VM_PAGE_SIZE, each higher level
   // multiplies by PT entries-per-table. SV32: L1=4MB. SV39: L1=2MB, L2=1GB.

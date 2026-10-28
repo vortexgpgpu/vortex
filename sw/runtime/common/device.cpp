@@ -827,9 +827,17 @@ vx_result_t Device::ensure_mmu_satp() {
     // own csrw satp derives at CTA entry. It cannot be written at open
     // (the ring is not live yet), so it is queue-ordered ahead of the
     // first launch that could translate, on every launch path.
-    if (!vm_enabled_ || mmu_satp_programmed_) {
+    if (!vm_enabled_ || mmu_satp_programmed_.load(std::memory_order_acquire)) {
         return VX_SUCCESS;
     }
+    return commit_mmu_satp();
+}
+
+vx_result_t Device::commit_mmu_satp() {
+    // The SATP_HI write commits the address space and flushes every TLB
+    // level. The command processor executes it in ring order, so it lands
+    // after the page-table writes queued before it and ahead of every launch
+    // queued after it.
     const uint64_t satp = vm_mgr_->satp();
     auto r = cp_submit_dcr_write(VX_DCR_MMU_SATP_LO, uint32_t(satp & 0xFFFFFFFFu));
     if (r != VX_SUCCESS) {
@@ -839,7 +847,7 @@ vx_result_t Device::ensure_mmu_satp() {
     if (r != VX_SUCCESS) {
         return r;
     }
-    mmu_satp_programmed_ = true;
+    mmu_satp_programmed_.store(true, std::memory_order_release);
     return VX_SUCCESS;
 }
 
@@ -1178,6 +1186,9 @@ vx_result_t Device::mem_alloc(uint64_t size, uint32_t flags,
                    ? vm_mgr_->install_identity_map(*out_addr, asize)
                    : vm_mgr_->phy_to_virt_map(asize, out_addr, flags);
         if (rc != 0) return VX_ERR_INVALID_VALUE;
+        if (!(flags & VX_MEM_PHYS)) {
+            vm_maps_[*out_addr] = asize;
+        }
     }
     return VX_SUCCESS;
 }
@@ -1230,6 +1241,9 @@ vx_result_t Device::mem_import(void* host_ptr, uint64_t size, uint32_t flags,
             platform_->mem_unimport(pa, asize);
             release();
             return VX_ERR_INVALID_VALUE;
+        }
+        if (!(flags & VX_MEM_PHYS)) {
+            vm_maps_[addr] = asize;
         }
     }
     {
@@ -1301,10 +1315,24 @@ vx_result_t Device::mem_free(uint64_t addr) {
         platform_->mem_unimport(import.first, import.second);
     }
     // VM: `addr` is a VA — resolve to the PA the allocator handed out.
+    vx_result_t committed = VX_SUCCESS;
     if (vm_mgr_) {
         std::lock_guard<std::mutex> g(vm_mu_);
+        const uint64_t va = addr;
         try { addr = vm_mgr_->page_table_walk(addr); }
         catch (...) { /* already unmapped — fall through to release */ }
+        // The pages go back to the pool: their translations go too, or a
+        // later buffer on the same pages would inherit this one's VAs, and a
+        // later VA reservation could land on them. The TLBs may still hold
+        // them until satp is committed again.
+        auto it = vm_maps_.find(va);
+        if (it != vm_maps_.end()) {
+            vm_mgr_->unmap(va, it->second);
+            vm_maps_.erase(it);
+            if (vm_enabled_) {
+                committed = commit_mmu_satp();
+            }
+        }
     }
     // Dispatch by resolved PA to whichever pool owns the range. PHYS
     // buffers are identity-mapped so their PA falls inside the slab;
@@ -1314,8 +1342,10 @@ vx_result_t Device::mem_free(uint64_t addr) {
         && addr >= pinned_base_
         && addr < pinned_base_ + pinned_size_;
     auto& alloc = in_pinned ? *pinned_mem_ : global_mem_;
-    return (alloc.release(addr) == 0)
-               ? VX_SUCCESS : VX_ERR_INVALID_VALUE;
+    if (alloc.release(addr) != 0) {
+        return VX_ERR_INVALID_VALUE;
+    }
+    return committed;
 }
 
 vx_result_t Device::memory_info(uint64_t* out_free, uint64_t* out_used) {

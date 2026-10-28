@@ -226,6 +226,17 @@ tests:
     OPTS: -t0 -n32 -p8
   env:
     VORTEX_RANDOMIZE_VA: 1
+# A freed buffer's pages reused by a larger buffer, then a new buffer: each
+# reaches its own pages through its own VAs.
+- id: vm-reuse
+  via: make-run
+  drivers:
+  - simx
+  - rtlsim
+  dir: tests/regression/vm_test
+  target: run-{driver}
+  vars:
+    OPTS: -t6 -n1 -p1
 - id: vm-fault
   via: make-run
   drivers:

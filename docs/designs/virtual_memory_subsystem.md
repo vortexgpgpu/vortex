@@ -546,6 +546,11 @@ DCRs. Then:
   GPU drivers. `init()` reserves the PT region in the PA allocator so no later
   allocation can overlap it, allocates the root, and installs the identity
   maps of §2.4.
+- **Freeing** a buffer mapped at a minted VA clears its PTEs, forgets its
+  pages' VAs and returns the VA range, so a later buffer on the same physical
+  pages gets fresh VAs and no translation outlives its pages. The free then
+  commits satp again (`commit_mmu_satp()`), queued behind its PTE writes, which
+  flushes every TLB level before any later launch.
 - **`vx_mem_alloc`** takes a PA from the global pool, mints a VA
   (identity by default; `VORTEX_RANDOMIZE_VA=1` picks a random page-aligned
   base seeded by `VORTEX_VA_SEED`, keeping multi-page buffers VA-contiguous)

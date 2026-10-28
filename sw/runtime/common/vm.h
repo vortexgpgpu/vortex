@@ -86,6 +86,10 @@ public:
   // Uses megapage PTEs where alignment + size permit, leaf PTEs otherwise.
   int install_identity_map(uint64_t addr, uint64_t size);
 
+  // Undo phy_to_virt_map for a freed buffer: clear its PTEs, forget its pages'
+  // VAs and return the VA range, so neither outlives the physical pages.
+  int unmap(uint64_t va, uint64_t size);
+
   // Push every dirty shadow PT page to device memory (one device write
   // per dirty page). Implicitly invoked at the end of init() /
   // phy_to_virt_map() / install_identity_map() / map_p2v() so callers
@@ -99,6 +103,9 @@ public:
 private:
   uint8_t alloc_page_table(uint64_t* pt_addr);
   int16_t update_page_table(uint64_t ppn, uint64_t vpn, uint32_t flag, uint8_t leaf_level = 0);
+  // The PA of the base-page PTE that maps `va`, whose interior tables exist;
+  // 0 when the walk does not reach a base-page entry.
+  uint64_t leaf_pte_addr(uint64_t va);
 
   uint64_t read_pte(uint64_t addr);
   void write_pte(uint64_t addr, uint64_t value = 0xbaadf00d);

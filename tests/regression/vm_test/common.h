@@ -8,6 +8,7 @@
 #define VM_MODE_AMO        3  // atomics contended on cold pages
 #define VM_MODE_SUPERPAGE  4  // repeated reads through a superpage-mapped region
 #define VM_MODE_RELEASE    5  // cold-page store, fence, atomic guard; the partner acquires
+#define VM_MODE_REUSE      6  // freed pages reused by a larger buffer, then a new one
 
 // Release mode: block 0 writes and block 1 reads. The writer's lanes send
 // RELEASE_PAD_BURSTS bursts of stores to cold pages ahead of the page store,
