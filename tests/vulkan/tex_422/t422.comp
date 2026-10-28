@@ -1,0 +1,14 @@
+#version 450
+layout(local_size_x = 8, local_size_y = 1) in;
+layout(set = 0, binding = 0) uniform sampler2D tex;
+layout(set = 0, binding = 1) buffer Out { vec4 o[]; };
+layout(push_constant) uniform PC { uint w; uint h; } pc;
+void main()
+{
+   uint x = gl_GlobalInvocationID.x;
+   uint y = gl_GlobalInvocationID.y;
+   if (x >= pc.w || y >= pc.h)
+      return;
+   vec2 uv = (vec2(x, y) + 0.5) / vec2(pc.w, pc.h);
+   o[y * pc.w + x] = textureLod(tex, uv, 0.0);
+}

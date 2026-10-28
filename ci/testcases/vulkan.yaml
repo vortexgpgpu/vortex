@@ -259,6 +259,10 @@ tests:
    configs+: "-DVX_CFG_VM_ENABLE", touches: [hw/rtl/vm, sim/simx/mem, tests/vulkan/sparse_atomic]}
 - {id: shader-sparse-vm-layers3d, via: make-run, drivers: [simx], dir: tests/vulkan/sparse_layers3d, target: "run-{driver}",
    configs+: "-DVX_CFG_VM_ENABLE", touches: [hw/rtl/vm, sim/simx/mem, tests/vulkan/sparse_layers3d]}
+# 4:2:2 packed textures through a sampler Y'CbCr conversion: each texel its own
+# luma, both the pair's chroma.
+- {id: tex-422, via: make-run, drivers: [simx], dir: tests/vulkan/tex_422, target: "run-{driver}",
+   touches: [sw/common/gfx_frag_tex.h, tests/vulkan/tex_422]}
 
 # FF/SW-mix matrix — the full 3D pipeline (draw3d) with fixed-function units
 # selectively dropped to SIMT software. Combos that need SW-TEX or SW-RASTER

@@ -364,6 +364,9 @@ VX_TEX_FORMAT_RGBX8           = 97
 VX_TEX_FORMAT_BGRX8           = 98
 VX_TEX_FORMAT_SRGBX8          = 99
 VX_TEX_FORMAT_SBGRX8          = 100
+# 4:2:2 packed: two texels share one 32-bit word and its chroma -> (r,g,b,1)
+VX_TEX_FORMAT_G8B8G8R8_422    = 101  # bytes G0 B G1 R
+VX_TEX_FORMAT_B8G8R8G8_422    = 102  # bytes B G0 R G1
 
 [raster_const]
 VX_RASTER_DIM_BITS    = 15

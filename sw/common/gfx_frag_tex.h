@@ -227,6 +227,10 @@ static inline TexFieldFmt TexFieldGeom(uint32_t format) {
   case VX_TEX_FORMAT_BGRX8: return { 4, 3, TEX_KIND_UNORM, {16, 8, 0}, {8, 8, 8} };
   case VX_TEX_FORMAT_SRGBX8: return { 4, 3, TEX_KIND_SRGB, {0, 8, 16}, {8, 8, 8} };
   case VX_TEX_FORMAT_SBGRX8: return { 4, 3, TEX_KIND_SRGB, {16, 8, 0}, {8, 8, 8} };
+  // 4:2:2 texels are addressed two bytes apart; TexDecodeField4 reads the word
+  // the pair shares.
+  case VX_TEX_FORMAT_G8B8G8R8_422: return { 2, 3, TEX_KIND_UNORM, {24, 0, 8}, {8, 8, 8} };
+  case VX_TEX_FORMAT_B8G8R8G8_422: return { 2, 3, TEX_KIND_UNORM, {16, 8, 0}, {8, 8, 8} };
   default: return { 4, 4, TEX_KIND_UNORM, {0, 8, 16, 24}, {8, 8, 8, 8} };
   }
 }
@@ -243,9 +247,19 @@ static inline float SrgbToLinearF(uint32_t c);
 // Decode one field-format texel to four lanes: float for normalized formats,
 // the integer's bits for integer formats. Absent channels read (0,0,1).
 static inline void TexDecodeField4(uint32_t format, const void* p, float out[4]) {
-  const TexFieldFmt g = TexFieldGeom(format);
+  TexFieldFmt g = TexFieldGeom(format);
   uint32_t w[4] = {0, 0, 0, 0};
-  __builtin_memcpy(w, p, g.bpp);
+  if (format == VX_TEX_FORMAT_G8B8G8R8_422 || format == VX_TEX_FORMAT_B8G8R8G8_422) {
+    // The texel at p is one of the pair in the word p lies in; the odd one takes
+    // the second luma byte, both the pair's chroma.
+    const uintptr_t a = (uintptr_t)p;
+    __builtin_memcpy(w, (const void*)(a & ~(uintptr_t)3), 4);
+    if ((a >> 1) & 1u) {
+      g.off[1] += 16;
+    }
+  } else {
+    __builtin_memcpy(w, p, g.bpp);
+  }
   const bool is_int = (g.kind == TEX_KIND_UINT || g.kind == TEX_KIND_SINT);
   for (uint32_t c = 0; c < 4; ++c) {
     uint32_t lane;
