@@ -451,7 +451,7 @@ make -C build/hw/syn/yosys/dut om CLOCK_FREQ=500    # override the target clock
 
 #### Synthesis-regression gate (`asic_gate`)
 
-`ci/asic_gate.py` runs that catalog against checked-in goldens in `ci/baselines/synthesis/yosys/` and fails on a Fmax move beyond ±2% or a cell-area move beyond ±5%. It is the ASIC sibling of `ci/fpga_gate.py` and shares its implementation (`ci/synth_gate.py`).
+`ci/asic_gate.py` runs that catalog against checked-in goldens in `ci/baselines/synthesis/yosys/` and fails when Fmax falls more than 2% below the build's target clock or cell area grows more than 5% over its `area_budget_um2`; both limits live in the catalog. It is the ASIC sibling of `ci/fpga_gate.py` and shares its implementation (`ci/synth_gate.py`).
 
 ```bash
 ci/asic_gate.py --list             # builds and their recorded baselines

@@ -48,7 +48,12 @@ tests:
 # builds — read by ci/fpga_gate.py, ignored by the pytest catalog loader.
 #
 #   dut         hw/syn/xilinx/dut/<dut> target to synthesize
-#   clock_mhz   target clock, baked into the constraint via CLK_FREQ_MHZ
+#   clock_mhz   target clock, baked into the constraint via CLK_FREQ_MHZ. The
+#               gate fails when Fmax falls more than 2% below it.
+#   lut_budget  LUT ceiling: the gate fails when LUT grows more than 5% over
+#               it. Fixed here rather than taken from the baseline, so
+#               re-recording cannot creep it upward; raising it is a reviewed
+#               edit.
 #   group       which golden file the results land in
 #   impl_strategy  Vivado implementation strategy for this build (IMPL_STRATEGY
 #               env into project.tcl); absent = the OPT_LEVEL default. Part of
@@ -71,6 +76,7 @@ builds:
   group: core
   dut: cache
   clock_mhz: 300
+  lut_budget: 28369
   configs: -DVX_CFG_EXT_A_ENABLE
 
 # Wide-SIMD core: issue/operand-collect/LSU/FPU at NT=NW=16, plus the RVC
@@ -79,6 +85,7 @@ builds:
   group: core
   dut: core
   clock_mhz: 300
+  lut_budget: 171712
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_EXT_C_ENABLE -DVX_CFG_EXT_A_ENABLE
 
 # Multi-core system top: 2 cores at NT=NW=4, atomics + virtual memory (MMU).
@@ -88,6 +95,7 @@ builds:
   group: core
   dut: top
   clock_mhz: 250
+  lut_budget: 136762
   configs: >-
     -DVX_CFG_NUM_THREADS=4 -DVX_CFG_NUM_WARPS=4
     -DVX_CFG_NUM_CORES=2
@@ -101,6 +109,7 @@ builds:
   group: dxa
   dut: dxa
   clock_mhz: 300
+  lut_budget: 10102
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
 
 # --- mufu --------------------------------------------------------------------
@@ -111,6 +120,7 @@ builds:
   group: mufu
   dut: mufu
   clock_mhz: 300
+  lut_budget: 2030
   configs: "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16"
 
 # --- tensor ------------------------------------------------------------------
@@ -121,6 +131,7 @@ builds:
   group: tensor
   dut: tcu
   clock_mhz: 300
+  lut_budget: 117377
   configs: >-
     -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_TCU_TYPE_TFR
     -DVX_CFG_TCU_FP16_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DVX_CFG_TCU_INT8_ENABLE
@@ -138,6 +149,7 @@ builds:
   group: graphics
   dut: rtu
   clock_mhz: 300
+  lut_budget: 67881
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
 
 # Rasterizer: bin/block/quad walker, edge evaluators, rcache port.
@@ -145,6 +157,7 @@ builds:
   group: graphics
   dut: raster
   clock_mhz: 300
+  lut_budget: 8346
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
 
 # Output merger: depth/stencil test, blend, ocache port.
@@ -152,6 +165,7 @@ builds:
   group: graphics
   dut: om
   clock_mhz: 300
+  lut_budget: 2618
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
 
 # Texture unit: address generation, LOD, bilinear filter, tcache port.
@@ -159,6 +173,7 @@ builds:
   group: graphics
   dut: tex
   clock_mhz: 300
+  lut_budget: 61245
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
 
 # --- vm ----------------------------------------------------------------------
@@ -170,6 +185,7 @@ builds:
   group: vm
   dut: vm
   clock_mhz: 250
+  lut_budget: 119695
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_NUM_CORES=2
 
 # --- graphics (combined subsystem) -------------------------------------------
@@ -182,6 +198,7 @@ builds:
   group: graphics
   dut: gfx
   clock_mhz: 250
+  lut_budget: 204871
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
 
 # --- tensor (combined subsystem) ---------------------------------------------
@@ -193,6 +210,7 @@ builds:
   group: tensor
   dut: tensor
   clock_mhz: 250
+  lut_budget: 239260
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
   # Route-dominated at this size: identical-area netlists swung 207-242 MHz
   # under the default strategy (placement variance), which no Fmax gate

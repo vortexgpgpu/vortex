@@ -266,13 +266,14 @@ so the parity and perf views of one workload are two cases.
 
 `perf_gate` catches a change that costs cycles. The synthesis gates catch one
 that costs **timing closure or area**: they synthesize a catalog of designs
-and assert the results against golden baselines.
+and assert the results against the target clock and area budget each build
+declares, recording every run's metrics in golden baselines.
 
 | | `fpga_gate` | `asic_gate` |
 |---|---|---|
 | flow | Vivado synthesis, place and route | sv2v → Yosys → ABC → OpenSTA, on ASAP7 |
 | design tree | `hw/syn/xilinx/dut` | `hw/syn/yosys/dut` |
-| gated against the baseline | `fmax_mhz`, `lut` | `cell_area_um2` (Fmax only against the target clock) |
+| gated | `fmax_mhz` against the target clock, `lut` against `lut_budget` | `fmax_mhz` against the target clock, `cell_area_um2` against `area_budget_um2` |
 | also recorded | `wns_ns`, `lutram`, `ff`, `bram`, `uram`, `dsp`, critical paths, high-fanout nets | `wns_ns`, `tns_ns`, `seq_area_um2`, `sram_area_um2`, `cell_count`, `power_mw` |
 | comparable when | same device, optimization level, xlen | same PDK, VT, corner, xlen |
 | runner | self-hosted, licensed Vivado | hosted, one job per design |
@@ -297,7 +298,7 @@ tool.
 
 | file | written by | holds |
 |---|---|---|
-| `ci/testcases/{fpga,asic}_gate.yaml` | a person | per build: a design, a target clock, `CONFIGS`, a group, optional `thresholds` and `known_issue` |
+| `ci/testcases/{fpga,asic}_gate.yaml` | a person | per build: a design, a target clock, an area budget, `CONFIGS`, a group, optional `thresholds` and `known_issue` |
 | `ci/baselines/synthesis/{xilinx,yosys}/<group>.json` | the gate | measured metrics, the config hash, the tool versions and environment |
 
 Groups are `core`, `tensor`, `graphics`, `dxa` and `vm`. `asic_gate` uses the
@@ -306,7 +307,9 @@ gates share a design, a divergence between the tools on the same module is a
 finding, not noise.
 
 The config hash ties the two files together: edit the spec, and the gate
-refuses to compare against numbers recorded for the old one. Its
+refuses to compare against numbers recorded for the old one. It matters only
+for a metric gated against its baseline (`--gate`); the default assertions
+read the target clock and the budget, which are not part of the hash. Its
 tool-specific half is the device and optimization level for Vivado and the
 PDK, VT and corner for Yosys.
 
@@ -318,9 +321,9 @@ developer runs cannot diverge.
 
 | assertion | reason |
 |---|---|
-| each gated metric within tolerance of its baseline | regression detection |
-| an improvement beyond tolerance also fails | the gain must be recorded |
-| Fmax within tolerance of the **target clock**, independent of the baseline | a baseline recorded below target must not let a build pass by matching it |
+| Fmax no more than its tolerance **below the target clock** | the design meets the clock it is built for; a faster result never fails, since placement noise alone moves Fmax by more than 2 % |
+| area no more than its tolerance **over the build's budget** | the budget is fixed in the catalog, so re-recording a baseline cannot creep area upward; raising it is a reviewed edit |
+| any other metric gated with `--gate`: within tolerance of its baseline, both ways | an improvement beyond tolerance must be recorded |
 
 Thresholds resolve most-specific first: a build's own `thresholds`, then a
 global per-metric threshold, then the global default.
@@ -339,10 +342,10 @@ so the flow reports the signed worst slack instead.
 | verdict | meaning | fails the run |
 |---|---|---|
 | `PASS` | within tolerance | no |
-| `REGRESSION` | a gated metric got worse | yes |
-| `IMPROVED` | a gated metric got better; record it | yes |
+| `FAIL` | Fmax below target, area over budget, or a baseline-gated metric worse | yes |
+| `IMPROVED` | a baseline-gated metric got better; record it | yes |
 | `STALE` | the spec or the tool changed since the baseline | yes |
-| `FAIL` | the build produced no metrics | yes |
+| `BUILD-FAIL` | the build produced no metrics | yes |
 | `KNOWN-ISSUE` | a tracked expected failure | no |
 | `XPASS` | a known issue stopped reproducing; clear the flag | no |
 | `RECORDED` | a baseline was written | no |

@@ -40,10 +40,13 @@ import time
 
 import yaml
 
-# Gated metrics must stay within +/-5% of baseline, and Fmax within +/-2% (of
-# both the baseline and the target clock). The regression side is the gate; the
-# improvement side is the ratchet -- a win beyond it must be recorded so the gain
-# is locked in and a later silent slide back to the old number still fails.
+# Fmax is held to the build's target clock and area to its fixed budget, both
+# from the catalog and both one-sided: Fmax may not fall more than 2% below the
+# target, area may not grow more than 5% over the budget, and doing better never
+# fails. Neither is measured against the last recorded baseline, so re-recording
+# cannot ratchet the limit; raising a budget is a reviewed catalog edit. Any
+# other metric gated with --gate is compared with its baseline both ways: the
+# improvement side is the ratchet, so a win must be recorded to lock it in.
 #
 # These are the GLOBAL defaults. They are overridden per-metric on the command
 # line (--metric-threshold lut=0.10) and per-build in the catalog ("thresholds":
@@ -89,6 +92,8 @@ class Tool:
 
     metrics = ()       # recorded, in report order; build_time_s is bookkeeping
     gated = ()         # asserted by default (--gate overrides)
+    area = ""          # the gated area metric, held to the catalog's budget
+    budget_key = ""    # the catalog field holding that budget
     integral = ()      # recorded as ints; every other metric is a rounded float
     columns = ()       # (header, metric, format, width) for the report table
 
@@ -191,7 +196,10 @@ class Xilinx(Tool):
 
     metrics = ("fmax_mhz", "wns_ns", "lut", "lutram", "ff", "bram", "uram",
                "dsp", "build_time_s")
-    gated = ("fmax_mhz", "lut")
+    # Fmax is held to the build's clock target (gate()'s BELOW TARGET check).
+    gated = ("lut",)
+    area = "lut"
+    budget_key = "lut_budget"
     integral = ("lut", "lutram", "ff", "bram", "uram", "dsp", "build_time_s")
     columns = (("fmax", "fmax_mhz", "%.0f", 9), ("lut", "lut", "%d", 9),
                ("ff", "ff", "%d", 9), ("lutram", "lutram", "%d", 9),
@@ -310,6 +318,8 @@ class Yosys(Tool):
     # whatever else the design contains: #424 left the RTU's worst path in an
     # unchanged FMA stage yet moved it 957 -> 903 MHz.
     gated = ("cell_area_um2",)
+    area = "cell_area_um2"
+    budget_key = "area_budget_um2"
     integral = ("cell_count", "build_time_s")
     columns = (("fmax", "fmax_mhz", "%.0f", 9),
                ("area_um2", "cell_area_um2", "%.0f", 11),
@@ -517,7 +527,7 @@ def load_catalog(root, tool):
         if bid in builds:
             sys.exit("ERROR: duplicate build id '%s' in %s"
                      % (bid, spec_path(root, tool.gate)))
-        missing = {"dut", "clock_mhz", "configs"} - set(entry)
+        missing = {"dut", "clock_mhz", "configs", tool.budget_key} - set(entry)
         if missing:
             sys.exit("ERROR: %s: missing %s" % (bid, ", ".join(sorted(missing))))
         group = entry.get("group", "default")
@@ -987,16 +997,31 @@ def gate(result, env, args, gated, tool):
     if result["error"]:
         return "BUILD-FAIL", [result["error"]]
 
+    reasons = []
+    vs_base = [m for m in gated if m != tool.area]
+
+    if tool.area in gated:
+        budget = float(build[tool.budget_key])
+        cur = result["metrics"].get(tool.area)
+        if cur is None:
+            reasons.append("%s: not measured by this run" % tool.area)
+        else:
+            tol = threshold(build, tool.area, args)
+            excess = (cur - budget) / budget
+            if excess > tol:
+                reasons.append("%s: %g vs %g budget (%+.1f%%, tolerance %.0f%%) "
+                               "-- OVER BUDGET"
+                               % (tool.area, cur, budget, 100 * excess, 100 * tol))
+
     base = build.get("baseline") or {}
-    if not any(base.get(m) is not None for m in gated):
+    if vs_base and not any(base.get(m) is not None for m in vs_base):
         return verdict("NO-BASELINE",
                        ["no recorded baseline (run --update-baseline)"])
-    if build.get("config_hash") != config_hash(build, env, tool):
+    if vs_base and build.get("config_hash") != config_hash(build, env, tool):
         return verdict("STALE", ["config changed since the baseline was recorded "
                                  "(re-record with --update-baseline)"])
 
-    reasons = []
-    for m in gated:
+    for m in vs_base:
         cur, ref = result["metrics"].get(m), base.get(m)
         if ref is None:
             reasons.append("%s: missing from baseline" % m)
@@ -1015,10 +1040,8 @@ def gate(result, env, args, gated, tool):
                           if better else "REGRESSION"))
 
     # Target-frequency gate: Fmax must be within tolerance of the clock the design
-    # was BUILT for, independent of the baseline. A baseline recorded below target
-    # (a design that never met its clock) must not let a build pass just by matching
-    # that number -- the gate answers "does it meet the frequency it targets?", not
-    # only "did it get worse than last time?".
+    # was BUILT for, never of the last recording. One-sided: a faster build passes,
+    # since placement noise alone moves Fmax by more than the tolerance.
     target = build.get("clock_mhz")
     fmax = result["metrics"].get("fmax_mhz")
     if target and fmax is not None:
@@ -1116,7 +1139,7 @@ def report(results, env, args, gated, tool, record=False):
 def main(argv=None, default_tool="xilinx"):
     tool = TOOLS[default_tool]
     ap = argparse.ArgumentParser(
-        description="Synthesis-regression gate (Fmax/area vs golden baseline)")
+        description="Synthesis-regression gate (Fmax vs target clock, area vs budget)")
     ap.add_argument("-b", "--build", action="append", default=[], metavar="ID",
                     help="build id or group to run (repeatable; default: all)")
     ap.add_argument("-j", "--jobs", type=int, default=2, metavar="N",
