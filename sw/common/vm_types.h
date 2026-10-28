@@ -114,6 +114,12 @@ public:
   bool d, a, g, u, x, w, r, v;
   uint64_t pte_bytes;
 
+  // The flags a TLB keeps: {N, D, A, G, U, X, W, R, V}, N the sparse
+  // null-translation bit.
+  uint32_t tlb_flags() const {
+    return (uint32_t)bits(pte_bytes, 0, VX_VM_PTE_SPARSE_BIT);
+  }
+
   void set_flags(uint32_t flag) {
     this->flags = flag;
     d = bit(flags, 7);

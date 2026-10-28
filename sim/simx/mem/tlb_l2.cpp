@@ -56,7 +56,7 @@ bool L2Tlb::busy() const {
   return false;
 }
 
-bool L2Tlb::lookup(uint64_t vpn, uint64_t* ppn, uint8_t* flags, uint8_t* level) {
+bool L2Tlb::lookup(uint64_t vpn, uint64_t* ppn, uint16_t* flags, uint8_t* level) {
   // Megapage side array first (one entry covers the whole range).
   {
     auto res = mega_.lookup(vpn);
@@ -80,7 +80,7 @@ bool L2Tlb::lookup(uint64_t vpn, uint64_t* ppn, uint8_t* flags, uint8_t* level) 
   return false;
 }
 
-void L2Tlb::fill(uint64_t vpn, uint64_t ppn, uint8_t flags, uint8_t level) {
+void L2Tlb::fill(uint64_t vpn, uint64_t ppn, uint16_t flags, uint8_t level) {
   if (level != 0) {
     mega_.fill(vpn, ppn, flags, level);
     return;
@@ -165,7 +165,8 @@ void L2Tlb::on_tick() {
       return;
     }
     uint64_t ppn;
-    uint8_t flags, level;
+    uint16_t flags;
+    uint8_t level;
     if (lookup(req.vpn, &ppn, &flags, &level)) {
       ++perf_.hits;
       TlbRsp out;

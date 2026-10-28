@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cassert>
+#include <algorithm>
 #include <vector>
 
 namespace vortex {
@@ -160,13 +161,22 @@ uint32_t CommandProcessor::mmio_read(uint32_t off) const {
 // VM — page-table walk (the CP DMA is an MMU-aware copy engine)
 // ============================================================================
 
-uint64_t CommandProcessor::cp_translate(uint64_t vaddr, bool physical) const {
+bool CommandProcessor::cp_paged(bool physical) const {
 #ifdef VX_CFG_VM_ENABLE
-    if (physical || satp_ == 0)
-        return vaddr;
+    return !physical && satp_ != 0 && SATP_t(satp_).get_mode() != BARE;
+#else
+    (void)physical;
+    return false;
+#endif
+}
+
+bool CommandProcessor::cp_translate_page(uint64_t vaddr, bool physical, uint64_t* paddr) const {
+    *paddr = vaddr;
+#ifdef VX_CFG_VM_ENABLE
+    if (!cp_paged(physical)) {
+        return true;
+    }
     SATP_t satp(satp_);
-    if (satp.get_mode() == BARE)
-        return vaddr;
     // Sv32/Sv39 walk — mirrors VMManager::page_table_walk so the CP DMA and
     // the host driver resolve addresses identically.
     int i = VX_VM_PT_LEVEL - 1;
@@ -176,16 +186,22 @@ uint64_t CommandProcessor::cp_translate(uint64_t vaddr, bool physical) const {
         uint64_t pte_addr  = cur_base_ppn * VX_VM_PT_SIZE
                            + va.vpn[i] * VX_VM_PTE_SIZE;
         uint64_t pte_bytes = 0;
-        if (hooks_.dram_read)
+        if (hooks_.dram_read) {
             hooks_.dram_read(pte_addr, &pte_bytes, VX_VM_PTE_SIZE);
+        }
         PTE_t pte(pte_bytes);
-        if (pte.v == 0)
-            return vaddr;            // unmapped — pass through (defensive)
+        if (pte.v == 0) {
+            return true;             // unmapped — pass through (defensive)
+        }
         if (pte.r == 0 && pte.w == 0 && pte.x == 0) {
-            if (--i < 0)
-                return vaddr;        // no leaf — pass through
+            if (--i < 0) {
+                return true;         // no leaf — pass through
+            }
             cur_base_ppn = pte.ppn;
             continue;
+        }
+        if ((pte.tlb_flags() >> VX_VM_PTE_SPARSE_BIT) & 1) {
+            return false;            // null translation
         }
         cur_base_ppn = pte.ppn;      // leaf found at level i
         break;
@@ -198,12 +214,69 @@ uint64_t CommandProcessor::cp_translate(uint64_t vaddr, bool physical) const {
     constexpr unsigned VPN_BITS = cp_clog2(VX_VM_PT_SIZE / VX_VM_PTE_SIZE);
     const uint64_t off_mask =
         (uint64_t(1) << (VX_VM_PAGE_LOG2_SIZE + i * VPN_BITS)) - 1;
-    return ((cur_base_ppn << VX_VM_PAGE_LOG2_SIZE) & ~off_mask)
-         | (vaddr & off_mask);
+    *paddr = ((cur_base_ppn << VX_VM_PAGE_LOG2_SIZE) & ~off_mask)
+           | (vaddr & off_mask);
+    return true;
 #else
     (void)physical;
-    return vaddr;
+    return true;
 #endif
+}
+
+void CommandProcessor::cp_dev_read(uint64_t vaddr, void* dst, uint64_t size) const {
+    constexpr uint64_t PAGE = uint64_t(1) << VX_VM_PAGE_LOG2_SIZE;
+    auto out = static_cast<uint8_t*>(dst);
+    const bool paged = cp_paged(false);
+    for (uint64_t done = 0; done < size; ) {
+        uint64_t n = size - done;
+        if (paged) {
+            n = std::min(n, PAGE - ((vaddr + done) & (PAGE - 1)));
+        }
+        uint64_t pa = 0;
+        if (cp_translate_page(vaddr + done, false, &pa)) {
+            hooks_.dram_read(pa, out + done, n);
+        } else {
+            std::fill(out + done, out + done + n, 0);
+        }
+        done += n;
+    }
+}
+
+void CommandProcessor::cp_mem_copy(uint64_t dst, bool dst_dev, uint64_t src, bool src_dev,
+                                   uint64_t size, bool physical) {
+    constexpr uint64_t CHUNK = 64 * 1024;
+    constexpr uint64_t PAGE = uint64_t(1) << VX_VM_PAGE_LOG2_SIZE;
+    std::vector<uint8_t> buf(std::size_t(size < CHUNK ? size : CHUNK));
+    const bool paged = cp_paged(physical);
+    for (uint64_t done = 0; done < size; ) {
+        uint64_t n = std::min(size - done, CHUNK);
+        uint64_t dpa = dst + done;
+        uint64_t spa = src + done;
+        bool dst_bound = true;
+        bool src_bound = true;
+        // A translated operand is contiguous only to the end of its page.
+        if (dst_dev) {
+            dst_bound = cp_translate_page(dst + done, physical, &dpa);
+            if (paged) {
+                n = std::min(n, PAGE - ((dst + done) & (PAGE - 1)));
+            }
+        }
+        if (src_dev) {
+            src_bound = cp_translate_page(src + done, physical, &spa);
+            if (paged) {
+                n = std::min(n, PAGE - ((src + done) & (PAGE - 1)));
+            }
+        }
+        if (src_bound) {
+            hooks_.dram_read(spa, buf.data(), n);
+        } else {
+            std::fill(buf.begin(), buf.begin() + n, 0);
+        }
+        if (dst_bound) {
+            hooks_.dram_write(dpa, buf.data(), n);
+        }
+        done += n;
+    }
 }
 
 // ============================================================================
@@ -320,16 +393,16 @@ bool CommandProcessor::apply_qmd_(uint64_t qmd_addr) {
     if (!hooks_.dram_read || !hooks_.vortex_dcr_write) {
         return true;
     }
-    uint64_t addr = cp_translate(qmd_addr, /*physical=*/false);
+    uint64_t addr = qmd_addr;
     uint32_t count = 0;
-    hooks_.dram_read(addr, &count, sizeof(count));
+    cp_dev_read(addr, &count, sizeof(count));
     addr += CP_QMD_PAIRS_OFFSET;
     if (count > CP_LAUNCH_MAX_PAIRS) {
         count = CP_LAUNCH_MAX_PAIRS;   // backstop against a corrupt count
     }
     for (uint32_t i = 0; i < count; ++i) {
         uint32_t pair[2] = {0, 0};          // {dcr_addr, value}
-        hooks_.dram_read(addr, pair, sizeof(pair));
+        cp_dev_read(addr, pair, sizeof(pair));
         addr += sizeof(pair);
         hooks_.vortex_dcr_write(pair[0] & 0xFFF, pair[1]);  // VX_DCR_ADDR_BITS=12
     }
@@ -338,7 +411,7 @@ bool CommandProcessor::apply_qmd_(uint64_t qmd_addr) {
 
 uint32_t CommandProcessor::read_dev32_(uint64_t vaddr) const {
     uint32_t v = 0;
-    hooks_.dram_read(cp_translate(vaddr, /*physical=*/false), &v, sizeof(v));
+    cp_dev_read(vaddr, &v, sizeof(v));
     return v;
 }
 
@@ -359,8 +432,8 @@ CommandProcessor::IldAction CommandProcessor::apply_ild_(uint64_t ild_addr,
     }
 #endif
     cp_ild_header_t hdr;
-    const uint64_t base = cp_translate(ild_addr, /*physical=*/false);
-    hooks_.dram_read(base, &hdr, sizeof(hdr));
+    const uint64_t base = ild_addr;
+    cp_dev_read(base, &hdr, sizeof(hdr));
 
     bool exec = true;
     if (hdr.ctl & CP_ILD_HAS_PRED) {
@@ -401,7 +474,7 @@ CommandProcessor::IldAction CommandProcessor::apply_ild_(uint64_t ild_addr,
     uint64_t addr = base + CP_ILD_HEADER_BYTES;
     for (uint32_t i = 0; i < count; ++i) {
         uint32_t pair[2] = {0, 0};   // {dcr_addr, value}
-        hooks_.dram_read(addr, pair, sizeof(pair));
+        cp_dev_read(addr, pair, sizeof(pair));
         addr += sizeof(pair);
         const uint32_t dcr = pair[0] & 0xFFF;
         uint32_t value = pair[1];
@@ -455,9 +528,9 @@ void CommandProcessor::draw_load_step_() {
     draw_cmd_ = Cmd{};
     if (!hooks_.dram_read) return;
     uint8_t buf[DRAW_STEP_BYTES] = {0};
-    const uint64_t at = draw_phys_ + 4
+    const uint64_t at = draw_addr_ + 4
                       + uint64_t(draw_step_) * DRAW_STEP_BYTES;
-    hooks_.dram_read(at, buf, DRAW_STEP_BYTES);
+    cp_dev_read(at, buf, DRAW_STEP_BYTES);
     decode_cmd_bytes(buf, DRAW_STEP_BYTES, 0, draw_cmd_);
 }
 
@@ -567,11 +640,12 @@ void CommandProcessor::tick_engine() {
                 // Device-orchestrated draw: arg0 → resident draw descriptor
                 // {uint32 num_steps, steps[28 B]...}. Walk the embedded command
                 // bundle (DrawStep), retiring the one OP_DRAW when drained.
-                draw_phys_ = cp_translate(cur_cmd_.arg0, /*physical=*/false);
+                draw_addr_ = cur_cmd_.arg0;
                 draw_num_steps_ = 0;
-                if (hooks_.dram_read)
-                    hooks_.dram_read(draw_phys_, &draw_num_steps_,
-                                     sizeof(draw_num_steps_));
+                if (hooks_.dram_read) {
+                    cp_dev_read(draw_addr_, &draw_num_steps_,
+                                sizeof(draw_num_steps_));
+                }
                 draw_step_ = 0;
                 eng_state_ = EngState::DrawStep;
             } else if (cur_cmd_.opcode == OP_DCR_WRITE) {
@@ -625,36 +699,17 @@ void CommandProcessor::tick_engine() {
                 // CMD_MEM_*: copy arg2 bytes from src (arg1) to dst (arg0).
                 // The CP DMA is an MMU-aware copy engine: the device-side
                 // operand is a virtual address, translated here by a
-                // page-table walk. MEM_WRITE -> arg0 is the device dst;
-                // MEM_READ -> arg1 is the device src; MEM_COPY -> both.
-                // Host-side operands and physical-flagged commands pass
-                // through untranslated. A buffer is one contiguous PA
-                // allocation, so translating the base covers the transfer.
+                // page-table walk, page by page. MEM_WRITE -> arg0 is the
+                // device dst; MEM_READ -> arg1 is the device src; MEM_COPY ->
+                // both. Host-side operands and physical-flagged commands pass
+                // through untranslated.
                 if (hooks_.dram_read && hooks_.dram_write
                  && cur_cmd_.arg2 != 0) {
                     const bool physical =
                         (cur_cmd_.flags & MEM_FLAG_PHYSICAL) != 0;
-                    uint64_t dst = cur_cmd_.arg0;
-                    uint64_t src = cur_cmd_.arg1;
-                    if (cur_cmd_.opcode == OP_MEM_WRITE) {
-                        dst = cp_translate(dst, physical);
-                    } else if (cur_cmd_.opcode == OP_MEM_READ) {
-                        src = cp_translate(src, physical);
-                    } else { // OP_MEM_COPY — both operands are device
-                        dst = cp_translate(dst, physical);
-                        src = cp_translate(src, physical);
-                    }
-                    const uint64_t total = cur_cmd_.arg2;
-                    constexpr uint64_t CHUNK = 64 * 1024;
-                    std::vector<uint8_t> buf(
-                        std::size_t(total < CHUNK ? total : CHUNK));
-                    for (uint64_t done = 0; done < total; ) {
-                        uint64_t n = total - done;
-                        if (n > CHUNK) n = CHUNK;
-                        hooks_.dram_read (src + done, buf.data(), n);
-                        hooks_.dram_write(dst + done, buf.data(), n);
-                        done += n;
-                    }
+                    cp_mem_copy(cur_cmd_.arg0, cur_cmd_.opcode != OP_MEM_READ,
+                                cur_cmd_.arg1, cur_cmd_.opcode != OP_MEM_WRITE,
+                                cur_cmd_.arg2, physical);
                 }
                 eng_state_ = EngState::Retire;
             } else {

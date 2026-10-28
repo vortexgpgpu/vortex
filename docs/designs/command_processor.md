@@ -583,7 +583,8 @@ The Emulation CP's MMIO map matches the RTL regfile **plus**:
 - `CP_SATP_LO/HI` at `0x028/0x02C`
   ([`cmd_processor.cpp:72-73`](../../sim/common/cmd_processor.cpp#L72)),
 - the `CP_DEV_CAPS` feature bits 24-26 (§6),
-- a software page-table walk `cp_translate` (Sv32/Sv39, megapage-aware,
+- a software page-table walk `cp_translate_page` (Sv32/Sv39, megapage-aware,
+  per page, a null translation reading 0 and dropping writes,
   [`:157-201`](../../sim/common/cmd_processor.cpp#L157)) honoring the
   `MEM_FLAG_PHYSICAL` flag ([`:519-520`](../../sim/common/cmd_processor.cpp#L519)),
 - byte-exact `CMD_MEM_*` copies, staged through a 64 KiB bounce buffer

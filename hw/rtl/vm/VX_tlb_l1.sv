@@ -101,7 +101,7 @@ module VX_tlb_l1 import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         `UNUSED_PIN (lookup_ppn_raw),
         `UNUSED_PIN (lookup_level),
         .access_hit    (access_hit),
-        .install_valid (install_valid),
+        .install_valid (install_valid && !install_entry.flags[TLB_FLAG_N]),
         .install_entry (install_entry),
         .install_evict (install_evict),
         .flush         (flush)

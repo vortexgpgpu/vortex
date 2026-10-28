@@ -106,7 +106,7 @@ void Ptw::on_pte_response(Walker& w, const MemRsp& rsp) {
       return;
     }
     w.final_ppn = pte.ppn;
-    w.flags = pte.flags;
+    w.flags = pte.tlb_flags();
     w.leaf_level = w.level;
     w.state = W_FILL;
     return;

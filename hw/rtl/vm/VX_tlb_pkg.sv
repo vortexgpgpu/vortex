@@ -25,7 +25,7 @@ package VX_tlb_pkg;
     localparam TLB_LEVEL_BITS  = `CLOG2(`VX_VM_PT_SIZE / `VX_VM_PTE_SIZE);
     localparam TLB_VPN_WIDTH   = TLB_PT_LEVELS * TLB_LEVEL_BITS;
     localparam TLB_PPN_WIDTH   = `VX_CFG_MEM_ADDR_WIDTH - `VX_VM_PAGE_LOG2_SIZE;
-    localparam TLB_FLAGS_WIDTH = 8;
+    localparam TLB_FLAGS_WIDTH = `VX_VM_PTE_SPARSE_BIT + 1;
 
     // Page-level index: 0 = base page, N = superpage spanning N index groups.
     localparam TLB_LEVEL_WIDTH = `UP(`CLOG2(TLB_PT_LEVELS));
@@ -44,7 +44,8 @@ package VX_tlb_pkg;
         logic [TLB_FLAGS_WIDTH-1:0] flags;
     } tlb_entry_t;
 
-    // PTE flag bit positions: {D,A,G,U,X,W,R,V} = flags[7:0]. V is checked only by
+    // PTE flag bit positions: {N,D,A,G,U,X,W,R,V} = flags[8:0], N the RSW bit
+    // marking a null translation (an unbound sparse page). V is checked only by
     // the PTW walker (VX_ptw_walker), which is elaborated only when VM is enabled;
     // entry validity is tracked separately here, so waive the unused-param lint when
     // the package is compiled with the walker excluded.
@@ -55,6 +56,7 @@ package VX_tlb_pkg;
     localparam TLB_FLAG_W = 2;
     localparam TLB_FLAG_X = 3;
     localparam TLB_FLAG_U = 4;
+    localparam TLB_FLAG_N = `VX_VM_PTE_SPARSE_BIT;
 
     // Permission predicate shared verbatim by the walker and every TLB
     // level. amo = AMO sideband: atomics carry rw=0 but require W.

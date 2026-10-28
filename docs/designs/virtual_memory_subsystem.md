@@ -145,7 +145,30 @@ The runtime sets `V|R|X|U|A|D` on every leaf and adds `W` for
 `VX_MEM_WRITE` buffers; `A`/`D` are pre-set because the device never writes
 them back.
 
-### 2.4 What is translated, and what is not
+### 2.4 Null translations (sparse residency)
+
+A leaf PTE whose RSW bit 8 is set (`VX_VM_PTE_SPARSE_BIT`, Sv32 and Sv39
+alike) is a **null translation**: the page belongs to a sparse reservation but
+nothing is bound behind it. Its PPN is ignored. The flags every TLB level keeps
+are therefore nine bits, `{N, D, A, G, U, X, W, R, V}` (`TLB_FLAGS_WIDTH`).
+
+- The walker returns a null leaf like any leaf; it is not a fault.
+- The cluster TLB caches it like any translation.
+- The L1 stage never installs it. The requests parked on the walk drain as
+  replays, and a replay of a null translation that passes its permission check
+  takes the kill teardown with no fault report: a load or an atomic is answered
+  with zeroed data, a store retires. The hit path is unchanged; each access to
+  an unbound page pays a cluster-TLB round trip instead.
+- The emulation CP's copies translate page by page; a null page reads 0 and
+  drops writes.
+
+The runtime builds sparse reservations from these
+(`VX_MEM_SPARSE`, `vx_buffer_bind`, §8.4). A bind rewrites base-page PTEs and
+commits `SATP_HI` behind them on the command processor, which flushes every TLB
+level before any later launch. Several reservation pages may map one physical
+page.
+
+### 2.5 What is translated, and what is not
 
 `VX_mmu` bypasses translation for a request when
 `¬vm_active ∨ attr[FLUSH] ∨ attr[IO] ∨ attr[OM]`: BARE mode (satp not yet
@@ -545,12 +568,18 @@ DCRs. Then:
   ~1024 (Sv32) PTEs, the host-shadow / batched-update pattern of mainstream
   GPU drivers. `init()` reserves the PT region in the PA allocator so no later
   allocation can overlap it, allocates the root, and installs the identity
-  maps of §2.4.
+  maps of §2.5.
 - **Freeing** a buffer mapped at a minted VA clears its PTEs, forgets its
   pages' VAs and returns the VA range, so a later buffer on the same physical
   pages gets fresh VAs and no translation outlives its pages. The free then
   commits satp again (`commit_mmu_satp()`), queued behind its PTE writes, which
   flushes every TLB level before any later launch.
+- **Sparse reservations.** `vx_buffer_create(VX_MEM_SPARSE)` takes VAs only,
+  each page a null translation (§2.4). `vx_buffer_bind` checks every page,
+  then points reservation pages at another buffer's pages, or back to null,
+  and commits satp behind its PTE writes; it is ordered on the command
+  processor, not on a queue. Freeing the memory behind bound pages makes them
+  null again; releasing the reservation clears its PTEs.
 - **`vx_mem_alloc`** takes a PA from the global pool, mints a VA
   (identity by default; `VORTEX_RANDOMIZE_VA=1` picks a random page-aligned
   base seeded by `VORTEX_VA_SEED`, keeping multi-page buffers VA-contiguous)
@@ -569,9 +598,11 @@ DCRs. Then:
 ### 8.5 The command processor
 
 The emulation CP ([`cmd_processor.cpp`](../../sim/common/cmd_processor.cpp))
-is MMU-aware: `cp_translate()` performs the same Sv32/Sv39 walk as
-`VMManager::page_table_walk` against device memory for every `CMD_MEM_*` VA
-operand, skipped by `F_MEM_PHYSICAL`; its root is `CP_SATP_LO/HI` (regfile
+is MMU-aware: `cp_translate_page()` performs the same Sv32/Sv39 walk as
+`VMManager::page_table_walk` against device memory, page by page, for every
+`CMD_MEM_*` VA operand (skipped by `F_MEM_PHYSICAL`) and for the descriptors and
+arguments it reads itself (`cp_dev_read`: QMD, indirect-launch header, record
+and predicate, draw descriptor); a null translation reads 0 and drops writes; its root is `CP_SATP_LO/HI` (regfile
 0x028/0x02C), programmed at open. The RTL CP has **no MMU**: `CP_SATP` reads
 zero, `DEV_CAPS.VM_ENABLED` is 0, and the runtime never mints VAs on FPGA.
 VM is therefore a simulation-only feature today
@@ -704,7 +735,8 @@ sizes must be powers of two ≥ 2 (static asserts).
 | `vm-stress` | `vm_stress` | paged and `VX_MEM_PHYS` identity translations contending |
 | `tlb-concurrent`, `mc-l2-amo`, `mc-l3` | 2–4 cores, L2 / L3 | shared cluster TLB and walker across cores and cache levels |
 | `vm-fault` | `vm_fault -t0` | unmapped page → device error and first-fault report |
-| `parity-vm-sgemm/vecadd` | `check: model_parity` | exact instret + cycles within tolerance, simx vs rtlsim |
+| `vm-sparse` | `vm_sparse`, `EXT_A` | null translations: unbound pages read 0 and drop stores and atomics, rebinds, two pages on one, CP copies |
+| `parity-vm-sgemm/vecadd/sparse` | `check: model_parity` | exact instret + cycles within tolerance, simx vs rtlsim |
 
 `vm_fault -t1` (a store to a read-only page) is not in CI: it needs the
 L1 permission-fault *report*, which the RTL does not surface (§9, §13).
@@ -734,7 +766,8 @@ Grades: ✅ done · ⚠️ partial · ❌ pending.
 | Structural fault kill + first-fault DCR report | ✅ | walker faults only |
 | Single DCR translation root, flush done-tree, socket snoop | ✅ | `csrw satp` is a mirror |
 | Host-shadowed page tables, batched PT flush, randomized VA | ✅ | `VMManager` |
-| Emulation CP MMU-aware DMA | ✅ | `cp_translate` |
+| Emulation CP MMU-aware DMA | ✅ | `cp_translate_page`, per page |
+| Null translations for sparse reservations | ✅ | RTL + SimX + CP; `VX_MEM_SPARSE`, `vx_buffer_bind` |
 | **L1 permission-fault report** | ⚠️ | detected and killed in RTL, not surfaced to the host; SimX reports it. `vm_fault -t1` waits on this |
 | **RTL MMU perf counters** | ⚠️ | computed at the socket, not routed through `sysmem_perf`; MPM reads zero on rtlsim / FPGA |
 | **SimX L1 placement** | ⚠️ | per core, vs per socket in RTL — identical only at `SOCKET_SIZE = 1` |

@@ -31,11 +31,16 @@ enum class TlbAccess : uint8_t {
   Exec  = 2
 };
 
+// A null translation: the page is reserved but unbound (VX_VM_PTE_SPARSE_BIT).
+inline bool tlb_null(uint16_t flags) {
+  return (flags >> VX_VM_PTE_SPARSE_BIT) & 1;
+}
+
 // Permission test against a leaf PTE's flag bits. Kernels run in U-mode,
 // so U is always required; W covers stores and the write half of an AMO.
 // Shared by the walker and by every TLB that hands out a translation, so
 // the two can never disagree about what a page permits.
-inline bool tlb_perm_ok(uint8_t flags, TlbAccess access, bool amo) {
+inline bool tlb_perm_ok(uint16_t flags, TlbAccess access, bool amo) {
   const bool r = (flags & (1u << 1)) != 0;
   const bool w = (flags & (1u << 2)) != 0;
   const bool x = (flags & (1u << 3)) != 0;
@@ -68,7 +73,7 @@ struct TlbReq {
 // Fill (or fault) response back to the requesting L1.
 struct TlbRsp {
   uint64_t ppn = 0;
-  uint8_t  flags = 0;
+  uint16_t flags = 0;
   uint8_t  level = 0;         // 0 = base page, 1 = mega, 2 = giga
   bool     fault = false;     // no translation installed when set
   uint32_t client_id = 0;

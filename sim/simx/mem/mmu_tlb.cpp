@@ -42,7 +42,7 @@ Tlb::Result Tlb::lookup(uint64_t vpn) {
   return {};
 }
 
-void Tlb::fill(uint64_t vpn, uint64_t ppn, uint8_t flags, uint8_t level) {
+void Tlb::fill(uint64_t vpn, uint64_t ppn, uint16_t flags, uint8_t level) {
   // Prefer an invalid slot; fall back to a non-MRU victim. If all slots
   // are valid AND every slot has mru=true, clear all MRU bits and evict slot 0.
   int victim = -1;

@@ -135,6 +135,11 @@ typedef struct vx_kernel* vx_kernel_h;
 // whole pages, which must stay mapped until the buffer is released. Backends
 // whose device cannot reach host memory return VX_ERR_NOT_SUPPORTED.
 #define VX_MEM_IMPORT_HOST          0x20
+// A sparse reservation: device virtual addresses with no memory behind them.
+// Every page reads 0 and discards writes until vx_buffer_bind maps memory
+// there. Needs a device with virtual memory; others return
+// VX_ERR_NOT_SUPPORTED.
+#define VX_MEM_SPARSE               0x40
 
 // ============================================================================
 // Result type
@@ -335,6 +340,24 @@ vx_result_t vx_buffer_create  (vx_device_h dev, uint64_t size, uint32_t flags,
 vx_result_t vx_buffer_reserve (vx_device_h dev, uint64_t address,
                                uint64_t size, uint32_t flags,
                                vx_buffer_h* out);
+
+// Map the pages [offset, offset + size) of a VX_MEM_SPARSE buffer onto the
+// pages of `mem` from mem_offset, or back to unbound when mem is NULL. Offsets
+// and size are 4 KiB-aligned; several reservations may map the same memory,
+// which must be a buffer mapped at a device-chosen address (not VX_MEM_PHYS or
+// VX_MEM_HOST). Releasing `mem` unbinds every page bound to it. A bind applies
+// whole or not at all.
+//
+// A bind is not a queue command: it rewrites the page table through the
+// command processor before it returns. Commands the command processor has
+// already executed used the old mapping; every command it executes afterwards
+// uses the new one -- including copies and launches enqueued earlier that a
+// queue has not handed to it yet, since copies are translated when they
+// execute and the bind flushes the TLBs ahead of any later launch. To order a bind
+// after work already enqueued, finish those queues (vx_queue_finish) first.
+vx_result_t vx_buffer_bind    (vx_buffer_h sparse, uint64_t offset,
+                               vx_buffer_h mem, uint64_t mem_offset,
+                               uint64_t size);
 
 vx_result_t vx_buffer_retain  (vx_buffer_h buf);
 vx_result_t vx_buffer_release (vx_buffer_h buf);

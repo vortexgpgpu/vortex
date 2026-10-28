@@ -33,6 +33,9 @@ constexpr uint32_t PTE_X = 1u << 3;
 constexpr uint32_t PTE_U = 1u << 4;
 constexpr uint32_t PTE_A = 1u << 6;
 constexpr uint32_t PTE_D = 1u << 7;
+// RSW bit: a null translation, the page of a sparse reservation with nothing
+// bound (reads return 0, writes are discarded).
+constexpr uint32_t PTE_N = 1u << VX_VM_PTE_SPARSE_BIT;
 
 // Driver-supplied raw device-memory I/O. PA-addressed bulk read/write
 // with no ACL semantics — VMManager batches all PT updates at PT-page
@@ -89,6 +92,15 @@ public:
   // Undo phy_to_virt_map for a freed buffer: clear its PTEs, forget its pages'
   // VAs and return the VA range, so neither outlives the physical pages.
   int unmap(uint64_t va, uint64_t size);
+  // Sparse reservations: a VA range of base pages with no PA behind it, every
+  // page a null translation until bound. bind_page points one page at a PA,
+  // or back to null; several VAs may map one PA. release_sparse clears the
+  // range's PTEs and returns its VAs.
+  int reserve_sparse(uint64_t size, uint64_t* va);
+  // Whether `va` is a base page bind_page can rewrite.
+  bool bindable(uint64_t va);
+  int bind_page(uint64_t va, bool bound, uint64_t pa);
+  int release_sparse(uint64_t va, uint64_t size);
 
   // Push every dirty shadow PT page to device memory (one device write
   // per dirty page). Implicitly invoked at the end of init() /
@@ -124,6 +136,11 @@ private:
   MemoryAllocator* page_table_mem_;
   MemoryAllocator* virtual_mem_;
   std::unordered_map<uint64_t, uint64_t> addr_mapping;
+  // Bound sparse pages: reservation VPN -> PPN, and each PPN's reservation
+  // VPNs, so freeing the memory behind them unbinds them.
+  std::unordered_map<uint64_t, uint64_t> sparse_bound_;
+  std::unordered_multimap<uint64_t, uint64_t> sparse_aliases_;
+  void forget_alias(uint64_t vpn);
 
   // Host shadow: key = PT-page-aligned PA, value = VX_VM_PT_SIZE bytes.
   std::unordered_map<uint64_t, std::vector<uint8_t>> shadow_pt_;

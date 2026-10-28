@@ -208,7 +208,10 @@ void Mmu::on_tick() {
     uint64_t page_mask = (uint64_t(1) << VX_VM_PAGE_LOG2_SIZE) - 1;
     uint32_t shift = rsp.level * TLB_VPN_LEVEL_BITS;
     uint64_t low_mask = (uint64_t(1) << shift) - 1;
-    if (!rsp.fault) {
+    // A null translation is never cached here: its accesses are answered
+    // as kills, so keeping it would need a response path off the hit path.
+    const bool null = !rsp.fault && tlb_null(rsp.flags);
+    if (!rsp.fault && !null) {
       tlb_.fill(mshr_[id].vpn, rsp.ppn, rsp.flags, rsp.level);
     }
     for (auto& [port, req] : mshr_[id].parked) {
@@ -222,6 +225,10 @@ void Mmu::on_tick() {
         report_fault(req);
         DT(3, this->name() << " perm-fault: vpn=0x" << std::hex
                            << (req.addr >> VX_VM_PAGE_LOG2_SIZE) << std::dec);
+      } else if (null) {
+        // Unbound sparse page: a load or an atomic reads 0, nothing is
+        // written, and nothing is reported.
+        kill_request(port, req);
       } else {
         MemReq translated = req;
         uint64_t vpn = req.addr >> VX_VM_PAGE_LOG2_SIZE;

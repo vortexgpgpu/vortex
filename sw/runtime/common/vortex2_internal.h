@@ -375,6 +375,10 @@ public:
                             uint64_t* out_addr);
     vx_result_t mem_reserve(uint64_t addr, uint64_t size, uint32_t flags);
     vx_result_t mem_free   (uint64_t addr);
+    // Point the pages of a VX_MEM_SPARSE range at the pages behind mem_addr,
+    // or back to unbound.
+    vx_result_t mem_bind   (uint64_t addr, bool bound, uint64_t mem_addr,
+                            uint64_t size);
     vx_result_t memory_info(uint64_t* out_free, uint64_t* out_used);
 
     // Decode a VX_CAPS_* id: the CP caps window (read via cp_reg_read +
@@ -466,6 +470,9 @@ private:
     // Imported host ranges, keyed by device address: their physical base and
     // page-rounded size.
     std::map<uint64_t, std::pair<uint64_t, uint64_t>> imports_;
+    // Sparse reservations (VX_MEM_SPARSE), keyed by device address: their
+    // page-rounded size.
+    std::map<uint64_t, uint64_t> sparse_;
 
     // Lazily-loaded device/ISA caps words (read once from the CP regfile).
     uint64_t                       dev_caps_    = 0;
@@ -554,6 +561,7 @@ public:
                                void* host_ptr, Buffer** out);
     static vx_result_t reserve(Device* dev, uint64_t address, uint64_t size,
                                uint32_t flags, Buffer** out);
+    vx_result_t bind(uint64_t off, Buffer* mem, uint64_t mem_off, uint64_t size);
 
     Device*  device()      { return device_; }
     uint64_t dev_address() const { return dev_addr_; }

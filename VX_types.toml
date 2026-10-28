@@ -66,6 +66,9 @@ VX_VM_PT_LEVEL       = "expr: 3 if ($XLEN == 64) else 2"
 VX_VM_PTE_SIZE       = "expr: 8 if ($XLEN == 64) else 4"
 VX_VM_PT_SIZE        = "expr: $VX_VM_PAGE_SIZE"
 VX_VM_PT_SIZE_LIMIT  = "expr: (1 << 25) if ($XLEN == 64) else (1 << 23)"
+# A leaf PTE with this RSW bit set is a null translation: the page is reserved
+# but unbound, so reads return 0 and writes are discarded (sparse residency).
+VX_VM_PTE_SPARSE_BIT = 8
 
 [dcr_base]
 VX_DCR_BASE_STATE_BEGIN = 0x000

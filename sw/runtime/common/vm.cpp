@@ -327,6 +327,22 @@ int16_t VMManager::update_page_table(uint64_t ppn, uint64_t vpn, uint32_t pte_fl
   return 0;
 }
 
+int VMManager::reserve_sparse(uint64_t size, uint64_t* va) {
+  const uint64_t num_pages = (size + VX_VM_PAGE_SIZE - 1) >> VX_VM_PAGE_LOG2_SIZE;
+  uint64_t base_va = 0;
+  CHECK_ERR(virtual_mem_->allocate(num_pages << VX_VM_PAGE_LOG2_SIZE, &base_va), { return -1; });
+  const uint32_t null_flags = PTE_V | PTE_R | PTE_W | PTE_U | PTE_A | PTE_D | PTE_N;
+  for (uint64_t i = 0; i < num_pages; ++i) {
+    const uint64_t vpn = (base_va >> VX_VM_PAGE_LOG2_SIZE) + i;
+    if (update_page_table(0, vpn, null_flags) != 0) {
+      release_sparse(base_va, i << VX_VM_PAGE_LOG2_SIZE);
+      return -1;
+    }
+  }
+  *va = base_va;
+  return flush();
+}
+
 uint64_t VMManager::leaf_pte_addr(uint64_t va) {
   vAddr_t vaddr(va);
   uint64_t base_ppn = get_base_ppn();
@@ -353,8 +369,67 @@ int VMManager::unmap(uint64_t va, uint64_t size) {
       addr_mapping.erase(it);
     }
     write_pte(pte_addr, 0);
+    // Sparse pages bound to this page lose their memory with it: unbound,
+    // they read 0 rather than whatever is allocated here next.
+    auto range = sparse_aliases_.equal_range(pte.ppn);
+    std::vector<uint64_t> aliases;
+    for (auto a = range.first; a != range.second; ++a) {
+      aliases.push_back(a->second);
+    }
+    for (uint64_t vpn : aliases) {
+      bind_page(vpn << VX_VM_PAGE_LOG2_SIZE, false, 0);
+    }
   }
   virtual_mem_->release(va & ~uint64_t(VX_VM_PAGE_SIZE - 1));
+  return flush();
+}
+
+bool VMManager::bindable(uint64_t va) {
+  return leaf_pte_addr(va) != 0;
+}
+
+void VMManager::forget_alias(uint64_t vpn) {
+  auto it = sparse_bound_.find(vpn);
+  if (it == sparse_bound_.end()) {
+    return;
+  }
+  auto range = sparse_aliases_.equal_range(it->second);
+  for (auto a = range.first; a != range.second; ++a) {
+    if (a->second == vpn) {
+      sparse_aliases_.erase(a);
+      break;
+    }
+  }
+  sparse_bound_.erase(it);
+}
+
+int VMManager::bind_page(uint64_t va, bool bound, uint64_t pa) {
+  const uint64_t pte_addr = leaf_pte_addr(va);
+  if (pte_addr == 0) {
+    return -1;
+  }
+  const uint64_t vpn = va >> VX_VM_PAGE_LOG2_SIZE;
+  forget_alias(vpn);
+  const uint32_t flags = PTE_V | PTE_R | PTE_W | PTE_U | PTE_A | PTE_D | (bound ? 0u : PTE_N);
+  PTE_t pte(bound ? (pa & ~uint64_t(VX_VM_PAGE_SIZE - 1)) : 0, flags);
+  write_pte(pte_addr, pte.pte_bytes);
+  if (bound) {
+    const uint64_t ppn = pa >> VX_VM_PAGE_LOG2_SIZE;
+    sparse_bound_[vpn] = ppn;
+    sparse_aliases_.emplace(ppn, vpn);
+  }
+  return 0;
+}
+
+int VMManager::release_sparse(uint64_t va, uint64_t size) {
+  for (uint64_t off = 0; off < size; off += VX_VM_PAGE_SIZE) {
+    forget_alias((va + off) >> VX_VM_PAGE_LOG2_SIZE);
+    const uint64_t pte_addr = leaf_pte_addr(va + off);
+    if (pte_addr != 0) {
+      write_pte(pte_addr, 0);
+    }
+  }
+  CHECK_ERR(virtual_mem_->release(va), { return -1; });
   return flush();
 }
 

@@ -264,15 +264,21 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     wire         replay_amo = replay_rattr[MEM_ATTR_AMO_OFFS];
     wire         replay_perm = tlb_perm_ok(replay_flags, replay_acc, replay_amo);
 
-    wire replay_push = replay_valid && replay_perm;   // forwards into a lane
+    // A null translation (an unbound sparse page) is never installed at this
+    // level, so it reaches the lanes only as a replay: it is torn down like a
+    // fault, without the report.
+    wire replay_null = replay_flags[TLB_FLAG_N];
+    wire replay_push = replay_valid && replay_perm && !replay_null; // forwards into a lane
     wire replay_drop = replay_valid && !replay_perm;  // permission fault
+    wire replay_void = replay_valid && replay_perm && replay_null;
 
     // Kill teardown: a faulting access — a structural fault drained from the
     // miss station (kill_valid) or a permission fault caught re-checking a
-    // replay (replay_drop) — still owes the pipeline a response. A data-side
-    // load or atomic is answered with zeroed data; a plain store and every
-    // fetch retire silently. `kill_*` reuse the replay decode.
-    wire                  kill_any     = kill_valid || replay_drop;
+    // replay (replay_drop) — or an access to an unbound page (replay_void)
+    // still owes the pipeline a response. A data-side load or atomic is
+    // answered with zeroed data; a plain store and every fetch retire
+    // silently. `kill_*` reuse the replay decode.
+    wire                  kill_any     = kill_valid || replay_drop || replay_void;
     wire [TAG_WIDTH-1:0]  kill_tag     = replay_fields[F_TAG_LO +: TAG_WIDTH];
     wire                  kill_needs_rsp = (EXEC_SIDE == 0) && (!replay_rw || replay_amo);
     wire [NUM_REQS-1:0]  kill_to_lane;
@@ -359,7 +365,7 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         assign mem_bus_if[l].rsp_ready      = core_bus_if[l].rsp_ready && ~kill_to_lane[l];
     end
 
-    assign replay_ready = replay_valid && (replay_perm ? pipe_ready[replay_lane] : kill_ready);
+    assign replay_ready = replay_valid && (replay_push ? pipe_ready[replay_lane] : kill_ready);
 
     // ---------------------------------------------------------------------
     // Fault sideband to the fault-latch surface. Structural faults come from

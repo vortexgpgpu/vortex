@@ -86,7 +86,7 @@ private:
     uint64_t cur_ppn = 0;
     uint64_t pte_addr = 0;
     uint64_t final_ppn = 0;
-    uint8_t  flags = 0;
+    uint16_t flags = 0;
     uint8_t  leaf_level = 0;
     bool     fault = false;
     uint64_t start_cycle = 0;

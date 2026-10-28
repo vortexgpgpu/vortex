@@ -246,6 +246,17 @@ tests:
   target: run-{driver}
   vars:
     OPTS: -t0
+# Sparse reservations (VX_MEM_SPARSE): unbound pages read 0 and discard stores
+# and atomics without a fault, bound pages reach the memory behind them, two
+# pages may map one, and a rebind holds for the next launch and the CP's copies.
+- id: vm-sparse
+  via: make-run
+  drivers:
+  - simx
+  - rtlsim
+  dir: tests/regression/vm_sparse
+  target: run-{driver}
+  configs+: -DVX_CFG_EXT_A_ENABLE
 # vm-fault-perm (-t1, read-only-store permission fault) needs L1 permission-fault
 # reporting, which is not currently implemented; only structural faults (-t0,
 # above) are reported, via the shared walker. Re-enable when L1 permission-fault
@@ -265,3 +276,8 @@ tests:
   via: blackbox
   app: vecadd
   args: -n16384
+- id: parity-vm-sparse
+  check: model_parity
+  via: blackbox
+  app: vm_sparse
+  configs+: -DVX_CFG_EXT_A_ENABLE

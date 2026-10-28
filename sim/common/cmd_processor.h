@@ -220,7 +220,7 @@ private:
     bool        unflushed_launch_ = false;
 
     // ----- Draw-bundle state (OP_DRAW walk) -----
-    uint64_t    draw_phys_      = 0;   // descriptor base (translated)
+    uint64_t    draw_addr_      = 0;   // descriptor base (device VA)
     uint32_t    draw_num_steps_ = 0;
     uint32_t    draw_step_      = 0;
     Cmd         draw_cmd_{};           // decoded current step
@@ -273,8 +273,19 @@ private:
     // Fetch one CL from ring into cl_buf_ if needed.
     void fetch_if_needed();
     // VM: translate a device virtual address to physical via a page-table
-    // walk. A no-op when VM is disabled, SATP is unset/BARE, or physical.
-    uint64_t cp_translate(uint64_t vaddr, bool physical) const;
+    // walk; the identity when VM is disabled, SATP is unset/BARE, or
+    // physical. False for a null translation (an unbound sparse page, which
+    // reads 0 and drops writes).
+    bool cp_translate_page(uint64_t vaddr, bool physical, uint64_t* paddr) const;
+    // Whether device addresses are translated (VM on, SATP set, not BARE).
+    bool cp_paged(bool physical) const;
+    // Read `size` bytes at device VA `vaddr`, page by page, 0 from unbound
+    // pages: a descriptor or argument may cross a page of a reservation.
+    void cp_dev_read(uint64_t vaddr, void* dst, uint64_t size) const;
+    // CMD_MEM_*: copy `size` bytes, translating each device operand page by
+    // page, since a virtual range need not be physically contiguous.
+    void cp_mem_copy(uint64_t dst, bool dst_dev, uint64_t src, bool src_dev,
+                     uint64_t size, bool physical);
 };
 
 } // namespace vortex

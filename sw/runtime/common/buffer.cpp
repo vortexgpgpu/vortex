@@ -51,6 +51,21 @@ vx_result_t Buffer::reserve(Device* dev, uint64_t address, uint64_t size,
     return VX_SUCCESS;
 }
 
+vx_result_t Buffer::bind(uint64_t off, Buffer* mem, uint64_t mem_off, uint64_t size) {
+    if (!(flags_ & VX_MEM_SPARSE) || off + size > size_ || off + size < off) {
+        return VX_ERR_INVALID_VALUE;
+    }
+    // Only memory the page table maps by a minted VA can be bound: its
+    // frees unbind the pages bound to it.
+    const uint32_t unbindable = VX_MEM_SPARSE | VX_MEM_PHYS | VX_MEM_HOST;
+    if (mem && (mem->device_ != device_ || (mem->flags_ & unbindable) ||
+                mem_off + size > mem->size_ || mem_off + size < mem_off)) {
+        return VX_ERR_INVALID_VALUE;
+    }
+    return device_->mem_bind(dev_addr_ + off, mem != nullptr,
+                             mem ? mem->dev_addr_ + mem_off : 0, size);
+}
+
 vx_result_t Buffer::access(uint64_t off, uint64_t size, uint32_t /*flags*/) {
     if (off + size > size_) return VX_ERR_INVALID_VALUE;
     // Access permissions are not tracked by the transport HAL — the CP is
@@ -155,6 +170,18 @@ extern "C" vx_result_t vx_buffer_reserve(vx_device_h dev, uint64_t address,
     if (r != VX_SUCCESS) return r;
     *out = to_handle(b);
     return VX_SUCCESS;
+    VX_C_ENTRY_CATCH
+}
+
+extern "C" vx_result_t vx_buffer_bind(vx_buffer_h sparse, uint64_t offset,
+                                      vx_buffer_h mem, uint64_t mem_offset,
+                                      uint64_t size) {
+    VX_C_ENTRY_TRY
+    if (!sparse) {
+        return VX_ERR_INVALID_HANDLE;
+    }
+    return to_buffer(sparse)->bind(offset, mem ? to_buffer(mem) : nullptr,
+                                   mem_offset, size);
     VX_C_ENTRY_CATCH
 }
 

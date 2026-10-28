@@ -1157,6 +1157,21 @@ vx_result_t Device::mem_alloc(uint64_t size, uint32_t flags,
         *out_addr = hm.cp_addr;
         return VX_SUCCESS;
     }
+    if (flags & VX_MEM_SPARSE) {
+        if (!vm_mgr_) {
+            return VX_ERR_NOT_SUPPORTED;
+        }
+        const uint64_t asize = (size + VX_VM_PAGE_SIZE - 1) & ~uint64_t(VX_VM_PAGE_SIZE - 1);
+        {
+            std::lock_guard<std::mutex> g(vm_mu_);
+            if (vm_mgr_->reserve_sparse(asize, out_addr) != 0) {
+                return VX_ERR_OUT_OF_DEVICE_MEMORY;
+            }
+        }
+        std::lock_guard<std::mutex> g(mu_);
+        sparse_[*out_addr] = asize;
+        return VX_SUCCESS;
+    }
     // Under VM the page table is the protection structure, so a page must
     // belong to one buffer: two sub-page allocations sharing a page can
     // only carry one set of PTE permissions, and the second buffer would
@@ -1292,10 +1307,62 @@ vx_result_t Device::mem_reserve(uint64_t addr, uint64_t size, uint32_t flags) {
     return VX_SUCCESS;
 }
 
+vx_result_t Device::mem_bind(uint64_t addr, bool bound, uint64_t mem_addr,
+                             uint64_t size) {
+    const uint64_t page = VX_VM_PAGE_SIZE;
+    if (!vm_mgr_) {
+        return VX_ERR_NOT_SUPPORTED;
+    }
+    if ((addr | mem_addr | size) & (page - 1)) {
+        return VX_ERR_INVALID_VALUE;
+    }
+    std::lock_guard<std::mutex> g(vm_mu_);
+    // Every page is checked before any is rewritten, so a bind either applies
+    // whole or leaves the page table as it was.
+    std::vector<uint64_t> pas(size / page, 0);
+    for (uint64_t i = 0; i < pas.size(); ++i) {
+        if (!vm_mgr_->bindable(addr + i * page)) {
+            return VX_ERR_INVALID_VALUE;
+        }
+        if (bound) {
+            try {
+                pas[i] = vm_mgr_->page_table_walk(mem_addr + i * page);
+            } catch (...) {
+                return VX_ERR_INVALID_VALUE;
+            }
+        }
+    }
+    for (uint64_t i = 0; i < pas.size(); ++i) {
+        vm_mgr_->bind_page(addr + i * page, bound, pas[i]);
+    }
+    if (vm_mgr_->flush() != 0) {
+        return VX_ERR_INVALID_VALUE;
+    }
+    // The TLBs may hold the old translations: commit satp behind the PTE
+    // writes, which flushes every level before any later launch.
+    return vm_enabled_ ? commit_mmu_satp() : VX_SUCCESS;
+}
+
 vx_result_t Device::mem_free(uint64_t addr) {
     bool is_host;
     bool is_import = false;
     std::pair<uint64_t, uint64_t> import;
+    uint64_t sparse_size = 0;
+    {
+        std::lock_guard<std::mutex> g(mu_);
+        auto it = sparse_.find(addr);
+        if (it != sparse_.end()) {
+            sparse_size = it->second;
+            sparse_.erase(it);
+        }
+    }
+    if (sparse_size != 0) {
+        std::lock_guard<std::mutex> g(vm_mu_);
+        if (vm_mgr_->release_sparse(addr, sparse_size) != 0) {
+            return VX_ERR_INVALID_VALUE;
+        }
+        return vm_enabled_ ? commit_mmu_satp() : VX_SUCCESS;
+    }
     {
         std::lock_guard<std::mutex> g(mu_);
         is_host = host_mems_.count(addr) != 0;

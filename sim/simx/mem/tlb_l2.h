@@ -73,7 +73,7 @@ private:
     bool     mru = false;
     uint64_t vpn = 0;
     uint64_t ppn = 0;
-    uint8_t  flags = 0;
+    uint16_t flags = 0;
   };
 
   struct MshrEntry {
@@ -85,8 +85,8 @@ private:
     std::vector<std::pair<uint32_t, uint32_t>> requesters;  // (client, slot)
   };
 
-  bool lookup(uint64_t vpn, uint64_t* ppn, uint8_t* flags, uint8_t* level);
-  void fill(uint64_t vpn, uint64_t ppn, uint8_t flags, uint8_t level);
+  bool lookup(uint64_t vpn, uint64_t* ppn, uint16_t* flags, uint8_t* level);
+  void fill(uint64_t vpn, uint64_t ppn, uint16_t flags, uint8_t level);
 
   uint32_t num_clients_;
   uint32_t num_sets_;

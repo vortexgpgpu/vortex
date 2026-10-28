@@ -26,7 +26,7 @@ public:
     bool     hit = false;
     uint64_t ppn = 0;     // 4KB-granule translation (superpage entries
                           // splice the vpn low bits back in)
-    uint8_t  flags = 0;
+    uint16_t flags = 0;
     uint8_t  level = 0;
   };
 
@@ -37,7 +37,7 @@ public:
   // 1 = mega, 2 = giga); one superpage entry covers its whole range.
   // Evicts a non-MRU entry when the TLB is full; updates `evictions_`
   // if the chosen slot was previously valid.
-  void fill(uint64_t vpn, uint64_t ppn, uint8_t flags, uint8_t level);
+  void fill(uint64_t vpn, uint64_t ppn, uint16_t flags, uint8_t level);
 
   // Invalidate every entry (sfence.vma equivalent).
   void flush();
@@ -53,7 +53,7 @@ private:
     bool     mru   = false;
     uint64_t vpn   = 0;
     uint64_t ppn   = 0;   // aligned down to the entry's level
-    uint8_t  flags = 0;
+    uint16_t flags = 0;
     uint8_t  level = 0;
   };
 

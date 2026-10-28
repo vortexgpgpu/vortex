@@ -245,6 +245,20 @@ tests:
    touches: [sim/simx/amo/, tests/vulkan/sparse_atomic]}
 - {id: shader-sparse-layers3d, via: make-run, drivers: [simx], dir: tests/vulkan/sparse_layers3d, target: "run-{driver}",
    touches: [tests/vulkan/sparse_layers3d]}
+# The same storage, transfer, buffer and atomic sparse tests on a device with an
+# MMU: each sparse resource is the device's own reservation (VX_MEM_SPARSE),
+# its bound tiles mapped onto the allocations behind them, so unbound tiles
+# read 0 and drop writes in hardware.
+- {id: shader-sparse-vm-image, via: make-run, drivers: [simx], dir: tests/vulkan/sparse_image, target: "run-{driver}",
+   configs+: "-DVX_CFG_VM_ENABLE", touches: [hw/rtl/vm, sim/simx/mem, sw/runtime/common/vm.cpp, tests/vulkan/sparse_image]}
+- {id: shader-sparse-vm-xfer, via: make-run, drivers: [simx], dir: tests/vulkan/sparse_xfer, target: "run-{driver}",
+   configs+: "-DVX_CFG_VM_ENABLE", touches: [hw/rtl/vm, sim/simx/mem, sim/common/cmd_processor.cpp, tests/vulkan/sparse_xfer]}
+- {id: shader-sparse-vm-buffer, via: make-run, drivers: [simx], dir: tests/vulkan/sparse_buffer, target: "run-{driver}",
+   configs+: "-DVX_CFG_VM_ENABLE", touches: [hw/rtl/vm, sim/simx/mem, tests/vulkan/sparse_buffer]}
+- {id: shader-sparse-vm-atomic, via: make-run, drivers: [simx], dir: tests/vulkan/sparse_atomic, target: "run-{driver}",
+   configs+: "-DVX_CFG_VM_ENABLE", touches: [hw/rtl/vm, sim/simx/mem, tests/vulkan/sparse_atomic]}
+- {id: shader-sparse-vm-layers3d, via: make-run, drivers: [simx], dir: tests/vulkan/sparse_layers3d, target: "run-{driver}",
+   configs+: "-DVX_CFG_VM_ENABLE", touches: [hw/rtl/vm, sim/simx/mem, tests/vulkan/sparse_layers3d]}
 
 # FF/SW-mix matrix — the full 3D pipeline (draw3d) with fixed-function units
 # selectively dropped to SIMT software. Combos that need SW-TEX or SW-RASTER

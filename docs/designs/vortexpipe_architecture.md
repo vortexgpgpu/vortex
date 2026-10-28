@@ -385,9 +385,26 @@ the resource's start).
 Unbound tiles read whatever the anonymous pages hold, as on llvmpipe;
 `residencyNonResidentStrict` is not advertised. Importing the
 reservation relies on the host remapping pages under the device, which
-only the simulators follow; the hardware form is a sparse mode of the
-GPU MMU, binds becoming page-table writes and an unbound tile a null
-entry, and tiled address modes in the TEX unit and the output merger
+only the simulators follow.
+
+On a device with an MMU (`vx_buffer_create(VX_MEM_SPARSE)` succeeds,
+probed once) with allocations imported, the screen takes the hardware
+form instead (`sparse_vm`): each sparse resource gets the device's own
+reservation, every page a null translation, and the bind hook maps the
+bound pages onto the imported allocation behind them with
+`vx_buffer_bind`; unbinding makes them null again. The device then
+never sees llvmpipe's reservation: unbound tiles read 0 and drop writes
+in hardware, and two resources on one memory reach the same pages
+through their own reservations. The residency bitmap is kept as before,
+by the same hook. No fixed-function unit is handed a
+reservation's address, since they issue physical addresses: a sparse
+attachment always takes the software merger there, one tile wide or not;
+sparse textures are never the TEX unit's either way; an acceleration
+structure in a sparse buffer reaches the RTU as the copy or transcode made
+from the host's view of it, which follows the binds; and indirect
+arguments and predicates in a sparse buffer are read by the command
+processor through the page table, an unbound page reading 0. Tiled address
+modes in the TEX unit and the output merger, with translation there,
 would take sparse textures and attachments back to the fixed-function
 units.
 
