@@ -276,7 +276,7 @@ and assert the results against golden baselines.
 | also recorded | `wns_ns`, `lutram`, `ff`, `bram`, `uram`, `dsp`, critical paths, high-fanout nets | `wns_ns`, `tns_ns`, `seq_area_um2`, `sram_area_um2`, `cell_count`, `power_mw` |
 | comparable when | same device, optimization level, xlen | same PDK, VT, corner, xlen |
 | runner | self-hosted, licensed Vivado | hosted, one job per design |
-| default tolerance | 5 % | 5 % |
+| default tolerance | Fmax 2 %, LUT 5 % | Fmax 2 %, cell area 5 % |
 
 Neither is a pytest cell. A cell is a build tree plus a driver; a synthesis
 build is neither, and both gates are hours long. They are standalone scripts

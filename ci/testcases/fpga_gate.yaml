@@ -195,7 +195,7 @@ builds:
   clock_mhz: 250
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
   # Route-dominated at this size: identical-area netlists swung 207-242 MHz
-  # under the default strategy (placement variance), which no 5% gate
+  # under the default strategy (placement variance), which no Fmax gate
   # tolerance survives. The worst arc is 80%+ route (L1 tag way-decode to the
   # data-store write enables), so the closure pick is the post-route physical
   # optimizer: 251.8 vs 244.2 for NetDelay_high on the same netlist.

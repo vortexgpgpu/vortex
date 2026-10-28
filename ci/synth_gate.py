@@ -40,16 +40,17 @@ import time
 
 import yaml
 
-# Gated metrics must stay within +/-5% of baseline. The regression side is the
-# gate; the improvement side is the ratchet -- a win beyond it must be recorded
-# so the gain is locked in and a later silent slide back to the old number still
-# fails.
+# Gated metrics must stay within +/-5% of baseline, and Fmax within +/-2% (of
+# both the baseline and the target clock). The regression side is the gate; the
+# improvement side is the ratchet -- a win beyond it must be recorded so the gain
+# is locked in and a later silent slide back to the old number still fails.
 #
-# This is the GLOBAL default. It is overridden per-metric on the command line
-# (--metric-threshold lut=0.10) and per-build in the catalog ("thresholds":
+# These are the GLOBAL defaults. They are overridden per-metric on the command
+# line (--metric-threshold lut=0.10) and per-build in the catalog ("thresholds":
 # {"fmax_mhz": 0.03}) -- most specific wins. Same shape as model_parity's
 # `tolerance` (per-case entry > category defaults > DEFAULT_PARITY_TOLERANCE).
 TOLERANCE = 0.05
+METRIC_TOLERANCE = {"fmax_mhz": 0.02}
 
 # Higher-is-better metrics. Everything else is lower-is-better.
 HIGHER_IS_BETTER = ("fmax_mhz",)
@@ -1137,7 +1138,9 @@ def main(argv=None, default_tool="xilinx"):
     ap.add_argument("--metric-threshold", action="append", default=[],
                     metavar="M=F",
                     help="global tolerance for one metric, e.g. lut=0.10 "
-                         "(repeatable); still overridden per-build")
+                         "(repeatable; default: %s); still overridden "
+                         "per-build" % ", ".join("%s=%g" % kv for kv in
+                                                 METRIC_TOLERANCE.items()))
     ap.add_argument("--gate", metavar="M,M",
                     help="metrics to assert on (default: the tool's, %s for %s); "
                          "all metrics are always recorded and reported"
@@ -1178,7 +1181,7 @@ def main(argv=None, default_tool="xilinx"):
     # happens whenever this is piped -- CI, nohup, a log file).
     sys.stdout.reconfigure(line_buffering=True)
 
-    overrides = {}
+    overrides = dict(METRIC_TOLERANCE)
     for spec in args.metric_threshold:
         metric, _, value = spec.partition("=")
         if metric not in tool.metrics or not value:
