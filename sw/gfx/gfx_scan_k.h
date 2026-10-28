@@ -15,18 +15,14 @@ static inline uint32_t scan_umin(uint32_t a, uint32_t b) { return a < b ? a : b;
 
 // The CTA's exclusive scan of one value per thread, through 2 * T words of
 // scratch; *total receives the CTA's sum. Every thread of the CTA calls it.
-// Each barrier follows a fence: another warp reads what this one stored, and
-// a barrier alone does not wait for the stores to land.
 static inline uint32_t cta_exclusive(uint32_t* scratch, uint32_t tid, uint32_t T, uint32_t v,
                                      uint32_t* total) {
   uint32_t* a = scratch;
   uint32_t* b = scratch + T;
   a[tid] = v;
-  vx_fence();
   __syncthreads();
   for (uint32_t d = 1; d < T; d <<= 1) {
     b[tid] = a[tid] + (tid >= d ? a[tid - d] : 0u);
-    vx_fence();
     __syncthreads();
     uint32_t* t = a; a = b; b = t;
   }

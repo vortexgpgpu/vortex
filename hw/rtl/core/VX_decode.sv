@@ -672,7 +672,6 @@ module VX_decode import
                                 op_type = INST_OP_BITS'(INST_SFU_BAR);
                                 op_args.wctl.is_sync_bar = 0;
                                 op_args.wctl.is_bar_arrive = ~is_rd_zero;
-                                is_wstall = is_rd_zero; // do not wati on arrival
                                 `USED_IREG (rd);
                                 `USED_IREG (rs1);
                                 `USED_IREG (rs2);

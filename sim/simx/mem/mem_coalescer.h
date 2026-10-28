@@ -49,6 +49,9 @@ public:
   // Extra request-side registers on one output port.
   void set_port_delay(uint32_t port, uint32_t delay) { port_delay_.at(port) = delay; }
 
+  // No request waits to be coalesced or sent on.
+  bool drained() const { return ReqIn.empty() && !out_round_.valid; }
+
 protected:
   void on_reset();
   void on_tick();

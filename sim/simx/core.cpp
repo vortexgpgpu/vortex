@@ -144,7 +144,8 @@ public:
     }
 
     // create per-block lmem adapters
-    std::vector<LsuMemAdapter::Ptr> lsu_lmem_adapter(VX_CFG_NUM_LSU_BLOCKS);
+    auto& lsu_lmem_adapter = lmem_adapters_;
+    lsu_lmem_adapter.resize(VX_CFG_NUM_LSU_BLOCKS);
     for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
       snprintf(sname, 100, "%s-lsu_lmem_adapter%d", name.c_str(), b);
       lsu_lmem_adapter.at(b) = LsuMemAdapter::Create(sname, LSU_CHANNELS, 1);
@@ -185,7 +186,8 @@ public:
     } else {
       // bypass memory coalescer: per-block lane adapter (channel-fused
       // pass-through when DCACHE_CHANNELS == 1)
-      std::vector<LsuMemAdapter::Ptr> lsu_dcache_adapter(VX_CFG_NUM_LSU_BLOCKS);
+      auto& lsu_dcache_adapter = dcache_adapters_;
+      lsu_dcache_adapter.resize(VX_CFG_NUM_LSU_BLOCKS);
       for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
         snprintf(sname, 100, "%s-lsu_dcache_adapter%d", name.c_str(), b);
         lsu_dcache_adapter.at(b) = LsuMemAdapter::Create(sname, DCACHE_CHANNELS, 1);
@@ -962,6 +964,30 @@ public:
     return std::static_pointer_cast<LsuUnit>(func_units_.at((int)FUType::LSU))->drained();
   }
 
+  // No request is on its way from the LSU blocks to the local memory or the
+  // data cache: the switch, the adapters, the coalescer and the address
+  // translation have handed every one over. What the local memory and the
+  // data cache have accepted they keep in order per line.
+  bool mem_req_drained() const {
+    for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
+      if (!lmem_switch_.at(b)->ReqIn.empty() || !lmem_adapters_.at(b)->ReqIn.empty()) {
+        return false;
+      }
+      if (mem_coalescers_.at(b) && !mem_coalescers_.at(b)->drained()) {
+        return false;
+      }
+      if (!dcache_adapters_.empty() && !dcache_adapters_.at(b)->ReqIn.empty()) {
+        return false;
+      }
+    }
+  #ifdef VX_CFG_VM_ENABLE
+    if (!dcache_mmu_->empty()) {
+      return false;
+    }
+  #endif
+    return true;
+  }
+
   int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value) {
     // tag arrives as (mpm_class << 6) | mpm_tag_idx after socket strips core_id
     switch (addr) {
@@ -1102,6 +1128,10 @@ private:
   LocalMem::Ptr local_mem_;
   std::vector<LocalMemSwitch::Ptr> lmem_switch_;
   std::vector<MemCoalescer::Ptr> mem_coalescers_;
+  // The per-block adapters into local memory and, without a coalescer, into
+  // the data cache.
+  std::vector<LsuMemAdapter::Ptr> lmem_adapters_;
+  std::vector<LsuMemAdapter::Ptr> dcache_adapters_;
 
   TFifo<instr_trace_t*> fetch_latch_;
   TFifo<instr_trace_t*> decode_latch_;
@@ -1198,6 +1228,10 @@ bool Core::has_pending_instrs(uint32_t wid) const {
 
 bool Core::lsu_drained() const {
   return impl_->lsu_drained();
+}
+
+bool Core::mem_req_drained() const {
+  return impl_->mem_req_drained();
 }
 
 void Core::resume(uint32_t wid) {

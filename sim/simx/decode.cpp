@@ -931,7 +931,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         instr->set_src_reg(1, rs2, RegType::Integer);
         wctlArgs.is_sync_bar = 0;
         wctlArgs.is_bar_arrive = (rd != 0);
-        instr->set_wstall(rd == 0); // stall on wait, not on arrive
+        instr->set_wstall(true);
         break;
       case 7: // WSYNC
         instr->set_op_type(WctlType::WSYNC);

@@ -20,7 +20,7 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
     wire split_valid;
     wire sjoin_valid;
     wire bar_valid;
-    wire wsync_valid;
+    wire resume_valid;
     // Primitive-order merge: a FRAG_WAIT (forder_release=0) or FRAG_RELEASE.
     wire forder_valid;
     wire forder_release;
@@ -62,7 +62,7 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
         output split_valid,
         output sjoin_valid,
         output bar_valid,
-        output wsync_valid,
+        output resume_valid,
         output forder_valid,
         output forder_release,
 
@@ -91,7 +91,7 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
         input split_valid,
         input sjoin_valid,
         input bar_valid,
-        input wsync_valid,
+        input resume_valid,
         input forder_valid,
         input forder_release,
 

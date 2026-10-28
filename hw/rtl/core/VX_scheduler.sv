@@ -254,8 +254,8 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             stalled_warps_n &= ~bar_unlock_mask;
         end
 
-        // wsync unlock: warp pipeline drained
-        if (warp_ctl_if.wsync_valid) begin
+        // wsync or barrier-arrival unlock: the warp's earlier requests drained
+        if (warp_ctl_if.resume_valid) begin
             stalled_warps_n[warp_ctl_if.wid] = 0;
         end
 

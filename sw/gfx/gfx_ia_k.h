@@ -111,8 +111,6 @@ static inline void ia_stage_count(const gfx_ia_t* ia, uint32_t* part, uint32_t g
 // chunk's run on entry is one past the last restart of every chunk before it,
 // and its primitives before its own first restart follow from that in closed
 // form. The chunk's partials become its run on entry and its first primitive.
-// Each barrier follows a fence: another warp reads what this one stored, and a
-// barrier alone does not wait for the stores to land.
 static inline void ia_stage_scan(gfx_ia_t* ia, uint32_t* part, uint32_t* tsum, uint32_t N,
                                  uint32_t count, uint32_t chunk) {
   const uint32_t tid = threadIdx.x;
@@ -131,7 +129,6 @@ static inline void ia_stage_scan(gfx_ia_t* ia, uint32_t* part, uint32_t* tsum, u
     }
     trun[tid] = last;
   }
-  vx_fence();
   __syncthreads();
   if (tid == 0) {
     uint32_t run = 0;
@@ -143,7 +140,6 @@ static inline void ia_stage_scan(gfx_ia_t* ia, uint32_t* part, uint32_t* tsum, u
       }
     }
   }
-  vx_fence();
   __syncthreads();
   {
     uint32_t run = trun[tid], acc = 0;
@@ -160,7 +156,6 @@ static inline void ia_stage_scan(gfx_ia_t* ia, uint32_t* part, uint32_t* tsum, u
     }
     tcnt[tid] = acc;
   }
-  vx_fence();
   __syncthreads();
   if (tid == 0) {
     uint32_t acc = 0;
@@ -185,7 +180,6 @@ static inline void ia_stage_scan(gfx_ia_t* ia, uint32_t* part, uint32_t* tsum, u
       }
     }
   }
-  vx_fence();
   __syncthreads();
   for (uint32_t i = glo; i < ghi; ++i) {
     part[3 * i + 2] += tcnt[tid];
@@ -236,10 +230,8 @@ __kernel void ia_k(ia_arg_t* __UNIFORM__ arg) {
     break;
   case IA_STAGE_ALL:
     ia_stage_count(ia, part, gid, N, count, chunk);
-    vx_fence();
     __syncthreads();
     ia_stage_scan(ia, part, tsum, N, count, chunk);
-    vx_fence();
     __syncthreads();
     ia_stage_emit(ia, part, gid, N, count, chunk);
     break;

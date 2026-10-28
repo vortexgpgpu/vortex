@@ -407,8 +407,10 @@ void SfuUnit::on_tick() {
 			continue; // stall — no side effects this tick
 
 		// WSYNC has a structural gate: cannot complete until prior insts retire.
-		// BAR (vx_barrier and vx_barrier_arrive) drains LSU before continuing —
-		// implements CUDA __syncthreads / OpenCL barrier(CLK_LOCAL_MEM_FENCE) semantic.
+		// BAR (vx_barrier and vx_barrier_arrive) is also a workgroup-scope memory
+		// barrier (CUDA __syncthreads, OpenCL barrier(CLK_LOCAL_MEM_FENCE)): the
+		// warp's earlier instructions must have reached the LSU and every request
+		// must have left the LSU blocks for the local memory and the data cache.
 		if (auto wctl_p = std::get_if<WctlType>(&trace->op_type)) {
 			if (trace->eop) {
 				if (*wctl_p == WctlType::WSYNC) {
@@ -418,12 +420,15 @@ void SfuUnit::on_tick() {
 					// A release hands the pixel to the next fragment: the merge it
 					// closes must have retired and the LSU must have drained, as the
 					// RTL's store_drained requires.
-					if (core_->has_pending_instrs(trace->wid) || !core_->lsu_drained()) {
+					if (core_->has_pending_instrs(trace->wid) || !core_->lsu_drained()
+					 || !core_->mem_req_drained()) {
 						continue;
 					}
 				} else if (*wctl_p == WctlType::BAR) {
-					if (!core_->lsu_drained())
-						continue; // drain LSU before the barrier
+					if (core_->has_pending_instrs(trace->wid) || !core_->lsu_drained()
+					 || !core_->mem_req_drained()) {
+						continue;
+					}
 				}
 			}
 		}

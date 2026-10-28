@@ -131,6 +131,47 @@ tests:
   app: bar_slot_phase
   shape:
     warps: 2
+# A CTA barrier orders the workgroup's memory: 32 warps of 4 threads are two
+# LSU blocks, and after each barrier a thread reads the word a thread on the
+# other block stored before it, with stores to other lines queued ahead.
+- id: bar-vis
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: bar_vis
+  shape:
+    warps: 32
+    threads: 4
+  args: -r64 -j4
+- id: bar-vis-shared
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: bar_vis
+  shape:
+    warps: 32
+    threads: 4
+  args: -r64 -s -j4
+- id: bar-vis-bank
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: bar_vis
+  shape:
+    warps: 32
+    threads: 4
+  args: -m1 -r64 -j16
+- id: model_parity-bar-vis
+  check: model_parity
+  via: blackbox
+  app: bar_vis
+  shape:
+    warps: 32
+    threads: 4
+  args: -r256 -j4
 - id: vecadd-1
   via: blackbox
   drivers:

@@ -56,7 +56,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     wire forder_release = is_forder && execute_if.data.op_args.wctl.is_cond_neg;
 
     wire wctl_valid;
-    wire wspawn_valid, tmc_valid, split_valid, sjoin_valid, bar_valid, wsync_valid, forder_valid;
+    wire wspawn_valid, tmc_valid, split_valid, sjoin_valid, bar_valid, resume_valid, forder_valid;
 
     wire [`UP(LANE_BITS)-1:0] last_tid;
 	    if (LANE_BITS != 0) begin : g_last_tid
@@ -194,13 +194,22 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
                      || (forder_release && !(warp_ctl_if.warp_pending_alm_empty[execute_if.data.header.wid]
                                           && warp_ctl_if.store_drained)));
 
-    // BAR (vx_barrier or vx_barrier_arrive) drains LSU before continuing.
-    wire bar_drain = execute_if.valid && is_bar && !warp_ctl_if.lsu_sched_drained;
+    // BAR (vx_barrier or vx_barrier_arrive) is a workgroup-scope memory barrier
+    // too: the warp's earlier instructions must have reached the LSU, and every
+    // request ahead of the barrier must have left the LSU blocks and the memory
+    // unit for the L1 and local memory, which keep a line's requests in order.
+    // Otherwise a store still in one LSU block's path can lose arbitration to a
+    // load another block issues after the barrier.
+    wire bar_drain = execute_if.valid && is_bar
+                  && !(warp_ctl_if.warp_pending_alm_empty[execute_if.data.header.wid]
+                    && warp_ctl_if.lsu_sched_drained
+                    && warp_ctl_if.store_drained);
 
     wire execute_fire = execute_if.valid && execute_if.ready;
     assign wctl_valid = execute_fire && execute_if.data.header.eop;
 
-    assign wsync_valid = wctl_valid && is_wsync;
+    // A barrier arrival does not wait for the barrier, only for its own drain.
+    assign resume_valid = wctl_valid && (is_wsync || (is_bar && execute_if.data.op_args.wctl.is_bar_arrive));
     assign forder_valid = wctl_valid && is_forder;
 
     VX_pipe_register #(
@@ -216,7 +225,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
             split_valid,
             sjoin_valid,
             bar_valid,
-            wsync_valid,
+            resume_valid,
             forder_valid,
             forder_release,
             execute_if.data.header.wid,
@@ -232,7 +241,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
             warp_ctl_if.split_valid,
             warp_ctl_if.sjoin_valid,
             warp_ctl_if.bar_valid,
-            warp_ctl_if.wsync_valid,
+            warp_ctl_if.resume_valid,
             warp_ctl_if.forder_valid,
             warp_ctl_if.forder_release,
             warp_ctl_if.wid,
