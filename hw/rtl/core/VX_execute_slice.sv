@@ -156,10 +156,11 @@ import VX_tcu_pkg::*;
         .data_t (lsu_result_t)
     ) lsu_result_if[1]();
 
+    // The LSU block registers its dispatch in its address stage.
     VX_lane_dispatch #(
         .BLOCK_SIZE (1),
         .NUM_LANES  (`VX_CFG_NUM_LSU_LANES),
-        .OUT_BUF    (3),
+        .OUT_BUF    (0),
         .NUM_PORTS  (1)
     ) lsu_dispatch (
         .clk        (clk),

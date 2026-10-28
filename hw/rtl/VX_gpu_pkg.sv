@@ -1106,8 +1106,11 @@ package VX_gpu_pkg;
     // tcu_args_t at 27 bits = 1+1+1+2+5+5+4+4+4. Sparse variants are distinct opcodes.
     localparam INST_ARGS_BITS = 3 + ALU_TYPE_BITS + 20 + 2;
 
+    // imm_hi: imm20 is bits [31:12] of the immediate (LUI, AUIPC).
+    // imm_x2: imm20 counts halfwords (JAL, conditional branches).
     typedef struct packed {
-        logic [1:0] __padding;
+        logic imm_hi;
+        logic imm_x2;
         logic use_PC;
         logic use_imm;
         logic is_w;
@@ -1118,7 +1121,8 @@ package VX_gpu_pkg;
 
     // Branch instructions (JAL/JALR/B/SYS) execute on the ALU pipeline.
     typedef struct packed {
-        logic [1:0] __padding;
+        logic imm_hi;
+        logic imm_x2;
         logic use_PC;
         logic use_imm;
         logic is_rvc;

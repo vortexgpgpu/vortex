@@ -231,6 +231,8 @@ module VX_decode import
                 op_args.alu.is_w = 0;
                 op_args.alu.use_PC = 0;
                 op_args.alu.use_imm = 1;
+                op_args.alu.imm_hi = 0;
+                op_args.alu.imm_x2 = 0;
                 op_args.alu.imm20 = `SEXT(20, i_imm);
                 `USED_IREG (rd);
                 `USED_IREG (rs1);
@@ -240,6 +242,8 @@ module VX_decode import
                 op_args.alu.is_w = 0;
                 op_args.alu.use_PC = 0;
                 op_args.alu.use_imm = 0;
+                op_args.alu.imm_hi = 0;
+                op_args.alu.imm_x2 = 0;
                 `USED_IREG (rd);
                 `USED_IREG (rs1);
                 `USED_IREG (rs2);
@@ -273,6 +277,8 @@ module VX_decode import
                 op_args.alu.is_w = 1;
                 op_args.alu.use_PC = 0;
                 op_args.alu.use_imm = 1;
+                op_args.alu.imm_hi = 0;
+                op_args.alu.imm_x2 = 0;
                 op_args.alu.imm20 = `SEXT(20, iw_imm);
                 `USED_IREG (rd);
                 `USED_IREG (rs1);
@@ -282,6 +288,8 @@ module VX_decode import
                 op_args.alu.is_w = 1;
                 op_args.alu.use_PC = 0;
                 op_args.alu.use_imm = 0;
+                op_args.alu.imm_hi = 0;
+                op_args.alu.imm_x2 = 0;
                 `USED_IREG (rd);
                 `USED_IREG (rs1);
                 `USED_IREG (rs2);
@@ -308,6 +316,8 @@ module VX_decode import
                 op_args.alu.is_w = 0;
                 op_args.alu.use_PC = 0;
                 op_args.alu.use_imm = 1;
+                op_args.alu.imm_hi = 1;
+                op_args.alu.imm_x2 = 0;
                 op_args.alu.imm20 = ui_imm;
                 `USED_IREG (rd);
             end
@@ -318,6 +328,8 @@ module VX_decode import
                 op_args.alu.is_w = 0;
                 op_args.alu.use_PC = 1;
                 op_args.alu.use_imm = 1;
+                op_args.alu.imm_hi = 1;
+                op_args.alu.imm_x2 = 0;
                 op_args.alu.imm20 = ui_imm;
                 `USED_IREG (rd);
             end
@@ -327,6 +339,8 @@ module VX_decode import
                 op_args.br.xtype  = ALU_TYPE_BRANCH;
                 op_args.br.use_PC = 1;
                 op_args.br.use_imm= 1;
+                op_args.br.imm_hi = 0;
+                op_args.br.imm_x2 = 1;
                 op_args.br.imm20  = jal_imm;
                 op_args.br.is_rvc = decode_is_rvc;
                 is_wstall = 1;
@@ -338,6 +352,8 @@ module VX_decode import
                 op_args.br.xtype  = ALU_TYPE_BRANCH;
                 op_args.br.use_PC = 0;
                 op_args.br.use_imm= 1;
+                op_args.br.imm_hi = 0;
+                op_args.br.imm_x2 = 0;
                 op_args.br.imm20  = `SEXT(20, u_12);
                 op_args.br.is_rvc = decode_is_rvc;
                 is_wstall = 1;
@@ -350,6 +366,8 @@ module VX_decode import
                 op_args.br.xtype  = ALU_TYPE_BRANCH;
                 op_args.br.use_PC = 1;
                 op_args.br.use_imm= 1;
+                op_args.br.imm_hi = 0;
+                op_args.br.imm_x2 = 1;
                 op_args.br.imm20  = `SEXT(20, b_imm);
                 op_args.br.is_rvc = decode_is_rvc;
                 is_wstall = 1;
@@ -427,6 +445,8 @@ module VX_decode import
                     op_type = INST_OP_BITS'(s_type);
                     op_args.br.xtype  = ALU_TYPE_BRANCH;
                     op_args.br.use_imm= 1;
+                    op_args.br.imm_hi = 0;
+                    op_args.br.imm_x2 = 0;
                     op_args.br.use_PC = 1;
                     op_args.br.imm20  = 20'd4;
                     op_args.br.is_rvc = decode_is_rvc;
