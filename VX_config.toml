@@ -212,7 +212,7 @@ single_cluster = "expr: $VX_CFG_NUM_CLUSTERS == 1"
 # is then the point of coherence for host transfers: they need no cache flush.
 # Only a last-level cache that alone serves every core can take it (an L2 with
 # one cluster, or an L3); VX_CFG_CP_ON_LLC is set where it took effect.
-VX_CFG_CP_LLC_CLIENT = 0
+VX_CFG_CP_LLC_CLIENT = 1
 VX_CFG_CP_ON_LLC = "expr: int($VX_CFG_CP_LLC_CLIENT != 0 and (($l2_is_llc and $single_cluster) or $l3_is_llc))"
 
 [l1cache]

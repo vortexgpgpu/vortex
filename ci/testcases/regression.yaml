@@ -416,7 +416,16 @@ tests:
   via: blackbox
   app: dogfood
   args: -n16 -xbar -xgbar
-  configs: -DVX_CFG_CP_LLC_CLIENT=1
+  shape:
+    cores: 4
+    l2cache: true
+# The same with the DMA off the L2, reaching memory on its own path.
+- id: model_parity-dogfood-cp-direct
+  check: model_parity
+  via: blackbox
+  app: dogfood
+  args: -n16 -xbar -xgbar
+  configs: -DVX_CFG_CP_LLC_CLIENT=0
   shape:
     cores: 4
     l2cache: true
@@ -428,7 +437,7 @@ tests:
   via: blackbox
   app: sgemm
   args: -n32
-  configs: -DVX_CFG_CP_LLC_CLIENT=1 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=8
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=8
   shape:
     cores: 2
     l2cache: true
@@ -438,7 +447,7 @@ tests:
   - simx
   app: sgemm
   args: -n32
-  configs: -DVX_CFG_CP_LLC_CLIENT=1 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=8
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=8
   shape:
     cores: 8
     l2cache: true

@@ -53,7 +53,7 @@ Some of these features can be set with a `VX_CFG_*` knob (see [Build Configurati
 | Full-sector refetch skip | Part of lazy fetch | Follows `*_LAZY_FETCH` |
 | Dcache read merge | `VX_CFG_DCACHE_READ_MERGE` | 1 (on) |
 | Icache same-line merge | `VX_CFG_ICACHE_READ_MERGE` | 1 (on). No effect with one fetch slice. |
-| CP DMA through the LLC | `VX_CFG_CP_LLC_CLIENT` | 0 (off); 1 in the GPU profiles. Takes effect only when one LLC serves every core. |
+| CP DMA through the LLC | `VX_CFG_CP_LLC_CLIENT` | 1 (on). Takes effect only when one LLC serves every core. |
 | Atomics at the LLC | `VX_CFG_EXT_A_ENABLE` | Off |
 | Sectored L2/L3 | `VX_CFG_{L2,L3}_SECTOR_SIZE` (a size) | One bus granule. Setting it to the line size removes sectoring. |
 | Dcache word-size banking | `VX_CFG_DCACHE_WORD_SIZE` (a size) | Derived from the lane count and XLEN |
@@ -290,7 +290,7 @@ Atomics with `.aq`/`.rl` get these steps around them. All of it is skipped when 
 - Transfers of at least half the LLC write around it, so they don't evict the working set.
 - A launch issued after DMA writes waits for an L1-only flush token sent on the DMA's slot.
 - The runtime detects the feature through the `DMA_LLC_CLIENT` capability.
-- Controlled by `VX_CFG_CP_LLC_CLIENT`: off by default, on in the GPU profiles.
+- Controlled by `VX_CFG_CP_LLC_CLIENT`: on by default.
 
 **Gain (rtlsim):**
 

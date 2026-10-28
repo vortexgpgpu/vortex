@@ -29,7 +29,7 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
   the sector with its dirty-byte mask and a partial bit instead of fetching the line; a later load or AMO merges memory data under the
   unwritten bytes, and evictions write back only dirty bytes. *Why:* streaming writes no longer read every line first: 1-core vecadd
   DRAM reads -33%.
-- **Command-processor DMA through the shared LLC (`VX_CFG_CP_LLC_CLIENT`, off by default).** When one LLC serves every core, the
+- **Command-processor DMA through the shared LLC (`VX_CFG_CP_LLC_CLIENT`, on by default).** When one LLC serves every core, the
   CP's transfers enter it on their own client slot, so host transfers need only an L1 flush, not a walk of the whole LLC; transfers
   of at least half the LLC write around it. A launch behind DMA writes waits for an L1-only flush token sent on the slot. The runtime
   sees the new `DMA_LLC_CLIENT` CP capability. *Why:* rtlsim at 2 clusters + L2 + L3: dogfood -30%, multikernel -42.7%; dogfood
