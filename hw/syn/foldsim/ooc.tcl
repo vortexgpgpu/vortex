@@ -62,6 +62,7 @@ synth_design -top foldsim_afu -part $part -mode out_of_context -include_dirs $in
 set t1 [clock seconds]
 report_utilization -file synth_util.rpt
 report_timing_summary -max_paths 20 -file synth_timing_summary.rpt
+source [file join [file dirname [file normalize [info script]]] floorplan.tcl]
 opt_design
 place_design -directive Explore
 phys_opt_design -directive AggressiveExplore
