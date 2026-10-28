@@ -168,7 +168,9 @@ static inline void ia_stage_scan(gfx_ia_t* ia, uint32_t* part, uint32_t* tsum, u
     if (ia->query_block) {
       const uint64_t n = (uint64_t)acc * ia->query_scale;
       ia_count(ia->query_block, GFX_QC_IA_PRIMITIVES, n);
-      if (ia->gs_invocations) {
+      if (ia->tess) {
+        ia_count(ia->query_block, GFX_QC_TCS_PATCHES, n);
+      } else if (ia->gs_invocations) {
         ia_count(ia->query_block, GFX_QC_GS_INVOCATIONS, n * ia->gs_invocations);
       } else {
         ia_count(ia->query_block, GFX_QC_PRIMS_GENERATED, n);

@@ -158,7 +158,11 @@
 #define GFX_QC_GENERATED(s)   ((s) ? GFX_QC_STREAM(s, 0u) : GFX_QC_PRIMS_GENERATED)
 #define GFX_QC_WRITTEN(s)     ((s) ? GFX_QC_STREAM(s, 1u) : GFX_QC_XFB_WRITTEN)
 #define GFX_QC_NEEDED(s)      ((s) ? GFX_QC_STREAM(s, 2u) : GFX_QC_XFB_NEEDED)
-#define GFX_QC_COUNT          22u
+// Tessellation: patches the control stage processed, and evaluation-stage
+// invocations (one per domain point).
+#define GFX_QC_TCS_PATCHES     22u
+#define GFX_QC_TES_INVOCATIONS 23u
+#define GFX_QC_COUNT          24u
 
 #define GFX_FS_ZPAIR(lo, hi) \
    ((uint64_t)(uint32_t)(int32_t)(lo) | ((uint64_t)(uint32_t)(int32_t)(hi) << 32))

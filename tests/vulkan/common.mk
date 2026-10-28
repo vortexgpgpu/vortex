@@ -167,7 +167,10 @@ EXPECT_NO_HOSTREAD ?= 0
 # the runtime's PERF line reports them: a test whose subject is work the device
 # must not do (a launch a device predicate skips) leaves no other trace.
 EXPECT_MAX_INSTRS ?=
-ifneq ($(EXPECT_ATTRIB)$(EXPECT_CPU)$(filter 1,$(EXPECT_NO_HOSTREAD)),)
+# EXPECT_LINES lists further lines the run must print with VORTEXPIPE_ATTRIB
+# set, '_' for the space -- e.g. vortexpipe-tess:_static=2_dynamic=1.
+EXPECT_LINES ?=
+ifneq ($(EXPECT_ATTRIB)$(EXPECT_CPU)$(filter 1,$(EXPECT_NO_HOSTREAD))$(EXPECT_LINES),)
 RUN_ENV += VORTEXPIPE_ATTRIB=1
 endif
 RUN_LD_PATH := $(MESA_PATH)/lib:$(LLVM_PATH)/lib:$(ZSTD_PATH)/lib:$(VORTEX_RT_LIB)
@@ -233,7 +236,12 @@ define check_run
 	   if [ -z "$$n" ] || [ "$$n" -gt $(EXPECT_MAX_INSTRS) ]; then \
 	      echo "FAIL: $(PROJECT) retired $${n:-no} instructions, more than $(EXPECT_MAX_INSTRS)"; exit 1; \
 	   fi; \
-	fi
+	fi; \
+	for p in $(EXPECT_LINES); do \
+	   if ! echo "$$out" | grep -qx "`echo $$p | tr _ ' '`"; then \
+	      echo "FAIL: $(PROJECT) did not print $$p"; exit 1; \
+	   fi; \
+	done
 endef
 
 .PHONY: all run run-simx run-rtlsim run-opae run-xrt clean

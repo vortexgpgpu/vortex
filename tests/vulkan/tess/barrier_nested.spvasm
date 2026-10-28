@@ -1,0 +1,209 @@
+; barrier.tesc built with -DNESTED (glslc), its two OpMemoryBarrier
+; placeholders inside the loop then made OpControlBarrier %uint_2 %uint_4 %uint_0,
+; the barrier() of the rounds outside the loop: GLSL keeps a control stage's
+; barrier() out of control flow, and SPIR-V does not.
+; SPIR-V
+; Version: 1.0
+; Generator: Google Shaderc over Glslang; 11
+; Bound: 138
+; Schema: 0
+               OpCapability Tessellation
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint TessellationControl %main "main" %t_pos %gl_InvocationID %v_pos %t_val %t_next %p_sum %gl_TessLevelOuter %v_lo %gl_TessLevelInner %v_li
+               OpExecutionMode %main OutputVertices 4
+               OpSource GLSL 450
+               OpSourceExtension "GL_GOOGLE_cpp_style_line_directive"
+               OpSourceExtension "GL_GOOGLE_include_directive"
+               OpName %main "main"
+               OpName %t_pos "t_pos"
+               OpName %gl_InvocationID "gl_InvocationID"
+               OpName %v_pos "v_pos"
+               OpName %t_val "t_val"
+               OpName %rounds "rounds"
+               OpName %r "r"
+               OpName %n "n"
+               OpName %t_next "t_next"
+               OpName %p_sum "p_sum"
+               OpName %gl_TessLevelOuter "gl_TessLevelOuter"
+               OpName %v_lo "v_lo"
+               OpName %gl_TessLevelInner "gl_TessLevelInner"
+               OpName %v_li "v_li"
+               OpDecorate %t_pos Location 0
+               OpDecorate %gl_InvocationID BuiltIn InvocationId
+               OpDecorate %v_pos Location 0
+               OpDecorate %t_val Location 1
+               OpDecorate %t_next Location 2
+               OpDecorate %p_sum Patch
+               OpDecorate %p_sum Location 3
+               OpDecorate %gl_TessLevelOuter BuiltIn TessLevelOuter
+               OpDecorate %gl_TessLevelOuter Patch
+               OpDecorate %v_lo Location 1
+               OpDecorate %gl_TessLevelInner BuiltIn TessLevelInner
+               OpDecorate %gl_TessLevelInner Patch
+               OpDecorate %v_li Location 2
+       %void = OpTypeVoid
+          %3 = OpTypeFunction %void
+      %float = OpTypeFloat 32
+    %v2float = OpTypeVector %float 2
+       %uint = OpTypeInt 32 0
+     %uint_4 = OpConstant %uint 4
+%_arr_v2float_uint_4 = OpTypeArray %v2float %uint_4
+%_ptr_Output__arr_v2float_uint_4 = OpTypePointer Output %_arr_v2float_uint_4
+      %t_pos = OpVariable %_ptr_Output__arr_v2float_uint_4 Output
+        %int = OpTypeInt 32 1
+%_ptr_Input_int = OpTypePointer Input %int
+%gl_InvocationID = OpVariable %_ptr_Input_int Input
+    %uint_32 = OpConstant %uint 32
+%_arr_v2float_uint_32 = OpTypeArray %v2float %uint_32
+%_ptr_Input__arr_v2float_uint_32 = OpTypePointer Input %_arr_v2float_uint_32
+      %v_pos = OpVariable %_ptr_Input__arr_v2float_uint_32 Input
+%_ptr_Input_v2float = OpTypePointer Input %v2float
+%_ptr_Output_v2float = OpTypePointer Output %v2float
+%_arr_float_uint_4 = OpTypeArray %float %uint_4
+%_ptr_Output__arr_float_uint_4 = OpTypePointer Output %_arr_float_uint_4
+      %t_val = OpVariable %_ptr_Output__arr_float_uint_4 Output
+     %uint_0 = OpConstant %uint 0
+%_ptr_Input_float = OpTypePointer Input %float
+    %float_2 = OpConstant %float 2
+%float_0_125 = OpConstant %float 0.125
+%_ptr_Output_float = OpTypePointer Output %float
+     %uint_2 = OpConstant %uint 2
+%_ptr_Function_int = OpTypePointer Function %int
+      %int_0 = OpConstant %int 0
+     %uint_1 = OpConstant %uint 1
+   %float_n2 = OpConstant %float -2
+       %bool = OpTypeBool
+      %int_3 = OpConstant %int 3
+      %int_1 = OpConstant %int 1
+%_ptr_Function_float = OpTypePointer Function %float
+  %uint_2056 = OpConstant %uint 2056
+  %float_0_5 = OpConstant %float 0.5
+     %t_next = OpVariable %_ptr_Output__arr_float_uint_4 Output
+      %p_sum = OpVariable %_ptr_Output_float Output
+      %int_2 = OpConstant %int 2
+%gl_TessLevelOuter = OpVariable %_ptr_Output__arr_float_uint_4 Output
+    %v4float = OpTypeVector %float 4
+%_arr_v4float_uint_32 = OpTypeArray %v4float %uint_32
+%_ptr_Input__arr_v4float_uint_32 = OpTypePointer Input %_arr_v4float_uint_32
+       %v_lo = OpVariable %_ptr_Input__arr_v4float_uint_32 Input
+     %uint_3 = OpConstant %uint 3
+%_arr_float_uint_2 = OpTypeArray %float %uint_2
+%_ptr_Output__arr_float_uint_2 = OpTypePointer Output %_arr_float_uint_2
+%gl_TessLevelInner = OpVariable %_ptr_Output__arr_float_uint_2 Output
+       %v_li = OpVariable %_ptr_Input__arr_v2float_uint_32 Input
+       %main = OpFunction %void None %3
+          %5 = OpLabel
+     %rounds = OpVariable %_ptr_Function_int Function
+          %r = OpVariable %_ptr_Function_int Function
+          %n = OpVariable %_ptr_Function_float Function
+         %16 = OpLoad %int %gl_InvocationID
+         %21 = OpLoad %int %gl_InvocationID
+         %23 = OpAccessChain %_ptr_Input_v2float %v_pos %21
+         %24 = OpLoad %v2float %23
+         %26 = OpAccessChain %_ptr_Output_v2float %t_pos %16
+               OpStore %26 %24
+         %30 = OpLoad %int %gl_InvocationID
+         %31 = OpLoad %int %gl_InvocationID
+         %34 = OpAccessChain %_ptr_Input_float %v_pos %31 %uint_0
+         %35 = OpLoad %float %34
+         %37 = OpFMul %float %35 %float_2
+         %38 = OpLoad %int %gl_InvocationID
+         %39 = OpConvertSToF %float %38
+         %41 = OpFMul %float %39 %float_0_125
+         %42 = OpFAdd %float %37 %41
+         %44 = OpAccessChain %_ptr_Output_float %t_val %30
+               OpStore %44 %42
+               OpControlBarrier %uint_2 %uint_4 %uint_0
+         %50 = OpAccessChain %_ptr_Input_float %v_pos %int_0 %uint_1
+         %51 = OpLoad %float %50
+         %54 = OpFOrdGreaterThanEqual %bool %51 %float_n2
+         %57 = OpSelect %int %54 %int_3 %int_1
+               OpStore %rounds %57
+               OpStore %r %int_0
+               OpBranch %59
+         %59 = OpLabel
+               OpLoopMerge %61 %62 None
+               OpBranch %63
+         %63 = OpLabel
+         %64 = OpLoad %int %r
+         %65 = OpLoad %int %rounds
+         %66 = OpSLessThan %bool %64 %65
+               OpBranchConditional %66 %60 %61
+         %60 = OpLabel
+         %69 = OpLoad %int %gl_InvocationID
+         %70 = OpIAdd %int %69 %int_1
+         %71 = OpBitwiseAnd %int %70 %int_3
+         %72 = OpAccessChain %_ptr_Output_float %t_val %71
+         %73 = OpLoad %float %72
+               OpStore %n %73
+               OpControlBarrier %uint_2 %uint_4 %uint_0
+         %75 = OpLoad %int %gl_InvocationID
+         %76 = OpLoad %float %n
+         %78 = OpFMul %float %76 %float_0_5
+         %79 = OpAccessChain %_ptr_Output_float %t_val %75
+         %80 = OpLoad %float %79
+         %81 = OpFAdd %float %80 %78
+         %82 = OpAccessChain %_ptr_Output_float %t_val %75
+               OpStore %82 %81
+               OpControlBarrier %uint_2 %uint_4 %uint_0
+               OpBranch %62
+         %62 = OpLabel
+         %83 = OpLoad %int %r
+         %84 = OpIAdd %int %83 %int_1
+               OpStore %r %84
+               OpBranch %59
+         %61 = OpLabel
+         %86 = OpLoad %int %gl_InvocationID
+         %87 = OpLoad %int %gl_InvocationID
+         %88 = OpIAdd %int %87 %int_1
+         %89 = OpBitwiseAnd %int %88 %int_3
+         %90 = OpAccessChain %_ptr_Output_float %t_val %89
+         %91 = OpLoad %float %90
+         %92 = OpAccessChain %_ptr_Output_float %t_next %86
+               OpStore %92 %91
+         %93 = OpLoad %int %gl_InvocationID
+         %94 = OpIEqual %bool %93 %int_0
+               OpSelectionMerge %96 None
+               OpBranchConditional %94 %95 %96
+         %95 = OpLabel
+         %98 = OpAccessChain %_ptr_Output_float %t_val %int_0
+         %99 = OpLoad %float %98
+        %100 = OpAccessChain %_ptr_Output_float %t_val %int_1
+        %101 = OpLoad %float %100
+        %102 = OpFAdd %float %99 %101
+        %104 = OpAccessChain %_ptr_Output_float %t_val %int_2
+        %105 = OpLoad %float %104
+        %106 = OpFAdd %float %102 %105
+        %107 = OpAccessChain %_ptr_Output_float %t_val %int_3
+        %108 = OpLoad %float %107
+        %109 = OpFAdd %float %106 %108
+               OpStore %p_sum %109
+        %115 = OpAccessChain %_ptr_Input_float %v_lo %int_0 %uint_0
+        %116 = OpLoad %float %115
+        %117 = OpAccessChain %_ptr_Output_float %gl_TessLevelOuter %int_0
+               OpStore %117 %116
+        %118 = OpAccessChain %_ptr_Input_float %v_lo %int_0 %uint_1
+        %119 = OpLoad %float %118
+        %120 = OpAccessChain %_ptr_Output_float %gl_TessLevelOuter %int_1
+               OpStore %120 %119
+        %121 = OpAccessChain %_ptr_Input_float %v_lo %int_0 %uint_2
+        %122 = OpLoad %float %121
+        %123 = OpAccessChain %_ptr_Output_float %gl_TessLevelOuter %int_2
+               OpStore %123 %122
+        %125 = OpAccessChain %_ptr_Input_float %v_lo %int_0 %uint_3
+        %126 = OpLoad %float %125
+        %127 = OpAccessChain %_ptr_Output_float %gl_TessLevelOuter %int_3
+               OpStore %127 %126
+        %132 = OpAccessChain %_ptr_Input_float %v_li %int_0 %uint_0
+        %133 = OpLoad %float %132
+        %134 = OpAccessChain %_ptr_Output_float %gl_TessLevelInner %int_0
+               OpStore %134 %133
+        %135 = OpAccessChain %_ptr_Input_float %v_li %int_0 %uint_1
+        %136 = OpLoad %float %135
+        %137 = OpAccessChain %_ptr_Output_float %gl_TessLevelInner %int_1
+               OpStore %137 %136
+               OpBranch %96
+         %96 = OpLabel
+               OpReturn
+               OpFunctionEnd

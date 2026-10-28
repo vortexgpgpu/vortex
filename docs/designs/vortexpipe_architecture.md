@@ -986,6 +986,78 @@ screen residency table (§1.3). The primitive record `rast_prim_t` is
 `rast_vary_t` at the same index carries the varying planes' record
 indices and the primitive's `gl_ViewportIndex` and `gl_Layer`.
 
+#### 3.2.2 The tessellation stages
+
+A patch draw runs the control (TCS) and evaluation (TES) shaders as SIMT
+kernels between the VS and the geometry stage or setup, in the same batch,
+with the tessellator itself as SIMT code: `sw/common/gfx_tess.h`, the D3D11
+reference tessellator llvmpipe runs on the CPU, kept in its 16.16 fixed point
+so every domain point and primitive is bit-identical to llvmpipe's
+(`tests/regression/gfx_tess_kernel` checks it against the reference). There is
+no fixed-function tessellator. Each stage has its own module at a fixed
+address (`VP_STARTUP_TCS`, `VP_STARTUP_TES`), linked with the tessellator's C
+ABI (`sw/gfx/gfx_tess_abi.cpp`); the stitch kernel is on the front-end module.
+
+- **Patches.** A patch list is a list topology of `patchControlPoints`
+  vertices (dynamic state, `set_patch_vertices`), trimmed to whole patches,
+  which the vertex stage assembles like any list (`gfx_ia_t`). Patch `q`
+  reads VS records `q * N .. q * N + N - 1`. Under a restart index only the
+  device knows how many patches the runs hold: the control stage takes their
+  count from the draw's `gfx_ia_t` (`VP_TCS_ARG_IA`), a patch past it makes
+  nothing, and `ia_k` counts them as the control stage's patches.
+- **Control stage.** Thread `g` is output control point `g % M` of patch
+  `g / M`. A CTA is one warp of whole patches (`max(1, warp width / M)` of
+  them), so `barrier()` is one warp's barrier and the CTAs spread over the
+  cores; with a barrier in control flow a CTA is one patch. Per-vertex
+  outputs go to control-point records in the VS record layout, per-patch
+  outputs to a patch record: the levels at fixed offsets, then the patch
+  varyings by location. Its epilogue, after a barrier, has invocation 0 set
+  every level no store writes to 0 and process the patch's levels
+  (`gfx_tess_patch_setup`) into a `gfx_tess_patch_t` and the patch's point,
+  primitive and stitch-unit counts.
+- **Static levels.** When every level the evaluation domain reads is stored
+  as one constant and the host knows the patches, the host processes the
+  levels once: no epilogue, no scan, every base `p * count`.
+- **Ordering.** Otherwise the device-wide scan (`scan_k`, 3 lanes) gives each
+  patch its first point, primitive and stitch unit. When a full batch with
+  every level 64 fits `VP_TS_BATCH_BYTES` and one front-end pass, the stages
+  after the scan run over the totals it leaves on the device: the command
+  processor sizes the evaluation and stitch grids from them
+  (`vx_launch_indirect_t`), the kernels bound their threads by them
+  (`VP_TES_ARG_COUNT_ADDR`, `gfx_tess_draw_t::units_addr`), and the pass reads
+  the counted primitives. Otherwise, and for a capture or a geometry stage,
+  whose memory the host sizes from the counts, the batch is cut there for a
+  12-byte read-back of the totals.
+- **Evaluation stage.** The kernel strides over the batch's domain points;
+  for point `g` it finds the patch (bisection over the scan), places
+  `gl_TessCoord` (`gfx_tess_eval_point`, the reference's per-point closed
+  form, in the reference's point order), runs the TES and writes record `g`
+  in the VS record layout; in point mode it also writes list entry `g`.
+- **Stitching.** `tess_stitch_k`, one thread per (patch, ring, edge) unit, a
+  quad's centre strip or a triangle's centre: the unit writes its triangles,
+  or an isoline's segments, into the list at the patch's first primitive
+  plus the unit's offset, so the list is in patch order and, within a patch,
+  in the reference's order. Every entry's `aux` holds the patch's
+  `gl_PrimitiveID`.
+- **Handoff.** Setup reads the evaluation records through the list
+  (`prim_index_addr`), as after a geometry shader. A geometry shader after
+  tessellation runs a variant that reads its input primitives from the list
+  (`vp_gs_info::list_input`), taking `gl_PrimitiveIDIn` from the entry.
+- **Capture and queries.** Transform feedback from the TES runs in its
+  module's `tes_xfb` entry, one thread per list entry, in primitive order;
+  thread 0 commits the filled sizes. TCS patches are host-counted; TES
+  invocations and the clipper's primitives are host-known with static levels
+  and added by the scan otherwise (`GFX_QC_TCS_PATCHES`,
+  `GFX_QC_TES_INVOCATIONS`).
+- **Batches.** Patches are batched so the control side stays within
+  `VP_TS_BATCH_BYTES`. A batch whose totals make more evaluation records and
+  list than that runs in ranges of its patches, cut at the scan's per-patch
+  offsets (one more read-back), with no control stage run again: a range's
+  `gfx_tess_draw_t` starts its scan and descriptors at its first patch, and
+  `first_point` / `first_prim` / `first_unit` renumber its points and
+  primitives from zero. Batches and ranges drain through the front end in
+  order, each sized by its own counts.
+
 ### 3.3 FF configuration + RASTER launch
 
 `vp_raster_draw` then programs the RASTER + OM + (optional) TEX DCRs and

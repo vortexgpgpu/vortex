@@ -287,7 +287,7 @@ typedef struct {
   uint32_t instances;
   uint32_t first_instance;
   uint32_t topology;      // GFX_IA_*
-  uint32_t per;           // vertices per primitive: 1, 2, 3, 4 or 6
+  uint32_t per;           // vertices per primitive: 1, 2, 3, 4 or 6, or a patch's
   uint32_t restart;       // `restart_index` (masked to index_size) cuts the runs
   uint32_t restart_index;
   uint32_t prims;         // primitives per instance
@@ -297,6 +297,9 @@ typedef struct {
   // are then its input, counted as its invocations rather than as primitives
   // the rasterizer and a stream query see, which its own scan counts.
   uint32_t gs_invocations;
+  // 1: the primitives are patches, counted as the control stage's; what the
+  // rasterizer sees is counted where the tessellator makes it.
+  uint32_t tess;
 } gfx_ia_t;
 
 // The three ia_k launches of a draw with restart, in CP order: COUNT and EMIT

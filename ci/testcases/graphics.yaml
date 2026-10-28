@@ -1455,3 +1455,26 @@ tests:
   args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
   configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
   shape: {cores: 2, l2cache: true, threads: 4}
+# The SIMT tessellator, bit for bit against the reference tessellator llvmpipe
+# runs -- every patch's counts, every domain point, every primitive, in order --
+# through the kernels the driver launches: ~1,000 patches of every domain,
+# spacing and output on SimX, and the smallest levels on rtlsim, where the
+# fixed-point code doubles as a compiler check.
+- {id: gfx_tess_kernel, via: make-run, drivers: [simx], dir: tests/regression/gfx_tess_kernel, target: "run-{driver}",
+   touches: [sw/common/gfx_tess.h, sw/gfx/gfx_tess_k.h, sw/gfx/gfx_tess_abi.cpp, sw/gfx/gfx_scan_k.h, tests/regression/gfx_tess_kernel]}
+- {id: gfx_tess_kernel-rtlsim, via: make-run, drivers: [rtlsim], dir: tests/regression/gfx_tess_kernel, target: "run-{driver}",
+   vars: {OPTS: "-q -n4"}, xlen: [32],
+   touches: [sw/common/gfx_tess.h, sw/gfx/gfx_tess_k.h, sw/gfx/gfx_tess_abi.cpp, sw/gfx/gfx_scan_k.h, tests/regression/gfx_tess_kernel]}
+# Every level 1..64 and random levels up to 64: the fractional shapes the
+# default batch samples.
+- {id: gfx_tess_kernel-full, via: make-run, drivers: [simx], dir: tests/regression/gfx_tess_kernel, target: "run-{driver}",
+   vars: {OPTS: "-f"}, tier: full, xlen: [32],
+   touches: [sw/common/gfx_tess.h, sw/gfx/gfx_tess_k.h, sw/gfx/gfx_tess_abi.cpp, sw/gfx/gfx_scan_k.h, tests/regression/gfx_tess_kernel]}
+# Each deliberately wrong reference must be caught as its own error: a count,
+# a domain point, a primitive.
+- {id: gfx_tess_kernel-bite1, via: make-run, drivers: [simx], dir: tests/regression/gfx_tess_kernel, target: "run-{driver}",
+   vars: {OPTS: "-q -n4 -b 1"}, xlen: [32], touches: [tests/regression/gfx_tess_kernel]}
+- {id: gfx_tess_kernel-bite2, via: make-run, drivers: [simx], dir: tests/regression/gfx_tess_kernel, target: "run-{driver}",
+   vars: {OPTS: "-q -n4 -b 2"}, xlen: [32], touches: [tests/regression/gfx_tess_kernel]}
+- {id: gfx_tess_kernel-bite3, via: make-run, drivers: [simx], dir: tests/regression/gfx_tess_kernel, target: "run-{driver}",
+   vars: {OPTS: "-q -n4 -b 3"}, xlen: [32], touches: [tests/regression/gfx_tess_kernel]}

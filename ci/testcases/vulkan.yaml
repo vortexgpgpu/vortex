@@ -176,6 +176,27 @@ tests:
 # every topology with and without a geometry shader, and gl_PrimitiveID.
 - {id: gfx-geometry, via: make-run, drivers: [simx], dir: tests/vulkan/geometry, target: "run-{driver}",
    touches: [sw/common/gfx_frontend_abi.h, sw/gfx/, tests/vulkan/geometry]}
+# Tessellation: control and evaluation shaders around the SIMT tessellator,
+# every domain, spacing and winding, point mode, levels known on the host or
+# only on the device (ordered by the device-wide scan), discarded patches, the
+# control stage's barrier, primitive order under blending and gl_PrimitiveID,
+# indexed patch lists and ones cut by a restart index, each compared pixel for
+# pixel with the host's tessellation drawn as a list.
+- {id: gfx-tess, via: make-run, drivers: [simx], dir: tests/vulkan/tess, target: "run-{driver}",
+   touches: [sw/common/gfx_tess.h, sw/gfx/gfx_tess_k.h, sw/gfx/gfx_tess_abi.cpp, sw/gfx/,
+             tests/vulkan/tess]}
+# 956 patches at level 64 through the widest evaluation records: more than a
+# 32-bit device allocates at once, so batches run in ranges of their patches.
+# Full tier, 32-bit only: 4M evaluation threads on four functional cores.
+- {id: gfx-tess-max, via: make-run, drivers: [simx], dir: tests/vulkan/tess, target: "run-{driver}",
+   tier: full, xlen: [32], vars: {OPTS: "-c levels_max", EXPECT_LINES: ""},
+   touches: [sw/common/gfx_tess.h, sw/gfx/gfx_tess_k.h, sw/gfx/gfx_tess_abi.cpp,
+             tests/vulkan/tess]}
+# A capture across tessellated draws on the device, on llvmpipe and on the
+# device again, as one stream.
+- {id: gfx-tess-handoff, via: make-run, drivers: [simx], dir: tests/vulkan/tess, target: "run-{driver}",
+   vars: {STRICT: 0, OPTS: "-c handoff", EXPECT_CPU: "transform-feedback=1", EXPECT_LINES: ""},
+   touches: [sw/gfx/, tests/vulkan/tess]}
 # Transform feedback, vertex streams and queries from a geometry shader.
 - {id: gfx-gsxfb, via: make-run, drivers: [simx], dir: tests/vulkan/gsxfb, target: "run-{driver}",
    touches: [sw/common/gfx_frontend_abi.h, sw/common/gfx_fs_desc_abi.h, sw/gfx/, tests/vulkan/gsxfb]}
