@@ -33,6 +33,22 @@ that builds on CIRCT, as POCL builds on LLVM: the `foldsim` driver and
 `foldsim-opt` come from the toolchain (`$(TOOLDIR)/foldsim`), CIRCT from
 `$(TOOLDIR)/circt`. Nothing else is in the flow: no Yosys, no sv2v.
 
+Foldsim is a general-purpose RTL simulator: everything that is not specific
+to Vortex is in the Foldsim repository. That is the compiler, the boundary
+lifting (`foldsim-lift`), and the FPGA shell the simulator runs in (control
+and memory endpoints, the DRAM bank timing model, the register map, the
+in-process host and the endpoint's unit tests), installed as
+`$(FOLDSIM_PATH)/share/foldsim/shell` (`FOLDSIM_SHELL`). Vortex keeps only its
+glue:
+
+| Vortex path | what |
+|---|---|
+| `hw/rtl/afu/foldsim/target/foldsim_target.sv` | Vortex with its AXI4 ports, DCR, start and busy as the shell's plain target ports |
+| `hw/syn/foldsim` | which units to lift and fold, and the V80 image flow on the native aved flow |
+| `sim/foldsim` | the shell's in-process host built for a Vortex configuration, with the Xilinx FP cores' models |
+| `sw/runtime/foldsim` | the Vortex runtime driver over the shell's registers |
+| `ci/testcases/foldsim.yaml` | the cycle-exact parity check against rtlsim |
+
 ```bash
 export FOLDSIM_CLASSES="VX_socket__lift VX_core__lift VX_compute_slice__lift"
 export FOLDSIM_LIFT="VX_socket:drop=INSTANCE_ID VX_core:drop=INSTANCE_ID VX_compute_slice:drop=INSTANCE_ID,SLICE_STR"
@@ -46,13 +62,14 @@ FPGA_BIN_DIR=$PWD/hw/syn/foldsim/build32_foldsim_hw/bin CONFIGS="$CONFIGS" \
 `FOLDSIM_CLASSES` names the modules threaded as classes; a class may contain
 others (the socket contains the issue slices). `FOLDSIM_LIFT` gives
 interface-port units a plain-port boundary first, so they can be classes
-(`hw/syn/foldsim/lift_boundaries.py`, a source-to-source pass on pyslang; the
+(Foldsim's `foldsim-lift`, a source-to-source pass on pyslang; the
 RTL is not changed). `drop=P` removes a parameter that only names an instance (`INSTANCE_ID`), so
 all instances of the class elaborate to one module; instance IDs that reach
 logic are already input ports in the RTL (the socket's `socket_id`).
 `port=P` turns such a parameter into an input port where a unit still has one.
-The tools are found through `FOLDSIM` (the driver) and
-`CIRCT_BIN`, by default `hw/syn/common.mk`'s `FOLDSIM_PATH` and `CIRCT_PATH`.
+The tools are found through `FOLDSIM` (the driver), `FOLDSIM_SHELL` and
+`CIRCT_BIN`, by default under `config.mk`'s `FOLDSIM_PATH` and
+`hw/syn/common.mk`'s `CIRCT_PATH`.
 
 A class `A+B` fuses two modules of the same parent (`foldsim-fuse-models`):
 each `A` is paired with the one `B` it exchanges bits with, and each pair is
@@ -209,7 +226,7 @@ chosen per image from a Verilator run.
 
 ## 4. The kernel
 
-`hw/rtl/afu/foldsim/foldsim_afu.sv` has the native V80 kernel's ports but for
+The shell's `rtl/foldsim_afu.sv` has the native V80 kernel's ports but for
 the host-memory master: `s_axi_control` and one device-memory master
 `m_axi_mem_<p>` per memory port of the target, each linked to the `MEM` HBM
 aperture (the linker gives each its own way in). The target has as many
@@ -345,7 +362,7 @@ addresses. `TARGET=hw` uses VRT — the kernel's registers through
 the same kernel in Verilator (`sim/foldsim`), with a sparse device memory and
 each register access costing the kernel cycles a PCIe access would.
 
-The register map is `sw/common/foldsim_regs.h` (`hw/rtl/afu/foldsim/foldsim_regs.vh`
+The register map is the shell's `include/foldsim_regs.h` (`rtl/foldsim_regs.vh`
 for the RTL):
 
 | offset | register |
@@ -399,7 +416,8 @@ advancing for that time (60 s when it is unset).
   in Verilator): random target inputs, every channel stalled at random, every
   output token compared. s2w4i2: 3,000 target cycles, 51,000 tokens, 0
   differences.
-- **The memory endpoint** (`hw/unittest/foldsim_mem`, in Verilator): an
+- **The memory endpoint** (the shell's `test`, `ninja check-foldsim-shell` in
+  the Foldsim build, in Verilator): an
   AXI4 master as the target, HBM with random ready and latency checking the
   device-side protocol, resets at random points with HBM busy, and each kind
   of burst; every target cycle's outputs compared with the C++ model's
@@ -408,7 +426,7 @@ advancing for that time (60 s when it is unset).
   h100 rates; small queues; row hits, random rows, one bank to the horizon,
   streams, read- and write-heavy) and five with refresh (per bank and all
   banks, at the standard intervals and faster), on the endpoint alone, with
-  staged token ends, and as one of two ports (`foldsim_mem_ch2`): 0
+  staged token ends, with speculative reads, and as one of two ports (`ch2`): 0
   differences.
 - **Refresh against its interval** (`tests/unittest/dram_bank_model
   refresh`): one refresh per interval, to the operation, at every memory and

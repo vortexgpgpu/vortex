@@ -20,9 +20,6 @@ all:
 	$(MAKE) -C afu_axil_demux
 	$(MAKE) -C afu_reset_seq
 	$(MAKE) -C mm_axi_arb
-	$(MAKE) -C foldsim_mem
-	$(MAKE) -C foldsim_mem_staged
-	$(MAKE) -C foldsim_mem_ch2
 	$(MAKE) -C cp_axi_path
 	$(MAKE) -C cp_dma
 	$(MAKE) -C cp_llc_port
@@ -58,9 +55,6 @@ run:
 	$(MAKE) -C afu_axil_demux run
 	$(MAKE) -C afu_reset_seq run
 	$(MAKE) -C mm_axi_arb run
-	$(MAKE) -C foldsim_mem run
-	$(MAKE) -C foldsim_mem_staged run
-	$(MAKE) -C foldsim_mem_ch2 run
 	$(MAKE) -C cp_axi_path run
 	$(MAKE) -C cp_dma run
 	$(MAKE) -C cp_llc_port run
@@ -213,9 +207,6 @@ clean:
 	$(MAKE) -C stream_arb clean
 	$(MAKE) -C mm_axi_arb clean
 	$(MAKE) -C cp_core clean
-	$(MAKE) -C foldsim_mem clean
-	$(MAKE) -C foldsim_mem_staged clean
-	$(MAKE) -C foldsim_mem_ch2 clean
 	$(MAKE) -C fma_unit clean
 	$(MAKE) -C fdiv_unit clean
 	$(MAKE) -C fsqrt_unit clean

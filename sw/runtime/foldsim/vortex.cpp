@@ -17,7 +17,7 @@
 // functional CommandProcessor model, and its hooks reach the foldsim
 // simulator. Device memory is the simulator's, in device memory at
 // FOLDSIM_REG_MEM_BASE; the target's DCR, start and busy are its command queue
-// and status (sw/common/foldsim_regs.h).
+// and status (Foldsim's shell, include/foldsim_regs.h).
 //
 // TARGET=hw runs the image on a V80 through VRT: registers over AXI4-Lite,
 // device memory over a QDMA queue. TARGET=avedsim simulates the same kernel
@@ -85,7 +85,7 @@ public:
   }
 
 private:
-  foldsim_emul sim_;
+  foldsim::foldsim_emul sim_;
 };
 
 #else

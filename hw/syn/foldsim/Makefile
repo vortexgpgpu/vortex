@@ -6,9 +6,11 @@
 #
 # foldsim compiles Vortex into a simulator, on CIRCT: each class threaded
 # through one physical copy (FAME-5), the rest of the target a model of its
-# own, and every channel between them in one token fabric. The kernel
-# (hw/rtl/afu/foldsim) adds the memory and control endpoints around it. The
-# image lands in $(BUILD_DIR)/bin/foldsim.vbin; run it with
+# own, and every channel between them in one token fabric. Foldsim's shell
+# (FOLDSIM_SHELL, part of the Foldsim installation) adds the memory and
+# control endpoints around it; Vortex supplies only the target wrapper
+# (hw/rtl/afu/foldsim/target) and this flow. The image lands in
+# $(BUILD_DIR)/bin/foldsim.vbin; run it with
 #   FPGA_BIN_DIR=<that bin> ./ci/blackbox.sh --driver=foldsim --target=hw ...
 # The runtime's avedsim target simulates the same generated design in-process.
 
@@ -19,7 +21,9 @@ include $(VORTEX_HOME)/hw/syn/common.mk
 SRC_DIR := $(VORTEX_HOME)/hw/syn/foldsim
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
-FOLDSIM_RTL_DIR := $(RTL_DIR)/afu/foldsim
+# The shell's RTL, and the wrapper that gives Vortex the shell's target ports.
+FOLDSIM_RTL_DIR := $(FOLDSIM_SHELL)/rtl
+FOLDSIM_TARGET_DIR := $(RTL_DIR)/afu/foldsim/target
 VIVADO := $(XILINX_VIVADO)/bin/vivado
 SLASHKIT ?= slashkit
 # Parallel link runs; each Vivado of a large simulator needs tens of GB.
@@ -44,7 +48,7 @@ BIN_DIR := $(BUILD_DIR)/bin
 GEN_DIR := $(BUILD_DIR)/gen
 
 # The classes threaded by FAME-5, and the units given plain-port boundaries
-# first so they can be classes (lift_boundaries.py; <unit>[:drop=P,...][;port=P,...]).
+# first so they can be classes (Foldsim's foldsim-lift; <unit>[:drop=P,...][;port=P,...]).
 FOLDSIM_CLASSES ?= VX_socket__lift
 FOLDSIM_LIFT ?= VX_socket:drop=INSTANCE_ID
 # Where circt-verilog, circt-opt and firtool are (hw/syn/common.mk's CIRCT);
@@ -69,7 +73,7 @@ TARGET_TOP := foldsim_target
 CONFIGS ?=
 RTL_INCLUDE := -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(RTL_DIR)/libs \
                -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm \
-               -I$(RTL_DIR)/cache -I$(RTL_DIR)/fpu -I$(RTL_DIR)/afu/common -I$(FOLDSIM_RTL_DIR)/target
+               -I$(RTL_DIR)/cache -I$(RTL_DIR)/fpu -I$(RTL_DIR)/afu/common -I$(FOLDSIM_TARGET_DIR)
 SYNTH_DEFINES := -DSYNTHESIS -DVIVADO -DNDEBUG
 ifdef PERF
 PLATFORM_DEFINES := -DPERF_ENABLE
@@ -128,15 +132,11 @@ IP_DIR := $(BUILD_DIR)/foldsim_afu_ip
 CFG := $(BUILD_DIR)/config.cfg
 VBIN := $(BIN_DIR)/foldsim.vbin
 
-# The kernel's own sources are not the target's: they are read only when the
-# kernel is packaged or emulated.
-KERNEL_RTL := $(wildcard $(FOLDSIM_RTL_DIR)/*.sv $(FOLDSIM_RTL_DIR)/*.vh)
-RTL_SRCS := $(filter-out $(KERNEL_RTL),$(shell find $(RTL_DIR) -name '*.sv' -o -name '*.v' -o -name '*.vh')) \
+RTL_SRCS := $(shell find $(RTL_DIR) -name '*.sv' -o -name '*.v' -o -name '*.vh') \
             $(wildcard $(ROOT_DIR)/hw/VX_config.vh) $(wildcard $(ROOT_DIR)/hw/VX_types.vh) \
             $(firstword $(MAKEFILE_LIST)) $(CONFIG_STAMP)
-# The AFU shells of the native flows are second tops, and the foldsim kernel is
-# compiled apart from the target.
-SHELL_MODULES := $(notdir $(wildcard $(RTL_DIR)/afu/common/*.sv) $(wildcard $(FOLDSIM_RTL_DIR)/*.sv))
+# The AFU shells of the native flows are second tops.
+SHELL_MODULES := $(notdir $(wildcard $(RTL_DIR)/afu/common/*.sv))
 
 .PHONY: all sources generate package-ip ooc clean FORCE
 
@@ -163,9 +163,9 @@ $(SRCS_LIST): $(RTL_SRCS) $(IP_STUBS) $(SCRIPT_DIR)/xilinx_ip_gen.tcl
 	fi
 	mv $@.tmp $@
 
-$(LIFT_LIST): $(SRCS_LIST) $(SRC_DIR)/lift_boundaries.py $(CLASSES_STAMP)
+$(LIFT_LIST): $(SRCS_LIST) $(FOLDSIM_LIFT_TOOL) $(CLASSES_STAMP)
 	rm -rf $(BUILD_DIR)/lift
-	$(LIFT_PYTHON) $(SRC_DIR)/lift_boundaries.py --srcs $(SRCS_LIST) --top $(TARGET_TOP) \
+	$(LIFT_PYTHON) $(FOLDSIM_LIFT_TOOL) --srcs $(SRCS_LIST) --top $(TARGET_TOP) \
 		--out $(BUILD_DIR)/lift $(foreach u,$(FOLDSIM_LIFT),--unit '$(u)')
 
 generate: $(GEN_SV) $(KERNEL_VH)
