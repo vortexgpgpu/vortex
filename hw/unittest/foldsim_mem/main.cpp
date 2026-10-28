@@ -143,6 +143,10 @@ const Setup kSetups[] = {
    Traffic::Random, 0.6, 0.3, 0.9, 4000, DramBankModel::Refresh::AllBank, 600, 0},
   {"ref_bank_fast",  dram_timing::Standard::HBM3, 1980, 6545, 0, 0, 32, 32, 26, 7,
    Traffic::Rows, 0.8, 0.2, 0.9, 4000, DramBankModel::Refresh::PerBank, 60, 0},
+  // Conflicts back to back between frequent all-bank refreshes: an activate's
+  // search starts from its precharge's clock and the refresh's floor.
+  {"ref_all_onebank", dram_timing::Standard::HBM2, 400, 800, 3, 0, 32, 32, 26, 7,
+   Traffic::OneBank, 0.7, 0.3, 0.9, 4000, DramBankModel::Refresh::AllBank, 600, 0},
   // Few blocks read and written back to back: reads that meet a write the
   // model has acknowledged and HBM has not taken yet.
   {"early_b",        dram_timing::Standard::HBM2, 400, 800, 0, 0, 32, 32, 26, 7,

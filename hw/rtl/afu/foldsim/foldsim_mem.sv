@@ -249,7 +249,7 @@ module foldsim_mem #(
     /* verilator lint_off UNUSEDSIGNAL */
     wire          rr_peek_valid;
     wire [3:0]    bk_c_valid, bk_c_sf;
-    wire [4*SW-1:0] bk_c_slot;
+    wire [4*SW-1:0] bk_c_slot, bk_c_slot_n;
     wire [4*ID_W-1:0] bk_c_id;
     wire [1:0]    bk_c_room;
     wire          bk_ar_take;
@@ -258,6 +258,9 @@ module foldsim_mem #(
     // Read data by slot, and which slots memory has answered.
     reg [DATA_W-1:0] slot_data [PSLOTS];
     reg [PSLOTS-1:0] arrived;
+    // SPEC 2: whether each R candidate's data has arrived, kept as the
+    // candidates and the data move.
+    reg [3:0]        c_arr;
 
     // ---- The model's outputs: functions of its state ----
     // The AR ready the target was offered: with SPEC, the candidate its R
@@ -287,7 +290,7 @@ module foldsim_mem #(
         r_ok = 1'b1;
         if (SPEC == 2) begin
             for (integer x = 0; x < 4; ++x)
-                r_ok = r_ok & (~bk_c_valid[x] | arrived[bk_c_slot[x*SW +: SW]]);
+                r_ok = r_ok & (~bk_c_valid[x] | c_arr[x]);
         end else begin
             r_ok = (~bk_r_valid | arrived[bk_r_slot]) & (~(SPEC != 0 && bk_r_valid1) | arrived[bk_r_slot1]);
         end
@@ -442,6 +445,12 @@ module foldsim_mem #(
     reg [CW-1:0] wm_count;
     // Whole writes whose AW, and whose W, memory has not taken yet.
     reg [CW-1:0] aw_formed, w_formed;
+    // The addresses at the heads of the read and write queues, kept as the
+    // queues move.
+    reg [63:0] arh_addr, awh_addr;
+    // The entries after them, read whether or not the heads move.
+    (* keep = "true" *) wire [63:0] arq_next = arq_addr[HPW'(arq_head + 1'b1)];
+    (* keep = "true" *) wire [63:0] awm_next = awm_addr[PW'(awm_head + 1'b1)];
 
     wire take     = finish & ~treset;
     wire flush    = finish & treset;
@@ -462,6 +471,13 @@ module foldsim_mem #(
     wire rd_push  = m_rvalid & m_rready;
     wire b_push   = m_bvalid & m_bready;
     assign full_wait = ~treset & ((aw_fire & (awm_live == CW'(DEPTH))) | (w_fire & (wm_count == CW'(DEPTH))));
+    // SPEC 2: whether the data of the ready queue's first four slots is in, as the
+    // cycle ends.
+    wire [3:0]       q_arr;
+    for (genvar k = 0; k < 4; ++k) begin : g_qa
+        wire [SW-1:0] q = bk_c_slot_n[k*SW +: SW];
+        assign q_arr[k] = arrived[q] | (rd_push & (arq_slot[rs_head] == q));
+    end
 
     // A request waits while a write of its block is unacknowledged: a read
     // for every whole write before it (memory answers reads and writes apart),
@@ -476,25 +492,31 @@ module foldsim_mem #(
         ar_hit = 1'b0;
         aw_hit = 1'b0;
         for (integer i = 0; i < DEPTH; ++i) begin
-            if ((off(PW'(i)) < wr_out[CW-1:0]) && (awm_addr[i][63:LB] == arq_addr[arq_head][63:LB]))
+            if ((off(PW'(i)) < wr_out[CW-1:0]) && (awm_addr[i][63:LB] == arh_addr[63:LB]))
                 ar_hit = 1'b1;
-            if ((off(PW'(i)) < aw_taken) && (awm_addr[i][63:LB] == awm_addr[awm_head][63:LB]))
+            if ((off(PW'(i)) < aw_taken) && (awm_addr[i][63:LB] == awh_addr[63:LB]))
                 aw_hit = 1'b1;
         end
     end
 
     assign m_arvalid = (arq_count != 0) & (ar_shown | ~ar_hit);
-    assign m_araddr  = arq_addr[arq_head];
+    assign m_araddr  = arh_addr;
     assign m_arlen   = 8'd0;
     assign m_rready  = 1'b1;
-    assign m_awvalid = (aw_formed != 0) & (aw_shown | ~aw_hit);
-    assign m_awaddr  = awm_addr[awm_head];
+    // A write's test is the one of the host cycle before, unless its head
+    // has changed since: acknowledgements only clear a hit.
+    reg aw_hit_q, aw_fresh;
+    assign m_awvalid = (aw_formed != 0) & (aw_shown | (aw_fresh & ~aw_hit_q));
+    assign m_awaddr  = awh_addr;
     assign m_awlen   = 8'd0;
     assign m_wvalid  = (w_formed != 0);
     assign m_wdata   = wm_data[wm_head];
     assign m_wstrb   = wm_strb[wm_head];
     assign m_wlast   = 1'b1;
     assign m_bready  = 1'b1;
+
+    always @(posedge clk)
+        aw_hit_q <= aw_hit;
 
     always @(posedge clk) begin
         if (arq_push) begin
@@ -503,6 +525,20 @@ module foldsim_mem #(
         end
         if (awm_push)
             awm_addr[awm_tail] <= base + 64'(awaddr);
+        begin : heads_
+            reg [HPW-1:0] ah;
+            reg [PW-1:0]  wh;
+            ah = arq_head + HPW'(arq_pop);
+            wh = awm_head + PW'(awm_pop);
+            if (arq_push & (arq_tail == ah))
+                arh_addr <= finish ? base + 64'(araddr) : ar_held_addr;
+            else
+                arh_addr <= arq_pop ? arq_next : arq_addr[arq_head];
+            if (awm_push & (awm_tail == wh))
+                awh_addr <= base + 64'(awaddr);
+            else
+                awh_addr <= awm_pop ? awm_next : awm_addr[awm_head];
+        end
         if (wm_push) begin
             wm_data[wm_tail] <= wdata;
             wm_strb[wm_tail] <= wstrb;
@@ -523,6 +559,7 @@ module foldsim_mem #(
             arq_count <= 0;
             rs_head   <= 0;
             arrived   <= '0;
+            c_arr     <= '0;
             awm_ack   <= 0;
             awm_head  <= 0;
             awm_tail  <= 0;
@@ -536,6 +573,7 @@ module foldsim_mem #(
             wr_out    <= 0;
             ar_shown  <= 1'b0;
             aw_shown  <= 1'b0;
+            aw_fresh  <= 1'b0;
         end else begin
             if (arq_push)
                 arq_tail <= arq_tail + 1'b1;
@@ -553,6 +591,13 @@ module foldsim_mem #(
                 if (rd_push)
                     a[arq_slot[rs_head]] = 1'b1;
                 arrived <= a;
+                // A candidate's slot is held, so no read taken now is one.
+                for (integer x = 0; x < 4; ++x) begin
+                    reg [1:0] n;
+                    n = 2'(x >> 1) + 2'(x & 1);
+                    c_arr[x] <= take ? (bk_fire_prev ? q_arr[n + 2'd1] : q_arr[n])
+                                     : c_arr[x] | (rd_push & (arq_slot[rs_head] == bk_c_slot[x*SW +: SW]));
+                end
             end
 
             if (awm_push)
@@ -571,6 +616,7 @@ module foldsim_mem #(
             w_formed  <= w_formed + CW'(form) - CW'(wm_pop);
             ar_shown  <= m_arvalid & ~m_arready;
             aw_shown  <= m_awvalid & ~m_awready;
+            aw_fresh  <= ~awm_pop & ~(awm_push & (awm_tail == PW'(awm_head + PW'(awm_pop))));
 
             rd_out <= rd_out + HCW'(arq_push) - HCW'(rd_push);
             wr_out <= wr_out + HCW'(form) - HCW'(b_push);
@@ -631,6 +677,7 @@ module foldsim_mem #(
         .rr_peek        (rready),
         .c_valid        (bk_c_valid),
         .c_slot         (bk_c_slot),
+        .c_slot_n       (bk_c_slot_n),
         .c_id           (bk_c_id),
         .c_room         (bk_c_room),
         .c_sf           (bk_c_sf),
