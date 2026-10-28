@@ -86,9 +86,7 @@ static void matmul_cpu(TYPE* out, const TYPE* A, const TYPE* B, uint32_t width, 
 
 const char* kernel_file = "kernel.vxbin";
 uint32_t size = 64;
-uint32_t tile_size = 4;
-uint32_t chunk_k = 0;
-uint32_t reg_size = 1;
+uint32_t block_size = 4;
 
 vx_device_h device = nullptr;
 vx_buffer_h A_buffer = nullptr;
@@ -101,32 +99,19 @@ kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
    std::cout << "Vortex Test." << std::endl;
-   std::cout << "Usage: [-k kernel] [-n matrix_size] [-t tile_size] [-c chunk_k] [-r reg_size] [-h help]" << std::endl;
-   std::cout << "  tile_size: each block computes a tile_size x tile_size tile of C" << std::endl;
-   std::cout << "  chunk_k:   k-slice staged in local memory per step (0: the first supported chunk for tile_size, reg_size)" << std::endl;
-   std::cout << "  reg_size:  outputs per thread per dimension; block = (tile_size/reg_size)^2 threads" << std::endl;
-   std::cout << "  supported (tile_size, chunk_k, reg_size):";
-#define SGEMM2_PRINT(T, K, R) std::cout << " (" << T << "," << K << "," << R << ")";
-   SGEMM2_CONFIGS(SGEMM2_PRINT)
-#undef SGEMM2_PRINT
-   std::cout << std::endl;
+   std::cout << "Usage: [-k kernel] [-n matrix_size] [-t block_size] [-h help]" << std::endl;
+   std::cout << "  block_size: 4, 8, 16 or 32; a block of block_size x block_size threads computes a tile of C" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "n:t:c:r:k:h")) != -1) {
+  while ((c = getopt(argc, argv, "n:t:k:h")) != -1) {
     switch (c) {
     case 'n':
       size = atoi(optarg);
       break;
     case 't':
-      tile_size = atoi(optarg);
-      break;
-    case 'c':
-      chunk_k = atoi(optarg);
-      break;
-    case 'r':
-      reg_size = atoi(optarg);
+      block_size = atoi(optarg);
       break;
     case 'k':
       kernel_file = optarg;
@@ -155,39 +140,17 @@ void cleanup() {
   }
 }
 
-static bool is_supported(uint32_t tile, uint32_t chunk, uint32_t reg) {
-#define SGEMM2_MATCH(T, K, R) if (tile == T && chunk == K && reg == R) { return true; }
-  SGEMM2_CONFIGS(SGEMM2_MATCH)
-#undef SGEMM2_MATCH
-  return false;
-}
-
-static uint32_t default_chunk(uint32_t tile, uint32_t reg) {
-#define SGEMM2_FIRST(T, K, R) if (tile == T && reg == R) { return K; }
-  SGEMM2_CONFIGS(SGEMM2_FIRST)
-#undef SGEMM2_FIRST
-  return tile;
-}
-
 int main(int argc, char *argv[]) {
   // parse command arguments
   parse_args(argc, argv);
 
-  if ((size / tile_size) * tile_size != size) {
-    printf("Error: matrix size %d must be a multiple of tile size %d\n", size, tile_size);
-    return -1;
-  }
-
-  if (chunk_k == 0) {
-    chunk_k = default_chunk(tile_size, reg_size);
-  }
-  if (!is_supported(tile_size, chunk_k, reg_size)) {
-    printf("Error: unsupported tile_size=%d, chunk_k=%d, reg_size=%d\n", tile_size, chunk_k, reg_size);
+  if (block_size != 4 && block_size != 8 && block_size != 16 && block_size != 32) {
+    printf("Error: unsupported block size %d\n", block_size);
     show_usage();
     return -1;
   }
-  if ((size % chunk_k) != 0) {
-    printf("Error: matrix size %d must be a multiple of chunk_k %d\n", size, chunk_k);
+  if ((size % block_size) != 0) {
+    printf("Error: matrix size %d must be a multiple of block size %d\n", size, block_size);
     return -1;
   }
 
@@ -202,15 +165,12 @@ int main(int argc, char *argv[]) {
 
   uint32_t size_sq = size * size;
   uint32_t buf_size = size_sq * sizeof(TYPE);
-  uint32_t block_size = tile_size / reg_size;
   uint32_t group_size = block_size * block_size;
-  uint32_t tile_elems_a = tile_size * chunk_k;
-  uint32_t tile_elems_b = chunk_k * tile_size;
-  uint32_t local_mem = (tile_elems_a + tile_elems_b) * sizeof(TYPE);
+  uint32_t local_mem = 2 * group_size * sizeof(TYPE);
 
   std::cout << "data type: " << Comparator<TYPE>::type_str() << std::endl;
   std::cout << "matrix size: " << size << "x" << size << std::endl;
-  std::cout << "tile size: " << tile_size << ", chunk_k: " << chunk_k << ", reg size: " << reg_size << std::endl;
+  std::cout << "block size: " << block_size << std::endl;
   std::cout << "local memory: " << local_mem << " bytes" << std::endl;
 
   // check work group occupancy
@@ -254,12 +214,10 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
   RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
 
-  kernel_arg.size      = size;
-  kernel_arg.tile_size = tile_size;
-  kernel_arg.chunk_k   = chunk_k;
-  kernel_arg.reg_size  = reg_size;
+  kernel_arg.size       = size;
+  kernel_arg.block_size = block_size;
 
-  uint32_t grid_dim[2]  = {size / tile_size, size / tile_size};
+  uint32_t grid_dim[2]  = {size / block_size, size / block_size};
   uint32_t block_dim[2] = {block_size, block_size};
 
   // launch kernel — args passed as a host blob (UVA), no args device buffer
