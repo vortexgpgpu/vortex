@@ -76,7 +76,6 @@ public:
       false,                  // lazy_fetch
       true,                   // core-response register
       (VX_CFG_ICACHE_READ_MERGE != 0) ? ICACHE_NUM_REQS : 0, // read_merge: the core's fetch slices
-      0,                      // mshr_lines
       false,                  // write_around
       VX_CFG_ICACHE_MRSQ_SIZE != 0, // memory-response queue
       true,                   // the socket's registered memory port
@@ -109,7 +108,6 @@ public:
       VX_CFG_DCACHE_LAZY_FETCH != 0, // lazy_fetch
       true,                          // core-response register
       (VX_CFG_DCACHE_READ_MERGE != 0) ? DCACHE_CHANNELS : 0, // read_merge
-      VX_CFG_DCACHE_MSHR_LINES,      // mshr_lines
       false,                         // write_around
       VX_CFG_DCACHE_MRSQ_SIZE != 0,  // memory-response queue
       true,                          // the socket's registered memory port

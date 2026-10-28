@@ -29,9 +29,6 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
   the sector with its dirty-byte mask and a partial bit instead of fetching the line; a later load or AMO merges memory data under the
   unwritten bytes, and evictions write back only dirty bytes. *Why:* streaming writes no longer read every line first: 1-core vecadd
   DRAM reads -33%.
-- **MSHR line table (`VX_CFG_{DCACHE,L2,L3}_MSHR_LINES`, off by default).** Misses are tracked in a reference-counted table of
-  distinct {line, sector} entries, and request entries keep only an index into it, so the MSHR holds more requests without widening
-  its address compares. *Why:* at 400-cycle memory latency, 64 requests over 16 lines: sgemm -n128 -15.3%, raycast -8.1%.
 - **Command-processor DMA through the shared LLC (`VX_CFG_CP_LLC_CLIENT`, off by default).** When one LLC serves every core, the
   CP's transfers enter it on their own client slot, so host transfers need only an L1 flush, not a walk of the whole LLC; transfers
   of at least half the LLC write around it. A launch behind DMA writes waits for an L1-only flush token sent on the slot. The runtime

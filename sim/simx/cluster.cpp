@@ -100,7 +100,6 @@ public:
         VX_CFG_L2_LAZY_FETCH != 0,     // lazy_fetch
         true,                          // core-response register (behind the bypass layer)
         0,                             // read_merge
-        VX_CFG_L2_MSHR_LINES,          // mshr_lines
         CP_ON_L2 != 0,                 // write_around
         VX_CFG_L2_MRSQ_SIZE != 0,      // memory-response queue
       });

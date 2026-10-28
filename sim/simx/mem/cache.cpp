@@ -530,21 +530,10 @@ struct mshr_entry_t {
   }
 };
 
-// With a line cap, the {line, sector} misses live in a table of that many
-// entries, each reference-counted by the request entries chained on it.
 class MSHR {
 public:
-  MSHR(uint32_t size, uint32_t line_cap)
-      : entries_(size), ready_reqs_(0), size_(0), line_cap_(line_cap) {}
-
-  // Distinct {line, sector} misses held.
-  uint32_t lines() const {
-    return lines_.size();
-  }
-
-  bool holds_line(uint32_t set_id, uint64_t addr_tag, uint32_t sector_id) const {
-    return this->find_line(set_id, addr_tag, sector_id) != lines_.end();
-  }
+  MSHR(uint32_t size)
+      : entries_(size), ready_reqs_(0), size_(0) {}
 
   uint32_t capacity() const {
     return entries_.size();
@@ -639,7 +628,6 @@ public:
         entry.refetch = refetch;
         entry.refetch_retry = false;
         ++size_;
-        this->line_ref(set_id, addr_tag, sector_id);
         return i;
       }
     }
@@ -742,7 +730,6 @@ public:
     picked->bank_req.type = bank_req_t::None;
     --ready_reqs_;
     --size_;
-    this->line_unref(picked->set_id, picked->addr_tag, picked->sector_id);
   }
 
   void reset() {
@@ -751,51 +738,12 @@ public:
     }
     ready_reqs_ = 0;
     size_ = 0;
-    lines_.clear();
   }
 
 private:
-  struct line_ref_t {
-    uint32_t set_id;
-    uint64_t addr_tag;
-    uint32_t sector_id;
-    uint32_t count;
-  };
-
-  std::vector<line_ref_t>::const_iterator find_line(uint32_t set_id, uint64_t addr_tag, uint32_t sector_id) const {
-    return std::find_if(lines_.begin(), lines_.end(), [&](const line_ref_t& l) {
-      return l.set_id == set_id && l.addr_tag == addr_tag && l.sector_id == sector_id;
-    });
-  }
-
-  void line_ref(uint32_t set_id, uint64_t addr_tag, uint32_t sector_id) {
-    for (auto &l : lines_) {
-      if (l.set_id == set_id && l.addr_tag == addr_tag && l.sector_id == sector_id) {
-        ++l.count;
-        return;
-      }
-    }
-    __assert(line_cap_ == 0 || lines_.size() < line_cap_, "MSHR line table overflow");
-    lines_.push_back({set_id, addr_tag, sector_id, 1});
-  }
-
-  void line_unref(uint32_t set_id, uint64_t addr_tag, uint32_t sector_id) {
-    for (auto it = lines_.begin(); it != lines_.end(); ++it) {
-      if (it->set_id == set_id && it->addr_tag == addr_tag && it->sector_id == sector_id) {
-        if (--it->count == 0) {
-          lines_.erase(it);
-        }
-        return;
-      }
-    }
-    __assert(false, "MSHR line count underflow");
-  }
-
   std::vector<mshr_entry_t> entries_;
   uint32_t ready_reqs_;
   uint32_t size_;
-  uint32_t line_cap_;
-  std::vector<line_ref_t> lines_;
 };
 
 class CacheBank : public SimObject<CacheBank> {
@@ -826,7 +774,7 @@ public:
             const Cache::Config &config,
             const params_t &params,
             uint32_t bank_id)
-      : SimObject<CacheBank>(ctx, name), core_req_in(this), core_rsp_out(this), mem_req_out(this), mem_rsp_in(this, config.mshr_size + AMO_PASSTHRU_CAP), config_(config), params_(params), bank_id_(bank_id), sets_(params.sets_per_bank, set_t(params.lines_per_set, params.sectors_per_line)), mshr_(config.mshr_size, config.mshr_lines), pipe_req_(TFifo<bank_req_t>::Create("", config.latency, std::max<uint32_t>(2u, config.latency))), lazy_q_(TFifo<uint32_t>::Create("", 1, lazyq_size(config))), rand_ctr_(0), adm_seq_ctr_(0)
+      : SimObject<CacheBank>(ctx, name), core_req_in(this), core_rsp_out(this), mem_req_out(this), mem_rsp_in(this, config.mshr_size + AMO_PASSTHRU_CAP), config_(config), params_(params), bank_id_(bank_id), sets_(params.sets_per_bank, set_t(params.lines_per_set, params.sectors_per_line)), mshr_(config.mshr_size), pipe_req_(TFifo<bank_req_t>::Create("", config.latency, std::max<uint32_t>(2u, config.latency))), lazy_q_(TFifo<uint32_t>::Create("", 1, lazyq_size(config))), rand_ctr_(0), adm_seq_ctr_(0)
 #if VX_CFG_EXT_A_ENABLED
       , amo_unit_(__MAX(2u, (uint32_t)VX_CFG_AMO_RS_SIZE))
 #endif
@@ -1244,13 +1192,6 @@ private:
         ++perf_stats_.mshr_stalls;
         return;
       }
-      // With a line table, a line entry must stay free for this request once
-      // every request ahead of it has claimed its own.
-      if (needs_mshr && config_.mshr_lines != 0
-       && this->mshrLinesClaimed() >= config_.mshr_lines) {
-        ++perf_stats_.mshr_stalls;
-        return;
-      }
       // Any admitted request may become a write-miss root: the lazy queue
       // keeps room for every request already in the pipe.
       if (config_.lazy_fetch && !this->lazyRoom()) {
@@ -1351,8 +1292,7 @@ private:
       if (!is_amo_passthru) {
         ++pending_mshr_size_;
         pipe_core_lines_.push_back({params_.addr_set_id(core_req.addr),
-                                    params_.addr_tag(core_req.addr),
-                                    params_.addr_sector_id(core_req.addr)});
+                                    params_.addr_tag(core_req.addr)});
       }
 #if VX_CFG_EXT_A_ENABLED
       if (is_amo_passthru) ++pending_amo_probes_;
@@ -2271,14 +2211,12 @@ private:
   uint32_t pending_mshr_size_;
   uint32_t mshr_occupancy_;
   uint32_t pending_amo_probes_; // AmoProbe requests in the pipe, each holding a table reservation
-  // {set, tag, sector} of Core requests inside the pipe: their MSHR entries
-  // exist only from pipe exit, so ordering checks against in-flight lines (the
-  // AMO admission defer) and the line-table admission must consult this
-  // mirror as well.
+  // {set, tag} of Core requests inside the pipe: their MSHR entries exist
+  // only from pipe exit, so ordering checks against in-flight lines (the AMO
+  // admission defer) must consult this mirror as well.
   struct pipe_line_t {
     uint32_t set_id;
     uint64_t addr_tag;
-    uint32_t sector_id;
   };
   std::vector<pipe_line_t> pipe_core_lines_;
 
@@ -2302,25 +2240,6 @@ private:
     assert(false && "in-pipe line mirror underflow");
   }
 
-  // MSHR line entries held or claimed: the lines in the MSHR, plus a line for
-  // each distinct one a request inside the pipe may still allocate. The RTL
-  // allocates at the pipe's first stage, so these already hold their entries.
-  uint32_t mshrLinesClaimed() const {
-    uint32_t n = mshr_.lines();
-    for (uint32_t i = 0, k = pipe_core_lines_.size(); i < k; ++i) {
-      auto &l = pipe_core_lines_.at(i);
-      if (mshr_.holds_line(l.set_id, l.addr_tag, l.sector_id)) {
-        continue;
-      }
-      bool seen = false;
-      for (uint32_t j = 0; j < i && !seen; ++j) {
-        auto &o = pipe_core_lines_.at(j);
-        seen = (o.set_id == l.set_id && o.addr_tag == l.addr_tag && o.sector_id == l.sector_id);
-      }
-      n += !seen;
-    }
-    return n;
-  }
   TFifo<bank_req_t>::Ptr pipe_req_;
   TFifo<uint32_t>::Ptr   lazy_q_;   // roots awaiting a data-less fill: write misses and written refetches
 

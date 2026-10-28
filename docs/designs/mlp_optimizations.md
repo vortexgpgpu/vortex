@@ -25,7 +25,6 @@ Each section says what problem the feature removes, how it works, and what it ga
 | [Hashed bank select](#hashed-bank-select) | L1D, L2 | Power-of-two strides on one bank | sgemv −32.8% | On (L2; dcache ≥ 4 banks) |
 | [Fill forwarding](#fill-forwarding) | All caches | Replaying waiters after a fill | sgemv −5.0% | On |
 | [Back-to-back fills](#back-to-back-fills) | All caches | A bubble after each fill | rtx5080 stream −6.2% | On |
-| [MSHR line table](#mshr-line-table) | All caches | One wide address compare per waiting request | sgemm −15.3% at 400-cycle latency | Off |
 | [Write-allocate without fetch](#write-allocate-without-fetch-lazy-fetch) | Write-back caches | Reading a line only to overwrite it | DRAM reads −33% | Off |
 | [Full-sector refetch skip](#full-sector-refetch-skip) | Write-back caches | Refetching a fully written sector | rtx5080 sgemm −43.5% with lazy L2 | Off (with lazy fetch) |
 | [Dcache read merge](#dcache-read-merge) | L1D | Same-word loads serialized on one bank | sgemm −17.2% | On |
@@ -50,7 +49,6 @@ Some of these features can be set with a `VX_CFG_*` knob (see [Build Configurati
 | Feature | Knob | Default |
 |---|---|---|
 | Hashed bank select | `VX_CFG_DCACHE_BANK_HASH`, `VX_CFG_L2_BANK_HASH` | dcache: on with 4 or more banks; L2: on. The L3 has no bank hash. |
-| MSHR line table | `VX_CFG_{DCACHE,L2,L3}_MSHR_LINES` | 0 (off): flat MSHR |
 | Write-allocate without fetch | `VX_CFG_{DCACHE,L2,L3}_LAZY_FETCH` | 0 (off). Enabling it also enables the dirty-byte masks (`*_DIRTYBYTES`). |
 | Full-sector refetch skip | Part of lazy fetch | Follows `*_LAZY_FETCH` |
 | Dcache read merge | `VX_CFG_DCACHE_READ_MERGE` | 1 (on) |
@@ -129,16 +127,6 @@ Some of these features can be set with a `VX_CFG_*` knob (see [Build Configurati
 - rtx5080 profile, 4 MiB stream: −6.2%
 - the stock configuration (shallow L2): within ±0.5%
 - the cache also closed timing faster: Fmax up by 3%
-
-### MSHR line table
-
-![MSHR line table](../assets/img/mlp_mshr_line_table.svg)
-
-**Problem.** Each MSHR entry holds a full line address, and every new miss compares against all of them. To keep more misses in flight, the MSHR needs more entries, and each one adds a wide comparator. At high memory latency, a 16-entry MSHR was full a fifth of the time, often with only one or two distinct lines in it.
-
-**How it works.** Distinct {line, sector} pairs go into a small reference-counted line table. Each request entry keeps only an index into that table. The cache holds many more waiting requests (for example 64) while comparing addresses against only the line table (for example 16 entries). Controlled by `VX_CFG_{DCACHE,L2,L3}_MSHR_LINES`.
-
-**Gain (rtlsim at 400-cycle memory latency, MSHR 16 → 64 requests over 16 lines):** sgemm −15.3%, raycast −8.1%. Without the dcache read merge, the same sgemm gains 24.8%. At the stock latency the MSHR does not limit, the gain is under 0.5%, and the feature is off by default.
 
 ### Write-allocate without fetch (lazy fetch)
 

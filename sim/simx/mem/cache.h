@@ -49,7 +49,6 @@ public:
 		bool    lazy_fetch = false;	// write miss allocates without a fill (write-back LLC only)
 		bool    core_out_buf = false; // registered core-response port
 		uint8_t read_merge = 0;	// merge same-word reads within groups of this many adjacent ports (0: off)
-		uint16_t mshr_lines = 0;	// MSHR distinct {line, sector} entries (0: one per request)
 		bool    write_around = false; // a no-allocate write miss goes to memory (write-back only)
 		bool    mem_rsp_queue = false; // memory responses enter through a response queue
 		bool    mem_rsp_slice = false; // a registered boundary ahead of the memory-response port stands for that queue's register
