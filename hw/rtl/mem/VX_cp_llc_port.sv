@@ -93,9 +93,12 @@ module VX_cp_llc_port import VX_gpu_pkg::*; #(
     wire req_fire   = req_valid && req_ready;
     wire fence_fire = fence_req && buf_ready_in;
 
+    // Registered ready: the slot's ready is the last-level cache's crossbar
+    // grant, which must not reach this buffer's enable combinationally.
     VX_elastic_buffer #(
-        .DATAW (REQ_DATAW),
-        .SIZE  (1)
+        .DATAW   (REQ_DATAW),
+        .SIZE    (`TO_OUT_BUF_SIZE(3)),
+        .OUT_REG (`TO_OUT_BUF_REG(3))
     ) req_buf (
         .clk       (clk),
         .reset     (reset),

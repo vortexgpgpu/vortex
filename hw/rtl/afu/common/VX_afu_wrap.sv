@@ -977,13 +977,23 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
         if (CP_DMA_LLC != 0) begin : g_cp_llc
             `STATIC_ASSERT(CP_MEM_DATA_SIZE == FAB_DATA_SIZE, ("CP DMA beat must match the last-level cache word"))
             `STATIC_ASSERT(CP_MEM_TAG_WIDTH >= `VX_CP_AXI_TID_WIDTH, ("CP DMA id does not fit the last-level cache slot tag"))
-            assign cp_llc_req_valid  = cp_mem_req_valid;
-            assign cp_llc_req_rw     = cp_mem_req_rw;
-            assign cp_llc_req_addr   = cp_mem_req_addr[CP_MEM_ADDR_WIDTH-1:0];
-            assign cp_llc_req_data   = cp_mem_req_data;
-            assign cp_llc_req_byteen = cp_mem_req_byteen;
-            assign cp_llc_req_tag    = CP_MEM_TAG_WIDTH'(cp_mem_req_tag);
-            assign cp_mem_req_ready  = cp_llc_req_ready;
+            // The bridge's request valid is combinational; register the
+            // request before it enters the last-level cache's slot.
+            VX_elastic_buffer #(
+                .DATAW   (1 + CP_MEM_ADDR_WIDTH + CP_MEM_DATA_SIZE * 9 + CP_MEM_TAG_WIDTH),
+                .SIZE    (`TO_OUT_BUF_SIZE(3)),
+                .OUT_REG (`TO_OUT_BUF_REG(3))
+            ) cp_llc_req_buf (
+                .clk       (clk),
+                .reset     (subsys_reset),
+                .valid_in  (cp_mem_req_valid),
+                .ready_in  (cp_mem_req_ready),
+                .data_in   ({cp_mem_req_rw, cp_mem_req_addr[CP_MEM_ADDR_WIDTH-1:0], cp_mem_req_data,
+                             cp_mem_req_byteen, CP_MEM_TAG_WIDTH'(cp_mem_req_tag)}),
+                .data_out  ({cp_llc_req_rw, cp_llc_req_addr, cp_llc_req_data, cp_llc_req_byteen, cp_llc_req_tag}),
+                .valid_out (cp_llc_req_valid),
+                .ready_out (cp_llc_req_ready)
+            );
             assign cp_mem_rsp_valid  = cp_llc_rsp_valid;
             assign cp_mem_rsp_data   = cp_llc_rsp_data;
             assign cp_mem_rsp_tag    = cp_llc_rsp_tag[`VX_CP_AXI_TID_WIDTH-1:0];
