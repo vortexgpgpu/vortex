@@ -161,7 +161,7 @@ tests:
   drivers:
   - rtlsim
   app: mstress
-  configs: -DVX_CFG_DCACHE_WRITEBACK=1 -DVX_CFG_DCACHE_DIRTYBYTES=0 -DVX_CFG_DCACHE_NUM_WAYS=4
+  configs: -DVX_CFG_DCACHE_WRITEBACK=1 -DVX_CFG_DCACHE_LAZY_FETCH=0 -DVX_CFG_DCACHE_DIRTYBYTES=0 -DVX_CFG_DCACHE_NUM_WAYS=4
 - id: mstress-2
   via: blackbox
   drivers:

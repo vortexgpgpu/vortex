@@ -25,8 +25,8 @@ Each section says what problem the feature removes, how it works, and what it ga
 | [Hashed bank select](#hashed-bank-select) | L1D, L2 | Power-of-two strides on one bank | sgemv −32.8% | On (L2; dcache ≥ 4 banks) |
 | [Fill forwarding](#fill-forwarding) | All caches | Replaying waiters after a fill | sgemv −5.0% | On |
 | [Back-to-back fills](#back-to-back-fills) | All caches | A bubble after each fill | rtx5080 stream −6.2% | On |
-| [Write-allocate without fetch](#write-allocate-without-fetch-lazy-fetch) | Write-back caches | Reading a line only to overwrite it | DRAM reads −33% | Off |
-| [Full-sector refetch skip](#full-sector-refetch-skip) | Write-back caches | Refetching a fully written sector | rtx5080 sgemm −43.5% with lazy L2 | Off (with lazy fetch) |
+| [Write-allocate without fetch](#write-allocate-without-fetch-lazy-fetch) | Write-back caches | Reading a line only to overwrite it | DRAM reads −33% | On where the cache is a write-back LLC |
+| [Full-sector refetch skip](#full-sector-refetch-skip) | Write-back caches | Refetching a fully written sector | rtx5080 sgemm −43.5% with lazy L2 | On with lazy fetch |
 | [Dcache read merge](#dcache-read-merge) | L1D | Same-word loads serialized on one bank | sgemm −17.2% | On |
 | [Icache same-line merge](#icache-same-line-merge) | L1I | Fetch slices serialized on one line | rtx5080 sgemm −25.8% | On |
 | [Broadcast flush, per-port tokens](#broadcast-flush-and-per-port-flush-tokens) | Whole hierarchy | Serial per-core flushes; lost writes | Flush 2.76M → 16.5k cycles per launch | On |
@@ -49,7 +49,7 @@ Some of these features can be set with a `VX_CFG_*` knob (see [Build Configurati
 | Feature | Knob | Default |
 |---|---|---|
 | Hashed bank select | `VX_CFG_DCACHE_BANK_HASH`, `VX_CFG_L2_BANK_HASH` | dcache: on with 4 or more banks; L2: on. The L3 has no bank hash. |
-| Write-allocate without fetch | `VX_CFG_{DCACHE,L2,L3}_LAZY_FETCH` | 0 (off). Enabling it also enables the dirty-byte masks (`*_DIRTYBYTES`). |
+| Write-allocate without fetch | `VX_CFG_{DCACHE,L2,L3}_LAZY_FETCH` | On where the cache is a write-back LLC (the dcache with no L2, the L2 with no L3, or the L3), off elsewhere. It also enables the dirty-byte masks (`*_DIRTYBYTES`). |
 | Full-sector refetch skip | Part of lazy fetch | Follows `*_LAZY_FETCH` |
 | Dcache read merge | `VX_CFG_DCACHE_READ_MERGE` | 1 (on) |
 | Icache same-line merge | `VX_CFG_ICACHE_READ_MERGE` | 1 (on). No effect with one fetch slice. |
@@ -62,6 +62,7 @@ Some of these features can be set with a `VX_CFG_*` knob (see [Build Configurati
 
 **Selected automatically:**
 - The L1-only launch flush and the fence shortcuts apply whenever a single LLC is the point of coherence.
+- Write-allocate without fetch, the full-sector refetch skip and the dirty-byte masks turn on in whichever cache is a write-back LLC.
 - The FPGA shell's memory port count follows the GPU's memory ports.
 
 ---
@@ -134,7 +135,7 @@ Some of these features can be set with a `VX_CFG_*` knob (see [Build Configurati
 
 **How it works.** A store miss installs the sector at once, with a per-byte dirty mask and a *partial* bit, without reading memory. A later load or atomic on a partial sector refetches it and merges memory data only under the bytes that were never written. An eviction writes back only the dirty bytes. A refill of one sector keeps the dirty bytes of the line's other sectors. Controlled by `VX_CFG_{DCACHE,L2,L3}_LAZY_FETCH`.
 
-**Gain:** 1-core vecadd DRAM reads −33% and memory requests −25%. Cycles are unchanged because that kernel is latency-bound. Off by default.
+**Gain:** 1-core vecadd DRAM reads −33% and memory requests −25%. Cycles are unchanged because that kernel is latency-bound. On where the cache is a write-back LLC, the same write-validate policy NVIDIA's L2 uses: the DRAM traffic it removes counts even where cycles are flat.
 
 ### Full-sector refetch skip
 

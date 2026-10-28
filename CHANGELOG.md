@@ -25,7 +25,7 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
   the same cycle are served by one bank access, and the response is multicast to every port; each port's order into the bank is
   unchanged. *Why:* uniform loads (kernel arguments, SGEMM's shared operand) no longer serialize on one bank: rtlsim sgemm -n128 at
   16 threads -6.5%, -17.2% with an 8-byte dcache word.
-- **Write-allocate without fetch (`VX_CFG_{DCACHE,L2,L3}_LAZY_FETCH`, off by default).** A store miss in a write-back cache installs
+- **Write-allocate without fetch (`VX_CFG_{DCACHE,L2,L3}_LAZY_FETCH`, on where the cache is a write-back LLC).** A store miss in a write-back cache installs
   the sector with its dirty-byte mask and a partial bit instead of fetching the line; a later load or AMO merges memory data under the
   unwritten bytes, and evictions write back only dirty bytes. *Why:* streaming writes no longer read every line first: 1-core vecadd
   DRAM reads -33%.

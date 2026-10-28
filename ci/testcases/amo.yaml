@@ -30,7 +30,7 @@ tests:
   - id: wb-dirtybytes0
     app: amo
     drivers: [rtlsim]
-    configs+: "-DVX_CFG_DCACHE_WRITEBACK=1 -DVX_CFG_DCACHE_DIRTYBYTES=0 -DVX_CFG_DCACHE_NUM_WAYS=4"
+    configs+: "-DVX_CFG_DCACHE_WRITEBACK=1 -DVX_CFG_DCACHE_LAZY_FETCH=0 -DVX_CFG_DCACHE_DIRTYBYTES=0 -DVX_CFG_DCACHE_NUM_WAYS=4"
   - id: wb-dirtybytes1
     app: amo
     drivers: [rtlsim]
