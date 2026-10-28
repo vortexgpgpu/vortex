@@ -347,16 +347,14 @@ vx_result_t Device::cp_init() {
         uint32_t dev_caps = 0;
         if (p->cp_reg_read(CP_DEV_CAPS, &dev_caps) != VX_SUCCESS)
             return VX_ERR_DEVICE_LOST;
-        // An all-ones read is never a valid capability word: bits [31:24] are
+        // An all-ones read is never a valid capability word: bits [31:29] are
         // hardwired zero by VX_cp_axil_regfile, so 0xFFFFFFFF means the read
         // did not reach the register (AXI DECERR / no response substitutes
         // all-ones on the way back). Decoding it would set every capability
         // bit -- and a spurious VM_ENABLED sends VMManager off to identity-map
         // 65,536 PTEs one CP round-trip at a time, which presents as a hang at
         // 100% CPU rather than as the bus error it actually is.
-        // Treat it as "no optional capabilities", which is also the correct
-        // answer for this CP: it has no SATP register, no OP_DRAW, and no
-        // CMD_LAUNCH_QMD (grep hw/rtl/cp -- all three are absent).
+        // Treat it as "no optional capabilities".
         if (dev_caps == 0xFFFFFFFFu) {
             printf("[VXDRV] Warning: CP_DEV_CAPS read returned all-ones; the "
                    "AXI-Lite read did not reach the register. Assuming no "

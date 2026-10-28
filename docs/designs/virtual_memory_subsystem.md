@@ -563,14 +563,15 @@ DCRs. Then:
 
 ### 8.5 The command processor
 
-The emulation CP ([`cmd_processor.cpp`](../../sim/common/cmd_processor.cpp))
-is MMU-aware: `cp_translate()` performs the same Sv32/Sv39 walk as
+Both command processors are MMU-aware: the emulation CP
+([`cmd_processor.cpp`](../../sim/common/cmd_processor.cpp), `cp_translate()`)
+and the RTL DMA ([`VX_cp_dma.sv`](../../hw/rtl/cp/VX_cp_dma.sv), the
+`S_XLATE_*` states) perform the same Sv32/Sv39 walk as
 `VMManager::page_table_walk` against device memory for every `CMD_MEM_*` VA
-operand, skipped by `F_MEM_PHYSICAL`; its root is `CP_SATP_LO/HI` (regfile
-0x028/0x02C), programmed at open. The RTL CP has **no MMU**: `CP_SATP` reads
-zero, `DEV_CAPS.VM_ENABLED` is 0, and the runtime never mints VAs on FPGA.
-VM is therefore a simulation-only feature today
-([`command_processor.md`](command_processor.md) §8, §10).
+operand, skipped by `F_MEM_PHYSICAL`. Their root is `CP_SATP_LO/HI` (regfile
+0x028/0x02C), programmed at open, and both advertise `DEV_CAPS.VM_ENABLED`
+in a VM build, so VM runs the same on simulators and FPGA
+([`command_processor.md`](command_processor.md) §8).
 
 ---
 

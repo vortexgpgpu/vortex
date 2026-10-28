@@ -158,6 +158,8 @@ static constexpr uint16_t CP_CYCLE_LO      = 0x010;
 static constexpr uint16_t CP_CYCLE_HI      = 0x014;
 static constexpr uint16_t GPU_DEV_CAPS_LO  = 0x018;
 static constexpr uint16_t GPU_DEV_CAPS_HI  = 0x01C;
+static constexpr uint16_t CP_SATP_LO       = 0x028;
+static constexpr uint16_t CP_SATP_HI       = 0x02C;
 static constexpr uint16_t GPU_ISA_CAPS_LO  = 0x020;
 static constexpr uint16_t GPU_ISA_CAPS_HI  = 0x024;
 
@@ -199,6 +201,16 @@ int main(int argc, char** argv) {
         EXPECT((v & 0xff)        == 1,  "T1: NUM_QUEUES low byte");
         EXPECT(((v >> 8)  & 0xff) == 16, "T1: RING_SIZE_LOG2_MAX byte");
         EXPECT(((v >> 16) & 0xff) == 6,  "T1: AXI_TID_WIDTH byte");
+        EXPECT(((v >> 24) & 1) == VX_CFG_VM_ENABLED, "T1: VM_ENABLED bit");
+    }
+
+    // ----- Test 1b: CP_SATP holds the DMA page-table root -----
+    {
+        EXPECT(axil_write(sim, tick, CP_SATP_LO, 0x80012345) == 0, "T1b: SATP_LO write");
+        EXPECT(axil_write(sim, tick, CP_SATP_HI, 0x00000007) == 0, "T1b: SATP_HI write");
+        EXPECT((axil_read(sim, tick, CP_SATP_LO) & 0xffffffffull) == 0x80012345, "T1b: SATP_LO readback");
+        EXPECT((axil_read(sim, tick, CP_SATP_HI) & 0xffffffffull) == 0x00000007, "T1b: SATP_HI readback");
+        EXPECT(sim->satp == 0x0000000780012345ull, "T1b: satp output");
     }
 
     // ----- Test 2: CP_CYCLE counter advances -----

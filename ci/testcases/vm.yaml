@@ -258,3 +258,21 @@ tests:
   via: blackbox
   app: vecadd
   args: -n16384
+# The RTL command processor's DMA walks the page table for every upload and
+# download; only xrt runs it (simx and rtlsim use the C++ command processor).
+- id: cp-dma-walk
+  via: blackbox
+  drivers:
+  - xrt
+  app: vm_test
+  args: -t1 -n16 -p1
+  env:
+    VORTEX_RANDOMIZE_VA: 1
+- id: cp-dma-walk-megapage
+  via: blackbox
+  drivers:
+  - xrt
+  app: sgemm
+  args: -n16
+  env:
+    VORTEX_VM_MEGAPAGE_HEAP: 1

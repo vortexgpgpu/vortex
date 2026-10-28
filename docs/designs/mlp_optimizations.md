@@ -311,7 +311,7 @@ Atomics with `.aq`/`.rl` get these steps around them. All of it is skipped when 
 | 4 cores + L2 | −9.1% | −23.4% | |
 | 8 MB L3 | −64% | | |
 
-**Virtual memory.** SimX's command processor translates DMA addresses before they enter the LLC. The RTL command processor has no MMU, so host DMA with virtual memory is a SimX-only configuration for now.
+**Virtual memory.** Both command processors translate DMA addresses before they enter the LLC, so a client of the LLC sees physical addresses with virtual memory on.
 
 ### Local-memory DMA round-robin
 
