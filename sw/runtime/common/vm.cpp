@@ -358,7 +358,17 @@ int VMManager::install_identity_map(uint64_t addr, uint64_t size) {
   constexpr uint32_t IDENTITY_PTE_FLAGS =
       PTE_V | PTE_R | PTE_W | PTE_X | PTE_U | PTE_A | PTE_D;
 
-  (void)virtual_mem_->reserve(addr, size);
+  // A range inside one already mapped, as the kernel image is inside the
+  // page-table and stack region init() maps, holds its VAs already.
+  bool reserved = false;
+  for (auto [start, end] : identity_ranges_) {
+    if (addr >= start && addr + size <= end) {
+      reserved = true;
+      break;
+    }
+  }
+  if (!reserved && virtual_mem_->reserve(addr, size) == 0)
+    identity_ranges_.emplace_back(addr, addr + size);
 
   uint64_t cur = addr;
   uint64_t end = addr + size;
