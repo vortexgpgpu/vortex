@@ -162,9 +162,7 @@ module VX_cache_data import VX_gpu_pkg::*; #(
                 .DATAW       (LINE_SIZE),
                 .SIZE        (DATA_RAM_DEPTH),
                 .OUT_REG     (1),
-                .RDW_MODE    ("R"),
-                .INIT_ENABLE (1),
-                .INIT_VALUE  (0)
+                .RDW_MODE    ("R")
             ) byteen_store (
                 .clk   (clk),
                 .reset (reset),
@@ -201,9 +199,7 @@ module VX_cache_data import VX_gpu_pkg::*; #(
                 .SIZE        (DATA_RAM_DEPTH),
                 .OUT_REG     (0),
                 .LUTRAM      (1),
-                .RDW_MODE    ("W"),
-                .INIT_ENABLE (1),
-                .INIT_VALUE  (0)
+                .RDW_MODE    ("W")
             ) byteen_store (
                 .clk   (clk),
                 .reset (reset),
