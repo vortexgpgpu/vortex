@@ -45,6 +45,7 @@ ci/logic_gate.py); see docs/designs/beacon.md.
 import argparse
 import collections
 import csv
+import json
 import os
 import re
 import resource
