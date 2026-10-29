@@ -284,6 +284,10 @@ tests:
 # luma, both the pair's chroma.
 - {id: tex-422, via: make-run, drivers: [simx], dir: tests/vulkan/tex_422, target: "run-{driver}",
    touches: [sw/common/gfx_frag_tex.h, tests/vulkan/tex_422]}
+# Descriptor robustness: texel buffer stores under robustBufferAccess alone
+# stay inside their buffer; a storage image slot rewritten to null.
+- {id: robust-desc, via: make-run, drivers: [simx], dir: tests/vulkan/robust_desc, target: "run-{driver}",
+   touches: [tests/vulkan/robust_desc]}
 
 # FF/SW-mix matrix — the full 3D pipeline (draw3d) with fixed-function units
 # selectively dropped to SIMT software. Combos that need SW-TEX or SW-RASTER

@@ -1,0 +1,7 @@
+#version 450
+layout(local_size_x = 1) in;
+layout(set = 0, binding = 0, r32ui) uniform writeonly uimageBuffer tb;
+void main()
+{
+   imageStore(tb, int(gl_GlobalInvocationID.x), uvec4(0xdeadu));
+}
