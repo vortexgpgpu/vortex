@@ -19,7 +19,10 @@ VX_ISA_IMPL_ID   = 0
 [memmap]
 VX_MEM_USER_BASE_ADDR       = "expr: 0x0000000000010000 if ($XLEN == 64) else 0x00010000"
 VX_MEM_STACK_LOG2_SIZE      = 13
-VX_MEM_STACK_BASE_ADDR      = "expr: 0x00000001FFFF0000 if ($XLEN == 64) else 0xFFFF0000"
+# The stack window's top is 256 KB aligned, so the window lies on whole groups
+# of NUM_THREADS stacks (up to 32 threads) and the stack interleave is a
+# pure bit permutation.
+VX_MEM_STACK_BASE_ADDR      = "expr: 0x00000001FFFC0000 if ($XLEN == 64) else 0xFFFC0000"
 VX_MEM_LMEM_BASE_ADDR       = "expr: $VX_MEM_STACK_BASE_ADDR"
 VX_MEM_IO_BASE_ADDR         = "expr: 0x0000000000000040 if ($XLEN == 64) else 0x00000040"
 VX_MEM_PAGE_TABLE_BASE_ADDR = "expr: 0x00000000F0000000 if ($XLEN == 64) else 0xF0000000"

@@ -87,12 +87,12 @@ Load-bearing properties:
 - **The XOR with the group index is what spreads warps across sets.** A
   group spans a power of two larger than a cache way; without the skew, the
   same frame slot of every warp would share a set.
-- **It costs two narrow operations, not three wide ones.** Written naively
-  the map subtracts the window base, permutes, and adds the base back. The
-  permutation moves bits only inside the group field and the group index
-  keeps its position, so the subtract and add cancel on every bit above the
-  field; the window base has trailing zeros, so the field itself needs
-  arithmetic only on the bits above them.
+- **It is a bit permutation plus one narrow XOR, with no arithmetic.** The
+  window top `VX_MEM_STACK_BASE_ADDR` is a multiple of the group size
+  (`NUM_THREADS` stacks), so groups start on absolute group boundaries and
+  the map needs no subtract or add of the window base: it rewires the
+  thread and word fields and XORs the word field with the low bits of the
+  group index. The 256 KB-aligned base covers up to 32 threads.
 - **Window membership is a narrow compare.** Both window bounds are asserted
   to be multiples of the stack size, so the test uses only the bits above it.
 
@@ -393,8 +393,9 @@ pool does.
 | `VX_CFG_LSU_QUEUE_IN_SIZE` | §4.3 | staging depth |
 | `VX_CFG_LSU_PENDING_SIZE` | §4.3 | outstanding-pool depth |
 
-`NUM_THREADS` must be a power of two for the stack interleave, and a stack
-access must fit a word (`FLEN ≤ XLEN`).
+`NUM_THREADS` must be a power of two for the stack interleave, the stack
+window top must be a multiple of `NUM_THREADS` stacks, and a stack access
+must fit a word (`FLEN ≤ XLEN`).
 
 ---
 
