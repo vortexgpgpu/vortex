@@ -55,7 +55,8 @@ driver: $(DESTDIR)/libfiresim.so
 
 $(DESTDIR)/libfiresim.so: force
 	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/firesim lib FIRESIM_CARD=$(FIRESIM_CARD) TARGET=$(TARGET) \
-		CONFIGS='$(CONFIGS)' $(if $(PERF),PERF=$(PERF))
+		CONFIGS='$(CONFIGS)' $(if $(PERF),PERF=$(PERF)) $(if $(FAME5),FAME5=$(FAME5)) \
+		$(if $(FAME5_THREADS),FAME5_THREADS=$(FAME5_THREADS))
 
 $(DESTDIR)/$(PROJECT): $(SRCS) $(DESTDIR)/libfiresim.so $(CONFIG_FILE)
 	$(CXX) $(CXXFLAGS) $(SRCS) $(LDFLAGS) -o $@

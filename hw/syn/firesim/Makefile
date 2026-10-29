@@ -88,11 +88,18 @@ $(error TARGET=$(TARGET) is not an image target for card $(FIRESIM_CARD): use on
 endif
 endif
 
+# FAME5=1: FireSim model multithreading. Every socket is time-multiplexed
+# through one physical copy (Golden Gate's FAME-5), which needs Vortex as FIRRTL
+# rather than as a Verilog BlackBox; see fame5/ and
+# docs/designs/firesim_integration.md. Its images never share a directory with
+# the unthreaded ones.
+FAME5_SUFFIX := $(if $(FAME5),_fame5)
+
 # Named as the native flows name theirs, so FPGA_BIN_DIR means the same thing.
 ifeq ($(FIRESIM_PLATFORM), aved)
-BUILD_DIR := $(abspath $(PREFIX)_aved_$(TARGET))
+BUILD_DIR := $(abspath $(PREFIX)_aved_$(TARGET)$(FAME5_SUFFIX))
 else
-BUILD_DIR := $(abspath $(PREFIX)_$(if $(XSA),$(XSA),$(FIRESIM_CARD))_$(TARGET))
+BUILD_DIR := $(abspath $(PREFIX)_$(if $(XSA),$(XSA),$(FIRESIM_CARD))_$(TARGET)$(FAME5_SUFFIX))
 endif
 # The runtime's metasimulator reuses the simulation flattening from here, in a
 # directory of its own.
@@ -110,10 +117,15 @@ ifneq ($(XSA),)
 DEVICE := $(XSA)
 endif
 
+# FireSim keys its generated RTL by design and configs only, so a FAME-5 build
+# names its own target config (identical to VortexConfig) to keep its output
+# apart from the unthreaded one's.
+VORTEX_TARGET_CONFIG := $(if $(FAME5),VortexFame5Config,VortexConfig)
+
 # The FireSim flow's make variables for this card's build.
 FIRESIM_TARGET_ARGS := PLATFORM=$(FIRESIM_PLATFORM) TARGET_PROJECT=midasexamples \
-                       DESIGN=VortexTarget TARGET_CONFIG=VortexConfig PLATFORM_CONFIG=$(PLATFORM_CONFIG)
-QUINTUPLET := $(FIRESIM_PLATFORM)-midasexamples-VortexTarget-VortexConfig-$(PLATFORM_CONFIG)
+                       DESIGN=VortexTarget TARGET_CONFIG=$(VORTEX_TARGET_CONFIG) PLATFORM_CONFIG=$(PLATFORM_CONFIG)
+QUINTUPLET := $(FIRESIM_PLATFORM)-midasexamples-VortexTarget-$(VORTEX_TARGET_CONFIG)-$(PLATFORM_CONFIG)
 
 # Flattened Vortex sources for the BlackBox. Golden Gate takes a file list, not
 # include paths, so the tree is copied into one directory with the macros already
@@ -129,6 +141,15 @@ QUINTUPLET := $(FIRESIM_PLATFORM)-midasexamples-VortexTarget-VortexConfig-$(PLAT
 ifneq ($(filter $(TARGET),sim hw_emu),)
 IMAGE_KIND := sim
 IMAGE_SUFFIX := _sim
+endif
+# FAME-5 converts one flattening to FIRRTL for every target, image or not. It is
+# the synthesis one: SIMULATION would bring in simulation-only tasks ($fflush,
+# $write) that have no FIRRTL form. VX_CFG_FAME5 keeps the async-BRAM patch out
+# of it (VX_platform.vh), whose placeholders only a Vivado hook resolves; the RAM
+# leaves are regenerated as FIRRTL memories instead.
+ifdef FAME5
+IMAGE_KIND :=
+IMAGE_SUFFIX :=
 endif
 VIVADO_SRCS_NAME := vivado_srcs$(IMAGE_SUFFIX)
 VIVADO_SRCS_DIR := $(BUILD_DIR)/$(VIVADO_SRCS_NAME)
@@ -262,6 +283,9 @@ endif
 # indistinguishable from an idle core rather than an absent instrument.
 ifdef PERF
 PLATFORM_DEFINES += -DPERF_ENABLE
+endif
+ifdef FAME5
+PLATFORM_DEFINES += -DVX_CFG_FAME5
 endif
 
 GEN_CFLAGS := -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN) $(CONFIGS) $(TYPE_DEFINES) $(PLATFORM_DEFINES) $(SYNTH_DEFINES) $(RTL_INCLUDE)
@@ -469,6 +493,7 @@ endif
 # prerequisite: the recipe hands synthesis the Vivado-flattened list, and pulling
 # the simulation one in would flatten the tree a second time under the opposite
 # defines for nothing.
+ifndef FAME5
 image: vivado-sources xilinx-ips stage
 	$(MAKE) -C $(FIRESIM_PATH)/sim replace-rtl $(FIRESIM_TARGET_ARGS)
 	VORTEX_VIVADO_SRCS=$(VIVADO_SRCS_LIST) VORTEX_XILINX_IP_DIR=$(XILINX_IP_DIR) \
@@ -481,6 +506,54 @@ image: vivado-sources xilinx-ips stage
 # no image. An image build elaborates as part of replace-rtl.
 elaborate: stage
 	$(MAKE) -C $(FIRESIM_PATH)/sim verilog $(FIRESIM_TARGET_ARGS)
+else
+# Under FAME-5 Vortex is part of the generated RTL, so the image is handed no
+# Vortex sources, no vendor cores and no pre-opt hook: there is nothing left
+# outside FireSim-generated.sv for them to apply to.
+image: elaborate
+	$(MAKE) -C $(FIRESIM_PATH)/sim replace-rtl $(FIRESIM_TARGET_ARGS)
+	TOOL_DIR=$(SCRIPT_DIR) $(MAKE) -C $(PLATFORM_BUILD_DIR) $(PLATFORM_IMAGE_GOAL) \
+		DEVICE=$(DEVICE) HOST_MEM_SP='$(HOST_MEM_SP)' FREQUENCY=$(FREQUENCY) STRATEGY=$(STRATEGY)
+
+# Vortex as FIRRTL: sv2v, then Yosys flattening everything but VX_socket_top
+# (the unit threaded), with the RAM leaves regenerated as FIRRTL memories
+# (fame5/to_firrtl.sh).
+FAME5_DIR := $(BUILD_DIR)/fame5
+FAME5_V := $(FAME5_DIR)/vortex.v
+FAME5_FIR := $(FAME5_DIR)/vortex.fir
+FAME5_SCRIPTS := $(wildcard $(SRC_DIR)/fame5/*)
+SV2V ?= sv2v
+
+$(FAME5_V): $(VIVADO_SRCS_LIST)
+	@mkdir -p $(FAME5_DIR)
+	$(SV2V) $$(grep '^+define+' $(VIVADO_SRCS_LIST) | sed 's/^+define+/-D/') --top=VX_firesim_wrap \
+		$$(grep -v '^+' $(VIVADO_SRCS_LIST)) -w $@
+
+$(FAME5_FIR): $(FAME5_V) $(FAME5_SCRIPTS)
+	bash $(SRC_DIR)/fame5/to_firrtl.sh $(FAME5_V) VX_firesim_wrap $@ VX_socket_top VX_firesim_wrap \
+		"blackbox VX_dp_ram VX_sp_ram"
+
+# The generator's circuit names VX_firesim_wrap as an extmodule; it is replaced
+# by the converted Vortex, and every socket is annotated for threading, before
+# Golden Gate runs. The circuit is regenerated each time, since the splice edits
+# it in place. FAME5_THREADS=0 skips the annotations: the same FIRRTL design,
+# unthreaded, which must agree with the threaded one cycle for cycle.
+# Yosys writes long nested cat() chains, and the FIRRTL parser recurses once per
+# level: the 8 MB thread stack FireSim sets overflows on a converted Vortex.
+# FireSim only sets its default when the variable is unset.
+export JAVA_TOOL_OPTIONS ?= -Xmx48G -Xss1G -Djava.io.tmpdir=$(FIRESIM_PATH)/sim/.java_tmp
+
+GEN_FIR := $(FIRESIM_PATH)/sim/generated-src/$(FIRESIM_PLATFORM)/$(QUINTUPLET)/firesim.midasexamples.VortexTarget.$(VORTEX_TARGET_CONFIG).fir
+GEN_ANNO := $(GEN_FIR:.fir=.anno.json)
+elaborate: stage $(FAME5_FIR)
+	rm -f $(GEN_FIR)
+	$(MAKE) -C $(FIRESIM_PATH)/sim $(GEN_FIR) $(FIRESIM_TARGET_ARGS)
+	python3 $(SRC_DIR)/fame5/splice.py $(GEN_FIR) $(FAME5_FIR)
+ifneq ($(FAME5_THREADS),0)
+	python3 $(SRC_DIR)/fame5/annotate_threads.py $(GEN_FIR) $(GEN_ANNO) VX_socket_top
+endif
+	$(MAKE) -C $(FIRESIM_PATH)/sim verilog $(FIRESIM_TARGET_ARGS)
+endif
 
 clean:
 	rm -rf $(BUILD_DIR)
