@@ -87,8 +87,8 @@ gfx_PKG  = $(RTL_DIR)/fpu/VX_fpu_pkg.sv $(RTL_DIR)/dxa/VX_dxa_pkg.sv $(RTL_DIR)/
 issue_PRJ := VX_issue_top
 issue_INC  = $(BASE_INC) -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm $(FPU_INC) -I$(UNITTEST_DIR)/issue
 
-lmem_PRJ := VX_local_mem_top
-lmem_INC  = $(BASE_INC) -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(RTL_DIR)/cache -I$(UNITTEST_DIR)/local_mem
+lmem_PRJ := VX_lmem_unit_top
+lmem_INC  = $(BASE_INC) -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(RTL_DIR)/cache -I$(UNITTEST_DIR)/lmem_unit
 
 mem_unit_PRJ := VX_mem_unit_top
 mem_unit_INC  = $(BASE_INC) -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(RTL_DIR)/core -I$(RTL_DIR)/fpu -I$(UNITTEST_DIR)/mem_unit

@@ -320,10 +320,6 @@ lmem_bytes_per_bank = 2048
 lmem_min_bytes = 16384
 VX_CFG_LMEM_NUM_BANKS = "expr: $VX_CFG_NUM_LSU_LANES"
 VX_CFG_LMEM_LOG_SIZE = "expr: clog2(max($lmem_min_bytes, $VX_CFG_LMEM_NUM_BANKS * $lmem_bytes_per_bank))"
-# Same-word reads of one LSU block's lanes share one bank access, and the
-# response returns to all of them: each bank serves one distinct word per cycle
-# to every lane reading it.
-VX_CFG_LMEM_READ_MERGE = 1
 
 [tcu]
 # string enum: 'DPI'|'DSP'|'BHF'|'TFR'|'FPNEW'; TFR is the universal default. On

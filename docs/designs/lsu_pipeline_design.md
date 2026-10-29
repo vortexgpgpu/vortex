@@ -305,14 +305,29 @@ The attribute passes through untouched on both paths.
 
 ### 5.2 Local path
 
-Each LSU block has its **own** adapter into
-[`VX_local_mem`](../../hw/rtl/mem/VX_local_mem.sv). A shared adapter would
-close a loop through its pack and unpack buffers and deadlock with more than
-one block.
+Each LSU block hands its local requests whole to
+[`VX_lmem_unit`](../../hw/rtl/mem/VX_lmem_unit.sv), the warp-wide local
+memory. A block arbiter takes one request at a time into a pass engine
+([`VX_lmem_engine`](../../hw/rtl/mem/VX_lmem_engine.sv)), which compares the
+lanes' words once and then serves the request in bank-conflict-free passes:
+every bank goes to its lowest pending lane, every pending lane reading that
+lane's word rides along (a broadcast), and the remaining lanes replay. A
+request retires before the next one starts, so every lane's accesses reach the
+banks in program order. A request without bank conflicts takes the banks for a
+single cycle, so one such request issues every cycle; the response
+carries every lane the pass served.
 
-Local memory is a banked SRAM, so lanes addressing different banks are served
-in the same cycle. Its second port is shared by the direct-memory clients —
-the DXA writes and the tensor unit's reads.
+With several LSU blocks, a second engine for plain reads only works the banks'
+second port, so two warps' reads go through in a cycle. Stores and atomics use
+the first engine alone and wait for the read engine to drain; the read engine
+takes no read while a store or atomic sits in the first engine, while one
+waited at an input the cycle before, or in a cycle the first engine may be
+taking one. Each engine's block is chosen a cycle ahead, so the ready a block
+sees comes from registers.
+
+The direct-memory clients (the DXA writes and the tensor unit's reads) take
+whole bank rows on the first port: a DMA request seen in one cycle stops the
+passes and gets the banks the next.
 
 ### 5.3 Global path
 

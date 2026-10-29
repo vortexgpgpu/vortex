@@ -244,19 +244,39 @@ tests:
   via: blackbox
   app: uniform_ld
   configs: -DVX_CFG_NUM_THREADS=16
-# Same-word local-memory reads of one LSU block, served by one bank access and
-# returned to every lane.
-- id: parity-lmem-merge
+# Warp-wide local memory: broadcast reads, bank-conflict replays, sub-word and
+# same-word stores, with one LSU block and with two, where the read engine
+# works the banks' second port.
+- id: parity-lmem-access
   check: model_parity
   via: blackbox
-  app: lmem_merge
+  app: lmem_access
   configs: -DVX_CFG_NUM_THREADS=16
-- id: parity-sgemm2-lmem-merge
+- id: parity-lmem-access-iw2
+  check: model_parity
+  via: blackbox
+  app: lmem_access
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_ISSUE_WIDTH=2
+# -s leaves out the LR/SC phase, whose retry count depends on timing; the
+# lmem-access-amo* regression cases run it.
+- id: parity-lmem-access-amo-iw2
+  check: model_parity
+  via: blackbox
+  app: lmem_access
+  args: -n16 -s
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_A_ENABLE -DVX_CFG_ISSUE_WIDTH=2
+- id: parity-sgemm2-lmem
   check: model_parity
   via: blackbox
   app: sgemm2
   args: -n32 -t4
   configs: -DVX_CFG_NUM_THREADS=16
+- id: parity-sgemm2-lmem-iw2
+  check: model_parity
+  via: blackbox
+  app: sgemm2
+  args: -n64 -t16
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_ISSUE_WIDTH=2
 # SGEMM with local-memory tiling (kernel-managed shared memory).
 - id: parity-sgemmx
   check: model_parity

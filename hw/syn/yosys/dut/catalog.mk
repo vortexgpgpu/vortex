@@ -9,7 +9,7 @@
 # synthesizes, so both gates measure the same modules and a divergence between
 # them is meaningful rather than an artefact of two DUT lists.
 
-DUTS := cache core tcu gfx tex raster om rtu dxa mufu vm tensor top vortex
+DUTS := cache core lmem tcu gfx tex raster om rtu dxa mufu vm tensor top vortex
 
 UNITTEST_DIR ?= $(VORTEX_HOME)/hw/unittest
 AFU_RTL_DIR  ?= $(VORTEX_HOME)/hw/rtl/afu
@@ -21,6 +21,12 @@ cache_CFG := -DVX_CFG_EXT_A_ENABLE
 core_TOP := VX_core_top
 core_INC := -I$(UNITTEST_DIR)/core
 core_CFG := -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_EXT_C_ENABLE -DVX_CFG_EXT_A_ENABLE
+
+# Warp-wide local memory at the configured core shape; its gate builds set the
+# shape, as the Xilinx lmem DUT's do.
+lmem_TOP := VX_lmem_unit_top
+lmem_INC := -I$(UNITTEST_DIR)/lmem_unit
+lmem_CFG :=
 
 tcu_TOP := VX_tcu_unit_top
 tcu_INC := -I$(UNITTEST_DIR)/tcu_unit

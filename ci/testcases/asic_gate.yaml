@@ -123,6 +123,15 @@ builds:
   area_budget_um2: 84624
   configs: "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8"
 
+# Warp-wide local memory with two LSU blocks: both pass engines, the
+# dual-port banks the read engine reads through, and the atomic logic.
+- id: lmem
+  group: core
+  dut: lmem
+  clock_mhz: 400
+  area_budget_um2: 15867
+  configs: "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_A_ENABLE"
+
 # Multi-core system top: 2 cores with atomics and virtual memory behind the AFU
 # wrapper. Closes the cross-module boundaries (socket arbiters, socket MMU,
 # cluster mem network) that the per-unit DUTs do not.

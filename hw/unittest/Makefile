@@ -4,7 +4,7 @@ all:
 	$(MAKE) -C cache
 	$(MAKE) -C core
 	$(MAKE) -C issue
-	$(MAKE) -C local_mem
+	$(MAKE) -C lmem_unit
 	$(MAKE) -C mem_unit
 	$(MAKE) -C tcu_fedp
 	$(MAKE) -C cta_dispatcher
@@ -39,7 +39,7 @@ run:
 	$(MAKE) -C cache run
 	$(MAKE) -C core run
 	$(MAKE) -C issue run
-	$(MAKE) -C local_mem run
+	$(MAKE) -C lmem_unit run
 	$(MAKE) -C mem_unit run
 	$(MAKE) -C tcu_fedp run
 	$(MAKE) -C cta_dispatcher run
@@ -188,7 +188,7 @@ clean:
 	$(MAKE) -C cache clean
 	$(MAKE) -C core clean
 	$(MAKE) -C issue clean
-	$(MAKE) -C local_mem clean
+	$(MAKE) -C lmem_unit clean
 	$(MAKE) -C mem_unit clean
 	$(MAKE) -C tcu_fedp clean
 	$(MAKE) -C cta_dispatcher clean

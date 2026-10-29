@@ -38,7 +38,7 @@ import VX_tcu_pkg::*;
     output wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] lsu_store_empty,
     output wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] lsu_busy,
 `ifdef VX_CFG_LMEM_ENABLE
-    VX_mem_bus_if.master    lmem_bus_if [LSU_NUM_REQS],
+    VX_lsu_mem_if.master    lmem_if [`VX_CFG_NUM_LSU_BLOCKS],
 `endif
     VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS],
 
@@ -132,7 +132,7 @@ import VX_tcu_pkg::*;
         .store_empty         (lsu_store_empty),
         .busy                (lsu_busy),
     `ifdef VX_CFG_LMEM_ENABLE
-        .lmem_bus_if         (lmem_bus_if),
+        .lmem_if             (lmem_if),
     `endif
         .dcache_bus_if       (dcache_bus_if)
     );

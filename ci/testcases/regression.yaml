@@ -18,33 +18,48 @@ tests:
   - rtlsim
   dir: tests/regression
   target: run-{driver}
-# Local-memory read merging: shared-word reads, partial masks, lanes of
-# different LSU blocks, and per-lane order against the lane's own stores.
-- id: lmem-merge-1
+# Local memory: shared-word reads (one lane to the whole warp, and lanes of
+# different LSU blocks), partial masks, bank-conflict replays, sub-word loads
+# and stores, same-word stores, and per-lane order against the lane's own
+# stores and atomics.
+- id: lmem-access-1
   via: blackbox
   drivers:
   - simx
   - rtlsim
-  app: lmem_merge
+  app: lmem_access
   shape:
     threads: 16
-- id: lmem-merge-2
+# Two LSU blocks: the read engine on the banks' second port.
+- id: lmem-access-2
   via: blackbox
   drivers:
   - simx
-  app: lmem_merge
+  - rtlsim
+  app: lmem_access
   configs: -DVX_CFG_ISSUE_WIDTH=2
   shape:
     threads: 32
     warps: 8
-# The same test with merging off: every lane takes its own bank access.
-- id: lmem-merge-off
+# With atomics: a warp's reads around its own atomic adds to the word.
+- id: lmem-access-amo
   via: blackbox
   drivers:
   - simx
   - rtlsim
-  app: lmem_merge
-  configs: -DVX_CFG_LMEM_READ_MERGE=0
+  app: lmem_access
+  configs: -DVX_CFG_EXT_A_ENABLE
+  shape:
+    threads: 16
+# Atomics with two LSU blocks: the read engine drains before an atomic enters
+# the first engine.
+- id: lmem-access-amo-iw2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: lmem_access
+  configs: -DVX_CFG_EXT_A_ENABLE -DVX_CFG_ISSUE_WIDTH=2
   shape:
     threads: 16
 - id: occupancy-1

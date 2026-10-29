@@ -88,6 +88,15 @@ builds:
   lut_budget: 171712
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_EXT_C_ENABLE -DVX_CFG_EXT_A_ENABLE
 
+# Warp-wide local memory with two LSU blocks: both pass engines, the
+# dual-port banks the read engine reads through, and the atomic logic.
+- id: lmem
+  group: core
+  dut: lmem
+  clock_mhz: 300
+  lut_budget: 26822
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_A_ENABLE
+
 # Multi-core system top: 2 cores at NT=NW=4, atomics + virtual memory (MMU).
 # Closes the cross-module boundaries (socket arbiters, socket MMU, cluster mem
 # network) that the per-unit DUTs do not; 250 MHz (routing-bound, misses 300).

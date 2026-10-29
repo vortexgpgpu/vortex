@@ -1,5 +1,6 @@
-// lmem_merge — local-memory reads that share words must each get their own
-// word, and keep each thread's order with its own stores.
+// lmem_access — local-memory reads that share words must each get their own
+// word, stores of several lanes to one word must all land, and every thread
+// keeps its order with its own stores.
 
 #include <vortex2.h>
 #include "common.h"
@@ -24,15 +25,20 @@
 namespace {
 const char* kernel_file = "kernel.vxbin";
 uint32_t    num_iters   = 16;
+// The LR/SC phase retries a contended store-conditional, so its instruction
+// count depends on timing; -s leaves it out where instruction counts must
+// match, as in the model-parity runs.
+bool        skip_lrsc   = false;
 
 void parse_args(int argc, char** argv) {
   int c;
-  while ((c = getopt(argc, argv, "n:k:h")) != -1) {
+  while ((c = getopt(argc, argv, "n:k:sh")) != -1) {
     switch (c) {
       case 'n': num_iters   = std::atoi(optarg); break;
       case 'k': kernel_file = optarg;            break;
+      case 's': skip_lrsc   = true;              break;
       default:
-        std::cout << "Usage: [-n iterations] [-k kernel] [-h]" << std::endl;
+        std::cout << "Usage: [-n iterations] [-k kernel] [-s (no LR/SC phase)] [-h]" << std::endl;
         std::exit(c == 'h' ? 0 : -1);
     }
   }
@@ -49,7 +55,10 @@ int main(int argc, char** argv) {
   CHECK(vx_device_open(0, &dev));
 
   // One block per core holding all its warps, two waves of blocks.
-  uint64_t nt = 0, nw = 0, nc = 0, lmem_size = 0;
+  uint64_t nt = 0;
+  uint64_t nw = 0;
+  uint64_t nc = 0;
+  uint64_t lmem_size = 0;
   CHECK(vx_device_query(dev, VX_CAPS_NUM_THREADS,    &nt));
   CHECK(vx_device_query(dev, VX_CAPS_NUM_WARPS,      &nw));
   CHECK(vx_device_query(dev, VX_CAPS_NUM_CORES,      &nc));
@@ -58,12 +67,15 @@ int main(int argc, char** argv) {
   const uint32_t block = static_cast<uint32_t>(nt * nw);
   const uint32_t grid = static_cast<uint32_t>(nc * 2);
   const uint32_t num_threads = block * grid;
-  // shrink the iteration count until a block's RAW and WAR words fit
-  while (num_iters > 1 && (RO_WORDS + 2 * nw * num_iters) * sizeof(uint32_t) > lmem_size) {
+  // shrink the iteration count until a block's per-iteration words fit
+  const uint32_t cf_words = W * W;
+  const uint32_t slot_words = 4 + SUB_WORDS(W);
+  while (num_iters > 1 && (RO_WORDS + slot_words * nw * num_iters + cf_words + num_iters + 2) * sizeof(uint32_t) > lmem_size) {
     num_iters /= 2;
   }
-  const uint32_t words = RO_WORDS + 2 * static_cast<uint32_t>(nw) * num_iters;
-  std::cout << "lmem_merge: iters=" << num_iters << " block=" << block << " grid=" << grid
+  const uint32_t slots = static_cast<uint32_t>(nw) * num_iters;
+  const uint32_t words = RO_WORDS + slot_words * slots + cf_words + num_iters + 2;
+  std::cout << "lmem_access: iters=" << num_iters << " block=" << block << " grid=" << grid
        << " words=" << words << std::endl;
   if (words * sizeof(uint32_t) > lmem_size) {
     std::cout << "local memory too small\nFAILED!" << std::endl;
@@ -74,7 +86,8 @@ int main(int argc, char** argv) {
   vx_queue_h q = nullptr;
   CHECK(vx_queue_create(dev, &qi, &q));
 
-  vx_buffer_h err_buf = nullptr, dump_buf = nullptr;
+  vx_buffer_h err_buf = nullptr;
+  vx_buffer_h dump_buf = nullptr;
   CHECK(vx_buffer_create(dev, num_threads * sizeof(uint32_t), VX_MEM_WRITE, &err_buf));
   CHECK(vx_buffer_create(dev, grid * words * sizeof(uint32_t), VX_MEM_WRITE, &dump_buf));
 
@@ -88,7 +101,15 @@ int main(int argc, char** argv) {
   kernel_arg.warp_size  = W;
   kernel_arg.lmem_words = words;
   kernel_arg.raw_base   = RO_WORDS;
-  kernel_arg.war_base   = RO_WORDS + static_cast<uint32_t>(nw) * num_iters;
+  kernel_arg.war_base   = RO_WORDS + slots;
+  kernel_arg.amo_base   = RO_WORDS + 2 * slots;
+  kernel_arg.cf_base    = RO_WORDS + 3 * slots;
+  kernel_arg.sub_base   = kernel_arg.cf_base + cf_words;
+  kernel_arg.same_base  = kernel_arg.sub_base + SUB_WORDS(W) * slots;
+  kernel_arg.xwarp_base = kernel_arg.same_base + slots;
+  kernel_arg.count_word = kernel_arg.xwarp_base + num_iters;
+  kernel_arg.lrsc_word  = kernel_arg.count_word + 1;
+  kernel_arg.lrsc       = skip_lrsc ? 0 : 1;
   CHECK(vx_buffer_address(err_buf,  &kernel_arg.err_addr));
   CHECK(vx_buffer_address(dump_buf, &kernel_arg.dump_addr));
 
@@ -102,8 +123,10 @@ int main(int argc, char** argv) {
   li.block_dim[0]= block;
   li.lmem_size   = words * sizeof(uint32_t);
 
-  std::vector<uint32_t> h_err(num_threads), h_dump(grid * words);
-  vx_event_h launch_ev = nullptr, read_ev = nullptr;
+  std::vector<uint32_t> h_err(num_threads);
+  std::vector<uint32_t> h_dump(grid * words);
+  vx_event_h launch_ev = nullptr;
+  vx_event_h read_ev = nullptr;
   CHECK(vx_enqueue_launch(q, &li, 0, nullptr, &launch_ev));
   CHECK(vx_enqueue_read(q, h_err.data(), err_buf, 0, num_threads * sizeof(uint32_t), 1, &launch_ev, nullptr));
   CHECK(vx_enqueue_read(q, h_dump.data(), dump_buf, 0, grid * words * sizeof(uint32_t), 1, &launch_ev, &read_ev));
@@ -119,10 +142,32 @@ int main(int argc, char** argv) {
     }
     errors += h_err[t];
   }
-  // every RAW and WAR word was stored by its lane; the read-only words kept their value
+  // every RAW and WAR word was stored by its lane, every sub-word store word
+  // holds its lanes' bytes, every same-word store word the highest lane's
+  // store, every cross-warp word its warp's store, and the counters every
+  // thread's increments; the read-only words kept their value
   for (uint32_t b = 0; b < grid; ++b) {
     for (uint32_t i = 0; i < words; ++i) {
-      uint32_t expected = (i < RO_WORDS) ? (i * 3 + 2) : (LMEM_MARK + i);
+      uint32_t expected = ro_word(i);
+      if (i >= kernel_arg.raw_base && i < kernel_arg.amo_base) {
+        expected = LMEM_MARK + i;
+      } else if (i >= kernel_arg.amo_base && i < kernel_arg.cf_base && VX_CFG_EXT_A_ENABLED) {
+        expected += W;
+      } else if (i >= kernel_arg.sub_base && i < kernel_arg.same_base) {
+        uint32_t slot = (i - kernel_arg.sub_base) / SUB_WORDS(W);
+        uint32_t lane0 = ((i - kernel_arg.sub_base) % SUB_WORDS(W)) * 4;
+        for (uint32_t k = 0; k < 4 && lane0 + k < W; ++k) {
+          expected = (expected & ~(0xffu << (8 * k))) | ((uint32_t)sub_byte(slot, lane0 + k) << (8 * k));
+        }
+      } else if (i >= kernel_arg.same_base && i < kernel_arg.xwarp_base) {
+        expected = same_word(i - kernel_arg.same_base, W - 1);
+      } else if (i >= kernel_arg.xwarp_base && i < kernel_arg.count_word) {
+        expected = xwarp_word(i - kernel_arg.xwarp_base);
+      } else if (i == kernel_arg.count_word && VX_CFG_EXT_A_ENABLED) {
+        expected += block * num_iters;
+      } else if (i == kernel_arg.lrsc_word && VX_CFG_EXT_A_ENABLED && kernel_arg.lrsc) {
+        expected += block;
+      }
       uint32_t actual = h_dump[b * words + i];
       if (actual != expected) {
         if (errors < 16) {

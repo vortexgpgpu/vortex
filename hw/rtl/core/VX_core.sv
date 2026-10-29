@@ -85,10 +85,11 @@ import VX_tcu_pkg::*;
     wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] lsu_sched_empty;
     wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] lsu_store_empty;
 `ifdef VX_CFG_LMEM_ENABLE
-    VX_mem_bus_if #(
+    VX_lsu_mem_if #(
+        .NUM_LANES (`VX_CFG_NUM_LSU_LANES),
         .DATA_SIZE (LSU_WORD_SIZE),
         .TAG_WIDTH (LSU_TAG_WIDTH)
-    ) lsu_lmem_bus_if[LSU_NUM_REQS]();
+    ) lsu_lmem_if[`VX_CFG_NUM_LSU_BLOCKS]();
 `endif
     VX_mem_bus_if #(
         .DATA_SIZE (DCACHE_WORD_SIZE),
@@ -450,7 +451,7 @@ import VX_tcu_pkg::*;
                 .lsu_store_empty      (lsu_store_empty[i]),
                 .lsu_busy             (lsu_busy[i]),
             `ifdef VX_CFG_LMEM_ENABLE
-                .lmem_bus_if          (lsu_lmem_bus_if[i * `VX_CFG_NUM_LSU_LANES +: `VX_CFG_NUM_LSU_LANES]),
+                .lmem_if              (lsu_lmem_if[i]),
             `endif
                 .dcache_bus_if        (lsu_dcache_bus_if[i * DCACHE_CHANNELS +: DCACHE_CHANNELS]),
             `ifdef VX_CFG_EXT_DXA_ENABLE
@@ -669,7 +670,7 @@ import VX_tcu_pkg::*;
                     .lsu_store_empty      (lsu_store_empty[i]),
                     .lsu_busy             (lsu_busy[i]),
                 `ifdef VX_CFG_LMEM_ENABLE
-                    .lmem_bus_if          (lsu_lmem_bus_if[i * `VX_CFG_NUM_LSU_LANES +: `VX_CFG_NUM_LSU_LANES]),
+                    .lmem_if              (lsu_lmem_if[i]),
                 `endif
                     .dcache_bus_if        (lsu_dcache_bus_if[i * DCACHE_CHANNELS +: DCACHE_CHANNELS]),
                 `ifdef VX_CFG_EXT_DXA_ENABLE
@@ -750,7 +751,7 @@ import VX_tcu_pkg::*;
                 .lsu_store_empty      (lsu_store_empty),
                 .lsu_busy             (lsu_busy),
             `ifdef VX_CFG_LMEM_ENABLE
-                .lmem_bus_if          (lsu_lmem_bus_if),
+                .lmem_if              (lsu_lmem_if),
             `endif
                 .dcache_bus_if        (lsu_dcache_bus_if),
 
@@ -819,7 +820,7 @@ import VX_tcu_pkg::*;
         .dxa_txbar_bus_if(dxa_txbar_bus_if),
     `endif
     `ifdef VX_CFG_LMEM_ENABLE
-        .lmem_bus_if     (lsu_lmem_bus_if),
+        .lmem_if         (lsu_lmem_if),
     `endif
         .lsu_dcache_bus_if (lsu_dcache_bus_if),
         .dcr_flush_if    (dcr_flush_dcache_if),

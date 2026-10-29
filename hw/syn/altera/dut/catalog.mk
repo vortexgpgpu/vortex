@@ -58,8 +58,8 @@ issue_PRJ := VX_issue_top
 issue_INC  = $(BASE_INC) -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm $(FPU_INC) \
              -I$(IP_CACHE_DIR) -I$(UNITTEST_DIR)/issue
 
-lmem_PRJ := VX_local_mem_top
-lmem_INC  = $(BASE_INC) -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(UNITTEST_DIR)/local_mem
+lmem_PRJ := VX_lmem_unit_top
+lmem_INC  = $(BASE_INC) -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(UNITTEST_DIR)/lmem_unit
 
 mem_unit_PRJ := VX_mem_unit_top
 mem_unit_INC  = $(BASE_INC) -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(RTL_DIR)/core -I$(RTL_DIR)/fpu \

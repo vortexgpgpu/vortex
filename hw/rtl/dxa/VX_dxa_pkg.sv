@@ -24,8 +24,8 @@ package VX_dxa_pkg;
     localparam DXA_LMEM_WORD_SIZE = `VX_CFG_LMEM_NUM_BANKS * (`VX_CFG_XLEN / 8);
     localparam DXA_LMEM_ADDR_W = LMEM_DMA_ADDR_WIDTH;
 
-    // LMEM byte-address width: an LMEM-relative byte offset, same as
-    // VX_local_mem's ADDR_WIDTH = `CLOG2(SIZE) = `VX_CFG_LMEM_LOG_SIZE.
+    // LMEM byte-address width: an LMEM-relative byte offset into the
+    // (1 << `VX_CFG_LMEM_LOG_SIZE)-byte local memory.
     localparam DXA_SMEM_ADDR_W = `VX_CFG_LMEM_LOG_SIZE;
 
     localparam DXA_DESC_SLOT_BITS = `CLOG2(`VX_DCR_DXA_DESC_COUNT);

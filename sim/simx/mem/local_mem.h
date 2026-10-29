@@ -17,6 +17,13 @@
 
 namespace vortex {
 
+// Warp-wide local memory. It takes whole warp requests from the LSU blocks,
+// one per cycle per engine (two engines with several LSU blocks), and serves
+// each in passes: each pass gives every bank to the lowest pending lane that
+// maps to it, and every pending read lane of the same word rides along. Lanes
+// left over replay in later passes, one every other cycle, and a request
+// retires before the next one starts, so the banks see every lane in program
+// order.
 class LocalMem : public SimObject<LocalMem> {
 public:
   // A DMA access covers one full bank row. A row wider than a mem_block
@@ -27,12 +34,11 @@ public:
 
   struct Config {
     uint32_t capacity;
-    uint32_t line_size;
-    uint32_t num_reqs;
-    uint32_t B; // log2 number of banks
-    bool write_reponse;
+    uint32_t word_size;
+    uint32_t num_blocks;  // LSU blocks, one warp request port each
+    uint32_t num_lanes;   // lanes of a warp request
+    uint32_t B;           // log2 number of banks
     uint32_t dma_clients; // row-wide DMA masters, served round-robin
-    uint32_t read_merge;  // same-word reads merge within groups of this many adjacent ports (0: off)
   };
 
   struct PerfStats {
@@ -48,8 +54,8 @@ public:
     }
   };
 
-  std::vector<SimChannel<MemReq>> Inputs;
-  std::vector<SimChannel<MemRsp>> Outputs;
+  std::vector<SimChannel<LsuReq>> ReqIn;
+  std::vector<SimChannel<LsuRsp>> RspOut;
 
   // DMA port: client c uses channels [c * DMA_PORTS, (c + 1) * DMA_PORTS).
   std::vector<SimChannel<MemReq>> DmaInputs;

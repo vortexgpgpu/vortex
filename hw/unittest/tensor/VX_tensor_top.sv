@@ -222,10 +222,11 @@ module VX_tensor_top import VX_gpu_pkg::*, VX_tcu_pkg::*, VX_dxa_pkg::*; #(
         wire [NUM_LSU_BLKS-1:0] block_sched_empty;
         wire [NUM_LSU_BLKS-1:0] block_store_empty;
 
-        VX_mem_bus_if #(
+        VX_lsu_mem_if #(
+            .NUM_LANES (`VX_CFG_NUM_LSU_LANES),
             .DATA_SIZE (LSU_WORD_SIZE),
             .TAG_WIDTH (LSU_TAG_WIDTH)
-        ) lsu_lmem_bus_if[LSU_NUM_REQS]();
+        ) lsu_lmem_if[`VX_CFG_NUM_LSU_BLOCKS]();
 
         VX_mem_bus_if #(
             .DATA_SIZE (DCACHE_WORD_SIZE),
@@ -263,7 +264,7 @@ module VX_tensor_top import VX_gpu_pkg::*, VX_tcu_pkg::*, VX_dxa_pkg::*; #(
                 .sched_empty   (block_sched_empty[block_idx]),
                 .store_empty   (block_store_empty[block_idx]),
                 `UNUSED_PIN    (busy),
-                .lmem_bus_if   (lsu_lmem_bus_if[block_idx * `VX_CFG_NUM_LSU_LANES +: `VX_CFG_NUM_LSU_LANES]),
+                .lmem_if       (lsu_lmem_if[block_idx]),
                 .dcache_bus_if (lsu_dcache_bus_if[block_idx * DCACHE_CHANNELS +: DCACHE_CHANNELS])
             );
         end
@@ -298,7 +299,7 @@ module VX_tensor_top import VX_gpu_pkg::*, VX_tcu_pkg::*, VX_dxa_pkg::*; #(
             .dxa_lmem_bus_if (per_core_dxa_lmem_bus_if[c]),
             .dxa_txbar_bus_if(dxa_txbar_bus_if),
         `endif
-            .lmem_bus_if     (lsu_lmem_bus_if),
+            .lmem_if         (lsu_lmem_if),
             .lsu_dcache_bus_if (lsu_dcache_bus_if),
             .dcr_flush_if    (dcr_flush_dcache_if),
             .flush_l1_only   (1'b0),

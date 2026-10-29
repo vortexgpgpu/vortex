@@ -35,7 +35,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 
     // the LSU blocks' memory paths
 `ifdef VX_CFG_LMEM_ENABLE
-    VX_mem_bus_if.slave     lmem_bus_if [LSU_NUM_REQS],
+    VX_lsu_mem_if.slave     lmem_if [`VX_CFG_NUM_LSU_BLOCKS],
 `endif
     VX_mem_bus_if.slave     lsu_dcache_bus_if [DCACHE_NUM_REQS],
 
@@ -164,27 +164,26 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 
     end
 
-    VX_local_mem #(
-        .INSTANCE_ID (`SFORMATF(("%s-lmem", INSTANCE_ID))),
-        .SIZE        (1 << `VX_CFG_LMEM_LOG_SIZE),
-        .NUM_REQS    (LSU_NUM_REQS),
-        .NUM_BANKS   (`VX_CFG_LMEM_NUM_BANKS),
-        .WORD_SIZE   (LSU_WORD_SIZE),
-        .ADDR_WIDTH  (LMEM_ADDR_WIDTH),
-        .TAG_WIDTH   (LSU_TAG_WIDTH),
-        .DMA_ENABLE  (LMEM_DMA_EN),
+    VX_lmem_unit #(
+        .INSTANCE_ID   (`SFORMATF(("%s-lmem", INSTANCE_ID))),
+        .SIZE          (1 << `VX_CFG_LMEM_LOG_SIZE),
+        .NUM_BLOCKS    (`VX_CFG_NUM_LSU_BLOCKS),
+        .NUM_LANES     (`VX_CFG_NUM_LSU_LANES),
+        .NUM_BANKS     (`VX_CFG_LMEM_NUM_BANKS),
+        .WORD_SIZE     (LSU_WORD_SIZE),
+        .ADDR_WIDTH    (LMEM_ADDR_WIDTH),
+        .TAG_WIDTH     (LSU_TAG_WIDTH),
+        .DMA_ENABLE    (LMEM_DMA_EN),
         .DMA_TAG_WIDTH (LMEM_DMA_TAG_WIDTH),
-        .AMO_ENABLE  (`VX_CFG_EXT_A_ENABLED),
-        .READ_MERGE  (`VX_CFG_LMEM_READ_MERGE ? `VX_CFG_NUM_LSU_LANES : 0),
-        .OUT_BUF     (3)
-    ) local_mem (
-        .clk         (clk),
-        .reset       (reset),
+        .AMO_ENABLE    (`VX_CFG_EXT_A_ENABLED)
+    ) lmem_unit (
+        .clk           (clk),
+        .reset         (reset),
     `ifdef PERF_ENABLE
-        .lmem_perf   (lmem_perf),
+        .lmem_perf     (lmem_perf),
     `endif
-        .dma_bus_if  (lmem_dma_if),
-        .lsu_bus_if  (lmem_bus_if)
+        .lsu_mem_if    (lmem_if),
+        .dma_bus_if    (lmem_dma_if)
     );
 
 `else

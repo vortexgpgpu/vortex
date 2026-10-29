@@ -46,10 +46,11 @@ module VX_mem_unit_top import VX_gpu_pkg::*; #(
     output wire [DCACHE_NUM_REQS-1:0]                   mem_rsp_ready
 );
 `ifdef VX_CFG_LMEM_ENABLE
-    VX_mem_bus_if #(
+    VX_lsu_mem_if #(
+        .NUM_LANES (`VX_CFG_NUM_LSU_LANES),
         .DATA_SIZE (LSU_WORD_SIZE),
         .TAG_WIDTH (LSU_TAG_WIDTH)
-    ) lsu_lmem_bus_if[LSU_NUM_REQS]();
+    ) lsu_lmem_if[`VX_CFG_NUM_LSU_BLOCKS]();
 `endif
 
     VX_mem_bus_if #(
@@ -96,7 +97,7 @@ module VX_mem_unit_top import VX_gpu_pkg::*; #(
             `UNUSED_PIN (store_empty),
             `UNUSED_PIN (busy),
         `ifdef VX_CFG_LMEM_ENABLE
-            .lmem_bus_if   (lsu_lmem_bus_if[i * `VX_CFG_NUM_LSU_LANES +: `VX_CFG_NUM_LSU_LANES]),
+            .lmem_if       (lsu_lmem_if[i]),
         `endif
             .dcache_bus_if (lsu_dcache_bus_if[i * DCACHE_CHANNELS +: DCACHE_CHANNELS])
         );
@@ -144,7 +145,7 @@ module VX_mem_unit_top import VX_gpu_pkg::*; #(
         .lmem_perf     (lmem_perf),
     `endif
     `ifdef VX_CFG_LMEM_ENABLE
-        .lmem_bus_if   (lsu_lmem_bus_if),
+        .lmem_if       (lsu_lmem_if),
     `endif
         .lsu_dcache_bus_if (lsu_dcache_bus_if),
         .dcr_flush_if  (dcr_flush_if),

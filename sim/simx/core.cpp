@@ -154,18 +154,17 @@ public:
       }
     }
 
-    // create local memory.
+    // create local memory: it takes each LSU block's warp requests whole.
     // The DXA writes and the TCU tile-buffer reads share the row-wide DMA
     // port, round-robin.
     snprintf(sname, 100, "%s-lmem", name.c_str());
     local_mem_ = LocalMem::Create(sname, LocalMem::Config{
       (1 << VX_CFG_LMEM_LOG_SIZE),
       LSU_WORD_SIZE,
-      LSU_NUM_REQS,
+      VX_CFG_NUM_LSU_BLOCKS,
+      LSU_CHANNELS,
       log2ceil(VX_CFG_LMEM_NUM_BANKS),
-      false,
-      VX_CFG_EXT_DXA_ENABLED + VX_CFG_TCU_WGMMA_ENABLED,
-      (VX_CFG_LMEM_READ_MERGE != 0 && LSU_CHANNELS > 1) ? LSU_CHANNELS : 0 // read_merge: one LSU block's lanes
+      VX_CFG_EXT_DXA_ENABLED + VX_CFG_TCU_WGMMA_ENABLED
     });
 
     // create lmem switch
@@ -174,25 +173,10 @@ public:
       lmem_switch_.at(b) = LocalMemSwitch::Create(sname, 1);
     }
 
-    // create per-block lmem adapters
-    std::vector<LsuMemAdapter::Ptr> lsu_lmem_adapter(VX_CFG_NUM_LSU_BLOCKS);
+    // connect lmem switch to local memory
     for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
-      snprintf(sname, 100, "%s-lsu_lmem_adapter%d", name.c_str(), b);
-      lsu_lmem_adapter.at(b) = LsuMemAdapter::Create(sname, LSU_CHANNELS, 1);
-    }
-
-    // connect lmem switch to per-block adapters
-    for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
-      lmem_switch_.at(b)->ReqOutLmem.bind(&lsu_lmem_adapter.at(b)->ReqIn);
-      lsu_lmem_adapter.at(b)->RspOut.bind(&lmem_switch_.at(b)->RspInLmem);
-    }
-
-    // connect per-block lmem adapters to local memory ports
-    for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
-      for (uint32_t c = 0; c < LSU_CHANNELS; ++c) {
-        lsu_lmem_adapter.at(b)->ReqOut.at(c).bind(&local_mem_->Inputs.at(b * LSU_CHANNELS + c));
-        local_mem_->Outputs.at(b * LSU_CHANNELS + c).bind(&lsu_lmem_adapter.at(b)->RspIn.at(c));
-      }
+      lmem_switch_.at(b)->ReqOutLmem.bind(&local_mem_->ReqIn.at(b));
+      local_mem_->RspOut.at(b).bind(&lmem_switch_.at(b)->RspInLmem);
     }
 
     // Per-channel request/response endpoints facing the dcache ports.

@@ -45,7 +45,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     output wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] busy,
 
 `ifdef VX_CFG_LMEM_ENABLE
-    VX_mem_bus_if.master    lmem_bus_if [LSU_NUM_REQS],
+    VX_lsu_mem_if.master    lmem_if [`VX_CFG_NUM_LSU_BLOCKS],
 `endif
     VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS]
 );
@@ -75,16 +75,6 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     ) per_block_result_if[BLOCK_SIZE]();
 
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_blocks
-    `ifdef VX_CFG_LMEM_ENABLE
-        VX_mem_bus_if #(
-            .DATA_SIZE (LSU_WORD_SIZE),
-            .TAG_WIDTH (LSU_TAG_WIDTH)
-        ) block_lmem_bus_if[NUM_LANES]();
-        for (genvar j = 0; j < NUM_LANES; ++j) begin : g_lmem_bus_if
-            `ASSIGN_VX_MEM_BUS_IF (lmem_bus_if[block_idx * NUM_LANES + j], block_lmem_bus_if[j]);
-        end
-    `endif
-
         VX_mem_bus_if #(
             .DATA_SIZE (DCACHE_WORD_SIZE),
             .TAG_WIDTH (DCACHE_TAG_WIDTH)
@@ -115,7 +105,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
             .store_empty      (store_empty[block_idx]),
             .busy             (busy[block_idx]),
         `ifdef VX_CFG_LMEM_ENABLE
-            .lmem_bus_if      (block_lmem_bus_if),
+            .lmem_if          (lmem_if[block_idx]),
         `endif
             .dcache_bus_if    (block_dcache_bus_if)
         );
