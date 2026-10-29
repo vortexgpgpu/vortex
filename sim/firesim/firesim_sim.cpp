@@ -188,8 +188,8 @@ public:
 
   // Only ever called after a blocking step, which has already waited for the
   // step to finish. A blocking peek would additionally wait up to 0.1 s for
-  // PRECISE_PEEKABLE, which a FAME-5 design never raises, and then return the
-  // same value: 0.1 s lost per peek, and dcr_read peeks once per target cycle.
+  // PRECISE_PEEKABLE and then return the same value: time lost per peek, and
+  // dcr_read peeks once per target cycle.
   uint32_t peek(const char *name) {
     return peek_poke.peek(name, false);
   }

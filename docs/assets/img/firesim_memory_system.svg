@@ -36,8 +36,8 @@
 
   <rect x="70" y="126" width="290" height="70" class="vx"/>
   <text x="86" y="147" class="th">Cores → L1 → (L2/L3 if enabled)</text>
-  <text x="86" y="164" class="ts">64-core FAME-5 build: 64 sockets' misses</text>
-  <text x="86" y="180" class="ts">meet at the cluster arbiter</text>
+  <text x="86" y="164" class="ts">the sockets' misses meet at the</text>
+  <text x="86" y="180" class="ts">cluster arbiter</text>
 
   <rect x="70" y="212" width="290" height="90" class="vx"/>
   <text x="86" y="233" class="th">VX_mem_to_axi</text>

@@ -73,7 +73,6 @@
   <text x="858" y="257" class="mono">tcycle — target cycles advanced (clockmodule; Vortex PERF: cycles)</text>
   <text x="858" y="274" class="mono">hcycle — host cycles spent simulating them</text>
   <text x="858" y="291" class="mono">FMR = hcycle/tcycle;  target freq = host_freq / FMR</text>
-  <text x="846" y="312" class="tt">64-core FAME-5 on the V80: 60 MHz / FMR 130–190 ≈ 320–460 kHz of target time</text>
 
   <!-- ===== layer 2: memory timing ===== -->
   <rect x="50" y="374" width="1380" height="250" class="grp"/>

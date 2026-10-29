@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1480 1050" font-family="Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 960" font-family="Helvetica, Arial, sans-serif">
   <defs>
     <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0,0 L10,5 L0,10 z" fill="#44525f"/>
@@ -21,23 +21,23 @@
     .w    { stroke:#44525f; stroke-width:1.4; fill:none; marker-end:url(#arr); }
   </style>
 
-  <rect x="0" y="0" width="1480" height="1050" fill="#ffffff"/>
+  <rect x="0" y="0" width="760" height="960" fill="#ffffff"/>
   <text x="24" y="34" class="t">Build flow — how Vortex RTL becomes a FireSim image</text>
-  <text x="24" y="56" class="tt">Left: the default FAME-1 build, where Vortex stays Verilog and Golden Gate never sees inside it. Right: FAME5=1, where Vortex is converted to FIRRTL so Golden Gate can thread the sockets. Both run from hw/syn/firesim/Makefile with the native flows' tokens.</text>
+  <text x="24" y="56" class="tt">Vortex stays Verilog: Golden Gate never sees inside it. Runs from hw/syn/firesim/Makefile with the native flows' tokens.</text>
+  <text x="24" y="72" class="tt">Threaded images (FAME-5) are the maxsim flow, compiled by CIRCT: see maxsim.md.</text>
 
-  <!-- common front end -->
-  <rect x="330" y="80" width="820" height="128" class="src"/>
-  <text x="346" y="101" class="th">Common front end — the configured tree, flattened</text>
-  <text x="346" y="118" class="mono">make -C hw/syn/firesim [PLATFORM=&lt;xsa&gt; | DEVICE=&lt;part&gt;] TARGET=hw|sim|hw_emu [FAME5=1] [PERF=1] CONFIGS="-DVX_CFG_…"</text>
-  <text x="346" y="136" class="ts">gen_sources.sh -P preprocesses hw/rtl into one self-contained directory (macros inlined), top VX_firesim_wrap:</text>
-  <text x="346" y="152" class="monos">vivado_srcs/ + .f    ← -DSYNTHESIS -DVIVADO -DNDEBUG (+ -DSIMULATION for TARGET=sim/hw_emu, never under FAME5)</text>
-  <text x="346" y="168" class="monos">vortex_srcs/ (metasim) ← -DNDEBUG only: behavioural RAMs, soft FPU</text>
-  <text x="346" y="186" class="ts">Platform defines both lanes share: VX_CFG_PLATFORM_MEMORY_NUM_BANKS=1 · PLATFORM_MEMORY_ID_WIDTH=4 (paired with idBits) · [PERF_ENABLE]</text>
+  <!-- front end -->
+  <rect x="60" y="92" width="640" height="128" class="src"/>
+  <text x="76" y="113" class="th">Front end — the configured tree, flattened</text>
+  <text x="76" y="130" class="mono">make -C hw/syn/firesim [PLATFORM=&lt;xsa&gt; | DEVICE=&lt;part&gt;] TARGET=hw|sim|hw_emu</text>
+  <text x="76" y="146" class="ts">gen_sources.sh -P preprocesses hw/rtl into one self-contained directory, top VX_firesim_wrap:</text>
+  <text x="76" y="162" class="monos">vivado_srcs/ + .f    ← -DSYNTHESIS -DVIVADO -DNDEBUG (+ -DSIMULATION for TARGET=sim/hw_emu)</text>
+  <text x="76" y="178" class="monos">vortex_srcs/ (metasim) ← -DNDEBUG only: behavioural RAMs, soft FPU</text>
+  <text x="76" y="198" class="ts">Platform defines: VX_CFG_PLATFORM_MEMORY_NUM_BANKS=1 · PLATFORM_MEMORY_ID_WIDTH=4</text>
+  <text x="76" y="212" class="ts">(paired with idBits) · [PERF_ENABLE]</text>
 
-  <!-- ================= lane A ================= -->
   <rect x="60" y="248" width="640" height="608" class="grp"/>
-  <text x="78" y="272" class="gt">Default: FAME-1, Vortex as a Verilog BlackBox</text>
-
+  <text x="78" y="272" class="gt">FAME-1: Vortex as a Verilog BlackBox</text>
   <rect x="90" y="288" width="580" height="86" class="step"/>
   <text x="106" y="309" class="th">stage → replace-rtl — Golden Gate on the harness only</text>
   <text x="106" y="326" class="ts">VortexTarget.scala elaborates: VortexDUT holds VX_firesim_wrap as an opaque BlackBox;</text>
@@ -67,57 +67,16 @@
   <text x="106" y="744" class="ts">FireSim-generated.sv + the vortex_srcs tree (library search) into libfiresim.so,</text>
   <text x="106" y="760" class="ts">with simif_emul as the host interface — the design itself is the simulator.</text>
   <text x="106" y="785" class="monos">EMUL_DEBUG=1 adds --trace +define+DEBUG → +waveformfile=… writes a VCD</text>
-  <text x="106" y="801" class="monos">FAME5=1 uses the generated RTL only (Vortex is already inside it)</text>
   <text x="106" y="820" class="tt">Same target, same tokens as the card: the step before silicon.</text>
 
-  <!-- ================= lane B ================= -->
-  <rect x="780" y="248" width="640" height="608" class="grp"/>
-  <text x="798" y="272" class="gt">FAME5=1: Vortex converted to FIRRTL, sockets threaded</text>
-
-  <rect x="810" y="288" width="580" height="56" class="f5"/>
-  <text x="826" y="309" class="th">sv2v — SystemVerilog → Verilog-2005</text>
-  <text x="826" y="326" class="mono">fame5/vortex.v   (interfaces inlined; VX_socket_top keeps a plain-wire boundary)</text>
-
-  <rect x="810" y="360" width="580" height="120" class="f5"/>
-  <text x="826" y="381" class="th">to_firrtl.sh — Yosys → FIRRTL (fame5/)</text>
-  <text x="826" y="398" class="ts">Flattens everything except VX_socket_top (the threaded unit, instantiated without</text>
-  <text x="826" y="414" class="ts">parameters); VX_dp_ram / VX_sp_ram become black boxes that gen_rams.py regenerates</text>
-  <text x="826" y="430" class="ts">as FIRRTL memories (clocked reads, byte enables); fix_firrtl.py repairs what Yosys</text>
-  <text x="826" y="446" class="ts">emits that the FIRRTL compiler rejects (signed shifts, deep nesting, cat-LHS, …).</text>
-  <text x="826" y="464" class="mono">→ fame5/vortex.fir   (~384 MB at 64 cores NW=NT=16, ~4 min)</text>
-
-  <rect x="810" y="496" width="580" height="128" class="gg"/>
-  <text x="826" y="517" class="th">splice + annotate + Golden Gate</text>
-  <text x="826" y="534" class="ts">splice.py replaces the harness FIR's VX_firesim_wrap extmodule with the converted Vortex;</text>
-  <text x="826" y="550" class="ts">annotate_threads.py adds one FirrtlEnableModelMultiThreadingAnnotation per socket</text>
-  <text x="826" y="566" class="ts">instance (FAME5_THREADS=0 skips: same design, unthreaded, must match cycle-for-cycle).</text>
-  <text x="826" y="582" class="ts">Golden Gate then applies FAME-1 + FAME-5: one threaded copy, N-deep state.</text>
-  <text x="826" y="600" class="mono">→ FireSim-generated.sv (Vortex inside; 229 MB at 64 cores, ~12 min / 36 GB heap)</text>
-
-  <rect x="810" y="640" width="580" height="72" class="step"/>
-  <text x="826" y="661" class="th">Platform build — handed nothing but the generated RTL</text>
-  <text x="826" y="678" class="ts">No Vortex sources, no vendor IP, no pre-opt hook: nothing outside FireSim-generated.sv</text>
-  <text x="826" y="694" class="ts">is left for them to apply to. Same Vivado flow, FREQUENCY, STRATEGY.</text>
-
-  <rect x="810" y="728" width="580" height="56" class="out"/>
-  <text x="826" y="749" class="th">Image — build32_aved_hw_fame5/bin/firesim.vbin</text>
-  <text x="826" y="766" class="ts">_fame5 directories throughout; VortexFame5Config keys the generated RTL apart</text>
-
-  <text x="826" y="812" class="tt">RTL preconditions (all under `ifdef VX_CFG_FAME5): CORE_ID parameter → core_id/socket_id</text>
-  <text x="826" y="828" class="tt">ports so all sockets elaborate identically; ASYNC_BRAM_PATCH off; no VM, no graphics.</text>
-
   <!-- wires -->
-  <line x1="600" y1="208" x2="480" y2="288" class="w"/>
-  <line x1="900" y1="208" x2="1050" y2="288" class="w"/>
+  <line x1="380" y1="220" x2="380" y2="288" class="w"/>
   <line x1="380" y1="374" x2="380" y2="390" class="w"/>
   <line x1="380" y1="454" x2="380" y2="470" class="w"/>
   <line x1="380" y1="598" x2="380" y2="614" class="w"/>
   <line x1="380" y1="670" x2="380" y2="690" class="w"/>
-  <line x1="1100" y1="344" x2="1100" y2="360" class="w"/>
-  <line x1="1100" y1="480" x2="1100" y2="496" class="w"/>
-  <line x1="1100" y1="624" x2="1100" y2="640" class="w"/>
-  <line x1="1100" y1="712" x2="1100" y2="728" class="w"/>
 
-  <text x="24" y="920" class="tt">Run either lane's image with the same command: FPGA_BIN_DIR=&lt;bin&gt; ./ci/blackbox.sh --driver=firesim --target=hw --app=… (FAME5=1 for a threaded build).</text>
-  <text x="24" y="938" class="tt">The Makefile guards the classic failure modes: SYNTHESIS missing from the flattened tree (every RAM lands in LUTRAM), VX_MEM_PORTS resolving to 0, a changed CONFIGS reusing a stale flatten.</text>
+  <text x="24" y="890" class="tt">Run the image: FPGA_BIN_DIR=&lt;bin&gt; ./ci/blackbox.sh --driver=firesim --target=hw --app=…</text>
+  <text x="24" y="908" class="tt">The Makefile guards the classic failure modes: SYNTHESIS missing from the flattened tree (every RAM</text>
+  <text x="24" y="924" class="tt">lands in LUTRAM), VX_MEM_PORTS resolving to 0, a changed CONFIGS reusing a stale flatten.</text>
 </svg>

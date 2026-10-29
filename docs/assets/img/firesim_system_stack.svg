@@ -63,7 +63,7 @@
   <text x="408" y="510" class="ts">MMIO + DMA through XRT</text>
 
   <!-- ===================== metasim column ===================== -->
-  <rect x="740" y="90" width="620" height="452" class="grp"/>
+  <rect x="740" y="90" width="620" height="374" class="grp"/>
   <text x="758" y="114" class="gt">Metasimulator (TARGET=xrtsim / avedsim) — no card, no image</text>
 
   <rect x="770" y="130" width="560" height="56" class="emu"/>
@@ -76,16 +76,14 @@
   <text x="786" y="254" class="ts">firesim_emul_main.cpp runs Verilator's event loop on the simulator thread.</text>
   <text x="786" y="270" class="monos">VORTEX_FIRESIM_EMUL_ARGS → +waveformfile=… +max-cycles=… (EMUL_DEBUG=1 build)</text>
 
-  <rect x="770" y="296" width="560" height="228" class="hw"/>
+  <rect x="770" y="296" width="560" height="150" class="hw"/>
   <text x="786" y="317" class="th">Vemul — the whole FPGA payload, Verilated</text>
-  <text x="786" y="334" class="ts">FireSim-generated.sv + (unthreaded builds) the flattened Vortex tree,</text>
+  <text x="786" y="334" class="ts">FireSim-generated.sv + the flattened Vortex tree,</text>
   <text x="786" y="350" class="ts">bit-identical to what the card synthesizes. Same tokens, same schedule:</text>
   <text x="786" y="366" class="ts">what passes here passes on silicon, cycle for cycle.</text>
-  <text x="786" y="392" class="tt">FAME5=1: Vortex is already inside FireSim-generated.sv (converted to</text>
-  <text x="786" y="408" class="tt">FIRRTL and threaded), so Verilator is handed no Vortex sources at all.</text>
-  <text x="786" y="440" class="ts">Build: sw/runtime/firesim → sim/firesim/Makefile (EMUL_DIR per card,</text>
-  <text x="786" y="456" class="ts">_fame5 and _dbg variants); run: blackbox.sh --driver=firesim</text>
-  <text x="786" y="472" class="monos">--target=avedsim|xrtsim [FAME5=1] [EMUL_DEBUG=1]</text>
+  <text x="786" y="394" class="ts">Build: sw/runtime/firesim → sim/firesim/Makefile (EMUL_DIR per card,</text>
+  <text x="786" y="410" class="ts">and a _dbg variant); run: blackbox.sh --driver=firesim</text>
+  <text x="786" y="426" class="monos">--target=avedsim|xrtsim [EMUL_DEBUG=1]</text>
 
   <!-- ===================== PCIe cut ===================== -->
   <line x1="60" y1="566" x2="700" y2="566" class="cut"/>
@@ -107,7 +105,6 @@
   <rect x="90" y="784" width="580" height="70" class="vx"/>
   <text x="106" y="805" class="th">Target — VortexDUT ▸ VX_firesim_wrap ▸ Vortex</text>
   <text x="106" y="822" class="ts">The design under test: DCR + start/busy control surface, one 512-bit AXI4 memory port.</text>
-  <text x="106" y="838" class="ts">FAME5=1: the sockets inside are time-multiplexed through one physical copy.</text>
 
   <!-- ===================== arrows ===================== -->
   <line x1="380" y1="182" x2="380" y2="196" class="w"/>

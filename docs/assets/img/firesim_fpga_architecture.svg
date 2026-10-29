@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1480 1000" font-family="Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1480 880" font-family="Helvetica, Arial, sans-serif">
   <defs>
     <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0,0 L10,5 L0,10 z" fill="#44525f"/>
@@ -31,16 +31,16 @@
     .wc   { stroke:#3a7d44; stroke-width:1.4; fill:none; marker-end:url(#arrg); stroke-dasharray:5 3; }
   </style>
 
-  <rect x="0" y="0" width="1480" height="1000" fill="#ffffff"/>
-  <text x="24" y="34" class="t">A Vortex instance on the FPGA — V80 (AVED shell), FAME-5 build</text>
+  <rect x="0" y="0" width="1480" height="880" fill="#ffffff"/>
+  <text x="24" y="34" class="t">A Vortex instance on the FPGA — V80 (AVED shell)</text>
   <text x="24" y="56" class="tt">Everything inside pblock_slash is FireSim-generated.sv, one reconfigurable module. Solid orange = memory data; solid grey = control (MMIO); dashed green = clocks. The U55C build is the same picture with the Vitis shell around it and HBM[0:7] as the memory binding.</text>
 
   <!-- ============== device ============== -->
-  <rect x="24" y="76" width="1432" height="820" class="dev"/>
+  <rect x="24" y="76" width="1432" height="724" class="dev"/>
   <text x="40" y="100" class="gt">xcv80-lsva4737-2MHP-e-S</text>
 
   <!-- ============== static region ============== -->
-  <rect x="44" y="116" width="300" height="700" class="stat"/>
+  <rect x="44" y="116" width="300" height="660" class="stat"/>
   <text x="60" y="140" class="th">AVED static region (in flash)</text>
 
   <rect x="64" y="156" width="260" height="76" class="stat"/>
@@ -75,7 +75,7 @@
   <text x="80" y="653" class="ts">only decides *when* answers return</text>
 
   <!-- ============== reconfigurable partition ============== -->
-  <rect x="372" y="116" width="1056" height="760" class="rm"/>
+  <rect x="372" y="116" width="1056" height="664" class="rm"/>
   <text x="388" y="140" class="gt">Reconfigurable partition pblock_slash — RM “slash_firesim” = FireSim-generated.sv</text>
 
   <!-- shim -->
@@ -122,36 +122,30 @@
   <text x="408" y="434" class="ts">Every wire between a bridge and the target is a token channel (ready/valid + payload). One target cycle fires exactly when every input</text>
   <text x="408" y="450" class="ts">channel holds a token and every output channel has space; otherwise the target clock is gated and the design waits, cycle-accurately.</text>
   <text x="408" y="466" class="ts">This is what host-decoupling means: the target cannot outrun the host, and the host cannot observe a half-advanced cycle.</text>
-  <text x="408" y="492" class="tt">Under FAME-5 the hub also carries one channel set per socket, multiplexed round-robin into the single threaded copy (next figure).</text>
   <text x="408" y="508" class="tt">Clock gating on the V80 is a clock-enable conversion (FireSimFabricClockGate): the partition has no BUFGCE site.</text>
 
   <!-- target -->
-  <rect x="392" y="550" width="1016" height="300" class="vx"/>
+  <rect x="392" y="550" width="1016" height="204" class="vx"/>
   <text x="408" y="571" class="th">Target — VortexDUT ▸ VX_firesim_wrap ▸ Vortex</text>
   <text x="408" y="588" class="ts">Control surface: DCR request/response + start/busy (poked by PeekPoke). Memory: one AXI4 port, 512-bit data, 32-bit address, 4-bit id.</text>
 
   <rect x="412" y="604" width="420" height="130" class="vx2"/>
   <text x="428" y="625" class="th">Single-copy logic (built once)</text>
   <text x="428" y="642" class="ts">KMU (CTA dispatch) · DCR bus · global barrier unit ·</text>
-  <text x="428" y="658" class="ts">cluster: 64-way socket↔memory arbiter · VX_mem_to_axi</text>
+  <text x="428" y="658" class="ts">cluster: socket↔memory arbiter · VX_mem_to_axi</text>
   <text x="428" y="675" class="ts">(tag buffer: 16 outstanding reads, 4-bit AXI id)</text>
-  <text x="428" y="700" class="tt">Everything here sees 64 sockets and does not know</text>
-  <text x="428" y="716" class="tt">they share one physical copy.</text>
+  <text x="428" y="700" class="tt">Built once for the whole GPU.</text>
 
   <rect x="852" y="604" width="536" height="130" class="vx2"/>
-  <text x="868" y="625" class="th">g_sockets — 64 × VX_socket_top (NW=NT=16 shown)</text>
+  <text x="868" y="625" class="th">g_sockets — N × VX_socket_top</text>
   <text x="868" y="642" class="ts">Each socket: 1 core + I$/D$/LMEM, socket_id as a port.</text>
-  <text x="868" y="658" class="ts">FAME5=1 → one physical copy, VX_socket_top_threaded:</text>
-  <text x="868" y="674" class="ts">registers become 64-deep LUTRAM, SRAMs 64× deeper,</text>
-  <text x="868" y="690" class="ts">one socket advances per host cycle, round-robin.</text>
-  <text x="868" y="715" class="monos">unthreaded: ~14.1M LUTs (5.5× the V80) — threaded: 719K LUTs, routed at 60 MHz</text>
+  <text x="868" y="658" class="ts">One physical copy per socket. Threading the sockets</text>
+  <text x="868" y="674" class="ts">through one copy (FAME-5) is the maxsim flow: maxsim.md.</text>
 
-  <text x="408" y="762" class="ts">Routed 64-core NW=NT=16 image, whole device: 974K LUTs (37.9%) · 565K FFs (11%) · 311K LUTRAM (24%) · 1,683 BRAM36 (45%) ·</text>
-  <text x="408" y="778" class="ts">105 URAM (5.5%) · 64 DSP · WNS +0.33 ns at 60 MHz</text>
 
   <!-- annotations under device -->
-  <text x="40" y="922" class="tt">Control path: PCIe BAR0 → AXI-Lite → shim register blocks → widget MMIO. Memory data path: FASED / LoadMem host-memory master → HBM VNOC → HBM.</text>
-  <text x="40" y="940" class="tt">Host clock: free-running 60 MHz from the shell. Target clock: the host clock, enabled only on token-complete cycles — the target has no clock of its own.</text>
+  <text x="40" y="826" class="tt">Control path: PCIe BAR0 → AXI-Lite → shim register blocks → widget MMIO. Memory data path: FASED / LoadMem host-memory master → HBM VNOC → HBM.</text>
+  <text x="40" y="844" class="tt">Host clock: free-running 60 MHz from the shell. Target clock: the host clock, enabled only on token-complete cycles — the target has no clock of its own.</text>
 
   <!-- ============== wires ============== -->
   <!-- control: PCIe -> shim -->
