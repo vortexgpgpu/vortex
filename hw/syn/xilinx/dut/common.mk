@@ -94,16 +94,16 @@ power:
 # of at least BEACON_PATH_LEVELS (beacon_summary.py's watch threshold), op by
 # op, by unit.
 BEACON_PATH_LEVELS ?= 8
-BEACON_MAP_PASS := foldsim-screen-map
+# The Beacon target: the family of the device, as hw/syn/xilinx/platforms names it.
+BEACON_TARGET = $(shell python3 $(SCRIPT_DIR)/gen_platform.py --device=$(DEVICE) --emit=family)
 beacon:
 	mkdir -p beacon
 	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -T$(TOP_LEVEL_ENTITY) -Obeacon/sources.f $(RTL_PKGS)
 	$(SCRIPT_DIR)/circt_elaborate.sh -f mlir -t $(TOP_LEVEL_ENTITY) -l beacon/sources.f \
 		-x $(SCRIPT_DIR)/xilinx_ip_stubs.sv -r beacon/memories.rpt -o beacon/netlist.mlir
-	$(FOLDSIM_OPT) beacon/netlist.mlir --pass-pipeline='builtin.module($(BEACON_MAP_PASS))' \
+	$(FOLDSIM_OPT) beacon/netlist.mlir --pass-pipeline='builtin.module(foldsim-beacon-map{target=$(BEACON_TARGET)})' \
 		--emit-bytecode -o beacon/mapped.mlirbc
-	family=$$(python3 $(SCRIPT_DIR)/gen_platform.py --device=$(DEVICE) --emit=family) && \
-	$(FOLDSIM_OPT) beacon/mapped.mlirbc -o /dev/null --pass-pipeline="builtin.module(foldsim-estimate-timing{top=$(TOP_LEVEL_ENTITY) family=$$family output=beacon/endpoints.csv instances=beacon/instances.csv report=beacon/report.txt paths=beacon/paths.jsonl path-levels=$(BEACON_PATH_LEVELS)})"
+	$(FOLDSIM_OPT) beacon/mapped.mlirbc -o /dev/null --pass-pipeline="builtin.module(foldsim-estimate-timing{top=$(TOP_LEVEL_ENTITY) target=$(BEACON_TARGET) output=beacon/endpoints.csv instances=beacon/instances.csv report=beacon/report.txt paths=beacon/paths.jsonl path-levels=$(BEACON_PATH_LEVELS)})"
 	python3 $(SCRIPT_DIR)/beacon_summary.py beacon --top $(TOP_LEVEL_ENTITY)
 
 clean:

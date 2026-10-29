@@ -26,7 +26,7 @@
 
   <!-- mapping pipeline -->
   <rect x="20" y="56" width="560" height="684" class="grp"/>
-  <text x="34" y="78" class="tb">foldsim-screen-map (per module)</text>
+  <text x="34" y="78" class="tb">foldsim-beacon-map (per module)</text>
 
   <rect x="40" y="94" width="520" height="56" class="box"/>
   <text x="55" y="116" class="t">1. hw-flatten-modules: inline modules &lt; 300 ops</text>
@@ -119,7 +119,7 @@
   <text x="1025" y="630" class="ts">endpoints.csv, instances.csv, report.txt</text>
 
   <rect x="630" y="646" width="730" height="88" class="box"/>
-  <text x="645" y="668" class="t">Device profiles (family=): the FPGAs differ only in their DSPs</text>
+  <text x="645" y="668" class="t">Targets (target=): the FPGAs differ in their DSPs</text>
   <text x="645" y="690" class="mono">versal          DSP58   27×24  in 1  out 6  cascade 3</text>
   <text x="645" y="708" class="mono">virtexuplusHBM  DSP48E2 27×18  in 1  out 5  cascade 2</text>
   <text x="645" y="726" class="mono">asap7           cell stages (3-input cuts), prefix adders, Dadda products</text>

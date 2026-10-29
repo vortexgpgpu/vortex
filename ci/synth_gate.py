@@ -498,7 +498,7 @@ class Beacon(Tool):
 
     # The netlist exists once foldsim-opt starts mapping it; a typo in a define
     # or an include dies in gen_sources.sh or circt_elaborate.sh before that.
-    elab_done = "foldsim-screen-map"
+    elab_done = "foldsim-beacon-map"
     elab_label = "elaboration"
     phases = (
         ("gen_sources.sh", "sources"),

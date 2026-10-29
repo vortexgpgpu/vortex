@@ -65,9 +65,9 @@ Or the two passes directly:
 
 ```bash
 foldsim-opt design.mlir --emit-bytecode -o mapped.mlirbc \
-  --pass-pipeline='builtin.module(foldsim-screen-map)'
+  --pass-pipeline='builtin.module(foldsim-beacon-map{target=virtexuplusHBM})'
 foldsim-opt mapped.mlirbc -o /dev/null --pass-pipeline='builtin.module(
-  foldsim-estimate-timing{top=VX_core_top family=virtexuplusHBM
+  foldsim-estimate-timing{top=VX_core_top target=virtexuplusHBM
     output=endpoints.csv instances=instances.csv report=report.txt
     top-paths=50 trace=lsu_unit})'
 ```
@@ -75,7 +75,7 @@ foldsim-opt mapped.mlirbc -o /dev/null --pass-pipeline='builtin.module(
 | `foldsim-estimate-timing` option | meaning |
 |---|---|
 | `top=` | the top module (default: the one nothing instantiates) |
-| `family=` | `versal` (V80, default), `virtexuplusHBM` (U55C), or `asap7` (ASIC, §4.3) |
+| `target=` | the Beacon target (§4.2): `versal` (V80, default), `virtexuplus`, `virtexuplusHBM` (U55C), `zynquplus`, or `asap7` (ASIC, §4.3); map with `foldsim-beacon-map` for the same target |
 | `black-boxes=` | modules to treat as external, as a harness stubs them |
 | `output=`, `instances=`, `report=` | the files of §5 |
 | `min-levels=` | write only end points at or above this many levels |
@@ -95,7 +95,7 @@ never builds it. The integration is in Vortex:
 
 | Piece | Where | Role |
 |---|---|---|
-| `foldsim-screen-map`, `foldsim-estimate-timing` | foldsim `lib/Transforms/EstimateTiming.cpp` | map to LUTs; count levels |
+| `foldsim-beacon-map`, `foldsim-estimate-timing` | foldsim `lib/Transforms/Beacon.cpp`, `EstimateTiming.cpp` | map to the target's cells; count levels |
 | `ci/beacon.py` | `ci/` | run Beacon on any netlist; read it by unit; compare with Vivado |
 | `xilinx_cone_dump.tcl`, `xilinx_cone_probe.tcl`, `xilinx_wire_probe.tcl` | `hw/scripts` | Vivado probes for what levels cannot show (§8) |
 | target `beacon` | `hw/syn/xilinx/dut/common.mk` | one DUT: sources → netlist → levels → summary |
@@ -114,9 +114,15 @@ black boxes (`xilinx_ip_stubs.sv`).
 
 ![Beacon compiler](../assets/img/beacon_compiler.svg)
 
-### 3.1 `foldsim-screen-map`
+### 3.1 `foldsim-beacon-map`
 
-A pipeline of CIRCT's synthesis passes plus three of foldsim's, per module:
+Both passes load the same **target** from foldsim's target table
+(`foldsim/Beacon.h`): its cells for the mapping, its DSPs and delays for the
+level count. A target is named after its FPGA family or its PDK, so every
+flow passes the name it already has: the DUT flow the family
+`gen_platform.py --emit=family` gives for `DEVICE`, the ASIC flow `PDK`,
+`ci/beacon.py run` its `target=`. The mapping is a pipeline of CIRCT's
+synthesis passes plus three of foldsim's, per module:
 
 1. **Inline small modules** (`hw-flatten-modules`, < 300 ops) so LUTs pack
    across buffers, arbiters and switches, as Vivado's flattened synthesis
@@ -137,7 +143,8 @@ A pipeline of CIRCT's synthesis passes plus three of foldsim's, per module:
    reproduce.
 5. **Depth-optimize** the graph: timing-aware variadic lowering, maximum
    AND cover, SOP balancing, structural hashing.
-6. **Map to 6-input LUTs** (`synth-generic-lut-mapper`, timing strategy).
+6. **Map to the target's cells** (`synth-generic-lut-mapper`, timing
+   strategy): 6-input LUTs on the FPGA families, 3-input cuts on ASAP7.
 
 The full GPU maps in about a minute and 18–20 GB.
 
@@ -182,30 +189,32 @@ multiplexers per two more.
 
 ### 4.2 Devices
 
-The V80 and the U55C both have LUT6s, 8-bit carry blocks (LOOKAHEAD8,
-CARRY8) and 64-word distributed RAMs; they differ only in their DSPs. The
-profile is selected by `family=`, with the names of
+Versal and the UltraScale+ families all have LUT6s, 8-bit carry blocks
+(LOOKAHEAD8, CARRY8) and 64-word distributed RAMs; they differ in their DSPs.
+The target is selected by `target=`, with the family names of
 `hw/syn/xilinx/platforms`:
 
-| `family=` | Device | DSP multiplier | fabric → registered product | product → fabric | per cascaded DSP |
+| `target=` | Device | DSP multiplier | fabric → registered product | product → fabric | per cascaded DSP |
 |---|---|---|---|---|---|
 | `versal` | V80 | DSP58, 27 × 24 | 1 | 6 | 3 |
-| `virtexuplusHBM` | U55C | DSP48E2, 27 × 18 | 1 | 5 | 2 |
+| `virtexuplus` | U200, U250 | DSP48E2, 27 × 18 | 1 | 5 | 2 |
+| `virtexuplusHBM` | U50, U55C, U280 | DSP48E2, 27 × 18 | 1 | 5 | 2 |
+| `zynquplus` | Zynq UltraScale+ | DSP48E2, 27 × 18 | 1 | 5 | 2 |
 
 A product takes ⌈a/A⌉·⌈b/B⌉ DSPs (the better orientation). The cell counts
 are Vivado's: on Versal, M_DATA, ALUMUX, ALUADD and OUTPUT out of a DSP,
 and ALUMUX, ALUADD and OUTPUT through each cascaded one. A register fed by
 the product is the DSP's own (MREG or PREG), and so is a LUT that reads that
 register back, its clock enable or feedback; any other load pays the output
-stage. The fabric-to-product value is fitted on the V80 data. Any other
-family is an error.
+stage. The fabric-to-product value is fitted on the V80 data. A name that
+is not a target is an error that lists the targets.
 
 ### 4.3 ASAP7
 
 For the ASIC flow (`hw/syn/yosys`, ASAP7 7.5-track RVT, TT corner)
-Beacon counts **cell stages**, not LUT levels. `foldsim-screen-map-asic`
+Beacon counts **cell stages**, not LUT levels. `target=asap7`
 maps the same balanced and-inverter graph to 3-input cuts, each one cell
-(NAND, AOI, MAJ, XOR), and `family=asap7` models the word-level operators
+(NAND, AOI, MAJ, XOR), and models the word-level operators
 as an ASIC builds them:
 
 | Element | Stages |
@@ -312,13 +321,14 @@ On the full GPU, the 3,283 pairs at ≥ 12 levels fold into 169 paths in
    repository's);
 2. `circt_elaborate.sh -f mlir` into `beacon/netlist.mlir`, the FP IPs as
    black boxes, with every op's source location;
-3. `foldsim-screen-map`, then `foldsim-estimate-timing` with
-   `family=$(gen_platform.py --device=$(DEVICE) --emit=family)`;
+3. `foldsim-beacon-map`, then `foldsim-estimate-timing`, both with
+   `target=` the family `gen_platform.py --device=$(DEVICE) --emit=family`
+   names;
 4. `beacon_summary.py`: `beacon_summary.csv`, `beacon_units.json` and
    `beacon_paths.txt` (§5).
 
 The ASIC flow has the same target, with the same sources, defines and SRAM
-black boxes as its synthesis, and `family=$(PDK)`:
+black boxes as its synthesis, and `target=$(PDK)`:
 
 ```bash
 make -C hw/syn/yosys/dut om TARGET=beacon

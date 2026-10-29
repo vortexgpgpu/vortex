@@ -62,9 +62,6 @@ FOLD_CLASSES = {
     'foldsim_target': 'foldsim_target_model_copy',
 }
 
-MAP_PASS = 'foldsim-screen-map'
-MAP_PASS_ASIC = 'foldsim-screen-map-asic'
-
 VIVADO_CELL = re.compile(
     r'_reg((\[\d+\])*(_replica(_\d+)?)?(_[fb]ret(_\d+)?)*(_rep(_\d+)?)?'
     r'|_\d+_\d+_\d+_\d+|_bram_\d+)$')
@@ -182,7 +179,9 @@ def cmd_run(args):
     """Map (unless the input is already mapped bytecode), then count levels."""
     opt = os.environ.get("FOLDSIM_OPT") or "foldsim-opt"
     os.makedirs(args.out, exist_ok=True)
-    asic = any(o == "family=asap7" for o in args.options)
+    # Map to the cells of the target the levels are counted on.
+    target = next((o for o in args.options if o.startswith("target=")),
+                  "target=versal")
     mapped = args.design
     steps = []
     # MLIR maps modules in parallel: the full GPU maps in 53 s and 18 GB, or
@@ -190,7 +189,7 @@ def cmd_run(args):
     threads = ["--mlir-disable-threading"] if args.no_threads else []
     if not args.design.endswith(".mlirbc"):
         mapped = os.path.join(args.out, "mapped.mlirbc")
-        pipeline = MAP_PASS_ASIC if asic else MAP_PASS
+        pipeline = "foldsim-beacon-map{%s}" % target
         if args.keep:
             # Keep these modules' instances through inlining, so their ports
             # can be reported (ports=, port-modules=).
@@ -564,8 +563,9 @@ def main():
     p.add_argument("design", help="elaborated netlist (.mlir), or mapped bytecode (.mlirbc)")
     p.add_argument("out", help="output directory")
     p.add_argument("options", nargs="*",
-                   help="foldsim-estimate-timing options (top=, family=, black-boxes=, "
-                   "trace=, retime-levels=, ...); family=asap7 maps for the ASIC library")
+                   help="foldsim-estimate-timing options (top=, target=, black-boxes=, "
+                   "trace=, retime-levels=, ...); the design is mapped to the "
+                   "cells of target= (versal by default)")
     p.add_argument("--no-threads", action="store_true",
                    help="map on one thread: half the peak memory, twice the time")
     p.add_argument("--keep", action="append", default=[], metavar="MODULE",

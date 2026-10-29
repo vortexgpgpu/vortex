@@ -68,14 +68,14 @@
   <rect x="510" y="200" width="400" height="300" class="core"/>
   <text x="525" y="224" class="tb">foldsim-opt (foldsim, on CIRCT)</text>
   <rect x="530" y="240" width="360" height="100" class="box"/>
-  <text x="545" y="264" class="t">foldsim-screen-map</text>
+  <text x="545" y="264" class="t">foldsim-beacon-map</text>
   <text x="545" y="286" class="ts">inline small modules, balance, lower to AIG,</text>
   <text x="545" y="304" class="ts">map to 6-input LUTs; adders, compares,</text>
   <text x="545" y="322" class="ts">multipliers and dividers stay word-level</text>
   <rect x="530" y="360" width="360" height="120" class="box"/>
   <text x="545" y="384" class="t">foldsim-estimate-timing</text>
   <text x="545" y="406" class="ts">per-bit arrival over the elaborated instances,</text>
-  <text x="545" y="424" class="ts">levels as Vivado counts them on family=</text>
+  <text x="545" y="424" class="ts">levels as Vivado counts them on target=</text>
   <text x="545" y="442" class="mono">versal (V80) | virtexuplusHBM (U55C)</text>
   <text x="545" y="464" class="ts">optional: retime-levels=, trace=, black-boxes=</text>
 

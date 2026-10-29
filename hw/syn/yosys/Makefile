@@ -285,18 +285,17 @@ timing: $(SYN_SRC_DEPS) $(SYN_LIB_DEPS) | $(BUILD_DIR)
 	@$(SRC_DIR)/synth_summary.py --reports $(BUILD_DIR)/reports \
 	  --top $(TOP_LEVEL_ENTITY) --clock-mhz $(CLOCK_FREQ)
 
-# Beacon (foldsim-estimate-timing, family=$(PDK)): the gate stages of every
+# Beacon (foldsim-estimate-timing, target=$(PDK)): the gate stages of every
 # register-to-register path, with the same sources and SRAM black boxes as
 # synthesis, in seconds and without Yosys; report.txt converts the deepest
 # path to a period with the library's delays. docs/designs/beacon.md.
-BEACON_MAP_PASS := foldsim-screen-map-asic
 beacon: $(BUILD_DIR)/src
 	mkdir -p $(BUILD_DIR)/beacon
 	$(SCRIPT_DIR)/circt_elaborate.sh -f mlir -t$(TOP_LEVEL_ENTITY) -I$(BUILD_DIR)/src -b'$(BB_MODULES)' \
 		-o$(BUILD_DIR)/beacon/netlist.mlir
-	$(FOLDSIM_OPT) $(BUILD_DIR)/beacon/netlist.mlir --pass-pipeline='builtin.module($(BEACON_MAP_PASS))' \
+	$(FOLDSIM_OPT) $(BUILD_DIR)/beacon/netlist.mlir --pass-pipeline='builtin.module(foldsim-beacon-map{target=$(PDK)})' \
 		--emit-bytecode -o $(BUILD_DIR)/beacon/mapped.mlirbc
-	$(FOLDSIM_OPT) $(BUILD_DIR)/beacon/mapped.mlirbc -o /dev/null --pass-pipeline='builtin.module(foldsim-estimate-timing{top=$(TOP_LEVEL_ENTITY) family=$(PDK) output=$(BUILD_DIR)/beacon/endpoints.csv instances=$(BUILD_DIR)/beacon/instances.csv report=$(BUILD_DIR)/beacon/report.txt})'
+	$(FOLDSIM_OPT) $(BUILD_DIR)/beacon/mapped.mlirbc -o /dev/null --pass-pipeline='builtin.module(foldsim-estimate-timing{top=$(TOP_LEVEL_ENTITY) target=$(PDK) output=$(BUILD_DIR)/beacon/endpoints.csv instances=$(BUILD_DIR)/beacon/instances.csv report=$(BUILD_DIR)/beacon/report.txt})'
 	@grep "^deepest path" $(BUILD_DIR)/beacon/report.txt
 
 gate-sim: techmap asap7-models
