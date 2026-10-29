@@ -28,7 +28,19 @@ $Y -q -l "$W/y.log" -p "
   splitnets -driver; opt_clean -purge
   splitnets $TOP; opt_clean -purge
   $REN
-  write_firrtl $W/raw.fir" || { tail -5 "$W/y.log"; exit 1; }
+  write_rtlil $W/design.il" || { tail -5 "$W/y.log"; exit 1; }
+# FIRRTL memories carry one enable and one uniform mask per write port, so a
+# handful of RTL arrays - read-modify-write DCR files, shift queues, per-field
+# struct writes - collect into \$mem cells write_firrtl rejects ('Complex
+# write enable'). Everything it can express stays a memory (threading turns
+# those into dense deep LUTRAM); only the rejected ones are memory_map'ed to
+# the FF logic every other flow infers for them anyway. The writer names each
+# offender, so export simply iterates until it goes through.
+YOSYS=$Y python3 "$(dirname "$0")/export_firrtl.py" "$W/design.il" "$W/raw0.fir" "$W/export.log" || { tail -5 "$W/export.log"; exit 1; }
+# Flattened + bit-split identifiers are most of the file's bytes; a full-GPU
+# export otherwise exceeds the FIRRTL reader's 2 GiB input limit.
+python3 "$(dirname "$0")/shorten_fir.py" "$W/raw0.fir" "$W/raw.fir"
+rm -f "$W/raw0.fir"
 # The writer types clocks as UInt<1> and converts each use with asClock();
 # (Above: the non-threaded top is split to single bits -- Yosys reuses bits of a
 # wire to drive other bits of the same wire, a loop at FIRRTL's word level.)
