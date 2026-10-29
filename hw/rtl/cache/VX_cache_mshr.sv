@@ -571,9 +571,28 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     // stalls and the replay never drains.
     reg [`CS_LINE_ADDR_WIDTH-1:0] dequeue_addr_r;
     reg dequeue_rw_r;
+
+    // The pointer's next entry, as the update above chooses it: a fill opens a
+    // chain, a dequeue walks to the chained successor or to a late joiner
+    // spliced this cycle. The dequeue handshake arrives late, so the address
+    // and the write flag of every candidate are looked up in parallel and the
+    // same choice selects among them, instead of the late pointer indexing the
+    // tables.
+    wire deq_to_next = ~dequeue_park_fire && dequeue_fire && next_table[dequeue_id];
+    wire deq_to_fin  = ~dequeue_park_fire && dequeue_fire && ~next_table[dequeue_id]
+                    && finalize_valid && finalize_is_pending && (finalize_previd == dequeue_id);
+    wire [MSHR_ADDR_WIDTH-1:0] deq_next_id = next_index[dequeue_id];
+    wire [MSHR_ADDR_WIDTH-1:0] deq_base_id = fill_valid ? fill_id : dequeue_id;
+    wire [`CS_LINE_ADDR_WIDTH-1:0] dequeue_addr_n = deq_to_next ? addr_table[deq_next_id]
+                                                 : (deq_to_fin ? addr_table[finalize_id] : addr_table[deq_base_id]);
+    wire dequeue_rw_n = deq_to_next ? write_table[deq_next_id]
+                      : (deq_to_fin ? write_table[finalize_id] : write_table[deq_base_id]);
+    `RUNTIME_ASSERT((dequeue_addr_n == addr_table[dequeue_id_n]) && (dequeue_rw_n == write_table[dequeue_id_n]),
+        ("*** %s dequeue candidate select out of sync: id=%0d", INSTANCE_ID, dequeue_id_n))
+
     always @(posedge clk) begin
-        dequeue_addr_r <= addr_table[dequeue_id_n];
-        dequeue_rw_r   <= write_table[dequeue_id_n];
+        dequeue_addr_r <= dequeue_addr_n;
+        dequeue_rw_r   <= dequeue_rw_n;
     end
 
     assign dequeue_addr  = dequeue_addr_r;
