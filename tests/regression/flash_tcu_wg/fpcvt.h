@@ -9,8 +9,8 @@
 // conversion in Vortex kernel surface so the pack has to exist here.
 //
 // Uses mask select for data-dependent decision, never branch. P differs per
-// lane so a branch on it needs a vx_split, but the Vortex backend stops
-// inserting vx_split for functions above -vortex-divergence-max-bbs blocks.
+// lane so a branch on it costs a vx_split/vx_join around every rounding step,
+// while the selects stay straight-line.
 //
 // Host references do not share one rounding semantics, so two paths:
 //   f32_to_custom -- mirrors cvt_f32_to_custom() in sw/common/softfloat_ext.cpp
