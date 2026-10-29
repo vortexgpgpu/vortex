@@ -3,9 +3,9 @@
 # Licensed under the Apache License, Version 2.0 (the "License").
 #
 # logic_gate — logic-level regression gate on hosted runners.
-# Screens the DUT catalog (ci/testcases/logic_gate.yaml) with
-# foldsim-estimate-timing and asserts the depth of every RTL unit against the
-# golden results in ci/baselines/synthesis/screen/, so an RTL change that makes
+# Runs Beacon over the DUT catalog (ci/testcases/logic_gate.yaml), through
+# foldsim-estimate-timing, and asserts the depth of every RTL unit against the
+# golden results in ci/baselines/synthesis/beacon/, so an RTL change that makes
 # a unit deeper is named on the change that does it, not the next night.
 #
 # Why its own workflow rather than a cell in ci.yml: it needs foldsim, which the
@@ -28,7 +28,7 @@ on:
       - 'ci/synth_gate.py'
       - 'ci/logic_gate.py'
       - 'ci/testcases/logic_gate.yaml'
-      - 'ci/baselines/synthesis/screen/**'
+      - 'ci/baselines/synthesis/beacon/**'
   push:
     branches: [master]
     paths:
@@ -39,7 +39,7 @@ on:
       - 'ci/synth_gate.py'
       - 'ci/logic_gate.py'
       - 'ci/testcases/logic_gate.yaml'
-      - 'ci/baselines/synthesis/screen/**'
+      - 'ci/baselines/synthesis/beacon/**'
   workflow_dispatch:
     inputs:
       builds:
@@ -54,7 +54,7 @@ env:
   CCACHE_DISABLE: 1
 
 jobs:
-  screen:
+  beacon:
     runs-on: ubuntu-22.04
     timeout-minutes: 90
     steps:
@@ -112,8 +112,8 @@ jobs:
             logic_gate.json
             logic_gate_report.md
             build32_logic_gate/hw/syn/xilinx/dut/logic_gate_*/build.log
-            build32_logic_gate/hw/syn/xilinx/dut/logic_gate_*/screen_*
-            build32_logic_gate/hw/syn/xilinx/dut/logic_gate_*/screen/report.txt
+            build32_logic_gate/hw/syn/xilinx/dut/logic_gate_*/beacon_*
+            build32_logic_gate/hw/syn/xilinx/dut/logic_gate_*/beacon/report.txt
           if-no-files-found: warn
 
       - name: Verdict

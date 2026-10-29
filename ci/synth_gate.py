@@ -12,11 +12,11 @@ what does it call its numbers" is shared:
 
   --tool=xilinx  Vivado synthesis + place-and-route      -> ci/fpga_gate.py
   --tool=yosys   Yosys + OpenSTA on an ASIC PDK          -> ci/asic_gate.py
-  --tool=screen  logic levels per RTL unit, no synthesis -> ci/logic_gate.py
+  --tool=beacon  logic levels per RTL unit, no synthesis -> ci/logic_gate.py
 
   Spec      : ci/testcases/<gate>.yaml                  (what to build)
   Baselines : ci/baselines/synthesis/<tool>/<group>.json (last accepted metrics)
-  Metrics   : <build>/synth_summary.csv (screen_summary.csv for the screen),
+  Metrics   : <build>/synth_summary.csv (beacon_summary.csv for Beacon),
               written by the flow itself
 
 Same division as every other check in the catalog: the yaml is hand-authored,
@@ -457,9 +457,9 @@ class Yosys(Tool):
                                                  base.get("cell_area_um2") or 0)
 
 
-class Screen(Tool):
-    """The logic screen: logic levels per RTL unit (hw/syn/xilinx/dut, target
-    `screen`).
+class Beacon(Tool):
+    """Beacon: logic levels per RTL unit (hw/syn/xilinx/dut, target
+    `beacon`).
 
     foldsim-estimate-timing ranks every register-to-register path of the CIRCT
     netlist the Xilinx flow elaborates by its logic levels, counted as Vivado
@@ -469,11 +469,11 @@ class Screen(Tool):
 
     Depth is deterministic -- the same RTL and tools give the same levels -- so
     the gate has no tolerance: a unit that gets deeper fails, by name, until it
-    is fixed or a human re-records it. What it gates is depth, not Fmax: the
-    screen does not see wires (docs/designs/continuous_integration.md 3.5).
+    is fixed or a human re-records it. What it gates is depth, not Fmax:
+    Beacon does not see wires (docs/designs/continuous_integration.md 3.5).
     """
 
-    name = "screen"
+    name = "beacon"
     gate = "logic_gate"
     flow = "hw/syn/xilinx/dut"
 
@@ -482,14 +482,15 @@ class Screen(Tool):
     gated = ("max_levels",)
     integral = metrics
     key_metric = "max_levels"
-    summary = "screen_summary.csv"
+    summary = "beacon_summary.csv"
     tolerance = 0.0
     columns = (("max_lv", "max_levels", "%d", 7),
                ("deep", "deep_endpoints", "%d", 9),
                ("watch", "watch_endpoints", "%d", 9),
                ("ends", "endpoints", "%d", 9))
 
-    # Elaboration and mapping of the widest DUTs; the screen itself is seconds.
+    # Elaboration and mapping of the widest DUTs; the level count itself is
+    # seconds.
     weights = {"top": 600, "vortex": 600, "gfx": 600, "core": 300,
                "tensor": 300, "tcu": 300}
     fallback_weight = 120
@@ -503,13 +504,13 @@ class Screen(Tool):
         ("gen_sources.sh", "sources"),
         ("circt_elaborate.sh", "elaboration"),
         (elab_done, "mapping"),
-        ("foldsim-estimate-timing", "screen"),
-        ("screen_summary.py", "reporting"),
+        ("foldsim-estimate-timing", "levels"),
+        ("beacon_summary.py", "reporting"),
     )
     error_re = re.compile(r"^(?:ERROR|FATAL|Error)\b|: error:|^\S+: \*\*\* ")
 
-    UNITS = "screen_units.json"
-    PATHS = "screen_paths.txt"
+    UNITS = "beacon_units.json"
+    PATHS = "beacon_paths.txt"
 
     def env(self, args):
         return {"circt": tool_version("circt-verilog", "--version",
@@ -546,7 +547,7 @@ class Screen(Tool):
         os.makedirs(work, exist_ok=True)
         shutil.copy2(os.path.join(dut_root, "build.mk"),
                      os.path.join(work, "Makefile"))
-        return ["make", "-C", work, "screen"], dict(DUT=build["dut"],
+        return ["make", "-C", work, "beacon"], dict(DUT=build["dut"],
                                                     CONFIGS=build["configs"])
 
     def extras(self, work):
@@ -604,7 +605,7 @@ class Screen(Tool):
         return "max %d levels" % base["max_levels"]
 
 
-TOOLS = {t.name: t for t in (Xilinx(), Yosys(), Screen())}
+TOOLS = {t.name: t for t in (Xilinx(), Yosys(), Beacon())}
 
 
 def tool_version(name, flag, package=None, line_prefix=None):
@@ -1350,7 +1351,7 @@ def main(argv=None, default_tool="xilinx"):
                          % default_tool)
     ap.add_argument("--threshold", type=float, default=None, metavar="F",
                     help="global gate tolerance, fraction (default: the "
-                         "tool's, %.2f for synthesis, 0 for the screen). "
+                         "tool's, %.2f for synthesis, 0 for Beacon). "
                          "Overridden per-metric by --metric-threshold and "
                          "per-build by the catalog's \"thresholds\"."
                          % TOLERANCE)

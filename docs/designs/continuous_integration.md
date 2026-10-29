@@ -283,12 +283,12 @@ catches one that makes a unit **deeper**, in seconds and without synthesis.
 | | `fpga_gate` | `asic_gate` | `logic_gate` |
 |---|---|---|---|
 | flow | Vivado synthesis, place and route | CIRCT → Yosys → ABC → OpenSTA, on ASAP7 | CIRCT → `foldsim-estimate-timing` (logic levels as Vivado counts them on `DEVICE`'s family) |
-| design tree | `hw/syn/xilinx/dut` | `hw/syn/yosys/dut` | `hw/syn/xilinx/dut`, target `screen` |
+| design tree | `hw/syn/xilinx/dut` | `hw/syn/yosys/dut` | `hw/syn/xilinx/dut`, target `beacon` |
 | gated | `fmax_mhz` against the target clock, `lut` against `lut_budget` | `fmax_mhz` against the target clock, `cell_area_um2` against `area_budget_um2` | `max_levels` against the baseline, and the deepest end point of every RTL unit |
 | also recorded | `wns_ns`, `lutram`, `ff`, `bram`, `uram`, `dsp`, critical paths, high-fanout nets | `wns_ns`, `tns_ns`, `seq_area_um2`, `sram_area_um2`, `cell_count`, `power_mw` | end point bits at ≥ 12 and ≥ 8 levels, the deepest paths |
 | comparable when | same device, optimization level, xlen | same PDK, VT, corner, xlen | same CIRCT, foldsim, xlen |
 | runner | self-hosted, licensed Vivado | hosted, one job per design | hosted, one job for the catalog |
-| default tolerance | Fmax 2 %, LUT 5 % | Fmax 2 %, cell area 5 % | none: the screen is deterministic |
+| default tolerance | Fmax 2 %, LUT 5 % | Fmax 2 %, cell area 5 % | none: Beacon is deterministic |
 
 None is a pytest cell. A cell is a build tree plus a driver; a gate build is
 neither, and the synthesis gates are hours long. They are standalone scripts
@@ -313,12 +313,12 @@ entry points that pin the tool.
 | file | written by | holds |
 |---|---|---|
 | `ci/testcases/{fpga,asic,timing}_gate.yaml` | a person | per build: a design, a target clock, an area budget (synthesis gates), `CONFIGS`, a group, optional `thresholds` and `known_issue` |
-| `ci/baselines/synthesis/{xilinx,yosys,screen}/<group>.json` | the gate | measured metrics, the config hash, the tool versions and environment |
+| `ci/baselines/synthesis/{xilinx,yosys,beacon}/<group>.json` | the gate | measured metrics, the config hash, the tool versions and environment |
 
 Groups are `core`, `tensor`, `graphics`, `dxa` and `vm`. `asic_gate` uses the
 same group names and gates a subset of the builds (§4.5), so where the two
 gates share a design, a divergence between the tools on the same module is a
-finding, not noise. `logic_gate` screens exactly `fpga_gate`'s builds, so a
+finding, not noise. `logic_gate` measures exactly `fpga_gate`'s builds, so a
 unit it flags can be read against the Fmax gate's critical paths.
 
 The config hash ties the two files together: edit the spec, and the gate
@@ -367,14 +367,14 @@ so the flow reports the signed worst slack instead.
 
 #### What `logic_gate` asserts
 
-The screen ([logic_screen.md](logic_screen.md)) counts logic levels, not
+Beacon ([beacon.md](beacon.md)) counts logic levels, not
 slack: it does not see wires, so it gates depth, which it predicts (Spearman
 0.50–0.93 against Vivado per register on the V80 gates), and leaves Fmax to
 `fpga_gate`. It counts them for the family of
 the DUT flow's `DEVICE` (the U55C by default), which
 `gen_platform.py --emit=family` reads from `hw/syn/xilinx/platforms`; the
-device is part of the baseline fingerprint, as it is for `fpga_gate`. The
-screen has profiles for the V80 and the U55C only, and fails on any other
+device is part of the baseline fingerprint, as it is for `fpga_gate`.
+Beacon has profiles for the V80 and the U55C only, and fails on any other
 `DEVICE`. A
 **unit** is an end point's instance path with generate indices folded
 (`g_banks_3_bank` → `g_banks_*_bank`).
@@ -387,8 +387,8 @@ screen has profiles for the V80 and the U55C only, and fails on any other
 
 There is no tolerance: the same RTL and tools give the same levels. A new CIRCT
 or foldsim can map the same RTL differently, so both versions are in the config
-hash and a tool change reads `STALE`. `make -C hw/syn/xilinx/dut <dut>-screen`
-runs one screen by hand; its `screen_paths.txt` lists every deep path op by op,
+hash and a tool change reads `STALE`. `make -C hw/syn/xilinx/dut <dut>-beacon`
+runs Beacon on one DUT by hand; its `beacon_paths.txt` lists every deep path op by op,
 by unit, with source lines, and a failing build names it.
 
 #### Running a multi-hour sweep
@@ -541,13 +541,13 @@ adding it: an over-budget design costs a silent job kill, not a red gate.
 ### 4.6 `logic_gate.yml`
 
 On every pull request and push to master that touches the RTL, the DUT
-wrappers, the screen's scripts, the gate or its baselines; and by manual
-dispatch. One hosted job screens the whole catalog: it restores the toolchain,
+wrappers, Beacon's scripts, the gate or its baselines; and by manual
+dispatch. One hosted job runs Beacon on the whole catalog: it restores the toolchain,
 installs foldsim (`ci/toolchain_install.sh --foldsim`), runs the catalog's
 `run:` command with `--report`, and renders the report with
 [`synth_report.py`](../../ci/synth_report.py) into the workflow summary. The
-artifacts are the report and, per design, the build log, the summary and the
-screen's deepest paths.
+artifacts are the report and, per design, the build log, the summary and
+Beacon's deepest paths.
 
 ---
 

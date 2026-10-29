@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
-"""Summarize a logic screen (foldsim-estimate-timing) for logic_gate.
+"""Summarize a Beacon run (foldsim-estimate-timing) for logic_gate.
 
-The screen writes one row per end point bit: the logic levels of its longest
+Beacon writes one row per end point bit: the logic levels of its longest
 path, its start and its end. ci/logic_gate.py gates depth per RTL unit, so
 this collapses the table into what it compares:
 
-  screen_summary.csv  one row: the deepest end point, the end point bits at or
+  beacon_summary.csv  one row: the deepest end point, the end point bits at or
                       above the fix and watch thresholds, and all end points
-  screen_units.json   the deepest end point of every unit at or above the
+  beacon_units.json   the deepest end point of every unit at or above the
                       watch threshold, and the deepest paths (diagnostics)
-  screen_paths.txt    if the screen wrote paths.jsonl: every path at or above
+  beacon_paths.txt    if Beacon wrote paths.jsonl: every path at or above
                       the watch threshold, op by op, by unit (write_paths)
 
 A unit is an end point's instance path with generate indices folded
 (g_banks_3_bank -> g_banks_*_bank), so one deep bank reads as one unit.
 
-  usage: screen_summary.py <screen dir> --top <module> [--output-dir <dir>]
+  usage: beacon_summary.py <run dir> --top <module> [--output-dir <dir>]
 """
 
 import argparse
@@ -27,7 +27,7 @@ import re
 
 # 300 MHz on the V80: failing end points have a median of 7-8 levels, and
 # about 55-60% of the registers at 12 or more fail
-# (docs/designs/logic_screen.md §7).
+# (docs/designs/beacon.md §7).
 FIX_LEVELS = 12
 WATCH_LEVELS = 8
 NUM_PATHS = 10
@@ -43,7 +43,7 @@ def norm(name):
 
 
 def instance_paths(path):
-    """Instance id -> path from the top, from the screen's instances.csv."""
+    """Instance id -> path from the top, from a run's instances.csv."""
     rows = {}
     with open(path) as fh:
         for row in csv.DictReader(fh):
@@ -69,16 +69,16 @@ def unit(path):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("screen")
+    ap.add_argument("run_dir")
     ap.add_argument("--top", required=True)
     ap.add_argument("--output-dir", default=".")
     args = ap.parse_args()
 
-    paths = instance_paths(os.path.join(args.screen, "instances.csv"))
+    paths = instance_paths(os.path.join(args.run_dir, "instances.csv"))
     units = collections.defaultdict(int)
     counts = collections.Counter()
     deepest = []
-    with open(os.path.join(args.screen, "endpoints.csv")) as fh:
+    with open(os.path.join(args.run_dir, "endpoints.csv")) as fh:
         for row in csv.DictReader(fh):
             levels = int(row["levels"])
             counts["endpoints"] += 1
@@ -105,28 +105,28 @@ def main():
                "endpoints": counts["endpoints"]}
     if not units:
         # Nothing reaches the watch threshold; the deepest is still recorded.
-        with open(os.path.join(args.screen, "endpoints.csv")) as fh:
+        with open(os.path.join(args.run_dir, "endpoints.csv")) as fh:
             summary["max_levels"] = max(
                 (int(r["levels"]) for r in csv.DictReader(fh)), default=0)
 
-    with open(os.path.join(args.output_dir, "screen_summary.csv"), "w",
+    with open(os.path.join(args.output_dir, "beacon_summary.csv"), "w",
               newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=COLUMNS)
         w.writeheader()
         w.writerow(summary)
-    with open(os.path.join(args.output_dir, "screen_units.json"), "w") as fh:
+    with open(os.path.join(args.output_dir, "beacon_units.json"), "w") as fh:
         json.dump({"fix_levels": FIX_LEVELS, "watch_levels": WATCH_LEVELS,
                    "units": dict(sorted(units.items())),
                    "deepest_paths": ["%d  %s -> %s" % d for d in deepest]},
                   fh, indent=2)
         fh.write("\n")
-    print("screen: %s max %d levels, %d end point bits >= %d, %d units >= %d"
+    print("beacon: %s max %d levels, %d end point bits >= %d, %d units >= %d"
           % (args.top, summary["max_levels"], summary["deep_endpoints"],
              FIX_LEVELS, len(units), WATCH_LEVELS))
-    if os.path.exists(os.path.join(args.screen, "paths.jsonl")):
-        with open(os.path.join(args.output_dir, "screen_paths.txt"), "w") as fh:
-            n, u = write_paths(fh, args.screen, WATCH_LEVELS, paths=paths)
-        print("screen: %d paths >= %d levels in %d units -> screen_paths.txt"
+    if os.path.exists(os.path.join(args.run_dir, "paths.jsonl")):
+        with open(os.path.join(args.output_dir, "beacon_paths.txt"), "w") as fh:
+            n, u = write_paths(fh, args.run_dir, WATCH_LEVELS, paths=paths)
+        print("beacon: %d paths >= %d levels in %d units -> beacon_paths.txt"
               % (n, WATCH_LEVELS, u))
 
 
@@ -134,21 +134,21 @@ def fold(name):
     return INDEX.sub("_*", norm(name))
 
 
-def write_paths(out, screen, min_levels, unit_filter=None, paths=None):
-    """Write the screen's deep paths (paths.jsonl) by unit, op by op.
+def write_paths(out, run_dir, min_levels, unit_filter=None, paths=None):
+    """Write a run's deep paths (paths.jsonl) by unit, op by op.
 
-    The screen lists one path per pair of start and end registers; this folds
+    Beacon lists one path per pair of start and end registers; this folds
     the pairs whose names differ only in generate indices and bits, as units
     fold them, keeping the deepest. Returns (paths, units) written.
     """
     if paths is None:
-        paths = instance_paths(os.path.join(screen, "instances.csv"))
+        paths = instance_paths(os.path.join(run_dir, "instances.csv"))
 
     def full(ctx, name):
         return "%s/%s" % (paths[ctx], name) if paths[ctx] else name
 
     units = collections.defaultdict(dict)
-    with open(os.path.join(screen, "paths.jsonl")) as fh:
+    with open(os.path.join(run_dir, "paths.jsonl")) as fh:
         for line in fh:
             p = json.loads(line)
             if p["levels"] < min_levels:

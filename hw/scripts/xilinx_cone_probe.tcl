@@ -14,7 +14,7 @@
 # xilinx_cone_probe.tcl <dcp> <out> <from> <to>...: for each from|to pair of cell
 # patterns ("-" for any), up to 500 setup paths between them; prints the
 # level histogram, the endpoints of the deepest and the deepest path cell by
-# cell. Answers whether a cone the screen reports exists in Vivado's netlist,
+# cell. Answers whether a cone Beacon reports exists in Vivado's netlist,
 # and how deep Vivado built it.
 set dcp [lindex $argv 0]
 set out [lindex $argv 1]

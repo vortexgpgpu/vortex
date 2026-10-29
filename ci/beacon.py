@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""logic_screen -- run foldsim's logic screen on a Vortex netlist, and read
-its results by RTL unit or against Vivado.
+"""beacon -- run Beacon, foldsim's logic-level count, on a Vortex netlist, and
+read its results by RTL unit or against Vivado.
 
-  screen        map an elaborated CIRCT netlist and count the logic levels of
-                every end point (foldsim-screen-map, foldsim-estimate-timing)
+  run           map an elaborated CIRCT netlist and count the logic levels of
+                every end point (foldsim-estimate-timing)
   summarize     the deep end points grouped by RTL unit, optionally beside
                 Vivado's failing ones
   paths         every deep path op by op, by RTL unit (one per pair of
@@ -27,20 +27,20 @@ its results by RTL unit or against Vivado.
   buffers       which elastic buffers pass a deep ready chain or a computed
                 output through: evidence for an OUT_BUF (OUT_REG) change
 
-  ci/logic_screen.py screen gen/design.mlir runs/full
-  ci/logic_screen.py screen runs/full/mapped.mlirbc runs/socket \\
+  ci/beacon.py run gen/design.mlir runs/full
+  ci/beacon.py run runs/full/mapped.mlirbc runs/socket \\
       top=VX_socket__lift black-boxes=VX_core__lift
-  ci/logic_screen.py summarize runs/full --min-levels 12
-  ci/logic_screen.py paths runs/full --unit lsu_unit
-  ci/logic_screen.py validate runs/socket ep.csv --native VX_socket__lift=dut
-  ci/logic_screen.py screen --keep VX_elastic_buffer design.mlir runs/eb \\
+  ci/beacon.py summarize runs/full --min-levels 12
+  ci/beacon.py paths runs/full --unit lsu_unit
+  ci/beacon.py validate runs/socket ep.csv --native VX_socket__lift=dut
+  ci/beacon.py run --keep VX_elastic_buffer design.mlir runs/eb \\
       port-modules=VX_elastic_buffer
-  ci/logic_screen.py buffers runs/eb
+  ci/beacon.py buffers runs/eb
 
 A Vivado end point table is a CSV of `slack,levels,logic,net,start,end`, one
-row per failing end point (a gate's ep.csv). The DUT flow and logic_gate
-screen with the Makefiles instead (make -C hw/syn/xilinx/dut <dut>-screen,
-ci/logic_gate.py); see docs/designs/logic_screen.md.
+row per failing end point (a gate's ep.csv). The DUT flow and logic_gate run
+Beacon through the Makefiles instead (make -C hw/syn/xilinx/dut <dut>-beacon,
+ci/logic_gate.py); see docs/designs/beacon.md.
 """
 import argparse
 import collections
@@ -60,6 +60,9 @@ FOLD_CLASSES = {
     'VX_compute_slice__lift': 'VX_compute_slice__lift_copy',
     'foldsim_target': 'foldsim_target_model_copy',
 }
+
+MAP_PASS = 'foldsim-screen-map'
+MAP_PASS_ASIC = 'foldsim-screen-map-asic'
 
 VIVADO_CELL = re.compile(
     r'_reg((\[\d+\])*(_replica(_\d+)?)?(_[fb]ret(_\d+)?)*(_rep(_\d+)?)?'
@@ -106,7 +109,7 @@ def ep_key(cell_path, native):
 
 
 def numpy():
-    # Only the comparisons with Vivado need numpy; screening does not.
+    # Only the comparisons with Vivado need numpy; counting levels does not.
     import numpy as np
     return np
 
@@ -129,9 +132,9 @@ def spearman(a, b):
     return float(np.corrcoef(ra, rb)[0, 1])
 
 
-def endpoints(screen):
-    """The rows of a screen's end point table, as dicts."""
-    with open(f'{screen}/endpoints.csv') as f:
+def endpoints(run_dir):
+    """The rows of a run's end point table, as dicts."""
+    with open(f'{run_dir}/endpoints.csv') as f:
         yield from csv.DictReader(f)
 
 
@@ -174,8 +177,8 @@ def unit(key):
     return INDEX.sub('_*', d)
 
 
-def cmd_screen(args):
-    """Map (unless the input is already mapped bytecode), then screen."""
+def cmd_run(args):
+    """Map (unless the input is already mapped bytecode), then count levels."""
     opt = os.environ.get("FOLDSIM_OPT") or "foldsim-opt"
     os.makedirs(args.out, exist_ok=True)
     asic = any(o == "family=asap7" for o in args.options)
@@ -186,7 +189,7 @@ def cmd_screen(args):
     threads = ["--mlir-disable-threading"] if args.no_threads else []
     if not args.design.endswith(".mlirbc"):
         mapped = os.path.join(args.out, "mapped.mlirbc")
-        pipeline = "foldsim-screen-map-asic" if asic else "foldsim-screen-map"
+        pipeline = MAP_PASS_ASIC if asic else MAP_PASS
         if args.keep:
             # Keep these modules' instances through inlining, so their ports
             # can be reported (ports=, port-modules=).
@@ -202,7 +205,7 @@ def cmd_screen(args):
     if any(o.startswith("port-modules=") for o in args.options):
         files.append("ports=%s/ports.csv" % args.out)
     opts = " ".join(files + args.options)
-    steps.append(("screen", [opt, mapped, "-o", os.devnull,
+    steps.append(("levels", [opt, mapped, "-o", os.devnull,
                              "--pass-pipeline=builtin.module("
                              "foldsim-estimate-timing{%s})" % opts]))
     for name, cmd in steps:
@@ -218,7 +221,7 @@ def cmd_screen(args):
 def cmd_validate(args):
     np = numpy()
 
-    inst = load_instances(f'{args.screen}/instances.csv')
+    inst = load_instances(f'{args.run_dir}/instances.csv')
     classes = FOLD_CLASSES
     sub = None
     if args.native:
@@ -232,7 +235,7 @@ def cmd_validate(args):
     # that place a register in the generate scope that assigns it rather
     # than the one that declares it.
     by_dir = collections.defaultdict(dict)
-    for row in endpoints(args.screen):
+    for row in endpoints(args.run_dir):
         cls, p = paths[int(row['end_inst'])]
         if cls is None:
             continue
@@ -301,22 +304,22 @@ def cmd_validate(args):
     print(f'ep rows {rows}: fold shell / channels {shell_rows}, '
           f'unmatched {unmatched_rows}, matched {rows - shell_rows - unmatched_rows} '
           f'in {len(keys)} registers/memories')
-    print(f'screen keys in the classes: {len(ours)}')
-    print(f'Spearman(screen levels, Vivado levels) = {spearman(a, lv):.3f}')
-    print(f'Spearman(screen levels, -slack)        = {spearman(a, -sl):.3f}')
+    print(f'Beacon keys in the classes: {len(ours)}')
+    print(f'Spearman(Beacon levels, Vivado levels) = {spearman(a, lv):.3f}')
+    print(f'Spearman(Beacon levels, -slack)        = {spearman(a, -sl):.3f}')
     ratio = a[lv > 0] / lv[lv > 0]
-    print(f'screen/Vivado levels: median {np.median(ratio):.2f}, '
+    print(f'Beacon/Vivado levels: median {np.median(ratio):.2f}, '
           f'p10 {np.percentile(ratio, 10):.2f}, p90 {np.percentile(ratio, 90):.2f}')
 
-    print('\nVivado levels -> screen levels (registers/memories):')
+    print('\nVivado levels -> Beacon levels (registers/memories):')
     for v in range(0, int(lv.max()) + 1):
         sel = a[lv == v]
         if len(sel):
-            print(f'  {v:3d}: n={len(sel):6d} screen median {np.median(sel):5.1f} '
+            print(f'  {v:3d}: n={len(sel):6d} Beacon median {np.median(sel):5.1f} '
                   f'p10 {np.percentile(sel, 10):5.1f} p90 {np.percentile(sel, 90):5.1f}')
 
     if args.native:
-        # The ep.csv of a gate lists every failing end point, so a screened
+        # The ep.csv of a gate lists every failing end point, so a measured
         # register without one meets timing.
         scr = np.array([v[0] for v in ours.values()])
         fails = np.array([k in viv for k in ours])
@@ -334,7 +337,7 @@ def cmd_validate(args):
     if args.json:
         summary = {
             'rows': rows, 'shell': shell_rows, 'unmatched': unmatched_rows,
-            'registers': len(keys), 'screened': len(ours),
+            'registers': len(keys), 'measured': len(ours),
             'rho_levels': round(spearman(a, lv), 3),
             'rho_slack': round(spearman(a, -sl), 3),
             'ratio': round(float(np.median(ratio)), 2),
@@ -354,17 +357,17 @@ def cmd_validate(args):
         print(f'  {n:6d} {cls}: {k}')
 
     order = np.argsort(-a, kind='mergesort')
-    print(f'\ndeepest screened registers with failing Vivado end points:')
+    print(f'\ndeepest measured registers with failing Vivado end points:')
     for i in order[:args.top]:
         k = keys[i]
-        print(f'  screen {a[i]:3d} vivado {lv[i]:3d} slack {sl[i]:7.3f} '
+        print(f'  beacon {a[i]:3d} vivado {lv[i]:3d} slack {sl[i]:7.3f} '
               f'n {viv[k][2]:5d} {k[0]}: {k[1]}')
 
 
 
 def cmd_summarize(args):
 
-    inst = load_instances(f'{args.screen}/instances.csv')
+    inst = load_instances(f'{args.run_dir}/instances.csv')
     classes = FOLD_CLASSES
     if args.native:
         module, prefix = args.native.split('=')
@@ -374,7 +377,7 @@ def cmd_summarize(args):
     groups = collections.defaultdict(
         lambda: {'n': 0, 'max': -1, 'hist': collections.Counter(),
                  'worst': None})
-    for row in endpoints(args.screen):
+    for row in endpoints(args.run_dir):
         levels = int(row[args.metric])
         if levels < args.min_levels:
             continue
@@ -425,7 +428,7 @@ def cmd_summarize(args):
         missed = sorted((k for k in viv if k not in groups),
                         key=lambda k: -viv[k][0])
         print(f'\nVivado units at or above {args.min_levels} levels the '
-              f'screen ranks below it ({len(missed)}):')
+              f'Beacon ranks below it ({len(missed)}):')
         for k in missed[:args.top]:
             print(f'{viv[k][0]:8d} {viv[k][1]:4d}  {k[0]}: {k[1]}')
 
@@ -435,18 +438,18 @@ def cmd_paths(args):
     """Every path of at least --min-levels, by unit, op by op."""
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                     '..', 'hw', 'scripts'))
-    import screen_summary
-    count, _ = screen_summary.write_paths(sys.stdout, args.screen,
+    import beacon_summary
+    count, _ = beacon_summary.write_paths(sys.stdout, args.run_dir,
                                           args.min_levels, args.unit)
     if not count:
-        print('(the screen lists paths from its path-levels= on, 12 by '
+        print('(Beacon lists paths from its path-levels= on, 12 by '
               'default)')
 
 
-def load_ports(screen):
-    """instance -> {port: (direction, levels)} from a screen's ports.csv."""
+def load_ports(run_dir):
+    """instance -> {port: (direction, levels)} from a run's ports.csv."""
     ports = collections.defaultdict(dict)
-    with open(f'{screen}/ports.csv') as f:
+    with open(f'{run_dir}/ports.csv') as f:
         for row in csv.DictReader(f):
             ports[(row['instance'], row['module'])][row['port']] = (
                 row['direction'], int(row['levels']))
@@ -456,7 +459,7 @@ def load_ports(screen):
 def cmd_ports(args):
     """The deepest instance of each unit, port by port."""
     units = {}
-    for (inst, module), ports in load_ports(args.screen).items():
+    for (inst, module), ports in load_ports(args.run_dir).items():
         deepest = max(levels for _, levels in ports.values())
         key = (INDEX.sub('_*', norm(inst)), module.rstrip('0123456789').rstrip('_'))
         if key not in units or deepest > units[key][0]:
@@ -480,7 +483,7 @@ def cmd_buffers(args):
     registered: OUT_REG would register it.
     """
     rows = []
-    for (inst, module), ports in load_ports(args.screen).items():
+    for (inst, module), ports in load_ports(args.run_dir).items():
         if not module.startswith('VX_elastic_buffer'):
             continue
         get = lambda p: ports.get(p, ('', -1))[1]
@@ -517,12 +520,12 @@ RETIMED = re.compile(r'_[fb]ret')
 
 def cmd_retime_split(args):
     np = numpy()
-    screen, ep, native, metric = args.screen, args.ep, args.native, args.metric
+    run_dir, ep, native, metric = args.run_dir, args.ep, args.native, args.metric
     module, prefix = native.split('=')
-    inst = load_instances(f'{screen}/instances.csv')
+    inst = load_instances(f'{run_dir}/instances.csv')
     paths = class_paths(inst, {module: prefix})
     ours = collections.defaultdict(int)
-    for row in endpoints(screen):
+    for row in endpoints(run_dir):
         cls, p = paths[int(row['end_inst'])]
         base = row['end'].rsplit('.', 1)[0]
         key = (cls, norm(f'{p}/{base}' if p else base))
@@ -546,8 +549,8 @@ def cmd_retime_split(args):
             continue
         ratio = np.median(a[b > 0] / b[b > 0]) if (b > 0).any() else float('nan')
         print(f'retimed={retimed!s:5}: {len(keys):5d} registers, Spearman '
-              f'{spearman(a, b):.3f}, median screen/Vivado {ratio:.2f}, '
-              f'screen-Vivado median {np.median(a - b):+.1f}')
+              f'{spearman(a, b):.3f}, median Beacon/Vivado {ratio:.2f}, '
+              f'Beacon-Vivado median {np.median(a - b):+.1f}')
 
 
 
@@ -556,7 +559,7 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    p = sub.add_parser("screen", help="map and screen a netlist")
+    p = sub.add_parser("run", help="map a netlist and count its levels")
     p.add_argument("design", help="elaborated netlist (.mlir), or mapped bytecode (.mlirbc)")
     p.add_argument("out", help="output directory")
     p.add_argument("options", nargs="*",
@@ -567,51 +570,51 @@ def main():
     p.add_argument("--keep", action="append", default=[], metavar="MODULE",
                    help="keep MODULE's instances through inlining, to report "
                    "their ports with port-modules=MODULE (repeatable)")
-    p.set_defaults(fn=cmd_screen)
+    p.set_defaults(fn=cmd_run)
 
     p = sub.add_parser("summarize", help="deep end points by RTL unit")
-    p.add_argument('screen')
+    p.add_argument('run_dir')
     p.add_argument('--min-levels', type=int, default=10)
     p.add_argument('--ep', help="a Vivado end point table to group beside")
     p.add_argument('--native', metavar='MODULE=PREFIX')
     p.add_argument('--top', type=int, default=40)
     p.add_argument('--metric', default='levels', choices=['levels', 'retimed'],
-                   help="the screen's column to group by")
+                   help="the run's column to group by")
     p.set_defaults(fn=cmd_summarize)
 
     p = sub.add_parser("paths", help="deep paths op by op, by RTL unit")
-    p.add_argument('screen')
+    p.add_argument('run_dir')
     p.add_argument('--min-levels', type=int, default=12)
     p.add_argument('--unit', help="only the units whose name contains this")
     p.set_defaults(fn=cmd_paths)
 
     p = sub.add_parser("validate", help="agreement per register with Vivado")
-    p.add_argument('screen')
+    p.add_argument('run_dir')
     p.add_argument('ep')
     p.add_argument('--top', type=int, default=30)
     p.add_argument('--native', metavar='MODULE=PREFIX[:SUBPATH]',
-                   help='native gate: the screened top and the harness '
+                   help='native gate: the measured top and the harness '
                    'prefix of its cells (e.g. VX_socket__lift=dut); with '
-                   'SUBPATH, only the screened end points below it, which '
+                   'SUBPATH, only the measured end points below it, which '
                    'the harness instantiates as PREFIX')
     p.add_argument('--json', help='also write the agreement to this file')
     p.add_argument('--metric', default='levels', choices=['levels', 'retimed'],
-                   help="the screen's column to compare")
+                   help="the run's column to compare")
     p.set_defaults(fn=cmd_validate)
 
     p = sub.add_parser("ports", help="port depths of chosen modules, by unit")
-    p.add_argument('screen')
+    p.add_argument('run_dir')
     p.add_argument('--min-levels', type=int, default=8)
     p.add_argument('--top', type=int, default=40)
     p.set_defaults(fn=cmd_ports)
 
     p = sub.add_parser("buffers", help="elastic buffers that pass deep paths")
-    p.add_argument('screen')
+    p.add_argument('run_dir')
     p.add_argument('--min-levels', type=int, default=8)
     p.set_defaults(fn=cmd_buffers)
 
     p = sub.add_parser("retime-split", help="agreement split by Vivado's retiming")
-    p.add_argument('screen')
+    p.add_argument('run_dir')
     p.add_argument('ep')
     p.add_argument('native', metavar='MODULE=PREFIX')
     p.add_argument('metric', nargs='?', default='levels', choices=['levels', 'retimed'])

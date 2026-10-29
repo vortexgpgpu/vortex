@@ -1,11 +1,11 @@
-# Logic screen — logic depth of every path, before Vivado
+# Beacon — logic depth of every path, before Vivado
 
-The logic screen counts the logic levels of every register-to-register path
+Beacon counts the logic levels of every register-to-register path
 of a Vortex design the way Vivado counts them, in seconds and without
 Vivado. It names the RTL units whose paths are too deep for the target clock,
 gates their depth on every RTL change (`logic_gate`), and is the first step
-of RTL timing work: screen, fix the deep units, then confirm with one Vivado
-run.
+of RTL timing work: run Beacon, fix the deep units, then confirm with one
+Vivado run.
 
 | § | contents |
 |---|---|
@@ -26,7 +26,7 @@ run.
 It answers one question per register: **how many logic levels is its worst
 input path?** At 300 MHz on the V80, failing end points have a median of
 7–8 levels, and between half and four fifths of the registers at 12 or more
-levels fail, depending on the gate (§7). So the screen reports:
+levels fail, depending on the gate (§7). So Beacon reports:
 
 - **fix list:** units with end points at ≥ 12 levels;
 - **watch list:** ≥ 8 levels.
@@ -36,9 +36,9 @@ It does not predict slack, because it does not see wires (§9).
 One DUT of the synthesis catalog, from a configured build tree:
 
 ```bash
-make -C hw/syn/xilinx/dut tcu-screen
-# build_tcu/screen_paths.txt     every path at >= 8 levels, op by op, by unit
-# build_tcu/screen_units.json    deepest end point per RTL unit
+make -C hw/syn/xilinx/dut tcu-beacon
+# build_tcu/beacon_paths.txt     every path at >= 8 levels, op by op, by unit
+# build_tcu/beacon_units.json    deepest end point per RTL unit
 ```
 
 The whole catalog as a gate, and a baseline update (a human step):
@@ -48,17 +48,17 @@ ci/logic_gate.py -j 2
 ci/logic_gate.py -b om --update-baseline
 ```
 
-Any CIRCT netlist, with `ci/logic_screen.py` (subcommands `screen`,
+Any CIRCT netlist, with `ci/beacon.py` (subcommands `run`,
 `summarize`, `paths`, `validate`, `retime-split`, `ports`, `buffers`;
 `foldsim-opt` from the `PATH` or `FOLDSIM_OPT`):
 
 ```bash
-ci/logic_screen.py screen design.mlir runs/full            # map, then screen
-ci/logic_screen.py screen runs/full/mapped.mlirbc runs/socket \
+ci/beacon.py run design.mlir runs/full                     # map, then count levels
+ci/beacon.py run runs/full/mapped.mlirbc runs/socket \
     top=VX_socket__lift black-boxes=VX_core__lift           # one unit of a mapped design
-ci/logic_screen.py summarize runs/full --min-levels 12     # deep end points by RTL unit
-ci/logic_screen.py paths runs/full --unit lsu_unit         # its paths, op by op (§5)
-ci/logic_screen.py validate runs/socket ep.csv --native VX_socket__lift=dut
+ci/beacon.py summarize runs/full --min-levels 12           # deep end points by RTL unit
+ci/beacon.py paths runs/full --unit lsu_unit               # its paths, op by op (§5)
+ci/beacon.py validate runs/socket ep.csv --native VX_socket__lift=dut
 ```
 
 Or the two passes directly:
@@ -87,7 +87,7 @@ foldsim-opt mapped.mlirbc -o /dev/null --pass-pipeline='builtin.module(
 
 ## 2. System architecture
 
-![Logic screen system](../assets/img/logic_screen_system.svg)
+![Beacon system](../assets/img/beacon_system.svg)
 
 The engine is two compiler passes of **foldsim** (`foldsim-opt`), built on
 CIRCT like the rest of foldsim, and shipped in the foldsim prebuilt. Vortex
@@ -96,23 +96,23 @@ never builds it. The integration is in Vortex:
 | Piece | Where | Role |
 |---|---|---|
 | `foldsim-screen-map`, `foldsim-estimate-timing` | foldsim `lib/Transforms/EstimateTiming.cpp` | map to LUTs; count levels |
-| `ci/logic_screen.py` | `ci/` | screen any netlist; read it by unit; compare with Vivado |
+| `ci/beacon.py` | `ci/` | run Beacon on any netlist; read it by unit; compare with Vivado |
 | `xilinx_cone_dump.tcl`, `xilinx_cone_probe.tcl`, `xilinx_wire_probe.tcl` | `hw/scripts` | Vivado probes for what levels cannot show (§8) |
-| target `screen` | `hw/syn/xilinx/dut/common.mk` | one DUT: sources → netlist → screen → summary |
+| target `beacon` | `hw/syn/xilinx/dut/common.mk` | one DUT: sources → netlist → levels → summary |
 | `circt_elaborate.sh -f mlir` | `hw/scripts` | the lowered HW/Comb/Seq netlist, no `firtool` |
 | `gen_platform.py --emit=family` | `hw/scripts` | the family of `DEVICE`, from `hw/syn/xilinx/platforms` |
-| `screen_summary.py` | `hw/scripts` | `screen_summary.csv` and per-unit `screen_units.json` |
-| `Screen` backend, `logic_gate.py` | `ci/synth_gate.py`, `ci/` | the gate, beside `fpga_gate` and `asic_gate` |
+| `beacon_summary.py` | `hw/scripts` | `beacon_summary.csv` and per-unit `beacon_units.json` |
+| `Beacon` backend, `logic_gate.py` | `ci/synth_gate.py`, `ci/` | the gate, beside `fpga_gate` and `asic_gate` |
 | `logic_gate.yml` | `.github/workflows` | runs it on pull requests that touch RTL |
 
-The screen reads the same CIRCT import that foldsim and the Yosys flow
+Beacon reads the same CIRCT import that foldsim and the Yosys flow
 use (`circt-verilog --ir-hw`), elaborated from the sources and defines
 `gen_sources.sh` writes for Vivado, with the Xilinx floating-point IPs as
 black boxes (`xilinx_ip_stubs.sv`).
 
 ## 3. Compiler architecture
 
-![Logic screen compiler](../assets/img/logic_screen_compiler.svg)
+![Beacon compiler](../assets/img/beacon_compiler.svg)
 
 ### 3.1 `foldsim-screen-map`
 
@@ -157,7 +157,7 @@ and one **node** per (context, value, bit). It never enumerates paths:
    predecessors back; the walk also yields the path's largest fanout and its
    module crossings.
 
-Time and memory are linear in the design's bits: the full GPU screens in
+Time and memory are linear in the design's bits: the full GPU runs in
 16–21 s and 2.7 GB, a DUT of the catalog in seconds.
 
 ## 4. The model
@@ -202,8 +202,8 @@ family is an error.
 
 ### 4.3 ASAP7
 
-For the ASIC flow (`hw/syn/yosys`, ASAP7 7.5-track RVT, TT corner) the
-screen counts **cell stages**, not LUT levels. `foldsim-screen-map-asic`
+For the ASIC flow (`hw/syn/yosys`, ASAP7 7.5-track RVT, TT corner)
+Beacon counts **cell stages**, not LUT levels. `foldsim-screen-map-asic`
 maps the same balanced and-inverter graph to 3-input cuts, each one cell
 (NAND, AOI, MAJ, XOR), and `family=asap7` models the word-level operators
 as an ASIC builds them:
@@ -252,10 +252,10 @@ candidates retiming is unlikely to absorb.
 | `endpoints.csv` | one row per end point bit: `levels,retimed,kind,start_kind,fanout,crossings,start_inst,start,end_inst,end` |
 | `instances.csv` | the instance tree: `id,parent,instance,module` (the `*_inst` columns' ids) |
 | `report.txt` | counts, combinational loops, ops without a model, the histogram of end points by levels, the `top-paths` deepest paths op by op, and the deepest path of each `trace=` match |
-| `screen_summary.csv` | the DUT flow's one row: max levels, end points ≥ 12, ≥ 8, all |
+| `beacon_summary.csv` | the DUT flow's one row: max levels, end points ≥ 12, ≥ 8, all |
 | `paths.jsonl` | `paths=`: one JSON line per pair of start and end registers whose deepest bit has at least `path-levels` levels: that bit's levels, the pair's bit count, start, end, and `ops`, the path from the end back to the start as `[levels, kind, fanout, instance id, name, source]` |
-| `screen_units.json` | the deepest end point of every unit at ≥ 8 levels, and the 10 deepest paths |
-| `screen_paths.txt` | the DUT flow's `paths.jsonl` at ≥ 8 levels, by unit (`ci/logic_screen.py paths` for any screen) |
+| `beacon_units.json` | the deepest end point of every unit at ≥ 8 levels, and the 10 deepest paths |
+| `beacon_paths.txt` | the DUT flow's `paths.jsonl` at ≥ 8 levels, by unit (`ci/beacon.py paths` for any run) |
 
 A path in `report.txt`, deepest first, one op per line: levels at the op,
 its kind, the fanout of its bit, and its instance path and name:
@@ -304,35 +304,35 @@ On the full GPU, the 3,283 pairs at ≥ 12 levels fold into 169 paths in
 ### 6.1 The DUT flow
 
 `hw/syn/xilinx/dut` builds every DUT of `catalog.mk` for Vivado; its
-`screen` target screens the same DUT with the same sources, defines and
+`beacon` target runs Beacon on the same DUT with the same sources, defines and
 `DEVICE` (the U55C by default):
 
-1. `gen_sources.sh` into `screen/sources.f`, a filelist of `hw/rtl` with
+1. `gen_sources.sh` into `beacon/sources.f`, a filelist of `hw/rtl` with
    the defines (not preprocessed copies, so source lines are the
    repository's);
-2. `circt_elaborate.sh -f mlir` into `screen/netlist.mlir`, the FP IPs as
+2. `circt_elaborate.sh -f mlir` into `beacon/netlist.mlir`, the FP IPs as
    black boxes, with every op's source location;
 3. `foldsim-screen-map`, then `foldsim-estimate-timing` with
    `family=$(gen_platform.py --device=$(DEVICE) --emit=family)`;
-4. `screen_summary.py`: `screen_summary.csv`, `screen_units.json` and
-   `screen_paths.txt` (§5).
+4. `beacon_summary.py`: `beacon_summary.csv`, `beacon_units.json` and
+   `beacon_paths.txt` (§5).
 
 The ASIC flow has the same target, with the same sources, defines and SRAM
 black boxes as its synthesis, and `family=$(PDK)`:
 
 ```bash
-make -C hw/syn/yosys/dut om TARGET=screen
-# om_VX_om_core_top/screen/report.txt: the deepest paths and the period
+make -C hw/syn/yosys/dut om TARGET=beacon
+# om_VX_om_core_top/beacon/report.txt: the deepest paths and the period
 ```
 
 ### 6.2 `logic_gate`
 
 The third synthesis gate, beside `fpga_gate` (Vivado, nightly) and
 `asic_gate` (Yosys + OpenSTA, nightly); see
-[continuous_integration.md §3.5](continuous_integration.md). It screens
+[continuous_integration.md §3.5](continuous_integration.md). It runs Beacon on
 `fpga_gate`'s builds (`ci/testcases/logic_gate.yaml`, all but `top`, whose
 `VX_cp_core` keeps LLHD reference ports) in about four minutes, and checks
-each against `ci/baselines/synthesis/screen/`:
+each against `ci/baselines/synthesis/beacon/`:
 
 - a **unit** that gets deeper fails, by name;
 - a **new unit** at or above the fix threshold (12) fails;
@@ -340,7 +340,7 @@ each against `ci/baselines/synthesis/screen/`:
   to lock in by re-recording;
 - end point counts are recorded, not gated (they grow with lanes and warps).
 
-A failing build names its `screen_paths.txt`, where the failing unit is a
+A failing build names its `beacon_paths.txt`, where the failing unit is a
 heading with its paths op by op; CI uploads it with the build's logs.
 
 Depth is deterministic, so the tolerance is zero. The baseline fingerprint
@@ -350,22 +350,22 @@ by a human (`--update-baseline`), as for the other gates.
 
 ### 6.3 RTL timing work
 
-Screen first, then Vivado:
+Beacon first, then Vivado:
 
 ```bash
-ci/logic_screen.py screen gen/design.mlir runs/full
-ci/logic_screen.py summarize runs/full --min-levels 12     # the fix list, by unit
+ci/beacon.py run gen/design.mlir runs/full
+ci/beacon.py summarize runs/full --min-levels 12           # the fix list, by unit
 ```
 
-The screen ranks the units; one Vivado run confirms the fix. Compare a fix
+Beacon ranks the units; one Vivado run confirms the fix. Compare a fix
 against a native gate (`hw/syn/xilinx/dut` or the OOC gates), not the
 folded design (§9).
 
 ## 7. Validation
 
-Against Vivado, per RTL register or memory: the screen's deepest bit
+Against Vivado, per RTL register or memory: Beacon's deepest bit
 against Vivado's deepest failing path and worst slack, on seven V80 datasets
-with no new Vivado runs (`ci/logic_screen.py validate`):
+with no new Vivado runs (`ci/beacon.py validate`):
 
 | Dataset | Vivado run | Spearman vs levels | Spearman vs slack | ≥ 12: precision / recall |
 |---|---|---|---|---|
@@ -377,7 +377,7 @@ with no new Vivado runs (`ci/logic_screen.py validate`):
 | core | native gate, 3.333 ns, placed | 0.93 | 0.62 | 0.81 / 0.13 |
 | compute slice | native gate, 3.333 ns, placed | 0.87 | 0.75 | 0.58 / 0.57 |
 
-The screen's depths run about 1.25× Vivado's on the native gates. The U55C
+Beacon's depths run about 1.25× Vivado's on the native gates. The U55C
 profile was checked against `fpga_gate`'s critical paths: it agrees with
 the V80 profile wherever no DSP is on the path, and the remaining
 disagreement is the same on both devices.
@@ -386,7 +386,7 @@ disagreement is the same on both devices.
 `hw/syn/yosys` builds them, flip-flops named after their registers,
 `hw/syn/yosys/sta_endpoints.tcl` for the slack of each):
 
-| DUT | Registers | Spearman, stages vs arrival | Worst path: OpenSTA → screen |
+| DUT | Registers | Spearman, stages vs arrival | Worst path: OpenSTA → Beacon |
 |---|---|---|---|
 | om | 93 | 0.91 | 827 → 879 ps |
 | cache | 526 | 0.82 | 1450 → 1311 ps |
@@ -398,21 +398,21 @@ Per register, the fitted delay per stage is 17–25 ps, the library's 24.
 The worst path is within a mean 8 % on these five, from which the path term
 was fitted; on the six larger DUTs, the predicted Fmax is within a mean
 13 % (−32 % to +3 %) of the asic_gate baselines, some of which predate the
-current RTL. A DUT screens in 2–52 s, where Yosys and OpenSTA take
+current RTL. Beacon runs a DUT in 2–52 s, where Yosys and OpenSTA take
 2.5–37 min.
 
 ## 8. Diagnostics beyond levels
 
-**Port depths.** `port-modules=` names modules whose instances' ports the
-screen reports: the levels at which each input arrives and the levels behind
+**Port depths.** `port-modules=` names modules whose instances' ports
+Beacon reports: the levels at which each input arrives and the levels behind
 each output. Small modules are inlined by the mapping, so keep them with
-`screen --keep`:
+`run --keep`:
 
 ```bash
-ci/logic_screen.py screen --keep VX_elastic_buffer design.mlir runs/eb \
+ci/beacon.py run --keep VX_elastic_buffer design.mlir runs/eb \
     port-modules=VX_elastic_buffer
-ci/logic_screen.py buffers runs/eb      # the OUT_BUF advisor
-ci/logic_screen.py ports runs/eb        # every kept module, by unit
+ci/beacon.py buffers runs/eb      # the OUT_BUF advisor
+ci/beacon.py ports runs/eb        # every kept module, by unit
 ```
 
 - The **buffer advisor** lists the `VX_elastic_buffer`s that pass a deep
@@ -429,8 +429,8 @@ ci/logic_screen.py ports runs/eb        # every kept module, by unit
 
 **Vivado probes.**
 
-`hw/scripts` has three Vivado Tcl probes for questions the
-screen cannot answer, run on a checkpoint
+`hw/scripts` has three Vivado Tcl probes for questions
+Beacon cannot answer, run on a checkpoint
 (`vivado -mode batch -source <probe> -tclargs <dcp> ...`):
 
 | Probe | Answers |
@@ -444,12 +444,12 @@ screen cannot answer, run on a checkpoint
 - **Depth, not slack.** On the placed 3.333 ns socket gate, wires are 83 %
   of the worst paths' delay; levels explain 1 % of net delay, and the real
   placement two thirds. No pre-placement wire term ranked slack better than
-  levels on every held-out gate, so the screen has none. Route-dominated
+  levels on every held-out gate, so Beacon has none. Route-dominated
   failures with few levels are invisible to it: recall at ≥ 12 levels is
   0.13–0.57.
 - **Retiming and packing.** Vivado retimes and packs across what the RTL
   separates: a popcount, its adders and a compare become a LUT6 tree with a
-  retimed register inside. The screen's depths are RTL stage depths, about
+  retimed register inside. Beacon's depths are RTL stage depths, about
   1.25× Vivado's.
 - **The fold.** In foldsim's folded designs, the fold turns some registers
   into LUTRAM and cuts some chains, so its paths differ from the RTL's. The
@@ -457,7 +457,7 @@ screen cannot answer, run on a checkpoint
 - **Black boxes.** Vendor IPs and `black-boxes=` modules end and start
   paths at their pins: their insides are not timed.
 - **Devices.** The V80 and the U55C (Vivado), and ASAP7 RVT TT (the Yosys
-  flow). The ASAP7 numbers are the screen's period estimate, a sizing
+  flow). The ASAP7 numbers are Beacon's period estimate, a sizing
   guide, not a sign-off: they come within about 10–30 % of OpenSTA.
 - **Toolchain.** The catalog maps only with three CIRCT Synth fixes
   (zero-width mux, constant SOP cut, a failing longest-path query), which
