@@ -231,11 +231,18 @@ machine from it: SimX, rtlsim, the FPGA and ASIC flows, and the kernels.
 | Profile | Machine |
 |---|---|
 | `tinygpu` | 1 core, 2 warps x 2 threads, shared memory |
-| `rtx1080` | GeForce GTX 1080 (Pascal): 20 cores x 64 warps x 32 threads, 2 MB L2, GDDR5X as 16 GDDR6 channels |
-| `v100` | Tesla V100 (Volta): 80 cores, 4 MB L2, 32 HBM2 channels at 1752 MT/s |
-| `a100` | A100 (Ampere): 108 cores, 32 MB L2, HBM2 at the card's 1555 GB/s |
-| `h100` | H100 SXM5 (Hopper): 132 cores, 32 MB L2, HBM3 at the card's 3.35 TB/s |
-| `rtx5080` | GeForce RTX 5080 (Blackwell): 84 cores x 48 warps, 64 MB L2, GDDR7 bandwidth on the GDDR6 model |
+| `gtx1080` | GeForce GTX 1080 (Pascal): 20 cores x 64 warps x 32 threads, 96 KB shared memory (64 KB modelled), 2 MB L2, GDDR5X as 16 GDDR6 channels; no tensor cores |
+| `v100` | Tesla V100 (Volta): 80 cores x 64 warps, 64 KB shared memory, 4 MB L2, 32 HBM2 channels at 1752 MT/s; FP16 tensor cores |
+| `a100` | A100 (Ampere): 108 cores x 64 warps, 128 KB shared memory, 32 MB L2, HBM2 at 1555 GB/s; FP16/TF32/INT8/INT4 tensor cores with 2:4 sparsity |
+| `h100` | H100 SXM5 (Hopper): 132 cores x 64 warps, 128 KB shared memory, 32 MB L2, HBM3 at 3.35 TB/s; FP16/TF32/FP8/INT8 tensor cores with sparsity and wgmma, TMA as DXA |
+| `rtx5080` | GeForce RTX 5080 (Blackwell): 84 cores x 48 warps, 64 KB shared memory, 64 MB L2, GDDR7 bandwidth on the GDDR6 model; FP16/TF32/FP8/FP4/MX/INT8 tensor cores with sparsity, TMA as DXA, RT cores as RTU |
+
+Every GPU profile also turns on virtual memory, the A extension with Zacas,
+Zfhmin, MUFU at the part's special-function throughput, and 32 shared-memory
+banks. The real parts are 64-bit machines, so these profiles set `"xlen": 64`:
+`configure --profile=<name>` picks XLEN from the profile (an explicit,
+conflicting `--xlen` is an error), and a `build32` tree rejects them. A profile
+without an `xlen` field, like `tinygpu`, builds at either width.
 
 Select one per build with `../configure --profile=<name>`, or per run:
 

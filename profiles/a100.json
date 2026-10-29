@@ -1,12 +1,28 @@
 {
   "name": "a100",
   "description": "NVIDIA A100 SXM4 (GA100, Ampere, sm_80) at its 1410 MHz boost clock: one Vortex core per SM.",
+  "xlen": 64,
   "core": {
     "VX_CFG_NUM_WARPS": 64,
     "VX_CFG_NUM_THREADS": 32,
     "VX_CFG_ISSUE_WIDTH": 4,
     "VX_CFG_DCACHE_SIZE": 131072,
-    "VX_CFG_FETCH_WIDTH": 4
+    "VX_CFG_FETCH_WIDTH": 4,
+    "VX_CFG_LMEM_LOG_SIZE": 17,
+    "VX_CFG_LMEM_NUM_BANKS": 32,
+    "VX_CFG_VM_ENABLE": true,
+    "VX_CFG_EXT_A_ENABLE": true,
+    "VX_CFG_EXT_ZACAS_ENABLE": true,
+    "VX_CFG_EXT_ZFHMIN_ENABLE": true,
+    "VX_CFG_EXT_MUFU_ENABLE": true,
+    "VX_CFG_NUM_MUFU_LANES": 16,
+    "VX_CFG_EXT_TCU_ENABLE": true,
+    "VX_CFG_TCU_TF32_ENABLE": true,
+    "VX_CFG_TCU_INT8_ENABLE": true,
+    "VX_CFG_TCU_INT4_ENABLE": true,
+    "VX_CFG_TCU_SPARSE_ENABLE": true,
+    "VX_CFG_NUM_BARRIERS": 16,
+    "VX_CFG_EXT_TEX_ENABLE": true
   },
   "chip": {
     "VX_CFG_NUM_CLUSTERS": 1,
@@ -34,6 +50,16 @@
     "PLATFORM_MEMORY_LATENCY, PLATFORM_MEMORY_QUEUE_SIZE": "Fixed DRAM latency and per-channel request queue of GPGPU-Sim's SM80_A100 configuration (accel-sim gpu-simulator/configs/tested-cfgs/SM80_A100/gpgpusim.config)",
     "PLATFORM_CLOCK_RATE, PLATFORM_MEMORY_PEAK_BW": "1410 MHz boost clock, 1555 GB/s (whitepaper, Table 3)",
     "FETCH_WIDTH": "4 SM processing blocks, each with its own warp scheduler, dispatch unit and L0 instruction cache (NVIDIA A100 Tensor Core GPU Architecture whitepaper)",
-    "CP_LLC_CLIENT": "Host copies reach device memory through the L2 like every other client, so uploaded data is L2-resident at launch"
+    "CP_LLC_CLIENT": "Host copies reach device memory through the L2 like every other client, so uploaded data is L2-resident at launch",
+    "LMEM_LOG_SIZE, DCACHE_SIZE": "164 KB maximum shared memory per SM (CUDA Programming Guide, compute capability 8.0), rounded down to the power of two the LMEM accepts. DCACHE_SIZE keeps the 192 KB L1/shared pool rounded down: the driver gives a kernel the L1 its shared-memory use leaves",
+    "LMEM_NUM_BANKS": "32 shared-memory banks of 4 B, as on every NVIDIA GPU since Maxwell (CUDA C++ Programming Guide, shared memory)",
+    "VM_ENABLE, EXT_A_ENABLE, EXT_ZACAS_ENABLE, EXT_ZFHMIN_ENABLE, EXT_MUFU_ENABLE": "Every NVIDIA GPU since Pascal has a demand-paged MMU (unified memory), global and shared-memory atomics with a native compare-and-swap (atomicCAS), FP16 storage and conversion, and per-partition special-function units for the transcendentals (MUFU)",
+    "EXT_TCU_ENABLE, TCU_*, EXT_DXA_ENABLE, EXT_RTU_ENABLE": "Third-generation tensor cores: FP16/BF16, TF32, INT8 and INT4, with 2:4 structured sparsity (A100 whitepaper). A100 has cp.async but no TMA, so no DXA",
+    "xlen": "64-bit machine: 64-bit pointers and FP64 (the D extension follows XLEN=64), with a 48-bit device address space against NVIDIA's 49-bit virtual addresses; configure --profile picks a build64 tree and a build32 tree rejects the profile",
+    "NUM_BARRIERS": "16 named CTA barriers (bar.sync 0-15, PTX ISA) on every NVIDIA GPU",
+    "EXT_TEX_ENABLE": "Texture units in every SM",
+    "EXT_RASTER_ENABLE, EXT_OM_ENABLE": "Off: the datacenter part is built for compute (no display outputs; the raster and ROP hardware is reduced or absent), so the profile models its compute machine",
+    "NUM_MUFU_LANES": "16 special-function results per clock per SM (4 SFUs in each of the 4 processing blocks) for the reciprocal, reciprocal square root, log2, exp2, sine and cosine (CUDA C++ Programming Guide, arithmetic instruction throughput, compute capability 8.0)",
+    "SIMD_WIDTH": "Left at NUM_THREADS (32) although the part has 16 FP32 / 16 INT32 lanes per SM processing block, so a warp instruction issues over two cycles (A100 whitepaper): the RTL TCU needs full-warp operands (NUM_TCU_LANES == NUM_THREADS) and VX_lane_dispatch cannot widen a 16-lane dispatch to 32 lanes, so SIMD_WIDTH=16 with EXT_TCU_ENABLE does not build in rtlsim. The tensor cores are kept; the ALU/FPU/LSU issue width is 2x the part's"
   }
 }

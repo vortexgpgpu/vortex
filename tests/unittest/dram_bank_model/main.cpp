@@ -62,7 +62,7 @@ const Machine kMachines[] = {
   {"v100",     {DramSim::Type::HBM2, 1, 64, 1530, 1752, 0, 0}},
   {"a100",     {DramSim::Type::HBM2, 1, 64, 1410, 3038, 190, 257}},
   {"h100",     {DramSim::Type::HBM3, 1, 64, 1980, 6545, 0, 0}},
-  {"rtx1080",  {DramSim::Type::GDDR6, 1, 64, 1607, 10000, 0, 0}},
+  {"gtx1080",  {DramSim::Type::GDDR6, 1, 64, 1607, 10000, 0, 0}},
   {"rtx5080",  {DramSim::Type::GDDR6, 1, 64, 2295, 15000, 339, 0}},
 };
 

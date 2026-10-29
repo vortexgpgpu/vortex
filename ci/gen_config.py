@@ -484,7 +484,7 @@ def _apply_overrides(defs: List[Define], enums: Dict[str, EnumSpec]) -> Tuple[Di
 # -----------------------------
 
 PROFILE_SECTIONS = ("core", "chip", "platform")
-PROFILE_FIELDS = {"name", "extends", "description", "reference", "sources"} | set(PROFILE_SECTIONS)
+PROFILE_FIELDS = {"name", "extends", "description", "xlen", "reference", "sources"} | set(PROFILE_SECTIONS)
 
 
 @dataclass
@@ -495,6 +495,7 @@ class Profile:
   sections: Dict[str, Set[str]]    # section -> knobs it sets
   reference: Dict[str, Any]
   sources: Any
+  xlen: Optional[int]              # ISA width the machine needs (None: any)
 
 
 def _profile_path(name: str, profiles_dir: str) -> str:
@@ -519,7 +520,7 @@ def load_profile(name: str, profiles_dir: str, _seen: Tuple[str, ...] = ()) -> P
     base = load_profile(data["extends"], profiles_dir, _seen + (name,))
   else:
     base = Profile(name="", chain=[], values={}, sections={s: set() for s in PROFILE_SECTIONS},
-                   reference={}, sources=None)
+                   reference={}, sources=None, xlen=None)
 
   values = dict(base.values)
   sections = {s: set(base.sections[s]) for s in PROFILE_SECTIONS}
@@ -532,8 +533,11 @@ def load_profile(name: str, profiles_dir: str, _seen: Tuple[str, ...] = ()) -> P
   reference = dict(base.reference)
   reference.update(data.get("reference", {}))
   sources = data.get("sources", base.sources)
+  xlen = data.get("xlen", base.xlen)
+  if xlen not in (None, 32, 64):
+    raise ValueError(f"Profile '{name}': xlen must be 32 or 64")
   return Profile(name=data.get("name", name), chain=base.chain + [name], values=values,
-                 sections=sections, reference=reference, sources=sources)
+                 sections=sections, reference=reference, sources=sources, xlen=xlen)
 
 
 def validate_profile(prof: Profile, toml_defs: Dict[str, Any], enums: Dict[str, EnumSpec],
@@ -1621,6 +1625,10 @@ def main(argv: List[str]) -> int:
   ap.add_argument("--profile", default="",
                   help="hardware profile: profiles/<name>.json next to the config, or a .json path")
   ap.add_argument("--profiles-dir", default=None, help="profile directory (default: <config dir>/profiles)")
+  ap.add_argument("--xlen", type=int, default=None,
+                  help="the build's XLEN; a profile that names another xlen is rejected")
+  ap.add_argument("--profile-xlen", action="store_true",
+                  help="print the profile's xlen (empty if it names none) and exit")
   ap.add_argument("--merge-configs", action="store_true",
                   help="print --cflags with the profile folded in (explicit -D flags win) and exit")
   args, unknown = ap.parse_known_args(argv)
@@ -1640,6 +1648,13 @@ def main(argv: List[str]) -> int:
     profiles_dir = args.profiles_dir or os.path.join(os.path.dirname(os.path.abspath(args.config)), "profiles")
     prof = load_profile(args.profile, profiles_dir)
     validate_profile(prof, toml_defs, enums, params_set | set(builtins.keys()))
+
+  if args.profile_xlen:
+    sys.stdout.write(f"{prof.xlen if prof and prof.xlen else ''}\n")
+    return 0
+  if prof is not None and prof.xlen is not None and args.xlen is not None and args.xlen != prof.xlen:
+    raise ValueError(f"Profile '{prof.name}' models a {prof.xlen}-bit machine but this build is XLEN={args.xlen}: "
+                     f"use a build{prof.xlen} tree (configure --xlen={prof.xlen})")
 
   if args.merge_configs:
     out = merge_configs(prof, args.cflags, enums) if prof else args.cflags

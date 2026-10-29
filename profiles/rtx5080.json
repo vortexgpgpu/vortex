@@ -1,13 +1,38 @@
 {
   "name": "rtx5080",
   "description": "NVIDIA GeForce RTX 5080 (GB203, Blackwell, sm_120) at its 2295 MHz base clock: one Vortex core per SM.",
+  "xlen": 64,
   "core": {
     "VX_CFG_NUM_WARPS": 48,
     "VX_CFG_NUM_THREADS": 32,
     "VX_CFG_ISSUE_WIDTH": 4,
     "VX_CFG_DCACHE_SIZE": 131072,
     "VX_CFG_DCACHE_MSHR_SIZE": 24,
-    "VX_CFG_FETCH_WIDTH": 4
+    "VX_CFG_FETCH_WIDTH": 4,
+    "VX_CFG_LMEM_LOG_SIZE": 16,
+    "VX_CFG_LMEM_NUM_BANKS": 32,
+    "VX_CFG_VM_ENABLE": true,
+    "VX_CFG_EXT_A_ENABLE": true,
+    "VX_CFG_EXT_ZACAS_ENABLE": true,
+    "VX_CFG_EXT_ZFHMIN_ENABLE": true,
+    "VX_CFG_EXT_MUFU_ENABLE": true,
+    "VX_CFG_NUM_MUFU_LANES": 16,
+    "VX_CFG_EXT_TCU_ENABLE": true,
+    "VX_CFG_TCU_TF32_ENABLE": true,
+    "VX_CFG_TCU_FP8_ENABLE": true,
+    "VX_CFG_TCU_FP4_ENABLE": true,
+    "VX_CFG_TCU_MX_ENABLE": true,
+    "VX_CFG_TCU_MXFP4_ENABLE": true,
+    "VX_CFG_TCU_NVFP4_ENABLE": true,
+    "VX_CFG_TCU_INT8_ENABLE": true,
+    "VX_CFG_TCU_SPARSE_ENABLE": true,
+    "VX_CFG_EXT_DXA_ENABLE": true,
+    "VX_CFG_EXT_RTU_ENABLE": true,
+    "VX_CFG_NUM_BARRIERS": 16,
+    "VX_CFG_EXT_TEX_ENABLE": true,
+    "VX_CFG_EXT_RASTER_ENABLE": true,
+    "VX_CFG_EXT_OM_ENABLE": true,
+    "VX_CFG_RTU_TLAS_ENABLE": true
   },
   "chip": {
     "VX_CFG_NUM_CLUSTERS": 1,
@@ -62,6 +87,16 @@
     "PLATFORM_MEMORY_TYPE, PLATFORM_MEMORY_DATA_RATE": "30 Gbps GDDR7 x8 channels modelled as GDDR6 x16 channels at 15000 MT/s: the same channel count, 32 B burst time and 960 GB/s (32 x 2 B x 15 GT/s)",
     "PLATFORM_MEMORY_LATENCY": "675 core cycles of PHY/NoC latency, calibrated in SimX against the 802-cycle pointer-chase DRAM latency in 'reference' with the same chase (random cyclic permutation, 128 B stride, one thread, cold L2 with CP_LLC_CLIENT=0; cycle difference between 128 KiB and 256 KiB footprints over the 1024 extra loads: 802.1). The L2 link latency is not modelled, so an L2 hit is about 79 cycles against the card's 354. Recalibrate when the memory model changes",
     "FETCH_WIDTH": "4 SM processing blocks, each with its own warp scheduler, dispatch unit and L0 instruction cache (NVIDIA RTX Blackwell GPU Architecture whitepaper)",
-    "CP_LLC_CLIENT": "Host copies reach device memory through the L2 like every other client, so uploaded data is L2-resident at launch"
+    "CP_LLC_CLIENT": "Host copies reach device memory through the L2 like every other client, so uploaded data is L2-resident at launch",
+    "LMEM_LOG_SIZE, DCACHE_SIZE": "100 KB maximum shared memory per SM (compute capability 12.0 device query: 102400 B per SM), rounded down to the power of two the LMEM accepts. DCACHE_SIZE keeps the whole 128 KB L1/shared pool: the driver gives a kernel the L1 its shared-memory use leaves",
+    "LMEM_NUM_BANKS": "32 shared-memory banks of 4 B, as on every NVIDIA GPU since Maxwell (CUDA C++ Programming Guide, shared memory)",
+    "VM_ENABLE, EXT_A_ENABLE, EXT_ZACAS_ENABLE, EXT_ZFHMIN_ENABLE, EXT_MUFU_ENABLE": "Every NVIDIA GPU since Pascal has a demand-paged MMU (unified memory), global and shared-memory atomics with a native compare-and-swap (atomicCAS), FP16 storage and conversion, and per-partition special-function units for the transcendentals (MUFU)",
+    "EXT_TCU_ENABLE, TCU_*, EXT_DXA_ENABLE, EXT_RTU_ENABLE": "Fifth-generation tensor cores: FP16/BF16, TF32, FP8, FP4 (NVFP4, MXFP4) and the MX formats, INT8, with 2:4 structured sparsity; no wgmma on sm_120. TMA is the DXA; the fourth-generation RT cores are the RTU (RTX Blackwell whitepaper)",
+    "xlen": "64-bit machine: 64-bit pointers and FP64 (the D extension follows XLEN=64), with a 48-bit device address space against NVIDIA's 49-bit virtual addresses; configure --profile picks a build64 tree and a build32 tree rejects the profile",
+    "NUM_BARRIERS": "16 named CTA barriers (bar.sync 0-15, PTX ISA) on every NVIDIA GPU",
+    "EXT_TEX_ENABLE": "Texture units in every SM",
+    "EXT_RASTER_ENABLE, EXT_OM_ENABLE": "Raster engines in every GPC and ROPs in every memory partition (architecture whitepaper)",
+    "RTU_TLAS_ENABLE": "RT cores traverse two-level acceleration structures (instance TLAS over BLAS), as DXR/Vulkan ray tracing requires",
+    "NUM_MUFU_LANES": "16 special-function results per clock per SM (4 SFUs in each of the 4 processing blocks) for the reciprocal, reciprocal square root, log2, exp2, sine and cosine (CUDA C++ Programming Guide, arithmetic instruction throughput, compute capability 12.0)"
   }
 }

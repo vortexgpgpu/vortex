@@ -9,8 +9,10 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
 
 ### Added
 
-- **Hardware profiles.** `profiles/<name>.json` names a machine (`tinygpu`, `rtx1080`, `v100`, `a100`, `h100`, `rtx5080`) that every flow
+- **Hardware profiles.** `profiles/<name>.json` names a machine (`tinygpu`, `gtx1080`, `v100`, `a100`, `h100`, `rtx5080`) that every flow
   builds through `configure --profile=<name>` or `blackbox.sh --profile=<name>`; explicit `CONFIGS` win over the profile.
+  The GPU profiles are 64-bit machines with VM, atomics, MUFU, shared memory and the tensor, DXA, ray-tracing and graphics units of
+  the real part; a profile's `xlen` sets `configure`'s XLEN, and a build tree of the other width rejects it.
   See [docs/simulation.md](docs/simulation.md#hardware-profiles).
 - **Per-partition fetch (`VX_CFG_FETCH_WIDTH`, default 1).** The front end splits into FETCH_WIDTH slices, each with its own warp
   scheduler, fetch, decode and icache port, serving the warps with `wid % FETCH_WIDTH == f`; CTA dispatch, barriers and warp control
