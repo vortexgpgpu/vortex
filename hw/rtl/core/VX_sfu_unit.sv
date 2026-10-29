@@ -41,6 +41,10 @@ import VX_raster_pkg::*;
     VX_txbar_bus_if.slave   dxa_txbar_bus_if,
 `endif
 
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    VX_tcu_bar_if.slave     tcu_bar_if,
+`endif
+
 `ifdef VX_CFG_EXT_TEX_ENABLE
     VX_tex_bus_if.master    tex_bus_if,
 `endif
@@ -183,6 +187,9 @@ import VX_raster_pkg::*;
         .execute_if (pe_execute_if[PE_IDX_WCTL]),
         .warp_ctl_if(warp_ctl_if),
         .txbar_bus_if(txbar_bus_if),
+    `ifdef VX_CFG_TCU_TMEM_ENABLE
+        .tcu_bar_if (tcu_bar_if),
+    `endif
         .result_if  (pe_result_if[PE_IDX_WCTL])
     );
 

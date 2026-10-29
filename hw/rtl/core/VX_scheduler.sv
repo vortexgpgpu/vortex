@@ -392,7 +392,9 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         .active_warps(active_warps),
         .gbar_bus_if(gbar_bus_if),
         .unlock_valid(bar_unlock_valid),
-        .unlock_mask(bar_unlock_mask)
+        .unlock_mask(bar_unlock_mask),
+        .flip_valid (warp_ctl_if.bar_flip_valid),
+        .flip_addr  (warp_ctl_if.bar_flip_addr)
     );
 
     // split/join handling

@@ -584,6 +584,7 @@ public:
   #endif
   #ifdef VX_CFG_TCU_TMEM_ENABLE
     this->job_step();
+    tj_port_busy_ = false;
   #endif
 
     uint64_t now = SimPlatform::instance().cycles();
@@ -676,12 +677,17 @@ public:
       #ifdef VX_CFG_TCU_TMEM_ENABLE
         case TcuType::TMEM_LD:
         case TcuType::TMEM_ST: {
+          // One TMEM transfer or job op per cycle across all blocks.
+          if (tj_port_busy_) {
+            continue;
+          }
           int32_t cta = (int32_t)core_->scheduler().warp(wid).cta_csrs.cta_id;
           // TMEM transfers wait for the CTA's tensor jobs to retire.
           if (this->jobs_pending(cta)) {
             ++perf_stats_.tmem_stalls;
             continue;
           }
+          tj_port_busy_ = true;
           // taddr = {lane [31:16], column [15:0]}. A transfer covers one
           // block's xtileM lanes. Lane per thread: thread t holds lane
           // + t % xtileM and register r column + r * kTmemThreadsPerLane
@@ -726,12 +732,16 @@ public:
           // ordered behind the warp's earlier work without a memory fence.
           auto& words = job_desc_.at(wid);
           uint32_t base = (tcu_type == TcuType::TJ_DESC) ? 0 : 8;
+          if (tj_port_busy_) {
+            continue;
+          }
           if (tcu_type == TcuType::TJ_POST) {
             int32_t cta = (int32_t)core_->scheduler().warp(wid).cta_csrs.cta_id;
-            if (this->jobs_pending(cta) >= kJobQueueSize) {
+            if (this->jobs_pending(cta) >= kJobQueueSize || jobs_.size() >= kJobSlots) {
               continue;
             }
           }
+          tj_port_busy_ = true;
           for (uint32_t i = 0; i < 4; ++i) {
             words.at(base + i)     = rs1_data.at(i).u;
             words.at(base + 4 + i) = rs2_data.at(i).u;
@@ -1129,8 +1139,21 @@ public:
       }
     }
 
-    uint32_t num_reads = kmajor ? cfg::tcN
-                       : (req.is_sparse && kBSparseTwoFetch) ? 2 : 1;
+    uint32_t num_reads = (req.is_sparse && kBSparseTwoFetch) ? 2 : 1;
+    if (kmajor) {
+      // The bbuf reads consecutive N-rows that share an LMEM bank row at once.
+      constexpr uint64_t kBankRowBytes = uint64_t(kLmemBanks) * (VX_CFG_XLEN / 8);
+      uint32_t k_elem = req.step_k * k_words * ratio * (req.is_sparse ? 2 : 1);
+      uint64_t prev_row = ~uint64_t(0);
+      num_reads = 0;
+      for (uint32_t j = 0; j < cfg::tcN; ++j) {
+        uint64_t off = elem_offset(sd_b, k_elem, req.step_n * cfg::tcN + j, e_bits, xtile_n,
+                                   true, req.is_sparse, false);
+        uint64_t row = (sd_b.base + off * e_bits / 8) / kBankRowBytes;
+        num_reads += (row != prev_row);
+        prev_row = row;
+      }
+    }
     return split_reads(std::move(lines), num_reads);
   }
 
@@ -1196,6 +1219,8 @@ public:
   static_assert(wg_cfg::tcM * wg_cfg::tcN == VX_CFG_NUM_THREADS, "C fragment must span the warp");
   static constexpr uint32_t kTmemReadLatency = 1;
   static constexpr uint32_t kJobQueueSize = 2;       // per CTA
+  static constexpr uint32_t kJobSlots = 8;           // all CTAs
+  static constexpr uint32_t kFlipLatency = 2;        // phase completion to the scheduler
   static constexpr uint32_t kJobDescWords = 16;
   static constexpr uint32_t kJobKeyBase = 0x10000;   // lmem_desc_ key of block 0
 
@@ -1238,20 +1263,34 @@ public:
     uint32_t   k_advance = 0;
     uint32_t   a_kdim = 0;
     uint32_t   b_kdim = 0;
-    uint32_t   fills = 0;          // CLOSED: stage fills issued
-    uint32_t   fill_part = 0;      // CLOSED: 0 = A next, 1 = B next
-    // progress
+    // stage use
     uint32_t   kt = 0;
-    uint32_t   n = 0;
-    uint32_t   m = 0;
+    uint32_t   ki = 0;             // K-tile within the stage
+    uint32_t   use_s = 0;          // stage of the next K-tile
+    uint32_t   use_idx = 0;        // stage fill of the next K-tile
     bool       arrived = false;
     uint32_t   wait_phase = 0;
+    bool       stage_ready = false;
+    uint64_t   ready_at = 0;
+    // stage release
+    uint32_t   consumed = 0;       // stage fills fully read
+    bool       pend_empty = false;
+    uint32_t   pend_empty_s = 0;
+    // CLOSED stage fills
+    uint32_t   fills = 0;
+    uint32_t   fills_kt = 0;
+    uint32_t   fill_part = 0;      // 0 = attach, 1 = A, 2 = B
+    uint32_t   fill_s = 0;
+    uint32_t   fill_k = 0;
+    // MMA steps
+    uint32_t   n = 0;
+    uint32_t   m = 0;
+    uint64_t   start_at = 0;
     bool       a_valid = false;
     bool       a_fetching = false;
-    // B blocks of the current K-tile, double-buffered by N step.
-    std::array<bool, TcuTbuf::B_SLOTS>     b_valid{};
-    std::array<bool, TcuTbuf::B_SLOTS>     b_fetching{};
-    std::array<uint32_t, TcuTbuf::B_SLOTS> b_n{};
+    bool       b_valid = false;
+    bool       b_fetching = false;
+    uint32_t   b_n = 0;
     uint64_t   done_due = 0;
   };
 
@@ -1261,10 +1300,6 @@ public:
       count += (job.cta == cta);
     }
     return count;
-  }
-
-  static uint32_t job_stage(const tj_t& job, uint32_t kt) {
-    return (job.stage0 + kt / job.kb) % job.nstages;
   }
 
   static uint32_t job_bar(uint32_t base, uint32_t stage) {
@@ -1294,6 +1329,8 @@ public:
     job.empty_bar    = w[9];
     job.done_bar     = w[10];
     job.stage0       = w[15] & 0xf;
+    job.use_s        = job.stage0;
+    job.fill_s       = job.stage0;
     job.dxa_slot_a   = w[11] & 0xf;
     job.dxa_slot_b   = (w[11] >> 4) & 0xf;
     job.a_coord[0]   = w[12] & 0xffff;
@@ -1317,8 +1354,8 @@ public:
       err = "zero nstages, kb, k_tiles or n_frag";
     } else if (job.lda == 0) {
       err = "A must be row-major (lda != 0)";
-    } else if (job.ldb == 0 && job.kb != 1) {
-      err = "block-major B requires kb == 1";
+    } else if (job.ldb == 0) {
+      err = "B must be K-major (ldb != 0)";
     } else if ((job.taddr >> 16) != 0) {
       err = "D must start at lane 0";
     } else if (job.taddr + job.n_frag * wg_cfg::tcN > kTmemCols) {
@@ -1344,16 +1381,14 @@ public:
   // Point each block's LMEM descriptors at the current K-tile.
   void job_set_descs(const tj_t& job) {
     uint32_t e_bits   = elem_bits(job.fmt_s);
-    uint32_t s        = job_stage(job, job.kt);
-    uint32_t ki       = job.kt % job.kb;
     uint32_t kt_bytes = kFedpWords * 4;
-    uint64_t stage_a  = uint64_t(VX_MEM_LMEM_BASE_ADDR) + job.a_base + uint64_t(s) * job.stage_stride;
-    uint64_t stage_b  = uint64_t(VX_MEM_LMEM_BASE_ADDR) + job.b_base + uint64_t(s) * job.stage_stride;
+    uint64_t stage_a  = uint64_t(VX_MEM_LMEM_BASE_ADDR) + job.a_base + uint64_t(job.use_s) * job.stage_stride;
+    uint64_t stage_b  = uint64_t(VX_MEM_LMEM_BASE_ADDR) + job.b_base + uint64_t(job.use_s) * job.stage_stride;
     for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
       auto& d = lmem_desc_[kJobKeyBase + b];
-      d[0] = {stage_a + uint64_t(b) * wg_cfg::xtileM * job.lda + ki * kt_bytes,
+      d[0] = {stage_a + uint64_t(b) * wg_cfg::xtileM * job.lda + job.ki * kt_bytes,
               job.lda * 8 / e_bits, false};
-      d[1] = {stage_b + (job.ldb ? ki * kt_bytes : 0), job.ldb * 8 / e_bits, false};
+      d[1] = {stage_b + (job.ldb ? job.ki * kt_bytes : 0), job.ldb * 8 / e_bits, false};
     }
   }
 
@@ -1370,116 +1405,147 @@ public:
     return req;
   }
 
-  // CLOSED: keep every stage that is free and still owed a fill loaded,
-  // `nstages` fills ahead of the K-tile being computed. A fill is the A and B
-  // DXA loads of one stage, completing on the stage's full barrier. Returns
-  // true once the fills owed so far have been issued.
-  bool job_fill(tj_t& job) {
-    uint32_t num_fills = (job.k_tiles + job.kb - 1) / job.kb;
-    uint32_t cur_fill  = job.kt / job.kb;
-    uint32_t limit     = std::min(num_fills, cur_fill + job.nstages);
-    while (job.fills < limit) {
-      if (simobject_->dxa_req_out.full()) {
-        return false;
-      }
-      uint32_t f = job.fills;
-      uint32_t s = (job.stage0 + f) % job.nstages;
-      uint32_t bar_raw = job.full_bar + (s << 8);
-      uint32_t k = f * job.k_advance;
-      DxaReq req{};
-      req.core     = core_;
-      req.wid      = job.wid;
-      req.bar_id   = bar_raw;
-      req.cta_mask = 0;
-      uint64_t stage_off = uint64_t(s) * job.stage_stride;
-      if (job.fill_part == 0) {
-        core_->barrier_event_attach(bar_decode_id(bar_raw, VX_CFG_NUM_BARRIERS), 2);
-        req.desc_slot = job.dxa_slot_a;
-        req.smem_addr = uint64_t(VX_MEM_LMEM_BASE_ADDR) + job.a_base + stage_off;
-        req.coords[0] = job.a_coord[0] + (job.a_kdim == 0 ? k : 0);
-        req.coords[1] = job.a_coord[1] + (job.a_kdim == 1 ? k : 0);
-      } else {
-        req.desc_slot = job.dxa_slot_b;
-        req.smem_addr = uint64_t(VX_MEM_LMEM_BASE_ADDR) + job.b_base + stage_off;
-        req.coords[0] = job.b_coord[0] + (job.b_kdim == 0 ? k : 0);
-        req.coords[1] = job.b_coord[1] + (job.b_kdim == 1 ? k : 0);
-      }
-      simobject_->dxa_req_out.send(req);
-      DT(3, simobject_->name() << " tj-fill: cta=" << job.cta << ", fill=" << f
-            << ", stage=" << s << ", part=" << (job.fill_part ? "B" : "A")
-            << ", c0=" << req.coords[0] << ", c1=" << req.coords[1]);
-      if (++job.fill_part == 2) {
-        job.fill_part = 0;
-        ++job.fills;
+  bool job_is_head(const tj_t& job) const {
+    for (auto& other : jobs_) {
+      if (other.cta == job.cta) {
+        return &other == &job;
       }
     }
-    return true;
+    return false;
   }
 
-  // Advance a waiting job towards its next K-tile; true once its stage is
-  // full. A CONSUME job's sequencer is one of the full barrier's two
-  // participants, so the phase cannot advance before it arrives.
-  bool job_ready(tj_t& job) {
-    if (job.mode == TJ_CLOSED && !this->job_fill(job)) {
-      return false;
+  bool job_fill_open(const tj_t& job) const {
+    return job.mode == TJ_CLOSED && job.state != tj_state_t::DRAIN
+        && job.fills_kt < job.k_tiles && job.fills < job.consumed + job.nstages;
+  }
+
+  // One barrier operation per cycle: a job's completion, a stage release, a
+  // CLOSED fill's transaction attach, then a waiting job's full arrival.
+  void job_bar_op(uint64_t now) {
+    for (auto it = jobs_.begin(); it != jobs_.end(); ++it) {
+      if (it->state == tj_state_t::DRAIN && now >= it->done_due && !it->pend_empty) {
+        DT(3, simobject_->name() << " tj-done: cta=" << it->cta);
+        core_->barrier_event_release(bar_decode_id(it->done_bar, VX_CFG_NUM_BARRIERS));
+        jobs_.erase(it);
+        return;
+      }
     }
-    if (!job.sw_full) {
-      uint32_t bar = job_bar(job.full_bar, job_stage(job, job.kt));
-      auto& barriers = core_->scheduler().barrier_unit();
-      if (!job.arrived) {
-        // A CLOSED job is its full barriers' only participant.
+    for (auto& job : jobs_) {
+      if (job.pend_empty) {
+        uint32_t bar = job_bar(job.empty_bar, job.pend_empty_s);
+        DT(3, simobject_->name() << " tj-empty-arrive: cta=" << job.cta << ", bar=" << bar);
+        core_->barrier_arrive(bar, 2, job.wid, false);
+        job.pend_empty = false;
+        return;
+      }
+    }
+    for (auto& job : jobs_) {
+      if (this->job_is_head(job) && this->job_fill_open(job) && job.fill_part == 0) {
+        core_->barrier_event_attach(job_bar(job.full_bar, job.fill_s), 2);
+        job.fill_part = 1;
+        return;
+      }
+    }
+    for (auto& job : jobs_) {
+      if (job.state == tj_state_t::WAIT && this->job_is_head(job) && !job.sw_full
+       && !job.arrived && !job.stage_ready
+       && (job.mode != TJ_CLOSED || job.fills > job.use_idx)) {
+        // A CLOSED job is its full barriers' only participant; a CONSUME
+        // job's arrival is required, so the phase cannot advance before it.
+        uint32_t bar = job_bar(job.full_bar, job.use_s);
+        auto& barriers = core_->scheduler().barrier_unit();
         job.wait_phase = barriers.get_phase(bar) & 1;
         core_->barrier_arrive(bar, (job.mode == TJ_CLOSED) ? 1 : 2, job.wid, false);
         job.arrived = true;
         DT(3, simobject_->name() << " tj-full-arrive: cta=" << job.cta << ", kt=" << job.kt
               << ", bar=" << bar << ", phase=" << job.wait_phase);
-      }
-      if ((barriers.get_phase(bar) & 1) == job.wait_phase) {
-        return false;
-      }
-      job.arrived = false;
-    }
-    this->job_set_descs(job);
-    return true;
-  }
-
-  // Jobs of different CTAs share the tensor core at K-tile granularity: the
-  // running job keeps it until its K-tile ends, then the oldest CTA whose
-  // next stage is full takes it. Every waiting job keeps its own stage loads
-  // and barrier arrivals moving meanwhile. A CTA's jobs run in order.
-  void job_step() {
-    uint64_t now = SimPlatform::instance().cycles();
-    for (auto it = jobs_.begin(); it != jobs_.end();) {
-      if (it->state == tj_state_t::DRAIN && now >= it->done_due) {
-        DT(3, simobject_->name() << " tj-done: cta=" << it->cta);
-        core_->barrier_event_release(bar_decode_id(it->done_bar, VX_CFG_NUM_BARRIERS));
-        it = jobs_.erase(it);
-      } else {
-        ++it;
-      }
-    }
-
-    for (auto& job : jobs_) {
-      if (job.state == tj_state_t::RUN) {
-        this->job_run(job);
         return;
       }
     }
+  }
 
-    bool waiting = false;
-    std::array<bool, VX_CFG_NUM_WARPS> seen{};
+  // One CLOSED stage load per cycle: the A then the B tile of a fill.
+  void job_dxa_op() {
+    if (simobject_->dxa_req_out.full()) {
+      return;
+    }
     for (auto& job : jobs_) {
-      if (job.cta < 0 || seen.at(job.cta)) {
+      if (!this->job_is_head(job) || !this->job_fill_open(job) || job.fill_part == 0) {
         continue;
       }
-      seen.at(job.cta) = true;
+      uint32_t bar_raw = job.full_bar + (job.fill_s << 8);
+      uint64_t stage_off = uint64_t(job.fill_s) * job.stage_stride;
+      DxaReq req{};
+      req.core     = core_;
+      req.wid      = job.wid;
+      req.bar_id   = bar_raw;
+      req.cta_mask = 0;
+      if (job.fill_part == 1) {
+        req.desc_slot = job.dxa_slot_a;
+        req.smem_addr = uint64_t(VX_MEM_LMEM_BASE_ADDR) + job.a_base + stage_off;
+        req.coords[0] = job.a_coord[0] + (job.a_kdim == 0 ? job.fill_k : 0);
+        req.coords[1] = job.a_coord[1] + (job.a_kdim == 1 ? job.fill_k : 0);
+        job.fill_part = 2;
+      } else {
+        req.desc_slot = job.dxa_slot_b;
+        req.smem_addr = uint64_t(VX_MEM_LMEM_BASE_ADDR) + job.b_base + stage_off;
+        req.coords[0] = job.b_coord[0] + (job.b_kdim == 0 ? job.fill_k : 0);
+        req.coords[1] = job.b_coord[1] + (job.b_kdim == 1 ? job.fill_k : 0);
+        job.fill_part = 0;
+        ++job.fills;
+        job.fills_kt += job.kb;
+        job.fill_k += job.k_advance;
+        job.fill_s = (job.fill_s + 1) % job.nstages;
+      }
+      simobject_->dxa_req_out.send(req);
+      DT(3, simobject_->name() << " tj-fill: cta=" << job.cta << ", stage=" << (bar_raw >> 8)
+            << ", c0=" << req.coords[0] << ", c1=" << req.coords[1]);
+      return;
+    }
+  }
+
+  // Jobs of different CTAs share the tensor core at stage granularity: the
+  // running job keeps it until its stage ends, then the oldest CTA head whose
+  // next stage is full takes it. Every waiting head keeps its own barrier
+  // arrivals and (CLOSED) stage loads moving meanwhile.
+  void job_step() {
+    uint64_t now = SimPlatform::instance().cycles();
+    this->job_bar_op(now);
+    this->job_dxa_op();
+
+    auto& barriers = core_->scheduler().barrier_unit();
+    bool waiting = false;
+    for (auto& job : jobs_) {
       if (job.state != tj_state_t::WAIT) {
         continue;
       }
       waiting = true;
-      if (this->job_ready(job)) {
+      if (job.arrived && (barriers.get_phase(job_bar(job.full_bar, job.use_s)) & 1) != job.wait_phase) {
+        job.arrived = false;
+        job.stage_ready = true;
+        job.ready_at = now + kFlipLatency;
+      }
+    }
+
+    bool running = false;
+    for (auto& job : jobs_) {
+      if (job.state == tj_state_t::RUN) {
+        this->job_run(job);
+        running = (job.state == tj_state_t::RUN);
+        break;
+      }
+    }
+    if (running) {
+      return;
+    }
+    for (auto& job : jobs_) {
+      if (job.state == tj_state_t::WAIT && this->job_is_head(job)
+       && (job.sw_full || (job.stage_ready && now >= job.ready_at))) {
         DT(3, simobject_->name() << " tj-run: cta=" << job.cta << ", kt=" << job.kt);
         job.state = tj_state_t::RUN;
+        job.stage_ready = false;
+        job.start_at = now + 1;
+        this->job_set_descs(job);
         return;
       }
     }
@@ -1488,10 +1554,14 @@ public:
     }
   }
 
+  // One MMA step per cycle on all blocks. A step's A stripes (first step of
+  // a K-tile) and B block are fetched when it is presented.
   void job_run(tj_t& job) {
     auto& tbuf = simobject_->tbuf();
+    if (SimPlatform::instance().cycles() < job.start_at) {
+      return;
+    }
 
-    // A stripes of every block for this K-tile.
     if (!job.a_valid) {
       if (!job.a_fetching) {
         for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
@@ -1510,26 +1580,19 @@ public:
       }
     }
 
-    // B blocks of this K-tile, shared by all blocks: block n is read from
-    // slot n % B_SLOTS while block n + 1 prefetches into the other slot.
-    for (uint32_t n = job.n; n < std::min(job.n + TcuTbuf::B_SLOTS, job.n_frag); ++n) {
-      uint32_t slot = n % TcuTbuf::B_SLOTS;
-      if (job.b_fetching.at(slot)) {
-        if (!tbuf->filling_b(slot)) {
-          job.b_fetching.at(slot) = false;
-          job.b_valid.at(slot) = true;
-        }
-      } else if (!job.b_valid.at(slot) || job.b_n.at(slot) != n) {
-        tbuf->fill_b(this->b_refill(this->job_req(job, 0, n)), slot);
-        job.b_fetching.at(slot) = true;
-        job.b_valid.at(slot) = false;
-        job.b_n.at(slot) = n;
+    if (job.b_fetching) {
+      if (!tbuf->filling_b()) {
+        job.b_fetching = false;
+        job.b_valid = true;
       }
+    } else if (!job.b_valid || job.b_n != job.n) {
+      tbuf->fill_b(this->b_refill(this->job_req(job, 0, job.n)));
+      job.b_fetching = true;
+      job.b_valid = false;
+      job.b_n = job.n;
     }
-    uint32_t b_slot = job.n % TcuTbuf::B_SLOTS;
-    bool b_ready = job.b_valid.at(b_slot) && job.b_n.at(b_slot) == job.n;
 
-    if (!job.a_valid || !b_ready) {
+    if (!job.a_valid || !job.b_valid || job.b_n != job.n) {
       ++perf_stats_.tbuf_stalls;
       return;
     }
@@ -1541,7 +1604,6 @@ public:
     static const std::vector<reg_data_t> kNone;
     std::vector<reg_data_t> c_frag(VX_CFG_NUM_THREADS);
     std::vector<reg_data_t> d_frag(VX_CFG_NUM_THREADS);
-    cur_b_slot_ = b_slot;
     for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
       uint32_t lane0 = b * wg_cfg::xtileM + job.m * wg_cfg::tcM;
       for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
@@ -1566,16 +1628,23 @@ public:
     }
     job.n = 0;
 
-    // K-tile done: its A stripes and every B block have been fetched.
-    bool stage_end = ((job.kt % job.kb) == job.kb - 1) || (job.kt + 1 == job.k_tiles);
-    if (stage_end && job.mode == TJ_CONSUME) {
-      DT(3, simobject_->name() << " tj-empty-arrive: cta=" << job.cta << ", kt=" << job.kt
-            << ", bar=" << job_bar(job.empty_bar, job_stage(job, job.kt)));
-      core_->barrier_arrive(job_bar(job.empty_bar, job_stage(job, job.kt)), 2, job.wid, false);
+    // K-tile done: its A stripes and every B block have been read.
+    bool stage_end = (job.ki == job.kb - 1) || (job.kt + 1 == job.k_tiles);
+    if (stage_end) {
+      ++job.consumed;
+      if (job.mode == TJ_CONSUME) {
+        job.pend_empty = true;
+        job.pend_empty_s = job.use_s;
+      }
+      job.ki = 0;
+      ++job.use_idx;
+      job.use_s = (job.use_s + 1) % job.nstages;
+    } else {
+      ++job.ki;
     }
     ++job.kt;
     job.a_valid = false;
-    job.b_valid = {};
+    job.b_valid = false;
     if (job.kt == job.k_tiles) {
       job.state = tj_state_t::DRAIN;
       job.done_due = SimPlatform::instance().cycles() + kMmaLatency;
@@ -1706,7 +1775,6 @@ public:
       return;
     }
 
-    cur_b_slot_ = 0;
     this->mma_lmem(wid, fmt_s, fmt_d, step_m, step_n, step_k,
                    rs1_data, rs2_data, rs3_data, rd_data,
                    is_sparse, is_a_smem, xtile_n);
@@ -2048,8 +2116,7 @@ private:
                          desc, row, col, fmt_s, pack_along_row, false,
                          cur_is_sparse_ && (wg_cfg::sp_k_mult == 1));
     }
-    uint32_t b_slot = cur_b_slot_;
-    return gather_word([&](uint64_t addr) { return tbuf->read_b(addr, b_slot); },
+    return gather_word([&](uint64_t addr) { return tbuf->read_b(addr); },
                        desc, row, col, fmt_s, pack_along_row, sparse_b, false);
   }
 
@@ -2117,7 +2184,6 @@ private:
   // Current block index, set before delegating to wgmma().
   uint32_t cur_block_ = 0;
   // B buffer slot read by the current MMA.
-  uint32_t cur_b_slot_ = 0;
   // A-descriptor base for the current wgmma(); distinguishes A from B in load_lmem_word.
   uint64_t cur_a_desc_base_ = ~uint64_t(0);
   bool cur_is_sparse_ = false;
@@ -2133,6 +2199,7 @@ private:
   std::vector<reg_data_t> tmem_;  // [lane][column]
   std::deque<tj_t> jobs_;
   std::array<tj_words_t, VX_CFG_NUM_WARPS> job_desc_{};
+  bool tj_port_busy_ = false;
 #endif
 };
 

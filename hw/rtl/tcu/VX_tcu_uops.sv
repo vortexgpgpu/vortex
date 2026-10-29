@@ -220,9 +220,18 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
                   ;
 `endif
 
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    wire is_tmem = (ibuf_in.op_type == INST_TCU_TMEM_LD)
+                || (ibuf_in.op_type == INST_TCU_TMEM_ST);
+    wire [4:0] tmem_idx = 5'(uop_idx);
+`endif
+
     // Dense FEDP2K RS adds one descriptor setup uop. Other WGMMA modes fuse
     // descriptor transport into their first compute uop.
     assign uop_count =
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+        is_tmem ? (UOP_CTR_W'(ibuf_in.op_args.tcu.fmt_s) + UOP_CTR_W'(1)) :
+`endif
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
         is_wgmma ? wg_uop_cnt :
 `endif
@@ -346,6 +355,17 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     `ifdef VX_CFG_TCU_SPARSE_ENABLE
         n_sp_s = '0;
         m_sp_s = '0;
+    `endif
+    `ifdef VX_CFG_TCU_TMEM_ENABLE
+        if (is_tmem) begin
+            // Uop i moves register (base + i); fmt_d carries i to the TMEM port.
+            ibuf_r.op_args.tcu.fmt_d = tmem_idx;
+            if (ibuf_in.op_type == INST_TCU_TMEM_LD) begin
+                ibuf_r.rd = ibuf_in.rd + NUM_REGS_BITS'(tmem_idx);
+            end else begin
+                ibuf_r.rs2 = ibuf_in.rs2 + NUM_REGS_BITS'(tmem_idx);
+            end
+        end else
     `endif
     `ifdef VX_CFG_TCU_WGMMA_ENABLE
         if (is_wgmma) begin

@@ -23,8 +23,7 @@ namespace vortex {
 // Holds the WGMMA operand storage and fetches it from LMEM:
 //
 //   abuf × Q   per-block A k-stripe
-//   bbuf × 2   B bank row, shared by all Q blocks; WGMMA uses slot 0 and
-//              tensor jobs prefetch the next block into the other slot
+//   bbuf × 1   B bank row, shared by all Q blocks
 //
 // The consumer (TcuUnit) owns the refill keys: it decides when a buffer
 // refills and hands over the refill as a list of LMEM reads. Each read is
@@ -43,8 +42,6 @@ public:
   // adjacent LMEM DMA channels.
   static constexpr uint32_t LMEM_PORTS = LocalMem::DMA_PORTS;
 
-  static constexpr uint32_t B_SLOTS = 2;
-
   // Lines of one bank-row read.
   using LmemRead = std::vector<uint64_t>;
 
@@ -57,17 +54,17 @@ public:
   // Drop the buffer's contents and fetch `reads` in order. `b` indexes the
   // per-block A buffer.
   void fill_a(uint32_t b, std::vector<LmemRead> reads);
-  void fill_b(std::vector<LmemRead> reads, uint32_t slot = 0);
+  void fill_b(std::vector<LmemRead> reads);
 
   bool filling_a(uint32_t b) const;
-  bool filling_b(uint32_t slot = 0) const;
+  bool filling_b() const;
 
   std::shared_ptr<mem_block_t> read_a(uint32_t b, uint64_t line_addr) const;
-  std::shared_ptr<mem_block_t> read_b(uint64_t line_addr, uint32_t slot = 0) const;
+  std::shared_ptr<mem_block_t> read_b(uint64_t line_addr) const;
 
   // Drop the buffer's contents and abandon a fill in progress.
   void invalidate_a(uint32_t b);
-  void invalidate_b(uint32_t slot = 0);
+  void invalidate_b();
 
   // Bank-row reads issued since the last reset (perf counter).
   uint64_t reads() const;

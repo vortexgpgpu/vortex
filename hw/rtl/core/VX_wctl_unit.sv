@@ -23,6 +23,9 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     // Inputs
     VX_execute_if.slave     execute_if,
     VX_txbar_bus_if.slave   txbar_bus_if,
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    VX_tcu_bar_if.slave     tcu_bar_if,
+`endif
 
     // Outputs
     VX_warp_ctl_if.master   warp_ctl_if,
@@ -146,8 +149,33 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
                        && execute_if.data.op_args.wctl.is_bar_arrive
                        && rs2_data[31];
 
-    assign bar_valid    = wctl_bar_enable || txbar_bus_if.valid;
+    // Tensor-job barrier operations take the request slot after warp
+    // instructions and DXA completions.
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    wire tcu_bar_sel = tcu_bar_if.req_valid && ~wctl_bar_enable && ~txbar_bus_if.valid;
+    assign tcu_bar_if.req_ready  = ~wctl_bar_enable && ~txbar_bus_if.valid;
+    assign tcu_bar_if.flip_valid = warp_ctl_if.bar_flip_valid;
+    assign tcu_bar_if.flip_addr  = warp_ctl_if.bar_flip_addr;
+`else
+    wire tcu_bar_sel = 1'b0;
+    `UNUSED_VAR (warp_ctl_if.bar_flip_valid)
+    `UNUSED_VAR (warp_ctl_if.bar_flip_addr)
+`endif
+
+    assign bar_valid    = wctl_bar_enable || txbar_bus_if.valid || tcu_bar_sel;
     assign bar.id       = rs1_data[BAR_ID_SHIFT +: NB_BITS];
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    assign bar.is_event = (txbar_bus_if.valid && ~wctl_bar_enable) || is_tx_expect
+                       || (tcu_bar_sel && tcu_bar_if.req_data.is_event);
+    assign bar.is_sync  = ~tcu_bar_sel && execute_if.data.op_args.wctl.is_sync_bar;
+    assign bar.is_global= wctl_bar_enable && rs1_data[31];
+    assign bar.is_arrive= tcu_bar_sel ? ~tcu_bar_if.req_data.is_event
+                        : ((execute_if.data.op_args.wctl.is_bar_arrive && ~rs2_data[31]) || execute_if.data.op_args.wctl.is_sync_bar);
+    assign bar.phase    = tcu_bar_sel ? tcu_bar_if.req_data.phase
+                        : (is_tx_expect ? 1'b1 : (wctl_bar_enable ? rs2_data[0] : ~txbar_bus_if.data.is_done));
+    assign bar.size_m1  = tcu_bar_sel ? tcu_bar_if.req_data.size_m1
+                        : (rs2_data[BAR_SIZE_W-1:0] - BAR_SIZE_W'(1));
+`else
     assign bar.is_event = (txbar_bus_if.valid && ~wctl_bar_enable) || is_tx_expect;
     assign bar.is_sync  = execute_if.data.op_args.wctl.is_sync_bar;
     assign bar.is_global= wctl_bar_enable && rs1_data[31];
@@ -158,6 +186,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     // For expect_tx: size_m1 carries (count - 1); for normal arrive: (num_warps - 1).
     // bar_unit will + 1 when consuming on the event path so the actual increment is `count`.
     assign bar.size_m1  = rs2_data[BAR_SIZE_W-1:0] - BAR_SIZE_W'(1);
+`endif
 
     assign txbar_bus_if.ready = ~wctl_bar_enable;
 
@@ -174,7 +203,12 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     // Scheduler response setup
 
     assign warp_ctl_if.dvstack_wid = execute_if.data.header.wid;
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    assign warp_ctl_if.bar_addr = wctl_bar_enable ? wctl_bar_addr
+                                : (txbar_bus_if.valid ? txbar_bus_if.data.addr : tcu_bar_if.req_data.addr);
+`else
     assign warp_ctl_if.bar_addr = wctl_bar_enable ? wctl_bar_addr : txbar_bus_if.data.addr;
+`endif
 
     // Send scheduler request
 

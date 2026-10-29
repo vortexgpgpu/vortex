@@ -629,6 +629,15 @@ package VX_gpu_pkg;
     // TCU_LD — warp-level load into a metadata SRAM namespace.
     localparam INST_TCU_LD         = 4'h5;
 `endif
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    // TMEM transfers (one uop per register) and tensor-job descriptor words.
+    // op_args.tcu: fmt_s = register count - 1 (macro), fmt_d = register index
+    // (uop), a_from_smem = one lane per register.
+    localparam INST_TCU_TMEM_LD    = 4'h6;
+    localparam INST_TCU_TMEM_ST    = 4'h7;
+    localparam INST_TCU_TJ_DESC    = 4'h8;
+    localparam INST_TCU_TJ_POST    = 4'h9;
+`endif
     localparam INST_TCU_BITS = 4;
 `endif
 
@@ -679,6 +688,16 @@ package VX_gpu_pkg;
         logic [BAR_ADDR_W-1:0] addr;
         logic                  is_done;
     } txbar_t;
+
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    // Barrier operation issued by the tensor-job sequencer.
+    typedef struct packed {
+        logic [BAR_ADDR_W-1:0] addr;
+        logic                  is_event; // 0 = arrive, 1 = transaction event
+        logic                  phase;    // event: 1 = attach, 0 = release
+        logic [BAR_SIZE_W-1:0] size_m1;  // arrive count - 1, attach count - 1
+    } tcu_bar_t;
+`endif
 
     typedef struct packed {
         logic                         rw;

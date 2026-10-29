@@ -214,15 +214,56 @@ scoreboard and `done_bar` is signalled after the last TMEM write; `cp`,
 
 ### Scheduling
 
-Jobs of different CTAs share the tensor core at K-tile granularity. The
-running job keeps it until its K-tile ends; then the oldest CTA whose next
-stage is full takes it. Every waiting job keeps its own barrier arrivals and
-(CLOSED) stage loads moving meanwhile. Strict FIFO order stalls the tensor
-core on one CTA's next stage while others are ready (SimX, 128^3: CONSUME
-76.5k cycles FIFO vs 72.8k by readiness).
+Jobs of different CTAs share the tensor core at stage granularity. The
+running job keeps it until its stage ends; then the oldest CTA head whose
+next stage is full takes it. Every waiting head keeps its own barrier
+arrivals and (CLOSED) stage loads moving meanwhile: the sequencer issues one
+barrier operation (done release, empty arrival, fill attach, full arrival, in
+that priority) and one DXA load per cycle. Strict FIFO order stalls the
+tensor core on one CTA's next stage while others are ready.
 
-Within a K-tile the sequencer prefetches B block `n+1` into a second B buffer
-while computing on block `n`.
+A step's A stripes (first step of a K-tile) and B block are fetched through
+the WGMMA `abuf`/`bbuf` when the step is presented; there is no B prefetch
+yet.
+
+## RTL
+
+- `VX_tcu_tjob` (in `VX_tcu_unit`): TMEM banks, eight job slots (two per
+  CTA), the barrier/DXA request generation, and a one-step issue register
+  that presents each (m, n) step to all four `VX_tcu_core`s with C read from
+  TMEM. Job steps take a core ahead of warp MMAs; a per-block order queue
+  routes the core's job results to TMEM writes and the rest to commit.
+- TMEM bank per block: `NT` 32-bit sub-banks of `(TMEM_COLS / TC_N) * M_STEPS`
+  rows, 1R1W, one-cycle read. Cell (lane `m*TC_M+i`, column `c`) is in
+  sub-bank `(TC_N*i + c + (NT/M)*m) mod NT`, row `(c/TC_N)*M_STEPS + m`, so a
+  C/D fragment and either `tmem.ld/st` layout touch each sub-bank once.
+  `tmem.ld/st` and job ops share one port (one op per cycle); a load has
+  priority over the job's C read, job D writes over `tmem.st`.
+- Barriers: the sequencer's operations enter `VX_wctl_unit` after warp
+  instructions and DXA completions; `VX_bar_unit` reports every local phase
+  completion back (`warp_ctl_if.bar_flip_*`).
+- DXA: a second request port per core (`tcu_dxa_req_bus_if`), socket index
+  `SOCKET_SIZE + core`.
+- Requires WGMMA (tile buffers) and FEDP2K; a TMEM build does not accept
+  warp WGMMA. XLEN=32, K-major B.
+
+## Results (RTL vs SimX)
+
+rtlsim and SimX, NT=8, 16 warps, ISSUE_WIDTH=4, LSU_BLOCKS=1, FEDP2K, DPI
+FEDP, fp16 -> fp32, B K-major, PIPE_N=2. Instruction counts match exactly.
+
+| Case | rtlsim | SimX |
+|---|---|---|
+| 64^3 CONSUME | 11,909 | 11,417 |
+| 64x64x256 CONSUME | 41,276 | 40,884 |
+| 128^3 CONSUME / CLOSED / sw_full | 69,625 / 67,647 / 69,925 | 65,763 / 64,777 / 66,255 |
+| 128x128x512 CONSUME | 308,056 | 308,550 |
+| 128^3 CLOSED, 512 columns, N = 32 / 64 / 128 per CTA | 66,582 / 48,839 / 42,344 | 63,704 / 46,404 / 40,149 |
+| 128^3 WGMMA deepbuf (register accumulator) | 78,673 | 94,921 |
+
+The remaining TMEM gap (4-6% at 128^3) is in the stage round trip (producer
+wake-up, DXA, barrier), not the job datapath: steady-state K-tiles match. The
+WGMMA deepbuf baseline is 17% pessimistic in SimX at 128^3 (1.3% at 64^3).
 
 ## Front-end decoupling
 
@@ -269,23 +310,10 @@ WMMA, WGMMA (register accumulator), `TCU_LD`, DXA issue, and barriers.
   or separating the register-path MMAs.
 - Dynamic TMEM allocation; non-FEDP2K configurations.
 
-## Results (SimX)
-
-Paper configuration (NT=8, 16 warps, ISSUE_WIDTH=4, LSU_BLOCKS=1, FEDP2K, DSP,
-fp16 -> fp32, B K-major, PIPE_N=2), 128^3:
-
-| Variant | Accumulator | K loop | Cycles |
-|---|---|---|---|
-| Hopper-style WGMMA (NRC=32) | registers | warps | 94,763 |
-| Blackwell-style (`sw_full` job per stage) | TMEM | warp waits, TCU computes | 66,357 |
-| CONSUME job | TMEM | producer warp + TCU | 65,697 |
-| CLOSED job | TMEM | TCU | 64,585 |
-| CLOSED, TMEM_COLS=512, N = 32 / 64 / 128 per CTA | TMEM | TCU | 63,801 / 46,395 / 39,990 |
-
 TMEM variants drain C with `tmem.ld.r` (one row per register, coalesced
-stores). At N=32 they are bound by DXA bandwidth. TMEM's main lever is
-the larger N per CTA that the register file cannot hold: more reuse, less
-DXA traffic per FLOP.
+stores; one lane per thread costs ~25% at 128^3). At N=32 per CTA they are
+bound by stage loads; TMEM's main lever is the larger N per CTA that the
+register file cannot hold: more reuse, less DXA traffic per FLOP.
 
 ## Plan
 
@@ -302,12 +330,9 @@ DXA traffic per FLOP.
    issue-slot occupancy and barrier stall cycles for Hopper-style /
    Blackwell-style / CONSUME / CLOSED at `n_frag` = 16/32/64. Proceed to RTL
    only if the dataflow variants show a clear gain over Blackwell-style.
-3. RTL
-   - TMEM (BRAM, 1R1W 1024-bit) and `tmem.ld/st`.
-   - Sequencer, `VX_bar_unit` phase-complete hook, txbar completion,
-     in-flight interlock.
-   - CLOSED-mode DXA request path.
-   - `model_parity` case.
+3. RTL (done; see above)
+   - Close the WGMMA deepbuf SimX gap before comparing against it.
+   - B prefetch and multi-outstanding `bbuf` reads, in RTL and SimX together.
 4. Area
    - TCU-native DXA layout; simplified `abuf`/`bbuf`; out-of-context
      synthesis of `tbuf`.

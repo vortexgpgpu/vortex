@@ -48,6 +48,10 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
     wire [BAR_ADDR_W-1:0] bar_addr;
     wire bar_phase;
 
+    // Barrier phase completions
+    wire bar_flip_valid;
+    wire [BAR_ADDR_W-1:0] bar_flip_addr;
+
     modport master (
         output wspawn_valid,
         output tmc_valid,
@@ -66,6 +70,8 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
 
         output bar_addr,
         input  bar_phase,
+        input  bar_flip_valid,
+        input  bar_flip_addr,
 
         input  warp_pending_alm_empty,
         input  lsu_sched_drained,
@@ -92,6 +98,8 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
 
         input  bar_addr,
         output bar_phase,
+        output bar_flip_valid,
+        output bar_flip_addr,
 
         output warp_pending_alm_empty,
         output lsu_sched_drained,

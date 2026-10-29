@@ -49,6 +49,9 @@ module VX_core import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     VX_dxa_req_bus_if.master dxa_req_bus_if,
     VX_mem_bus_if.slave     dxa_lmem_bus_if,
 `endif
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    VX_dxa_req_bus_if.master tcu_dxa_req_bus_if,
+`endif
 
 `ifdef VX_CFG_EXT_TEX_ENABLE
     VX_tex_bus_if.master    tex_bus_if,
@@ -344,6 +347,9 @@ module VX_core import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     `ifdef VX_CFG_EXT_DXA_ENABLE
         .dxa_req_bus_if (dxa_req_bus_if),
         .dxa_txbar_bus_if(dxa_txbar_bus_if),
+    `endif
+    `ifdef VX_CFG_TCU_TMEM_ENABLE
+        .tcu_dxa_req_bus_if (tcu_dxa_req_bus_if),
     `endif
     `ifdef VX_CFG_EXT_TEX_ENABLE
         .tex_bus_if     (tex_bus_if),

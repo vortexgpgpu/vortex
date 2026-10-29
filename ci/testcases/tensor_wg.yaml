@@ -259,3 +259,34 @@ tests:
 
   # Not warp-width swept: the tensor-core fragment layout is defined over a fixed
   # lane count, which the configs pin.
+# Tensor memory: barrier-triggered tensor jobs with the accumulator in TMEM.
+# The producer warp issues the stage loads (CONSUME) or the job does (CLOSED).
+- id: sgemm_tcu_tmem-consume
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm_tcu_tmem
+  xlen: [32]
+  args: -m64 -n64 -k256
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_FEDP2K -DVX_CFG_TCU_TMEM_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
+    -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32 -DPIPE_N=2 -DB_KMAJOR
+- id: model_parity-tmem-consume
+  check: model_parity
+  via: blackbox
+  app: sgemm_tcu_tmem
+  xlen: [32]
+  args: -m64 -n64 -k256
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_FEDP2K -DVX_CFG_TCU_TMEM_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
+    -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32 -DPIPE_N=2 -DB_KMAJOR
+- id: model_parity-tmem-closed
+  check: model_parity
+  via: blackbox
+  app: sgemm_tcu_tmem
+  xlen: [32]
+  args: -m64 -n64 -k256
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_FEDP2K -DVX_CFG_TCU_TMEM_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
+    -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32 -DPIPE_N=2 -DB_KMAJOR -DTMEM_CLOSED

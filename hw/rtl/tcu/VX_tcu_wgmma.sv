@@ -45,6 +45,11 @@ module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // Bank-parallel LMEM read port.
     VX_mem_bus_if.master                                                 tcu_lmem_if,
 
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    // Tensor-job steps own the tile buffers; warps do not issue WGMMA.
+    input  tcu_tbuf_req_t [BLOCK_SIZE-1:0]                               job_req,
+`endif
+
     // Outputs to tcu_core (consumed by the wrapper).
     output wire [BLOCK_SIZE-1:0][TCU_WG_A_DATA_SIZE-1:0][`VX_CFG_XLEN-1:0] tbuf_rs1_data,
     output wire [BLOCK_SIZE-1:0][TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0] tbuf_rs2_data,
@@ -106,6 +111,10 @@ module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         end
     end
 
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    assign cta_conflict = '0;
+    `UNUSED_VAR ({is_wgmma_b_w, new_cta_b_w, exec_fire_b_w, is_last_uop_b_w})
+`else
     VX_tcu_lockstep #(
         .INSTANCE_ID (`SFORMATF(("%s-lockstep", INSTANCE_ID))),
         .BLOCK_SIZE  (BLOCK_SIZE)
@@ -119,6 +128,7 @@ module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .is_last_uop_b  (is_last_uop_b_w),
         .cta_conflict   (cta_conflict)
     );
+`endif
 
     // -----------------------------------------------------------------------
     // Per-block uop observation → VX_tcu_tbuf request.
@@ -177,17 +187,27 @@ module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .tbuf_cache_hits(tbuf_cache_hits_w),
         .lmem_reads     (lmem_reads_w),
     `endif
+    `ifdef VX_CFG_TCU_TMEM_ENABLE
+        .req            (job_req),
+    `else
         .req            (req),
+    `endif
         .tcu_lmem_if    (tcu_lmem_if),
         .tbuf_rs1_data  (tbuf_rs1_data),
         .tbuf_rs2_data  (tbuf_rs2_data),
         .tbuf_ready     (tbuf_ready)
     );
 
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    assign tbuf_ready_eff = tbuf_ready;
+    `UNUSED_VAR (req)
+    `UNUSED_VAR (cta_conflict)
+`else
     for (genvar bi = 0; bi < BLOCK_SIZE; ++bi) begin : g_tbuf_eff
         assign tbuf_ready_eff[bi] = is_setup_uop_b_w[bi] ? 1'b1
                                   : (tbuf_ready[bi] && !cta_conflict[bi]);
     end
+`endif
 
     // -----------------------------------------------------------------------
     // WGMMA perf counters (instrs / stalls).

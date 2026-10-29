@@ -51,6 +51,9 @@ module VX_execute import VX_gpu_pkg::*; #(
     VX_dxa_req_bus_if.master dxa_req_bus_if,
     VX_txbar_bus_if.slave  dxa_txbar_bus_if,
 `endif
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    VX_dxa_req_bus_if.master tcu_dxa_req_bus_if,
+`endif
 
 `ifdef VX_CFG_EXT_TEX_ENABLE
     VX_tex_bus_if.master    tex_bus_if,
@@ -122,9 +125,14 @@ module VX_execute import VX_gpu_pkg::*; #(
     );
 `endif
 
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    VX_tcu_bar_if tcu_bar_if();
+`endif
+
 `ifdef VX_CFG_EXT_TCU_ENABLE
     VX_tcu_unit #(
-        .INSTANCE_ID (`SFORMATF(("%s-tcu", INSTANCE_ID)))
+        .INSTANCE_ID (`SFORMATF(("%s-tcu", INSTANCE_ID))),
+        .CORE_ID     (CORE_ID)
     ) tcu_unit (
         .clk            (clk),
         .reset          (reset),
@@ -136,6 +144,10 @@ module VX_execute import VX_gpu_pkg::*; #(
     `endif
     `ifdef TCU_META_ENABLE
         .tcu_mem_if        (tcu_mem_if),
+    `endif
+    `ifdef VX_CFG_TCU_TMEM_ENABLE
+        .tcu_bar_if     (tcu_bar_if),
+        .tcu_dxa_req_bus_if (tcu_dxa_req_bus_if),
     `endif
         .dispatch_if    (dispatch_if[EX_TCU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH]),
         .commit_if      (commit_if[EX_TCU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH])
@@ -160,6 +172,9 @@ module VX_execute import VX_gpu_pkg::*; #(
     `ifdef VX_CFG_EXT_DXA_ENABLE
         .dxa_req_bus_if (dxa_req_bus_if),
         .dxa_txbar_bus_if(dxa_txbar_bus_if),
+    `endif
+    `ifdef VX_CFG_TCU_TMEM_ENABLE
+        .tcu_bar_if     (tcu_bar_if),
     `endif
     `ifdef VX_CFG_EXT_TEX_ENABLE
         .tex_bus_if     (tex_bus_if),

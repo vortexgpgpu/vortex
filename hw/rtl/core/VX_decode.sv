@@ -748,6 +748,36 @@ module VX_decode import
                         end
                     end
                 `endif
+                `ifdef VX_CFG_TCU_TMEM_ENABLE
+                    7'h05: begin // TMEM transfers and tensor jobs
+                        ex_type = EX_TCU;
+                        op_args.tcu = '0;
+                        case (funct3)
+                            3'h0, 3'h4: begin // TMEM_LD fd, (rs1), n: rs2 field = n-1
+                                op_type = INST_OP_BITS'(INST_TCU_TMEM_LD);
+                                op_args.tcu.fmt_s       = rs2;
+                                op_args.tcu.a_from_smem = funct3[2];
+                                `USED_FREG (rd);
+                                `USED_IREG (rs1);
+                            end
+                            3'h1, 3'h5: begin // TMEM_ST fs, (rs1), n: rd field = first source
+                                op_type = INST_OP_BITS'(INST_TCU_TMEM_ST);
+                                op_args.tcu.fmt_s       = rs2;
+                                op_args.tcu.a_from_smem = funct3[2];
+                                `USED_IREG (rs1);
+                                reg_ids[RV_RS2]  = make_reg_num(REG_TYPE_F, RV_REGS_BITS'(rd));
+                                use_regs[RV_RS2] = 1'b1;
+                            end
+                            3'h2, 3'h3: begin // TJ_DESC / TJ_POST rs1, rs2
+                                op_type = funct3[0] ? INST_OP_BITS'(INST_TCU_TJ_POST)
+                                                    : INST_OP_BITS'(INST_TCU_TJ_DESC);
+                                `USED_IREG (rs1);
+                                `USED_IREG (rs2);
+                            end
+                            default:;
+                        endcase
+                    end
+                `endif
                 `ifdef VX_CFG_EXT_DXA_ENABLE
                     7'h03: begin // DXA issue
                         // Multicast is determined by cta_mask (>1 bit set).
