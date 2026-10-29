@@ -127,7 +127,13 @@
 // (om_row_offset) and steps each attachment by its own layer stride, so it
 // ignores this. Read only by a fragment shader built for layered draws.
 #define GFX_FS_ARG_LAYER_ROWS 26u
-#define GFX_FS_ARG_COUNT    27u
+// A mesh draw's per-primitive records and their byte stride, which
+// rast_vary_t::prim_id indexes: a per-primitive input is read flat from its
+// location's slot there, and gl_PrimitiveID from the record's first word. 0 = the
+// draw has none, and prim_id is gl_PrimitiveID itself.
+#define GFX_FS_ARG_PRIMREC  27u
+#define GFX_FS_ARG_PRIMSTRIDE 28u
+#define GFX_FS_ARG_COUNT    29u
 
 // The query counter block: one 64-bit counter per statistic, kept on the device
 // and added to with 32-bit atomics (the low word, then the high word on a carry).
@@ -162,7 +168,11 @@
 // invocations (one per domain point).
 #define GFX_QC_TCS_PATCHES     22u
 #define GFX_QC_TES_INVOCATIONS 23u
-#define GFX_QC_COUNT          24u
+// Task- and mesh-shader invocations. A mesh primitive that reaches the
+// rasterizer counts as generated on stream 0 (GFX_QC_PRIMS_GENERATED).
+#define GFX_QC_TASK_INVOCATIONS 24u
+#define GFX_QC_MESH_INVOCATIONS 25u
+#define GFX_QC_COUNT          26u
 
 #define GFX_FS_ZPAIR(lo, hi) \
    ((uint64_t)(uint32_t)(int32_t)(lo) | ((uint64_t)(uint32_t)(int32_t)(hi) << 32))

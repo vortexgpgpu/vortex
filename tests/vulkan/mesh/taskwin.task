@@ -1,0 +1,21 @@
+#version 460
+#extension GL_EXT_mesh_shader : require
+
+// Tasks whose mesh workgroups -- 250, 300 or 350 each, decided at run time --
+// together take several mesh windows.
+layout(local_size_x = 4) in;
+
+struct Payload {
+   uint first;
+};
+taskPayloadSharedEXT Payload td;
+
+void main()
+{
+   const uint t = gl_WorkGroupID.x;
+   const uint before = 3u * (t / 3u) + ((t % 3u) == 2u ? 1u : 0u);
+   if (gl_LocalInvocationIndex == 0u)
+      td.first = 250u * t + 50u * before;
+   barrier();
+   EmitMeshTasksEXT(250u + 50u * (t % 3u), 1u, 1u);
+}

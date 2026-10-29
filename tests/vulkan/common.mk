@@ -160,8 +160,9 @@ endif
 # sparse-image=2.
 EXPECT_CPU ?=
 # EXPECT_NO_HOSTREAD := 1 requires every context to report, on its
-# vortexpipe-hostread line, that the host read no indirect dispatch record and
-# no render-condition word: the command processor evaluated them all.
+# vortexpipe-hostread line, that the host read no indirect dispatch record, no
+# render-condition word and no mesh draw count: the command processor evaluated
+# them all.
 EXPECT_NO_HOSTREAD ?= 0
 # EXPECT_MAX_INSTRS bounds the instructions the device retires over the run, as
 # the runtime's PERF line reports them: a test whose subject is work the device
@@ -222,7 +223,7 @@ define check_run
 	   if ! echo "$$out" | grep -q '^vortexpipe-hostread:'; then \
 	      echo "FAIL: $(PROJECT) reported no vortexpipe-hostread line"; exit 1; \
 	   fi; \
-	   if echo "$$out" | grep '^vortexpipe-hostread:' | grep -qv ' dispatch=0 cond=0$$'; then \
+	   if echo "$$out" | grep '^vortexpipe-hostread:' | grep -qv ' dispatch=0 cond=0 mesh=0$$'; then \
 	      echo "FAIL: $(PROJECT) read launch arguments on the host"; exit 1; \
 	   fi; \
 	fi; \

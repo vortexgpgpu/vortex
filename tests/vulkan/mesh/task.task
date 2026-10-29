@@ -1,0 +1,39 @@
+#version 460
+#extension GL_EXT_mesh_shader : require
+#extension GL_GOOGLE_include_directive : require
+#include "mesh_common.glsl"
+
+// Task t launches the mesh grid task_grid(t) -- one with a zero dimension
+// launches nothing -- and hands its mesh workgroups the number of the first of
+// them, counted over the draw's tasks in order.
+layout(local_size_x = 4) in;
+
+struct Payload {
+   uint first;
+   uint task;
+};
+taskPayloadSharedEXT Payload td;
+
+uvec3 task_grid(uint t)
+{
+   const uvec3 g[4] = uvec3[4](uvec3(0u, 1u, 1u), uvec3(1u, 1u, 1u), uvec3(2u, 3u, 4u),
+                               uvec3(3u, 1u, 1u));
+   return g[t % 4u];
+}
+
+void main()
+{
+   const uint t = gl_WorkGroupID.x;
+   uint first = 0u;
+   for (uint s = 0u; s < t; s++) {
+      const uvec3 g = task_grid(s);
+      first += g.x * g.y * g.z;
+   }
+   if (gl_LocalInvocationIndex == 0u) {
+      td.first = first;
+      td.task = t;
+   }
+   barrier();
+   const uvec3 g = task_grid(t);
+   EmitMeshTasksEXT(g.x, g.y, g.z);
+}

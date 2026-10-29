@@ -1,0 +1,24 @@
+#version 460
+#extension GL_EXT_mesh_shader : require
+#extension GL_GOOGLE_include_directive : require
+#include "mesh_common.glsl"
+
+// Lines: a horizontal segment across the middle of the primitive's cell.
+layout(local_size_x = 16) in;
+layout(lines, max_vertices = 64, max_primitives = 32) out;
+layout(location = 0) flat out uint vcol[];
+
+void main()
+{
+   const uint w = wg_linear();
+   const uint n = wg_prims(w);
+   SetMeshOutputsEXT(2u * n, n);
+   for (uint k = gl_LocalInvocationIndex; k < n; k += 16u) {
+      const uint c = prim_cell(w, k);
+      const vec2 o = vec2(float(c % 4u) * 16.0, float(c / 4u) * 16.0);
+      gl_MeshVerticesEXT[2u * k].gl_Position = ndc(o + vec2(2.0, 8.5));
+      gl_MeshVerticesEXT[2u * k + 1u].gl_Position = ndc(o + vec2(14.0, 8.5));
+      vcol[2u * k] = vcol[2u * k + 1u] = prim_colour(w, k);
+      gl_PrimitiveLineIndicesEXT[k] = uvec2(2u * k, 2u * k + 1u);
+   }
+}

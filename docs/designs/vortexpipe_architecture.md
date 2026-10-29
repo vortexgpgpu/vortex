@@ -1058,6 +1058,69 @@ ABI (`sw/gfx/gfx_tess_abi.cpp`); the stitch kernel is on the front-end module.
   primitives from zero. Batches and ranges drain through the front end in
   order, each sized by its own counts.
 
+#### 3.2.2 The task and mesh stages
+
+A mesh draw (`draw_mesh_tasks`) takes the vertex stage's place in the same
+batch: everything from setup on is the vertex draw's. A task or mesh shader is
+translated (`vp_nir_to_llvm_mesh`) into an ordinary function, `vp_task_main` or
+`vp_mesh_main`, linked beside a persistent stage kernel from the Vortex tree
+(`task_k`, `mesh_k`: `sw/gfx/gfx_mesh_k.h`) that calls it once per workgroup
+with the workgroup's `gfx_mesh_wg_t` (`sw/common/gfx_mesh_abi.h`). The mesh
+kernel loads at the vertex kernel's address and the task kernel at the
+geometry kernel's, which a mesh pipeline does not use.
+
+- **Persistent grids.** A stage kernel is a fixed grid of CTAs filling the
+  device, each walking workgroups `cta, cta + G, ...` up to a count in device
+  memory (`gfx_mesh_meta_t`). The count is the same for every thread of a CTA,
+  so the barriers of the shader stay matched; a workgroup starts with its
+  workgroup memory undefined, and the kernel's barrier between iterations
+  keeps a later one from overwriting it early. No grid is ever computed on the
+  device, so a zero-size grid never reaches the KMU.
+- **Tasks.** A task workgroup writes its payload to device memory (the mesh
+  workgroups it launches run on other cores) and, at `EmitMeshTasksEXT`, its
+  mesh grid and their count. A device-wide scan of the counts gives each task
+  its first mesh workgroup, and a mesh workgroup finds its task by binary
+  search -- or, when every task launches the same constant grid, in closed
+  form with no scan. `mesh_launch_k` turns the scan's total into each mesh
+  window's grid on the device, and an empty window skips the rest of its
+  chunk; the host reads the total back only when the windows a chunk may need
+  exceed `VP_MESH_DEV_WINDOWS`.
+  Task workgroups run in chunks whose payloads fit `VP_TASK_CHUNK_BYTES`.
+- **Mesh output.** Mesh workgroups run in windows that fit
+  `VP_MESH_WINDOW_BYTES`. Workgroup `w` of a window owns fixed slots:
+  `max_vertices` vertex records (the VS record layout, so setup and the
+  fragment stage read them unchanged), `max_primitives` primitive records and
+  list entries. Per-primitive outputs go to the primitive record: words 0-2 of
+  its first slot hold `gl_PrimitiveID`, `gl_Layer` and `gl_ViewportIndex`, a
+  generic output its location's slot. With a static primitive count and no
+  culling, the vertex indices are written straight into the dense list setup
+  reads, entry `w * S + k`; the kernel first points every entry at the
+  workgroup's vertex 0, so a primitive whose indices the shader leaves
+  unwritten is degenerate rather than a read of another workgroup's records. Otherwise they are staged with the cull flag; after
+  the body the kernel compacts the workgroup's live primitives (not culled,
+  indices below the vertex count) in index order with a CTA scan, a
+  device-wide scan of the workgroups' counts places each workgroup, and
+  `mesh_post_k` copies them into the dense list. Order is task, mesh
+  workgroup, primitive index throughout.
+- **Per-primitive data.** List entries name their primitive record in `aux`
+  (`PIPE_LIST_AUX_PRIMREC`): setup reads `gl_Layer` and `gl_ViewportIndex`
+  from it, `rast_vary_t::prim_id` carries its index, and the fragment wrapper
+  reads per-primitive inputs and `gl_PrimitiveID` flat from it
+  (`GFX_FS_ARG_PRIMREC` and `GFX_FS_ARG_PRIMSTRIDE`, `sw/common/gfx_fs_desc_abi.h`;
+  the setup side is `pipe_arg_t::view_rec_addr` with `view_by_id`, in
+  `sw/common/gfx_frontend_abi.h`).
+- **Queries.** `task_k` adds the task invocations; mesh invocations and, with
+  a static count, the primitives generated and the clipper's invocations and
+  primitives are added by the first window's kernel; with run-time counts the
+  window's scan adds the live primitives to the generated and clipper
+  counters.
+- **Indirect.** A mesh-only indirect or indirect-count dispatch is read on
+  the device: `mesh_launch_k` takes each command's grid (and the draw count)
+  from its record, and a grid larger than the windows hold is drawn by a
+  continuation from its first undrawn workgroup. With a task shader the grids
+  are read on the host, each becoming the direct draw it describes with its
+  own `gl_DrawID`.
+
 ### 3.3 FF configuration + RASTER launch
 
 `vp_raster_draw` then programs the RASTER + OM + (optional) TEX DCRs and

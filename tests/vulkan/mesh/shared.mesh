@@ -1,0 +1,35 @@
+#version 460
+#extension GL_EXT_mesh_shader : require
+#extension GL_GOOGLE_include_directive : require
+#include "mesh_common.glsl"
+
+// The positions travel through workgroup memory: invocation i writes the
+// corners of primitive i, and after a barrier invocation 31 - i emits them.
+layout(local_size_x = 32) in;
+layout(triangles, max_vertices = 96, max_primitives = 32) out;
+layout(location = 0) flat out uint vcol[];
+
+shared vec4 corner[96];
+shared uint colour[32];
+
+void main()
+{
+   const uint w = wg_linear();
+   const uint n = wg_prims(w);
+   const uint i = gl_LocalInvocationIndex;
+   if (i < n) {
+      for (uint v = 0u; v < 3u; v++)
+         corner[3u * i + v] = cell_vertex(prim_cell(w, i), v);
+      colour[i] = prim_colour(w, i);
+   }
+   barrier();
+   SetMeshOutputsEXT(3u * n, n);
+   const uint k = 31u - i;
+   if (k < n) {
+      for (uint v = 0u; v < 3u; v++) {
+         gl_MeshVerticesEXT[3u * k + v].gl_Position = corner[3u * k + v];
+         vcol[3u * k + v] = colour[k];
+      }
+      gl_PrimitiveTriangleIndicesEXT[k] = uvec3(3u * k, 3u * k + 1u, 3u * k + 2u);
+   }
+}

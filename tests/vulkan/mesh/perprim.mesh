@@ -1,0 +1,41 @@
+#version 460
+#extension GL_EXT_mesh_shader : require
+#extension GL_GOOGLE_include_directive : require
+#include "mesh_common.glsl"
+
+// Per-primitive outputs: two triangles sharing an edge (four vertices), each
+// with its own colour, gl_PrimitiveID and viewport, beside a per-vertex value
+// the fragment shader mixes in.
+layout(local_size_x = 16) in;
+layout(triangles, max_vertices = 64, max_primitives = 32) out;
+layout(location = 0) flat out uint vcol[];
+layout(location = 1) perprimitiveEXT flat out uint pcol[];
+
+void main()
+{
+   const uint w = wg_linear();
+   const uint n = 2u * (w % 3u + 1u);
+   SetMeshOutputsEXT(2u * n, n);
+   const uint k = gl_LocalInvocationIndex;
+   if (k < n) {
+      // both triangles of quad q in the cell of its first
+      const uint q = k / 2u;
+      const uint c = prim_cell(w, 2u * q);
+      // a quad of the cell's triangle and its mirror, split along the diagonal
+      const vec2 o = vec2(float(c % 4u) * 16.0, float(c / 4u) * 16.0);
+      if ((k & 1u) == 0u) {
+         gl_MeshVerticesEXT[4u * q + 0u].gl_Position = ndc(o + vec2(2.0, 2.0));
+         gl_MeshVerticesEXT[4u * q + 1u].gl_Position = ndc(o + vec2(14.0, 2.0));
+         gl_MeshVerticesEXT[4u * q + 2u].gl_Position = ndc(o + vec2(2.0, 8.0));
+         gl_MeshVerticesEXT[4u * q + 3u].gl_Position = ndc(o + vec2(14.0, 8.0));
+         for (uint v = 0u; v < 4u; v++)
+            vcol[4u * q + v] = 0x00000010u * v;
+      }
+      gl_PrimitiveTriangleIndicesEXT[k] = (k & 1u) == 0u
+         ? uvec3(4u * q, 4u * q + 1u, 4u * q + 2u)
+         : uvec3(4u * q + 1u, 4u * q + 3u, 4u * q + 2u);
+      pcol[k] = prim_colour(w, k);
+      gl_MeshPrimitivesEXT[k].gl_PrimitiveID = int(1000u * w + k);
+      gl_MeshPrimitivesEXT[k].gl_ViewportIndex = int(k % 4u);
+   }
+}

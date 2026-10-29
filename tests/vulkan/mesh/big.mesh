@@ -1,0 +1,30 @@
+#version 460
+#extension GL_EXT_mesh_shader : require
+#extension GL_GOOGLE_include_directive : require
+#include "mesh_common.glsl"
+
+// 32 one-pixel points per workgroup, each on its own pixel (big_pixel), over a
+// grid large enough that the draw's
+// primitives take more than one front-end pass; with DYN, a count from a push
+// constant, which the device finds only once the workgroups have run.
+layout(local_size_x = 32) in;
+layout(points, max_vertices = 32, max_primitives = 32) out;
+layout(location = 0) flat out uint vcol[];
+layout(constant_id = 0) const uint DYN = 0u;
+
+layout(push_constant) uniform Pc { uint prims; } pc;
+
+void main()
+{
+   const uint w = wg_linear();
+   const uint n = DYN != 0u ? pc.prims : 32u;
+   SetMeshOutputsEXT(n, n);
+   const uint k = gl_LocalInvocationIndex;
+   if (k < n) {
+      const uint p = big_pixel(w, k);
+      gl_MeshVerticesEXT[k].gl_Position = ndc(vec2(float(p % 64u), float(p / 64u)) + 0.5);
+      gl_MeshVerticesEXT[k].gl_PointSize = 1.0;
+      vcol[k] = prim_colour(w, k);
+      gl_PrimitivePointIndicesEXT[k] = k;
+   }
+}

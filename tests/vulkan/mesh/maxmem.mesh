@@ -1,0 +1,42 @@
+#version 460
+#extension GL_EXT_mesh_shader : require
+#extension GL_GOOGLE_include_directive : require
+#include "mesh_common.glsl"
+
+// The largest workgroup the device advertises, with all the workgroup memory it
+// advertises: every invocation fills its share, and primitive k's colour says
+// whether invocation k read back every word i with i % n == k as written.
+layout(local_size_x_id = 1) in;
+layout(constant_id = 2) const uint WORDS = 1u;
+layout(triangles, max_vertices = 96, max_primitives = 32) out;
+layout(location = 0) flat out uint vcol[];
+layout(push_constant) uniform Pc { uint prims; } pc;
+
+shared uint big[WORDS];
+
+uint word(uint w, uint i)
+{
+   return i * 2654435761u + w;
+}
+
+void main()
+{
+   const uint w = wg_linear();
+   const uint n = pc.prims;
+   const uint k = gl_LocalInvocationIndex;
+   for (uint i = k; i < WORDS; i += gl_WorkGroupSize.x)
+      big[i] = word(w, i);
+   barrier();
+   SetMeshOutputsEXT(3u * n, n);
+   if (k < n) {
+      bool ok = true;
+      for (uint i = k; i < WORDS; i += n)
+         ok = ok && big[i] == word(w, i);
+      const uint c = prim_cell(w, k);
+      for (uint v = 0u; v < 3u; v++) {
+         gl_MeshVerticesEXT[3u * k + v].gl_Position = cell_vertex(c, v);
+         vcol[3u * k + v] = ok ? prim_colour(w, k) : 0xffff00ffu;
+      }
+      gl_PrimitiveTriangleIndicesEXT[k] = uvec3(3u * k, 3u * k + 1u, 3u * k + 2u);
+   }
+}

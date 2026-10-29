@@ -1,0 +1,28 @@
+#version 460
+#extension GL_EXT_mesh_shader : require
+#extension GL_GOOGLE_include_directive : require
+#include "mesh_common.glsl"
+
+// A static count of 32 triangles whose vertices are all written; with a zero
+// push constant only the even triangles' indices are, and the odd ones are
+// left undefined, so they must draw nothing the device did not get from this
+// workgroup.
+layout(local_size_x = 32) in;
+layout(triangles, max_vertices = 96, max_primitives = 32) out;
+layout(location = 0) flat out uint vcol[];
+layout(push_constant) uniform Pc { uint all_prims; } pc;
+
+void main()
+{
+   const uint w = wg_linear();
+   SetMeshOutputsEXT(96u, 32u);
+   const uint k = gl_LocalInvocationIndex;
+   const uint c = prim_cell(w, k);
+   const uint colour = prim_colour(w, k) ^ (pc.all_prims != 0u ? 0u : 0x00800000u);
+   for (uint v = 0u; v < 3u; v++) {
+      gl_MeshVerticesEXT[3u * k + v].gl_Position = cell_vertex(c, v);
+      vcol[3u * k + v] = colour;
+   }
+   if (pc.all_prims != 0u || (k & 1u) == 0u)
+      gl_PrimitiveTriangleIndicesEXT[k] = uvec3(3u * k, 3u * k + 1u, 3u * k + 2u);
+}

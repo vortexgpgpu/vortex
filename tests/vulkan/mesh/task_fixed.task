@@ -1,0 +1,22 @@
+#version 460
+#extension GL_EXT_mesh_shader : require
+
+// Every task launches the same grid of two mesh workgroups.
+layout(local_size_x = 8) in;
+
+struct Payload {
+   uint first;
+   uint task;
+};
+taskPayloadSharedEXT Payload td;
+
+void main()
+{
+   const uint t = gl_WorkGroupID.x;
+   if (gl_LocalInvocationIndex == 0u) {
+      td.first = 2u * t;
+      td.task = t;
+   }
+   barrier();
+   EmitMeshTasksEXT(2u, 1u, 1u);
+}

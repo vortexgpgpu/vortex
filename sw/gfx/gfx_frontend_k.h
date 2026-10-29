@@ -43,7 +43,7 @@ static inline void pipe_bin_range(const setup_bbox_t& p, int& bL, int& bR, int& 
 struct pipe_prim_ref {
   uint32_t rec[3];
   uint32_t sub;
-  uint32_t id;     // gl_PrimitiveID
+  uint32_t id;     // gl_PrimitiveID, or with PIPE_LIST_AUX_PRIMREC its primitive record
 };
 
 // The draw's primitive counts as a launch takes them. Without an input assembly
@@ -84,7 +84,7 @@ static inline pipe_prim_ref pipe_prim_records(const pipe_arg_t* arg, const pipe_
       r.sub = t % 3;
     }
     const pipe_list_entry_t& w = reinterpret_cast<const pipe_list_entry_t*>(arg->prim_index_addr)[e];
-    r.id = arg->list_aux == PIPE_LIST_AUX_PRIMID ? (w.aux & PIPE_LIST_AUX_MASK) : e;
+    r.id = arg->list_aux != PIPE_LIST_AUX_NONE ? (w.aux & PIPE_LIST_AUX_MASK) : e;
     switch (arg->prim_type) {
     case SETUP_PRIM_LINE:
       r.rec[0] = w.rec[0]; r.rec[1] = r.rec[2] = w.rec[1];
@@ -530,8 +530,8 @@ static inline bool pipe_cull_distance(const pipe_arg_t* arg, const pipe_prim_ref
 }
 
 // The viewport slot and layer primitive t is drawn with: the ViewportIndex and
-// Layer its provoking vertex wrote, an index past the array taking slot 0 and a
-// layer past the framebuffer its last layer.
+// Layer its provoking vertex wrote, or its primitive record holds, an index past
+// the array taking slot 0 and a layer past the framebuffer its last layer.
 struct pipe_prim_view {
   const setup_viewport_t* vp;
   uint32_t scissor_x, scissor_y;
@@ -542,9 +542,9 @@ static inline pipe_prim_view pipe_prim_viewport(const pipe_arg_t* arg, const pip
                                                 const setup_viewport_t* vp) {
   pipe_prim_view v{ vp, RAST_SCISSOR_PACK(0, 0xffff), RAST_SCISSOR_PACK(0, 0xffff), 0, 0 };
   const uint8_t* pv = nullptr;
-  if (arg->vsrec_addr && (arg->vpi_off || arg->layer_off)) {
-    pv = reinterpret_cast<const uint8_t*>(arg->vsrec_addr)
-       + (size_t)ref.rec[arg->provoke_last ? 2 : 0] * arg->vstride;
+  if (arg->view_rec_addr) {
+    const uint32_t i = arg->view_by_id ? ref.id : ref.rec[arg->provoke_last ? 2 : 0];
+    pv = reinterpret_cast<const uint8_t*>(arg->view_rec_addr) + (size_t)i * arg->view_rec_stride;
   }
   if (arg->vp_table_addr) {
     const auto* table = reinterpret_cast<const setup_vp_slot_t*>(arg->vp_table_addr);

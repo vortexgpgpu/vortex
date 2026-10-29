@@ -232,7 +232,7 @@ typedef struct {
   float    bary[3][3];
   uint32_t vrec[3];
   uint32_t vp_layer;   // RAST_VARY_VP_LAYER: the primitive's viewport and layer
-  uint32_t prim_id;    // gl_PrimitiveID
+  uint32_t prim_id;    // gl_PrimitiveID, or the primitive record (PIPE_LIST_AUX_PRIMREC)
 } rast_vary_t;
 
 // ViewportIndex and Layer of a primitive as the fragment stage reads them, after
@@ -426,6 +426,13 @@ typedef struct {
   // 1: the implicit records come in adjacency groups -- four per line, six per
   // triangle -- of which the primitive is records 1 and 2, or 0, 2 and 4.
   uint32_t adjacency;
+  // The records a primitive's ViewportIndex and Layer are read from (at vpi_off
+  // and layer_off), view_rec_stride bytes apart; 0 when it reads neither. They
+  // are the vertex records, the provoking vertex's read, or with view_by_id the
+  // primitive records, the one its entry's aux names (PIPE_LIST_AUX_PRIMREC).
+  uint64_t view_rec_addr;
+  uint32_t view_rec_stride;
+  uint32_t view_by_id;
 } pipe_arg_t;
 
 // One entry of an indexed primitive list. A triangle names its three records in
@@ -440,6 +447,7 @@ typedef struct {
 
 #define PIPE_LIST_AUX_NONE   0u
 #define PIPE_LIST_AUX_PRIMID 1u   // aux holds the primitive's gl_PrimitiveID
+#define PIPE_LIST_AUX_PRIMREC 2u  // aux indexes the primitive's record (view_by_id)
 #define PIPE_LIST_HEAD       0x80000000u
 #define PIPE_LIST_AUX_MASK   0x7fffffffu
 

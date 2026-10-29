@@ -1,0 +1,25 @@
+#version 460
+#extension GL_EXT_mesh_shader : require
+#extension GL_GOOGLE_include_directive : require
+#include "mesh_common.glsl"
+
+// Points: a 4-pixel point in the middle of the primitive's cell.
+layout(local_size_x = 32) in;
+layout(points, max_vertices = 32, max_primitives = 32) out;
+layout(location = 0) flat out uint vcol[];
+
+void main()
+{
+   const uint w = wg_linear();
+   const uint n = wg_prims(w);
+   SetMeshOutputsEXT(n, n);
+   const uint k = gl_LocalInvocationIndex;
+   if (k < n) {
+      const uint c = prim_cell(w, k);
+      const vec2 o = vec2(float(c % 4u) * 16.0, float(c / 4u) * 16.0);
+      gl_MeshVerticesEXT[k].gl_Position = ndc(o + vec2(8.0, 8.0));
+      gl_MeshVerticesEXT[k].gl_PointSize = 4.0;
+      vcol[k] = prim_colour(w, k);
+      gl_PrimitivePointIndicesEXT[k] = k;
+   }
+}

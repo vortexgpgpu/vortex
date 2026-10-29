@@ -1,0 +1,22 @@
+#version 460
+#extension GL_EXT_mesh_shader : require
+#extension GL_GOOGLE_include_directive : require
+#include "mesh_common.glsl"
+
+// Every workgroup emits the same 32 triangles' worth: a static count.
+layout(local_size_x = 32) in;
+layout(triangles, max_vertices = 96, max_primitives = 32) out;
+layout(location = 0) flat out uint vcol[];
+
+void main()
+{
+   const uint w = wg_linear();
+   SetMeshOutputsEXT(96u, 32u);
+   const uint k = gl_LocalInvocationIndex;
+   const uint c = prim_cell(w, k);
+   for (uint v = 0u; v < 3u; v++) {
+      gl_MeshVerticesEXT[3u * k + v].gl_Position = cell_vertex(c, v);
+      vcol[3u * k + v] = prim_colour(w, k);
+   }
+   gl_PrimitiveTriangleIndicesEXT[k] = uvec3(3u * k, 3u * k + 1u, 3u * k + 2u);
+}

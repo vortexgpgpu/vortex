@@ -8,38 +8,13 @@
 #include <vx_spawn2.h>
 #include <gfx_frontend_abi.h>
 #include <gfx_fs_desc_abi.h>   // GFX_QC_*
+#include "gfx_cta_k.h"
 
 namespace gfx_scan {
 
 static inline uint32_t scan_umin(uint32_t a, uint32_t b) { return a < b ? a : b; }
 
-// The CTA's exclusive scan of one value per thread, through 2 * T words of
-// scratch; *total receives the CTA's sum. Every thread of the CTA calls it.
-static inline uint32_t cta_exclusive(uint32_t* scratch, uint32_t tid, uint32_t T, uint32_t v,
-                                     uint32_t* total) {
-  uint32_t* a = scratch;
-  uint32_t* b = scratch + T;
-  a[tid] = v;
-  __syncthreads();
-  for (uint32_t d = 1; d < T; d <<= 1) {
-    b[tid] = a[tid] + (tid >= d ? a[tid - d] : 0u);
-    __syncthreads();
-    uint32_t* t = a; a = b; b = t;
-  }
-  const uint32_t incl = a[tid];
-  *total = a[T - 1];
-  __syncthreads();
-  return incl - v;
-}
-
-// Add n to 64-bit counter `slot` of a query counter block, from one thread.
-static inline void query_add(uint64_t block, uint32_t slot, uint32_t n) {
-  auto w = reinterpret_cast<uint32_t*>(block) + 2u * slot;
-  const uint32_t old = __atomic_fetch_add(&w[0], n, __ATOMIC_RELAXED);
-  if (old + n < old) {
-    __atomic_fetch_add(&w[1], 1u, __ATOMIC_RELAXED);
-  }
-}
+using gfx_cta::query_add;
 
 // Commit a geometry stage's capture: each captured stream writes the primitives
 // it made -- the total of its lane, its rank among the scanned `streams` -- that
@@ -99,7 +74,7 @@ __kernel void scan_k(pipe_scan_arg_t* __UNIFORM__ arg) {
       uint32_t s = 0;
       for (uint32_t i = a; i < b; ++i) s += in[(size_t)i * L + l];
       uint32_t total;
-      uint32_t acc = cta_exclusive(scratch, tid, T, s, &total);
+      uint32_t acc = gfx_cta::exclusive(scratch, tid, T, s, &total);
       if (arg->stage == PIPE_SCAN_UP) {
         if (tid == 0) part[j * L + l] = total;
         continue;
@@ -123,7 +98,7 @@ __kernel void scan_k(pipe_scan_arg_t* __UNIFORM__ arg) {
       uint32_t s = 0;
       for (uint32_t i = a; i < b; ++i) s += part[i * L + l];
       uint32_t total;
-      uint32_t acc = cta_exclusive(scratch, tid, T, s, &total);
+      uint32_t acc = gfx_cta::exclusive(scratch, tid, T, s, &total);
       for (uint32_t i = a; i < b; ++i) {
         const uint32_t v = part[i * L + l];
         part[i * L + l] = acc;

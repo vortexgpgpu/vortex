@@ -1,0 +1,21 @@
+#version 460
+#extension GL_EXT_mesh_shader : require
+#extension GL_GOOGLE_include_directive : require
+#include "mesh_common.glsl"
+
+// One workgroup, one triangle, its count static.
+layout(local_size_x = 4) in;
+layout(triangles, max_vertices = 3, max_primitives = 1) out;
+layout(location = 0) flat out uint vcol[];
+
+void main()
+{
+   SetMeshOutputsEXT(3u, 1u);
+   const uint i = gl_LocalInvocationIndex;
+   if (i < 3u) {
+      gl_MeshVerticesEXT[i].gl_Position = cell_vertex(5u, i);
+      vcol[i] = prim_colour(0u, 0u);
+   }
+   if (i == 0u)
+      gl_PrimitiveTriangleIndicesEXT[0] = uvec3(0u, 1u, 2u);
+}

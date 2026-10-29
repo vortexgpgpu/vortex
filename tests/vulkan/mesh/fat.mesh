@@ -1,0 +1,30 @@
+#version 460
+#extension GL_EXT_mesh_shader : require
+#extension GL_GOOGLE_include_directive : require
+#include "mesh_common.glsl"
+
+// Workgroups whose declared outputs take so much memory that a draw of them
+// runs in several windows: 256 vertices of nine slots each and 256
+// primitives, of which each workgroup emits up to three.
+layout(local_size_x = 32) in;
+layout(triangles, max_vertices = 256, max_primitives = 256) out;
+layout(location = 0) flat out uint vcol[];
+layout(location = 1) out vec4 pad[][8];
+
+void main()
+{
+   const uint w = wg_linear();
+   const uint n = wg_prims(w) % 4u;
+   SetMeshOutputsEXT(3u * n, n);
+   const uint k = gl_LocalInvocationIndex;
+   if (k < n) {
+      const uint c = prim_cell(w, k);
+      for (uint v = 0u; v < 3u; v++) {
+         gl_MeshVerticesEXT[3u * k + v].gl_Position = cell_vertex(c, v);
+         vcol[3u * k + v] = prim_colour(w, k);
+         for (uint s = 0u; s < 8u; s++)
+            pad[3u * k + v][s] = vec4(float(s));
+      }
+      gl_PrimitiveTriangleIndicesEXT[k] = uvec3(3u * k, 3u * k + 1u, 3u * k + 2u);
+   }
+}

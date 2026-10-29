@@ -1,0 +1,25 @@
+#version 460
+#extension GL_EXT_mesh_shader : require
+#extension GL_GOOGLE_include_directive : require
+#include "mesh_common.glsl"
+
+// Each workgroup of a 3D grid emits its own count of triangles, each in its
+// own vertices, fewer invocations than primitives.
+layout(local_size_x = 8) in;
+layout(triangles, max_vertices = 96, max_primitives = 32) out;
+layout(location = 0) flat out uint vcol[];
+
+void main()
+{
+   const uint w = wg_linear();
+   const uint n = wg_prims(w);
+   SetMeshOutputsEXT(3u * n, n);
+   for (uint k = gl_LocalInvocationIndex; k < n; k += 8u) {
+      const uint c = prim_cell(w, k);
+      for (uint v = 0u; v < 3u; v++) {
+         gl_MeshVerticesEXT[3u * k + v].gl_Position = cell_vertex(c, v);
+         vcol[3u * k + v] = prim_colour(w, k);
+      }
+      gl_PrimitiveTriangleIndicesEXT[k] = uvec3(3u * k, 3u * k + 1u, 3u * k + 2u);
+   }
+}

@@ -1,0 +1,36 @@
+#version 460
+#extension GL_EXT_mesh_shader : require
+#extension GL_GOOGLE_include_directive : require
+#include "mesh_common.glsl"
+
+// taskbig.task's mesh workgroups: up to two triangles each, a payload whose
+// stamps are wrong drawing them magenta.
+layout(local_size_x = 4) in;
+layout(triangles, max_vertices = 6, max_primitives = 2) out;
+layout(location = 0) flat out uint vcol[];
+
+struct Payload {
+   uint first;
+   uint fill[4094];
+   uint task;
+};
+taskPayloadSharedEXT Payload td;
+
+void main()
+{
+   const uint w = td.first + wg_linear();
+   const uint n = wg_prims(w) % 3u;
+   const uint t = td.task;
+   const bool ok = td.fill[0] == t && td.fill[2047] == (t ^ 2047u) &&
+                   td.fill[4093] == (t ^ 4093u);
+   SetMeshOutputsEXT(3u * n, n);
+   const uint k = gl_LocalInvocationIndex;
+   if (k < n) {
+      const uint c = prim_cell(w, k);
+      for (uint v = 0u; v < 3u; v++) {
+         gl_MeshVerticesEXT[3u * k + v].gl_Position = cell_vertex(c, v);
+         vcol[3u * k + v] = ok ? prim_colour(w, k) : 0xffff00ffu;
+      }
+      gl_PrimitiveTriangleIndicesEXT[k] = uvec3(3u * k, 3u * k + 1u, 3u * k + 2u);
+   }
+}

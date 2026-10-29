@@ -1,0 +1,30 @@
+#version 460
+#extension GL_EXT_mesh_shader : require
+
+// Many tasks, each with the largest payload: task t launches t % 3 mesh
+// workgroups and stamps words across its payload, which they check.
+layout(local_size_x = 4) in;
+
+struct Payload {
+   uint first;
+   uint fill[4094];
+   uint task;
+};
+taskPayloadSharedEXT Payload td;
+
+void main()
+{
+   const uint t = gl_WorkGroupID.x;
+   const uint k = gl_LocalInvocationIndex;
+   // The workgroups the tasks before t launch: 3 per whole cycle of three.
+   const uint first = 3u * (t / 3u) + ((t % 3u) == 2u ? 1u : 0u);
+   if (k == 0u) {
+      td.first = first;
+      td.task = t;
+   }
+   const uint stamp[3] = uint[3](0u, 2047u, 4093u);
+   if (k < 3u)
+      td.fill[stamp[k]] = t ^ stamp[k];
+   barrier();
+   EmitMeshTasksEXT(t % 3u, 1u, 1u);
+}

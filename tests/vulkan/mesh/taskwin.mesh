@@ -1,0 +1,34 @@
+#version 460
+#extension GL_EXT_mesh_shader : require
+#extension GL_GOOGLE_include_directive : require
+#include "mesh_common.glsl"
+
+// taskwin.task's mesh workgroups, each declaring fat.mesh's outputs, so the
+// draw's workgroups take several windows.
+layout(local_size_x = 32) in;
+layout(triangles, max_vertices = 256, max_primitives = 256) out;
+layout(location = 0) flat out uint vcol[];
+layout(location = 1) out vec4 pad[][8];
+
+struct Payload {
+   uint first;
+};
+taskPayloadSharedEXT Payload td;
+
+void main()
+{
+   const uint w = td.first + wg_linear();
+   const uint n = wg_prims(w) % 4u;
+   SetMeshOutputsEXT(3u * n, n);
+   const uint k = gl_LocalInvocationIndex;
+   if (k < n) {
+      const uint c = prim_cell(w, k);
+      for (uint v = 0u; v < 3u; v++) {
+         gl_MeshVerticesEXT[3u * k + v].gl_Position = cell_vertex(c, v);
+         vcol[3u * k + v] = prim_colour(w, k);
+         for (uint s = 0u; s < 8u; s++)
+            pad[3u * k + v][s] = vec4(float(s));
+      }
+      gl_PrimitiveTriangleIndicesEXT[k] = uvec3(3u * k, 3u * k + 1u, 3u * k + 2u);
+   }
+}
