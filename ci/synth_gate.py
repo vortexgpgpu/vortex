@@ -1330,6 +1330,40 @@ def report(results, env, args, gated, tool, record=False):
     return failures
 
 
+def compare_against(results, ref_dir, tool):
+    """Each finished build's Beacon end points against the same build in
+    ref_dir, register by register; return the builds a register got deeper
+    in, as failing verdicts."""
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "beacon.py")
+    failures = []
+    for r in results:
+        b, work = r["build"], r.get("work")
+        if not r["metrics"] or not work:
+            continue
+        ref = os.path.join(build_work(b, ref_dir, tool), "beacon")
+        cur = os.path.join(work, "beacon")
+        if not os.path.exists(os.path.join(ref, "endpoints.csv")):
+            print("\n%s: no reference run in %s" % (b["id"], ref))
+            continue
+        out = os.path.join(work, "beacon_diff.txt")
+        with open(out, "w") as fh:
+            m = r["metrics"]
+            rc = subprocess.run([sys.executable, script, "diff", ref, cur,
+                                 "--min-levels", str(m.get("watch_levels") or 8),
+                                 "--fix-levels", str(m.get("fix_levels") or 12)],
+                                stdout=fh, stderr=subprocess.STDOUT).returncode
+        with open(out) as fh:
+            head = fh.readline().strip()
+        print("\n%s against %s: %s%s\n  see %s"
+              % (b["id"], ref_dir, head, " -- REGRESSION" if rc == 1 else "", out))
+        if rc == 1:
+            failures.append((b["id"], "DEEPER", ["a register got deeper than in "
+                                                 "the reference: %s" % out]))
+        elif rc:
+            failures.append((b["id"], "BUILD-FAIL", ["beacon.py diff failed: %s" % out]))
+    return failures
+
+
 # ---------------------------------------------------------------------------
 
 def main(argv=None, default_tool="xilinx"):
@@ -1371,6 +1405,12 @@ def main(argv=None, default_tool="xilinx"):
     ap.add_argument("--build-dir", metavar="DIR",
                     help="build tree to synthesize in (default: "
                          "<source>/build<xlen>_<gate>, configured on demand)")
+    ap.add_argument("--against", metavar="DIR",
+                    help="Beacon only: the build tree of a reference run, "
+                         "typically the parent revision's; each build's end "
+                         "points are compared register by register with the "
+                         "same build there (ci/beacon.py diff), and a register "
+                         "that got deeper fails the run")
     ap.add_argument("--xlen", type=int, default=32, choices=(32, 64),
                     help="ISA width (default: 32)")
     ap.add_argument("--opt-level", type=int, default=3, metavar="N",
@@ -1441,6 +1481,8 @@ def main(argv=None, default_tool="xilinx"):
         return 0
 
     tool.check_env()
+    if args.against and tool.name != "beacon":
+        sys.exit("ERROR: --against compares Beacon runs; use it with --tool=beacon")
 
     if args.jobs < 1:
         sys.exit("ERROR: --jobs must be >= 1")
@@ -1467,6 +1509,8 @@ def main(argv=None, default_tool="xilinx"):
     gated = tuple(m for m in (args.gate.split(",") if args.gate else tool.gated) if m)
     outcomes = report(results, env, args, gated, tool, args.update_baseline)
     failures = [o for o in outcomes if o[1] not in PASSING]
+    if args.against:
+        failures += compare_against(results, args.against, tool)
 
     ok = [r for r in results if r["metrics"]]
     if args.update_baseline and ok:

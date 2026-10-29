@@ -21,6 +21,8 @@ read its results by RTL unit or against Vivado.
                 Vivado's failing ones
   paths         every deep path op by op, by RTL unit (one per pair of
                 registers, generate copies folded)
+  diff          a change against its parent revision: the registers that got
+                deeper or shallower, by register and by unit
   validate      agreement per register with a Vivado end point table
   retime-split  the same agreement, split by whether Vivado retimed the paths
   ports         the depth at the ports of chosen modules' instances, by unit
@@ -32,6 +34,7 @@ read its results by RTL unit or against Vivado.
       top=VX_socket__lift black-boxes=VX_core__lift
   ci/beacon.py summarize runs/full --min-levels 12
   ci/beacon.py paths runs/full --unit lsu_unit
+  ci/beacon.py diff runs/parent runs/change --min-levels 8
   ci/beacon.py validate runs/socket ep.csv --native VX_socket__lift=dut
   ci/beacon.py run --keep VX_elastic_buffer design.mlir runs/eb \\
       port-modules=VX_elastic_buffer
@@ -62,9 +65,11 @@ FOLD_CLASSES = {
     'foldsim_target': 'foldsim_target_model_copy',
 }
 
+# Vivado appends replication and retiming suffixes in any order
+# (_rep__0_replica_1).
 VIVADO_CELL = re.compile(
-    r'_reg((\[\w+\])*(_replica(_\d+)?)?(_[fb]ret(_+\d+)?)*(_rep(_+\d+)?)?'
-    r'|_\d+(_\d+_\d+_\d+)?|_bram_\d+)$')
+    r'_reg((\[\w+\])*(_replica(_\d+)?|_[fb]ret(_+\d+)?|_rep(_+\d+)?)*'
+    r'|_\d+(_\d+)*|_bram_\d+)$')
 FOLD_SUFFIX = re.compile(
     r'(_ext(_\d+)?|_fold|_read(_\d+)?|_[fb]ret(_\d+)?|_replica(_\d+)?)+$')
 FOLD_SHELL = re.compile(r'^fold\d+_')
@@ -82,6 +87,9 @@ def ep_key(cell_path, native):
     Native: <harness>/<path>/<cell>[/<primitive>]/<pin>, <class> being the
     harness prefix.
     """
+    # The halves of a dual-port LUTRAM (RAM32X1D/RAM64X1D: DP, SP) sit
+    # below the memory cell.
+    cell_path = re.sub(r'/(DP|SP)(/[^/]+)$', r'\2', cell_path)
     parts = cell_path.split('/')
     if native:
         cls = parts[0]
@@ -224,9 +232,14 @@ def cmd_validate(args):
     inst = load_instances(f'{args.run_dir}/instances.csv')
     classes = FOLD_CLASSES
     sub = None
+    harness = ''
     if args.native:
         module, prefix = args.native.split('=')
         prefix, _, sub = prefix.partition(':')
+        # A DUT build's table names its cells from the DUT's top down, with
+        # no harness prefix.
+        harness = '' if prefix else 'dut/'
+        prefix = prefix or 'dut'
         classes = {module: prefix}
     paths = class_paths(inst, classes)
 
@@ -284,7 +297,7 @@ def cmd_validate(args):
         parts = k.split('/')
         return any((cls, '/'.join(parts[:i])) in ips for i in range(1, len(parts)))
 
-    viv = collections.defaultdict(lambda: [0, 0.0, 0])  # max lv, min slack, n
+    viv = collections.defaultdict(lambda: [0, float('inf'), 0])  # max lv, min slack, n
     rows = unmatched_rows = shell_rows = ip_rows = 0
     unmatched = collections.Counter()
     with open(args.ep) as f:
@@ -292,7 +305,7 @@ def cmd_validate(args):
         next(r)
         for slack, levels, logic, net, start, end in r:
             rows += 1
-            key = ep_key(end, args.native)
+            key = ep_key(harness + end, args.native)
             if key is None or key[0] not in classes.values():
                 shell_rows += 1
                 continue
@@ -303,6 +316,10 @@ def cmd_validate(args):
                 # The read register of a synchronous RAM is the memory's
                 # read port in the design.
                 key = (key[0], key[1][:-len('_rdata')])
+            if (key not in ours and key[1].endswith('_rdata_r')
+                    and (key[0], key[1][:-len('_rdata_r')] + '_ram') in ours):
+                # So is the registered read of a synchronous LUTRAM.
+                key = (key[0], key[1][:-len('_rdata_r')] + '_ram')
             if key not in ours:
                 key = fallback(key)
             if key not in ours:
@@ -344,12 +361,11 @@ def cmd_validate(args):
                   f'p10 {np.percentile(sel, 10):5.1f} p90 {np.percentile(sel, 90):5.1f}')
 
     if args.native:
-        # The ep.csv of a gate lists every failing end point, so a measured
-        # register without one meets timing.
+        # The table lists the end points near or past the period; a measured
+        # register fails when its worst slack is negative.
         scr = np.array([v[0] for v in ours.values()])
-        fails = np.array([k in viv for k in ours])
-        print('\nflag registers at >= T levels (gate lists all failing end '
-              'points):')
+        fails = np.array([k in viv and viv[k][1] < 0 for k in ours])
+        print('\nflag registers at >= T levels (failing: negative slack):')
         print('     T  flagged  precision  recall')
         for t in range(4, 21, 2):
             flagged = scr >= t
@@ -499,6 +515,119 @@ def cmd_ports(args):
             print(f'       {direction:>3} {port:24s} {levels:3d}')
 
 
+BIT_INDEX = re.compile(r'(\[\d+\])+$')
+
+
+def register_depths(run_dir, metric):
+    """register -> (levels, deepest start) over its bits, for a run."""
+    inst = load_instances(f'{run_dir}/instances.csv')
+    paths = class_paths(inst, FOLD_CLASSES)
+    regs = {}
+    for row in endpoints(run_dir):
+        levels = int(row[metric])
+        cls, p = paths[int(row['end_inst'])]
+        end = row['end']
+        full = f'{p}/{end}' if p else end
+        key = (cls or '', BIT_INDEX.sub('', full))
+        if key not in regs or levels > regs[key][0]:
+            sp = paths[int(row['start_inst'])][1]
+            regs[key] = (levels, f'{sp}/{row["start"]}' if sp else row['start'])
+    return regs
+
+
+def cmd_diff(args):
+    """A change's effect on depth: every register at or above --min-levels in
+    either run whose depth moved, worst first. Exits 1 on a regression: a
+    register --fail-delta or more levels deeper, one that reaches --fix-levels
+    from below, or one only the change has at --fix-levels.
+
+    Against routed Vivado runs of the same DUT's revisions, a register that
+    got four or more levels deeper lost slack every time, while a rise of one
+    to three is within Vivado's own spread from run to run. The mean depth of
+    the deepest registers tracks the change in worst slack; the single deepest
+    one does not."""
+    before = register_depths(args.before, args.metric)
+    after = register_depths(args.after, args.metric)
+
+    def deepest(regs):
+        return max((v[0] for v in regs.values()), default=0)
+
+    def watched(regs):
+        return sum(1 for v in regs.values() if v[0] >= args.min_levels)
+
+    def top_mean(regs, n=50):
+        depths = sorted((v[0] for v in regs.values()), reverse=True)[:n]
+        return sum(depths) / len(depths) if depths else 0.0
+
+    print(f'deepest path {deepest(before)} -> {deepest(after)} levels; '
+          f'mean of the 50 deepest {top_mean(before):.1f} -> {top_mean(after):.1f}; '
+          f'registers at or above {args.min_levels} levels '
+          f'{watched(before)} -> {watched(after)}')
+
+    deeper, shallower, new, gone = [], [], [], []
+    for key, (lv, start) in after.items():
+        if key not in before:
+            if lv >= args.min_levels:
+                new.append((lv, key, start))
+            continue
+        old = before[key][0]
+        if lv > old and lv >= args.min_levels:
+            deeper.append((lv, old, key, start))
+        elif lv < old and old >= args.min_levels:
+            shallower.append((lv, old, key, start))
+    for key, (lv, start) in before.items():
+        if key not in after and lv >= args.min_levels:
+            gone.append((lv, key, start))
+
+    def name(key):
+        return f'{key[0]}: {key[1]}' if key[0] else key[1]
+
+    def show(title, rows, moved):
+        if not rows:
+            return
+        print(f'\n{title} ({len(rows)})')
+        for row in rows[:args.top]:
+            if moved:
+                lv, old, key, start = row
+                print(f'{old:4d} -> {lv:<4d} {name(key)}')
+            else:
+                lv, key, start = row
+                print(f'{lv:12d} {name(key)}')
+            print(f'{"":>13}from {start}')
+
+    deeper.sort(key=lambda r: (-r[0], r[1] - r[0]))
+    shallower.sort(key=lambda r: (-r[1], r[0] - r[1]))
+    new.sort(key=lambda r: -r[0])
+    gone.sort(key=lambda r: -r[0])
+    regress = [r for r in deeper if r[0] - r[1] >= args.fail_delta
+               or (r[0] >= args.fix_levels > r[1])]
+    regress_keys = {r[2] for r in regress}
+    show(f'REGRESSION: {args.fail_delta} or more levels deeper, or now at '
+         f'{args.fix_levels}', regress, True)
+    show('deeper by less (watch)', [r for r in deeper if r[2] not in regress_keys], True)
+    show('new at or above the watch', new, False)
+    show('shallower', shallower, True)
+    show('no longer present', gone, False)
+
+    # The same movement by unit: the deepest register of each unit.
+    units = collections.defaultdict(lambda: [0, 0])
+    for i, regs in enumerate((before, after)):
+        for (cls, reg), (lv, _) in regs.items():
+            u = units[(cls, unit(norm(reg)))]
+            u[i] = max(u[i], lv)
+    moved = sorted(((b, a, k) for k, (b, a) in units.items()
+                    if a != b and max(a, b) >= args.min_levels),
+                   key=lambda r: (-max(r[0], r[1]), r[0] - r[1]))
+    if moved:
+        print(f'\nunits whose deepest register moved ({len(moved)})')
+        for b, a, (cls, u) in moved[:args.top]:
+            print(f'{b:4d} -> {a:<4d} {cls + ": " if cls else ""}{u}')
+
+    # A register the reference lacks may be a renamed one, so it fails only at
+    # the fix threshold, as a new unit does in logic_gate.
+    return 1 if regress or any(r[0] >= args.fix_levels for r in new) else 0
+
+
 def cmd_buffers(args):
     """VX_elastic_buffer instances whose ready chain or output is deep.
 
@@ -623,7 +752,8 @@ def main():
                    help='native gate: the measured top and the harness '
                    'prefix of its cells (e.g. VX_socket__lift=dut); with '
                    'SUBPATH, only the measured end points below it, which '
-                   'the harness instantiates as PREFIX')
+                   'the harness instantiates as PREFIX; an empty PREFIX (VX_core_top=) for '
+                   'a DUT build, whose cells have no harness prefix')
     p.add_argument('--json', help='also write the agreement to this file')
     p.add_argument('--metric', default='levels', choices=['levels', 'retimed'],
                    help="the run's column to compare")
@@ -634,6 +764,22 @@ def main():
     p.add_argument('--min-levels', type=int, default=8)
     p.add_argument('--top', type=int, default=40)
     p.set_defaults(fn=cmd_ports)
+
+    p = sub.add_parser("diff", help="a change's effect on depth, register by register")
+    p.add_argument('before', help="run directory of the reference (the parent revision)")
+    p.add_argument('after', help="run directory of the change")
+    p.add_argument('--min-levels', type=int, default=8,
+                   help="watch registers at or above this depth in either run")
+    p.add_argument('--fix-levels', type=int, default=12,
+                   help="a register that reaches this depth from below, or "
+                   "only the change has at it, fails")
+    p.add_argument('--fail-delta', type=int, default=4,
+                   help="a register this many levels deeper fails; a smaller "
+                   "rise is listed to watch")
+    p.add_argument('--top', type=int, default=40)
+    p.add_argument('--metric', default='levels', choices=['levels', 'retimed'],
+                   help="the runs' column to compare")
+    p.set_defaults(fn=cmd_diff)
 
     p = sub.add_parser("buffers", help="elastic buffers that pass deep paths")
     p.add_argument('run_dir')

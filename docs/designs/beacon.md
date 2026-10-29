@@ -358,18 +358,49 @@ is the CIRCT and foldsim versions, `DEVICE` and `XLEN`: a new foldsim reads
 as STALE, not as a regression. Baselines are golden data, re-recorded only
 by a human (`--update-baseline`), as for the other gates.
 
-### 6.3 RTL timing work
+### 6.3 RTL timing work: Beacon first
 
-Beacon first, then Vivado:
+Beacon is the inner loop of any RTL change that can move timing. A DUT takes
+minutes in Beacon and hours in Vivado or Yosys, so a deeper path is found and
+fixed while the change is still open, and synthesis runs once, to confirm.
 
-```bash
-ci/beacon.py run gen/design.mlir runs/full
-ci/beacon.py summarize runs/full --min-levels 12           # the fix list, by unit
-```
+1. **Reference.** Beacon on the parent revision, once per base, in a build
+   tree of its own:
 
-Beacon ranks the units; one Vivado run confirms the fix. Compare a fix
-against a native gate (`hw/syn/xilinx/dut` or the OOC gates), not the
-folded design (§9).
+   ```bash
+   git worktree add ../ref HEAD
+   ../ref/ci/logic_gate.py -b core -b lmem --build-dir $PWD/build32_beacon_ref
+   ```
+
+2. **Change.** The same builds on the working tree, each compared with the
+   reference register by register:
+
+   ```bash
+   ci/logic_gate.py -b core -b lmem --against build32_beacon_ref
+   ```
+
+   Besides the per-unit verdict against the golden baseline, each build
+   writes `beacon_diff.txt` (`ci/beacon.py diff`). It lists the registers
+   that got deeper, new deep registers, and the ones that got shallower, then
+   the units whose deepest register moved. A register that got deeper fails
+   the run (`DEEPER`), and so does a new one at the fix threshold (12). A new
+   one below it is listed but passes, since a rename looks the same.
+
+3. **Fix.** `ci/beacon.py paths <build>/beacon --unit <unit>` prints a deep
+   unit's paths op by op. Edit, and repeat step 2 until nothing got deeper,
+   or until each deeper path is one the change intends.
+
+4. **Confirm.** Run synthesis once per change, not once per edit: the
+   `fpga_gate` or `asic_gate` builds of the DUTs whose depth moved. Then feed
+   the result back. `ci/beacon.py validate <build>/beacon ep.csv` compares the
+   run with Vivado's end point table, and a disagreement there is a Beacon bug
+   to fix in foldsim.
+
+Beacon counts logic levels; it does not see wire delay, placement, SLR
+crossings, congestion or area. A change that moves those (a wide fan-out, a
+floorplan, a larger RAM) still needs synthesis before it lands. Compare a fix
+against a native gate (`hw/syn/xilinx/dut` or the OOC gates), not the folded
+design (§9).
 
 ## 7. Validation
 
