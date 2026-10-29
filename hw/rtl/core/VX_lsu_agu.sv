@@ -23,9 +23,9 @@
 // and a single carry-propagate adder serves both. Addresses in the per-thread
 // stack window are then interleaved by word across threads.
 //
-// This module sits between the issue dispatch registers and the LSU address
-// stage register, so every full-width operation here is reduced to the
-// narrowest width that is provably equivalent; see g_stack_interleave.
+// This module sits between the LSU lane dispatch registers and the memory
+// scheduler's request queue, so every full-width operation here is reduced to
+// the narrowest width that is provably equivalent; see g_stack_interleave.
 
 module VX_lsu_agu import VX_gpu_pkg::*; (
     input  wire [`VX_CFG_XLEN-1:0] base,    // rs1

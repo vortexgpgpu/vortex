@@ -58,11 +58,10 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
         .data_t (lsu_execute_t)
     ) per_block_execute_if[BLOCK_SIZE]();
 
-    // Each LSU block registers its dispatch in its address stage.
     VX_lane_dispatch #(
         .BLOCK_SIZE (BLOCK_SIZE),
         .NUM_LANES  (NUM_LANES),
-        .OUT_BUF    (0)
+        .OUT_BUF    (3)
     ) lane_dispatch (
         .clk        (clk),
         .reset      (reset),

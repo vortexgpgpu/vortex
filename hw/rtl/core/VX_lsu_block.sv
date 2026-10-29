@@ -80,78 +80,36 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
         .data_t (lsu_result_t)
     ) result_no_rsp_if();
 
-    // Address stage: the per-lane AGUs read the operands as dispatched, and the
-    // stage register holds the generated addresses, so the request into the
-    // memory scheduler starts from flops. The third operand slot is read only
-    // by compare-and-swap, which needs the atomic extension to exist at all.
-    typedef struct packed {
-        lsu_header_t                            header;
-        logic [INST_OP_BITS-1:0]                op_type;
-        op_args_t                               op_args;
-        logic [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] addr;
-        logic [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] rs2_data;
-    `ifdef VX_CFG_EXT_A_ENABLE
-    `ifdef VX_CFG_EXT_ZACAS_ENABLE
-        logic [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] rs3_data;
-    `endif
-    `endif
-    } lsu_req_t;
+    // The third operand slot is read only by compare-and-swap, which needs
+    // the atomic extension to exist at all.
+`ifdef VX_CFG_EXT_A_ENABLE
+`ifndef VX_CFG_EXT_ZACAS_ENABLE
+    `UNUSED_VAR (execute_if.data.rs3_data)
+`endif
+`else
+    `UNUSED_VAR (execute_if.data.rs3_data)
+`endif
 
-    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] agu_addr;
+    // full address calculation — per-lane AGU (all address forms live in
+    // VX_lsu_agu; this slice contains no address arithmetic).
+
+    wire req_is_fence, rsp_is_fence;
+    wire req_fence_io = inst_lsu_is_fence_io(execute_if.data.op_type);
+    // a memory fence that orders only later reads (acquire) or only earlier
+    // writes (release)
+    wire req_fence_acq = ~req_fence_io && ~execute_if.data.op_args.lsu.amo_rl;
+    wire req_fence_rel = ~req_fence_io && ~execute_if.data.op_args.lsu.amo_aq;
+
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] full_addr;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_full_addr
         VX_lsu_agu lsu_agu (
             .base   (execute_if.data.rs1_data[i]),
             .stride (execute_if.data.rs2_data[i]),
             .offset (execute_if.data.op_args.lsu.offset),
             .pack   (execute_if.data.op_args.lsu.pack),
-            .addr   (agu_addr[i])
+            .addr   (full_addr[i])
         );
     end
-
-    lsu_req_t agu_data;
-    assign agu_data.header   = execute_if.data.header;
-    assign agu_data.op_type  = execute_if.data.op_type;
-    assign agu_data.op_args  = execute_if.data.op_args;
-    assign agu_data.addr     = agu_addr;
-    assign agu_data.rs2_data = execute_if.data.rs2_data;
-`ifdef VX_CFG_EXT_A_ENABLE
-`ifdef VX_CFG_EXT_ZACAS_ENABLE
-    assign agu_data.rs3_data = execute_if.data.rs3_data;
-`else
-    `UNUSED_VAR (execute_if.data.rs3_data)
-`endif
-`else
-    `UNUSED_VAR (execute_if.data.rs3_data)
-`endif
-
-    wire      req_valid;
-    lsu_req_t req_data;
-    wire      req_ready;
-
-    VX_elastic_buffer #(
-        .DATAW   ($bits(lsu_req_t)),
-        .SIZE    (2),
-        .OUT_REG (1)
-    ) agu_buf (
-        .clk       (clk),
-        .reset     (reset),
-        .valid_in  (execute_if.valid),
-        .ready_in  (execute_if.ready),
-        .data_in   (agu_data),
-        .data_out  (req_data),
-        .valid_out (req_valid),
-        .ready_out (req_ready)
-    );
-    `UNUSED_VAR ({req_data.op_args.lsu.offset, req_data.op_args.lsu.pack})
-
-    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] full_addr = req_data.addr;
-
-    wire req_is_fence, rsp_is_fence;
-    wire req_fence_io = inst_lsu_is_fence_io(req_data.op_type);
-    // a memory fence that orders only later reads (acquire) or only earlier
-    // writes (release)
-    wire req_fence_acq = ~req_fence_io && ~req_data.op_args.lsu.amo_rl;
-    wire req_fence_rel = ~req_fence_io && ~req_data.op_args.lsu.amo_aq;
 
     // address type + AMO classification — per-lane mem_bus_attr_t
     // carried through the scheduler's USER channel and out via the
@@ -199,20 +157,20 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
     `endif
     `ifdef VX_CFG_EXT_A_ENABLE
         amo_req_t lane_amo;
-        assign lane_amo.amo_valid    = req_data.op_args.lsu.amo_valid;
-        assign lane_amo.amo_op       = req_data.op_args.lsu.amo_op;
+        assign lane_amo.amo_valid    = execute_if.data.op_args.lsu.amo_valid;
+        assign lane_amo.amo_op       = execute_if.data.op_args.lsu.amo_op;
         // amo_unsigned distinguishes signed/unsigned AMOMIN/MAX variants
         // (decoder collapses MINU/MAXU into MIN/MAX + this bit).
-        assign lane_amo.amo_unsigned = req_data.op_args.lsu.amo_unsigned;
+        assign lane_amo.amo_unsigned = execute_if.data.op_args.lsu.amo_unsigned;
     `ifdef VX_CFG_EXT_ZACAS_ENABLE
         // Compare-and-swap comparand. The decoder routes rd into the third
         // operand slot for it; every other atomic leaves the slot unread.
-        assign lane_amo.amo_cmp      = req_data.rs3_data[i];
+        assign lane_amo.amo_cmp      = execute_if.data.rs3_data[i];
     `endif
         // make_hart_id(cid, wid, tid) — packed concatenation, low bits = tid.
         assign lane_amo.hart_id      = HART_ID_WIDTH'(
             (HART_ID_WIDTH'(core_id) << (NW_BITS + NT_BITS))
-          | (HART_ID_WIDTH'(req_data.header.wid) << NT_BITS)
+          | (HART_ID_WIDTH'(execute_if.data.header.wid) << NT_BITS)
           |  HART_ID_WIDTH'(i)
         );
         assign mem_req_attr_struct[i].amo = lane_amo;
@@ -255,13 +213,13 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
 
     reg fence_lock;
 
-    assign req_is_fence = inst_lsu_is_fence(req_data.op_type);
+    assign req_is_fence = inst_lsu_is_fence(execute_if.data.op_type);
 
     always @(posedge clk) begin
         if (reset) begin
             fence_lock <= 0;
         end else begin
-            if (mem_req_fire && req_is_fence && req_data.header.eop) begin
+            if (mem_req_fire && req_is_fence && execute_if.data.header.eop) begin
                 fence_lock <= 1;
             end
             if (mem_rsp_fire && rsp_is_fence && mem_rsp_eop_pkt) begin
@@ -270,31 +228,31 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
         end
     end
 
-    wire req_skip = req_is_fence && ~req_data.header.eop;
-    wire no_rsp_buf_enable = (mem_req_rw && ~req_data.header.wb) || req_skip;
+    wire req_skip = req_is_fence && ~execute_if.data.header.eop;
+    wire no_rsp_buf_enable = (mem_req_rw && ~execute_if.data.header.wb) || req_skip;
 
-    assign mem_req_valid = req_valid
+    assign mem_req_valid = execute_if.valid
                         && ~req_skip
                         && ~(no_rsp_buf_enable && ~no_rsp_buf_ready)
                         && ~fence_lock;
 
-    assign no_rsp_buf_valid = req_valid
+    assign no_rsp_buf_valid = execute_if.valid
                            && no_rsp_buf_enable
                            && (req_skip || mem_req_ready)
                            && ~fence_lock;
 
-    assign req_ready = (mem_req_ready || req_skip)
+    assign execute_if.ready = (mem_req_ready || req_skip)
                            && ~(no_rsp_buf_enable && ~no_rsp_buf_ready)
                            && ~fence_lock;
 
-    assign mem_req_mask = req_data.header.tmask;
+    assign mem_req_mask = execute_if.data.header.tmask;
 `ifdef VX_CFG_EXT_A_ENABLE
     // AMO MemReq.rw is unconditionally 0: a missing line under SC must
     // miss-and-return-failure, not write-and-succeed.
-    assign mem_req_rw = req_data.op_args.lsu.is_store
-                     && ~req_data.op_args.lsu.amo_valid;
+    assign mem_req_rw = execute_if.data.op_args.lsu.is_store
+                     && ~execute_if.data.op_args.lsu.amo_valid;
 `else
-    assign mem_req_rw = req_data.op_args.lsu.is_store;
+    assign mem_req_rw = execute_if.data.op_args.lsu.is_store;
 `endif
 
     // address formatting
@@ -311,7 +269,7 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
         reg [LSU_WORD_SIZE-1:0] mem_req_byteen_w;
         always @(*) begin
             mem_req_byteen_w = '0;
-            case (inst_lsu_wsize(req_data.op_type))
+            case (inst_lsu_wsize(execute_if.data.op_type))
                 0: begin // 8-bit
                     mem_req_byteen_w[req_align[i]] = 1'b1;
                 end
@@ -338,25 +296,25 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
 
     // memory misalignment not supported!
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_missalign
-        wire lsu_req_fire = req_valid && req_ready;
-        `RUNTIME_ASSERT((~lsu_req_fire || ~req_data.header.tmask[i] || req_is_fence || (full_addr[i] % (1 << inst_lsu_wsize(req_data.op_type))) == 0),
+        wire lsu_req_fire = execute_if.valid && execute_if.ready;
+        `RUNTIME_ASSERT((~lsu_req_fire || ~execute_if.data.header.tmask[i] || req_is_fence || (full_addr[i] % (1 << inst_lsu_wsize(execute_if.data.op_type))) == 0),
             ("%t: misaligned memory access, wid=%0d, PC=0x%0h, addr=0x%0h, wsize=%0d! (#%0d)",
-                $time, req_data.header.wid, to_fullPC(req_data.header.PC), full_addr[i], inst_lsu_wsize(req_data.op_type), req_data.header.uuid))
+                $time, execute_if.data.header.wid, to_fullPC(execute_if.data.header.PC), full_addr[i], inst_lsu_wsize(execute_if.data.op_type), execute_if.data.header.uuid))
     end
 
     // store data formatting
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mem_req_data
         always @(*) begin
-            mem_req_data[i] = req_data.rs2_data[i];
+            mem_req_data[i] = execute_if.data.rs2_data[i];
             case (req_align[i])
-                1: mem_req_data[i][`VX_CFG_XLEN-1:8]  = req_data.rs2_data[i][`VX_CFG_XLEN-9:0];
-                2: mem_req_data[i][`VX_CFG_XLEN-1:16] = req_data.rs2_data[i][`VX_CFG_XLEN-17:0];
-                3: mem_req_data[i][`VX_CFG_XLEN-1:24] = req_data.rs2_data[i][`VX_CFG_XLEN-25:0];
+                1: mem_req_data[i][`VX_CFG_XLEN-1:8]  = execute_if.data.rs2_data[i][`VX_CFG_XLEN-9:0];
+                2: mem_req_data[i][`VX_CFG_XLEN-1:16] = execute_if.data.rs2_data[i][`VX_CFG_XLEN-17:0];
+                3: mem_req_data[i][`VX_CFG_XLEN-1:24] = execute_if.data.rs2_data[i][`VX_CFG_XLEN-25:0];
             `ifdef VX_CFG_XLEN_64
-                4: mem_req_data[i][`VX_CFG_XLEN-1:32] = req_data.rs2_data[i][`VX_CFG_XLEN-33:0];
-                5: mem_req_data[i][`VX_CFG_XLEN-1:40] = req_data.rs2_data[i][`VX_CFG_XLEN-41:0];
-                6: mem_req_data[i][`VX_CFG_XLEN-1:48] = req_data.rs2_data[i][`VX_CFG_XLEN-49:0];
-                7: mem_req_data[i][`VX_CFG_XLEN-1:56] = req_data.rs2_data[i][`VX_CFG_XLEN-57:0];
+                4: mem_req_data[i][`VX_CFG_XLEN-1:32] = execute_if.data.rs2_data[i][`VX_CFG_XLEN-33:0];
+                5: mem_req_data[i][`VX_CFG_XLEN-1:40] = execute_if.data.rs2_data[i][`VX_CFG_XLEN-41:0];
+                6: mem_req_data[i][`VX_CFG_XLEN-1:48] = execute_if.data.rs2_data[i][`VX_CFG_XLEN-49:0];
+                7: mem_req_data[i][`VX_CFG_XLEN-1:56] = execute_if.data.rs2_data[i][`VX_CFG_XLEN-57:0];
             `endif
                 default:;
             endcase
@@ -371,8 +329,8 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
         reg [`VX_CFG_LSU_PENDING_SIZE-1:0] pkt_sop, pkt_eop;
 
         wire mem_req_rd_fire     = mem_req_fire && ~mem_req_rw;
-        wire mem_req_rd_sop_fire = mem_req_rd_fire && req_data.header.sop;
-        wire mem_req_rd_eop_fire = mem_req_rd_fire && req_data.header.eop;
+        wire mem_req_rd_sop_fire = mem_req_rd_fire && execute_if.data.header.sop;
+        wire mem_req_rd_eop_fire = mem_req_rd_fire && execute_if.data.header.eop;
         wire mem_rsp_eop_fire    = mem_rsp_fire && mem_rsp_eop;
         wire mem_rsp_eop_pkt_fire= mem_rsp_fire && mem_rsp_eop_pkt;
         wire full;
@@ -440,8 +398,8 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
 
     // pack memory request tag
     assign mem_req_tag = {
-        req_data.header,
-        req_data.op_type,
+        execute_if.data.header,
+        execute_if.data.op_type,
         req_align,
         pkt_waddr,
         req_is_fence
@@ -587,7 +545,7 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
         .reset     (reset),
         .valid_in  (no_rsp_buf_valid),
         .ready_in  (no_rsp_buf_ready),
-        .data_in   (req_data.header),
+        .data_in   (execute_if.data.header),
         .data_out  (result_no_rsp_if.data.header),
         .valid_out (result_no_rsp_if.valid),
         .ready_out (result_no_rsp_if.ready)
@@ -613,24 +571,24 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
 
 `ifdef DBG_TRACE_MEM
     always @(posedge clk) begin
-        if (req_valid && fence_lock) begin
+        if (execute_if.valid && fence_lock) begin
             `TRACE(2, ("%t: *** %s fence wait\n", $time, INSTANCE_ID))
         end
         if (mem_req_fire) begin
             if (mem_req_rw) begin
-                `TRACE(2, ("%t: %s Wr Req: wid=%0d, cta_id=%0d, PC=0x%0h, tmask=%b, addr=", $time, INSTANCE_ID, req_data.header.wid, req_data.header.cta_id, to_fullPC(req_data.header.PC), mem_req_mask))
+                `TRACE(2, ("%t: %s Wr Req: wid=%0d, cta_id=%0d, PC=0x%0h, tmask=%b, addr=", $time, INSTANCE_ID, execute_if.data.header.wid, execute_if.data.header.cta_id, to_fullPC(execute_if.data.header.PC), mem_req_mask))
                 `TRACE_ARRAY1D(2, "0x%h", full_addr, NUM_LANES)
                 `TRACE(2, (", attr="))
                 `TRACE_ARRAY1D(2, "%b", mem_req_attr, NUM_LANES)
                 `TRACE(2, (", byteen=0x%0h, data=", mem_req_byteen))
                 `TRACE_ARRAY1D(2, "0x%0h", mem_req_data, NUM_LANES)
-                `TRACE(2, (", sop=%b, pid=%0d, eop=%b, tag=0x%0h (#%0d)\n", req_data.header.pid, req_data.header.sop, req_data.header.eop, mem_req_tag, req_data.header.uuid))
+                `TRACE(2, (", sop=%b, pid=%0d, eop=%b, tag=0x%0h (#%0d)\n", execute_if.data.header.pid, execute_if.data.header.sop, execute_if.data.header.eop, mem_req_tag, execute_if.data.header.uuid))
             end else begin
-                `TRACE(2, ("%t: %s Rd Req: wid=%0d, cta_id=%0d, PC=0x%0h, tmask=%b, addr=", $time, INSTANCE_ID, req_data.header.wid, req_data.header.cta_id, to_fullPC(req_data.header.PC), mem_req_mask))
+                `TRACE(2, ("%t: %s Rd Req: wid=%0d, cta_id=%0d, PC=0x%0h, tmask=%b, addr=", $time, INSTANCE_ID, execute_if.data.header.wid, execute_if.data.header.cta_id, to_fullPC(execute_if.data.header.PC), mem_req_mask))
                 `TRACE_ARRAY1D(2, "0x%h", full_addr, NUM_LANES)
                 `TRACE(2, (", attr="))
                 `TRACE_ARRAY1D(2, "%b", mem_req_attr, NUM_LANES)
-                `TRACE(2, (", byteen=0x%0h, rd=%0d, pid=%0d, sop=%b, eop=%b, tag=0x%0h (#%0d)\n", mem_req_byteen, req_data.header.rd, req_data.header.pid, req_data.header.sop, req_data.header.eop, mem_req_tag, req_data.header.uuid))
+                `TRACE(2, (", byteen=0x%0h, rd=%0d, pid=%0d, sop=%b, eop=%b, tag=0x%0h (#%0d)\n", mem_req_byteen, execute_if.data.header.rd, execute_if.data.header.pid, execute_if.data.header.sop, execute_if.data.header.eop, mem_req_tag, execute_if.data.header.uuid))
             end
         end
         if (mem_rsp_fire) begin
@@ -663,7 +621,7 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
             full_addr,
             mem_req_byteen,
             mem_req_data,
-            req_data.header.uuid,
+            execute_if.data.header.uuid,
             rsp_data,
             rsp_hdr.uuid
         },
@@ -678,7 +636,7 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
 `ifdef DBG_SCOPE_LSU
     ila_lsu ila_lsu_inst (
         .clk    (clk),
-        .probe0 ({req_valid, req_data, req_ready}),
+        .probe0 ({execute_if.valid, execute_if.data, execute_if.ready}),
         .probe1 ({client_if.req_valid, client_if.req_data, client_if.req_ready}),
         .probe2 ({client_if.rsp_valid, client_if.rsp_data, client_if.rsp_ready})
     );
