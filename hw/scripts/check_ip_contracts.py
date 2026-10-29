@@ -128,7 +128,8 @@ def main():
         print(f'ERROR: {e}', file=sys.stderr)
     if errors:
         sys.exit(1)
-    print(f'xilinx IP contracts: {", ".join(f"{n} {contracts[n]["fixed_latency"]}" for n in RTL_ASSERTS)} consistent')
+    latencies = ", ".join(f"{n} {contracts[n]['fixed_latency']}" for n in RTL_ASSERTS)
+    print(f'xilinx IP contracts: {latencies} consistent')
 
 
 if __name__ == '__main__':
