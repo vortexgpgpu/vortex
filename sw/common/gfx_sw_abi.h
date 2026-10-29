@@ -77,6 +77,10 @@ extern "C" {
 // which only the software sampler addresses (texstate.sparse).
 #define GFX_SW_TEX_FILTER_TILED (1u << 10)
 
+// texstate.filter bit 11: `depth` counts a 3D view's base-level slices, which
+// minify with the level, rather than the layers of an array view.
+#define GFX_SW_TEX_FILTER_3D (1u << 11)
+
 // Either axis wraps with CLAMP_TO_BORDER, which the FF unit decodes as REPEAT.
 // Routing only: the software sampler keys off the wrap value itself.
 #define GFX_SW_TEX_FILTER_BORDER (1u << 6)
@@ -99,7 +103,7 @@ typedef struct {
   uint32_t min_lod;                       // sampler LOD clamp lower bound, Q(VX_TEX_LOD_FRAC_BITS)
   uint32_t max_lod;                       // sampler LOD clamp upper bound, Q(VX_TEX_LOD_FRAC_BITS)
   int32_t  lod_bias;                      // sampler LOD bias, signed Q(VX_TEX_LOD_FRAC_BITS)
-  uint32_t depth;                         // sampler3D: mip-0 depth-slice count; samplerCubeArray: cube count; 0 otherwise
+  uint32_t depth;                         // sampler3D: mip-0 depth-slice count; 1D/2D array: layer count; samplerCubeArray: cube count; 0 otherwise
   uint32_t wrap_w;                        // VX_TEX_WRAP_* for the 3D depth (r) axis
   uint32_t levels;                        // mip levels the view exposes
   gfx_sparse_t sparse;                    // a sparse texture's tiles and residency; bitmap 0 => not sparse
@@ -208,7 +212,9 @@ void gfx_tex_sample_3d_f32(const gfx_sw_texstate_t* st,
 // texelFetch: the four channels of the exact texel at integer (x,y) of integer
 // `lod`, as floats in RGBA order -- no wrap/filter/mip. Floats because a
 // float-format texture's values lie outside [0,1]; a non-float format yields the
-// same [0,1] channels the shader unpack would.
+// same [0,1] channels the shader unpack would. A texel outside the view -- past
+// its extent, array layers or 3D slices, levels or samples -- reads as a texel
+// of zeros, for this and every texelFetch below.
 void gfx_tex_fetch_f32(const gfx_sw_texstate_t* st,
                        int32_t x, int32_t y, uint32_t lod, float* out);
 

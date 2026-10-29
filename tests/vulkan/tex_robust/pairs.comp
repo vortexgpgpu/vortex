@@ -1,0 +1,14 @@
+#version 450
+layout(local_size_x = 1) in;
+layout(set = 0, binding = 0) uniform utexture2D t[5];
+layout(set = 0, binding = 1) uniform sampler s[4];
+layout(set = 0, binding = 2) buffer Out { uint o[]; };
+#define PAIR(i, j) o[i * 4 + j] = textureLod(usampler2D(t[i], s[j]), vec2(0.5), 0.0).r
+void main()
+{
+   PAIR(0, 0); PAIR(0, 1); PAIR(0, 2); PAIR(0, 3);
+   PAIR(1, 0); PAIR(1, 1); PAIR(1, 2); PAIR(1, 3);
+   PAIR(2, 0); PAIR(2, 1); PAIR(2, 2); PAIR(2, 3);
+   PAIR(3, 0); PAIR(3, 1); PAIR(3, 2); PAIR(3, 3);
+   PAIR(4, 0); PAIR(4, 1); PAIR(4, 2); PAIR(4, 3);
+}

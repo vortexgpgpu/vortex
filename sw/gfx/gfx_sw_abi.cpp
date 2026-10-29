@@ -99,18 +99,29 @@ extern "C" void gfx_tex_fetch_array_f32(const gfx_sw_texstate_t* st,
                               layer, lod, out);
 }
 
+// A sample past the image's reads the zero texel, as a texel outside it does:
+// the fetch is steered past the view's last level.
+static inline gfx_sw::TexState tex_ms_plane(const gfx_sw_texstate_t* st, uint32_t sample,
+                                            uint32_t* lod) {
+  gfx_sw::TexState s = *reinterpret_cast<const gfx_sw::TexState*>(st);
+  const uint32_t samples = s.samples ? s.samples : 1u;
+  *lod = sample < samples ? 0u : (uint32_t)VX_TEX_LOD_MAX + 1u;
+  s.base += (uint64_t)(sample < samples ? sample : 0u) * s.sample_stride;
+  return s;
+}
+
 extern "C" void gfx_tex_fetch_ms_f32(const gfx_sw_texstate_t* st, int32_t x, int32_t y,
                                      uint32_t layer, uint32_t sample, float* out) {
-  gfx_sw::TexState s = *reinterpret_cast<const gfx_sw::TexState*>(st);
-  s.base += (uint64_t)(sample < s.samples ? sample : 0u) * s.sample_stride;
-  gfx_sw::tex_fetch_array_f32(s, x, y, layer, 0, out);
+  uint32_t lod;
+  const gfx_sw::TexState s = tex_ms_plane(st, sample, &lod);
+  gfx_sw::tex_fetch_array_f32(s, x, y, layer, lod, out);
 }
 
 extern "C" void gfx_tex_fetch_ms_i32(const gfx_sw_texstate_t* st, int32_t x, int32_t y,
                                      uint32_t layer, uint32_t sample, int32_t* out) {
-  gfx_sw::TexState s = *reinterpret_cast<const gfx_sw::TexState*>(st);
-  s.base += (uint64_t)(sample < s.samples ? sample : 0u) * s.sample_stride;
-  gfx_sw::tex_fetch_i32(s, x, y, 0, layer, out);
+  uint32_t lod;
+  const gfx_sw::TexState s = tex_ms_plane(st, sample, &lod);
+  gfx_sw::tex_fetch_i32(s, x, y, lod, layer, out);
 }
 
 extern "C" void gfx_tex_fetch_i32(const gfx_sw_texstate_t* st,

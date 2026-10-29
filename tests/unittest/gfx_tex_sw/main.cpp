@@ -974,6 +974,56 @@ void check_pitched(uint8_t* pool) {
       }
     }
   }
+  // A texelFetch outside the view reads a texel of zeros: past the row, the
+  // column, the last layer and the last level, and at negative coordinates.
+  const int32_t oob[][4] = { // x, y, layer, level
+    { (int32_t)W, 0, 0, 0 }, { 0, (int32_t)H, 0, 0 }, { 0, 0, (int32_t)layers, 0 },
+    { 0, 0, 0, (int32_t)levels }, { -1, 0, 0, 0 }, { 0, -1, 0, 0 },
+    { (int32_t)(W >> 1), 0, 0, 1 },
+  };
+  for (const auto& o : oob) {
+    float t[4];
+    gfx_sw::tex_fetch_array_f32(st, o[0], o[1], (uint32_t)o[2], (uint32_t)o[3], t);
+    int32_t ti[4];
+    gfx_sw::tex_fetch_i32(st, o[0], o[1], (uint32_t)o[3], (uint32_t)o[2], ti);
+    ++checked;
+    if ((t[0] != 0.0f || t[1] != 0.0f || t[2] != 0.0f || t[3] != 0.0f ||
+         ti[0] || ti[1] || ti[2] || ti[3]) && fails++ < 8) {
+      printf("  PITCHED OOB FETCH (%d,%d) layer %d level %d: got %g %g %g %g, want zeros\n",
+             o[0], o[1], o[2], o[3], t[0], t[1], t[2], t[3]);
+    }
+  }
+  // A 3D view bounds the slice by the level's depth, not the base level's.
+  st.filter |= GFX_SW_TEX_FILTER_3D;
+  {
+    float t[4];
+    gfx_sw::tex_fetch_array_f32(st, 0, 0, 1, 1, t);   // depth 2 minifies to 1 at level 1
+    ++checked;
+    if ((t[0] != 0.0f || t[3] != 0.0f) && fails++ < 8) {
+      printf("  PITCHED OOB 3D SLICE: got %g .. %g, want zeros\n", t[0], t[3]);
+    }
+  }
+  st.filter &= ~GFX_SW_TEX_FILTER_3D;
+  // A sparse fetch outside the view reads no residency word: against a bitmap
+  // with no page bound, a texel inside reports non-resident and one past the
+  // last layer, the row or the last level reports resident.
+  {
+    uint32_t none[64] = {};
+    st.sparse.bitmap = (uintptr_t)none;
+    const uint32_t inside = gfx_sw::tex_residency(st, 0, 0, 0, 0, 0, 0, false, true);
+    const uint32_t past_layer =
+      gfx_sw::tex_residency(st, 0, 0, 0, layers, 0, 0, false, true);
+    const uint32_t past_row = gfx_sw::tex_residency(st, (int32_t)W, 0, 0, 0, 0, 0, false, true);
+    const uint32_t past_level =
+      gfx_sw::tex_residency(st, 0, 0, 0, 0, levels, 0, false, true);
+    st.sparse.bitmap = 0;
+    checked += 4;
+    if ((inside != 0u || past_layer != 1u || past_row != 1u || past_level != 1u) &&
+        fails++ < 8) {
+      printf("  PITCHED SPARSE FETCH RESIDENCY: inside %u (want 0), past layer %u, row %u, "
+             "level %u (want 1)\n", inside, past_layer, past_row, past_level);
+    }
+  }
   if (fails) {
     g_fail += fails;
   } else {

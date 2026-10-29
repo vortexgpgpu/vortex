@@ -1,0 +1,38 @@
+#version 450
+layout(local_size_x = 1) in;
+layout(set = 0, binding = 0) uniform usampler2DArray arr;
+layout(set = 0, binding = 1) uniform usampler3D vol;
+layout(set = 0, binding = 2) uniform usamplerBuffer tb;
+layout(set = 0, binding = 3) uniform usamplerBuffer nulltb;
+layout(set = 0, binding = 4) uniform usampler1DArray arr1d;
+layout(set = 0, binding = 5) uniform usampler2DMS ms;
+layout(set = 0, binding = 6) uniform sampler2D bc;
+layout(set = 0, binding = 7) uniform usampler2D nullimg;
+layout(set = 0, binding = 8) readonly buffer Probes { ivec4 p[]; };
+layout(set = 0, binding = 9) buffer Out { uvec4 o[]; };
+void main()
+{
+   uint i = gl_GlobalInvocationID.x;
+   ivec4 q = p[2u * i];
+   int lod = p[2u * i + 1u].x;
+   uvec4 r;
+   if (q.x == 0)
+      r = texelFetch(arr, q.yzw, lod);
+   else if (q.x == 1)
+      r = texelFetch(vol, q.yzw, lod);
+   else if (q.x == 2)
+      r = texelFetch(tb, q.y);
+   else if (q.x == 3)
+      r = texelFetch(nulltb, q.y);
+   else if (q.x == 4)
+      r = texelFetch(arr1d, q.yz, lod);
+   else if (q.x == 5)
+      r = texelFetch(ms, q.yz, q.w);
+   else if (q.x == 6)
+      r = floatBitsToUint(texelFetch(bc, q.yz, lod));
+   else if (q.x == 7)
+      r = uvec4(textureSize(nullimg, 0), 0u, 0u);
+   else
+      r = uvec4(uint(textureSize(nulltb)), 0u, 0u, 0u);
+   o[i] = r;
+}

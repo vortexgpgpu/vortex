@@ -1432,23 +1432,58 @@ static inline __attribute__((always_inline)) void tex_sample_f32_3d(
   tex_sample_f32_3d_level(s, u, v, w, lod, filter, out);
 }
 
+// Whether texel (x,y) of `layer` and level `lod` lies inside the view: x and y
+// within the level, the layer within the array's layers or the level's 3D
+// slices, the level within the view's. *w receives the level's width.
+static inline __attribute__((always_inline)) bool tex_fetch_in_view(
+    const TexState& s, int32_t x, int32_t y, uint32_t layer, uint32_t lod, uint32_t* w) {
+  const uint32_t levels = s.levels ? s.levels : 1u;
+  if (lod >= levels || lod > (uint32_t)VX_TEX_LOD_MAX) {
+    return false;
+  }
+  uint32_t log_width  = (uint32_t)gfx_tex::tex_imax((int32_t)(s.logdim & 0xffff) - (int32_t)lod, 0);
+  uint32_t log_height = (uint32_t)gfx_tex::tex_imax((int32_t)(s.logdim >> 16) - (int32_t)lod, 0);
+  *w = s.width ? (uint32_t)gfx_tex::tex_imax((int32_t)(s.width >> lod), 1) : (1u << log_width);
+  uint32_t h = s.height ? (uint32_t)gfx_tex::tex_imax((int32_t)(s.height >> lod), 1) : (1u << log_height);
+  const uint32_t depth = s.depth ? s.depth : 1u;
+  const uint32_t layers = (s.filter & GFX_SW_TEX_FILTER_3D)
+                        ? (uint32_t)gfx_tex::tex_imax((int32_t)(depth >> lod), 1) : depth;
+  return (uint32_t)x < *w && (uint32_t)y < h && layer < layers;
+}
+
+// What a fetch outside the view decodes, as robust image access asks: zero in
+// every channel, alpha included for a format that has it and 1 for one that
+// does not. A texel of zeros decodes so in every format but BC1's, whose zero
+// block is opaque black; its block of all-3 indices is transparent black.
+static const uint8_t kTexZeroTexel[16] = {};
+static const uint8_t kTexBc1Transparent[8] = { 0, 0, 0, 0, 0xff, 0xff, 0xff, 0xff };
+
+static inline __attribute__((always_inline)) uint64_t tex_fetch_oob(const TexState& s) {
+  switch (gfx_tex::TexBlockLinear(s.format)) {
+  case VX_TEX_FORMAT_BC1:
+  case VX_TEX_FORMAT_BC1A:
+    return (uint64_t)(uintptr_t)kTexBc1Transparent;
+  default:
+    return (uint64_t)(uintptr_t)kTexZeroTexel;
+  }
+}
+
 // texelFetch addressing: byte address of the texel at integer (x,y) of `layer`
-// and `lod`, plus the texel stride. Coords are clamped into range (Vulkan leaves
-// an out-of-range fetch undefined; clamp is a safe, deterministic choice). Each
-// level is laid out row-major, row_pitch[lod] bytes a row and slice_pitch[lod]
-// bytes a layer.
+// and `lod`, plus the texel stride. Each level is laid out row-major,
+// row_pitch[lod] bytes a row and slice_pitch[lod] bytes a layer. A texel
+// outside the view has no address: the fetch decodes tex_fetch_oob's instead.
 static inline __attribute__((always_inline)) uint64_t tex_fetch_addr(
     const TexState& s, int32_t x, int32_t y, uint32_t layer, uint32_t lod,
     uint32_t* stride, uint32_t* sub) {
-  uint32_t log_width  = (uint32_t)gfx_tex::tex_imax((int32_t)(s.logdim & 0xffff) - (int32_t)lod, 0);
-  uint32_t log_height = (uint32_t)gfx_tex::tex_imax((int32_t)(s.logdim >> 16) - (int32_t)lod, 0);
-  uint32_t w = s.width  ? (uint32_t)gfx_tex::tex_imax((int32_t)(s.width  >> lod), 1) : (1u << log_width);
-  uint32_t h = s.height ? (uint32_t)gfx_tex::tex_imax((int32_t)(s.height >> lod), 1) : (1u << log_height);
-  uint32_t xi = (x < 0) ? 0u : ((uint32_t)x >= w ? w - 1u : (uint32_t)x);
-  uint32_t yi = (y < 0) ? 0u : ((uint32_t)y >= h ? h - 1u : (uint32_t)y);
   *stride = gfx_tex::FormatStride(s.format);
+  *sub = 0;
+  uint32_t w;
+  if (!tex_fetch_in_view(s, x, y, layer, lod, &w)) {
+    return tex_fetch_oob(s);
+  }
   return tex_level_base(s, layer, lod)
-       + gfx_tex::TexTexelOffset(s.format, w, xi, yi, sub, s.row_pitch[lod], s.sparse.shape);
+       + gfx_tex::TexTexelOffset(s.format, w, (uint32_t)x, (uint32_t)y, sub, s.row_pitch[lod],
+                                 s.sparse.shape);
 }
 
 // texelFetch: the four channels of the exact texel at (x,y) of integer `lod`, as
@@ -1613,6 +1648,11 @@ static inline __attribute__((always_inline)) uint32_t tex_residency(
     const TexState& s, int32_t u, int32_t v, int32_t w, uint32_t z, uint32_t lod,
     uint32_t filter, bool is3d, bool fetch) {
   if (!s.sparse.bitmap) {
+    return 1u;
+  }
+  // A fetch outside the view reads no memory, so no page of it can be missing.
+  uint32_t wv;
+  if (fetch && !tex_fetch_in_view(s, u, v, is3d ? (uint32_t)w : z, lod, &wv)) {
     return 1u;
   }
   uint32_t lv[2] = { lod, lod };
