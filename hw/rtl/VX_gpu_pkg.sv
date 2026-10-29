@@ -1951,7 +1951,8 @@ package VX_gpu_pkg;
     localparam RTCACHE_ADDR_WIDTH    = (`VX_CFG_MEM_ADDR_WIDTH - `CLOG2(RTCACHE_WORD_SIZE));
     localparam RTCACHE_LINE_SIZE     = `VX_CFG_L1_LINE_SIZE;
     localparam RTCACHE_NUM_REQS      = 1;
-    localparam RTCACHE_TAG_ID_BITS   = `CLOG2(`VX_CFG_RTCACHE_MSHR_SIZE);
+    // The core-side tag carries the RTU context index.
+    localparam RTCACHE_TAG_ID_BITS   = `CLOG2(`VX_CFG_RTU_NUM_CTX);
     localparam RTCACHE_TAG_WIDTH     = (UUID_WIDTH + RTCACHE_TAG_ID_BITS);
     localparam RTCACHE_BUS_TAG_WIDTH = (RTCACHE_TAG_WIDTH + 1);
     localparam RTCACHE_MEM_DATA_WIDTH= (RTCACHE_LINE_SIZE * 8);
