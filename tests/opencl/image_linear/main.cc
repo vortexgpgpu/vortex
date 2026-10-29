@@ -25,10 +25,13 @@ cl_device_id device_id = NULL; cl_context context = NULL; cl_command_queue queue
 cl_program program = NULL; cl_kernel kernel = NULL; cl_sampler sampler = NULL;
 cl_mem src_image = NULL, out_buf = NULL;
 static void cleanup() {
-  if (queue) clReleaseCommandQueue(queue); if (kernel) clReleaseKernel(kernel);
-  if (program) clReleaseProgram(program); if (sampler) clReleaseSampler(sampler);
-  if (src_image) clReleaseMemObject(src_image); if (out_buf) clReleaseMemObject(out_buf);
-  if (context) clReleaseContext(context);
+  if (queue) { clReleaseCommandQueue(queue); }
+  if (kernel) { clReleaseKernel(kernel); }
+  if (program) { clReleaseProgram(program); }
+  if (sampler) { clReleaseSampler(sampler); }
+  if (src_image) { clReleaseMemObject(src_image); }
+  if (out_buf) { clReleaseMemObject(out_buf); }
+  if (context) { clReleaseContext(context); }
 }
 
 int main(int argc, char** argv) {

@@ -34,20 +34,8 @@ runs:
       id: vers
       shell: bash
       run: |
-        source VERSION
-        # TOOLCHAIN_REV is a rolling tag (e.g. v3.0), so the cache key must use
-        # the commit it currently resolves to: keying on the tag name keeps
-        # serving a stale cache after the tag is force-moved to new prebuilts.
-        # ls-remote output is refname-sorted, so the peeled ^{} line (annotated
-        # tag's commit) sorts last; a lightweight tag yields the single commit line.
-        sha=$(git ls-remote https://github.com/vortexgpgpu/vortex-toolchain-prebuilt \
-              "refs/tags/$TOOLCHAIN_REV" "refs/tags/$TOOLCHAIN_REV^{}" \
-              | tail -1 | cut -f1)
-        if [ -z "$sha" ]; then
-          echo "error: cannot resolve toolchain tag '$TOOLCHAIN_REV'" >&2
-          exit 1
-        fi
-        echo "toolchain=$TOOLCHAIN_REV-$sha" >> "$GITHUB_OUTPUT"
+        rev=$(bash ci/toolchain_rev.sh)
+        echo "toolchain=$rev" >> "$GITHUB_OUTPUT"
 
     - name: Cache toolchain
       id: cache-toolchain
@@ -62,6 +50,19 @@ runs:
       with:
         path: third_party
         key: ${{ runner.os }}-thirdparty-${{ hashFiles('third_party/Makefile', '.gitmodules') }}
+
+    # Publish WHERE the toolchain cache above was restored to. The `tools` cache
+    # path is relative to the workspace, but nothing downstream could know that:
+    # consumers that need it (ci.yml, apptainer-ci.yml) each re-derived
+    # `$PWD/tools` by hand, and any consumer that forgot silently fell back to
+    # configure's `$HOME/tools` default -- a path that does not exist on a
+    # hosted runner. asic_gate did forget, and every one of its builds died in
+    # gen_sources.sh looking for verilator under /home/runner/tools. Exporting it
+    # here means restoring the toolchain and knowing where it landed are the same
+    # step, so a new workflow cannot get this wrong by omission.
+    - name: Export TOOLDIR
+      shell: bash
+      run: echo "TOOLDIR=$GITHUB_WORKSPACE/tools" >> "$GITHUB_ENV"
 
     - name: Install dependencies
       shell: bash

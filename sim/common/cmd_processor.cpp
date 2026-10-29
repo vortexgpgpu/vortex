@@ -26,15 +26,11 @@ constexpr unsigned cp_clog2(uint64_t n) {
 }
 uint64_t gpu_dev_caps() {
     const unsigned cluster_size = VX_CFG_NUM_CORES / VX_CFG_SOCKET_SIZE;
+    static_assert(VX_CFG_NUM_WARPS < 128 && VX_CFG_NUM_CLUSTERS < 128
+               && VX_CFG_NUM_CORES / VX_CFG_SOCKET_SIZE < 256,
+                  "GPU_DEV_CAPS exact-count fields overflow");
     const unsigned bank_addr_w  = VX_CFG_PLATFORM_MEMORY_ADDR_WIDTH
                                 - cp_clog2(VX_CFG_PLATFORM_MEMORY_NUM_BANKS);
-#ifdef VX_CFG_TCU_TMEM_ENABLE
-    constexpr unsigned kTcuTmemCols = VX_CFG_TCU_TMEM_COLS;
-    static_assert((kTcuTmemCols & (kTcuTmemCols - 1)) == 0,
-                  "VX_CFG_TCU_TMEM_COLS must be a power of 2");
-#else
-    constexpr unsigned kTcuTmemCols = 0;
-#endif
     return  (uint64_t(VX_ISA_IMPL_ID) & 0xFF)
          | ((uint64_t(cp_clog2(VX_CFG_NUM_THREADS))  & 0x7)  << 8)
          | ((uint64_t(cp_clog2(VX_CFG_NUM_WARPS))    & 0x7)  << 11)
@@ -45,7 +41,19 @@ uint64_t gpu_dev_caps() {
          | ((uint64_t(VX_CFG_LMEM_ENABLED ? VX_CFG_LMEM_LOG_SIZE : 0) & 0xFF) << 26)
          | ((uint64_t(cp_clog2(VX_CFG_PLATFORM_MEMORY_NUM_BANKS)) & 0x7) << 34)
          | ((uint64_t(bank_addr_w - 20) & 0x1F) << 37)
-         | ((uint64_t(kTcuTmemCols == 0 ? 0 : cp_clog2(kTcuTmemCols)) & 0x1F) << 42);
+         | ((uint64_t(VX_CFG_NUM_WARPS)    & 0x7F) << 42)
+         | ((uint64_t(cluster_size)        & 0xFF) << 49)
+         | ((uint64_t(VX_CFG_NUM_CLUSTERS) & 0x7F) << 57);
+}
+uint64_t gpu_ext_caps() {
+#ifdef VX_CFG_TCU_TMEM_ENABLE
+    constexpr unsigned kTcuTmemCols = VX_CFG_TCU_TMEM_COLS;
+    static_assert((kTcuTmemCols & (kTcuTmemCols - 1)) == 0,
+                  "VX_CFG_TCU_TMEM_COLS must be a power of 2");
+#else
+    constexpr unsigned kTcuTmemCols = 0;
+#endif
+    return uint64_t(kTcuTmemCols == 0 ? 0 : cp_clog2(kTcuTmemCols)) & 0x1F;
 }
 uint64_t gpu_isa_caps() {
     return  (uint64_t(VX_CFG_MISA_EXT) << 32)
@@ -81,7 +89,8 @@ void CommandProcessor::mmio_write(uint32_t off, uint32_t value) {
         case 0x02C: satp_ = (satp_ & 0x00000000FFFFFFFFULL) | (uint64_t(value) << 32);  return;
         // STATUS / DEV_CAPS / CYCLE / GPU caps are RO; ignore writes.
         case 0x004: case 0x008: case 0x010: case 0x014:
-        case 0x018: case 0x01C: case 0x020: case 0x024: return;
+        case 0x018: case 0x01C: case 0x020: case 0x024:
+        case 0x038: case 0x03C: return;
     }
     // Queue 0 (offsets 0x100..0x12F)
     if (off >= 0x100 && off < 0x140) {
@@ -138,6 +147,8 @@ uint32_t CommandProcessor::mmio_read(uint32_t off) const {
         case 0x024: return uint32_t(gpu_isa_caps() >> 32);
         case 0x028: return uint32_t(satp_ & 0xFFFFFFFF);
         case 0x02C: return uint32_t(satp_ >> 32);
+        case 0x038: return uint32_t(gpu_ext_caps() & 0xFFFFFFFF);
+        case 0x03C: return uint32_t(gpu_ext_caps() >> 32);
     }
     if (off >= 0x100 && off < 0x140) {
         switch (off - 0x100) {

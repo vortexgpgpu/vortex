@@ -74,6 +74,9 @@ void encode(int op, uint32_t a, uint32_t b, uint32_t c,
     case FMSUB:  op_type = OP_MADD;  fmt = 2;                 break; // a*b - c
     case FNMADD: op_type = OP_NMADD; fmt = 0;                 break; // -(a*b) - c
     case FNMSUB: op_type = OP_NMADD; fmt = 2;                 break; // -(a*b) + c
+    default:
+        std::fprintf(stderr, "encode: unknown op %d\n", op);
+        std::abort();
     }
 }
 

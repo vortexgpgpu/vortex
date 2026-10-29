@@ -1,0 +1,140 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 1064" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="m_a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2e5e82"/>
+    </marker>
+    <marker id="m_p" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8e4a7e"/>
+    </marker>
+    <marker id="m_g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3a7d44"/>
+    </marker>
+    <marker id="m_y" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b58900"/>
+    </marker>
+  </defs>
+  <style>
+    .lane { stroke:#c2ccd6; stroke-width:1.3; }
+    .t    { fill:#1b2733; font-size:19px; font-weight:bold; }
+    .th   { fill:#1b2733; font-size:12.5px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:11px; }
+    .tt   { fill:#5a6772; font-size:10.5px; font-style:italic; }
+    .act  { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.3; }
+    .actp { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.3; }
+    .actg { fill:#f4faf4; stroke:#3a7d44; stroke-width:1.3; }
+    .mem  { fill:#fdf6e3; stroke:#b58900; stroke-width:1.3; }
+    .note { fill:#fbfcfd; stroke:#5a7184; stroke-width:1.2; }
+    .m    { stroke:#2e5e82; stroke-width:1.7; fill:none; marker-end:url(#m_a); }
+    .mp   { stroke:#8e4a7e; stroke-width:1.7; fill:none; marker-end:url(#m_p); }
+    .mg   { stroke:#3a7d44; stroke-width:1.7; fill:none; marker-end:url(#m_g); }
+    .my   { stroke:#b58900; stroke-width:1.7; fill:none; marker-end:url(#m_y); }
+    .lb   { fill:#2e5e82; font-size:10.5px; }
+    .lbp  { fill:#8e4a7e; font-size:10.5px; }
+    .lbg  { fill:#2f6b39; font-size:10.5px; }
+    .lby  { fill:#8a6d00; font-size:10.5px; }
+  </style>
+
+  <rect x="0" y="0" width="1500" height="1064" fill="#ffffff"/>
+  <text x="24" y="34" class="t">A data-side TLB miss, a same-page follower, and the fill — where the latency goes</text>
+  <text x="24" y="56" class="tt">Two loads to one page arrive on different lanes. The second joins the first's miss-station entry, one walk serves both, and each replays through its own lane in arrival order.</text>
+
+  <!-- lifelines -->
+  <text x="120"  y="94" class="th" text-anchor="middle" fill="#8e4a7e">LSU lanes (VA)</text>
+  <text x="370"  y="94" class="th" text-anchor="middle" fill="#2e5e82">L1 MMU + miss station</text>
+  <text x="620"  y="94" class="th" text-anchor="middle" fill="#2e5e82">socket / cluster tlb arbs</text>
+  <text x="870"  y="94" class="th" text-anchor="middle" fill="#2e5e82">VX_tlb_l2 (cluster TLB)</text>
+  <text x="1120" y="94" class="th" text-anchor="middle" fill="#2f6b39">VX_ptw (walkers)</text>
+  <text x="1370" y="94" class="th" text-anchor="middle" fill="#8a6d00">L2 cache / memory</text>
+
+  <line x1="120"  y1="104" x2="120"  y2="1054" class="lane"/>
+  <line x1="370"  y1="104" x2="370"  y2="1054" class="lane"/>
+  <line x1="620"  y1="104" x2="620"  y2="1054" class="lane"/>
+  <line x1="870"  y1="104" x2="870"  y2="1054" class="lane"/>
+  <line x1="1120" y1="104" x2="1120" y2="1054" class="lane"/>
+  <line x1="1370" y1="104" x2="1370" y2="1054" class="lane"/>
+
+  <!-- 1: lane A misses -->
+  <path d="M 124 132 L 366 132" class="mp"/>
+  <text x="140" y="124" class="lbp">load A — lane 0, page P (VPN v)</text>
+  <rect x="350" y="140" width="40" height="70" class="act"/>
+  <text x="396" y="154" class="ts">CAM probe: no entry; MSHR probe: no live entry → cat_park</text>
+  <text x="396" y="170" class="ts">alloc slot s ← {vpn v, acc RD, amo 0}; token {lane 0, fields A}</text>
+  <text x="396" y="186" class="ts">lane 0 ready=1: the LSU sees the request accepted and moves on</text>
+  <text x="396" y="202" class="tt">tlb_reads++, tlb_misses++ (park fire)</text>
+
+  <!-- 1': lane B same page -->
+  <path d="M 124 232 L 366 232" class="mp"/>
+  <text x="140" y="224" class="lbp">load B — lane 2, same page P</text>
+  <rect x="350" y="240" width="40" height="56" class="act"/>
+  <text x="396" y="254" class="ts">CAM probe: still no entry; MSHR probe: slot s live → mshr_match → cat_park</text>
+  <text x="396" y="270" class="ts">join slot s: token {lane 2, fields B} queued behind A (QDEPTH=2, so this fills the queue)</text>
+  <text x="396" y="286" class="tt">a third same-page lane would hold (alloc_ready=0) until a token drains</text>
+
+  <!-- hit under miss -->
+  <path d="M 124 322 L 366 322" class="mp"/>
+  <text x="140" y="314" class="lbp">load C — lane 1, page Q (cached)</text>
+  <rect x="350" y="330" width="40" height="26" class="actg"/>
+  <text x="396" y="344" class="ts">cat_hit: PPN splice + tlb_perm_ok → out_pipe → L1 dcache. Nothing waits on the walk. (hit-under-miss)</text>
+  <path d="M 366 378 L 124 378" class="mg"/>
+  <text x="140" y="372" class="lbg">C's translated request leaves the MMU the next cycle</text>
+
+  <!-- 2: issue -->
+  <path d="M 374 404 L 616 404" class="m"/>
+  <text x="390" y="396" class="lb">tlb_bus req {id = s, acc, amo, vpn v}</text>
+  <rect x="600" y="412" width="40" height="40" class="act"/>
+  <text x="646" y="426" class="ts">socket arb 2:1 prepends mmu index; cluster arb prepends socket index</text>
+  <text x="646" y="442" class="tt">each arb level is a registered slice (OUT_BUF=3): ~1 cycle per hop, both directions</text>
+  <path d="M 624 464 L 866 464" class="m"/>
+  <text x="640" y="456" class="lb">req {id = {socket, mmu, s}, …}</text>
+
+  <!-- 3: L2 lookup -->
+  <rect x="850" y="472" width="40" height="110" class="act"/>
+  <text x="896" y="486" class="ts">lookup pipe: LATENCY cycles (VX_pipe_buffer, one request per cycle)</text>
+  <text x="896" y="502" class="ts">retire: megapage CAM miss ∧ set array miss (row = set(v), tag compare per way)</text>
+  <text x="896" y="518" class="ts">→ tail_miss: allocate L2 MSHR slot k (or join a live same-VPN entry) with token = id</text>
+  <text x="896" y="534" class="ts">issue to the walker: ptw_if.req {id = k, acc, amo, vpn v}</text>
+  <text x="896" y="554" class="tt">an L2 hit would instead answer here: rsp {id, level, ppn, flags} through the</text>
+  <text x="896" y="570" class="tt">response arbiter, and the sequence resumes at step 8</text>
+  <path d="M 874 594 L 1116 594" class="m"/>
+  <text x="890" y="586" class="lb">ptw_if req {id = k, vpn v}</text>
+
+  <!-- 4: PTW dispatch -->
+  <rect x="1100" y="602" width="40" height="60" class="actg"/>
+  <text x="1146" y="616" class="ts">walk cache probe: tag = v ≫ LEVEL_BITS</text>
+  <text x="1146" y="632" class="ts">miss → start at root: ppn = satp.PPN, level = PT_LEVELS−1</text>
+  <text x="1146" y="648" class="ts">lowest idle walker takes it (disp_vpn/acc/amo recorded)</text>
+  <path d="M 1124 676 L 1366 676" class="my"/>
+  <text x="1140" y="668" class="lby">PTE fetch, level 1 (root table)</text>
+  <rect x="1354" y="682" width="32" height="30" class="mem"/>
+  <path d="M 1366 722 L 1124 722" class="my"/>
+  <text x="1140" y="716" class="lby">line data → walker selects its PTE word</text>
+  <rect x="1100" y="730" width="40" height="44" class="actg"/>
+  <text x="1146" y="744" class="ts">non-leaf, valid → ppn ← pte.ppn, level ← 0</text>
+  <text x="1146" y="760" class="ts">walk-cache write {tag(v) → ppn} as the walk steps into its last level</text>
+  <path d="M 1124 788 L 1366 788" class="my"/>
+  <text x="1140" y="780" class="lby">PTE fetch, level 0</text>
+  <rect x="1354" y="794" width="32" height="30" class="mem"/>
+  <path d="M 1366 834 L 1124 834" class="my"/>
+  <rect x="1100" y="842" width="40" height="30" class="actg"/>
+  <text x="1146" y="856" class="ts">leaf, aligned → RESP {id = k, fault 0, level 0, ppn, flags}</text>
+
+  <!-- 7: fill to L2 -->
+  <path d="M 1116 884 L 874 884" class="mg"/>
+  <text x="890" y="878" class="lbg">walk-fill {id = k, level, ppn, flags}</text>
+  <rect x="850" y="892" width="40" height="44" class="act"/>
+  <text x="896" y="906" class="ts">install into the set array (level 0) or the megapage CAM (level ≥ 1); MRU bump</text>
+  <text x="896" y="922" class="ts">drain slot k: one response per attached token, through the response arbiter</text>
+
+  <!-- 8: fill to L1 -->
+  <path d="M 866 954 L 624 954" class="mg"/>
+  <text x="640" y="948" class="lbg">rsp {id = {socket, mmu, s}, …}</text>
+  <path d="M 616 976 L 374 976" class="mg"/>
+  <text x="390" y="970" class="lbg">tlb_bus rsp {id = s, level, ppn, flags} — arbs peel their index bits</text>
+
+  <!-- 9: L1 install + replay -->
+  <rect x="350" y="984" width="40" height="44" class="act"/>
+  <text x="396" y="998" class="ts">install {level, v, ppn, flags} into the CAM; slot s drains: token A then token B, one per cycle</text>
+  <text x="396" y="1014" class="ts">each replay re-splices its VA and re-checks its own permission, then takes its lane's out_pipe → L1 dcache (PA)</text>
+  <path d="M 366 1046 L 124 1046" class="mg"/>
+  <text x="140" y="1040" class="lbg">A and B leave translated, in arrival order; a faulted walk would kill them instead (zeroed load reply)</text>
+</svg>

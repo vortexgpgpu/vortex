@@ -34,9 +34,9 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   auto meta     = reinterpret_cast<uint32_t*>(arg->meta_addr);
 
   const uint32_t n   = arg->num_prims;
-  const uint32_t tid = threadIdx.x;
-  const uint32_t T   = blockDim.x;
-  const uint32_t B   = BINSORT_NUM_BINS;
+  const size_t   tid = threadIdx.x;
+  const size_t   T   = blockDim.x;
+  const size_t   B   = BINSORT_NUM_BINS;
 
   switch (arg->stage) {
 
@@ -69,7 +69,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     __syncthreads();
     if (tid == 0) {
       uint32_t acc = 0;
-      for (uint32_t t = 0; t < T; ++t) { uint32_t v = tsum[t]; tsum[t] = acc; acc += v; }
+      for (size_t t = 0; t < T; ++t) { uint32_t v = tsum[t]; tsum[t] = acc; acc += v; }
       meta[0] = acc; offset[n] = acc;
     }
     __syncthreads();
@@ -82,7 +82,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     for (uint32_t i = lo; i < hi; ++i) {
       if (count[i] == 0) continue;                      // culled / empty bbox
       int bL, bR, bT, bB; bin_range(prims[i], bL, bR, bT, bB);
-      uint32_t w = offset[i];
+      size_t w = offset[i];
       for (int by = bT; by <= bB; ++by)
         for (int bx = bL; bx <= bR; ++bx)
           keys[w++] = ((uint32_t)(by * BINSORT_BIN_COLS + bx) << BINSORT_PRIM_BITS) | i;
@@ -98,7 +98,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     __syncthreads();
     for (uint32_t k = klo; k < khi; ++k) { uint32_t b = keys[k] >> BINSORT_PRIM_BITS; if (b >= lo && b < hi) thist[tid * B + b]++; }
     __syncthreads();
-    for (uint32_t b = lo + tid; b < hi; b += T) { uint32_t s = 0; for (uint32_t t = 0; t < T; ++t) s += thist[t * B + b]; bincount[b] = s; }
+    for (uint32_t b = lo + tid; b < hi; b += T) { uint32_t s = 0; for (size_t t = 0; t < T; ++t) s += thist[t * B + b]; bincount[b] = s; }
   } break;
 
   case BINSORT_STAGE_BASE: {                           // single CTA: bin-base scan + headers
@@ -123,7 +123,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     uint32_t kchunk = (P + T - 1) / T;
     uint32_t klo = umin(tid * kchunk, P), khi = umin(klo + kchunk, P);
     // owned hist columns -> stable write cursors (base + thread-exclusive prefix)
-    for (uint32_t b = lo + tid; b < hi; b += T) { uint32_t run = binbase[b]; for (uint32_t t = 0; t < T; ++t) { uint32_t c = thist[t * B + b]; thist[t * B + b] = run; run += c; } }
+    for (uint32_t b = lo + tid; b < hi; b += T) { uint32_t run = binbase[b]; for (size_t t = 0; t < T; ++t) { uint32_t c = thist[t * B + b]; thist[t * B + b] = run; run += c; } }
     __syncthreads();
     for (uint32_t k = klo; k < khi; ++k) {
       uint32_t key = keys[k], b = key >> BINSORT_PRIM_BITS;

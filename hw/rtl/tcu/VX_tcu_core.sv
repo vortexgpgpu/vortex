@@ -45,6 +45,9 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // A UMMA uop is present but held off by the RAW interlock. Distinct from
     // losing bank arbitration (tmem_bank_stalls)
     output wire                                     perf_umma_hazard_stall,
+    // A UMMA uop is present and waiting on its accumulator read grant.
+    // Excludes the hazard case so the two counters do not double-count.
+    output wire                                     perf_umma_rd_stall,
 `endif
 `endif
 
@@ -400,13 +403,14 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                                     && (wr_track[t].col_base  == umma_col_base);
     end
     wire umma_hazard = is_umma && (|umma_hazard_match);
-`ifdef PERF_ENABLE
-    assign perf_umma_hazard_stall = execute_if.valid && umma_hazard;
-`endif
 
     // Bank-port stall: this op's TMEM read hasn't won its bank yet (or is
     // won and waiting on other admission conditions). Retries next cycle.
     wire umma_rd_stall = is_umma && ~umma_rd_won;
+`ifdef PERF_ENABLE
+    assign perf_umma_hazard_stall = execute_if.valid && umma_hazard;
+    assign perf_umma_rd_stall     = execute_if.valid && umma_rd_stall && ~umma_hazard;
+`endif
 `else
     wire umma_hazard   = 1'b0;
     wire umma_rd_stall = 1'b0;

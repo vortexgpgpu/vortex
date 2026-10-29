@@ -356,6 +356,9 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .axil_s     (cp_axil),
         .axi_host   (cp_axi_host),
         .axi_dev    (cp_axi_dev),
+        // CCI-P has no AXI host port, so there are no drain counters to report.
+        .dbg_host_w_counts ('0),
+        .dbg_host_r_counts ('0),
         .gpu_if     (cp_gpu_if),
         .irq        (cp_interrupt)
     );

@@ -186,10 +186,9 @@ package VX_rtu_pkg;
     localparam RTU_FLAT_LINES_BITS = `CLOG2(RTU_FLAT_LINES + 1);
 
     // ─────────────────────────────────────────────────────────────────
-    // TLAS instance record (64 B). The 3x4 row-major affine transform
-    // (object→world) occupies floats 0..11;
-    // the walker applies its inverse (VX_rtu_xform) to bring the world ray into
-    // object space. The two TLAS variants share xform/blas/custom but differ in
+    // TLAS instance record (64 B). The 3x4 row-major world→object affine
+    // occupies floats 0..11; the walker applies it (VX_rtu_xform) to bring the
+    // world ray into object space. The two TLAS variants share xform/blas/custom but differ in
     // where instance_id and cull_mask sit:
     //   flat TLAS : blas_off@48, custom_id@52, cull_mask@56; instance_id = loop idx
     //   BVH inst  : blas_root@48, custom_id@52, instance_id@56, cull_mask@60
@@ -264,21 +263,22 @@ package VX_rtu_pkg;
     //
     //   hit attrs  [RES_BASE, +RES_HIT)   written by every response
     //   candidate  [RES_BASE, +RES_CAND)  + object ray, cb_type, sbt, handle
-    //   payload     PAYLOAD_SLOT          written once, at arm (warp-uniform)
+    //   payload     PAYLOAD_SLOT(+1)      XLEN/32 words, written per record (warp-uniform)
     //   hit attr    ATTR_SLOT             the IS shader's hitAttribute, on commit
     //   status      STATUS_SLOT           written LAST
     //
     // Status is last by design: writing it is what completes the warp's parked
     // WAIT, so every slot the warp may then read must already be in place.
     // ─────────────────────────────────────────────────────────────────
-    localparam RTU_RAY_BEATS    = 8;   // origin[3], dir[3], t_min, t_max
-    localparam RTU_RES_BASE     = `VX_RT_HIT_T;
-    localparam RTU_RES_HIT      = 7;   // hit_t, hit_u, hit_v, prim, instance, geometry, custom
-    localparam RTU_RES_CAND     = 16;  // + object ray (6), cb_type, cb_sbt_idx, cb_handle
-    localparam RTU_STATUS_SLOT  = `VX_RT_STATUS;
-    localparam RTU_PAYLOAD_SLOT = `VX_RT_PAYLOAD_PTR_LO;
-    localparam RTU_ATTR_SLOT    = `VX_RT_HIT_ATTR_0;
-    localparam RTU_IDX_BITS     = `CLOG2(RTU_RES_CAND + 1);
+    localparam RTU_RAY_BEATS     = 8;   // origin[3], dir[3], t_min, t_max
+    localparam RTU_RES_BASE      = `VX_RT_HIT_T;
+    localparam RTU_RES_HIT       = 7;   // hit_t, hit_u, hit_v, prim, instance, geometry, custom
+    localparam RTU_RES_CAND      = 16;  // + object ray (6), cb_type, cb_sbt_idx, cb_handle
+    localparam RTU_STATUS_SLOT   = `VX_RT_STATUS;
+    localparam RTU_PAYLOAD_SLOT  = `VX_RT_PAYLOAD_PTR_LO;
+    localparam RTU_PAYLOAD_WORDS = `VX_CFG_XLEN / 32;
+    localparam RTU_ATTR_SLOT     = `VX_RT_HIT_ATTR_0;
+    localparam RTU_IDX_BITS      = `CLOG2(RTU_RES_CAND + 1);
 
     // ─────────────────────────────────────────────────────────────────
     // Window store — the per-slot result record, one NUM_LANES*32 row per word,
@@ -299,6 +299,7 @@ package VX_rtu_pkg;
     localparam RTU_WS_CONT_T    = 16;  // CONTINUE beat 0: the shader's own t
     localparam RTU_WS_CONT_ATTR = 17;  // CONTINUE beat 1: the shader's hitAttribute
     localparam RTU_WS_RES_ATTR  = 18;  // accepted candidate's bound hitAttribute
+    localparam RTU_WS_YLD_OBJ   = 19;  // instanced candidate's object ray: o.xyz, d.xyz (19..24)
     localparam RTU_WS_WORDS     = 32;  // rows per slot (power of two for addressing)
     localparam RTU_WS_WORD_BITS = `CLOG2(RTU_WS_WORDS);
 

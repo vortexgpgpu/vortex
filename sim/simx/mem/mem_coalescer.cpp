@@ -39,6 +39,7 @@ MemCoalescer::MemCoalescer(
   , sent_mask_(input_size)
   , line_size_(line_size)
   , delay_(delay)
+  , port_delay_(output_size, 0)
 {}
 
 void MemCoalescer::on_reset() {
@@ -294,7 +295,7 @@ void MemCoalescer::flush_out_round() {
     if (!out_round_.lanes.test(o)) {
       continue;
     }
-    if (ReqOut.at(o).try_send(out_round_.reqs.at(o), delay_)) {
+    if (ReqOut.at(o).try_send(out_round_.reqs.at(o), delay_ + port_delay_.at(o))) {
       out_round_.lanes.reset(o);
     }
   }

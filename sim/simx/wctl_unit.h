@@ -28,9 +28,11 @@ public:
   explicit WctlUnit(Core* core) : core_(core) {}
 
   // Execute the WctlType side effects for `trace`. Returns whether the
-  // warp should be released after this trace's eop fires. Caller is
-  // responsible for the input/output channel push and the latency.
-  bool process(instr_trace_t* trace);
+  // warp should be released after this trace's eop fires; `exit` is set
+  // when a TMC disables every thread, leaving the warp's deactivation to
+  // the caller. Caller is responsible for the input/output channel push and
+  // the latency.
+  bool process(instr_trace_t* trace, bool* exit);
 
 private:
   Core* core_;

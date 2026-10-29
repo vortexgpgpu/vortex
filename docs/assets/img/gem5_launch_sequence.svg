@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1480 906" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="arrb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1c6ca8"/>
+    </marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b58900"/>
+    </marker>
+  </defs>
+
+  <style>
+    .box     { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.5; }
+    .unit    { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .mem     { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .sw      { fill:#eef7ee; stroke:#3a7d44; stroke-width:1.5; }
+    .core    { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.5; }
+    .pe      { fill:#ffffff; stroke:#2e5e82; stroke-width:1.2; }
+    .none    { fill:#fafafa; stroke:#9aa5af; stroke-width:1.2; stroke-dasharray:5 4; }
+    .grp     { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .t       { fill:#1b2733; font-size:15px; }
+    .tb      { fill:#1b2733; font-size:16px; font-weight:bold; }
+    .th      { fill:#1b2733; font-size:13.5px; font-weight:bold; }
+    .ts      { fill:#44525f; font-size:12.5px; }
+    .tt      { fill:#5a6772; font-size:12px; font-style:italic; }
+    .mono    { font-family:'SF Mono',Consolas,monospace; font-size:12px; fill:#1b2733; }
+    .flow    { stroke:#444; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+    .flowb   { stroke:#1c6ca8; stroke-width:1.8; fill:none; marker-end:url(#arrb); stroke-dasharray:7 4; }
+    .flowg   { stroke:#b58900; stroke-width:1.8; fill:none; marker-end:url(#arrg); }
+    .lbl     { fill:#1c6ca8; font-size:12px; }
+    .lbg     { fill:#8a6d00; font-size:12px; }
+    .lbk     { fill:#44525f; font-size:12px; }
+    .rule    { stroke:#d5dce3; stroke-width:1; }
+    .lane { stroke:#c2ccd6; stroke-width:1.3; }
+    .act  { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.3; }
+    .actp { fill:#eef7ee; stroke:#3a7d44; stroke-width:1.3; }
+    .actg { fill:#fdf6e3; stroke:#b58900; stroke-width:1.3; }
+    .note { fill:#fbfcfd; stroke:#5a7184; stroke-width:1.2; }
+    .m    { stroke:#2e5e82; stroke-width:1.7; fill:none; marker-end:url(#arr2); }
+    .mp   { stroke:#3a7d44; stroke-width:1.7; fill:none; marker-end:url(#arrp); }
+    .mg   { stroke:#b58900; stroke-width:1.7; fill:none; marker-end:url(#arrg); }
+    .lb   { fill:#2e5e82; font-size:11.5px; }
+    .lbp  { fill:#2f6a39; font-size:11.5px; }
+    .lbgg { fill:#8a6d00; font-size:11.5px; }
+    .tsm  { fill:#44525f; font-size:11.5px; }
+  </style>
+
+  <rect x="0" y="0" width="1480" height="906" fill="#ffffff"/>
+  <text x="24" y="34" class="tb" font-size="20">A kernel launch under gem5 — hosted run</text>
+
+  <defs>
+    <marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2e5e82"/></marker>
+    <marker id="arrp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#3a7d44"/></marker>
+  </defs>
+  <text x="24" y="56" class="tt">Green = the simulated host, gold = device memory, blue = native device code. Time runs down.</text>
+  <text x="150" y="94" class="th" text-anchor="middle" fill="#2f6a39">host runtime</text>
+  <line x1="150" y1="104" x2="150" y2="826" class="lane"/>
+  <text x="450" y="94" class="th" text-anchor="middle" fill="#8a6d00">device memory (PIN window)</text>
+  <line x1="450" y1="104" x2="450" y2="826" class="lane"/>
+  <text x="730" y="94" class="th" text-anchor="middle" fill="#2e5e82">SimObject</text>
+  <line x1="730" y1="104" x2="730" y2="826" class="lane"/>
+  <text x="1010" y="94" class="th" text-anchor="middle" fill="#2e5e82">CommandProcessor</text>
+  <line x1="1010" y1="104" x2="1010" y2="826" class="lane"/>
+  <text x="1300" y="94" class="th" text-anchor="middle" fill="#2e5e82">Processor</text>
+  <line x1="1300" y1="104" x2="1300" y2="826" class="lane"/>
+  <rect x="30" y="116" width="240" height="52" rx="5" class="actp"/>
+  <text x="40" y="134" class="tsm">open the device; create a queue:</text>
+  <text x="40" y="149" class="tsm">host_mem_alloc rings in the aperture</text>
+  <path d="M 150 192 L 726 192" class="mp"/>
+  <text x="166" y="184" class="lbp">cp_reg_write: program queue 0, enable the CP  (PIO, 32-bit)</text>
+  <path d="M 730 218 L 1006 218" class="m"/>
+  <text x="746" y="210" class="lb">cp_mmio_write</text>
+  <path d="M 150 262 L 446 262" class="mp"/>
+  <text x="166" y="254" class="lbp">store the command lines into the ring</text>
+  <rect x="30" y="276" width="240" height="36" rx="5" class="actp"/>
+  <text x="40" y="294" class="tsm">mmio_fence: the stores land first</text>
+  <path d="M 150 336 L 726 336" class="mp"/>
+  <text x="166" y="328" class="lbp">cp_reg_write Q_TAIL_HI — the doorbell</text>
+  <path d="M 730 362 L 1006 362" class="m"/>
+  <text x="746" y="354" class="lb">cp_mmio_write, then maybeWakeCp</text>
+  <rect x="615" y="376" width="230" height="52" rx="5" class="act"/>
+  <text x="625" y="394" class="tsm">cpTickEvent scheduled; it reschedules</text>
+  <text x="625" y="409" class="tsm">itself while the CP has work</text>
+  <path d="M 1010 452 L 454 452" class="m"/>
+  <text x="466" y="444" class="lb">fetch a command line from the ring</text>
+  <rect x="890" y="466" width="240" height="52" rx="5" class="act"/>
+  <text x="900" y="484" class="tsm">CMD_DCR_WRITE → the device's DCRs</text>
+  <text x="900" y="499" class="tsm">CMD_LAUNCH → the start hook</text>
+  <path d="M 1010 542 L 734 542" class="m"/>
+  <text x="746" y="534" class="lb">start handler</text>
+  <path d="M 730 568 L 1296 568" class="m"/>
+  <text x="746" y="560" class="lb">vortexTickEvent scheduled</text>
+  <rect x="1180" y="582" width="240" height="68" rx="5" class="act"/>
+  <text x="1190" y="600" class="tsm">one cycle per event, until idle</text>
+  <text x="1190" y="615" class="tsm"></text>
+  <text x="1190" y="630" class="tsm">reads and writes device memory</text>
+  <text x="1190" y="645" class="tsm">directly</text>
+  <path d="M 1300 668 L 454 668" class="mg"/>
+  <text x="466" y="660" class="lbgg">kernel image, arguments, results</text>
+  <rect x="890" y="582" width="240" height="52" rx="5" class="act"/>
+  <text x="900" y="600" class="tsm">the launch waits on the</text>
+  <text x="900" y="615" class="tsm">processor's busy flag</text>
+  <path d="M 1300 694 L 1014 694" class="m"/>
+  <text x="1026" y="686" class="lb">idle</text>
+  <path d="M 1010 720 L 454 720" class="m"/>
+  <text x="466" y="712" class="lb">retire: write the sequence number to the completion slot</text>
+  <path d="M 150 754 L 726 754" class="mp"/>
+  <text x="166" y="746" class="lbp">cp_reg_read Q_SEQNUM — repeated until the expected number</text>
+  <path d="M 730 780 L 154 780" class="m"/>
+  <text x="166" y="772" class="lb">value</text>
+  <rect x="30" y="794" width="240" height="24" rx="5" class="actp"/>
+  <text x="40" y="812" class="tsm">read results through the window</text>
+  <rect x="24" y="840" width="470" height="50" rx="6" class="note"/>
+  <text x="36" y="860" class="th">Both events idle</text>
+  <text x="36" y="878" class="tsm">between commands nothing on the device is scheduled</text>
+  <rect x="506" y="840" width="470" height="50" rx="6" class="note"/>
+  <text x="518" y="860" class="th">Polling costs simulated time</text>
+  <text x="518" y="878" class="tsm">the host CPU model executes the poll loop, so it is gem5 wall time</text>
+  <rect x="988" y="840" width="468" height="50" rx="6" class="note"/>
+  <text x="1000" y="860" class="th">Hostless run</text>
+  <text x="1000" y="878" class="tsm">kernel= preloads the image; only the processor chain runs</text>
+</svg>

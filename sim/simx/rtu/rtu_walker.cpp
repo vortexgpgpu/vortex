@@ -23,8 +23,8 @@
 #include "rtu_types.h"       // RtuReq, SceneView, LaneState, PerfStats,
                              // scene-format constants
 #include "rtu_bvh.h"         // CW-BVH node/leaf/instance layouts
-#include "rtu_isect.h"       // ray_triangle, ray_aabb_intersect,
-                             // affine_inverse_transform_ray
+#include "rtu_isect.h"       // ray_triangle, ray_box,
+                             // world_to_object_ray
 #include "rtu_classifier.h"  // classify_tri_hit, finalise_lane
 
 namespace vortex { namespace rtu {
@@ -62,18 +62,6 @@ void read_scene_bytes(SceneView& sv, uint32_t off, uint32_t len, uint8_t* out) {
   }
 }
 
-// CW-BVH: reconstruct a child AABB from quantized representation.
-//   real = origin + qaabb * 2^exp (per axis)
-inline void reconstruct_child_aabb(const float origin[3], const int8_t exp[3],
-                                   const uint8_t qmin[3], const uint8_t qmax[3],
-                                   float out_mn[3], float out_mx[3]) {
-  for (int i = 0; i < 3; ++i) {
-    float scale = std::ldexp(1.0f, exp[i]);
-    out_mn[i] = origin[i] + static_cast<float>(qmin[i]) * scale;
-    out_mx[i] = origin[i] + static_cast<float>(qmax[i]) * scale;
-  }
-}
-
 // Copy a 3-vector (object-space ray capture helper).
 inline void vcopy3(float dst[3], const float src[3]) {
   dst[0] = src[0]; dst[1] = src[1]; dst[2] = src[2];
@@ -105,7 +93,36 @@ struct WalkCtx {
   // at the top level (no instance).
   float best_obj_o[3],  best_obj_d[3];
   float yield_obj_o[3], yield_obj_d[3];
+  // Candidates are offered one at a time in ascending (t, key) order, key =
+  // (instance_id << 32) | record offset -- unique per primitive per instance. A
+  // resumed walk skips everything at or below the last decided candidate's key.
+  uint64_t yield_key;
+  bool     has_floor;
+  float    floor_t;
+  uint64_t floor_key;
 };
+
+inline uint64_t cand_key(uint32_t instance_id, uint32_t record_off) {
+  return (uint64_t(instance_id) << 32) | record_off;
+}
+
+// Whether a candidate at (t, key) replaces the pending one: nearer than the
+// committed hit, above the resume floor, and first in (t, key) order.
+inline bool cand_takes(const WalkCtx& ctx, float t, uint64_t key) {
+  if (!(t < ctx.best_t)) return false;
+  if (ctx.has_floor
+   && (t < ctx.floor_t || (t == ctx.floor_t && key <= ctx.floor_key)))
+    return false;
+  if (!ctx.yield_pending) return true;
+  return t < ctx.yield_t || (t == ctx.yield_t && key < ctx.yield_key);
+}
+
+// The geometry word's back-facing bit, after the instance's FLIP_FACING:
+// what gl_HitKindEXT reports.
+inline uint32_t hit_facing_bit(bool back_facing, uint32_t inst_flags) {
+  if (inst_flags & kRtuInstanceFlagTriFlip) back_facing = !back_facing;
+  return back_facing ? VX_RT_HIT_BACK_FACING : 0u;
+}
 
 // Depth-first walker for one BVH sub-tree under the supplied (object-space)
 // ray. Recurses on LeafInst so each instance's BLAS gets walked with its
@@ -122,6 +139,9 @@ void walk_bvh4_subtree(SceneView& sv,
                        uint32_t root_off, uint32_t instance_id,
                        uint32_t custom_id, uint32_t inst_flags,
                        WalkCtx& ctx, PerfStats& perf) {
+  // The ray setup's reciprocals, once per (object-space) ray.
+  const float inv[3] = { ray_recip(rd[0]), ray_recip(rd[1]), ray_recip(rd[2]) };
+
   auto visit_leaf_tri = [&](uint32_t leaf_off, uint32_t count) {
     uint8_t hdr_buf[kVxBvhLeafHeaderBytes];
     read_scene_bytes(sv, leaf_off, sizeof(hdr_buf), hdr_buf);
@@ -145,43 +165,47 @@ void walk_bvh4_subtree(SceneView& sv,
       float t_hit = 0.f, u = 0.f, v = 0.f;
       bool back_facing = false;
       ++perf.bvh_tri_tests;
+      // The interval shrinks to the committed hit: a hit is only reported
+      // strictly nearer than it, so on equal t the first one found stays.
       if (!ray_triangle(ro, rd, &tri[0], &tri[3], &tri[6],
-                        ctx.tmin, ctx.tmax,
+                        ctx.tmin, ctx.best_t,
                         t_hit, u, v, back_facing)) {
         continue;
       }
 
       TriClassify cls = classify_tri_hit(ctx.ray_flags, tri_flags,
                                           inst_flags, back_facing);
+      const uint32_t hit_geom = (leaf_geom & VX_RT_HIT_GEOMETRY_MASK)
+                              | hit_facing_bit(back_facing, inst_flags);
       if (cls.action == TriAction::Ignore) continue;
 
       if (cls.action == TriAction::Commit) {
-        if (t_hit < ctx.best_t) {
-          ctx.best_t = t_hit; ctx.best_u = u; ctx.best_v = v;
-          ctx.best_prim = leaf_prim_base + i;
-          ctx.best_instance = instance_id;
-          ctx.best_custom = custom_id;
-          ctx.best_geom = leaf_geom;
-          ctx.any_hit = true;
-          vcopy3(ctx.best_obj_o, ro);   // object-space ray of this BLAS
-          vcopy3(ctx.best_obj_d, rd);
-          if (ctx.yield_pending && ctx.yield_t >= ctx.best_t) {
-            ctx.yield_pending = false;
-            ctx.yield_t = ctx.tmax;
-          }
-          if (cls.terminate_on_first_hit) {
-            ctx.terminated = true;
-            return;
-          }
+        ctx.best_t = t_hit; ctx.best_u = u; ctx.best_v = v;
+        ctx.best_prim = leaf_prim_base + i;
+        ctx.best_instance = instance_id;
+        ctx.best_custom = custom_id;
+        ctx.best_geom = hit_geom;
+        ctx.any_hit = true;
+        vcopy3(ctx.best_obj_o, ro);   // object-space ray of this BLAS
+        vcopy3(ctx.best_obj_d, rd);
+        if (ctx.yield_pending && ctx.yield_t >= ctx.best_t) {
+          ctx.yield_pending = false;
+          ctx.yield_t = ctx.tmax;
+        }
+        if (cls.terminate_on_first_hit) {
+          ctx.terminated = true;
+          return;
         }
       } else {  // TriAction::Yield
-        if (t_hit < ctx.best_t && t_hit < ctx.yield_t) {
+        uint64_t key = cand_key(instance_id, tris_off + i * kVxBvhTriStride);
+        if (cand_takes(ctx, t_hit, key)) {
           ctx.yield_pending = true;
+          ctx.yield_key = key;
           ctx.yield_t = t_hit; ctx.yield_u = u; ctx.yield_v = v;
           ctx.yield_prim = leaf_prim_base + i;
           ctx.yield_instance = instance_id;
           ctx.yield_custom = custom_id;
-          ctx.yield_geom = leaf_geom;
+          ctx.yield_geom = hit_geom;
           ctx.yield_sbt = cls.yield_sbt_idx;
           ctx.yield_cb_type = cls.yield_cb_type;
           vcopy3(ctx.yield_obj_o, ro);  // object-space ray for AHS/IS
@@ -212,21 +236,25 @@ void walk_bvh4_subtree(SceneView& sv,
       if (sv.miss) return;
       const VxBvhProcAabb* rec =
           reinterpret_cast<const VxBvhProcAabb*>(rec_buf);
-      float t_near = 0.f;
+      static const float kRawBase[3] = { 0.f, 0.f, 0.f };
+      float rel_mn[3], rel_mx[3], t_near = 0.f;
+      box_rel(kRawBase, rec->aabb_min, rec->aabb_max, ro, rel_mn, rel_mx);
       ++perf.bvh_box_tests;
-      if (!ray_aabb_intersect(ro, rd, rec->aabb_min, rec->aabb_max,
-                              ctx.tmin, ctx.best_t, t_near)) {
+      if (!ray_box(rel_mn, rel_mx, inv, ctx.tmin, ctx.best_t, t_near)) {
         continue;
       }
       // Procedural primitives are inherently non-opaque (the IS decides the
       // hit), so always stage an IS yield for the closest candidate.
-      if (t_near < ctx.best_t && t_near < ctx.yield_t) {
+      uint64_t key = cand_key(instance_id,
+                              aabbs_off + i * uint32_t(sizeof(VxBvhProcAabb)));
+      if (cand_takes(ctx, t_near, key)) {
         ctx.yield_pending = true;
+        ctx.yield_key = key;
         ctx.yield_t = t_near; ctx.yield_u = 0.f; ctx.yield_v = 0.f;
-        ctx.yield_prim = i;
+        ctx.yield_prim = hdr->prim_base + i;   // gl_PrimitiveID, as for LEAF_TRI
         ctx.yield_instance = instance_id;
         ctx.yield_custom = custom_id;
-        ctx.yield_geom = hdr->geometry_index;
+        ctx.yield_geom = hdr->geometry_index & VX_RT_HIT_GEOMETRY_MASK;
         ctx.yield_sbt = leaf_sbt;
         ctx.yield_cb_type = VX_RT_CB_TYPE_PROC;
         vcopy3(ctx.yield_obj_o, ro);
@@ -236,6 +264,9 @@ void walk_bvh4_subtree(SceneView& sv,
   };
 
   auto visit_leaf_inst = [&](uint32_t leaf_off, uint32_t count) {
+    uint8_t hdr_buf[kVxBvhLeafHeaderBytes];
+    read_scene_bytes(sv, leaf_off, sizeof(hdr_buf), hdr_buf);
+    if (sv.miss) return;
     uint32_t insts_off = leaf_off + kVxBvhLeafHeaderBytes;
     for (uint32_t i = 0; i < count; ++i) {
       uint8_t inst_buf[kVxBvhInstanceStride];
@@ -252,7 +283,7 @@ void walk_bvh4_subtree(SceneView& sv,
       uint32_t inst_flags2 =
           (inst->cull_mask >> kRtuInstanceFlagsShift) & kRtuInstanceFlagsMask;
       float obj_ro[3], obj_rd[3];
-      affine_inverse_transform_ray(inst->xform, ro, rd, obj_ro, obj_rd);
+      world_to_object_ray(inst->xform, ro, rd, obj_ro, obj_rd);
       ++perf.bvh_instance_descents;
       walk_bvh4_subtree(sv, obj_ro, obj_rd,
                         inst->blas_root_byte_offset,
@@ -335,14 +366,15 @@ void walk_bvh4_subtree(SceneView& sv,
         uint32_t off_word  = nv.child_offsets[i];
         uint32_t child_off = off_word & kVxBvhChildOffsetMask;
         if (off_word == kVxBvhChildEmpty) continue;
-        float mn[3], mx[3];
-        reconstruct_child_aabb(nv.origin, nv.exp,
-                                nv.qaabb_min[i], nv.qaabb_max[i],
-                                mn, mx);
+        float mn[3], mx[3], rel_mn[3], rel_mx[3];
+        for (int a = 0; a < 3; ++a) {
+          mn[a] = quant_corner(nv.qaabb_min[i][a], nv.exp[a]);
+          mx[a] = quant_corner(nv.qaabb_max[i][a], nv.exp[a]);
+        }
+        box_rel(nv.origin, mn, mx, ro, rel_mn, rel_mx);
         float t_near = 0.f;
         ++perf.bvh_box_tests;
-        if (!ray_aabb_intersect(ro, rd, mn, mx,
-                                ctx.tmin, ctx.best_t, t_near)) {
+        if (!ray_box(rel_mn, rel_mx, inv, ctx.tmin, ctx.best_t, t_near)) {
           continue;
         }
         hits[hit_count++] = { child_off, t_near };
@@ -418,6 +450,7 @@ bool emit_lane_result(const RtuReq& req, LaneState& l, uint32_t t,
     l.cand_prim  = ctx.yield_prim;
     l.cand_instance = ctx.yield_instance;
     l.cand_custom   = ctx.yield_custom;
+    l.cand_key      = ctx.yield_key;
     return true;
   case LaneAction::YieldChs:
     l.cb_pending = true;
@@ -448,9 +481,10 @@ bool emit_lane_result(const RtuReq& req, LaneState& l, uint32_t t,
   return false;  // unreachable
 }
 
-// Common init of the traversal accumulator from the ray.
+// Common init of the traversal accumulator from the ray, and -- for a walk
+// resumed after a callback verdict -- from the lane's committed hit and floor.
 WalkCtx init_ctx(const RtuReq& req, uint32_t t,
-                 const float ro[3], const float rd[3]) {
+                 const float ro[3], const float rd[3], const LaneState& l) {
   WalkCtx ctx;
   ctx.tmin = req.tmin[t];
   ctx.tmax = req.tmax[t];
@@ -471,6 +505,20 @@ WalkCtx init_ctx(const RtuReq& req, uint32_t t,
   // under an instance).
   vcopy3(ctx.best_obj_o, ro);  vcopy3(ctx.best_obj_d, rd);
   vcopy3(ctx.yield_obj_o, ro); vcopy3(ctx.yield_obj_d, rd);
+  ctx.yield_key = 0;
+  ctx.has_floor = l.has_floor;
+  ctx.floor_t   = l.floor_t;
+  ctx.floor_key = l.floor_key;
+  if (l.has_floor && l.hit) {
+    ctx.any_hit = true;
+    ctx.best_t = l.hit_t; ctx.best_u = l.hit_u; ctx.best_v = l.hit_v;
+    ctx.best_prim = l.hit_prim;
+    ctx.best_instance = l.hit_instance_id;
+    ctx.best_custom = l.hit_instance_custom;
+    ctx.best_geom = l.hit_geometry;
+    vcopy3(ctx.best_obj_o, l.hit_obj_o);
+    vcopy3(ctx.best_obj_d, l.hit_obj_d);
+  }
   return ctx;
 }
 
@@ -492,10 +540,10 @@ WalkResult FlatWalker::walk_lane(const RtuReq& req, uint32_t t, SceneView& sv,
 
   const float ro[3] = { req.origin_x[t], req.origin_y[t], req.origin_z[t] };
   const float rd[3] = { req.dir_x[t],    req.dir_y[t],    req.dir_z[t]   };
-  WalkCtx ctx = init_ctx(req, t, ro, rd);
+  WalkCtx ctx = init_ctx(req, t, ro, rd, l);
 
   // TLAS scenes walk one or more instances; each instance points at a BLAS (a
-  // triangle list) and (optionally) applies an object→world affine transform.
+  // triangle list) through its world→object affine transform.
   uint32_t num_instances  = 1;
   uint32_t triangle_count = 0;
 #ifdef VX_CFG_RTU_TLAS_ENABLE
@@ -556,10 +604,9 @@ WalkResult FlatWalker::walk_lane(const RtuReq& req, uint32_t t, SceneView& sv,
       std::memcpy(&cur_custom,
                   inst_buf + kRtuInstanceCustomIdOff,
                   sizeof(uint32_t));
-      // World→object ray transform. For pure rotation + translation the t
-      // parameter is preserved, so the BLAS-reported hit_t is also the world
-      // hit_t.
-      affine_inverse_transform_ray(xform, ro, rd, ray_o, ray_d);
+      // World→object ray transform; the direction is not renormalised, so
+      // the BLAS-reported hit_t is also the world hit_t.
+      world_to_object_ray(xform, ro, rd, ray_o, ray_d);
       ++perf.bvh_instance_descents;
       uint8_t blas_hdr[4];
       read_scene_bytes(sv, blas_byte_off, sizeof(blas_hdr), blas_hdr);
@@ -592,48 +639,48 @@ WalkResult FlatWalker::walk_lane(const RtuReq& req, uint32_t t, SceneView& sv,
       float t_hit = 0.f, u = 0.f, v = 0.f;
       bool back_facing = false;
       ++perf.bvh_tri_tests;
-      // Test against ray.tmax (not best_t) so an opaque hit committed earlier in
-      // this walk doesn't pre-cull a non-opaque candidate that might survive an
-      // ACCEPT.
       if (!ray_triangle(ray_o, ray_d, &tri[0], &tri[3], &tri[6],
-                        ctx.tmin, ctx.tmax,
+                        ctx.tmin, ctx.best_t,
                         t_hit, u, v, back_facing)) {
         continue;
       }
 
       TriClassify cls = classify_tri_hit(ctx.ray_flags, tri_flags,
                                           cur_inst_flags, back_facing);
+      const uint32_t hit_geom = hit_facing_bit(back_facing, cur_inst_flags);
       if (cls.action == TriAction::Ignore) continue;
 
       if (cls.action == TriAction::Commit) {
-        if (t_hit < ctx.best_t) {
-          ctx.best_t = t_hit; ctx.best_u = u; ctx.best_v = v;
-          ctx.best_prim = i;
-          ctx.best_instance = inst_idx;
-          ctx.best_custom = cur_custom;
-          ctx.any_hit = true;
-          vcopy3(ctx.best_obj_o, ray_o);   // this instance's object ray
-          vcopy3(ctx.best_obj_d, ray_d);
-          if (ctx.yield_pending && ctx.yield_t >= ctx.best_t) {
-            ctx.yield_pending = false;
-            ctx.yield_t = ctx.tmax;
-          }
-          if (cls.terminate_on_first_hit) {
-            // Halt the whole walk: this hit is committed as the result and no
-            // later triangle or instance may replace it.
-            ctx.terminated = true;
-            break;
-          }
+        ctx.best_t = t_hit; ctx.best_u = u; ctx.best_v = v;
+        ctx.best_prim = i;
+        ctx.best_instance = inst_idx;
+        ctx.best_custom = cur_custom;
+        ctx.best_geom = hit_geom;
+        ctx.any_hit = true;
+        vcopy3(ctx.best_obj_o, ray_o);   // this instance's object ray
+        vcopy3(ctx.best_obj_d, ray_d);
+        if (ctx.yield_pending && ctx.yield_t >= ctx.best_t) {
+          ctx.yield_pending = false;
+          ctx.yield_t = ctx.tmax;
+        }
+        if (cls.terminate_on_first_hit) {
+          // Halt the whole walk: this hit is committed as the result and no
+          // later triangle or instance may replace it.
+          ctx.terminated = true;
+          break;
         }
       } else {  // TriAction::Yield
-        if (t_hit < ctx.best_t && t_hit < ctx.yield_t) {
+        uint64_t key = cand_key(inst_idx, blas_tri_off + i * kPhase2TriStride);
+        if (cand_takes(ctx, t_hit, key)) {
           ctx.yield_pending = true;
+          ctx.yield_key = key;
           ctx.yield_t = t_hit; ctx.yield_u = u; ctx.yield_v = v;
           ctx.yield_prim = i;
           ctx.yield_sbt = cls.yield_sbt_idx;
           ctx.yield_cb_type = cls.yield_cb_type;
           ctx.yield_instance = inst_idx;
           ctx.yield_custom = cur_custom;
+          ctx.yield_geom = hit_geom;
           vcopy3(ctx.yield_obj_o, ray_o);  // object ray for AHS/IS
           vcopy3(ctx.yield_obj_d, ray_d);
         }
@@ -661,7 +708,7 @@ WalkResult Bvh4Walker::walk_lane(const RtuReq& req, uint32_t t, SceneView& sv,
 
   const float ro[3] = { req.origin_x[t], req.origin_y[t], req.origin_z[t] };
   const float rd[3] = { req.dir_x[t],    req.dir_y[t],    req.dir_z[t]   };
-  WalkCtx ctx = init_ctx(req, t, ro, rd);
+  WalkCtx ctx = init_ctx(req, t, ro, rd, l);
 
   // Top-level (non-instanced) triangles carry no instance flags.
   walk_bvh4_subtree(sv, ro, rd, root_off, 0, 0, 0, ctx, perf);

@@ -56,6 +56,10 @@ class SfuUnit : public FuncUnit<VX_CFG_NUM_SFU_BLOCKS> {
 public:
 	SfuUnit(const SimContext& ctx, const char* name, Core*);
 
+	// Resolved warp-control op of a stalled warp, registered toward the
+	// scheduler.
+	SimChannel<WarpCtl> warp_ctl_out;
+
 	CsrUnit& csr_unit() { return *csr_unit_; }
 
 #ifdef VX_CFG_EXT_DXA_ENABLE

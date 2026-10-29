@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 800" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="arrb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1c6ca8"/>
+    </marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b58900"/>
+    </marker>
+  </defs>
+
+  <style>
+    .box     { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.5; }
+    .unit    { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .mem     { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .sw      { fill:#eef7ee; stroke:#3a7d44; stroke-width:1.5; }
+    .core    { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.5; }
+    .pe      { fill:#ffffff; stroke:#2e5e82; stroke-width:1.2; }
+    .none    { fill:#fafafa; stroke:#9aa5af; stroke-width:1.2; stroke-dasharray:5 4; }
+    .grp     { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .t       { fill:#1b2733; font-size:15px; }
+    .tb      { fill:#1b2733; font-size:16px; font-weight:bold; }
+    .th      { fill:#1b2733; font-size:13.5px; font-weight:bold; }
+    .ts      { fill:#44525f; font-size:12.5px; }
+    .tt      { fill:#5a6772; font-size:12px; font-style:italic; }
+    .mono    { font-family:'SF Mono',Consolas,monospace; font-size:12px; fill:#1b2733; }
+    .flow    { stroke:#444; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+    .flowb   { stroke:#1c6ca8; stroke-width:1.8; fill:none; marker-end:url(#arrb); stroke-dasharray:7 4; }
+    .flowg   { stroke:#b58900; stroke-width:1.8; fill:none; marker-end:url(#arrg); }
+    .lbl     { fill:#1c6ca8; font-size:12px; }
+    .lbg     { fill:#8a6d00; font-size:12px; }
+    .lbk     { fill:#44525f; font-size:12px; }
+    .rule    { stroke:#d5dce3; stroke-width:1; }
+    .lane { stroke:#c2ccd6; stroke-width:1.3; }
+    .act  { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.3; }
+    .actp { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.3; }
+    .actg { fill:#fdf6e3; stroke:#b58900; stroke-width:1.3; }
+    .note { fill:#fbfcfd; stroke:#5a7184; stroke-width:1.2; }
+    .m    { stroke:#2e5e82; stroke-width:1.7; fill:none; marker-end:url(#arr2); }
+    .mp   { stroke:#8e4a7e; stroke-width:1.7; fill:none; marker-end:url(#arrp); }
+    .mg   { stroke:#b58900; stroke-width:1.7; fill:none; marker-end:url(#arrg); }
+    .lb   { fill:#2e5e82; font-size:11.5px; }
+    .lbp  { fill:#8e4a7e; font-size:11.5px; }
+    .lbgg { fill:#8a6d00; font-size:11.5px; }
+    .tsm  { fill:#44525f; font-size:11.5px; }
+  </style>
+
+  <rect x="0" y="0" width="1400" height="800" fill="#ffffff"/>
+  <text x="24" y="34" class="tb" font-size="20">Asynchronous launch and wait — the warp keeps only a handle</text>
+
+  <defs>
+    <marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2e5e82"/></marker>
+    <marker id="arrp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8e4a7e"/></marker>
+  </defs>
+  <text x="24" y="56" class="tt">Purple = the warp, blue = core pipeline, gold = the accelerator. Time runs down.</text>
+  <text x="150" y="94" class="th" text-anchor="middle" fill="#8e4a7e">kernel (one warp)</text>
+  <line x1="150" y1="104" x2="150" y2="720" class="lane"/>
+  <text x="470" y="94" class="th" text-anchor="middle" fill="#2e5e82">sequencer and issue</text>
+  <line x1="470" y1="104" x2="470" y2="720" class="lane"/>
+  <text x="760" y="94" class="th" text-anchor="middle" fill="#2e5e82">scoreboard</text>
+  <line x1="760" y1="104" x2="760" y2="720" class="lane"/>
+  <text x="1080" y="94" class="th" text-anchor="middle" fill="#8a6d00">accelerator</text>
+  <line x1="1080" y1="104" x2="1080" y2="720" class="lane"/>
+  <path d="M 150 132 L 466 132" class="mp"/>
+  <text x="166" y="124" class="lbp">launch(desc, work item)</text>
+  <rect x="355" y="146" width="230" height="52" rx="5" class="act"/>
+  <text x="365" y="164" class="tsm">macro-op → micro-ops,</text>
+  <text x="365" y="179" class="tsm">one per cycle</text>
+  <path d="M 470 220 L 1076 220" class="m"/>
+  <text x="486" y="212" class="lb">uop 0: allocate a slot, latch the descriptor</text>
+  <path d="M 470 250 L 1076 250" class="m"/>
+  <text x="486" y="242" class="lb">uop 1 … n: stream the operands into the slot; the last one arms it</text>
+  <path d="M 1080 282 L 154 282" class="mg"/>
+  <text x="166" y="274" class="lbgg">rd = handle (the slot index)</text>
+  <rect x="965" y="300" width="230" height="112" rx="5" class="actg"/>
+  <text x="975" y="318" class="tsm">runs on its own:</text>
+  <text x="975" y="333" class="tsm">memory traffic, traversal,</text>
+  <text x="975" y="348" class="tsm">a multi-cycle computation</text>
+  <text x="975" y="363" class="tsm"></text>
+  <text x="975" y="378" class="tsm">inputs were snapshotted into</text>
+  <text x="975" y="393" class="tsm">the slot at launch</text>
+  <rect x="35" y="300" width="230" height="82" rx="5" class="actp"/>
+  <text x="45" y="318" class="tsm">independent work overlaps</text>
+  <text x="45" y="333" class="tsm">the operation</text>
+  <text x="45" y="348" class="tsm"></text>
+  <text x="45" y="363" class="tsm">the operand registers are free</text>
+  <path d="M 150 446 L 466 446" class="mp"/>
+  <text x="166" y="438" class="lbp">wait(handle)</text>
+  <path d="M 470 476 L 756 476" class="m"/>
+  <text x="486" y="468" class="lb">depends on the slot</text>
+  <rect x="645" y="490" width="230" height="52" rx="5" class="act"/>
+  <text x="655" y="508" class="tsm">the warp's issue is held;</text>
+  <text x="655" y="523" class="tsm">no spinning, no polling</text>
+  <path d="M 1080 566 L 764 566" class="mg"/>
+  <text x="776" y="558" class="lbgg">operation complete</text>
+  <path d="M 760 596 L 474 596" class="m"/>
+  <text x="486" y="588" class="lb">dependency released</text>
+  <path d="M 1080 630 L 474 630" class="mg"/>
+  <text x="486" y="622" class="lbgg">result window: floats → f registers, integers → x registers; the slot is freed</text>
+  <path d="M 470 664 L 154 664" class="mp"/>
+  <text x="166" y="656" class="lbp">rd = status</text>
+  <rect x="35" y="678" width="230" height="38" rx="5" class="actp"/>
+  <text x="45" y="696" class="tsm">results are in registers</text>
+  <rect x="24" y="736" width="440" height="50" rx="6" class="note"/>
+  <text x="36" y="756" class="th">Back-pressure</text>
+  <text x="36" y="774" class="tsm">a full slot pool stalls the launch at issue — the pool is bounded</text>
+  <rect x="480" y="736" width="440" height="50" rx="6" class="note"/>
+  <text x="492" y="756" class="th">Atomic hand-off</text>
+  <text x="492" y="774" class="tsm">fu_lock on the first micro-op, fu_unlock on the last: no interleaving</text>
+  <rect x="936" y="736" width="440" height="50" rx="6" class="note"/>
+  <text x="948" y="756" class="th">Storage that survives</text>
+  <text x="948" y="774" class="tsm">one handle register in the core; one slot in the accelerator</text>
+</svg>

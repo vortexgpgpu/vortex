@@ -31,3 +31,10 @@ tests:
     via: script
     run: "make -C hw/unittest run-tcu-dsp"
     touches: [hw/rtl/tcu, hw/unittest/tcu_fedp]
+  # Texel blend (VX_tex_lerp, both forms the sampler uses) against the C model
+  # the SW sampler and SimX share, and the exact Vulkan f/256 blend, over every
+  # input.
+  - id: hw-tex-lerp
+    via: script
+    run: "make -C hw/unittest/tex_lerp run"
+    touches: [hw/rtl/tex, hw/unittest/tex_lerp, sw/common/vx_gfx_abi.h, sw/common/gfx_frag_tex.h]

@@ -1,0 +1,169 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 780" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+  </defs>
+
+  <style>
+    .box     { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.5; }
+    .unit    { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .f32     { fill:#eef7ee; stroke:#3a7d44; stroke-width:1.5; }
+    .f64     { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .ones    { fill:#eceff2; stroke:#5a7184; stroke-width:1.2; }
+    .grp     { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .t       { fill:#1b2733; font-size:15px; }
+    .tb      { fill:#1b2733; font-size:16px; font-weight:bold; }
+    .ts      { fill:#44525f; font-size:12.5px; }
+    .tt      { fill:#5a6772; font-size:12px; font-style:italic; }
+    .mono    { font-family:'SF Mono',Consolas,monospace; font-size:12px; fill:#1b2733; }
+    .flow    { stroke:#444; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+  </style>
+
+  <rect x="0" y="0" width="1400" height="780" fill="#ffffff"/>
+  <text x="24" y="34" class="tb" font-size="20">How F32 and F64 share the FPU — one decision per operation class</text>
+
+  <!-- ══════════ register format ══════════ -->
+  <rect x="24" y="56" width="1352" height="170" class="grp"/>
+  <text x="36" y="80" class="tb">Operand format — a 64-bit lane (FLEN = 64)</text>
+
+  <text x="40" y="112" class="ts">double precision</text>
+  <rect x="200" y="94" width="40" height="30" class="f64"/>
+  <text x="220" y="114" class="mono" text-anchor="middle">s</text>
+  <rect x="240" y="94" width="176" height="30" class="f64"/>
+  <text x="328" y="114" class="mono" text-anchor="middle">exponent 11</text>
+  <rect x="416" y="94" width="624" height="30" class="f64"/>
+  <text x="728" y="114" class="mono" text-anchor="middle">mantissa 52</text>
+
+  <text x="40" y="162" class="ts">single precision,</text>
+  <text x="40" y="178" class="ts">NaN-boxed</text>
+  <rect x="200" y="144" width="420" height="30" class="ones"/>
+  <text x="410" y="164" class="mono" text-anchor="middle">all ones [63:32]</text>
+  <rect x="620" y="144" width="28" height="30" class="f32"/>
+  <text x="634" y="164" class="mono" text-anchor="middle">s</text>
+  <rect x="648" y="144" width="112" height="30" class="f32"/>
+  <text x="704" y="164" class="mono" text-anchor="middle">exp 8</text>
+  <rect x="760" y="144" width="280" height="30" class="f32"/>
+  <text x="900" y="164" class="mono" text-anchor="middle">mantissa 23</text>
+
+  <text x="1064" y="106" class="ts">The format comes from the instruction's</text>
+  <text x="1064" y="122" class="ts">fmt[0], never from the operand's width.</text>
+  <text x="1064" y="146" class="ts">An F32 result is boxed on the way out.</text>
+  <text x="1064" y="162" class="ts">The arithmetic cores read the low half</text>
+  <text x="1064" y="178" class="ts">of an F32 operand and ignore the rest.</text>
+  <text x="40" y="212" class="tt">Lanes are XLEN wide, so double precision requires XLEN = 64. On a 32-bit build the lane is the F32 value alone.</text>
+
+  <!-- ══════════ FMA ══════════ -->
+  <rect x="24" y="254" width="326" height="480" class="grp"/>
+  <text x="36" y="278" class="tb">FMA — separate</text>
+  <text x="36" y="298" class="tt">two physical cores</text>
+
+  <rect x="44" y="318" width="130" height="150" rx="6" class="f32"/>
+  <text x="109" y="342" class="t" text-anchor="middle">fma32</text>
+  <text x="109" y="366" class="ts" text-anchor="middle">24 × 24</text>
+  <text x="109" y="382" class="ts" text-anchor="middle">multiply</text>
+  <text x="109" y="410" class="ts" text-anchor="middle">1-stage align</text>
+  <text x="109" y="450" class="tt" text-anchor="middle">lane [31:0]</text>
+
+  <rect x="196" y="318" width="136" height="150" rx="6" class="f64"/>
+  <text x="264" y="342" class="t" text-anchor="middle">fma64</text>
+  <text x="264" y="366" class="ts" text-anchor="middle">53 × 53</text>
+  <text x="264" y="382" class="ts" text-anchor="middle">multiply</text>
+  <text x="264" y="410" class="ts" text-anchor="middle">2-stage align</text>
+  <text x="264" y="450" class="tt" text-anchor="middle">lane [63:0]</text>
+
+  <rect x="44" y="496" width="288" height="44" rx="6" class="box"/>
+  <text x="188" y="523" class="ts" text-anchor="middle">select on fmt[0], delayed by the latency</text>
+  <path d="M 109 468 L 109 496" class="flow"/>
+  <path d="M 264 468 L 264 496" class="flow"/>
+
+  <text x="36" y="572" class="ts">A 24-bit multiplier is about a fifth of a</text>
+  <text x="36" y="588" class="ts">53-bit one, so merging saves little —</text>
+  <text x="36" y="604" class="ts">and it would put the F64 multiply and</text>
+  <text x="36" y="620" class="ts">aligner on every F32 operation.</text>
+  <text x="36" y="648" class="ts">Both cores share one latency, so the</text>
+  <text x="36" y="664" class="ts">F32 core's spare cycles go to its MUL</text>
+  <text x="36" y="680" class="ts">stage.</text>
+  <text x="36" y="714" class="tt">no F32 → F64 → F32 path: no double rounding</text>
+
+  <!-- ══════════ DIVSQRT ══════════ -->
+  <rect x="366" y="254" width="326" height="480" class="grp"/>
+  <text x="378" y="278" class="tb">DIV / SQRT — merged</text>
+  <text x="378" y="298" class="tt">one iterator at the widest format</text>
+
+  <rect x="386" y="318" width="288" height="40" rx="6" class="box"/>
+  <text x="530" y="343" class="ts" text-anchor="middle">unpack at the active format</text>
+  <rect x="386" y="378" width="288" height="90" rx="6" class="f64"/>
+  <text x="530" y="402" class="t" text-anchor="middle">radix-2 carry-save recurrence</text>
+  <text x="530" y="424" class="ts" text-anchor="middle">significand left-justified into 53 bits</text>
+  <text x="530" y="442" class="ts" text-anchor="middle">28 stages, two steps per stage</text>
+  <rect x="386" y="488" width="288" height="52" rx="6" class="box"/>
+  <text x="530" y="510" class="ts" text-anchor="middle">convert, normalize, round once at</text>
+  <text x="530" y="526" class="ts" text-anchor="middle">the active precision</text>
+  <path d="M 530 358 L 530 378" class="flow"/>
+  <path d="M 530 468 L 530 488" class="flow"/>
+
+  <text x="378" y="572" class="ts">The iterator dominates the area and the</text>
+  <text x="378" y="588" class="ts">traffic is rare, so one datapath serves</text>
+  <text x="378" y="604" class="ts">both formats.</text>
+  <text x="378" y="632" class="ts">The pipeline is fixed-depth: in an F64</text>
+  <text x="378" y="648" class="ts">build an F32 divide also takes 32 cycles.</text>
+  <text x="378" y="676" class="ts">The exponent is tracked in the active</text>
+  <text x="378" y="692" class="ts">format's frame, so F32 overflows and</text>
+  <text x="378" y="708" class="ts">underflows at the F32 boundary.</text>
+
+  <!-- ══════════ CVT ══════════ -->
+  <rect x="708" y="254" width="326" height="480" class="grp"/>
+  <text x="720" y="278" class="tb">CVT — merged</text>
+  <text x="720" y="298" class="tt">one canonical form</text>
+
+  <rect x="728" y="318" width="136" height="52" rx="6" class="box"/>
+  <text x="796" y="340" class="ts" text-anchor="middle">integer, XLEN</text>
+  <text x="796" y="356" class="ts" text-anchor="middle">I32 I64 U32 U64</text>
+  <rect x="880" y="318" width="136" height="52" rx="6" class="box"/>
+  <text x="948" y="340" class="ts" text-anchor="middle">float</text>
+  <text x="948" y="356" class="ts" text-anchor="middle">F32 or F64</text>
+  <rect x="728" y="392" width="288" height="76" rx="6" class="f64"/>
+  <text x="872" y="416" class="t" text-anchor="middle">canonical value</text>
+  <text x="872" y="438" class="ts" text-anchor="middle">exponent and significand sized to the</text>
+  <text x="872" y="454" class="ts" text-anchor="middle">widest enabled format</text>
+  <rect x="728" y="488" width="288" height="52" rx="6" class="box"/>
+  <text x="872" y="510" class="ts" text-anchor="middle">one round and pack tree, narrowed</text>
+  <text x="872" y="526" class="ts" text-anchor="middle">to the destination</text>
+  <path d="M 796 370 L 796 392" class="flow"/>
+  <path d="M 948 370 L 948 392" class="flow"/>
+  <path d="M 872 468 L 872 488" class="flow"/>
+
+  <text x="720" y="572" class="ts">Conversion is inherently cross-format —</text>
+  <text x="720" y="588" class="ts">FCVT.S.D is the point — so a pair of</text>
+  <text x="720" y="604" class="ts">hardwired converters would duplicate</text>
+  <text x="720" y="620" class="ts">the whole tree.</text>
+  <text x="720" y="648" class="ts">Narrowing handles a subnormal</text>
+  <text x="720" y="664" class="ts">destination and overflow to infinity.</text>
+  <text x="720" y="692" class="ts">A 64-bit integer adds one stage: the</text>
+  <text x="720" y="708" class="ts">negate is split from the zero count.</text>
+
+  <!-- ══════════ NCP ══════════ -->
+  <rect x="1050" y="254" width="326" height="480" class="grp"/>
+  <text x="1062" y="278" class="tb">NCP — merged</text>
+  <text x="1062" y="298" class="tt">no arithmetic</text>
+
+  <rect x="1070" y="318" width="288" height="222" rx="6" class="unit"/>
+  <text x="1082" y="342" class="t">VX_fncp_unit, FLEN wide</text>
+  <text x="1082" y="368" class="ts">sign injection   SGNJ, SGNJN, SGNJX</text>
+  <text x="1082" y="388" class="ts">min, max</text>
+  <text x="1082" y="408" class="ts">compare         EQ, LT, LE</text>
+  <text x="1082" y="428" class="ts">classify</text>
+  <text x="1082" y="448" class="ts">move            float ↔ integer register</text>
+  <text x="1082" y="480" class="ts">field positions are selected by fmt[0];</text>
+  <text x="1082" y="496" class="ts">canonical NaNs and boxing are generated</text>
+  <text x="1082" y="512" class="ts">per format</text>
+
+  <text x="1062" y="572" class="ts">Comparators and muxes only, off the hot</text>
+  <text x="1062" y="588" class="ts">path: widening them to FLEN costs the</text>
+  <text x="1062" y="604" class="ts">F32 case nothing that matters.</text>
+  <text x="1062" y="632" class="ts">Compare and classify write an integer</text>
+  <text x="1062" y="648" class="ts">register, so the result is XLEN wide.</text>
+
+  <text x="24" y="764" class="tt">Green = F32-width logic · gold = logic at the widest enabled format · with FLEN = 32 every gold block elaborates at F32 width and fma64 does not exist.</text>
+</svg>

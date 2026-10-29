@@ -1,0 +1,188 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 720" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="arrb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1c6ca8"/>
+    </marker>
+  </defs>
+
+  <style>
+    .box     { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.5; }
+    .unit    { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .mem     { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .sw      { fill:#eef7ee; stroke:#3a7d44; stroke-width:1.5; }
+    .core    { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.5; }
+    .grp     { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .t       { fill:#1b2733; font-size:15px; }
+    .tb      { fill:#1b2733; font-size:16px; font-weight:bold; }
+    .ts      { fill:#44525f; font-size:12.5px; }
+    .tt      { fill:#5a6772; font-size:12px; font-style:italic; }
+    .mono    { font-family:'SF Mono',Consolas,monospace; font-size:12px; fill:#1b2733; }
+    .flow    { stroke:#444; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+    .flowb   { stroke:#1c6ca8; stroke-width:1.8; fill:none; marker-end:url(#arrb); stroke-dasharray:7 4; }
+    .lbl     { fill:#1c6ca8; font-size:12px; }
+    .bound   { stroke:#a8324a; stroke-width:1.6; stroke-dasharray:3 4; fill:none; }
+    .lblr    { fill:#a8324a; font-size:12px; }
+  </style>
+
+  <rect x="0" y="0" width="1400" height="720" fill="#ffffff"/>
+  <text x="24" y="34" class="tb" font-size="20">Vortex build configuration — value flow from TOML to every consumer</text>
+
+  <!-- ══════════ Sources ══════════ -->
+  <rect x="24" y="56" width="316" height="566" class="grp"/>
+  <text x="36" y="80" class="tb">Sources (repo root)</text>
+
+  <rect x="40" y="96" width="284" height="150" rx="6" class="mem"/>
+  <text x="52" y="118" class="tb">VX_config.toml</text>
+  <text x="52" y="138" class="ts">hardware build configuration</text>
+  <text x="52" y="156" class="ts">VX_CFG_* knobs · VX_DBG_* debug knobs</text>
+  <text x="52" y="172" class="ts">[toolchain] predicates (ASIC, VIVADO, …)</text>
+  <text x="52" y="188" class="ts">lowercase private locals (never emitted)</text>
+  <text x="52" y="204" class="ts">[[enum]] · [[param]] · [[builtin]] tables</text>
+  <text x="52" y="230" class="tt">HW / simulator private</text>
+
+  <rect x="40" y="276" width="284" height="140" rx="6" class="mem"/>
+  <text x="52" y="298" class="tb">VX_types.toml</text>
+  <text x="52" y="318" class="ts">ISA / ABI contract</text>
+  <text x="52" y="336" class="ts">VX_CSR_* · VX_DCR_* · VX_ISA_*</text>
+  <text x="52" y="352" class="ts">[memmap] VX_MEM_* · [vm] VX_VM_*</text>
+  <text x="52" y="368" class="ts">[[builtin]] XLEN (from the environment)</text>
+  <text x="52" y="398" class="tt">shared by hardware and software</text>
+
+  <rect x="40" y="456" width="284" height="150" rx="6" class="sw"/>
+  <text x="52" y="478" class="tb">Build-time overrides</text>
+  <text x="52" y="500" class="mono">CONFIGS="-DVX_CFG_NUM_THREADS=8"</text>
+  <text x="52" y="518" class="mono">CONFIGS="-DVX_CFG_L2_ENABLE"</text>
+  <text x="52" y="536" class="mono">CONFIGS="-DVX_CFG_ICACHE_DISABLE"</text>
+  <text x="52" y="554" class="mono">CONFIGS="-DVX_CFG_FPU_TYPE=DSP"</text>
+  <text x="52" y="580" class="ts">XLEN — fixed by configure --xlen</text>
+  <text x="52" y="596" class="tt">blackbox.sh flags expand to CONFIGS</text>
+
+  <!-- ══════════ Generator ══════════ -->
+  <rect x="400" y="56" width="316" height="566" class="grp"/>
+  <text x="412" y="80" class="tb">ci/gen_config.py</text>
+
+  <rect x="416" y="96" width="284" height="150" rx="6" class="unit"/>
+  <text x="428" y="118" class="tb">header mode — unresolved</text>
+  <text x="428" y="138" class="ts">run by configure, once per build tree</text>
+  <text x="428" y="158" class="ts">every key wrapped in `ifndef / #ifndef:</text>
+  <text x="428" y="174" class="ts">a -D on the compile line wins</text>
+  <text x="428" y="194" class="ts">expr: keys become nested `ifdef trees</text>
+  <text x="428" y="210" class="ts">or macro expressions (__MAX, __CLOG2)</text>
+  <text x="428" y="232" class="tt">defaults stay overridable per build</text>
+
+  <rect x="416" y="276" width="284" height="140" rx="6" class="unit"/>
+  <text x="428" y="298" class="tb">header mode — resolved</text>
+  <text x="428" y="318" class="ts">run by configure with --resolved</text>
+  <text x="428" y="338" class="ts">every expr: evaluated to a constant;</text>
+  <text x="428" y="354" class="ts">XLEN read from the environment</text>
+  <text x="428" y="374" class="ts">plain `define / #define, no guards</text>
+  <text x="428" y="398" class="tt">a contract is never overridden</text>
+
+  <rect x="416" y="456" width="284" height="150" rx="6" class="unit"/>
+  <text x="428" y="478" class="tb">cflags mode — always resolved</text>
+  <text x="428" y="498" class="ts">run by each Makefile, on every build</text>
+  <text x="428" y="518" class="ts">applies the -D overrides, then</text>
+  <text x="428" y="534" class="ts">evaluates every expr: in dependency</text>
+  <text x="428" y="550" class="ts">order and prints the whole knob set</text>
+  <text x="428" y="570" class="ts">as one -D list</text>
+  <text x="428" y="592" class="tt">XCONFIGS := $(shell gen_config.py --cflags=…)</text>
+
+  <path d="M 324 150 L 416 150" class="flow"/>
+  <path d="M 324 346 L 416 346" class="flow"/>
+  <path d="M 324 540 L 416 540" class="flow"/>
+  <path d="M 324 216 L 370 216 L 370 496 L 416 496" class="flowb"/>
+  <text x="388" y="452" class="lbl" transform="rotate(-90 388 452)">defaults</text>
+
+  <!-- ══════════ Generated artifacts ══════════ -->
+  <rect x="776" y="56" width="268" height="566" class="grp"/>
+  <text x="788" y="80" class="tb">Generated, in the build tree</text>
+
+  <rect x="792" y="96" width="236" height="68" rx="6" class="box"/>
+  <text x="804" y="118" class="t">build/hw/VX_config.vh</text>
+  <text x="804" y="138" class="ts">Verilog `define, guarded</text>
+  <text x="804" y="154" class="tt">helper macros emitted on demand</text>
+
+  <rect x="792" y="178" width="236" height="68" rx="6" class="box"/>
+  <text x="804" y="200" class="t">build/sw/VX_config.h</text>
+  <text x="804" y="220" class="ts">C #define, guarded</text>
+  <text x="804" y="236" class="tt">same keys, same order</text>
+
+  <rect x="792" y="276" width="236" height="62" rx="6" class="box"/>
+  <text x="804" y="298" class="t">build/hw/VX_types.vh</text>
+  <text x="804" y="318" class="ts">Verilog `define, constants</text>
+
+  <rect x="792" y="354" width="236" height="62" rx="6" class="box"/>
+  <text x="804" y="376" class="t">build/sw/VX_types.h</text>
+  <text x="804" y="396" class="ts">C #define, constants</text>
+
+  <rect x="792" y="456" width="236" height="150" rx="6" class="box"/>
+  <text x="804" y="478" class="t">XCONFIGS (-D list)</text>
+  <text x="804" y="500" class="mono">-DVX_CFG_XLEN=32</text>
+  <text x="804" y="516" class="mono">-DVX_CFG_XLEN_32</text>
+  <text x="804" y="532" class="mono">-DVX_CFG_FPU_TYPE=STD</text>
+  <text x="804" y="548" class="mono">-DVX_CFG_FPU_TYPE_STD</text>
+  <text x="804" y="564" class="mono">-DVX_CFG_L2_ENABLED=0 …</text>
+  <text x="804" y="592" class="tt">never written to disk</text>
+
+  <path d="M 700 150 L 792 130" class="flow"/>
+  <path d="M 700 182 L 792 212" class="flow"/>
+  <path d="M 700 330 L 792 307" class="flow"/>
+  <path d="M 700 362 L 792 385" class="flow"/>
+  <path d="M 700 530 L 792 530" class="flow"/>
+
+  <!-- ══════════ Consumers ══════════ -->
+  <rect x="1104" y="56" width="272" height="262" class="grp"/>
+  <text x="1116" y="80" class="tb">Hardware and simulators</text>
+
+  <rect x="1120" y="96" width="240" height="98" rx="6" class="unit"/>
+  <text x="1132" y="118" class="tb">RTL</text>
+  <text x="1132" y="138" class="ts">VX_define.vh includes both .vh files</text>
+  <text x="1132" y="154" class="ts">reads `VX_CFG_* / `VX_MEM_* directly</text>
+  <text x="1132" y="174" class="ts">+ raw CONFIGS and enum companions</text>
+  <text x="1132" y="188" class="ts">   on the tool command line</text>
+
+  <rect x="1120" y="208" width="240" height="94" rx="6" class="unit"/>
+  <text x="1132" y="230" class="tb">SimX and sim/common</text>
+  <text x="1132" y="250" class="ts">#include VX_config.h and VX_types.h</text>
+  <text x="1132" y="266" class="ts">+ raw CONFIGS on the compile line</text>
+  <text x="1132" y="286" class="ts">Makefile picks sources from XCONFIGS</text>
+
+  <rect x="1104" y="374" width="272" height="248" class="grp"/>
+  <text x="1116" y="398" class="tb">Software</text>
+
+  <rect x="1120" y="414" width="240" height="94" rx="6" class="sw"/>
+  <text x="1132" y="436" class="tb">Runtime (sw/runtime)</text>
+  <text x="1132" y="456" class="ts">VX_types.h only</text>
+  <text x="1132" y="472" class="ts">device facts come from the device:</text>
+  <text x="1132" y="488" class="ts">vx_device_query(VX_CAPS_*)</text>
+
+  <rect x="1120" y="522" width="240" height="84" rx="6" class="sw"/>
+  <text x="1132" y="544" class="tb">Kernel library and tests</text>
+  <text x="1132" y="564" class="ts">VX_types.h + XCONFIGS as CFLAGS</text>
+  <text x="1132" y="580" class="ts">(compile-time hardware shape)</text>
+
+  <!-- config.* -> HW/sim only -->
+  <path d="M 1028 171 L 1104 171" class="flow"/>
+  <text x="1034" y="163" class="ts">private</text>
+
+  <!-- types.* -> both -->
+  <path d="M 1028 346 L 1074 346 L 1074 290 L 1104 290" class="flow"/>
+  <path d="M 1074 346 L 1074 430 L 1104 430" class="flow"/>
+  <text x="1034" y="338" class="ts">ABI</text>
+
+  <!-- xconfigs -> software -->
+  <path d="M 1028 564 L 1104 564" class="flow"/>
+
+  <!-- boundary -->
+  <path d="M 1086 346 L 1376 346" class="bound"/>
+  <text x="1118" y="340" class="lblr">config boundary — VX_config.h stops here</text>
+  <text x="1118" y="362" class="lblr">ci/check_config_boundary.sh</text>
+
+  <!-- footer -->
+  <text x="24" y="656" class="tt">configure regenerates a header only when its TOML, gen_config.py, or the configure parameters (XLEN, TOOLDIR, …) are newer than the header.</text>
+  <text x="24" y="676" class="tt">The cflags pass runs on every make, so a CONFIGS override needs no re-configure — but the application and the driver must be built with the same CONFIGS.</text>
+  <text x="24" y="696" class="tt">Every other *.toml at the repo root (vortex_opae.toml) rides the same header pass and lands beside these as &lt;name&gt;.vh / &lt;name&gt;.h.</text>
+</svg>

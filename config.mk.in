@@ -55,3 +55,14 @@ SIM_COMMON_DIR ?= $(VORTEX_HOME)/sim/common
 # V80 runtime install prefix; only consulted by the aved backend when it
 # targets real hardware or the vendor simulator.
 VRT_HOME ?= /usr/local
+
+# Hardware profile (profiles/<name>.json), folded into CONFIGS once here so every
+# flow that includes config.mk builds the same machine. Explicit -D flags in
+# CONFIGS win over the profile.
+PROFILE ?= @PROFILE@
+ifneq ($(strip $(PROFILE)),)
+override CONFIGS := $(shell python3 $(VORTEX_HOME)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --profile=$(PROFILE) --merge-configs --cflags='$(CONFIGS)')
+ifneq ($(.SHELLSTATUS),0)
+$(error invalid hardware profile '$(PROFILE)')
+endif
+endif

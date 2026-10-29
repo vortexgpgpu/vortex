@@ -119,12 +119,18 @@ tests:
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
     -DVX_CFG_TCU_TMEM_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DUMMA_NRC=32
 
-# SimX<->rtlsim cycle parity under concurrency, at a larger (perf_gate-sized)
-# workload than above. SimX doesn't model the TMEM bank-arbitration/lockstep
-# contention effects RTL incurs once a second CTA is resident.
+# Same, with A sourced from TMEM: covers the abuf TMEM refill and its bank arbitration.
+- id: model_parity-umma-fp16-ts
+  check: model_parity
+  via: blackbox
+  app: sgemm_tcu_tmem
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_TMEM_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DUMMA_NRC=32 -DUMMA_A_TMEM
+
+# SimX<->rtlsim cycle parity with concurrent CTAs: two resident at NW=8, four at
+# NW=16. Covers the CTA lockstep wait and cross-CTA TMEM bank contention.
 - id: model_parity-umma-2cta
   check: model_parity
-  tolerance: 0.20
   via: blackbox
   app: sgemm_tcu_tmem
   args: -m64 -n64 -k64
@@ -138,6 +144,56 @@ tests:
   args: -m64 -n64 -k64
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
     -DVX_CFG_TCU_TMEM_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DUMMA_NRC=32
+
+# FEDP2K doubles FEDP_K, so an A k-stripe spans two TMEM bank words.
+- id: sgemm_tcu_tmem-15
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_tmem
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_TMEM_ENABLE -DVX_CFG_TCU_FEDP2K -DITYPE=fp16 -DOTYPE=fp32 -DUMMA_NRC=32
+
+- id: sgemm_tcu_tmem-16
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_tmem
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_TMEM_ENABLE -DVX_CFG_TCU_FEDP2K -DITYPE=fp16 -DOTYPE=fp32 -DUMMA_NRC=32
+
+# A from TMEM (UMMA TS form): abuf refills from TMEM instead of LMEM.
+- id: sgemm_tcu_tmem-17
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_tmem
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_TMEM_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DUMMA_NRC=32 -DUMMA_A_TMEM
+
+- id: sgemm_tcu_tmem-18
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_tmem
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_TMEM_ENABLE -DVX_CFG_TCU_FEDP2K -DITYPE=fp16 -DOTYPE=fp32 -DUMMA_NRC=32 -DUMMA_A_TMEM
+
+- id: sgemm_tcu_tmem-19
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_tmem
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_TMEM_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DUMMA_NRC=32 -DUMMA_A_TMEM
+
+- id: sgemm_tcu_tmem-20
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_tmem
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_TMEM_ENABLE -DVX_CFG_TCU_FEDP2K -DITYPE=fp16 -DOTYPE=fp32 -DUMMA_NRC=32 -DUMMA_A_TMEM
 
 # Dense UMMA fp16 datapath, cycles-vs-baseline.
 - id: perf_gate-umma-fp16

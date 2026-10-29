@@ -1,0 +1,158 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 660" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="arrb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1c6ca8"/>
+    </marker>
+    <marker id="arrp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8e4a7e"/>
+    </marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3a7d44"/>
+    </marker>
+    <marker id="arrr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b03a2e"/>
+    </marker>
+  </defs>
+  <style>
+    .blk  { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.6; }
+    .bad  { fill:#fbeeed; stroke:#b03a2e; stroke-width:1.6; }
+    .grp  { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .t    { fill:#1b2733; font-size:15px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:12.5px; }
+    .tg   { fill:#5a6772; font-size:13px; font-weight:bold; }
+    .w    { stroke:#444; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+    .wva  { stroke:#8e4a7e; stroke-width:2.0; fill:none; marker-end:url(#arrp); }
+    .whit { stroke:#3a7d44; stroke-width:2.0; fill:none; marker-end:url(#arrg); }
+    .wmis { stroke:#1c6ca8; stroke-width:1.8; fill:none; marker-end:url(#arrb); }
+    .wbus { stroke:#1c6ca8; stroke-width:1.8; fill:none; marker-end:url(#arrb); marker-start:url(#arrb); }
+    .wkil { stroke:#b03a2e; stroke-width:1.8; fill:none; marker-end:url(#arrr); stroke-dasharray:5 3; }
+    .wctl { stroke:#3a7d44; stroke-width:1.5; fill:none; marker-end:url(#arrg); stroke-dasharray:4 3; }
+    .l    { fill:#444; font-size:12px; }
+    .li   { fill:#1b2733; font-size:12.5px; font-weight:bold; }
+    .lp   { fill:#8e4a7e; font-size:12px; }
+    .lg   { fill:#2f6b39; font-size:12px; }
+    .lb   { fill:#1c6ca8; font-size:12px; }
+    .lr   { fill:#b03a2e; font-size:12px; }
+  </style>
+
+  <rect x="0" y="0" width="1500" height="660" fill="#ffffff"/>
+  <text x="24" y="34" class="t" font-size="20">VX_mmu — translation stage, one per L1 cache</text>
+
+  <!-- request path -->
+  <rect x="200" y="120" width="150" height="100" rx="6" class="blk"/>
+  <text x="275" y="152" class="t" text-anchor="middle">Decode</text>
+  <text x="275" y="172" class="ts" text-anchor="middle">vpn · access · amo</text>
+  <text x="275" y="188" class="ts" text-anchor="middle">bypass (BARE / IO / OM)</text>
+
+  <rect x="600" y="120" width="170" height="100" rx="6" class="blk"/>
+  <text x="685" y="152" class="t" text-anchor="middle">Categorize</text>
+  <text x="685" y="172" class="ts" text-anchor="middle">bypass · hit · park · pfault</text>
+  <text x="685" y="188" class="ts" text-anchor="middle">per lane, priority order</text>
+
+  <rect x="820" y="120" width="170" height="100" rx="6" class="blk"/>
+  <text x="905" y="152" class="t" text-anchor="middle">Translate</text>
+  <text x="905" y="172" class="ts" text-anchor="middle">PPN splice</text>
+  <text x="905" y="188" class="ts" text-anchor="middle">tlb_perm_ok</text>
+
+  <rect x="1040" y="120" width="170" height="100" rx="6" class="blk"/>
+  <text x="1125" y="152" class="t" text-anchor="middle">out_pipe</text>
+  <text x="1125" y="172" class="ts" text-anchor="middle">VX_elastic_buffer</text>
+  <text x="1125" y="188" class="ts" text-anchor="middle">1 registered stage</text>
+
+  <path d="M 60 170 L 200 170" class="wva"/>
+  <text x="60" y="150" class="li">core_bus_if[l].req</text>
+  <text x="60" y="164" class="lp">VA · ×NUM_REQS</text>
+  <path d="M 350 170 L 600 170" class="wva"/>
+  <text x="420" y="162" class="lp">fields · vpn · access · amo · bypass</text>
+  <path d="M 770 170 L 820 170" class="whit"/>
+  <text x="776" y="162" class="lg">hit</text>
+  <path d="M 990 170 L 1040 170" class="whit"/>
+  <text x="1002" y="162" class="lg">PA</text>
+  <path d="M 1210 170 L 1440 170" class="w"/>
+  <text x="1300" y="150" class="li">mem_bus_if[l].req</text>
+  <text x="1300" y="164" class="l">PA · ×NUM_REQS → L1 cache</text>
+  <path d="M 770 200 L 795 200 L 795 260 L 1010 260 L 1010 200 L 1040 200" class="w"/>
+  <text x="830" y="254" class="l">bypass (untranslated)</text>
+
+  <!-- storage -->
+  <rect x="200" y="300" width="570" height="230" rx="6" class="grp"/>
+  <text x="212" y="322" class="tg">VX_tlb_l1</text>
+
+  <rect x="220" y="340" width="240" height="80" rx="6" class="blk"/>
+  <text x="340" y="370" class="t" text-anchor="middle">VX_tlb_cam</text>
+  <text x="340" y="390" class="ts" text-anchor="middle">TLB_SIZE entries · FA · NUM_REQS ports</text>
+
+  <rect x="500" y="340" width="250" height="170" rx="6" class="blk"/>
+  <text x="625" y="370" class="t" text-anchor="middle">VX_tlb_mshr</text>
+  <text x="625" y="390" class="ts" text-anchor="middle">MSHR_SIZE entries · 2 tokens each</text>
+  <text x="625" y="406" class="ts" text-anchor="middle">VPN dedup</text>
+  <text x="625" y="430" class="ts" text-anchor="middle">park → issue → fill → drain</text>
+
+  <rect x="680" y="240" width="90" height="36" rx="6" class="blk"/>
+  <text x="725" y="263" class="ts" text-anchor="middle">park arb</text>
+
+  <path d="M 275 220 L 275 340" class="wva"/>
+  <text x="282" y="290" class="lp">vpn</text>
+  <path d="M 320 220 L 320 292 L 480 292 L 480 360 L 500 360" class="wva"/>
+  <text x="332" y="286" class="lp">vpn (probe)</text>
+  <path d="M 420 340 L 420 236 L 620 236 L 620 220" class="whit"/>
+  <text x="432" y="230" class="lg">hit · ppn · flags · level</text>
+  <path d="M 540 340 L 540 250 L 640 250 L 640 220" class="wmis"/>
+  <text x="546" y="264" class="lb">mshr_match</text>
+  <path d="M 725 220 L 725 240" class="wmis"/>
+  <path d="M 725 276 L 725 340" class="wmis"/>
+  <text x="718" y="300" class="lb" text-anchor="end">park {lane, fields}</text>
+  <path d="M 360 420 L 360 440 L 500 440" class="w"/>
+  <text x="372" y="434" class="l">install</text>
+
+  <path d="M 625 510 L 625 600" class="wbus"/>
+  <text x="634" y="560" class="li">tlb_bus_if</text>
+  <text x="634" y="576" class="lb">miss / fill → socket VX_tlb_bus_arb</text>
+
+  <!-- replay / kill / response -->
+  <rect x="820" y="320" width="170" height="80" rx="6" class="blk"/>
+  <text x="905" y="350" class="t" text-anchor="middle">Replay</text>
+  <text x="905" y="370" class="ts" text-anchor="middle">re-splice · re-check perm</text>
+
+  <rect x="820" y="430" width="170" height="70" rx="6" class="bad"/>
+  <text x="905" y="458" class="t" text-anchor="middle">Kill</text>
+  <text x="905" y="478" class="ts" text-anchor="middle">zeroed reply for load / AMO</text>
+
+  <rect x="1040" y="320" width="170" height="80" rx="6" class="blk"/>
+  <text x="1125" y="350" class="t" text-anchor="middle">Rsp mux</text>
+  <text x="1125" y="370" class="ts" text-anchor="middle">kill reply ahead of cache reply</text>
+
+  <path d="M 750 360 L 820 360" class="whit"/>
+  <text x="760" y="352" class="lg">drain</text>
+  <path d="M 905 320 L 905 280 L 1125 280 L 1125 220" class="whit"/>
+  <text x="940" y="274" class="lg">replay (pre-empts new request)</text>
+  <path d="M 905 400 L 905 430" class="wkil"/>
+  <text x="912" y="420" class="lr">¬perm</text>
+  <path d="M 750 465 L 820 465" class="wkil"/>
+  <text x="760" y="457" class="lr">fault</text>
+  <path d="M 990 465 L 1015 465 L 1015 360 L 1040 360" class="wkil"/>
+  <text x="1020" y="420" class="lr">kill</text>
+  <path d="M 1440 360 L 1210 360" class="w"/>
+  <text x="1300" y="340" class="li">mem_bus_if[l].rsp</text>
+  <text x="1300" y="354" class="l">← L1 cache</text>
+  <path d="M 1125 400 L 1125 620 L 60 620" class="w"/>
+  <text x="60" y="600" class="li">core_bus_if[l].rsp</text>
+  <text x="60" y="614" class="l">cache reply or kill reply</text>
+
+  <path d="M 770 205 L 786 205 L 786 300" class="wkil" marker-end="none"/>
+  <path d="M 786 300 L 786 540 L 1255 540 L 1255 480 L 1440 480" class="wkil"/>
+  <text x="1300" y="460" class="li">fault_if</text>
+  <text x="1300" y="474" class="lr">va · access · amo</text>
+  <text x="900" y="534" class="lr">pfault · replay ¬perm · mshr fault</text>
+
+  <!-- control -->
+  <path d="M 60 340 L 200 340" class="wctl"/>
+  <text x="60" y="320" class="li">vm_active · flush_if</text>
+  <text x="60" y="334" class="lg">from VX_mmu_snoop</text>
+  <path d="M 200 480 L 60 480" class="wctl"/>
+  <text x="60" y="500" class="li">empty</text>
+  <text x="60" y="514" class="lg">→ socket_mmu_drained</text>
+</svg>

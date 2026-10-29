@@ -29,10 +29,9 @@ struct Node {
 //--date:	26/01/2011
 //--note: width is changed to the new_width
 //----------------------------------------------------------
-void run_bfs_cpu(int no_of_nodes, Node *h_graph_nodes, int edge_list_size,
-                 int *h_graph_edges, char *h_graph_mask,
-                 char *h_updating_graph_mask, char *h_graph_visited,
-                 int *h_cost_ref) {
+void run_bfs_cpu(int no_of_nodes, Node *h_graph_nodes, int *h_graph_edges,
+                 char *h_graph_mask, char *h_updating_graph_mask,
+                 char *h_graph_visited, int *h_cost_ref) {
   char stop;
   int k = 0;
   do {
@@ -186,8 +185,9 @@ int main(int argc, char *argv[]) {
   int no_of_nodes;
   int edge_list_size;
   FILE *fp;
-  Node *h_graph_nodes;
-  char *h_graph_mask, *h_updating_graph_mask, *h_graph_visited;
+  Node *h_graph_nodes = NULL;
+  char *h_graph_mask = NULL, *h_updating_graph_mask = NULL,
+       *h_graph_visited = NULL;
 
   if (argc < 2) {
     printf("graph file missing!\n");
@@ -206,17 +206,22 @@ int main(int argc, char *argv[]) {
 
     printf("Reading File completed!\n");
 
+    auto read_int = [fp](int *value) {
+      if (fscanf(fp, "%d", value) != 1) {
+        fclose(fp);
+        throw(std::string("error parsing graph file"));
+      }
+    };
+
     int source = 0;
 
-    fscanf(fp, "%d", &no_of_nodes);
+    read_int(&no_of_nodes);
 
-    int num_of_blocks = 1;
     int num_of_threads_per_block = no_of_nodes;
 
     // Make execution Parameters according to the number of nodes
     // Distribute threads across multiple Blocks if necessary
     if (no_of_nodes > MAX_THREADS_PER_BLOCK) {
-      num_of_blocks = (int)ceil(no_of_nodes / (double)MAX_THREADS_PER_BLOCK);
       num_of_threads_per_block = MAX_THREADS_PER_BLOCK;
     }
     work_group_size = num_of_threads_per_block;
@@ -229,7 +234,8 @@ int main(int argc, char *argv[]) {
     int start, edgeno;
     // initalize the memory
     for (int i = 0; i < no_of_nodes; i++) {
-      fscanf(fp, "%d %d", &start, &edgeno);
+      read_int(&start);
+      read_int(&edgeno);
       h_graph_nodes[i].starting = start;
       h_graph_nodes[i].no_of_edges = edgeno;
       h_graph_mask[i] = false;
@@ -237,17 +243,17 @@ int main(int argc, char *argv[]) {
       h_graph_visited[i] = false;
     }
     // read the source node from the file
-    fscanf(fp, "%d", &source);
+    read_int(&source);
     source = 0;
     // set the source node as true in the mask
     h_graph_mask[source] = true;
     h_graph_visited[source] = true;
-    fscanf(fp, "%d", &edge_list_size);
+    read_int(&edge_list_size);
     int id, cost;
     int *h_graph_edges = (int *)malloc(sizeof(int) * edge_list_size);
     for (int i = 0; i < edge_list_size; i++) {
-      fscanf(fp, "%d", &id);
-      fscanf(fp, "%d", &cost);
+      read_int(&id);
+      read_int(&cost);
       h_graph_edges[i] = id;
     }
 
@@ -278,7 +284,7 @@ int main(int argc, char *argv[]) {
     source = 0;
     h_graph_mask[source] = true;
     h_graph_visited[source] = true;
-    run_bfs_cpu(no_of_nodes, h_graph_nodes, edge_list_size, h_graph_edges,
+    run_bfs_cpu(no_of_nodes, h_graph_nodes, h_graph_edges,
                 h_graph_mask, h_updating_graph_mask, h_graph_visited,
                 h_cost_ref);
     //---------------------------------------------------------
@@ -290,7 +296,7 @@ int main(int argc, char *argv[]) {
     free(h_updating_graph_mask);
     free(h_graph_visited);
   } catch (std::string msg) {
-    printf("--cambine: exception in main ->%s\n", msg);
+    printf("--cambine: exception in main ->%s\n", msg.c_str());
     // release host memory
     free(h_graph_nodes);
     free(h_graph_mask);

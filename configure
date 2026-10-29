@@ -77,7 +77,7 @@ copy_files() {
                         continue
                     fi
                     mkdir -p "$dest_dir"
-                    sed "s|@VORTEX_HOME@|$SOURCE_DIR|g; s|@XLEN@|$XLEN|g; s|@TOOLDIR@|$TOOLDIR|g; s|@OSVERSION@|$OSVERSION|g; s|@INSTALLDIR@|$PREFIX|g; s|@BUILDDIR@|$CURRENT_DIR|g; s|@TOOLCHAIN_REV@|$TOOLCHAIN_REV|g; s|@VORTEX_VERSION@|$VORTEX_VERSION|g; s|@GEM5_REV@|$GEM5_REV|g" "$file" > "$dest_file"
+                    sed "s|@VORTEX_HOME@|$SOURCE_DIR|g; s|@XLEN@|$XLEN|g; s|@TOOLDIR@|$TOOLDIR|g; s|@OSVERSION@|$OSVERSION|g; s|@INSTALLDIR@|$PREFIX|g; s|@BUILDDIR@|$CURRENT_DIR|g; s|@TOOLCHAIN_REV@|$TOOLCHAIN_REV|g; s|@VORTEX_VERSION@|$VORTEX_VERSION|g; s|@GEM5_REV@|$GEM5_REV|g; s|@PROFILE@|$PROFILE|g" "$file" > "$dest_file"
                     # apply permissions to bash scripts
                     read -r firstline < "$dest_file"
                     if [[ "$firstline" =~ ^#!.*bash ]]; then
@@ -140,6 +140,7 @@ default_xlen=32
 default_tooldir=$HOME/tools
 default_osversion=$(detect_osversion)
 default_prefix=$CURRENT_DIR/install
+default_profile=
 
 # load default configuration parameters from existing config.mk
 if [ -f "config.mk" ]; then
@@ -152,6 +153,7 @@ if [ -f "config.mk" ]; then
             TOOLDIR\ ?*) default_tooldir=${value//\?=/} ;;
             OSVERSION\ ?*) default_osversion=${value//\?=/} ;;
             PREFIX\ ?*) default_prefix=${value//\?=/} ;;
+            PROFILE\ ?*) default_profile=${value//\?=/} ;;
         esac
     done < config.mk
 fi
@@ -161,6 +163,7 @@ XLEN=${XLEN:=$default_xlen}
 TOOLDIR=${TOOLDIR:=$default_tooldir}
 OSVERSION=${OSVERSION:=$default_osversion}
 PREFIX=${PREFIX:=$default_prefix}
+PROFILE=${PROFILE-$default_profile}
 
 # parse command line arguments
 usage() {
@@ -169,6 +172,7 @@ usage() {
     echo "  --tooldir=<path>     Set the TOOLDIR path (default: $HOME/tools)"
     echo "  --osversion=<version> Set the OS Version (default: $(detect_osversion))"
     echo "  --prefix=<path>, --installdir=<path> Set installation directory"
+    echo "  --profile=<name>     Default hardware profile, profiles/<name>.json (default: none)"
     exit 1
 }
 while [[ "$#" -gt 0 ]]; do
@@ -177,11 +181,18 @@ while [[ "$#" -gt 0 ]]; do
         --tooldir=*) TOOLDIR="${1#*=}" ;;
         --osversion=*) OSVERSION="${1#*=}" ;;
         --prefix=*|--installdir=*) PREFIX="${1#*=}" ;;
+        --profile=*) PROFILE="${1#*=}" ;;
         -h|--help) usage ;;
         *) echo "Unknown parameter passed: $1"; usage ;;
     esac
     shift
 done
+
+# check the profile before anything is generated from it
+if [ -n "$PROFILE" ] && [ ! -f "$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/profiles/$PROFILE.json" ]; then
+    echo "Error: unknown profile '$PROFILE' (no profiles/$PROFILE.json)"
+    exit -1
+fi
 
 # check OS
 if [ "$OSVERSION" == "unsupported" ]; then
@@ -202,7 +213,7 @@ source "$SOURCE_DIR/VERSION"
 
 # stamp file tracks config parameter changes; touched only when params change
 CONFIG_STAMP="$CURRENT_DIR/.config.stamp"
-CONFIG_SIG="XLEN=$XLEN TOOLDIR=$TOOLDIR OSVERSION=$OSVERSION PREFIX=$PREFIX SOURCE_DIR=$SOURCE_DIR BUILDDIR=$CURRENT_DIR"
+CONFIG_SIG="XLEN=$XLEN TOOLDIR=$TOOLDIR OSVERSION=$OSVERSION PREFIX=$PREFIX PROFILE=$PROFILE SOURCE_DIR=$SOURCE_DIR BUILDDIR=$CURRENT_DIR"
 if [ ! -f "$CONFIG_STAMP" ] || [ "$(cat "$CONFIG_STAMP" 2>/dev/null)" != "$CONFIG_SIG" ]; then
     echo "$CONFIG_SIG" > "$CONFIG_STAMP"
 fi
@@ -238,6 +249,7 @@ for toml in "$SOURCE_DIR"/*.toml; do
     extra=""
     case "$name" in
         VX_types) extra="--resolved" ;;
+        VX_config) [ -n "$PROFILE" ] && extra="--profile=$PROFILE" ;;
     esac
     gen_header "$toml" "$CURRENT_DIR/hw/$name.vh" verilog "$extra"
     gen_header "$toml" "$CURRENT_DIR/sw/$name.h"  cpp     "$extra"

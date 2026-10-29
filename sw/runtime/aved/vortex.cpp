@@ -267,6 +267,21 @@ public:
       // Only the hardware platform has a slave bridge, so anything else needs
       // the explicit host-memory sync in cp_reg_write/cp_reg_read.
       sim_mode_  = (vrtDevice_.getPlatform() != vrt::Platform::HARDWARE);
+      // Like XRT's xclbin load, clock the kernel at the rate the image was
+      // timed for: a design write leaves the user clock at whatever the
+      // previous image set, which can be far above or below this one's.
+      if (!sim_mode_) {
+        const uint64_t timed_hz = vrtDevice_.getMaxFrequency();
+        vrtDevice_.setFrequency(timed_hz);
+        const uint64_t clk_hz = vrtDevice_.getFrequency();
+        if (clk_hz == 0 || clk_hz > timed_hz + timed_hz / 200) {
+          fprintf(stderr, "[VXDRV] Error: user clock reads %lu Hz, image is timed for %lu Hz\n",
+                  (unsigned long)clk_hz, (unsigned long)timed_hz);
+          return -1;
+        }
+        printf("[VXDRV] kernel clock %lu Hz (image timed for %lu Hz)\n",
+               (unsigned long)clk_hz, (unsigned long)timed_hz);
+      }
       vrtKernel_ = vrt::Kernel(vrtDevice_, KERNEL_NAME);
     VRT_CATCH(-1)
 

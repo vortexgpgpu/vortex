@@ -44,6 +44,7 @@ module VX_dcr_data import VX_gpu_pkg::*; #(
     // Latch a read request when it is for this core and addr == MPM_VALUE
     reg                         dcr_csr_pending_r;
     reg [`VX_CSR_ADDR_BITS-1:0] dcr_csr_addr_r;
+    reg [7:0]                   dcr_csr_class_r;
 
     wire is_mpm_read = dcr_bus_if.req_valid
                     && ~dcr_bus_if.req_data.rw
@@ -55,9 +56,11 @@ module VX_dcr_data import VX_gpu_pkg::*; #(
         if (reset) begin
             dcr_csr_pending_r <= 1'b0;
             dcr_csr_addr_r    <= '0;
+            dcr_csr_class_r   <= '0;
         end else if (is_mpm_read) begin
             dcr_csr_pending_r <= 1'b1;
             dcr_csr_addr_r    <= mpm_csr_addr;
+            dcr_csr_class_r   <= mpm_class;
         end else if (dcr_csr_if.ready) begin
             dcr_csr_pending_r <= 1'b0;
         end
@@ -65,7 +68,7 @@ module VX_dcr_data import VX_gpu_pkg::*; #(
 
     assign dcr_csr_if.valid = dcr_csr_pending_r;
     assign dcr_csr_if.addr  = dcr_csr_addr_r;
-    assign dcr_csr_if.mpm_class = mpm_class;
+    assign dcr_csr_if.mpm_class = dcr_csr_class_r;
 
     wire dcr_csr_if_fire = dcr_csr_if.valid && dcr_csr_if.ready;
 

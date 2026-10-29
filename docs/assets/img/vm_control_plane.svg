@@ -1,0 +1,146 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 1030" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="m_a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2e5e82"/>
+    </marker>
+    <marker id="m_p" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8e4a7e"/>
+    </marker>
+    <marker id="m_g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3a7d44"/>
+    </marker>
+    <marker id="m_r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b03a2e"/>
+    </marker>
+    <marker id="m_y" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b58900"/>
+    </marker>
+  </defs>
+  <style>
+    .lane { stroke:#c2ccd6; stroke-width:1.3; }
+    .t    { fill:#1b2733; font-size:19px; font-weight:bold; }
+    .th   { fill:#1b2733; font-size:12.5px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:11px; }
+    .tt   { fill:#5a6772; font-size:10.5px; font-style:italic; }
+    .act  { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.3; }
+    .actp { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.3; }
+    .actg { fill:#f4faf4; stroke:#3a7d44; stroke-width:1.3; }
+    .actr { fill:#fbeeed; stroke:#b03a2e; stroke-width:1.3; }
+    .mem  { fill:#fdf6e3; stroke:#b58900; stroke-width:1.3; }
+    .phase{ fill:#fbfcfd; stroke:#5a7184; stroke-width:1.0; stroke-dasharray:5 3; }
+    .m    { stroke:#2e5e82; stroke-width:1.7; fill:none; marker-end:url(#m_a); }
+    .mp   { stroke:#8e4a7e; stroke-width:1.7; fill:none; marker-end:url(#m_p); }
+    .mg   { stroke:#3a7d44; stroke-width:1.7; fill:none; marker-end:url(#m_g); }
+    .mr   { stroke:#b03a2e; stroke-width:1.7; fill:none; marker-end:url(#m_r); }
+    .my   { stroke:#b58900; stroke-width:1.7; fill:none; marker-end:url(#m_y); }
+    .lb   { fill:#2e5e82; font-size:10.5px; }
+    .lbp  { fill:#8e4a7e; font-size:10.5px; }
+    .lbg  { fill:#2f6b39; font-size:10.5px; }
+    .lbr  { fill:#b03a2e; font-size:10.5px; }
+    .lby  { fill:#8a6d00; font-size:10.5px; }
+  </style>
+
+  <rect x="0" y="0" width="1500" height="1030" fill="#ffffff"/>
+  <text x="24" y="34" class="t">Control plane — from device open to a reported page fault</text>
+  <text x="24" y="56" class="tt">One DCR pair is the only translation root. Writing its high half commits the address space: it fans satp to the walkers, flushes every TLB level, and arms a clean fault report.</text>
+
+  <text x="120"  y="94" class="th" text-anchor="middle" fill="#5a7184">host runtime</text>
+  <text x="380"  y="94" class="th" text-anchor="middle" fill="#8a6d00">CP ring / device memory</text>
+  <text x="640"  y="94" class="th" text-anchor="middle" fill="#2f6b39">VX_mmu_dcr (top)</text>
+  <text x="900"  y="94" class="th" text-anchor="middle" fill="#2f6b39">VX_mmu_snoop (socket)</text>
+  <text x="1160" y="94" class="th" text-anchor="middle" fill="#2e5e82">L2 TLB + PTW (cluster)</text>
+  <text x="1400" y="94" class="th" text-anchor="middle" fill="#8e4a7e">kernel on the cores</text>
+
+  <line x1="120"  y1="104" x2="120"  y2="1020" class="lane"/>
+  <line x1="380"  y1="104" x2="380"  y2="1020" class="lane"/>
+  <line x1="640"  y1="104" x2="640"  y2="1020" class="lane"/>
+  <line x1="900"  y1="104" x2="900"  y2="1020" class="lane"/>
+  <line x1="1160" y1="104" x2="1160" y2="1020" class="lane"/>
+  <line x1="1400" y1="104" x2="1400" y2="1020" class="lane"/>
+
+  <!-- phase: open -->
+  <rect x="40" y="112" width="1440" height="196" rx="6" class="phase"/>
+  <text x="52" y="128" class="th">1 · vx_device_open — discovery and page-table construction</text>
+  <rect x="104" y="136" width="32" height="150" class="act"/>
+  <path d="M 140 150 L 376 150" class="my"/>
+  <text x="150" y="144" class="lby">read CP_DEV_CAPS: bit 24 VM_ENABLED, bit 27 MMU_FAULT_REPORT</text>
+  <text x="150" y="172" class="ts">VMManager::init(): reserve the PT region in the PA allocator, allocate the root table (shadow, zeroed),</text>
+  <text x="150" y="188" class="ts">identity-map [0, USER_BASE) (IO) and [PAGE_TABLE_BASE, end) (page tables + per-warp stacks) with superpages</text>
+  <text x="150" y="204" class="ts">where alignment allows; the kernel image is identity-mapped later by mem_reserve once the loader knows it</text>
+  <path d="M 140 222 L 376 222" class="my"/>
+  <text x="150" y="216" class="lby">flush(): CMD_MEM_WRITE(physical) per dirty PT page</text>
+  <rect x="366" y="228" width="28" height="30" class="mem"/>
+  <text x="400" y="246" class="ts">page tables now live at VX_MEM_PAGE_TABLE_BASE_ADDR</text>
+  <path d="M 140 270 L 376 270" class="my"/>
+  <text x="150" y="264" class="lby">CP_SATP_LO/HI ← satp (emulation CP DMA root; reads zero on the RTL CP)</text>
+  <text x="400" y="290" class="tt">every later vx_mem_alloc: PA from the pool, VA minted (identity or randomized), PTEs into the shadow, one flush per dirty PT page</text>
+
+  <!-- phase: launch -->
+  <rect x="40" y="322" width="1440" height="360" rx="6" class="phase"/>
+  <text x="52" y="338" class="th">2 · first launch — commit the address space (ensure_mmu_satp, queue-ordered ahead of CMD_LAUNCH)</text>
+  <rect x="104" y="346" width="32" height="60" class="act"/>
+  <path d="M 140 360 L 376 360" class="my"/>
+  <text x="150" y="354" class="lby">CMD_DCR_WRITE SATP_LO</text>
+  <path d="M 384 360 L 636 360" class="m"/>
+  <text x="400" y="354" class="lb">DCR write</text>
+  <rect x="626" y="366" width="28" height="30" class="actg"/>
+  <text x="660" y="384" class="ts">satp_r[31:0] ← data (no other effect)</text>
+
+  <path d="M 140 412 L 376 412" class="my"/>
+  <text x="150" y="406" class="lby">CMD_DCR_WRITE SATP_HI (also on Sv32, where it carries zero)</text>
+  <path d="M 384 412 L 636 412" class="m"/>
+  <rect x="626" y="418" width="28" height="190" class="actg"/>
+  <text x="660" y="432" class="ts">satp_r[63:32] ← data (XLEN=64)</text>
+  <text x="660" y="446" class="ts">flush_pending ← 1; fault_valid ← 0</text>
+
+  <path d="M 654 412 L 896 412" class="m" stroke-dasharray="4 3"/>
+  <text x="700" y="406" class="lb">same DCR write, forwarded down the chain</text>
+  <rect x="886" y="418" width="28" height="80" class="actg"/>
+  <text x="920" y="432" class="ts">vm_active ← MODE bit (SATP_LO[31] on Sv32, SATP_HI[31:28] ≠ 0 on Sv39)</text>
+  <text x="920" y="448" class="ts">tlb_flush ← 1: dMMU + iMMU flush_if.req, held until both report done</text>
+  <text x="920" y="464" class="ts">(each clears its CAM and miss station once tlb_empty)</text>
+  <text x="920" y="484" class="tt">self-timed: no handshake back to the top — satp only changes between kernels</text>
+
+  <path d="M 654 512 L 1156 512" class="mg"/>
+  <text x="670" y="506" class="lbg">satp → every cluster's VX_ptw (root PPN);  flush_req → L2 TLB and PTW legs</text>
+  <rect x="1146" y="518" width="28" height="60" class="act"/>
+  <text x="1180" y="532" class="ts">L2 TLB: waits pipe empty ∧ station idle, then clears</text>
+  <text x="1180" y="548" class="ts">PTW: waits no walker active; walk cache clears on req</text>
+  <text x="1180" y="564" class="ts">done = both legs; the top ANDs every cluster</text>
+  <path d="M 1156 592 L 654 592" class="mg"/>
+  <text x="670" y="586" class="lbg">cluster_flush_done → flush_pending ← 0</text>
+
+  <path d="M 140 624 L 376 624" class="my"/>
+  <text x="150" y="618" class="lby">CMD_LAUNCH (then CMD_CACHE_FLUSH, COUT drain, …)</text>
+  <path d="M 384 644 L 1396 644" class="mp"/>
+  <text x="400" y="638" class="lbp">KMU dispatch; __vx_cta_entry does `csrw satp` — a readback mirror, not a translation source</text>
+  <rect x="1386" y="650" width="28" height="20" class="actp"/>
+  <text x="420" y="668" class="tt">from here every dcache/icache request is translated at the socket MMU under vm_active; hits cost one registered stage, misses walk as in the miss sequence figure</text>
+
+  <!-- phase: fault -->
+  <rect x="40" y="696" width="1440" height="316" rx="6" class="phase"/>
+  <text x="52" y="712" class="th">3 · a page fault — structural fault in the walker, first-fault latch, host readback</text>
+  <rect x="1386" y="720" width="28" height="30" class="actp"/>
+  <text x="1150" y="738" class="ts" text-anchor="end">a lane touches an unmapped page → L1 miss → L2 miss → walk</text>
+  <path d="M 1396 760 L 1174 760" class="mp"/>
+  <rect x="1146" y="766" width="28" height="70" class="actr"/>
+  <text x="1180" y="780" class="ts">walker: ¬V (or ¬leaf at level 0, or misaligned) → RESP fault=1</text>
+  <text x="1180" y="796" class="ts">fault_if pulses {va, access, amo}; the fill carries fault=1 to L2, L1</text>
+  <text x="1180" y="812" class="ts">L1 station drains the entry as kills: loads/AMOs get a zeroed reply,</text>
+  <text x="1180" y="828" class="ts">stores and fetches retire silently; nothing installs at any level</text>
+  <path d="M 1156 850 L 654 850" class="mr"/>
+  <text x="670" y="844" class="lbr">cluster_fault_valid / va / access / amo</text>
+  <rect x="626" y="856" width="28" height="40" class="actr"/>
+  <text x="660" y="870" class="ts">first fault only: fault_valid ← 1, {va, access, amo} latched (lowest cluster index wins a tie)</text>
+  <text x="660" y="886" class="ts">later faults are ignored until the host clears the report</text>
+  <rect x="104" y="910" width="32" height="90" class="act"/>
+  <path d="M 140 922 L 376 922" class="my"/>
+  <text x="150" y="916" class="lby">check_mmu_fault() after the launch: CMD_DCR_READ FAULT_INFO</text>
+  <path d="M 384 922 L 636 922" class="m"/>
+  <path d="M 636 940 L 384 940" class="mg"/>
+  <text x="400" y="956" class="lbg">{amo[3], access[2:1], valid[0]} — latched at the read, held until the next DCR access (pulse-then-poll)</text>
+  <path d="M 140 972 L 376 972" class="my"/>
+  <text x="150" y="966" class="lby">read FAULT_VA, FAULT_VA_HI; write FAULT_INFO (clear) → VX_ERR_DEVICE_LOST, "device page fault on write in page 0x…"</text>
+  <text x="150" y="992" class="tt">SimX: the same latch lives in Ptw::fault_; the processor loop ends the launch as soon as a fault is latched and the fabric is quiet, since a</text>
+  <text x="150" y="1006" class="tt">killed fetch owes no response. In RTL the warp drains on its kill replies; a fetch fault stalls that warp until the host tears the launch down.</text>
+</svg>

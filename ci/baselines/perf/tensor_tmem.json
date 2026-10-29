@@ -1,34 +1,34 @@
 {
   "tensor_tmem:perf_gate-umma-4cta:rtlsim": {
     "32": {
-      "cycles": 97512,
+      "cycles": 84036,
       "instrs": 74048
     },
     "app": "sgemm_tcu_tmem",
     "args": "-m64 -n64 -k64",
-    "config_hash": "c85cadc69183d0a6",
+    "config_hash": "499d92a7681cbc15",
     "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_TMEM_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DUMMA_NRC=32",
     "driver": "rtlsim"
   },
   "tensor_tmem:perf_gate-umma-fp16:rtlsim": {
     "32": {
-      "cycles": 129063,
+      "cycles": 88382,
       "instrs": 74016
     },
     "app": "sgemm_tcu_tmem",
     "args": "-m 64 -n 64 -k 64",
-    "config_hash": "50ec8d489c733a56",
+    "config_hash": "279d5ffa77435834",
     "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_TMEM_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DUMMA_NRC=32",
     "driver": "rtlsim"
   },
   "tensor_tmem:perf_gate-umma-int8:rtlsim": {
     "32": {
-      "cycles": 113374,
+      "cycles": 76568,
       "instrs": 64144
     },
     "app": "sgemm_tcu_tmem",
     "args": "-m 64 -n 64 -k 64",
-    "config_hash": "376a9a1a5a51efed",
+    "config_hash": "d3134fbd4d1ed0b2",
     "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_TMEM_ENABLE -DVX_CFG_TCU_INT8_ENABLE -DITYPE=int8 -DOTYPE=int32 -DUMMA_NRC=32",
     "driver": "rtlsim"
   }

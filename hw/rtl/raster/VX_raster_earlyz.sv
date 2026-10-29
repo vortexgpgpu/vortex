@@ -141,7 +141,7 @@ module VX_raster_earlyz import VX_gpu_pkg::*; import VX_raster_pkg::*; import VX
             assign pix_cand_n[p] = zbits[31] ? 24'd0
                                  : (|zbits[30:24]) ? 24'(OM_DEPTH_MASK)
                                  : zbits[23:0];
-            wire [31:0] y_pitch = quad_ypitch[q] + (i[1] ? dcrs.zbuf_pitch : 32'd0);
+            wire [31:0] y_pitch = quad_ypitch[q] + (i[1] ? 32'(dcrs.zbuf_pitch) : 32'd0);
             wire [W_ADDR_BITS-1:0] baddr = {dcrs.zbuf_addr, 4'b0} + W_ADDR_BITS'(px);
             assign pix_waddr_n[p] = baddr + W_ADDR_BITS'(y_pitch[31:2]);
             `UNUSED_VAR (y_pitch)

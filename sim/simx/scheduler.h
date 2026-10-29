@@ -211,6 +211,12 @@ private:
   WarpMask active_warps_;
   WarpMask stalled_warps_;       // registered (current) state read by schedule()
   WarpMask stalled_warps_next_;  // next-state written by suspend()/resume()
+  // CTA dispatch pipeline: the active set the dispatcher sees, and the warp
+  // it picked last cycle.
+  WarpMask cta_active_view_;
+  bool cta_fire_ = false;
+  uint32_t cta_fire_wid_ = 0;
+  cta_warp_record_t cta_fire_rec_;
   uint32_t ipdom_size_;
   wspawn_t wspawn_;
   uint32_t mpm_class_;

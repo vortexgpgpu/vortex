@@ -180,7 +180,7 @@ int main (int argc, char **argv) {
   // Create kernel
   kernel = CL_CHECK2(clCreateKernel(program, KERNEL_NAME, &_err));
 
-  size_t global_size[2] = {size, size};
+  size_t global_size[2] = {static_cast<size_t>(size), static_cast<size_t>(size)};
   size_t local_size[2] = {1, 1};
 
   // Set kernel arguments

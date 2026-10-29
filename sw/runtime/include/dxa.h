@@ -74,7 +74,8 @@ constexpr uint32_t elem_size_enc(uint32_t elem_bytes) {
 //   (contiguous, like ROW_MAJOR) and scatters each element to the
 //   flat/block-major destination — the cheap K_MAJOR direction
 //   (contiguous read → permuted write). The tile geometry the
-//   destination formula needs (tcN) is conveyed via set_tile_geometry().
+//   destination formula needs (tcN and the dense block K extent) is
+//   conveyed via set_tile_geometry().
 enum class Layout : uint32_t {
   RowMajor   = 0,
   KMajor     = 1,
@@ -282,14 +283,18 @@ inline int set_layout(
 
 // Convey the WGMMA tile geometry the Flat/BlockMajor destination formula
 // needs. `tcN` is the micro-tile N dimension (= tcK for canonical WGMMA
-// configs); the engine derives n_steps = tile0/tcN and ratio = 4/elem_bytes.
-// Rides the vestigial ESTRIDE2 register (unused for rank ≤ 2). Call after
-// program_Nd + set_layout(Flat|BlockMajor). No-op for RowMajor/KMajor.
+// configs); `blk_k` is the K extent of one dense B block in elements
+// (fedpK * i_ratio — set by the consumer's FEDP depth, not derivable from
+// tcN). Both are powers of two. The engine derives n_steps = tile0/tcN and
+// ratio = 4/elem_bytes. Rides the vestigial ESTRIDE2 register (unused for
+// rank ≤ 2): tcN in [15:0], blk_k in [31:16]. Call after program_Nd +
+// set_layout(Flat|BlockMajor). No-op for RowMajor/KMajor.
 inline int set_tile_geometry(
     vx_device_h dev, uint32_t slot,
-    uint32_t tcN) {
+    uint32_t tcN, uint32_t blk_k) {
   uint32_t dcr = VX_DCR_DXA_DESC_BASE + slot * VX_DCR_DXA_DESC_STRIDE;
-  return vx_dcr_write(dev, dcr + VX_DCR_DXA_DESC_ESTRIDE2_OFF, tcN);
+  return vx_dcr_write(dev, dcr + VX_DCR_DXA_DESC_ESTRIDE2_OFF,
+                      (blk_k << 16) | (tcN & 0xffffu));
 }
 
 } // namespace dxa

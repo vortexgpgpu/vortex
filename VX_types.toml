@@ -429,7 +429,7 @@ VX_RT_HIT_BARY_U            = 11
 VX_RT_HIT_BARY_V            = 12
 VX_RT_HIT_PRIMITIVE_ID      = 13
 VX_RT_HIT_INSTANCE_ID       = 14
-VX_RT_HIT_GEOMETRY_INDEX    = 15
+VX_RT_HIT_GEOMETRY_INDEX    = 15      # VX_RT_HIT_GEOMETRY_MASK bits: gl_GeometryIndexEXT; bit 31: VX_RT_HIT_BACK_FACING
 VX_RT_HIT_INSTANCE_CUSTOM   = 16
 VX_RT_OBJECT_RAY_ORIGIN     = 17      # object_ray.origin.{x,y,z}    (17..19)
 VX_RT_OBJECT_RAY_DIRECTION  = 20      # object_ray.direction.{x,y,z} (20..22)
@@ -442,6 +442,7 @@ VX_RT_STATUS                = 26      # per-lane VX_RT_STS_*; WAIT completes on 
 # Every slot is written by the RTU and read by the shader; nothing else writes the
 # window. The payload pointer rides the arm doorbell (warp-uniform) and the
 # hitAttribute rides the CONTINUE, so both reach the RTU without a window write.
+# On RV64 the payload pointer's upper word follows in slot VX_RT_PAYLOAD_PTR_LO + 1.
 VX_RT_PAYLOAD_PTR_LO        = 27      # the tracing shader's payload; the callbacks read it
 VX_RT_HIT_ATTR_0            = 29      # user hitAttributeEXT (an IS shader returns it)
 
@@ -476,6 +477,14 @@ VX_RT_FLAG_SKIP_TRIANGLES          = 0x100
 VX_RT_FLAG_SKIP_AABBS              = 0x200
 VX_RT_FLAG_ENABLE_CHS              = 0x400
 VX_RT_FLAG_ENABLE_MISS             = 0x800
+
+[rtu_hit_bits]
+# The HIT_GEOMETRY_INDEX word: the leaf's geometry index in the low 28 bits (the
+# Vulkan BVH layout keeps flags above them, which the RTU drops), and
+# BACK_FACING set when a triangle hit lies on its back face after the instance's
+# FLIP_FACING, i.e. gl_HitKindEXT is BACK_FACING.
+VX_RT_HIT_GEOMETRY_MASK            = 0x0fffffff
+VX_RT_HIT_BACK_FACING              = 0x80000000
 
 [rtu_cb_actions]
 # vx_rt_cb_ret action codes
@@ -764,6 +773,8 @@ VX_CSR_MPM_DXA_LMEM_WRITES  = 0xB06  # SMEM word writes issued
 VX_CSR_MPM_DXA_LMEM_WRITES_H  = 0xB86
 VX_CSR_MPM_DXA_GMEM_LT  = 0xB07  # total GMEM latency cycles (sum; avg = LT/TRANSFERS)
 VX_CSR_MPM_DXA_GMEM_LT_H  = 0xB87
+VX_CSR_MPM_DXA_NOSLOT_STALLS  = 0xB08  # cycles: read stalled with no free inflight slot
+VX_CSR_MPM_DXA_NOSLOT_STALLS_H  = 0xB88
 
 [csr_mpm_tcu]
 # PERF: WGMMA tile-buffer (per-core; summed across blocks)
@@ -780,12 +791,12 @@ VX_CSR_MPM_TCU_TMEM_READS     = 0xB07  # TMEM elements read (UMMA C + tmem_ld)
 VX_CSR_MPM_TCU_TMEM_READS_H   = 0xB87
 VX_CSR_MPM_TCU_TMEM_WRITES    = 0xB08  # TMEM elements written (UMMA D + tmem_st)
 VX_CSR_MPM_TCU_TMEM_WRITES_H  = 0xB88
-# The two below are microarchitectural and RTL-only: SimX doesn't model bank
-# arbitration or the RAW interlock, so it reports 0 for both.
 VX_CSR_MPM_TCU_TMEM_BANK_STALLS   = 0xB09  # cycles: a TMEM bank request lost arbitration and retried
 VX_CSR_MPM_TCU_TMEM_BANK_STALLS_H = 0xB89
 VX_CSR_MPM_TCU_TMEM_HAZARD_STALLS = 0xB0A  # cycles: a UMMA uop held at admission by the TMEM RAW interlock
 VX_CSR_MPM_TCU_TMEM_HAZARD_STALLS_H = 0xB8A
+VX_CSR_MPM_TCU_TMEM_RD_GRANT_STALLS = 0xB0B  # cycles: a UMMA uop held at admission waiting on its accumulator read grant
+VX_CSR_MPM_TCU_TMEM_RD_GRANT_STALLS_H = 0xB8B
 
 [csr_mpm_tex]
 # PERF: texture unit (per-core; summed across blocks)

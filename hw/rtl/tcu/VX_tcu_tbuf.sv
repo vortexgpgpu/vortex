@@ -59,6 +59,14 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // Single LMEM master out (post-arb)
     VX_mem_bus_if.master                                                tcu_lmem_if,
 
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    // Per-block abuf A-stripe fill from TMEM
+    output wire [BLOCK_SIZE-1:0]                                        afill_valid,
+    output wire [TCU_TMEM_COL_BITS-1:0]                                 afill_col_base [BLOCK_SIZE],
+    input  wire [BLOCK_SIZE-1:0]                                        afill_grant,
+    input  wire [TCU_WG_TILE_M-1:0][TCU_TC_N-1:0][31:0]                 afill_data [BLOCK_SIZE],
+`endif
+
     // Per-block operand outputs (rs2 is broadcast — bbuf is shared)
     output wire [BLOCK_SIZE-1:0][TCU_WG_A_DATA_SIZE-1:0][`VX_CFG_XLEN-1:0] tbuf_rs1_data,
     output wire [BLOCK_SIZE-1:0][TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0]tbuf_rs2_data,
@@ -112,6 +120,13 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             .req_step_k     (req[b].step_k),
             .req_desc_a     (req[b].desc_a),
             .req_a_is_smem  (req[b].a_is_smem),
+        `ifdef VX_CFG_TCU_TMEM_ENABLE
+            .req_a_is_tmem  (req[b].a_is_tmem),
+            .afill_valid    (afill_valid[b]),
+            .afill_col_base (afill_col_base[b]),
+            .afill_grant    (afill_grant[b]),
+            .afill_data     (afill_data[b]),
+        `endif
         `ifdef VX_CFG_TCU_SPARSE_ENABLE
             .req_is_sparse  (req[b].is_sparse),
         `else

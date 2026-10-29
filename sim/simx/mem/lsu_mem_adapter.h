@@ -41,12 +41,16 @@ public:
   ) : LsuMemAdapter(ctx, name, num_inputs, 0)
   {}
 
+  // Extra request-side registers on one output port.
+  void set_port_delay(uint32_t port, uint32_t delay) { port_delay_.at(port) = delay; }
+
 protected:
   void on_reset();
   void on_tick();
 
 private:
   uint32_t delay_;
+  std::vector<uint32_t> port_delay_;
   BitVector<uint32_t> pending_mask_;
 
   friend class SimObject<LsuMemAdapter>;

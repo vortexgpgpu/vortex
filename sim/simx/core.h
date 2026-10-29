@@ -78,6 +78,11 @@ public:
   std::vector<SimChannel<MemReq>> dcache_req_out;
   std::vector<SimChannel<MemRsp>> dcache_rsp_in;
 
+  // Warp releases from resolved branches (ALU) and warp-control ops (SFU).
+  // A warp has at most one release in flight, so NUM_WARPS bounds each.
+  SimChannel<uint32_t> branch_ctl_in;
+  SimChannel<WarpCtl>  warp_ctl_in;
+
   // Global-barrier event links, wired core <-> cluster at elaboration.
   SimEventLink<GbarArrive> gbar_arrive_out;
   SimEventLink<GbarResume> gbar_resume_in;

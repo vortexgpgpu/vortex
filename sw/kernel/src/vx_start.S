@@ -261,5 +261,11 @@ init_tls_all:
 .section .data
 
 	.weak __dso_handle
+#if __riscv_xlen == 64
+	.p2align 3
+__dso_handle:
+	.dword	0
+#else
 __dso_handle:
 	.long	0
+#endif

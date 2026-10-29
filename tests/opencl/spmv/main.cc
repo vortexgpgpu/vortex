@@ -50,7 +50,7 @@ static float* read_output_file(const char* filename, int* out_size) {
         return NULL;
     }
     // Read the float data
-    if (fread(floats, sizeof(float), size, file) != size) {
+    if (fread(floats, sizeof(float), size, file) != (size_t)size) {
         fclose(file);
         free(floats);
         perror("Error reading floats from file");
@@ -109,15 +109,6 @@ static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) 
   return CL_SUCCESS;
 }
 
-static int generate_vector(float *x_vector, int dim) {
-  srand(54321);
-  int i;
-  for (i = 0; i < dim; i++) {
-    x_vector[i] = (rand() / (float)RAND_MAX);
-  }
-  return 0;
-}
-
 int main(int argc, char **argv) {
   struct pb_TimerSet timers;
   struct pb_Parameters *parameters;
@@ -146,7 +137,6 @@ int main(int argc, char **argv) {
   }
 
   cl_device_id clDevice = (cl_device_id)pb_context->clDeviceId;
-  cl_platform_id clPlatform = (cl_platform_id)pb_context->clPlatformId;
   cl_context clContext = (cl_context)pb_context->clContext;
   cl_command_queue clCommandQueue = clCreateCommandQueue(
       clContext, clDevice, CL_QUEUE_PROFILING_ENABLE, &clStatus);
@@ -159,7 +149,6 @@ int main(int argc, char **argv) {
   // clCreateProgramWithSource(clContext,1,clSource,NULL,&clStatus);
    uint8_t *kernel_bin = NULL;
   size_t kernel_size;
-  cl_int binary_status = 0;
   cl_program clProgram;
 
   clStatus = read_kernel_file("kernel.cl", &kernel_bin, &kernel_size);
@@ -169,7 +158,7 @@ int main(int argc, char **argv) {
   CHECK_ERROR("clCreateProgramWithSource")
 
   char clOptions[50];
-  sprintf(clOptions, "");
+  clOptions[0] = '\0';
   clStatus = clBuildProgram(clProgram, 1, &clDevice, clOptions, NULL, NULL);
   CHECK_ERROR("clBuildProgram")
 

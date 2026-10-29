@@ -28,6 +28,9 @@ module VX_execute import VX_gpu_pkg::*; #(
 `ifdef VX_CFG_EXT_TCU_ENABLE
     output tcu_perf_t       tcu_perf,
 `endif
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    output tmem_perf_t      tmem_perf,
+`endif
 `endif
 
     // Per-block LSU client connections to VX_lsu_scheduler (at VX_core).
@@ -135,6 +138,9 @@ module VX_execute import VX_gpu_pkg::*; #(
         .reset          (reset),
     `ifdef PERF_ENABLE
         .tcu_perf       (tcu_perf),
+    `ifdef VX_CFG_TCU_TMEM_ENABLE
+        .tmem_perf      (tmem_perf),
+    `endif
     `endif
     `ifdef VX_CFG_TCU_WGMMA_ENABLE
         .tcu_lmem_if    (tcu_lmem_if),

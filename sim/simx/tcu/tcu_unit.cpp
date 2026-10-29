@@ -14,6 +14,7 @@
 
 #include <VX_types.h>
 #include "tcu_unit.h"
+#include "tcu_tmem.h"
 #include "tensor_cfg.h"
 #include <rvfloats.h>
 #include "core.h"
@@ -21,12 +22,12 @@
 #include "local_mem.h"
 #include "processor_impl.h"
 #include "mem/memory.h"
+#include "stack_interleave.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <limits>
 #include <type_traits>
-#include <unordered_set>
 
 using namespace vortex;
 
@@ -34,6 +35,16 @@ namespace vt = vortex::tensor;
 using cfg    = vt::wmma_config_t<VX_CFG_NUM_THREADS>;
 using wg_cfg = vt::wgmma_config_t<VX_CFG_NUM_THREADS, vt::fp32, vt::fp32>;
 static constexpr uint32_t kFedpWords = wg_cfg::fedpK;
+
+#ifdef VX_CFG_TCU_TMEM_ENABLE
+// Bank reads per A-from-TMEM stripe refill. A k-stripe is kFedpWords columns
+// wide and one bank word spans TcuTmem::kWordCols (== TCU_TC_N) of them, so
+// this is 1 unless FEDP2K doubles fedpK. Depends on TC_K == TC_N.
+static constexpr uint32_t kAFillWords =
+    (kFedpWords + TcuTmem::kWordCols - 1) / TcuTmem::kWordCols;
+static_assert(kFedpWords % TcuTmem::kWordCols == 0,
+              "A-from-TMEM needs fedpK to be a whole number of bank words");
+#endif
 #ifdef VX_CFG_TCU_FEDP2K
 static constexpr bool kFedp2K = true;
 #else
@@ -46,9 +57,29 @@ static constexpr uint32_t kFedpLatency = VX_CFG_TCU_LATENCY;
 // unblocked result bypasses the landing queue).
 static constexpr uint32_t kMmaLatency = 1 + kFedpLatency;
 
-// UMMA's 3-bit umma_nrc field selects the per-warp N-tile width (NRC).
-// Not gated behind VX_CFG_TCU_TMEM_ENABLE: plan_wgmma_lines() references it via
-// its is_umma branch whenever WGMMA is enabled, independent of TMEM.
+static constexpr uint64_t kLineMask = ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
+
+// WGMMA tile-buffer geometry in 32-bit words.
+static constexpr uint32_t kLmemBanks     = VX_CFG_LMEM_NUM_BANKS;
+static constexpr uint32_t kBankRowWords  = kLmemBanks * (VX_CFG_XLEN / 32);
+static constexpr uint32_t kBBlockWords   = kFedpWords * cfg::tcN;
+static constexpr uint32_t kBBlockWordsSp = cfg::tcK * cfg::tcN * 2;
+// One bank row holds kBSubBlocks consecutive dense B blocks.
+static constexpr uint32_t kBSubBlocks =
+    (VX_CFG_NUM_THREADS > kBBlockWords) ? (VX_CFG_NUM_THREADS / kBBlockWords) : 1;
+// A sparse B block spanning two 32-bit bank rows takes two reads.
+static constexpr bool kBSparseTwoFetch =
+    (kBBlockWordsSp == 2 * kLmemBanks) && (VX_CFG_XLEN == 32);
+// A block-major A stripe is m_steps blocks, each padded to whole bank rows.
+static constexpr uint32_t a_stripe_reads(uint32_t block_words) {
+  return (wg_cfg::m_steps * ((block_words + kLmemBanks - 1) / kLmemBanks) * kLmemBanks
+          + kBankRowWords - 1) / kBankRowWords;
+}
+static constexpr uint32_t kAStripeReads   = a_stripe_reads(cfg::tcM * kFedpWords);
+static constexpr uint32_t kAStripeReadsSp = a_stripe_reads(cfg::tcM * cfg::tcK);
+
+// NRC selector: WGMMA's cd_nregs uses 0..2, UMMA's umma_nrc 0..4. Not gated
+// behind VX_CFG_TCU_TMEM_ENABLE: the tile buffers size WGMMA's tile with it.
 static constexpr uint32_t kNrcTable[5] = {8, 16, 32, 64, 128};
 
 inline uint64_t nan_box(uint32_t value) {
@@ -357,7 +388,6 @@ public:
     , perf_stats_()
   {
     exec_done_.fill(false);
-    wgmma_planned_warps_.fill(0);
     in_wgmma_.fill(false);
     wgmma_desc_.fill({0, 0});
   }
@@ -378,24 +408,36 @@ public:
     }
   #endif
     exec_done_.fill(false);
-    wgmma_planned_warps_.fill(0);
+    for (auto& due : result_due_) {
+      due.clear();
+    }
     in_wgmma_.fill(false);
     lmem_desc_.clear();
     wgmma_desc_.fill({0, 0});
     cta_owner_a_.fill(-1);
-    cta_owner_b_ = -1;
+  #ifdef VX_CFG_TCU_WGMMA_ENABLE
+    abuf_.fill(abuf_slot_t{});
+    bbuf_ = bbuf_slot_t{};
+  #endif
     cur_block_ = 0;
   #ifdef TCU_META_ENABLE
     agu_.fill(agu_state_t{});
     agu_issue_rr_ = 0;
   #endif
   #ifdef VX_CFG_TCU_TMEM_ENABLE
-    for (auto& row : tmem_data_) row.fill(0);
-    tmem_free_.assign(1, {0, kTmemCols});
-    tmem_allocs_.clear();
-    cta_tmem_handle_.clear();
-    cta_tmem_dealloc_warps_.clear();
+    tmem_.reset();
+    tmem_reqs_ = TcuTmem::CycleReqs{};
+    for (auto& track : wr_track_) {
+      track.reset();
+    }
+    umma_hazard_.fill(false);
+    umma_rd_won_.fill(false);
+    umma_rd_won_r_.fill(false);
+    umma_wr_won_r_.fill(false);
+    tmem_mgmt_grant_ = TcuTmem::kNoGrant;
+    tmem_mgmt_fire_ = false;
     umma_handle_.clear();
+    a_fill_.fill(a_fill_t{});
   #endif
   }
 
@@ -430,6 +472,13 @@ public:
     agu.selector = selector;
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       agu.addrs.at(t) = base_addr + uint64_t(t) * 4;
+      // Metadata is read as a linear warp-wide tile, which an interleaved
+      // per-thread stack cannot provide.
+      if (StackInterleave::contains(agu.addrs.at(t))) {
+        std::cout << "Error: TCU metadata inside the thread stack window: addr=0x"
+                  << std::hex << agu.addrs.at(t) << std::dec << std::endl;
+        std::abort();
+      }
     }
   }
 
@@ -535,112 +584,19 @@ public:
   }
 #endif // TCU_META_ENABLE
 
-  void tick() {
-  #ifdef TCU_META_ENABLE
-    this->agu_step();
-  #endif
-  #ifdef VX_CFG_TCU_WGMMA_ENABLE
-    // Q-warp lock-step probe.
-    // Pass 1 — identify active WGMMA blocks and prime each one's plan() on
-    // first uop. WMMA and TCU_LD blocks are unaffected (no Q-coupling).
-    uint32_t wgmma_active = 0;
-    for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
-      auto& input = simobject_->Inputs.at(b);
-      if (input.empty()) continue;
-      auto trace = input.peek();
-      if (!tcu_uses_shared_tbuf(std::get<TcuType>(trace->op_type))) continue;
+#ifdef VX_CFG_TCU_TMEM_ENABLE
+  // Collect and arbitrate this cycle's TMEM bank requests.
+  void tmem_arb_step() {
+    tmem_reqs_ = TcuTmem::CycleReqs{};
 
-      uint32_t wid = trace->wid;
-      uint64_t wid_bit = (uint64_t(1) << wid);
-      int32_t new_cta = (int32_t)core_->scheduler().warp(wid).cta_csrs.cta_id;
-      auto& instr = *trace->instr_ptr;
-      auto tpuArgs = std::get<IntrTcuArgs>(instr.get_args());
-
-      if (tpuArgs.is_setup_uop)
-        continue;
-
-      wgmma_active |= (1u << b);
-
-      // CTA-overlap fence — defer this block's WGMMA if any other block
-      // is mid-flight with a different CTA. The shared B buffer assumes
-      // single-CTA occupancy across all blocks.
-      bool block_other_cta_inflight = false;
-      for (uint32_t k = 0; k < VX_CFG_NUM_TCU_BLOCKS; ++k) {
-        if (k == b) continue;
-        if (in_wgmma_.at(k) && cta_owner_a_.at(k) != new_cta) {
-          block_other_cta_inflight = true;
-          break;
-        }
-      }
-      if (block_other_cta_inflight) {
-        wgmma_active &= ~(1u << b);
-        continue;
-      }
-
-      if (wgmma_planned_warps_.at(b) & wid_bit) continue;
-      if (!(tpuArgs.step_m == 0 && tpuArgs.step_n == 0 && tpuArgs.step_k == 0)) {
-        // Non-first uop arrived without a prior plan: first uop already drained.
-        // Mark planned and continue (descriptors persist in lmem_desc_[wid]).
-        wgmma_planned_warps_.at(b) |= wid_bit;
-        continue;
-      }
-      uint32_t a_desc = wgmma_desc_[wid][0];
-      uint32_t b_desc = wgmma_desc_[wid][1];
-      bool needs_setup = kFedp2K && !tpuArgs.is_a_smem
-                      && (std::get<TcuType>(trace->op_type) != TcuType::WGMMA_SP);
-      if (tpuArgs.is_first_uop && !needs_setup) {
-        if (tpuArgs.is_a_smem)
-          a_desc = trace->src_data.at(0).at(0).u32;
-        b_desc = trace->src_data.at(1).at(0).u32;
-        wgmma_desc_[wid][0] = a_desc;
-        wgmma_desc_[wid][1] = b_desc;
-      }
-
-      // Drop the shared B buffer only when no other block is mid-WGMMA —
-      // otherwise we'd evict their resident bytes mid-flight.
-      bool any_in_wgmma = false;
-      for (auto v : in_wgmma_) any_in_wgmma = any_in_wgmma || v;
-      auto& tbuf = simobject_->tbuf();
-      if (!any_in_wgmma) {
-        tbuf->invalidate_b();
-        cta_owner_b_ = -1;
-      }
-      // Only drop the per-block A buffer when no warp is currently in flight.
-      if (!in_wgmma_.at(b)) {
-        tbuf->invalidate_a(b);
-      }
-      this->plan_wgmma_lines(b, wid, a_desc, b_desc, tpuArgs,
-                             std::get<TcuType>(trace->op_type) == TcuType::WGMMA_SP,
-                             std::get<TcuType>(trace->op_type) == TcuType::UMMA);
-      if (tbuf->ready_a(b) && tbuf->ready_b()) {
-        ++perf_stats_.tbuf_cache_hits;
-      }
-      in_wgmma_.at(b) = true;
-      wgmma_planned_warps_.at(b) |= wid_bit;
-      cta_owner_a_.at(b) = new_cta;
-      if (cta_owner_b_ == -1) cta_owner_b_ = new_cta;
+    uint64_t cur_cycle = SimPlatform::instance().cycles();
+    for (auto& track : wr_track_) {
+      track.retire(cur_cycle);
     }
 
-    // Pass 2 — all active WGMMA blocks must have A/B operands resident
-    // before any of them advances.
-    if (wgmma_active != 0) {
-      uint32_t ready_mask = 0;
-      auto& tbuf = simobject_->tbuf();
-      for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
-        if (!((wgmma_active >> b) & 1u)) continue;
-        auto trace = simobject_->Inputs.at(b).peek();
-        auto tpuArgs = std::get<IntrTcuArgs>(trace->instr_ptr->get_args());
-        bool a_ok = !tpuArgs.is_a_smem || tbuf->ready_a(b);
-        bool b_ok = tbuf->ready_b();
-        if (a_ok && b_ok) ready_mask |= (1u << b);
-      }
-      if (ready_mask != wgmma_active) {
-        ++perf_stats_.tbuf_stalls;
-        return; // hold all blocks; per-block dispatch deferred to next tick
-      }
-    }
-  #endif
-
+    // Phase 1 — decode addresses. Validity is decided in phase 3, once the
+    // published grants are known, so a request's address is filled in here
+    // even for a requester that will not bid.
     for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
       auto& input = simobject_->Inputs.at(b);
       if (input.empty())
@@ -648,24 +604,201 @@ public:
       auto trace = input.peek();
       auto tcu_type = std::get<TcuType>(trace->op_type);
       auto tpuArgs = std::get<IntrTcuArgs>(trace->instr_ptr->get_args());
+      uint32_t wid = trace->wid;
 
-      #ifdef VX_CFG_TCU_WGMMA_ENABLE
-      // CTA-overlap fence deferred this block — skip until pass 1 plans it.
-      if (tcu_uses_shared_tbuf(tcu_type) && !tpuArgs.is_setup_uop &&
-          !(wgmma_planned_warps_.at(b) & (uint64_t(1) << trace->wid)))
+      switch (tcu_type) {
+      case TcuType::UMMA: {
+        bool first_uop = (tpuArgs.step_m == 0 && tpuArgs.step_n == 0 && tpuArgs.step_k == 0);
+        uint32_t handle = first_uop ? (trace->src_data[2].empty() ? 0 : trace->src_data[2].at(0).u32)
+                                    : umma_handle_[wid];
+        uint32_t cta_rank = core_->scheduler().warp(wid).cta_csrs.cta_rank;
+        tmem_reqs_.compute_rd.at(b).lane_base = cta_rank * wg_cfg::xtileM + tpuArgs.step_m * cfg::tcM;
+        tmem_reqs_.compute_rd.at(b).col_base = handle + tpuArgs.step_n * cfg::tcN;
+        tmem_reqs_.compute_wr.at(b) = tmem_reqs_.compute_rd.at(b);
+      } break;
+      case TcuType::TMEM_LD:
+      case TcuType::TMEM_ST: {
+        uint32_t tmem_addr = trace->src_data[0].empty() ? 0 : trace->src_data[0].at(0).u32;
+        TcuTmem::BankReq req;
+        req.lane_base = (tmem_addr >> 16) & 0xFFFF;
+        req.col_base = tmem_addr & 0xFFFF;
+        if (tcu_type == TcuType::TMEM_LD) {
+          tmem_reqs_.ldst_rd.at(b) = req;
+        } else {
+          tmem_reqs_.ldst_wr.at(b) = req;
+        }
+      } break;
+      default:
+        break;
+      }
+    }
+    for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
+      auto& af = a_fill_.at(b);
+      tmem_reqs_.a_fill_rd.at(b).lane_base = af.lane_base;
+      tmem_reqs_.a_fill_rd.at(b).col_base = af.col_base + af.words_done * TcuTmem::kWordCols;
+    }
+
+    // Phase 2 — publish the read grants arbitrated last cycle.
+    tmem_.arb_publish(tmem_reqs_);
+
+    // Phase 3 — resolve the compute-side sticky latches and set validity.
+    for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
+      auto& input = simobject_->Inputs.at(b);
+      if (input.empty())
         continue;
-      if (tcu_uses_shared_tbuf(tcu_type) && !tpuArgs.is_setup_uop) {
-        int32_t this_cta = (int32_t)core_->scheduler().warp(trace->wid).cta_csrs.cta_id;
-        bool block_other_cta_inflight = false;
-        for (uint32_t k = 0; k < VX_CFG_NUM_TCU_BLOCKS; ++k) {
-          if (k == b) continue;
-          if (in_wgmma_.at(k) && cta_owner_a_.at(k) != this_cta) {
-            block_other_cta_inflight = true;
-            break;
+      auto tcu_type = std::get<TcuType>(input.peek()->op_type);
+
+      if (tcu_type == TcuType::UMMA) {
+        // The RAW interlock suppresses the read request as well as admission.
+        umma_hazard_.at(b) = wr_track_.at(b).hazard(
+            tmem_reqs_.compute_rd.at(b).lane_base,
+            tmem_reqs_.compute_rd.at(b).col_base);
+        umma_rd_won_.at(b) = tmem_.grants().compute_rd.test(b) || umma_rd_won_r_.at(b);
+        tmem_reqs_.compute_rd.at(b).valid = !umma_hazard_.at(b) && !umma_rd_won_.at(b);
+        // The hazard case is excluded from the grant counter so the two do not
+        // double-count.
+        if (!exec_done_.at(b)) {
+          if (umma_hazard_.at(b)) {
+            ++perf_stats_.tmem_hazard_stalls;
+          } else if (!umma_rd_won_.at(b)) {
+            ++perf_stats_.tmem_rd_grant_stalls;
           }
         }
-        if (block_other_cta_inflight)
+        // The writeback bids once the read is in hand.
+        tmem_reqs_.compute_wr.at(b).valid =
+            (umma_rd_won_.at(b) || exec_done_.at(b)) && !umma_wr_won_r_.at(b);
+      } else {
+        umma_hazard_.at(b) = false;
+        umma_rd_won_.at(b) = false;
+        tmem_reqs_.ldst_rd.at(b).valid = (tcu_type == TcuType::TMEM_LD);
+        tmem_reqs_.ldst_wr.at(b).valid =
+            (tcu_type == TcuType::TMEM_ST) && !tmem_.won_ldst_wr(b);
+      }
+    }
+
+    // A-fill: last cycle's registered grant delivered one bank word.
+    for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
+      auto& af = a_fill_.at(b);
+      tmem_reqs_.a_fill_rd.at(b).valid = af.fetching;
+      if (af.fetching && tmem_.grants().a_fill_rd.test(b)
+       && ++af.words_done == kAFillWords) {
+        af.fetching = false;
+      }
+    }
+
+    tmem_.arb_arbitrate(tmem_reqs_);
+    perf_stats_.tmem_bank_stalls = tmem_.perf_stats().bank_stalls;
+
+    // ALLOC/DEALLOC: one grant per cycle across all blocks, DEALLOC first.
+    // try_send() fails exactly when the output channel is full.
+    std::bitset<TcuTmem::kBanks> alloc_ready;
+    std::bitset<TcuTmem::kBanks> dealloc_ready;
+    for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
+      auto& input = simobject_->Inputs.at(b);
+      if (input.empty() || exec_done_.at(b) || simobject_->Outputs.at(b).full())
+        continue;
+      switch (std::get<TcuType>(input.peek()->op_type)) {
+      case TcuType::TMEM_ALLOC:   alloc_ready.set(b); break;
+      case TcuType::TMEM_DEALLOC: dealloc_ready.set(b); break;
+      default: break;
+      }
+    }
+    tmem_mgmt_grant_ = TcuTmem::mgmt_grant(alloc_ready, dealloc_ready);
+    tmem_mgmt_fire_ = (tmem_mgmt_grant_ != TcuTmem::kNoGrant);
+
+    // alloc_resp_valid: a granted fresh ALLOC that cannot be satisfied this
+    // cycle withholds its fire.
+    if (tmem_mgmt_fire_ && alloc_ready.test(tmem_mgmt_grant_)) {
+      auto trace = simobject_->Inputs.at(tmem_mgmt_grant_).peek();
+      uint32_t ncols = trace->src_data[0].empty() ? 0 : trace->src_data[0].at(0).u32;
+      if (tmem_.alloc_would_stall(ncols, this->cta_uid(trace->wid))) {
+        tmem_mgmt_fire_ = false;
+      }
+    }
+
+    // The compute-read win must survive to the admission cycle, which is the
+    // next one. Latch it now that arbitration has consumed this cycle's
+    // requests; it is cleared when the uop is admitted.
+    for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
+      if (umma_rd_won_.at(b)) umma_rd_won_r_.at(b) = true;
+      if (tmem_.grants().compute_wr.test(b)) umma_wr_won_r_.at(b) = true;
+    }
+  }
+
+  // Refill block b's A stripe from TMEM: the TS form's counterpart of
+  // tbuf->fill_a(). A's rows are this CTA's xtileM lanes, and one bank read
+  // covers kWordCols of the stripe's kFedpWords columns.
+  void tmem_fill_a(uint32_t b, uint32_t wid, uint32_t step_k) {
+    uint32_t cta_rank = core_->scheduler().warp(wid).cta_csrs.cta_rank;
+    auto& af = a_fill_.at(b);
+    af.fetching   = true;
+    af.lane_base  = cta_rank * wg_cfg::xtileM;
+    af.col_base   = wgmma_desc_[wid][0] + step_k * kFedpWords;
+    af.words_done = 0;
+  }
+
+  bool tmem_filling_a(uint32_t b) const {
+    return a_fill_.at(b).fetching;
+  }
+#endif
+
+  void tick() {
+  #ifdef TCU_META_ENABLE
+    this->agu_step();
+  #endif
+  #ifdef VX_CFG_TCU_TMEM_ENABLE
+    this->tmem_arb_step();
+  #endif
+  #ifdef VX_CFG_TCU_WGMMA_ENABLE
+    uint32_t wgmma_ready = this->tbuf_step();
+    uint32_t setup_fired = 0;
+  #endif
+
+    uint64_t now = SimPlatform::instance().cycles();
+    for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
+      // A result completing while an earlier one still waits for the commit
+      // side holds admission for the cycle. Results already visible but not
+      // taken are the output occupancy beyond those still in flight.
+      auto& due = result_due_.at(b);
+      due.erase(std::remove_if(due.begin(), due.end(), [now](uint64_t t) { return t < now; }), due.end());
+      bool completing = std::any_of(due.begin(), due.end(), [now](uint64_t t) { return t == now; });
+      bool backed_up = simobject_->Outputs.at(b).size() > due.size();
+      auto& input = simobject_->Inputs.at(b);
+      if (input.empty())
+        continue;
+      if (completing && backed_up) {
+        continue;
+      }
+      auto trace = input.peek();
+      auto tcu_type = std::get<TcuType>(trace->op_type);
+      auto tpuArgs = std::get<IntrTcuArgs>(trace->instr_ptr->get_args());
+
+    #ifdef VX_CFG_TCU_WGMMA_ENABLE
+      // A WGMMA/UMMA compute uop fires once its tile-buffer operands are ready.
+      if (tcu_uses_shared_tbuf(tcu_type) && !tpuArgs.is_setup_uop
+       && !exec_done_.at(b) && !((wgmma_ready >> b) & 1u)) {
+        continue;
+      }
+    #endif
+
+    #ifdef VX_CFG_TCU_TMEM_ENABLE
+      // TMEM read-port admission. A UMMA uop and a TMEM_LD both close their
+      // handshake through a registered bank read, so neither can be admitted
+      // until the grant arrives on the cycle after the request.
+      if (!exec_done_.at(b)) {
+        if (tcu_type == TcuType::UMMA
+         && (umma_hazard_.at(b) || !umma_rd_won_.at(b))) {
           continue;
+        }
+        if (tcu_type == TcuType::TMEM_LD && !tmem_.grants().ldst_rd.test(b)) {
+          continue;
+        }
+        // Only the block that won this cycle's single ALLOC/DEALLOC grant may
+        // touch the allocator.
+        if ((tcu_type == TcuType::TMEM_ALLOC || tcu_type == TcuType::TMEM_DEALLOC)
+         && !(tmem_mgmt_fire_ && b == tmem_mgmt_grant_)) {
+          continue;
+        }
       }
     #endif
 
@@ -694,10 +827,10 @@ public:
           uint32_t a_desc = rs1_data.empty() ? 0 : rs1_data.at(0).u32;
           uint32_t b_desc = rs2_data.empty() ? 0 : rs2_data.at(0).u32;
           cur_block_ = b;
+          int32_t this_cta = (int32_t)core_->scheduler().warp(wid).cta_csrs.cta_id;
           // CTA lockstep invariant: no block may execute a WGMMA uop for a
           // different cta_id while another block is mid-WGMMA.
           if (!tpuArgs.is_setup_uop) {
-            int32_t this_cta = (int32_t)core_->scheduler().warp(wid).cta_csrs.cta_id;
             for (uint32_t k = 0; k < VX_CFG_NUM_TCU_BLOCKS; ++k) {
               if (k == b) continue;
               if (in_wgmma_.at(k) && cta_owner_a_.at(k) != this_cta) {
@@ -714,6 +847,19 @@ public:
                       a_desc, b_desc, rs1_data, rs2_data, rs3_data, rd_data,
                       tcu_is_sparse(tcu_type),
                       tpuArgs.cd_nregs, tpuArgs.is_a_smem, tpuArgs.is_setup_uop);
+          if (tpuArgs.is_setup_uop) {
+            setup_fired |= (1u << b);
+          } else {
+            // The block owns its CTA from its first compute uop to its last.
+            if (tpuArgs.is_first_uop) {
+              in_wgmma_.at(b) = true;
+              cta_owner_a_.at(b) = this_cta;
+            }
+            if (tpuArgs.is_last_uop) {
+              in_wgmma_.at(b) = false;
+              cta_owner_a_.at(b) = -1;
+            }
+          }
         } break;
       #endif
       #ifdef TCU_META_ENABLE
@@ -733,23 +879,29 @@ public:
           uint32_t handle = rs3_data.empty() ? 0 : rs3_data.at(0).u32;
           cur_block_ = b;
           // Same lockstep invariant as WGMMA — UMMA shares the same bbuf.
-          if (!tpuArgs.is_setup_uop) {
-            int32_t this_cta = (int32_t)core_->scheduler().warp(wid).cta_csrs.cta_id;
-            for (uint32_t k = 0; k < VX_CFG_NUM_TCU_BLOCKS; ++k) {
-              if (k == b) continue;
-              if (in_wgmma_.at(k) && cta_owner_a_.at(k) != this_cta) {
-                std::cerr << "*** TCU CTA lockstep violation: block " << b
-                          << " executing UMMA cta_id=" << this_cta
-                          << " while block " << k << " holds cta_id="
-                          << cta_owner_a_.at(k) << std::endl;
-                std::abort();
-              }
+          int32_t this_cta = (int32_t)core_->scheduler().warp(wid).cta_csrs.cta_id;
+          for (uint32_t k = 0; k < VX_CFG_NUM_TCU_BLOCKS; ++k) {
+            if (k == b) continue;
+            if (in_wgmma_.at(k) && cta_owner_a_.at(k) != this_cta) {
+              std::cerr << "*** TCU CTA lockstep violation: block " << b
+                        << " executing UMMA cta_id=" << this_cta
+                        << " while block " << k << " holds cta_id="
+                        << cta_owner_a_.at(k) << std::endl;
+              std::abort();
             }
           }
           this->umma(wid, tpuArgs.fmt_s, tpuArgs.fmt_d,
                      tpuArgs.step_m, tpuArgs.step_n, tpuArgs.step_k,
-                     tpuArgs.umma_nrc, a_desc, b_desc, handle,
+                     tpuArgs.umma_nrc, tpuArgs.is_a_smem, a_desc, b_desc, handle,
                      rs1_data, rs2_data);
+          if (tpuArgs.is_first_uop) {
+            in_wgmma_.at(b) = true;
+            cta_owner_a_.at(b) = this_cta;
+          }
+          if (tpuArgs.is_last_uop) {
+            in_wgmma_.at(b) = false;
+            cta_owner_a_.at(b) = -1;
+          }
         } break;
         case TcuType::TMEM_ALLOC: {
           // Every warp of the CTA can call this independently — tmem_alloc()
@@ -778,6 +930,26 @@ public:
           std::abort();
         }
         exec_done_.at(b) = true;
+      #ifdef VX_CFG_TCU_TMEM_ENABLE
+        // execute_fire: the uop is admitted, so release the read-grant latch
+        // and let the next uop bid.
+        if (tcu_type == TcuType::UMMA) {
+          umma_rd_won_r_.at(b) = false;
+          umma_rd_won_.at(b) = false;
+        }
+        // fedp_enqueue: every non-setup FEDP uop takes a tracker entry, not
+        // just UMMA's. Non-UMMA entries can never match a hazard, but they do
+        // occupy depth.
+        bool is_fedp_uop = (tcu_type == TcuType::WMMA) || (tcu_type == TcuType::WMMA_SP)
+                        || (tcu_type == TcuType::WGMMA) || (tcu_type == TcuType::WGMMA_SP)
+                        || (tcu_type == TcuType::UMMA);
+        if (is_fedp_uop && !tpuArgs.is_setup_uop) {
+          wr_track_.at(b).push(tcu_type == TcuType::UMMA,
+                               tmem_reqs_.compute_rd.at(b).lane_base,
+                               tmem_reqs_.compute_rd.at(b).col_base,
+                               SimPlatform::instance().cycles() + kMmaLatency);
+        }
+      #endif
       }
 
       uint32_t delay = 0;
@@ -822,18 +994,27 @@ public:
         }
       }
     #endif
+    #ifdef VX_CFG_TCU_TMEM_ENABLE
+      // TMEM write-port retirement
+      if (tcu_type == TcuType::UMMA
+       && !(tmem_.grants().compute_wr.test(b) || umma_wr_won_r_.at(b))) {
+        continue;
+      }
+      if (tcu_type == TcuType::TMEM_ST
+       && !(tmem_.grants().ldst_wr.test(b) || tmem_.won_ldst_wr(b))) {
+        continue;
+      }
+    #endif
       if (simobject_->Outputs.at(b).try_send(trace, delay)) {
+        due.push_back(now + delay);
         exec_done_.at(b) = false;
-      #ifdef VX_CFG_TCU_WGMMA_ENABLE
-        // Clear this warp's plan bit on its last uop so the next WGMMA/UMMA
-        // re-decodes descriptors. Block stays in_wgmma_ until all warps drain.
-        if (tcu_uses_shared_tbuf(tcu_type) && trace->instr_ptr->get_fu_unlock()) {
-          uint64_t wid_bit = (uint64_t(1) << trace->wid);
-          wgmma_planned_warps_.at(b) &= ~wid_bit;
-          if (wgmma_planned_warps_.at(b) == 0) {
-            in_wgmma_.at(b) = false;
-            cta_owner_a_.at(b) = -1;
-          }
+      #ifdef VX_CFG_TCU_TMEM_ENABLE
+        // The result was taken: fedp_result_fire for UMMA, mgmt_ready for
+        // TMEM_ST. Both release their write-grant latch.
+        if (tcu_type == TcuType::UMMA) {
+          umma_wr_won_r_.at(b) = false;
+        } else if (tcu_type == TcuType::TMEM_ST) {
+          tmem_.clear_ldst_wr_win(b);
         }
       #endif
       #ifdef TCU_META_ENABLE
@@ -846,98 +1027,387 @@ public:
         input.pop();
       }
     }
+
+  #ifdef VX_CFG_TCU_WGMMA_ENABLE
+    // A setup uop drops its block's A stripe and the shared B row at the end
+    // of the cycle; uops firing alongside it still read the old contents.
+    if (setup_fired != 0) {
+      auto& tbuf = simobject_->tbuf();
+      for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
+        if ((setup_fired >> b) & 1u) {
+          abuf_.at(b) = abuf_slot_t{};
+          tbuf->invalidate_a(b);
+        }
+      }
+      bbuf_ = bbuf_slot_t{};
+      tbuf->invalidate_b();
+    }
+  #endif
   }
 
-  // Plan all line addresses required for the current WGMMA's A, B and
-  // sparse-metadata tiles into the per-role caches inside TcuTbuf.
-  // Lines already resident or in-flight are skipped (additive plan).
-  void plan_wgmma_lines(uint32_t b, uint32_t wid,
-                        uint32_t a_desc, uint32_t b_desc,
-                        const IntrTcuArgs& args, bool is_sparse, bool is_umma) {
-    uint32_t fmt_s = args.fmt_s;
-    bool is_a_smem = args.is_a_smem;
-    uint32_t e_bits = elem_bits(fmt_s);
-    // WGMMA: cd_nregs 0/1/2 → 8/16/32. UMMA: umma_nrc 0..4 → 8/16/32/64/128
-    // (its own field — cd_nregs is left at 0 for UMMA instructions)
-    uint32_t nrc      = is_umma ? kNrcTable[args.umma_nrc]
-                                 : ((args.cd_nregs == 0) ? 8 : (args.cd_nregs == 1) ? 16 : 32);
-    uint32_t xtile_n  = (nrc * VX_CFG_NUM_THREADS) / wg_cfg::xtileM;
+#ifdef VX_CFG_TCU_WGMMA_ENABLE
+  // A block's A buffer: one k-stripe.
+  struct abuf_slot_t {
+    bool     valid = false;
+    bool     fetching = false;
+    bool     first_refetched = false;
+    uint32_t step_k = 0;
+  };
 
-    lmem_desc_t sd_a{}, sd_b{};
-    if (is_a_smem) {
-      sd_a = {uint64_t(VX_MEM_LMEM_BASE_ADDR) + (a_desc & 0xFFFF), (a_desc >> 16) * 8 / e_bits, false};
-      lmem_desc_[wid][0] = sd_a;
+  // The shared B buffer and its refill key.
+  struct bbuf_slot_t {
+    bool     valid = false;
+    bool     fetching = false;
+    bool     first_refetched = false;
+    bool     kmajor = false;
+    bool     sparse = false;
+    uint64_t row = 0;       // block-major: LMEM address of the bank row
+    int32_t  cta = -1;      // K-major: the (cta, step_k, step_n) block
+    uint32_t step_k = 0;
+    uint32_t step_n = 0;
+
+    bool same_row(const bbuf_slot_t& key) const {
+      if (kmajor != key.kmajor || sparse != key.sparse) {
+        return false;
+      }
+      if (kmajor) {
+        return cta == key.cta && step_k == key.step_k && step_n == key.step_n;
+      }
+      return row == key.row;
     }
-    sd_b = {uint64_t(VX_MEM_LMEM_BASE_ADDR) + (b_desc & 0xFFFF), (b_desc >> 16) * 8 / e_bits, false};
-    lmem_desc_[wid][1] = sd_b;
+  };
 
-    // tileK = xtileK × ratio (ratio = 32/e_bits); sparse compresses K on A only.
-    uint32_t ratio  = 32 / e_bits;
-    uint32_t tile_k = uint32_t(wg_cfg::xtileK) * ratio;
-    uint32_t a_k    = is_sparse ? (tile_k / 2) : tile_k;
+  // One block's WGMMA compute uop as the tile buffers see it.
+  struct tbuf_req_t {
+    bool     valid = false;
+    uint32_t wid = 0;
+    int32_t  cta = -1;
+    bool     is_first_uop = false;
+    bool     is_sparse = false;
+    bool     a_is_smem = false;
+  #ifdef VX_CFG_TCU_TMEM_ENABLE
+    bool     a_is_tmem = false;  // UMMA TS form: the A buffer refills from TMEM
+  #endif
+    uint32_t step_m = 0;
+    uint32_t step_n = 0;
+    uint32_t step_k = 0;
+    uint32_t cd_nregs = 0;  // NRC selector
+    uint32_t fmt_s = 0;
+    uint32_t desc_b = 0;
 
-    // ldm==0 → block-major layout; ldm!=0 → row-major (stride in elements).
-    uint32_t fedp_words  = kFedpWords;
-    uint32_t b_k_blk_dim = fedp_words * ratio;
-    uint32_t a_k_blk_dim = is_sparse ? (cfg::tcK * ratio) : b_k_blk_dim;
-    uint32_t a_blk_elems = cfg::tcM * a_k_blk_dim;
-    uint32_t b_blk_elems = b_k_blk_dim * cfg::tcN;
-    uint32_t n_steps     = xtile_n / cfg::tcN;
+    // The A buffer forces a refetch on a WGMMA's first compute uop.
+    bool first_compute() const {
+      return step_m == 0 && step_n == 0 && step_k == 0;
+    }
+  };
 
+  // Evaluate the A/B tile buffers for the uops at the head of each block
+  // and return the blocks whose WGMMA compute uop may fire.
+  //
+  // The B buffer holds one bank row and refills when the key of the lowest
+  // block with a uop changes; a block whose (desc_b, step_k, step_n) differs
+  // from that block's waits. Each A buffer holds its block's k-stripe.
+  // Refills start from the buffer state at the beginning of the cycle, and a
+  // refill that completes this cycle serves from the next.
+  uint32_t tbuf_step() {
     auto& tbuf = simobject_->tbuf();
 
-    // Plan A lines (SS mode only): xtileM rows × a_k columns.
-    if (is_a_smem) {
-      bool a_block_major = (sd_a.ldm == 0);
-      std::vector<uint64_t> a_lines;
-      a_lines.reserve(uint32_t(wg_cfg::xtileM) * a_k);
-      for (uint32_t r = 0; r < wg_cfg::xtileM; ++r) {
-        for (uint32_t c = 0; c < a_k; ++c) {
-          uint64_t elem_off;
-          if (a_block_major) {
-            uint32_t m_blk = r / cfg::tcM;
-            uint32_t i_in  = r % cfg::tcM;
-            uint32_t k_blk = c / a_k_blk_dim;
-            uint32_t k_in  = c % a_k_blk_dim;
-            elem_off = (k_blk * wg_cfg::m_steps + m_blk) * a_blk_elems
-                     + i_in * a_k_blk_dim + k_in;
-          } else {
-            elem_off = uint64_t(r) * sd_a.ldm + c;
-          }
-          uint64_t addr = sd_a.base + elem_off * e_bits / 8;
-          a_lines.push_back(addr & ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1));
+    std::array<tbuf_req_t, VX_CFG_NUM_TCU_BLOCKS> reqs;
+    int32_t rep = -1;
+    for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
+      auto& input = simobject_->Inputs.at(b);
+      if (input.empty() || exec_done_.at(b)) {
+        continue;
+      }
+      auto trace = input.peek();
+      auto tcu_type = std::get<TcuType>(trace->op_type);
+      if (!tcu_uses_shared_tbuf(tcu_type)) {
+        continue;
+      }
+      auto tpuArgs = std::get<IntrTcuArgs>(trace->instr_ptr->get_args());
+      if (tpuArgs.is_setup_uop) {
+        continue;
+      }
+      uint32_t wid = trace->wid;
+      int32_t cta = (int32_t)core_->scheduler().warp(wid).cta_csrs.cta_id;
+      // CTA lockstep: wait while another block is mid-WGMMA for another CTA.
+      bool cta_conflict = false;
+      for (uint32_t k = 0; k < VX_CFG_NUM_TCU_BLOCKS; ++k) {
+        if (k != b && in_wgmma_.at(k) && cta_owner_a_.at(k) != cta) {
+          cta_conflict = true;
+          break;
         }
       }
-      tbuf->plan_a(b, a_lines);
-      // Sparse metadata is preloaded into sparse_meta_ via TCU_LD;
-      // no metadata lines are planned through tbuf here.
+      if (cta_conflict) {
+        continue;
+      }
+
+      bool is_sparse = (tcu_type == TcuType::WGMMA_SP);
+      bool is_umma = (tcu_type == TcuType::UMMA);
+      // Only dense WGMMA's RS form gets a setup uop; UMMA's TS form has none.
+      bool needs_setup = kFedp2K && !tpuArgs.is_a_smem && tcu_type == TcuType::WGMMA;
+      if (tpuArgs.is_first_uop && !needs_setup) {
+        // The first compute uop carries the live descriptors. On UMMA's TS
+        // form, A's is its TMEM column.
+        if (tpuArgs.is_a_smem || is_umma) {
+          wgmma_desc_[wid][0] = trace->src_data.at(0).at(0).u32;
+        }
+        wgmma_desc_[wid][1] = trace->src_data.at(1).at(0).u32;
+        this->decode_descs(wid, tpuArgs.fmt_s, tpuArgs.is_a_smem);
+      }
+
+      auto& req = reqs.at(b);
+      req.valid        = true;
+      req.wid          = wid;
+      req.cta          = cta;
+      req.is_first_uop = tpuArgs.is_first_uop;
+      req.is_sparse    = is_sparse;
+      req.a_is_smem    = tpuArgs.is_a_smem;
+    #ifdef VX_CFG_TCU_TMEM_ENABLE
+      req.a_is_tmem    = is_umma && !tpuArgs.is_a_smem;
+    #endif
+      req.step_m       = tpuArgs.step_m;
+      req.step_n       = tpuArgs.step_n;
+      req.step_k       = tpuArgs.step_k;
+      req.cd_nregs     = is_umma ? tpuArgs.umma_nrc : tpuArgs.cd_nregs;
+      req.fmt_s        = tpuArgs.fmt_s;
+      req.desc_b       = wgmma_desc_[wid][1];
+      if (rep < 0) {
+        rep = b;
+      }
     }
 
-    // Plan B lines: always dense in K, tileK rows × xtileN columns.
-    //   ldm == 0 → block-major; ldm != 0 → K-major (smem[n*ldm + k]).
-    bool b_block_major = (sd_b.ldm == 0);
-    std::vector<uint64_t> b_lines;
-    b_lines.reserve(tile_k * xtile_n);
-    for (uint32_t r = 0; r < tile_k; ++r) {
-      for (uint32_t c = 0; c < xtile_n; ++c) {
-        uint64_t elem_off;
-        if (b_block_major) {
-          uint32_t k_blk = r / b_k_blk_dim;
-          uint32_t r_in  = r % b_k_blk_dim;
-          uint32_t n_blk = c / cfg::tcN;
-          uint32_t n_in  = c % cfg::tcN;
-          // Within-block layout: N outer, K inner.
-          elem_off = (k_blk * n_steps + n_blk) * b_blk_elems
-                   + n_in * b_k_blk_dim + r_in;
-        } else {
-          elem_off = uint64_t(c) * sd_b.ldm + r;
+    // Shared B buffer, keyed by the lowest block with a uop.
+    bool bbuf_ready = true;
+    if (rep >= 0) {
+      auto& r = reqs.at(rep);
+      bbuf_slot_t key = this->bbuf_key(r);
+      bool resident = bbuf_.valid && bbuf_.same_row(key)
+                   && (!key.kmajor || !r.is_first_uop || bbuf_.first_refetched);
+      if (resident) {
+        ++perf_stats_.tbuf_cache_hits;
+      } else {
+        bbuf_ready = false;
+        ++perf_stats_.tbuf_stalls;
+        if (!bbuf_.fetching) {
+          bool first_refetched = bbuf_.first_refetched;
+          bbuf_ = key;
+          bbuf_.fetching = true;
+          bbuf_.first_refetched = first_refetched;
+          DT(3, simobject_->name() << " bbuf: alloc desc_b=0x" << std::hex << r.desc_b
+                << std::dec << ", sparse=" << r.is_sparse << ", step_k=" << r.step_k
+                << ", step_n=" << r.step_n << ", row=0x" << std::hex << key.row
+                << std::dec << ", wid=" << r.wid);
+          tbuf->fill_b(this->b_refill(r));
         }
-        uint64_t addr = sd_b.base + elem_off * e_bits / 8;
-        b_lines.push_back(addr & ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1));
       }
     }
-    tbuf->plan_b(b_lines);
+
+    // Per-block A buffers.
+    std::array<bool, VX_CFG_NUM_TCU_BLOCKS> abuf_ready;
+    for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
+      auto& r = reqs.at(b);
+      auto& slot = abuf_.at(b);
+      abuf_ready.at(b) = true;
+      bool uses_abuf = r.a_is_smem;
+    #ifdef VX_CFG_TCU_TMEM_ENABLE
+      uses_abuf = uses_abuf || r.a_is_tmem;
+    #endif
+      if (!r.valid || !uses_abuf) {
+        continue;
+      }
+      bool resident = slot.valid && slot.step_k == r.step_k
+                   && (!r.first_compute() || slot.first_refetched);
+      if (resident) {
+        continue;
+      }
+      abuf_ready.at(b) = false;
+      ++perf_stats_.tbuf_stalls;
+      if (!slot.fetching) {
+        slot.valid    = false;
+        slot.fetching = true;
+        slot.step_k   = r.step_k;
+      #ifdef VX_CFG_TCU_TMEM_ENABLE
+        if (r.a_is_tmem) {
+          this->tmem_fill_a(b, r.wid, r.step_k);
+          continue;
+        }
+      #endif
+        tbuf->fill_a(b, this->a_refill(r));
+      }
+    }
+
+    uint32_t ready_mask = 0;
+    for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
+      auto& r = reqs.at(b);
+      if (!r.valid) {
+        continue;
+      }
+      auto& p = reqs.at(rep);
+      bool key_match = ((r.desc_b & 0xffff) == (p.desc_b & 0xffff))
+                    && r.step_k == p.step_k
+                    && r.step_n == p.step_n
+                    && r.cd_nregs == p.cd_nregs;
+      if (abuf_ready.at(b) && bbuf_ready && key_match) {
+        ready_mask |= (1u << b);
+      }
+    }
+
+    // Buffer state for the next cycle.
+    if (bbuf_.fetching && !tbuf->filling_b()) {
+      bbuf_.fetching = false;
+      bbuf_.valid = true;
+      if (rep >= 0 && reqs.at(rep).is_first_uop) {
+        bbuf_.first_refetched = true;
+      }
+    } else if (rep >= 0 && bbuf_ready && !reqs.at(rep).is_first_uop) {
+      bbuf_.first_refetched = false;
+    }
+    for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
+      auto& r = reqs.at(b);
+      auto& slot = abuf_.at(b);
+      bool filling = tbuf->filling_a(b);
+    #ifdef VX_CFG_TCU_TMEM_ENABLE
+      filling = filling || this->tmem_filling_a(b);
+    #endif
+      if (slot.fetching && !filling) {
+        slot.fetching = false;
+        slot.valid = true;
+        if (r.valid && r.first_compute()) {
+          slot.first_refetched = true;
+        }
+      } else if (r.valid && abuf_ready.at(b) && !r.first_compute()) {
+        slot.first_refetched = false;
+      }
+    }
+
+    return ready_mask;
   }
+
+  // Decode a warp's WGMMA descriptors into LMEM base and row stride.
+  void decode_descs(uint32_t wid, uint32_t fmt_s, bool is_a_smem) {
+    uint32_t e_bits = elem_bits(fmt_s);
+    uint32_t a_desc = wgmma_desc_[wid][0];
+    uint32_t b_desc = wgmma_desc_[wid][1];
+    if (is_a_smem) {
+      lmem_desc_[wid][0] = {uint64_t(VX_MEM_LMEM_BASE_ADDR) + (a_desc & 0xFFFF), (a_desc >> 16) * 8 / e_bits, false};
+    }
+    lmem_desc_[wid][1] = {uint64_t(VX_MEM_LMEM_BASE_ADDR) + (b_desc & 0xFFFF), (b_desc >> 16) * 8 / e_bits, false};
+  }
+
+  static uint32_t xtile_n_of(uint32_t cd_nregs) {
+    // NRC: cd_nregs 0/1/2/3/4 → 8/16/32/64/128; xtileN = NRC * NT / xtileM.
+    return (kNrcTable[cd_nregs] * VX_CFG_NUM_THREADS) / wg_cfg::xtileM;
+  }
+
+  // Refill key of the B row serving `req`. Block-major B is keyed by the
+  // bank row holding the (step_k, step_n) block; K-major B by the block.
+  bbuf_slot_t bbuf_key(const tbuf_req_t& req) {
+    const auto& sd_b = lmem_desc_[req.wid][1];
+    bbuf_slot_t key;
+    key.kmajor = (sd_b.ldm != 0);
+    key.sparse = req.is_sparse;
+    if (key.kmajor) {
+      key.cta    = req.cta;
+      key.step_k = req.step_k;
+      key.step_n = req.step_n;
+    } else {
+      uint32_t n_steps = xtile_n_of(req.cd_nregs) / cfg::tcN;
+      uint32_t blk = req.step_k * n_steps + req.step_n;
+      uint32_t blk_bytes = req.is_sparse ? (kBBlockWordsSp * 4) : (kBBlockWords * 4);
+      uint32_t blks_per_row = req.is_sparse ? 1 : kBSubBlocks;
+      key.row = sd_b.base + uint64_t(blk / blks_per_row) * blks_per_row * blk_bytes;
+    }
+    return key;
+  }
+
+  // LMEM reads that refill the B buffer for `req`: one bank row for a
+  // block-major row (two when a sparse block spans two rows) and one per
+  // N-row of the block in K-major layout.
+  std::vector<TcuTbuf::LmemRead> b_refill(const tbuf_req_t& req) {
+    const auto& sd_b = lmem_desc_[req.wid][1];
+    uint32_t e_bits  = elem_bits(req.fmt_s);
+    uint32_t ratio   = 32 / e_bits;
+    uint32_t xtile_n = xtile_n_of(req.cd_nregs);
+    uint32_t n_steps = xtile_n / cfg::tcN;
+    uint32_t k_words = req.is_sparse ? cfg::tcK : kFedpWords;
+    bool kmajor = (sd_b.ldm != 0);
+
+    // (step_k, step_n) blocks this refill brings in.
+    uint32_t blk = req.step_k * n_steps + req.step_n;
+    uint32_t blks = (kmajor || req.is_sparse) ? 1 : kBSubBlocks;
+    uint32_t first_blk = blk - (blk % blks);
+
+    std::vector<uint64_t> lines;
+    for (uint32_t bi = first_blk; bi < first_blk + blks; ++bi) {
+      uint32_t step_k = bi / n_steps;
+      uint32_t step_n = bi % n_steps;
+      for (uint32_t j = 0; j < cfg::tcN; ++j) {
+        uint32_t col = step_n * cfg::tcN + j;
+        for (uint32_t z = 0; z < k_words; ++z) {
+          uint32_t k_elem = (step_k * k_words + z) * ratio * (req.is_sparse ? 2 : 1);
+          uint32_t k_elems = req.is_sparse ? (2 * ratio) : ratio;
+          for (uint32_t e = 0; e < k_elems; ++e) {
+            uint64_t off = elem_offset(sd_b, k_elem + e, col, e_bits, xtile_n,
+                                       true, req.is_sparse, false);
+            lines.push_back((sd_b.base + off * e_bits / 8) & kLineMask);
+          }
+        }
+      }
+    }
+
+    uint32_t num_reads = kmajor ? cfg::tcN
+                       : (req.is_sparse && kBSparseTwoFetch) ? 2 : 1;
+    return split_reads(std::move(lines), num_reads);
+  }
+
+  // LMEM reads that refill a block's A buffer with the k-stripe of `req`:
+  // one per bank row of a block-major stripe, one per row in row-major.
+  std::vector<TcuTbuf::LmemRead> a_refill(const tbuf_req_t& req) {
+    const auto& sd_a = lmem_desc_[req.wid][0];
+    uint32_t e_bits  = elem_bits(req.fmt_s);
+    uint32_t ratio   = 32 / e_bits;
+    uint32_t xtile_n = xtile_n_of(req.cd_nregs);
+    uint32_t k_words = req.is_sparse ? cfg::tcK : kFedpWords;
+
+    std::vector<uint64_t> lines;
+    for (uint32_t row = 0; row < wg_cfg::m_steps * cfg::tcM; ++row) {
+      for (uint32_t z = 0; z < k_words; ++z) {
+        uint32_t k_elem = (req.step_k * k_words + z) * ratio;
+        for (uint32_t e = 0; e < ratio; ++e) {
+          uint64_t off = elem_offset(sd_a, row, k_elem + e, e_bits, xtile_n,
+                                     false, false, req.is_sparse);
+          lines.push_back((sd_a.base + off * e_bits / 8) & kLineMask);
+        }
+      }
+    }
+
+    uint32_t num_reads = (sd_a.ldm != 0) ? (wg_cfg::m_steps * cfg::tcM)
+                       : req.is_sparse ? kAStripeReadsSp : kAStripeReads;
+    return split_reads(std::move(lines), num_reads);
+  }
+
+  // Spread a refill's distinct lines over the hardware's read count.
+  static std::vector<TcuTbuf::LmemRead> split_reads(std::vector<uint64_t> lines,
+                                                    uint32_t num_reads) {
+    std::sort(lines.begin(), lines.end());
+    lines.erase(std::unique(lines.begin(), lines.end()), lines.end());
+    uint32_t n = lines.size();
+    if (n == 0) {
+      return {};
+    }
+    std::vector<TcuTbuf::LmemRead> reads(num_reads);
+    for (uint32_t i = 0; i < num_reads; ++i) {
+      if (n >= num_reads) {
+        reads.at(i).assign(lines.begin() + (uint64_t(i) * n) / num_reads,
+                           lines.begin() + (uint64_t(i + 1) * n) / num_reads);
+      } else {
+        reads.at(i).push_back(lines.at(i % n));
+      }
+    }
+    return reads;
+  }
+#endif // VX_CFG_TCU_WGMMA_ENABLE
 
 
   void wmma(uint32_t wid,
@@ -1167,92 +1637,15 @@ public:
                     + csrs.block_idx[0]);
   }
 
-  // ── TMEM allocator ─────────────────────────────────────────────────────
-  // First-fit free-list column allocator. Multiple warpgroups (different
-  // CTAs) can hold disjoint, concurrently-live allocations.
-  //
-  // CTA-scoped idempotency: every warp of a CTA can call tmem_alloc()
-  // independently and get the same handle back, with no elected-thread +
-  // shared-memory broadcast needed in the kernel. The first call for a
-  // given cta_id allocates and later calls from other warps of the
-  // same CTA just return the cached handle.
+  // TMEM storage, its column allocator and its bank arbitration all live in
+  // TcuTmem; these forward and resolve the Core-side context.
   uint32_t tmem_alloc(uint32_t ncols, int32_t cta_id) {
-    auto cta_it = cta_tmem_handle_.find(cta_id);
-    if (cta_it != cta_tmem_handle_.end()) {
-      uint32_t handle = cta_it->second;
-      if (tmem_allocs_.at(handle) != ncols) {
-        std::cout << "Error: TMEM_ALLOC ncols mismatch for cta_id=" << cta_id
-                  << " (existing=" << tmem_allocs_.at(handle) << ", requested=" << ncols
-                  << ") — one CTA can only hold one live allocation in this PoC" << std::endl;
-        std::abort();
-      }
-      return handle;
-    }
-
-    for (auto it = tmem_free_.begin(); it != tmem_free_.end(); ++it) {
-      if (it->second < ncols) continue;
-      uint32_t handle = it->first;
-      if (it->second == ncols) {
-        tmem_free_.erase(it);
-      } else {
-        it->first  += ncols;
-        it->second -= ncols;
-      }
-      tmem_allocs_[handle] = ncols;
-      for (uint32_t c = handle; c < handle + ncols; ++c)
-        for (auto& row : tmem_data_)
-          row[c] = 0;
-      cta_tmem_handle_[cta_id] = handle;
-      return handle;
-    }
-    std::cout << "Error: TMEM allocation failed (ncols=" << ncols
-              << ", no free range large enough)" << std::endl;
-    std::abort();
+    return tmem_.alloc(ncols, cta_id);
   }
 
-  // Mirrors tmem_alloc(). The range is only actually freed once every warp
-  // of the CTA has called dealloc.
   void tmem_dealloc(uint32_t handle, int32_t cta_id, uint32_t wid) {
-    auto it = tmem_allocs_.find(handle);
-    if (it == tmem_allocs_.end()) {
-      std::cout << "Error: TMEM_DEALLOC unknown handle " << handle << std::endl;
-      std::abort();
-    }
-    auto& dealloc_warps = cta_tmem_dealloc_warps_[cta_id];
-    dealloc_warps.insert(wid);
-    uint32_t expected = core_->scheduler().warp(wid).cta_csrs.cta_size;
-    if (dealloc_warps.size() < expected) {
-      return; // other warps of this CTA still hold the allocation open
-    }
-
-    tmem_free_.push_back({handle, it->second});
-    tmem_allocs_.erase(it);
-    cta_tmem_handle_.erase(cta_id);
-    cta_tmem_dealloc_warps_.erase(cta_id);
-    // Coalesce adjacent free ranges to keep the allocator from fragmenting.
-    std::sort(tmem_free_.begin(), tmem_free_.end());
-    for (size_t i = 0; i + 1 < tmem_free_.size();) {
-      if (tmem_free_[i].first + tmem_free_[i].second == tmem_free_[i + 1].first) {
-        tmem_free_[i].second += tmem_free_[i + 1].second;
-        tmem_free_.erase(tmem_free_.begin() + i + 1);
-      } else {
-        ++i;
-      }
-    }
-  }
-
-  // Per-thread lane/col bound check for tmem_st/tmem_ld: lane must be within
-  // physical capacity, col must fall inside an active allocation
-  void validate_tmem_lane_col(uint32_t lane, uint32_t col) {
-    if (lane >= kTmemLanes) {
-      std::cout << "Error: TMEM lane " << lane << " exceeds kTmemLanes=" << kTmemLanes << std::endl;
-      std::abort();
-    }
-    for (auto& kv : tmem_allocs_) {
-      if (col >= kv.first && col < kv.first + kv.second) return;
-    }
-    std::cout << "Error: TMEM column " << col << " not within any active allocation" << std::endl;
-    std::abort();
+    uint32_t cta_size = core_->scheduler().warp(wid).cta_csrs.cta_size;
+    tmem_.dealloc(handle, cta_id, wid, cta_size);
   }
 
   void tmem_st(uint32_t tmem_addr, const std::vector<reg_data_t>& value_data,
@@ -1263,8 +1656,7 @@ public:
     for (uint32_t t = 0; t < value_data.size(); ++t) {
       if (!tmask.test(t))
         continue;
-      validate_tmem_lane_col(lane_base + t, col);
-      tmem_data_.at(lane_base + t).at(col) = value_data.at(t).u32;
+      tmem_.write(lane_base + t, col, value_data.at(t).u32);
       ++active;
     }
     perf_stats_.tmem_writes += active;
@@ -1278,16 +1670,15 @@ public:
     for (uint32_t t = 0; t < rd_data.size(); ++t) {
       if (!tmask.test(t))
         continue;
-      validate_tmem_lane_col(lane_base + t, col);
-      rd_data.at(t).u64 = nan_box(tmem_data_.at(lane_base + t).at(col));
+      rd_data.at(t).u64 = nan_box(tmem_.read(lane_base + t, col));
       ++active;
     }
     perf_stats_.tmem_reads += active;
   }
 
   // UMMA: A/B fetched via the shared tile buffer exactly like WGMMA's
-  // smem path; C/D read/written directly against tmem_data_ at
-  // [handle + local_col], derived from the handle cached on the first uop.
+  // smem path; C/D read/written through TcuTmem at [handle + local_col],
+  // derived from the handle cached on the first uop.
   void umma(uint32_t wid,
             uint32_t fmt_s,
             uint32_t fmt_d,
@@ -1295,6 +1686,7 @@ public:
             uint32_t step_n,
             uint32_t step_k,
             uint32_t umma_nrc,
+            uint32_t a_from_smem,
             uint32_t a_desc,
             uint32_t b_desc,
             uint32_t handle,
@@ -1311,13 +1703,21 @@ public:
 
     bool first_uop = (step_m == 0 && step_n == 0 && step_k == 0);
     if (first_uop) {
-      lmem_desc_[wid][0] = {uint64_t(VX_MEM_LMEM_BASE_ADDR) + (a_desc & 0xFFFF), (a_desc >> 16) * 8 / e_bits, false};
+      if (a_from_smem) {
+        lmem_desc_[wid][0] = {uint64_t(VX_MEM_LMEM_BASE_ADDR) + (a_desc & 0xFFFF), (a_desc >> 16) * 8 / e_bits, false};
+      } else {
+        // On the TMEM path a_desc is an absolute TMEM column, not a descriptor.
+        lmem_desc_[wid][0] = {};
+      }
       lmem_desc_[wid][1] = {uint64_t(VX_MEM_LMEM_BASE_ADDR) + (b_desc & 0xFFFF), (b_desc >> 16) * 8 / e_bits, false};
       umma_handle_[wid] = handle;
+      wgmma_desc_[wid][0] = a_desc;
     }
     lmem_desc_t sd_a = lmem_desc_[wid][0];
     lmem_desc_t sd_b = lmem_desc_[wid][1];
-    cur_a_desc_base_ = sd_a.base;
+    // load_lmem_word distinguishes A from B by descriptor base; A-from-TMEM
+    // never reaches it, so leave no base that could alias B's.
+    cur_a_desc_base_ = a_from_smem ? sd_a.base : ~uint64_t(0);
     cur_is_sparse_ = false;
 
     uint32_t xtileM = wg_cfg::xtileM;
@@ -1329,29 +1729,48 @@ public:
     uint32_t cta_rank = core_->scheduler().warp(wid).cta_csrs.cta_rank;
 
     // Bounds check once per uop rather than per element.
-    auto alloc_it = tmem_allocs_.find(use_handle);
-    if (alloc_it == tmem_allocs_.end()) {
+    uint32_t alloc_ncols = tmem_.alloc_ncols(use_handle);
+    if (0 == alloc_ncols) {
       std::cout << "Error: UMMA invalid TMEM handle " << use_handle << std::endl;
       std::abort();
     }
     uint32_t max_lane = cta_rank * xtileM + step_m * cfg::tcM + cfg::tcM;
-    if (max_lane > kTmemLanes) {
-      std::cout << "Error: UMMA lane range exceeds kTmemLanes=" << kTmemLanes << std::endl;
+    if (max_lane > TcuTmem::kLanes) {
+      std::cout << "Error: UMMA lane range exceeds kLanes=" << TcuTmem::kLanes << std::endl;
       std::abort();
     }
     uint32_t max_col_local = step_n * cfg::tcN + cfg::tcN;
-    if (max_col_local > alloc_it->second) {
+    if (max_col_local > alloc_ncols) {
       std::cout << "Error: UMMA column range exceeds TMEM allocation (handle=" << use_handle
-                << ", ncols=" << alloc_it->second << ")" << std::endl;
+                << ", ncols=" << alloc_ncols << ")" << std::endl;
       std::abort();
+    }
+
+    uint32_t a_col = wgmma_desc_[wid][0];
+    if (!a_from_smem) {
+      // A is read from the same lanes the accumulator occupies, so its column
+      // range is the only thing to bound-check.
+      uint32_t max_a_col = a_col + step_k * k_words + k_words;
+      if (max_a_col > TcuTmem::kCols) {
+        std::cout << "Error: UMMA A-from-TMEM column range exceeds TMEM"
+                     " (col=" << a_col << ", cols=" << TcuTmem::kCols << ")" << std::endl;
+        std::abort();
+      }
     }
 
     reg_data_t a_tile[cfg::tcM * kFedpWords] = {};
     for (uint32_t i = 0; i < cfg::tcM; ++i) {
       uint32_t a_row_idx = step_m * cfg::tcM + i;
       for (uint32_t z = 0; z < k_words; ++z) {
-        uint32_t k_elem = (step_k * k_words + z) * ratio;
-        a_tile[i * k_words + z].u32 = load_lmem_word(sd_a, a_row_idx, k_elem, fmt_s, false, false);
+        if (a_from_smem) {
+          uint32_t k_elem = (step_k * k_words + z) * ratio;
+          a_tile[i * k_words + z].u32 = load_lmem_word(sd_a, a_row_idx, k_elem, fmt_s, false, false);
+        } else {
+          // element (row, k) lives at TMEM[cta_rank*xtileM + row][a_col + k/ratio],
+          // and k/ratio for word z is exactly step_k*k_words + z.
+          a_tile[i * k_words + z].u32 =
+              tmem_.read(cta_rank * xtileM + a_row_idx, a_col + step_k * k_words + z);
+        }
       }
     }
 
@@ -1374,9 +1793,9 @@ public:
         uint32_t col  = use_handle + step_n * cfg::tcN + j;
         auto a_row = &a_tile[i * k_words];
         auto b_col = &b_tile[(i * cfg::tcN + j) * k_words];
-        uint32_t c_val = tmem_data_.at(lane).at(col);
+        uint32_t c_val = tmem_.read(lane, col);
         uint32_t d_val = fedp(a_row, b_col, c_val, k_words);
-        tmem_data_.at(lane).at(col) = d_val;
+        tmem_.write(lane, col, d_val);
         DTH(3, simobject_->name() << " UMMA FEDP"
             << ": wid=" << wid << ", i=" << i << ", j=" << j
             << ", m=" << step_m << ", n=" << step_n << ", k=" << step_k << std::hex
@@ -1493,6 +1912,68 @@ private:
 #endif
   }
 
+  // Element offset of one operand element from its descriptor base. A is
+  // (row=M, col=K) and B is (row=K, col=N); `pack_along_row` selects B.
+  static uint64_t elem_offset(const lmem_desc_t& desc, uint32_t row, uint32_t col,
+                              uint32_t e_bits, uint32_t xtile_n,
+                              bool pack_along_row, bool sparse_b,
+                              bool sparse_a_layout) {
+    uint32_t ratio = (e_bits >= 32) ? 1 : (32 / e_bits);
+    uint64_t elem_off;
+    if (desc.ldm == 0) {
+      // Block-major SMEM. K dimension is along col for A (pack_along_row
+      // false) and along row for B (pack_along_row true).
+      uint32_t k_blk_dim = (sparse_a_layout && !pack_along_row)
+                         ? (cfg::tcK * ratio)
+                         : (kFedpWords * ratio);
+      if (pack_along_row && sparse_b) {
+        // Sparse B in flat (candidate-pair) layout: block-contiguous
+        // K-word-major / N-inner order [kw_in*tcN + n_in].
+        uint32_t b_tcK_words = cfg::tcK * 2;
+        uint32_t k_word = row / ratio;
+        uint32_t elem   = row % ratio;
+        uint32_t k_blk  = k_word / b_tcK_words;
+        uint32_t kw_in  = k_word % b_tcK_words;
+        uint32_t n_blk  = col / cfg::tcN;
+        uint32_t n_in   = col % cfg::tcN;
+        uint32_t blk_words = cfg::tcN * b_tcK_words;
+        uint32_t n_steps   = xtile_n / cfg::tcN;
+        uint64_t word_off  = (k_blk * n_steps + n_blk) * blk_words
+                           + (kw_in * cfg::tcN + n_in);
+        elem_off = word_off * ratio + elem;
+      } else if (pack_along_row) {
+        // Dense B (block-major): r is K coord, c is N coord; N outer, K inner.
+        uint32_t k_blk = row / k_blk_dim;
+        uint32_t r_in  = row % k_blk_dim;
+        uint32_t n_blk = col / cfg::tcN;
+        uint32_t n_in  = col % cfg::tcN;
+        uint32_t b_blk_elems = k_blk_dim * cfg::tcN;
+        uint32_t n_steps     = xtile_n / cfg::tcN;
+        elem_off = (k_blk * n_steps + n_blk) * b_blk_elems
+                 + n_in * k_blk_dim + r_in;
+      } else {
+        // A: r is M coord, c is K coord.
+        uint32_t m_blk = row / cfg::tcM;
+        uint32_t i_in  = row % cfg::tcM;
+        uint32_t k_blk = col / k_blk_dim;
+        uint32_t k_in  = col % k_blk_dim;
+        uint32_t a_blk_elems = cfg::tcM * k_blk_dim;
+        elem_off = (k_blk * wg_cfg::m_steps + m_blk) * a_blk_elems
+                 + i_in * k_blk_dim + k_in;
+      }
+    } else if (desc.col_major) {
+      elem_off = uint64_t(col) * desc.ldm + row;
+    } else if (pack_along_row) {
+      // B: K-major (N-outer K-inner). row=K, col=N;
+      // ldm = stride in elements between N rows.
+      elem_off = uint64_t(col) * desc.ldm + row;
+    } else {
+      // A: row-major (M-outer K-inner). row=M, col=K.
+      elem_off = uint64_t(row) * desc.ldm + col;
+    }
+    return elem_off;
+  }
+
   // Gather one 32-bit operand word from a TCU line cache.
   // `read_line` is supplied by the caller and routes to the right per-role
   // buffer inside TcuTbuf (A → read_a, B → read_b). For sub-32-bit formats,
@@ -1509,60 +1990,8 @@ private:
     for (uint32_t r = 0; r < ratio; ++r) {
       uint32_t cur_row = pack_along_row ? (row + r) : row;
       uint32_t cur_col = pack_along_row ? col       : (col + r);
-      uint64_t elem_off;
-      if (desc.ldm == 0) {
-        // Block-major SMEM. K dimension is along col for A (pack_along_row
-        // false) and along row for B (pack_along_row true).
-        uint32_t k_blk_dim = (sparse_a_layout && !pack_along_row)
-                           ? (cfg::tcK * ratio)
-                           : (kFedpWords * ratio);
-        if (pack_along_row && sparse_b) {
-          // Sparse B in flat (candidate-pair) layout: block-contiguous
-          // K-word-major / N-inner order [kw_in*tcN + n_in] (mirrors
-          // vx_tensor.h b_sp_flat_idx). The bbuf applies the candidate-pair
-          // read-perm; here we just read logically.
-          uint32_t b_tcK_words = cfg::tcK * 2;
-          uint32_t k_word = cur_row / ratio;
-          uint32_t elem   = cur_row % ratio;
-          uint32_t k_blk  = k_word / b_tcK_words;
-          uint32_t kw_in  = k_word % b_tcK_words;
-          uint32_t n_blk  = cur_col / cfg::tcN;
-          uint32_t n_in   = cur_col % cfg::tcN;
-          uint32_t blk_words = cfg::tcN * b_tcK_words;
-          uint32_t n_steps   = cur_xtile_n_ / cfg::tcN;
-          uint64_t word_off  = (k_blk * n_steps + n_blk) * blk_words
-                             + (kw_in * cfg::tcN + n_in);
-          elem_off = word_off * ratio + elem;
-        } else if (pack_along_row) {
-          // Dense B (block-major): r is K coord, c is N coord; N outer, K inner.
-          uint32_t k_blk = cur_row / k_blk_dim;
-          uint32_t r_in  = cur_row % k_blk_dim;
-          uint32_t n_blk = cur_col / cfg::tcN;
-          uint32_t n_in  = cur_col % cfg::tcN;
-          uint32_t b_blk_elems = k_blk_dim * cfg::tcN;
-          uint32_t n_steps     = cur_xtile_n_ / cfg::tcN;
-          elem_off = (k_blk * n_steps + n_blk) * b_blk_elems
-                   + n_in * k_blk_dim + r_in;
-        } else {
-          // A: r is M coord, c is K coord.
-          uint32_t m_blk = cur_row / cfg::tcM;
-          uint32_t i_in  = cur_row % cfg::tcM;
-          uint32_t k_blk = cur_col / k_blk_dim;
-          uint32_t k_in  = cur_col % k_blk_dim;
-          uint32_t a_blk_elems = cfg::tcM * k_blk_dim;
-          elem_off = (k_blk * wg_cfg::m_steps + m_blk) * a_blk_elems
-                   + i_in * k_blk_dim + k_in;
-        }
-      } else if (desc.col_major) {
-        elem_off = uint64_t(cur_col) * desc.ldm + cur_row;
-      } else if (pack_along_row) {
-        // B: K-major (N-outer K-inner). cur_row=K, cur_col=N;
-        // ldm = stride in elements between N rows.
-        elem_off = uint64_t(cur_col) * desc.ldm + cur_row;
-      } else {
-        // A: row-major (M-outer K-inner). cur_row=M, cur_col=K.
-        elem_off = uint64_t(cur_row) * desc.ldm + cur_col;
-      }
+      uint64_t elem_off = elem_offset(desc, cur_row, cur_col, e_bits, cur_xtile_n_,
+                                      pack_along_row, sparse_b, sparse_a_layout);
       uint64_t byte_addr = desc.base + elem_off * e_bits / 8;
       auto line = read_line(byte_addr);
       if (!line) {
@@ -1663,10 +2092,38 @@ private:
   mutable PerfStats perf_stats_;
   // Per-block guard: execute already happened for this trace; reset on pop().
   std::array<bool, VX_CFG_NUM_TCU_BLOCKS> exec_done_;
-  // Per-block bitmask of warp IDs with planned WGMMA lines; cleared on fu_unlock.
-  std::array<uint64_t, VX_CFG_NUM_TCU_BLOCKS> wgmma_planned_warps_;
+  // Cycles at which each block's results sent so far become visible.
+  std::array<std::vector<uint64_t>, VX_CFG_NUM_TCU_BLOCKS> result_due_;
   // True while a block is between its first and last WGMMA uop.
   std::array<bool, VX_CFG_NUM_TCU_BLOCKS> in_wgmma_;
+
+#ifdef VX_CFG_TCU_TMEM_ENABLE
+  TcuTmem tmem_;
+  TcuTmem::CycleReqs tmem_reqs_;
+
+  std::array<TcuTmemWrTrack, VX_CFG_NUM_TCU_BLOCKS> wr_track_;
+
+  // A-from-TMEM refill in flight for a block's abuf; residency is abuf_.
+  struct a_fill_t {
+    bool     fetching = false;  // == S_FETCH
+    uint32_t lane_base = 0;
+    uint32_t col_base = 0;
+    uint32_t words_done = 0;    // == req_ctr_r
+  };
+  std::array<a_fill_t, VX_CFG_NUM_TCU_BLOCKS> a_fill_;
+  std::array<bool, VX_CFG_NUM_TCU_BLOCKS> umma_hazard_{};
+  std::array<bool, VX_CFG_NUM_TCU_BLOCKS> umma_rd_won_{};
+  std::array<bool, VX_CFG_NUM_TCU_BLOCKS> umma_rd_won_r_{};
+  std::array<bool, VX_CFG_NUM_TCU_BLOCKS> umma_wr_won_r_{};
+
+  // This cycle's single ALLOC/DEALLOC winner, and whether the allocator can
+  // actually service it.
+  uint32_t tmem_mgmt_grant_ = TcuTmem::kNoGrant;
+  bool tmem_mgmt_fire_ = false;
+
+  // Per-wid cached TMEM handle, latched on UMMA's first uop
+  std::unordered_map<uint32_t, uint32_t> umma_handle_;
+#endif
   // Current block index, set before delegating to wgmma().
   uint32_t cur_block_ = 0;
   // A-descriptor base for the current wgmma(); distinguishes A from B in load_lmem_word.
@@ -1674,37 +2131,11 @@ private:
   bool cur_is_sparse_ = false;
   // xtileN for the active WGMMA (derived from NRC).
   uint32_t cur_xtile_n_ = 8;
-  // CTA owner per block's A buffer and the shared B buffer (-1 = unowned).
+  // CTA each block holds while mid-WGMMA (-1 = none).
   std::array<int32_t, VX_CFG_NUM_TCU_BLOCKS> cta_owner_a_{};
-  int32_t cta_owner_b_ = -1;
-
-#ifdef VX_CFG_TCU_TMEM_ENABLE
-  // TMEM is architecturally per-SM on Blackwell GPUs, not per-tensor-core. 
-  // Living inside TcuUnit::Impl here is correct because Vortex currently
-  // instantiates exactly one TcuUnit per Core. If Vortex ever allows
-  // multiple TCU-equivalent units per core, this storage and the
-  // allocator need to move up to Core so it becomes correctly
-  // SM-scoped instead of per-TC (which would also break the
-  // CTA-scoped handle cache in tmem_alloc()/tmem_dealloc()).
-  static constexpr uint32_t kTmemCols  = VX_CFG_TCU_TMEM_COLS;
-  // Lanes are sized to one warpgroup's width (VX_CFG_NUM_TCU_BLOCKS) and
-  // shared/reused across concurrent warpgroups, addressed by each warp's
-  // CTA-local rank
-  static constexpr uint32_t kTmemLanes = wg_cfg::xtileM * VX_CFG_NUM_TCU_BLOCKS;
-  static_assert(kTmemLanes <= 128, "TMEM lanes exceed cap");
-
-  std::array<std::array<uint32_t, kTmemCols>, kTmemLanes> tmem_data_{};
-  // Free-list allocator state: {start_col, ncols} ranges, and handle->ncols
-  // for active allocations.
-  std::vector<std::pair<uint32_t, uint32_t>> tmem_free_{{0, kTmemCols}};
-  std::unordered_map<uint32_t, uint32_t> tmem_allocs_;
-  // CTA-scoped idempotent-alloc bookkeeping
-  std::unordered_map<int32_t, uint32_t> cta_tmem_handle_;
-  // Distinct wids that have called tmem_dealloc for this CTA — a set, not a
-  // counter, so a warp calling dealloc twice can't free the range early
-  std::unordered_map<int32_t, std::unordered_set<uint32_t>> cta_tmem_dealloc_warps_;
-  // Per-wid cached TMEM handle, latched on UMMA's first uop
-  std::unordered_map<uint32_t, uint32_t> umma_handle_;
+#ifdef VX_CFG_TCU_WGMMA_ENABLE
+  std::array<abuf_slot_t, VX_CFG_NUM_TCU_BLOCKS> abuf_;
+  bbuf_slot_t bbuf_;
 #endif
 };
 
@@ -1987,7 +2418,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
 
     bool first = (uop_index == 0);
     bool last  = (uop_index == (total - 1));
-    uop_instr->set_args(IntrTcuArgs{1, 0, args.fmt_s, args.fmt_d, m, n, k,
+    uop_instr->set_args(IntrTcuArgs{args.is_a_smem, 0, args.fmt_s, args.fmt_d, m, n, k,
                                    first ? 1u : 0u, last ? 1u : 0u, 0, args.umma_nrc});
     // desc_a/desc_b/handle only need fetching once; Impl caches them per-wid
     // (lmem_desc_, umma_handle_) and reuses on subsequent uops.
@@ -2106,12 +2537,13 @@ void TcuUnit::umma(uint32_t wid,
                     uint32_t step_n,
                     uint32_t step_k,
                     uint32_t umma_nrc,
+                    uint32_t a_from_smem,
                     uint32_t a_desc,
                     uint32_t b_desc,
                     uint32_t handle,
                     const std::vector<reg_data_t>& rs1_data,
                     const std::vector<reg_data_t>& rs2_data) {
   impl_->umma(wid, fmt_s, fmt_d, step_m, step_n, step_k,
-              umma_nrc, a_desc, b_desc, handle, rs1_data, rs2_data);
+              umma_nrc, a_from_smem, a_desc, b_desc, handle, rs1_data, rs2_data);
 }
 #endif

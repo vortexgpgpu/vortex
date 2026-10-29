@@ -23,10 +23,13 @@ cl_device_id device_id = NULL; cl_context context = NULL; cl_command_queue queue
 cl_program program = NULL; cl_kernel kernel = NULL; cl_sampler sampler = NULL;
 cl_mem src_image = NULL, dst_image = NULL;
 static void cleanup() {
-  if (queue) clReleaseCommandQueue(queue); if (kernel) clReleaseKernel(kernel);
-  if (program) clReleaseProgram(program); if (sampler) clReleaseSampler(sampler);
-  if (src_image) clReleaseMemObject(src_image); if (dst_image) clReleaseMemObject(dst_image);
-  if (context) clReleaseContext(context);
+  if (queue) { clReleaseCommandQueue(queue); }
+  if (kernel) { clReleaseKernel(kernel); }
+  if (program) { clReleaseProgram(program); }
+  if (sampler) { clReleaseSampler(sampler); }
+  if (src_image) { clReleaseMemObject(src_image); }
+  if (dst_image) { clReleaseMemObject(dst_image); }
+  if (context) { clReleaseContext(context); }
 }
 
 int main(int argc, char** argv) {
@@ -66,7 +69,11 @@ int main(int argc, char** argv) {
 
   int errors=0;
   for (size_t i=0;i<h_src.size();++i) if (h_dst[i]!=h_src[i]) {
-    if (errors<8) printf("mismatch byte %zu got %u expect %u\n",i,(unsigned)h_dst[i],(unsigned)h_src[i]); ++errors; }
+    if (errors<8) {
+      printf("mismatch byte %zu got %u expect %u\n",i,(unsigned)h_dst[i],(unsigned)h_src[i]);
+    }
+    ++errors;
+  }
   cleanup();
   if (errors) { printf("Found %d mismatches.\nFAILED!\n",errors); return 1; }
   printf("PASSED!\n"); return 0;

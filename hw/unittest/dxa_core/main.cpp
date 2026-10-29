@@ -19,6 +19,7 @@
 #include <cassert>
 #include <cstdlib>
 #include "VVX_dxa_core_top.h"
+#include "VX_config.h"
 #include "verilated.h"
 #ifdef VCD_OUTPUT
 #include "verilated_vcd_c.h"
@@ -93,9 +94,10 @@ int main(int argc, char** argv) {
     dut->dcr_req_valid  = 0;
     dut->dcr_req_rw     = 0;
     dut->dxa_req_valid  = 0;
-    dut->gmem_req_ready = ~0ULL; // all ready
+    auto all_ready = [](uint32_t ports) { return (ports >= 32) ? ~0u : ((1u << ports) - 1); };
+    dut->gmem_req_ready = all_ready(VX_CFG_NUM_DXA_CORES);
     dut->gmem_rsp_valid = 0;
-    dut->lmem_req_ready = ~0ULL; // all ready
+    dut->lmem_req_ready = all_ready(VX_CFG_SOCKET_SIZE);
 
     reset_dut();
 

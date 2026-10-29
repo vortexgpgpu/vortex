@@ -19,7 +19,7 @@ ROOT_DIR=$SCRIPT_DIR/..
 show_usage()
 {
     echo "Vortex BlackBox Test Driver v1.0"
-    echo "Usage: $0 [[--clusters=#n] [--cores=#n] [--warps=#n] [--threads=#n] [--l2cache] [--l3cache] [[--driver=#name] [--target=#name] [--app=#app] [--args=#args] [--debug=#level] [--scope] [--vcd] [--saif] [--perf=#class] [--vcd_file=#file] [--saif_file=#file] [--log=logfile] [--nohup] [--help]]"
+    echo "Usage: $0 [[--profile=#name] [--clusters=#n] [--cores=#n] [--warps=#n] [--threads=#n] [--l2cache] [--l3cache] [[--driver=#name] [--target=#name] [--app=#app] [--args=#args] [--debug=#level] [--scope] [--vcd] [--saif] [--perf=#class] [--vcd_file=#file] [--saif_file=#file] [--log=logfile] [--nohup] [--help]]"
 }
 
 show_help()
@@ -66,6 +66,7 @@ parse_args() {
     for i in "$@"; do
         case $i in
             --driver=*) DRIVER=${i#*=} ;;
+            --profile=*) export PROFILE=${i#*=} ;;
             --target=*) TARGET=${i#*=} ;;
             --app=*)    APP=${i#*=} ;;
             --clusters=*) CONFIGS=$(add_option "$CONFIGS" "-DVX_CFG_NUM_CLUSTERS=${i#*=}") ;;
@@ -130,14 +131,17 @@ build_driver() {
     [ $VCD -eq 1 ] && cmd_opts=$(add_option "$cmd_opts" "VCD=1")
     [ $SAIF -eq 1 ] && cmd_opts=$(add_option "$cmd_opts" "SAIF=1")
     [ -n "$TARGET" ] && cmd_opts=$(add_option "$cmd_opts" "TARGET=$TARGET")
-    [ $TEMPBUILD -eq 1 ] && cmd_opts=$(add_option "$cmd_opts" "DESTDIR=\"$TEMPDIR\"")
+    [ $TEMPBUILD -eq 1 ] && cmd_opts=$(add_option "$cmd_opts" "VORTEX_RT_LIB=\"$TEMPDIR\"")
     [ -n "$CONFIGS" ] && cmd_opts=$(add_option "$cmd_opts" "CONFIGS=\"$CONFIGS\"")
-    cmd_opts=$(add_option "$cmd_opts" "make -C $DRIVER_PATH > /dev/null")
+    # Through the app's Makefile, not the driver's: an app resolves its own
+    # CONFIGS defaults, and a driver built from the caller's CONFIGS alone is a
+    # different model that the run then discards and rebuilds.
+    cmd_opts=$(add_option "$cmd_opts" "make -C \"$APP_PATH\" runtime-$DRIVER > /dev/null")
     echo "Running: $cmd_opts"
     eval "$cmd_opts"
     status=$?
     if [ $status -ne 0 ]; then
-        echo "Error building driver: $DRIVER_PATH"
+        echo "Error building driver: $DRIVER (via $APP_PATH)"
         exit $status
     fi
 }
@@ -163,6 +167,14 @@ run_app() {
     echo "Running: $cmd_opts"
     eval "$cmd_opts"
     status=$?
+    # A debug run sends everything to the log, so a failure would otherwise
+    # surface as a bare exit code with no output at all -- the reason is in a
+    # file the caller never sees. Echo the tail on the way out.
+    if [ $status -ne 0 ] && [ $DEBUG -ne 0 ] && [ -f "$LOGFILE" ]; then
+        echo "--- $LOGFILE (last 100 lines) ---"
+        tail -100 "$LOGFILE"
+        echo "--- end $LOGFILE ---"
+    fi
     return $status
 }
 

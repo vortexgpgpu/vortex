@@ -86,10 +86,10 @@ static void emit_instance(uint8_t* out, float tx, float ty, float tz,
                           uint32_t blas_off, uint32_t custom_id,
                           uint32_t instance_id) {
   float* xform = reinterpret_cast<float*>(out);
-  // Row-major 3x4 affine: [R t]. Identity R, translation t.
-  xform[0]  = 1.f; xform[1]  = 0.f; xform[2]  = 0.f; xform[3]  = tx;
-  xform[4]  = 0.f; xform[5]  = 1.f; xform[6]  = 0.f; xform[7]  = ty;
-  xform[8]  = 0.f; xform[9]  = 0.f; xform[10] = 1.f; xform[11] = tz;
+  // Row-major 3x4 world->object affine: the inverse of [I t], i.e. [I -t].
+  xform[0]  = 1.f; xform[1]  = 0.f; xform[2]  = 0.f; xform[3]  = -tx;
+  xform[4]  = 0.f; xform[5]  = 1.f; xform[6]  = 0.f; xform[7]  = -ty;
+  xform[8]  = 0.f; xform[9]  = 0.f; xform[10] = 1.f; xform[11] = -tz;
   *reinterpret_cast<uint32_t*>(out + VX_BVH_INSTANCE_BLAS_OFF)  = blas_off;
   *reinterpret_cast<uint32_t*>(out + VX_BVH_INSTANCE_CUSTOM_ID) = custom_id;
   *reinterpret_cast<uint32_t*>(out + VX_BVH_INSTANCE_ID_OFFSET) = instance_id;

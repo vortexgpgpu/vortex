@@ -31,6 +31,16 @@ struct smem_matrix_desc {
   uint32_t value;
 };
 
+// A reference to an A operand held in TMEM (UMMA's A-from-TMEM mode)
+struct tmem_matrix_ref {
+  uint32_t value; // absolute TMEM column where this warpgroup's A tile begins
+};
+
+// Build a TMEM A-operand reference from an absolute TMEM column.
+static inline __attribute__((always_inline)) tmem_matrix_ref vx_make_tmem_ref(uint32_t col) {
+  return {col};
+}
+
 // Build a smem descriptor from a pointer and row stride in bytes.
 static inline __attribute__((always_inline)) smem_matrix_desc vx_make_smem_desc(const void* ptr, uint32_t leading_bytes) {
   size_t lmem_base = csr_read_nv(VX_CSR_LOCAL_MEM_BASE);
@@ -87,7 +97,7 @@ namespace detail {
       }
     }
 
-    static __attribute__((always_inline)) D pack_row(const Type *base, uint32_t ldm) {
+    static __attribute__((always_inline)) D pack_row(const Type *base, size_t ldm) {
       static_assert(sizeof(D) % sizeof(Type) == 0, "D must be a multiple of Type in size");
       if constexpr (sizeof(Type) == 1 && sizeof(D) == 4) {
         // 4 × 1-byte strided loads → single pack-load byte instruction
@@ -368,7 +378,7 @@ public:
           k_bases[0] = base;
           if constexpr (num_k_groups >= 2) {
             asm volatile("" : "+r"(k_bases[0])); // prevent reverse strength reduction
-            auto k_ldm_step = k_stride * (uint32_t)ldm;
+            size_t k_ldm_step = k_stride * ldm;
             detail::unroll_for<num_k_groups - 1>([&](auto i) {
               k_bases[i + 1] = k_bases[i] + k_ldm_step;
             });
@@ -393,7 +403,7 @@ public:
           n_bases[0] = base;
           if constexpr (num_n_groups >= 2) {
             asm volatile("" : "+r"(n_bases[0])); // prevent reverse strength reduction
-            auto n_ldm_step = n_stride * (uint32_t)ldm;
+            size_t n_ldm_step = n_stride * ldm;
             detail::unroll_for<num_n_groups - 1>([&](auto i) {
               n_bases[i + 1] = n_bases[i] + n_ldm_step;
             });
@@ -745,7 +755,8 @@ public:
   // BLOCK = micro-tile (tcM × tcK or tcK × tcN), measured in input_t element units.
   static constexpr uint32_t a_blk_elems  = tcM * fedpK * i_ratio; // elements per A block
   static constexpr uint32_t a_warp_elems = xtileM * tileK;      // elements per warp's A slice
-  static constexpr uint32_t b_blk_elems  = fedpK * i_ratio * tcN; // elements per B block
+  static constexpr uint32_t b_blk_k      = fedpK * i_ratio;     // K elements per B block
+  static constexpr uint32_t b_blk_elems  = b_blk_k * tcN;       // elements per B block
 
   // Cooperative-load index into A_smem for an (r, c) target in the
   // row-major-equivalent A view (r ∈ [0, cta_M), c ∈ [0, tileK)).
@@ -767,12 +778,12 @@ public:
   // Within-block layout: N outer, K inner — each 32-bit word packs i_ratio
   // K-elements at one (j, k_word) cell, matching tcu_core's b_off + j*TC_K + k.
   static __attribute__((always_inline)) uint32_t b_blockmajor_idx(uint32_t r, uint32_t c) {
-    uint32_t k_blk = r / (fedpK * i_ratio);
-    uint32_t r_in  = r % (fedpK * i_ratio);
+    uint32_t k_blk = r / b_blk_k;
+    uint32_t r_in  = r % b_blk_k;
     uint32_t n_blk = c / tcN;
     uint32_t n_in  = c % tcN;
     return (k_blk * n_steps + n_blk) * b_blk_elems
-         + n_in * (fedpK * i_ratio) + r_in;
+         + n_in * b_blk_k + r_in;
   }
 
   // Flat sparse-B SMEM layout: per (k_blk, n_blk) block, words are stored
@@ -863,7 +874,7 @@ public:
     uint32_t k_in_elem = (lane % tcK) * i_ratio;
 
     auto load_reg = [&](uint32_t m_blk, uint32_t k_blk) {
-      uint32_t elem_off;
+      size_t elem_off;
       if (ldm == 0) {
         // Block-major SMEM: blocks contiguous, k-block outer.
         constexpr uint32_t block_elems = is_sparse ? sparse_blk_elems : a_blk_elems;
@@ -872,7 +883,7 @@ public:
                  + k_in_elem;
       } else {
         // Row-major SMEM: standard row*ldm + col.
-        elem_off = (m_blk * tcM + i_in) * uint32_t(ldm)
+        elem_off = (m_blk * tcM + i_in) * ldm
                  + (k_blk * k_row_elems + k_in_elem);
       }
       return *reinterpret_cast<const vreg_t*>(
@@ -892,14 +903,14 @@ public:
         uint32_t m_blk = r / a_reg_k_steps;
         uint32_t k_blk = r % a_reg_k_steps;
         if constexpr (k_steps == 1) {
-          uint32_t elem_off;
+          size_t elem_off;
           if (ldm == 0) {
             elem_off = m_blk * a_blk_elems
                      + i_in * (fedpK * i_ratio)
                      + k_blk * k_row_elems
                      + k_in_elem;
           } else {
-            elem_off = (m_blk * tcM + i_in) * uint32_t(ldm)
+            elem_off = (m_blk * tcM + i_in) * ldm
                      + (k_blk * k_row_elems + k_in_elem);
           }
           dst.data[r] = *reinterpret_cast<const vreg_t*>(
@@ -1288,8 +1299,15 @@ private:
   // UMMA flags encoding (rs2 field, same shape as WGMMA's):
   //   bit 0     : is_sparse = 0 (always, for now)
   //   bits [3:1]: NRC encoding — 0=8, 1=16, 2=32, 3=64, 4=128
+  //   bit 4     : a_from_smem — 1 = shared memory, 0 = TMEM
   static constexpr int umma_nrc_code =
       (NRC_ == 128) ? 4 : (NRC_ == 64) ? 3 : (NRC_ == 32) ? 2 : (NRC_ == 16) ? 1 : 0;
+
+  template <bool a_is_smem>
+  static constexpr int umma_flags() {
+    return (umma_nrc_code << 1)
+         | ((a_is_smem ? 1 : 0) << 4);
+  }
 
 public:
   using input_t  = typename ctx::input_t;
@@ -1372,17 +1390,83 @@ public:
     tmem_lanes_exit(saved_mask);
   }
 
+  // Packed-word geometry for the A-from-TMEM (TS) path: a 32-bit TMEM word
+  // holds `a_elems_per_word` consecutive A elements along k, so a k-stripe of
+  // `tileK` elements occupies `a_tmem_words` columns.
+  static constexpr uint32_t a_elems_per_word = sizeof(uint32_t) / sizeof(input_t);
+  static constexpr uint32_t a_tmem_words     = tileK / a_elems_per_word;
+
+  // Stage this warp's xtileM x tileK A tile into TMEM for the TS path, read
+  // row-major from global memory.
+  //
+  // Packing matches the shared-memory path: element k of a row lands in column
+  // a_col + k/a_elems_per_word at bit (k % a_elems_per_word) * 8 *
+  // sizeof(input_t). A's rows are the same TMEM lanes the accumulator occupies,
+  // so there is no lane field to supply.
+  //
+  // Software contract: the caller must place a barrier between this and the
+  // umma_sync that reads it.
+  static __attribute__((always_inline)) void store_a_tmem(uint32_t a_col,
+                                                          const input_t* A_global,
+                                                          uint32_t tile_row,
+                                                          uint32_t k0,
+                                                          uint32_t K) {
+    static_assert(sizeof(input_t) == 1 || sizeof(input_t) == 2 || sizeof(input_t) == 4,
+                  "A-from-TMEM staging supports 8/16/32-bit input types");
+    static_assert(a_tmem_words * a_elems_per_word == tileK,
+                  "tileK must be a whole number of packed TMEM words");
+    using raw_t = typename std::conditional<
+        sizeof(input_t) == 1, uint8_t,
+        typename std::conditional<sizeof(input_t) == 2, uint16_t, uint32_t>::type>::type;
+    constexpr uint32_t e_bits = 8 * sizeof(input_t);
+
+    uint32_t tid_in_warp = vx_thread_id() % NT;
+    uint32_t rank = vx_cta_rank();
+    size_t saved_mask;
+    if (!tmem_lanes_enter(saved_mask))
+      return;
+    for (uint32_t r = 0; r < tmem_rows_per_thread; ++r) {
+      uint32_t base = rank * xtileM + r * tmem_active_lanes;
+      const input_t* src = A_global + size_t(tile_row + base + tid_in_warp) * K + k0;
+      for (uint32_t j = 0; j < a_tmem_words; ++j) {
+        uint32_t w = 0;
+        for (uint32_t e = 0; e < a_elems_per_word; ++e) {
+          uint32_t bits = uint32_t(detail::bit_cast<raw_t>(src[j * a_elems_per_word + e]));
+          w |= bits << (e * e_bits);
+        }
+        vx_tmem_st(vx_make_tmem_addr(base, a_col + j), w);
+      }
+    }
+    tmem_lanes_exit(saved_mask);
+  }
+
   // Issue a UMMA op: A/B sourced from SMEM via descriptors, C/D implicit in
   // TMEM at `handle`.
-  static __attribute__((always_inline)) void umma_sync(smem_matrix_desc desc_a,
+  // ---- UMMA sync intrinsic ----
+  // SS: umma_sync(desc_a,   desc_b, handle) — A from shared memory
+  // TS: umma_sync(tmem_ref, desc_b, handle) — A from TMEM
+  //
+  // On the TMEM path op_a.value is an absolute TMEM column. No lane field is
+  // needed since A's rows are the same TMEM lanes the accumulator uses
+  // (cta_rank*xtileM + m), so element (row, k) lives at
+  //   TMEM[cta_rank*xtileM + row][op_a.value + k / elems_per_word]
+  // with the same elems_per_word packing the shared-memory path uses.
+  // The TS form does not wait on TMEM_ST writes to A; the caller must order
+  // them with a barrier, since the RAW interlock tracks only UMMA writes.
+  template <typename OpA>
+  static __attribute__((always_inline)) void umma_sync(const OpA& op_a,
                                                        smem_matrix_desc desc_b,
                                                        uint32_t handle) {
     static_assert(NRC_ == 8 || NRC_ == 16 || NRC_ == 32 || NRC_ == 64 || NRC_ == 128,
                   "umma_sync supports NRC = 8, 16, 32, 64, 128");
 
-    int flags = umma_nrc_code << 1;
+    constexpr bool a_is_smem = std::is_same_v<OpA, smem_matrix_desc>;
+    static_assert(a_is_smem || std::is_same_v<OpA, tmem_matrix_ref>,
+                  "A must be smem_matrix_desc or tmem_matrix_ref");
 
-    register uint32_t ra __asm__("a0") = desc_a.value;
+    constexpr int flags = umma_flags<a_is_smem>();
+
+    register uint32_t ra __asm__("a0") = op_a.value;
     register uint32_t rb __asm__("a1") = desc_b.value;
     register uint32_t rh __asm__("a2") = handle;
 

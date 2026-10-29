@@ -169,7 +169,9 @@ module VX_cache import VX_gpu_pkg::*; #(
         .NUM_OUTPUTS (NUM_BANKS),
         .DATAW       (MEM_RSP_DATAW-MEM_ARB_SEL_BITS),
         .ARBITER     ("R"),
-        .OUT_BUF     (3)
+        // Registered at the input handshake, so the wide fill payload does not
+        // load on the bank's late ready.
+        .OUT_BUF     (2)
     ) mem_rsp_xbar (
         .clk       (clk),
         .reset     (reset),

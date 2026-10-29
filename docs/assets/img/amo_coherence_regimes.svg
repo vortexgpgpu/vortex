@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 720" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2e5e82"/>
+    </marker>
+    <marker id="arrk" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3a7d44"/>
+    </marker>
+    <marker id="arrr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#a8324a"/>
+    </marker>
+  </defs>
+  <style>
+    .lane { stroke:#c2ccd6; stroke-width:1.3; }
+    .grp  { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .tb   { fill:#1b2733; font-size:16px; font-weight:bold; }
+    .th   { fill:#1b2733; font-size:13px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:11.5px; }
+    .tt   { fill:#5a6772; font-size:11.5px; font-style:italic; }
+    .act  { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.3; }
+    .actk { fill:#eef7ee; stroke:#3a7d44; stroke-width:1.3; }
+    .actr { fill:#fbeaee; stroke:#a8324a; stroke-width:1.3; }
+    .m    { stroke:#2e5e82; stroke-width:1.7; fill:none; marker-end:url(#arr); }
+    .mk   { stroke:#3a7d44; stroke-width:1.7; fill:none; marker-end:url(#arrk); }
+    .mr   { stroke:#a8324a; stroke-width:1.7; fill:none; marker-end:url(#arrr); }
+    .lb   { fill:#2e5e82; font-size:11px; }
+    .lbk  { fill:#2f6a39; font-size:11px; }
+    .lbr  { fill:#a8324a; font-size:11px; }
+  </style>
+
+  <rect x="0" y="0" width="1400" height="720" fill="#ffffff"/>
+  <text x="24" y="34" class="tb" font-size="20">Two sharing regimes for a word X</text>
+
+  <!-- ══════════ Regime A ══════════ -->
+  <rect x="24" y="56" width="660" height="620" class="grp"/>
+  <text x="36" y="80" class="tb">Regime A — every access to X is an atomic</text>
+  <text x="36" y="100" class="tt">spinlocks, atomic counters, reductions — coherent with no software help</text>
+
+  <text x="130" y="136" class="th" text-anchor="middle">core 0 · L1</text>
+  <text x="354" y="136" class="th" text-anchor="middle">last-level cache</text>
+  <text x="578" y="136" class="th" text-anchor="middle">core 3 · L1</text>
+  <line x1="130" y1="146" x2="130" y2="516" class="lane"/>
+  <line x1="354" y1="146" x2="354" y2="516" class="lane"/>
+  <line x1="578" y1="146" x2="578" y2="516" class="lane"/>
+
+  <rect x="294" y="158" width="120" height="30" rx="5" class="actk"/>
+  <text x="354" y="178" class="ts" text-anchor="middle">X = 0</text>
+
+  <path d="M 130 220 L 350 220" class="m"/>
+  <text x="142" y="212" class="lb">amoadd X, 1</text>
+  <rect x="294" y="232" width="120" height="30" rx="5" class="actk"/>
+  <text x="354" y="252" class="ts" text-anchor="middle">X = 1</text>
+  <path d="M 350 284 L 134 284" class="mk"/>
+  <text x="250" y="276" class="lbk">returns 0</text>
+
+  <path d="M 578 336 L 358 336" class="m"/>
+  <text x="566" y="328" class="lb" text-anchor="end">amoadd X, 1</text>
+  <rect x="294" y="348" width="120" height="30" rx="5" class="actk"/>
+  <text x="354" y="368" class="ts" text-anchor="middle">X = 2</text>
+  <path d="M 358 400 L 574 400" class="mk"/>
+  <text x="370" y="392" class="lbk">returns 1</text>
+
+  <rect x="50" y="440" width="160" height="56" rx="5" class="act"/>
+  <text x="130" y="462" class="ts" text-anchor="middle">L1 never holds X</text>
+  <text x="130" y="478" class="ts" text-anchor="middle">(nothing to go stale)</text>
+  <rect x="498" y="440" width="160" height="56" rx="5" class="act"/>
+  <text x="578" y="462" class="ts" text-anchor="middle">L1 never holds X</text>
+  <text x="578" y="478" class="ts" text-anchor="middle">(nothing to go stale)</text>
+
+  <text x="40" y="540" class="ts">An atomic installs no line on the way down or up, and it drops any copy</text>
+  <text x="40" y="556" class="ts">its own L1 held. Every operation serializes at the last level: unique</text>
+  <text x="40" y="572" class="ts">return values, exact final value, zero traffic between the L1s.</text>
+  <text x="40" y="604" class="tt">Implemented and covered by tests/regression/amo on the 4-core hierarchies.</text>
+
+  <!-- ══════════ Regime B ══════════ -->
+  <rect x="716" y="56" width="660" height="620" class="grp"/>
+  <text x="728" y="80" class="tb">Regime B — a plain load cached X on another core</text>
+  <text x="728" y="100" class="tt">producer / consumer through plain memory — the program supplies the fence</text>
+
+  <text x="822"  y="136" class="th" text-anchor="middle">core 0 · L1</text>
+  <text x="1046" y="136" class="th" text-anchor="middle">last-level cache</text>
+  <text x="1270" y="136" class="th" text-anchor="middle">core 3 · L1</text>
+  <line x1="822"  y1="146" x2="822"  y2="562" class="lane"/>
+  <line x1="1046" y1="146" x2="1046" y2="562" class="lane"/>
+  <line x1="1270" y1="146" x2="1270" y2="562" class="lane"/>
+
+  <rect x="986" y="158" width="120" height="30" rx="5" class="actk"/>
+  <text x="1046" y="178" class="ts" text-anchor="middle">X = 0</text>
+
+  <path d="M 822 214 L 1042 214" class="m"/>
+  <text x="834" y="206" class="lb">load X (miss)</text>
+  <rect x="742" y="226" width="160" height="30" rx="5" class="act"/>
+  <text x="822" y="246" class="ts" text-anchor="middle">L1 installs X = 0</text>
+
+  <path d="M 1270 292 L 1050 292" class="m"/>
+  <text x="1258" y="284" class="lb" text-anchor="end">amoadd X, 1</text>
+  <rect x="986" y="304" width="120" height="30" rx="5" class="actk"/>
+  <text x="1046" y="324" class="ts" text-anchor="middle">X = 1</text>
+
+  <rect x="742" y="356" width="160" height="56" rx="5" class="actr"/>
+  <text x="822" y="378" class="ts" text-anchor="middle">load X hits L1:</text>
+  <text x="822" y="394" class="ts" text-anchor="middle">reads 0 — stale</text>
+  <text x="914" y="388" class="lbr">the last level never</text>
+  <text x="914" y="404" class="lbr">reaches up</text>
+
+  <rect x="742" y="440" width="160" height="40" rx="5" class="act"/>
+  <text x="822" y="458" class="ts" text-anchor="middle">acquire point: the core</text>
+  <text x="822" y="473" class="ts" text-anchor="middle">discards its own copies</text>
+
+  <path d="M 822 512 L 1042 512" class="m"/>
+  <text x="834" y="504" class="lb">load X (miss)</text>
+  <path d="M 1042 544 L 826 544" class="mk"/>
+  <text x="942" y="536" class="lbk">X = 1</text>
+
+  <text x="732" y="588" class="ts">The consumer pulls: it discards its own copies at a synchronization point</text>
+  <text x="732" y="604" class="ts">and refetches. This is the ld.acquire / __threadfence contract of a GPU.</text>
+  <text x="732" y="636" class="tt">Not a supported flow yet — see the text; atomic_critical is skipped on multi-core.</text>
+
+  <text x="24" y="704" class="tt">Green = the value held at the last level · blue = a core's private L1 · red = the stale read the weak model permits.</text>
+</svg>

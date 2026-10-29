@@ -1,0 +1,198 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 860" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="arrb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1c6ca8"/>
+    </marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b58900"/>
+    </marker>
+  </defs>
+
+  <style>
+    .box     { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.5; }
+    .unit    { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .mem     { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .sw      { fill:#eef7ee; stroke:#3a7d44; stroke-width:1.5; }
+    .core    { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.5; }
+    .pe      { fill:#ffffff; stroke:#2e5e82; stroke-width:1.2; }
+    .none    { fill:#fafafa; stroke:#9aa5af; stroke-width:1.2; stroke-dasharray:5 4; }
+    .grp     { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .t       { fill:#1b2733; font-size:15px; }
+    .tb      { fill:#1b2733; font-size:16px; font-weight:bold; }
+    .th      { fill:#1b2733; font-size:13.5px; font-weight:bold; }
+    .ts      { fill:#44525f; font-size:12.5px; }
+    .tt      { fill:#5a6772; font-size:12px; font-style:italic; }
+    .mono    { font-family:'SF Mono',Consolas,monospace; font-size:12px; fill:#1b2733; }
+    .flow    { stroke:#444; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+    .flowb   { stroke:#1c6ca8; stroke-width:1.8; fill:none; marker-end:url(#arrb); stroke-dasharray:7 4; }
+    .flowg   { stroke:#b58900; stroke-width:1.8; fill:none; marker-end:url(#arrg); }
+    .lbl     { fill:#1c6ca8; font-size:12px; }
+    .lbg     { fill:#8a6d00; font-size:12px; }
+    .lbk     { fill:#44525f; font-size:12px; }
+    .rule    { stroke:#d5dce3; stroke-width:1; }
+    .cellA   { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1; }
+    .cellB   { fill:#eef7ee; stroke:#3a7d44; stroke-width:1; }
+    .cellC   { fill:#fdf6e3; stroke:#b58900; stroke-width:1; }
+    .hotA    { fill:#9fc3e0; stroke:#2e5e82; stroke-width:2; }
+    .hotB    { fill:#a9d8b0; stroke:#3a7d44; stroke-width:2; }
+    .hotC    { fill:#f2d37a; stroke:#b58900; stroke-width:2; }
+    .seq     { fill:#ffffff; stroke:#9aa5af; stroke-width:1; }
+    .seqh    { fill:#f2d37a; stroke:#b58900; stroke-width:1.4; }
+    .num     { fill:#1b2733; font-size:12px; }
+  </style>
+
+  <rect x="0" y="0" width="1400" height="860" fill="#ffffff"/>
+  <text x="24" y="34" class="tb" font-size="20">Tensor tile geometry — how one MMA instruction becomes micro-ops</text>
+
+  <text x="24" y="56" class="tt">Example: NUM_THREADS = 16, fp32. One cell below is one block; a block is what one micro-op computes.</text>
+  <rect x="24" y="76" width="664" height="520" class="grp"/>
+  <text x="36" y="100" class="tb">The three tiles, in blocks</text>
+  <rect x="70" y="250" width="52" height="52" rx="0" class="cellA"/>
+  <rect x="122" y="250" width="52" height="52" rx="0" class="cellA"/>
+  <rect x="70" y="302" width="52" height="52" rx="0" class="hotA"/>
+  <rect x="122" y="302" width="52" height="52" rx="0" class="cellA"/>
+  <rect x="70" y="354" width="52" height="52" rx="0" class="cellA"/>
+  <rect x="122" y="354" width="52" height="52" rx="0" class="cellA"/>
+  <rect x="70" y="406" width="52" height="52" rx="0" class="cellA"/>
+  <rect x="122" y="406" width="52" height="52" rx="0" class="cellA"/>
+  <rect x="218" y="120" width="52" height="52" rx="0" class="cellB"/>
+  <rect x="270" y="120" width="52" height="52" rx="0" class="hotB"/>
+  <rect x="218" y="172" width="52" height="52" rx="0" class="cellB"/>
+  <rect x="270" y="172" width="52" height="52" rx="0" class="cellB"/>
+  <rect x="218" y="250" width="52" height="52" rx="0" class="cellC"/>
+  <rect x="270" y="250" width="52" height="52" rx="0" class="cellC"/>
+  <rect x="218" y="302" width="52" height="52" rx="0" class="cellC"/>
+  <rect x="270" y="302" width="52" height="52" rx="0" class="hotC"/>
+  <rect x="218" y="354" width="52" height="52" rx="0" class="cellC"/>
+  <rect x="270" y="354" width="52" height="52" rx="0" class="cellC"/>
+  <rect x="218" y="406" width="52" height="52" rx="0" class="cellC"/>
+  <rect x="270" y="406" width="52" height="52" rx="0" class="cellC"/>
+  <text x="122" y="238" class="tb" text-anchor="middle">A</text>
+  <text x="122" y="478" class="ts" text-anchor="middle">K →</text>
+  <text x="56" y="354" class="ts" text-anchor="end">M</text>
+  <text x="270" y="108" class="tb" text-anchor="middle">B</text>
+  <text x="336" y="176" class="ts">K</text>
+  <text x="270" y="478" class="ts" text-anchor="middle">N →</text>
+  <text x="336" y="358" class="tb">C</text>
+  <text x="96.0" y="332.0" class="num" text-anchor="middle">m=1,k=0</text>
+  <text x="296.0" y="150.0" class="num" text-anchor="middle">k=0,n=1</text>
+  <text x="296.0" y="332.0" class="num" text-anchor="middle">m=1,n=1</text>
+  <text x="382" y="130" class="mono">tile    M × N × K = 16 × 8 × 8 elements</text>
+  <text x="382" y="148" class="mono">block   TC_M × TC_N × TC_K = 4 × 4 × 4</text>
+  <text x="382" y="166" class="mono">steps   4 × 2 × 2 = 16 micro-ops</text>
+  <text x="382" y="210" class="ts">The highlighted micro-op computes</text>
+  <text x="382" y="234" class="ts">  C[m,n] += A[m,k] · B[k,n]</text>
+  <text x="382" y="258" class="ts">for one block: a TC_M × TC_N grid of</text>
+  <text x="382" y="274" class="ts">dot products, each over TC_K</text>
+  <text x="382" y="290" class="ts">elements.</text>
+  <text x="382" y="350" class="ts">A block = TC_M × TC_K words, one</text>
+  <text x="382" y="366" class="ts">register of lanes.</text>
+  <text x="382" y="390" class="ts">B block = TC_K × TC_N words.</text>
+  <text x="382" y="414" class="ts">C block = TC_M × TC_N words: one</text>
+  <text x="382" y="430" class="ts">accumulator register, read as rs3</text>
+  <text x="382" y="446" class="ts">and written as rd.</text>
+  <text x="36" y="580" class="tt">a tile is as many registers as it has blocks; a block is one register of NUM_THREADS lanes</text>
+  <rect x="712" y="76" width="664" height="520" class="grp"/>
+  <text x="724" y="100" class="tb">Micro-op order — k outer, n middle, m inner</text>
+  <text x="724" y="122" class="tt">the number in each cell is the accumulator block (n, m) the micro-op writes</text>
+  <text x="724" y="168" class="t">k = 0</text>
+  <rect x="784" y="184" width="67" height="40" rx="3" class="seq"/>
+  <text x="817.5" y="201" class="num" text-anchor="middle">uop 0</text>
+  <text x="817.5" y="217" class="mono" text-anchor="middle">C[0,0]</text>
+  <rect x="857" y="184" width="67" height="40" rx="3" class="seq"/>
+  <text x="890.5" y="201" class="num" text-anchor="middle">uop 1</text>
+  <text x="890.5" y="217" class="mono" text-anchor="middle">C[1,0]</text>
+  <rect x="930" y="184" width="67" height="40" rx="3" class="seq"/>
+  <text x="963.5" y="201" class="num" text-anchor="middle">uop 2</text>
+  <text x="963.5" y="217" class="mono" text-anchor="middle">C[2,0]</text>
+  <rect x="1003" y="184" width="67" height="40" rx="3" class="seq"/>
+  <text x="1036.5" y="201" class="num" text-anchor="middle">uop 3</text>
+  <text x="1036.5" y="217" class="mono" text-anchor="middle">C[3,0]</text>
+  <rect x="1076" y="184" width="67" height="40" rx="3" class="seq"/>
+  <text x="1109.5" y="201" class="num" text-anchor="middle">uop 4</text>
+  <text x="1109.5" y="217" class="mono" text-anchor="middle">C[0,1]</text>
+  <rect x="1149" y="184" width="67" height="40" rx="3" class="seqh"/>
+  <text x="1182.5" y="201" class="num" text-anchor="middle">uop 5</text>
+  <text x="1182.5" y="217" class="mono" text-anchor="middle">C[1,1]</text>
+  <rect x="1222" y="184" width="67" height="40" rx="3" class="seq"/>
+  <text x="1255.5" y="201" class="num" text-anchor="middle">uop 6</text>
+  <text x="1255.5" y="217" class="mono" text-anchor="middle">C[2,1]</text>
+  <rect x="1295" y="184" width="67" height="40" rx="3" class="seq"/>
+  <text x="1328.5" y="201" class="num" text-anchor="middle">uop 7</text>
+  <text x="1328.5" y="217" class="mono" text-anchor="middle">C[3,1]</text>
+  <text x="784" y="246" class="ts">n = 0</text>
+  <text x="1076" y="246" class="ts">n = 1</text>
+  <text x="724" y="318" class="t">k = 1</text>
+  <rect x="784" y="334" width="67" height="40" rx="3" class="seq"/>
+  <text x="817.5" y="351" class="num" text-anchor="middle">uop 8</text>
+  <text x="817.5" y="367" class="mono" text-anchor="middle">C[0,0]</text>
+  <rect x="857" y="334" width="67" height="40" rx="3" class="seq"/>
+  <text x="890.5" y="351" class="num" text-anchor="middle">uop 9</text>
+  <text x="890.5" y="367" class="mono" text-anchor="middle">C[1,0]</text>
+  <rect x="930" y="334" width="67" height="40" rx="3" class="seq"/>
+  <text x="963.5" y="351" class="num" text-anchor="middle">uop 10</text>
+  <text x="963.5" y="367" class="mono" text-anchor="middle">C[2,0]</text>
+  <rect x="1003" y="334" width="67" height="40" rx="3" class="seq"/>
+  <text x="1036.5" y="351" class="num" text-anchor="middle">uop 11</text>
+  <text x="1036.5" y="367" class="mono" text-anchor="middle">C[3,0]</text>
+  <rect x="1076" y="334" width="67" height="40" rx="3" class="seq"/>
+  <text x="1109.5" y="351" class="num" text-anchor="middle">uop 12</text>
+  <text x="1109.5" y="367" class="mono" text-anchor="middle">C[0,1]</text>
+  <rect x="1149" y="334" width="67" height="40" rx="3" class="seqh"/>
+  <text x="1182.5" y="351" class="num" text-anchor="middle">uop 13</text>
+  <text x="1182.5" y="367" class="mono" text-anchor="middle">C[1,1]</text>
+  <rect x="1222" y="334" width="67" height="40" rx="3" class="seq"/>
+  <text x="1255.5" y="351" class="num" text-anchor="middle">uop 14</text>
+  <text x="1255.5" y="367" class="mono" text-anchor="middle">C[2,1]</text>
+  <rect x="1295" y="334" width="67" height="40" rx="3" class="seq"/>
+  <text x="1328.5" y="351" class="num" text-anchor="middle">uop 15</text>
+  <text x="1328.5" y="367" class="mono" text-anchor="middle">C[3,1]</text>
+  <text x="784" y="396" class="ts">n = 0</text>
+  <text x="1076" y="396" class="ts">n = 1</text>
+  <path d="M 1185 224 L 1185 334" class="flowg"/>
+  <text x="1195" y="274" class="lbg">same accumulator,</text>
+  <text x="1195" y="290" class="lbg">8 micro-ops later</text>
+  <text x="724" y="470" class="ts">A block's accumulator is revisited only after every other block of the tile has been</text>
+  <text x="724" y="486" class="ts">issued, M_STEPS × N_STEPS micro-ops later. Consecutive micro-ops write different</text>
+  <text x="724" y="502" class="ts">registers, so they do not depend on each other and overlap inside the FEDP pipeline</text>
+  <text x="724" y="518" class="ts">instead of waiting for it.</text>
+  <text x="724" y="542" class="ts">A k-inner order would chain consecutive micro-ops on one accumulator.</text>
+  <text x="24" y="636" class="tb">Geometry by thread count</text>
+  <text x="280" y="636" class="tt">derived in VX_tcu_pkg from NUM_THREADS alone; elements are 32-bit words — a narrower format packs more per word</text>
+  <text x="24" y="668" class="th">NUM_THREADS</text>
+  <text x="190" y="668" class="th">block  TC_M × TC_N × TC_K</text>
+  <text x="430" y="668" class="th">WMMA tile  M × N × K</text>
+  <text x="650" y="668" class="th">steps  M × N × K</text>
+  <text x="860" y="668" class="th">micro-ops</text>
+  <text x="1080" y="668" class="th">WGMMA tile per warp  M × N × K</text>
+  <line x1="24" y1="678" x2="1376" y2="678" class="rule"/>
+  <text x="24" y="700" class="mono">4</text>
+  <text x="190" y="700" class="mono">2 × 2 × 2</text>
+  <text x="430" y="700" class="mono">8 × 4 × 4</text>
+  <text x="650" y="700" class="mono">4 × 2 × 2</text>
+  <text x="860" y="700" class="mono">16</text>
+  <text x="1080" y="700" class="mono">4 × 32 × 4</text>
+  <text x="24" y="726" class="mono">8</text>
+  <text x="190" y="726" class="mono">4 × 2 × 2</text>
+  <text x="430" y="726" class="mono">8 × 8 × 8</text>
+  <text x="650" y="726" class="mono">2 × 4 × 4</text>
+  <text x="860" y="726" class="mono">32</text>
+  <text x="1080" y="726" class="mono">8 × 32 × 4</text>
+  <text x="24" y="752" class="mono">16</text>
+  <text x="190" y="752" class="mono">4 × 4 × 4</text>
+  <text x="430" y="752" class="mono">16 × 8 × 8</text>
+  <text x="650" y="752" class="mono">4 × 2 × 2</text>
+  <text x="860" y="752" class="mono">16</text>
+  <text x="1080" y="752" class="mono">8 × 64 × 8</text>
+  <text x="24" y="778" class="mono">32</text>
+  <text x="190" y="778" class="mono">8 × 4 × 4</text>
+  <text x="430" y="778" class="mono">16 × 16 × 16</text>
+  <text x="650" y="778" class="mono">2 × 4 × 4</text>
+  <text x="860" y="778" class="mono">32</text>
+  <text x="1080" y="778" class="mono">16 × 64 × 8</text>
+  <text x="24" y="814" class="tt">WGMMA tile shown for 32 accumulator registers (cd_nregs = 2); 8 or 16 registers divide N by 4 or 2. With FEDP2K the dense WGMMA block spans 2 × TC_K and takes one K step.</text>
+  <text x="24" y="844" class="tt">Blue = A · green = B · gold = C · darker = the blocks one micro-op touches.</text>
+</svg>

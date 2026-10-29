@@ -20,16 +20,6 @@
 
 package VX_gpu_pkg;
 
-    // These 6 localparams mirror their VX_CFG_* macros, which expand to
-    // VX_CFG_{DCACHE,L2,L3}_NUM_REQS — localparams declared later in this package.
-    localparam DCACHE_NUM_BANKS                 = `VX_CFG_DCACHE_NUM_BANKS;
-    localparam L1_MEM_PORTS                     = `VX_CFG_L1_MEM_PORTS;
-    localparam L2_MEM_PORTS                     = `VX_CFG_L2_MEM_PORTS;
-    localparam L2_NUM_BANKS                     = `VX_CFG_L2_NUM_BANKS;
-    localparam L3_MEM_PORTS                     = `VX_CFG_L3_MEM_PORTS;
-    localparam L3_NUM_BANKS                     = `VX_CFG_L3_NUM_BANKS;
-
-
     localparam NC_BITS = `CLOG2(`VX_CFG_NUM_CORES);
     localparam NW_BITS = `CLOG2(`VX_CFG_NUM_WARPS);
     localparam NT_BITS = `CLOG2(`VX_CFG_NUM_THREADS);
@@ -149,6 +139,12 @@ package VX_gpu_pkg;
     localparam SRC_OPD_BITS = `CLOG2(NUM_SRC_OPDS);
     localparam SRC_OPD_WIDTH = `UP(SRC_OPD_BITS);
     localparam NUM_SOCKETS = `UP(`VX_CFG_NUM_CORES / `VX_CFG_SOCKET_SIZE);
+
+    // Per-thread stack window: one stack per hardware thread below the stack base.
+    localparam NUM_STACKS = `VX_CFG_NUM_CLUSTERS * NUM_SOCKETS * `VX_CFG_SOCKET_SIZE * `VX_CFG_NUM_WARPS * `VX_CFG_NUM_THREADS;
+    localparam [`VX_CFG_XLEN-1:0] STACK_WINDOW_TOP    = `VX_CFG_XLEN'(`VX_MEM_STACK_BASE_ADDR);
+    localparam [`VX_CFG_XLEN-1:0] STACK_WINDOW_SPAN   = `VX_CFG_XLEN'(NUM_STACKS) << `VX_MEM_STACK_LOG2_SIZE;
+    localparam [`VX_CFG_XLEN-1:0] STACK_WINDOW_BOTTOM = STACK_WINDOW_TOP - STACK_WINDOW_SPAN;
 
 
     // ===== AMO (RVA) sideband =====================================
@@ -561,6 +557,9 @@ package VX_gpu_pkg;
     localparam ISSUE_WIS_BITS = `CLOG2(PER_ISSUE_WARPS);
     localparam ISSUE_WIS_W = `UP(ISSUE_WIS_BITS);
 
+    // Machine-mode trap CSRs stored per warp in the scheduler: mstatus, mtvec, mepc, mcause, mtval.
+    localparam NUM_TRAP_CSRS = 5;
+
     localparam DISPATCH_QSIZE = `VX_CFG_DISPATCH_QUEUE_SIZE;
 
     localparam PER_OPC_WARPS = PER_ISSUE_WARPS / `VX_CFG_NUM_OPCS;
@@ -959,7 +958,8 @@ package VX_gpu_pkg;
     typedef struct packed {
         logic is_last_uop;    // WGMMA/UMMA: set on last sub-uop of an expansion
         logic is_first_uop;   // WGMMA/UMMA: set on first sub-uop of an expansion
-        logic a_from_smem;    // 0=register, 1=shared memory (B is always smem)
+        logic a_from_smem;    // WGMMA: 0=register, 1=shared memory
+                              // UMMA:  0=TMEM,     1=shared memory
         logic [2:0] cd_nregs; // WGMMA: 0=8, 1=16, 2=32 C/D registers
                               // UMMA:  0..4 -> NRC 8/16/32/64/128
         logic [4:0] fmt_d;
@@ -1181,6 +1181,7 @@ package VX_gpu_pkg;
     typedef struct packed {
         logic [UUID_WIDTH-1:0]              uuid;
         logic [ISSUE_WIS_W-1:0]             wis;
+        logic [PER_ISSUE_WARPS-1:0]         eop_wis; // one-hot wis, set on eop
         logic [NCTA_WIDTH-1:0]              cta_id;
         logic [SIMD_IDX_W-1:0]              sid;
         logic [`VX_CFG_SIMD_WIDTH-1:0]             tmask;
@@ -1256,14 +1257,18 @@ package VX_gpu_pkg;
         logic [PERF_CTR_BITS-1:0] wgmma_stalls;      // cycles: WGMMA valid but stalled (tbuf or mdata)
         logic [PERF_CTR_BITS-1:0] wgmma_instrs;      // WGMMA µops executed
         logic [PERF_CTR_BITS-1:0] tbuf_stalls;         // cycles: WGMMA valid but stalled (uop cannot enter TCU core because tbuf data not ready)
-`ifdef VX_CFG_TCU_TMEM_ENABLE
-        logic [PERF_CTR_BITS-1:0] umma_instrs;       // UMMA µops executed
-        logic [PERF_CTR_BITS-1:0] tmem_reads;        // TMEM elements read (UMMA C + tmem_ld)
-        logic [PERF_CTR_BITS-1:0] tmem_writes;       // TMEM elements written (UMMA D + tmem_st)
-        logic [PERF_CTR_BITS-1:0] tmem_bank_stalls;  // cycles: a TMEM bank request (compute or tmem_ld/st) lost arbitration and retried
-        logic [PERF_CTR_BITS-1:0] tmem_hazard_stalls; // cycles: a UMMA uop was blocked at admission by the TMEM RAW interlock (distinct from losing bank arbitration)
-`endif
     } tcu_perf_t;
+
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    typedef struct packed {
+        logic [PERF_CTR_BITS-1:0] umma_instrs;          // UMMA µops executed
+        logic [PERF_CTR_BITS-1:0] tmem_reads;           // TMEM elements read (UMMA C + tmem_ld)
+        logic [PERF_CTR_BITS-1:0] tmem_writes;          // TMEM elements written (UMMA D + tmem_st)
+        logic [PERF_CTR_BITS-1:0] tmem_bank_stalls;     // cycles: a TMEM bank request (compute or tmem_ld/st) lost arbitration and retried
+        logic [PERF_CTR_BITS-1:0] tmem_hazard_stalls;   // cycles: a UMMA uop was blocked at admission by the TMEM RAW interlock (distinct from losing bank arbitration)
+        logic [PERF_CTR_BITS-1:0] tmem_rd_grant_stalls; // cycles: a UMMA uop was blocked at admission waiting on its accumulator read grant
+    } tmem_perf_t;
+`endif
 `endif
 
     typedef struct packed {
@@ -1279,6 +1284,7 @@ package VX_gpu_pkg;
         logic [PERF_CTR_BITS-1:0] gmem_dedup;
         logic [PERF_CTR_BITS-1:0] lmem_writes;
         logic [PERF_CTR_BITS-1:0] gmem_latency;
+        logic [PERF_CTR_BITS-1:0] noslot_stalls;
     } dxa_perf_t;
 `endif
 
@@ -1360,6 +1366,9 @@ package VX_gpu_pkg;
         issue_perf_t              issue;
     `ifdef VX_CFG_EXT_TCU_ENABLE
         tcu_perf_t                tcu;
+    `endif
+    `ifdef VX_CFG_TCU_TMEM_ENABLE
+        tmem_perf_t               tmem;
     `endif
     `ifdef VX_CFG_VM_ENABLE
         mmu_perf_t                mmu;
@@ -1497,6 +1506,8 @@ package VX_gpu_pkg;
     // Input request size (using coalesced memory blocks)
     localparam DCACHE_CHANNELS	    = `UP((`VX_CFG_NUM_LSU_LANES * LSU_WORD_SIZE) / DCACHE_WORD_SIZE);
     localparam DCACHE_NUM_REQS	    = `VX_CFG_NUM_LSU_BLOCKS * DCACHE_CHANNELS;
+    localparam DCACHE_NUM_BANKS     = `VX_CFG_DCACHE_NUM_BANKS;
+    localparam L1_MEM_PORTS         = `VX_CFG_L1_MEM_PORTS;
 
     // Core request tag Id bits
     localparam DCACHE_MERGED_REQS   = (`VX_CFG_NUM_LSU_LANES * LSU_WORD_SIZE) / DCACHE_WORD_SIZE;
@@ -1720,12 +1731,20 @@ package VX_gpu_pkg;
     localparam L2_GFX_RASTER_IDX    = L2_SOCKET_REQS;
     localparam L2_GFX_OM_IDX        = L2_GFX_RASTER_IDX + `VX_CFG_EXT_RASTER_ENABLED;
 
-    // The shared page-table walker attaches one PTE-fetch port under VM, right
-    // after the socket and graphics ports (like ocache/rcache).
-    localparam L2_PTW_REQS          = `VX_CFG_VM_ENABLED;
+    // With one cluster, an L2 and no L3, that L2 is the LLC: the device
+    // walker's PTE fetches ride it through a dedicated client slot, so a
+    // leaf-PTE miss is a cache lookup rather than a DRAM round trip. In
+    // every other topology the walker attaches at the device (see L3_PTW_IDX).
+    localparam PTW_ON_L2            = ((`VX_CFG_VM_ENABLED != 0)
+                                    && (`VX_CFG_NUM_CLUSTERS == 1)
+                                    && (`VX_CFG_L2_ENABLED != 0)
+                                    && (`VX_CFG_L3_ENABLED == 0)) ? 1 : 0;
+    localparam L2_PTW_REQS          = PTW_ON_L2;
     localparam L2_PTW_IDX           = L2_SOCKET_REQS + L2_GFX_REQS;
 
     localparam L2_NUM_REQS          = L2_SOCKET_REQS + L2_GFX_REQS + L2_PTW_REQS;
+    localparam L2_NUM_BANKS         = `VX_CFG_L2_NUM_BANKS;
+    localparam L2_MEM_PORTS         = `VX_CFG_L2_MEM_PORTS;
 
     // Core request tag bits (socket arb output width)
     localparam L2_TAG_WIDTH         = SOCKET_MEM_ARB_TAG_WIDTH;
@@ -1738,6 +1757,8 @@ package VX_gpu_pkg;
     localparam TLB_SOCKET_ID_WIDTH   = L1_TLB_ID_WIDTH + `ARB_SEL_BITS(2, 1);
     localparam TLB_CLUSTER_ID_WIDTH  = TLB_SOCKET_ID_WIDTH + `ARB_SEL_BITS(NUM_SOCKETS, 1);
     localparam L2_TLB_SLOT_WIDTH     = `CLOG2(`VX_CFG_L2_TLB_MSHR_SIZE);
+    // Device-level walker: cluster L2-TLB miss buses arb into one walker.
+    localparam TLB_DEV_ID_WIDTH      = L2_TLB_SLOT_WIDTH + `ARB_SEL_BITS(`VX_CFG_NUM_CLUSTERS, 1);
 
     // Memory request data bits (mem transacts in sectors)
     localparam L2_MEM_DATA_WIDTH	= (L2_SECTOR_SIZE * 8);
@@ -1761,7 +1782,14 @@ package VX_gpu_pkg;
     localparam L3_SECTOR_SIZE       = `VX_CFG_L3_SECTOR_SIZE;
 
     // Input request size
-    localparam L3_NUM_REQS	        = `VX_CFG_NUM_CLUSTERS * L2_MEM_PORTS;
+    // The device-level walker attaches its PTE fetches as one more LLC
+    // client on the last requestor slot, unless a single cluster's L2 is
+    // the LLC (PTW_ON_L2) and carries them instead.
+    localparam L3_PTW_IDX           = `VX_CFG_NUM_CLUSTERS * L2_MEM_PORTS;
+    localparam L3_NUM_REQS	        = `VX_CFG_NUM_CLUSTERS * L2_MEM_PORTS
+                                    + ((`VX_CFG_VM_ENABLED != 0) && (PTW_ON_L2 == 0) ? 1 : 0);
+    localparam L3_NUM_BANKS         = `VX_CFG_L3_NUM_BANKS;
+    localparam L3_MEM_PORTS         = `VX_CFG_L3_MEM_PORTS;
 
     // Core request tag bits
     localparam L3_TAG_WIDTH	        = L2_MEM_TAG_WIDTH;

@@ -78,7 +78,7 @@ void BVHIntersect(const ray_t &ray,
                   const tri_t *triBuffer,
                   ray_hit_t *hit) {
   uint32_t stack[BVH_STACK_SIZE];
-  uint32_t stackPtr = 0;
+  size_t stackPtr = 0;
   stack[stackPtr++] = 0; // Push root node index
 
   while (stackPtr != 0) {
@@ -86,7 +86,7 @@ void BVHIntersect(const ray_t &ray,
     const bvh_node_t &node = bvhBuffer[nodeIdx];
     if (node.isLeaf()) {
       // Intersect leaf triangles
-      for (uint32_t i = 0; i < node.triCount; ++i) {
+      for (size_t i = 0; i < node.triCount; ++i) {
         uint32_t triIdx = triIdxBuffer[node.leftFirst + i];
         float dist;
         float3_t bcoords;
@@ -149,7 +149,7 @@ void TLASIntersect(const ray_t &ray,
                    const tri_t *triBuffer,
                    ray_hit_t *hit) {
   uint32_t stack[BVH_STACK_SIZE];
-  uint32_t stackPtr = 0;
+  size_t stackPtr = 0;
   stack[stackPtr++] = tlas_root;
 
   while (stackPtr != 0) {

@@ -139,6 +139,8 @@ public:
     , parent_uuid_(uuid)
     , fu_type_(fu_type)
     , dst_bytesel_(0xFF)
+    , fcsr_rd_(0)
+    , fcsr_wr_(0)
     , is_uop_(false)
     , is_macro_op_(false)
     , is_wstall_(false)
@@ -228,6 +230,19 @@ public:
   void set_dst_bytesel(uint8_t value) { dst_bytesel_ = value; }
   uint8_t get_dst_bytesel() const { return dst_bytesel_; }
 
+  // Floating-point CSR fields the scoreboard orders like GPRs: an instruction
+  // naming one, read or written, waits for an older writer to commit.
+  enum : uint8_t {
+    FCSR_FFLAGS = 1u << 0,
+    FCSR_FRM    = 1u << 1,
+  };
+  void set_fcsr_use(uint8_t rd_mask, uint8_t wr_mask) {
+    fcsr_rd_ = rd_mask;
+    fcsr_wr_ = wr_mask;
+  }
+  uint8_t fcsr_reads() const { return fcsr_rd_; }
+  uint8_t fcsr_writes() const { return fcsr_wr_; }
+
 private:
 
   uint64_t uuid_;
@@ -238,6 +253,8 @@ private:
   RegOpd   rsrc_[MAX_REG_SOURCES];
   RegOpd   rdest_;
   uint8_t  dst_bytesel_;
+  uint8_t  fcsr_rd_;
+  uint8_t  fcsr_wr_;
   bool     is_uop_;
   bool     is_macro_op_;
   bool     is_wstall_;

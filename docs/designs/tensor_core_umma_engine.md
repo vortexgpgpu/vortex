@@ -122,10 +122,36 @@ in `cd_nregs` (widened from WGMMA's 2 bits):
 | 4 | 128 |
 
 `-DUMMA_NRC=<N>` selects NRC at kernel build time
-(`tests/regression/sgemm_tcu_tmem`, §6). UMMA's A operand is always
-shared-memory-sourced; decode forces `a_from_smem = 1` for
-`op_type == INST_TCU_UMMA` — that bit is reserved for a real "A source"
-toggle once A-from-TMEM is implemented (future work).
+(`tests/regression/sgemm_tcu_tmem`, §6).
+
+**A source.** The `flags` immediate (the instruction's `rs2` field) is:
+
+| bits | meaning |
+|---|---|
+| 0 | reserved for `is_sparse` (0 for now) |
+| 3:1 | NRC code (0..4) |
+| 4 | A from shared memory (1 = shared memory, 0 = TMEM) |
+
+WGMMA's width field (`cd_nregs`) is 2 bits, so its A-source bit is at 3,
+while UMMA widens that field to 3 bits, so its A-source bit lands at 4.
+The largest UMMA encoding is 24, inside the 5-bit `rs2` field.
+
+B is always shared-memory-sourced.
+
+When A comes from TMEM, `a0` carries an absolute TMEM **column** rather
+than a shared-memory descriptor. There is no lane field: A's rows are
+the same TMEM lanes the accumulator uses, so element `(row, k)` is at
+
+```
+TMEM[cta_rank*xtileM + row][a_col + k / elems_per_word]
+```
+
+with the same `elems_per_word` packing the shared-memory path uses, so a
+sub-32-bit `It` packs several k elements into one TMEM word.
+
+Status: the ISA and decode are in place in both simx and RTL. The
+operand datapath is not implemented in either: A still comes from shared
+memory. Issuing the mode is rejected.
 
 **Key config** ([`VX_config.toml:236-258`](../../VX_config.toml#L236)):
 
@@ -279,7 +305,7 @@ under `#ifdef VX_CFG_TCU_TMEM_ENABLE`:
   format, not by this function.
 - `umma_context<NT, It, Ot, NRC_>` — reuses `wgmma_context`'s tile
   geometry (`tcM`, `tcN`, `xtileM`, `xtileN`, `tileK`, `n_steps`, etc.).
-  - `umma_sync(desc_a, desc_b, handle)` issues the macro-op.
+  - `umma_sync(op_a, desc_b, handle)` issues the macro-op.
   - `fill_tmem(handle, value)`, `store_output(handle, pC, ...)` —
     helpers; both address TMEM via `vx_cta_rank()` (the
     warp's CTA-local rank intrinsic).

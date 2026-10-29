@@ -17,7 +17,7 @@
 // ============================================================================
 // caps.h — shared device/ISA capability decoder for all runtime backends.
 //
-// The two 64-bit capability words (GPU_DEV_CAPS / GPU_ISA_CAPS) are read
+// The 64-bit capability words (GPU_DEV_CAPS / GPU_ISA_CAPS / GPU_EXT_CAPS) are read
 // from the Command Processor regfile at the CP-internal offsets below.
 //
 // CACHE_LINE_SIZE / GLOBAL_MEM_SIZE / CLOCK_RATE / PEAK_MEM_BW are NOT
@@ -36,12 +36,22 @@ static constexpr uint32_t CP_REG_GPU_DEV_CAPS_LO = 0x018;
 static constexpr uint32_t CP_REG_GPU_DEV_CAPS_HI = 0x01C;
 static constexpr uint32_t CP_REG_GPU_ISA_CAPS_LO = 0x020;
 static constexpr uint32_t CP_REG_GPU_ISA_CAPS_HI = 0x024;
+static constexpr uint32_t CP_REG_GPU_EXT_CAPS_LO = 0x038;
+static constexpr uint32_t CP_REG_GPU_EXT_CAPS_HI = 0x03C;
 
-// Decode a VX_CAPS_* id from the two CP capability words. Returns true
+// Warps, sockets per cluster and clusters carry an exact count, so a machine
+// that is not a power of two reports truly; the field is zero on devices
+// built before it existed, which report only the 3-bit log2 field.
+inline uint64_t exact_or_log2(uint64_t dev_caps, uint32_t exact_lsb, uint64_t exact_mask, uint32_t log2_lsb) {
+  uint64_t exact = (dev_caps >> exact_lsb) & exact_mask;
+  return exact ? exact : (1ull << ((dev_caps >> log2_lsb) & 0x7));
+}
+
+// Decode a VX_CAPS_* id from the CP capability words. Returns true
 // and writes *out when the id is encoded in the words; returns false
 // for ids the caller must resolve itself (CACHE_LINE_SIZE,
 // GLOBAL_MEM_SIZE, CLOCK_RATE, PEAK_MEM_BW).
-inline bool decode_caps(uint64_t dev_caps, uint64_t isa_caps,
+inline bool decode_caps(uint64_t dev_caps, uint64_t isa_caps, uint64_t ext_caps,
                         uint32_t caps_id, uint64_t* out) {
   switch (caps_id) {
   case VX_CAPS_VERSION:
@@ -51,20 +61,20 @@ inline bool decode_caps(uint64_t dev_caps, uint64_t isa_caps,
     *out = 1ull << ((dev_caps >> 8) & 0x7);
     return true;
   case VX_CAPS_NUM_WARPS:
-    *out = 1ull << ((dev_caps >> 11) & 0x7);
+    *out = exact_or_log2(dev_caps, 42, 0x7F, 11);
     return true;
   case VX_CAPS_NUM_CORES: {
-    uint32_t socket_size  = 1u << ((dev_caps >> 14) & 0x7);
-    uint32_t cluster_size = 1u << ((dev_caps >> 17) & 0x7);
-    uint32_t num_clusters = 1u << ((dev_caps >> 20) & 0x7);
-    *out = uint64_t(num_clusters) * cluster_size * socket_size;
+    uint64_t socket_size  = 1ull << ((dev_caps >> 14) & 0x7);
+    uint64_t cluster_size = exact_or_log2(dev_caps, 49, 0xFF, 17);
+    uint64_t num_clusters = exact_or_log2(dev_caps, 57, 0x7F, 20);
+    *out = num_clusters * cluster_size * socket_size;
     return true;
   }
   case VX_CAPS_SOCKET_SIZE:
     *out = 1ull << ((dev_caps >> 14) & 0x7);
     return true;
   case VX_CAPS_NUM_CLUSTERS:
-    *out = 1ull << ((dev_caps >> 20) & 0x7);
+    *out = exact_or_log2(dev_caps, 57, 0x7F, 20);
     return true;
   case VX_CAPS_ISSUE_WIDTH:
     *out = 1ull << ((dev_caps >> 23) & 0x7);
@@ -82,7 +92,7 @@ inline bool decode_caps(uint64_t dev_caps, uint64_t isa_caps,
     *out = 1ull << (20 + ((dev_caps >> 37) & 0x1f));
     return true;
   case VX_CAPS_TCU_TMEM_COLS: {
-    uint32_t log2_cols = (dev_caps >> 42) & 0x1f;
+    uint32_t log2_cols = ext_caps & 0x1f;
     *out = log2_cols == 0 ? 0 : (1ull << log2_cols);
     return true;
   }
@@ -91,13 +101,13 @@ inline bool decode_caps(uint64_t dev_caps, uint64_t isa_caps,
   }
 }
 
-// Read GPU_DEV_CAPS / GPU_ISA_CAPS from the CP regfile through a
+// Read GPU_DEV_CAPS / GPU_ISA_CAPS / GPU_EXT_CAPS from the CP regfile through a
 // backend's cp_mmio_read primitive. `Reader` is any callable matching
 // int(uint32_t off, uint32_t* out) — returns non-zero on failure.
 // Returns 0 on success.
 template <typename Reader>
 inline int load_caps(Reader&& cp_mmio_read,
-                     uint64_t* dev_caps, uint64_t* isa_caps) {
+                     uint64_t* dev_caps, uint64_t* isa_caps, uint64_t* ext_caps) {
   uint32_t lo = 0, hi = 0;
   if (cp_mmio_read(CP_REG_GPU_DEV_CAPS_LO, &lo)) return -1;
   if (cp_mmio_read(CP_REG_GPU_DEV_CAPS_HI, &hi)) return -1;
@@ -105,6 +115,9 @@ inline int load_caps(Reader&& cp_mmio_read,
   if (cp_mmio_read(CP_REG_GPU_ISA_CAPS_LO, &lo)) return -1;
   if (cp_mmio_read(CP_REG_GPU_ISA_CAPS_HI, &hi)) return -1;
   *isa_caps = uint64_t(lo) | (uint64_t(hi) << 32);
+  if (cp_mmio_read(CP_REG_GPU_EXT_CAPS_LO, &lo)) return -1;
+  if (cp_mmio_read(CP_REG_GPU_EXT_CAPS_HI, &hi)) return -1;
+  *ext_caps = uint64_t(lo) | (uint64_t(hi) << 32);
   return 0;
 }
 

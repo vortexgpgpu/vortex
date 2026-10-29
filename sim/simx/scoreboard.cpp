@@ -12,12 +12,14 @@
 // limitations under the License.
 
 #include "scoreboard.h"
+#include <algorithm>
 
 using namespace vortex;
 
 Scoreboard::Scoreboard(const SimContext& ctx, const char* name)
   : SimObject<Scoreboard>(ctx, name)
-  , in_use_regs_(VX_CFG_NUM_WARPS) {
+  , in_use_regs_(VX_CFG_NUM_WARPS)
+  , in_use_fcsr_(VX_CFG_NUM_WARPS, 0) {
   for (auto& in_use_reg : in_use_regs_) {
     in_use_reg.resize((int)RegType::Count);
   }
@@ -33,11 +35,34 @@ void Scoreboard::on_reset() {
       mask.reset();
     }
   }
+  std::fill(in_use_fcsr_.begin(), in_use_fcsr_.end(), 0);
   owners_.clear();
   commit_counts_.clear();
+  pending_releases_.clear();
+}
+
+void Scoreboard::on_tick() {
+  uint64_t now = SimPlatform::instance().cycles();
+  while (!pending_releases_.empty() && pending_releases_.front().due <= now) {
+    auto& r = pending_releases_.front();
+    if (r.fcsr != 0) {
+      in_use_fcsr_.at(r.wid) &= ~r.fcsr;
+    } else {
+      owners_.erase(get_reg_id(r.reg, r.wid));
+      in_use_regs_.at(r.wid).at((int)r.reg.type).reset(r.reg.idx);
+    }
+    pending_releases_.pop_front();
+  }
+  if (pending_releases_.empty()) {
+    this->tick_sleep();
+  }
 }
 
 bool Scoreboard::in_use(instr_trace_t* trace) const {
+  auto& instr = *trace->instr_ptr;
+  if (in_use_fcsr_.at(trace->wid) & (instr.fcsr_reads() | instr.fcsr_writes())) {
+    return true;
+  }
   if (trace->wb) {
     assert(trace->dst_reg.type != RegType::None);
     if (in_use_regs_.at(trace->wid).at((int)trace->dst_reg.type).test(trace->dst_reg.idx)) {
@@ -89,9 +114,24 @@ void Scoreboard::release(instr_trace_t* trace) {
   assert(trace->wb);
   assert(in_use_regs_.at(trace->wid).at((int)trace->dst_reg.type).test(trace->dst_reg.idx));
   assert(owners_.count(reg_id) != 0);
-  owners_.erase(reg_id);
   commit_counts_.erase(reg_id);
-  in_use_regs_.at(trace->wid).at((int)trace->dst_reg.type).reset(trace->dst_reg.idx);
+  pending_releases_.push_back({trace->wid, trace->dst_reg, 0,
+                               SimPlatform::instance().cycles() + kReleaseDelay});
+  this->tick_wake();
+}
+
+void Scoreboard::reserve_fcsr(instr_trace_t* trace) {
+  uint8_t fields = trace->instr_ptr->fcsr_writes();
+  assert((in_use_fcsr_.at(trace->wid) & fields) == 0);
+  in_use_fcsr_.at(trace->wid) |= fields;
+}
+
+void Scoreboard::release_fcsr(instr_trace_t* trace) {
+  uint8_t fields = trace->instr_ptr->fcsr_writes();
+  assert((in_use_fcsr_.at(trace->wid) & fields) == fields);
+  pending_releases_.push_back({trace->wid, {RegType::None, 0}, fields,
+                               SimPlatform::instance().cycles() + kReleaseDelay});
+  this->tick_wake();
 }
 
 bool Scoreboard::commit_packet(instr_trace_t* trace) {

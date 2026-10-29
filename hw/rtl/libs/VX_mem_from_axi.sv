@@ -126,6 +126,7 @@ module VX_mem_from_axi #(
     logic [DATA_W-1:0] rd_data;
     `UNUSED_VAR (rd_addr[CL_SHIFT-1:0])
 
+    wire issue_wr;
     wire rd_last = (rd_beats == 8'd0);
 
     always @(posedge clk) begin
@@ -169,7 +170,7 @@ module VX_mem_from_axi #(
     assign s_rresp   = 2'b00;
 
     // ---- mem_req mux: writes win when both pending ----
-    wire issue_wr = (wr_state == WR_ISSUE) && s_wvalid;
+    assign issue_wr = (wr_state == WR_ISSUE) && s_wvalid;
     wire issue_rd = (rd_state == RD_ISSUE);
 
     assign mem_req_valid  = issue_wr || issue_rd;

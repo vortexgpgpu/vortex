@@ -44,10 +44,65 @@ def _path(category):
     return os.path.join(BASELINE_DIR, category + ".json")
 
 
+# The generated headers the drivers and the RTL compile against. They are a
+# deterministic function of the source tomls, so hashing them tracks the
+# resolved configuration and ignores comment-only edits to the toml.
+#
+# VX_config is taken whole: every key in it is a microarchitecture knob. From
+# VX_types only the CSR and DCR register numbers are dropped — those are an
+# address map, not a machine parameter, and adding a counter must not invalidate
+# every stored cycle count. Everything else in VX_types is kept, so the memory
+# map and the paging constants (which do move cycles) are covered, and any key
+# added under a new prefix is included by default rather than silently ignored.
+_WHOLE_CONFIG_FILES = (
+    os.path.join("hw", "VX_config.vh"),
+    os.path.join("sw", "VX_config.h"),
+)
+_FILTERED_CONFIG_FILES = (
+    os.path.join("hw", "VX_types.vh"),
+    os.path.join("sw", "VX_types.h"),
+)
+_ADDRESS_MAP_DEFINE = re.compile(
+    rb"^\s*(?:`define|#define)\s+VX_(?:CSR|DCR)_", re.M)
+
+_resolved_cache = []
+
+
+def _read_config(rel):
+    try:
+        with open(rel, "rb") as fh:
+            return fh.read()
+    except OSError:
+        raise RuntimeError(
+            "{}: resolved config header missing — perf baselines cannot be "
+            "fingerprinted. Run the harness from a configured build tree "
+            "(re-run configure from build/).".format(rel))
+
+
+def resolved_config_hash():
+    """Fingerprint the build tree's resolved configuration.
+
+    Cycles are only comparable between runs built from the same configuration,
+    so a toml edit has to invalidate the stored baselines instead of surfacing
+    as a cycle regression.
+    """
+    if _resolved_cache:
+        return _resolved_cache[0]
+    h = hashlib.sha256()
+    for rel in _WHOLE_CONFIG_FILES:
+        h.update(_read_config(rel))
+    for rel in _FILTERED_CONFIG_FILES:
+        kept = [ln for ln in _read_config(rel).splitlines()
+                if not _ADDRESS_MAP_DEFINE.match(ln)]
+        h.update(b"\n".join(kept))
+    _resolved_cache.append(h.hexdigest())
+    return _resolved_cache[0]
+
+
 def config_hash(case):
     """Fingerprint the run inputs; a change invalidates the stored cycles."""
     key = "|".join([case.app, case.args, case.configs,
-                    repr(sorted(case.shape.items()))])
+                    repr(sorted(case.shape.items())), resolved_config_hash()])
     return hashlib.sha256(key.encode()).hexdigest()[:16]
 
 

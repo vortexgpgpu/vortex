@@ -72,7 +72,12 @@ int mm_read_unsymmetric_sparse(const char *fname, int *M_, int *N_, int *nz_,
  
     for (i=0; i<nz; i++)
     {
-        fscanf(f, "%d %d %lg\n", &I[i], &J[i], &val[i]);
+        if (fscanf(f, "%d %d %lg\n", &I[i], &J[i], &val[i]) != 3)
+        {
+            fprintf(stderr, "read_unsymmetric_sparse(): could not parse matrix entry %d.\n", i);
+            fclose(f);
+            return MM_PREMATURE_EOF;
+        }
         I[i]--;  /* adjust from 1-based to 0-based */
         J[i]--;
     }
@@ -264,6 +269,8 @@ int mm_read_mtx_crd_data(FILE *f, int M, int N, int nz, int I[], int J[],
         double val[], MM_typecode matcode)
 {
     int i;
+    (void)M;
+    (void)N;
     if (mm_is_complex(matcode))
     {
         for (i=0; i<nz; i++)
@@ -455,13 +462,12 @@ char  *mm_typecode_to_str(MM_typecode matcode)
     char buffer[MM_MAX_LINE_LENGTH];
     char *types[4];
 	char *mm_strdup(const char *);
-    int error =0;
 
     /* check for MTX type */
     if (mm_is_matrix(matcode)) 
         types[0] = MM_MTX_STR;
     else
-        error=1;
+        return NULL;
 
     /* check for CRD or ARR matrix */
     if (mm_is_sparse(matcode))

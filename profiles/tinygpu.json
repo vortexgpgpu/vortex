@@ -1,0 +1,15 @@
+{
+  "name": "tinygpu",
+  "description": "The smallest Vortex: one core of 2 warps x 2 threads with shared memory.",
+  "core": {
+    "VX_CFG_NUM_WARPS": 2,
+    "VX_CFG_NUM_THREADS": 2
+  },
+  "chip": {
+    "VX_CFG_NUM_CLUSTERS": 1,
+    "VX_CFG_NUM_CORES": 1
+  },
+  "sources": {
+    "all": "A minimal reference machine for small FPGAs and fast simulation (1 core, NW=NT=2, shared memory at its default size); the ISA keeps the defaults (RV32IMAF/RV64IMAFD) so it runs the shipped toolchain runtime"
+  }
+}

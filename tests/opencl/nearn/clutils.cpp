@@ -71,9 +71,6 @@ static cl_uint numPlatforms;
 static cl_device_id* devices = NULL;
 static cl_uint* numDevices = NULL;
 
-//! The chosen OpenCL platform
-static cl_platform_id platform = NULL;
-
 //! The chosen OpenCL device
 static cl_device_id device = NULL;
 
@@ -82,11 +79,6 @@ static cl_context context = NULL;
 
 //! OpenCL command queue
 static cl_command_queue commandQueue = NULL;
-static cl_command_queue commandQueueProf = NULL;
-static cl_command_queue commandQueueNoProf = NULL;
-
-//! Global status of events
-static bool eventsEnabled = false;
 
 //-------------------------------------------------------
 //          Initialization and Cleanup
@@ -259,9 +251,7 @@ static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) 
   return 0;
 }
 
-cl_context cl_init_context(int platform, int dev,int quiet) {
-    int printInfo=1;
-    if (platform >= 0 && dev >= 0) printInfo = 0;
+cl_context cl_init_context(int /*platform*/, int /*dev*/, int /*quiet*/) {
 	cl_int status;
 	// Used to iterate through the platforms and devices, respectively
 
@@ -400,7 +390,6 @@ cl_context cl_init_context(int platform, int dev,int quiet) {
     numDevices[0] = 1;
     devices = (cl_device_id*)malloc(sizeof(cl_device_id)*numDevices[0]);
 
-    int platform_touse = 0;
     int device_touse = 0;
 
     status = clGetPlatformIDs(numPlatforms, platforms, NULL);
@@ -643,7 +632,12 @@ cl_mem cl_allocImage(size_t height, size_t width, char type, cl_mem_flags flags)
     allocationSize += height*width*elemSize;
 
     // Create the image
-    mem = clCreateImage2D(context, flags, &format, width, height, 0, NULL, &status);
+    cl_image_desc desc;
+    memset(&desc, 0, sizeof(desc));
+    desc.image_type = CL_MEM_OBJECT_IMAGE2D;
+    desc.image_width = width;
+    desc.image_height = height;
+    mem = clCreateImage(context, flags, &format, &desc, NULL, &status);
 
     //cl_errChk(status, "creating image", true);
     if(status != CL_SUCCESS) {
@@ -725,7 +719,7 @@ void cl_copyBufferToHost(void* dst, cl_mem src, size_t mem_size, cl_bool blockin
 void cl_copyBufferToImage(cl_mem buffer, cl_mem image, int height, int width)
 {
     size_t origin[3] = {0, 0, 0};
-    size_t region[3] = {width, height, 1};
+    size_t region[3] = {static_cast<size_t>(width), static_cast<size_t>(height), 1};
 
     cl_int status;
     status = clEnqueueCopyBufferToImage(commandQueue, buffer, image, 0,
@@ -832,12 +826,9 @@ Compile Opencl source file into a cl_program. The cl_program will be made into a
 \param compileoptions Compilation options
 \param verbosebuild Switch to enable verbose Output
 */
-cl_program cl_compileProgram(char* kernelPath, char* compileoptions, bool verbosebuild )
+cl_program cl_compileProgram(char* /*kernelPath*/, char* compileoptions, bool verbosebuild )
 {
     cl_int status;
-    FILE *fp = NULL;
-    char *source = NULL;
-    long int size;
 
     /*printf("\t%s\n", kernelPath);
 
@@ -878,7 +869,6 @@ cl_program cl_compileProgram(char* kernelPath, char* compileoptions, bool verbos
     // read kernel binary from file
     uint8_t *kernel_bin = NULL;
     size_t kernel_size;
-    cl_int binary_status = 0;
     cl_program clProgramReturn;
 
     // Create the program object
@@ -1420,8 +1410,7 @@ char* catStringWithInt(const char* string, int integer) {
 
     char tmp[6];
 
-    strcpy(eventStr, string);
-    strncat(eventStr, itoa_portable(integer, tmp, 10), 5);
+    snprintf(eventStr, strLen, "%s%s", string, itoa_portable(integer, tmp, 10));
 
     return eventStr;
 }

@@ -21,6 +21,10 @@
 //              map to DSP48. Trades ~2K LUT/unit onto the idle BRAM + DSP blocks.
 //              ~9e-8 max relative error (well inside the RTU's 1e-4 tolerance).
 //
+// A zero (or, flushed, subnormal) operand returns +FLT_MAX rather than inf
+// (SimX rtu::ray_recip): a slab along a zero direction component then stays
+// finite, (b - o) * FLT_MAX, instead of 0 * inf = NaN.
+//
 // The input is presented combinationally and held stable for the whole setup
 // span by the scheduler; the result is a fixed-latency pipeline output, valid
 // after the backend's pipeline depth (<= the scheduler's SETUP_LAT wait).
@@ -36,8 +40,10 @@ module VX_rtu_recip import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     input  wire        enable,
     input  wire        mask,
     input  wire [31:0] x,                     // operand (dir component)
-    output wire [31:0] result                 // 1 / x
+    output wire [31:0] result                 // 1 / x (+FLT_MAX for x == 0)
 );
+    localparam [31:0] F32_MAX = 32'h7F7FFFFF;
+
     if (DSP_SEED != 0) begin : g_dsp_seed
         `UNUSED_VAR (mask)
         // ── seed ROM: 1/a for a = 1.fraction in [1,2), indexed by the top 10
@@ -68,16 +74,17 @@ module VX_rtu_recip import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         wire [22:0] s0_frac = x[22:0];
         wire [23:0] s0_A    = {1'b1, s0_frac};           // significand a*2^23
         wire [30:0] s0_afx  = {s0_A, 7'b0};              // a in Q2.30
-        wire        s0_inf  = (s0_exp == 8'h00);         // 1/0 -> inf
-        wire        s0_zero = (s0_exp == 8'hFF);         // 1/inf -> 0
+        wire        s0_inf  = (s0_exp == 8'h00);         // 1/0 -> FLT_MAX
+        wire        s0_zero = (s0_exp == 8'hFF);         // 1/inf -> 0, 1/NaN -> NaN
+        wire        s0_nan  = s0_zero && (s0_frac != 23'd0);
         wire [KIDX-1:0] s0_idx = s0_frac[22 -: KIDX];
 
-        reg        s1_sign, s1_inf, s1_zero;
+        reg        s1_sign, s1_inf, s1_zero, s1_nan;
         reg [7:0]  s1_exp;
         reg [30:0] s1_afx;
         reg [31:0] s1_y;                                 // seed, Q1.31
         always_ff @(posedge clk) if (enable) begin
-            s1_sign <= s0_sign; s1_inf <= s0_inf; s1_zero <= s0_zero;
+            s1_sign <= s0_sign; s1_inf <= s0_inf; s1_zero <= s0_zero; s1_nan <= s0_nan;
             s1_exp  <= s0_exp;  s1_afx <= s0_afx;
             s1_y    <= seed_rom[s0_idx];                 // registered ROM read -> BRAM
         end
@@ -86,23 +93,23 @@ module VX_rtu_recip import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         wire [62:0] s1_ay = s1_afx * s1_y;               // -> DSP (31b * 32b)
         wire [31:0] s1_p  = 32'(s1_ay >> 31);            // a*y  (Q2.30)
         wire [31:0] s1_t  = 32'h8000_0000 - s1_p;        // 2 - p  (2 == 2^31 in Q2.30)
-        reg        s2_sign, s2_inf, s2_zero;
+        reg        s2_sign, s2_inf, s2_zero, s2_nan;
         reg [7:0]  s2_exp;
         reg [30:0] s2_afx;
         reg [31:0] s2_y0, s2_t;
         always_ff @(posedge clk) if (enable) begin
-            s2_sign <= s1_sign; s2_inf <= s1_inf; s2_zero <= s1_zero;
+            s2_sign <= s1_sign; s2_inf <= s1_inf; s2_zero <= s1_zero; s2_nan <= s1_nan;
             s2_exp  <= s1_exp;  s2_afx <= s1_afx;
             s2_y0   <= s1_y;    s2_t   <= s1_t;
         end
         wire [63:0] s2_yt = s2_y0 * s2_t;                // -> DSP (32b * 32b)
         wire [31:0] s2_y1 = 32'(s2_yt >> 30);            // y*(2-a*y)  (Q1.31)
-        reg        s3_sign, s3_inf, s3_zero;
+        reg        s3_sign, s3_inf, s3_zero, s3_nan;
         reg [7:0]  s3_exp;
         reg [30:0] s3_afx;
         reg [31:0] s3_y1;
         always_ff @(posedge clk) if (enable) begin
-            s3_sign <= s2_sign; s3_inf <= s2_inf; s3_zero <= s2_zero;
+            s3_sign <= s2_sign; s3_inf <= s2_inf; s3_zero <= s2_zero; s3_nan <= s2_nan;
             s3_exp  <= s2_exp;  s3_afx <= s2_afx;  s3_y1 <= s2_y1;
         end
 
@@ -110,20 +117,20 @@ module VX_rtu_recip import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         wire [62:0] s3_ay = s3_afx * s3_y1;              // -> DSP (31b * 32b)
         wire [31:0] s3_p  = 32'(s3_ay >> 31);
         wire [31:0] s3_t  = 32'h8000_0000 - s3_p;
-        reg        s4_sign, s4_inf, s4_zero;
+        reg        s4_sign, s4_inf, s4_zero, s4_nan;
         reg [7:0]  s4_exp;
         reg [31:0] s4_y1, s4_t;
         always_ff @(posedge clk) if (enable) begin
-            s4_sign <= s3_sign; s4_inf <= s3_inf; s4_zero <= s3_zero;
+            s4_sign <= s3_sign; s4_inf <= s3_inf; s4_zero <= s3_zero; s4_nan <= s3_nan;
             s4_exp  <= s3_exp;  s4_y1 <= s3_y1;   s4_t <= s3_t;
         end
         wire [63:0] s4_yt = s4_y1 * s4_t;                // -> DSP (32b * 32b)
         wire [31:0] s4_y2 = 32'(s4_yt >> 30);            // 1/a in Q1.31
-        reg        s5_sign, s5_inf, s5_zero;
+        reg        s5_sign, s5_inf, s5_zero, s5_nan;
         reg [7:0]  s5_exp;
         reg [31:0] s5_y2;
         always_ff @(posedge clk) if (enable) begin
-            s5_sign <= s4_sign; s5_inf <= s4_inf; s5_zero <= s4_zero;
+            s5_sign <= s4_sign; s5_inf <= s4_inf; s5_zero <= s4_zero; s5_nan <= s4_nan;
             s5_exp  <= s4_exp;  s5_y2 <= s4_y2;
         end
 
@@ -135,18 +142,20 @@ module VX_rtu_recip import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         wire        s5_ovf = s5_fr[23];                  // 2y rounded up to 2.0
         wire [7:0]  s5_expf = s5_ovf ? (s5_exf[7:0] + 8'd1) : s5_exf[7:0];
         wire [22:0] s5_frac = s5_ovf ? 23'd0 : s5_fr[22:0];
-        assign result = s5_inf  ? {s5_sign, 8'hFF, 23'd0}
+        assign result = s5_inf  ? F32_MAX
+                      : s5_nan  ? 32'h7FC00000
                       : s5_zero ? {s5_sign, 8'h00, 23'd0}
                       :           {s5_sign, s5_expf, s5_frac};
         `UNUSED_PARAM (LATENCY)
     end else begin : g_lut_nr
         // portable baseline: 1.0 / x via the shared divide unit — vendor xil_fdiv
         // on Vivado (USE_DSP=VX_CFG_RTU_USE_DSP, LATENCY 28), soft NR in sim (17).
+        wire [31:0] quot;
         VX_fdiv_unit #(
             .USE_DSP        (`VX_CFG_RTU_USE_DSP),
             .LATENCY        (LATENCY),
             .SUBNORM_ENABLE (0),
-            .EXCEPT_ENABLE  (0)
+            .EXCEPT_ENABLE  (1)
         ) u_recip (
             .clk     (clk),
             .reset   (reset),
@@ -156,9 +165,21 @@ module VX_rtu_recip import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .frm     (INST_FRM_RNE),
             .dataa   (32'h3F800000 /*1.0*/),
             .datab   (x),
-            .result  (result),
+            .result  (quot),
             `UNUSED_PIN (fflags)
         );
+        wire x_zero_q;
+        VX_shift_register #(
+            .DATAW (1),
+            .DEPTH (LATENCY)
+        ) sr_zero (
+            .clk      (clk),
+            .reset    (reset),
+            .enable   (enable),
+            .data_in  (x[30:23] == 8'd0),
+            .data_out (x_zero_q)
+        );
+        assign result = x_zero_q ? F32_MAX : quot;
     end
 
 endmodule

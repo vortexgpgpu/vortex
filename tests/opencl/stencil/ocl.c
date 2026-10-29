@@ -27,7 +27,7 @@ char* readFile(const char* fileName)
         }
 
         size_t res = fread(buffer,1,size,fp);
-        if(res != size)
+        if(res != (size_t)size)
         {
                 printf("Error 3!\n");
                 fclose(fp);

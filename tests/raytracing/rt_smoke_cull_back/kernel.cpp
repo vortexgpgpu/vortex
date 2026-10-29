@@ -33,8 +33,8 @@ static inline uint32_t fire_ray(uint64_t scene_addr,
   ray.dir[2]    = dir[2];
   ray.tmin      = tmin;
   ray.tmax      = tmax;
-  uint32_t scene_lo = (uint32_t)(scene_addr & 0xffffffffu);
-  uint32_t h = vx_rt_wtrace(scene_lo, 0u,
+  uintptr_t scene_ptr = scene_addr;
+  uint32_t h = vx_rt_wtrace(scene_ptr, 0u,
                             VX_RT_FLAG_OPAQUE | VX_RT_FLAG_CULL_BACK_FACING,
                             0xffu, &ray);
   return vx_rt_wait(h, hit);

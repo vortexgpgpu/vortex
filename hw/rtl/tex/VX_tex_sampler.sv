@@ -161,14 +161,14 @@ module VX_tex_sampler import VX_gpu_pkg::*, VX_tex_pkg::*; #(
         .data_out ({valid_s2, req_tag_s2, lodfrac_s2})
     );
 
-    // Blend the two levels. The weight is a fraction of 256 rather than of 255,
-    // which is the form the software sampler blends levels in; a sample that
-    // moves between the two paths then keeps the same value.
+    // Blend the two levels. The level weight truncates rather than rounds,
+    // the form the software sampler blends levels in; a sample that moves
+    // between the two paths then keeps the same value.
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_tex_lerp_LOD
         for (genvar j = 0; j < 4; ++j) begin : g_j
             VX_tex_lerp #(
-                .LATENCY    (3),
-                .FRAC_SCALE (256)
+                .LATENCY (3),
+                .ROUND   (0)
             ) tex_lerp_lod (
                 .clk  (clk),
                 .reset(reset),

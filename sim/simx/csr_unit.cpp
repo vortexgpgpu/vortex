@@ -218,7 +218,6 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
         }
       #ifdef VX_CFG_VM_ENABLE
         auto mmu_perf = core_->mmu_perf_stats();
-        auto cluster_mmu_perf = core_->socket()->cluster()->perf_stats();
       #endif
         switch (addr) {
         CSR_READ_64(VX_CSR_MPM_MEM_READS, proc_perf.mem_reads);
@@ -234,8 +233,8 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
         CSR_READ_64(VX_CSR_MPM_TLB_HITS, mmu_perf.tlb_hits);
         CSR_READ_64(VX_CSR_MPM_TLB_MISSES, mmu_perf.tlb_misses);
         CSR_READ_64(VX_CSR_MPM_TLB_EVICTS, mmu_perf.tlb_evictions);
-        CSR_READ_64(VX_CSR_MPM_PTW_WALKS, cluster_mmu_perf.ptw.walks);
-        CSR_READ_64(VX_CSR_MPM_PTW_LATENCY, cluster_mmu_perf.ptw.walk_latency);
+        CSR_READ_64(VX_CSR_MPM_PTW_WALKS, proc_perf.ptw.walks);
+        CSR_READ_64(VX_CSR_MPM_PTW_LATENCY, proc_perf.ptw.walk_latency);
       #endif
         }
       } break;
@@ -250,9 +249,10 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
         CSR_READ_64(VX_CSR_MPM_TCU_UMMA_INSTRS,        tcu_perf.umma_instrs);
         CSR_READ_64(VX_CSR_MPM_TCU_TMEM_READS,         tcu_perf.tmem_reads);
         CSR_READ_64(VX_CSR_MPM_TCU_TMEM_WRITES,        tcu_perf.tmem_writes);
-        // Always 0 in SimX: no bank-arbitration or interlock model
-        CSR_READ_64(VX_CSR_MPM_TCU_TMEM_BANK_STALLS,   tcu_perf.tmem_bank_stalls);
-        CSR_READ_64(VX_CSR_MPM_TCU_TMEM_HAZARD_STALLS, tcu_perf.tmem_hazard_stalls);
+        CSR_READ_64(VX_CSR_MPM_TCU_TMEM_BANK_STALLS,     tcu_perf.tmem_bank_stalls);
+        CSR_READ_64(VX_CSR_MPM_TCU_TMEM_RD_GRANT_STALLS, tcu_perf.tmem_rd_grant_stalls);
+        // Always 0 in SimX
+        CSR_READ_64(VX_CSR_MPM_TCU_TMEM_HAZARD_STALLS,   tcu_perf.tmem_hazard_stalls);
       #endif
         }
       } break;
@@ -266,6 +266,7 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
         CSR_READ_64(VX_CSR_MPM_DXA_GMEM_DEDUP, cluster_perf.dxa.gmem_dedup);
         CSR_READ_64(VX_CSR_MPM_DXA_LMEM_WRITES,cluster_perf.dxa.lmem_writes);
         CSR_READ_64(VX_CSR_MPM_DXA_GMEM_LT,    cluster_perf.dxa.total_latency);
+        CSR_READ_64(VX_CSR_MPM_DXA_NOSLOT_STALLS, cluster_perf.dxa.noslot_stalls);
         }
       } break;
     #endif

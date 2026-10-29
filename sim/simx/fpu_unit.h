@@ -13,8 +13,6 @@
 
 #pragma once
 
-#include <vector>
-
 #include "func_unit.h"
 
 namespace vortex {
@@ -22,6 +20,11 @@ namespace vortex {
 class FpuUnit : public FuncUnit<VX_CFG_NUM_FPU_BLOCKS> {
 public:
   FpuUnit(const SimContext& ctx, const char* name, Core*);
+
+  // Partial bandwidth: a lane-gather stage takes results off the response
+  // port. Otherwise the commit arbiter reads the response port directly.
+  static constexpr bool kGather = (VX_CFG_NUM_FPU_BLOCKS != VX_CFG_ISSUE_WIDTH)
+                               || (VX_CFG_NUM_FPU_LANES != VX_CFG_SIMD_WIDTH);
 
 protected:
   void on_tick() override;
@@ -31,13 +34,6 @@ private:
   void execute(instr_trace_t* trace);
 
   uint32_t latency_of(const instr_trace_t* trace) const;
-
-  // Result-exit cycles of operations inside the arithmetic pipelines: an
-  // operation holds a tag slot from acceptance until its result leaves the
-  // datapath, so at most VX_CFG_FPU_QUEUE_SIZE operations overlap however
-  // deep the pipelines are. Results exit out of order across the different
-  // pipelines, so slots free by exit time, not acceptance order.
-  std::array<std::vector<uint64_t>, VX_CFG_NUM_FPU_BLOCKS> inflight_;
 };
 
 }

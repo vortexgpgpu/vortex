@@ -60,17 +60,15 @@ public:
 
 	struct PerfStats {
 		uint64_t latency = 0;
-		uint64_t tbuf_stalls = 0;      // cycles stalled on TcuTbufA/TcuSharedB readiness
-		uint64_t tbuf_cache_hits = 0;  // WGMMA entries with all lines already resident (cross-WGMMA reuse)
-		uint64_t lmem_reads = 0;       // sum of TcuTbufA + TcuSharedB LmemReqs issued
+		uint64_t tbuf_stalls = 0;      // cycles a WGMMA uop waits on its A stripe or the B row, summed over buffers
+		uint64_t tbuf_cache_hits = 0;  // cycles the resident B row serves the representative block
+		uint64_t lmem_reads = 0;       // bank-row reads issued by the A and B buffers
 #ifdef VX_CFG_TCU_TMEM_ENABLE
 		uint64_t umma_instrs = 0;      // UMMA micro-ops executed
 		uint64_t tmem_reads = 0;       // TMEM elements read (UMMA C + tmem_ld)
 		uint64_t tmem_writes = 0;      // TMEM elements written (UMMA D + tmem_st)
-		// The two below are microarchitectural and RTL-only: SimX doesn't
-		// model bank arbitration or the RAW interlock, so it reports 0
-		// for both.
 		uint64_t tmem_bank_stalls = 0;
+		uint64_t tmem_rd_grant_stalls = 0;
 		uint64_t tmem_hazard_stalls = 0;
 #endif
 
@@ -80,11 +78,12 @@ public:
 			this->tbuf_cache_hits  += rhs.tbuf_cache_hits;
 			this->lmem_reads       += rhs.lmem_reads;
 #ifdef VX_CFG_TCU_TMEM_ENABLE
-			this->umma_instrs      += rhs.umma_instrs;
-			this->tmem_reads       += rhs.tmem_reads;
-			this->tmem_writes      += rhs.tmem_writes;
-			this->tmem_bank_stalls += rhs.tmem_bank_stalls;
-			this->tmem_hazard_stalls += rhs.tmem_hazard_stalls;
+			this->umma_instrs      	   += rhs.umma_instrs;
+			this->tmem_reads       	   += rhs.tmem_reads;
+			this->tmem_writes          += rhs.tmem_writes;
+			this->tmem_bank_stalls 	   += rhs.tmem_bank_stalls;
+			this->tmem_hazard_stalls   += rhs.tmem_hazard_stalls;
+			this->tmem_rd_grant_stalls += rhs.tmem_rd_grant_stalls;
 #endif
 			return *this;
 		}
@@ -156,6 +155,7 @@ public:
 	          uint32_t step_n,
 	          uint32_t step_k,
 	          uint32_t umma_nrc,
+	          uint32_t a_from_smem,
 	          uint32_t a_desc,
 	          uint32_t b_desc,
 	          uint32_t handle,

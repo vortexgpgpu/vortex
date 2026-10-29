@@ -260,23 +260,23 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
         case (umma_nrc_enc)
             3'd0: begin // NRC=8, n_steps=4
                 umma_n_index = `UP(LG_N_UMMA_MAX)'(ctr[LG_M_WG +: 2]);
-                umma_k_index = `UP(LG_K_WG)'(ctr[LG_M_WG + 2 +: `UP(LG_K_WG)]);
+                umma_k_index = `UP(LG_K_WG)'(ctr >> (LG_M_WG + 2));
             end
             3'd1: begin // NRC=16, n_steps=8
                 umma_n_index = `UP(LG_N_UMMA_MAX)'(ctr[LG_M_WG +: 3]);
-                umma_k_index = `UP(LG_K_WG)'(ctr[LG_M_WG + 3 +: `UP(LG_K_WG)]);
+                umma_k_index = `UP(LG_K_WG)'(ctr >> (LG_M_WG + 3));
             end
             3'd2: begin // NRC=32, n_steps=16
                 umma_n_index = `UP(LG_N_UMMA_MAX)'(ctr[LG_M_WG +: 4]);
-                umma_k_index = `UP(LG_K_WG)'(ctr[LG_M_WG + 4 +: `UP(LG_K_WG)]);
+                umma_k_index = `UP(LG_K_WG)'(ctr >> (LG_M_WG + 4));
             end
             3'd3: begin // NRC=64, n_steps=32
                 umma_n_index = `UP(LG_N_UMMA_MAX)'(ctr[LG_M_WG +: 5]);
-                umma_k_index = `UP(LG_K_WG)'(ctr[LG_M_WG + 5 +: `UP(LG_K_WG)]);
+                umma_k_index = `UP(LG_K_WG)'(ctr >> (LG_M_WG + 5));
             end
             default: begin // NRC=128, n_steps=64
                 umma_n_index = `UP(LG_N_UMMA_MAX)'(ctr[LG_M_WG +: 6]);
-                umma_k_index = `UP(LG_K_WG)'(ctr[LG_M_WG + 6 +: `UP(LG_K_WG)]);
+                umma_k_index = `UP(LG_K_WG)'(ctr >> (LG_M_WG + 6));
             end
         endcase
     end

@@ -31,7 +31,10 @@ int main(int argc, char *argv[]) {
 
   if (size == 0) {
     fp = fopen(filename, "r");
-    fscanf(fp, "%d", &size);
+    if (fscanf(fp, "%d", &size) != 1) {
+      printf("Error reading matrix size from %s\n", filename);
+      exit(1);
+    }
 
     printf("using %dx%d input matrix\n", size, size);
 
@@ -200,8 +203,9 @@ void ForwardSub(cl_context context, float *a, float *b, float *m, int size,
   writeMB = (float)(sizeof(float) * size * (size + size + 1) / 1e6);
 
   // 3. Determine block sizes
-  size_t globalWorksizeFan1[1] = {size};
-  size_t globalWorksizeFan2[2] = {size, size};
+  size_t globalWorksizeFan1[1] = {static_cast<size_t>(size)};
+  size_t globalWorksizeFan2[2] = {static_cast<size_t>(size),
+                                  static_cast<size_t>(size)};
   size_t localWorksizeFan1[1] = {1};
   size_t localWorksizeFan2[2] = {1, 1};
 
@@ -425,7 +429,10 @@ void InitMat(FILE *fp, int size, float *ary, int nrow, int ncol) {
 
   for (i = 0; i < nrow; i++) {
     for (j = 0; j < ncol; j++) {
-      fscanf(fp, "%f", ary + size * i + j);
+      if (fscanf(fp, "%f", ary + size * i + j) != 1) {
+        printf("Error reading input matrix\n");
+        exit(1);
+      }
     }
   }
 }
@@ -438,7 +445,10 @@ void InitAry(FILE *fp, float *ary, int ary_size) {
   int i;
 
   for (i = 0; i < ary_size; i++) {
-    fscanf(fp, "%f", &ary[i]);
+    if (fscanf(fp, "%f", &ary[i]) != 1) {
+      printf("Error reading input array\n");
+      exit(1);
+    }
   }
 }
 /*------------------------------------------------------

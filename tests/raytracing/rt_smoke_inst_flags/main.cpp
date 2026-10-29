@@ -111,7 +111,7 @@ int main(int argc, char* argv[]) {
   float* xform = reinterpret_cast<float*>(inst);
   xform[0] = 1.f; xform[1] = 0.f; xform[2]  = 0.f; xform[3]  = 0.f;
   xform[4] = 0.f; xform[5] = 1.f; xform[6]  = 0.f; xform[7]  = 0.f;
-  xform[8] = 0.f; xform[9] = 0.f; xform[10] = 1.f; xform[11] = 5.f;
+  xform[8] = 0.f; xform[9] = 0.f; xform[10] = 1.f; xform[11] = -5.f;   // world->object
   uint32_t* blas_off = reinterpret_cast<uint32_t*>(inst + RTU_INSTANCE_BLAS_OFF_OFF);
   *blas_off = kBlasOff;
   uint32_t* custom_id = reinterpret_cast<uint32_t*>(inst + RTU_INSTANCE_CUSTOM_ID_OFF);

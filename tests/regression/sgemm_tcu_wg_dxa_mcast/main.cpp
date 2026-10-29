@@ -433,11 +433,12 @@ int main(int argc, char *argv[]) {
     /*elem_bytes=*/sizeof(itype_t)));
   // BLOCK_MAJOR SMEM destination — DXA reads B[K][N] row-major and scatters
   // each element to the bbuf-native dense block-major destination
-  // (vx_tensor.h::b_blockmajor_idx); set_tile_geometry conveys tcN. The
-  // per-element dest formula is identical across multicast receivers.
+  // (vx_tensor.h::b_blockmajor_idx); set_tile_geometry conveys tcN and the
+  // dense block K extent. The per-element dest formula is identical across
+  // multicast receivers.
   RT_CHECK(vortex::dxa::set_layout(device, kDescB,
     vortex::dxa::Layout::BlockMajor, /*rank=*/2, /*elem_bytes=*/sizeof(itype_t)));
-  RT_CHECK(vortex::dxa::set_tile_geometry(device, kDescB, /*tcN=*/cfg::tcN));
+  RT_CHECK(vortex::dxa::set_tile_geometry(device, kDescB, /*tcN=*/cfg::tcN, /*blk_k=*/cfg::b_blk_k));
 
   // Multicast attribute on B descriptor: smem_stride per receiver. Each
   // co-resident CTA has its own LMEM region; the dispatcher allocates them

@@ -23,6 +23,9 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
 `ifdef PERF_ENABLE
     output tcu_perf_t       tcu_perf,
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    output tmem_perf_t      tmem_perf,
+`endif
 `endif
 
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
@@ -198,6 +201,21 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     end
 `endif
 
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    // abuf A-stripe fill from TMEM (UMMA TS form). A's rows are the CTA's whole
+    // lane range, so the lane base is the bank origin for the block's CTA rank.
+    wire [BLOCK_SIZE-1:0]                        afill_valid;
+    wire [TCU_TMEM_COL_BITS-1:0]                 afill_col_base  [BLOCK_SIZE];
+    wire [TCU_TMEM_LANE_BITS-1:0]                afill_lane_base [BLOCK_SIZE];
+    wire [BLOCK_SIZE-1:0]                        afill_grant;
+    wire [TCU_WG_TILE_M-1:0][TCU_TC_N-1:0][31:0] afill_data      [BLOCK_SIZE];
+    for (genvar bi = 0; bi < BLOCK_SIZE; ++bi) begin : g_afill_lane
+        assign afill_lane_base[bi] = 
+            TCU_TMEM_LANE_BITS'(cta_rank_table[core_execute_if[bi].data.header.wid]) *
+            TCU_TMEM_LANE_BITS'(TCU_WG_TILE_M);
+    end
+`endif
+
     // -----------------------------------------------------------------------
     // WGMMA feature (orchestrator): VX_tcu_tbuf + VX_tcu_lockstep + perf.
     // -----------------------------------------------------------------------
@@ -229,6 +247,12 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .exec_ready     (exec_ready_w),
         .exec_data      (exec_data_w),
         .tcu_lmem_if    (tcu_lmem_if),
+    `ifdef VX_CFG_TCU_TMEM_ENABLE
+        .afill_valid    (afill_valid),
+        .afill_col_base (afill_col_base),
+        .afill_grant    (afill_grant),
+        .afill_data     (afill_data),
+    `endif
         .tbuf_rs1_data  (tbuf_rs1_data),
         .tbuf_rs2_data  (tbuf_rs2_data),
         .tbuf_ready_eff (tbuf_ready_eff)
@@ -321,6 +345,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [BLOCK_SIZE-1:0]                   tmem_wr_grant;
 `ifdef PERF_ENABLE
     wire [BLOCK_SIZE-1:0]                   perf_umma_hazard_stall;
+    wire [BLOCK_SIZE-1:0]                   perf_umma_rd_stall;
 `endif
 
     VX_tcu_tmem #(
@@ -330,7 +355,10 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .clk           (clk),
         .reset         (reset),
     `ifdef PERF_ENABLE
-        .tcu_perf      (tcu_perf),
+        .perf_umma_instrs      (tmem_perf.umma_instrs),
+        .perf_tmem_reads       (tmem_perf.tmem_reads),
+        .perf_tmem_writes      (tmem_perf.tmem_writes),
+        .perf_tmem_bank_stalls (tmem_perf.tmem_bank_stalls),
     `endif
         .mgmt_valid    (tmem_mgmt_valid),
         .mgmt_data     (tmem_mgmt_data),
@@ -347,7 +375,12 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .wr_lane_base  (tmem_wr_lane_base),
         .wr_col_base   (tmem_wr_col_base),
         .wr_data       (tmem_wr_data),
-        .wr_grant      (tmem_wr_grant)
+        .wr_grant      (tmem_wr_grant),
+        .afill_valid    (afill_valid),
+        .afill_lane_base(afill_lane_base),
+        .afill_col_base (afill_col_base),
+        .afill_grant    (afill_grant),
+        .afill_data     (afill_data)
     );
 `endif // VX_CFG_TCU_TMEM_ENABLE
 
@@ -386,6 +419,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             .tmem_wr_grant    (tmem_wr_grant[block_idx]),
         `ifdef PERF_ENABLE
             .perf_umma_hazard_stall (perf_umma_hazard_stall[block_idx]),
+            .perf_umma_rd_stall     (perf_umma_rd_stall[block_idx]),
         `endif
         `endif
         `ifdef TCU_META_ENABLE
@@ -403,15 +437,20 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `ifdef PERF_ENABLE
     // RAW-interlock stalls, summed across blocks
     logic [PERF_CTR_BITS-1:0] tmem_hazard_stalls_r;
+    logic [PERF_CTR_BITS-1:0] tmem_rd_grant_stalls_r;
     always @(posedge clk) begin
         if (reset) begin
-            tmem_hazard_stalls_r <= '0;
+            tmem_hazard_stalls_r   <= '0;
+            tmem_rd_grant_stalls_r <= '0;
         end else begin
-            tmem_hazard_stalls_r <= tmem_hazard_stalls_r
+            tmem_hazard_stalls_r   <= tmem_hazard_stalls_r
                 + PERF_CTR_BITS'($countones(perf_umma_hazard_stall));
+            tmem_rd_grant_stalls_r <= tmem_rd_grant_stalls_r
+                + PERF_CTR_BITS'($countones(perf_umma_rd_stall));
         end
     end
-    assign tcu_perf.tmem_hazard_stalls = tmem_hazard_stalls_r;
+    assign tmem_perf.tmem_hazard_stalls   = tmem_hazard_stalls_r;
+    assign tmem_perf.tmem_rd_grant_stalls = tmem_rd_grant_stalls_r;
 `endif
 `endif
 

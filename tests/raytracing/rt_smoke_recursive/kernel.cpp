@@ -29,7 +29,7 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   uint32_t tid = blockIdx.x;
   if (tid != 0) return;
 
-  uint32_t sub_scene = (uint32_t)(arg->sub_scene_addr & 0xffffffffu);
+  uintptr_t sub_scene = arg->sub_scene_addr;
 
   vx_ray_t ray = {
     { arg->ray_origin[0],    arg->ray_origin[1],    arg->ray_origin[2] },
@@ -37,11 +37,11 @@ __kernel void kernel_main(kernel_arg_t* arg) {
     arg->tmin, arg->tmax
   };
 
-  uint32_t scene_lo = (uint32_t)(arg->scene_addr & 0xffffffffu);
+  uintptr_t scene_ptr = arg->scene_addr;
   // payload pointer for the CHS to write sub_status into; enable CHS for
   // the parent ray (so its closest hit returns a candidate).
-  uint32_t payload  = (uint32_t)(arg->payload_addr & 0xffffffffu);
-  uint32_t h   = vx_rt_wtrace(scene_lo, payload, VX_RT_FLAG_ENABLE_CHS,
+  uintptr_t payload = arg->payload_addr;
+  uint32_t h   = vx_rt_wtrace(scene_ptr, payload, VX_RT_FLAG_ENABLE_CHS,
                               0xffu, &ray);
   vx_hit_t hit;
   uint32_t sts = vx_rt_wait(h, &hit);
@@ -51,7 +51,7 @@ __kernel void kernel_main(kernel_arg_t* arg) {
     vx_hit_t sub_hit;
     uint32_t sub_h = vx_rt_wtrace(sub_scene, 0u, 0u, 0xffu, &ray);
     uint32_t sub_status = vx_rt_wait(sub_h, &sub_hit);
-    *(volatile uint32_t*)(uintptr_t)payload = sub_status;
+    *(volatile uint32_t*)payload = sub_status;
     sts = vx_rt_continue(h, VX_RT_CB_DONE, hit.t, 0u, &hit);
   }
 

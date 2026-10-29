@@ -1,0 +1,32 @@
+{
+  "name": "rtx1080",
+  "description": "NVIDIA GeForce GTX 1080 (GP104, Pascal, sm_61) at its 1607 MHz base clock: one Vortex core per SM.",
+  "core": {
+    "VX_CFG_NUM_WARPS": 64,
+    "VX_CFG_NUM_THREADS": 32,
+    "VX_CFG_ISSUE_WIDTH": 4,
+    "VX_CFG_DCACHE_SIZE": 32768
+  },
+  "chip": {
+    "VX_CFG_NUM_CLUSTERS": 1,
+    "VX_CFG_NUM_CORES": 20,
+    "VX_CFG_L2_ENABLE": true,
+    "VX_CFG_L2_SIZE": 2097152,
+    "VX_CFG_L2_NUM_WAYS": 16,
+    "VX_CFG_L2_NUM_BANKS": 16
+  },
+  "platform": {
+    "VX_CFG_PLATFORM_MEMORY_NUM_BANKS": 16,
+    "VX_CFG_PLATFORM_CLOCK_RATE": 1607,
+    "VX_CFG_PLATFORM_MEMORY_PEAK_BW": 320000,
+    "VX_CFG_PLATFORM_MEMORY_TYPE": "GDDR6",
+    "VX_CFG_PLATFORM_MEMORY_DATA_RATE": 10000
+  },
+  "sources": {
+    "NUM_CORES, NUM_WARPS, NUM_THREADS, ISSUE_WIDTH": "20 SMs, 64 resident warps/SM, 4 schedulers x 32 lanes (NVIDIA GeForce GTX 1080 whitepaper)",
+    "DCACHE_SIZE": "48 KB unified L1/texture per SM (whitepaper), rounded down to the power of two the cache accepts",
+    "L2_SIZE, L2_NUM_WAYS, L2_NUM_BANKS": "2 MB L2 (whitepaper); 16 ways, 16 banks for the 16 memory channels",
+    "PLATFORM_MEMORY_TYPE, PLATFORM_MEMORY_NUM_BANKS, PLATFORM_MEMORY_DATA_RATE": "256-bit GDDR5X at 10 Gbps modelled as 16 GDDR6 x16 channels at 10000 MT/s: 16 x 2 B x 10 GT/s = 320 GB/s, the card's bandwidth; latency not calibrated",
+    "PLATFORM_CLOCK_RATE, PLATFORM_MEMORY_PEAK_BW": "1607 MHz base clock, 320 GB/s (whitepaper)"
+  }
+}

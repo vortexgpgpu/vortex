@@ -358,6 +358,7 @@ public:
   static constexpr uint32_t tileK = xtileK * i_ratio;
   static constexpr uint32_t m_steps = 2;
   static constexpr uint32_t k_steps = xtileK / fedpK;
+  static constexpr uint32_t b_blk_k = fedpK * i_ratio; // K elements per dense B block
   static constexpr uint32_t NRC = NRC_;
 };
 

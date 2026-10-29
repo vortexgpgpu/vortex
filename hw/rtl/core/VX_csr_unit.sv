@@ -37,21 +37,15 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam PID_BITS = `CLOG2(`VX_CFG_NUM_THREADS / NUM_LANES);
+    localparam LANE_BITS = `CLOG2(NUM_LANES);
 
     `UNUSED_VAR (execute_if.data.rs3_data)
-
-    reg [NUM_LANES-1:0][`VX_CFG_XLEN-1:0]  csr_read_data;
-    reg  [`VX_CFG_XLEN-1:0]                csr_write_data;
-    wire [`VX_CFG_XLEN-1:0]                csr_read_data_ro, csr_read_data_rw;
-    wire [`VX_CFG_XLEN-1:0]                csr_req_data;
-    reg                             csr_rd_enable;
-    wire                            csr_wr_enable;
-    wire                            csr_req_ready;
 
     wire [`VX_CSR_ADDR_BITS-1:0] csr_addr = execute_if.data.op_args.csr.addr;
     wire [RV_REGS_BITS-1:0] csr_imm = execute_if.data.op_args.csr.imm5;
 
-    // Single-cycle CTA read: per-lane CTA thread coordinates are precomputed.
+    // A request is held for one cycle before it may fire: the CTA context RAMs
+    // are read in that cycle, and the CSR decode is registered in it.
     localparam CTA_READ_LATENCY = 2'd1;
     reg [1:0] cta_read_wait_r;
     always_ff @(posedge clk) begin
@@ -67,15 +61,11 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         end
     end
 
+    wire csr_req_ready;
     wire cta_read_done = (cta_read_wait_r == CTA_READ_LATENCY);
     wire csr_req_valid = execute_if.valid && cta_read_done;
+    wire csr_req_fire  = csr_req_valid && csr_req_ready;
     assign execute_if.ready = csr_req_ready && cta_read_done;
-
-    // DCR access bridge
-    wire [`VX_CSR_ADDR_BITS-1:0] csr_read_addr = csr_req_valid ? csr_addr : dcr_csr_if.addr;
-    wire [7:0] mpm_class = csr_req_valid ? 0 : dcr_csr_if.mpm_class;
-    assign dcr_csr_if.ready = ~csr_req_valid;
-    assign dcr_csr_if.value = VX_DCR_DATA_WIDTH'(csr_read_data_ro);
 
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] rs1_data;
     `UNUSED_VAR (rs1_data)
@@ -83,7 +73,15 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         assign rs1_data[i] = execute_if.data.rs1_data[i];
     end
 
-    wire csr_write_enable = (execute_if.data.op_type == INST_SFU_CSRRW);
+    wire [`VX_CFG_XLEN-1:0] csr_req_src = execute_if.data.op_args.csr.use_imm ? `VX_CFG_XLEN'(csr_imm) : rs1_data[0];
+
+    wire [`VX_CFG_XLEN-1:0] csr_scalar_data, dcr_read_data;
+
+    // Host counter reads decode their own address and never wait on a request.
+    assign dcr_csr_if.ready = 1'b1;
+    assign dcr_csr_if.value = VX_DCR_DATA_WIDTH'(dcr_read_data);
+    `UNUSED_VAR (dcr_read_data)
+    `UNUSED_VAR (dcr_csr_if.valid)
 
     VX_csr_data #(
         .INSTANCE_ID (INSTANCE_ID),
@@ -91,8 +89,6 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     ) csr_data (
         .clk            (clk),
         .reset          (reset),
-
-        .mpm_class      (mpm_class),
 
     `ifdef PERF_ENABLE
         .sysmem_perf    (sysmem_perf),
@@ -105,35 +101,74 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         .fpu_csr_if     (fpu_csr_if),
     `endif
 
-        .read_enable    (csr_req_valid && csr_rd_enable),
-        .read_uuid      (execute_if.data.header.uuid),
-        .read_wid       (execute_if.data.header.wid),
-        .read_cta_id    (execute_if.data.header.cta_id),
-        .read_addr      (csr_read_addr),
-        .read_data_ro   (csr_read_data_ro),
-        .read_data_rw   (csr_read_data_rw),
+        .req_fire       (csr_req_fire),
+        .req_uuid       (execute_if.data.header.uuid),
+        .req_wid        (execute_if.data.header.wid),
+        .req_cta_id     (execute_if.data.header.cta_id),
+        .req_addr       (csr_addr),
+        .req_op         (execute_if.data.op_type),
+        .req_src        (csr_req_src),
+        .read_data      (csr_scalar_data),
 
-        .write_enable   (csr_req_valid && csr_wr_enable),
-        .write_uuid     (execute_if.data.header.uuid),
-        .write_wid      (execute_if.data.header.wid),
-        .write_addr     (csr_addr),
-        .write_data     (csr_write_data)
+        .dcr_mpm_class  (dcr_csr_if.mpm_class),
+        .dcr_addr       (dcr_csr_if.addr),
+        .dcr_data       (dcr_read_data)
     );
 
-    // CSR read
+    // Per-lane CSRs
 
-    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] wtid, gtid;
+    // Thread ids are the lane index on top of a per-request base.
+    wire [`VX_CFG_XLEN-1:0] wtid_base = (PID_BITS != 0) ? `VX_CFG_XLEN'(execute_if.data.header.pid * NUM_LANES) : '0;
+    wire [`VX_CFG_XLEN-1:0] gtid_base = (`VX_CFG_XLEN'(CORE_ID) << (NW_BITS + NT_BITS))
+                                      + (`VX_CFG_XLEN'(execute_if.data.header.wid) << NT_BITS)
+                                      + wtid_base;
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_wtid
-        if (PID_BITS != 0) begin : g_pid
-            assign wtid[i] = `VX_CFG_XLEN'(execute_if.data.header.pid * NUM_LANES + i);
-        end else begin : g_no_pid
-            assign wtid[i] = `VX_CFG_XLEN'(i);
-        end
+    wire is_wtid_w    = (csr_addr == `VX_CSR_THREAD_ID);
+    wire is_gtid_w    = (csr_addr == `VX_CSR_MHARTID);
+    wire is_cta_x_w   = (csr_addr == `VX_CSR_CTA_THREAD_ID_X);
+    wire is_cta_y_w   = (csr_addr == `VX_CSR_CTA_THREAD_ID_Y);
+    wire is_cta_z_w   = (csr_addr == `VX_CSR_CTA_THREAD_ID_Z);
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    wire is_frag_pos_w = (csr_addr == `VX_CSR_FRAG_POS);
+    wire is_frag_pid_w = (csr_addr == `VX_CSR_FRAG_PID);
+`else
+    wire is_frag_pos_w = 1'b0;
+    wire is_frag_pid_w = 1'b0;
+`endif
+    wire [`VX_CFG_XLEN-1:0] tid_base_w = is_gtid_w ? gtid_base : wtid_base;
+
+    // Registered with the scalar decode, in the cycle before the request fires.
+    reg is_tid_r, is_cta_x_r, is_cta_y_r, is_cta_z_r, is_frag_pos_r, is_frag_pid_r;
+    reg [`VX_CFG_XLEN-1:0] tid_base_r;
+    always @(posedge clk) begin
+        is_tid_r      <= is_wtid_w || is_gtid_w;
+        is_cta_x_r    <= is_cta_x_w;
+        is_cta_y_r    <= is_cta_y_w;
+        is_cta_z_r    <= is_cta_z_w;
+        is_frag_pos_r <= is_frag_pos_w;
+        is_frag_pid_r <= is_frag_pid_w;
+        tid_base_r    <= tid_base_w;
     end
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_gtid
-        assign gtid[i] = (`VX_CFG_XLEN'(CORE_ID) << (NW_BITS + NT_BITS)) + (`VX_CFG_XLEN'(execute_if.data.header.wid) << NT_BITS) + wtid[i];
+`ifdef SIMULATION
+    always @(posedge clk) begin
+        if (~reset && csr_req_fire) begin
+            `ASSERT(is_tid_r == (is_wtid_w || is_gtid_w) && is_cta_x_r == is_cta_x_w && is_cta_y_r == is_cta_y_w
+                 && is_cta_z_r == is_cta_z_w && is_frag_pos_r == is_frag_pos_w && is_frag_pid_r == is_frag_pid_w
+                 && (~is_tid_r || tid_base_r == tid_base_w),
+                ("%t: *** %s lane CSR 0x%0h changed between decode and fire (#%0d)", $time, INSTANCE_ID, csr_addr, execute_if.data.header.uuid));
+        end
+    end
+`endif
+
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] lane_tid;
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_lane_tid
+        if (`IS_POW2(NUM_LANES) && LANE_BITS != 0) begin : g_concat
+            // the base is a multiple of NUM_LANES
+            assign lane_tid[i] = {tid_base_r[`VX_CFG_XLEN-1:LANE_BITS], LANE_BITS'(i)};
+        end else begin : g_add
+            assign lane_tid[i] = tid_base_r + `VX_CFG_XLEN'(i);
+        end
     end
 
     // Per-lane CTA thread coordinates are precomputed divide-free at dispatch
@@ -208,43 +243,25 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     end
 `endif
 
-    always @(*) begin
-        csr_rd_enable = 0;
-        case (csr_addr)
-        `VX_CSR_THREAD_ID       : csr_read_data = wtid;
-        `VX_CSR_MHARTID         : csr_read_data = gtid;
-        `VX_CSR_CTA_THREAD_ID_X : csr_read_data = cta_tid_x;
-        `VX_CSR_CTA_THREAD_ID_Y : csr_read_data = cta_tid_y;
-        `VX_CSR_CTA_THREAD_ID_Z : csr_read_data = cta_tid_z;
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] lane_frag;
 `ifdef VX_CFG_EXT_RASTER_ENABLE
-        `VX_CSR_FRAG_POS        : csr_read_data = frag_pos;
-        `VX_CSR_FRAG_PID        : csr_read_data = frag_pid;
-`endif
-        default : begin
-            csr_read_data = {NUM_LANES{csr_read_data_ro | csr_read_data_rw}};
-            csr_rd_enable = 1;
-        end
-        endcase
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_lane_frag
+        assign lane_frag[i] = (is_frag_pos_r ? frag_pos[i] : '0)
+                            | (is_frag_pid_r ? frag_pid[i] : '0);
     end
+`else
+    assign lane_frag = '0;
+    `UNUSED_VAR ({is_frag_pos_r, is_frag_pid_r})
+`endif
 
-    // CSR write
-
-    assign csr_req_data = execute_if.data.op_args.csr.use_imm ? `VX_CFG_XLEN'(csr_imm) : rs1_data[0];
-    assign csr_wr_enable = csr_write_enable || (| csr_req_data);
-
-    always @(*) begin
-        case (execute_if.data.op_type)
-            INST_SFU_CSRRW: begin
-                csr_write_data = csr_req_data;
-            end
-            INST_SFU_CSRRS: begin
-                csr_write_data = csr_read_data_rw | csr_req_data;
-            end
-            //INST_SFU_CSRRC
-            default: begin
-                csr_write_data = csr_read_data_rw & ~csr_req_data;
-            end
-        endcase
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] csr_read_data;
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_read_data
+        assign csr_read_data[i] = csr_scalar_data
+                                | (is_tid_r   ? lane_tid[i]  : '0)
+                                | (is_cta_x_r ? cta_tid_x[i] : '0)
+                                | (is_cta_y_r ? cta_tid_y[i] : '0)
+                                | (is_cta_z_r ? cta_tid_z[i] : '0)
+                                | lane_frag[i];
     end
 
     VX_elastic_buffer #(

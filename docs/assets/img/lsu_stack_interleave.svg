@@ -1,0 +1,137 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 800" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+  </defs>
+
+  <style>
+    .box     { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.5; }
+    .grp     { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .t0      { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.2; }
+    .t1      { fill:#eef7ee; stroke:#3a7d44; stroke-width:1.2; }
+    .t2      { fill:#fdf6e3; stroke:#b58900; stroke-width:1.2; }
+    .t3      { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.2; }
+    .hot0    { fill:#9fc3e0; stroke:#2e5e82; stroke-width:1.6; }
+    .hot1    { fill:#a9d8b0; stroke:#3a7d44; stroke-width:1.6; }
+    .hot2    { fill:#f2d37a; stroke:#b58900; stroke-width:1.6; }
+    .hot3    { fill:#dcaed1; stroke:#8e4a7e; stroke-width:1.6; }
+    .line    { fill:none; stroke:#a8324a; stroke-width:2; stroke-dasharray:5 3; }
+    .fld     { fill:#ffffff; stroke:#5a7184; stroke-width:1.2; }
+    .fldh    { fill:#eceff2; stroke:#5a7184; stroke-width:1.2; }
+    .t       { fill:#1b2733; font-size:15px; }
+    .tb      { fill:#1b2733; font-size:16px; font-weight:bold; }
+    .ts      { fill:#44525f; font-size:12.5px; }
+    .tt      { fill:#5a6772; font-size:12px; font-style:italic; }
+    .mono    { font-family:'SF Mono',Consolas,monospace; font-size:12px; fill:#1b2733; }
+    .lbr     { fill:#a8324a; font-size:12px; }
+    .flow    { stroke:#444; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+  </style>
+
+  <rect x="0" y="0" width="1400" height="800" fill="#ffffff"/>
+  <text x="24" y="34" class="tb" font-size="20">Stack interleave — one frame slot, one cache line</text>
+  <text x="24" y="56" class="tt">A warp of four threads spills the same frame slot. Left: where the four words sit as software sees them. Right: where the LSU stores them.</text>
+
+  <!-- ══════════ software view ══════════ -->
+  <rect x="24" y="76" width="640" height="440" class="grp"/>
+  <text x="36" y="100" class="tb">Software view — one contiguous stack per thread</text>
+  <text x="36" y="120" class="tt">sp = STACK_BASE − hartid × STACK_SIZE</text>
+
+  <text x="40" y="160" class="ts">thread 0</text>
+  <rect x="110" y="142" width="536" height="30" class="t0"/>
+  <rect x="350" y="142" width="34" height="30" class="hot0"/>
+  <text x="40" y="204" class="ts">thread 1</text>
+  <rect x="110" y="186" width="536" height="30" class="t1"/>
+  <rect x="350" y="186" width="34" height="30" class="hot1"/>
+  <text x="40" y="248" class="ts">thread 2</text>
+  <rect x="110" y="230" width="536" height="30" class="t2"/>
+  <rect x="350" y="230" width="34" height="30" class="hot2"/>
+  <text x="40" y="292" class="ts">thread 3</text>
+  <rect x="110" y="274" width="536" height="30" class="t3"/>
+  <rect x="350" y="274" width="34" height="30" class="hot3"/>
+
+  <text x="110" y="326" class="tt">low address</text>
+  <text x="646" y="326" class="tt" text-anchor="end">high address, one stack</text>
+  <text x="367" y="346" class="lbr" text-anchor="middle">the same slot, in each stack</text>
+
+  <text x="40" y="386" class="ts">The four words are one stack size apart: four different cache lines.</text>
+  <text x="40" y="404" class="ts">A stack size is a power of two larger than a cache way, so the four</text>
+  <text x="40" y="420" class="ts">lines share a set index — and the same dcache bank.</text>
+  <text x="40" y="448" class="ts">One spill is four line misses that conflict with each other.</text>
+  <text x="40" y="492" class="tt">address = {group, thread, word, byte}</text>
+
+  <!-- ══════════ stored view ══════════ -->
+  <rect x="736" y="76" width="640" height="440" class="grp"/>
+  <text x="748" y="100" class="tb">Stored view — threads interleaved by word</text>
+  <text x="748" y="120" class="tt">a group is NUM_THREADS stacks</text>
+
+  <text x="752" y="160" class="ts">slot k−1</text>
+  <rect x="822" y="142" width="34" height="30" class="t0"/>
+  <rect x="856" y="142" width="34" height="30" class="t1"/>
+  <rect x="890" y="142" width="34" height="30" class="t2"/>
+  <rect x="924" y="142" width="34" height="30" class="t3"/>
+  <text x="752" y="204" class="ts">slot k</text>
+  <rect x="822" y="186" width="34" height="30" class="hot0"/>
+  <rect x="856" y="186" width="34" height="30" class="hot1"/>
+  <rect x="890" y="186" width="34" height="30" class="hot2"/>
+  <rect x="924" y="186" width="34" height="30" class="hot3"/>
+  <rect x="816" y="180" width="148" height="42" class="line"/>
+  <text x="976" y="206" class="lbr">one contiguous block — one line</text>
+  <text x="752" y="248" class="ts">slot k+1</text>
+  <rect x="822" y="230" width="34" height="30" class="t0"/>
+  <rect x="856" y="230" width="34" height="30" class="t1"/>
+  <rect x="890" y="230" width="34" height="30" class="t2"/>
+  <rect x="924" y="230" width="34" height="30" class="t3"/>
+  <text x="752" y="292" class="ts">slot k+2</text>
+  <rect x="822" y="274" width="34" height="30" class="t0"/>
+  <rect x="856" y="274" width="34" height="30" class="t1"/>
+  <rect x="890" y="274" width="34" height="30" class="t2"/>
+  <rect x="924" y="274" width="34" height="30" class="t3"/>
+
+  <text x="822" y="326" class="tt">thread 0 … 3, one word each</text>
+
+  <text x="752" y="386" class="ts">The thread index and the word index trade places, so a warp-wide</text>
+  <text x="752" y="404" class="ts">access to one slot fills one contiguous block.</text>
+  <text x="752" y="432" class="ts">The slot index is XOR-ed with the group index: without it, the same</text>
+  <text x="752" y="448" class="ts">slot of every warp would still land in one cache set.</text>
+  <text x="752" y="492" class="tt">address = {group, word ⊕ group, thread, byte}</text>
+
+  <path d="M 664 296 L 736 296" class="flow"/>
+  <text x="700" y="286" class="ts" text-anchor="middle">VX_lsu_agu</text>
+
+  <!-- ══════════ bit fields ══════════ -->
+  <text x="24" y="560" class="tb">The remap is a permutation of address bits inside the stack window</text>
+
+  <text x="24" y="600" class="ts">linear</text>
+  <rect x="110" y="580" width="420" height="32" class="fldh"/>
+  <text x="320" y="601" class="mono" text-anchor="middle">group index</text>
+  <rect x="530" y="580" width="140" height="32" class="fld"/>
+  <text x="600" y="601" class="mono" text-anchor="middle">thread</text>
+  <rect x="670" y="580" width="280" height="32" class="fld"/>
+  <text x="810" y="601" class="mono" text-anchor="middle">word (slot)</text>
+  <rect x="950" y="580" width="100" height="32" class="fld"/>
+  <text x="1000" y="601" class="mono" text-anchor="middle">byte</text>
+
+  <text x="24" y="664" class="ts">stored</text>
+  <rect x="110" y="644" width="420" height="32" class="fldh"/>
+  <text x="320" y="665" class="mono" text-anchor="middle">group index</text>
+  <rect x="530" y="644" width="280" height="32" class="fld"/>
+  <text x="670" y="665" class="mono" text-anchor="middle">word ⊕ group</text>
+  <rect x="810" y="644" width="140" height="32" class="fld"/>
+  <text x="880" y="665" class="mono" text-anchor="middle">thread</text>
+  <rect x="950" y="644" width="100" height="32" class="fld"/>
+  <text x="1000" y="665" class="mono" text-anchor="middle">byte</text>
+
+  <path d="M 600 612 L 880 644" class="flow"/>
+  <path d="M 810 612 L 670 644" class="flow"/>
+
+  <text x="1074" y="594" class="ts">offsets are measured from the</text>
+  <text x="1074" y="610" class="ts">bottom of the stack window</text>
+  <text x="1074" y="650" class="ts">the group field keeps its place, so</text>
+  <text x="1074" y="666" class="ts">the base subtract and add cancel</text>
+  <text x="1074" y="682" class="ts">on every bit above it</text>
+
+  <text x="24" y="720" class="ts">The map depends on the address alone — not on which thread issues the access — so a pointer into another thread's stack still resolves.</text>
+  <text x="24" y="738" class="ts">Software, the stack pointer and frame offsets are unchanged; only the physical placement moves. Addresses outside the window pass through.</text>
+  <text x="24" y="774" class="tt">Colors = the owning thread · darker cells = the frame slot being accessed · gray field = bits the remap does not move.</text>
+</svg>

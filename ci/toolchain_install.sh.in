@@ -142,6 +142,12 @@ mesa()
 
 verilator()
 {
+    # Tracks what ci/toolchain_prebuilt.sh's `split -b 50M` actually produced
+    # for this release: 5.050 compresses to ~114 MB, so three parts. A letter too
+    # many here is a 404 on the wget below; too few silently truncates the
+    # archive, and a stale part left behind in the prebuilt repo corrupts the one
+    # `cat parta*` rebuilds. This count and the published parts move together --
+    # re-check it whenever the verilator prebuilt is refreshed.
     case $OSVERSION in
     "ubuntu/focal") parts=$(eval echo {a..c}) ;;
     *)              parts=$(eval echo {a..a}) ;;

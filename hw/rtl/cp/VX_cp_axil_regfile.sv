@@ -22,6 +22,8 @@
 //     0x01C GPU_DEV_CAPS_HI RO  device-config caps, high 32 bits
 //     0x020 GPU_ISA_CAPS_LO RO  ISA caps, low 32 bits
 //     0x024 GPU_ISA_CAPS_HI RO  ISA caps, high 32 bits
+//     0x038 GPU_EXT_CAPS_LO RO  extension caps, low 32 bits
+//     0x03C GPU_EXT_CAPS_HI RO  extension caps, high 32 bits
 //
 //   Per-queue, base = 0x100 + qid * 0x40
 //     +0x00 Q_RING_BASE_LO  RW
@@ -128,15 +130,13 @@ module VX_cp_axil_regfile
   localparam int GPU_BANK_ADDR_W  = `VX_CFG_PLATFORM_MEMORY_ADDR_WIDTH
                                   - `CLOG2(`VX_CFG_PLATFORM_MEMORY_NUM_BANKS);
 
-`ifdef VX_CFG_TCU_TMEM_ENABLE
-  localparam int GPU_TCU_TMEM_COLS = `VX_CFG_TCU_TMEM_COLS;
-`else
-  localparam int GPU_TCU_TMEM_COLS = 0;
-`endif
+  `STATIC_ASSERT(`VX_CFG_NUM_WARPS < 128 && `VX_CFG_NUM_CLUSTERS < 128 && GPU_CLUSTER_SIZE < 256,
+                 ("GPU_DEV_CAPS exact-count fields overflow"))
 
   wire [63:0] gpu_dev_caps = {
-    17'b0,
-    5'(GPU_TCU_TMEM_COLS == 0 ? 0 : $clog2(GPU_TCU_TMEM_COLS)),
+    7'(`VX_CFG_NUM_CLUSTERS),
+    8'(GPU_CLUSTER_SIZE),
+    7'(`VX_CFG_NUM_WARPS),
     5'(GPU_BANK_ADDR_W - 20),
     3'($clog2(`VX_CFG_PLATFORM_MEMORY_NUM_BANKS)),
     8'(`VX_CFG_LMEM_ENABLED ? `VX_CFG_LMEM_LOG_SIZE : 0),
@@ -147,6 +147,17 @@ module VX_cp_axil_regfile
     3'($clog2(`VX_CFG_NUM_WARPS)),
     3'($clog2(`VX_CFG_NUM_THREADS)),
     8'(`VX_ISA_IMPL_ID)
+  };
+
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+  localparam int GPU_TCU_TMEM_COLS = `VX_CFG_TCU_TMEM_COLS;
+`else
+  localparam int GPU_TCU_TMEM_COLS = 0;
+`endif
+
+  wire [63:0] gpu_ext_caps = {
+    59'b0,
+    5'(GPU_TCU_TMEM_COLS == 0 ? 0 : $clog2(GPU_TCU_TMEM_COLS))
   };
 
   wire [63:0] gpu_isa_caps = {
@@ -189,37 +200,50 @@ module VX_cp_axil_regfile
     return 1'b1;
   endfunction
 
+  // The global window: 0x000..0x03F, every word of it decoded.
+  function automatic logic in_global(input logic [ADDR_W-1:0] addr);
+    `UNUSED_VAR (addr[5:0])
+    return (addr[ADDR_W-1:6] == '0);
+  endfunction
+
   // ---- Read data combinational decode ----
+  // One case per window rather than a chain of early returns: the registers
+  // are mutually exclusive, and a priority chain of ~30 compares is what
+  // limited the CP's clock.
   function automatic logic [31:0] read_reg(input logic [ADDR_W-1:0] addr);
     logic [QID_W-1:0] qid;
     logic [5:0]       off;
-    if (is_global(addr, 8'h00)) return r_cp_ctrl;
-    if (is_global(addr, 8'h04)) return {30'd0, cp_error, cp_busy};
-    if (is_global(addr, 8'h08)) return {8'd0,
-                                        8'(AXI_TID_W),
-                                        8'(RING_SIZE_LOG2_MAX),
-                                        8'(NUM_QUEUES)};
-    if (is_global(addr, 8'h10)) return r_cycle_count[31:0];
-    if (is_global(addr, 8'h14)) return r_cycle_count[63:32];
-    if (is_global(addr, 8'h18)) return gpu_dev_caps[31:0];
-    if (is_global(addr, 8'h1C)) return gpu_dev_caps[63:32];
-    if (is_global(addr, 8'h20)) return gpu_isa_caps[31:0];
-    if (is_global(addr, 8'h24)) return gpu_isa_caps[63:32];
-    // Block padding -- see the 16-byte block note on is_decoded(). Read as
-    // zero; they exist so their enclosing block is fully populated.
-    // 0x28/0x2C are CP_SATP_LO/HI in the software ABI (sw/runtime/common/
-    // device.cpp), i.e. the CP DMA MMU page-table root. This CP has no MMU --
-    // there is no satp anywhere in hw/rtl/cp -- so it correctly reports
-    // VM_ENABLED=0 in CP_DEV_CAPS and the runtime never writes them. Reading
-    // zero is the honest answer; implement them for real if an MMU is added.
-    if (is_global(addr, 8'h0C)) return 32'd0;
-    if (is_global(addr, 8'h28)) return 32'd0;
-    if (is_global(addr, 8'h2C)) return 32'd0;
-    // AFU host-port drain counters (debug, read-only).
-    if (is_global(addr, 8'h30)) return dbg_host_w_counts;
-    if (is_global(addr, 8'h34)) return dbg_host_r_counts;
-    if (is_global(addr, 8'h38)) return 32'd0;   // pad: completes block 0x30
-    if (is_global(addr, 8'h3C)) return 32'd0;   // pad: completes block 0x30
+    if (in_global(addr)) begin
+      case (addr[5:0])
+        6'h00: return r_cp_ctrl;
+        6'h04: return {30'd0, cp_error, cp_busy};
+        6'h08: return {8'd0,
+                       8'(AXI_TID_W),
+                       8'(RING_SIZE_LOG2_MAX),
+                       8'(NUM_QUEUES)};
+        6'h10: return r_cycle_count[31:0];
+        6'h14: return r_cycle_count[63:32];
+        6'h18: return gpu_dev_caps[31:0];
+        6'h1C: return gpu_dev_caps[63:32];
+        6'h20: return gpu_isa_caps[31:0];
+        6'h24: return gpu_isa_caps[63:32];
+        // Block padding -- see the 16-byte block note on is_decoded(). Read
+        // as zero; they exist so their enclosing block is fully populated.
+        // 0x28/0x2C are CP_SATP_LO/HI in the software ABI (sw/runtime/common/
+        // device.cpp), i.e. the CP DMA MMU page-table root. This CP has no
+        // MMU -- there is no satp anywhere in hw/rtl/cp -- so it correctly
+        // reports VM_ENABLED=0 in CP_DEV_CAPS and the runtime never writes
+        // them. Reading zero is the honest answer; implement them for real if
+        // an MMU is added.
+        6'h0C, 6'h28, 6'h2C: return 32'd0;
+        // AFU host-port drain counters (debug, read-only).
+        6'h30: return dbg_host_w_counts;
+        6'h34: return dbg_host_r_counts;
+        6'h38: return gpu_ext_caps[31:0];
+        6'h3C: return gpu_ext_caps[63:32];
+        default: return 32'hDEAD_BEEF;   // unaligned: DECERR
+      endcase
+    end
     if (decode_queue(addr, qid, off)) begin
       case (off)
         6'h00: return r_ring_base[qid][31:0];
@@ -262,37 +286,17 @@ module VX_cp_axil_regfile
   // block worked -- it was never about the registers, only their blocks.
   //
   // Consequence: when adding a register, pad its block out to 4 words.
+  //
+  // With the padding, every word of the global window and of each queue's
+  // 0x40 block is decoded (the queue's 0x34..0x3C pad completes its 0x30
+  // block so Q_LAST_DCR_RSP is reachable), so the test is alignment plus
+  // window membership -- flat logic, not a compare per register.
   function automatic logic is_decoded(input logic [ADDR_W-1:0] addr);
     logic [QID_W-1:0] qid;   // populated by decode_queue but unused here
     logic [5:0]       off;
     `UNUSED_VAR (qid)
-    if (is_global(addr, 8'h00)) return 1'b1;
-    if (is_global(addr, 8'h04)) return 1'b1;
-    if (is_global(addr, 8'h08)) return 1'b1;
-    if (is_global(addr, 8'h0C)) return 1'b1;   // pad: completes block 0x00
-    if (is_global(addr, 8'h10)) return 1'b1;
-    if (is_global(addr, 8'h14)) return 1'b1;
-    if (is_global(addr, 8'h18)) return 1'b1;
-    if (is_global(addr, 8'h1C)) return 1'b1;
-    if (is_global(addr, 8'h20)) return 1'b1;
-    if (is_global(addr, 8'h24)) return 1'b1;
-    if (is_global(addr, 8'h28)) return 1'b1;   // pad: completes block 0x20
-    if (is_global(addr, 8'h2C)) return 1'b1;   // pad: completes block 0x20
-    if (is_global(addr, 8'h30)) return 1'b1;   // drain counters (debug)
-    if (is_global(addr, 8'h34)) return 1'b1;
-    if (is_global(addr, 8'h38)) return 1'b1;   // pad: completes block 0x30
-    if (is_global(addr, 8'h3C)) return 1'b1;   // pad: completes block 0x30
-    if (decode_queue(addr, qid, off)) begin
-      case (off)
-        6'h00, 6'h04, 6'h08, 6'h0C, 6'h10, 6'h14,
-        6'h18, 6'h1C, 6'h20, 6'h24, 6'h28, 6'h2C,
-        6'h30,
-        // pad: completes the queue's 0x30 block so Q_LAST_DCR_RSP is reachable
-        6'h34, 6'h38, 6'h3C: return 1'b1;
-        default: return 1'b0;
-      endcase
-    end
-    return 1'b0;
+    `UNUSED_VAR (off)
+    return (addr[1:0] == 2'b00) && (in_global(addr) || decode_queue(addr, qid, off));
   endfunction
 
   // ============================================================================

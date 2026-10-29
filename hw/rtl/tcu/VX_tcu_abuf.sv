@@ -41,6 +41,11 @@
 // and extracts tcK consecutive words at lane
 //   (r * ldm_words + step_k * tcK) & (BANK_ROW_WORDS-1).
 //
+// TMEM refill: req_desc_a is an absolute TMEM column. A's rows are this CTA's
+// TCU_WG_TILE_M lanes, i.e. a whole bank word, so one bank read supplies
+// TCU_TC_N of the stripe's FEDP_K columns and a refill is FEDP_K / TCU_TC_N
+// reads (1, or 2 under FEDP2K).
+//
 // Output rs1_data carries one A-block per cycle, selected by step_m.
 // Format-aware sub-word extraction (fp16/fp8 packing) happens
 // downstream in the FEDP grid; abuf is word pass-through.
@@ -73,6 +78,16 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     // LMEM bank-parallel read port
     VX_mem_bus_if.master            tcu_lmem_if,
+
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    // TMEM bank read port. afill_grant arrives the cycle after the win with
+    // afill_data.
+    input  wire                     req_a_is_tmem,
+    output wire                     afill_valid,
+    output wire [TCU_TMEM_COL_BITS-1:0] afill_col_base,
+    input  wire                     afill_grant,
+    input  wire [TCU_WG_TILE_M-1:0][TCU_TC_N-1:0][31:0] afill_data,
+`endif
 
     // Outputs
     output wire                     abuf_ready,
@@ -117,6 +132,15 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // Canonical configs fit an A block in one bank-row normally and two
     // bank-rows with dense FEDP2K.
 
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    localparam AFILL_WORDS = TCU_WG_FEDP_K / TCU_TC_N;
+    `STATIC_ASSERT ((TCU_WG_FEDP_K % TCU_TC_N) == 0,
+        ("A-from-TMEM needs FEDP_K to be a whole number of TMEM bank words"))
+    wire a_is_tmem = req_a_is_tmem;
+`else
+    wire a_is_tmem = 1'b0;
+`endif
+
     // -----------------------------------------------------------------------
     // Resident slot state
     // -----------------------------------------------------------------------
@@ -131,6 +155,12 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     logic                       slot_row_major_r;
     logic [LDM_W-1:0]           slot_ldm_words_r;
     logic                       slot_is_sparse_r;
+    // TMEM mode: the in-flight fetch reads TMEM rather than LMEM.
+    logic                       slot_tmem_r;
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    logic [TCU_TMEM_COL_BITS-1:0] slot_tmem_col_r;   // a_col, latched on the first compute uop
+    logic [TCU_TMEM_COL_BITS-1:0] fetch_tmem_col_r;  // in-flight stripe's first column
+`endif
 
     wire [`UP(K_STEPS_W)-1:0]   req_step_k_trunc = `UP(K_STEPS_W)'(req_step_k);
     if (2 > K_STEPS_W) begin : g_step_k_upper_unused
@@ -148,17 +178,20 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // refetched_for_first_compute_r gates stripe_resident: cleared until the
     // current WGMMA's first compute fetch completes, then set; cleared again
     // on later compute uops so the next WGMMA always triggers a fresh fetch.
+    // TMEM-sourced A relies on this for correctness: the kernel rewrites A in
+    // TMEM between UMMAs at an unchanged column.
     reg refetched_for_first_compute_r;
     wire stripe_resident = slot_valid_r
                         && (slot_step_k_r == req_step_k_trunc)
                         && (!is_first_compute_uop || refetched_for_first_compute_r);
 
-    // RS mode (a_from_smem=0): A from registers, abuf bypassed → always ready.
-    wire need_smem  = req_valid && req_a_is_smem;
-    wire need_fetch = need_smem && !stripe_resident;
+    // WGMMA RS mode: A from registers, abuf bypassed -> always ready.
+    wire uses_abuf  = req_a_is_smem || a_is_tmem;
+    wire need_buf   = req_valid && uses_abuf;
+    wire need_fetch = need_buf && !stripe_resident;
     wire alloc_en   = need_fetch && !slot_fetching_r;
 
-    assign abuf_ready = !req_valid || !req_a_is_smem || stripe_resident;
+    assign abuf_ready = !req_valid || !uses_abuf || stripe_resident;
 
     wire fire = req_valid && abuf_ready;
 
@@ -200,6 +233,22 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // is a power of 2 in canonical configs, so synth folds the multiply
     // into a shift.
 
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    wire [TCU_TMEM_COL_BITS-1:0] effective_tmem_col =
+        is_first_compute_uop ? req_desc_a[TCU_TMEM_COL_BITS-1:0] : slot_tmem_col_r;
+    wire [TCU_TMEM_COL_BITS-1:0] stripe_tmem_col = effective_tmem_col
+        + TCU_TMEM_COL_BITS'(req_step_k_trunc) * TCU_TMEM_COL_BITS'(TCU_WG_FEDP_K);
+
+    // A bank read addresses a whole word (col / TC_N), so a stripe that is not
+    // word-aligned would read the wrong columns.
+    `RUNTIME_ASSERT (~(alloc_en && a_is_tmem) || ((32'(stripe_tmem_col) % TCU_TC_N) == 0),
+        ("%s: A-from-TMEM stripe column %0d is not aligned to TCU_TC_N (%0d)",
+         INSTANCE_ID, stripe_tmem_col, TCU_TC_N))
+    `RUNTIME_ASSERT (~(alloc_en && a_is_tmem) || ((32'(stripe_tmem_col) + TCU_WG_FEDP_K) <= TCU_TMEM_COLS),
+        ("%s: A-from-TMEM stripe column %0d overruns TMEM (%0d columns)",
+         INSTANCE_ID, stripe_tmem_col, TCU_TMEM_COLS))
+`endif
+
     // -----------------------------------------------------------------------
     // Fetch FSM
     // -----------------------------------------------------------------------
@@ -226,10 +275,27 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                             : FETCH_CTR_W'(A_STRIPE_LMEM_ROWS));
 
     wire all_requested = (req_ctr_r >= target_fetches);
-    wire can_issue     = in_fetch && !all_requested
+    wire lmem_fetch    = in_fetch && !slot_tmem_r;
+    wire can_issue     = lmem_fetch && !all_requested
                       && (!req_inflight_r || tcu_lmem_if.rsp_valid);
-    wire last_rsp      = in_fetch && tcu_lmem_if.rsp_valid
+    wire lmem_rsp      = lmem_fetch && tcu_lmem_if.rsp_valid;
+    wire last_rsp      = lmem_rsp
                       && (rsp_ctr_r == target_fetches - FETCH_CTR_W'(1));
+
+    // TMEM mode: one bank word per grant, req_ctr_r counting words taken. The
+    // request stays up across the grant cycle and the TMEM side drops it, so
+    // the address must not advance until the grant has been consumed.
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    wire afill_take = in_fetch && slot_tmem_r && afill_grant;
+    wire last_afill = afill_take && (req_ctr_r == FETCH_CTR_W'(AFILL_WORDS - 1));
+    assign afill_valid    = in_fetch && slot_tmem_r;
+    assign afill_col_base = fetch_tmem_col_r
+                          + TCU_TMEM_COL_BITS'(req_ctr_r) * TCU_TMEM_COL_BITS'(TCU_TC_N);
+`else
+    wire afill_take = 1'b0;
+    wire last_afill = 1'b0;
+`endif
+    wire fetch_done = last_rsp || last_afill;
 
     // Per-row 32-bit-word offset (relative to fetch_base_r * BANK_ROW_WORDS).
     // Width = LDM (row stride) + counter + a bit for step_k*TC_K headroom.
@@ -280,6 +346,11 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             slot_row_major_r       <= 1'b0;
             slot_ldm_words_r       <= '0;
             slot_is_sparse_r       <= 1'b0;
+            slot_tmem_r            <= 1'b0;
+        `ifdef VX_CFG_TCU_TMEM_ENABLE
+            slot_tmem_col_r        <= '0;
+            fetch_tmem_col_r       <= '0;
+        `endif
             refetched_for_first_compute_r <= 1'b0;
         end else begin
             if (req_setup) begin
@@ -302,9 +373,12 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     slot_desc_a_row_base_r <= desc_a_row_base;
                     slot_ldm_words_r       <= desc_a_ldm_words;
                     slot_row_major_r       <= (desc_a_ldm_words != '0);
+                `ifdef VX_CFG_TCU_TMEM_ENABLE
+                    slot_tmem_col_r        <= req_desc_a[TCU_TMEM_COL_BITS-1:0];
+                `endif
                 end
 
-                if (last_rsp && is_first_compute_uop)
+                if (fetch_done && is_first_compute_uop)
                     refetched_for_first_compute_r <= 1'b1;
                 else if (fire && !is_first_compute_uop)
                     refetched_for_first_compute_r <= 1'b0;
@@ -317,6 +391,10 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                             slot_valid_r     <= 1'b0;
                             slot_step_k_r    <= req_step_k_trunc;
                             slot_is_sparse_r  <= req_is_sparse;
+                            slot_tmem_r       <= a_is_tmem;
+                        `ifdef VX_CFG_TCU_TMEM_ENABLE
+                            fetch_tmem_col_r  <= stripe_tmem_col;
+                        `endif
                             // Row-major base is the A_warp start bank-row (no
                             // step_k offset; per-row arithmetic derives the
                             // exact LMEM addr). Block-major base is the stripe
@@ -336,12 +414,15 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                             req_ctr_r <= req_ctr_r + FETCH_CTR_W'(1);
                             row_word_off_req_r <= row_word_off_req_r + ROW_OFF_W'(slot_ldm_words_r);
                         end
-                        if (last_rsp) begin
+                        if (afill_take) begin
+                            req_ctr_r <= req_ctr_r + FETCH_CTR_W'(1);
+                        end
+                        if (fetch_done) begin
                             fsm_state_r     <= S_IDLE;
                             slot_fetching_r <= 1'b0;
                             slot_valid_r    <= 1'b1;
                             req_inflight_r  <= 1'b0;
-                        end else if (tcu_lmem_if.rsp_valid) begin
+                        end else if (lmem_rsp) begin
                             rsp_ctr_r <= rsp_ctr_r + FETCH_CTR_W'(1);
                             row_word_off_rsp_r <= row_word_off_rsp_r + ROW_OFF_W'(slot_ldm_words_r);
                         end
@@ -369,7 +450,25 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     always_comb begin
         storage_wdata = '0;
         storage_wren  = '0;
-        if (in_fetch && tcu_lmem_if.rsp_valid) begin
+    `ifdef VX_CFG_TCU_TMEM_ENABLE
+        if (afill_take) begin
+            // Bank word req_ctr_r carries stripe columns [req_ctr_r*TC_N, +TC_N)
+            // of every row. Index through the per-block padding so the output
+            // mux reads the same layout as the LMEM paths.
+            for (int r = 0; r < TCU_WG_TILE_M; ++r) begin
+                for (int c = 0; c < TCU_TC_N; ++c) begin
+                    automatic int dst = (r / int'(TCU_TC_M)) * int'(BLOCK_WORDS_PADDED)
+                                      + (r % int'(TCU_TC_M)) * int'(TCU_WG_FEDP_K)
+                                      + int'(req_ctr_r) * int'(TCU_TC_N) + c;
+                    if (dst < A_STRIPE_WORDS) begin
+                        storage_wren[dst] = 1'b1;
+                        storage_wdata[dst * 32 +: 32] = afill_data[r][c];
+                    end
+                end
+            end
+        end else
+    `endif
+        if (lmem_rsp) begin
             if (slot_row_major_r) begin
                 // Row-major: write k_words of row rsp_ctr_r into
                 // storage[rsp_ctr_r * k_words .. + k_words). Source words start
@@ -411,7 +510,7 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .clk   (clk),
         .reset (reset),
         .read  (1'b1),
-        .write (in_fetch && tcu_lmem_if.rsp_valid),
+        .write (lmem_rsp || afill_take),
         .wren  (storage_wren),
         .waddr (1'b0),
         .wdata (storage_wdata),
@@ -486,7 +585,12 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             if (tcu_lmem_if.rsp_valid)
                 `TRACE(3, ("%t: %s abuf: rd_rsp rsp_ctr=%0d\n",
                     $time, INSTANCE_ID, rsp_ctr_r))
-            if (last_rsp)
+        `ifdef VX_CFG_TCU_TMEM_ENABLE
+            if (afill_take)
+                `TRACE(3, ("%t: %s abuf: tmem word=%0d col=0x%0h\n",
+                    $time, INSTANCE_ID, req_ctr_r, afill_col_base))
+        `endif
+            if (fetch_done)
                 `TRACE(3, ("%t: %s abuf: stripe READY\n", $time, INSTANCE_ID))
         end
     end

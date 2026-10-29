@@ -45,6 +45,15 @@ module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // Bank-parallel LMEM read port.
     VX_mem_bus_if.master                                                 tcu_lmem_if,
 
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    // abuf A-stripe fill from TMEM (UMMA TS form). The wrapper supplies the
+    // lane base, since it is a function of the block's CTA rank.
+    output wire [BLOCK_SIZE-1:0]                                         afill_valid,
+    output wire [TCU_TMEM_COL_BITS-1:0]                                  afill_col_base [BLOCK_SIZE],
+    input  wire [BLOCK_SIZE-1:0]                                         afill_grant,
+    input  wire [TCU_WG_TILE_M-1:0][TCU_TC_N-1:0][31:0]                  afill_data [BLOCK_SIZE],
+`endif
+
     // Outputs to tcu_core (consumed by the wrapper).
     output wire [BLOCK_SIZE-1:0][TCU_WG_A_DATA_SIZE-1:0][`VX_CFG_XLEN-1:0] tbuf_rs1_data,
     output wire [BLOCK_SIZE-1:0][TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0] tbuf_rs2_data,
@@ -171,10 +180,9 @@ module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                           && !needs_setup_b_w[bi];
         assign req[bi].desc_a       = use_live_desc ? exec_data[bi].rs1_data[0] : desc_a_r[bi];
         assign req[bi].desc_b       = use_live_desc ? exec_data[bi].rs2_data[0] : desc_b_r[bi];
-    `ifdef VX_CFG_TCU_TMEM_ENABLE
-        assign req[bi].a_is_smem    = is_umma_b || exec_data[bi].op_args.tcu.a_from_smem;
-    `else
         assign req[bi].a_is_smem    = exec_data[bi].op_args.tcu.a_from_smem;
+    `ifdef VX_CFG_TCU_TMEM_ENABLE
+        assign req[bi].a_is_tmem    = is_umma_b && !exec_data[bi].op_args.tcu.a_from_smem;
     `endif
         assign req[bi].is_first_uop = exec_data[bi].op_args.tcu.is_first_uop;
         assign req[bi].is_last_uop  = exec_data[bi].op_args.tcu.is_last_uop;
@@ -207,6 +215,12 @@ module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     `endif
         .req            (req),
         .tcu_lmem_if    (tcu_lmem_if),
+    `ifdef VX_CFG_TCU_TMEM_ENABLE
+        .afill_valid    (afill_valid),
+        .afill_col_base (afill_col_base),
+        .afill_grant    (afill_grant),
+        .afill_data     (afill_data),
+    `endif
         .tbuf_rs1_data  (tbuf_rs1_data),
         .tbuf_rs2_data  (tbuf_rs2_data),
         .tbuf_ready     (tbuf_ready)

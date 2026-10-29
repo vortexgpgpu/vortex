@@ -23,19 +23,20 @@
 
 `TRACING_OFF
 module VX_mem_to_axi #(
-    parameter DATA_WIDTH     = 512,
-    parameter ADDR_WIDTH_IN  = 26, // word-addressable
-    parameter ADDR_WIDTH_OUT = 32, // byte-addressable
-    parameter TAG_WIDTH_IN   = 8,
-    parameter TAG_WIDTH_OUT  = 8,
-    parameter NUM_PORTS_IN   = 1,
-    parameter NUM_BANKS_OUT  = 1,
-    parameter INTERLEAVE     = 0,
-    parameter TAG_BUFFER_SIZE= 16,
-    parameter ARBITER        = "R",
-    parameter REQ_OUT_BUF    = 0,
-    parameter RSP_OUT_BUF    = 0,
-    parameter DATA_SIZE      = DATA_WIDTH/8
+    parameter DATA_WIDTH        = 512,
+    parameter ADDR_WIDTH_IN     = 26, // word-addressable
+    parameter ADDR_WIDTH_OUT    = 32, // byte-addressable
+    parameter TAG_WIDTH_IN      = 8,
+    parameter TAG_WIDTH_OUT     = 8,
+    parameter NUM_PORTS_IN      = 1,
+    parameter NUM_BANKS_OUT     = 1,
+    parameter INTERLEAVE        = 0,
+    parameter TAG_BUFFER_SIZE   = 16,
+    parameter WRITE_TRACK_DEPTH = 8, // outstanding writes tracked per bank
+    parameter ARBITER           = "R",
+    parameter REQ_OUT_BUF       = 0,
+    parameter RSP_OUT_BUF       = 0,
+    parameter DATA_SIZE         = DATA_WIDTH/8
  ) (
     input  wire                     clk,
     input  wire                     reset,
@@ -123,6 +124,7 @@ module VX_mem_to_axi #(
 
     `STATIC_ASSERT ((DST_ADDR_WDITH >= ADDR_WIDTH_IN), ("invalid address width: current=%0d, expected=%0d", DST_ADDR_WDITH, ADDR_WIDTH_IN))
     `STATIC_ASSERT ((TAG_WIDTH_OUT >= DST_TAG_WIDTH), ("invalid output tag width: current=%0d, expected=%0d", TAG_WIDTH_OUT, DST_TAG_WIDTH))
+    `STATIC_ASSERT ((WRITE_TRACK_DEPTH >= 2) && `IS_POW2(WRITE_TRACK_DEPTH), ("WRITE_TRACK_DEPTH must be a power of 2 >= 2: current=%0d", WRITE_TRACK_DEPTH))
 
     // Bank selection
 
@@ -254,11 +256,66 @@ module VX_mem_to_axi #(
             `UNUSED_PIN (tx_ack)
         );
 
-        assign req_xbar_ready_out[i] = xbar_rw_out ? axi_write_ready : m_axi_arready[i];
+        // Write tracker: AXI orders neither a read against an outstanding
+        // write nor two writes carrying different IDs, so a same-address read
+        // issued here may legally return pre-write data. This master must
+        // therefore enforce read-after-write ordering itself:
+        //  1. every write on a bank carries AWID 0, the only case AXI requires
+        //     the slave to keep in order, which also makes the B responses
+        //     return in issue order so the tracker retires FIFO-style;
+        //  2. issued-but-unacknowledged write addresses are held below; a read
+        //     matching one of them is held until that write's B retires it,
+        //     and a write only starts when a tracker slot is free.
+        // A write that has already fired one of its two channels is never
+        // held, since its slot was reserved when it started.
+        localparam WT_PTRW = `CLOG2(WRITE_TRACK_DEPTH);
+        reg [WRITE_TRACK_DEPTH-1:0][BANK_ADDR_WIDTH-1:0] wtrack_addr;
+        reg [WRITE_TRACK_DEPTH-1:0] wtrack_valid;
+        reg [WT_PTRW-1:0] wtrack_head, wtrack_tail;
+
+        wire wtrack_full = (& wtrack_valid);
+        wire wtrack_push = req_xbar_valid_out[i] && xbar_rw_out && req_xbar_ready_out[i];
+        wire wtrack_pop  = m_axi_bvalid[i];   // bready is tied high below
+
+        always @(posedge clk) begin
+            if (reset) begin
+                wtrack_valid <= '0;
+                wtrack_head  <= '0;
+                wtrack_tail  <= '0;
+            end else begin
+                if (wtrack_push) begin
+                    wtrack_addr[wtrack_tail]  <= xbar_addr_out;
+                    wtrack_valid[wtrack_tail] <= 1'b1;
+                    wtrack_tail <= wtrack_tail + WT_PTRW'(1);
+                end
+                if (wtrack_pop) begin
+                    wtrack_valid[wtrack_head] <= 1'b0;
+                    wtrack_head <= wtrack_head + WT_PTRW'(1);
+                end
+            end
+        end
+
+        `RUNTIME_ASSERT(~m_axi_bvalid[i] || wtrack_valid[wtrack_head], ("*** AXI spurious write response"))
+
+        wire [WRITE_TRACK_DEPTH-1:0] wtrack_match;
+        for (genvar j = 0; j < WRITE_TRACK_DEPTH; ++j) begin : g_wtrack_match
+            assign wtrack_match[j] = wtrack_valid[j] && (wtrack_addr[j] == xbar_addr_out);
+        end
+        wire rd_hazard = (| wtrack_match);
+
+        wire wr_in_progress   = m_axi_aw_ack || m_axi_w_ack;
+        wire wr_start_allowed = wr_in_progress || ~wtrack_full;
+
+        // axi_write_ready reflects the READY pins alone, so it can be high
+        // while the valids are held off. The xbar handshake must carry the
+        // same gating as the valids, or a held write is consumed from the
+        // xbar without ever reaching AXI.
+        assign req_xbar_ready_out[i] = xbar_rw_out ? (axi_write_ready && wr_start_allowed)
+                                                   : (m_axi_arready[i] && ~rd_hazard);
 
         // AXI write address channel
 
-        assign m_axi_awvalid[i] = req_xbar_valid_out[i] && xbar_rw_out && ~m_axi_aw_ack;
+        assign m_axi_awvalid[i] = req_xbar_valid_out[i] && xbar_rw_out && ~m_axi_aw_ack && wr_start_allowed;
 
     if (INTERLEAVE) begin : g_m_axi_awaddr_i
         assign m_axi_awaddr[i]  = (ADDR_WIDTH_OUT'(xbar_addr_out) << (BANK_SEL_BITS + LOG2_DATA_SIZE)) | (ADDR_WIDTH_OUT'(i) << LOG2_DATA_SIZE);
@@ -266,7 +323,7 @@ module VX_mem_to_axi #(
         assign m_axi_awaddr[i]  = (ADDR_WIDTH_OUT'(xbar_addr_out) << LOG2_DATA_SIZE) | (ADDR_WIDTH_OUT'(i) << (BANK_ADDR_WIDTH + LOG2_DATA_SIZE));
     end
 
-        assign m_axi_awid[i]    = TAG_WIDTH_OUT'(xbar_tag_out);
+        assign m_axi_awid[i]    = '0;   // see the write tracker above
         assign m_axi_awlen[i]   = 8'b00000000;
         assign m_axi_awsize[i]  = 3'(LOG2_DATA_SIZE);
         assign m_axi_awburst[i] = 2'b01;
@@ -278,7 +335,7 @@ module VX_mem_to_axi #(
 
         // AXI write data channel
 
-        assign m_axi_wvalid[i]  = req_xbar_valid_out[i] && xbar_rw_out && ~m_axi_w_ack;
+        assign m_axi_wvalid[i]  = req_xbar_valid_out[i] && xbar_rw_out && ~m_axi_w_ack && wr_start_allowed;
         assign m_axi_wstrb[i]   = xbar_byteen_out;
         assign m_axi_wdata[i]   = xbar_data_out;
         assign m_axi_wlast[i]   = 1'b1;
@@ -293,7 +350,7 @@ module VX_mem_to_axi #(
             assign xbar_tag_r_out = READ_TAG_WIDTH'(xbar_tag_out);
         end
 
-        assign m_axi_arvalid[i] = req_xbar_valid_out[i] && ~xbar_rw_out;
+        assign m_axi_arvalid[i] = req_xbar_valid_out[i] && ~xbar_rw_out && ~rd_hazard;
 
         // convert address to byte-addressable space
     if (INTERLEAVE) begin : g_m_axi_araddr_i
@@ -312,10 +369,9 @@ module VX_mem_to_axi #(
         assign m_axi_arregion[i]= 4'b0000;
     end
 
-    // AXI write response channel (ignore)
+    // AXI write response channel (retires the per-bank write tracker)
 
     for (genvar i = 0; i < NUM_BANKS_OUT; ++i) begin : g_axi_write_rsp
-        `UNUSED_VAR (m_axi_bvalid[i])
         `UNUSED_VAR (m_axi_bid[i])
         `UNUSED_VAR (m_axi_bresp[i])
         assign m_axi_bready[i] = 1'b1;

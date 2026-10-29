@@ -31,7 +31,7 @@ module VX_rtu_core_top import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     // Channel widths (mirror VX_rtu_bus_slice / VX_rtu_bus_if).
     parameter SRC_WIDTH = `UP(`CLOG2(NUM_SRCS)),
     parameter ARM_DATAW = SRC_WIDTH + NW_WIDTH + NUM_LANES
-                        + `VX_CFG_MEM_ADDR_WIDTH + 16 + 16 + 32 + TAG_WIDTH,
+                        + `VX_CFG_MEM_ADDR_WIDTH + 16 + 16 + `VX_CFG_XLEN + TAG_WIDTH,
     parameter REQ_DATAW = 1 + SRC_WIDTH + NW_WIDTH
                         + NUM_LANES * 32 + NUM_LANES * RTU_CB_ACTION_BITS,
     parameter WIN_DATAW = 1 + NW_WIDTH + RTU_SLOT_BITS

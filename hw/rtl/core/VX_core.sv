@@ -156,6 +156,10 @@ module VX_core import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     tcu_perf_t tcu_perf;
     assign pipeline_perf.tcu = tcu_perf;
 `endif
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    tmem_perf_t tmem_perf;
+    assign pipeline_perf.tmem = tmem_perf;
+`endif
     sysmem_perf_t sysmem_perf_tmp;
     always @(*) begin
         sysmem_perf_tmp = sysmem_perf;
@@ -174,6 +178,10 @@ module VX_core import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     VX_dcr_flush_if dcr_flush_if();
     VX_dcr_flush_if dcr_flush_dcache_if();
     VX_dcr_flush_if dcr_flush_icache_if();
+
+    // High when the in-core global-store path is empty (no store still in
+    // flight toward the dcache). Gates `busy` so the flush waits for the tail.
+    wire mem_unit_empty;
 
     // Hold the dcache flush request until this core's stores have all reached L1.
     // Stores are ack-less and lag warp-exit by many cycles, and the flush arbiter
@@ -327,6 +335,9 @@ module VX_core import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     `ifdef VX_CFG_EXT_TCU_ENABLE
         .tcu_perf       (tcu_perf),
     `endif
+    `ifdef VX_CFG_TCU_TMEM_ENABLE
+        .tmem_perf      (tmem_perf),
+    `endif
     `endif
 
         // execute exposes LSU client interfaces; lsu_scheduler sits between
@@ -437,10 +448,6 @@ module VX_core import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
             .lsu_mem_if (lsu_mem_if[block_idx])
         );
     end
-
-    // High when the in-core global-store path is empty (no store still in
-    // flight toward the dcache). Gates `busy` so the flush waits for the tail.
-    wire mem_unit_empty;
 
     VX_mem_unit #(
         .INSTANCE_ID (INSTANCE_ID)

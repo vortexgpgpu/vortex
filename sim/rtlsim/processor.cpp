@@ -48,9 +48,6 @@
 #include <dram_sim.h>
 #include <util.h>
 
-#ifndef MEM_CLOCK_RATIO
-#define MEM_CLOCK_RATIO 1
-#endif
 
 #ifndef TRACE_START_TIME
 #define TRACE_START_TIME 0ull
@@ -101,7 +98,7 @@ bool sim_trace_enabled() {
 
 class Processor::Impl {
 public:
-  Impl() : dram_sim_(VX_CFG_PLATFORM_MEMORY_NUM_BANKS, VX_CFG_PLATFORM_MEMORY_DATA_SIZE, MEM_CLOCK_RATIO) {
+  Impl() : dram_sim_(DramSim::platform_config()) {
     // restart sim time so a re-created model registers at time zero
     timestamp = 0;
 
@@ -306,9 +303,9 @@ private:
     dram_sim_.tick();
 
     for (int b = 0; b < VX_CFG_PLATFORM_MEMORY_NUM_BANKS; ++b) {
-      if (!dram_queue_[b].empty()) {
+      if (!dram_queue_[b].empty() && dram_sim_.can_accept(b)) {
         auto mem_req = dram_queue_[b].front();
-        dram_sim_.send_request(mem_req->addr, mem_req->write, [](void* arg)->bool {
+        dram_sim_.send_request(b, mem_req->bank_addr, mem_req->write, [](void* arg)->bool {
           // mark completed request as ready
           auto orig_req = reinterpret_cast<mem_req_t*>(arg);
           orig_req->ready = true;
@@ -400,6 +397,7 @@ private:
             auto mem_req = new mem_req_t();
             mem_req->tag   = device_->mem_req_tag[b];
             mem_req->addr  = byte_addr;
+            mem_req->bank_addr = uint64_t(device_->mem_req_addr[b]) * VX_CFG_PLATFORM_MEMORY_DATA_SIZE;
             mem_req->write = true;
             mem_req->ready = false;
 
@@ -414,6 +412,7 @@ private:
           auto mem_req = new mem_req_t();
           mem_req->tag   = device_->mem_req_tag[b];
           mem_req->addr  = byte_addr;
+          mem_req->bank_addr = uint64_t(device_->mem_req_addr[b]) * VX_CFG_PLATFORM_MEMORY_DATA_SIZE;
           mem_req->write = false;
           mem_req->ready = false;
           ram_->read(mem_req->data.data(), byte_addr, VX_CFG_PLATFORM_MEMORY_DATA_SIZE);
@@ -445,6 +444,7 @@ private:
     Vrtlsim_shim* device;
     std::array<uint8_t, VX_CFG_PLATFORM_MEMORY_DATA_SIZE> data;
     uint64_t addr;
+    uint64_t bank_addr;
     uint64_t tag;
     bool write;
     bool ready;

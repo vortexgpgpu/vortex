@@ -187,6 +187,29 @@ if [ -n "$copy_folder" ]; then
 fi
 
 # Optional filelist generation
+# Order-sensitive consumers (Questa, VCS) need every package compiled before
+# its importers. Detect packages by content, not filename: vendored IP ships
+# packages whose names lack the _pkg suffix (e.g. cvfpu's defs_div_sqrt_mvp.sv).
+is_package_file() {
+    grep -qE '^[[:space:]]*package[[:space:]]+[A-Za-z_]' "$1" 2>/dev/null
+}
+
+list_sources() {
+    find "$(realpath "$1")" -maxdepth 1 -type f \( -name "*.v" -o -name "*.sv" \) -print
+}
+
+list_packages() {
+    list_sources "$1" | while IFS= read -r f; do
+        if is_package_file "$f"; then echo "$f"; fi
+    done
+}
+
+list_non_packages() {
+    list_sources "$1" | while IFS= read -r f; do
+        if ! is_package_file "$f"; then echo "$f"; fi
+    done
+}
+
 if [ "$output_file" != "" ]; then
     {
         # If we didn't generate a header, push +define+ into the filelist
@@ -207,36 +230,36 @@ if [ "$output_file" != "" ]; then
                 echo "+incdir+$(realpath "$dir")"
             done
 
-            # extern *_pkg.sv and .v/.sv files
+            # extern packages first, then the remaining .v/.sv files
             for dir in ${externs[@]}; do
-                find "$(realpath $dir)" -maxdepth 1 -type f -name "*_pkg.sv" -print
+                list_packages "$dir"
             done
             for dir in ${externs[@]}; do
-                find "$(realpath $dir)" -maxdepth 1 -type f \( -name "*.v" -o -name "*.sv" \) ! -name "*_pkg.sv" -print
+                list_non_packages "$dir"
             done
         fi
 
         if [ "$copy_folder" != "" ]; then
             # All files have been copied; just point to the copy folder
             echo "+incdir+$(realpath "$copy_folder")"
-            find "$(realpath "$copy_folder")" -maxdepth 1 -type f -name "*_pkg.sv" -print
-            find "$(realpath "$copy_folder")" -maxdepth 1 -type f -name "*_if.sv" -print
-            find "$(realpath "$copy_folder")" -maxdepth 1 -type f \( -name "*.v" -o -name "*.sv" \) ! -name "*_pkg.sv" ! -name "*_if.sv" -print
+            list_packages "$copy_folder"
+            list_non_packages "$copy_folder" | { grep -e '_if\.sv$' || true; }
+            list_non_packages "$copy_folder" | { grep -v -e '_if\.sv$' || true; }
         else
             # Use original include dirs
             for dir in ${includes[@]}; do
                 echo "+incdir+$(realpath "$dir")"
             done
 
-            # *_pkg.sv, then *_if.sv (interfaces), then remaining .v/.sv from include dirs
+            # packages, then *_if.sv (interfaces), then remaining .v/.sv from include dirs
             for dir in ${includes[@]}; do
-                find "$(realpath "$dir")" -maxdepth 1 -type f -name "*_pkg.sv" -print
+                list_packages "$dir"
             done
             for dir in ${includes[@]}; do
-                find "$(realpath "$dir")" -maxdepth 1 -type f -name "*_if.sv" -print
+                list_non_packages "$dir" | { grep -e '_if\.sv$' || true; }
             done
             for dir in ${includes[@]}; do
-                find "$(realpath "$dir")" -maxdepth 1 -type f \( -name "*.v" -o -name "*.sv" \) ! -name "*_pkg.sv" ! -name "*_if.sv" -print
+                list_non_packages "$dir" | { grep -v -e '_if\.sv$' || true; }
             done
 
             # add source files

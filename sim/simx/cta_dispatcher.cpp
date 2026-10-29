@@ -16,6 +16,7 @@
 #include "core.h"
 #include <VX_config.h>
 #include <cassert>
+#include <iostream>
 
 using namespace vortex;
 
@@ -28,6 +29,7 @@ CtaDispatcher::CtaDispatcher(const SimContext& ctx, const char* name, Core* core
   , num_warps_(VX_CFG_NUM_WARPS)
   , lmem_base_(VX_MEM_LMEM_BASE_ADDR)
   , lmem_capacity_(1u << VX_CFG_LMEM_LOG_SIZE)
+  , lmem_overrun_reported_(false)
   , slot_rem_warps_(num_warps_, 0)
   , wid_to_slot_(num_warps_, num_warps_)  // num_warps_ = invalid/unassigned
   , tail_slot_(0)
@@ -65,17 +67,27 @@ void CtaDispatcher::on_reset() {
   // both are zero-initialized at construction.
 }
 
-uint32_t CtaDispatcher::usable_slots(uint32_t stride, uint32_t cta_warps) const {
-  // Co-residency bound, not a warp count. A slot is only useful if a CTA can
-  // actually occupy it, and a CTA of `cta_warps` warps needs that many warps
-  // free.
-  uint32_t max_resident = (cta_warps != 0) ? (num_warps_ / cta_warps) : num_warps_;
-  if (max_resident == 0) max_resident = 1;  // a CTA wider than the core still gets one slot
-  if (stride == 0)
-    return max_resident;
+uint32_t CtaDispatcher::usable_slots(uint32_t stride) const {
+  if (stride == 0) {
+    return num_warps_;
+  }
   uint32_t fit = uint32_t(lmem_capacity_ / stride);
-  if (fit > max_resident) fit = max_resident;
-  if (fit == 0) fit = 1;  // a single CTA that barely exceeds capacity still gets one slot
+  if (fit > num_warps_) {
+    fit = num_warps_;
+  }
+  if (fit == 0) {
+    // The CTA does not fit. One slot is still granted so the launch makes
+    // forward progress, but it will write past that slot, and a silent
+    // overrun surfaces later as unattributable data corruption.
+    if (!lmem_overrun_reported_) {
+      lmem_overrun_reported_ = true;
+      std::cerr << "Warning: CTA shared-memory footprint " << stride
+                << " bytes exceeds the " << lmem_capacity_
+                << "-byte capacity; the CTA is admitted anyway and will "
+                   "overrun its slot." << std::endl;
+    }
+    fit = 1;
+  }
   return fit;
 }
 
@@ -97,8 +109,7 @@ bool CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wid_out, cta_wa
     // its stride the same way to stay consistent.
     uint32_t stride = (next.lmem_size + VX_CFG_MEM_BLOCK_SIZE - 1u)
                       & ~uint32_t(VX_CFG_MEM_BLOCK_SIZE - 1u);
-    uint32_t next_cta_warps = (next.block_size + num_threads_ - 1) / num_threads_;
-    uint32_t max_slots = usable_slots(stride, next_cta_warps);
+    uint32_t max_slots = usable_slots(stride);
 
     // Round-robin slot allocation over the usable range. Normalize the tail in
     // case a kernel transition shrank the usable count.

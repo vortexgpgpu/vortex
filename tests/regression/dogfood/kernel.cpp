@@ -10,14 +10,14 @@ inline float __ieee754_sqrtf (float x) {
 }
 
 void kernel_iadd(kernel_arg_t* __UNIFORM__ arg) {
-	auto count    = arg->task_size;
+	size_t count  = arg->task_size;
 	auto src0_ptr = (int32_t*)arg->src0_addr;
 	auto src1_ptr = (int32_t*)arg->src1_addr;
 	auto dst_ptr  = (int32_t*)arg->dst_addr;
 	uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 	auto offset = gid * count;
 
-	for (uint32_t i = 0; i < count; ++i) {
+	for (size_t i = 0; i < count; ++i) {
 		int32_t a = src0_ptr[offset+i];
 		int32_t b = src1_ptr[offset+i];
 		int32_t c = a + b;
@@ -26,14 +26,14 @@ void kernel_iadd(kernel_arg_t* __UNIFORM__ arg) {
 }
 
 void kernel_imul(kernel_arg_t* __UNIFORM__ arg) {
-	auto count    = arg->task_size;
+	size_t count  = arg->task_size;
 	auto src0_ptr = (int32_t*)arg->src0_addr;
 	auto src1_ptr = (int32_t*)arg->src1_addr;
 	auto dst_ptr  = (int32_t*)arg->dst_addr;
 	uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 	auto offset = gid * count;
 
-	for (uint32_t i = 0; i < count; ++i) {
+	for (size_t i = 0; i < count; ++i) {
 		auto a = src0_ptr[offset+i];
 		auto b = src1_ptr[offset+i];
 		auto c = a * b;
@@ -42,14 +42,14 @@ void kernel_imul(kernel_arg_t* __UNIFORM__ arg) {
 }
 
 void kernel_idiv(kernel_arg_t* __UNIFORM__ arg) {
-	auto count    = arg->task_size;
+	size_t count  = arg->task_size;
 	auto src0_ptr = (int32_t*)arg->src0_addr;
 	auto src1_ptr = (int32_t*)arg->src1_addr;
 	auto dst_ptr  = (int32_t*)arg->dst_addr;
 	uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 	auto offset = gid * count;
 
-	for (uint32_t i = 0; i < count; ++i) {
+	for (size_t i = 0; i < count; ++i) {
 		auto a = src0_ptr[offset+i];
 		auto b = src1_ptr[offset+i];
 		auto c = a / b;
@@ -58,14 +58,14 @@ void kernel_idiv(kernel_arg_t* __UNIFORM__ arg) {
 }
 
 void kernel_idiv_mul(kernel_arg_t* __UNIFORM__ arg) {
-	auto count    = arg->task_size;
+	size_t count  = arg->task_size;
 	auto src0_ptr = (int32_t*)arg->src0_addr;
 	auto src1_ptr = (int32_t*)arg->src1_addr;
 	auto dst_ptr  = (int32_t*)arg->dst_addr;
 	uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 	auto offset = gid * count;
 
-	for (uint32_t i = 0; i < count; ++i) {
+	for (size_t i = 0; i < count; ++i) {
 		auto a = src0_ptr[offset+i];
 		auto b = src1_ptr[offset+i];
 		auto c = a / b;
@@ -76,14 +76,14 @@ void kernel_idiv_mul(kernel_arg_t* __UNIFORM__ arg) {
 }
 
 void kernel_fadd(kernel_arg_t* __UNIFORM__ arg) {
-	auto count    = arg->task_size;
+	size_t count  = arg->task_size;
 	auto src0_ptr = (float*)arg->src0_addr;
 	auto src1_ptr = (float*)arg->src1_addr;
 	auto dst_ptr  = (float*)arg->dst_addr;
 	uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 	auto offset = gid * count;
 
-	for (uint32_t i = 0; i < count; ++i) {
+	for (size_t i = 0; i < count; ++i) {
 		float a = src0_ptr[offset+i];
 		float b = src1_ptr[offset+i];
 		float c = a + b;
@@ -92,14 +92,14 @@ void kernel_fadd(kernel_arg_t* __UNIFORM__ arg) {
 }
 
 void kernel_fsub(kernel_arg_t* __UNIFORM__ arg) {
-	auto count    = arg->task_size;
+	size_t count  = arg->task_size;
 	auto src0_ptr = (float*)arg->src0_addr;
 	auto src1_ptr = (float*)arg->src1_addr;
 	auto dst_ptr  = (float*)arg->dst_addr;
 	uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 	auto offset = gid * count;
 
-	for (uint32_t i = 0; i < count; ++i) {
+	for (size_t i = 0; i < count; ++i) {
 		auto a = src0_ptr[offset+i];
 		auto b = src1_ptr[offset+i];
 		auto c = a - b;
@@ -108,14 +108,14 @@ void kernel_fsub(kernel_arg_t* __UNIFORM__ arg) {
 }
 
 void kernel_fmul(kernel_arg_t* __UNIFORM__ arg) {
-	auto count    = arg->task_size;
+	size_t count  = arg->task_size;
 	auto src0_ptr = (float*)arg->src0_addr;
 	auto src1_ptr = (float*)arg->src1_addr;
 	auto dst_ptr  = (float*)arg->dst_addr;
 	uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 	auto offset = gid * count;
 
-	for (uint32_t i = 0; i < count; ++i) {
+	for (size_t i = 0; i < count; ++i) {
 		auto a = src0_ptr[offset+i];
 		auto b = src1_ptr[offset+i];
 		auto c = a * b;
@@ -124,14 +124,14 @@ void kernel_fmul(kernel_arg_t* __UNIFORM__ arg) {
 }
 
 void kernel_fmadd(kernel_arg_t* __UNIFORM__ arg) {
-	auto count    = arg->task_size;
+	size_t count  = arg->task_size;
 	auto src0_ptr = (float*)arg->src0_addr;
 	auto src1_ptr = (float*)arg->src1_addr;
 	auto dst_ptr  = (float*)arg->dst_addr;
 	uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 	auto offset = gid * count;
 
-	for (uint32_t i = 0; i < count; ++i) {
+	for (size_t i = 0; i < count; ++i) {
 		auto a = src0_ptr[offset+i];
 		auto b = src1_ptr[offset+i];
 		auto c = a * b + b;
@@ -140,14 +140,14 @@ void kernel_fmadd(kernel_arg_t* __UNIFORM__ arg) {
 }
 
 void kernel_fmsub(kernel_arg_t* __UNIFORM__ arg) {
-	auto count    = arg->task_size;
+	size_t count  = arg->task_size;
 	auto src0_ptr = (float*)arg->src0_addr;
 	auto src1_ptr = (float*)arg->src1_addr;
 	auto dst_ptr  = (float*)arg->dst_addr;
 	uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 	auto offset = gid * count;
 
-	for (uint32_t i = 0; i < count; ++i) {
+	for (size_t i = 0; i < count; ++i) {
 		auto a = src0_ptr[offset+i];
 		auto b = src1_ptr[offset+i];
 		auto c = a * b - b;
@@ -156,14 +156,14 @@ void kernel_fmsub(kernel_arg_t* __UNIFORM__ arg) {
 }
 
 void kernel_fnmadd(kernel_arg_t* __UNIFORM__ arg) {
-	auto count    = arg->task_size;
+	size_t count  = arg->task_size;
 	auto src0_ptr = (float*)arg->src0_addr;
 	auto src1_ptr = (float*)arg->src1_addr;
 	auto dst_ptr  = (float*)arg->dst_addr;
 	uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 	auto offset = gid * count;
 
-	for (uint32_t i = 0; i < count; ++i) {
+	for (size_t i = 0; i < count; ++i) {
 		auto a = src0_ptr[offset+i];
 		auto b = src1_ptr[offset+i];
 		auto c =-a * b - b;
@@ -172,14 +172,14 @@ void kernel_fnmadd(kernel_arg_t* __UNIFORM__ arg) {
 }
 
 void kernel_fnmsub(kernel_arg_t* __UNIFORM__ arg) {
-	auto count    = arg->task_size;
+	size_t count  = arg->task_size;
 	auto src0_ptr = (float*)arg->src0_addr;
 	auto src1_ptr = (float*)arg->src1_addr;
 	auto dst_ptr  = (float*)arg->dst_addr;
 	uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 	auto offset = gid * count;
 
-	for (uint32_t i = 0; i < count; ++i) {
+	for (size_t i = 0; i < count; ++i) {
 		auto a = src0_ptr[offset+i];
 		auto b = src1_ptr[offset+i];
 		auto c =-a * b + b;
@@ -188,14 +188,14 @@ void kernel_fnmsub(kernel_arg_t* __UNIFORM__ arg) {
 }
 
 void kernel_fnmadd_madd(kernel_arg_t* __UNIFORM__ arg) {
-	auto count    = arg->task_size;
+	size_t count  = arg->task_size;
 	auto src0_ptr = (float*)arg->src0_addr;
 	auto src1_ptr = (float*)arg->src1_addr;
 	auto dst_ptr  = (float*)arg->dst_addr;
 	uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 	auto offset = gid * count;
 
-	for (uint32_t i = 0; i < count; ++i) {
+	for (size_t i = 0; i < count; ++i) {
 		auto a = src0_ptr[offset+i];
 		auto b = src1_ptr[offset+i];
 		auto c =-a * b - b;
@@ -206,14 +206,14 @@ void kernel_fnmadd_madd(kernel_arg_t* __UNIFORM__ arg) {
 }
 
 void kernel_fdiv(kernel_arg_t* __UNIFORM__ arg) {
-	auto count    = arg->task_size;
+	size_t count  = arg->task_size;
 	auto src0_ptr = (float*)arg->src0_addr;
 	auto src1_ptr = (float*)arg->src1_addr;
 	auto dst_ptr  = (float*)arg->dst_addr;
 	uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 	auto offset = gid * count;
 
-	for (uint32_t i = 0; i < count; ++i) {
+	for (size_t i = 0; i < count; ++i) {
 		auto a = src0_ptr[offset+i];
 		auto b = src1_ptr[offset+i];
 		auto c = a / b;
@@ -222,14 +222,14 @@ void kernel_fdiv(kernel_arg_t* __UNIFORM__ arg) {
 }
 
 void kernel_fdiv2(kernel_arg_t* __UNIFORM__ arg) {
-	auto count  = arg->task_size;
+	size_t count = arg->task_size;
 	auto src0_ptr = (float*)arg->src0_addr;
 	auto src1_ptr = (float*)arg->src1_addr;
 	auto dst_ptr  = (float*)arg->dst_addr;
 	uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 	auto offset = gid * count;
 
-	for (uint32_t i = 0; i < count; ++i) {
+	for (size_t i = 0; i < count; ++i) {
 		auto a = src0_ptr[offset+i];
 		auto b = src1_ptr[offset+i];
 		auto c = a / b;
@@ -240,14 +240,14 @@ void kernel_fdiv2(kernel_arg_t* __UNIFORM__ arg) {
 }
 
 void kernel_fsqrt(kernel_arg_t* __UNIFORM__ arg) {
-	auto count    = arg->task_size;
+	size_t count  = arg->task_size;
 	auto src0_ptr = (float*)arg->src0_addr;
 	auto src1_ptr = (float*)arg->src1_addr;
 	auto dst_ptr  = (float*)arg->dst_addr;
 	uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 	auto offset = gid * count;
 
-	for (uint32_t i = 0; i < count; ++i) {
+	for (size_t i = 0; i < count; ++i) {
 		auto a = src0_ptr[offset+i];
 		auto b = src1_ptr[offset+i];
 		auto c = __ieee754_sqrtf(a * b);
@@ -256,14 +256,14 @@ void kernel_fsqrt(kernel_arg_t* __UNIFORM__ arg) {
 }
 
 void kernel_ftoi(kernel_arg_t* __UNIFORM__ arg) {
-	auto count    = arg->task_size;
+	size_t count  = arg->task_size;
 	auto src0_ptr = (float*)arg->src0_addr;
 	auto src1_ptr = (float*)arg->src1_addr;
 	auto dst_ptr  = (int32_t*)arg->dst_addr;
 	uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 	auto offset = gid * count;
 
-	for (uint32_t i = 0; i < count; ++i) {
+	for (size_t i = 0; i < count; ++i) {
 		auto a = src0_ptr[offset+i];
 		auto b = src1_ptr[offset+i];
 		auto c = a + b;
@@ -273,14 +273,14 @@ void kernel_ftoi(kernel_arg_t* __UNIFORM__ arg) {
 }
 
 void kernel_ftou(kernel_arg_t* __UNIFORM__ arg) {
-	auto count    = arg->task_size;
+	size_t count  = arg->task_size;
 	auto src0_ptr = (float*)arg->src0_addr;
 	auto src1_ptr = (float*)arg->src1_addr;
 	auto dst_ptr  = (uint32_t*)arg->dst_addr;
 	uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 	auto offset = gid * count;
 
-	for (uint32_t i = 0; i < count; ++i) {
+	for (size_t i = 0; i < count; ++i) {
 		auto a = src0_ptr[offset+i];
 		auto b = src1_ptr[offset+i];
 		auto c = a + b;
@@ -290,14 +290,14 @@ void kernel_ftou(kernel_arg_t* __UNIFORM__ arg) {
 }
 
 void kernel_itof(kernel_arg_t* __UNIFORM__ arg) {
-	auto count    = arg->task_size;
+	size_t count  = arg->task_size;
 	auto src0_ptr = (int32_t*)arg->src0_addr;
 	auto src1_ptr = (int32_t*)arg->src1_addr;
 	auto dst_ptr  = (float*)arg->dst_addr;
 	uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 	auto offset = gid * count;
 
-	for (uint32_t i = 0; i < count; ++i) {
+	for (size_t i = 0; i < count; ++i) {
 		auto a = src0_ptr[offset+i];
 		auto b = src1_ptr[offset+i];
 		auto c = a + b;
@@ -307,14 +307,14 @@ void kernel_itof(kernel_arg_t* __UNIFORM__ arg) {
 }
 
 void kernel_utof(kernel_arg_t* __UNIFORM__ arg) {
-	auto count    = arg->task_size;
+	size_t count  = arg->task_size;
 	auto src0_ptr = (int32_t*)arg->src0_addr;
 	auto src1_ptr = (int32_t*)arg->src1_addr;
 	auto dst_ptr  = (float*)arg->dst_addr;
 	uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 	auto offset = gid * count;
 
-	for (uint32_t i = 0; i < count; ++i) {
+	for (size_t i = 0; i < count; ++i) {
 		auto a = src0_ptr[offset+i];
 		auto b = src1_ptr[offset+i];
 		auto c = a + b;
@@ -328,14 +328,14 @@ inline float fclamp(float a, float b, float c) {
 }
 
 void kernel_fclamp(kernel_arg_t* __UNIFORM__ arg) {
-	auto count  = arg->task_size;
+	size_t count = arg->task_size;
 	auto src0_ptr = (float*)arg->src0_addr;
 	auto src1_ptr = (float*)arg->src1_addr;
 	auto dst_ptr  = (float*)arg->dst_addr;
 	uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 	auto offset = gid * count;
 
-	for (uint32_t i = 0; i < count; ++i) {
+	for (size_t i = 0; i < count; ++i) {
 		auto a = src0_ptr[offset+i];
 		auto b = src1_ptr[offset+i];
 		dst_ptr[offset+i] = fclamp(1.0f, a, b);
@@ -347,14 +347,14 @@ inline int iclamp(int a, int b, int c) {
 }
 
 void kernel_iclamp(kernel_arg_t* __UNIFORM__ arg) {
-	auto count  = arg->task_size;
+	size_t count = arg->task_size;
 	auto src0_ptr = (int*)arg->src0_addr;
 	auto src1_ptr = (int*)arg->src1_addr;
 	auto dst_ptr  = (int*)arg->dst_addr;
 	uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 	auto offset = gid * count;
 
-	for (uint32_t i = 0; i < count; ++i) {
+	for (size_t i = 0; i < count; ++i) {
 		auto a = src0_ptr[offset+i];
 		auto b = src1_ptr[offset+i];
 		dst_ptr[offset+i] = iclamp(1, a, b);
@@ -362,14 +362,14 @@ void kernel_iclamp(kernel_arg_t* __UNIFORM__ arg) {
 }
 
 void kernel_trigo(kernel_arg_t* __UNIFORM__ arg) {
-	auto count  = arg->task_size;
+	size_t count = arg->task_size;
 	auto src0_ptr = (float*)arg->src0_addr;
 	auto src1_ptr = (float*)arg->src1_addr;
 	auto dst_ptr  = (float*)arg->dst_addr;
 	uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 	auto offset = gid * count;
-	for (uint32_t i = 0; i < count; ++i) {
-		uint32_t j = offset + i;
+	for (size_t i = 0; i < count; ++i) {
+		size_t j = offset + i;
 		auto a = src0_ptr[j];
 		auto b = src1_ptr[j];
 		auto c = a * b;

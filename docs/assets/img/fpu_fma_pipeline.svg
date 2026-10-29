@@ -1,0 +1,182 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 732" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+  </defs>
+
+  <style>
+    .box     { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.5; }
+    .unit    { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .hot     { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .grp     { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .cell    { fill:#ffffff; stroke:#9aa5af; stroke-width:1; }
+    .cellh   { fill:#fbf0d0; stroke:#b58900; stroke-width:1; }
+    .t       { fill:#1b2733; font-size:15px; }
+    .tb      { fill:#1b2733; font-size:16px; font-weight:bold; }
+    .th      { fill:#1b2733; font-size:13.5px; font-weight:bold; }
+    .ts      { fill:#44525f; font-size:12.5px; }
+    .tt      { fill:#5a6772; font-size:12px; font-style:italic; }
+    .num     { fill:#1b2733; font-size:15px; font-weight:bold; }
+    .flow    { stroke:#444; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+  </style>
+
+  <rect x="0" y="0" width="1400" height="732" fill="#ffffff"/>
+  <text x="24" y="34" class="tb" font-size="20">VX_fma_unit_rtl — fused multiply-add pipeline and its latency budget</text>
+
+  <!-- ══════════ stages ══════════ -->
+  <rect x="24"   y="64" width="176" height="230" rx="6" class="unit"/>
+  <text x="36"   y="88" class="tb">INI</text>
+  <text x="36"   y="110" class="ts">unpack sign, exponent,</text>
+  <text x="36"   y="126" class="ts">significand</text>
+  <text x="36"   y="148" class="ts">classify: NaN, inf, zero,</text>
+  <text x="36"   y="164" class="ts">subnormal</text>
+  <text x="36"   y="186" class="ts">remap the operation:</text>
+  <text x="36"   y="202" class="ts">ADD is a × 1.0 + b,</text>
+  <text x="36"   y="218" class="ts">MUL is a × b + 0</text>
+  <text x="36"   y="246" class="ts">subnormals are not pre-</text>
+  <text x="36"   y="262" class="ts">normalized: NRM absorbs</text>
+  <text x="36"   y="278" class="ts">their leading zeros</text>
+
+  <rect x="220"  y="64" width="176" height="230" rx="6" class="hot"/>
+  <text x="232"  y="88" class="tb">MUL</text>
+  <text x="232"  y="110" class="ts">significand product,</text>
+  <text x="232"  y="126" class="ts">SIG × SIG</text>
+  <text x="232"  y="148" class="ts">exponents, addend and</text>
+  <text x="232"  y="164" class="ts">flags ride a side pipe of</text>
+  <text x="232"  y="180" class="ts">the same depth</text>
+  <text x="232"  y="208" class="ts">the only variable-depth</text>
+  <text x="232"  y="224" class="ts">stage: it takes whatever</text>
+  <text x="232"  y="240" class="ts">LATENCY leaves over</text>
+  <text x="232"  y="278" class="tt">four multiplier styles ↓</text>
+
+  <rect x="416"  y="64" width="176" height="230" rx="6" class="hot"/>
+  <text x="428"  y="88" class="tb">ALN</text>
+  <text x="428"  y="110" class="ts">align the addend to the</text>
+  <text x="428"  y="126" class="ts">product's exponent</text>
+  <text x="428"  y="148" class="ts">F32: one barrel shift</text>
+  <text x="428"  y="170" class="ts">F64: coarse shift, register,</text>
+  <text x="428"  y="186" class="ts">fine shift</text>
+  <text x="428"  y="214" class="ts">exact: the sticky bit is</text>
+  <text x="428"  y="230" class="ts">taken from the fully</text>
+  <text x="428"  y="246" class="ts">shifted value</text>
+
+  <rect x="612"  y="64" width="176" height="230" rx="6" class="unit"/>
+  <text x="624"  y="88" class="tb">ACC</text>
+  <text x="624"  y="110" class="ts">add or subtract product</text>
+  <text x="624"  y="126" class="ts">and aligned addend</text>
+  <text x="624"  y="148" class="ts">leading-zero count of the</text>
+  <text x="624"  y="164" class="ts">sum</text>
+  <text x="624"  y="192" class="ts">the product is never</text>
+  <text x="624"  y="208" class="ts">rounded on its own: one</text>
+  <text x="624"  y="224" class="ts">rounding for the whole</text>
+  <text x="624"  y="240" class="ts">a × b + c</text>
+
+  <rect x="808"  y="64" width="176" height="230" rx="6" class="unit"/>
+  <text x="820"  y="88" class="tb">NRM</text>
+  <text x="820"  y="110" class="ts">left-shift by the</text>
+  <text x="820"  y="126" class="ts">registered leading-zero</text>
+  <text x="820"  y="142" class="ts">count</text>
+  <text x="820"  y="164" class="ts">adjust the exponent</text>
+  <text x="820"  y="192" class="ts">extract guard, round,</text>
+  <text x="820"  y="208" class="ts">sticky</text>
+
+  <rect x="1004" y="64" width="176" height="230" rx="6" class="unit"/>
+  <text x="1016" y="88" class="tb">RND1</text>
+  <text x="1016" y="110" class="ts">normal path: compute</text>
+  <text x="1016" y="126" class="ts">both the rounded-up and</text>
+  <text x="1016" y="142" class="ts">the truncated result,</text>
+  <text x="1016" y="158" class="ts">then select</text>
+  <text x="1016" y="186" class="ts">subnormal path: shift the</text>
+  <text x="1016" y="202" class="ts">result right into the</text>
+  <text x="1016" y="218" class="ts">denormal range</text>
+
+  <rect x="1200" y="64" width="176" height="230" rx="6" class="unit"/>
+  <text x="1212" y="88" class="tb">RND2</text>
+  <text x="1212" y="110" class="ts">subnormal round-add</text>
+  <text x="1212" y="132" class="ts">special results: NaN,</text>
+  <text x="1212" y="148" class="ts">inf, signed zero</text>
+  <text x="1212" y="170" class="ts">pack sign, exponent,</text>
+  <text x="1212" y="186" class="ts">mantissa</text>
+  <text x="1212" y="208" class="ts">fflags: NV, OF, UF, NX</text>
+
+  <path d="M 200 180 L 220 180" class="flow"/>
+  <path d="M 396 180 L 416 180" class="flow"/>
+  <path d="M 592 180 L 612 180" class="flow"/>
+  <path d="M 788 180 L 808 180" class="flow"/>
+  <path d="M 984 180 L 1004 180" class="flow"/>
+  <path d="M 1180 180 L 1200 180" class="flow"/>
+
+  <!-- ══════════ budget table ══════════ -->
+  <text x="24" y="336" class="tb">Cycles per stage</text>
+  <text x="250" y="336" class="tt">MUL = LATENCY − (INI + ALN + ACC + NRM + RND1 + RND2); gold = the stages that differ by format</text>
+  <text x="24" y="372" class="th">F32 core — LATENCY 8 (soft, F32 build)</text>
+  <rect x="24" y="380" width="176" height="28" class="cell"/>
+  <text x="112" y="400" class="num" text-anchor="middle">1</text>
+  <rect x="220" y="380" width="176" height="28" class="cellh"/>
+  <text x="308" y="400" class="num" text-anchor="middle">2</text>
+  <rect x="416" y="380" width="176" height="28" class="cellh"/>
+  <text x="504" y="400" class="num" text-anchor="middle">1</text>
+  <rect x="612" y="380" width="176" height="28" class="cell"/>
+  <text x="700" y="400" class="num" text-anchor="middle">1</text>
+  <rect x="808" y="380" width="176" height="28" class="cell"/>
+  <text x="896" y="400" class="num" text-anchor="middle">1</text>
+  <rect x="1004" y="380" width="176" height="28" class="cell"/>
+  <text x="1092" y="400" class="num" text-anchor="middle">1</text>
+  <rect x="1200" y="380" width="176" height="28" class="cell"/>
+  <text x="1288" y="400" class="num" text-anchor="middle">1</text>
+  <text x="24" y="430" class="th">F64 core — LATENCY 12 (soft, F64 build)</text>
+  <rect x="24" y="438" width="176" height="28" class="cell"/>
+  <text x="112" y="458" class="num" text-anchor="middle">1</text>
+  <rect x="220" y="438" width="176" height="28" class="cellh"/>
+  <text x="308" y="458" class="num" text-anchor="middle">5</text>
+  <rect x="416" y="438" width="176" height="28" class="cellh"/>
+  <text x="504" y="458" class="num" text-anchor="middle">2</text>
+  <rect x="612" y="438" width="176" height="28" class="cell"/>
+  <text x="700" y="458" class="num" text-anchor="middle">1</text>
+  <rect x="808" y="438" width="176" height="28" class="cell"/>
+  <text x="896" y="458" class="num" text-anchor="middle">1</text>
+  <rect x="1004" y="438" width="176" height="28" class="cell"/>
+  <text x="1092" y="458" class="num" text-anchor="middle">1</text>
+  <rect x="1200" y="438" width="176" height="28" class="cell"/>
+  <text x="1288" y="458" class="num" text-anchor="middle">1</text>
+  <text x="24" y="488" class="th">F64 core — LATENCY 16 (Vivado DSP build)</text>
+  <rect x="24" y="496" width="176" height="28" class="cell"/>
+  <text x="112" y="516" class="num" text-anchor="middle">1</text>
+  <rect x="220" y="496" width="176" height="28" class="cellh"/>
+  <text x="308" y="516" class="num" text-anchor="middle">9</text>
+  <rect x="416" y="496" width="176" height="28" class="cellh"/>
+  <text x="504" y="516" class="num" text-anchor="middle">2</text>
+  <rect x="612" y="496" width="176" height="28" class="cell"/>
+  <text x="700" y="516" class="num" text-anchor="middle">1</text>
+  <rect x="808" y="496" width="176" height="28" class="cell"/>
+  <text x="896" y="516" class="num" text-anchor="middle">1</text>
+  <rect x="1004" y="496" width="176" height="28" class="cell"/>
+  <text x="1092" y="516" class="num" text-anchor="middle">1</text>
+  <rect x="1200" y="496" width="176" height="28" class="cell"/>
+  <text x="1288" y="516" class="num" text-anchor="middle">1</text>
+
+  <!-- ══════════ multiplier styles ══════════ -->
+  <rect x="24" y="552" width="1352" height="150" class="grp"/>
+  <text x="36" y="576" class="tb">Multiplier style — chosen at elaboration</text>
+  <rect x="40" y="590" width="316" height="96" rx="6" class="box"/>
+  <text x="52" y="612" class="t">split DSP</text>
+  <text x="52" y="632" class="ts">USE_DSP, significand &gt; 24 bits, MUL ≥ 2</text>
+  <text x="52" y="650" class="ts">a × b_lo and a × b_hi, each registered,</text>
+  <text x="52" y="668" class="ts">then summed — F64 on FPGA</text>
+  <rect x="372" y="590" width="316" height="96" rx="6" class="box"/>
+  <text x="384" y="612" class="t">flat DSP</text>
+  <text x="384" y="632" class="ts">USE_DSP otherwise</text>
+  <text x="384" y="650" class="ts">one a × b with a use_dsp hint, retimed</text>
+  <text x="384" y="668" class="ts">into the block — F32 on FPGA</text>
+  <rect x="704" y="590" width="316" height="96" rx="6" class="box"/>
+  <text x="716" y="612" class="t">Wallace tree</text>
+  <text x="716" y="632" class="ts">no DSP, significand ≤ 24 bits, shallow MUL</text>
+  <text x="716" y="650" class="ts">VX_wallace_mul with a carry-propagate</text>
+  <text x="716" y="668" class="ts">adder — F32 on ASIC</text>
+  <rect x="1036" y="590" width="324" height="96" rx="6" class="box"/>
+  <text x="1048" y="612" class="t">inferred</text>
+  <text x="1048" y="632" class="ts">every other case</text>
+  <text x="1048" y="650" class="ts">a plain a × b the tool retimes across the</text>
+  <text x="1048" y="668" class="ts">MUL registers — F64 on ASIC</text>
+</svg>

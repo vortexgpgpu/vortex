@@ -21,9 +21,12 @@ static int read_kernel_file(const char* fn, uint8_t** data, size_t* size) {
 cl_device_id device_id = NULL; cl_context context = NULL; cl_command_queue queue = NULL;
 cl_program program = NULL; cl_kernel kernel = NULL; cl_mem image = NULL, out_buf = NULL;
 static void cleanup() {
-  if (queue) clReleaseCommandQueue(queue); if (kernel) clReleaseKernel(kernel);
-  if (program) clReleaseProgram(program); if (image) clReleaseMemObject(image);
-  if (out_buf) clReleaseMemObject(out_buf); if (context) clReleaseContext(context);
+  if (queue) { clReleaseCommandQueue(queue); }
+  if (kernel) { clReleaseKernel(kernel); }
+  if (program) { clReleaseProgram(program); }
+  if (image) { clReleaseMemObject(image); }
+  if (out_buf) { clReleaseMemObject(out_buf); }
+  if (context) { clReleaseContext(context); }
 }
 
 int main(int argc, char** argv) {

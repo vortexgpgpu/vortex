@@ -15,7 +15,7 @@
 // Register spilling silently erases the bug by doing proper NaN-boxing. 
 // Uncomment the two lines to see all the tests pass.
 __attribute__((always_inline))
-inline uint64_t packlb_bits(const void* base, uint32_t stride) {
+inline uint64_t packlb_bits(const void* base, size_t stride) {
     uint64_t bits;
     __asm__ volatile (
         ".insn r %1, 1, 4, ft0, %2, %3\n\t"
@@ -28,7 +28,7 @@ inline uint64_t packlb_bits(const void* base, uint32_t stride) {
 }
 
 __attribute__((always_inline))
-inline uint64_t packlh_bits(const void* base, uint32_t stride) {
+inline uint64_t packlh_bits(const void* base, size_t stride) {
     uint64_t bits;
     __asm__ volatile (
         ".insn r %1, 2, 4, ft0, %2, %3\n\t"
@@ -53,8 +53,8 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     auto dst_lb   = reinterpret_cast<uint64_t*>(arg->dst_lb_addr);
     auto dst_lh   = reinterpret_cast<uint64_t*>(arg->dst_lh_addr);
 
-    uint32_t tid    = blockIdx.x * blockDim.x + threadIdx.x;
-    uint32_t stride = 1; // byte stride between consecutive elements
+    size_t   tid    = blockIdx.x * blockDim.x + threadIdx.x;
+    size_t   stride = 1; // byte stride between consecutive elements
 
     for (uint32_t p = 0; p < NUM_POINTS; ++p) {
         // 4 bytes at consecutive addresses → one packed float (PACKLB)

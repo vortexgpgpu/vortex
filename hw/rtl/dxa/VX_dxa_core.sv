@@ -246,6 +246,7 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             dxa_perf.gmem_dedup  += worker_dxa_perf[w].gmem_dedup;
             dxa_perf.lmem_writes += worker_dxa_perf[w].lmem_writes;
             dxa_perf.gmem_latency += worker_dxa_perf[w].gmem_latency;
+            dxa_perf.noslot_stalls += worker_dxa_perf[w].noslot_stalls;
         end
     end
 `endif

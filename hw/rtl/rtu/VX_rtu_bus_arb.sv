@@ -68,7 +68,7 @@ module VX_rtu_bus_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     localparam SRC_IN_W = 1;
 
     localparam ARM_DATAW = NW_WIDTH + NUM_LANES
-                         + `VX_CFG_MEM_ADDR_WIDTH + 16 + 16 + 32 + TAG_WIDTH;
+                         + `VX_CFG_MEM_ADDR_WIDTH + 16 + 16 + `VX_CFG_XLEN + TAG_WIDTH;
     localparam REQ_DATAW = 1 + NW_WIDTH + NUM_LANES * 32 + NUM_LANES * RTU_CB_ACTION_BITS;
     // the win payload carries the sel-stripped tag on the core side
     localparam WIN_DATAW = 1 + NW_WIDTH + RTU_SLOT_BITS

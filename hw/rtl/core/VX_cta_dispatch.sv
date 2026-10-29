@@ -320,38 +320,42 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     wire [LMEM_LOG:0] stride = kmu_req.aligned_lmem_size;
     wire is_first_of_cluster = eff_is_first;
 
+    reg [NW_WIDTH:0] usable_slots_r;
     // Cluster member count K, capped at the slot count (a cluster larger than
-    // co-residency degenerates to a clamp — matches the SimX model).
+    // co-residency degenerates to a clamp).
     wire [NW_WIDTH:0] cluster_k_raw = eff_cluster_size;
     wire [NW_WIDTH:0] cluster_k = (cluster_k_raw > usable_slots_r) ? usable_slots_r
                                 : (cluster_k_raw == 0) ? (NW_WIDTH+1)'(1) : cluster_k_raw;
 
     // Occupancy bound, registered (off the ready path). usable = largest m in
-    // [1, NUM_WARPS] with m*stride <= LMEM_SIZE (LMEM test skipped when
-    // stride == 0) AND m*cta_warps <= NUM_WARPS. The second term is a
-    // co-residency bound. A slot only counts if a CTA can actually occupy it,
-    // and a CTA of cta_warps warps needs that many warps free, so at most
-    // NUM_WARPS/cta_warps CTAs are ever co-resident. Both products are
-    // constant-times-variable (shift/add), so the NUM_WARPS-wide comparator
-    // tree has no divider.
-    localparam PROD_W  = LMEM_LOG + NW_WIDTH + 2;
-    localparam WPROD_W = 2 * (NW_WIDTH + 1) + 1;
-    reg [NW_WIDTH:0] usable_slots_r;
+    // [1, NUM_WARPS] with m*stride <= LMEM_SIZE; all slots when stride == 0.
+    // The product m*stride is a constant-times-variable (shift/add), so the
+    // NUM_WARPS-wide comparator tree has no divider.
+    localparam PROD_W = LMEM_LOG + NW_WIDTH + 2;
     always_ff @(posedge clk) begin
         if (reset) begin
             usable_slots_r <= (NW_WIDTH+1)'(NUM_CTA_SLOTS);
         end else begin
-            usable_slots_r <= (NW_WIDTH+1)'(1);
-            for (integer m = 1; m <= NUM_CTA_SLOTS; m = m + 1) begin
-                if (((stride == 0)
-                     || (PROD_W'(m) * PROD_W'(stride) <= PROD_W'(LMEM_SIZE)))
-                 && ((kmu_num_warps == '0)
-                     || (WPROD_W'(m) * WPROD_W'(kmu_num_warps) <= WPROD_W'(NUM_CTA_SLOTS)))) begin
-                    usable_slots_r <= (NW_WIDTH+1)'(m);
+            if (stride == 0) begin
+                usable_slots_r <= (NW_WIDTH+1)'(NUM_CTA_SLOTS);
+            end else begin
+                // Granting one slot to a CTA that exceeds capacity keeps the
+                // launch making forward progress, at the cost of letting it
+                // write past its slot.
+                usable_slots_r <= (NW_WIDTH+1)'(1);
+                for (integer m = 1; m <= NUM_CTA_SLOTS; m = m + 1) begin
+                    if (PROD_W'(m) * PROD_W'(stride) <= PROD_W'(LMEM_SIZE)) begin
+                        usable_slots_r <= (NW_WIDTH+1)'(m);
+                    end
                 end
             end
         end
     end
+
+    // `data` is a launch descriptor only while `valid` is high: the launch buffers
+    // reset the valid bit alone, so an idle beat carries arbitrary bits.
+    `RUNTIME_ASSERT(~kmu_bus_if.valid || (stride == 0) || (PROD_W'(stride) <= PROD_W'(LMEM_SIZE)),
+        ("%t: %s CTA shared-memory footprint %0d exceeds the %0d-byte capacity; the CTA overruns its slot", $time, INSTANCE_ID, stride, LMEM_SIZE))
 
     // Normalize the round-robin pointer to the usable range (covers a kernel
     // transition that shrank usable_slots_r), then apply cluster pre-wrap.

@@ -5,8 +5,8 @@
 #define VX_CFG_NUM_THREADS 4
 #endif
 
-static inline size_t bits_from_f32(float x) { size_t u; __builtin_memcpy(&u, &x, 4); return u; }
-static inline float f32_from_bits(size_t u) { float x; __builtin_memcpy(&x, &u, 4); return x; }
+static inline size_t bits_from_f32(float x) { uint32_t u; __builtin_memcpy(&u, &x, 4); return u; }
+static inline float f32_from_bits(size_t u) { uint32_t b = u; float x; __builtin_memcpy(&x, &b, 4); return x; }
 
 static inline float warp_reduce_sum(float x, uint32_t warp_size) {
   int clamp   = warp_size - 1;

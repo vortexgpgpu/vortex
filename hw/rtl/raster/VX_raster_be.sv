@@ -147,6 +147,23 @@ module VX_raster_be import VX_raster_pkg::*; #(
         .yloc_out   (qe_yloc)
     );
 
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
+    // The quad evaluator registers its outputs once; delay the plane the same
+    // way so each wave leaves with its own primitive's plane, not the plane of
+    // the block behind it.
+    wire [2:0][`RASTER_DATA_BITS-1:0] qe_zplane;
+
+    VX_pipe_register #(
+        .DATAW  (3 * `RASTER_DATA_BITS)
+    ) qe_zplane_reg (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (~stall),
+        .data_in  (zplane_r),
+        .data_out (qe_zplane)
+    );
+`endif
+
     // Populate fifo inputs
 
     wire [OUTPUT_BATCHES-1:0][OUTPUT_QUADS-1:0] fifo_mask_in;
@@ -227,7 +244,7 @@ module VX_raster_be import VX_raster_pkg::*; #(
         .reset     (reset),
         .valid_in  (fifo_valid_in),
         .ready_in  (fifo_ready_in),
-        .data_in   ({zplane_r,   fifo_stamp_in[fifo_arb_index]}),
+        .data_in   ({qe_zplane,  fifo_stamp_in[fifo_arb_index]}),
         .data_out  ({zplane_out, stamps_out}),
         .valid_out (valid_out),
         .ready_out (ready_out)

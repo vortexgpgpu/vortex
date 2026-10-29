@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 700" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="arrb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1c6ca8"/>
+    </marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b58900"/>
+    </marker>
+  </defs>
+
+  <style>
+    .box     { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.5; }
+    .unit    { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .mem     { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .sw      { fill:#eef7ee; stroke:#3a7d44; stroke-width:1.5; }
+    .core    { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.5; }
+    .pe      { fill:#ffffff; stroke:#2e5e82; stroke-width:1.2; }
+    .none    { fill:#fafafa; stroke:#9aa5af; stroke-width:1.2; stroke-dasharray:5 4; }
+    .grp     { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .t       { fill:#1b2733; font-size:15px; }
+    .tb      { fill:#1b2733; font-size:16px; font-weight:bold; }
+    .th      { fill:#1b2733; font-size:13.5px; font-weight:bold; }
+    .ts      { fill:#44525f; font-size:12.5px; }
+    .tt      { fill:#5a6772; font-size:12px; font-style:italic; }
+    .mono    { font-family:'SF Mono',Consolas,monospace; font-size:12px; fill:#1b2733; }
+    .flow    { stroke:#444; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+    .flowb   { stroke:#1c6ca8; stroke-width:1.8; fill:none; marker-end:url(#arrb); stroke-dasharray:7 4; }
+    .flowg   { stroke:#b58900; stroke-width:1.8; fill:none; marker-end:url(#arrg); }
+    .lbl     { fill:#1c6ca8; font-size:12px; }
+    .lbg     { fill:#8a6d00; font-size:12px; }
+    .lbk     { fill:#44525f; font-size:12px; }
+    .rule    { stroke:#d5dce3; stroke-width:1; }
+    .dram  { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.4; }
+    .pio   { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.4; }
+    .vram  { fill:#fdf6e3; stroke:#b58900; stroke-width:1.4; }
+    .ap    { fill:#f2d37a; stroke:#b58900; stroke-width:1.4; }
+    .gap   { fill:#ffffff; stroke:#b9c2ca; stroke-width:1; stroke-dasharray:4 3; }
+  </style>
+
+  <rect x="0" y="0" width="1400" height="700" fill="#ffffff"/>
+  <text x="24" y="34" class="tb" font-size="20">gem5 address map — what the simulated process sees, and what backs it</text>
+
+  <text x="24" y="56" class="tt">Virtual and physical addresses are identical: both device windows are identity-mapped by the configuration script.</text>
+  <text x="480.0" y="92" class="th" text-anchor="middle">simulated process address space</text>
+  <rect x="300" y="120" width="360" height="110" rx="0" class="dram"/>
+  <text x="480.0" y="173.0" class="t" text-anchor="middle">process memory</text>
+  <text x="480.0" y="191.0" class="ts" text-anchor="middle">code, heap, stacks — gem5 DRAM model</text>
+  <rect x="300" y="238" width="360" height="46" rx="0" class="pio"/>
+  <text x="480.0" y="259.0" class="t" text-anchor="middle">PIO window</text>
+  <text x="480.0" y="277.0" class="ts" text-anchor="middle">CP register file, 32-bit accesses</text>
+  <rect x="300" y="292" width="360" height="70" rx="0" class="gap"/>
+  <text x="480.0" y="325.0" class="t" text-anchor="middle">unmapped</text>
+  <rect x="300" y="370" width="360" height="190" rx="0" class="vram"/>
+  <text x="480.0" y="463.0" class="t" text-anchor="middle">PIN window — device memory</text>
+  <text x="480.0" y="481.0" class="ts" text-anchor="middle">allocations grow upward from the bottom</text>
+  <rect x="300" y="560" width="360" height="60" rx="0" class="ap"/>
+  <text x="480.0" y="588.0" class="t" text-anchor="middle">host-memory aperture, 64 MB</text>
+  <text x="480.0" y="606.0" class="ts" text-anchor="middle">command rings, staging, completion slots</text>
+  <text x="288" y="124" class="mono" text-anchor="end">0x0000_0000</text>
+  <text x="288" y="242" class="mono" text-anchor="end">0x2000_0000</text>
+  <text x="288" y="296" class="mono" text-anchor="end">0x2000_0200</text>
+  <text x="288" y="374" class="mono" text-anchor="end">0x1_0000_0000</text>
+  <text x="288" y="564" class="mono" text-anchor="end">0x1_FC00_0000</text>
+  <text x="288" y="624" class="mono" text-anchor="end">0x2_0000_0000</text>
+  <text x="760" y="92" class="th">backed by</text>
+  <rect x="760" y="120" width="600" height="110" rx="6" class="box"/>
+  <text x="772" y="142" class="t">gem5 memory controller</text>
+  <text x="772" y="164" class="ts">DRAM range [0, PIO base)</text>
+  <text x="772" y="180" class="ts">it must not overlap either device window: two responders on one range is fatal</text>
+  <rect x="760" y="238" width="600" height="46" rx="6" class="unit"/>
+  <text x="772" y="260" class="t">VortexGPGPU PIO range</text>
+  <text x="990" y="260" class="ts">→ CommandProcessor register file</text>
+  <rect x="760" y="370" width="600" height="250" rx="6" class="mem"/>
+  <text x="772" y="392" class="t">VortexGPGPU PIN range → in-process device RAM</text>
+  <text x="772" y="414" class="ts">host pointer = PIN base + device address</text>
+  <text x="772" y="438" class="ts">the device allocator and the aperture never meet: one grows from</text>
+  <text x="772" y="454" class="ts">the bottom, the other is carved from the top</text>
+  <text x="772" y="478" class="ts">the CP addresses the aperture by device address; the host writes</text>
+  <text x="772" y="494" class="ts">the same bytes through the window</text>
+  <text x="772" y="518" class="ts">enabled by pin_size; zero for a hostless run</text>
+  <path d="M 660 175 L 760 175" class="flow"/>
+  <path d="M 660 261 L 760 261" class="flow"/>
+  <path d="M 660 495 L 760 495" class="flow"/>
+  <text x="24" y="660" class="tt">The window must be mapped uncached. With caching, the host CPU model can hold a new ring entry while the doorbell has already reached the device: the CP fetches a stale line and the host polls forever.</text>
+  <text x="24" y="684" class="tt">Gray = ordinary process memory · purple = register window · gold = device memory; darker = the aperture the runtime allocates from.</text>
+</svg>

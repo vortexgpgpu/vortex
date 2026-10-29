@@ -351,7 +351,7 @@ public:
     auto b = (float*)src2;
     auto c = (float*)dst;
     for (uint32_t i = 0; i < n; ++i) {
-      auto ref = a[i] * b[i] + b[i];
+      auto ref = fmaf(a[i], b[i], b[i]);
       if (!almost_equal(c[i], ref)) {
         std::cout << "error at result #" << std::dec << i << std::hex << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
@@ -381,7 +381,7 @@ public:
     auto b = (float*)src2;
     auto c = (float*)dst;
     for (uint32_t i = 0; i < n; ++i) {
-      auto ref = a[i] * b[i] - b[i];
+      auto ref = fmaf(a[i], b[i], -b[i]);
       if (!almost_equal(c[i], ref)) {
         std::cout << "error at result #" << std::dec << i << std::hex << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
@@ -411,7 +411,7 @@ public:
     auto b = (float*)src2;
     auto c = (float*)dst;
     for (uint32_t i = 0; i < n; ++i) {
-      auto ref = -a[i] * b[i] - b[i];
+      auto ref = fmaf(-a[i], b[i], -b[i]);
       if (!almost_equal(c[i], ref)) {
         std::cout << "error at result #" << std::dec << i << std::hex << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
@@ -441,7 +441,7 @@ public:
     auto b = (float*)src2;
     auto c = (float*)dst;
     for (uint32_t i = 0; i < n; ++i) {
-      auto ref = -a[i] * b[i] + b[i];
+      auto ref = fmaf(-a[i], b[i], b[i]);
       if (!almost_equal(c[i], ref)) {
         std::cout << "error at result #" << std::dec << i << std::hex << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
@@ -471,8 +471,8 @@ public:
     auto b = (float*)src2;
     auto c = (float*)dst;
     for (uint32_t i = 0; i < n; ++i) {
-      auto x = -a[i] * b[i] - b[i];
-      auto y =  a[i] * b[i] + b[i];
+      auto x = fmaf(-a[i], b[i], -b[i]);
+      auto y = fmaf(a[i], b[i], b[i]);
       auto ref = x + y;
       if (!almost_equal(c[i], ref)) {
         std::cout << "error at result #" << std::dec << i << std::hex << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;

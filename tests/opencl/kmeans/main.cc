@@ -55,9 +55,8 @@ static cl_device_type device_type;
 static cl_device_id *device_list;
 static cl_int num_devices;
 
-static int initialize(int use_gpu) {
+static int initialize() {
   cl_int result;
-  size_t size;
 
   /*// create OpenCL context
   cl_platform_id platform_id;
@@ -189,8 +188,7 @@ int allocate(int n_points, int n_features, int n_clusters, float **feature) {
   fclose(fp);*/
 
   // OpenCL initialization
-  int use_gpu = 1;
-  if (initialize(use_gpu))
+  if (initialize())
     return -1;
 
   // compile kernel
@@ -199,7 +197,6 @@ int allocate(int n_points, int n_features, int n_clusters, float **feature) {
   //cl_program prog = clCreateProgramWithSource(context, 1, slist, NULL, &err);
   uint8_t *kernel_bin = NULL;
   size_t kernel_size;
-  cl_int binary_status = 0;
   cl_program prog;
   
   err = read_kernel_file("kernel.cl", &kernel_bin, &kernel_size);
@@ -228,8 +225,8 @@ int allocate(int n_points, int n_features, int n_clusters, float **feature) {
     return -1;
   }
 
-  char *kernel_kmeans_c = "kmeans_kernel_c";
-  char *kernel_swap = "kmeans_swap";
+  const char *kernel_kmeans_c = "kmeans_kernel_c";
+  const char *kernel_swap = "kmeans_swap";
 
   kernel_s = clCreateKernel(prog, kernel_kmeans_c, &err);
   if (err != CL_SUCCESS) {
@@ -294,7 +291,7 @@ int allocate(int n_points, int n_features, int n_clusters, float **feature) {
   clSetKernelArg(kernel2, 2, sizeof(cl_int), (void *)&n_points);
   clSetKernelArg(kernel2, 3, sizeof(cl_int), (void *)&n_features);
 
-  size_t global_work[3] = {n_points, 1, 1};
+  size_t global_work[3] = {static_cast<size_t>(n_points), 1, 1};
   /// Ke Wang adjustable local group size 2013/08/07 10:37:33
   size_t local_work_size = BLOCK_SIZE; // work group size is defined by
                                        // RD_WG_SIZE_0 or RD_WG_SIZE_0_0
@@ -335,10 +332,10 @@ int kmeansOCL(float **feature, /* in: [npoints][nfeatures] */
               float **clusters, int *new_centers_len, float **new_centers) {
 
   int delta = 0;
-  int i, j, k;
+  int i, j;
   cl_int err = 0;
 
-  size_t global_work[3] = {n_points, 1, 1};
+  size_t global_work[3] = {static_cast<size_t>(n_points), 1, 1};
 
   /// Ke Wang adjustable local group size 2013/08/07 10:37:33
   size_t local_work_size = BLOCK_SIZE2; // work group size is defined by

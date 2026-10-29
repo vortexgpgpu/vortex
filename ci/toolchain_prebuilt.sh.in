@@ -119,6 +119,9 @@ verilator()
     split -b 50M verilator.tar.bz2 "verilator.tar.bz2.part"
     mkdir -p ./verilator/$OSVERSION
     mv verilator.tar.bz2.part* ./verilator/$OSVERSION
+    # Every other component drops its intermediate tarball; this one did not,
+    # leaving a ~100 MB untracked file in the prebuilt checkout after packaging.
+    rm verilator.tar.bz2
 }
 
 sv2v()

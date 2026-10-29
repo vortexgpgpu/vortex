@@ -2,11 +2,9 @@
 
 ## Testing changes to the RTL or simulator GPU driver.
 
-The Blackbox utility script will not pick up your changes if the h/w configuration is the same as the last run.
-To force the utility to build the driver, you need pass the --rebuild=1 option when running tests.
-Using --rebuild=0 will prevent the rebuild even if the h/w configuration is different from last run.
+The Blackbox utility script runs `make` on the driver before every test, so RTL, simulator and configuration changes are picked up automatically; there is nothing to force.
 
-    $ ./ci/blackbox.sh --driver=simx --app=demo --rebuild=1
+    $ ./ci/blackbox.sh --driver=simx --app=demo
 
 ## SimX Debugging
 
