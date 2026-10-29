@@ -75,14 +75,11 @@ def elaborate(defines, incdirs, files, top):
             and d.processOptions() and d.parseAllSources()):
         sys.exit("lift: slang could not parse the sources")
     comp = d.createCompilation()
-    used = set()
-
-    def visit(sym):
-        if sym.kind == ast.SymbolKind.Instance:
-            used.add(sym.definition.name)
-        return ast.VisitAction.Advance
-    for t in comp.getRoot().topInstances:
-        t.visit(visit)
+    # Elaborates one canonical body per distinct instance (slang's instance
+    # cache) and marks the others as copies of it.
+    diags = comp.getAllDiagnostics()
+    graph = definition_graph(comp)
+    used = set(graph) | {c for cs in graph.values() for c in cs}
     sm = comp.sourceManager
 
     def unused_only(fname):
@@ -90,7 +87,7 @@ def elaborate(defines, incdirs, files, top):
         # errors there cannot affect the design.
         names = re.findall(r"^\s*(module|interface|package)\s+(\w+)", open(fname).read(), re.M)
         return bool(names) and all(k == "module" and n not in used for k, n in names)
-    errs = [x for x in comp.getAllDiagnostics() if x.isError()
+    errs = [x for x in diags if x.isError()
             and not unused_only(str(sm.getFileName(x.location)))]
     if errs:
         x = errs[0]
@@ -98,7 +95,62 @@ def elaborate(defines, incdirs, files, top):
                  f"{sm.getFileName(x.location)}:{sm.getLineNumber(x.location)})")
     am = analysis.AnalysisManager()
     am.analyze(comp)
-    return d, comp, am
+    return d, comp, am, graph
+
+
+def definition_graph(comp):
+    """{definition: {definitions it instantiates}} over the elaborated hierarchy.
+
+    Walks canonical bodies only: an instance that slang's instance cache made a
+    copy of another has the same children, and elaborating every copy's body
+    costs memory per instance instead of per distinct body."""
+    graph = collections.defaultdict(set)
+    stack = list(comp.getRoot().topInstances)
+    for t in stack:
+        graph[t.definition.name]
+    while stack:
+        inst = stack.pop()
+        name = inst.definition.name
+
+        def visit(sym):
+            if sym is inst:
+                return ast.VisitAction.Advance
+            if sym.kind == ast.SymbolKind.Instance:
+                graph[name].add(sym.definition.name)
+                if sym.canonicalBody is None:
+                    stack.append(sym)
+                return ast.VisitAction.Skip
+            return ast.VisitAction.Advance
+        inst.visit(visit)
+    return graph
+
+
+def find_instances(comp, graph, names):
+    """{definition: [instances]} of the named definitions, in hierarchy order.
+
+    Descends only into instances whose definition can contain one of them."""
+    rev = collections.defaultdict(set)
+    for p, cs in graph.items():
+        for c in cs:
+            rev[c].add(p)
+    holders, todo = set(), list(names)
+    while todo:
+        for p in rev[todo.pop()]:
+            if p not in holders:
+                holders.add(p)
+                todo.append(p)
+    out = {n: [] for n in names}
+
+    def visit(sym):
+        if sym.kind == ast.SymbolKind.Instance:
+            n = sym.definition.name
+            if n in out:
+                out[n].append(sym)
+            return ast.VisitAction.Advance if n in holders else ast.VisitAction.Skip
+        return ast.VisitAction.Advance
+    for t in comp.getRoot().topInstances:
+        t.visit(visit)
+    return out
 
 
 def vec(w):
@@ -171,6 +223,9 @@ def signal_dirs(unit_inst, elem, modport_name, am):
                 continue
             d = mp_dirs[m.name]
         else:
+            if unit_inst.canonicalBody is not None:
+                sys.exit(f"lift: {upath} is a cached copy of another instance's body; "
+                         f"its drivers are not analyzed")
             drv = am.getDrivers(m)
             inside = any(dv.containingSymbol.hierarchicalPath == upath
                          or dv.containingSymbol.hierarchicalPath.startswith(upath + ".")
@@ -340,20 +395,18 @@ def _remove_item(text_len_getter, node, sm):
 class Promoter:
     """Parameter-to-port promotion across definitions (see module docstring)."""
 
-    def __init__(self, comp, sm, lifted_sites):
-        self.comp, self.sm = comp, sm
+    def __init__(self, comp, sm, lifted_sites, graph):
+        self.comp, self.sm, self.graph = comp, sm, graph
         self.lifted_sites = lifted_sites  # site keys rewritten by lifting: skip
         self.done = {}                   # (def, param) -> default text
         self.edits = collections.defaultdict(list)
         self.site_conv = collections.defaultdict(set)  # site key -> {param} converted
-        self.insts = collections.defaultdict(list)
-        for t in comp.getRoot().topInstances:
-            t.visit(self._collect)
+        self._insts = {}
 
-    def _collect(self, sym):
-        if sym.kind == ast.SymbolKind.Instance:
-            self.insts[sym.definition.name].append(sym)
-        return ast.VisitAction.Advance
+    def insts(self, defname):
+        if defname not in self._insts:
+            self._insts[defname] = find_instances(self.comp, self.graph, [defname])[defname]
+        return self._insts[defname]
 
     def key(self, node):
         r = node.sourceRange
@@ -362,7 +415,7 @@ class Promoter:
     def promote(self, defname, param):
         if (defname, param) in self.done:
             return
-        rep = self.insts[defname][0]
+        rep = self.insts(defname)[0]
         dsyn = rep.definition.syntax
         hdr = dsyn.header
         f = self.sm.getFileName(dsyn.sourceRange.start)
@@ -387,8 +440,6 @@ class Promoter:
         op = hdr.ports.openParen.location.offset + 1
         self.edits[f].append((op, op, f"\n    input wire [31:0] {param},"))
         # children whose overrides use the promoted value
-        for ch in rep.body:
-            pass
         for cinst in self._children(rep):
             site = cinst.syntax.parent
             ov = site_overrides(site)
@@ -411,7 +462,7 @@ class Promoter:
     def convert_sites(self):
         """Every instantiation of a promoted (def, param): override -> port connection."""
         for (defname, param), default in self.done.items():
-            for inst in self.insts[defname]:
+            for inst in self.insts(defname):
                 site = inst.syntax.parent
                 k = self.key(site)
                 if k in self.lifted_sites or param in self.site_conv[k]:
@@ -483,18 +534,13 @@ def main():
     a = ap.parse_args()
     a.out = os.path.abspath(a.out)
     defines, incdirs, files = read_srcs(a.srcs)
-    d, comp, am = elaborate(defines, incdirs, files, a.top)
+    d, comp, am, graph = elaborate(defines, incdirs, files, a.top)
     sm = comp.sourceManager
     units = {u.name: u for u in (Unit(s) for s in a.unit)}
-
-    def visit(sym):
-        if sym.kind == ast.SymbolKind.Instance and sym.definition.name in units:
-            units[sym.definition.name].insts.append(sym)
-        return ast.VisitAction.Advance
     # Only the elaborated hierarchy: slang also builds placeholder instances of
     # uninstantiated definitions, which must not count.
-    for t in comp.getRoot().topInstances:
-        t.visit(visit)
+    for name, insts in find_instances(comp, graph, list(units)).items():
+        units[name].insts = insts
 
     edits = collections.defaultdict(list)  # file -> [(start, end, text)]
     wrappers = {}
@@ -528,7 +574,7 @@ def main():
               f"{sum(1 for s in shape if s[0] == 'iface')} interface ports, "
               f"{sum(len(s[4]) for s in shape if s[0] == 'iface')} lifted signals")
 
-    pr = Promoter(comp, sm, lifted_sites)
+    pr = Promoter(comp, sm, lifted_sites, graph)
     for u in units.values():
         for pp in u.ports:
             pr.promote(u.name, pp)
