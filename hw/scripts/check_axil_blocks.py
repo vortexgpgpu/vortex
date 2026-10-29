@@ -29,14 +29,54 @@ DEFAULT = Path(__file__).resolve().parents[1] / "rtl/cp/VX_cp_axil_regfile.sv"
 GLOBAL_RE = re.compile(r"is_global\s*\(\s*addr\s*,\s*8'h([0-9A-Fa-f]{2})\s*\)")
 QUEUE_RE = re.compile(r"6'h([0-9A-Fa-f]{2})")
 
+# Window decoder: is_decoded() accepts whole aligned windows via in_global()
+# and decode_queue(), so its offsets are derived from their range checks.
+IN_GLOBAL_RE = re.compile(r"addr\s*\[\s*ADDR_W\s*-\s*1\s*:\s*(\d+)\s*\]\s*==\s*'0")
+QUEUE_BASE_RE = re.compile(r"addr\s*<\s*ADDR_W'\(16'h([0-9A-Fa-f]+)\)")
+QUEUE_STRIDE_RE = re.compile(r"NUM_QUEUES\)\s*\*\s*ADDR_W'\(16'h([0-9A-Fa-f]+)\)")
+# Any compare on the per-queue offset would make a window sparse again.
+OFF_FILTER_RE = re.compile(r"\b(off|off_o)\b\s*(==|!=|<|>|inside)|case\s*\(\s*off")
+
+
+def function_body(text, name):
+    start = text.find(f"function automatic logic {name}")
+    if start < 0:
+        return None
+    return text[start:text.find("endfunction", start)]
+
+
+def window_offsets(text, body):
+    """Expand in_global()/decode_queue() windows into word offsets."""
+    globals_, queue = set(), set()
+    filters = re.sub(r"`UNUSED_VAR\s*\([^)]*\)", "", body)
+    if OFF_FILTER_RE.search(filters):
+        sys.exit("check_axil_blocks: is_decoded() filters on the queue offset "
+                 "-- the decoder shape changed")
+    if "in_global(addr)" in body:
+        g = function_body(text, "in_global")
+        m = IN_GLOBAL_RE.search(g or "")
+        if not m:
+            sys.exit("check_axil_blocks: in_global() is not a single aligned "
+                     "window -- the decoder shape changed")
+        globals_ = set(range(0, 1 << int(m.group(1)), 4))
+    if "decode_queue(addr" in body:
+        q = function_body(text, "decode_queue")
+        base = QUEUE_BASE_RE.search(q or "")
+        stride = QUEUE_STRIDE_RE.search(q or "")
+        if not (base and stride) or OFF_FILTER_RE.search(q):
+            sys.exit("check_axil_blocks: decode_queue() is not a whole-window "
+                     "range check -- the decoder shape changed")
+        if int(base.group(1), 16) % 16:
+            sys.exit("check_axil_blocks: queue window base is not 16-byte aligned")
+        queue = set(range(0, int(stride.group(1), 16), 4))
+    return globals_, queue
+
 
 def decoded_offsets(text):
     """Return (globals, queue_offsets) taken from the body of is_decoded()."""
-    start = text.find("function automatic logic is_decoded")
-    if start < 0:
+    body = function_body(text, "is_decoded")
+    if body is None:
         sys.exit("check_axil_blocks: is_decoded() not found -- has it been renamed?")
-    end = text.find("endfunction", start)
-    body = text[start:end]
 
     globals_ = {int(m, 16) for m in GLOBAL_RE.findall(body)}
 
@@ -47,6 +87,8 @@ def decoded_offsets(text):
     queue = set()
     if qstart >= 0 and qend > qstart:
         queue = {int(m, 16) for m in QUEUE_RE.findall(body[qstart:qend])}
+    if not globals_ and not queue:
+        return window_offsets(text, body)
     return globals_, queue
 
 
