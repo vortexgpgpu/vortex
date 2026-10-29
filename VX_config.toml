@@ -142,8 +142,9 @@ VX_CFG_FMA_LATENCY  = "expr: 16 if $fpu_dsp_vivado else (4 if $fpu_dsp_quartus e
 # STD timing; DPI is a fast STD and takes the same values.
 fdiv_latency_std  = "expr: 32 if $VX_CFG_EXT_D_ENABLE else 17"
 fsqrt_latency_std = "expr: $fdiv_latency_std"
-fdiv_latency_dsp  = "expr: 15 if $QUARTUS else (28 if $VIVADO else (32 if $VX_CFG_EXT_D_ENABLE else 17))"
-fsqrt_latency_dsp = "expr: 10 if $QUARTUS else (28 if $VIVADO else (32 if $VX_CFG_EXT_D_ENABLE else 17))"
+# The vendor divide and square-root IP is F32 only; with D they are the RTL cores.
+fdiv_latency_dsp  = "expr: 32 if $VX_CFG_EXT_D_ENABLE else (15 if $QUARTUS else (28 if $VIVADO else 17))"
+fsqrt_latency_dsp = "expr: 32 if $VX_CFG_EXT_D_ENABLE else (10 if $QUARTUS else (28 if $VIVADO else 17))"
 
 VX_CFG_FDIV_LATENCY = "expr: 16 if $VX_CFG_FPU_TYPE_FPNEW else ($fdiv_latency_dsp if $VX_CFG_FPU_TYPE_DSP else $fdiv_latency_std)"
 VX_CFG_FSQRT_LATENCY= "expr: 16 if $VX_CFG_FPU_TYPE_FPNEW else ($fsqrt_latency_dsp if $VX_CFG_FPU_TYPE_DSP else $fsqrt_latency_std)"
