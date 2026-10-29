@@ -63,8 +63,8 @@ FOLD_CLASSES = {
 }
 
 VIVADO_CELL = re.compile(
-    r'_reg((\[\d+\])*(_replica(_\d+)?)?(_[fb]ret(_\d+)?)*(_rep(_\d+)?)?'
-    r'|_\d+_\d+_\d+_\d+|_bram_\d+)$')
+    r'_reg((\[\w+\])*(_replica(_\d+)?)?(_[fb]ret(_+\d+)?)*(_rep(_+\d+)?)?'
+    r'|_\d+(_\d+_\d+_\d+)?|_bram_\d+)$')
 FOLD_SUFFIX = re.compile(
     r'(_ext(_\d+)?|_fold|_read(_\d+)?|_[fb]ret(_\d+)?|_replica(_\d+)?)+$')
 FOLD_SHELL = re.compile(r'^fold\d+_')
@@ -235,17 +235,32 @@ def cmd_validate(args):
     # that place a register in the generate scope that assigns it rather
     # than the one that declares it.
     by_dir = collections.defaultdict(dict)
-    for row in endpoints(args.run_dir):
-        cls, p = paths[int(row['end_inst'])]
+    # Vendor IPs, black boxes to Beacon: Vivado's end points inside them have
+    # no counterpart.
+    ips = set()
+
+    def class_key(inst_id, name):
+        cls, p = paths[int(inst_id)]
         if cls is None:
-            continue
+            return None
         # Registers of inlined modules are named <instance path>/<name>.
-        base = row['end'].rsplit('.', 1)[0]
+        base = name.rsplit('.', 1)[0]
         full = f'{p}/{base}' if p else base
         if sub:
             if not full.startswith(sub + '/'):
-                continue
+                return None
             full = full[len(sub) + 1:]
+        return cls, full
+
+    for row in endpoints(args.run_dir):
+        if row['start_kind'] == 'ip':
+            ip = class_key(row['start_inst'], row['start'])
+            if ip:
+                ips.add((ip[0], norm(ip[1])))
+        ck = class_key(row['end_inst'], row['end'])
+        if ck is None:
+            continue
+        cls, full = ck
         key = (cls, norm(full))
         v = ours[key]
         if not v[1]:
@@ -264,8 +279,13 @@ def cmd_validate(args):
                 best = (name, cand)
         return best[1] if best else key
 
+    def in_ip(key):
+        cls, k = key
+        parts = k.split('/')
+        return any((cls, '/'.join(parts[:i])) in ips for i in range(1, len(parts)))
+
     viv = collections.defaultdict(lambda: [0, 0.0, 0])  # max lv, min slack, n
-    rows = unmatched_rows = shell_rows = 0
+    rows = unmatched_rows = shell_rows = ip_rows = 0
     unmatched = collections.Counter()
     with open(args.ep) as f:
         r = csv.reader(f)
@@ -275,6 +295,9 @@ def cmd_validate(args):
             key = ep_key(end, args.native)
             if key is None or key[0] not in classes.values():
                 shell_rows += 1
+                continue
+            if in_ip(key):
+                ip_rows += 1
                 continue
             if key not in ours and key[1].endswith('_rdata'):
                 # The read register of a synchronous RAM is the memory's
@@ -294,7 +317,8 @@ def cmd_validate(args):
     keys = sorted(viv)
     if not keys:
         print(f'ep rows {rows}: fold shell / channels {shell_rows}, '
-              f'unmatched {unmatched_rows}, matched 0')
+              f'inside vendor IPs {ip_rows}, unmatched {unmatched_rows}, '
+              f'matched 0')
         for (cls, k), n in unmatched.most_common(args.top):
             print(f'  {n:6d} {cls}: {k}')
         return
@@ -302,7 +326,8 @@ def cmd_validate(args):
     lv = np.array([viv[k][0] for k in keys])
     sl = np.array([viv[k][1] for k in keys])
     print(f'ep rows {rows}: fold shell / channels {shell_rows}, '
-          f'unmatched {unmatched_rows}, matched {rows - shell_rows - unmatched_rows} '
+          f'inside vendor IPs {ip_rows}, unmatched {unmatched_rows}, '
+          f'matched {rows - shell_rows - ip_rows - unmatched_rows} '
           f'in {len(keys)} registers/memories')
     print(f'Beacon keys in the classes: {len(ours)}')
     print(f'Spearman(Beacon levels, Vivado levels) = {spearman(a, lv):.3f}')
@@ -336,7 +361,8 @@ def cmd_validate(args):
 
     if args.json:
         summary = {
-            'rows': rows, 'shell': shell_rows, 'unmatched': unmatched_rows,
+            'rows': rows, 'shell': shell_rows, 'vendor_ip': ip_rows,
+            'unmatched': unmatched_rows,
             'registers': len(keys), 'measured': len(ours),
             'rho_levels': round(spearman(a, lv), 3),
             'rho_slack': round(spearman(a, -sl), 3),
