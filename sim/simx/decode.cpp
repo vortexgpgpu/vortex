@@ -977,7 +977,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         uint32_t fmt_d = rd, fmt_s = rs1;
         bool is_sparse = (rs2 & 1) != 0;
         instr->set_op_type(is_sparse ? TcuType::WMMA_SP : TcuType::WMMA);
-        instr->set_args(IntrTcuArgs{0, 0, fmt_s, fmt_d, 0, 0, 0, 0, 0, 0});
+        instr->set_args(IntrTcuArgs{0, 0, fmt_s, fmt_d, 0, 0, 0, 0, 0, 0, 0, 0, 0});
         instr->set_macro_op();
       } break;
     #ifdef VX_CFG_TCU_WGMMA_ENABLE
@@ -987,7 +987,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         uint32_t cd_nregs = (rs2 >> 1) & 0x3;
         bool is_a_smem = (rs2 >> 3) & 1;
         instr->set_op_type(is_sparse ? TcuType::WGMMA_SP : TcuType::WGMMA);
-        instr->set_args(IntrTcuArgs{is_a_smem ? 1u : 0u, cd_nregs, fmt_s, fmt_d, 0, 0, 0, 0, 0, 0});
+        instr->set_args(IntrTcuArgs{is_a_smem ? 1u : 0u, cd_nregs, fmt_s, fmt_d, 0, 0, 0, 0, 0, 0, 0, 0, 0});
         instr->set_macro_op();
       } break;
     #endif // VX_CFG_TCU_WGMMA_ENABLE
@@ -996,7 +996,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         uint32_t fmt_s = rs2;
         uint32_t slot  = rd;
         instr->set_op_type(TcuType::TCU_LD);
-        instr->set_args(IntrTcuArgs{0, 0, fmt_s, slot, 0, 0, 0, 0, 0, 0});
+        instr->set_args(IntrTcuArgs{0, 0, fmt_s, slot, 0, 0, 0, 0, 0, 0, 0, 0, 0});
         // rs1 holds the warp-broadcast base address (real I-reg read).
         instr->set_src_reg(0, rs1, RegType::Integer);
       } break;
@@ -1004,6 +1004,41 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       default:
         std::abort();
       }
+    } break;
+  #endif
+  #ifdef VX_CFG_TCU_TMEM_ENABLE
+    case 5: {
+      instr->set_fu_type(FUType::TCU);
+      IntrTcuArgs args{};
+      switch (funct3) {
+      case 0: // TMEM_LD fd, (rs1), n: rd = first FP destination, rs2 = n-1
+      case 4: // TMEM_LD.R: one lane per register
+        args.fmt_d  = rd;
+        args.tmem_row = (funct3 == 4);
+        args.tmem_n = rs2 + 1;
+        instr->set_op_type(TcuType::TMEM_LD);
+        instr->set_src_reg(0, rs1, RegType::Integer);
+        instr->set_macro_op();
+        break;
+      case 1: // TMEM_ST fs, (rs1), n: rd = first FP source, rs2 = n-1
+      case 5: // TMEM_ST.R: one lane per register
+        args.fmt_s  = rd;
+        args.tmem_row = (funct3 == 5);
+        args.tmem_n = rs2 + 1;
+        instr->set_op_type(TcuType::TMEM_ST);
+        instr->set_src_reg(0, rs1, RegType::Integer);
+        instr->set_macro_op();
+        break;
+      case 2: // TJ_DESC rs1, rs2: descriptor words 0..7, four per register (lanes 0..3)
+      case 3: // TJ_POST rs1, rs2: descriptor words 8..15
+        instr->set_op_type((funct3 == 2) ? TcuType::TJ_DESC : TcuType::TJ_POST);
+        instr->set_src_reg(0, rs1, RegType::Integer);
+        instr->set_src_reg(1, rs2, RegType::Integer);
+        break;
+      default:
+        std::abort();
+      }
+      instr->set_args(args);
     } break;
   #endif
     case 4: { // Load/Store Packing extensions — macro-ops, sequencer expands to N single-elem uops

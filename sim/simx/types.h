@@ -789,6 +789,10 @@ enum class TcuType {
   WMMA_SP,    // Sparse variants live in distinct op_types so IntrTcuArgs
   WGMMA_SP,   // doesn't carry a per-uop is_sparse bit.
   TCU_LD,     // Warp-level metadata load. rd[4] selects sparse/MX namespace.
+  TMEM_LD,    // TMEM -> FP registers, one uop per register.
+  TMEM_ST,    // FP registers -> TMEM, one uop per register.
+  TJ_DESC,    // Tensor-job descriptor words 0..7.
+  TJ_POST,    // Tensor-job descriptor words 8..15; enqueues the job.
 };
 
 struct IntrTcuArgs {
@@ -802,6 +806,9 @@ struct IntrTcuArgs {
   uint32_t is_first_uop : 1; // set per-uop by tcu_uops expansion (C4)
   uint32_t is_last_uop  : 1;
   uint32_t is_setup_uop : 1; // WGMMA descriptor setup uop, no FEDP compute
+  uint32_t tmem_n       : 6; // TMEM_LD/ST register count
+  uint32_t tmem_idx     : 5; // TMEM_LD/ST uop register offset
+  uint32_t tmem_row     : 1; // TMEM_LD/ST: one lane per register (else one lane per thread)
 };
 
 // Helper: is_sparse derived from op_type (no per-uop bit).
@@ -812,6 +819,11 @@ inline bool tcu_is_sparse(TcuType t) {
 // Helper: WGMMA family (covers dense + sparse).
 inline bool tcu_is_wgmma(TcuType t) {
   return t == TcuType::WGMMA || t == TcuType::WGMMA_SP;
+}
+
+// Helper: TMEM transfers.
+inline bool tcu_is_tmem(TcuType t) {
+  return t == TcuType::TMEM_LD || t == TcuType::TMEM_ST;
 }
 
 // Helper: WMMA family (covers dense + sparse).
@@ -826,6 +838,10 @@ inline std::ostream &operator<<(std::ostream &os, const TcuType& type) {
   case TcuType::WMMA_SP:    os << "WMMA.SP"; break;
   case TcuType::WGMMA_SP:   os << "WGMMA.SP"; break;
   case TcuType::TCU_LD:     os << "TCU_LD"; break;
+  case TcuType::TMEM_LD:    os << "TMEM_LD"; break;
+  case TcuType::TMEM_ST:    os << "TMEM_ST"; break;
+  case TcuType::TJ_DESC:    os << "TJ_DESC"; break;
+  case TcuType::TJ_POST:    os << "TJ_POST"; break;
   default:
     assert(false);
   }

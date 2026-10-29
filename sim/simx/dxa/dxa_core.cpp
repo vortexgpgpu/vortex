@@ -846,7 +846,8 @@ private:
 
 DxaCore::DxaCore(const SimContext& ctx, const char* name, Socket* socket)
   : SimObject<DxaCore>(ctx, name)
-  , dxa_req_in(kCoresPerSocket, this)
+  // SFU issue ports [0, cores), then TCU tensor-job ports [cores, 2*cores).
+  , dxa_req_in(kCoresPerSocket * (VX_CFG_TCU_TMEM_ENABLED ? 2 : 1), this)
   , gmem_req_out(kDxaMemPorts, this)
   , gmem_rsp_in(kDxaMemPorts, this)
   , lmem_req_out(kCoresPerSocket * LMEM_PORTS_PER_CORE, this)

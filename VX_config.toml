@@ -323,6 +323,11 @@ VX_CFG_TCU_FEDP2K = false
 # A sparse WGMMA uop fills the doubled-K FEDP with compressed A (wgmma.sp k32
 # vs dense k16); without it the FEDP's upper half idles on every sparse uop.
 VX_CFG_TCU_SPARSE_FULLK = "expr: $VX_CFG_TCU_SPARSE_ENABLE and $VX_CFG_TCU_WGMMA_ENABLE and $VX_CFG_TCU_FEDP2K"
+# Tensor memory: a per-core accumulator of (TCU blocks x WGMMA M) lanes by
+# TMEM_COLS 32-bit columns, and the tensor-job sequencer that drives the K loop
+# from DXA stages.
+VX_CFG_TCU_TMEM_ENABLE = false
+VX_CFG_TCU_TMEM_COLS = 128
 
 [dxa]
 # Cluster-level DXA engine count, decoupled from cores/socket size.

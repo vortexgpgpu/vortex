@@ -19,6 +19,9 @@
 #include "types.h"
 #ifdef VX_CFG_EXT_DXA_ENABLE
 #include "dxa_core.h"
+#ifdef VX_CFG_TCU_TMEM_ENABLE
+#include "tcu_unit.h"
+#endif
 #include "local_mem.h"
 #include "sfu_unit.h"
 #endif
@@ -321,6 +324,9 @@ public:
     for (uint32_t c = 0; c < cores_per_socket; ++c) {
       auto sfu = cores_.at(c)->sfu_unit();
       sfu->dxa_req_out.bind(&dxa_core_->dxa_req_in.at(c));
+    #ifdef VX_CFG_TCU_TMEM_ENABLE
+      cores_.at(c)->tcu_unit()->dxa_req_out.bind(&dxa_core_->dxa_req_in.at(cores_per_socket + c));
+    #endif
     }
 
     // DxaCore::lmem_req_out[c] → core's LocalMem DMA port (first client).

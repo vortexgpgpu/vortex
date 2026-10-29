@@ -25,6 +25,8 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstring>
+#include <deque>
 #include <limits>
 #include <type_traits>
 
@@ -45,6 +47,10 @@ static constexpr bool kSpFullK = (wg_cfg::sp_k_mult > 1);
 static constexpr bool wgmma_needs_setup(bool is_a_smem, bool is_sparse) {
   return kFedp2K && !is_a_smem && (!is_sparse || kSpFullK);
 }
+
+#if defined(VX_CFG_TCU_TMEM_ENABLE) && (!defined(VX_CFG_TCU_WGMMA_ENABLE) || !defined(VX_CFG_TCU_FEDP2K))
+#error "VX_CFG_TCU_TMEM_ENABLE requires VX_CFG_TCU_WGMMA_ENABLE and VX_CFG_TCU_FEDP2K"
+#endif
 
 // Dot-product pipeline depth of the configured tensor-PE type.
 static constexpr uint32_t kFedpLatency = VX_CFG_TCU_LATENCY;
@@ -381,6 +387,9 @@ public:
     exec_done_.fill(false);
     in_wgmma_.fill(false);
     wgmma_desc_.fill({0, 0});
+  #ifdef VX_CFG_TCU_TMEM_ENABLE
+    tmem_.assign(kTmemLanes * kTmemCols, reg_data_t{});
+  #endif
   }
 
   ~Impl() {}
@@ -411,6 +420,11 @@ public:
     bbuf_ = bbuf_slot_t{};
   #endif
     cur_block_ = 0;
+  #ifdef VX_CFG_TCU_TMEM_ENABLE
+    std::fill(tmem_.begin(), tmem_.end(), reg_data_t{});
+    jobs_.clear();
+    job_desc_ = {};
+  #endif
   #ifdef TCU_META_ENABLE
     agu_.fill(agu_state_t{});
     agu_issue_rr_ = 0;
@@ -568,6 +582,9 @@ public:
     uint32_t wgmma_ready = this->tbuf_step();
     uint32_t setup_fired = 0;
   #endif
+  #ifdef VX_CFG_TCU_TMEM_ENABLE
+    this->job_step();
+  #endif
 
     uint64_t now = SimPlatform::instance().cycles();
     for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
@@ -656,6 +673,78 @@ public:
           }
         } break;
       #endif
+      #ifdef VX_CFG_TCU_TMEM_ENABLE
+        case TcuType::TMEM_LD:
+        case TcuType::TMEM_ST: {
+          int32_t cta = (int32_t)core_->scheduler().warp(wid).cta_csrs.cta_id;
+          // TMEM transfers wait for the CTA's tensor jobs to retire.
+          if (this->jobs_pending(cta)) {
+            ++perf_stats_.tmem_stalls;
+            continue;
+          }
+          // taddr = {lane [31:16], column [15:0]}. A transfer covers one
+          // block's xtileM lanes. Lane per thread: thread t holds lane
+          // + t % xtileM and register r column + r * kTmemThreadsPerLane
+          // + t / xtileM. Lane per register: register r holds lane + r % xtileM
+          // and thread t column + (r / xtileM) * NT + t.
+          uint32_t taddr = rs1_data.at(0).u;
+          uint32_t r = tpuArgs.tmem_idx;
+          uint32_t lane0 = taddr >> 16;
+          uint32_t col0 = taddr & 0xffff;
+          uint32_t cols = kTmemThreadsPerLane;
+          if (tpuArgs.tmem_row) {
+            lane0 += r % wg_cfg::xtileM;
+            col0 += (r / wg_cfg::xtileM) * VX_CFG_NUM_THREADS;
+            cols = VX_CFG_NUM_THREADS;
+          } else {
+            col0 += r * kTmemThreadsPerLane;
+          }
+          if (((taddr >> 16) % wg_cfg::xtileM) != 0 || (taddr >> 16) >= kTmemLanes
+           || col0 + cols > kTmemCols) {
+            std::cout << "Error: TMEM lane " << lane0 << " column " << col0
+                      << " out of range (lanes=" << kTmemLanes << " in groups of "
+                      << wg_cfg::xtileM << ", columns=" << kTmemCols << ")" << std::endl;
+            std::abort();
+          }
+          if (tcu_type == TcuType::TMEM_LD) {
+            rd_data.resize(VX_CFG_NUM_THREADS);
+          }
+          for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+            auto& cell = tpuArgs.tmem_row
+                       ? this->tmem_at(lane0, col0 + t)
+                       : this->tmem_at(lane0 + t % wg_cfg::xtileM, col0 + t / wg_cfg::xtileM);
+            if (tcu_type == TcuType::TMEM_LD) {
+              rd_data.at(t) = cell;
+            } else {
+              cell = rs2_data.at(t);
+            }
+          }
+        } break;
+        case TcuType::TJ_DESC:
+        case TcuType::TJ_POST: {
+          // The descriptor travels in the instruction stream, so it is
+          // ordered behind the warp's earlier work without a memory fence.
+          auto& words = job_desc_.at(wid);
+          uint32_t base = (tcu_type == TcuType::TJ_DESC) ? 0 : 8;
+          if (tcu_type == TcuType::TJ_POST) {
+            int32_t cta = (int32_t)core_->scheduler().warp(wid).cta_csrs.cta_id;
+            if (this->jobs_pending(cta) >= kJobQueueSize) {
+              continue;
+            }
+          }
+          for (uint32_t i = 0; i < 4; ++i) {
+            words.at(base + i)     = rs1_data.at(i).u;
+            words.at(base + 4 + i) = rs2_data.at(i).u;
+          }
+          if (tcu_type == TcuType::TJ_POST) {
+            tj_t job;
+            job.cta = (int32_t)core_->scheduler().warp(wid).cta_csrs.cta_id;
+            job.wid = wid;
+            this->job_decode(job, words);
+            jobs_.push_back(job);
+          }
+        } break;
+      #endif
       #ifdef TCU_META_ENABLE
         case TcuType::TCU_LD: {
           if (agu_.at(b).busy) {
@@ -680,6 +769,16 @@ public:
       case TcuType::WGMMA_SP:
         delay = kMmaLatency;
         break;
+    #ifdef VX_CFG_TCU_TMEM_ENABLE
+      case TcuType::TMEM_LD:
+        delay = kTmemReadLatency + 1;
+        break;
+      case TcuType::TMEM_ST:
+      case TcuType::TJ_DESC:
+      case TcuType::TJ_POST:
+        delay = 1;
+        break;
+    #endif
     #ifdef TCU_META_ENABLE
       case TcuType::TCU_LD:
         // The AGU round-trip models the memory latency; the remaining
@@ -776,6 +875,7 @@ public:
     uint32_t step_n = 0;
     uint32_t step_k = 0;
     uint32_t cd_nregs = 0;
+    uint32_t xtile_n = 0;
     uint32_t fmt_s = 0;
     uint32_t desc_b = 0;
 
@@ -848,12 +948,20 @@ public:
       req.step_n       = tpuArgs.step_n;
       req.step_k       = tpuArgs.step_k;
       req.cd_nregs     = tpuArgs.cd_nregs;
+      req.xtile_n      = xtile_n_of(tpuArgs.cd_nregs);
       req.fmt_s        = tpuArgs.fmt_s;
       req.desc_b       = wgmma_desc_[wid][1];
       if (rep < 0) {
         rep = b;
       }
     }
+
+  #ifdef VX_CFG_TCU_TMEM_ENABLE
+    if (rep >= 0 && !jobs_.empty()) {
+      std::cout << "Error: WGMMA issued while a tensor job owns the tile buffers" << std::endl;
+      std::abort();
+    }
+  #endif
 
     // Shared B buffer, keyed by the lowest block with a uop.
     bool bbuf_ready = true;
@@ -977,7 +1085,7 @@ public:
       key.step_k = req.step_k;
       key.step_n = req.step_n;
     } else {
-      uint32_t n_steps = xtile_n_of(req.cd_nregs) / cfg::tcN;
+      uint32_t n_steps = req.xtile_n / cfg::tcN;
       uint32_t blk = req.step_k * n_steps + req.step_n;
       uint32_t blk_bytes = req.is_sparse ? (kBBlockWordsSp * 4) : (kBBlockWords * 4);
       uint32_t blks_per_row = req.is_sparse ? 1 : kBSubBlocks;
@@ -993,7 +1101,7 @@ public:
     const auto& sd_b = lmem_desc_[req.wid][1];
     uint32_t e_bits  = elem_bits(req.fmt_s);
     uint32_t ratio   = 32 / e_bits;
-    uint32_t xtile_n = xtile_n_of(req.cd_nregs);
+    uint32_t xtile_n = req.xtile_n;
     uint32_t n_steps = xtile_n / cfg::tcN;
     uint32_t k_words = req.is_sparse ? wg_cfg::sp_k_words : kFedpWords;
     bool kmajor = (sd_b.ldm != 0);
@@ -1032,7 +1140,7 @@ public:
     const auto& sd_a = lmem_desc_[req.wid][0];
     uint32_t e_bits  = elem_bits(req.fmt_s);
     uint32_t ratio   = 32 / e_bits;
-    uint32_t xtile_n = xtile_n_of(req.cd_nregs);
+    uint32_t xtile_n = req.xtile_n;
     // Sparse FULLK compressed A has the dense per-uop shape (fedpK words).
     bool sparse_a    = req.is_sparse && !kSpFullK;
     uint32_t k_words = sparse_a ? cfg::tcK : kFedpWords;
@@ -1074,6 +1182,410 @@ public:
     }
     return reads;
   }
+
+#ifdef VX_CFG_TCU_TMEM_ENABLE
+  // Tensor jobs run one at a time on all blocks in lockstep: block b holds
+  // rows [b*xtileM, (b+1)*xtileM) of the job's M, which are TMEM lanes
+  // [b*xtileM, (b+1)*xtileM); all blocks share each B block. Per K-tile, every
+  // block's A stripe is fetched once and B is streamed one (k, n) block at a
+  // time. TMEM columns are N elements, 32 bits each.
+  static constexpr uint32_t kTmemLanes = VX_CFG_NUM_TCU_BLOCKS * wg_cfg::xtileM;
+  static constexpr uint32_t kTmemCols  = VX_CFG_TCU_TMEM_COLS;
+  static constexpr uint32_t kTmemThreadsPerLane = VX_CFG_NUM_THREADS / wg_cfg::xtileM;
+  static_assert(VX_CFG_NUM_THREADS % wg_cfg::xtileM == 0, "TMEM needs NUM_THREADS to be a multiple of WGMMA M");
+  static_assert(wg_cfg::tcM * wg_cfg::tcN == VX_CFG_NUM_THREADS, "C fragment must span the warp");
+  static constexpr uint32_t kTmemReadLatency = 1;
+  static constexpr uint32_t kJobQueueSize = 2;       // per CTA
+  static constexpr uint32_t kJobDescWords = 16;
+  static constexpr uint32_t kJobKeyBase = 0x10000;   // lmem_desc_ key of block 0
+
+  enum tj_mode_t { TJ_CONSUME = 0, TJ_CLOSED = 1 };
+  enum class tj_state_t { WAIT, RUN, DRAIN };
+  using tj_words_t = std::array<uint32_t, kJobDescWords>;
+
+  reg_data_t& tmem_at(uint32_t lane, uint32_t col) {
+    return tmem_.at(lane * kTmemCols + col);
+  }
+
+  struct tj_t {
+    int32_t    cta = -1;
+    uint32_t   wid = 0;
+    uint32_t   stage0 = 0;
+    tj_state_t state = tj_state_t::WAIT;
+    // descriptor
+    uint32_t   fmt_s = 0;
+    uint32_t   fmt_d = 0;
+    uint32_t   n_frag = 0;
+    bool       acc_init = false;
+    uint32_t   mode = TJ_CONSUME;
+    bool       sw_full = false;    // software waited on the full barriers
+    uint32_t   nstages = 1;
+    uint32_t   kb = 1;
+    uint32_t   k_tiles = 0;
+    uint32_t   taddr = 0;
+    uint32_t   a_base = 0;
+    uint32_t   b_base = 0;
+    uint32_t   stage_stride = 0;
+    uint32_t   lda = 0;            // leading bytes
+    uint32_t   ldb = 0;
+    uint32_t   full_bar = 0;       // raw barrier ids; stage s adds s << 8
+    uint32_t   empty_bar = 0;
+    uint32_t   done_bar = 0;
+    uint32_t   dxa_slot_a = 0;     // CLOSED
+    uint32_t   dxa_slot_b = 0;
+    uint32_t   a_coord[2] = {0, 0};
+    uint32_t   b_coord[2] = {0, 0};
+    uint32_t   k_advance = 0;
+    uint32_t   a_kdim = 0;
+    uint32_t   b_kdim = 0;
+    uint32_t   fills = 0;          // CLOSED: stage fills issued
+    uint32_t   fill_part = 0;      // CLOSED: 0 = A next, 1 = B next
+    // progress
+    uint32_t   kt = 0;
+    uint32_t   n = 0;
+    uint32_t   m = 0;
+    bool       arrived = false;
+    uint32_t   wait_phase = 0;
+    bool       a_valid = false;
+    bool       a_fetching = false;
+    // B blocks of the current K-tile, double-buffered by N step.
+    std::array<bool, TcuTbuf::B_SLOTS>     b_valid{};
+    std::array<bool, TcuTbuf::B_SLOTS>     b_fetching{};
+    std::array<uint32_t, TcuTbuf::B_SLOTS> b_n{};
+    uint64_t   done_due = 0;
+  };
+
+  uint32_t jobs_pending(int32_t cta) const {
+    uint32_t count = 0;
+    for (auto& job : jobs_) {
+      count += (job.cta == cta);
+    }
+    return count;
+  }
+
+  static uint32_t job_stage(const tj_t& job, uint32_t kt) {
+    return (job.stage0 + kt / job.kb) % job.nstages;
+  }
+
+  static uint32_t job_bar(uint32_t base, uint32_t stage) {
+    return bar_decode_id(base + (stage << 8), VX_CFG_NUM_BARRIERS);
+  }
+
+  void job_decode(tj_t& job, const tj_words_t& w) {
+    uint32_t idesc   = w[0];
+    job.fmt_s        = idesc & 0x1f;
+    job.fmt_d        = (idesc >> 5) & 0x1f;
+    bool sparse      = (idesc >> 10) & 1;
+    job.acc_init     = (idesc >> 11) & 1;
+    bool a_tmem      = (idesc >> 12) & 1;
+    job.n_frag       = (idesc >> 13) & 0xff;
+    job.mode         = w[1] & 0x3;
+    job.sw_full      = (w[1] >> 2) & 1;
+    job.nstages      = (w[1] >> 4) & 0xf;
+    job.kb           = (w[1] >> 8) & 0xff;
+    job.k_tiles      = w[1] >> 16;
+    job.taddr        = w[2];
+    job.a_base       = w[3];
+    job.b_base       = w[4];
+    job.stage_stride = w[6];
+    job.lda          = w[7] & 0xffff;
+    job.ldb          = w[7] >> 16;
+    job.full_bar     = w[8];
+    job.empty_bar    = w[9];
+    job.done_bar     = w[10];
+    job.stage0       = w[15] & 0xf;
+    job.dxa_slot_a   = w[11] & 0xf;
+    job.dxa_slot_b   = (w[11] >> 4) & 0xf;
+    job.a_coord[0]   = w[12] & 0xffff;
+    job.a_coord[1]   = w[12] >> 16;
+    job.b_coord[0]   = w[13] & 0xffff;
+    job.b_coord[1]   = w[13] >> 16;
+    job.k_advance    = w[14] & 0xffff;
+    job.a_kdim       = (w[14] >> 16) & 1;
+    job.b_kdim       = (w[14] >> 17) & 1;
+
+    const char* err = nullptr;
+    if (sparse) {
+      err = "sparse jobs are not supported";
+    } else if (a_tmem) {
+      err = "A from TMEM is not supported";
+    } else if (job.mode != TJ_CONSUME && job.mode != TJ_CLOSED) {
+      err = "unknown mode";
+    } else if (job.sw_full && job.mode != TJ_CONSUME) {
+      err = "sw_full requires CONSUME mode";
+    } else if (job.nstages == 0 || job.kb == 0 || job.k_tiles == 0 || job.n_frag == 0) {
+      err = "zero nstages, kb, k_tiles or n_frag";
+    } else if (job.lda == 0) {
+      err = "A must be row-major (lda != 0)";
+    } else if (job.ldb == 0 && job.kb != 1) {
+      err = "block-major B requires kb == 1";
+    } else if ((job.taddr >> 16) != 0) {
+      err = "D must start at lane 0";
+    } else if (job.taddr + job.n_frag * wg_cfg::tcN > kTmemCols) {
+      err = "D columns exceed TMEM";
+    } else if (job.n_frag * wg_cfg::m_steps <= kFedpLatency + kTmemReadLatency) {
+      // A D fragment is read again one K-tile later; it must have been written.
+      err = "n_frag too small to cover the FEDP latency";
+    } else if (job.stage0 >= job.nstages) {
+      err = "starting stage out of range";
+    }
+    if (err) {
+      std::cout << "Error: tensor job (cta=" << job.cta << "): " << err << std::endl;
+      std::abort();
+    }
+    DT(3, simobject_->name() << " tj-post: cta=" << job.cta << ", n_frag=" << job.n_frag
+          << ", k_tiles=" << job.k_tiles << ", kb=" << job.kb << ", nstages=" << job.nstages
+          << ", taddr=" << job.taddr << ", acc_init=" << job.acc_init
+          << ", a_base=0x" << std::hex << job.a_base << ", b_base=0x" << job.b_base
+          << ", stride=0x" << job.stage_stride << ", lda=0x" << job.lda << ", ldb=0x" << job.ldb
+          << ", bars=0x" << job.full_bar << "/0x" << job.empty_bar << "/0x" << job.done_bar << std::dec);
+  }
+
+  // Point each block's LMEM descriptors at the current K-tile.
+  void job_set_descs(const tj_t& job) {
+    uint32_t e_bits   = elem_bits(job.fmt_s);
+    uint32_t s        = job_stage(job, job.kt);
+    uint32_t ki       = job.kt % job.kb;
+    uint32_t kt_bytes = kFedpWords * 4;
+    uint64_t stage_a  = uint64_t(VX_MEM_LMEM_BASE_ADDR) + job.a_base + uint64_t(s) * job.stage_stride;
+    uint64_t stage_b  = uint64_t(VX_MEM_LMEM_BASE_ADDR) + job.b_base + uint64_t(s) * job.stage_stride;
+    for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
+      auto& d = lmem_desc_[kJobKeyBase + b];
+      d[0] = {stage_a + uint64_t(b) * wg_cfg::xtileM * job.lda + ki * kt_bytes,
+              job.lda * 8 / e_bits, false};
+      d[1] = {stage_b + (job.ldb ? ki * kt_bytes : 0), job.ldb * 8 / e_bits, false};
+    }
+  }
+
+  tbuf_req_t job_req(const tj_t& job, uint32_t b, uint32_t n = 0) const {
+    tbuf_req_t req;
+    req.valid     = true;
+    req.wid       = kJobKeyBase + b;
+    req.cta       = job.cta;
+    req.a_is_smem = true;
+    req.step_m    = job.m;
+    req.step_n    = n;
+    req.xtile_n   = job.n_frag * cfg::tcN;
+    req.fmt_s     = job.fmt_s;
+    return req;
+  }
+
+  // CLOSED: keep every stage that is free and still owed a fill loaded,
+  // `nstages` fills ahead of the K-tile being computed. A fill is the A and B
+  // DXA loads of one stage, completing on the stage's full barrier. Returns
+  // true once the fills owed so far have been issued.
+  bool job_fill(tj_t& job) {
+    uint32_t num_fills = (job.k_tiles + job.kb - 1) / job.kb;
+    uint32_t cur_fill  = job.kt / job.kb;
+    uint32_t limit     = std::min(num_fills, cur_fill + job.nstages);
+    while (job.fills < limit) {
+      if (simobject_->dxa_req_out.full()) {
+        return false;
+      }
+      uint32_t f = job.fills;
+      uint32_t s = (job.stage0 + f) % job.nstages;
+      uint32_t bar_raw = job.full_bar + (s << 8);
+      uint32_t k = f * job.k_advance;
+      DxaReq req{};
+      req.core     = core_;
+      req.wid      = job.wid;
+      req.bar_id   = bar_raw;
+      req.cta_mask = 0;
+      uint64_t stage_off = uint64_t(s) * job.stage_stride;
+      if (job.fill_part == 0) {
+        core_->barrier_event_attach(bar_decode_id(bar_raw, VX_CFG_NUM_BARRIERS), 2);
+        req.desc_slot = job.dxa_slot_a;
+        req.smem_addr = uint64_t(VX_MEM_LMEM_BASE_ADDR) + job.a_base + stage_off;
+        req.coords[0] = job.a_coord[0] + (job.a_kdim == 0 ? k : 0);
+        req.coords[1] = job.a_coord[1] + (job.a_kdim == 1 ? k : 0);
+      } else {
+        req.desc_slot = job.dxa_slot_b;
+        req.smem_addr = uint64_t(VX_MEM_LMEM_BASE_ADDR) + job.b_base + stage_off;
+        req.coords[0] = job.b_coord[0] + (job.b_kdim == 0 ? k : 0);
+        req.coords[1] = job.b_coord[1] + (job.b_kdim == 1 ? k : 0);
+      }
+      simobject_->dxa_req_out.send(req);
+      DT(3, simobject_->name() << " tj-fill: cta=" << job.cta << ", fill=" << f
+            << ", stage=" << s << ", part=" << (job.fill_part ? "B" : "A")
+            << ", c0=" << req.coords[0] << ", c1=" << req.coords[1]);
+      if (++job.fill_part == 2) {
+        job.fill_part = 0;
+        ++job.fills;
+      }
+    }
+    return true;
+  }
+
+  // Advance a waiting job towards its next K-tile; true once its stage is
+  // full. A CONSUME job's sequencer is one of the full barrier's two
+  // participants, so the phase cannot advance before it arrives.
+  bool job_ready(tj_t& job) {
+    if (job.mode == TJ_CLOSED && !this->job_fill(job)) {
+      return false;
+    }
+    if (!job.sw_full) {
+      uint32_t bar = job_bar(job.full_bar, job_stage(job, job.kt));
+      auto& barriers = core_->scheduler().barrier_unit();
+      if (!job.arrived) {
+        // A CLOSED job is its full barriers' only participant.
+        job.wait_phase = barriers.get_phase(bar) & 1;
+        core_->barrier_arrive(bar, (job.mode == TJ_CLOSED) ? 1 : 2, job.wid, false);
+        job.arrived = true;
+        DT(3, simobject_->name() << " tj-full-arrive: cta=" << job.cta << ", kt=" << job.kt
+              << ", bar=" << bar << ", phase=" << job.wait_phase);
+      }
+      if ((barriers.get_phase(bar) & 1) == job.wait_phase) {
+        return false;
+      }
+      job.arrived = false;
+    }
+    this->job_set_descs(job);
+    return true;
+  }
+
+  // Jobs of different CTAs share the tensor core at K-tile granularity: the
+  // running job keeps it until its K-tile ends, then the oldest CTA whose
+  // next stage is full takes it. Every waiting job keeps its own stage loads
+  // and barrier arrivals moving meanwhile. A CTA's jobs run in order.
+  void job_step() {
+    uint64_t now = SimPlatform::instance().cycles();
+    for (auto it = jobs_.begin(); it != jobs_.end();) {
+      if (it->state == tj_state_t::DRAIN && now >= it->done_due) {
+        DT(3, simobject_->name() << " tj-done: cta=" << it->cta);
+        core_->barrier_event_release(bar_decode_id(it->done_bar, VX_CFG_NUM_BARRIERS));
+        it = jobs_.erase(it);
+      } else {
+        ++it;
+      }
+    }
+
+    for (auto& job : jobs_) {
+      if (job.state == tj_state_t::RUN) {
+        this->job_run(job);
+        return;
+      }
+    }
+
+    bool waiting = false;
+    std::array<bool, VX_CFG_NUM_WARPS> seen{};
+    for (auto& job : jobs_) {
+      if (job.cta < 0 || seen.at(job.cta)) {
+        continue;
+      }
+      seen.at(job.cta) = true;
+      if (job.state != tj_state_t::WAIT) {
+        continue;
+      }
+      waiting = true;
+      if (this->job_ready(job)) {
+        DT(3, simobject_->name() << " tj-run: cta=" << job.cta << ", kt=" << job.kt);
+        job.state = tj_state_t::RUN;
+        return;
+      }
+    }
+    if (waiting) {
+      ++perf_stats_.tj_stage_waits;
+    }
+  }
+
+  void job_run(tj_t& job) {
+    auto& tbuf = simobject_->tbuf();
+
+    // A stripes of every block for this K-tile.
+    if (!job.a_valid) {
+      if (!job.a_fetching) {
+        for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
+          tbuf->fill_a(b, this->a_refill(this->job_req(job, b)));
+        }
+        job.a_fetching = true;
+      } else {
+        bool filling = false;
+        for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
+          filling |= tbuf->filling_a(b);
+        }
+        if (!filling) {
+          job.a_fetching = false;
+          job.a_valid = true;
+        }
+      }
+    }
+
+    // B blocks of this K-tile, shared by all blocks: block n is read from
+    // slot n % B_SLOTS while block n + 1 prefetches into the other slot.
+    for (uint32_t n = job.n; n < std::min(job.n + TcuTbuf::B_SLOTS, job.n_frag); ++n) {
+      uint32_t slot = n % TcuTbuf::B_SLOTS;
+      if (job.b_fetching.at(slot)) {
+        if (!tbuf->filling_b(slot)) {
+          job.b_fetching.at(slot) = false;
+          job.b_valid.at(slot) = true;
+        }
+      } else if (!job.b_valid.at(slot) || job.b_n.at(slot) != n) {
+        tbuf->fill_b(this->b_refill(this->job_req(job, 0, n)), slot);
+        job.b_fetching.at(slot) = true;
+        job.b_valid.at(slot) = false;
+        job.b_n.at(slot) = n;
+      }
+    }
+    uint32_t b_slot = job.n % TcuTbuf::B_SLOTS;
+    bool b_ready = job.b_valid.at(b_slot) && job.b_n.at(b_slot) == job.n;
+
+    if (!job.a_valid || !b_ready) {
+      ++perf_stats_.tbuf_stalls;
+      return;
+    }
+
+    // Thread t of fragment (m, n) is M row m*tcM + t/tcN, N column n*tcN + t%tcN.
+    uint32_t col0 = job.taddr + job.n * wg_cfg::tcN;
+    uint32_t xtile_n = job.n_frag * cfg::tcN;
+    bool zero_c = (job.kt == 0 && job.acc_init);
+    static const std::vector<reg_data_t> kNone;
+    std::vector<reg_data_t> c_frag(VX_CFG_NUM_THREADS);
+    std::vector<reg_data_t> d_frag(VX_CFG_NUM_THREADS);
+    cur_b_slot_ = b_slot;
+    for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
+      uint32_t lane0 = b * wg_cfg::xtileM + job.m * wg_cfg::tcM;
+      for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+        c_frag.at(t) = zero_c ? reg_data_t{}
+                              : this->tmem_at(lane0 + t / wg_cfg::tcN, col0 + t % wg_cfg::tcN);
+      }
+      cur_block_ = b;
+      this->mma_lmem(kJobKeyBase + b, job.fmt_s, job.fmt_d, job.m, job.n, 0,
+                     kNone, kNone, c_frag, d_frag, false, true, xtile_n);
+      for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+        this->tmem_at(lane0 + t / wg_cfg::tcN, col0 + t % wg_cfg::tcN) = d_frag.at(t);
+      }
+    }
+    ++perf_stats_.tj_mma_uops;
+
+    if (++job.m < wg_cfg::m_steps) {
+      return;
+    }
+    job.m = 0;
+    if (++job.n < job.n_frag) {
+      return;
+    }
+    job.n = 0;
+
+    // K-tile done: its A stripes and every B block have been fetched.
+    bool stage_end = ((job.kt % job.kb) == job.kb - 1) || (job.kt + 1 == job.k_tiles);
+    if (stage_end && job.mode == TJ_CONSUME) {
+      DT(3, simobject_->name() << " tj-empty-arrive: cta=" << job.cta << ", kt=" << job.kt
+            << ", bar=" << job_bar(job.empty_bar, job_stage(job, job.kt)));
+      core_->barrier_arrive(job_bar(job.empty_bar, job_stage(job, job.kt)), 2, job.wid, false);
+    }
+    ++job.kt;
+    job.a_valid = false;
+    job.b_valid = {};
+    if (job.kt == job.k_tiles) {
+      job.state = tj_state_t::DRAIN;
+      job.done_due = SimPlatform::instance().cycles() + kMmaLatency;
+    } else if (stage_end) {
+      job.state = tj_state_t::WAIT;
+    } else {
+      this->job_set_descs(job);
+    }
+  }
+#endif // VX_CFG_TCU_TMEM_ENABLE
 #endif // VX_CFG_TCU_WGMMA_ENABLE
 
 
@@ -1177,9 +1689,10 @@ public:
       std::abort();
     }
 
-    uint32_t ratio   = elem_ratio(fmt_s);
-    uint32_t k_words = is_sparse ? wg_cfg::sp_k_words : kFedpWords;
     uint32_t e_bits = elem_bits(fmt_s);
+    // NRC: cd_nregs 0/1/2 → 8/16/32; xtileN = NRC * NT / xtileM.
+    uint32_t nrc = (cd_nregs == 0) ? 8 : (cd_nregs == 1) ? 16 : 32;
+    uint32_t xtile_n = (nrc * VX_CFG_NUM_THREADS) / wg_cfg::xtileM;
 
     // Decode smem descriptors (B always from smem, A optionally).
     if (is_setup_uop) {
@@ -1189,21 +1702,41 @@ public:
         lmem_desc_[wid][0] = {uint64_t(VX_MEM_LMEM_BASE_ADDR) + (a_desc & 0xFFFF), (a_desc >> 16) * 8 / e_bits, false};
       }
       lmem_desc_[wid][1] = {uint64_t(VX_MEM_LMEM_BASE_ADDR) + (b_desc & 0xFFFF), (b_desc >> 16) * 8 / e_bits, false};
-      uint32_t nrc = (cd_nregs == 0) ? 8 : (cd_nregs == 1) ? 16 : 32;
-      cur_xtile_n_ = (nrc * VX_CFG_NUM_THREADS) / wg_cfg::xtileM;
+      cur_xtile_n_ = xtile_n;
       return;
     }
 
-    lmem_desc_t sd_a = lmem_desc_[wid][0];
-    lmem_desc_t sd_b = lmem_desc_[wid][1];
+    cur_b_slot_ = 0;
+    this->mma_lmem(wid, fmt_s, fmt_d, step_m, step_n, step_k,
+                   rs1_data, rs2_data, rs3_data, rd_data,
+                   is_sparse, is_a_smem, xtile_n);
+    __unused(b_desc);
+  }
+
+  // One WGMMA compute uop with B (and A when is_a_smem) read through the tile
+  // buffers. `key` selects the decoded LMEM descriptors.
+  void mma_lmem(uint32_t key,
+                uint32_t fmt_s,
+                uint32_t fmt_d,
+                uint32_t step_m,
+                uint32_t step_n,
+                uint32_t step_k,
+                const std::vector<reg_data_t>& rs1_data,
+                const std::vector<reg_data_t>& rs2_data,
+                const std::vector<reg_data_t>& rs3_data,
+                std::vector<reg_data_t>& rd_data,
+                bool is_sparse,
+                bool is_a_smem,
+                uint32_t xtile_n) {
+    uint32_t wid     = key;
+    uint32_t ratio   = elem_ratio(fmt_s);
+    uint32_t k_words = is_sparse ? wg_cfg::sp_k_words : kFedpWords;
+    lmem_desc_t sd_a = lmem_desc_[key][0];
+    lmem_desc_t sd_b = lmem_desc_[key][1];
     // load_lmem_word distinguishes A from B by descriptor base.
     cur_a_desc_base_ = is_a_smem ? sd_a.base : ~uint64_t(0);
     cur_is_sparse_ = is_sparse;
-    // NRC: cd_nregs 0/1/2 → 8/16/32; xtileN = NRC * NT / xtileM.
-    {
-      uint32_t nrc = (cd_nregs == 0) ? 8 : (cd_nregs == 1) ? 16 : 32;
-      cur_xtile_n_ = (nrc * VX_CFG_NUM_THREADS) / wg_cfg::xtileM;
-    }
+    cur_xtile_n_ = xtile_n;
 
     reg_data_t a_tile[cfg::tcM * kFedpWords] = {};
     for (uint32_t i = 0; i < cfg::tcM; ++i) {
@@ -1291,7 +1824,6 @@ public:
               a_tile, b_tile, rs3_data, rd_data,
               is_sparse, k_words, k_words,
               wg_cfg::k_steps * wg_cfg::fedpK);
-    __unused(b_desc);
   }
 
   const PerfStats& perf_stats() const {
@@ -1516,7 +2048,8 @@ private:
                          desc, row, col, fmt_s, pack_along_row, false,
                          cur_is_sparse_ && (wg_cfg::sp_k_mult == 1));
     }
-    return gather_word([&](uint64_t addr) { return tbuf->read_b(addr); },
+    uint32_t b_slot = cur_b_slot_;
+    return gather_word([&](uint64_t addr) { return tbuf->read_b(addr, b_slot); },
                        desc, row, col, fmt_s, pack_along_row, sparse_b, false);
   }
 
@@ -1583,6 +2116,8 @@ private:
   std::array<bool, VX_CFG_NUM_TCU_BLOCKS> in_wgmma_;
   // Current block index, set before delegating to wgmma().
   uint32_t cur_block_ = 0;
+  // B buffer slot read by the current MMA.
+  uint32_t cur_b_slot_ = 0;
   // A-descriptor base for the current wgmma(); distinguishes A from B in load_lmem_word.
   uint64_t cur_a_desc_base_ = ~uint64_t(0);
   bool cur_is_sparse_ = false;
@@ -1593,6 +2128,11 @@ private:
 #ifdef VX_CFG_TCU_WGMMA_ENABLE
   std::array<abuf_slot_t, VX_CFG_NUM_TCU_BLOCKS> abuf_;
   bbuf_slot_t bbuf_;
+#endif
+#ifdef VX_CFG_TCU_TMEM_ENABLE
+  std::vector<reg_data_t> tmem_;  // [lane][column]
+  std::deque<tj_t> jobs_;
+  std::array<tj_words_t, VX_CFG_NUM_WARPS> job_desc_{};
 #endif
 };
 
@@ -1617,6 +2157,14 @@ op_string_t TcuUnit::op_string(TcuType tcu_type, IntrTcuArgs args) {
   case TcuType::TCU_LD:
     return {"TCU_LD." + std::string((args.fmt_d & 0x10) ? "MX." : "SP.")
              + std::string(vt::fmt_string(args.fmt_s)) + ".slot" + std::to_string(args.fmt_d & 0xf), ""};
+  case TcuType::TMEM_LD:
+    return {std::string(args.tmem_row ? "TMEM_LD.R." : "TMEM_LD.") + std::to_string(args.tmem_n) + "." + std::to_string(args.tmem_idx), ""};
+  case TcuType::TMEM_ST:
+    return {std::string(args.tmem_row ? "TMEM_ST.R." : "TMEM_ST.") + std::to_string(args.tmem_n) + "." + std::to_string(args.tmem_idx), ""};
+  case TcuType::TJ_DESC:
+    return {"TJ_DESC", ""};
+  case TcuType::TJ_POST:
+    return {"TJ_POST", ""};
   default:
     std::abort();
   }
@@ -1631,6 +2179,12 @@ uint32_t TcuUopGen::uop_count(const Instr& instr) {
   auto tcu_type = std::get<TcuType>(instr.get_op_type());
 #ifdef VX_CFG_TCU_WGMMA_ENABLE
   auto args = std::get<IntrTcuArgs>(instr.get_args());
+#endif
+
+#ifdef VX_CFG_TCU_TMEM_ENABLE
+  if (tcu_is_tmem(tcu_type)) {
+    return std::get<IntrTcuArgs>(instr.get_args()).tmem_n;
+  }
 #endif
 
   if (tcu_is_wmma(tcu_type)) {
@@ -1675,6 +2229,29 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
   auto uop_instr = std::allocate_shared<Instr>(pool_, uop_uuid, FUType::TCU);
   uop_instr->set_parent_uuid(parent_uuid);
 
+#ifdef VX_CFG_TCU_TMEM_ENABLE
+  if (tcu_is_tmem(tcu_type)) {
+    // Uop i moves FP register (f + i) to or from its TMEM columns.
+    uint32_t freg = (tcu_type == TcuType::TMEM_LD) ? args.fmt_d : args.fmt_s;
+    if (freg + args.tmem_n > 32) {
+      std::cout << "Error: TMEM transfer of " << args.tmem_n << " registers from f"
+                << freg << " exceeds the register file" << std::endl;
+      std::abort();
+    }
+    IntrTcuArgs uop_args = args;
+    uop_args.tmem_idx = uop_index;
+    uop_instr->set_op_type(tcu_type);
+    uop_instr->set_args(uop_args);
+    uop_instr->set_src_reg(0, macro_instr.get_src_reg(0).idx, RegType::Integer);
+    if (tcu_type == TcuType::TMEM_LD) {
+      uop_instr->set_dest_reg(freg + uop_index, RegType::Float);
+    } else {
+      uop_instr->set_src_reg(1, freg + uop_index, RegType::Float);
+    }
+    return uop_instr;
+  }
+#endif
+
   if (tcu_is_wmma(tcu_type)) {
     using wmma = vt::wmma_config_t<VX_CFG_NUM_THREADS>;
     constexpr uint32_t rc_base = 0, ra_base = 10;
@@ -1709,7 +2286,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
         uint32_t actual_n = lg_k ? (n_sp >> lg_k) : n_sp;
         uint32_t reg_rs3 = rc_base + (mma_idx >> 1);
         uop_instr->set_op_type(TcuType::WMMA_SP);
-        uop_instr->set_args(IntrTcuArgs{0, 0, fmt_s, fmt_d, m_sp, actual_n, 0, 0, 0, 0});
+        uop_instr->set_args(IntrTcuArgs{0, 0, fmt_s, fmt_d, m_sp, actual_n, 0, 0, 0, 0, 0, 0, 0});
         uop_instr->set_dest_reg(reg_rs3, RegType::Float);
         uop_instr->set_src_reg(0, ra_base + m_sp, RegType::Float);
         uop_instr->set_src_reg(1, rb_base + n_sp, RegType::Float);
@@ -1765,7 +2342,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
           reg_rs3 = rc_base + c_off;
         }
         uop_instr->set_op_type(is_sparse ? TcuType::WMMA_SP : TcuType::WMMA);
-        uop_instr->set_args(IntrTcuArgs{0, 0, fmt_s, fmt_d, m, n, k, 0, 0, 0});
+        uop_instr->set_args(IntrTcuArgs{0, 0, fmt_s, fmt_d, m, n, k, 0, 0, 0, 0, 0, 0});
         uop_instr->set_dest_reg(reg_rs3, RegType::Float);
         uop_instr->set_src_reg(0, reg_rs1, RegType::Float);
         uop_instr->set_src_reg(1, reg_rs2, RegType::Float);
@@ -1792,7 +2369,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
 
       if (needs_setup && uop_index == 0) {
         uop_instr->set_args(IntrTcuArgs{is_a_smem ? 1u : 0u, cd_nregs,
-                                       fmt_s, fmt_d, 0, 0, 0, 1, 0, 1});
+                                       fmt_s, fmt_d, 0, 0, 0, 1, 0, 1, 0, 0, 0});
         uop_instr->set_src_reg(0, a0, RegType::Integer);
         uop_instr->set_src_reg(1, a1, RegType::Integer);
         uop_instr->set_fu_lock(true);
@@ -1819,7 +2396,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
       bool first = (mma_idx == 0);
       bool last  = (uop_index == (total - 1));
       uop_instr->set_args(IntrTcuArgs{is_a_smem ? 1u : 0u, cd_nregs,
-                                     fmt_s, fmt_d, m, n, k, first ? 1u : 0u, last ? 1u : 0u, 0});
+                                     fmt_s, fmt_d, m, n, k, first ? 1u : 0u, last ? 1u : 0u, 0, 0, 0, 0});
       uop_instr->set_dest_reg(r, RegType::Float);
       if (!is_a_smem) {
         uint32_t rs1_off = (is_sparse && !kSpFullK) ? m : (m * a_reg_k_steps + k);
@@ -1849,6 +2426,9 @@ TcuUnit::TcuUnit(const SimContext &ctx, const char* name, Core* core)
 #ifdef TCU_META_ENABLE
 	, agu_req_out(this)
 	, agu_rsp_in(this)
+#endif
+#ifdef VX_CFG_TCU_TMEM_ENABLE
+	, dxa_req_out(this)
 #endif
 	, impl_(new Impl(this, core))
 {

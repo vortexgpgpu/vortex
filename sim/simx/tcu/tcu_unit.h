@@ -20,6 +20,9 @@
 #include "instr.h"
 #include "func_unit.h"
 #include "tcu_tbuf.h"
+#ifdef VX_CFG_TCU_TMEM_ENABLE
+#include "dxa/dxa_unit.h"
+#endif
 
 // The TCU metadata SRAM is present when any metadata-consuming mode (MX or
 // sparse) is enabled. Internal derived macro — not a VX_CFG_* knob; mirrors
@@ -63,12 +66,18 @@ public:
 		uint64_t tbuf_stalls = 0;      // cycles a WGMMA uop waits on its A stripe or the B row, summed over buffers
 		uint64_t tbuf_cache_hits = 0;  // cycles the resident B row serves the representative block
 		uint64_t lmem_reads = 0;       // bank-row reads issued by the A and B buffers
+		uint64_t tj_mma_uops = 0;      // tensor-job MMA steps (all blocks in lockstep)
+		uint64_t tj_stage_waits = 0;   // cycles a tensor job waits on a stage's full barrier
+		uint64_t tmem_stalls = 0;      // cycles a TMEM transfer waits on its CTA's jobs
 
 		PerfStats& operator+=(const PerfStats& rhs) {
 			this->latency          += rhs.latency;
 			this->tbuf_stalls      += rhs.tbuf_stalls;
 			this->tbuf_cache_hits  += rhs.tbuf_cache_hits;
 			this->lmem_reads       += rhs.lmem_reads;
+			this->tj_mma_uops      += rhs.tj_mma_uops;
+			this->tj_stage_waits   += rhs.tj_stage_waits;
+			this->tmem_stalls      += rhs.tmem_stalls;
 			return *this;
 		}
 	};
@@ -82,6 +91,11 @@ public:
   // metadata SRAM.
   SimChannel<LsuReq> agu_req_out;
   SimChannel<LsuRsp> agu_rsp_in;
+#endif
+
+#ifdef VX_CFG_TCU_TMEM_ENABLE
+  // CLOSED tensor jobs issue their stage loads to the DXA engine.
+  SimChannel<DxaReq> dxa_req_out;
 #endif
 
 	void wmma(uint32_t wid,

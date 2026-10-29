@@ -1,0 +1,620 @@
+#include "common.h"
+#include <algorithm>
+#include <chrono>
+#include <type_traits>
+#include <cmath>
+#include <iostream>
+#include <rvfloats.h>
+#include <string.h>
+#include <tensor_cfg.h>
+#include <unistd.h>
+#include <util.h>
+#include <vector>
+#include <vortex2.h>
+#include <dxa.h>
+
+// The TCU chains K/tileK dot-product ops, each rounding its accumulator to fp32
+// once, while the CPU reference accumulates in double (no intermediate rounding).
+// A wider tile rounds fewer times but sums more elements per rounding, so the two
+// effects cancel and the drift tracks K rather than the chain depth: it measures
+// ~K/8 ULP across every gated NUM_THREADS (16 ULP at K=128 for both tileK=8 and
+// tileK=16). float_ulp() therefore scales with K and carries 2x headroom, since a
+// fixed bound silently depends on the tile shape. The RTL datapath itself is
+// verified bit-exactly against its windowed reference by hw/unittest/tcu_fedp
+// (`make -C hw/unittest run-tcu`), so this bounds a reference idealization, not a
+// hardware tolerance.
+static uint32_t g_float_ulp = 16;
+static uint32_t g_max_ulp = 0;
+
+static uint32_t float_ulp(uint32_t K) {
+  return std::max<uint32_t>(8, K / 5);
+}
+#define MAX_ERRORS 100
+
+#define RT_CHECK(_expr)                                      \
+  do {                                                       \
+    int _ret = _expr;                                        \
+    if (0 == _ret)                                           \
+      break;                                                 \
+    printf("Error: '%s' returned %d!\n", #_expr, (int)_ret); \
+    cleanup();                                               \
+    exit(-1);                                                \
+  } while (false)
+
+using namespace vortex;
+namespace vt = tensor;
+
+///////////////////////////////////////////////////////////////////////////////
+
+template <typename Type>
+class Comparator {};
+
+template <>
+class Comparator<vt::fp32> {
+public:
+  static float generate() {
+    return static_cast<float>(rand()) / RAND_MAX;
+  }
+  static bool compare(float a, float b, int index, int errors) {
+    union fi_t {
+      float f;
+      int32_t i;
+    };
+    fi_t fa, fb;
+    fa.f = a;
+    fb.f = b;
+    auto d = std::abs(fa.i - fb.i);
+    g_max_ulp = std::max(g_max_ulp, static_cast<uint32_t>(d));
+    if (d > static_cast<int32_t>(g_float_ulp)) {
+      if (errors < MAX_ERRORS) {
+        printf("*** error: [%d] expected=%f, actual=%f\n", index, fb.f, fa.f);
+      }
+      return false;
+    }
+    return true;
+  }
+};
+
+template <>
+class Comparator<vt::fp16> {
+public:
+  static uint16_t generate() {
+    auto fvalue = float(rand()) / RAND_MAX;
+    return rv_ftoh_s(bit_cast<uint32_t>(fvalue), 0, nullptr);
+  }
+  static bool compare(uint16_t a, uint16_t b, int index, int errors) {
+    if (a != b) {
+      if (errors < MAX_ERRORS) {
+        printf("*** error: [%d] expected=0x%x, actual=0x%x\n", index, b, a);
+      }
+      return false;
+    }
+    return true;
+  }
+};
+
+template <>
+class Comparator<vt::fp8> {
+public:
+  static uint8_t generate() {
+    auto fvalue = float(rand()) / RAND_MAX;
+    return rv_ftoe4m3_s(bit_cast<uint32_t>(fvalue), 0, nullptr);
+  }
+  static bool compare(uint8_t a, uint8_t b, int index, int errors) {
+    if (a != b) {
+      if (errors < MAX_ERRORS) {
+        printf("*** error: [%d] expected=0x%x, actual=0x%x\n", index, b, a);
+      }
+      return false;
+    }
+    return true;
+  }
+};
+
+template <>
+class Comparator<vt::bf8> {
+public:
+  static uint8_t generate() {
+    auto fvalue = float(rand()) / RAND_MAX;
+    return rv_ftoe5m2_s(bit_cast<uint32_t>(fvalue), 0, nullptr);
+  }
+  static bool compare(uint8_t a, uint8_t b, int index, int errors) {
+    if (a != b) {
+      if (errors < MAX_ERRORS) {
+        printf("*** error: [%d] expected=0x%x, actual=0x%x\n", index, b, a);
+      }
+      return false;
+    }
+    return true;
+  }
+};
+
+template <>
+class Comparator<vt::int8> {
+public:
+  static int8_t generate() {
+    return static_cast<int8_t>(rand());
+  }
+  static bool compare(int8_t a, int8_t b, int index, int errors) {
+    if (a != b) {
+      if (errors < MAX_ERRORS) {
+        printf("*** error: [%d] expected=%d, actual=%d\n", index, b, a);
+      }
+      return false;
+    }
+    return true;
+  }
+};
+
+template <>
+class Comparator<vt::int32> {
+public:
+  static int32_t generate() {
+    return static_cast<int32_t>(rand());
+  }
+  static bool compare(int32_t a, int32_t b, int index, int errors) {
+    if (a != b) {
+      if (errors < MAX_ERRORS) {
+        printf("*** error: [%d] expected=%d, actual=%d\n", index, b, a);
+      }
+      return false;
+    }
+    return true;
+  }
+};
+
+template <>
+class Comparator<vt::tf32> {
+public:
+  static uint32_t generate() {
+    auto fvalue = float(rand()) / RAND_MAX;
+    return rv_ftotf32_s(bit_cast<uint32_t>(fvalue), 0, nullptr);
+  }
+  static bool compare(uint32_t a, uint32_t b, int index, int errors) {
+    if (a != b) {
+      if (errors < MAX_ERRORS) {
+        printf("*** error: [%d] expected=0x%x, actual=0x%x\n", index, b, a);
+      }
+      return false;
+    }
+    return true;
+  }
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
+template <typename S, typename D>
+struct muladd_t {
+  using stype = typename S::dtype;
+  using dtype = typename D::dtype;
+  static dtype eval(stype a, stype b, dtype c) {
+    return static_cast<dtype>(a) * static_cast<dtype>(b) + c;
+  }
+};
+
+template <>
+struct muladd_t<vt::fp16, vt::fp32> {
+  static float eval(uint16_t a, uint16_t b, float c) {
+    auto fa = bit_cast<float>(rv_htof_s(a, 0, nullptr));
+    auto fb = bit_cast<float>(rv_htof_s(b, 0, nullptr));
+    return fa * fb + c;
+  }
+};
+
+template <>
+struct muladd_t<vt::fp8, vt::fp32> {
+  static float eval(uint8_t a, uint8_t b, float c) {
+    auto fa = bit_cast<float>(rv_e4m3tof_s(a, 0, nullptr));
+    auto fb = bit_cast<float>(rv_e4m3tof_s(b, 0, nullptr));
+    return fa * fb + c;
+  }
+};
+
+template <>
+struct muladd_t<vt::fp8, vt::fp8> {
+  static uint8_t eval(uint8_t a, uint8_t b, uint8_t c) {
+    auto fa = bit_cast<float>(rv_e4m3tof_s(a, 0, nullptr));
+    auto fb = bit_cast<float>(rv_e4m3tof_s(b, 0, nullptr));
+    auto fc = bit_cast<float>(rv_e4m3tof_s(c, 0, nullptr));
+    auto fd = fa * fb + fc;
+    return rv_ftoe4m3_s(bit_cast<uint32_t>(fd), 0, nullptr);
+  }
+};
+
+template <>
+struct muladd_t<vt::bf8, vt::fp32> {
+  static float eval(uint8_t a, uint8_t b, float c) {
+    auto fa = bit_cast<float>(rv_e5m2tof_s(a, 0, nullptr));
+    auto fb = bit_cast<float>(rv_e5m2tof_s(b, 0, nullptr));
+    return fa * fb + c;
+  }
+};
+
+template <>
+struct muladd_t<vt::bf8, vt::bf8> {
+  static uint8_t eval(uint8_t a, uint8_t b, uint8_t c) {
+    auto fa = bit_cast<float>(rv_e5m2tof_s(a, 0, nullptr));
+    auto fb = bit_cast<float>(rv_e5m2tof_s(b, 0, nullptr));
+    auto fc = bit_cast<float>(rv_e5m2tof_s(c, 0, nullptr));
+    auto fd = fa * fb + fc;
+    return rv_ftoe5m2_s(bit_cast<uint32_t>(fd), 0, nullptr);
+  }
+};
+
+template <>
+struct muladd_t<vt::tf32, vt::fp32> {
+  static float eval(uint32_t a, uint32_t b, float c) {
+    auto fa = bit_cast<float>(rv_tf32tof_s(a, 0, nullptr));
+    auto fb = bit_cast<float>(rv_tf32tof_s(b, 0, nullptr));
+    return fa * fb + c;
+  }
+};
+
+template <>
+struct muladd_t<vt::tf32, vt::tf32> {
+  static uint32_t eval(uint32_t a, uint32_t b, uint32_t c) {
+    auto fa = bit_cast<float>(rv_tf32tof_s(a, 0, nullptr));
+    auto fb = bit_cast<float>(rv_tf32tof_s(b, 0, nullptr));
+    auto fc = bit_cast<float>(rv_tf32tof_s(c, 0, nullptr));
+    auto fd = fa * fb + fc;
+    return rv_ftotf32_s(bit_cast<uint32_t>(fd), 0, nullptr);
+  }
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
+using cfg = vt::wgmma_config_t<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, WGMMA_NRC>;
+
+using itype_t = typename vt::ITYPE::dtype;
+using otype_t = typename vt::OTYPE::dtype;
+
+static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B,
+                       uint32_t M, uint32_t N, uint32_t K) {
+  for (uint32_t m = 0; m < M; ++m) {
+    for (uint32_t n = 0; n < N; ++n) {
+      if constexpr (std::is_same<vt::OTYPE, vt::fp32>::value) {
+        // fp32 output: the tensor core accumulates the K products in a wide
+        // accumulator and rounds to fp32 once; a per-step-rounded reference
+        // drifts by several ULP over K. Each product is exact in fp32, so a
+        // double accumulation reproduces the single-rounding dot product.
+        double acc = 0.0;
+        for (uint32_t k = 0; k < K; ++k) {
+          acc += static_cast<double>(muladd_t<vt::ITYPE, vt::OTYPE>::eval(A[m * K + k], B[k * N + n], otype_t(0)));
+        }
+        C[m * N + n] = static_cast<otype_t>(acc);
+      } else {
+        // Narrow outputs re-round the accumulator to the output type every
+        // step, matching the hardware chain exactly.
+        otype_t sum(0);
+        for (uint32_t k = 0; k < K; ++k) {
+          sum = muladd_t<vt::ITYPE, vt::OTYPE>::eval(A[m * K + k], B[k * N + n], sum);
+        }
+        C[m * N + n] = sum;
+      }
+    }
+  }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+const char *kernel_file = "kernel.vxbin";
+
+uint32_t xm = 64;
+uint32_t xn = 64;
+uint32_t xk = 64;
+// `warps` (= warps per CTA = WGMMA group size) is derived at runtime from
+// VX_CAPS_ISSUE_WIDTH after the device opens. WGMMA requires CTA-warp count
+// to match the hardware's TCU BLOCK_SIZE (= ISSUE_WIDTH), so it's not a
+// user-facing knob.
+uint32_t warps = 0;
+
+vx_device_h device = nullptr;
+vx_buffer_h A_buffer = nullptr;
+vx_buffer_h B_buffer = nullptr;
+vx_buffer_h C_buffer = nullptr;
+vx_queue_h  queue   = nullptr;
+vx_module_h module_ = nullptr;
+vx_kernel_h kernel  = nullptr;
+kernel_arg_t kernel_arg = {};
+constexpr uint32_t kDescA = 0;
+constexpr uint32_t kDescB = 1;
+
+static void show_usage() {
+  std::cout << "Vortex SGEMM TCU WGMMA+DXA Test." << std::endl;
+  std::cout << "Usage: [-m M] [-n N] [-k K] [-h help]" << std::endl;
+}
+
+static void parse_args(int argc, char **argv) {
+  int c;
+  while ((c = getopt(argc, argv, "m:n:k:h")) != -1) {
+    switch (c) {
+    case 'm': xm = atoi(optarg); break;
+    case 'n': xn = atoi(optarg); break;
+    case 'k': xk = atoi(optarg); break;
+    case 'h': show_usage(); exit(0); break;
+    default:  show_usage(); exit(-1);
+    }
+  }
+}
+
+void cleanup() {
+  if (device) {
+    if (A_buffer) vx_buffer_release(A_buffer);
+    if (B_buffer) vx_buffer_release(B_buffer);
+    if (C_buffer) vx_buffer_release(C_buffer);
+    if (kernel)  vx_kernel_release(kernel);
+    if (module_) vx_module_release(module_);
+    if (queue)   vx_queue_release(queue);
+    vx_device_dump_perf(device, stdout);
+    vx_device_release(device);
+  }
+}
+
+int main(int argc, char *argv[]) {
+  parse_args(argc, argv);
+
+  std::srand(50);
+
+  std::cout << "open device connection" << std::endl;
+  RT_CHECK(vx_device_open(0, &device));
+
+  vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
+  RT_CHECK(vx_queue_create(device, &qi, &queue));
+
+  // Check TCU extension
+  uint64_t isa_flags;
+  RT_CHECK(vx_device_query(device, VX_CAPS_ISA_FLAGS, &isa_flags));
+  if (!(isa_flags & VX_ISA_EXT_TCU)) {
+    std::cout << "TCU extension not supported!" << std::endl;
+    cleanup();
+    return -1;
+  }
+
+  // Check DXA extension
+  if ((isa_flags & VX_ISA_EXT_DXA) == 0) {
+    std::cerr << "Error: DXA ISA extension is disabled." << std::endl;
+    cleanup();
+    return -1;
+  }
+
+  uint64_t NT;
+  RT_CHECK(vx_device_query(device, VX_CAPS_NUM_THREADS, &NT));
+  if (NT != VX_CFG_NUM_THREADS) {
+    std::cout << "Error: device thread count (" << NT
+              << ") must match VX_CFG_NUM_THREADS=" << VX_CFG_NUM_THREADS << std::endl;
+    return -1;
+  }
+
+  uint64_t num_warps;
+  RT_CHECK(vx_device_query(device, VX_CAPS_NUM_WARPS, &num_warps));
+
+  // WGMMA group size = ISSUE_WIDTH. The hardware lockstep gate dispatches
+  // BLOCK_SIZE = ISSUE_WIDTH warps in parallel per uop, so the CTA must
+  // launch exactly that many active warps. Derived here, not user-tunable.
+  uint64_t issue_width;
+  RT_CHECK(vx_device_query(device, VX_CAPS_ISSUE_WIDTH, &issue_width));
+  warps = (uint32_t)issue_width;
+  if (warps > num_warps) {
+    std::cout << "Error: WGMMA group size (" << warps
+              << " = VX_CFG_ISSUE_WIDTH) exceeds device's per-core warp count ("
+              << num_warps << ")" << std::endl;
+    return -1;
+  }
+
+  uint32_t M = xm;
+  uint32_t N = xn;
+  uint32_t K = xk;
+
+  g_float_ulp = float_ulp(K);
+
+#ifdef WARP_SPEC
+  // One of the `warps` launched warps is a dedicated DXA producer (never
+  // computes), so only (warps-1) warps contribute an M-row band.
+  if (warps < 2) {
+    std::cout << "Error: WARP_SPEC needs at least 2 warps (1 producer + >=1 consumer)" << std::endl;
+    return -1;
+  }
+  uint32_t cta_M = (warps - 1) * cfg::xtileM;
+#else
+  uint32_t cta_M = warps * cfg::xtileM;
+#endif
+
+  if ((M % cta_M) != 0) {
+    std::cout << "Error: M (" << M << ") must be a multiple of cta_M=" << cta_M << std::endl;
+    return -1;
+  }
+  const uint32_t tile_n = cfg::xtileN * TMEM_NCHUNK;
+  if ((N % tile_n) != 0) {
+    std::cout << "Error: N (" << N << ") must be a multiple of tileN=" << tile_n << std::endl;
+    return -1;
+  }
+  if ((K % cfg::tileK) != 0) {
+    std::cout << "Error: K (" << K << ") must be a multiple of tileK=" << cfg::tileK << std::endl;
+    return -1;
+  }
+  // DEEP_BUF stages hold KB K-tiles (kernel.cpp: kBK); other paths use one.
+#if defined(DEEP_BUF)
+  const uint32_t stage_k = KB * cfg::tileK;
+#else
+  const uint32_t stage_k = cfg::tileK;
+#endif
+  if ((K % stage_k) != 0) {
+    std::cout << "Error: K (" << K << ") must be a multiple of KB*tileK=" << stage_k << std::endl;
+    return -1;
+  }
+
+  size_t sizeA = M * K;
+  size_t sizeB = K * N;
+  size_t sizeC = M * N;
+
+  // Grid: one block per CTA output tile. Block: warps * NT threads.
+  uint32_t grid_dim[2]  = {N / tile_n, M / cta_M};
+  uint32_t block_dim[2] = {warps * (uint32_t)NT, 1};
+
+  // SMEM: A tile [cta_M x tileK] + B tile [tileK x tileN]
+  uint32_t smem_size = (cta_M * stage_k + stage_k * tile_n) * sizeof(itype_t);
+  smem_size *= PIPE_N;  // N-stage pipeline (common.h)
+  // The CTA's TMEM columns scale with its shared-memory window
+  // (vx_tmem.h: smem_bytes_for_cols).
+  const uint32_t tmem_window = (tile_n + 1) * ((1u << VX_CFG_LMEM_LOG_SIZE) / VX_CFG_TCU_TMEM_COLS);
+  smem_size = std::max(smem_size, tmem_window);
+
+  std::cout << "input type: " << vt::ITYPE::name << ", output type: " << vt::OTYPE::name << std::endl;
+  std::cout << "warp tile: M=" << cfg::xtileM << ", N=" << tile_n << ", K=" << cfg::tileK << std::endl;
+  std::cout << "CTA tile: M=" << cta_M << " (warps=" << warps << ")" << std::endl;
+  std::cout << "grid: " << grid_dim[0] << "x" << grid_dim[1] << std::endl;
+  std::cout << "block: " << block_dim[0] << "x" << block_dim[1] << std::endl;
+  std::cout << "matrix A: " << M << "x" << K << std::endl;
+  std::cout << "matrix B: " << K << "x" << N << std::endl;
+  std::cout << "smem: " << smem_size << " bytes" << std::endl;
+
+  kernel_arg.M = M;
+  kernel_arg.N = N;
+  kernel_arg.K = K;
+
+  std::cout << "allocate device memory" << std::endl;
+  RT_CHECK(vx_buffer_create(device, sizeA * sizeof(itype_t), VX_MEM_READ, &A_buffer));
+  RT_CHECK(vx_buffer_address(A_buffer, &kernel_arg.A_addr));
+  RT_CHECK(vx_buffer_create(device, sizeB * sizeof(itype_t), VX_MEM_READ, &B_buffer));
+  RT_CHECK(vx_buffer_address(B_buffer, &kernel_arg.B_addr));
+  RT_CHECK(vx_buffer_create(device, sizeC * sizeof(otype_t), VX_MEM_WRITE, &C_buffer));
+  RT_CHECK(vx_buffer_address(C_buffer, &kernel_arg.C_addr));
+
+  std::cout << "A_addr=0x" << std::hex << kernel_arg.A_addr << std::dec << std::endl;
+  std::cout << "B_addr=0x" << std::hex << kernel_arg.B_addr << std::dec << std::endl;
+  std::cout << "C_addr=0x" << std::hex << kernel_arg.C_addr << std::dec << std::endl;
+
+  // Generate source data
+  std::vector<itype_t> h_A(sizeA);
+  std::vector<itype_t> h_B(sizeB);
+  for (uint32_t i = 0; i < sizeA; ++i) {
+    h_A[i] = Comparator<vt::ITYPE>::generate();
+  }
+  for (uint32_t i = 0; i < sizeB; ++i) {
+    h_B[i] = Comparator<vt::ITYPE>::generate();
+  }
+
+  // B_KMAJOR: the device holds B^T ([N][K], K contiguous). h_B stays the
+  // logical [K][N] operand the CPU reference uses. h_BT must outlive the
+  // async write below.
+#ifdef B_KMAJOR
+  std::vector<itype_t> h_BT(sizeB);
+  for (uint32_t k = 0; k < K; ++k) {
+    for (uint32_t n = 0; n < N; ++n) {
+      h_BT[(size_t)n * K + k] = h_B[(size_t)k * N + n];
+    }
+  }
+  const itype_t* b_upload = h_BT.data();
+#else
+  const itype_t* b_upload = h_B.data();
+#endif
+
+  std::cout << "upload source data" << std::endl;
+  RT_CHECK(vx_enqueue_write(queue, A_buffer, 0, h_A.data(), sizeA * sizeof(itype_t), 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_write(queue, B_buffer, 0, b_upload, sizeB * sizeof(itype_t), 0, nullptr, nullptr));
+
+  // Program DXA descriptors.
+  // Descriptor A: fetches tileK columns x cta_M rows from A[row, k].
+  //   dim0 = K-axis (tile0 = tileK), dim1 = M-axis (tile1 = cta_M)
+  //   stride0_bytes = row stride of A = K * sizeof(itype_t)
+  RT_CHECK(vortex::dxa::program_2d(queue, kDescA, kernel_arg.A_addr,
+    /*size0=*/K, /*size1=*/M,
+    /*stride0_bytes=*/K * sizeof(itype_t),
+    /*tile0=*/stage_k, /*tile1=*/cta_M,
+    /*elem_bytes=*/sizeof(itype_t)));
+
+  // Descriptor B: fetches tileN columns x tileK rows from B[k, col].
+  //   dim0 = N-axis (tile0 = tileN), dim1 = K-axis (tile1 = tileK)
+  //   stride0_bytes = row stride of B = N * sizeof(itype_t)
+  //   layout = BLOCK_MAJOR → DXA reads B[K][N] row-major and scatters each
+  //            element to the bbuf-native dense block-major destination
+  //            (vx_tensor.h::b_blockmajor_idx); set_tile_geometry conveys tcN
+  //            and the dense block K extent.
+#ifdef B_KMAJOR
+  // B_KMAJOR: B^T[N][K] in memory; plain row-major copy of a
+  // [tileN][tileK] tile (dim0 = K, dim1 = N). No scatter.
+  RT_CHECK(vortex::dxa::program_2d(queue, kDescB, kernel_arg.B_addr,
+    /*size0=*/K, /*size1=*/N,
+    /*stride0_bytes=*/K * sizeof(itype_t),
+    /*tile0=*/stage_k, /*tile1=*/tile_n,
+    /*elem_bytes=*/sizeof(itype_t)));
+  RT_CHECK(vortex::dxa::set_layout(queue, kDescB,
+    vortex::dxa::Layout::RowMajor, /*rank=*/2, /*elem_bytes=*/sizeof(itype_t)));
+#else
+  RT_CHECK(vortex::dxa::program_2d(queue, kDescB, kernel_arg.B_addr,
+    /*size0=*/N, /*size1=*/K,
+    /*stride0_bytes=*/N * sizeof(itype_t),
+    /*tile0=*/tile_n, /*tile1=*/cfg::tileK,
+    /*elem_bytes=*/sizeof(itype_t)));
+  RT_CHECK(vortex::dxa::set_layout(queue, kDescB,
+    vortex::dxa::Layout::BlockMajor, /*rank=*/2, /*elem_bytes=*/sizeof(itype_t)));
+  RT_CHECK(vortex::dxa::set_tile_geometry(device, kDescB, /*tcN=*/cfg::tcN, /*blk_k=*/cfg::b_blk_k));
+#endif
+
+  std::cout << "load kernel module" << std::endl;
+  RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
+  RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
+
+  // Host result buffer — must outlive the async read enqueued below.
+  std::vector<otype_t> h_C(sizeC);
+
+  auto time_start = std::chrono::high_resolution_clock::now();
+
+  std::cout << "start device" << std::endl;
+  vx_event_h launch_ev = nullptr;
+  {
+    vx_launch_info_t li = {};
+    li.struct_size  = sizeof(li);
+    li.kernel       = kernel;
+    li.args_host    = &kernel_arg;
+    li.args_size    = sizeof(kernel_arg);
+    li.ndim         = 2;
+    li.grid_dim[0]  = grid_dim[0];
+    li.grid_dim[1]  = grid_dim[1];
+    li.block_dim[0] = block_dim[0];
+    li.block_dim[1] = block_dim[1];
+    li.lmem_size    = smem_size;
+    RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
+  }
+
+  // Download result — chained after the launch on the same queue
+  std::cout << "download result" << std::endl;
+  vx_event_h read_ev = nullptr;
+  RT_CHECK(vx_enqueue_read(queue, h_C.data(), C_buffer, 0, sizeC * sizeof(otype_t), 1, &launch_ev, &read_ev));
+
+  std::cout << "wait for completion" << std::endl;
+  RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
+  vx_event_release(read_ev);
+  vx_event_release(launch_ev);
+
+  auto time_end = std::chrono::high_resolution_clock::now();
+  double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();
+  printf("Elapsed time: %lg ms\n", elapsed);
+
+  std::cout << "verify result" << std::endl;
+  int errors = 0;
+  {
+    std::vector<otype_t> h_ref(sizeC);
+    matmul_cpu(h_ref.data(), h_A.data(), h_B.data(), M, N, K);
+    for (uint32_t i = 0; i < h_ref.size(); ++i) {
+      if (!Comparator<vt::OTYPE>::compare(h_C[i], h_ref[i], i, errors)) {
+        ++errors;
+      }
+    }
+  }
+
+  // std::dec: an earlier dump leaves the stream in hex.
+  std::cout << std::dec << "reference drift: max=" << g_max_ulp << " ULP, bound="
+            << g_float_ulp << " ULP (K=" << K << ")" << std::endl;
+
+  cleanup();
+
+  if (errors != 0) {
+    std::cout << "Found " << std::dec << errors << " / " << sizeC << " errors!" << std::endl;
+    std::cout << "FAILED!" << std::endl;
+    return errors;
+  }
+
+  std::cout << "PASSED!" << std::endl;
+  return 0;
+}
