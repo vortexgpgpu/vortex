@@ -973,6 +973,39 @@ struct Tb {
         CHECK(evicted && !around, "I: the line stayed pinned after its read was answered from the buffer");
         hbm.lat_lo = hbm.lat_hi = 50;
         ++steps;
+
+        // J: more pairs in memory at once than pins (8): the one past them goes
+        // around, and the first pin holds.
+        constexpr uint32_t kPins = 8;
+        std::vector<std::pair<uint32_t, uint32_t>> pairs;  // (instance, row), distinct lines
+        std::set<uint32_t> lines, insts;
+        for (uint32_t i = 1; i < kInstances && pairs.size() < kPins + 1; ++i)
+          for (uint32_t r = 0; r < kRows; ++r)
+            if (!lines.count(line_of(i, r))) {
+              pairs.push_back({i, r});
+              lines.insert(line_of(i, r));
+              insts.insert(i);
+              break;
+            }
+        uint32_t x = kInstances, rx = 0;
+        for (uint32_t i = 1; i < kInstances && x == kInstances && pairs.size() == kPins + 1; ++i)
+          for (uint32_t r = 0; r < kRows && !insts.count(i); ++r)
+            if (line_of(i, r) == line_of(pairs[0].first, pairs[0].second)) {
+              x = i;
+              rx = r;
+              break;
+            }
+        if (x != kInstances) {
+          hbm.lat_lo = hbm.lat_hi = 600;
+          hbm.late_sample = true;
+          for (auto [i, r] : pairs) issue(true, true, i, r);
+          for (int c = 0; c < 20; ++c) cycle(false, false);
+          issue(false, true, x, rx);
+          for (auto [i, r] : pairs) await(i, 0);
+          hbm.lat_lo = hbm.lat_hi = 50;
+          hbm.late_sample = false;
+          ++steps;
+        }
       }
     }
     finish();
