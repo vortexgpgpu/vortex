@@ -42,7 +42,7 @@ set tool_dir $::env(TOOL_DIR)
 set path_to_tmp_project "${build_dir}/${krnl_name}_ip_project"
 set path_to_packaged     "${build_dir}/${krnl_name}_ip"
 
-# The FPU's F32 path instantiates Xilinx floating-point IP (xil_fma and
+# The FPU instantiates Xilinx floating-point IP (xil_fma and
 # friends) rather than soft logic, so those cores must exist before the AFU
 # is packaged; otherwise the component carries a dangling module reference
 # and RTL elaboration fails at link time, after the IP looks fine.
@@ -86,7 +86,7 @@ if {$ooc_xdc ne ""} {
 # alongside the RTL. The set matches the XRT flow's package_kernel.tcl.
 if {$vendor_ip} {
     set ip_files [list]
-    foreach ip {xil_fdiv xil_fma xil_fsqrt xil_fmul xil_fadd} {
+    foreach ip {xil_fdiv xil_fma xil_fsqrt xil_fdiv64 xil_fma64 xil_fsqrt64 xil_fmul xil_fadd} {
         lappend ip_files [file normalize "${build_dir}/ip/${ip}/${ip}.xci"]
     }
     add_files -verbose -norecurse -fileset [get_filesets sources_1] $ip_files

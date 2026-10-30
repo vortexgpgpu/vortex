@@ -76,6 +76,57 @@ module xil_fma (
 );
 endmodule
 
+(* black_box, fixed_latency = 57, clock = "aclk", clock_enable = "aclken",
+   data_in = "s_axis_a_tdata s_axis_b_tdata",
+   data_out = "m_axis_result_tdata m_axis_result_tuser",
+   tie = "s_axis_a_tvalid=1 s_axis_b_tvalid=1", pure_pipeline *)
+module xil_fdiv64 (
+    input  wire        aclk,
+    input  wire        aclken,
+    input  wire        s_axis_a_tvalid,
+    input  wire [63:0] s_axis_a_tdata,
+    input  wire        s_axis_b_tvalid,
+    input  wire [63:0] s_axis_b_tdata,
+    output wire        m_axis_result_tvalid,
+    output wire [63:0] m_axis_result_tdata,
+    output wire [3:0]  m_axis_result_tuser   // underflow, overflow, invalid, divide by zero
+);
+endmodule
+
+(* black_box, fixed_latency = 57, clock = "aclk", clock_enable = "aclken",
+   data_in = "s_axis_a_tdata",
+   data_out = "m_axis_result_tdata m_axis_result_tuser",
+   tie = "s_axis_a_tvalid=1", pure_pipeline *)
+module xil_fsqrt64 (
+    input  wire        aclk,
+    input  wire        aclken,
+    input  wire        s_axis_a_tvalid,
+    input  wire [63:0] s_axis_a_tdata,
+    output wire        m_axis_result_tvalid,
+    output wire [63:0] m_axis_result_tdata,
+    output wire [0:0]  m_axis_result_tuser   // invalid
+);
+endmodule
+
+(* black_box, fixed_latency = 26, clock = "aclk", clock_enable = "aclken",
+   data_in = "s_axis_a_tdata s_axis_b_tdata s_axis_c_tdata",
+   data_out = "m_axis_result_tdata m_axis_result_tuser",
+   tie = "s_axis_a_tvalid=1 s_axis_b_tvalid=1 s_axis_c_tvalid=1", pure_pipeline *)
+module xil_fma64 (
+    input  wire        aclk,
+    input  wire        aclken,
+    input  wire        s_axis_a_tvalid,
+    input  wire [63:0] s_axis_a_tdata,
+    input  wire        s_axis_b_tvalid,
+    input  wire [63:0] s_axis_b_tdata,
+    input  wire        s_axis_c_tvalid,
+    input  wire [63:0] s_axis_c_tdata,
+    output wire        m_axis_result_tvalid,
+    output wire [63:0] m_axis_result_tdata,
+    output wire [2:0]  m_axis_result_tuser   // underflow, overflow, invalid
+);
+endmodule
+
 (* black_box, fixed_latency = 8, clock = "aclk", clock_enable = "aclken",
    data_in = "s_axis_a_tdata s_axis_b_tdata",
    data_out = "m_axis_result_tdata",

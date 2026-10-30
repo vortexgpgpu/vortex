@@ -76,6 +76,9 @@ set ip_files [list \
  [file normalize "${build_dir}/ip/xil_fdiv/xil_fdiv.xci"] \
  [file normalize "${build_dir}/ip/xil_fma/xil_fma.xci"] \
  [file normalize "${build_dir}/ip/xil_fsqrt/xil_fsqrt.xci"] \
+ [file normalize "${build_dir}/ip/xil_fdiv64/xil_fdiv64.xci"] \
+ [file normalize "${build_dir}/ip/xil_fma64/xil_fma64.xci"] \
+ [file normalize "${build_dir}/ip/xil_fsqrt64/xil_fsqrt64.xci"] \
  [file normalize "${build_dir}/ip/xil_fmul/xil_fmul.xci"] \
  [file normalize "${build_dir}/ip/xil_fadd/xil_fadd.xci"] \
 ]

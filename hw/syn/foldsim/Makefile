@@ -223,7 +223,7 @@ $(IP_DIR)/component.xml: $(KERNEL_SRCS) $(KERNEL_VH) $(OOC_XDC) $(wildcard $(FOL
 	cd $(BUILD_DIR) && TOOL_DIR=$(SCRIPT_DIR) $(VIVADO) -mode batch -nojournal -nolog \
 		-source $(VORTEX_HOME)/hw/syn/xilinx/aved/package_ip.tcl \
 		-tclargs foldsim_afu $(KERNEL_SRCS) . $(DEVICE) ooc-xdc=$(OOC_XDC) \
-		$$(grep -qE '^ *xil_f(ma|div|sqrt|mul|add) ' $(GEN_SV) || echo no-vendor-ip)
+		$$(grep -qE '^ *xil_f(ma|div|sqrt|mul|add)(64)? ' $(GEN_SV) || echo no-vendor-ip)
 
 # foldsim --slr-groups writes a floorplan that keeps each threaded copy whole
 # in one SLR; the implementation applies it before opt_design (floorplan.tcl).
@@ -239,7 +239,7 @@ ooc: $(KERNEL_SRCS)
 	cd $(OOC_DIR) && TOOL_DIR=$(SCRIPT_DIR) $(FLOORPLAN_ENV) $(VIVADO) -mode batch -nojournal -log vivado.log \
 		-source $(SRC_DIR)/ooc.tcl -tclargs $(KERNEL_SRCS) $(DEVICE) \
 		$$(python3 -c 'print(round(1000 / $(FOLDSIM_FREQ), 3))') \
-		$$(grep -qE '^ *xil_f(ma|div|sqrt|mul|add) ' $(GEN_SV) || echo no-vendor-ip)
+		$$(grep -qE '^ *xil_f(ma|div|sqrt|mul|add)(64)? ' $(GEN_SV) || echo no-vendor-ip)
 	@grep -A2 'WNS(ns)' $(OOC_DIR)/routed_timing_summary.rpt | tail -1
 
 $(CFG): $(GEN_SV) FORCE

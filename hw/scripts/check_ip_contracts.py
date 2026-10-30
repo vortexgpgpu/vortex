@@ -18,7 +18,8 @@ Each black box in xilinx_ip_stubs.sv declares the latency it is used at
 (`fixed_latency`). That latency must be the core's C_Latency in
 xilinx_ip_gen.tcl, the latency the RTL around it asserts, its simulation
 model's (sim/foldsim/xilinx_fp_models.sv) and, with --cflags, the
-VX_CFG_*_LATENCY the configuration resolves to for it.
+VX_CFG_*_LATENCY the configuration resolves to for it (at FLEN 64 the
+deeper of its F32 and F64 cores).
 
 usage: check_ip_contracts.py [--cflags '<-D flags of the build>']
 """
@@ -33,18 +34,25 @@ ROOT = os.path.realpath(os.path.join(HERE, '..', '..'))
 
 # Where the RTL states the latency it uses each core at.
 RTL_ASSERTS = {
-    'xil_fma': ('hw/rtl/fpu/VX_fma_unit.sv', r'USE_VENDOR_IP\s*\|\|\s*\(LATENCY\s*==\s*(\d+)\)'),
-    'xil_fdiv': ('hw/rtl/fpu/VX_fdiv_unit.sv', r'USE_VENDOR_IP\s*\|\|\s*\(LATENCY\s*==\s*(\d+)\)'),
-    'xil_fsqrt': ('hw/rtl/fpu/VX_fsqrt_unit.sv', r'USE_VENDOR_IP\s*\|\|\s*\(LATENCY\s*==\s*(\d+)\)'),
+    'xil_fma': ('hw/rtl/fpu/VX_fma_unit.sv', r'localparam\s+XIL_FMA_LATENCY\s*=\s*(\d+)'),
+    'xil_fma64': ('hw/rtl/fpu/VX_fma_unit.sv', r'localparam\s+XIL_FMA64_LATENCY\s*=\s*(\d+)'),
+    'xil_fdiv': ('hw/rtl/fpu/VX_fdiv_unit.sv', r'localparam\s+XIL_FDIV_LATENCY\s*=\s*(\d+)'),
+    'xil_fdiv64': ('hw/rtl/fpu/VX_fdiv_unit.sv', r'localparam\s+XIL_FDIV64_LATENCY\s*=\s*(\d+)'),
+    'xil_fsqrt': ('hw/rtl/fpu/VX_fsqrt_unit.sv', r'localparam\s+XIL_FSQRT_LATENCY\s*=\s*(\d+)'),
+    'xil_fsqrt64': ('hw/rtl/fpu/VX_fsqrt_unit.sv', r'localparam\s+XIL_FSQRT64_LATENCY\s*=\s*(\d+)'),
     'xil_fmul': ('hw/rtl/tcu/dsp/VX_tcu_fedp_dsp.sv', r'localparam\s+FMUL_LATENCY\s*=\s*(\d+)'),
     'xil_fadd': ('hw/rtl/tcu/dsp/VX_tcu_fedp_dsp.sv', r'localparam\s+FADD_LATENCY\s*=\s*(\d+)'),
 }
 
-# The configuration's latency of each core, when the configuration selects it.
+# The latency of each knob when the configuration selects its cores: the
+# deepest of them, as a unit holding an F32 and an F64 core runs at the deeper
+# one's latency. knob -> (selector, F32 cores, F64 cores at FLEN 64).
 CONFIG_LATENCIES = {
-    'xil_fma': [('VX_CFG_FMA_LATENCY', 'VX_CFG_FPU_TYPE_DSP')],
-    'xil_fdiv': [('VX_CFG_FDIV_LATENCY', 'VX_CFG_FPU_TYPE_DSP'), ('VX_CFG_RTU_FDIV_LATENCY', None)],
-    'xil_fsqrt': [('VX_CFG_FSQRT_LATENCY', 'VX_CFG_FPU_TYPE_DSP')],
+    'VX_CFG_FMA_LATENCY': ('VX_CFG_FPU_TYPE_DSP', ['xil_fma'], ['xil_fma64']),
+    'VX_CFG_FDIV_LATENCY': ('VX_CFG_FPU_TYPE_DSP', ['xil_fdiv'], ['xil_fdiv64']),
+    'VX_CFG_FSQRT_LATENCY': ('VX_CFG_FPU_TYPE_DSP', ['xil_fsqrt'], ['xil_fsqrt64']),
+    # The RTU's divider is F32 only.
+    'VX_CFG_RTU_FDIV_LATENCY': (None, ['xil_fdiv'], []),
 }
 
 
@@ -98,12 +106,14 @@ def main():
     tcl = tcl_latencies(os.path.join(HERE, 'xilinx_ip_gen.tcl'))
     config = config_values(a.cflags) if a.cflags is not None else None
     models = model_latencies(os.path.join(ROOT, 'sim', 'foldsim', 'xilinx_fp_models.sv'))
+    latencies = {}
     for name, rtl in RTL_ASSERTS.items():
         c = contracts.get(name)
         if c is None or 'fixed_latency' not in c:
             errors.append(f'{name}: no fixed_latency contract in xilinx_ip_stubs.sv')
             continue
         latency = int(c['fixed_latency'])
+        latencies[name] = latency
         if tcl.get(name) != latency:
             errors.append(f'{name}: contract latency {latency}, C_Latency {tcl.get(name)} in xilinx_ip_gen.tcl')
         if models.get(name) != latency:
@@ -114,16 +124,20 @@ def main():
             errors.append(f'{name}: {path} no longer states the latency it uses the core at')
         elif int(m.group(1)) != latency:
             errors.append(f'{name}: contract latency {latency}, {path} uses {m.group(1)}')
-        if config is None:
-            continue
-        for knob, selector in CONFIG_LATENCIES.get(name, []):
+    if config is not None:
+        has_d = config.get('VX_CFG_EXT_D_ENABLED') == '1'
+        for knob, (selector, cores, cores_d) in CONFIG_LATENCIES.items():
             if selector and selector not in config:
                 continue
             # The RTU uses the vendor divider on the Vivado flow only.
             if knob == 'VX_CFG_RTU_FDIV_LATENCY' and not re.search(r'-DVIVADO\b', a.cflags):
                 continue
-            if knob in config and int(config[knob]) != latency:
-                errors.append(f'{name}: contract latency {latency}, the configuration resolves {knob}={config[knob]}')
+            used = cores + (cores_d if has_d else [])
+            if any(n not in latencies for n in used) or knob not in config:
+                continue
+            want = max(latencies[n] for n in used)
+            if int(config[knob]) != want:
+                errors.append(f'{"/".join(used)}: contract latency {want}, the configuration resolves {knob}={config[knob]}')
     for e in errors:
         print(f'ERROR: {e}', file=sys.stderr)
     if errors:

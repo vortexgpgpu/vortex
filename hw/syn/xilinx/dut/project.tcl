@@ -183,6 +183,9 @@ proc run_setup {} {
     add_files -norecurse -verbose ${ip_dir}/xil_fma/xil_fma.xci
     add_files -norecurse -verbose ${ip_dir}/xil_fdiv/xil_fdiv.xci
     add_files -norecurse -verbose ${ip_dir}/xil_fsqrt/xil_fsqrt.xci
+    add_files -norecurse -verbose ${ip_dir}/xil_fma64/xil_fma64.xci
+    add_files -norecurse -verbose ${ip_dir}/xil_fdiv64/xil_fdiv64.xci
+    add_files -norecurse -verbose ${ip_dir}/xil_fsqrt64/xil_fsqrt64.xci
     add_files -norecurse -verbose ${ip_dir}/xil_fmul/xil_fmul.xci
     add_files -norecurse -verbose ${ip_dir}/xil_fadd/xil_fadd.xci
   }

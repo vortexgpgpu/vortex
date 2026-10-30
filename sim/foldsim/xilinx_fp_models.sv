@@ -24,11 +24,14 @@
 // and denormal results flushed to zero, keeping the sign, with underflow
 // raised; the flags of each core on m_axis_result_tuser. What the documents
 // leave open is softfloat's (RISC-V) choice here: a NaN result is the
-// canonical quiet NaN 0x7fc00000, and invalid is raised for signaling NaN
-// inputs as for the invalid operations. Bit-exactness to the cores can only be
-// confirmed on silicon.
+// canonical quiet NaN (0x7fc00000, 0x7ff8000000000000), and invalid is raised
+// for signaling NaN inputs as for the invalid operations. Bit-exactness to the
+// cores can only be confirmed on silicon.
 
 `include "dpi_float.vh"
+
+// The DPI calls return a 64-bit result and every flag; each core uses its own part.
+/* verilator lint_off UNUSEDSIGNAL */
 
 package xilinx_fp_model_pkg;
   // A denormal input, as the cores read it: zero of its sign.
@@ -44,6 +47,15 @@ package xilinx_fp_model_pkg;
   endfunction
   function automatic logic [63:0] box(input logic [31:0] x);
     return {32'hffffffff, x};
+  endfunction
+  function automatic logic [63:0] ftz_in64(input logic [63:0] x);
+    return (x[62:52] == 11'h0) ? {x[63], 63'h0} : x;
+  endfunction
+  function automatic logic [63:0] ftz_out64(input logic [63:0] x);
+    return (x[62:52] == 11'h0) ? {x[63], 63'h0} : x;
+  endfunction
+  function automatic logic is_denormal64(input logic [63:0] x);
+    return (x[62:52] == 11'h0) && (x[51:0] != 52'h0);
   endfunction
 endpackage
 
@@ -140,6 +152,78 @@ module xil_fsqrt (
   xilinx_fp_model_pipe #(.LATENCY(28), .D(1 + 32 + 1)) pipe (
     .aclk(aclk), .aclken(aclken),
     .d({s_axis_a_tvalid, ftz_out(r[31:0]), f[4]}),
+    .q({m_axis_result_tvalid, m_axis_result_tdata, m_axis_result_tuser}));
+endmodule
+
+module xil_fma64 (
+  input  wire        aclk,
+  input  wire        aclken,
+  input  wire        s_axis_a_tvalid,
+  input  wire [63:0] s_axis_a_tdata,
+  input  wire        s_axis_b_tvalid,
+  input  wire [63:0] s_axis_b_tdata,
+  input  wire        s_axis_c_tvalid,
+  input  wire [63:0] s_axis_c_tdata,
+  output wire        m_axis_result_tvalid,
+  output wire [63:0] m_axis_result_tdata,
+  output wire [2:0]  m_axis_result_tuser   // underflow, overflow, invalid
+);
+  import xilinx_fp_model_pkg::*;
+  logic [63:0] r;
+  logic [4:0] f;
+  always @(*) begin
+    dpi_fmadd(1'b1, 1, ftz_in64(s_axis_a_tdata), ftz_in64(s_axis_b_tdata),
+              ftz_in64(s_axis_c_tdata), 3'b000, r, f);
+  end
+  wire tiny = is_denormal64(r);
+  xilinx_fp_model_pipe #(.LATENCY(26), .D(1 + 64 + 3)) pipe (
+    .aclk(aclk), .aclken(aclken),
+    .d({s_axis_a_tvalid & s_axis_b_tvalid & s_axis_c_tvalid, ftz_out64(r), f[4], f[2], f[1] | tiny}),
+    .q({m_axis_result_tvalid, m_axis_result_tdata, m_axis_result_tuser}));
+endmodule
+
+module xil_fdiv64 (
+  input  wire        aclk,
+  input  wire        aclken,
+  input  wire        s_axis_a_tvalid,
+  input  wire [63:0] s_axis_a_tdata,
+  input  wire        s_axis_b_tvalid,
+  input  wire [63:0] s_axis_b_tdata,
+  output wire        m_axis_result_tvalid,
+  output wire [63:0] m_axis_result_tdata,
+  output wire [3:0]  m_axis_result_tuser   // underflow, overflow, invalid, divide by zero
+);
+  import xilinx_fp_model_pkg::*;
+  logic [63:0] r;
+  logic [4:0] f;
+  always @(*) begin
+    dpi_fdiv(1'b1, 1, ftz_in64(s_axis_a_tdata), ftz_in64(s_axis_b_tdata), 3'b000, r, f);
+  end
+  wire tiny = is_denormal64(r);
+  xilinx_fp_model_pipe #(.LATENCY(57), .D(1 + 64 + 4)) pipe (
+    .aclk(aclk), .aclken(aclken),
+    .d({s_axis_a_tvalid & s_axis_b_tvalid, ftz_out64(r), f[3], f[4], f[2], f[1] | tiny}),
+    .q({m_axis_result_tvalid, m_axis_result_tdata, m_axis_result_tuser}));
+endmodule
+
+module xil_fsqrt64 (
+  input  wire        aclk,
+  input  wire        aclken,
+  input  wire        s_axis_a_tvalid,
+  input  wire [63:0] s_axis_a_tdata,
+  output wire        m_axis_result_tvalid,
+  output wire [63:0] m_axis_result_tdata,
+  output wire [0:0]  m_axis_result_tuser   // invalid
+);
+  import xilinx_fp_model_pkg::*;
+  logic [63:0] r;
+  logic [4:0] f;
+  always @(*) begin
+    dpi_fsqrt(1'b1, 1, ftz_in64(s_axis_a_tdata), 3'b000, r, f);
+  end
+  xilinx_fp_model_pipe #(.LATENCY(57), .D(1 + 64 + 1)) pipe (
+    .aclk(aclk), .aclken(aclken),
+    .d({s_axis_a_tvalid, ftz_out64(r), f[4]}),
     .q({m_axis_result_tvalid, m_axis_result_tdata, m_axis_result_tuser}));
 endmodule
 
