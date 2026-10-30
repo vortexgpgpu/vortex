@@ -1,0 +1,848 @@
+// Copyright © 2019-2023
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// A folded simulator's virtual memory: one target RAM's rows for every
+// instance, kept in device memory behind an AXI4 512-bit master.
+//
+// The simulator never waits for the controller: it issues a read or a write
+// only when `free` allowed it, and takes a bubble while an instance's read is
+// pending. The controller keeps the RAM's semantics and returns each read's
+// row tagged with its instance, in any order across instances.
+//
+// Row `row` of instance `inst` lives at base + ((row * INSTANCES + inst) <<
+// log2(ROW_BYTES)), ROW_BYTES being DW/8 rounded up to a power of two of at
+// least 64: one burst of ceil(DW/512) beats, which never crosses 4 KiB.
+//
+// Requests flow in order through four stages:
+//   X  the inputs, registered (two cycles more for INSTANCES not a power of
+//      two: the multiply); the host cache's tags are read.
+//   Y  the read's row against the cache, every buffered write, the write
+//      taking a buffer slot this cycle and its own cycle's write: the newest
+//      earlier copy of the row. The write hits or fills a cache line, or
+//      goes around the cache.
+//   Z  a write that goes around, or a dirty line the write evicts, takes a
+//      write-buffer slot. The read's match: its slot.
+//   R  a read whose newest copy is a whole row, in the cache or the buffer,
+//      answers from it; any other read joins the read queue, waiting for a
+//      partial write's B first.
+// Writes leave the buffer in order on AW and W (one AXI id, so their B's
+// come back in order) and free their slot on B. Reads leave the read queue in
+// order on AR, each with its own id; R data may come back in any order and
+// interleaved, and its last beat answers the read.
+//
+// The host cache (CACHE_ROWS > 0) is direct-mapped and write-back, indexed by
+// the low bits of row * INSTANCES + inst (consecutive instances, consecutive
+// lines). A whole-row write allocates without a fetch; a partial write hits
+// or goes around; a read that misses goes to memory and allocates nothing.
+// Since an instance with a read outstanding issues nothing, no line of its
+// rows can be filled, nor evicted to memory, while its read is in flight --
+// but a same-cycle read-first pair's whole-row write, which goes around and
+// waits for the read instead.
+//
+// Request-queue room (`free`): a read holds an entry from the cycle it is
+// taken until it answers locally or goes out on AR; a write until it is in
+// the cache, or until the B of the slot it (or the line it evicts) takes.
+//
+// Reset takes no request, drops every read not yet on AR and answers none
+// from before it; every write taken before it still goes to the cache or
+// memory, and then every dirty line goes to memory and every line is
+// invalidated: memory holds the RAM's image. It finishes, with free back at
+// QUEUE, once memory has answered every transaction: until then free stays 0.
+module foldsim_vmem #(
+    // Instance-index bits: the global instance index over all copies.
+    parameter IW             = 8,
+    // Row-address bits.
+    parameter AW             = 10,
+    // Row data bits: a multiple of 8, up to 4096.
+    parameter DW             = 512,
+    // Mask bits: DW/8 byte enables, or 1 for a whole-row enable. A bit
+    // enables DW/8/MW bytes.
+    parameter MW             = DW / 8,
+    // A same-cycle read of the row being written returns the old row (1) or
+    // the new one (0).
+    parameter RDW_READ_FIRST = 1,
+    // Request-queue entries.
+    parameter QUEUE          = 32,
+    parameter AXI_ID_W       = 4,
+    // Reads on AXI at once, at most 2^AXI_ID_W.
+    parameter OUTSTANDING    = 16,
+    // The instances the layout spaces rows by.
+    parameter INSTANCES      = 1 << IW,
+    // Host-cache rows, a power of two (0: direct).
+    parameter CACHE_ROWS     = 0
+) (
+    input  wire                        clk,
+    input  wire                        reset,
+
+    input  wire                        rd_valid,
+    input  wire [IW-1:0]               rd_inst,
+    input  wire [AW-1:0]               rd_row,
+
+    input  wire                        wr_valid,
+    input  wire [IW-1:0]               wr_inst,
+    input  wire [AW-1:0]               wr_row,
+    input  wire [DW-1:0]               wr_data,
+    input  wire [MW-1:0]               wr_mask,
+
+    output wire                        rsp_valid,
+    output reg  [IW-1:0]               rsp_inst,
+    output reg  [DW-1:0]               rsp_data,
+
+    output reg  [$clog2(QUEUE+1)-1:0]  free,
+
+    input  wire [63:0]                 base,
+
+    output reg                         m_awvalid,
+    input  wire                        m_awready,
+    output reg  [63:0]                 m_awaddr,
+    output wire [AXI_ID_W-1:0]         m_awid,
+    output wire [7:0]                  m_awlen,
+    output reg                         m_wvalid,
+    input  wire                        m_wready,
+    output reg  [511:0]                m_wdata,
+    output reg  [63:0]                 m_wstrb,
+    output reg                         m_wlast,
+    input  wire                        m_bvalid,
+    output wire                        m_bready,
+    /* verilator lint_off UNUSEDSIGNAL */
+    input  wire [AXI_ID_W-1:0]         m_bid,
+    /* verilator lint_on UNUSEDSIGNAL */
+    output reg                         m_arvalid,
+    input  wire                        m_arready,
+    output reg  [63:0]                 m_araddr,
+    output reg  [AXI_ID_W-1:0]         m_arid,
+    output wire [7:0]                  m_arlen,
+    input  wire                        m_rvalid,
+    output reg                         m_rready,
+    input  wire [511:0]                m_rdata,
+    input  wire [AXI_ID_W-1:0]         m_rid,
+    /* verilator lint_off UNUSEDSIGNAL */
+    input  wire                        m_rlast
+    /* verilator lint_on UNUSEDSIGNAL */
+);
+    localparam FW     = $clog2(QUEUE + 1);
+    localparam QW     = (QUEUE > 1) ? $clog2(QUEUE) : 1;
+    localparam OW     = (OUTSTANDING > 1) ? $clog2(OUTSTANDING) : 1;
+    localparam LW     = AW + $clog2(INSTANCES);
+    localparam BYTES  = DW / 8;
+    localparam RB     = ($clog2(BYTES) > 6) ? $clog2(BYTES) : 6;
+    localparam BEATS  = (DW + 511) / 512;
+    localparam BW     = (BEATS > 1) ? $clog2(BEATS) : 1;
+    localparam GROUP  = BYTES / MW;
+    // A row's offset in the image: its bits.
+    localparam OB     = LW + RB;
+    localparam CACHE  = (CACHE_ROWS > 0) ? 1 : 0;
+    // A line's index and tag bits.
+    localparam CI     = (CACHE_ROWS > 1) ? $clog2(CACHE_ROWS) : 1;
+    localparam CT     = (LW > CI) ? LW - CI : 1;
+
+    // Where a local answer's row comes from.
+    localparam SRC_WB = 2'd0;  // the write buffer
+    localparam SRC_CA = 2'd1;  // the cache, by the read's own port
+    localparam SRC_CB = 2'd2;  // the cache line the same-cycle write reads first
+
+`ifdef SIMULATION
+    initial begin
+        if ((DW % 8) != 0 || DW > 4096)
+            $error("foldsim_vmem: DW must be a multiple of 8, at most 4096");
+        if ((BYTES % MW) != 0)
+            $error("foldsim_vmem: MW must divide DW/8");
+        if (OUTSTANDING > (1 << AXI_ID_W))
+            $error("foldsim_vmem: OUTSTANDING exceeds the AXI ids");
+        if (INSTANCES > (1 << IW))
+            $error("foldsim_vmem: INSTANCES exceeds the instance index");
+        if (QUEUE < 4)
+            $error("foldsim_vmem: QUEUE must be at least 4");
+        if (CACHE_ROWS != 0 && (CACHE_ROWS < 2 || (CACHE_ROWS & (CACHE_ROWS - 1)) != 0 || CI >= LW))
+            $error("foldsim_vmem: CACHE_ROWS must be a power of two below the rows");
+    end
+`endif
+
+    function automatic [QW-1:0] qinc(input [QW-1:0] p);
+        qinc = (p == QW'(QUEUE - 1)) ? '0 : p + 1'b1;
+    endfunction
+
+    function automatic [QW-1:0] onehot_index(input [QUEUE-1:0] v);
+        onehot_index = '0;
+        for (integer i = 0; i < QUEUE; ++i)
+            if (v[i])
+                onehot_index = onehot_index | QW'(i);
+    endfunction
+
+    function automatic [OW-1:0] first_zero(input [OUTSTANDING-1:0] v);
+        first_zero = '0;
+        for (integer i = OUTSTANDING - 1; i >= 0; --i)
+            if (!v[i])
+                first_zero = OW'(i);
+    endfunction
+
+    function automatic [BYTES-1:0] byte_enables(input [MW-1:0] mask);
+        for (integer j = 0; j < BYTES; ++j)
+            byte_enables[j] = mask[j / GROUP];
+    endfunction
+
+    // ---- State that outlives a reset: what the cache and memory have, or
+    // are owed ----
+    // A reset drains it rather than clearing it, so it starts at its
+    // power-up value: 0, as the FPGA's flops and block RAMs (INIT 0) do.
+    // Simulation starts it there too.
+    reg              draining;
+    reg              x_wr, y_wr, x_sw, y_sw, z_wa, z_ev;
+    reg [QUEUE-1:0]  wb_valid;
+    reg [QW-1:0]     wb_tail, wb_aw, wb_w, wb_head;
+    // Writes in the buffer: all, before AW, before their last W beat, before B.
+    reg [FW-1:0]     wb_cnt, n_aw, n_w, n_b;
+    reg [BW-1:0]     w_beat;
+    reg [OUTSTANDING-1:0] id_busy;
+    reg              rc_valid;
+`ifdef SIMULATION
+    initial begin
+        draining  = 1'b0;
+        x_wr      = 1'b0;
+        y_wr      = 1'b0;
+        x_sw      = 1'b0;
+        y_sw      = 1'b0;
+        z_wa      = 1'b0;
+        z_ev      = 1'b0;
+        wb_valid  = '0;
+        wb_tail   = '0;
+        wb_aw     = '0;
+        wb_w      = '0;
+        wb_head   = '0;
+        wb_cnt    = '0;
+        n_aw      = '0;
+        n_w       = '0;
+        n_b       = '0;
+        w_beat    = '0;
+        id_busy   = '0;
+        rc_valid  = 1'b0;
+        m_awvalid = 1'b0;
+        m_wvalid  = 1'b0;
+        m_arvalid = 1'b0;
+    end
+`endif
+
+    wire accept = ~reset & ~draining;
+    wire taken_rd = rd_valid & accept;
+    wire taken_wr = wr_valid & accept;
+
+    // ---- Intake: a row's index in the image, row * INSTANCES + inst ----
+    wire              i_rd, i_wr, i_busy;
+    wire [IW-1:0]     i_rinst;
+    wire [LW-1:0]     i_rlin, i_wlin;
+    wire [DW-1:0]     i_wdata;
+    wire [MW-1:0]     i_wmask;
+    if (INSTANCES == (1 << IW)) begin : g_lin_shift
+        assign i_rd    = taken_rd;
+        assign i_wr    = taken_wr;
+        assign i_busy  = 1'b0;
+        assign i_rinst = rd_inst;
+        assign i_rlin  = LW'({rd_row, rd_inst});
+        assign i_wlin  = LW'({wr_row, wr_inst});
+        assign i_wdata = wr_data;
+        assign i_wmask = wr_mask;
+    end else begin : g_lin_mul
+        // The multiply in a DSP, its input and product registered: two more
+        // cycles. A write taken still reaches the cache or memory through a
+        // reset.
+        reg          a_rd, a_wr, p_rd, p_wr;
+        reg [AW-1:0] a_rrow, a_wrow;
+        reg [IW-1:0] a_rinst, a_winst, p_rinst, p_winst;
+        reg [LW-1:0] p_rprod, p_wprod;
+        reg [DW-1:0] a_wdata, p_wdata;
+        reg [MW-1:0] a_wmask, p_wmask;
+`ifdef SIMULATION
+        initial begin
+            a_wr = 1'b0;
+            p_wr = 1'b0;
+        end
+`endif
+        always @(posedge clk) begin
+            a_rd    <= taken_rd;
+            a_wr    <= taken_wr;
+            a_rrow  <= rd_row;
+            a_wrow  <= wr_row;
+            a_rinst <= rd_inst;
+            a_winst <= wr_inst;
+            a_wdata <= wr_data;
+            a_wmask <= wr_mask;
+            p_rd    <= a_rd & ~reset;
+            p_wr    <= a_wr;
+            p_rprod <= LW'(a_rrow) * LW'(INSTANCES);
+            p_wprod <= LW'(a_wrow) * LW'(INSTANCES);
+            p_rinst <= a_rinst;
+            p_winst <= a_winst;
+            p_wdata <= a_wdata;
+            p_wmask <= a_wmask;
+        end
+        assign i_rd    = p_rd;
+        assign i_wr    = p_wr;
+        assign i_busy  = a_wr | p_wr;
+        assign i_rinst = p_rinst;
+        assign i_rlin  = p_rprod + LW'(p_rinst);
+        assign i_wlin  = p_wprod + LW'(p_winst);
+        assign i_wdata = p_wdata;
+        assign i_wmask = p_wmask;
+    end
+
+    // base + offset adds only the offset's bits; above them, base or base + 1
+    // (kept registered: base is static while requests flow).
+    reg [63-OB:0] base_hi1;
+    always @(posedge clk)
+        base_hi1 <= base[63:OB] + 1'b1;
+    function automatic [63:0] row_addr(input [LW-1:0] lin);
+        reg [OB:0] lo;
+        lo = {1'b0, base[OB-1:0]} + {1'b0, lin, {RB{1'b0}}};
+        row_addr = {lo[OB] ? base_hi1 : base[63:OB], lo[OB-1:0]};
+    endfunction
+
+    // ---- The sweep of a reset's drain: every line, in order ----
+    reg              sw_done;
+    reg [CI-1:0]     sw_idx;
+    wire             sweep_go;
+
+    // ---- X: the requests, in the image's terms; the tags are read ----
+    reg              x_rd;
+    reg [IW-1:0]     x_rinst;
+    reg [LW-1:0]     x_rlin, x_wlin;
+    reg [DW-1:0]     x_wdata;
+    reg [MW-1:0]     x_wmask;
+    reg [CI-1:0]     x_swidx;
+
+    always @(posedge clk) begin
+        x_rd    <= i_rd & ~reset;
+        x_wr    <= i_wr;
+        x_sw    <= sweep_go;
+        x_swidx <= sw_idx;
+        x_rinst <= i_rinst;
+        x_rlin  <= i_rlin;
+        x_wlin  <= i_wlin;
+        x_wdata <= i_wdata;
+        x_wmask <= i_wmask;
+    end
+
+    // ---- Y: the newest earlier copy of the read's row ----
+    reg              y_rd, y_wfull;
+    reg [IW-1:0]     y_rinst;
+    reg [LW-1:0]     y_rlin, y_wlin;
+    reg [DW-1:0]     y_wdata;
+    reg [MW-1:0]     y_wmask;
+    reg [CI-1:0]     y_swidx;
+    reg [63:0]       y_raddr;
+
+    always @(posedge clk) begin
+        y_rd    <= x_rd & ~reset;
+        y_wr    <= x_wr;
+        y_sw    <= x_sw;
+        y_swidx <= x_swidx;
+        y_rinst <= x_rinst;
+        y_rlin  <= x_rlin;
+        y_wlin  <= x_wlin;
+        y_wdata <= x_wdata;
+        y_wmask <= x_wmask;
+        y_wfull <= &x_wmask;
+        y_raddr <= row_addr(x_rlin);
+    end
+
+    // The cache's view at Y, and its rows at Z and R.
+    wire             c_rhit, c_whit, c_victim, c_same_idx;
+    wire [CT-1:0]    c_vtag;
+    wire [DW-1:0]    c_ca, c_cb;
+
+    wire y_same_row = y_rd & y_wr & (y_rlin == y_wlin);
+    // A whole-row write fills a line, but a read-first pair's, which goes
+    // around and waits for its read.
+    wire w_alloc  = (CACHE != 0) & y_wr & ~c_whit & y_wfull
+                  & ~(y_same_row & (RDW_READ_FIRST != 0));
+    wire w_around = y_wr & ~c_whit & ~w_alloc;
+    wire evict    = (w_alloc | y_sw) & c_victim;
+    wire [CI-1:0] y_widx = y_sw ? y_swidx : y_wlin[CI-1:0];
+    wire [LW-1:0] ev_lin = LW'({c_vtag, y_widx});
+    // The write is done with the cache: its room is free.
+    wire y_wdone  = y_wr & ~w_around & ~evict;
+
+    // The read's own write, around the cache: seen by it, or held until it
+    // has its data.
+    wire pair_wf  = y_same_row & w_around & (RDW_READ_FIRST == 0);
+    wire pair_rf  = y_same_row & w_around & (RDW_READ_FIRST != 0);
+    // In the cache: a hit, or a write-first pair's line.
+    wire c_local  = c_rhit | (y_same_row & w_alloc & (RDW_READ_FIRST == 0));
+
+    // The write buffer: writes in request order, until their B. A write is
+    // live until a later write of its row takes a slot, so a row has at most
+    // one live write: a read's match needs no priority.
+    reg [LW-1:0]     wb_lin  [QUEUE];
+    reg [QUEUE-1:0]  wb_live, wb_full, wb_blk;
+    reg [DW-1:0]     wb_data [QUEUE];
+    reg [MW-1:0]     wb_mask [QUEUE];
+    reg [63:0]       wb_addr [QUEUE];
+
+    reg              z_rd, z_local, z_pair, z_zhit, z_ub, z_merge, z_wfull, z_blk;
+    reg [1:0]        z_src;
+    reg [QUEUE-1:0]  z_hit;
+    reg [QW-1:0]     z_zslot;
+    reg [IW-1:0]     z_rinst;
+    reg [63:0]       z_raddr;
+    reg [LW-1:0]     z_alin;
+    reg [DW-1:0]     z_wdata;
+    reg [MW-1:0]     z_wmask;
+
+    wire z_alloc = z_wa | z_ev;
+    wire z_afull = z_ev | z_wfull;
+
+    reg [QUEUE-1:0] rhit;
+    always @(*) begin
+        for (integer i = 0; i < QUEUE; ++i)
+            rhit[i] = wb_valid[i] & wb_live[i] & (wb_lin[i] == y_rlin);
+    end
+    // The write taking a slot this cycle is newer than the buffer's.
+    wire zhit   = z_alloc & (z_alin == y_rlin);
+    wire wb_fwd = pair_wf ? y_wfull : (zhit ? z_afull : |(rhit & wb_full));
+    wire y_local = y_rd & (c_local | wb_fwd);
+    wire [1:0] y_src = ~c_local ? SRC_WB
+                     : ((c_same_idx & (c_whit | w_alloc)) ? SRC_CB : SRC_CA);
+
+    always @(posedge clk) begin
+        z_rd    <= y_rd & ~reset;
+        z_local <= y_local & ~reset;
+        z_src   <= y_src;
+        z_merge <= y_same_row & (RDW_READ_FIRST == 0);
+        z_hit   <= rhit;
+        z_pair  <= pair_wf;
+        z_zhit  <= zhit;
+        z_zslot <= wb_tail;
+        z_ub    <= pair_rf;
+        z_rinst <= y_rinst;
+        z_raddr <= y_raddr;
+        z_wa    <= w_around;
+        z_ev    <= evict;
+        z_alin  <= evict ? ev_lin : y_wlin;
+        z_wdata <= y_wdata;
+        z_wmask <= y_wmask;
+        z_wfull <= y_wfull;
+        z_blk   <= pair_rf;
+        // R's last beat answers a read the cycle after it: never in the cycle
+        // a read answers locally.
+        m_rready <= ~(y_local & ~reset);
+    end
+
+    // ---- Z: a write around the cache, or an evicted line, takes a slot ----
+    // A slot valid at Y is not taken again before R ends (a write taken
+    // needs the room its B gave back, and reaches Z three cycles later), so
+    // its data is still the matched write's.
+    wire [DW-1:0]    z_adata = z_ev ? c_cb : z_wdata;
+    wire [MW-1:0]    z_amask = z_ev ? '1 : z_wmask;
+    wire [63:0]      z_aaddr = row_addr(z_alin);
+    wire [QW-1:0]    z_slot  = z_pair ? wb_tail : (z_zhit ? z_zslot : onehot_index(z_hit));
+    wire             z_any   = z_pair | z_zhit | (|z_hit);
+
+    reg [QUEUE-1:0] whit;
+    always @(*) begin
+        for (integer i = 0; i < QUEUE; ++i)
+            whit[i] = wb_valid[i] & (wb_lin[i] == z_alin);
+    end
+
+    // A write-first pair's line: the old row under the write.
+    reg [DW-1:0] z_pdata;
+    always @(*) begin
+        for (integer j = 0; j < BYTES; ++j)
+            z_pdata[j*8 +: 8] = (z_merge & z_wmask[j / GROUP]) ? z_wdata[j*8 +: 8] : c_cb[j*8 +: 8];
+    end
+
+    reg              r_local, r_rd, r_part, r_ub;
+    reg [1:0]        r_src;
+    reg [QW-1:0]     r_slot, r_ubslot;
+    reg [IW-1:0]     r_inst;
+    reg [63:0]       r_addr;
+    reg [DW-1:0]     r_pdata;
+
+    always @(posedge clk) begin
+        r_local  <= z_local & ~reset;
+        r_rd     <= z_rd & ~z_local & ~reset;
+        r_part   <= z_any;
+        r_ub     <= z_ub;
+        r_src    <= z_src;
+        r_slot   <= z_slot;
+        r_ubslot <= wb_tail;
+        r_inst   <= z_rinst;
+        r_addr   <= z_raddr;
+        r_pdata  <= z_pdata;
+    end
+
+    // ---- R: answer locally, or queue for AR ----
+    wire b_pop = m_bvalid;
+
+    reg [63:0]       rq_addr  [QUEUE];
+    reg [IW-1:0]     rq_inst  [QUEUE];
+    reg              rq_ub    [QUEUE];
+    reg [QW-1:0]     rq_ubslot [QUEUE];
+    reg [QW-1:0]     rq_dslot [QUEUE];
+    reg [QUEUE-1:0]  rq_dep;
+    reg [QW-1:0]     rq_head, rq_tail;
+    reg [FW-1:0]     rq_count;
+
+    wire rq_push = r_rd;
+    wire r_dep   = r_part & wb_valid[r_slot] & ~(b_pop & (wb_head == r_slot));
+
+    // ---- AR: the read queue's head, with a free id ----
+    wire          id_avail = ~(&id_busy);
+    wire [OW-1:0] id_next  = first_zero(id_busy);
+    wire          rq_issue = (rq_count != 0) & ~rq_dep[rq_head] & id_avail
+                           & (~m_arvalid | m_arready) & ~reset;
+
+    reg [IW-1:0]  tbl_inst  [OUTSTANDING];
+    reg           tbl_ub    [OUTSTANDING];
+    reg [QW-1:0]  tbl_ubslot [OUTSTANDING];
+    reg [BW-1:0]  rcnt      [OUTSTANDING];
+
+    always @(posedge clk) begin
+        if (rq_push) begin
+            rq_addr[rq_tail]   <= r_addr;
+            rq_inst[rq_tail]   <= r_inst;
+            rq_ub[rq_tail]     <= r_ub;
+            rq_ubslot[rq_tail] <= r_ubslot;
+            rq_dslot[rq_tail]  <= r_slot;
+        end
+        // A queued read waits for its row's newest partial write: its B
+        // frees the slot.
+        for (integer i = 0; i < QUEUE; ++i)
+            if (b_pop & (rq_dslot[i] == wb_head))
+                rq_dep[i] <= 1'b0;
+        if (rq_push)
+            rq_dep[rq_tail] <= r_dep;
+        if (reset) begin
+            rq_head  <= '0;
+            rq_tail  <= '0;
+            rq_count <= '0;
+        end else begin
+            if (rq_push)
+                rq_tail <= qinc(rq_tail);
+            if (rq_issue)
+                rq_head <= qinc(rq_head);
+            rq_count <= rq_count + FW'(rq_push) - FW'(rq_issue);
+        end
+        if (rq_issue) begin
+            m_araddr            <= rq_addr[rq_head];
+            m_arid              <= AXI_ID_W'(id_next);
+            tbl_inst[id_next]   <= rq_inst[rq_head];
+            tbl_ub[id_next]     <= rq_ub[rq_head];
+            tbl_ubslot[id_next] <= rq_ubslot[rq_head];
+        end
+        if (rq_issue)
+            m_arvalid <= 1'b1;
+        else if (m_arready)
+            m_arvalid <= 1'b0;
+    end
+    assign m_arlen = 8'(BEATS - 1);
+
+    // ---- R: beats by id, the last one answers ----
+    reg [OW-1:0]  rc_id;
+    reg [511:0]   rc_data;
+    /* verilator lint_off UNUSEDSIGNAL */
+    reg           rc_rlast;
+    /* verilator lint_on UNUSEDSIGNAL */
+    always @(posedge clk) begin
+        rc_valid <= m_rvalid & m_rready;
+        rc_id    <= OW'(m_rid);
+        rc_data  <= m_rdata;
+        rc_rlast <= m_rlast;
+    end
+    wire [BW-1:0] rc_beat = rcnt[rc_id];
+    wire          rc_last = (rc_beat == BW'(BEATS - 1));
+    wire          rc_done = rc_valid & rc_last;
+
+    // The last beat's bits past DW are padding.
+    /* verilator lint_off UNUSEDSIGNAL */
+    wire [BEATS*512-1:0] rc_row;
+    /* verilator lint_on UNUSEDSIGNAL */
+    if (BEATS > 1) begin : g_beats
+        for (genvar k = 0; k < BEATS - 1; ++k) begin : g_bm
+            reg [511:0] bm [OUTSTANDING];
+            always @(posedge clk)
+                if (rc_valid & (rc_beat == BW'(k)))
+                    bm[rc_id] <= rc_data;
+            assign rc_row[k*512 +: 512] = bm[rc_id];
+        end
+    end
+    assign rc_row[(BEATS-1)*512 +: 512] = rc_data;
+
+    // An id's beat count restarts with its read.
+    always @(posedge clk) begin
+        if (rc_valid)
+            rcnt[rc_id] <= rc_last ? '0 : rc_beat + 1'b1;
+        if (rq_issue)
+            rcnt[id_next] <= '0;
+    end
+
+    // ---- Responses: local (R) or from memory ----
+    // None is offered while reset is high, not even one made before it.
+    reg rsp_q;
+    assign rsp_valid = rsp_q & ~reset;
+    always @(posedge clk) begin
+        rsp_q <= (r_local | (rc_done & ~draining)) & ~reset;
+        if (r_local) begin
+            rsp_inst <= r_inst;
+            case (r_src)
+            SRC_CA:  rsp_data <= c_ca;
+            SRC_CB:  rsp_data <= r_pdata;
+            default: rsp_data <= wb_data[r_slot];
+            endcase
+        end else begin
+            rsp_inst <= tbl_inst[rc_id];
+            rsp_data <= rc_row[DW-1:0];
+        end
+    end
+
+    // ---- AW and W: the buffer's writes in order ----
+    wire aw_issue = (n_aw != 0) & (~wb_blk[wb_aw] | draining) & (~m_awvalid | m_awready);
+    wire w_issue  = (n_w != 0) & (~m_wvalid | m_wready);
+    wire w_end    = w_issue & (w_beat == BW'(BEATS - 1));
+
+    wire [BEATS*512-1:0] w_row  = (BEATS*512)'(wb_data[wb_w]);
+    wire [BEATS*64-1:0]  w_strb = (BEATS*64)'(byte_enables(wb_mask[wb_w]));
+
+    always @(posedge clk) begin
+        if (aw_issue) begin
+            m_awaddr <= wb_addr[wb_aw];
+            wb_aw    <= qinc(wb_aw);
+        end
+        if (aw_issue)
+            m_awvalid <= 1'b1;
+        else if (m_awready)
+            m_awvalid <= 1'b0;
+
+        if (w_issue) begin
+            m_wdata <= w_row[32'(w_beat) * 512 +: 512];
+            m_wstrb <= w_strb[32'(w_beat) * 64 +: 64];
+            m_wlast <= (w_beat == BW'(BEATS - 1));
+            w_beat  <= (w_beat == BW'(BEATS - 1)) ? '0 : w_beat + 1'b1;
+        end
+        if (w_end)
+            wb_w <= qinc(wb_w);
+        if (w_issue)
+            m_wvalid <= 1'b1;
+        else if (m_wready)
+            m_wvalid <= 1'b0;
+
+        wb_cnt <= wb_cnt + FW'(z_alloc) - FW'(b_pop);
+        n_aw   <= n_aw + FW'(z_alloc) - FW'(aw_issue);
+        n_w    <= n_w + FW'(aw_issue) - FW'(w_end);
+        n_b    <= n_b + FW'(w_end) - FW'(b_pop);
+    end
+    assign m_awid   = '0;
+    assign m_awlen  = 8'(BEATS - 1);
+    assign m_bready = 1'b1;
+
+    // ---- The buffer's slots: taken at Z, freed by B ----
+    always @(posedge clk) begin
+        if (z_alloc) begin
+            wb_lin[wb_tail]  <= z_alin;
+            wb_data[wb_tail] <= z_adata;
+            wb_mask[wb_tail] <= z_amask;
+            wb_addr[wb_tail] <= z_aaddr;
+        end
+        for (integer i = 0; i < QUEUE; ++i)
+            if (z_alloc & whit[i])
+                wb_live[i] <= 1'b0;
+        if (z_alloc) begin
+            wb_live[wb_tail] <= 1'b1;
+            wb_full[wb_tail] <= z_afull;
+            wb_tail          <= qinc(wb_tail);
+        end
+        // A write held for its own cycle's read goes once that read has its
+        // data.
+        if (r_local & r_ub)
+            wb_blk[r_ubslot] <= 1'b0;
+        if (rc_done & tbl_ub[rc_id])
+            wb_blk[tbl_ubslot[rc_id]] <= 1'b0;
+        if (z_alloc)
+            wb_blk[wb_tail] <= z_wa & z_blk;
+
+        if (b_pop)
+            wb_head <= qinc(wb_head);
+        begin : valid_
+            reg [QUEUE-1:0] v;
+            v = wb_valid;
+            if (b_pop)
+                v[wb_head] = 1'b0;
+            if (z_alloc)
+                v[wb_tail] = 1'b1;
+            wb_valid <= v;
+        end
+    end
+
+    // ---- Ids: busy from AR until the last beat of R ----
+    always @(posedge clk) begin
+        begin : ids_
+            reg [OUTSTANDING-1:0] b;
+            b = id_busy;
+            if (rc_done)
+                b[rc_id] = 1'b0;
+            if (rq_issue)
+                b[id_next] = 1'b1;
+            id_busy <= b;
+        end
+    end
+
+    // ---- The host cache ----
+    if (CACHE != 0) begin : g_cache
+        // A line: valid, tag. Only writes fill lines, so a valid line is
+        // dirty. Two copies of the tags, one per lookup; each is read at X,
+        // and the update of the cycle before (made at Y as the read was made)
+        // is forwarded. Whether it is at X's lines, and its tag X's, is known
+        // at X.
+        localparam TE = CT + 1;
+        reg [TE-1:0] tag_r [CACHE_ROWS];
+        reg [TE-1:0] tag_w [CACHE_ROWS];
+        reg [TE-1:0] tr_q, tw_q, tu_ent;
+        reg          tu_v, selr_q, selw_q, bhr_q, bhw_q;
+`ifdef SIMULATION
+        initial begin
+            for (integer i = 0; i < CACHE_ROWS; ++i) begin
+                tag_r[i] = '0;
+                tag_w[i] = '0;
+            end
+        end
+`endif
+        wire [CI-1:0] y_ridx = y_rlin[CI-1:0];
+        wire [CI-1:0] x_widx = x_sw ? x_swidx : x_wlin[CI-1:0];
+        wire          tu_we  = c_whit | w_alloc | y_sw;
+        wire [TE-1:0] tu_new = y_sw ? '0 : {1'b1, CT'(y_wlin >> CI)};
+
+        always @(posedge clk) begin
+            tr_q <= tag_r[x_rlin[CI-1:0]];
+            tw_q <= tag_w[x_widx];
+            if (tu_we) begin
+                tag_r[y_widx] <= tu_new;
+                tag_w[y_widx] <= tu_new;
+            end
+            tu_v   <= tu_we;
+            tu_ent <= tu_new;
+            selr_q <= (y_wr | y_sw) & (y_widx == x_rlin[CI-1:0]);
+            selw_q <= (y_wr | y_sw) & (y_widx == x_widx);
+            bhr_q  <= ~y_sw & (CT'(y_wlin >> CI) == CT'(x_rlin >> CI));
+            bhw_q  <= ~y_sw & (CT'(y_wlin >> CI) == CT'(x_wlin >> CI));
+        end
+        wire br = selr_q & tu_v;
+        wire bw = selw_q & tu_v;
+
+        assign c_rhit     = y_rd & (br ? bhr_q : (tr_q[TE-1] & (tr_q[CT-1:0] == CT'(y_rlin >> CI))));
+        assign c_whit     = y_wr & (bw ? bhw_q : (tw_q[TE-1] & (tw_q[CT-1:0] == CT'(y_wlin >> CI))));
+        assign c_victim   = bw ? tu_ent[TE-1] : tw_q[TE-1];
+        assign c_vtag     = bw ? tu_ent[CT-1:0] : tw_q[CT-1:0];
+        assign c_same_idx = (y_ridx == y_widx);
+
+        // The rows: port A reads for the read (two cycles: an output
+        // register); port B writes for the write, reading first the line it
+        // replaces or the read of its cycle shares.
+        reg [DW-1:0] cdata [CACHE_ROWS];
+        reg [DW-1:0] ca1, ca2, cb1;
+        wire [BYTES-1:0] be = w_alloc ? '1 : (c_whit ? byte_enables(y_wmask) : '0);
+        always @(posedge clk) begin
+            ca1 <= cdata[y_ridx];
+            ca2 <= ca1;
+        end
+        always @(posedge clk) begin
+            cb1 <= cdata[y_widx];
+            for (integer j = 0; j < BYTES; ++j)
+                if (be[j])
+                    cdata[y_widx][j*8 +: 8] <= y_wdata[j*8 +: 8];
+        end
+        assign c_ca = ca2;
+        assign c_cb = cb1;
+    end else begin : g_direct
+        assign c_rhit     = 1'b0;
+        assign c_whit     = 1'b0;
+        assign c_victim   = 1'b0;
+        assign c_vtag     = '0;
+        assign c_same_idx = 1'b0;
+        assign c_ca       = '0;
+        assign c_cb       = '0;
+    end
+
+    // The reset's sweep: a line per cycle while the buffer has room for what
+    // is in flight, once the writes taken before the reset are in.
+    assign sweep_go = (CACHE != 0) & draining & ~reset & ~sw_done & ~i_busy & ~x_wr & ~y_wr
+                    & (wb_cnt <= FW'(QUEUE - 4));
+    always @(posedge clk) begin
+        if (reset) begin
+            sw_done <= (CACHE == 0);
+            sw_idx  <= '0;
+        end else if (sweep_go) begin
+            sw_idx <= sw_idx + 1'b1;
+            if (sw_idx == CI'(CACHE_ROWS - 1))
+                sw_done <= 1'b1;
+        end
+    end
+
+    // ---- Room, and the drain after a reset ----
+    wire idle = sw_done & ~i_busy & ~x_wr & ~y_wr & ~x_sw & ~y_sw & ~z_alloc
+              & (wb_cnt == 0) & (id_busy == '0)
+              & ~m_arvalid & ~m_awvalid & ~m_wvalid & ~rc_valid;
+
+    // Room given back counts a cycle late: free only rises later.
+    reg  [2:0] rel_q;
+    // Outside reset and its drain, every request is taken.
+    wire [3:0] delta = {1'b0, rel_q} - 4'(rd_valid) - 4'(wr_valid);
+
+    always @(posedge clk) begin
+        rel_q <= (reset | draining) ? 3'd0
+               : 3'(r_local) + 3'(rq_issue) + 3'(b_pop) + 3'(y_wdone);
+        if (reset) begin
+            draining <= 1'b1;
+            free     <= '0;
+        end else if (draining) begin
+            if (idle) begin
+                draining <= 1'b0;
+                free     <= FW'(QUEUE);
+            end
+        end else begin
+            free <= free + FW'($signed(delta));
+        end
+    end
+
+`ifdef SIMULATION
+    // The simulator's guarantees, and the protocol memory must keep.
+    reg sim_pending [INSTANCES];
+    always @(posedge clk) begin
+        if (reset) begin
+            for (integer i = 0; i < INSTANCES; ++i)
+                sim_pending[i] <= 1'b0;
+        end else begin
+            if ((FW+1)'(rd_valid) + (FW+1)'(wr_valid) > (FW+1)'(free))
+                $error("foldsim_vmem: a request without room (free %0d)", free);
+            if (rd_valid & sim_pending[rd_inst])
+                $error("foldsim_vmem: a second read of instance %0d outstanding", rd_inst);
+            if (wr_valid & sim_pending[wr_inst])
+                $error("foldsim_vmem: a write of instance %0d, whose read is outstanding", wr_inst);
+            if (rsp_valid)
+                sim_pending[rsp_inst] <= 1'b0;
+            if (taken_rd)
+                sim_pending[rd_inst] <= 1'b1;
+        end
+        if ((m_rvalid & m_rready) && (32'(m_rid) >= OUTSTANDING || !id_busy[OW'(m_rid)]))
+            $error("foldsim_vmem: R for id %0d, which has no read", m_rid);
+        if (rc_valid && (rc_rlast != rc_last))
+            $error("foldsim_vmem: R's last beat out of place for id %0d", rc_id);
+        if (m_bvalid & ((n_b == 0) | (m_bid != '0)))
+            $error("foldsim_vmem: B with no write, or of id %0d", m_bid);
+        if (r_local & rc_done)
+            $error("foldsim_vmem: two responses in one cycle");
+        if (z_alloc & (wb_cnt == FW'(QUEUE)) & ~b_pop)
+            $error("foldsim_vmem: the write buffer overflows");
+        if ((base & ((64'd1 << RB) - 1)) != 0)
+            $error("foldsim_vmem: base not aligned to a row");
+    end
+`endif
+
+endmodule
