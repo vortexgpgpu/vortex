@@ -250,20 +250,34 @@ module foldsim_afu #(
     localparam [63:0] VMEM_BYTES = `FOLDSIM_VMEM_BYTES;
     localparam VMEM_QUEUE       = 32;
     localparam VMEM_OUTSTANDING = (C_M_AXI_MEM_ID_WIDTH >= 4) ? 16 : (1 << C_M_AXI_MEM_ID_WIDTH);
+    // Memory k's host-cache rows: FOLDSIM_VMEM_<k>_CACHE_ROWS where
+    // foldsim_kernel.vh says the headers give one per memory, else
+    // FOLDSIM_VMEM_CACHE_ROWS (0: none).
+`ifdef FOLDSIM_VMEM_PER_MEMORY_ROWS
+`define FOLDSIM_VMEM_ROWS(k) (`FOLDSIM_VMEM_``k``_CACHE_ROWS)
+`else
 `ifdef FOLDSIM_VMEM_CACHE_ROWS
     localparam VMEM_CACHE_ROWS  = `FOLDSIM_VMEM_CACHE_ROWS;
 `else
     localparam VMEM_CACHE_ROWS  = 0;
 `endif
+`define FOLDSIM_VMEM_ROWS(k) VMEM_CACHE_ROWS
+`endif
+    // Known-zero rows (foldsim_vmem KNOWN_ZERO), on unless 0.
+`ifdef FOLDSIM_VMEM_KNOWN_ZERO
+    localparam VMEM_KNOWN_ZERO  = `FOLDSIM_VMEM_KNOWN_ZERO;
+`else
+    localparam VMEM_KNOWN_ZERO  = 1;
+`endif
     if (C_M_AXI_MEM_DATA_WIDTH != 512) begin : g_vmem_width
         $error("foldsim_afu: the virtual memories' controllers have 512-bit masters");
     end
     wire [63:0] vmem_base;
-    wire        vmem_on;
+    wire        vmem_on, vmem_zero;
 
     // Memory k on master p. Its region's base is registered: base + the
     // region's offset is static while requests flow. Its host cache has
-    // VMEM_CACHE_ROWS lines, at most a line per row of its image.
+    // FOLDSIM_VMEM_ROWS(k) lines, at most a line per row of its image.
 `define FOLDSIM_VMEM(p, k) \
     wire                                vm``k``_rd_valid, vm``k``_wr_valid, vm``k``_rsp_valid; \
     wire [`FOLDSIM_VMEM_``k``_IW-1:0]   vm``k``_rd_inst, vm``k``_wr_inst, vm``k``_rsp_inst; \
@@ -285,8 +299,9 @@ module foldsim_afu #(
         .AXI_ID_W       (C_M_AXI_MEM_ID_WIDTH), \
         .OUTSTANDING    (VMEM_OUTSTANDING), \
         .INSTANCES      (`FOLDSIM_VMEM_``k``_INSTANCES), \
-        .CACHE_ROWS     ((VMEM_CACHE_ROWS < (1 << (`FOLDSIM_VMEM_``k``_AW + $clog2(`FOLDSIM_VMEM_``k``_INSTANCES)))) \
-                         ? VMEM_CACHE_ROWS : (1 << (`FOLDSIM_VMEM_``k``_AW + $clog2(`FOLDSIM_VMEM_``k``_INSTANCES)))) \
+        .CACHE_ROWS     ((`FOLDSIM_VMEM_ROWS(k) < (1 << (`FOLDSIM_VMEM_``k``_AW + $clog2(`FOLDSIM_VMEM_``k``_INSTANCES)))) \
+                         ? `FOLDSIM_VMEM_ROWS(k) : (1 << (`FOLDSIM_VMEM_``k``_AW + $clog2(`FOLDSIM_VMEM_``k``_INSTANCES)))), \
+        .KNOWN_ZERO     (VMEM_KNOWN_ZERO) \
     ) vmem_``k ( \
         .clk       (ap_clk), \
         .reset     (reset), \
@@ -303,6 +318,7 @@ module foldsim_afu #(
         .rsp_data  (vm``k``_rsp_data), \
         .free      (vm``k``_room), \
         .base      (vm``k``_base), \
+        .zero      (vmem_zero), \
         .m_awvalid (m_axi_mem_``p``_awvalid), \
         .m_awready (m_axi_mem_``p``_awready), \
         .m_awaddr  (m_axi_mem_``p``_awaddr), \
@@ -330,6 +346,7 @@ module foldsim_afu #(
 
     `FOLDSIM_VMEM_REPEAT(FOLDSIM_VMEM, FOLDSIM_SEMI);
 `undef FOLDSIM_VMEM
+`undef FOLDSIM_VMEM_ROWS
 
 `define FOLDSIM_SIM_VMEM(p, k) \
     .vm``k``_rsp_valid (vm``k``_rsp_valid), .vm``k``_rsp_inst (vm``k``_rsp_inst), \
@@ -493,11 +510,13 @@ module foldsim_afu #(
 `ifdef FOLDSIM_VMEM_COUNT
         .vmem_base         (vmem_base),
         .vmem_on           (vmem_on),
+        .vmem_zero         (vmem_zero),
 `else
         // Without virtual memories, the region is never used.
         /* verilator lint_off PINCONNECTEMPTY */
         .vmem_base         (),
         .vmem_on           (),
+        .vmem_zero         (),
         /* verilator lint_on PINCONNECTEMPTY */
 `endif
         .mem_stats         (mem_stats),

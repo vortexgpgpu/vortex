@@ -64,6 +64,18 @@
 // taken until it answers locally or goes out on AR; a write until it is in
 // the cache, or until the B of the slot it (or the line it evicts) takes.
 //
+// Known-zero rows (KNOWN_ZERO): a bit per row of the image says whether a
+// write took the row since the reset. While `zero` is high -- the host says
+// memory holds zero in every row not written since the reset, as a runtime
+// that cleared the image does -- a row not written is zero: a read of it is
+// answered on chip (zeros, like a cache hit, filling no line: the bit already
+// answers it), and a write of it is made whole, zeros where its mask is off,
+// so it may fill a line and memory's copy of the row no longer matters. A
+// read-first pair's read sees the row before its write. The bits are looked
+// up as requests are taken, so they follow request order; the reset clears
+// them, a word of each of KBANKS one-bit memories a cycle, within its drain.
+// With `zero` low the controller behaves as without the bits.
+//
 // Reset takes no request, drops every read not yet on AR and answers none
 // from before it; every write taken before it still goes to the cache or
 // memory, and then every dirty line goes to memory and every line is
@@ -91,7 +103,9 @@ module foldsim_vmem #(
     parameter INSTANCES      = 1 << IW,
     // Host-cache rows, a power of two up to 2^(AW + clog2(INSTANCES)), a
     // line per row (0: direct).
-    parameter CACHE_ROWS     = 0
+    parameter CACHE_ROWS     = 0,
+    // Known-zero rows: a bit per row of the image (0: none, `zero` unused).
+    parameter KNOWN_ZERO     = 1
 ) (
     input  wire                        clk,
     input  wire                        reset,
@@ -113,6 +127,8 @@ module foldsim_vmem #(
     output reg  [$clog2(QUEUE+1)-1:0]  free,
 
     input  wire [63:0]                 base,
+    // Memory holds zero in every row not written since the reset.
+    input  wire                        zero,
 
     output reg                         m_awvalid,
     input  wire                        m_awready,
@@ -166,11 +182,13 @@ module foldsim_vmem #(
                      && (POW2 == 0 || CACHE_ROWS < INSTANCES);
     localparam PINS   = 8;
     localparam PW     = $clog2(PINS);
+    localparam KZ     = (KNOWN_ZERO != 0) ? 1 : 0;
 
     // Where a local answer's row comes from.
     localparam SRC_WB = 2'd0;  // the write buffer
     localparam SRC_CA = 2'd1;  // the cache, by the read's own port
     localparam SRC_CB = 2'd2;  // the cache line the same-cycle write reads first
+    localparam SRC_ZR = 2'd3;  // a known-zero row
 
 `ifdef SIMULATION
     initial begin
@@ -344,6 +362,11 @@ module foldsim_vmem #(
     wire [DW-1:0]    fl_data;
     wire             fill_go = fl_v & ~i_wr & ~reset & ~draining;
 
+    // ---- Known-zero rows: looked up as requests are taken ----
+    // At X: the write's row, the read's row was zero before this cycle's
+    // write (zero high, no write since the reset); the reset's clear is done.
+    wire             kz_w, kz_r, kz_done;
+
     // ---- X: the requests, in the image's terms; the tags are read ----
     reg              x_rd;
     reg [IW-1:0]     x_rinst;
@@ -365,8 +388,19 @@ module foldsim_vmem #(
         x_wmask <= fill_go ? '1 : i_wmask;
     end
 
+    // A write of a known-zero row, made whole: zeros where its mask is off.
+    reg [DW-1:0] x_wzdata;
+    always @(*) begin
+        for (integer j = 0; j < BYTES; ++j)
+            x_wzdata[j*8 +: 8] = (kz_w & ~x_wmask[j / GROUP]) ? 8'd0 : x_wdata[j*8 +: 8];
+    end
+    // The read's row is zero: a known-zero row, but a write-first pair's
+    // (its own write is newer); a pair's read sees the row before its write.
+    wire x_same = x_rd & x_wr & (x_rlin == x_wlin);
+    wire x_zero = x_rd & (x_same ? ((RDW_READ_FIRST != 0) & kz_w) : kz_r);
+
     // ---- Y: the newest earlier copy of the read's row ----
-    reg              y_rd, y_wfull;
+    reg              y_rd, y_wfull, y_zero;
     reg [IW-1:0]     y_rinst;
     reg [LW-1:0]     y_rlin, y_wlin;
     reg [DW-1:0]     y_wdata;
@@ -376,6 +410,7 @@ module foldsim_vmem #(
 
     always @(posedge clk) begin
         y_rd    <= x_rd & ~reset;
+        y_zero  <= x_zero & ~reset;
         y_wr    <= x_wr;
         y_sw    <= x_sw;
         y_fl    <= x_fl;
@@ -383,9 +418,9 @@ module foldsim_vmem #(
         y_rinst <= x_rinst;
         y_rlin  <= x_rlin;
         y_wlin  <= x_wlin;
-        y_wdata <= x_wdata;
-        y_wmask <= x_wmask;
-        y_wfull <= &x_wmask;
+        y_wdata <= x_wzdata;
+        y_wmask <= x_wmask | {MW{kz_w}};
+        y_wfull <= (&x_wmask) | kz_w;
         y_raddr <= row_addr(x_rlin);
     end
 
@@ -455,8 +490,9 @@ module foldsim_vmem #(
     // The write taking a slot this cycle is newer than the buffer's.
     wire zhit   = z_alloc & (z_alin == y_rlin);
     wire wb_fwd = pair_wf ? y_wfull : (zhit ? z_afull : |(rhit & wb_full));
-    wire y_local = y_rd & (c_local | wb_fwd);
-    wire [1:0] y_src = ~c_local ? SRC_WB
+    wire y_local = (y_rd & (c_local | wb_fwd)) | y_zero;
+    wire [1:0] y_src = y_zero ? SRC_ZR
+                     : ~c_local ? SRC_WB
                      : ((c_same_idx & (c_whit | w_alloc | f_alloc)) ? SRC_CB : SRC_CA);
     // A read that goes to memory fills its line with the answer, but a
     // pair's: its write is newer.
@@ -671,6 +707,7 @@ module foldsim_vmem #(
             case (r_src)
             SRC_CA:  rsp_data <= c_ca;
             SRC_CB:  rsp_data <= r_pdata;
+            SRC_ZR:  rsp_data <= '0;
             default: rsp_data <= wb_data[r_slot];
             endcase
         end else begin
@@ -940,6 +977,64 @@ module foldsim_vmem #(
         assign c_cb       = '0;
     end
 
+    // ---- Known-zero rows: written since the reset ----
+    // Row lin's bit is bit lin / KBANKS of bank lin % KBANKS. A write sets
+    // its row's bit as it is taken, reading the bit first; a read reads its
+    // row's bit as it is taken, so it sees every earlier write's, but not a
+    // same-cycle one's (a pair's read takes its write's old bit). A later
+    // write of its row comes only after its answer (guarantee 4). The reset
+    // clears a word of every bank a cycle in its drain, which takes no
+    // request; a write taken before it and still in the multiply then sets
+    // nothing, as the reset forgets it anyway.
+    if (KZ != 0) begin : g_kz
+        localparam KROWS  = (1 << AW) * INSTANCES;
+        localparam KBB    = (AW < 4) ? AW : 4;
+        localparam KBANKS = 1 << KBB;
+        localparam KDEPTH = (KROWS + KBANKS - 1) / KBANKS;
+        localparam KAW    = (KDEPTH > 1) ? $clog2(KDEPTH) : 1;
+        reg              zv, done, looked;
+        reg [KAW-1:0]    ptr;
+        wire             clear = draining & ~reset & ~done;
+        wire             set   = i_wr & ~reset & ~draining;
+        wire [KAW-1:0]   wa    = clear ? ptr : KAW'(i_wlin >> KBB);
+        wire [KAW-1:0]   ra    = KAW'(i_rlin >> KBB);
+        wire [KBANKS-1:0] wq, rq;
+        for (genvar b = 0; b < KBANKS; ++b) begin : g_bank
+            reg mem [KDEPTH];
+            reg wo, ro;
+            always @(posedge clk) begin
+                wo <= mem[wa];
+                ro <= mem[ra];
+                if (clear | (set & (i_wlin[KBB-1:0] == KBB'(b))))
+                    mem[wa] <= ~clear;
+            end
+            assign wq[b] = wo;
+            assign rq[b] = ro;
+        end
+        always @(posedge clk) begin
+            zv     <= zero & ~reset;
+            looked <= set;
+            if (reset) begin
+                ptr  <= '0;
+                done <= 1'b0;
+            end else if (clear) begin
+                ptr <= ptr + 1'b1;
+                if (ptr == KAW'(KDEPTH - 1))
+                    done <= 1'b1;
+            end
+        end
+        assign kz_w    = looked & zv & ~wq[x_wlin[KBB-1:0]];
+        assign kz_r    = zv & ~rq[x_rlin[KBB-1:0]];
+        assign kz_done = done;
+    end else begin : g_no_kz
+        /* verilator lint_off UNUSEDSIGNAL */
+        wire unused = zero;
+        /* verilator lint_on UNUSEDSIGNAL */
+        assign kz_w    = 1'b0;
+        assign kz_r    = 1'b0;
+        assign kz_done = 1'b1;
+    end
+
     // The reset's sweep: a line per cycle while the buffer has room for what
     // is in flight, once the writes taken before the reset are in.
     assign sweep_go = (CACHE != 0) & draining & ~reset & ~sw_done & ~i_busy & ~x_wr & ~y_wr & ~x_fl & ~y_fl
@@ -956,7 +1051,7 @@ module foldsim_vmem #(
     end
 
     // ---- Room, and the drain after a reset ----
-    wire idle = sw_done & ~i_busy & ~x_wr & ~y_wr & ~x_sw & ~y_sw & ~x_fl & ~y_fl & ~z_alloc
+    wire idle = sw_done & kz_done & ~i_busy & ~x_wr & ~y_wr & ~x_sw & ~y_sw & ~x_fl & ~y_fl & ~z_alloc
               & (wb_cnt == 0) & (id_busy == '0)
               & ~m_arvalid & ~m_awvalid & ~m_wvalid & ~rc_valid;
 

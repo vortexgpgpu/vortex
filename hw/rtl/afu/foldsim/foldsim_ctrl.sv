@@ -77,9 +77,11 @@ module foldsim_ctrl #(
     output reg  [15:0]           mem_refi,
     output reg  [15:0]           mem_rfc,
     output reg  [7:0]            bubble,
-    // Where the virtual memories are, and whether the simulator may use them.
+    // Where the virtual memories are, whether the simulator may use them, and
+    // whether every row of theirs not written since the reset is zero.
     output wire [63:0]           vmem_base,
     output wire                  vmem_on,
+    output wire                  vmem_zero,
     // Per memory port, its counters.
     input  wire [MEM_PORTS*8*64-1:0] mem_stats,
     input  wire                  mem_idle,
@@ -408,33 +410,41 @@ module foldsim_ctrl #(
     end
 
     // The virtual memories' region: the runtime places it before the
-    // simulator takes a step, and may move it only between requests.
+    // simulator takes a step, and may move it only between requests. Moving
+    // it, as a reset, says nothing of its rows any more: the runtime says
+    // again that they are zero once they are (VMEM_ZERO).
     if (VMEM_BYTES != 0) begin : g_vmem
         reg [63:0] base_r;
-        reg        on_r;
+        reg        on_r, zero_r;
         always @(posedge clk) begin
             if (reset) begin
                 base_r <= 64'd0;
                 on_r   <= 1'b0;
+                zero_r <= 1'b0;
             end else if (wr) begin
                 case (wa)
                 `FOLDSIM_REG_VMEM_BASE_LO: begin
                     base_r[31:0] <= w_data;
                     on_r         <= 1'b0;
+                    zero_r       <= 1'b0;
                 end
                 `FOLDSIM_REG_VMEM_BASE_HI: begin
                     base_r[63:32] <= w_data;
                     on_r          <= 1'b1;
                 end
+                `FOLDSIM_REG_VMEM_ZERO:
+                    zero_r <= w_data[0];
                 default:;
                 endcase
             end
         end
         assign vmem_base = base_r;
         assign vmem_on   = on_r;
+        assign vmem_zero = zero_r;
     end else begin : g_no_vmem
         assign vmem_base = 64'd0;
         assign vmem_on   = 1'b0;
+        assign vmem_zero = 1'b0;
     end
 
 endmodule

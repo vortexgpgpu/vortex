@@ -558,7 +558,9 @@ private:
 
   // The simulator's virtual memories (foldsim --virtual-memories): device
   // memory of their own, cleared as an on-chip RAM starts, and placed before
-  // the simulator takes a step. A kernel without them reads 0 bytes.
+  // the simulator takes a step; the kernel is told it is clear, so its
+  // controllers answer rows nobody has written on chip. A kernel without them
+  // reads 0 bytes.
   int setup_vmem() {
     uint32_t bytes = 0;
     if (transport_.reg_read(FOLDSIM_REG_VMEM_BYTES, &bytes) != 0)
@@ -585,6 +587,7 @@ private:
         return -1;
     }
     if (reg_write(FOLDSIM_REG_VMEM_BASE_LO, uint32_t(vmem_base_)) != 0 ||
+        reg_write(FOLDSIM_REG_VMEM_ZERO, 1) != 0 ||
         reg_write(FOLDSIM_REG_VMEM_BASE_HI, uint32_t(vmem_base_ >> 32)) != 0)
       return -1;
     return 0;

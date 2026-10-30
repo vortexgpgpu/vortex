@@ -43,8 +43,12 @@
 `define FOLDSIM_REG_MEM_BASE_HI 12'h0C4
 `define FOLDSIM_REG_BUBBLE      12'h0C8
 // The simulator's virtual memories (foldsim --virtual-memories): the bytes of
-// device memory they need, and where the runtime placed them.
+// device memory they need, and where the runtime placed them. VMEM_ZERO, a
+// write at VMEM_BYTES' offset: [0] the region holds zero in every row the
+// simulator has not written since the kernel's reset (1), or not (0, as after
+// a reset or a write of VMEM_BASE_LO).
 `define FOLDSIM_REG_VMEM_BYTES  12'h0CC
+`define FOLDSIM_REG_VMEM_ZERO   12'h0CC
 `define FOLDSIM_REG_VMEM_BASE_LO 12'h0D0
 `define FOLDSIM_REG_VMEM_BASE_HI 12'h0D4
 // The memory model (sw/common/foldsim_regs.h has the fields).

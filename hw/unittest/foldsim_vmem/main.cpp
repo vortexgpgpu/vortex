@@ -26,12 +26,25 @@
 //     the writes taken before it reach HBM;
 //   * after a final reset (which writes the host cache's dirty lines back),
 //     HBM's image equals the reference RAM, padding untouched.
+// The z* setups clear the image (the host's zeroing, after a reset) and raise
+// `zero`, dropping and raising it again at random under traffic; a reset
+// drops it, and the host clears the image again, or not (then `zero` stays
+// low). Every answer still equals the reference RAM's row.
 // With a host cache, directed sequences first check where answers and writes
 // go: a read-first pair's whole-row write fills its line, its read still
 // getting the old row from memory (miss) or the line (hit); later reads hit;
 // a fill evicts the line's dirty row; a partial write that misses goes
 // around; and, where instances share lines, a pinned line stays in the cache
 // (another instance's write goes around) until its pair's read has its data.
+// With known-zero rows, directed steps check that reads of rows not written
+// since the reset are answered on chip, as zeros, with no read of memory;
+// that writes, partial or whole, in the cache or around it, and a pair's
+// write, take their row out of it (a partial write made whole); that a row
+// evicted after its write reads back its data; that `zero` raised or dropped
+// with reads in memory changes only the reads looked up after it (a request
+// is looked up as it is taken, or two cycles later through the multiply);
+// that dropping it lets the host change the image; and that a reset forgets
+// every write.
 //
 //   ./foldsim_vmem            every setup
 //   ./foldsim_vmem <name>     one setup
@@ -84,6 +97,9 @@
 #ifndef VM_CACHE_ROWS
 #define VM_CACHE_ROWS 0
 #endif
+#ifndef VM_KNOWN_ZERO
+#define VM_KNOWN_ZERO 1
+#endif
 
 namespace {
 
@@ -102,6 +118,9 @@ constexpr int kLead = 3;
 constexpr bool kPow2 = (kInstances & (kInstances - 1)) == 0;
 // A read answered on chip: 5 host cycles, 7 through the layout's multiply.
 constexpr uint64_t kLocal = kPow2 ? 5 : 7;
+// A request reaches the lookups (known-zero bits, the cache's tags) this
+// many host cycles after it is taken: the multiply's two stages.
+constexpr int kIntake = kPow2 ? 0 : 2;
 // The image's rows; instances share lines: read-first pairs pin theirs.
 constexpr uint64_t kImageRows = uint64_t(kRows) * kInstances;
 constexpr bool kPin = VM_CACHE_ROWS > 0 && uint64_t(VM_CACHE_ROWS) < kImageRows &&
@@ -192,6 +211,9 @@ uint8_t init_byte(uint64_t addr) {
 // ---- HBM: an AXI4 slave ----
 struct Hbm {
   std::map<uint64_t, Line> mem;
+  // Lines never written hold zero (the host cleared the image), else a
+  // pseudo-random pattern.
+  bool zero_init = false;
   double ready_p = 0.7, rvalid_p = 0.8, interleave_p = 0.3;
   uint64_t lat_lo = 20, lat_hi = 600;
   // A read samples memory at the end of its flight (else at a random point).
@@ -227,12 +249,13 @@ struct Hbm {
 
   uint64_t n_ar = 0, n_aw = 0, n_w = 0, n_b = 0, n_r = 0, max_lat = 0, min_lat = ~0ull;
   std::vector<uint64_t> aw_log;  // AW addresses, in order
+  std::vector<bool> whole_log;   // each write, in order: every byte of its row enabled
 
   Line& line(uint64_t a) {
     auto it = mem.find(a);
     if (it == mem.end()) {
       Line l;
-      for (int i = 0; i < 64; ++i) l[i] = init_byte(a + i);
+      for (int i = 0; i < 64; ++i) l[i] = zero_init ? 0 : init_byte(a + i);
       it = mem.emplace(a, l).first;
     }
     return it->second;
@@ -365,15 +388,20 @@ struct Hbm {
     while (!aw.empty() && int(w.size()) >= kBeats) {
       Write wr;
       wr.addr = aw.front().addr;
+      bool whole = true;
       for (int k = 0; k < kBeats; ++k) {
         const Beat& b = w.front();
         CHECK(b.last == (k == kBeats - 1), "WLAST %d on beat %d of %d", int(b.last), k, kBeats);
-        for (int i = 0; i < 64; ++i)
+        for (int i = 0; i < 64; ++i) {
           if (k * 64 + i >= kBytes)
             CHECK(!((b.strb >> i) & 1), "strobe on padding byte %d", k * 64 + i);
+          else
+            whole &= (b.strb >> i) & 1;
+        }
         wr.beats.push_back(b);
         w.pop_front();
       }
+      whole_log.push_back(whole);
       aw.pop_front();
       last_apply = std::max(last_apply, now + rand_in(1, lat_hi / 2 + 1));
       wr.apply_at = last_apply;
@@ -410,11 +438,12 @@ struct Hbm {
 // ---- The reference RAM and the simulator's view ----
 struct Ref {
   std::map<uint64_t, Row> rows;  // by row address
+  bool zero_init = false;        // as Hbm::zero_init
   Row get(uint64_t a) {
     auto it = rows.find(a);
     if (it != rows.end()) return it->second;
     Row r(kBytes);
-    for (int i = 0; i < kBytes; ++i) r[i] = init_byte(a + i);
+    for (int i = 0; i < kBytes; ++i) r[i] = zero_init ? 0 : init_byte(a + i);
     return r;
   }
   void write(uint64_t a, const Row& d, const std::vector<bool>& mask) {
@@ -436,17 +465,23 @@ struct Setup {
   uint64_t lat_lo, lat_hi;
   double ready_p;
   int resets;        // resets with traffic in flight
+  int zero;          // the host clears the image and raises `zero` (0: never)
 };
 
 const Setup kSetups[] = {
-  // name        cycles  issue read  write both  same  full active hot  p_hot lead lat        ready resets
-  {"hot",        300000,  0.9,  0.6,  0.6,  0.4,  0.5,  0.5, 8,     4,   0.8,  3,   20,  600,  0.7,  4},
-  {"wide",       300000,  0.9,  0.7,  0.5,  0.3,  0.3,  0.5, 0,     0,   0.0,  3,   20,  200,  0.8,  4},
-  {"full",       300000,  1.0,  0.7,  0.7,  0.5,  0.5,  0.5, 0,     8,   0.5,  0,   300, 600,  0.3,  4},
-  {"pairs",      300000,  0.9,  0.2,  0.2,  0.9,  0.8,  0.4, 16,    2,   0.9,  3,   20,  600,  0.6,  4},
-  {"partial",    300000,  0.9,  0.6,  0.6,  0.4,  0.5,  0.1, 8,     2,   0.9,  0,   20,  300,  0.7,  4},
-  {"fastmem",    300000,  1.0,  0.6,  0.6,  0.4,  0.4,  0.5, 32,    4,   0.7,  0,   1,   20,   1.0,  4},
-  {"sparse",     300000,  0.1,  0.6,  0.6,  0.4,  0.6,  0.5, 4,     2,   0.9,  3,   20,  600,  0.5,  4},
+  // name        cycles  issue read  write both  same  full active hot  p_hot lead lat        ready resets zero
+  {"hot",        300000,  0.9,  0.6,  0.6,  0.4,  0.5,  0.5, 8,     4,   0.8,  3,   20,  600,  0.7,  4,     0},
+  {"wide",       300000,  0.9,  0.7,  0.5,  0.3,  0.3,  0.5, 0,     0,   0.0,  3,   20,  200,  0.8,  4,     0},
+  {"full",       300000,  1.0,  0.7,  0.7,  0.5,  0.5,  0.5, 0,     8,   0.5,  0,   300, 600,  0.3,  4,     0},
+  {"pairs",      300000,  0.9,  0.2,  0.2,  0.9,  0.8,  0.4, 16,    2,   0.9,  3,   20,  600,  0.6,  4,     0},
+  {"partial",    300000,  0.9,  0.6,  0.6,  0.4,  0.5,  0.1, 8,     2,   0.9,  0,   20,  300,  0.7,  4,     0},
+  {"fastmem",    300000,  1.0,  0.6,  0.6,  0.4,  0.4,  0.5, 32,    4,   0.7,  0,   1,   20,   1.0,  4,     0},
+  {"sparse",     300000,  0.1,  0.6,  0.6,  0.4,  0.6,  0.5, 4,     2,   0.9,  3,   20,  600,  0.5,  4,     0},
+  {"zhot",       300000,  0.9,  0.6,  0.6,  0.4,  0.5,  0.5, 8,     4,   0.8,  3,   20,  600,  0.7,  4,     1},
+  {"zwide",      300000,  0.9,  0.7,  0.5,  0.3,  0.3,  0.5, 0,     0,   0.0,  3,   20,  200,  0.8,  4,     1},
+  {"zpairs",     300000,  0.9,  0.2,  0.2,  0.9,  0.8,  0.4, 16,    2,   0.9,  3,   20,  600,  0.6,  4,     1},
+  {"zpartial",   300000,  0.9,  0.6,  0.6,  0.4,  0.5,  0.1, 8,     2,   0.9,  0,   20,  300,  0.7,  4,     1},
+  {"zfast",      300000,  1.0,  0.6,  0.6,  0.4,  0.4,  0.5, 32,    4,   0.7,  0,   1,   20,   1.0,  4,     1},
 };
 
 // A request the directed sequences force.
@@ -470,6 +505,10 @@ struct Tb {
   std::vector<uint64_t> issued_at;
   std::deque<uint32_t> free_hist;
   bool in_reset = false, draining = false;
+  // `zero`, and whether the host cleared the image since the last reset
+  // (only then may `zero` be raised).
+  bool zero = false, zeroed = false, toggles = false;
+  uint64_t n_toggles = 0, drain_cycles = 0;
   uint32_t last_free = 0;
   int last_taken = 0;
 
@@ -490,6 +529,8 @@ struct Tb {
   }
 
   void reset_dut(int n) {
+    // The register holding `zero` is reset with the controller.
+    zero = zeroed = false;
     in_reset = true;
     for (int i = 0; i < n; ++i) cycle(true);
     in_reset = false;
@@ -555,7 +596,14 @@ struct Tb {
       }
     }
 
+    // The host drops `zero` and raises it again at random, while the image
+    // stays as it cleared it.
+    if (toggles && zeroed && !rst && !draining && chance(2e-4)) {
+      zero = !zero;
+      ++n_toggles;
+    }
     dut->reset = rst;
+    dut->zero = zero;
     dut->rd_valid = rd;
     dut->rd_inst = rd ? inst : uint32_t(rand_in(0, kInstances - 1));
     dut->rd_row = rd ? rrow : uint32_t(rand_in(0, kRows - 1));
@@ -639,6 +687,8 @@ struct Tb {
           }
       }
       draining = true;
+    } else if (draining && dut->free == 0) {
+      ++drain_cycles;
     } else if (draining && dut->free != 0) {
       CHECK(dut->free == VM_QUEUE, "free %u after the drain", uint32_t(dut->free));
       CHECK(hbm.outstanding() == 0 && hbm.r_id < 0, "the drain ended with %zu transactions in HBM",
@@ -678,7 +728,7 @@ struct Tb {
         const Line& l = hbm.line(kv.first + 64 * k);
         for (int i = 0; i < 64; ++i) {
           const int j = k * 64 + i;
-          const uint8_t want = j < kBytes ? kv.second[j] : init_byte(kv.first + j);
+          const uint8_t want = j < kBytes ? kv.second[j] : hbm.zero_init ? 0 : init_byte(kv.first + j);
           if (l[i] != want) {
             CHECK(false, "HBM row 0x%lx byte %d: 0x%02x, want 0x%02x", (unsigned long)kv.first, j, l[i],
                   want);
@@ -688,6 +738,17 @@ struct Tb {
       }
     }
     (void)rows;
+  }
+
+  // The host clears the image (the controller drained after a reset: memory
+  // holds the image, the cache nothing) and raises `zero`.
+  void host_zero() {
+    CHECK(hbm.outstanding() == 0 && !draining, "the host clears the image with HBM busy");
+    hbm.mem.clear();
+    hbm.zero_init = true;
+    ref.rows.clear();
+    ref.zero_init = true;
+    zeroed = zero = true;
   }
 
   // A new controller, reset and drained, under a setup.
@@ -709,6 +770,8 @@ struct Tb {
     wr_order.clear();
     wr_inflight.clear();
     draining = false;
+    zero = zeroed = false;
+    n_toggles = drain_cycles = 0;
     last_free = 0;
     last_taken = 0;
     n_reads = n_writes = n_checked = n_pairs_same = n_raw = n_resets = n_resets_busy = max_rsp_lat = 0;
@@ -720,6 +783,7 @@ struct Tb {
     dut->eval();
     reset_dut(4);
     while (draining) cycle(false, false);
+    if (setup.zero) host_zero();
   }
 
   // Quiet, then a last reset: memory holds the RAM's image.
@@ -734,6 +798,7 @@ struct Tb {
   int run(const Setup& setup, uint64_t seed) {
     const int before = failures;
     start(setup, seed);
+    toggles = setup.zero != 0;
 
     const uint64_t slice = setup.cycles / uint64_t(setup.resets + 1);
     for (int k = 0; k <= setup.resets; ++k) {
@@ -751,8 +816,10 @@ struct Tb {
       for (int c = 0; c < 200000 && !hbm.busy_ahead(); ++c) cycle();
       reset_dut(int(rand_in(1, 5)));
       uint64_t drain = 0;
-      while (draining && drain++ < 100000) cycle(false, false);
+      while (draining && drain++ < 200000) cycle(false, false);
       CHECK(!draining, "the drain never ends");
+      // The host clears the image again, mostly; else `zero` stays low.
+      if (setup.zero && chance(0.75)) host_zero();
       hbm.lat_lo = lo;
       hbm.lat_hi = hi;
       hbm.ready_p = rp;
@@ -762,18 +829,20 @@ struct Tb {
     printf("%-8s %lu cycles: %lu reads checked of %lu (%lu meeting a write in flight, %lu answered "
            "locally), %lu writes, "
            "%lu same-row pairs; HBM %lu AR %lu AW, latency %lu-%lu, response latency max %lu; "
-           "%lu cycles with free 0; %lu resets (%lu with HBM busy, %lu reads dropped): %s\n",
+           "%lu cycles with free 0; %lu resets (%lu with HBM busy, %lu reads dropped, %lu drain cycles); "
+           "zero toggled %lu times: %s\n",
            setup.name, (unsigned long)now, (unsigned long)n_checked, (unsigned long)n_reads,
            (unsigned long)n_raw, (unsigned long)n_quick, (unsigned long)n_writes,
            (unsigned long)n_pairs_same,
            (unsigned long)hbm.n_ar, (unsigned long)hbm.n_aw, (unsigned long)hbm.min_lat,
            (unsigned long)hbm.max_lat, (unsigned long)max_rsp_lat, (unsigned long)full_cycles,
            (unsigned long)n_resets, (unsigned long)n_resets_busy, (unsigned long)dropped,
-           failures == before ? "ok" : "FAILED");
+           (unsigned long)drain_cycles, (unsigned long)n_toggles, failures == before ? "ok" : "FAILED");
     // A cache with a line per row can keep HBM idle under any traffic.
     if (uint64_t(VM_CACHE_ROWS) < kImageRows)
       CHECK(n_resets_busy >= uint64_t(setup.resets), "only %lu of the resets found HBM busy",
             (unsigned long)n_resets_busy);
+    toggles = false;
     delete dut;
     dut = nullptr;
     return failures - before;
@@ -824,7 +893,7 @@ struct Tb {
   }
 
   int run_directed(uint64_t seed) {
-    static const Setup kDirected = {"directed", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 50, 50, 1.0, 0};
+    static const Setup kDirected = {"directed", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 50, 50, 1.0, 0, 0};
     const int before = failures;
     start(kDirected, seed);
     hbm.rvalid_p = 1.0;
@@ -832,6 +901,8 @@ struct Tb {
     const uint32_t a = 0, r1 = 3 % kRows;
     int steps = 0;
     uint64_t ar, aw;
+    // The line K2 leaves dirty, if any: K's fill must not need it.
+    int64_t k2_line = -1;
 
     // K2: while other writes keep the fill from X, the row's own partial
     // write gets there first (it goes around): the fill must be dropped, or
@@ -858,13 +929,15 @@ struct Tb {
         for (int i = 0; i < 200; ++i) cycle(false, false);
         issue(true, false, a, r9);
         await(a, 0);
+        k2_line = line_of(b, rb);
         ++steps;
       }
     }
     // K: a read that misses fills its line: the next read of the row is on
     // chip. A line with a dirty row takes no fill (its row stays).
     {
-      const uint32_t r6 = 5 % kRows;
+      uint32_t r6 = 5 % kRows;
+      while (int64_t(line_of(a, r6)) == k2_line) r6 = (r6 + 1) % kRows;
       ar = hbm.n_ar;
       issue(true, false, a, r6);
       await(a, 20);
@@ -1116,6 +1189,243 @@ struct Tb {
     dut = nullptr;
     return failures - before;
   }
+
+  // ---- Directed: known-zero rows ----
+  // AW entries since `from` that wrote row (i, r), and whether each was whole.
+  int aws_to(size_t from, uint32_t i, uint32_t r, bool* whole) {
+    int n = 0;
+    *whole = true;
+    for (size_t k = from; k < hbm.aw_log.size(); ++k) {
+      if (hbm.aw_log[k] != row_addr(i, r)) continue;
+      ++n;
+      *whole &= k < hbm.whole_log.size() && hbm.whole_log[k];
+    }
+    return n;
+  }
+
+  int run_kz_directed(uint64_t seed) {
+    static const Setup kZ = {"zdirected", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 50, 50, 1.0, 0, 1};
+    const int before = failures;
+    start(kZ, seed);  // the host clears the image and raises zero
+    hbm.rvalid_p = 1.0;
+    const uint32_t a = 0, top = kInstances - 1, rtop = kRows - 1;
+    std::set<std::pair<uint32_t, uint32_t>> used;
+    // A row of instance i nobody has touched (and, with `line`, on that line).
+    auto fresh = [&](uint32_t i, int64_t line = -1) {
+      for (uint32_t r = 1; r < kRows; ++r)
+        if (!used.count({i, r}) && (line < 0 || line_of(i, r) == uint32_t(line))) {
+          used.insert({i, r});
+          return r;
+        }
+      CHECK(false, "no fresh row of instance %u", i);
+      return 0u;
+    };
+    int steps = 0;
+    uint64_t ar;
+    size_t from;
+    bool whole;
+
+    // Z1: rows nobody wrote since the reset read as zeros, on chip, at the
+    // first and last instance and row (the bits' first and last banks and
+    // words).
+    ar = hbm.n_ar;
+    const std::pair<uint32_t, uint32_t> z1[] = {{a, 0}, {top, rtop}, {top, 0}, {a, rtop}};
+    for (auto [i, r] : z1) {
+      used.insert({i, r});
+      issue(true, false, i, r);
+      await(i, 0);
+      CHECK(quick(i), "Z1: known-zero row %u of instance %u answered in %lu cycles", r, i,
+            (unsigned long)rsp_lat[i]);
+    }
+    CHECK(hbm.n_ar == ar, "Z1: %lu reads of memory for known-zero rows", (unsigned long)(hbm.n_ar - ar));
+    ++steps;
+
+    // Z2: a whole write and a partial one take their rows out; the partial
+    // one is made whole (zeros where its mask is off): it fills a line, or
+    // goes to memory whole. Both read back their data.
+    const uint32_t rw = fresh(a), rp = fresh(a);
+    from = hbm.aw_log.size();
+    issue(false, true, a, rw);
+    issue(false, true, a, rp, false);
+    for (int i = 0; i < 300; ++i) cycle(false, false);
+    const int to_rp = aws_to(from, a, rp, &whole);
+    if (VM_CACHE_ROWS == 0) {
+      bool whole_rw;
+      CHECK(aws_to(from, a, rw, &whole_rw) == 1 && to_rp == 1, "Z2: the writes did not reach memory");
+      CHECK(whole, "Z2: a partial write of a known-zero row went to memory partial");
+    } else {
+      CHECK(to_rp == 0, "Z2: a partial write of a known-zero row did not fill its line");
+    }
+    for (uint32_t r : {rw, rp}) {
+      issue(true, false, a, r);
+      await(a, 0);
+    }
+    ++steps;
+
+    // Z3: pairs on known-zero rows, whole and partial: the read is on chip
+    // (read-first: zeros; write-first: the write over zeros); the row then
+    // reads back the write.
+    for (bool full : {true, false}) {
+      const uint32_t r = fresh(a);
+      ar = hbm.n_ar;
+      issue(true, true, a, r, full);
+      await(a, 100);
+      CHECK(quick(a) && hbm.n_ar == ar, "Z3: a %s pair on a known-zero row left the chip (%lu cycles)",
+            full ? "whole" : "partial", (unsigned long)rsp_lat[a]);
+      issue(true, false, a, r);
+      await(a, 0);
+    }
+    ++steps;
+
+    // Z4: a row written, then evicted from its line, reads back its data
+    // (from the buffer or memory, never as zero).
+    uint32_t r5 = 0, r6 = 0;
+    for (uint32_t r = 1; r < kRows && r6 == 0; ++r)
+      for (uint32_t t = r + 1; t < kRows && VM_CACHE_ROWS > 0 && !used.count({a, r}); ++t)
+        if (!used.count({a, t}) && line_of(a, t) == line_of(a, r)) {
+          r5 = r, r6 = t;
+          break;
+        }
+    if (r6 != 0) {
+      used.insert({a, r5});
+      used.insert({a, r6});
+      issue(false, true, a, r5);
+      for (int i = 0; i < 20; ++i) cycle(false, false);
+      from = hbm.aw_log.size();
+      issue(false, true, a, r6);
+      for (int i = 0; i < 300; ++i) cycle(false, false);
+      CHECK(aws_to(from, a, r5, &whole) == 1, "Z4: the written row was not evicted");
+      ar = hbm.n_ar;
+      issue(true, false, a, r5);
+      await(a, 0);
+      CHECK(hbm.n_ar == ar + 1, "Z4: the evicted row was not read from memory");
+      ++steps;
+    }
+
+    // Z5: zero raised with a read in memory: that read answers from memory,
+    // a read after it on chip. Dropped the cycle after a read: that read
+    // still answers on chip, the next goes to memory.
+    {
+      hbm.lat_lo = hbm.lat_hi = 300;
+      zero = false;
+      cycle(false, false);
+      const uint32_t r7 = fresh(a), r8 = fresh(top);
+      ar = hbm.n_ar;
+      issue(true, false, a, r7);
+      for (int i = 0; i < 20; ++i) cycle(false, false);
+      CHECK(pending[a] && hbm.n_ar == ar + 1, "Z5: with zero low the read did not go to memory");
+      zero = true;
+      // One read per instance outstanding: with one instance, after it.
+      if (top == a) await(a, 0);
+      issue(true, false, top, r8);
+      await(top, 0);
+      CHECK(quick(top) && hbm.n_ar == ar + 1, "Z5: zero raised, a known-zero read left the chip");
+      if (top != a) CHECK(pending[a], "Z5: the read in memory answered early");
+      await(a, 0);
+      const uint32_t r9 = fresh(top), r10 = fresh(top);
+      ar = hbm.n_ar;
+      issue(true, false, top, r9);
+      for (int i = 0; i < kIntake; ++i) cycle(false, false);
+      zero = false;
+      await(top, 0);
+      CHECK(quick(top) && hbm.n_ar == ar, "Z5: a read taken with zero high went to memory");
+      issue(true, false, top, r10);
+      await(top, 0);
+      CHECK(hbm.n_ar == ar + 1, "Z5: a read taken with zero low did not go to memory");
+      hbm.lat_lo = hbm.lat_hi = 50;
+      ++steps;
+    }
+
+    // Z6: with zero low, a row answered as zero earlier is read from memory
+    // (a zero answer fills no line), and the host may change a row nobody
+    // touched: it reads back the host's data.
+    {
+      for (int i = 0; i < 50; ++i) cycle(false, false);
+      ar = hbm.n_ar;
+      issue(true, false, a, 0);
+      await(a, 0);
+      CHECK(hbm.n_ar == ar + 1, "Z6: a known-zero answer filled a line");
+      const uint32_t r11 = fresh(a);
+      dma(a, r11);
+      issue(true, false, a, r11);
+      await(a, 0);
+      CHECK(hbm.n_ar == ar + 2, "Z6: the host's row was not read from memory");
+      ++steps;
+    }
+
+    // Z7: a reset forgets every write: with zero low the rows written before
+    // it read back from memory; once the host clears the image and raises
+    // zero, the same rows are known zero again, the last row of the last
+    // instance (the clear's last word) among them.
+    {
+      issue(false, true, top, rtop);
+      for (int i = 0; i < 50; ++i) cycle(false, false);
+      reset_dut(2);
+      while (draining) cycle(false, false);
+      ar = hbm.n_ar;
+      issue(true, false, a, rw);
+      await(a, 0);
+      CHECK(hbm.n_ar == ar + 1, "Z7: zero low after the reset, yet no read of memory");
+      host_zero();
+      used.clear();
+      for (auto [i, r] : {std::pair<uint32_t, uint32_t>{a, rw}, {a, rp}, {top, rtop}}) {
+        ar = hbm.n_ar;
+        issue(true, false, i, r);
+        await(i, 0);
+        CHECK(quick(i) && hbm.n_ar == ar, "Z7: row %u of instance %u, written before the reset, is not known zero",
+              r, i);
+      }
+      ++steps;
+    }
+
+    // Z8: where instances share lines, a write of a known-zero row whose line
+    // a pair has pinned goes around the cache, whole, and takes its row out.
+    if (kPin && VM_RDW_READ_FIRST != 0) {
+      uint32_t p = kInstances, rp1 = 0, q = kInstances, rq = 0;
+      for (uint32_t i = 1; i < kInstances && q == kInstances; ++i)
+        for (uint32_t r = 1; r < kRows && q == kInstances; ++r) {
+          if (used.count({i, r})) continue;
+          for (uint32_t j = i + 1; j < kInstances && q == kInstances; ++j)
+            for (uint32_t t = 1; t < kRows; ++t)
+              if (!used.count({j, t}) && line_of(j, t) == line_of(i, r)) {
+                p = i, rp1 = r, q = j, rq = t;
+                break;
+              }
+        }
+      CHECK(q != kInstances, "Z8: no two instances' rows share a line");
+      if (q != kInstances) {
+        used.insert({p, rp1});
+        used.insert({q, rq});
+        hbm.lat_lo = hbm.lat_hi = 400;
+        hbm.late_sample = true;
+        // The pair's read must go to memory: zero low for its cycle.
+        zero = false;
+        issue(true, true, p, rp1);
+        for (int i = 0; i < kIntake; ++i) cycle(false, false);
+        zero = true;
+        for (int i = 0; i < 10; ++i) cycle(false, false);
+        CHECK(pending[p], "Z8: the pinning read answered early");
+        from = hbm.aw_log.size();
+        issue(false, true, q, rq, false);
+        for (int i = 0; i < 300; ++i) cycle(false, false);
+        CHECK(pending[p], "Z8: the pinning read answered early");
+        CHECK(aws_to(from, q, rq, &whole) == 1 && whole, "Z8: the write of the pinned line did not go around whole");
+        await(p, 0);
+        hbm.lat_lo = hbm.lat_hi = 50;
+        hbm.late_sample = false;
+        issue(true, false, q, rq);
+        await(q, 0);
+        ++steps;
+      }
+    }
+    finish();
+    printf("zdirected %d steps (cache %d, read-first %d, pins %d, %lu drain cycles): %s\n", steps,
+           VM_CACHE_ROWS, VM_RDW_READ_FIRST, int(kPin), (unsigned long)drain_cycles,
+           failures == before ? "ok" : "FAILED");
+    delete dut;
+    dut = nullptr;
+    return failures - before;
+  }
 };
 
 }  // namespace
@@ -1126,11 +1436,12 @@ int main(int argc, char** argv) {
   for (int i = 1; i < argc; ++i)
     if (argv[i][0] != '+') only = argv[i];
   printf("foldsim_vmem: IW %d AW %d DW %d MW %d RDW_READ_FIRST %d QUEUE %d OUTSTANDING %d INSTANCES %u "
-         "CACHE_ROWS %d\n",
+         "CACHE_ROWS %d KNOWN_ZERO %d\n",
          VM_IW, VM_AW, VM_DW, VM_MW, VM_RDW_READ_FIRST, VM_QUEUE, VM_OUTSTANDING, kInstances,
-         VM_CACHE_ROWS);
+         VM_CACHE_ROWS, VM_KNOWN_ZERO);
   Tb tb;
   if (VM_CACHE_ROWS > 0 && (!only || !std::strcmp(only, "directed"))) tb.run_directed(1);
+  if (VM_KNOWN_ZERO && (!only || !std::strcmp(only, "zdirected"))) tb.run_kz_directed(1);
   uint64_t seed = 1;
   for (const auto& s : kSetups) {
     ++seed;

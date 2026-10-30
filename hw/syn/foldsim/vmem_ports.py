@@ -18,8 +18,11 @@ foldsim --virtual-memories gives foldsim_sim.vh FOLDSIM_VMEM_COUNT; each
 memory's foldsim_vmem controller gets its own device-memory master, numbered
 after the memory ports. This prints FOLDSIM_VMEM_REPEAT(f,s): `f(port, k) for
 each memory k joined by `s, spelled out as the Makefile spells out
-FOLDSIM_MEM_REPEAT, and FOLDSIM_VMEM_CACHE_ROWS when given. Nothing for a
-simulator without them.
+FOLDSIM_MEM_REPEAT, and FOLDSIM_VMEM_CACHE_ROWS when given. Each memory k's
+host cache takes FOLDSIM_VMEM_<k>_CACHE_ROWS where an earlier header (or the
+command line) defines it, else FOLDSIM_VMEM_CACHE_ROWS (0: none); the
+foldsim_afu.sv of a kernel.vh without FOLDSIM_VMEM_PER_MEMORY_ROWS takes the
+global one for every memory. Nothing for a simulator without them.
 With --masters, it prints the kernel's device-memory masters instead.
 """
 
@@ -59,6 +62,9 @@ def main():
           + ' `s '.join(f'`f({a.mem_ports + k}, {k})' for k in range(n)))
     if a.cache_rows:
         print(f'`define FOLDSIM_VMEM_CACHE_ROWS {a.cache_rows}')
+    print('`define FOLDSIM_VMEM_PER_MEMORY_ROWS')
+    for k in range(n):
+        print(f'`ifndef FOLDSIM_VMEM_{k}_CACHE_ROWS\n`define FOLDSIM_VMEM_{k}_CACHE_ROWS {a.cache_rows}\n`endif')
 
 
 if __name__ == '__main__':

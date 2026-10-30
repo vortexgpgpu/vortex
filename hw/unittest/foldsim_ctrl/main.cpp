@@ -17,7 +17,10 @@
 // place in the stats window, every class's finishes, zero past the end of each
 // window, the idle-slot rate: kept with BUBBLES, 0 without; and the virtual
 // memories' region: VMEM_BYTES of them, placed (and on) by a write of the high
-// word of its base, off again by one of the low; with none, all of it 0.
+// word of its base, off again by one of the low; with none, all of it 0; and
+// their known-zero state: set and cleared by VMEM_ZERO, cleared by a write
+// of VMEM_BASE_LO and by the reset, never with no virtual memories, and
+// VMEM_BYTES still read at its offset.
 
 #include <cstdint>
 #include <cstdio>
@@ -147,10 +150,22 @@ int main(int argc, char** argv) {
     got = reg_read(FOLDSIM_REG_VMEM_BYTES);
     check(got == uint32_t(VMEM_BYTES), "virtual memories' bytes", FOLDSIM_REG_VMEM_BYTES, got, uint32_t(VMEM_BYTES));
     check(!dut->vmem_on, "virtual memories on at reset", FOLDSIM_REG_VMEM_BASE_HI, dut->vmem_on, 0);
+    check(!dut->vmem_zero, "virtual memories zero at reset", FOLDSIM_REG_VMEM_ZERO, dut->vmem_zero, 0);
+    reg_write(FOLDSIM_REG_VMEM_ZERO, 1);
+    check(dut->vmem_zero == vm, "virtual memories zero", FOLDSIM_REG_VMEM_ZERO, dut->vmem_zero, vm);
+    got = reg_read(FOLDSIM_REG_VMEM_BYTES);
+    check(got == uint32_t(VMEM_BYTES), "virtual memories' bytes after VMEM_ZERO", FOLDSIM_REG_VMEM_BYTES, got,
+          uint32_t(VMEM_BYTES));
+    reg_write(FOLDSIM_REG_VMEM_ZERO, 0);
+    check(!dut->vmem_zero, "virtual memories zero, taken back", FOLDSIM_REG_VMEM_ZERO, dut->vmem_zero, 0);
+    reg_write(FOLDSIM_REG_VMEM_ZERO, 1);
     reg_write(FOLDSIM_REG_VMEM_BASE_LO, 0x12345000u);
     check(!dut->vmem_on, "virtual memories on with half a base", FOLDSIM_REG_VMEM_BASE_LO, dut->vmem_on, 0);
+    check(!dut->vmem_zero, "virtual memories zero after a move", FOLDSIM_REG_VMEM_BASE_LO, dut->vmem_zero, 0);
+    reg_write(FOLDSIM_REG_VMEM_ZERO, 1);
     reg_write(FOLDSIM_REG_VMEM_BASE_HI, 0x41u);
     check(dut->vmem_on == vm, "virtual memories on", FOLDSIM_REG_VMEM_BASE_HI, dut->vmem_on, vm);
+    check(dut->vmem_zero == vm, "virtual memories zero, placed", FOLDSIM_REG_VMEM_BASE_HI, dut->vmem_zero, vm);
     const uint64_t base = vm ? 0x4112345000ull : 0;
     check(dut->vmem_base == base, "virtual memories' base output", FOLDSIM_REG_VMEM_BASE_LO,
           uint32_t(dut->vmem_base), uint32_t(base));
@@ -196,6 +211,17 @@ int main(int argc, char** argv) {
   if (NUM_CLASSES < 96) {
     got = reg_read(FOLDSIM_REG_FINISH(NUM_CLASSES));
     check(got == 0, "past the classes", FOLDSIM_REG_FINISH(NUM_CLASSES), got, 0);
+  }
+
+  // A reset takes the virtual memories' known-zero state back.
+  if (VMEM_BYTES != 0) {
+    reg_write(FOLDSIM_REG_VMEM_ZERO, 1);
+    check(dut->vmem_zero, "virtual memories zero before the reset", FOLDSIM_REG_VMEM_ZERO, dut->vmem_zero, 1);
+    dut->reset = 1;
+    tick();
+    dut->reset = 0;
+    tick();
+    check(!dut->vmem_zero, "virtual memories zero after the reset", FOLDSIM_REG_VMEM_ZERO, dut->vmem_zero, 0);
   }
 
   dut->final();

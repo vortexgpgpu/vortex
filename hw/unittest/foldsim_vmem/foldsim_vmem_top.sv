@@ -24,7 +24,8 @@ module foldsim_vmem_top #(
     parameter AXI_ID_W       = 4,
     parameter OUTSTANDING    = 16,
     parameter INSTANCES      = 1 << IW,
-    parameter CACHE_ROWS     = 0
+    parameter CACHE_ROWS     = 0,
+    parameter KNOWN_ZERO     = 1
 ) (
     input  wire                        clk,
     input  wire                        reset,
@@ -41,6 +42,7 @@ module foldsim_vmem_top #(
     output reg  [DW-1:0]               rsp_data,
     output reg  [$clog2(QUEUE+1)-1:0]  free,
     input  wire [63:0]                 base,
+    input  wire                        zero,
     output reg                         m_awvalid,
     input  wire                        m_awready,
     output reg  [63:0]                 m_awaddr,
@@ -73,6 +75,7 @@ module foldsim_vmem_top #(
     reg [DW-1:0]      wr_data_r;
     reg [MW-1:0]      wr_mask_r;
     reg [63:0]        base_r;
+    reg               zero_r;
     reg               awready_r, wready_r, bvalid_r, arready_r, rvalid_r, rlast_r;
     reg [AXI_ID_W-1:0] bid_r, rid_r;
     reg [511:0]       rdata_r;
@@ -88,6 +91,7 @@ module foldsim_vmem_top #(
         wr_data_r  <= wr_data;
         wr_mask_r  <= wr_mask;
         base_r     <= base;
+        zero_r     <= zero;
         awready_r  <= m_awready;
         wready_r   <= m_wready;
         bvalid_r   <= m_bvalid;
@@ -119,7 +123,8 @@ module foldsim_vmem_top #(
         .AXI_ID_W       (AXI_ID_W),
         .OUTSTANDING    (OUTSTANDING),
         .INSTANCES      (INSTANCES),
-        .CACHE_ROWS     (CACHE_ROWS)
+        .CACHE_ROWS     (CACHE_ROWS),
+        .KNOWN_ZERO     (KNOWN_ZERO)
     ) vmem (
         .clk       (clk),
         .reset     (reset_r),
@@ -136,6 +141,7 @@ module foldsim_vmem_top #(
         .rsp_data  (rsp_data_w),
         .free      (free_w),
         .base      (base_r),
+        .zero      (zero_r),
         .m_awvalid (awvalid_w),
         .m_awready (awready_r),
         .m_awaddr  (awaddr_w),
