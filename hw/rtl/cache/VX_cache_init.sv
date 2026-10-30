@@ -101,11 +101,36 @@ module VX_cache_init import VX_gpu_pkg::*; #(
         localparam INCRW   = `CLOG2(`MIN(NUM_REQS, XBAR_SIZE)+1);
         localparam BANKS_W = `CLOG2(NUM_BANKS+1);
 
-        wire [REQS_W-1:0]  xbar_req_cnt;
-        wire [BANKS_W-1:0] bank_req_cnt;
+        // The fires and their counts are registered ahead of the counter, so
+        // the crossbar's arbitration, the popcounts and the counter's add are
+        // three cycles apart. A request is in flight from the cycle after it
+        // fires: until the counter holds it, the registered fire or count
+        // does. Decrements arrive as late, so the counter only overstates.
+        reg [NUM_REQS-1:0]  xbar_req_fire_r;
+        reg [NUM_BANKS-1:0] bank_req_fire_r;
+        reg [REQS_W-1:0]    xbar_req_cnt_r;
+        reg [BANKS_W-1:0]   bank_req_cnt_r;
+        wire [REQS_W-1:0]   xbar_req_cnt;
+        wire [BANKS_W-1:0]  bank_req_cnt;
 
-        `POP_COUNT(xbar_req_cnt, xbar_req_fire);
-        `POP_COUNT(bank_req_cnt, bank_req_fire);
+        `POP_COUNT(xbar_req_cnt, xbar_req_fire_r);
+        `POP_COUNT(bank_req_cnt, bank_req_fire_r);
+
+        always @(posedge clk) begin
+            if (reset) begin
+                xbar_req_fire_r <= '0;
+                bank_req_fire_r <= '0;
+                xbar_req_cnt_r  <= '0;
+                bank_req_cnt_r  <= '0;
+            end else begin
+                xbar_req_fire_r <= xbar_req_fire;
+                bank_req_fire_r <= bank_req_fire;
+                xbar_req_cnt_r  <= xbar_req_cnt;
+                bank_req_cnt_r  <= bank_req_cnt;
+            end
+        end
+
+        wire xbar_empty;
 
         VX_pending_size #(
             .SIZE  (XBAR_SIZE),
@@ -114,14 +139,16 @@ module VX_cache_init import VX_gpu_pkg::*; #(
         ) pending_size (
             .clk   (clk),
             .reset (reset),
-            .incr  (INCRW'(xbar_req_cnt)),
-            .decr  (bank_req_cnt),
-            .empty (no_inflight_reqs),
+            .incr  (INCRW'(xbar_req_cnt_r)),
+            .decr  (bank_req_cnt_r),
+            .empty (xbar_empty),
             `UNUSED_PIN (alm_empty),
             `UNUSED_PIN (full),
             `UNUSED_PIN (alm_full),
             `UNUSED_PIN (size)
         );
+
+        assign no_inflight_reqs = xbar_empty && ~(| xbar_req_fire_r) && (xbar_req_cnt_r == '0);
 
     end else begin : g_no_xbar_inflight
         assign no_inflight_reqs = 0;
