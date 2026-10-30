@@ -833,6 +833,34 @@ struct Tb {
     int steps = 0;
     uint64_t ar, aw;
 
+    // K2: while other writes keep the fill from X, the row's own partial
+    // write gets there first (it goes around): the fill must be dropped, or
+    // a later read would hit its stale row.
+    if (kInstances > 1 && VM_MW > 1) {
+      const uint32_t b = 1, r9 = 9 % kRows;
+      uint32_t rb = kRows;
+      for (uint32_t r = 0; r < kRows && rb == kRows; ++r)
+        if (line_of(b, r) != line_of(a, r9)) rb = r;
+      if (rb != kRows) {
+        issue(true, false, a, r9);
+        bool wrote = false;
+        int tail = 4;
+        for (int i = 0; i < 2000 && tail > 0; ++i) {
+          if (!pending[a] && !wrote) {
+            issue(false, true, a, r9, false);
+            wrote = true;
+          } else {
+            issue(false, true, b, rb);
+            if (wrote) --tail;
+          }
+        }
+        CHECK(wrote, "K2: the read never answered");
+        for (int i = 0; i < 200; ++i) cycle(false, false);
+        issue(true, false, a, r9);
+        await(a, 0);
+        ++steps;
+      }
+    }
     // K: a read that misses fills its line: the next read of the row is on
     // chip. A line with a dirty row takes no fill (its row stays).
     {
@@ -867,34 +895,6 @@ struct Tb {
         CHECK(hbm.n_ar == ar + 2 && quick(a), "K: the dirty row left the cache");
       }
       ++steps;
-    }
-    // K2: while other writes keep the fill from X, the row's own partial
-    // write gets there first (it goes around): the fill must be dropped, or
-    // a later read would hit its stale row.
-    if (kInstances > 1 && VM_MW > 1) {
-      const uint32_t b = 1, r9 = 9 % kRows;
-      uint32_t rb = kRows;
-      for (uint32_t r = 0; r < kRows && rb == kRows; ++r)
-        if (line_of(b, r) != line_of(a, r9)) rb = r;
-      if (rb != kRows) {
-        issue(true, false, a, r9);
-        bool wrote = false;
-        int tail = 4;
-        for (int i = 0; i < 2000 && tail > 0; ++i) {
-          if (!pending[a] && !wrote) {
-            issue(false, true, a, r9, false);
-            wrote = true;
-          } else {
-            issue(false, true, b, rb);
-            if (wrote) --tail;
-          }
-        }
-        CHECK(wrote, "K2: the read never answered");
-        for (int i = 0; i < 200; ++i) cycle(false, false);
-        issue(true, false, a, r9);
-        await(a, 0);
-        ++steps;
-      }
     }
     // L: a reset leaves the cache empty, so the host may change the image:
     // a read in memory when the reset comes fills nothing.
