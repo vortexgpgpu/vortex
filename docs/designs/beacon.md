@@ -15,7 +15,7 @@ Vivado run.
 | [4](#4-the-model) | The model: levels per element, devices |
 | [5](#5-outputs) | Outputs |
 | [6](#6-integration) | Integration: the DUT flow, `logic_gate`, timing work |
-| [7](#7-validation) | Validation against Vivado |
+| [7](#7-validation) | Validation against Vivado; the learned calibration (§7.1) |
 | [8](#8-diagnostics) | Diagnostics beyond levels |
 | [9](#9-invariants-and-limitations) | Invariants and limitations |
 
@@ -49,7 +49,8 @@ ci/logic_gate.py -b om --update-baseline
 ```
 
 Any CIRCT netlist, with `ci/beacon.py` (subcommands `run`,
-`summarize`, `paths`, `validate`, `retime-split`, `ports`, `buffers`;
+`summarize`, `paths`, `validate`, `retime-split`, `ports`, `buffers`,
+`calibrate`, `score`;
 `foldsim-opt` from the `PATH` or `FOLDSIM_OPT`):
 
 ```bash
@@ -442,6 +443,95 @@ was fitted; on the six larger DUTs, the predicted Fmax is within a mean
 current RTL. Beacon runs a DUT in 2–52 s, where Yosys and OpenSTA take
 2.5–37 min.
 
+### 7.1 Learned calibration (advisory)
+
+Levels rank Vivado's near-critical registers at about half the ceiling set
+by one Vivado run predicting another. `ci/beacon.py score` ranks them with a
+calibration learned from routed U55C builds instead: gradient-boosted trees
+on 38 per-register features, all from Beacon's own outputs (no Vivado input):
+
+- **depth:** levels, mean levels over the bits, the share of bits within one
+  level of the deepest;
+- **width:** bits, and bits within one level of the deepest;
+- **end and start kind:** D, RAM write data or control, RAM read; register,
+  port, BRAM, IP;
+- **fan-out:** the deepest start's, the cone's (`in_fanout`), the largest
+  along the deepest path, nets of 64 or more loads on it;
+- **span:** hierarchy depth, crossings, the bits under the lowest common
+  instance of the register and its deepest start;
+- **the deepest path's op mix** (`paths.jsonl`, at 8 levels or more): levels
+  spent in LUT, carry, compare, LUTRAM, BRAM and DSP ops, distinct
+  instances and source files, and the levels with a carry level costed at
+  0.42 of a LUT level and a compare at 0.15.
+
+The model is three tree ensembles: the worst slack (capped at 1 ns, the
+`ep.csv` horizon), the probability of slack under 0.3 ns (near-critical) and
+under 0 ns. A register never ranks safer for being deeper (a monotone
+constraint on levels). `calibrate` trains them with scikit-learn and writes
+them as plain JSON trees; `score` evaluates them in pure Python, in about
+4 s for a core. The model trained on the 13 builds below ships as
+[`hw/scripts/beacon_calibration_u55c.json`](../../hw/scripts/beacon_calibration_u55c.json);
+it applies to the U55C at 300 MHz, the target it was trained on.
+
+```bash
+ci/beacon.py score build_core/beacon hw/scripts/beacon_calibration_u55c.json \
+    --top 30 --csv score.csv
+ci/beacon.py calibrate cal.json --holdout \
+    --build build_core/beacon build_core/ep.csv core \
+    --build build_cache/beacon build_cache/ep.csv cache
+```
+
+Each `--build` is a DUT build's Beacon run (`path-levels=8`, as the DUT flow
+writes it) and the end point table of the same sources. `--holdout` prints
+the check below for the given builds.
+
+**Validation.** 13 routed U55C builds at 3.333 ns: 8 core revisions, 4 lmem,
+1 cache, 19 k registers. Each build is held out and scored by a model
+trained on the builds outside its group. Revisions of one RTL lineage share
+most of their registers, so they are held out together:
+
+- core with the coretiming lineage (origin, it1, it2, lsuagu);
+- core with the lmemwarp lineage (v1, v2, final, p2lsulmem);
+- cache;
+- lmem.
+
+The stricter test holds out the whole DUT (core trained on cache and lmem
+only).
+
+| held out | near-critical AP: levels | levels + 0.35·log2(fan-out) | carry/compare cost | model, lineage out | model, DUT out | Spearman vs −slack: levels / model |
+|---|---|---|---|---|---|---|
+| core origin | 0.36 | 0.38 | 0.41 | 0.72 | 0.65 | 0.15 / 0.64 |
+| core it1 | 0.40 | 0.42 | 0.42 | 0.75 | 0.65 | 0.18 / 0.63 |
+| core it2 | 0.44 | 0.46 | 0.48 | 0.77 | 0.68 | 0.24 / 0.68 |
+| core lsuagu | 0.68 | 0.70 | 0.70 | 0.80 | 0.71 | 0.33 / 0.54 |
+| core lmemwarp v1 | 0.37 | 0.40 | 0.48 | 0.75 | 0.56 | 0.27 / 0.66 |
+| core lmemwarp v2 | 0.44 | 0.50 | 0.54 | 0.82 | 0.61 | 0.35 / 0.73 |
+| core lmemwarp | 0.37 | 0.41 | 0.52 | 0.81 | 0.59 | 0.32 / 0.64 |
+| core p2lsulmem | 0.55 | 0.63 | 0.60 | 0.87 | 0.65 | 0.40 / 0.78 |
+| cache | 0.47 | 0.57 | 0.52 | 0.65 | 0.65 | 0.50 / 0.56 |
+| **mean** | **0.44** | **0.50** | **0.52** | **0.77** | **0.64** | **0.30 / 0.65** |
+
+On the three lmem builds, with 4–5 near-critical registers each, the AP goes
+from 0.02–0.03 to 0.63–0.68. One Vivado run predicting another of nearly
+the same RTL (it1, it2) reaches 0.80. AP for failing registers goes from
+0.21 to 0.44; that set is mostly placement noise at a WNS near −0.1 ns.
+
+- **Width carries most of it.** Shuffling the bit counts costs 0.29 of AP.
+  This is partly selection: a wide register shows the worst of many bits.
+  Within registers of one deep bit, though, the AP still goes from 0.47 to
+  0.79.
+- **Span, the op mix and fan-out carry the rest** (0.03–0.08 each). The op
+  mix matters most on the cache (0.27).
+- **The DUT-out column is the honest number for a new DUT.** The lineage-out
+  column is the one for a new revision of a DUT already trained on.
+- **It does not track a whole design's slowdown.** The mean of the 50 lowest
+  predicted slacks follows the change in WNS over 10 revision pairs worse
+  than the top-50 mean of levels: Spearman 0.15 (lineage out) or 0.42 (DUT
+  out), against 0.53. The lsuagu regression, −1.3 ns, moves it by 0.02 ns.
+
+So the model is a ranking for where to look first, not a gate. `diff` and
+`logic_gate` keep gating on levels.
+
 ## 8. Diagnostics beyond levels
 
 **Port depths.** `port-modules=` names modules whose instances' ports
@@ -487,7 +577,9 @@ Beacon cannot answer, run on a checkpoint
   placement two thirds. No pre-placement wire term ranked slack better than
   levels on every held-out gate, so Beacon has none. Route-dominated
   failures with few levels are invisible to it: recall at ≥ 12 levels is
-  0.13–0.57.
+  0.13–0.57. The learned calibration (§7.1) ranks near-critical registers
+  better from width, span and fan-out, but it is trained on three U55C DUTs
+  and is advisory.
 - **Retiming and packing.** Vivado retimes and packs across what the RTL
   separates: a popcount, its adders and a compare become a LUT6 tree with a
   retimed register inside. Beacon's depths are RTL stage depths, about

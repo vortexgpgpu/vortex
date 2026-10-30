@@ -28,6 +28,10 @@ read its results by RTL unit or against Vivado.
   ports         the depth at the ports of chosen modules' instances, by unit
   buffers       which elastic buffers pass a deep ready chain or a computed
                 output through: evidence for an OUT_BUF (OUT_REG) change
+  calibrate     train the learned calibration (scikit-learn) on DUT builds:
+                Beacon runs and the Vivado end point tables of the same sources
+  score         rank a run's registers by the calibrated near-critical
+                probability, with predicted slack (pure Python; advisory)
 
   ci/beacon.py run gen/design.mlir runs/full
   ci/beacon.py run runs/full/mapped.mlirbc runs/socket \\
@@ -39,6 +43,8 @@ read its results by RTL unit or against Vivado.
   ci/beacon.py run --keep VX_elastic_buffer design.mlir runs/eb \\
       port-modules=VX_elastic_buffer
   ci/beacon.py buffers runs/eb
+  ci/beacon.py calibrate cal.json --build build_core/beacon ep.csv core
+  ci/beacon.py score build_core/beacon cal.json --top 30
 
 A Vivado end point table is a CSV of `slack,levels,logic,net,start,end`, one
 row per failing end point (a gate's ep.csv). The DUT flow and logic_gate run
@@ -49,6 +55,7 @@ import argparse
 import collections
 import csv
 import json
+import math
 import os
 import re
 import resource
@@ -708,6 +715,322 @@ def cmd_retime_split(args):
               f'Beacon-Vivado median {np.median(a - b):+.1f}')
 
 
+# Learned calibration (calibrate, score): per-register features of a run,
+# all from Beacon's own outputs. The p_*/n_* columns come from the deepest
+# path in paths.jsonl, for registers at or above the model's path levels;
+# below that they are missing, as in training.
+CAL_FEATURES = (
+    'lev', 'lev_mean', 'log2_bits', 'frac_deep', 'log2_nbits_deep',
+    'k_d', 'k_wd', 'k_wctl', 'k_rd', 'k_port',
+    's_reg', 's_port', 's_bram', 's_ip', 's_other',
+    'log2_sfo', 'log2_sfomax', 'log2_in_fo', 'log2_in_fo_deep', 'cross', 'xmax',
+    'hier_depth', 'log2_lca_bits', 'lca_up',
+    'p_lut', 'p_carry', 'p_cmp', 'p_lutram', 'p_bram', 'p_dsp',
+    'n_carry', 'n_cmp', 'p_maxfo', 'p_sumlog_fo', 'p_nfo64', 'p_ninst', 'p_nsrc',
+    'hand',
+)
+CAL_OPS = ('lut', 'carry', 'cmp', 'lutram', 'bram', 'dsp')
+CAL_KINDS = {'d': 'd', 'wd': 'wd', 'wa': 'wctl', 'we': 'wctl', 'wm': 'wctl',
+             'ra': 'rd', 're': 'rd'}
+CAL_NEAR = 0.3     # ns: the near-critical set the model ranks
+CAL_CENSOR = 1.0   # ns: a gate's ep.csv lists end points under 1 ns only
+
+
+def log2p(x):
+    return math.log2(1 + max(0, x))
+
+
+def register_features(run_dir, path_levels):
+    """(features, by_dir, ips) of a run: register -> {feature: value}, all
+    end point bits under one name (a memory's ports included), keyed by its
+    normalized path below the run's top; the instance -> {base name: key}
+    map and the vendor IP instances, for matching Vivado's names."""
+    inst = load_instances(f'{run_dir}/instances.csv')
+    memo = {}
+
+    def ipath(ctx):
+        if ctx not in memo:
+            parent, name, _ = inst[ctx]
+            p = '' if ctx == 0 else ipath(parent)
+            memo[ctx] = '' if ctx == 0 else (f'{p}/{name}' if p else name)
+        return memo[ctx]
+
+    def full(ctx, name):
+        p = ipath(int(ctx))
+        return f'{p}/{name}' if p else name
+
+    sys.setrecursionlimit(10000)
+    regs, ips = {}, set()
+    by_dir = collections.defaultdict(dict)
+    for row in endpoints(run_dir):
+        if row['start_kind'] == 'ip':
+            ips.add(norm(full(row['start_inst'], row['start'].rsplit('.', 1)[0])))
+        f = full(row['end_inst'], row['end'].rsplit('.', 1)[0])
+        key = norm(f)
+        lv, fo, sfo = int(row['levels']), int(row.get('in_fanout') or 0), int(row['fanout'])
+        r = regs.get(key)
+        if r is None:
+            r = regs[key] = dict(lev=-1, bits=0, sum=0, sfomax=0, fo=0, xmax=0, lvs=[])
+            d, _, b = f.rpartition('/')
+            by_dir[norm(d)][norm(b.rsplit('.', 1)[-1])] = key
+        r['bits'] += 1
+        r['sum'] += lv
+        r['lvs'].append(lv)
+        r['fo'] = max(r['fo'], fo)
+        r['xmax'] = max(r['xmax'], int(row['crossings']))
+        if row['start_kind'] == 'reg':
+            r['sfomax'] = max(r['sfomax'], sfo)
+        if lv > r['lev']:
+            r.update(lev=lv, kind=row['kind'], skind=row['start_kind'], sfo=sfo,
+                     fo_deep=fo, cross=int(row['crossings']),
+                     start=norm(full(row['start_inst'], row['start'])))
+
+    paths = {}
+    if os.path.exists(f'{run_dir}/paths.jsonl'):
+        with open(f'{run_dir}/paths.jsonl') as f:
+            for line in f:
+                p = json.loads(line)
+                key = norm(full(p['end_inst'], p['end'].rsplit('.', 1)[0]))
+                if key not in paths or p['levels'] > paths[key]['levels']:
+                    paths[key] = p
+
+    # Bits below each instance: the span of a register and its deepest start.
+    under = collections.Counter()
+    for k, r in regs.items():
+        parts = k.split('/')[:-1]
+        for i in range(len(parts) + 1):
+            under['/'.join(parts[:i])] += r['bits']
+
+    feats = {}
+    for k, r in regs.items():
+        lv = r['lev']
+        a, c = k.split('/')[:-1], r['start'].split('/')[:-1]
+        n = 0
+        while n < min(len(a), len(c)) and a[n] == c[n]:
+            n += 1
+        deep = sum(1 for v in r['lvs'] if v >= lv - 1)
+        kind = CAL_KINDS.get(r['kind'], 'port')
+        skind = r['skind'] if r['skind'] in ('reg', 'port', 'bram', 'ip') else 'other'
+        x = dict(lev=lv, lev_mean=r['sum'] / r['bits'], log2_bits=log2p(r['bits']),
+                 frac_deep=deep / r['bits'], log2_nbits_deep=log2p(deep),
+                 log2_sfo=log2p(r['sfo']), log2_sfomax=log2p(r['sfomax']),
+                 log2_in_fo=log2p(r['fo']), log2_in_fo_deep=log2p(r['fo_deep']),
+                 cross=r['cross'], xmax=r['xmax'], hier_depth=len(a),
+                 log2_lca_bits=log2p(under['/'.join(a[:n])]), lca_up=len(a) - n)
+        for v in ('d', 'wd', 'wctl', 'rd', 'port'):
+            x['k_' + v] = float(kind == v)
+        for v in ('reg', 'port', 'bram', 'ip', 'other'):
+            x['s_' + v] = float(skind == v)
+        p = paths.get(k) if lv >= path_levels else None
+        if p is None:
+            x.update((f, float('nan')) for f in CAL_FEATURES if f.startswith(('p_', 'n_')))
+            x['hand'] = lv
+        else:
+            ops = p['ops']  # [levels, kind, fanout, instance, name, source], end first
+            cost, count = collections.Counter(), collections.Counter()
+            for i in range(len(ops) - 1):
+                op = ops[i][1] if ops[i][1] in CAL_OPS else 'lut'
+                cost[op] += ops[i][0] - ops[i + 1][0]
+                count[op] += 1
+            fos = [o[2] for o in ops[1:-1]]
+            x.update((f'p_{op}', cost[op]) for op in CAL_OPS)
+            x.update(n_carry=count['carry'], n_cmp=count['cmp'],
+                     p_maxfo=log2p(max(fos, default=0)),
+                     p_sumlog_fo=sum(log2p(v) for v in fos),
+                     p_nfo64=sum(1 for v in fos if v >= 64),
+                     p_ninst=len({o[3] for o in ops}),
+                     p_nsrc=len({o[5].split(':')[0] for o in ops}))
+            # Against Vivado's path delay, a carry level costs about 0.42 of
+            # a LUT level and a compare 0.15.
+            x['hand'] = lv - 0.58 * cost['carry'] - 0.85 * cost['cmp']
+        feats[k] = x
+    return feats, by_dir, ips
+
+
+def vivado_slacks(ep, regs, by_dir, ips):
+    """register -> worst slack of a DUT build's end point table (cells named
+    from the DUT's top down), matched to a run's registers as validate does."""
+    def in_ip(k):
+        parts = k.split('/')
+        return any('/'.join(parts[:i]) in ips for i in range(1, len(parts)))
+
+    def fallback(k):
+        d, _, leaf = k.rpartition('/')
+        best = None
+        for name, cand in by_dir.get(d, {}).items():
+            if (leaf == name or leaf.endswith('_' + name)) and (
+                    best is None or len(name) > len(best[0])):
+                best = (name, cand)
+        return best[1] if best else k
+
+    slack = {}
+    with open(ep) as f:
+        r = csv.reader(f)
+        next(r)
+        for s, levels, logic, net, start, end in r:
+            key = ep_key('top/' + end, True)
+            if key is None or in_ip(key[1]):
+                continue
+            k = key[1]
+            if k not in regs and k.endswith('_rdata'):
+                k = k[:-len('_rdata')]
+            if k not in regs and k.endswith('_rdata_r') and k[:-len('_rdata_r')] + '_ram' in regs:
+                k = k[:-len('_rdata_r')] + '_ram'
+            if k not in regs:
+                k = fallback(k)
+            if k in regs:
+                slack[k] = min(slack.get(k, float('inf')), float(s))
+    return slack
+
+
+def average_precision(score, positive):
+    """Average precision of a ranking, tied scores taken together."""
+    np = numpy()
+    order = np.argsort(-np.asarray(score, float), kind='mergesort')
+    s, y = np.asarray(score, float)[order], np.asarray(positive, bool)[order]
+    tp = np.cumsum(y)
+    last = np.r_[s[1:] != s[:-1], True]
+    prec, rec = tp[last] / (np.nonzero(last)[0] + 1), tp[last] / max(y.sum(), 1)
+    return float(np.sum(prec * np.diff(np.r_[0.0, rec])))
+
+
+def hgb_json(m, link):
+    """A fitted HistGradientBoosting model as plain trees: a node goes left
+    when its feature is <= t, or is missing and m is set; a leaf has f -1."""
+    trees = []
+    for (pred,) in m._predictors:
+        n = pred.nodes
+        leaf = n['is_leaf'].astype(bool)
+        trees.append(dict(
+            f=[-1 if lf else int(i) for i, lf in zip(n['feature_idx'], leaf)],
+            t=[0 if lf else float(t) for t, lf in zip(n['num_threshold'], leaf)],
+            m=[int(v) for v in n['missing_go_to_left']],
+            l=[int(v) for v in n['left']], r=[int(v) for v in n['right']],
+            v=[float(f'{v:.7g}') if lf else 0 for v, lf in zip(n['value'], leaf)]))
+    return dict(link=link, base=float(m._baseline_prediction.ravel()[0]), trees=trees)
+
+
+def hgb_predict(model, x):
+    """Evaluate hgb_json trees on one feature row (a list)."""
+    raw = model['base']
+    for t in model['trees']:
+        i = 0
+        f = t['f']
+        while f[i] >= 0:
+            v = x[f[i]]
+            i = t['l'][i] if (t['m'][i] if v != v else v <= t['t'][i]) else t['r'][i]
+        raw += t['v'][i]
+    return 1 / (1 + math.exp(-raw)) if model['link'] == 'logistic' else raw
+
+
+def cal_models(X, slack, weight, features):
+    """Fit the slack regressor and the near-critical and failing classifiers:
+    gradient-boosted trees, never ranking a deeper register (lev, hand) safer."""
+    from sklearn.ensemble import (HistGradientBoostingClassifier,
+                                  HistGradientBoostingRegressor)
+    kw = dict(max_iter=300, learning_rate=0.05, max_leaf_nodes=15, min_samples_leaf=50,
+              l2_regularization=1.0, early_stopping=False, random_state=0)
+    up = [1 if f in ('lev', 'hand') else 0 for f in features]
+    reg = HistGradientBoostingRegressor(monotonic_cst=[-v for v in up], **kw)
+    near = HistGradientBoostingClassifier(monotonic_cst=up, **kw)
+    fail = HistGradientBoostingClassifier(monotonic_cst=up, **kw)
+    return (reg.fit(X, slack, sample_weight=weight),
+            near.fit(X, slack < CAL_NEAR, sample_weight=weight),
+            fail.fit(X, slack < 0, sample_weight=weight))
+
+
+def cmd_calibrate(args):
+    """Train the calibration on DUT builds: each a Beacon run and the Vivado
+    end point table of the same sources. Writes the model as JSON."""
+    np = numpy()
+    builds = []
+    for b in args.build:
+        if len(b) not in (2, 3):
+            sys.exit('--build RUN_DIR EP_CSV [GROUP]')
+        run_dir, ep = b[:2]
+        feats, by_dir, ips = register_features(run_dir, args.path_levels)
+        slacks = vivado_slacks(ep, feats, by_dir, ips)
+        keys = sorted(feats)
+        X = np.array([[feats[k][f] for f in CAL_FEATURES] for k in keys], float)
+        y = np.array([min(slacks.get(k, CAL_CENSOR), CAL_CENSOR) for k in keys])
+        measured = np.array([k in slacks for k in keys])
+        builds.append(dict(run=run_dir, group=b[2] if len(b) == 3 else run_dir,
+                           X=X, y=y, measured=measured))
+        print(f'{run_dir}: {len(keys)} registers, {measured.sum()} in the table, '
+              f'{(y < 0).sum()} failing, {(y < CAL_NEAR).sum()} under {CAL_NEAR} ns')
+
+    def fit(train):
+        X = np.vstack([b['X'] for b in train])
+        y = np.concatenate([b['y'] for b in train])
+        # Every build weighs the same, whatever its register count.
+        w = np.concatenate([np.full(len(b['y']), len(y) / len(train) / len(b['y']))
+                            for b in train])
+        return cal_models(X, y, w, CAL_FEATURES)
+
+    if args.holdout:
+        print('\nleave one build out (builds of its group left out of training):')
+        print(f'{"":40} near-critical AP      Spearman vs -slack')
+        print(f'{"build":40} {"levels":>7} {"model":>7}   {"levels":>7} {"model":>7}')
+        for b in builds:
+            train = [o for o in builds if o['group'] != b['group']]
+            if not train:
+                continue
+            reg, near, _ = fit(train)
+            lev, m, y = b['X'][:, 0], b['measured'], b['y']
+            ap = [average_precision(s, y < CAL_NEAR) if (y < CAL_NEAR).any() else float('nan')
+                  for s in (lev, near.predict_proba(b['X'])[:, 1])]
+            rho = [spearman(s[m], -y[m]) for s in (lev, -reg.predict(b['X']))]
+            name = '/'.join(os.path.normpath(b['run']).split('/')[-2:])
+            print(f'{name[-40:]:40} {ap[0]:7.2f} {ap[1]:7.2f}   {rho[0]:7.2f} {rho[1]:7.2f}')
+
+    import sklearn
+    reg, near, fail = fit(builds)
+    model = dict(
+        features=list(CAL_FEATURES), path_levels=args.path_levels, near=CAL_NEAR,
+        censor=CAL_CENSOR, sklearn=sklearn.__version__,
+        builds=[dict(run=b['run'], group=b['group'], registers=len(b['y']),
+                     failing=int((b['y'] < 0).sum())) for b in builds],
+        slack=hgb_json(reg, 'identity'), p_near=hgb_json(near, 'logistic'),
+        p_fail=hgb_json(fail, 'logistic'))
+    with open(args.model, 'w') as f:
+        json.dump(model, f, separators=(',', ':'))
+    print(f'\nwrote {args.model} ({os.path.getsize(args.model) // 1024} KB, '
+          f'{len(builds)} builds)')
+
+
+def cmd_score(args):
+    """Rank a run's registers by the calibrated near-critical probability,
+    with the predicted worst slack. Advisory: the gates stay on levels."""
+    with open(args.model) as f:
+        model = json.load(f)
+    feats, _, _ = register_features(args.run_dir, model['path_levels'])
+    names = model['features']
+    if any(math.isnan(x['p_lut']) for x in feats.values()
+           if x['lev'] >= model['path_levels']):
+        print(f'warning: registers at or above {model["path_levels"]} levels lack '
+              f'a path in paths.jsonl; rerun with path-levels={model["path_levels"]}')
+    rows = []
+    for k, x in feats.items():
+        v = [x[n] for n in names]
+        rows.append((hgb_predict(model['p_near'], v), hgb_predict(model['slack'], v),
+                     hgb_predict(model['p_fail'], v), x['lev'], k))
+    rows.sort(key=lambda r: (-r[0], r[1]))
+    low = sorted(r[1] for r in rows)[:50]
+    print(f'{len(rows)} registers; P(slack < {model["near"]} ns) >= 0.5: '
+          f'{sum(r[0] >= 0.5 for r in rows)}; mean of the 50 lowest predicted '
+          f'slacks {sum(low) / max(1, len(low)):+.3f} ns (model trained on '
+          f'{len(model["builds"])} builds)')
+    print(f'{"P(near)":>7} {"slack":>6} {"P(fail)":>7} {"lv":>3}  register')
+    for p, s, pf, lv, k in [r for r in rows if r[3] >= args.min_levels][:args.top]:
+        print(f'{p:7.2f} {s:+6.2f} {pf:7.2f} {lv:3d}  {k}')
+    if args.csv:
+        with open(args.csv, 'w', newline='') as f:
+            w = csv.writer(f)
+            w.writerow(['register', 'levels', 'p_near', 'slack', 'p_fail'])
+            for p, s, pf, lv, k in rows:
+                w.writerow([k, lv, f'{p:.4f}', f'{s:.4f}', f'{pf:.4f}'])
+
+
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
@@ -792,6 +1115,27 @@ def main():
     p.add_argument('native', metavar='MODULE=PREFIX')
     p.add_argument('metric', nargs='?', default='levels', choices=['levels', 'retimed'])
     p.set_defaults(fn=cmd_retime_split)
+
+    p = sub.add_parser("calibrate", help="train the learned slack calibration")
+    p.add_argument('model', help="the model JSON to write")
+    p.add_argument('--build', nargs='+', action='append', required=True,
+                   metavar='RUN_DIR EP_CSV [GROUP]',
+                   help="a DUT build: its Beacon run and Vivado end point table; "
+                   "builds of one GROUP (one RTL lineage) are held out together "
+                   "(repeatable)")
+    p.add_argument('--path-levels', type=int, default=8,
+                   help="path features from this depth on (the runs' path-levels)")
+    p.add_argument('--holdout', action='store_true',
+                   help="also print a leave-one-build-out check against levels")
+    p.set_defaults(fn=cmd_calibrate)
+
+    p = sub.add_parser("score", help="registers by calibrated near-critical risk")
+    p.add_argument('run_dir')
+    p.add_argument('model', help="a model JSON from calibrate")
+    p.add_argument('--min-levels', type=int, default=0)
+    p.add_argument('--top', type=int, default=40)
+    p.add_argument('--csv', help="also write every register's prediction here")
+    p.set_defaults(fn=cmd_score)
 
     args = ap.parse_args()
     return args.fn(args) or 0
