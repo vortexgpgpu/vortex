@@ -270,7 +270,8 @@ import VX_tcu_pkg::*;
 `ifdef VX_CFG_VM_ENABLE
     wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] sched_satp;
     wire [`VX_CFG_NUM_SFU_BLOCKS-1:0] satp_wr_valid;
-    wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] satp_wr_data;
+    wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][INST_SFU_BITS-1:0] satp_wr_op;
+    wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] satp_wr_src;
 `endif
 
     cta_bcast_t cta_bcast;
@@ -299,7 +300,8 @@ import VX_tcu_pkg::*;
     `ifdef VX_CFG_VM_ENABLE
         .satp           (sched_satp),
         .satp_wr_valid  (satp_wr_valid),
-        .satp_wr_data   (satp_wr_data),
+        .satp_wr_op     (satp_wr_op),
+        .satp_wr_src    (satp_wr_src),
     `endif
         .busy           (sched_busy)
     );
@@ -438,7 +440,8 @@ import VX_tcu_pkg::*;
             `ifdef VX_CFG_VM_ENABLE
                 .satp                 (sched_satp[i]),
                 .satp_wr_valid        (satp_wr_valid[i]),
-                .satp_wr_data         (satp_wr_data[i]),
+                .satp_wr_op           (satp_wr_op[i]),
+                .satp_wr_src          (satp_wr_src[i]),
             `endif
             `ifdef PERF_ENABLE
                 .lsu_perf_rd_req_fire (lsu_perf_rd_req_fire[i]),
@@ -534,7 +537,8 @@ import VX_tcu_pkg::*;
         `ifdef VX_CFG_VM_ENABLE
             .satp                 (sched_satp),
             .satp_wr_valid        (satp_wr_valid),
-            .satp_wr_data         (satp_wr_data),
+            .satp_wr_op           (satp_wr_op),
+            .satp_wr_src          (satp_wr_src),
         `endif
             .fs_branch            (fs_branch),
             .fs_wctl              (fs_wctl),

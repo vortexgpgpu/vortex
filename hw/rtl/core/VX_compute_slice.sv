@@ -55,7 +55,8 @@ import VX_tcu_pkg::*;
 `ifdef VX_CFG_VM_ENABLE
     input wire [`VX_CFG_XLEN-1:0] satp,
     output wire             satp_wr_valid,
-    output wire [`VX_CFG_XLEN-1:0] satp_wr_data,
+    output wire [INST_SFU_BITS-1:0] satp_wr_op,
+    output wire [`VX_CFG_XLEN-1:0] satp_wr_src,
 `endif
 
     // LSU
@@ -265,7 +266,8 @@ import VX_tcu_pkg::*;
 `ifdef VX_CFG_VM_ENABLE
     assign sched_csr_if.csr_satp     = satp;
     assign satp_wr_valid             = sched_csr_if.satp_wr_valid;
-    assign satp_wr_data              = sched_csr_if.satp_wr_data;
+    assign satp_wr_op                = sched_csr_if.satp_wr_op;
+    assign satp_wr_src               = sched_csr_if.satp_wr_src;
 `endif
 
 `ifdef VX_CFG_EXT_RTU_ENABLE

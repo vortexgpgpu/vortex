@@ -588,6 +588,20 @@ package VX_gpu_pkg;
         return (op >= 6 && op <= 8);
     endfunction
 
+    // The value a CSR instruction writes: CSRRW replaces, CSRRS sets and
+    // CSRRC clears the source bits of the current value.
+    function automatic logic [`VX_CFG_XLEN-1:0] csr_rmw(
+        input logic [INST_SFU_BITS-1:0] op,
+        input logic [`VX_CFG_XLEN-1:0]  value,
+        input logic [`VX_CFG_XLEN-1:0]  src
+    );
+        case (op)
+            INST_SFU_CSRRW: csr_rmw = src;
+            INST_SFU_CSRRS: csr_rmw = value | src;
+            default:        csr_rmw = value & ~src; // INST_SFU_CSRRC
+        endcase
+    endfunction
+
     /////////////////////////////// Issue parameters //////////////////////////
 
     localparam ISSUE_ISW_BITS = `CLOG2(`VX_CFG_ISSUE_WIDTH);

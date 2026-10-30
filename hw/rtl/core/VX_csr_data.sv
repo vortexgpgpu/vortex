@@ -91,18 +91,6 @@ import VX_fpu_pkg::*;
     localparam WR_TRAP          = 5;
     localparam NUM_WR           = WR_TRAP + NUM_TRAP_CSRS;
 
-    function automatic logic [`VX_CFG_XLEN-1:0] csr_rmw(
-        input logic [INST_SFU_BITS-1:0] op,
-        input logic [`VX_CFG_XLEN-1:0]  value,
-        input logic [`VX_CFG_XLEN-1:0]  src
-    );
-        case (op)
-            INST_SFU_CSRRW: csr_rmw = src;
-            INST_SFU_CSRRS: csr_rmw = value | src;
-            default:        csr_rmw = value & ~src; // INST_SFU_CSRRC
-        endcase
-    endfunction
-
     // Decode ////////////////////////////////////////////////////////////////
 
     // Scheduler CSRs read interface
@@ -199,12 +187,27 @@ import VX_fpu_pkg::*;
         wr_data_r   <= wr_data_w;
     end
 
+`ifdef VX_CFG_VM_ENABLE
+    // The SATP write's operation and source, registered with the decode: the
+    // scheduler applies the read-modify-write to the shared CSR.
+    reg [INST_SFU_BITS-1:0]  satp_op_r;
+    reg [`VX_CFG_XLEN-1:0]   satp_src_r;
+    always @(posedge clk) begin
+        satp_op_r  <= req_op;
+        satp_src_r <= req_src;
+    end
+`endif
+
 `ifdef SIMULATION
     always @(posedge clk) begin
         if (~reset && req_fire) begin
             `ASSERT(stable_r == stable_w && live_sel_r == live_sel_w && wr_sel_r == wr_sel_w
                  && wr_enable_r == wr_enable_w && wr_data_r == wr_data_w,
                 ("%t: *** %s CSR 0x%0h changed between decode and fire (#%0d)", $time, INSTANCE_ID, req_addr, req_uuid));
+        `ifdef VX_CFG_VM_ENABLE
+            `ASSERT(~wr_sel_r[WR_SATP] || (satp_op_r == req_op && satp_src_r == req_src),
+                ("%t: *** %s SATP write changed between decode and fire (#%0d)", $time, INSTANCE_ID, req_uuid));
+        `endif
         end
     end
 `endif
@@ -289,10 +292,13 @@ import VX_fpu_pkg::*;
 `endif
 
 `ifdef VX_CFG_VM_ENABLE
-    // The per-core SATP CSR lives in the scheduler, shared by every SFU block,
-    // so its read-modify-write stays in the fire cycle.
+    // The per-core SATP CSR lives in the scheduler, shared by every SFU block.
+    // The scheduler applies the read-modify-write in block order, so a block
+    // hands it the operation and source, not a value computed from the SATP
+    // it reads: the write never depends on another block's write in the cycle.
     assign sched_csr_if.satp_wr_valid = write_sel[WR_SATP];
-    assign sched_csr_if.satp_wr_data  = csr_rmw(req_op, live_data, req_src);
+    assign sched_csr_if.satp_wr_op    = satp_op_r;
+    assign sched_csr_if.satp_wr_src   = satp_src_r;
 `else
     `UNUSED_VAR (write_sel[WR_SATP])
 `endif
