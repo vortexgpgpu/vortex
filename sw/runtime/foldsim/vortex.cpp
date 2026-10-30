@@ -339,6 +339,24 @@ public:
     }
     if (this->setup_bank_model() != 0)
       return -1;
+    // VORTEX_FOLDSIM_BUBBLE=<percent>: idle slots in the simulator's frames, which
+    // must not change what the target does, only the host cycles it takes.
+    const char* bubble = getenv("VORTEX_FOLDSIM_BUBBLE");
+    if (bubble != nullptr) {
+      const int percent = atoi(bubble);
+      const uint32_t rate = uint32_t(percent) * 256u / 100u;
+      uint32_t got = 0;
+      if (percent < 0 || percent > 99) {
+        fprintf(stderr, "[VXDRV] VORTEX_FOLDSIM_BUBBLE must be 0 to 99 (got '%s')\n", bubble);
+        return -1;
+      }
+      if (reg_write(FOLDSIM_REG_BUBBLE, rate) != 0 || transport_.reg_read(FOLDSIM_REG_BUBBLE, &got) != 0)
+        return -1;
+      if (got != rate) {
+        fprintf(stderr, "[VXDRV] VORTEX_FOLDSIM_BUBBLE: this simulator takes no idle slots (built without --bubbles)\n");
+        return -1;
+      }
+    }
     if (reg_write(FOLDSIM_REG_MEM_BASE_LO, uint32_t(kMemBase)) != 0 ||
         reg_write(FOLDSIM_REG_MEM_BASE_HI, uint32_t(kMemBase >> 32)) != 0 ||
         reg_write(FOLDSIM_REG_CTRL, 1) != 0)

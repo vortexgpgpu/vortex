@@ -38,6 +38,9 @@
 #define FOLDSIM_REG_NUM_CLASSES 0x038u  // classes of threaded models
 #define FOLDSIM_REG_MEM_BASE_LO 0x0C0u  // device address of target address 0
 #define FOLDSIM_REG_MEM_BASE_HI 0x0C4u
+// [7:0]: idle slots the kernel puts in the simulator's frames, in 256ths of its
+// host cycles (pseudo-random). A simulator built without --bubbles keeps it 0.
+#define FOLDSIM_REG_BUBBLE      0x0C8u
 #define FOLDSIM_REG_FINISH(c)   (0x100u + 8u * (c))  // threads of class c finished, lo/hi
 
 // The memory model: each memory port's timing as a DRAM channel's banks

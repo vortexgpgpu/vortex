@@ -211,10 +211,33 @@ module foldsim_afu #(
 
     wire [`FOLDSIM_NUM_CLASSES-1:0] profile_finish /*verilator public_flat_rd*/;
 
+`ifdef FOLDSIM_ADVANCE
+    localparam BUBBLES = 1;
+`else
+    localparam BUBBLES = 0;
+`endif
+    // Idle slots at the host's rate: a host cycle is one when a pseudo-random
+    // byte (a 16-bit maximal LFSR) is below it; at 0, never.
+    wire [7:0] bubble;
+    reg [15:0] bubble_lfsr;
+    reg        advance;
+    always @(posedge ap_clk) begin
+        if (reset) begin
+            bubble_lfsr <= 16'hACE1;
+            advance     <= 1'b1;
+        end else begin
+            bubble_lfsr <= {1'b0, bubble_lfsr[15:1]} ^ (bubble_lfsr[0] ? 16'hB400 : 16'h0);
+            advance     <= (bubble_lfsr[7:0] >= bubble);
+        end
+    end
+
     foldsim_sim sim (
         .hostClock (ap_clk),
         .hostReset (reset),
         .profile_finish (profile_finish),
+`ifdef FOLDSIM_ADVANCE
+        .advance (advance),
+`endif
         `FOLDSIM_MEM_REPEAT(FOLDSIM_SIM_MEM, FOLDSIM_COMMA),
         `FOLDSIM_IN(reset),
         `FOLDSIM_IN(dcr_req_valid),
@@ -323,7 +346,8 @@ module foldsim_afu #(
         .DCR_DATA_W  (DCR_DATA_W),
         .NUM_CLASSES (`FOLDSIM_NUM_CLASSES),
         .MEM_PORTS   (PORTS),
-        .MEM_CAPS    (MEM_CAPS)
+        .MEM_CAPS    (MEM_CAPS),
+        .BUBBLES     (BUBBLES)
     ) ctrl (
         .clk               (ap_clk),
         .reset             (reset),
@@ -351,6 +375,7 @@ module foldsim_afu #(
         .mem_refresh       (mem_refresh),
         .mem_refi          (mem_refi),
         .mem_rfc           (mem_rfc),
+        .bubble            (bubble),
         .mem_stats         (mem_stats),
         .mem_idle          (&mem_idle),
         .mem_error         (|mem_error),
