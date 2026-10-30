@@ -23,6 +23,9 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
 #(
     parameter LATENCY   = 5,
     parameter FLEN      = 32,
+    // Width of the float registers: an F32-only unit (FLEN=32) of a FLEN 64
+    // core checks a single-precision source's NaN box against it.
+    parameter REGW      = FLEN,
     parameter OUT_REG   = 0,
     // 1: full IEEE subnormal support. 0: flush-to-zero (DAZ subnormal float
     //    sources to signed zero) for area. Use 0 for relaxed paths.
@@ -100,8 +103,8 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
     wire [15:0] h_op = (&dataa[`VX_CFG_XLEN-1:16]) ? dataa[15:0] : 16'h7E00;
 
     wire [31:0] s_op;
-    if (HAS_D) begin : g_s_unbox
-        assign s_op = (&dataa[`VX_CFG_XLEN-1:32]) ? dataa[31:0] : 32'h7FC00000;
+    if (REGW > 32) begin : g_s_unbox
+        assign s_op = (&dataa[REGW-1:32]) ? dataa[31:0] : 32'h7FC00000;
     end else begin : g_s_raw
         assign s_op = dataa[31:0];
     end

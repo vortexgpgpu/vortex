@@ -18,7 +18,13 @@
 module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     parameter NUM_LANES = 4,
     parameter TAG_WIDTH = 4,
-    parameter OUT_BUF   = 0
+    parameter OUT_BUF   = 0,
+    // Widest float format this datapath implements: an FP32-only datapath beside
+    // a narrow FP64 one is built at FLEN 32 inside a FLEN 64 core.
+    parameter FLEN          = `VX_CFG_FLEN,
+    parameter FMA_LATENCY   = `VX_CFG_FMA_LATENCY,
+    parameter FDIV_LATENCY  = `VX_CFG_FDIV_LATENCY,
+    parameter FSQRT_LATENCY = `VX_CFG_FSQRT_LATENCY
 ) (
     input wire clk,
     input wire reset,
@@ -47,6 +53,9 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     input wire  ready_out,
     output wire valid_out
 );
+    // One merged divide/square-root unit runs both at FDIV_LATENCY.
+    `UNUSED_PARAM (FSQRT_LATENCY)
+
     localparam FPU_FMA     = 0;
     localparam FPU_DIVSQRT = 1;
     localparam FPU_CVT     = 2;
@@ -141,7 +150,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         VX_pe_serializer #(
             .NUM_LANES      (NUM_LANES),
             .NUM_PES        (NUM_PES_FMA),
-            .LATENCY        (`VX_CFG_FMA_LATENCY),
+            .LATENCY        (FMA_LATENCY),
             .DATA_IN_WIDTH  (3*`VX_CFG_XLEN),
             .DATA_OUT_WIDTH (`FP_FLAGS_BITS+`VX_CFG_XLEN),
             .SHARED_WIDTH   (INST_FPU_BITS+INST_FMT_BITS+INST_FRM_BITS),
@@ -180,13 +189,13 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         // Separate F32 / F64 FMA cores; fmt[0] selects the result.
         // pe_shared is input-aligned; delay the selector by FMA latency so it
         // lines up with the result emerging from the units.
-        wire is_d_in = (`VX_CFG_FLEN >= 64) & pe_shared[INST_FRM_BITS+0];
+        wire is_d_in = (FLEN >= 64) & pe_shared[INST_FRM_BITS+0];
         wire is_d_fma;
-        if (`VX_CFG_FLEN >= 64) begin : g_isd_pipe
+        if (FLEN >= 64) begin : g_isd_pipe
             VX_shift_register #(
                 .DATAW  (1),
                 .RESETW (1),
-                .DEPTH  (`VX_CFG_FMA_LATENCY)
+                .DEPTH  (FMA_LATENCY)
             ) is_d_pipe (
                 .clk      (clk),
                 .reset    (reset),
@@ -203,7 +212,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             wire [31:0]              res32;
             wire [`FP_FLAGS_BITS-1:0] ff32;
             VX_fma_unit #(
-                .LATENCY  (`VX_CFG_FMA_LATENCY),
+                .LATENCY  (FMA_LATENCY),
                 .MAN_BITS (23),
                 .EXP_BITS (8),
                 .USE_DSP  (`VX_CFG_FPU_USE_DSP)
@@ -221,11 +230,11 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 .result  (res32),
                 .fflags  (ff32)
             );
-            if (`VX_CFG_FLEN >= 64) begin : g_fma_d
+            if (FLEN >= 64) begin : g_fma_d
                 wire [63:0]              res64;
                 wire [`FP_FLAGS_BITS-1:0] ff64;
                 VX_fma_unit #(
-                    .LATENCY  (`VX_CFG_FMA_LATENCY),
+                    .LATENCY  (FMA_LATENCY),
                     .MAN_BITS (52),
                     .EXP_BITS (11),
                     .USE_DSP  (`VX_CFG_FPU_USE_DSP)
@@ -289,7 +298,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         VX_pe_serializer #(
             .NUM_LANES      (NUM_LANES),
             .NUM_PES        (NUM_PES_DIV),
-            .LATENCY        (`VX_CFG_FDIV_LATENCY),
+            .LATENCY        (FDIV_LATENCY),
             .DATA_IN_WIDTH  (2*`VX_CFG_XLEN),
             .DATA_OUT_WIDTH (`FP_FLAGS_BITS+`VX_CFG_XLEN),
             .SHARED_WIDTH   (1+INST_FMT_BITS+INST_FRM_BITS),
@@ -326,12 +335,13 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         end
 
         for (genvar i = 0; i < NUM_PES_DIV; ++i) begin : g_units
-            if (`VX_CFG_XLEN > `VX_CFG_FLEN) begin : g_pad
-                assign pe_data_out[i][`VX_CFG_FLEN +: (`VX_CFG_XLEN-`VX_CFG_FLEN)] = '0;
+            if (`VX_CFG_XLEN > FLEN) begin : g_pad
+                // An FP32-only datapath in a FLEN 64 core NaN-boxes its results.
+                assign pe_data_out[i][FLEN +: (`VX_CFG_XLEN-FLEN)] = {(`VX_CFG_XLEN-FLEN){FLEN < `VX_CFG_FLEN}};
             end
             VX_fdivsqrt_unit #(
-                .LATENCY (`VX_CFG_FDIV_LATENCY),
-                .FLEN    (`VX_CFG_FLEN)
+                .LATENCY (FDIV_LATENCY),
+                .FLEN    (FLEN)
             ) fdiv_sqrt_unit (
                 .clk     (clk),
                 .reset   (reset),
@@ -339,10 +349,10 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 .mask    (pe_mask_out[i]),
                 .fmt     (pe_shared[INST_FRM_BITS+:INST_FMT_BITS]),
                 .frm     (pe_shared[0+:INST_FRM_BITS]),
-                .dataa   (pe_data_in[i][0+:`VX_CFG_FLEN]),
-                .datab   (pe_data_in[i][`VX_CFG_XLEN+:`VX_CFG_FLEN]),
+                .dataa   (pe_data_in[i][0+:FLEN]),
+                .datab   (pe_data_in[i][`VX_CFG_XLEN+:FLEN]),
                 .is_sqrt (pe_shared[INST_FRM_BITS+INST_FMT_BITS]),
-                .result  (pe_data_out[i][0+:`VX_CFG_FLEN]),
+                .result  (pe_data_out[i][0+:FLEN]),
                 .fflags  (pe_data_out[i][`VX_CFG_XLEN+:`FP_FLAGS_BITS])
             );
         end
@@ -424,7 +434,8 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
             VX_fcvt_unit #(
                 .LATENCY (CVT_LATENCY),
-                .FLEN    (`VX_CFG_FLEN),
+                .FLEN    (FLEN),
+                .REGW    (`VX_CFG_FLEN),
             `ifdef VX_CFG_EXT_ZFHMIN_ENABLE
                 .HALF_ENABLE (1),
             `endif
@@ -519,7 +530,8 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         for (genvar i = 0; i < NUM_PES_NCP; ++i) begin : g_units
             VX_fncp_unit #(
                 .LATENCY (`VX_CFG_FNCP_LATENCY),
-                .FLEN    (`VX_CFG_FLEN),
+                .FLEN    (FLEN),
+                .REGW    (`VX_CFG_FLEN),
                 .OUT_REG (1)
             ) fncp_unit (
                 .clk     (clk),

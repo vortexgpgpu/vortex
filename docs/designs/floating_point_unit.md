@@ -165,6 +165,42 @@ handshaking blocks. The serializer owns the enable, so back-pressure stalls
 every unit of a core together and the latency is a constant the serializer
 can count.
 
+### 5.1 FP64 lanes
+
+A GPU builds far fewer FP64 units than FP32 ones per SM, so double precision
+runs at a fraction of the single-precision rate. `VX_CFG_NUM_FP64_LANES`
+(default `NUM_FPU_LANES`) sets the FP64 lanes of each FPU block. At the
+default, one datapath serves both formats (§4.2) and nothing changes. Below
+it, on a `FLEN = 64` build, [`VX_fpu_block`](../../hw/rtl/fpu/VX_fpu_block.sv)
+holds two datapaths ([`VX_fpu_datapath`](../../hw/rtl/fpu/VX_fpu_datapath.sv),
+the backend of §9 at a given `FLEN`):
+
+| datapath | lanes | `FLEN` | serves |
+|---|---|---|---|
+| FP32 | `NUM_FPU_LANES` | 32 | every operation without a double operand or result, at the full rate |
+| FP64 | `NUM_FP64_LANES` | 64 | every operation with one: `fmt[0]` set, and `F2F` unless its source is half |
+
+The FP32 datapath has no 64-bit hardware at all — no F64 FMA, a divide
+iterator sized for F32, F32-only conversion and comparison — and runs at
+FP32's own latencies (`VX_CFG_F{MA,DIV,SQRT}_F32_LATENCY`, §10). It keeps the
+`FLEN = 64` register semantics: its conversion and non-computational units
+check the NaN box of an F32 operand against the 64-bit register
+(`REGW`), and its divider boxes its results, so its results are
+bit-identical to the shared datapath's.
+
+An FP64 operation is issued to the FP64 datapath in
+`R = NUM_FPU_LANES / NUM_FP64_LANES` batches, one per cycle, through a
+registered batch select; the request stays on the block's input until its
+last batch is taken, so the operations behind it wait, as behind any
+serialized unit. The tag and the rounding mode are taken with the first
+batch. The batches of one operation return in order but interleave with
+other operations' across the FP64 cores, so every batch but the last is
+parked by tag in a small distributed RAM (`QUEUE_SIZE` entries of the
+`NUM_FPU_LANES - NUM_FP64_LANES` lanes) and its flags are gathered by tag; the
+last batch completes the result. The block thus still returns one result per
+request, and a two-input arbiter merges the two datapaths' results ahead of
+its output buffer.
+
 ---
 
 ## 6. FMA — `VX_fma_unit`
@@ -395,6 +431,8 @@ cores and is conformant.
 | `VX_CFG_FPU_USE_DSP` | 1 on FPGA synthesis | soft multipliers target DSP blocks |
 | `VX_CFG_NUM_FPU_BLOCKS` | issue width | request paths |
 | `VX_CFG_NUM_FPU_LANES` | SIMD width | lanes per request |
+| `VX_CFG_NUM_FP64_LANES` | `NUM_FPU_LANES` | FP64 lanes per block (§5.1); fewer splits FP64 onto its own narrow datapath |
+| `VX_CFG_F{MA,DIV,SQRT}_F32_LATENCY` | the F32-build values below | the FP32-only datapath's latencies when split |
 | `VX_CFG_FPU_QUEUE_SIZE` | `2 × SIMD_WIDTH / NUM_FPU_LANES` | tag-store depth |
 | `VX_CFG_F{MA,DIV,SQRT,CVT,NCP}_PE_RATIO` | 1 | lanes per processing element |
 | `VX_CFG_FNCP_LATENCY` | 2 | |
@@ -446,6 +484,11 @@ flight, and a result waiting on the commit arbiter keeps its tag:
   commits `VX_CFG_FMA_LATENCY + 1` cycles after it enters.
 - At partial bandwidth the lane-gather stage takes the result off the port and
   frees the tag.
+
+With FP64 lanes split off (§5.1), an FP64 operation holds the block's input
+for `R` cycles, taking its tag on the first, and its result leaves with its
+last batch: `R - 1` cycles after the first, plus the shared latency and the
+one-cycle batch select. Every other operation takes the `_F32` latencies.
 
 ---
 

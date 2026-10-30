@@ -48,7 +48,23 @@ FpuUnit::FpuUnit(const SimContext& ctx, const char* name, Core* core)
 	: FuncUnit<VX_CFG_NUM_FPU_BLOCKS>(ctx, name, core, VX_CFG_FPU_QUEUE_SIZE)
 {}
 
+bool FpuUnit::is_fp64(const instr_trace_t* trace) {
+	auto fpuArgs = std::get<IntrFpuArgs>(trace->instr_ptr->get_args());
+	if (std::get<FpuType>(trace->op_type) == FpuType::F2F) {
+		if (fpuArgs.is_f16)
+			return fpuArgs.cvt == 1;  // FCVT.H.D
+		if (fpuArgs.cvt == 2)
+			return fpuArgs.is_f64;    // FCVT.D.H
+		return true;                // FCVT.D.S, FCVT.S.D
+	}
+	return fpuArgs.is_f64;
+}
+
 uint32_t FpuUnit::latency_of(const instr_trace_t* trace) const {
+	// Split datapaths: the FP32-only one runs at FP32's own depth; the narrow
+	// FP64 one at the shared depth, behind its registered batch select.
+	bool split_f32 = kFp64Split && !is_fp64(trace);
+	uint32_t f64_in = (kFp64Split && !split_f32) ? 1 : 0;
 	auto fpu_type = std::get<FpuType>(trace->op_type);
 	switch (fpu_type) {
 	case FpuType::FCMP:
@@ -57,7 +73,7 @@ uint32_t FpuUnit::latency_of(const instr_trace_t* trace) const {
 	case FpuType::FMVXW:
 	case FpuType::FMVWX:
 	case FpuType::FMINMAX:
-		return VX_CFG_FNCP_LATENCY;
+		return VX_CFG_FNCP_LATENCY + f64_in;
 	case FpuType::FADD:
 	case FpuType::FSUB:
 	case FpuType::FMUL:
@@ -65,15 +81,15 @@ uint32_t FpuUnit::latency_of(const instr_trace_t* trace) const {
 	case FpuType::FMSUB:
 	case FpuType::FNMADD:
 	case FpuType::FNMSUB:
-		return VX_CFG_FMA_LATENCY;
+		return (split_f32 ? VX_CFG_FMA_F32_LATENCY : VX_CFG_FMA_LATENCY) + f64_in;
 	case FpuType::FDIV:
-		return VX_CFG_FDIV_LATENCY;
+		return (split_f32 ? VX_CFG_FDIV_F32_LATENCY : VX_CFG_FDIV_LATENCY) + f64_in;
 	case FpuType::FSQRT:
-		return VX_CFG_FSQRT_LATENCY;
+		return (split_f32 ? VX_CFG_FSQRT_F32_LATENCY : VX_CFG_FSQRT_LATENCY) + f64_in;
 	case FpuType::F2I:
 	case FpuType::I2F:
 	case FpuType::F2F:
-		return VX_CFG_FCVT_LATENCY;
+		return VX_CFG_FCVT_LATENCY + f64_in;
 	default:
 		std::abort();
 	}
@@ -393,16 +409,41 @@ void FpuUnit::execute(instr_trace_t* trace) {
 	DT(3, this->name() << " execute: op=" << fpu_type << ", " << *trace);
 }
 
+void FpuUnit::on_reset() {
+  fp64_batches_.fill(0);
+}
+
 void FpuUnit::on_tick() {
   bool idle = true;
   for (uint32_t b = 0; b < VX_CFG_NUM_FPU_BLOCKS; ++b) {
     auto& input = Inputs.at(b);
     if (!input.empty()) {
       auto& output = Outputs.at(b);
+      auto trace = input.peek();
+      // An FP64 operation holds the input while its batches issue, one per
+      // cycle. It takes its tag (its response slot) with the first batch and
+      // leaves the input with the last.
+      if (kFp64Split && is_fp64(trace)) {
+        auto& batches = fp64_batches_.at(b);
+        if (batches == 0) {
+          if (output.full()) {
+            idle = false;
+            continue;
+          }
+          this->execute(trace);
+          uint32_t delay = (kFp64Batches - 1) + this->latency_of(trace) + (kGather ? 0 : 1);
+          output.send(trace, delay);
+          batches = kFp64Batches;
+        }
+        if (--batches == 0) {
+          input.pop();
+        }
+        idle &= (input.size() == 0);
+        continue;
+      }
       // A full response port (every tag in use) stalls admission even though
       // the arithmetic pipelines are deeper.
       if (!output.full()) {
-        auto trace = input.peek();
         this->execute(trace);
         // Without a lane-gather stage commit reads this port directly, so the
         // result also takes the registered stage other units cross into commit.

@@ -1,0 +1,73 @@
+# FP64 lanes: with VX_CFG_NUM_FP64_LANES below NUM_FPU_LANES, FP64 operations
+# serialize onto a narrow FP64 datapath beside an FP32-only one
+# (docs/designs/floating_point_unit.md §5.1). `sgemm -DTYPE=double` is the
+# double-precision GEMM. The STD cases run the synthesizable datapaths; rtlsim
+# otherwise uses the DPI model.
+category: fp64
+defaults:
+  xlen:
+  - 64
+  tier: smoke
+  touches: [hw/rtl/fpu, sim/simx/fpu_unit.cpp, sim/simx/fpu_unit.h]
+tests:
+# One FP64 lane under four FPU lanes: four batches per operation.
+- id: dgemm-fp64l1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm
+  args: -n32
+  configs: -DTYPE=double -DVX_CFG_NUM_FP64_LANES=1
+- id: dgemm-fp64l1-std
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm
+  args: -n32
+  configs: -DTYPE=double -DVX_CFG_NUM_FP64_LANES=1 -DVX_CFG_FPU_TYPE_STD
+# FP32 on the FP32-only datapath beside the narrow FP64 one.
+- id: sgemm-fp64l1-std
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm
+  args: -n32
+  configs: -DVX_CFG_NUM_FP64_LANES=1 -DVX_CFG_FPU_TYPE_STD
+# The F and D conformance suites on the split STD datapaths: NaN-boxing of the
+# FP32-only datapath, conversions and moves on the FP64 one.
+- id: isa-64d-fp64l1-std
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/riscv/isa
+  target: run-{driver}-64d
+  configs: -DVX_CFG_NUM_FP64_LANES=1 -DVX_CFG_FPU_TYPE_STD
+- id: isa-64f-fp64l1-std
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/riscv/isa
+  target: run-{driver}-64f
+  configs: -DVX_CFG_NUM_FP64_LANES=1 -DVX_CFG_FPU_TYPE_STD
+# Half conversions to and from each side of the split.
+- id: zfhmin-fp64l1-std
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: zfhmin
+  args: -n256
+  configs: -DVX_CFG_EXT_ZFHMIN_ENABLE -DVX_CFG_NUM_FP64_LANES=1 -DVX_CFG_FPU_TYPE_STD
+
+# ---------------------------------------------------------------------------
+# check: model_parity — SimX vs rtlsim (see core.yaml).
+# ---------------------------------------------------------------------------
+
+# Eight FPU lanes, one FP64 lane: eight batches per FP64 operation.
+- id: parity-dgemm-fp64l1
+  check: model_parity
+  via: blackbox
+  app: sgemm
+  args: -n64
+  configs: -DTYPE=double -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_FP64_LANES=1

@@ -20,7 +20,13 @@
 module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     parameter NUM_LANES = 1,
     parameter TAG_WIDTH = 1,
-    parameter OUT_BUF   = 0
+    parameter OUT_BUF   = 0,
+    // Widest float format this datapath implements: an FP32-only datapath beside
+    // a narrow FP64 one is built at FLEN 32 inside a FLEN 64 core.
+    parameter FLEN          = `VX_CFG_FLEN,
+    parameter FMA_LATENCY   = `VX_CFG_FMA_LATENCY,
+    parameter FDIV_LATENCY  = `VX_CFG_FDIV_LATENCY,
+    parameter FSQRT_LATENCY = `VX_CFG_FSQRT_LATENCY
 ) (
     input wire clk,
     input wire reset,
@@ -49,6 +55,9 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     input wire  ready_out,
     output wire valid_out
 );
+    // The DPI model implements every format whatever FLEN is.
+    `UNUSED_PARAM (FLEN)
+
     localparam FPU_FMA     = 0;
     localparam FPU_DIVSQRT = 1;
     localparam FPU_CVT     = 2;
@@ -186,7 +195,7 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
         VX_shift_register #(
             .DATAW  (1 + TAG_WIDTH + NUM_LANES * `VX_CFG_XLEN + $bits(fflags_t)),
-            .DEPTH  (`VX_CFG_FMA_LATENCY),
+            .DEPTH  (FMA_LATENCY),
             .RESETW (1)
         ) shift_reg (
             .clk      (clk),
@@ -223,7 +232,7 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
         VX_shift_register #(
             .DATAW  (1 + TAG_WIDTH + NUM_LANES * `VX_CFG_XLEN + $bits(fflags_t)),
-            .DEPTH  (`VX_CFG_FDIV_LATENCY),
+            .DEPTH  (FDIV_LATENCY),
             .RESETW (1)
         ) shift_reg (
             .clk      (clk),
@@ -260,7 +269,7 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
         VX_shift_register #(
             .DATAW  (1 + TAG_WIDTH + NUM_LANES * `VX_CFG_XLEN + $bits(fflags_t)),
-            .DEPTH  (`VX_CFG_FSQRT_LATENCY),
+            .DEPTH  (FSQRT_LATENCY),
             .RESETW (1)
         ) shift_reg (
             .clk      (clk),

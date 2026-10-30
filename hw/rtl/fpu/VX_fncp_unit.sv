@@ -17,12 +17,15 @@
 // Merged sign-inject / min-max / compare / classify / move unit.
 // FLEN=32 handles F32 only; FLEN=64 adds F64, selected per-op by fmt[0]
 // (0=single, 1=double). F32 operands occupy the low 32 bits (NaN-boxed).
+// REGW is the width of the float registers the operands come from: an F32-only
+// unit (FLEN=32) of a FLEN 64 core takes them at 64 bits to check the NaN box.
 
 `include "VX_fpu_define.vh"
 
 module VX_fncp_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     parameter LATENCY  = 1,
     parameter FLEN     = 32,
+    parameter REGW     = FLEN,
     parameter OUT_REG  = 0
 ) (
     input wire clk,
@@ -35,8 +38,8 @@ module VX_fncp_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     input wire [INST_FMT_BITS-1:0] fmt,
     input wire [INST_FRM_BITS-1:0] frm,
 
-    input wire [FLEN-1:0]   dataa,
-    input wire [FLEN-1:0]   datab,
+    input wire [REGW-1:0]   dataa,
+    input wire [REGW-1:0]   datab,
     output wire [`VX_CFG_XLEN-1:0]  result,
 
     output wire [`FP_FLAGS_BITS-1:0] fflags
@@ -58,9 +61,9 @@ module VX_fncp_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     // is treated as the canonical single-precision qNaN (0x7FC00000).
     localparam [31:0] F32_CANON_QNAN = 32'h7FC00000;
     wire a32_boxed, b32_boxed;
-    if (HAS_D) begin : g_box_chk
-        assign a32_boxed = &dataa[FLEN-1:32];
-        assign b32_boxed = &datab[FLEN-1:32];
+    if (REGW > 32) begin : g_box_chk
+        assign a32_boxed = &dataa[REGW-1:32];
+        assign b32_boxed = &datab[REGW-1:32];
     end else begin : g_no_box_chk
         assign a32_boxed = 1'b1;
         assign b32_boxed = 1'b1;
@@ -170,7 +173,7 @@ module VX_fncp_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         .clk      (clk),
         .reset    (reset),
         .enable   (enable && mask),
-        .data_in  ({op_mod,    dataa,    datab,    a_sign_sel, b_sign_sel, a_class_sel, b_class_sel, a_smaller_sel, ab_equal_sel, is_d,    is_h,    a32_boxed}),
+        .data_in  ({op_mod,    dataa[FLEN-1:0], datab[FLEN-1:0], a_sign_sel, b_sign_sel, a_class_sel, b_class_sel, a_smaller_sel, ab_equal_sel, is_d,    is_h,    a32_boxed}),
         .data_out ({op_mod_s0, dataa_s0, datab_s0, a_sign_s0,  b_sign_s0,  a_fclass_s0, b_fclass_s0, a_smaller_s0,  ab_equal_s0,  is_d_s0, is_h_s0, a32_boxed_s0})
     );
 

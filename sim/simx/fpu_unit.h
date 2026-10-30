@@ -26,7 +26,17 @@ public:
   static constexpr bool kGather = (VX_CFG_NUM_FPU_BLOCKS != VX_CFG_ISSUE_WIDTH)
                                || (VX_CFG_NUM_FPU_LANES != VX_CFG_SIMD_WIDTH);
 
+  // FP64 lanes (VX_CFG_NUM_FP64_LANES). Below the FPU lanes (FLEN 64), an
+  // operation on FP64 values runs on a narrow FP64 datapath beside an FP32-only
+  // one, in kFp64Batches batches of kFp64Lanes, one per cycle.
+  static constexpr uint32_t kFp64Lanes = (VX_CFG_NUM_FP64_LANES < VX_CFG_NUM_FPU_LANES)
+                                       ? VX_CFG_NUM_FP64_LANES : VX_CFG_NUM_FPU_LANES;
+  static constexpr bool kFp64Split = (VX_CFG_FLEN >= 64) && (kFp64Lanes < VX_CFG_NUM_FPU_LANES);
+  static constexpr uint32_t kFp64Batches = VX_CFG_NUM_FPU_LANES / kFp64Lanes;
+  static_assert(VX_CFG_NUM_FPU_LANES % kFp64Lanes == 0, "FP64 lanes must divide the FPU lanes");
+
 protected:
+  void on_reset() override;
   void on_tick() override;
 
 private:
@@ -34,6 +44,12 @@ private:
   void execute(instr_trace_t* trace);
 
   uint32_t latency_of(const instr_trace_t* trace) const;
+
+  // The operation reads or writes an FP64 value.
+  static bool is_fp64(const instr_trace_t* trace);
+
+  // Per block: batches of the FP64 operation at the input head still to issue.
+  std::array<uint32_t, VX_CFG_NUM_FPU_BLOCKS> fp64_batches_{};
 };
 
 }
