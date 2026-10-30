@@ -1,0 +1,58 @@
+# Zfhmin: half-precision load/store, move and fp16<->fp32/fp64 conversion.
+# The `zfhmin` app checks every conversion bit-exactly against softfloat, with
+# fflags, across all rounding modes, exhaustively for the widening direction,
+# plus flh/fsh/fmv NaN-boxing. The converter datapath is also covered by
+# unittest:hw-fpu (fcvt_unit).
+category: zfhmin
+defaults:
+  xlen:
+  - 32
+  - 64
+  tier: smoke
+  touches: [hw/rtl/fpu, hw/rtl/core/VX_decode.sv, hw/rtl/core/VX_lsu_slice.sv, hw/rtl/core/VX_csr_unit.sv, hw/dpi/dpi_float.cpp, sim/simx/fpu_unit.cpp, sim/simx/decode.cpp, sim/simx/lsu_unit.cpp, sim/simx/csr_unit.cpp, sw/common/rvfloats.cpp]
+tests:
+- id: zfhmin-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: zfhmin
+  args: -n1024
+  configs: -DVX_CFG_EXT_ZFHMIN_ENABLE
+# The synthesizable converter (STD) rather than the DPI model rtlsim uses by default.
+- id: zfhmin-std
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: zfhmin
+  args: -n256
+  configs: -DVX_CFG_EXT_ZFHMIN_ENABLE -DVX_CFG_FPU_TYPE_STD
+- id: zfhmin-dsp
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: zfhmin
+  args: -n256
+  configs: -DVX_CFG_EXT_ZFHMIN_ENABLE -DVX_CFG_FPU_TYPE_DSP
+  xlen:
+  - 32
+# Wide warp with a single FPU lane: conversions split into one packet per thread.
+- id: zfhmin-nt16-fpu1
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: zfhmin
+  args: -n0 -p0x23
+  configs: -DVX_CFG_EXT_ZFHMIN_ENABLE -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_NUM_FPU_LANES=1
+  xlen:
+  - 32
+
+# ---------------------------------------------------------------------------
+# check: model_parity — SimX vs rtlsim on the narrowing/widening/boxing phases.
+# ---------------------------------------------------------------------------
+- id: parity-zfhmin
+  check: model_parity
+  via: blackbox
+  app: zfhmin
+  args: -n1024 -p0x23
+  configs: -DVX_CFG_EXT_ZFHMIN_ENABLE

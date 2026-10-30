@@ -128,7 +128,7 @@ public:
 
   void reset() {
     cycle_ = 0;
-    perf_stats_ = OmCore::PerfStats();
+    // perf_stats_ survives: the MPM counters run from device reset.
     for (auto& s : slots_) {
       s.in_use = false;
       s.state  = State::ADDR;

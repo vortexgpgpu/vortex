@@ -53,6 +53,10 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     input wire clk,
     input wire reset,
 
+`ifdef PERF_ENABLE
+    output rtu_perf_t    perf_rtu,
+`endif
+
     // window bus (this core is the master)
     VX_rtu_bus_if.slave  rtu_bus_if,
 
@@ -196,6 +200,10 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
 
     `UNUSED_VAR (sch_busy)
 
+`ifdef PERF_ENABLE
+    rtu_sched_events_t sch_events;
+`endif
+
     VX_rtu_scheduler #(
         .INSTANCE_ID (INSTANCE_ID),
         .NUM_SLOTS   (NUM_SLOTS),
@@ -203,6 +211,9 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     ) scheduler (
         .clk              (clk),
         .reset            (reset),
+    `ifdef PERF_ENABLE
+        .perf_events      (sch_events),
+    `endif
         .slot_start_valid (ss_valid),
         .slot_start_slot  (ss_slot),
         .slot_start_mask  (ss_mask),
@@ -786,45 +797,65 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
         end
     end
 
-// ── RTU occupancy counters ────────────────────────────────────────────────
-`ifdef DBG_RTU_OCC
-    longint unsigned occ_total, occ_busy, occ_write, occ_cb, occ_fill;
-    longint unsigned occ_idle_ray_waiting, occ_idle_starved, occ_traces;
+`ifdef PERF_ENABLE
+    localparam LANE_CNT_W = `CLOG2(NUM_LANES + 1);
+
+    // A record's lanes are counted once, when its status word (the last) goes out.
+    wire perf_rec_done = win_fire && wr_status;
+    wire perf_term     = perf_rec_done && !is_cand[ws];
+    wire perf_cand     = perf_rec_done && is_cand[ws];
+
+    wire [NUM_LANES-1:0] ws_hit = sch_hit[32'(ws)*NUM_LANES +: NUM_LANES];
+
+    // Shader callbacks: any-hit and intersection candidates returned to the warp.
+    wire [NUM_LANES-1:0] ws_cb;
+    for (genvar l = 0; l < NUM_LANES; ++l) begin : g_perf_cb
+        assign ws_cb[l] = wr_cb_mask[l]
+                       && ((sch_cbtype[wctx[l]] == RTU_CB_TYPE_BITS'(`VX_RT_CB_TYPE_ANYHIT))
+                        || (sch_cbtype[wctx[l]] == RTU_CB_TYPE_BITS'(`VX_RT_CB_TYPE_PROC)));
+    end
+
+    wire [NUM_LANES-1:0] perf_ray_lanes = ss_valid  ? ss_mask : '0;
+    wire [NUM_LANES-1:0] perf_hit_lanes = perf_term ? (req_mask[ws] & ws_hit) : '0;
+    wire [NUM_LANES-1:0] perf_cb_lanes  = perf_cand ? ws_cb : '0;
+
+    wire [LANE_CNT_W-1:0] perf_rays_cnt, perf_hits_cnt, perf_cb_cnt;
+    `POP_COUNT(perf_rays_cnt, perf_ray_lanes);
+    `POP_COUNT(perf_hits_cnt, perf_hit_lanes);
+    `POP_COUNT(perf_cb_cnt,   perf_cb_lanes);
+
+    // The per-cycle increments are registered so the counter adders stay off
+    // the scheduler's and the record walk's timing paths.
+    rtu_sched_events_t    sch_events_r;
+    reg                   busy_r;
+    reg [LANE_CNT_W-1:0]  rays_r, hits_r, cb_r;
+    rtu_perf_t            perf_rtu_r;
+
     always @(posedge clk) begin
         if (reset) begin
-            occ_total <= 0; occ_busy <= 0; occ_write <= 0; occ_cb <= 0;
-            occ_fill <= 0; occ_idle_ray_waiting <= 0; occ_idle_starved <= 0;
-            occ_traces <= 0;
+            sch_events_r <= '0;
+            busy_r       <= 1'b0;
+            rays_r       <= '0;
+            hits_r       <= '0;
+            cb_r         <= '0;
+            perf_rtu_r   <= '0;
         end else begin
-            occ_total <= occ_total + 1;
-            if (ss_valid) begin
-                occ_traces <= occ_traces + 1;
-            end
-            for (integer s = 0; s < NUM_SLOTS; s = s + 1) begin
-                case (tstate[s])
-                T_BUSY:   occ_busy  <= occ_busy + 1;
-                T_WRITE:  occ_write <= occ_write + 1;
-                T_FILL:   occ_fill  <= occ_fill + 1;
-                T_CBWAIT, T_CBATTR, T_RESUME, T_RWAIT: occ_cb <= occ_cb + 1;
-                T_IDLE: begin
-                    if ((| stg_ready) || (fstate == F_RUN)) begin
-                        occ_idle_ray_waiting <= occ_idle_ray_waiting + 1;
-                    end else begin
-                        occ_idle_starved <= occ_idle_starved + 1;
-                    end
-                end
-                default:;
-                endcase
-            end
+            sch_events_r <= sch_events;
+            busy_r       <= ~(& slot_free);
+            rays_r       <= perf_rays_cnt;
+            hits_r       <= perf_hits_cnt;
+            cb_r         <= perf_cb_cnt;
+
+            perf_rtu_r.rays      <= perf_rtu_r.rays      + PERF_CTR_BITS'(rays_r);
+            perf_rtu_r.hits      <= perf_rtu_r.hits      + PERF_CTR_BITS'(hits_r);
+            perf_rtu_r.box_tests <= perf_rtu_r.box_tests + PERF_CTR_BITS'(sch_events_r.box_test);
+            perf_rtu_r.tri_tests <= perf_rtu_r.tri_tests + PERF_CTR_BITS'(sch_events_r.tri_test);
+            perf_rtu_r.callbacks <= perf_rtu_r.callbacks + PERF_CTR_BITS'(cb_r);
+            perf_rtu_r.busy      <= perf_rtu_r.busy      + PERF_CTR_BITS'(busy_r);
         end
     end
-    always @(posedge clk) begin
-        if (!reset && (occ_total % 40000 == 39999)) begin
-            $display("RTU-OCC @%0d: traces=%0d | busy=%0d write=%0d cb=%0d fill=%0d | IDLE_ray_waiting=%0d IDLE_STARVED=%0d",
-                occ_total, occ_traces, occ_busy, occ_write, occ_cb, occ_fill,
-                occ_idle_ray_waiting, occ_idle_starved);
-        end
-    end
+
+    assign perf_rtu = perf_rtu_r;
 `endif
 
 endmodule

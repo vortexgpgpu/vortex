@@ -46,7 +46,7 @@ GEN_DIR := $(BUILD_DIR)/gen
 # The classes threaded by FAME-5, and the units given plain-port boundaries
 # first so they can be classes (lift_boundaries.py; <unit>[:drop=P,...][;port=P,...]).
 FOLDSIM_CLASSES ?= VX_socket__lift
-FOLDSIM_LIFT ?= VX_socket:drop=INSTANCE_ID;port=SOCKET_ID
+FOLDSIM_LIFT ?= VX_socket:drop=INSTANCE_ID
 # Where circt-verilog, circt-opt and firtool are (hw/syn/common.mk's CIRCT);
 # the foldsim driver is hw/syn/common.mk's FOLDSIM.
 CIRCT_BIN ?= $(CIRCT_PATH)/bin
@@ -225,6 +225,10 @@ $(IP_DIR)/component.xml: $(KERNEL_SRCS) $(KERNEL_VH) $(OOC_XDC) $(wildcard $(FOL
 		-tclargs foldsim_afu $(KERNEL_SRCS) . $(DEVICE) ooc-xdc=$(OOC_XDC) \
 		$$(grep -qE '^ *xil_f(ma|div|sqrt|mul|add) ' $(GEN_SV) || echo no-vendor-ip)
 
+# foldsim --slr-groups writes a floorplan that keeps each threaded copy whole
+# in one SLR; the implementation applies it before opt_design (floorplan.tcl).
+FLOORPLAN_ENV := $(if $(findstring --slr-groups,$(FOLDSIM_FLAGS)),FOLDSIM_FLOORPLAN=$(GEN_DIR)/foldsim_floorplan.tcl)
+
 # The kernel alone, out of context at FOLDSIM_FREQ: synthesis with global
 # retiming, placement and routing, without the shell, its reports in
 # $(BUILD_DIR)/ooc. It answers what a change does to the kernel's Fmax in
@@ -232,7 +236,7 @@ $(IP_DIR)/component.xml: $(KERNEL_SRCS) $(KERNEL_VH) $(OOC_XDC) $(wildcard $(FOL
 OOC_DIR := $(BUILD_DIR)/ooc
 ooc: $(KERNEL_SRCS)
 	rm -rf $(OOC_DIR) && mkdir -p $(OOC_DIR)
-	cd $(OOC_DIR) && TOOL_DIR=$(SCRIPT_DIR) $(VIVADO) -mode batch -nojournal -log vivado.log \
+	cd $(OOC_DIR) && TOOL_DIR=$(SCRIPT_DIR) $(FLOORPLAN_ENV) $(VIVADO) -mode batch -nojournal -log vivado.log \
 		-source $(SRC_DIR)/ooc.tcl -tclargs $(KERNEL_SRCS) $(DEVICE) \
 		$$(python3 -c 'print(round(1000 / $(FOLDSIM_FREQ), 3))') \
 		$$(grep -qE '^ *xil_f(ma|div|sqrt|mul|add) ' $(GEN_SV) || echo no-vendor-ip)
@@ -247,7 +251,7 @@ FORCE:
 
 $(VBIN): $(IP_DIR)/component.xml $(CFG)
 	mkdir -p $(BIN_DIR)
-	TOOL_DIR=$(SCRIPT_DIR) $(SLASHKIT) link -c $(CFG) -p hw -o $@ -k $(IP_DIR)/component.xml \
+	TOOL_DIR=$(SCRIPT_DIR) $(FLOORPLAN_ENV) $(SLASHKIT) link -c $(CFG) -p hw -o $@ -k $(IP_DIR)/component.xml \
 		--vivado $(VIVADO) $(if $(SLASHKIT_JOBS),--jobs $(SLASHKIT_JOBS)) \
 		--pre-synth-tcls $(SRC_DIR)/pre_synth_hook.tcl
 	@echo "image: $@"

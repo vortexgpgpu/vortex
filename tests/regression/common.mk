@@ -45,11 +45,17 @@ else
 	ZACAS_EXT :=
 endif
 
+ifneq (,$(filter -DVX_CFG_EXT_ZFHMIN_ENABLE, $(XCONFIGS)))
+	ZFHMIN_EXT := _zfhmin
+else
+	ZFHMIN_EXT :=
+endif
+
 ifeq ($(XLEN),64)
-	VX_CFLAGS += -march=rv64imafd$(C_EXT)$(ZACAS_EXT) -mabi=lp64d
+	VX_CFLAGS += -march=rv64imafd$(C_EXT)$(ZACAS_EXT)$(ZFHMIN_EXT) -mabi=lp64d
 	STARTUP_ADDR ?= 0x180000000
 else
-	VX_CFLAGS += -march=rv32imaf$(C_EXT)$(ZACAS_EXT) -mabi=ilp32f
+	VX_CFLAGS += -march=rv32imaf$(C_EXT)$(ZACAS_EXT)$(ZFHMIN_EXT) -mabi=ilp32f
 	STARTUP_ADDR ?= 0x80000000
 endif
 

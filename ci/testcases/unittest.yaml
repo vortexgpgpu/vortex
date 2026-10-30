@@ -53,3 +53,9 @@ tests:
     via: script
     run: "make -C hw/unittest/tex_lerp run"
     touches: [hw/rtl/tex, hw/unittest/tex_lerp, sw/common/vx_gfx_abi.h, sw/common/gfx_frag_tex.h]
+  # MUFU datapath (VX_mufu_pe) against the golden model SimX and the tests share
+  # (sw/common/mufu.cpp): specials, a strided sweep of all FP32 inputs, random.
+  - id: hw-mufu
+    via: script
+    run: "make -C hw/unittest/mufu_unit run"
+    touches: [hw/rtl/mufu, hw/unittest/mufu_unit, sw/common/mufu.cpp, sw/common/mufu_tables.h]

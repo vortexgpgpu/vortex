@@ -61,6 +61,15 @@ module VX_decode import
     wire [4:0] rs3 = instr[31:27];
 
     `UNUSED_VAR (funct2)
+
+`ifdef VX_CFG_EXT_ZFHMIN_ENABLE
+    wire fcvt_fmt_valid = (rs2[4:2] == 3'b000) && (rs2[1:0] != 2'b11) && (funct2 != 2'b11) && (rs2[1:0] != funct2);
+`ifdef VX_CFG_FLEN_64
+    wire fcvt_fmt_supported = fcvt_fmt_valid;
+`else
+    wire fcvt_fmt_supported = fcvt_fmt_valid && (rs2[1:0] != 2'b01) && (funct2 != 2'b01);
+`endif
+`endif
 `ifndef VX_CFG_EXT_A_ENABLE
     `UNUSED_VAR (funct5)
 `endif
@@ -509,7 +518,21 @@ module VX_decode import
                         `USED_FREG (rs1);
                         `USED_FREG (rs2);
                     end
-                `ifdef VX_CFG_FLEN_64
+                `ifdef VX_CFG_EXT_ZFHMIN_ENABLE
+                    5'b01000: begin
+                        if (fcvt_fmt_supported) begin
+                            if (funct2 == 2'b10) begin
+                                op_type = INST_OP_BITS'(INST_FPU_F2H);
+                                op_args.fpu.fmt[0] = rs2[0];
+                            end else begin
+                                op_type = INST_OP_BITS'(INST_FPU_F2F);
+                            end
+                            rd_xregs[XREG_1] = frm_is_dyn;
+                            `USED_FREG (rd);
+                            `USED_FREG (rs1);
+                        end
+                    end
+                `elsif VX_CFG_FLEN_64
                     5'b01000: begin
                         // FCVT.S.D, FCVT.D.S
                         op_type = INST_OP_BITS'(INST_FPU_F2F);
@@ -563,6 +586,9 @@ module VX_decode import
                             // NCP: FMV.X.W=4
                             op_type = INST_OP_BITS'(INST_FPU_MISC);
                             op_args.fpu.frm = INST_FRM_BITS'(4);
+                        `ifdef VX_CFG_EXT_ZFHMIN_ENABLE
+                            op_args.fpu.fmt[1] = funct2[1];
+                        `endif
                         end
                         wr_xregs[XREG_0] = 1'b0;
                         `USED_IREG (rd);
@@ -572,6 +598,9 @@ module VX_decode import
                         // NCP: FMV.W.X=5
                         op_type = INST_OP_BITS'(INST_FPU_MISC);
                         op_args.fpu.frm = INST_FRM_BITS'(5);
+                    `ifdef VX_CFG_EXT_ZFHMIN_ENABLE
+                        op_args.fpu.fmt[1] = funct2[1];
+                    `endif
                         wr_xregs[XREG_0] = 1'b0;
                         `USED_FREG (rd);
                         `USED_IREG (rs1);
@@ -883,6 +912,18 @@ module VX_decode import
                 default:;
                 endcase
             end
+        `ifdef VX_CFG_EXT_MUFU_ENABLE
+            INST_EXT3: begin
+                if (funct7 == 7'h00 && funct3 == 3'h0 && rs2 <= 5'(INST_MUFU_TANH)) begin
+                    ex_type = EX_SFU;
+                    op_type = INST_OP_BITS'(INST_SFU_MUFU);
+                    op_args.mufu.__padding = '0;
+                    op_args.mufu.fn = INST_MUFU_BITS'(rs2);
+                    `USED_FREG (rd);
+                    `USED_FREG (rs1);
+                end
+            end
+        `endif
             default:;
         endcase
     end

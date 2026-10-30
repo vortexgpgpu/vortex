@@ -56,6 +56,9 @@ VX_MEM_IO_END_ADDR          = "expr: $VX_MEM_USER_BASE_ADDR"
 VX_MEM_OM_BASE_ADDR         = "expr: 0x00000000E0000000 if ($XLEN == 64) else 0xE0000000"
 VX_MEM_OM_END_ADDR          = "expr: $VX_MEM_PAGE_TABLE_BASE_ADDR"
 
+[mufu]
+VX_MUFU_LATENCY = 7
+
 # VM page-table format — RISC-V architectural constants fixed by the SATP mode
 # (SV32 vs SV39, selected by XLEN). Relocated from VX_config.toml.
 [vm]
@@ -849,6 +852,26 @@ VX_CSR_MPM_OCACHE_BANK_ST     = 0xB0B  # bank conflicts
 VX_CSR_MPM_OCACHE_BANK_ST_H   = 0xB8B
 VX_CSR_MPM_OCACHE_MSHR_ST     = 0xB0C  # MSHR stalls
 VX_CSR_MPM_OCACHE_MSHR_ST_H   = 0xB8C
+
+[csr_mpm_rtu]
+# PERF: ray-tracing unit (per-socket; summed across the socket's RTU cores)
+VX_CSR_MPM_RTU_RAYS         = 0xB03  # rays traced (active lanes of the trace instructions)
+VX_CSR_MPM_RTU_RAYS_H       = 0xB83
+VX_CSR_MPM_RTU_HITS         = 0xB04  # rays whose final result is a hit
+VX_CSR_MPM_RTU_HITS_H       = 0xB84
+VX_CSR_MPM_RTU_BOX_TESTS    = 0xB05  # ray/box intersection tests
+VX_CSR_MPM_RTU_BOX_TESTS_H  = 0xB85
+VX_CSR_MPM_RTU_TRI_TESTS    = 0xB06  # ray/triangle intersection tests
+VX_CSR_MPM_RTU_TRI_TESTS_H  = 0xB86
+VX_CSR_MPM_RTU_CALLBACKS    = 0xB07  # any-hit and intersection candidates returned to the shader
+VX_CSR_MPM_RTU_CALLBACKS_H  = 0xB87
+VX_CSR_MPM_RTU_BUSY         = 0xB08  # cycles with a ray in flight
+VX_CSR_MPM_RTU_BUSY_H       = 0xB88
+# PERF: ray-tracing cache
+VX_CSR_MPM_RTCACHE_READS    = 0xB09  # total reads
+VX_CSR_MPM_RTCACHE_READS_H  = 0xB89
+VX_CSR_MPM_RTCACHE_MISS_R   = 0xB0A  # read misses
+VX_CSR_MPM_RTCACHE_MISS_R_H = 0xB8A
 
 # XLEN is an environment-supplied build axis (configure exports it); the
 # [memmap]/[vm] exprs above reference it. Declared as a [[builtin]] so the

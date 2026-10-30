@@ -462,6 +462,22 @@ void SfuUnit::on_tick() {
 			}
 		}
 
+#ifdef VX_CFG_EXT_MUFU_ENABLE
+		// Each SFU block has its own MUFU serializer, as in the RTL.
+		if (std::get_if<MufuType>(&trace->op_type)) {
+			if (output.full()) {
+				continue;
+			}
+			if (!mufu_units_.at(b).process(trace)) {
+				continue;
+			}
+			output.send(trace, this->latency_of(trace) + MufuUnit::kLatency);
+			trace->resume_warp = trace->fetch_stall;
+			input.pop();
+			continue;
+		}
+#endif
+
 		if (output.full())
 			continue; // stall — no side effects this tick
 

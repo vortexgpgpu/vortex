@@ -271,6 +271,20 @@ package VX_trace_pkg;
             `ifdef VX_CFG_EXT_RASTER_ENABLE
                 INST_SFU_RASTER: `TRACE(level, ("RAST.FETCH"))
             `endif
+            `ifdef VX_CFG_EXT_MUFU_ENABLE
+                INST_SFU_MUFU: begin
+                    case (op_args.mufu.fn)
+                        INST_MUFU_RCP:   `TRACE(level, ("MUFU.RCP"))
+                        INST_MUFU_RSQRT: `TRACE(level, ("MUFU.RSQRT"))
+                        INST_MUFU_EX2:   `TRACE(level, ("MUFU.EX2"))
+                        INST_MUFU_LG2:   `TRACE(level, ("MUFU.LG2"))
+                        INST_MUFU_SINPI: `TRACE(level, ("MUFU.SINPI"))
+                        INST_MUFU_COSPI: `TRACE(level, ("MUFU.COSPI"))
+                        INST_MUFU_TANH:  `TRACE(level, ("MUFU.TANH"))
+                        default:         `TRACE(level, ("MUFU.?"))
+                    endcase
+                end
+            `endif
                 default: `TRACE(level, ("?"))
             endcase
         end
@@ -361,10 +375,18 @@ package VX_trace_pkg;
                     end
                 end
                 INST_FPU_F2F: begin
+                    case (op_args.fpu.fmt)
+                    2'b00: `TRACE(level, ("FCVT.S.D"))
+                    2'b01: `TRACE(level, ("FCVT.D.S"))
+                    2'b10: `TRACE(level, ("FCVT.S.H"))
+                    2'b11: `TRACE(level, ("FCVT.D.H"))
+                    endcase
+                end
+                INST_FPU_F2H: begin
                     if (op_args.fpu.fmt[0]) begin
-                        `TRACE(level, ("FCVT.D.S"))
+                        `TRACE(level, ("FCVT.H.D"))
                     end else begin
-                        `TRACE(level, ("FCVT.S.D"))
+                        `TRACE(level, ("FCVT.H.S"))
                     end
                 end
                 INST_FPU_F2I: begin
@@ -417,8 +439,8 @@ package VX_trace_pkg;
                             1: `TRACE(level, ("FSGNJN.S"))
                             2: `TRACE(level, ("FSGNJX.S"))
                             3: `TRACE(level, ("FCLASS.S"))
-                            4: `TRACE(level, ("FMV.X.S"))
-                            5: `TRACE(level, ("FMV.S.X"))
+                            4: `TRACE(level, (op_args.fpu.fmt[1] ? "FMV.X.H" : "FMV.X.S"))
+                            5: `TRACE(level, (op_args.fpu.fmt[1] ? "FMV.H.X" : "FMV.S.X"))
                             6: `TRACE(level, ("FMIN.S"))
                             7: `TRACE(level, ("FMAX.S"))
                         endcase

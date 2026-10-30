@@ -24,6 +24,12 @@ PARAMS   += -GSUBNORM_ENABLE=0 -GEXCEPT_ENABLE=0
 CXXFLAGS += -DLEAN
 endif
 
+HALF ?= 1
+ifeq ($(HALF),1)
+PARAMS   += -GHALF_ENABLE=1
+CXXFLAGS += -DHALF
+endif
+
 SRCS += $(SW_COMMON_DIR)/softfloat_ext.cpp
 SRCS += $(SW_COMMON_DIR)/rvfloats.cpp
 SRCS += $(SRC_DIR)/main.cpp

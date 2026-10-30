@@ -152,7 +152,7 @@ public:
 
   void reset() {
     cycle_ = 0;
-    perf_stats_ = RasterCore::PerfStats();
+    // perf_stats_ survives: the MPM counters run from device reset.
     reset_load_state();
     state_ = State::IDLE;
     // The per-launch reset precedes the delegated launch's frame kick, so both
