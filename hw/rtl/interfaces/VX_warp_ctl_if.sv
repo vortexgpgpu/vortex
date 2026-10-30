@@ -28,13 +28,15 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
     wire [SFU_BLOCK_WARPS-1:0] warp_pending_alm_empty;
 
     // Every LSU block's memory scheduler is empty, and the translation path
-    // drained. VX_wctl_unit ANDs them to gate BAR (both vx_barrier and
+    // drained (MMU_EMPTY_W status bits: the socket MMUs hold no request, and
+    // none of this core's requests waits at their inputs). VX_wctl_unit ANDs
+    // them to gate BAR (both vx_barrier and
     // vx_barrier_arrive) so the barrier acts as a SMEM/GMEM fence — pending
     // LSU memory ops finish before the warp suspends or the barrier arrival is
     // registered. This is the CUDA __syncthreads / OpenCL
     // barrier(CLK_LOCAL_MEM_FENCE) contract.
     wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] lsu_sched_empty;
-    wire mmu_empty;
+    wire [MMU_EMPTY_W-1:0] mmu_empty;
 
     // IPDOM stack address and mscratch of the warp at dvstack_wid
     wire [NW_WIDTH-1:0] dvstack_wid;

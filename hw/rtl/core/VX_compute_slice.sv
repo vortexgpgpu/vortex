@@ -50,7 +50,7 @@ import VX_tcu_pkg::*;
     input wire [PERF_CTR_BITS-1:0] instret,
     input wire [`VX_CFG_NUM_WARPS-1:0] active_warps,
     input wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] all_lsu_sched_empty,
-    input wire              mmu_empty,
+    input wire [MMU_EMPTY_W-1:0] mmu_empty,
     input cta_bcast_t       cta_bcast,
 `ifdef VX_CFG_VM_ENABLE
     input wire [`VX_CFG_XLEN-1:0] satp,

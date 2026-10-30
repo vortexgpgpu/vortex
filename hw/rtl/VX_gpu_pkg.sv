@@ -709,6 +709,11 @@ package VX_gpu_pkg;
     localparam SFU_BLOCK_NW_BITS = `CLOG2(SFU_BLOCK_WARPS);
     localparam SFU_BLOCK_NW_W  = `UP(SFU_BLOCK_NW_BITS);
 
+    // Translation drain status bits a core hands its warp-control units: the
+    // socket MMUs hold no request, and none of the core's own requests waits
+    // at their inputs.
+    localparam MMU_EMPTY_W = 2;
+
     function automatic logic [SFU_BLOCK_W-1:0] wid_to_sfu_block(
         input logic [NW_WIDTH-1:0] wid
     );

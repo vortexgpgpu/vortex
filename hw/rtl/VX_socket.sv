@@ -341,10 +341,22 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     `UNUSED_VAR (immu_fault_if.access)
     `UNUSED_VAR (immu_fault_if.amo)
 
-    // Socket MMU drain status, broadcast to every core so its busy/barrier logic
-    // waits for in-flight translations. Shared MMU: a core waits for the whole
-    // socket to drain (conservative, always correct).
+    // Socket MMU drain status, broadcast to every core: no request is held in
+    // either MMU (output stages and miss stations, shared and conservative). It
+    // has no path from the cores' requests: a core adds its own requests still
+    // waiting at the MMU inputs, so one core's barrier never waits on another
+    // core's not-yet-accepted request.
     wire socket_mmu_drained = dmmu_empty && immu_empty;
+
+    // Requests still waiting at the MMU inputs, for the socket's own busy.
+    wire [`VX_CFG_SOCKET_SIZE * DCACHE_NUM_REQS-1:0] dmmu_in_valid;
+    wire [`VX_CFG_SOCKET_SIZE * ICACHE_NUM_REQS-1:0] immu_in_valid;
+    for (genvar i = 0; i < `VX_CFG_SOCKET_SIZE * DCACHE_NUM_REQS; ++i) begin : g_dmmu_in_valid
+        assign dmmu_in_valid[i] = per_core_dcache_bus_if[i].req_valid;
+    end
+    for (genvar i = 0; i < `VX_CFG_SOCKET_SIZE * ICACHE_NUM_REQS; ++i) begin : g_immu_in_valid
+        assign immu_in_valid[i] = per_core_icache_bus_if[i].req_valid;
+    end
 
 `ifdef PERF_ENABLE
     // Surfacing these through sysmem_perf needs a dedicated mmu slot; until that
@@ -955,7 +967,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
         assign per_core_kmu_fire[i]  = per_core_kmu_bus_if[i].valid && per_core_kmu_bus_if[i].ready;
     end
 `ifdef VX_CFG_VM_ENABLE
-    wire mmu_busy = ~socket_mmu_drained;
+    wire mmu_busy = ~socket_mmu_drained || (| dmmu_in_valid) || (| immu_in_valid);
 `else
     wire mmu_busy = 1'b0;
 `endif

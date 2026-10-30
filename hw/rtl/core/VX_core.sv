@@ -152,10 +152,21 @@ import VX_tcu_pkg::*;
     // the MMU perf counters are kept at the socket
     assign pipeline_perf.mmu = '0;
 `endif
-    // Translation drains at the socket MMU; the socket returns its empty status.
-    wire mmu_empty = mmu_drained;
+    // Translation drains at the socket MMU. The socket's status covers the
+    // requests the MMUs hold; this core adds its own requests still waiting at
+    // their inputs, so a barrier drains this core's traffic, not another core's.
+    // The two status bits go to the slices uncombined, as the LSU blocks' do.
+    wire [DCACHE_NUM_REQS-1:0] dcache_req_waiting;
+    wire [ICACHE_NUM_REQS-1:0] icache_req_waiting;
+    for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin : g_dcache_req_waiting
+        assign dcache_req_waiting[i] = dcache_bus_if[i].req_valid;
+    end
+    for (genvar i = 0; i < ICACHE_NUM_REQS; ++i) begin : g_icache_req_waiting
+        assign icache_req_waiting[i] = icache_bus_if[i].req_valid;
+    end
+    wire [MMU_EMPTY_W-1:0] mmu_empty = {~(| dcache_req_waiting) && ~(| icache_req_waiting), mmu_drained};
 `else
-    wire mmu_empty = 1'b1;
+    wire [MMU_EMPTY_W-1:0] mmu_empty = '1;
 `endif
 
 
