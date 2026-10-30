@@ -78,10 +78,14 @@ module foldsim_ctrl #(
     output reg  [15:0]           mem_rfc,
     output reg  [7:0]            bubble,
     // Where the virtual memories are, whether the simulator may use them, and
-    // whether every row of theirs not written since the reset is zero.
+    // whether every row of theirs not written since the reset is zero. A
+    // cycle's pulse when the region moves (VMEM_BASE_LO); their controllers
+    // are still at it (STATUS bit 4).
     output wire [63:0]           vmem_base,
     output wire                  vmem_on,
     output wire                  vmem_zero,
+    output wire                  vmem_move,
+    input  wire                  vmem_moving,
     // Per memory port, its counters.
     input  wire [MEM_PORTS*8*64-1:0] mem_stats,
     input  wire                  mem_idle,
@@ -221,6 +225,8 @@ module foldsim_ctrl #(
     assign s_arready = ~ar_got & ~s_rvalid;
 
     wire wr      = aw_got & w_got & ~s_bvalid;
+    // A virtual memories' move is under way (STATUS bit 4).
+    wire vmem_busy;
     wire [11:0] wa = {aw_addr, 2'b00};
     wire push    = wr & (wa == `FOLDSIM_REG_CMD) & (q_count != QC'(QUEUE));
     wire pop     = finish & ~q_empty & (reset_next == 0);
@@ -358,7 +364,7 @@ module foldsim_ctrl #(
                 `FOLDSIM_REG_ID:          s_rdata <= `FOLDSIM_ID;
                 `FOLDSIM_REG_VERSION:     s_rdata <= `FOLDSIM_VERSION;
                 `FOLDSIM_REG_CTRL:        s_rdata <= {31'b0, run};
-                `FOLDSIM_REG_STATUS:      s_rdata <= {28'b0, mem_error, rsp_valid,
+                `FOLDSIM_REG_STATUS:      s_rdata <= {27'b0, vmem_busy, mem_error, rsp_valid,
                                                      (q_count == QC'(QUEUE)), status_busy};
                 `FOLDSIM_REG_CMD_ADDR:    s_rdata <= 32'(cmd_addr);
                 `FOLDSIM_REG_CMD_DATA:    s_rdata <= 32'(cmd_data);
@@ -410,13 +416,16 @@ module foldsim_ctrl #(
     end
 
     // The virtual memories' region: the runtime places it before the
-    // simulator takes a step, and may move it only between requests. Moving
-    // it, as a reset, says nothing of its rows any more: the runtime says
-    // again that they are zero once they are (VMEM_ZERO).
+    // simulator takes a step. Moving it (a write of VMEM_BASE_LO) stops the
+    // simulator's requests and has the controllers finish those taken and
+    // flush the old region (vmem_move); as a reset, it says nothing of the
+    // rows any more: the runtime says again that they are zero once they are
+    // (VMEM_ZERO). STATUS bit 4 holds until the controllers are done.
     if (VMEM_BYTES != 0) begin : g_vmem
         reg [63:0] base_r;
-        reg        on_r, zero_r;
+        reg        on_r, zero_r, move_r;
         always @(posedge clk) begin
+            move_r <= ~reset & wr & (wa == `FOLDSIM_REG_VMEM_BASE_LO);
             if (reset) begin
                 base_r <= 64'd0;
                 on_r   <= 1'b0;
@@ -441,10 +450,18 @@ module foldsim_ctrl #(
         assign vmem_base = base_r;
         assign vmem_on   = on_r;
         assign vmem_zero = zero_r;
+        assign vmem_move = move_r;
+        // The pulse covers the cycle before the controllers see it.
+        assign vmem_busy = move_r | vmem_moving;
     end else begin : g_no_vmem
+        /* verilator lint_off UNUSEDSIGNAL */
+        wire unused = vmem_moving;
+        /* verilator lint_on UNUSEDSIGNAL */
         assign vmem_base = 64'd0;
         assign vmem_on   = 1'b0;
         assign vmem_zero = 1'b0;
+        assign vmem_move = 1'b0;
+        assign vmem_busy = 1'b0;
     end
 
 endmodule

@@ -273,7 +273,9 @@ module foldsim_afu #(
         $error("foldsim_afu: the virtual memories' controllers have 512-bit masters");
     end
     wire [63:0] vmem_base;
-    wire        vmem_on, vmem_zero;
+    wire        vmem_on, vmem_zero, vmem_move;
+    // Each controller is still moving its region (foldsim_vmem `moving`).
+    wire [`FOLDSIM_VMEM_COUNT-1:0] vmem_moving;
 
     // Memory k on master p. Its region's base is registered: base + the
     // region's offset is static while requests flow. Its host cache has
@@ -286,6 +288,8 @@ module foldsim_afu #(
     wire [`FOLDSIM_VMEM_``k``_MW-1:0]   vm``k``_wr_mask; \
     wire [$clog2(VMEM_QUEUE+1)-1:0]     vm``k``_room; \
     wire [15:0]                         vm``k``_free = vmem_on ? 16'(vm``k``_room) : 16'd0; \
+    wire                                vm``k``_moving; \
+    assign vmem_moving[k] = vm``k``_moving; \
     reg  [63:0]                         vm``k``_base; \
     always @(posedge ap_clk) \
         vm``k``_base <= vmem_base + `FOLDSIM_VMEM_``k``_BASE; \
@@ -319,6 +323,8 @@ module foldsim_afu #(
         .free      (vm``k``_room), \
         .base      (vm``k``_base), \
         .zero      (vmem_zero), \
+        .move      (vmem_move), \
+        .moving    (vm``k``_moving), \
         .m_awvalid (m_axi_mem_``p``_awvalid), \
         .m_awready (m_axi_mem_``p``_awready), \
         .m_awaddr  (m_axi_mem_``p``_awaddr), \
@@ -511,13 +517,17 @@ module foldsim_afu #(
         .vmem_base         (vmem_base),
         .vmem_on           (vmem_on),
         .vmem_zero         (vmem_zero),
+        .vmem_move         (vmem_move),
+        .vmem_moving       (|vmem_moving),
 `else
         // Without virtual memories, the region is never used.
         /* verilator lint_off PINCONNECTEMPTY */
         .vmem_base         (),
         .vmem_on           (),
         .vmem_zero         (),
+        .vmem_move         (),
         /* verilator lint_on PINCONNECTEMPTY */
+        .vmem_moving       (1'b0),
 `endif
         .mem_stats         (mem_stats),
         .mem_idle          (&mem_idle),

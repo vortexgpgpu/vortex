@@ -81,6 +81,17 @@
 // memory, and then every dirty line goes to memory and every line is
 // invalidated: memory holds the RAM's image (which the host may then change). It finishes, with free back at
 // QUEUE, once memory has answered every transaction: until then free stays 0.
+//
+// A region move (`move`, the host placing the image elsewhere, as a new
+// process does without a reset) ends the old region's use as a reset does,
+// but the simulator keeps its state: free drops to 0 and `moving` rises;
+// every request taken before it, or within the simulator's lead after it, is
+// served and answered against the old region (no fill); then, once no request
+// has come for QUIET cycles and none is in flight, the cache's sweep writes
+// every dirty line back to the old base and invalidates every line, and the
+// known-zero bits are cleared. Once memory has answered every transaction,
+// `moving` falls, free returns to QUEUE and the new base takes effect. The
+// base the controller uses is held from `move` (and from a reset) until then.
 module foldsim_vmem #(
     // Instance-index bits: the global instance index over all copies.
     parameter IW             = 8,
@@ -129,6 +140,10 @@ module foldsim_vmem #(
     input  wire [63:0]                 base,
     // Memory holds zero in every row not written since the reset.
     input  wire                        zero,
+    // A cycle's pulse: the region moves; `base` may change from this cycle on.
+    input  wire                        move,
+    // The move is under way (from the cycle after `move`).
+    output wire                        moving,
 
     output reg                         m_awvalid,
     input  wire                        m_awready,
@@ -183,6 +198,9 @@ module foldsim_vmem #(
     localparam PINS   = 8;
     localparam PW     = $clog2(PINS);
     localparam KZ     = (KNOWN_ZERO != 0) ? 1 : 0;
+    // A move's flush starts once no request has come for this many cycles:
+    // past the simulator's lead (L = 3) after free dropped to 0.
+    localparam QUIET  = 15;
 
     // Where a local answer's row comes from.
     localparam SRC_WB = 2'd0;  // the write buffer
@@ -244,8 +262,10 @@ module foldsim_vmem #(
     reg [BW-1:0]     w_beat;
     reg [OUTSTANDING-1:0] id_busy;
     reg              rc_valid;
+    reg [63:0]       base_q;
 `ifdef SIMULATION
     initial begin
+        base_q    = '0;
         draining  = 1'b0;
         x_wr      = 1'b0;
         y_wr      = 1'b0;
@@ -278,7 +298,8 @@ module foldsim_vmem #(
     wire taken_wr = wr_valid & accept;
 
     // ---- Intake: a row's index in the image, row * INSTANCES + inst ----
-    wire              i_rd, i_wr, i_busy;
+    // i_busy, i_rbusy: a write, a read, still in the multiply.
+    wire              i_rd, i_wr, i_busy, i_rbusy;
     wire [IW-1:0]     i_rinst;
     wire [LW-1:0]     i_rlin, i_wlin;
     wire [DW-1:0]     i_wdata;
@@ -288,6 +309,7 @@ module foldsim_vmem #(
         assign i_rd    = taken_rd;
         assign i_wr    = taken_wr;
         assign i_busy  = 1'b0;
+        assign i_rbusy = 1'b0;
         assign i_rinst = rd_inst;
         assign i_rlin  = (LW'(rd_row) << KB) | LW'(rd_inst & IW'(INSTANCES - 1));
         assign i_wlin  = (LW'(wr_row) << KB) | LW'(wr_inst & IW'(INSTANCES - 1));
@@ -307,6 +329,8 @@ module foldsim_vmem #(
         initial begin
             a_wr = 1'b0;
             p_wr = 1'b0;
+            a_rd = 1'b0;
+            p_rd = 1'b0;
         end
 `endif
         always @(posedge clk) begin
@@ -330,6 +354,7 @@ module foldsim_vmem #(
         assign i_rd    = p_rd;
         assign i_wr    = p_wr;
         assign i_busy  = a_wr | p_wr;
+        assign i_rbusy = a_rd | p_rd;
         assign i_rinst = p_rinst;
         assign i_rlin  = p_rprod + LW'(p_rinst);
         assign i_wlin  = p_wprod + LW'(p_winst);
@@ -337,15 +362,21 @@ module foldsim_vmem #(
         assign i_wmask = p_wmask;
     end
 
+    // The base in use (base_q): `base` but through a reset's drain and a
+    // move, which still address the old region; taken again as either ends.
     // base + offset adds only the offset's bits; above them, base or base + 1
     // (kept registered: base is static while requests flow).
     reg [63-OB:0] base_hi1;
-    always @(posedge clk)
-        base_hi1 <= base[63:OB] + 1'b1;
+    wire          base_hold;
+    always @(posedge clk) begin
+        if (~base_hold)
+            base_q <= base;
+        base_hi1 <= base_q[63:OB] + 1'b1;
+    end
     function automatic [63:0] row_addr(input [LW-1:0] lin);
         reg [OB:0] lo;
-        lo = {1'b0, base[OB-1:0]} + {1'b0, lin, {RB{1'b0}}};
-        row_addr = {lo[OB] ? base_hi1 : base[63:OB], lo[OB-1:0]};
+        lo = {1'b0, base_q[OB-1:0]} + {1'b0, lin, {RB{1'b0}}};
+        row_addr = {lo[OB] ? base_hi1 : base_q[63:OB], lo[OB-1:0]};
     endfunction
 
     // ---- The sweep of a reset's drain: every line, in order ----
@@ -360,12 +391,24 @@ module foldsim_vmem #(
     wire             fl_v;
     wire [LW-1:0]    fl_lin;
     wire [DW-1:0]    fl_data;
-    wire             fill_go = fl_v & ~i_wr & ~reset & ~draining;
+    // A move (mv_busy) fills nothing either: its sweep empties the cache.
+    reg              mv_busy;
+    wire             fill_go = fl_v & ~i_wr & ~reset & ~draining & ~mv_busy;
 
     // ---- Known-zero rows: looked up as requests are taken ----
     // At X: the write's row, the read's row was zero before this cycle's
     // write (zero high, no write since the reset); the reset's clear is done.
     wire             kz_w, kz_r, kz_done;
+
+    // ---- A move: its flush (the sweep and the clear) has begun, begins ----
+    reg              mv_flush;
+    wire             mv_go;
+`ifdef SIMULATION
+    initial begin
+        mv_busy  = 1'b0;
+        mv_flush = 1'b0;
+    end
+`endif
 
     // ---- X: the requests, in the image's terms; the tags are read ----
     reg              x_rd;
@@ -717,7 +760,7 @@ module foldsim_vmem #(
     end
 
     // The fill: the last answer from memory whose line may take it. Reset
-    // drops it, and no answer during the drain fills.
+    // and a move drop it, and no answer during the drain or the move fills.
     if (CACHE != 0) begin : g_fill
         reg          v;
         reg [LW-1:0] lin;
@@ -726,11 +769,11 @@ module foldsim_vmem #(
         initial v = 1'b0;
 `endif
         always @(posedge clk) begin
-            if (rc_done & tbl_fill[rc_id] & ~draining & ~reset) begin
+            if (rc_done & tbl_fill[rc_id] & ~draining & ~reset & ~mv_busy & ~move) begin
                 v    <= 1'b1;
                 lin  <= tbl_lin[rc_id];
                 data <= rc_row[DW-1:0];
-            end else if (reset | fill_go | (i_wr & (i_wlin == lin))) begin
+            end else if (reset | move | fill_go | (i_wr & (i_wlin == lin))) begin
                 v    <= 1'b0;
             end
         end
@@ -994,7 +1037,7 @@ module foldsim_vmem #(
         localparam KAW    = (KDEPTH > 1) ? $clog2(KDEPTH) : 1;
         reg              zv, done, looked;
         reg [KAW-1:0]    ptr;
-        wire             clear = draining & ~reset & ~done;
+        wire             clear = (draining | mv_flush) & ~reset & ~done;
         wire             set   = i_wr & ~reset & ~draining;
         wire [KAW-1:0]   wa    = clear ? ptr : KAW'(i_wlin >> KBB);
         wire [KAW-1:0]   ra    = KAW'(i_rlin >> KBB);
@@ -1014,7 +1057,7 @@ module foldsim_vmem #(
         always @(posedge clk) begin
             zv     <= zero & ~reset;
             looked <= set;
-            if (reset) begin
+            if (reset | mv_go) begin
                 ptr  <= '0;
                 done <= 1'b0;
             end else if (clear) begin
@@ -1035,12 +1078,13 @@ module foldsim_vmem #(
         assign kz_done = 1'b1;
     end
 
-    // The reset's sweep: a line per cycle while the buffer has room for what
-    // is in flight, once the writes taken before the reset are in.
-    assign sweep_go = (CACHE != 0) & draining & ~reset & ~sw_done & ~i_busy & ~x_wr & ~y_wr & ~x_fl & ~y_fl
-                    & (wb_cnt <= FW'(QUEUE - 4));
+    // The sweep of a reset's drain or a move's flush: a line per cycle while
+    // the buffer has room for what is in flight, once the writes taken before
+    // it are in.
+    assign sweep_go = (CACHE != 0) & (draining | mv_flush) & ~reset & ~sw_done & ~i_busy & ~x_wr & ~y_wr
+                    & ~x_fl & ~y_fl & (wb_cnt <= FW'(QUEUE - 4));
     always @(posedge clk) begin
-        if (reset) begin
+        if (reset | mv_go) begin
             sw_done <= (CACHE == 0);
             sw_idx  <= '0;
         end else if (sweep_go) begin
@@ -1055,25 +1099,61 @@ module foldsim_vmem #(
               & (wb_cnt == 0) & (id_busy == '0)
               & ~m_arvalid & ~m_awvalid & ~m_wvalid & ~rc_valid;
 
-    // Room given back counts a cycle late: free only rises later.
-    reg  [2:0] rel_q;
+    // ---- A move: serve what was taken, then the flush ----
+    // Nothing taken is in flight but writes in the buffer: no read anywhere,
+    // no write still to look up its known-zero bit or reach the cache.
+    wire quiet = ~i_busy & ~i_rbusy & ~x_rd & ~y_rd & ~z_rd & ~r_rd & ~r_local & (rq_count == '0)
+               & (id_busy == '0) & ~rc_valid & ~x_wr & ~y_wr;
+    reg  [3:0] mv_cnt;
+    wire       mv_start = move & ~mv_busy & ~reset & ~draining;
+    assign     mv_go    = mv_busy & ~mv_flush & quiet & (mv_cnt == 4'(QUIET));
+    wire       mv_end   = mv_flush & idle;
+    always @(posedge clk) begin
+        if (reset) begin
+            mv_busy  <= 1'b0;
+            mv_flush <= 1'b0;
+        end else begin
+            if (mv_start)
+                mv_busy <= 1'b1;
+            else if (mv_end)
+                mv_busy <= 1'b0;
+            if (mv_go)
+                mv_flush <= 1'b1;
+            else if (mv_end)
+                mv_flush <= 1'b0;
+        end
+        // Cycles since the last request (QUIET at most).
+        if (mv_start | rd_valid | wr_valid)
+            mv_cnt <= '0;
+        else if (mv_cnt != 4'(QUIET))
+            mv_cnt <= mv_cnt + 1'b1;
+    end
+    assign moving    = mv_busy;
+    assign base_hold = reset | (draining & ~idle) | (mv_busy & ~mv_end) | move;
+
+    // Room given back counts a cycle late: free only rises later. room counts
+    // requests and their room until a move's flush too (free shows 0 from the
+    // move); the flush, as the drain, ends with everything back.
+    reg  [2:0]    rel_q;
+    reg  [FW-1:0] room;
     // Outside reset and its drain, every request is taken.
-    wire [3:0] delta = {1'b0, rel_q} - 4'(rd_valid) - 4'(wr_valid);
+    wire [3:0]    delta  = {1'b0, rel_q} - 4'(rd_valid) - 4'(wr_valid);
+    wire [FW-1:0] room_n = reset ? '0
+                         : (draining | mv_flush) ? (idle ? FW'(QUEUE) : '0)
+                         : room + FW'($signed(delta));
 
     always @(posedge clk) begin
-        rel_q <= (reset | draining) ? 3'd0
+        rel_q <= (reset | draining | mv_flush) ? 3'd0
                : 3'(r_local) + 3'(rq_issue) + 3'(b_pop) + 3'(y_wdone);
-        if (reset) begin
+        if (reset)
             draining <= 1'b1;
-            free     <= '0;
-        end else if (draining) begin
-            if (idle) begin
-                draining <= 1'b0;
-                free     <= FW'(QUEUE);
-            end
-        end else begin
-            free <= free + FW'($signed(delta));
-        end
+        else if (draining & idle)
+            draining <= 1'b0;
+        room <= room_n;
+        if (mv_start | (mv_busy & ~mv_end))
+            free <= '0;
+        else
+            free <= room_n;
     end
 
 `ifdef SIMULATION
@@ -1086,8 +1166,10 @@ module foldsim_vmem #(
         end else begin
             if ((rd_valid && 32'(rd_inst) >= INSTANCES) || (wr_valid && 32'(wr_inst) >= INSTANCES))
                 $error("foldsim_vmem: an instance index past INSTANCES");
-            if ((FW+1)'(rd_valid) + (FW+1)'(wr_valid) > (FW+1)'(free))
-                $error("foldsim_vmem: a request without room (free %0d)", free);
+            if ((FW+1)'(rd_valid) + (FW+1)'(wr_valid) > (FW+1)'(room))
+                $error("foldsim_vmem: a request without room (%0d)", room);
+            if ((rd_valid | wr_valid) & mv_flush)
+                $error("foldsim_vmem: a request in a move's flush, QUIET cycles after free dropped to 0");
             if (rd_valid & sim_pending[rd_inst])
                 $error("foldsim_vmem: a second read of instance %0d outstanding", rd_inst);
             if (wr_valid & sim_pending[wr_inst])
@@ -1107,7 +1189,7 @@ module foldsim_vmem #(
             $error("foldsim_vmem: two responses in one cycle");
         if (z_alloc & (wb_cnt == FW'(QUEUE)) & ~b_pop)
             $error("foldsim_vmem: the write buffer overflows");
-        if ((base & ((64'd1 << RB) - 1)) != 0)
+        if ((base_q & ((64'd1 << RB) - 1)) != 0)
             $error("foldsim_vmem: base not aligned to a row");
     end
 `endif

@@ -560,7 +560,10 @@ private:
   // memory of their own, cleared as an on-chip RAM starts, and placed before
   // the simulator takes a step; the kernel is told it is clear, so its
   // controllers answer rows nobody has written on chip. A kernel without them
-  // reads 0 bytes.
+  // reads 0 bytes. The region is placed (VMEM_BASE_LO) before it is cleared:
+  // the move has the controllers finish what an earlier process left them and
+  // write its rows back to its own region, which may be this one, so the
+  // clear waits for that (STATUS VMEM_MOVE; a kernel without moves never sets it).
   int setup_vmem() {
     uint32_t bytes = 0;
     if (transport_.reg_read(FOLDSIM_REG_VMEM_BYTES, &bytes) != 0)
@@ -580,14 +583,17 @@ private:
               (unsigned long)vmem_base_);
       return -1;
     }
+    if (reg_write(FOLDSIM_REG_VMEM_BASE_LO, uint32_t(vmem_base_)) != 0 ||
+        poll([](uint32_t s) { return !(s & FOLDSIM_STATUS_VMEM_MOVE); }, false,
+             "moved its virtual memories") != 0)
+      return -1;
     const std::vector<uint8_t> zeros(std::min<uint64_t>(vmem_bytes_, 1ull << 20), 0);
     for (uint64_t off = 0; off < vmem_bytes_; off += zeros.size()) {
       if (transport_.dev_write(vmem_base_ + off, zeros.data(),
                                std::min<uint64_t>(zeros.size(), vmem_bytes_ - off)) != 0)
         return -1;
     }
-    if (reg_write(FOLDSIM_REG_VMEM_BASE_LO, uint32_t(vmem_base_)) != 0 ||
-        reg_write(FOLDSIM_REG_VMEM_ZERO, 1) != 0 ||
+    if (reg_write(FOLDSIM_REG_VMEM_ZERO, 1) != 0 ||
         reg_write(FOLDSIM_REG_VMEM_BASE_HI, uint32_t(vmem_base_ >> 32)) != 0)
       return -1;
     return 0;

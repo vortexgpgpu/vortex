@@ -20,7 +20,9 @@
 // word of its base, off again by one of the low; with none, all of it 0; and
 // their known-zero state: set and cleared by VMEM_ZERO, cleared by a write
 // of VMEM_BASE_LO and by the reset, never with no virtual memories, and
-// VMEM_BYTES still read at its offset.
+// VMEM_BYTES still read at its offset; a write of VMEM_BASE_LO, and no other,
+// tells the controllers the region moves (one cycle of vmem_move), and STATUS
+// shows their move under way (FOLDSIM_STATUS_VMEM_MOVE).
 
 #include <cstdint>
 #include <cstdio>
@@ -35,10 +37,13 @@ namespace {
 
 std::unique_ptr<Vfoldsim_ctrl> dut;
 int failures = 0;
+// Cycles vmem_move was high.
+uint32_t moves = 0;
 
 void tick() {
   dut->clk = 0;
   dut->eval();
+  moves += dut->vmem_move;
   dut->clk = 1;
   dut->eval();
 }
@@ -181,6 +186,22 @@ int main(int argc, char** argv) {
     got = reg_read(FOLDSIM_REG_VMEM_BASE_LO);
     check(got == (vm ? 0x2000u : 0u), "virtual memories' moved base", FOLDSIM_REG_VMEM_BASE_LO, got,
           vm ? 0x2000u : 0u);
+    // Two writes of VMEM_BASE_LO above, each one cycle of vmem_move.
+    check(moves == (vm ? 2u : 0u), "virtual memories' move pulses", FOLDSIM_REG_VMEM_BASE_LO, moves, vm ? 2u : 0u);
+    moves = 0;
+    reg_write(FOLDSIM_REG_VMEM_BASE_HI, 0x42u);
+    reg_write(FOLDSIM_REG_VMEM_ZERO, 1);
+    reg_write(FOLDSIM_REG_VMEM_ZERO, 0);
+    check(moves == 0, "a move pulse from another register", FOLDSIM_REG_VMEM_BASE_HI, moves, 0);
+    got = reg_read(FOLDSIM_REG_STATUS) & FOLDSIM_STATUS_VMEM_MOVE;
+    check(got == 0, "a move under way with none", FOLDSIM_REG_STATUS, got, 0);
+    dut->vmem_moving = 1;
+    got = reg_read(FOLDSIM_REG_STATUS) & FOLDSIM_STATUS_VMEM_MOVE;
+    check(got == (vm ? FOLDSIM_STATUS_VMEM_MOVE : 0u), "a move under way", FOLDSIM_REG_STATUS, got,
+          vm ? FOLDSIM_STATUS_VMEM_MOVE : 0u);
+    dut->vmem_moving = 0;
+    got = reg_read(FOLDSIM_REG_STATUS) & FOLDSIM_STATUS_VMEM_MOVE;
+    check(got == 0, "a move over", FOLDSIM_REG_STATUS, got, 0);
   }
 
   got = reg_read(FOLDSIM_REG_MEM_TIMING(FOLDSIM_MEM_NUM_TIMINGS));

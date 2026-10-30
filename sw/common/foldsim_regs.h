@@ -45,8 +45,9 @@
 // memory behind the kernel's foldsim_vmem controllers. VMEM_BYTES (read only):
 // the bytes they need, 0 for none. VMEM_BASE: where they are, 4 KiB aligned.
 // Until its high word is written the simulator issues them nothing and takes
-// no step; a write of its low word stops them again, so the region moves
-// only between requests. VMEM_ZERO (write only, at VMEM_BYTES' offset): 1 says
+// no step; a write of its low word stops them again and moves the region:
+// the controllers finish the requests taken, write the old region's dirty
+// rows back to it and forget its rows, STATUS VMEM_MOVE set until they have. VMEM_ZERO (write only, at VMEM_BYTES' offset): 1 says
 // the region holds zero in every row the simulator has not written since the
 // kernel's reset (as after the runtime cleared it), and lets the controllers
 // answer those rows on chip; 0 takes it back, as a reset or a write of
@@ -102,6 +103,7 @@ enum {
 #define FOLDSIM_STATUS_FULL     0x2u  // the command queue is full
 #define FOLDSIM_STATUS_RSP      0x4u  // a DCR read has its response
 #define FOLDSIM_STATUS_MEM_ERR  0x8u  // the target made a burst
+#define FOLDSIM_STATUS_VMEM_MOVE 0x10u // the virtual memories' region move is under way
 
 #define FOLDSIM_CMD_DCR_WRITE   1u
 #define FOLDSIM_CMD_DCR_READ    2u

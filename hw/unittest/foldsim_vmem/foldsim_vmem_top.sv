@@ -43,6 +43,8 @@ module foldsim_vmem_top #(
     output reg  [$clog2(QUEUE+1)-1:0]  free,
     input  wire [63:0]                 base,
     input  wire                        zero,
+    input  wire                        move,
+    output reg                         moving,
     output reg                         m_awvalid,
     input  wire                        m_awready,
     output reg  [63:0]                 m_awaddr,
@@ -75,7 +77,7 @@ module foldsim_vmem_top #(
     reg [DW-1:0]      wr_data_r;
     reg [MW-1:0]      wr_mask_r;
     reg [63:0]        base_r;
-    reg               zero_r;
+    reg               zero_r, move_r;
     reg               awready_r, wready_r, bvalid_r, arready_r, rvalid_r, rlast_r;
     reg [AXI_ID_W-1:0] bid_r, rid_r;
     reg [511:0]       rdata_r;
@@ -92,6 +94,7 @@ module foldsim_vmem_top #(
         wr_mask_r  <= wr_mask;
         base_r     <= base;
         zero_r     <= zero;
+        move_r     <= move;
         awready_r  <= m_awready;
         wready_r   <= m_wready;
         bvalid_r   <= m_bvalid;
@@ -107,6 +110,7 @@ module foldsim_vmem_top #(
     wire [IW-1:0]       rsp_inst_w;
     wire [DW-1:0]       rsp_data_w;
     wire [FW-1:0]       free_w;
+    wire                moving_w;
     wire                awvalid_w, wvalid_w, wlast_w, bready_w, arvalid_w, rready_w;
     wire [63:0]         awaddr_w, araddr_w, wstrb_w;
     wire [AXI_ID_W-1:0] awid_w, arid_w;
@@ -142,6 +146,8 @@ module foldsim_vmem_top #(
         .free      (free_w),
         .base      (base_r),
         .zero      (zero_r),
+        .move      (move_r),
+        .moving    (moving_w),
         .m_awvalid (awvalid_w),
         .m_awready (awready_r),
         .m_awaddr  (awaddr_w),
@@ -172,6 +178,7 @@ module foldsim_vmem_top #(
         rsp_inst  <= rsp_inst_w;
         rsp_data  <= rsp_data_w;
         free      <= free_w;
+        moving    <= moving_w;
         m_awvalid <= awvalid_w;
         m_awaddr  <= awaddr_w;
         m_awid    <= awid_w;

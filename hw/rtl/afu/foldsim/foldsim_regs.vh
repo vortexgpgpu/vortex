@@ -46,7 +46,9 @@
 // device memory they need, and where the runtime placed them. VMEM_ZERO, a
 // write at VMEM_BYTES' offset: [0] the region holds zero in every row the
 // simulator has not written since the kernel's reset (1), or not (0, as after
-// a reset or a write of VMEM_BASE_LO).
+// a reset or a write of VMEM_BASE_LO). A write of VMEM_BASE_LO moves the region:
+// the controllers finish what the simulator asked of the old one and write its
+// dirty rows back there; STATUS bit 4 is set until they have.
 `define FOLDSIM_REG_VMEM_BYTES  12'h0CC
 `define FOLDSIM_REG_VMEM_ZERO   12'h0CC
 `define FOLDSIM_REG_VMEM_BASE_LO 12'h0D0
