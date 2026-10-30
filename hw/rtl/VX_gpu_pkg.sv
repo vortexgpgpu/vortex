@@ -603,6 +603,20 @@ package VX_gpu_pkg;
     localparam INST_MUFU_BITS =  3;
 `endif
 
+    // The value a CSR instruction writes: CSRRW replaces, CSRRS sets and
+    // CSRRC clears the source bits of the current value.
+    function automatic logic [`VX_CFG_XLEN-1:0] csr_rmw(
+        input logic [INST_SFU_BITS-1:0] op,
+        input logic [`VX_CFG_XLEN-1:0]  value,
+        input logic [`VX_CFG_XLEN-1:0]  src
+    );
+        case (op)
+            INST_SFU_CSRRW: csr_rmw = src;
+            INST_SFU_CSRRS: csr_rmw = value | src;
+            default:        csr_rmw = value & ~src; // INST_SFU_CSRRC
+        endcase
+    endfunction
+
     /////////////////////////////// Issue parameters //////////////////////////
 
     localparam ISSUE_ISW_BITS = `CLOG2(`VX_CFG_ISSUE_WIDTH);
@@ -709,6 +723,11 @@ package VX_gpu_pkg;
     localparam SFU_BLOCK_WARPS = `VX_CFG_NUM_WARPS / `VX_CFG_NUM_SFU_BLOCKS;
     localparam SFU_BLOCK_NW_BITS = `CLOG2(SFU_BLOCK_WARPS);
     localparam SFU_BLOCK_NW_W  = `UP(SFU_BLOCK_NW_BITS);
+
+    // Translation drain status bits a core hands its warp-control units: the
+    // socket MMUs hold no request, and none of the core's own requests waits
+    // at their inputs.
+    localparam MMU_EMPTY_W = 2;
 
     function automatic logic [SFU_BLOCK_W-1:0] wid_to_sfu_block(
         input logic [NW_WIDTH-1:0] wid

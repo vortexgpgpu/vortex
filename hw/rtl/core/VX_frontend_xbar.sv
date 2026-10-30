@@ -44,11 +44,12 @@ module VX_frontend_xbar import VX_gpu_pkg::*; (
     input wire [PERF_CTR_BITS-1:0] instret,
     input wire [`VX_CFG_NUM_WARPS-1:0] active_warps,
     input wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] lsu_sched_empty,
-    input wire              mmu_empty,
+    input wire [MMU_EMPTY_W-1:0] mmu_empty,
 `ifdef VX_CFG_VM_ENABLE
     input wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] satp,
     output wire [`VX_CFG_NUM_SFU_BLOCKS-1:0] satp_wr_valid,
-    output wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] satp_wr_data,
+    output wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][INST_SFU_BITS-1:0] satp_wr_op,
+    output wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] satp_wr_src,
 `endif
 
     // frontend slices
@@ -214,7 +215,8 @@ module VX_frontend_xbar import VX_gpu_pkg::*; (
     `ifdef VX_CFG_VM_ENABLE
         assign sched_csr_if[b].csr_satp     = satp[b];
         assign satp_wr_valid[b]             = sched_csr_if[b].satp_wr_valid;
-        assign satp_wr_data[b]              = sched_csr_if[b].satp_wr_data;
+        assign satp_wr_op[b]                = sched_csr_if[b].satp_wr_op;
+        assign satp_wr_src[b]               = sched_csr_if[b].satp_wr_src;
     `endif
     end
 

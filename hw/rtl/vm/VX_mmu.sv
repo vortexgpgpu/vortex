@@ -391,14 +391,13 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     // ---------------------------------------------------------------------
     // Drain status
     // ---------------------------------------------------------------------
-    // The MMU is drained only when no request is anywhere in its front pipeline
-    // (incoming or output stage) and the TLB miss station is idle. Omitting the
-    // incoming stage would let `empty` assert a cycle early while a request is
-    // still in flight, releasing the socket drain gate prematurely.
+    // The MMU holds no request when its output stage is empty and the TLB miss
+    // station is idle. `empty` is state only: a request still waiting at the
+    // input belongs to its client, which covers it (each client waits for its
+    // own incoming request, so one client's drain does not wait on another's).
     wire [NUM_REQS-1:0] pipe_busy;
     for (genvar l = 0; l < NUM_REQS; ++l) begin : g_busy
-        assign pipe_busy[l] = core_bus_if[l].req_valid   // incoming (client held)
-                           || mem_bus_if[l].req_valid;    // output stage
+        assign pipe_busy[l] = mem_bus_if[l].req_valid;   // output stage
     end
     assign empty = ~(| pipe_busy) && tlb_empty;
 

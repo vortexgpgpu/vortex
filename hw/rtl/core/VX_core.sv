@@ -152,10 +152,21 @@ import VX_tcu_pkg::*;
     // the MMU perf counters are kept at the socket
     assign pipeline_perf.mmu = '0;
 `endif
-    // Translation drains at the socket MMU; the socket returns its empty status.
-    wire mmu_empty = mmu_drained;
+    // Translation drains at the socket MMU. The socket's status covers the
+    // requests the MMUs hold; this core adds its own requests still waiting at
+    // their inputs, so a barrier drains this core's traffic, not another core's.
+    // The two status bits go to the slices uncombined, as the LSU blocks' do.
+    wire [DCACHE_NUM_REQS-1:0] dcache_req_waiting;
+    wire [ICACHE_NUM_REQS-1:0] icache_req_waiting;
+    for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin : g_dcache_req_waiting
+        assign dcache_req_waiting[i] = dcache_bus_if[i].req_valid;
+    end
+    for (genvar i = 0; i < ICACHE_NUM_REQS; ++i) begin : g_icache_req_waiting
+        assign icache_req_waiting[i] = icache_bus_if[i].req_valid;
+    end
+    wire [MMU_EMPTY_W-1:0] mmu_empty = {~(| dcache_req_waiting) && ~(| icache_req_waiting), mmu_drained};
 `else
-    wire mmu_empty = 1'b1;
+    wire [MMU_EMPTY_W-1:0] mmu_empty = '1;
 `endif
 
 
@@ -270,7 +281,8 @@ import VX_tcu_pkg::*;
 `ifdef VX_CFG_VM_ENABLE
     wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] sched_satp;
     wire [`VX_CFG_NUM_SFU_BLOCKS-1:0] satp_wr_valid;
-    wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] satp_wr_data;
+    wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][INST_SFU_BITS-1:0] satp_wr_op;
+    wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] satp_wr_src;
 `endif
 
     cta_bcast_t cta_bcast;
@@ -299,7 +311,8 @@ import VX_tcu_pkg::*;
     `ifdef VX_CFG_VM_ENABLE
         .satp           (sched_satp),
         .satp_wr_valid  (satp_wr_valid),
-        .satp_wr_data   (satp_wr_data),
+        .satp_wr_op     (satp_wr_op),
+        .satp_wr_src    (satp_wr_src),
     `endif
         .busy           (sched_busy)
     );
@@ -438,7 +451,8 @@ import VX_tcu_pkg::*;
             `ifdef VX_CFG_VM_ENABLE
                 .satp                 (sched_satp[i]),
                 .satp_wr_valid        (satp_wr_valid[i]),
-                .satp_wr_data         (satp_wr_data[i]),
+                .satp_wr_op           (satp_wr_op[i]),
+                .satp_wr_src          (satp_wr_src[i]),
             `endif
             `ifdef PERF_ENABLE
                 .lsu_perf_rd_req_fire (lsu_perf_rd_req_fire[i]),
@@ -534,7 +548,8 @@ import VX_tcu_pkg::*;
         `ifdef VX_CFG_VM_ENABLE
             .satp                 (sched_satp),
             .satp_wr_valid        (satp_wr_valid),
-            .satp_wr_data         (satp_wr_data),
+            .satp_wr_op           (satp_wr_op),
+            .satp_wr_src          (satp_wr_src),
         `endif
             .fs_branch            (fs_branch),
             .fs_wctl              (fs_wctl),

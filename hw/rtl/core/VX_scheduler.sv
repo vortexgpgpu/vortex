@@ -49,7 +49,8 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 `ifdef VX_CFG_VM_ENABLE
     output wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] satp,
     input wire [`VX_CFG_NUM_SFU_BLOCKS-1:0] satp_wr_valid,
-    input wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] satp_wr_data,
+    input wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][INST_SFU_BITS-1:0] satp_wr_op,
+    input wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] satp_wr_src,
 `endif
 
     output wire             busy
@@ -166,13 +167,16 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 `ifdef VX_CFG_VM_ENABLE
     // Per-core SATP CSR, written by any SFU block's CSR unit. Accesses in one
     // cycle take effect in block order: each block reads the value the lower
-    // blocks leave.
+    // blocks leave. The blocks send their CSR operation and source, and the
+    // read-modify-write is applied here, so no block's write depends on the
+    // SATP it reads and the chain stays inside the scheduler.
     reg [`VX_CFG_XLEN-1:0] satp_r;
     wire [`VX_CFG_NUM_SFU_BLOCKS:0][`VX_CFG_XLEN-1:0] satp_chain;
     assign satp_chain[0] = satp_r;
     for (genvar b = 0; b < `VX_CFG_NUM_SFU_BLOCKS; ++b) begin : g_satp
         assign satp[b] = satp_chain[b];
-        assign satp_chain[b+1] = satp_wr_valid[b] ? satp_wr_data[b] : satp_chain[b];
+        assign satp_chain[b+1] = satp_wr_valid[b] ? csr_rmw(satp_wr_op[b], satp_chain[b], satp_wr_src[b])
+                                                  : satp_chain[b];
     end
     always @(posedge clk) begin
         if (reset) begin

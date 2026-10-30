@@ -816,6 +816,9 @@ int firesim_sim::start() {
     return 0;
   }
   impl_->submit("prefill", [] { prefill_region(); });
+  launch_hcycles_ = 0;
+  launch_tcycles_ = 0;
+  launch_steps_ = 0;
   awaiting_busy_ = true;
   idle_cycles_ = 0;
   abort_phase_ = 0;
@@ -863,10 +866,16 @@ int firesim_sim::is_busy(bool *busy) {
   // Advance before sampling: the target only moves while it is being asked to,
   // so a caller that merely polls without stepping would spin forever.
   const uint32_t batch = step_batch_;
-  int ret = impl_->submit(label("step %u + busy", batch), [&sampled, batch] {
+  uint64_t hcycles = 0;
+  int ret = impl_->submit(label("step %u + busy", batch), [&sampled, &hcycles, batch] {
+    const uint64_t h0 = g_sim->clock.hcycle();
     g_sim->step(batch);
+    hcycles = g_sim->clock.hcycle() - h0;
     sampled = g_sim->peek("ctrl_busy");
   });
+  launch_hcycles_ += hcycles;
+  launch_tcycles_ += batch;
+  ++launch_steps_;
   if (ret != 0) {
     return ret;
   }
@@ -910,6 +919,17 @@ int firesim_sim::is_busy(bool *busy) {
     // its vortex_busy hook and never calls ready_wait at all.
     if (busy_cycles_ > 0 && report_on_idle()) {
       report_progress("target went idle");
+    }
+    // Host cycles of the fabric clock per target cycle while the target was
+    // stepping: the FPGA side's H. The host's turnaround between steps is not
+    // in it; that one depends on the link to the host, not on the design.
+    if (busy_cycles_ > 0 && launch_tcycles_ > 0) {
+      fprintf(stderr,
+              "[firesim] launch: target cycles=%llu host cycles=%llu "
+              "host/target=%.3f steps=%llu\n",
+              (unsigned long long)launch_tcycles_, (unsigned long long)launch_hcycles_,
+              double(launch_hcycles_) / double(launch_tcycles_),
+              (unsigned long long)launch_steps_);
     }
     step_batch_ = std::min(kStepBatchFloor, step_batch_ceiling());
     busy_cycles_ = 0;

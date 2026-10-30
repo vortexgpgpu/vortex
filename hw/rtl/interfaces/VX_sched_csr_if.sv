@@ -31,8 +31,11 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
 
 `ifdef VX_CFG_VM_ENABLE
     logic [`VX_CFG_XLEN-1:0]        csr_satp;
+    // SATP write: the CSR operation and its source; the master applies the
+    // read-modify-write.
     logic                           satp_wr_valid;
-    logic [`VX_CFG_XLEN-1:0]        satp_wr_data;
+    logic [INST_SFU_BITS-1:0]       satp_wr_op;
+    logic [`VX_CFG_XLEN-1:0]        satp_wr_src;
 `endif
 
     // Write port: slave notifies scheduler of MSCRATCH CSR writes
@@ -69,7 +72,8 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
     `ifdef VX_CFG_VM_ENABLE
         output csr_satp,
         input  satp_wr_valid,
-        input  satp_wr_data,
+        input  satp_wr_op,
+        input  satp_wr_src,
     `endif
         input  csr_rd_wid,
         input  csr_wr_valid,
@@ -95,7 +99,8 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
     `ifdef VX_CFG_VM_ENABLE
         input  csr_satp,
         output satp_wr_valid,
-        output satp_wr_data,
+        output satp_wr_op,
+        output satp_wr_src,
     `endif
         output csr_rd_wid,
         output csr_wr_valid,

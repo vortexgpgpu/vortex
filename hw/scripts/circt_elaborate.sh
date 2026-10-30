@@ -169,7 +169,9 @@ if [ "$format" = mlir ]; then
         "${debuginfo[@]}" -o "$output_file"
     exit 0
 fi
-"$CIRCT_OPT" "$stem.mlir" "${passes[@]}" --canonicalize --topological-sort --cse \
+# Instances nothing reads go first: an empty module left instantiated is a
+# black box to an out-of-context IP's implementation.
+"$CIRCT_OPT" "$stem.mlir" "${passes[@]}" --hw-imdce --canonicalize --topological-sort --cse \
     -o "$stem.lowered.mlir"
 "$FIRTOOL" --format=mlir "$stem.lowered.mlir" --disable-all-randomization \
     --add-vivado-ram-address-conflict-synthesis-bug-workaround \
