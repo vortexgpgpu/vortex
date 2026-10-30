@@ -287,7 +287,7 @@ catches one that makes a unit **deeper**, in seconds and without synthesis.
 | gated | `fmax_mhz` against the target clock, `lut` against `lut_budget` | `fmax_mhz` against the target clock, `cell_area_um2` against `area_budget_um2` | `max_levels` against the baseline, and the deepest end point of every RTL unit |
 | also recorded | `wns_ns`, `lutram`, `ff`, `bram`, `uram`, `dsp`, critical paths, high-fanout nets | `wns_ns`, `tns_ns`, `seq_area_um2`, `sram_area_um2`, `cell_count`, `power_mw` | end point bits at ≥ 12 and ≥ 8 levels, the deepest paths |
 | comparable when | same device, optimization level, xlen | same PDK, VT, corner, xlen | same CIRCT, foldsim, xlen |
-| runner | self-hosted, licensed Vivado | hosted, one job per design | hosted, one job for the catalog |
+| runner | self-hosted, licensed Vivado | hosted, one job per design | hosted, one job for the catalog; the opt-in `gpu` group self-hosted |
 | default tolerance | Fmax 2 %, LUT 5 % | Fmax 2 %, cell area 5 % | none: Beacon is deterministic |
 
 None is a pytest cell. A cell is a build tree plus a driver; a gate build is
@@ -312,14 +312,21 @@ entry points that pin the tool.
 
 | file | written by | holds |
 |---|---|---|
-| `ci/testcases/{fpga,asic,timing}_gate.yaml` | a person | per build: a design, a target clock, an area budget (synthesis gates), `CONFIGS`, a group, optional `thresholds` and `known_issue` |
+| `ci/testcases/{fpga,asic,logic}_gate.yaml` | a person | per build: a design, a target clock, an area budget (synthesis gates), `CONFIGS`, a group, optional `thresholds`, `known_issue`, `xlen`, `profile` and `opt_in` |
 | `ci/baselines/synthesis/{xilinx,yosys,beacon}/<group>.json` | the gate | measured metrics, the config hash, the tool versions and environment |
 
-Groups are `core`, `tensor`, `graphics`, `dxa` and `vm`. `asic_gate` uses the
+Groups are `core`, `tensor`, `graphics`, `dxa` and `vm`, plus `logic_gate`'s
+opt-in `gpu`. `asic_gate` uses the
 same group names and gates a subset of the builds (§4.5), so where the two
 gates share a design, a divergence between the tools on the same module is a
 finding, not noise. `logic_gate` measures exactly `fpga_gate`'s builds, so a
-unit it flags can be read against the Fmax gate's critical paths.
+unit it flags can be read against the Fmax gate's critical paths; its `gpu`
+group adds builds no synthesis gate can afford.
+
+A build may pin its own `xlen`, and runs in that width's build tree
+(`build<xlen>_<gate>`); `profile` folds a hardware profile
+(`profiles/<name>.json`) under its `CONFIGS`, which win over it. Both are in
+the config hash. An `opt_in` build runs only when selected by id or group.
 
 The config hash ties the two files together: edit the spec, and the gate
 refuses to compare against numbers recorded for the old one. It matters only
@@ -384,12 +391,41 @@ Beacon has profiles for the V80 and the U55C only, and fails on any other
 | no unit deeper than its baseline | the change that adds a level is named, by unit |
 | no new unit at the fix threshold (12 levels at 300 MHz) | a new deep cone is a regression even with no baseline to compare |
 | a shallower unit, or one that drops below the watch threshold (8), reads `IMPROVED` | the gain must be recorded |
+| no output of a build's `interfaces` modules reached combinationally from outside the instance in more bits than its baseline | modules register their outgoing interfaces: a path that runs through a core, socket or cluster boundary is what fails routing across SLRs, and Beacon names it by port |
+
+`interfaces` lists modules by name; their instances keep their ports through
+Beacon's mapping (`BEACON_INTERFACES` in the DUT flow), and `ports.csv`
+counts, per output port, the bits a combinational path from outside the
+instance reaches.
 
 There is no tolerance: the same RTL and tools give the same levels. A new CIRCT
 or foldsim can map the same RTL differently, so both versions are in the config
 hash and a tool change reads `STALE`. `make -C hw/syn/xilinx/dut <dut>-beacon`
 runs Beacon on one DUT by hand; its `beacon_paths.txt` lists every deep path op by op,
 by unit, with source lines, and a failing build names it.
+
+#### Full-GPU builds
+
+The `gpu` group runs Beacon on the whole processor (`vortex` DUT) with every
+feature on: the 32-bit machine with every extension, tensor format and
+graphics unit, and the `rtx5080` and `h100` profiles at XLEN 64. It catches
+what the per-unit DUTs cannot: the cluster, socket and L2 crossbars at full
+width, the kernel launch path into every core, and every extension at once.
+Vivado needs 48 hours and more on these designs; Beacon needs about 30 minutes.
+
+| cores | time | peak memory | end points |
+|---|---|---|---|
+| 1 | 37 min | 101 GB | 7.1 M |
+| 2 | 24 min | 90 GB | 13.2 M |
+| 4 | 32 min | 94 GB | 25.4 M |
+| 8 | 49 min | 121 GB | 50.1 M |
+
+Measured with the `rtx5080` features at XLEN 64 on a loaded machine. The
+builds use 4 cores: the core count widens only the arbiters and crossbars,
+and the deepest path was the same at every count, while memory grows with it.
+The group is opt-in in the gate (`ci/logic_gate.py -b gpu -j 1`) and its own
+tier, `timing_gpu`, in the catalog, so neither the default run nor
+`--tier timing` sweeps it in.
 
 #### Running a multi-hour sweep
 
@@ -548,6 +584,10 @@ installs foldsim (`ci/toolchain_install.sh --foldsim`), runs the catalog's
 [`synth_report.py`](../../ci/synth_report.py) into the workflow summary. The
 artifacts are the report and, per design, the build log, the summary and
 Beacon's deepest paths.
+
+A manual dispatch with `gpu: true` runs the catalog's `gpu` case instead, on
+the self-hosted machine: one build at a time, up to two hours each, since each
+needs about 95 GB of memory.
 
 ---
 

@@ -547,8 +547,9 @@ class Beacon(Tool):
         os.makedirs(work, exist_ok=True)
         shutil.copy2(os.path.join(dut_root, "build.mk"),
                      os.path.join(work, "Makefile"))
-        return ["make", "-C", work, "beacon"], dict(DUT=build["dut"],
-                                                    CONFIGS=build["configs"])
+        return ["make", "-C", work, "beacon"], dict(
+            DUT=build["dut"], CONFIGS=build["configs"],
+            BEACON_INTERFACES=build.get("interfaces", ""))
 
     def extras(self, work):
         try:
@@ -557,6 +558,7 @@ class Beacon(Tool):
         except (OSError, ValueError):
             return {}
         return {"units": doc.get("units", {}),
+                "interfaces": doc.get("interfaces", {}),
                 "deepest_paths": doc.get("deepest_paths", []),
                 "fix_levels": doc.get("fix_levels"),
                 "watch_levels": doc.get("watch_levels")}
@@ -567,7 +569,9 @@ class Beacon(Tool):
     def compare(self, metrics, base):
         """Per unit: deeper than its baseline fails; a new unit at the fix
         threshold fails; shallower, or gone from the watch list, is an
-        improvement to lock in."""
+        improvement to lock in. Per interface output: more bits reached
+        combinationally from outside its instance fails, fewer is an
+        improvement."""
         cur, ref = metrics.get("units"), base.get("units")
         if cur is None or ref is None:
             return []
@@ -587,6 +591,16 @@ class Beacon(Tool):
                 reasons.append("unit %s: %d -> %d levels -- %s"
                                % (unit, was, now,
                                   "REGRESSION" if now > was else
+                                  "improvement, update the baseline to lock "
+                                  "it in"))
+        cur, ref = metrics.get("interfaces") or {}, base.get("interfaces") or {}
+        for port in sorted(set(cur) | set(ref)):
+            now, was = cur.get(port, 0), ref.get(port, 0)
+            if now != was:
+                reasons.append("interface %s: %d -> %d bits reached "
+                               "combinationally from outside -- %s"
+                               % (port, was, now,
+                                  "REGRESSION, register it" if now > was else
                                   "improvement, update the baseline to lock "
                                   "it in"))
         return reasons
@@ -671,7 +685,7 @@ def baseline_path(root, tool, group):
     return os.path.join(baseline_dir(root, tool), group + ".json")
 
 
-def load_catalog(root, tool):
+def load_catalog(root, tool, xlen=32):
     """Builds keyed by id: the SPEC from ci/testcases/<gate>.yaml, joined to its
     recorded metrics from ci/baselines/synthesis/<tool>/<group>.json.
 
@@ -712,6 +726,12 @@ def load_catalog(root, tool):
         build = dict(entry)
         build["group"] = group
         build["configs"] = entry["configs"] or ""
+        # A build may pin its own ISA width and hardware profile
+        # (profiles/<name>.json, folded under its configs by config.mk); a
+        # profile that models a 64-bit machine needs xlen: 64.
+        build["xlen"] = entry.get("xlen", xlen)
+        build["profile"] = entry.get("profile", "")
+        build["opt_in"] = bool(entry.get("opt_in", False))
         build["known_issue"] = entry.get("known_issue",
                                          defaults.get("known_issue", ""))
         build["thresholds"] = entry.get("thresholds",
@@ -730,9 +750,10 @@ def load_catalog(root, tool):
 
 def select(builds, selectors):
     """Resolve --build selectors: an exact build id wins over a group of the
-    same name; otherwise a group selects all its builds."""
+    same name; otherwise a group selects all its builds. With no selector, every
+    build but the opt-in ones, which run only when named."""
     if not selectors:
-        return [builds[b] for b in sorted(builds)]
+        return [builds[b] for b in sorted(builds) if not builds[b]["opt_in"]]
     picked = {}
     for sel in selectors:
         hits = [b for b in builds.values() if b["id"] == sel]
@@ -748,11 +769,15 @@ def select(builds, selectors):
 def config_hash(build, env, tool):
     """Fingerprint the synthesis inputs; a change invalidates the stored metrics."""
     key = "|".join([build["dut"], str(build["clock_mhz"]), build["configs"]]
-                   + tool.hash_key(env))
-    # Appended only when set, so builds without a strategy override keep the
-    # hash their baselines were recorded under.
+                   + tool.hash_key(dict(env, xlen=build["xlen"])))
+    # Appended only when set, so builds without a strategy override or a
+    # profile keep the hash their baselines were recorded under.
     if build.get("impl_strategy"):
         key += "|" + build["impl_strategy"]
+    if build.get("profile"):
+        key += "|profile=" + build["profile"]
+    if build.get("interfaces"):
+        key += "|interfaces=" + build["interfaces"]
     return hashlib.sha256(key.encode()).hexdigest()[:16]
 
 
@@ -783,10 +808,12 @@ def save_baselines(root, tool, results, env):
                 "clock_mhz": b["clock_mhz"],
                 "configs": b["configs"],
                 "config_hash": config_hash(b, env, tool),
-                "result": dict(r["metrics"], env=dict(env)),
+                "result": dict(r["metrics"], env=dict(env, xlen=b["xlen"])),
             }
             if b.get("impl_strategy"):
                 entries[b["id"]]["impl_strategy"] = b["impl_strategy"]
+            if b.get("profile"):
+                entries[b["id"]]["profile"] = b["profile"]
         with open(path, "w") as fh:
             json.dump(entries, fh, indent=2, sort_keys=True)
             fh.write("\n")
@@ -1060,6 +1087,9 @@ def run_build(build, build_dir, env, args, tool):
     benv = dict(os.environ)
     argv, extra = tool.build_command(dut_root, work, build, env, args)
     benv.update(extra)
+    # Set even when empty, so a PROFILE in the caller's environment cannot
+    # leak into a build that names none.
+    benv["PROFILE"] = build["profile"]
     if resume:
         benv["RESUME"] = "1"   # make clean is a no-op; keeps project_1 + *.dcp
 
@@ -1271,6 +1301,9 @@ def report_entry(r, env, tool):
              "reasons": r["reasons"]}
     if b.get("impl_strategy"):
         entry["impl_strategy"] = b["impl_strategy"]
+    entry["xlen"] = b["xlen"]
+    if b.get("profile"):
+        entry["profile"] = b["profile"]
     return entry
 
 
@@ -1412,7 +1445,8 @@ def main(argv=None, default_tool="xilinx"):
                          "same build there (ci/beacon.py diff), and a register "
                          "that got deeper fails the run")
     ap.add_argument("--xlen", type=int, default=32, choices=(32, 64),
-                    help="ISA width (default: 32)")
+                    help="ISA width of the builds that do not pin their own "
+                         "(default: 32)")
     ap.add_argument("--opt-level", type=int, default=3, metavar="N",
                     help="Vivado optimization level, 0=fastest 3=default")
     ap.add_argument("--timeout", type=int, default=8 * 3600, metavar="SEC",
@@ -1453,7 +1487,7 @@ def main(argv=None, default_tool="xilinx"):
     args.metric_threshold = overrides
 
     root = source_root()
-    builds = load_catalog(root, tool)
+    builds = load_catalog(root, tool, args.xlen)
 
     if args.matrix:
         # Ordered longest-first so the slowest DUT is dispatched into the fan-out
@@ -1461,7 +1495,7 @@ def main(argv=None, default_tool="xilinx"):
         # argument run_all() makes for its thread pool.
         print(json.dumps(sorted(
             [{"id": b["id"], "group": b["group"], "dut": b["dut"],
-              "clock_mhz": b["clock_mhz"],
+              "clock_mhz": b["clock_mhz"], "xlen": b["xlen"],
               "known_issue": bool(b.get("known_issue"))}
              for b in select(builds, args.build)],
             key=lambda b: (-weight(builds[b["id"]], tool), b["id"]))))
@@ -1470,8 +1504,10 @@ def main(argv=None, default_tool="xilinx"):
     if args.list:
         for b in select(builds, args.build):
             base = b.get("baseline") or {}
-            print("%-10s [%s] dut=%-8s %4d MHz  %s%s"
-                  % (b["id"], b["group"], b["dut"], b["clock_mhz"],
+            print("%-10s [%s] dut=%-8s %4d MHz  xlen %d%s%s  %s%s"
+                  % (b["id"], b["group"], b["dut"], b["clock_mhz"], b["xlen"],
+                     "  profile " + b["profile"] if b["profile"] else "",
+                     "  (opt-in)" if b["opt_in"] else "",
                      "baseline: " + tool.describe_baseline(base)
                      if base.get(tool.key_metric) is not None
                      else "no baseline",
@@ -1490,8 +1526,6 @@ def main(argv=None, default_tool="xilinx"):
         args.tool_jobs = max(MIN_TOOL_JOBS,
                              min(MAX_TOOL_JOBS, os.cpu_count() // args.jobs))
 
-    build_dir = args.build_dir or os.path.join(
-        root, "build%d_%s" % (args.xlen, tool.gate))
     env = tool.env(args)
 
     selected = select(builds, args.build)
@@ -1500,11 +1534,24 @@ def main(argv=None, default_tool="xilinx"):
         if warning:
             print("WARNING: %s %s" % (b["id"], warning))
 
-    if not args.dry_run:
-        prepare_build_tree(root, build_dir, args.xlen)
-    results = run_all(selected, build_dir, env, args, tool)
+    # One configured build tree per ISA width: a build that pins its own xlen
+    # runs in that width's tree.
+    xlens = sorted({b["xlen"] for b in selected})
+    if len(xlens) > 1 and (args.build_dir or args.against):
+        sys.exit("ERROR: --build-dir/--against name one build tree, and the "
+                 "selected builds span xlen %s; select one width"
+                 % "/".join(map(str, xlens)))
+    results = []
+    for xlen in xlens:
+        build_dir = args.build_dir or os.path.join(
+            root, "build%d_%s" % (xlen, tool.gate))
+        if not args.dry_run:
+            prepare_build_tree(root, build_dir, xlen)
+        results += run_all([b for b in selected if b["xlen"] == xlen],
+                           build_dir, env, args, tool)
     if args.dry_run:
         return 0
+    results.sort(key=lambda r: r["build"]["id"])
 
     gated = tuple(m for m in (args.gate.split(",") if args.gate else tool.gated) if m)
     outcomes = report(results, env, args, gated, tool, args.update_baseline)

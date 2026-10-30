@@ -96,14 +96,25 @@ power:
 BEACON_PATH_LEVELS ?= 8
 # The Beacon target: the family of the device, as hw/syn/xilinx/platforms names it.
 BEACON_TARGET = $(shell python3 $(SCRIPT_DIR)/gen_platform.py --device=$(DEVICE) --emit=family)
+# Modules whose interfaces must be registered (space separated): their
+# instances keep their ports through mapping, and beacon/ports.csv counts, per
+# output port, the bits a combinational path from outside the instance
+# reaches (`through`). beacon_summary.py records them for logic_gate.
+BEACON_INTERFACES ?=
+beacon_comma := ,
+beacon_empty :=
+beacon_space := $(beacon_empty) $(beacon_empty)
+beacon_keep   = $(subst $(beacon_space),$(beacon_comma),$(strip $(BEACON_INTERFACES)))
+BEACON_MAP    = $(if $(beacon_keep),foldsim-keep-modules{modules=$(beacon_keep)}$(beacon_comma))foldsim-beacon-map{target=$(BEACON_TARGET)}
+BEACON_PORTS  = $(if $(beacon_keep),ports=beacon/ports.csv port-modules=$(beacon_keep))
 beacon:
 	mkdir -p beacon
 	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -T$(TOP_LEVEL_ENTITY) -Obeacon/sources.f $(RTL_PKGS)
 	$(SCRIPT_DIR)/circt_elaborate.sh -f mlir -t $(TOP_LEVEL_ENTITY) -l beacon/sources.f \
 		-x $(SCRIPT_DIR)/xilinx_ip_stubs.sv -r beacon/memories.rpt -o beacon/netlist.mlir
-	$(FOLDSIM_OPT) beacon/netlist.mlir --pass-pipeline='builtin.module(foldsim-beacon-map{target=$(BEACON_TARGET)})' \
+	$(FOLDSIM_OPT) beacon/netlist.mlir --pass-pipeline='builtin.module($(BEACON_MAP))' \
 		--emit-bytecode -o beacon/mapped.mlirbc
-	$(FOLDSIM_OPT) beacon/mapped.mlirbc -o /dev/null --pass-pipeline="builtin.module(foldsim-estimate-timing{top=$(TOP_LEVEL_ENTITY) target=$(BEACON_TARGET) output=beacon/endpoints.csv instances=beacon/instances.csv report=beacon/report.txt paths=beacon/paths.jsonl path-levels=$(BEACON_PATH_LEVELS)})"
+	$(FOLDSIM_OPT) beacon/mapped.mlirbc -o /dev/null --pass-pipeline="builtin.module(foldsim-estimate-timing{top=$(TOP_LEVEL_ENTITY) target=$(BEACON_TARGET) output=beacon/endpoints.csv instances=beacon/instances.csv report=beacon/report.txt paths=beacon/paths.jsonl path-levels=$(BEACON_PATH_LEVELS) $(BEACON_PORTS)})"
 	python3 $(SCRIPT_DIR)/beacon_summary.py beacon --top $(TOP_LEVEL_ENTITY)
 
 clean:

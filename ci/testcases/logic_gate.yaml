@@ -55,6 +55,13 @@ tests:
 - id: gate
   run: ci/logic_gate.py -j 2
 
+# The full-GPU builds (group gpu, below): ~30 min and ~95 GB of memory each,
+# so one at a time, on a large self-hosted machine -- never a hosted runner.
+# Its own opt-in tier keeps `--tier timing` from sweeping it in.
+- id: gpu
+  tier: timing_gpu
+  run: ci/logic_gate.py -b gpu -j 1 --timeout 7200
+
 # ---------------------------------------------------------------------------
 # builds — read by ci/logic_gate.py, ignored by the pytest catalog loader.
 #
@@ -62,6 +69,15 @@ tests:
 #   clock_mhz   the Fmax gate's target for this DUT (recorded, not asserted)
 #   configs     EXTRA defines, appended to the catalog's
 #   group       which golden file the results land in
+#   xlen        ISA width, when not the gate's default (32); the build runs in
+#               that width's own build tree
+#   profile     hardware profile (profiles/<name>.json) under the configs;
+#               configs win over it
+#   opt_in      run only when selected by id or group, never by default
+#   interfaces  modules whose outputs must be registered (space separated):
+#               an output bit a combinational path from outside the
+#               instance reaches is recorded, and one more than the
+#               baseline fails
 #   known_issue tracked expected failure: still measures and reports, does not
 #               fail the run
 # ---------------------------------------------------------------------------
@@ -83,6 +99,7 @@ builds:
   dut: core
   clock_mhz: 300
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_EXT_C_ENABLE -DVX_CFG_EXT_A_ENABLE
+  interfaces: VX_core
 
 # Warp-wide local memory with two LSU blocks: both pass engines, the
 # dual-port banks the read engine reads through, and the atomic logic.
@@ -180,3 +197,60 @@ builds:
   dut: tensor
   clock_mhz: 250
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+
+# --- gpu (opt-in): the whole processor with every feature on ------------------
+#
+# The per-unit DUTs above miss what only the assembled GPU has: the
+# cluster/socket/L2 crossbars at full width, the kernel launch path into every
+# core, and the cross-unit boundaries with every extension on at once. Vivado
+# needs 48 h and more on these; Beacon ~30 min. Four cores, not the products'
+# 84-132: core count widens only the arbiters and crossbars -- the deepest path
+# was the same 43 levels at 1, 2, 4 and 8 cores -- while memory grows with it
+# (~95 GB at 4, 121 GB at 8). Run with `ci/logic_gate.py -b gpu -j 1`.
+
+# Everything the 32-bit machine has: every extension and tensor format, VM,
+# DXA and DMA, the graphics pipeline, ray tracing with TLAS, a 4-wide
+# frontend and issue. (D is 64-bit only.)
+- id: gpu32_full
+  group: gpu
+  opt_in: true
+  dut: vortex
+  clock_mhz: 300
+  interfaces: VX_core VX_socket VX_cluster
+  configs: >-
+    -DVX_CFG_NUM_CORES=4 -DVX_CFG_NUM_CLUSTERS=1
+    -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+    -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_FETCH_WIDTH=4
+    -DVX_CFG_EXT_C_ENABLE -DVX_CFG_EXT_A_ENABLE -DVX_CFG_EXT_ZACAS_ENABLE
+    -DVX_CFG_EXT_ZFHMIN_ENABLE -DVX_CFG_EXT_MUFU_ENABLE -DVX_CFG_VM_ENABLE
+    -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TF32_ENABLE -DVX_CFG_TCU_FP16_ENABLE
+    -DVX_CFG_TCU_FP8_ENABLE -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_INT8_ENABLE
+    -DVX_CFG_TCU_INT4_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_MXFP4_ENABLE
+    -DVX_CFG_TCU_NVFP4_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_DSM_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_EXT_DMA_ENABLE
+    -DVX_CFG_EXT_RTU_ENABLE -DVX_CFG_RTU_TLAS_ENABLE
+    -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
+    -DVX_CFG_L2_ENABLE
+
+# RTX 5080's SM: 48 warps x 32 threads, the graphics pipeline, ray tracing,
+# MX/FP4 tensor formats, a 32-bank L2 -- at XLEN 64 with D.
+- id: gpu_rtx5080
+  group: gpu
+  opt_in: true
+  dut: vortex
+  clock_mhz: 300
+  interfaces: VX_core VX_socket VX_cluster
+  xlen: 64
+  profile: rtx5080
+  configs: -DVX_CFG_NUM_CORES=4 -DVX_CFG_NUM_CLUSTERS=1
+
+# H100's SM: 64 warps and WGMMA, which the RTX 5080 profile does not have.
+- id: gpu_h100
+  group: gpu
+  opt_in: true
+  dut: vortex
+  clock_mhz: 300
+  interfaces: VX_core VX_socket VX_cluster
+  xlen: 64
+  profile: h100
+  configs: -DVX_CFG_NUM_CORES=4 -DVX_CFG_NUM_CLUSTERS=1

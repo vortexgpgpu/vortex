@@ -381,11 +381,19 @@ fixed while the change is still open, and synthesis runs once, to confirm.
    ```
 
    Besides the per-unit verdict against the golden baseline, each build
-   writes `beacon_diff.txt` (`ci/beacon.py diff`). It lists the registers
-   that got deeper, new deep registers, and the ones that got shallower, then
-   the units whose deepest register moved. A register that got deeper fails
-   the run (`DEEPER`), and so does a new one at the fix threshold (12). A new
-   one below it is listed but passes, since a rename looks the same.
+   writes `beacon_diff.txt` (`ci/beacon.py diff`). Its headline is the
+   deepest register, the mean of the 50 deepest and the count at the watch
+   threshold, before and after; then it lists the registers that got deeper,
+   new deep registers, and the ones that got shallower, then the units whose
+   deepest register moved. The run fails (`DEEPER`) on a register 4 or more
+   levels deeper, one that reaches the fix threshold (12) from below, or a new
+   one at it. These limits come from 13 routed U55C builds: a register 4 or
+   more levels deeper lost slack in Vivado in every case (170 of 170), while
+   1 to 3 levels is within the placer's noise, so those are listed as
+   "deeper by less" to watch, not failed. Of the headline numbers, the top-50
+   mean follows Vivado's worst slack (Spearman 0.56) and the single deepest
+   register does not (0.29). A new register below 12 is listed but passes,
+   since a rename looks the same.
 
 3. **Fix.** `ci/beacon.py paths <build>/beacon --unit <unit>` prints a deep
    unit's paths op by op. Edit, and repeat step 2 until nothing got deeper,
@@ -535,8 +543,12 @@ So the model is a ranking for where to look first, not a gate. `diff` and
 ## 8. Diagnostics beyond levels
 
 **Port depths.** `port-modules=` names modules whose instances' ports
-Beacon reports: the levels at which each input arrives and the levels behind
-each output. Small modules are inlined by the mapping, so keep them with
+Beacon reports: the levels at which each input arrives, the levels behind
+each output, and `through`, the bits of each output that a combinational
+path from outside the instance reaches. A module that registers its
+outgoing interface has `through` 0 on every output; `logic_gate` gates it
+for the modules a build lists under `interfaces` (`BEACON_INTERFACES` in
+the DUT flow). Small modules are inlined by the mapping, so keep them with
 `run --keep`:
 
 ```bash

@@ -2,6 +2,8 @@
 
 This guide explains how to run synthesis, timing analysis, area analysis, and power analysis for Vortex across all supported back-ends: Xilinx (Vivado), Altera (Quartus), Yosys (open-source), and Synopsys Design Compiler.
 
+**Timing work starts in Beacon, not here.** For an RTL change that can move timing, iterate on [Beacon](designs/beacon.md) (§6.3): it counts the logic levels of every register in minutes, compares them with the parent revision's (`ci/logic_gate.py -b <dut> --against <ref build tree>`), and names the registers a change made deeper. Synthesize once the change passes there, to confirm Fmax and to measure what Beacon does not see: wires, placement, congestion, area and power.
+
 ---
 
 ## Table of Contents

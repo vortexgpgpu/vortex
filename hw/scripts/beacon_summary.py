@@ -12,6 +12,10 @@ this collapses the table into what it compares:
   beacon_paths.txt    if Beacon wrote paths.jsonl: every path at or above
                       the watch threshold, op by op, by unit (write_paths)
 
+If Beacon wrote ports.csv (BEACON_INTERFACES), beacon_units.json also holds
+`interfaces`: per output port of those modules' instances, folded like
+units, the bits a combinational path from outside the instance reaches.
+
 A unit is an end point's instance path with generate indices folded
 (g_banks_3_bank -> g_banks_*_bank), so one deep bank reads as one unit.
 
@@ -114,11 +118,16 @@ def main():
         w = csv.DictWriter(fh, fieldnames=COLUMNS)
         w.writeheader()
         w.writerow(summary)
+    doc = {"fix_levels": FIX_LEVELS, "watch_levels": WATCH_LEVELS,
+           "units": dict(sorted(units.items())),
+           "deepest_paths": ["%d  %s -> %s" % d for d in deepest]}
+    ports = os.path.join(args.run_dir, "ports.csv")
+    if os.path.exists(ports):
+        doc["interfaces"] = interfaces(ports)
+        print("beacon: %d interface outputs reached combinationally from "
+              "outside" % len(doc["interfaces"]))
     with open(os.path.join(args.output_dir, "beacon_units.json"), "w") as fh:
-        json.dump({"fix_levels": FIX_LEVELS, "watch_levels": WATCH_LEVELS,
-                   "units": dict(sorted(units.items())),
-                   "deepest_paths": ["%d  %s -> %s" % d for d in deepest]},
-                  fh, indent=2)
+        json.dump(doc, fh, indent=2)
         fh.write("\n")
     print("beacon: %s max %d levels, %d end point bits >= %d, %d units >= %d"
           % (args.top, summary["max_levels"], summary["deep_endpoints"],
@@ -132,6 +141,21 @@ def main():
 
 def fold(name):
     return INDEX.sub("_*", norm(name))
+
+
+def interfaces(path):
+    """'<instance>.<port>' -> bits, for every output port of a kept module's
+    instance that a combinational path from outside reaches; generate copies
+    folded, keeping the most bits."""
+    out = {}
+    with open(path) as fh:
+        for row in csv.DictReader(fh):
+            bits = int(row["through"])
+            if row["direction"] != "out" or not bits:
+                continue
+            key = "%s.%s" % (fold(row["instance"]), row["port"])
+            out[key] = max(out.get(key, 0), bits)
+    return dict(sorted(out.items()))
 
 
 def write_paths(out, run_dir, min_levels, unit_filter=None, paths=None):
