@@ -92,7 +92,10 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
 
     // Fixed-stride LMEM partition: resident CTA in slot i gets LMEM base
     // i * stride, where stride = aligned_lmem_size (uniform within a kernel).
-    // cur_lmem_base_r is latched at accept and held stable through DISPATCH.
+    // The product is formed from the slot and stride latched at accept, a cycle
+    // later; its first reader, the context write of the first launched warp,
+    // comes at least two cycles after accept.
+    reg [`VX_CFG_LMEM_LOG_SIZE:0]   cur_stride_r;
     reg [`VX_CFG_LMEM_LOG_SIZE-1:0] cur_lmem_base_r;
 
     // Reverse lookup: warp-ID → CTA slot index. A flop array indexed by wid,
@@ -124,6 +127,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     reg [PC_BITS-1:0]               entry_r;
     reg [2:0][31:0]                 block_idx_r;
     reg [2:0][CTA_TID_WIDTH:0]      block_dim_r;
+    reg [1:0][CTA_TID_WIDTH-1:0]    block_last_r;
     reg [2:0][31:0]                 grid_dim_r;
     reg [`VX_CFG_MEM_ADDR_WIDTH-1:0] param_r;
     reg [CTA_TID_WIDTH:0]           block_size_r;
@@ -234,12 +238,8 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // -------------------------------------------------------------------------
     wire [NW_WIDTH:0]      kmu_num_warps;
     wire [CTA_TID_WIDTH:0] block_size_next;
-    wire [CTA_TID_WIDTH:0] block_size_cur;
     wire [`VX_CFG_NUM_THREADS-1:0] partial_tmask;
-
-    // block_size_r retires the warps latched last cycle a cycle late, so the count
-    // left for the warps being latched now excludes them.
-    assign block_size_cur = fire_any_r ? block_size_next : block_size_r;
+    wire                   part_warp_r;
 
     if (NT_BITS > 0) begin : g_nt_nonzero
         // Ceiling division block_size / NUM_THREADS: upper bits + OR of lower bits.
@@ -248,52 +248,77 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
         // Shared block_size decrement: low NT_BITS bits unchanged; upper bits drop by
         // the warps launched.
         assign block_size_next = {block_size_r[CTA_TID_WIDTH:NT_BITS] - (CTA_TID_WIDTH+1-NT_BITS)'(nfired_r), block_size_r[NT_BITS-1:0]};
-        // Partial-warp mask: (1 << count) - 1 where count = block_size_cur[NT_BITS-1:0]
-        assign partial_tmask = (`VX_CFG_NUM_THREADS'(1) << block_size_cur[NT_BITS-1:0]) - `VX_CFG_NUM_THREADS'(1);
+        // Partial-warp mask: (1 << count) - 1 where count = block_size_r[NT_BITS-1:0],
+        // which launches never change.
+        assign partial_tmask = (`VX_CFG_NUM_THREADS'(1) << block_size_r[NT_BITS-1:0]) - `VX_CFG_NUM_THREADS'(1);
+        assign part_warp_r = (| block_size_r[NT_BITS-1:0]);
     end else begin : g_nt_zero
         // NT_BITS=0: NUM_THREADS=1, each warp has exactly 1 thread, no partial warps.
         assign kmu_num_warps = (NW_WIDTH+1)'(eff_block_size);
         assign block_size_next = (CTA_TID_WIDTH+1)'(block_size_r - (CTA_TID_WIDTH+1)'(nfired_r));
         assign partial_tmask = `VX_CFG_NUM_THREADS'(0);
+        assign part_warp_r = 1'b0;
     end
 
-    // Warps still to launch, after those latched last cycle.
-    wire [CTA_TID_WIDTH-NT_BITS:0] full_warps_cur = block_size_cur[CTA_TID_WIDTH:NT_BITS];
-    wire [NW_WIDTH:0] rem_warps_cur;
-    if (NT_BITS > 0) begin : g_rem_nt
-        assign rem_warps_cur = (NW_WIDTH+1)'(full_warps_cur) + (NW_WIDTH+1)'(|block_size_cur[NT_BITS-1:0]);
-    end else begin : g_rem_nt1
-        assign rem_warps_cur = (NW_WIDTH+1)'(full_warps_cur);
-    end
-
-    // Launch selection: lanes with a free warp, taken in round-robin order from
-    // lane_rr_r, up to the warps left. order[l] is the lane's position among
-    // the selected lanes.
-    reg [LANE_WIDTH-1:0] lane_rr_r;
-    wire                 launch_en;
-    reg [NUM_LANES-1:0]                 lane_sel;
-    reg [NUM_LANES-1:0][LANE_WIDTH-1:0] lane_order;
-    reg [LCNT_WIDTH-1:0]                lane_cnt;
-    always @(*) begin
-        lane_sel   = '0;
-        lane_order = '0;
-        lane_cnt   = '0;
-        for (integer o = 0; o < NUM_LANES; ++o) begin
-            if (launch_en && lane_ready[(int'(lane_rr_r) + o) % NUM_LANES]
-             && ((NW_WIDTH+1)'(lane_cnt) < rem_warps_cur)) begin
-                lane_sel[(int'(lane_rr_r) + o) % NUM_LANES]   = 1'b1;
-                lane_order[(int'(lane_rr_r) + o) % NUM_LANES] = LANE_WIDTH'(lane_cnt);
-                lane_cnt = lane_cnt + LCNT_WIDTH'(1);
-            end
+    // Warps still to launch, after those latched last cycle, compared with each
+    // launch position k as thermometers: block_size_r retires the warps latched
+    // last cycle a cycle late, so excluding them shifts the thermometers of its
+    // own counts by nfired_r. full_gt[k]: more than k full warps are left;
+    // rem_gt[k]: more than k warps are left.
+    localparam FULL_W = CTA_TID_WIDTH + 1 - NT_BITS;
+    wire [FULL_W-1:0]        full_warps_r = block_size_r[CTA_TID_WIDTH:NT_BITS];
+    wire [2*NUM_LANES-1:0]   full_r_gt, rem_r_gt;
+    for (genvar j = 0; j < 2*NUM_LANES; ++j) begin : g_rem_therm
+        assign full_r_gt[j] = (full_warps_r > FULL_W'(j));
+        if (j == 0) begin : g_first
+            assign rem_r_gt[j] = full_r_gt[j] | part_warp_r;
+        end else begin : g_rest
+            assign rem_r_gt[j] = full_r_gt[j] | (part_warp_r & full_r_gt[j-1]);
         end
     end
+    wire [LCNT_WIDTH-1:0] nfired_cur = fire_any_r ? nfired_r : '0;
+    wire [NUM_LANES-1:0]  full_gt = NUM_LANES'(full_r_gt >> nfired_cur);
+    wire [NUM_LANES-1:0]  rem_gt  = NUM_LANES'(rem_r_gt >> nfired_cur);
+
+    // Launch selection: lanes with a free warp, taken in round-robin order from
+    // lane_rr_r, up to the warps left. A lane's order is its position among the
+    // selected lanes: the ready lanes ahead of it in the rotation, so a ready lane
+    // is selected while fewer than the warps left are ahead of it.
+    `STATIC_ASSERT (`IS_POW2(NUM_LANES), ("invalid parameter"))
+    reg  [LANE_WIDTH-1:0] lane_rr_r;
+    wire                  launch_en;
+    wire [NUM_LANES-1:0]                 lane_sel;
+    wire [NUM_LANES-1:0][LANE_WIDTH-1:0] lane_order;
+    wire [LCNT_WIDTH-1:0]                lane_cnt;
+    for (genvar l = 0; l < NUM_LANES; ++l) begin : g_lane_sel
+        wire [NUM_LANES-1:0] ahead;
+        for (genvar m = 0; m < NUM_LANES; ++m) begin : g_ahead
+            assign ahead[m] = (LANE_WIDTH'(m) - lane_rr_r) < (LANE_WIDTH'(l) - lane_rr_r);
+        end
+        wire [NUM_LANES-1:0]  ready_ahead = lane_ready & ahead;
+        wire [LCNT_WIDTH-1:0] order;
+        VX_popcount #(
+            .N (NUM_LANES)
+        ) order_count (
+            .data_in  (ready_ahead),
+            .data_out (order)
+        );
+        assign lane_order[l] = LANE_WIDTH'(order);
+        assign lane_sel[l]   = launch_en && lane_ready[l] && 1'(rem_gt >> order);
+    end
+    VX_popcount #(
+        .N (NUM_LANES)
+    ) lane_count (
+        .data_in  (lane_sel),
+        .data_out (lane_cnt)
+    );
 
     // A warp is full unless it is the CTA's last and the block size is not a
     // multiple of the warp width.
     wire [NUM_LANES-1:0][`VX_CFG_NUM_THREADS-1:0] lane_tmask;
     wire [NUM_LANES-1:0] lane_full;
     for (genvar l = 0; l < NUM_LANES; ++l) begin : g_lane_tmask
-        assign lane_full[l] = ((CTA_TID_WIDTH+1-NT_BITS)'(lane_order[l]) < full_warps_cur);
+        assign lane_full[l] = 1'(full_gt >> lane_order[l]);
         assign lane_tmask[l] = lane_full[l] ? {`VX_CFG_NUM_THREADS{1'b1}} : partial_tmask;
     end
 
@@ -312,22 +337,30 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     end
 
     // One thread-index advance by `step`, with a single wrap per dimension: every
-    // step is normalized below the block dimensions.
+    // step is normalized below the block dimensions. Y and Z are formed for both
+    // carries in parallel, so the lower dimension's wrap only selects.
     function automatic logic [2:0][CTA_TID_WIDTH-1:0] tid_advance (
         input logic [2:0][CTA_TID_WIDTH-1:0] base,
         input logic [2:0][CTA_TID_WIDTH-1:0] step,
         input logic [CTA_TID_WIDTH:0]        bdim_x,
         input logic [CTA_TID_WIDTH:0]        bdim_y
     );
-        logic [CTA_TID_WIDTH:0] nx, ny;
-        logic wx, wy;
-        nx = {1'b0, base[0]} + {1'b0, step[0]};
-        wx = (nx >= bdim_x);
-        ny = ({1'b0, base[1]} + {1'b0, step[1]}) + (CTA_TID_WIDTH+1)'(wx);
-        wy = (ny >= bdim_y);
+        logic [CTA_TID_WIDTH:0] nx, ny0, ny1;
+        logic wx, wy0, wy1;
+        logic [CTA_TID_WIDTH-1:0] y0, y1, z0, z1;
+        nx  = {1'b0, base[0]} + {1'b0, step[0]};
+        wx  = (nx >= bdim_x);
+        ny0 = {1'b0, base[1]} + {1'b0, step[1]};
+        ny1 = {1'b0, base[1]} + {1'b0, step[1]} + (CTA_TID_WIDTH+1)'(1);
+        wy0 = (ny0 >= bdim_y);
+        wy1 = (ny1 >= bdim_y);
+        y0  = wy0 ? CTA_TID_WIDTH'(ny0 - bdim_y) : CTA_TID_WIDTH'(ny0);
+        y1  = wy1 ? CTA_TID_WIDTH'(ny1 - bdim_y) : CTA_TID_WIDTH'(ny1);
+        z0  = base[2] + step[2];
+        z1  = base[2] + step[2] + CTA_TID_WIDTH'(1);
         tid_advance[0] = wx ? CTA_TID_WIDTH'(nx - bdim_x) : CTA_TID_WIDTH'(nx);
-        tid_advance[1] = wy ? CTA_TID_WIDTH'(ny - bdim_y) : CTA_TID_WIDTH'(ny);
-        tid_advance[2] = base[2] + step[2] + CTA_TID_WIDTH'(wy);
+        tid_advance[1] = wx ? y1 : y0;
+        tid_advance[2] = (wx ? wy1 : wy0) ? z1 : z0;
     endfunction
 
     // The window after the warps latched last cycle launch: entries shift down by
@@ -359,6 +392,29 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     reg [LCNT_WIDTH-1:0]         init_cnt_r;
     reg [2:0][CTA_TID_WIDTH-1:0] init_acc_r;
     wire                         init_busy = (init_cnt_r != '0);
+    wire [2:0][CTA_TID_WIDTH-1:0] init_next = tid_advance(init_acc_r, warp_step_r, block_dim_r[0], block_dim_r[1]);
+    wire shape_new = (NUM_LANES > 1) && !kmu_is_frag
+                  && ((kmu_req.args.compute.warp_step != shape_step_r)
+                   || (kmu_req.args.compute.block_dim != shape_dim_r));
+
+    // The window: a launch header reloads it (cleared for a new shape), the
+    // window build writes one entry per cycle, and launches shift it. No warp
+    // launches while the window is built, so the three writes are exclusive and
+    // the shift, the deepest input, takes the last select.
+    `RUNTIME_ASSERT(reset || ~(init_busy && fire_any_r), ("%t: %s window shifted while being built", $time, INSTANCE_ID))
+    always @(posedge clk) begin
+        if (~reset) begin
+            for (integer k = 0; k < NUM_LANES; ++k) begin
+                if ((state == DISPATCH) && fire_any_r) begin
+                    thread_idx_r[k] <= thread_idx_adv[k];
+                end else if ((state == IDLE) && kmu_bus_if_fire) begin
+                    thread_idx_r[k] <= shape_new ? '0 : thread_idx_init_r[k];
+                end else if ((state == DISPATCH) && init_busy && (int'(init_cnt_r) == k)) begin
+                    thread_idx_r[k] <= init_next;
+                end
+            end
+        end
+    end
 
     // -------------------------------------------------------------------------
     // Retirement decode — pipeline:
@@ -395,13 +451,13 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // Within one kernel every CTA has the same aligned LMEM footprint, so LMEM
     // is partitioned into equal slots of pitch `stride = aligned_lmem_size`.
     // Resident CTA in slot i owns LMEM bytes [i*stride, (i+1)*stride). The
-    // occupancy bound `usable_slots_r = min(NUM_WARPS, floor(LMEM/stride))` is a
+    // occupancy bound `usable = min(NUM_WARPS, floor(LMEM/stride))` is a
     // kernel constant and is registered so the per-CTA admission/ready path sees
     // only a free-slot test, never the divide/encode.
     //
     // Cluster co-residency: the first CTA of a cluster (is_first_of_cluster)
     // reserves K = cluster_size CONSECUTIVE usable slots, pre-wrapping the slot
-    // window to 0 if it would overrun usable_slots_r. Members 2..K then take the
+    // window to 0 if it would overrun the usable range. Members 2..K then take the
     // following slots, so member r lands at issuer_base + r*stride — exactly what
     // DXA multicast resolves. Slots free immediately (out of order) on retire.
 
@@ -413,35 +469,23 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     wire [LMEM_LOG:0] stride = kmu_req.aligned_lmem_size;
     wire is_first_of_cluster = eff_is_first;
 
-    reg [NW_WIDTH:0] usable_slots_r;
-    // Cluster member count K, capped at the slot count (a cluster larger than
-    // co-residency degenerates to a clamp).
-    wire [NW_WIDTH:0] cluster_k_raw = eff_cluster_size;
-    wire [NW_WIDTH:0] cluster_k = (cluster_k_raw > usable_slots_r) ? usable_slots_r
-                                : (cluster_k_raw == 0) ? (NW_WIDTH+1)'(1) : cluster_k_raw;
-
-    // Occupancy bound, registered (off the ready path). usable = largest m in
-    // [1, NUM_WARPS] with m*stride <= LMEM_SIZE; all slots when stride == 0.
-    // m*stride <= LMEM_SIZE is tested as stride <= floor(LMEM_SIZE/m), a constant
-    // per m, so the NUM_WARPS-wide comparator tree has neither a multiplier nor
-    // a divider.
+    // Occupancy bound as a thermometer, registered (off the ready path):
+    // usable_therm_r[m-1] is set iff m slots fit, i.e. m*stride <= LMEM_SIZE,
+    // tested as stride <= floor(LMEM_SIZE/m), a constant per m, so there is
+    // neither a multiplier nor a divider. All slots fit when stride == 0, and
+    // slot 0 always does.
     localparam PROD_W = LMEM_LOG + NW_WIDTH + 2;
+    reg [NUM_CTA_SLOTS-1:0] usable_therm_r;
     always_ff @(posedge clk) begin
         if (reset) begin
-            usable_slots_r <= (NW_WIDTH+1)'(NUM_CTA_SLOTS);
+            usable_therm_r <= '1;
         end else begin
-            if (stride == 0) begin
-                usable_slots_r <= (NW_WIDTH+1)'(NUM_CTA_SLOTS);
-            end else begin
+            for (integer m = 1; m <= NUM_CTA_SLOTS; m = m + 1) begin
                 // Granting one slot to a CTA that exceeds capacity keeps the
                 // launch making forward progress, at the cost of letting it
                 // write past its slot.
-                usable_slots_r <= (NW_WIDTH+1)'(1);
-                for (integer m = 1; m <= NUM_CTA_SLOTS; m = m + 1) begin
-                    if (PROD_W'(stride) <= PROD_W'(LMEM_SIZE / m)) begin
-                        usable_slots_r <= (NW_WIDTH+1)'(m);
-                    end
-                end
+                usable_therm_r[m-1] <= (m == 1) || (stride == 0)
+                                    || (PROD_W'(stride) <= PROD_W'(LMEM_SIZE / m));
             end
         end
     end
@@ -451,40 +495,47 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     `RUNTIME_ASSERT(~kmu_bus_if.valid || (stride == 0) || (PROD_W'(stride) <= PROD_W'(LMEM_SIZE)),
         ("%t: %s CTA shared-memory footprint %0d exceeds the %0d-byte capacity; the CTA overruns its slot", $time, INSTANCE_ID, stride, LMEM_SIZE))
 
-    // Normalize the round-robin pointer to the usable range (covers a kernel
-    // transition that shrank usable_slots_r), then apply cluster pre-wrap.
-    // Compares are full (NW_WIDTH+2)-bit to admit usable_slots_r == NUM_CTA_SLOTS.
-    wire [NW_WIDTH+1:0] tail_ext = {2'b0, tail_r};
-    wire [NW_WIDTH+1:0] usable_ext = {1'b0, usable_slots_r};
-    wire [CS_BITS-1:0] base_tail = (tail_ext >= usable_ext) ? CS_BITS'(0) : tail_r;
-    wire cluster_prewrap = is_first_of_cluster
-        && (({2'b0, base_tail} + {1'b0, cluster_k}) > usable_ext);
-    wire [CS_BITS-1:0] base_slot = cluster_prewrap ? CS_BITS'(0) : base_tail;
+    // The slot base is either the round-robin tail or slot 0: the tail is
+    // normalized to 0 when a kernel transition shrank the usable range below it,
+    // and a cluster window that would overrun the usable range pre-wraps to 0.
+    // Every test is a bit of the registered maps shifted by the tail:
+    // tail_room[j] is set iff slot tail+j is usable.
+    wire [NUM_CTA_SLOTS:0]   usable_room = {1'b0, usable_therm_r};
+    wire [NUM_CTA_SLOTS:0]   tail_room = usable_room >> tail_r;
+    wire [NUM_CTA_SLOTS-1:0] tail_busy = slot_valid_r >> tail_r;
+    if (NUM_CTA_SLOTS > 1) begin : g_room_top
+        `UNUSED_VAR (tail_room[NUM_CTA_SLOTS])
+    end
 
-    // Round-robin advance: next slot wraps to 0 at usable_slots_r.
-    wire [NW_WIDTH+1:0] next_tail_raw = {2'b0, base_slot} + (NW_WIDTH+2)'(1);
-    wire [CS_BITS-1:0] next_tail = (next_tail_raw >= usable_ext)
-                                 ? CS_BITS'(0) : next_tail_raw[CS_BITS-1:0];
+    // Window of K = max(cluster_size, 1) slots. The fit test may take K unclamped:
+    // a K above the usable count never fits past slot 0, and at tail 0 both bases
+    // agree. The window mask is clamped to the usable count, as a cluster larger
+    // than co-residency degenerates to a clamp.
+    wire [NUM_CTA_SLOTS-1:0] cluster_therm;
+    for (genvar j = 0; j < NUM_CTA_SLOTS; ++j) begin : g_cluster_therm
+        assign cluster_therm[j] = (j == 0) || (eff_cluster_size > (NW_WIDTH+1)'(j));
+    end
+    wire [NUM_CTA_SLOTS-1:0] window_ones = cluster_therm & usable_therm_r;
+    wire window_fits_tail = ((cluster_therm & ~tail_room[NUM_CTA_SLOTS-1:0]) == '0);
+    wire window_free_tail = ((tail_busy & window_ones) == '0);
+    wire window_free_zero = ((slot_valid_r & window_ones) == '0);
 
-    // Slot LMEM base = base_slot * stride (small multiply, latched at accept;
-    // off the ready path).
-    wire [LMEM_LOG-1:0] base_lmem = (LMEM_LOG)'((LMEM_LOG+NW_WIDTH+1)'(base_slot) * (LMEM_LOG+NW_WIDTH+1)'(stride));
+    wire tail_usable = tail_room[0];
+    wire base_zero   = is_first_of_cluster ? ~window_fits_tail : ~tail_usable;
+    wire [CS_BITS-1:0] base_slot = base_zero ? CS_BITS'(0) : tail_r;
+
+    // Round-robin advance: next slot wraps to 0 at the usable count.
+    wire [CS_BITS-1:0] tail_inc = tail_r + CS_BITS'(1);
+    wire [CS_BITS-1:0] next_tail = base_zero ? CS_BITS'(usable_room[1])
+                                 : (tail_room[1] ? tail_inc : CS_BITS'(0));
 
     // Admission: a standalone CTA / following cluster member needs its single
     // slot free; a first-of-cluster needs all K window slots free. The window
-    // [base_slot, base_slot+K) never overruns NUM_CTA_SLOTS (pre-wrap ensures
-    // base_slot+K <= usable_slots_r <= NUM_CTA_SLOTS), so the mask is built at
-    // NUM_CTA_SLOTS width directly. K == NUM_CTA_SLOTS wraps to all-ones, which
-    // is the intended full mask.
-    // The window is tested at both candidate bases in parallel: shifting the
-    // registered slot map by the tail leaves only the pre-wrap select after the
-    // window size.
-    wire [NUM_CTA_SLOTS-1:0] window_ones = (NUM_CTA_SLOTS'(1) << cluster_k) - NUM_CTA_SLOTS'(1);
-    wire [NUM_CTA_SLOTS-1:0] slot_valid_tail = slot_valid_r >> base_tail;
-    wire window_free_tail = ((slot_valid_tail & window_ones) == '0);
-    wire window_free_zero = ((slot_valid_r & window_ones) == '0);
-    wire cluster_window_free = cluster_prewrap ? window_free_zero : window_free_tail;
-    wire admit_ok = is_first_of_cluster ? cluster_window_free : ~slot_valid_r[base_tail];
+    // [base_slot, base_slot+K) never overruns the usable range, so the mask is
+    // built at NUM_CTA_SLOTS width directly.
+    wire cluster_window_free = window_fits_tail ? window_free_tail : window_free_zero;
+    wire single_slot_free = tail_usable ? ~tail_busy[0] : ~slot_valid_r[0];
+    wire admit_ok = is_first_of_cluster ? cluster_window_free : single_slot_free;
     // A fragment launch's stamps land in the warp record TID_STAGES cycles after the
     // warp fires (the thread-index ripple), but frag_stamps_r is a single bank. So a
     // new launch must not overwrite it while an earlier fragment warp is still in that
@@ -531,7 +582,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
             warp_init_lanes_r <= '0;
             warp_skip_init_r <= '0;
             tail_r          <= '0;
-            cur_lmem_base_r <= '0;
+            cur_stride_r    <= '0;
             slot_valid_r    <= '0;
             dispatched_warps<= '0;
             warp_done_r     <= 0;
@@ -596,33 +647,32 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                         entry_r      <= kmu_req.entry;
                         block_idx_r  <= kmu_block_idx;
                         block_dim_r  <= kmu_req.args.compute.block_dim;
+                        for (integer d = 0; d < 2; ++d) begin
+                            block_last_r[d] <= CTA_TID_WIDTH'(kmu_req.args.compute.block_dim[d] - (CTA_TID_WIDTH+1)'(1));
+                        end
                         grid_dim_r   <= kmu_grid_dim;
                         param_r      <= kmu_req.param;
                         block_size_r <= eff_block_size;
                         warp_step_r  <= kmu_req.args.compute.warp_step;
                         cluster_size_r <= eff_cluster_size;
                         cta_rank_r   <= '0;
-                        thread_idx_r <= thread_idx_init_r;
                         group_step_r <= (NUM_LANES == 1) ? kmu_req.args.compute.warp_step : group_step_r;
                         // A new block shape rebuilds the window constants before launching.
-                        if ((NUM_LANES > 1) && !kmu_is_frag
-                         && ((kmu_req.args.compute.warp_step != shape_step_r)
-                          || (kmu_req.args.compute.block_dim != shape_dim_r))) begin
+                        if (shape_new) begin
                             shape_step_r <= kmu_req.args.compute.warp_step;
                             shape_dim_r  <= kmu_req.args.compute.block_dim;
                             init_cnt_r   <= LCNT_WIDTH'(1);
                             init_acc_r   <= '0;
-                            thread_idx_r <= '0;
                         end
 
                         // Fixed-stride placement: this CTA lands in slot base_slot
                         // (the round-robin tail, pre-wrapped for a cluster window)
                         // at LMEM base base_slot * stride. The round-robin pointer
-                        // advances to next_tail (wraps at usable_slots_r). Slots
+                        // advances to next_tail (wraps at the usable count). Slots
                         // free out of order on retirement, so a cluster's window is
                         // checked free up front (admit_ok) rather than reclaimed
                         // in order.
-                        cur_lmem_base_r <= base_lmem;
+                        cur_stride_r <= stride;
                         slot_valid_r[base_slot] <= 1'b1;
                         tail_r     <= (`VX_CFG_NUM_WARPS > 1) ? next_tail : CS_BITS'(0);
                         cur_slot_r <= base_slot;
@@ -643,18 +693,17 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                         end
                     end
                     nfired_r  <= lane_cnt;
-                    lane_rr_r <= LANE_WIDTH'((int'(lane_rr_r) + int'(lane_cnt)) % NUM_LANES);
+                    lane_rr_r <= (NUM_LANES > 1) ? (lane_rr_r + LANE_WIDTH'(lane_cnt)) : '0;
 
                     if (fire_any_r) begin
                         cta_rank_r   <= cta_rank_r + NW_WIDTH'(nfired_r);
                         block_size_r <= block_size_next;
-                        thread_idx_r <= thread_idx_adv;
                         for (integer l = 0; l < NUM_LANES; ++l) begin
                             if (warp_fire_r[l]) begin
                                 warp_init_lanes_r[warp_id_r[l]] <= warp_init_lanes_r[warp_id_r[l]] | warp_tmask_r[l];
                             end
                         end
-                        if (rem_warps_cur == '0) begin
+                        if (~rem_gt[0]) begin
                             state <= IDLE;
                         end
                     end
@@ -662,18 +711,25 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                     // window constants: step warp_step_r once per cycle
                     if (init_busy) begin
                         if (int'(init_cnt_r) < NUM_LANES) begin
-                            thread_idx_r[init_cnt_r] <= tid_advance(init_acc_r, warp_step_r, block_dim_r[0], block_dim_r[1]);
-                            thread_idx_init_r[init_cnt_r] <= tid_advance(init_acc_r, warp_step_r, block_dim_r[0], block_dim_r[1]);
+                            thread_idx_init_r[init_cnt_r] <= init_next;
                             init_cnt_r <= init_cnt_r + LCNT_WIDTH'(1);
                         end else begin
-                            group_step_r <= tid_advance(init_acc_r, warp_step_r, block_dim_r[0], block_dim_r[1]);
+                            group_step_r <= init_next;
                             init_cnt_r   <= '0;
                         end
-                        init_acc_r <= tid_advance(init_acc_r, warp_step_r, block_dim_r[0], block_dim_r[1]);
+                        init_acc_r <= init_next;
                     end
                 end
                 default:;
             endcase
+        end
+    end
+
+    always_ff @(posedge clk) begin
+        if (reset) begin
+            cur_lmem_base_r <= '0;
+        end else begin
+            cur_lmem_base_r <= (LMEM_LOG)'((LMEM_LOG+NW_WIDTH+1)'(cur_slot_r) * (LMEM_LOG+NW_WIDTH+1)'(cur_stride_r));
         end
     end
 
@@ -745,21 +801,19 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
 
     function automatic logic [2:0][CTA_TID_WIDTH-1:0] tid_next (
         input logic [2:0][CTA_TID_WIDTH-1:0] prev,
-        input logic [CTA_TID_WIDTH:0]        bd_x,
-        input logic [CTA_TID_WIDTH:0]        bd_y
+        input logic [CTA_TID_WIDTH-1:0]      last_x,
+        input logic [CTA_TID_WIDTH-1:0]      last_y
     );
-        // prev is a reduced coordinate (prev[0] < bd_x, prev[1] < bd_y: the
-        // warp bases come from tid_advance), so a +1 step wraps exactly when
-        // it reaches the dimension, and wraps to 0.
-        logic [CTA_TID_WIDTH:0] nx, ny;
+        // prev is a reduced coordinate (prev[0] <= last_x, prev[1] <= last_y:
+        // the warp bases come from tid_advance), so a +1 step wraps exactly
+        // when it leaves the last index, and wraps to 0. The wraps are equality
+        // tests on prev itself, beside the increments rather than after them.
         logic wx, wy;
-        nx = {1'b0, prev[0]} + (CTA_TID_WIDTH+1)'(1);
-        wx = (nx == bd_x);
-        ny = {1'b0, prev[1]} + (CTA_TID_WIDTH+1)'(wx);
-        wy = wx && (ny == bd_y);
-        tid_next[0] = wx ? '0 : CTA_TID_WIDTH'(nx);
-        tid_next[1] = wy ? '0 : CTA_TID_WIDTH'(ny);
-        tid_next[2] = prev[2] + CTA_TID_WIDTH'(wy);
+        wx = (prev[0] == last_x);
+        wy = wx && (prev[1] == last_y);
+        tid_next[0] = wx ? '0 : (prev[0] + CTA_TID_WIDTH'(1));
+        tid_next[1] = wy ? '0 : (wx ? (prev[1] + CTA_TID_WIDTH'(1)) : prev[1]);
+        tid_next[2] = wy ? (prev[2] + CTA_TID_WIDTH'(1)) : prev[2];
     endfunction
 
     typedef logic [`VX_CFG_NUM_THREADS-1:0][2:0][CTA_TID_WIDTH-1:0] cta_tid_arr_t;
@@ -771,11 +825,10 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
         wire [TID_STAGES:0]                    tidp_valid;
         wire [TID_STAGES:0][NW_WIDTH-1:0]      tidp_wid;
         wire [TID_STAGES:0][NW_WIDTH-1:0]      tidp_rank;
-        // block_dim spans 1..NUM_WARPS*NUM_THREADS inclusive, one bit more than a
-        // thread index -- truncating it to CTA_TID_WIDTH turns a full-width dimension
-        // into 0 and makes every lane wrap.
-        wire [TID_STAGES:0][CTA_TID_WIDTH:0] tidp_bdx;
-        wire [TID_STAGES:0][CTA_TID_WIDTH:0] tidp_bdy;
+        // The last index of each dimension, block_dim - 1: block_dim spans
+        // 1..NUM_WARPS*NUM_THREADS, so its last index is a thread index.
+        wire [TID_STAGES:0][CTA_TID_WIDTH-1:0] tidp_last_x;
+        wire [TID_STAGES:0][CTA_TID_WIDTH-1:0] tidp_last_y;
 
         // stage 0: combinational inputs; seed lane 0 with the warp base.
         cta_tid_arr_t tidp_tid0;
@@ -787,8 +840,8 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
         assign tidp_valid[0] = warp_fire_r[l];
         assign tidp_wid[0]   = warp_id_r[l];
         assign tidp_rank[0]  = cta_csrs.cta_rank + NW_WIDTH'(warp_order_r[l]);
-        assign tidp_bdx[0]   = cta_csrs.block_dim[0];
-        assign tidp_bdy[0]   = cta_csrs.block_dim[1];
+        assign tidp_last_x[0] = block_last_r[0];
+        assign tidp_last_y[0] = block_last_r[1];
 
         for (genvar s = 1; s <= TID_STAGES; ++s) begin : g_tid_pipe
             cta_tid_arr_t nxt;
@@ -796,13 +849,13 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                 nxt = tidp_tid[s-1];
                 for (integer k = 0; k < TID_STEP; k = k + 1) begin
                     if (((s-1)*TID_STEP + k + 1) < `VX_CFG_NUM_THREADS) begin
-                        nxt[(s-1)*TID_STEP + k + 1] = tid_next(nxt[(s-1)*TID_STEP + k], tidp_bdx[s-1], tidp_bdy[s-1]);
+                        nxt[(s-1)*TID_STEP + k + 1] = tid_next(nxt[(s-1)*TID_STEP + k], tidp_last_x[s-1], tidp_last_y[s-1]);
                     end
                 end
             end
             reg                    v_r;
             reg [NW_WIDTH-1:0]     wid_r, rank_r;
-            reg [CTA_TID_WIDTH:0]  bdx_r, bdy_r;
+            reg [CTA_TID_WIDTH-1:0] last_x_r, last_y_r;
             cta_tid_arr_t          tid_r;
             always @(posedge clk) begin
                 if (reset) begin
@@ -813,15 +866,15 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                 tid_r  <= nxt;
                 wid_r  <= tidp_wid[s-1];
                 rank_r <= tidp_rank[s-1];
-                bdx_r  <= tidp_bdx[s-1];
-                bdy_r  <= tidp_bdy[s-1];
+                last_x_r <= tidp_last_x[s-1];
+                last_y_r <= tidp_last_y[s-1];
             end
             assign tidp_tid[s]   = tid_r;
             assign tidp_valid[s] = v_r;
             assign tidp_wid[s]   = wid_r;
             assign tidp_rank[s]  = rank_r;
-            assign tidp_bdx[s]   = bdx_r;
-            assign tidp_bdy[s]   = bdy_r;
+            assign tidp_last_x[s] = last_x_r;
+            assign tidp_last_y[s] = last_y_r;
         end
 
         wire is_frag_warp;
@@ -854,10 +907,10 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
         `UNUSED_VAR (is_frag_warp)
     `endif
 
-        // block_dim is consumed only by stages still rippling; the final stage's
-        // forwarded copy is unused.
-        `UNUSED_VAR (tidp_bdx[TID_STAGES])
-        `UNUSED_VAR (tidp_bdy[TID_STAGES])
+        // last_x/last_y are consumed only by stages still rippling; the final
+        // stage's forwarded copies are unused.
+        `UNUSED_VAR (tidp_last_x[TID_STAGES])
+        `UNUSED_VAR (tidp_last_y[TID_STAGES])
 
         cta_warp_t cta_warp_wdata;
         assign cta_warp_wdata.cta_rank = tidp_rank[TID_STAGES];
@@ -931,7 +984,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
             `TRACE(1, ("%t: %s kmu-accept: cta_id=%0d, PC=0x%0h, param=0x%0h, stride=%0d, num_warps=%0d, usable_slots=%0d\n",
                 $time, INSTANCE_ID, base_slot, to_fullPC(kmu_req.PC),
                 kmu_req.param,
-                stride, kmu_num_warps, usable_slots_r))
+                stride, kmu_num_warps, $countones(usable_therm_r)))
         end
         // Warps dispatched to the schedulers
         for (integer l = 0; l < NUM_LANES; ++l) begin
@@ -952,7 +1005,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
         // Admission gate status when KMU presents a CTA but is stalled
         if (kmu_bus_if.valid && !kmu_bus_if.ready && state == IDLE) begin
             `TRACE(4, ("%t: %s stall: admit_ok=%b, base_slot=%0d, stride=%0d, usable_slots=%0d\n",
-                $time, INSTANCE_ID, admit_ok, base_slot, stride, usable_slots_r))
+                $time, INSTANCE_ID, admit_ok, base_slot, stride, $countones(usable_therm_r)))
         end
     end
 `endif
