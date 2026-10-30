@@ -815,6 +815,14 @@ struct Tb {
 
   bool quick(uint32_t inst) const { return rsp_lat[inst] <= kLocal + 1; }
 
+  // The host writes a row of the image (the controller idle after a reset).
+  void dma(uint32_t inst, uint32_t row) {
+    const uint64_t addr = row_addr(inst, row);
+    Row d = rand_row();
+    for (int i = 0; i < kBytes; ++i) hbm.line(addr + (i / 64) * 64)[i % 64] = d[i];
+    ref.rows[addr] = d;
+  }
+
   int run_directed(uint64_t seed) {
     static const Setup kDirected = {"directed", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 50, 50, 1.0, 0};
     const int before = failures;
@@ -823,10 +831,97 @@ struct Tb {
     const bool rf = VM_RDW_READ_FIRST != 0;
     const uint32_t a = 0, r1 = 3 % kRows;
     int steps = 0;
+    uint64_t ar, aw;
+
+    // K: a read that misses fills its line: the next read of the row is on
+    // chip. A line with a dirty row takes no fill (its row stays).
+    {
+      const uint32_t r6 = 5 % kRows;
+      ar = hbm.n_ar;
+      issue(true, false, a, r6);
+      await(a, 20);
+      CHECK(hbm.n_ar == ar + 1, "K: a read miss did not go to memory");
+      issue(true, false, a, r6);
+      await(a, 0);
+      CHECK(hbm.n_ar == ar + 1 && quick(a), "K: a read miss did not fill its line (%lu cycles)",
+            (unsigned long)rsp_lat[a]);
+      uint32_t r7 = r6, r8 = r6;
+      for (uint32_t r = 0; r < kRows && r8 == r6; ++r)
+        if (r != r6 && line_of(a, r) == line_of(a, r6)) {
+          if (r7 == r6)
+            r7 = r;
+          else
+            r8 = r;
+        }
+      if (r8 != r6) {
+        issue(false, true, a, r7);
+        for (int i = 0; i < 20; ++i) cycle(false, false);
+        ar = hbm.n_ar;
+        issue(true, false, a, r8);
+        await(a, 20);
+        issue(true, false, a, r8);
+        await(a, 20);
+        CHECK(hbm.n_ar == ar + 2, "K: a fill replaced a dirty row (%lu reads)", (unsigned long)(hbm.n_ar - ar));
+        issue(true, false, a, r7);
+        await(a, 0);
+        CHECK(hbm.n_ar == ar + 2 && quick(a), "K: the dirty row left the cache");
+      }
+      ++steps;
+    }
+    // K2: while other writes keep the fill from X, the row's own partial
+    // write gets there first (it goes around): the fill must be dropped, or
+    // a later read would hit its stale row.
+    if (kInstances > 1 && VM_MW > 1) {
+      const uint32_t b = 1, r9 = 9 % kRows;
+      uint32_t rb = kRows;
+      for (uint32_t r = 0; r < kRows && rb == kRows; ++r)
+        if (line_of(b, r) != line_of(a, r9)) rb = r;
+      if (rb != kRows) {
+        issue(true, false, a, r9);
+        bool wrote = false;
+        int tail = 4;
+        for (int i = 0; i < 2000 && tail > 0; ++i) {
+          if (!pending[a] && !wrote) {
+            issue(false, true, a, r9, false);
+            wrote = true;
+          } else {
+            issue(false, true, b, rb);
+            if (wrote) --tail;
+          }
+        }
+        CHECK(wrote, "K2: the read never answered");
+        for (int i = 0; i < 200; ++i) cycle(false, false);
+        issue(true, false, a, r9);
+        await(a, 0);
+        ++steps;
+      }
+    }
+    // L: a reset leaves the cache empty, so the host may change the image:
+    // a read in memory when the reset comes fills nothing.
+    {
+      const uint32_t r10 = 11 % kRows;
+      hbm.lat_lo = hbm.lat_hi = 300;
+      issue(true, false, a, r10);
+      for (int i = 0; i < 20; ++i) cycle(false, false);
+      CHECK(pending[a] && !hbm.reads.empty(), "L: the read is not in memory");
+      reset_dut(2);
+      hbm.lat_lo = hbm.lat_hi = 50;
+      while (draining) cycle(false, false);
+      for (int i = 0; i < 20; ++i) cycle(false, false);
+      dma(a, r10);
+      issue(true, false, a, r10);
+      await(a, 0);
+      ++steps;
+    }
+    // A clean start for the rest.
+    quiesce();
+    reset_dut(2);
+    while (draining) cycle(false, false);
 
     // A: a pair on a row not in the cache fills its line; a read-first
     // pair's read gets the old row from memory, a write-first one's the new.
-    uint64_t ar = hbm.n_ar, aw = hbm.n_aw;
+    ar = hbm.n_ar;
+    aw = hbm.n_aw;
     issue(true, true, a, r1);
     await(a, 100);
     CHECK(hbm.n_aw == aw, "A: the pair's write went to memory, not to its line");
@@ -1004,6 +1099,12 @@ struct Tb {
           for (auto [i, r] : pairs) await(i, 0);
           hbm.lat_lo = hbm.lat_hi = 50;
           hbm.late_sample = false;
+          // Every row reads back its pair's write (the one past the pins'
+          // read must not have filled its line with the old row).
+          for (auto [i, r] : pairs) {
+            issue(true, false, i, r);
+            await(i, 0);
+          }
           ++steps;
         }
       }

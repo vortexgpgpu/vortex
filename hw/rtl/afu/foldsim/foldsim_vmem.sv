@@ -45,17 +45,20 @@
 // write-back, indexed by the low bits of row * INSTANCES + inst (consecutive
 // instances, consecutive lines). A whole-row write allocates without a fetch,
 // a read-first pair's too (its read still gets the old row, from the buffer
-// or memory); a partial write hits or goes around; a read that misses goes to
-// memory and allocates nothing.
+// or memory); a partial write hits or goes around. A read that misses goes to
+// memory, and its answer fills the line, clean, unless the line holds a dirty
+// row (a fill takes the place of a write at X, in a cycle without one; a
+// write of its row getting there first drops it). A pair's read fills
+// nothing: its write is newer.
 // Such a pair leaves its new row in the cache while its read fetches the old
 // one: until that read has its data, the line must not reach memory. Only a
 // write's allocation (or a reset's sweep, after which no read answers) evicts
-// a line, and an instance with a read outstanding writes nothing. So where
-// every line belongs to one instance (INSTANCES a power of two, at most
-// CACHE_ROWS; or a line per row), the line is safe by construction. Elsewhere the pair pins its
-// line (a few pins, else it goes around as below) until the read has its
-// data, and a write whose line is pinned goes around the cache instead.
-// A pair that goes around waits in the buffer for its read.
+// a dirty line, and an instance with a read outstanding writes nothing. So
+// where every line belongs to one instance (INSTANCES a power of two, at most
+// CACHE_ROWS; or a line per row), the line is safe by construction. Elsewhere
+// the pair pins its line (a few pins, else it goes around as below) until the
+// read has its data, and a write whose line is pinned goes around the cache
+// instead. A pair that goes around waits in the buffer for its read.
 //
 // Request-queue room (`free`): a read holds an entry from the cycle it is
 // taken until it answers locally or goes out on AR; a write until it is in
@@ -64,7 +67,7 @@
 // Reset takes no request, drops every read not yet on AR and answers none
 // from before it; every write taken before it still goes to the cache or
 // memory, and then every dirty line goes to memory and every line is
-// invalidated: memory holds the RAM's image. It finishes, with free back at
+// invalidated: memory holds the RAM's image (which the host may then change). It finishes, with free back at
 // QUEUE, once memory has answered every transaction: until then free stays 0.
 module foldsim_vmem #(
     // Instance-index bits: the global instance index over all copies.
@@ -215,7 +218,7 @@ module foldsim_vmem #(
     // power-up value: 0, as the FPGA's flops and block RAMs (INIT 0) do.
     // Simulation starts it there too.
     reg              draining;
-    reg              x_wr, y_wr, x_sw, y_sw, z_wa, z_ev;
+    reg              x_wr, y_wr, x_sw, y_sw, x_fl, y_fl, z_wa, z_ev;
     reg [QUEUE-1:0]  wb_valid;
     reg [QW-1:0]     wb_tail, wb_aw, wb_w, wb_head;
     // Writes in the buffer: all, before AW, before their last W beat, before B.
@@ -230,6 +233,8 @@ module foldsim_vmem #(
         y_wr      = 1'b0;
         x_sw      = 1'b0;
         y_sw      = 1'b0;
+        x_fl      = 1'b0;
+        y_fl      = 1'b0;
         z_wa      = 1'b0;
         z_ev      = 1'b0;
         wb_valid  = '0;
@@ -330,6 +335,15 @@ module foldsim_vmem #(
     reg [CI-1:0]     sw_idx;
     wire             sweep_go;
 
+    // ---- A fill: a row memory answered, for its line ----
+    // It takes the write's place at X in a cycle without one. A write of its
+    // row reaching X first would be newer (only the read's instance writes
+    // the row, after its answer): the fill is dropped then.
+    wire             fl_v;
+    wire [LW-1:0]    fl_lin;
+    wire [DW-1:0]    fl_data;
+    wire             fill_go = fl_v & ~i_wr & ~reset & ~draining;
+
     // ---- X: the requests, in the image's terms; the tags are read ----
     reg              x_rd;
     reg [IW-1:0]     x_rinst;
@@ -342,12 +356,13 @@ module foldsim_vmem #(
         x_rd    <= i_rd & ~reset;
         x_wr    <= i_wr;
         x_sw    <= sweep_go;
+        x_fl    <= fill_go;
         x_swidx <= sw_idx;
         x_rinst <= i_rinst;
         x_rlin  <= i_rlin;
-        x_wlin  <= i_wlin;
-        x_wdata <= i_wdata;
-        x_wmask <= i_wmask;
+        x_wlin  <= fill_go ? fl_lin : i_wlin;
+        x_wdata <= fill_go ? fl_data : i_wdata;
+        x_wmask <= fill_go ? '1 : i_wmask;
     end
 
     // ---- Y: the newest earlier copy of the read's row ----
@@ -363,6 +378,7 @@ module foldsim_vmem #(
         y_rd    <= x_rd & ~reset;
         y_wr    <= x_wr;
         y_sw    <= x_sw;
+        y_fl    <= x_fl;
         y_swidx <= x_swidx;
         y_rinst <= x_rinst;
         y_rlin  <= x_rlin;
@@ -373,7 +389,8 @@ module foldsim_vmem #(
         y_raddr <= row_addr(x_rlin);
     end
 
-    // The cache's view at Y, and its rows at Z and R.
+    // The cache's view at Y, and its rows at Z and R. c_victim: the write's
+    // line holds a dirty row.
     wire             c_rhit, c_whit, c_victim, c_same_idx;
     wire [CT-1:0]    c_vtag;
     wire [DW-1:0]    c_ca, c_cb;
@@ -392,6 +409,8 @@ module foldsim_vmem #(
     // data.
     wire y_pin    = PIN & rf_pair & w_alloc;
     wire evict    = (w_alloc | y_sw) & c_victim;
+    // A fill takes a line that holds no dirty row (no write-back, no pin).
+    wire f_alloc  = (CACHE != 0) & y_fl & ~c_victim;
     wire [CI-1:0] y_widx = y_sw ? y_swidx : y_wlin[CI-1:0];
     wire [LW-1:0] ev_lin = LW'({c_vtag, y_widx});
     // The write is done with the cache: its room is free.
@@ -413,7 +432,8 @@ module foldsim_vmem #(
     reg [MW-1:0]     wb_mask [QUEUE];
     reg [63:0]       wb_addr [QUEUE];
 
-    reg              z_rd, z_local, z_pair, z_zhit, z_ub, z_merge, z_wfull, z_blk, z_pin;
+    reg              z_rd, z_local, z_pair, z_zhit, z_ub, z_merge, z_wfull, z_blk, z_pin, z_fill;
+    reg [LW-1:0]     z_rlin;
     reg [PW-1:0]     z_pinid;
     reg [1:0]        z_src;
     reg [QUEUE-1:0]  z_hit;
@@ -437,7 +457,10 @@ module foldsim_vmem #(
     wire wb_fwd = pair_wf ? y_wfull : (zhit ? z_afull : |(rhit & wb_full));
     wire y_local = y_rd & (c_local | wb_fwd);
     wire [1:0] y_src = ~c_local ? SRC_WB
-                     : ((c_same_idx & (c_whit | w_alloc)) ? SRC_CB : SRC_CA);
+                     : ((c_same_idx & (c_whit | w_alloc | f_alloc)) ? SRC_CB : SRC_CA);
+    // A read that goes to memory fills its line with the answer, but a
+    // pair's: its write is newer.
+    wire y_fill = (CACHE != 0) & ~y_same_row;
 
     always @(posedge clk) begin
         z_rd    <= y_rd & ~reset;
@@ -451,6 +474,8 @@ module foldsim_vmem #(
         z_ub    <= pair_rf;
         z_pin   <= y_pin;
         z_pinid <= pin_next;
+        z_fill  <= y_fill;
+        z_rlin  <= y_rlin;
         z_rinst <= y_rinst;
         z_raddr <= y_raddr;
         z_wa    <= w_around;
@@ -488,7 +513,8 @@ module foldsim_vmem #(
             z_pdata[j*8 +: 8] = (z_merge & z_wmask[j / GROUP]) ? z_wdata[j*8 +: 8] : c_cb[j*8 +: 8];
     end
 
-    reg              r_local, r_rd, r_part, r_ub, r_pin;
+    reg              r_local, r_rd, r_part, r_ub, r_pin, r_fill;
+    reg [LW-1:0]     r_rlin;
     reg [PW-1:0]     r_pinid;
     reg [1:0]        r_src;
     reg [QW-1:0]     r_slot, r_ubslot;
@@ -503,6 +529,8 @@ module foldsim_vmem #(
         r_ub     <= z_ub;
         r_pin    <= z_pin;
         r_pinid  <= z_pinid;
+        r_fill   <= z_fill;
+        r_rlin   <= z_rlin;
         r_src    <= z_src;
         r_slot   <= z_slot;
         r_ubslot <= wb_tail;
@@ -520,6 +548,8 @@ module foldsim_vmem #(
     reg [QW-1:0]     rq_ubslot [QUEUE];
     reg [QW-1:0]     rq_dslot [QUEUE];
     reg              rq_pin   [QUEUE];
+    reg              rq_fill  [QUEUE];
+    reg [LW-1:0]     rq_lin   [QUEUE];
     reg [PW-1:0]     rq_pinid [QUEUE];
     reg [QUEUE-1:0]  rq_dep;
     reg [QW-1:0]     rq_head, rq_tail;
@@ -538,6 +568,8 @@ module foldsim_vmem #(
     reg           tbl_ub    [OUTSTANDING];
     reg [QW-1:0]  tbl_ubslot [OUTSTANDING];
     reg           tbl_pin   [OUTSTANDING];
+    reg           tbl_fill  [OUTSTANDING];
+    reg [LW-1:0]  tbl_lin   [OUTSTANDING];
     reg [PW-1:0]  tbl_pinid [OUTSTANDING];
     reg [BW-1:0]  rcnt      [OUTSTANDING];
 
@@ -549,6 +581,8 @@ module foldsim_vmem #(
             rq_ubslot[rq_tail] <= r_ubslot;
             rq_dslot[rq_tail]  <= r_slot;
             rq_pin[rq_tail]    <= r_pin;
+            rq_fill[rq_tail]   <= r_fill;
+            rq_lin[rq_tail]    <= r_rlin;
             rq_pinid[rq_tail]  <= r_pinid;
         end
         // A queued read waits for its row's newest partial write: its B
@@ -576,6 +610,8 @@ module foldsim_vmem #(
             tbl_ub[id_next]     <= rq_ub[rq_head];
             tbl_ubslot[id_next] <= rq_ubslot[rq_head];
             tbl_pin[id_next]    <= rq_pin[rq_head];
+            tbl_fill[id_next]   <= rq_fill[rq_head];
+            tbl_lin[id_next]    <= rq_lin[rq_head];
             tbl_pinid[id_next]  <= rq_pinid[rq_head];
         end
         if (rq_issue)
@@ -641,6 +677,36 @@ module foldsim_vmem #(
             rsp_inst <= tbl_inst[rc_id];
             rsp_data <= rc_row[DW-1:0];
         end
+    end
+
+    // The fill: the last answer from memory whose line may take it. Reset
+    // drops it, and no answer during the drain fills.
+    if (CACHE != 0) begin : g_fill
+        reg          v;
+        reg [LW-1:0] lin;
+        reg [DW-1:0] data;
+`ifdef SIMULATION
+        initial v = 1'b0;
+`endif
+        always @(posedge clk) begin
+            if (rc_done & tbl_fill[rc_id] & ~draining & ~reset) begin
+                v    <= 1'b1;
+                lin  <= tbl_lin[rc_id];
+                data <= rc_row[DW-1:0];
+            end else if (reset | fill_go | (i_wr & (i_wlin == lin))) begin
+                v    <= 1'b0;
+            end
+        end
+        assign fl_v    = v;
+        assign fl_lin  = lin;
+        assign fl_data = data;
+    end else begin : g_no_fill
+        /* verilator lint_off UNUSEDSIGNAL */
+        wire unused = tbl_fill[rc_id] | (|tbl_lin[rc_id]);
+        /* verilator lint_on UNUSEDSIGNAL */
+        assign fl_v    = 1'b0;
+        assign fl_lin  = '0;
+        assign fl_data = '0;
     end
 
     // ---- AW and W: the buffer's writes in order ----
@@ -793,15 +859,17 @@ module foldsim_vmem #(
 
     // ---- The host cache ----
     if (CACHE != 0) begin : g_cache
-        // A line: valid, tag. Only writes fill lines, so a valid line is
-        // dirty. Two copies of the tags, one per lookup; each is read at X,
-        // and the update of the cycle before (made at Y as the read was made)
-        // is forwarded. Whether it is at X's lines, and its tag X's, is known
-        // at X.
+        // A line: valid, dirty (the write's lookup only), tag. Writes leave a
+        // line dirty, fills clean. Two copies of the tags, one per lookup;
+        // each is read at X, and the update of the cycle before (made at Y as
+        // the read was made) is forwarded. Whether it is at X's lines, and its
+        // tag X's, is known at X.
         localparam TE = CT + 1;
+        localparam TW = CT + 2;
         reg [TE-1:0] tag_r [CACHE_ROWS];
-        reg [TE-1:0] tag_w [CACHE_ROWS];
-        reg [TE-1:0] tr_q, tw_q, tu_ent;
+        reg [TW-1:0] tag_w [CACHE_ROWS];
+        reg [TE-1:0] tr_q;
+        reg [TW-1:0] tw_q, tu_ent;
         reg          tu_v, selr_q, selw_q, bhr_q, bhw_q;
 `ifdef SIMULATION
         initial begin
@@ -813,20 +881,20 @@ module foldsim_vmem #(
 `endif
         wire [CI-1:0] y_ridx = y_rlin[CI-1:0];
         wire [CI-1:0] x_widx = x_sw ? x_swidx : x_wlin[CI-1:0];
-        wire          tu_we  = c_whit | w_alloc | y_sw;
-        wire [TE-1:0] tu_new = y_sw ? '0 : {1'b1, CT'(y_wlin >> CI)};
+        wire          tu_we  = c_whit | w_alloc | f_alloc | y_sw;
+        wire [TW-1:0] tu_new = y_sw ? '0 : {1'b1, y_wr, CT'(y_wlin >> CI)};
 
         always @(posedge clk) begin
             tr_q <= tag_r[x_rlin[CI-1:0]];
             tw_q <= tag_w[x_widx];
             if (tu_we) begin
-                tag_r[y_widx] <= tu_new;
+                tag_r[y_widx] <= {tu_new[TW-1], tu_new[CT-1:0]};
                 tag_w[y_widx] <= tu_new;
             end
             tu_v   <= tu_we;
             tu_ent <= tu_new;
-            selr_q <= (y_wr | y_sw) & (y_widx == x_rlin[CI-1:0]);
-            selw_q <= (y_wr | y_sw) & (y_widx == x_widx);
+            selr_q <= (y_wr | y_sw | y_fl) & (y_widx == x_rlin[CI-1:0]);
+            selw_q <= (y_wr | y_sw | y_fl) & (y_widx == x_widx);
             bhr_q  <= ~y_sw & (CT'(y_wlin >> CI) == CT'(x_rlin >> CI));
             bhw_q  <= ~y_sw & (CT'(y_wlin >> CI) == CT'(x_wlin >> CI));
         end
@@ -834,8 +902,8 @@ module foldsim_vmem #(
         wire bw = selw_q & tu_v;
 
         assign c_rhit     = y_rd & (br ? bhr_q : (tr_q[TE-1] & (tr_q[CT-1:0] == CT'(y_rlin >> CI))));
-        assign c_whit     = y_wr & (bw ? bhw_q : (tw_q[TE-1] & (tw_q[CT-1:0] == CT'(y_wlin >> CI))));
-        assign c_victim   = bw ? tu_ent[TE-1] : tw_q[TE-1];
+        assign c_whit     = y_wr & (bw ? bhw_q : (tw_q[TW-1] & (tw_q[CT-1:0] == CT'(y_wlin >> CI))));
+        assign c_victim   = bw ? tu_ent[TW-2] : tw_q[TW-2];
         assign c_vtag     = bw ? tu_ent[CT-1:0] : tw_q[CT-1:0];
         assign c_same_idx = (y_ridx == y_widx);
 
@@ -844,9 +912,9 @@ module foldsim_vmem #(
         // replaces or the read of its cycle shares.
         reg [DW-1:0] cdata [CACHE_ROWS];
         reg [DW-1:0] ca1, ca2, cb1;
-        // A fill's mask is whole: the enables are the write's own, apart from
-        // whether it writes the line at all.
-        wire             cwe = c_whit | w_alloc;
+        // An allocation's mask is whole: the enables are the write's own,
+        // apart from whether it writes the line at all.
+        wire             cwe = c_whit | w_alloc | f_alloc;
         wire [BYTES-1:0] be  = byte_enables(y_wmask);
         always @(posedge clk) begin
             ca1 <= cdata[y_ridx];
@@ -874,7 +942,7 @@ module foldsim_vmem #(
 
     // The reset's sweep: a line per cycle while the buffer has room for what
     // is in flight, once the writes taken before the reset are in.
-    assign sweep_go = (CACHE != 0) & draining & ~reset & ~sw_done & ~i_busy & ~x_wr & ~y_wr
+    assign sweep_go = (CACHE != 0) & draining & ~reset & ~sw_done & ~i_busy & ~x_wr & ~y_wr & ~x_fl & ~y_fl
                     & (wb_cnt <= FW'(QUEUE - 4));
     always @(posedge clk) begin
         if (reset) begin
@@ -888,7 +956,7 @@ module foldsim_vmem #(
     end
 
     // ---- Room, and the drain after a reset ----
-    wire idle = sw_done & ~i_busy & ~x_wr & ~y_wr & ~x_sw & ~y_sw & ~z_alloc
+    wire idle = sw_done & ~i_busy & ~x_wr & ~y_wr & ~x_sw & ~y_sw & ~x_fl & ~y_fl & ~z_alloc
               & (wb_cnt == 0) & (id_busy == '0)
               & ~m_arvalid & ~m_awvalid & ~m_wvalid & ~rc_valid;
 
