@@ -1765,6 +1765,24 @@ struct Tb {
       await(0, 20);
       ++steps;
     }
+    // M6: a move with nothing in flight, and a write taken at the end of the
+    // simulator's lead (the third cycle after it): the flush waits for it, and
+    // it reaches the old region.
+    {
+      const uint64_t b0 = g_base;
+      const uint32_t r = 60 % kRows;
+      for (int c = 0; c < 50; ++c) cycle(false, false);
+      begin_move(kBase + 5 * kStride, false);
+      cycle(false, false);
+      cycle(false, false);
+      issue(false, true, 0, r);
+      finish_move(false, false);
+      const Row want = ref.get(old_addr(b0, 0, r));
+      Row got(kBytes);
+      for (int i = 0; i < kBytes; ++i) got[i] = hbm.line(old_addr(b0, 0, r) + (i / 64) * 64)[i % 64];
+      CHECK(got == want, "M6: the write taken in the lead did not reach the old region");
+      ++steps;
+    }
     finish();
     printf("mdirected %d steps (cache %d, known zero %d, %lu moves, %lu cycles in them): %s\n", steps, VM_CACHE_ROWS,
            VM_KNOWN_ZERO, (unsigned long)n_moves, (unsigned long)move_cycles, failures == before ? "ok" : "FAILED");
