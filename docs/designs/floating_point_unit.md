@@ -336,18 +336,26 @@ instantiates either the soft core or the FPGA vendor's hardened
 floating-point operator.
 
 ```
-USE_VENDOR_IP = USE_DSP ∧ (SUBNORM_ENABLE == 0) ∧ F32 ∧ (VIVADO ∨ QUARTUS)
+USE_VENDOR_IP = USE_DSP ∧ (SUBNORM_ENABLE == 0) ∧ (F32 ∨ (F64 ∧ VIVADO)) ∧ (VIVADO ∨ QUARTUS)
 ```
 
 | condition | reason |
 |---|---|
 | `USE_DSP` | the DSP backend passes 1; the STD backend passes `VX_CFG_FPU_USE_DSP`, which only changes the soft multiplier's style |
 | `SUBNORM_ENABLE == 0` | the vendor operators are flush-to-zero; the DSP backend sets this on a Vivado or Quartus flow |
-| F32 | only single-precision operators are generated |
+| F32, or F64 on Vivado | Xilinx operators are generated in both precisions (`xil_fma`/`xil_fma64`, `xil_fdiv`/`xil_fdiv64`, `xil_fsqrt`/`xil_fsqrt64`); the Altera ones in single precision only |
 | vendor flow | the operators do not exist elsewhere |
 
-Anything else — F64, an ASIC flow, simulation, a configuration that needs
-subnormals — gets the soft core, where `USE_DSP` keeps its soft meaning.
+Anything else — F64 on Quartus, an ASIC flow, simulation, a configuration
+that needs subnormals — gets the soft core, where `USE_DSP` keeps its soft
+meaning.
+
+At FLEN 64 the divide and square-root selectors hold an F32 and an F64
+operator and `fmt[0]` picks the result, NaN-boxing an F32 one; the FMA
+backend already instantiates one F32 and one F64 unit. A unit whose
+`LATENCY` exceeds its operator's latency delays the operator's output by the
+difference, so both precisions leave a unit after the same `LATENCY` cycles
+and an F32 operation takes the deeper F64 operator's latency at FLEN 64.
 
 What the vendor path gives up:
 
@@ -358,9 +366,9 @@ What the vendor path gives up:
 | flags | NV, DZ, OF, UF, NX | Xilinx: NV, DZ, OF, UF — **no inexact**; Altera: none |
 | latency | structural | fixed by the generated IP |
 
-So an FPGA build of the DSP backend is faster and smaller in F32 and is
-**not IEEE-conformant** in F32: it cannot round toward zero or infinity and
-never reports inexact. A simulation of the DSP backend exercises the soft
+So an FPGA build of the DSP backend is faster and smaller and is **not
+IEEE-conformant**: it cannot round toward zero or infinity and never reports
+inexact. A simulation of the DSP backend exercises the soft
 cores and is conformant.
 
 ---
@@ -390,12 +398,17 @@ The arithmetic latencies are derived from the backend and the flow:
 | STD, F32 build | 8 | 17 | 17 |
 | STD, F64 build | 12 | 32 | 32 |
 | DSP, simulation, F32 / F64 build | 8 / 12 | 17 / 32 | 17 / 32 |
-| DSP, Vivado | 16 | 28 | 28 |
-| DSP, Quartus | 4 | 15 | 10 |
+| DSP, Vivado, F32 / F64 build | 16 / 26 | 28 / 57 | 28 / 57 |
+| DSP, Quartus, F32 / F64 build | 4 / 12 | 15 / 32 | 10 / 32 |
 | DPI | 8 / 12 | 15 | 10 |
 | FPNEW | 8 / 12 | 16 | 16 |
 
-The Vivado and Quartus rows are the vendor operators' fixed latencies.
+The Vivado and Quartus rows are the vendor operators' fixed latencies; at
+FLEN 64 a unit runs at its deeper operator's (Quartus: the soft F64 core's).
+The Xilinx operators are generated at their maximum pipelining on Versal:
+FMA 16 (F32) and 26 (F64) with `Medium_Usage` DSPs, divide and square root 28
+and 57 without DSPs. `hw/scripts/check_ip_contracts.py` checks each against
+its generation, its simulation model, the RTL and the resolved configuration.
 
 ---
 
@@ -432,7 +445,7 @@ flight, and a result waiting on the commit arbiter keeps its tag:
 | what | where | checks |
 |---|---|---|
 | leaf units | `hw/unittest/{fma,fdiv,fsqrt,fcvt,fdivsqrt}_unit`, run by `make -C hw/unittest run-fpu` | bit-exact result and flags against soft-float, over every RISC-V rounding mode, in the default and the area-reduced configurations |
-| FPU RTL end to end | `riscv` category, `isa-32f-dsp`: `rtlsim` rebuilt with the DSP backend, running `rv32uf` | the soft cores under the full pipeline, F32 |
+| FPU RTL end to end | `riscv` category, `isa-32f-dsp` / `isa-64d-dsp`: `rtlsim` rebuilt with the DSP backend, running `rv32uf` / `rv64ud` | the soft cores under the full pipeline, F32 and FLEN 64 |
 | ISA conformance | `riscv` category, every other lane: `rv32uf`, `rv64uf`, `rv64ud` | decode, the front end and writeback — arithmetic comes from the DPI model |
 | STD backend on hardware | `config2` category, `dogfood` with `-DVX_CFG_FPU_TYPE_STD` on `xrt` | the soft cores on the FPGA |
 | timing and area | the `core` device under test in `fpga_gate` / `asic_gate` | the FPU as integrated |
@@ -441,19 +454,16 @@ The unit tests are executed, not only built, by the `hw-fpu` CI case, so a
 divergence from soft-float fails CI.
 
 `rtlsim` defaults to the DPI backend, so an ordinary ISA run does **not**
-exercise the FPU's arithmetic RTL. `isa-32f-dsp` is the one lane that does,
-and it is F32 only: the F64 soft cores are covered by the unit tests alone.
+exercise the FPU's arithmetic RTL. `isa-32f-dsp` (rv32uf) and `isa-64d-dsp`
+(rv64ud, FLEN 64) are the lanes that do. They run the simulation backend's
+soft cores; the vendor operators' simulation models
+(`sim/foldsim/xilinx_fp_models.sv`) run in a Foldsim simulation, or in an
+`rtlsim` built with `-DVIVADO` and `RTL_PRE_SRCS` set to that file.
 
 ---
 
 ## 13. Known limitations
 
-- **F64 division and square root on a Vivado DSP build.** The latency keys
-  resolve to the vendor operators' 28 cycles, but only F32 uses the vendor
-  operator; the F64 path is the soft iterator, which is structurally 32
-  cycles. The iterator's latency assertion is compiled out under synthesis,
-  so the mismatch is silent. FPGA builds are 32-bit today, where the F64
-  path does not exist.
 - **Vendor operators are not IEEE-conformant** (§9.2): round-to-nearest-even
   only, flush-to-zero, no inexact flag.
 - **SimX conversion latency at `XLEN = 64`.** The RTL adds a stage; SimX

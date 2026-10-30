@@ -212,7 +212,7 @@ $(IP_DIR)/component.xml: $(KERNEL_SRCS) $(KERNEL_VH) $(OOC_XDC) $(wildcard $(FOL
 	cd $(BUILD_DIR) && TOOL_DIR=$(SCRIPT_DIR) $(VIVADO) -mode batch -nojournal -nolog \
 		-source $(VORTEX_HOME)/hw/syn/xilinx/aved/package_ip.tcl \
 		-tclargs foldsim_afu $(KERNEL_SRCS) . $(DEVICE) ooc-xdc=$(OOC_XDC) \
-		$$(grep -qE '^ *xil_f(ma|div|sqrt|mul|add) ' $(GEN_SV) || echo no-vendor-ip)
+		$$(grep -qE '^ *xil_f(ma|div|sqrt|mul|add)(64)? ' $(GEN_SV) || echo no-vendor-ip)
 
 # The kernel alone, out of context at FOLDSIM_FREQ: synthesis with global
 # retiming, placement and routing, without the shell, its reports in
@@ -224,7 +224,7 @@ ooc: $(KERNEL_SRCS)
 	cd $(OOC_DIR) && TOOL_DIR=$(SCRIPT_DIR) $(VIVADO) -mode batch -nojournal -log vivado.log \
 		-source $(SRC_DIR)/ooc.tcl -tclargs $(KERNEL_SRCS) $(DEVICE) \
 		$$(python3 -c 'print(round(1000 / $(FOLDSIM_FREQ), 3))') \
-		$$(grep -qE '^ *xil_f(ma|div|sqrt|mul|add) ' $(GEN_SV) || echo no-vendor-ip)
+		$$(grep -qE '^ *xil_f(ma|div|sqrt|mul|add)(64)? ' $(GEN_SV) || echo no-vendor-ip)
 	@grep -A2 'WNS(ns)' $(OOC_DIR)/routed_timing_summary.rpt | tail -1
 
 $(CFG): FORCE

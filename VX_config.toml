@@ -132,13 +132,22 @@ VX_CFG_FPU_USE_DSP = "expr: 1 if ($SYNTHESIS and not $ASIC) else 0"
 fpu_dsp_quartus = "expr: $VX_CFG_FPU_TYPE_DSP and $QUARTUS"
 fpu_dsp_vivado  = "expr: $VX_CFG_FPU_TYPE_DSP and $VIVADO"
 
+# The Xilinx floating-point cores at their maximum latency, per precision
+# (hw/scripts/xilinx_ip_gen.tcl): FMA 16 / 26, divide and square root 28 / 57.
+# At FLEN 64 a unit holds both cores and runs at the deeper one's latency.
+fma_latency_xil   = "expr: 26 if $VX_CFG_EXT_D_ENABLE else 16"
+fdiv_latency_xil  = "expr: 57 if $VX_CFG_EXT_D_ENABLE else 28"
+fsqrt_latency_xil = "expr: 57 if $VX_CFG_EXT_D_ENABLE else 28"
+# The Altera cores are F32-only: at FLEN 64 the soft cores set the latency.
+fpu_acl_f32 = "expr: $QUARTUS and not $VX_CFG_EXT_D_ENABLE"
+
 # STD: FDIV_LATENCY must equal FSQRT_LATENCY (shared serializer in VX_fpu_std)
-VX_CFG_FMA_LATENCY  = "expr: 16 if $fpu_dsp_vivado else (4 if $fpu_dsp_quartus else (12 if $VX_CFG_EXT_D_ENABLE else 8))"
+VX_CFG_FMA_LATENCY  = "expr: $fma_latency_xil if $fpu_dsp_vivado else (4 if ($fpu_dsp_quartus and $fpu_acl_f32) else (12 if $VX_CFG_EXT_D_ENABLE else 8))"
 # STD timing; DPI is a fast STD and takes the same values.
 fdiv_latency_std  = "expr: 32 if $VX_CFG_EXT_D_ENABLE else 17"
 fsqrt_latency_std = "expr: $fdiv_latency_std"
-fdiv_latency_dsp  = "expr: 15 if $QUARTUS else (28 if $VIVADO else (32 if $VX_CFG_EXT_D_ENABLE else 17))"
-fsqrt_latency_dsp = "expr: 10 if $QUARTUS else (28 if $VIVADO else (32 if $VX_CFG_EXT_D_ENABLE else 17))"
+fdiv_latency_dsp  = "expr: $fdiv_latency_xil if $VIVADO else (15 if $fpu_acl_f32 else $fdiv_latency_std)"
+fsqrt_latency_dsp = "expr: $fsqrt_latency_xil if $VIVADO else (10 if $fpu_acl_f32 else $fsqrt_latency_std)"
 
 VX_CFG_FDIV_LATENCY = "expr: 16 if $VX_CFG_FPU_TYPE_FPNEW else ($fdiv_latency_dsp if $VX_CFG_FPU_TYPE_DSP else $fdiv_latency_std)"
 VX_CFG_FSQRT_LATENCY= "expr: 16 if $VX_CFG_FPU_TYPE_FPNEW else ($fsqrt_latency_dsp if $VX_CFG_FPU_TYPE_DSP else $fsqrt_latency_std)"

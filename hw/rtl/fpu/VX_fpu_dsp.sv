@@ -191,9 +191,10 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         wire [NUM_PES_FMA-1:0] fma_pe_ce;
         `FANOUT_BUFFER (fma_pe_ce, pe_enable);
 
-        // Separate F32 / F64 FMA cores (pure-RTL, mantissa multiply mapped to DSP
-        // via USE_DSP). fmt[0] selects the result; pe_shared is input-aligned, so
-        // delay the selector by FMA latency to line it up with the unit output.
+        // Separate F32 / F64 FMA cores (the vendor IP on Xilinx/Altera, else
+        // pure-RTL with the mantissa multiply on DSP). fmt[0] selects the result;
+        // pe_shared is input-aligned, so delay the selector by FMA latency to
+        // line it up with the unit output.
         wire is_d_in = (`VX_CFG_FLEN >= 64) & pe_shared[INST_FRM_BITS+0];
         wire is_d_fma;
         if (`VX_CFG_FLEN >= 64) begin : g_isd_pipe
@@ -385,8 +386,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         fflags_t [NUM_LANES-1:0] div_fflags_lanes;
         wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] div_result;
 
-        // Pass-through: the F32 IPs box their output explicitly; the native
-        // merged unit self-boxes (F64 fills the width, F32 NaN-boxed).
+        // Pass-through: the unit self-boxes (F64 fills the width, F32 NaN-boxed).
         for (genvar i = 0; i < NUM_LANES; ++i) begin : g_div_result
             assign div_result[i] = div_data_out[i][0+:`VX_CFG_XLEN];
             assign div_fflags_lanes[i] = div_data_out[i][`VX_CFG_XLEN+:`FP_FLAGS_BITS];
@@ -473,7 +473,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         fflags_t [NUM_LANES-1:0] sqrt_fflags_lanes;
         wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] sqrt_result;
 
-        // Pass-through: F32 IP boxes explicitly; native merged unit self-boxes.
+        // Pass-through: the unit self-boxes (F64 fills the width, F32 NaN-boxed).
         for (genvar i = 0; i < NUM_LANES; ++i) begin : g_sqrt_result
             assign sqrt_result[i] = sqrt_data_out[i][0+:`VX_CFG_XLEN];
             assign sqrt_fflags_lanes[i] = sqrt_data_out[i][`VX_CFG_XLEN+:`FP_FLAGS_BITS];
