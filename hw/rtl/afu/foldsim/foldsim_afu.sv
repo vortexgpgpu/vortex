@@ -72,7 +72,10 @@ module foldsim_afu #(
     // rlast (their transactions are single beats of id 0), and the control
     // port's strobes and upper address bits (its registers are whole words).
     /* verilator lint_off UNUSEDSIGNAL */
-    `FOLDSIM_MEM_REPEAT(FOLDSIM_AXI_MEM, FOLDSIM_COMMA),
+    `FOLDSIM_MEM_REPEAT0(FOLDSIM_AXI_MEM, FOLDSIM_COMMA)
+    `FOLDSIM_MEM_REPEAT1(FOLDSIM_AXI_MEM, FOLDSIM_COMMA)
+    `FOLDSIM_MEM_REPEAT2(FOLDSIM_AXI_MEM, FOLDSIM_COMMA)
+    `FOLDSIM_MEM_REPEAT3(FOLDSIM_AXI_MEM, FOLDSIM_COMMA),
 `ifdef FOLDSIM_VMEM_COUNT
 `define FOLDSIM_AXI_VMEM(p, k) `FOLDSIM_AXI_MEM(p)
     `FOLDSIM_VMEM_REPEAT(FOLDSIM_AXI_VMEM, FOLDSIM_COMMA),
@@ -203,7 +206,10 @@ module foldsim_afu #(
     assign m_axi_mem_``i``_rready  = hbm_rready[i]; \
     assign hbm_rdata[i]            = m_axi_mem_``i``_rdata
 
-    `FOLDSIM_MEM_REPEAT(FOLDSIM_HBM, FOLDSIM_SEMI);
+    `FOLDSIM_MEM_REPEAT0(FOLDSIM_HBM, FOLDSIM_SEMI)
+    `FOLDSIM_MEM_REPEAT1(FOLDSIM_HBM, FOLDSIM_SEMI)
+    `FOLDSIM_MEM_REPEAT2(FOLDSIM_HBM, FOLDSIM_SEMI)
+    `FOLDSIM_MEM_REPEAT3(FOLDSIM_HBM, FOLDSIM_SEMI);
 `undef FOLDSIM_HBM
 
 `define FOLDSIM_IN(name) \
@@ -373,7 +379,10 @@ module foldsim_afu #(
         `FOLDSIM_VMEM_REPEAT(FOLDSIM_SIM_VMEM, FOLDSIM_COMMA),
 `undef FOLDSIM_SIM_VMEM
 `endif
-        `FOLDSIM_MEM_REPEAT(FOLDSIM_SIM_MEM, FOLDSIM_COMMA),
+        `FOLDSIM_MEM_REPEAT0(FOLDSIM_SIM_MEM, FOLDSIM_COMMA)
+        `FOLDSIM_MEM_REPEAT1(FOLDSIM_SIM_MEM, FOLDSIM_COMMA)
+        `FOLDSIM_MEM_REPEAT2(FOLDSIM_SIM_MEM, FOLDSIM_COMMA)
+        `FOLDSIM_MEM_REPEAT3(FOLDSIM_SIM_MEM, FOLDSIM_COMMA),
         `FOLDSIM_IN(reset),
         `FOLDSIM_IN(dcr_req_valid),
         `FOLDSIM_IN(dcr_req_rw),
