@@ -35,7 +35,10 @@ module foldsim_ctrl #(
     // The memory endpoints, one per memory port of the target.
     parameter MEM_PORTS    = 1,
     // MEM_CAPS: what the memory endpoints' bank models were built with.
-    parameter MEM_CAPS     = 32'd0
+    parameter MEM_CAPS     = 32'd0,
+    // The simulator takes idle slots (foldsim --bubbles): FOLDSIM_REG_BUBBLE
+    // holds a rate, else it stays 0.
+    parameter BUBBLES      = 0
 ) (
     input  wire                  clk,
     input  wire                  reset,
@@ -71,6 +74,7 @@ module foldsim_ctrl #(
     output wire [1:0]            mem_refresh,
     output reg  [15:0]           mem_refi,
     output reg  [15:0]           mem_rfc,
+    output reg  [7:0]            bubble,
     // Per memory port, its counters.
     input  wire [MEM_PORTS*8*64-1:0] mem_stats,
     input  wire                  mem_idle,
@@ -231,6 +235,7 @@ module foldsim_ctrl #(
             for (integer c = 0; c < NUM_CLASSES; ++c)
                 finishes[c] <= 0;
             mem_base          <= 64'h40_0000_0000;
+            bubble            <= 8'd0;
             mem_refresh_r     <= 2'd0;
             mem_refi          <= 16'd0;
             mem_rfc           <= 16'd0;
@@ -316,6 +321,7 @@ module foldsim_ctrl #(
                 `FOLDSIM_REG_CMD_DATA:    cmd_data <= DCR_DATA_W'(w_data);
                 `FOLDSIM_REG_MEM_BASE_LO: mem_base[31:0] <= w_data;
                 `FOLDSIM_REG_MEM_BASE_HI: mem_base[63:32] <= w_data;
+                `FOLDSIM_REG_BUBBLE:      if (BUBBLES != 0) bubble <= w_data[7:0];
                 `FOLDSIM_REG_MEM_CLOCK:   mem_clock <= w_data;
                 `FOLDSIM_REG_MEM_LATENCY: mem_latency <= w_data[15:0];
                 `FOLDSIM_REG_MEM_QUEUE:   mem_queue <= w_data;
@@ -353,6 +359,7 @@ module foldsim_ctrl #(
                 `FOLDSIM_REG_HCYCLES_HI:  s_rdata <= host_cycles[63:32];
                 `FOLDSIM_REG_MEM_BASE_LO: s_rdata <= mem_base[31:0];
                 `FOLDSIM_REG_MEM_BASE_HI: s_rdata <= mem_base[63:32];
+                `FOLDSIM_REG_BUBBLE:      s_rdata <= 32'(bubble);
                 `FOLDSIM_REG_MSTALL_LO:   s_rdata <= mem_stalls[31:0];
                 `FOLDSIM_REG_MSTALL_HI:   s_rdata <= mem_stalls[63:32];
                 `FOLDSIM_REG_NUM_CLASSES: s_rdata <= 32'(NUM_CLASSES);

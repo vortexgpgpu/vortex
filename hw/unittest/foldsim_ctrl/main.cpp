@@ -14,8 +14,8 @@
 // foldsim's control endpoint (hw/rtl/afu/foldsim/foldsim_ctrl.sv) as the
 // runtime sees it, through sw/common/foldsim_regs.h over AXI4-Lite: the id and
 // version, the DRAM timings read back, every memory port's counters at its
-// place in the stats window, every class's finishes, and zero past the end of
-// each window.
+// place in the stats window, every class's finishes, zero past the end of each
+// window, and the idle-slot rate: kept with BUBBLES, 0 without.
 
 #include <cstdint>
 #include <cstdio>
@@ -133,6 +133,13 @@ int main(int argc, char** argv) {
     got = reg_read(FOLDSIM_REG_MEM_TIMING(i));
     check(got == 0x100u + i, "timing", FOLDSIM_REG_MEM_TIMING(i), got, 0x100u + i);
   }
+  got = reg_read(FOLDSIM_REG_BUBBLE);
+  check(got == 0, "idle slots at reset", FOLDSIM_REG_BUBBLE, got, 0);
+  reg_write(FOLDSIM_REG_BUBBLE, 0x1C0);
+  got = reg_read(FOLDSIM_REG_BUBBLE);
+  check(got == (BUBBLES ? 0xC0u : 0u), "idle slots", FOLDSIM_REG_BUBBLE, got, BUBBLES ? 0xC0u : 0u);
+  check(dut->bubble == (BUBBLES ? 0xC0 : 0), "idle-slot output", FOLDSIM_REG_BUBBLE, dut->bubble, BUBBLES ? 0xC0u : 0u);
+
   got = reg_read(FOLDSIM_REG_MEM_TIMING(FOLDSIM_MEM_NUM_TIMINGS));
   check(got == 0, "past the timings", FOLDSIM_REG_MEM_TIMING(FOLDSIM_MEM_NUM_TIMINGS), got, 0);
 

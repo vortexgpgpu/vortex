@@ -41,6 +41,7 @@
 `define FOLDSIM_REG_NUM_CLASSES 12'h038
 `define FOLDSIM_REG_MEM_BASE_LO 12'h0C0
 `define FOLDSIM_REG_MEM_BASE_HI 12'h0C4
+`define FOLDSIM_REG_BUBBLE      12'h0C8
 // The memory model (sw/common/foldsim_regs.h has the fields).
 `define FOLDSIM_REG_MEM_REFRESH 12'h0D8
 `define FOLDSIM_REG_MEM_CAPS    12'h0DC
