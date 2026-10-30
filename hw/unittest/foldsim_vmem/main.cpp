@@ -43,8 +43,8 @@
 // evicted after its write reads back its data; that `zero` raised or dropped
 // with reads in memory changes only the reads looked up after it (a request
 // is looked up as it is taken, or two cycles later through the multiply);
-// that dropping it lets the host change the image; and that a reset forgets
-// every write.
+// that dropping it lets the host change the image; that a reset forgets
+// every write, and answers no known-zero read taken before it.
 //
 //   ./foldsim_vmem            every setup
 //   ./foldsim_vmem <name>     one setup
@@ -1375,6 +1375,18 @@ struct Tb {
         CHECK(quick(i) && hbm.n_ar == ar, "Z7: row %u of instance %u, written before the reset, is not known zero",
               r, i);
       }
+      ++steps;
+    }
+
+    // Z9: a known-zero read taken the cycle before a one-cycle reset is not
+    // answered (the TB's check: nothing during a reset or its drain).
+    {
+      const uint32_t r12 = fresh(a);
+      issue(true, false, a, r12);
+      reset_dut(1);
+      while (draining) cycle(false, false);
+      for (int i = 0; i < 20; ++i) cycle(false, false);
+      host_zero();
       ++steps;
     }
 
