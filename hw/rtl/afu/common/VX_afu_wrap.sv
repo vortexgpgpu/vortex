@@ -893,6 +893,8 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
         wire [FAB_TAG_WIDTH-1:0]        fab_rsp_tag [FAB_NUM_PORTS];
         wire                            fab_rsp_ready [FAB_NUM_PORTS];
 
+        // The GPU and the bank adapter can sit in different SLRs: both
+        // directions leave this adapter fully registered, data included.
         for (genvar i = 0; i < VX_MEM_PORTS; ++i) begin : g_vx_mem_adapter
             VX_mem_data_adapter #(
                 .SRC_DATA_WIDTH (VX_MEM_DATA_WIDTH),
@@ -901,8 +903,8 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
                 .DST_ADDR_WIDTH (VX_MEM_ADDR_A_WIDTH),
                 .SRC_TAG_WIDTH  (VX_MEM_TAG_WIDTH),
                 .DST_TAG_WIDTH  (FAB_TAG_WIDTH),
-                .REQ_OUT_BUF    (0),
-                .RSP_OUT_BUF    (0)
+                .REQ_OUT_BUF    (3),
+                .RSP_OUT_BUF    (3)
             ) mem_data_adapter (
                 .clk                (clk),
                 .reset              (vx_reset),
