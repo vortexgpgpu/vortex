@@ -23,7 +23,8 @@ module foldsim_vmem_top #(
     parameter QUEUE          = 32,
     parameter AXI_ID_W       = 4,
     parameter OUTSTANDING    = 16,
-    parameter INSTANCES      = 1 << IW
+    parameter INSTANCES      = 1 << IW,
+    parameter CACHE_ROWS     = 0
 ) (
     input  wire                        clk,
     input  wire                        reset,
@@ -117,7 +118,8 @@ module foldsim_vmem_top #(
         .QUEUE          (QUEUE),
         .AXI_ID_W       (AXI_ID_W),
         .OUTSTANDING    (OUTSTANDING),
-        .INSTANCES      (INSTANCES)
+        .INSTANCES      (INSTANCES),
+        .CACHE_ROWS     (CACHE_ROWS)
     ) vmem (
         .clk       (clk),
         .reset     (reset_r),

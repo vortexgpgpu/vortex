@@ -24,7 +24,8 @@
 //   * a reset with transactions in flight answers nothing from before it,
 //     keeps free at 0 until HBM has answered everything, then gives QUEUE;
 //     the writes taken before it reach HBM;
-//   * at the end, HBM's image equals the reference RAM, padding untouched.
+//   * after a final reset (which writes the host cache's dirty lines back),
+//     HBM's image equals the reference RAM, padding untouched.
 //
 //   ./foldsim_vmem            every setup
 //   ./foldsim_vmem <name>     one setup
@@ -73,6 +74,9 @@
 #endif
 #ifndef VM_INSTANCES
 #define VM_INSTANCES (1u << VM_IW)
+#endif
+#ifndef VM_CACHE_ROWS
+#define VM_CACHE_ROWS 0
 #endif
 
 namespace {
@@ -433,13 +437,14 @@ struct Tb {
   uint32_t last_free = 0;
   int last_taken = 0;
 
-  // Writes taken and not yet acknowledged by HBM, by row address: the
-  // controller issues writes in request order, so B's come in that order.
+  // Writes taken and not yet acknowledged by HBM, by row address: without a
+  // host cache the controller issues writes in request order, so B's come in
+  // that order.
   std::deque<uint64_t> wr_order;
   std::map<uint64_t, int> wr_inflight;
 
   uint64_t n_reads = 0, n_writes = 0, n_checked = 0, n_pairs_same = 0, n_raw = 0, n_resets = 0,
-           n_resets_busy = 0, max_rsp_lat = 0, full_cycles = 0, dropped = 0;
+           n_resets_busy = 0, max_rsp_lat = 0, full_cycles = 0, dropped = 0, n_quick = 0;
 
   void tick() {
     dut->clk = 0;
@@ -539,6 +544,8 @@ struct Tb {
         CHECK(got == expect[ri], "instance %u: wrong row", ri);
         pending[ri] = false;
         max_rsp_lat = std::max(max_rsp_lat, now - issued_at[ri]);
+        // Answered without memory: the cache or the write buffer.
+        if (now - issued_at[ri] <= 6) ++n_quick;
       }
     }
     if (fr == 0 && !draining && !rst) ++full_cycles;
@@ -553,17 +560,19 @@ struct Tb {
       if (rd && !read_first && wr) expect[inst] = ref.get(ra);
       if (rd) {
         ++n_reads;
-        if (wr_inflight.count(ra)) ++n_raw;
+        if (VM_CACHE_ROWS == 0 && wr_inflight.count(ra)) ++n_raw;
         pending[inst] = true;
         issued_at[inst] = now;
       }
       if (wr) {
         ++n_writes;
-        wr_order.push_back(wa);
-        ++wr_inflight[wa];
+        if (VM_CACHE_ROWS == 0) {
+          wr_order.push_back(wa);
+          ++wr_inflight[wa];
+        }
       }
     }
-    if (hbm.bvalid) {
+    if (VM_CACHE_ROWS == 0 && hbm.bvalid) {
       const uint64_t a = wr_order.front();
       wr_order.pop_front();
       if (--wr_inflight[a] == 0) wr_inflight.erase(a);
@@ -657,7 +666,7 @@ struct Tb {
     last_free = 0;
     last_taken = 0;
     n_reads = n_writes = n_checked = n_pairs_same = n_raw = n_resets = n_resets_busy = max_rsp_lat = 0;
-    full_cycles = dropped = 0;
+    full_cycles = dropped = n_quick = 0;
 
     dut = new Vfoldsim_vmem();
     dut->base = kBase;
@@ -677,6 +686,8 @@ struct Tb {
       hbm.lat_hi = 600;
       hbm.ready_p = 0.3;
       for (int c = 0; c < 300; ++c) cycle();
+      // Sparse traffic can leave HBM idle at the random point; reset once it is not.
+      for (int c = 0; c < 5000 && hbm.outstanding() == 0; ++c) cycle();
       reset_dut(int(rand_in(1, 5)));
       uint64_t drain = 0;
       while (draining && drain++ < 100000) cycle(false, false);
@@ -686,13 +697,18 @@ struct Tb {
       hbm.ready_p = rp;
     }
     quiesce();
+    reset_dut(2);
+    while (draining) cycle(false, false);
+    CHECK(hbm.outstanding() == 0, "HBM left with %zu transactions after the last drain", hbm.outstanding());
     check_image();
 
-    printf("%-8s %lu cycles: %lu reads checked of %lu (%lu meeting a write in flight), %lu writes, "
+    printf("%-8s %lu cycles: %lu reads checked of %lu (%lu meeting a write in flight, %lu answered "
+           "locally), %lu writes, "
            "%lu same-row pairs; HBM %lu AR %lu AW, latency %lu-%lu, response latency max %lu; "
            "%lu cycles with free 0; %lu resets (%lu with HBM busy, %lu reads dropped): %s\n",
            setup.name, (unsigned long)now, (unsigned long)n_checked, (unsigned long)n_reads,
-           (unsigned long)n_raw, (unsigned long)n_writes, (unsigned long)n_pairs_same,
+           (unsigned long)n_raw, (unsigned long)n_quick, (unsigned long)n_writes,
+           (unsigned long)n_pairs_same,
            (unsigned long)hbm.n_ar, (unsigned long)hbm.n_aw, (unsigned long)hbm.min_lat,
            (unsigned long)hbm.max_lat, (unsigned long)max_rsp_lat, (unsigned long)full_cycles,
            (unsigned long)n_resets, (unsigned long)n_resets_busy, (unsigned long)dropped,
@@ -712,8 +728,10 @@ int main(int argc, char** argv) {
   const char* only = nullptr;
   for (int i = 1; i < argc; ++i)
     if (argv[i][0] != '+') only = argv[i];
-  printf("foldsim_vmem: IW %d AW %d DW %d MW %d RDW_READ_FIRST %d QUEUE %d OUTSTANDING %d INSTANCES %u\n",
-         VM_IW, VM_AW, VM_DW, VM_MW, VM_RDW_READ_FIRST, VM_QUEUE, VM_OUTSTANDING, kInstances);
+  printf("foldsim_vmem: IW %d AW %d DW %d MW %d RDW_READ_FIRST %d QUEUE %d OUTSTANDING %d INSTANCES %u "
+         "CACHE_ROWS %d\n",
+         VM_IW, VM_AW, VM_DW, VM_MW, VM_RDW_READ_FIRST, VM_QUEUE, VM_OUTSTANDING, kInstances,
+         VM_CACHE_ROWS);
   Tb tb;
   uint64_t seed = 1;
   for (const auto& s : kSetups) {
