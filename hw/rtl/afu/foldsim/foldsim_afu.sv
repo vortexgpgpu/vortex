@@ -23,7 +23,9 @@
 // native V80 kernel's, but for the host-memory master it does not need: one
 // device-memory master per memory port of the target (FOLDSIM_MEM_PORTS, from
 // foldsim_kernel.vh, with the ports' id width), each its own way into device
-// memory.
+// memory. A simulator with virtual memories (FOLDSIM_VMEM_COUNT, from
+// foldsim_sim.vh) has a foldsim_vmem controller for each, with a master of its
+// own after the memory ports' (FOLDSIM_VMEM_REPEAT).
 module foldsim_afu #(
     parameter C_S_AXI_CONTROL_ADDR_WIDTH = 16,
     parameter C_S_AXI_CONTROL_DATA_WIDTH = 32,
@@ -66,7 +68,16 @@ module foldsim_afu #(
     input  wire [1:0]                              m_axi_mem_``i``_bresp, \
     input  wire [C_M_AXI_MEM_ID_WIDTH-1:0]         m_axi_mem_``i``_bid
 
+    // Not every input is used: responses' resp, the memory ports' ids and
+    // rlast (their transactions are single beats of id 0), and the control
+    // port's strobes and upper address bits (its registers are whole words).
+    /* verilator lint_off UNUSEDSIGNAL */
     `FOLDSIM_MEM_REPEAT(FOLDSIM_AXI_MEM, FOLDSIM_COMMA),
+`ifdef FOLDSIM_VMEM_COUNT
+`define FOLDSIM_AXI_VMEM(p, k) `FOLDSIM_AXI_MEM(p)
+    `FOLDSIM_VMEM_REPEAT(FOLDSIM_AXI_VMEM, FOLDSIM_COMMA),
+`undef FOLDSIM_AXI_VMEM
+`endif
 
     input  wire                                    s_axi_control_awvalid,
     output wire                                    s_axi_control_awready,
@@ -85,6 +96,7 @@ module foldsim_afu #(
     output wire                                    s_axi_control_bvalid,
     input  wire                                    s_axi_control_bready,
     output wire [1:0]                              s_axi_control_bresp
+    /* verilator lint_on UNUSEDSIGNAL */
 );
 `undef FOLDSIM_AXI_MEM
     localparam DATA_W = C_M_AXI_MEM_DATA_WIDTH;
@@ -231,12 +243,110 @@ module foldsim_afu #(
         end
     end
 
+`ifdef FOLDSIM_VMEM_COUNT
+    // ---- The virtual memories: a controller each, on its own master ----
+    // The simulator issues them nothing while vmem_on is low: until the
+    // runtime has placed their region (FOLDSIM_REG_VMEM_BASE), it sees no room.
+    localparam [63:0] VMEM_BYTES = `FOLDSIM_VMEM_BYTES;
+    localparam VMEM_QUEUE       = 32;
+    localparam VMEM_OUTSTANDING = (C_M_AXI_MEM_ID_WIDTH >= 4) ? 16 : (1 << C_M_AXI_MEM_ID_WIDTH);
+`ifdef FOLDSIM_VMEM_CACHE_ROWS
+    localparam VMEM_CACHE_ROWS  = `FOLDSIM_VMEM_CACHE_ROWS;
+`else
+    localparam VMEM_CACHE_ROWS  = 0;
+`endif
+    if (C_M_AXI_MEM_DATA_WIDTH != 512) begin : g_vmem_width
+        $error("foldsim_afu: the virtual memories' controllers have 512-bit masters");
+    end
+    wire [63:0] vmem_base;
+    wire        vmem_on;
+
+    // Memory k on master p. Its region's base is registered: base + the
+    // region's offset is static while requests flow.
+`define FOLDSIM_VMEM(p, k) \
+    wire                                vm``k``_rd_valid, vm``k``_wr_valid, vm``k``_rsp_valid; \
+    wire [`FOLDSIM_VMEM_``k``_IW-1:0]   vm``k``_rd_inst, vm``k``_wr_inst, vm``k``_rsp_inst; \
+    wire [`FOLDSIM_VMEM_``k``_AW-1:0]   vm``k``_rd_row, vm``k``_wr_row; \
+    wire [`FOLDSIM_VMEM_``k``_DW-1:0]   vm``k``_wr_data, vm``k``_rsp_data; \
+    wire [`FOLDSIM_VMEM_``k``_MW-1:0]   vm``k``_wr_mask; \
+    wire [$clog2(VMEM_QUEUE+1)-1:0]     vm``k``_room; \
+    wire [15:0]                         vm``k``_free = vmem_on ? 16'(vm``k``_room) : 16'd0; \
+    reg  [63:0]                         vm``k``_base; \
+    always @(posedge ap_clk) \
+        vm``k``_base <= vmem_base + `FOLDSIM_VMEM_``k``_BASE; \
+    foldsim_vmem #( \
+        .IW             (`FOLDSIM_VMEM_``k``_IW), \
+        .AW             (`FOLDSIM_VMEM_``k``_AW), \
+        .DW             (`FOLDSIM_VMEM_``k``_DW), \
+        .MW             (`FOLDSIM_VMEM_``k``_MW), \
+        .RDW_READ_FIRST (`FOLDSIM_VMEM_``k``_RDWRF), \
+        .QUEUE          (VMEM_QUEUE), \
+        .AXI_ID_W       (C_M_AXI_MEM_ID_WIDTH), \
+        .OUTSTANDING    (VMEM_OUTSTANDING), \
+        .INSTANCES      (`FOLDSIM_VMEM_``k``_INSTANCES), \
+        .CACHE_ROWS     (VMEM_CACHE_ROWS) \
+    ) vmem_``k ( \
+        .clk       (ap_clk), \
+        .reset     (reset), \
+        .rd_valid  (vm``k``_rd_valid), \
+        .rd_inst   (vm``k``_rd_inst), \
+        .rd_row    (vm``k``_rd_row), \
+        .wr_valid  (vm``k``_wr_valid), \
+        .wr_inst   (vm``k``_wr_inst), \
+        .wr_row    (vm``k``_wr_row), \
+        .wr_data   (vm``k``_wr_data), \
+        .wr_mask   (vm``k``_wr_mask), \
+        .rsp_valid (vm``k``_rsp_valid), \
+        .rsp_inst  (vm``k``_rsp_inst), \
+        .rsp_data  (vm``k``_rsp_data), \
+        .free      (vm``k``_room), \
+        .base      (vm``k``_base), \
+        .m_awvalid (m_axi_mem_``p``_awvalid), \
+        .m_awready (m_axi_mem_``p``_awready), \
+        .m_awaddr  (m_axi_mem_``p``_awaddr), \
+        .m_awid    (m_axi_mem_``p``_awid), \
+        .m_awlen   (m_axi_mem_``p``_awlen), \
+        .m_wvalid  (m_axi_mem_``p``_wvalid), \
+        .m_wready  (m_axi_mem_``p``_wready), \
+        .m_wdata   (m_axi_mem_``p``_wdata), \
+        .m_wstrb   (m_axi_mem_``p``_wstrb), \
+        .m_wlast   (m_axi_mem_``p``_wlast), \
+        .m_bvalid  (m_axi_mem_``p``_bvalid), \
+        .m_bready  (m_axi_mem_``p``_bready), \
+        .m_bid     (m_axi_mem_``p``_bid), \
+        .m_arvalid (m_axi_mem_``p``_arvalid), \
+        .m_arready (m_axi_mem_``p``_arready), \
+        .m_araddr  (m_axi_mem_``p``_araddr), \
+        .m_arid    (m_axi_mem_``p``_arid), \
+        .m_arlen   (m_axi_mem_``p``_arlen), \
+        .m_rvalid  (m_axi_mem_``p``_rvalid), \
+        .m_rready  (m_axi_mem_``p``_rready), \
+        .m_rdata   (m_axi_mem_``p``_rdata), \
+        .m_rid     (m_axi_mem_``p``_rid), \
+        .m_rlast   (m_axi_mem_``p``_rlast) \
+    )
+
+    `FOLDSIM_VMEM_REPEAT(FOLDSIM_VMEM, FOLDSIM_SEMI);
+`undef FOLDSIM_VMEM
+
+`define FOLDSIM_SIM_VMEM(p, k) \
+    .vm``k``_rsp_valid (vm``k``_rsp_valid), .vm``k``_rsp_inst (vm``k``_rsp_inst), \
+    .vm``k``_rsp_data (vm``k``_rsp_data), .vm``k``_free (vm``k``_free), \
+    .vm``k``_rd_valid (vm``k``_rd_valid), .vm``k``_rd_inst (vm``k``_rd_inst), .vm``k``_rd_row (vm``k``_rd_row), \
+    .vm``k``_wr_valid (vm``k``_wr_valid), .vm``k``_wr_inst (vm``k``_wr_inst), .vm``k``_wr_row (vm``k``_wr_row), \
+    .vm``k``_wr_data (vm``k``_wr_data), .vm``k``_wr_mask (vm``k``_wr_mask)
+`endif
+
     foldsim_sim sim (
         .hostClock (ap_clk),
         .hostReset (reset),
         .profile_finish (profile_finish),
 `ifdef FOLDSIM_ADVANCE
         .advance (advance),
+`endif
+`ifdef FOLDSIM_VMEM_COUNT
+        `FOLDSIM_VMEM_REPEAT(FOLDSIM_SIM_VMEM, FOLDSIM_COMMA),
+`undef FOLDSIM_SIM_VMEM
 `endif
         `FOLDSIM_MEM_REPEAT(FOLDSIM_SIM_MEM, FOLDSIM_COMMA),
         `FOLDSIM_IN(reset),
@@ -346,6 +456,9 @@ module foldsim_afu #(
         .NUM_CLASSES (`FOLDSIM_NUM_CLASSES),
         .MEM_PORTS   (PORTS),
         .MEM_CAPS    (MEM_CAPS),
+`ifdef FOLDSIM_VMEM_COUNT
+        .VMEM_BYTES  (VMEM_BYTES),
+`endif
         .BUBBLES     (BUBBLES)
     ) ctrl (
         .clk               (ap_clk),
@@ -375,6 +488,16 @@ module foldsim_afu #(
         .mem_refi          (mem_refi),
         .mem_rfc           (mem_rfc),
         .bubble            (bubble),
+`ifdef FOLDSIM_VMEM_COUNT
+        .vmem_base         (vmem_base),
+        .vmem_on           (vmem_on),
+`else
+        // Without virtual memories, the region is never used.
+        /* verilator lint_off PINCONNECTEMPTY */
+        .vmem_base         (),
+        .vmem_on           (),
+        /* verilator lint_on PINCONNECTEMPTY */
+`endif
         .mem_stats         (mem_stats),
         .mem_idle          (&mem_idle),
         .mem_error         (|mem_error),

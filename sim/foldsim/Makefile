@@ -10,8 +10,10 @@ SRC_DIR := $(VORTEX_HOME)/sim/foldsim
 FOLDSIM_RTL_DIR := $(RTL_DIR)/afu/foldsim
 WORK_DIR := $(DESTDIR)/foldsim_emul
 GEN_SV := $(WORK_DIR)/gen/foldsim_sim.sv
-# The kernel's memory ports, as the image's flow derived them.
+# The kernel's memory ports, as the image's flow derived them, and the
+# simulator's virtual memories, each on a master of its own after them.
 KERNEL_VH := $(WORK_DIR)/gen/foldsim_kernel.vh
+SIM_VH := $(WORK_DIR)/gen/foldsim_sim.vh
 
 CONFIG_FILE := $(DESTDIR)/foldsim_emul_config.stamp
 
@@ -35,7 +37,8 @@ TOP := foldsim_afu
 # instantiate (its FPU of type DSP): Verilator cannot run their netlists.
 RTL_SRCS := $(SRC_DIR)/xilinx_fp_models.sv $(GEN_SV) $(FOLDSIM_RTL_DIR)/foldsim_token.sv \
             $(FOLDSIM_RTL_DIR)/foldsim_mem_bmap.sv $(FOLDSIM_RTL_DIR)/foldsim_mem_bank.sv \
-            $(FOLDSIM_RTL_DIR)/foldsim_mem.sv $(FOLDSIM_RTL_DIR)/foldsim_ctrl.sv $(FOLDSIM_RTL_DIR)/foldsim_afu.sv
+            $(FOLDSIM_RTL_DIR)/foldsim_mem.sv $(FOLDSIM_RTL_DIR)/foldsim_vmem.sv $(FOLDSIM_RTL_DIR)/foldsim_ctrl.sv \
+            $(FOLDSIM_RTL_DIR)/foldsim_afu.sv
 SRCS := $(SRC_DIR)/foldsim_emul.cpp $(DPI_DIR)/dpi_float.cpp $(DPI_DIR)/dpi_util.cpp \
         $(SW_COMMON_DIR)/softfloat_ext.cpp $(SW_COMMON_DIR)/rvfloats.cpp
 
@@ -52,11 +55,13 @@ $(GEN_SV): force
 		$(if $(PERF),PERF=$(PERF)) $(if $(FOLDSIM_CLASSES),FOLDSIM_CLASSES='$(FOLDSIM_CLASSES)') \
 		$(if $(FOLDSIM_LIFT),FOLDSIM_LIFT='$(FOLDSIM_LIFT)') $(if $(CIRCT_BIN),CIRCT_BIN=$(CIRCT_BIN)) \
 		$(if $(FOLDSIM_FLAGS),FOLDSIM_FLAGS='$(FOLDSIM_FLAGS)') \
-		$(if $(LIFT_PYTHON),LIFT_PYTHON=$(LIFT_PYTHON)) $(if $(FOLDSIM),FOLDSIM=$(FOLDSIM))
+		$(if $(LIFT_PYTHON),LIFT_PYTHON=$(LIFT_PYTHON)) $(if $(FOLDSIM),FOLDSIM=$(FOLDSIM)) \
+		$(if $(FOLDSIM_VMEM_CACHE_ROWS),FOLDSIM_VMEM_CACHE_ROWS=$(FOLDSIM_VMEM_CACHE_ROWS))
 
 $(DESTDIR)/$(PROJECT): $(GEN_SV) $(SRCS) $(SRC_DIR)/xilinx_fp_models.sv $(wildcard $(FOLDSIM_RTL_DIR)/*) $(CONFIG_FILE)
 	$(VERILATOR_PATH)/bin/verilator --build --exe $(VL_FLAGS) --cc $(RTL_SRCS) --top-module $(TOP) \
 		$(SRCS) -CFLAGS '$(CXXFLAGS) -DFOLDSIM_MEM_PORTS='$$(sed -n 's/^`define FOLDSIM_MEM_PORTS //p' $(KERNEL_VH)) \
+		-CFLAGS -DFOLDSIM_VMEM_COUNT=$$(sed -n 's/^`define FOLDSIM_VMEM_COUNT //p' $(SIM_VH) | grep . || echo 0) \
 		-LDFLAGS '$(LDFLAGS)' --Mdir $@.obj_dir -o $@
 
 $(CONFIG_FILE): force

@@ -67,6 +67,7 @@ namespace {
 // kernel's memory port reaches through the MEM tag (hw/syn/xilinx/platforms/
 // v80.toml). The target's 4 GB lie in HBM0..HBM7, which nothing else uses.
 constexpr uint64_t kMemBase = 0x4000000000ull;
+constexpr uint64_t kTargetBytes = 4ull << 30;
 
 #ifdef FOLDSIM_EMUL
 
@@ -82,6 +83,16 @@ public:
   }
   int mem_read(uint64_t addr, void* dst, uint64_t n) {
     return sim_.mem_read(kMemBase + addr, dst, n);
+  }
+  // Device memory past the target's, for the simulator's own use: here
+  // nothing else is there.
+  int dev_alloc(uint64_t n, uint64_t* dev_addr) {
+    (void)n;
+    *dev_addr = kMemBase + kTargetBytes;
+    return 0;
+  }
+  int dev_write(uint64_t dev_addr, const void* src, uint64_t n) {
+    return sim_.mem_write(dev_addr, src, n);
   }
 
 private:
@@ -140,6 +151,7 @@ public:
       auto vdev = session_->getDeviceByBdf(bdf);
       dma_ = std::make_unique<vrtd::Buffer>(vdev.openHbmBuffer(/*region=*/8, kDmaChunk));
       fd_ = dma_->getFd();
+      bdf_ = bdf;
     VRT_CATCH(-1)
     // The host side of the transfers: a kernel DMA buffer, mapped.
     struct slash_qdma_buf_create create = {};
@@ -185,14 +197,29 @@ public:
   // be page aligned, not the device address or the length. A write is the
   // bytes it writes, with no read of the pages around them.
   int mem_write(uint64_t addr, const void* src, uint64_t n) {
+    return dev_write(kMemBase + addr, src, n);
+  }
+
+  // Device memory past the target's, for the simulator's own use: an HBM
+  // allocation beside the transfers' own, outside the target's 4 GB.
+  int dev_alloc(uint64_t n, uint64_t* dev_addr) {
+    VRT_TRY()
+      auto vdev = session_->getDeviceByBdf(bdf_);
+      own_.push_back(std::make_unique<vrtd::Buffer>(vdev.openHbmBuffer(/*region=*/8, n)));
+      *dev_addr = own_.back()->getPhysAddr();
+    VRT_CATCH(-1)
+    return 0;
+  }
+
+  int dev_write(uint64_t dev_addr, const void* src, uint64_t n) {
     std::lock_guard<std::mutex> lock(mutex_);
     auto* bytes = static_cast<const uint8_t*>(src);
     while (n != 0) {
       const uint64_t span = std::min<uint64_t>(kDmaChunk, n);
       std::memcpy(staging_, bytes, span);
-      if (dma(addr, staging_, span, true) != 0)
+      if (dma(dev_addr, staging_, span, true) != 0)
         return -1;
-      addr += span;
+      dev_addr += span;
       bytes += span;
       n -= span;
     }
@@ -204,7 +231,7 @@ public:
     auto* bytes = static_cast<uint8_t*>(dst);
     while (n != 0) {
       const uint64_t span = std::min<uint64_t>(kDmaChunk, n);
-      if (dma(addr, staging_, span, false) != 0)
+      if (dma(kMemBase + addr, staging_, span, false) != 0)
         return -1;
       std::memcpy(bytes, staging_, span);
       addr += span;
@@ -218,9 +245,9 @@ private:
   static constexpr uint64_t kDmaChunk = 64ull << 20;
   static constexpr uint64_t kStaging = kDmaChunk;
 
-  // `len` bytes at target address `addr`, from or to `host` in the staging
-  // buffer, page aligned.
-  int dma(uint64_t addr, uint8_t* host, uint64_t len, bool to_device) {
+  // `len` bytes at device address `dev_addr`, from or to `host` in the
+  // staging buffer, page aligned.
+  int dma(uint64_t dev_addr, uint8_t* host, uint64_t len, bool to_device) {
     struct slash_qdma_transfer xfer = {};
     xfer.size = sizeof(xfer);
     xfer.count = 1;
@@ -228,13 +255,13 @@ private:
     xfer.xfers[0].direction = to_device ? SLASH_QDMA_XFER_H2C : SLASH_QDMA_XFER_C2H;
     xfer.xfers[0].buf_fd = staging_fd_;
     xfer.xfers[0].buf_offset = static_cast<uint64_t>(host - staging_);
-    xfer.xfers[0].dev_addr = kMemBase + addr;
+    xfer.xfers[0].dev_addr = dev_addr;
     xfer.xfers[0].length = len;
     const int n = ioctl(fd_, SLASH_QDMA_QPAIR_IOCTL_TRANSFER, &xfer);
     if (n < 0 || static_cast<uint64_t>(n) != len) {
       fprintf(stderr, "[VXDRV] QDMA %s of %lu bytes at 0x%lx failed: %s\n",
               to_device ? "write" : "read", (unsigned long)len,
-              (unsigned long)(kMemBase + addr), n < 0 ? strerror(errno) : "short");
+              (unsigned long)dev_addr, n < 0 ? strerror(errno) : "short");
       return -1;
     }
     return 0;
@@ -244,6 +271,8 @@ private:
   std::unique_ptr<vrt::Kernel> kernel_;
   std::unique_ptr<vrtd::Session> session_;
   std::unique_ptr<vrtd::Buffer> dma_;
+  std::vector<std::unique_ptr<vrtd::Buffer>> own_;
+  std::string bdf_;
   int fd_ = -1;
   int staging_fd_ = -1;
   uint8_t* staging_ = nullptr;
@@ -293,6 +322,11 @@ public:
     timer_t t(stats.dma_s);
     stats.dma_bytes += n;
     return transport_t::mem_read(addr, dst, n);
+  }
+  int dev_write(uint64_t dev_addr, const void* src, uint64_t n) {
+    timer_t t(stats.dma_s);
+    stats.dma_bytes += n;
+    return transport_t::dev_write(dev_addr, src, n);
   }
   transport_stats_t stats;
 };
@@ -360,6 +394,8 @@ public:
     if (reg_write(FOLDSIM_REG_MEM_BASE_LO, uint32_t(kMemBase)) != 0 ||
         reg_write(FOLDSIM_REG_MEM_BASE_HI, uint32_t(kMemBase >> 32)) != 0 ||
         reg_write(FOLDSIM_REG_CTRL, 1) != 0)
+      return -1;
+    if (this->setup_vmem() != 0)
       return -1;
     // A target left running by an earlier process is reset, as a card's
     // native driver resets its device on open: Vortex counts VX_CFG_RESET_DELAY
@@ -520,6 +556,40 @@ private:
     return 0;
   }
 
+  // The simulator's virtual memories (foldsim --virtual-memories): device
+  // memory of their own, cleared as an on-chip RAM starts, and placed before
+  // the simulator takes a step. A kernel without them reads 0 bytes.
+  int setup_vmem() {
+    uint32_t bytes = 0;
+    if (transport_.reg_read(FOLDSIM_REG_VMEM_BYTES, &bytes) != 0)
+      return -1;
+    vmem_bytes_ = bytes;
+    if (vmem_bytes_ == 0)
+      return 0;
+    if (transport_.dev_alloc(vmem_bytes_, &vmem_base_) != 0) {
+      fprintf(stderr, "[VXDRV] cannot allocate %lu bytes of device memory for the virtual memories\n",
+              (unsigned long)vmem_bytes_);
+      return -1;
+    }
+    // The memories' regions are 4 KiB aligned within the space, and so must
+    // the space be.
+    if ((vmem_base_ & 0xfff) != 0) {
+      fprintf(stderr, "[VXDRV] the virtual memories' device memory at 0x%lx is not 4 KiB aligned\n",
+              (unsigned long)vmem_base_);
+      return -1;
+    }
+    const std::vector<uint8_t> zeros(std::min<uint64_t>(vmem_bytes_, 1ull << 20), 0);
+    for (uint64_t off = 0; off < vmem_bytes_; off += zeros.size()) {
+      if (transport_.dev_write(vmem_base_ + off, zeros.data(),
+                               std::min<uint64_t>(zeros.size(), vmem_bytes_ - off)) != 0)
+        return -1;
+    }
+    if (reg_write(FOLDSIM_REG_VMEM_BASE_LO, uint32_t(vmem_base_)) != 0 ||
+        reg_write(FOLDSIM_REG_VMEM_BASE_HI, uint32_t(vmem_base_ >> 32)) != 0)
+      return -1;
+    return 0;
+  }
+
   uint64_t read64(uint32_t lo) {
     uint32_t l = 0, h = 0, h2 = 0;
     do {
@@ -540,6 +610,9 @@ private:
             "[foldsim] target cycles=%lu host cycles=%lu host/target=%.2f memory waits=%lu\n",
             (unsigned long)target, (unsigned long)host,
             target ? double(host) / double(target) : 0.0, (unsigned long)stall);
+    if (vmem_bytes_ != 0)
+      fprintf(stderr, "[foldsim] virtual memories: %lu bytes of device memory at 0x%lx\n",
+              (unsigned long)vmem_bytes_, (unsigned long)vmem_base_);
     // Each class finishes each of its threads once a target cycle, so its
     // finishes per host cycle is how busy its one physical copy is.
     uint32_t classes = 0;
@@ -785,6 +858,7 @@ private:
   bool open_ = false;
   uint32_t refresh_ = 0;
   uint32_t mem_ports_ = 1;
+  uint64_t vmem_bytes_ = 0, vmem_base_ = 0;
   vortex::CommandProcessor cp_;
   std::mutex host_mu_;
   std::map<uint64_t, uint64_t> host_regions_;

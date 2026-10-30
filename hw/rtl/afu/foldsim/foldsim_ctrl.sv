@@ -38,7 +38,9 @@ module foldsim_ctrl #(
     parameter MEM_CAPS     = 32'd0,
     // The simulator takes idle slots (foldsim --bubbles): FOLDSIM_REG_BUBBLE
     // holds a rate, else it stays 0.
-    parameter BUBBLES      = 0
+    parameter BUBBLES      = 0,
+    // The device memory the simulator's virtual memories need (0: none).
+    parameter [63:0] VMEM_BYTES = 64'd0
 ) (
     input  wire                  clk,
     input  wire                  reset,
@@ -75,6 +77,9 @@ module foldsim_ctrl #(
     output reg  [15:0]           mem_refi,
     output reg  [15:0]           mem_rfc,
     output reg  [7:0]            bubble,
+    // Where the virtual memories are, and whether the simulator may use them.
+    output wire [63:0]           vmem_base,
+    output wire                  vmem_on,
     // Per memory port, its counters.
     input  wire [MEM_PORTS*8*64-1:0] mem_stats,
     input  wire                  mem_idle,
@@ -101,6 +106,9 @@ module foldsim_ctrl #(
 );
     if (NUM_CLASSES > 96 || MEM_PORTS > 32) begin : g_map
         $error("foldsim_ctrl: the register map holds up to 96 classes and 32 memory ports");
+    end
+    if (VMEM_BYTES >= 64'h1_0000_0000) begin : g_vmem_map
+        $error("foldsim_ctrl: FOLDSIM_REG_VMEM_BYTES holds up to 4 GiB");
     end
 
     localparam QW = $clog2(QUEUE);
@@ -385,10 +393,48 @@ module foldsim_ctrl #(
                     s_rdata <= ar_addr[2] ? 32'(finishes[fin_idx] >> 32)
                                           : finishes[fin_idx][31:0];
                 end
+                if (VMEM_BYTES != 0) begin
+                    case ({ar_addr[11:2], 2'b00})
+                    `FOLDSIM_REG_VMEM_BYTES:   s_rdata <= VMEM_BYTES[31:0];
+                    `FOLDSIM_REG_VMEM_BASE_LO: s_rdata <= vmem_base[31:0];
+                    `FOLDSIM_REG_VMEM_BASE_HI: s_rdata <= vmem_base[63:32];
+                    default:;
+                    endcase
+                end
             end
             if (s_rvalid & s_rready)
                 s_rvalid <= 1'b0;
         end
+    end
+
+    // The virtual memories' region: the runtime places it before the
+    // simulator takes a step, and may move it only between requests.
+    if (VMEM_BYTES != 0) begin : g_vmem
+        reg [63:0] base_r;
+        reg        on_r;
+        always @(posedge clk) begin
+            if (reset) begin
+                base_r <= 64'd0;
+                on_r   <= 1'b0;
+            end else if (wr) begin
+                case (wa)
+                `FOLDSIM_REG_VMEM_BASE_LO: begin
+                    base_r[31:0] <= w_data;
+                    on_r         <= 1'b0;
+                end
+                `FOLDSIM_REG_VMEM_BASE_HI: begin
+                    base_r[63:32] <= w_data;
+                    on_r          <= 1'b1;
+                end
+                default:;
+                endcase
+            end
+        end
+        assign vmem_base = base_r;
+        assign vmem_on   = on_r;
+    end else begin : g_no_vmem
+        assign vmem_base = 64'd0;
+        assign vmem_on   = 1'b0;
     end
 
 endmodule

@@ -2,7 +2,8 @@ ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
 
 # hw/unittest/foldsim_ctrl's test with 2 memory ports and 3 classes: the
-# windows end where the ports and classes do; a simulator with idle slots.
+# windows end where the ports and classes do; a simulator with idle slots and
+# 256 KiB of virtual memories.
 PROJECT := foldsim_ctrl
 
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
@@ -11,7 +12,7 @@ FOLDSIM_RTL_DIR := $(RTL_DIR)/afu/foldsim
 SRC_DIR := $(VORTEX_HOME)/hw/unittest/foldsim_ctrl
 
 CXXFLAGS := -I$(SRC_DIR) -I$(VORTEX_HOME)/hw/unittest/common -I$(SW_COMMON_DIR)
-CXXFLAGS += -DMEM_PORTS=2 -DNUM_CLASSES=3 -DBUBBLES=1
+CXXFLAGS += -DMEM_PORTS=2 -DNUM_CLASSES=3 -DBUBBLES=1 -DVMEM_BYTES=262144
 
 SRCS := $(SRC_DIR)/main.cpp
 
@@ -21,7 +22,7 @@ RTL_INCLUDE := -I$(FOLDSIM_RTL_DIR)
 
 # The token modules are not named after their file.
 VL_FLAGS += $(FOLDSIM_RTL_DIR)/foldsim_token.sv
-PARAMS += -GMEM_PORTS=2 -GNUM_CLASSES=3 -GBUBBLES=1
+PARAMS += -GMEM_PORTS=2 -GNUM_CLASSES=3 -GBUBBLES=1 -GVMEM_BYTES=64\'d262144
 
 TOP := foldsim_ctrl
 

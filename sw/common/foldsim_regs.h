@@ -41,6 +41,15 @@
 // [7:0]: idle slots the kernel puts in the simulator's frames, in 256ths of its
 // host cycles (pseudo-random). A simulator built without --bubbles keeps it 0.
 #define FOLDSIM_REG_BUBBLE      0x0C8u
+// The simulator's virtual memories (foldsim --virtual-memories), kept in device
+// memory behind the kernel's foldsim_vmem controllers. VMEM_BYTES (read only):
+// the bytes they need, 0 for none. VMEM_BASE: where they are, 4 KiB aligned.
+// Until its high word is written the simulator issues them nothing and takes
+// no step; a write of its low word stops them again, so the region moves
+// only between requests.
+#define FOLDSIM_REG_VMEM_BYTES   0x0CCu
+#define FOLDSIM_REG_VMEM_BASE_LO 0x0D0u
+#define FOLDSIM_REG_VMEM_BASE_HI 0x0D4u
 #define FOLDSIM_REG_FINISH(c)   (0x100u + 8u * (c))  // threads of class c finished, lo/hi (c < 96)
 
 // The memory model: each memory port's timing as a DRAM channel's banks

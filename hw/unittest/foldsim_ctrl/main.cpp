@@ -15,7 +15,9 @@
 // runtime sees it, through sw/common/foldsim_regs.h over AXI4-Lite: the id and
 // version, the DRAM timings read back, every memory port's counters at its
 // place in the stats window, every class's finishes, zero past the end of each
-// window, and the idle-slot rate: kept with BUBBLES, 0 without.
+// window, the idle-slot rate: kept with BUBBLES, 0 without; and the virtual
+// memories' region: VMEM_BYTES of them, placed (and on) by a write of the high
+// word of its base, off again by one of the low; with none, all of it 0.
 
 #include <cstdint>
 #include <cstdio>
@@ -139,6 +141,32 @@ int main(int argc, char** argv) {
   got = reg_read(FOLDSIM_REG_BUBBLE);
   check(got == (BUBBLES ? 0xC0u : 0u), "idle slots", FOLDSIM_REG_BUBBLE, got, BUBBLES ? 0xC0u : 0u);
   check(dut->bubble == (BUBBLES ? 0xC0 : 0), "idle-slot output", FOLDSIM_REG_BUBBLE, dut->bubble, BUBBLES ? 0xC0u : 0u);
+
+  {
+    const bool vm = VMEM_BYTES != 0;
+    got = reg_read(FOLDSIM_REG_VMEM_BYTES);
+    check(got == uint32_t(VMEM_BYTES), "virtual memories' bytes", FOLDSIM_REG_VMEM_BYTES, got, uint32_t(VMEM_BYTES));
+    check(!dut->vmem_on, "virtual memories on at reset", FOLDSIM_REG_VMEM_BASE_HI, dut->vmem_on, 0);
+    reg_write(FOLDSIM_REG_VMEM_BASE_LO, 0x12345000u);
+    check(!dut->vmem_on, "virtual memories on with half a base", FOLDSIM_REG_VMEM_BASE_LO, dut->vmem_on, 0);
+    reg_write(FOLDSIM_REG_VMEM_BASE_HI, 0x41u);
+    check(dut->vmem_on == vm, "virtual memories on", FOLDSIM_REG_VMEM_BASE_HI, dut->vmem_on, vm);
+    const uint64_t base = vm ? 0x4112345000ull : 0;
+    check(dut->vmem_base == base, "virtual memories' base output", FOLDSIM_REG_VMEM_BASE_LO,
+          uint32_t(dut->vmem_base), uint32_t(base));
+    got = reg_read(FOLDSIM_REG_VMEM_BASE_LO);
+    check(got == uint32_t(base), "virtual memories' base, low", FOLDSIM_REG_VMEM_BASE_LO, got, uint32_t(base));
+    got = reg_read(FOLDSIM_REG_VMEM_BASE_HI);
+    check(got == uint32_t(base >> 32), "virtual memories' base, high", FOLDSIM_REG_VMEM_BASE_HI, got,
+          uint32_t(base >> 32));
+    reg_write(FOLDSIM_REG_VMEM_BASE_LO, 0x2000u);
+    check(!dut->vmem_on, "virtual memories on while moved", FOLDSIM_REG_VMEM_BASE_LO, dut->vmem_on, 0);
+    reg_write(FOLDSIM_REG_VMEM_BASE_HI, 0x41u);
+    check(dut->vmem_on == vm, "virtual memories on, moved", FOLDSIM_REG_VMEM_BASE_HI, dut->vmem_on, vm);
+    got = reg_read(FOLDSIM_REG_VMEM_BASE_LO);
+    check(got == (vm ? 0x2000u : 0u), "virtual memories' moved base", FOLDSIM_REG_VMEM_BASE_LO, got,
+          vm ? 0x2000u : 0u);
+  }
 
   got = reg_read(FOLDSIM_REG_MEM_TIMING(FOLDSIM_MEM_NUM_TIMINGS));
   check(got == 0, "past the timings", FOLDSIM_REG_MEM_TIMING(FOLDSIM_MEM_NUM_TIMINGS), got, 0);
