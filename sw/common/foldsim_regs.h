@@ -19,7 +19,7 @@
 #pragma once
 
 #define FOLDSIM_ID              0x464F4C44u
-#define FOLDSIM_VERSION         5u
+#define FOLDSIM_VERSION         6u
 
 #define FOLDSIM_REG_ID          0x000u
 #define FOLDSIM_REG_VERSION     0x004u
@@ -38,7 +38,7 @@
 #define FOLDSIM_REG_NUM_CLASSES 0x038u  // classes of threaded models
 #define FOLDSIM_REG_MEM_BASE_LO 0x0C0u  // device address of target address 0
 #define FOLDSIM_REG_MEM_BASE_HI 0x0C4u
-#define FOLDSIM_REG_FINISH(c)   (0x100u + 8u * (c))  // threads of class c finished, lo/hi
+#define FOLDSIM_REG_FINISH(c)   (0x100u + 8u * (c))  // threads of class c finished, lo/hi (c < 96)
 
 // The memory model: each memory port's timing as a DRAM channel's banks
 // (hw/rtl/afu/foldsim/foldsim_mem_bank.sv). Its settings take effect at the
@@ -56,14 +56,14 @@
 #define FOLDSIM_REG_MEM_WMARK   0x0F0u  // write bursts: [7:0] to writes at, [15:8] back below
 #define FOLDSIM_REG_MEM_REFI    0x0F4u  // refresh: DRAM clocks from one to the next
 #define FOLDSIM_REG_MEM_RFC     0x0F8u  // refresh: DRAM clocks a refreshed bank may not activate
-#define FOLDSIM_REG_MEM_TIMING(i) (0x800u + 4u * (i))  // FOLDSIM_MEM_T_*, 12 bits each
-#define FOLDSIM_REG_MEM_STATS(p, i) (0xC00u + 0x40u * (p) + 8u * (i))  // port p's FOLDSIM_MEM_STAT_*, lo/hi
+#define FOLDSIM_REG_MEM_TIMING(i) (0x400u + 4u * (i))  // FOLDSIM_MEM_T_*, 12 bits each
+#define FOLDSIM_REG_MEM_STATS(p, i) (0x800u + 0x40u * (p) + 8u * (i))  // port p's FOLDSIM_MEM_STAT_*, lo/hi (p < 32)
 
 #define FOLDSIM_MEM_REFRESH_OFF  0u
 #define FOLDSIM_MEM_REFRESH_BANK 1u  // per bank, the banks in turn
 #define FOLDSIM_MEM_REFRESH_ALL  3u  // all banks at once
 
-#define FOLDSIM_MEM_CAPS_PORTS(c)   ((c) & 0xffu)                       // memory ports, a channel each
+#define FOLDSIM_MEM_CAPS_PORTS(c)   ((c) & 0xffu)                       // memory ports (at most 32), a channel each
 #define FOLDSIM_MEM_CAPS_HORIZON(c) (1u << ((((c) >> 8) & 0xfu) + 4u))  // ring, DRAM clocks
 #define FOLDSIM_MEM_CAPS_SLOTS(c)   (((c) >> 12) & 0xffu)               // read slots per port
 #define FOLDSIM_MEM_CAPS_TIME_W(c)  ((((c) >> 28) & 0xfu) + 12u)        // timing bits

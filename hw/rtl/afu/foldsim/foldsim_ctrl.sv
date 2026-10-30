@@ -42,7 +42,10 @@ module foldsim_ctrl #(
 
     input  wire                  s_awvalid,
     output wire                  s_awready,
+    // Registers are words: an address's byte bits are not decoded.
+    /* verilator lint_off UNUSEDSIGNAL */
     input  wire [11:0]           s_awaddr,
+    /* verilator lint_on UNUSEDSIGNAL */
     input  wire                  s_wvalid,
     output wire                  s_wready,
     input  wire [31:0]           s_wdata,
@@ -92,6 +95,10 @@ module foldsim_ctrl #(
     input  wire                  dcr_rsp_data_valid,  output wire dcr_rsp_data_ready,  input wire [DCR_DATA_W-1:0] dcr_rsp_data_bits,
     input  wire                  busy_valid,          output wire busy_ready,          input wire                  busy_bits
 );
+    if (NUM_CLASSES > 96 || MEM_PORTS > 32) begin : g_map
+        $error("foldsim_ctrl: the register map holds up to 96 classes and 32 memory ports");
+    end
+
     localparam QW = $clog2(QUEUE);
     localparam QC = $clog2(QUEUE + 1);
 
@@ -188,14 +195,19 @@ module foldsim_ctrl #(
 
     // ---- The host's registers ----
     reg       aw_got, w_got, ar_got;
-    reg [11:0] aw_addr, ar_addr;
+    reg [11:2] aw_addr;
+    reg [11:0] ar_addr;
+    // Offsets into the counter and finish windows of the address being read.
+    wire [11:0] stat_off = ar_addr - `FOLDSIM_REG_MEM_STATS;
+    localparam CW = (NUM_CLASSES > 1) ? $clog2(NUM_CLASSES) : 1;
+    wire [CW-1:0] fin_idx = CW'((ar_addr - `FOLDSIM_REG_FINISH_BASE) >> 3);
     reg [31:0] w_data;
     assign s_awready = ~aw_got;
     assign s_wready  = ~w_got;
     assign s_arready = ~ar_got & ~s_rvalid;
 
     wire wr      = aw_got & w_got & ~s_bvalid;
-    wire [11:0] wa = {aw_addr[11:2], 2'b00};
+    wire [11:0] wa = {aw_addr, 2'b00};
     wire push    = wr & (wa == `FOLDSIM_REG_CMD) & (q_count != QC'(QUEUE));
     wire pop     = finish & ~q_empty & (reset_next == 0);
 
@@ -288,7 +300,7 @@ module foldsim_ctrl #(
             // AXI4-Lite: a write once both its address and data are in.
             if (s_awvalid & s_awready) begin
                 aw_got  <= 1'b1;
-                aw_addr <= s_awaddr;
+                aw_addr <= s_awaddr[11:2];
             end
             if (s_wvalid & s_wready) begin
                 w_got  <= 1'b1;
@@ -330,7 +342,7 @@ module foldsim_ctrl #(
                 `FOLDSIM_REG_ID:          s_rdata <= `FOLDSIM_ID;
                 `FOLDSIM_REG_VERSION:     s_rdata <= `FOLDSIM_VERSION;
                 `FOLDSIM_REG_CTRL:        s_rdata <= {31'b0, run};
-                `FOLDSIM_REG_STATUS:      s_rdata <= {27'b0, mem_error, rsp_valid,
+                `FOLDSIM_REG_STATUS:      s_rdata <= {28'b0, mem_error, rsp_valid,
                                                      (q_count == QC'(QUEUE)), status_busy};
                 `FOLDSIM_REG_CMD_ADDR:    s_rdata <= 32'(cmd_addr);
                 `FOLDSIM_REG_CMD_DATA:    s_rdata <= 32'(cmd_data);
@@ -358,13 +370,13 @@ module foldsim_ctrl #(
                 if (ar_addr >= `FOLDSIM_REG_MEM_TIMING && ar_addr < `FOLDSIM_REG_MEM_TIMING + 12'(4 * 18))
                     s_rdata <= 32'(mem_t[5'((ar_addr - `FOLDSIM_REG_MEM_TIMING) >> 2)]);
                 // A port's counters at FOLDSIM_REG_MEM_STATS + 0x40 per port.
-                if (ar_addr >= `FOLDSIM_REG_MEM_STATS && ar_addr < `FOLDSIM_REG_MEM_STATS + 12'(64 * MEM_PORTS))
-                    s_rdata <= mem_stats[32'((ar_addr - `FOLDSIM_REG_MEM_STATS) >> 6) * (8 * 64)
-                                         + 32'(ar_addr[5:0]) * 8 +: 32];
+                // 32 ports end the window at 0x1000, past 12 bits: compared in 32.
+                if (ar_addr >= `FOLDSIM_REG_MEM_STATS && 32'(ar_addr) < 32'(`FOLDSIM_REG_MEM_STATS) + 32'(64 * MEM_PORTS))
+                    s_rdata <= mem_stats[32'(stat_off[11:6]) * (8 * 64) + 32'(stat_off[5:0]) * 8 +: 32];
                 if (ar_addr >= `FOLDSIM_REG_FINISH_BASE
                  && ar_addr < `FOLDSIM_REG_FINISH_BASE + 12'(8 * NUM_CLASSES)) begin
-                    s_rdata <= ar_addr[2] ? 32'(finishes[(ar_addr - `FOLDSIM_REG_FINISH_BASE) >> 3] >> 32)
-                                          : finishes[(ar_addr - `FOLDSIM_REG_FINISH_BASE) >> 3][31:0];
+                    s_rdata <= ar_addr[2] ? 32'(finishes[fin_idx] >> 32)
+                                          : finishes[fin_idx][31:0];
                 end
             end
             if (s_rvalid & s_rready)

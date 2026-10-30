@@ -22,7 +22,7 @@
 `define FOLDSIM_REGS_VH
 
 `define FOLDSIM_ID              32'h464F4C44
-`define FOLDSIM_VERSION         32'd5
+`define FOLDSIM_VERSION         32'd6
 
 `define FOLDSIM_REG_ID          12'h000
 `define FOLDSIM_REG_VERSION     12'h004
@@ -51,12 +51,14 @@
 `define FOLDSIM_REG_MEM_WMARK   12'h0F0
 `define FOLDSIM_REG_MEM_REFI    12'h0F4
 `define FOLDSIM_REG_MEM_RFC     12'h0F8
-// Per class c: the host cycles a thread of it finished its target cycle.
+// Per class c: the host cycles a thread of it finished its target cycle, up
+// to 96 classes.
 `define FOLDSIM_REG_FINISH_BASE 12'h100
 // The bank model's DRAM timings, a word each, and per memory port p its
-// counters, 64-bit each, from FOLDSIM_REG_MEM_STATS + 0x40 * p.
-`define FOLDSIM_REG_MEM_TIMING  12'h800
-`define FOLDSIM_REG_MEM_STATS   12'hC00
+// counters, 64-bit each, from FOLDSIM_REG_MEM_STATS + 0x40 * p: the upper
+// half of the map, up to 32 ports.
+`define FOLDSIM_REG_MEM_TIMING  12'h400
+`define FOLDSIM_REG_MEM_STATS   12'h800
 
 `define FOLDSIM_CMD_NONE        3'd0
 `define FOLDSIM_CMD_DCR_WRITE   3'd1

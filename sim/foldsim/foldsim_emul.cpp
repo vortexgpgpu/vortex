@@ -28,6 +28,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 
 using namespace vortex;
@@ -47,7 +48,7 @@ constexpr uint32_t kBeat = 64;
 #ifndef FOLDSIM_MEM_PORTS
 #error "FOLDSIM_MEM_PORTS comes from the generated foldsim_kernel.vh"
 #endif
-static_assert(FOLDSIM_MEM_PORTS >= 1 && FOLDSIM_MEM_PORTS <= 8, "the kernel has 1 to 8 memory ports");
+static_assert(FOLDSIM_MEM_PORTS >= 1 && FOLDSIM_MEM_PORTS <= 32, "the kernel has 1 to 32 memory ports");
 
 // Device memory: sparse, zero where never written.
 class memory_t {
@@ -208,7 +209,10 @@ private:
   // has in flight on it.
   struct port_t {
     CData *awvalid, *awready, *wvalid, *wready, *arvalid, *arready;
-    CData *rvalid, *rready, *rlast, *rid, *rresp, *bvalid, *bready, *bid, *bresp;
+    CData *rvalid, *rready, *rlast, *rresp, *bvalid, *bready, *bresp;
+    // 16 bits past 8: the id carries the port index above the tag buffer's 4 bits.
+    using id_t = std::remove_reference_t<decltype(Vfoldsim_afu::m_axi_mem_0_rid)>;
+    id_t *rid, *bid;
     QData *awaddr, *araddr, *wstrb;
     VlWide<16> *wdata, *rdata;
     std::deque<request_t> reads;
@@ -246,6 +250,16 @@ private:
     FOLDSIM_PORT(5)
     FOLDSIM_PORT(6)
     FOLDSIM_PORT(7)
+#endif
+#if FOLDSIM_MEM_PORTS > 8
+    FOLDSIM_PORT(8)  FOLDSIM_PORT(9)  FOLDSIM_PORT(10) FOLDSIM_PORT(11)
+    FOLDSIM_PORT(12) FOLDSIM_PORT(13) FOLDSIM_PORT(14) FOLDSIM_PORT(15)
+#endif
+#if FOLDSIM_MEM_PORTS > 16
+    FOLDSIM_PORT(16) FOLDSIM_PORT(17) FOLDSIM_PORT(18) FOLDSIM_PORT(19)
+    FOLDSIM_PORT(20) FOLDSIM_PORT(21) FOLDSIM_PORT(22) FOLDSIM_PORT(23)
+    FOLDSIM_PORT(24) FOLDSIM_PORT(25) FOLDSIM_PORT(26) FOLDSIM_PORT(27)
+    FOLDSIM_PORT(28) FOLDSIM_PORT(29) FOLDSIM_PORT(30) FOLDSIM_PORT(31)
 #endif
   }
 #undef FOLDSIM_PORT

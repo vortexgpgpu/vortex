@@ -90,8 +90,8 @@ cfg_value = $(lastword $(patsubst -D$(1)=%,%,$(filter -D$(1)=%,$(XCONFIGS))))
 # GPU's memory port the read came from, of which there are at most as many as
 # memory ports.
 MEM_PORTS := $(call cfg_value,VX_CFG_PLATFORM_MEMORY_NUM_BANKS)
-ifeq ($(filter 1 2 4 8,$(MEM_PORTS)),)
-$(error the foldsim kernel has 1, 2, 4 or 8 memory ports (VX_CFG_PLATFORM_MEMORY_NUM_BANKS=$(MEM_PORTS)))
+ifeq ($(filter 1 2 4 8 16 32,$(MEM_PORTS)),)
+$(error the foldsim kernel has 1, 2, 4, 8, 16 or 32 memory ports (VX_CFG_PLATFORM_MEMORY_NUM_BANKS=$(MEM_PORTS)))
 endif
 MEM_ID_W := $(shell python3 -c 'print(4 + ($(MEM_PORTS) - 1).bit_length())')
 PLATFORM_DEFINES += -DPLATFORM_MEMORY_ID_WIDTH=$(MEM_ID_W)

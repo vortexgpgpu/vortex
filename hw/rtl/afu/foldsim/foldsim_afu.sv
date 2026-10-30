@@ -237,8 +237,7 @@ module foldsim_afu #(
     // starts at their own state, not at the simulator's handshake. A token then
     // counts a host cycle later; s2w4i2's host cycles do not move.
     localparam MEM_STAGED = 0;
-    // Ports, engines and device-memory masters: one of each per port.
-    localparam [31:0] MEM_CAPS = {4'd0, 4'(PORTS), 4'(PORTS), 8'(MEM_SLOTS), 4'(MEM_HLOG2 - 4), 8'(PORTS)};
+    localparam [31:0] MEM_CAPS = {12'd0, 8'(MEM_SLOTS), 4'(MEM_HLOG2 - 4), 8'(PORTS)};
 
     wire [63:0] mem_base;
     wire [31:0] mem_clock, mem_queue;

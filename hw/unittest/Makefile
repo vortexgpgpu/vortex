@@ -27,6 +27,8 @@ all:
 	$(MAKE) -C foldsim_mem_spec_s8
 	$(MAKE) -C foldsim_mem_spec2_s8
 	$(MAKE) -C foldsim_mem_ch2
+	$(MAKE) -C foldsim_ctrl
+	$(MAKE) -C foldsim_ctrl_p2
 	$(MAKE) -C cp_axi_path
 	$(MAKE) -C cp_dma
 	$(MAKE) -C cp_llc_port
@@ -68,6 +70,8 @@ run:
 	$(MAKE) -C foldsim_mem_spec_s8 run
 	$(MAKE) -C foldsim_mem_spec2_s8 run
 	$(MAKE) -C foldsim_mem_ch2 run
+	$(MAKE) -C foldsim_ctrl run
+	$(MAKE) -C foldsim_ctrl_p2 run
 	$(MAKE) -C cp_axi_path run
 	$(MAKE) -C cp_dma run
 	$(MAKE) -C cp_llc_port run
@@ -178,6 +182,8 @@ clean:
 	$(MAKE) -C foldsim_mem_spec_s8 clean
 	$(MAKE) -C foldsim_mem_spec2_s8 clean
 	$(MAKE) -C foldsim_mem_ch2 clean
+	$(MAKE) -C foldsim_ctrl clean
+	$(MAKE) -C foldsim_ctrl_p2 clean
 	$(MAKE) -C fma_unit clean
 	$(MAKE) -C fdiv_unit clean
 	$(MAKE) -C fsqrt_unit clean
