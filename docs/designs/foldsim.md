@@ -213,12 +213,13 @@ the host-memory master: `s_axi_control` and one device-memory master
 `m_axi_mem_<p>` per memory port of the target, each linked to the `MEM` HBM
 aperture (the linker gives each its own way in). The target has as many
 memory ports as its configuration has platform memory banks
-(`VX_CFG_PLATFORM_MEMORY_NUM_BANKS`: 1, 2, 4 or 8; `VX_config.toml`'s 2 unless
+(`VX_CFG_PLATFORM_MEMORY_NUM_BANKS`: 1, 2, 4, 8, 16 or 32; `VX_config.toml`'s 2 unless
 `CONFIGS` sets it); the flow writes their number, the shift to a port's
-channel, their AXI id width and `FOLDSIM_MEM_REPEAT`, which lists the ports
-whose names carry their index, into `gen/foldsim_kernel.vh` (spelled out, as
-Vivado's IP packager does not paste an expanded macro argument into a macro
-name). It instantiates `foldsim_sim`, a
+channel, their AXI id width and `FOLDSIM_MEM_REPEAT0` to `3`, which list the
+ports whose names carry their index, 8 to a part, into `gen/foldsim_kernel.vh`
+(spelled out, as Vivado's IP packager does not paste an expanded macro argument
+into a macro name; in parts on lines of their own, as Verilator takes at most
+40000 tokens on a line). It instantiates `foldsim_sim`, a
 memory endpoint per port and the control endpoint, all models of the target's
 surroundings that take one token per channel per target cycle
 (`foldsim_token.sv`):
@@ -544,7 +545,7 @@ folds (s2w4i2 above).
    them; a burst sets the status register's memory error, stops the
    endpoint, and only a reset clears it. Under the bank model, no two reads
    of one id may be outstanding (Vortex's AXI adapter never has them).
-4. **Memory ports**: 1, 2, 4 or 8, one per platform memory bank, each a
+4. **Memory ports**: 1, 2, 4, 8, 16 or 32, one per platform memory bank, each a
    channel with its own engine (about 11k LUTs). A refresh that keeps its
    bank longer than the horizon (per-bank refresh at HBM3's clock: tRFCsb is
    524 clocks against 448) holds the requests behind one to that bank at the

@@ -66,7 +66,10 @@ module foldsim_afu #(
     input  wire [1:0]                              m_axi_mem_``i``_bresp, \
     input  wire [C_M_AXI_MEM_ID_WIDTH-1:0]         m_axi_mem_``i``_bid
 
-    `FOLDSIM_MEM_REPEAT(FOLDSIM_AXI_MEM, FOLDSIM_COMMA),
+    `FOLDSIM_MEM_REPEAT0(FOLDSIM_AXI_MEM, FOLDSIM_COMMA)
+    `FOLDSIM_MEM_REPEAT1(FOLDSIM_AXI_MEM, FOLDSIM_COMMA)
+    `FOLDSIM_MEM_REPEAT2(FOLDSIM_AXI_MEM, FOLDSIM_COMMA)
+    `FOLDSIM_MEM_REPEAT3(FOLDSIM_AXI_MEM, FOLDSIM_COMMA),
 
     input  wire                                    s_axi_control_awvalid,
     output wire                                    s_axi_control_awready,
@@ -191,7 +194,10 @@ module foldsim_afu #(
     assign m_axi_mem_``i``_rready  = hbm_rready[i]; \
     assign hbm_rdata[i]            = m_axi_mem_``i``_rdata
 
-    `FOLDSIM_MEM_REPEAT(FOLDSIM_HBM, FOLDSIM_SEMI);
+    `FOLDSIM_MEM_REPEAT0(FOLDSIM_HBM, FOLDSIM_SEMI)
+    `FOLDSIM_MEM_REPEAT1(FOLDSIM_HBM, FOLDSIM_SEMI)
+    `FOLDSIM_MEM_REPEAT2(FOLDSIM_HBM, FOLDSIM_SEMI)
+    `FOLDSIM_MEM_REPEAT3(FOLDSIM_HBM, FOLDSIM_SEMI);
 `undef FOLDSIM_HBM
 
 `define FOLDSIM_IN(name) \
@@ -215,7 +221,10 @@ module foldsim_afu #(
         .hostClock (ap_clk),
         .hostReset (reset),
         .profile_finish (profile_finish),
-        `FOLDSIM_MEM_REPEAT(FOLDSIM_SIM_MEM, FOLDSIM_COMMA),
+        `FOLDSIM_MEM_REPEAT0(FOLDSIM_SIM_MEM, FOLDSIM_COMMA)
+        `FOLDSIM_MEM_REPEAT1(FOLDSIM_SIM_MEM, FOLDSIM_COMMA)
+        `FOLDSIM_MEM_REPEAT2(FOLDSIM_SIM_MEM, FOLDSIM_COMMA)
+        `FOLDSIM_MEM_REPEAT3(FOLDSIM_SIM_MEM, FOLDSIM_COMMA),
         `FOLDSIM_IN(reset),
         `FOLDSIM_IN(dcr_req_valid),
         `FOLDSIM_IN(dcr_req_rw),
