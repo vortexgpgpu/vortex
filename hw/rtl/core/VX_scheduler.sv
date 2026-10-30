@@ -145,10 +145,21 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     // a CTA counts from its accept cycle, which busy leaves to the issuer
     wire kmu_fire = kmu_bus_if.valid && kmu_bus_if.ready;
 
+    // An issue slice commits at most one warp per cycle (warp w belongs to slice
+    // w % ISSUE_WIDTH), so the commits are counted per slice, not per warp.
+    wire [`VX_CFG_ISSUE_WIDTH-1:0] committed_slices;
+    for (genvar i = 0; i < `VX_CFG_ISSUE_WIDTH; ++i) begin : g_committed_slices
+        wire [PER_ISSUE_WARPS-1:0] slice_warps;
+        for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_warps
+            assign slice_warps[w] = committed_warps[w * `VX_CFG_ISSUE_WIDTH + i];
+        end
+        assign committed_slices[i] = (| slice_warps);
+    end
+
     reg [PERF_CTR_BITS-1:0] cycles_r;
     reg [PERF_CTR_BITS-1:0] instret_r;
-    wire [`CLOG2(`VX_CFG_NUM_WARPS+1)-1:0] committed_warps_cnt;
-    `POP_COUNT(committed_warps_cnt, committed_warps);
+    wire [`CLOG2(`VX_CFG_ISSUE_WIDTH+1)-1:0] committed_cnt;
+    `POP_COUNT(committed_cnt, committed_slices);
     always @(posedge clk) begin
         if (reset) begin
             cycles_r  <= '0;
@@ -157,7 +168,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             if (busy || kmu_fire) begin
                 cycles_r <= cycles_r + 1;
             end
-            instret_r <= instret_r + PERF_CTR_BITS'(committed_warps_cnt);
+            instret_r <= instret_r + PERF_CTR_BITS'(committed_cnt);
         end
     end
     assign cycles  = cycles_r;
