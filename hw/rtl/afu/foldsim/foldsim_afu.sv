@@ -262,7 +262,8 @@ module foldsim_afu #(
     wire        vmem_on;
 
     // Memory k on master p. Its region's base is registered: base + the
-    // region's offset is static while requests flow.
+    // region's offset is static while requests flow. Its host cache has
+    // VMEM_CACHE_ROWS lines, at most a line per row of its image.
 `define FOLDSIM_VMEM(p, k) \
     wire                                vm``k``_rd_valid, vm``k``_wr_valid, vm``k``_rsp_valid; \
     wire [`FOLDSIM_VMEM_``k``_IW-1:0]   vm``k``_rd_inst, vm``k``_wr_inst, vm``k``_rsp_inst; \
@@ -284,7 +285,8 @@ module foldsim_afu #(
         .AXI_ID_W       (C_M_AXI_MEM_ID_WIDTH), \
         .OUTSTANDING    (VMEM_OUTSTANDING), \
         .INSTANCES      (`FOLDSIM_VMEM_``k``_INSTANCES), \
-        .CACHE_ROWS     (VMEM_CACHE_ROWS) \
+        .CACHE_ROWS     ((VMEM_CACHE_ROWS < (1 << (`FOLDSIM_VMEM_``k``_AW + $clog2(`FOLDSIM_VMEM_``k``_INSTANCES)))) \
+                         ? VMEM_CACHE_ROWS : (1 << (`FOLDSIM_VMEM_``k``_AW + $clog2(`FOLDSIM_VMEM_``k``_INSTANCES)))) \
     ) vmem_``k ( \
         .clk       (ap_clk), \
         .reset     (reset), \

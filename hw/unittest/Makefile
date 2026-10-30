@@ -38,6 +38,11 @@ all:
 	$(MAKE) -C foldsim_vmem_c256dw1024
 	$(MAKE) -C foldsim_vmem_c16q8
 	$(MAKE) -C foldsim_vmem_c8dw4096
+	$(MAKE) -C foldsim_vmem_i1
+	$(MAKE) -C foldsim_vmem_i1c256
+	$(MAKE) -C foldsim_vmem_i4c64
+	$(MAKE) -C foldsim_vmem_c16pin
+	$(MAKE) -C foldsim_vmem_np2c512
 	$(MAKE) -C foldsim_ctrl
 	$(MAKE) -C foldsim_ctrl_p2
 	$(MAKE) -C cp_axi_path
@@ -92,6 +97,11 @@ run:
 	$(MAKE) -C foldsim_vmem_c256dw1024 run
 	$(MAKE) -C foldsim_vmem_c16q8 run
 	$(MAKE) -C foldsim_vmem_c8dw4096 run
+	$(MAKE) -C foldsim_vmem_i1 run
+	$(MAKE) -C foldsim_vmem_i1c256 run
+	$(MAKE) -C foldsim_vmem_i4c64 run
+	$(MAKE) -C foldsim_vmem_c16pin run
+	$(MAKE) -C foldsim_vmem_np2c512 run
 	$(MAKE) -C foldsim_ctrl run
 	$(MAKE) -C foldsim_ctrl_p2 run
 	$(MAKE) -C cp_axi_path run
@@ -215,6 +225,11 @@ clean:
 	$(MAKE) -C foldsim_vmem_c256dw1024 clean
 	$(MAKE) -C foldsim_vmem_c16q8 clean
 	$(MAKE) -C foldsim_vmem_c8dw4096 clean
+	$(MAKE) -C foldsim_vmem_i1 clean
+	$(MAKE) -C foldsim_vmem_i1c256 clean
+	$(MAKE) -C foldsim_vmem_i4c64 clean
+	$(MAKE) -C foldsim_vmem_c16pin clean
+	$(MAKE) -C foldsim_vmem_np2c512 clean
 	$(MAKE) -C foldsim_ctrl clean
 	$(MAKE) -C foldsim_ctrl_p2 clean
 	$(MAKE) -C fma_unit clean

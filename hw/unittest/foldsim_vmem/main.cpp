@@ -26,6 +26,12 @@
 //     the writes taken before it reach HBM;
 //   * after a final reset (which writes the host cache's dirty lines back),
 //     HBM's image equals the reference RAM, padding untouched.
+// With a host cache, directed sequences first check where answers and writes
+// go: a read-first pair's whole-row write fills its line, its read still
+// getting the old row from memory (miss) or the line (hit); later reads hit;
+// a fill evicts the line's dirty row; a partial write that misses goes
+// around; and, where instances share lines, a pinned line stays in the cache
+// (another instance's write goes around) until its pair's read has its data.
 //
 //   ./foldsim_vmem            every setup
 //   ./foldsim_vmem <name>     one setup
@@ -93,6 +99,13 @@ constexpr uint32_t kRows = 1u << VM_AW;
 constexpr uint32_t kInstances = VM_INSTANCES;
 constexpr uint64_t kBase = 0x123400000ull;
 constexpr int kLead = 3;
+constexpr bool kPow2 = (kInstances & (kInstances - 1)) == 0;
+// A read answered on chip: 5 host cycles, 7 through the layout's multiply.
+constexpr uint64_t kLocal = kPow2 ? 5 : 7;
+// The image's rows; instances share lines: read-first pairs pin theirs.
+constexpr uint64_t kImageRows = uint64_t(kRows) * kInstances;
+constexpr bool kPin = VM_CACHE_ROWS > 0 && uint64_t(VM_CACHE_ROWS) < kImageRows &&
+                      (!kPow2 || uint32_t(VM_CACHE_ROWS) < kInstances);
 
 using Row = std::vector<uint8_t>;
 using Line = std::array<uint8_t, 64>;
@@ -181,6 +194,8 @@ struct Hbm {
   std::map<uint64_t, Line> mem;
   double ready_p = 0.7, rvalid_p = 0.8, interleave_p = 0.3;
   uint64_t lat_lo = 20, lat_hi = 600;
+  // A read samples memory at the end of its flight (else at a random point).
+  bool late_sample = false;
 
   struct Read {
     uint64_t addr;
@@ -211,6 +226,7 @@ struct Hbm {
   bool w_last = false;
 
   uint64_t n_ar = 0, n_aw = 0, n_w = 0, n_b = 0, n_r = 0, max_lat = 0, min_lat = ~0ull;
+  std::vector<uint64_t> aw_log;  // AW addresses, in order
 
   Line& line(uint64_t a) {
     auto it = mem.find(a);
@@ -223,6 +239,15 @@ struct Hbm {
   }
 
   size_t outstanding() const { return reads.size() + aw.size() + w.size() + writes.size(); }
+
+  // A transaction that cannot finish within the next two cycles.
+  bool busy_ahead() const {
+    for (auto& kv : reads)
+      if (kv.second.ready_at > now + 2) return true;
+    for (auto& wr : writes)
+      if (wr.b_at > now + 2) return true;
+    return false;
+  }
 
   void check_addr(uint64_t a, const char* ch) {
     CHECK((a & ((1ull << kRowLog2) - 1)) == 0, "%s address 0x%lx not row aligned", ch, (unsigned long)a);
@@ -320,7 +345,7 @@ struct Hbm {
       Read r;
       r.addr = dut->m_araddr;
       r.ready_at = now + rand_in(lat_lo, lat_hi);
-      r.sample_at = rand_in(now + 1, r.ready_at);
+      r.sample_at = late_sample ? r.ready_at : rand_in(now + 1, r.ready_at);
       const uint64_t lat = r.ready_at - now;
       max_lat = std::max(max_lat, lat);
       min_lat = std::min(min_lat, lat);
@@ -330,6 +355,7 @@ struct Hbm {
       ++n_aw;
       check_addr(dut->m_awaddr, "AW");
       aw.push_back({dut->m_awaddr});
+      aw_log.push_back(dut->m_awaddr);
     }
     if (w_hs) {
       ++n_w;
@@ -423,8 +449,18 @@ const Setup kSetups[] = {
   {"sparse",     300000,  0.1,  0.6,  0.6,  0.4,  0.6,  0.5, 4,     2,   0.9,  3,   20,  600,  0.5,  4},
 };
 
+// A request the directed sequences force.
+struct Req {
+  bool rd = false, wr = false;
+  uint32_t inst = 0, rrow = 0, wrow = 0;
+  Row data;
+  std::vector<bool> mask;
+};
+
 struct Tb {
   Vfoldsim_vmem* dut = nullptr;
+  const Req* force = nullptr;
+  std::vector<uint64_t> rsp_lat;
   Hbm hbm;
   Ref ref;
   const Setup* s = nullptr;
@@ -478,7 +514,15 @@ struct Tb {
     uint32_t inst = 0, rrow = 0, wrow = 0;
     Row wdata(kBytes);
     std::vector<bool> mask(VM_MW, true);
-    if (!rst && issue && chance(s->p_issue)) {
+    if (!rst && force) {
+      rd = force->rd;
+      wr = force->wr;
+      inst = force->inst;
+      rrow = force->rrow;
+      wrow = force->wrow;
+      wdata = force->data;
+      mask = force->mask;
+    } else if (!rst && issue && chance(s->p_issue)) {
       const uint32_t span = s->active ? s->active : kInstances;
       const uint32_t first = s->active ? uint32_t((now / 5000) * 7 % kInstances) : 0;
       for (int tries = 0; tries < 8; ++tries) {
@@ -544,8 +588,9 @@ struct Tb {
         CHECK(got == expect[ri], "instance %u: wrong row", ri);
         pending[ri] = false;
         max_rsp_lat = std::max(max_rsp_lat, now - issued_at[ri]);
+        rsp_lat[ri] = now - issued_at[ri];
         // Answered without memory: the cache or the write buffer.
-        if (now - issued_at[ri] <= 6) ++n_quick;
+        if (now - issued_at[ri] <= kLocal + 1) ++n_quick;
       }
     }
     if (fr == 0 && !draining && !rst) ++full_cycles;
@@ -645,18 +690,19 @@ struct Tb {
     (void)rows;
   }
 
-  int run(const Setup& setup, uint64_t seed) {
+  // A new controller, reset and drained, under a setup.
+  void start(const Setup& setup, uint64_t seed) {
     s = &setup;
     setup_name = setup.name;
     rng.seed(seed);
     now = 0;
-    const int before = failures;
     hbm = Hbm();
     hbm.lat_lo = setup.lat_lo;
     hbm.lat_hi = setup.lat_hi;
     hbm.ready_p = setup.ready_p;
     ref = Ref();
     pending.assign(kInstances, false);
+    rsp_lat.assign(kInstances, 0);
     expect.assign(kInstances, Row(kBytes));
     issued_at.assign(kInstances, 0);
     free_hist.clear();
@@ -674,6 +720,20 @@ struct Tb {
     dut->eval();
     reset_dut(4);
     while (draining) cycle(false, false);
+  }
+
+  // Quiet, then a last reset: memory holds the RAM's image.
+  void finish() {
+    quiesce();
+    reset_dut(2);
+    while (draining) cycle(false, false);
+    CHECK(hbm.outstanding() == 0, "HBM left with %zu transactions after the last drain", hbm.outstanding());
+    check_image();
+  }
+
+  int run(const Setup& setup, uint64_t seed) {
+    const int before = failures;
+    start(setup, seed);
 
     const uint64_t slice = setup.cycles / uint64_t(setup.resets + 1);
     for (int k = 0; k <= setup.resets; ++k) {
@@ -686,8 +746,9 @@ struct Tb {
       hbm.lat_hi = 600;
       hbm.ready_p = 0.3;
       for (int c = 0; c < 300; ++c) cycle();
-      // Sparse traffic can leave HBM idle at the random point; reset once it is not.
-      for (int c = 0; c < 5000 && hbm.outstanding() == 0; ++c) cycle();
+      // Sparse traffic, or a host cache taking it all, can leave HBM idle at
+      // the random point; reset once it is not.
+      for (int c = 0; c < 200000 && !hbm.busy_ahead(); ++c) cycle();
       reset_dut(int(rand_in(1, 5)));
       uint64_t drain = 0;
       while (draining && drain++ < 100000) cycle(false, false);
@@ -696,11 +757,7 @@ struct Tb {
       hbm.lat_hi = hi;
       hbm.ready_p = rp;
     }
-    quiesce();
-    reset_dut(2);
-    while (draining) cycle(false, false);
-    CHECK(hbm.outstanding() == 0, "HBM left with %zu transactions after the last drain", hbm.outstanding());
-    check_image();
+    finish();
 
     printf("%-8s %lu cycles: %lu reads checked of %lu (%lu meeting a write in flight, %lu answered "
            "locally), %lu writes, "
@@ -713,8 +770,214 @@ struct Tb {
            (unsigned long)hbm.max_lat, (unsigned long)max_rsp_lat, (unsigned long)full_cycles,
            (unsigned long)n_resets, (unsigned long)n_resets_busy, (unsigned long)dropped,
            failures == before ? "ok" : "FAILED");
-    CHECK(n_resets_busy >= uint64_t(setup.resets), "only %lu of the resets found HBM busy",
-          (unsigned long)n_resets_busy);
+    // A cache with a line per row can keep HBM idle under any traffic.
+    if (uint64_t(VM_CACHE_ROWS) < kImageRows)
+      CHECK(n_resets_busy >= uint64_t(setup.resets), "only %lu of the resets found HBM busy",
+            (unsigned long)n_resets_busy);
+    delete dut;
+    dut = nullptr;
+    return failures - before;
+  }
+
+  // ---- Directed: where a host cache's answers and writes go ----
+  static uint32_t line_of(uint32_t inst, uint32_t row) {
+    return uint32_t((uint64_t(row) * kInstances + inst) % uint64_t(VM_CACHE_ROWS ? VM_CACHE_ROWS : 1));
+  }
+
+  Row rand_row() {
+    Row r(kBytes);
+    for (auto& b : r) b = uint8_t(rand_in(0, 255));
+    return r;
+  }
+
+  // One request (the controller idle: free at QUEUE). A partial write
+  // leaves its first mask group out.
+  void issue(bool rd, bool wr, uint32_t inst, uint32_t row, bool full = true) {
+    Req q;
+    q.rd = rd;
+    q.wr = wr;
+    q.inst = inst;
+    q.rrow = q.wrow = row;
+    q.data = rand_row();
+    q.mask.assign(VM_MW, true);
+    if (!full) q.mask[0] = false;
+    force = &q;
+    cycle();
+    force = nullptr;
+  }
+
+  // Idle until the instance's read has answered, then `settle` cycles more.
+  void await(uint32_t inst, uint64_t settle) {
+    for (int i = 0; i < 100000 && pending[inst]; ++i) cycle(false, false);
+    CHECK(!pending[inst], "the read of instance %u never answered", inst);
+    for (uint64_t i = 0; i < settle; ++i) cycle(false, false);
+  }
+
+  bool quick(uint32_t inst) const { return rsp_lat[inst] <= kLocal + 1; }
+
+  int run_directed(uint64_t seed) {
+    static const Setup kDirected = {"directed", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 50, 50, 1.0, 0};
+    const int before = failures;
+    start(kDirected, seed);
+    hbm.rvalid_p = 1.0;
+    const bool rf = VM_RDW_READ_FIRST != 0;
+    const uint32_t a = 0, r1 = 3 % kRows;
+    int steps = 0;
+
+    // A: a pair on a row not in the cache fills its line; a read-first
+    // pair's read gets the old row from memory, a write-first one's the new.
+    uint64_t ar = hbm.n_ar, aw = hbm.n_aw;
+    issue(true, true, a, r1);
+    await(a, 100);
+    CHECK(hbm.n_aw == aw, "A: the pair's write went to memory, not to its line");
+    CHECK(hbm.n_ar == ar + (rf ? 1 : 0), "A: %lu reads of memory", (unsigned long)(hbm.n_ar - ar));
+    if (!rf) CHECK(quick(a), "A: a write-first pair answered in %lu cycles", (unsigned long)rsp_lat[a]);
+    ++steps;
+    // B: the row is in the cache.
+    ar = hbm.n_ar;
+    issue(true, false, a, r1);
+    await(a, 0);
+    CHECK(hbm.n_ar == ar && quick(a), "B: the filled line missed (%lu cycles)", (unsigned long)rsp_lat[a]);
+    ++steps;
+    // C: a pair on the resident row: on chip, the old row (read-first) from
+    // the line its write replaces.
+    ar = hbm.n_ar;
+    aw = hbm.n_aw;
+    issue(true, true, a, r1);
+    await(a, 100);
+    CHECK(hbm.n_ar == ar && hbm.n_aw == aw && quick(a), "C: a pair on a resident row left the chip");
+    ++steps;
+    // D: and the new row is there.
+    issue(true, false, a, r1);
+    await(a, 0);
+    CHECK(quick(a), "D: the row left the cache");
+    ++steps;
+    // E: a pair on another row of the line evicts the dirty row to memory;
+    // both rows read back right.
+    uint32_t r2 = r1;
+    for (uint32_t r = 0; r < kRows && r2 == r1; ++r)
+      if (r != r1 && line_of(a, r) == line_of(a, r1)) r2 = r;
+    if (VM_CACHE_ROWS > 0 && r2 != r1) {
+      ar = hbm.n_ar;
+      aw = hbm.n_aw;
+      issue(true, true, a, r2);
+      await(a, 200);
+      CHECK(hbm.n_ar == ar + (rf ? 1 : 0), "E: %lu reads of memory", (unsigned long)(hbm.n_ar - ar));
+      CHECK(hbm.n_aw == aw + 1 && hbm.aw_log.back() == row_addr(a, r1), "E: the dirty row was not evicted");
+      issue(true, false, a, r1);
+      await(a, 0);
+      ar = hbm.n_ar;
+      issue(true, false, a, r2);
+      await(a, 0);
+      CHECK(hbm.n_ar == ar && quick(a), "E: the new row is not in the cache");
+      ++steps;
+    }
+    // F: a partial write of a row not in the cache goes around it.
+    const uint32_t r4 = (r1 + 7) % kRows;
+    if (VM_MW > 1 && r4 != r1 && r4 != r2) {
+      aw = hbm.n_aw;
+      issue(false, true, a, r4, false);
+      await(a, 200);
+      CHECK(hbm.n_aw == aw + 1 && hbm.aw_log.back() == row_addr(a, r4), "F: a partial write filled a line");
+      ++steps;
+    }
+    // G: instances sharing a line: instance p's pair pins it while its read
+    // is in memory (sampling it as late as it can); other instances' whole-row
+    // writes of rows on that line, the next cycle and later, go around instead
+    // of evicting it. Once the read has its data, such a write fills the line.
+    // H: a reset drops a pin whose read it drops.
+    if (kPin && rf) {
+      const uint32_t used = line_of(a, r1);
+      uint32_t p = kInstances, r5 = 0;
+      for (uint32_t i = 1; i < kInstances && p == kInstances; ++i)
+        for (uint32_t r = 0; r < kRows; ++r)
+          if (line_of(i, r) != used) {
+            p = i;
+            r5 = r;
+            break;
+          }
+      std::vector<std::pair<uint32_t, uint32_t>> others;  // (instance, row) on p's line
+      for (uint32_t i = 1; i < kInstances && others.size() < 2 && p != kInstances; ++i)
+        for (uint32_t r = 0; r < kRows && others.size() < 2; ++r)
+          if (i != p && line_of(i, r) == line_of(p, r5)) others.push_back({i, r});
+      CHECK(others.size() == 2, "G: no two other instances' rows share a line");
+      if (others.size() == 2) {
+        const auto [q1, rq1] = others[0];
+        const auto [q2, rq2] = others[1];
+        hbm.lat_lo = hbm.lat_hi = 400;
+        hbm.late_sample = true;
+        aw = hbm.n_aw;
+        issue(true, true, p, r5);
+        issue(false, true, q1, rq1);
+        for (int i = 0; i < 30; ++i) cycle(false, false);
+        issue(false, true, q2, rq2);
+        for (int i = 0; i < 300; ++i) cycle(false, false);
+        CHECK(pending[p], "G: the pinning read answered early");
+        CHECK(hbm.n_aw == aw + 2 && hbm.aw_log[aw] == row_addr(q1, rq1) && hbm.aw_log[aw + 1] == row_addr(q2, rq2),
+              "G: a write of a pinned line did not go around (%lu AW)", (unsigned long)(hbm.n_aw - aw));
+        await(p, 0);
+        hbm.lat_lo = hbm.lat_hi = 50;
+        hbm.late_sample = false;
+        ar = hbm.n_ar;
+        issue(true, false, p, r5);
+        await(p, 0);
+        CHECK(hbm.n_ar == ar && quick(p), "G: the pinned row left the cache");
+        issue(true, false, q1, rq1);
+        await(q1, 0);
+        CHECK(hbm.n_ar == ar + 1, "G: the row written around is in the cache");
+        aw = hbm.n_aw;
+        issue(false, true, q1, rq1);
+        for (int i = 0; i < 200; ++i) cycle(false, false);
+        CHECK(hbm.n_aw == aw + 1 && hbm.aw_log.back() == row_addr(p, r5),
+              "G: the line stayed pinned after its read");
+        ++steps;
+
+        // H: with AR held back, p's pair's read waits behind another read
+        // when the reset drops it; its pin must go too.
+        hbm.ready_p = 0;
+        ar = hbm.n_ar;
+        issue(true, false, q2, rq2);
+        issue(true, true, p, r5);
+        for (int i = 0; i < 20; ++i) cycle(false, false);
+        CHECK(pending[p] && hbm.n_ar == ar, "H: the reads did not wait for AR");
+        reset_dut(2);
+        hbm.ready_p = 1.0;
+        while (draining) cycle(false, false);
+        ar = hbm.n_ar;
+        aw = hbm.n_aw;
+        issue(false, true, q2, rq2);
+        for (int i = 0; i < 200; ++i) cycle(false, false);
+        issue(true, false, q2, rq2);
+        await(q2, 0);
+        CHECK(hbm.n_aw == aw && hbm.n_ar == ar && quick(q2), "H: a pin outlived the reset");
+        ++steps;
+
+        // I: a pair whose read is answered from the buffer (its row evicted,
+        // the write-back not yet acknowledged) releases its pin there.
+        hbm.lat_lo = hbm.lat_hi = 400;
+        issue(false, true, p, r5);
+        issue(false, true, q1, rq1);
+        for (int i = 0; i < 10; ++i) cycle(false, false);
+        issue(true, true, p, r5);
+        await(p, 0);
+        CHECK(quick(p), "I: the pair's read was not answered from the buffer (%lu cycles)",
+              (unsigned long)rsp_lat[p]);
+        const size_t from = hbm.aw_log.size();
+        issue(false, true, q2, rq2);
+        for (int i = 0; i < 1500; ++i) cycle(false, false);
+        bool evicted = false, around = false;
+        for (size_t i = from; i < hbm.aw_log.size(); ++i) {
+          evicted |= hbm.aw_log[i] == row_addr(p, r5);
+          around |= hbm.aw_log[i] == row_addr(q2, rq2);
+        }
+        CHECK(evicted && !around, "I: the line stayed pinned after its read was answered from the buffer");
+        hbm.lat_lo = hbm.lat_hi = 50;
+        ++steps;
+      }
+    }
+    finish();
+    printf("directed %d steps (read-first %d, pins %d): %s\n", steps, int(rf), int(kPin),
+           failures == before ? "ok" : "FAILED");
     delete dut;
     dut = nullptr;
     return failures - before;
@@ -733,6 +996,7 @@ int main(int argc, char** argv) {
          VM_IW, VM_AW, VM_DW, VM_MW, VM_RDW_READ_FIRST, VM_QUEUE, VM_OUTSTANDING, kInstances,
          VM_CACHE_ROWS);
   Tb tb;
+  if (VM_CACHE_ROWS > 0 && (!only || !std::strcmp(only, "directed"))) tb.run_directed(1);
   uint64_t seed = 1;
   for (const auto& s : kSetups) {
     ++seed;
