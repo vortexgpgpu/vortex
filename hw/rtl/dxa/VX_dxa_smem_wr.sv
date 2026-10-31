@@ -167,6 +167,9 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     reg [DXA_SMEM_ADDR_W-1:0] tiled_step_q;
     reg [DXA_SMEM_ADDR_W-1:0] tiled_wrap_q;
     reg [4:0]                 calc_sh2_q;
+    reg [15:0]                intra_khi_mask_q, intra_klo_mask_q;
+    reg [4:0]                 intra_khi_sh_q, intra_n_sh_q;
+    reg [3:0]                 esize_q;
     wire is_flat_w = (dest_mode_q == DXA_DEST_FLAT);
     wire [15:0] tcn_mask_w = (16'd1 << lg_tcN_q) - 16'd1;
     wire [4:0] step_sh_w = is_flat_w ? (5'(lg_ratio_q) + 5'(esize))
@@ -183,6 +186,16 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         calc_sh2_q   <= is_flat_w
             ? (5'(lg_tcN_q) + 5'(lg_tcN_q) + 5'd1 + 5'(lg_ratio_q) + 5'(esize))
             : (5'(lg_tcN_q) + 5'(lg_bkK_q) + 5'(esize));
+        // intra-block term of the per-CL dest calc (stage 1 below), as disjoint
+        // k/n bit fields shifted into place:
+        //   FLAT: k[hi] << (lg_tcN+esize) | n_in << (lg_ratio+esize) | k[lo] << esize
+        //         hi = ((2 << lg_tcN) - 1) << lg_ratio, lo = (1 << lg_ratio) - 1
+        //   BM:   n_in << (lg_bkK+esize) | k[lo] << esize, lo = (1 << lg_bkK) - 1
+        intra_khi_mask_q <= is_flat_w ? (((16'd2 << lg_tcN_q) - 16'd1) << lg_ratio_q) : 16'd0;
+        intra_khi_sh_q   <= 5'(lg_tcN_q) + 5'(esize);
+        intra_n_sh_q     <= step_sh_w;
+        intra_klo_mask_q <= (16'd1 << (is_flat_w ? lg_ratio_q : lg_bkK_q)) - 16'd1;
+        esize_q          <= esize;
     end
 
     // ════════════════════════════════════════════════════════════════════
@@ -426,23 +439,18 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [15:0] calc_k = calc_pend ? pend_k_r : defer_k_r;
     wire [15:0] calc_n = calc_pend ? pend_n_r : defer_n_r;
 
-    wire [15:0] ratio_mask_w = (16'd1 << lg_ratio_q) - 16'd1;
-    wire [15:0] ktck_mask_w  = (16'd2 << lg_tcN_q) - 16'd1;
-    wire [15:0] kw_mask_w    = (16'd1 << lg_bkK_q) - 16'd1;
     wire [15:0] calc_n_blk   = calc_n >> lg_tcN_q;
     wire [15:0] calc_n_in    = calc_n & tcn_mask_q;
     wire [15:0] f_k_word     = calc_k >> lg_ratio_q;
-    wire [15:0] f_elem       = calc_k & ratio_mask_w;
     wire [15:0] f_k_blk      = f_k_word >> (lg_tcN_q + 4'd1);
-    wire [15:0] f_kw_in      = f_k_word & ktck_mask_w;
     wire [15:0] b_k_blk      = calc_k >> lg_bkK_q;
-    wire [15:0] b_r_in       = calc_k & kw_mask_w;
 
     wire [15:0] calc_k_blk = is_flat_w ? f_k_blk : b_k_blk;
     wire [31:0] calc_blk_w   = (32'(calc_k_blk) << lg_nsteps_q) + 32'(calc_n_blk);
-    wire [31:0] calc_intra_w = is_flat_w
-        ? (((((32'(f_kw_in) << lg_tcN_q) + 32'(calc_n_in)) << lg_ratio_q) + 32'(f_elem)) << esize)
-        : (((32'(calc_n_in) << lg_bkK_q) + 32'(b_r_in)) << esize);
+    // the masked fields are disjoint, so the nested shift-adds are one OR
+    wire [31:0] calc_intra_w = (32'(calc_k & intra_khi_mask_q) << intra_khi_sh_q)
+                             | (32'(calc_n_in) << intra_n_sh_q)
+                             | (32'(calc_k & intra_klo_mask_q) << esize_q);
 
     reg [31:0] calc_blk_r, calc_intra_r;
     reg        calc2_valid_r, calc2_pend_r;
