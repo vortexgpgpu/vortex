@@ -126,8 +126,8 @@ module foldsim_vmem #(
     // (foldsim_vmem_group's member): carried to the response, never part of
     // the address. Requests of different tags may share lines, so read-first
     // pairs pin theirs wherever lines are not one per row; and the cache's
-    // index hashes the row's high bits in, so members' rows of one index (the
-    // same row of equal members) do not take the same line.
+    // index hashes the row's high bits in, so members using the same rows of
+    // their own do not take the same lines.
     parameter TAGW           = 0
 ) (
     input  wire                        clk,
@@ -214,10 +214,13 @@ module foldsim_vmem #(
     // A move's flush starts once no request has come for this many cycles:
     // past the simulator's lead (L = 3) after free dropped to 0.
     localparam QUIET  = 15;
-    // A line's index: the row's low bits, with (TAGW > 0) every CI bits above
-    // them XORed in; the tag keeps the bits above, so the row is
-    // {tag, index ^ fold(tag)}.
+    // A line's index: the row's low bits, with (TAGW > 0) the bits above them
+    // XORed in, CI at a time from the top: the tag's top bits reach the
+    // index's top bits, so members (largest first, each at a multiple of its
+    // size) using their low rows alike take different parts of the cache. The
+    // tag keeps the bits above, so the row is {tag, index ^ fold(tag)}.
     localparam HASH   = (TAGW > 0) && (CACHE != 0) && (LW > CI);
+    localparam HPAD   = (CI - (CT % CI)) % CI;
 
     // Where a local answer's row comes from.
     localparam SRC_WB = 2'd0;  // the write buffer
@@ -261,9 +264,11 @@ module foldsim_vmem #(
     endfunction
 
     function automatic [CI-1:0] fold(input [LW-1:0] hi);
+        reg [LW+CI-1:0] t;
+        t    = (LW+CI)'(hi) << HPAD;
         fold = '0;
-        for (integer c = 0; c < LW; c += CI)
-            fold = fold ^ CI'(hi >> c);
+        for (integer c = 0; c < LW + CI; c += CI)
+            fold = fold ^ CI'(t >> c);
     endfunction
     function automatic [CI-1:0] cidx(input [LW-1:0] lin);
         cidx = (HASH != 0) ? (lin[CI-1:0] ^ fold(lin >> CI)) : lin[CI-1:0];

@@ -20,9 +20,12 @@
 // the members' requests wait in a FIFO each (a read and a write of a host
 // cycle are one entry, and reach the controller together: their order is
 // RDW_READ_FIRST's) and leave one entry a cycle, round robin, while the
-// controller has room. A member's `free` is twice its free entries, so the
-// simulator's room rule (free >= 2 (L + 1)) holds per FIFO, and bubbles take
-// up the rest: a member whose FIFO fills sees no room.
+// controller has room. A member's `free` is twice its free entries but one:
+// the simulator decides a position on the `free` it sees and issues its
+// requests four host cycles later, so five decisions' entries (the four in
+// flight and its own) may follow any `free` it saw, and it takes free >= 8
+// as room for four. Bubbles take up the rest: a member whose FIFO fills sees
+// no room.
 //
 // The members' rows are disjoint rows of the controller's image: member m's
 // row r is the controller's row MROW[m] | r (the compiler places the members
@@ -77,7 +80,7 @@ module foldsim_vmem_group #(
     parameter OUTSTANDING    = 16,
     parameter CACHE_ROWS     = 0,
     parameter KNOWN_ZERO     = 1,
-    // FIFO entries per member, a power of two of at least 4.
+    // FIFO entries per member, a power of two of at least 8.
     parameter FIFO           = 8,
     localparam GF            = $clog2(2 * FIFO + 1)
 ) (
@@ -139,8 +142,8 @@ module foldsim_vmem_group #(
     initial begin
         if (N < 2)
             $error("foldsim_vmem_group: N must be at least 2 (one memory takes foldsim_vmem)");
-        if (FIFO < 4 || (FIFO & (FIFO - 1)) != 0)
-            $error("foldsim_vmem_group: FIFO must be a power of two of at least 4");
+        if (FIFO < 8 || (FIFO & (FIFO - 1)) != 0)
+            $error("foldsim_vmem_group: FIFO must be a power of two of at least 8");
         for (integer m = 0; m < N; ++m) begin
             if (MDW[m] < 1 || MDW[m] > DW || MAW[m] < 1 || MAW[m] > AW)
                 $error("foldsim_vmem_group: member %0d's data or row bits out of range", m);
@@ -258,12 +261,13 @@ module foldsim_vmem_group #(
 `endif
     end
 
-    // Room: twice the free entries, 0 while the group or the controller is
-    // reset, draining or moving (and from the cycle a reset or a move comes).
+    // Room: twice the free entries but one, 0 while the group or the
+    // controller is reset, draining or moving (and from the cycle a reset or
+    // a move comes).
     wire block = reset | rst_pend | c_reset | c_drain | move | mv_pend | c_moving;
     always @(posedge clk) begin
         for (integer m = 0; m < N; ++m)
-            free[m] <= block ? '0 : GF'(2 * (FIFO - 32'(cnt_next[m])));
+            free[m] <= (block | (cnt_next[m] == CW'(FIFO))) ? '0 : GF'(2 * (FIFO - 1 - 32'(cnt_next[m])));
     end
 
     // ---- The grant, a cycle ahead: round robin among the members with an

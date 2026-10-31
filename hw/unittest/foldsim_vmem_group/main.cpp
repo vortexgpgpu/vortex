@@ -15,8 +15,10 @@
 // of one class copy behind one foldsim_vmem), driven as a folded simulator
 // drives it -- a copy's state pass issues a read and/or a write to any of the
 // members at once for one instance, only once that instance has no read
-// outstanding in any member, and only to a member whose `free` allowed it L
-// host cycles earlier -- against a model of HBM with random latency and
+// outstanding in any member, and only to a member whose `free` allowed it L =
+// 4 host cycles earlier (the simulator's decision comes four host cycles
+// before its requests: five decisions' entries may follow a `free` it saw) --
+// against a model of HBM with random latency and
 // ready, reads out of order and interleaved across ids, writes applied and
 // reads sampled at random points of their flight, and the AXI4 protocol
 // checked. The members differ in rows, data width (one not a multiple of 8)
@@ -26,8 +28,8 @@
 //     instance, one a cycle at most, and equals that member's reference RAM
 //     row (requests applied in order, a same-cycle read and write of one row
 //     by RDW_READ_FIRST);
-//   * each member's free stays within 2 FIFO and never drops by more than
-//     twice the requests it took;
+//   * each member's free stays within 2 (FIFO - 1) and never drops by more
+//     than twice the requests it took;
 //   * a reset with requests queued and transactions in flight answers
 //     nothing from before it, keeps every free at 0 until HBM has answered
 //     everything, and the queued writes still reach HBM;
@@ -80,7 +82,8 @@ const Cfg kCfgs[] = {
 const Cfg& C = kCfgs[VG_CFG];
 const int N = int(C.m.size());
 
-constexpr int kAxiIdW = 4, kOutstanding = 16, kQueue = 32, kFifo = 8, kLead = 3;
+constexpr int kAxiIdW = 4, kOutstanding = 16, kQueue = 32, kFifo = 8, kLead = 4;
+constexpr uint32_t kFull = 2 * (kFifo - 1);
 const int kBytes = C.dw / 8;
 const int kBeats = (C.dw + 511) / 512;
 const int kRowLog2 = [] {
@@ -439,7 +442,7 @@ struct Tb {
     if (draining) return false;
     if (s->lead == 0) return on && int(last_free[m]) >= 2 * n;
     if (free_hist[m].size() < size_t(kLead) + 1) return false;
-    return free_hist[m].front() >= uint32_t(2 * (kLead + 1));
+    return free_hist[m].front() >= 8u;
   }
 
   uint32_t pick_row(int m) {
@@ -528,7 +531,7 @@ struct Tb {
     for (int m = 0; m < N; ++m) {
       const uint32_t fr = dut->free[m];
       if (!rst && !draining) {
-        CHECK(fr <= 2 * kFifo, "member %d: free %u above 2 FIFO", m, fr);
+        CHECK(fr <= kFull, "member %d: free %u above 2 (FIFO - 1)", m, fr);
         if (!moving_tb)
           CHECK(fr + 2 * uint32_t(last_taken[m]) >= last_free[m], "member %d: free dropped from %u to %u", m,
                 last_free[m], fr);
@@ -579,7 +582,7 @@ struct Tb {
     bool all_zero = true, all_full = true;
     for (int m = 0; m < N; ++m) {
       all_zero &= dut->free[m] == 0;
-      all_full &= dut->free[m] == 2 * kFifo;
+      all_full &= dut->free[m] == kFull;
     }
     if (rst) {
       if (!draining) {
@@ -596,7 +599,7 @@ struct Tb {
     } else if (draining && all_zero) {
       ++drain_cycles;
     } else if (draining) {
-      CHECK(all_full, "free not 2 FIFO for every member after the drain");
+      CHECK(all_full, "free not 2 (FIFO - 1) for every member after the drain");
       CHECK(hbm.outstanding() == 0 && hbm.r_id < 0, "the drain ended with %zu transactions in HBM",
             hbm.outstanding());
       draining = false;
@@ -620,7 +623,7 @@ struct Tb {
       last_free[m] = dut->free[m];
       free_hist[m].push_back(rst || draining || !on ? 0 : last_free[m]);
       if (free_hist[m].size() > size_t(kLead) + 1) free_hist[m].pop_front();
-      if (!draining && !rst) max_queue = std::max<uint64_t>(max_queue, uint64_t(2 * kFifo - last_free[m]) / 2);
+      if (!draining && !rst) max_queue = std::max<uint64_t>(max_queue, uint64_t(kFull - last_free[m]) / 2);
     }
     ++now;
   }
@@ -628,7 +631,7 @@ struct Tb {
   void end_move() {
     moving_tb = false;
     for (int m = 0; m < N; ++m) {
-      CHECK(dut->free[m] == 2 * kFifo, "member %d: free %u as the move ended", m, uint32_t(dut->free[m]));
+      CHECK(dut->free[m] == kFull, "member %d: free %u as the move ended", m, uint32_t(dut->free[m]));
       for (uint32_t i = 0; i < kInstances; ++i)
         CHECK(!pending[m][i], "the move ended with member %d instance %u's read unanswered", m, i);
     }
@@ -640,7 +643,7 @@ struct Tb {
 
   bool queued() const {
     for (int m = 0; m < N; ++m)
-      if (last_free[m] < 2 * kFifo) return true;
+      if (last_free[m] < kFull) return true;
     return false;
   }
 
@@ -680,7 +683,7 @@ struct Tb {
       bool any = false;
       for (uint32_t k = 0; k < kInstances; ++k) any |= any_pending(k);
       bool full = true;
-      for (int m = 0; m < N; ++m) full &= dut->free[m] == 2 * kFifo;
+      for (int m = 0; m < N; ++m) full &= dut->free[m] == kFull;
       if (!any && hbm.outstanding() == 0 && full && !draining && !moving_tb) break;
       cycle(false, false);
     }

@@ -575,8 +575,8 @@ module foldsim_afu #(
             .m_rdata   (`FOLDSIM_VMEM_AXI(p, k, rdata)), \
             .m_rid     (`FOLDSIM_VMEM_AXI(p, k, rid)), \
             .m_rlast   (`FOLDSIM_VMEM_AXI(p, k, rlast))
-    // A member's FIFO: entries enough for the simulator's lead and a burst.
-    localparam VMEM_GROUP_FIFO = 8;
+    // A member's FIFO: entries for the simulator's lead (five) and a burst.
+    localparam VMEM_GROUP_FIFO = 16;
 `endif
     `FOLDSIM_VMEM_REPEAT(FOLDSIM_VMEM, FOLDSIM_SEMI);
 `undef FOLDSIM_VMEM
