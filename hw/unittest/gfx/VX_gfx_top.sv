@@ -30,6 +30,8 @@
 //                       input set {icache, dcache, tcache, rtcache, DXA gmem};
 //                       the icache/dcache/DXA slots are driven from top ports
 //   cluster tail:
+//     VX_mmu          : under VM, the cluster unit MMU between the rcache /
+//                       ocache ports and the L2 (tlb_bus and flush as ports)
 //     VX_graphics     : the production container — raster launch fork,
 //                       VX_raster_core xN + rcache, the OM trunk stage
 //                       (VX_om_steer/VX_om_ingress per trunk port),
@@ -52,7 +54,7 @@
 // top-level port and every DUT output is observed at a top-level port.
 
 module VX_gfx_top import VX_gpu_pkg::*
-`ifdef SOCKET_UNIT_MMU_ENABLE
+`ifdef VX_CFG_VM_ENABLE
     , VX_tlb_pkg::*
 `endif
 `ifdef VX_CFG_EXT_TEX_ENABLE
@@ -68,7 +70,7 @@ module VX_gfx_top import VX_gpu_pkg::*
     parameter SFU_LANES     = `VX_CFG_NUM_SFU_LANES,
     parameter L2_MEM_ADDR_W = `VX_CFG_MEM_ADDR_WIDTH - `CLOG2(L2_SECTOR_SIZE),
     parameter EXT_ADDR_W    = `VX_CFG_MEM_ADDR_WIDTH - `CLOG2(`VX_CFG_L1_LINE_SIZE)
-`ifdef SOCKET_UNIT_MMU_ENABLE
+`ifdef VX_CFG_VM_ENABLE
   , parameter UTLB_ID_W     = `UP(L1_TLB_ID_WIDTH),
     parameter UTLB_REQ_W    = UTLB_ID_W + $bits(tlb_access_e) + 1 + TLB_VPN_WIDTH,
     parameter UTLB_RSP_W    = UTLB_ID_W + 1 + TLB_LEVEL_WIDTH + TLB_PPN_WIDTH + TLB_FLAGS_WIDTH
@@ -190,11 +192,27 @@ module VX_gfx_top import VX_gpu_pkg::*
     input  wire flush_req,
     output wire flush_done,
 
+`ifdef VX_CFG_VM_ENABLE
+    input  wire                     vm_active,
+`endif
+`ifdef CLUSTER_UNIT_MMU_ENABLE
+    // -----------------------------------------------------------------------
+    // Cluster unit MMU: the address-space change, drain, and its tlb_bus
+    // -----------------------------------------------------------------------
+    input  wire                     cmmu_flush_req,
+    output wire                     cmmu_flush_done,
+    output wire                     cmmu_empty,
+    output wire                     ctlb_req_valid,
+    output wire [UTLB_REQ_W-1:0]    ctlb_req_data,
+    input  wire                     ctlb_req_ready,
+    input  wire                     ctlb_rsp_valid,
+    input  wire [UTLB_RSP_W-1:0]    ctlb_rsp_data,
+    output wire                     ctlb_rsp_ready,
+`endif
 `ifdef SOCKET_UNIT_MMU_ENABLE
     // -----------------------------------------------------------------------
-    // Socket unit MMU: satp mode, TLB flush, drain, and its tlb_bus
+    // Socket unit MMU: TLB flush, drain, and its tlb_bus
     // -----------------------------------------------------------------------
-    input  wire                     vm_active,
     input  wire                     ummu_flush_req,
     output wire                     ummu_flush_done,
     output wire                     ummu_empty,
@@ -795,6 +813,14 @@ module VX_gfx_top import VX_gpu_pkg::*
     ) ocache_l2_bus_if();
 `endif
 
+`ifdef CLUSTER_UNIT_MMU_ENABLE
+    VX_dcr_flush_if gfx_mmu_flush_if();
+    VX_tlb_flush_if cmmu_flush_if();
+    assign gfx_mmu_flush_if.req = cmmu_flush_req;
+    assign cmmu_flush_if.req    = cmmu_flush_req && gfx_mmu_flush_if.done;
+    assign cmmu_flush_done      = cmmu_flush_if.done;
+`endif
+
     VX_graphics #(
         .INSTANCE_ID ("cluster0")
     ) graphics (
@@ -813,6 +839,9 @@ module VX_gfx_top import VX_gpu_pkg::*
     `endif
         .dcr_bus_if        (gfx_dcr_bus_if),
         .cluster_flush_if  (cluster_flush_if),
+    `ifdef CLUSTER_UNIT_MMU_ENABLE
+        .mmu_flush_if      (gfx_mmu_flush_if),
+    `endif
         .busy              (busy)
     );
 
@@ -826,12 +855,81 @@ module VX_gfx_top import VX_gpu_pkg::*
     end
 `endif
 
+`ifdef CLUSTER_UNIT_MMU_ENABLE
+    // Cluster unit MMU, wired as VX_cluster wires it.
+    VX_mem_bus_if #(
+        .DATA_SIZE (`VX_CFG_L1_LINE_SIZE),
+        .TAG_WIDTH (L2_TAG_WIDTH)
+    ) gfx_mem_bus_if[CMMU_NUM_REQS]();
+
+    VX_mem_bus_if #(
+        .DATA_SIZE (`VX_CFG_L1_LINE_SIZE),
+        .TAG_WIDTH (L2_TAG_WIDTH)
+    ) gfx_phys_bus_if[CMMU_NUM_REQS]();
+
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    `ASSIGN_VX_MEM_BUS_IF (gfx_mem_bus_if[CMMU_RCACHE_IDX], rcache_l2_bus_if);
+    `ASSIGN_VX_MEM_BUS_IF (l2_core_if[L2_GFX_RASTER_IDX], gfx_phys_bus_if[CMMU_RCACHE_IDX]);
+`endif
+`ifdef VX_CFG_EXT_OM_ENABLE
+    `ASSIGN_VX_MEM_BUS_IF (gfx_mem_bus_if[CMMU_OCACHE_IDX], ocache_l2_bus_if);
+    `ASSIGN_VX_MEM_BUS_IF (l2_core_if[L2_GFX_OM_IDX], gfx_phys_bus_if[CMMU_OCACHE_IDX]);
+`endif
+
+    VX_tlb_bus_if #(
+        .ID_WIDTH (L1_TLB_ID_WIDTH)
+    ) ctlb_bus_if();
+    assign ctlb_req_valid        = ctlb_bus_if.req_valid;
+    assign ctlb_req_data         = ctlb_bus_if.req_data;
+    assign ctlb_bus_if.req_ready = ctlb_req_ready;
+    assign ctlb_bus_if.rsp_valid = ctlb_rsp_valid;
+    assign ctlb_bus_if.rsp_data  = ctlb_rsp_data;
+    assign ctlb_rsp_ready        = ctlb_bus_if.rsp_ready;
+
+    VX_mmu_fault_if cmmu_fault_if();
+    `UNUSED_VAR (cmmu_fault_if.valid)
+    `UNUSED_VAR (cmmu_fault_if.va)
+    `UNUSED_VAR (cmmu_fault_if.access)
+    `UNUSED_VAR (cmmu_fault_if.amo)
+
+`ifdef PERF_ENABLE
+    mmu_perf_t cmmu_perf;
+    `UNUSED_VAR (cmmu_perf)
+`endif
+
+    VX_mmu #(
+        .INSTANCE_ID  ("cmmu"),
+        .NUM_REQS     (CMMU_NUM_REQS),
+        .TLB_SIZE     (`VX_CFG_CTLB_SIZE),
+        .EXEC_SIDE    (0),
+        .WRITE_ENABLE (`VX_CFG_EXT_OM_ENABLED),
+        .RSP_OUT_BUF  (2),
+        .PARK_REG     (1),
+        .DATA_SIZE    (`VX_CFG_L1_LINE_SIZE),
+        .TAG_WIDTH    (L2_TAG_WIDTH)
+    ) cmmu (
+        .clk         (clk),
+        .reset       (reset),
+        .vm_active   (vm_active),
+    `ifdef PERF_ENABLE
+        .mmu_perf    (cmmu_perf),
+    `endif
+        .core_bus_if (gfx_mem_bus_if),
+        .mem_bus_if  (gfx_phys_bus_if),
+        .tlb_bus_if  (ctlb_bus_if),
+        .flush_if    (cmmu_flush_if),
+        .fault_if    (cmmu_fault_if),
+        `UNUSED_PIN (lane_idle),
+        .empty       (cmmu_empty)
+    );
+`else
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     `ASSIGN_VX_MEM_BUS_IF (l2_core_if[L2_GFX_RASTER_IDX], rcache_l2_bus_if);
 `endif
 `ifdef VX_CFG_EXT_OM_ENABLE
     `ASSIGN_VX_MEM_BUS_IF (l2_core_if[L2_GFX_OM_IDX], ocache_l2_bus_if);
 `endif
+`endif // CLUSTER_UNIT_MMU_ENABLE
 
 `else // !EXT_GFX_CLUSTER_ENABLE
     // No cluster-resident graphics: the trunk connects straight to the L2.

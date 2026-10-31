@@ -275,6 +275,26 @@ tests:
   args: -i toad.png -r toad_ref_f0.png -f 0 -g 0
   env:
     VORTEX_RANDOMIZE_VA: 1
+- id: vm-raster
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: gfx_raster
+  configs+: -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png
+  env:
+    VORTEX_RANDOMIZE_VA: 1
+- id: vm-om
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: gfx_om
+  configs+: -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -d -b -r whitebox_db_128.png
+  env:
+    VORTEX_RANDOMIZE_VA: 1
 
 # ---------------------------------------------------------------------------
 # check: model_parity — same VM-enabled app on both drivers (xlen 32); exact
@@ -307,6 +327,18 @@ tests:
   app: gfx_tex
   configs+: -DVX_CFG_EXT_TEX_ENABLE
   args: -i toad.png -r toad_ref_f0.png -f 0 -g 0
+- id: parity-vm-gfx_raster
+  check: model_parity
+  via: blackbox
+  app: gfx_raster
+  configs+: -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png
+- id: parity-vm-gfx_om
+  check: model_parity
+  via: blackbox
+  app: gfx_om
+  configs+: -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -d -b -r whitebox_db_128.png
 # The RTL command processor's DMA walks the page table for every upload and
 # download; only xrt runs it (simx and rtlsim use the C++ command processor).
 - id: cp-dma-walk

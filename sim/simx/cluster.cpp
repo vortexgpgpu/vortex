@@ -19,6 +19,9 @@
 #include "constants.h"
 #include "types.h"
 #include "debug.h"
+#ifdef SIMX_CLUSTER_UNIT_MMU
+#include "mem/mmu.h"
+#endif
 #ifdef VX_CFG_EXT_OM_ENABLE
 #include "om_core.h"
 #include "om_unit.h"
@@ -135,6 +138,22 @@ public:
         l2arb->RspOut.at(kL2Rows * port + 0).bind(&sockets_.at(i)->mem_rsp_in.at(j));
       }
     }
+    // A gfx cache's memory port reaches the L2 arbiter through the cluster
+    // unit MMU under VM.
+    auto bind_gfx_port = [&](uint32_t arb_idx, uint32_t cmmu_idx,
+                             SimChannel<MemReq>& req_src,
+                             SimChannel<MemRsp>& rsp_dst) {
+    #ifdef SIMX_CLUSTER_UNIT_MMU
+      req_src.bind(&gfx_mmu_->ReqIn.at(cmmu_idx));
+      gfx_mmu_->RspOut.at(cmmu_idx).bind(&rsp_dst);
+      gfx_mmu_->ReqOut.at(cmmu_idx).bind(&l2arb->ReqIn.at(arb_idx));
+      l2arb->RspOut.at(arb_idx).bind(&gfx_mmu_->RspIn.at(cmmu_idx));
+    #else
+      __unused(cmmu_idx);
+      req_src.bind(&l2arb->ReqIn.at(arb_idx));
+      l2arb->RspOut.at(arb_idx).bind(&rsp_dst);
+    #endif
+    };
     // L2 arb outputs → l2cache (after all rows are bound).
     for (uint32_t i = 0; i < VX_CFG_L2_DEMAND_REQS; ++i) {
       l2arb->ReqOut.at(i).bind(&l2cache_->core_req_in.at(i));
@@ -156,9 +175,15 @@ public:
     // binds at the device.
     uint32_t num_core_tlb_clients = sockets_per_cluster * VX_CFG_SOCKET_SIZE * 2;
   #ifdef SIMX_SOCKET_UNIT_MMU
-    uint32_t num_tlb_clients = num_core_tlb_clients + sockets_per_cluster;
+    uint32_t num_unit_tlb_clients = sockets_per_cluster;
   #else
-    uint32_t num_tlb_clients = num_core_tlb_clients;
+    uint32_t num_unit_tlb_clients = 0;
+  #endif
+  #ifdef SIMX_CLUSTER_UNIT_MMU
+    uint32_t gfx_tlb_client = num_core_tlb_clients + num_unit_tlb_clients;
+    uint32_t num_tlb_clients = gfx_tlb_client + 1;
+  #else
+    uint32_t num_tlb_clients = num_core_tlb_clients + num_unit_tlb_clients;
   #endif
     snprintf(sname, 100, "%s-l2tlb", name.c_str());
     l2tlb_ = L2Tlb::Create(sname, num_tlb_clients);
@@ -179,6 +204,18 @@ public:
       socket->tlb_miss_out().bind(&l2tlb_->ReqIn.at(socket->unit_tlb_client()));
       l2tlb_->RspOut.at(socket->unit_tlb_client()).bind(&socket->tlb_fill_in());
     }
+  #endif
+  #ifdef SIMX_CLUSTER_UNIT_MMU
+    // Cluster unit MMU: between the rcache / ocache memory ports and the L2,
+    // so those caches are virtually tagged. Its TLB is the cluster TLB's last
+    // client. Like the socket unit MMU, each response leaves through a
+    // registered stage and a new miss is held a cycle before it allocates;
+    // the ocache writes, so a flush token is ordered behind its parks.
+    snprintf(sname, 100, "%s-gfx_mmu", name.c_str());
+    gfx_mmu_ = Mmu::Create(sname, CMMU_NUM_REQS, VX_CFG_CTLB_SIZE, gfx_tlb_client,
+                           false, true, VX_CFG_EXT_OM_ENABLED != 0, true);
+    gfx_mmu_->TlbMissOut.bind(&l2tlb_->ReqIn.at(gfx_tlb_client));
+    l2tlb_->RspOut.at(gfx_tlb_client).bind(&gfx_mmu_->TlbFillIn);
   #endif
 
 #endif
@@ -224,8 +261,7 @@ public:
     // ocache memory side → l2arb.
     constexpr uint32_t kOmRow = 1;
     for (uint32_t i = 0; i < kOcacheMemPorts; ++i) {
-      ocache->mem_req_out.at(i).bind(&l2arb->ReqIn.at(kL2Rows * i + kOmRow));
-      l2arb->RspOut.at(kL2Rows * i + kOmRow).bind(&ocache->mem_rsp_in.at(i));
+      bind_gfx_port(kL2Rows * i + kOmRow, CMMU_OCACHE_IDX, ocache->mem_req_out.at(i), ocache->mem_rsp_in.at(i));
     }
 
     // Per-core SFU.om_req_out (OmUnit decodes onto it) → OmCore::om_req_in[cid],
@@ -288,8 +324,7 @@ public:
     // rcache memory side → l2arb.
     constexpr uint32_t kRasterRow = 1 + VX_CFG_EXT_OM_ENABLED;
     for (uint32_t i = 0; i < kRcacheMemPorts; ++i) {
-      rcache->mem_req_out.at(i).bind(&l2arb->ReqIn.at(kL2Rows * i + kRasterRow));
-      l2arb->RspOut.at(kL2Rows * i + kRasterRow).bind(&rcache->mem_rsp_in.at(i));
+      bind_gfx_port(kL2Rows * i + kRasterRow, CMMU_RCACHE_IDX, rcache->mem_req_out.at(i), rcache->mem_rsp_in.at(i));
     }
 
     // Cluster-level RasterBus arbiter: NUM_CORES_PER_CLUSTER inputs (one per
@@ -346,6 +381,11 @@ public:
     // A parked fill holds no channel packet while it waits, so completion
     // must ask the TLB directly. (The device walker is the processor's.)
     if (l2tlb_->busy()) {
+      return true;
+    }
+  #endif
+  #ifdef SIMX_CLUSTER_UNIT_MMU
+    if (!gfx_mmu_->empty()) {
       return true;
     }
   #endif
@@ -461,6 +501,18 @@ public:
       socket->set_satp(value);
     #endif
     }
+  #ifdef SIMX_CLUSTER_UNIT_MMU
+    // The rcache and ocache are virtually tagged: a satp commit flushes the
+    // cluster unit TLB and invalidates them. The ocache writes through, and a
+    // commit falls between launches, so it holds no write to drain first.
+    gfx_mmu_->set_satp(value);
+  #ifdef VX_CFG_EXT_RASTER_ENABLE
+    rcache_->invalidate();
+  #endif
+  #ifdef VX_CFG_EXT_OM_ENABLE
+    ocache_->invalidate();
+  #endif
+  #endif
   }
 
   SimChannel<TlbReq>& ptw_req_out() {
@@ -641,6 +693,9 @@ private:
   uint32_t                    cores_per_socket_;
 #ifdef VX_CFG_VM_ENABLE
   L2Tlb::Ptr                  l2tlb_;
+#ifdef SIMX_CLUSTER_UNIT_MMU
+  Mmu::Ptr                    gfx_mmu_;
+#endif
 #endif
 #ifdef VX_CFG_EXT_OM_ENABLE
   OmCore::Ptr                 om_core_;

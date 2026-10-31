@@ -830,37 +830,6 @@ vx_result_t Device::cp_poll_seqnum_(uint64_t target) {
 }
 
 vx_result_t Device::cp_submit_dcr_write(uint32_t addr, uint32_t value) {
-    // VM safety check: when VM is active and the pinned slab is configured,
-    // every HW-addr DCR must reference a buffer in the pinned slab — the HW
-    // master bypasses the MMU and would otherwise dereference a stale VA.
-    // TEX (and DXA, RTU) translate through the socket unit MMU instead, so their
-    // addresses are VAs like any buffer address.
-    //
-    // RASTER / OM address DCRs encode value as a cache-block index
-    // (pa = value << 6).
-    if (vm_enabled_ && pinned_mem_) {
-        switch (addr) {
-        case VX_DCR_RASTER_TBUF_ADDR:
-        case VX_DCR_RASTER_PBUF_ADDR:
-        case VX_DCR_OM_CBUF_ADDR:
-        case VX_DCR_OM_ZBUF_ADDR: {
-            const uint64_t pa = uint64_t(value) << 6;
-            if (pa < pinned_base_ ||
-                pa >= pinned_base_ + pinned_size_) {
-                std::cerr << "[VXDRV] dcr 0x" << std::hex << addr
-                          << " value 0x" << value << " (pa 0x" << pa
-                          << ") not in pinned slab [0x" << pinned_base_
-                          << ", 0x" << (pinned_base_ + pinned_size_)
-                          << ") — buffer needs VX_MEM_PHYS"
-                          << std::dec << std::endl;
-                return VX_ERR_INVALID_VALUE;
-            }
-            break;
-        }
-        default:
-            break;
-        }
-    }
     // CMD_DCR_WRITE on-wire layout (cmd_size=20):
     //   bytes 0..3   header  { opcode=0x04, flags=0, reserved=0 }
     //   bytes 4..11  arg0    DCR addr

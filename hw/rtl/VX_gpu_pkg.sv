@@ -2009,6 +2009,11 @@ package VX_gpu_pkg;
     localparam L2_GFX_RASTER_IDX    = L2_SOCKET_REQS;
     localparam L2_GFX_OM_IDX        = L2_GFX_RASTER_IDX + `VX_CFG_EXT_RASTER_ENABLED;
 
+    // Cluster unit MMU ports (CLUSTER_UNIT_MMU_ENABLE), in L2 client order.
+    localparam CMMU_RCACHE_IDX      = 0;
+    localparam CMMU_OCACHE_IDX      = CMMU_RCACHE_IDX + `VX_CFG_EXT_RASTER_ENABLED;
+    localparam CMMU_NUM_REQS        = `VX_CFG_EXT_RASTER_ENABLED + `VX_CFG_EXT_OM_ENABLED;
+
     // With one cluster, an L2 and no L3, that L2 is the LLC: the device
     // walker's PTE fetches ride it through a dedicated client slot, so a
     // leaf-PTE miss is a cache lookup rather than a DRAM round trip. In
@@ -2051,7 +2056,13 @@ package VX_gpu_pkg;
     localparam SOCKET_NUM_MMUS       = 2;
 `endif
     localparam TLB_SOCKET_ID_WIDTH   = L1_TLB_ID_WIDTH + `ARB_SEL_BITS(SOCKET_NUM_MMUS, 1);
-    localparam TLB_CLUSTER_ID_WIDTH  = TLB_SOCKET_ID_WIDTH + `ARB_SEL_BITS(NUM_SOCKETS, 1);
+    // The cluster TLB's clients: every socket, plus the cluster unit MMU.
+`ifdef CLUSTER_UNIT_MMU_ENABLE
+    localparam CLUSTER_NUM_TLB_PORTS = NUM_SOCKETS + 1;
+`else
+    localparam CLUSTER_NUM_TLB_PORTS = NUM_SOCKETS;
+`endif
+    localparam TLB_CLUSTER_ID_WIDTH  = TLB_SOCKET_ID_WIDTH + `ARB_SEL_BITS(CLUSTER_NUM_TLB_PORTS, 1);
     localparam L2_TLB_SLOT_WIDTH     = `CLOG2(`VX_CFG_L2_TLB_MSHR_SIZE);
     // Device-level walker: cluster L2-TLB miss buses arb into one walker.
     localparam TLB_DEV_ID_WIDTH      = L2_TLB_SLOT_WIDTH + `ARB_SEL_BITS(`VX_CFG_NUM_CLUSTERS, 1);

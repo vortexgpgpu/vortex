@@ -164,9 +164,9 @@ The socket-resident units translate too: the TEX unit's tcache misses, the
 RTU's rtcache misses and the DXA's global reads go through the socket **unit
 MMU** (§3.8), so a texture base, a BVH root, an acceleration-structure pointer
 or a tensor descriptor is a virtual address like any kernel pointer. The
-cluster-resident fixed-function masters (RASTER, OM) still issue physical
-addresses and never pass through an MMU; see
-[`graphics_hardware_stack.md`](graphics_hardware_stack.md).
+cluster-resident raster and OM units translate through the cluster **unit
+MMU** (§3.9), so their tile, primitive, color and depth buffers are ordinary
+buffers too; see [`graphics_hardware_stack.md`](graphics_hardware_stack.md).
 
 ---
 
@@ -379,6 +379,36 @@ The unit MMU's `empty` holds the socket `busy`, but not the per-core
 `mmu_drained` barrier gate: that gate orders a core's own loads and stores,
 none of which pass through the unit MMU.
 
+### 3.9 The cluster unit MMU
+
+Raster and OM live in the cluster (`VX_graphics`) and reach the L2 directly
+through the rcache and the ocache, past every socket. Under VM a fourth
+`VX_mmu`, `cmmu` ([`VX_cluster.sv`](../../hw/rtl/VX_cluster.sv)), sits between
+those caches' memory ports and their L2 client slots (`L2_GFX_RASTER_IDX`,
+`L2_GFX_OM_IDX`), one lane each (`CMMU_RCACHE_IDX`, `CMMU_OCACHE_IDX`), with
+the same registered reply (`RSP_OUT_BUF = 2`) and registered park
+(`PARK_REG = 1`) as the socket unit MMU; the rcache and ocache register their
+memory requests (`MEM_OUT_BUF`). Its TLB is
+`VX_CFG_CTLB_SIZE` (8) entries, and its misses enter the cluster TLB arbiter
+as one more client after the sockets (`CLUSTER_NUM_TLB_PORTS`), its slot id
+zero-extended to the socket buses' width. `WRITE_ENABLE` follows OM, since the
+ocache writes (write-through) through it, so its park stage holds a full
+line. `vm_active` comes from the device's
+`satp` mode, fanned to the clusters from [`Vortex.sv`](../../hw/rtl/Vortex.sv).
+
+The rcache and ocache are virtually tagged, so the device's `SATP_HI` flush
+(`mmu_flush_req`, §8.1) also reaches `VX_graphics` as an address-space-change
+requester: the rcache invalidates through its `VX_dcr_flush` leg, and the OM
+flush sequencer takes it as an L1-only round, draining the OM's fragments and
+the ocache's writes into the L2 before invalidating. Only then does the
+cluster flush the `cmmu` TLB those writes went through; the cluster's
+`mmu_flush_done` waits on the L2 TLB and on `cmmu`. `cmmu.empty` joins the
+cluster `busy`. With both units, the raster's early-Z depth reads go through
+the ocache and so through `cmmu` too; its enable (`OM_EARLYZ_SAFE`) and depth
+function reset off, so a draw that never programs the OM depth state reads no
+depth buffer. As for TEX, the raster and OM buffer-base fields
+(`RASTER_ADDR_BITS`, `OM_ADDR_BITS`) widen to 26 bits on Sv32 under VM.
+
 ---
 
 ## 4. The miss/fill fabric
@@ -402,7 +432,7 @@ elastic slice (`OUT_BUF = 3`). The id therefore grows deterministically
 ```
 L1_TLB_ID_WIDTH      = clog2(L1_TLB_MSHR_SIZE)                 the L1 miss-station slot
 TLB_SOCKET_ID_WIDTH  = L1_TLB_ID_WIDTH + sel(SOCKET_NUM_MMUS)   + {dMMU, iMMU[, unit MMU]}
-TLB_CLUSTER_ID_WIDTH = TLB_SOCKET_ID_WIDTH + sel(NUM_SOCKETS)   + socket
+TLB_CLUSTER_ID_WIDTH = TLB_SOCKET_ID_WIDTH + sel(CLUSTER_NUM_TLB_PORTS) + socket [or cluster unit MMU]
 ```
 
 The socket arbiter merges the dMMU, iMMU and (when present) unit MMU ports onto `cluster_tlb_bus_if`,
@@ -633,7 +663,8 @@ DCRs. Then:
   maps of §2.4.
 - **`vx_mem_alloc`** takes a PA from the global pool, mints a VA
   (identity by default; `VORTEX_RANDOMIZE_VA=1` picks a random page-aligned
-  base seeded by `VORTEX_VA_SEED`, keeping multi-page buffers VA-contiguous)
+  base seeded by `VORTEX_VA_SEED`, keeping multi-page buffers VA-contiguous
+  and outside the OM aperture, which the LSU decodes by address)
   and installs one leaf PTE per page. Re-mapping a VA already covered by a
   leaf is idempotent when the translation matches (identity superpages
   installed at init are legitimately re-covered) and a conflict otherwise.
@@ -692,9 +723,11 @@ SimObjects bound through channels:
 
 Wiring ([`cluster.cpp`](../../sim/simx/cluster.cpp)): every core's two `Mmu`
 instances are clients of the cluster `L2Tlb`, followed by each socket's unit
-`Mmu` ([`socket.cpp`](../../sim/simx/socket.cpp)), placed as in the RTL
+`Mmu` ([`socket.cpp`](../../sim/simx/socket.cpp)) and the cluster's unit `Mmu`
+in front of the rcache / ocache, placed as in the RTL
 between the tcache / rtcache / DXA gmem ports and the socket arbiter; `set_satp`
-flushes its TLB and invalidates the unit caches (`Cache::invalidate`); the `Ptw` shares L2-cache port 0
+flushes its TLB and invalidates the unit caches (`Cache::invalidate`; the
+ocache writes through and holds no write between launches); the `Ptw` shares L2-cache port 0
 with socket 0 through a **priority** arbiter that favours PTE fetches — every
 translated access behind a walk is blocked until it completes, and the
 walkers issue far too little traffic to starve the demand stream (the reverse
@@ -765,6 +798,7 @@ untranslated.
 | `VX_CFG_DTLB_SIZE` | 16 | socket dMMU CAM entries |
 | `VX_CFG_ITLB_SIZE` | 8 | socket iMMU CAM entries |
 | `VX_CFG_UTLB_SIZE` | 8 | socket unit MMU CAM entries (TEX, RTU, DXA) |
+| `VX_CFG_CTLB_SIZE` | 8 | cluster unit MMU CAM entries (RASTER, OM) |
 | `VX_CFG_L1_TLB_MSHR_SIZE` | 4 | L1 miss-station entries (distinct outstanding VPNs); 2 tokens each |
 | `VX_CFG_L2_TLB_SIZE` / `NUM_WAYS` | 512 / 4 | cluster TLB set array |
 | `VX_CFG_L2_TLB_MEGA_SIZE` | 8 | cluster TLB superpage CAM |
@@ -805,6 +839,9 @@ sizes must be powers of two ≥ 2 (static asserts).
 | `parity-vm-rt_raycast`, `parity-vm-dxa_copy` | `check: model_parity`, RTU + DXA | unit-MMU timing, simx vs rtlsim |
 | `vm-tex` | `gfx_tex`, `EXT_TEX`, randomized VA | tcache misses through the socket unit MMU |
 | `parity-vm-gfx_tex` | `check: model_parity`, TEX | unit-MMU texture timing, simx vs rtlsim |
+| `vm-raster` | `gfx_raster`, `EXT_RASTER` + `EXT_OM`, randomized VA | rcache misses through the cluster unit MMU |
+| `vm-om` | `gfx_om -d -b`, `EXT_RASTER` + `EXT_OM`, randomized VA | ocache reads and write-throughs through the cluster unit MMU |
+| `parity-vm-gfx_raster`, `parity-vm-gfx_om` | `check: model_parity`, RASTER + OM | cluster-unit-MMU timing, simx vs rtlsim |
 
 `vm_fault -t1` (a store to a read-only page) is not in CI: it needs the
 L1 permission-fault *report*, which the RTL does not surface (§9, §13).
@@ -827,7 +864,7 @@ Grades: ✅ done · ⚠️ partial · ❌ pending.
 |---|:--:|---|
 | Socket L1 translation stage, lane-parallel, hit-under-miss | ✅ | RTL + SimX |
 | Socket unit MMU for TEX, RTU and DXA, VIVT tcache/rtcache invalidated on `satp` | ✅ | RTL + SimX |
-| RASTER, OM translation | ❌ | still physical (`VX_MEM_PHYS` buffers) |
+| Cluster unit MMU for RASTER and OM, rcache invalidated / ocache drained and invalidated on `satp` | ✅ | RTL + SimX |
 | VPN-dedup miss stations with per-entry requester queues, ordered drain | ✅ | L1 and cluster |
 | Narrow miss/fill fabric with id-prepending arbiters | ✅ | socket + cluster levels |
 | Cluster TLB: pipelined set-associative array + megapage CAM | ✅ | RTL + SimX |
@@ -844,17 +881,17 @@ Grades: ✅ done · ⚠️ partial · ❌ pending.
 | Chip-wide L3 TLB, TLB inclusion policy, a `VX_dma` block with its own TLB | ❌ | not started |
 | ASIDs, A/D write-back, PMP, Sv48/Sv57 | ❌ | deliberate: single global address space; runtime pre-sets A/D |
 
-**Known limitation.** The `satp` commit's invalidation of the tcache and the
-rtcache shares each cache's flush leg with the core-driven graphics flush: the
-two requests are OR-ed onto one `VX_dcr_flush`, so whichever is raised second
-completes on the walk the first one started — a core flush raised while the
-`satp` request is high completes on the `satp` flush's done, and the reverse.
-Both directions are benign for these read-only caches: the walk blocks the
-cache's inputs and invalidates every line, so a walk that completes after a
-request was raised leaves no line the request could still see. The runtime
-also commits `satp` once, before the first launch, with no core flush in
-progress. A writing cache, or a commit that must complete strictly after a
-given core flush, would need its own requester.
+**Known limitation.** The `satp` commit's invalidation of the tcache, the
+rtcache and the rcache shares each cache's flush leg with the core-driven
+graphics flush: the two requests are OR-ed onto one `VX_dcr_flush`, so
+whichever is raised second completes on the walk the first one started — a
+core flush raised while the `satp` request is high completes on the `satp`
+flush's done, and the reverse. Both directions are benign for these read-only
+caches: the walk blocks the cache's inputs and invalidates every line, so a
+walk that completes after a request was raised leaves no line the request
+could still see. The runtime also commits `satp` once, before the first
+launch, with no core flush in progress. A writing cache, or a commit that must
+complete strictly after a given core flush, would need its own requester.
 
 **Deliberate simplifications** (recorded so they are not mistaken for
 bugs): there is one global address space and no ASID — `satp` is programmed

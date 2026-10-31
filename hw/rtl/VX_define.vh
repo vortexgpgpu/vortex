@@ -83,6 +83,13 @@
     `define EXT_GFX_CLUSTER_ENABLE
 `endif
 
+// Under VM, the cluster unit MMU translates the rcache and ocache memory ports.
+`ifdef VX_CFG_VM_ENABLE
+`ifdef EXT_GFX_CLUSTER_ENABLE
+    `define CLUSTER_UNIT_MMU_ENABLE
+`endif
+`endif
+
 // Under VM, the socket unit MMU translates the memory ports of the
 // socket-resident units: the tcache and rtcache misses and the DXA gmem reads.
 `ifdef VX_CFG_VM_ENABLE

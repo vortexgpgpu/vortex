@@ -303,6 +303,14 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*, VX_tlb_pkg::*; (
 `ifdef VX_CFG_VM_ENABLE
     wire [`VX_CFG_XLEN-1:0] mmu_satp;
     wire                    mmu_flush_req;
+`ifdef CLUSTER_UNIT_MMU_ENABLE
+    // Translation active vs BARE (satp.MODE), for the cluster unit MMUs.
+`ifdef VX_VM_ADDR_MODE_SV32
+    wire mmu_vm_active = mmu_satp[31];
+`else
+    wire mmu_vm_active = (| mmu_satp[63:60]);
+`endif
+`endif
     wire [`VX_CFG_NUM_CLUSTERS-1:0] cl_mmu_flush_done;
 
     // Per-cluster L2-TLB miss export buses (used by the device-level walker).
@@ -466,6 +474,9 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*, VX_tlb_pkg::*; (
             .dev_ptw_mem_if     (per_cluster_ptw_mem_if[cluster_id]),
             .mmu_flush_req      (mmu_flush_req),
             .mmu_flush_done     (cl_mmu_flush_done[cluster_id]),
+        `ifdef CLUSTER_UNIT_MMU_ENABLE
+            .mmu_vm_active      (mmu_vm_active),
+        `endif
         `endif
 
             .cp_mem_if          (per_cluster_cp_mem_if[cluster_id]),

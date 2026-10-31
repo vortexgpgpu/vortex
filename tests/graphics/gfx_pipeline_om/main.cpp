@@ -1,7 +1,7 @@
 // gfx_v2 device front end -> RASTER, end to end.
 //
 // The fused setup+binning pipeline runs on the SIMT cores to produce RASTER's
-// tilebuf + primbuf (pinned), which are bound to the RASTER unit and rasterised
+// tilebuf + primbuf, which are bound to the RASTER unit and rasterised
 // by a trivial fragment kernel. Two validations: (1) the device buffers match
 // host Binning() (localises any front-end bug), and (2) the rendered image
 // matches the gfx-v1 reference PNG (proves the device front end drives the FF
@@ -156,11 +156,11 @@ int main(int argc, char** argv) {
   RT_CHECK(vx_module_get_kernel(mod, "binning_k", &k_binning));
   RT_CHECK(vx_module_get_kernel(mod, "main", &k_frag));
 
-  // OM writes the color buffer via its AXI master (bypasses the MMU) -> pinned.
+  // OM writes the color buffer through the ocache.
   uint32_t cbuf_stride = 4, cbuf_pitch = dst_width * cbuf_stride, cbuf_size = dst_height * cbuf_pitch;
   vx_buffer_h color_buffer = nullptr;
   uint64_t cbuf_addr = 0;
-  RT_CHECK(vx_buffer_create(dev, cbuf_size, VX_MEM_READ | VX_MEM_WRITE | VX_MEM_PHYS, &color_buffer));
+  RT_CHECK(vx_buffer_create(dev, cbuf_size, VX_MEM_READ | VX_MEM_WRITE, &color_buffer));
   RT_CHECK(vx_buffer_address(color_buffer, &cbuf_addr));
   { std::vector<uint32_t> clr(cbuf_size / 4, 0xff000000); vx_event_h e = nullptr;
     RT_CHECK(vx_enqueue_write(q, color_buffer, 0, clr.data(), cbuf_size, 0, nullptr, &e));
@@ -195,7 +195,7 @@ int main(int argc, char** argv) {
     const size_t PRIM_SZ = sizeof(rast_prim_t), HDR_SZ = sizeof(rast_bin_header_t);
     const size_t TILEBUF_SZ = (size_t)B * HDR_SZ + (size_t)Kcap * sizeof(uint32_t);
 
-    // Buffers. prim/tilebuf are pinned (RASTER's AXI master reads them).
+    // Buffers. The raster unit reads prim/tilebuf through the rcache.
     vx_buffer_h verts_b, slot_prim_b, slot_bbox_b, keep_b, offset_b, tsum_b, prim_b, bbox_b,
                 bcount_b, boffset_b, keys_b, btsum_b, thist_b, bincount_b, binbase_b, tilebuf_b, meta_b;
     RT_CHECK(vx_buffer_create(dev, 3 * ntri * sizeof(setup_vertex_t), VX_MEM_READ,  &verts_b));
@@ -204,7 +204,7 @@ int main(int argc, char** argv) {
     RT_CHECK(vx_buffer_create(dev, ntri * sizeof(uint32_t),          VX_MEM_WRITE, &keep_b));
     RT_CHECK(vx_buffer_create(dev, (ntri + 1) * sizeof(uint32_t),    VX_MEM_WRITE, &offset_b));
     RT_CHECK(vx_buffer_create(dev, T * sizeof(uint32_t),            VX_MEM_WRITE, &tsum_b));
-    RT_CHECK(vx_buffer_create(dev, ntri * MS * PRIM_SZ, VX_MEM_READ | VX_MEM_WRITE | VX_MEM_PHYS, &prim_b));
+    RT_CHECK(vx_buffer_create(dev, ntri * MS * PRIM_SZ, VX_MEM_READ | VX_MEM_WRITE, &prim_b));
     RT_CHECK(vx_buffer_create(dev, ntri * MS * sizeof(setup_bbox_t), VX_MEM_WRITE, &bbox_b));
     RT_CHECK(vx_buffer_create(dev, ntri * MS * sizeof(uint32_t),     VX_MEM_WRITE, &bcount_b));
     RT_CHECK(vx_buffer_create(dev, (ntri * MS + 1) * sizeof(uint32_t), VX_MEM_WRITE, &boffset_b));
@@ -213,7 +213,7 @@ int main(int argc, char** argv) {
     RT_CHECK(vx_buffer_create(dev, T * B * sizeof(uint32_t),        VX_MEM_WRITE, &thist_b));
     RT_CHECK(vx_buffer_create(dev, B * sizeof(uint32_t),           VX_MEM_WRITE, &bincount_b));
     RT_CHECK(vx_buffer_create(dev, B * sizeof(uint32_t),           VX_MEM_WRITE, &binbase_b));
-    RT_CHECK(vx_buffer_create(dev, TILEBUF_SZ, VX_MEM_READ | VX_MEM_WRITE | VX_MEM_PHYS, &tilebuf_b));
+    RT_CHECK(vx_buffer_create(dev, TILEBUF_SZ, VX_MEM_READ | VX_MEM_WRITE, &tilebuf_b));
     RT_CHECK(vx_buffer_create(dev, 3 * sizeof(uint32_t),           VX_MEM_WRITE, &meta_b));
 
     pipe_arg_t pa = {};

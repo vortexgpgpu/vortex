@@ -184,6 +184,10 @@ VX_CFG_L1_TLB_MSHR_SIZE = 4
 # from the dTLB so texture and BVH traffic cannot evict the cores' translations.
 VX_CFG_UTLB_SIZE        = 8
 
+# Cluster unit MMU: one TLB per cluster for the rcache and ocache memory ports
+# (raster and OM), a client of the cluster TLB like a socket.
+VX_CFG_CTLB_SIZE        = 8
+
 # Shared cluster TLB and page-table walker complex.
 VX_CFG_L2_TLB_SIZE         = 512
 VX_CFG_L2_TLB_NUM_WAYS     = 4

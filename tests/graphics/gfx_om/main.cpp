@@ -1,10 +1,10 @@
 // Output-merger regression test.
 //
-// Pinned-buffer contract:
-//   depth_buffer  → OM HW (VX_DCR_OM_ZBUF_ADDR)  → VX_MEM_PHYS (identity-mapped)
-//   color_buffer  → OM HW (VX_DCR_OM_CBUF_ADDR)  → VX_MEM_PHYS (identity-mapped)
-// Both are read+written by the OM fixed-function block, which bypasses
-// the per-core MMU; under VM the buffers must be identity-mapped.
+// Buffers:
+//   depth_buffer  → OM HW (VX_DCR_OM_ZBUF_ADDR)
+//   color_buffer  → OM HW (VX_DCR_OM_CBUF_ADDR)
+// Both are read+written by the OM fixed-function block through the ocache,
+// whose misses translate through the cluster unit MMU under VM.
 
 #include <iostream>
 #include <vector>
@@ -173,12 +173,9 @@ int main(int argc, char *argv[]) {
   cbuf_pitch = dst_width * 4;
   cbuf_size  = dst_height * cbuf_pitch;
 
-  // HW path: depth_buffer / color_buffer are bound to the OM unit (via
-  // VX_DCR_OM_ZBUF_ADDR / VX_DCR_OM_CBUF_ADDR), which reads/writes them through
-  // the OM/ocache path bypassing the per-core MMU — both need physical (pinned)
-  // addresses. SW path (-S): the kernel does the merge through the LSU/dcache,
-  // so allocate them as normal kernel-accessed buffers.
-  uint32_t om_flags = VX_MEM_READ_WRITE | (sw_path ? 0u : (uint32_t)VX_MEM_PHYS);
+  // HW path: the OM unit reads/writes them through the ocache (translated by
+  // the cluster unit MMU); SW path (-S): the kernel merges through the LSU.
+  uint32_t om_flags = VX_MEM_READ_WRITE;
   RT_CHECK(vx_buffer_create(device, zbuf_size, om_flags, &depth_buffer));
   RT_CHECK(vx_buffer_address(depth_buffer, &zbuf_addr));
   RT_CHECK(vx_buffer_create(device, cbuf_size, om_flags, &color_buffer));

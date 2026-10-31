@@ -54,6 +54,10 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
     VX_mem_bus_if.slave            dev_ptw_mem_if,
     input  wire                    mmu_flush_req,
     output wire                    mmu_flush_done,
+`ifdef CLUSTER_UNIT_MMU_ENABLE
+    // Translation active vs BARE (satp.MODE), for the cluster unit MMU.
+    input  wire                    mmu_vm_active,
+`endif
 `endif
 
     // Command-processor DMA, entering as an L2 client when this cluster's L2
@@ -324,14 +328,15 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
     // ---------------------------------------------------------------------
     // Shared cluster TLB + page-table walker
     // ---------------------------------------------------------------------
+    // Every socket's tlb_bus, then the cluster unit MMU's (when present).
     VX_tlb_bus_if #(.ID_WIDTH (TLB_SOCKET_ID_WIDTH))
-        per_socket_tlb_bus_if [NUM_SOCKETS] ();
+        per_socket_tlb_bus_if [CLUSTER_NUM_TLB_PORTS] ();
 
     VX_tlb_bus_if #(.ID_WIDTH (TLB_CLUSTER_ID_WIDTH)) l2_client_if ();
     VX_tlb_bus_if #(.ID_WIDTH (L2_TLB_SLOT_WIDTH))    l2_ptw_if ();
 
     VX_tlb_bus_arb #(
-        .NUM_INPUTS  (NUM_SOCKETS),
+        .NUM_INPUTS  (CLUSTER_NUM_TLB_PORTS),
         .ID_WIDTH_IN (TLB_SOCKET_ID_WIDTH),
         .OUT_BUF     (3)
     ) tlb_cluster_arb (
@@ -374,9 +379,21 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
     // TLB flush off the SATP DCR write, and the device walker reports its
     // own done leg at the top.
     assign l2_flush_if.req  = mmu_flush_req;
+`ifdef CLUSTER_UNIT_MMU_ENABLE
+    // The rcache and ocache are virtually tagged: the address-space change
+    // drains the ocache's writes and invalidates both, then flushes the
+    // cluster unit MMU's TLB that those writes went through.
+    VX_dcr_flush_if gfx_mmu_flush_if();
+    VX_tlb_flush_if cmmu_flush_if();
+    wire cmmu_empty;
+    assign gfx_mmu_flush_if.req = mmu_flush_req;
+    assign cmmu_flush_if.req    = mmu_flush_req && gfx_mmu_flush_if.done;
+    assign mmu_flush_done       = l2_flush_if.done && cmmu_flush_if.done;
+    wire mmu_busy = ~(l2_empty && cmmu_empty);
+`else
     assign mmu_flush_done   = l2_flush_if.done;
-
     wire mmu_busy = ~l2_empty;
+`endif
 `else
     wire mmu_busy = 1'b0;
 `endif
@@ -465,9 +482,95 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
     `endif
         .dcr_bus_if               (gfx_dcr_bus_if),
         .cluster_flush_if         (cluster_flush_if),
+    `ifdef CLUSTER_UNIT_MMU_ENABLE
+        .mmu_flush_if             (gfx_mmu_flush_if),
+    `endif
         .busy                     (gfx_busy)
     );
 
+`ifdef CLUSTER_UNIT_MMU_ENABLE
+    ///////////////////////////////////////////////////////////////////////////
+    // Cluster unit MMU — translates the rcache and ocache memory ports on
+    // their way to the L2, so those caches are virtually indexed and tagged.
+    // Its misses go straight to the cluster TLB as one more client.
+    ///////////////////////////////////////////////////////////////////////////
+
+    VX_mem_bus_if #(
+        .DATA_SIZE (`VX_CFG_L1_LINE_SIZE),
+        .TAG_WIDTH (L2_TAG_WIDTH)
+    ) gfx_mem_bus_if[CMMU_NUM_REQS]();
+
+    VX_mem_bus_if #(
+        .DATA_SIZE (`VX_CFG_L1_LINE_SIZE),
+        .TAG_WIDTH (L2_TAG_WIDTH)
+    ) gfx_phys_bus_if[CMMU_NUM_REQS]();
+
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    `ASSIGN_VX_MEM_BUS_IF (gfx_mem_bus_if[CMMU_RCACHE_IDX], rcache_l2_bus_if);
+    `ASSIGN_VX_MEM_BUS_IF (per_socket_mem_bus_if[L2_GFX_RASTER_IDX], gfx_phys_bus_if[CMMU_RCACHE_IDX]);
+`endif
+`ifdef VX_CFG_EXT_OM_ENABLE
+    `ASSIGN_VX_MEM_BUS_IF (gfx_mem_bus_if[CMMU_OCACHE_IDX], ocache_l2_bus_if);
+    `ASSIGN_VX_MEM_BUS_IF (per_socket_mem_bus_if[L2_GFX_OM_IDX], gfx_phys_bus_if[CMMU_OCACHE_IDX]);
+`endif
+
+    // Its miss bus enters the cluster TLB arbiter after the sockets' buses,
+    // its slot id zero-extended to their width.
+    VX_tlb_bus_if #(
+        .ID_WIDTH (L1_TLB_ID_WIDTH)
+    ) cmmu_tlb_bus_if();
+    assign per_socket_tlb_bus_if[NUM_SOCKETS].req_valid       = cmmu_tlb_bus_if.req_valid;
+    assign per_socket_tlb_bus_if[NUM_SOCKETS].req_data.id     = `UP(TLB_SOCKET_ID_WIDTH)'(cmmu_tlb_bus_if.req_data.id);
+    assign per_socket_tlb_bus_if[NUM_SOCKETS].req_data.access = cmmu_tlb_bus_if.req_data.access;
+    assign per_socket_tlb_bus_if[NUM_SOCKETS].req_data.amo    = cmmu_tlb_bus_if.req_data.amo;
+    assign per_socket_tlb_bus_if[NUM_SOCKETS].req_data.vpn    = cmmu_tlb_bus_if.req_data.vpn;
+    assign cmmu_tlb_bus_if.req_ready = per_socket_tlb_bus_if[NUM_SOCKETS].req_ready;
+    assign cmmu_tlb_bus_if.rsp_valid = per_socket_tlb_bus_if[NUM_SOCKETS].rsp_valid;
+    assign cmmu_tlb_bus_if.rsp_data.id    = `UP(L1_TLB_ID_WIDTH)'(per_socket_tlb_bus_if[NUM_SOCKETS].rsp_data.id);
+    assign cmmu_tlb_bus_if.rsp_data.fault = per_socket_tlb_bus_if[NUM_SOCKETS].rsp_data.fault;
+    assign cmmu_tlb_bus_if.rsp_data.level = per_socket_tlb_bus_if[NUM_SOCKETS].rsp_data.level;
+    assign cmmu_tlb_bus_if.rsp_data.ppn   = per_socket_tlb_bus_if[NUM_SOCKETS].rsp_data.ppn;
+    assign cmmu_tlb_bus_if.rsp_data.flags = per_socket_tlb_bus_if[NUM_SOCKETS].rsp_data.flags;
+    assign per_socket_tlb_bus_if[NUM_SOCKETS].rsp_ready = cmmu_tlb_bus_if.rsp_ready;
+
+    VX_mmu_fault_if cmmu_fault_if();
+    // Faults are reported by the walker, as for the socket MMUs.
+    `UNUSED_VAR (cmmu_fault_if.valid)
+    `UNUSED_VAR (cmmu_fault_if.va)
+    `UNUSED_VAR (cmmu_fault_if.access)
+    `UNUSED_VAR (cmmu_fault_if.amo)
+
+`ifdef PERF_ENABLE
+    mmu_perf_t cmmu_perf;
+    `UNUSED_VAR (cmmu_perf)
+`endif
+
+    VX_mmu #(
+        .INSTANCE_ID  ("cmmu"),
+        .NUM_REQS     (CMMU_NUM_REQS),
+        .TLB_SIZE     (`VX_CFG_CTLB_SIZE),
+        .EXEC_SIDE    (0),
+        .WRITE_ENABLE (`VX_CFG_EXT_OM_ENABLED),
+        .RSP_OUT_BUF  (2),
+        .PARK_REG     (1),
+        .DATA_SIZE    (`VX_CFG_L1_LINE_SIZE),
+        .TAG_WIDTH    (L2_TAG_WIDTH)
+    ) cmmu (
+        .clk         (clk),
+        .reset       (reset),
+        .vm_active   (mmu_vm_active),
+    `ifdef PERF_ENABLE
+        .mmu_perf    (cmmu_perf),
+    `endif
+        .core_bus_if (gfx_mem_bus_if),
+        .mem_bus_if  (gfx_phys_bus_if),
+        .tlb_bus_if  (cmmu_tlb_bus_if),
+        .flush_if    (cmmu_flush_if),
+        .fault_if    (cmmu_fault_if),
+        `UNUSED_PIN (lane_idle),
+        .empty       (cmmu_empty)
+    );
+`else
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     `ASSIGN_VX_MEM_BUS_IF (per_socket_mem_bus_if[L2_GFX_RASTER_IDX], rcache_l2_bus_if);
 `endif
@@ -475,6 +578,7 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
 `ifdef VX_CFG_EXT_OM_ENABLE
     `ASSIGN_VX_MEM_BUS_IF (per_socket_mem_bus_if[L2_GFX_OM_IDX], ocache_l2_bus_if);
 `endif
+`endif // CLUSTER_UNIT_MMU_ENABLE
 
 `elsif EXT_GFX_ANY_ENABLE
     // No cluster-resident graphics caches: the socket-local flush legs
