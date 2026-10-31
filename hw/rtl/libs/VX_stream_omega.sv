@@ -194,22 +194,29 @@ module VX_stream_omega #(
 
         // Count input collisions: valid transfers with multiple candidates for the same output port.
 
-        reg [NUM_STAGES-1:0][NUM_SWITCHES-1:0][RADIX-1:0] per_cycle_collision, per_cycle_collision_r;
+        wire [NUM_STAGES-1:0][NUM_SWITCHES-1:0][RADIX-1:0] per_cycle_collision;
+        reg [NUM_STAGES-1:0][NUM_SWITCHES-1:0][RADIX-1:0] per_cycle_collision_r;
         wire [`CLOG2(NUM_STAGES*NUM_SWITCHES*RADIX+1)-1:0] collision_count;
         reg [PERF_CTR_BITS-1:0] collisions_r;
 
-        always @(*) begin
-            per_cycle_collision = 0;
-            for (integer stage = 0; stage < NUM_STAGES; ++stage) begin
-                for (integer switch = 0; switch < NUM_SWITCHES; ++switch) begin
-                    for (integer port_a = 0; port_a < RADIX; ++port_a) begin
-                        for (integer port_b = port_a + 1; port_b < RADIX; ++port_b) begin
-                            per_cycle_collision[stage][switch][port_a] |= switch_valid_in[stage][switch][port_a]
-                                                                       && switch_valid_in[stage][switch][port_b]
-                                                                       && (switch_sel_in[stage][switch][port_a] == switch_sel_in[stage][switch][port_b])
-                                                                       && (switch_ready_in[stage][switch][port_a] | switch_ready_in[stage][switch][port_b]);
+        // A port collides with a higher port of its switch that is valid for
+        // the same output. One continuous assignment per port: a procedural
+        // loop over every switch of a large network (11 x 1024 at 2049
+        // outputs) is a process tools must unroll.
+        for (genvar stage = 0; stage < NUM_STAGES; ++stage) begin : g_collisions
+            for (genvar switch = 0; switch < NUM_SWITCHES; ++switch) begin : g_switches
+                for (genvar port_a = 0; port_a < RADIX; ++port_a) begin : g_ports
+                    wire [RADIX-1:0] same_out;
+                    for (genvar port_b = 0; port_b < RADIX; ++port_b) begin : g_others
+                        if (port_b > port_a) begin : g_higher
+                            assign same_out[port_b] = switch_valid_in[stage][switch][port_b]
+                                                   && (switch_sel_in[stage][switch][port_a] == switch_sel_in[stage][switch][port_b])
+                                                   && (switch_ready_in[stage][switch][port_a] | switch_ready_in[stage][switch][port_b]);
+                        end else begin : g_lower
+                            assign same_out[port_b] = 1'b0;
                         end
                     end
+                    assign per_cycle_collision[stage][switch][port_a] = switch_valid_in[stage][switch][port_a] && (| same_out);
                 end
             end
         end
