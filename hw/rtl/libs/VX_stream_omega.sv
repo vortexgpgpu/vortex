@@ -95,9 +95,13 @@ module VX_stream_omega #(
             logic [IN_WIDTH-1:0] sel_out;
         } omega_t;
 
-        // Wires for internal connections between stages
+        // Wires for internal connections between stages. The payloads are a
+        // packed vector per stage: packed across the stages too, a large
+        // network's (4096 ports, 12 stages) would pass the widest packed type
+        // a tool takes (2^24 - 1 bits in slang and MLIR).
         wire [NUM_STAGES-1:0][NUM_SWITCHES-1:0][RADIX-1:0]      switch_valid_in, switch_valid_out;
-        omega_t [NUM_STAGES-1:0][NUM_SWITCHES-1:0][RADIX-1:0]   switch_data_in,  switch_data_out;
+        omega_t [NUM_SWITCHES-1:0][RADIX-1:0]                   switch_data_in [NUM_STAGES];
+        omega_t [NUM_SWITCHES-1:0][RADIX-1:0]                   switch_data_out [NUM_STAGES];
         wire [NUM_STAGES-1:0][NUM_SWITCHES-1:0][RADIX-1:0][RADIX_LG-1:0] switch_sel_in;
         wire [NUM_STAGES-1:0][NUM_SWITCHES-1:0][RADIX-1:0]      switch_ready_in, switch_ready_out;
 
