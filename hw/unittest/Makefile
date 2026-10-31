@@ -46,6 +46,9 @@ all:
 	$(MAKE) -C foldsim_vmem_kz0
 	$(MAKE) -C foldsim_vmem_kzbig
 	$(MAKE) -C foldsim_vmem_i1a12c1024
+	$(MAKE) -C foldsim_vmem_share
+	$(MAKE) -C foldsim_vmem_share_w
+	$(MAKE) -C foldsim_vmem_share_c
 	$(MAKE) -C foldsim_ctrl
 	$(MAKE) -C foldsim_ctrl_p2
 	$(MAKE) -C cp_axi_path
@@ -109,6 +112,9 @@ run:
 	$(MAKE) -C foldsim_vmem_kz0 run
 	$(MAKE) -C foldsim_vmem_kzbig run
 	$(MAKE) -C foldsim_vmem_i1a12c1024 run
+	$(MAKE) -C foldsim_vmem_share run
+	$(MAKE) -C foldsim_vmem_share_w run
+	$(MAKE) -C foldsim_vmem_share_c run
 	$(MAKE) -C foldsim_ctrl run
 	$(MAKE) -C foldsim_ctrl_p2 run
 	$(MAKE) -C cp_axi_path run
@@ -245,6 +251,9 @@ clean:
 	$(MAKE) -C foldsim_vmem_kz0 clean
 	$(MAKE) -C foldsim_vmem_kzbig clean
 	$(MAKE) -C foldsim_vmem_i1a12c1024 clean
+	$(MAKE) -C foldsim_vmem_share clean
+	$(MAKE) -C foldsim_vmem_share_w clean
+	$(MAKE) -C foldsim_vmem_share_c clean
 	$(MAKE) -C foldsim_ctrl clean
 	$(MAKE) -C foldsim_ctrl_p2 clean
 	$(MAKE) -C fma_unit clean

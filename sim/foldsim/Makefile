@@ -38,7 +38,8 @@ TOP := foldsim_afu
 # instantiate (its FPU of type DSP): Verilator cannot run their netlists.
 RTL_SRCS := $(SRC_DIR)/xilinx_fp_models.sv $(GEN_SV) $(FOLDSIM_RTL_DIR)/foldsim_token.sv \
             $(FOLDSIM_RTL_DIR)/foldsim_mem_bmap.sv $(FOLDSIM_RTL_DIR)/foldsim_mem_bank.sv \
-            $(FOLDSIM_RTL_DIR)/foldsim_mem.sv $(FOLDSIM_RTL_DIR)/foldsim_vmem.sv $(FOLDSIM_RTL_DIR)/foldsim_ctrl.sv \
+            $(FOLDSIM_RTL_DIR)/foldsim_mem.sv $(FOLDSIM_RTL_DIR)/foldsim_vmem.sv $(FOLDSIM_RTL_DIR)/foldsim_vmem_share.sv \
+            $(FOLDSIM_RTL_DIR)/foldsim_ctrl.sv \
             $(FOLDSIM_RTL_DIR)/foldsim_afu.sv
 SRCS := $(SRC_DIR)/foldsim_emul.cpp $(DPI_DIR)/dpi_float.cpp $(DPI_DIR)/dpi_util.cpp \
         $(SW_COMMON_DIR)/softfloat_ext.cpp $(SW_COMMON_DIR)/rvfloats.cpp
@@ -57,12 +58,15 @@ $(GEN_SV): force
 		$(if $(FOLDSIM_LIFT),FOLDSIM_LIFT='$(FOLDSIM_LIFT)') $(if $(CIRCT_BIN),CIRCT_BIN=$(CIRCT_BIN)) \
 		$(if $(FOLDSIM_FLAGS),FOLDSIM_FLAGS='$(FOLDSIM_FLAGS)') \
 		$(if $(LIFT_PYTHON),LIFT_PYTHON=$(LIFT_PYTHON)) $(if $(FOLDSIM),FOLDSIM=$(FOLDSIM)) \
-		$(if $(FOLDSIM_VMEM_CACHE_ROWS),FOLDSIM_VMEM_CACHE_ROWS=$(FOLDSIM_VMEM_CACHE_ROWS))
+		$(if $(FOLDSIM_VMEM_CACHE_ROWS),FOLDSIM_VMEM_CACHE_ROWS=$(FOLDSIM_VMEM_CACHE_ROWS)) \
+		$(if $(FOLDSIM_VMEM_MASTERS),FOLDSIM_VMEM_MASTERS=$(FOLDSIM_VMEM_MASTERS))
 
 $(DESTDIR)/$(PROJECT): $(GEN_SV) $(SRCS) $(SRC_DIR)/xilinx_fp_models.sv $(wildcard $(FOLDSIM_RTL_DIR)/*) $(CONFIG_FILE)
 	$(VERILATOR_PATH)/bin/verilator --build --exe $(VL_FLAGS) --cc $(RTL_SRCS) --top-module $(TOP) \
 		$(SRCS) -CFLAGS '$(CXXFLAGS) -DFOLDSIM_MEM_PORTS='$$(sed -n 's/^`define FOLDSIM_MEM_PORTS //p' $(KERNEL_VH)) \
 		-CFLAGS -DFOLDSIM_VMEM_COUNT=$$(sed -n 's/^`define FOLDSIM_VMEM_COUNT //p' $(SIM_VH) | grep . || echo 0) \
+		$$(sed -n -e 's/^`define FOLDSIM_VMEM_MASTERS \(.*\)/-CFLAGS -DFOLDSIM_VMEM_MASTERS=\1/p' \
+		          -e 's/^`define FOLDSIM_VMEM_ON_PORTS.*/-CFLAGS -DFOLDSIM_VMEM_MASTERS=0/p' $(KERNEL_VH)) \
 		-LDFLAGS '$(LDFLAGS)' --Mdir $@.obj_dir -o $@
 
 $(CONFIG_FILE): force

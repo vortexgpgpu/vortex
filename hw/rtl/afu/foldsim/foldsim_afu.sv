@@ -25,7 +25,11 @@
 // foldsim_kernel.vh, with the ports' id width), each its own way into device
 // memory. A simulator with virtual memories (FOLDSIM_VMEM_COUNT, from
 // foldsim_sim.vh) has a foldsim_vmem controller for each, with a master of its
-// own after the memory ports' (FOLDSIM_VMEM_REPEAT).
+// own after the memory ports' (FOLDSIM_VMEM_REPEAT), or, where
+// foldsim_kernel.vh gives fewer (FOLDSIM_VMEM_MASTERS), controller k on master
+// k mod FOLDSIM_VMEM_MASTERS with the others there (foldsim_vmem_share); with
+// no master left beside the memory ports' (FOLDSIM_VMEM_ON_PORTS), controller k
+// shares memory port k mod FOLDSIM_MEM_PORTS's master with its endpoint.
 module foldsim_afu #(
     parameter C_S_AXI_CONTROL_ADDR_WIDTH = 16,
     parameter C_S_AXI_CONTROL_DATA_WIDTH = 32,
@@ -77,9 +81,15 @@ module foldsim_afu #(
     `FOLDSIM_MEM_REPEAT2(FOLDSIM_AXI_MEM, FOLDSIM_COMMA)
     `FOLDSIM_MEM_REPEAT3(FOLDSIM_AXI_MEM, FOLDSIM_COMMA),
 `ifdef FOLDSIM_VMEM_COUNT
+`ifndef FOLDSIM_VMEM_ON_PORTS
 `define FOLDSIM_AXI_VMEM(p, k) `FOLDSIM_AXI_MEM(p)
+`ifdef FOLDSIM_VMEM_MASTERS
+    `FOLDSIM_VMEM_MASTER_REPEAT(FOLDSIM_AXI_VMEM, FOLDSIM_COMMA),
+`else
     `FOLDSIM_VMEM_REPEAT(FOLDSIM_AXI_VMEM, FOLDSIM_COMMA),
+`endif
 `undef FOLDSIM_AXI_VMEM
+`endif
 `endif
 
     input  wire                                    s_axi_control_awvalid,
@@ -206,10 +216,12 @@ module foldsim_afu #(
     assign m_axi_mem_``i``_rready  = hbm_rready[i]; \
     assign hbm_rdata[i]            = m_axi_mem_``i``_rdata
 
+`ifndef FOLDSIM_VMEM_ON_PORTS
     `FOLDSIM_MEM_REPEAT0(FOLDSIM_HBM, FOLDSIM_SEMI)
     `FOLDSIM_MEM_REPEAT1(FOLDSIM_HBM, FOLDSIM_SEMI)
     `FOLDSIM_MEM_REPEAT2(FOLDSIM_HBM, FOLDSIM_SEMI)
     `FOLDSIM_MEM_REPEAT3(FOLDSIM_HBM, FOLDSIM_SEMI);
+`endif
 `undef FOLDSIM_HBM
 
 `define FOLDSIM_IN(name) \
@@ -283,6 +295,38 @@ module foldsim_afu #(
     // Each controller is still moving its region (foldsim_vmem `moving`).
     wire [`FOLDSIM_VMEM_COUNT-1:0] vmem_moving;
 
+    // Controller k's master: m_axi_mem_<p>, or its slot of the sharing.
+`ifdef FOLDSIM_VMEM_ON_PORTS
+`define FOLDSIM_VMEM_SHARED
+`endif
+`ifdef FOLDSIM_VMEM_MASTERS
+`define FOLDSIM_VMEM_SHARED
+`endif
+`ifdef FOLDSIM_VMEM_SHARED
+    localparam VMEM_N = `FOLDSIM_VMEM_COUNT;
+    localparam VMEM_ID_W = C_M_AXI_MEM_ID_WIDTH;
+    wire                 vmc_awvalid [VMEM_N], vmc_awready [VMEM_N];
+    wire [63:0]          vmc_awaddr  [VMEM_N];
+    wire [VMEM_ID_W-1:0] vmc_awid    [VMEM_N];
+    wire [7:0]           vmc_awlen   [VMEM_N];
+    wire                 vmc_wvalid  [VMEM_N], vmc_wready [VMEM_N], vmc_wlast [VMEM_N];
+    wire [511:0]         vmc_wdata   [VMEM_N];
+    wire [63:0]          vmc_wstrb   [VMEM_N];
+    wire                 vmc_bvalid  [VMEM_N], vmc_bready [VMEM_N];
+    wire [VMEM_ID_W-1:0] vmc_bid     [VMEM_N];
+    wire                 vmc_arvalid [VMEM_N], vmc_arready [VMEM_N];
+    wire [63:0]          vmc_araddr  [VMEM_N];
+    wire [VMEM_ID_W-1:0] vmc_arid    [VMEM_N];
+    wire [7:0]           vmc_arlen   [VMEM_N];
+    wire                 vmc_rvalid  [VMEM_N], vmc_rready [VMEM_N], vmc_rlast [VMEM_N];
+    wire [511:0]         vmc_rdata   [VMEM_N];
+    wire [VMEM_ID_W-1:0] vmc_rid     [VMEM_N];
+`undef FOLDSIM_VMEM_SHARED
+`define FOLDSIM_VMEM_AXI(p, k, s) vmc_``s[k]
+`else
+`define FOLDSIM_VMEM_AXI(p, k, s) m_axi_mem_``p``_``s
+`endif
+
     // Memory k on master p. Its region's base is registered: base + the
     // region's offset is static while requests flow. Its host cache has
     // FOLDSIM_VMEM_ROWS(k) lines, at most a line per row of its image.
@@ -331,34 +375,326 @@ module foldsim_afu #(
         .zero      (vmem_zero), \
         .move      (vmem_move), \
         .moving    (vm``k``_moving), \
-        .m_awvalid (m_axi_mem_``p``_awvalid), \
-        .m_awready (m_axi_mem_``p``_awready), \
-        .m_awaddr  (m_axi_mem_``p``_awaddr), \
-        .m_awid    (m_axi_mem_``p``_awid), \
-        .m_awlen   (m_axi_mem_``p``_awlen), \
-        .m_wvalid  (m_axi_mem_``p``_wvalid), \
-        .m_wready  (m_axi_mem_``p``_wready), \
-        .m_wdata   (m_axi_mem_``p``_wdata), \
-        .m_wstrb   (m_axi_mem_``p``_wstrb), \
-        .m_wlast   (m_axi_mem_``p``_wlast), \
-        .m_bvalid  (m_axi_mem_``p``_bvalid), \
-        .m_bready  (m_axi_mem_``p``_bready), \
-        .m_bid     (m_axi_mem_``p``_bid), \
-        .m_arvalid (m_axi_mem_``p``_arvalid), \
-        .m_arready (m_axi_mem_``p``_arready), \
-        .m_araddr  (m_axi_mem_``p``_araddr), \
-        .m_arid    (m_axi_mem_``p``_arid), \
-        .m_arlen   (m_axi_mem_``p``_arlen), \
-        .m_rvalid  (m_axi_mem_``p``_rvalid), \
-        .m_rready  (m_axi_mem_``p``_rready), \
-        .m_rdata   (m_axi_mem_``p``_rdata), \
-        .m_rid     (m_axi_mem_``p``_rid), \
-        .m_rlast   (m_axi_mem_``p``_rlast) \
+        .m_awvalid (`FOLDSIM_VMEM_AXI(p, k, awvalid)), \
+        .m_awready (`FOLDSIM_VMEM_AXI(p, k, awready)), \
+        .m_awaddr  (`FOLDSIM_VMEM_AXI(p, k, awaddr)), \
+        .m_awid    (`FOLDSIM_VMEM_AXI(p, k, awid)), \
+        .m_awlen   (`FOLDSIM_VMEM_AXI(p, k, awlen)), \
+        .m_wvalid  (`FOLDSIM_VMEM_AXI(p, k, wvalid)), \
+        .m_wready  (`FOLDSIM_VMEM_AXI(p, k, wready)), \
+        .m_wdata   (`FOLDSIM_VMEM_AXI(p, k, wdata)), \
+        .m_wstrb   (`FOLDSIM_VMEM_AXI(p, k, wstrb)), \
+        .m_wlast   (`FOLDSIM_VMEM_AXI(p, k, wlast)), \
+        .m_bvalid  (`FOLDSIM_VMEM_AXI(p, k, bvalid)), \
+        .m_bready  (`FOLDSIM_VMEM_AXI(p, k, bready)), \
+        .m_bid     (`FOLDSIM_VMEM_AXI(p, k, bid)), \
+        .m_arvalid (`FOLDSIM_VMEM_AXI(p, k, arvalid)), \
+        .m_arready (`FOLDSIM_VMEM_AXI(p, k, arready)), \
+        .m_araddr  (`FOLDSIM_VMEM_AXI(p, k, araddr)), \
+        .m_arid    (`FOLDSIM_VMEM_AXI(p, k, arid)), \
+        .m_arlen   (`FOLDSIM_VMEM_AXI(p, k, arlen)), \
+        .m_rvalid  (`FOLDSIM_VMEM_AXI(p, k, rvalid)), \
+        .m_rready  (`FOLDSIM_VMEM_AXI(p, k, rready)), \
+        .m_rdata   (`FOLDSIM_VMEM_AXI(p, k, rdata)), \
+        .m_rid     (`FOLDSIM_VMEM_AXI(p, k, rid)), \
+        .m_rlast   (`FOLDSIM_VMEM_AXI(p, k, rlast)) \
     )
 
     `FOLDSIM_VMEM_REPEAT(FOLDSIM_VMEM, FOLDSIM_SEMI);
 `undef FOLDSIM_VMEM
 `undef FOLDSIM_VMEM_ROWS
+`undef FOLDSIM_VMEM_AXI
+
+`ifdef FOLDSIM_VMEM_MASTERS
+    // Master j: controllers j, j + M, j + 2M, ... Each controller has at
+    // most QUEUE writes and one read per id in flight.
+    localparam VMEM_M = `FOLDSIM_VMEM_MASTERS;
+    wire                 vmm_awvalid [VMEM_M], vmm_awready [VMEM_M];
+    wire [63:0]          vmm_awaddr  [VMEM_M];
+    wire [VMEM_ID_W-1:0] vmm_awid    [VMEM_M];
+    wire [7:0]           vmm_awlen   [VMEM_M];
+    wire                 vmm_wvalid  [VMEM_M], vmm_wready [VMEM_M], vmm_wlast [VMEM_M];
+    wire [511:0]         vmm_wdata   [VMEM_M];
+    wire [63:0]          vmm_wstrb   [VMEM_M];
+    wire                 vmm_bvalid  [VMEM_M], vmm_bready [VMEM_M];
+    wire [VMEM_ID_W-1:0] vmm_bid     [VMEM_M];
+    wire                 vmm_arvalid [VMEM_M], vmm_arready [VMEM_M];
+    wire [63:0]          vmm_araddr  [VMEM_M];
+    wire [VMEM_ID_W-1:0] vmm_arid    [VMEM_M];
+    wire [7:0]           vmm_arlen   [VMEM_M];
+    wire                 vmm_rvalid  [VMEM_M], vmm_rready [VMEM_M], vmm_rlast [VMEM_M];
+    wire [511:0]         vmm_rdata   [VMEM_M];
+    wire [VMEM_ID_W-1:0] vmm_rid     [VMEM_M];
+    for (genvar j = 0; j < VMEM_M; ++j) begin : g_vmem_master
+        localparam G = (VMEM_N - j + VMEM_M - 1) / VMEM_M;
+        wire                 s_awvalid [G], s_awready [G];
+        wire [63:0]          s_awaddr  [G];
+        wire [VMEM_ID_W-1:0] s_awid    [G];
+        wire [7:0]           s_awlen   [G];
+        wire                 s_wvalid  [G], s_wready [G], s_wlast [G];
+        wire [511:0]         s_wdata   [G];
+        wire [63:0]          s_wstrb   [G];
+        wire                 s_bvalid  [G], s_bready [G];
+        wire [VMEM_ID_W-1:0] s_bid     [G];
+        wire                 s_arvalid [G], s_arready [G];
+        wire [63:0]          s_araddr  [G];
+        wire [VMEM_ID_W-1:0] s_arid    [G];
+        wire [7:0]           s_arlen   [G];
+        wire                 s_rvalid  [G], s_rready [G], s_rlast [G];
+        wire [511:0]         s_rdata   [G];
+        wire [VMEM_ID_W-1:0] s_rid     [G];
+        for (genvar i = 0; i < G; ++i) begin : g_ctrl
+            localparam K = j + i * VMEM_M;
+            assign s_awvalid[i] = vmc_awvalid[K];
+            assign vmc_awready[K] = s_awready[i];
+            assign s_awaddr[i]  = vmc_awaddr[K];
+            assign s_awid[i]    = vmc_awid[K];
+            assign s_awlen[i]   = vmc_awlen[K];
+            assign s_wvalid[i]  = vmc_wvalid[K];
+            assign vmc_wready[K] = s_wready[i];
+            assign s_wdata[i]   = vmc_wdata[K];
+            assign s_wstrb[i]   = vmc_wstrb[K];
+            assign s_wlast[i]   = vmc_wlast[K];
+            assign vmc_bvalid[K] = s_bvalid[i];
+            assign s_bready[i]  = vmc_bready[K];
+            assign vmc_bid[K]   = s_bid[i];
+            assign s_arvalid[i] = vmc_arvalid[K];
+            assign vmc_arready[K] = s_arready[i];
+            assign s_araddr[i]  = vmc_araddr[K];
+            assign s_arid[i]    = vmc_arid[K];
+            assign s_arlen[i]   = vmc_arlen[K];
+            assign vmc_rvalid[K] = s_rvalid[i];
+            assign s_rready[i]  = vmc_rready[K];
+            assign vmc_rdata[K] = s_rdata[i];
+            assign vmc_rid[K]   = s_rid[i];
+            assign vmc_rlast[K] = s_rlast[i];
+        end
+        foldsim_vmem_share #(
+            .N      (G),
+            .ID_W   (VMEM_ID_W),
+            .RDEPTH (G),
+            .WDEPTH (G * VMEM_QUEUE)
+        ) share (
+            .clk       (ap_clk),
+            .s_awvalid (s_awvalid), .s_awready (s_awready), .s_awaddr (s_awaddr), .s_awid (s_awid),
+            .s_awlen   (s_awlen),
+            .s_wvalid  (s_wvalid),  .s_wready  (s_wready),  .s_wdata  (s_wdata),  .s_wstrb (s_wstrb),
+            .s_wlast   (s_wlast),
+            .s_bvalid  (s_bvalid),  .s_bready  (s_bready),  .s_bid    (s_bid),
+            .s_arvalid (s_arvalid), .s_arready (s_arready), .s_araddr (s_araddr), .s_arid  (s_arid),
+            .s_arlen   (s_arlen),
+            .s_rvalid  (s_rvalid),  .s_rready  (s_rready),  .s_rdata  (s_rdata),  .s_rid   (s_rid),
+            .s_rlast   (s_rlast),
+            .m_awvalid (vmm_awvalid[j]), .m_awready (vmm_awready[j]), .m_awaddr (vmm_awaddr[j]),
+            .m_awid    (vmm_awid[j]),    .m_awlen   (vmm_awlen[j]),
+            .m_wvalid  (vmm_wvalid[j]),  .m_wready  (vmm_wready[j]),  .m_wdata  (vmm_wdata[j]),
+            .m_wstrb   (vmm_wstrb[j]),   .m_wlast   (vmm_wlast[j]),
+            .m_bvalid  (vmm_bvalid[j]),  .m_bready  (vmm_bready[j]),  .m_bid    (vmm_bid[j]),
+            .m_arvalid (vmm_arvalid[j]), .m_arready (vmm_arready[j]), .m_araddr (vmm_araddr[j]),
+            .m_arid    (vmm_arid[j]),    .m_arlen   (vmm_arlen[j]),
+            .m_rvalid  (vmm_rvalid[j]),  .m_rready  (vmm_rready[j]),  .m_rdata  (vmm_rdata[j]),
+            .m_rid     (vmm_rid[j]),     .m_rlast   (vmm_rlast[j])
+        );
+    end
+`define FOLDSIM_VMEM_PORT(p, j) \
+    assign m_axi_mem_``p``_awvalid = vmm_awvalid[j]; \
+    assign vmm_awready[j]          = m_axi_mem_``p``_awready; \
+    assign m_axi_mem_``p``_awaddr  = vmm_awaddr[j]; \
+    assign m_axi_mem_``p``_awid    = vmm_awid[j]; \
+    assign m_axi_mem_``p``_awlen   = vmm_awlen[j]; \
+    assign m_axi_mem_``p``_wvalid  = vmm_wvalid[j]; \
+    assign vmm_wready[j]           = m_axi_mem_``p``_wready; \
+    assign m_axi_mem_``p``_wdata   = vmm_wdata[j]; \
+    assign m_axi_mem_``p``_wstrb   = vmm_wstrb[j]; \
+    assign m_axi_mem_``p``_wlast   = vmm_wlast[j]; \
+    assign vmm_bvalid[j]           = m_axi_mem_``p``_bvalid; \
+    assign m_axi_mem_``p``_bready  = vmm_bready[j]; \
+    assign vmm_bid[j]              = m_axi_mem_``p``_bid; \
+    assign m_axi_mem_``p``_arvalid = vmm_arvalid[j]; \
+    assign vmm_arready[j]          = m_axi_mem_``p``_arready; \
+    assign m_axi_mem_``p``_araddr  = vmm_araddr[j]; \
+    assign m_axi_mem_``p``_arid    = vmm_arid[j]; \
+    assign m_axi_mem_``p``_arlen   = vmm_arlen[j]; \
+    assign vmm_rvalid[j]           = m_axi_mem_``p``_rvalid; \
+    assign m_axi_mem_``p``_rready  = vmm_rready[j]; \
+    assign vmm_rdata[j]            = m_axi_mem_``p``_rdata; \
+    assign vmm_rid[j]              = m_axi_mem_``p``_rid; \
+    assign vmm_rlast[j]            = m_axi_mem_``p``_rlast
+    `FOLDSIM_VMEM_MASTER_REPEAT(FOLDSIM_VMEM_PORT, FOLDSIM_SEMI);
+`undef FOLDSIM_VMEM_PORT
+`endif
+
+`ifdef FOLDSIM_VMEM_ON_PORTS
+    // Memory port p's master: its endpoint, then controllers p, p + PORTS,
+    // ... The endpoint's transactions are single beats of id 0: the route of
+    // R holds as many of its reads in flight (more only wait for room).
+    localparam VMEM_PORT_READS = 64;
+    wire                       pm_awvalid [PORTS], pm_awready [PORTS];
+    wire [63:0]                pm_awaddr  [PORTS];
+    wire [VMEM_ID_W-1:0]       pm_awid    [PORTS];
+    wire [7:0]                 pm_awlen   [PORTS];
+    wire                       pm_wvalid  [PORTS], pm_wready [PORTS], pm_wlast [PORTS];
+    wire [DATA_W-1:0]          pm_wdata   [PORTS];
+    wire [DATA_W/8-1:0]        pm_wstrb   [PORTS];
+    wire                       pm_bvalid  [PORTS], pm_bready [PORTS];
+    wire [VMEM_ID_W-1:0]       pm_bid     [PORTS];
+    wire                       pm_arvalid [PORTS], pm_arready [PORTS];
+    wire [63:0]                pm_araddr  [PORTS];
+    wire [VMEM_ID_W-1:0]       pm_arid    [PORTS];
+    wire [7:0]                 pm_arlen   [PORTS];
+    wire                       pm_rvalid  [PORTS], pm_rready [PORTS], pm_rlast [PORTS];
+    wire [DATA_W-1:0]          pm_rdata   [PORTS];
+    wire [VMEM_ID_W-1:0]       pm_rid     [PORTS];
+    for (genvar p = 0; p < PORTS; ++p) begin : g_vmem_port
+        localparam G = (p < VMEM_N) ? (VMEM_N - p + PORTS - 1) / PORTS : 0;
+        if (G == 0) begin : g_alone
+            assign pm_awvalid[p]  = hbm_awvalid[p];
+            assign hbm_awready[p] = pm_awready[p];
+            assign pm_awaddr[p]   = hbm_awaddr[p];
+            assign pm_awid[p]     = '0;
+            assign pm_awlen[p]    = hbm_awlen[p];
+            assign pm_wvalid[p]   = hbm_wvalid[p];
+            assign hbm_wready[p]  = pm_wready[p];
+            assign pm_wdata[p]    = hbm_wdata[p];
+            assign pm_wstrb[p]    = hbm_wstrb[p];
+            assign pm_wlast[p]    = hbm_wlast[p];
+            assign hbm_bvalid[p]  = pm_bvalid[p];
+            assign pm_bready[p]   = hbm_bready[p];
+            assign pm_arvalid[p]  = hbm_arvalid[p];
+            assign hbm_arready[p] = pm_arready[p];
+            assign pm_araddr[p]   = hbm_araddr[p];
+            assign pm_arid[p]     = '0;
+            assign pm_arlen[p]    = hbm_arlen[p];
+            assign hbm_rvalid[p]  = pm_rvalid[p];
+            assign pm_rready[p]   = hbm_rready[p];
+            assign hbm_rdata[p]   = pm_rdata[p];
+            /* verilator lint_off UNUSEDSIGNAL */
+            wire unused = (|pm_bid[p]) | (|pm_rid[p]) | pm_rlast[p];
+            /* verilator lint_on UNUSEDSIGNAL */
+        end else begin : g_shared
+            wire                 s_awvalid [G+1], s_awready [G+1];
+            wire [63:0]          s_awaddr  [G+1];
+            wire [VMEM_ID_W-1:0] s_awid    [G+1];
+            wire [7:0]           s_awlen   [G+1];
+            wire                 s_wvalid  [G+1], s_wready [G+1], s_wlast [G+1];
+            wire [511:0]         s_wdata   [G+1];
+            wire [63:0]          s_wstrb   [G+1];
+            wire                 s_bvalid  [G+1], s_bready [G+1];
+            wire [VMEM_ID_W-1:0] s_bid     [G+1];
+            wire                 s_arvalid [G+1], s_arready [G+1];
+            wire [63:0]          s_araddr  [G+1];
+            wire [VMEM_ID_W-1:0] s_arid    [G+1];
+            wire [7:0]           s_arlen   [G+1];
+            wire                 s_rvalid  [G+1], s_rready [G+1], s_rlast [G+1];
+            wire [511:0]         s_rdata   [G+1];
+            wire [VMEM_ID_W-1:0] s_rid     [G+1];
+            assign s_awvalid[0]   = hbm_awvalid[p];
+            assign hbm_awready[p] = s_awready[0];
+            assign s_awaddr[0]    = hbm_awaddr[p];
+            assign s_awid[0]      = '0;
+            assign s_awlen[0]     = hbm_awlen[p];
+            assign s_wvalid[0]    = hbm_wvalid[p];
+            assign hbm_wready[p]  = s_wready[0];
+            assign s_wdata[0]     = hbm_wdata[p];
+            assign s_wstrb[0]     = hbm_wstrb[p];
+            assign s_wlast[0]     = hbm_wlast[p];
+            assign hbm_bvalid[p]  = s_bvalid[0];
+            assign s_bready[0]    = hbm_bready[p];
+            assign s_arvalid[0]   = hbm_arvalid[p];
+            assign hbm_arready[p] = s_arready[0];
+            assign s_araddr[0]    = hbm_araddr[p];
+            assign s_arid[0]      = '0;
+            assign s_arlen[0]     = hbm_arlen[p];
+            assign hbm_rvalid[p]  = s_rvalid[0];
+            assign s_rready[0]    = hbm_rready[p];
+            assign hbm_rdata[p]   = s_rdata[0];
+            /* verilator lint_off UNUSEDSIGNAL */
+            wire unused = (|s_bid[0]) | (|s_rid[0]) | s_rlast[0];
+            /* verilator lint_on UNUSEDSIGNAL */
+            for (genvar i = 0; i < G; ++i) begin : g_ctrl
+                localparam K = p + i * PORTS;
+                assign s_awvalid[i+1] = vmc_awvalid[K];
+                assign vmc_awready[K] = s_awready[i+1];
+                assign s_awaddr[i+1]  = vmc_awaddr[K];
+                assign s_awid[i+1]    = vmc_awid[K];
+                assign s_awlen[i+1]   = vmc_awlen[K];
+                assign s_wvalid[i+1]  = vmc_wvalid[K];
+                assign vmc_wready[K]  = s_wready[i+1];
+                assign s_wdata[i+1]   = vmc_wdata[K];
+                assign s_wstrb[i+1]   = vmc_wstrb[K];
+                assign s_wlast[i+1]   = vmc_wlast[K];
+                assign vmc_bvalid[K]  = s_bvalid[i+1];
+                assign s_bready[i+1]  = vmc_bready[K];
+                assign vmc_bid[K]     = s_bid[i+1];
+                assign s_arvalid[i+1] = vmc_arvalid[K];
+                assign vmc_arready[K] = s_arready[i+1];
+                assign s_araddr[i+1]  = vmc_araddr[K];
+                assign s_arid[i+1]    = vmc_arid[K];
+                assign s_arlen[i+1]   = vmc_arlen[K];
+                assign vmc_rvalid[K]  = s_rvalid[i+1];
+                assign s_rready[i+1]  = vmc_rready[K];
+                assign vmc_rdata[K]   = s_rdata[i+1];
+                assign vmc_rid[K]     = s_rid[i+1];
+                assign vmc_rlast[K]   = s_rlast[i+1];
+            end
+            foldsim_vmem_share #(
+                .N      (G + 1),
+                .ID_W   (VMEM_ID_W),
+                .RDEPTH (VMEM_PORT_READS + G),
+                .WDEPTH ((G + 1) * VMEM_QUEUE)
+            ) share (
+                .clk       (ap_clk),
+                .s_awvalid (s_awvalid), .s_awready (s_awready), .s_awaddr (s_awaddr), .s_awid (s_awid),
+                .s_awlen   (s_awlen),
+                .s_wvalid  (s_wvalid),  .s_wready  (s_wready),  .s_wdata  (s_wdata),  .s_wstrb (s_wstrb),
+                .s_wlast   (s_wlast),
+                .s_bvalid  (s_bvalid),  .s_bready  (s_bready),  .s_bid    (s_bid),
+                .s_arvalid (s_arvalid), .s_arready (s_arready), .s_araddr (s_araddr), .s_arid  (s_arid),
+                .s_arlen   (s_arlen),
+                .s_rvalid  (s_rvalid),  .s_rready  (s_rready),  .s_rdata  (s_rdata),  .s_rid   (s_rid),
+                .s_rlast   (s_rlast),
+                .m_awvalid (pm_awvalid[p]), .m_awready (pm_awready[p]), .m_awaddr (pm_awaddr[p]),
+                .m_awid    (pm_awid[p]),    .m_awlen   (pm_awlen[p]),
+                .m_wvalid  (pm_wvalid[p]),  .m_wready  (pm_wready[p]),  .m_wdata  (pm_wdata[p]),
+                .m_wstrb   (pm_wstrb[p]),   .m_wlast   (pm_wlast[p]),
+                .m_bvalid  (pm_bvalid[p]),  .m_bready  (pm_bready[p]),  .m_bid    (pm_bid[p]),
+                .m_arvalid (pm_arvalid[p]), .m_arready (pm_arready[p]), .m_araddr (pm_araddr[p]),
+                .m_arid    (pm_arid[p]),    .m_arlen   (pm_arlen[p]),
+                .m_rvalid  (pm_rvalid[p]),  .m_rready  (pm_rready[p]),  .m_rdata  (pm_rdata[p]),
+                .m_rid     (pm_rid[p]),     .m_rlast   (pm_rlast[p])
+            );
+        end
+    end
+`define FOLDSIM_PORT_HBM(i) \
+    assign m_axi_mem_``i``_awvalid = pm_awvalid[i]; \
+    assign pm_awready[i]           = m_axi_mem_``i``_awready; \
+    assign m_axi_mem_``i``_awaddr  = pm_awaddr[i]; \
+    assign m_axi_mem_``i``_awid    = pm_awid[i]; \
+    assign m_axi_mem_``i``_awlen   = pm_awlen[i]; \
+    assign m_axi_mem_``i``_wvalid  = pm_wvalid[i]; \
+    assign pm_wready[i]            = m_axi_mem_``i``_wready; \
+    assign m_axi_mem_``i``_wdata   = pm_wdata[i]; \
+    assign m_axi_mem_``i``_wstrb   = pm_wstrb[i]; \
+    assign m_axi_mem_``i``_wlast   = pm_wlast[i]; \
+    assign pm_bvalid[i]            = m_axi_mem_``i``_bvalid; \
+    assign m_axi_mem_``i``_bready  = pm_bready[i]; \
+    assign pm_bid[i]               = m_axi_mem_``i``_bid; \
+    assign m_axi_mem_``i``_arvalid = pm_arvalid[i]; \
+    assign pm_arready[i]           = m_axi_mem_``i``_arready; \
+    assign m_axi_mem_``i``_araddr  = pm_araddr[i]; \
+    assign m_axi_mem_``i``_arid    = pm_arid[i]; \
+    assign m_axi_mem_``i``_arlen   = pm_arlen[i]; \
+    assign pm_rvalid[i]            = m_axi_mem_``i``_rvalid; \
+    assign m_axi_mem_``i``_rready  = pm_rready[i]; \
+    assign pm_rdata[i]             = m_axi_mem_``i``_rdata; \
+    assign pm_rid[i]               = m_axi_mem_``i``_rid; \
+    assign pm_rlast[i]             = m_axi_mem_``i``_rlast
+    `FOLDSIM_MEM_REPEAT0(FOLDSIM_PORT_HBM, FOLDSIM_SEMI)
+    `FOLDSIM_MEM_REPEAT1(FOLDSIM_PORT_HBM, FOLDSIM_SEMI)
+    `FOLDSIM_MEM_REPEAT2(FOLDSIM_PORT_HBM, FOLDSIM_SEMI)
+    `FOLDSIM_MEM_REPEAT3(FOLDSIM_PORT_HBM, FOLDSIM_SEMI);
+`undef FOLDSIM_PORT_HBM
+`endif
 
 `define FOLDSIM_SIM_VMEM(p, k) \
     .vm``k``_rsp_valid (vm``k``_rsp_valid), .vm``k``_rsp_inst (vm``k``_rsp_inst), \

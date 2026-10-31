@@ -24,6 +24,16 @@ command line) defines it, else FOLDSIM_VMEM_CACHE_ROWS (0: none); the
 foldsim_afu.sv of a kernel.vh without FOLDSIM_VMEM_PER_MEMORY_ROWS takes the
 global one for every memory. Nothing for a simulator without them.
 With --masters, it prints the kernel's device-memory masters instead.
+
+Masters for the controllers (--vmem-masters M, Makefile FOLDSIM_VMEM_MASTERS):
+by default one per controller, as many as fit beside the memory ports (at
+most MAX_MASTERS in all). With fewer masters M than controllers N, controller k
+shares master k mod M with the others there (foldsim_vmem_share): the header
+then says FOLDSIM_VMEM_MASTERS M and FOLDSIM_VMEM_MASTER_REPEAT(f,s), `f(port,
+j) for each master j, and FOLDSIM_VMEM_REPEAT gives each controller its
+master's port. With M = N the header is as without the option. Where no
+master is left beside the memory ports (or with M = 0), controller k shares
+memory port k mod P's master with that port's endpoint: FOLDSIM_VMEM_ON_PORTS.
 """
 
 import argparse
@@ -46,20 +56,36 @@ def main():
     ap.add_argument('--mem-ports', type=int, required=True, help='the memory ports (FOLDSIM_MEM_PORTS)')
     ap.add_argument('--cache-rows', type=int, default=0, help='host-cache rows per controller (0: none)')
     ap.add_argument('--masters', action='store_true', help='print the device-memory masters')
+    ap.add_argument('--vmem-masters', type=int, default=None,
+                    help="the controllers' own masters (default: one each, or as many as fit; "
+                         "0: none, on the memory ports' masters)")
     a = ap.parse_args()
     n = vmem_count(a.sim_vh)
-    if a.mem_ports + n > MAX_MASTERS:
-        sys.exit(f'vmem_ports.py: {a.mem_ports} memory ports and {n} virtual memories need '
-                 f'{a.mem_ports + n} device-memory masters; the kernel has at most {MAX_MASTERS}')
+    room = MAX_MASTERS - a.mem_ports
+    m = min(n, room if a.vmem_masters is None else a.vmem_masters)
+    if m < 0:
+        sys.exit(f'vmem_ports.py: {a.mem_ports} memory ports, beyond the kernel\'s {MAX_MASTERS} masters')
+    if m > room:
+        sys.exit(f'vmem_ports.py: {a.mem_ports} memory ports and {m} masters for the virtual memories '
+                 f'need {a.mem_ports + m} device-memory masters; the kernel has at most {MAX_MASTERS}')
     if a.cache_rows and (a.cache_rows < 2 or a.cache_rows & (a.cache_rows - 1)):
         sys.exit('vmem_ports.py: --cache-rows is 0 or a power of two of at least 2')
     if a.masters:
-        print(a.mem_ports + n)
+        print(a.mem_ports + m)
         return
     if n == 0:
         return
-    print('`define FOLDSIM_VMEM_REPEAT(f,s) '
-          + ' `s '.join(f'`f({a.mem_ports + k}, {k})' for k in range(n)))
+    if m == 0:
+        print('`define FOLDSIM_VMEM_REPEAT(f,s) '
+              + ' `s '.join(f'`f({k % a.mem_ports}, {k})' for k in range(n)))
+        print('`define FOLDSIM_VMEM_ON_PORTS')
+    else:
+        print('`define FOLDSIM_VMEM_REPEAT(f,s) '
+              + ' `s '.join(f'`f({a.mem_ports + k % m}, {k})' for k in range(n)))
+    if 0 < m < n:
+        print(f'`define FOLDSIM_VMEM_MASTERS {m}')
+        print('`define FOLDSIM_VMEM_MASTER_REPEAT(f,s) '
+              + ' `s '.join(f'`f({a.mem_ports + j}, {j})' for j in range(m)))
     if a.cache_rows:
         print(f'`define FOLDSIM_VMEM_CACHE_ROWS {a.cache_rows}')
     print('`define FOLDSIM_VMEM_PER_MEMORY_ROWS')

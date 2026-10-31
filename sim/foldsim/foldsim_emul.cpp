@@ -48,12 +48,16 @@ constexpr uint32_t kBeat = 64;
 #ifndef FOLDSIM_MEM_PORTS
 #error "FOLDSIM_MEM_PORTS comes from the generated foldsim_kernel.vh"
 #endif
-// The virtual memories' controllers, each with a master after the memory
-// ports' (FOLDSIM_VMEM_COUNT of the generated foldsim_sim.vh).
+// The virtual memories' controllers (FOLDSIM_VMEM_COUNT of the generated
+// foldsim_sim.vh), each with a master after the memory ports', or sharing
+// FOLDSIM_VMEM_MASTERS of them (foldsim_kernel.vh; 0: the memory ports').
 #ifndef FOLDSIM_VMEM_COUNT
 #define FOLDSIM_VMEM_COUNT 0
 #endif
-#define FOLDSIM_AXI_PORTS (FOLDSIM_MEM_PORTS + FOLDSIM_VMEM_COUNT)
+#ifndef FOLDSIM_VMEM_MASTERS
+#define FOLDSIM_VMEM_MASTERS FOLDSIM_VMEM_COUNT
+#endif
+#define FOLDSIM_AXI_PORTS (FOLDSIM_MEM_PORTS + FOLDSIM_VMEM_MASTERS)
 static_assert(FOLDSIM_MEM_PORTS >= 1 && FOLDSIM_MEM_PORTS <= 32, "the kernel has 1 to 32 memory ports");
 static_assert(FOLDSIM_AXI_PORTS <= 32, "the kernel has at most 32 device-memory masters");
 
@@ -93,9 +97,9 @@ public:
     // What the virtual memories' controllers asked of device memory.
     for (int k = FOLDSIM_MEM_PORTS; k < FOLDSIM_AXI_PORTS; ++k) {
       const auto& p = ports_[k];
-      fprintf(stderr, "[foldsim] vmem %d (master %d): %lu reads, %lu writes; %lu beats read, %lu written\n",
-              k - FOLDSIM_MEM_PORTS, k, (unsigned long)p.n_ar, (unsigned long)p.n_aw,
-              (unsigned long)p.n_r, (unsigned long)p.n_w);
+      fprintf(stderr, "[foldsim] vmem %d%s (master %d): %lu reads, %lu writes; %lu beats read, %lu written\n",
+              k - FOLDSIM_MEM_PORTS, FOLDSIM_VMEM_MASTERS < FOLDSIM_VMEM_COUNT ? " and its sharers" : "", k,
+              (unsigned long)p.n_ar, (unsigned long)p.n_aw, (unsigned long)p.n_r, (unsigned long)p.n_w);
     }
 #ifdef VM_TRACE
     if (vcd_)
