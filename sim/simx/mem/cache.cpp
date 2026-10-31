@@ -794,6 +794,14 @@ public:
   // a writeback request for every dirty line via mem_req_out (write-back only;
   // write-through caches have nothing to evict). flush_done() reports when the
   // walk finishes AND the cache is otherwise idle.
+  // Drop every line, as an address-space change does to a read-only
+  // virtually tagged cache. Called between launches, with no line in flight.
+  void invalidate() {
+    for (auto &set : sets_) {
+      set.reset();
+    }
+  }
+
   void flush_begin(bool keep_lines) {
     keep_lines_ = keep_lines;
     if (!config_.write_back || keep_lines) {
@@ -3283,6 +3291,15 @@ public:
     return perf_stats;
   }
 
+  void invalidate() {
+    if (config_.bypass) {
+      return;
+    }
+    for (auto &bank : banks_) {
+      bank->invalidate();
+    }
+  }
+
   void flush_begin(bool l1_only) {
     if (config_.bypass) return;
     // The shared last-level cache stays the point of coherence across an
@@ -3399,6 +3416,10 @@ void Cache::flush_begin(bool l1_only) {
 
 bool Cache::flush_done() const {
   return impl_->flush_done();
+}
+
+void Cache::invalidate() {
+  impl_->invalidate();
 }
 
 void Cache::keep_lines() {

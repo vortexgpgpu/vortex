@@ -19,7 +19,9 @@ Mmu::Mmu(const SimContext& ctx,
          uint32_t num_ports,
          uint32_t tlb_size,
          uint32_t client_id,
-         bool exec_side)
+         bool exec_side,
+         bool rsp_reg,
+         bool write_enable)
   : SimObject(ctx, name)
   , ReqIn(num_ports, this)
   , RspOut(num_ports, this)
@@ -30,10 +32,13 @@ Mmu::Mmu(const SimContext& ctx,
   , num_ports_(num_ports)
   , client_id_(client_id)
   , exec_side_(exec_side)
+  , rsp_reg_(rsp_reg)
+  , write_enable_(write_enable)
   , tlb_(tlb_size)
   , mshr_(VX_CFG_L1_TLB_MSHR_SIZE)
   , replay_(num_ports)
   , fault_rsp_(num_ports)
+  , pf_slot_(num_ports)
 {}
 
 Mmu::~Mmu() {}
@@ -47,6 +52,9 @@ void Mmu::on_reset() {
   }
   for (auto& q : fault_rsp_) {
     q = {};
+  }
+  for (auto& s : pf_slot_) {
+    s.reset();
   }
   reports_ = {};
   // Physical pages move under a virtual address between launches, so
@@ -78,6 +86,11 @@ bool Mmu::empty() const {
   }
   for (auto& q : fault_rsp_) {
     if (!q.empty()) {
+      return false;
+    }
+  }
+  for (auto& s : pf_slot_) {
+    if (s) {
       return false;
     }
   }
@@ -139,12 +152,30 @@ void Mmu::kill_request(uint32_t port, const MemReq& req) {
   if (exec_side_) {
     return;
   }
-  // Same rule the caches apply: only a plain store retires without one.
-  if (req.op != MemOp::ST || req.flags.strsp) {
+  if (needs_kill_rsp(req)) {
     auto data = std::make_shared<mem_block_t>();
     data->fill(0);
     fault_rsp_.at(port).push(MemRsp(req.tag, req.hart_id, req.uuid, data));
   }
+}
+
+bool Mmu::needs_kill_rsp(const MemReq& req) const {
+  // Same rule the caches apply: only a plain store retires without one.
+  return !exec_side_ && (req.op != MemOp::ST || req.flags.strsp);
+}
+
+bool Mmu::port_parked(uint32_t port) const {
+  for (auto& e : mshr_) {
+    if (!e.valid) {
+      continue;
+    }
+    for (auto& pr : e.parked) {
+      if (pr.first == port) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 void Mmu::report_fault(const MemReq& req) {
@@ -161,21 +192,27 @@ void Mmu::on_tick() {
   // 1) Forward downstream responses upstream unchanged. Kill responses go
   // first: they belong to accesses that will never reach the cache, and the
   // warps waiting on them cannot drain until they land.
+  uint64_t rsp_delay = rsp_reg_ ? 1 : 0;
   for (uint32_t p = 0; p < num_ports_; ++p) {
     if (RspOut.at(p).full()) {
       continue;
     }
     if (!fault_rsp_.at(p).empty()) {
-      RspOut.at(p).send(fault_rsp_.at(p).front(), 0);
+      RspOut.at(p).send(fault_rsp_.at(p).front(), rsp_delay);
       fault_rsp_.at(p).pop();
+      continue;
+    }
+    if (pf_slot_.at(p)) {
+      RspOut.at(p).send(*pf_slot_.at(p), rsp_delay);
+      pf_slot_.at(p).reset();
       continue;
     }
     if (RspIn.at(p).empty()) {
       continue;
     }
-    // Responses pass straight through with no added latency: the translation
-    // stage's cost is charged on the request path, not the reply path.
-    RspOut.at(p).send(RspIn.at(p).peek(), 0);
+    // Responses pass straight through, through the port's response stage
+    // when registered: the translation is charged on the request path.
+    RspOut.at(p).send(RspIn.at(p).peek(), rsp_delay);
     RspIn.at(p).pop();
   }
 
@@ -264,9 +301,14 @@ void Mmu::on_tick() {
     if (ReqIn.at(p).empty()) {
       continue;
     }
-    const MemReq& req = ReqIn.at(p).peek();
+    MemReq req = ReqIn.at(p).peek();
 
     if (!needs_translation(req)) {
+      // A flush token reaches the cache behind its port's parked requests
+      // (writing data-side clients only: an overtaken read is still correct).
+      if (req.flags.flush && write_enable_ && !exec_side_ && port_parked(p)) {
+        continue;
+      }
       if (ReqOut.at(p).try_send(req)) {
         ReqIn.at(p).pop();
       }
@@ -279,8 +321,16 @@ void Mmu::on_tick() {
       // A cached translation still has to satisfy the access: the entry
       // was installed for whichever intent first missed on this page.
       if (!tlb_perm_ok(res.flags, access_of(req), memop_is_amo(req.op))) {
+        bool needs_rsp = needs_kill_rsp(req);
+        if (needs_rsp && pf_slot_.at(p)) {
+          continue;  // the port's fault slot is still owed out
+        }
         DT(3, this->name() << " perm-fault: vpn=0x" << std::hex << vpn << std::dec);
-        kill_request(p, req);
+        if (needs_rsp) {
+          auto data = std::make_shared<mem_block_t>();
+          data->fill(0);
+          pf_slot_.at(p) = MemRsp(req.tag, req.hart_id, req.uuid, data);
+        }
         report_fault(req);
         ReqIn.at(p).pop();
         continue;
@@ -299,7 +349,7 @@ void Mmu::on_tick() {
       if (id < 0) {
         id = mshr_alloc(vpn);
       }
-      if (id >= 0 && mshr_[id].parked.size() < 2) {
+      if (id >= 0 && mshr_[id].parked.size() < MAX_PARKED_PER_ENTRY) {
         mshr_[id].parked.emplace_back(p, req);
         ReqIn.at(p).pop();
       }

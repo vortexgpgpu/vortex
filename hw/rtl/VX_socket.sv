@@ -276,20 +276,29 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     VX_tlb_flush_if immu_flush_if();
     VX_mmu_fault_if dmmu_fault_if();
     VX_mmu_fault_if immu_fault_if();
+`ifdef SOCKET_UNIT_MMU_ENABLE
+    VX_tlb_flush_if ummu_flush_if();
+    VX_dcr_flush_if ucache_flush_if();
+`endif
 
     VX_mmu_snoop mmu_snoop (
-        .clk            (clk),
-        .reset          (reset),
-        .dcr_bus_in_if  (dcr_bus_if),
-        .dcr_bus_out_if (socket_dcr_bus_if),
-        .vm_active      (vm_active),
-        .dmmu_flush_if  (dmmu_flush_if),
-        .immu_flush_if  (immu_flush_if)
+        .clk             (clk),
+        .reset           (reset),
+        .dcr_bus_in_if   (dcr_bus_if),
+        .dcr_bus_out_if  (socket_dcr_bus_if),
+        .vm_active       (vm_active),
+        .dmmu_flush_if   (dmmu_flush_if),
+    `ifdef SOCKET_UNIT_MMU_ENABLE
+        .ummu_flush_if   (ummu_flush_if),
+        .ucache_flush_if (ucache_flush_if),
+    `endif
+        .immu_flush_if   (immu_flush_if)
     );
 
-    // dtlb + itlb each drive one tlb_bus into the socket arbiter below.
+    // dtlb + itlb (+ the unit MMU) each drive one tlb_bus into the socket
+    // arbiter below.
     VX_tlb_bus_if #(.ID_WIDTH (L1_TLB_ID_WIDTH))
-        socket_tlb_bus_if [2] ();
+        socket_tlb_bus_if [SOCKET_NUM_MMUS] ();
 
     wire dmmu_empty, immu_empty;
 
@@ -316,6 +325,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .tlb_bus_if  (socket_tlb_bus_if[0]),
         .flush_if    (dmmu_flush_if),
         .fault_if    (dmmu_fault_if),
+        .lane_idle   (dmmu_lane_idle),
         .empty       (dmmu_empty)
     );
 
@@ -338,6 +348,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .tlb_bus_if  (socket_tlb_bus_if[1]),
         .flush_if    (immu_flush_if),
         .fault_if    (immu_fault_if),
+        `UNUSED_PIN (lane_idle),
         .empty       (immu_empty)
     );
 
@@ -354,8 +365,18 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
 
     // Socket MMU drain status, broadcast to every core so its busy/barrier logic
     // waits for in-flight translations. Shared MMU: a core waits for the whole
-    // socket to drain (conservative, always correct).
+    // socket to drain (conservative, always correct). The unit MMU carries no
+    // core load or store, so it holds only the socket busy, not the barriers.
     wire socket_mmu_drained = dmmu_empty && immu_empty;
+    // Per dMMU lane: none of that lane's requests is in the MMU; each core's
+    // dcache flush waits only on its own lanes.
+    wire [`VX_CFG_SOCKET_SIZE * DCACHE_NUM_REQS-1:0] dmmu_lane_idle;
+`ifdef SOCKET_UNIT_MMU_ENABLE
+    wire ummu_empty;
+    wire unit_mmu_drained = ummu_empty;
+`else
+    wire unit_mmu_drained = 1'b1;
+`endif
 
 `ifdef PERF_ENABLE
     // Surfacing these through sysmem_perf needs a dedicated mmu slot; until that
@@ -364,9 +385,9 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     `UNUSED_VAR (immu_perf)
 `endif
 
-    // Merge the two MMU tlb buses onto the one cluster-facing bus.
+    // Merge the MMU tlb buses onto the one cluster-facing bus.
     VX_tlb_bus_arb #(
-        .NUM_INPUTS  (2),
+        .NUM_INPUTS  (SOCKET_NUM_MMUS),
         .ID_WIDTH_IN (L1_TLB_ID_WIDTH),
         .OUT_BUF     (3)
     ) tlb_socket_arb (
@@ -797,6 +818,78 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     );
 `endif // VX_CFG_EXT_DXA_ENABLE
 
+`ifdef SOCKET_UNIT_MMU_ENABLE
+    ///////////////////////////////////////////////////////////////////////////
+    // Socket unit MMU — translates the socket-resident units' memory ports
+    // (rtcache misses, DXA gmem reads) between them and the socket memory
+    // arbiter, so the unit caches are virtually indexed and tagged. Its own
+    // TLB keeps BVH and tensor streams from evicting the dTLB's entries, and
+    // its misses ride the third socket tlb_bus.
+    ///////////////////////////////////////////////////////////////////////////
+
+    VX_mem_bus_if #(
+        .DATA_SIZE (`VX_CFG_L1_LINE_SIZE),
+        .TAG_WIDTH (SOCKET_MEM_TAG_WIDTH)
+    ) unit_mem_bus_if[UMMU_NUM_REQS]();
+
+    VX_mem_bus_if #(
+        .DATA_SIZE (`VX_CFG_L1_LINE_SIZE),
+        .TAG_WIDTH (SOCKET_MEM_TAG_WIDTH)
+    ) unit_phys_bus_if[UMMU_NUM_REQS]();
+
+
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    `ASSIGN_VX_MEM_BUS_IF_EX (unit_mem_bus_if[UMMU_RTCACHE_IDX], rtcache_mem_bus_tmp_if[0], SOCKET_MEM_TAG_WIDTH, RTCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
+`endif
+`ifdef VX_CFG_EXT_DXA_ENABLE
+    `ASSIGN_VX_MEM_BUS_IF (unit_mem_bus_if[UMMU_DXA_IDX], dxa_gmem_bus_if[0]);
+`endif
+
+    VX_mmu_fault_if ummu_fault_if();
+
+`ifdef PERF_ENABLE
+    mmu_perf_t ummu_perf;
+    `UNUSED_VAR (ummu_perf)
+`endif
+
+    VX_mmu #(
+        .INSTANCE_ID  ("ummu"),
+        .NUM_REQS     (UMMU_NUM_REQS),
+        .TLB_SIZE     (`VX_CFG_UTLB_SIZE),
+        .EXEC_SIDE    (0),
+        .WRITE_ENABLE (0),
+        .RSP_OUT_BUF  (2),
+        .DATA_SIZE    (`VX_CFG_L1_LINE_SIZE),
+        .TAG_WIDTH    (SOCKET_MEM_TAG_WIDTH)
+    ) ummu (
+        .clk         (clk),
+        .reset       (reset),
+        .vm_active   (vm_active),
+    `ifdef PERF_ENABLE
+        .mmu_perf    (ummu_perf),
+    `endif
+        .core_bus_if (unit_mem_bus_if),
+        .mem_bus_if  (unit_phys_bus_if),
+        .tlb_bus_if  (socket_tlb_bus_if[2]),
+        .flush_if    (ummu_flush_if),
+        .fault_if    (ummu_fault_if),
+        `UNUSED_PIN (lane_idle),
+        .empty       (ummu_empty)
+    );
+
+    // Faults are reported by the cluster walker, as for the dMMU/iMMU.
+    `UNUSED_VAR (ummu_fault_if.valid)
+    `UNUSED_VAR (ummu_fault_if.va)
+    `UNUSED_VAR (ummu_fault_if.access)
+    `UNUSED_VAR (ummu_fault_if.amo)
+
+`ifndef VX_CFG_EXT_RTU_ENABLE
+    // no unit cache to invalidate
+    assign ucache_flush_if.done = 1'b1;
+    `UNUSED_VAR (ucache_flush_if.req)
+`endif
+`endif // SOCKET_UNIT_MMU_ENABLE
+
     ///////////////////////////////////////////////////////////////////////////
 
     wire mem_arb_empty;
@@ -823,11 +916,20 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
         `ifdef VX_CFG_EXT_TEX_ENABLE
             `ASSIGN_VX_MEM_BUS_IF_EX (socket_arb_in_if[TCACHE_MEM_ARB_IDX], tcache_mem_bus_tmp_if[0], SOCKET_MEM_TAG_WIDTH, TCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
         `endif
+        `ifdef SOCKET_UNIT_MMU_ENABLE
+        `ifdef VX_CFG_EXT_RTU_ENABLE
+            `ASSIGN_VX_MEM_BUS_IF (socket_arb_in_if[RTCACHE_MEM_ARB_IDX], unit_phys_bus_if[UMMU_RTCACHE_IDX]);
+        `endif
+        `ifdef VX_CFG_EXT_DXA_ENABLE
+            `ASSIGN_VX_MEM_BUS_IF (socket_arb_in_if[DXA_MEM_ARB_IDX], unit_phys_bus_if[UMMU_DXA_IDX]);
+        `endif
+        `else
         `ifdef VX_CFG_EXT_RTU_ENABLE
             `ASSIGN_VX_MEM_BUS_IF_EX (socket_arb_in_if[RTCACHE_MEM_ARB_IDX], rtcache_mem_bus_tmp_if[0], SOCKET_MEM_TAG_WIDTH, RTCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
         `endif
         `ifdef VX_CFG_EXT_DXA_ENABLE
             `ASSIGN_VX_MEM_BUS_IF (socket_arb_in_if[DXA_MEM_ARB_IDX], dxa_gmem_bus_if[0]);
+        `endif
         `endif
 
             VX_mem_bus_arb #(
@@ -895,7 +997,13 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     assign tcache_flush_done_w = 1'b1;
 `endif
 `ifdef VX_CFG_EXT_RTU_ENABLE
+`ifdef SOCKET_UNIT_MMU_ENABLE
+    // The rtcache is virtually tagged: the SATP commit invalidates it too.
+    assign rtcache_flush_if.req = socket_flush_req || ucache_flush_if.req;
+    assign ucache_flush_if.done = rtcache_flush_if.done;
+`else
     assign rtcache_flush_if.req = socket_flush_req;
+`endif
     assign rtcache_flush_done_w = rtcache_flush_if.done;
 `else
     assign rtcache_flush_done_w = 1'b1;
@@ -961,6 +1069,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
 
         `ifdef VX_CFG_VM_ENABLE
             .mmu_drained    (socket_mmu_drained),
+            .dcache_mmu_drained (& dmmu_lane_idle[core_id * DCACHE_NUM_REQS +: DCACHE_NUM_REQS]),
         `endif
 
         `ifdef EXT_GFX_ANY_ENABLE
@@ -989,7 +1098,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
         assign per_core_kmu_fire[i]  = per_core_kmu_bus_if[i].valid && per_core_kmu_bus_if[i].ready;
     end
 `ifdef VX_CFG_VM_ENABLE
-    wire mmu_busy = ~socket_mmu_drained;
+    wire mmu_busy = ~(socket_mmu_drained && unit_mmu_drained);
 `else
     wire mmu_busy = 1'b0;
 `endif

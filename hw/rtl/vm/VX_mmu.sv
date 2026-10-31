@@ -28,6 +28,12 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     parameter MSHR_SIZE    = `VX_CFG_L1_TLB_MSHR_SIZE,
     parameter REPLAY_DEPTH = 2,
     parameter EXEC_SIDE    = 0,
+    // 0: the clients only read, so a parked request keeps no write data or
+    // byte enables (don't-care on a read).
+    parameter WRITE_ENABLE = 1,
+    // Response stage per lane toward the client (TO_OUT_BUF encoding). Keeps
+    // the injected-response select off the client's response cone.
+    parameter RSP_OUT_BUF  = 0,
     parameter DATA_SIZE    = DCACHE_WORD_SIZE,
     parameter TAG_WIDTH    = DCACHE_TAG_WIDTH_BASE,
     parameter ADDR_WIDTH   = `VX_CFG_MEM_ADDR_WIDTH - `CLOG2(DATA_SIZE),
@@ -49,9 +55,38 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     VX_tlb_flush_if.slave  flush_if,
 
     VX_mmu_fault_if.master fault_if,
+    // Per lane: nothing of the lane's is in the MMU (front stages, fault slot,
+    // and, where flushes are ordered, the miss station).
+    output wire [NUM_REQS-1:0] lane_idle,
     output wire            empty
 );
     `UNUSED_PARAM (INSTANCE_ID)
+
+    // The client's bus as the MMU drives it: requests pass straight through to
+    // the lookup (the client registers its own request output), responses
+    // through an optional MMU-owned stage.
+    VX_mem_bus_if #(
+        .DATA_SIZE  (DATA_SIZE),
+        .TAG_WIDTH  (TAG_WIDTH),
+        .ADDR_WIDTH (ADDR_WIDTH),
+        .ATTR_WIDTH (ATTR_WIDTH)
+    ) req_if [NUM_REQS] ();
+
+    for (genvar l = 0; l < NUM_REQS; ++l) begin : g_rsp_buf
+        VX_mem_bus_slice #(
+            .DATA_SIZE   (DATA_SIZE),
+            .TAG_WIDTH   (TAG_WIDTH),
+            .ADDR_WIDTH  (ADDR_WIDTH),
+            .ATTR_WIDTH  (ATTR_WIDTH),
+            .REQ_OUT_BUF (0),
+            .RSP_OUT_BUF (RSP_OUT_BUF)
+        ) rsp_buf (
+            .clk        (clk),
+            .reset      (reset),
+            .bus_in_if  (core_bus_if[l]),
+            .bus_out_if (req_if[l])
+        );
+    end
 
     localparam DATA_WIDTH    = DATA_SIZE * 8;
     localparam LANE_W        = `UP(`CLOG2(NUM_REQS));
@@ -65,7 +100,9 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     localparam F_ADDR_LO   = F_DATA_LO + DATA_WIDTH;
     localparam F_RW_LO     = F_ADDR_LO + ADDR_WIDTH;
     localparam FIELDS_W    = F_RW_LO + 1;
-    localparam PAYLOAD_W   = LANE_W + FIELDS_W;
+    // Parked fields: a read-only client's drop {data, byteen}.
+    localparam PFIELDS_W   = (WRITE_ENABLE != 0) ? FIELDS_W : (FIELDS_W - DATA_WIDTH - DATA_SIZE);
+    localparam PAYLOAD_W   = LANE_W + PFIELDS_W;
 
 
     function automatic tlb_access_e access_of (input logic rw);
@@ -94,17 +131,17 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     wire [NUM_REQS-1:0]                      mshr_match;
 
     for (genvar l = 0; l < NUM_REQS; ++l) begin : g_decode
-        assign req_valid[l] = core_bus_if[l].req_valid;
-        assign req_rw[l]    = core_bus_if[l].req_data.rw;
-        assign req_addr[l]  = core_bus_if[l].req_data.addr;
-        assign req_attr[l]  = core_bus_if[l].req_data.attr[ATTR_WIDTH-1:0];
+        assign req_valid[l] = req_if[l].req_valid;
+        assign req_rw[l]    = req_if[l].req_data.rw;
+        assign req_addr[l]  = req_if[l].req_data.addr;
+        assign req_attr[l]  = req_if[l].req_data.attr[ATTR_WIDTH-1:0];
         assign req_fields[l] = {
-            core_bus_if[l].req_data.rw,
-            core_bus_if[l].req_data.addr,
-            core_bus_if[l].req_data.data,
-            core_bus_if[l].req_data.byteen,
-            core_bus_if[l].req_data.attr[ATTR_WIDTH-1:0],
-            core_bus_if[l].req_data.tag[TAG_WIDTH-1:0]
+            req_if[l].req_data.rw,
+            req_if[l].req_data.addr,
+            req_if[l].req_data.data,
+            req_if[l].req_data.byteen,
+            req_if[l].req_data.attr[ATTR_WIDTH-1:0],
+            req_if[l].req_data.tag[TAG_WIDTH-1:0]
         };
         assign req_bypass[l] = ~vm_active
                             || req_attr[l][MEM_ATTR_FLUSH_OFFS]
@@ -195,10 +232,15 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     wire [NUM_REQS-1:0] cat_park;
     wire [NUM_REQS-1:0] cat_hit;
     wire [NUM_REQS-1:0] cat_pfault;
+    wire [NUM_REQS-1:0] pf_accept;     // permission fault taken this cycle
+    wire [NUM_REQS-1:0] pf_rsp_busy;   // a fault response is owed on the lane
+    wire [NUM_REQS-1:0] lane_parked;   // the lane has requests in the miss station
 
     for (genvar l = 0; l < NUM_REQS; ++l) begin : g_cat
+        // A flush token holds behind its lane's parked requests (see g_parked).
+        wire flush_hold = req_attr[l][MEM_ATTR_FLUSH_OFFS] && lane_parked[l];
         assign cam_acc[l]    = req_acc[l];
-        assign cat_bypass[l] = req_valid[l] && req_bypass[l];
+        assign cat_bypass[l] = req_valid[l] && req_bypass[l] && !flush_hold;
         assign cat_park[l]   = req_valid[l] && !req_bypass[l] && (mshr_match[l] || !cam_hit[l]);
         assign cat_hit[l]    = req_valid[l] && !req_bypass[l] && !mshr_match[l] && cam_hit[l] && cam_perm[l];
         assign cat_pfault[l] = req_valid[l] && !req_bypass[l] && !mshr_match[l] && cam_hit[l] && !cam_perm[l];
@@ -235,13 +277,30 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     assign park_vpn     = park_out[PARK_W-1 -: TLB_VPN_WIDTH];
     assign park_access  = tlb_access_e'(park_out[FIELDS_W+1 +: $bits(tlb_access_e)]);
     assign park_amo     = park_out[FIELDS_W];
-    assign park_payload = {park_lane, park_out[FIELDS_W-1:0]};
 
     // ---------------------------------------------------------------------
     // Replay decode + translation splice
     // ---------------------------------------------------------------------
-    wire [LANE_W-1:0]      replay_lane   = replay_payload[FIELDS_W +: LANE_W];
-    wire [FIELDS_W-1:0]    replay_fields = replay_payload[FIELDS_W-1:0];
+    wire [LANE_W-1:0]      replay_lane    = replay_payload[PFIELDS_W +: LANE_W];
+    wire [PFIELDS_W-1:0]   replay_pfields = replay_payload[PFIELDS_W-1:0];
+    wire [PFIELDS_W-1:0]   park_pfields;
+    wire [FIELDS_W-1:0]    replay_fields;
+
+    if (WRITE_ENABLE != 0) begin : g_park_wr
+        assign park_pfields  = park_out[FIELDS_W-1:0];
+        assign replay_fields = replay_pfields;
+    end else begin : g_park_ro
+        // A read's data and byte enables are don't-care below the L1; the
+        // replay presents it as a full-line read.
+        assign park_pfields  = {park_out[FIELDS_W-1:F_ADDR_LO], park_out[F_BYTEEN_LO-1:0]};
+        assign replay_fields = {replay_pfields[PFIELDS_W-1:F_BYTEEN_LO], DATA_WIDTH'(0), {DATA_SIZE{1'b1}},
+                                replay_pfields[F_BYTEEN_LO-1:0]};
+        `UNUSED_VAR (park_out[F_ADDR_LO-1:F_BYTEEN_LO])
+        `RUNTIME_ASSERT (~(park_valid && park_ready) || ~park_out[F_RW_LO],
+                         ("%t: *** %s read-only MMU parked a write, addr=0x%0h", $time, INSTANCE_ID,
+                          park_out[F_ADDR_LO +: ADDR_WIDTH]))
+    end
+    assign park_payload = {park_lane, park_pfields};
     wire                   replay_rw     = replay_fields[F_RW_LO];
     wire [ADDR_WIDTH-1:0]  replay_raddr  = replay_fields[F_ADDR_LO +: ADDR_WIDTH];
     wire [ATTR_WIDTH-1:0]  replay_rattr  = replay_fields[F_ATTR_LO +: ATTR_WIDTH];
@@ -334,38 +393,116 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
 
         assign cam_access_hit[l] = cat_hit[l] && !replay_to_lane[l] && pipe_ready[l];
 
+        // A permission fault on a hit never reaches memory, but a data-side
+        // load or atomic still owes its requester a response, as a kill does:
+        // it waits in a per-lane slot and is answered with zeroed data.
+        wire                 pf_rsp_valid;
+        wire [TAG_WIDTH-1:0] pf_rsp_tag;
+        if (EXEC_SIDE == 0) begin : g_pf_rsp
+            wire pf_needs_rsp = !req_rw[l] || req_amo[l];
+            reg                 pf_rsp_valid_r;
+            reg [TAG_WIDTH-1:0] pf_rsp_tag_r;
+            wire pf_rsp_fire = pf_rsp_valid_r && !kill_to_lane[l] && req_if[l].rsp_ready;
+            // An empty slot loads unconditionally so the tag's enable stays off
+            // the CAM lookup cone; only the valid bit depends on the fault.
+            always @(posedge clk) begin
+                if (reset) begin
+                    pf_rsp_valid_r <= 1'b0;
+                end else if (pf_rsp_valid_r) begin
+                    pf_rsp_valid_r <= ~pf_rsp_fire;
+                end else begin
+                    pf_rsp_valid_r <= cat_pfault[l] && pf_needs_rsp;
+                end
+            end
+            always @(posedge clk) begin
+                if (~pf_rsp_valid_r) begin
+                    pf_rsp_tag_r <= req_fields[l][F_TAG_LO +: TAG_WIDTH];
+                end
+            end
+            assign pf_accept[l] = cat_pfault[l] && !(pf_needs_rsp && pf_rsp_valid_r);
+            assign pf_rsp_valid = pf_rsp_valid_r;
+            assign pf_rsp_tag   = pf_rsp_tag_r;
+        end else begin : g_pf_no_rsp
+            // A fetch is answered by the fault report alone.
+            assign pf_accept[l] = cat_pfault[l];
+            assign pf_rsp_valid = 1'b0;
+            assign pf_rsp_tag   = '0;
+        end
+        assign pf_rsp_busy[l] = pf_rsp_valid;
+
         // Request accept back to the client.
-        assign core_bus_if[l].req_ready =
+        assign req_if[l].req_ready =
               cat_bypass[l] ? (!replay_to_lane[l] && pipe_ready[l])
             : cat_hit[l]    ? (!replay_to_lane[l] && pipe_ready[l])
             : cat_park[l]   ? (park_sel[l] && park_ready)
-            : cat_pfault[l] ? 1'b1
+            : cat_pfault[l] ? pf_accept[l]
             : 1'b0;
 
-        // Response path wires straight back, except a kill teardown injects a
-        // zeroed response ahead of the cache reply for its lane.
-        assign core_rsp_ready[l] = core_bus_if[l].rsp_ready;
-        assign core_bus_if[l].rsp_valid     = kill_to_lane[l] ? 1'b1 : mem_bus_if[l].rsp_valid;
-        assign core_bus_if[l].rsp_data.data = kill_to_lane[l] ? '0 : mem_bus_if[l].rsp_data.data;
-        assign core_bus_if[l].rsp_data.tag  = kill_to_lane[l] ? kill_tag : mem_bus_if[l].rsp_data.tag;
-        assign mem_bus_if[l].rsp_ready      = core_bus_if[l].rsp_ready && ~kill_to_lane[l];
+        // Response path wires straight back, except a kill teardown or a
+        // permission fault injects a zeroed response ahead of the cache reply.
+        // The injected tag is chosen ahead of the one select on the reply.
+        wire                 inj_rsp = kill_to_lane[l] || pf_rsp_valid;
+        wire [TAG_WIDTH-1:0] inj_tag = kill_to_lane[l] ? kill_tag : pf_rsp_tag;
+        assign core_rsp_ready[l] = req_if[l].rsp_ready;
+        assign req_if[l].rsp_valid     = inj_rsp ? 1'b1 : mem_bus_if[l].rsp_valid;
+        assign req_if[l].rsp_data.data = inj_rsp ? '0 : mem_bus_if[l].rsp_data.data;
+        assign req_if[l].rsp_data.tag  = inj_rsp ? inj_tag : mem_bus_if[l].rsp_data.tag;
+        assign mem_bus_if[l].rsp_ready = req_if[l].rsp_ready && ~inj_rsp;
     end
 
     assign replay_ready = replay_valid && (replay_perm ? pipe_ready[replay_lane] : kill_ready);
+
+    // ---------------------------------------------------------------------
+    // Per-lane parked count. A flush token bypasses translation, so it would
+    // overtake its lane's parked requests; it holds until they have left the
+    // miss station instead, reaching the cache behind them as a lane's
+    // requests always do (a FLUSH_FORWARD cache forwards it behind that
+    // port's writes). Only a data-side MMU with writing clients needs it: a
+    // read overtaken by a flush token is still answered correctly.
+    // ---------------------------------------------------------------------
+    localparam PCNT_W = `CLOG2(MSHR_SIZE * REPLAY_DEPTH + 2);
+    wire              park_take      = park_valid && park_ready;
+    wire [LANE_W-1:0] park_take_lane = park_lane;
+    wire              drain_take     = replay_ready || (kill_valid && kill_ready);
+
+    if ((WRITE_ENABLE != 0) && (EXEC_SIDE == 0)) begin : g_flush_order
+        for (genvar l = 0; l < NUM_REQS; ++l) begin : g_parked
+            reg [PCNT_W-1:0] parked_cnt_r;
+            wire inc = park_take && (park_take_lane == LANE_W'(l));
+            wire dec = drain_take && (replay_lane == LANE_W'(l));
+            always @(posedge clk) begin
+                if (reset) begin
+                    parked_cnt_r <= '0;
+                end else if (inc && !dec) begin
+                    parked_cnt_r <= parked_cnt_r + PCNT_W'(1);
+                end else if (dec && !inc) begin
+                    parked_cnt_r <= parked_cnt_r - PCNT_W'(1);
+                end
+            end
+            `RUNTIME_ASSERT (reset || ~(dec && !inc) || (parked_cnt_r != '0),
+                             ("%t: *** %s lane %0d drained more than it parked", $time, INSTANCE_ID, l))
+            assign lane_parked[l] = (parked_cnt_r != '0);
+        end
+    end else begin : g_no_flush_order
+        assign lane_parked = '0;
+        `UNUSED_VAR (park_take)
+        `UNUSED_VAR (park_take_lane)
+        `UNUSED_VAR (drain_take)
+    end
 
     // ---------------------------------------------------------------------
     // Fault sideband to the fault-latch surface. Structural faults come from
     // the walker via the MSHR; permission faults are detected here on hits
     // and replays.
     // ---------------------------------------------------------------------
-    wire perm_fault_any = (| cat_pfault) || replay_drop;
+    wire perm_fault_any = (| pf_accept) || replay_drop;
     reg [TLB_VPN_WIDTH-1:0] perm_fault_vpn;
     reg                     perm_fault_amo;
     always @(*) begin
         perm_fault_vpn = replay_vpn;
         perm_fault_amo = replay_amo;
         for (int l = NUM_REQS-1; l >= 0; --l) begin
-            if (cat_pfault[l]) begin
+            if (pf_accept[l]) begin
                 perm_fault_vpn = req_vpn[l];
                 perm_fault_amo = req_amo[l];
             end
@@ -398,7 +535,9 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     wire [NUM_REQS-1:0] pipe_busy;
     for (genvar l = 0; l < NUM_REQS; ++l) begin : g_busy
         assign pipe_busy[l] = core_bus_if[l].req_valid   // incoming (client held)
-                           || mem_bus_if[l].req_valid;    // output stage
+                           || mem_bus_if[l].req_valid    // output stage
+                           || pf_rsp_busy[l];            // owed fault response
+        assign lane_idle[l] = ~pipe_busy[l] && ~lane_parked[l];
     end
     assign empty = ~(| pipe_busy) && tlb_empty;
 

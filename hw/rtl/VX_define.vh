@@ -83,6 +83,16 @@
     `define EXT_GFX_CLUSTER_ENABLE
 `endif
 
+// Under VM, the socket unit MMU translates the memory ports of the
+// socket-resident units: the rtcache misses and the DXA gmem reads.
+`ifdef VX_CFG_VM_ENABLE
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    `define SOCKET_UNIT_MMU_ENABLE
+`elsif VX_CFG_EXT_DXA_ENABLE
+    `define SOCKET_UNIT_MMU_ENABLE
+`endif
+`endif
+
 // Early-Z occlusion cull requires BOTH the rasterizer (produces the covered-quad
 // waves + depth plane) and the OM (owns the ocache the depth read is coherent
 // with). It is illegal without them — reading committed depth needs the ocache.

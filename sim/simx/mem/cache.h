@@ -100,6 +100,10 @@ public:
 	// A shared last-level cache keeps its lines into the next launch.
 	void keep_lines();
 
+	// Drop every line (a read-only, virtually tagged cache on an
+	// address-space change). Called between launches.
+	void invalidate();
+
 protected:
 	void on_reset();
 	void on_tick();

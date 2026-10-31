@@ -179,6 +179,11 @@ VX_CFG_DTLB_SIZE        = 16
 VX_CFG_ITLB_SIZE        = 8
 VX_CFG_L1_TLB_MSHR_SIZE = 4
 
+# Socket unit MMU: one TLB per socket for the socket-resident units' memory
+# ports (RTU rtcache misses, DXA gmem reads), kept apart from the dTLB so
+# BVH traffic cannot evict the cores' translations.
+VX_CFG_UTLB_SIZE        = 8
+
 # Shared cluster TLB and page-table walker complex.
 VX_CFG_L2_TLB_SIZE         = 512
 VX_CFG_L2_TLB_NUM_WAYS     = 4

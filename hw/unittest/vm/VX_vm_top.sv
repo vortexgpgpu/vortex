@@ -255,7 +255,7 @@ module VX_vm_top import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
 
         // --- socket miss ports (dTLB, iTLB) into the socket arbiter ---
         VX_tlb_bus_if #(.ID_WIDTH (L1_TLB_ID_WIDTH))
-            socket_tlb_bus_if [2] ();
+            socket_tlb_bus_if [SOCKET_NUM_MMUS] ();
 
         VX_mmu #(
             .INSTANCE_ID ("dmmu"),
@@ -273,6 +273,7 @@ module VX_vm_top import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
             .tlb_bus_if  (socket_tlb_bus_if[0]),
             .flush_if    (dmmu_flush_if),
             .fault_if    (dmmu_fault_if),
+            `UNUSED_PIN (lane_idle),
             .empty       (dmmu_empty[s])
         );
 
@@ -383,6 +384,7 @@ module VX_vm_top import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
                 .tlb_bus_if  (socket_tlb_bus_if[1]),
                 .flush_if    (immu_flush_if),
                 .fault_if    (immu_fault_if),
+                `UNUSED_PIN (lane_idle),
                 .empty       (immu_empty[s])
             );
 
@@ -423,8 +425,8 @@ module VX_vm_top import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
                 `UNUSED_PIN (req_empty)
             );
         end else begin : g_no_immu
-            // Keep the socket arbiter 2-wide (so TLB_SOCKET_ID_WIDTH matches the
-            // package) with the iTLB port idle.
+            // Keep the socket arbiter at the package's width (so
+            // TLB_SOCKET_ID_WIDTH matches) with the iTLB port idle.
             assign socket_tlb_bus_if[1].req_valid = 1'b0;
             assign socket_tlb_bus_if[1].req_data  = '0;
             assign socket_tlb_bus_if[1].rsp_ready = 1'b0;
@@ -453,9 +455,20 @@ module VX_vm_top import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
             `UNUSED_VAR (ic_mem_rsp_tag[s])
         end
 
-        // --- socket TLB arbiter: {dTLB, iTLB} -> cluster fabric ---
+        // A build with socket units adds the unit MMU's port (SOCKET_NUM_MMUS);
+        // this sandbox has no units, so that port idles.
+        for (genvar t = 2; t < SOCKET_NUM_MMUS; ++t) begin : g_unit_tlb_idle
+            assign socket_tlb_bus_if[t].req_valid = 1'b0;
+            assign socket_tlb_bus_if[t].req_data  = '0;
+            assign socket_tlb_bus_if[t].rsp_ready = 1'b0;
+            `UNUSED_VAR (socket_tlb_bus_if[t].req_ready)
+            `UNUSED_VAR (socket_tlb_bus_if[t].rsp_valid)
+            `UNUSED_VAR (socket_tlb_bus_if[t].rsp_data)
+        end
+
+        // --- socket TLB arbiter: {dTLB, iTLB[, unit]} -> cluster fabric ---
         VX_tlb_bus_arb #(
-            .NUM_INPUTS  (2),
+            .NUM_INPUTS  (SOCKET_NUM_MMUS),
             .ID_WIDTH_IN (L1_TLB_ID_WIDTH),
             .OUT_BUF     (3)
         ) tlb_socket_arb (

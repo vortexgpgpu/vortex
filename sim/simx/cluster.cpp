@@ -56,7 +56,9 @@ public:
     for (uint32_t i = 0; i < sockets_per_cluster; ++i) {
       uint32_t socket_id = cluster_id * sockets_per_cluster + i;
       snprintf(sname, 100, "%s-socket%d", name.c_str(), i);
-      sockets_.at(i) = Socket::Create(sname, socket_id, simobject_);
+      // A socket's unit MMU is a cluster-TLB client after every core's two.
+      uint32_t unit_tlb_client = sockets_per_cluster * VX_CFG_SOCKET_SIZE * 2 + i;
+      sockets_.at(i) = Socket::Create(sname, socket_id, simobject_, unit_tlb_client);
     }
 
     // Global-barrier event links: each core's arrive end fans into the
@@ -149,9 +151,15 @@ public:
 #endif // cluster-resident gfx caches
 
 #ifdef VX_CFG_VM_ENABLE
-    // Shared cluster L2 TLB. Every core's two L1 TLBs are clients; its
-    // misses export on the walker link the processor binds at the device.
-    uint32_t num_tlb_clients = sockets_per_cluster * VX_CFG_SOCKET_SIZE * 2;
+    // Shared cluster L2 TLB. Every core's two L1 TLBs are clients, then each
+    // socket's unit MMU; its misses export on the walker link the processor
+    // binds at the device.
+    uint32_t num_core_tlb_clients = sockets_per_cluster * VX_CFG_SOCKET_SIZE * 2;
+  #ifdef SIMX_SOCKET_UNIT_MMU
+    uint32_t num_tlb_clients = num_core_tlb_clients + sockets_per_cluster;
+  #else
+    uint32_t num_tlb_clients = num_core_tlb_clients;
+  #endif
     snprintf(sname, 100, "%s-l2tlb", name.c_str());
     l2tlb_ = L2Tlb::Create(sname, num_tlb_clients);
 
@@ -165,6 +173,13 @@ public:
         }
       }
     }
+  #ifdef SIMX_SOCKET_UNIT_MMU
+    for (uint32_t s = 0; s < sockets_per_cluster; ++s) {
+      auto& socket = sockets_.at(s);
+      socket->tlb_miss_out().bind(&l2tlb_->ReqIn.at(socket->unit_tlb_client()));
+      l2tlb_->RspOut.at(socket->unit_tlb_client()).bind(&socket->tlb_fill_in());
+    }
+  #endif
 
 #endif
 
@@ -442,6 +457,9 @@ public:
       for (uint32_t c = 0; c < cores_per_socket_; ++c) {
         socket->core(c)->set_satp(value);
       }
+    #ifdef SIMX_SOCKET_UNIT_MMU
+      socket->set_satp(value);
+    #endif
     }
   }
 

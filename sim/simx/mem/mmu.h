@@ -14,6 +14,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <queue>
 #include <vector>
 #include <mem.h>
@@ -54,7 +55,9 @@ public:
       uint32_t num_ports,
       uint32_t tlb_size,
       uint32_t client_id,
-      bool exec_side);
+      bool exec_side,
+      bool rsp_reg = false,
+      bool write_enable = true);
 
   ~Mmu();
 
@@ -86,6 +89,8 @@ private:
   };
 
   bool needs_translation(const MemReq& req) const;
+  bool port_parked(uint32_t port) const;
+  bool needs_kill_rsp(const MemReq& req) const;
   int  mshr_find(uint64_t vpn) const;
   int  mshr_alloc(uint64_t vpn);
   TlbAccess access_of(const MemReq& req) const;
@@ -95,12 +100,19 @@ private:
   uint32_t                 num_ports_;
   uint32_t                 client_id_;
   bool                     exec_side_;
+  // Each response leaves a cycle late through its own stage.
+  bool                     rsp_reg_;
+  // Clients may write: a flush token is ordered behind the port's parks.
+  bool                     write_enable_;
   std::unique_ptr<SATP_t>  satp_;
   Tlb                      tlb_;
 
   std::vector<MshrEntry>          mshr_;
   std::vector<std::queue<MemReq>> replay_;   // per-port, drains before new input
   std::vector<std::queue<MemRsp>> fault_rsp_;// per-port, kills faulted accesses
+  // Per-port single slot answering a permission fault on a hit; a lane whose
+  // slot is still full stalls its next such fault.
+  std::vector<std::optional<MemRsp>> pf_slot_;
   std::queue<TlbReq>              reports_;  // permission faults awaiting the walker
 
   // Requests of one VPN that a single miss-station entry can absorb.

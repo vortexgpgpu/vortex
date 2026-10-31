@@ -14,7 +14,9 @@
 #pragma once
 
 #include "types.h"
+#include "constants.h"
 #include "cache.h"
+#include "mem/tlb_types.h"
 #ifdef VX_CFG_EXT_DXA_ENABLE
 #include "dxa_core.h"
 #endif
@@ -54,11 +56,15 @@ public:
   Socket(const SimContext& ctx,
          const char* name,
          uint32_t socket_id,
-         Cluster* cluster);
+         Cluster* cluster,
+         uint32_t unit_tlb_client = 0);
 
   ~Socket();
 
   uint32_t id() const { return socket_id_; }
+
+  // The unit MMU's client index at the cluster TLB.
+  uint32_t unit_tlb_client() const { return unit_tlb_client_; }
 
   Cluster* cluster() const { return cluster_; }
 
@@ -98,12 +104,21 @@ public:
   RtuCore::Ptr& rtu_core();
 #endif
 
+#ifdef SIMX_SOCKET_UNIT_MMU
+  // Unit MMU: its miss/fill link to the cluster TLB, and the device satp
+  // (Cluster::set_mmu_satp), which flushes its TLB on an actual change.
+  SimChannel<TlbReq>& tlb_miss_out();
+  SimChannel<TlbRsp>& tlb_fill_in();
+  void set_satp(uint64_t satp);
+#endif
+
 protected:
   void on_reset();
 
 private:
   uint32_t socket_id_;
   Cluster* cluster_;
+  uint32_t unit_tlb_client_;
 
   class Impl;
   Impl* impl_;

@@ -244,6 +244,28 @@ tests:
   app: sgemm
   configs: -DVX_CFG_VM_ENABLE -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_NUM_SFU_BLOCKS=2
 
+# Socket unit MMU: the RTU's BVH fetches and the DXA's global reads translate,
+# so a scene or a tile source at a minted VA (!= PA) is read correctly (both
+# apps check their results; dxa_copy does not).
+- id: vm-rtu
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: rt_smoke
+  configs+: -DVX_CFG_EXT_RTU_ENABLE
+  env:
+    VORTEX_RANDOMIZE_VA: 1
+- id: vm-dxa
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm2_dxa
+  configs+: -DVX_CFG_EXT_DXA_ENABLE
+  env:
+    VORTEX_RANDOMIZE_VA: 1
+
 # ---------------------------------------------------------------------------
 # check: model_parity — same VM-enabled app on both drivers (xlen 32); exact
 # instret + cycles within tolerance. SimX is the timing model of the RTL.
@@ -258,6 +280,17 @@ tests:
   via: blackbox
   app: vecadd
   args: -n16384
+- id: parity-vm-rt_raycast
+  check: model_parity
+  via: blackbox
+  app: rt_raycast
+  configs+: -DVX_CFG_EXT_RTU_ENABLE -DVX_CFG_EXT_DXA_ENABLE
+- id: parity-vm-dxa_copy
+  check: model_parity
+  via: blackbox
+  app: dxa_copy
+  configs+: -DVX_CFG_EXT_RTU_ENABLE -DVX_CFG_EXT_DXA_ENABLE
+  args: -d3
 # The RTL command processor's DMA walks the page table for every upload and
 # download; only xrt runs it (simx and rtlsim use the C++ command processor).
 - id: cp-dma-walk

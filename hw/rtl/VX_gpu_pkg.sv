@@ -1974,6 +1974,11 @@ package VX_gpu_pkg;
     localparam DXA_MEM_ARB_IDX      = RTCACHE_MEM_ARB_IDX + `VX_CFG_EXT_RTU_ENABLED;
     localparam SOCKET_MEM_ARB_REQS  = 2 + `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_RTU_ENABLED + `VX_CFG_EXT_DXA_ENABLED;
 
+    // Socket unit MMU ports (SOCKET_UNIT_MMU_ENABLE), in socket arb order.
+    localparam UMMU_RTCACHE_IDX     = 0;
+    localparam UMMU_DXA_IDX         = UMMU_RTCACHE_IDX + `VX_CFG_EXT_RTU_ENABLED;
+    localparam UMMU_NUM_REQS        = `VX_CFG_EXT_RTU_ENABLED + `VX_CFG_EXT_DXA_ENABLED;
+
     // Widest tag among the socket arb inputs (DXA adapts to the given budget)
 `ifdef VX_CFG_EXT_TEX_ENABLE
     localparam SOCKET_MEM_TAG_W1    = `MAX(L1_MEM_TAG_WIDTH, TCACHE_MEM_TAG_WIDTH);
@@ -2037,9 +2042,14 @@ package VX_gpu_pkg;
     // TLB miss/fill fabric id widths. The id starts as the L1 miss-station slot
     // and each arb level prepends its grant index so fills route back exactly.
     localparam L1_TLB_ID_WIDTH       = `CLOG2(`VX_CFG_L1_TLB_MSHR_SIZE);
-    // A socket exposes two L1 MMUs (dtlb + itlb), regardless of SOCKET_SIZE, each
-    // driving one bus into the socket TLB arbiter.
-    localparam TLB_SOCKET_ID_WIDTH   = L1_TLB_ID_WIDTH + `ARB_SEL_BITS(2, 1);
+    // A socket exposes two L1 MMUs (dtlb + itlb), regardless of SOCKET_SIZE, plus
+    // the unit MMU when present, each driving one bus into the socket TLB arbiter.
+`ifdef SOCKET_UNIT_MMU_ENABLE
+    localparam SOCKET_NUM_MMUS       = 3;
+`else
+    localparam SOCKET_NUM_MMUS       = 2;
+`endif
+    localparam TLB_SOCKET_ID_WIDTH   = L1_TLB_ID_WIDTH + `ARB_SEL_BITS(SOCKET_NUM_MMUS, 1);
     localparam TLB_CLUSTER_ID_WIDTH  = TLB_SOCKET_ID_WIDTH + `ARB_SEL_BITS(NUM_SOCKETS, 1);
     localparam L2_TLB_SLOT_WIDTH     = `CLOG2(`VX_CFG_L2_TLB_MSHR_SIZE);
     // Device-level walker: cluster L2-TLB miss buses arb into one walker.

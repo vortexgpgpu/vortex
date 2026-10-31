@@ -89,6 +89,15 @@ inline constexpr uint32_t NUM_SOCKETS     = __UP(VX_CFG_NUM_CORES / VX_CFG_SOCKE
 static_assert((VX_CFG_NUM_CORES % VX_CFG_SOCKET_SIZE) == 0,
               "NUM_CORES must be a multiple of SOCKET_SIZE");
 
+// Under VM, a socket's unit MMU translates the memory ports of its
+// socket-resident units (rtcache misses, DXA gmem reads), in socket arb order.
+#if defined(VX_CFG_VM_ENABLE) && (defined(VX_CFG_EXT_RTU_ENABLE) || defined(VX_CFG_EXT_DXA_ENABLE))
+#define SIMX_SOCKET_UNIT_MMU
+#endif
+inline constexpr uint32_t UMMU_RTCACHE_IDX = 0;
+inline constexpr uint32_t UMMU_DXA_IDX     = UMMU_RTCACHE_IDX + VX_CFG_EXT_RTU_ENABLED;
+inline constexpr uint32_t UMMU_NUM_REQS    = VX_CFG_EXT_RTU_ENABLED + VX_CFG_EXT_DXA_ENABLED;
+
 // Demand clients of the cluster L2 (sockets and gfx caches), excluding the
 // walker's PTE-fetch slot.
 inline constexpr uint32_t VX_CFG_L2_DEMAND_REQS  = NUM_SOCKETS * VX_CFG_L1_MEM_PORTS;

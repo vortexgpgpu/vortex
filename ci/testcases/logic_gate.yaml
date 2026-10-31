@@ -188,6 +188,14 @@ builds:
   clock_mhz: 250
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
 
+# The same slice under VM: the unit MMUs in front of the graphics caches and the
+# DXA, which neither gfx (VM off) nor vm (no units) builds.
+- id: gfxvm
+  group: graphics
+  dut: gfxvm
+  clock_mhz: 250
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+
 # --- tensor (combined subsystem) ---------------------------------------------
 
 # Full tensor subsystem in one wrapper: TCU (WGMMA + MX) + dxa behind a shared L2,

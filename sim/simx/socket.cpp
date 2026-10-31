@@ -17,6 +17,9 @@
 #include "cluster.h"
 #include "constants.h"
 #include "types.h"
+#ifdef SIMX_SOCKET_UNIT_MMU
+#include "mem/mmu.h"
+#endif
 #ifdef VX_CFG_EXT_DXA_ENABLE
 #include "dxa_core.h"
 #include "local_mem.h"
@@ -204,6 +207,16 @@ public:
     dxa_core_ = DxaCore::Create(sname, simobject_);
 #endif
 
+#ifdef SIMX_SOCKET_UNIT_MMU
+    // ── Socket unit MMU ─────────────────────────────────────────────────
+    // Translates the unit caches' and DXA's memory ports between them and the
+    // socket memory arbiter, so those caches are virtually tagged. Each
+    // response leaves through a registered stage; its clients only read.
+    snprintf(sname, 100, "%s-unit_mmu", name.c_str());
+    unit_mmu_ = Mmu::Create(sname, UMMU_NUM_REQS, VX_CFG_UTLB_SIZE,
+                            simobject_->unit_tlb_client(), false, true, false);
+#endif
+
     // find overlap
     uint32_t overlap = __MIN(VX_CFG_ICACHE_MEM_PORTS, VX_CFG_L1_MEM_PORTS);
 
@@ -244,6 +257,23 @@ public:
     sock_arb->RspOut.at(0).bind(&icaches_->mem_rsp_in.at(0));
     dcaches_->mem_req_out.at(0).bind(&sock_arb->ReqIn.at(1));
     sock_arb->RspOut.at(1).bind(&dcaches_->mem_rsp_in.at(0));
+  #if defined(VX_CFG_EXT_RTU_ENABLE) || defined(VX_CFG_EXT_DXA_ENABLE)
+    // A unit port reaches the arbiter through the unit MMU under VM.
+    auto bind_unit_port = [&](uint32_t arb_idx, uint32_t ummu_idx,
+                              SimChannel<MemReq>& req_src,
+                              SimChannel<MemRsp>& rsp_dst) {
+    #ifdef SIMX_SOCKET_UNIT_MMU
+      req_src.bind(&unit_mmu_->ReqIn.at(ummu_idx));
+      unit_mmu_->RspOut.at(ummu_idx).bind(&rsp_dst);
+      unit_mmu_->ReqOut.at(ummu_idx).bind(&sock_arb->ReqIn.at(arb_idx));
+      sock_arb->RspOut.at(arb_idx).bind(&unit_mmu_->RspIn.at(ummu_idx));
+    #else
+      __unused(ummu_idx);
+      req_src.bind(&sock_arb->ReqIn.at(arb_idx));
+      sock_arb->RspOut.at(arb_idx).bind(&rsp_dst);
+    #endif
+    };
+  #endif
   #ifdef VX_CFG_EXT_TEX_ENABLE
     constexpr uint32_t kTexArbIdx = 2;
     tcache_->mem_req_out.at(0).bind(&sock_arb->ReqIn.at(kTexArbIdx));
@@ -251,13 +281,11 @@ public:
   #endif
   #ifdef VX_CFG_EXT_RTU_ENABLE
     constexpr uint32_t kRtuArbIdx = 2 + VX_CFG_EXT_TEX_ENABLED;
-    rtcache_->mem_req_out.at(0).bind(&sock_arb->ReqIn.at(kRtuArbIdx));
-    sock_arb->RspOut.at(kRtuArbIdx).bind(&rtcache_->mem_rsp_in.at(0));
+    bind_unit_port(kRtuArbIdx, UMMU_RTCACHE_IDX, rtcache_->mem_req_out.at(0), rtcache_->mem_rsp_in.at(0));
   #endif
   #ifdef VX_CFG_EXT_DXA_ENABLE
     constexpr uint32_t kDxaArbIdx = 2 + VX_CFG_EXT_TEX_ENABLED + VX_CFG_EXT_RTU_ENABLED;
-    dxa_core_->gmem_req_out.at(0).bind(&sock_arb->ReqIn.at(kDxaArbIdx));
-    sock_arb->RspOut.at(kDxaArbIdx).bind(&dxa_core_->gmem_rsp_in.at(0));
+    bind_unit_port(kDxaArbIdx, UMMU_DXA_IDX, dxa_core_->gmem_req_out.at(0), dxa_core_->gmem_rsp_in.at(0));
   #endif
     bind_mem_port(0, sock_arb->ReqOut.at(0), sock_arb->RspIn.at(0));
 
@@ -381,6 +409,12 @@ public:
       if (core->running())
         return true;
     }
+  #ifdef SIMX_SOCKET_UNIT_MMU
+    // Parked translations hold no channel packet.
+    if (!unit_mmu_->empty()) {
+      return true;
+    }
+  #endif
     return false;
   }
 
@@ -467,6 +501,19 @@ public:
   RtuCore::Ptr& rtu_core() { return rtu_core_; }
 #endif
 
+#ifdef SIMX_SOCKET_UNIT_MMU
+  SimChannel<TlbReq>& tlb_miss_out() { return unit_mmu_->TlbMissOut; }
+  SimChannel<TlbRsp>& tlb_fill_in() { return unit_mmu_->TlbFillIn; }
+  // The unit caches are virtually tagged: a satp commit flushes the unit
+  // TLB and invalidates them.
+  void set_satp(uint64_t satp) {
+    unit_mmu_->set_satp(satp);
+  #ifdef VX_CFG_EXT_RTU_ENABLE
+    rtcache_->invalidate();
+  #endif
+  }
+#endif
+
 private:
   Socket*                 simobject_;
   std::vector<Core::Ptr>  cores_;
@@ -486,6 +533,9 @@ private:
   Cache::Ptr              rtcache_;
   RtuBusArbiter::Ptr      rtu_bus_arb_;
 #endif
+#ifdef SIMX_SOCKET_UNIT_MMU
+  Mmu::Ptr                unit_mmu_;
+#endif
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -493,12 +543,14 @@ private:
 Socket::Socket(const SimContext& ctx,
                 const char* name,
                 uint32_t socket_id,
-                Cluster* cluster)
+                Cluster* cluster,
+                uint32_t unit_tlb_client)
   : SimObject(ctx, name)
   , mem_req_out(VX_CFG_L1_MEM_PORTS, this)
   , mem_rsp_in(VX_CFG_L1_MEM_PORTS, this)
   , socket_id_(socket_id)
   , cluster_(cluster)
+  , unit_tlb_client_(unit_tlb_client)
   , impl_(new Impl(this))
 {}
 
@@ -569,5 +621,19 @@ DxaCore::Ptr& Socket::dxa_core() {
 #ifdef VX_CFG_EXT_RTU_ENABLE
 RtuCore::Ptr& Socket::rtu_core() {
   return impl_->rtu_core();
+}
+#endif
+
+#ifdef SIMX_SOCKET_UNIT_MMU
+SimChannel<TlbReq>& Socket::tlb_miss_out() {
+  return impl_->tlb_miss_out();
+}
+
+SimChannel<TlbRsp>& Socket::tlb_fill_in() {
+  return impl_->tlb_fill_in();
+}
+
+void Socket::set_satp(uint64_t satp) {
+  impl_->set_satp(satp);
 }
 #endif
