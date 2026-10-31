@@ -184,7 +184,7 @@ module foldsim_vmem_group #(
 `endif
 
     // ---- The members' FIFOs ----
-    wire [N-1:0]      push, nonempty, grant_pop;
+    wire [N-1:0]      push, nonempty, many, grant_pop;
     wire [CW-1:0]     cnt_next [N];
     reg  [N-1:0]      grant;
     wire              room_ok = (c_free >= FW'(2));
@@ -226,6 +226,7 @@ module foldsim_vmem_group #(
         end
         assign cnt_next[m] = cnt + CW'(push[m]) - CW'(grant_pop[m]);
         assign nonempty[m] = (cnt != '0);
+        assign many[m]     = (cnt > CW'(1));
         wire [EW-1:0] h = mem[rp];
         wire [A-1:0]  rrow, wrow;
         wire [K-1:0]  mask = h[K-1:0];
@@ -266,32 +267,40 @@ module foldsim_vmem_group #(
     end
 
     // ---- The grant, a cycle ahead: round robin among the members with an
-    // entry next cycle, from the member after the last one popped ----
-    // after_q: the members after the last popped; after_g: after the grant.
-    reg  [N-1:0] after_q, after_g;
-    wire [N-1:0] want;
+    // entry next cycle, from the member after the last one granted ----
+    // A member wants the grant with two entries or more, with one not
+    // granted now (granted, it leaves now, but for want of room: then the
+    // next cycle's grant passes it over), or with an entry coming. Each bit
+    // is a wide OR of registers and the member's request: no count is added.
+    reg  [N-1:0] after_q;
+    wire [N-1:0] want, left;
     for (genvar m = 0; m < N; ++m) begin : g_want
-        assign want[m] = (cnt_next[m] != '0);
+        assign want[m] = many[m] | (nonempty[m] & ~grant[m]) | push[m];
+        assign left[m] = (cnt_next[m] != '0);
     end
-    wire         popped  = |grant_pop;
-    wire [N-1:0] after   = popped ? after_g : after_q;
-    wire [N-1:0] hi      = want & after;
-    wire [N-1:0] pool    = (hi != '0) ? hi : want;
-    // The lowest member of the pool, and the members above it.
-    wire [N-1:0] pick    = pool & (~pool + 1'b1);
-    wire [N-1:0] above   = ~((pick << 1) - 1'b1);
+    // The lowest set bit of x, and the bits above it.
+    function automatic [N-1:0] lowest(input [N-1:0] x);
+        for (integer i = 0; i < N; ++i)
+            lowest[i] = x[i] & ~(|(x & N'((N'(1) << i) - 1'b1)));
+    endfunction
+    function automatic [N-1:0] above(input [N-1:0] x);
+        for (integer i = 0; i < N; ++i)
+            above[i] = |(x & N'((N'(1) << i) - 1'b1));
+    endfunction
+    wire [N-1:0] hi     = want & after_q;
+    wire         any_hi = |hi;
+    wire [N-1:0] pick   = any_hi ? lowest(hi) : lowest(want);
+    wire [N-1:0] next   = any_hi ? above(hi) : above(want);
 `ifdef SIMULATION
     initial begin
         grant   = '0;
         after_q = '0;
-        after_g = '0;
     end
 `endif
     always @(posedge clk) begin
-        grant   <= pick;
-        after_g <= above;
-        if (popped)
-            after_q <= after_g;
+        grant <= pick;
+        if (|want)
+            after_q <= next;
     end
 
     // ---- The granted entry, to the controller ----
@@ -333,7 +342,7 @@ module foldsim_vmem_group #(
     assign c_wmask = s_wmask;
 
     // ---- Reset: drain the FIFOs' writes, then reset the controller ----
-    wire drained_next = (want == '0);
+    wire drained_next = (left == '0);
     always @(posedge clk) begin
         c_reset  <= (reset | rst_pend) & drained_next;
         rst_pend <= reset | (rst_pend & ~c_reset);
