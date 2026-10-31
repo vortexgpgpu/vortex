@@ -269,7 +269,12 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     wire [FULL_W-1:0]        full_warps_r = block_size_r[CTA_TID_WIDTH:NT_BITS];
     wire [2*NUM_LANES-1:0]   full_r_gt, rem_r_gt;
     for (genvar j = 0; j < 2*NUM_LANES; ++j) begin : g_rem_therm
-        assign full_r_gt[j] = (full_warps_r > FULL_W'(j));
+        // a block holds at most 2^FULL_W-1 full warps
+        if (j < (1 << FULL_W) - 1) begin : g_full_cmp
+            assign full_r_gt[j] = (full_warps_r > FULL_W'(j));
+        end else begin : g_full_never
+            assign full_r_gt[j] = 1'b0;
+        end
         if (j == 0) begin : g_first
             assign rem_r_gt[j] = full_r_gt[j] | part_warp_r;
         end else begin : g_rest
@@ -711,7 +716,11 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                     // window constants: step warp_step_r once per cycle
                     if (init_busy) begin
                         if (int'(init_cnt_r) < NUM_LANES) begin
-                            thread_idx_init_r[init_cnt_r] <= init_next;
+                            for (integer k = 0; k < NUM_LANES; ++k) begin
+                                if (int'(init_cnt_r) == k) begin
+                                    thread_idx_init_r[k] <= init_next;
+                                end
+                            end
                             init_cnt_r <= init_cnt_r + LCNT_WIDTH'(1);
                         end else begin
                             group_step_r <= init_next;
