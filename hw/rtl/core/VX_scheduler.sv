@@ -578,9 +578,10 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             if (decode_sched_if.valid && decode_sched_if.unlock) begin
                 timeout_enable <= 1;
             end
-            if (timeout_enable && active_warps !=0 && active_warps == stalled_warps) begin
+            // Barrier traffic from async units (DXA, tensor jobs) is progress while every warp waits.
+            if (timeout_enable && active_warps !=0 && active_warps == stalled_warps && !warp_ctl_if.bar_valid) begin
                 timeout_ctr <= timeout_ctr + 1;
-            end else if (active_warps == 0 || active_warps != stalled_warps) begin
+            end else if (active_warps == 0 || active_warps != stalled_warps || warp_ctl_if.bar_valid) begin
                 timeout_ctr <= '0;
             end
         end
