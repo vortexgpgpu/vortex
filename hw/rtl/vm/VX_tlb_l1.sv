@@ -27,6 +27,7 @@ module VX_tlb_l1 import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     parameter MSHR_SIZE    = `VX_CFG_L1_TLB_MSHR_SIZE,
     parameter REPLAY_DEPTH = 2,
     parameter PAYLOAD_W    = 1,
+    parameter ALLOC_PROBE  = 0,
     parameter ID_WIDTH     = `CLOG2(MSHR_SIZE)
 ) (
     input wire clk,
@@ -140,6 +141,7 @@ module VX_tlb_l1 import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         .QDATA_W   (PAYLOAD_W),
         .QDEPTH    (REPLAY_DEPTH),
         .DEDUP_LIVE_EXCLUDES_FAULT (1),
+        .ALLOC_PROBE (ALLOC_PROBE),
         .ID_WIDTH  (ID_WIDTH)
     ) mshr (
         .clk           (clk),

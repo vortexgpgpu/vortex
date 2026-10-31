@@ -211,10 +211,11 @@ public:
     // ── Socket unit MMU ─────────────────────────────────────────────────
     // Translates the unit caches' and DXA's memory ports between them and the
     // socket memory arbiter, so those caches are virtually tagged. Each
-    // response leaves through a registered stage; its clients only read.
+    // response leaves through a registered stage, and a new miss is held a
+    // cycle in a park stage before it allocates; its clients only read.
     snprintf(sname, 100, "%s-unit_mmu", name.c_str());
     unit_mmu_ = Mmu::Create(sname, UMMU_NUM_REQS, VX_CFG_UTLB_SIZE,
-                            simobject_->unit_tlb_client(), false, true, false);
+                            simobject_->unit_tlb_client(), false, true, false, true);
 #endif
 
     // find overlap
@@ -257,7 +258,6 @@ public:
     sock_arb->RspOut.at(0).bind(&icaches_->mem_rsp_in.at(0));
     dcaches_->mem_req_out.at(0).bind(&sock_arb->ReqIn.at(1));
     sock_arb->RspOut.at(1).bind(&dcaches_->mem_rsp_in.at(0));
-  #if defined(VX_CFG_EXT_RTU_ENABLE) || defined(VX_CFG_EXT_DXA_ENABLE)
     // A unit port reaches the arbiter through the unit MMU under VM.
     auto bind_unit_port = [&](uint32_t arb_idx, uint32_t ummu_idx,
                               SimChannel<MemReq>& req_src,
@@ -273,11 +273,9 @@ public:
       sock_arb->RspOut.at(arb_idx).bind(&rsp_dst);
     #endif
     };
-  #endif
   #ifdef VX_CFG_EXT_TEX_ENABLE
     constexpr uint32_t kTexArbIdx = 2;
-    tcache_->mem_req_out.at(0).bind(&sock_arb->ReqIn.at(kTexArbIdx));
-    sock_arb->RspOut.at(kTexArbIdx).bind(&tcache_->mem_rsp_in.at(0));
+    bind_unit_port(kTexArbIdx, UMMU_TCACHE_IDX, tcache_->mem_req_out.at(0), tcache_->mem_rsp_in.at(0));
   #endif
   #ifdef VX_CFG_EXT_RTU_ENABLE
     constexpr uint32_t kRtuArbIdx = 2 + VX_CFG_EXT_TEX_ENABLED;
@@ -508,6 +506,9 @@ public:
   // TLB and invalidates them.
   void set_satp(uint64_t satp) {
     unit_mmu_->set_satp(satp);
+  #ifdef VX_CFG_EXT_TEX_ENABLE
+    tcache_->invalidate();
+  #endif
   #ifdef VX_CFG_EXT_RTU_ENABLE
     rtcache_->invalidate();
   #endif

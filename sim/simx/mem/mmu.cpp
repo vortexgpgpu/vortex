@@ -21,7 +21,8 @@ Mmu::Mmu(const SimContext& ctx,
          uint32_t client_id,
          bool exec_side,
          bool rsp_reg,
-         bool write_enable)
+         bool write_enable,
+         bool park_reg)
   : SimObject(ctx, name)
   , ReqIn(num_ports, this)
   , RspOut(num_ports, this)
@@ -34,6 +35,7 @@ Mmu::Mmu(const SimContext& ctx,
   , exec_side_(exec_side)
   , rsp_reg_(rsp_reg)
   , write_enable_(write_enable)
+  , park_reg_(park_reg)
   , tlb_(tlb_size)
   , mshr_(VX_CFG_L1_TLB_MSHR_SIZE)
   , replay_(num_ports)
@@ -56,6 +58,7 @@ void Mmu::on_reset() {
   for (auto& s : pf_slot_) {
     s.reset();
   }
+  stage_.reset();
   reports_ = {};
   // Physical pages move under a virtual address between launches, so
   // cached translations cannot outlive one — the shared levels clear here
@@ -71,6 +74,9 @@ void Mmu::set_satp(uint64_t satp) {
   }
   satp_ = std::make_unique<SATP_t>(satp);
   tlb_.flush();  // sfence.vma
+  for (auto& e : mshr_) {
+    e.retired = false;
+  }
 }
 
 bool Mmu::empty() const {
@@ -93,6 +99,9 @@ bool Mmu::empty() const {
     if (s) {
       return false;
     }
+  }
+  if (stage_) {
+    return false;
   }
   return reports_.empty();
 }
@@ -129,6 +138,8 @@ int Mmu::mshr_alloc(uint64_t vpn) {
     if (!mshr_[i].valid) {
       mshr_[i].valid = true;
       mshr_[i].issued = false;
+      mshr_[i].retired = false;
+      mshr_[i].rearmed = false;
       mshr_[i].vpn = vpn;
       mshr_[i].parked.clear();
       return (int)i;
@@ -165,6 +176,9 @@ bool Mmu::needs_kill_rsp(const MemReq& req) const {
 }
 
 bool Mmu::port_parked(uint32_t port) const {
+  if (stage_ && stage_->port == port) {
+    return true;
+  }
   for (auto& e : mshr_) {
     if (!e.valid) {
       continue;
@@ -176,6 +190,82 @@ bool Mmu::port_parked(uint32_t port) const {
     }
   }
   return false;
+}
+
+void Mmu::retire(int id, uint64_t ppn, uint32_t flags, uint32_t level) {
+  // A freed entry keeps its translation only behind a registered park, the
+  // one requester that can find its entry freed after probing it.
+  uint64_t vpn = mshr_[id].vpn;
+  mshr_[id] = MshrEntry();
+  if (park_reg_) {
+    mshr_[id].vpn = vpn;
+    mshr_[id].retired = true;
+    mshr_[id].r_ppn = ppn;
+    mshr_[id].r_flags = flags;
+    mshr_[id].r_level = level;
+  }
+}
+
+int Mmu::retired_find(uint64_t vpn) const {
+  for (size_t i = 0; i < mshr_.size(); ++i) {
+    if (!mshr_[i].valid && mshr_[i].retired && mshr_[i].vpn == vpn) {
+      return (int)i;
+    }
+  }
+  return -1;
+}
+
+void Mmu::replay_or_kill(uint32_t port, const MemReq& req, uint64_t ppn,
+                         uint32_t flags, uint32_t level) {
+  // Requests of differing intent chain onto one entry, so the walk's own
+  // check covers only the request that allocated it. Each parked request is
+  // re-checked against the flags the walk brought back.
+  if (!tlb_perm_ok(flags, access_of(req), memop_is_amo(req.op))) {
+    kill_request(port, req);
+    report_fault(req);
+    DT(3, this->name() << " perm-fault: vpn=0x" << std::hex
+                       << (req.addr >> VX_VM_PAGE_LOG2_SIZE) << std::dec);
+    return;
+  }
+  uint64_t page_mask = (uint64_t(1) << VX_VM_PAGE_LOG2_SIZE) - 1;
+  uint64_t low_mask = (uint64_t(1) << (level * TLB_VPN_LEVEL_BITS)) - 1;
+  uint64_t vpn = req.addr >> VX_VM_PAGE_LOG2_SIZE;
+  MemReq translated = req;
+  translated.addr = ((((ppn & ~low_mask) | (vpn & low_mask))) << VX_VM_PAGE_LOG2_SIZE)
+                  | (req.addr & page_mask);
+  replay_.at(port).push(translated);
+}
+
+void Mmu::stage_drain() {
+  // The staged park allocates (or joins) a cycle after it was taken, against
+  // its own VPN; an entry that filled and freed meanwhile re-arms from its
+  // kept translation.
+  if (!stage_ || SimPlatform::instance().cycles() < stage_->cycle) {
+    return;
+  }
+  auto& st = *stage_;
+  int id = mshr_find(st.vpn);
+  if (id < 0) {
+    int r = retired_find(st.vpn);
+    if (r >= 0) {
+      // Re-armed: the entry is held again and drains as a filled one does,
+      // two cycles on, absorbing same-page joins meanwhile.
+      auto& e = mshr_[r];
+      e.valid = true;
+      e.issued = true;
+      e.rearmed = true;
+      e.rearm_cycle = SimPlatform::instance().cycles() + 2;
+      e.parked.clear();
+      e.parked.emplace_back(st.port, st.req);
+      stage_.reset();
+      return;
+    }
+    id = mshr_alloc(st.vpn);
+  }
+  if (id >= 0 && mshr_[id].parked.size() < MAX_PARKED_PER_ENTRY) {
+    mshr_[id].parked.emplace_back(st.port, st.req);
+    stage_.reset();
+  }
 }
 
 void Mmu::report_fault(const MemReq& req) {
@@ -228,33 +318,34 @@ void Mmu::on_tick() {
     // Dropping a fill would leave its parked requests waiting forever.
     __assert(id >= 0 && id < (int)mshr_.size() && mshr_[id].valid,
              "TLB fill does not match an outstanding miss");
-    uint64_t page_mask = (uint64_t(1) << VX_VM_PAGE_LOG2_SIZE) - 1;
-    uint32_t shift = rsp.level * TLB_VPN_LEVEL_BITS;
-    uint64_t low_mask = (uint64_t(1) << shift) - 1;
     if (!rsp.fault) {
       tlb_.fill(mshr_[id].vpn, rsp.ppn, rsp.flags, rsp.level);
     }
     for (auto& [port, req] : mshr_[id].parked) {
-      // Requests of differing intent chain onto one entry, so the walk's
-      // own check covers only the request that allocated it. Each parked
-      // request is re-checked against the flags the walk brought back.
       if (rsp.fault) {
         kill_request(port, req);
-      } else if (!tlb_perm_ok(rsp.flags, access_of(req), memop_is_amo(req.op))) {
-        kill_request(port, req);
-        report_fault(req);
-        DT(3, this->name() << " perm-fault: vpn=0x" << std::hex
-                           << (req.addr >> VX_VM_PAGE_LOG2_SIZE) << std::dec);
       } else {
-        MemReq translated = req;
-        uint64_t vpn = req.addr >> VX_VM_PAGE_LOG2_SIZE;
-        uint64_t ppn = (rsp.ppn & ~low_mask) | (vpn & low_mask);
-        translated.addr = (ppn << VX_VM_PAGE_LOG2_SIZE) | (req.addr & page_mask);
-        replay_.at(port).push(translated);
+        replay_or_kill(port, req, rsp.ppn, rsp.flags, rsp.level);
       }
     }
-    mshr_[id] = MshrEntry();
+    if (rsp.fault) {
+      mshr_[id] = MshrEntry();
+    } else {
+      retire(id, rsp.ppn, rsp.flags, rsp.level);
+    }
     TlbFillIn.pop();
+  }
+
+  // 2b) Drain re-armed entries once their fill-equivalent cycle comes.
+  for (size_t i = 0; i < mshr_.size(); ++i) {
+    auto& e = mshr_[i];
+    if (!e.valid || !e.rearmed || SimPlatform::instance().cycles() < e.rearm_cycle) {
+      continue;
+    }
+    for (auto& [port, req] : e.parked) {
+      replay_or_kill(port, req, e.r_ppn, e.r_flags, e.r_level);
+    }
+    retire((int)i, e.r_ppn, e.r_flags, e.r_level);
   }
 
   // 3) Issue pending miss requests (one per tick over the shared link).
@@ -290,6 +381,16 @@ void Mmu::on_tick() {
   // while older requests are still parked, so only same-address order is
   // guaranteed — those share a VPN, hence one entry and its arrival-order
   // parked list. Replays drain ahead of new input on the same port.
+  // With a registered park, the stage's state at the start of the cycle
+  // decides both whether it takes a park and which page holds.
+  bool stage_free = !stage_.has_value();
+  std::optional<uint64_t> hold_vpn;
+  if (stage_) {
+    hold_vpn = stage_->vpn;
+  }
+  if (park_reg_) {
+    stage_drain();
+  }
   for (uint32_t p = 0; p < num_ports_; ++p) {
     if (!replay_.at(p).empty()) {
       if (ReqOut.at(p).try_send(replay_.at(p).front())) {
@@ -316,8 +417,14 @@ void Mmu::on_tick() {
     }
 
     uint64_t vpn = req.addr >> VX_VM_PAGE_LOG2_SIZE;
+    if (hold_vpn && *hold_vpn == vpn) {
+      continue;  // its page is in the park stage
+    }
     auto res = tlb_.lookup(vpn);
-    if (res.hit) {
+    // A page with a live miss-station entry (a re-armed one still holds its
+    // requests) parks behind it, as the RTL's station probe does, so a hit
+    // cannot overtake an older same-page request.
+    if (res.hit && !(park_reg_ && mshr_find(vpn) >= 0)) {
       // A cached translation still has to satisfy the access: the entry
       // was installed for whichever intent first missed on this page.
       if (!tlb_perm_ok(res.flags, access_of(req), memop_is_amo(req.op))) {
@@ -345,6 +452,14 @@ void Mmu::on_tick() {
       // Park the miss and keep the port flowing (hit-under-miss).
       // Same-VPN misses chain on one entry, preserving arrival order;
       // a full entry or a full station stalls this port only.
+      if (park_reg_) {
+        if (stage_free) {
+          stage_ = Staged{p, req, vpn, SimPlatform::instance().cycles() + 1};
+          stage_free = false;
+          ReqIn.at(p).pop();
+        }
+        continue;
+      }
       int id = mshr_find(vpn);
       if (id < 0) {
         id = mshr_alloc(vpn);

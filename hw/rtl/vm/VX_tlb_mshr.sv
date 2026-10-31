@@ -24,6 +24,11 @@
 // per-lane program order for same-page accesses, which the requester relies on.
 // DEDUP_LIVE_EXCLUDES_FAULT drops faulted entries from dedup (a new same-VPN
 // request re-walks); with it clear the request joins and shares the fault.
+// ALLOC_PROBE dedups the allocate against its own VPN instead: for a requester
+// that registers its park, whose lane probe is a cycle stale by then. An entry
+// that filled and freed while the park was registered still matches (retired_r):
+// the allocate re-arms it as filled, replaying from its kept translation rather
+// than walking the page again.
 //
 // The associative state (valid/vpn/control) is held in flip-flops — an all-entry
 // parallel compare cannot come from an addressable RAM. The wide single-read
@@ -39,6 +44,7 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
     parameter QDATA_W    = 1,
     parameter QDEPTH     = 2,
     parameter DEDUP_LIVE_EXCLUDES_FAULT = 0,
+    parameter ALLOC_PROBE = 0,
     parameter ID_WIDTH   = `CLOG2(MSHR_SIZE)
 ) (
     input wire clk,
@@ -137,9 +143,32 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
         );
     end
 
-    // Allocate reuses the probing lane's dedup result.
-    wire             has_match  = probe_match[alloc_lane];
-    wire [IDX_W-1:0] match_slot = probe_slot[alloc_lane];
+    wire             has_match;
+    wire [IDX_W-1:0] match_slot;
+    wire                 rearm;       // the allocate re-arms a retired entry
+    wire [MSHR_SIZE-1:0] retired;     // freed after a good fill, translation kept
+    if (ALLOC_PROBE != 0) begin : g_alloc_probe
+        wire [MSHR_SIZE-1:0] m;
+        for (genvar e = 0; e < MSHR_SIZE; ++e) begin : g_m
+            assign m[e] = (live[e] || retired[e]) && (vpn_r[e] == alloc_vpn);
+        end
+        VX_priority_encoder #(
+            .N (MSHR_SIZE)
+        ) alloc_enc (
+            .data_in    (m),
+            `UNUSED_PIN (onehot_out),
+            .index_out  (match_slot),
+            .valid_out  (has_match)
+        );
+        assign rearm = has_match && retired[match_slot];
+        `UNUSED_VAR (alloc_lane)
+        `UNUSED_VAR (probe_slot)
+    end else begin : g_lane_probe
+        // Allocate reuses the probing lane's dedup result.
+        assign has_match  = probe_match[alloc_lane];
+        assign match_slot = probe_slot[alloc_lane];
+        assign rearm      = 1'b0;
+    end
 
     wire             has_free;
     wire [IDX_W-1:0] free_slot;
@@ -401,6 +430,10 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
             fault_r  <= '0;
             amo_r    <= '0;
         end else begin
+            if (alloc_fire && rearm) begin
+                valid_r[match_slot]  <= 1'b1;
+                filled_r[match_slot] <= 1'b1;
+            end
             if (alloc_fire && !has_match) begin
                 valid_r[free_slot]  <= 1'b1;
                 issued_r[free_slot] <= 1'b0;
@@ -448,6 +481,29 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
                 end
             end
         end
+    end
+
+    // Retired entries: only a registered park can find its entry freed between
+    // its lane's probe and its allocate. The entry keeps issued_r set when it
+    // frees, so a re-arm restores valid and filled only.
+    if (ALLOC_PROBE != 0) begin : g_retired
+        reg [MSHR_SIZE-1:0] retired_r;
+        always @(posedge clk) begin
+            if (reset || flush) begin
+                retired_r <= '0;
+            end else begin
+                if (drain_free && !fault_r[drain_sel_r]) begin
+                    retired_r[drain_sel_r] <= 1'b1;
+                end
+                if (alloc_fire) begin
+                    retired_r[alloc_target] <= 1'b0;
+                end
+            end
+        end
+        assign retired = retired_r;
+    end else begin : g_no_retired
+        assign retired = '0;
+        `UNUSED_VAR (retired)
     end
 
     assign empty = ~(| valid_r);

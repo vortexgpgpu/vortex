@@ -1,11 +1,10 @@
 // Texture regression test using the KMU launch API.
 //
-// Pinned-buffer contract:
-//   src_buffer  → TEX HW (VX_DCR_TEX_ADDR) → VX_MEM_PHYS (identity-mapped)
-//   dst_buffer  → kernel-only (LSU stores)  → not pinned
-// Only src_buffer is read by the TEX fixed-function block. dst_buffer is
-// written by kernel code through the per-core MMU, so it gets a regular
-// minted VA under VM.
+// Buffers:
+//   src_buffer  → TEX HW (VX_DCR_TEX_ADDR)
+//   dst_buffer  → kernel-only (LSU stores)
+// Both get a regular minted VA under VM: the TEX unit's tcache misses
+// translate through the socket unit MMU like the kernel's loads and stores.
 //
 // Host loads a PNG, generates a mipmap chain, configures TEX stage 0
 // DCRs, then launches a 2D grid where each thread samples one output
@@ -197,14 +196,11 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
 
   // ---- allocate device buffers -----------------------------------------
-  // HW path: src_buffer is bound to the TEX unit (VX_DCR_TEX_ADDR), which reads
-  // it through the TEX/tcache path bypassing the per-core MMU — needs a physical
-  // (pinned) address. SW path (-S): the kernel reads the texture through the
-  // LSU/dcache like any other resident buffer, so allocate it as a normal
-  // kernel-read buffer (a PHYS buffer read via the LSU is not dcache-coherent
-  // with the host upload).
-  uint32_t src_flags = VX_MEM_READ | (sw_path ? 0u : (uint32_t)VX_MEM_PHYS);
-  RT_CHECK(vx_buffer_create(device, src_bufsize, src_flags, &src_buffer));
+  // HW path: src_buffer is bound to the TEX unit (VX_DCR_TEX_ADDR), whose
+  // tcache translates through the socket unit MMU. SW path (-S): the kernel
+  // reads the texture through the LSU/dcache. Either way it is a normal
+  // kernel-read buffer.
+  RT_CHECK(vx_buffer_create(device, src_bufsize, VX_MEM_READ, &src_buffer));
   RT_CHECK(vx_buffer_address(src_buffer, &src_addr));
   // dst_buffer is kernel-written via the LSU only — no HW-block reader,
   // no need to pin (the per-core MMU translates the VA for the kernel).

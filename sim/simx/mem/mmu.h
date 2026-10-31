@@ -57,7 +57,8 @@ public:
       uint32_t client_id,
       bool exec_side,
       bool rsp_reg = false,
-      bool write_enable = true);
+      bool write_enable = true,
+      bool park_reg = false);
 
   ~Mmu();
 
@@ -85,6 +86,15 @@ private:
     bool     valid = false;
     bool     issued = false;
     uint64_t vpn = 0;
+    // Freed after a good fill: a registered park whose lane probe saw this
+    // entry re-arms it from the kept translation instead of walking again.
+    bool     retired = false;
+    // Re-armed from its kept translation: drains, as if filled, from this cycle.
+    bool     rearmed = false;
+    uint64_t rearm_cycle = 0;
+    uint64_t r_ppn = 0;
+    uint32_t r_flags = 0;
+    uint32_t r_level = 0;
     std::vector<std::pair<uint32_t, MemReq>> parked;  // (port, request)
   };
 
@@ -93,6 +103,11 @@ private:
   bool needs_kill_rsp(const MemReq& req) const;
   int  mshr_find(uint64_t vpn) const;
   int  mshr_alloc(uint64_t vpn);
+  int  retired_find(uint64_t vpn) const;
+  void replay_or_kill(uint32_t port, const MemReq& req, uint64_t ppn,
+                      uint32_t flags, uint32_t level);
+  void stage_drain();
+  void retire(int id, uint64_t ppn, uint32_t flags, uint32_t level);
   TlbAccess access_of(const MemReq& req) const;
   void kill_request(uint32_t port, const MemReq& req);
   void report_fault(const MemReq& req);
@@ -104,6 +119,18 @@ private:
   bool                     rsp_reg_;
   // Clients may write: a flush token is ordered behind the port's parks.
   bool                     write_enable_;
+  // A registered park: a lane's miss (new or joining) is first held in a
+  // one-entry stage and reaches the miss station the next cycle at the
+  // earliest; the stage takes a request only while empty, and a lane whose
+  // page is staged holds meanwhile.
+  bool                     park_reg_;
+  struct Staged {
+    uint32_t port;
+    MemReq   req;
+    uint64_t vpn;
+    uint64_t cycle;
+  };
+  std::optional<Staged>    stage_;
   std::unique_ptr<SATP_t>  satp_;
   Tlb                      tlb_;
 

@@ -176,7 +176,7 @@ int main(int argc, char** argv) {
   std::vector<uint8_t> texbuf; std::vector<uint32_t> mip_offsets;
   RT_CHECK(GenerateMipmaps(texbuf, mip_offsets, tex_pixels.data(), FORMAT_A8R8G8B8, tw, th, tw * 4));
   vx_buffer_h tex_b = nullptr; uint64_t tex_addr = 0;
-  RT_CHECK(vx_buffer_create(dev, texbuf.size(), VX_MEM_READ | VX_MEM_PHYS, &tex_b));
+  RT_CHECK(vx_buffer_create(dev, texbuf.size(), VX_MEM_READ, &tex_b));
   RT_CHECK(vx_buffer_address(tex_b, &tex_addr));
   RT_CHECK(vx_enqueue_write(q, tex_b, 0, texbuf.data(), texbuf.size(), 0, nullptr, nullptr));
 

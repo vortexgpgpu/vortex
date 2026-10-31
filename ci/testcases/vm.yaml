@@ -265,6 +265,16 @@ tests:
   configs+: -DVX_CFG_EXT_DXA_ENABLE
   env:
     VORTEX_RANDOMIZE_VA: 1
+- id: vm-tex
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: gfx_tex
+  configs+: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i toad.png -r toad_ref_f0.png -f 0 -g 0
+  env:
+    VORTEX_RANDOMIZE_VA: 1
 
 # ---------------------------------------------------------------------------
 # check: model_parity — same VM-enabled app on both drivers (xlen 32); exact
@@ -291,6 +301,12 @@ tests:
   app: dxa_copy
   configs+: -DVX_CFG_EXT_RTU_ENABLE -DVX_CFG_EXT_DXA_ENABLE
   args: -d3
+- id: parity-vm-gfx_tex
+  check: model_parity
+  via: blackbox
+  app: gfx_tex
+  configs+: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i toad.png -r toad_ref_f0.png -f 0 -g 0
 # The RTL command processor's DMA walks the page table for every upload and
 # download; only xrt runs it (simx and rtlsim use the C++ command processor).
 - id: cp-dma-walk

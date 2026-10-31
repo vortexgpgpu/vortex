@@ -21,8 +21,8 @@
 //   socket slice:
 //     VX_tex_bus_arb  -> VX_tex_core xN -> tcache (VX_cache_cluster)
 //     VX_rtu_bus_arb  -> VX_rtu_core xN -> rtcache (VX_cache_cluster)
-//     VX_mmu          : under VM, the socket unit MMU between the rtcache /
-//                       DXA gmem ports and the arbiter; its tlb_bus, satp
+//     VX_mmu          : under VM, the socket unit MMU between the tcache /
+//                       rtcache / DXA gmem ports and the arbiter; its tlb_bus, satp
 //                       mode and TLB flush are top ports. The 3-input socket
 //                       TLB arbiter and the snoop's unit-MMU and unit-cache
 //                       flush legs are elaborated only by the full-GPU build
@@ -535,6 +535,9 @@ module VX_gfx_top import VX_gpu_pkg::*
         .TAG_WIDTH (SOCKET_MEM_TAG_WIDTH)
     ) unit_phys_bus_if[UMMU_NUM_REQS]();
 
+`ifdef VX_CFG_EXT_TEX_ENABLE
+    `ASSIGN_VX_MEM_BUS_IF_EX (unit_mem_bus_if[UMMU_TCACHE_IDX], tcache_mem_bus_tmp_if[0], SOCKET_MEM_TAG_WIDTH, TCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
+`endif
 `ifdef VX_CFG_EXT_RTU_ENABLE
     `ASSIGN_VX_MEM_BUS_IF_EX (unit_mem_bus_if[UMMU_RTCACHE_IDX], rtcache_mem_bus_tmp_if[0], SOCKET_MEM_TAG_WIDTH, RTCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
 `endif
@@ -586,6 +589,7 @@ module VX_gfx_top import VX_gpu_pkg::*
         .EXEC_SIDE    (0),
         .WRITE_ENABLE (0),
         .RSP_OUT_BUF  (2),
+        .PARK_REG     (1),
         .DATA_SIZE    (`VX_CFG_L1_LINE_SIZE),
         .TAG_WIDTH    (SOCKET_MEM_TAG_WIDTH)
     ) ummu (
@@ -654,10 +658,10 @@ module VX_gfx_top import VX_gpu_pkg::*
             assign dc_mem_rsp_tag[0]   = socket_arb_in_if[DCACHE_MEM_ARB_IDX].rsp_data.tag;
             assign socket_arb_in_if[DCACHE_MEM_ARB_IDX].rsp_ready = dc_mem_rsp_ready[0];
 
-        `ifdef VX_CFG_EXT_TEX_ENABLE
-            `ASSIGN_VX_MEM_BUS_IF_EX (socket_arb_in_if[TCACHE_MEM_ARB_IDX], tcache_mem_bus_tmp_if[0], SOCKET_MEM_TAG_WIDTH, TCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
-        `endif
         `ifdef SOCKET_UNIT_MMU_ENABLE
+        `ifdef VX_CFG_EXT_TEX_ENABLE
+            `ASSIGN_VX_MEM_BUS_IF (socket_arb_in_if[TCACHE_MEM_ARB_IDX], unit_phys_bus_if[UMMU_TCACHE_IDX]);
+        `endif
         `ifdef VX_CFG_EXT_RTU_ENABLE
             `ASSIGN_VX_MEM_BUS_IF (socket_arb_in_if[RTCACHE_MEM_ARB_IDX], unit_phys_bus_if[UMMU_RTCACHE_IDX]);
         `endif
@@ -665,6 +669,9 @@ module VX_gfx_top import VX_gpu_pkg::*
             `ASSIGN_VX_MEM_BUS_IF (socket_arb_in_if[DXA_MEM_ARB_IDX], unit_phys_bus_if[UMMU_DXA_IDX]);
         `endif
         `else
+        `ifdef VX_CFG_EXT_TEX_ENABLE
+            `ASSIGN_VX_MEM_BUS_IF_EX (socket_arb_in_if[TCACHE_MEM_ARB_IDX], tcache_mem_bus_tmp_if[0], SOCKET_MEM_TAG_WIDTH, TCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
+        `endif
         `ifdef VX_CFG_EXT_RTU_ENABLE
             `ASSIGN_VX_MEM_BUS_IF_EX (socket_arb_in_if[RTCACHE_MEM_ARB_IDX], rtcache_mem_bus_tmp_if[0], SOCKET_MEM_TAG_WIDTH, RTCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
         `endif

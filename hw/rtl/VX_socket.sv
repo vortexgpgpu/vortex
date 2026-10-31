@@ -821,10 +821,10 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
 `ifdef SOCKET_UNIT_MMU_ENABLE
     ///////////////////////////////////////////////////////////////////////////
     // Socket unit MMU — translates the socket-resident units' memory ports
-    // (rtcache misses, DXA gmem reads) between them and the socket memory
-    // arbiter, so the unit caches are virtually indexed and tagged. Its own
-    // TLB keeps BVH and tensor streams from evicting the dTLB's entries, and
-    // its misses ride the third socket tlb_bus.
+    // (tcache and rtcache misses, DXA gmem reads) between them and the socket
+    // memory arbiter, so the unit caches are virtually indexed and tagged. Its
+    // own TLB keeps texture, BVH and tensor streams from evicting the dTLB's
+    // entries, and its misses ride the third socket tlb_bus.
     ///////////////////////////////////////////////////////////////////////////
 
     VX_mem_bus_if #(
@@ -838,6 +838,9 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     ) unit_phys_bus_if[UMMU_NUM_REQS]();
 
 
+`ifdef VX_CFG_EXT_TEX_ENABLE
+    `ASSIGN_VX_MEM_BUS_IF_EX (unit_mem_bus_if[UMMU_TCACHE_IDX], tcache_mem_bus_tmp_if[0], SOCKET_MEM_TAG_WIDTH, TCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
+`endif
 `ifdef VX_CFG_EXT_RTU_ENABLE
     `ASSIGN_VX_MEM_BUS_IF_EX (unit_mem_bus_if[UMMU_RTCACHE_IDX], rtcache_mem_bus_tmp_if[0], SOCKET_MEM_TAG_WIDTH, RTCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
 `endif
@@ -859,6 +862,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .EXEC_SIDE    (0),
         .WRITE_ENABLE (0),
         .RSP_OUT_BUF  (2),
+        .PARK_REG     (1),
         .DATA_SIZE    (`VX_CFG_L1_LINE_SIZE),
         .TAG_WIDTH    (SOCKET_MEM_TAG_WIDTH)
     ) ummu (
@@ -883,7 +887,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     `UNUSED_VAR (ummu_fault_if.access)
     `UNUSED_VAR (ummu_fault_if.amo)
 
-`ifndef VX_CFG_EXT_RTU_ENABLE
+`ifndef EXT_GFX_ANY_ENABLE
     // no unit cache to invalidate
     assign ucache_flush_if.done = 1'b1;
     `UNUSED_VAR (ucache_flush_if.req)
@@ -913,10 +917,10 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
 
             `ASSIGN_VX_MEM_BUS_IF_EX (socket_arb_in_if[ICACHE_MEM_ARB_IDX], icache_mem_bus_if[0], SOCKET_MEM_TAG_WIDTH, ICACHE_MEM_TAG_WIDTH, UUID_WIDTH);
             `ASSIGN_VX_MEM_BUS_IF_EX (socket_arb_in_if[DCACHE_MEM_ARB_IDX], dcache_mem_bus_if[0], SOCKET_MEM_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
-        `ifdef VX_CFG_EXT_TEX_ENABLE
-            `ASSIGN_VX_MEM_BUS_IF_EX (socket_arb_in_if[TCACHE_MEM_ARB_IDX], tcache_mem_bus_tmp_if[0], SOCKET_MEM_TAG_WIDTH, TCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
-        `endif
         `ifdef SOCKET_UNIT_MMU_ENABLE
+        `ifdef VX_CFG_EXT_TEX_ENABLE
+            `ASSIGN_VX_MEM_BUS_IF (socket_arb_in_if[TCACHE_MEM_ARB_IDX], unit_phys_bus_if[UMMU_TCACHE_IDX]);
+        `endif
         `ifdef VX_CFG_EXT_RTU_ENABLE
             `ASSIGN_VX_MEM_BUS_IF (socket_arb_in_if[RTCACHE_MEM_ARB_IDX], unit_phys_bus_if[UMMU_RTCACHE_IDX]);
         `endif
@@ -924,6 +928,9 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
             `ASSIGN_VX_MEM_BUS_IF (socket_arb_in_if[DXA_MEM_ARB_IDX], unit_phys_bus_if[UMMU_DXA_IDX]);
         `endif
         `else
+        `ifdef VX_CFG_EXT_TEX_ENABLE
+            `ASSIGN_VX_MEM_BUS_IF_EX (socket_arb_in_if[TCACHE_MEM_ARB_IDX], tcache_mem_bus_tmp_if[0], SOCKET_MEM_TAG_WIDTH, TCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
+        `endif
         `ifdef VX_CFG_EXT_RTU_ENABLE
             `ASSIGN_VX_MEM_BUS_IF_EX (socket_arb_in_if[RTCACHE_MEM_ARB_IDX], rtcache_mem_bus_tmp_if[0], SOCKET_MEM_TAG_WIDTH, RTCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
         `endif
@@ -990,20 +997,26 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
 
     wire tcache_flush_done_w;
     wire rtcache_flush_done_w;
+`ifdef SOCKET_UNIT_MMU_ENABLE
+    // The unit caches are virtually tagged: the SATP commit invalidates them too.
+    wire unit_cache_flush_req = ucache_flush_if.req;
+    assign ucache_flush_if.done = tcache_flush_done_w && rtcache_flush_done_w;
+`else
+    wire unit_cache_flush_req = 1'b0;
+`endif
+`ifndef VX_CFG_EXT_TEX_ENABLE
+`ifndef VX_CFG_EXT_RTU_ENABLE
+    `UNUSED_VAR (unit_cache_flush_req) // no socket-resident unit cache
+`endif
+`endif
 `ifdef VX_CFG_EXT_TEX_ENABLE
-    assign tcache_flush_if.req = socket_flush_req;
+    assign tcache_flush_if.req = socket_flush_req || unit_cache_flush_req;
     assign tcache_flush_done_w = tcache_flush_if.done;
 `else
     assign tcache_flush_done_w = 1'b1;
 `endif
 `ifdef VX_CFG_EXT_RTU_ENABLE
-`ifdef SOCKET_UNIT_MMU_ENABLE
-    // The rtcache is virtually tagged: the SATP commit invalidates it too.
-    assign rtcache_flush_if.req = socket_flush_req || ucache_flush_if.req;
-    assign ucache_flush_if.done = rtcache_flush_if.done;
-`else
-    assign rtcache_flush_if.req = socket_flush_req;
-`endif
+    assign rtcache_flush_if.req = socket_flush_req || unit_cache_flush_req;
     assign rtcache_flush_done_w = rtcache_flush_if.done;
 `else
     assign rtcache_flush_done_w = 1'b1;

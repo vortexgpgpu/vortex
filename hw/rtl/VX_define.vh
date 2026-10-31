@@ -84,9 +84,11 @@
 `endif
 
 // Under VM, the socket unit MMU translates the memory ports of the
-// socket-resident units: the rtcache misses and the DXA gmem reads.
+// socket-resident units: the tcache and rtcache misses and the DXA gmem reads.
 `ifdef VX_CFG_VM_ENABLE
-`ifdef VX_CFG_EXT_RTU_ENABLE
+`ifdef VX_CFG_EXT_TEX_ENABLE
+    `define SOCKET_UNIT_MMU_ENABLE
+`elsif VX_CFG_EXT_RTU_ENABLE
     `define SOCKET_UNIT_MMU_ENABLE
 `elsif VX_CFG_EXT_DXA_ENABLE
     `define SOCKET_UNIT_MMU_ENABLE

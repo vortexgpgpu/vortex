@@ -1975,9 +1975,10 @@ package VX_gpu_pkg;
     localparam SOCKET_MEM_ARB_REQS  = 2 + `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_RTU_ENABLED + `VX_CFG_EXT_DXA_ENABLED;
 
     // Socket unit MMU ports (SOCKET_UNIT_MMU_ENABLE), in socket arb order.
-    localparam UMMU_RTCACHE_IDX     = 0;
+    localparam UMMU_TCACHE_IDX      = 0;
+    localparam UMMU_RTCACHE_IDX     = UMMU_TCACHE_IDX + `VX_CFG_EXT_TEX_ENABLED;
     localparam UMMU_DXA_IDX         = UMMU_RTCACHE_IDX + `VX_CFG_EXT_RTU_ENABLED;
-    localparam UMMU_NUM_REQS        = `VX_CFG_EXT_RTU_ENABLED + `VX_CFG_EXT_DXA_ENABLED;
+    localparam UMMU_NUM_REQS        = `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_RTU_ENABLED + `VX_CFG_EXT_DXA_ENABLED;
 
     // Widest tag among the socket arb inputs (DXA adapts to the given budget)
 `ifdef VX_CFG_EXT_TEX_ENABLE
