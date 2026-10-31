@@ -206,7 +206,7 @@ $(KERNEL_VH): $(GEN_SV) FORCE
 $(KERNEL_SRCS): $(GEN_SV) $(KERNEL_VH)
 	@{ echo "+incdir+$(FOLDSIM_RTL_DIR)"; echo "+incdir+$(GEN_DIR)"; \
 	   echo "$(GEN_SV)"; \
-	   for f in foldsim_token.sv foldsim_mem_bmap.sv foldsim_mem_bank.sv foldsim_mem.sv foldsim_vmem.sv foldsim_vmem_share.sv \
+	   for f in foldsim_token.sv foldsim_mem_bmap.sv foldsim_mem_bank.sv foldsim_mem.sv foldsim_vmem.sv foldsim_vmem_share.sv foldsim_vmem_group.sv \
 	            foldsim_ctrl.sv foldsim_afu.sv; do echo "$(FOLDSIM_RTL_DIR)/$$f"; done; \
 	 } > $@
 

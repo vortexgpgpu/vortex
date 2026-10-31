@@ -82,6 +82,11 @@
 // invalidated: memory holds the RAM's image (which the host may then change). It finishes, with free back at
 // QUEUE, once memory has answered every transaction: until then free stays 0.
 //
+// With TAGW tag bits (foldsim_vmem_group), rd_inst and wr_inst carry a member
+// tag above the instance: the response returns it, the address ignores it (the
+// group gives its members disjoint rows), and the simulator's guarantees hold
+// per (tag, instance).
+//
 // A region move (`move`, the host placing the image elsewhere, as a new
 // process does without a reset) ends the old region's use as a reset does,
 // but the simulator keeps its state: free drops to 0 and `moving` rises;
@@ -116,23 +121,28 @@ module foldsim_vmem #(
     // line per row (0: direct).
     parameter CACHE_ROWS     = 0,
     // Known-zero rows: a bit per row of the image (0: none, `zero` unused).
-    parameter KNOWN_ZERO     = 1
+    parameter KNOWN_ZERO     = 1,
+    // Tag bits above the instance index in rd_inst, wr_inst and rsp_inst
+    // (foldsim_vmem_group's member): carried to the response, never part of
+    // the address. Requests of different tags may share lines, so read-first
+    // pairs pin theirs wherever lines are not one per row.
+    parameter TAGW           = 0
 ) (
     input  wire                        clk,
     input  wire                        reset,
 
     input  wire                        rd_valid,
-    input  wire [IW-1:0]               rd_inst,
+    input  wire [IW+TAGW-1:0]          rd_inst,
     input  wire [AW-1:0]               rd_row,
 
     input  wire                        wr_valid,
-    input  wire [IW-1:0]               wr_inst,
+    input  wire [IW+TAGW-1:0]          wr_inst,
     input  wire [AW-1:0]               wr_row,
     input  wire [DW-1:0]               wr_data,
     input  wire [MW-1:0]               wr_mask,
 
     output wire                        rsp_valid,
-    output reg  [IW-1:0]               rsp_inst,
+    output reg  [IW+TAGW-1:0]          rsp_inst,
     output reg  [DW-1:0]               rsp_data,
 
     output reg  [$clog2(QUEUE+1)-1:0]  free,
@@ -174,6 +184,7 @@ module foldsim_vmem #(
     /* verilator lint_on UNUSEDSIGNAL */
 );
     localparam FW     = $clog2(QUEUE + 1);
+    localparam IT     = IW + TAGW;
     localparam QW     = (QUEUE > 1) ? $clog2(QUEUE) : 1;
     localparam OW     = (OUTSTANDING > 1) ? $clog2(OUTSTANDING) : 1;
     localparam KB     = $clog2(INSTANCES);
@@ -194,7 +205,7 @@ module foldsim_vmem #(
     // INSTANCES is a power of two, at most CACHE_ROWS, or when every row has
     // a line): read-first pairs pin theirs (PINS at once).
     localparam PIN    = (CACHE != 0) && (CACHE_ROWS < (1 << AW) * INSTANCES)
-                     && (POW2 == 0 || CACHE_ROWS < INSTANCES);
+                     && (POW2 == 0 || CACHE_ROWS < INSTANCES || TAGW > 0);
     localparam PINS   = 8;
     localparam PW     = $clog2(PINS);
     localparam KZ     = (KNOWN_ZERO != 0) ? 1 : 0;
@@ -293,6 +304,13 @@ module foldsim_vmem #(
     end
 `endif
 
+    if (TAGW > 0) begin : g_tag
+        // A write's tag only names its member, for the checks below.
+        /* verilator lint_off UNUSEDSIGNAL */
+        wire unused = |wr_inst[IT-1:IW];
+        /* verilator lint_on UNUSEDSIGNAL */
+    end
+
     wire accept = ~reset & ~draining;
     wire taken_rd = rd_valid & accept;
     wire taken_wr = wr_valid & accept;
@@ -300,7 +318,7 @@ module foldsim_vmem #(
     // ---- Intake: a row's index in the image, row * INSTANCES + inst ----
     // i_busy, i_rbusy: a write, a read, still in the multiply.
     wire              i_rd, i_wr, i_busy, i_rbusy;
-    wire [IW-1:0]     i_rinst;
+    wire [IT-1:0]     i_rinst;
     wire [LW-1:0]     i_rlin, i_wlin;
     wire [DW-1:0]     i_wdata;
     wire [MW-1:0]     i_wmask;
@@ -311,8 +329,8 @@ module foldsim_vmem #(
         assign i_busy  = 1'b0;
         assign i_rbusy = 1'b0;
         assign i_rinst = rd_inst;
-        assign i_rlin  = (LW'(rd_row) << KB) | LW'(rd_inst & IW'(INSTANCES - 1));
-        assign i_wlin  = (LW'(wr_row) << KB) | LW'(wr_inst & IW'(INSTANCES - 1));
+        assign i_rlin  = (LW'(rd_row) << KB) | LW'(rd_inst[IW-1:0] & IW'(INSTANCES - 1));
+        assign i_wlin  = (LW'(wr_row) << KB) | LW'(wr_inst[IW-1:0] & IW'(INSTANCES - 1));
         assign i_wdata = wr_data;
         assign i_wmask = wr_mask;
     end else begin : g_lin_mul
@@ -321,7 +339,8 @@ module foldsim_vmem #(
         // reset.
         reg          a_rd, a_wr, p_rd, p_wr;
         reg [AW-1:0] a_rrow, a_wrow;
-        reg [IW-1:0] a_rinst, a_winst, p_rinst, p_winst;
+        reg [IT-1:0] a_rinst, p_rinst;
+        reg [IW-1:0] a_winst, p_winst;
         reg [LW-1:0] p_rprod, p_wprod;
         reg [DW-1:0] a_wdata, p_wdata;
         reg [MW-1:0] a_wmask, p_wmask;
@@ -339,7 +358,7 @@ module foldsim_vmem #(
             a_rrow  <= rd_row;
             a_wrow  <= wr_row;
             a_rinst <= rd_inst;
-            a_winst <= wr_inst;
+            a_winst <= wr_inst[IW-1:0];
             a_wdata <= wr_data;
             a_wmask <= wr_mask;
             p_rd    <= a_rd & ~reset;
@@ -356,7 +375,7 @@ module foldsim_vmem #(
         assign i_busy  = a_wr | p_wr;
         assign i_rbusy = a_rd | p_rd;
         assign i_rinst = p_rinst;
-        assign i_rlin  = p_rprod + LW'(p_rinst);
+        assign i_rlin  = p_rprod + LW'(p_rinst[IW-1:0]);
         assign i_wlin  = p_wprod + LW'(p_winst);
         assign i_wdata = p_wdata;
         assign i_wmask = p_wmask;
@@ -412,7 +431,7 @@ module foldsim_vmem #(
 
     // ---- X: the requests, in the image's terms; the tags are read ----
     reg              x_rd;
-    reg [IW-1:0]     x_rinst;
+    reg [IT-1:0]     x_rinst;
     reg [LW-1:0]     x_rlin, x_wlin;
     reg [DW-1:0]     x_wdata;
     reg [MW-1:0]     x_wmask;
@@ -444,7 +463,7 @@ module foldsim_vmem #(
 
     // ---- Y: the newest earlier copy of the read's row ----
     reg              y_rd, y_wfull, y_zero;
-    reg [IW-1:0]     y_rinst;
+    reg [IT-1:0]     y_rinst;
     reg [LW-1:0]     y_rlin, y_wlin;
     reg [DW-1:0]     y_wdata;
     reg [MW-1:0]     y_wmask;
@@ -516,7 +535,7 @@ module foldsim_vmem #(
     reg [1:0]        z_src;
     reg [QUEUE-1:0]  z_hit;
     reg [QW-1:0]     z_zslot;
-    reg [IW-1:0]     z_rinst;
+    reg [IT-1:0]     z_rinst;
     reg [63:0]       z_raddr;
     reg [LW-1:0]     z_alin;
     reg [DW-1:0]     z_wdata;
@@ -597,7 +616,7 @@ module foldsim_vmem #(
     reg [PW-1:0]     r_pinid;
     reg [1:0]        r_src;
     reg [QW-1:0]     r_slot, r_ubslot;
-    reg [IW-1:0]     r_inst;
+    reg [IT-1:0]     r_inst;
     reg [63:0]       r_addr;
     reg [DW-1:0]     r_pdata;
 
@@ -622,7 +641,7 @@ module foldsim_vmem #(
     wire b_pop = m_bvalid;
 
     reg [63:0]       rq_addr  [QUEUE];
-    reg [IW-1:0]     rq_inst  [QUEUE];
+    reg [IT-1:0]     rq_inst  [QUEUE];
     reg              rq_ub    [QUEUE];
     reg [QW-1:0]     rq_ubslot [QUEUE];
     reg [QW-1:0]     rq_dslot [QUEUE];
@@ -643,7 +662,7 @@ module foldsim_vmem #(
     wire          rq_issue = (rq_count != 0) & ~rq_dep[rq_head] & id_avail
                            & (~m_arvalid | m_arready) & ~reset;
 
-    reg [IW-1:0]  tbl_inst  [OUTSTANDING];
+    reg [IT-1:0]  tbl_inst  [OUTSTANDING];
     reg           tbl_ub    [OUTSTANDING];
     reg [QW-1:0]  tbl_ubslot [OUTSTANDING];
     reg           tbl_pin   [OUTSTANDING];
@@ -1158,13 +1177,13 @@ module foldsim_vmem #(
 
 `ifdef SIMULATION
     // The simulator's guarantees, and the protocol memory must keep.
-    reg sim_pending [1 << IW];
+    reg sim_pending [1 << IT];
     always @(posedge clk) begin
         if (reset) begin
-            for (integer i = 0; i < (1 << IW); ++i)
+            for (integer i = 0; i < (1 << IT); ++i)
                 sim_pending[i] <= 1'b0;
         end else begin
-            if ((rd_valid && 32'(rd_inst) >= INSTANCES) || (wr_valid && 32'(wr_inst) >= INSTANCES))
+            if ((rd_valid && 32'(rd_inst[IW-1:0]) >= INSTANCES) || (wr_valid && 32'(wr_inst[IW-1:0]) >= INSTANCES))
                 $error("foldsim_vmem: an instance index past INSTANCES");
             if ((FW+1)'(rd_valid) + (FW+1)'(wr_valid) > (FW+1)'(room))
                 $error("foldsim_vmem: a request without room (%0d)", room);

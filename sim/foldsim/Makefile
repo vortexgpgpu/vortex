@@ -39,6 +39,7 @@ TOP := foldsim_afu
 RTL_SRCS := $(SRC_DIR)/xilinx_fp_models.sv $(GEN_SV) $(FOLDSIM_RTL_DIR)/foldsim_token.sv \
             $(FOLDSIM_RTL_DIR)/foldsim_mem_bmap.sv $(FOLDSIM_RTL_DIR)/foldsim_mem_bank.sv \
             $(FOLDSIM_RTL_DIR)/foldsim_mem.sv $(FOLDSIM_RTL_DIR)/foldsim_vmem.sv $(FOLDSIM_RTL_DIR)/foldsim_vmem_share.sv \
+            $(FOLDSIM_RTL_DIR)/foldsim_vmem_group.sv \
             $(FOLDSIM_RTL_DIR)/foldsim_ctrl.sv \
             $(FOLDSIM_RTL_DIR)/foldsim_afu.sv
 SRCS := $(SRC_DIR)/foldsim_emul.cpp $(DPI_DIR)/dpi_float.cpp $(DPI_DIR)/dpi_util.cpp \
@@ -64,7 +65,7 @@ $(GEN_SV): force
 $(DESTDIR)/$(PROJECT): $(GEN_SV) $(SRCS) $(SRC_DIR)/xilinx_fp_models.sv $(wildcard $(FOLDSIM_RTL_DIR)/*) $(CONFIG_FILE)
 	$(VERILATOR_PATH)/bin/verilator --build --exe $(VL_FLAGS) --cc $(RTL_SRCS) --top-module $(TOP) \
 		$(SRCS) -CFLAGS '$(CXXFLAGS) -DFOLDSIM_MEM_PORTS='$$(sed -n 's/^`define FOLDSIM_MEM_PORTS //p' $(KERNEL_VH)) \
-		-CFLAGS -DFOLDSIM_VMEM_COUNT=$$(sed -n 's/^`define FOLDSIM_VMEM_COUNT //p' $(SIM_VH) | grep . || echo 0) \
+		-CFLAGS -DFOLDSIM_VMEM_COUNT=$$(sed -n -e 's/^`define FOLDSIM_VMEM_GROUPS //p' -e 's/^`define FOLDSIM_VMEM_COUNT //p' $(SIM_VH) | sort -n | head -1 | grep . || echo 0) \
 		$$(sed -n -e 's/^`define FOLDSIM_VMEM_MASTERS \(.*\)/-CFLAGS -DFOLDSIM_VMEM_MASTERS=\1/p' \
 		          -e 's/^`define FOLDSIM_VMEM_ON_PORTS.*/-CFLAGS -DFOLDSIM_VMEM_MASTERS=0/p' $(KERNEL_VH)) \
 		-LDFLAGS '$(LDFLAGS)' --Mdir $@.obj_dir -o $@
