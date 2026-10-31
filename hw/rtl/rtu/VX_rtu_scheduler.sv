@@ -322,14 +322,22 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     reg [CTX_TAG_W-1:0]      sel_q;
     reg                      fresh_q;
     reg                      rewalk_q;
-    // candidate key order, precomputed at ALIGN off the store row: the key of
-    // the record under test ({instance, record offset}) against the floor and
-    // the staged candidate, so EXEC only adds the t compares
-    reg                      key_gt_floor_q;
-    reg                      key_lt_yld_q;
+    // EXEC's compares, precomputed at ALIGN off the sources its operands are
+    // captured from. Only states a fresh or re-walk pass never enters read
+    // them, so word_x is word_q there. *_before_q leaves out yld_q, which
+    // EXEC reads live.
+    reg                      t0_lt_best_q;   // procedural t below the committed hit
+    reg                      t0_above_q;     // ... above the resume floor
+    reg                      t0_before_q;    // ... ahead of the staged candidate
+    reg                      tri_above_q;
+    reg                      tri_before_q;
+    reg                      tri_occl_q;     // a hit at trit occludes the staged candidate
+    reg                      tri_more_q;     // a further triangle in the loop
+    reg                      inst_last_q;    // the last instance of the leaf
+    reg [31:0]               inst_next_off_q; // the next instance's record offset
     ctx_state_t              word_q;
     lane_ray_t               ray_q;
-    reg [BUF_BITS-1:0]       fbuf_q;
+    reg [BUF_BITS-1:0]       f_aligned_q;   // fetched lines, byte-aligned to the structure
     reg [STK_ENTW-1:0]       stacktop_q;
     reg [PATHW-1:0]          pathv_q;   // rank path entry below the current node
     reg [ADDRW-1:0]          structaddr_q;
@@ -526,6 +534,24 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     reg [COLL_SIZE-1:0]                     coll_prochit;
 
     wire [31:0] cand_ki_al = cs_word.in_blas ? cs_word.inst_id : 32'd0;
+    wire        key_gt_floor_al = {cand_ki_al, cs_word.cur_off} > {cs_word.floor_ki, cs_word.floor_ko};
+    wire        key_lt_yld_al   = {cand_ki_al, cs_word.cur_off} < {cs_word.yld_ki, cs_word.yld_ko};
+    wire [31:0] coll_t0_al      = coll_ordt[cs_word.coll_id][0];
+    wire [31:0] trit_al         = trires_rdata[95:64];
+    wire [31:0] inst_next_al    = cs_word.inst_idx + 32'd1;
+    function automatic logic above_floor_al(input logic [31:0] t);
+        above_floor_al = !cs_word.has_floor
+                      || (t > cs_word.floor_t)
+                      || ((t == cs_word.floor_t) && key_gt_floor_al);
+    endfunction
+    function automatic logic before_yld_al(input logic [31:0] t);
+        before_yld_al = (t < cs_word.yld_t)
+                     || ((t == cs_word.yld_t) && key_lt_yld_al);
+    endfunction
+    // the structure's byte offset in its line: the low bits of structaddr_q,
+    // which only the low bits of its two addends reach
+    wire [RTU_LINE_SEL_BITS-1:0] f_off_al = slot_scene[s1_slot][RTU_LINE_SEL_BITS-1:0]
+        + ((s1_fresh || s1_rewalk) ? RTU_LINE_SEL_BITS'(0) : cs_word.cur_off[RTU_LINE_SEL_BITS-1:0]);
 
     // ═══════════════════════ stage advance ════════════════════════════
     always_ff @(posedge clk) begin
@@ -547,11 +573,18 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 sel_q        <= s1_sel;
                 fresh_q      <= s1_fresh;
                 rewalk_q     <= s1_rewalk;
-                key_gt_floor_q <= {cand_ki_al, cs_word.cur_off} > {cs_word.floor_ki, cs_word.floor_ko};
-                key_lt_yld_q   <= {cand_ki_al, cs_word.cur_off} < {cs_word.yld_ki, cs_word.yld_ko};
+                t0_lt_best_q <= (coll_t0_al < cs_word.best_t);
+                t0_above_q   <= above_floor_al(coll_t0_al);
+                t0_before_q  <= before_yld_al(coll_t0_al);
+                tri_above_q  <= above_floor_al(trit_al);
+                tri_before_q <= before_yld_al(trit_al);
+                tri_occl_q   <= (cs_word.yld_t >= trit_al);
+                tri_more_q   <= ((cs_word.tri_i + 32'd1) < cs_word.tri_n);
+                inst_last_q  <= (inst_next_al == cs_word.inst_cnt);
+                inst_next_off_q <= cs_word.inst_base + (inst_next_al * 32'(RTU_INST_STRIDE));
                 word_q       <= cs_word;
                 ray_q        <= lane_ray_t'(ray_rdata);
-                fbuf_q       <= fbuf;
+                f_aligned_q  <= fbuf >> {f_off_al, 3'b000};
                 stacktop_q   <= stk_rdata;
                 pathv_q      <= path_rdata;
                 // a fresh context's store row is stale and a re-walk restarts:
@@ -572,9 +605,8 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     end
 
     // ═══════════════════════ EXEC decode ══════════════════════════════
-    wire [RTU_LINE_SEL_BITS-1:0] f_off   = structaddr_q[RTU_LINE_SEL_BITS-1:0];
-    wire [RTU_LINE_SEL_BITS+2:0] f_shift = {f_off, 3'b000};
-    wire [BUF_BITS-1:0] f_aligned = fbuf_q >> f_shift;
+    wire [RTU_LINE_SEL_BITS-1:0] f_off = structaddr_q[RTU_LINE_SEL_BITS-1:0];
+    wire [BUF_BITS-1:0] f_aligned = f_aligned_q;
 
     wire [31:0] f_off32 = 32'(f_off);
     wire [LB-1:0] tri_rec_lines =
@@ -1275,16 +1307,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     // Candidate order: ascending (t, key), key = {instance id, record offset}.
     // A candidate is staged only above the floor and ahead of the staged one.
     wire [31:0] cand_ki = word_q.in_blas ? word_q.inst_id : 32'd0;
-    function automatic logic above_floor(input logic [31:0] t);
-        above_floor = !word_q.has_floor
-                   || (t > word_q.floor_t)
-                   || ((t == word_q.floor_t) && key_gt_floor_q);
-    endfunction
-    function automatic logic before_yld(input logic [31:0] t);
-        before_yld = !yld_q[sel_q]
-                  || (t < word_q.yld_t)
-                  || ((t == word_q.yld_t) && key_lt_yld_q);
-    endfunction
+    wire yld_sel = yld_q[sel_q];
 
     // EXEC outcome (combinational)
     ctx_state_t word_n;
@@ -1589,9 +1612,9 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         CS_PROC_WAIT: begin
             // woken by the collector: the raw AABB result landed
             if (coll_hit_q
-             && (coll_t0_q < word_x.best_t)
-             && above_floor(coll_t0_q)
-             && before_yld(coll_t0_q)) begin
+             && t0_lt_best_q
+             && t0_above_q
+             && (!yld_sel || t0_before_q)) begin
                 cf_din_r.kind = CK_YLDP;
                 cf_din_r.t    = coll_t0_q;
                 cf_din_r.prim = word_x.prim_base;
@@ -1678,13 +1701,13 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                     exec_hit_set  = 1'b1;
                     word_n.best_t  = trit_q;
                     // a closer opaque hit occludes a farther candidate
-                    if (yld_q[sel_q] && (word_x.yld_t >= trit_q)) begin
+                    if (yld_sel && tri_occl_q) begin
                         exec_yld_clr = 1'b1;
                     end
                     if (term_first) begin
                         word_n.cstate = CS_DONE;
                         exec_done     = 1'b1;
-                    end else if ((word_x.tri_i + 32'd1) < word_x.tri_n) begin
+                    end else if (tri_more_q) begin
                         word_n.tri_i   = word_x.tri_i + 32'd1;
                         word_n.cur_off = word_x.cur_off + 32'(RTU_TRI_STRIDE);
                         word_n.cstate  = CS_LTRI_REQ0;
@@ -1695,8 +1718,8 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                     end
                 end
             end else if (tri_pass
-                      && above_floor(trit_q)
-                      && before_yld(trit_q)) begin
+                      && tri_above_q
+                      && (!yld_sel || tri_before_q)) begin
                 cf_din_r.kind = CK_YLDA;
                 cf_din_r.t    = trit_q;
                 cf_din_r.u    = triu_q;
@@ -1718,7 +1741,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                     word_n.yld_t  = trit_q;
                     word_n.yld_ki = cand_ki;
                     word_n.yld_ko = word_x.cur_off;
-                    if ((word_x.tri_i + 32'd1) < word_x.tri_n) begin
+                    if (tri_more_q) begin
                         word_n.tri_i   = word_x.tri_i + 32'd1;
                         word_n.cur_off = word_x.cur_off + 32'(RTU_TRI_STRIDE);
                         word_n.cstate  = CS_LTRI_REQ0;
@@ -1728,7 +1751,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                     wake_self = 1'b1;
                 end
             end else begin
-                if ((word_x.tri_i + 32'd1) < word_x.tri_n) begin
+                if (tri_more_q) begin
                     word_n.tri_i   = word_x.tri_i + 32'd1;
                     word_n.cur_off = word_x.cur_off + 32'(RTU_TRI_STRIDE);
                     word_n.cstate  = CS_LTRI_REQ0;
@@ -1867,7 +1890,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             // path ends at the instance it resumed.
             word_n.in_blas = 1'b0;
             word_n.follow  = 1'b0;
-            if ((word_x.inst_idx + 32'd1) == word_x.inst_cnt) begin
+            if (inst_last_q) begin
                 if (FLAT) begin
                     word_n.cstate = CS_DONE;
                     exec_done     = 1'b1;
@@ -1877,8 +1900,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 end
             end else begin
                 word_n.inst_idx = word_x.inst_idx + 32'd1;
-                word_n.cur_off  = word_x.inst_base
-                                + ((word_x.inst_idx + 32'd1) * 32'(RTU_INST_STRIDE));
+                word_n.cur_off  = inst_next_off_q;
                 word_n.cstate   = CS_INST_REQ;
                 wake_self       = 1'b1;
             end
