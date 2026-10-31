@@ -125,7 +125,9 @@ module foldsim_vmem #(
     // Tag bits above the instance index in rd_inst, wr_inst and rsp_inst
     // (foldsim_vmem_group's member): carried to the response, never part of
     // the address. Requests of different tags may share lines, so read-first
-    // pairs pin theirs wherever lines are not one per row.
+    // pairs pin theirs wherever lines are not one per row; and the cache's
+    // index hashes the row's high bits in, so members' rows of one index (the
+    // same row of equal members) do not take the same line.
     parameter TAGW           = 0
 ) (
     input  wire                        clk,
@@ -212,6 +214,10 @@ module foldsim_vmem #(
     // A move's flush starts once no request has come for this many cycles:
     // past the simulator's lead (L = 3) after free dropped to 0.
     localparam QUIET  = 15;
+    // A line's index: the row's low bits, with (TAGW > 0) every CI bits above
+    // them XORed in; the tag keeps the bits above, so the row is
+    // {tag, index ^ fold(tag)}.
+    localparam HASH   = (TAGW > 0) && (CACHE != 0) && (LW > CI);
 
     // Where a local answer's row comes from.
     localparam SRC_WB = 2'd0;  // the write buffer
@@ -252,6 +258,15 @@ module foldsim_vmem #(
         for (integer i = OUTSTANDING - 1; i >= 0; --i)
             if (!v[i])
                 first_zero = OW'(i);
+    endfunction
+
+    function automatic [CI-1:0] fold(input [LW-1:0] hi);
+        fold = '0;
+        for (integer c = 0; c < LW; c += CI)
+            fold = fold ^ CI'(hi >> c);
+    endfunction
+    function automatic [CI-1:0] cidx(input [LW-1:0] lin);
+        cidx = (HASH != 0) ? (lin[CI-1:0] ^ fold(lin >> CI)) : lin[CI-1:0];
     endfunction
 
     function automatic [BYTES-1:0] byte_enables(input [MW-1:0] mask);
@@ -508,8 +523,8 @@ module foldsim_vmem #(
     wire evict    = (w_alloc | y_sw) & c_victim;
     // A fill takes a line that holds no dirty row (no write-back, no pin).
     wire f_alloc  = (CACHE != 0) & y_fl & ~c_victim;
-    wire [CI-1:0] y_widx = y_sw ? y_swidx : y_wlin[CI-1:0];
-    wire [LW-1:0] ev_lin = LW'({c_vtag, y_widx});
+    wire [CI-1:0] y_widx = y_sw ? y_swidx : cidx(y_wlin);
+    wire [LW-1:0] ev_lin = (HASH != 0) ? LW'({c_vtag, y_widx ^ fold(LW'(c_vtag))}) : LW'({c_vtag, y_widx});
     // The write is done with the cache: its room is free.
     wire y_wdone  = y_wr & ~w_around & ~evict;
 
@@ -909,7 +924,7 @@ module foldsim_vmem #(
         reg [PINS-1:0] pin_v;
         reg [CI-1:0]   pin_idx [PINS];
         reg            pinned_q;
-        wire [CI-1:0]  x_idx = x_wlin[CI-1:0];
+        wire [CI-1:0]  x_idx = cidx(x_wlin);
         reg  [PINS-1:0] pm;
         always @(*) begin
             for (integer i = 0; i < PINS; ++i)
@@ -917,9 +932,9 @@ module foldsim_vmem #(
         end
         always @(posedge clk) begin
             // A pair at Y may pin X's line this cycle: taken as pinned.
-            pinned_q <= (|pm) | (rf_pair & y_wfull & (y_wlin[CI-1:0] == x_idx));
+            pinned_q <= (|pm) | (rf_pair & y_wfull & (cidx(y_wlin) == x_idx));
             if (y_pin)
-                pin_idx[pin_next] <= y_wlin[CI-1:0];
+                pin_idx[pin_next] <= cidx(y_wlin);
             begin : v_
                 reg [PINS-1:0] v;
                 v = pin_v;
@@ -978,13 +993,14 @@ module foldsim_vmem #(
             end
         end
 `endif
-        wire [CI-1:0] y_ridx = y_rlin[CI-1:0];
-        wire [CI-1:0] x_widx = x_sw ? x_swidx : x_wlin[CI-1:0];
+        wire [CI-1:0] y_ridx = cidx(y_rlin);
+        wire [CI-1:0] x_ridx = cidx(x_rlin);
+        wire [CI-1:0] x_widx = x_sw ? x_swidx : cidx(x_wlin);
         wire          tu_we  = c_whit | w_alloc | f_alloc | y_sw;
         wire [TW-1:0] tu_new = y_sw ? '0 : {1'b1, y_wr, CT'(y_wlin >> CI)};
 
         always @(posedge clk) begin
-            tr_q <= tag_r[x_rlin[CI-1:0]];
+            tr_q <= tag_r[x_ridx];
             tw_q <= tag_w[x_widx];
             if (tu_we) begin
                 tag_r[y_widx] <= {tu_new[TW-1], tu_new[CT-1:0]};
@@ -992,7 +1008,7 @@ module foldsim_vmem #(
             end
             tu_v   <= tu_we;
             tu_ent <= tu_new;
-            selr_q <= (y_wr | y_sw | y_fl) & (y_widx == x_rlin[CI-1:0]);
+            selr_q <= (y_wr | y_sw | y_fl) & (y_widx == x_ridx);
             selw_q <= (y_wr | y_sw | y_fl) & (y_widx == x_widx);
             bhr_q  <= ~y_sw & (CT'(y_wlin >> CI) == CT'(x_rlin >> CI));
             bhw_q  <= ~y_sw & (CT'(y_wlin >> CI) == CT'(x_wlin >> CI));
