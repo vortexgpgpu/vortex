@@ -594,11 +594,20 @@ def _canonical_define(tok: str, enums: Dict[str, EnumSpec]) -> Optional[str]:
 
 def merge_configs(prof: Profile, cflags: str, enums: Dict[str, EnumSpec]) -> str:
   explicit = shlex.split(cflags) if cflags else []
-  given = {_canonical_define(t, enums) for t in explicit}
+  knobs = [_canonical_define(t, enums) for t in explicit]
+  given = set(knobs)
   given.discard(None)
   merged = [t for t in profile_defines(prof) if _canonical_define(t, enums) not in given]
-  # The caller's flags pass through verbatim, quoting included.
-  return " ".join(merged + ([cflags.strip()] if cflags.strip() else []))
+  # A later flag for a knob replaces an earlier one, as on a compiler command
+  # line: a Makefile appends its own flags after an already merged profile.
+  last = {k: i for i, k in enumerate(knobs) if k is not None}
+  kept = [t for i, (t, k) in enumerate(zip(explicit, knobs)) if k is None or last[k] == i]
+  if len(kept) == len(explicit):
+    # Nothing replaced: the caller's flags pass through verbatim, quoting included.
+    caller = [cflags.strip()] if cflags.strip() else []
+  else:
+    caller = [shlex.join(kept)]
+  return " ".join(merged + caller)
 
 
 # -----------------------------
