@@ -34,6 +34,7 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <algorithm>
 #include <chrono>
 #include <cstring>
 #include <map>
@@ -447,8 +448,73 @@ public:
       return -1;
     if (mem_error(s))
       return -1;
+    if (this->settle() != 0)
+      return -1;
     open_ = true;
     return 0;
+  }
+
+  // After a reset Vortex's caches invalidate their lines, a set per cycle,
+  // and hold every request until they have. The host's next command comes as
+  // many target cycles later as the simulator runs in the host's time: fewer
+  // the slower it simulates (bubbles, a large II, state off chip), so a
+  // kernel started inside the invalidation would wait for it and its cycles
+  // would depend on the host. The target first runs past it:
+  // VORTEX_FOLDSIM_SETTLE=<target cycles>, by default twice the most sets a
+  // cache of this machine has in a bank plus the reset's spread.
+  static uint64_t cache_sets(uint64_t size, uint64_t line, uint64_t ways, uint64_t banks) {
+    const uint64_t d = line * ways * banks;
+    return d ? size / d : 0;
+  }
+  static uint64_t settle_default() {
+    uint64_t sets = 0;
+#if defined(VX_CFG_ICACHE_SIZE) && defined(VX_CFG_ICACHE_NUM_WAYS) && defined(VX_CFG_ICACHE_NUM_BANKS) && defined(VX_CFG_L1_LINE_SIZE)
+    sets = std::max(sets, cache_sets(VX_CFG_ICACHE_SIZE, VX_CFG_L1_LINE_SIZE, VX_CFG_ICACHE_NUM_WAYS,
+                                     VX_CFG_ICACHE_NUM_BANKS));
+#endif
+#if defined(VX_CFG_DCACHE_SIZE) && defined(VX_CFG_DCACHE_NUM_WAYS) && defined(VX_CFG_DCACHE_NUM_BANKS) && defined(VX_CFG_DCACHE_LINE_SIZE)
+    sets = std::max(sets, cache_sets(VX_CFG_DCACHE_SIZE, VX_CFG_DCACHE_LINE_SIZE, VX_CFG_DCACHE_NUM_WAYS,
+                                     VX_CFG_DCACHE_NUM_BANKS));
+#endif
+#if defined(VX_CFG_L2_ENABLE) && defined(VX_CFG_L2_SIZE) && defined(VX_CFG_L2_NUM_WAYS) && defined(VX_CFG_L2_NUM_BANKS) && defined(VX_CFG_L2_LINE_SIZE)
+    sets = std::max(sets, cache_sets(VX_CFG_L2_SIZE, VX_CFG_L2_LINE_SIZE, VX_CFG_L2_NUM_WAYS,
+                                     VX_CFG_L2_NUM_BANKS));
+#endif
+#if defined(VX_CFG_L3_ENABLE) && defined(VX_CFG_L3_SIZE) && defined(VX_CFG_L3_NUM_WAYS) && defined(VX_CFG_L3_NUM_BANKS) && defined(VX_CFG_L3_LINE_SIZE)
+    sets = std::max(sets, cache_sets(VX_CFG_L3_SIZE, VX_CFG_L3_LINE_SIZE, VX_CFG_L3_NUM_WAYS,
+                                     VX_CFG_L3_NUM_BANKS));
+#endif
+    return sets ? 2 * sets + 256 : 4096;
+  }
+  int settle() {
+    uint64_t cycles = settle_default();
+    if (const char* e = getenv("VORTEX_FOLDSIM_SETTLE")) {
+      char* end = nullptr;
+      cycles = strtoull(e, &end, 0);
+      if (e[0] == '\0' || *end != '\0') {
+        fprintf(stderr, "[VXDRV] VORTEX_FOLDSIM_SETTLE must be a count of target cycles (got '%s')\n", e);
+        return -1;
+      }
+    }
+    const uint64_t from = read64(FOLDSIM_REG_TCYCLES_LO);
+    uint64_t last = from;
+    auto last_progress = std::chrono::steady_clock::now();
+    for (;;) {
+      if (failed_)
+        return -1;
+      const uint64_t now = read64(FOLDSIM_REG_TCYCLES_LO);
+      if (now - from >= cycles) {
+        poll_backoff(false);
+        return 0;
+      }
+      if (now != last) {
+        last = now;
+        last_progress = std::chrono::steady_clock::now();
+      } else if (elapsed_s(last_progress) > control_timeout_s_) {
+        return fail("the target stopped advancing while it settled after its reset");
+      }
+      poll_backoff(true);
+    }
   }
 
   // ----- CP register channel -----
