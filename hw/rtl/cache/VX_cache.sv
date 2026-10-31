@@ -360,28 +360,34 @@ module VX_cache import VX_gpu_pkg::*; #(
         for (genvar i = 0; i < NUM_REQS; ++i) begin : g_plain_read
             assign plain_read[i] = core_req_valid[i] && ~core_req_rw[i] && ((core_req_attr[i] & SPECIAL_ATTRS) == '0);
         end
-        // same_word[i][j]: port i reads what a lower port j of its group reads
-        wire [NUM_REQS-1:0][NUM_REQS-1:0] same_word;
+        // same_word[i][k]: port i reads what a lower port k of its group (port
+        // GROUP_BASE + k) reads; the ports of other groups never merge, so
+        // only a group's ports are compared (NUM_REQS x MERGE_GROUP, not
+        // NUM_REQS x NUM_REQS, blocks).
+        wire [NUM_REQS-1:0][MERGE_GROUP-1:0] same_word;
         for (genvar i = 0; i < NUM_REQS; ++i) begin : g_same_i
-            for (genvar j = 0; j < NUM_REQS; ++j) begin : g_same_j
-                if (j < i && (j / MERGE_GROUP) == (i / MERGE_GROUP)) begin : g_cmp
-                    assign same_word[i][j] = plain_read[i] && plain_read[j]
+            localparam GROUP_BASE = (i / MERGE_GROUP) * MERGE_GROUP;
+            for (genvar k = 0; k < MERGE_GROUP; ++k) begin : g_same_k
+                localparam j = GROUP_BASE + k;
+                if (j < i) begin : g_cmp
+                    assign same_word[i][k] = plain_read[i] && plain_read[j]
                                           && (core_req_addr[i] == core_req_addr[j])
                                           && (core_req_tag[i] == core_req_tag[j]);
                 end else begin : g_none
-                    assign same_word[i][j] = 1'b0;
+                    assign same_word[i][k] = 1'b0;
                 end
             end
         end
         for (genvar i = 0; i < NUM_REQS; ++i) begin : g_merge
             localparam GROUP_BASE = (i / MERGE_GROUP) * MERGE_GROUP;
             wire [MERGE_GROUP-1:0] merged_mask;
-            wire [NUM_REQS-1:0] leader_fire;
+            wire [MERGE_GROUP-1:0] leader_fire;
             for (genvar k = 0; k < MERGE_GROUP; ++k) begin : g_merged_mask
-                assign merged_mask[k] = same_word[GROUP_BASE + k][i];
+                assign merged_mask[k] = same_word[GROUP_BASE + k][i - GROUP_BASE];
             end
-            for (genvar j = 0; j < NUM_REQS; ++j) begin : g_leader_fire
-                assign leader_fire[j] = same_word[i][j] && ~core_req_follower[j] && core_req_xbar_ready[j];
+            for (genvar k = 0; k < MERGE_GROUP; ++k) begin : g_leader_fire
+                assign leader_fire[k] = same_word[i][k] && ~core_req_follower[GROUP_BASE + k]
+                                     && core_req_xbar_ready[GROUP_BASE + k];
             end
             assign core_req_follower[i] = (| same_word[i]);
             assign core_req_bank_tag[i] = {core_req_tag[i], merged_mask};
