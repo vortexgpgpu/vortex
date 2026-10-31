@@ -42,11 +42,18 @@ module VX_stream_arb #(
 );
     if (NUM_INPUTS > NUM_OUTPUTS) begin : g_input_select
 
+        // This direction's ratio of inputs to outputs: NUM_REQS here. The
+        // loops of a branch use their own direction's ratio, as tools that
+        // elaborate a branch not taken (slang builds every iteration of its
+        // loops) would otherwise build NUM_REQS x NUM_INPUTS blocks there for
+        // the other direction (1M for a 1025-input arbiter).
+        localparam REQS = `CDIV(NUM_INPUTS, NUM_OUTPUTS);
+
         // #Inputs > #Outputs
 
-        if (MAX_FANOUT != 0 && (NUM_REQS > (MAX_FANOUT + MAX_FANOUT /2))) begin : g_fanout
+        if (MAX_FANOUT != 0 && (REQS > (MAX_FANOUT + MAX_FANOUT /2))) begin : g_fanout
 
-            localparam NUM_SLICES    = `CDIV(NUM_REQS, MAX_FANOUT);
+            localparam NUM_SLICES    = `CDIV(REQS, MAX_FANOUT);
             localparam LOG_NUM_REQS2 = `CLOG2(MAX_FANOUT);
             localparam LOG_NUM_REQS3 = `CLOG2(NUM_SLICES);
             localparam DATAW2 = DATAW + LOG_NUM_REQS2;
@@ -125,13 +132,13 @@ module VX_stream_arb #(
 
         end else begin : g_arbiter
 
-            wire [NUM_REQS-1:0]     arb_requests;
+            wire [REQS-1:0]         arb_requests;
             wire                    arb_valid;
             wire [NUM_REQS_W-1:0]   arb_index;
-            wire [NUM_REQS-1:0]     arb_onehot;
+            wire [REQS-1:0]         arb_onehot;
             wire                    arb_ready;
 
-            for (genvar r = 0; r < NUM_REQS; ++r) begin : g_requests
+            for (genvar r = 0; r < REQS; ++r) begin : g_requests
                 wire [NUM_OUTPUTS-1:0] requests;
                 for (genvar o = 0; o < NUM_OUTPUTS; ++o) begin : g_o
                     localparam i = r * NUM_OUTPUTS + o;
@@ -145,7 +152,7 @@ module VX_stream_arb #(
             end
 
             VX_generic_arbiter #(
-                .NUM_REQS (NUM_REQS),
+                .NUM_REQS (REQS),
                 .TYPE     (ARBITER),
                 .STICKY   (STICKY)
             ) arbiter (
@@ -163,9 +170,9 @@ module VX_stream_arb #(
             wire [NUM_OUTPUTS-1:0] ready_out_w;
 
             for (genvar o = 0; o < NUM_OUTPUTS; ++o) begin : g_data_out_w
-                wire [NUM_REQS-1:0] valid_in_w;
-                wire [NUM_REQS-1:0][DATAW-1:0] data_in_w;
-                for (genvar r = 0; r < NUM_REQS; ++r) begin : g_r
+                wire [REQS-1:0] valid_in_w;
+                wire [REQS-1:0][DATAW-1:0] data_in_w;
+                for (genvar r = 0; r < REQS; ++r) begin : g_r
                     localparam i = r * NUM_OUTPUTS + o;
                     if (i < NUM_INPUTS) begin : g_valid
                         assign valid_in_w[r] = valid_in[i];
@@ -208,11 +215,14 @@ module VX_stream_arb #(
 
     end else if (NUM_INPUTS < NUM_OUTPUTS) begin : g_output_select
 
+        // This direction's ratio of outputs to inputs, NUM_REQS here (see g_input_select).
+        localparam REQS = `CDIV(NUM_OUTPUTS, NUM_INPUTS);
+
         // #Inputs < #Outputs
 
-        if (MAX_FANOUT != 0 && (NUM_REQS > (MAX_FANOUT + MAX_FANOUT /2))) begin : g_fanout
+        if (MAX_FANOUT != 0 && (REQS > (MAX_FANOUT + MAX_FANOUT /2))) begin : g_fanout
 
-            localparam NUM_SLICES    = `CDIV(NUM_REQS, MAX_FANOUT);
+            localparam NUM_SLICES    = `CDIV(REQS, MAX_FANOUT);
             localparam LOG_NUM_REQS2 = `CLOG2(MAX_FANOUT);
             localparam LOG_NUM_REQS3 = `CLOG2(NUM_SLICES);
             localparam SLICE_STRIDE  = MAX_FANOUT * NUM_INPUTS;
@@ -293,13 +303,13 @@ module VX_stream_arb #(
 
         end else begin : g_arbiter
 
-            wire [NUM_REQS-1:0]     arb_requests;
+            wire [REQS-1:0]         arb_requests;
             wire                    arb_valid;
             wire [NUM_REQS_W-1:0]   arb_index;
-            wire [NUM_REQS-1:0]     arb_onehot;
+            wire [REQS-1:0]         arb_onehot;
             wire                    arb_ready;
 
-            for (genvar r = 0; r < NUM_REQS; ++r) begin : g_requests
+            for (genvar r = 0; r < REQS; ++r) begin : g_requests
                 wire [NUM_INPUTS-1:0] requests;
                 for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_i
                     localparam o = r * NUM_INPUTS + i;
@@ -313,7 +323,7 @@ module VX_stream_arb #(
             end
 
             VX_generic_arbiter #(
-                .NUM_REQS (NUM_REQS),
+                .NUM_REQS (REQS),
                 .TYPE     (ARBITER),
                 .STICKY   (STICKY)
             ) arbiter (
@@ -338,8 +348,8 @@ module VX_stream_arb #(
             end
 
             for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_ready_in
-                wire [NUM_REQS-1:0] ready_out_s;
-                for (genvar r = 0; r < NUM_REQS; ++r) begin : g_r
+                wire [REQS-1:0] ready_out_s;
+                for (genvar r = 0; r < REQS; ++r) begin : g_r
                     localparam o = r * NUM_INPUTS + i;
                     if (o < NUM_OUTPUTS) begin : g_ready
                         assign ready_out_s[r] = ready_out_w[o];
