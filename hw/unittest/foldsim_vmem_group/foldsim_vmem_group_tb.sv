@@ -25,15 +25,26 @@
 `elsif VG_CFG_4
 `define VG_P N = 4, IW = 1, INSTANCES = 1, AW = 8, DW = 512, MW = 64, RDWF = 1, CACHE = 64
 `define VG_M MAW [N] = '{6, 6, 6, 6}, MDW [N] = '{512, 512, 512, 512}, MMW [N] = '{64, 64, 64, 64}, MROW [N] = '{0, 64, 128, 192}
+`elsif VG_CFG_5
+`define VG_P N = 3, IW = 4, INSTANCES = 16, AW = 7, DW = 128, MW = 16, RDWF = 0, CACHE = 64
+`define VG_M MAW [N] = '{6, 5, 5}, MDW [N] = '{128, 96, 128}, MMW [N] = '{16, 12, 16}, MROW [N] = '{0, 64, 96}
+`define VG_X AXI_ID_W = 1, OUTSTANDING = 32, ROW_BYTES = 16, KZ_SHIFT = 2
+`elsif VG_CFG_6
+`define VG_P N = 3, IW = 3, INSTANCES = 8, AW = 8, DW = 64, MW = 8, RDWF = 1, CACHE = 0
+`define VG_M MAW [N] = '{7, 6, 6}, MDW [N] = '{64, 64, 64}, MMW [N] = '{8, 8, 8}, MROW [N] = '{0, 128, 192}
+`define VG_X AXI_ID_W = 1, OUTSTANDING = 64, ROW_BYTES = 8, KZ_SHIFT = 4
 `else
 `define VG_P N = 3, IW = 3, INSTANCES = 8, AW = 7, DW = 512, MW = 64, RDWF = 1, CACHE = 0
 `define VG_M MAW [N] = '{6, 5, 4}, MDW [N] = '{512, 64, 26}, MMW [N] = '{64, 8, 1}, MROW [N] = '{0, 64, 96}
+`endif
+`ifndef VG_X
+`define VG_X AXI_ID_W = 4, OUTSTANDING = 16, ROW_BYTES = 64, KZ_SHIFT = 0
 `endif
 
 module foldsim_vmem_group_tb #(
     parameter `VG_P,
     parameter int `VG_M,
-    parameter AXI_ID_W = 4,
+    parameter `VG_X,
     parameter FIFO     = 8,
     localparam GF      = $clog2(2 * FIFO + 1)
 ) (
@@ -92,6 +103,9 @@ module foldsim_vmem_group_tb #(
         .MROW           (MROW),
         .RDW_READ_FIRST (RDWF),
         .AXI_ID_W       (AXI_ID_W),
+        .OUTSTANDING    (OUTSTANDING),
+        .ROW_BYTES      (ROW_BYTES),
+        .KZ_SHIFT       (KZ_SHIFT),
         .CACHE_ROWS     (CACHE),
         .FIFO           (FIFO)
     ) group (.*);

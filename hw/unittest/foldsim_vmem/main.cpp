@@ -110,6 +110,13 @@
 #ifndef VM_KNOWN_ZERO
 #define VM_KNOWN_ZERO 1
 #endif
+#ifndef VM_KZ_SHIFT
+#define VM_KZ_SHIFT 0
+#endif
+// 0: the controller's default (DW/8 rounded up to a power of two, at least 64).
+#ifndef VM_ROW_BYTES
+#define VM_ROW_BYTES 0
+#endif
 
 namespace {
 
@@ -119,10 +126,15 @@ constexpr uint8_t kTopMask = (VM_DW % 8) ? uint8_t((1u << (VM_DW % 8)) - 1) : ui
 constexpr int kGroup = kBytes / VM_MW;
 constexpr int kBeats = (VM_DW + 511) / 512;
 constexpr int kRowLog2 = [] {
-  int l = 6;
-  while ((1 << l) < kBytes) ++l;
+  int l = VM_ROW_BYTES ? 0 : 6;
+  while ((1 << l) < (VM_ROW_BYTES ? VM_ROW_BYTES : kBytes)) ++l;
   return l;
 }();
+// Rows below 64 bytes share lines: read as the line, written with the row's
+// strobes; AR and AW then address the line.
+constexpr bool kSub = kRowLog2 < 6;
+constexpr int kRowSpan = kSub ? (1 << kRowLog2) : kBeats * 64;
+constexpr int kAddrAlign = kSub ? 6 : kRowLog2;
 constexpr uint32_t kRows = 1u << VM_AW;
 constexpr uint32_t kInstances = VM_INSTANCES;
 constexpr uint64_t kBase = 0x123400000ull;
@@ -261,7 +273,8 @@ struct Hbm {
     std::vector<Line> data;
     int beat = 0;
   };
-  std::map<int, Read> reads;  // by id
+  std::map<int, std::deque<Read>> reads;  // by id, in AR order (AXI answers an id in order)
+  size_t n_reads = 0;
   struct Aw { uint64_t addr; };
   std::deque<Aw> aw;
   struct Beat { std::array<uint8_t, 64> data; uint64_t strb; bool last; };
@@ -287,6 +300,7 @@ struct Hbm {
   std::vector<bool> whole_log;   // each write, in order: every byte of its row enabled
 
   Line& line(uint64_t a) {
+    CHECK((a & 63) == 0, "line address 0x%lx", (unsigned long)a);
     auto it = mem.find(a);
     if (it == mem.end()) {
       Line l;
@@ -296,20 +310,24 @@ struct Hbm {
     return it->second;
   }
 
-  size_t outstanding() const { return reads.size() + aw.size() + w.size() + writes.size(); }
+  // A byte of memory.
+  uint8_t& byte(uint64_t a) { return line(a & ~63ull)[a & 63]; }
+
+  size_t outstanding() const { return n_reads + aw.size() + w.size() + writes.size(); }
 
   // A transaction that cannot finish within the next two cycles.
   bool busy_ahead() const {
     for (auto& kv : reads)
-      if (kv.second.ready_at > now + 2) return true;
+      for (auto& r : kv.second)
+        if (r.ready_at > now + 2) return true;
     for (auto& wr : writes)
       if (wr.b_at > now + 2) return true;
     return false;
   }
 
   void check_addr(uint64_t a, const char* ch) {
-    CHECK((a & ((1ull << kRowLog2) - 1)) == 0, "%s address 0x%lx not row aligned", ch, (unsigned long)a);
-    CHECK(a >= g_base && a < g_base + kImageBytes, "%s address 0x%lx out of the image at 0x%lx", ch,
+    CHECK((a & ((1ull << kAddrAlign) - 1)) == 0, "%s address 0x%lx not row aligned", ch, (unsigned long)a);
+    CHECK(a >= (g_base & ~63ull) && a < g_base + kImageBytes, "%s address 0x%lx out of the image at 0x%lx", ch,
           (unsigned long)a, (unsigned long)g_base);
     CHECK((a >> 12) == ((a + uint64_t(kBeats) * 64 - 1) >> 12), "%s burst at 0x%lx crosses 4 KiB", ch,
           (unsigned long)a);
@@ -327,9 +345,10 @@ struct Hbm {
     if (r_id < 0 && chance(rvalid_p)) {
       std::vector<int> ok, started;
       for (auto& kv : reads) {
-        if (kv.second.sampled && kv.second.ready_at <= now) {
+        const Read& r = kv.second.front();
+        if (r.sampled && r.ready_at <= now) {
           ok.push_back(kv.first);
-          if (kv.second.beat > 0) started.push_back(kv.first);
+          if (r.beat > 0) started.push_back(kv.first);
         }
       }
       // A burst under way usually continues; sometimes another id's beats
@@ -341,7 +360,7 @@ struct Hbm {
     }
     dut->m_rvalid = r_id >= 0;
     if (r_id >= 0) {
-      const Read& r = reads.at(r_id);
+      const Read& r = reads.at(r_id).front();
       put_bytes(dut->m_rdata, r.data[r.beat].data(), 64);
       dut->m_rid = r_id;
       dut->m_rlast = r.beat == kBeats - 1;
@@ -384,10 +403,13 @@ struct Hbm {
     w_last = dut->m_wlast;
 
     if (r_id >= 0 && dut->m_rready) {
-      Read& r = reads.at(r_id);
+      auto& q = reads.at(r_id);
       ++n_r;
-      if (++r.beat == kBeats)
-        reads.erase(r_id);
+      if (++q.front().beat == kBeats) {
+        q.pop_front();
+        --n_reads;
+        if (q.empty()) reads.erase(r_id);
+      }
       r_id = -1;
     }
     if (bvalid) {
@@ -397,8 +419,8 @@ struct Hbm {
     if (ar_hs) {
       ++n_ar;
       const int id = dut->m_arid;
-      CHECK(id < VM_OUTSTANDING, "AR id %d beyond OUTSTANDING", id);
-      CHECK(!reads.count(id), "AR id %d reused while outstanding", id);
+      CHECK(id < (1 << VM_AXI_ID_W), "AR id %d", id);
+      CHECK(n_reads < size_t(VM_OUTSTANDING), "AR beyond OUTSTANDING reads in flight");
       check_addr(dut->m_araddr, "AR");
       Read r;
       r.addr = dut->m_araddr;
@@ -407,7 +429,8 @@ struct Hbm {
       const uint64_t lat = r.ready_at - now;
       max_lat = std::max(max_lat, lat);
       min_lat = std::min(min_lat, lat);
-      reads[id] = r;
+      reads[id].push_back(r);
+      ++n_reads;
     }
     if (aw_hs) {
       ++n_aw;
@@ -424,18 +447,40 @@ struct Hbm {
       Write wr;
       wr.addr = aw.front().addr;
       bool whole = true;
+      // A row of a shared line: its strobes in one row's place.
+      int place = -1;
       for (int k = 0; k < kBeats; ++k) {
         const Beat& b = w.front();
         CHECK(b.last == (k == kBeats - 1), "WLAST %d on beat %d of %d", int(b.last), k, kBeats);
         for (int i = 0; i < 64; ++i) {
+          const bool on = (b.strb >> i) & 1;
+          if (kSub) {
+            if (on) {
+              if (place < 0) place = i >> kRowLog2;
+              CHECK(place == (i >> kRowLog2), "strobes in two rows of a line");
+            }
+            continue;
+          }
           if (k * 64 + i >= kBytes)
-            CHECK(!((b.strb >> i) & 1), "strobe on padding byte %d", k * 64 + i);
+            CHECK(!on, "strobe on padding byte %d", k * 64 + i);
           else
-            whole &= (b.strb >> i) & 1;
+            whole &= on;
+        }
+        if (kSub) {
+          whole = place >= 0;
+          for (int j = 0; j < (1 << kRowLog2) && place >= 0; ++j) {
+            const bool on = (b.strb >> ((place << kRowLog2) + j)) & 1;
+            if (j >= kBytes)
+              CHECK(!on, "strobe on padding byte %d", j);
+            else
+              whole &= on;
+          }
         }
         wr.beats.push_back(b);
         w.pop_front();
       }
+      // A row of a shared line: the row the strobes name.
+      if (kSub && place >= 0) aw_log[whole_log.size()] = wr.addr + (uint64_t(place) << kRowLog2);
       whole_log.push_back(whole);
       aw.pop_front();
       last_apply = std::max(last_apply, now + rand_in(1, lat_hi / 2 + 1));
@@ -461,12 +506,12 @@ struct Hbm {
       }
       wr.applied = true;
     }
-    for (auto& kv : reads) {
-      Read& r = kv.second;
-      if (r.sampled || r.sample_at > now) continue;
-      for (int k = 0; k < kBeats; ++k) r.data.push_back(line(r.addr + 64 * k));
-      r.sampled = true;
-    }
+    for (auto& kv : reads)
+      for (Read& r : kv.second) {
+        if (r.sampled || r.sample_at > now) continue;
+        for (int k = 0; k < kBeats; ++k) r.data.push_back(line(r.addr + 64 * k));
+        r.sampled = true;
+      }
   }
 };
 
@@ -842,18 +887,14 @@ struct Tb {
     uint64_t rows = 0;
     for (auto& kv : ref.rows) {
       ++rows;
-      for (int k = 0; k < kBeats; ++k) {
-        const Line& l = hbm.line(kv.first + 64 * k);
-        for (int i = 0; i < 64; ++i) {
-          const int j = k * 64 + i;
-          const uint8_t want = j < kBytes ? kv.second[j] : zero_at(kv.first) ? 0 : init_byte(kv.first + j);
-          // A row's bits above DW are never read.
-          const uint8_t have = j == kBytes - 1 ? uint8_t(l[i] & kTopMask) : l[i];
-          if (have != want) {
-            CHECK(false, "HBM row 0x%lx byte %d: 0x%02x, want 0x%02x", (unsigned long)kv.first, j, l[i],
-                  want);
-            return;
-          }
+      for (int j = 0; j < kRowSpan; ++j) {
+        const uint8_t got = hbm.byte(kv.first + j);
+        const uint8_t want = j < kBytes ? kv.second[j] : zero_at(kv.first) ? 0 : init_byte(kv.first + j);
+        // A row's bits above DW are never read.
+        const uint8_t have = j == kBytes - 1 ? uint8_t(got & kTopMask) : got;
+        if (have != want) {
+          CHECK(false, "HBM row 0x%lx byte %d: 0x%02x, want 0x%02x", (unsigned long)kv.first, j, got, want);
+          return;
         }
       }
     }
@@ -1049,7 +1090,7 @@ struct Tb {
   void dma(uint32_t inst, uint32_t row) {
     const uint64_t addr = row_addr(inst, row);
     Row d = rand_row();
-    for (int i = 0; i < kBytes; ++i) hbm.line(addr + (i / 64) * 64)[i % 64] = d[i];
+    for (int i = 0; i < kBytes; ++i) hbm.byte(addr + i) = d[i];
     ref.rows[addr] = d;
   }
 
@@ -1605,6 +1646,76 @@ struct Tb {
     return base + ((uint64_t(row) * kInstances + inst) << kRowLog2);
   }
 
+  // ---- Directed: known-zero blocks (KZ_SHIFT > 0) ----
+  // A bit stands for 2^KZ_SHIFT consecutive image rows (row * INSTANCES +
+  // inst). B1: a row of an untouched block reads zeros on chip. B2: once a
+  // row of a block is written, another row of it goes to memory (the host's
+  // zeros, the answer checked against the reference). B3: a partial write of
+  // a third row there is not made whole (goes to memory partial, or merges
+  // into nothing: around the cache). B4: a row of another untouched block is
+  // still known zero.
+  int run_kzb_directed(uint64_t seed) {
+    static const Setup kZ = {"zbdirected", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 50, 50, 1.0, 0, 1, 0};
+    const int before = failures;
+    start(kZ, seed);
+    hbm.rvalid_p = 1.0;
+    auto block = [](uint32_t i, uint32_t r) { return (uint64_t(r) * kInstances + i) >> VM_KZ_SHIFT; };
+    // Rows of block `b`, other than those given.
+    auto in_block = [&](uint64_t b, std::set<std::pair<uint32_t, uint32_t>> no) {
+      for (uint32_t r = 0; r < kRows; ++r)
+        for (uint32_t i = 0; i < kInstances; ++i)
+          if (block(i, r) == b && !no.count({i, r})) return std::make_pair(i, r);
+      return std::make_pair(kInstances, kRows);
+    };
+    int steps = 0;
+    uint64_t ar;
+    const auto p0 = in_block(1, {});
+    const auto p1 = in_block(1, {p0});
+    const auto p2 = in_block(1, {p0, p1});
+    // B1
+    ar = hbm.n_ar;
+    issue(true, false, p0.first, p0.second);
+    await(p0.first, 0);
+    CHECK(quick(p0.first) && hbm.n_ar == ar, "B1: a row of an untouched block left the chip");
+    ++steps;
+    // B2
+    issue(false, true, p0.first, p0.second);
+    for (int i = 0; i < 300; ++i) cycle(false, false);
+    if (p1.first < kInstances) {
+      ar = hbm.n_ar;
+      issue(true, false, p1.first, p1.second);
+      await(p1.first, 0);
+      CHECK(hbm.n_ar == ar + 1, "B2: a row of a written block was answered as known zero");
+      ++steps;
+    }
+    // B3
+    if (p2.first < kInstances && VM_MW > 1) {
+      const size_t from = hbm.aw_log.size();
+      bool whole = true;
+      issue(false, true, p2.first, p2.second, false);
+      for (int i = 0; i < 300; ++i) cycle(false, false);
+      CHECK(aws_to(from, p2.first, p2.second, &whole) == 1 && !whole,
+            "B3: a partial write in a written block was made whole");
+      issue(true, false, p2.first, p2.second);
+      await(p2.first, 0);
+      ++steps;
+    }
+    // B4
+    const auto p3 = in_block(2, {});
+    if (p3.first < kInstances) {
+      ar = hbm.n_ar;
+      issue(true, false, p3.first, p3.second);
+      await(p3.first, 0);
+      CHECK(quick(p3.first) && hbm.n_ar == ar, "B4: a row of another untouched block left the chip");
+      ++steps;
+    }
+    finish();
+    printf("zbdirected %d steps (block of %d rows): %s\n", steps, 1 << VM_KZ_SHIFT, failures == before ? "ok" : "FAILED");
+    delete dut;
+    dut = nullptr;
+    return failures - before;
+  }
+
   int run_move_directed(uint64_t seed) {
     static const Setup kM = {"mdirected", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 50, 50, 1.0, 0, 0, 0};
     const int before = failures;
@@ -1675,7 +1786,7 @@ struct Tb {
       CHECK(move_cycles - mc > uint64_t(250), "M2: the move ended before its reads (%lu cycles)",
             (unsigned long)(move_cycles - mc));
       if (n > 2) {
-        CHECK(hbm.line(old_addr(b0, 2, rw2))[0] == ref.get(old_addr(b0, 2, rw2))[0],
+        CHECK(hbm.byte(old_addr(b0, 2, rw2)) == ref.get(old_addr(b0, 2, rw2))[0],
               "M2: the write within the lead did not reach the old region");
         ar = hbm.n_ar;
         issue(true, false, 2, rw2);
@@ -1792,7 +1903,7 @@ struct Tb {
       finish_move(false, false);
       const Row want = ref.get(old_addr(b0, 0, r));
       Row got(kBytes);
-      for (int i = 0; i < kBytes; ++i) got[i] = hbm.line(old_addr(b0, 0, r) + (i / 64) * 64)[i % 64];
+      for (int i = 0; i < kBytes; ++i) got[i] = hbm.byte(old_addr(b0, 0, r) + i);
       CHECK(clip(got) == want, "M6: the write taken in the lead did not reach the old region");
       ++steps;
     }
@@ -1812,13 +1923,14 @@ int main(int argc, char** argv) {
   const char* only = nullptr;
   for (int i = 1; i < argc; ++i)
     if (argv[i][0] != '+') only = argv[i];
-  printf("foldsim_vmem: IW %d AW %d DW %d MW %d RDW_READ_FIRST %d QUEUE %d OUTSTANDING %d INSTANCES %u "
-         "CACHE_ROWS %d KNOWN_ZERO %d\n",
-         VM_IW, VM_AW, VM_DW, VM_MW, VM_RDW_READ_FIRST, VM_QUEUE, VM_OUTSTANDING, kInstances,
-         VM_CACHE_ROWS, VM_KNOWN_ZERO);
+  printf("foldsim_vmem: IW %d AW %d DW %d MW %d RDW_READ_FIRST %d QUEUE %d AXI_ID_W %d OUTSTANDING %d INSTANCES %u "
+         "CACHE_ROWS %d KNOWN_ZERO %d KZ_SHIFT %d ROW_BYTES %d\n",
+         VM_IW, VM_AW, VM_DW, VM_MW, VM_RDW_READ_FIRST, VM_QUEUE, VM_AXI_ID_W, VM_OUTSTANDING, kInstances,
+         VM_CACHE_ROWS, VM_KNOWN_ZERO, VM_KZ_SHIFT, 1 << kRowLog2);
   Tb tb;
   if (VM_CACHE_ROWS > 0 && (!only || !std::strcmp(only, "directed"))) tb.run_directed(1);
-  if (VM_KNOWN_ZERO && (!only || !std::strcmp(only, "zdirected"))) tb.run_kz_directed(1);
+  if (VM_KNOWN_ZERO && VM_KZ_SHIFT == 0 && (!only || !std::strcmp(only, "zdirected"))) tb.run_kz_directed(1);
+  if (VM_KNOWN_ZERO && VM_KZ_SHIFT > 0 && (!only || !std::strcmp(only, "zbdirected"))) tb.run_kzb_directed(1);
   if (!only || !std::strcmp(only, "mdirected")) tb.run_move_directed(1);
   uint64_t seed = 1;
   for (const auto& s : kSetups) {

@@ -68,9 +68,12 @@ namespace {
 
 // The setups of foldsim_vmem_group_tb.sv (VG_CFG_<n>).
 struct Member { int aw, dw, mw, row0; };
+// The controller's AXI id bits, reads in flight, row bytes in memory (0: its
+// default) and known-zero block (log2 rows) close each setup.
 struct Cfg {
   int iw, instances, aw, dw, mw, rdwf, cache;
   std::vector<Member> m;
+  int axi_id_w = 4, outstanding = 16, row_bytes = 0, kz_shift = 0;
 };
 const Cfg kCfgs[] = {
   {3, 8, 7, 512, 64, 1, 0, {{6, 512, 64, 0}, {5, 64, 8, 64}, {4, 26, 1, 96}}},
@@ -78,19 +81,31 @@ const Cfg kCfgs[] = {
   {2, 3, 6, 128, 16, 1, 32, {{5, 128, 16, 0}, {4, 40, 5, 32}}},
   {4, 16, 6, 64, 1, 0, 16, {{4, 64, 1, 0}, {4, 64, 1, 16}, {3, 16, 1, 32}, {3, 8, 1, 40}}},
   {1, 1, 8, 512, 64, 1, 64, {{6, 512, 64, 0}, {6, 512, 64, 64}, {6, 512, 64, 128}, {6, 512, 64, 192}}},
+  // FireSim's tile, packed: 16-byte rows (four to a line), a 96-bit member, a
+  // 64-line cache, known-zero blocks of 4 rows, 32 reads on 2 ids.
+  {4, 16, 7, 128, 16, 0, 64, {{6, 128, 16, 0}, {5, 96, 12, 64}, {5, 128, 16, 96}}, 1, 32, 16, 2},
+  // FireSim's DRAM banks, packed: 8-byte rows (eight to a line) of 64-bit
+  // words with byte enables, no cache, known-zero blocks of 16 rows, 64 reads
+  // on 2 ids.
+  {3, 8, 8, 64, 8, 1, 0, {{7, 64, 8, 0}, {6, 64, 8, 128}, {6, 64, 8, 192}}, 1, 64, 8, 4},
 };
 const Cfg& C = kCfgs[VG_CFG];
 const int N = int(C.m.size());
 
-constexpr int kAxiIdW = 4, kOutstanding = 16, kQueue = 32, kFifo = 8, kLead = 4;
+const int kAxiIdW = C.axi_id_w, kOutstanding = C.outstanding;
+constexpr int kQueue = 32, kFifo = 8, kLead = 4;
 constexpr uint32_t kFull = 2 * (kFifo - 1);
 const int kBytes = C.dw / 8;
 const int kBeats = (C.dw + 511) / 512;
 const int kRowLog2 = [] {
-  int l = 6;
-  while ((1 << l) < kBytes) ++l;
+  int l = C.row_bytes ? 0 : 6;
+  while ((1 << l) < (C.row_bytes ? C.row_bytes : kBytes)) ++l;
   return l;
 }();
+// Rows below 64 bytes share lines (as foldsim_vmem's test).
+const bool kSub = kRowLog2 < 6;
+const int kRowSpan = kSub ? (1 << kRowLog2) : kBeats * 64;
+const int kAddrAlign = kSub ? 6 : kRowLog2;
 const uint32_t kInstances = uint32_t(C.instances);
 const uint64_t kImageBytes = (uint64_t(1u << C.aw) * kInstances) << kRowLog2;
 constexpr uint64_t kBase = 0x123400000ull;
@@ -196,7 +211,8 @@ struct Hbm {
     std::vector<Line> data;
     int beat = 0;
   };
-  std::map<int, Read> reads;
+  std::map<int, std::deque<Read>> reads;  // by id, in AR order
+  size_t n_reads = 0;
   std::deque<uint64_t> aw;
   struct Beat { std::array<uint8_t, 64> data; uint64_t strb; bool last; };
   std::deque<Beat> w;
@@ -215,6 +231,7 @@ struct Hbm {
   uint64_t n_ar = 0, n_aw = 0;
 
   Line& line(uint64_t a) {
+    CHECK((a & 63) == 0, "line address 0x%lx", (unsigned long)a);
     auto it = mem.find(a);
     if (it == mem.end()) {
       Line l;
@@ -223,17 +240,19 @@ struct Hbm {
     }
     return it->second;
   }
-  size_t outstanding() const { return reads.size() + aw.size() + w.size() + writes.size(); }
+  uint8_t& byte(uint64_t a) { return line(a & ~63ull)[a & 63]; }
+  size_t outstanding() const { return n_reads + aw.size() + w.size() + writes.size(); }
   bool busy_ahead() const {
     for (auto& kv : reads)
-      if (kv.second.ready_at > now + 2) return true;
+      for (auto& r : kv.second)
+        if (r.ready_at > now + 2) return true;
     for (auto& wr : writes)
       if (wr.b_at > now + 2) return true;
     return false;
   }
   void check_addr(uint64_t a, const char* ch) {
-    CHECK((a & ((1ull << kRowLog2) - 1)) == 0, "%s address 0x%lx not row aligned", ch, (unsigned long)a);
-    CHECK(a >= g_base && a < g_base + kImageBytes, "%s address 0x%lx out of the image at 0x%lx", ch,
+    CHECK((a & ((1ull << kAddrAlign) - 1)) == 0, "%s address 0x%lx not row aligned", ch, (unsigned long)a);
+    CHECK(a >= (g_base & ~63ull) && a < g_base + kImageBytes, "%s address 0x%lx out of the image at 0x%lx", ch,
           (unsigned long)a, (unsigned long)g_base);
   }
   template <typename D>
@@ -246,11 +265,13 @@ struct Hbm {
     dut->m_wready = wready;
     if (r_id < 0 && chance(rvalid_p)) {
       std::vector<int> ok, started;
-      for (auto& kv : reads)
-        if (kv.second.sampled && kv.second.ready_at <= now) {
+      for (auto& kv : reads) {
+        const Read& r = kv.second.front();
+        if (r.sampled && r.ready_at <= now) {
           ok.push_back(kv.first);
-          if (kv.second.beat > 0) started.push_back(kv.first);
+          if (r.beat > 0) started.push_back(kv.first);
         }
+      }
       if (!started.empty() && !chance(interleave_p))
         r_id = started[rand_in(0, started.size() - 1)];
       else if (!ok.empty())
@@ -258,7 +279,7 @@ struct Hbm {
     }
     dut->m_rvalid = r_id >= 0;
     if (r_id >= 0) {
-      const Read& r = reads.at(r_id);
+      const Read& r = reads.at(r_id).front();
       put_bytes(dut->m_rdata, r.data[r.beat].data(), 64);
       dut->m_rid = r_id;
       dut->m_rlast = r.beat == kBeats - 1;
@@ -295,21 +316,26 @@ struct Hbm {
     w_strb = dut->m_wstrb;
     w_last = dut->m_wlast;
     if (r_id >= 0 && dut->m_rready) {
-      Read& r = reads.at(r_id);
-      if (++r.beat == kBeats) reads.erase(r_id);
+      auto& q = reads.at(r_id);
+      if (++q.front().beat == kBeats) {
+        q.pop_front();
+        --n_reads;
+        if (q.empty()) reads.erase(r_id);
+      }
       r_id = -1;
     }
     if (bvalid) writes.pop_front();
     if (ar_hs) {
       ++n_ar;
       const int id = dut->m_arid;
-      CHECK(id < kOutstanding && !reads.count(id), "AR id %d beyond OUTSTANDING or reused", id);
+      CHECK(id < (1 << kAxiIdW) && n_reads < size_t(kOutstanding), "AR id %d, or beyond OUTSTANDING reads", id);
       check_addr(dut->m_araddr, "AR");
       Read r;
       r.addr = dut->m_araddr;
       r.ready_at = now + rand_in(lat_lo, lat_hi);
       r.sample_at = rand_in(now + 1, r.ready_at);
-      reads[id] = r;
+      reads[id].push_back(r);
+      ++n_reads;
     }
     if (aw_hs) {
       ++n_aw;
@@ -323,8 +349,18 @@ struct Hbm {
       for (int k = 0; k < kBeats; ++k) {
         const Beat& b = w.front();
         CHECK(b.last == (k == kBeats - 1), "WLAST %d on beat %d of %d", int(b.last), k, kBeats);
-        for (int i = 0; i < 64; ++i)
-          if (k * 64 + i >= kBytes) CHECK(!((b.strb >> i) & 1), "strobe on padding byte %d", k * 64 + i);
+        int place = -1;
+        for (int i = 0; i < 64; ++i) {
+          const bool on = (b.strb >> i) & 1;
+          if (kSub) {
+            // A row of a shared line: strobes in one row's place, its bytes.
+            if (!on) continue;
+            if (place < 0) place = i >> kRowLog2;
+            CHECK(place == (i >> kRowLog2) && (i & ((1 << kRowLog2) - 1)) < kBytes, "strobe %d out of its row", i);
+          } else if (k * 64 + i >= kBytes) {
+            CHECK(!on, "strobe on padding byte %d", k * 64 + i);
+          }
+        }
         wr.beats.push_back(b);
         w.pop_front();
       }
@@ -347,12 +383,12 @@ struct Hbm {
       }
       wr.applied = true;
     }
-    for (auto& kv : reads) {
-      Read& r = kv.second;
-      if (r.sampled || r.sample_at > now) continue;
-      for (int k = 0; k < kBeats; ++k) r.data.push_back(line(r.addr + 64 * k));
-      r.sampled = true;
-    }
+    for (auto& kv : reads)
+      for (Read& r : kv.second) {
+        if (r.sampled || r.sample_at > now) continue;
+        for (int k = 0; k < kBeats; ++k) r.data.push_back(line(r.addr + 64 * k));
+        r.sampled = true;
+      }
   }
 };
 
@@ -696,15 +732,12 @@ struct Tb {
 
   void check_image() {
     for (auto& kv : ref.rows) {
-      for (int k = 0; k < kBeats; ++k) {
-        const Line& l = hbm.line(kv.first + 64 * k);
-        for (int i = 0; i < 64; ++i) {
-          const int j = k * 64 + i;
-          const uint8_t want = j < kBytes ? kv.second[j] : zero_at(kv.first) ? 0 : init_byte(kv.first + j);
-          if (l[i] != want) {
-            CHECK(false, "HBM row 0x%lx byte %d: 0x%02x, want 0x%02x", (unsigned long)kv.first, j, l[i], want);
-            return;
-          }
+      for (int j = 0; j < kRowSpan; ++j) {
+        const uint8_t got = hbm.byte(kv.first + j);
+        const uint8_t want = j < kBytes ? kv.second[j] : zero_at(kv.first) ? 0 : init_byte(kv.first + j);
+        if (got != want) {
+          CHECK(false, "HBM row 0x%lx byte %d: 0x%02x, want 0x%02x", (unsigned long)kv.first, j, got, want);
+          return;
         }
       }
     }

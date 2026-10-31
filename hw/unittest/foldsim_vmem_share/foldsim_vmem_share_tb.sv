@@ -152,7 +152,7 @@ module foldsim_vmem_share_tb #(
     foldsim_vmem_share #(
         .N      (NC),
         .ID_W   (AXI_ID_W),
-        .RDEPTH (NC),
+        .RDEPTH (NC * (OUTSTANDING > (1 << AXI_ID_W) ? OUTSTANDING >> AXI_ID_W : 1)),
         .WDEPTH (NC * QUEUE)
     ) share (
         .clk       (clk),

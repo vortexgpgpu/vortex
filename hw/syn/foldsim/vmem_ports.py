@@ -33,6 +33,12 @@ FOLDSIM_VMEM_MEMBERS(f,s) lists every memory k of group g as member i,
 g's host cache: FOLDSIM_VMEM_G<g>_CACHE_ROWS where the compiler gave it, else
 --cache-rows.
 
+Layout v7 (FOLDSIM_VMEM_LAYOUT_V7): each controller's row bytes in device
+memory, known-zero bits on or off and their block (FOLDSIM_VMEM_<k>_ROW_BYTES,
+_KNOWN_ZERO, _KZ_SHIFT; groups G<g>) are the compiler's where foldsim_sim.vh
+gives them, else the v6 layout's (DW/8 rounded up to a power of two of at
+least 64 bytes; a bit per row).
+
 Masters for the controllers (--vmem-masters M, Makefile FOLDSIM_VMEM_MASTERS):
 by default one per controller, as many as fit beside the memory ports (at
 most MAX_MASTERS in all). With fewer masters M than controllers N, controller k
@@ -71,6 +77,21 @@ def vmem_groups(sim_vh):
                        re.findall(r'^`define FOLDSIM_VMEM_(\d+)_GROUP (\d+)\s*$', text, re.M)):
         groups[g].append(k)
     return groups
+
+
+def vmem_widths(sim_vh):
+    """Each memory's and each group's DW from foldsim_sim.vh: {'<k>' or 'G<g>': DW}."""
+    with open(sim_vh) as f:
+        return {k: int(w) for k, w in re.findall(r'^`define FOLDSIM_VMEM_(G?\d+)_DW (\d+)\s*$', f.read(), re.M)}
+
+
+def layout_defaults(name, dw):
+    """The v6 layout's row bytes and a known-zero bit per row, where the
+    compiler gave none."""
+    nb = (dw + 7) // 8
+    rb = max(64, 1 << (nb - 1).bit_length())
+    return ''.join(f'`ifndef FOLDSIM_VMEM_{name}_{key}\n`define FOLDSIM_VMEM_{name}_{key} {v}\n`endif\n'
+                   for key, v in (('ROW_BYTES', rb), ('KNOWN_ZERO', 1), ('KZ_SHIFT', 0))).rstrip('\n')
 
 
 def main():
@@ -113,6 +134,8 @@ def main():
     if a.cache_rows:
         print(f'`define FOLDSIM_VMEM_CACHE_ROWS {a.cache_rows}')
     print('`define FOLDSIM_VMEM_PER_MEMORY_ROWS')
+    print('`define FOLDSIM_VMEM_LAYOUT_V7')
+    widths = vmem_widths(a.sim_vh)
     if groups is not None:
         print('`define FOLDSIM_VMEM_MEMBERS(f,s) '
               + ' `s '.join(f'`f({g}, {i}, {k})' for g, ks in enumerate(groups) for i, k in enumerate(ks)))
@@ -120,9 +143,11 @@ def main():
             print(f'`define FOLDSIM_VMEM_G{g}_REPEAT(f,s) '
                   + ' `s '.join(f'`f({g}, {i}, {k})' for i, k in enumerate(ks)))
             print(f'`ifndef FOLDSIM_VMEM_G{g}_CACHE_ROWS\n`define FOLDSIM_VMEM_G{g}_CACHE_ROWS {a.cache_rows}\n`endif')
+            print(layout_defaults(f'G{g}', widths[f'G{g}']))
         return
     for k in range(n):
         print(f'`ifndef FOLDSIM_VMEM_{k}_CACHE_ROWS\n`define FOLDSIM_VMEM_{k}_CACHE_ROWS {a.cache_rows}\n`endif')
+        print(layout_defaults(str(k), widths[str(k)]))
 
 
 if __name__ == '__main__':

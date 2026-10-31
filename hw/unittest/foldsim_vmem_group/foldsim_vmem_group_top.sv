@@ -27,7 +27,10 @@ module foldsim_vmem_group_top #(
     parameter int MROW [N]   = '{0, 4096, 8192, 12288},
     parameter RDW_READ_FIRST = 1,
     parameter AXI_ID_W       = 4,
+    parameter OUTSTANDING    = 16,
     parameter CACHE_ROWS     = 1024,
+    parameter KZ_SHIFT       = 0,
+    parameter ROW_BYTES      = (((DW + 7) / 8) > 64) ? (1 << $clog2((DW + 7) / 8)) : 64,
     parameter FIFO           = 8,
     localparam GF            = $clog2(2 * FIFO + 1)
 ) (
@@ -131,6 +134,9 @@ module foldsim_vmem_group_top #(
         .MROW           (MROW),
         .RDW_READ_FIRST (RDW_READ_FIRST),
         .AXI_ID_W       (AXI_ID_W),
+        .OUTSTANDING    (OUTSTANDING),
+        .KZ_SHIFT       (KZ_SHIFT),
+        .ROW_BYTES      (ROW_BYTES),
         .CACHE_ROWS     (CACHE_ROWS),
         .FIFO           (FIFO)
     ) group (

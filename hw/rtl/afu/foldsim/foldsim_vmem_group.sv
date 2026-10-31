@@ -81,6 +81,9 @@ module foldsim_vmem_group #(
     parameter OUTSTANDING    = 16,
     parameter CACHE_ROWS     = 0,
     parameter KNOWN_ZERO     = 1,
+    parameter KZ_SHIFT       = 0,
+    // The controller's row bytes in memory (foldsim_vmem).
+    parameter ROW_BYTES      = (((DW + 7) / 8) > 64) ? (1 << $clog2((DW + 7) / 8)) : 64,
     // FIFO entries per member, a power of two of at least 8.
     parameter FIFO           = 8,
     localparam GF            = $clog2(2 * FIFO + 1)
@@ -408,6 +411,8 @@ module foldsim_vmem_group #(
         .INSTANCES      (INSTANCES),
         .CACHE_ROWS     (CACHE_ROWS),
         .KNOWN_ZERO     (KNOWN_ZERO),
+        .KZ_SHIFT       (KZ_SHIFT),
+        .ROW_BYTES      (ROW_BYTES),
         .TAGW           (TW)
     ) vmem (
         .clk       (clk),

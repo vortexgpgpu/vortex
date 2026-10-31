@@ -270,7 +270,9 @@ module foldsim_afu #(
     // runtime has placed their region (FOLDSIM_REG_VMEM_BASE), it sees no room.
     localparam [63:0] VMEM_BYTES = `FOLDSIM_VMEM_BYTES;
     localparam VMEM_QUEUE       = 32;
-    localparam VMEM_OUTSTANDING = (C_M_AXI_MEM_ID_WIDTH >= 4) ? 16 : (1 << C_M_AXI_MEM_ID_WIDTH);
+    // Reads in flight per controller, on as many ids as the master has (up
+    // to that many), in order per id.
+    localparam VMEM_OUTSTANDING = 64;
     // Memory k's host-cache rows: FOLDSIM_VMEM_<k>_CACHE_ROWS where
     // foldsim_kernel.vh says the headers give one per memory, else
     // FOLDSIM_VMEM_CACHE_ROWS (0: none).
@@ -289,6 +291,19 @@ module foldsim_afu #(
     localparam VMEM_KNOWN_ZERO  = `FOLDSIM_VMEM_KNOWN_ZERO;
 `else
     localparam VMEM_KNOWN_ZERO  = 1;
+`endif
+    // Controller k's row bytes in memory, known-zero bits (on or off) and
+    // their block (log2 rows): the compiler's (foldsim_sim.vh, or vmem_ports.py's
+    // defaults in foldsim_kernel.vh: the v6 layout, a bit per row); a
+    // kernel.vh before layout v7 gives the defaults. Groups: G<g>.
+`ifdef FOLDSIM_VMEM_LAYOUT_V7
+`define FOLDSIM_VMEM_RB(k)  (`FOLDSIM_VMEM_``k``_ROW_BYTES)
+`define FOLDSIM_VMEM_KZ(k)  (`FOLDSIM_VMEM_``k``_KNOWN_ZERO)
+`define FOLDSIM_VMEM_KZS(k) (`FOLDSIM_VMEM_``k``_KZ_SHIFT)
+`else
+`define FOLDSIM_VMEM_RB(k)  ((((`FOLDSIM_VMEM_``k``_DW + 7) / 8) > 64) ? (1 << $clog2((`FOLDSIM_VMEM_``k``_DW + 7) / 8)) : 64)
+`define FOLDSIM_VMEM_KZ(k)  1
+`define FOLDSIM_VMEM_KZS(k) 0
 `endif
     if (C_M_AXI_MEM_DATA_WIDTH != 512) begin : g_vmem_width
         $error("foldsim_afu: the virtual memories' controllers have 512-bit masters");
@@ -313,6 +328,8 @@ module foldsim_afu #(
 `ifdef FOLDSIM_VMEM_SHARED
     localparam VMEM_N = VMEM_CTRLS;
     localparam VMEM_ID_W = C_M_AXI_MEM_ID_WIDTH;
+    // A controller's reads of one id in flight, for the sharing's route of R.
+    localparam VMEM_ID_READS = (VMEM_ID_W >= 6) ? 1 : VMEM_OUTSTANDING >> VMEM_ID_W;
     wire                 vmc_awvalid [VMEM_N], vmc_awready [VMEM_N];
     wire [63:0]          vmc_awaddr  [VMEM_N];
     wire [VMEM_ID_W-1:0] vmc_awid    [VMEM_N];
@@ -363,7 +380,9 @@ module foldsim_afu #(
         .INSTANCES      (`FOLDSIM_VMEM_``k``_INSTANCES), \
         .CACHE_ROWS     ((`FOLDSIM_VMEM_ROWS(k) < (1 << (`FOLDSIM_VMEM_``k``_AW + $clog2(`FOLDSIM_VMEM_``k``_INSTANCES)))) \
                          ? `FOLDSIM_VMEM_ROWS(k) : (1 << (`FOLDSIM_VMEM_``k``_AW + $clog2(`FOLDSIM_VMEM_``k``_INSTANCES)))), \
-        .KNOWN_ZERO     (VMEM_KNOWN_ZERO) \
+        .KNOWN_ZERO     (VMEM_KNOWN_ZERO & `FOLDSIM_VMEM_KZ(k)), \
+        .KZ_SHIFT       (`FOLDSIM_VMEM_KZS(k)), \
+        .ROW_BYTES      (`FOLDSIM_VMEM_RB(k)) \
     ) vmem_``k ( \
         .clk       (ap_clk), \
         .reset     (reset), \
@@ -411,6 +430,18 @@ module foldsim_afu #(
 `ifdef FOLDSIM_VMEM_GROUPS
 `undef FOLDSIM_VMEM
 `undef FOLDSIM_VMEM_ROWS
+`undef FOLDSIM_VMEM_RB
+`undef FOLDSIM_VMEM_KZ
+`undef FOLDSIM_VMEM_KZS
+`ifdef FOLDSIM_VMEM_LAYOUT_V7
+`define FOLDSIM_VMEM_RB(g)  (`FOLDSIM_VMEM_G``g``_ROW_BYTES)
+`define FOLDSIM_VMEM_KZ(g)  (`FOLDSIM_VMEM_G``g``_KNOWN_ZERO)
+`define FOLDSIM_VMEM_KZS(g) (`FOLDSIM_VMEM_G``g``_KZ_SHIFT)
+`else
+`define FOLDSIM_VMEM_RB(g)  ((((`FOLDSIM_VMEM_G``g``_DW + 7) / 8) > 64) ? (1 << $clog2((`FOLDSIM_VMEM_G``g``_DW + 7) / 8)) : 64)
+`define FOLDSIM_VMEM_KZ(g)  1
+`define FOLDSIM_VMEM_KZS(g) 0
+`endif
 `ifdef FOLDSIM_VMEM_PER_MEMORY_ROWS
 `define FOLDSIM_VMEM_ROWS(g) (`FOLDSIM_VMEM_G``g``_CACHE_ROWS)
 `else
@@ -484,7 +515,9 @@ module foldsim_afu #(
             .OUTSTANDING    (VMEM_OUTSTANDING), \
             .INSTANCES      (VG``g``_IN), \
             .CACHE_ROWS     (VG``g``_CACHE), \
-            .KNOWN_ZERO     (VMEM_KNOWN_ZERO) \
+            .KNOWN_ZERO     (VMEM_KNOWN_ZERO & `FOLDSIM_VMEM_KZ(g)), \
+            .KZ_SHIFT       (`FOLDSIM_VMEM_KZS(g)), \
+            .ROW_BYTES      (`FOLDSIM_VMEM_RB(g)) \
         ) vmem ( \
             .clk       (ap_clk), \
             .reset     (reset), \
@@ -527,7 +560,9 @@ module foldsim_afu #(
             .AXI_ID_W       (C_M_AXI_MEM_ID_WIDTH), \
             .OUTSTANDING    (VMEM_OUTSTANDING), \
             .CACHE_ROWS     (VG``g``_CACHE), \
-            .KNOWN_ZERO     (VMEM_KNOWN_ZERO), \
+            .KNOWN_ZERO     (VMEM_KNOWN_ZERO & `FOLDSIM_VMEM_KZ(g)), \
+            .KZ_SHIFT       (`FOLDSIM_VMEM_KZS(g)), \
+            .ROW_BYTES      (`FOLDSIM_VMEM_RB(g)), \
             .FIFO           (VMEM_GROUP_FIFO) \
         ) group ( \
             .clk       (ap_clk), \
@@ -581,6 +616,9 @@ module foldsim_afu #(
     `FOLDSIM_VMEM_REPEAT(FOLDSIM_VMEM, FOLDSIM_SEMI);
 `undef FOLDSIM_VMEM
 `undef FOLDSIM_VMEM_ROWS
+`undef FOLDSIM_VMEM_RB
+`undef FOLDSIM_VMEM_KZ
+`undef FOLDSIM_VMEM_KZS
 `undef FOLDSIM_VMEM_AXI
 `ifdef FOLDSIM_VMEM_GROUPS
 `undef FOLDSIM_VMEM_AXI_PORTS
@@ -593,7 +631,7 @@ module foldsim_afu #(
 
 `ifdef FOLDSIM_VMEM_MASTERS
     // Master j: controllers j, j + M, j + 2M, ... Each controller has at
-    // most QUEUE writes and one read per id in flight.
+    // most QUEUE writes and VMEM_ID_READS reads per id in flight.
     localparam VMEM_M = `FOLDSIM_VMEM_MASTERS;
     wire                 vmm_awvalid [VMEM_M], vmm_awready [VMEM_M];
     wire [63:0]          vmm_awaddr  [VMEM_M];
@@ -658,7 +696,7 @@ module foldsim_afu #(
         foldsim_vmem_share #(
             .N      (G),
             .ID_W   (VMEM_ID_W),
-            .RDEPTH (G),
+            .RDEPTH (G * VMEM_ID_READS),
             .WDEPTH (G * VMEM_QUEUE)
         ) share (
             .clk       (ap_clk),
@@ -826,7 +864,7 @@ module foldsim_afu #(
             foldsim_vmem_share #(
                 .N      (G + 1),
                 .ID_W   (VMEM_ID_W),
-                .RDEPTH (VMEM_PORT_READS + G),
+                .RDEPTH (VMEM_PORT_READS + G * VMEM_ID_READS),
                 .WDEPTH ((G + 1) * VMEM_QUEUE)
             ) share (
                 .clk       (ap_clk),

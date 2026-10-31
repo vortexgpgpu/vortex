@@ -25,7 +25,9 @@ module foldsim_vmem_top #(
     parameter OUTSTANDING    = 16,
     parameter INSTANCES      = 1 << IW,
     parameter CACHE_ROWS     = 0,
-    parameter KNOWN_ZERO     = 1
+    parameter KNOWN_ZERO     = 1,
+    parameter KZ_SHIFT       = 0,
+    parameter ROW_BYTES      = (((DW + 7) / 8) > 64) ? (1 << $clog2((DW + 7) / 8)) : 64
 ) (
     input  wire                        clk,
     input  wire                        reset,
@@ -128,7 +130,9 @@ module foldsim_vmem_top #(
         .OUTSTANDING    (OUTSTANDING),
         .INSTANCES      (INSTANCES),
         .CACHE_ROWS     (CACHE_ROWS),
-        .KNOWN_ZERO     (KNOWN_ZERO)
+        .KNOWN_ZERO     (KNOWN_ZERO),
+        .KZ_SHIFT       (KZ_SHIFT),
+        .ROW_BYTES      (ROW_BYTES)
     ) vmem (
         .clk       (clk),
         .reset     (reset_r),
