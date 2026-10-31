@@ -21,7 +21,8 @@
 //
 // Row `row` of instance `inst` lives at base + ((row * INSTANCES + inst) <<
 // log2(ROW_BYTES)), ROW_BYTES being DW/8 rounded up to a power of two of at
-// least 64: one burst of ceil(DW/512) beats, which never crosses 4 KiB.
+// least 64: one burst of ceil(DW/512) beats, which never crosses 4 KiB. A row
+// of DW bits not whole bytes is kept as whole bytes, the bits above DW zero.
 //
 // Requests flow in order through four stages:
 //   X  the inputs, registered (two cycles more for INSTANCES not a power of
@@ -102,7 +103,8 @@ module foldsim_vmem #(
     parameter IW             = 8,
     // Row-address bits.
     parameter AW             = 10,
-    // Row data bits: a multiple of 8, up to 4096.
+    // Row data bits, up to 4096: any width with a whole-row enable (MW = 1),
+    // else a multiple of 8.
     parameter DW             = 512,
     // Mask bits: DW/8 byte enables, or 1 for a whole-row enable. A bit
     // enables DW/8/MW bytes.
@@ -145,7 +147,7 @@ module foldsim_vmem #(
 
     output wire                        rsp_valid,
     output reg  [IW+TAGW-1:0]          rsp_inst,
-    output reg  [DW-1:0]               rsp_data,
+    output wire [DW-1:0]               rsp_data,
 
     output reg  [$clog2(QUEUE+1)-1:0]  free,
 
@@ -192,9 +194,11 @@ module foldsim_vmem #(
     localparam KB     = $clog2(INSTANCES);
     localparam POW2   = ((INSTANCES & (INSTANCES - 1)) == 0) ? 1 : 0;
     localparam LW     = AW + KB;
-    localparam BYTES  = DW / 8;
+    // The row in whole bytes.
+    localparam DB     = (DW + 7) / 8 * 8;
+    localparam BYTES  = DB / 8;
     localparam RB     = ($clog2(BYTES) > 6) ? $clog2(BYTES) : 6;
-    localparam BEATS  = (DW + 511) / 512;
+    localparam BEATS  = (DB + 511) / 512;
     localparam BW     = (BEATS > 1) ? $clog2(BEATS) : 1;
     localparam GROUP  = BYTES / MW;
     // A row's offset in the image: its bits.
@@ -212,7 +216,7 @@ module foldsim_vmem #(
     localparam PW     = $clog2(PINS);
     localparam KZ     = (KNOWN_ZERO != 0) ? 1 : 0;
     // A move's flush starts once no request has come for this many cycles:
-    // past the simulator's lead (L = 3) after free dropped to 0.
+    // past the simulator's lead (L = 4) after free dropped to 0.
     localparam QUIET  = 15;
     // A line's index: the row's low bits, with (TAGW > 0) the bits above them
     // XORed in, CI at a time from the top: the tag's top bits reach the
@@ -230,16 +234,16 @@ module foldsim_vmem #(
 
 `ifdef SIMULATION
     initial begin
-        if ((DW % 8) != 0 || DW > 4096)
-            $error("foldsim_vmem: DW must be a multiple of 8, at most 4096");
+        if (DW < 1 || DW > 4096 || ((DW % 8) != 0 && MW != 1))
+            $error("foldsim_vmem: DW must be 1 to 4096 bits, a multiple of 8 with byte enables");
         if ((BYTES % MW) != 0)
             $error("foldsim_vmem: MW must divide DW/8");
         if (OUTSTANDING > (1 << AXI_ID_W))
             $error("foldsim_vmem: OUTSTANDING exceeds the AXI ids");
         if (INSTANCES > (1 << IW))
             $error("foldsim_vmem: INSTANCES exceeds the instance index");
-        if (QUEUE < 4)
-            $error("foldsim_vmem: QUEUE must be at least 4");
+        if (QUEUE < 10)
+            $error("foldsim_vmem: QUEUE must be at least 10, the simulator's room (VMEM_INTERFACE.md guarantee 2)");
         if (CACHE_ROWS != 0 && (CACHE_ROWS < 2 || (CACHE_ROWS & (CACHE_ROWS - 1)) != 0 || CI > LW))
             $error("foldsim_vmem: CACHE_ROWS must be a power of two, at most 2^(AW + clog2(INSTANCES))");
     end
@@ -340,7 +344,7 @@ module foldsim_vmem #(
     wire              i_rd, i_wr, i_busy, i_rbusy;
     wire [IT-1:0]     i_rinst;
     wire [LW-1:0]     i_rlin, i_wlin;
-    wire [DW-1:0]     i_wdata;
+    wire [DB-1:0]     i_wdata;
     wire [MW-1:0]     i_wmask;
     if (POW2 != 0) begin : g_lin_shift
         // inst < INSTANCES: its low KB bits.
@@ -351,7 +355,7 @@ module foldsim_vmem #(
         assign i_rinst = rd_inst;
         assign i_rlin  = (LW'(rd_row) << KB) | LW'(rd_inst[IW-1:0] & IW'(INSTANCES - 1));
         assign i_wlin  = (LW'(wr_row) << KB) | LW'(wr_inst[IW-1:0] & IW'(INSTANCES - 1));
-        assign i_wdata = wr_data;
+        assign i_wdata = DB'(wr_data);
         assign i_wmask = wr_mask;
     end else begin : g_lin_mul
         // The multiply in a DSP, its input and product registered: two more
@@ -362,7 +366,7 @@ module foldsim_vmem #(
         reg [IT-1:0] a_rinst, p_rinst;
         reg [IW-1:0] a_winst, p_winst;
         reg [LW-1:0] p_rprod, p_wprod;
-        reg [DW-1:0] a_wdata, p_wdata;
+        reg [DB-1:0] a_wdata, p_wdata;
         reg [MW-1:0] a_wmask, p_wmask;
 `ifdef SIMULATION
         initial begin
@@ -379,7 +383,7 @@ module foldsim_vmem #(
             a_wrow  <= wr_row;
             a_rinst <= rd_inst;
             a_winst <= wr_inst[IW-1:0];
-            a_wdata <= wr_data;
+            a_wdata <= DB'(wr_data);
             a_wmask <= wr_mask;
             p_rd    <= a_rd & ~reset;
             p_wr    <= a_wr;
@@ -429,7 +433,7 @@ module foldsim_vmem #(
     // the row, after its answer): the fill is dropped then.
     wire             fl_v;
     wire [LW-1:0]    fl_lin;
-    wire [DW-1:0]    fl_data;
+    wire [DB-1:0]    fl_data;
     // A move (mv_busy) fills nothing either: its sweep empties the cache.
     reg              mv_busy;
     wire             fill_go = fl_v & ~i_wr & ~reset & ~draining & ~mv_busy;
@@ -453,7 +457,7 @@ module foldsim_vmem #(
     reg              x_rd;
     reg [IT-1:0]     x_rinst;
     reg [LW-1:0]     x_rlin, x_wlin;
-    reg [DW-1:0]     x_wdata;
+    reg [DB-1:0]     x_wdata;
     reg [MW-1:0]     x_wmask;
     reg [CI-1:0]     x_swidx;
 
@@ -471,7 +475,7 @@ module foldsim_vmem #(
     end
 
     // A write of a known-zero row, made whole: zeros where its mask is off.
-    reg [DW-1:0] x_wzdata;
+    reg [DB-1:0] x_wzdata;
     always @(*) begin
         for (integer j = 0; j < BYTES; ++j)
             x_wzdata[j*8 +: 8] = (kz_w & ~x_wmask[j / GROUP]) ? 8'd0 : x_wdata[j*8 +: 8];
@@ -485,7 +489,7 @@ module foldsim_vmem #(
     reg              y_rd, y_wfull, y_zero;
     reg [IT-1:0]     y_rinst;
     reg [LW-1:0]     y_rlin, y_wlin;
-    reg [DW-1:0]     y_wdata;
+    reg [DB-1:0]     y_wdata;
     reg [MW-1:0]     y_wmask;
     reg [CI-1:0]     y_swidx;
     reg [63:0]       y_raddr;
@@ -510,7 +514,7 @@ module foldsim_vmem #(
     // line holds a dirty row.
     wire             c_rhit, c_whit, c_victim, c_same_idx;
     wire [CT-1:0]    c_vtag;
-    wire [DW-1:0]    c_ca, c_cb;
+    wire [DB-1:0]    c_ca, c_cb;
 
     wire y_same_row = y_rd & y_wr & (y_rlin == y_wlin);
     wire rf_pair    = y_same_row & (RDW_READ_FIRST != 0);
@@ -545,7 +549,7 @@ module foldsim_vmem #(
     // one live write: a read's match needs no priority.
     reg [LW-1:0]     wb_lin  [QUEUE];
     reg [QUEUE-1:0]  wb_live, wb_full, wb_blk;
-    reg [DW-1:0]     wb_data [QUEUE];
+    reg [DB-1:0]     wb_data [QUEUE];
     reg [MW-1:0]     wb_mask [QUEUE];
     reg [63:0]       wb_addr [QUEUE];
 
@@ -558,7 +562,7 @@ module foldsim_vmem #(
     reg [IT-1:0]     z_rinst;
     reg [63:0]       z_raddr;
     reg [LW-1:0]     z_alin;
-    reg [DW-1:0]     z_wdata;
+    reg [DB-1:0]     z_wdata;
     reg [MW-1:0]     z_wmask;
 
     wire z_alloc = z_wa | z_ev;
@@ -612,7 +616,7 @@ module foldsim_vmem #(
     // A slot valid at Y is not taken again before R ends (a write taken
     // needs the room its B gave back, and reaches Z three cycles later), so
     // its data is still the matched write's.
-    wire [DW-1:0]    z_adata = z_ev ? c_cb : z_wdata;
+    wire [DB-1:0]    z_adata = z_ev ? c_cb : z_wdata;
     wire [MW-1:0]    z_amask = z_ev ? '1 : z_wmask;
     wire [63:0]      z_aaddr = row_addr(z_alin);
     wire [QW-1:0]    z_slot  = z_pair ? wb_tail : (z_zhit ? z_zslot : onehot_index(z_hit));
@@ -625,7 +629,7 @@ module foldsim_vmem #(
     end
 
     // A write-first pair's line: the old row under the write.
-    reg [DW-1:0] z_pdata;
+    reg [DB-1:0] z_pdata;
     always @(*) begin
         for (integer j = 0; j < BYTES; ++j)
             z_pdata[j*8 +: 8] = (z_merge & z_wmask[j / GROUP]) ? z_wdata[j*8 +: 8] : c_cb[j*8 +: 8];
@@ -638,7 +642,7 @@ module foldsim_vmem #(
     reg [QW-1:0]     r_slot, r_ubslot;
     reg [IT-1:0]     r_inst;
     reg [63:0]       r_addr;
-    reg [DW-1:0]     r_pdata;
+    reg [DB-1:0]     r_pdata;
 
     always @(posedge clk) begin
         r_local  <= z_local & ~reset;
@@ -755,7 +759,7 @@ module foldsim_vmem #(
     wire          rc_last = (rc_beat == BW'(BEATS - 1));
     wire          rc_done = rc_valid & rc_last;
 
-    // The last beat's bits past DW are padding.
+    // The last beat's bits past the row are padding.
     /* verilator lint_off UNUSEDSIGNAL */
     wire [BEATS*512-1:0] rc_row;
     /* verilator lint_on UNUSEDSIGNAL */
@@ -780,21 +784,29 @@ module foldsim_vmem #(
 
     // ---- Responses: local (R) or from memory ----
     // None is offered while reset is high, not even one made before it.
-    reg rsp_q;
+    reg          rsp_q;
+    reg [DB-1:0] rsp_row;
     assign rsp_valid = rsp_q & ~reset;
+    // A row's bits above DW are zero (written so), never answered.
+    assign rsp_data  = rsp_row[DW-1:0];
+    if (DB > DW) begin : g_pad
+        /* verilator lint_off UNUSEDSIGNAL */
+        wire unused = |rsp_row[DB-1:DW];
+        /* verilator lint_on UNUSEDSIGNAL */
+    end
     always @(posedge clk) begin
         rsp_q <= (r_local | (rc_done & ~draining)) & ~reset;
         if (r_local) begin
             rsp_inst <= r_inst;
             case (r_src)
-            SRC_CA:  rsp_data <= c_ca;
-            SRC_CB:  rsp_data <= r_pdata;
-            SRC_ZR:  rsp_data <= '0;
-            default: rsp_data <= wb_data[r_slot];
+            SRC_CA:  rsp_row <= c_ca;
+            SRC_CB:  rsp_row <= r_pdata;
+            SRC_ZR:  rsp_row <= '0;
+            default: rsp_row <= wb_data[r_slot];
             endcase
         end else begin
             rsp_inst <= tbl_inst[rc_id];
-            rsp_data <= rc_row[DW-1:0];
+            rsp_row  <= rc_row[DB-1:0];
         end
     end
 
@@ -803,7 +815,7 @@ module foldsim_vmem #(
     if (CACHE != 0) begin : g_fill
         reg          v;
         reg [LW-1:0] lin;
-        reg [DW-1:0] data;
+        reg [DB-1:0] data;
 `ifdef SIMULATION
         initial v = 1'b0;
 `endif
@@ -811,7 +823,7 @@ module foldsim_vmem #(
             if (rc_done & tbl_fill[rc_id] & ~draining & ~reset & ~mv_busy & ~move) begin
                 v    <= 1'b1;
                 lin  <= tbl_lin[rc_id];
-                data <= rc_row[DW-1:0];
+                data <= rc_row[DB-1:0];
             end else if (reset | move | fill_go | (i_wr & (i_wlin == lin))) begin
                 v    <= 1'b0;
             end
@@ -1030,8 +1042,8 @@ module foldsim_vmem #(
         // The rows: port A reads for the read (two cycles: an output
         // register); port B writes for the write, reading first the line it
         // replaces or the read of its cycle shares.
-        reg [DW-1:0] cdata [CACHE_ROWS];
-        reg [DW-1:0] ca1, ca2, cb1;
+        reg [DB-1:0] cdata [CACHE_ROWS];
+        reg [DB-1:0] ca1, ca2, cb1;
         // An allocation's mask is whole: the enables are the write's own,
         // apart from whether it writes the line at all.
         wire             cwe = c_whit | w_alloc | f_alloc;

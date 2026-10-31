@@ -23,9 +23,10 @@
 // controller has room. A member's `free` is twice its free entries but one:
 // the simulator decides a position on the `free` it sees and issues its
 // requests four host cycles later, so five decisions' entries (the four in
-// flight and its own) may follow any `free` it saw, and it takes free >= 8
-// as room for four. Bubbles take up the rest: a member whose FIFO fills sees
-// no room.
+// flight and its own) may follow any `free` it saw; it takes free >= 10 as
+// room for them, and the entry held back keeps a simulator that took
+// free >= 8 (before VMEM_INTERFACE.md v7) within the FIFO too. Bubbles take
+// up the rest: a member whose FIFO fills sees no room.
 //
 // The members' rows are disjoint rows of the controller's image: member m's
 // row r is the controller's row MROW[m] | r (the compiler places the members

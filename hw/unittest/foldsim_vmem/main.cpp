@@ -113,7 +113,9 @@
 
 namespace {
 
-constexpr int kBytes = VM_DW / 8;
+// A row's whole bytes; the bits of the last above DW are zero.
+constexpr int kBytes = (VM_DW + 7) / 8;
+constexpr uint8_t kTopMask = (VM_DW % 8) ? uint8_t((1u << (VM_DW % 8)) - 1) : uint8_t(0xff);
 constexpr int kGroup = kBytes / VM_MW;
 constexpr int kBeats = (VM_DW + 511) / 512;
 constexpr int kRowLog2 = [] {
@@ -126,7 +128,9 @@ constexpr uint32_t kInstances = VM_INSTANCES;
 constexpr uint64_t kBase = 0x123400000ull;
 // Regions a move takes: kBase + k * kStride, apart in both words of the base.
 constexpr uint64_t kStride = 0x104000000ull;
-constexpr int kLead = 3;
+// The simulator's lead: its requests leave four host cycles after the
+// decision on the `free` it saw (VMEM_INTERFACE.md guarantee 2).
+constexpr int kLead = 4;
 constexpr bool kPow2 = (kInstances & (kInstances - 1)) == 0;
 // A read answered on chip: 5 host cycles, 7 through the layout's multiply.
 constexpr uint64_t kLocal = kPow2 ? 5 : 7;
@@ -139,6 +143,12 @@ constexpr bool kPin = VM_CACHE_ROWS > 0 && uint64_t(VM_CACHE_ROWS) < kImageRows 
                       (!kPow2 || uint32_t(VM_CACHE_ROWS) < kInstances);
 
 using Row = std::vector<uint8_t>;
+
+// A row as the RAM has it: DW bits.
+Row clip(Row r) {
+  if (!r.empty()) r.back() &= kTopMask;
+  return r;
+}
 using Line = std::array<uint8_t, 64>;
 
 int failures = 0;
@@ -468,7 +478,7 @@ struct Ref {
     if (it != rows.end()) return it->second;
     Row r(kBytes);
     for (int i = 0; i < kBytes; ++i) r[i] = zero_at(a) ? 0 : init_byte(a + i);
-    return r;
+    return clip(r);
   }
   void write(uint64_t a, const Row& d, const std::vector<bool>& mask) {
     Row r = get(a);
@@ -626,6 +636,7 @@ struct Tb {
       if (wr) {
         wrow = (rd && chance(s->p_same)) ? rrow : pick_row();
         for (auto& b : wdata) b = uint8_t(rand_in(0, 255));
+        wdata = clip(wdata);
         if (!chance(s->p_full)) {
           if (VM_MW == 1) {
             mask[0] = chance(0.8);
@@ -836,7 +847,9 @@ struct Tb {
         for (int i = 0; i < 64; ++i) {
           const int j = k * 64 + i;
           const uint8_t want = j < kBytes ? kv.second[j] : zero_at(kv.first) ? 0 : init_byte(kv.first + j);
-          if (l[i] != want) {
+          // A row's bits above DW are never read.
+          const uint8_t have = j == kBytes - 1 ? uint8_t(l[i] & kTopMask) : l[i];
+          if (have != want) {
             CHECK(false, "HBM row 0x%lx byte %d: 0x%02x, want 0x%02x", (unsigned long)kv.first, j, l[i],
                   want);
             return;
@@ -1004,7 +1017,7 @@ struct Tb {
   Row rand_row() {
     Row r(kBytes);
     for (auto& b : r) b = uint8_t(rand_in(0, 255));
-    return r;
+    return clip(r);
   }
 
   // One request (the controller idle: free at QUEUE). A partial write
@@ -1780,7 +1793,7 @@ struct Tb {
       const Row want = ref.get(old_addr(b0, 0, r));
       Row got(kBytes);
       for (int i = 0; i < kBytes; ++i) got[i] = hbm.line(old_addr(b0, 0, r) + (i / 64) * 64)[i % 64];
-      CHECK(got == want, "M6: the write taken in the lead did not reach the old region");
+      CHECK(clip(got) == want, "M6: the write taken in the lead did not reach the old region");
       ++steps;
     }
     finish();
