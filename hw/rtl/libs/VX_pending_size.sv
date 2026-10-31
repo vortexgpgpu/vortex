@@ -64,7 +64,72 @@ module VX_pending_size #(
         reg empty_r, alm_empty_r;
         reg full_r, alm_full_r;
 
-        if (INCRW != 1 || DECRW != 1) begin : g_wide_step
+        localparam MAX_INCR = (1 << INCRW) - 1;
+        localparam MAX_DECR = (1 << DECRW) - 1;
+        localparam NUM_STEPS = MAX_INCR + MAX_DECR + 1;
+
+        if ((INCRW != 1 || DECRW != 1) && (NUM_STEPS <= 8)) begin : g_select_step
+
+            // incr/decr typically arrive late, so every next size and its flags
+            // are computed from size_r alone and they only select one.
+            localparam DELTAW = `MIN(SIZEW, `MAX(INCRW, DECRW)+1);
+
+            logic [SIZEW-1:0] size_r;
+            wire [NUM_STEPS-1:0][SIZEW+3:0] step_data;
+
+            for (genvar s = 0; s < NUM_STEPS; ++s) begin : g_steps
+                wire [SIZEW-1:0] step_size = size_r + SIZEW'(s - MAX_DECR);
+                assign step_data[s] = {step_size,
+                                       (step_size == SIZEW'(0)),
+                                       (step_size == SIZEW'(SIZE)),
+                                       (step_size <= SIZEW'(ALM_EMPTY)),
+                                       (step_size >= SIZEW'(ALM_FULL))};
+            end
+
+            // each (incr, decr) pair is decoded directly, so no adder sits on them
+            wire [NUM_STEPS-1:0] step_hot;
+            for (genvar s = 0; s < NUM_STEPS; ++s) begin : g_hot
+                wire [MAX_INCR:0][MAX_DECR:0] pair_hit;
+                for (genvar i = 0; i <= MAX_INCR; ++i) begin : g_i
+                    for (genvar j = 0; j <= MAX_DECR; ++j) begin : g_j
+                        assign pair_hit[i][j] = (i - j + MAX_DECR == s) && (incr == INCRW'(i)) && (decr == DECRW'(j));
+                    end
+                end
+                assign step_hot[s] = (| pair_hit);
+            end
+
+            wire [SIZEW-1:0] size_n;
+            wire empty_n, full_n, alm_empty_n, alm_full_n;
+            VX_onehot_mux #(
+                .DATAW (SIZEW + 4),
+                .N     (NUM_STEPS)
+            ) step_mux (
+                .data_in  (step_data),
+                .sel_in   (step_hot),
+                .data_out ({size_n, empty_n, full_n, alm_empty_n, alm_full_n})
+            );
+
+            always @(posedge clk) begin
+                if (reset) begin
+                    empty_r     <= 1;
+                    full_r      <= 0;
+                    alm_empty_r <= 1;
+                    alm_full_r  <= 0;
+                    size_r      <= '0;
+                end else begin
+                    `ASSERT((DELTAW'(incr) <= DELTAW'(decr)) || (size_n >= size_r), ("runtime error: counter overflow"));
+                    `ASSERT((DELTAW'(incr) >= DELTAW'(decr)) || (size_n <= size_r), ("runtime error: counter underflow"));
+                    empty_r     <= empty_n;
+                    full_r      <= full_n;
+                    alm_empty_r <= alm_empty_n;
+                    alm_full_r  <= alm_full_n;
+                    size_r      <= size_n;
+                end
+            end
+
+            assign size = size_r;
+
+        end else if (INCRW != 1 || DECRW != 1) begin : g_wide_step
 
             localparam DELTAW = `MIN(SIZEW, `MAX(INCRW, DECRW)+1);
 
