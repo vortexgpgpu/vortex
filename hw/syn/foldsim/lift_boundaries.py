@@ -72,13 +72,18 @@ def q(a):
     return "'" + a.replace("'", "'\\''") + "'" if any(c in a for c in " '\"") else a
 
 
-def elaborate(defines, incdirs, files, top):
+def elaborate(defines, incdirs, files, top, max_generate_steps=0):
     d = pyslang.driver.Driver()
     d.addStandardArgs()
     # The Vortex RTL references some nets before their declaration (VX_tcu_core),
     # which Vivado and Verilator accept; slang makes it an error unless allowed.
     args = ["slang", "--top", top, "--allow-hierarchical-const", "--allow-use-before-declare",
             "--ignore-unknown-modules"]
+    # slang bounds the blocks a generate loop may make, counting those of the
+    # loops around it (131072 by default, a guard against endless loops); a
+    # large configuration's trees (VX_popcount over 16k inputs) go over it.
+    if max_generate_steps:
+        args += ["--max-generate-steps", str(max_generate_steps)]
     args += [f"-D{x}" for x in defines] + [f"-I{x}" for x in incdirs] + files
     if not (d.parseCommandLine(" ".join(q(a) for a in args), pyslang.driver.CommandLineOptions())
             and d.processOptions() and d.parseAllSources()):
@@ -603,10 +608,12 @@ def main():
     ap.add_argument("--top", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--unit", action="append", required=True)
+    ap.add_argument("--max-generate-steps", type=int, default=0,
+                    help="slang's generate-loop step limit (0: slang's default)")
     a = ap.parse_args()
     a.out = os.path.abspath(a.out)
     defines, incdirs, files = read_srcs(a.srcs)
-    d, comp, am, graph = elaborate(defines, incdirs, files, a.top)
+    d, comp, am, graph = elaborate(defines, incdirs, files, a.top, a.max_generate_steps)
     sm = comp.sourceManager
     units = {u.name: u for u in (Unit(s) for s in a.unit)}
     # Only the elaborated hierarchy: slang also builds placeholder instances of

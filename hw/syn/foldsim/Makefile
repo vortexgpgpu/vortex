@@ -51,6 +51,10 @@ FOLDSIM_LIFT ?= VX_socket:drop=INSTANCE_ID
 # the foldsim driver is hw/syn/common.mk's FOLDSIM.
 CIRCT_BIN ?= $(CIRCT_PATH)/bin
 LIFT_PYTHON ?= python3
+# slang's generate-loop step limit for the lift and the import (empty: slang's
+# default, 131072); configurations of 64 or more cores need more (their L2
+# response network's VX_popcount trees).
+FOLDSIM_MAX_GENERATE_STEPS ?=
 # The kernel clock (MHz): the image is timed at it and the shell programs it.
 FOLDSIM_FREQ ?= 250
 # Options of the foldsim driver: by default the set that times s2w4i2 at
@@ -114,7 +118,7 @@ endef
 CONFIG_STAMP := $(BUILD_DIR)/cflags.stamp
 CLASSES_STAMP := $(BUILD_DIR)/classes.stamp
 $(call stamp,$(CONFIG_STAMP),$(GEN_CFLAGS))
-$(call stamp,$(CLASSES_STAMP),$(FOLDSIM_CLASSES) | $(FOLDSIM_LIFT)$(if $(FOLDSIM_FLAGS), | $(FOLDSIM_FLAGS)))
+$(call stamp,$(CLASSES_STAMP),$(FOLDSIM_CLASSES) | $(FOLDSIM_LIFT)$(if $(FOLDSIM_FLAGS), | $(FOLDSIM_FLAGS))$(if $(FOLDSIM_MAX_GENERATE_STEPS), | steps $(FOLDSIM_MAX_GENERATE_STEPS)))
 
 SRCS_NAME := vortex_srcs
 SRCS_DIR := $(BUILD_DIR)/$(SRCS_NAME)
@@ -166,7 +170,8 @@ $(SRCS_LIST): $(RTL_SRCS) $(IP_STUBS) $(SCRIPT_DIR)/xilinx_ip_gen.tcl
 $(LIFT_LIST): $(SRCS_LIST) $(SRC_DIR)/lift_boundaries.py $(CLASSES_STAMP)
 	rm -rf $(BUILD_DIR)/lift
 	$(LIFT_PYTHON) $(SRC_DIR)/lift_boundaries.py --srcs $(SRCS_LIST) --top $(TARGET_TOP) \
-		--out $(BUILD_DIR)/lift $(foreach u,$(FOLDSIM_LIFT),--unit '$(u)')
+		--out $(BUILD_DIR)/lift $(foreach u,$(FOLDSIM_LIFT),--unit '$(u)') \
+		$(if $(FOLDSIM_MAX_GENERATE_STEPS),--max-generate-steps $(FOLDSIM_MAX_GENERATE_STEPS))
 
 generate: $(GEN_SV) $(KERNEL_VH)
 # The compiler is the driver and the tools it runs: foldsim-opt beside it and
@@ -175,7 +180,8 @@ FOLDSIM_TOOLS := $(FOLDSIM) $(wildcard $(dir $(FOLDSIM))foldsim-opt \
                  $(addprefix $(CIRCT_BIN)/,circt-verilog circt-opt firtool))
 $(GEN_SV): $(TARGET_SRCS) $(FOLDSIM_TOOLS) $(CLASSES_STAMP)
 	$(FOLDSIM) --srcs $(TARGET_SRCS) --top $(TARGET_TOP) --out $(GEN_DIR) \
-		$(if $(CIRCT_BIN),--circt-bin $(CIRCT_BIN)) $(FOLDSIM_FLAGS) $(FOLDSIM_CLASSES)
+		$(if $(CIRCT_BIN),--circt-bin $(CIRCT_BIN)) \
+		$(if $(FOLDSIM_MAX_GENERATE_STEPS),--max-generate-steps $(FOLDSIM_MAX_GENERATE_STEPS)) $(FOLDSIM_FLAGS) $(FOLDSIM_CLASSES)
 
 # What the kernel's top needs of the configuration: its memory ports, their id
 # width, and FOLDSIM_MEM_REPEAT0..3(f,s), which list the ports whose names carry
