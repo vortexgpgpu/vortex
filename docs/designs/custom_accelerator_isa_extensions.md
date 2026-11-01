@@ -226,6 +226,8 @@ the table in the same change.
 | | | `0x02` | tensor core (WMMA/WGMMA) | R |
 | | | `0x03` | DXA async copy | R |
 | | | `0x04` | packed loads (`vx_packl*`) | R |
+| | | `0x08`–`0x0F` | `vx_ldg`: `funct7[2]` FP, `[1:0]` cache hint; `rs2` = uimm5 byte offset | R |
+| | | `0x10`–`0x17` | `vx_stg`: `funct7[2]` FP, `[1:0]` cache hint; `rd` = uimm5 byte offset | R |
 | custom-1 `0x2B` | `funct3` | `0` | `vx_wgather` | R4 |
 | | | `3` | `vx_om_export` | R4 |
 | | | `5` | `vx_tex` | R4 |
@@ -233,7 +235,17 @@ the table in the same change.
 | | | `7` | `vx_rt_trace`, `vx_rt_wait` | R4 |
 | | | `1`, `2`, `4` | free | |
 | custom-2 `0x5B` | `funct7` | `0x00` | MUFU special functions; `fn` in `rs2`, `fmt` in `funct3` | R |
-| custom-3 `0x7B` | | | free | |
+| custom-3 `0x7B` | `funct3` | `0`–`6` | `vx_lds` (LOAD widths); `imm[11]` FP, `imm[10:0]` byte offset | I |
+| | | `7` | `vx_sts`; `imm[11]` FP, `imm[10:9]` size, `imm[8:0]` byte offset | S |
+
+`vx_lds`/`vx_sts` address local memory by the low `LMEM_LOG_SIZE` bits of the
+effective address, so a local pointer may hold the window address or a bare
+offset. `vx_ldg`/`vx_stg` take the generic path: the local-memory window is
+reserved, so no global pointer falls in it. Their hint is 0 (default), 1
+(`.cg`) or 2 (`.cs`); 3 is reserved. The FP forms with `funct3`/size 0 and the
+integer-only codes with `imm[11]` set are reserved for wide local accesses, as
+are `vx_ldg` with `funct3` 7 and `vx_stg` with `funct3` 4–7. Standard loads and
+stores stay generic.
 
 ---
 

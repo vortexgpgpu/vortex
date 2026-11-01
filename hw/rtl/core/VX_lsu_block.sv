@@ -137,6 +137,15 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
     // carried through the scheduler's USER channel and out via the
     // lsu_mem_if's per-lane req_data.user field.
 
+    // vx_lds/vx_sts address local memory by the low bits alone, so a bare
+    // offset that falls in another window is still local.
+`ifdef VX_CFG_LMEM_ENABLE
+    wire req_local = execute_if.data.op_args.lsu.is_local;
+`else
+    wire req_local = 1'b0;
+    `UNUSED_VAR (execute_if.data.op_args.lsu.is_local)
+`endif
+
     mem_bus_attr_t [NUM_LANES-1:0] mem_req_attr_struct;
     wire [NUM_LANES-1:0][MEM_ATTR_WIDTH-1:0] mem_req_attr;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mem_req_attr
@@ -159,7 +168,7 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
         // the store off the L1->L2 trunk on that bit alone.
         wire [MEM_ADDRW-1:0] om_addr_start = MEM_ADDRW'(`VX_CFG_XLEN'(`VX_MEM_OM_BASE_ADDR) >> MEM_ASHIFT);
         wire [MEM_ADDRW-1:0] om_addr_end = MEM_ADDRW'(`VX_CFG_XLEN'(`VX_MEM_OM_END_ADDR) >> MEM_ASHIFT);
-        wire lane_is_om = (block_addr >= om_addr_start) && (block_addr < om_addr_end);
+        wire lane_is_om = (block_addr >= om_addr_start) && (block_addr < om_addr_end) && ~req_local;
         assign mem_req_attr_struct[i].is_addr_om = lane_is_om;
     `else
         wire lane_is_om = 1'b0;
@@ -168,12 +177,12 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
         // a fence's token carries its kind: io for a fence ordering only device
         // accesses, and for an acquire fence's (byte enables set: no drain owed)
         assign mem_req_attr_struct[i].is_addr_io = req_is_fence ? (req_fence_io || req_fence_acq)
-                                                 : (((block_addr >= io_addr_start) && (block_addr < io_addr_end))
+                                                 : (((block_addr >= io_addr_start) && (block_addr < io_addr_end) && ~req_local)
                                                     || lane_is_om);
     `ifdef VX_CFG_LMEM_ENABLE
         // is local memory address
-        assign mem_req_attr_struct[i].is_addr_local =
-            (block_addr[MEM_ADDRW-1:LMEM_BLK_LSB] == LMEM_BLK_BASE[MEM_ADDRW-1:LMEM_BLK_LSB]);
+        assign mem_req_attr_struct[i].is_addr_local = req_local
+            || (block_addr[MEM_ADDRW-1:LMEM_BLK_LSB] == LMEM_BLK_BASE[MEM_ADDRW-1:LMEM_BLK_LSB]);
     `else
         assign mem_req_attr_struct[i].is_addr_local = 1'b0;
     `endif

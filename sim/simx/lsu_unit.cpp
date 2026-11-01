@@ -164,6 +164,7 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 	bool is_write;
 	int64_t  offset;
 	uint32_t stride;
+	[[maybe_unused]] bool is_local = false;
 	if (is_amo) {
 		auto amo_args = std::get<IntrAmoArgs>(trace->instr_ptr->get_args());
 		data_bytes = 1u << (amo_args.width & 0x3);
@@ -176,6 +177,7 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 		is_write   = (lsu_tag && *lsu_tag == LsuType::STORE);
 		offset     = lsu_args.offset;
 		stride     = lsu_args.stride;
+		is_local   = lsu_args.is_local;
 		if (is_write && lsu_args.width > 3)
 			std::abort();
 	}
@@ -199,6 +201,14 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 			// upper bits into the 64-bit address field.
 			e.addr = Word(rs1_data[t].i + (uint64_t)stride * rs2_data[t].u + offset);
 			e.size = data_bytes;
+		#ifdef VX_CFG_LMEM_ENABLE
+			if (is_local) {
+				// Local memory decodes only the low bits; the window address
+				// carries the request to it.
+				constexpr uint64_t lmem_mask = (uint64_t(1) << VX_CFG_LMEM_LOG_SIZE) - 1;
+				e.addr = uint64_t(VX_MEM_LMEM_BASE_ADDR) | (e.addr & lmem_mask);
+			} else
+		#endif
 			if (StackInterleave::contains(e.addr)) {
 				// Interleaving is word-granular; a wider access would straddle two threads.
 				if (e.size > StackInterleave::WORD_SIZE) {

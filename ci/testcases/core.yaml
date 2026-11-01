@@ -265,6 +265,12 @@ tests:
   app: lmem_access
   args: -n16 -s
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_A_ENABLE -DVX_CFG_ISSUE_WIDTH=2
+# Explicit local and global loads and stores: SimX and RTL route them alike.
+- id: parity-lds-ldg
+  check: model_parity
+  via: blackbox
+  app: lds_ldg
+  configs: -DVX_CFG_NUM_THREADS=16
 - id: parity-sgemm2-lmem
   check: model_parity
   via: blackbox

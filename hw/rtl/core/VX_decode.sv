@@ -222,6 +222,7 @@ module VX_decode import
         // address of every store in the program.
         op_args.lsu.export_mask = 2'b00;
     `endif
+        op_args.lsu.is_local = 1'b0;
 
         case (opcode)
             INST_I: begin
@@ -488,6 +489,36 @@ module VX_decode import
                 `USED_IREG (rs2);
             `endif
             end
+        `ifdef VX_CFG_LMEM_ENABLE
+            // vx_lds/vx_sts: imm[11] selects the FP register file; a store
+            // carries its size in imm[10:9].
+            INST_EXT4: begin
+                ex_type = EX_LSU;
+                op_args.lsu.is_float = instr[31];
+                op_args.lsu.pack     = 0;
+                op_args.lsu.is_local = 1;
+                `USED_IREG (rs1);
+                if (funct3 == 3'h7) begin
+                    op_type = INST_OP_BITS'({2'b10, instr[30:29]});
+                    op_args.lsu.is_store = 1;
+                    op_args.lsu.offset   = {{3{s_imm[8]}}, s_imm[8:0]};
+                `ifdef VX_CFG_EXT_F_ENABLE
+                    `USED_REG (instr[31], rs2, 1'b1);
+                `else
+                    `USED_IREG (rs2);
+                `endif
+                end else begin
+                    op_type = INST_OP_BITS'({1'b0, funct3});
+                    op_args.lsu.is_store = 0;
+                    op_args.lsu.offset   = {u_12[10], u_12[10:0]};
+                `ifdef VX_CFG_EXT_F_ENABLE
+                    `USED_REG (instr[31], rd, 1'b1);
+                `else
+                    `USED_IREG (rd);
+                `endif
+                end
+            end
+        `endif
         `ifdef VX_CFG_EXT_F_ENABLE
             INST_FMADD,  // 7'b1000011
             INST_FMSUB,  // 7'b1000111
@@ -814,6 +845,37 @@ module VX_decode import
                             end
                             default:;
                         endcase
+                    end
+                    // vx_ldg/vx_stg: global accesses through the generic path, the
+                    // window being reserved for local memory. funct7[2] selects the
+                    // FP register file; the cache hint in funct7[1:0] is advisory.
+                    7'h08, 7'h09, 7'h0A, 7'h0B, 7'h0C, 7'h0D, 7'h0E, 7'h0F: begin
+                        ex_type              = EX_LSU;
+                        op_type              = INST_OP_BITS'({1'b0, funct3});
+                        op_args.lsu.is_store = 0;
+                        op_args.lsu.is_float = funct7[2];
+                        op_args.lsu.pack     = 0;
+                        op_args.lsu.offset   = 12'(rs2);
+                        `USED_IREG (rs1);
+                    `ifdef VX_CFG_EXT_F_ENABLE
+                        `USED_REG (funct7[2], rd, 1'b1);
+                    `else
+                        `USED_IREG (rd);
+                    `endif
+                    end
+                    7'h10, 7'h11, 7'h12, 7'h13, 7'h14, 7'h15, 7'h16, 7'h17: begin
+                        ex_type              = EX_LSU;
+                        op_type              = INST_OP_BITS'({2'b10, funct3[1:0]});
+                        op_args.lsu.is_store = 1;
+                        op_args.lsu.is_float = funct7[2];
+                        op_args.lsu.pack     = 0;
+                        op_args.lsu.offset   = 12'(rd);
+                        `USED_IREG (rs1);
+                    `ifdef VX_CFG_EXT_F_ENABLE
+                        `USED_REG (funct7[2], rs2, 1'b1);
+                    `else
+                        `USED_IREG (rs2);
+                    `endif
                     end
                     default:;
                 endcase

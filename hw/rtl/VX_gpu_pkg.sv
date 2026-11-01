@@ -1159,10 +1159,10 @@ package VX_gpu_pkg;
     // words, and VX_gfx_uops emits one uop per set bit.
     // Zero = not an export. Read ONLY by VX_gfx_uops; the LSU never sees it set
     // (the expander clears it), so the LSU stays a general-purpose unit.
-    // Spends two of the struct's spare padding bits -- INST_ARGS_BITS is
-    // unchanged (the PACKAGE_ASSERT below proves it).
+    // is_local marks vx_lds/vx_sts: the access goes to local memory at the
+    // low bits of its address, whatever the address window says.
     typedef struct packed {
-        logic [(INST_ARGS_BITS-1-1-12-2-1-1-$bits(amo_op_e)-2-2)-1:0] __padding;
+        logic                       is_local;
         logic [1:0]                 export_mask;
         logic                       amo_valid;
         logic                       amo_unsigned;

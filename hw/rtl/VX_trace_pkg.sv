@@ -180,6 +180,27 @@ package VX_trace_pkg;
                         `TRACE(level, ("PACKLH.F"))
                     end
                 endcase
+            end else if (op_args.lsu.is_local) begin
+                if (op_args.lsu.is_float) begin
+                    `TRACE(level, ("VX_F"))
+                end else begin
+                    `TRACE(level, ("VX_"))
+                end
+                if (op_args.lsu.is_store) begin
+                    `TRACE(level, ("STS."))
+                end else begin
+                    `TRACE(level, ("LDS."))
+                end
+                case (INST_LSU_BITS'(op_type))
+                    INST_LSU_LB, INST_LSU_SB: `TRACE(level, ("B"))
+                    INST_LSU_LH, INST_LSU_SH: `TRACE(level, ("H"))
+                    INST_LSU_LW, INST_LSU_SW: `TRACE(level, ("W"))
+                    INST_LSU_LD, INST_LSU_SD: `TRACE(level, ("D"))
+                    INST_LSU_LBU:             `TRACE(level, ("BU"))
+                    INST_LSU_LHU:             `TRACE(level, ("HU"))
+                    INST_LSU_LWU:             `TRACE(level, ("WU"))
+                    default:                  `TRACE(level, ("?"))
+                endcase
             end else if (op_args.lsu.is_float) begin
                 case (INST_LSU_BITS'(op_type))
                     INST_LSU_LW: `TRACE(level, ("FLW"))
