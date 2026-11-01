@@ -32,6 +32,10 @@
 // request is seen, and it is accepted in the cycle that follows. An atomic owns
 // its bank for three cycles (read, capture, write back), so no pass or DMA access
 // is issued in the two cycles after an atomic pass.
+//
+// A wide read names its group size in the atomic op of a request that is not
+// an atomic. Its lanes' addresses are aligned down to the group here, and the
+// engine serves the group one word-phase at a time.
 module VX_lmem_unit import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
 
@@ -55,7 +59,10 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
     parameter DMA_TAG_WIDTH = 1,
 
     // Synthesize atomic-op + LR/SC logic in the banks
-    parameter AMO_ENABLE    = 0
+    parameter AMO_ENABLE    = 0,
+
+    // Serve wide reads
+    parameter WIDE_ENABLE   = 0
 ) (
     input wire clk,
     input wire reset,
@@ -97,6 +104,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
     localparam PAYLOAD_WIDTH   = WORD_WIDTH + WORD_SIZE + LANE_SB_WIDTH;
     // common to all lanes: the atomic op and its signedness
     localparam ATTR_WIDTH      = AMO_OP_WIDTH + 1;
+    localparam RSP_SIDE_WIDTH  = WIDE_ENABLE ? $bits(lsu_rsp_side_t) : 0;
 
     `STATIC_ASSERT(ADDR_WIDTH == (BANK_ADDR_WIDTH + `CLOG2(NUM_BANKS)), ("invalid parameter"))
     `STATIC_ASSERT(`IS_POW2(NUM_BANKS), ("invalid parameter"))
@@ -112,6 +120,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
     wire [NUM_BLOCKS-1:0][NUM_LANES-1:0][ADDR_WIDTH-1:0]    in_addr;
     wire [NUM_BLOCKS-1:0][NUM_LANES-1:0][PAYLOAD_WIDTH-1:0] in_payload;
     wire [NUM_BLOCKS-1:0][TAG_WIDTH-1:0]                    in_tag;
+    wire [NUM_BLOCKS-1:0][1:0]                              in_wide;
     wire [NUM_BLOCKS-1:0]                                   in_ready;
 
     for (genvar k = 0; k < NUM_BLOCKS; ++k) begin : g_in
@@ -125,9 +134,23 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
         assign in_attr[k]  = AMO_ENABLE ? {attr0.amo.amo_op, attr0.amo.amo_unsigned} : '0;
         assign in_mask[k]  = lsu_mem_if[k].req_data.mask;
         assign in_tag[k]   = lsu_mem_if[k].req_data.tag;
+        if (WIDE_ENABLE != 0) begin : g_wide
+            wire [AMO_OP_WIDTH-1:0] attr0_op = attr0.amo.amo_op;
+            assign in_wide[k] = attr0.amo.amo_valid ? 2'b00 : attr0_op[1:0];
+            `UNUSED_VAR (attr0_op)
+        end else begin : g_no_wide
+            assign in_wide[k] = 2'b00;
+        end
         `UNUSED_VAR (attr0)
         for (genvar i = 0; i < NUM_LANES; ++i) begin : g_lanes
-            assign in_addr[k][i] = lsu_mem_if[k].req_data.addr[i][ADDR_WIDTH-1:0];
+            wire [ADDR_WIDTH-1:0] lane_addr = lsu_mem_if[k].req_data.addr[i][ADDR_WIDTH-1:0];
+            if (WIDE_ENABLE != 0) begin : g_wide_addr
+                assign in_addr[k][i] = {lane_addr[ADDR_WIDTH-1:2],
+                                        lane_addr[1] && ~in_wide[k][1],
+                                        lane_addr[0] && (in_wide[k] == 2'b00)};
+            end else begin : g_addr
+                assign in_addr[k][i] = lane_addr;
+            end
             if (AMO_ENABLE != 0) begin : g_amo
                 mem_bus_attr_t lane_attr;
                 assign lane_attr = mem_bus_attr_t'(lsu_mem_if[k].req_data.user[i]);
@@ -177,6 +200,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
     wire [NUM_LANES-1:0]                 a_rsp_mask;
     wire [NUM_LANES-1:0][WORD_WIDTH-1:0] a_rsp_data;
     wire [TAG_WIDTH-1:0]                 a_rsp_tag;
+    wire [`UP(RSP_SIDE_WIDTH)-1:0]       a_rsp_side;
 
     wire [NUM_LANES-1:0] a_perf_served;
     wire                 a_perf_store;
@@ -194,6 +218,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
     wire [NUM_LANES-1:0]                 b_rsp_mask;
     wire [NUM_LANES-1:0][WORD_WIDTH-1:0] b_rsp_data;
     wire [TAG_WIDTH-1:0]                 b_rsp_tag;
+    wire [`UP(RSP_SIDE_WIDTH)-1:0]       b_rsp_side;
 
     wire [NUM_LANES-1:0] b_perf_served;
     wire                 b_perf_replay;
@@ -311,7 +336,8 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
         .PAYLOAD_WIDTH  (PAYLOAD_WIDTH),
         .ATTR_WIDTH     (ATTR_WIDTH),
         .NUM_BLOCKS     (NUM_BLOCKS),
-        .RSP_QUEUE_SIZE (RSP_QUEUE_SIZE)
+        .RSP_QUEUE_SIZE (RSP_QUEUE_SIZE),
+        .WIDE_ENABLE    (WIDE_ENABLE)
     ) engine_a (
         .clk          (clk),
         .reset        (reset),
@@ -325,6 +351,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
         .req_addr     (in_addr[a_req_block]),
         .req_payload  (in_payload[a_req_block]),
         .req_tag      (in_tag[a_req_block]),
+        .req_wide     (in_wide[a_req_block]),
         .req_ready    (a_req_ready),
         .busy         (a_busy),
         .holds_write  (a_holds_write),
@@ -342,6 +369,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
         .rsp_mask     (a_rsp_mask),
         .rsp_data     (a_rsp_data),
         .rsp_tag      (a_rsp_tag),
+        .rsp_side     (a_rsp_side),
         .rsp_take     (a_rsp_take),
         .rsp_done     (a_rsp_done),
         .perf_served  (a_perf_served),
@@ -371,7 +399,8 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
             .PAYLOAD_WIDTH  (1),
             .ATTR_WIDTH     (ATTR_WIDTH),
             .NUM_BLOCKS     (NUM_BLOCKS),
-            .RSP_QUEUE_SIZE (RSP_QUEUE_SIZE)
+            .RSP_QUEUE_SIZE (RSP_QUEUE_SIZE),
+            .WIDE_ENABLE    (WIDE_ENABLE)
         ) engine_b (
             .clk          (clk),
             .reset        (reset),
@@ -385,6 +414,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
             .req_addr     (in_addr[b_req_block]),
             .req_payload  (b_req_payload),
             .req_tag      (in_tag[b_req_block]),
+            .req_wide     (in_wide[b_req_block]),
             .req_ready    (b_req_ready),
             .busy         (b_busy),
             .holds_write  (b_holds_write),
@@ -402,6 +432,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
             .rsp_mask     (b_rsp_mask),
             .rsp_data     (b_rsp_data),
             .rsp_tag      (b_rsp_tag),
+            .rsp_side     (b_rsp_side),
             .rsp_take     (b_rsp_take),
             .rsp_done     (b_rsp_done),
             .perf_served  (b_perf_served),
@@ -420,6 +451,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
         assign b_rsp_mask    = '0;
         assign b_rsp_data    = '0;
         assign b_rsp_tag     = '0;
+        assign b_rsp_side    = '0;
         assign b_perf_served = '0;
         assign b_perf_replay = 1'b0;
         `UNUSED_VAR (b_bank_rdata)
@@ -448,6 +480,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
         reg [NUM_LANES-1:0]                 rsp_mask_r;
         reg [NUM_LANES-1:0][WORD_WIDTH-1:0] rsp_data_r;
         reg [TAG_WIDTH-1:0]                 rsp_tag_r;
+        reg [`UP(RSP_SIDE_WIDTH)-1:0]       rsp_side_r;
 
         wire rsp_fire = rsp_valid_r && lsu_mem_if[k].rsp_ready;
         wire rsp_free = ~rsp_valid_r || lsu_mem_if[k].rsp_ready;
@@ -470,6 +503,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
                 rsp_mask_r   <= a_hit ? a_rsp_mask : b_rsp_mask;
                 rsp_data_r   <= a_hit ? a_rsp_data : b_rsp_data;
                 rsp_tag_r    <= a_hit ? a_rsp_tag  : b_rsp_tag;
+                rsp_side_r   <= a_hit ? a_rsp_side : b_rsp_side;
             end
         end
 
@@ -477,6 +511,12 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
         assign lsu_mem_if[k].rsp_data.mask = rsp_mask_r;
         assign lsu_mem_if[k].rsp_data.data = rsp_data_r;
         assign lsu_mem_if[k].rsp_data.tag  = rsp_tag_r;
+        if (WIDE_ENABLE != 0) begin : g_rsp_side
+            assign lsu_mem_if[k].rsp_data.side = rsp_side_r;
+        end else begin : g_no_rsp_side
+            assign lsu_mem_if[k].rsp_data.side = '0;
+            `UNUSED_VAR (rsp_side_r)
+        end
     end
 
     `POP_COUNT(a_rsp_done, a_done);

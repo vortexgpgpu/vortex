@@ -1,6 +1,6 @@
-// lds_ldg — the explicit local (vx_lds/vx_sts) and global (vx_ldg/vx_stg)
-// loads and stores return and store what the generic path does, at every
-// width and at the limits of their offsets.
+// lds_ldg — the explicit local (vx_lds/vx_sts, vx_flds.64/.128) and global
+// (vx_ldg/vx_stg) loads and stores return and store what the generic path
+// does, at every width and at the limits of their offsets.
 
 #include <vortex2.h>
 #include "common.h"
@@ -48,14 +48,20 @@ int main(int argc, char** argv) {
   uint64_t nw = 0;
   uint64_t nc = 0;
   uint64_t lmem_size = 0;
+  uint64_t isa = 0;
   CHECK(vx_device_query(dev, VX_CAPS_NUM_THREADS,    &nt));
   CHECK(vx_device_query(dev, VX_CAPS_NUM_WARPS,      &nw));
   CHECK(vx_device_query(dev, VX_CAPS_NUM_CORES,      &nc));
   CHECK(vx_device_query(dev, VX_CAPS_LOCAL_MEM_SIZE, &lmem_size));
+  CHECK(vx_device_query(dev, VX_CAPS_ISA_FLAGS,      &isa));
+  // the kernel's wide loads (vx_flds) exist on XLEN 32 with F
+  const bool wide = (VX_ISA_ARCH(isa) == 32) && (isa & VX_ISA_STD_F);
   const uint32_t block = static_cast<uint32_t>(nt * nw);
   const uint32_t grid = static_cast<uint32_t>(nc * 2);
   const uint32_t num_threads = block * grid;
-  const uint32_t words = RO_WORDS + block * SLOT_WORDS;
+  const uint32_t slot_end = RO_WORDS + block * SLOT_WORDS;
+  const uint32_t wide_start = wide_base(block);
+  const uint32_t words = wide ? (wide_start + block * WIDE_WORDS) : slot_end;
   std::cout << "lds_ldg: block=" << block << " grid=" << grid << " words=" << words << std::endl;
   if (words * sizeof(uint32_t) > lmem_size) {
     std::cout << "local memory too small\nFAILED!" << std::endl;
@@ -136,8 +142,12 @@ int main(int argc, char** argv) {
   }
   for (uint32_t b = 0; b < grid; ++b) {
     for (uint32_t i = 0; i < words; ++i) {
+      if (i >= slot_end && i < wide_start) {
+        continue; // alignment padding, never written
+      }
       uint32_t expected = (i < RO_WORDS) ? ro_word(i)
-                        : slot_word(b * block + (i - RO_WORDS) / SLOT_WORDS, (i - RO_WORDS) % SLOT_WORDS);
+                        : (i < slot_end) ? slot_word(b * block + (i - RO_WORDS) / SLOT_WORDS, (i - RO_WORDS) % SLOT_WORDS)
+                        : wide_word(b * block + (i - wide_start) / WIDE_WORDS, (i - wide_start) % WIDE_WORDS);
       uint32_t actual = h_dump[b * words + i];
       if (actual != expected) {
         if (errors < 16) {

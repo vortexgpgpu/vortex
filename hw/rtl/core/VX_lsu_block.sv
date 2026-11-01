@@ -146,6 +146,18 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
     `UNUSED_VAR (execute_if.data.op_args.lsu.is_local)
 `endif
 
+    // A wide local load names its group size, as log2 words, in the atomic op
+    // of a request that is not an atomic.
+    wire [1:0] req_wide;
+    if (LDS_WIDE_ENABLE) begin : g_req_wide
+        wire [XLENB_W-1:0] bytesel_size = execute_if.data.header.bytesel[BYTESEL_BITS-1 -: XLENB_W];
+        wire [XLENB_W-1:0] bytesel_off  = execute_if.data.header.bytesel[0 +: XLENB_W];
+        wire is_wide = (bytesel_size == XLENB_W'(XLENB-1)) && bytesel_off[0];
+        assign req_wide = is_wide ? (bytesel_off[1] ? 2'd2 : 2'd1) : 2'd0;
+    end else begin : g_no_req_wide
+        assign req_wide = 2'd0;
+    end
+
     mem_bus_attr_t [NUM_LANES-1:0] mem_req_attr_struct;
     wire [NUM_LANES-1:0][MEM_ATTR_WIDTH-1:0] mem_req_attr;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mem_req_attr
@@ -189,7 +201,8 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
     `ifdef VX_CFG_EXT_A_ENABLE
         amo_req_t lane_amo;
         assign lane_amo.amo_valid    = execute_if.data.op_args.lsu.amo_valid;
-        assign lane_amo.amo_op       = execute_if.data.op_args.lsu.amo_op;
+        assign lane_amo.amo_op       = (LDS_WIDE_ENABLE && ~execute_if.data.op_args.lsu.amo_valid)
+                                     ? amo_op_e'($bits(amo_op_e)'(req_wide)) : execute_if.data.op_args.lsu.amo_op;
         // amo_unsigned distinguishes signed/unsigned AMOMIN/MAX variants
         // (decoder collapses MINU/MAXU into MIN/MAX + this bit).
         assign lane_amo.amo_unsigned = execute_if.data.op_args.lsu.amo_unsigned;
@@ -208,7 +221,12 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
     `else
         // EXT_A disabled: tie the AMO sideband to zero so the bits don't
         // propagate as 'x under --x-assign unique.
-        assign mem_req_attr_struct[i].amo = '0;
+        amo_req_t lane_amo;
+        always @(*) begin
+            lane_amo = '0;
+            lane_amo.amo_op = amo_op_e'($bits(amo_op_e)'(req_wide));
+        end
+        assign mem_req_attr_struct[i].amo = lane_amo;
     `endif
         assign mem_req_attr[i] = mem_req_attr_struct[i];
     end
@@ -231,6 +249,13 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
     wire                            mem_rsp_sop;
     wire                            mem_rsp_eop;
     wire                            mem_rsp_ready;
+
+    // a wide load response's phase, and whether it completes that phase for
+    // the whole instruction, which releases the phase's register
+    wire                            mem_rsp_hold;
+    wire                            mem_rsp_phase_end;
+    wire [1:0]                      mem_rsp_phase;
+    wire                            mem_rsp_phase_rel;
 
     wire mem_req_fire = mem_req_valid && mem_req_ready;
     wire mem_rsp_fire = mem_rsp_valid && mem_rsp_ready;
@@ -333,6 +358,20 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
                 $time, execute_if.data.header.wid, to_fullPC(execute_if.data.header.PC), full_addr[i], inst_lsu_wsize(execute_if.data.op_type), execute_if.data.header.uuid))
     end
 
+    // A wide load's lanes address whole groups and fill an aligned register group.
+    if (LDS_WIDE_ENABLE) begin : g_wide_align
+        wire lsu_req_fire = execute_if.valid && execute_if.ready;
+        wire [3:0] group_amask = req_wide[1] ? 4'hf : 4'h7;
+        for (genvar i = 0; i < NUM_LANES; ++i) begin : g_lanes
+            `RUNTIME_ASSERT((~lsu_req_fire || (req_wide == 2'd0) || ~execute_if.data.header.tmask[i] || ((full_addr[i][3:0] & group_amask) == 4'h0)),
+                ("%t: misaligned wide local load, wid=%0d, PC=0x%0h, addr=0x%0h! (#%0d)",
+                    $time, execute_if.data.header.wid, to_fullPC(execute_if.data.header.PC), full_addr[i], execute_if.data.header.uuid))
+        end
+        `RUNTIME_ASSERT((~lsu_req_fire || (req_wide == 2'd0) || ((execute_if.data.header.rd[1:0] & {req_wide[1], 1'b1}) == 2'b00)),
+            ("%t: misaligned wide local load register group, wid=%0d, PC=0x%0h, rd=%0d! (#%0d)",
+                $time, execute_if.data.header.wid, to_fullPC(execute_if.data.header.PC), execute_if.data.header.rd, execute_if.data.header.uuid))
+    end
+
     // store data formatting
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mem_req_data
         always @(*) begin
@@ -412,6 +451,35 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
 
         assign mem_rsp_sop_pkt = pkt_sop[pkt_raddr];
         assign mem_rsp_eop_pkt = mem_rsp_eop && pkt_eop[pkt_raddr] && (pkt_ctr[pkt_raddr] == 1);
+
+        // A wide load's packets serve their phases independently, so a phase
+        // before the last is complete once every packet has served it.
+        if (LDS_WIDE_ENABLE) begin : g_phase_ctr
+            reg [`VX_CFG_LSU_PENDING_SIZE-1:0][2:0][PID_BITS:0] phase_ctr;
+            wire phase_dec = mem_rsp_fire && mem_rsp_hold && mem_rsp_phase_end;
+
+            always @(posedge clk) begin
+                for (integer s = 0; s < `VX_CFG_LSU_PENDING_SIZE; ++s) begin
+                    for (integer k = 0; k < 3; ++k) begin
+                        if (reset) begin
+                            phase_ctr[s][k] <= '0;
+                        end else if (mem_req_rd_sop_fire && (pkt_waddr == LSUQ_SIZEW'(s))) begin
+                            phase_ctr[s][k] <= (PID_BITS+1)'(1);
+                        end else begin
+                            phase_ctr[s][k] <= phase_ctr[s][k]
+                                             + (PID_BITS+1)'(mem_req_rd_fire && (pkt_waddr == LSUQ_SIZEW'(s)))
+                                             - (PID_BITS+1)'(phase_dec && (pkt_raddr == LSUQ_SIZEW'(s)) && (mem_rsp_phase == 2'(k)));
+                        end
+                    end
+                end
+            end
+
+            wire [PID_BITS:0] rsp_phase_ctr = phase_ctr[pkt_raddr][(mem_rsp_phase == 2'd3) ? 2'd0 : mem_rsp_phase];
+            assign mem_rsp_phase_rel = mem_rsp_phase_end
+                                    && (mem_rsp_hold ? (pkt_eop[pkt_raddr] && (rsp_phase_ctr == 1)) : mem_rsp_eop_pkt);
+        end else begin : g_no_phase_ctr
+            assign mem_rsp_phase_rel = 1'b0;
+        end
         `RUNTIME_ASSERT(~(mem_req_rd_fire && full), ("allocator full!"))
         `RUNTIME_ASSERT(~(mem_req_rd_sop_fire && pkt_ctr[pkt_waddr] != 0), ("oops! broken sop request!"))
         // pkt_ctr is guarded against a same-cycle same-slot request/response by
@@ -424,7 +492,9 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
         assign pkt_waddr = 0;
         assign mem_rsp_sop_pkt = mem_rsp_sop;
         assign mem_rsp_eop_pkt = mem_rsp_eop;
+        assign mem_rsp_phase_rel = mem_rsp_phase_end;
         `UNUSED_VAR (pkt_raddr)
+        `UNUSED_VAR (mem_rsp_hold)
     end
 
     // pack memory request tag
@@ -481,6 +551,19 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
     assign mem_rsp_sop               = client_if.rsp_data.sop;
     assign mem_rsp_eop               = client_if.rsp_data.eop;
     assign client_if.rsp_ready       = mem_rsp_ready;
+
+    if (LDS_WIDE_ENABLE) begin : g_rsp_side
+        lsu_rsp_side_t rsp_side;
+        assign rsp_side          = lsu_rsp_side_t'(client_if.rsp_data.side);
+        assign mem_rsp_hold      = rsp_side.hold;
+        assign mem_rsp_phase_end = rsp_side.phase_end;
+        assign mem_rsp_phase     = rsp_side.phase;
+    end else begin : g_no_rsp_side
+        assign mem_rsp_hold      = 1'b0;
+        assign mem_rsp_phase_end = 1'b0;
+        assign mem_rsp_phase     = 2'd0;
+        `UNUSED_VAR (client_if.rsp_data.side)
+    end
 
     lsu_header_t rsp_hdr;
     wire [INST_LSU_BITS-1:0] rsp_op_type;
@@ -546,12 +629,35 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
 
     // result
 
+    // A wide load's beat writes the register of its phase; its bytesel
+    // offset bit 1 says whether the beat releases that register.
+    wire rsp_wide;
+    wire rsp_quad;
+    if (LDS_WIDE_ENABLE) begin : g_rsp_wide
+        wire [XLENB_W-1:0] bytesel_size = rsp_hdr.bytesel[BYTESEL_BITS-1 -: XLENB_W];
+        wire [XLENB_W-1:0] bytesel_off  = rsp_hdr.bytesel[0 +: XLENB_W];
+        assign rsp_wide = (bytesel_size == XLENB_W'(XLENB-1)) && bytesel_off[0];
+        assign rsp_quad = bytesel_off[1];
+    end else begin : g_no_rsp_wide
+        assign rsp_wide = 1'b0;
+        assign rsp_quad = 1'b0;
+        `UNUSED_VAR ({mem_rsp_hold, mem_rsp_phase_end, mem_rsp_phase_rel})
+    end
+
     lsu_header_t rsp_hdr2;
     always @(*) begin
         rsp_hdr2 = rsp_hdr;
         rsp_hdr2.tmask = mem_rsp_mask;
         rsp_hdr2.sop = mem_rsp_sop_pkt;
         rsp_hdr2.eop = mem_rsp_eop_pkt;
+        if (rsp_wide) begin
+            if (rsp_quad) begin
+                rsp_hdr2.rd[1:0] = mem_rsp_phase;
+            end else begin
+                rsp_hdr2.rd[0] = mem_rsp_phase[0];
+            end
+            rsp_hdr2.bytesel = {XLENB_W'(XLENB-1), XLENB_W'({mem_rsp_phase_rel, 1'b1})};
+        end
     end
 
     VX_elastic_buffer #(

@@ -30,27 +30,50 @@ module VX_commit_slice import VX_gpu_pkg::*; #(
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam OUT_DATAW = $bits(commit_t);
+    localparam REL_W     = LDS_WIDE_ENABLE ? PER_ISSUE_WARPS : 0;
+    localparam ARB_DATAW = PER_ISSUE_WARPS + REL_W + OUT_DATAW;
 
     VX_commit_if commit_arb_if();
     wire [PER_ISSUE_WARPS-1:0] commit_eop_wis;
+    wire [PER_ISSUE_WARPS-1:0] commit_rel_wis;
 
     wire [NUM_EX_UNITS-1:0]            valid_in;
-    wire [NUM_EX_UNITS-1:0][PER_ISSUE_WARPS+OUT_DATAW-1:0] data_in;
+    wire [NUM_EX_UNITS-1:0][ARB_DATAW-1:0] data_in;
+    wire [ARB_DATAW-1:0]               data_out;
     wire [NUM_EX_UNITS-1:0]            ready_in;
 
     // Decoded ahead of the output register so each warp's release reads
-    // its own flop.
+    // its own flop. A wide load's beat (full-size bytesel with an odd offset)
+    // writes a whole register, and its offset bit 1 releases it.
     for (genvar j = 0; j < NUM_EX_UNITS; ++j) begin : g_data_in
         wire [PER_ISSUE_WARPS-1:0] eop_wis = PER_ISSUE_WARPS'(commit_if[j].data.eop)
                                           << wid_to_wis(commit_if[j].data.wid);
+        if (LDS_WIDE_ENABLE && (j == EX_LSU)) begin : g_wide
+            wire [XLENB_W-1:0] size = commit_if[j].data.bytesel[BYTESEL_BITS-1 -: XLENB_W];
+            wire [XLENB_W-1:0] off  = commit_if[j].data.bytesel[0 +: XLENB_W];
+            wire wide = (size == XLENB_W'(XLENB-1)) && off[0];
+            commit_t data;
+            always @(*) begin
+                data = commit_if[j].data;
+                if (wide) begin
+                    data.bytesel = BYTESEL_DEFAULT;
+                end
+            end
+            wire [PER_ISSUE_WARPS-1:0] rel_wis = PER_ISSUE_WARPS'(wide && off[1])
+                                              << wid_to_wis(commit_if[j].data.wid);
+            assign data_in[j] = {eop_wis, rel_wis, data};
+        end else if (LDS_WIDE_ENABLE) begin : g_narrow
+            assign data_in[j] = {eop_wis, PER_ISSUE_WARPS'(0), commit_if[j].data};
+        end else begin : g_no_wide
+            assign data_in[j] = {eop_wis, commit_if[j].data};
+        end
         assign valid_in[j] = commit_if[j].valid;
-        assign data_in[j]  = {eop_wis, commit_if[j].data};
         assign commit_if[j].ready = ready_in[j];
     end
 
     VX_stream_arb #(
         .NUM_INPUTS (NUM_EX_UNITS),
-        .DATAW      (PER_ISSUE_WARPS + OUT_DATAW),
+        .DATAW      (ARB_DATAW),
         .ARBITER    ("P"),
         .OUT_BUF    (1)
     ) commit_arb (
@@ -59,11 +82,18 @@ module VX_commit_slice import VX_gpu_pkg::*; #(
         .valid_in   (valid_in),
         .ready_in   (ready_in),
         .data_in    (data_in),
-        .data_out   ({commit_eop_wis, commit_arb_if.data}),
+        .data_out   (data_out),
         .valid_out  (commit_arb_if.valid),
         .ready_out  (commit_arb_if.ready),
         `UNUSED_PIN (sel_out)
     );
+
+    if (LDS_WIDE_ENABLE) begin : g_rel
+        assign {commit_eop_wis, commit_rel_wis, commit_arb_if.data} = data_out;
+    end else begin : g_no_rel
+        assign {commit_eop_wis, commit_arb_if.data} = data_out;
+        assign commit_rel_wis = '0;
+    end
 
     // notify scheduler
     wire [PER_ISSUE_WARPS-1:0] committed_wis_n = commit_arb_if.valid ? commit_eop_wis : '0;
@@ -94,6 +124,7 @@ module VX_commit_slice import VX_gpu_pkg::*; #(
     assign writeback_if.data.uuid = commit_arb_if.data.uuid;
     assign writeback_if.data.wis  = wid_to_wis(commit_arb_if.data.wid);
     assign writeback_if.data.eop_wis = commit_eop_wis;
+    assign writeback_if.data.rel_wis = commit_rel_wis;
     assign writeback_if.data.cta_id = commit_arb_if.data.cta_id;
     assign writeback_if.data.sid  = commit_arb_if.data.sid;
     assign writeback_if.data.PC   = commit_arb_if.data.PC;

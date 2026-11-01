@@ -47,9 +47,10 @@ module VX_mem_unit_top import VX_gpu_pkg::*; #(
 );
 `ifdef VX_CFG_LMEM_ENABLE
     VX_lsu_mem_if #(
-        .NUM_LANES (`VX_CFG_NUM_LSU_LANES),
-        .DATA_SIZE (LSU_WORD_SIZE),
-        .TAG_WIDTH (LSU_TAG_WIDTH)
+        .NUM_LANES      (`VX_CFG_NUM_LSU_LANES),
+        .DATA_SIZE      (LSU_WORD_SIZE),
+        .TAG_WIDTH      (LSU_TAG_WIDTH),
+        .RSP_SIDE_WIDTH (LSU_RSP_SIDE_W)
     ) lsu_lmem_if[`VX_CFG_NUM_LSU_BLOCKS]();
 `endif
 

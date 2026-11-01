@@ -43,6 +43,10 @@ module VX_mem_scheduler #(
     // all feeding the one output register -- which then cannot be placed near
     // its own data. Distributed RAM lands in the slices that hold that register.
     parameter REQQ_LUTRAM   = 0,
+    // Nonzero: a memory response carries a side word to its core response, and
+    // a hold bit that keeps the lanes it serves outstanding. Needs RSP_PARTIAL
+    // and no coalescing.
+    parameter RSP_SIDE_WIDTH = 0,
 
     parameter WORD_WIDTH    = WORD_SIZE * 8,
     parameter LINE_WIDTH    = LINE_SIZE * 8,
@@ -85,6 +89,7 @@ module VX_mem_scheduler #(
     output wire [TAG_WIDTH-1:0]             core_rsp_tag,
     output wire                             core_rsp_sop,
     output wire                             core_rsp_eop,
+    output wire [`UP(RSP_SIDE_WIDTH)-1:0]   core_rsp_side,
     input wire                              core_rsp_ready,
 
     // Memory request
@@ -103,6 +108,8 @@ module VX_mem_scheduler #(
     input wire [MEM_CHANNELS-1:0]           mem_rsp_mask,
     input wire [MEM_CHANNELS-1:0][LINE_WIDTH-1:0] mem_rsp_data,
     input wire [MEM_TAG_WIDTH-1:0]          mem_rsp_tag,
+    input wire                              mem_rsp_hold,
+    input wire [`UP(RSP_SIDE_WIDTH)-1:0]    mem_rsp_side,
     output wire                             mem_rsp_ready
 );
     localparam BATCH_SEL_WIDTH = `UP(MEM_BATCH_BITS);
@@ -117,6 +124,7 @@ module VX_mem_scheduler #(
     `STATIC_ASSERT ((MEM_CHANNELS <= CORE_REQS), ("invalid parameter"))
     `STATIC_ASSERT (`IS_DIVISBLE(CORE_REQS * WORD_SIZE, LINE_SIZE), ("invalid parameter"))
     `STATIC_ASSERT ((TAG_WIDTH >= UUID_WIDTH), ("invalid parameter"))
+    `STATIC_ASSERT ((RSP_SIDE_WIDTH == 0) || ((RSP_PARTIAL != 0) && !COALESCE_ENABLE), ("invalid parameter"))
     `RUNTIME_ASSERT((~core_req_valid || core_req_mask != 0), ("invalid request mask"))
 
     wire                            ibuf_push;
@@ -477,7 +485,11 @@ module VX_mem_scheduler #(
         assign crsp_valid = mem_rsp_valid_s;
         assign crsp_mask  = mem_rsp_mask_s;
         assign crsp_sop   = 1'b1;
-        assign crsp_eop   = 1'b1;
+        if (RSP_SIDE_WIDTH != 0) begin : g_hold
+            assign crsp_eop = ~mem_rsp_hold;
+        end else begin : g_no_hold
+            assign crsp_eop = 1'b1;
+        end
         assign crsp_data  = mem_rsp_data_s;
 
         assign mem_rsp_ready_s = crsp_ready;
@@ -493,7 +505,14 @@ module VX_mem_scheduler #(
             assign curr_mask[r] = (BATCH_SEL_WIDTH'(i) == rsp_batch_idx) && mem_rsp_mask_s[j];
         end
 
-        assign rsp_rem_mask_n = rsp_rem_mask[ibuf_raddr] & ~curr_mask;
+        wire [CORE_REQS-1:0] rsp_retire_mask;
+        if (RSP_SIDE_WIDTH != 0) begin : g_hold
+            assign rsp_retire_mask = mem_rsp_hold ? '0 : curr_mask;
+        end else begin : g_no_hold
+            assign rsp_retire_mask = curr_mask;
+        end
+
+        assign rsp_rem_mask_n = rsp_rem_mask[ibuf_raddr] & ~rsp_retire_mask;
 
         wire mem_rsp_fire_s = mem_rsp_valid_s && mem_rsp_ready_s;
 
@@ -597,8 +616,22 @@ module VX_mem_scheduler #(
 
     // Send response to caller
 
+    localparam CRSP_DATAW = CORE_REQS + 1 + 1 + (CORE_REQS * WORD_WIDTH) + TAG_WIDTH;
+
+    wire [CRSP_DATAW+RSP_SIDE_WIDTH-1:0] crsp_buf_in, crsp_buf_out;
+
+    if (RSP_SIDE_WIDTH != 0) begin : g_crsp_side
+        assign crsp_buf_in = {mem_rsp_side, crsp_mask, crsp_sop, crsp_eop, crsp_data, crsp_tag};
+        assign {core_rsp_side, core_rsp_mask, core_rsp_sop, core_rsp_eop, core_rsp_data, core_rsp_tag} = crsp_buf_out;
+    end else begin : g_crsp_no_side
+        assign crsp_buf_in = {crsp_mask, crsp_sop, crsp_eop, crsp_data, crsp_tag};
+        assign {core_rsp_mask, core_rsp_sop, core_rsp_eop, core_rsp_data, core_rsp_tag} = crsp_buf_out;
+        assign core_rsp_side = '0;
+        `UNUSED_VAR ({mem_rsp_hold, mem_rsp_side})
+    end
+
     VX_elastic_buffer #(
-        .DATAW   (CORE_REQS + 1 + 1 + (CORE_REQS * WORD_WIDTH) + TAG_WIDTH),
+        .DATAW   (CRSP_DATAW + RSP_SIDE_WIDTH),
         .SIZE    (`TO_OUT_BUF_SIZE(CORE_OUT_BUF)),
         .OUT_REG (`TO_OUT_BUF_REG(CORE_OUT_BUF))
     ) rsp_buf (
@@ -606,8 +639,8 @@ module VX_mem_scheduler #(
         .reset     (reset),
         .valid_in  (crsp_valid),
         .ready_in  (crsp_ready),
-        .data_in   ({crsp_mask,     crsp_sop,     crsp_eop,     crsp_data,     crsp_tag}),
-        .data_out  ({core_rsp_mask, core_rsp_sop, core_rsp_eop, core_rsp_data, core_rsp_tag}),
+        .data_in   (crsp_buf_in),
+        .data_out  (crsp_buf_out),
         .valid_out (core_rsp_valid),
         .ready_out (core_rsp_ready)
     );

@@ -80,6 +80,7 @@ protected:
     // the next pass's bank winners are known: a pass that leaves lanes
     // pending is followed by a cycle that finds the next ones
     bool        ready = false;
+    uint32_t    phase = 0; // a wide load's word-phase in service
     std::deque<RspEntry> rsp_queue;
   };
 
@@ -144,7 +145,9 @@ protected:
   // a plain read also serves every pending lane reading the same word. A
   // store or an atomic takes its bank alone, so lanes writing one word land
   // in lane order and the highest lane's bytes are the ones left.
-  BitVector<> select_pass(const LsuReq& req, const BitVector<>& pending) const {
+  // A wide load's word-phase reads at a fixed byte offset from each lane's
+  // aligned group, so its conflicts are those of the group addresses.
+  BitVector<> select_pass(const LsuReq& req, const BitVector<>& pending, uint32_t offset) const {
     uint32_t num_banks = 1u << config_.B;
     std::vector<int32_t> winner(num_banks, -1);
     BitVector<> served(pending.size());
@@ -153,11 +156,12 @@ protected:
       if (!pending.test(i)) {
         continue;
       }
-      uint32_t b = this->bank_of(req.addrs.at(i));
+      uint64_t addr = req.addrs.at(i) + offset;
+      uint32_t b = this->bank_of(addr);
       if (winner.at(b) == -1) {
         winner.at(b) = i;
         served.set(i);
-      } else if (join && this->bank_word(req.addrs.at(i)) == this->bank_word(req.addrs.at(winner.at(b)))) {
+      } else if (join && this->bank_word(addr) == this->bank_word(req.addrs.at(winner.at(b)) + offset)) {
         served.set(i);
       }
     }
@@ -313,11 +317,12 @@ protected:
     if (has_rsp && rsp_count >= RSP_QUEUE_SIZE) {
       return false;
     }
-    auto served = this->select_pass(req, e.pending);
+    auto served = this->select_pass(req, e.pending, e.phase * config_.word_size);
     LsuRsp rsp(config_.num_lanes);
-    rsp.tag  = req.tag;
-    rsp.cid  = req.cid;
-    rsp.uuid = req.uuid;
+    rsp.tag   = req.tag;
+    rsp.cid   = req.cid;
+    rsp.uuid  = req.uuid;
+    rsp.phase = e.phase;
     for (uint32_t i = 0; i < config_.num_lanes; ++i) {
       if (!served.test(i)) {
         continue;
@@ -329,7 +334,8 @@ protected:
       }
       e.pending.reset(i);
     }
-    DT(4, simobject_->name() << " pass: served=" << served << ", " << req);
+    rsp.phase_last = e.pending.none();
+    DT(4, simobject_->name() << " pass: phase=" << e.phase << ", served=" << served << ", " << req);
     if (has_rsp) {
       e.rsp_queue.push_back({SimPlatform::instance().cycles() + RSP_LATENCY, e.s1.block, std::move(rsp)});
     }
@@ -339,6 +345,13 @@ protected:
     }
 #endif
     if (e.pending.none()) {
+      if (e.phase < req.flags.nwords_m1) {
+        // the next word-phase serves every lane again, from the next cycle
+        ++e.phase;
+        e.pending = req.mask;
+        return false;
+      }
+      e.phase = 0;
       e.s1_valid = false;
       return true;
     }
@@ -459,6 +472,7 @@ public:
       e.s0.clear();
       e.s1_valid = false;
       e.pending.reset();
+      e.phase = 0;
       e.rsp_queue.clear();
     }
     for (auto& r : rsp_regs_) {

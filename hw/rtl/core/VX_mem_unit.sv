@@ -175,7 +175,8 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         .TAG_WIDTH     (LSU_TAG_WIDTH),
         .DMA_ENABLE    (LMEM_DMA_EN),
         .DMA_TAG_WIDTH (LMEM_DMA_TAG_WIDTH),
-        .AMO_ENABLE    (`VX_CFG_EXT_A_ENABLED)
+        .AMO_ENABLE    (`VX_CFG_EXT_A_ENABLED),
+        .WIDE_ENABLE   (LDS_WIDE_ENABLE)
     ) lmem_unit (
         .clk           (clk),
         .reset         (reset),

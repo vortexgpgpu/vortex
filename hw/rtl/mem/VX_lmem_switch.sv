@@ -106,9 +106,29 @@ module VX_lmem_switch import VX_gpu_pkg::*; #(
         .ready_out (local_out_if.req_ready)
     );
 
+    // The local responses carry a sideband; the global ones leave it clear.
+    wire [1:0][RSP_DATAW+LSU_RSP_SIDE_W-1:0] rsp_arb_in;
+    wire [RSP_DATAW+LSU_RSP_SIDE_W-1:0] rsp_arb_out;
+
+    wire [RSP_DATAW-1:0] local_rsp  = {local_out_if.rsp_data.mask, local_out_if.rsp_data.data, local_out_if.rsp_data.tag};
+    wire [RSP_DATAW-1:0] global_rsp = {global_out_if.rsp_data.mask, global_out_if.rsp_data.data, global_out_if.rsp_data.tag};
+    `UNUSED_VAR (global_out_if.rsp_data.side)
+
+    if (LSU_RSP_SIDE_W != 0) begin : g_rsp_side
+        assign rsp_arb_in[1] = {local_out_if.rsp_data.side, local_rsp};
+        assign rsp_arb_in[0] = {LSU_RSP_SIDE_W'(0), global_rsp};
+        assign {lsu_in_if.rsp_data.side, lsu_in_if.rsp_data.mask, lsu_in_if.rsp_data.data, lsu_in_if.rsp_data.tag} = rsp_arb_out;
+    end else begin : g_no_rsp_side
+        assign rsp_arb_in[1] = local_rsp;
+        assign rsp_arb_in[0] = global_rsp;
+        assign {lsu_in_if.rsp_data.mask, lsu_in_if.rsp_data.data, lsu_in_if.rsp_data.tag} = rsp_arb_out;
+        assign lsu_in_if.rsp_data.side = '0;
+        `UNUSED_VAR (local_out_if.rsp_data.side)
+    end
+
     VX_stream_arb #(
         .NUM_INPUTS (2),
-        .DATAW      (RSP_DATAW),
+        .DATAW      (RSP_DATAW + LSU_RSP_SIDE_W),
         .ARBITER    (ARBITER),
         .OUT_BUF    (RSP_OUT_BUF)
     ) rsp_arb (
@@ -122,11 +142,8 @@ module VX_lmem_switch import VX_gpu_pkg::*; #(
             local_out_if.rsp_ready,
             global_out_if.rsp_ready
         }),
-        .data_in   ({
-            local_out_if.rsp_data,
-            global_out_if.rsp_data
-        }),
-        .data_out  (lsu_in_if.rsp_data),
+        .data_in   (rsp_arb_in),
+        .data_out  (rsp_arb_out),
         .valid_out (lsu_in_if.rsp_valid),
         .ready_out (lsu_in_if.rsp_ready),
         `UNUSED_PIN (sel_out)

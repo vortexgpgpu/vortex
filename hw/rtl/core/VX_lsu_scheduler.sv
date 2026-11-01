@@ -68,6 +68,7 @@ module VX_lsu_scheduler import VX_gpu_pkg::*; #(
     wire [SCHED_TAG_WIDTH-1:0]      sched_rsp_tag;
     wire                            sched_rsp_sop;
     wire                            sched_rsp_eop;
+    wire [`UP(LSU_RSP_SIDE_W)-1:0]  sched_rsp_side;
     wire                            sched_rsp_ready;
 
     // Flatten interface array into per-signal vectors so the arbiter
@@ -109,6 +110,7 @@ module VX_lsu_scheduler import VX_gpu_pkg::*; #(
         assign cli_rsp_data[0].tag   = sched_rsp_tag;
         assign cli_rsp_data[0].sop   = sched_rsp_sop;
         assign cli_rsp_data[0].eop   = sched_rsp_eop;
+        assign cli_rsp_data[0].side  = sched_rsp_side;
         assign sched_rsp_ready    = cli_rsp_ready[0];
     end else begin : g_arb
         // Round-robin priority. rr_ptr rotates after every accepted request.
@@ -186,6 +188,7 @@ module VX_lsu_scheduler import VX_gpu_pkg::*; #(
             assign cli_rsp_data[i].tag  = sched_rsp_tag[LSU_CLIENT_TAG_WIDTH-1:0];
             assign cli_rsp_data[i].sop  = sched_rsp_sop;
             assign cli_rsp_data[i].eop  = sched_rsp_eop;
+            assign cli_rsp_data[i].side = sched_rsp_side;
         end
         // sched_rsp_ready is driven by the granted client's ready.
         logic sched_rsp_ready_l;
@@ -215,6 +218,7 @@ module VX_lsu_scheduler import VX_gpu_pkg::*; #(
     wire [NUM_LANES-1:0]                       lsu_mem_rsp_mask;
     wire [NUM_LANES-1:0][(LSU_WORD_SIZE*8)-1:0] lsu_mem_rsp_data;
     wire [LSU_TAG_WIDTH-1:0]                   lsu_mem_rsp_tag;
+    wire                                       lsu_mem_rsp_hold;
     wire                                       lsu_mem_rsp_ready;
 
     wire                                       sched_req_queue_empty;
@@ -233,6 +237,7 @@ module VX_lsu_scheduler import VX_gpu_pkg::*; #(
         .PENDING_SIZE   (PENDING_SIZE),
         .UUID_WIDTH  (UUID_WIDTH),
         .RSP_PARTIAL (1),
+        .RSP_SIDE_WIDTH (LSU_RSP_SIDE_W),
         .MEM_OUT_BUF (0),
         .CORE_OUT_BUF(0),
         .LUTRAM      (1)
@@ -260,6 +265,7 @@ module VX_lsu_scheduler import VX_gpu_pkg::*; #(
         .core_rsp_tag   (sched_rsp_tag),
         .core_rsp_sop   (sched_rsp_sop),
         .core_rsp_eop   (sched_rsp_eop),
+        .core_rsp_side  (sched_rsp_side),
         .core_rsp_ready (sched_rsp_ready),
 
         .mem_req_valid  (lsu_mem_req_valid),
@@ -276,6 +282,8 @@ module VX_lsu_scheduler import VX_gpu_pkg::*; #(
         .mem_rsp_mask   (lsu_mem_rsp_mask),
         .mem_rsp_data   (lsu_mem_rsp_data),
         .mem_rsp_tag    (lsu_mem_rsp_tag),
+        .mem_rsp_hold   (lsu_mem_rsp_hold),
+        .mem_rsp_side   (lsu_mem_if.rsp_data.side),
         .mem_rsp_ready  (lsu_mem_rsp_ready)
     );
 
@@ -296,6 +304,14 @@ module VX_lsu_scheduler import VX_gpu_pkg::*; #(
     assign lsu_mem_rsp_mask           = lsu_mem_if.rsp_data.mask;
     assign lsu_mem_rsp_data           = lsu_mem_if.rsp_data.data;
     assign lsu_mem_rsp_tag            = lsu_mem_if.rsp_data.tag;
+    if (LSU_RSP_SIDE_W != 0) begin : g_rsp_hold
+        lsu_rsp_side_t rsp_side;
+        assign rsp_side = lsu_rsp_side_t'(lsu_mem_if.rsp_data.side);
+        assign lsu_mem_rsp_hold = rsp_side.hold;
+        `UNUSED_VAR (rsp_side)
+    end else begin : g_no_rsp_hold
+        assign lsu_mem_rsp_hold = 1'b0;
+    end
     assign lsu_mem_if.rsp_ready       = lsu_mem_rsp_ready;
 
     assign empty = sched_req_queue_empty;

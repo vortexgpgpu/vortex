@@ -4,9 +4,15 @@
 #include <stdint.h>
 
 // Local memory per block: RO_WORDS read-only words, then SLOT_WORDS words per
-// thread that it stores to.
+// thread that it stores to, then, from a 16-byte boundary, WIDE_WORDS words per
+// thread that it stores to and reads back with wide loads.
 #define RO_WORDS   1024
 #define SLOT_WORDS 5
+#define WIDE_WORDS 4
+
+static inline uint32_t wide_base(uint32_t block) {
+  return (RO_WORDS + block * SLOT_WORDS + 3) & ~3u;
+}
 
 // Global input words read past each thread's index (the largest LDG offset).
 #define IN_PAD 8
@@ -27,6 +33,9 @@ static inline uint32_t slot_word(uint32_t tid, uint32_t k) {
 }
 static inline uint32_t out_word(uint32_t tid, uint32_t k) {
   return 0x30000000u | (tid << 4) | k;
+}
+static inline uint32_t wide_word(uint32_t tid, uint32_t k) {
+  return 0x6C000000u | (tid << 4) | k;
 }
 
 typedef struct {

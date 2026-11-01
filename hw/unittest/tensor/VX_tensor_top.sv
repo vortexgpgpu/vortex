@@ -223,9 +223,10 @@ module VX_tensor_top import VX_gpu_pkg::*, VX_tcu_pkg::*, VX_dxa_pkg::*; #(
         wire [NUM_LSU_BLKS-1:0] block_store_empty;
 
         VX_lsu_mem_if #(
-            .NUM_LANES (`VX_CFG_NUM_LSU_LANES),
-            .DATA_SIZE (LSU_WORD_SIZE),
-            .TAG_WIDTH (LSU_TAG_WIDTH)
+            .NUM_LANES      (`VX_CFG_NUM_LSU_LANES),
+            .DATA_SIZE      (LSU_WORD_SIZE),
+            .TAG_WIDTH      (LSU_TAG_WIDTH),
+            .RSP_SIDE_WIDTH (LSU_RSP_SIDE_W)
         ) lsu_lmem_if[`VX_CFG_NUM_LSU_BLOCKS]();
 
         VX_mem_bus_if #(

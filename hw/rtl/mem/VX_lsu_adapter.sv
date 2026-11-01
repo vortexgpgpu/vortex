@@ -117,5 +117,6 @@ module VX_lsu_adapter import VX_gpu_pkg::*; #(
         .tag_out    (lsu_mem_if.rsp_data.tag),
         .ready_out  (lsu_mem_if.rsp_ready)
     );
+    assign lsu_mem_if.rsp_data.side = '0;
 
 endmodule

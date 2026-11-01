@@ -267,6 +267,9 @@ static op_string_t op_string(const Instr &instr) {
       case LsuType::LOAD: {
         auto lsuArgs = std::get<IntrLsuArgs>(instrArgs);
         bool dst_float = (instr.get_dest_reg().type == RegType::Float);
+        if (lsuArgs.nregs > 1) {
+          return {(lsuArgs.nregs == 4) ? "VX_FLDS.128" : "VX_FLDS.64", to_hex_str(lsuArgs.offset)};
+        }
         if (lsuArgs.is_local) {
           static const char* const widths[] = {"B", "H", "W", "D", "BU", "HU", "WU"};
           return {std::string(dst_float ? "VX_FLDS." : "VX_LDS.") + widths[lsuArgs.width], to_hex_str(lsuArgs.offset)};
@@ -1276,13 +1279,27 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       instr->set_op_type(LsuType::STORE);
       instr->set_args(IntrLsuArgs{size, /*stride*/ 0, (int32_t)sext(imm9, 9), /*is_local*/ true});
     } else {
-      if (is_float && (funct3 == 0 || funct3 > 3)) {
+      // vx_flds.128 (funct3 0) and vx_flds.64 (funct3 4) load words into an
+      // aligned quad or pair of FP registers; defined on XLEN 32 only
+      uint32_t nregs = 1;
+      if (is_float && (funct3 == 0 || funct3 == 4)) {
+      #if defined(VX_CFG_XLEN_32) && defined(VX_CFG_EXT_F_ENABLE)
+        nregs = (funct3 == 0) ? 4 : 2;
+      #else
+        std::abort();
+      #endif
+      } else if (is_float && funct3 > 3) {
+        std::abort();
+      }
+      if (rd % nregs != 0) {
+        std::cout << "Error: vx_flds." << (32 * nregs) << " destination f" << rd
+                  << " is not aligned to " << nregs << " registers" << std::endl;
         std::abort();
       }
       uint32_t imm11 = (code >> shift_rs2) & 0x7ff;
       instr->set_dest_reg(rd, is_float ? RegType::Float : RegType::Integer);
       instr->set_op_type(LsuType::LOAD);
-      instr->set_args(IntrLsuArgs{funct3, /*stride*/ 0, (int32_t)sext(imm11, 11), /*is_local*/ true});
+      instr->set_args(IntrLsuArgs{(nregs > 1) ? 2u : funct3, /*stride*/ 0, (int32_t)sext(imm11, 11), /*is_local*/ true, nregs});
     }
   } break;
 #endif

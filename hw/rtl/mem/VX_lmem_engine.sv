@@ -35,6 +35,13 @@
 // payload mux. The first pass's winners come from S0; a replay finds the next
 // winners in the cycle after a pass, so a conflicting request replays at one
 // pass per two cycles. The last pass frees S1 in its own cycle.
+//
+// A wide read takes two or four words per lane, its lanes' base words aligned
+// to the group. It is served one word-phase at a time: a phase sets the low
+// word-address bits of every lane to the phase number, which leaves each pair
+// of lanes' bank and word equality unchanged, so every phase reuses the
+// request's matrices and first winners, and starts in the cycle after the
+// previous phase's last pass.
 module VX_lmem_engine import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter NUM_LANES       = 4,
@@ -49,11 +56,14 @@ module VX_lmem_engine import VX_gpu_pkg::*; #(
     parameter ATTR_WIDTH      = 1,
     parameter NUM_BLOCKS      = 1,
     parameter RSP_QUEUE_SIZE  = 8,
+    // serve wide reads
+    parameter WIDE_ENABLE     = 0,
 
     parameter WORD_WIDTH      = WORD_SIZE * 8,
     parameter BLOCK_WIDTH     = `UP(`CLOG2(NUM_BLOCKS)),
     parameter DONE_WIDTH      = `CLOG2(NUM_BLOCKS + 1),
-    parameter BANK_ADDR_WIDTH = ADDR_WIDTH - `CLOG2(NUM_BANKS)
+    parameter BANK_ADDR_WIDTH = ADDR_WIDTH - `CLOG2(NUM_BANKS),
+    localparam RSP_SIDE_WIDTH = WIDE_ENABLE ? $bits(lsu_rsp_side_t) : 0
 ) (
     input wire                                       clk,
     input wire                                       reset,
@@ -71,6 +81,8 @@ module VX_lmem_engine import VX_gpu_pkg::*; #(
     input wire [NUM_LANES-1:0][ADDR_WIDTH-1:0]       req_addr,
     input wire [NUM_LANES-1:0][PAYLOAD_WIDTH-1:0]    req_payload,
     input wire [TAG_WIDTH-1:0]                       req_tag,
+    // a read's words per lane, as log2 (up to 4 words)
+    input wire [1:0]                                 req_wide,
     output wire                                      req_ready,
 
     // the engine holds a request; the one it holds is a store or an atomic
@@ -100,6 +112,8 @@ module VX_lmem_engine import VX_gpu_pkg::*; #(
     output wire [NUM_LANES-1:0]                      rsp_mask,
     output wire [NUM_LANES-1:0][WORD_WIDTH-1:0]      rsp_data,
     output wire [TAG_WIDTH-1:0]                      rsp_tag,
+    // the response's phase of a wide read (lsu_rsp_side_t)
+    output wire [`UP(RSP_SIDE_WIDTH)-1:0]            rsp_side,
     input wire                                       rsp_take,
     input wire [DONE_WIDTH-1:0]                      rsp_done,
 
@@ -114,9 +128,13 @@ module VX_lmem_engine import VX_gpu_pkg::*; #(
     localparam BANK_SEL_BITS  = `CLOG2(NUM_BANKS);
     localparam BANK_SEL_WIDTH = `UP(BANK_SEL_BITS);
     localparam CREDIT_WIDTH   = `CLOG2(RSP_QUEUE_SIZE + 1);
-    localparam RSP_DATAW      = BLOCK_WIDTH + NUM_LANES + NUM_LANES * WORD_WIDTH + TAG_WIDTH;
+    localparam WIDE_WIDTH     = WIDE_ENABLE ? 2 : 0;
+    // the response's side word travels with its tag
+    localparam TAGX_WIDTH     = TAG_WIDTH + RSP_SIDE_WIDTH;
+    localparam RSP_DATAW      = BLOCK_WIDTH + NUM_LANES + NUM_LANES * WORD_WIDTH + TAGX_WIDTH;
 
     `STATIC_ASSERT(ADDR_WIDTH > BANK_SEL_BITS, ("invalid parameter"))
+    `STATIC_ASSERT((WIDE_ENABLE == 0) || (ADDR_WIDTH >= 2), ("invalid parameter"))
 
     // S0: the engine's input queue. Holding two requests, it takes one in any
     // cycle that starts with at most one, so its ready is a register and the
@@ -135,10 +153,27 @@ module VX_lmem_engine import VX_gpu_pkg::*; #(
     wire [NUM_LANES-1:0][ADDR_WIDTH-1:0]    s0_addr;
     wire [NUM_LANES-1:0][PAYLOAD_WIDTH-1:0] s0_payload;
     wire [TAG_WIDTH-1:0]                    s0_tag;
+    wire [1:0]                              s0_wide;
     wire                                    s1_free;
 
+    wire [S0_DATAW-1:0]            s0_base_in, s0_base_out;
+    wire [S0_DATAW+WIDE_WIDTH-1:0] s0_buf_in, s0_buf_out;
+
+    assign s0_base_in = {req_block, req_rw, req_read, req_amo, req_attr, req_mask, req_addr, req_payload, req_tag};
+    assign {s0_block, s0_rw, s0_read, s0_amo, s0_attr, s0_mask, s0_addr, s0_payload, s0_tag} = s0_base_out;
+
+    if (WIDE_ENABLE != 0) begin : g_s0_wide
+        assign s0_buf_in = {req_wide, s0_base_in};
+        assign {s0_wide, s0_base_out} = s0_buf_out;
+    end else begin : g_s0_no_wide
+        assign s0_buf_in   = s0_base_in;
+        assign s0_base_out = s0_buf_out;
+        assign s0_wide     = 2'b00;
+        `UNUSED_VAR (req_wide)
+    end
+
     VX_elastic_buffer #(
-        .DATAW   (S0_DATAW),
+        .DATAW   (S0_DATAW + WIDE_WIDTH),
         .SIZE    (2),
         .OUT_REG (1)
     ) s0_buf (
@@ -146,8 +181,8 @@ module VX_lmem_engine import VX_gpu_pkg::*; #(
         .reset     (reset),
         .valid_in  (req_valid),
         .ready_in  (req_ready),
-        .data_in   ({req_block, req_rw, req_read, req_amo, req_attr, req_mask, req_addr, req_payload, req_tag}),
-        .data_out  ({s0_block, s0_rw, s0_read, s0_amo, s0_attr, s0_mask, s0_addr, s0_payload, s0_tag}),
+        .data_in   (s0_buf_in),
+        .data_out  (s0_buf_out),
         .valid_out (s0_valid),
         .ready_out (s1_free)
     );
@@ -203,6 +238,14 @@ module VX_lmem_engine import VX_gpu_pkg::*; #(
     reg [TAG_WIDTH-1:0]                    s1_tag;
     reg [NUM_LANES-1:0][NUM_LANES-1:0]     s1_same_bank;
     reg [NUM_LANES-1:0][NUM_LANES-1:0]     s1_same_word;
+    // a wide read's group size, its phase, whether the phase is its last, and
+    // the request's first pass, which every phase starts from
+    reg                                    s1_quad;
+    reg [1:0]                              s1_phase;
+    reg                                    s1_final;
+    reg [NUM_LANES-1:0]                    s1_mask0;
+    reg [NUM_LANES-1:0]                    s1_first0;
+    reg                                    s1_one_pass0;
 
     // A pass serves the registered bank winners and the pending read lanes of
     // their words. After a pass that leaves lanes pending, the next cycle finds
@@ -228,9 +271,14 @@ module VX_lmem_engine import VX_gpu_pkg::*; #(
     reg [CREDIT_WIDTH-1:0] credits;
     wire has_rsp    = ~s1_rw;
     wire pass_fire  = s1_valid && s1_ready && pass_en && (~has_rsp || (credits != '0));
-    wire s1_release = pass_fire && s1_last;
+    wire last_phase = (WIDE_ENABLE == 0) || s1_final;
+    wire phase_end  = pass_fire && s1_last;
+    wire s1_release = phase_end && last_phase;
+    wire s1_advance = phase_end && ~last_phase;
     assign s1_free  = ~s1_valid || s1_release;
     wire   s1_load  = s0_valid && s1_free;
+
+    wire [1:0] phase_n = s1_phase + 2'd1;
 
     always @(posedge clk) begin
         if (reset) begin
@@ -255,6 +303,25 @@ module VX_lmem_engine import VX_gpu_pkg::*; #(
             s1_tag       <= s0_tag;
             s1_same_bank <= s0_same_bank;
             s1_same_word <= s0_same_word;
+            s1_quad      <= s0_wide[1];
+            s1_phase     <= 2'd0;
+            s1_final     <= (s0_wide == 2'd0);
+            s1_mask0     <= s0_mask;
+            s1_first0    <= s0_first;
+            s1_one_pass0 <= s0_one_pass;
+        end else if (s1_advance) begin
+            s1_ready     <= 1'b1;
+            s1_last      <= s1_one_pass0;
+            s1_winners   <= s1_first0;
+            s1_pending   <= s1_mask0;
+            s1_phase     <= phase_n;
+            s1_final     <= (phase_n == {s1_quad, 1'b1});
+            for (integer i = 0; i < NUM_LANES; ++i) begin
+                s1_addr[i][0] <= phase_n[0];
+                if (s1_quad) begin
+                    s1_addr[i][1] <= phase_n[1];
+                end
+            end
         end else if (pass_fire) begin
             s1_ready     <= 1'b0;
             s1_pending   <= s1_pending & ~served;
@@ -263,6 +330,18 @@ module VX_lmem_engine import VX_gpu_pkg::*; #(
             s1_last      <= last_n;
             s1_winners   <= winners_n;
         end
+    end
+
+    wire [TAGX_WIDTH-1:0] s1_tagx;
+    if (WIDE_ENABLE != 0) begin : g_s1_side
+        lsu_rsp_side_t s1_side;
+        assign s1_side.hold      = ~s1_final;
+        assign s1_side.phase_end = s1_last;
+        assign s1_side.phase     = s1_phase;
+        assign s1_tagx = {s1_side, s1_tag};
+    end else begin : g_s1_no_side
+        assign s1_tagx = s1_tag;
+        `UNUSED_VAR ({s1_quad, s1_phase, s1_final, s1_mask0, s1_first0, s1_one_pass0, phase_n})
     end
 
     // stores and atomics held between S0's two entries and S1
@@ -349,17 +428,17 @@ module VX_lmem_engine import VX_gpu_pkg::*; #(
     wire [BLOCK_WIDTH-1:0]                   m2_block;
     wire [NUM_LANES-1:0]                     m2_mask;
     wire [NUM_LANES-1:0][BANK_SEL_WIDTH-1:0] m2_bank;
-    wire [TAG_WIDTH-1:0]                     m2_tag;
+    wire [TAGX_WIDTH-1:0]                    m2_tag;
 
     VX_pipe_register #(
-        .DATAW  (1 + BLOCK_WIDTH + NUM_LANES + NUM_LANES * BANK_SEL_WIDTH + TAG_WIDTH),
+        .DATAW  (1 + BLOCK_WIDTH + NUM_LANES + NUM_LANES * BANK_SEL_WIDTH + TAGX_WIDTH),
         .RESETW (1),
         .DEPTH  (2)
     ) rsp_meta_pipe (
         .clk      (clk),
         .reset    (reset),
         .enable   (1'b1),
-        .data_in  ({pass_fire && has_rsp, s1_block, served, s1_bank, s1_tag}),
+        .data_in  ({pass_fire && has_rsp, s1_block, served, s1_bank, s1_tagx}),
         .data_out ({m2_valid, m2_block, m2_mask, m2_bank, m2_tag})
     );
 
@@ -374,7 +453,7 @@ module VX_lmem_engine import VX_gpu_pkg::*; #(
     wire [BLOCK_WIDTH-1:0]               m3_block;
     wire [NUM_LANES-1:0]                 m3_mask;
     wire [NUM_LANES-1:0][WORD_WIDTH-1:0] m3_data;
-    wire [TAG_WIDTH-1:0]                 m3_tag;
+    wire [TAGX_WIDTH-1:0]                m3_tag;
 
     VX_pipe_register #(
         .DATAW  (RSP_DATAW + 1),
@@ -413,8 +492,16 @@ module VX_lmem_engine import VX_gpu_pkg::*; #(
         `UNUSED_PIN (alm_full),
         `UNUSED_PIN (size)
     );
+    wire [TAGX_WIDTH-1:0] rsp_tagx;
     assign rsp_valid = ~rsp_empty || m3_valid;
-    assign {rsp_block, rsp_mask, rsp_data, rsp_tag} = rsp_empty ? {m3_block, m3_mask, m3_data, m3_tag} : rsp_head;
+    assign {rsp_block, rsp_mask, rsp_data, rsp_tagx} = rsp_empty ? {m3_block, m3_mask, m3_data, m3_tag} : rsp_head;
+
+    if (WIDE_ENABLE != 0) begin : g_rsp_side
+        assign {rsp_side, rsp_tag} = rsp_tagx;
+    end else begin : g_rsp_no_side
+        assign rsp_tag  = rsp_tagx;
+        assign rsp_side = '0;
+    end
 
     // a response's slot is free again once its block has taken it on
     wire credit_take = pass_fire && has_rsp;
@@ -433,8 +520,8 @@ module VX_lmem_engine import VX_gpu_pkg::*; #(
 `ifdef DBG_TRACE_MEM
     always @(posedge clk) begin
         if (pass_fire) begin
-            `TRACE(2, ("%t: %s pass: rw=%b, amo=%b, pending=%b, served=%b, tag=0x%0h\n",
-                $time, INSTANCE_ID, s1_rw, s1_amo, s1_pending, served, s1_tag))
+            `TRACE(2, ("%t: %s pass: rw=%b, amo=%b, pending=%b, served=%b, phase=%0d, tag=0x%0h\n",
+                $time, INSTANCE_ID, s1_rw, s1_amo, s1_pending, served, s1_phase, s1_tag))
         end
     end
 `endif

@@ -385,6 +385,7 @@ struct IntrLsuArgs {
   uint32_t stride : 4;  // per-uop multiplier: 0 = regular LD/ST; 0..N-1 = packLD uop_idx
   int32_t  offset;      // immediate addr offset (signed); 0 for packLD uops
   bool     is_local = false; // vx_lds/vx_sts: local memory at the low address bits
+  uint32_t nregs = 1;        // vx_flds.64/.128: registers fd.. loaded one word-phase each
 };
 
 // A fence carries no access width; its width field says what it orders.
@@ -469,6 +470,7 @@ struct MemFlags {
       uint32_t dxa_notify_done   : 1;   // bit 7
       uint32_t dxa_notify_bar_id : 16;  // bits 8..23
     #endif
+      uint32_t nwords_m1    : 2;  // wide local load: words per lane - 1, served in word-phases
     };
   };
 
@@ -1210,6 +1212,10 @@ struct LsuRsp {
   uint64_t tag;
   uint32_t cid;
   uint64_t uuid;
+  // Wide local load: the word-phase this pass served, and whether it was the
+  // phase's last pass.
+  uint32_t phase;
+  bool     phase_last;
 
   // TLM data: per-lane block populated for loads/AMO returns.
   std::vector<std::shared_ptr<mem_block_t>> data;
@@ -1219,6 +1225,8 @@ struct LsuRsp {
     , tag (0)
     , cid(0)
     , uuid(0)
+    , phase(0)
+    , phase_last(true)
     , data(size)
   {}
 

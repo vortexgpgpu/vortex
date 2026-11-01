@@ -107,6 +107,11 @@ module VX_decode import
     wire [11:0] i_imm   = is_itype_sh ? {7'b0, instr[24:20]} : u_12;
 `endif
     wire [11:0] s_imm   = {funct7, rd};
+`ifdef VX_CFG_LMEM_ENABLE
+`ifdef VX_CFG_EXT_F_ENABLE
+    wire lds_wide = LDS_WIDE_ENABLE && instr[31] && (funct3[1:0] == 2'b00);
+`endif
+`endif
     wire [11:0] b_imm   = {instr[31], instr[7], instr[30:25], instr[11:8]};
     wire [19:0] jal_imm = {instr[31], instr[19:12], instr[20], instr[30:21]};
 
@@ -512,6 +517,14 @@ module VX_decode import
                     op_args.lsu.is_store = 0;
                     op_args.lsu.offset   = {u_12[10], u_12[10:0]};
                 `ifdef VX_CFG_EXT_F_ENABLE
+                    // vx_flds.128 (funct3 0) and vx_flds.64 (funct3 4) load 4 or 2
+                    // words into an aligned FP register group, one word per beat.
+                    // A full-size bytesel with an odd offset, which no other
+                    // instruction produces, carries the group size.
+                    if (lds_wide) begin
+                        op_type = INST_OP_BITS'(INST_LSU_LW);
+                        bytesel = {XLENB_W'(XLENB-1), XLENB_W'({~funct3[2], 1'b1})};
+                    end
                     `USED_REG (instr[31], rd, 1'b1);
                 `else
                     `USED_IREG (rd);
@@ -1074,7 +1087,7 @@ module VX_decode import
             `TRACE(1, ("%t: %s decode: wid=%0d, cta_id=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, decode_if.data.wid, decode_if.data.cta_id, to_fullPC(decode_if.data.PC)))
             VX_trace_pkg::trace_ex_type(1, decode_if.data.ex_type);
             `TRACE(1, (", op="))
-            VX_trace_pkg::trace_ex_op(1, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args);
+            VX_trace_pkg::trace_ex_op(1, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args, decode_if.data.bytesel);
             `TRACE(1, (", tmask=%b, wb=%b, rd_xregs=%b, wr_xregs=%b, used_rs=%b, rd=", decode_if.data.tmask, decode_if.data.wb, decode_if.data.rd_xregs, decode_if.data.wr_xregs, decode_if.data.used_rs))
             VX_trace_pkg::trace_reg_idx(1, decode_if.data.rd);
             `TRACE(1, (", rs1="))

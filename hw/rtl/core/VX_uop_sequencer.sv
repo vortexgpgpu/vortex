@@ -234,7 +234,7 @@ module VX_uop_sequencer import
             `TRACE(1, ("%t: %s decode: wid=%0d, cta_id=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, WARP_ID, output_if.data.cta_id, to_fullPC(output_if.data.PC)))
             VX_trace_pkg::trace_ex_type(1, output_if.data.ex_type);
             `TRACE(1, (", op="))
-            VX_trace_pkg::trace_ex_op(1, output_if.data.ex_type, output_if.data.op_type, output_if.data.op_args);
+            VX_trace_pkg::trace_ex_op(1, output_if.data.ex_type, output_if.data.op_type, output_if.data.op_args, output_if.data.bytesel);
             `TRACE(1, (", tmask=%b, wb=%b, rd_xregs=%b, wr_xregs=%b, used_rs=%b, rd=", output_if.data.tmask, output_if.data.wb, output_if.data.rd_xregs, output_if.data.wr_xregs, output_if.data.used_rs))
             VX_trace_pkg::trace_reg_idx(1, output_if.data.rd);
             `TRACE(1, (", rs1="))

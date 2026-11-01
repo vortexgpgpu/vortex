@@ -83,6 +83,26 @@ tests:
   shape:
     threads: 32
     warps: 8
+# Fewer LSU lanes than SIMD lanes: a warp's request goes out in four packets.
+- id: lds-ldg-3
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: lds_ldg
+  configs: -DVX_CFG_NUM_LSU_LANES=4
+  shape:
+    threads: 16
+# One SIMD lane: the dispatcher splits every warp into single-lane packets.
+- id: lds-ldg-4
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: lds_ldg
+  configs: -DVX_CFG_SIMD_WIDTH=1
+  shape:
+    threads: 4
 - id: occupancy-1
   via: blackbox
   drivers:

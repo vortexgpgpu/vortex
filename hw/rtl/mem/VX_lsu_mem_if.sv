@@ -18,7 +18,9 @@ interface VX_lsu_mem_if import VX_gpu_pkg::*; #(
     parameter DATA_SIZE  = 1,
     parameter TAG_WIDTH  = 1,
     parameter USER_WIDTH = MEM_ATTR_WIDTH,
-    parameter ADDR_WIDTH = `VX_CFG_MEM_ADDR_WIDTH - `CLOG2(DATA_SIZE)
+    parameter ADDR_WIDTH = `VX_CFG_MEM_ADDR_WIDTH - `CLOG2(DATA_SIZE),
+    // response sideband width; zero keeps a single bit that endpoints tie off
+    parameter RSP_SIDE_WIDTH = 0
 ) ();
 
     typedef struct packed {
@@ -37,6 +39,7 @@ interface VX_lsu_mem_if import VX_gpu_pkg::*; #(
     } req_data_t;
 
     typedef struct packed {
+        logic [`UP(RSP_SIDE_WIDTH)-1:0]        side;
         logic [NUM_LANES-1:0]                  mask;
         logic [NUM_LANES-1:0][DATA_SIZE*8-1:0] data;
         tag_t                                  tag;

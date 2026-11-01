@@ -242,10 +242,12 @@ the table in the same change.
 effective address, so a local pointer may hold the window address or a bare
 offset. `vx_ldg`/`vx_stg` take the generic path: the local-memory window is
 reserved, so no global pointer falls in it. Their hint is 0 (default), 1
-(`.cg`) or 2 (`.cs`); 3 is reserved. The FP forms with `funct3`/size 0 and the
-integer-only codes with `imm[11]` set are reserved for wide local accesses, as
-are `vx_ldg` with `funct3` 7 and `vx_stg` with `funct3` 4–7. Standard loads and
-stores stay generic.
+(`.cg`) or 2 (`.cs`); 3 is reserved. With `imm[11]` set, `funct3` 0 is
+`vx_flds.128` and `funct3` 4 is `vx_flds.64` (XLEN 32): one request loads four
+or two consecutive words into the quad- or pair-aligned FP registers starting at
+`fd`. The other integer-only codes with `imm[11]` set and the FP store with
+size 0 are reserved for wide local accesses, as are `vx_ldg` with `funct3` 7
+and `vx_stg` with `funct3` 4–7. Standard loads and stores stay generic.
 
 ---
 

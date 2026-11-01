@@ -283,6 +283,7 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         .core_rsp_tag   (mrsp_tag),
         `UNUSED_PIN (core_rsp_sop),
         `UNUSED_PIN (core_rsp_eop),
+        `UNUSED_PIN (core_rsp_side),
         .core_rsp_ready (mrsp_ready),
 
         // Memory request
@@ -301,6 +302,8 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         .mem_rsp_mask   (lsu_mem_if.rsp_data.mask),
         .mem_rsp_data   (lsu_mem_if.rsp_data.data),
         .mem_rsp_tag    (lsu_mem_if.rsp_data.tag),
+        .mem_rsp_hold   (1'b0),
+        .mem_rsp_side   (lsu_mem_if.rsp_data.side),
         .mem_rsp_ready  (lsu_mem_if.rsp_ready)
     );
 
