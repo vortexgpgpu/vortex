@@ -1,16 +1,23 @@
 #!/usr/bin/env python3
-"""Summarize a Beacon run (foldsim-estimate-timing) for logic_gate.
+"""Summarize a Beacon run (foldsim-estimate-timing, foldsim-estimate-area)
+for logic_gate.
 
 Beacon writes one row per end point bit: the logic levels of its longest
-path, its start and its end. ci/logic_gate.py gates depth per RTL unit, so
-this collapses the table into what it compares:
+path, its start and its end; and one row per instance: its resources and its
+subtree's. ci/logic_gate.py gates depth per RTL unit and the design's area,
+so this collapses the tables into what it compares:
 
   beacon_summary.csv  one row: the deepest end point, the end point bits at or
-                      above the fix and watch thresholds, and all end points
+                      above the fix and watch thresholds, all end points, and
+                      the design's LUTs, flip-flops, distributed RAM LUTs,
+                      block RAMs, UltraRAMs and DSPs (area.csv)
   beacon_units.json   the deepest end point of every unit at or above the
-                      watch threshold, and the deepest paths (diagnostics)
+                      watch threshold, the deepest paths (diagnostics), and
+                      `area`: each unit's resources, one copy's subtree
   beacon_paths.txt    if Beacon wrote paths.jsonl: every path at or above
                       the watch threshold, op by op, by unit (write_paths)
+  beacon_area.txt     if Beacon wrote area.csv: the area summary, the units
+                      by LUTs, and where each memory goes (write_area)
 
 If Beacon wrote ports.csv (BEACON_INTERFACES), beacon_units.json also holds
 `interfaces`: per output port of those modules' instances, folded like
@@ -38,6 +45,10 @@ NUM_PATHS = 10
 
 COLUMNS = ("top", "max_levels", "deep_endpoints", "watch_endpoints",
            "endpoints")
+AREA = ("lut", "ff", "lutram", "bram", "uram", "dsp")
+# Units of at least this share of the design's LUTs are listed in
+# beacon_area.txt.
+AREA_UNIT_SHARE = 0.01
 
 INDEX = re.compile(r"_\d+(?=_|/|$)")
 
@@ -113,14 +124,21 @@ def main():
             summary["max_levels"] = max(
                 (int(r["levels"]) for r in csv.DictReader(fh)), default=0)
 
+    area = read_area(args.run_dir)
+    columns = COLUMNS
+    if area:
+        summary.update(area["total"])
+        columns = COLUMNS + AREA
     with open(os.path.join(args.output_dir, "beacon_summary.csv"), "w",
               newline="") as fh:
-        w = csv.DictWriter(fh, fieldnames=COLUMNS)
+        w = csv.DictWriter(fh, fieldnames=columns)
         w.writeheader()
         w.writerow(summary)
     doc = {"fix_levels": FIX_LEVELS, "watch_levels": WATCH_LEVELS,
            "units": dict(sorted(units.items())),
            "deepest_paths": ["%d  %s -> %s" % d for d in deepest]}
+    if area:
+        doc["area"] = area["units"]
     ports = os.path.join(args.run_dir, "ports.csv")
     if os.path.exists(ports):
         doc["interfaces"] = interfaces(ports)
@@ -137,7 +155,84 @@ def main():
             n, u = write_paths(fh, args.run_dir, WATCH_LEVELS, paths=paths)
         print("beacon: %d paths >= %d levels in %d units -> beacon_paths.txt"
               % (n, WATCH_LEVELS, u))
+    if area:
+        with open(os.path.join(args.output_dir, "beacon_area.txt"), "w") as fh:
+            write_area(fh, args.run_dir, area)
+        t = area["total"]
+        print("beacon: %s %d LUTs (%d distributed RAM), %d FFs, %g block "
+              "RAMs, %d UltraRAMs, %d DSPs -> beacon_area.txt"
+              % (args.top, t["lut"], t["lutram"], t["ff"], t["bram"],
+                 t["uram"], t["dsp"]))
 
+
+def read_area(run_dir):
+    """The design's resources and each unit's from a run's area.csv, or None.
+    `lut` counts every LUT, distributed RAM included, as Vivado's utilization
+    does. A unit's resources are one copy's subtree; `copies` counts its
+    instances."""
+    path = os.path.join(run_dir, "area.csv")
+    if not os.path.exists(path):
+        return None
+    total, units = None, {}
+    with open(path) as fh:
+        for row in csv.DictReader(fh):
+            res = {k: float(row["total_" + k]) for k in AREA}
+            res["lut"] += res["lutram"]
+            res = {k: (round(v, 1) if k == "bram" else int(round(v)))
+                   for k, v in res.items()}
+            if total is None:
+                total = res
+                continue
+            u = fold(row["path"])
+            if u in units:
+                units[u]["copies"] += 1
+            else:
+                units[u] = dict(res, module=row["module"], copies=1)
+    return {"total": total, "units": dict(sorted(units.items()))}
+
+
+def write_area(out, run_dir, area):
+    """The area report, the units holding at least AREA_UNIT_SHARE of the
+    LUTs, and every memory with its placement."""
+    with open(os.path.join(run_dir, "area.txt")) as fh:
+        out.write(fh.read())
+    t = area["total"]
+    floor = AREA_UNIT_SHARE * t["lut"]
+    out.write("\nUnits with at least %g%% of the LUTs, one copy's subtree "
+              "(x copies):\n" % (100 * AREA_UNIT_SHARE))
+    out.write("  %9s %8s %7s %7s %5s %5s  %s\n"
+              % ("lut", "ff", "lutram", "bram", "uram", "dsp", "unit"))
+    rows = sorted(area["units"].items(), key=lambda kv: -kv[1]["lut"])
+    for u, r in rows:
+        if r["lut"] * r["copies"] < floor:
+            continue
+        out.write("  %9d %8d %7d %7g %5d %5d  %s (%s) x%d\n"
+                  % (r["lut"], r["ff"], r["lutram"], r["bram"], r["uram"],
+                     r["dsp"], u, r["module"], r["copies"]))
+    mems = os.path.join(run_dir, "area_memories.csv")
+    if not os.path.exists(mems):
+        return
+    out.write("\nMemories (depth x width, read latency, ram_style -> "
+              "placement and cost, x copies):\n")
+    groups = collections.OrderedDict()
+    with open(mems) as fh:
+        for r in csv.DictReader(fh):
+            name = fold("%s/%s" % (r["path"], r["name"]) if r["path"]
+                        else r["name"])
+            key = (name, r["depth"], r["width"], r["latency"], r["style"],
+                   r["placement"])
+            if key in groups:
+                groups[key][1] += 1
+            else:
+                groups[key] = [r, 1]
+    for (name, depth, width, latency, style, placement), (r, n) in \
+            groups.items():
+        cost = ("%s LUTs" % r["lutram"] if placement == "lutram" else
+                "%s blocks" % r["bram"] if placement == "bram" else
+                "%s UltraRAMs" % r["uram"] if placement == "uram" else
+                "%s FFs" % r["ff"])
+        out.write("  %6sx%-5s lat %s %-11s -> %-6s %-12s %s x%d\n"
+                  % (depth, width, latency, style, placement, cost, name, n))
 
 def fold(name):
     return INDEX.sub("_*", norm(name))

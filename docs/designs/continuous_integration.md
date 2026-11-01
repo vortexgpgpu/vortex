@@ -278,17 +278,18 @@ so the parity and perf views of one workload are two cases.
 that costs **timing closure or area**: they synthesize a catalog of designs
 and assert the results against the target clock and area budget each build
 declares, recording every run's metrics in golden baselines. `logic_gate`
-catches one that makes a unit **deeper**, in seconds and without synthesis.
+catches one that makes a unit **deeper** or the design **larger**, in seconds
+and without synthesis.
 
 | | `fpga_gate` | `asic_gate` | `logic_gate` |
 |---|---|---|---|
-| flow | Vivado synthesis, place and route | CIRCT → Yosys → ABC → OpenSTA, on ASAP7 | CIRCT → `foldsim-estimate-timing` (logic levels as Vivado counts them on `DEVICE`'s family) |
+| flow | Vivado synthesis, place and route | CIRCT → Yosys → ABC → OpenSTA, on ASAP7 | CIRCT → `foldsim-estimate-timing` (logic levels as Vivado counts them on `DEVICE`'s family) and `foldsim-estimate-area` (its cells, memories and DSPs) |
 | design tree | `hw/syn/xilinx/dut` | `hw/syn/yosys/dut` | `hw/syn/xilinx/dut`, target `beacon` |
-| gated | `fmax_mhz` against the target clock, `lut` against `lut_budget` | `fmax_mhz` against the target clock, `cell_area_um2` against `area_budget_um2` | `max_levels` against the baseline, and the deepest end point of every RTL unit |
+| gated | `fmax_mhz` against the target clock, `lut` against `lut_budget` | `fmax_mhz` against the target clock, `cell_area_um2` against `area_budget_um2` | `max_levels` against the baseline, the deepest end point of every RTL unit, and `lut`, `ff`, `lutram`, `bram`, `uram`, `dsp` against the baseline |
 | also recorded | `wns_ns`, `lutram`, `ff`, `bram`, `uram`, `dsp`, critical paths, high-fanout nets | `wns_ns`, `tns_ns`, `seq_area_um2`, `sram_area_um2`, `cell_count`, `power_mw` | end point bits at ≥ 12 and ≥ 8 levels, the deepest paths |
 | comparable when | same device, optimization level, xlen | same PDK, VT, corner, xlen | same CIRCT, foldsim, xlen |
 | runner | self-hosted, licensed Vivado | hosted, one job per design | hosted, one job for the catalog; the opt-in `gpu` group self-hosted |
-| default tolerance | Fmax 2 %, LUT 5 % | Fmax 2 %, cell area 5 % | none: Beacon is deterministic |
+| default tolerance | Fmax 2 %, LUT 5 % | Fmax 2 %, cell area 5 % | depth none: Beacon is deterministic; area 5 % |
 
 None is a pytest cell. A cell is a build tree plus a driver; a gate build is
 neither, and the synthesis gates are hours long. They are standalone scripts
@@ -392,13 +393,17 @@ Beacon has profiles for the V80 and the U55C only, and fails on any other
 | no new unit at the fix threshold (12 levels at 300 MHz) | a new deep cone is a regression even with no baseline to compare |
 | a shallower unit, or one that drops below the watch threshold (8), reads `IMPROVED` | the gain must be recorded |
 | no output of a build's `interfaces` modules reached combinationally from outside the instance in more bits than its baseline | modules register their outgoing interfaces: a path that runs through a core, socket or cluster boundary is what fails routing across SLRs, and Beacon names it by port |
+| no resource of the design (`lut`, `ff`, `lutram`, `bram`, `uram`, `dsp`) more than 5 % above its baseline | area found in minutes, not in a nightly Vivado run; a memory that moves between distributed and block RAM moves two columns, and `beacon_area.txt` names each memory's placement |
 
 `interfaces` lists modules by name; their instances keep their ports through
 Beacon's mapping (`BEACON_INTERFACES` in the DUT flow), and `ports.csv`
 counts, per output port, the bits a combinational path from outside the
 instance reaches.
 
-There is no tolerance: the same RTL and tools give the same levels. A new CIRCT
+Depth has no tolerance: the same RTL and tools give the same levels. Area is
+as deterministic, but a feature adds some by design, so it has `fpga_gate`'s
+LUT tolerance; its LUTs are the area mapping's scaled to Vivado's average
+([beacon.md §4.5](beacon.md)), so it gates their change, not a budget. A new CIRCT
 or foldsim can map the same RTL differently, so both versions are in the config
 hash and a tool change reads `STALE`. `make -C hw/syn/xilinx/dut <dut>-beacon`
 runs Beacon on one DUT by hand; its `beacon_paths.txt` lists every deep path op by op,

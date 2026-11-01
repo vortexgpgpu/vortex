@@ -1,21 +1,22 @@
-# Beacon — logic depth of every path, before Vivado
+# Beacon — logic depth and area, before Vivado
 
 Beacon counts the logic levels of every register-to-register path
-of a Vortex design the way Vivado counts them, in seconds and without
+of a Vortex design the way Vivado counts them, and the LUTs, flip-flops,
+distributed and block RAM and DSPs it maps to, in seconds and without
 Vivado. It names the RTL units whose paths are too deep for the target clock,
-gates their depth on every RTL change (`logic_gate`), and is the first step
-of RTL timing work: run Beacon, fix the deep units, then confirm with one
-Vivado run.
+gates their depth and the design's area on every RTL change (`logic_gate`),
+and is the first step of RTL timing work: run Beacon, fix the deep units,
+then confirm with one Vivado run.
 
 | § | contents |
 |---|---|
 | [1](#1-overview) | Overview and how to run it |
 | [2](#2-system-architecture) | System architecture: where each piece lives |
 | [3](#3-compiler-architecture) | Compiler architecture: the two passes |
-| [4](#4-the-model) | The model: levels per element, devices |
+| [4](#4-the-model) | The model: levels per element, devices, area (§4.5) |
 | [5](#5-outputs) | Outputs |
 | [6](#6-integration) | Integration: the DUT flow, `logic_gate`, timing work |
-| [7](#7-validation) | Validation against Vivado; the learned calibration (§7.1) |
+| [7](#7-validation) | Validation against Vivado; the learned calibration (§7.1); area (§7.2) |
 | [8](#8-diagnostics) | Diagnostics beyond levels |
 | [9](#9-invariants-and-limitations) | Invariants and limitations |
 
@@ -38,7 +39,8 @@ One DUT of the synthesis catalog, from a configured build tree:
 ```bash
 make -C hw/syn/xilinx/dut tcu-beacon
 # build_tcu/beacon_paths.txt     every path at >= 8 levels, op by op, by unit
-# build_tcu/beacon_units.json    deepest end point per RTL unit
+# build_tcu/beacon_units.json    deepest end point per RTL unit, area per unit
+# build_tcu/beacon_area.txt      LUTs, FFs, memories and DSPs, by unit; each memory's placement
 ```
 
 The whole catalog as a gate, and a baseline update (a human step):
@@ -54,7 +56,7 @@ Any CIRCT netlist, with `ci/beacon.py` (subcommands `run`,
 `foldsim-opt` from the `PATH` or `FOLDSIM_OPT`):
 
 ```bash
-ci/beacon.py run design.mlir runs/full                     # map, then count levels
+ci/beacon.py run design.mlir runs/full                     # map, then count levels and area
 ci/beacon.py run runs/full/mapped.mlirbc runs/socket \
     top=VX_socket__lift black-boxes=VX_core__lift           # one unit of a mapped design
 ci/beacon.py summarize runs/full --min-levels 12           # deep end points by RTL unit
@@ -62,7 +64,7 @@ ci/beacon.py paths runs/full --unit lsu_unit               # its paths, op by op
 ci/beacon.py validate runs/socket ep.csv --native VX_socket__lift=dut
 ```
 
-Or the two passes directly:
+Or the passes directly:
 
 ```bash
 foldsim-opt design.mlir --emit-bytecode -o mapped.mlirbc \
@@ -71,6 +73,10 @@ foldsim-opt mapped.mlirbc -o /dev/null --pass-pipeline='builtin.module(
   foldsim-estimate-timing{top=VX_core_top target=virtexuplusHBM
     output=endpoints.csv instances=instances.csv report=report.txt
     top-paths=50 trace=lsu_unit})'
+foldsim-opt design.mlir -o /dev/null --pass-pipeline='builtin.module(
+  foldsim-beacon-map{target=virtexuplusHBM area},
+  foldsim-estimate-area{top=VX_core_top target=virtexuplusHBM
+    output=area.csv memories=area_memories.csv report=area.txt})'
 ```
 
 | `foldsim-estimate-timing` option | meaning |
@@ -86,6 +92,15 @@ foldsim-opt mapped.mlirbc -o /dev/null --pass-pipeline='builtin.module(
 | `retime-levels=` | also estimate the depth after Vivado's retiming to this period (§4.4) |
 | `ports=`, `port-modules=` | the depth at each port of the named modules' instances (§8) |
 
+| `foldsim-estimate-area` option | meaning |
+|---|---|
+| `top=`, `target=`, `black-boxes=` | as for `foldsim-estimate-timing`; map with `foldsim-beacon-map{area}` for the same target |
+| `output=` | the instance table of §5 (`area.csv`) |
+| `memories=` | every memory, its shape and where it goes (`area_memories.csv`) |
+| `report=` | the design's totals, the mapping's LUTs by op, the vendor IP |
+| `lut-scale=` | device LUTs per mapped LUT (default: the target's, §4.5) |
+| `modules=`, `state-threads=` | per module, its totals and its state's cost folded over that many threads (JSON; foldsim's fold-degree search prices copies with it) |
+
 ## 2. System architecture
 
 ![Beacon system](../assets/img/beacon_system.svg)
@@ -96,13 +111,13 @@ never builds it. The integration is in Vortex:
 
 | Piece | Where | Role |
 |---|---|---|
-| `foldsim-beacon-map`, `foldsim-estimate-timing` | foldsim `lib/Transforms/Beacon.cpp`, `EstimateTiming.cpp` | map to the target's cells; count levels |
+| `foldsim-beacon-map`, `foldsim-estimate-timing`, `foldsim-estimate-area` | foldsim `lib/Transforms/Beacon.cpp`, `EstimateTiming.cpp`, `EstimateArea.cpp` | map to the target's cells; count levels; count area |
 | `ci/beacon.py` | `ci/` | run Beacon on any netlist; read it by unit; compare with Vivado |
 | `xilinx_cone_dump.tcl`, `xilinx_cone_probe.tcl`, `xilinx_wire_probe.tcl` | `hw/scripts` | Vivado probes for what levels cannot show (§8) |
-| target `beacon` | `hw/syn/xilinx/dut/common.mk` | one DUT: sources → netlist → levels → summary |
+| target `beacon` | `hw/syn/xilinx/dut/common.mk` | one DUT: sources → netlist → levels and area → summary |
 | `circt_elaborate.sh -f mlir` | `hw/scripts` | the lowered HW/Comb/Seq netlist, no `firtool` |
 | `gen_platform.py --emit=family` | `hw/scripts` | the family of `DEVICE`, from `hw/syn/xilinx/platforms` |
-| `beacon_summary.py` | `hw/scripts` | `beacon_summary.csv` and per-unit `beacon_units.json` |
+| `beacon_summary.py` | `hw/scripts` | `beacon_summary.csv`, per-unit `beacon_units.json`, `beacon_area.txt` |
 | `Beacon` backend, `logic_gate.py` | `ci/synth_gate.py`, `ci/` | the gate, beside `fpga_gate` and `asic_gate` |
 | `logic_gate.yml` | `.github/workflows` | runs it on pull requests that touch RTL |
 
@@ -117,9 +132,9 @@ black boxes (`xilinx_ip_stubs.sv`).
 
 ### 3.1 `foldsim-beacon-map`
 
-Both passes load the same **target** from foldsim's target table
+Every pass loads the same **target** from foldsim's target table
 (`foldsim/Beacon.h`): its cells for the mapping, its DSPs and delays for the
-level count. A target is named after its FPGA family or its PDK, so every
+level count, its LUT scale for the area (§4.5). A target is named after its FPGA family or its PDK, so every
 flow passes the name it already has: the DUT flow the family
 `gen_platform.py --emit=family` gives for `DEVICE`, the ASIC flow `PDK`,
 `ci/beacon.py run` its `target=`. The mapping is a pipeline of CIRCT's
@@ -149,6 +164,20 @@ synthesis passes plus three of foldsim's, per module:
 
 The full GPU maps in about a minute and 18–20 GB.
 
+With `area`, the same lowering maps the design for `foldsim-estimate-area`
+instead. A depth-oriented cover duplicates logic to save levels, so its
+cells are no measure of area; the area mapping is what Vivado does off the
+critical paths:
+
+- every module stays an instance, so each one's resources stay its own
+  (inlining moves the count by 1–4 %), and each module maps once however
+  many instances it has;
+- no mux balancing, no maximum AND cover and no SOP balancing;
+- variadic logic lowered sharing common subsets (`reuse-subsets`), and the
+  cut mapper's area strategy.
+
+A DUT of the catalog maps for area in 1–16 s.
+
 ### 3.2 `foldsim-estimate-timing`
 
 The estimator works on the elaborated design: one **context** per instance,
@@ -167,6 +196,14 @@ and one **node** per (context, value, bit). It never enumerates paths:
 
 Time and memory are linear in the design's bits: the full GPU runs in
 16–21 s and 2.7 GB, a DUT of the catalog in seconds.
+
+### 3.3 `foldsim-estimate-area`
+
+The area estimator counts each module's own ops once (§4.5), then sums the
+instance tree from `top`: a module's total is its own resources and its
+instances' totals. It writes one row per instance, depth first, with the
+instance's own resources and its subtree's, and one row per memory with the
+placement chosen for it. It takes under a second on a DUT.
 
 ## 4. The model
 
@@ -255,6 +292,47 @@ harness makes them. It ranks no better than plain levels, so `levels` stays
 the ranking; `retimed ≥ 12` at `retime-levels=10` is a short list of fix
 candidates retiming is unlikely to absorb.
 
+### 4.5 Area
+
+Per op of the area mapping (§3.1):
+
+| Element | FPGA | ASAP7 |
+|---|---|---|
+| LUT (`comb.truth_table`) | 1 LUT | 1 cell |
+| Adder or subtracter | a LUT per bit into the carry chain | a prefix adder: w · (2 + ⌈log₂ w⌉) cells |
+| Order compare | a LUT per two bits | 2 cells per bit |
+| Multiply by a constant | a LUT per bit (shifts and adders) | 3 cells per bit |
+| Multiply, ≤ 10 variable operand bits | a table: a LUT per output bit (at most as many as the operands' variable bits), per 64 entries past six bits | the same in cells |
+| Multiply, wider | DSPs: the fewer of ⌈a/A⌉·⌈b/B⌉ in either orientation over the significant bits (§4.2) | partial products and a Dadda tree: 3·a·b cells |
+| Divide or remainder (output bits: at most the dividend's) | a table over ≤ 10 variable bits; a constant divisor, 2 LUTs per bit; else a subtracter per quotient bit, a LUT per result bit | the same, but 3 cells per subtracter bit |
+| Register | a flip-flop per bit | a flip-flop per bit |
+| Vendor IP (`xil_*`) | its measured LUTs, flip-flops and DSPs | — |
+| SRAM macro (black box) | — | a macro |
+
+**Memories** go where Vivado infers them. A `ram_style` the RTL asks for wins
+(`VX_dp_ram` writes `block` for `FORCE_BRAM` sizes and `distributed` for
+`LUTRAM`; the RAM fold, `ram_fold.py`, registers the read of the RAMs it
+folds, so `VX_dp_ram` writes `block` for them too). Otherwise a
+read of latency 0 is distributed RAM, and a registered read of at least 32
+words and 2 Kb is block RAM. The shapes are the same on every FPGA family:
+
+| Placement | Cost |
+|---|---|
+| distributed RAM | 0.57 LUTs per bit up to 32 words (RAM32M16), 1.14 per 64 words beyond (RAM64M8), per read port, plus a multiplexer tree over the 64-word LUTs |
+| block RAM | the fewest 36 Kb blocks of any shape (512 × 72 … 32K × 1) or 18 Kb halves; a copy per two ports, a read-write port one of them |
+| UltraRAM (`ultra`) | 4096 × 72 each |
+| `registers` | flip-flops and a read multiplexer |
+
+On ASAP7, a memory without a macro is flip-flops, a write decoder and a
+read multiplexer tree.
+
+**The LUT scale.** The cut mapper has none of Vivado's LUT combining or
+clock-enable and reset pins, and maps module by module, so it covers a
+design with 2.1–3.5× the logic LUTs Vivado leaves. The target's `lutScale` converts the mapping's LUTs to
+Vivado's: 0.337 on the LUT6 families, the geometric mean of Vivado's logic
+LUTs over Beacon's on routed U55C builds (§7.2). Vendor IP and distributed
+RAM, and the memories' read multiplexers, are not scaled; `lut-scale=1` gives the raw cover.
+
 ## 5. Outputs
 
 | File | Contents |
@@ -262,10 +340,19 @@ candidates retiming is unlikely to absorb.
 | `endpoints.csv` | one row per end point bit: `levels,retimed,kind,start_kind,fanout,crossings,start_inst,start,end_inst,end` |
 | `instances.csv` | the instance tree: `id,parent,instance,module` (the `*_inst` columns' ids) |
 | `report.txt` | counts, combinational loops, ops without a model, the histogram of end points by levels, the `top-paths` deepest paths op by op, and the deepest path of each `trace=` match |
-| `beacon_summary.csv` | the DUT flow's one row: max levels, end points ≥ 12, ≥ 8, all |
+| `beacon_summary.csv` | the DUT flow's one row: max levels, end points ≥ 12, ≥ 8, all, and the area |
 | `paths.jsonl` | `paths=`: one JSON line per pair of start and end registers whose deepest bit has at least `path-levels` levels: that bit's levels, the pair's bit count, start, end, and `ops`, the path from the end back to the start as `[levels, kind, fanout, instance id, name, source]` |
 | `beacon_units.json` | the deepest end point of every unit at ≥ 8 levels, and the 10 deepest paths |
 | `beacon_paths.txt` | the DUT flow's `paths.jsonl` at ≥ 8 levels, by unit (`ci/beacon.py paths` for any run) |
+| `area.csv` | one row per instance, depth first: `depth,path,module`, its own `lut,lutram,ff,bram,uram,dsp,macros`, then its subtree's (`total_*`); `lut` is logic LUTs, scaled (§4.5) |
+| `area_memories.csv` | one row per memory: its instance, name, depth, width, read, write and read-write ports, read latency, `ram_style`, placement and cost |
+| `area.txt` | the design's totals, the mapping's LUTs by op before scaling, and the vendor IP |
+| `beacon_area.txt` | `area.txt`, the units with ≥ 1 % of the LUTs (one copy's subtree, × copies), and every memory with its placement |
+
+`beacon_summary.csv` also holds the design's `lut` (distributed RAM
+included, as Vivado's utilization counts it), `ff`, `lutram`, `bram`,
+`uram` and `dsp`, and `beacon_units.json` an `area` map of every unit's
+resources (one copy's subtree) and copy count.
 
 A path in `report.txt`, deepest first, one op per line: levels at the op,
 its kind, the fanout of its bit, and its instance path and name:
@@ -322,11 +409,12 @@ On the full GPU, the 3,283 pairs at ≥ 12 levels fold into 169 paths in
    repository's);
 2. `circt_elaborate.sh -f mlir` into `beacon/netlist.mlir`, the FP IPs as
    black boxes, with every op's source location;
-3. `foldsim-beacon-map`, then `foldsim-estimate-timing`, both with
+3. `foldsim-beacon-map`, then `foldsim-estimate-timing`; and
+   `foldsim-beacon-map{area}`, then `foldsim-estimate-area`; all with
    `target=` the family `gen_platform.py --device=$(DEVICE) --emit=family`
    names;
-4. `beacon_summary.py`: `beacon_summary.csv`, `beacon_units.json` and
-   `beacon_paths.txt` (§5).
+4. `beacon_summary.py`: `beacon_summary.csv`, `beacon_units.json`,
+   `beacon_paths.txt` and `beacon_area.txt` (§5).
 
 The ASIC flow has the same target, with the same sources, defines and SRAM
 black boxes as its synthesis, and `target=$(PDK)`:
@@ -349,12 +437,20 @@ each against `ci/baselines/synthesis/beacon/`:
 - a **new unit** at or above the fix threshold (12) fails;
 - a unit that gets shallower, or leaves the watch list, is an improvement
   to lock in by re-recording;
-- end point counts are recorded, not gated (they grow with lanes and warps).
+- end point counts are recorded, not gated (they grow with lanes and warps);
+- a **resource** of the design (`lut`, `ff`, `lutram`, `bram`, `uram`,
+  `dsp`) more than 5 % above its baseline fails, `fpga_gate`'s LUT
+  tolerance (catalog `thresholds` and `--metric-threshold` override it);
+  5 % below is an improvement to lock in. A memory that moves between
+  distributed and block RAM shows as both columns moving.
 
 A failing build names its `beacon_paths.txt`, where the failing unit is a
-heading with its paths op by op; CI uploads it with the build's logs.
+heading with its paths op by op, and its `beacon_area.txt`; CI uploads them
+with the build's logs.
 
-Depth is deterministic, so the tolerance is zero. The baseline fingerprint
+Depth is deterministic, so the tolerance is zero. Area is as
+deterministic, but a feature adds some by design, so it has the Fmax gate's
+tolerance. The baseline fingerprint
 is the CIRCT and foldsim versions, `DEVICE` and `XLEN`: a new foldsim reads
 as STALE, not as a regression. Baselines are golden data, re-recorded only
 by a human (`--update-baseline`), as for the other gates.
@@ -385,7 +481,10 @@ fixed while the change is still open, and synthesis runs once, to confirm.
    deepest register, the mean of the 50 deepest and the count at the watch
    threshold, before and after; then it lists the registers that got deeper,
    new deep registers, and the ones that got shallower, then the units whose
-   deepest register moved. The run fails (`DEEPER`) on a register 4 or more
+   deepest register moved. With area, the headline adds the LUTs, block RAMs
+   and DSPs before and after, and a section lists each resource of the
+   design and the units whose own area moved, all copies; a resource more
+   than 5 % larger fails the run (`AREA`). The run fails (`DEEPER`) on a register 4 or more
    levels deeper, one that reaches the fix threshold (12) from below, or a new
    one at it. These limits come from 13 routed U55C builds: a register 4 or
    more levels deeper lost slack in Vivado in every case (170 of 170), while
@@ -405,9 +504,9 @@ fixed while the change is still open, and synthesis runs once, to confirm.
    run with Vivado's end point table, and a disagreement there is a Beacon bug
    to fix in foldsim.
 
-Beacon counts logic levels; it does not see wire delay, placement, SLR
-crossings, congestion or area. A change that moves those (a wide fan-out, a
-floorplan, a larger RAM) still needs synthesis before it lands. Compare a fix
+Beacon counts logic levels and cells; it does not see wire delay,
+placement, SLR crossings or congestion. A change that moves those (a wide
+fan-out, a floorplan) still needs synthesis before it lands. Compare a fix
 against a native gate (`hw/syn/xilinx/dut` or the OOC gates), not the folded
 design (§9).
 
@@ -540,6 +639,37 @@ the same RTL (it1, it2) reaches 0.80. AP for failing registers goes from
 So the model is a ranking for where to look first, not a gate. `diff` and
 `logic_gate` keep gating on levels.
 
+### 7.2 Area
+
+Against the routed `fpga_gate` builds of the same sources (U55C, Vivado
+2024.1, 1 November 2026):
+
+| DUT | LUT (Beacon / Vivado) | FF | distributed RAM LUTs | block RAM | DSP |
+|---|---|---|---|---|---|
+| core | 148,956 / 174,006 (0.86) | 166,850 / 146,008 (1.14) | 6,838 / 8,528 | 129 / 137 | 97 / 96 |
+| cache | 37,466 / 31,039 (1.21) | 33,270 / 25,280 (1.32) | 3,784 / 2,722 | 32 / 32 | 0 / 0 |
+| tcu | 122,262 / 117,087 (1.04) | 47,095 / 42,675 (1.10) | 2,083 / 1,360 | 0 / 0 | 769 / 768 |
+| tensor | 264,677 / 233,153 (1.14) | 160,881 / 138,986 (1.16) | 12,806 / 7,844 | 114.5 / 133 | 267 / 265 |
+
+- **DSPs** are within two per DUT. Vivado decides some narrow products
+  (8 × 9, say) by a heuristic of its own, between DSPs and LUTs; Beacon puts
+  every product of more than ten variable bits in DSPs.
+- **Block RAM** is exact on cache, 6 % short on core and 14 % short on
+  tensor; which of tensor's memories Vivado puts in block RAM that Beacon
+  does not is not yet traced.
+- **Flip-flops** run 10–32 % high. Vivado can move pipeline registers into
+  DSPs (`AREG`, `MREG`, `PREG`) and block RAM output registers, and shift
+  registers into SRLs, none of which Beacon models; how much each accounts
+  for is not yet measured.
+- **LUTs** are a calibrated estimate, within −14 % to +21 % on these DUTs;
+  the scale is one number per family (§4.5), so a DUT whose logic packs
+  better or worse than the average moves by that much. `logic_gate`
+  compares a DUT with its own baseline, so the scale cancels there.
+
+The repository's Vivado baselines (`ci/baselines/synthesis/xilinx/`) date
+from 5 October 2026 and predate later RTL changes, so they are not a
+reference for this table.
+
 ## 8. Diagnostics beyond levels
 
 **Port depths.** `port-modules=` names modules whose instances' ports
@@ -600,7 +730,13 @@ Beacon cannot answer, run on a checkpoint
   into LUTRAM and cuts some chains, so its paths differ from the RTL's. The
   native gates are the reference for native RTL.
 - **Black boxes.** Vendor IPs and `black-boxes=` modules end and start
-  paths at their pins: their insides are not timed.
+  paths at their pins: their insides are not timed. Vendor IP's area is
+  its measured cost per instance; a `black-boxes=` module's is left out.
+- **Area is a count, not a utilization report.** The mapping is a cut
+  mapper's cover scaled to Vivado's average (§4.5, §7.2), memories go by
+  Vivado's inference rules, and what Vivado packs into DSP, block RAM and
+  SRL cells Beacon counts as fabric. Logic that nothing observable reads is
+  counted; Vivado removes it.
 - **Devices.** The V80 and the U55C (Vivado), and ASAP7 RVT TT (the Yosys
   flow). The ASAP7 numbers are Beacon's period estimate, a sizing
   guide, not a sign-off: they come within about 10–30 % of OpenSTA.

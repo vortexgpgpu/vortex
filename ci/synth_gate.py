@@ -102,6 +102,9 @@ class Tool:
     summary = "synth_summary.csv"
     # Default gate tolerance, overridden by --threshold and the catalog.
     tolerance = TOLERANCE
+    # Per-metric defaults over `tolerance`, overridden by --metric-threshold
+    # and the catalog.
+    metric_tolerance = {}
     integral = ()      # recorded as ints; every other metric is a rounded float
     columns = ()       # (header, metric, format, width) for the report table
 
@@ -458,36 +461,49 @@ class Yosys(Tool):
 
 
 class Beacon(Tool):
-    """Beacon: logic levels per RTL unit (hw/syn/xilinx/dut, target
-    `beacon`).
+    """Beacon: logic levels per RTL unit and the design's area
+    (hw/syn/xilinx/dut, target `beacon`).
 
     foldsim-estimate-timing ranks every register-to-register path of the CIRCT
     netlist the Xilinx flow elaborates by its logic levels, counted as Vivado
-    counts them on DEVICE's family. It needs no Vivado and no licence and
-    takes seconds per DUT, so it can run on every change where the Fmax gate
-    runs nightly.
+    counts them on DEVICE's family; foldsim-estimate-area counts its LUTs,
+    flip-flops, distributed and block RAM, UltraRAM and DSPs, placing each
+    memory as Vivado infers it. It needs no Vivado and no licence and takes
+    seconds per DUT, so it can run on every change where the Fmax gate runs
+    nightly.
 
     Depth is deterministic -- the same RTL and tools give the same levels -- so
     the gate has no tolerance: a unit that gets deeper fails, by name, until it
-    is fixed or a human re-records it. What it gates is depth, not Fmax:
-    Beacon does not see wires (docs/designs/continuous_integration.md 3.5).
+    is fixed or a human re-records it. Area is as deterministic, but a feature
+    adds some by design, so a resource of the design fails past its baseline
+    by more than fpga_gate's LUT tolerance (metric_tolerance), and a memory
+    that moves between distributed and block RAM shows as both columns
+    moving. What it gates is depth and cells, not Fmax or placement: Beacon
+    does not see wires (docs/designs/continuous_integration.md 3.5).
     """
 
     name = "beacon"
     gate = "logic_gate"
     flow = "hw/syn/xilinx/dut"
 
-    metrics = ("max_levels", "deep_endpoints", "watch_endpoints", "endpoints",
-               "build_time_s")
-    gated = ("max_levels",)
-    integral = metrics
+    area_metrics = ("lut", "ff", "lutram", "bram", "uram", "dsp")
+    metrics = ("max_levels", "deep_endpoints", "watch_endpoints",
+               "endpoints") + area_metrics + ("build_time_s",)
+    gated = ("max_levels",) + area_metrics
+    integral = ("max_levels", "deep_endpoints", "watch_endpoints",
+                "endpoints", "lut", "ff", "lutram", "uram", "dsp",
+                "build_time_s")
     key_metric = "max_levels"
     summary = "beacon_summary.csv"
     tolerance = 0.0
+    metric_tolerance = dict.fromkeys(area_metrics, 0.05)
     columns = (("max_lv", "max_levels", "%d", 7),
                ("deep", "deep_endpoints", "%d", 9),
                ("watch", "watch_endpoints", "%d", 9),
-               ("ends", "endpoints", "%d", 9))
+               ("ends", "endpoints", "%d", 9),
+               ("lut", "lut", "%d", 9), ("ff", "ff", "%d", 9),
+               ("lutram", "lutram", "%d", 9), ("bram", "bram", "%g", 8),
+               ("uram", "uram", "%d", 6), ("dsp", "dsp", "%d", 6))
 
     # Elaboration and mapping of the widest DUTs; the level count itself is
     # seconds.
@@ -505,12 +521,14 @@ class Beacon(Tool):
         ("circt_elaborate.sh", "elaboration"),
         (elab_done, "mapping"),
         ("foldsim-estimate-timing", "levels"),
+        ("foldsim-estimate-area", "area"),
         ("beacon_summary.py", "reporting"),
     )
     error_re = re.compile(r"^(?:ERROR|FATAL|Error)\b|: error:|^\S+: \*\*\* ")
 
     UNITS = "beacon_units.json"
     PATHS = "beacon_paths.txt"
+    AREA = "beacon_area.txt"
 
     def env(self, args):
         return {"circt": tool_version("circt-verilog", "--version",
@@ -607,13 +625,17 @@ class Beacon(Tool):
 
     def evidence(self, work):
         # Every unit at or above the watch threshold, its paths op by op: a
-        # failing unit is a heading there.
-        path = os.path.join(work, self.PATHS)
-        return [path] if os.path.exists(path) else []
+        # failing unit is a heading there; the area by unit and each memory's
+        # placement.
+        return [p for p in (os.path.join(work, self.PATHS),
+                            os.path.join(work, self.AREA))
+                if os.path.exists(p)]
 
     def describe(self, m):
-        return "max %d levels, %d end points >= %s" % (
-            m["max_levels"], m["deep_endpoints"], m.get("fix_levels"))
+        area = (", %d LUTs, %g BRAM, %d DSP" % (m["lut"], m["bram"], m["dsp"])
+                if m.get("lut") is not None else "")
+        return "max %d levels, %d end points >= %s%s" % (
+            m["max_levels"], m["deep_endpoints"], m.get("fix_levels"), area)
 
     def describe_baseline(self, base):
         return "max %d levels" % base["max_levels"]
@@ -1364,9 +1386,10 @@ def report(results, env, args, gated, tool, record=False):
 
 
 def compare_against(results, ref_dir, tool):
-    """Each finished build's Beacon end points against the same build in
-    ref_dir, register by register; return the builds a register got deeper
-    in, as failing verdicts."""
+    """Each finished build's Beacon run against the same build in ref_dir:
+    end points register by register, and area by unit; return the builds a
+    register got deeper in, or whose area grew past the tolerance, as failing
+    verdicts."""
     script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "beacon.py")
     failures = []
     for r in results:
@@ -1388,10 +1411,15 @@ def compare_against(results, ref_dir, tool):
         with open(out) as fh:
             head = fh.readline().strip()
         print("\n%s against %s: %s%s\n  see %s"
-              % (b["id"], ref_dir, head, " -- REGRESSION" if rc == 1 else "", out))
+              % (b["id"], ref_dir, head, " -- REGRESSION" if rc in (1, 3) else "",
+                 out))
         if rc == 1:
             failures.append((b["id"], "DEEPER", ["a register got deeper than in "
                                                  "the reference: %s" % out]))
+        elif rc == 3:
+            failures.append((b["id"], "AREA", ["the design's area grew past the "
+                                               "tolerance against the "
+                                               "reference: %s" % out]))
         elif rc:
             failures.append((b["id"], "BUILD-FAIL", ["beacon.py diff failed: %s" % out]))
     return failures
@@ -1441,9 +1469,10 @@ def main(argv=None, default_tool="xilinx"):
     ap.add_argument("--against", metavar="DIR",
                     help="Beacon only: the build tree of a reference run, "
                          "typically the parent revision's; each build's end "
-                         "points are compared register by register with the "
-                         "same build there (ci/beacon.py diff), and a register "
-                         "that got deeper fails the run")
+                         "points are compared register by register, and its "
+                         "area by unit, with the same build there "
+                         "(ci/beacon.py diff); a register that got deeper, or "
+                         "area grown past the tolerance, fails the run")
     ap.add_argument("--xlen", type=int, default=32, choices=(32, 64),
                     help="ISA width of the builds that do not pin their own "
                          "(default: 32)")
@@ -1477,7 +1506,7 @@ def main(argv=None, default_tool="xilinx"):
     # happens whenever this is piped -- CI, nohup, a log file).
     sys.stdout.reconfigure(line_buffering=True)
 
-    overrides = dict(METRIC_TOLERANCE)
+    overrides = dict(METRIC_TOLERANCE, **tool.metric_tolerance)
     for spec in args.metric_threshold:
         metric, _, value = spec.partition("=")
         if metric not in tool.metrics or not value:

@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""beacon -- run Beacon, foldsim's logic-level count, on a Vortex netlist, and
-read its results by RTL unit or against Vivado.
+"""beacon -- run Beacon, foldsim's logic-level and area count, on a Vortex
+netlist, and read its results by RTL unit or against Vivado.
 
   run           map an elaborated CIRCT netlist and count the logic levels of
-                every end point (foldsim-estimate-timing)
+                every end point (foldsim-estimate-timing) and its LUTs,
+                flip-flops, memories and DSPs (foldsim-estimate-area)
   summarize     the deep end points grouped by RTL unit, optionally beside
                 Vivado's failing ones
   paths         every deep path op by op, by RTL unit (one per pair of
@@ -191,7 +192,8 @@ def unit(key):
 
 
 def cmd_run(args):
-    """Map (unless the input is already mapped bytecode), then count levels."""
+    """Map (unless the input is already mapped bytecode), then count levels;
+    from a netlist, also map for area and count it."""
     opt = os.environ.get("FOLDSIM_OPT") or "foldsim-opt"
     os.makedirs(args.out, exist_ok=True)
     # Map to the cells of the target the levels are counted on.
@@ -223,6 +225,17 @@ def cmd_run(args):
     steps.append(("levels", [opt, mapped, "-o", os.devnull,
                              "--pass-pipeline=builtin.module("
                              "foldsim-estimate-timing{%s})" % opts]))
+    if not args.design.endswith(".mlirbc"):
+        # Area reads the netlist mapped again, for area.
+        top = [o for o in args.options if o.startswith(("top=", "black-boxes="))]
+        area = " ".join([target, "output=%s/area.csv" % args.out,
+                         "memories=%s/area_memories.csv" % args.out,
+                         "report=%s/area.txt" % args.out] + top)
+        steps.append(("area", [opt, args.design, "-o", os.devnull,
+                               "--pass-pipeline=builtin.module("
+                               "foldsim-beacon-map{%s area},"
+                               "foldsim-estimate-area{%s})" % (target, area)]
+                      + threads))
     for name, cmd in steps:
         start = time.time()
         rc = subprocess.call(cmd)
@@ -546,7 +559,10 @@ def cmd_diff(args):
     """A change's effect on depth: every register at or above --min-levels in
     either run whose depth moved, worst first. Exits 1 on a regression: a
     register --fail-delta or more levels deeper, one that reaches --fix-levels
-    from below, or one only the change has at --fix-levels.
+    from below, or one only the change has at --fix-levels. If both runs
+    counted area, also the design's resources and the units whose area moved;
+    exits 3 if only area regressed: a resource of the design more than
+    --area-tolerance larger.
 
     Against routed Vivado runs of the same DUT's revisions, a register that
     got four or more levels deeper lost slack every time, while a rise of one
@@ -566,10 +582,19 @@ def cmd_diff(args):
         depths = sorted((v[0] for v in regs.values()), reverse=True)[:n]
         return sum(depths) / len(depths) if depths else 0.0
 
+    area_before, area_after = load_area(args.before), load_area(args.after)
+    area_head = ''
+    if bool(area_before) != bool(area_after):
+        print('area: only the %s run counted it; not compared'
+              % ('reference' if area_before else 'changed'))
+    if area_before and area_after:
+        tb, ta = area_before[''], area_after['']
+        area_head = '; ' + ', '.join(
+            f'{k} {tb[k]:g} -> {ta[k]:g}' for k in ('lut', 'bram', 'dsp'))
     print(f'deepest path {deepest(before)} -> {deepest(after)} levels; '
           f'mean of the 50 deepest {top_mean(before):.1f} -> {top_mean(after):.1f}; '
           f'registers at or above {args.min_levels} levels '
-          f'{watched(before)} -> {watched(after)}')
+          f'{watched(before)} -> {watched(after)}{area_head}')
 
     deeper, shallower, new, gone = [], [], [], []
     for key, (lv, start) in after.items():
@@ -630,9 +655,75 @@ def cmd_diff(args):
         for b, a, (cls, u) in moved[:args.top]:
             print(f'{b:4d} -> {a:<4d} {cls + ": " if cls else ""}{u}')
 
+    area_regress = False
+    if area_before and area_after:
+        area_regress = show_area(area_before, area_after, args)
+
     # A register the reference lacks may be a renamed one, so it fails only at
     # the fix threshold, as a new unit does in logic_gate.
-    return 1 if regress or any(r[0] >= args.fix_levels for r in new) else 0
+    if regress or any(r[0] >= args.fix_levels for r in new):
+        return 1
+    return 3 if area_regress else 0
+
+
+AREA_KEYS = ('lut', 'ff', 'lutram', 'bram', 'uram', 'dsp')
+
+
+def load_area(run_dir):
+    """The design's resources ('') and each folded unit's own, summed over its
+    copies, from a run's area.csv, or None. A unit's own resources leave out
+    its children's, so a change shows at the unit it is in. `lut` counts
+    distributed RAM too, as Vivado's utilization does."""
+    path = f'{run_dir}/area.csv'
+    if not os.path.exists(path):
+        return None
+    units = {}
+    with open(path) as fh:
+        for row in csv.DictReader(fh):
+            prefix = 'total_' if not row['path'] else ''
+            res = {k: float(row[prefix + k]) for k in AREA_KEYS}
+            res['lut'] += res['lutram']
+            key = unit(norm(row['path']) + '/x') if row['path'] else ''
+            if key in units:
+                for k in AREA_KEYS:
+                    units[key][k] += res[k]
+            else:
+                units[key] = res
+    return units if '' in units else None
+
+
+def show_area(before, after, args):
+    """The design's resources before and after, and the units whose own LUTs,
+    memories or DSPs moved most; True if a resource of the design grew more
+    than --area-tolerance."""
+    tb, ta = before[''], after['']
+    print('\narea (design)')
+    regress = False
+    for k in AREA_KEYS:
+        b, a = tb[k], ta[k]
+        pct = (a - b) / b * 100 if b else (100.0 if a else 0.0)
+        flag = ''
+        if pct > 100 * args.area_tolerance:
+            flag, regress = '  REGRESSION', True
+        print(f'  {k:7s} {b:10g} -> {a:<10g} {pct:+6.1f}%{flag}')
+    moved = []
+    for key in set(before) | set(after):
+        if not key:
+            continue
+        b = before.get(key, dict.fromkeys(AREA_KEYS, 0.0))
+        a = after.get(key, dict.fromkeys(AREA_KEYS, 0.0))
+        if any(abs(a[k] - b[k]) >= 0.5 for k in AREA_KEYS):
+            moved.append((abs(a['lut'] - b['lut']) + 100 * (
+                abs(a['bram'] - b['bram']) + abs(a['uram'] - b['uram'])
+                + abs(a['dsp'] - b['dsp'])), key, b, a))
+    if moved:
+        moved.sort(key=lambda r: -r[0])
+        print(f'\nunits whose own area moved ({len(moved)}), all copies')
+        for _, key, b, a in moved[:args.top]:
+            parts = [f'{k} {b[k]:g} -> {a[k]:g}' for k in AREA_KEYS
+                     if abs(a[k] - b[k]) >= 0.5]
+            print(f'  {key}: ' + ', '.join(parts))
+    return regress
 
 
 def cmd_buffers(args):
@@ -1088,7 +1179,8 @@ def main():
     p.add_argument('--top', type=int, default=40)
     p.set_defaults(fn=cmd_ports)
 
-    p = sub.add_parser("diff", help="a change's effect on depth, register by register")
+    p = sub.add_parser("diff", help="a change's effect on depth, register by "
+                       "register, and on area, by unit")
     p.add_argument('before', help="run directory of the reference (the parent revision)")
     p.add_argument('after', help="run directory of the change")
     p.add_argument('--min-levels', type=int, default=8,
@@ -1102,6 +1194,9 @@ def main():
     p.add_argument('--top', type=int, default=40)
     p.add_argument('--metric', default='levels', choices=['levels', 'retimed'],
                    help="the runs' column to compare")
+    p.add_argument('--area-tolerance', type=float, default=0.05,
+                   help="a resource of the design that grows by more than this "
+                   "fraction fails (exit 3)")
     p.set_defaults(fn=cmd_diff)
 
     p = sub.add_parser("buffers", help="elastic buffers that pass deep paths")
@@ -1142,4 +1237,11 @@ def main():
 
 
 if __name__ == '__main__':
-    sys.exit(main())
+    # Exit codes 1 and 3 are regressions to logic_gate (DEEPER, AREA); a crash
+    # must read as a failed run, not as one.
+    try:
+        sys.exit(main())
+    except Exception:
+        import traceback
+        traceback.print_exc()
+        sys.exit(4)

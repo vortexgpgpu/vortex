@@ -83,15 +83,17 @@ power:
 	TOOL_DIR=$(SCRIPT_DIR) SAIF_FILE=$(SAIF_FILE) SAIF_INST=$(SAIF_INST) \
 	  $(VIVADO) -mode batch -source $(SCRIPT_DIR)/xilinx_power_analysis.tcl
 
-# Beacon (foldsim-estimate-timing): the logic levels of every
-# register-to-register path of the design, counted as Vivado counts them on
-# DEVICE's family (hw/syn/xilinx/platforms), by RTL unit, in seconds and
-# without Vivado. It elaborates the same sources and
-# defines as gen-sources into a CIRCT netlist of its own, with the Xilinx
-# floating-point cores as black boxes. ci/logic_gate.py gates
+# Beacon (foldsim-estimate-timing, foldsim-estimate-area): the logic levels of
+# every register-to-register path of the design, counted as Vivado counts them
+# on DEVICE's family (hw/syn/xilinx/platforms), by RTL unit, and its LUTs,
+# flip-flops, distributed and block RAM and DSPs, in seconds and without
+# Vivado. It elaborates the same sources and defines as gen-sources into a
+# CIRCT netlist of its own, with the Xilinx floating-point cores as black
+# boxes, mapped once for depth and once for area. ci/logic_gate.py gates
 # beacon_summary.csv and beacon_units.json; beacon_paths.txt has every path
 # of at least BEACON_PATH_LEVELS (beacon_summary.py's watch threshold), op by
-# op, by unit.
+# op, by unit, and beacon_area.txt the area by unit and where each memory
+# goes.
 BEACON_PATH_LEVELS ?= 8
 # The Beacon target: the family of the device, as hw/syn/xilinx/platforms names it.
 BEACON_TARGET = $(shell python3 $(SCRIPT_DIR)/gen_platform.py --device=$(DEVICE) --emit=family)
@@ -114,11 +116,12 @@ beacon:
 	$(FOLDSIM_OPT) beacon/netlist.mlir --pass-pipeline='builtin.module($(BEACON_MAP))' \
 		--emit-bytecode -o beacon/mapped.mlirbc
 	$(FOLDSIM_OPT) beacon/mapped.mlirbc -o /dev/null --pass-pipeline="builtin.module(foldsim-estimate-timing{top=$(TOP_LEVEL_ENTITY) target=$(BEACON_TARGET) output=beacon/endpoints.csv instances=beacon/instances.csv report=beacon/report.txt paths=beacon/paths.jsonl path-levels=$(BEACON_PATH_LEVELS) $(BEACON_PORTS)})"
+	$(FOLDSIM_OPT) beacon/netlist.mlir -o /dev/null --pass-pipeline="builtin.module(foldsim-beacon-map{target=$(BEACON_TARGET) area},foldsim-estimate-area{top=$(TOP_LEVEL_ENTITY) target=$(BEACON_TARGET) output=beacon/area.csv memories=beacon/area_memories.csv report=beacon/area.txt})"
 	python3 $(SCRIPT_DIR)/beacon_summary.py beacon --top $(TOP_LEVEL_ENTITY)
 
 clean:
 ifndef RESUME
-	rm -rf project_1 beacon beacon_summary.csv beacon_units.json beacon_paths.txt
+	rm -rf project_1 beacon beacon_summary.csv beacon_units.json beacon_paths.txt beacon_area.txt
 	rm -rf .Xil
 	rm -f *.rpt
 	rm -f *.log
