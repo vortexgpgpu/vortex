@@ -157,9 +157,12 @@ uint32_t TcuTmem::mgmt_grant(const std::bitset<kBanks>& alloc_ready,
   return kNoGrant;
 }
 
-uint32_t TcuTmem::alloc_ncols(uint32_t handle) const {
-  auto it = allocs_.find(handle);
-  return (it == allocs_.end()) ? 0 : it->second;
+uint32_t TcuTmem::alloc_cols_from(uint32_t col) const {
+  for (auto& kv : allocs_) {
+    if (col >= kv.first && col < kv.first + kv.second)
+      return kv.first + kv.second - col;
+  }
+  return 0;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

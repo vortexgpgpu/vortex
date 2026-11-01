@@ -127,6 +127,25 @@ tests:
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
     -DVX_CFG_TCU_TMEM_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DUMMA_NRC=32 -DUMMA_A_TMEM
 
+# SimX<->rtlsim parity with the accumulator away from the allocation base, as a
+# kernel holding several accumulators in one allocation does. Two CTAs are
+# resident, so the second CTA's accumulator is offset into its own range too.
+- id: model_parity-umma-acc-offset
+  check: model_parity
+  via: blackbox
+  app: sgemm_tcu_tmem
+  args: -m64 -n64 -k64
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_TMEM_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DUMMA_NRC=32 -DUMMA_ACC_OFFSET=8
+
+- id: model_parity-umma-acc-offset-ts
+  check: model_parity
+  via: blackbox
+  app: sgemm_tcu_tmem
+  args: -m64 -n64 -k64
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_TMEM_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DUMMA_NRC=32 -DUMMA_A_TMEM -DUMMA_ACC_OFFSET=8
+
 # SimX<->rtlsim cycle parity with concurrent CTAs: two resident at NW=8, four at
 # NW=16. Covers the CTA lockstep wait and cross-CTA TMEM bank contention.
 - id: model_parity-umma-2cta

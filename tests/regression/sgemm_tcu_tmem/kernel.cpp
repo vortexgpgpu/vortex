@@ -30,19 +30,24 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   [[maybe_unused]] auto A_smem = smem;
   auto B_smem = smem + cta_M * ctx::tileK;
 
+  static_assert(UMMA_ACC_OFFSET % ctx::tcN == 0,
+                "UMMA_ACC_OFFSET must be a multiple of TC_N");
+
   // Every warp calls tmem_alloc directly — the allocator is CTA-scoped and
   // idempotent (see tcu_unit.cpp's tmem_alloc), so every warp gets the same
   // handle back with no elected-thread/shared-memory broadcast needed.
 #ifdef UMMA_A_TMEM
-  // One CTA-scoped allocation covers both: C at [handle, handle+xtileN) and
+  // One CTA-scoped allocation covers both: C at [acc, acc+xtileN) and
   // A's k-stripe at [a_col, a_col+a_tmem_words). The allocator is idempotent
   // per CTA, so two separate alloc calls would hand back the same handle.
-  uint32_t handle = vt::vx_tmem_alloc(ctx::xtileN + ctx::a_tmem_words);
-  uint32_t a_col  = handle + ctx::xtileN;
+  uint32_t handle = vt::vx_tmem_alloc(UMMA_ACC_OFFSET + ctx::xtileN + ctx::a_tmem_words);
+  uint32_t acc    = handle + UMMA_ACC_OFFSET;
+  uint32_t a_col  = acc + ctx::xtileN;
 #else
-  uint32_t handle = vt::vx_tmem_alloc(ctx::xtileN);
+  uint32_t handle = vt::vx_tmem_alloc(UMMA_ACC_OFFSET + ctx::xtileN);
+  uint32_t acc    = handle + UMMA_ACC_OFFSET;
 #endif
-  ctx::fill_tmem(handle, 0);
+  ctx::fill_tmem(acc, 0);
   __syncthreads();
 
   for (uint32_t k = 0; k < K; k += ctx::tileK) {
@@ -83,7 +88,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     auto desc_b = vt::vx_make_smem_desc(B_smem, 0); // block-major: stride field unused
 
   #ifdef UMMA_A_TMEM
-    ctx::umma_sync(vt::vx_make_tmem_ref(a_col), desc_b, handle);
+    ctx::umma_sync(vt::vx_make_tmem_ref(a_col), desc_b, acc);
   #else
     // Each warp's A slice — base differs by layout:
     //   block-major: warp_rank * a_warp_elems (per a_blockmajor_idx packing).
@@ -96,14 +101,14 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     constexpr uint32_t a_ldm = 0;           // block-major A
   #endif
     auto desc_a = vt::vx_make_smem_desc(A_warp, a_ldm * sizeof(ctx::input_t));
-    ctx::umma_sync(desc_a, desc_b, handle);
+    ctx::umma_sync(desc_a, desc_b, acc);
   #endif
 
     __syncthreads();
   }
 
   // Epilogue: TMEM -> global memory.
-  ctx::store_output(handle, pC, tile_row, tile_col, N);
+  ctx::store_output(acc, pC, tile_row, tile_col, N);
   __syncthreads();
 
   vt::vx_tmem_dealloc(handle);

@@ -81,8 +81,9 @@ public:
   static uint32_t mgmt_grant(const std::bitset<kBanks>& alloc_ready,
                              const std::bitset<kBanks>& dealloc_ready);
 
-  // Live-allocation width in columns, or 0 if `handle` is not live.
-  uint32_t alloc_ncols(uint32_t handle) const;
+  // Columns from `col` to the end of the live allocation containing it, or 0
+  // if no live allocation contains it.
+  uint32_t alloc_cols_from(uint32_t col) const;
 
   // Bounds-checked element access.
   uint32_t read(uint32_t lane, uint32_t col) const;
