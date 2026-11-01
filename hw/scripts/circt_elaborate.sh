@@ -14,7 +14,9 @@
 # limitations under the License.
 
 # Elaborates SystemVerilog sources with CIRCT and writes the design as one
-# file, the netlist every synthesis flow reads:
+# file, the netlist Yosys, Beacon and Foldsim read (Vivado reads the sources
+# themselves). Asynchronous RAM reads are made synchronous before this, in the
+# sources (gen_sources.sh -F); here:
 #
 #   - memories are detected, and a RAM that asks for block RAM with its
 #     synthesis attribute (ram_style = "block", ...) reads synchronously, so

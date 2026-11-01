@@ -60,8 +60,7 @@ all: $(PROJECT).xpr
 gen-sources: project_1/sources.txt
 project_1/sources.txt:
 	mkdir -p project_1
-	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -T$(TOP_LEVEL_ENTITY) -P -Cproject_1/src -Oproject_1/sources.txt $(RTL_PKGS) \
-		-E -X$(SCRIPT_DIR)/xilinx_ip_stubs.sv
+	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -T$(TOP_LEVEL_ENTITY) -P -F -Cproject_1/src -Oproject_1/sources.txt $(RTL_PKGS)
 
 build: $(PROJECT).xpr
 $(PROJECT).xpr: project_1/sources.txt
@@ -109,7 +108,7 @@ BEACON_MAP    = $(if $(beacon_keep),foldsim-keep-modules{modules=$(beacon_keep)}
 BEACON_PORTS  = $(if $(beacon_keep),ports=beacon/ports.csv port-modules=$(beacon_keep))
 beacon:
 	mkdir -p beacon
-	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -T$(TOP_LEVEL_ENTITY) -Obeacon/sources.f $(RTL_PKGS)
+	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -T$(TOP_LEVEL_ENTITY) -P -F -Cbeacon/src -Obeacon/sources.f $(RTL_PKGS)
 	$(SCRIPT_DIR)/circt_elaborate.sh -f mlir -t $(TOP_LEVEL_ENTITY) -l beacon/sources.f \
 		-x $(SCRIPT_DIR)/xilinx_ip_stubs.sv -r beacon/memories.rpt -o beacon/netlist.mlir
 	$(FOLDSIM_OPT) beacon/netlist.mlir --pass-pipeline='builtin.module($(BEACON_MAP))' \

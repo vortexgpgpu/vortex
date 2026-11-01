@@ -1130,10 +1130,11 @@ for the backend's architecture and
 
 ## 14. CIRCT
 
-**Purpose**: the SystemVerilog frontend of every synthesis flow. Each flow
-reads the netlist CIRCT elaborates (`hw/scripts/circt_elaborate.sh`,
-`gen_sources.sh -E`; see the hardware library's "Block RAM and asynchronous
-reads"), and Foldsim builds on it.
+**Purpose**: the SystemVerilog frontend of every synthesis flow. Its
+preprocessor writes the sources each flow reads (`gen_sources.sh -P`, then the
+RAM fold, `-F`; see the hardware library's "Block RAM and asynchronous reads");
+Vivado reads them as they are, and Yosys, Beacon and Foldsim read the netlist
+CIRCT elaborates from them (`hw/scripts/circt_elaborate.sh`).
 
 > **Baseline:** Vortex's CIRCT fork, branch `vortex_3.x` of
 > `vortexgpgpu/circt`: upstream CIRCT with the import, lowering and

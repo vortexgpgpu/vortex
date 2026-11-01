@@ -97,7 +97,7 @@ module VX_fifo_queue #(
         //   present the look-ahead address (rd_ptr_n, the next read pointer): the
         //   registered read then returns ram[rd_ptr_r] on the same cycle the async
         //   read would have, making the output bit-identical while letting Vivado
-        //   infer native BRAM (no async patch).
+        //   infer native BRAM.
         wire [ADDRW-1:0] rd_addr = (OUT_REG != 0) ? rd_ptr_n : rd_ptr_r;
 
         VX_dp_ram #(
@@ -105,8 +105,7 @@ module VX_fifo_queue #(
             .SIZE  (DEPTH),
             .OUT_REG (OUT_REG),
             .LUTRAM (LUTRAM),
-            .RDW_MODE ("W"),
-            .RADDR_REG (OUT_REG == 0)
+            .RDW_MODE ("W")
         ) dp_ram (
             .clk   (clk),
             .reset (reset),

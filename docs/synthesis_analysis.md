@@ -64,6 +64,23 @@ NUM_CORES=16  # equivalent to -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=16 -DVX
 NUM_CORES=32  # equivalent to -DVX_CFG_NUM_CLUSTERS=2 -DVX_CFG_NUM_CORES=16 -DVX_CFG_L2_ENABLE
 ```
 
+### Block RAM for asynchronous reads (the RAM fold)
+
+Every flow reads preprocessed copies of the sources (`gen_sources.sh -P`) that
+the RAM fold has patched first (`-F`, [hw/scripts/ram_fold.py](../hw/scripts/ram_fold.py)):
+a block-RAM-sized `VX_dp_ram` that reads combinationally gets its read address one
+cycle early and a registered read, so it maps to block RAM or an SRAM macro. The
+build's source folder holds `ram_fold.rpt` (each candidate RAM, folded or kept
+with the reason) and `ram_fold.diff` (the patch). The fold needs a python3 with
+pyslang 11 or 12, named by `RAM_FOLD_PYTHON` (default `python3`):
+
+```bash
+pip install "pyslang>=11,<13"
+RAM_FOLD_PYTHON=/path/to/python3 make core     # when python3 has no pyslang
+```
+
+See [Block RAM and asynchronous reads](hardware_library.md#block-ram-and-asynchronous-reads).
+
 ### Using PREFIX for Isolated Builds
 
 Use `PREFIX=<unique_build_dir>` to keep builds separate. Each flow creates a build directory derived from `PREFIX` so that multiple configurations can coexist without overwriting each other:

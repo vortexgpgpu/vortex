@@ -53,6 +53,11 @@ jobs:
           echo "state=$HOME/.cache/vortex/fpga_gate.$(echo '${{ github.repository }}' | tr / _).sha" >> "$GITHUB_OUTPUT"
           echo "gating $SHA"
 
+      # The synthesis flows fold asynchronous RAM reads into block RAM with
+      # pyslang (hw/scripts/ram_fold.py); a no-op once installed.
+      - name: Install pyslang
+        run: python3 -m pip install --quiet --user "pyslang>=11,<13"
+
       # The command is the one the catalog declares (ci/testcases/fpga_gate.yaml's
       # single `run:` case), so what CI runs and what the catalog says cannot
       # drift apart. Dispatch inputs only narrow it, and reach the shell through

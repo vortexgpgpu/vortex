@@ -23,8 +23,10 @@ endif
 
 # Tool install prefixes (overridable; default under $(TOOLDIR)). CIRCT is the
 # SystemVerilog frontend of every flow: its preprocessor (gen_sources.sh -P)
-# and its elaboration into the one netlist a synthesis tool reads
-# (circt_elaborate.sh; gen_sources.sh -E).
+# feeds Vivado, and its elaboration into one netlist (circt_elaborate.sh;
+# gen_sources.sh -E) feeds Yosys, Beacon and Foldsim. Before either, the RAM
+# fold (gen_sources.sh -F, hw/scripts/ram_fold.py) patches the preprocessed
+# sources so that asynchronous RAM reads map to block RAM.
 CIRCT_PATH ?= $(TOOLDIR)/circt
 YOSYS_PATH ?= $(TOOLDIR)/yosys
 STA_PATH   ?= $(TOOLDIR)/sta
@@ -41,5 +43,7 @@ FOLDSIM_LIFT_TOOL ?= $(FOLDSIM_PATH)/bin/foldsim-lift
 YOSYS ?= $(YOSYS_PATH)/bin/yosys
 STA   ?= $(STA_PATH)/bin/sta
 VERILATOR ?= $(VERILATOR_PATH)/bin/verilator
+# a python3 with pyslang 11 or 12 (pip install "pyslang>=11,<13")
+RAM_FOLD_PYTHON ?= python3
 
-export CIRCT_PATH FOLDSIM_PATH FOLDSIM_SHELL FOLDSIM_LIFT_TOOL YOSYS_PATH STA_PATH VERILATOR_PATH CIRCT_VERILOG CIRCT_OPT FIRTOOL FOLDSIM FOLDSIM_OPT YOSYS STA VERILATOR
+export CIRCT_PATH FOLDSIM_PATH FOLDSIM_SHELL FOLDSIM_LIFT_TOOL YOSYS_PATH STA_PATH VERILATOR_PATH CIRCT_VERILOG CIRCT_OPT FIRTOOL FOLDSIM FOLDSIM_OPT YOSYS STA VERILATOR RAM_FOLD_PYTHON

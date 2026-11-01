@@ -368,6 +368,9 @@ $(VIVADO_SRCS_LIST): $(RTL_SRCS)
 			{ echo "ERROR: $$f no longer selects its vendor core by VENDOR_OK"; exit 1; }; \
 		sed -i 's/localparam VENDOR_OK = 1;/localparam VENDOR_OK = 0;/' $(VIVADO_SRCS_DIR)/$$f; \
 	done
+	@# the RAM fold runs here, not in gen_sources.sh (-F), so it patches the sources as read
+	$(RAM_FOLD_PYTHON) $(SCRIPT_DIR)/ram_fold.py --top VX_firesim_wrap --report $(VIVADO_SRCS_DIR)/ram_fold.rpt \
+		--diff $(VIVADO_SRCS_DIR)/ram_fold.diff $$(grep -E '\.s?v$$' $(VIVADO_SRCS_LIST))
 	@# gen_sources.sh lists packages in find(1) order, which is directory order,
 	@# not dependency order. Synthesis reorders on its own; a simulator compiles
 	@# the list as given. Under -DSIMULATION VX_trace_pkg imports VX_gpu_pkg, and

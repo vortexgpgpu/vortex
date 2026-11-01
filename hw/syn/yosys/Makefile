@@ -202,7 +202,7 @@ $(BUILD_DIR):
 	mkdir -p $@
 
 $(BUILD_DIR)/src: | $(BUILD_DIR)
-	$(SCRIPT_DIR)/gen_sources.sh -P $(CFLAGS) -C$(BUILD_DIR)/src
+	$(SCRIPT_DIR)/gen_sources.sh -P -F -T$(TOP_LEVEL_ENTITY) $(CFLAGS) -C$(BUILD_DIR)/src
 
 # CIRCT elaborates the design into one Verilog-2005 file; the black-box
 # modules (SRAM macros) stay instances with their parameter values, bound to

@@ -90,10 +90,10 @@ compiler's `foldsim-find-pipelines`). `hw/scripts/check_ip_contracts.py` checks
 each contract's latency against the core's generation, the RTL and the
 configuration; the in-process simulator runs the cores' models
 (`sim/foldsim/xilinx_fp_models.sv`). `-DVX_CFG_FPU_TYPE_STD` in `CONFIGS`
-selects the soft FPU. A RAM that asks for block RAM but reads asynchronously reads
-synchronously once the target is flattened (CIRCT `seq-retime-firmem-reads`,
-see the hardware library's "Block RAM and asynchronous reads");
-`gen/memories.rpt` lists each such RAM and the decision.
+selects the soft FPU. A block-RAM-sized RAM that reads asynchronously gets a registered read
+from the RAM fold before the target is lifted (`<srcs>/ram_fold.rpt`, see the
+hardware library's "Block RAM and asynchronous reads"); `gen/memories.rpt` lists
+the RAMs that still read asynchronously.
 
 ---
 

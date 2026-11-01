@@ -1220,16 +1220,15 @@ Parameterized memory primitives with support for FPGA (LUTRAM/BRAM) and ASIC syn
 | `OUT_REG` | 0 | Output register enable |
 | `LUTRAM` | 0 | Force LUTRAM implementation |
 | `RDW_MODE` | "W" | Read-during-write mode: "W" (write-first), "R" (read-first) |
-| `RADDR_REG` | 0 | Read address registered hint |
 | `INIT_ENABLE` | 0 | Enable initialization |
 | `INIT_FILE` | "" | Initialization memory file |
 
 **Features:**
 - Separate read and write ports with independent addresses
 - Bit-level write enable (`WRENW` granularity)
-- Write-first or read-first semantics for simultaneous read/write to same address
+- Three read forms: registered address, registered data, combinational (see [Block RAM and asynchronous reads](#block-ram-and-asynchronous-reads))
 - FPGA: infers LUTRAM or BRAM based on `LUTRAM` parameter
-- ASIC: uses register-based implementation
+- ASIC: a registered read of block-RAM size maps to the SRAM macro (`VX_dp_ram_asic`); the registered-address form forwards the lanes written at the captured address around it. Other RAMs are flops
 - Optional output register for timing improvement
 - File-based initialization for preloaded content
 
@@ -1254,7 +1253,7 @@ Parameterized memory primitives with support for FPGA (LUTRAM/BRAM) and ASIC syn
 **Features:**
 - Single address shared between read and write
 - Three read-during-write modes including "N" (no-change) which holds previous read data
-- A forced-BRAM, read-first RAM read asynchronously is tagged block RAM (`ram_style = "block"`); the synthesis elaboration makes its read synchronous (see [Block RAM and asynchronous reads](#block-ram-and-asynchronous-reads))
+- Read forms and block-RAM rules as in VX_dp_ram (see [Block RAM and asynchronous reads](#block-ram-and-asynchronous-reads))
 - Same FPGA/ASIC implementation paths as VX_dp_ram
 
 ---
@@ -1305,40 +1304,65 @@ Parameterized memory primitives with support for FPGA (LUTRAM/BRAM) and ASIC syn
 
 ### Block RAM and asynchronous reads
 
-Block RAMs and SRAM macros only read synchronously. A `VX_dp_ram` or
-`VX_sp_ram` that must be block RAM (`FORCE_BRAM`) but reads asynchronously
-(`OUT_REG=0`, read-first) is written as a plain array with the standard
-synthesis attribute `(* ram_style = "block" *)` (`USE_BLOCK_BRAM`) and an
-asynchronous read. Every synthesis flow elaborates the design with CIRCT
-(`hw/scripts/circt_elaborate.sh`, `gen_sources.sh -E`), whose
-`seq-retime-firmem-reads` pass then reads such a RAM one edge earlier, at the
-address its address registers are about to take, so that it maps to a block
-RAM. The modules between the RAM and its registers are inlined for it, and
-only those.
+Block RAMs and SRAM macros read only synchronously. `VX_dp_ram` and
+`VX_sp_ram` have three read forms:
 
-The attribute is a contract:
+| Form | Parameters | `rdata` | Implementation |
+|------|------------|---------|----------------|
+| Registered address | `OUT_REG=1`, `RDW_MODE="W"` | `ram[raddr captured on read]`; sees a write on the same edge | block RAM (with a collision bypass) or distributed RAM |
+| Registered data | `OUT_REG=1`, `RDW_MODE="R"` (`"N"` on `VX_sp_ram` also holds it across a write) | `ram[raddr]` captured on read; does not see a write on the same edge | block RAM or distributed RAM |
+| Combinational | `OUT_REG=0` | `ram[raddr]` | distributed RAM or flops, unless the RAM fold turns it into the registered-address form |
 
-- `ram_style = "block"`: the RAM is converted. If it cannot be (its address
-  depends on anything but registers and logic, or a register has an
-  asynchronous reset), the elaboration stops and names the reason;
-- `ram_style = "distributed"`: the RAM stays as it is;
-- no attribute: the RAM stays as it is (`circt_elaborate.sh -m auto` converts
-  those it can).
+The form fixes the behaviour, identically in simulation and synthesis; size
+and `LUTRAM` only pick the implementation (`FORCE_BRAM`), locally, inside the
+RAM.
 
-The converted read is exact on every cycle after the first clock edge. Each
-elaboration writes `<netlist>.memories.rpt`, one line per asynchronous-read
-RAM with its size, hint and decision.
+**The RAM fold.** Write a read in whatever form the design needs; a
+combinational read of a `VX_dp_ram` is fine at any size. Every synthesis flow
+but Altera OPAE (which does not preprocess) runs `hw/scripts/ram_fold.py` on its preprocessed sources (`gen_sources.sh -P
+-F`) before any tool reads them. For each block-RAM-sized `VX_dp_ram` that reads
+combinationally and does not ask for `LUTRAM`, it computes the read address one
+cycle early and gives the RAM the registered-address form, reading on every
+cycle (`read` tied high), which reads exactly what the combinational read did:
 
-A converted RAM returns the data written in the same cycle, as the
-asynchronous read did (write-first). The elaborated netlist states this to
-Vivado with `rw_addr_collision = "yes"`, and the ports of every RAM share one
-clock net, so Vivado keeps each RAM's read-under-write behavior. A block RAM
-whose ports Vivado takes as independently clocked returns undefined bits when
-a read meets a write to the same address; simulation never shows it. To
-check a netlist, read the block RAM primitives' `WRITE_MODE_A/B` and
-`CLOCK_DOMAINS`, not the synthesis report's mapping table.
+- The pass elaborates the design with slang (CIRCT's front end) and follows the
+  read address back to the registers that feed it, through assigns, ports,
+  interfaces, struct fields, functions and generate scopes, in any module.
+- Each signal on that path gets a twin, `<name>__nx`, carrying its next value: a
+  copy of the signal's own driver with its operands renamed. A register's twin
+  is a combinational copy of its clocked block that keeps only the assignments
+  to that register; their right-hand sides still read current values. Ports
+  and interface signals on the path get twin ports and members.
+- The edits only add code, except the RAM's parameters and address
+  connection. The patched sources are elaborated again, and the patch is
+  dropped if it adds an error.
 
----
+`<src>/ram_fold.rpt` lists every candidate RAM, folded or kept with the reason;
+`<src>/ram_fold.diff` is the patch. A RAM is kept, and stays distributed RAM, when:
+
+- its address depends on a top-level input, or on a signal driven by an
+  `always_comb` block or by a clocked block with blocking assignments;
+- an instance on the path is an element of an instance array, or connects its
+  ports by position;
+- another RAM made by the same instantiation statement cannot fold, or
+  registers its read (`OUT_REG` from a parameter, as in `VX_fifo_queue`): the patch
+  edits the statement, which all its instances share;
+- a register on the path is written by more than one block, inside a
+  concatenation, or on a clock other than the RAM's;
+- the address reaches a signal through a module body slang analyzed only as
+  another instance and the signal lies outside it, or a signal on the path has
+  no driver.
+
+`ram_fold.py --check` adds a simulation check that each folded RAM's next
+address is its address a cycle later; `ci/test_ram_fold.py` runs a folded design
+in lockstep against the original, with a known-bad patch the check must catch.
+
+The fold needs a python3 with pyslang 11 or 12 (`pip install "pyslang>=11,<13"`), named by
+`RAM_FOLD_PYTHON` (default `python3`, `hw/syn/common.mk`). Vivado reads the
+folded preprocessed sources, so its own RAM, FSM and shift-register inference
+sees the RTL as written. The CIRCT elaboration of the same sources feeds Yosys,
+Beacon and Foldsim; its `<netlist>.memories.rpt` lists the RAMs that still read
+combinationally.
 
 ### VX_fifo_queue
 

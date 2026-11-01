@@ -102,8 +102,7 @@ module VX_ipdom_stack import VX_gpu_pkg::*; #(
     VX_dp_ram #(
         .DATAW    (BRAM_DATAW),
         .SIZE     (BRAM_SIZE),
-        .RDW_MODE ("R"),
-        .RADDR_REG(1)
+        .RDW_MODE ("R")
     ) ipdom_store (
         .clk   (clk),
         .reset (reset),
