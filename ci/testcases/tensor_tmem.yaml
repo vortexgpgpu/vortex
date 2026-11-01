@@ -146,6 +146,16 @@ tests:
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
     -DVX_CFG_TCU_TMEM_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DUMMA_NRC=32 -DUMMA_A_TMEM -DUMMA_ACC_OFFSET=8
 
+# One CTA allocating all of TMEM (offset 224 + xtileN 32 = TCU_TMEM_COLS), with
+# the accumulator in the last 32 columns. Covers the allocator's ncols width.
+- id: model_parity-umma-full-tmem
+  check: model_parity
+  via: blackbox
+  app: sgemm_tcu_tmem
+  args: -m64 -n64 -k64
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=4 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_TMEM_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DUMMA_NRC=32 -DUMMA_ACC_OFFSET=224
+
 # SimX<->rtlsim cycle parity with concurrent CTAs: two resident at NW=8, four at
 # NW=16. Covers the CTA lockstep wait and cross-CTA TMEM bank contention.
 - id: model_parity-umma-2cta
