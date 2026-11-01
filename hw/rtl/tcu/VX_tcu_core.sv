@@ -327,7 +327,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
 `ifdef VX_CFG_TCU_MX_ENABLE
 
-    localparam MX_MAX_MN = TCU_TILE_M > TCU_TILE_N ? TCU_TILE_M : TCU_TILE_N;
+    localparam MX_MAX_MN = `MAX(`MAX(TCU_TILE_M, TCU_TILE_N), `MAX(TCU_WG_TILE_M, TCU_WG_TILE_N));
     localparam MX_IDX_W = $clog2(MX_MAX_MN);
     localparam MX_TILE_K_MAX = `MAX(TCU_TILE_K, TCU_WG_K_STEPS * TCU_WG_FEDP_K);
     localparam MX_K_IDX_W = `LOG2UP(MX_TILE_K_MAX * TCU_MAX_ELT_RATIO);
