@@ -15,7 +15,8 @@
 // The vortexpipe FS (NIR→LLVM, C) emits calls to these entry points when a unit
 // is routed to software; the host builds the POD descriptors from the bound
 // pipeline state and passes their resident device pointers via the kernel arg.
-// The implementations (gfx_sw_abi.cpp) are thin wrappers over the C++ single-
+// The implementations (gfx_sw_abi.cpp; gfx_image_abi.cpp for the typeless image
+// access, which the driver inlines) are thin wrappers over the C++ single-
 // source-of-truth headers (gfx_frag_tex.h / gfx_sw.h / gfx_frag_rast.h), so the SW path
 // the driver runs is bit-identical to the FF model and the unit tests.
 //

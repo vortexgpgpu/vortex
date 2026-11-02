@@ -307,7 +307,7 @@ tests:
 # Descriptor robustness: texel buffer stores under robustBufferAccess alone
 # stay inside their buffer; a storage image slot rewritten to null.
 - {id: robust-desc, via: make-run, drivers: [simx], dir: tests/vulkan/robust_desc, target: "run-{driver}",
-   touches: [tests/vulkan/robust_desc]}
+   touches: [sw/gfx/gfx_image_abi.cpp, tests/vulkan/robust_desc]}
 # Robust texelFetch: inside and outside a 2D array, a 3D image, a 1D array, a
 # multisample image, a BC1 RGBA image and a texel buffer; null texel buffers and
 # images; more than 16 (texture, sampler) pairs.
