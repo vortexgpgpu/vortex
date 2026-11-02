@@ -93,7 +93,7 @@ module VX_gfx_top import VX_gpu_pkg::*
     input  wire [NC-1:0]                                    tex_req_valid,
     input  wire [NC-1:0][SFU_LANES-1:0]                     tex_req_mask,
     input  wire [NC-1:0][1:0][SFU_LANES-1:0][31:0]          tex_req_coords,
-    input  wire [NC-1:0][SFU_LANES-1:0][TEX_LOD_BITS-1:0]   tex_req_lod,
+    input  wire [NC-1:0][SFU_LANES-1:0][TEX_LODF_BITS-1:0]  tex_req_lod,
     input  wire [NC-1:0][TEX_STAGE_BITS-1:0]                tex_req_stage,
     input  wire [NC-1:0][TEX_REQ_TAG_WIDTH-1:0]             tex_req_tag,
     output wire [NC-1:0]                                    tex_req_ready,
