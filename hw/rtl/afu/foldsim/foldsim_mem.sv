@@ -558,8 +558,11 @@ module foldsim_mem #(
     // for every whole write before it (memory answers reads and writes apart),
     // a write for those memory has taken (same-id writes complete in order,
     // but need not reach memory in it). Once offered, it stays offered.
-    function automatic [CW-1:0] off(input [PW-1:0] i);
-        off = CW'(PW'(i - awm_ack));
+    // (The ring offset from the oldest unacknowledged write; its base an
+    // argument: a function reading module state is not a constant function
+    // to Yosys.)
+    function automatic [CW-1:0] ring_off(input [PW-1:0] i, input [PW-1:0] head);
+        ring_off = CW'(PW'(i - head));
     endfunction
     wire [CW-1:0] aw_taken = wr_out[CW-1:0] - aw_formed;
     reg ar_hit, aw_hit, ar_shown, aw_shown;
@@ -567,9 +570,9 @@ module foldsim_mem #(
         ar_hit = 1'b0;
         aw_hit = 1'b0;
         for (integer i = 0; i < DEPTH; ++i) begin
-            if ((off(PW'(i)) < ah_old) && (awm_addr[i][63:LB] == arh_addr[63:LB]))
+            if ((ring_off(PW'(i), PW'(awm_ack)) < ah_old) && (awm_addr[i][63:LB] == arh_addr[63:LB]))
                 ar_hit = 1'b1;
-            if ((off(PW'(i)) < aw_taken) && (awm_addr[i][63:LB] == awh_addr[63:LB]))
+            if ((ring_off(PW'(i), PW'(awm_ack)) < aw_taken) && (awm_addr[i][63:LB] == awh_addr[63:LB]))
                 aw_hit = 1'b1;
         end
     end
