@@ -15,20 +15,23 @@
 // of foldsim_mem_par, served by ONE memory endpoint threaded PORTS ways
 // (foldsim_mem_threaded_foldsim_mem: foldsim_mem through Foldsim's FAME-5
 // pass, hw/syn/foldsim/portfold_gen.sh, from a frozen snapshot) and one AXI4
-// master. The threaded endpoint runs thread `tidx` a host cycle at a time,
+// master. The threaded endpoint runs thread `t` a host cycle at a time,
 // in turn; at its turn this module is that port's surroundings, exactly as
 // foldsim_mem_par's are for an endpoint of its own: its REQ record's tokens
 // (offered until taken), its RSP record's fields (taken once each), and its
 // AXI master (requests into the shared master's queues, its R and B from a
 // buffer of its own). Every channel of the thread is valid / ready at its
-// turn, so each turn is one of the port's endpoint clocks.
+// turn, so each turn is one of the port's endpoint clocks (the first, after
+// the module's reset, with no edge; the second in the endpoint's reset).
 //
 // Exact by construction: a port's endpoint state lives in its thread and its
 // surroundings in its own buffers; what the endpoint offers the target is its
 // DRAM model's (foldsim_mem), and the shared master's back-pressure and
 // latency only delay the host cycle a port's target cycle finishes on.
 // The shared master: one AXI id, so R and B in order; a FIFO of port tags
-// for each returns them to the port that asked.
+// for each returns them to the port that asked, and a request is taken only
+// with room for its tag. A port's W waits in a buffer of its own until its AW
+// is taken, so W beats follow AWs across ports.
 `include "foldsim_mem_rec.vh"
 
 module foldsim_mem_fold #(
@@ -36,6 +39,11 @@ module foldsim_mem_fold #(
     parameter ID_W     = 9,
     parameter ADDR_W   = 64,
     parameter DATA_W   = 512,
+    // The bank model's slots and ring, and the token ends: the threaded
+    // snapshot is made with foldsim_mem's defaults (portfold_gen.sh).
+    parameter SLOTS    = 32,
+    parameter HLOG2    = 9,
+    parameter STAGED   = 0,
     parameter SPEC     = 2,
     parameter NC       = (SPEC == 2) ? 4 : ((SPEC != 0) ? 2 : 1),
     parameter NW       = (SPEC == 2) ? 4 : 1,
@@ -114,13 +122,46 @@ module foldsim_mem_fold #(
         for (j = 0; j < i; j = j + 1) o = o + `FMR_RSP_W(j);
         return o;
     endfunction
+    // The simulator's own field table (foldsim_sim.vh with folded ports:
+    // FOLDSIM_PORTS_REQ_W, FOLDSIM_PORTS_RSP_W, FOLDSIM_PORTS) must be this one.
+    initial begin
+        if (PORTS < 2)
+            $error("foldsim_mem_fold: PORTS %0d; a threaded endpoint has 2 threads or more", PORTS);
+        if (SLOTS != 32 || HLOG2 != 9 || STAGED != 0)
+            $error("foldsim_mem_fold: the threaded endpoint is made with SLOTS 32, HLOG2 9, STAGED 0");
+`ifdef FOLDSIM_PORTS_REQ_W
+        if (`FOLDSIM_PORTS_REQ_W != REQ_W)
+            $error("foldsim_mem_fold: the simulator's REQ record is %0d bits, not %0d", `FOLDSIM_PORTS_REQ_W, REQ_W);
+`endif
+`ifdef FOLDSIM_PORTS_RSP_W
+        if (`FOLDSIM_PORTS_RSP_W != RSP_W)
+            $error("foldsim_mem_fold: the simulator's RSP record is %0d bits, not %0d", `FOLDSIM_PORTS_RSP_W, RSP_W);
+`endif
+`ifdef FOLDSIM_PORTS
+        if (`FOLDSIM_PORTS != PORTS)
+            $error("foldsim_mem_fold: the simulator has %0d ports, not %0d", `FOLDSIM_PORTS, PORTS);
+`endif
+`ifdef FOLDSIM_PORTS_REQ_WDATA_LO
+        if (`FOLDSIM_PORTS_REQ_WDATA_LO != req_off(5) || `FOLDSIM_PORTS_REQ_BREADY_LO != req_off(13))
+            $error("foldsim_mem_fold: the simulator's REQ field offsets differ");
+`endif
+`ifdef FOLDSIM_PORTS_RSP_RDATA_LO
+        if (`FOLDSIM_PORTS_RSP_RDATA_LO != rsp_off(4) || `FOLDSIM_PORTS_RSP_BID_LO != rsp_off(10))
+            $error("foldsim_mem_fold: the simulator's RSP field offsets differ");
+`endif
+        if (req_off(`FMR_REQ_FIELDS) != REQ_W)
+            $error("foldsim_mem_fold: REQ_W %0d is not the fields' %0d", REQ_W, req_off(`FMR_REQ_FIELDS));
+        if (rsp_off(`FMR_RSP_FIELDS) != RSP_W)
+            $error("foldsim_mem_fold: RSP_W %0d is not the fields' %0d", RSP_W, rsp_off(`FMR_RSP_FIELDS));
+    end
 
     // ---- The threaded endpoint: the current thread's channels ----
-    wire [4:0] tidx5;
+    // The endpoint threaded PORTS ways (its snapshot made for this module's
+    // PORTS, ID_W, DATA_W, CH_SHIFT and SPEC): the current thread.
+    wire [CW-1:0] t;
     // The current thread finishes its endpoint clock this host cycle: its
     // surroundings change only then.
     wire fin;
-    wire [CW-1:0] t = CW'(tidx5);
     // The endpoint's own reset is an input of its threads like any other
     // (foldsim-fame5's hostReset only presets the registers that have one):
     // each thread takes its first endpoint clock in reset, as an unfolded
@@ -160,11 +201,17 @@ module foldsim_mem_fold #(
     // flight until its R or B returns.
     reg  [QW:0]        ar_n, aw_n, w_n, rt_n, bt_n;
     wire               t_arready = (rt_n < (QW+1)'(QDEPTH));
-    wire               t_awready = (bt_n < (QW+1)'(QDEPTH));
-    wire               t_wready  = (w_n  < (QW+1)'(QDEPTH));
+    // The shared master's W beats follow its AWs (AXI4), and an endpoint may
+    // offer a write's W before its AW (which waits for an earlier write of
+    // its block): each port's W waits in a buffer of its own, and its AW is
+    // taken only with it, both queued together.
+    reg  [PORTS-1:0]   wb_full;
+    reg  [DATA_W+DATA_W/8:0] wb_data [PORTS];
+    wire               t_wready  = ~wb_full[t];
+    wire               t_awready = wb_full[t] & (bt_n < (QW+1)'(QDEPTH)) & (w_n < (QW+1)'(QDEPTH));
     wire               ar_take = run & t_arvalid & t_arready;
     wire               aw_take = run & t_awvalid & t_awready;
-    wire               w_take  = run & t_wvalid & t_wready;
+    wire               w_take  = run & t_wvalid & t_wready;  // into the port's buffer
     wire               r_take  = run & r_full[t] & t_rready;
     wire               b_take  = run & (b_cnt[t] != 0) & t_bready;
 
@@ -186,7 +233,7 @@ module foldsim_mem_fold #(
     foldsim_mem_threaded_foldsim_mem threaded (
         .hostClock (clk),
         .hostReset (reset),
-        .threadIdx (tidx5),
+        .threadIdx (t),
         .finish    (fin),
         .reset_sink_valid (1'b1), .reset_sink_bits (t_rst[t]), .reset_sink_ready (),
         .base_sink_valid (1'b1), .base_sink_bits (base), .base_sink_ready (),
@@ -332,122 +379,138 @@ module foldsim_mem_fold #(
     wire r_in = m_rvalid & m_rready;
     wire b_in = m_bvalid & m_bready;
 
-    // The RSP stream: complete records, ports in turn.
-    reg  [CW-1:0]    turn;
-    reg  [PORTS-1:0] s_take;
-    always @(*) begin
-        s_take = '0;
-        if (!rsp_valid || rsp_ready)
-            for (integer k = PORTS - 1; k >= 0; k = k - 1)
-                if (&s_got[(int'(turn) + k) % PORTS]) begin
-                    s_take = '0;
-                    s_take[(int'(turn) + k) % PORTS] = 1'b1;
-                end
-    end
+    // The RSP stream: a pointer visits the ports one a host cycle, as the
+    // threads take turns, and sends the record of the port it is on when
+    // that record is complete.
+    reg  [CW-1:0]    sp;
+    wire [PORTS-1:0] s_done;
+    wire             s_send = s_done[sp] & (!rsp_valid || rsp_ready);
 
     wire [QF-1:0] q_fire = {QF{run}} & q_valid & q_ready;
     wire [SF-1:0] s_fire = {SF{run}} & s_valid & s_ready;
+    // The RSP bits the current thread's fired fields write.
+    wire [RSP_W-1:0] s_mask;
+    for (genvar f = 0; f < SF; ++f) begin : g_smask
+        assign s_mask[rsp_off(f) +: `FMR_RSP_W(f)] = {`FMR_RSP_W(f){s_fire[f]}};
+    end
 
+    // Each port's surroundings; the current thread's change at its turn.
+    for (genvar p = 0; p < PORTS; ++p) begin : g_port
+        wire cur = (t == CW'(p));
+        wire req_in = req_valid && req_ready && (req_chan == CW'(p));
+        assign s_done[p] = &s_got[p];
+        wire s_take = s_send && (sp == CW'(p));
+        always @(posedge clk) begin
+            if (reset) begin
+                t_rst[p]   <= 1'b1;
+                q_full[p]  <= 1'b0;
+                q_taken[p] <= '0;
+                s_got[p]   <= '0;
+                r_full[p]  <= 1'b0;
+                b_cnt[p]   <= '0;
+                p_idle[p]  <= 1'b1;
+                p_error[p] <= 1'b0;
+                p_stall[p] <= 1'b0;
+                wb_full[p] <= 1'b0;
+            end else begin
+                if (cur && fin)
+                    t_rst[p] <= 1'b0;
+                // Its REQ record: in when the buffer is free (req_ready),
+                // out once the endpoint has taken every token of it.
+                if (req_in) begin
+                    q_full[p]  <= 1'b1;
+                    q_taken[p] <= '0;
+                end else if (cur && run && q_full[p]) begin
+                    if (&(q_taken[p] | q_fire)) begin
+                        q_full[p]  <= 1'b0;
+                        q_taken[p] <= '0;
+                    end else begin
+                        q_taken[p] <= q_taken[p] | q_fire;
+                    end
+                end
+                // Its RSP record: fields in at its turns, out on the stream.
+                if (s_take)
+                    s_got[p] <= '0;
+                else if (cur)
+                    s_got[p] <= s_got[p] | s_fire;
+                if (cur && run) begin
+                    p_idle[p]  <= t_idle;
+                    p_error[p] <= t_error;
+                    p_stall[p] <= t_stall;
+                end
+                // Its read data buffer and its write acks.
+                if (r_in && (r_port == CW'(p)))
+                    r_full[p] <= 1'b1;
+                else if (cur && r_take)
+                    r_full[p] <= 1'b0;
+                b_cnt[p] <= b_cnt[p] + ((b_in && b_port == CW'(p)) ? 6'd1 : 6'd0)
+                                     - ((cur && b_take) ? 6'd1 : 6'd0);
+                if (cur && w_take)
+                    wb_full[p] <= 1'b1;
+                else if (cur && aw_take)
+                    wb_full[p] <= 1'b0;
+            end
+            if (req_in) begin
+                q_bits[p]   <= req_bits;
+                q_treset[p] <= req_treset;
+            end
+            if (cur)
+                s_bits[p] <= (s_bits[p] & ~s_mask) | (s_in & s_mask);
+            if (cur && run)
+                p_stats[p] <= t_stats;
+            if (r_in && (r_port == CW'(p)))
+                r_data[p] <= m_rdata;
+            if (cur && w_take)
+                wb_data[p] <= {t_wlast, t_wstrb, t_wdata};
+        end
+    end
+
+    // The RSP stream and the shared master.
     always @(posedge clk) begin
         if (reset) begin
-            q_full <= '0;
-            r_full <= '0;
-            t_rst  <= '1;
-            p_idle <= '1;
-            p_error <= '0;
-            p_stall <= '0;
             rsp_valid <= 1'b0;
-            turn <= '0;
+            sp <= '0;
             ar_n <= '0; aw_n <= '0; w_n <= '0; rt_n <= '0; bt_n <= '0;
             ar_h <= '0; ar_t <= '0; aw_h <= '0; aw_t <= '0; w_h <= '0; w_t <= '0;
             rt_h <= '0; rt_t <= '0; bt_h <= '0; bt_t <= '0;
-            for (integer p = 0; p < PORTS; p = p + 1) begin
-                q_taken[p] <= '0;
-                s_got[p]   <= '0;
-                b_cnt[p]   <= '0;
-            end
         end else begin
-            // The current thread's turn: its tokens taken, fields got, AXI.
-            if (fin)
-                t_rst[t] <= 1'b0;
-            if (run && q_full[t]) begin
-                if (&(q_taken[t] | q_fire)) begin
-                    q_full[t]  <= 1'b0;
-                    q_taken[t] <= '0;
-                end else begin
-                    q_taken[t] <= q_taken[t] | q_fire;
-                end
-            end
-            for (integer f = 0; f < SF; f = f + 1)
-                if (s_fire[f])
-                    for (integer b = rsp_off(f); b < rsp_off(f + 1); b = b + 1)
-                        s_bits[t][b] <= s_in[b];
-            if (run) begin
-                p_stats[t] <= t_stats;
-                p_idle[t]  <= t_idle;
-                p_error[t] <= t_error;
-                p_stall[t] <= t_stall;
-            end
-            // A REQ record into its port's buffer (never the current thread's
-            // full one: req_ready).
-            if (req_valid && req_ready) begin
-                q_full[req_chan]   <= 1'b1;
-                q_bits[req_chan]   <= req_bits;
-                q_treset[req_chan] <= req_treset;
-                q_taken[req_chan]  <= '0;
-            end
-            // The RSP stream.
             if (rsp_valid && rsp_ready)
                 rsp_valid <= 1'b0;
-            for (integer k = 0; k < PORTS; k = k + 1) begin
-                if (s_take[k]) begin
-                    rsp_valid <= 1'b1;
-                    rsp_chan  <= CW'(k);
-                    rsp_bits  <= s_bits[k];
-                    turn      <= CW'((k + 1) % PORTS);
-                end
-                // A record leaves, or the current thread gets fields.
-                if (s_take[k])
-                    s_got[k] <= (CW'(k) == t) ? s_fire : '0;
-                else if (CW'(k) == t)
-                    s_got[k] <= s_got[k] | s_fire;
-            end
-            // The shared master.
+            if (s_send)
+                rsp_valid <= 1'b1;
+            sp <= (sp == CW'(PORTS - 1)) ? '0 : sp + 1'b1;
             if (ar_take) begin
-                arq[ar_t] <= {t, t_araddr, t_arlen};
                 ar_t <= ar_t + 1'b1;
-                rtag[rt_t] <= t;
                 rt_t <= rt_t + 1'b1;
             end
             if (aw_take) begin
-                awq[aw_t] <= {t, t_awaddr, t_awlen};
                 aw_t <= aw_t + 1'b1;
-                btag[bt_t] <= t;
                 bt_t <= bt_t + 1'b1;
-            end
-            if (w_take) begin
-                wq[w_t] <= {t_wlast, t_wstrb, t_wdata};
-                w_t <= w_t + 1'b1;
+                w_t  <= w_t + 1'b1;
             end
             if (m_arvalid && m_arready) ar_h <= ar_h + 1'b1;
             if (m_awvalid && m_awready) aw_h <= aw_h + 1'b1;
             if (m_wvalid && m_wready)   w_h  <= w_h + 1'b1;
+            if (r_in) rt_h <= rt_h + 1'b1;
+            if (b_in) bt_h <= bt_h + 1'b1;
             ar_n <= ar_n + (QW+1)'(ar_take) - (QW+1)'(m_arvalid && m_arready);
             aw_n <= aw_n + (QW+1)'(aw_take) - (QW+1)'(m_awvalid && m_awready);
-            w_n  <= w_n  + (QW+1)'(w_take) - (QW+1)'(m_wvalid && m_wready);
+            w_n  <= w_n  + (QW+1)'(aw_take) - (QW+1)'(m_wvalid && m_wready);
             rt_n <= rt_n + (QW+1)'(ar_take) - (QW+1)'(r_in);
             bt_n <= bt_n + (QW+1)'(aw_take) - (QW+1)'(b_in);
-            if (r_take)
-                r_full[t] <= 1'b0;
-            if (r_in) begin
-                r_full[r_port] <= 1'b1;
-                r_data[r_port] <= m_rdata;
-                rt_h <= rt_h + 1'b1;
-            end
-            for (integer p = 0; p < PORTS; p = p + 1)
-                b_cnt[p] <= b_cnt[p] + ((b_in && b_port == CW'(p)) ? 6'd1 : 6'd0)
-                                     - ((b_take && t == CW'(p)) ? 6'd1 : 6'd0);
-            if (b_in) bt_h <= bt_h + 1'b1;
+        end
+        if (s_send) begin
+            rsp_chan <= sp;
+            rsp_bits <= s_bits[sp];
+        end
+        if (ar_take) begin
+            arq[ar_t]  <= {t, t_araddr, t_arlen};
+            rtag[rt_t] <= t;
+        end
+        if (aw_take) begin
+            awq[aw_t]  <= {t, t_awaddr, t_awlen};
+            btag[bt_t] <= t;
+            wq[w_t]    <= wb_data[t];
         end
     end
 endmodule

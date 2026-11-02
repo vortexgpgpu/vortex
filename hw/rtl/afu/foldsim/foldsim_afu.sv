@@ -935,7 +935,7 @@ module foldsim_afu #(
 
 `ifdef FOLDSIM_PORTS
     // Folded memory ports: one record a port and target cycle each way
-    // (PORTFOLD_IFACE.md), before the endpoints behind foldsim_mem_par.
+    // (PORTFOLD_IFACE.md), served by the folded memory endpoint.
     localparam PF_CW = `FOLDSIM_PORTS_CW;
     wire                          pf_req_valid, pf_req_ready, pf_req_treset;
     wire [PF_CW-1:0]              pf_req_chan;
@@ -1024,13 +1024,17 @@ module foldsim_afu #(
     assign mem_idle  = {PORTS{pf_idle}};
     assign mem_error = {PORTS{pf_error}};
     assign mem_stall = {PORTS{pf_stall}};
-    wire [PORTS-1:0]          pf_awvalid, pf_awready, pf_wvalid, pf_wready, pf_wlast, pf_bvalid, pf_bready;
-    wire [PORTS-1:0]          pf_arvalid, pf_arready, pf_rvalid, pf_rready;
-    wire [PORTS*64-1:0]       pf_awaddr, pf_araddr;
-    wire [PORTS*8-1:0]        pf_awlen, pf_arlen;
-    wire [PORTS*DATA_W-1:0]   pf_wdata, pf_rdata;
-    wire [PORTS*DATA_W/8-1:0] pf_wstrb;
-    foldsim_mem_par #(
+    // One memory endpoint threaded PORTS ways (foldsim_mem_fold, the threaded
+    // module from a portfold_gen.sh snapshot made for these parameters) and
+    // one AXI master, on the first port's device-memory path: every port's
+    // data at base plus its target address, as before; the other paths idle.
+    wire                pf_awvalid, pf_awready, pf_wvalid, pf_wready, pf_wlast, pf_bvalid, pf_bready;
+    wire                pf_arvalid, pf_arready, pf_rvalid, pf_rready;
+    wire [63:0]         pf_awaddr, pf_araddr;
+    wire [7:0]          pf_awlen, pf_arlen;
+    wire [DATA_W-1:0]   pf_wdata, pf_rdata;
+    wire [DATA_W/8-1:0] pf_wstrb;
+    foldsim_mem_fold #(
         .PORTS    (PORTS),
         .ID_W     (TARGET_ID_W),
         .ADDR_W   (TARGET_ADDR_W),
@@ -1038,12 +1042,11 @@ module foldsim_afu #(
         .SLOTS    (MEM_SLOTS),
         .HLOG2    (MEM_HLOG2),
         .STAGED   (MEM_STAGED),
-        .CH_SHIFT (`FOLDSIM_MEM_CH_SHIFT),
         .SPEC     (MEM_SPEC),
         .CW       (PF_CW),
         .REQ_W    (`FOLDSIM_PORTS_REQ_W),
         .RSP_W    (`FOLDSIM_PORTS_RSP_W)
-    ) mem_par (
+    ) mem_fold (
         .clk           (ap_clk),
         .reset         (reset),
         .base          (mem_base),
@@ -1080,24 +1083,43 @@ module foldsim_afu #(
         .m_rvalid  (pf_rvalid),  .m_rready  (pf_rready),  .m_rdata   (pf_rdata)
     );
     for (genvar p = 0; p < PORTS; ++p) begin : g_mem
-        assign hbm_awvalid[p] = pf_awvalid[p];
-        assign pf_awready[p]  = hbm_awready[p];
-        assign hbm_awaddr[p]  = pf_awaddr[p*64 +: 64];
-        assign hbm_awlen[p]   = pf_awlen[p*8 +: 8];
-        assign hbm_wvalid[p]  = pf_wvalid[p];
-        assign pf_wready[p]   = hbm_wready[p];
-        assign hbm_wdata[p]   = pf_wdata[p*DATA_W +: DATA_W];
-        assign hbm_wstrb[p]   = pf_wstrb[p*DATA_W/8 +: DATA_W/8];
-        assign hbm_wlast[p]   = pf_wlast[p];
-        assign pf_bvalid[p]   = hbm_bvalid[p];
-        assign hbm_bready[p]  = pf_bready[p];
-        assign hbm_arvalid[p] = pf_arvalid[p];
-        assign pf_arready[p]  = hbm_arready[p];
-        assign hbm_araddr[p]  = pf_araddr[p*64 +: 64];
-        assign hbm_arlen[p]   = pf_arlen[p*8 +: 8];
-        assign pf_rvalid[p]   = hbm_rvalid[p];
-        assign hbm_rready[p]  = pf_rready[p];
-        assign pf_rdata[p*DATA_W +: DATA_W] = hbm_rdata[p];
+        if (p == 0) begin : g_used
+            assign hbm_awvalid[p] = pf_awvalid;
+            assign pf_awready     = hbm_awready[p];
+            assign hbm_awaddr[p]  = pf_awaddr;
+            assign hbm_awlen[p]   = pf_awlen;
+            assign hbm_wvalid[p]  = pf_wvalid;
+            assign pf_wready      = hbm_wready[p];
+            assign hbm_wdata[p]   = pf_wdata;
+            assign hbm_wstrb[p]   = pf_wstrb;
+            assign hbm_wlast[p]   = pf_wlast;
+            assign pf_bvalid      = hbm_bvalid[p];
+            assign hbm_bready[p]  = pf_bready;
+            assign hbm_arvalid[p] = pf_arvalid;
+            assign pf_arready     = hbm_arready[p];
+            assign hbm_araddr[p]  = pf_araddr;
+            assign hbm_arlen[p]   = pf_arlen;
+            assign pf_rvalid      = hbm_rvalid[p];
+            assign hbm_rready[p]  = pf_rready;
+            assign pf_rdata       = hbm_rdata[p];
+        end else begin : g_idle
+            assign hbm_awvalid[p] = 1'b0;
+            assign hbm_awaddr[p]  = '0;
+            assign hbm_awlen[p]   = '0;
+            assign hbm_wvalid[p]  = 1'b0;
+            assign hbm_wdata[p]   = '0;
+            assign hbm_wstrb[p]   = '0;
+            assign hbm_wlast[p]   = 1'b0;
+            assign hbm_bready[p]  = 1'b1;
+            assign hbm_arvalid[p] = 1'b0;
+            assign hbm_araddr[p]  = '0;
+            assign hbm_arlen[p]   = '0;
+            assign hbm_rready[p]  = 1'b1;
+            /* verilator lint_off UNUSEDSIGNAL */
+            wire unused = &{1'b0, hbm_awready[p], hbm_wready[p], hbm_bvalid[p], hbm_arready[p], hbm_rvalid[p],
+                            hbm_rdata[p]};
+            /* verilator lint_on UNUSEDSIGNAL */
+        end
     end
 `else
     for (genvar p = 0; p < PORTS; ++p) begin : g_mem

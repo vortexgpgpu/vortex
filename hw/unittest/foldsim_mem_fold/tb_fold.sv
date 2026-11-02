@@ -17,15 +17,20 @@ module axi_mem #(parameter DATA_W = 512) (
     output reg rvalid, input wire rready, output reg [DATA_W-1:0] rdata);
   bit [DATA_W-1:0] mem [longint];
   longint aq [$]; int ad [$]; int bd [$]; longint cyc = 0;
+  // +rd_at_ar: a read's data is the block as the read arrives (else as it leaves).
+  bit [DATA_W-1:0] dq [$]; bit at_ar = $test$plusargs("rd_at_ar");
   assign arready = 1'b1;
   // A write: its AW and its W, taken together.
   assign awready = awvalid && wvalid;
   assign wready  = awvalid && wvalid;
   always @(posedge clk) begin
     cyc <= cyc + 1;
-    if (reset) begin aq.delete(); ad.delete(); bd.delete(); rvalid <= 0; bvalid <= 0; end
+    if (reset) begin aq.delete(); ad.delete(); bd.delete(); dq.delete(); rvalid <= 0; bvalid <= 0; end
     else begin
-      if (arvalid) begin aq.push_back(araddr >> 6); ad.push_back(int'(cyc) + 1 + ($urandom % lat)); end
+      if (arvalid) begin
+        aq.push_back(araddr >> 6); ad.push_back(int'(cyc) + 1 + ($urandom % lat));
+        dq.push_back(mem.exists(araddr >> 6) ? mem[araddr >> 6] : '0);
+      end
       if (awvalid && wvalid) begin
         bit [DATA_W-1:0] old = mem.exists(awaddr >> 6) ? mem[awaddr >> 6] : '0;
         for (int b = 0; b < DATA_W / 8; b++) if (wstrb[b]) old[b*8 +: 8] = wdata[b*8 +: 8];
@@ -34,7 +39,8 @@ module axi_mem #(parameter DATA_W = 512) (
       end
       if (rvalid && rready) rvalid <= 0;
       if ((!rvalid || rready) && aq.size() != 0 && ad[0] <= int'(cyc)) begin
-        rvalid <= 1; rdata <= mem.exists(aq[0]) ? mem[aq[0]] : '0; void'(aq.pop_front()); void'(ad.pop_front());
+        rvalid <= 1; rdata <= at_ar ? dq[0] : mem.exists(aq[0]) ? mem[aq[0]] : '0;
+        void'(aq.pop_front()); void'(ad.pop_front()); void'(dq.pop_front());
       end
       if (bvalid && bready) bvalid <= 0;
       if ((!bvalid || bready) && bd.size() != 0 && bd[0] <= int'(cyc)) begin bvalid <= 1; void'(bd.pop_front()); end
@@ -54,7 +60,15 @@ module tb;
 
   logic clk = 0, reset = 1;
   always #5 clk = ~clk;
-  int n = 200, lat = 20, mode = 0; string ms;
+  int n = 200, lat = 20, mode = 0; string ms, rs;
+  // +refresh=pb|ab: per-bank or all-bank refresh at HBM2's intervals (cfgdump: refi 48 / rfc 64, 1560 / 140).
+  logic [1:0] cfg_refresh = 2'd0; logic [15:0] cfg_refi = 16'd0, cfg_rfc = 16'd0;
+  initial begin
+    if ($value$plusargs("refresh=%s", rs)) begin
+      if (rs == "pb") begin cfg_refresh = 2'd1; cfg_refi = 16'd48; cfg_rfc = 16'd64; end
+      if (rs == "ab") begin cfg_refresh = 2'd3; cfg_refi = 16'd1560; cfg_rfc = 16'd140; end
+    end
+  end
   initial begin
     if (!$value$plusargs("n=%d", n)) n = 200;
     if (!$value$plusargs("lat=%d", lat)) lat = 20;
@@ -111,7 +125,71 @@ module tb;
     else if (S``_req_valid && S``_req_ready) begin S``_k[S``_req_chan] <= S``_k[S``_req_chan] + 1; S``_turn <= (int'(S``_req_chan) + 1) % PORTS; end \
   assign S``_rsp_ready = 1'b1;
   `SIDE(p)
+`ifndef SER
   `SIDE(f)
+`else
+  // SER: the folded side through foldsim_mem_ser, as a simulator's per-port channels: each REQ field (and the reset
+  // token) a channel of its own, offered record after record with random gaps; each RSP field taken with random
+  // gaps, the records reassembled per port.
+  localparam QF = `FMR_REQ_FIELDS + 1, SF = `FMR_RSP_FIELDS;
+  logic f_req_valid, f_req_ready, f_req_treset, f_rsp_valid, f_rsp_ready;
+  logic [CW-1:0] f_req_chan, f_rsp_chan; logic [REQ_W-1:0] f_req_bits; logic [RSP_W-1:0] f_rsp_bits;
+  logic [PORTS*QF-1:0] sq_valid, sq_ready; logic [PORTS*REQ_W-1:0] sq_bits; logic [PORTS-1:0] sq_treset;
+  logic [PORTS*SF-1:0] ss_valid, ss_ready; logic [PORTS*RSP_W-1:0] ss_bits;
+  int f_k [PORTS];                       // records whose every field was taken (for the TIMEOUT line)
+  int kq [PORTS][QF]; int ks [PORTS][SF];
+  bit [QF-1:0] gq [PORTS]; bit [SF-1:0] gs [PORTS];
+  logic [RSP_W-1:0] asm_ [PORTS][int]; int asm_n [PORTS][int];
+  function automatic int qlo(input int f); int o = 0; for (int j = 0; j < f; j++) o += `FMR_REQ_W(j); return o; endfunction
+  function automatic int slo(input int f); int o = 0; for (int j = 0; j < f; j++) o += `FMR_RSP_W(j); return o; endfunction
+  always_comb
+    for (int p = 0; p < PORTS; p++) begin
+      for (int f = 0; f < QF; f++) begin
+        sq_valid[p * QF + f] = gq[p][f] && kq[p][f] < n;
+        if (f < QF - 1) begin
+          automatic logic [REQ_W-1:0] r = rec(p, kq[p][f]);
+          for (int b = qlo(f); b < qlo(f + 1); b++) sq_bits[p * REQ_W + b] = r[b];
+        end
+      end
+      sq_treset[p] = kq[p][QF - 1] < 2;
+      for (int f = 0; f < SF; f++) ss_ready[p * SF + f] = gs[p][f];
+    end
+  always @(posedge clk) begin
+    for (int p = 0; p < PORTS; p++) begin
+      for (int f = 0; f < QF; f++) gq[p][f] <= ($urandom % 4) != 0;
+      for (int f = 0; f < SF; f++) gs[p][f] <= ($urandom % 4) != 0;
+    end
+    if (reset) begin
+      for (int p = 0; p < PORTS; p++) begin
+        f_k[p] <= 0; for (int f = 0; f < QF; f++) kq[p][f] <= 0; for (int f = 0; f < SF; f++) ks[p][f] <= 0;
+      end
+    end else
+      for (int p = 0; p < PORTS; p++) begin
+        automatic int m = n;
+        for (int f = 0; f < QF; f++) begin
+          if (sq_valid[p * QF + f] && sq_ready[p * QF + f]) kq[p][f] <= kq[p][f] + 1;
+          m = (kq[p][f] + int'(sq_valid[p * QF + f] && sq_ready[p * QF + f]) < m) ? kq[p][f] + int'(sq_valid[p * QF + f] && sq_ready[p * QF + f]) : m;
+        end
+        f_k[p] <= m;
+        for (int f = 0; f < SF; f++)
+          if (ss_valid[p * SF + f] && ss_ready[p * SF + f]) begin
+            automatic int j = ks[p][f];
+            automatic logic [RSP_W-1:0] r = asm_[p].exists(j) ? asm_[p][j] : '0;
+            for (int b = slo(f); b < slo(f + 1); b++) r[b] = ss_bits[p * RSP_W + b];
+            asm_[p][j] = r;
+            asm_n[p][j] = (asm_n[p].exists(j) ? asm_n[p][j] : 0) + 1;
+            ks[p][f] <= j + 1;
+            if (asm_n[p][j] == SF) begin fq[p].push_back(r); asm_[p].delete(j); asm_n[p].delete(j); end
+          end
+      end
+  end
+  foldsim_mem_ser #(.PORTS(PORTS), .ID_W(ID_W), .DATA_W(DATA_W), .SPEC(SPEC)) ser (
+    .clk, .reset, .q_valid(sq_valid), .q_ready(sq_ready), .q_bits(sq_bits), .q_treset(sq_treset),
+    .s_valid(ss_valid), .s_ready(ss_ready), .s_bits(ss_bits),
+    .req_valid(f_req_valid), .req_ready(f_req_ready), .req_chan(f_req_chan), .req_treset(f_req_treset),
+    .req_bits(f_req_bits), .rsp_valid(f_rsp_valid), .rsp_ready(f_rsp_ready), .rsp_chan(f_rsp_chan),
+    .rsp_bits(f_rsp_bits));
+`endif
 
   // The reference: PORTS endpoints, a master and memory each.
   wire [PORTS-1:0] pm_awvalid, pm_awready, pm_wvalid, pm_wready, pm_wlast, pm_bvalid, pm_bready, pm_arvalid,
@@ -122,7 +200,7 @@ module tb;
   wire [PORTS*8*64-1:0] p_stats, f_stats;
 `define CFG .base(64'h0), .cfg_data_rate(16'd800), .cfg_core_clock(16'd400), .cfg_latency(16'd0), \
     .cfg_queue(16'd0), .cfg_rq(8'd32), .cfg_wq(8'd32), .cfg_wr_high(8'd26), .cfg_wr_low(8'd7), \
-    .cfg_geom(CFG_GEOM), .cfg_t(CFG_T), .cfg_refresh(2'd0), .cfg_refi(16'd0), .cfg_rfc(16'd0)
+    .cfg_geom(CFG_GEOM), .cfg_t(CFG_T), .cfg_refresh(cfg_refresh), .cfg_refi(cfg_refi), .cfg_rfc(cfg_rfc)
   foldsim_mem_par #(.PORTS(PORTS), .ID_W(ID_W), .DATA_W(DATA_W), .SPEC(SPEC), .CH_SHIFT(5)) par (
     .clk, .reset, `CFG, .stats(p_stats), .idle(p_idle), .error(p_error), .stall(p_stall),
     .req_valid(p_req_valid), .req_ready(p_req_ready), .req_chan(p_req_chan), .req_treset(p_req_treset),
@@ -183,16 +261,24 @@ module tb;
     cyc <= cyc + 1;
     if (!reset) begin
       if (p_rsp_valid) pq[p_rsp_chan].push_back(p_rsp_bits);
+`ifndef SER
       if (f_rsp_valid) fq[f_rsp_chan].push_back(f_rsp_bits);
+`endif
       for (int p = 0; p < PORTS; p++)
         while (pq[p].size() != 0 && fq[p].size() != 0) begin
           if (!bad && seen(pq[p][0]) !== seen(fq[p][0])) begin
-            logic [RSP_W-1:0] d = seen(pq[p][0]) ^ seen(fq[p][0]);
-            int lo = 0;
+            automatic logic [RSP_W-1:0] d = seen(pq[p][0]) ^ seen(fq[p][0]);
+            automatic int lo = 0;
             for (int f = 0; f < `FMR_RSP_FIELDS; f++) begin
-              if (|((d >> lo) << (RSP_W - `FMR_RSP_W(f)))) $display("  field %0d (bit %0d) differs", f, lo);
+              automatic bit df = 0;
+              for (int i = lo; i < lo + `FMR_RSP_W(f); i++) df |= d[i];
+              if (df) $display("  field %0d (bit %0d) differs", f, lo);
               lo += `FMR_RSP_W(f);
             end
+            for (int x = 0; x < NC; x++)
+              $display("  R copy %0d: rvalid f %b p %b rid f %h p %h data f %h.. p %h..", x, fq[p][0][RV_LO + x],
+                       pq[p][0][RV_LO + x], fq[p][0][RI_LO + x * ID_W +: ID_W], pq[p][0][RI_LO + x * ID_W +: ID_W],
+                       fq[p][0][RD_LO + x * DATA_W +: 64], pq[p][0][RD_LO + x * DATA_W +: 64]);
             $display("MISMATCH port %0d record %0d (host cycle %0d): folded %h.. reference %h..", p, got[p], cyc,
                      fq[p][0][63:0], pq[p][0][63:0]);
             bad = 1;
@@ -210,8 +296,26 @@ module tb;
       for (int p = 0; p < PORTS; p++) if (got[p] >= n - 2) done_p++;
       if (bad) begin $display("FAIL"); $finish; end
       if (done_p == PORTS) begin
-        $display("PASS %0d records x %0d ports in %0d host cycles (errors: reference %0d, folded %0d)", n - 2, PORTS,
-                 cyc, p_error, f_error);
+        // Both sides have taken every record and wait for the next: the same target cycle per port, so the same
+        // bank-model statistics (reads, writes, row hits, misses, conflicts, latency sum, refreshes, full cycles).
+        // The engines may still run the waiting cycle's DRAM clocks (a fold's port one host cycle a turn): up to
+        // 1,000 turns for the counters to agree.
+        longint st [8];
+        for (int w = 0; w < 1000 && p_stats !== f_stats; w++) repeat (PORTS) @(posedge clk);
+        for (int i = 0; i < 8; i++) st[i] = 0;
+        for (int p = 0; p < PORTS; p++)
+          for (int i = 0; i < 8; i++) begin
+            if (p_stats[(p * 8 + i) * 64 +: 64] !== f_stats[(p * 8 + i) * 64 +: 64]) begin
+              $display("MISMATCH stats port %0d counter %0d: folded %0d reference %0d (records compared %0d, queued f %0d p %0d)",
+                       p, i, f_stats[(p * 8 + i) * 64 +: 64], p_stats[(p * 8 + i) * 64 +: 64], got[p], fq[p].size(),
+                       pq[p].size());
+              bad = 1;
+            end
+            st[i] += p_stats[(p * 8 + i) * 64 +: 64];
+          end
+        if (bad) begin $display("FAIL"); $finish; end
+        $display("PASS %0d records x %0d ports in %0d host cycles (errors: reference %0d, folded %0d); reads %0d writes %0d hits %0d misses %0d conflicts %0d refreshes %0d",
+                 n - 2, PORTS, cyc, p_error, f_error, st[0], st[1], st[2], st[3], st[4], st[6]);
         $finish;
       end
       if (cyc > 64'(n) * 64'd4000) begin
