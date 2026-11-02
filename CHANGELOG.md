@@ -12,6 +12,17 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
 - **Hardware profiles.** `profiles/<name>.json` names a machine (`tinygpu`, `rtx1080`, `v100`, `a100`, `h100`, `rtx5080`) that every flow
   builds through `configure --profile=<name>` or `blackbox.sh --profile=<name>`; explicit `CONFIGS` win over the profile.
   See [docs/simulation.md](docs/simulation.md#hardware-profiles).
+- **RHEL 9 toolchain (`rhel/9`).** EL9 hosts (RHEL, Rocky, AlmaLinux, CentOS Stream 9) get native prebuilt bundles: LLVM 20.1.8,
+  Verilator 5.050, Yosys 0.69 and OpenSTA rebuilt against glibc 2.34 / GCC 11 libstdc++, plus the focal riscv-gnu, sv2v, POCL,
+  chipStar and Mesa bundles, which already ran there. Before this, EL9 mapped to `centos/7`, which has no LLVM, POCL, chipStar, Mesa,
+  Yosys or OpenSTA bundle and whose GCC 13 riscv toolchain no longer links the kernel library. gem5 is not provided for `rhel/9`.
+  See [docs/install_vortex.md](docs/install_vortex.md#rhel-9-rocky--almalinux--centos-stream-9).
+
+### Fixed
+
+- **Stale softfloat archive.** `third_party/Makefile` rebuilds softfloat when `SOFTFLOAT_OPTS` changes. Before this, a tree built
+  before `-DTHREAD_LOCAL=_Thread_local` was added kept its non-TLS archive, and the simx runtime failed to link with
+  `TLS reference ... mismatches non-TLS definition` for `softfloat_exceptionFlags`.
 
 ### Changed
 

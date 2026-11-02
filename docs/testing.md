@@ -7,13 +7,13 @@ You can query the commandline options of the tool using:
 
     $ ./ci/blackbox.sh --help
 
-To execute sgemm test program on the simx driver and passing "-n10" as argument to sgemm:
+To execute sgemm test program on the simx driver and passing "-n16" as argument to sgemm:
 
-    $ ./ci/blackbox.sh --driver=simx --app=sgemm --args="-n10"
+    $ ./ci/blackbox.sh --driver=simx --app=sgemm --args="-n16"
 
 You can execute the same application of a GPU architecture with 2 cores:
 
-    $ ./ci/blackbox.sh --core=2 --driver=simx --app=sgemm --args="-n10"
+    $ ./ci/blackbox.sh --core=2 --driver=simx --app=sgemm --args="-n16"
 
 When excuting, Blackbox needs to recompile the driver if the desired architecture changes.
 It tracks the latest configuration in a file under the current directory blackbox.<driver>.cache.
