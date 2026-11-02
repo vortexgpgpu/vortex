@@ -126,8 +126,10 @@ module foldsim_afu #(
 `else
     localparam MEM_SPEC = 0;
 `endif
+`ifndef FOLDSIM_PORTS
     localparam NC = (MEM_SPEC == 2) ? 4 : ((MEM_SPEC != 0) ? 2 : 1);
     localparam NW = (MEM_SPEC == 2) ? 4 : 1;
+`endif
 
     // A registered reset, so it reaches the whole kernel in one cycle's time.
     reg reset;
@@ -150,7 +152,9 @@ module foldsim_afu #(
     `FOLDSIM_CH(busy, 1)
 `undef FOLDSIM_CH
 
-    // A memory port's channels, by port.
+    // A memory port's channels, by port (with folded ports, the simulator has
+    // none: the records carry them).
+`ifndef FOLDSIM_PORTS
 `define FOLDSIM_MCH(name, w) \
     wire         mem_``name``_valid [PORTS]; \
     wire         mem_``name``_ready [PORTS]; \
@@ -182,6 +186,7 @@ module foldsim_afu #(
     `FOLDSIM_MCH(rready, 1)
     `FOLDSIM_MCH(bready, 1)
 `undef FOLDSIM_MCH
+`endif
 
     // Device memory, by port.
     wire                   hbm_awvalid [PORTS], hbm_awready [PORTS];
@@ -928,6 +933,17 @@ module foldsim_afu #(
     .vm``k``_wr_data (vm``k``_wr_data), .vm``k``_wr_mask (vm``k``_wr_mask)
 `endif
 
+`ifdef FOLDSIM_PORTS
+    // Folded memory ports: one record a port and target cycle each way
+    // (PORTFOLD_IFACE.md), before the endpoints behind foldsim_mem_par.
+    localparam PF_CW = `FOLDSIM_PORTS_CW;
+    wire                          pf_req_valid, pf_req_ready, pf_req_treset;
+    wire [PF_CW-1:0]              pf_req_chan;
+    wire [`FOLDSIM_PORTS_REQ_W-1:0] pf_req_bits;
+    wire                          pf_rsp_valid, pf_rsp_ready;
+    wire [PF_CW-1:0]              pf_rsp_chan;
+    wire [`FOLDSIM_PORTS_RSP_W-1:0] pf_rsp_bits;
+`endif
     foldsim_sim sim (
         .hostClock (ap_clk),
         .hostReset (reset),
@@ -945,10 +961,18 @@ module foldsim_afu #(
 `endif
 `undef FOLDSIM_SIM_VMEM
 `endif
+`ifdef FOLDSIM_PORTS
+        // Folded memory ports (foldsim --fold-ports): the record streams.
+        .req_valid (pf_req_valid), .req_ready (pf_req_ready), .req_chan (pf_req_chan),
+        .req_treset (pf_req_treset), .req_bits (pf_req_bits),
+        .rsp_valid (pf_rsp_valid), .rsp_ready (pf_rsp_ready), .rsp_chan (pf_rsp_chan),
+        .rsp_bits (pf_rsp_bits),
+`else
         `FOLDSIM_MEM_REPEAT0(FOLDSIM_SIM_MEM, FOLDSIM_COMMA)
         `FOLDSIM_MEM_REPEAT1(FOLDSIM_SIM_MEM, FOLDSIM_COMMA)
         `FOLDSIM_MEM_REPEAT2(FOLDSIM_SIM_MEM, FOLDSIM_COMMA)
         `FOLDSIM_MEM_REPEAT3(FOLDSIM_SIM_MEM, FOLDSIM_COMMA),
+`endif
         `FOLDSIM_IN(reset),
         `FOLDSIM_IN(dcr_req_valid),
         `FOLDSIM_IN(dcr_req_rw),
@@ -989,6 +1013,93 @@ module foldsim_afu #(
     .name``_valid (mem_``name``_valid[p]), .name``_ready (mem_``name``_ready[p]), \
     .name``_bits (mem_``name``_bits[p])
 
+`ifdef FOLDSIM_PORTS
+    // The ports' reset tokens ride on the request records (req_treset): the
+    // control endpoint's per-port reset channels are taken as they come.
+    assign mem_reset_ready = '1;
+    /* verilator lint_off UNUSEDSIGNAL */
+    wire pf_unused_reset = &{1'b0, mem_reset_valid, mem_reset_bits};
+    /* verilator lint_on UNUSEDSIGNAL */
+    wire pf_idle, pf_error, pf_stall;
+    assign mem_idle  = {PORTS{pf_idle}};
+    assign mem_error = {PORTS{pf_error}};
+    assign mem_stall = {PORTS{pf_stall}};
+    wire [PORTS-1:0]          pf_awvalid, pf_awready, pf_wvalid, pf_wready, pf_wlast, pf_bvalid, pf_bready;
+    wire [PORTS-1:0]          pf_arvalid, pf_arready, pf_rvalid, pf_rready;
+    wire [PORTS*64-1:0]       pf_awaddr, pf_araddr;
+    wire [PORTS*8-1:0]        pf_awlen, pf_arlen;
+    wire [PORTS*DATA_W-1:0]   pf_wdata, pf_rdata;
+    wire [PORTS*DATA_W/8-1:0] pf_wstrb;
+    foldsim_mem_par #(
+        .PORTS    (PORTS),
+        .ID_W     (TARGET_ID_W),
+        .ADDR_W   (TARGET_ADDR_W),
+        .DATA_W   (DATA_W),
+        .SLOTS    (MEM_SLOTS),
+        .HLOG2    (MEM_HLOG2),
+        .STAGED   (MEM_STAGED),
+        .CH_SHIFT (`FOLDSIM_MEM_CH_SHIFT),
+        .SPEC     (MEM_SPEC),
+        .CW       (PF_CW),
+        .REQ_W    (`FOLDSIM_PORTS_REQ_W),
+        .RSP_W    (`FOLDSIM_PORTS_RSP_W)
+    ) mem_par (
+        .clk           (ap_clk),
+        .reset         (reset),
+        .base          (mem_base),
+        .cfg_data_rate (mem_clock[15:0]),
+        .cfg_core_clock(mem_clock[31:16]),
+        .cfg_latency   (mem_latency),
+        .cfg_queue     (mem_queue[15:0]),
+        .cfg_rq        (mem_queue[23:16]),
+        .cfg_wq        (mem_queue[31:24]),
+        .cfg_wr_high   (mem_wmark[7:0]),
+        .cfg_wr_low    (mem_wmark[15:8]),
+        .cfg_geom      (mem_geom),
+        .cfg_t         (mem_timing),
+        .cfg_refresh   (mem_refresh),
+        .cfg_refi      (mem_refi),
+        .cfg_rfc       (mem_rfc),
+        .stats         (mem_stats),
+        .idle          (pf_idle),
+        .error         (pf_error),
+        .stall         (pf_stall),
+        .req_valid     (pf_req_valid),
+        .req_ready     (pf_req_ready),
+        .req_chan      (pf_req_chan),
+        .req_treset    (pf_req_treset),
+        .req_bits      (pf_req_bits),
+        .rsp_valid     (pf_rsp_valid),
+        .rsp_ready     (pf_rsp_ready),
+        .rsp_chan      (pf_rsp_chan),
+        .rsp_bits      (pf_rsp_bits),
+        .m_awvalid (pf_awvalid), .m_awready (pf_awready), .m_awaddr (pf_awaddr), .m_awlen (pf_awlen),
+        .m_wvalid  (pf_wvalid),  .m_wready  (pf_wready),  .m_wdata  (pf_wdata),  .m_wstrb (pf_wstrb),
+        .m_wlast   (pf_wlast),   .m_bvalid  (pf_bvalid),  .m_bready  (pf_bready),
+        .m_arvalid (pf_arvalid), .m_arready (pf_arready), .m_araddr  (pf_araddr), .m_arlen (pf_arlen),
+        .m_rvalid  (pf_rvalid),  .m_rready  (pf_rready),  .m_rdata   (pf_rdata)
+    );
+    for (genvar p = 0; p < PORTS; ++p) begin : g_mem
+        assign hbm_awvalid[p] = pf_awvalid[p];
+        assign pf_awready[p]  = hbm_awready[p];
+        assign hbm_awaddr[p]  = pf_awaddr[p*64 +: 64];
+        assign hbm_awlen[p]   = pf_awlen[p*8 +: 8];
+        assign hbm_wvalid[p]  = pf_wvalid[p];
+        assign pf_wready[p]   = hbm_wready[p];
+        assign hbm_wdata[p]   = pf_wdata[p*DATA_W +: DATA_W];
+        assign hbm_wstrb[p]   = pf_wstrb[p*DATA_W/8 +: DATA_W/8];
+        assign hbm_wlast[p]   = pf_wlast[p];
+        assign pf_bvalid[p]   = hbm_bvalid[p];
+        assign hbm_bready[p]  = pf_bready[p];
+        assign hbm_arvalid[p] = pf_arvalid[p];
+        assign pf_arready[p]  = hbm_arready[p];
+        assign hbm_araddr[p]  = pf_araddr[p*64 +: 64];
+        assign hbm_arlen[p]   = pf_arlen[p*8 +: 8];
+        assign pf_rvalid[p]   = hbm_rvalid[p];
+        assign hbm_rready[p]  = pf_rready[p];
+        assign pf_rdata[p*DATA_W +: DATA_W] = hbm_rdata[p];
+    end
+`else
     for (genvar p = 0; p < PORTS; ++p) begin : g_mem
         foldsim_mem #(
             .ID_W     (TARGET_ID_W),
@@ -1052,6 +1163,7 @@ module foldsim_afu #(
             .m_rdata   (hbm_rdata[p])
         );
     end
+`endif
 `undef FOLDSIM_MEM
 
     foldsim_ctrl #(
