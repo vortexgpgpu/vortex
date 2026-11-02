@@ -357,19 +357,6 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
         dequeue_id, next_table[dequeue_id]))
 
 `ifdef SIMULATION
-    // Every entry the dequeue pointer lands on must belong to the line whose
-    // fill opened the chain, whichever way the pointer got there (fill,
-    // next_index walk, or same-cycle late-joiner splice). Checked here rather
-    // than at the bank's forward port because only the MSHR can see all three.
-    reg [`CS_LINE_ADDR_WIDTH-1:0] chain_addr_r;
-    always @(posedge clk) begin
-        if (fill_valid) begin
-            chain_addr_r <= addr_table[fill_id];
-        end
-    end
-    `RUNTIME_ASSERT(~(dequeue_val && ~fill_valid && (addr_table[dequeue_id] != chain_addr_r)), ("*** %s chain entry on foreign line: dequeue_id=%0d, entry=0x%0h, chain=0x%0h", INSTANCE_ID,
-        dequeue_id, `CS_BANK_TO_FULL_ADDR(addr_table[dequeue_id], BANK_ID), `CS_BANK_TO_FULL_ADDR(chain_addr_r, BANK_ID)))
-
     // The slot the dequeue pointer names must not be handed to another line
     // while the pointer still rests on it: a combinational `dequeue_addr` on
     // the entry at `dequeue_id_r` would retarget an in-flight replay.
@@ -552,29 +539,25 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
         ("%t: *** %s order-hazard probe diverged from the full exclusion", $time, INSTANCE_ID))
 
     assign dequeue_valid = dequeue_val && ~((LAZY_FETCH != 0) && dequeue_block);
-    // Sampled with dequeue_id_n, alongside the payload in mshr_store, rather
-    // than read live at dequeue_id_r a cycle later. The entry's slot can be
-    // freed and reallocated while the pointer still names it -- the free set
-    // offers a slot released by a dequeue or a finalize in the same cycle -- and
-    // a live read then retargets an in-flight replay onto the new occupant's
-    // line. The bank's fill-forward path answers that replay from the staged
-    // sector of the line it was actually issued for, so the requester silently
-    // receives another line's data; the guard for it is a RUNTIME_ASSERT, which
-    // synthesis compiles out.
-    //
-    // Taking the address from the same snapshot as the payload also removes an
-    // inconsistency that was there regardless: the payload was a snapshot and
-    // the address was not, so the two could describe different entries.
-    //
-    // Withholding the slot from the free set instead deadlocks: the pointer can
-    // park on a blocked replay, and if that slot is the last free one the core
-    // stalls and the replay never drains.
+    // Coalescing keys on the line, so every entry a chain walks (the fill's
+    // root, its next_index successors, a late joiner spliced in) holds the
+    // fill's line: the address is captured once, at the fill, and the late
+    // dequeue pointer stays off it. Being a register, it also cannot follow a
+    // slot that is freed and reallocated while the pointer still names it,
+    // which would retarget an in-flight replay onto the new occupant's line.
+    // Withholding that slot from the free set instead deadlocks: the pointer
+    // can park on a blocked replay, and if that slot is the last free one the
+    // core stalls and the replay never drains.
     reg [`CS_LINE_ADDR_WIDTH-1:0] dequeue_addr_r;
     reg dequeue_rw_r;
     always @(posedge clk) begin
-        dequeue_addr_r <= addr_table[dequeue_id_n];
-        dequeue_rw_r   <= write_table[dequeue_id_n];
+        if (fill_valid) begin
+            dequeue_addr_r <= fill_addr;
+        end
+        dequeue_rw_r <= write_table[dequeue_id_n];
     end
+    `RUNTIME_ASSERT(~(dequeue_val && ~fill_valid && (addr_table[dequeue_id] != dequeue_addr_r)), ("*** %s chain entry on foreign line: dequeue_id=%0d, entry=0x%0h, chain=0x%0h", INSTANCE_ID,
+        dequeue_id, `CS_BANK_TO_FULL_ADDR(addr_table[dequeue_id], BANK_ID), `CS_BANK_TO_FULL_ADDR(dequeue_addr_r, BANK_ID)))
 
     assign dequeue_addr  = dequeue_addr_r;
     assign dequeue_rw    = dequeue_rw_r;
