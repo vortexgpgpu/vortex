@@ -294,7 +294,34 @@ candidates retiming is unlikely to absorb.
 
 ### 4.5 Area
 
-Per op of the area mapping (§3.1):
+The area mapping (§3.1) first takes out of the netlist what Vivado keeps
+out of LUTs:
+
+- **Clock enables and synchronous resets** (`foldsim-register-enables`). A
+  select between a register's next value and the register itself is the
+  flip-flop's CE pin, and a select of a constant under it the R or S pin;
+  neither takes a LUT (Vivado's `VX_pipe_register`s with reset and enable
+  have none). The register becomes a `seq.compreg.ce`; its enable and reset
+  are one gate per register, not per bit.
+- **Register bits that never leave 0** (`foldsim-constant-registers`). A
+  flip-flop powers up at 0, so a bit that only loads 0 or itself, and resets
+  to 0 if at all, is the constant 0, and the register narrows to its other
+  bits (`VX_cache_amo`'s write-back offset, of which only bit 5 varies, makes
+  its shift a select of two amounts).
+- **Bits a select passes through** (`foldsim-narrow-muxes`). A procedural
+  write of part of a vector in a loop elaborates to a select per iteration
+  of the whole vector, whose arms agree on every bit outside that part;
+  lowered to and-inverter gates, each such bit stays a pair of gates and
+  every iteration's condition reaches it. `VX_cache_amo`'s read-forward
+  loop over the L2's 512-bit word (64 bytes of 4 write-back slots and the
+  settling entry) is a chain of 320 whole-word selects, every one reaching
+  every bit. Each select narrows to the runs where its arms differ.
+- **Styled ROMs** (`foldsim-styled-roms`). A constant table on a wire with
+  `rom_style` `block` or `distributed` becomes a memory of its shape, placed
+  as below (`VX_mufu`'s table: one block RAM, as Vivado places it, instead
+  of 12,321 mapped LUTs of logic).
+
+Then, per op:
 
 | Element | FPGA | ASAP7 |
 |---|---|---|
@@ -306,7 +333,7 @@ Per op of the area mapping (§3.1):
 | Multiply, wider | DSPs: the fewer of ⌈a/A⌉·⌈b/B⌉ in either orientation over the significant bits (§4.2) | partial products and a Dadda tree: 3·a·b cells |
 | Divide or remainder (output bits: at most the dividend's) | a table over ≤ 10 variable bits; a constant divisor, 2 LUTs per bit; else a subtracter per quotient bit, a LUT per result bit | the same, but 3 cells per subtracter bit |
 | Register | a flip-flop per bit | a flip-flop per bit |
-| Vendor IP (`xil_*`) | its measured LUTs, flip-flops and DSPs | — |
+| Vendor IP (`xil_*`) | its logic LUTs, flip-flops and DSPs: for `xil_fma`, `xil_fdiv` and `xil_fsqrt` the medians of their routed instances in the U55C builds (616, 743, 412 LUTs; 1,064, 1,360, 786 flip-flops) | — |
 | SRAM macro (black box) | — | a macro |
 
 **Memories** go where Vivado infers them. A `ram_style` the RTL asks for wins
@@ -323,15 +350,41 @@ words and 2 Kb is block RAM. The shapes are the same on every FPGA family:
 | UltraRAM (`ultra`) | 4096 × 72 each |
 | `registers` | flip-flops and a read multiplexer |
 
+Two shapes override the inference:
+
+- A memory distributed RAM cannot hold is **flip-flops**: one read of
+  latency 0 at each of its words, at constant addresses (an associative
+  lookup, as the MSHR's `addr_table`, `word_table` and `sector_table` are),
+  or more than seven read ports besides a read-write port. Its
+  constant-address reads are wires (in a copy folded over threads, a
+  multiplexer over the threads), every other read a multiplexer per bit,
+  and each word a write enable on its flip-flops' CE pins. The L2 MSHR goes from 629 to 348 distributed RAM LUTs
+  and from 167 to 567 flip-flops per bank, against Vivado's 352 and 579.
+- A block RAM writes 8- or 9-bit bytes under a mask, so a memory masked in
+  **lanes that are not whole bytes** (neither a multiple of 8 nor of 9 bits)
+  is a block RAM per lane: the L2 tag store (64 × 136 in eight 17-bit
+  lanes) is eight 18 Kb halves, the I-cache's (64 × 80 in four 20-bit lanes)
+  four, as Vivado builds them.
+- A memory without a write port is a **ROM**: in distributed form, logic
+  (a table over the address per bit and read, nothing for one word), not
+  distributed RAM, which is how Vivado reports it. A memory nothing reads
+  costs nothing.
+
 On ASAP7, a memory without a macro is flip-flops, a write decoder and a
 read multiplexer tree.
 
 **The LUT scale.** The cut mapper has none of Vivado's LUT combining or
-clock-enable and reset pins, and maps module by module, so it covers a
-design with 2.1–3.5× the logic LUTs Vivado leaves. The target's `lutScale` converts the mapping's LUTs to
-Vivado's: 0.337 on the LUT6 families, the geometric mean of Vivado's logic
-LUTs over Beacon's on routed U55C builds (§7.2). Vendor IP and distributed
-RAM, and the memories' read multiplexers, are not scaled; `lut-scale=1` gives the raw cover.
+wide multiplexers (MUXF7/F8), and maps module by module, without the logic
+Vivado trims across module boundaries, so it covers a design with 2.6× the
+logic LUTs Vivado leaves at the geometric mean, from 1.4× (`lmem`) to 7.5×
+(`rtu`) (§7.2). The target's `lutScale`
+converts the mapping's LUTs to Vivado's: 0.391 on the LUT6 families, the
+geometric mean over the 14 routed U55C `fpga_gate` DUTs of Vivado's logic
+LUTs, less what Beacon prices outside the mapping (vendor IP, memory
+multiplexers), over Beacon's mapped LUTs (§7.2). The V80 shares that value
+without a fit of its own, and `asap7` has none (1.0): its cell counts are
+not yet compared with Yosys. Vendor IP and distributed RAM, and the
+memories' read multiplexers, are not scaled; `lut-scale=1` gives the raw cover.
 
 ## 5. Outputs
 
@@ -642,29 +695,62 @@ So the model is a ranking for where to look first, not a gate. `diff` and
 ### 7.2 Area
 
 Against the routed `fpga_gate` builds of the same sources (U55C, Vivado
-2024.1, 1 November 2026):
+2024.2.2, 1 November 2026):
 
-| DUT | LUT (Beacon / Vivado) | FF | distributed RAM LUTs | block RAM | DSP |
-|---|---|---|---|---|---|
-| core | 148,956 / 174,006 (0.86) | 166,850 / 146,008 (1.14) | 6,838 / 8,528 | 129 / 137 | 97 / 96 |
-| cache | 37,466 / 31,039 (1.21) | 33,270 / 25,280 (1.32) | 3,784 / 2,722 | 32 / 32 | 0 / 0 |
-| tcu | 122,262 / 117,087 (1.04) | 47,095 / 42,675 (1.10) | 2,083 / 1,360 | 0 / 0 | 769 / 768 |
-| tensor | 264,677 / 233,153 (1.14) | 160,881 / 138,986 (1.16) | 12,806 / 7,844 | 114.5 / 133 | 267 / 265 |
+Logic LUTs are Vivado's logic LUTs (without distributed RAM and shift
+registers) against Beacon's at the fitted scale; *before* is the estimator
+before the rules of §4.5 above, at its earlier scale of 0.337 and IP costs.
+`top` leaves out the command processor (`cp_core`) on both sides: CIRCT
+elaborates it with LLHD signals Beacon does not read.
 
-- **DSPs** are within two per DUT. Vivado decides some narrow products
-  (8 × 9, say) by a heuristic of its own, between DSPs and LUTs; Beacon puts
-  every product of more than ten variable bits in DSPs.
-- **Block RAM** is exact on cache, 6 % short on core and 14 % short on
-  tensor; which of tensor's memories Vivado puts in block RAM that Beacon
-  does not is not yet traced.
-- **Flip-flops** run 10–32 % high. Vivado can move pipeline registers into
-  DSPs (`AREG`, `MREG`, `PREG`) and block RAM output registers, and shift
-  registers into SRLs, none of which Beacon models; how much each accounts
-  for is not yet measured.
-- **LUTs** are a calibrated estimate, within −14 % to +21 % on these DUTs;
-  the scale is one number per family (§4.5), so a DUT whose logic packs
-  better or worse than the average moves by that much. `logic_gate`
-  compares a DUT with its own baseline, so the scale cancels there.
+| DUT | LUT ratio before | LUT (Beacon / Vivado) | FF | distributed RAM LUTs | block RAM | DSP |
+|---|---|---|---|---|---|---|
+| cache | 1.19 | 27,313 / 28,317 (0.96) | 34,922 / 25,280 (1.38) | 2,542 / 2,722 | 32 / 32 | 0 / 0 |
+| core | 0.86 | 122,879 / 165,478 (0.74) | 158,903 / 146,008 (1.09) | 6,838 / 6,220 | 129 / 137 | 97 / 96 |
+| dxa | 1.05 | 8,170 / 9,666 (0.85) | 9,215 / 7,132 (1.29) | 568 / 638 | 0 / 0 | 9 / 7 |
+| gfx | 1.45 | 241,768 / 210,879 (1.15) | 379,837 / 236,308 (1.61) | 11,906 / 12,834 | 191.5 / 172.5 | 1,140 / 992 |
+| lmem | 0.68 | 14,766 / 26,322 (0.56) | 14,361 / 13,623 (1.05) | 726 / 740 | 16 / 16 | 0 / 0 |
+| mufu | 2.92 | 1,387 / 1,966 (0.71) | 1,806 / 1,105 (1.63) | 0 / 0 | 1 / 1 | 5 / 3 |
+| om | 2.37 | 4,730 / 2,298 (2.06) | 4,456 / 3,496 (1.27) | 367 / 408 | 0 / 0 | 10 / 22 |
+| raster | 1.00 | 5,044 / 7,981 (0.63) | 12,069 / 8,974 (1.34) | 496 / 606 | 8 / 8 | 14 / 14 |
+| rtu | 2.01 | 99,325 / 63,721 (1.56) | 146,917 / 94,885 (1.55) | 1,904 / 1,840 | 16.5 / 18.5 | 140 / 140 |
+| tcu | 1.04 | 121,388 / 115,727 (1.05) | 49,056 / 42,675 (1.15) | 915 / 1,360 | 0 / 0 | 769 / 768 |
+| tensor | 1.12 | 220,251 / 225,309 (0.98) | 166,688 / 138,986 (1.20) | 8,962 / 7,842 | 116.5 / 133.5 | 267 / 265 |
+| tex | 1.50 | 71,506 / 55,791 (1.28) | 96,949 / 34,582 (2.80) | 3,241 / 4,208 | 0 / 0 | 896 / 528 |
+| top | 1.04 | 104,728 / 125,511 (0.83) | 157,573 / 144,522 (1.09) | 8,551 / 7,836 | 76 / 76 | 50 / 48 |
+| vm | 1.55 | 109,070 / 116,552 (0.94) | 151,175 / 121,587 (1.24) | 10,276 / 10,366 | 168 / 172 | 0 / 0 |
+
+- **LUTs**: the geometric mean error over the 14 DUTs goes from 41 % to
+  31 %, the range from 0.68–2.92 to 0.56–2.06. The L2 of `vm` came to
+  105,071 LUTs before (311,783 mapped) and comes to 47,555 now (121,625
+  mapped), against Vivado's 54,150; each bank's `VX_cache_amo` to 14,733
+  before and 3,608 now, against 5,001. The scale is one number per family,
+  so a DUT whose logic Vivado trims or packs more or less than the average
+  moves by that much; `logic_gate` compares a DUT with its own baseline, so
+  the scale cancels there. The largest
+  residues are logic Vivado removes across module boundaries, which Beacon,
+  mapping module by module, keeps: `rtu`'s logic outside its 73
+  floating-point cores is 19,536 LUTs and 18,088 flip-flops in Vivado against 53,970 LUTs
+  (138,032 mapped) and 68,357 flip-flops in Beacon; `tex` keeps 2.8×
+  Vivado's flip-flops; `om`'s `VX_om_dcr` and `VX_om_blend` come to 3,407
+  LUTs against Vivado's 741. `lmem`, `raster` and `core` come out low.
+- **Flip-flops** run 5–63 % high, and 2.8× on `tex`, for the same reason:
+  Vivado drops the bits a parent never reads or ties to a constant (the
+  cache DUT's stream buffers, 20,936 flip-flops in Beacon against 12,324), and moves pipeline registers into DSPs and block RAM
+  output registers, none of which a module-by-module count sees.
+- **Distributed RAM** is within 15 % on 10 of the 13 DUTs that have any
+  (`raster` 0.82, `tex` 0.77, `tcu` 0.67).
+- **Block RAM** is exact on 5 of the 10 DUTs that have any; the mask-lane
+  rule matches Vivado on every masked tag store. The RTU scheduler's
+  `window_store` (64 × 512 in eight 64-bit lanes) packs in 7.5 blocks, its
+  lanes being whole bytes, where Vivado builds a 36 Kb block per lane, 8.
+  `gfx` is 19 high: Beacon places four RTU scheduler memories without a
+  `ram_style` (`fbuf_ram`, `ray_store`, `xfres_ram`, `trires_ram`, 23.5
+  blocks) in block RAM by its size and latency rule, and Vivado does not;
+  `core` and `tensor` are short by 8 and 17, not yet traced.
+- **DSPs** are within two on 11 DUTs; `gfx` and `tex` are 148 and 368 high
+  and `om` 12 low, where Vivado chooses between DSPs and LUTs for narrow
+  products by a heuristic of its own.
 
 The repository's Vivado baselines (`ci/baselines/synthesis/xilinx/`) date
 from 5 October 2026 and predate later RTL changes, so they are not a
