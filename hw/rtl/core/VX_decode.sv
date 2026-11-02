@@ -489,12 +489,44 @@ module VX_decode import
             `endif
             end
         `ifdef VX_CFG_EXT_F_ENABLE
-        `ifndef VX_CFG_FLEN_64
-            // vx_flw.d/.q and vx_fsw.d/.q: 2 or 4 words of an aligned FP register
-            // group, expanded into flw/fsw uops; the bytesel offset carries the
-            // group size.
             INST_EXT4: begin
                 case (funct3)
+                `ifdef VX_CFG_EXT_TCU_ENABLE
+                    // vx_ldm/vx_stm: a TCU matrix fragment, expanded into one flw/fsw
+                    // per register. imm[4:0] is the fragment shape, replaced by its
+                    // expander code; a bytesel offset of 2 (4 registers) or 3 (8)
+                    // marks the access as a fragment.
+                    3'h0: begin
+                        if (VX_tcu_pkg::tcu_ldm_valid(u_12[4:0])) begin
+                            ex_type = EX_LSU;
+                            op_type = INST_OP_BITS'(INST_LSU_LW);
+                            op_args.lsu.is_store = 0;
+                            op_args.lsu.is_float = 1;
+                            op_args.lsu.pack     = 2'b11;
+                            op_args.lsu.offset   = {u_12[11:5], VX_tcu_pkg::tcu_ldm_code(u_12[4:0])};
+                            bytesel = {XLENB_W'(XLENB-1), XLENB_W'({1'b1, VX_tcu_pkg::tcu_ldm_is8(u_12[4:0])})};
+                            `USED_IREG (rs1);
+                            `USED_FREG (rd);
+                        end
+                    end
+                    3'h2: begin
+                        if (VX_tcu_pkg::tcu_ldm_valid(rd)) begin
+                            ex_type = EX_LSU;
+                            op_type = INST_OP_BITS'(INST_LSU_SW);
+                            op_args.lsu.is_store = 1;
+                            op_args.lsu.is_float = 1;
+                            op_args.lsu.pack     = 2'b11;
+                            op_args.lsu.offset   = {s_imm[11:5], VX_tcu_pkg::tcu_ldm_code(rd)};
+                            bytesel = {XLENB_W'(XLENB-1), XLENB_W'({1'b1, VX_tcu_pkg::tcu_ldm_is8(rd)})};
+                            `USED_IREG (rs1);
+                            `USED_FREG (rs2);
+                        end
+                    end
+                `endif
+                `ifndef VX_CFG_FLEN_64
+                    // vx_flw.d/.q and vx_fsw.d/.q: 2 or 4 words of an aligned FP register
+                    // group, expanded into flw/fsw uops; the bytesel offset carries the
+                    // group size.
                     3'h3, 3'h4: begin
                         ex_type = EX_LSU;
                         op_type = INST_OP_BITS'(INST_LSU_LW);
@@ -517,10 +549,10 @@ module VX_decode import
                         `USED_IREG (rs1);
                         `USED_FREG (rs2);
                     end
+                `endif
                     default:;
                 endcase
             end
-        `endif
         `endif
         `ifdef VX_CFG_EXT_F_ENABLE
             INST_FMADD,  // 7'b1000011
@@ -831,6 +863,9 @@ module VX_decode import
                                 op_args.lsu.is_float = 1;
                                 op_args.lsu.pack     = 2'b01;
                                 op_args.lsu.offset   = '0;
+                                // the bytesel offset of a pack/wide/fragment access
+                                // carries its uop count: 0 → 2, 1 or 2 → 4, 3 → 8
+                                bytesel = {XLENB_W'(XLENB-1), XLENB_W'(1)};
                                 `USED_FREG (rd);
                                 `USED_IREG (rs1);
                                 `USED_IREG (rs2);

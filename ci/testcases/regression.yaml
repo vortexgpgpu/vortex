@@ -103,6 +103,40 @@ tests:
   configs: -DVX_CFG_SIMD_WIDTH=1
   shape:
     threads: 4
+# Matrix fragment loads and stores (vx_ldm, vx_stm): every shape of the
+# configuration, local and global memory, row strides that are not powers of
+# two, zero/positive/negative offsets, aligned and unaligned register bases.
+- id: ldst-matrix-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: ldst_matrix
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI
+# Symmetric sparse geometry (4 lanes).
+- id: ldst-matrix-2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: ldst_matrix
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_SPARSE_ENABLE
+# WGMMA accumulator chunks (16 lanes).
+- id: ldst-matrix-3
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: ldst_matrix
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_WGMMA_ENABLE
+# Each uop split into 4-lane packets, symmetric sparse shapes included.
+- id: ldst-matrix-4
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: ldst_matrix
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_NUM_LSU_LANES=4
 # The sgemm benchmarks with each thread's consecutive words read and written
 # through the wide forms (LDST_WIDE=1).
 - id: ldst-wide-sgemm

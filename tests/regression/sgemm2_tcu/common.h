@@ -15,6 +15,17 @@
 #define OTYPE fp32
 #endif
 
+// LDST_MATRIX=1 moves each tensor fragment with one vx_ldm/vx_stm where its
+// shape has one; 0 keeps one flw/fsw per register.
+#ifndef LDST_MATRIX
+#define LDST_MATRIX 0
+#endif
+
+// K tiles per iteration of the K loop
+#ifndef KUNROLL
+#define KUNROLL 1
+#endif
+
 typedef struct {
   uint32_t M, N, K;
   uint32_t cta_M;

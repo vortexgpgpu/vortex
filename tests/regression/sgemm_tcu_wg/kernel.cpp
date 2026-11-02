@@ -5,7 +5,7 @@
 
 namespace vt = vortex::tensor;
 
-using ctx = vt::wgmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, false, WGMMA_NRC>;
+using ctx = vt::wgmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, false, WGMMA_NRC, LDST_MATRIX>;
 
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   auto pA = reinterpret_cast<ctx::input_t *>(arg->A_addr);
@@ -42,6 +42,9 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   size_t a_lane_off = ctx::lane_offset<ctx::fragment_a>(a_ldm);
 #endif
 
+#if KUNROLL > 1
+#pragma unroll KUNROLL
+#endif
   for (uint32_t k = 0; k < K; k += ctx::tileK) {
     // Cooperatively load A [cta_M × tileK] into smem.
     //   Default (block-major):  A_smem[a_blockmajor_idx(r, c)].

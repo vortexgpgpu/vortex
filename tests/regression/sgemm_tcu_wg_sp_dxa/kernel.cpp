@@ -7,7 +7,7 @@
 
 namespace vt = vortex::tensor;
 // WGMMA accumulator; is_sparse=true (A is 2:4 compressed in smem)
-using ctx = vt::wgmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, true, WGMMA_NRC>;
+using ctx = vt::wgmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, true, WGMMA_NRC, LDST_MATRIX>;
 
 // Per-warp smem layout: [A_compressed][reserved metadata row], then shared B.
 static constexpr uint32_t smem_a_elems     = ctx::xtileM * (ctx::tileK / 2);
@@ -60,6 +60,9 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 #endif
 
   // Loop over K tiles
+#if KUNROLL > 1
+#pragma unroll KUNROLL
+#endif
   for (uint32_t k = 0; k < K; k += ctx::tileK) {
     uint32_t k_tile = k / ctx::tileK;
 

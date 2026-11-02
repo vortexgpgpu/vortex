@@ -282,3 +282,22 @@ tests:
 
   # Not warp-width swept: the tensor-core fragment layout is defined over a fixed
   # lane count, which the configs pin.
+
+# MX fragments moved with vx_ldm/vx_stm (LDST_MATRIX=1).
+- id: sgemm_tcu_mx-ldm-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32 -DLDST_MATRIX=1
+  args: -k64
+  touches: [hw/rtl/tcu, hw/rtl/core/VX_uop_packld.sv, hw/rtl/core/VX_decode.sv, sim/simx/tcu, sim/simx/lsu_unit.cpp, sim/simx/decode.cpp, sw/kernel/include/vx_tensor.h]
+- id: sgemm_tcu_mx-ldm-2
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DITYPE=mxfp4 -DOTYPE=fp32 -DLDST_MATRIX=1 -DKUNROLL=2
+  args: -k64
+  touches: [hw/rtl/tcu, hw/rtl/core/VX_uop_packld.sv, hw/rtl/core/VX_decode.sv, sim/simx/tcu, sim/simx/lsu_unit.cpp, sim/simx/decode.cpp, sw/kernel/include/vx_tensor.h]

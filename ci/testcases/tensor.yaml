@@ -230,3 +230,75 @@ tests:
 
   # Not warp-width swept: the tensor-core fragment layout is defined over a fixed
   # lane count, which the configs pin.
+
+# Fragments moved with vx_ldm/vx_stm (LDST_MATRIX=1), alone and with the K loop
+# unrolled (KUNROLL), whose tile offsets the instructions take as immediates.
+- id: sgemm_tcu-ldm-1
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DLDST_MATRIX=1
+  touches: [hw/rtl/tcu, hw/rtl/core/VX_uop_packld.sv, hw/rtl/core/VX_decode.sv, sim/simx/tcu, sim/simx/lsu_unit.cpp, sim/simx/decode.cpp, sw/kernel/include/vx_tensor.h]
+- id: sgemm_tcu-ldm-2
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=bf16 -DOTYPE=fp32 -DLDST_MATRIX=1 -DKUNROLL=2
+  touches: [hw/rtl/tcu, hw/rtl/core/VX_uop_packld.sv, hw/rtl/core/VX_decode.sv, sim/simx/tcu, sim/simx/lsu_unit.cpp, sim/simx/decode.cpp, sw/kernel/include/vx_tensor.h]
+- id: sgemm_tcu-ldm-3
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu
+  args: -m 64 -n 64 -k 128
+  configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DITYPE=fp8 -DOTYPE=fp32 -DLDST_MATRIX=1 -DKUNROLL=4
+  touches: [hw/rtl/tcu, hw/rtl/core/VX_uop_packld.sv, hw/rtl/core/VX_decode.sv, sim/simx/tcu, sim/simx/lsu_unit.cpp, sim/simx/decode.cpp, sw/kernel/include/vx_tensor.h]
+- id: sgemm_tcu-ldm-4
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_INT8_ENABLE -DITYPE=int8 -DOTYPE=int32 -DLDST_MATRIX=1
+  touches: [hw/rtl/tcu, hw/rtl/core/VX_uop_packld.sv, hw/rtl/core/VX_decode.sv, sim/simx/tcu, sim/simx/lsu_unit.cpp, sim/simx/decode.cpp, sw/kernel/include/vx_tensor.h]
+- id: sgemm_tcu-ldm-5
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu
+  args: -m 32 -n 32 -k 96
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=fp16 -DOTYPE=fp32 -DLDST_MATRIX=1 -DKUNROLL=4
+  touches: [hw/rtl/tcu, hw/rtl/core/VX_uop_packld.sv, hw/rtl/core/VX_decode.sv, sim/simx/tcu, sim/simx/lsu_unit.cpp, sim/simx/decode.cpp, sw/kernel/include/vx_tensor.h]
+- id: sgemm2_tcu-ldm
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm2_tcu
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_FETCH_WIDTH=4 -DVX_CFG_NUM_SFU_BLOCKS=4
+    -DITYPE=fp16 -DOTYPE=fp32 -DLDST_MATRIX=1
+  args: -w 4
+  touches: [hw/rtl/tcu, hw/rtl/core/VX_uop_packld.sv, hw/rtl/core/VX_decode.sv, sim/simx/tcu, sim/simx/lsu_unit.cpp, sim/simx/decode.cpp, sw/kernel/include/vx_tensor.h]
+- id: model_parity-fp16-ldm
+  check: model_parity
+  via: blackbox
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DLDST_MATRIX=1
+  touches: [hw/rtl/tcu, hw/rtl/core/VX_uop_packld.sv, hw/rtl/core/VX_decode.sv, sim/simx/tcu, sim/simx/lsu_unit.cpp, sim/simx/decode.cpp, sw/kernel/include/vx_tensor.h]
+- id: model_parity-fp16-ldm-u4
+  check: model_parity
+  via: blackbox
+  app: sgemm_tcu
+  args: -m 64 -n 64 -k 128
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DLDST_MATRIX=1 -DKUNROLL=4
+  touches: [hw/rtl/tcu, hw/rtl/core/VX_uop_packld.sv, hw/rtl/core/VX_decode.sv, sim/simx/tcu, sim/simx/lsu_unit.cpp, sim/simx/decode.cpp, sw/kernel/include/vx_tensor.h]
+- id: model_parity-sgemm2-fp16-ldm
+  check: model_parity
+  via: blackbox
+  app: sgemm2_tcu
+  args: -m 128 -n 128 -k 64
+  # One execution block per unit: the four-block model ISSUE_WIDTH=4 implies is
+  # several times the size, and a hosted CI runner cannot build it in a job.
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1 -DLDST_MATRIX=1
+  touches: [hw/rtl/tcu, hw/rtl/core/VX_uop_packld.sv, hw/rtl/core/VX_decode.sv, sim/simx/tcu, sim/simx/lsu_unit.cpp, sim/simx/decode.cpp, sw/kernel/include/vx_tensor.h]

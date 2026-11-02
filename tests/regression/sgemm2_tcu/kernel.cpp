@@ -4,7 +4,7 @@
 #include <vx_intrinsics.h>
 
 namespace vt = vortex::tensor;
-using ctx = vt::wmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE>;
+using ctx = vt::wmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, false, 8, 0, LDST_MATRIX>;
 
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   auto pA = reinterpret_cast<ctx::input_t *>(arg->A_addr);
@@ -35,6 +35,9 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   size_t a_lane_off = ctx::lane_offset<ctx::fragment_a>(ctx::tileK);
   size_t b_lane_off = ctx::lane_offset<ctx::fragment_b, vt::col_major>(ctx::tileK);
 
+#if KUNROLL > 1
+#pragma unroll KUNROLL
+#endif
   for (size_t k = 0; k < K; k += ctx::tileK) {
     // Cooperatively load A tile [cta_M x tileK] from DRAM (row-major).
     uint32_t a_size = cta_M * ctx::tileK;

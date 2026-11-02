@@ -288,6 +288,9 @@ static op_string_t op_string(const Instr &instr) {
       case LsuType::LOAD: {
         auto lsuArgs = std::get<IntrLsuArgs>(instrArgs);
         bool dst_float = (instr.get_dest_reg().type == RegType::Float);
+        if (lsuArgs.matrix) {
+          return {"VX_LDM", to_hex_str(lsuArgs.offset)};
+        }
         if (instr.is_macro_op() && dst_float && lsuArgs.width == 0) {
           return {"PACKLB.F", ""};
         }
@@ -321,6 +324,9 @@ static op_string_t op_string(const Instr &instr) {
       }
       case LsuType::STORE: {
         auto lsuArgs = std::get<IntrLsuArgs>(instrArgs);
+        if (lsuArgs.matrix) {
+          return {"VX_STM", to_hex_str(lsuArgs.offset)};
+        }
         if (instr.is_macro_op()) {
           return {(lsuArgs.width == 4) ? "VX_FSW.Q" : "VX_FSW.D", to_hex_str(lsuArgs.offset)};
         }
@@ -1243,8 +1249,36 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     // known-violation handoff class, checked against its decoded destination.
     gfx_doctrine::check(*instr);
   } break;
-#if defined(VX_CFG_EXT_F_ENABLE) && !defined(VX_CFG_FLEN_64)
+#if defined(VX_CFG_EXT_F_ENABLE) && (defined(VX_CFG_EXT_TCU_ENABLE) || !defined(VX_CFG_FLEN_64))
   case Opcode::EXT4: {
+  #ifdef VX_CFG_EXT_TCU_ENABLE
+    // vx_ldm (funct3 0) and vx_stm (funct3 2): a macro-op of one flw/fsw per
+    // register of a TCU matrix fragment; imm[4:0] is the fragment shape.
+    if (funct3 == 0 || funct3 == 2) {
+      bool is_load = (funct3 == 0);
+      uint32_t imm12 = is_load ? (code >> shift_rs2) : ((funct7 << width_reg) | rd);
+      uint32_t shape = imm12 & 0x1f;
+      if (!TcuUopGen::ldm_valid(shape)) {
+        std::cout << "Error: " << (is_load ? "vx_ldm" : "vx_stm") << " shape " << shape
+                  << " is not supported by this configuration" << std::endl;
+        std::abort();
+      }
+      instr->set_fu_type(FUType::LSU);
+      instr->set_op_type(is_load ? LsuType::LOAD : LsuType::STORE);
+      instr->set_src_reg(0, rs1, RegType::Integer);
+      if (is_load) {
+        instr->set_dest_reg(rd, RegType::Float);
+      } else {
+        instr->set_src_reg(1, rs2, RegType::Float);
+      }
+      IntrLsuArgs args{/*LW*/ 2, /*stride*/ 0, (int32_t)sext(imm12, width_i_imm)};
+      args.matrix = true;
+      instr->set_args(args);
+      instr->set_macro_op();
+      break;
+    }
+  #endif
+  #ifndef VX_CFG_FLEN_64
     // vx_flw.d/.q (funct3 3/4) and vx_fsw.d/.q (funct3 5/6): a macro-op of 2
     // or 4 flw/fsw uops over an aligned FP register group. The width is the
     // access's log2 bytes, as for fld/flq.
@@ -1273,6 +1307,9 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     }
     instr->set_args(IntrLsuArgs{width, /*stride*/ 0, offset});
     instr->set_macro_op();
+  #else
+    std::abort();
+  #endif
   } break;
 #endif
 #ifdef VX_CFG_EXT_MUFU_ENABLE

@@ -5,7 +5,7 @@
 
 namespace vt = vortex::tensor;
 using ctx = vt::wgmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE,
-                              false, WGMMA_NRC>;
+                              false, WGMMA_NRC, LDST_MATRIX>;
 
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   static_assert(sizeof(ctx::input_t) == 1, "MX WGMMA inputs use byte storage");
@@ -41,6 +41,9 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   size_t a_lane_off = ctx::lane_offset<ctx::fragment_a>(ctx::tileK);
 #endif
 
+#if KUNROLL > 1
+#pragma unroll KUNROLL
+#endif
   for (size_t k = 0; k < K; k += ctx::tileK) {
     uint32_t k_tile = k / ctx::tileK;
     uint32_t a_bytes = cta_m * ctx::tileK;

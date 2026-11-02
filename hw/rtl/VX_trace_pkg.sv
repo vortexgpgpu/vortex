@@ -181,8 +181,10 @@ package VX_trace_pkg;
                         `TRACE(level, ("PACKLH.F"))
                     end
                     default: begin
-                        // a wide access's bytesel offset marks a quad
-                        if (op_args.lsu.is_store) begin
+                        // the bytesel offset marks a quad (1) or a matrix fragment (2, 3)
+                        if (bytesel[1]) begin
+                            `TRACE(level, (op_args.lsu.is_store ? "VX_STM" : "VX_LDM"))
+                        end else if (op_args.lsu.is_store) begin
                             `TRACE(level, ((bytesel != BYTESEL_DEFAULT) ? "VX_FSW.Q" : "VX_FSW.D"))
                         end else begin
                             `TRACE(level, ((bytesel != BYTESEL_DEFAULT) ? "VX_FLW.Q" : "VX_FLW.D"))

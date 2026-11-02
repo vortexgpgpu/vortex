@@ -26,6 +26,9 @@
 #include "stack_interleave.h"
 #include "VX_types.h"
 #include "VX_config.h"
+#ifdef VX_CFG_EXT_TCU_ENABLE
+#include "tcu_unit.h"
+#endif
 
 using namespace vortex;
 
@@ -37,7 +40,13 @@ uint32_t LsuUopGen::uop_count(const Instr& instr) {
   // PACKLB.F: width=0 (LB), 4 byte-elements
   // PACKLH.F: width=1 (LH), 2 halfword-elements
   // VX_FLW/VX_FSW.D: width=3, 2 words; .Q: width=4, 4 words
+  // VX_LDM/VX_STM: one word per register of the fragment shape
   auto args = std::get<IntrLsuArgs>(instr.get_args());
+#ifdef VX_CFG_EXT_TCU_ENABLE
+  if (args.matrix) {
+    return TcuUopGen::ldm_count(args.offset & 0x1f);
+  }
+#endif
   if (args.width >= 3) {
     return 1u << (args.width - 2);
   }
@@ -80,6 +89,25 @@ Instr::Ptr LsuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
   }
 
   auto args = std::get<IntrLsuArgs>(macro_instr.get_args());
+#ifdef VX_CFG_EXT_TCU_ENABLE
+  if (args.matrix) {
+    // a fragment uop reads its base from rs1 | grp, ORs its column into the
+    // offset (whose low 5 bits held the shape) and moves register fd/fs2 + reg_off
+    bool is_load = (std::get<LsuType>(macro_instr.get_op_type()) == LsuType::LOAD);
+    auto u = TcuUopGen::ldm_uop(args.offset & 0x1f, uop_index);
+    auto uop_instr = std::allocate_shared<Instr>(pool_, uop_uuid, FUType::LSU);
+    uop_instr->set_parent_uuid(parent_uuid);
+    uop_instr->set_op_type(macro_instr.get_op_type());
+    uop_instr->set_src_reg(0, macro_instr.get_src_reg(0).idx | u.grp, RegType::Integer);
+    if (is_load) {
+      uop_instr->set_dest_reg((macro_instr.get_dest_reg().idx + u.reg_off) & 0x1f, RegType::Float);
+    } else {
+      uop_instr->set_src_reg(1, (macro_instr.get_src_reg(1).idx + u.reg_off) & 0x1f, RegType::Float);
+    }
+    uop_instr->set_args(IntrLsuArgs{/*LW*/ 2, /*stride*/ 0, int32_t((args.offset & ~0x1f) | u.col)});
+    return uop_instr;
+  }
+#endif
   if (args.width >= 3) {
     // a wide access's uop k moves word k: register fd/fs2 + k, offset + 4k
     bool is_load = (std::get<LsuType>(macro_instr.get_op_type()) == LsuType::LOAD);

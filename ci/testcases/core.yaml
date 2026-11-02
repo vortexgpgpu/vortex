@@ -276,6 +276,12 @@ tests:
   via: blackbox
   app: ldst_wide
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_LSU_LANES=4
+# Matrix fragment loads and stores: SimX and RTL expand and time them alike.
+- id: parity-ldst-matrix
+  check: model_parity
+  via: blackbox
+  app: ldst_matrix
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_SPARSE_ENABLE
 - id: parity-sgemm2-lmem
   check: model_parity
   via: blackbox

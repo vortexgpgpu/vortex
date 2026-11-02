@@ -145,17 +145,143 @@ namespace detail {
       return *reinterpret_cast<const D*>(&result_u);
     }
   };
+
+  // vx_ldm fd, imm(rs1) / vx_stm fs2, imm(rs1): imm[4:0] is the fragment
+  // shape, imm[11:5] a byte offset; rs1 is the first of J registers, a multiple
+  // of J, holding the lane's address in each of the fragment's row groups.
+  enum ldm_shape_t : int32_t {
+    LDM_NONE = -1,
+    LDM_A    = 0x00, // WMMA A, row-major
+    LDM_A_SP = 0x01, // WMMA sparse A, row-major
+    LDM_B    = 0x06, // WMMA B, col-major
+    LDM_B_SP = 0x07, // WMMA sparse B, col-major
+    LDM_C    = 0x08, // WMMA C, row-major
+    LDM_WG_C = 0x18  // WGMMA C, row-major, one 8-register chunk
+  };
+
+#if __riscv_xlen == 64
+  using gpr_pair_t = unsigned __int128;
+#else
+  using gpr_pair_t = uint64_t;
+#endif
+
+#define VX_TENSOR_FREGS_0     "f0",  "f1",  "f2",  "f3",  "f4",  "f5",  "f6",  "f7"
+#define VX_TENSOR_FREGS_8     "f8",  "f9",  "f10", "f11", "f12", "f13", "f14", "f15"
+#define VX_TENSOR_FREGS_10    "f10", "f11", "f12", "f13", "f14", "f15", "f16", "f17"
+#define VX_TENSOR_FREGS_16    "f16", "f17", "f18", "f19", "f20", "f21", "f22", "f23"
+#define VX_TENSOR_FREGS_24    "f24", "f25", "f26", "f27", "f28", "f29", "f30", "f31"
+#define VX_TENSOR_FREGS4_10   "f10", "f11", "f12", "f13"
+#define VX_TENSOR_FREGS4_28   "f28", "f29", "f30", "f31"
+
+// The register lists expand before the inner macros split them into names.
+#define VX_TENSOR_LDM8(ival, regs, ...) VX_TENSOR_LDM8_(ival, regs, __VA_ARGS__)
+#define VX_TENSOR_LDM8_(ival, r0, r1, r2, r3, r4, r5, r6, r7, ...) {                      \
+    register float x0 __asm__(r0); register float x1 __asm__(r1);                         \
+    register float x2 __asm__(r2); register float x3 __asm__(r3);                         \
+    register float x4 __asm__(r4); register float x5 __asm__(r5);                         \
+    register float x6 __asm__(r6); register float x7 __asm__(r7);                         \
+    __asm__ volatile (".insn i %[op], 0, %[x0], %[g], %[imm]"                             \
+      : [x0]"=f"(x0), "=f"(x1), "=f"(x2), "=f"(x3), "=f"(x4), "=f"(x5), "=f"(x6), "=f"(x7)\
+      : [op]"i"(RISCV_CUSTOM3), [imm]"i"(ival), __VA_ARGS__ : "memory");                  \
+    v[0] = x0; v[1] = x1; v[2] = x2; v[3] = x3; v[4] = x4; v[5] = x5; v[6] = x6; v[7] = x7; }
+#define VX_TENSOR_LDM4(ival, regs, ...) VX_TENSOR_LDM4_(ival, regs, __VA_ARGS__)
+#define VX_TENSOR_LDM4_(ival, r0, r1, r2, r3, ...) {                                      \
+    register float x0 __asm__(r0); register float x1 __asm__(r1);                         \
+    register float x2 __asm__(r2); register float x3 __asm__(r3);                         \
+    __asm__ volatile (".insn i %[op], 0, %[x0], %[g], %[imm]"                             \
+      : [x0]"=f"(x0), "=f"(x1), "=f"(x2), "=f"(x3)                                        \
+      : [op]"i"(RISCV_CUSTOM3), [imm]"i"(ival), __VA_ARGS__ : "memory");                  \
+    v[0] = x0; v[1] = x1; v[2] = x2; v[3] = x3; }
+#define VX_TENSOR_STM8(ival, regs, ...) VX_TENSOR_STM8_(ival, regs, __VA_ARGS__)
+#define VX_TENSOR_STM8_(ival, r0, r1, r2, r3, r4, r5, r6, r7, ...) {                      \
+    register float x0 __asm__(r0) = v[0]; register float x1 __asm__(r1) = v[1];           \
+    register float x2 __asm__(r2) = v[2]; register float x3 __asm__(r3) = v[3];           \
+    register float x4 __asm__(r4) = v[4]; register float x5 __asm__(r5) = v[5];           \
+    register float x6 __asm__(r6) = v[6]; register float x7 __asm__(r7) = v[7];           \
+    __asm__ volatile (".insn s %[op], 2, %[x0], %[imm](%[g])"                             \
+      :: [op]"i"(RISCV_CUSTOM3), [imm]"i"(ival), [x0]"f"(x0), "f"(x1), "f"(x2), "f"(x3),   \
+         "f"(x4), "f"(x5), "f"(x6), "f"(x7), __VA_ARGS__ : "memory"); }
+
+  // A J=2 group rides in a register pair; a J=4 group is pinned to x28..x31
+  // or x12..x15.
+#define VX_TENSOR_LDM_GROUP(EMIT)                                                         \
+    if constexpr (J == 2) {                                                               \
+      gpr_pair_t p = gpr_pair_t(g[0]) | (gpr_pair_t(g[1]) << (8 * sizeof(uintptr_t)));    \
+      EMIT([g]"R"(p));                                                                    \
+    } else if constexpr (Q == 28) {                                                       \
+      register uintptr_t q0 __asm__("x28") = g[0]; register uintptr_t q1 __asm__("x29") = g[1]; \
+      register uintptr_t q2 __asm__("x30") = g[2]; register uintptr_t q3 __asm__("x31") = g[3]; \
+      EMIT([g]"r"(q0), "r"(q1), "r"(q2), "r"(q3));                                       \
+    } else {                                                                              \
+      register uintptr_t q0 __asm__("x12") = g[0]; register uintptr_t q1 __asm__("x13") = g[1]; \
+      register uintptr_t q2 __asm__("x14") = g[2]; register uintptr_t q3 __asm__("x15") = g[3]; \
+      EMIT([g]"r"(q0), "r"(q1), "r"(q2), "r"(q3));                                       \
+    }
+
+  // vx_ldm of NR registers from fd = FD; Q picks a J=4 group's registers.
+  template <uint32_t FD, uint32_t NR, uint32_t J, uint32_t Q, int32_t IMM>
+  __attribute__((always_inline)) inline void vx_ldm(float (&v)[NR], const uintptr_t (&g)[J]) {
+    static_assert(J == 2 || J == 4, "a fragment has 2 or 4 row groups");
+  #define VX_TENSOR_LDM_EMIT(...)                                                         \
+    if constexpr (FD == 10 && NR == 8) VX_TENSOR_LDM8(IMM, VX_TENSOR_FREGS_10, __VA_ARGS__) \
+    else if constexpr (FD == 10)       VX_TENSOR_LDM4(IMM, VX_TENSOR_FREGS4_10, __VA_ARGS__) \
+    else if constexpr (FD == 24)       VX_TENSOR_LDM8(IMM, VX_TENSOR_FREGS_24, __VA_ARGS__) \
+    else if constexpr (FD == 28)       VX_TENSOR_LDM4(IMM, VX_TENSOR_FREGS4_28, __VA_ARGS__) \
+    else { static_assert(FD == 0 && NR == 8, "unsupported fragment registers");          \
+                                       VX_TENSOR_LDM8(IMM, VX_TENSOR_FREGS_0, __VA_ARGS__) }
+    VX_TENSOR_LDM_GROUP(VX_TENSOR_LDM_EMIT)
+  #undef VX_TENSOR_LDM_EMIT
+  }
+
+  // vx_stm of 8 registers from fs2 = FD
+  template <uint32_t FD, uint32_t J, uint32_t Q, int32_t IMM>
+  __attribute__((always_inline)) inline void vx_stm(const float (&v)[8], const uintptr_t (&g)[J]) {
+    static_assert(J == 2 || J == 4, "a fragment has 2 or 4 row groups");
+  #define VX_TENSOR_STM_EMIT(...)                                                         \
+    if constexpr (FD == 0)       VX_TENSOR_STM8(IMM, VX_TENSOR_FREGS_0, __VA_ARGS__)       \
+    else if constexpr (FD == 8)  VX_TENSOR_STM8(IMM, VX_TENSOR_FREGS_8, __VA_ARGS__)       \
+    else if constexpr (FD == 16) VX_TENSOR_STM8(IMM, VX_TENSOR_FREGS_16, __VA_ARGS__)      \
+    else { static_assert(FD == 24, "unsupported fragment registers");                    \
+                                 VX_TENSOR_STM8(IMM, VX_TENSOR_FREGS_24, __VA_ARGS__) }
+    VX_TENSOR_LDM_GROUP(VX_TENSOR_STM_EMIT)
+  #undef VX_TENSOR_STM_EMIT
+  }
+
+#undef VX_TENSOR_FREGS_0
+#undef VX_TENSOR_FREGS_8
+#undef VX_TENSOR_FREGS_10
+#undef VX_TENSOR_FREGS_16
+#undef VX_TENSOR_FREGS_24
+#undef VX_TENSOR_FREGS4_10
+#undef VX_TENSOR_FREGS4_28
+#undef VX_TENSOR_LDM8
+#undef VX_TENSOR_LDM8_
+#undef VX_TENSOR_LDM4
+#undef VX_TENSOR_LDM4_
+#undef VX_TENSOR_STM8
+#undef VX_TENSOR_STM8_
+#undef VX_TENSOR_LDM_GROUP
+
+  // The immediate of a fragment access at byte offset off from the group: off
+  // folds in when it is a multiple of 32 and of the column span (the OR with
+  // the uops' column offsets is then an add).
+  template <int32_t off, uint32_t span>
+  inline constexpr bool ldm_folds = (off % 32 == 0) && (off % int32_t(span) == 0)
+                                 && (off >= -2048) && (off <= 2016);
 }
 
 // Hoist detail::frag_use_t into the enclosing tensor namespace
 using detail::frag_use_t;
+// Compile-time loop, e.g. over the K tiles of an unrolled K loop
+using detail::unroll_for;
 
 template <uint32_t NT,              // number of threads per warp
           typename It,              // input type (A,B)
           typename Ot,              // output type (C,D)
           bool is_sparse = false,   // sparse mode flag
           uint32_t NR_ = 8,         // registers per C/D fragment
-          uint32_t DK_ = 0          // K dimension of the tile
+          uint32_t DK_ = 0,         // K dimension of the tile
+          bool ldst_matrix = false  // move fragments with vx_ldm/vx_stm where they have a shape
           >
 struct wmma_context {
 private:
@@ -295,12 +421,22 @@ public:
   static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm) {
     uint32_t row, col;
     lane_coords<Frag, src_layout>(row, col);
-    load_fragment<src_layout>(dst, reinterpret_cast<const frag_elem_t<Frag>*>(src) + row * ldm + col, ldm);
+    if constexpr (ldst_matrix && ldm_shape<Frag, src_layout>() != detail::LDM_NONE) {
+      ldm_load<src_layout, 0>(dst, src, row * ldm + col, ldm);
+    } else {
+      load_fragment<src_layout>(dst, reinterpret_cast<const frag_elem_t<Frag>*>(src) + row * ldm + col, ldm);
+    }
   }
 
-  template <mem_layout src_layout = row_major, typename Frag>
+  // k_off: a constant element offset from src, e.g. the next K tile of an
+  // unrolled loop, which a vx_ldm takes in its immediate.
+  template <mem_layout src_layout = row_major, int32_t k_off = 0, typename Frag>
   static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm, size_t lane_off) {
-    load_fragment<src_layout>(dst, reinterpret_cast<const frag_elem_t<Frag>*>(src) + lane_off, ldm);
+    if constexpr (ldst_matrix && ldm_shape<Frag, src_layout>() != detail::LDM_NONE) {
+      ldm_load<src_layout, k_off>(dst, src, lane_off, ldm);
+    } else {
+      load_fragment<src_layout>(dst, reinterpret_cast<const frag_elem_t<Frag>*>(src) + lane_off + k_off, ldm);
+    }
   }
 
 private:
@@ -332,6 +468,182 @@ private:
     if constexpr (layout == col_major) {
       std::swap(row, col);
     }
+  }
+
+  // The TCU reads its operands in a bank-conflict-free register order, so a
+  // fragment must sit in registers in that order. These map a register offset
+  // back to the logical fragment index it holds.
+  static constexpr uint32_t b_sub_eff = is_sparse ? cfg::b_sub_blocks_sp : cfg::b_sub_blocks;
+  static constexpr bool bcfree_sp = is_sparse && !cfg::sym_sparse;      // sparse non-sym
+  static constexpr bool bcfree_a  = !is_sparse && (b_sub_eff == 1);     // dense pattern A
+  static constexpr bool bcfree_b  = !is_sparse && (b_sub_eff > 1);      // dense pattern B
+
+  // A inverse: physical offset → logical fragment index
+  static constexpr uint32_t ra_idx(uint32_t off) {
+    if constexpr (bcfree_sp) {
+      // Sparse non-sym: A is identity (off = m*k_count+k)
+      return off;
+    } else if constexpr (bcfree_a) {
+      // Dense Pattern A (b_sub==1): forward A={m[0],~m[hi],k}
+      uint32_t m = ((1 - ((off >> 1) & 1)) << 1) | (off >> 2);
+      uint32_t k = off & 1;
+      return m * cfg::k_steps + k;
+    } else if constexpr (bcfree_b) {
+      // Dense Pattern B (b_sub==2): forward A={k[0],~m,m^k[hi]}
+      uint32_t m = 1 - ((off >> 1) & 1);
+      uint32_t k_hi = m ^ (off & 1);
+      uint32_t k_lo = off >> 2;
+      return m * cfg::k_steps + (k_hi << 1 | k_lo);
+    } else {
+      return off;
+    }
+  }
+
+  // B inverse: physical offset → logical fragment index
+  static constexpr uint32_t rb_idx(uint32_t off) {
+    if constexpr (bcfree_sp) {
+      // Sparse non-sym: forward B={n[hi], ~(n[0]^k), ~k}
+      // Inverse: k = 1-off[0], n[0] = (1-off[1])^k, n[hi] = off[2]
+      uint32_t k = 1 - (off & 1);
+      uint32_t n_lo = (1 - ((off >> 1) & 1)) ^ k;
+      uint32_t n_hi = off >> 2;
+      return k * cfg::n_steps + (n_hi << 1 | n_lo);
+    } else if constexpr (bcfree_b) {
+      // Dense Pattern B (b_sub==2): forward B={k[0],k[hi]^np,~np}
+      uint32_t n_pair = 1 - (off & 1);
+      uint32_t k_hi = ((off >> 1) & 1) ^ n_pair;
+      uint32_t k_lo = off >> 2;
+      return (k_hi << 1 | k_lo) * cfg::b_sub_blocks + n_pair;
+    } else if constexpr (bcfree_a) {
+      // Dense Pattern A (b_sub==1): forward B={n^k,~k}
+      uint32_t k = 1 - (off & 1);
+      uint32_t n = ((off >> 1) & 1) ^ k;
+      return k * cfg::n_steps + n;
+    } else {
+      return off;
+    }
+  }
+
+  // C inverse: physical offset → logical fragment index
+  static constexpr uint32_t rc_idx(uint32_t off) {
+    if constexpr (bcfree_sp) {
+      // Sparse non-sym: forward C={n[hi], m, ~(m^n[0])}
+      // Inverse: m = off[1], n[0] = (1-off[0])^m, n[hi] = off[2]
+      uint32_t m = (off >> 1) & 1;
+      uint32_t n_lo = (1 - (off & 1)) ^ m;
+      uint32_t n_hi = off >> 2;
+      return m * cfg::n_steps + (n_hi << 1 | n_lo);
+    } else if constexpr (bcfree_a) {
+      // Dense Pattern A (b_sub==1): forward C={m[0],~m[hi],XNOR(m[hi],n)}
+      uint32_t m_hi = 1 - ((off >> 1) & 1);
+      uint32_t m = (m_hi << 1) | (off >> 2);
+      uint32_t n = 1 - (m_hi ^ (off & 1));
+      return m * cfg::n_steps + n;
+    } else if constexpr (bcfree_b) {
+      // Dense Pattern B (b_sub==2): forward C={n[0],~m,n[hi]}
+      uint32_t m = 1 - ((off >> 1) & 1);
+      uint32_t n = ((off & 1) << 1) | (off >> 2);
+      return m * cfg::n_steps + n;
+    } else {
+      return off;
+    }
+  }
+
+  // vx_ldm/vx_stm geometry of a fragment: NR registers from FD in J row groups
+  // row_step * ldm elements apart, span bytes of columns per row group, and Q
+  // the registers of a J=4 group.
+  template <typename Frag>
+  struct ldm_geom {
+    static constexpr bool is_a = (Frag::Use == frag_use_t::matrix_a);
+    static constexpr bool is_b = (Frag::Use == frag_use_t::matrix_b);
+    static constexpr uint32_t NR = (is_a && is_sparse) ? sparse_regs : Frag::NR;
+    static constexpr uint32_t J = is_a ? cfg::m_steps
+                                : is_b ? (is_sparse ? Frag::NR : cfg::b_sub_steps)
+                                : cfg::m_steps;
+    static constexpr uint32_t row_step = is_a ? (cfg::a_sub_blocks * cfg::tcM)
+                                       : is_b ? (is_sparse ? (cfg::tcN / 2) : (cfg::b_sub_blocks * cfg::tcN))
+                                       : cfg::tcM;
+    static constexpr uint32_t col_bytes = (is_b && is_sparse) ? 4
+                                        : (is_a || is_b) ? (cfg::tcK * 4) : (cfg::tcN * 4);
+    static constexpr uint32_t span = (NR / J) * col_bytes;
+    static constexpr uint32_t FD = is_a ? 10 : is_b ? ((Frag::NR == 8) ? 24 : 28) : 0;
+    static constexpr uint32_t Q = is_b ? 12 : 28;
+  };
+
+  // The fragment's vx_ldm/vx_stm shape in a memory layout; LDM_NONE when a
+  // fragment register is not one word of the tile, the order is not covered,
+  // the context is not the 8-register C/D tile the shapes are defined on, or
+  // the macro-op does not pay: a sparse MX K tile is bound by its three
+  // serialized metadata loads, which the fragment macro-ops cannot shorten and
+  // their base-group setup delays; an asymmetric sparse B, one burst of eight
+  // uops, stalls the MMA on its operands longer than the scalar loads do (it
+  // has no shape).
+  template <typename Frag, mem_layout layout>
+  static constexpr int32_t ldm_shape() {
+    if constexpr (NR_ != 8 || DK_ != 0 || (is_sparse && input_is_mx)) {
+      return detail::LDM_NONE;
+    } else if constexpr (Frag::Use == frag_use_t::matrix_a) {
+      return (layout == row_major) ? (is_sparse ? detail::LDM_A_SP : detail::LDM_A) : detail::LDM_NONE;
+    } else if constexpr (Frag::Use == frag_use_t::matrix_b) {
+      if constexpr (is_sparse && !cfg::sym_sparse) {
+        return detail::LDM_NONE;
+      }
+      return (layout == col_major) ? (is_sparse ? detail::LDM_B_SP : detail::LDM_B) : detail::LDM_NONE;
+    } else {
+      return (layout == row_major && !is_sparse) ? detail::LDM_C : detail::LDM_NONE;
+    }
+  }
+
+  template <typename Frag>
+  static constexpr uint32_t ldm_idx(uint32_t off) {
+    if constexpr (Frag::Use == frag_use_t::matrix_a) {
+      return ra_idx(off);
+    } else if constexpr (Frag::Use == frag_use_t::matrix_b) {
+      return rb_idx(off);
+    } else {
+      return rc_idx(off);
+    }
+  }
+
+  // Lane addresses of the fragment's row groups; off_bytes is added unless it
+  // folds into the instruction's immediate. Each is the lane's tile address
+  // plus a loop-invariant row offset.
+  template <typename Frag, int32_t off_bytes>
+  static __attribute__((always_inline)) void ldm_group(uintptr_t (&g)[ldm_geom<Frag>::J],
+                                                       const void *src, size_t lane_off, size_t ldm) {
+    using geom = ldm_geom<Frag>;
+    constexpr bool fold = detail::ldm_folds<off_bytes, geom::span>;
+    size_t lane_bytes = lane_off * sizeof(frag_elem_t<Frag>) + (fold ? 0 : off_bytes);
+    size_t row_bytes = geom::row_step * ldm * sizeof(frag_elem_t<Frag>);
+    uintptr_t base = reinterpret_cast<uintptr_t>(src) + lane_bytes;
+    if constexpr (geom::J == 4) {
+      // opaque, so a K loop steps one induction variable and derives the other
+      // three registers by adds instead of stepping one per register; volatile,
+      // so those adds stay behind the tile's metadata loads instead of delaying them
+      __asm__ volatile("" : "+r"(base));
+    }
+    detail::unroll_for<geom::J>([&](auto j) {
+      g[j] = base + j * row_bytes;
+    });
+  }
+
+  template <typename Frag, int32_t off_bytes, int32_t shape>
+  static constexpr int32_t ldm_imm() {
+    return (detail::ldm_folds<off_bytes, ldm_geom<Frag>::span> ? off_bytes : 0) | shape;
+  }
+
+  template <mem_layout src_layout, int32_t k_off, typename Frag>
+  static __attribute__((always_inline)) void ldm_load(Frag &dst, const void *src, size_t lane_off, size_t ldm) {
+    using geom = ldm_geom<Frag>;
+    constexpr int32_t off_bytes = k_off * int32_t(sizeof(frag_elem_t<Frag>));
+    uintptr_t g[geom::J];
+    ldm_group<Frag, off_bytes>(g, src, lane_off, ldm);
+    float v[geom::NR];
+    detail::vx_ldm<geom::FD, geom::NR, geom::J, geom::Q,
+                   ldm_imm<Frag, off_bytes, ldm_shape<Frag, src_layout>()>()>(v, g);
+    detail::unroll_for<geom::NR>([&](auto r) {
+      dst.data[ldm_idx<Frag>(r)] = v[r];
+    });
   }
 
   // base already points at the calling lane's first element
@@ -509,6 +821,17 @@ public:
     uint32_t m_stride  = cfg::tcM;
     uint32_t n_stride  = cfg::tcN;
     auto base = reinterpret_cast<output_t*>(dst) + block_row * ldm + block_col;
+    if constexpr (ldst_matrix && ldm_shape<Frag, dst_layout>() != detail::LDM_NONE) {
+      using geom = ldm_geom<Frag>;
+      uintptr_t g[geom::J];
+      ldm_group<Frag, 0>(g, dst, block_row * ldm + block_col, ldm);
+      float v[8];
+      detail::unroll_for<8>([&](auto r) {
+        v[r] = src.data[rc_idx(r)];
+      });
+      detail::vx_stm<geom::FD, geom::J, geom::Q, detail::LDM_C>(v, g);
+      return;
+    }
     detail::unroll_for<Frag::NR>([&](auto r) {
       uint32_t block_m  = r / cfg::n_steps;
       uint32_t block_n  = r % cfg::n_steps;
@@ -534,87 +857,6 @@ public:
     static_assert(FragB::Use == frag_use_t::matrix_b, "B must be matrix_b");
     static_assert(FragC::Use == frag_use_t::accumulator, "C must be accumulator");
     static_assert(FragD::Use == frag_use_t::accumulator, "D must be accumulator");
-
-    // Bank-conflict-free register offset permutations (0 stalls).
-    // SW must place fragment data into registers matching the HW's
-    // permuted offset order.  These are the INVERSE of the forward
-    // formulas in VX_tcu_uops.sv, mapping physical register offset
-    // back to the logical fragment index.
-    constexpr uint32_t b_sub_eff = is_sparse ? cfg::b_sub_blocks_sp : cfg::b_sub_blocks;
-    constexpr bool bcfree_sp = is_sparse && !cfg::sym_sparse;      // sparse non-sym
-    constexpr bool bcfree_a  = !is_sparse && (b_sub_eff == 1);     // dense pattern A
-    constexpr bool bcfree_b  = !is_sparse && (b_sub_eff > 1);      // dense pattern B
-
-    // A inverse: physical offset → logical fragment index
-    constexpr auto ra_idx = [](uint32_t off) constexpr -> uint32_t {
-      if constexpr (bcfree_sp) {
-        // Sparse non-sym: A is identity (off = m*k_count+k)
-        return off;
-      } else if constexpr (bcfree_a) {
-        // Dense Pattern A (b_sub==1): forward A={m[0],~m[hi],k}
-        uint32_t m = ((1 - ((off >> 1) & 1)) << 1) | (off >> 2);
-        uint32_t k = off & 1;
-        return m * cfg::k_steps + k;
-      } else if constexpr (bcfree_b) {
-        // Dense Pattern B (b_sub==2): forward A={k[0],~m,m^k[hi]}
-        uint32_t m = 1 - ((off >> 1) & 1);
-        uint32_t k_hi = m ^ (off & 1);
-        uint32_t k_lo = off >> 2;
-        return m * cfg::k_steps + (k_hi << 1 | k_lo);
-      } else {
-        return off;
-      }
-    };
-
-    // B inverse: physical offset → logical fragment index
-    constexpr auto rb_idx = [](uint32_t off) constexpr -> uint32_t {
-      if constexpr (bcfree_sp) {
-        // Sparse non-sym: forward B={n[hi], ~(n[0]^k), ~k}
-        // Inverse: k = 1-off[0], n[0] = (1-off[1])^k, n[hi] = off[2]
-        uint32_t k = 1 - (off & 1);
-        uint32_t n_lo = (1 - ((off >> 1) & 1)) ^ k;
-        uint32_t n_hi = off >> 2;
-        return k * cfg::n_steps + (n_hi << 1 | n_lo);
-      } else if constexpr (bcfree_b) {
-        // Dense Pattern B (b_sub==2): forward B={k[0],k[hi]^np,~np}
-        uint32_t n_pair = 1 - (off & 1);
-        uint32_t k_hi = ((off >> 1) & 1) ^ n_pair;
-        uint32_t k_lo = off >> 2;
-        return (k_hi << 1 | k_lo) * cfg::b_sub_blocks + n_pair;
-      } else if constexpr (bcfree_a) {
-        // Dense Pattern A (b_sub==1): forward B={n^k,~k}
-        uint32_t k = 1 - (off & 1);
-        uint32_t n = ((off >> 1) & 1) ^ k;
-        return k * cfg::n_steps + n;
-      } else {
-        return off;
-      }
-    };
-
-    // C inverse: physical offset → logical fragment index
-    constexpr auto rc_idx = [](uint32_t off) constexpr -> uint32_t {
-      if constexpr (bcfree_sp) {
-        // Sparse non-sym: forward C={n[hi], m, ~(m^n[0])}
-        // Inverse: m = off[1], n[0] = (1-off[0])^m, n[hi] = off[2]
-        uint32_t m = (off >> 1) & 1;
-        uint32_t n_lo = (1 - (off & 1)) ^ m;
-        uint32_t n_hi = off >> 2;
-        return m * cfg::n_steps + (n_hi << 1 | n_lo);
-      } else if constexpr (bcfree_a) {
-        // Dense Pattern A (b_sub==1): forward C={m[0],~m[hi],XNOR(m[hi],n)}
-        uint32_t m_hi = 1 - ((off >> 1) & 1);
-        uint32_t m = (m_hi << 1) | (off >> 2);
-        uint32_t n = 1 - (m_hi ^ (off & 1));
-        return m * cfg::n_steps + n;
-      } else if constexpr (bcfree_b) {
-        // Dense Pattern B (b_sub==2): forward C={n[0],~m,n[hi]}
-        uint32_t m = 1 - ((off >> 1) & 1);
-        uint32_t n = ((off & 1) << 1) | (off >> 2);
-        return m * cfg::n_steps + n;
-      } else {
-        return off;
-      }
-    };
 
     // frag_c initialized into accumulator registers (f0-f7)
     register float fd0 __asm__("f0") = frag_c.data[rc_idx(0)];
@@ -697,7 +939,8 @@ template <uint32_t NT,
           typename It,
           typename Ot,
           bool is_sparse = false,
-          uint32_t NRC_ = 8>
+          uint32_t NRC_ = 8,
+          bool ldst_matrix = false> // store the accumulator with vx_stm
 struct wgmma_context {
   static_assert(tcu_output_valid(It::id, Ot::id),
                 "TCU output type must be fp32 (int32 for integer inputs)");
@@ -705,8 +948,8 @@ struct wgmma_context {
 private:
   static constexpr uint32_t NRA = 4;
 
-  using ctx_c = wmma_context<NT, It, Ot, is_sparse, NRC_>;
-  using ctx_a = wmma_context<NT, It, Ot, is_sparse, NRA>;
+  using ctx_c = wmma_context<NT, It, Ot, is_sparse, NRC_, 0, ldst_matrix>;
+  using ctx_a = wmma_context<NT, It, Ot, is_sparse, NRA, 0, ldst_matrix>;
 
   // Direct geometry from NT (no wmma_config_t dependency)
   static constexpr uint32_t clog2(uint32_t x) {
@@ -986,6 +1229,23 @@ public:
     uint32_t base_row = lane / tcN;
     uint32_t base_col = lane % tcN;
     auto base = reinterpret_cast<output_t*>(dst) + base_row * ldm + base_col;
+    if constexpr (ldst_matrix && dst_layout == row_major) {
+      // one vx_stm per 8-register chunk; chunk q holds columns 4q..4q+3
+      constexpr uint32_t chunk_bytes = 4 * tcN * sizeof(output_t);
+      static_assert((chunk_bytes % 32) == 0, "a chunk's column offset must fold into the immediate");
+      uintptr_t g[2];
+      g[0] = reinterpret_cast<uintptr_t>(base);
+      g[1] = g[0] + tcM * ldm * sizeof(output_t);
+      detail::unroll_for<Frag::NR / 8>([&](auto q) {
+        constexpr uint32_t chunk = decltype(q)::value;
+        float v[8];
+        detail::unroll_for<8>([&](auto r) {
+          v[r] = src.data[chunk * 8 + r];
+        });
+        detail::vx_stm<chunk * 8, 2, 28, int32_t(chunk * chunk_bytes) | detail::LDM_WG_C>(v, g);
+      });
+      return;
+    }
     detail::unroll_for<Frag::NR>([&](auto r) {
       uint32_t block_m = r % m_steps;       // n-major: m is inner
       uint32_t block_n = r / m_steps;       // n-major: n is outer

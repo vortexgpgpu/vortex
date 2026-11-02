@@ -4,7 +4,7 @@
 #include <vx_intrinsics.h>
 
 namespace vt = vortex::tensor;
-using ctx = vt::wmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE>;
+using ctx = vt::wmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, false, 8, 0, LDST_MATRIX>;
 
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   auto pA = reinterpret_cast<ctx::input_t *>(arg->A_addr);
@@ -33,6 +33,33 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   size_t a_lane_off = ctx::lane_offset<ctx::fragment_a>(K);
   size_t b_lane_off = ctx::lane_offset<ctx::fragment_b, vt::col_major>(K);
 
+#if KUNROLL > 1
+  // KUNROLL tiles per iteration: each tile's load takes its K offset as a
+  // constant, which a vx_ldm folds into its immediate.
+  auto k_tiles = [&](uint32_t i, auto count) {
+    uint32_t k_tile = i / ctx::tileK;
+    auto pTileA = pA + tile_row * K + i;
+    auto pTileB = pB + tile_col * K + i;
+    auto pTileMxA = pMxA + (blockIdx.y * num_k_tiles + k_tile) * VX_CFG_NUM_THREADS;
+    auto pTileMxB = pMxB + (blockIdx.x * num_k_tiles + k_tile) * VX_CFG_NUM_THREADS;
+    vt::unroll_for<decltype(count)::value>([&](auto u) {
+      constexpr uint32_t t = decltype(u)::value;
+      constexpr int32_t k_off = t * ctx::tileK;
+      ctx::load_mx_metadata(fragA, pTileMxA + t * VX_CFG_NUM_THREADS);
+      ctx::load_mx_metadata(fragB, pTileMxB + t * VX_CFG_NUM_THREADS);
+      ctx::load_matrix_sync<vt::row_major, k_off>(fragA, pTileA, K, a_lane_off);
+      ctx::load_matrix_sync<vt::col_major, k_off>(fragB, pTileB, K, b_lane_off);
+      ctx::mma_sync(fragC, fragA, fragB, fragC);
+    });
+  };
+  uint32_t i = 0;
+  for (; i + KUNROLL * ctx::tileK <= K; i += KUNROLL * ctx::tileK) {
+    k_tiles(i, std::integral_constant<uint32_t, KUNROLL>{});
+  }
+  for (; i < K; i += ctx::tileK) {
+    k_tiles(i, std::integral_constant<uint32_t, 1>{});
+  }
+#else
   for (uint32_t i = 0; i < K; i += ctx::tileK) {
     uint32_t k_tile = i / ctx::tileK;
 
@@ -47,6 +74,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     ctx::load_matrix_sync<vt::col_major>(fragB, pTileB, K, b_lane_off);
     ctx::mma_sync(fragC, fragA, fragB, fragC);
   }
+#endif
 
 #ifdef TCU_MX_TLS
   if constexpr (std::is_same<vt::ITYPE, vt::nvfp4>::value) {

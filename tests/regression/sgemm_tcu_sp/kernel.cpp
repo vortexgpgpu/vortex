@@ -4,7 +4,7 @@
 #include <vx_intrinsics.h>
 
 namespace vt = vortex::tensor;
-using ctx = vt::wmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, true>; // is_sparse=true
+using ctx = vt::wmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, true, 8, 0, LDST_MATRIX>;
 
 __kernel void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
   auto pA = reinterpret_cast<ctx::input_t *>(arg->A_addr);
@@ -45,6 +45,39 @@ __kernel void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
   constexpr uint32_t a_k_stride = ctx::tileK / 2;
 
   auto pTileB = pB + tile_col * K;
+#if KUNROLL > 1
+  // KUNROLL tiles per iteration: each tile's load takes its K offset as a
+  // constant, which a vx_ldm folds into its immediate.
+  size_t a_lane_off = ctx::lane_offset<ctx::fragment_a>(stride_A);
+  size_t b_lane_off = ctx::lane_offset<ctx::fragment_b, vt::col_major>(K);
+  auto k_tiles = [&](auto count) {
+    constexpr uint32_t n = decltype(count)::value;
+#ifdef PROFILE_ENABLE
+    __rdcycle_time t0 = vx_rdcycle_sync_begin();
+#endif
+    vt::unroll_for<n>([&](auto u) {
+      constexpr uint32_t t = decltype(u)::value;
+      ctx::load_matrix_sync<vt::row_major, t * a_k_stride>(fragA, pTileA, stride_A, a_lane_off);
+      ctx::load_sp_metadata(fragA, pMetaSp + t * per_k_tile_words);
+      ctx::load_matrix_sync<vt::col_major, t * ctx::tileK>(fragB, pTileB, K, b_lane_off);
+      ctx::mma_sync(fragC, fragA, fragB, fragC);
+    });
+#ifdef PROFILE_ENABLE
+    __rdcycle_time t1 = vx_rdcycle_sync_end();
+    cycles += vx_rdcycle_sync_diff(t0, t1);
+#endif
+    pMetaSp += n * per_k_tile_words;
+    pTileA += n * a_k_stride;
+    pTileB += n * ctx::tileK;
+  };
+  uint32_t i = 0;
+  for (; i + KUNROLL * ctx::tileK <= K; i += KUNROLL * ctx::tileK) {
+    k_tiles(std::integral_constant<uint32_t, KUNROLL>{});
+  }
+  for (; i < K; i += ctx::tileK) {
+    k_tiles(std::integral_constant<uint32_t, 1>{});
+  }
+#else
   for (int i = 0; i < (int)K; i += (int)ctx::tileK) {
 #ifdef PROFILE_ENABLE
     __rdcycle_time t0 = vx_rdcycle_sync_begin();
@@ -61,6 +94,7 @@ __kernel void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
     pTileA += a_k_stride;
     pTileB += ctx::tileK;
   }
+#endif
 
   auto pTileC = pC + tile_row * N + tile_col;
   ctx::store_matrix_sync(pTileC, fragC, N);

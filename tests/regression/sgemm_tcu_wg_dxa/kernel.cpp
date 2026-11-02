@@ -6,7 +6,7 @@
 #include <vx_barrier.h>
 
 namespace vt = vortex::tensor;
-using ctx = vt::wgmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, false, WGMMA_NRC>;
+using ctx = vt::wgmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, false, WGMMA_NRC, LDST_MATRIX>;
 
 // DXA descriptor slots (programmed by host in main.cpp).
 [[maybe_unused]] constexpr uint32_t kDescA = 0;
@@ -150,6 +150,9 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   // the buffer may be re-staged. Loop-carried state is {A_cur, B_cur,
   // bar_cur} mutated by XOR — no arrays, no unrolling, no object reloads.
   load_tile(A_cur, B_cur, bar_cur, 0);
+#if KUNROLL > 1
+#pragma unroll KUNROLL
+#endif
   for (uint32_t i = 0; i < num_k_tiles; ++i) {
     if (i + 1 < num_k_tiles) {
       // Prefetch tile i+1 into the other buffer while tile i is computed.
@@ -175,6 +178,9 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 #else
   // Serial single-buffer schedule: stage and compute alternately in buf0.
   load_tile(A_cur, B_cur, bar_cur, 0);
+#if KUNROLL > 1
+#pragma unroll KUNROLL
+#endif
   for (uint32_t i = 0; i < num_k_tiles; ++i) {
     if (i != 0) {
       load_tile(A_cur, B_cur, bar_cur, i * ctx::tileK);

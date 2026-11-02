@@ -15,7 +15,7 @@
 #include <vx_barrier.h>
 
 namespace vt = vortex::tensor;
-using ctx = vt::wgmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, false, WGMMA_NRC>;
+using ctx = vt::wgmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, false, WGMMA_NRC, LDST_MATRIX>;
 
 constexpr uint32_t kDescA = 0;
 constexpr uint32_t kDescB = 1;
@@ -63,6 +63,9 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   size_t a_lane_off = ctx::lane_offset<ctx::fragment_a>(ctx::tileK);
 #endif
 
+#if KUNROLL > 1
+#pragma unroll KUNROLL
+#endif
   for (uint32_t k = 0; k < K; k += ctx::tileK) {
     if (is_loader_warp) {
       local_A.expect_tx(1);                        // A: per-CTA, manual

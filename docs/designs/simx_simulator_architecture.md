@@ -105,7 +105,9 @@ atomics, threads, locks, or deferred-call plumbing — enforced by
 
 **Functional units**
 - `alu_unit`, `fpu_unit` — own private `execute()` (ISA semantics).
-- `lsu_unit` — loads/stores/AMO; `LsuUopGen` for packed loads and wide loads/stores; pulls load
+- `lsu_unit` — loads/stores/AMO; `LsuUopGen` for packed loads, wide loads/stores and
+  matrix fragment loads/stores (`vx_ldm`/`vx_stm`, whose geometry and register order
+  `TcuUopGen::ldm_uop` derives with the WMMA expansion's permutations); pulls load
   data from `MemRsp::data`.
 - `sfu_unit` — special-function dispatcher routing to sub-units: WCTL,
   CSR, TEX, RASTER, DXA, OM.

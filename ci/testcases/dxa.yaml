@@ -620,3 +620,13 @@ tests:
 
   shape:
     threads: [4, 16]
+
+# The DXA-staged WGMMA accumulator stored with vx_stm (LDST_MATRIX=1).
+- id: sgemm_tcu_wg_dxa-ldm
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_wg_dxa
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=16 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1 -DLDST_MATRIX=1
+  shape: {threads: 32, warps: 8}
+  touches: [hw/rtl/tcu, hw/rtl/core/VX_uop_packld.sv, hw/rtl/core/VX_decode.sv, sim/simx/tcu, sim/simx/lsu_unit.cpp, sim/simx/decode.cpp, sw/kernel/include/vx_tensor.h]
