@@ -665,8 +665,11 @@ module foldsim_mem_bank #(
     // The clocks of the word from its first free one on.
     function automatic [63:0] from_first(input [63:0] x);
         from_first = x;
-        for (integer k = 1; k < 64; k = k * 2)
-            from_first = from_first | (from_first << k);
+        // Shifts of 1, 2, 4 .. 32 (a unit-step loop: circt-verilog does not
+        // unroll one stepping by k * 2, and the clocked process calling it
+        // then does not lower to registers).
+        for (integer i = 0; i < 6; i = i + 1)
+            from_first = from_first | (from_first << (1 << i));
     endfunction
 
     // The bounds a command's search starts from that do not depend on the
