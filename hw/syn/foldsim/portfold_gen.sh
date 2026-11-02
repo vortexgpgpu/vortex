@@ -20,10 +20,10 @@ open(p, 'w').write(s)
 PY
 C1="$CIRCT_BIN/circt-verilog --ir-hw --top=foldsim_mem --allow-use-before-declare --detect-memories --max-unroll-trip-count=100000 src/foldsim_token.sv src/foldsim_mem_bmap.sv src/foldsim_mem_bank.sv src/foldsim_mem.sv -o design.mlir"
 C2="$CIRCT_BIN/circt-opt design.mlir --symbol-dce --hw-flatten-modules --symbol-dce --canonicalize --cse --seq-retime-firmem-reads=report=memories.rpt --canonicalize --cse -o flat.mlir"
-C3="$FOLDSIM_OPT flat.mlir --pass-pipeline=builtin.module(foldsim-fame5{module=foldsim_mem threads=$N thread-index=true clock-enable=true}) -o threaded.mlir"
+C3="$FOLDSIM_OPT flat.mlir '--pass-pipeline=builtin.module(foldsim-fame5{module=foldsim_mem threads=$N thread-index=true clock-enable=true})' -o threaded.mlir"
 C4="$CIRCT_BIN/firtool --format=mlir threaded.mlir --add-vivado-ram-address-conflict-synthesis-bug-workaround -o foldsim_mem_threaded.sv"
-$C1; [ $(grep -cE 'llhd\.(process|combinational|coroutine)|func\.func' design.mlir) = 0 ] || { echo "portfold_gen: unlowered ops in the import"; exit 1; }
-$C2; $C3; $C4
+eval "$C1"; [ $(grep -cE 'llhd\.(process|combinational|coroutine)|func\.func' design.mlir) = 0 ] || { echo "portfold_gen: unlowered ops in the import"; exit 1; }
+eval "$C2"; eval "$C3"; eval "$C4"
 { echo "foldsim_mem threaded $N ways (ID_W $IDW DATA_W $DW CH_SHIFT $CHS SPEC $SPEC), $(date '+%F %T')"
   echo "vortex $(git -C $T rev-parse --short HEAD)$(git -C $T diff --quiet -- hw/rtl/afu/foldsim || echo +dirty)"
   echo "circt-verilog: $($CIRCT_BIN/circt-verilog --version 2>&1 | head -1)"
