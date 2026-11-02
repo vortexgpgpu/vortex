@@ -55,6 +55,10 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   uint32_t num_k_tiles = K / ctx::tileK;
   uint32_t meta_words_per_tile = ctx::wg_meta_total_bytes / 4;
 
+#if defined(WGMMA_RS) && (WGMMA_NRC <= 16)
+  size_t a_lane_off = ctx::lane_offset<ctx::fragment_a>(ctx::tileK / 2);
+#endif
+
   for (size_t k = 0; k < K; k += ctx::tileK) {
     uint32_t k_tile = k / ctx::tileK;
 
@@ -94,7 +98,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
   #if defined(WGMMA_RS) && (WGMMA_NRC <= 16)
     // RS: A from registers, B from smem (NRC <= 16 only).
-    ctx::load_matrix_sync(fragA, A_warp, ctx::tileK / 2);
+    ctx::load_matrix_sync(fragA, A_warp, ctx::tileK / 2, a_lane_off);
     ctx::wgmma_sync(fragC, fragA, desc_b, fragC);
   #else
     // SS: both A and B from smem descriptors

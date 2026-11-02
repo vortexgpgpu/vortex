@@ -37,6 +37,10 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   ctx::fragment_acc fragC;
   ctx::fill_fragment(fragC, 0);
 
+#if defined(WGMMA_RS) && (WGMMA_NRC <= 16)
+  size_t a_lane_off = ctx::lane_offset<ctx::fragment_a>(ctx::tileK);
+#endif
+
   for (size_t k = 0; k < K; k += ctx::tileK) {
     uint32_t k_tile = k / ctx::tileK;
     uint32_t a_bytes = cta_m * ctx::tileK;
@@ -62,7 +66,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     auto A_warp = A_smem + warp_rank * ctx::xtileM * ctx::tileK;
     auto desc_b = vt::vx_make_smem_desc(B_smem, ctx::tileK);
 #if defined(WGMMA_RS) && (WGMMA_NRC <= 16)
-    ctx::load_matrix_sync(fragA, A_warp, ctx::tileK);
+    ctx::load_matrix_sync(fragA, A_warp, ctx::tileK, a_lane_off);
     ctx::wgmma_sync(fragC, fragA, desc_b, fragC);
 #else
     auto desc_a = vt::vx_make_smem_desc(A_warp, ctx::tileK);

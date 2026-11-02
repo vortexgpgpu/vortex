@@ -59,6 +59,10 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   vortex::group_barrier group_B(2, mc_group_size);
   const bool is_loader_warp = (get_sub_group_id() == 0);
 
+#if defined(WGMMA_RS) && (WGMMA_NRC <= 16)
+  size_t a_lane_off = ctx::lane_offset<ctx::fragment_a>(ctx::tileK);
+#endif
+
   for (uint32_t k = 0; k < K; k += ctx::tileK) {
     if (is_loader_warp) {
       local_A.expect_tx(1);                        // A: per-CTA, manual
@@ -85,7 +89,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
   #if defined(WGMMA_RS) && (WGMMA_NRC <= 16)
     ctx::fragment_a fragA;
-    ctx::load_matrix_sync(fragA, A_warp, ctx::tileK);
+    ctx::load_matrix_sync(fragA, A_warp, ctx::tileK, a_lane_off);
     ctx::wgmma_sync(fragC, fragA, desc_b, fragC);
   #else
     auto desc_a = vt::vx_make_smem_desc(A_warp, ctx::tileK * sizeof(ctx::input_t));

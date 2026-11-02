@@ -30,6 +30,9 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
   ctx::fill_fragment(fragC, 0);
 
+  size_t a_lane_off = ctx::lane_offset<ctx::fragment_a>(K);
+  size_t b_lane_off = ctx::lane_offset<ctx::fragment_b, vt::col_major>(K);
+
   for (uint32_t i = 0; i < K; i += ctx::tileK) {
     uint32_t k_tile = i / ctx::tileK;
 
@@ -40,8 +43,8 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
     ctx::load_mx_metadata(fragA, pTileMxA);
     ctx::load_mx_metadata(fragB, pTileMxB);
-    ctx::load_matrix_sync(fragA, pTileA, K);
-    ctx::load_matrix_sync<vt::col_major>(fragB, pTileB, K);
+    ctx::load_matrix_sync(fragA, pTileA, K, a_lane_off);
+    ctx::load_matrix_sync<vt::col_major>(fragB, pTileB, K, b_lane_off);
     ctx::mma_sync(fragC, fragA, fragB, fragC);
   }
 

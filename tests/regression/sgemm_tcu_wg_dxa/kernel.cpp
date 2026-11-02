@@ -119,6 +119,10 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     (void)A_smem; (void)B_smem; (void)bar; (void)k;
   };
 
+#if defined(WGMMA_RS) && (WGMMA_NRC <= 16)
+  size_t a_lane_off = ctx::lane_offset<ctx::fragment_a>(ctx::tileK);
+#endif
+
   // One WGMMA accumulation step out of the given buffer pair.
   auto compute_tile = [&](ctx::input_t* A_smem, ctx::input_t* B_smem) {
     auto A_warp = A_smem + warp_rank * ctx::xtileM * ctx::tileK;
@@ -127,7 +131,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   #if defined(WGMMA_RS) && (WGMMA_NRC <= 16)
     // RS: A from registers, B from smem (NRC <= 16 only)
     ctx::fragment_a fragA;
-    ctx::load_matrix_sync(fragA, A_warp, ctx::tileK);
+    ctx::load_matrix_sync(fragA, A_warp, ctx::tileK, a_lane_off);
     ctx::wgmma_sync(fragC, fragA, desc_b, fragC);
   #else
     // SS: both from smem

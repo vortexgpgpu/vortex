@@ -33,6 +33,15 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   ctx::fragment_acc fragC;
   ctx::fill_fragment(fragC, 0);
 
+#ifdef WGMMA_RMAJOR_A
+  constexpr uint32_t a_ldm = ctx::tileK;  // row-major A: ldm = tileK elements
+#else
+  constexpr uint32_t a_ldm = 0;           // block-major A
+#endif
+#if defined(WGMMA_RS) && (WGMMA_NRC <= 16)
+  size_t a_lane_off = ctx::lane_offset<ctx::fragment_a>(a_ldm);
+#endif
+
   for (uint32_t k = 0; k < K; k += ctx::tileK) {
     // Cooperatively load A [cta_M × tileK] into smem.
     //   Default (block-major):  A_smem[a_blockmajor_idx(r, c)].
@@ -74,15 +83,10 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   #endif
     auto desc_b = vt::vx_make_smem_desc(B_smem, 0); // block-major: stride field unused
 
-  #ifdef WGMMA_RMAJOR_A
-    constexpr uint32_t a_ldm = ctx::tileK;  // row-major A: ldm = tileK elements
-  #else
-    constexpr uint32_t a_ldm = 0;           // block-major A
-  #endif
   #if defined(WGMMA_RS) && (WGMMA_NRC <= 16)
     // RS: A from registers, B from smem (NRC <= 16 only).
     ctx::fragment_a fragA;
-    ctx::load_matrix_sync(fragA, A_warp, a_ldm);
+    ctx::load_matrix_sync(fragA, A_warp, a_ldm, a_lane_off);
     ctx::wgmma_sync(fragC, fragA, desc_b, fragC);
   #else
     // SS: both from smem
