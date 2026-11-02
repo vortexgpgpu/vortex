@@ -162,6 +162,20 @@ module tb;
 
   always @(posedge clk) if ($test$plusargs("dbg") && cyc > 4 && cyc < 140)
     $display("%0d t %0d fin %0b qv %b qr %b sv %b sr %b", cyc, fold.t, fold.fin, fold.q_valid, fold.q_ready, fold.s_valid, fold.s_ready);
+  // A record as the target sees it (AXI): R's data and id of copy x only with its rvalid, B's id only with bvalid.
+  // The rest comes from the bank model's slot data and id registers, never reset (random here, per endpoint).
+  // RSP field offsets (PORTFOLD_IFACE.md 1a): rvalid, rdata, rid, bvalid, bid.
+  localparam RV_LO = 3 * NW, RD_LO = RV_LO + NC, RI_LO = RD_LO + NC * DATA_W + NC, BV_LO = RI_LO + NC * ID_W + NC * 2,
+             BI_LO = BV_LO + 3;
+  function automatic logic [RSP_W-1:0] seen(input logic [RSP_W-1:0] r);
+    for (int x = 0; x < NC; x++)
+      if (!r[RV_LO + x]) begin
+        r[RD_LO + x * DATA_W +: DATA_W] = '0;
+        r[RI_LO + x * ID_W +: ID_W] = '0;
+      end
+    if (!r[BV_LO]) r[BI_LO +: ID_W] = '0;
+    return r;
+  endfunction
   // Compare each port's RSP records in order.
   logic [RSP_W-1:0] pq [PORTS][$], fq [PORTS][$];
   int got [PORTS]; bit bad = 0; longint cyc = 0; int done_p = 0;
@@ -172,7 +186,13 @@ module tb;
       if (f_rsp_valid) fq[f_rsp_chan].push_back(f_rsp_bits);
       for (int p = 0; p < PORTS; p++)
         while (pq[p].size() != 0 && fq[p].size() != 0) begin
-          if (!bad && pq[p][0] !== fq[p][0]) begin
+          if (!bad && seen(pq[p][0]) !== seen(fq[p][0])) begin
+            logic [RSP_W-1:0] d = seen(pq[p][0]) ^ seen(fq[p][0]);
+            int lo = 0;
+            for (int f = 0; f < `FMR_RSP_FIELDS; f++) begin
+              if (|((d >> lo) << (RSP_W - `FMR_RSP_W(f)))) $display("  field %0d (bit %0d) differs", f, lo);
+              lo += `FMR_RSP_W(f);
+            end
             $display("MISMATCH port %0d record %0d (host cycle %0d): folded %h.. reference %h..", p, got[p], cyc,
                      fq[p][0][63:0], pq[p][0][63:0]);
             bad = 1;
@@ -196,7 +216,12 @@ module tb;
       end
       if (cyc > 64'(n) * 64'd4000) begin
         $display("TIMEOUT at host cycle %0d (n %0d): records compared per port min %0d; REQ taken p %0d f %0d; RSP queued p %0d f %0d",
-                 cyc, n, got.min()[0], p_k.sum(), f_k.sum(), pq[0].size(), fq[0].size()); $finish;
+                 cyc, n, got.min()[0], p_k.sum(), f_k.sum(), pq[0].size(), fq[0].size());
+        $display("  folded: ar %0d aw %0d w %0d rtags %0d btags %0d", fold.ar_n, fold.aw_n, fold.w_n, fold.rt_n, fold.bt_n);
+        for (int p = 0; p < PORTS; p++)
+          $display("  port %0d: k %0d got %0d q_full %b q_taken %b s_got %b r_full %b b_cnt %0d", p, f_k[p], got[p],
+                   fold.q_full[p], fold.q_taken[p], fold.s_got[p], fold.r_full[p], fold.b_cnt[p]);
+        $finish;
       end
     end
   end

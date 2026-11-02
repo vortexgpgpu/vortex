@@ -42,7 +42,8 @@ module foldsim_mem_fold #(
     parameter CW       = (PORTS > 1) ? $clog2(PORTS) : 1,
     parameter REQ_W    = 6 + 2 * ADDR_W + 2 * ID_W + 16 + DATA_W + DATA_W / 8,
     parameter RSP_W    = 2 * NW + 2 * NC + NC * DATA_W + NC + NC * ID_W + NC * 2 + 3 + ID_W,
-    // Requests the shared master may hold, and reads / writes in flight on it.
+    // Requests the shared master may hold, and reads / writes in flight on it
+    // (queued or in memory: their port tags).
     parameter QDEPTH   = 64
 ) (
     input  wire                   clk,
@@ -120,6 +121,12 @@ module foldsim_mem_fold #(
     // surroundings change only then.
     wire fin;
     wire [CW-1:0] t = CW'(tidx5);
+    // The endpoint's own reset is an input of its threads like any other
+    // (foldsim-fame5's hostReset only presets the registers that have one):
+    // each thread takes its first endpoint clock in reset, as an unfolded
+    // endpoint takes this module's reset, and exchanges nothing on it.
+    reg  [PORTS-1:0] t_rst;
+    wire run = fin & ~t_rst[t];
 
     // Each port's REQ record and the tokens taken of it.
     reg  [PORTS-1:0]  q_full;
@@ -128,14 +135,14 @@ module foldsim_mem_fold #(
     reg  [PORTS-1:0]  q_treset;
     assign req_ready = !q_full[req_chan];
     wire [REQ_W-1:0]  qb = q_bits[t];
-    wire [QF-1:0]     q_valid = {QF{q_full[t]}} & ~q_taken[t];
+    wire [QF-1:0]     q_valid = {QF{q_full[t] & ~t_rst[t]}} & ~q_taken[t];
     wire [QF-1:0]     q_ready;
 
     // Each port's RSP record, field by field.
     reg  [SF-1:0]     s_got [PORTS];
     reg  [RSP_W-1:0]  s_bits [PORTS];
     wire [SF-1:0]     s_valid;
-    wire [SF-1:0]     s_ready = ~s_got[t];
+    wire [SF-1:0]     s_ready = ~s_got[t] & {SF{~t_rst[t]}};
     wire [RSP_W-1:0]  s_in;
 
     // Each port's AXI surroundings: its read data, its write acks.
@@ -149,15 +156,17 @@ module foldsim_mem_fold #(
     wire [DATA_W/8-1:0] t_wstrb;
     // The shared master's queues: AR (port, address, length), AW, W; and the
     // ports of the reads and writes it has in flight.
-    reg  [QW:0]        ar_n, aw_n, w_n;
-    wire               t_arready = (ar_n < (QW+1)'(QDEPTH - 1));
-    wire               t_awready = (aw_n < (QW+1)'(QDEPTH - 1));
-    wire               t_wready  = (w_n  < (QW+1)'(QDEPTH - 1));
-    wire               ar_take = fin & t_arvalid & t_arready;
-    wire               aw_take = fin & t_awvalid & t_awready;
-    wire               w_take  = fin & t_wvalid & t_wready;
-    wire               r_take  = fin & r_full[t] & t_rready;
-    wire               b_take  = fin & (b_cnt[t] != 0) & t_bready;
+    // A read or write is taken only with room for its port tag: it is in
+    // flight until its R or B returns.
+    reg  [QW:0]        ar_n, aw_n, w_n, rt_n, bt_n;
+    wire               t_arready = (rt_n < (QW+1)'(QDEPTH));
+    wire               t_awready = (bt_n < (QW+1)'(QDEPTH));
+    wire               t_wready  = (w_n  < (QW+1)'(QDEPTH));
+    wire               ar_take = run & t_arvalid & t_arready;
+    wire               aw_take = run & t_awvalid & t_awready;
+    wire               w_take  = run & t_wvalid & t_wready;
+    wire               r_take  = run & r_full[t] & t_rready;
+    wire               b_take  = run & (b_cnt[t] != 0) & t_bready;
 
     wire [8*64-1:0]    t_stats;
     wire               t_idle, t_error, t_stall;
@@ -171,12 +180,15 @@ module foldsim_mem_fold #(
     end
 
 `define FMF_Q(i) qb[req_off(i) +: `FMR_REQ_W(i)]
+    // Every channel is valid and ready at every turn, so each turn finishes
+    // and the channels' own handshakes are unused.
+    /* verilator lint_off PINCONNECTEMPTY */
     foldsim_mem_threaded_foldsim_mem threaded (
         .hostClock (clk),
         .hostReset (reset),
         .threadIdx (tidx5),
         .finish    (fin),
-        .reset_sink_valid (1'b1), .reset_sink_bits (1'b0), .reset_sink_ready (),
+        .reset_sink_valid (1'b1), .reset_sink_bits (t_rst[t]), .reset_sink_ready (),
         .base_sink_valid (1'b1), .base_sink_bits (base), .base_sink_ready (),
         .cfg_data_rate_sink_valid (1'b1), .cfg_data_rate_sink_bits (cfg_data_rate), .cfg_data_rate_sink_ready (),
         .cfg_core_clock_sink_valid (1'b1), .cfg_core_clock_sink_bits (cfg_core_clock), .cfg_core_clock_sink_ready (),
@@ -296,6 +308,7 @@ module foldsim_mem_fold #(
         .m_arlen_source_ready (1'b1), .m_arlen_source_valid (), .m_arlen_source_bits (t_arlen),
         .m_rready_source_ready (1'b1), .m_rready_source_valid (), .m_rready_source_bits (t_rready)
     );
+    /* verilator lint_on PINCONNECTEMPTY */
 `undef FMF_Q
 
     // ---- The shared master's queues ----
@@ -332,16 +345,20 @@ module foldsim_mem_fold #(
                 end
     end
 
-    wire [QF-1:0] q_fire = {QF{fin}} & q_valid & q_ready;
-    wire [SF-1:0] s_fire = {SF{fin}} & s_valid & s_ready;
+    wire [QF-1:0] q_fire = {QF{run}} & q_valid & q_ready;
+    wire [SF-1:0] s_fire = {SF{run}} & s_valid & s_ready;
 
     always @(posedge clk) begin
         if (reset) begin
             q_full <= '0;
             r_full <= '0;
+            t_rst  <= '1;
+            p_idle <= '1;
+            p_error <= '0;
+            p_stall <= '0;
             rsp_valid <= 1'b0;
             turn <= '0;
-            ar_n <= '0; aw_n <= '0; w_n <= '0;
+            ar_n <= '0; aw_n <= '0; w_n <= '0; rt_n <= '0; bt_n <= '0;
             ar_h <= '0; ar_t <= '0; aw_h <= '0; aw_t <= '0; w_h <= '0; w_t <= '0;
             rt_h <= '0; rt_t <= '0; bt_h <= '0; bt_t <= '0;
             for (integer p = 0; p < PORTS; p = p + 1) begin
@@ -351,7 +368,9 @@ module foldsim_mem_fold #(
             end
         end else begin
             // The current thread's turn: its tokens taken, fields got, AXI.
-            if (fin && q_full[t]) begin
+            if (fin)
+                t_rst[t] <= 1'b0;
+            if (run && q_full[t]) begin
                 if (&(q_taken[t] | q_fire)) begin
                     q_full[t]  <= 1'b0;
                     q_taken[t] <= '0;
@@ -363,7 +382,7 @@ module foldsim_mem_fold #(
                 if (s_fire[f])
                     for (integer b = rsp_off(f); b < rsp_off(f + 1); b = b + 1)
                         s_bits[t][b] <= s_in[b];
-            if (fin) begin
+            if (run) begin
                 p_stats[t] <= t_stats;
                 p_idle[t]  <= t_idle;
                 p_error[t] <= t_error;
@@ -416,6 +435,8 @@ module foldsim_mem_fold #(
             ar_n <= ar_n + (QW+1)'(ar_take) - (QW+1)'(m_arvalid && m_arready);
             aw_n <= aw_n + (QW+1)'(aw_take) - (QW+1)'(m_awvalid && m_awready);
             w_n  <= w_n  + (QW+1)'(w_take) - (QW+1)'(m_wvalid && m_wready);
+            rt_n <= rt_n + (QW+1)'(ar_take) - (QW+1)'(r_in);
+            bt_n <= bt_n + (QW+1)'(aw_take) - (QW+1)'(b_in);
             if (r_take)
                 r_full[t] <= 1'b0;
             if (r_in) begin
