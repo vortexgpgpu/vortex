@@ -35,6 +35,27 @@
 
 using namespace vortex;
 
+#ifdef VX_CFG_EXT_TCU_ENABLE
+// The scoreboard's two FCSR bits double as the TCU metadata slots, as in the
+// RTL: a TCU_LD writes the sparse (fflags) or MX (frm) bit, and an MMA that
+// consumes that metadata reads it.
+static uint8_t tcu_meta_reads(uint32_t fmt_s, bool is_sparse) {
+  uint8_t mask = 0;
+  __unused(fmt_s, is_sparse);
+#ifdef VX_CFG_TCU_SPARSE_ENABLE
+  if (is_sparse) {
+    mask |= Instr::FCSR_FFLAGS;
+  }
+#endif
+#ifdef VX_CFG_TCU_MX_ENABLE
+  if (fmt_s & 0x8) {
+    mask |= Instr::FCSR_FRM;
+  }
+#endif
+  return mask;
+}
+#endif
+
 static op_string_t op_string(const Instr &instr) {
   auto op_type = instr.get_op_type();
   auto instrArgs = instr.get_args();
@@ -1007,6 +1028,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         bool is_sparse = (rs2 & 1) != 0;
         instr->set_op_type(is_sparse ? TcuType::WMMA_SP : TcuType::WMMA);
         instr->set_args(IntrTcuArgs{0, 0, fmt_s, fmt_d, 0, 0, 0, 0, 0, 0});
+        instr->set_fcsr_use(tcu_meta_reads(fmt_s, is_sparse), 0);
         instr->set_macro_op();
       } break;
     #ifdef VX_CFG_TCU_WGMMA_ENABLE
@@ -1017,6 +1039,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         bool is_a_smem = (rs2 >> 3) & 1;
         instr->set_op_type(is_sparse ? TcuType::WGMMA_SP : TcuType::WGMMA);
         instr->set_args(IntrTcuArgs{is_a_smem ? 1u : 0u, cd_nregs, fmt_s, fmt_d, 0, 0, 0, 0, 0, 0});
+        instr->set_fcsr_use(tcu_meta_reads(fmt_s, is_sparse), 0);
         instr->set_macro_op();
       } break;
     #endif // VX_CFG_TCU_WGMMA_ENABLE
@@ -1028,6 +1051,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         instr->set_args(IntrTcuArgs{0, 0, fmt_s, slot, 0, 0, 0, 0, 0, 0});
         // rs1 holds the warp-broadcast base address (real I-reg read).
         instr->set_src_reg(0, rs1, RegType::Integer);
+        instr->set_fcsr_use(0, (rd & 0x10) ? Instr::FCSR_FRM : Instr::FCSR_FFLAGS);
       } break;
     #endif // TCU_META_ENABLE
       default:

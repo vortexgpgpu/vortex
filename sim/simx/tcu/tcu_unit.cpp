@@ -493,6 +493,24 @@ public:
     }
   }
 
+  // A TCU_LD retires once its words are deposited into the metadata SRAM;
+  // the AGU takes the next load the cycle after.
+  void agu_retire(uint64_t now) {
+    for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
+      auto& agu = agu_.at(b);
+      if (!agu.complete)
+        continue;
+      // The AGU round-trip models the memory latency; these cycles cover the
+      // metadata deposit and retire.
+      constexpr uint32_t kRetireDelay = 3;
+      if (simobject_->Outputs.at(b).try_send(agu.trace, kRetireDelay)) {
+        result_due_.at(b).push_back(now + kRetireDelay);
+        DT(3, simobject_->name() << " execute: op=" << TcuType::TCU_LD << ", " << *agu.trace);
+        agu = agu_state_t{};
+      }
+    }
+  }
+
   // Write lane T's fetched word into the selected metadata SRAM.
   void agu_write(const agu_state_t& agu, uint32_t T, uint32_t word) {
     uint32_t wid = agu.wid;
@@ -558,12 +576,28 @@ public:
       auto& input = simobject_->Inputs.at(b);
       if (input.empty())
         continue;
-      if (completing && backed_up) {
-        continue;
-      }
       auto trace = input.peek();
       auto tcu_type = std::get<TcuType>(trace->op_type);
       auto tpuArgs = std::get<IntrTcuArgs>(trace->instr_ptr->get_args());
+
+    #ifdef TCU_META_ENABLE
+      // A TCU_LD leaves the input for the AGU once the AGU is free, so the ops
+      // behind it run while its metadata is in flight; it retires from the AGU.
+      if (tcu_type == TcuType::TCU_LD) {
+        if (!agu_.at(b).busy) {
+          // rs1 is a full-width address (.u64); use u64 to avoid truncation on XLEN=64.
+          auto& rs1_data = trace->src_data[0];
+          uint64_t base_addr = rs1_data.empty() ? 0 : rs1_data.at(0).u64;
+          this->agu_start(b, trace->wid, tpuArgs.fmt_d, base_addr, trace);
+          input.pop();
+        }
+        continue;
+      }
+    #endif
+
+      if (completing && backed_up) {
+        continue;
+      }
 
     #ifdef VX_CFG_TCU_WGMMA_ENABLE
       // A WGMMA compute uop fires once its tile-buffer operands are ready.
@@ -584,7 +618,7 @@ public:
         trace->dst_data.assign(num_threads, reg_data_t{});
         auto& rd_data = trace->dst_data;
 
-        if (tcu_type != TcuType::TCU_LD && !vt::tcu_output_valid(tpuArgs.fmt_s, tpuArgs.fmt_d)) {
+        if (!vt::tcu_output_valid(tpuArgs.fmt_s, tpuArgs.fmt_d)) {
           std::cerr << "*** TCU output format " << tpuArgs.fmt_d << " for input format " << tpuArgs.fmt_s
                     << " is not supported: the TCU returns fp32 (int32 for integer inputs)" << std::endl;
           std::abort();
@@ -639,64 +673,23 @@ public:
           }
         } break;
       #endif
-      #ifdef TCU_META_ENABLE
-        case TcuType::TCU_LD: {
-          if (agu_.at(b).busy) {
-            continue;
-          }
-          // rs1 is a full-width address (.u64); use u64 to avoid truncation on XLEN=64.
-          uint64_t base_addr = rs1_data.empty() ? 0 : rs1_data.at(0).u64;
-          this->agu_start(b, wid, tpuArgs.fmt_d, base_addr, trace);
-        } break;
-      #endif
         default:
           std::abort();
         }
         exec_done_.at(b) = true;
       }
 
-      uint32_t delay = 0;
-      switch (tcu_type) {
-      case TcuType::WMMA:
-      case TcuType::WMMA_SP:
-      case TcuType::WGMMA:
-      case TcuType::WGMMA_SP:
-        delay = kMmaLatency;
-        break;
-    #ifdef TCU_META_ENABLE
-      case TcuType::TCU_LD:
-        // The AGU round-trip models the memory latency; the remaining
-        // cycles cover the metadata deposit and retire.
-        delay = 3;
-        break;
-    #endif
-      default:
-        std::abort();
-      }
-    #ifdef TCU_META_ENABLE
-      // TCU_LD retires only after its words are deposited into the
-      // metadata SRAM.
-      if (tcu_type == TcuType::TCU_LD) {
-        auto& agu = agu_.at(b);
-        assert(agu.busy && agu.trace == trace);
-        if (!agu.complete) {
-          continue; // metadata still in flight — hold the block
-        }
-      }
-    #endif
-      if (simobject_->Outputs.at(b).try_send(trace, delay)) {
-        due.push_back(now + delay);
+      if (simobject_->Outputs.at(b).try_send(trace, kMmaLatency)) {
+        due.push_back(now + kMmaLatency);
         exec_done_.at(b) = false;
-      #ifdef TCU_META_ENABLE
-        // TCU_LD retired: free the AGU for the next metadata load.
-        if (tcu_type == TcuType::TCU_LD) {
-          agu_.at(b) = agu_state_t{};
-        }
-      #endif
         DT(3, simobject_->name() << " execute: op=" << tcu_type << ", " << *trace);
         input.pop();
       }
     }
+
+  #ifdef TCU_META_ENABLE
+    this->agu_retire(now);
+  #endif
 
   #ifdef VX_CFG_TCU_WGMMA_ENABLE
     // A setup uop drops its block's A stripe and the shared B row at the end
@@ -1690,6 +1683,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
 
   auto uop_instr = std::allocate_shared<Instr>(pool_, uop_uuid, FUType::TCU);
   uop_instr->set_parent_uuid(parent_uuid);
+  uop_instr->set_fcsr_use(macro_instr.fcsr_reads(), macro_instr.fcsr_writes());
 
   if (tcu_is_wmma(tcu_type)) {
     using wmma = vt::wmma_config_t<VX_CFG_NUM_THREADS>;
