@@ -12,9 +12,6 @@
 #include <vector>
 #include <vortex2.h>
 
-#ifndef FLOAT_ULP
-#define FLOAT_ULP 10
-#endif
 #define MAX_ERRORS 100
 
 #define RT_CHECK(_expr)                                      \
@@ -29,6 +26,9 @@
 
 using namespace vortex;
 namespace vt = tensor;
+
+// fp32 result tolerance in ULPs; it grows with K (see fp32_ulp_bound).
+static uint32_t fp32_max_ulp = 0;
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -330,7 +330,7 @@ public:
       fa.f = a;
       fb.f = b;
       auto d = std::abs(fa.i - fb.i);
-      if (d > FLOAT_ULP) {
+      if (uint32_t(d) > fp32_max_ulp) {
         if (errors < MAX_ERRORS) {
           printf("*** error: [%d] expected=%f, actual=%f\n", index, fb.f, fa.f);
         }
@@ -441,6 +441,18 @@ using otype_t = typename vt::OTYPE::dtype;
 static_assert(vt::tcu_output_valid(vt::ITYPE::id, vt::OTYPE::id),
               "TCU output type must be fp32 (int32 for integer inputs)");
 
+// Error bound of the device's fp32 result against the exact dot product. Each
+// output accumulates through a chain of uops; a uop folds its products into
+// the fp32 accumulator, rounding or truncating each of those terms and the sum
+// once, every time by less than half an ulp of the uop's result. The inputs are
+// non-negative, so no partial sum exceeds the final one: a uop of P products
+// costs at most (P + 1) / 2 ulp of the result, and the chain adds them up. The
+// reference's own rounding adds one more.
+static uint32_t fp32_ulp_bound(uint32_t K) {
+  constexpr uint32_t products = cfg::tcK * cfg::i_ratio;
+  uint32_t uops = (K / cfg::tileK) * (cfg::k_steps / 2);
+  return (uops * (products + 1) + 1) / 2 + 1;
+}
 
 // Dense CPU reference matmul (pruned A has zeros at masked positions)
 static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B, uint32_t M, uint32_t N, uint32_t K) {
@@ -449,10 +461,9 @@ static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B, uint32_t 
   for (uint32_t m = 0; m < M; ++m) {
     for (uint32_t n = 0; n < N; ++n) {
       if constexpr (std::is_same<vt::OTYPE, vt::fp32>::value) {
-        // fp32 output: the tensor core accumulates the K products in a wide
-        // accumulator and rounds to fp32 once; a per-step-rounded reference
-        // drifts by several ULP over K. Each product is exact in fp32, so a
-        // double accumulation reproduces the single-rounding dot product.
+        // fp32 output: the exact dot product, rounded once. Each product is
+        // exact in fp32 and their double sum is exact to far below an fp32
+        // ulp; fp32_ulp_bound covers the device's per-uop rounding.
         double acc = 0.0;
         for (uint32_t k = 0; k < KS; ++k) {
           auto a = data_accessor_t<vt::ITYPE>::read(A, m * KS + k);
@@ -674,6 +685,8 @@ int main(int argc, char *argv[]) {
     std::cout << "Error: K must be a multiple of tensor tileK=" << cfg::tileK << "!" << std::endl;
     return -1;
   }
+
+  fp32_max_ulp = fp32_ulp_bound(K);
 
   size_t sizeA_full = M * K;
   size_t sizeA = (M * K) / 2;
@@ -1177,7 +1190,7 @@ int main(int argc, char *argv[]) {
   if (errors != 0) {
     std::cout << "Found " << std::dec << errors << " / " << sizeC << " errors!" << std::endl;
     std::cout << "FAILED!" << std::endl;
-    return errors;
+    return 1;
   }
 
   std::cout << "PASSED!" << std::endl;

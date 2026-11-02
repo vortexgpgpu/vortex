@@ -32,6 +32,15 @@ tests:
   - simx
   app: sgemm_tcu_sp
   configs: -DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TF32_ENABLE -DITYPE=tf32 -DOTYPE=fp32
+# A long K: the fp32 tolerance grows with the accumulation chain.
+- id: sgemm_tcu_sp-k256
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=fp16 -DOTYPE=fp32
+  args: -k256
 - id: sgemm_tcu_sp-5
   via: blackbox
   drivers:
