@@ -40,7 +40,7 @@ module foldsim_mem_par #(
     parameter NC       = (SPEC == 2) ? 4 : ((SPEC != 0) ? 2 : 1),
     parameter NW       = (SPEC == 2) ? 4 : 1,
     parameter CW       = (PORTS > 1) ? $clog2(PORTS) : 1,
-    parameter REQ_W    = 4 + 2 * ADDR_W + 2 * ID_W + 16 + DATA_W + DATA_W / 8 + 4,
+    parameter REQ_W    = 6 + 2 * ADDR_W + 2 * ID_W + 16 + DATA_W + DATA_W / 8,
     parameter RSP_W    = 2 * NW + 2 * NC + NC * DATA_W + NC + NC * ID_W + NC * 2 + 3 + ID_W
 ) (
     input  wire                   clk,
