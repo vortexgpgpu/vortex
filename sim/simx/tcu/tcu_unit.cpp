@@ -377,7 +377,7 @@ public:
   Impl(TcuUnit* simobject, Core* core)
     : simobject_(simobject)
     , core_(core)
-    , sparse_meta_(VX_CFG_NUM_WARPS, std::vector<uint32_t>(kMetaBanks * kMaxMetaCols, 0))
+    , sparse_meta_(kMetaSlots, std::vector<uint32_t>(kMetaBanks * kMaxMetaCols, 0))
   #ifdef VX_CFG_TCU_MX_ENABLE
     , mx_meta_a_(VX_CFG_NUM_WARPS, std::vector<uint32_t>(VX_CFG_NUM_THREADS, 0))
     , mx_meta_b_(VX_CFG_NUM_WARPS, std::vector<uint32_t>(VX_CFG_NUM_THREADS, 0))
@@ -1263,6 +1263,10 @@ public:
     uint32_t   k_advance = 0;
     uint32_t   a_kdim = 0;
     uint32_t   b_kdim = 0;
+    bool       sparse = false;
+    bool       a_tmem = false;     // a_base is A's first TMEM column
+    uint32_t   meta_base = 0;      // first metadata TMEM column
+    uint32_t   pro_done = 0;       // K-tile prologue reads issued
     // stage use
     uint32_t   kt = 0;
     uint32_t   ki = 0;             // K-tile within the stage
@@ -1310,9 +1314,9 @@ public:
     uint32_t idesc   = w[0];
     job.fmt_s        = idesc & 0x1f;
     job.fmt_d        = (idesc >> 5) & 0x1f;
-    bool sparse      = (idesc >> 10) & 1;
+    job.sparse       = (idesc >> 10) & 1;
     job.acc_init     = (idesc >> 11) & 1;
-    bool a_tmem      = (idesc >> 12) & 1;
+    job.a_tmem       = (idesc >> 12) & 1;
     job.n_frag       = (idesc >> 13) & 0xff;
     job.mode         = w[1] & 0x3;
     job.sw_full      = (w[1] >> 2) & 1;
@@ -1322,6 +1326,7 @@ public:
     job.taddr        = w[2];
     job.a_base       = w[3];
     job.b_base       = w[4];
+    job.meta_base    = w[5];
     job.stage_stride = w[6];
     job.lda          = w[7] & 0xffff;
     job.ldb          = w[7] >> 16;
@@ -1341,11 +1346,21 @@ public:
     job.a_kdim       = (w[14] >> 16) & 1;
     job.b_kdim       = (w[14] >> 17) & 1;
 
+    // Columns [base, base + cols) must not overlap D, which the job rewrites.
+    auto bad_columns = [&](uint32_t base, uint32_t cols) {
+      uint32_t d_end = job.taddr + job.n_frag * wg_cfg::tcN;
+      return base + cols > kTmemCols || (base < d_end && job.taddr < base + cols);
+    };
+
     const char* err = nullptr;
-    if (sparse) {
-      err = "sparse jobs are not supported";
-    } else if (a_tmem) {
-      err = "A from TMEM is not supported";
+    if (job.sparse && !kSpFullK) {
+      err = "sparse jobs require VX_CFG_TCU_SPARSE_FULLK";
+    } else if (job.sparse && !vt::sparse_format_supported(job.fmt_s)) {
+      err = "sparse job with an unsupported input format";
+    } else if (job.sparse && bad_columns(job.meta_base, job.k_tiles * this->job_meta_cols(job))) {
+      err = "metadata columns exceed TMEM or overlap D";
+    } else if (job.a_tmem && bad_columns(job.a_base, job.k_tiles * kFedpWords)) {
+      err = "A columns exceed TMEM or overlap D";
     } else if (job.mode != TJ_CONSUME && job.mode != TJ_CLOSED) {
       err = "unknown mode";
     } else if (job.sw_full && job.mode != TJ_CONSUME) {
@@ -1378,17 +1393,59 @@ public:
           << ", bars=0x" << job.full_bar << "/0x" << job.empty_bar << "/0x" << job.done_bar << std::dec);
   }
 
+  // TMEM columns of one K-tile's metadata: a lane holds, per column, the
+  // K-tile's two metadata rows (the two TC_K halves of a sparse uop) in order.
+  uint32_t job_meta_cols(const tj_t& job) const {
+    return std::max(1u, kFedpWords * 2 * elem_ratio(job.fmt_s) / 32);
+  }
+
+  // TMEM reads ahead of a K-tile's first step. A read covers one column per
+  // lane per kTmemThreadsPerLane.
+  uint32_t job_meta_reads(const tj_t& job) const {
+    return job.sparse ? (this->job_meta_cols(job) + kTmemThreadsPerLane - 1) / kTmemThreadsPerLane : 0;
+  }
+  uint32_t job_a_reads(const tj_t& job) const {
+    return job.a_tmem ? kFedpWords / kTmemThreadsPerLane : 0;
+  }
+
+  // Latch the K-tile's metadata from TMEM into each block's job metadata slot,
+  // in the bank layout mma_lmem reads.
+  void job_load_meta(const tj_t& job) {
+    uint32_t cols = this->job_meta_cols(job);
+    uint32_t row_w = cfg::tcK * 2 * elem_ratio(job.fmt_s);
+    uint32_t col0 = job.meta_base + job.kt * cols;
+    for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
+      auto& meta = sparse_meta_.at(this->meta_slot(kJobKeyBase + b));
+      std::fill(meta.begin(), meta.end(), 0);
+      for (uint32_t lane = 0; lane < wg_cfg::xtileM; ++lane) {
+        uint32_t m = lane / cfg::tcM;
+        uint32_t i = lane % cfg::tcM;
+        for (uint32_t h = 0; h < 2; ++h) {
+          for (uint32_t bit = 0; bit < row_w; ++bit) {
+            uint32_t src = h * row_w + bit;
+            uint32_t word = this->tmem_at(b * wg_cfg::xtileM + lane, col0 + src / 32).u32;
+            uint32_t dst = i * row_w + bit;
+            uint32_t bank = m * (cfg::k_steps / 2) + h;
+            meta.at(bank * kMaxMetaCols + dst / 32) |= ((word >> (src % 32)) & 1u) << (dst % 32);
+          }
+        }
+      }
+    }
+  }
+
   // Point each block's LMEM descriptors at the current K-tile.
   void job_set_descs(const tj_t& job) {
     uint32_t e_bits   = elem_bits(job.fmt_s);
     uint32_t kt_bytes = kFedpWords * 4;
+    // A sparse K-tile is compressed in A and twice as long in B.
+    uint32_t b_kt_bytes = job.sparse ? (2 * kt_bytes) : kt_bytes;
     uint64_t stage_a  = uint64_t(VX_MEM_LMEM_BASE_ADDR) + job.a_base + uint64_t(job.use_s) * job.stage_stride;
     uint64_t stage_b  = uint64_t(VX_MEM_LMEM_BASE_ADDR) + job.b_base + uint64_t(job.use_s) * job.stage_stride;
     for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
       auto& d = lmem_desc_[kJobKeyBase + b];
       d[0] = {stage_a + uint64_t(b) * wg_cfg::xtileM * job.lda + job.ki * kt_bytes,
               job.lda * 8 / e_bits, false};
-      d[1] = {stage_b + (job.ldb ? job.ki * kt_bytes : 0), job.ldb * 8 / e_bits, false};
+      d[1] = {stage_b + (job.ldb ? job.ki * b_kt_bytes : 0), job.ldb * 8 / e_bits, false};
     }
   }
 
@@ -1397,7 +1454,8 @@ public:
     req.valid     = true;
     req.wid       = kJobKeyBase + b;
     req.cta       = job.cta;
-    req.a_is_smem = true;
+    req.a_is_smem = !job.a_tmem;
+    req.is_sparse = job.sparse;
     req.step_m    = job.m;
     req.step_n    = n;
     req.xtile_n   = job.n_frag * cfg::tcN;
@@ -1441,8 +1499,8 @@ public:
     }
     for (auto& job : jobs_) {
       if (this->job_is_head(job) && this->job_fill_open(job) && job.fill_part == 0) {
-        core_->barrier_event_attach(job_bar(job.full_bar, job.fill_s), 2);
-        job.fill_part = 1;
+        core_->barrier_event_attach(job_bar(job.full_bar, job.fill_s), job.a_tmem ? 1 : 2);
+        job.fill_part = job.a_tmem ? 2 : 1;
         return;
       }
     }
@@ -1483,8 +1541,10 @@ public:
       if (job.fill_part == 1) {
         req.desc_slot = job.dxa_slot_a;
         req.smem_addr = uint64_t(VX_MEM_LMEM_BASE_ADDR) + job.a_base + stage_off;
-        req.coords[0] = job.a_coord[0] + (job.a_kdim == 0 ? job.fill_k : 0);
-        req.coords[1] = job.a_coord[1] + (job.a_kdim == 1 ? job.fill_k : 0);
+        // k_advance is in dense K; compressed A advances half as far.
+        uint32_t a_k = job.sparse ? (job.fill_k / 2) : job.fill_k;
+        req.coords[0] = job.a_coord[0] + (job.a_kdim == 0 ? a_k : 0);
+        req.coords[1] = job.a_coord[1] + (job.a_kdim == 1 ? a_k : 0);
         job.fill_part = 2;
       } else {
         req.desc_slot = job.dxa_slot_b;
@@ -1562,6 +1622,20 @@ public:
       return;
     }
 
+    // K-tile prologue: metadata and A come over the TMEM read port, all blocks
+    // in parallel, ahead of the first step.
+    uint32_t pro_reads = this->job_meta_reads(job) + this->job_a_reads(job);
+    if (job.pro_done < pro_reads) {
+      if (++job.pro_done == pro_reads) {
+        if (job.sparse) {
+          this->job_load_meta(job);
+        }
+        job.a_valid = job.a_tmem;
+      }
+      ++perf_stats_.tbuf_stalls;
+      return;
+    }
+
     if (!job.a_valid) {
       if (!job.a_fetching) {
         for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
@@ -1604,15 +1678,28 @@ public:
     static const std::vector<reg_data_t> kNone;
     std::vector<reg_data_t> c_frag(VX_CFG_NUM_THREADS);
     std::vector<reg_data_t> d_frag(VX_CFG_NUM_THREADS);
+    std::vector<reg_data_t> a_lo(VX_CFG_NUM_THREADS);
+    std::vector<reg_data_t> a_hi(VX_CFG_NUM_THREADS);
     for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
       uint32_t lane0 = b * wg_cfg::xtileM + job.m * wg_cfg::tcM;
+      if (job.a_tmem) {
+        // The operand layout of the register-A path: rs1 lower, rs2 upper K words.
+        uint32_t a_col = job.a_base + job.kt * kFedpWords;
+        for (uint32_t i = 0; i < cfg::tcM; ++i) {
+          for (uint32_t z = 0; z < cfg::tcK; ++z) {
+            a_lo.at(i * cfg::tcK + z) = this->tmem_at(lane0 + i, a_col + z);
+            a_hi.at(i * cfg::tcK + z) = this->tmem_at(lane0 + i, a_col + cfg::tcK + z);
+          }
+        }
+      }
       for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
         c_frag.at(t) = zero_c ? reg_data_t{}
                               : this->tmem_at(lane0 + t / wg_cfg::tcN, col0 + t % wg_cfg::tcN);
       }
       cur_block_ = b;
       this->mma_lmem(kJobKeyBase + b, job.fmt_s, job.fmt_d, job.m, job.n, 0,
-                     kNone, kNone, c_frag, d_frag, false, true, xtile_n);
+                     job.a_tmem ? a_lo : kNone, job.a_tmem ? a_hi : kNone, c_frag, d_frag,
+                     job.sparse, !job.a_tmem, xtile_n);
       for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
         this->tmem_at(lane0 + t / wg_cfg::tcN, col0 + t % wg_cfg::tcN) = d_frag.at(t);
       }
@@ -1643,6 +1730,7 @@ public:
       ++job.ki;
     }
     ++job.kt;
+    job.pro_done = 0;
     job.a_valid = false;
     job.b_valid = false;
     if (job.kt == job.k_tiles) {
@@ -1836,7 +1924,7 @@ public:
       // Metadata is preloaded into sparse_meta_ via TCU_LD before dispatch.
       auto meta_bit_wg = [&](uint32_t bit_idx) -> uint32_t {
         uint32_t word_idx = wg_bank * kMaxMetaCols + bit_idx / 32;
-        uint32_t word_val = sparse_meta_.at(wid).at(word_idx);
+        uint32_t word_val = sparse_meta_.at(this->meta_slot(wid)).at(word_idx);
         // Trace: META_RD (CSV: wid,step_m,step_k,bank,value).
         if (const char* p = std::getenv("VORTEX_TCU_TRACE")) {
           if (p[0] == '1' && (bit_idx % 32) == 0) {
@@ -2123,6 +2211,16 @@ private:
   static constexpr uint32_t kSparseKSteps = cfg::k_steps / 2;
   static constexpr uint32_t kMetaBanks = cfg::m_steps * kSparseKSteps;
   static constexpr uint32_t kMaxMetaCols = VX_CFG_NUM_THREADS / 2;
+#ifdef VX_CFG_TCU_TMEM_ENABLE
+  // Tensor jobs hold one K-tile's metadata per block, after the warps' slots.
+  static constexpr uint32_t kMetaSlots = VX_CFG_NUM_WARPS + VX_CFG_NUM_TCU_BLOCKS;
+  uint32_t meta_slot(uint32_t key) const {
+    return (key >= kJobKeyBase) ? (VX_CFG_NUM_WARPS + key - kJobKeyBase) : key;
+  }
+#else
+  static constexpr uint32_t kMetaSlots = VX_CFG_NUM_WARPS;
+  uint32_t meta_slot(uint32_t key) const { return key; }
+#endif
 
   // FEDP tile computation for both WMMA and WGMMA.
   // a_tile: [tcM][k_words] flat array of pre-loaded A operand words.

@@ -113,6 +113,13 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     tcu_execute_t         job_data [BLOCK_SIZE];
     wire [BLOCK_SIZE-1:0] job_core_ready;
     tcu_tbuf_req_t [BLOCK_SIZE-1:0] job_tbuf_req;
+    wire                  job_a_fill_valid;
+    wire [3:0]            job_a_fill_k;
+    wire [BLOCK_SIZE-1:0][`VX_CFG_NUM_THREADS-1:0][31:0] job_a_fill_data;
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
+    wire [BLOCK_SIZE-1:0][TCU_MAX_META_BLOCK_WIDTH-1:0] job_meta;
+    wire [BLOCK_SIZE-1:0][TCU_MAX_META_BLOCK_WIDTH-1:0] job_meta_hi;
+`endif
     wire [BLOCK_SIZE-1:0] jres_valid;
     wire [BLOCK_SIZE-1:0][`VX_CFG_NUM_THREADS-1:0][31:0] jres_data;
 `endif
@@ -263,6 +270,9 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .tcu_lmem_if    (tcu_lmem_if),
     `ifdef VX_CFG_TCU_TMEM_ENABLE
         .job_req        (job_tbuf_req),
+        .job_a_fill_valid (job_a_fill_valid),
+        .job_a_fill_k   (job_a_fill_k),
+        .job_a_fill_data (job_a_fill_data),
     `endif
         .tbuf_rs1_data  (tbuf_rs1_data),
         .tbuf_rs2_data  (tbuf_rs2_data),
@@ -337,6 +347,13 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .core_ready     (job_core_ready),
         .job_fire       (job_fire),
         .tbuf_req       (job_tbuf_req),
+        .a_fill_valid   (job_a_fill_valid),
+        .a_fill_k       (job_a_fill_k),
+        .a_fill_data    (job_a_fill_data),
+    `ifdef VX_CFG_TCU_SPARSE_ENABLE
+        .job_meta       (job_meta),
+        .job_meta_hi    (job_meta_hi),
+    `endif
         .jres_valid     (jres_valid),
         .jres_data      (jres_data),
         .tcu_bar_if     (tcu_bar_if),
@@ -365,6 +382,12 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             .ext_meta_wr_wid  (agu_meta_wr_wid),
             .ext_meta_wr_idx  (agu_meta_wr_idx),
             .ext_meta_wr_data (agu_meta_wr_data),
+        `endif
+        `ifdef VX_CFG_TCU_TMEM_ENABLE
+        `ifdef VX_CFG_TCU_SPARSE_ENABLE
+            .job_meta    (job_meta[block_idx]),
+            .job_meta_hi (job_meta_hi[block_idx]),
+        `endif
         `endif
             .execute_if (core_execute_if[block_idx]),
             .result_if  (core_result_if[block_idx])

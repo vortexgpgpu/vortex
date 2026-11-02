@@ -71,6 +71,15 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input  wire                     req_is_sparse_in,
     input  wire [UUID_WIDTH-1:0]    req_uuid,
 
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    // One TMEM read of a tensor job's A: thread t holds M row t % XM, K word
+    // fill_k + t / XM. A job issues it ahead of the K-tile's steps with
+    // req_a_is_smem low, so the fetch path stays idle.
+    input  wire                     a_fill_valid,
+    input  wire [3:0]               a_fill_k,
+    input  wire [`VX_CFG_NUM_THREADS-1:0][31:0] a_fill_data,
+`endif
+
     // LMEM bank-parallel read port
     VX_mem_bus_if.master            tcu_lmem_if,
 
@@ -94,6 +103,9 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam A_BLOCK_BANK_ROWS  = (A_BLOCK_WORDS + NUM_BANKS - 1) / NUM_BANKS;
     localparam A_BLOCK_BANK_ROWS_SP = (A_BLOCK_WORDS_SP + NUM_BANKS - 1) / NUM_BANKS;
     localparam BLOCK_WORDS_PADDED = A_BLOCK_BANK_ROWS * NUM_BANKS;
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    `STATIC_ASSERT (BLOCK_WORDS_PADDED == A_BLOCK_WORDS, ("A from TMEM assumes unpadded A blocks"))
+`endif
     localparam BLOCK_WORDS_PADDED_SP = A_BLOCK_BANK_ROWS_SP * NUM_BANKS;
     localparam A_STRIPE_BANK_ROWS = TCU_WG_M_STEPS * A_BLOCK_BANK_ROWS;
     localparam A_STRIPE_BANK_ROWS_SP = TCU_WG_M_STEPS * A_BLOCK_BANK_ROWS_SP;
@@ -378,6 +390,16 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     always_comb begin
         storage_wdata = '0;
         storage_wren  = '0;
+    `ifdef VX_CFG_TCU_TMEM_ENABLE
+        if (a_fill_valid) begin
+            for (int t = 0; t < `VX_CFG_NUM_THREADS; ++t) begin
+                automatic int dst = (t % TCU_WG_TILE_M) * TCU_WG_FEDP_K
+                                  + int'(a_fill_k) + t / TCU_WG_TILE_M;
+                storage_wren[dst] = 1'b1;
+                storage_wdata[dst * 32 +: 32] = a_fill_data[t];
+            end
+        end else
+    `endif
         if (in_fetch && tcu_lmem_if.rsp_valid) begin
             if (slot_row_major_r) begin
                 // Row-major: write k_words of row rsp_ctr_r into
@@ -420,7 +442,11 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .clk   (clk),
         .reset (reset),
         .read  (1'b1),
+    `ifdef VX_CFG_TCU_TMEM_ENABLE
+        .write ((in_fetch && tcu_lmem_if.rsp_valid) || a_fill_valid),
+    `else
         .write (in_fetch && tcu_lmem_if.rsp_valid),
+    `endif
         .wren  (storage_wren),
         .waddr (1'b0),
         .wdata (storage_wdata),

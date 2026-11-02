@@ -56,6 +56,12 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // Per-block uop observation (sized BLOCK_SIZE; req.valid pre-gated to WGMMA)
     input  tcu_tbuf_req_t [BLOCK_SIZE-1:0]                              req,
 
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    input  wire                                                         a_fill_valid,
+    input  wire [3:0]                                                   a_fill_k,
+    input  wire [BLOCK_SIZE-1:0][`VX_CFG_NUM_THREADS-1:0][31:0]         a_fill_data,
+`endif
+
     // Single LMEM master out (post-arb)
     VX_mem_bus_if.master                                                tcu_lmem_if,
 
@@ -118,6 +124,11 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             .req_is_sparse_in (1'b0),
         `endif
             .req_uuid       (req[b].uuid),
+        `ifdef VX_CFG_TCU_TMEM_ENABLE
+            .a_fill_valid   (a_fill_valid),
+            .a_fill_k       (a_fill_k),
+            .a_fill_data    (a_fill_data[b]),
+        `endif
             .tcu_lmem_if    (lmem_masters[b]),
             .abuf_ready     (abuf_ready_w[b]),
             .abuf_rs1_data  (abuf_rs1_data_w[b])

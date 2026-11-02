@@ -38,9 +38,9 @@ struct tj_desc_t {
   uint32_t idesc;         // fmt_s [4:0], fmt_d [9:5], sparse [10], acc_init [11], a_tmem [12], n_frag [20:13]
   uint32_t ctrl;          // mode [1:0], sw_full [2], nstages [7:4], kb [15:8], k_tiles [31:16]
   uint32_t taddr;         // first D column (lane 0)
-  uint32_t a_base;        // stage-0 A offset in shared memory (bytes)
+  uint32_t a_base;        // stage-0 A offset in shared memory (bytes), or A's first TMEM column
   uint32_t b_base;        // stage-0 B offset in shared memory (bytes)
-  uint32_t meta_base;     // stage-0 sparse metadata offset (bytes)
+  uint32_t meta_base;     // first TMEM column of the sparse metadata
   uint32_t stage_stride;  // bytes between stages
   uint32_t ld;            // leading bytes: A [15:0], B [31:16] (B 0 = block-major)
   uint32_t full_bar;      // barrier ids; stage s uses id + (s << 8)
@@ -53,8 +53,15 @@ struct tj_desc_t {
   uint32_t stage;         // first stage [3:0]
 };
 
-inline constexpr uint32_t make_idesc(uint32_t fmt_s, uint32_t fmt_d, uint32_t n_frag, bool acc_init) {
-  return (fmt_s & 0x1f) | ((fmt_d & 0x1f) << 5) | ((acc_init ? 1u : 0u) << 11) | ((n_frag & 0xff) << 13);
+// sparse: A is 2:4 compressed and meta_base is the first TMEM column of its
+// metadata. One K-tile's metadata is one column per 32 bits: a lane holds, from
+// bit 0, the VX_tcu_sp_mux rows of the K-tile's lower then upper TC_K words.
+// a_tmem: a_base is A's first TMEM column instead of a stage offset; a lane is
+// an M row, and a K-tile is fedpK columns of K-packed words.
+inline constexpr uint32_t make_idesc(uint32_t fmt_s, uint32_t fmt_d, uint32_t n_frag, bool acc_init,
+                                     bool sparse = false, bool a_tmem = false) {
+  return (fmt_s & 0x1f) | ((fmt_d & 0x1f) << 5) | ((sparse ? 1u : 0u) << 10) | ((acc_init ? 1u : 0u) << 11)
+       | ((a_tmem ? 1u : 0u) << 12) | ((n_frag & 0xff) << 13);
 }
 
 // sw_full: software has already waited on the stages' full barriers, so the

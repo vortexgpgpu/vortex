@@ -48,6 +48,9 @@ module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `ifdef VX_CFG_TCU_TMEM_ENABLE
     // Tensor-job steps own the tile buffers; warps do not issue WGMMA.
     input  tcu_tbuf_req_t [BLOCK_SIZE-1:0]                               job_req,
+    input  wire                                                          job_a_fill_valid,
+    input  wire [3:0]                                                    job_a_fill_k,
+    input  wire [BLOCK_SIZE-1:0][`VX_CFG_NUM_THREADS-1:0][31:0]          job_a_fill_data,
 `endif
 
     // Outputs to tcu_core (consumed by the wrapper).
@@ -189,6 +192,9 @@ module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     `endif
     `ifdef VX_CFG_TCU_TMEM_ENABLE
         .req            (job_req),
+        .a_fill_valid   (job_a_fill_valid),
+        .a_fill_k       (job_a_fill_k),
+        .a_fill_data    (job_a_fill_data),
     `else
         .req            (req),
     `endif

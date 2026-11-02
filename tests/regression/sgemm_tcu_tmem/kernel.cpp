@@ -9,10 +9,25 @@
 namespace vt = vortex::tensor;
 namespace tm = vortex::tmem;
 using ctx = vt::wgmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, false, WGMMA_NRC>;
+using wg_cfg = vt::wgmma_config_t<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, WGMMA_NRC>;
+
+#ifdef TMEM_SPARSE
+constexpr bool     kSparse = true;
+constexpr uint32_t kTileK  = wg_cfg::tileK_sp;
+#else
+constexpr bool     kSparse = false;
+constexpr uint32_t kTileK  = ctx::tileK;
+#endif
+#ifdef TMEM_A
+constexpr bool kATmem = true;
+#else
+constexpr bool kATmem = false;
+#endif
 
 // DXA descriptor slots (programmed by host in main.cpp).
 constexpr uint32_t kDescA = 0;
 constexpr uint32_t kDescB = 1;
+[[maybe_unused]] constexpr uint32_t kDescMeta = 2;
 
 #if (KB > 1) && !defined(B_KMAJOR)
 #error "KB > 1 requires B_KMAJOR"
@@ -37,16 +52,53 @@ static_assert(sizeof(ctx::output_t) == sizeof(float), "the TMEM epilogue stores 
 
 constexpr uint32_t kPipeN = PIPE_N;
 constexpr uint32_t kTileN = ctx::xtileN * TMEM_NCHUNK;  // CTA tile N
-constexpr uint32_t kBK    = KB * ctx::tileK;  // K per pipeline stage
+constexpr uint32_t kBK    = KB * kTileK;  // K per pipeline stage
+constexpr uint32_t kAK    = kSparse ? (kBK / 2) : kBK;  // A is compressed along K
 #ifdef B_KMAJOR
 constexpr uint32_t kBLdmBytes = kBK * sizeof(ctx::input_t);
 #else
 constexpr uint32_t kBLdmBytes = 0;
 #endif
 
-// Full, empty and done barriers of a CTA.
-static_assert(2 * kPipeN + 1 <= VX_CFG_NUM_BARRIERS, "not enough barriers for PIPE_N");
+// Full, empty, done and TMEM-load barriers of a CTA.
+static_assert(2 * kPipeN + 2 <= VX_CFG_NUM_BARRIERS, "not enough barriers for PIPE_N");
 
+constexpr uint32_t kThreadsPerLane = VX_CFG_NUM_THREADS / ctx::xtileM;
+constexpr uint32_t kMetaCols = (wg_cfg::fedpK * 2 * (32 / vt::ITYPE::bits) + 31) / 32;
+// tmem::store writes whole fragments.
+constexpr uint32_t kStoreCols = ctx::fragment_acc::NR * kThreadsPerLane;
+
+// Warp `lane` group: copy `cols` columns from global words [row][col] into TMEM.
+[[maybe_unused]] static inline void load_tmem_cols(uint32_t lane, uint32_t col0, uint32_t cols,
+                                  const float* src, uint32_t stride, uint32_t row0) {
+  const uint32_t t = vx_thread_id();
+  const uint32_t row = row0 + t % ctx::xtileM;
+  for (uint32_t c = 0; c < cols; c += kStoreCols) {
+    ctx::fragment_acc frag;
+    #pragma unroll
+    for (uint32_t r = 0; r < ctx::fragment_acc::NR; ++r) {
+      uint32_t col = c + r * kThreadsPerLane + t / ctx::xtileM;
+      frag.data[r] = (col < stride) ? src[row * stride + col] : 0.0f;
+    }
+    tm::store<tm::LANE_PER_THREAD>(tm::make_taddr(lane, col0 + c), frag);
+  }
+}
+
+// Warp `lane` group: copy `cols` columns of the CTA's [row][stride] words in
+// shared memory into TMEM. Threads read consecutive words of a row; columns
+// past `stride` pick up the next row's words, which the job never reads.
+[[maybe_unused]] static inline void smem_to_tmem_cols(uint32_t lane, uint32_t col0, uint32_t cols,
+                                                      const float* src, uint32_t stride) {
+  const uint32_t t = vx_thread_id();
+  for (uint32_t c = 0; c < cols; c += kStoreCols) {
+    ctx::fragment_acc frag;
+    #pragma unroll
+    for (uint32_t r = 0; r < ctx::fragment_acc::NR; ++r) {
+      frag.data[r] = src[(lane + r % ctx::xtileM) * stride + c + (r / ctx::xtileM) * VX_CFG_NUM_THREADS + t];
+    }
+    tm::store<tm::LANE_PER_REG>(tm::make_taddr(lane, col0 + c), frag);
+  }
+}
 
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   auto pC = reinterpret_cast<ctx::output_t *>(arg->C_addr);
@@ -65,35 +117,70 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   uint32_t tile_col = blockIdx.x * kTileN;
 
   auto smem = reinterpret_cast<ctx::input_t *>(__local_mem());
-  const uint32_t stage_elems = cta_M * kBK + kBK * kTileN;
+  const uint32_t stage_a_elems = kATmem ? 0 : (cta_M * kAK);
+  const uint32_t stage_elems = stage_a_elems + kBK * kTileN;
   auto stage_A = [&](uint32_t s) { return smem + s * stage_elems; };
-  auto stage_B = [&](uint32_t s) { return smem + s * stage_elems + cta_M * kBK; };
+  auto stage_B = [&](uint32_t s) { return smem + s * stage_elems + stage_a_elems; };
 
   const uint32_t cta_id = get_local_group_id();
   auto full_bar  = [&](uint32_t s) { return cta_id | (s << 8); };
   auto empty_bar = [&](uint32_t s) { return cta_id | ((kPipeN + s) << 8); };
   const uint32_t done_bar = cta_id | ((2 * kPipeN) << 8);
+  const uint32_t load_bar = cta_id | ((2 * kPipeN + 1) << 8);
 
   // main.cpp sizes the shared-memory window to cover kTileN TMEM columns.
   const uint32_t taddr     = tm::cta_col_base(smem);
   const uint32_t num_steps = K / kBK;
+  const uint32_t k_tiles   = K / kTileK;
+
+  // TMEM above D: A (a_tmem), then the metadata (sparse). main.cpp sizes the window.
+  const uint32_t a_cols  = (K / kTileK) * wg_cfg::fedpK;
+  const uint32_t a_col   = taddr + kTileN;
+  const uint32_t meta_col = a_col + (kATmem ? ((a_cols + kStoreCols - 1) / kStoreCols) * kStoreCols : 0);
+  const uint32_t lane0   = warp_rank * ctx::xtileM;
+  const uint32_t row0    = tile_row + lane0;
+  // The metadata is staged through the pipeline stages, which no job uses yet.
+  const uint32_t meta_words = k_tiles * kMetaCols;
+  if constexpr (kSparse) {
+    if (warp_rank == 0) {
+      vx_barrier_expect_tx(load_bar, 1);
+      vx_dxa_issue_2d_wg(kDescMeta, load_bar, smem, 0, tile_row);
+    }
+  }
+  if constexpr (kATmem) {
+    const uint32_t a_stride = ((K * sizeof(ctx::input_t)) / (kSparse ? 2 : 1)) / 4;
+    load_tmem_cols(lane0, a_col, a_cols, reinterpret_cast<const float*>(arg->A_addr), a_stride, row0);
+  }
+  if constexpr (kSparse) {
+    vx_barrier(load_bar, num_warps);
+    smem_to_tmem_cols(lane0, meta_col, meta_words, reinterpret_cast<const float*>(smem), meta_words);
+  }
+  if constexpr (kATmem || kSparse) {
+    // A job's reads are only ordered behind this warp's own transfers.
+    vx_barrier(load_bar, num_warps);
+  }
+
+  auto init_desc = [&](tm::tj_desc_t& desc, bool acc_init) {
+    desc.idesc        = tm::make_idesc(vt::ITYPE::id, vt::OTYPE::id, kTileN / ctx::tcN, acc_init, kSparse, kATmem);
+    desc.taddr        = taddr;
+    desc.a_base       = kATmem ? a_col : tm::smem_offset(stage_A(0));
+    desc.b_base       = tm::smem_offset(stage_B(0));
+    desc.meta_base    = kSparse ? meta_col : 0;
+    desc.stage_stride = stage_elems * sizeof(ctx::input_t);
+    desc.ld           = (kAK * sizeof(ctx::input_t)) | (kBLdmBytes << 16);
+  };
 
   if (warp_rank == 0) {
     tm::tj_desc_t desc = {};
-    desc.idesc        = tm::make_idesc(vt::ITYPE::id, vt::OTYPE::id, kTileN / ctx::tcN, true);
-    desc.ctrl         = tm::make_ctrl(tm::TJ_CONSUME, kPipeN, KB, K / ctx::tileK);
-    desc.taddr        = taddr;
-    desc.a_base       = tm::smem_offset(stage_A(0));
-    desc.b_base       = tm::smem_offset(stage_B(0));
-    desc.stage_stride = stage_elems * sizeof(ctx::input_t);
-    desc.ld           = (kBK * sizeof(ctx::input_t)) | (kBLdmBytes << 16);
+    init_desc(desc, true);
+    desc.ctrl         = tm::make_ctrl(tm::TJ_CONSUME, kPipeN, KB, k_tiles);
     desc.full_bar     = full_bar(0);
     desc.empty_bar    = empty_bar(0);
     desc.done_bar     = done_bar;
 
   #ifdef TMEM_CLOSED
     // The TCU issues every stage load itself; no warp runs in the K loop.
-    desc.ctrl      = tm::make_ctrl(tm::TJ_CLOSED, kPipeN, KB, K / ctx::tileK);
+    desc.ctrl      = tm::make_ctrl(tm::TJ_CLOSED, kPipeN, KB, k_tiles);
     desc.dxa_slots = kDescA | (kDescB << 4);
     desc.a_coord   = 0 | (tile_row << 16);
     desc.b_coord   = b_coord0(0, tile_col) | (b_coord1(0, tile_col) << 16);
@@ -120,8 +207,10 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
         vx_barrier_wait(empty_bar(s), phase);
       }
       uint32_t k = i * kBK;
-      vx_barrier_expect_tx(full_bar(s), 2);
-      vx_dxa_issue_2d_wg(kDescA, full_bar(s), stage_A(s), k, tile_row);
+      vx_barrier_expect_tx(full_bar(s), kATmem ? 1 : 2);
+      if constexpr (!kATmem) {
+        vx_dxa_issue_2d_wg(kDescA, full_bar(s), stage_A(s), i * kAK, tile_row);
+      }
       vx_dxa_issue_2d_wg(kDescB, full_bar(s), stage_B(s), b_coord0(k, tile_col), b_coord1(k, tile_col));
       vx_barrier_arrive(full_bar(s), 2);
     }
@@ -139,11 +228,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     // Blackwell-style MMA warp: wait on each stage, then post a one-stage job
     // that consumes it and releases it to the producer when fetched.
     tm::tj_desc_t desc = {};
-    desc.taddr        = taddr;
-    desc.a_base       = tm::smem_offset(stage_A(0));
-    desc.b_base       = tm::smem_offset(stage_B(0));
-    desc.stage_stride = stage_elems * sizeof(ctx::input_t);
-    desc.ld           = (kBK * sizeof(ctx::input_t)) | (kBLdmBytes << 16);
+    init_desc(desc, true);
     desc.full_bar     = full_bar(0);
     desc.empty_bar    = empty_bar(0);
     desc.done_bar     = done_bar;
@@ -152,7 +237,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
       uint32_t s = i % kPipeN;
       int phase = vx_barrier_arrive(full_bar(s), 2);
       vx_barrier_wait(full_bar(s), phase);
-      desc.idesc = tm::make_idesc(vt::ITYPE::id, vt::OTYPE::id, kTileN / ctx::tcN, i == 0);
+      init_desc(desc, i == 0);
       desc.stage = s;
       vx_barrier_expect_tx(done_bar, 1);
       tm::tj_post(desc);

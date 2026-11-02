@@ -55,6 +55,17 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
     // Tile-buffer requests of the presented step
     output tcu_tbuf_req_t [BLOCK_SIZE-1:0] tbuf_req,
 
+    // A K-tile's A from TMEM, written to each block's abuf storage
+    output wire                     a_fill_valid,
+    output wire [3:0]               a_fill_k,
+    output wire [BLOCK_SIZE-1:0][`VX_CFG_NUM_THREADS-1:0][31:0] a_fill_data,
+
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
+    // Metadata of the presented step: its two TC_K halves
+    output wire [BLOCK_SIZE-1:0][TCU_MAX_META_BLOCK_WIDTH-1:0] job_meta,
+    output wire [BLOCK_SIZE-1:0][TCU_MAX_META_BLOCK_WIDTH-1:0] job_meta_hi,
+`endif
+
     // Job results from the blocks' tcu_cores, in issue order per block
     input  wire [BLOCK_SIZE-1:0]    jres_valid,
     input  wire [BLOCK_SIZE-1:0][`VX_CFG_NUM_THREADS-1:0][31:0] jres_data,
@@ -84,6 +95,9 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
     localparam JOBS_PER_CTA = 2;
     localparam WQ_DEPTH = 16;
     localparam INFLW    = 8;
+    localparam A_READS  = TCU_WG_FEDP_K / TPL;
+
+    `STATIC_ASSERT (TCU_WG_FEDP_K % TPL == 0, ("A from TMEM reads whole K words per lane"))
 
     `STATIC_ASSERT (TC_M * TC_N == NT, ("C fragment must span the warp"))
     `STATIC_ASSERT (NT % XM == 0, ("TMEM needs NUM_THREADS to be a multiple of WGMMA M"))
@@ -217,6 +231,9 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
         logic [COLW-1:0]        taddr;
         logic [15:0]            a_base;
         logic [15:0]            b_base;
+        logic [15:0]            meta_base;
+        logic                   sparse;
+        logic                   a_tmem;    // a_base is A's first TMEM column
         logic [15:0]            stride;
         logic [15:0]            lda;
         logic [15:0]            ldb;
@@ -310,14 +327,9 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
     wire op_is_desc = (op.op_type == INST_OP_BITS'(INST_TCU_TJ_DESC));
     wire op_is_post = (op.op_type == INST_OP_BITS'(INST_TCU_TJ_POST));
 
-    logic [`CLOG2(JOBS_PER_CTA+NSLOTS+1)-1:0] op_cta_jobs;
-    always_comb begin
-        op_cta_jobs = '0;
-        for (int i = 0; i < NSLOTS; ++i) begin
-            if (state_r[i] != TJ_FREE && slot_r[i].cta == op.header.cta_id)
-                op_cta_jobs = op_cta_jobs + 1;
-        end
-    end
+    // Counted rather than derived from the slots: op_ready depends on it.
+    logic [(1 << NCTA_WIDTH)-1:0][`CLOG2(JOBS_PER_CTA+NSLOTS+1)-1:0] cta_jobs_r;
+    wire [`CLOG2(JOBS_PER_CTA+NSLOTS+1)-1:0] op_cta_jobs = cta_jobs_r[op.header.cta_id];
 
     logic [NSLOTS-1:0] free_slots;
     for (genvar i = 0; i < NSLOTS; ++i) begin : g_free
@@ -449,11 +461,7 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
     logic             e_valid_r;
     logic [SLOTW-1:0] e_slot_r;
     logic             e_m_r;
-    logic [7:0]       e_n_r;
     logic [3:0]       e_sn_r;
-    logic [15:0]      e_choff_r;
-    logic [7:0]       e_ki_r;
-    logic [15:0]      e_stage_off_r;
     logic [3:0]       e_stage_r;
     logic             e_first_r;
     logic             e_zero_r;
@@ -462,6 +470,19 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
     logic             e_fresh_r;
     logic [BLOCK_SIZE-1:0][NT-1:0][31:0] e_hold_r;
 
+    // Slot fields of the presented step, captured at load: job_fire depends on
+    // the descriptors through tbuf_ready, too late for the slot mux and adders.
+    logic [UUID_WIDTH-1:0] e_uuid_r;
+    logic [NW_WIDTH-1:0]   e_wid_r;
+    logic [NCTA_WIDTH-1:0] e_cta_r;
+    logic [4:0]       e_fmt_s_r, e_fmt_d_r;
+    logic [15:0]      e_lda_r, e_ldb_r;
+    logic             e_closed_r, e_a_tmem_r, e_sparse_r;
+    logic [COLW-1:0]  e_col0_r;
+    logic [NT-1:0][SUBW-1:0] e_sub_r;
+    logic [BLOCK_SIZE-1:0][15:0] e_a_off_r;
+    logic [15:0]      e_b_off_r;
+
     tj_slot_t rj;
     assign rj = slot_r[run_slot_r];
     tj_slot_t ej;
@@ -469,7 +490,30 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
 
     assign job_fire = e_valid_r && (&core_ready);
     wire e_advance  = ~e_valid_r || job_fire;
-    wire load       = e_advance && run_valid_r && ~ld_read;
+
+    // K-tile prologue: metadata then A over the read port, all blocks in
+    // parallel, once the previous K-tile's last step has left the E register.
+    // A lane's K-tile metadata is its two rows, in row order, over `meta_cols`.
+    logic [3:0] pro_idx_r;
+    function automatic logic [15:0] meta_row_bits(input logic [4:0] fmt);
+        return 16'(TCU_TC_K * 2 * (32 / tcu_fmt_width(fmt)));
+    endfunction
+    wire [15:0] rj_meta_bits  = 2 * meta_row_bits(rj.fmt_s);
+    wire [15:0] rj_meta_cols  = (rj_meta_bits + 16'd31) >> 5;
+    wire [3:0]  pro_meta_reads = rj.sparse ? 4'((rj_meta_cols + 16'(TPL) - 16'd1) / 16'(TPL)) : 4'd0;
+    wire [3:0]  pro_a_reads    = rj.a_tmem ? 4'(A_READS) : 4'd0;
+    wire [3:0]  pro_total      = pro_meta_reads + pro_a_reads;
+    wire        pro_pending    = run_valid_r && (pro_idx_r < pro_total);
+    wire        pro_go         = pro_pending && e_advance && ~ld_read;
+    wire        pro_is_meta    = (pro_idx_r < pro_meta_reads);
+    wire [3:0]  pro_a_idx      = pro_idx_r - pro_meta_reads;
+    wire [COLW-1:0] pro_col0   = pro_is_meta
+        ? (rj.meta_base + COLW'(32'(rj.kt) * 32'(rj_meta_cols)) + COLW'(32'(pro_idx_r) * TPL))
+        : (rj.a_base + COLW'(32'(rj.kt) * TCU_WG_FEDP_K) + COLW'(32'(pro_a_idx) * TPL));
+    tm_access_t pro_acc;
+    assign pro_acc = reg_access(1'b0, 5'd0, pro_col0);
+
+    wire load       = e_advance && run_valid_r && ~ld_read && ~pro_pending;
 
     wire load_zero      = (rj.kt == 0) && rj.acc_init;
     wire load_m_last    = (run_m_r == 1'(M_STEPS - 1));
@@ -488,14 +532,12 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
     wire [15:0] sn_chunk = 16'(TC_N) * rj.ldb * 16'd15;
 
     // C cells of the presented step, per thread
-    tm_access_t e_acc;
-    assign e_acc = frag_access(e_m_r, ej.taddr + COLW'(32'(e_n_r) * TC_N));
     logic [BLOCK_SIZE-1:0][NT-1:0][31:0] e_c;
     always_comb begin
         for (int b = 0; b < BLOCK_SIZE; ++b) begin
             for (int t = 0; t < NT; ++t) begin
                 e_c[b][t] = e_zero_r ? 32'd0
-                          : (e_fresh_r ? bank_rdata[b][e_acc.sub[t]] : e_hold_r[b][t]);
+                          : (e_fresh_r ? bank_rdata[b][e_sub_r[t]] : e_hold_r[b][t]);
             end
         end
     end
@@ -503,29 +545,84 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
         if (e_fresh_r) e_hold_r <= e_c;
     end
 
-    // descriptors of the presented step
-    wire [15:0] e_a_off = ej.a_base + e_stage_off_r + 16'(32'(e_ki_r) * KT_BYTES);
-    wire [15:0] e_b_off = ej.b_base + e_stage_off_r + e_choff_r
-                        + ((ej.ldb != 0) ? 16'(32'(e_ki_r) * KT_BYTES) : 16'd0);
+    // descriptors of the step being loaded
+    wire [15:0] load_a_off = rj.a_base + rj.use_off + 16'(32'(rj.ki) * KT_BYTES);
+    wire [15:0] load_b_off = rj.b_base + rj.use_off + run_choff_r
+                           + ((rj.ldb != 0) ? 16'(32'(rj.ki) * KT_BYTES * (rj.sparse ? 2 : 1)) : 16'd0);
 
     assign job_valid = e_valid_r;
 
+    // Prologue responses
+    logic                    pro_rsp_valid_r;
+    logic                    pro_rsp_meta_r;
+    logic [3:0]              pro_rsp_idx_r;
+    logic [NT-1:0][SUBW-1:0] pro_rsp_sub_r;
+    logic [BLOCK_SIZE-1:0][NT-1:0][31:0] pro_cell;
+    always_comb begin
+        for (int b = 0; b < BLOCK_SIZE; ++b) begin
+            for (int t = 0; t < NT; ++t) begin
+                pro_cell[b][t] = bank_rdata[b][pro_rsp_sub_r[t]];
+            end
+        end
+    end
+    assign a_fill_valid = pro_rsp_valid_r && ~pro_rsp_meta_r;
+    assign a_fill_k     = 4'(32'(pro_rsp_idx_r) * TPL);
+    assign a_fill_data  = pro_cell;
+
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
+    localparam META_COLS_MAX = (TCU_WG_FEDP_K * 2 * TCU_MAX_ELT_RATIO + 31) / 32;
+    logic [BLOCK_SIZE-1:0][XM-1:0][META_COLS_MAX-1:0][31:0] meta_r;
+    always_ff @(posedge clk) begin
+        if (pro_rsp_valid_r && pro_rsp_meta_r) begin
+            for (int b = 0; b < BLOCK_SIZE; ++b) begin
+                for (int t = 0; t < NT; ++t) begin
+                    meta_r[b][t % XM][32'(pro_rsp_idx_r) * TPL + t / XM] <= pro_cell[b][t];
+                end
+            end
+        end
+    end
+
+    // Rows of M step e_m_r, packed as VX_tcu_sp_mux expects for the format.
+    logic [BLOCK_SIZE-1:0][TCU_MAX_META_BLOCK_WIDTH-1:0] job_meta_lo_c, job_meta_hi_c;
+    always_comb begin
+        job_meta_lo_c = '0;
+        job_meta_hi_c = '0;
+        for (int w = TCU_TC_K * 2; w <= TCU_TC_K * 2 * TCU_MAX_ELT_RATIO; w *= 2) begin
+            if (meta_row_bits(e_fmt_s_r) == 16'(w)) begin
+                for (int b = 0; b < BLOCK_SIZE; ++b) begin
+                    for (int i = 0; i < TC_M; ++i) begin
+                        for (int j = 0; j < w; ++j) begin
+                            job_meta_lo_c[b][i * w + j] = meta_r[b][32'(e_m_r) * TC_M + i][j / 32][j % 32];
+                            job_meta_hi_c[b][i * w + j] = meta_r[b][32'(e_m_r) * TC_M + i][(w + j) / 32][(w + j) % 32];
+                        end
+                    end
+                end
+            end
+        end
+    end
+    assign job_meta    = job_meta_lo_c;
+    assign job_meta_hi = job_meta_hi_c;
+`endif
+
     for (genvar b = 0; b < BLOCK_SIZE; ++b) begin : g_job
-        wire [15:0] a_off_b = e_a_off + 16'(32'(b) * XM * 32'(ej.lda));
         always_comb begin
             job_data[b] = '0;
-            job_data[b].header.uuid   = ej.uuid;
-            job_data[b].header.wid    = ej.wid;
-            job_data[b].header.cta_id = ej.cta;
+            job_data[b].header.uuid   = e_uuid_r;
+            job_data[b].header.wid    = e_wid_r;
+            job_data[b].header.cta_id = e_cta_r;
             job_data[b].header.tmask  = '1;
             job_data[b].header.sop    = 1'b1;
             job_data[b].header.eop    = 1'b1;
             job_data[b].header.wb     = 1'b1;
+        `ifdef VX_CFG_TCU_SPARSE_ENABLE
+            job_data[b].op_type       = e_sparse_r ? INST_OP_BITS'(INST_TCU_WGMMA_SP) : INST_OP_BITS'(INST_TCU_WGMMA);
+        `else
             job_data[b].op_type       = INST_OP_BITS'(INST_TCU_WGMMA);
+        `endif
             job_data[b].op_args.tcu.a_from_smem  = 1'b1;
             job_data[b].op_args.tcu.cd_nregs     = 2'd2;
-            job_data[b].op_args.tcu.fmt_s        = ej.fmt_s;
-            job_data[b].op_args.tcu.fmt_d        = ej.fmt_d;
+            job_data[b].op_args.tcu.fmt_s        = e_fmt_s_r;
+            job_data[b].op_args.tcu.fmt_d        = e_fmt_d_r;
             job_data[b].op_args.tcu.step_m       = 4'(e_m_r);
             job_data[b].op_args.tcu.step_n       = e_sn_r;
             job_data[b].op_args.tcu.is_first_uop = e_first_r;
@@ -535,15 +632,18 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
 
             tbuf_req[b]              = '0;
             tbuf_req[b].valid        = e_valid_r;
-            tbuf_req[b].uuid         = ej.uuid;
-            tbuf_req[b].wid          = ej.wid;
-            tbuf_req[b].cta_id       = ej.cta;
+            tbuf_req[b].uuid         = e_uuid_r;
+            tbuf_req[b].wid          = e_wid_r;
+            tbuf_req[b].cta_id       = e_cta_r;
             tbuf_req[b].step_m       = 4'(e_m_r);
             tbuf_req[b].step_n       = e_sn_r;
             tbuf_req[b].cd_nregs     = 2'd2;
-            tbuf_req[b].desc_a       = `VX_CFG_XLEN'({ej.lda, a_off_b});
-            tbuf_req[b].desc_b       = `VX_CFG_XLEN'({ej.ldb, e_b_off});
-            tbuf_req[b].a_is_smem    = 1'b1;
+            tbuf_req[b].desc_a       = `VX_CFG_XLEN'({e_lda_r, e_a_off_r[b]});
+            tbuf_req[b].desc_b       = `VX_CFG_XLEN'({e_ldb_r, e_b_off_r});
+            tbuf_req[b].a_is_smem    = ~e_a_tmem_r;
+        `ifdef VX_CFG_TCU_SPARSE_ENABLE
+            tbuf_req[b].is_sparse    = e_sparse_r;
+        `endif
             tbuf_req[b].is_first_uop = e_first_r;
         end
     end
@@ -562,7 +662,7 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
             .reset   (reset),
             .push    (job_fire),
             .pop     (jres_valid[b]),
-            .data_in ({e_slot_r, e_m_r, ej.taddr + COLW'(32'(e_n_r) * TC_N)}),
+            .data_in ({e_slot_r, e_m_r, e_col0_r}),
             .data_out(wq_head[b]),
             `UNUSED_PIN (empty),
             `UNUSED_PIN (alm_empty),
@@ -592,6 +692,8 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
             // read: a tmem.ld has priority over the job's C read
             if (ld_read && (op_blk == BLKW'(b))) begin
                 for (int s = 0; s < NT; ++s) bank_raddr[b][s] = op_acc.addr[op_owner[s]];
+            end else if (pro_go) begin
+                for (int t = 0; t < NT; ++t) bank_raddr[b][pro_acc.sub[t]] = pro_acc.addr[t];
             end else begin
                 for (int s = 0; s < NT; ++s) begin
                     for (int t = 0; t < NT; ++t) begin
@@ -621,7 +723,7 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
     `UNUSED_VAR (rj)
     `UNUSED_VAR (ej)
     `UNUSED_VAR (dj)
-    `UNUSED_VAR (e_acc)
+    `UNUSED_VAR (e_sparse_r)
 
     // -----------------------------------------------------------------------
     // Barrier and DXA requests
@@ -678,7 +780,7 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
             bar_req.addr     = bar_addr(slot_r[attach_i].full_bar, slot_r[attach_i].fill_s);
             bar_req.is_event = 1'b1;
             bar_req.phase    = 1'b1;
-            bar_req.size_m1  = BAR_SIZE_W'(1);
+            bar_req.size_m1  = slot_r[attach_i].a_tmem ? BAR_SIZE_W'(0) : BAR_SIZE_W'(1);
         end else if (arrive_v) begin
             bar_kind = 2'd3; bar_slot = arrive_i;
             bar_req.addr     = bar_addr(slot_r[arrive_i].full_bar, slot_r[arrive_i].use_s);
@@ -694,7 +796,8 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
     tj_slot_t dj;
     assign dj = slot_r[dxa_i];
     wire dxa_is_b = (dj.fill_part == 2'd2);
-    wire [31:0] dxa_k = 32'(dj.fill_k);
+    // k_advance is in dense K; compressed A advances half as far.
+    wire [31:0] dxa_k = (dj.sparse && ~dxa_is_b) ? (32'(dj.fill_k) >> 1) : 32'(dj.fill_k);
     dxa_req_data_t dxa_req;
     always_comb begin
         dxa_req = '0;
@@ -754,11 +857,14 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
     always_ff @(posedge clk) begin
         if (reset) begin
             state_r     <= '{default: TJ_FREE};
+            cta_jobs_r  <= '0;
             inflight_r  <= '0;
             older_r     <= '0;
             run_valid_r <= 1'b0;
             e_valid_r   <= 1'b0;
             e_fresh_r   <= 1'b0;
+            pro_idx_r   <= '0;
+            pro_rsp_valid_r <= 1'b0;
         end else begin
             // post
             if (post) begin
@@ -779,6 +885,9 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
                 j.taddr      = post_w[2][COLW-1:0];
                 j.a_base     = post_w[3][15:0];
                 j.b_base     = post_w[4][15:0];
+                j.meta_base  = post_w[5][15:0];
+                j.sparse     = post_w[0][10];
+                j.a_tmem     = post_w[0][12];
                 j.stride     = post_w[6][15:0];
                 j.lda        = post_w[7][15:0];
                 j.ldb        = post_w[7][31:16];
@@ -807,12 +916,18 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
                 end
             end
 
+            for (int c = 0; c < (1 << NCTA_WIDTH); ++c) begin
+                cta_jobs_r[c] <= cta_jobs_r[c]
+                    + `CLOG2(JOBS_PER_CTA+NSLOTS+1)'(post && op.header.cta_id == NCTA_WIDTH'(c))
+                    - `CLOG2(JOBS_PER_CTA+NSLOTS+1)'(bar_fire && bar_kind == 2'd0 && slot_r[bar_slot].cta == NCTA_WIDTH'(c));
+            end
+
             // barrier requests
             if (bar_fire) begin
                 case (bar_kind)
                 2'd0: state_r[bar_slot] <= TJ_FREE;
                 2'd1: slot_r[bar_slot].pend_empty <= 1'b0;
-                2'd2: slot_r[bar_slot].fill_part <= 2'd1;
+                2'd2: slot_r[bar_slot].fill_part <= slot_r[bar_slot].a_tmem ? 2'd2 : 2'd1;
                 default: slot_r[bar_slot].arrived <= 1'b1;
                 endcase
             end
@@ -850,7 +965,7 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
             // step fired: count it in flight, release the stage at its end
             if (job_fire && e_ktile_last_r && e_stage_end_r) begin
                 slot_r[e_slot_r].consumed <= ej.consumed + 16'd1;
-                if (~ej.closed) begin
+                if (~e_closed_r) begin
                     slot_r[e_slot_r].pend_empty   <= 1'b1;
                     slot_r[e_slot_r].pend_empty_s <= e_stage_r;
                 end
@@ -864,18 +979,42 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
                                + ((job_fire && e_slot_r == SLOTW'(i)) ? INFLW'(BLOCK_SIZE) : INFLW'(0));
             end
 
+            // K-tile prologue
+            pro_rsp_valid_r <= pro_go;
+            if (pro_go) begin
+                pro_idx_r      <= pro_idx_r + 4'd1;
+                pro_rsp_meta_r <= pro_is_meta;
+                pro_rsp_idx_r  <= pro_is_meta ? pro_idx_r : pro_a_idx;
+                pro_rsp_sub_r  <= pro_acc.sub;
+            end
+            if (load && load_ktile_end) begin
+                pro_idx_r <= 4'd0;
+            end
+
             // step register
             e_fresh_r <= load && ~load_zero;
             if (load) begin
                 e_valid_r      <= 1'b1;
                 e_slot_r       <= run_slot_r;
                 e_m_r          <= run_m_r;
-                e_n_r          <= run_n_r;
                 e_sn_r         <= run_sn_r;
-                e_choff_r      <= run_choff_r;
-                e_ki_r         <= rj.ki;
-                e_stage_off_r  <= rj.use_off;
                 e_stage_r      <= rj.use_s;
+                e_uuid_r       <= rj.uuid;
+                e_wid_r        <= rj.wid;
+                e_cta_r        <= rj.cta;
+                e_fmt_s_r      <= rj.fmt_s;
+                e_fmt_d_r      <= rj.fmt_d;
+                e_lda_r        <= rj.lda;
+                e_ldb_r        <= rj.ldb;
+                e_closed_r     <= rj.closed;
+                e_a_tmem_r     <= rj.a_tmem;
+                e_sparse_r     <= rj.sparse;
+                e_col0_r       <= load_col0;
+                e_sub_r        <= load_acc.sub;
+                for (int b = 0; b < BLOCK_SIZE; ++b) begin
+                    e_a_off_r[b] <= load_a_off + 16'(32'(b) * XM * 32'(rj.lda));
+                end
+                e_b_off_r      <= load_b_off;
                 e_first_r      <= (run_m_r == 1'b0) && (run_n_r == 8'd0);
                 e_zero_r       <= load_zero;
                 e_ktile_last_r <= load_ktile_end;
@@ -934,6 +1073,7 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
                 run_n_r     <= 8'd0;
                 run_sn_r    <= 4'd0;
                 run_choff_r <= 16'd0;
+                pro_idx_r   <= 4'd0;
                 state_r[start_i] <= TJ_RUN;
                 slot_r[start_i].stage_ready <= 1'b0;
             end
@@ -944,7 +1084,21 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
     // Descriptor checks
     // -----------------------------------------------------------------------
 
-    wire post_bad = post && (post_w[0][10] || post_w[0][12]       // sparse, A from TMEM
+    // Columns [base, base + cols) must not overlap D, which the job rewrites.
+    function automatic logic bad_columns(input logic [31:0] base, input logic [31:0] cols);
+        automatic logic [31:0] d_base = 32'(post_w[2][15:0]);
+        automatic logic [31:0] d_end  = d_base + 32'(post_w[0][20:13]) * TC_N;
+        return (base + cols > COLS) || (base < d_end && d_base < base + cols);
+    endfunction
+    wire [31:0] post_k_tiles  = 32'(post_w[1][31:16]);
+    wire [31:0] post_meta_cols = (2 * 32'(meta_row_bits(post_w[0][4:0])) + 32'd31) >> 5;
+    wire post_bad = post && (
+                       (post_w[0][10] && (TCU_WG_SP_FULLK == 0))
+                    `ifndef VX_CFG_TCU_SPARSE_ENABLE
+                          || post_w[0][10]
+                    `endif
+                          || (post_w[0][10] && bad_columns(32'(post_w[5][15:0]), post_k_tiles * post_meta_cols))
+                          || (post_w[0][12] && bad_columns(32'(post_w[3][15:0]), post_k_tiles * TCU_WG_FEDP_K))
                           || post_w[1][1]                         // unknown mode
                           || (post_w[1][2] && post_w[1][1:0] != 2'd0)
                           || post_w[1][7:4] == 0 || post_w[1][15:8] == 0

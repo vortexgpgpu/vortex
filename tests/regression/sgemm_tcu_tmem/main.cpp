@@ -7,6 +7,7 @@
 #include <rvfloats.h>
 #include <string.h>
 #include <tensor_cfg.h>
+#include <tensor_sp.h>
 #include <unistd.h>
 #include <util.h>
 #include <vector>
@@ -268,6 +269,54 @@ using cfg = vt::wgmma_config_t<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, WGMMA_N
 using itype_t = typename vt::ITYPE::dtype;
 using otype_t = typename vt::OTYPE::dtype;
 
+#ifdef TMEM_SPARSE
+constexpr bool     kSparse = true;
+constexpr uint32_t kTileK  = cfg::tileK_sp;
+#else
+constexpr bool     kSparse = false;
+constexpr uint32_t kTileK  = cfg::tileK;
+#endif
+#ifdef TMEM_A
+constexpr bool kATmem = true;
+#else
+constexpr bool kATmem = false;
+#endif
+static constexpr uint32_t kIRatio   = 32 / vt::ITYPE::bits;
+static constexpr uint32_t kMetaRow  = cfg::tcK * 2 * kIRatio;
+static constexpr uint32_t kMetaCols = (2 * kMetaRow + 31) / 32;
+static constexpr uint32_t kStoreCols = WGMMA_NRC * (VX_CFG_NUM_THREADS / cfg::xtileM);
+
+#ifdef TMEM_SPARSE
+// One word per (row, K-tile, metadata column): from bit 0, the VX_tcu_sp_mux
+// rows of the K-tile's lower then upper TC_K words.
+static std::vector<uint32_t> pack_tmem_metadata(const std::vector<uint8_t>& masks, uint32_t M, uint32_t K) {
+  const uint32_t k_tiles = K / kTileK;
+  const uint32_t groups_per_row = K / 4;
+  const uint32_t half_elems = cfg::tcK * kIRatio * 2;
+  std::vector<uint32_t> meta(size_t(M) * k_tiles * kMetaCols, 0);
+  for (uint32_t row = 0; row < M; ++row) {
+    for (uint32_t g = 0; g < groups_per_row; ++g) {
+      uint8_t mask = masks[row * groups_per_row + g];
+      for (uint32_t p = 0; p < 4; ++p) {
+        if (!(mask & (1u << p))) continue;
+        uint32_t k = g * 4 + p;
+        uint32_t kt = k / kTileK;
+        uint32_t elt = k % kTileK;
+        uint32_t half = elt / half_elems;
+        uint32_t e = elt % half_elems;
+        uint32_t k_reg = e / (2 * kIRatio);
+        uint32_t pos = e % (2 * kIRatio);
+        uint32_t bit = (pos < kIRatio) ? (k_reg * kIRatio + pos)
+                                       : ((cfg::tcK + k_reg) * kIRatio + (pos - kIRatio));
+        bit += half * kMetaRow;
+        meta[(size_t(row) * k_tiles + kt) * kMetaCols + bit / 32] |= 1u << (bit % 32);
+      }
+    }
+  }
+  return meta;
+}
+#endif
+
 static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B,
                        uint32_t M, uint32_t N, uint32_t K) {
   for (uint32_t m = 0; m < M; ++m) {
@@ -312,12 +361,14 @@ vx_device_h device = nullptr;
 vx_buffer_h A_buffer = nullptr;
 vx_buffer_h B_buffer = nullptr;
 vx_buffer_h C_buffer = nullptr;
+vx_buffer_h meta_buffer = nullptr;
 vx_queue_h  queue   = nullptr;
 vx_module_h module_ = nullptr;
 vx_kernel_h kernel  = nullptr;
 kernel_arg_t kernel_arg = {};
 constexpr uint32_t kDescA = 0;
 constexpr uint32_t kDescB = 1;
+[[maybe_unused]] constexpr uint32_t kDescMeta = 2;
 
 static void show_usage() {
   std::cout << "Vortex SGEMM TCU WGMMA+DXA Test." << std::endl;
@@ -342,6 +393,7 @@ void cleanup() {
     if (A_buffer) vx_buffer_release(A_buffer);
     if (B_buffer) vx_buffer_release(B_buffer);
     if (C_buffer) vx_buffer_release(C_buffer);
+    if (meta_buffer) vx_buffer_release(meta_buffer);
     if (kernel)  vx_kernel_release(kernel);
     if (module_) vx_module_release(module_);
     if (queue)   vx_queue_release(queue);
@@ -428,22 +480,24 @@ int main(int argc, char *argv[]) {
     std::cout << "Error: N (" << N << ") must be a multiple of tileN=" << tile_n << std::endl;
     return -1;
   }
-  if ((K % cfg::tileK) != 0) {
-    std::cout << "Error: K (" << K << ") must be a multiple of tileK=" << cfg::tileK << std::endl;
+  if ((K % kTileK) != 0) {
+    std::cout << "Error: K (" << K << ") must be a multiple of tileK=" << kTileK << std::endl;
     return -1;
   }
   // DEEP_BUF stages hold KB K-tiles (kernel.cpp: kBK); other paths use one.
 #if defined(DEEP_BUF)
-  const uint32_t stage_k = KB * cfg::tileK;
+  const uint32_t stage_k = KB * kTileK;
 #else
-  const uint32_t stage_k = cfg::tileK;
+  const uint32_t stage_k = kTileK;
 #endif
+  const uint32_t stage_ka = kSparse ? (stage_k / 2) : stage_k;
   if ((K % stage_k) != 0) {
     std::cout << "Error: K (" << K << ") must be a multiple of KB*tileK=" << stage_k << std::endl;
     return -1;
   }
 
   size_t sizeA = M * K;
+  size_t sizeA_dev = kSparse ? (size_t(M) * (K / 2)) : sizeA;
   size_t sizeB = K * N;
   size_t sizeC = M * N;
 
@@ -452,12 +506,21 @@ int main(int argc, char *argv[]) {
   uint32_t block_dim[2] = {warps * (uint32_t)NT, 1};
 
   // SMEM: A tile [cta_M x tileK] + B tile [tileK x tileN]
-  uint32_t smem_size = (cta_M * stage_k + stage_k * tile_n) * sizeof(itype_t);
+  uint32_t smem_size = ((kATmem ? 0 : cta_M * stage_ka) + stage_k * tile_n) * sizeof(itype_t);
   smem_size *= PIPE_N;  // N-stage pipeline (common.h)
   // The CTA's TMEM columns scale with its shared-memory window
   // (vx_tmem.h: smem_bytes_for_cols).
-  const uint32_t tmem_window = (tile_n + 1) * ((1u << VX_CFG_LMEM_LOG_SIZE) / VX_CFG_TCU_TMEM_COLS);
+  auto round_store = [](uint32_t cols) { return ((cols + kStoreCols - 1) / kStoreCols) * kStoreCols; };
+  const uint32_t tmem_cols = tile_n
+    + (kATmem ? round_store((K / kTileK) * cfg::fedpK) : 0)
+    + (kSparse ? round_store((K / kTileK) * kMetaCols) : 0);
+  const uint32_t tmem_window = (tmem_cols + 1) * ((1u << VX_CFG_LMEM_LOG_SIZE) / VX_CFG_TCU_TMEM_COLS);
   smem_size = std::max(smem_size, tmem_window);
+  // kernel.cpp stages the CTA's metadata rows at the window base, and the
+  // TMEM copy reads up to one store past their end.
+  if (kSparse) {
+    smem_size = std::max(smem_size, (cta_M * (K / kTileK) * kMetaCols + kStoreCols) * uint32_t(sizeof(uint32_t)));
+  }
 
   std::cout << "input type: " << vt::ITYPE::name << ", output type: " << vt::OTYPE::name << std::endl;
   std::cout << "warp tile: M=" << cfg::xtileM << ", N=" << tile_n << ", K=" << cfg::tileK << std::endl;
@@ -473,7 +536,7 @@ int main(int argc, char *argv[]) {
   kernel_arg.K = K;
 
   std::cout << "allocate device memory" << std::endl;
-  RT_CHECK(vx_buffer_create(device, sizeA * sizeof(itype_t), VX_MEM_READ, &A_buffer));
+  RT_CHECK(vx_buffer_create(device, sizeA_dev * sizeof(itype_t), VX_MEM_READ, &A_buffer));
   RT_CHECK(vx_buffer_address(A_buffer, &kernel_arg.A_addr));
   RT_CHECK(vx_buffer_create(device, sizeB * sizeof(itype_t), VX_MEM_READ, &B_buffer));
   RT_CHECK(vx_buffer_address(B_buffer, &kernel_arg.B_addr));
@@ -494,6 +557,29 @@ int main(int argc, char *argv[]) {
     h_B[i] = Comparator<vt::ITYPE>::generate();
   }
 
+  // Sparse: h_A becomes the pruned operand the CPU reference uses; the device
+  // holds its compressed form and the metadata. Must outlive the async writes.
+  std::vector<itype_t> h_A_dev = h_A;
+  std::vector<uint32_t> h_meta;
+#ifdef TMEM_SPARSE
+  if (!vt::prune_2to4_matrix<vt::ITYPE>(h_A.data(), M, K)) {
+    std::cerr << "prune_2to4_matrix failed" << std::endl;
+    cleanup();
+    return -1;
+  }
+  h_A_dev.resize(sizeA_dev);
+  std::vector<uint8_t> masks;
+  if (!vt::compress_2to4_matrix<vt::ITYPE>(h_A_dev.data(), h_A.data(), masks, M, K)) {
+    std::cerr << "compress_2to4_matrix failed" << std::endl;
+    cleanup();
+    return -1;
+  }
+  h_meta = pack_tmem_metadata(masks, M, K);
+  RT_CHECK(vx_buffer_create(device, h_meta.size() * sizeof(uint32_t), VX_MEM_READ, &meta_buffer));
+  RT_CHECK(vx_buffer_address(meta_buffer, &kernel_arg.meta_addr));
+  RT_CHECK(vx_enqueue_write(queue, meta_buffer, 0, h_meta.data(), h_meta.size() * sizeof(uint32_t), 0, nullptr, nullptr));
+#endif
+
   // B_KMAJOR: the device holds B^T ([N][K], K contiguous). h_B stays the
   // logical [K][N] operand the CPU reference uses. h_BT must outlive the
   // async write below.
@@ -510,7 +596,7 @@ int main(int argc, char *argv[]) {
 #endif
 
   std::cout << "upload source data" << std::endl;
-  RT_CHECK(vx_enqueue_write(queue, A_buffer, 0, h_A.data(), sizeA * sizeof(itype_t), 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_write(queue, A_buffer, 0, h_A_dev.data(), sizeA_dev * sizeof(itype_t), 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_write(queue, B_buffer, 0, b_upload, sizeB * sizeof(itype_t), 0, nullptr, nullptr));
 
   // Program DXA descriptors.
@@ -518,9 +604,9 @@ int main(int argc, char *argv[]) {
   //   dim0 = K-axis (tile0 = tileK), dim1 = M-axis (tile1 = cta_M)
   //   stride0_bytes = row stride of A = K * sizeof(itype_t)
   RT_CHECK(vortex::dxa::program_2d(queue, kDescA, kernel_arg.A_addr,
-    /*size0=*/K, /*size1=*/M,
-    /*stride0_bytes=*/K * sizeof(itype_t),
-    /*tile0=*/stage_k, /*tile1=*/cta_M,
+    /*size0=*/uint32_t(sizeA_dev / M), /*size1=*/M,
+    /*stride0_bytes=*/uint32_t(sizeA_dev / M) * sizeof(itype_t),
+    /*tile0=*/stage_ka, /*tile1=*/cta_M,
     /*elem_bytes=*/sizeof(itype_t)));
 
   // Descriptor B: fetches tileN columns x tileK rows from B[k, col].
@@ -549,6 +635,15 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vortex::dxa::set_layout(queue, kDescB,
     vortex::dxa::Layout::BlockMajor, /*rank=*/2, /*elem_bytes=*/sizeof(itype_t)));
   RT_CHECK(vortex::dxa::set_tile_geometry(device, kDescB, /*tcN=*/cfg::tcN, /*blk_k=*/cfg::b_blk_k));
+#endif
+
+#ifdef TMEM_SPARSE
+  // Descriptor Meta: a CTA's cta_M metadata rows, all K-tiles at once.
+  RT_CHECK(vortex::dxa::program_2d(queue, kDescMeta, kernel_arg.meta_addr,
+    /*size0=*/(K / kTileK) * kMetaCols, /*size1=*/M,
+    /*stride0_bytes=*/(K / kTileK) * kMetaCols * sizeof(uint32_t),
+    /*tile0=*/(K / kTileK) * kMetaCols, /*tile1=*/cta_M,
+    /*elem_bytes=*/sizeof(uint32_t)));
 #endif
 
   std::cout << "load kernel module" << std::endl;

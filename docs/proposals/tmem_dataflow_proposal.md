@@ -162,9 +162,9 @@ scoreboard and `done_bar` is signalled after the last TMEM write; `cp`,
 |---|---|
 | [4:0] | `fmt_s` |
 | [9:5] | `fmt_d` |
-| [10] | sparse |
+| [10] | sparse (2:4 compressed A, metadata in TMEM) |
 | [11] | `acc_init` (first K-tile overwrites D) |
-| [12] | A source: 0 = LMEM, 1 = TMEM (reserved) |
+| [12] | A source: 0 = LMEM, 1 = TMEM |
 | [20:13] | `n_frag` |
 | [31:21] | reserved |
 
@@ -175,7 +175,7 @@ scoreboard and `done_bar` is signalled after the last TMEM write; `cp`,
 | 0 | `idesc` |
 | 1 | `mode` [1:0] (0 = CONSUME, 1 = CLOSED), `sw_full` [2] (software already waited on the full barriers), `nstages` [7:4], `kb` [15:8] (K-tiles per stage), `k_tiles` [31:16] |
 | 2 | `taddr`: first D column (lane 0) |
-| 3 / 4 / 5 | stage base: A / B / sparse metadata |
+| 3 / 4 / 5 | A: stage base, or first TMEM column when A is in TMEM / B: stage base / first metadata TMEM column |
 | 6 | stage stride (bytes) |
 | 7 | leading bytes: A [15:0], B [31:16] (0 = block-major B, `kb` must be 1) |
 | 8 / 9 / 10 | `full_bar` base / `empty_bar` base / `done_bar`; stage `s` uses `base \| (s << 8)` |
@@ -265,6 +265,37 @@ The remaining TMEM gap (4-6% at 128^3) is in the stage round trip (producer
 wake-up, DXA, barrier), not the job datapath: steady-state K-tiles match. The
 WGMMA deepbuf baseline is 17% pessimistic in SimX at 128^3 (1.3% at 64^3).
 
+128x128x512, rtlsim:
+
+| Case | Cycles | vs WGMMA |
+|---|---|---|
+| WGMMA deepbuf | 312,224 | 1.00x |
+| CONSUME, 128 columns, N = 32 | 308,056 | 1.01x |
+| CLOSED, 512 columns, N = 128 (TFR FEDP) | 179,049 (SimX 178,253) | 1.74x |
+
+All 128^3 and 64^3 cases also pass with the TFR FEDP at the same cycle counts
+as DPI. Long CLOSED jobs leave every warp waiting on a barrier for over
+`STALL_TIMEOUT` cycles, so the scheduler watchdog treats barrier traffic as
+progress.
+
+### Findings
+
+- Tile size is the whole gain. At 128 columns a CTA's tile (16 warps x 32
+  registers x NT = 4096 accumulators) is exactly what the register file
+  already holds, so per-stage work and reuse equal WGMMA's: 1.01-1.16x, from
+  issue/RF relief only. Wider N per CTA (512 columns) gives 1.6-1.9x.
+- K-loop placement is small on GEMM. At 128^3: Blackwell-style (sw_full,
+  69,925), CONSUME (69,625, -0.4%), CLOSED (67,647, -3.3%). CLOSED cuts
+  instructions 39% vs CONSUME (9,392 vs 15,504), which GEMM cannot use
+  because nothing else competes for issue.
+- CLOSED costs ~1.3k flops (91 static + 70 counter bits per slot); fill state
+  is per CTA head, so it could be kept per CTA instead of per slot.
+- B is not the bottleneck: a one-block `bbuf` prefetch (next block read while
+  the last M step fires) cut the B cadence from 5 to 3-4 cycles per block but
+  64^3 only from 11,909 to 11,851 cycles; dropped. The per-stage cost is the
+  serial A stripe load (~39 cycles at 64^3: four `abuf`s in turn on the
+  shared LMEM port, each bank row read twice) plus the stage round trip.
+
 ## Front-end decoupling
 
 Jobs never touch the register file, so their uop expansion moves from
@@ -291,6 +322,33 @@ written by a new DXA layout mode:
 `bbuf` becomes a double-buffered 1024-bit pipeline register with prefetch;
 `abuf` becomes a 4096-bit stationary register with a 2:1 M-step select.
 
+## A from TMEM and sparse jobs
+
+Warps fill TMEM before the post and synchronize on a barrier: a job's reads are
+ordered only behind the posting warp's own transfers. Both regions must be
+disjoint from D (descriptor check). A K-tile prologue reads them over the TMEM
+read port, on all blocks in parallel, ahead of the K-tile's first step and once
+the previous K-tile's last step has fired (`tmem.ld` > prologue/C read). A read
+is one `tmem.ld` lane-per-thread access: `NT / M` columns of every lane.
+
+- A: `FEDP_K` columns per K-tile of K-packed words; a lane is an M row.
+  `FEDP_K * M / NT` reads (4 at NT=8) fill `abuf`'s storage, against ~39 cycles
+  of serial LMEM stripe load. The fetch FSM stays idle. CLOSED skips A's DXA
+  load and attaches one transaction; CONSUME producers issue B only.
+- Sparse: compressed A (from a stage or TMEM) with the FULLK uop shape, so a
+  K-tile covers twice the dense K; requires `VX_CFG_TCU_SPARSE_FULLK`. A lane's
+  K-tile metadata is its two `VX_tcu_sp_mux` rows, low bits first, over
+  `ceil(2 * row_bits / 32)` columns (fp16 and fp8: one, fp4: two at NT=8): one read
+  per K-tile, into a per-block register, against a warp TCU_LD per K-tile in
+  WGMMA. No warp is in the K loop, so the metadata cannot desynchronize warps.
+  CLOSED halves the dense `k_advance` for A's coordinates. The kernel loads a
+  CTA's metadata as NVIDIA does (TMA -> smem -> `tcgen05.cp`): one DXA copy
+  into the not-yet-used stages, then unrolled smem loads and `tmem.st`.
+
+Warp WGMMA and TMEM are mutually exclusive: warps never issue WGMMA or WGMMA_SP
+in a TMEM build, so VX_tcu_core takes those ops' metadata from the job unit.
+`VX_CFG_TCU_WGMMA_ENABLE` still selects the tile buffers these builds reuse.
+
 ## Unchanged
 
 WMMA, WGMMA (register accumulator), `TCU_LD`, DXA issue, and barriers.
@@ -301,8 +359,13 @@ WMMA, WGMMA (register accumulator), `TCU_LD`, DXA issue, and barriers.
   the stage barrier, shortening fill and inter-stage gaps.
 - Readiness scheduling: run whichever queued job (across CTAs) has its next
   stage ready, hiding one job's DXA latency behind another's compute.
-- A from TMEM (`idesc[12]`): replaces `abuf`, frees A's LMEM bandwidth, needs
-  a wider TMEM read port.
+- Softmax jobs for attention, reusing the existing units: `exp(S - m)` through
+  the MUFU `EX2` behind an arbiter (job vs warp), row max by comparators as S
+  streams from TMEM, row sum from the tensor core (a ones column appended to
+  V), packed P written back to TMEM; O rescale left to warps under FA4's
+  threshold rule, `1/l` by warps at the end. Worth building only if software
+  attention on TMEM is bound by issue and TMEM<->RF traffic rather than MUFU
+  throughput; measure that first.
 - Multicast in CLOSED mode.
 - One configurable array per core (`TCU_ARRAY_M x TCU_ARRAY_N`), independent
   of `NUM_THREADS` and `ISSUE_WIDTH`. A 16x8 array of the same 128 FEDPs needs

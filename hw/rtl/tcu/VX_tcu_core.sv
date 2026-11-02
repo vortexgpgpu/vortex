@@ -35,6 +35,14 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0] ext_meta_wr_data,
 `endif
 
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
+    // A tensor job's K-tile metadata; warps do not issue WGMMA_SP with TMEM.
+    input wire [TCU_MAX_META_BLOCK_WIDTH-1:0] job_meta,
+    input wire [TCU_MAX_META_BLOCK_WIDTH-1:0] job_meta_hi,
+`endif
+`endif
+
     // Inputs
     VX_execute_if.slave execute_if,
 
@@ -120,7 +128,14 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
   `ifdef VX_CFG_TCU_SPARSE_ENABLE
     // Sparse metadata lives in VX_tcu_sp_meta SRAM, preloaded via TCU_LD.
-    wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_meta_block = wmma_sp_meta;
+  `ifdef VX_CFG_TCU_TMEM_ENABLE
+    wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_meta_block    = is_wgmma ? job_meta : wmma_sp_meta;
+    wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_meta_block_hi = job_meta_hi;
+    `UNUSED_VAR (wmma_sp_meta_hi)
+  `else
+    wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_meta_block    = wmma_sp_meta;
+    wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_meta_block_hi = wmma_sp_meta_hi;
+  `endif
   `endif
 
     assign exe_ready_extra = ~is_wgmma || tbuf_ready;
@@ -533,7 +548,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     .fmt_s     (fmt_s),
                     .b_col_in1 (b_col_1_hi),
                     .b_col_in2 (b_col_2_hi),
-                    .vld_mask  (wmma_sp_meta_hi),
+                    .vld_mask  (vld_meta_block_hi),
                     .b_col_out (b_col_sel_hi)
                 );
                 assign b_col_sparse_hi = is_wgmma ? b_col_sel_hi : '0;
@@ -541,7 +556,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `endif
             begin : g_sp_hi_off
                 assign b_col_sparse_hi = '0;
-                `UNUSED_VAR (wmma_sp_meta_hi)
+                `UNUSED_VAR (vld_meta_block_hi)
                 // Without FEDP2K there are no upper FEDP lanes to consume it.
                 if (FEDP_K == TCU_TC_K) begin : g_sp_hi_unused
                     `UNUSED_VAR (b_col_sparse_hi)
