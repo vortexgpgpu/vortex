@@ -226,8 +226,7 @@ the table in the same change.
 | | | `0x02` | tensor core (WMMA/WGMMA) | R |
 | | | `0x03` | DXA async copy | R |
 | | | `0x04` | packed loads (`vx_packl*`) | R |
-| | | `0x08`–`0x0F` | `vx_ldg`: `funct7[2]` FP, `[1:0]` cache hint; `rs2` = uimm5 byte offset | R |
-| | | `0x10`–`0x17` | `vx_stg`: `funct7[2]` FP, `[1:0]` cache hint; `rd` = uimm5 byte offset | R |
+| | | `0x08`–`0x17` | free | |
 | custom-1 `0x2B` | `funct3` | `0` | `vx_wgather` | R4 |
 | | | `3` | `vx_om_export` | R4 |
 | | | `5` | `vx_tex` | R4 |
@@ -235,19 +234,24 @@ the table in the same change.
 | | | `7` | `vx_rt_trace`, `vx_rt_wait` | R4 |
 | | | `1`, `2`, `4` | free | |
 | custom-2 `0x5B` | `funct7` | `0x00` | MUFU special functions; `fn` in `rs2`, `fmt` in `funct3` | R |
-| custom-3 `0x7B` | `funct3` | `0`–`6` | `vx_lds` (LOAD widths); `imm[11]` FP, `imm[10:0]` byte offset | I |
-| | | `7` | `vx_sts`; `imm[11]` FP, `imm[10:9]` size, `imm[8:0]` byte offset | S |
+| custom-3 `0x7B` | `funct3` | `3` | `vx_flds.d fd, imm(rs1)`: wide local load into `fd`, `fd+1` | I |
+| | | `4` | `vx_flds.q fd, imm(rs1)`: wide local load into `fd`..`fd+3` | I |
+| | | `0`–`2`, `5`–`7` | reserved | |
 
-`vx_lds`/`vx_sts` address local memory by the low `LMEM_LOG_SIZE` bits of the
-effective address, so a local pointer may hold the window address or a bare
-offset. `vx_ldg`/`vx_stg` take the generic path: the local-memory window is
-reserved, so no global pointer falls in it. Their hint is 0 (default), 1
-(`.cg`) or 2 (`.cs`); 3 is reserved. With `imm[11]` set, `funct3` 0 is
-`vx_flds.128` and `funct3` 4 is `vx_flds.64` (XLEN 32): one request loads four
-or two consecutive words into the quad- or pair-aligned FP registers starting at
-`fd`. The other integer-only codes with `imm[11]` set and the FP store with
-size 0 are reserved for wide local accesses, as are `vx_ldg` with `funct3` 7
-and `vx_stg` with `funct3` 4–7. Standard loads and stores stay generic.
+`vx_flds.d` and `vx_flds.q` have the layout of the standard `fld`/`flq`: `rd`
+is the first FP destination, `rs1` the base, and `imm[11:0]` a signed byte
+offset. Each thread loads 8 or 16 bytes from local memory into the aligned
+register pair or quad starting at `fd`; `fd` must be a multiple of 2 or 4, and
+the address a multiple of 8 or 16. Local memory is addressed by the low
+`LMEM_LOG_SIZE` bits of the effective address, so a local pointer may hold the
+window address or a bare offset. Standard loads and stores serve every other
+local and global access through the generic path.
+
+The two forms are defined only with FLEN 32 (XLEN 32 with F) and local memory;
+elsewhere custom-3 is illegal. One FP register then holds one LSU word, so the
+group fills one word per phase on the existing datapath and each phase
+releases its register on its own. With FLEN 64 one register already holds 64
+bits and `fld` covers the `.d` case.
 
 ---
 

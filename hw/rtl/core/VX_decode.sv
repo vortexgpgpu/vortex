@@ -107,11 +107,6 @@ module VX_decode import
     wire [11:0] i_imm   = is_itype_sh ? {7'b0, instr[24:20]} : u_12;
 `endif
     wire [11:0] s_imm   = {funct7, rd};
-`ifdef VX_CFG_LMEM_ENABLE
-`ifdef VX_CFG_EXT_F_ENABLE
-    wire lds_wide = LDS_WIDE_ENABLE && instr[31] && (funct3[1:0] == 2'b00);
-`endif
-`endif
     wire [11:0] b_imm   = {instr[31], instr[7], instr[30:25], instr[11:8]};
     wire [19:0] jal_imm = {instr[31], instr[19:12], instr[20], instr[30:21]};
 
@@ -495,42 +490,26 @@ module VX_decode import
             `endif
             end
         `ifdef VX_CFG_LMEM_ENABLE
-            // vx_lds/vx_sts: imm[11] selects the FP register file; a store
-            // carries its size in imm[10:9].
+        `ifdef VX_CFG_EXT_F_ENABLE
+            // vx_flds.d (funct3 3) and vx_flds.q (funct3 4) load 2 or 4 words
+            // into an aligned FP register group, one word per beat. A full-size
+            // bytesel with an odd offset, which no other instruction produces,
+            // carries the group size.
             INST_EXT4: begin
-                ex_type = EX_LSU;
-                op_args.lsu.is_float = instr[31];
-                op_args.lsu.pack     = 0;
-                op_args.lsu.is_local = 1;
-                `USED_IREG (rs1);
-                if (funct3 == 3'h7) begin
-                    op_type = INST_OP_BITS'({2'b10, instr[30:29]});
-                    op_args.lsu.is_store = 1;
-                    op_args.lsu.offset   = {{3{s_imm[8]}}, s_imm[8:0]};
-                `ifdef VX_CFG_EXT_F_ENABLE
-                    `USED_REG (instr[31], rs2, 1'b1);
-                `else
-                    `USED_IREG (rs2);
-                `endif
-                end else begin
-                    op_type = INST_OP_BITS'({1'b0, funct3});
+                if (LDS_WIDE_ENABLE && ((funct3 == 3'h3) || (funct3 == 3'h4))) begin
+                    ex_type = EX_LSU;
+                    op_type = INST_OP_BITS'(INST_LSU_LW);
                     op_args.lsu.is_store = 0;
-                    op_args.lsu.offset   = {u_12[10], u_12[10:0]};
-                `ifdef VX_CFG_EXT_F_ENABLE
-                    // vx_flds.128 (funct3 0) and vx_flds.64 (funct3 4) load 4 or 2
-                    // words into an aligned FP register group, one word per beat.
-                    // A full-size bytesel with an odd offset, which no other
-                    // instruction produces, carries the group size.
-                    if (lds_wide) begin
-                        op_type = INST_OP_BITS'(INST_LSU_LW);
-                        bytesel = {XLENB_W'(XLENB-1), XLENB_W'({~funct3[2], 1'b1})};
-                    end
-                    `USED_REG (instr[31], rd, 1'b1);
-                `else
-                    `USED_IREG (rd);
-                `endif
+                    op_args.lsu.is_float = 1;
+                    op_args.lsu.pack     = 0;
+                    op_args.lsu.is_local = 1;
+                    op_args.lsu.offset   = u_12;
+                    bytesel = {XLENB_W'(XLENB-1), XLENB_W'({funct3[2], 1'b1})};
+                    `USED_IREG (rs1);
+                    `USED_FREG (rd);
                 end
             end
+        `endif
         `endif
         `ifdef VX_CFG_EXT_F_ENABLE
             INST_FMADD,  // 7'b1000011
@@ -858,37 +837,6 @@ module VX_decode import
                             end
                             default:;
                         endcase
-                    end
-                    // vx_ldg/vx_stg: global accesses through the generic path, the
-                    // window being reserved for local memory. funct7[2] selects the
-                    // FP register file; the cache hint in funct7[1:0] is advisory.
-                    7'h08, 7'h09, 7'h0A, 7'h0B, 7'h0C, 7'h0D, 7'h0E, 7'h0F: begin
-                        ex_type              = EX_LSU;
-                        op_type              = INST_OP_BITS'({1'b0, funct3});
-                        op_args.lsu.is_store = 0;
-                        op_args.lsu.is_float = funct7[2];
-                        op_args.lsu.pack     = 0;
-                        op_args.lsu.offset   = 12'(rs2);
-                        `USED_IREG (rs1);
-                    `ifdef VX_CFG_EXT_F_ENABLE
-                        `USED_REG (funct7[2], rd, 1'b1);
-                    `else
-                        `USED_IREG (rd);
-                    `endif
-                    end
-                    7'h10, 7'h11, 7'h12, 7'h13, 7'h14, 7'h15, 7'h16, 7'h17: begin
-                        ex_type              = EX_LSU;
-                        op_type              = INST_OP_BITS'({2'b10, funct3[1:0]});
-                        op_args.lsu.is_store = 1;
-                        op_args.lsu.is_float = funct7[2];
-                        op_args.lsu.pack     = 0;
-                        op_args.lsu.offset   = 12'(rd);
-                        `USED_IREG (rs1);
-                    `ifdef VX_CFG_EXT_F_ENABLE
-                        `USED_REG (funct7[2], rs2, 1'b1);
-                    `else
-                        `USED_IREG (rs2);
-                    `endif
                     end
                     default:;
                 endcase

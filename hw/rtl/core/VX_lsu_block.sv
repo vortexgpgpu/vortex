@@ -137,7 +137,7 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
     // carried through the scheduler's USER channel and out via the
     // lsu_mem_if's per-lane req_data.user field.
 
-    // vx_lds/vx_sts address local memory by the low bits alone, so a bare
+    // Wide local loads address local memory by the low bits alone, so a bare
     // offset that falls in another window is still local.
 `ifdef VX_CFG_LMEM_ENABLE
     wire req_local = execute_if.data.op_args.lsu.is_local;

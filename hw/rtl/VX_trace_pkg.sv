@@ -182,35 +182,14 @@ package VX_trace_pkg;
                     end
                 endcase
             end else if (op_args.lsu.is_local) begin
-                if (op_args.lsu.is_float) begin
-                    `TRACE(level, ("VX_F"))
+                // only wide loads are local: a full-size bytesel with offset 3
+                // is a quad, with offset 1 a pair
+                if (bytesel == BYTESEL_BITS'({XLENB_W'(XLENB-1), XLENB_W'(3)})) begin
+                    `TRACE(level, ("VX_FLDS.Q"))
+                end else if (bytesel == BYTESEL_BITS'({XLENB_W'(XLENB-1), XLENB_W'(1)})) begin
+                    `TRACE(level, ("VX_FLDS.D"))
                 end else begin
-                    `TRACE(level, ("VX_"))
-                end
-                if (op_args.lsu.is_store) begin
-                    `TRACE(level, ("STS."))
-                end else begin
-                    `TRACE(level, ("LDS."))
-                end
-                // a full-size bytesel with offset 1 or 3 is a wide load
-                if ((bytesel[BYTESEL_BITS-1 -: XLENB_W] == XLENB_W'(XLENB-1))
-                 && ((bytesel[XLENB_W-1:0] | XLENB_W'(2)) == XLENB_W'(3))) begin
-                    if (bytesel[1]) begin
-                        `TRACE(level, ("128"))
-                    end else begin
-                        `TRACE(level, ("64"))
-                    end
-                end else begin
-                    case (INST_LSU_BITS'(op_type))
-                        INST_LSU_LB, INST_LSU_SB: `TRACE(level, ("B"))
-                        INST_LSU_LH, INST_LSU_SH: `TRACE(level, ("H"))
-                        INST_LSU_LW, INST_LSU_SW: `TRACE(level, ("W"))
-                        INST_LSU_LD, INST_LSU_SD: `TRACE(level, ("D"))
-                        INST_LSU_LBU:             `TRACE(level, ("BU"))
-                        INST_LSU_LHU:             `TRACE(level, ("HU"))
-                        INST_LSU_LWU:             `TRACE(level, ("WU"))
-                        default:                  `TRACE(level, ("?"))
-                    endcase
+                    `TRACE(level, ("?"))
                 end
             end else if (op_args.lsu.is_float) begin
                 case (INST_LSU_BITS'(op_type))

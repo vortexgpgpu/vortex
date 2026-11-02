@@ -384,8 +384,8 @@ struct IntrLsuArgs {
   uint32_t width : 3;
   uint32_t stride : 4;  // per-uop multiplier: 0 = regular LD/ST; 0..N-1 = packLD uop_idx
   int32_t  offset;      // immediate addr offset (signed); 0 for packLD uops
-  bool     is_local = false; // vx_lds/vx_sts: local memory at the low address bits
-  uint32_t nregs = 1;        // vx_flds.64/.128: registers fd.. loaded one word-phase each
+  bool     is_local = false; // wide local load: local memory at the low address bits
+  uint32_t nregs = 1;        // wide local load: registers fd.. loaded one word-phase each
 };
 
 // A fence carries no access width; its width field says what it orders.

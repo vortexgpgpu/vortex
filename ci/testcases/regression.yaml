@@ -62,44 +62,44 @@ tests:
   configs: -DVX_CFG_EXT_A_ENABLE -DVX_CFG_ISSUE_WIDTH=2
   shape:
     threads: 16
-# Explicit local (vx_lds/vx_sts) and global (vx_ldg/vx_stg) loads and stores:
-# every width, the offset limits, and local addresses given as a bare offset.
-- id: lds-ldg-1
+# Wide local loads (vx_flds.d/.q): lane patterns, register groups, the offset
+# limits, and local addresses given as a bare offset.
+- id: lds-wide-1
   via: blackbox
   drivers:
   - simx
   - rtlsim
-  app: lds_ldg
+  app: lds_wide
   shape:
     threads: 16
 # Two LSU blocks: local requests on the second engine.
-- id: lds-ldg-2
+- id: lds-wide-2
   via: blackbox
   drivers:
   - simx
   - rtlsim
-  app: lds_ldg
+  app: lds_wide
   configs: -DVX_CFG_ISSUE_WIDTH=2
   shape:
     threads: 32
     warps: 8
 # Fewer LSU lanes than SIMD lanes: a warp's request goes out in four packets.
-- id: lds-ldg-3
+- id: lds-wide-3
   via: blackbox
   drivers:
   - simx
   - rtlsim
-  app: lds_ldg
+  app: lds_wide
   configs: -DVX_CFG_NUM_LSU_LANES=4
   shape:
     threads: 16
 # One SIMD lane: the dispatcher splits every warp into single-lane packets.
-- id: lds-ldg-4
+- id: lds-wide-4
   via: blackbox
   drivers:
   - simx
   - rtlsim
-  app: lds_ldg
+  app: lds_wide
   configs: -DVX_CFG_SIMD_WIDTH=1
   shape:
     threads: 4

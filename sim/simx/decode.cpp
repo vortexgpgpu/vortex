@@ -268,11 +268,7 @@ static op_string_t op_string(const Instr &instr) {
         auto lsuArgs = std::get<IntrLsuArgs>(instrArgs);
         bool dst_float = (instr.get_dest_reg().type == RegType::Float);
         if (lsuArgs.nregs > 1) {
-          return {(lsuArgs.nregs == 4) ? "VX_FLDS.128" : "VX_FLDS.64", to_hex_str(lsuArgs.offset)};
-        }
-        if (lsuArgs.is_local) {
-          static const char* const widths[] = {"B", "H", "W", "D", "BU", "HU", "WU"};
-          return {std::string(dst_float ? "VX_FLDS." : "VX_LDS.") + widths[lsuArgs.width], to_hex_str(lsuArgs.offset)};
+          return {(lsuArgs.nregs == 4) ? "VX_FLDS.Q" : "VX_FLDS.D", to_hex_str(lsuArgs.offset)};
         }
         if (instr.is_macro_op() && dst_float && lsuArgs.width == 0) {
           return {"PACKLB.F", ""};
@@ -306,10 +302,6 @@ static op_string_t op_string(const Instr &instr) {
         auto lsuArgs = std::get<IntrLsuArgs>(instrArgs);
         // For stores, the data source (rs2) carries the type info.
         bool src_float = (instr.get_src_reg(1).type == RegType::Float);
-        if (lsuArgs.is_local) {
-          static const char* const widths[] = {"B", "H", "W", "D"};
-          return {std::string(src_float ? "VX_FSTS." : "VX_STS.") + widths[lsuArgs.width], to_hex_str(lsuArgs.offset)};
-        }
         if (src_float) {
           switch (lsuArgs.width) {
           case 1: return {"FSH", to_hex_str(lsuArgs.offset)};
@@ -1058,33 +1050,6 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       }
       instr->set_macro_op();
     } break;
-    // vx_ldg/vx_stg: global accesses through the generic path, the window
-    // being reserved for local memory. funct7[2] selects the FP register
-    // file; the cache hint in funct7[1:0] is advisory.
-    case 0x08: case 0x09: case 0x0a: case 0x0b:
-    case 0x0c: case 0x0d: case 0x0e: case 0x0f: {
-      bool is_float = (funct7 >> 2) & 0x1;
-      if ((funct7 & 0x3) == 3 || funct3 == 7 || (is_float && (funct3 == 0 || funct3 > 3))) {
-        std::abort();
-      }
-      instr->set_fu_type(FUType::LSU);
-      instr->set_op_type(LsuType::LOAD);
-      instr->set_dest_reg(rd, is_float ? RegType::Float : RegType::Integer);
-      instr->set_src_reg(0, rs1, RegType::Integer);
-      instr->set_args(IntrLsuArgs{funct3, /*stride*/ 0, int32_t(rs2)});
-    } break;
-    case 0x10: case 0x11: case 0x12: case 0x13:
-    case 0x14: case 0x15: case 0x16: case 0x17: {
-      bool is_float = (funct7 >> 2) & 0x1;
-      if ((funct7 & 0x3) == 3 || funct3 > 3 || (is_float && funct3 == 0)) {
-        std::abort();
-      }
-      instr->set_fu_type(FUType::LSU);
-      instr->set_op_type(LsuType::STORE);
-      instr->set_src_reg(0, rs1, RegType::Integer);
-      instr->set_src_reg(1, rs2, is_float ? RegType::Float : RegType::Integer);
-      instr->set_args(IntrLsuArgs{funct3, /*stride*/ 0, int32_t(rd)});
-    } break;
     default:
       std::abort();
     }
@@ -1262,45 +1227,25 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     instr->set_src_reg(0, rs1, RegType::Float);
   } break;
 #endif
-#ifdef VX_CFG_LMEM_ENABLE
+#if defined(VX_CFG_LMEM_ENABLE) && defined(VX_CFG_EXT_F_ENABLE) && defined(VX_CFG_XLEN_32)
   case Opcode::EXT4: {
-    // vx_lds/vx_sts: imm[11] selects the FP register file; a store carries
-    // its size in imm[10:9]. The remaining codes are reserved.
-    instr->set_fu_type(FUType::LSU);
-    instr->set_src_reg(0, rs1, RegType::Integer);
-    bool is_float = (funct7 >> 6) & 0x1;
-    if (funct3 == 7) {
-      uint32_t size = (funct7 >> 4) & 0x3;
-      if (is_float && size == 0) {
-        std::abort();
-      }
-      uint32_t imm9 = ((funct7 & 0xf) << width_reg) | rd;
-      instr->set_src_reg(1, rs2, is_float ? RegType::Float : RegType::Integer);
-      instr->set_op_type(LsuType::STORE);
-      instr->set_args(IntrLsuArgs{size, /*stride*/ 0, (int32_t)sext(imm9, 9), /*is_local*/ true});
-    } else {
-      // vx_flds.128 (funct3 0) and vx_flds.64 (funct3 4) load words into an
-      // aligned quad or pair of FP registers; defined on XLEN 32 only
-      uint32_t nregs = 1;
-      if (is_float && (funct3 == 0 || funct3 == 4)) {
-      #if defined(VX_CFG_XLEN_32) && defined(VX_CFG_EXT_F_ENABLE)
-        nregs = (funct3 == 0) ? 4 : 2;
-      #else
-        std::abort();
-      #endif
-      } else if (is_float && funct3 > 3) {
-        std::abort();
-      }
-      if (rd % nregs != 0) {
-        std::cout << "Error: vx_flds." << (32 * nregs) << " destination f" << rd
-                  << " is not aligned to " << nregs << " registers" << std::endl;
-        std::abort();
-      }
-      uint32_t imm11 = (code >> shift_rs2) & 0x7ff;
-      instr->set_dest_reg(rd, is_float ? RegType::Float : RegType::Integer);
-      instr->set_op_type(LsuType::LOAD);
-      instr->set_args(IntrLsuArgs{(nregs > 1) ? 2u : funct3, /*stride*/ 0, (int32_t)sext(imm11, 11), /*is_local*/ true, nregs});
+    // vx_flds.d (funct3 3) and vx_flds.q (funct3 4) load words into an
+    // aligned pair or quad of FP registers.
+    if (funct3 != 3 && funct3 != 4) {
+      std::abort();
     }
+    uint32_t nregs = (funct3 == 4) ? 4 : 2;
+    if (rd % nregs != 0) {
+      std::cout << "Error: vx_flds." << ((nregs == 4) ? "q" : "d") << " destination f" << rd
+                << " is not aligned to " << nregs << " registers" << std::endl;
+      std::abort();
+    }
+    uint32_t imm12 = code >> shift_rs2;
+    instr->set_fu_type(FUType::LSU);
+    instr->set_op_type(LsuType::LOAD);
+    instr->set_dest_reg(rd, RegType::Float);
+    instr->set_src_reg(0, rs1, RegType::Integer);
+    instr->set_args(IntrLsuArgs{/*width=LW*/ 2, /*stride*/ 0, (int32_t)sext(imm12, width_i_imm), /*is_local*/ true, nregs});
   } break;
 #endif
   default:

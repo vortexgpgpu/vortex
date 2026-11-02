@@ -265,17 +265,17 @@ tests:
   app: lmem_access
   args: -n16 -s
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_A_ENABLE -DVX_CFG_ISSUE_WIDTH=2
-# Explicit local and global loads and stores: SimX and RTL route them alike.
-- id: parity-lds-ldg
+# Wide local loads: SimX and RTL route and time them alike.
+- id: parity-lds-wide
   check: model_parity
   via: blackbox
-  app: lds_ldg
+  app: lds_wide
   configs: -DVX_CFG_NUM_THREADS=16
 # Fewer LSU lanes than SIMD lanes: a wide load's phases complete across packets.
-- id: parity-lds-ldg-lanes
+- id: parity-lds-wide-lanes
   check: model_parity
   via: blackbox
-  app: lds_ldg
+  app: lds_wide
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_LSU_LANES=4
 - id: parity-sgemm2-lmem
   check: model_parity

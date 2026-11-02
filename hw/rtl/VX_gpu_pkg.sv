@@ -1159,8 +1159,8 @@ package VX_gpu_pkg;
     // words, and VX_gfx_uops emits one uop per set bit.
     // Zero = not an export. Read ONLY by VX_gfx_uops; the LSU never sees it set
     // (the expander clears it), so the LSU stays a general-purpose unit.
-    // is_local marks vx_lds/vx_sts: the access goes to local memory at the
-    // low bits of its address, whatever the address window says.
+    // is_local marks a wide local load: the access goes to local memory at
+    // the low bits of its address, whatever the address window says.
     typedef struct packed {
         logic                       is_local;
         logic [1:0]                 export_mask;
@@ -1673,7 +1673,7 @@ package VX_gpu_pkg;
         logic [LSU_CLIENT_TAG_WIDTH-1:0]                            tag;
     } lsu_req_data_t;
 
-    // Wide local loads (vx_flds.64/.128) fill an aligned FP register group,
+    // Wide local loads (vx_flds.d/.q) fill an aligned FP register group,
     // one word-phase at a time.
     localparam LDS_WIDE_ENABLE = `VX_CFG_LMEM_ENABLED && `VX_CFG_EXT_F_ENABLED && (`VX_CFG_XLEN == 32);
 
