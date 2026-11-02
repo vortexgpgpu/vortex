@@ -1,8 +1,8 @@
 {
   "tensor_tmem:perf_gate-umma-4cta:rtlsim": {
     "32": {
-      "cycles": 84036,
-      "instrs": 74048
+      "cycles": 81448,
+      "instrs": 73008
     },
     "app": "sgemm_tcu_tmem",
     "args": "-m64 -n64 -k64",
@@ -12,8 +12,8 @@
   },
   "tensor_tmem:perf_gate-umma-fp16:rtlsim": {
     "32": {
-      "cycles": 88382,
-      "instrs": 74016
+      "cycles": 86417,
+      "instrs": 72976
     },
     "app": "sgemm_tcu_tmem",
     "args": "-m 64 -n 64 -k 64",
@@ -23,8 +23,8 @@
   },
   "tensor_tmem:perf_gate-umma-int8:rtlsim": {
     "32": {
-      "cycles": 76568,
-      "instrs": 64144
+      "cycles": 74832,
+      "instrs": 63104
     },
     "app": "sgemm_tcu_tmem",
     "args": "-m 64 -n 64 -k 64",

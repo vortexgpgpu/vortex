@@ -202,7 +202,7 @@ module VX_tcu_tmem import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             for (int e = 0; e < ALLOC_NUM_ENTRIES; ++e) begin
                 if (alloc_live_valid[e]
                     && ({1'b0, ldst_addr_col} >= {1'b0, alloc_live_handle[e]})
-                    && ({1'b0, ldst_addr_col} < ({1'b0, alloc_live_handle[e]} + {1'b0, alloc_live_ncols[e]}))) begin
+                    && ({1'b0, ldst_addr_col} < ({1'b0, alloc_live_handle[e]} + alloc_live_ncols[e]))) begin
                     ldst_col_live = 1'b1;
                 end
             end
@@ -534,7 +534,7 @@ module VX_tcu_tmem import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire                          alloc_req_valid      = alloc_grant_valid;
     wire                          alloc_req_is_dealloc = is_dealloc_req[alloc_grant_idx];
     wire [NCTA_WIDTH-1:0]         alloc_req_cta_id     = mgmt_data[alloc_grant_idx].header.cta_id;
-    wire [7:0]                    alloc_req_ncols      = mgmt_data[alloc_grant_idx].rs1_data[0][7:0];
+    wire [TCU_TMEM_COL_BITS:0]    alloc_req_ncols      = mgmt_data[alloc_grant_idx].rs1_data[0][TCU_TMEM_COL_BITS:0];
     wire [TCU_TMEM_COL_BITS-1:0]  alloc_req_handle     = TCU_TMEM_COL_BITS'(mgmt_data[alloc_grant_idx].rs1_data[0]);
 
     wire                          alloc_resp_valid;
@@ -543,7 +543,7 @@ module VX_tcu_tmem import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam ALLOC_NUM_ENTRIES = (`VX_CFG_NUM_WARPS / `VX_CFG_NUM_TCU_BLOCKS) + 1;
     wire                         alloc_live_valid  [ALLOC_NUM_ENTRIES];
     wire [TCU_TMEM_COL_BITS-1:0] alloc_live_handle [ALLOC_NUM_ENTRIES];
-    wire [7:0]                   alloc_live_ncols  [ALLOC_NUM_ENTRIES];
+    wire [TCU_TMEM_COL_BITS:0]   alloc_live_ncols  [ALLOC_NUM_ENTRIES];
 
     VX_tcu_tmem_alloc #(
         .INSTANCE_ID (`SFORMATF(("%s-alloc", INSTANCE_ID)))

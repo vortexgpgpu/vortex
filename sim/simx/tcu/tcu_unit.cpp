@@ -1728,10 +1728,19 @@ public:
     // TMEM lane addressing uses this warp's CTA-local rank
     uint32_t cta_rank = core_->scheduler().warp(wid).cta_csrs.cta_rank;
 
-    // Bounds check once per uop rather than per element.
-    uint32_t alloc_ncols = tmem_.alloc_ncols(use_handle);
+    // Bounds check once per uop rather than per element. The accumulator may
+    // start at any column of a live allocation, not only at its base.
+    uint32_t alloc_ncols = tmem_.alloc_cols_from(use_handle);
     if (0 == alloc_ncols) {
-      std::cout << "Error: UMMA invalid TMEM handle " << use_handle << std::endl;
+      std::cout << "Error: UMMA accumulator column " << use_handle
+                << " not within any active allocation" << std::endl;
+      std::abort();
+    }
+    // TMEM banks hold TC_N-column words, so a misaligned origin would address
+    // the word below it.
+    if (use_handle % cfg::tcN != 0) {
+      std::cout << "Error: UMMA accumulator column " << use_handle
+                << " is not a multiple of TC_N=" << cfg::tcN << std::endl;
       std::abort();
     }
     uint32_t max_lane = cta_rank * xtileM + step_m * cfg::tcM + cfg::tcM;
@@ -1741,8 +1750,8 @@ public:
     }
     uint32_t max_col_local = step_n * cfg::tcN + cfg::tcN;
     if (max_col_local > alloc_ncols) {
-      std::cout << "Error: UMMA column range exceeds TMEM allocation (handle=" << use_handle
-                << ", ncols=" << alloc_ncols << ")" << std::endl;
+      std::cout << "Error: UMMA column range exceeds TMEM allocation (col=" << use_handle
+                << ", cols left=" << alloc_ncols << ")" << std::endl;
       std::abort();
     }
 

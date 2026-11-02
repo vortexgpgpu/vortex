@@ -1441,7 +1441,8 @@ public:
   }
 
   // Issue a UMMA op: A/B sourced from SMEM via descriptors, C/D implicit in
-  // TMEM at `handle`.
+  // TMEM at `handle`, the accumulator tile's first column. It may be any column
+  // of the CTA's allocation, so one allocation can hold several accumulators.
   // ---- UMMA sync intrinsic ----
   // SS: umma_sync(desc_a,   desc_b, handle) — A from shared memory
   // TS: umma_sync(tmem_ref, desc_b, handle) — A from TMEM

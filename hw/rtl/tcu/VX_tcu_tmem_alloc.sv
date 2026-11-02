@@ -46,7 +46,7 @@ module VX_tcu_tmem_alloc import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input  wire                         req_valid,
     input  wire                         req_is_dealloc,
     input  wire [NCTA_WIDTH-1:0]        req_cta_id,
-    input  wire [7:0]                   req_ncols,
+    input  wire [TCU_TMEM_COL_BITS:0]   req_ncols,
     input  wire [TCU_TMEM_COL_BITS-1:0] req_handle,
 
     output wire                         resp_valid,
@@ -56,7 +56,7 @@ module VX_tcu_tmem_alloc import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // TMEM_LD/TMEM_ST addresses against live ranges
     output wire                         live_valid_out  [NUM_ENTRIES],
     output wire [TCU_TMEM_COL_BITS-1:0] live_handle_out [NUM_ENTRIES],
-    output wire [7:0]                   live_ncols_out  [NUM_ENTRIES]
+    output wire [TCU_TMEM_COL_BITS:0]   live_ncols_out  [NUM_ENTRIES]
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
@@ -74,7 +74,7 @@ module VX_tcu_tmem_alloc import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     logic                  live_valid         [NUM_ENTRIES];
     logic [NCTA_WIDTH-1:0] live_cta_id        [NUM_ENTRIES];
     logic [COLW-1:0]       live_handle        [NUM_ENTRIES];
-    logic [7:0]            live_ncols         [NUM_ENTRIES];
+    logic [SIZEW-1:0]      live_ncols         [NUM_ENTRIES];
     logic [7:0]            live_dealloc_count [NUM_ENTRIES];
 
     for (genvar i = 0; i < NUM_ENTRIES; ++i) begin : g_live_export
@@ -108,7 +108,7 @@ module VX_tcu_tmem_alloc import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         free_fit_found = 1'b0;
         free_fit_idx   = '0;
         for (int i = 0; i < NUM_ENTRIES; ++i) begin
-            if (!free_fit_found && free_valid[i] && (free_size[i] >= {1'b0, req_ncols})) begin
+            if (!free_fit_found && free_valid[i] && (free_size[i] >= req_ncols)) begin
                 free_fit_found = 1'b1;
                 free_fit_idx   = ENTRY_BITS'(i);
             end
@@ -146,8 +146,8 @@ module VX_tcu_tmem_alloc import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // DEALLOC-completing: is the range about to be freed adjacent to an
     // existing free entry on the left and/or right (coalescing)
     wire [COLW-1:0]  dealloc_handle = live_handle[handle_match_idx];
-    wire [7:0]       dealloc_ncols  = live_ncols[handle_match_idx];
-    wire [SIZEW-1:0] dealloc_end    = {1'b0, dealloc_handle} + {1'b0, dealloc_ncols};
+    wire [SIZEW-1:0] dealloc_ncols  = live_ncols[handle_match_idx];
+    wire [SIZEW-1:0] dealloc_end    = {1'b0, dealloc_handle} + dealloc_ncols;
 
     logic                  left_adj_found;
     logic [ENTRY_BITS-1:0] left_adj_idx;
@@ -244,11 +244,11 @@ module VX_tcu_tmem_alloc import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             // Fresh ALLOC: consume the matched free range, register a new
             // CAM entry
             if (alloc_is_fresh && free_fit_found && cam_slot_found) begin
-                if (free_size[free_fit_idx] == {1'b0, req_ncols}) begin
+                if (free_size[free_fit_idx] == req_ncols) begin
                     free_valid[free_fit_idx] <= 1'b0;
                 end else begin
                     free_start[free_fit_idx] <= free_start[free_fit_idx] + COLW'(req_ncols);
-                    free_size[free_fit_idx]  <= free_size[free_fit_idx] - {1'b0, req_ncols};
+                    free_size[free_fit_idx]  <= free_size[free_fit_idx] - req_ncols;
                 end
                 live_valid[cam_slot_idx]         <= 1'b1;
                 live_cta_id[cam_slot_idx]        <= req_cta_id;
@@ -265,17 +265,17 @@ module VX_tcu_tmem_alloc import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 if (dealloc_completes) begin
                     live_valid[handle_match_idx] <= 1'b0;
                     if (left_adj_found && right_adj_found) begin
-                        free_size[left_adj_idx]   <= free_size[left_adj_idx] + {1'b0, dealloc_ncols} + free_size[right_adj_idx];
+                        free_size[left_adj_idx]   <= free_size[left_adj_idx] + dealloc_ncols + free_size[right_adj_idx];
                         free_valid[right_adj_idx] <= 1'b0;
                     end else if (left_adj_found) begin
-                        free_size[left_adj_idx] <= free_size[left_adj_idx] + {1'b0, dealloc_ncols};
+                        free_size[left_adj_idx] <= free_size[left_adj_idx] + dealloc_ncols;
                     end else if (right_adj_found) begin
                         free_start[right_adj_idx] <= dealloc_handle;
-                        free_size[right_adj_idx]  <= free_size[right_adj_idx] + {1'b0, dealloc_ncols};
+                        free_size[right_adj_idx]  <= free_size[right_adj_idx] + dealloc_ncols;
                     end else if (free_slot_found) begin
                         free_valid[free_slot_idx] <= 1'b1;
                         free_start[free_slot_idx] <= dealloc_handle;
-                        free_size[free_slot_idx]  <= {1'b0, dealloc_ncols};
+                        free_size[free_slot_idx]  <= dealloc_ncols;
                     end
                 end else begin
                     live_dealloc_count[handle_match_idx] <= live_dealloc_count[handle_match_idx] + 8'd1;

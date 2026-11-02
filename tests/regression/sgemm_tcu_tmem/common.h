@@ -7,6 +7,11 @@
   #define UMMA_NRC 8
 #endif
 
+// Columns between the TMEM allocation's base and the accumulator
+#ifndef UMMA_ACC_OFFSET
+  #define UMMA_ACC_OFFSET 0
+#endif
+
 #ifndef ITYPE
 #define ITYPE fp16
 #endif
