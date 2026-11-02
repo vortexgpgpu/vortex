@@ -259,6 +259,28 @@ tests:
   app: sgemm_tcu_sp
   configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_TF32_ENABLE -DITYPE=tf32 -DOTYPE=fp32
 
+# An LSU narrower than the warp: TCU_LD fetches the metadata in several passes,
+# through a shared AGU port in the second case.
+- id: sgemm_tcu_sp-lsu-lanes-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_LSU_LANES=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=fp16 -DOTYPE=fp32
+- id: sgemm_tcu_sp-lsu-lanes-2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_LSU_LANES=4 -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_INT8_ENABLE -DITYPE=int8 -DOTYPE=int32
+- id: model_parity-sparse-lsu-lanes
+  check: model_parity
+  via: blackbox
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_LSU_LANES=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE
+
 # SimX<->rtlsim cycle parity on the native sparse fp16 datapath: same config on
 # both drivers, cycles must agree within tolerance (see core.yaml).
 - id: model_parity-sparse-fp16

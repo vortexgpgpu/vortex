@@ -16,10 +16,12 @@
 `ifdef TCU_META_ENABLE
 
 // A TCU block's TCU_LD unit: one warp-wide load in flight through an LSU
-// scheduler client port. Response fragments are written straight into the
-// block's metadata RAM, lane by lane, so nothing is buffered here. The load
-// cannot overwrite metadata an older MMA still needs: TCU_LD enters the block
-// in order behind that MMA, which reads the RAM when it issues.
+// scheduler client port, issued in NUM_TCU_LANES / NUM_LSU_LANES passes of
+// consecutive words, like the LSU's own packets. Response fragments are
+// written straight into the block's metadata RAM, lane by lane, so nothing is
+// buffered here. The load cannot overwrite metadata an older MMA still needs:
+// TCU_LD enters the block in order behind that MMA, which reads the RAM when
+// it issues.
 
 module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -46,11 +48,19 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input wire              result_ready
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    `STATIC_ASSERT (NUM_LANES == `VX_CFG_NUM_LSU_LANES, ("TCU_LD requires NUM_TCU_LANES == NUM_LSU_LANES"))
+
+    localparam LSU_LANES  = `VX_CFG_NUM_LSU_LANES;
+    localparam NUM_PASSES = NUM_LANES / LSU_LANES;
+    localparam PASS_BITS  = `CLOG2(NUM_PASSES);
 
     // An LSU word holds XLEN/32 metadata words; lane i reads word i.
     localparam LSU_W32_RATIO = LSU_WORD_SIZE / 4;
     localparam LG_W32_RATIO  = (LSU_W32_RATIO > 1) ? $clog2(LSU_W32_RATIO) : 0;
+
+    `STATIC_ASSERT ((NUM_LANES % LSU_LANES) == 0, ("TCU_LD requires NUM_TCU_LANES to be a multiple of NUM_LSU_LANES"))
+    // each pass starts on an LSU word, so lane i keeps reading word i
+    `STATIC_ASSERT ((NUM_PASSES == 1) || ((LSU_LANES % LSU_W32_RATIO) == 0), ("TCU_LD passes must be LSU-word aligned"))
+    `STATIC_ASSERT (LSU_CLIENT_TAG_WIDTH >= PASS_BITS, ("LSU client tag cannot encode the TCU_LD pass"))
 
     reg                     busy_r, issued_r, done_r;
     tcu_header_t            header_r;
@@ -62,6 +72,11 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire rsp_fire    = client_if.rsp_valid && client_if.rsp_ready;
     wire result_fire = result_valid && result_ready;
 
+    // the pass being requested, and whether it and the response are the last
+    wire [`UP(PASS_BITS)-1:0] req_pass;
+    wire [`UP(PASS_BITS)-1:0] rsp_pass;
+    wire req_last, rsp_last;
+
     always @(posedge clk) begin
         if (reset) begin
             busy_r   <= 1'b0;
@@ -71,10 +86,10 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             if (ld_fire) begin
                 busy_r <= 1'b1;
             end
-            if (req_fire) begin
+            if (req_fire && req_last) begin
                 issued_r <= 1'b1;
             end
-            if (rsp_fire && client_if.rsp_data.eop) begin
+            if (rsp_fire && client_if.rsp_data.eop && rsp_last) begin
                 done_r <= 1'b1;
             end
             if (result_fire) begin
@@ -87,14 +102,46 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             header_r <= ld_data.header;
             slot_r   <= ld_data.op_args.tcu.fmt_d;
             addr_r   <= ld_data.rs1_data[0];
+        end else if (req_fire && (NUM_PASSES > 1)) begin
+            addr_r   <= addr_r + `VX_CFG_XLEN'(LSU_LANES * 4);
         end
+    end
+
+    if (NUM_PASSES > 1) begin : g_passes
+        reg [PASS_BITS-1:0] req_pass_r;
+        reg [PASS_BITS-1:0] rsp_cnt_r;
+        always @(posedge clk) begin
+            if (reset || ld_fire) begin
+                req_pass_r <= '0;
+                rsp_cnt_r  <= '0;
+            end else begin
+                if (req_fire) begin
+                    req_pass_r <= req_pass_r + PASS_BITS'(1);
+                end
+                if (rsp_fire && client_if.rsp_data.eop) begin
+                    rsp_cnt_r <= rsp_cnt_r + PASS_BITS'(1);
+                end
+            end
+        end
+        assign req_pass = req_pass_r;
+        assign req_last = (req_pass_r == PASS_BITS'(NUM_PASSES-1));
+        assign rsp_last = (rsp_cnt_r == PASS_BITS'(NUM_PASSES-1));
+        // responses of different passes may return out of order
+        assign rsp_pass = client_if.rsp_data.tag[PASS_BITS-1:0];
+        `UNUSED_VAR (client_if.rsp_data.tag[LSU_CLIENT_TAG_WIDTH-1:PASS_BITS])
+    end else begin : g_no_passes
+        assign req_pass = '0;
+        assign req_last = 1'b1;
+        assign rsp_last = 1'b1;
+        assign rsp_pass = '0;
+        `UNUSED_VAR (client_if.rsp_data.tag)
     end
 
     assign ld_ready = ~busy_r;
     `UNUSED_VAR (ld_data)
 
     // -----------------------------------------------------------------------
-    // Request: one warp-wide load of NUM_LANES consecutive 32-bit words.
+    // Request: one pass loads LSU_LANES consecutive 32-bit words.
     // -----------------------------------------------------------------------
     wire [LSU_ADDR_WIDTH-1:0] base_word_addr = LSU_ADDR_WIDTH'(addr_r >> `CLOG2(LSU_WORD_SIZE));
     `UNUSED_VAR (addr_r[`CLOG2(LSU_WORD_SIZE)-1:0])
@@ -124,8 +171,9 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     always_comb begin
         req_data      = '0;
         req_data.rw   = 1'b0;
-        req_data.mask = {NUM_LANES{1'b1}};
-        for (int i = 0; i < NUM_LANES; ++i) begin
+        req_data.mask = {LSU_LANES{1'b1}};
+        req_data.tag  = LSU_CLIENT_TAG_WIDTH'(req_pass);
+        for (int i = 0; i < LSU_LANES; ++i) begin
             req_data.addr[i]   = base_word_addr + (LSU_ADDR_WIDTH'(i) >> LG_W32_RATIO);
             req_data.byteen[i] = {LSU_WORD_SIZE{1'b1}};
             req_data.attr[i]   = req_attr;
@@ -136,7 +184,6 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     assign client_if.req_data  = req_data;
     assign client_if.rsp_ready = 1'b1;
     `UNUSED_VAR (client_if.rsp_data.sop)
-    `UNUSED_VAR (client_if.rsp_data.tag)
 
     `RUNTIME_ASSERT(~client_if.rsp_valid || (issued_r && ~done_r),
         ("%t: *** %s unexpected TCU_LD response", $time, INSTANCE_ID))
@@ -145,14 +192,14 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // Metadata is read as a linear warp-wide tile, which an interleaved
     // per-thread stack cannot provide.
     if (`VX_CFG_NUM_THREADS > 1) begin : g_meta_stack_check
-        wire [`VX_CFG_XLEN-1:0] meta_end_addr = addr_r + `VX_CFG_XLEN'(NUM_LANES * 4 - 1);
+        wire [`VX_CFG_XLEN-1:0] meta_end_addr = addr_r + `VX_CFG_XLEN'(LSU_LANES * 4 - 1);
         `RUNTIME_ASSERT(~req_fire || (meta_end_addr < STACK_WINDOW_BOTTOM) || (addr_r >= STACK_WINDOW_TOP),
             ("%t: *** %s TCU metadata inside the thread stack window: addr=0x%0h", $time, INSTANCE_ID, addr_r))
     end
 `endif
 
     // -----------------------------------------------------------------------
-    // Metadata RAM write: each response fragment writes its own lanes.
+    // Metadata RAM write: each response fragment writes its own pass's lanes.
     // -----------------------------------------------------------------------
     assign meta_wr_en  = rsp_fire;
     assign meta_wr_wid = header_r.wid;
@@ -160,8 +207,9 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     for (genvar i = 0; i < TCU_BLOCK_CAP; ++i) begin : g_meta_wr
         if (i < NUM_LANES) begin : g_lane
-            wire [LSU_W32_RATIO-1:0][31:0] rsp_w32 = client_if.rsp_data.data[i];
-            assign meta_wr_mask[i] = client_if.rsp_data.mask[i];
+            wire [LSU_W32_RATIO-1:0][31:0] rsp_w32 = client_if.rsp_data.data[i % LSU_LANES];
+            assign meta_wr_mask[i] = client_if.rsp_data.mask[i % LSU_LANES]
+                                  && (rsp_pass == `UP(PASS_BITS)'(i / LSU_LANES));
             assign meta_wr_data[i] = rsp_w32[i % LSU_W32_RATIO];
             `UNUSED_VAR (rsp_w32)
         end else begin : g_pad

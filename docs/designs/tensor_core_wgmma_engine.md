@@ -379,7 +379,10 @@ simulation assertion catches a forgotten mask.
 [`VX_tcu_agu.sv`](../../hw/rtl/tcu/VX_tcu_agu.sv) issues **one warp-wide
 fetch per `TCU_LD`**: lane `T` loads word `T` of the metadata tile at the
 base address in `rs1`. The kernel pre-advances the base per slot, so a
-multi-slot load is several instructions.
+multi-slot load is several instructions. An LSU narrower than the warp
+takes the fetch in `NUM_THREADS / NUM_LSU_LANES` passes of consecutive
+words, as the LSU splits a warp into packets; each request carries its pass
+in its tag, so the responses can return in any order.
 
 The generator is **client 1 of the core's LSU scheduler** on block 0. It
 owns no memory port; it reuses the LSU's staging, outstanding pool and cache
