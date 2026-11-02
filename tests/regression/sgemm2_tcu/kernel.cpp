@@ -22,7 +22,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   size_t tile_row = blockIdx.y * cta_M;
   size_t tile_col = blockIdx.x * ctx::tileN;
 
-  // Shared memory: A [cta_M x tileK] row-major, B [tileK x tileN] row-major
+  // Shared memory: A [cta_M x tileK] row-major, B [tileK x tileN] col-major
   auto smem   = reinterpret_cast<ctx::input_t *>(__local_mem());
   auto A_smem = smem;
   auto B_smem = smem + cta_M * ctx::tileK;
@@ -31,6 +31,9 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   ctx::fragment_b   fragB;
   ctx::fragment_acc fragC;
   ctx::fill_fragment(fragC, 0);
+
+  size_t a_lane_off = ctx::lane_offset<ctx::fragment_a>(ctx::tileK);
+  size_t b_lane_off = ctx::lane_offset<ctx::fragment_b, vt::col_major>(ctx::tileK);
 
   for (size_t k = 0; k < K; k += ctx::tileK) {
     // Cooperatively load A tile [cta_M x tileK] from DRAM (row-major).
@@ -43,21 +46,22 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     }
 
     // Cooperatively load B tile [tileK x tileN] from DRAM (col-major source)
-    // and store row-major in shared memory.
+    // and keep it col-major in shared memory: K-contiguous, each B fragment
+    // register is one word rather than a gather across K rows.
     uint32_t b_size = ctx::tileK * ctx::tileN;
     for (size_t i = 0; i < b_size; i += num_threads) {
       size_t idx = i + tid;
-      size_t r = idx / ctx::tileN;
-      size_t c = idx % ctx::tileN;
-      B_smem[r * ctx::tileN + c] = pB[(tile_col + c) * K + (k + r)];
+      size_t c = idx / ctx::tileK;
+      size_t r = idx % ctx::tileK;
+      B_smem[c * ctx::tileK + r] = pB[(tile_col + c) * K + (k + r)];
     }
 
     __syncthreads();
 
     // Per-warp WMMA from shared memory.
     auto A_warp = A_smem + warp_rank * ctx::tileM * ctx::tileK;
-    ctx::load_matrix_sync(fragA, A_warp, ctx::tileK);
-    ctx::load_matrix_sync(fragB, B_smem, ctx::tileN);
+    ctx::load_matrix_sync(fragA, A_warp, ctx::tileK, a_lane_off);
+    ctx::load_matrix_sync<vt::col_major>(fragB, B_smem, ctx::tileK, b_lane_off);
     ctx::mma_sync(fragC, fragA, fragB, fragC);
 
     __syncthreads();

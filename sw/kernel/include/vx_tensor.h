@@ -280,25 +280,71 @@ public:
     });
   }
 
+  // Element offset of the calling lane's first fragment element in a tile with
+  // leading dimension ldm. A K loop computes it once and passes it to
+  // load_matrix_sync: an asm with side effects ahead of the load (a barrier, a
+  // metadata load) keeps the compiler from hoisting the lane id read.
+  template <typename Frag, mem_layout layout = row_major>
+  static __attribute__((always_inline)) size_t lane_offset(size_t ldm) {
+    uint32_t row, col;
+    lane_coords<Frag, layout>(row, col);
+    return row * ldm + col;
+  }
+
   template <mem_layout src_layout = row_major, typename Frag>
   static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm) {
+    uint32_t row, col;
+    lane_coords<Frag, src_layout>(row, col);
+    load_fragment<src_layout>(dst, reinterpret_cast<const frag_elem_t<Frag>*>(src) + row * ldm + col, ldm);
+  }
+
+  template <mem_layout src_layout = row_major, typename Frag>
+  static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm, size_t lane_off) {
+    load_fragment<src_layout>(dst, reinterpret_cast<const frag_elem_t<Frag>*>(src) + lane_off, ldm);
+  }
+
+private:
+
+  template <typename Frag>
+  using frag_elem_t = std::conditional_t<Frag::Use == frag_use_t::accumulator, output_t, input_t>;
+
+  // Row and column of the calling lane's first fragment element in its tile
+  template <typename Frag, mem_layout layout>
+  static __attribute__((always_inline)) void lane_coords(uint32_t &row, uint32_t &col) {
     uint32_t lane = vx_thread_id();
     if constexpr (Frag::Use == frag_use_t::matrix_a) {
-      // Load row-major matrix A
       uint32_t block_idx = (cfg::a_block_size == NT) ? 0 : (lane / cfg::a_block_size);
       uint32_t lane_in_blk = (cfg::a_block_size == NT) ? lane : (lane % cfg::a_block_size);
-      uint32_t block_row = (lane_in_blk / cfg::tcK) + (block_idx * cfg::tcM);
-      uint32_t block_col = (lane_in_blk % cfg::tcK) * i_ratio;
+      row = (lane_in_blk / cfg::tcK) + (block_idx * cfg::tcM);
+      col = (lane_in_blk % cfg::tcK) * i_ratio;
+    } else if constexpr (Frag::Use == frag_use_t::matrix_b) {
+      // Sparse B uses 2x tcK per block
+      constexpr uint32_t b_tcK = is_sparse ? (cfg::tcK * 2) : cfg::tcK;
+      constexpr uint32_t b_block_size = is_sparse ? cfg::b_block_size_sp : cfg::b_block_size;
+      uint32_t block_idx = (b_block_size == NT) ? 0 : (lane / b_block_size);
+      uint32_t lane_in_blk = (b_block_size == NT) ? lane : (lane % b_block_size);
+      row = (lane_in_blk % b_tcK) * i_ratio;
+      col = (lane_in_blk / b_tcK) + (block_idx * cfg::tcN);
+    } else {
+      row = lane / cfg::tcN;
+      col = lane % cfg::tcN;
+    }
+    if constexpr (layout == col_major) {
+      std::swap(row, col);
+    }
+  }
+
+  // base already points at the calling lane's first element
+  template <mem_layout src_layout, typename Frag>
+  static __attribute__((always_inline)) void load_fragment(Frag &dst, const frag_elem_t<Frag> *base, size_t ldm) {
+    if constexpr (Frag::Use == frag_use_t::matrix_a) {
+      // Load row-major matrix A
       uint32_t m_stride  = cfg::a_sub_blocks * cfg::tcM;
       uint32_t k_stride  = cfg::tcK * i_ratio;
-      if constexpr (src_layout == col_major) {
-        std::swap(block_row, block_col);
-      }
       if constexpr (is_sparse) {
         // Sparse A load: only load half the K-steps (compressed A)
         constexpr uint32_t sparse_k_steps = cfg::k_steps / 2;
         constexpr uint32_t sparse_regs = cfg::m_steps * sparse_k_steps;
-        auto base = reinterpret_cast<const input_t*>(src) + block_row * ldm + block_col;
         detail::unroll_for<sparse_regs>([&](auto r) {
           uint32_t block_m  = r / sparse_k_steps;
           uint32_t block_k  = r % sparse_k_steps;
@@ -322,7 +368,6 @@ public:
         });
       } else {
         // Dense A load: load all K-steps
-        auto base = reinterpret_cast<const input_t*>(src) + block_row * ldm + block_col;
         detail::unroll_for<Frag::NR>([&](auto r) {
           uint32_t block_m  = r / cfg::k_steps;
           uint32_t block_k  = r % cfg::k_steps;
@@ -350,18 +395,10 @@ public:
       if constexpr (is_sparse) {
         // Sparse B load: uses 2x tcK for B block
         constexpr uint32_t b_tcK = cfg::tcK * 2;
-        uint32_t block_idx = (cfg::b_block_size_sp == NT) ? 0 : (lane / cfg::b_block_size_sp);
-        uint32_t lane_in_blk = (cfg::b_block_size_sp == NT) ? lane : (lane % cfg::b_block_size_sp);
-        uint32_t block_col = (lane_in_blk / b_tcK) + (block_idx * cfg::tcN);
-        uint32_t block_row = (lane_in_blk % b_tcK) * i_ratio;
         // NT=16 sparse: each register = 2 columns × full K (n_stride=2, no K iteration)
         // NT=8/32 sparse: standard interleaved layout
         uint32_t n_stride  = cfg::sym_sparse ? (cfg::tcN / 2) : (cfg::b_sub_blocks_sp * cfg::tcN);
         uint32_t k_stride  = b_tcK * i_ratio;
-        if constexpr (src_layout == col_major) {
-          std::swap(block_row, block_col);
-        }
-        auto base = reinterpret_cast<const input_t*>(src) + block_row * ldm + block_col;
 
         if constexpr (src_layout == row_major) {
           static_assert(input_is_subbyte == false, "row_major layout is not supported for sub-byte matrix_b");
@@ -413,16 +450,8 @@ public:
         }
       } else {
         // Dense B load
-        uint32_t block_idx = (cfg::b_block_size == NT) ? 0 : (lane / cfg::b_block_size);
-        uint32_t lane_in_blk = (cfg::b_block_size == NT) ? lane : (lane % cfg::b_block_size);
-        uint32_t block_col = (lane_in_blk / cfg::tcK) + (block_idx * cfg::tcN);
-        uint32_t block_row = (lane_in_blk % cfg::tcK) * i_ratio;
         uint32_t n_stride  = cfg::b_sub_blocks * cfg::tcN;
         uint32_t k_stride  = cfg::tcK * i_ratio;
-        if constexpr (src_layout == col_major) {
-          std::swap(block_row, block_col);
-        }
-        auto base = reinterpret_cast<const input_t*>(src) + block_row * ldm + block_col;
         detail::unroll_for<Frag::NR>([&](auto r) {
           uint32_t block_k = r / cfg::b_sub_steps;
           uint32_t block_n = r % cfg::b_sub_steps;
@@ -448,14 +477,8 @@ public:
 
     } else {
       // Load accumulator matrix C
-      uint32_t block_row = lane / cfg::tcN;
-      uint32_t block_col = lane % cfg::tcN;
       uint32_t m_stride = cfg::tcM;
       uint32_t n_stride = cfg::tcN;
-      if constexpr (src_layout == col_major) {
-        std::swap(block_row, block_col);
-      }
-      auto base = reinterpret_cast<const output_t*>(src) + block_row * ldm + block_col;
       detail::unroll_for<Frag::NR>([&](auto r) {
         uint32_t block_m  = r / cfg::n_steps;
         uint32_t block_n  = r % cfg::n_steps;
@@ -476,17 +499,15 @@ public:
     }
   }
 
+public:
+
   template <mem_layout dst_layout = row_major, typename Frag>
   static __attribute__((always_inline)) void store_matrix_sync(void *dst, const Frag &src, size_t ldm) {
     static_assert(Frag::Use == frag_use_t::accumulator, "only accumulator fragment can be stored");
-    uint32_t lane = vx_thread_id();
-    uint32_t block_row = lane / cfg::tcN;
-    uint32_t block_col = lane % cfg::tcN;
+    uint32_t block_row, block_col;
+    lane_coords<Frag, dst_layout>(block_row, block_col);
     uint32_t m_stride  = cfg::tcM;
     uint32_t n_stride  = cfg::tcN;
-    if constexpr (dst_layout == col_major) {
-      std::swap(block_row, block_col);
-    }
     auto base = reinterpret_cast<output_t*>(dst) + block_row * ldm + block_col;
     detail::unroll_for<Frag::NR>([&](auto r) {
       uint32_t block_m  = r / cfg::n_steps;
@@ -846,6 +867,22 @@ public:
     ctx_c::fill_fragment(dst, value);
   }
 
+  // Element offset of the calling lane's first A element (see wmma_context::lane_offset).
+  template <typename Frag, mem_layout layout = row_major>
+  static __attribute__((always_inline)) size_t lane_offset(size_t ldm) {
+    static_assert(Frag::Use == frag_use_t::matrix_a, "only matrix_a fragment can be loaded from registers in wgmma context");
+    static_assert(layout == row_major, "wgmma block-major load only accepts row_major caller hint");
+    uint32_t lane      = vx_thread_id();
+    uint32_t i_in      = lane / tcK;
+    uint32_t k_in_elem = (lane % tcK) * i_ratio;
+    if (ldm == 0) {
+      // Block-major: a single-K-step dense block holds fedpK elements per row
+      constexpr uint32_t row_elems = (k_steps == 1 && !is_sparse) ? (fedpK * i_ratio) : (tcK * i_ratio);
+      return i_in * row_elems + k_in_elem;
+    }
+    return i_in * ldm + k_in_elem;
+  }
+
   // Load A fragment (NRA=4 config) from SMEM (RS path).
   // Layout selection via `ldm` (in elements):
   //   ldm == 0  → block-major (cooperative-load layout):
@@ -859,28 +896,27 @@ public:
   // ctx_a::sparse_regs slot is reserved for the metadata word.
   template <mem_layout src_layout = row_major, typename Frag>
   static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm) {
+    load_matrix_sync<src_layout>(dst, src, ldm, lane_offset<Frag, src_layout>(ldm));
+  }
+
+  template <mem_layout src_layout = row_major, typename Frag>
+  static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm, size_t lane_off) {
     static_assert(Frag::Use == frag_use_t::matrix_a, "only matrix_a fragment can be loaded from registers in wgmma context");
     static_assert(src_layout == row_major, "wgmma block-major load only accepts row_major caller hint");
     static_assert(tcM * tcK == NT, "wgmma block-major load assumes canonical config (TC_M*TC_K == NT)");
 
     constexpr uint32_t k_row_elems = tcK * i_ratio;
     constexpr uint32_t sparse_blk_elems = tcM * k_row_elems;
-    uint32_t lane      = vx_thread_id();
-    uint32_t i_in      = lane / tcK;
-    uint32_t k_in_elem = (lane % tcK) * i_ratio;
 
     auto load_reg = [&](uint32_t m_blk, uint32_t k_blk) {
       size_t elem_off;
       if (ldm == 0) {
         // Block-major SMEM: blocks contiguous, k-block outer.
         constexpr uint32_t block_elems = is_sparse ? sparse_blk_elems : a_blk_elems;
-        elem_off = (k_blk * m_steps + m_blk) * block_elems
-                 + i_in * k_row_elems
-                 + k_in_elem;
+        elem_off = (k_blk * m_steps + m_blk) * block_elems + lane_off;
       } else {
         // Row-major SMEM: standard row*ldm + col.
-        elem_off = (m_blk * tcM + i_in) * ldm
-                 + (k_blk * k_row_elems + k_in_elem);
+        elem_off = (m_blk * tcM) * ldm + k_blk * k_row_elems + lane_off;
       }
       return *reinterpret_cast<const vreg_t*>(
                  reinterpret_cast<const input_t*>(src) + elem_off);
@@ -901,13 +937,9 @@ public:
         if constexpr (k_steps == 1) {
           size_t elem_off;
           if (ldm == 0) {
-            elem_off = m_blk * a_blk_elems
-                     + i_in * (fedpK * i_ratio)
-                     + k_blk * k_row_elems
-                     + k_in_elem;
+            elem_off = m_blk * a_blk_elems + k_blk * k_row_elems + lane_off;
           } else {
-            elem_off = (m_blk * tcM + i_in) * ldm
-                     + (k_blk * k_row_elems + k_in_elem);
+            elem_off = (m_blk * tcM) * ldm + k_blk * k_row_elems + lane_off;
           }
           dst.data[r] = *reinterpret_cast<const vreg_t*>(
                            reinterpret_cast<const input_t*>(src) + elem_off);
