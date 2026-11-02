@@ -314,8 +314,22 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
             `UNUSED_PIN(cout)
         );
 
+        // The reverse difference runs beside the forward one, so the magnitude
+        // is a select rather than a negate behind the subtract.
+        wire [24:0] sub_rev;
+        VX_ks_adder #(
+            .N(25),
+            .BYPASS(`FORCE_BUILTIN_ADDER(25))
+        ) sub_rev_adder (
+            .dataa(sig_min_ext),
+            .datab(~sig_max_ext),
+            .cin(1'b1),
+            .sum(sub_rev),
+            `UNUSED_PIN(cout)
+        );
+
         wire sub_neg = sub_raw[24];
-        wire [24:0] sub_abs = sub_neg ? -sub_raw : sub_raw;
+        wire [24:0] sub_abs = sub_neg ? sub_rev : sub_raw;
         wire [24:0] sig_add_raw = do_sub ? sub_abs : add_raw;
 
         // Scaling by 1 avoids renormalization.
