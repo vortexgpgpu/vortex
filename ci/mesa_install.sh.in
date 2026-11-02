@@ -24,7 +24,7 @@
 # (ci/toolchain_install.sh). The apt steps need sudo.
 #
 # The defaults build the Vortex Mesa fork
-#   https://github.com/vortexgpgpu/mesa  (branch vortex_3.x)
+#   https://github.com/vortexgpgpu/mesa  (branch vortex_3.1)
 # whose `vortexpipe` Gallium driver runs Vulkan workloads on the
 # Vortex GPU. For a vanilla-lavapipe baseline (no vortexpipe),
 # override MESA_REPO/MESA_REV and set GALLIUM_DRIVERS=llvmpipe.
@@ -50,7 +50,7 @@ VORTEX_PATH=${VORTEX_PATH:=@INSTALLDIR@}
 
 # Pinned source: the Vortex Mesa fork carrying the vortexpipe driver.
 MESA_REPO=${MESA_REPO:=https://github.com/vortexgpgpu/mesa.git}
-MESA_REV=${MESA_REV:=vortex_3.x}
+MESA_REV=${MESA_REV:=vortex_3.1}
 
 # Gallium / Vulkan driver set. `llvmpipe`+`vortexpipe` (Gallium) under
 # `swrast` (Vulkan) is lavapipe plus the Vortex accelerator:

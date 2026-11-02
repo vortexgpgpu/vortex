@@ -370,6 +370,10 @@ target. POCL ingests OpenCL-C (and, with SPIR-V enabled,
 SPIR-V via `clCreateProgramWithIL`) and dispatches to the
 Vortex runtime.
 
+> **v3.1:** branch `vortex_3.1`, which forks `vortex_3.x` where the PoCL driver programs the
+> TEX unit in texels (`VX_DCR_TEX_DIM`), a DCR change v3.0 hardware does not have. Use
+> `vortex_3.x` with v3.0.
+>
 > **v3.0 baseline:** branch `vortex_3.x`, POCL 7.0 derived from
 > `upstream/release_6_0`. Includes the SPIR-V ingestion path
 > (`clCreateProgramWithIL`) and the
@@ -386,7 +390,7 @@ POCL consumes Vortex through its install tree (`$VORTEX_PATH`) via
 `vortex-kernel.pc` exist under `$VORTEX_PATH/lib/pkgconfig/`.
 
 ```bash
-git clone --branch vortex_3.x --recursive https://github.com/vortexgpgpu/pocl
+git clone --branch vortex_3.1 --recursive https://github.com/vortexgpgpu/pocl
 cd pocl
 mkdir build && cd build
 
@@ -604,6 +608,10 @@ Vulkan driver is built on. The `vortexpipe` Gallium driver
 > `ci/toolchain_prebuilt.sh --mesa`. This section documents the
 > manual build for maintainers.
 
+> **v3.1 pin:** branch `vortex_3.1` of `github.com/vortexgpgpu/mesa`, which forks `vortex_3.x`
+> where vortexpipe starts depending on v3.1 hardware state (DCRs, device ABI). Use `vortex_3.x`
+> with v3.0.
+>
 > **v3.0 pin:** branch `vortex_3.x` of
 > `github.com/vortexgpgpu/mesa` — a fork of upstream Mesa at tag
 > `mesa-25.1.0`, carrying the `vortexpipe` Gallium driver. Built
@@ -640,7 +648,7 @@ the Vortex build dir first so `vortex-runtime.pc` is on
 `PKG_CONFIG_PATH`.
 
 ```bash
-git clone --branch vortex_3.x https://github.com/vortexgpgpu/mesa.git mesa_vortex
+git clone --branch vortex_3.1 https://github.com/vortexgpgpu/mesa.git mesa_vortex
 cd mesa_vortex
 
 # Put the Vortex LLVM's llvm-config first so meson selects it.
