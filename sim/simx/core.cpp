@@ -363,10 +363,10 @@ public:
     for (uint32_t iw = 0; iw < VX_CFG_ISSUE_WIDTH; ++iw) {
       auto& queues = commit_queues_.emplace_back();
       for (uint32_t fu = 0; fu < (uint32_t)FUType::Count; ++fu) {
-        // A unit's lane gather holds two results. The LSU's and the SFU's
-        // cross one register into it; the others cross two and take a third
-        // slot so that they still retire one result per cycle.
-        uint32_t capacity = (fu == (uint32_t)FUType::LSU || fu == (uint32_t)FUType::SFU) ? 2 : 3;
+        // A unit's lane gather holds two results. The LSU's, the SFU's and the
+        // TCU's cross one register into it; the others cross two and take a
+        // third slot so that they still retire one result per cycle.
+        uint32_t capacity = (fu == (uint32_t)FUType::LSU || fu == (uint32_t)FUType::SFU || fu == (uint32_t)FUType::TCU) ? 2 : 3;
         queues.emplace_back(std::make_unique<SimChannel<instr_trace_t*>>(simobject_, capacity));
       }
     }
@@ -933,9 +933,10 @@ public:
         auto& arb_in = *commit_queues_.at(iw).at(fu);
         // The unit's output registers ahead of the commit arbiter that its
         // output channel does not already carry: the LSU's response buffer and
-        // result arbiter, and the SFU's result buffer and response switch, are
-        // in their channels, leaving each its lane gather.
-        uint32_t commit_delay = (fu == (uint32_t)FUType::LSU || fu == (uint32_t)FUType::SFU) ? 1 : 2;
+        // result arbiter, the SFU's result buffer and response switch, and the
+        // TCU's result landing queue are in their channels, leaving each its
+        // lane gather.
+        uint32_t commit_delay = (fu == (uint32_t)FUType::LSU || fu == (uint32_t)FUType::SFU || fu == (uint32_t)FUType::TCU) ? 1 : 2;
         if (arb_in.try_send(trace, commit_delay)) {
           // Release the warp as soon as its stalling instruction's result leaves
           // the functional unit — the branch target / fence / warp-control is

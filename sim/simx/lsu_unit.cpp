@@ -388,7 +388,24 @@ void LsuUnit::process_response_step(uint32_t b) {
 void LsuUnit::ingest_inputs(uint32_t b, bool queue_room, uint32_t reads_held) {
 	auto& state = states_.at(b);
 	auto& input = Inputs.at(b);
-	if (input.empty() || !queue_room)
+	if (!queue_room)
+		return;
+#ifdef TCU_META_ENABLE
+	// The TCU metadata client and the block's own requests share the request
+	// queue, one entry per cycle, granted round-robin.
+	bool meta_req = (b < TCU_AGU_PORTS)
+	             && !TcuReqIn.at(b).empty()
+	             && (reads_held < VX_CFG_LSU_PENDING_SIZE);
+	if (meta_req && (input.empty() || !state.meta_last)) {
+		state.meta_reqs.push_back(TcuReqIn.at(b).peek());
+		TcuReqIn.at(b).pop();
+		state.req_queue.push(nullptr);
+		++state.staged_reads;
+		state.meta_last = true;
+		return;
+	}
+#endif
+	if (input.empty())
 		return;
 	auto trace = input.peek();
 	// Hold a fence at the input head until req_queue is empty so the
@@ -418,6 +435,9 @@ void LsuUnit::ingest_inputs(uint32_t b, bool queue_room, uint32_t reads_held) {
 	}
 	state.req_queue.push(trace);
 	input.pop();
+#ifdef TCU_META_ENABLE
+	state.meta_last = false;
+#endif
 }
 
 // The fence travels to the data cache as a flush token on the lanes of its
@@ -484,14 +504,14 @@ void LsuUnit::process_request_step(uint32_t b) {
 	}
 
 #ifdef TCU_META_ENABLE
-	// TCU metadata client (blocks below TCU_AGU_PORTS): forward one pending request per
-	// cycle into lmem_switch, ahead of the block's own dispatch. The wire tag
+	// TCU metadata client (blocks below TCU_AGU_PORTS): its request leaves the
+	// shared request queue in order with the block's own. The wire tag
 	// is re-allocated from pending_reqs so it stays unique on the switch; the
 	// client's own tag is restored on the response. An independent client, so
 	// not gated by the fence lock — its entries still hold fence release via
 	// pending_reqs.empty().
-	if (b < TCU_AGU_PORTS && !TcuReqIn.at(b).empty()) {
-		const LsuReq& meta_req = TcuReqIn.at(b).peek();
+	if (!state.req_queue.empty() && state.req_queue.front() == nullptr) {
+		const LsuReq& meta_req = state.meta_reqs.front();
 		bool to_dc = false, to_lmem = false;
 		for (uint32_t i = 0; i < VX_CFG_NUM_LSU_LANES; ++i) {
 			if (meta_req.mask.test(i)) {
@@ -525,9 +545,11 @@ void LsuUnit::process_request_step(uint32_t b) {
 			lsu_req.tag = tag;
 			core_->lmem_switch(b)->ReqIn.send(lsu_req, 0);
 			DT(3, this->name() << " tcu-meta-req: " << lsu_req);
-			TcuReqIn.at(b).pop();
-			return; // one request per cycle into the switch
+			state.meta_reqs.pop_front();
+			state.req_queue.pop();
+			--state.staged_reads;
 		}
+		return; // one request per cycle into the switch
 	}
 #endif
 

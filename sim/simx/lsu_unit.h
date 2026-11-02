@@ -14,6 +14,7 @@
 #pragma once
 
 #include <array>
+#include <deque>
 #include <mempool.h>
 #include <ringqueue.h>
 #include "func_unit.h"
@@ -149,6 +150,10 @@ private:
 		// Reads waiting in req_queue hold a pending_reqs slot from the moment
 		// they enter it, so staged and outstanding reads share the pool.
 		uint32_t                  staged_reads = 0;
+		// TCU metadata requests granted a req_queue slot (a null entry there),
+		// and whether the TCU client took the last queue entry.
+		std::deque<LsuReq>        meta_reqs;
+		bool                      meta_last = false;
 		bool                      head_staged = false;
 		FenceController           fence;
 		// the engaged fence's flush token is still to be sent
@@ -160,6 +165,8 @@ private:
 			this->req_queue.clear();
 			this->pending_reqs.clear();
 			this->staged_reads = 0;
+			this->meta_reqs.clear();
+			this->meta_last = false;
 			this->head_staged = false;
 			this->fence.reset();
 			this->fence_token = false;

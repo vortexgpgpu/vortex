@@ -500,11 +500,10 @@ public:
       auto& agu = agu_.at(b);
       if (!agu.complete)
         continue;
-      // The AGU round-trip models the memory latency; these cycles cover the
-      // metadata deposit and retire.
-      constexpr uint32_t kRetireDelay = 3;
-      if (simobject_->Outputs.at(b).try_send(agu.trace, kRetireDelay)) {
-        result_due_.at(b).push_back(now + kRetireDelay);
+      // The result is offered in the cycle its last fragment lands, as the
+      // AGU's done flag; the lane gather adds the one register to commit.
+      if (simobject_->Outputs.at(b).try_send(agu.trace, 0)) {
+        result_due_.at(b).push_back(now);
         DT(3, simobject_->name() << " execute: op=" << TcuType::TCU_LD << ", " << *agu.trace);
         agu = agu_state_t{};
       }
