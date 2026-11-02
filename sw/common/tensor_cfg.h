@@ -287,7 +287,8 @@ public:
   static constexpr uint32_t b_sub_blocks = block_cap / b_block_size;  // number of B micro-tiles per register
   static constexpr uint32_t b_sub_steps  = n_steps / b_sub_blocks;    // number of B sub-steps per register
 
-  // Symmetric sparse flag (NT=4, NT=16: block_em == block_en)
+  // Symmetric sparse flag (NT=4, NT=16: block_em == block_en). It selects the
+  // WMMA_SP layout only, so a WGMMA build keeps it: WGMMA_SP has its own.
   static constexpr bool sym_sparse = (block_em == block_en);
 
   // Symmetric: column-pair layout (block_cap lanes per block)
