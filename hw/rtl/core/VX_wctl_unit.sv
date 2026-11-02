@@ -29,7 +29,6 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     VX_result_if.master     result_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    localparam LANE_BITS  = `CLOG2(NUM_LANES);
     localparam PID_BITS   = `CLOG2(`VX_CFG_NUM_THREADS / NUM_LANES);
     localparam WCTL_WIDTH = $bits(tmc_t) + $bits(split_t) + $bits(join_t);
 
@@ -52,23 +51,29 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     wire wctl_valid;
     wire tmc_valid, split_valid, sjoin_valid, wsync_valid;
 
-    wire [`UP(LANE_BITS)-1:0] last_tid;
-	    if (LANE_BITS != 0) begin : g_last_tid
-	        VX_priority_encoder #(
-	            .N (NUM_LANES),
-	            .REVERSE (1)
-	        ) last_tid_select (
-	            .data_in (execute_if.data.header.tmask),
-	            .index_out (last_tid),
-	            `UNUSED_PIN (onehot_out),
-            `UNUSED_PIN (valid_out)
-        );
-    end else begin : g_no_tid
-        assign last_tid = 0;
+    // The last active lane's operands, and whether their thread masks are
+    // empty (reduced per lane, ahead of the select), are picked by the mask's
+    // own select tree rather than by an encoded lane index driving a wide mux.
+    wire [NUM_LANES-1:0][2*`VX_CFG_XLEN+1:0] lane_scalars;
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_lane_scalars
+        assign lane_scalars[i] = {(| execute_if.data.rs1_data[i][`VX_CFG_NUM_THREADS-1:0]),
+                                  (| execute_if.data.rs2_data[i][`VX_CFG_NUM_THREADS-1:0]),
+                                  execute_if.data.rs1_data[i],
+                                  execute_if.data.rs2_data[i]};
     end
 
-    wire [`VX_CFG_XLEN-1:0] rs1_data = execute_if.data.rs1_data[last_tid];
-    wire [`VX_CFG_XLEN-1:0] rs2_data = execute_if.data.rs2_data[last_tid];
+    wire rs1_tmask_nz, rs2_tmask_nz;
+    wire [`VX_CFG_XLEN-1:0] rs1_data, rs2_data;
+    VX_find_first #(
+        .N       (NUM_LANES),
+        .DATAW   (2*`VX_CFG_XLEN+2),
+        .REVERSE (1)
+    ) last_lane_sel (
+        .valid_in   (execute_if.data.header.tmask),
+        .data_in    (lane_scalars),
+        .data_out   ({rs1_tmask_nz, rs2_tmask_nz, rs1_data, rs2_data}),
+        `UNUSED_PIN (valid_out)
+    );
     `UNUSED_VAR (rs1_data)
 
     wire not_pred = execute_if.data.op_args.wctl.is_cond_neg;
@@ -183,7 +188,8 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     // completes once the unit has served it; every other request is posted,
     // completing as it is accepted, and the warp resumes through its unlock path.
     wire bar_rsp_valid = is_bar && execute_if.data.op_args.wctl.is_bar_arrive;
-    wire is_exit   = (is_tmc || is_pred) && (tmc.tmask == 0);
+    // tmc.tmask == 0; a predicate mask with active then-lanes is never empty
+    wire is_exit   = (is_tmc && ~rs1_tmask_nz) || (is_pred && ~has_then && ~rs2_tmask_nz);
     wire is_shared = execute_if.data.header.eop && (is_bar || is_wspawn || is_exit);
     wire sh_posted = is_shared && ~bar_rsp_valid;
 

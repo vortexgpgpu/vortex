@@ -77,17 +77,17 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
 
     wire [`VX_CFG_XLEN-1:0] rs1_first;
     if (NUM_LANES > 1) begin : g_rs1_first
-        wire [`LOG2UP(NUM_LANES)-1:0] first_lane;
-        VX_priority_encoder #(
+        // the data's own select tree, not an encoded lane index driving a wide mux
+        VX_find_first #(
             .N       (NUM_LANES),
+            .DATAW   (`VX_CFG_XLEN),
             .REVERSE (0)
         ) first_lane_sel (
-            .data_in    (execute_if.data.header.tmask),
-            .index_out  (first_lane),
-            `UNUSED_PIN (onehot_out),
+            .valid_in   (execute_if.data.header.tmask),
+            .data_in    (rs1_data),
+            .data_out   (rs1_first),
             `UNUSED_PIN (valid_out)
         );
-        assign rs1_first = rs1_data[first_lane];
     end else begin : g_rs1_first_0
         assign rs1_first = rs1_data[0];
     end

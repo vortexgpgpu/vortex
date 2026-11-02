@@ -195,8 +195,8 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         //   fire: staging hands off, its rd is reserved, the ibuffer instr moves in
         // Either way the flop gets the value a post-grant evaluation would.
         //
-        // Either outcome checks one of only two instrs, so each is reduced
-        // against the released in-use set once and the outcomes select bits.
+        // Either outcome checks one of only two instrs, so each is checked
+        // once and the outcomes select bits.
         wire [NUM_REGS-1:0] ibf_regs_mask = ibf_opd_mask[0] | ibf_opd_mask[1] | ibf_opd_mask[2] | ibf_opd_mask[3];
         wire [NUM_REGS-1:0] stg_regs_mask = stg_opd_mask[0] | stg_opd_mask[1] | stg_opd_mask[2] | stg_opd_mask[3];
         wire ibf_group_busy, stg_group_busy;
@@ -221,8 +221,19 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             assign ibf_group_busy = 1'b0;
             assign stg_group_busy = 1'b0;
         end
-        wire ibf_busy  = (| (wb_inuse_regs & ibf_regs_mask)) || ibf_group_busy;
-        wire stg_busy  = (| (wb_inuse_regs & stg_regs_mask)) || stg_group_busy;
+        // Each operand reads its in-use bit by index and compares its index with
+        // this cycle's release, which is shallower than reducing the operand
+        // masks against the whole released set.
+        wire wb_release = (writeback_fire || writeback_rel) && writeback_if.data.wb;
+        wire [NUM_OPDS-1:0] ibf_opd_busy, stg_opd_busy;
+        for (genvar i = 0; i < NUM_OPDS; ++i) begin : g_opd_busy
+            assign ibf_opd_busy[i] = ibf_used_rs[i] && inuse_regs[ibf_opds[i]]
+                                  && ~(wb_release && (writeback_if.data.rd == ibf_opds[i]));
+            assign stg_opd_busy[i] = stg_used_rs[i] && inuse_regs[stg_opds[i]]
+                                  && ~(wb_release && (writeback_if.data.rd == stg_opds[i]));
+        end
+        wire ibf_busy  = (| ibf_opd_busy) || ibf_group_busy;
+        wire stg_busy  = (| stg_opd_busy) || stg_group_busy;
         wire ibf_xbusy = | (wb_inuse_xregs & ibf_xregs_mask);
         wire stg_xbusy = | (wb_inuse_xregs & stg_xregs_mask);
 
@@ -275,6 +286,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         `UNUSED_VAR (xregs_busy)
     `else
         `UNUSED_VAR (ibuffer_fire)
+        `UNUSED_VAR ({ibf_regs_mask, stg_regs_mask})
     `endif
 
         always @(posedge clk) begin
