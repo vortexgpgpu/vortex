@@ -632,9 +632,6 @@ public:
     trace->op_type     = instr->get_op_type();
     trace->dst_reg     = instr->get_dest_reg();
     trace->dst_bytesel = instr->get_dst_bytesel();
-    if (auto lsu_args = std::get_if<IntrLsuArgs>(&instr->get_args())) {
-      trace->dst_span = lsu_args->nregs;
-    }
     for (uint32_t i = 0; i < NUM_SRC_REGS; ++i) {
       trace->src_regs[i] = instr->get_src_reg(i);
     }

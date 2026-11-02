@@ -88,10 +88,9 @@ import VX_tcu_pkg::*;
     wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] lsu_store_empty;
 `ifdef VX_CFG_LMEM_ENABLE
     VX_lsu_mem_if #(
-        .NUM_LANES      (`VX_CFG_NUM_LSU_LANES),
-        .DATA_SIZE      (LSU_WORD_SIZE),
-        .TAG_WIDTH      (LSU_TAG_WIDTH),
-        .RSP_SIDE_WIDTH (LSU_RSP_SIDE_W)
+        .NUM_LANES (`VX_CFG_NUM_LSU_LANES),
+        .DATA_SIZE (LSU_WORD_SIZE),
+        .TAG_WIDTH (LSU_TAG_WIDTH)
     ) lsu_lmem_if[`VX_CFG_NUM_LSU_BLOCKS]();
 `endif
     VX_mem_bus_if #(

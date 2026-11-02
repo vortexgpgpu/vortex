@@ -13,9 +13,24 @@ constexpr uint32_t kDescB = 1;
 // shB layout: [chunk_k × tile_size], row-major (row = k, col = l_col)
 static inline void gemm_accumulate(TYPE& sum, const TYPE* shA, const TYPE* shB, size_t tile_size,
                                    size_t chunk_k, size_t l_row, size_t l_col) {
+#if LDST_WIDE
+  size_t k = 0;
+  static_assert(__is_same(TYPE, float), "LDST_WIDE needs float");
+  for (; k + 4 <= chunk_k; k += 4) {
+    vx_float4 a = vx_flw_q(&shA[l_row * chunk_k + k]);
+    sum += a[0] * shB[k * tile_size + l_col];
+    sum += a[1] * shB[(k + 1) * tile_size + l_col];
+    sum += a[2] * shB[(k + 2) * tile_size + l_col];
+    sum += a[3] * shB[(k + 3) * tile_size + l_col];
+  }
+  for (; k < chunk_k; ++k) {
+    sum += shA[l_row * chunk_k + k] * shB[k * tile_size + l_col];
+  }
+#else
   for (size_t k = 0; k < chunk_k; ++k) {
     sum += shA[l_row * chunk_k + k] * shB[k * tile_size + l_col];
   }
+#endif
 }
 
 __kernel void kernel_main(kernel_arg_t* arg) {

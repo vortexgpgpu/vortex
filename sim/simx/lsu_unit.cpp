@@ -36,7 +36,11 @@ uint32_t LsuUopGen::uop_count(const Instr& instr) {
   }
   // PACKLB.F: width=0 (LB), 4 byte-elements
   // PACKLH.F: width=1 (LH), 2 halfword-elements
+  // VX_FLW/VX_FSW.D: width=3, 2 words; .Q: width=4, 4 words
   auto args = std::get<IntrLsuArgs>(instr.get_args());
+  if (args.width >= 3) {
+    return 1u << (args.width - 2);
+  }
   return (args.width == 0) ? 4 : 2;
 }
 
@@ -76,6 +80,22 @@ Instr::Ptr LsuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
   }
 
   auto args = std::get<IntrLsuArgs>(macro_instr.get_args());
+  if (args.width >= 3) {
+    // a wide access's uop k moves word k: register fd/fs2 + k, offset + 4k
+    bool is_load = (std::get<LsuType>(macro_instr.get_op_type()) == LsuType::LOAD);
+    auto uop_instr = std::allocate_shared<Instr>(pool_, uop_uuid, FUType::LSU);
+    uop_instr->set_parent_uuid(parent_uuid);
+    uop_instr->set_op_type(macro_instr.get_op_type());
+    uop_instr->set_src_reg(0, macro_instr.get_src_reg(0).idx, RegType::Integer);
+    if (is_load) {
+      uop_instr->set_dest_reg(macro_instr.get_dest_reg().idx + uop_index, RegType::Float);
+    } else {
+      uop_instr->set_src_reg(1, macro_instr.get_src_reg(1).idx + uop_index, RegType::Float);
+    }
+    uop_instr->set_args(IntrLsuArgs{/*LW*/ 2, /*stride*/ 0, args.offset + int32_t(4 * uop_index)});
+    return uop_instr;
+  }
+
   // Macro encodes elem-size as width: 0=byte (PACKLB), 1=halfword (PACKLH).
   // The uop is a regular unsigned load (LBU/LHU = width + 4) so the LSU
   // doesn't sign-extend the loaded byte/halfword before the bytesel write.
@@ -161,27 +181,21 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 	const bool is_cas = is_amo && (*amo_tag == AmoType::AMOCAS);
 	uint32_t num_threads = VX_CFG_NUM_THREADS;
 	uint32_t data_bytes;
-	uint32_t align_bytes;
 	bool is_write;
 	int64_t  offset;
 	uint32_t stride;
-	[[maybe_unused]] bool is_local = false;
 	if (is_amo) {
 		auto amo_args = std::get<IntrAmoArgs>(trace->instr_ptr->get_args());
 		data_bytes = 1u << (amo_args.width & 0x3);
-		align_bytes = data_bytes;
 		is_write   = false;        // AMO never writes via the regular store path
 		offset     = 0;            // AMO has no immediate offset
 		stride     = 0;            // single-word access — addr = rs1[t]
 	} else {
 		auto lsu_args = std::get<IntrLsuArgs>(trace->instr_ptr->get_args());
 		data_bytes = 1u << (lsu_args.width & 0x3);
-		// a wide local load reads its words from one aligned group per lane
-		align_bytes = data_bytes * lsu_args.nregs;
 		is_write   = (lsu_tag && *lsu_tag == LsuType::STORE);
 		offset     = lsu_args.offset;
 		stride     = lsu_args.stride;
-		is_local   = lsu_args.is_local;
 		if (is_write && lsu_args.width > 3)
 			std::abort();
 	}
@@ -205,14 +219,6 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 			// upper bits into the 64-bit address field.
 			e.addr = Word(rs1_data[t].i + (uint64_t)stride * rs2_data[t].u + offset);
 			e.size = data_bytes;
-		#ifdef VX_CFG_LMEM_ENABLE
-			if (is_local) {
-				// Local memory decodes only the low bits; the window address
-				// carries the request to it.
-				constexpr uint64_t lmem_mask = (uint64_t(1) << VX_CFG_LMEM_LOG_SIZE) - 1;
-				e.addr = uint64_t(VX_MEM_LMEM_BASE_ADDR) | (e.addr & lmem_mask);
-			} else
-		#endif
 			if (StackInterleave::contains(e.addr)) {
 				// Interleaving is word-granular; a wider access would straddle two threads.
 				if (e.size > StackInterleave::WORD_SIZE) {
@@ -228,9 +234,9 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 			// The hardware LSU enforces the same contract, so modelling
 			// anything looser here would let a shader pass in simulation and fail
 			// on the device.
-			if ((e.addr % align_bytes) != 0) {
+			if ((e.addr % e.size) != 0) {
 				std::cout << "Error: misaligned memory access: addr=0x" << std::hex
-				          << e.addr << std::dec << ", size=" << align_bytes << std::endl;
+				          << e.addr << std::dec << ", size=" << e.size << std::endl;
 				std::abort();
 			}
 			if (is_write || is_amo) {
@@ -313,18 +319,13 @@ void LsuUnit::process_response_step(uint32_t b) {
 		                    : (uint32_t)__builtin_ctz(data_bs);
 		bool nan_box = dst_float && (data_bytes < 8);
 		bool half_float = VX_CFG_EXT_ZFHMIN_ENABLED && dst_float && (entry.lsu_args.width == 1);
-		// a wide local load's phase k returns word k of each lane's group
-		uint32_t phase = lsu_rsp.phase;
-		if (phase != 0 && trace->wide_data.empty()) {
-			trace->wide_data.resize(3 * VX_CFG_NUM_THREADS, 0);
-		}
 
 		for (uint32_t lane = 0; lane < lsu_rsp.mask.size(); ++lane) {
 			if (!lsu_rsp.mask.test(lane))
 				continue;
 			const auto& lane_info = entry.lanes.at(lane);
 			assert(lsu_rsp.data.at(lane) && "LOAD response must carry line payload");
-			uint32_t off = (lane_info.addr & (VX_CFG_MEM_BLOCK_SIZE - 1)) + phase * data_bytes;
+			uint32_t off = lane_info.addr & (VX_CFG_MEM_BLOCK_SIZE - 1);
 			uint64_t read_data = 0;
 			std::memcpy(&read_data, lsu_rsp.data.at(lane)->data() + off, data_bytes);
 			// Format the loaded value at low bits per RISC-V load semantics.
@@ -351,14 +352,10 @@ void LsuUnit::process_response_step(uint32_t b) {
 				std::abort();
 			}
 			// Place at bytesel-specified position; OR-in NaN-box for Float dest.
+			auto& dst = entry.trace->dst_data.at(lane_info.tid);
 			uint32_t box_bits = half_float ? 16 : 32;
-			uint64_t value = (formatted << (8 * byte_off))
-			               | (nan_box ? nanbox::box(0, box_bits) : 0);
-			if (phase != 0) {
-				trace->wide_data.at(lane_info.tid * 3 + phase - 1) = value;
-			} else {
-				trace->dst_data.at(lane_info.tid).u64 = value;
-			}
+			dst.u64 = (formatted << (8 * byte_off))
+			        | (nan_box ? nanbox::box(0, box_bits) : 0);
 		}
 	}
 	entry.count -= lsu_rsp.mask.count(); // track remaining
@@ -366,27 +363,7 @@ void LsuUnit::process_response_step(uint32_t b) {
 	if (is_final) {
 		state.pending_reqs.release(lsu_rsp.tag);
 	}
-	if (entry.is_load && entry.lsu_args.nregs > 1 && lsu_rsp.phase_last) {
-		// A wide load's word-phase is complete: its beat writes register
-		// fd + phase and releases it, so a consumer of fd need not wait for
-		// fd + 3. The last phase's beat retires the instruction.
-		instr_trace_t* beat = trace;
-		if (!is_final) {
-			auto beat_alloc = core_->trace_pool().allocate(1);
-			beat = new (beat_alloc) instr_trace_t(*trace);
-			beat->eop = false;
-		}
-		uint32_t phase = lsu_rsp.phase;
-		if (phase != 0) {
-			for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-				beat->dst_data.at(t).u64 = trace->wide_data.at(t * 3 + phase - 1);
-			}
-		}
-		beat->dst_reg.idx += phase;
-		beat->dst_span = 1;
-		beat->wide_data.clear();
-		output.send(beat, 2);
-	} else if (is_final && entry.eop) {
+	if (is_final && entry.eop) {
 		// the response buffer, then the result arbiter's register
 		output.send(trace, 2);
 	} else {
@@ -667,12 +644,8 @@ void LsuUnit::process_request_step(uint32_t b) {
 		// signed/unsigned into one op + flag.
 		lsu_req.op = is_amo ? amo_to_memop(*amo_tag)
 		            : (is_write ? MemOp::ST : MemOp::LD);
-		uint32_t nregs = 1;
 		if (is_amo) {
 			lsu_req.flags.amo_unsigned = amo_is_unsigned(*amo_tag);
-		} else {
-			nregs = std::get<IntrLsuArgs>(trace->instr_ptr->get_args()).nregs;
-			lsu_req.flags.nwords_m1 = nregs - 1;
 		}
 		uint32_t t0 = state.addr_list.size() - state.remain_addrs;
 		uint32_t beat_n = std::min<uint32_t>(VX_CFG_NUM_LSU_LANES, state.remain_addrs);
@@ -709,13 +682,6 @@ void LsuUnit::process_request_step(uint32_t b) {
 
 		uint32_t count = lsu_req.mask.count();
 		bool is_eop = (state.remain_addrs == 0);
-		// A wide load's phases release its registers, so all its lanes must
-		// ride one request; the dispatcher's lane split guarantees it.
-		if (nregs > 1 && !is_eop) {
-			std::abort();
-		}
-		// every word-phase answers each lane once
-		uint32_t rsp_count = count * nregs;
 
 		uint32_t tag = 0;
 		if (!is_write || is_amo) {
@@ -736,7 +702,7 @@ void LsuUnit::process_request_step(uint32_t b) {
 				--state.staged_reads;
 				state.head_staged = false;
 			}
-			tag = state.pending_reqs.allocate({trace, rsp_count, is_eop, std::move(lane_entries), entry_args, true});
+			tag = state.pending_reqs.allocate({trace, count, is_eop, std::move(lane_entries), entry_args, true});
 		}
 		lsu_req.tag  = tag;
 		lsu_req.cid  = trace->cid;
@@ -751,7 +717,7 @@ void LsuUnit::process_request_step(uint32_t b) {
 			core_->perf_stats().stores += count;
 		} else {
 			core_->perf_stats().loads += count;
-			pending_loads_ += rsp_count;
+			pending_loads_ += count;
 		}
 	}
 

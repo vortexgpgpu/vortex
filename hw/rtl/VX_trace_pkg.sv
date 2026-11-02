@@ -177,20 +177,18 @@ package VX_trace_pkg;
                     2'd1: begin
                         `TRACE(level, ("PACKLB.F"))
                     end
-                    default: begin
+                    2'd2: begin
                         `TRACE(level, ("PACKLH.F"))
                     end
+                    default: begin
+                        // a wide access's bytesel offset marks a quad
+                        if (op_args.lsu.is_store) begin
+                            `TRACE(level, ((bytesel != BYTESEL_DEFAULT) ? "VX_FSW.Q" : "VX_FSW.D"))
+                        end else begin
+                            `TRACE(level, ((bytesel != BYTESEL_DEFAULT) ? "VX_FLW.Q" : "VX_FLW.D"))
+                        end
+                    end
                 endcase
-            end else if (op_args.lsu.is_local) begin
-                // only wide loads are local: a full-size bytesel with offset 3
-                // is a quad, with offset 1 a pair
-                if (bytesel == BYTESEL_BITS'({XLENB_W'(XLENB-1), XLENB_W'(3)})) begin
-                    `TRACE(level, ("VX_FLDS.Q"))
-                end else if (bytesel == BYTESEL_BITS'({XLENB_W'(XLENB-1), XLENB_W'(1)})) begin
-                    `TRACE(level, ("VX_FLDS.D"))
-                end else begin
-                    `TRACE(level, ("?"))
-                end
             end else if (op_args.lsu.is_float) begin
                 case (INST_LSU_BITS'(op_type))
                     INST_LSU_LW: `TRACE(level, ("FLW"))

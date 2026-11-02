@@ -113,7 +113,7 @@ module VX_dispatcher import VX_gpu_pkg::*; #(
                 `TRACE(1, ("%t: %s dispatch: wid=%0d, cta_id=%0d, sid=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, wis_to_wid(dispatch_if[ex].data.wis, slice_id), dispatch_if[ex].data.cta_id, dispatch_if[ex].data.sid, to_fullPC(dispatch_if[ex].data.PC)))
                 VX_trace_pkg::trace_ex_type(1, ex);
                 `TRACE(1, (", op="))
-                VX_trace_pkg::trace_ex_op(1, ex, dispatch_if[ex].data.op_type, dispatch_if[ex].data.op_args, dispatch_if[ex].data.bytesel);
+                VX_trace_pkg::trace_ex_op(1, ex, dispatch_if[ex].data.op_type, dispatch_if[ex].data.op_args);
                 `TRACE(1, (", tmask=%b, wb=%b, wr_xregs=%b, rd=%0d, rs1_data=", dispatch_if[ex].data.tmask, dispatch_if[ex].data.wb, dispatch_if[ex].data.wr_xregs, dispatch_if[ex].data.rd))
                 `TRACE_ARRAY1D(1, "0x%0h", dispatch_if[ex].data.rs1_data, `VX_CFG_SIMD_WIDTH)
                 `TRACE(1, (", rs2_data="))

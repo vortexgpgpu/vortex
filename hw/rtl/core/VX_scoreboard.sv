@@ -103,7 +103,6 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         wire staging_fire = staging_if[w].valid && staging_if[w].ready;
 
         wire writeback_fire = writeback_if.valid && writeback_if.data.eop_wis[w];
-        wire writeback_rel  = writeback_if.valid && writeback_if.data.rel_wis[w];
 
         wire [NUM_OPDS-1:0] [NUM_REGS_BITS-1:0] ibf_opds, stg_opds;
         assign ibf_opds = {ibuffer_if[w].data.rs3, ibuffer_if[w].data.rs2, ibuffer_if[w].data.rs1, ibuffer_if[w].data.rd};
@@ -116,24 +115,6 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         wire [NUM_XREGS-1:0] ibf_xregs_mask = ibuffer_if[w].data.rd_xregs | ibuffer_if[w].data.wr_xregs;
         wire [NUM_XREGS-1:0] stg_xregs_mask = staging_if[w].data.rd_xregs | staging_if[w].data.wr_xregs;
 
-        // A wide load's rd names an aligned group of two or four registers.
-        wire ibf_wide, ibf_quad, stg_wide, stg_quad;
-        if (LDS_WIDE_ENABLE) begin : g_wide
-            wire [XLENB_W-1:0] ibf_size = ibuffer_if[w].data.bytesel[BYTESEL_BITS-1 -: XLENB_W];
-            wire [XLENB_W-1:0] ibf_off  = ibuffer_if[w].data.bytesel[0 +: XLENB_W];
-            wire [XLENB_W-1:0] stg_size = staging_if[w].data.bytesel[BYTESEL_BITS-1 -: XLENB_W];
-            wire [XLENB_W-1:0] stg_off  = staging_if[w].data.bytesel[0 +: XLENB_W];
-            assign ibf_wide = (ibf_size == XLENB_W'(XLENB-1)) && ibf_off[0];
-            assign ibf_quad = ibf_wide && ibf_off[1];
-            assign stg_wide = (stg_size == XLENB_W'(XLENB-1)) && stg_off[0];
-            assign stg_quad = stg_wide && stg_off[1];
-        end else begin : g_no_wide
-            assign ibf_wide = 1'b0;
-            assign ibf_quad = 1'b0;
-            assign stg_wide = 1'b0;
-            assign stg_quad = 1'b0;
-        end
-
         wire [NUM_OPDS-1:0][REG_TYPES-1:0][RV_REGS-1:0] ibf_opd_mask, stg_opd_mask;
 
         for (genvar i = 0; i < NUM_OPDS; ++i) begin : g_opd_masks
@@ -143,31 +124,17 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             end
         end
 
-        // the registers the staging instr reserves: its rd, or rd's group
-        wire [NUM_REGS-1:0] stg_rsv_mask;
-        if (LDS_WIDE_ENABLE) begin : g_rsv_group
-            for (genvar r = 0; r < NUM_REGS; ++r) begin : g_r
-                localparam [NUM_REGS_BITS-1:0] R = NUM_REGS_BITS'(r);
-                assign stg_rsv_mask[r] = stg_used_rs[0]
-                                      && (stg_opds[0][NUM_REGS_BITS-1:2] == R[NUM_REGS_BITS-1:2])
-                                      && (stg_quad || (stg_opds[0][1] == R[1]))
-                                      && (stg_wide || (stg_opds[0][0] == R[0]));
-            end
-        end else begin : g_rsv_single
-            assign stg_rsv_mask = stg_opd_mask[0];
-        end
-
-        // Writeback release feeds wb_inuse_regs, which the busy check reads; the
-        // staging reserve is added on top to form the next state, inuse_regs_n.
+        // Writeback release feeds wb_inuse_regs; the staging reserve is added on
+        // top to form the next state, inuse_regs_n.
         reg [NUM_REGS-1:0]  wb_inuse_regs;
         reg [NUM_XREGS-1:0] wb_inuse_xregs;
         always @(*) begin
             wb_inuse_regs  = inuse_regs;
             wb_inuse_xregs = inuse_xregs;
-            if ((writeback_fire || writeback_rel) && writeback_if.data.wb) begin
-                wb_inuse_regs[writeback_if.data.rd] = 0; // release rd
-            end
             if (writeback_fire) begin
+                if (writeback_if.data.wb) begin
+                    wb_inuse_regs[writeback_if.data.rd] = 0; // release rd
+                end
                 wb_inuse_xregs &= ~writeback_if.data.wr_xregs; // release special regs
             end
         end
@@ -177,7 +144,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             inuse_xregs_n = wb_inuse_xregs;
             if (staging_fire) begin
                 if (staging_if[w].data.wb) begin
-                    inuse_regs_n |= stg_rsv_mask; // reserve rd or its group
+                    inuse_regs_n |= stg_opd_mask[0]; // reserve rd
                 end
                 inuse_xregs_n |= staging_if[w].data.wr_xregs; // reserve special regs
             end
@@ -199,32 +166,10 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         // once and the outcomes select bits.
         wire [NUM_REGS-1:0] ibf_regs_mask = ibf_opd_mask[0] | ibf_opd_mask[1] | ibf_opd_mask[2] | ibf_opd_mask[3];
         wire [NUM_REGS-1:0] stg_regs_mask = stg_opd_mask[0] | stg_opd_mask[1] | stg_opd_mask[2] | stg_opd_mask[3];
-        wire ibf_group_busy, stg_group_busy;
-        if (LDS_WIDE_ENABLE) begin : g_group_busy
-            // A destination group's other registers are tested against the
-            // registered in-use set, reduced per pair and quad ahead, off the
-            // operand masks' reduction. Missing a release in this cycle only
-            // delays the group by a cycle.
-            wire [NUM_REGS/2-1:0] inuse_pairs;
-            wire [NUM_REGS/4-1:0] inuse_quads;
-            for (genvar g = 0; g < NUM_REGS/2; ++g) begin : g_pairs
-                assign inuse_pairs[g] = | inuse_regs[2*g +: 2];
-            end
-            for (genvar g = 0; g < NUM_REGS/4; ++g) begin : g_quads
-                assign inuse_quads[g] = | inuse_regs[4*g +: 4];
-            end
-            assign ibf_group_busy = ibf_quad ? inuse_quads[ibf_opds[0][NUM_REGS_BITS-1:2]]
-                                  : (ibf_wide && inuse_pairs[ibf_opds[0][NUM_REGS_BITS-1:1]]);
-            assign stg_group_busy = stg_quad ? inuse_quads[stg_opds[0][NUM_REGS_BITS-1:2]]
-                                  : (stg_wide && inuse_pairs[stg_opds[0][NUM_REGS_BITS-1:1]]);
-        end else begin : g_no_group_busy
-            assign ibf_group_busy = 1'b0;
-            assign stg_group_busy = 1'b0;
-        end
         // Each operand reads its in-use bit by index and compares its index with
         // this cycle's release, which is shallower than reducing the operand
         // masks against the whole released set.
-        wire wb_release = (writeback_fire || writeback_rel) && writeback_if.data.wb;
+        wire wb_release = writeback_fire && writeback_if.data.wb;
         wire [NUM_OPDS-1:0] ibf_opd_busy, stg_opd_busy;
         for (genvar i = 0; i < NUM_OPDS; ++i) begin : g_opd_busy
             assign ibf_opd_busy[i] = ibf_used_rs[i] && inuse_regs[ibf_opds[i]]
@@ -232,23 +177,17 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             assign stg_opd_busy[i] = stg_used_rs[i] && inuse_regs[stg_opds[i]]
                                   && ~(wb_release && (writeback_if.data.rd == stg_opds[i]));
         end
-        wire ibf_busy  = (| ibf_opd_busy) || ibf_group_busy;
-        wire stg_busy  = (| stg_opd_busy) || stg_group_busy;
+        wire ibf_busy  = | ibf_opd_busy;
+        wire stg_busy  = | stg_opd_busy;
         wire ibf_xbusy = | (wb_inuse_xregs & ibf_xregs_mask);
         wire stg_xbusy = | (wb_inuse_xregs & stg_xregs_mask);
 
         // On fire the staging instr also reserves its rd and wr_xregs. Its
         // successor sees that reservation only through a register it names,
-        // and a lone staging instr always names its own rd. A register group
-        // matches any register in it.
+        // and a lone staging instr always names its own rd.
         wire [NUM_OPDS-1:0] ibf_reads_rd;
         for (genvar i = 0; i < NUM_OPDS; ++i) begin : g_ibf_reads_rd
-            wire any_bit1 = stg_quad || ((i == 0) && ibf_quad);
-            wire any_bit0 = stg_wide || ((i == 0) && ibf_wide);
-            assign ibf_reads_rd[i] = ibf_used_rs[i]
-                                  && (ibf_opds[i][NUM_REGS_BITS-1:2] == stg_opds[0][NUM_REGS_BITS-1:2])
-                                  && (any_bit1 || (ibf_opds[i][1] == stg_opds[0][1]))
-                                  && (any_bit0 || (ibf_opds[i][0] == stg_opds[0][0]));
+            assign ibf_reads_rd[i] = ibf_used_rs[i] && (ibf_opds[i] == stg_opds[0]);
         end
         wire stg_rsv_rd = staging_if[w].data.wb;
         wire ibf_rsv    = (stg_rsv_rd && (| ibf_reads_rd))
@@ -327,7 +266,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
                 w, to_fullPC(staging_if[w].data.PC), staging_if[w].data.tmask, timeout_ctr,
                 operands_busy, staging_if[w].data.uuid))
 
-        `RUNTIME_ASSERT(~((writeback_fire || writeback_rel) && writeback_if.data.wb) || inuse_regs[writeback_if.data.rd] != 0,
+        `RUNTIME_ASSERT(~(writeback_fire && writeback_if.data.wb) || inuse_regs[writeback_if.data.rd] != 0,
             ("invalid writeback register: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d (#%0d)",
                 w, to_fullPC(writeback_if.data.PC), writeback_if.data.tmask, writeback_if.data.rd, writeback_if.data.uuid))
 

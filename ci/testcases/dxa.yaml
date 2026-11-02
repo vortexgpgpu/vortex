@@ -216,6 +216,21 @@ tests:
   - rtlsim
   app: sgemm2_dxa
   configs: -DVX_CFG_EXT_DXA_ENABLE
+# The tile reads through the wide loads (LDST_WIDE=1).
+- id: sgemm2_dxa-wide
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm2_dxa
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DLDST_WIDE=1
+- id: sgemm2_dxa_mcast-wide
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm2_dxa_mcast
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DLDST_WIDE=1
 - id: sgemm2_dxa_mcast-1
   via: blackbox
   drivers:

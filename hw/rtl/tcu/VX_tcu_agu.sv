@@ -136,7 +136,6 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     assign client_if.req_data  = req_data;
     assign client_if.rsp_ready = 1'b1;
     `UNUSED_VAR (client_if.rsp_data.sop)
-    `UNUSED_VAR (client_if.rsp_data.side)
     `UNUSED_VAR (client_if.rsp_data.tag)
 
     `RUNTIME_ASSERT(~client_if.rsp_valid || (issued_r && ~done_r),

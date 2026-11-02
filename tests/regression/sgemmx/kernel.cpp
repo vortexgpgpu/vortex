@@ -5,6 +5,51 @@
 #define BLOCK_SIZE_M  (BLOCK_DIM_Y * THREAD_SIZE_Y)
 #define BLOCK_SIZE_N  (BLOCK_DIM_X * THREAD_SIZE_X)
 
+#if LDST_WIDE
+static_assert(__is_same(TYPE, float), "LDST_WIDE needs float");
+
+// N consecutive words, in groups of 4, then 2, then 1.
+template <int N>
+static inline void wide_load(TYPE* dst, const TYPE* src) {
+    int j = 0;
+    #pragma unroll
+    for (; j + 4 <= N; j += 4) {
+        vx_float4 v = vx_flw_q(src + j);
+        dst[j] = v[0];
+        dst[j + 1] = v[1];
+        dst[j + 2] = v[2];
+        dst[j + 3] = v[3];
+    }
+    #pragma unroll
+    for (; j + 2 <= N; j += 2) {
+        vx_float2 v = vx_flw_d(src + j);
+        dst[j] = v[0];
+        dst[j + 1] = v[1];
+    }
+    #pragma unroll
+    for (; j < N; ++j) {
+        dst[j] = src[j];
+    }
+}
+
+template <int N>
+static inline void wide_store(TYPE* dst, const TYPE* src) {
+    int j = 0;
+    #pragma unroll
+    for (; j + 4 <= N; j += 4) {
+        vx_fsw_q(dst + j, vx_float4{src[j], src[j + 1], src[j + 2], src[j + 3]});
+    }
+    #pragma unroll
+    for (; j + 2 <= N; j += 2) {
+        vx_fsw_d(dst + j, vx_float2{src[j], src[j + 1]});
+    }
+    #pragma unroll
+    for (; j < N; ++j) {
+        dst[j] = src[j];
+    }
+}
+#endif
+
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     const TYPE* A = reinterpret_cast<const TYPE*>(arg->A_addr);
     const TYPE* B = reinterpret_cast<const TYPE*>(arg->B_addr);
@@ -44,12 +89,21 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
         }
 
         // Load B into shared memory
+    #if LDST_WIDE
+        {
+            TYPE b_row_data[THREAD_SIZE_X];
+            int b_row = k_tile * BLOCK_SIZE_K + ty;
+            wide_load<THREAD_SIZE_X>(b_row_data, &B[b_row * N + bx * BLOCK_SIZE_N + tx * THREAD_SIZE_X]);
+            wide_store<THREAD_SIZE_X>(&Bs[ty * BLOCK_SIZE_N + tx * THREAD_SIZE_X], b_row_data);
+        }
+    #else
         #pragma unroll
         for (int j = 0; j < THREAD_SIZE_X; ++j) {
             int b_row = k_tile * BLOCK_SIZE_K + ty;
             int b_col = bx * BLOCK_SIZE_N + tx * THREAD_SIZE_X + j;
             Bs[ty * BLOCK_SIZE_N + tx * THREAD_SIZE_X + j] = B[b_row * N + b_col];
         }
+    #endif
 
         __syncthreads();
 
@@ -60,10 +114,14 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
             for (int i = 0; i < THREAD_SIZE_Y; ++i) {
                 a_frag[i] = As[(ty * THREAD_SIZE_Y + i) * BLOCK_SIZE_K + k];
             }
+        #if LDST_WIDE
+            wide_load<THREAD_SIZE_X>(b_frag, &Bs[k * BLOCK_SIZE_N + tx * THREAD_SIZE_X]);
+        #else
             #pragma unroll
             for (int j = 0; j < THREAD_SIZE_X; ++j) {
                 b_frag[j] = Bs[k * BLOCK_SIZE_N + tx * THREAD_SIZE_X + j];
             }
+        #endif
 
             #pragma unroll
             for (int i = 0; i < THREAD_SIZE_Y; ++i) {
@@ -80,11 +138,22 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     // --- Write Back to Global Memory ---
     #pragma unroll
     for (int i = 0; i < THREAD_SIZE_Y; ++i) {
+    #if LDST_WIDE
+        TYPE c_data[THREAD_SIZE_X];
+        TYPE* c_ptr = &C[(row + i) * N + col];
+        wide_load<THREAD_SIZE_X>(c_data, c_ptr);
+        #pragma unroll
+        for (int j = 0; j < THREAD_SIZE_X; ++j) {
+            c_data[j] = alpha * accum[i][j] + beta * c_data[j];
+        }
+        wide_store<THREAD_SIZE_X>(c_ptr, c_data);
+    #else
         #pragma unroll
         for (int j = 0; j < THREAD_SIZE_X; ++j) {
             int c_row = row + i;
             int c_col = col + j;
             C[c_row * N + c_col] = alpha * accum[i][j] + beta * C[c_row * N + c_col];
         }
+    #endif
     }
 }

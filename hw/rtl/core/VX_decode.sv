@@ -222,7 +222,6 @@ module VX_decode import
         // address of every store in the program.
         op_args.lsu.export_mask = 2'b00;
     `endif
-        op_args.lsu.is_local = 1'b0;
 
         case (opcode)
             INST_I: begin
@@ -489,25 +488,37 @@ module VX_decode import
                 `USED_IREG (rs2);
             `endif
             end
-        `ifdef VX_CFG_LMEM_ENABLE
         `ifdef VX_CFG_EXT_F_ENABLE
-            // vx_flds.d (funct3 3) and vx_flds.q (funct3 4) load 2 or 4 words
-            // into an aligned FP register group, one word per beat. A full-size
-            // bytesel with an odd offset, which no other instruction produces,
-            // carries the group size.
+        `ifndef VX_CFG_FLEN_64
+            // vx_flw.d/.q and vx_fsw.d/.q: 2 or 4 words of an aligned FP register
+            // group, expanded into flw/fsw uops; the bytesel offset carries the
+            // group size.
             INST_EXT4: begin
-                if (LDS_WIDE_ENABLE && ((funct3 == 3'h3) || (funct3 == 3'h4))) begin
-                    ex_type = EX_LSU;
-                    op_type = INST_OP_BITS'(INST_LSU_LW);
-                    op_args.lsu.is_store = 0;
-                    op_args.lsu.is_float = 1;
-                    op_args.lsu.pack     = 0;
-                    op_args.lsu.is_local = 1;
-                    op_args.lsu.offset   = u_12;
-                    bytesel = {XLENB_W'(XLENB-1), XLENB_W'({funct3[2], 1'b1})};
-                    `USED_IREG (rs1);
-                    `USED_FREG (rd);
-                end
+                case (funct3)
+                    3'h3, 3'h4: begin
+                        ex_type = EX_LSU;
+                        op_type = INST_OP_BITS'(INST_LSU_LW);
+                        op_args.lsu.is_store = 0;
+                        op_args.lsu.is_float = 1;
+                        op_args.lsu.pack     = 2'b11;
+                        op_args.lsu.offset   = u_12;
+                        bytesel = {XLENB_W'(XLENB-1), XLENB_W'(!funct3[0])};
+                        `USED_IREG (rs1);
+                        `USED_FREG (rd);
+                    end
+                    3'h5, 3'h6: begin
+                        ex_type = EX_LSU;
+                        op_type = INST_OP_BITS'(INST_LSU_SW);
+                        op_args.lsu.is_store = 1;
+                        op_args.lsu.is_float = 1;
+                        op_args.lsu.pack     = 2'b11;
+                        op_args.lsu.offset   = s_imm;
+                        bytesel = {XLENB_W'(XLENB-1), XLENB_W'(!funct3[0])};
+                        `USED_IREG (rs1);
+                        `USED_FREG (rs2);
+                    end
+                    default:;
+                endcase
             end
         `endif
         `endif

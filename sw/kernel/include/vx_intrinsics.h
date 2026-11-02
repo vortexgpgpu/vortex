@@ -636,6 +636,36 @@ inline float vx_packlh_f(const void* base, size_t stride) {
     return out;
 }
 
+//
+// Wide loads and stores
+//
+
+// Two or four consecutive words, each 4-byte aligned. A compiler with the
+// wide load/store extension emits one vx_flw.d/.q or vx_fsw.d/.q for each
+// access; any other splits it into flw/fsw.
+typedef float vx_float2 __attribute__((vector_size(8), aligned(4)));
+typedef float vx_float4 __attribute__((vector_size(16), aligned(4)));
+
+__attribute__((always_inline))
+inline vx_float2 vx_flw_d(const void* addr) {
+    return *(const vx_float2*)addr;
+}
+
+__attribute__((always_inline))
+inline vx_float4 vx_flw_q(const void* addr) {
+    return *(const vx_float4*)addr;
+}
+
+__attribute__((always_inline))
+inline void vx_fsw_d(void* addr, vx_float2 value) {
+    *(vx_float2*)addr = value;
+}
+
+__attribute__((always_inline))
+inline void vx_fsw_q(void* addr, vx_float4 value) {
+    *(vx_float4*)addr = value;
+}
+
 #ifdef __cplusplus
 }
 #endif

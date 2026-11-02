@@ -164,7 +164,6 @@ module VX_lsu_mem_arb import VX_gpu_pkg::*; #(
                 bus_out_if[i].rsp_data.data,
                 rsp_tag_out
             };
-            `UNUSED_VAR (bus_out_if[i].rsp_data.side)
             assign bus_out_if[i].rsp_ready = rsp_ready_in[i];
         end
 
@@ -196,13 +195,8 @@ module VX_lsu_mem_arb import VX_gpu_pkg::*; #(
                 TAG_WIDTH'(bus_out_if[i].rsp_data.tag)
             };
         `else
-            assign rsp_data_in[i]  = {
-                bus_out_if[i].rsp_data.mask,
-                bus_out_if[i].rsp_data.data,
-                bus_out_if[i].rsp_data.tag
-            };
+            assign rsp_data_in[i]  = bus_out_if[i].rsp_data;
         `endif
-            `UNUSED_VAR (bus_out_if[i].rsp_data.side)
             assign bus_out_if[i].rsp_ready = rsp_ready_in[i];
         end
 
@@ -228,8 +222,7 @@ module VX_lsu_mem_arb import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_output
         assign bus_in_if[i].rsp_valid = rsp_valid_out[i];
-        assign {bus_in_if[i].rsp_data.mask, bus_in_if[i].rsp_data.data, bus_in_if[i].rsp_data.tag} = rsp_data_out[i];
-        assign bus_in_if[i].rsp_data.side = '0;
+        assign bus_in_if[i].rsp_data  = rsp_data_out[i];
         assign rsp_ready_out[i] = bus_in_if[i].rsp_ready;
     end
 

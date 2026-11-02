@@ -267,14 +267,14 @@ static op_string_t op_string(const Instr &instr) {
       case LsuType::LOAD: {
         auto lsuArgs = std::get<IntrLsuArgs>(instrArgs);
         bool dst_float = (instr.get_dest_reg().type == RegType::Float);
-        if (lsuArgs.nregs > 1) {
-          return {(lsuArgs.nregs == 4) ? "VX_FLDS.Q" : "VX_FLDS.D", to_hex_str(lsuArgs.offset)};
-        }
         if (instr.is_macro_op() && dst_float && lsuArgs.width == 0) {
           return {"PACKLB.F", ""};
         }
         if (instr.is_macro_op() && dst_float && lsuArgs.width == 1) {
           return {"PACKLH.F", ""};
+        }
+        if (instr.is_macro_op()) {
+          return {(lsuArgs.width == 4) ? "VX_FLW.Q" : "VX_FLW.D", to_hex_str(lsuArgs.offset)};
         }
         if (dst_float) {
           switch (lsuArgs.width) {
@@ -300,6 +300,9 @@ static op_string_t op_string(const Instr &instr) {
       }
       case LsuType::STORE: {
         auto lsuArgs = std::get<IntrLsuArgs>(instrArgs);
+        if (instr.is_macro_op()) {
+          return {(lsuArgs.width == 4) ? "VX_FSW.Q" : "VX_FSW.D", to_hex_str(lsuArgs.offset)};
+        }
         // For stores, the data source (rs2) carries the type info.
         bool src_float = (instr.get_src_reg(1).type == RegType::Float);
         if (src_float) {
@@ -1216,6 +1219,38 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     // known-violation handoff class, checked against its decoded destination.
     gfx_doctrine::check(*instr);
   } break;
+#if defined(VX_CFG_EXT_F_ENABLE) && !defined(VX_CFG_FLEN_64)
+  case Opcode::EXT4: {
+    // vx_flw.d/.q (funct3 3/4) and vx_fsw.d/.q (funct3 5/6): a macro-op of 2
+    // or 4 flw/fsw uops over an aligned FP register group. The width is the
+    // access's log2 bytes, as for fld/flq.
+    bool is_load = (funct3 == 3 || funct3 == 4);
+    if (!is_load && funct3 != 5 && funct3 != 6) {
+      std::abort();
+    }
+    uint32_t width = is_load ? funct3 : (funct3 - 2);
+    uint32_t words = 1u << (width - 2);
+    uint32_t reg   = is_load ? rd : rs2;
+    uint32_t imm12 = is_load ? (code >> shift_rs2) : ((funct7 << width_reg) | rd);
+    auto offset = (int32_t)sext(imm12, width_i_imm);
+    if ((reg % words) != 0 || (offset % int32_t(4 * words)) != 0) {
+      std::cout << "Error: " << (is_load ? "vx_flw." : "vx_fsw.") << ((words == 4) ? "q" : "d")
+                << " needs f" << reg << " aligned to " << words << " registers and offset "
+                << offset << " to " << (4 * words) << " bytes" << std::endl;
+      std::abort();
+    }
+    instr->set_fu_type(FUType::LSU);
+    instr->set_op_type(is_load ? LsuType::LOAD : LsuType::STORE);
+    instr->set_src_reg(0, rs1, RegType::Integer);
+    if (is_load) {
+      instr->set_dest_reg(rd, RegType::Float);
+    } else {
+      instr->set_src_reg(1, rs2, RegType::Float);
+    }
+    instr->set_args(IntrLsuArgs{width, /*stride*/ 0, offset});
+    instr->set_macro_op();
+  } break;
+#endif
 #ifdef VX_CFG_EXT_MUFU_ENABLE
   case Opcode::EXT3: {
     if (funct7 != 0 || funct3 != 0 || rs2 > uint32_t(MufuType::TANH)) {
@@ -1225,27 +1260,6 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     instr->set_op_type(MufuType(rs2));
     instr->set_dest_reg(rd, RegType::Float);
     instr->set_src_reg(0, rs1, RegType::Float);
-  } break;
-#endif
-#if defined(VX_CFG_LMEM_ENABLE) && defined(VX_CFG_EXT_F_ENABLE) && defined(VX_CFG_XLEN_32)
-  case Opcode::EXT4: {
-    // vx_flds.d (funct3 3) and vx_flds.q (funct3 4) load words into an
-    // aligned pair or quad of FP registers.
-    if (funct3 != 3 && funct3 != 4) {
-      std::abort();
-    }
-    uint32_t nregs = (funct3 == 4) ? 4 : 2;
-    if (rd % nregs != 0) {
-      std::cout << "Error: vx_flds." << ((nregs == 4) ? "q" : "d") << " destination f" << rd
-                << " is not aligned to " << nregs << " registers" << std::endl;
-      std::abort();
-    }
-    uint32_t imm12 = code >> shift_rs2;
-    instr->set_fu_type(FUType::LSU);
-    instr->set_op_type(LsuType::LOAD);
-    instr->set_dest_reg(rd, RegType::Float);
-    instr->set_src_reg(0, rs1, RegType::Integer);
-    instr->set_args(IntrLsuArgs{/*width=LW*/ 2, /*stride*/ 0, (int32_t)sext(imm12, width_i_imm), /*is_local*/ true, nregs});
   } break;
 #endif
   default:

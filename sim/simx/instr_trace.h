@@ -52,14 +52,6 @@ public:
   // Byte write enable
   uint8_t dst_bytesel;
 
-  // Registers from dst_reg up that the scoreboard reserves and releases: a
-  // wide local load reserves its quad or pair at issue, and each word-phase
-  // releases its own register.
-  uint32_t dst_span;
-
-  // A wide local load's words 1..3, per thread, until their phase retires.
-  std::vector<uint64_t> wide_data;
-
   std::shared_ptr<Instr> instr_ptr;
 
   int  pid;
@@ -98,7 +90,6 @@ public:
      , src_data(NUM_SRC_REGS, std::vector<reg_data_t>(VX_CFG_NUM_THREADS))
     , dst_data(VX_CFG_NUM_THREADS)
     , dst_bytesel(0xFF)
-    , dst_span(1)
     , pid(-1)
     , sop(true)
     , eop(true)
@@ -125,8 +116,6 @@ public:
     , src_data(rhs.src_data)
     , dst_data(rhs.dst_data)
     , dst_bytesel(rhs.dst_bytesel)
-    , dst_span(rhs.dst_span)
-    , wide_data(rhs.wide_data)
     , instr_ptr(rhs.instr_ptr)
     , pid(rhs.pid)
     , sop(rhs.sop)

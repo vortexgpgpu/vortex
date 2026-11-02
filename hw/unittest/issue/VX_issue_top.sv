@@ -111,7 +111,6 @@ module VX_issue_top import VX_gpu_pkg::*; #(
         assign writeback_if[i].data.uuid = writeback_uuid[i];
         assign writeback_if[i].data.wis = writeback_wis[i];
         assign writeback_if[i].data.eop_wis = PER_ISSUE_WARPS'(writeback_eop[i]) << writeback_wis[i];
-        assign writeback_if[i].data.rel_wis = '0;
         assign writeback_if[i].data.sid = writeback_sid[i];
         assign writeback_if[i].data.tmask = writeback_tmask[i];
         assign writeback_if[i].data.PC = writeback_PC[i];

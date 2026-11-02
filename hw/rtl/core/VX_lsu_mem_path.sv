@@ -49,10 +49,9 @@ module VX_lsu_mem_path import VX_gpu_pkg::*; #(
     `UNUSED_SPARAM (INSTANCE_ID)
 
     VX_lsu_mem_if #(
-        .NUM_LANES      (`VX_CFG_NUM_LSU_LANES),
-        .DATA_SIZE      (LSU_WORD_SIZE),
-        .TAG_WIDTH      (LSU_TAG_WIDTH),
-        .RSP_SIDE_WIDTH (LSU_RSP_SIDE_W)
+        .NUM_LANES (`VX_CFG_NUM_LSU_LANES),
+        .DATA_SIZE (LSU_WORD_SIZE),
+        .TAG_WIDTH (LSU_TAG_WIDTH)
     ) lsu_mem_if();
 
     // scheduler: client 0 is the block's lanes, client 1 the TCU metadata AGU
@@ -207,8 +206,6 @@ module VX_lsu_mem_path import VX_gpu_pkg::*; #(
             .out_rsp_tag    (dcache_coalesced_if.rsp_data.tag),
             .out_rsp_ready  (dcache_coalesced_if.rsp_ready)
         );
-        assign lsu_dcache_if.rsp_data.side = '0;
-        `UNUSED_VAR (dcache_coalesced_if.rsp_data.side)
 
     end else begin : g_no_coalescing
 

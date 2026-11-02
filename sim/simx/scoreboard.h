@@ -72,10 +72,6 @@ private:
   // A committed result is written back from the commit arbiter's output
   // register, and the issue stage reads a registered readiness.
   static constexpr uint32_t kReleaseDelay = 2;
-  // A wide load tests its destination group against the in-use state as
-  // registered at the start of the cycle, so it sees a release one cycle
-  // after other instructions do.
-  static constexpr uint32_t kGroupReleaseDelay = kReleaseDelay + 1;
 
   struct pending_release_t {
     uint32_t wid;
@@ -85,10 +81,8 @@ private:
   };
 
   std::vector<std::vector<RegMask>> in_use_regs_;
-  std::vector<std::vector<RegMask>> in_use_groups_;
   std::vector<uint8_t> in_use_fcsr_;
   std::deque<pending_release_t> pending_releases_;
-  std::deque<pending_release_t> pending_group_releases_;
   std::unordered_map<uint32_t, instr_trace_t*> owners_;
   std::unordered_map<uint32_t, uint32_t> commit_counts_;
 

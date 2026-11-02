@@ -20,10 +20,23 @@ static void matrix_mul(const TYPE* A, const TYPE* B, TYPE* C, uint32_t size) {
     Bs[ty * BLOCK_SIZE + tx] = B[(t + ty) * size + col];
     __syncthreads();
 
+  #if LDST_WIDE
+    static_assert(__is_same(TYPE, float), "LDST_WIDE needs float");
+    static_assert((BLOCK_SIZE % 4) == 0, "LDST_WIDE reads A in groups of 4");
+    #pragma unroll
+    for (uint32_t k = 0; k < BLOCK_SIZE; k += 4) {
+      vx_float4 a = vx_flw_q(&As[ty * BLOCK_SIZE + k]);
+      sum += a[0] * Bs[k * BLOCK_SIZE + tx];
+      sum += a[1] * Bs[(k + 1) * BLOCK_SIZE + tx];
+      sum += a[2] * Bs[(k + 2) * BLOCK_SIZE + tx];
+      sum += a[3] * Bs[(k + 3) * BLOCK_SIZE + tx];
+    }
+  #else
     #pragma unroll
     for (uint32_t k = 0; k < BLOCK_SIZE; ++k) {
       sum += As[ty * BLOCK_SIZE + k] * Bs[k * BLOCK_SIZE + tx];
     }
+  #endif
     __syncthreads();
   }
 

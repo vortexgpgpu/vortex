@@ -52,7 +52,6 @@ module VX_lmem_unit_top import VX_gpu_pkg::*; #(
     output wire [NUM_BLOCKS-1:0][NUM_LANES-1:0]                    rsp_mask,
     output wire [NUM_BLOCKS-1:0][NUM_LANES-1:0][WORD_WIDTH-1:0]    rsp_data,
     output wire [NUM_BLOCKS-1:0][TAG_WIDTH-1:0]                    rsp_tag,
-    output wire [NUM_BLOCKS-1:0][`UP(LSU_RSP_SIDE_W)-1:0]          rsp_side,
     input  wire [NUM_BLOCKS-1:0]                                   rsp_ready,
 
     // DMA requests
@@ -74,10 +73,9 @@ module VX_lmem_unit_top import VX_gpu_pkg::*; #(
     localparam DMA_REQ_DATAW = 1 + DMA_ADDR_WIDTH + DMA_DATA_SIZE * 8 + DMA_DATA_SIZE + MEM_ATTR_WIDTH + DMA_TAG_WIDTH;
 
     VX_lsu_mem_if #(
-        .NUM_LANES      (NUM_LANES),
-        .DATA_SIZE      (WORD_SIZE),
-        .TAG_WIDTH      (TAG_WIDTH),
-        .RSP_SIDE_WIDTH (LSU_RSP_SIDE_W)
+        .NUM_LANES (NUM_LANES),
+        .DATA_SIZE (WORD_SIZE),
+        .TAG_WIDTH (TAG_WIDTH)
     ) lsu_mem_if[NUM_BLOCKS]();
 
     VX_mem_bus_if #(
@@ -110,7 +108,6 @@ module VX_lmem_unit_top import VX_gpu_pkg::*; #(
         assign rsp_mask[k]  = lsu_mem_if[k].rsp_data.mask;
         assign rsp_data[k]  = lsu_mem_if[k].rsp_data.data;
         assign rsp_tag[k]   = lsu_mem_if[k].rsp_data.tag;
-        assign rsp_side[k]  = lsu_mem_if[k].rsp_data.side;
         assign lsu_mem_if[k].rsp_ready = rsp_ready[k];
     end
 
@@ -144,8 +141,7 @@ module VX_lmem_unit_top import VX_gpu_pkg::*; #(
         .TAG_WIDTH   (TAG_WIDTH),
         .DMA_ENABLE  (1),
         .DMA_TAG_WIDTH (DMA_TAG_WIDTH),
-        .AMO_ENABLE  (`VX_CFG_EXT_A_ENABLED),
-        .WIDE_ENABLE (LDS_WIDE_ENABLE)
+        .AMO_ENABLE  (`VX_CFG_EXT_A_ENABLED)
     ) lmem_unit (
         .clk        (clk),
         .reset      (reset),

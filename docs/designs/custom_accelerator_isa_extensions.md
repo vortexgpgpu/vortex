@@ -226,7 +226,6 @@ the table in the same change.
 | | | `0x02` | tensor core (WMMA/WGMMA) | R |
 | | | `0x03` | DXA async copy | R |
 | | | `0x04` | packed loads (`vx_packl*`) | R |
-| | | `0x08`–`0x17` | free | |
 | custom-1 `0x2B` | `funct3` | `0` | `vx_wgather` | R4 |
 | | | `3` | `vx_om_export` | R4 |
 | | | `5` | `vx_tex` | R4 |
@@ -234,24 +233,22 @@ the table in the same change.
 | | | `7` | `vx_rt_trace`, `vx_rt_wait` | R4 |
 | | | `1`, `2`, `4` | free | |
 | custom-2 `0x5B` | `funct7` | `0x00` | MUFU special functions; `fn` in `rs2`, `fmt` in `funct3` | R |
-| custom-3 `0x7B` | `funct3` | `3` | `vx_flds.d fd, imm(rs1)`: wide local load into `fd`, `fd+1` | I |
-| | | `4` | `vx_flds.q fd, imm(rs1)`: wide local load into `fd`..`fd+3` | I |
-| | | `0`–`2`, `5`–`7` | reserved | |
+| custom-3 `0x7B` | `funct3` | `3` | `vx_flw.d fd, imm(rs1)`: `fd`, `fd+1` ← two words | I |
+| | | `4` | `vx_flw.q fd, imm(rs1)`: `fd`..`fd+3` ← four words | I |
+| | | `5` | `vx_fsw.d fs2, imm(rs1)`: two words ← `fs2`, `fs2+1` | S |
+| | | `6` | `vx_fsw.q fs2, imm(rs1)`: four words ← `fs2`..`fs2+3` | S |
+| | | `0`–`2`, `7` | reserved | |
 
-`vx_flds.d` and `vx_flds.q` have the layout of the standard `fld`/`flq`: `rd`
-is the first FP destination, `rs1` the base, and `imm[11:0]` a signed byte
-offset. Each thread loads 8 or 16 bytes from local memory into the aligned
-register pair or quad starting at `fd`; `fd` must be a multiple of 2 or 4, and
-the address a multiple of 8 or 16. Local memory is addressed by the low
-`LMEM_LOG_SIZE` bits of the effective address, so a local pointer may hold the
-window address or a bare offset. Standard loads and stores serve every other
-local and global access through the generic path.
-
-The two forms are defined only with FLEN 32 (XLEN 32 with F) and local memory;
-elsewhere custom-3 is illegal. One FP register then holds one LSU word, so the
-group fills one word per phase on the existing datapath and each phase
-releases its register on its own. With FLEN 64 one register already holds 64
-bits and `fld` covers the `.d` case.
+The wide loads and stores have the layout of `fld`/`flq` and `fsd`/`fsq`, with a
+signed 12-bit byte offset. Each is a macro-op of 2 or 4 plain `flw`/`fsw`: uop
+*k* moves word *k* at `rs1 + imm + 4k` to or from register `fd + k` (`fs2 + k`),
+so the result is exactly that of the scalar sequence, with the same address
+windows, exceptions and lane mask, and no atomicity across the words. Each word
+needs only 4-byte alignment. The register must be a multiple of 2 (`.d`) or 4
+(`.q`) and `imm` a multiple of 8 or 16, which lets the expander place *k* in the
+low bits of both without an adder. An encoding that breaks either rule is
+reserved and its result undefined; the assembler rejects it. They are defined
+with F and FLEN 32 (no D); elsewhere custom-3 is illegal.
 
 ---
 
@@ -279,7 +276,7 @@ a priority encoder in the sequencer:
 
 | slot | expander | macro-ops |
 |---|---|---|
-| `UOP_PACKLD` | [`VX_uop_packld.sv`](../../hw/rtl/core/VX_uop_packld.sv) | packed loads |
+| `UOP_PACKLD` | [`VX_uop_packld.sv`](../../hw/rtl/core/VX_uop_packld.sv) | packed loads, wide loads and stores |
 | `UOP_TCU` | [`VX_tcu_uops.sv`](../../hw/rtl/tcu/VX_tcu_uops.sv) | WMMA, WGMMA |
 | `UOP_GFX` | [`VX_gfx_uops.sv`](../../hw/rtl/core/VX_gfx_uops.sv) | ray-trace windows, fragment export |
 

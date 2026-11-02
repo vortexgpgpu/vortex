@@ -1159,10 +1159,10 @@ package VX_gpu_pkg;
     // words, and VX_gfx_uops emits one uop per set bit.
     // Zero = not an export. Read ONLY by VX_gfx_uops; the LSU never sees it set
     // (the expander clears it), so the LSU stays a general-purpose unit.
-    // is_local marks a wide local load: the access goes to local memory at
-    // the low bits of its address, whatever the address window says.
+    // Spends two of the struct's spare padding bits -- INST_ARGS_BITS is
+    // unchanged (the PACKAGE_ASSERT below proves it).
     typedef struct packed {
-        logic                       is_local;
+        logic [(INST_ARGS_BITS-1-1-12-2-1-1-$bits(amo_op_e)-2-2)-1:0] __padding;
         logic [1:0]                 export_mask;
         logic                       amo_valid;
         logic                       amo_unsigned;
@@ -1436,7 +1436,6 @@ package VX_gpu_pkg;
         logic [UUID_WIDTH-1:0]              uuid;
         logic [ISSUE_WIS_W-1:0]             wis;
         logic [PER_ISSUE_WARPS-1:0]         eop_wis; // one-hot wis, set on eop
-        logic [PER_ISSUE_WARPS-1:0]         rel_wis; // one-hot wis, releases rd ahead of eop
         logic [NCTA_WIDTH-1:0]              cta_id;
         logic [SIMD_IDX_W-1:0]              sid;
         logic [`VX_CFG_SIMD_WIDTH-1:0]             tmask;
@@ -1673,21 +1672,7 @@ package VX_gpu_pkg;
         logic [LSU_CLIENT_TAG_WIDTH-1:0]                            tag;
     } lsu_req_data_t;
 
-    // Wide local loads (vx_flds.d/.q) fill an aligned FP register group,
-    // one word-phase at a time.
-    localparam LDS_WIDE_ENABLE = `VX_CFG_LMEM_ENABLED && `VX_CFG_EXT_F_ENABLED && (`VX_CFG_XLEN == 32);
-
-    // A local response's phase of a wide load. hold marks a phase before the
-    // last, whose lanes stay outstanding; phase_end marks its last pass.
     typedef struct packed {
-        logic                       hold;
-        logic                       phase_end;
-        logic [1:0]                 phase;
-    } lsu_rsp_side_t;
-    localparam LSU_RSP_SIDE_W = LDS_WIDE_ENABLE ? $bits(lsu_rsp_side_t) : 0;
-
-    typedef struct packed {
-        logic [`UP(LSU_RSP_SIDE_W)-1:0]                             side;
         logic [`VX_CFG_NUM_LSU_LANES-1:0]                           mask;
         logic [`VX_CFG_NUM_LSU_LANES-1:0][(LSU_WORD_SIZE*8)-1:0]    data;
         logic [LSU_CLIENT_TAG_WIDTH-1:0]                            tag;

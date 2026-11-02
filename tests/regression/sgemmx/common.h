@@ -7,6 +7,12 @@
 #define TYPE float
 #endif
 
+// LDST_WIDE=1 reads and writes each thread's consecutive words with the wide
+// loads and stores (vx_flw_d/q, vx_fsw_d/q); 0 keeps scalar accesses.
+#ifndef LDST_WIDE
+#define LDST_WIDE 0
+#endif
+
 // Per-thread output tile
 #ifndef THREAD_SIZE_Y
 #define THREAD_SIZE_Y 4

@@ -265,17 +265,16 @@ tests:
   app: lmem_access
   args: -n16 -s
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_A_ENABLE -DVX_CFG_ISSUE_WIDTH=2
-# Wide local loads: SimX and RTL route and time them alike.
-- id: parity-lds-wide
+# Wide loads and stores: SimX and RTL expand and time them alike.
+- id: parity-ldst-wide
   check: model_parity
   via: blackbox
-  app: lds_wide
+  app: ldst_wide
   configs: -DVX_CFG_NUM_THREADS=16
-# Fewer LSU lanes than SIMD lanes: a wide load's phases complete across packets.
-- id: parity-lds-wide-lanes
+- id: parity-ldst-wide-lanes
   check: model_parity
   via: blackbox
-  app: lds_wide
+  app: ldst_wide
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_LSU_LANES=4
 - id: parity-sgemm2-lmem
   check: model_parity
@@ -289,6 +288,12 @@ tests:
   app: sgemm2
   args: -n64 -t16
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_ISSUE_WIDTH=2
+- id: parity-sgemm2-lmem-wide
+  check: model_parity
+  via: blackbox
+  app: sgemm2
+  args: -n32 -t4
+  configs: -DVX_CFG_NUM_THREADS=16 -DLDST_WIDE=1
 # SGEMM with local-memory tiling (kernel-managed shared memory).
 - id: parity-sgemmx
   check: model_parity

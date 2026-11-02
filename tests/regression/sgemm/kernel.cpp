@@ -11,10 +11,35 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     int row = blockIdx.y * blockDim.y + threadIdx.y;
 
     TYPE sum(0);
+#if LDST_WIDE
+    static_assert(__is_same(TYPE, float), "LDST_WIDE needs float");
+    const TYPE* a_row = A + row * size;
+    const TYPE* b_col = B + col;
+    size_t e = 0;
+    for (; e + 8 <= size; e += 8) {
+        vx_float4 a0 = vx_flw_q(a_row + e);
+        vx_float4 a1 = vx_flw_q(a_row + e + 4);
+        #pragma unroll
+        for (int k = 0; k < 4; ++k) {
+            sum += a0[k] * *b_col;
+            b_col += size;
+        }
+        #pragma unroll
+        for (int k = 0; k < 4; ++k) {
+            sum += a1[k] * *b_col;
+            b_col += size;
+        }
+    }
+    for (; e < size; ++e) {
+        sum += a_row[e] * *b_col;
+        b_col += size;
+    }
+#else
     #pragma unroll 8
     for (size_t e = 0; e < size; ++e) {
         sum += A[row * size + e] * B[e * size + col];
     }
+#endif
 
     C[row * size + col] = sum;
 }

@@ -62,47 +62,85 @@ tests:
   configs: -DVX_CFG_EXT_A_ENABLE -DVX_CFG_ISSUE_WIDTH=2
   shape:
     threads: 16
-# Wide local loads (vx_flds.d/.q): lane patterns, register groups, the offset
-# limits, and local addresses given as a bare offset.
-- id: lds-wide-1
+# Wide loads and stores (vx_flw.d/.q, vx_fsw.d/.q) on local and global memory:
+# lane patterns, register groups, word alignments and the offset limits.
+- id: ldst-wide-1
   via: blackbox
   drivers:
   - simx
   - rtlsim
-  app: lds_wide
+  app: ldst_wide
   shape:
     threads: 16
-# Two LSU blocks: local requests on the second engine.
-- id: lds-wide-2
+# Two LSU blocks.
+- id: ldst-wide-2
   via: blackbox
   drivers:
   - simx
   - rtlsim
-  app: lds_wide
+  app: ldst_wide
   configs: -DVX_CFG_ISSUE_WIDTH=2
   shape:
     threads: 32
     warps: 8
-# Fewer LSU lanes than SIMD lanes: a warp's request goes out in four packets.
-- id: lds-wide-3
+# Fewer LSU lanes than SIMD lanes: each uop's request goes out in four packets.
+- id: ldst-wide-3
   via: blackbox
   drivers:
   - simx
   - rtlsim
-  app: lds_wide
+  app: ldst_wide
   configs: -DVX_CFG_NUM_LSU_LANES=4
   shape:
     threads: 16
 # One SIMD lane: the dispatcher splits every warp into single-lane packets.
-- id: lds-wide-4
+- id: ldst-wide-4
   via: blackbox
   drivers:
   - simx
   - rtlsim
-  app: lds_wide
+  app: ldst_wide
   configs: -DVX_CFG_SIMD_WIDTH=1
   shape:
     threads: 4
+# The sgemm benchmarks with each thread's consecutive words read and written
+# through the wide forms (LDST_WIDE=1).
+- id: ldst-wide-sgemm
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm
+  configs: -DLDST_WIDE=1
+- id: ldst-wide-sgemm-v1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm_v1
+  configs: -DLDST_WIDE=1
+- id: ldst-wide-sgemmx
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemmx
+  configs: -DLDST_WIDE=1
+- id: ldst-wide-sgemm2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm2
+  args: -n32 -t4
+  configs: -DLDST_WIDE=1
+- id: ldst-wide-sgemm2-v1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm2_v1
+  configs: -DLDST_WIDE=1
 - id: occupancy-1
   via: blackbox
   drivers:
