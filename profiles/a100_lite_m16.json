@@ -1,0 +1,22 @@
+{
+  "name": "a100_lite_m16",
+  "extends": "a100_lite",
+  "description": "The a100_lite SM at 16 SMs, the memory system scaled to 16/108 of the A100's (a100_lite's rule).",
+  "chip": {
+    "VX_CFG_NUM_CORES": 16,
+    "VX_CFG_L2_SIZE": 4194304,
+    "VX_CFG_L2_NUM_BANKS": 16
+  },
+  "platform": {
+    "VX_CFG_PLATFORM_MEMORY_NUM_BANKS": 16,
+    "VX_CFG_PLATFORM_MEMORY_PEAK_BW": 230370,
+    "VX_CFG_PLATFORM_MEMORY_DATA_RATE": 900
+  },
+  "sources": {
+    "inherited (a100_lite)": "the SM, and the rule that scales the memory system with the SMs",
+    "NUM_CORES 16": "16 SMs, one Vortex core each",
+    "L2_NUM_BANKS, PLATFORM_MEMORY_NUM_BANKS 16": "min(SMs, 32)",
+    "L2_SIZE 4 MiB": "nearest power of two to 0.3 MiB x 16 = 4.8 MiB",
+    "PLATFORM_MEMORY_PEAK_BW 230370, DATA_RATE 900": "1555000 MB/s x 16 / 108; 16 HBM2 channels x 16 B x 900 MT/s = 230400 MB/s"
+  }
+}

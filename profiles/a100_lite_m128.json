@@ -1,0 +1,22 @@
+{
+  "name": "a100_lite_m128",
+  "extends": "a100_lite",
+  "description": "The a100_lite SM at 128 SMs, the memory system scaled to 128/108 of the A100's (a100_lite's rule).",
+  "chip": {
+    "VX_CFG_NUM_CORES": 128,
+    "VX_CFG_L2_SIZE": 33554432,
+    "VX_CFG_L2_NUM_BANKS": 32
+  },
+  "platform": {
+    "VX_CFG_PLATFORM_MEMORY_NUM_BANKS": 32,
+    "VX_CFG_PLATFORM_MEMORY_PEAK_BW": 1842963,
+    "VX_CFG_PLATFORM_MEMORY_DATA_RATE": 3600
+  },
+  "sources": {
+    "inherited (a100_lite)": "the SM, and the rule that scales the memory system with the SMs",
+    "NUM_CORES 128": "128 SMs, one Vortex core each",
+    "L2_NUM_BANKS, PLATFORM_MEMORY_NUM_BANKS 32": "min(SMs, 32)",
+    "L2_SIZE 32 MiB": "the full 32 MiB from 64 SMs (the a100 profile's L2; 0.3 MiB x 128 = 38.4 MiB)",
+    "PLATFORM_MEMORY_PEAK_BW 1842963, DATA_RATE 3600": "1555000 MB/s x 128 / 108; 32 HBM2 channels x 16 B x 3600 MT/s = 1843200 MB/s"
+  }
+}
