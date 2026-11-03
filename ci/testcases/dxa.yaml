@@ -458,6 +458,19 @@ tests:
   shape:
     threads: 8
     warps: 8
+# A 128 KB local memory with the tiles placed above 64 KB: the DXA writes and
+# both WGMMA shared-memory descriptors address the upper half.
+- id: sgemm_tcu_wg_dxa-lmem128k
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm_tcu_wg_dxa
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_LMEM_LOG_SIZE=17
+    -DLMEM_PAD=65536 -DWGMMA_SS -DWGMMA_NRC=8 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
+  shape:
+    threads: 8
+    warps: 8
 - id: sgemm_tcu_wg_sp_dxa-1
   via: blackbox
   drivers:

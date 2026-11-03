@@ -887,7 +887,7 @@ public:
         continue;
       }
       auto& p = reqs.at(rep);
-      bool key_match = ((r.desc_b & 0xffff) == (p.desc_b & 0xffff))
+      bool key_match = (vt::smem_desc_offset(r.desc_b) == vt::smem_desc_offset(p.desc_b))
                     && r.step_k == p.step_k
                     && r.step_n == p.step_n
                     && r.cd_nregs == p.cd_nregs;
@@ -929,9 +929,9 @@ public:
     uint32_t a_desc = wgmma_desc_[wid][0];
     uint32_t b_desc = wgmma_desc_[wid][1];
     if (is_a_smem) {
-      lmem_desc_[wid][0] = {uint64_t(VX_MEM_LMEM_BASE_ADDR) + (a_desc & 0xFFFF), (a_desc >> 16) * 8 / e_bits, false};
+      lmem_desc_[wid][0] = {uint64_t(VX_MEM_LMEM_BASE_ADDR) + vt::smem_desc_offset(a_desc), vt::smem_desc_stride(a_desc) * 8 / e_bits, false};
     }
-    lmem_desc_[wid][1] = {uint64_t(VX_MEM_LMEM_BASE_ADDR) + (b_desc & 0xFFFF), (b_desc >> 16) * 8 / e_bits, false};
+    lmem_desc_[wid][1] = {uint64_t(VX_MEM_LMEM_BASE_ADDR) + vt::smem_desc_offset(b_desc), vt::smem_desc_stride(b_desc) * 8 / e_bits, false};
   }
 
   static uint32_t xtile_n_of(uint32_t cd_nregs) {
@@ -1159,9 +1159,9 @@ public:
       wgmma_desc_[wid][0] = a_desc;
       wgmma_desc_[wid][1] = b_desc;
       if (is_a_smem) {
-        lmem_desc_[wid][0] = {uint64_t(VX_MEM_LMEM_BASE_ADDR) + (a_desc & 0xFFFF), (a_desc >> 16) * 8 / e_bits, false};
+        lmem_desc_[wid][0] = {uint64_t(VX_MEM_LMEM_BASE_ADDR) + vt::smem_desc_offset(a_desc), vt::smem_desc_stride(a_desc) * 8 / e_bits, false};
       }
-      lmem_desc_[wid][1] = {uint64_t(VX_MEM_LMEM_BASE_ADDR) + (b_desc & 0xFFFF), (b_desc >> 16) * 8 / e_bits, false};
+      lmem_desc_[wid][1] = {uint64_t(VX_MEM_LMEM_BASE_ADDR) + vt::smem_desc_offset(b_desc), vt::smem_desc_stride(b_desc) * 8 / e_bits, false};
       uint32_t nrc = (cd_nregs == 0) ? 8 : (cd_nregs == 1) ? 16 : 32;
       cur_xtile_n_ = (nrc * VX_CFG_NUM_THREADS) / wg_cfg::xtileM;
       return;

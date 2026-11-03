@@ -24,18 +24,16 @@ enum mem_layout {
   col_major
 };
 
-// Shared-memory matrix descriptor (32-bit packed):
-//   bits[31:16] = row stride in bytes (leading dimension)
-//   bits[15:0]  = byte offset from local memory base (max 64 KB)
+// Shared-memory matrix descriptor (layout in smem_desc_pack).
 struct smem_matrix_desc {
   uint32_t value;
 };
 
-// Build a smem descriptor from a pointer and row stride in bytes.
+// Build a smem descriptor from a pointer and a row stride in bytes, a multiple of 4.
 static inline __attribute__((always_inline)) smem_matrix_desc vx_make_smem_desc(const void* ptr, uint32_t leading_bytes) {
   size_t lmem_base = csr_read_nv(VX_CSR_LOCAL_MEM_BASE);
   uint32_t offset = static_cast<uint32_t>(static_cast<size_t>(reinterpret_cast<uintptr_t>(ptr)) - lmem_base);
-  return {((leading_bytes << 16) | offset)};
+  return {smem_desc_pack(offset, leading_bytes)};
 }
 
 namespace detail {

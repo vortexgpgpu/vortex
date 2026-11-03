@@ -21,6 +21,12 @@
 #define LDST_MATRIX 0
 #endif
 
+// Bytes of local memory left unused below the tile buffers, so the tiles and
+// their shared-memory descriptors can sit above a given LMEM offset.
+#ifndef LMEM_PAD
+#define LMEM_PAD 0
+#endif
+
 // K tiles per iteration of the K loop
 #ifndef KUNROLL
 #define KUNROLL 1

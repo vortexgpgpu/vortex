@@ -24,11 +24,11 @@
 // by `row_idx * tcK + k_in` where row_idx ∈ [0, M_STEPS*tcM). The output
 // mux is layout-agnostic — only the fetch path differs.
 //
-// Mode is selected by the descriptor's stride field (req_desc_a[31:16]):
+// Mode is selected by the descriptor's stride field (req_desc_a[31:18]):
 //   stride == 0 → block-major. SMEM layout:
 //     A_smem[(k_blk * M_STEPS + m_blk) * BLOCK_WORDS + i*TC_K + k_in]
 //   stride != 0 → row-major (matches WGMMA SS descriptors and
-//     DXA-loaded slabs). ldm_words = stride_bytes/4 = words per row.
+//     DXA-loaded slabs). ldm_words = the stride field = words per row.
 //     A_smem[row * ldm_words + col_word].
 //
 // Block-major refill key = {desc_a, step_k}; one fetch reads M_STEPS
@@ -110,9 +110,8 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam FETCH_CTR_W_RM     = `CLOG2(A_TOTAL_ROWS + 1);
     localparam FETCH_CTR_W        = (FETCH_CTR_W_BM > FETCH_CTR_W_RM) ? FETCH_CTR_W_BM : FETCH_CTR_W_RM;
     localparam K_STEPS_W          = `CLOG2(TCU_WG_K_STEPS);
-    // ldm field width: desc[31:16] is a 16-bit byte stride; >>2 gives the
-    // per-row 32-bit-word stride. Cap at 14 bits (= 64KB smem / 4B).
-    localparam LDM_W              = 14;
+    // ldm field width: the descriptor's per-row 32-bit-word stride.
+    localparam LDM_W              = 32 - TCU_SMEM_DESC_OFF_BITS;
 
     // Canonical configs fit an A block in one bank-row normally and two
     // bank-rows with dense FEDP2K.
@@ -169,15 +168,15 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // M_STEPS adjacent bank-rows starting at base + k * M_STEPS.
 
     localparam DESC_ADDR_W = BANK_ADDR_WIDTH + BANK_SEL_BITS;
-    wire [DESC_ADDR_W-1:0]      desc_a_word_base = DESC_ADDR_W'(req_desc_a[15:0] >> WORD_SIZE_LOG2);
+    wire [DESC_ADDR_W-1:0]      desc_a_word_base = DESC_ADDR_W'(req_desc_a[TCU_SMEM_DESC_OFF_BITS-1:0] >> WORD_SIZE_LOG2);
     wire [BANK_ADDR_WIDTH-1:0]  desc_a_row_base  = desc_a_word_base[BANK_SEL_BITS +: BANK_ADDR_WIDTH];
     if (BANK_SEL_BITS > 0) begin : g_addr_lsb_unused
         `UNUSED_VAR (desc_a_word_base[BANK_SEL_BITS-1:0])
     end
-    // desc_a's lower 16 bits encode the smem offset; upper 16 bits carry the
-    // per-row byte stride (matches WGMMA SS descriptor). Stride=0 keeps
+    // desc_a's low bits encode the smem byte offset; the bits above carry the
+    // per-row word stride (matches WGMMA SS descriptor). Stride=0 keeps
     // the canonical block-major layout; non-zero selects the row-major path.
-    wire [LDM_W-1:0] desc_a_ldm_words = LDM_W'(req_desc_a[31:16] >> 2);
+    wire [LDM_W-1:0] desc_a_ldm_words = req_desc_a[31:TCU_SMEM_DESC_OFF_BITS];
     if (`VX_CFG_XLEN > 32) begin : g_desc_a_upper_unused
         `UNUSED_VAR (req_desc_a[`VX_CFG_XLEN-1:32])
     end

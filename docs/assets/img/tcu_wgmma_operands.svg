@@ -103,9 +103,9 @@
   <text x="880" y="80" class="tb">The descriptor selects the layout</text>
   <text x="880" y="112" class="ts">shared-memory descriptor, 32 bits</text>
   <rect x="880" y="122" width="230" height="32" rx="0" class="fldh"/>
-  <text x="995" y="143" class="mono" text-anchor="middle">row stride, bytes [31:16]</text>
+  <text x="995" y="143" class="mono" text-anchor="middle">row stride, words [31:18]</text>
   <rect x="1110" y="122" width="250" height="32" rx="0" class="fld"/>
-  <text x="1235" y="143" class="mono" text-anchor="middle">offset in shared memory [15:0]</text>
+  <text x="1235" y="143" class="mono" text-anchor="middle">offset, bytes [17:0]</text>
   <text x="880" y="176" class="tt">x10 carries the A descriptor, x11 the B descriptor</text>
   <rect x="880" y="196" width="480" height="150" rx="6" class="box"/>
   <text x="892" y="218" class="t">stride = 0 — block-major</text>

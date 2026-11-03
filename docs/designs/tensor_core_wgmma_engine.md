@@ -288,11 +288,12 @@ WGMMA perf counters.
 
 | bits | field |
 |---|---|
-| `[15:0]` | offset of the slab in shared memory |
-| `[31:16]` | row stride in bytes; **0 selects the block-major layout** |
+| `[17:0]` | byte offset of the slab in shared memory |
+| `[31:18]` | row stride in 4-byte words; **0 selects the block-major layout** |
 
-`x10` carries the A descriptor and `x11` the B descriptor. The 16-bit offset
-is why a shared memory visible to WGMMA cannot exceed 64 KB.
+`x10` carries the A descriptor and `x11` the B descriptor. The 18-bit offset
+is why a shared memory visible to WGMMA cannot exceed 256 KB. A constant row
+stride folds into the packing, so building a descriptor costs one OR.
 
 | layout | slab organization | fetch |
 |---|---|---|

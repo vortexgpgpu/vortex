@@ -102,12 +102,12 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     // K-major (= row-major SMEM where K runs along contiguous bytes; the
     // WGMMA SS-descriptor's canonical layout) fetch path. Engaged
-    // when desc_b's stride field (bits [31:16]) is non-zero. Performs
+    // when desc_b's stride field (bits [31:18]) is non-zero. Performs
     // TCU_TC_N per-N-row LMEM reads per (step_k, step_n) WGMMA uop, writing
     // TCU_WG_FEDP_K 32-bit words per row into storage at the b_off offset
     // tcu_core's `b_off + j*tcK + k` indexing will read. Mirrors
     // VX_tcu_abuf.sv's row-major fetch for A.
-    localparam LDM_W              = 14;
+    localparam LDM_W              = 32 - TCU_SMEM_DESC_OFF_BITS;
     localparam BANK_ROW_WORDS     = NUM_BANKS * XLEN_RATIO;
     localparam BANK_ROW_WORDS_LOG2= $clog2(BANK_ROW_WORDS);
     localparam LG_B_BLOCK_WORDS   = $clog2(B_BLOCK_WORDS);
@@ -168,11 +168,11 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // -----------------------------------------------------------------------
 
     localparam DESC_ADDR_W = BANK_ADDR_WIDTH + BANK_SEL_BITS;
-    wire [DESC_ADDR_W-1:0]      desc_b_word_base = DESC_ADDR_W'(req_desc_b[15:0] >> WORD_SIZE_LOG2);
+    wire [DESC_ADDR_W-1:0]      desc_b_word_base = DESC_ADDR_W'(req_desc_b[TCU_SMEM_DESC_OFF_BITS-1:0] >> WORD_SIZE_LOG2);
     wire [BANK_ADDR_WIDTH-1:0]  desc_b_row_base  = desc_b_word_base[BANK_SEL_BITS +: BANK_ADDR_WIDTH];
-    // desc_b's upper 16 bits encode the per-row byte stride (WGMMA
+    // desc_b's upper bits encode the per-row word stride (WGMMA
     // SS-descriptor `ldm`). Non-zero stride selects the K-major fetch path.
-    wire [LDM_W-1:0] desc_b_ldm_words = LDM_W'(req_desc_b[31:16] >> 2);
+    wire [LDM_W-1:0] desc_b_ldm_words = req_desc_b[31:TCU_SMEM_DESC_OFF_BITS];
     if (`VX_CFG_XLEN > 32) begin : g_desc_b_upper_unused
         `UNUSED_VAR (req_desc_b[`VX_CFG_XLEN-1:32])
     end

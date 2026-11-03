@@ -113,6 +113,10 @@ package VX_tcu_pkg;
     localparam TCU_WG_B_BLOCK_SIZE = TCU_WG_FEDP_K * TCU_TC_N;
     localparam TCU_WG_B_SUB_BLOCKS = TCU_BLOCK_CAP / TCU_WG_B_BLOCK_SIZE;
 
+    // WGMMA shared-memory descriptor: the slab's local-memory byte offset,
+    // and above it the row stride in 32-bit words.
+    localparam TCU_SMEM_DESC_OFF_BITS = 18;
+
     // Symmetric sparse flag (NT=4, NT=16: block_em == block_en). It selects the
     // WMMA_SP layout only: WGMMA_SP always reads the full interleaved layout.
     localparam SYM_SPARSE = (TCU_BLOCK_EM == TCU_BLOCK_EN);

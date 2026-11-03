@@ -156,6 +156,24 @@ inline const char* fmt_string(uint32_t fmt) {
   }
 }
 
+// WGMMA shared-memory matrix descriptor (32-bit): the slab's byte offset from
+// the local memory base in [17:0], and its row stride in 4-byte words in
+// [31:18], 0 selecting the block-major layout.
+constexpr uint32_t smem_desc_offset_bits = 18;
+constexpr uint32_t smem_desc_stride_lg   = 2;
+
+inline constexpr uint32_t smem_desc_pack(uint32_t offset, uint32_t stride) {
+  return ((stride >> smem_desc_stride_lg) << smem_desc_offset_bits) | offset;
+}
+
+inline constexpr uint32_t smem_desc_offset(uint32_t desc) {
+  return desc & ((1u << smem_desc_offset_bits) - 1);
+}
+
+inline constexpr uint32_t smem_desc_stride(uint32_t desc) {
+  return (desc >> smem_desc_offset_bits) << smem_desc_stride_lg;
+}
+
 // The TCU accumulates and returns fp32 (int32 for integer inputs); it has no
 // other output format.
 inline constexpr bool tcu_output_valid(uint32_t it, uint32_t ot) {

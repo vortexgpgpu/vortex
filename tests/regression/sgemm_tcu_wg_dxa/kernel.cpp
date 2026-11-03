@@ -52,7 +52,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   // within caller-saved registers and the stack is never touched.
   //   buffer: A [cta_M x tileK] then B [tileK x xtileN]
   uint32_t a_elems   = cta_M * ctx::tileK;
-  auto smem = reinterpret_cast<ctx::input_t *>(__local_mem());
+  auto smem = reinterpret_cast<ctx::input_t *>(reinterpret_cast<uint8_t *>(__local_mem()) + LMEM_PAD);
   ctx::input_t* A_cur = smem;
   ctx::input_t* B_cur = smem + a_elems;
 
