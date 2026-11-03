@@ -183,12 +183,12 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   auto err = reinterpret_cast<volatile uint32_t*>(arg->err_addr);
 
   if (arg->phase == 3) {
-    // Read fresh lines from memory, one word each.
+    // Read fresh memory blocks, one word each.
     auto base = reinterpret_cast<volatile uint32_t*>(arg->full_addr);
     uint32_t sum = 0;
     for (uint32_t i = 0; i < arg->full_lines; ++i) {
-      uint32_t line = i * arg->num_threads + gid;
-      sum += base[line * (arg->flood_stride / sizeof(uint32_t))];
+      uint32_t block = i * arg->num_threads + gid;
+      sum += base[block * (FLOOD_BLOCK_BYTES / sizeof(uint32_t))];
     }
     asm volatile ("" :: "r"(sum));
     err[gid] = 0;

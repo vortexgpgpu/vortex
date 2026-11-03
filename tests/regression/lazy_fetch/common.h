@@ -16,6 +16,8 @@
 // sectors, stored before any of it is loaded.
 #define FULL_LINE_WORDS 32
 #define SECTOR_WORDS    16
+// A flood launch reads one word of each memory block.
+#define FLOOD_BLOCK_BYTES 64
 
 // How a phase-2 launch stores and loads its lines.
 enum {
@@ -45,11 +47,10 @@ typedef struct {
   uint32_t phase;        // 0: exercise the cases, 1: re-check every region, 2: full lines, 3: flood
   uint32_t rotate;       // phase 1: check the regions of thread (gid + rotate)
   uint64_t full_addr;
-  uint32_t full_lines;   // phase 2: lines per thread (per warp in FULL_CHAIN); 3: lines it reads
+  uint32_t full_lines;   // phase 2: lines per thread (per warp in FULL_CHAIN); 3: blocks it reads
   uint32_t full_mode;    // phase 2: FULL_*
   uint32_t full_skip;    // phase 2: leave each sector's last word unwritten
   uint32_t num_blocks;
-  uint32_t flood_stride; // phase 3: bytes between the words it reads
 } kernel_arg_t;
 
 // Pre-pattern the host writes over the whole buffer.

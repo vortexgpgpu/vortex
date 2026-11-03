@@ -1407,11 +1407,10 @@ private:
       // Repurpose the victim way for the new line: all sectors invalid.
       victim_line.reset();
       victim_line.tag = addr_tag;
-    }
-    // Every installed fill advances the set's FIFO pointer, a sector refill
-    // into the resident way included.
-    if (config_.repl_policy == Cache::FIFO) {
-      set.fifo_ptr = (set.fifo_ptr + 1) % set.lines.size();
+      // Only a new line advances the FIFO pointer; a sector refill keeps it.
+      if (config_.repl_policy == Cache::FIFO) {
+        set.fifo_ptr = (set.fifo_ptr + 1) % set.lines.size();
+      }
     }
 
     auto &line = set.lines.at(line_id);

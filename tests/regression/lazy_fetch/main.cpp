@@ -139,30 +139,25 @@ static const char* full_name(const kernel_arg_t& arg) {
   }
 }
 
-// The last-level cache: its bytes and line size. The command processor's DMA
-// writes an upload into it when that cache is an L2 or L3, so a buffer just
-// uploaded can be resident there with every byte valid.
+// The last-level cache's bytes. The command processor's DMA writes an upload
+// into it when that cache is an L2 or L3, so a buffer just uploaded can be
+// resident there with every byte valid.
 #if VX_CFG_L3_ENABLED
 static const uint64_t llc_bytes = VX_CFG_L3_SIZE;
-static const uint32_t llc_line  = VX_CFG_L3_LINE_SIZE;
 #elif VX_CFG_L2_ENABLED
 static const uint64_t llc_bytes = (uint64_t)VX_CFG_L2_SIZE * VX_CFG_NUM_CLUSTERS;
-static const uint32_t llc_line  = VX_CFG_L2_LINE_SIZE;
 #else
 static const uint64_t llc_bytes = (uint64_t)VX_CFG_DCACHE_SIZE * VX_CFG_NUM_DCACHES;
-static const uint32_t llc_line  = VX_CFG_L1_LINE_SIZE;
 #endif
 
 // One phase-2 launch over a fresh pre-patterned buffer, after a launch that
 // reads far more. Drivers differ on whether the memory read counter restarts
 // at each launch; after the flood, a counter that restarted reads below its
-// previous value. The flood also reads a word of each line of twice the
-// last-level cache, so the buffer is left in memory only and a sector left
-// partial must read it. One fill per line: the FIFO pointer also advances on
-// a sector refill, so reading every sector of a line would skip ways. Returns
-// the launch's memory reads.
+// previous value. The flood also reads a word of every memory block over
+// twice the last-level cache, so the buffer is left in memory only and a
+// sector left partial must read it. Returns the launch's memory reads.
 static int64_t run_lines(kernel_arg_t arg, uint32_t grid, uint32_t block, uint32_t lines, int* errors) {
-  const uint32_t flood_lines = std::max<uint64_t>(4096, 2 * llc_bytes / llc_line);
+  const uint32_t flood_blocks = std::max<uint64_t>(4096, 2 * llc_bytes / FLOOD_BLOCK_BYTES);
   uint32_t line_threads = (arg.full_mode == FULL_CHAIN) ? arg.num_blocks : arg.num_threads;
   uint32_t words = lines * line_threads * FULL_LINE_WORDS;
   vx_buffer_h buffer = new_buffer(words * sizeof(uint32_t), &arg.full_addr);
@@ -174,9 +169,8 @@ static int64_t run_lines(kernel_arg_t arg, uint32_t grid, uint32_t block, uint32
 
   kernel_arg_t flood = arg;
   flood.phase = 3;
-  flood.full_lines = flood_lines / arg.num_threads;
-  flood.flood_stride = llc_line;
-  new_buffer(flood_lines * llc_line, &flood.full_addr);
+  flood.full_lines = flood_blocks / arg.num_threads;
+  new_buffer(flood_blocks * FLOOD_BLOCK_BYTES, &flood.full_addr);
   RT_CHECK(launch(flood, grid, block));
   *errors += check_errors(arg.num_threads);
 

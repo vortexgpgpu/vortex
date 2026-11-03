@@ -384,6 +384,20 @@ tests:
   shape:
     cores: 4
     l2cache: true
+# A set holds as many lines as it has ways: one thread reads every sector of a
+# set's worth of same-set lines twice, then of one line more. On the sectored
+# L2 a sector refill must not advance the FIFO victim. The bank hash would
+# spread the lines over the banks, so it is off.
+- id: cache_ways-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: cache_ways
+  configs: -DVX_CFG_L2_BANK_HASH=0
+  flags: --perf=7
+  shape:
+    l2cache: true
 # A thread's load must return its own earlier store to the same word. On the
 # write-through L1 under an L2, the stores of a miss chain reach the array only
 # as they replay behind the fill: a load landing after the chain's read head
