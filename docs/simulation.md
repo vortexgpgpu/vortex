@@ -235,6 +235,9 @@ machine from it: SimX, rtlsim, the FPGA and ASIC flows, and the kernels.
 | `gtx1060` | GeForce GTX 1060 6 GB (Pascal), on `gtx1080`: 10 cores, 1.5 MB L2, 192 GB/s as 8 GDDR6 channels |
 | `rtx3060` | GeForce RTX 3060 12 GB (Ampere GA106): 28 cores x 48 warps, 64 KB shared memory, 3 MB L2, GDDR6 at 360 GB/s; FP16/TF32/INT8/INT4 tensor cores with sparsity; no RTU (it needs full-warp ALU lanes, GA106 has 16 INT32 per block) |
 | `rx6600` | Radeon RX 6600 (RDNA 2): 28 CUs x 40 waves x 32 lanes, 64 KB LDS, 2 MB L2, 32 MB Infinity Cache as the L3, GDDR6 at 224 GB/s; ray accelerators as RTU |
+| `rx580` | Radeon RX 580 (Polaris, GCN 4): 36 CUs x 40 waves x 64 lanes on a 16-lane datapath (`SIMD_WIDTH` 16, a wave instruction every 4 clocks as on GCN), 64 KB LDS, 2 MB L2, GDDR5 at 256 GB/s as GDDR6 channels; no matrix units |
+| `mi250x` | Instinct MI250X (CDNA 2): 2 dies x 110 CUs x 32 waves x 64 lanes, 64 KB LDS, 8 MB L2, HBM2E at 3.28 TB/s; INT8 matrix cores |
+| `mi300x` | Instinct MI300X (CDNA 3): 8 XCDs x 38 CUs x 32 waves x 64 lanes, 64 KB LDS, 4 MB L2 per XCD, 256 MB Infinity Cache as the L3, HBM3 at 5.3 TB/s; TF32/FP8/INT8 matrix cores with sparsity |
 | `rx9070xt` | Radeon RX 9070 XT (RDNA 4): 64 CUs x 32 waves x 32 lanes, 64 KB LDS, 8 MB L2, 64 MB Infinity Cache as the L3, GDDR6 at 640 GB/s; FP16/FP8/INT8/INT4 matrix units with sparsity, ray accelerators as RTU |
 | `v100` | Tesla V100 (Volta): 80 cores x 64 warps, 64 KB shared memory, 6 MB L2, 32 HBM2 channels at 1752 MT/s; FP16 tensor cores |
 | `a100` | A100 (Ampere): 108 cores x 64 warps, 128 KB shared memory, 192 KB L1, 40 MB L2, HBM2 at 1555 GB/s; FP16/TF32/INT8/INT4 tensor cores with 2:4 sparsity |
