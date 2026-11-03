@@ -881,6 +881,16 @@ public:
               this->ibuf_release(wid);
             }
             head_staged_.at(wid) = false;
+            // The staging register takes the next instruction in the cycle it
+            // hands this one off, so its buffer slot frees now.
+            if (!ibuffer->empty()) {
+              auto next = ibuffer->peek();
+              if (!next->instr_ptr->is_macro_op()
+               && SimPlatform::instance().cycles() > next->ibuf_time) {
+                head_staged_.at(wid) = true;
+                this->ibuf_release(wid);
+              }
+            }
           }
         }
       }

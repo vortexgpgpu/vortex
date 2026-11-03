@@ -49,6 +49,10 @@ void MemCoalescer::on_reset() {
 }
 
 void MemCoalescer::on_tick() {
+  // The tag table's full flag is registered: a tag a response frees this
+  // cycle takes a new request from the next one.
+  const bool tags_full = pending_rd_reqs_.full();
+
   // process outgoing responses: merge same-tag fragments arriving across
   // channels this tick into one uncoalesced response.
   for (uint32_t o = 0; o < output_size_; ++o) {
@@ -153,7 +157,7 @@ void MemCoalescer::on_tick() {
   assert(!in_req.mask.none());
 
   // ensure we can allocate a response tag
-  if (pending_rd_reqs_.full()) {
+  if (tags_full) {
     DT(4, this->name() << " queue-full: " << in_req);
     return;
   }

@@ -757,6 +757,13 @@ public:
   // commits it, not one.
   static constexpr uint32_t MEM_REQ_DELAY = 2;
 
+  // The socket's registered memory port stands for the request register of
+  // the non-cacheable bypass layer; a cache without that layer has no such
+  // register, so its requests reach the port one cycle sooner.
+  static uint32_t mem_req_delay(const Cache::Config &config) {
+    return (config.mem_rsp_slice && !config.nc_enable) ? (MEM_REQ_DELAY - 1) : MEM_REQ_DELAY;
+  }
+
   // Non-LLC AMO passthrough table capacity. Also partitions the memory-side
   // tag namespace and counts toward the response-sink credit on mem_rsp_in.
   static constexpr uint32_t AMO_PASSTHRU_CAP = 8;
@@ -778,7 +785,7 @@ public:
             const Cache::Config &config,
             const params_t &params,
             uint32_t bank_id)
-      : SimObject<CacheBank>(ctx, name), core_req_in(this), core_rsp_out(this), mem_req_out(this), mem_rsp_in(this, config.mshr_size + AMO_PASSTHRU_CAP), config_(config), params_(params), bank_id_(bank_id), sets_(params.sets_per_bank, set_t(params.lines_per_set, params.sectors_per_line)), mshr_(config.mshr_size), pipe_req_(TFifo<bank_req_t>::Create("", config.latency, std::max<uint32_t>(2u, config.latency))), lazy_q_(TFifo<uint32_t>::Create("", 1, lazyq_size(config))), rand_ctr_(0), adm_seq_ctr_(0)
+      : SimObject<CacheBank>(ctx, name), core_req_in(this), core_rsp_out(this), mem_req_out(this), mem_rsp_in(this, config.mshr_size + AMO_PASSTHRU_CAP), config_(config), params_(params), bank_id_(bank_id), mem_req_delay_(mem_req_delay(config)), sets_(params.sets_per_bank, set_t(params.lines_per_set, params.sectors_per_line)), mshr_(config.mshr_size), pipe_req_(TFifo<bank_req_t>::Create("", config.latency, std::max<uint32_t>(2u, config.latency))), lazy_q_(TFifo<uint32_t>::Create("", 1, lazyq_size(config))), rand_ctr_(0), adm_seq_ctr_(0)
 #if VX_CFG_EXT_A_ENABLED
       , amo_unit_(__MAX(2u, (uint32_t)VX_CFG_AMO_RS_SIZE))
 #endif
@@ -1616,11 +1623,11 @@ private:
       uint64_t head = std::max(now, dbg_mem_req_free_);
       uint64_t leave = head + (req.is_write() ? DBG_WDELAY : 0);
       dbg_mem_req_free_ = leave + 1;
-      this->mem_req_out.send(req, MEM_REQ_DELAY + (leave - now));
+      this->mem_req_out.send(req, mem_req_delay_ + (leave - now));
       return;
     }
   #endif
-    this->mem_req_out.send(req, MEM_REQ_DELAY);
+    this->mem_req_out.send(req, mem_req_delay_);
   }
 
   // Emit a write-through store downstream, with the optional core response.
@@ -2216,6 +2223,7 @@ private:
   Cache::Config config_;
   params_t params_;
   uint32_t bank_id_;
+  uint32_t mem_req_delay_;
 
   std::vector<set_t> sets_;
   MSHR mshr_;
