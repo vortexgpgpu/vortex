@@ -247,5 +247,5 @@ int main (int argc, char **argv) {
   // Clean up
   cleanup();
 
-  return errors;
+  return errors != 0;
 }

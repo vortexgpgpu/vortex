@@ -307,7 +307,7 @@ int main(int argc, char *argv[]) {
 
   if (errors != 0) {
     printf("Failed!\n");
-    return errors;
+    return errors != 0;
   }
 
   printf("Passed!\n");

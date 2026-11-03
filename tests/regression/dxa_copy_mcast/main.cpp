@@ -195,7 +195,7 @@ int main(int argc, char* argv[]) {
   cleanup();
   if (errors) {
     std::cout << "FAILED (" << errors << " errors)\n";
-    return errors;
+    return errors != 0;
   }
   std::cout << "PASSED\n";
   return 0;
