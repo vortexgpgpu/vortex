@@ -96,10 +96,12 @@ module VX_lsu_mem_path import VX_gpu_pkg::*; #(
     );
 
 `ifdef PERF_ENABLE
+    // The block's own client only: the TCU metadata loads are the TCU's, not
+    // the program's loads.
     for (genvar j = 0; j < `VX_CFG_NUM_LSU_LANES; ++j) begin : g_perf
-        assign perf_rd_req_fire[j] = lsu_mem_if.req_valid && lsu_mem_if.req_data.mask[j] && lsu_mem_if.req_ready && ~lsu_mem_if.req_data.rw;
-        assign perf_wr_req_fire[j] = lsu_mem_if.req_valid && lsu_mem_if.req_data.mask[j] && lsu_mem_if.req_ready && lsu_mem_if.req_data.rw;
-        assign perf_rsp_fire[j]    = lsu_mem_if.rsp_valid && lsu_mem_if.rsp_data.mask[j] && lsu_mem_if.rsp_ready;
+        assign perf_rd_req_fire[j] = client_if.req_valid && client_if.req_data.mask[j] && client_if.req_ready && ~client_if.req_data.rw;
+        assign perf_wr_req_fire[j] = client_if.req_valid && client_if.req_data.mask[j] && client_if.req_ready && client_if.req_data.rw;
+        assign perf_rsp_fire[j]    = client_if.rsp_valid && client_if.rsp_data.mask[j] && client_if.rsp_ready;
     end
 `endif
 
