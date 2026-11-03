@@ -31,8 +31,13 @@ module VX_mem_req_pending #(
     localparam SIZEW = `CLOG2(SIZE+1);
 
     // The handshakes usually end long ready chains, so they are registered
-    // before counting; the count then lags a cycle and empty adds back the
-    // registered handshakes, the same value on every cycle.
+    // before counting, and over many inputs the count of them is registered
+    // too: the counter then lags two cycles. empty is conservative: it is the
+    // exact empty of the section when no input fired the previous cycle and
+    // false otherwise, so it never reports empty while a request is held and
+    // reports it at most one cycle after the section drained. A cycle in which
+    // an input fires and the section drains the same cycle is the only one it
+    // misses.
     reg [NUM_INPUTS-1:0]  in_fire_r;
     reg [NUM_OUTPUTS-1:0] out_fire_r;
     always @(posedge clk) begin
@@ -45,11 +50,24 @@ module VX_mem_req_pending #(
         end
     end
 
-    wire [INCRW-1:0] in_cnt;
-    wire [DECRW-1:0] out_cnt;
-    `POP_COUNT(in_cnt, in_fire_r);
-    `POP_COUNT(out_cnt, out_fire_r);
+    wire [INCRW-1:0] in_cnt_w;
+    wire [DECRW-1:0] out_cnt_w;
+    `POP_COUNT(in_cnt_w, in_fire_r);
+    `POP_COUNT(out_cnt_w, out_fire_r);
 
+    reg [INCRW-1:0] in_cnt_r;
+    reg [DECRW-1:0] out_cnt_r;
+    always @(posedge clk) begin
+        if (reset) begin
+            in_cnt_r  <= '0;
+            out_cnt_r <= '0;
+        end else begin
+            in_cnt_r  <= in_cnt_w;
+            out_cnt_r <= out_cnt_w;
+        end
+    end
+
+    // requests through the handshakes of two cycles ago
     wire [SIZEW-1:0] size_lag;
     VX_pending_size #(
         .SIZE  (SIZE),
@@ -58,8 +76,8 @@ module VX_mem_req_pending #(
     ) pending (
         .clk       (clk),
         .reset     (reset),
-        .incr      (in_cnt),
-        .decr      (out_cnt),
+        .incr      (in_cnt_r),
+        .decr      (out_cnt_r),
         `UNUSED_PIN (empty),
         `UNUSED_PIN (alm_empty),
         `UNUSED_PIN (full),
@@ -67,7 +85,9 @@ module VX_mem_req_pending #(
         .size      (size_lag)
     );
 
-    assign empty = ((SIZEW+1)'(size_lag) + (SIZEW+1)'(in_cnt)) == (SIZEW+1)'(out_cnt);
-
+    // held after last cycle's handshakes, given no input fired last cycle
+    wire [SIZEW:0] held_in  = (SIZEW+1)'(size_lag) + (SIZEW+1)'(in_cnt_r);
+    wire [SIZEW:0] held_out = (SIZEW+1)'(out_cnt_r) + (SIZEW+1)'(out_cnt_w);
+    assign empty = ~(| in_fire_r) && (held_in == held_out);
 
 endmodule
