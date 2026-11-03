@@ -27,7 +27,11 @@
     "VX_CFG_TCU_WGMMA_ENABLE": true,
     "VX_CFG_EXT_DXA_ENABLE": true,
     "VX_CFG_NUM_BARRIERS": 16,
-    "VX_CFG_EXT_TEX_ENABLE": true
+    "VX_CFG_EXT_TEX_ENABLE": true,
+    "VX_CFG_FDIV_PE_RATIO": 8,
+    "VX_CFG_FSQRT_PE_RATIO": 8,
+    "VX_CFG_FCVT_PE_RATIO": 8,
+    "VX_CFG_DCACHE_NUM_BANKS": 4
   },
   "chip": {
     "VX_CFG_NUM_CLUSTERS": 1,
@@ -35,7 +39,7 @@
     "VX_CFG_L2_ENABLE": true,
     "VX_CFG_L2_SIZE": 33554432,
     "VX_CFG_L2_NUM_WAYS": 16,
-    "VX_CFG_L2_NUM_BANKS": 32,
+    "VX_CFG_L2_NUM_BANKS": 64,
     "VX_CFG_CP_LLC_CLIENT": 1
   },
   "platform": {
@@ -48,7 +52,7 @@
   "sources": {
     "NUM_CORES, NUM_WARPS, NUM_THREADS, ISSUE_WIDTH": "132 SMs (SXM5), 64 resident warps/SM, 4 schedulers x 32 lanes (NVIDIA H100 Tensor Core GPU Architecture whitepaper)",
     "DCACHE_SIZE": "256 KB combined L1/shared per SM (whitepaper)",
-    "L2_SIZE, L2_NUM_WAYS, L2_NUM_BANKS": "50 MB L2 (whitepaper), rounded down to the power of two the cache accepts; 16 ways and 32 banks as in the a100 profile",
+    "L2_SIZE, L2_NUM_WAYS, L2_NUM_BANKS": "50 MB L2 (whitepaper), rounded down to the power of two the cache accepts; 16 ways; 64 banks of 64 B, the power of two nearest the part's L2 bandwidth per clock (as a100)",
     "PLATFORM_MEMORY_TYPE, PLATFORM_MEMORY_NUM_BANKS, PLATFORM_MEMORY_DATA_RATE": "5 HBM3 stacks x 16 64-bit channels at 5236 MT/s = 40 128-bit channel pairs, modelled as 32 at 6545 MT/s for a power-of-two interleave: 32 x 16 B x 6545 MT/s = 3.35 TB/s, the card's bandwidth; latency not calibrated",
     "PLATFORM_CLOCK_RATE, PLATFORM_MEMORY_PEAK_BW": "1980 MHz boost clock, 3.35 TB/s (H100 SXM5 datasheet)",
     "FETCH_WIDTH": "4 SM processing blocks, each with its own warp scheduler, dispatch unit and L0 instruction cache (NVIDIA H100 Tensor Core GPU Architecture whitepaper)",
@@ -62,6 +66,8 @@
     "EXT_TEX_ENABLE": "Texture units in every SM",
     "EXT_RASTER_ENABLE, EXT_OM_ENABLE": "Off: the datacenter part is built for compute (no display outputs; the raster and ROP hardware is reduced or absent), so the profile models its compute machine",
     "NUM_MUFU_LANES": "16 special-function results per clock per SM (4 SFUs in each of the 4 processing blocks) for the reciprocal, reciprocal square root, log2, exp2, sine and cosine (CUDA C++ Programming Guide, arithmetic instruction throughput, compute capability 9.0)",
-    "NUM_ALU_LANES, NUM_FPU_LANES, NUM_LSU_LANES": "GH100 SM (H100 whitepaper, Figure 7): 4 processing blocks, each with 32 FP32, 16 INT32, 16 FP64 cores, 8 LD/ST units, 1 SFU and 1 tensor core. One Vortex ALU/FPU/LSU block per processing block (ISSUE_WIDTH=4) with the part's INT32, FP32 and LD/ST lanes; a 32-thread warp instruction issues over NUM_THREADS/lanes cycles, as on the part. The TCU stays full-warp (NUM_TCU_LANES == NUM_THREADS). FP64 is not modelled separately: with XLEN=64 each FPU lane also executes FP64, so the profile has 128 FP64 lanes per SM against the part's 64"
+    "NUM_ALU_LANES, NUM_FPU_LANES, NUM_LSU_LANES": "GH100 SM (H100 whitepaper, Figure 7): 4 processing blocks, each with 32 FP32, 16 INT32, 16 FP64 cores, 8 LD/ST units, 1 SFU and 1 tensor core. One Vortex ALU/FPU/LSU block per processing block (ISSUE_WIDTH=4) with the part's INT32, FP32 and LD/ST lanes; a 32-thread warp instruction issues over NUM_THREADS/lanes cycles, as on the part. The TCU stays full-warp (NUM_TCU_LANES == NUM_THREADS). FP64 is not modelled separately: with XLEN=64 each FPU lane also executes FP64, so the profile has 128 FP64 lanes per SM against the part's 64",
+    "FDIV_PE_RATIO, FSQRT_PE_RATIO, FCVT_PE_RATIO": "16 results per clock per SM, 4 per processing block: FP32 reciprocal and reciprocal square root, on which division and square root are built, and the 32-bit type conversions (CUDA C++ Programming Guide, arithmetic instruction throughput); 32 FPU lanes / 8, compute capability 9.0",
+    "DCACHE_NUM_BANKS": "128 B per clock of L1 data per SM: 4 banks of the 32 B dcache word. The default (one bank per LSU request channel) gives 8, twice the part"
   }
 }

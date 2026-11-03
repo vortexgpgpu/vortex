@@ -22,7 +22,9 @@
     "VX_CFG_NUM_BARRIERS": 16,
     "VX_CFG_EXT_TEX_ENABLE": true,
     "VX_CFG_EXT_RASTER_ENABLE": true,
-    "VX_CFG_EXT_OM_ENABLE": true
+    "VX_CFG_EXT_OM_ENABLE": true,
+    "VX_CFG_FDIV_PE_RATIO": 4,
+    "VX_CFG_FSQRT_PE_RATIO": 4
   },
   "chip": {
     "VX_CFG_NUM_CLUSTERS": 1,
@@ -57,6 +59,7 @@
     "EXT_TEX_ENABLE": "Texture units in every SM",
     "EXT_RASTER_ENABLE, EXT_OM_ENABLE": "Raster engines in every GPC and ROPs in every memory partition (architecture whitepaper)",
     "NUM_MUFU_LANES": "32 special-function results per clock per SM (8 SFUs in each of the 4 processing blocks) for the reciprocal, reciprocal square root, log2, exp2, sine and cosine (CUDA C++ Programming Guide, arithmetic instruction throughput, compute capability 6.1)",
-    "NUM_ALU_LANES, NUM_FPU_LANES, NUM_LSU_LANES": "GP104 SM (GTX 1080 whitepaper): 4 processing blocks, each with 32 CUDA cores (FP32 and INT32 on the same cores), 8 LD/ST units and 8 SFUs; 4 FP64 cores per SM. One Vortex ALU/FPU/LSU block per processing block (ISSUE_WIDTH=4) with the part's INT32, FP32 and LD/ST lanes; a 32-thread warp instruction issues over NUM_THREADS/lanes cycles, as on the part. The TCU stays full-warp (NUM_TCU_LANES == NUM_THREADS). FP64 is not modelled separately: with XLEN=64 each FPU lane also executes FP64, so the profile has 128 FP64 lanes per SM against the part's 4"
+    "NUM_ALU_LANES, NUM_FPU_LANES, NUM_LSU_LANES": "GP104 SM (GTX 1080 whitepaper): 4 processing blocks, each with 32 CUDA cores (FP32 and INT32 on the same cores), 8 LD/ST units and 8 SFUs; 4 FP64 cores per SM. One Vortex ALU/FPU/LSU block per processing block (ISSUE_WIDTH=4) with the part's INT32, FP32 and LD/ST lanes; a 32-thread warp instruction issues over NUM_THREADS/lanes cycles, as on the part. The TCU stays full-warp (NUM_TCU_LANES == NUM_THREADS). FP64 is not modelled separately: with XLEN=64 each FPU lane also executes FP64, so the profile has 128 FP64 lanes per SM against the part's 4",
+    "FDIV_PE_RATIO, FSQRT_PE_RATIO": "32 results per clock per SM, 8 per processing block: FP32 reciprocal and reciprocal square root, on which division and square root are built (CUDA C++ Programming Guide, arithmetic instruction throughput, compute capability 6.1); 32 FPU lanes / 4"
   }
 }

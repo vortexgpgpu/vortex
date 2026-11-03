@@ -27,7 +27,10 @@
     "VX_CFG_NUM_BARRIERS": 16,
     "VX_CFG_EXT_TEX_ENABLE": true,
     "VX_CFG_EXT_RASTER_ENABLE": true,
-    "VX_CFG_EXT_OM_ENABLE": true
+    "VX_CFG_EXT_OM_ENABLE": true,
+    "VX_CFG_FDIV_PE_RATIO": 8,
+    "VX_CFG_FSQRT_PE_RATIO": 8,
+    "VX_CFG_FCVT_PE_RATIO": 8
   },
   "chip": {
     "VX_CFG_NUM_CLUSTERS": 1,
@@ -58,6 +61,7 @@
     "EXT_RTU_ENABLE": "Off although the part has one RT core per SM: the RTU needs full-warp ALU lanes (NUM_ALU_LANES == NUM_THREADS), and the part's 16 INT32 lanes per block take precedence",
     "NUM_MUFU_LANES": "16 special-function results per clock per SM (compute capability 8.6)",
     "VM_ENABLE, EXT_A_ENABLE, EXT_ZACAS_ENABLE, EXT_ZFHMIN_ENABLE, NUM_BARRIERS, EXT_TEX_ENABLE, EXT_RASTER_ENABLE, EXT_OM_ENABLE": "As in the other NVIDIA profiles: demand-paged MMU, atomics with CAS, FP16, 16 named barriers, and the graphics pipeline of a GeForce part",
-    "xlen": "64-bit machine: 64-bit pointers and FP64"
+    "xlen": "64-bit machine: 64-bit pointers and FP64",
+    "FDIV_PE_RATIO, FSQRT_PE_RATIO, FCVT_PE_RATIO": "16 results per clock per SM, 4 per processing block: FP32 reciprocal and reciprocal square root, on which division and square root are built, and the 32-bit type conversions (CUDA C++ Programming Guide, arithmetic instruction throughput); 32 FPU lanes / 8, compute capability 8.6"
   }
 }
