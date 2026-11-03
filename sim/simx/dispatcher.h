@@ -50,6 +50,13 @@ private:
 	uint32_t batch_idx_;
 	uint32_t out_delay_;
 	std::vector<int> block_pids_;
+	// first cycle a block's lane iterator can present a new op
+	std::vector<uint64_t> block_free_;
+	// the slot queue a block's iterator still holds a last packet of, or -1
+	std::vector<int> held_input_;
+	// A SIMD slice wider than the fanout limit (8 lanes, plus half) splits
+	// into packets through a registered iterator.
+	bool iter_out_reg_;
 	bool release_on_accept_ = false;
 
 	friend class SimObject<Dispatcher>;

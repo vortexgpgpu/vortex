@@ -32,6 +32,9 @@ Dispatcher::Dispatcher(const SimContext& ctx, const char* name, Core* core, uint
   , batch_idx_(0)
   , out_delay_(out_delay)
   , block_pids_(block_size, 0)
+  , block_free_(block_size, 0)
+  , held_input_(block_size, -1)
+  , iter_out_reg_((num_lanes != VX_CFG_SIMD_WIDTH) && (VX_CFG_SIMD_WIDTH > 12))
 {}
 
 Dispatcher::~Dispatcher() {}
@@ -41,9 +44,16 @@ void Dispatcher::on_reset() {
   for (auto& bp : block_pids_) {
     bp = 0;
   }
+  for (auto& bf : block_free_) {
+    bf = 0;
+  }
+  for (auto& hi : held_input_) {
+    hi = -1;
+  }
 }
 
 void Dispatcher::on_tick() {
+  uint64_t now = SimPlatform::instance().cycles();
   // Batches holding an instruction this cycle, sampled before any is popped.
   uint32_t valid_batches = 0;
   if (num_blocks_ != 1) {
@@ -52,6 +62,18 @@ void Dispatcher::on_tick() {
         valid_batches |= 1u << (i / block_size_);
       }
     }
+  }
+
+  // ops whose last packet left the iterator last cycle leave their queue now
+  for (auto& held : held_input_) {
+    if (held < 0)
+      continue;
+    auto& input = Inputs.at(held);
+    if (!release_on_accept_) {
+      ReleaseOut.send(input.peek(), 0);
+    }
+    input.pop();
+    held = -1;
   }
 
   // process inputs
@@ -68,6 +90,8 @@ void Dispatcher::on_tick() {
     // leaves its slot queue only when the unit's input has room.
     auto& output = Outputs.at(b);
     if (output.full())
+      continue;
+    if (now < block_free_.at(b))
       continue;
 
     auto trace = input.peek();
@@ -117,9 +141,18 @@ void Dispatcher::on_tick() {
         block_pids_.at(b) = start + 1;
       } else {
         block_pids_.at(b) = -1; // mark block as processed
-        input.pop();
-        if (!release_on_accept_) {
-          ReleaseOut.send(trace, 0);
+        if (iter_out_reg_) {
+          // The iterator's output register holds the last packet a cycle
+          // more: the op leaves its slot queue then, and the register is
+          // cleared as it does, so the next op's first packet comes a cycle
+          // after that.
+          block_free_.at(b) = now + 2;
+          held_input_.at(b) = i;
+        } else {
+          input.pop();
+          if (!release_on_accept_) {
+            ReleaseOut.send(trace, 0);
+          }
         }
         ++block_sent;
       }
