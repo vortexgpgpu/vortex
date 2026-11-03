@@ -64,7 +64,7 @@
     "NUM_CORES, NUM_WARPS, NUM_THREADS, ISSUE_WIDTH": "132 SMs (SXM5), 64 resident warps/SM, 4 schedulers x 32 lanes (NVIDIA H100 Tensor Core GPU Architecture whitepaper)",
     "DCACHE_SIZE": "256 KB combined L1/shared per SM (whitepaper)",
     "L2_SIZE, L2_NUM_WAYS, L2_NUM_BANKS": "50 MB L2 (whitepaper): 25 ways over power-of-two sets; 64 banks of 64 B, the power of two nearest the part's L2 bandwidth per clock (as a100)",
-    "PLATFORM_MEMORY_TYPE, PLATFORM_MEMORY_NUM_BANKS, PLATFORM_MEMORY_DATA_RATE": "5 HBM3 stacks x 16 64-bit channels at 5236 MT/s = 40 128-bit channel pairs, modelled as 32 at 6545 MT/s for a power-of-two interleave: 32 x 16 B x 6545 MT/s = 3.35 TB/s, the card's bandwidth; latency not calibrated",
+    "PLATFORM_MEMORY_TYPE, PLATFORM_MEMORY_NUM_BANKS, PLATFORM_MEMORY_DATA_RATE": "5 HBM3 stacks x 16 64-bit channels at 5236 MT/s = 40 128-bit channel pairs, modelled as 32 at 6545 MT/s for a power-of-two interleave: 32 x 16 B x 6545 MT/s = 3.35 TB/s, the card's bandwidth",
     "PLATFORM_CLOCK_RATE, PLATFORM_MEMORY_PEAK_BW": "1980 MHz boost clock, 3.35 TB/s (H100 SXM5 datasheet)",
     "FETCH_WIDTH": "4 SM processing blocks, each with its own warp scheduler, dispatch unit and L0 instruction cache (NVIDIA H100 Tensor Core GPU Architecture whitepaper)",
     "CP_LLC_CLIENT": "Host copies reach device memory through the L2 like every other client, so uploaded data is L2-resident at launch",
