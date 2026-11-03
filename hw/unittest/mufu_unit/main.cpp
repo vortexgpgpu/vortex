@@ -22,6 +22,7 @@
 #include "mufu.h"
 
 #include <cstdint>
+#include <VX_types.h>
 #include <cstdio>
 #include <cstdlib>
 #include <deque>
@@ -33,7 +34,7 @@ using namespace vortex::mufu;
 
 namespace {
 
-constexpr int kLatency = 7;
+constexpr int kLatency = VX_MUFU_LATENCY;
 
 const uint32_t kSpecials[] = {
   0x00000000, 0x80000000, 0x00000001, 0x807fffff, 0x00800000, 0x80800000,

@@ -6,7 +6,7 @@ PROJECT := mufu_unit
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
 SRC_DIR := $(VORTEX_HOME)/hw/unittest/$(PROJECT)
 
-CXXFLAGS := -I$(SRC_DIR) -I$(VORTEX_HOME)/hw/unittest/common -I$(SW_COMMON_DIR)
+CXXFLAGS := -I$(SRC_DIR) -I$(VORTEX_HOME)/hw/unittest/common -I$(SW_COMMON_DIR) -I$(ROOT_DIR)/sw
 
 CONFIGS += -DSIMULATION -DVX_CFG_EXT_MUFU_ENABLE
 

@@ -8,7 +8,7 @@ module VX_mufu_pe import VX_gpu_pkg::*; (
     input wire [31:0]   dataa,
     output wire [31:0]  result
 );
-    `STATIC_ASSERT (`VX_MUFU_LATENCY == 7, ("VX_mufu_pe: the datapath is 7 stages, VX_MUFU_LATENCY=%0d", `VX_MUFU_LATENCY))
+    `STATIC_ASSERT (`VX_MUFU_LATENCY == 9, ("VX_mufu_pe: the datapath is 9 stages, VX_MUFU_LATENCY=%0d", `VX_MUFU_LATENCY))
 
     localparam TBL_RCP   = 3'd0;
     localparam TBL_RSQRT = 3'd1;
@@ -22,10 +22,39 @@ module VX_mufu_pe import VX_gpu_pkg::*; (
     localparam F32_NEG_INF = 32'hff800000;
     localparam F32_ONE     = 32'h3f800000;
 
-    wire        x_s = dataa[31];
-    wire [7:0]  x_e = dataa[30:23];
-    wire [22:0] x_m = dataa[22:0];
-    wire [23:0] x_sig = {1'b1, x_m};
+    // Stage 0: unpack and the argument shifts of EX2 and SINPI/COSPI.
+    wire [7:0]  in_e   = dataa[30:23];
+    wire [23:0] in_sig = {1'b1, dataa[22:0]};
+
+    wire [3:0] ex2_lsh = 4'(in_e - 8'd120);
+    wire [7:0] ex2_rsh = 8'd120 - in_e;
+    wire [37:0] ex2_mag_in = (in_e >= 8'd120) ? (38'(in_sig) << ex2_lsh)
+                           : ((ex2_rsh < 8'd24) ? 38'(in_sig >> ex2_rsh[4:0]) : 38'd0);
+
+    wire [7:0] trig_lsh = in_e - 8'd119;
+    wire [7:0] trig_rsh = 8'd119 - in_e;
+    wire [31:0] trig_u0_in = (in_e >= 8'd119) ? ((trig_lsh < 8'd32) ? (32'(in_sig) << trig_lsh[4:0]) : 32'd0)
+                           : ((trig_rsh < 8'd24) ? 32'(in_sig >> trig_rsh[4:0]) : 32'd0);
+
+    wire [2:0]  s0_fn;
+    wire [31:0] s0_data;
+    wire [37:0] ex2_mag;
+    wire [31:0] trig_u0;
+
+    VX_pipe_register #(
+        .DATAW (3 + 32 + 38 + 32)
+    ) s0_reg (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (enable),
+        .data_in  ({fn,    dataa,   ex2_mag_in, trig_u0_in}),
+        .data_out ({s0_fn, s0_data, ex2_mag,    trig_u0})
+    );
+
+    // Stage 1: specials, table select and reduced argument.
+    wire        x_s = s0_data[31];
+    wire [7:0]  x_e = s0_data[30:23];
+    wire [22:0] x_m = s0_data[22:0];
 
     wire x_zero = (x_e == 8'd0);
     wire x_inf  = (x_e == 8'hff) && (x_m == 23'd0);
@@ -33,18 +62,11 @@ module VX_mufu_pe import VX_gpu_pkg::*; (
 
     wire signed [9:0] x_k = 10'($signed({2'b00, x_e})) - 10'sd127;
 
-    wire [3:0] ex2_lsh = 4'(x_e - 8'd120);
-    wire [7:0] ex2_rsh = 8'd120 - x_e;
-    wire [37:0] ex2_mag = (x_e >= 8'd120) ? (38'(x_sig) << ex2_lsh)
-                        : ((ex2_rsh < 8'd24) ? 38'(x_sig >> ex2_rsh[4:0]) : 38'd0);
     wire [38:0] ex2_x = x_s ? -{1'b0, ex2_mag} : {1'b0, ex2_mag};
 
-    wire [7:0] trig_lsh = x_e - 8'd119;
-    wire [7:0] trig_rsh = 8'd119 - x_e;
-    wire is_sin = (fn == 3'(INST_MUFU_SINPI));
-    wire [31:0] trig_u0 = (x_e >= 8'd119) ? ((trig_lsh < 8'd32) ? (32'(x_sig) << trig_lsh[4:0]) : 32'd0)
-                        : ((trig_rsh < 8'd24) ? 32'(x_sig >> trig_rsh[4:0]) : 32'd0);
-    wire [31:0] trig_u = is_sin ? trig_u0 : (trig_u0 + 32'h40000000);
+    wire is_sin = (s0_fn == 3'(INST_MUFU_SINPI));
+    // COSPI adds a quarter period: only the two top bits take the carry.
+    wire [31:0] trig_u = is_sin ? trig_u0 : {trig_u0[31:30] + 2'b01, trig_u0[29:0]};
     wire        trig_odd = trig_u[30];
     wire [29:0] trig_t = trig_odd ? ~trig_u[29:0] : trig_u[29:0];
     wire        trig_neg = trig_u[31] ^ (is_sin && x_s);
@@ -71,7 +93,7 @@ module VX_mufu_pe import VX_gpu_pkg::*; (
         r_neg     = 1'b0;
         r_zsign   = 1'b0;
         r_lg2     = 1'b0;
-        case (fn)
+        case (s0_fn)
         3'(INST_MUFU_RCP): begin
             r_neg = x_s;
             r_exp = 10'sd127 - 10'($signed({2'b00, x_e}));
@@ -163,7 +185,7 @@ module VX_mufu_pe import VX_gpu_pkg::*; (
                 r_sval = {x_s, 31'd0};
             end else if (x_e < 8'd122) begin
                 r_special = 1'b1;
-                r_sval = dataa;
+                r_sval = s0_data;
             end
         end
         default: begin
@@ -276,23 +298,42 @@ module VX_mufu_pe import VX_gpu_pkg::*; (
         .data_out ({s4_misc, s4_a0})
     );
 
-    wire        s4_special, s4_neg, s4_zsign, s4_lg2;
-    wire [31:0] s4_sval;
-    wire signed [9:0] s4_exp, s4_k;
-    assign {s4_special, s4_sval, s4_exp, s4_neg, s4_zsign, s4_lg2, s4_k} = s4_misc;
-
     wire signed [27:0] t1 = 28'(s4_p1 >>> 18);
     wire signed [20:0] t2 = 21'(s4_p2 >>> 18);
     wire signed [34:0] p_sum = $signed({3'b000, s4_a0}) + 35'(t1) + 35'(t2);
-    wire [33:0] p_pos = p_sum[34] ? 34'd0 : p_sum[33:0];
-    wire signed [40:0] lg2_sum = 41'($signed({s4_k, 30'd0})) + $signed({7'd0, p_pos});
-    wire lg2_neg = lg2_sum[40];
-    wire [39:0] lg2_mag = 40'(lg2_neg ? -lg2_sum : lg2_sum);
+    wire [33:0] p_pos_in = p_sum[34] ? 34'd0 : p_sum[33:0];
 
-    wire [39:0] mag = s4_lg2 ? lg2_mag : 40'(p_pos);
-    wire        neg = s4_lg2 ? lg2_neg : s4_neg;
-    wire signed [9:0] exp_adj = s4_lg2 ? 10'sd0 : s4_exp;
-    wire zsign = s4_lg2 ? 1'b0 : s4_zsign;
+    wire [MISC_W-1:0] s4b_misc;
+    wire [33:0] p_pos;
+
+    VX_pipe_register #(
+        .DATAW (MISC_W + 34)
+    ) s4b_reg (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (enable),
+        .data_in  ({s4_misc,  p_pos_in}),
+        .data_out ({s4b_misc, p_pos})
+    );
+
+    wire        s4b_special, s4b_neg, s4b_zsign, s4b_lg2;
+    wire [31:0] s4b_sval;
+    wire signed [9:0] s4b_exp, s4b_k;
+    assign {s4b_special, s4b_sval, s4b_exp, s4b_neg, s4b_zsign, s4b_lg2, s4b_k} = s4b_misc;
+
+    // LG2: k * 2^30 + p_pos. The low 30 bits are p_pos's, so only the top
+    // takes the add; its magnitude negates the two parts side by side.
+    wire signed [10:0] lg2_hi = 11'(s4b_k) + 11'(p_pos[33:30]);
+    wire [29:0] p_lo = p_pos[29:0];
+    wire        lg2_neg = lg2_hi[10];
+    wire [29:0] lg2_lo_neg = -p_lo;
+    wire [9:0]  lg2_hi_neg = ~lg2_hi[9:0] + 10'(p_lo == 30'd0);
+    wire [39:0] lg2_mag = lg2_neg ? {lg2_hi_neg, lg2_lo_neg} : {lg2_hi[9:0], p_lo};
+
+    wire [39:0] mag = s4b_lg2 ? lg2_mag : 40'(p_pos);
+    wire        neg = s4b_lg2 ? lg2_neg : s4b_neg;
+    wire signed [9:0] exp_adj = s4b_lg2 ? 10'sd0 : s4b_exp;
+    wire zsign = s4b_lg2 ? 1'b0 : s4b_zsign;
 
     wire        s5_special, s5_neg, s5_zsign;
     wire [31:0] s5_sval;
@@ -305,7 +346,7 @@ module VX_mufu_pe import VX_gpu_pkg::*; (
         .clk      (clk),
         .reset    (reset),
         .enable   (enable),
-        .data_in  ({s4_special, s4_sval, exp_adj, neg,    zsign,    mag}),
+        .data_in  ({s4b_special, s4b_sval, exp_adj, neg,  zsign,    mag}),
         .data_out ({s5_special, s5_sval, s5_exp,  s5_neg, s5_zsign, s5_mag})
     );
 
@@ -340,7 +381,11 @@ module VX_mufu_pe import VX_gpu_pkg::*; (
     );
 
     wire [24:0] sig_r = {1'b0, s6_sig[24:1]} + 25'(s6_sig[0]);
-    wire signed [11:0] bexp = s6_bexp + 12'(sig_r[24]);
+    // The rounding carry bumps the exponent by one: both range checks are
+    // taken on the unrounded exponent and the carry selects.
+    wire [7:0]  bexp = s6_bexp[7:0] + 8'(sig_r[24]);
+    wire bexp_ovf = sig_r[24] ? (s6_bexp >= 12'sd254) : (s6_bexp >= 12'sd255);
+    wire bexp_unf = sig_r[24] ? (s6_bexp <= -12'sd1)  : (s6_bexp <= 12'sd0);
     wire [22:0] mant = sig_r[24] ? sig_r[23:1] : sig_r[22:0];
 
     reg [31:0] packed_res;
@@ -349,12 +394,12 @@ module VX_mufu_pe import VX_gpu_pkg::*; (
             packed_res = s6_sval;
         end else if (~s6_nz) begin
             packed_res = {s6_zsign, 31'd0};
-        end else if (bexp >= 12'sd255) begin
+        end else if (bexp_ovf) begin
             packed_res = {s6_neg, F32_POS_INF[30:0]};
-        end else if (bexp <= 12'sd0) begin
+        end else if (bexp_unf) begin
             packed_res = {s6_neg, 31'd0};
         end else begin
-            packed_res = {s6_neg, bexp[7:0], mant};
+            packed_res = {s6_neg, bexp, mant};
         end
     end
 
