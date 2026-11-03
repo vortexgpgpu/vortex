@@ -243,6 +243,16 @@ machine from it: SimX, rtlsim, the FPGA and ASIC flows, and the kernels.
 | `a100` | A100 (Ampere): 108 cores x 64 warps, 164 KB shared memory, 192 KB L1, 40 MB L2, HBM2 at 1555 GB/s; FP16/TF32/INT8/INT4 tensor cores with 2:4 sparsity |
 | `h100` | H100 SXM5 (Hopper): 132 cores x 64 warps, 228 KB shared memory, 50 MB L2, HBM3 at 3.35 TB/s; FP16/TF32/FP8/INT8 tensor cores with sparsity and wgmma, TMA as DXA |
 | `rtx5080` | GeForce RTX 5080 (Blackwell): 84 cores x 48 warps, 100 KB shared memory, 64 MB L2, GDDR7 bandwidth on the GDDR6 model; FP16/TF32/FP8/FP4/MX/INT8 tensor cores with sparsity, TMA as DXA, RT cores as RTU |
+| `titanv` | TITAN V (Volta), on `v100`: 4.5 MB L2, HBM2 at 653 GB/s |
+| `qv100` | Quadro GV100 (Volta), on `v100`: HBM2 at 870 GB/s, 1132 MHz |
+| `rtx2060` | GeForce RTX 2060 (Turing TU106): 30 cores x 32 warps, 64 KB shared memory, 96 KB L1, 3 MB L2, GDDR6 at 336 GB/s; FP16/INT8/INT4 tensor cores |
+| `rtx2060s` | GeForce RTX 2060 SUPER (Turing), on `rtx2060`: 34 cores, 4 MB L2, GDDR6 at 448 GB/s |
+| `t4` | Tesla T4 (Turing TU104), on `rtx2060`: 40 cores, 4 MB L2, GDDR6 at 320 GB/s |
+| `rtx3070` | GeForce RTX 3070 (Ampere GA104), on `rtx3060`: 46 cores, 4 MB L2, GDDR6 at 448 GB/s |
+| `h200` | H200 SXM5 (Hopper), on `h100`: HBM3e at 4.8 TB/s |
+| `r9nano` | Radeon R9 Nano (Fiji, GCN 3), on `rx580`: 64 CUs, 2 MB L2, HBM at 512 GB/s |
+| `rx5500xt` | Radeon RX 5500 XT (RDNA 1), on `rx6600`: 22 CUs, 1 MB L2, no Infinity Cache, no ray accelerators |
+| `w6800` | Radeon Pro W6800 (RDNA 2), on `rx6600`: 60 CUs, 4 MB L2, 128 MB Infinity Cache, GDDR6 at 512 GB/s |
 
 Every GPU profile also turns on virtual memory, the A extension with Zacas,
 Zfhmin, MUFU at the part's special-function throughput, the part's INT32,
@@ -268,7 +278,7 @@ unset, and everything else falls back to `VX_config.toml`.
 $ CONFIGS="-DVX_CFG_L2_SIZE=8388608" ./ci/blackbox.sh --driver=simx --profile=a100 --warps=32 --app=sgemm
 ```
 
-The other profiles (20 to 132 cores) are SimX-scale machines for architecture
+The other profiles (10 to 304 cores) are SimX-scale machines for architecture
 studies, not FPGA builds; `tinygpu` is the small one, sized for FPGA
 bring-up and fast simulation.
 

@@ -1,0 +1,20 @@
+{
+  "name": "qv100",
+  "extends": "v100",
+  "description": "NVIDIA Quadro GV100 (GV100, Volta, sm_70) at its 1132 MHz base clock: one Vortex core per SM; the chip is the V100's (v100).",
+  "platform": {
+    "VX_CFG_PLATFORM_CLOCK_RATE": 1132,
+    "VX_CFG_PLATFORM_MEMORY_PEAK_BW": 870400,
+    "VX_CFG_PLATFORM_MEMORY_DATA_RATE": 1700
+  },
+  "reference": {
+    "dram_bandwidth_gbs": 870
+  },
+  "sources": {
+    "SM (all core knobs), NUM_CORES, L2": "Inherited from v100: Quadro GV100 is a full GV100 (80 SMs, 5120 CUDA cores, 640 tensor cores, 6 MB L2)",
+    "PLATFORM_MEMORY_DATA_RATE, PLATFORM_MEMORY_PEAK_BW": "4 HBM2 stacks x 8 128-bit channels = 32 channels at 1700 MT/s: 32 x 16 B x 1700 MT/s = 870.4 GB/s (Quadro GV100 data sheet: 870 GB/s)",
+    "PLATFORM_CLOCK_RATE": "1132 MHz base clock (1627 MHz boost), the clock of Accel-Sim's SM7_QV100 configuration",
+    "L2_LINK_LATENCY, PLATFORM_MEMORY_LATENCY, L2_MSHR_SIZE": "Inherited from v100 (same die, SM-to-L2 network and HBM2), calibrated there against Jia et al.'s V100 pointer chase",
+    "reference": "fp32_lanes is the vendor FP32 core count (FP32 FMA lanes per chip, clock-free); dram_bandwidth_gbs the vendor peak. Checked by ci/profile_check.py. Latencies inherited from v100 (Jia et al., V100: same GV100 die). Accel-Sim (accel-sim-framework) correlates this card: GPGPU-Sim tested-cfg SM7_QV100 and posted hardware runs (volta-quadro-v100)"
+  }
+}

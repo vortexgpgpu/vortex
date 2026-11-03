@@ -1,0 +1,32 @@
+{
+  "name": "w6800",
+  "extends": "rx6600",
+  "description": "AMD Radeon Pro W6800 (Navi 21, RDNA 2, gfx1030) at its 2320 MHz clock: one Vortex core per CU; the CU is the RX 6600's (rx6600).",
+  "chip": {
+    "VX_CFG_NUM_CORES": 60,
+    "VX_CFG_L2_SIZE": 4194304,
+    "VX_CFG_L2_NUM_WAYS": 16,
+    "VX_CFG_L2_NUM_BANKS": 16,
+    "VX_CFG_L3_SIZE": 134217728,
+    "VX_CFG_L3_NUM_BANKS": 16
+  },
+  "platform": {
+    "VX_CFG_PLATFORM_MEMORY_NUM_BANKS": 16,
+    "VX_CFG_PLATFORM_CLOCK_RATE": 2320,
+    "VX_CFG_PLATFORM_MEMORY_PEAK_BW": 512000,
+    "VX_CFG_PLATFORM_MEMORY_DATA_RATE": 16000
+  },
+  "reference": {
+    "fp32_lanes": 3840,
+    "dram_bandwidth_gbs": 512
+  },
+  "sources": {
+    "CU (all core knobs)": "Inherited from rx6600: Navi 21 and Navi 23 share the RDNA 2 CU",
+    "NUM_CORES": "60 CUs (30 DCUs), 3840 stream processors (Bao et al., NaviSim: A Highly Accurate GPU Simulator for AMD RDNA GPUs (PACT 2022), Table 1; Radeon Pro W6800 specifications)",
+    "L2_SIZE, L2_NUM_WAYS, L2_NUM_BANKS": "4 MB L2 (Navi 21), 16-way, one bank per memory channel",
+    "L3_SIZE, L3_NUM_BANKS": "128 MB Infinity Cache (Navi 21) behind the L2, the Vortex L3, one bank per memory channel",
+    "PLATFORM_MEMORY_TYPE, PLATFORM_MEMORY_NUM_BANKS, PLATFORM_MEMORY_DATA_RATE, PLATFORM_MEMORY_PEAK_BW": "256-bit GDDR6 at 16 Gbps: 8 devices x 2 x16 channels = 16 channels, 16 x 2 B x 16 GT/s = 512 GB/s (Bao et al., NaviSim: A Highly Accurate GPU Simulator for AMD RDNA GPUs (PACT 2022), Table 1)",
+    "PLATFORM_CLOCK_RATE": "2320 MHz, the core clock NaviSim validates at (Bao et al., NaviSim: A Highly Accurate GPU Simulator for AMD RDNA GPUs (PACT 2022), Table 1)",
+    "reference": "fp32_lanes is the vendor FP32 core count (FP32 FMA lanes per chip, clock-free); dram_bandwidth_gbs the vendor peak. Checked by ci/profile_check.py. NaviSim validates its RDNA model against this card (Bao et al., NaviSim: A Highly Accurate GPU Simulator for AMD RDNA GPUs (PACT 2022)); no cycle latencies are published, so the chase metrics are unchecked"
+  }
+}

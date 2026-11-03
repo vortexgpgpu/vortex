@@ -1,0 +1,30 @@
+{
+  "name": "rx5500xt",
+  "extends": "rx6600",
+  "description": "AMD Radeon RX 5500 XT (Navi 14, RDNA 1, gfx1012) at its 1845 MHz clock: one Vortex core per CU; the CU is RDNA 2's (rx6600).",
+  "core": {
+    "VX_CFG_EXT_RTU_ENABLE": false
+  },
+  "chip": {
+    "VX_CFG_NUM_CORES": 22,
+    "VX_CFG_L2_SIZE": 1048576,
+    "VX_CFG_L2_NUM_WAYS": 16,
+    "VX_CFG_L3_ENABLE": false
+  },
+  "platform": {
+    "VX_CFG_PLATFORM_CLOCK_RATE": 1845
+  },
+  "reference": {
+    "fp32_lanes": 1408,
+    "dram_bandwidth_gbs": 224
+  },
+  "sources": {
+    "CU (other core knobs)": "Inherited from rx6600: RDNA 1 and RDNA 2 share the CU (2 SIMD32 with their own schedulers, 16 KB L0 vector cache, 64 KB LDS, FP64 at 1/16)",
+    "EXT_RTU_ENABLE": "Off: RDNA 1 has no ray accelerators",
+    "NUM_CORES": "22 CUs (11 DCUs), 1408 stream processors (Bao et al., NaviSim: A Highly Accurate GPU Simulator for AMD RDNA GPUs (PACT 2022), Table 1; RX 5500 XT specifications)",
+    "L2_SIZE, L2_NUM_WAYS, L3_ENABLE": "1 MB 16-way L2 (Bao et al., NaviSim: A Highly Accurate GPU Simulator for AMD RDNA GPUs (PACT 2022), Table 2) and no Infinity Cache, which came with RDNA 2",
+    "PLATFORM_MEMORY_TYPE, PLATFORM_MEMORY_NUM_BANKS, PLATFORM_MEMORY_DATA_RATE, PLATFORM_MEMORY_PEAK_BW": "Inherited from rx6600: 128-bit GDDR6 at 14 Gbps, 8 x16 channels, 224 GB/s (Bao et al., NaviSim: A Highly Accurate GPU Simulator for AMD RDNA GPUs (PACT 2022), Table 1)",
+    "PLATFORM_CLOCK_RATE": "1845 MHz, the core clock NaviSim validates at (Bao et al., NaviSim: A Highly Accurate GPU Simulator for AMD RDNA GPUs (PACT 2022), Table 1)",
+    "reference": "fp32_lanes is the vendor FP32 core count (FP32 FMA lanes per chip, clock-free); dram_bandwidth_gbs the vendor peak. Checked by ci/profile_check.py. NaviSim validates its RDNA model against this card; its pointer chase puts the first-level (L0) cache near 110 cycles (Bao et al., NaviSim: A Highly Accurate GPU Simulator for AMD RDNA GPUs (PACT 2022), Figure 1), read off a chart, so the chase metrics are unchecked"
+  }
+}

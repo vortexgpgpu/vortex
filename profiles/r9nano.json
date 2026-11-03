@@ -1,0 +1,30 @@
+{
+  "name": "r9nano",
+  "extends": "rx580",
+  "description": "AMD Radeon R9 Nano (Fiji XT, GCN 3, gfx803) at its 1000 MHz engine clock: one Vortex core per CU; the CU is Polaris's (rx580).",
+  "chip": {
+    "VX_CFG_NUM_CORES": 64,
+    "VX_CFG_L2_SIZE": 2097152,
+    "VX_CFG_L2_NUM_WAYS": 16,
+    "VX_CFG_L2_NUM_BANKS": 16
+  },
+  "platform": {
+    "VX_CFG_PLATFORM_MEMORY_NUM_BANKS": 32,
+    "VX_CFG_PLATFORM_CLOCK_RATE": 1000,
+    "VX_CFG_PLATFORM_MEMORY_PEAK_BW": 512000,
+    "VX_CFG_PLATFORM_MEMORY_TYPE": "HBM2",
+    "VX_CFG_PLATFORM_MEMORY_DATA_RATE": 1000
+  },
+  "reference": {
+    "fp32_lanes": 4096,
+    "dram_bandwidth_gbs": 512
+  },
+  "sources": {
+    "CU (all core knobs)": "Inherited from rx580: GCN 3 (Fiji) and GCN 4 (Polaris) share the CU: 4 SIMD16 units running wave64, 40 waves, 16 KB vector L1, 64 KB LDS, FP64 at 1/16",
+    "NUM_CORES": "64 CUs, 4096 stream processors (AMD Radeon R9 Nano specifications); the configuration MGPUSim's r9nano timing model builds (sarchlab/mgpusim amd/samples/runner/timingconfig/r9nano)",
+    "L2_SIZE, L2_NUM_WAYS, L2_NUM_BANKS": "2 MB L2 (Fiji; MGPUSim's r9nano l2CacheSize), 16 ways, 16 channels",
+    "PLATFORM_MEMORY_TYPE, PLATFORM_MEMORY_NUM_BANKS, PLATFORM_MEMORY_DATA_RATE, PLATFORM_MEMORY_PEAK_BW": "4 first-generation HBM stacks x 8 128-bit channels = 32 channels at 1 Gbps: 32 x 16 B x 1000 MT/s = 512 GB/s, modelled with the HBM2 array timing (Ramulator has no HBM1)",
+    "PLATFORM_CLOCK_RATE": "1000 MHz engine clock (R9 Nano specifications; MGPUSim's r9nano freq)",
+    "reference": "fp32_lanes is the vendor FP32 core count (FP32 FMA lanes per chip, clock-free); dram_bandwidth_gbs the vendor peak. Checked by ci/profile_check.py. MGPUSim validates its r9nano model against this card (Sun et al., MGPUSim, ISCA 2019); NaviSim's pointer chase on this card puts the L1 near 190 cycles (Bao et al., NaviSim, PACT 2022, Figure 1), read off a chart, so the chase metrics are unchecked"
+  }
+}
