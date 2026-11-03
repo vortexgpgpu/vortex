@@ -37,10 +37,10 @@ instr_trace_t* TexUnit::process(instr_trace_t* trace, uint32_t block_id) {
   req.trace    = trace;
   req.block_id = block_id;
 
-  uint32_t bits = 0;
+  uint64_t bits = 0;
   for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
     if (!trace->tmask.test(t)) continue;
-    bits |= (1u << t);
+    bits |= (uint64_t(1) << t);
     req.u[t]   = static_cast<int32_t>(trace->src_data[0].at(t).u);
     req.v[t]   = static_cast<int32_t>(trace->src_data[1].at(t).u);
     req.lod[t] = trace->src_data[2].at(t).u;

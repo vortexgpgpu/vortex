@@ -76,13 +76,13 @@ instr_trace_t* OmUnit::process_export(instr_trace_t* trace, uint32_t export_mask
   req.from_aperture = true;
   req.export_mask   = export_mask;
 
-  uint32_t mask_bits = 0;
+  uint64_t mask_bits = 0;
   for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
     if (!trace->tmask.test(t)) continue;
     req.addr[t]  = trace->src_data[0].at(t).u;   // aperture address
     req.color[t] = trace->src_data[1].at(t).u;
     req.depth[t] = trace->src_data[2].at(t).u;
-    mask_bits |= (1u << t);
+    mask_bits |= (uint64_t(1) << t);
   }
   req.tmask_bits = mask_bits;
 

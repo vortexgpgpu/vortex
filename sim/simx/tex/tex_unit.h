@@ -30,7 +30,7 @@ struct TexReq {
   uint64_t                                uuid       = 0;
   uint32_t                                tag        = 0;     // {core_local, queue_slot} routing tag
   uint32_t                                stage      = 0;
-  uint32_t                                tmask_bits = 0;     // active-thread bitmask (VX_CFG_NUM_THREADS lsbs)
+  uint64_t                                tmask_bits = 0;     // active-thread bitmask (VX_CFG_NUM_THREADS lsbs)
   std::array<int32_t,  VX_CFG_NUM_THREADS>       u          = {};    // s32 fixed-point coord (TEX_FXD_FRAC bits)
   std::array<int32_t,  VX_CFG_NUM_THREADS>       v          = {};
   std::array<uint32_t, VX_CFG_NUM_THREADS>       lod        = {};

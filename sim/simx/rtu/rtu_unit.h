@@ -215,7 +215,7 @@ private:
   // CONTINUE also carries lanes that are merely PENDING (still traversing), and
   // those may have a candidate queued for a later batch, so their garbage action
   // must not be allowed to resolve it.
-  std::array<uint32_t, VX_CFG_NUM_WARPS>  last_cand_mask_{};
+  std::array<uint64_t, VX_CFG_NUM_WARPS>  last_cand_mask_{};
 
   // Per-warp cross-uop TRACE state. The ray NEVER enters the window: the burst
   // stages it here and hands it to RtuCore at the arm. The window is result

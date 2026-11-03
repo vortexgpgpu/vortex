@@ -60,7 +60,7 @@ struct RtuReq {
   RtuReqKind kind = RtuReqKind::TRACE_NEW;
   uint64_t uuid = 0;
   uint32_t tag  = 0;
-  uint32_t tmask_bits = 0;
+  uint64_t tmask_bits = 0;
 
   // Async pool: pre-allocated slot index for TRACE_NEW.
   uint32_t slot_idx = 0;
@@ -150,7 +150,7 @@ struct RtuRsp {
   std::array<float,    VX_CFG_NUM_THREADS> obj_d_z = {};
 
   // CB_YIELD only — yielding-lane mask + per-lane callback metadata.
-  uint32_t cb_active_mask = 0;
+  uint64_t cb_active_mask = 0;
   std::array<uint32_t, VX_CFG_NUM_THREADS> cb_type    = {};
   std::array<uint32_t, VX_CFG_NUM_THREADS> cb_handle  = {};
   std::array<uint32_t, VX_CFG_NUM_THREADS> cb_sbt_idx = {};
