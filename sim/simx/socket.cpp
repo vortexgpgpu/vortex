@@ -58,11 +58,11 @@ public:
     snprintf(sname, 100, "%s-icache", name.c_str());
     icaches_ = CacheCluster::Create(sname, cores_per_socket, VX_CFG_NUM_ICACHES, Cache::Config{
       !VX_CFG_ICACHE_ENABLED,
-      log2ceil(VX_CFG_ICACHE_SIZE),  // C
+      VX_CFG_ICACHE_SIZE,            // size
       log2ceil(VX_CFG_L1_LINE_SIZE), // L
       log2ceil(VX_CFG_L1_LINE_SIZE), // S (no sectoring)
       log2ceil(sizeof(uint32_t)), // W
-      log2ceil(VX_CFG_ICACHE_NUM_WAYS),// A
+      VX_CFG_ICACHE_NUM_WAYS,          // ways
       log2ceil(VX_CFG_ICACHE_NUM_BANKS), // B
       VX_CFG_XLEN,                   // address bits
       ICACHE_NUM_REQS,        // number of inputs (one per frontend slice)
@@ -90,11 +90,11 @@ public:
     // L1 dcache is the LLC iff neither L2 nor L3 is enabled.
     dcaches_ = CacheCluster::Create(sname, cores_per_socket, VX_CFG_NUM_DCACHES, Cache::Config{
       !VX_CFG_DCACHE_ENABLED,
-      log2ceil(VX_CFG_DCACHE_SIZE),  // C
+      VX_CFG_DCACHE_SIZE,            // size
       log2ceil(VX_CFG_DCACHE_LINE_SIZE), // L
       log2ceil(VX_CFG_DCACHE_SECTOR_SIZE), // S
       log2ceil(DCACHE_WORD_SIZE), // W
-      log2ceil(VX_CFG_DCACHE_NUM_WAYS),// A
+      VX_CFG_DCACHE_NUM_WAYS,          // ways
       log2ceil(VX_CFG_DCACHE_NUM_BANKS), // B
       VX_CFG_XLEN,                   // address bits
       VX_CFG_DCACHE_NUM_REQS,        // number of inputs
@@ -129,11 +129,11 @@ public:
     constexpr uint32_t kTcacheMemPorts = 1;              // = TCACHE_MEM_PORTS
     Cache::Config tcache_config{
       false,                       // bypass
-      log2ceil(VX_CFG_TCACHE_SIZE),       // C
+      VX_CFG_TCACHE_SIZE,                 // size
       log2ceil(kTcacheLineSize),   // L
       log2ceil(kTcacheLineSize),   // S (no sectoring)
       log2ceil(kTcacheWordSize),   // W
-      log2ceil(VX_CFG_TCACHE_NUM_WAYS),   // A
+      VX_CFG_TCACHE_NUM_WAYS,             // ways
       log2ceil(VX_CFG_TCACHE_NUM_BANKS),  // B
       VX_CFG_XLEN,                        // address bits
       kTcacheNumReqs,              // request size
@@ -172,11 +172,11 @@ public:
     constexpr uint32_t kRtcacheMemPorts  = 1;
     Cache::Config rtcache_config{
       false,                              // bypass
-      log2ceil(VX_CFG_RTCACHE_SIZE),      // C
+      VX_CFG_RTCACHE_SIZE,                // size
       log2ceil(kRtcacheLineSize),         // L
       log2ceil(kRtcacheLineSize),         // S (no sectoring)
       log2ceil(kRtcacheWordSize),         // W
-      log2ceil(VX_CFG_RTCACHE_NUM_WAYS),  // A
+      VX_CFG_RTCACHE_NUM_WAYS,            // ways
       log2ceil(VX_CFG_RTCACHE_NUM_BANKS), // B
       VX_CFG_XLEN,                        // address bits
       kRtcacheNumInputs,                  // num_inputs (1 per RTU port)

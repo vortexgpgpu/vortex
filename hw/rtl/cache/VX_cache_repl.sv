@@ -100,6 +100,8 @@ module VX_cache_repl #(
     output wire [`CS_WAY_SEL_WIDTH-1:0] repl_way
 );
     localparam WAY_SEL_WIDTH = `CS_WAY_SEL_WIDTH;
+    // A way count that is not a power of two leaves the top way codes unused.
+    localparam WAYS_POW2     = `IS_POW2(NUM_WAYS);
     `UNUSED_VAR (reset)
     `UNUSED_VAR (init)
     `UNUSED_VAR (stall)
@@ -109,11 +111,16 @@ module VX_cache_repl #(
             // Pseudo Least Recently Used replacement policy
             `UNUSED_VAR (repl_line) // read uses repl_line_n (look-ahead)
             `UNUSED_VAR (repl_valid) // state advances on lookup hits only
-            localparam LRU_WIDTH = `UP(NUM_WAYS-1);
+
+            // The tree spans the ways rounded up to a power of two; a leaf
+            // past the last way picks the way TREE_WAYS - NUM_WAYS below it.
+            localparam TREE_WAYS = 1 << WAY_SEL_WIDTH;
+            localparam LRU_WIDTH = TREE_WAYS - 1;
 
             wire [LRU_WIDTH-1:0] plru_rdata;
             wire [LRU_WIDTH-1:0] plru_wdata;
             wire [LRU_WIDTH-1:0] plru_wmask;
+            wire [WAY_SEL_WIDTH-1:0] plru_way;
 
             // Look-ahead read advances every non-stalled cycle (same idiom as
             // the tag store) so the data always tracks the request entering
@@ -138,7 +145,7 @@ module VX_cache_repl #(
             );
 
             plru_decoder #(
-                .NUM_WAYS (NUM_WAYS)
+                .NUM_WAYS (TREE_WAYS)
             ) plru_dec (
                 .way_idx  (lookup_way),
                 .lru_data (plru_wdata),
@@ -146,11 +153,14 @@ module VX_cache_repl #(
             );
 
             plru_encoder #(
-                .NUM_WAYS (NUM_WAYS)
+                .NUM_WAYS (TREE_WAYS)
             ) plru_enc (
                 .lru_in  (plru_rdata),
-                .way_idx (repl_way)
+                .way_idx (plru_way)
             );
+
+            assign repl_way = (WAYS_POW2 || (plru_way < WAY_SEL_WIDTH'(NUM_WAYS))) ? plru_way
+                            : (plru_way - WAY_SEL_WIDTH'(TREE_WAYS - NUM_WAYS));
 
         end else if (REPL_POLICY == `CS_REPL_FIFO) begin : g_fifo
             // Fifo replacement policy
@@ -160,7 +170,7 @@ module VX_cache_repl #(
             `UNUSED_VAR (lookup_way)
 
             wire [WAY_SEL_WIDTH-1:0] fifo_rdata;
-            wire [WAY_SEL_WIDTH-1:0] fifo_wdata = fifo_rdata + 1;
+            wire [WAY_SEL_WIDTH-1:0] fifo_wdata = (WAYS_POW2 || (fifo_rdata != WAY_SEL_WIDTH'(NUM_WAYS-1))) ? (fifo_rdata + 1) : '0;
 
             // Same per-cycle look-ahead as plru_store/tag store; read-first so
             // the fill's own increment is not bypassed into its victim read.
@@ -203,9 +213,11 @@ module VX_cache_repl #(
             end
             // XOR-mix LFSR with line index so different lines see different
             // victim sequences for the same RNG state.
-            assign repl_way = rng_state[WAY_SEL_WIDTH-1:0]
-                            ^ rng_state[STATE_W-1 -: WAY_SEL_WIDTH]
-                            ^ repl_line[WAY_SEL_WIDTH-1:0];
+            wire [WAY_SEL_WIDTH-1:0] rng_way = rng_state[WAY_SEL_WIDTH-1:0]
+                                             ^ rng_state[STATE_W-1 -: WAY_SEL_WIDTH]
+                                             ^ repl_line[WAY_SEL_WIDTH-1:0];
+            assign repl_way = (WAYS_POW2 || (rng_way < WAY_SEL_WIDTH'(NUM_WAYS))) ? rng_way
+                            : (rng_way - WAY_SEL_WIDTH'(NUM_WAYS));
         end
     end else begin : g_disable
         `UNUSED_VAR (clk)

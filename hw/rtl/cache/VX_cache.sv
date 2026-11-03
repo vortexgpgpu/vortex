@@ -81,6 +81,9 @@ module VX_cache import VX_gpu_pkg::*; #(
     `STATIC_ASSERT(!WRITE_AROUND || WRITEBACK, ("invalid parameter: write-around requires a write-back cache"))
     `STATIC_ASSERT(NUM_BANKS >= MEM_PORTS, ("invalid parameter: number of banks must be greater or equal to number of memory ports"))
     `STATIC_ASSERT(!BANK_HASH || NUM_BANKS <= 256, ("invalid parameter: bank hash supports up to 256 banks"))
+    // any number of ways, but a power-of-two number of sets that fills the size
+    `STATIC_ASSERT(`IS_POW2(`CS_LINES_PER_BANK) && (CACHE_SIZE == (`CS_LINES_PER_BANK * LINE_SIZE * NUM_WAYS * NUM_BANKS)),
+        ("invalid parameter: size %0d is not a power-of-two number of sets of %0d ways of %0d-byte lines in %0d banks", CACHE_SIZE, NUM_WAYS, LINE_SIZE, NUM_BANKS))
     localparam REQ_SEL_WIDTH   = `UP(`CS_REQ_SEL_BITS);
     localparam WORD_SEL_WIDTH  = `UP(`CS_WORD_SEL_BITS);
     localparam MSHR_ADDR_WIDTH = `LOG2UP(MSHR_SIZE);

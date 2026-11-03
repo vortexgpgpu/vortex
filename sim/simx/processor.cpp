@@ -103,11 +103,11 @@ ProcessorImpl::ProcessorImpl()
     SimPlatform::LaunchKeepScope keep(CP_ON_L2 != 0 || CP_ON_L3 != 0);
     l3cache_ = Cache::Create("l3cache", Cache::Config{
       !VX_CFG_L3_ENABLED,
-      log2ceil(VX_CFG_L3_SIZE),  // C
+      VX_CFG_L3_SIZE,            // size
       log2ceil(VX_CFG_L3_LINE_SIZE),   // L
       log2ceil(VX_CFG_L3_SECTOR_SIZE), // S
       log2ceil(VX_CFG_L2_SECTOR_SIZE), // W
-      log2ceil(VX_CFG_L3_NUM_WAYS),    // A
+      VX_CFG_L3_NUM_WAYS,              // ways
       log2ceil(VX_CFG_L3_NUM_BANKS),   // B
       VX_CFG_XLEN,                     // address bits
       L3_CACHE_REQS,                   // request size

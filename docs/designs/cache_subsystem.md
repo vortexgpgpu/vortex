@@ -894,7 +894,7 @@ closely enough to be a parity oracle:
 | AMOs | LLC commits, non-LLC probes and forwards | `amo_unit_` at LLC; `AmoProbe` above it |
 | Flush | per-bank set × way walk | per-bank set × way × sector walk |
 
-`Cache::Config` fields: `bypass, C, L, S, W, A, B, addr_width, num_inputs,
+`Cache::Config` fields: `bypass, size, L, S, W, num_ways, B, addr_width, num_inputs,
 mem_ports, write_back, write_reponse, mshr_size, latency, repl_policy, is_llc`
 (`write_reponse` is misspelled in the source). `bypass` mirrors RTL `PASSTHRU`.
 
@@ -991,6 +991,11 @@ timing.
 conflict misses for strided or power-of-two patterns at a mild area cost. Because
 the tag store packs all ways into one BRAM word, extra ways widen that word rather
 than adding arrays. Diminishing returns past 8 for typical GPU workloads.
+The way count need not be a power of two (3 or 6 ways give 48 KB, 192 KB or
+6 MB with power-of-two sets), but `SIZE / (LINE × WAYS × BANKS)`, the sets per
+bank, must be one (static assert). The replacement state and the write-back
+flush walk skip the unused way codes: FIFO wraps at the last way, and a random
+or PLRU pick past it folds back onto a real way.
 
 **`*_REPL_POLICY`** (`fifo` everywhere) — `0` random, `1` FIFO, `2` PLRU. PLRU
 gives the best hit rate on reuse-heavy workloads but stores per-set tree bits;

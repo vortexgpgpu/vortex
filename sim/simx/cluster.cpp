@@ -84,11 +84,11 @@ public:
       SimPlatform::LaunchKeepScope keep(CP_ON_L2 != 0);
       l2cache_ = Cache::Create(sname, Cache::Config{
         !VX_CFG_L2_ENABLED,
-        log2ceil(VX_CFG_L2_SIZE),// C
+        VX_CFG_L2_SIZE,          // size
         log2ceil(VX_CFG_L2_LINE_SIZE),// L
         log2ceil(VX_CFG_L2_SECTOR_SIZE),// S
         log2ceil(VX_CFG_L1_LINE_SIZE), // W
-        log2ceil(VX_CFG_L2_NUM_WAYS),  // A
+        VX_CFG_L2_NUM_WAYS,            // ways
         log2ceil(VX_CFG_L2_NUM_BANKS), // B
         VX_CFG_XLEN,                   // address bits
         L2_CACHE_REQS,                 // request size
@@ -233,11 +233,11 @@ public:
     constexpr uint32_t kOcacheMemPorts = 1;
     auto ocache = Cache::Create(sname, Cache::Config{
       false,                        // bypass
-      log2ceil(VX_CFG_OCACHE_SIZE),        // C
+      VX_CFG_OCACHE_SIZE,                  // size
       log2ceil(kOcacheLineSize),    // L
       log2ceil(kOcacheLineSize),    // S (no sectoring)
       log2ceil(kOcacheWordSize),    // W
-      log2ceil(VX_CFG_OCACHE_NUM_WAYS),    // A
+      VX_CFG_OCACHE_NUM_WAYS,              // ways
       log2ceil(VX_CFG_OCACHE_NUM_BANKS),   // B
       VX_CFG_XLEN,                         // address bits
       kOcacheNumReqs,               // request size
@@ -297,11 +297,11 @@ public:
     constexpr uint32_t kRcacheMemPorts = 1;
     auto rcache = Cache::Create(sname, Cache::Config{
       false,                        // bypass
-      log2ceil(VX_CFG_RCACHE_SIZE),        // C
+      VX_CFG_RCACHE_SIZE,                  // size
       log2ceil(kRcacheLineSize),    // L
       log2ceil(kRcacheLineSize),    // S (no sectoring)
       log2ceil(kRcacheWordSize),    // W
-      log2ceil(VX_CFG_RCACHE_NUM_WAYS),    // A
+      VX_CFG_RCACHE_NUM_WAYS,              // ways
       log2ceil(VX_CFG_RCACHE_NUM_BANKS),   // B
       VX_CFG_XLEN,                         // address bits
       kRcacheNumReqs,               // request size

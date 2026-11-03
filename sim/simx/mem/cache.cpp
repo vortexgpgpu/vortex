@@ -88,9 +88,13 @@ struct params_t {
 
   params_t(const Cache::Config &config) : bank_hash(config.bank_hash) {
     int32_t offset_bits = config.L - config.W;
-    int32_t index_bits = config.C - (config.L + config.A + config.B);
+    // Any number of ways, but a power-of-two number of sets filling the size.
+    uint32_t way_bytes = config.num_ways << (config.L + config.B);
     assert(offset_bits >= 0);
-    assert(index_bits >= 0);
+    assert(config.num_ways != 0 && (config.size % way_bytes) == 0);
+    uint32_t sets = config.size / way_bytes;
+    assert(ispow2(sets));
+    int32_t index_bits = log2ceil(sets);
 
     this->log2_num_inputs = log2ceil(config.num_inputs);
 
@@ -98,7 +102,7 @@ struct params_t {
     assert(sector_bits >= 0);
 
     this->sets_per_bank = 1 << index_bits;
-    this->lines_per_set = 1 << config.A;
+    this->lines_per_set = config.num_ways;
     this->words_per_line = 1 << offset_bits;
     this->sectors_per_line = 1 << sector_bits;
 
