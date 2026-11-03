@@ -111,50 +111,66 @@ module VX_lsu_scheduler import VX_gpu_pkg::*; #(
         assign cli_rsp_data[0].eop   = sched_rsp_eop;
         assign sched_rsp_ready    = cli_rsp_ready[0];
     end else begin : g_arb
-        // Round-robin priority. rr_ptr rotates after every accepted request.
-        // For NUM_CLIENTS=2 this trivially alternates; the generic loop
-        // generalizes to wider clients later.
+        // Round-robin priority. rr_ptr rotates after every accepted request:
+        // client k is ahead of client i when it comes first in the rotation
+        // starting at rr_ptr. Which clients are ahead of each one is a
+        // constant per pointer value, so it is selected by the registered
+        // pointer, not computed by modular arithmetic on it.
         reg  [CLIENT_ID_BITS-1:0] rr_ptr_r;
 
-        // Priority chain starting at rr_ptr (rotated), pick lowest set bit.
-        wire [(2*NUM_CLIENTS)-1:0] rotated_double = {cli_req_valid, cli_req_valid} >> rr_ptr_r;
-        wire [NUM_CLIENTS-1:0]     rotated_valid  = rotated_double[NUM_CLIENTS-1:0];
-        `UNUSED_VAR (rotated_double[(2*NUM_CLIENTS)-1:NUM_CLIENTS])
-
-        logic [CLIENT_ID_BITS-1:0] rotated_grant_idx;
-        logic                       any_valid;
-        always_comb begin
-            rotated_grant_idx = '0;
-            any_valid         = 1'b0;
-            for (int i = NUM_CLIENTS-1; i >= 0; i--) begin
-                if (rotated_valid[i]) begin
-                    rotated_grant_idx = CLIENT_ID_BITS'(i);
-                    any_valid         = 1'b1;
+        wire [NUM_CLIENTS-1:0] granted;
+        wire [NUM_CLIENTS-1:0] blocked;
+        for (genvar i = 0; i < NUM_CLIENTS; ++i) begin : g_ahead
+            wire [NUM_CLIENTS-1:0] ahead;
+            for (genvar k = 0; k < NUM_CLIENTS; ++k) begin : g_k
+                wire [NUM_CLIENTS-1:0] ahead_at;   // [p]: k is ahead of i at rr_ptr == p
+                for (genvar p = 0; p < NUM_CLIENTS; ++p) begin : g_p
+                    localparam AHEAD = (k != i) && (((k - p + NUM_CLIENTS) % NUM_CLIENTS) < ((i - p + NUM_CLIENTS) % NUM_CLIENTS));
+                    assign ahead_at[p] = AHEAD && (rr_ptr_r == CLIENT_ID_BITS'(p));
                 end
+                assign ahead[k] = (| ahead_at);
             end
+            assign blocked[i] = (| (cli_req_valid & ahead));
+            assign granted[i] = cli_req_valid[i] && ~blocked[i];
         end
 
-        wire [CLIENT_ID_BITS-1:0] grant_idx = rr_ptr_r + rotated_grant_idx;
-        wire                       grant_fire = any_valid && sched_req_ready;
+        wire [CLIENT_ID_BITS-1:0] grant_idx;
+        wire                      any_valid = (| cli_req_valid);
+        VX_onehot_encoder #(
+            .N (NUM_CLIENTS)
+        ) grant_enc (
+            .data_in  (granted),
+            .data_out (grant_idx),
+            `UNUSED_PIN (valid_out)
+        );
+        wire grant_fire = any_valid && sched_req_ready;
 
         always @(posedge clk) begin
             if (reset) begin
                 rr_ptr_r <= '0;
             end else if (grant_fire) begin
-                rr_ptr_r <= grant_idx + CLIENT_ID_BITS'(1);
+                rr_ptr_r <= (grant_idx == CLIENT_ID_BITS'(NUM_CLIENTS-1)) ? '0 : (grant_idx + CLIENT_ID_BITS'(1));
             end
         end
 
-        // Mux selected client's request to the scheduler. Tag is extended
-        // with grant_idx so the response demux can route back.
+        // Mux selected client's request to the scheduler (one-hot on the
+        // grant). Tag is extended with grant_idx so the response demux can
+        // route back.
+        lsu_req_data_t sel_req;
+        always @(*) begin
+            sel_req = '0;
+            for (integer i = 0; i < NUM_CLIENTS; ++i) begin
+                sel_req = sel_req | (granted[i] ? cli_req_data[i] : '0);
+            end
+        end
         assign sched_req_valid  = any_valid;
-        assign sched_req_rw     = cli_req_data[grant_idx].rw;
-        assign sched_req_mask   = cli_req_data[grant_idx].mask;
-        assign sched_req_byteen = cli_req_data[grant_idx].byteen;
-        assign sched_req_addr   = cli_req_data[grant_idx].addr;
-        assign sched_req_attr   = cli_req_data[grant_idx].attr;
-        assign sched_req_data   = cli_req_data[grant_idx].data;
-        assign sched_req_tag    = {grant_idx, cli_req_data[grant_idx].tag};
+        assign sched_req_rw     = sel_req.rw;
+        assign sched_req_mask   = sel_req.mask;
+        assign sched_req_byteen = sel_req.byteen;
+        assign sched_req_addr   = sel_req.addr;
+        assign sched_req_attr   = sel_req.attr;
+        assign sched_req_data   = sel_req.data;
+        assign sched_req_tag    = {grant_idx, sel_req.tag};
 
         // Per-client ready: a client is granted unless a client ahead of it in
         // the rotation is requesting, and it takes the scheduler's ready for its
@@ -162,17 +178,7 @@ module VX_lsu_scheduler import VX_gpu_pkg::*; #(
         // the only time a ready is consumed -- without the client's own valid,
         // the grant and the request mux in front of the requester's enables.
         for (genvar i = 0; i < NUM_CLIENTS; ++i) begin : g_creq_rdy
-            reg blocked;
-            always @(*) begin
-                blocked = 1'b0;
-                for (integer k = 0; k < NUM_CLIENTS; ++k) begin
-                    if ((k != i) && cli_req_valid[k]
-                     && (((k - int'(rr_ptr_r) + NUM_CLIENTS) % NUM_CLIENTS) < ((i - int'(rr_ptr_r) + NUM_CLIENTS) % NUM_CLIENTS))) begin
-                        blocked = 1'b1;
-                    end
-                end
-            end
-            assign cli_req_ready[i] = ~blocked && (cli_req_data[i].rw ? sched_req_ready_wr : sched_req_ready_rd);
+            assign cli_req_ready[i] = ~blocked[i] && (cli_req_data[i].rw ? sched_req_ready_wr : sched_req_ready_rd);
         end
         `RUNTIME_ASSERT (~any_valid || (cli_req_ready[grant_idx] == sched_req_ready),
             ("%t: %s client ready out of sync with the granted ready", $time, INSTANCE_ID))
