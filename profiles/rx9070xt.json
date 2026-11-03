@@ -54,6 +54,10 @@
     "VX_CFG_PLATFORM_MEMORY_TYPE": "GDDR6",
     "VX_CFG_PLATFORM_MEMORY_DATA_RATE": 20000
   },
+  "reference": {
+    "fp32_lanes": 4096,
+    "dram_bandwidth_gbs": 640
+  },
   "sources": {
     "NUM_CORES": "64 CUs in 4 shader engines (AMD RX 9070 XT specifications; Chips and Cheese, RDNA 4 architecture)",
     "NUM_THREADS, ISSUE_WIDTH, FETCH_WIDTH, NUM_WARPS": "2 SIMD32 units per CU, each with its own scheduler, running wave32 at one instruction per clock; 16 waves per SIMD (AMD RDNA 4 ISA; zolotukhin.ai RDNA3/RDNA4 reference)",
@@ -71,6 +75,7 @@
     "EXT_RTU_ENABLE": "One ray accelerator per CU",
     "VM_ENABLE, EXT_A_ENABLE, EXT_ZACAS_ENABLE, EXT_ZFHMIN_ENABLE, NUM_BARRIERS, EXT_TEX_ENABLE, EXT_RASTER_ENABLE, EXT_OM_ENABLE": "GPUVM paging, global and LDS atomics with compare-swap, FP16, workgroup barriers, and the graphics pipeline (4 texture units per CU, rasterizers, ROPs) of a gaming part",
     "xlen": "64-bit machine: 64-bit pointers and FP64. FP64 runs at 1/32 of the dual-issue FP32 rate (4 per CU per clock) on the part; with XLEN=64 every FPU lane executes FP64, so the profile has 64 FP64 lanes per CU",
-    "FDIV_PE_RATIO, FSQRT_PE_RATIO": "Transcendentals (reciprocal, reciprocal square root, on which division and square root are built) run at a quarter of the FP32 rate on GCN, RDNA and CDNA: FPU lanes / 4"
+    "FDIV_PE_RATIO, FSQRT_PE_RATIO": "Transcendentals (reciprocal, reciprocal square root, on which division and square root are built) run at a quarter of the FP32 rate on GCN, RDNA and CDNA: FPU lanes / 4",
+    "reference": "fp32_lanes is the vendor FP32 core count (FP32 FMA lanes per chip, clock-free); dram_bandwidth_gbs the vendor peak. Checked by ci/profile_check.py"
   }
 }

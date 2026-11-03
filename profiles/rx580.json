@@ -46,6 +46,10 @@
     "VX_CFG_PLATFORM_MEMORY_TYPE": "GDDR6",
     "VX_CFG_PLATFORM_MEMORY_DATA_RATE": 8000
   },
+  "reference": {
+    "fp32_lanes": 2304,
+    "dram_bandwidth_gbs": 256
+  },
   "sources": {
     "NUM_CORES": "36 CUs (Polaris 20 XTX; TechPowerUp RX 580)",
     "NUM_THREADS, ISSUE_WIDTH, NUM_WARPS": "4 SIMD16 units per CU running wave64 over 4 clocks, so 64 FP32 lanes per CU; 10 waves per SIMD, 40 per CU (AMD GCN architecture whitepaper)",
@@ -64,6 +68,7 @@
     "xlen": "64-bit machine: 64-bit pointers and FP64. FP64 runs at 1/16 of FP32 (4 per CU per clock) on the part; with XLEN=64 every FPU lane executes FP64, so the profile has 64 FP64 lanes per CU",
     "SIMD_WIDTH": "16: each SIMD's VGPR file feeds 16 lanes per clock and a wave64 instruction occupies its SIMD for 4 clocks, so the slice datapath is 16 lanes and a warp moves as 4 packets (the default, NUM_THREADS, would make the register file and dispatch path 4x wider than the part and issue a wave instruction every clock)",
     "FDIV_PE_RATIO, FSQRT_PE_RATIO": "Transcendentals (reciprocal, reciprocal square root, on which division and square root are built) run at a quarter of the FP32 rate on GCN, RDNA and CDNA: FPU lanes / 4",
-    "DCACHE_NUM_BANKS": "64 B per clock of vector L1 per CU (GCN / CDNA 2): 2 banks of the 32 B dcache word; the default gives 4"
+    "DCACHE_NUM_BANKS": "64 B per clock of vector L1 per CU (GCN / CDNA 2): 2 banks of the 32 B dcache word; the default gives 4",
+    "reference": "fp32_lanes is the vendor FP32 core count (FP32 FMA lanes per chip, clock-free); dram_bandwidth_gbs the vendor peak. Checked by ci/profile_check.py"
   }
 }

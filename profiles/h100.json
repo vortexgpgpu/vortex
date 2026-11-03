@@ -48,7 +48,14 @@
     "VX_CFG_PLATFORM_CLOCK_RATE": 1980,
     "VX_CFG_PLATFORM_MEMORY_PEAK_BW": 3350000,
     "VX_CFG_PLATFORM_MEMORY_TYPE": "HBM3",
-    "VX_CFG_PLATFORM_MEMORY_DATA_RATE": 6545
+    "VX_CFG_PLATFORM_MEMORY_DATA_RATE": 6545,
+    "VX_CFG_PLATFORM_MEMORY_LATENCY": 492
+  },
+  "reference": {
+    "fp32_lanes": 16896,
+    "dram_bandwidth_gbs": 3350,
+    "l2_hit_cycles": 273,
+    "dram_cycles": 658.7
   },
   "sources": {
     "NUM_CORES, NUM_WARPS, NUM_THREADS, ISSUE_WIDTH": "132 SMs (SXM5), 64 resident warps/SM, 4 schedulers x 32 lanes (NVIDIA H100 Tensor Core GPU Architecture whitepaper)",
@@ -69,6 +76,8 @@
     "NUM_ALU_LANES, NUM_FPU_LANES, NUM_LSU_LANES": "GH100 SM (H100 whitepaper, Figure 7): 4 processing blocks, each with 32 FP32, 16 INT32, 16 FP64 cores, 8 LD/ST units, 1 SFU and 1 tensor core. One Vortex ALU/FPU/LSU block per processing block (ISSUE_WIDTH=4) with the part's INT32, FP32 and LD/ST lanes; a 32-thread warp instruction issues over NUM_THREADS/lanes cycles, as on the part. The TCU stays full-warp (NUM_TCU_LANES == NUM_THREADS). FP64 is not modelled separately: with XLEN=64 each FPU lane also executes FP64, so the profile has 128 FP64 lanes per SM against the part's 64",
     "FDIV_PE_RATIO, FSQRT_PE_RATIO, FCVT_PE_RATIO": "16 results per clock per SM, 4 per processing block: FP32 reciprocal and reciprocal square root, on which division and square root are built, and the 32-bit type conversions (CUDA C++ Programming Guide, arithmetic instruction throughput); 32 FPU lanes / 8, compute capability 9.0",
     "DCACHE_NUM_BANKS": "128 B per clock of L1 data per SM: 4 banks of the 32 B dcache word. The default (one bank per LSU request channel) gives 8, twice the part",
-    "LMEM_SIZE, LMEM_LOG_SIZE, DCACHE_SIZE": "228 KB maximum shared memory per SM (CUDA Programming Guide, compute capability 9.0) in a 256 KB window. DCACHE_SIZE keeps the whole 256 KB L1/shared pool: the driver gives a kernel the L1 its shared-memory use leaves"
+    "LMEM_SIZE, LMEM_LOG_SIZE, DCACHE_SIZE": "228 KB maximum shared memory per SM (CUDA Programming Guide, compute capability 9.0) in a 256 KB window. DCACHE_SIZE keeps the whole 256 KB L1/shared pool: the driver gives a kernel the L1 its shared-memory use leaves",
+    "reference": "fp32_lanes is the vendor FP32 core count (FP32 FMA lanes per chip, clock-free); dram_bandwidth_gbs the vendor peak. Checked by ci/profile_check.py. Latencies: Microbenchmarking NVIDIA's Blackwell Architecture (arXiv 2507.10789), GH100: L2 hit ~273 cycles, global memory ~658.7 cycles beyond 55 MB. Measured on the HBM2e (PCIe) part; the SXM5 part's HBM3 is not separately published. L1 (30-40 cycles) is a range, not checked",
+    "PLATFORM_MEMORY_LATENCY": "492 core cycles of PHY/NoC latency, calibrated with ci/profile_check.py so the SimX cold pointer chase gives the 658.7-cycle global memory latency in 'reference' (measured on the HBM2e part)"
   }
 }

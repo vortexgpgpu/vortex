@@ -50,6 +50,10 @@
     "VX_CFG_PLATFORM_MEMORY_TYPE": "GDDR6",
     "VX_CFG_PLATFORM_MEMORY_DATA_RATE": 11250
   },
+  "reference": {
+    "fp32_lanes": 3584,
+    "dram_bandwidth_gbs": 360
+  },
   "sources": {
     "NUM_CORES, NUM_WARPS, NUM_THREADS, ISSUE_WIDTH, FETCH_WIDTH": "28 SMs (3584 CUDA cores), 48 resident warps per SM (compute capability 8.6), 4 processing blocks each with its own scheduler and L0 instruction cache (NVIDIA Ampere GA102 whitepaper, SM)",
     "NUM_ALU_LANES, NUM_FPU_LANES, NUM_LSU_LANES": "GA10x SM processing block: 16 FP32 cores plus 16 cores that run FP32 or INT32, 4 LD/ST units, 1 SFU, 1 tensor core (GA102 whitepaper): 32 FP32, 16 INT32 and 4 LD/ST lanes per block. The shared FP32/INT32 half is modelled as FPU lanes, so an INT and an FP32 instruction can overlap where the part would share those 16 cores. FP64 (2 per SM on the part) is not modelled separately: with XLEN=64 all 128 FPU lanes execute FP64",
@@ -65,6 +69,7 @@
     "VM_ENABLE, EXT_A_ENABLE, EXT_ZACAS_ENABLE, EXT_ZFHMIN_ENABLE, NUM_BARRIERS, EXT_TEX_ENABLE, EXT_RASTER_ENABLE, EXT_OM_ENABLE": "As in the other NVIDIA profiles: demand-paged MMU, atomics with CAS, FP16, 16 named barriers, and the graphics pipeline of a GeForce part",
     "xlen": "64-bit machine: 64-bit pointers and FP64",
     "FDIV_PE_RATIO, FSQRT_PE_RATIO, FCVT_PE_RATIO": "16 results per clock per SM, 4 per processing block: FP32 reciprocal and reciprocal square root, on which division and square root are built, and the 32-bit type conversions (CUDA C++ Programming Guide, arithmetic instruction throughput); 32 FPU lanes / 8, compute capability 8.6",
-    "LMEM_SIZE, LMEM_LOG_SIZE": "100 KB maximum shared memory per SM (CUDA Programming Guide, compute capability 8.6) in a 128 KB window"
+    "LMEM_SIZE, LMEM_LOG_SIZE": "100 KB maximum shared memory per SM (CUDA Programming Guide, compute capability 8.6) in a 128 KB window",
+    "reference": "fp32_lanes is the vendor FP32 core count (FP32 FMA lanes per chip, clock-free); dram_bandwidth_gbs the vendor peak. Checked by ci/profile_check.py"
   }
 }

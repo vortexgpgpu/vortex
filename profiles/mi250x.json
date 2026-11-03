@@ -45,6 +45,10 @@
     "VX_CFG_PLATFORM_MEMORY_TYPE": "HBM2",
     "VX_CFG_PLATFORM_MEMORY_DATA_RATE": 3200
   },
+  "reference": {
+    "fp32_lanes": 14080,
+    "dram_bandwidth_gbs": 3276.8
+  },
   "sources": {
     "NUM_THREADS, ISSUE_WIDTH, FETCH_WIDTH": "4 SIMD16 units per CU running wave64 over 4 clocks (64 lanes per CU), fed by one instruction arbiter that issues to one SIMD per clock (CDNA keeps the GCN CU)",
     "NUM_ALU_LANES, NUM_FPU_LANES": "16 VALU lanes per SIMD. Packed FP32 (two FP32 ops per lane, which doubles the vector FP32 peak) is not modelled",
@@ -64,6 +68,7 @@
     "EXT_TCU_ENABLE, TCU_*": "4 matrix cores per CU, one per SIMD: FP16/BF16 and INT8 (no TF32, FP8 or sparsity on CDNA 2). Matrix FP64/FP32 are not modelled",
     "TCU_PE_RATIO": "512 dense FP16 FMA per clock per CU: 383 TFLOPS at 1700 MHz over 220 CUs (AMD CDNA 2 white paper). A TCU block at NUM_THREADS=64 computes an 8x8x8-word tile, 1024 FP16 FMA per clock, so the 4 blocks give 4096: ratio 8",
     "FDIV_PE_RATIO, FSQRT_PE_RATIO": "Transcendentals (reciprocal, reciprocal square root, on which division and square root are built) run at a quarter of the FP32 rate on GCN, RDNA and CDNA: FPU lanes / 4",
-    "DCACHE_NUM_BANKS": "64 B per clock of vector L1 per CU (GCN / CDNA 2): 2 banks of the 32 B dcache word; the default gives 4"
+    "DCACHE_NUM_BANKS": "64 B per clock of vector L1 per CU (GCN / CDNA 2): 2 banks of the 32 B dcache word; the default gives 4",
+    "reference": "fp32_lanes is the vendor FP32 core count (FP32 FMA lanes per chip, clock-free); dram_bandwidth_gbs the vendor peak. Checked by ci/profile_check.py"
   }
 }

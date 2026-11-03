@@ -272,6 +272,24 @@ The other profiles (20 to 132 cores) are SimX-scale machines for architecture
 studies, not FPGA builds; `tinygpu` is the small one, sized for FPGA
 bring-up and fast simulation.
 
+A profile's `reference` block holds the part's published or measured numbers,
+and `ci/profile_check.py` compares the model against them from a build tree
+of the profile's XLEN:
+
+| Key | Checked against |
+|---|---|
+| `fp32_lanes`, `dram_bandwidth_gbs`, `dram_peak_bytes_per_cycle`, `clock_mhz` | the resolved configuration |
+| `l1_hit_cycles`, `l2_hit_cycles`, `dram_cycles` | `tests/regression/chase` on one core: a random pointer chase at a 128 B stride (DRAM: a cold chain over a buffer never uploaded) |
+| `stream_cycles` (`"<n>MiB"`) | `vecadd` with n MiB per buffer, whole chip |
+| `sgemm_cycles` (`"<n>"`) | `sgemm -n<n>`, whole chip |
+
+```bash
+$ cd build64 && python3 ../ci/profile_check.py --profile=a100 --metrics=peak,latency
+```
+
+It exits 1 when a metric is off by more than `--tolerance` (10% by default),
+and 2 when a run fails.
+
 ### Configuring the DRAM Model
 
 The simulators (simx, rtlsim, opaesim, xrtsim) all model the device memory

@@ -44,6 +44,10 @@
     "VX_CFG_PLATFORM_MEMORY_TYPE": "GDDR6",
     "VX_CFG_PLATFORM_MEMORY_DATA_RATE": 10000
   },
+  "reference": {
+    "fp32_lanes": 2560,
+    "dram_bandwidth_gbs": 320
+  },
   "sources": {
     "NUM_CORES, NUM_WARPS, NUM_THREADS, ISSUE_WIDTH": "20 SMs, 64 resident warps/SM, 4 schedulers x 32 lanes (NVIDIA GeForce GTX 1080 whitepaper)",
     "DCACHE_SIZE": "48 KB unified L1/texture per SM (whitepaper): 6 ways over power-of-two sets",
@@ -62,6 +66,7 @@
     "NUM_MUFU_LANES": "32 special-function results per clock per SM (8 SFUs in each of the 4 processing blocks) for the reciprocal, reciprocal square root, log2, exp2, sine and cosine (CUDA C++ Programming Guide, arithmetic instruction throughput, compute capability 6.1)",
     "NUM_ALU_LANES, NUM_FPU_LANES, NUM_LSU_LANES": "GP104 SM (GTX 1080 whitepaper): 4 processing blocks, each with 32 CUDA cores (FP32 and INT32 on the same cores), 8 LD/ST units and 8 SFUs; 4 FP64 cores per SM. One Vortex ALU/FPU/LSU block per processing block (ISSUE_WIDTH=4) with the part's INT32, FP32 and LD/ST lanes; a 32-thread warp instruction issues over NUM_THREADS/lanes cycles, as on the part. The TCU stays full-warp (NUM_TCU_LANES == NUM_THREADS). FP64 is not modelled separately: with XLEN=64 each FPU lane also executes FP64, so the profile has 128 FP64 lanes per SM against the part's 4",
     "FDIV_PE_RATIO, FSQRT_PE_RATIO": "32 results per clock per SM, 8 per processing block: FP32 reciprocal and reciprocal square root, on which division and square root are built (CUDA C++ Programming Guide, arithmetic instruction throughput, compute capability 6.1); 32 FPU lanes / 4",
-    "LMEM_SIZE, LMEM_LOG_SIZE, DCACHE_SIZE": "96 KB dedicated shared memory per SM, separate from the 48 KB L1/texture (GTX 1080 whitepaper), in a 128 KB window"
+    "LMEM_SIZE, LMEM_LOG_SIZE, DCACHE_SIZE": "96 KB dedicated shared memory per SM, separate from the 48 KB L1/texture (GTX 1080 whitepaper), in a 128 KB window",
+    "reference": "fp32_lanes is the vendor FP32 core count (FP32 FMA lanes per chip, clock-free); dram_bandwidth_gbs the vendor peak. Checked by ci/profile_check.py"
   }
 }

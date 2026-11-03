@@ -48,8 +48,15 @@
     "VX_CFG_PLATFORM_MEMORY_PEAK_BW": 1555000,
     "VX_CFG_PLATFORM_MEMORY_TYPE": "HBM2",
     "VX_CFG_PLATFORM_MEMORY_DATA_RATE": 3038,
-    "VX_CFG_PLATFORM_MEMORY_LATENCY": 190,
+    "VX_CFG_PLATFORM_MEMORY_LATENCY": 133,
     "VX_CFG_PLATFORM_MEMORY_QUEUE_SIZE": 257
+  },
+  "reference": {
+    "fp32_lanes": 6912,
+    "dram_bandwidth_gbs": 1555,
+    "l1_hit_cycles": 33,
+    "l2_hit_cycles": 200,
+    "dram_cycles": 290
   },
   "sources": {
     "NUM_CORES, NUM_WARPS, NUM_THREADS, ISSUE_WIDTH": "108 SMs, 64 resident warps/SM, 4 schedulers x 32 lanes (NVIDIA A100 Tensor Core GPU Architecture whitepaper, Table 3)",
@@ -58,7 +65,6 @@
     "DCACHE_SIZE": "192 KB combined L1/shared per SM (whitepaper): 6 ways over power-of-two sets",
     "L2_SIZE, L2_NUM_WAYS, L2_NUM_BANKS": "40 MB L2 in 80 slices (whitepaper): 20 ways over power-of-two sets; 64 banks of 64 B (4 KB/clk), the power of two nearest the 80 slices' 5 KB/clk",
     "PLATFORM_MEMORY_TYPE, PLATFORM_MEMORY_NUM_BANKS, PLATFORM_MEMORY_DATA_RATE": "5 HBM2 stacks x 8 128-bit channels = 40 channels at 2430 MT/s, modelled as 32 channels at 3038 MT/s for a power-of-two interleave: 32 x 16 B x 3038 MT/s = 1555 GB/s, the card's bandwidth; the array timing is in nanoseconds, so latency is unchanged",
-    "PLATFORM_MEMORY_LATENCY, PLATFORM_MEMORY_QUEUE_SIZE": "Fixed DRAM latency and per-channel request queue of GPGPU-Sim's SM80_A100 configuration (accel-sim gpu-simulator/configs/tested-cfgs/SM80_A100/gpgpusim.config)",
     "PLATFORM_CLOCK_RATE, PLATFORM_MEMORY_PEAK_BW": "1410 MHz boost clock, 1555 GB/s (whitepaper, Table 3)",
     "FETCH_WIDTH": "4 SM processing blocks, each with its own warp scheduler, dispatch unit and L0 instruction cache (NVIDIA A100 Tensor Core GPU Architecture whitepaper)",
     "CP_LLC_CLIENT": "Host copies reach device memory through the L2 like every other client, so uploaded data is L2-resident at launch",
@@ -71,6 +77,9 @@
     "EXT_RASTER_ENABLE, EXT_OM_ENABLE": "Off: the datacenter part is built for compute (no display outputs; the raster and ROP hardware is reduced or absent), so the profile models its compute machine",
     "NUM_MUFU_LANES": "16 special-function results per clock per SM (4 SFUs in each of the 4 processing blocks) for the reciprocal, reciprocal square root, log2, exp2, sine and cosine (CUDA C++ Programming Guide, arithmetic instruction throughput, compute capability 8.0)",
     "NUM_ALU_LANES, NUM_FPU_LANES, NUM_LSU_LANES": "GA100 SM (A100 whitepaper, Figure 7): 4 processing blocks, each with 16 FP32, 16 INT32, 8 FP64 cores, 8 LD/ST units, 1 SFU and 1 tensor core. One Vortex ALU/FPU/LSU block per processing block (ISSUE_WIDTH=4) with the part's INT32, FP32 and LD/ST lanes; a 32-thread warp instruction issues over NUM_THREADS/lanes cycles, as on the part. The TCU stays full-warp (NUM_TCU_LANES == NUM_THREADS). FP64 is not modelled separately: with XLEN=64 each FPU lane also executes FP64, so the profile has 64 FP64 lanes per SM against the part's 32",
-    "LMEM_SIZE, LMEM_LOG_SIZE, DCACHE_SIZE": "164 KB maximum shared memory per SM (CUDA Programming Guide, compute capability 8.0) in a 256 KB window. DCACHE_SIZE is the whole 192 KB L1/shared pool: the driver gives a kernel the L1 its shared-memory use leaves"
+    "LMEM_SIZE, LMEM_LOG_SIZE, DCACHE_SIZE": "164 KB maximum shared memory per SM (CUDA Programming Guide, compute capability 8.0) in a 256 KB window. DCACHE_SIZE is the whole 192 KB L1/shared pool: the driver gives a kernel the L1 its shared-memory use leaves",
+    "reference": "fp32_lanes is the vendor FP32 core count (FP32 FMA lanes per chip, clock-free); dram_bandwidth_gbs the vendor peak. Checked by ci/profile_check.py. Latencies: Abdelkhalik et al., Demystifying the Nvidia Ampere Architecture through Microbenchmarking and Instruction-level Analysis (HPEC 2022), Table IV: L1 33, L2 200, global memory 290 cycles",
+    "PLATFORM_MEMORY_QUEUE_SIZE": "Per-channel request queue of GPGPU-Sim's SM80_A100 configuration (accel-sim gpu-simulator/configs/tested-cfgs/SM80_A100/gpgpusim.config)",
+    "PLATFORM_MEMORY_LATENCY": "133 core cycles of PHY/NoC latency, calibrated with ci/profile_check.py so the SimX cold pointer chase gives the 290-cycle global memory latency in 'reference' (GPGPU-Sim's SM80_A100 fixed latency of 190 gives 347)"
   }
 }
