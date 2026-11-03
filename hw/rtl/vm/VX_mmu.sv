@@ -270,6 +270,7 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     wire [NUM_REQS-1:0] cat_park;
     wire [NUM_REQS-1:0] cat_hit;
     wire [NUM_REQS-1:0] cat_pfault;
+    wire [NUM_REQS-1:0] pfault_fire;
 
     for (genvar l = 0; l < NUM_REQS; ++l) begin : g_cat
         assign cam_acc[l]    = req_acc[l];
@@ -409,21 +410,30 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
 
         assign cam_access_hit[l] = cat_hit[l] && !replay_to_lane[l] && pipe_ready[l];
 
+        // A permission fault caught on a hit is torn down like one caught on
+        // a replay: a load or atomic still owes the pipeline its (zeroed)
+        // response, which it takes when no replay teardown holds the lane.
+        wire pf_needs_rsp = (EXEC_SIDE == 0) && (!req_rw[l] || req_amo[l]);
+        wire pf_rsp = cat_pfault[l] && pf_needs_rsp && !kill_to_lane[l];
+
         // The input stage's head leaves.
         assign s1_deq[l] =
               cat_bypass[l] ? (!replay_to_lane[l] && pipe_ready[l])
             : cat_hit[l]    ? (!replay_to_lane[l] && pipe_ready[l])
             : cat_park[l]   ? (park_sel[l] && park_ready)
-            : cat_pfault[l] ? 1'b1
+            : cat_pfault[l] ? (!pf_needs_rsp || (pf_rsp && core_rsp_ready[l]))
             : 1'b0;
+        assign pfault_fire[l] = cat_pfault[l] && s1_deq[l];
 
-        // Response path wires straight back, except a kill teardown injects a
+        // Response path wires straight back, except a teardown injects a
         // zeroed response ahead of the cache reply for its lane.
         assign core_rsp_ready[l] = core_bus_if[l].rsp_ready;
-        assign core_bus_if[l].rsp_valid     = kill_to_lane[l] ? 1'b1 : mem_bus_if[l].rsp_valid;
-        assign core_bus_if[l].rsp_data.data = kill_to_lane[l] ? '0 : mem_bus_if[l].rsp_data.data;
-        assign core_bus_if[l].rsp_data.tag  = kill_to_lane[l] ? kill_tag : mem_bus_if[l].rsp_data.tag;
-        assign mem_bus_if[l].rsp_ready      = core_bus_if[l].rsp_ready && ~kill_to_lane[l];
+        assign core_bus_if[l].rsp_valid     = kill_to_lane[l] || pf_rsp || mem_bus_if[l].rsp_valid;
+        assign core_bus_if[l].rsp_data.data = (kill_to_lane[l] || pf_rsp) ? '0 : mem_bus_if[l].rsp_data.data;
+        assign core_bus_if[l].rsp_data.tag  = kill_to_lane[l] ? kill_tag
+                                            : pf_rsp ? req_fields[l][F_TAG_LO +: TAG_WIDTH]
+                                            : mem_bus_if[l].rsp_data.tag;
+        assign mem_bus_if[l].rsp_ready      = core_bus_if[l].rsp_ready && ~kill_to_lane[l] && ~pf_rsp;
     end
 
     assign replay_ready = replay_valid && (replay_perm ? pipe_ready[replay_lane] : kill_ready);
@@ -433,14 +443,14 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     // the walker via the MSHR; permission faults are detected here on hits
     // and replays.
     // ---------------------------------------------------------------------
-    wire perm_fault_any = (| cat_pfault) || replay_drop;
+    wire perm_fault_any = (| pfault_fire) || replay_drop;
     reg [TLB_VPN_WIDTH-1:0] perm_fault_vpn;
     reg                     perm_fault_amo;
     always @(*) begin
         perm_fault_vpn = replay_vpn;
         perm_fault_amo = replay_amo;
         for (int l = NUM_REQS-1; l >= 0; --l) begin
-            if (cat_pfault[l]) begin
+            if (pfault_fire[l]) begin
                 perm_fault_vpn = req_vpn[l];
                 perm_fault_amo = req_amo[l];
             end
