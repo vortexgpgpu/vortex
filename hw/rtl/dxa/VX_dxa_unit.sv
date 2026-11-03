@@ -28,6 +28,8 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR (execute_if.data.rs3_data)
 
+    `STATIC_ASSERT((`VX_CFG_NUM_ALU_LANES >= 4), ("invalid parameter: NUM_ALU_LANES=%0d: the DXA descriptor is packed by WGATHER, which gathers within groups of 4 lanes, so the ALU must hold a whole group in one packet", `VX_CFG_NUM_ALU_LANES))
+
     // Wgather-based layout (lane index = thread_id & 3):
     //   Lane 0: rs1=smem_addr, rs2=coord2
     //   Lane 1: rs1=meta,      rs2=coord3

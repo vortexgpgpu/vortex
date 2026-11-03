@@ -18,6 +18,10 @@
 
 using namespace vortex;
 
+static_assert(VX_CFG_NUM_ALU_LANES >= 4,
+              "the DXA descriptor is packed by WGATHER, which gathers within groups of 4 lanes, "
+              "so the ALU must hold a whole group in one packet");
+
 instr_trace_t* DxaUnit::process(instr_trace_t* trace) {
   if (req_out_.full()) {
     return nullptr;
