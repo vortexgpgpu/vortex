@@ -942,7 +942,8 @@ enum class ArbiterType {
   Priority,
   RoundRobin,
   Matrix,
-  GreedyRR
+  GreedyRR,
+  GreedyMatrix
 };
 
 inline std::ostream &operator<<(std::ostream &os, const ArbiterType& type) {
@@ -951,6 +952,7 @@ inline std::ostream &operator<<(std::ostream &os, const ArbiterType& type) {
   case ArbiterType::RoundRobin: os << "RoundRobin"; break;
   case ArbiterType::Matrix:     os << "Matrix"; break;
   case ArbiterType::GreedyRR:   os << "GreedyRR"; break;
+  case ArbiterType::GreedyMatrix: os << "GreedyMatrix"; break;
   default: assert(false);
   }
   return os;
@@ -1015,53 +1017,46 @@ private:
   uint32_t last_grant_;
 };
 
+// Least-recently-granted, as VX_matrix_arbiter: a grant drops its requester
+// to the lowest priority; from reset the highest index ranks first. A greedy
+// one keeps granting its owner while it requests, without updating the order.
 class MatrixArbiter : public IArbiterImpl {
 public:
-  MatrixArbiter(uint32_t size)
-    : size_(size)
-    , priority_matrix_(size, std::vector<bool>(size)) {
+  MatrixArbiter(uint32_t size, bool greedy = false)
+    : size_(size), greedy_(greedy) {
     this->reset();
   }
 
   uint32_t grant(const BitVector<>& requests) override {
     assert(requests.size() == size_);
-    for (uint32_t i = 0; i < size_; ++i) {
-      if (requests[i]) {
-        // Check if this request has the highest priority by comparing it
-        bool highest_priority = true;
-        for (uint32_t j = 0; j < size_; ++j) {
-          if (requests[j] && priority_matrix_[i][j]) {
-            highest_priority = false;
-            break;
-          }
-        }
-
-        if (highest_priority) {
-          for (uint32_t j = 0; j < size_; ++j) {
-            if (i != j) {
-              priority_matrix_[i][j] = false;
-              priority_matrix_[j][i] = true;
-            }
-          }
-          return i;
-        }
+    if (greedy_ && last_grant_ < size_ && requests.test(last_grant_)) {
+      return last_grant_;
+    }
+    for (auto it = order_.begin(); it != order_.end(); ++it) {
+      uint32_t idx = *it;
+      if (requests.test(idx)) {
+        order_.erase(it);
+        order_.push_back(idx);
+        last_grant_ = idx;
+        return idx;
       }
     }
-    return -1;
+    return -1u;
   }
 
   void reset() override {
-    for (uint32_t i = 0; i < size_; ++i) {
-      priority_matrix_[i].resize(size_);
-      for (uint32_t j = i + 1; j < size_; ++j) {
-        priority_matrix_[i][j] = true;
-      }
+    order_.clear();
+    for (uint32_t i = size_; i-- > 0;) {
+      order_.push_back(i);
     }
+    last_grant_ = -1u;
   }
 
 private:
   uint32_t size_;
-  std::vector<std::vector<bool>> priority_matrix_;
+  bool greedy_;
+  std::vector<uint32_t> order_;
+  uint32_t last_grant_;
 };
 
 // Greedy round-robin: keeps granting the current owner while it requests,
@@ -1113,6 +1108,9 @@ public:
       break;
     case ArbiterType::GreedyRR:
       impl_ = std::make_shared<GreedyRRArbiter>(size);
+      break;
+    case ArbiterType::GreedyMatrix:
+      impl_ = std::make_shared<MatrixArbiter>(size, true);
       break;
     default:
       assert(false);

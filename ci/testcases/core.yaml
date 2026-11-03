@@ -338,6 +338,14 @@ tests:
   app: mixfu
   args: -n32 -i128
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_NUM_ALU_LANES=8 -DVX_CFG_NUM_FPU_LANES=8 -DVX_CFG_NUM_LSU_LANES=8 -DVX_CFG_FMA_PE_RATIO=2 -DVX_CFG_FCVT_PE_RATIO=4 -DVX_CFG_FNCP_PE_RATIO=8
+# Divide and remainder chained through the loop: the cycles follow the order in
+# which the slot's matrix arbiter (past 8 warps) hands issue to its 16 warps.
+- id: parity-mixfu-div
+  check: model_parity
+  via: blackbox
+  app: mixfu
+  args: -n40 -i32
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_NUM_ALU_LANES=8 -DVX_CFG_NUM_FPU_LANES=8 -DVX_CFG_NUM_LSU_LANES=8 -DMIXFU_DIV
 # Division and square root at a quarter rate, as the GPU profiles set them.
 # The F64 FMA rate needs XLEN 64, which the parity gate does not run.
 - id: parity-raycast-fdiv4

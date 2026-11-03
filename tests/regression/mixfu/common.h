@@ -65,6 +65,12 @@ inline mixfu_result_t mixfu_compute(uint32_t row, uint32_t col, uint32_t size, u
     x6 ^= (uint32_t)(((uint64_t)x7 * x1) >> 32);
     a3 = mixfu_fma(a3, 0.5f, __builtin_fminf(a5, 1.0f));
     a6 = mixfu_fma((float)(x2 & 0xf), 0.0625f, a6);
+#ifdef MIXFU_DIV
+    x5 += x6 / (x7 | 1u);
+    x2 ^= x3 % (x0 | 1u);
+    a5 = a5 / (__builtin_fabsf(a6) + 1.5f);
+    a1 = mixfu_fma(a1, 0.25f, __builtin_sqrtf(__builtin_fabsf(a7) + 0.25f));
+#endif
   }
   mixfu_result_t r;
   r.f = ((a0 + a1) + (a2 + a3)) + ((a4 + a5) + (a6 + a7));

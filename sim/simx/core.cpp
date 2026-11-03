@@ -100,7 +100,8 @@ public:
     , func_units_((uint32_t)FUType::Count)
     , lmem_switch_(VX_CFG_NUM_LSU_BLOCKS)
     , mem_coalescers_(VX_CFG_NUM_LSU_BLOCKS)
-    , ibuffer_arbs_(VX_CFG_ISSUE_WIDTH, {ArbiterType::GreedyRR, PER_ISSUE_WARPS})
+    // As the scoreboard's out_arb: a matrix arbiter past 8 warps per slot.
+    , ibuffer_arbs_(VX_CFG_ISSUE_WIDTH, {(PER_ISSUE_WARPS > 8) ? ArbiterType::GreedyMatrix : ArbiterType::GreedyRR, PER_ISSUE_WARPS})
     , issue_lock_owner_(VX_CFG_ISSUE_WIDTH, kLockOpen)
     , fu_credits_(VX_CFG_ISSUE_WIDTH, std::vector<uint32_t>((uint32_t)FUType::Count, 0))
     , fu_full_(VX_CFG_ISSUE_WIDTH, BitVector<>((uint32_t)FUType::Count, 0))
