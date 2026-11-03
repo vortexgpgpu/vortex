@@ -107,7 +107,6 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     // the output slice entering the array this cycle
     wire [SLICE_W-1:0] slice_idx;
-    wire slice_last;
     wire array_issue;
     `UNUSED_VAR (array_issue)
     wire [SLICE_M_W-1:0] slice_m = SLICE_M_W'(32'(slice_idx) / PE_RATIO_N);
@@ -288,9 +287,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     && (~fedp_done || result_if.ready)
                     && exe_ready_extra;
 
-    // A compute micro-op is taken with its last output slice.
-    wire hold_ready = is_wgmma_setup ? (~setup_valid_r || result_if.ready) : slice_last;
-    assign execute_if.ready = admit_ready && hold_ready;
+    wire setup_ready = ~is_wgmma_setup || ~setup_valid_r || result_if.ready;
 
     wire mdata_push = fedp_enqueue;
 
@@ -776,8 +773,23 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         reg [SLICE_W-1:0] slice_in_r, slice_out_r;
         reg [PIPE_LATENCY-1:0] slice_delay_pipe;
         reg [PE_RATIO-2:0][PE_M-1:0][PE_N-1:0][31:0] d_slices_r;
+        wire slice_last;
 
-        wire slice_issue = execute_if.valid && ~is_wgmma_setup && admit_ready;
+        // A compute micro-op is taken with its last output slice. The tile
+        // buffer's ready, the deepest input, meets the other terms last, as
+        // without slices, so the slice term replaces one there: a full header
+        // queue implies full landing credits, which also count a pending setup
+        // result, and only a setup micro-op has no writeback.
+        `RUNTIME_ASSERT (~mdata_queue_full || landq_credits_full,
+            ("%t: %s: header queue full with landing credits left", $time, INSTANCE_ID))
+        `RUNTIME_ASSERT (~execute_if.valid || execute_if.data.header.wb || is_wgmma_setup,
+            ("%t: %s: a compute micro-op without a writeback", $time, INSTANCE_ID))
+        `UNUSED_VAR (admit_ready)
+        wire slice_blocked = landq_credits_full || (fedp_done && ~result_if.ready)
+                          || (execute_if.data.header.wb && ~slice_last);
+        assign execute_if.ready = ~slice_blocked && exe_ready_extra && setup_ready;
+        wire slice_issue = execute_if.valid && ~is_wgmma_setup && ~landq_credits_full
+                        && (~fedp_done || result_if.ready) && exe_ready_extra;
         wire slice_done  = slice_delay_pipe[0];
 
         always @(posedge clk) begin
@@ -818,15 +830,30 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         end
 
         assign slice_idx   = slice_in_r;
-        assign slice_last  = (slice_in_r == SLICE_W'(PE_RATIO - 1));
+        if (PE_RATIO > 2) begin : g_last_flag
+            // the last slice as a flag, set as the one before it enters
+            reg slice_last_r;
+            always @(posedge clk) begin
+                if (reset) begin
+                    slice_last_r <= 1'b0;
+                end else if (slice_issue) begin
+                    slice_last_r <= (slice_in_r == SLICE_W'(PE_RATIO - 2));
+                end
+            end
+            assign slice_last = slice_last_r;
+            `RUNTIME_ASSERT (slice_last_r == (slice_in_r == SLICE_W'(PE_RATIO - 1)),
+                ("%t: %s: last-slice flag out of step with the slice counter", $time, INSTANCE_ID))
+        end else begin : g_last_bit
+            assign slice_last = slice_in_r[0];
+        end
         assign array_issue = slice_issue;
 
         `RUNTIME_ASSERT (fedp_done == (slice_done && slice_out_r == SLICE_W'(PE_RATIO - 1)),
             ("%t: %s: output slices out of step with their micro-op: fedp_done=%b, slice_done=%b, slice=%0d", $time, INSTANCE_ID, fedp_done, slice_done, slice_out_r))
 
     end else begin : g_no_slices
+        assign execute_if.ready = admit_ready && setup_ready;
         assign slice_idx   = '0;
-        assign slice_last  = 1'b1;
         assign array_issue = fedp_enqueue;
         assign d_val       = d_pe;
     end
