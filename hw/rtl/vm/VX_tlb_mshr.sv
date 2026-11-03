@@ -18,10 +18,11 @@
 // entry drains one token per cycle when the fill lands.
 //
 // NUM_REQS lanes probe the table in parallel for hit-under-miss; the allocate
-// path reuses the probing lane's result (alloc_vpn == probe_vpn[alloc_lane]) so
-// the wide dedup compare stays off the enqueue path. A same-VPN request joins
-// its entry through the fill: queuing behind the entry's parked requests keeps
-// per-lane program order for same-page accesses, which the requester relies on.
+// path reuses the result of the lane alloc_sel picks (alloc_vpn is that lane's
+// probe_vpn) so the wide dedup compare stays off the enqueue path. A same-VPN
+// request joins its entry through the fill: queuing behind the entry's parked
+// requests keeps per-lane program order for same-page accesses, which the
+// requester relies on.
 // DEDUP_LIVE_EXCLUDES_FAULT drops faulted entries from dedup (a new same-VPN
 // request re-walks); with it clear the request joins and shares the fault.
 //
@@ -53,7 +54,7 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
     input  wire [TLB_VPN_WIDTH-1:0]         alloc_vpn,
     input  tlb_access_e                     alloc_access,
     input  wire                             alloc_amo,
-    input  wire [`UP(`CLOG2(NUM_REQS))-1:0] alloc_lane,
+    input  wire [NUM_REQS-1:0]              alloc_sel,   // one-hot: the allocating lane
     input  wire [QDATA_W-1:0]               alloc_qdata,
     output wire                             alloc_ready,
 
@@ -133,8 +134,16 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
     end
 
     // Allocate reuses the probing lane's dedup result.
-    wire                 has_match = probe_match[alloc_lane];
-    wire [MSHR_SIZE-1:0] match_oh  = probe_m[alloc_lane];
+    wire                 has_match = (| (probe_match & alloc_sel));
+    wire [MSHR_SIZE-1:0] match_oh;
+    VX_onehot_mux #(
+        .DATAW (MSHR_SIZE),
+        .N     (NUM_REQS)
+    ) match_mux (
+        .data_in  (probe_m),
+        .sel_in   (alloc_sel),
+        .data_out (match_oh)
+    );
 
     wire                 has_free;
     wire [MSHR_SIZE-1:0] free_oh;
@@ -442,6 +451,9 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
     // State update
     // ---------------------------------------------------------------------
     // Per entry, each decoding its own events; later events take precedence.
+    // A free entry's request fields follow the allocate input every cycle, so
+    // they hold the request the cycle the entry is taken: their enable is the
+    // entry's own valid bit rather than the allocate decision.
     for (genvar e = 0; e < MSHR_SIZE; ++e) begin : g_entries
         reg                     e_valid, e_issued, e_filled, e_fault, e_amo;
         reg [TLB_VPN_WIDTH-1:0] e_vpn;
@@ -452,14 +464,12 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
                 e_issued <= 1'b0;
                 e_filled <= 1'b0;
                 e_fault  <= 1'b0;
-                e_amo    <= 1'b0;
             end else begin
                 if (alloc_new_oh[e]) begin
                     e_valid  <= 1'b1;
                     e_issued <= 1'b0;
                     e_filled <= 1'b0;
                     e_fault  <= 1'b0;
-                    e_amo    <= alloc_amo;
                 end
                 if (issue_fire && issue_oh[e]) begin
                     e_issued <= 1'b1;
@@ -475,9 +485,10 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
             end
         end
         always @(posedge clk) begin
-            if (alloc_new_oh[e]) begin
+            if (!e_valid) begin
                 e_vpn    <= alloc_vpn;
                 e_access <= alloc_access;
+                e_amo    <= alloc_amo;
             end
         end
         assign valid_r[e]  = e_valid;

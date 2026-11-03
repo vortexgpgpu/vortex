@@ -61,7 +61,7 @@ module VX_tlb_l1 import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     input  wire [TLB_VPN_WIDTH-1:0]  park_vpn,
     input  tlb_access_e              park_access,
     input  wire                      park_amo,
-    input  wire [`UP(`CLOG2(NUM_REQS))-1:0] park_lane,
+    input  wire [NUM_REQS-1:0]              park_sel,    // one-hot: the parking lane
     input  wire [PAYLOAD_W-1:0]      park_payload,
     output wire                      park_ready,
 
@@ -167,7 +167,7 @@ module VX_tlb_l1 import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         .alloc_vpn     (park_vpn),
         .alloc_access  (park_access),
         .alloc_amo     (park_amo),
-        .alloc_lane    (park_lane),
+        .alloc_sel     (park_sel),
         .alloc_qdata   (park_payload),
         .alloc_ready   (park_ready),
         .issue_valid   (tlb_bus_if.req_valid),

@@ -354,7 +354,7 @@ module VX_tlb_l2 import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     // the response path).
     wire [0:0][TLB_VPN_WIDTH-1:0] probe_vpn;
     wire [0:0]                    probe_match;
-    wire [`UP(`CLOG2(1))-1:0]     alloc_lane = '0;
+    wire [0:0]                    alloc_sel = 1'b1;
     assign probe_vpn[0] = t_vpn;
     `UNUSED_VAR (probe_match)
     wire                     mshr_fault_valid;
@@ -380,7 +380,7 @@ module VX_tlb_l2 import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         .alloc_vpn     (t_vpn),
         .alloc_access  (t_acc),
         .alloc_amo     (t_amo),
-        .alloc_lane    (alloc_lane),
+        .alloc_sel     (alloc_sel),
         .alloc_qdata   (t_id),
         .alloc_ready   (alloc_ready),
         .issue_valid   (ptw_if.req_valid),

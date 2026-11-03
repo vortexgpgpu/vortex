@@ -195,6 +195,7 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     tlb_access_e               park_access;
     wire                       park_amo;
     wire [LANE_W-1:0]          park_lane;
+    wire [NUM_REQS-1:0]        park_sel;
     wire [PAYLOAD_W-1:0]       park_payload;
     wire                       park_ready;
 
@@ -244,7 +245,7 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         .park_vpn      (park_vpn),
         .park_access   (park_access),
         .park_amo      (park_amo),
-        .park_lane     (park_lane),
+        .park_sel      (park_sel),
         .park_payload  (park_payload),
         .park_ready    (park_ready),
         .replay_valid  (replay_valid),
@@ -285,14 +286,22 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     // categories; the encoded lane only rides in the payload.
     localparam PARK_W = TLB_VPN_WIDTH + $bits(tlb_access_e) + 1 + FIELDS_W;
 
-    wire [NUM_REQS-1:0] park_sel;
-    VX_priority_encoder #(
+    // Lowest parking lane, isolated by an OR over the lanes below it (no
+    // borrow chain across the lanes); the encoded lane is formed beside it.
+    for (genvar l = 0; l < NUM_REQS; ++l) begin : g_park_sel
+        if (l == 0) begin : g_lo
+            assign park_sel[l] = cat_park[l];
+        end else begin : g_hi
+            assign park_sel[l] = cat_park[l] && ~(| cat_park[l-1:0]);
+        end
+    end
+    assign park_valid = (| cat_park);
+    VX_onehot_encoder #(
         .N (NUM_REQS)
     ) park_enc (
-        .data_in    (cat_park),
-        .onehot_out (park_sel),
-        .index_out  (park_lane),
-        .valid_out  (park_valid)
+        .data_in   (park_sel),
+        .data_out  (park_lane),
+        `UNUSED_PIN (valid_out)
     );
 
     wire [NUM_REQS-1:0][PARK_W-1:0] park_src;
