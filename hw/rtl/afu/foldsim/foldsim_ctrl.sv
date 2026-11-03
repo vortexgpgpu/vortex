@@ -219,6 +219,10 @@ module foldsim_ctrl #(
 
     // ---- The host's registers ----
     reg       aw_got, w_got, ar_got;
+    // A read takes two host cycles: each window's word is registered, then
+    // the address's window chooses among them.
+    reg        rd_sel, r_in_tim, r_in_stat, r_in_fin, r_in_vm;
+    reg [31:0] r_base, r_tim, r_stat, r_fin, r_vm;
     reg [11:2] aw_addr;
     reg [11:0] ar_addr;
     // Offsets into the counter and finish windows of the address being read.
@@ -248,14 +252,18 @@ module foldsim_ctrl #(
     reg [31:0] w_data;
     assign s_awready = ~aw_got;
     assign s_wready  = ~w_got;
-    assign s_arready = ~ar_got & ~s_rvalid;
+    assign s_arready = ~ar_got & ~rd_sel & ~s_rvalid;
 
     wire wr      = aw_got & w_got & ~s_bvalid;
     // A virtual memories' move is under way (STATUS bit 4).
     wire vmem_busy;
     wire [11:0] wa = {aw_addr, 2'b00};
     wire push    = wr & (wa == `FOLDSIM_REG_CMD) & (q_count != QC'(QUEUE));
-    wire pop     = finish & ~q_empty & (reset_next == 0);
+    // reset_next == 0 without its subtractions: a count runs out at 1, and a
+    // reset command's count is only taken above 1.
+    wire reset_last = (reset_count != 0) ? (reset_count == 32'd1)
+                    : ~((cur_op == `FOLDSIM_CMD_RESET) && (cur_data > 1));
+    wire pop     = finish & ~q_empty & reset_last;
 
     wire status_busy = ~q_empty | (cur_op != `FOLDSIM_CMD_NONE) | start_pending | target_busy
                      | ~mem_idle | (reset_count != 0);
@@ -291,6 +299,7 @@ module foldsim_ctrl #(
             aw_got            <= 1'b0;
             w_got             <= 1'b0;
             ar_got            <= 1'b0;
+            rd_sel            <= 1'b0;
             s_bvalid          <= 1'b0;
             s_rvalid          <= 1'b0;
         end else begin
@@ -387,60 +396,65 @@ module foldsim_ctrl #(
             end
             if (ar_got) begin
                 ar_got   <= 1'b0;
-                s_rvalid <= 1'b1;
+                rd_sel   <= 1'b1;
                 case ({ar_addr[11:2], 2'b00})
-                `FOLDSIM_REG_ID:          s_rdata <= `FOLDSIM_ID;
-                `FOLDSIM_REG_VERSION:     s_rdata <= `FOLDSIM_VERSION;
-                `FOLDSIM_REG_CTRL:        s_rdata <= {31'b0, run};
-                `FOLDSIM_REG_STATUS:      s_rdata <= {27'b0, vmem_busy, mem_error, rsp_valid,
+                `FOLDSIM_REG_ID:          r_base <= `FOLDSIM_ID;
+                `FOLDSIM_REG_VERSION:     r_base <= `FOLDSIM_VERSION;
+                `FOLDSIM_REG_CTRL:        r_base <= {31'b0, run};
+                `FOLDSIM_REG_STATUS:      r_base <= {27'b0, vmem_busy, mem_error, rsp_valid,
                                                      (q_count == QC'(QUEUE)), status_busy};
-                `FOLDSIM_REG_CMD_ADDR:    s_rdata <= 32'(cmd_addr);
-                `FOLDSIM_REG_CMD_DATA:    s_rdata <= 32'(cmd_data);
-                `FOLDSIM_REG_DCR_RSP:     s_rdata <= 32'(rsp_data);
-                `FOLDSIM_REG_TCYCLES_LO:  s_rdata <= target_cycles[31:0];
-                `FOLDSIM_REG_TCYCLES_HI:  s_rdata <= target_cycles[63:32];
-                `FOLDSIM_REG_HCYCLES_LO:  s_rdata <= host_cycles[31:0];
-                `FOLDSIM_REG_HCYCLES_HI:  s_rdata <= host_cycles[63:32];
-                `FOLDSIM_REG_MEM_BASE_LO: s_rdata <= mem_base[31:0];
-                `FOLDSIM_REG_MEM_BASE_HI: s_rdata <= mem_base[63:32];
-                `FOLDSIM_REG_BUBBLE:      s_rdata <= 32'(bubble);
-                `FOLDSIM_REG_MSTALL_LO:   s_rdata <= mem_stalls[31:0];
-                `FOLDSIM_REG_MSTALL_HI:   s_rdata <= mem_stalls[63:32];
-                `FOLDSIM_REG_NUM_CLASSES: s_rdata <= 32'(NUM_CLASSES);
-                `FOLDSIM_REG_MEM_REFRESH: s_rdata <= 32'(mem_refresh_r);
-                `FOLDSIM_REG_MEM_CAPS:    s_rdata <= MEM_CAPS;
-                `FOLDSIM_REG_MEM_CLOCK:   s_rdata <= mem_clock;
-                `FOLDSIM_REG_MEM_LATENCY: s_rdata <= 32'(mem_latency);
-                `FOLDSIM_REG_MEM_QUEUE:   s_rdata <= mem_queue;
-                `FOLDSIM_REG_MEM_GEOM:    s_rdata <= 32'(mem_geom);
-                `FOLDSIM_REG_MEM_WMARK:   s_rdata <= 32'(mem_wmark);
-                `FOLDSIM_REG_MEM_REFI:    s_rdata <= 32'(mem_refi);
-                `FOLDSIM_REG_MEM_RFC:     s_rdata <= 32'(mem_rfc);
-                default:                 s_rdata <= 32'd0;
+                `FOLDSIM_REG_CMD_ADDR:    r_base <= 32'(cmd_addr);
+                `FOLDSIM_REG_CMD_DATA:    r_base <= 32'(cmd_data);
+                `FOLDSIM_REG_DCR_RSP:     r_base <= 32'(rsp_data);
+                `FOLDSIM_REG_TCYCLES_LO:  r_base <= target_cycles[31:0];
+                `FOLDSIM_REG_TCYCLES_HI:  r_base <= target_cycles[63:32];
+                `FOLDSIM_REG_HCYCLES_LO:  r_base <= host_cycles[31:0];
+                `FOLDSIM_REG_HCYCLES_HI:  r_base <= host_cycles[63:32];
+                `FOLDSIM_REG_MEM_BASE_LO: r_base <= mem_base[31:0];
+                `FOLDSIM_REG_MEM_BASE_HI: r_base <= mem_base[63:32];
+                `FOLDSIM_REG_BUBBLE:      r_base <= 32'(bubble);
+                `FOLDSIM_REG_MSTALL_LO:   r_base <= mem_stalls[31:0];
+                `FOLDSIM_REG_MSTALL_HI:   r_base <= mem_stalls[63:32];
+                `FOLDSIM_REG_NUM_CLASSES: r_base <= 32'(NUM_CLASSES);
+                `FOLDSIM_REG_MEM_REFRESH: r_base <= 32'(mem_refresh_r);
+                `FOLDSIM_REG_MEM_CAPS:    r_base <= MEM_CAPS;
+                `FOLDSIM_REG_MEM_CLOCK:   r_base <= mem_clock;
+                `FOLDSIM_REG_MEM_LATENCY: r_base <= 32'(mem_latency);
+                `FOLDSIM_REG_MEM_QUEUE:   r_base <= mem_queue;
+                `FOLDSIM_REG_MEM_GEOM:    r_base <= 32'(mem_geom);
+                `FOLDSIM_REG_MEM_WMARK:   r_base <= 32'(mem_wmark);
+                `FOLDSIM_REG_MEM_REFI:    r_base <= 32'(mem_refi);
+                `FOLDSIM_REG_MEM_RFC:     r_base <= 32'(mem_rfc);
+                default:                 r_base <= 32'd0;
                 endcase
-                if (ar_addr >= `FOLDSIM_REG_MEM_TIMING && ar_addr < `FOLDSIM_REG_MEM_TIMING + 12'(4 * 18))
-                    s_rdata <= 32'(mem_t[5'((ar_addr - `FOLDSIM_REG_MEM_TIMING) >> 2)]);
+                r_in_tim <= ar_addr >= `FOLDSIM_REG_MEM_TIMING && ar_addr < `FOLDSIM_REG_MEM_TIMING + 12'(4 * 18);
+                r_tim    <= 32'(mem_t[5'((ar_addr - `FOLDSIM_REG_MEM_TIMING) >> 2)]);
                 // A port's counters at FOLDSIM_REG_MEM_STATS + 0x40 per port.
                 // 32 ports end the window at 0x1000, past 12 bits: compared in 32.
-                if (ar_addr >= `FOLDSIM_REG_MEM_STATS && 32'(ar_addr) < 32'(`FOLDSIM_REG_MEM_STATS) + 32'(64 * MEM_PORTS))
-                    s_rdata <= mem_stats[32'(stat_off[11:6]) * (8 * 64) + 32'(stat_off[5:0]) * 8 +: 32];
-                // A port's device-memory telemetry at FOLDSIM_REG_MEM_AXI + 0x20 per port (24 ports at most), and its
-                // stall-reason word at FOLDSIM_REG_MEM_DBG + 4 per port (32 at most), chosen as the read was taken.
-                if (win_hit)
-                    s_rdata <= win_rdata;
-                if (ar_addr >= `FOLDSIM_REG_FINISH_BASE
-                 && ar_addr < `FOLDSIM_REG_FINISH_BASE + 12'(8 * NUM_CLASSES)) begin
-                    s_rdata <= ar_addr[2] ? 32'(finishes[fin_idx] >> 32)
-                                          : finishes[fin_idx][31:0];
-                end
+                r_in_stat <= ar_addr >= `FOLDSIM_REG_MEM_STATS && 32'(ar_addr) < 32'(`FOLDSIM_REG_MEM_STATS) + 32'(64 * MEM_PORTS);
+                r_stat    <= mem_stats[32'(stat_off[11:6]) * (8 * 64) + 32'(stat_off[5:0]) * 8 +: 32];
+                r_in_fin <= ar_addr >= `FOLDSIM_REG_FINISH_BASE
+                         && ar_addr < `FOLDSIM_REG_FINISH_BASE + 12'(8 * NUM_CLASSES);
+                r_fin    <= ar_addr[2] ? 32'(finishes[fin_idx] >> 32) : finishes[fin_idx][31:0];
+                r_in_vm <= 1'b0;
+                r_vm    <= 32'd0;
                 if (VMEM_BYTES != 0) begin
+                    r_in_vm <= 1'b1;
                     case ({ar_addr[11:2], 2'b00})
-                    `FOLDSIM_REG_VMEM_BYTES:   s_rdata <= VMEM_BYTES[31:0];
-                    `FOLDSIM_REG_VMEM_BASE_LO: s_rdata <= vmem_base[31:0];
-                    `FOLDSIM_REG_VMEM_BASE_HI: s_rdata <= vmem_base[63:32];
-                    default:;
+                    `FOLDSIM_REG_VMEM_BYTES:   r_vm <= VMEM_BYTES[31:0];
+                    `FOLDSIM_REG_VMEM_BASE_LO: r_vm <= vmem_base[31:0];
+                    `FOLDSIM_REG_VMEM_BASE_HI: r_vm <= vmem_base[63:32];
+                    default:                   r_in_vm <= 1'b0;
                     endcase
                 end
+            end
+            if (rd_sel) begin
+                rd_sel   <= 1'b0;
+                s_rvalid <= 1'b1;
+                // A port's device-memory telemetry (FOLDSIM_REG_MEM_AXI + 0x20 per port, 24 ports at most) and its
+                // stall-reason word (FOLDSIM_REG_MEM_DBG + 4 per port, 32 at most): win_rdata, registered as the read
+                // was taken and held until the response.
+                s_rdata  <= r_in_vm ? r_vm : r_in_fin ? r_fin : win_hit ? win_rdata : r_in_stat ? r_stat : r_in_tim ? r_tim : r_base;
             end
             if (s_rvalid & s_rready)
                 s_rvalid <= 1'b0;

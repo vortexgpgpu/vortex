@@ -191,6 +191,8 @@ module foldsim_mem_bank #(
     reg signed [15:0] k_wrpre, k_dep, k_ccdl1, k_rcdrd, k_rcdwr, k_rp, k_ras, k_rc, k_rtp;
     reg signed [15:0] k_rrds, k_rrdl, k_rfc;
     reg [16:0]        k_twoclk;
+    // The data-rate accumulators' values out of reset, a stage per subtraction.
+    reg signed [33:0] k_cr1_0, k_cr2_0;
     reg [2:0]         k_bb;
     reg [4:0]         k_rowsh;
     reg [24:0]        k_bmask;
@@ -217,6 +219,8 @@ module foldsim_mem_bank #(
         k_rrdl    <= 16'(T[I_RRDL]);
         k_rfc     <= $signed(cfg_rfc);
         k_twoclk  <= {cfg_core_clock, 1'b0};
+        k_cr1_0   <= 34'(cfg_data_rate) - 34'(k_twoclk);
+        k_cr2_0   <= k_cr1_0 - 34'(k_twoclk);
         k_bb      <= 3'(g_lpcs) + 3'(g_lbgs) + 3'(g_lbanks);
         k_rowsh   <= 5'(g_lpcs) + 5'(g_lbgs) + 5'(g_lbanks) + 5'(g_lrow);
         k_bmask   <= (25'd1 << (3'(g_lpcs) + 3'(g_lbgs) + 3'(g_lbanks))) - 25'd1;
@@ -1679,8 +1683,8 @@ module foldsim_mem_bank #(
                 rb_reach    <= '0;
                 wb_reach    <= '0;
                 state       <= S_IDLE;
-                cr1         <= 34'(cfg_data_rate) - 34'(k_twoclk);
-                cr2         <= 34'(cfg_data_rate) - 34'(k_twoclk) - 34'(k_twoclk);
+                cr1         <= k_cr1_0;
+                cr2         <= k_cr2_0;
                 rq_cnt      <= '0;
                 wq_cnt      <= '0;
                 wmode       <= 1'b0;
