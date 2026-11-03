@@ -310,10 +310,15 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
             valid_table  <= '0;
             allocate_rdy <= 0;
             dequeue_val  <= 0;
+            // Indexes the tables and the store's read port every cycle, valid or
+            // not: with a non-power-of-two MSHR_SIZE a power-on value can name
+            // no entry, and it holds until the first fill.
+            dequeue_id_r <= '0;
         end else begin
             valid_table  <= valid_table_n;
             allocate_rdy <= allocate_rdy_n;
             dequeue_val  <= dequeue_val_n;
+            dequeue_id_r <= dequeue_id_n;
         end
 
         if (allocate_fire) begin
@@ -325,7 +330,6 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
             next_index[finalize_previd] <= finalize_id;
         end
 
-        dequeue_id_r  <= dequeue_id_n;
         allocate_id_r <= allocate_id_n;
         next_table    <= next_table_n;
     end
