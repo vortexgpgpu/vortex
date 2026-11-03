@@ -29,7 +29,8 @@
     "VX_CFG_TCU_SPARSE_ENABLE": true,
     "VX_CFG_NUM_BARRIERS": 16,
     "VX_CFG_FDIV_PE_RATIO": 4,
-    "VX_CFG_FSQRT_PE_RATIO": 4
+    "VX_CFG_FSQRT_PE_RATIO": 4,
+    "VX_CFG_L1_LINK_LATENCY": 19
   },
   "chip": {
     "VX_CFG_NUM_CLUSTERS": 8,
@@ -42,18 +43,24 @@
     "VX_CFG_L3_SIZE": 268435456,
     "VX_CFG_L3_NUM_WAYS": 16,
     "VX_CFG_L3_NUM_BANKS": 32,
-    "VX_CFG_CP_LLC_CLIENT": 1
+    "VX_CFG_CP_LLC_CLIENT": 1,
+    "VX_CFG_L2_LINK_LATENCY": 42,
+    "VX_CFG_L2_MSHR_SIZE": 256
   },
   "platform": {
     "VX_CFG_PLATFORM_MEMORY_NUM_BANKS": 64,
     "VX_CFG_PLATFORM_CLOCK_RATE": 2100,
     "VX_CFG_PLATFORM_MEMORY_PEAK_BW": 5300000,
     "VX_CFG_PLATFORM_MEMORY_TYPE": "HBM3",
-    "VX_CFG_PLATFORM_MEMORY_DATA_RATE": 5200
+    "VX_CFG_PLATFORM_MEMORY_DATA_RATE": 5200,
+    "VX_CFG_PLATFORM_MEMORY_LATENCY": 411
   },
   "reference": {
     "fp32_lanes": 19456,
-    "dram_bandwidth_gbs": 5300
+    "dram_bandwidth_gbs": 5300,
+    "l1_hit_cycles": 68,
+    "l2_hit_cycles": 179,
+    "dram_cycles": 720
   },
   "sources": {
     "NUM_THREADS, ISSUE_WIDTH, FETCH_WIDTH": "4 SIMD16 units per CU running wave64 over 4 clocks (64 lanes per CU), fed by one instruction arbiter that issues to one SIMD per clock (CDNA keeps the GCN CU)",
@@ -75,6 +82,10 @@
     "EXT_TCU_ENABLE, TCU_*": "4 matrix cores per CU, one per SIMD as NUM_TCU_BLOCKS=ISSUE_WIDTH: FP16/BF16, TF32, FP8, INT8, with structured sparsity. Matrix FP64/FP32 are not modelled",
     "TCU_PE_RATIO": "1024 dense FP16 FMA per clock per CU: 1307 TFLOPS at 2100 MHz over 304 CUs (AMD CDNA 3 white paper). A TCU block at NUM_THREADS=64 computes an 8x8x8-word tile, 1024 FP16 FMA per clock, so the 4 blocks give 4096: ratio 4",
     "FDIV_PE_RATIO, FSQRT_PE_RATIO": "Transcendentals (reciprocal, reciprocal square root, on which division and square root are built) run at a quarter of the FP32 rate on GCN, RDNA and CDNA: FPU lanes / 4",
-    "reference": "fp32_lanes is the vendor FP32 core count (FP32 FMA lanes per chip, clock-free); dram_bandwidth_gbs the vendor peak. Checked by ci/profile_check.py"
+    "reference": "fp32_lanes is the vendor FP32 core count (FP32 FMA lanes per chip, clock-free); dram_bandwidth_gbs the vendor peak. Checked by ci/profile_check.py. Latencies: MGPUSim's measured MI300X ground truth (sarchlab/mgpusim gpu_perf_scripts/calibration/mi300x_ground_truth.csv, cache_latency: a one-thread pointer chase over 64 B lines, 4 laps with at least 131072 and at most 16M timed loads, amd/benchmarks/microbench/cachelatency): 32.4 ns per load up to 16 KB (L1, 68 cycles at 2100 MHz), 85.2 ns from 32 KB to 4 MB (L2, 179 cycles), about 198 ns from 8 to 64 MB (Infinity Cache, the L3: not checked, no chase metric) and 343 ns from 512 MB up (HBM3, 720 cycles)",
+    "L1_LINK_LATENCY": "19 core cycles each way between a core and its dcache, the L1/texture load pipeline, which the dcache bank pipeline (DCACHE_LATENCY) does not model: calibrated with ci/profile_check.py so the SimX pointer chase gives the 68-cycle L1 hit latency in 'reference'",
+    "L2_LINK_LATENCY": "42 core cycles each way between an SM and the L2, the SM-to-L2 network: calibrated with ci/profile_check.py (after the L1 link) so the SimX pointer chase gives the 179-cycle L2 hit latency in 'reference'",
+    "PLATFORM_MEMORY_LATENCY": "411 core cycles of PHY/NoC latency beyond the links, calibrated with ci/profile_check.py so the SimX cold pointer chase gives the 720-cycle global memory latency in 'reference'",
+    "L2_MSHR_SIZE": "256 per bank: Little's law on the L2-miss round trip (DRAM 720 - L2 hit 179 = 541 cycles) x 2524 B/cycle (5.3 TB/s / 2100 MHz) / (8 XCDs x 16 banks x 64 B) = 166.7, rounded up to a power of two (mi300a, 6 XCDs: 222)"
   }
 }

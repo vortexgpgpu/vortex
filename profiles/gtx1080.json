@@ -27,7 +27,8 @@
     "VX_CFG_FDIV_PE_RATIO": 4,
     "VX_CFG_FSQRT_PE_RATIO": 4,
     "VX_CFG_FMA64_PE_RATIO": 32,
-    "VX_CFG_DCACHE_NUM_WAYS": 6
+    "VX_CFG_DCACHE_NUM_WAYS": 6,
+    "VX_CFG_L1_LINK_LATENCY": 26
   },
   "chip": {
     "VX_CFG_NUM_CLUSTERS": 1,
@@ -36,7 +37,8 @@
     "VX_CFG_L2_SIZE": 2097152,
     "VX_CFG_L2_NUM_WAYS": 16,
     "VX_CFG_L2_NUM_BANKS": 16,
-    "VX_CFG_CP_LLC_CLIENT": 1
+    "VX_CFG_CP_LLC_CLIENT": 1,
+    "VX_CFG_L2_LINK_LATENCY": 52
   },
   "platform": {
     "VX_CFG_PLATFORM_MEMORY_NUM_BANKS": 16,
@@ -47,7 +49,9 @@
   },
   "reference": {
     "fp32_lanes": 2560,
-    "dram_bandwidth_gbs": 320
+    "dram_bandwidth_gbs": 320,
+    "l1_hit_cycles": 82,
+    "l2_hit_cycles": 216
   },
   "sources": {
     "NUM_CORES, NUM_WARPS, NUM_THREADS, ISSUE_WIDTH": "20 SMs, 64 resident warps/SM, 4 schedulers x 32 lanes (NVIDIA GeForce GTX 1080 whitepaper)",
@@ -69,6 +73,9 @@
     "FMA64_PE_RATIO": "FP64 FMA at 1/32 of the FP32 rate: 4 FP64 cores per SM, 1 per processing block (CUDA C++ Programming Guide, arithmetic instruction throughput, compute capability 6.1); 32 FPU lanes / 32 = 1 F64 FMA PE. FP64 division, square root and conversions take the FDIV/FSQRT/FCVT rates",
     "FDIV_PE_RATIO, FSQRT_PE_RATIO": "32 results per clock per SM, 8 per processing block: FP32 reciprocal and reciprocal square root, on which division and square root are built (CUDA C++ Programming Guide, arithmetic instruction throughput, compute capability 6.1); 32 FPU lanes / 4",
     "LMEM_SIZE, LMEM_LOG_SIZE, DCACHE_SIZE": "96 KB dedicated shared memory per SM, separate from the 48 KB L1/texture (GTX 1080 whitepaper), in a 128 KB window",
-    "reference": "fp32_lanes is the vendor FP32 core count (FP32 FMA lanes per chip, clock-free); dram_bandwidth_gbs the vendor peak. Checked by ci/profile_check.py"
+    "reference": "fp32_lanes is the vendor FP32 core count (FP32 FMA lanes per chip, clock-free); dram_bandwidth_gbs the vendor peak. Checked by ci/profile_check.py. Latencies: Jia et al., Dissecting the NVIDIA Turing T4 GPU via Microbenchmarking (arXiv 1903.07486), Table 3.1: L1 hit 82 and L2 hit ~216 cycles on the Tesla P4, a GP104 like this card. No DRAM latency is published for GP104, so dram_cycles is unchecked. Accel-Sim correlates the Pascal TITAN X and GTX 1080 Ti (posted hardware runs: pascal-titanx, pascal-1080ti)",
+    "L1_LINK_LATENCY": "26 core cycles each way between a core and its dcache, the L1/texture load pipeline, which the dcache bank pipeline (DCACHE_LATENCY) does not model: calibrated with ci/profile_check.py so the SimX pointer chase gives the 82-cycle L1 hit latency in 'reference'",
+    "L2_LINK_LATENCY": "52 core cycles each way between an SM and the L2, the SM-to-L2 network: calibrated with ci/profile_check.py (after the L1 link) so the SimX pointer chase gives the 216-cycle L2 hit latency in 'reference'",
+    "PLATFORM_MEMORY_LATENCY": "Not set: no DRAM latency is published for this part, so dram_cycles is unchecked"
   }
 }

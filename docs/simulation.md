@@ -253,6 +253,13 @@ machine from it: SimX, rtlsim, the FPGA and ASIC flows, and the kernels.
 | `r9nano` | Radeon R9 Nano (Fiji, GCN 3), on `rx580`: 64 CUs, 2 MB L2, HBM at 512 GB/s |
 | `rx5500xt` | Radeon RX 5500 XT (RDNA 1), on `rx6600`: 22 CUs, 1 MB L2, no Infinity Cache, no ray accelerators |
 | `w6800` | Radeon Pro W6800 (RDNA 2), on `rx6600`: 60 CUs, 4 MB L2, 128 MB Infinity Cache, GDDR6 at 512 GB/s |
+| `gtx480` | GeForce GTX 480 (Fermi): 15 cores x 48 warps, 2 schedulers of 32 lanes at the 700 MHz core clock (the hot-clocked 16-lane groups), 48 KB shared memory, 768 KB L2, GDDR5 at 177 GB/s |
+| `keplertitan` | GeForce GTX TITAN (Kepler GK110): 14 cores x 64 warps, 4 schedulers of 32 lanes (no dual issue: 128 of the SMX's 192 cores), 48 KB shared memory, 1.5 MB L2, GDDR5 at 288 GB/s |
+| `gtx980` | GeForce GTX 980 (Maxwell), on `gtx1080`: 16 cores, 24 KB L1, GDDR5 at 224 GB/s |
+| `titanx` | TITAN X (Pascal GP102), on `gtx1080`: 28 cores, 3 MB L2, GDDR5X at 480 GB/s |
+| `gtx1080ti` | GeForce GTX 1080 Ti (Pascal GP102), on `gtx1080`: 28 cores, 2.75 MB L2, GDDR5X at 484 GB/s |
+| `p100` | Tesla P100 PCIe (Pascal GP100): 56 cores x 64 warps, 2 blocks of 32 lanes, FP64 at half rate, 64 KB shared memory, 4 MB L2, HBM2 at 732 GB/s |
+| `mi300a` | Instinct MI300A (CDNA 3), on `mi300x`: 6 XCDs |
 
 Every GPU profile also turns on virtual memory, the A extension with Zacas,
 Zfhmin, MUFU at the part's special-function throughput, the part's INT32,
