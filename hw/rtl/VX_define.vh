@@ -107,12 +107,16 @@
     `endif
 `endif
 
-// Convenience flag: the TCU metadata SRAM is present when any metadata-consuming
-// mode (MX or sparse) is enabled. Internal derived macro — not a VX_CFG_* knob.
+// Convenience flag: the TCU metadata SRAM is present when the tensor core is and
+// any metadata-consuming mode (MX or sparse) is enabled. Internal derived macro —
+// not a VX_CFG_* knob. Without the tensor core nothing drives the LSU
+// scheduler's metadata client, so the format knobs alone must not add it.
+`ifdef VX_CFG_EXT_TCU_ENABLE
 `ifdef VX_CFG_TCU_MX_ENABLE
     `define TCU_META_ENABLE
 `elsif VX_CFG_TCU_SPARSE_ENABLE
     `define TCU_META_ENABLE
+`endif
 `endif
 
 // Integer mul/div via DPI: simulation only (not synthesis) with DPI enabled.

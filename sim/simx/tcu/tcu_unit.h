@@ -21,10 +21,10 @@
 #include "func_unit.h"
 #include "tcu_tbuf.h"
 
-// The TCU metadata SRAM is present when any metadata-consuming mode (MX or
-// sparse) is enabled. Internal derived macro — not a VX_CFG_* knob; mirrors
-// the hardware derivation.
-#if defined(VX_CFG_TCU_MX_ENABLE) || defined(VX_CFG_TCU_SPARSE_ENABLE)
+// The TCU metadata SRAM is present when the tensor core is and any
+// metadata-consuming mode (MX or sparse) is enabled. Internal derived macro —
+// not a VX_CFG_* knob; mirrors the hardware derivation.
+#if defined(VX_CFG_EXT_TCU_ENABLE) && (defined(VX_CFG_TCU_MX_ENABLE) || defined(VX_CFG_TCU_SPARSE_ENABLE))
 #define TCU_META_ENABLE
 #endif
 
