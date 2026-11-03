@@ -59,30 +59,57 @@ module VX_amo_alu import VX_gpu_pkg::*; #(
     wire [AW-1:0] a = old_word[AW-1:0];
     wire [AW-1:0] b = rhs[AW-1:0];
 
-    // Mask to width-sized values; sign-extend at the 32-bit boundary for MIN/MAX.
     wire [ARW-1:0] a_v = a[ARW-1:0];
     wire [ARW-1:0] b_v = b[ARW-1:0];
-    wire [ARW-1:0] a_u = arith_w ? {{(ARW-32){1'b0}},  a_v[31:0]} : a_v;
-    wire [ARW-1:0] b_u = arith_w ? {{(ARW-32){1'b0}},  b_v[31:0]} : b_v;
-    wire signed [ARW-1:0] a_s = arith_w ? {{(ARW-32){a_v[31]}}, a_v[31:0]} : a_v;
-    wire signed [ARW-1:0] b_s = arith_w ? {{(ARW-32){b_v[31]}}, b_v[31:0]} : b_v;
+
+    // a < b, signed or unsigned, at .W or .D. The compare is split at bit 32:
+    // two 32-bit compares side by side instead of one full-width one, and
+    // the raw operands feed them (the extension of a .W operand only decides
+    // the sign, which is taken from bit 31 instead).
+    wire lo_ltu  = (a_v[31:0] < b_v[31:0]);
+    wire lt_w    = (~is_unsigned && (a_v[31] != b_v[31])) ? a_v[31] : lo_ltu;
+    wire lt;
+    if (ARW > 32) begin : g_lt_d
+        wire [ARW-33:0] a_hi = a_v[ARW-1:32];
+        wire [ARW-33:0] b_hi = b_v[ARW-1:32];
+        wire hi_ltu = (a_hi < b_hi);
+        wire hi_eq  = (a_hi == b_hi);
+        wire hi_lt  = (~is_unsigned && (a_hi[ARW-33] != b_hi[ARW-33])) ? a_hi[ARW-33] : hi_ltu;
+        assign lt = arith_w ? lt_w : (hi_eq ? lo_ltu : hi_lt);
+    end else begin : g_lt_w
+        assign lt = lt_w;
+    end
+
+    // a + b: the upper half is added both ways beside the lower half's
+    // carry, which then selects.
+    wire [ARW-1:0] sum;
+    if (ARW > 32) begin : g_add_d
+        wire [32:0]     lo_sum  = {1'b0, a_v[31:0]} + {1'b0, b_v[31:0]};
+        wire [ARW-33:0] hi_sum0 = a_v[ARW-1:32] + b_v[ARW-1:32];
+        wire [ARW-33:0] hi_sum1 = a_v[ARW-1:32] + b_v[ARW-1:32] + (ARW-32)'(1);
+        assign sum = {(lo_sum[32] ? hi_sum1 : hi_sum0), lo_sum[31:0]};
+    end else begin : g_add_w
+        assign sum = a_v + b_v;
+    end
+
+    // MIN keeps a when a < b, MAX keeps b; equal operands give the same value.
+    wire take_a_minmax = (op == AMO_OP_MIN) ? lt : ~lt;
 
     reg [ARW-1:0] arith_res;
     always @(*) begin
         case (op)
-            AMO_OP_LR:    arith_res = a_u;
-            AMO_OP_SC:    arith_res = b_u;
-            AMO_OP_SWAP:  arith_res = b_u;
-            AMO_OP_ADD:   arith_res = a_u + b_u;
-            AMO_OP_AND:   arith_res = a_u & b_u;
-            AMO_OP_OR:    arith_res = a_u | b_u;
-            AMO_OP_XOR:   arith_res = a_u ^ b_u;
-            AMO_OP_MIN:   arith_res = is_unsigned ? ((a_u < b_u) ? a_u : b_u)
-                                                  : ((a_s < b_s) ? a_s : b_s);
-            AMO_OP_MAX:   arith_res = is_unsigned ? ((a_u > b_u) ? a_u : b_u)
-                                                  : ((a_s > b_s) ? a_s : b_s);
-            default:      arith_res = a_u;
+            AMO_OP_LR:    arith_res = a_v;
+            AMO_OP_SC:    arith_res = b_v;
+            AMO_OP_SWAP:  arith_res = b_v;
+            AMO_OP_ADD:   arith_res = sum;
+            AMO_OP_AND:   arith_res = a_v & b_v;
+            AMO_OP_OR:    arith_res = a_v | b_v;
+            AMO_OP_XOR:   arith_res = a_v ^ b_v;
+            AMO_OP_MIN,
+            AMO_OP_MAX:   arith_res = take_a_minmax ? a_v : b_v;
+            default:      arith_res = a_v;
         endcase
+        // a .W result is the low word, zero-extended
         if (arith_w) arith_res = {{(ARW-32){1'b0}}, arith_res[31:0]};
     end
 
