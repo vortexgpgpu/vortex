@@ -421,7 +421,7 @@ CP regfile is the only producer on every target.
 | `[19:17]` | 3 | log2 cluster_size | (only via `NUM_CORES`) |
 | `[22:20]` | 3 | log2 num_clusters | `VX_CAPS_NUM_CLUSTERS` |
 | `[25:23]` | 3 | log2 issue_width | `VX_CAPS_ISSUE_WIDTH` |
-| `[33:26]` | 8 | log2 local_mem_size | `VX_CAPS_LOCAL_MEM_SIZE` |
+| `[33:26]` | 8 | local_mem_size in 4 KB units | `VX_CAPS_LOCAL_MEM_SIZE` |
 | `[36:34]` | 3 | log2 num_mem_banks | `VX_CAPS_NUM_MEM_BANKS` |
 | `[41:37]` | 5 | mem_bank_size, biased by 20 | `VX_CAPS_MEM_BANK_SIZE` |
 | `[48:42]` | 7 | warps/core | `VX_CAPS_NUM_WARPS` |

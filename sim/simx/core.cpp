@@ -172,9 +172,12 @@ public:
     // create local memory: it takes each LSU block's warp requests whole.
     // The DXA writes and the TCU tile-buffer reads share the row-wide DMA
     // port, round-robin.
+    static_assert(uint64_t(VX_CFG_LMEM_SIZE) <= (uint64_t(1) << VX_CFG_LMEM_LOG_SIZE)
+               && 2 * uint64_t(VX_CFG_LMEM_SIZE) > (uint64_t(1) << VX_CFG_LMEM_LOG_SIZE),
+                  "LMEM_LOG_SIZE must be clog2(LMEM_SIZE)");
     snprintf(sname, 100, "%s-lmem", name.c_str());
     local_mem_ = LocalMem::Create(sname, LocalMem::Config{
-      (1 << VX_CFG_LMEM_LOG_SIZE),
+      VX_CFG_LMEM_SIZE,
       LSU_WORD_SIZE,
       VX_CFG_NUM_LSU_BLOCKS,
       LSU_CHANNELS,

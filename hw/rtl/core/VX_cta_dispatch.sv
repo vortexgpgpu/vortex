@@ -53,7 +53,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     localparam LANE_WIDTH   = `LOG2UP(NUM_LANES);
     localparam LCNT_WIDTH   = `CLOG2(NUM_LANES+1);
     localparam CS_BITS      = NW_WIDTH; // UP(NW_BITS): at least 1 to avoid zero-width when NUM_WARPS=1
-    localparam LMEM_SIZE    = (1 << `VX_CFG_LMEM_LOG_SIZE);
+    localparam LMEM_SIZE    = `VX_CFG_LMEM_SIZE;
 
     // -------------------------------------------------------------------------
     // CTA table — fixed-stride slots (no in-order reclaim).

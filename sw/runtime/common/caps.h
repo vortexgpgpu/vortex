@@ -86,7 +86,7 @@ inline bool decode_caps(uint64_t dev_caps, uint32_t dev_caps_ext, uint64_t isa_c
     *out = 1ull << ((dev_caps >> 23) & 0x7);
     return true;
   case VX_CAPS_LOCAL_MEM_SIZE:
-    *out = 1ull << ((dev_caps >> 26) & 0xff);
+    *out = ((dev_caps >> 26) & 0xff) * 4096ull;
     return true;
   case VX_CAPS_ISA_FLAGS:
     *out = isa_caps;

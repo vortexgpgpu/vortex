@@ -140,6 +140,8 @@ module VX_cp_axil_regfile
   `STATIC_ASSERT(`VX_CFG_NUM_WARPS < 128 && `VX_CFG_NUM_CLUSTERS < 128 && GPU_CLUSTER_SIZE < 256
                  && `VX_CFG_SOCKET_SIZE < 256,
                  ("GPU_DEV_CAPS exact-count fields overflow"))
+  `STATIC_ASSERT((`VX_CFG_LMEM_SIZE % 4096) == 0 && (`VX_CFG_LMEM_SIZE / 4096) < 256,
+                 ("GPU_DEV_CAPS carries LMEM_SIZE in 4 KB units: %0d does not fit", `VX_CFG_LMEM_SIZE))
 
   wire [63:0] gpu_dev_caps = {
     7'(`VX_CFG_NUM_CLUSTERS),
@@ -147,7 +149,7 @@ module VX_cp_axil_regfile
     7'(`VX_CFG_NUM_WARPS),
     5'(GPU_BANK_ADDR_W - 20),
     3'($clog2(`VX_CFG_PLATFORM_MEMORY_NUM_BANKS)),
-    8'(`VX_CFG_LMEM_ENABLED ? `VX_CFG_LMEM_LOG_SIZE : 0),
+    8'(`VX_CFG_LMEM_ENABLED ? (`VX_CFG_LMEM_SIZE / 4096) : 0),
     3'($clog2(`VX_CFG_ISSUE_WIDTH)),
     3'($clog2(`VX_CFG_NUM_CLUSTERS)),
     3'($clog2(GPU_CLUSTER_SIZE)),

@@ -345,6 +345,9 @@ lmem_bytes_per_bank = 2048
 lmem_min_bytes = 16384
 VX_CFG_LMEM_NUM_BANKS = "expr: $VX_CFG_NUM_LSU_LANES"
 VX_CFG_LMEM_LOG_SIZE = "expr: clog2(max($lmem_min_bytes, $VX_CFG_LMEM_NUM_BANKS * $lmem_bytes_per_bank))"
+# Capacity in bytes; LMEM_LOG_SIZE is its power-of-two address window, so a
+# capacity like 96 KB or 228 KB sets both (LMEM_LOG_SIZE = clog2(LMEM_SIZE)).
+VX_CFG_LMEM_SIZE = "expr: pow(2, $VX_CFG_LMEM_LOG_SIZE)"
 
 [tcu]
 # string enum: 'DPI'|'DSP'|'BHF'|'TFR'|'FPNEW'; TFR is the universal default. On

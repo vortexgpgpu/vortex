@@ -21,7 +21,7 @@
 // decoding on the timing report.
 module VX_lmem_unit_top import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
-    parameter SIZE         = (1 << `VX_CFG_LMEM_LOG_SIZE),
+    parameter SIZE         = `VX_CFG_LMEM_SIZE,
     parameter NUM_BLOCKS   = `VX_CFG_NUM_LSU_BLOCKS,
     parameter NUM_LANES    = `VX_CFG_NUM_LSU_LANES,
     parameter NUM_BANKS    = `VX_CFG_LMEM_NUM_BANKS,

@@ -919,7 +919,7 @@ inline AddrType get_addr_type(uint64_t addr) {
      return AddrType::IO;
   }
   if (VX_CFG_LMEM_ENABLED) {
-    if (addr >= VX_MEM_LMEM_BASE_ADDR && (addr-VX_MEM_LMEM_BASE_ADDR) < (1 << VX_CFG_LMEM_LOG_SIZE)) {
+    if (addr >= VX_MEM_LMEM_BASE_ADDR && (addr-VX_MEM_LMEM_BASE_ADDR) < uint64_t(VX_CFG_LMEM_SIZE)) {
         return AddrType::Shared;
     }
   }

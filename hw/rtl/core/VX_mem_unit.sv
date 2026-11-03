@@ -57,7 +57,12 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 
 `ifdef VX_CFG_LMEM_ENABLE
 
-    `STATIC_ASSERT(`IS_DIVISBLE((1 << `VX_CFG_LMEM_LOG_SIZE), `VX_CFG_MEM_BLOCK_SIZE), ("invalid parameter"))
+    `STATIC_ASSERT(`IS_DIVISBLE(`VX_CFG_LMEM_SIZE, `VX_CFG_MEM_BLOCK_SIZE * `VX_CFG_LMEM_NUM_BANKS),
+                   ("LMEM_SIZE=%0d is not a whole number of block rows across the banks", `VX_CFG_LMEM_SIZE))
+    // VX_lmem_unit sizes its addresses from the capacity, the window decode
+    // from LMEM_LOG_SIZE; both must agree.
+    `STATIC_ASSERT((`VX_CFG_LMEM_SIZE <= (1 << `VX_CFG_LMEM_LOG_SIZE)) && (2 * `VX_CFG_LMEM_SIZE > (1 << `VX_CFG_LMEM_LOG_SIZE)),
+                   ("LMEM_LOG_SIZE=%0d must be clog2(LMEM_SIZE=%0d)", `VX_CFG_LMEM_LOG_SIZE, `VX_CFG_LMEM_SIZE))
     // The window ends at the next alignment boundary above its base, so the
     // base's alignment bounds the capacity.
     `STATIC_ASSERT(0 == (`VX_MEM_LMEM_BASE_ADDR % (1 << `VX_CFG_LMEM_LOG_SIZE)),
@@ -167,7 +172,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 
     VX_lmem_unit #(
         .INSTANCE_ID   (`SFORMATF(("%s-lmem", INSTANCE_ID))),
-        .SIZE          (1 << `VX_CFG_LMEM_LOG_SIZE),
+        .SIZE          (`VX_CFG_LMEM_SIZE),
         .NUM_BLOCKS    (`VX_CFG_NUM_LSU_BLOCKS),
         .NUM_LANES     (`VX_CFG_NUM_LSU_LANES),
         .NUM_BANKS     (`VX_CFG_LMEM_NUM_BANKS),

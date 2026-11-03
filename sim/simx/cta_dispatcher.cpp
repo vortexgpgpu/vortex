@@ -28,7 +28,7 @@ CtaDispatcher::CtaDispatcher(const SimContext& ctx, const char* name, Core* core
   , num_threads_(VX_CFG_NUM_THREADS)
   , num_warps_(VX_CFG_NUM_WARPS)
   , lmem_base_(VX_MEM_LMEM_BASE_ADDR)
-  , lmem_capacity_(1u << VX_CFG_LMEM_LOG_SIZE)
+  , lmem_capacity_(VX_CFG_LMEM_SIZE)
   , lmem_overrun_reported_(false)
   , slot_rem_warps_(num_warps_, 0)
   , wid_to_slot_(num_warps_, num_warps_)  // num_warps_ = invalid/unassigned
