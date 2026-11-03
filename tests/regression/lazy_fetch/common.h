@@ -16,8 +16,6 @@
 // sectors, stored before any of it is loaded.
 #define FULL_LINE_WORDS 32
 #define SECTOR_WORDS    16
-// Lines a flood launch reads one word of, each a memory block apart.
-#define FLOOD_LINE_BYTES 64
 
 // How a phase-2 launch stores and loads its lines.
 enum {
@@ -51,6 +49,7 @@ typedef struct {
   uint32_t full_mode;    // phase 2: FULL_*
   uint32_t full_skip;    // phase 2: leave each sector's last word unwritten
   uint32_t num_blocks;
+  uint32_t flood_stride; // phase 3: bytes between the words it reads
 } kernel_arg_t;
 
 // Pre-pattern the host writes over the whole buffer.
@@ -85,13 +84,18 @@ static inline uint32_t full_value2(uint32_t line, uint32_t w) {
   return 0x60000000u | (line << 5) | w;
 }
 
-// Word `word_idx` of a phase-2 buffer once its launch has run; the host
-// pre-patterns the buffer.
+// Pre-pattern of a phase-2 buffer: one constant, so the loops that check it
+// need no spill.
+static inline uint32_t full_pattern(uint32_t word_idx) {
+  return 0x70000000u | word_idx;
+}
+
+// Word `word_idx` of a phase-2 buffer once its launch has run.
 static inline uint32_t full_expected(uint32_t word_idx, const kernel_arg_t* arg) {
   uint32_t line = word_idx / FULL_LINE_WORDS;
   uint32_t w    = word_idx % FULL_LINE_WORDS;
   if (full_skipped(line, w, arg)) {
-    return pattern_word(word_idx);
+    return full_pattern(word_idx);
   }
   if (arg->full_mode == FULL_CHAIN) {
     return full_value2(line, w);
