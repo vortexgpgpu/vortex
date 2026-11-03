@@ -24,7 +24,7 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
     input wire [CORE_ID_WIDTH-1:0] core_id,
 
     // Inputs
-    VX_execute_if.slave     execute_if,
+    VX_execute_if.slave     execute_in_if,
 
     // Outputs
     VX_result_if.master     result_if,
@@ -91,23 +91,68 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
 `endif
 
     // full address calculation — per-lane AGU (all address forms live in
-    // VX_lsu_agu; this slice contains no address arithmetic).
-
+    // VX_lsu_agu; this slice contains no address arithmetic). The AGU takes two
+    // registered stages ahead of the request's classification and the memory
+    // scheduler's queue: the adder (agu_buf), then the stack-window test and
+    // interleave of the registered address (VX_lsu_agu_swz, swz_buf).
     wire req_is_fence, rsp_is_fence;
-    wire req_fence_io = inst_lsu_is_fence_io(execute_if.data.op_type);
-
-    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] full_addr;
-    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] lin_addr;
-    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_full_addr
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] lin_addr_in, lin_addr_agu, lin_addr;
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_lin_addr
         VX_lsu_agu lsu_agu (
-            .base     (execute_if.data.rs1_data[i]),
-            .stride   (execute_if.data.rs2_data[i]),
-            .offset   (execute_if.data.op_args.lsu.offset),
-            .pack     (execute_if.data.op_args.lsu.pack),
-            .addr     (full_addr[i]),
-            .lin_addr (lin_addr[i])
+            .base     (execute_in_if.data.rs1_data[i]),
+            .stride   (execute_in_if.data.rs2_data[i]),
+            .offset   (execute_in_if.data.op_args.lsu.offset),
+            .pack     (execute_in_if.data.op_args.lsu.pack),
+            .lin_addr (lin_addr_in[i])
         );
     end
+
+    VX_execute_if #(
+        .data_t (lsu_execute_t)
+    ) execute_agu_if();
+
+    VX_execute_if #(
+        .data_t (lsu_execute_t)
+    ) execute_if();
+
+    VX_elastic_buffer #(
+        .DATAW (NUM_LANES * `VX_CFG_XLEN + $bits(lsu_execute_t)),
+        .SIZE  (2)
+    ) agu_buf (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (execute_in_if.valid),
+        .ready_in  (execute_in_if.ready),
+        .data_in   ({lin_addr_in,  execute_in_if.data}),
+        .data_out  ({lin_addr_agu, execute_agu_if.data}),
+        .valid_out (execute_agu_if.valid),
+        .ready_out (execute_agu_if.ready)
+    );
+    `UNUSED_VAR (execute_agu_if.data.rs1_data)
+
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] full_addr_agu, full_addr;
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_full_addr
+        VX_lsu_agu_swz lsu_agu_swz (
+            .lin_addr (lin_addr_agu[i]),
+            .addr     (full_addr_agu[i])
+        );
+    end
+
+    VX_elastic_buffer #(
+        .DATAW (2 * NUM_LANES * `VX_CFG_XLEN + $bits(lsu_execute_t)),
+        .SIZE  (2)
+    ) swz_buf (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (execute_agu_if.valid),
+        .ready_in  (execute_agu_if.ready),
+        .data_in   ({full_addr_agu, lin_addr_agu, execute_agu_if.data}),
+        .data_out  ({full_addr,     lin_addr,     execute_if.data}),
+        .valid_out (execute_if.valid),
+        .ready_out (execute_if.ready)
+    );
+    `UNUSED_VAR (execute_if.data.rs1_data)
+    wire req_fence_io = inst_lsu_is_fence_io(execute_if.data.op_type);
 
     // The address windows are classified on the address before the stack
     // interleave, which keeps the interleave off the request's attribute

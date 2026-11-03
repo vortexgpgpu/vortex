@@ -112,6 +112,7 @@ private:
 
 	// Drain Inputs[b] into req_queue.
 	void ingest_inputs(uint32_t b);
+	void ingest_staged(uint32_t b);
 
   struct mem_addr_size_t {
 		uint64_t addr;
@@ -150,6 +151,10 @@ private:
 		// they enter it, so staged and outstanding reads share the pool.
 		uint32_t                  staged_reads = 0;
 		bool                      head_staged = false;
+		// The address stages between the issue port and req_queue: the AGU's
+		// sum, then its stack interleave, are each registered with the
+		// request (VX_lsu_block agu_buf, swz_buf). [0] is the younger.
+		instr_trace_t*            agu_stage[2] = {nullptr, nullptr};
 		FenceController           fence;
 		// the engaged fence's flush token is still to be sent
 		bool                      fence_token = false;
@@ -161,6 +166,8 @@ private:
 			this->pending_reqs.clear();
 			this->staged_reads = 0;
 			this->head_staged = false;
+			this->agu_stage[0] = nullptr;
+			this->agu_stage[1] = nullptr;
 			this->fence.reset();
 			this->fence_token = false;
 			this->addr_list.clear();
