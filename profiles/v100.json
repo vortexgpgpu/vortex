@@ -39,18 +39,24 @@
     "VX_CFG_L2_SIZE": 6291456,
     "VX_CFG_L2_NUM_WAYS": 24,
     "VX_CFG_L2_NUM_BANKS": 32,
-    "VX_CFG_CP_LLC_CLIENT": 1
+    "VX_CFG_CP_LLC_CLIENT": 1,
+    "VX_CFG_L2_LINK_LATENCY": 65,
+    "VX_CFG_L2_MSHR_SIZE": 64
   },
   "platform": {
     "VX_CFG_PLATFORM_MEMORY_NUM_BANKS": 32,
     "VX_CFG_PLATFORM_CLOCK_RATE": 1530,
     "VX_CFG_PLATFORM_MEMORY_PEAK_BW": 900000,
     "VX_CFG_PLATFORM_MEMORY_TYPE": "HBM2",
-    "VX_CFG_PLATFORM_MEMORY_DATA_RATE": 1752
+    "VX_CFG_PLATFORM_MEMORY_DATA_RATE": 1752,
+    "VX_CFG_PLATFORM_MEMORY_LATENCY": 88
   },
   "reference": {
     "fp32_lanes": 5120,
-    "dram_bandwidth_gbs": 900
+    "dram_bandwidth_gbs": 900,
+    "l1_hit_cycles": 28,
+    "l2_hit_cycles": 193,
+    "dram_cycles": 375
   },
   "sources": {
     "NUM_CORES, NUM_WARPS, NUM_THREADS, ISSUE_WIDTH": "80 SMs, 64 resident warps/SM, 4 processing blocks with one scheduler each (NVIDIA Tesla V100 GPU Architecture whitepaper, Table 1)",
@@ -74,6 +80,9 @@
     "FDIV_PE_RATIO, FSQRT_PE_RATIO, FCVT_PE_RATIO": "16 results per clock per SM, 4 per processing block: FP32 reciprocal and reciprocal square root, on which division and square root are built, and the 32-bit type conversions (CUDA C++ Programming Guide, arithmetic instruction throughput); 16 FPU lanes / 4, compute capability 7.0",
     "DCACHE_NUM_BANKS": "128 B per clock of L1 data per SM: 4 banks of the 32 B dcache word. The default (one bank per LSU request channel) gives 8, twice the part (Volta whitepaper: 128 B/clk L1)",
     "LMEM_SIZE, LMEM_LOG_SIZE, DCACHE_SIZE": "96 KB maximum shared memory per SM (CUDA Programming Guide, compute capability 7.0) in a 128 KB window. DCACHE_SIZE keeps the whole 128 KB L1/shared pool: the driver gives a kernel the L1 its shared-memory use leaves, so a kernel without shared memory sees the full pool",
-    "reference": "fp32_lanes is the vendor FP32 core count (FP32 FMA lanes per chip, clock-free); dram_bandwidth_gbs the vendor peak. Checked by ci/profile_check.py"
+    "reference": "fp32_lanes is the vendor FP32 core count (FP32 FMA lanes per chip, clock-free); dram_bandwidth_gbs the vendor peak. Checked by ci/profile_check.py. Latencies: Jia et al., Dissecting the NVIDIA Volta GPU Architecture via Microbenchmarking (arXiv 1804.06826), Figure 3.2: L1 hit 28, L2 hit 193, L2 miss with a TLB hit 375 cycles",
+    "L2_LINK_LATENCY": "65 core cycles each way between an SM and the L2, the SM-to-L2 network, which the L2 bank pipeline (L2_LATENCY) does not model: calibrated with ci/profile_check.py so the SimX pointer chase gives the 193-cycle L2 hit latency in 'reference'",
+    "PLATFORM_MEMORY_LATENCY": "88 core cycles of PHY/NoC latency beyond the L2 link, calibrated with ci/profile_check.py so the SimX cold pointer chase gives the 375-cycle global memory latency in 'reference'",
+    "L2_MSHR_SIZE": "64 per bank: Little's law on the L2-miss round trip ci/profile_check.py measures (DRAM 375 - L2 hit 193 = 182 cycles) x 588 B/cycle (900 GB/s / 1530 MHz) / (32 banks x 64 B) = 52.3, rounded up to a power of two. The derived default counts only PLATFORM_MEMORY_LATENCY, which the link latency now mostly replaces"
   }
 }
