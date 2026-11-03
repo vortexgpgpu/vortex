@@ -233,12 +233,7 @@ machine from it: SimX, rtlsim, the FPGA and ASIC flows, and the kernels.
 | `tinygpu` | 1 core, 2 warps x 2 threads, shared memory |
 | `gtx1080` | GeForce GTX 1080 (Pascal): 20 cores x 64 warps x 32 threads, 96 KB shared memory, 2 MB L2, GDDR5X as 16 GDDR6 channels; no tensor cores |
 | `gtx1060` | GeForce GTX 1060 6 GB (Pascal), on `gtx1080`: 10 cores, 1.5 MB L2, 192 GB/s as 8 GDDR6 channels |
-| `rtx3060` | GeForce RTX 3060 12 GB (Ampere GA106): 28 cores x 48 warps, 100 KB shared memory, 3 MB L2, GDDR6 at 360 GB/s; FP16/TF32/INT8/INT4 tensor cores with sparsity; no RTU (it needs full-warp ALU lanes, GA106 has 16 INT32 per block) |
-| `rx6600` | Radeon RX 6600 (RDNA 2): 28 CUs x 40 waves x 32 lanes, 64 KB LDS, 2 MB L2, 32 MB Infinity Cache as the L3, GDDR6 at 224 GB/s; ray accelerators as RTU |
-| `rx580` | Radeon RX 580 (Polaris, GCN 4): 36 CUs x 40 waves x 64 lanes on a 16-lane datapath (`SIMD_WIDTH` 16, a wave instruction every 4 clocks as on GCN), 64 KB LDS, 2 MB L2, GDDR5 at 256 GB/s as GDDR6 channels; no matrix units |
-| `mi250x` | Instinct MI250X (CDNA 2): 2 dies x 110 CUs x 32 waves x 64 lanes, 64 KB LDS, 8 MB L2, HBM2E at 3.28 TB/s; INT8 matrix cores |
 | `mi300x` | Instinct MI300X (CDNA 3): 8 XCDs x 38 CUs x 32 waves x 64 lanes, 64 KB LDS, 4 MB L2 per XCD, 256 MB Infinity Cache as the L3, HBM3 at 5.3 TB/s; TF32/FP8/INT8 matrix cores with sparsity |
-| `rx9070xt` | Radeon RX 9070 XT (RDNA 4): 64 CUs x 32 waves x 32 lanes, 64 KB LDS, 8 MB L2, 64 MB Infinity Cache as the L3, GDDR6 at 640 GB/s; FP16/FP8/INT8/INT4 matrix units with sparsity, ray accelerators as RTU |
 | `v100` | Tesla V100 (Volta): 80 cores x 64 warps, 96 KB shared memory, 6 MB L2, 32 HBM2 channels at 1752 MT/s; FP16 tensor cores |
 | `a100` | A100 (Ampere): 108 cores x 64 warps, 164 KB shared memory, 192 KB L1, 40 MB L2, HBM2 at 1555 GB/s; FP16/TF32/INT8/INT4 tensor cores with 2:4 sparsity |
 | `h100` | H100 SXM5 (Hopper): 132 cores x 64 warps, 228 KB shared memory, 50 MB L2, HBM3 at 3.35 TB/s; FP16/TF32/FP8/INT8 tensor cores with sparsity and wgmma, TMA as DXA |
@@ -248,11 +243,7 @@ machine from it: SimX, rtlsim, the FPGA and ASIC flows, and the kernels.
 | `rtx2060` | GeForce RTX 2060 (Turing TU106): 30 cores x 32 warps, 64 KB shared memory, 96 KB L1, 3 MB L2, GDDR6 at 336 GB/s; FP16/INT8/INT4 tensor cores |
 | `rtx2060s` | GeForce RTX 2060 SUPER (Turing), on `rtx2060`: 34 cores, 4 MB L2, GDDR6 at 448 GB/s |
 | `t4` | Tesla T4 (Turing TU104), on `rtx2060`: 40 cores, 4 MB L2, GDDR6 at 320 GB/s |
-| `rtx3070` | GeForce RTX 3070 (Ampere GA104), on `rtx3060`: 46 cores, 4 MB L2, GDDR6 at 448 GB/s |
 | `h200` | H200 SXM5 (Hopper), on `h100`: HBM3e at 4.8 TB/s |
-| `r9nano` | Radeon R9 Nano (Fiji, GCN 3), on `rx580`: 64 CUs, 2 MB L2, HBM at 512 GB/s |
-| `rx5500xt` | Radeon RX 5500 XT (RDNA 1), on `rx6600`: 22 CUs, 1 MB L2, no Infinity Cache, no ray accelerators |
-| `w6800` | Radeon Pro W6800 (RDNA 2), on `rx6600`: 60 CUs, 4 MB L2, 128 MB Infinity Cache, GDDR6 at 512 GB/s |
 | `gtx480` | GeForce GTX 480 (Fermi): 15 cores x 48 warps, 2 schedulers of 32 lanes at the 700 MHz core clock (the hot-clocked 16-lane groups), 48 KB shared memory, 768 KB L2, GDDR5 at 177 GB/s |
 | `keplertitan` | GeForce GTX TITAN (Kepler GK110): 14 cores x 64 warps, 4 schedulers of 32 lanes (no dual issue: 128 of the SMX's 192 cores), 48 KB shared memory, 1.5 MB L2, GDDR5 at 288 GB/s |
 | `gtx980` | GeForce GTX 980 (Maxwell), on `gtx1080`: 16 cores, 24 KB L1, GDDR5 at 224 GB/s |
