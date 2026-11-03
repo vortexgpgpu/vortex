@@ -124,6 +124,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     reg [PC_BITS-1:0]               entry_r;
     reg [2:0][31:0]                 block_idx_r;
     reg [2:0][CTA_TID_WIDTH:0]      block_dim_r;
+    reg [1:0][CTA_TID_WIDTH:0]      block_dim_m1_r;  // block_dim_r[1:0] - 1
     reg [2:0][31:0]                 grid_dim_r;
     reg [`VX_CFG_MEM_ADDR_WIDTH-1:0] param_r;
     reg [CTA_TID_WIDTH:0]           block_size_r;
@@ -248,8 +249,14 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
         // Shared block_size decrement: low NT_BITS bits unchanged; upper bits drop by
         // the warps launched.
         assign block_size_next = {block_size_r[CTA_TID_WIDTH:NT_BITS] - (CTA_TID_WIDTH+1-NT_BITS)'(nfired_r), block_size_r[NT_BITS-1:0]};
-        // Partial-warp mask: (1 << count) - 1 where count = block_size_cur[NT_BITS-1:0]
-        assign partial_tmask = (`VX_CFG_NUM_THREADS'(1) << block_size_cur[NT_BITS-1:0]) - `VX_CFG_NUM_THREADS'(1);
+        // Partial-warp mask: (1 << count) - 1 where count = block_size[NT_BITS-1:0],
+        // which launches never change (they only decrement the upper bits), so it
+        // is a thermometer of the registered count.
+        // (the count is below NUM_THREADS, so the top lane is never set)
+        for (genvar i = 0; i < `VX_CFG_NUM_THREADS - 1; ++i) begin : g_partial_tmask
+            assign partial_tmask[i] = (NT_BITS'(i) < block_size_r[NT_BITS-1:0]);
+        end
+        assign partial_tmask[`VX_CFG_NUM_THREADS-1] = 1'b0;
     end else begin : g_nt_zero
         // NT_BITS=0: NUM_THREADS=1, each warp has exactly 1 thread, no partial warps.
         assign kmu_num_warps = (NW_WIDTH+1)'(eff_block_size);
@@ -269,31 +276,158 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // Launch selection: lanes with a free warp, taken in round-robin order from
     // lane_rr_r, up to the warps left. order[l] is the lane's position among
     // the selected lanes.
+    //
+    // Computed in parallel rather than as a serial count across the lanes: in
+    // round-robin order (position o is lane (lane_rr_r + o) % NUM_LANES) a ready
+    // lane's order is the number of ready lanes ahead of it, and it is selected
+    // while that order is below the warps left. The per-order tests against the
+    // warps left (and the full-warp count) come from registers only, so the
+    // round-robin pointer feeds just a rotate, a small prefix count and a
+    // rotate back.
     reg [LANE_WIDTH-1:0] lane_rr_r;
     wire                 launch_en;
-    reg [NUM_LANES-1:0]                 lane_sel;
-    reg [NUM_LANES-1:0][LANE_WIDTH-1:0] lane_order;
-    reg [LCNT_WIDTH-1:0]                lane_cnt;
+    wire [NUM_LANES-1:0]                 lane_sel;
+    wire [NUM_LANES-1:0][LANE_WIDTH-1:0] lane_order;
+    wire [LCNT_WIDTH-1:0]                lane_cnt;
+
+    // Order k launches any warp (k < rem_warps_cur) / a full warp
+    // (k < full_warps_cur). Both counts are the registered ones less nfired_r
+    // (0 when nothing fired), so each test is the registered count against the
+    // constant k + n for every n, selected by nfired_r: no subtract on the way.
+    // The registered warp count is the full-warp count plus a partial last warp.
+    // (The full-warp test only matters for an order that launches, and so never
+    // sees the full-warp count go below zero.)
+    wire [CTA_TID_WIDTH-NT_BITS:0] full_warps_r = block_size_r[CTA_TID_WIDTH:NT_BITS];
+    wire part_warp_r;
+    if (NT_BITS > 0) begin : g_part_warp
+        assign part_warp_r = (| block_size_r[NT_BITS-1:0]);
+    end else begin : g_no_part_warp
+        assign part_warp_r = 1'b0;
+    end
+    wire [2*NUM_LANES-1:0] full_gt, rem_gt;
+    for (genvar j = 0; j < 2*NUM_LANES; ++j) begin : g_full_gt
+        assign full_gt[j] = (32'(full_warps_r) > 32'(j));
+        if (j == 0) begin : g_first
+            assign rem_gt[j] = full_gt[j] || part_warp_r;
+        end else begin : g_rest
+            assign rem_gt[j] = full_gt[j] || (part_warp_r && full_gt[j-1]);
+        end
+    end
+    `RUNTIME_ASSERT(fire_any_r == (nfired_r != '0), ("%t: %s nfired_r out of step with warp_fire_r", $time, INSTANCE_ID))
+    reg [NUM_LANES-1:0] order_ok, order_full;
     always @(*) begin
-        lane_sel   = '0;
-        lane_order = '0;
-        lane_cnt   = '0;
-        for (integer o = 0; o < NUM_LANES; ++o) begin
-            if (launch_en && lane_ready[(int'(lane_rr_r) + o) % NUM_LANES]
-             && ((NW_WIDTH+1)'(lane_cnt) < rem_warps_cur)) begin
-                lane_sel[(int'(lane_rr_r) + o) % NUM_LANES]   = 1'b1;
-                lane_order[(int'(lane_rr_r) + o) % NUM_LANES] = LANE_WIDTH'(lane_cnt);
-                lane_cnt = lane_cnt + LCNT_WIDTH'(1);
+        for (integer k = 0; k < NUM_LANES; ++k) begin
+            order_ok[k]   = rem_gt[k];
+            order_full[k] = full_gt[k];
+            for (integer n = 1; n <= NUM_LANES; ++n) begin
+                if (int'(nfired_r) == n) begin
+                    order_ok[k]   = rem_gt[k + n];
+                    order_full[k] = full_gt[k + n];
+                end
             end
         end
+    end
+
+    // position o of the round-robin order
+    wire [NUM_LANES-1:0]                 pos_ready, pos_sel, pos_full;
+    wire [NUM_LANES-1:0][LANE_WIDTH-1:0] pos_order;
+    for (genvar o = 0; o < NUM_LANES; ++o) begin : g_pos
+        reg rdy;
+        always @(*) begin
+            rdy = 1'b0;
+            for (integer r = 0; r < NUM_LANES; ++r) begin
+                if (int'(lane_rr_r) == r) begin
+                    rdy = lane_ready[(r + o) % NUM_LANES];
+                end
+            end
+        end
+        assign pos_ready[o] = rdy;
+        // order_ok / order_full are thermometers (true below a count), so the
+        // test at this position's order is an AND over the orders it reaches.
+        wire [NUM_LANES-1:0] reach;     // reach[k]: order >= k
+        if (o == 0) begin : g_first
+            assign pos_order[o] = '0;
+            assign reach = NUM_LANES'(1);
+        end else begin : g_rest
+            wire [`CLOG2(o+1)-1:0] ahead;
+            `POP_COUNT(ahead, pos_ready[o-1:0]);
+            assign pos_order[o] = LANE_WIDTH'(ahead);
+            for (genvar k = 0; k < NUM_LANES; ++k) begin : g_reach
+                if (k > o) begin : g_never
+                    assign reach[k] = 1'b0;
+                end else if (k == 0) begin : g_always
+                    assign reach[k] = 1'b1;
+                end else begin : g_cmp
+                    assign reach[k] = (ahead >= $bits(ahead)'(k));
+                end
+            end
+        end
+        assign pos_sel[o]  = launch_en && pos_ready[o] && (& (~reach | order_ok));
+        assign pos_full[o] = (& (~reach | order_full));
+    end
+
+    // The count launched, min(ready lanes, warps left), from the lanes in any
+    // order: rotation does not change it.
+    reg [LCNT_WIDTH-1:0] ready_cnt;
+    always @(*) begin
+        ready_cnt = '0;
+        for (integer l = 0; l < NUM_LANES; ++l) begin
+            ready_cnt = ready_cnt + LCNT_WIDTH'(lane_ready[l]);
+        end
+    end
+    // min as a thermometer (k below both), counted by its top bit
+    wire [NUM_LANES-1:0] cnt_thermo;
+    for (genvar k = 0; k < NUM_LANES; ++k) begin : g_cnt_thermo
+        assign cnt_thermo[k] = launch_en && (ready_cnt > LCNT_WIDTH'(k)) && order_ok[k];
+    end
+    reg [LCNT_WIDTH-1:0] cnt_r;
+    always @(*) begin
+        cnt_r = '0;
+        for (integer k = 0; k < NUM_LANES; ++k) begin
+            if (cnt_thermo[k]) begin
+                cnt_r = LCNT_WIDTH'(k + 1);
+            end
+        end
+    end
+    assign lane_cnt = cnt_r;
+
+    // back to lane l, at position (l - lane_rr_r) % NUM_LANES
+    wire [NUM_LANES-1:0] lane_full;
+    for (genvar l = 0; l < NUM_LANES; ++l) begin : g_lane_unrot
+        reg                  sel, full;
+        reg [LANE_WIDTH-1:0] order;
+        always @(*) begin
+            sel   = 1'b0;
+            full  = 1'b0;
+            order = '0;
+            for (integer r = 0; r < NUM_LANES; ++r) begin
+                if (int'(lane_rr_r) == r) begin
+                    sel   = pos_sel[(l - r + NUM_LANES) % NUM_LANES];
+                    full  = pos_full[(l - r + NUM_LANES) % NUM_LANES];
+                    order = pos_order[(l - r + NUM_LANES) % NUM_LANES];
+                end
+            end
+        end
+        assign lane_sel[l]   = sel;
+        assign lane_full[l]  = full;
+        assign lane_order[l] = order;
+    end
+
+    // the pointer advances past the lanes launched
+    wire [LANE_WIDTH-1:0] lane_rr_n;
+    if ((1 << LANE_WIDTH) == NUM_LANES) begin : g_rr_pow2
+        assign lane_rr_n = LANE_WIDTH'(lane_rr_r + LANE_WIDTH'(lane_cnt));
+    end else begin : g_rr_wrap
+        wire [LANE_WIDTH:0] lane_rr_sum = (LANE_WIDTH+1)'(lane_rr_r) + (LANE_WIDTH+1)'(lane_cnt);
+        assign lane_rr_n = (lane_rr_sum >= (LANE_WIDTH+1)'(NUM_LANES))
+                         ? LANE_WIDTH'(lane_rr_sum - (LANE_WIDTH+1)'(NUM_LANES))
+                         : LANE_WIDTH'(lane_rr_sum);
     end
 
     // A warp is full unless it is the CTA's last and the block size is not a
     // multiple of the warp width.
     wire [NUM_LANES-1:0][`VX_CFG_NUM_THREADS-1:0] lane_tmask;
-    wire [NUM_LANES-1:0] lane_full;
     for (genvar l = 0; l < NUM_LANES; ++l) begin : g_lane_tmask
-        assign lane_full[l] = ((CTA_TID_WIDTH+1-NT_BITS)'(lane_order[l]) < full_warps_cur);
         assign lane_tmask[l] = lane_full[l] ? {`VX_CFG_NUM_THREADS{1'b1}} : partial_tmask;
     end
 
@@ -319,15 +453,26 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
         input logic [CTA_TID_WIDTH:0]        bdim_x,
         input logic [CTA_TID_WIDTH:0]        bdim_y
     );
-        logic [CTA_TID_WIDTH:0] nx, ny;
-        logic wx, wy;
-        nx = {1'b0, base[0]} + {1'b0, step[0]};
-        wx = (nx >= bdim_x);
-        ny = ({1'b0, base[1]} + {1'b0, step[1]}) + (CTA_TID_WIDTH+1)'(wx);
-        wy = (ny >= bdim_y);
+        // Each dimension is computed for both carries from the one below, in
+        // parallel, and the carries only select (carry-select): the x, y and z
+        // adds do not chain.
+        logic [CTA_TID_WIDTH:0] nx, ny0, ny1;
+        logic [CTA_TID_WIDTH-1:0] y0, y1, z0, z1;
+        logic wx, wy0, wy1, wy;
+        nx  = {1'b0, base[0]} + {1'b0, step[0]};
+        wx  = (nx >= bdim_x);
+        ny0 = {1'b0, base[1]} + {1'b0, step[1]};
+        ny1 = {1'b0, base[1]} + {1'b0, step[1]} + (CTA_TID_WIDTH+1)'(1);
+        wy0 = (ny0 >= bdim_y);
+        wy1 = (ny1 >= bdim_y);
+        y0  = wy0 ? CTA_TID_WIDTH'(ny0 - bdim_y) : CTA_TID_WIDTH'(ny0);
+        y1  = wy1 ? CTA_TID_WIDTH'(ny1 - bdim_y) : CTA_TID_WIDTH'(ny1);
+        z0  = base[2] + step[2];
+        z1  = base[2] + step[2] + CTA_TID_WIDTH'(1);
+        wy  = wx ? wy1 : wy0;
         tid_advance[0] = wx ? CTA_TID_WIDTH'(nx - bdim_x) : CTA_TID_WIDTH'(nx);
-        tid_advance[1] = wy ? CTA_TID_WIDTH'(ny - bdim_y) : CTA_TID_WIDTH'(ny);
-        tid_advance[2] = base[2] + step[2] + CTA_TID_WIDTH'(wy);
+        tid_advance[1] = wx ? y1 : y0;
+        tid_advance[2] = wy ? z1 : z0;
     endfunction
 
     // The window after the warps latched last cycle launch: entries shift down by
@@ -461,10 +606,13 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
         && (({2'b0, base_tail} + {1'b0, cluster_k}) > usable_ext);
     wire [CS_BITS-1:0] base_slot = cluster_prewrap ? CS_BITS'(0) : base_tail;
 
-    // Round-robin advance: next slot wraps to 0 at usable_slots_r.
-    wire [NW_WIDTH+1:0] next_tail_raw = {2'b0, base_slot} + (NW_WIDTH+2)'(1);
-    wire [CS_BITS-1:0] next_tail = (next_tail_raw >= usable_ext)
-                                 ? CS_BITS'(0) : next_tail_raw[CS_BITS-1:0];
+    // Round-robin advance: next slot wraps to 0 at usable_slots_r. Computed
+    // for both bases (the tail, slot 0) beside the pre-wrap test, which selects.
+    wire [NW_WIDTH+1:0] next_tail_raw = {2'b0, base_tail} + (NW_WIDTH+2)'(1);
+    wire [CS_BITS-1:0] next_tail_t = (next_tail_raw >= usable_ext)
+                                   ? CS_BITS'(0) : next_tail_raw[CS_BITS-1:0];
+    wire [CS_BITS-1:0] next_tail_0 = ((NW_WIDTH+2)'(1) >= usable_ext) ? CS_BITS'(0) : CS_BITS'(1);
+    wire [CS_BITS-1:0] next_tail = cluster_prewrap ? next_tail_0 : next_tail_t;
 
     // Slot LMEM base = base_slot * stride (small multiply, latched at accept;
     // off the ready path).
@@ -474,12 +622,15 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // slot free; a first-of-cluster needs all K window slots free. The window
     // [base_slot, base_slot+K) never overruns NUM_CTA_SLOTS (pre-wrap ensures
     // base_slot+K <= usable_slots_r <= NUM_CTA_SLOTS), so the mask is built at
-    // NUM_CTA_SLOTS width directly. K == NUM_CTA_SLOTS wraps to all-ones, which
-    // is the intended full mask.
+    // NUM_CTA_SLOTS width directly, as a thermometer (slot i < K): no carry
+    // across the slots, and K == NUM_CTA_SLOTS is the full mask.
     // The window is tested at both candidate bases in parallel: shifting the
     // registered slot map by the tail leaves only the pre-wrap select after the
     // window size.
-    wire [NUM_CTA_SLOTS-1:0] window_ones = (NUM_CTA_SLOTS'(1) << cluster_k) - NUM_CTA_SLOTS'(1);
+    wire [NUM_CTA_SLOTS-1:0] window_ones;
+    for (genvar i = 0; i < NUM_CTA_SLOTS; ++i) begin : g_window_ones
+        assign window_ones[i] = ((NW_WIDTH+1)'(i) < cluster_k);
+    end
     wire [NUM_CTA_SLOTS-1:0] slot_valid_tail = slot_valid_r >> base_tail;
     wire window_free_tail = ((slot_valid_tail & window_ones) == '0);
     wire window_free_zero = ((slot_valid_r & window_ones) == '0);
@@ -634,6 +785,8 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                         entry_r      <= kmu_req.entry;
                         block_idx_r  <= kmu_block_idx;
                         block_dim_r  <= kmu_req.args.compute.block_dim;
+                        block_dim_m1_r[0] <= kmu_req.args.compute.block_dim[0] - (CTA_TID_WIDTH+1)'(1);
+                        block_dim_m1_r[1] <= kmu_req.args.compute.block_dim[1] - (CTA_TID_WIDTH+1)'(1);
                         grid_dim_r   <= kmu_grid_dim;
                         param_r      <= kmu_req.param;
                         block_size_r <= eff_block_size;
@@ -681,7 +834,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                         end
                     end
                     nfired_r  <= lane_cnt;
-                    lane_rr_r <= LANE_WIDTH'((int'(lane_rr_r) + int'(lane_cnt)) % NUM_LANES);
+                    lane_rr_r <= lane_rr_n;
 
                     if (fire_any_r) begin
                         cta_rank_r   <= cta_rank_r + NW_WIDTH'(nfired_r);
@@ -783,20 +936,19 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
 
     function automatic logic [2:0][CTA_TID_WIDTH-1:0] tid_next (
         input logic [2:0][CTA_TID_WIDTH-1:0] prev,
-        input logic [CTA_TID_WIDTH:0]        bd_x,
-        input logic [CTA_TID_WIDTH:0]        bd_y
+        input logic [CTA_TID_WIDTH:0]        bdm1_x,
+        input logic [CTA_TID_WIDTH:0]        bdm1_y
     );
         // prev is a reduced coordinate (prev[0] < bd_x, prev[1] < bd_y: the
         // warp bases come from tid_advance), so a +1 step wraps exactly when
-        // it reaches the dimension, and wraps to 0.
-        logic [CTA_TID_WIDTH:0] nx, ny;
+        // it reaches the dimension, and wraps to 0. The wrap tests compare
+        // against the dimension less one (bdm1_*, all ones for a 0 dimension:
+        // never reached), so they run beside the increments, not after them.
         logic wx, wy;
-        nx = {1'b0, prev[0]} + (CTA_TID_WIDTH+1)'(1);
-        wx = (nx == bd_x);
-        ny = {1'b0, prev[1]} + (CTA_TID_WIDTH+1)'(wx);
-        wy = wx && (ny == bd_y);
-        tid_next[0] = wx ? '0 : CTA_TID_WIDTH'(nx);
-        tid_next[1] = wy ? '0 : CTA_TID_WIDTH'(ny);
+        wx = ({1'b0, prev[0]} == bdm1_x);
+        wy = wx && ({1'b0, prev[1]} == bdm1_y);
+        tid_next[0] = wx ? '0 : (prev[0] + CTA_TID_WIDTH'(1));
+        tid_next[1] = wy ? '0 : (prev[1] + CTA_TID_WIDTH'(wx));
         tid_next[2] = prev[2] + CTA_TID_WIDTH'(wy);
     endfunction
 
@@ -811,7 +963,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
         wire [TID_STAGES:0][NW_WIDTH-1:0]      tidp_rank;
         // block_dim spans 1..NUM_WARPS*NUM_THREADS inclusive, one bit more than a
         // thread index -- truncating it to CTA_TID_WIDTH turns a full-width dimension
-        // into 0 and makes every lane wrap.
+        // into 0 and makes every lane wrap. The pipeline carries block_dim - 1.
         wire [TID_STAGES:0][CTA_TID_WIDTH:0] tidp_bdx;
         wire [TID_STAGES:0][CTA_TID_WIDTH:0] tidp_bdy;
 
@@ -825,8 +977,8 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
         assign tidp_valid[0] = warp_fire_r[l];
         assign tidp_wid[0]   = warp_id_r[l];
         assign tidp_rank[0]  = cta_csrs.cta_rank + NW_WIDTH'(warp_order_r[l]);
-        assign tidp_bdx[0]   = cta_csrs.block_dim[0];
-        assign tidp_bdy[0]   = cta_csrs.block_dim[1];
+        assign tidp_bdx[0]   = block_dim_m1_r[0];
+        assign tidp_bdy[0]   = block_dim_m1_r[1];
 
         for (genvar s = 1; s <= TID_STAGES; ++s) begin : g_tid_pipe
             cta_tid_arr_t nxt;
