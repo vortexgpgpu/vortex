@@ -40,7 +40,8 @@
     "VX_CFG_RTU_TLAS_ENABLE": true,
     "VX_CFG_FDIV_PE_RATIO": 8,
     "VX_CFG_FSQRT_PE_RATIO": 8,
-    "VX_CFG_FCVT_PE_RATIO": 8
+    "VX_CFG_FCVT_PE_RATIO": 8,
+    "VX_CFG_FMA64_PE_RATIO": 64
   },
   "chip": {
     "VX_CFG_NUM_CLUSTERS": 1,
@@ -110,7 +111,8 @@
     "EXT_RASTER_ENABLE, EXT_OM_ENABLE": "Raster engines in every GPC and ROPs in every memory partition (architecture whitepaper)",
     "RTU_TLAS_ENABLE": "RT cores traverse two-level acceleration structures (instance TLAS over BLAS), as DXR/Vulkan ray tracing requires",
     "NUM_MUFU_LANES": "16 special-function results per clock per SM (4 SFUs in each of the 4 processing blocks) for the reciprocal, reciprocal square root, log2, exp2, sine and cosine (CUDA C++ Programming Guide, arithmetic instruction throughput, compute capability 12.0)",
-    "NUM_ALU_LANES, NUM_FPU_LANES, NUM_LSU_LANES": "GB203 SM (RTX Blackwell whitepaper, Figure 5 and App. B): 4 processing blocks, each with 32 unified FP32/INT32 CUDA cores (INT32 TOPS = FP32 TFLOPS, Table 4), 4 LD/ST units and 1 SFU, 1 tensor core; 2 FP64 cores per SM. One Vortex ALU/FPU/LSU block per processing block (ISSUE_WIDTH=4) with the part's INT32, FP32 and LD/ST lanes; a 32-thread warp instruction issues over NUM_THREADS/lanes cycles, as on the part. The TCU stays full-warp (NUM_TCU_LANES == NUM_THREADS). FP64 is not modelled separately: with XLEN=64 each FPU lane also executes FP64, so the profile has 128 FP64 lanes per SM against the part's 2",
+    "NUM_ALU_LANES, NUM_FPU_LANES, NUM_LSU_LANES": "GB203 SM (RTX Blackwell whitepaper, Figure 5 and App. B): 4 processing blocks, each with 32 unified FP32/INT32 CUDA cores (INT32 TOPS = FP32 TFLOPS, Table 4), 4 LD/ST units and 1 SFU, 1 tensor core; 2 FP64 cores per SM. One Vortex ALU/FPU/LSU block per processing block (ISSUE_WIDTH=4) with the part's INT32, FP32 and LD/ST lanes; a 32-thread warp instruction issues over NUM_THREADS/lanes cycles, as on the part. The TCU stays full-warp (NUM_TCU_LANES == NUM_THREADS). FP64 FMAs run on their own F64 FMA PE (FMA64_PE_RATIO)",
+    "FMA64_PE_RATIO": "FP64 FMA at 1/64 of the FP32 rate: 2 FP64 cores per SM, half a core per processing block (CUDA C++ Programming Guide, arithmetic instruction throughput, compute capability 12.0). A block keeps at least one PE, so 32 FPU lanes / 64 rounds up to 1 F64 FMA PE: 1/32 of FP32, twice the part's FP64 rate. FP64 division, square root and conversions take the FDIV/FSQRT/FCVT rates",
     "FDIV_PE_RATIO, FSQRT_PE_RATIO, FCVT_PE_RATIO": "16 results per clock per SM, 4 per processing block: FP32 reciprocal and reciprocal square root, on which division and square root are built, and the 32-bit type conversions (CUDA C++ Programming Guide, arithmetic instruction throughput); 32 FPU lanes / 8, compute capability 12.0",
     "LMEM_SIZE, LMEM_LOG_SIZE, DCACHE_SIZE": "100 KB maximum shared memory per SM (compute capability 12.0 device query: 102400 B per SM) in a 128 KB window. DCACHE_SIZE keeps the whole 128 KB L1/shared pool: the driver gives a kernel the L1 its shared-memory use leaves"
   }

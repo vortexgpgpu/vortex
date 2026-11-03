@@ -28,6 +28,7 @@
     "VX_CFG_EXT_OM_ENABLE": true,
     "VX_CFG_FDIV_PE_RATIO": 4,
     "VX_CFG_FSQRT_PE_RATIO": 4,
+    "VX_CFG_FMA64_PE_RATIO": 16,
     "VX_CFG_DCACHE_NUM_BANKS": 2
   },
   "chip": {
@@ -65,7 +66,8 @@
     "EXT_MUFU_ENABLE, NUM_MUFU_LANES": "Transcendentals at a quarter of the VALU rate: 4 per SIMD, 16 per CU per clock",
     "EXT_TCU_ENABLE": "Off: GCN 4 has no matrix units",
     "VM_ENABLE, EXT_A_ENABLE, EXT_ZACAS_ENABLE, EXT_ZFHMIN_ENABLE, NUM_BARRIERS, EXT_TEX_ENABLE, EXT_RASTER_ENABLE, EXT_OM_ENABLE": "GPUVM paging, global and LDS atomics with compare-swap, FP16 instructions, workgroup barriers, and the graphics pipeline (4 texture units per CU, rasterizers, ROPs) of a gaming part",
-    "xlen": "64-bit machine: 64-bit pointers and FP64. FP64 runs at 1/16 of FP32 (4 per CU per clock) on the part; with XLEN=64 every FPU lane executes FP64, so the profile has 64 FP64 lanes per CU",
+    "xlen": "64-bit machine: 64-bit pointers and FP64. FP64 runs at 1/16 of FP32 (4 per CU per clock) on the part",
+    "FMA64_PE_RATIO": "FP64 FMA at 1/16 of the FP32 rate: 4 FP64 results per CU per clock, 1 per SIMD; 16 FPU lanes / 16 = 1 F64 FMA PE. FP64 division, square root and conversions take the FDIV/FSQRT/FCVT rates",
     "SIMD_WIDTH": "16: each SIMD's VGPR file feeds 16 lanes per clock and a wave64 instruction occupies its SIMD for 4 clocks, so the slice datapath is 16 lanes and a warp moves as 4 packets (the default, NUM_THREADS, would make the register file and dispatch path 4x wider than the part and issue a wave instruction every clock)",
     "FDIV_PE_RATIO, FSQRT_PE_RATIO": "Transcendentals (reciprocal, reciprocal square root, on which division and square root are built) run at a quarter of the FP32 rate on GCN, RDNA and CDNA: FPU lanes / 4",
     "DCACHE_NUM_BANKS": "64 B per clock of vector L1 per CU (GCN / CDNA 2): 2 banks of the 32 B dcache word; the default gives 4",

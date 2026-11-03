@@ -34,7 +34,8 @@ front end:
 
 The cores run independently, so a long divide does not block an add. Results
 leave in completion order — the tag, not the order, identifies the
-instruction.
+instruction. A fifth core, an F64-only FMA, exists when the F64 FMA is given
+a rate of its own (§5.2).
 
 Four backends implement the same port list. Two are native Vortex RTL and are
 the subject of this document: `VX_fpu_std` (soft RTL) and `VX_fpu_dsp` (soft
@@ -140,7 +141,9 @@ merging saves is bounded by what the F32 version would have cost.
 | NCP | **merged** | comparators and muxes only, off the hot path |
 
 Only FMA is duplicated. The invariant this protects: **enabling D must not
-slow or grow the F32 FMA path.**
+slow or grow the F32 FMA path.** By default every FMA processing element
+holds both formats; an F64 FMA rate of its own moves `fma64` into a core of
+its own (§5.2).
 
 ---
 
@@ -165,6 +168,39 @@ handshaking blocks. The serializer owns the enable, so back-pressure stalls
 every unit of a core together and the latency is a constant the serializer
 can count.
 
+### 5.1 Timing
+
+With `B = NUM_LANES / NUM_PES` batches, the serializer feeds one batch per
+cycle, masked lanes included, and accepts the request with its last batch:
+
+- the request **holds the backend's input for `B` cycles**, so a core
+  accepts one request every `B` cycles;
+- its result leaves **`B - 1` cycles later** than at a ratio of 1, the core's
+  latency after the last batch.
+
+The backend's request switch is unbuffered, so while one core serializes a
+request, the requests behind it wait whatever their class: the FPU block
+takes one request every `B` cycles of the class at its head. `VX_fpu_dpi`
+holds each class's request for the same `B` cycles before its soft-float call
+and SimX holds the block's input alike (§11), so the ratios time the same in
+every backend that honours them. `VX_fpu_fpnew` has no serializer and accepts
+only ratios of 1.
+
+### 5.2 The F64 FMA rate
+
+`VX_CFG_FMA64_PE_RATIO` sets the F64 FMA rate on its own. When it gives as
+many processing elements as `VX_CFG_FMA_PE_RATIO`, the FMA core keeps one pool
+of elements that each hold `fma32` and `fma64` (the default). When it differs,
+the backend adds an F64 FMA core: `fmt[0]` routes F64 FMA-class requests to a
+pool of `fma64`-only elements behind their own serializer, and the F32 pool
+drops its `fma64` units. A GPU with a narrow FP64 rate then pays for the F64
+multipliers it has, not one per lane. F64 division, square root and
+conversions run on the merged units of their classes, at the
+`FDIV`/`FSQRT`/`FCVT` ratios.
+
+In `VX_fpu_std`, division and square root share one unit and serializer, so
+`VX_CFG_FSQRT_PE_RATIO` must equal `VX_CFG_FDIV_PE_RATIO`.
+
 ---
 
 ## 6. FMA — `VX_fma_unit`
@@ -174,7 +210,8 @@ can count.
 [`VX_fma_unit_rtl.sv`](../../hw/rtl/fpu/VX_fma_unit_rtl.sv) is one parametric
 core (`MAN_BITS`, `EXP_BITS`, `LATENCY`). The backend instantiates it as
 `fma32` (23, 8) and, with `FLEN >= 64`, as `fma64` (52, 11), and selects the
-result on `fmt[0]` delayed by the latency.
+result on `fmt[0]` delayed by the latency. With a separate F64 FMA core
+(§5.2), each pool holds one of the two.
 
 ### 6.1 Operation remap
 
@@ -389,6 +426,7 @@ cores and is conformant.
 | `VX_CFG_NUM_FPU_LANES` | SIMD width | lanes per request |
 | `VX_CFG_FPU_QUEUE_SIZE` | `2 × SIMD_WIDTH / NUM_FPU_LANES` | tag-store depth |
 | `VX_CFG_F{MA,DIV,SQRT,CVT,NCP}_PE_RATIO` | 1 | lanes per processing element |
+| `VX_CFG_FMA64_PE_RATIO` | 1 | lanes per F64 FMA processing element (§5.2) |
 | `VX_CFG_FNCP_LATENCY` | 2 | |
 | `VX_CFG_FCVT_LATENCY` | 5 | plus one at `XLEN = 64` |
 
@@ -401,7 +439,7 @@ The arithmetic latencies are derived from the backend and the flow:
 | DSP, simulation, F32 / F64 build | 8 / 12 | 17 / 32 | 17 / 32 |
 | DSP, Vivado | 16 | 28 | 28 |
 | DSP, Quartus | 4 | 15 | 10 |
-| DPI | 8 / 12 | 15 | 10 |
+| DPI | 8 / 12 | 17 / 32 | 17 / 32 |
 | FPNEW | 8 / 12 | 16 | 16 |
 
 The Vivado and Quartus rows are the vendor operators' fixed latencies.
@@ -420,6 +458,11 @@ latencies:
 | DIV, SQRT | `VX_CFG_FDIV_LATENCY`, `VX_CFG_FSQRT_LATENCY` |
 | CVT | `VX_CFG_FCVT_LATENCY` |
 | NCP | `VX_CFG_FNCP_LATENCY` |
+
+An operation holds its block's input for the `B` cycles of its class's lane
+serialization (§5.1) — the F64 FMA rate for an F64 FMA-class operation — and
+enters the pipeline with its last batch, so every class's ratio costs what it
+costs the RTL, including the requests of other classes queued behind it.
 
 Its response port has one slot per tag (`VX_CFG_FPU_QUEUE_SIZE`). As in the
 RTL, an operation holds its tag from acceptance until its result is taken off

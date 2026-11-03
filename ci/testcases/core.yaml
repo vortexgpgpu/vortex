@@ -312,6 +312,22 @@ tests:
   app: mixfu
   args: -n40 -i64
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_SIMD_WIDTH=8 -DVX_CFG_NUM_ALU_LANES=4 -DVX_CFG_NUM_FPU_LANES=4 -DVX_CFG_NUM_LSU_LANES=4
+# FPU lane serialization: each FMA, conversion and minimum holds the FPU
+# block's input for 2, 4 and 8 cycles, and blocks the classes queued behind it.
+- id: parity-mixfu-pe-ratio
+  check: model_parity
+  via: blackbox
+  app: mixfu
+  args: -n32 -i128
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_NUM_ALU_LANES=8 -DVX_CFG_NUM_FPU_LANES=8 -DVX_CFG_NUM_LSU_LANES=8 -DVX_CFG_FMA_PE_RATIO=2 -DVX_CFG_FCVT_PE_RATIO=4 -DVX_CFG_FNCP_PE_RATIO=8
+# Division and square root at a quarter rate, as the GPU profiles set them.
+# The F64 FMA rate needs XLEN 64, which the parity gate does not run.
+- id: parity-raycast-fdiv4
+  check: model_parity
+  via: blackbox
+  app: raycast
+  args: -w16 -h12
+  configs: -DVX_CFG_FDIV_PE_RATIO=4 -DVX_CFG_FSQRT_PE_RATIO=4
 # Matrix fragment loads and stores: SimX and RTL expand and time them alike.
 - id: parity-ldst-matrix
   check: model_parity

@@ -31,6 +31,7 @@ public:
   SimChannel<instr_trace_t*> ReleaseOut;
 
 protected:
+  void on_reset() override;
   void on_tick() override;
 
 private:
@@ -38,6 +39,12 @@ private:
   void execute(instr_trace_t* trace);
 
   uint32_t latency_of(const instr_trace_t* trace) const;
+
+  // Cycles an operation holds its block's input: its class serves the block's
+  // lanes on fewer processing elements, one batch of lanes per cycle.
+  uint32_t batches_of(const instr_trace_t* trace) const;
+
+  std::array<uint32_t, VX_CFG_NUM_FPU_BLOCKS> batch_idx_{};
 };
 
 }

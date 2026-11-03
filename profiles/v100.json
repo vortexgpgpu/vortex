@@ -29,6 +29,7 @@
     "VX_CFG_FDIV_PE_RATIO": 4,
     "VX_CFG_FSQRT_PE_RATIO": 4,
     "VX_CFG_FCVT_PE_RATIO": 4,
+    "VX_CFG_FMA64_PE_RATIO": 2,
     "VX_CFG_DCACHE_NUM_BANKS": 4
   },
   "chip": {
@@ -68,7 +69,8 @@
     "EXT_TEX_ENABLE": "Texture units in every SM",
     "EXT_RASTER_ENABLE, EXT_OM_ENABLE": "Raster engines in every GPC and ROPs in every memory partition (architecture whitepaper)",
     "NUM_MUFU_LANES": "16 special-function results per clock per SM (4 SFUs in each of the 4 processing blocks) for the reciprocal, reciprocal square root, log2, exp2, sine and cosine (CUDA C++ Programming Guide, arithmetic instruction throughput, compute capability 7.0)",
-    "NUM_ALU_LANES, NUM_FPU_LANES, NUM_LSU_LANES": "GV100 SM (Volta whitepaper, Figure 5): 4 processing blocks, each with 16 FP32, 16 INT32, 8 FP64 cores, 8 LD/ST units, 1 SFU and 2 tensor cores. One Vortex ALU/FPU/LSU block per processing block (ISSUE_WIDTH=4) with the part's INT32, FP32 and LD/ST lanes; a 32-thread warp instruction issues over NUM_THREADS/lanes cycles, as on the part. The TCU stays full-warp (NUM_TCU_LANES == NUM_THREADS). FP64 is not modelled separately: with XLEN=64 each FPU lane also executes FP64, so the profile has 64 FP64 lanes per SM against the part's 32",
+    "NUM_ALU_LANES, NUM_FPU_LANES, NUM_LSU_LANES": "GV100 SM (Volta whitepaper, Figure 5): 4 processing blocks, each with 16 FP32, 16 INT32, 8 FP64 cores, 8 LD/ST units, 1 SFU and 2 tensor cores. One Vortex ALU/FPU/LSU block per processing block (ISSUE_WIDTH=4) with the part's INT32, FP32 and LD/ST lanes; a 32-thread warp instruction issues over NUM_THREADS/lanes cycles, as on the part. The TCU stays full-warp (NUM_TCU_LANES == NUM_THREADS). FP64 FMAs run on their own F64 FMA PEs (FMA64_PE_RATIO)",
+    "FMA64_PE_RATIO": "FP64 FMA at half the FP32 rate: 8 FP64 against 16 FP32 cores per processing block (CUDA C++ Programming Guide, arithmetic instruction throughput, compute capability 7.0); 16 FPU lanes / 2 = 8 F64 FMA PEs. FP64 division, square root and conversions take the FDIV/FSQRT/FCVT rates",
     "FDIV_PE_RATIO, FSQRT_PE_RATIO, FCVT_PE_RATIO": "16 results per clock per SM, 4 per processing block: FP32 reciprocal and reciprocal square root, on which division and square root are built, and the 32-bit type conversions (CUDA C++ Programming Guide, arithmetic instruction throughput); 16 FPU lanes / 4, compute capability 7.0",
     "DCACHE_NUM_BANKS": "128 B per clock of L1 data per SM: 4 banks of the 32 B dcache word. The default (one bank per LSU request channel) gives 8, twice the part (Volta whitepaper: 128 B/clk L1)",
     "LMEM_SIZE, LMEM_LOG_SIZE, DCACHE_SIZE": "96 KB maximum shared memory per SM (CUDA Programming Guide, compute capability 7.0) in a 128 KB window. DCACHE_SIZE keeps the whole 128 KB L1/shared pool: the driver gives a kernel the L1 its shared-memory use leaves, so a kernel without shared memory sees the full pool",

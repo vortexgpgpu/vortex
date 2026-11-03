@@ -187,6 +187,18 @@ tests:
   - rtlsim
   app: sgemm2_v1
   configs: -DLDST_WIDE=1
+# DGEMM: the sgemm kernel in FP64, its FMAs on F64 FMA processing elements
+# serving two lanes each.
+- id: dgemm-fma64
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm
+  args: -n32
+  configs: -DTYPE=double -DVX_CFG_FMA64_PE_RATIO=2
+  xlen:
+  - 64
 - id: occupancy-1
   via: blackbox
   drivers:

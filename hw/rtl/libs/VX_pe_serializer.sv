@@ -100,9 +100,17 @@ module VX_pe_serializer #(
         reg [BATCH_SIZEW-1:0] batch_in_idx, batch_out_idx;
         reg batch_in_done, batch_out_done;
 
+        // Each PE selects among its BATCH_SIZE lanes only, a BATCH_SIZE:1 mux
+        // rather than one over every lane.
         for (genvar i = 0; i < NUM_PES; ++i) begin : g_pe_data_out_w
-            assign pe_data_out_w[i] = data_in[batch_in_idx * NUM_PES + i];
-            assign pe_mask_out_w[i] = mask_in[batch_in_idx * NUM_PES + i];
+            wire [BATCH_SIZE-1:0][DATA_IN_WIDTH-1:0] batch_data;
+            wire [BATCH_SIZE-1:0] batch_mask;
+            for (genvar b = 0; b < BATCH_SIZE; ++b) begin : g_batch
+                assign batch_data[b] = data_in[b * NUM_PES + i];
+                assign batch_mask[b] = mask_in[b * NUM_PES + i];
+            end
+            assign pe_data_out_w[i] = batch_data[batch_in_idx];
+            assign pe_mask_out_w[i] = batch_mask[batch_in_idx];
         end
 
         always @(posedge clk) begin

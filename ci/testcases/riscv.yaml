@@ -61,6 +61,17 @@ tests:
   configs+: "-DVX_CFG_FPU_TYPE_DSP"
   xlen:
   - 32
+# The F64 ISA suite on the pure-RTL FPU with a separate F64 FMA core: F64 FMAs
+# on their own pool of fma64-only PEs, two lanes each.
+- id: isa-64d-dsp-fma64
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/riscv/isa
+  target: run-{driver}-64d
+  configs+: "-DVX_CFG_FPU_TYPE_DSP -DVX_CFG_FMA64_PE_RATIO=2"
+  xlen:
+  - 64
 - id: isa-64d-1
   via: make-run
   drivers:

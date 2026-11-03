@@ -14,6 +14,7 @@
 #include "fpu_unit.h"
 #include <iostream>
 #include <iomanip>
+#include <algorithm>
 #include <string.h>
 #include <assert.h>
 #include <util.h>
@@ -86,6 +87,46 @@ uint32_t FpuUnit::latency_of(const instr_trace_t* trace) const {
 	default:
 		std::abort();
 	}
+}
+
+namespace {
+constexpr uint32_t pe_batches(uint32_t pe_ratio) {
+  constexpr uint32_t kLanes = VX_CFG_NUM_FPU_LANES;
+  return kLanes / std::max<uint32_t>(kLanes / pe_ratio, 1);
+}
+}
+
+uint32_t FpuUnit::batches_of(const instr_trace_t* trace) const {
+  auto fpu_type = std::get<FpuType>(trace->op_type);
+  switch (fpu_type) {
+  case FpuType::FCMP:
+  case FpuType::FSGNJ:
+  case FpuType::FCLASS:
+  case FpuType::FMVXW:
+  case FpuType::FMVWX:
+  case FpuType::FMINMAX:
+    return pe_batches(VX_CFG_FNCP_PE_RATIO);
+  case FpuType::FADD:
+  case FpuType::FSUB:
+  case FpuType::FMUL:
+  case FpuType::FMADD:
+  case FpuType::FMSUB:
+  case FpuType::FNMADD:
+  case FpuType::FNMSUB: {
+    auto fpuArgs = std::get<IntrFpuArgs>(trace->instr_ptr->get_args());
+    return fpuArgs.is_f64 ? pe_batches(VX_CFG_FMA64_PE_RATIO) : pe_batches(VX_CFG_FMA_PE_RATIO);
+  }
+  case FpuType::FDIV:
+    return pe_batches(VX_CFG_FDIV_PE_RATIO);
+  case FpuType::FSQRT:
+    return pe_batches(VX_CFG_FSQRT_PE_RATIO);
+  case FpuType::F2I:
+  case FpuType::I2F:
+  case FpuType::F2F:
+    return pe_batches(VX_CFG_FCVT_PE_RATIO);
+  default:
+    std::abort();
+  }
 }
 
 void FpuUnit::execute(instr_trace_t* trace) {
@@ -402,6 +443,10 @@ void FpuUnit::execute(instr_trace_t* trace) {
 	DT(3, this->name() << " execute: op=" << fpu_type << ", " << *trace);
 }
 
+void FpuUnit::on_reset() {
+  batch_idx_.fill(0);
+}
+
 void FpuUnit::on_tick() {
   bool idle = true;
   for (uint32_t b = 0; b < VX_CFG_NUM_FPU_BLOCKS; ++b) {
@@ -412,6 +457,14 @@ void FpuUnit::on_tick() {
       // the arithmetic pipelines are deeper.
       if (!output.full()) {
         auto trace = input.peek();
+        // The operation holds the block's input, whatever its class, until its
+        // last batch of lanes enters the pipeline.
+        if (batch_idx_.at(b) + 1 < this->batches_of(trace)) {
+          ++batch_idx_.at(b);
+          idle = false;
+          continue;
+        }
+        batch_idx_.at(b) = 0;
         this->execute(trace);
         // The result crosses the unit's output register on this port and
         // keeps its tag until the lane gather, or without one the commit

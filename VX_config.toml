@@ -162,7 +162,12 @@ VX_CFG_FSQRT_LATENCY= "expr: 16 if $VX_CFG_FPU_TYPE_FPNEW else ($fsqrt_latency_d
 VX_CFG_FNCP_LATENCY = 2
 VX_CFG_FCVT_LATENCY = 5
 
+# Lanes per processing element of each FPU class: a class serves its lanes on
+# NUM_FPU_LANES / ratio PEs (at least one), so an instruction holds the FPU's
+# input for that many cycles. FMA64 sets the F64 FMA rate on its own; when it
+# differs from FMA, the F64 FMAs get a separate pool of F64-only PEs.
 VX_CFG_FMA_PE_RATIO  = 1
+VX_CFG_FMA64_PE_RATIO= 1
 VX_CFG_FDIV_PE_RATIO = 1
 VX_CFG_FSQRT_PE_RATIO= 1
 VX_CFG_FCVT_PE_RATIO = 1

@@ -27,7 +27,8 @@
     "VX_CFG_EXT_RASTER_ENABLE": true,
     "VX_CFG_EXT_OM_ENABLE": true,
     "VX_CFG_FDIV_PE_RATIO": 4,
-    "VX_CFG_FSQRT_PE_RATIO": 4
+    "VX_CFG_FSQRT_PE_RATIO": 4,
+    "VX_CFG_FMA64_PE_RATIO": 16
   },
   "chip": {
     "VX_CFG_NUM_CLUSTERS": 1,
@@ -69,7 +70,8 @@
     "EXT_TCU_ENABLE": "Off: RDNA 2 has no matrix units (only packed dot-product instructions)",
     "EXT_RTU_ENABLE": "One ray accelerator per CU",
     "VM_ENABLE, EXT_A_ENABLE, EXT_ZACAS_ENABLE, EXT_ZFHMIN_ENABLE, NUM_BARRIERS, EXT_TEX_ENABLE, EXT_RASTER_ENABLE, EXT_OM_ENABLE": "GPUVM paging, global and LDS atomics with compare-swap, FP16 instructions and workgroup barriers, and the graphics pipeline (4 texture units per CU, rasterizers, ROPs) of a gaming part",
-    "xlen": "64-bit machine: 64-bit pointers and FP64. FP64 runs at 1/16 of FP32 (4 per CU per clock) on the part; with XLEN=64 every FPU lane executes FP64, so the profile has 64 FP64 lanes per CU",
+    "xlen": "64-bit machine: 64-bit pointers and FP64. FP64 runs at 1/16 of FP32 (4 per CU per clock) on the part",
+    "FMA64_PE_RATIO": "FP64 FMA at 1/16 of the FP32 rate: 4 FP64 results per CU per clock, 2 per SIMD; 32 FPU lanes / 16 = 2 F64 FMA PEs. FP64 division, square root and conversions take the FDIV/FSQRT/FCVT rates",
     "FDIV_PE_RATIO, FSQRT_PE_RATIO": "Transcendentals (reciprocal, reciprocal square root, on which division and square root are built) run at a quarter of the FP32 rate on GCN, RDNA and CDNA: FPU lanes / 4",
     "reference": "fp32_lanes is the vendor FP32 core count (FP32 FMA lanes per chip, clock-free); dram_bandwidth_gbs the vendor peak. Checked by ci/profile_check.py"
   }
