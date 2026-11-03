@@ -172,7 +172,7 @@ module foldsim_mem_fold #(
     // Each port's REQ record and the tokens taken of it.
     reg  [PORTS-1:0]  q_full;
     reg  [QF-1:0]     q_taken [PORTS];
-    reg  [REQ_W-1:0]  q_bits  [PORTS];
+    (* ram_style = "distributed" *) reg [REQ_W-1:0] q_bits [PORTS];
     reg  [PORTS-1:0]  q_treset;
     assign req_ready = !q_full[req_chan];
     wire [REQ_W-1:0]  qb = q_bits[t];
@@ -181,14 +181,13 @@ module foldsim_mem_fold #(
 
     // Each port's RSP record, field by field.
     reg  [SF-1:0]     s_got [PORTS];
-    reg  [RSP_W-1:0]  s_bits [PORTS];
     wire [SF-1:0]     s_valid;
     wire [SF-1:0]     s_ready = ~s_got[t] & {SF{~t_rst[t]}};
     wire [RSP_W-1:0]  s_in;
 
     // Each port's AXI surroundings: its read data, its write acks.
     reg  [PORTS-1:0]   r_full;
-    reg  [DATA_W-1:0]  r_data [PORTS];
+    (* ram_style = "distributed" *) reg [DATA_W-1:0] r_data [PORTS];
     reg  [5:0]         b_cnt  [PORTS];
     wire               t_awvalid, t_wvalid, t_arvalid, t_rready, t_bready, t_wlast;
     wire [63:0]        t_awaddr, t_araddr;
@@ -206,7 +205,7 @@ module foldsim_mem_fold #(
     // its block): each port's W waits in a buffer of its own, and its AW is
     // taken only with it, both queued together.
     reg  [PORTS-1:0]   wb_full;
-    reg  [DATA_W+DATA_W/8:0] wb_data [PORTS];
+    (* ram_style = "distributed" *) reg [DATA_W+DATA_W/8:0] wb_data [PORTS];
     wire               t_wready  = ~wb_full[t];
     wire               t_awready = wb_full[t] & (bt_n < (QW+1)'(QDEPTH)) & (w_n < (QW+1)'(QDEPTH));
     wire               ar_take = run & t_arvalid & t_arready;
@@ -388,11 +387,6 @@ module foldsim_mem_fold #(
 
     wire [QF-1:0] q_fire = {QF{run}} & q_valid & q_ready;
     wire [SF-1:0] s_fire = {SF{run}} & s_valid & s_ready;
-    // The RSP bits the current thread's fired fields write.
-    wire [RSP_W-1:0] s_mask;
-    for (genvar f = 0; f < SF; ++f) begin : g_smask
-        assign s_mask[rsp_off(f) +: `FMR_RSP_W(f)] = {`FMR_RSP_W(f){s_fire[f]}};
-    end
 
     // Each port's surroundings; the current thread's change at its turn.
     for (genvar p = 0; p < PORTS; ++p) begin : g_port
@@ -450,19 +444,32 @@ module foldsim_mem_fold #(
                 else if (cur && aw_take)
                     wb_full[p] <= 1'b0;
             end
-            if (req_in) begin
-                q_bits[p]   <= req_bits;
+            if (req_in)
                 q_treset[p] <= req_treset;
-            end
-            if (cur)
-                s_bits[p] <= (s_bits[p] & ~s_mask) | (s_in & s_mask);
             if (cur && run)
                 p_stats[p] <= t_stats;
-            if (r_in && (r_port == CW'(p)))
-                r_data[p] <= m_rdata;
-            if (cur && w_take)
-                wb_data[p] <= {t_wlast, t_wstrb, t_wdata};
         end
+    end
+
+    // The ports' wide buffers as memories indexed by port (one write a host
+    // cycle each, read at the current thread or the RSP pointer): LUTRAM.
+    always @(posedge clk) begin
+        if (req_valid && req_ready)
+            q_bits[req_chan] <= req_bits;
+        if (r_in)
+            r_data[r_port] <= m_rdata;
+        if (w_take)
+            wb_data[t] <= {t_wlast, t_wstrb, t_wdata};
+    end
+    // A port's RSP record, a memory per field: the fields fire at different
+    // turns, each written alone.
+    wire [RSP_W-1:0] s_rec;
+    for (genvar f = 0; f < SF; ++f) begin : g_sfield
+        (* ram_style = "distributed" *) reg [`FMR_RSP_W(f)-1:0] s_mem [PORTS];
+        always @(posedge clk)
+            if (s_fire[f])
+                s_mem[t] <= s_in[rsp_off(f) +: `FMR_RSP_W(f)];
+        assign s_rec[rsp_off(f) +: `FMR_RSP_W(f)] = s_mem[sp];
     end
 
     // The RSP stream and the shared master.
@@ -501,7 +508,7 @@ module foldsim_mem_fold #(
         end
         if (s_send) begin
             rsp_chan <= sp;
-            rsp_bits <= s_bits[sp];
+            rsp_bits <= s_rec;
         end
         if (ar_take) begin
             arq[ar_t]  <= {t, t_araddr, t_arlen};

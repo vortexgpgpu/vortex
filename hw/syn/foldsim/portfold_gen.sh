@@ -5,6 +5,7 @@
 # foldsim-fame5{threads, thread-index, clock-enable} -> firtool. Writes <out>/foldsim_mem_threaded.sv and <out>/REV (the
 # tools' revisions, this tree's commit and the commands). Run once into a frozen snapshot; the kernel build reads the
 # snapshot and never runs the compiler. Tools from CIRCT_BIN (circt-verilog, circt-opt, firtool) and FOLDSIM_OPT.
+# RAM_HINTS (below): memories to map to block / ultra RAM.
 set -eo pipefail
 O=$1; N=$2; IDW=${3:-9}; DW=${4:-512}; CHS=${5:-5}; SPEC=${6:-2}
 R=$(cd "$(dirname "$0")/../../rtl/afu/foldsim" && pwd); T=$(cd "$(dirname "$0")/../../.." && pwd)
@@ -18,6 +19,24 @@ for k, v in zip(('ID_W', 'DATA_W', 'CH_SHIFT', 'SPEC'), sys.argv[2:]):
     s = re.sub(r'(parameter\s+%s\s*=\s*)[^,\n)]+' % k, r'\g<1>%s' % v, s, count=1)
 open(p, 'w').write(s)
 PY
+# RAM_HINTS="<memory>=<block|ultra|distributed> ...": a ram_style attribute on those memories of the copies (the
+# endpoint's own files are unchanged), so the flattening retimes their asynchronous reads (address registers folded
+# in: a read of latency 1, threaded with a per-thread read-data store) and synthesis maps them to block / ultra RAM.
+for h in $RAM_HINTS; do
+  python3 - src/foldsim_mem.sv src/foldsim_mem_bank.sv "${h%%=*}" "${h#*=}" <<'PY'
+import re, sys
+name, style = sys.argv[3], sys.argv[4]
+n = 0
+for p in sys.argv[1:3]:
+    s = open(p).read()
+    s, k = re.subn(r'^(\s*)(reg\s+\[[^\]]+\]\s+%s\s*\[)' % re.escape(name), r'\1(* ram_style = "%s" *) \2' % style, s,
+                   flags=re.M)
+    n += k
+    open(p, 'w').write(s)
+if n != 1:
+    sys.exit('portfold_gen: RAM_HINTS %s: %d declarations' % (name, n))
+PY
+done
 C1="$CIRCT_BIN/circt-verilog --ir-hw --top=foldsim_mem --allow-use-before-declare --detect-memories --max-unroll-trip-count=100000 src/foldsim_token.sv src/foldsim_mem_bmap.sv src/foldsim_mem_bank.sv src/foldsim_mem.sv -o design.mlir"
 C2="$CIRCT_BIN/circt-opt design.mlir --symbol-dce --hw-flatten-modules --symbol-dce --canonicalize --cse --seq-retime-firmem-reads=report=memories.rpt --canonicalize --cse -o flat.mlir"
 C3="$FOLDSIM_OPT flat.mlir '--pass-pipeline=builtin.module(foldsim-fame5{module=foldsim_mem threads=$N thread-index=true clock-enable=true})' -o threaded.mlir"
@@ -25,7 +44,7 @@ C4="$CIRCT_BIN/firtool --format=mlir threaded.mlir --add-vivado-ram-address-conf
 eval "$C1"; [ $(grep -cE 'llhd\.(process|combinational|coroutine)|func\.func' design.mlir) = 0 ] || { echo "portfold_gen: unlowered ops in the import"; exit 1; }
 eval "$C2"; eval "$C3"; eval "$C4"
 { echo "foldsim_mem threaded $N ways (ID_W $IDW DATA_W $DW CH_SHIFT $CHS SPEC $SPEC), $(date '+%F %T')"
-  echo "vortex $(git -C $T rev-parse --short HEAD)$(git -C $T diff --quiet -- hw/rtl/afu/foldsim || echo +dirty)"
+  echo "vortex $(git -C $T rev-parse --short HEAD)$(git -C $T diff --quiet -- hw/rtl/afu/foldsim || echo +dirty)${RAM_HINTS:+ RAM_HINTS: $RAM_HINTS}"
   echo "circt-verilog: $($CIRCT_BIN/circt-verilog --version 2>&1 | head -1)"
   echo "foldsim-opt: $FOLDSIM_OPT ($(cat $(dirname $FOLDSIM_OPT)/REV 2>/dev/null | cut -c1-80))"
   echo "firtool: $($CIRCT_BIN/firtool --version 2>&1 | head -1)"
