@@ -94,7 +94,16 @@ module VX_ptw_walker import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     `UNUSED_VAR (req_amo)
 
     // PTE address for the current level: (base_ppn << 12) + (vpn[level] << pte_shift).
-    wire [TLB_LEVEL_BITS-1:0] vpn_index = vpn_r[level_r*TLB_LEVEL_BITS +: TLB_LEVEL_BITS];
+    // The level's VPN field is a select of constant slices (no index multiply).
+    reg [TLB_LEVEL_BITS-1:0] vpn_index;
+    always @(*) begin
+        vpn_index = '0;
+        for (integer l = 0; l < PT_LEVELS; ++l) begin
+            if (int'(level_r) == l) begin
+                vpn_index = vpn_r[l*TLB_LEVEL_BITS +: TLB_LEVEL_BITS];
+            end
+        end
+    end
     wire [PAGE_LOG2-1:0]      page_off  = PAGE_LOG2'(vpn_index) << PTE_SHIFT;
     wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] pte_byte_addr = {base_ppn_r, page_off};
     wire [ADDR_WIDTH-1:0]     pte_word_addr = pte_byte_addr[`VX_CFG_MEM_ADDR_WIDTH-1:WORD_SHIFT];
@@ -127,7 +136,8 @@ module VX_ptw_walker import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     wire pte_leaf = pte_r | pte_w | pte_x;
     wire pte_bad  = (~pte_v) | (~pte_r & pte_w);
 
-    wire [TLB_VPN_WIDTH-1:0] sp_mask = ({{(TLB_VPN_WIDTH-1){1'b0}}, 1'b1} << (level_r * TLB_LEVEL_BITS)) - 1'b1;
+    // The superpage's intra-page VPN bits: those below its level.
+    wire [TLB_VPN_WIDTH-1:0] sp_mask = ~tlb_vpn_mask(TLB_LEVEL_WIDTH'(level_r));
     wire pte_misaligned = (| (pte_ppn & TLB_PPN_WIDTH'(sp_mask)));
 
     wire at_last_level = (level_r == '0);
