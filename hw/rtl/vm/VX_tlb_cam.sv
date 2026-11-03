@@ -17,12 +17,24 @@
 // every lane, a single fill/flush write port, and MRU-style replacement.
 // Superpage entries mask the low level*TLB_LEVEL_BITS VPN bits on compare
 // and splice them back into the PPN on a hit.
+//
+// PRE_MATCH=1 splits the lookup across two cycles: the tag compare runs on
+// probe_vpn (probe_match, with the same cycle's install forwarded) and the
+// caller holds the match vectors, applying later installs to them (the
+// install_* outputs), until it looks them up through lookup_match. The
+// select then starts from a register, not from the compare.
 module VX_tlb_cam import VX_tlb_pkg::*; #(
     parameter NUM_REQS = 4,
-    parameter TLB_SIZE  = 16
+    parameter TLB_SIZE  = 16,
+    parameter PRE_MATCH = 0
 ) (
     input wire clk,
     input wire reset,
+
+    // Tag compare a cycle ahead (PRE_MATCH): per-lane match vectors.
+    input  wire [NUM_REQS-1:0][TLB_VPN_WIDTH-1:0]  probe_vpn,
+    output wire [NUM_REQS-1:0][TLB_SIZE-1:0]       probe_match,
+    input  wire [NUM_REQS-1:0][TLB_SIZE-1:0]       lookup_match,
 
     // Per-lane combinational lookup.
     input  wire [NUM_REQS-1:0][TLB_VPN_WIDTH-1:0] lookup_vpn,
@@ -46,6 +58,7 @@ module VX_tlb_cam import VX_tlb_pkg::*; #(
     input  wire                                     install_valid,
     input  tlb_entry_t                              install_entry,
     output wire                                     install_evict,
+    output wire [`UP(`CLOG2(TLB_SIZE))-1:0]         install_victim,
 
     // Flush: invalidate every entry.
     input  wire                                     flush
@@ -59,7 +72,7 @@ module VX_tlb_cam import VX_tlb_pkg::*; #(
     // ---------------------------------------------------------------------
     // Per-lane lookup
     // ---------------------------------------------------------------------
-    wire [NUM_REQS-1:0][IDX_W-1:0] hit_index;
+    wire [NUM_REQS-1:0][TLB_SIZE-1:0] hit_sel;   // each lane's winning entry, one-hot
 
     // Selectable fields packed once so each lane picks the winning entry with a
     // one-hot mux rather than encoding a hit index and re-indexing entries_r.
@@ -69,26 +82,47 @@ module VX_tlb_cam import VX_tlb_pkg::*; #(
         assign entry_sel[i] = {entries_r[i].ppn, entries_r[i].flags, entries_r[i].level};
     end
 
+    reg [IDX_W-1:0] victim;
+
+    if (PRE_MATCH != 0) begin : g_probe
+        for (genvar l = 0; l < NUM_REQS; ++l) begin : g_lanes
+            for (genvar i = 0; i < TLB_SIZE; ++i) begin : g_match
+                // an install this cycle lands in the victim entry
+                assign probe_match[l][i] = (install_valid && (victim == IDX_W'(i)))
+                    ? tlb_vpn_match(install_entry.vpn, install_entry.level, probe_vpn[l])
+                    : (valid_r[i] && tlb_vpn_match(entries_r[i].vpn, entries_r[i].level, probe_vpn[l]));
+            end
+        end
+    end else begin : g_no_probe
+        assign probe_match = '0;
+        `UNUSED_VAR (probe_vpn)
+        `UNUSED_VAR (lookup_match)
+    end
+
     for (genvar l = 0; l < NUM_REQS; ++l) begin : g_lookup
         wire [TLB_SIZE-1:0] hit_vec;
-        for (genvar i = 0; i < TLB_SIZE; ++i) begin : g_match
-            wire [TLB_VPN_WIDTH-1:0] mask = tlb_vpn_mask(entries_r[i].level);
-            assign hit_vec[i] = valid_r[i]
-                && ((entries_r[i].vpn & mask) == (lookup_vpn[l] & mask));
+        if (PRE_MATCH != 0) begin : g_pre
+            assign hit_vec = lookup_match[l];
+        end else begin : g_cmp
+            for (genvar i = 0; i < TLB_SIZE; ++i) begin : g_match
+                assign hit_vec[i] = valid_r[i]
+                    && tlb_vpn_match(entries_r[i].vpn, entries_r[i].level, lookup_vpn[l]);
+            end
         end
 
-        // Lowest matching index wins: the encoder yields the hit flag, the
-        // winning one-hot, and its index (for the MRU bump) without a mux tree.
+        // Lowest matching index wins. The winner is isolated by an OR over
+        // the entries below each one (no borrow chain across the entries),
+        // and the MRU bump takes the one-hot directly.
         wire [TLB_SIZE-1:0] hit_onehot;
-        VX_priority_encoder #(
-            .N       (TLB_SIZE),
-            .REVERSE (0)
-        ) hit_enc (
-            .data_in    (hit_vec),
-            .onehot_out (hit_onehot),
-            .index_out  (hit_index[l]),
-            .valid_out  (lookup_hit[l])
-        );
+        for (genvar i = 0; i < TLB_SIZE; ++i) begin : g_first
+            if (i == 0) begin : g_lo
+                assign hit_onehot[i] = hit_vec[i];
+            end else begin : g_hi
+                assign hit_onehot[i] = hit_vec[i] && ~(| hit_vec[i-1:0]);
+            end
+        end
+        assign lookup_hit[l] = (| hit_vec);
+        assign hit_sel[l] = hit_onehot;
 
         // One-hot AND-OR select of the winning entry's fields, off the idx cone.
         wire [SEL_W-1:0] sel;
@@ -124,7 +158,6 @@ module VX_tlb_cam import VX_tlb_pkg::*; #(
     wire has_invalid = (| (~valid_r));
     wire has_non_mru = (| (valid_r & ~mru_r));
 
-    reg [IDX_W-1:0] victim;
     always @(*) begin
         victim = '0;
         if (has_invalid) begin
@@ -146,6 +179,17 @@ module VX_tlb_cam import VX_tlb_pkg::*; #(
     wire all_mru = ~has_invalid && ~has_non_mru;
 
     assign install_evict = install_valid && valid_r[victim];
+    assign install_victim = victim;
+
+    reg [TLB_SIZE-1:0] mru_bump;
+    always @(*) begin
+        mru_bump = '0;
+        for (integer l = 0; l < NUM_REQS; ++l) begin
+            if (access_hit[l]) begin
+                mru_bump = mru_bump | hit_sel[l];
+            end
+        end
+    end
 
     // ---------------------------------------------------------------------
     // State update
@@ -156,11 +200,7 @@ module VX_tlb_cam import VX_tlb_pkg::*; #(
             mru_r   <= '0;
         end else begin
             // MRU bump on consumed hits.
-            for (int l = 0; l < NUM_REQS; ++l) begin
-                if (access_hit[l]) begin
-                    mru_r[hit_index[l]] <= 1'b1;
-                end
-            end
+            mru_r <= mru_r | mru_bump;
             if (install_valid) begin
                 if (all_mru) begin
                     mru_r <= '0;

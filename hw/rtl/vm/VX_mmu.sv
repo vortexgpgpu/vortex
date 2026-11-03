@@ -16,7 +16,9 @@
 // Per-client MMU: lookup (delegated to VX_tlb_l1) + address translation. Each
 // lane probes the TLB in parallel, and on a hit this module splices the PPN
 // with the page offset and checks permissions in place (N lanes translate
-// per cycle). Misses park in the TLB's miss station and the lane keeps going
+// per cycle). The lookup is pipelined over two cycles: a request's TLB tag
+// compare runs as it enters the lane's input stage, and the hit select,
+// translation and dispatch run from that stage's registers a cycle later. Misses park in the TLB's miss station and the lane keeps going
 // (hit-under-miss); the fill replays the parked requests, which this module
 // re-splices. A bypass request (BARE mode, flush/IO/OM attr) skips
 // translation entirely. The MMU owns the tlb_bus to the shared walker and the
@@ -93,12 +95,30 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     wire [NUM_REQS-1:0]                      cam_access_hit;
     wire [NUM_REQS-1:0]                      mshr_match;
 
-    for (genvar l = 0; l < NUM_REQS; ++l) begin : g_decode
-        assign req_valid[l] = core_bus_if[l].req_valid;
-        assign req_rw[l]    = core_bus_if[l].req_data.rw;
-        assign req_addr[l]  = core_bus_if[l].req_data.addr;
-        assign req_attr[l]  = core_bus_if[l].req_data.attr[ATTR_WIDTH-1:0];
-        assign req_fields[l] = {
+    // ---------------------------------------------------------------------
+    // Input stage: each lane's requests enter a 2-entry queue. Its ready is a
+    // register, so the client's accept does not wait on the TLB lookup, and
+    // the TLB tag compare runs on the way in: the lookup a cycle later starts
+    // from the registered match vector. An install or flush that lands while
+    // a request waits is applied to its vector (the replaced entry no longer
+    // matches, the new one may), so the vector always describes the current
+    // entries.
+    // ---------------------------------------------------------------------
+    localparam VICTIM_W = `UP(`CLOG2(TLB_SIZE));
+
+    wire [NUM_REQS-1:0][TLB_VPN_WIDTH-1:0] probe_vpn;
+    wire [NUM_REQS-1:0][TLB_SIZE-1:0]      probe_match;
+    wire [NUM_REQS-1:0][TLB_SIZE-1:0]      s1_match;
+    wire [NUM_REQS-1:0]                    s1_deq;
+    wire                                   install_fire;
+    wire [VICTIM_W-1:0]                    install_victim;
+    tlb_entry_t                            install_data;
+    wire                                   flush_clear;
+    wire [NUM_REQS-1:0]                    s1_busy;
+    `UNUSED_VAR ({install_data.ppn, install_data.flags})
+
+    for (genvar l = 0; l < NUM_REQS; ++l) begin : g_in
+        wire [FIELDS_W-1:0] fields_in = {
             core_bus_if[l].req_data.rw,
             core_bus_if[l].req_data.addr,
             core_bus_if[l].req_data.data,
@@ -106,6 +126,57 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
             core_bus_if[l].req_data.attr[ATTR_WIDTH-1:0],
             core_bus_if[l].req_data.tag[TAG_WIDTH-1:0]
         };
+        assign probe_vpn[l] = core_bus_if[l].req_data.addr[PAGE_OFFSET_W +: TLB_VPN_WIDTH];
+
+        reg [1:0]                v_r;
+        reg [1:0][FIELDS_W-1:0]  d_r;
+        reg [1:0][TLB_SIZE-1:0]  m_r;
+        reg                      rd_r, wr_r;
+
+        wire in_ready = ~(& v_r);
+        wire enq = core_bus_if[l].req_valid && in_ready;
+        assign core_bus_if[l].req_ready = in_ready;
+
+        always @(posedge clk) begin
+            for (integer e = 0; e < 2; ++e) begin
+                if (install_fire) begin
+                    m_r[e][install_victim] <= tlb_vpn_match(install_data.vpn, install_data.level,
+                                                            d_r[e][F_ADDR_LO + PAGE_OFFSET_W +: TLB_VPN_WIDTH]);
+                end
+                if (flush_clear) begin
+                    m_r[e] <= '0;
+                end
+            end
+            if (enq) begin
+                d_r[wr_r] <= fields_in;
+                m_r[wr_r] <= flush_clear ? '0 : probe_match[l];
+            end
+            if (reset) begin
+                v_r  <= '0;
+                rd_r <= 1'b0;
+                wr_r <= 1'b0;
+            end else begin
+                if (enq) begin
+                    v_r[wr_r] <= 1'b1;
+                    wr_r <= ~wr_r;
+                end
+                if (s1_deq[l]) begin
+                    v_r[rd_r] <= 1'b0;
+                    rd_r <= ~rd_r;
+                end
+            end
+        end
+
+        assign req_valid[l]  = v_r[rd_r];
+        assign req_fields[l] = d_r[rd_r];
+        assign s1_match[l]   = m_r[rd_r];
+        assign s1_busy[l]    = (| v_r);
+    end
+
+    for (genvar l = 0; l < NUM_REQS; ++l) begin : g_decode
+        assign req_rw[l]    = req_fields[l][F_RW_LO];
+        assign req_addr[l]  = req_fields[l][F_ADDR_LO +: ADDR_WIDTH];
+        assign req_attr[l]  = req_fields[l][F_ATTR_LO +: ATTR_WIDTH];
         assign req_bypass[l] = ~vm_active
                             || req_attr[l][MEM_ATTR_FLUSH_OFFS]
                             || req_attr[l][MEM_ATTR_IO_OFFS]
@@ -142,8 +213,6 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     tlb_access_e               mshr_fault_access;
     wire                       tlb_empty;
 
-    wire                       flush_clear;
-
     VX_tlb_l1 #(
         .NUM_REQS    (NUM_REQS),
         .TLB_SIZE     (TLB_SIZE),
@@ -157,6 +226,12 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     `ifdef PERF_ENABLE
         .mmu_perf      (mmu_perf),
     `endif
+        .probe_vpn     (probe_vpn),
+        .probe_match   (probe_match),
+        .lookup_match  (s1_match),
+        .install_fire  (install_fire),
+        .install_victim(install_victim),
+        .install_data  (install_data),
         .lookup_vpn    (cam_vpn),
         .lookup_hit    (cam_hit),
         .lookup_ppn    (cam_ppn),
@@ -334,8 +409,8 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
 
         assign cam_access_hit[l] = cat_hit[l] && !replay_to_lane[l] && pipe_ready[l];
 
-        // Request accept back to the client.
-        assign core_bus_if[l].req_ready =
+        // The input stage's head leaves.
+        assign s1_deq[l] =
               cat_bypass[l] ? (!replay_to_lane[l] && pipe_ready[l])
             : cat_hit[l]    ? (!replay_to_lane[l] && pipe_ready[l])
             : cat_park[l]   ? (park_sel[l] && park_ready)
@@ -391,13 +466,14 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     // ---------------------------------------------------------------------
     // Drain status
     // ---------------------------------------------------------------------
-    // The MMU holds no request when its output stage is empty and the TLB miss
-    // station is idle. `empty` is state only: a request still waiting at the
-    // input belongs to its client, which covers it (each client waits for its
-    // own incoming request, so one client's drain does not wait on another's).
+    // The MMU holds no request when its input and output stages are empty and
+    // the TLB miss station is idle. `empty` is state only: a request still
+    // waiting at the input belongs to its client, which covers it (each client
+    // waits for its own incoming request, so one client's drain does not wait
+    // on another's).
     wire [NUM_REQS-1:0] pipe_busy;
     for (genvar l = 0; l < NUM_REQS; ++l) begin : g_busy
-        assign pipe_busy[l] = mem_bus_if[l].req_valid;   // output stage
+        assign pipe_busy[l] = s1_busy[l] || mem_bus_if[l].req_valid;
     end
     assign empty = ~(| pipe_busy) && tlb_empty;
 

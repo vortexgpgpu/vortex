@@ -131,6 +131,9 @@ module VX_tlb_l2 import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     ) mega (
         .clk            (clk),
         .reset          (reset),
+        .probe_vpn      ('0),
+        `UNUSED_PIN (probe_match),
+        .lookup_match   ('0),
         .lookup_vpn     (mega_lu_vpn),
         .lookup_hit     (mega_lu_hit),
         `UNUSED_PIN (lookup_ppn),
@@ -144,6 +147,7 @@ module VX_tlb_l2 import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         .install_valid  (install_valid && install_is_mega),
         .install_entry  (install_entry),
         `UNUSED_PIN (install_evict),
+        `UNUSED_PIN (install_victim),
         .flush          (flush_clear)
     );
 

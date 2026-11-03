@@ -73,8 +73,25 @@ package VX_tlb_pkg;
     endfunction
 
     // Mask that drops the low level*TLB_LEVEL_BITS VPN bits (superpages).
+    // A select of constants by level (no multiply-and-shift).
     function automatic logic [TLB_VPN_WIDTH-1:0] tlb_vpn_mask (input logic [TLB_LEVEL_WIDTH-1:0] level);
-        tlb_vpn_mask = {TLB_VPN_WIDTH{1'b1}} << (level * TLB_LEVEL_BITS);
+        tlb_vpn_mask = '0;
+        for (integer l = 0; l < TLB_PT_LEVELS; ++l) begin
+            if (int'(level) == l) begin
+                tlb_vpn_mask = {TLB_VPN_WIDTH{1'b1}} << (l * TLB_LEVEL_BITS);
+            end
+        end
+    endfunction
+
+    // Does an entry (page number, level) translate this VPN? Superpages compare
+    // only the VPN bits above their level.
+    function automatic logic tlb_vpn_match (
+        input logic [TLB_VPN_WIDTH-1:0]   entry_vpn,
+        input logic [TLB_LEVEL_WIDTH-1:0] entry_level,
+        input logic [TLB_VPN_WIDTH-1:0]   vpn
+    );
+        logic [TLB_VPN_WIDTH-1:0] mask = tlb_vpn_mask(entry_level);
+        tlb_vpn_match = ((entry_vpn & mask) == (vpn & mask));
     endfunction
 
 endpackage
