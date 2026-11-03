@@ -43,6 +43,19 @@ C3="$FOLDSIM_OPT flat.mlir '--pass-pipeline=builtin.module(foldsim-fame5{module=
 C4="$CIRCT_BIN/firtool --format=mlir threaded.mlir --add-vivado-ram-address-conflict-synthesis-bug-workaround -o foldsim_mem_threaded.sv"
 eval "$C1"; [ $(grep -cE 'llhd\.(process|combinational|coroutine)|func\.func' design.mlir) = 0 ] || { echo "portfold_gen: unlowered ops in the import"; exit 1; }
 eval "$C2"; eval "$C3"; eval "$C4"
+# Every module but the top named after it: firtool names helper modules by shape (mem_32x1, ...), and a generated
+# simulator compiled beside this file has its own modules of the same names (a duplicate module is one definition,
+# the first one read, in Verilator and Vivado alike).
+python3 - foldsim_mem_threaded.sv <<'PY'
+import re, sys
+p = sys.argv[1]; s = open(p).read()
+top = 'foldsim_mem_threaded_foldsim_mem'
+mods = [m for m in re.findall(r'^module (\w+)\(', s, re.M) if m != top]
+for m in sorted(mods, key=len, reverse=True):
+    s = re.sub(r'\b%s\b' % re.escape(m), top + '__' + m, s)
+open(p, 'w').write(s)
+print('portfold_gen: %d helper modules prefixed' % len(mods))
+PY
 { echo "foldsim_mem threaded $N ways (ID_W $IDW DATA_W $DW CH_SHIFT $CHS SPEC $SPEC), $(date '+%F %T')"
   echo "vortex $(git -C $T rev-parse --short HEAD)$(git -C $T diff --quiet -- hw/rtl/afu/foldsim || echo +dirty)${RAM_HINTS:+ RAM_HINTS: $RAM_HINTS}"
   echo "circt-verilog: $($CIRCT_BIN/circt-verilog --version 2>&1 | head -1)"
