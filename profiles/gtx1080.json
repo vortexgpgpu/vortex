@@ -11,7 +11,8 @@
     "VX_CFG_NUM_LSU_LANES": 8,
     "VX_CFG_DCACHE_SIZE": 49152,
     "VX_CFG_FETCH_WIDTH": 4,
-    "VX_CFG_LMEM_LOG_SIZE": 16,
+    "VX_CFG_LMEM_LOG_SIZE": 17,
+    "VX_CFG_LMEM_SIZE": 98304,
     "VX_CFG_LMEM_NUM_BANKS": 16,
     "VX_CFG_VM_ENABLE": true,
     "VX_CFG_EXT_A_ENABLE": true,
@@ -51,7 +52,6 @@
     "PLATFORM_CLOCK_RATE, PLATFORM_MEMORY_PEAK_BW": "1607 MHz base clock, 320 GB/s (whitepaper)",
     "FETCH_WIDTH": "4 SM processing blocks, each with its own instruction buffer and warp scheduler (NVIDIA GeForce GTX 1080 (GP104) whitepaper)",
     "CP_LLC_CLIENT": "Host copies reach device memory through the L2 like every other client, so uploaded data is L2-resident at launch",
-    "LMEM_LOG_SIZE, DCACHE_SIZE": "96 KB dedicated shared memory per SM, separate from the 48 KB L1/texture (GTX 1080 whitepaper), rounded down to the power of two the LMEM accepts",
     "LMEM_NUM_BANKS": "128 B per clock per SM: 32 banks of 4 B on the part (CUDA C++ Programming Guide, shared memory). Vortex banks are XLEN wide (8 B), so 16 banks carry the same bytes per clock; lanes reading one 8 B word share its bank access, so a stride-1 FP32 warp read is conflict-free as on the part",
     "VM_ENABLE, EXT_A_ENABLE, EXT_ZACAS_ENABLE, EXT_ZFHMIN_ENABLE, EXT_MUFU_ENABLE": "Every NVIDIA GPU since Pascal has a demand-paged MMU (unified memory), global and shared-memory atomics with a native compare-and-swap (atomicCAS), FP16 storage and conversion, and per-partition special-function units for the transcendentals (MUFU)",
     "EXT_TCU_ENABLE": "Pascal has no tensor cores and no RT cores",
@@ -61,6 +61,7 @@
     "EXT_RASTER_ENABLE, EXT_OM_ENABLE": "Raster engines in every GPC and ROPs in every memory partition (architecture whitepaper)",
     "NUM_MUFU_LANES": "32 special-function results per clock per SM (8 SFUs in each of the 4 processing blocks) for the reciprocal, reciprocal square root, log2, exp2, sine and cosine (CUDA C++ Programming Guide, arithmetic instruction throughput, compute capability 6.1)",
     "NUM_ALU_LANES, NUM_FPU_LANES, NUM_LSU_LANES": "GP104 SM (GTX 1080 whitepaper): 4 processing blocks, each with 32 CUDA cores (FP32 and INT32 on the same cores), 8 LD/ST units and 8 SFUs; 4 FP64 cores per SM. One Vortex ALU/FPU/LSU block per processing block (ISSUE_WIDTH=4) with the part's INT32, FP32 and LD/ST lanes; a 32-thread warp instruction issues over NUM_THREADS/lanes cycles, as on the part. The TCU stays full-warp (NUM_TCU_LANES == NUM_THREADS). FP64 is not modelled separately: with XLEN=64 each FPU lane also executes FP64, so the profile has 128 FP64 lanes per SM against the part's 4",
-    "FDIV_PE_RATIO, FSQRT_PE_RATIO": "32 results per clock per SM, 8 per processing block: FP32 reciprocal and reciprocal square root, on which division and square root are built (CUDA C++ Programming Guide, arithmetic instruction throughput, compute capability 6.1); 32 FPU lanes / 4"
+    "FDIV_PE_RATIO, FSQRT_PE_RATIO": "32 results per clock per SM, 8 per processing block: FP32 reciprocal and reciprocal square root, on which division and square root are built (CUDA C++ Programming Guide, arithmetic instruction throughput, compute capability 6.1); 32 FPU lanes / 4",
+    "LMEM_SIZE, LMEM_LOG_SIZE, DCACHE_SIZE": "96 KB dedicated shared memory per SM, separate from the 48 KB L1/texture (GTX 1080 whitepaper), in a 128 KB window"
   }
 }
