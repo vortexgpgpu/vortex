@@ -529,6 +529,11 @@ fixed while the change is still open, and synthesis runs once, to confirm.
    ci/logic_gate.py -b core -b lmem --against build32_beacon_ref
    ```
 
+   A change behind a non-default knob is compared at that setting: give
+   both runs the same `--configs="-D..."`, which appends the flags to every
+   selected build's catalog configuration. The catalog baselines are not
+   gated then, and none can be recorded.
+
    Besides the per-unit verdict against the golden baseline, each build
    writes `beacon_diff.txt` (`ci/beacon.py diff`). Its headline is the
    deepest register, the mean of the 50 deepest and the count at the watch

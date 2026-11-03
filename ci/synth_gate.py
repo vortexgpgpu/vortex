@@ -1473,6 +1473,13 @@ def main(argv=None, default_tool="xilinx"):
                          "area by unit, with the same build there "
                          "(ci/beacon.py diff); a register that got deeper, or "
                          "area grown past the tolerance, fails the run")
+    ap.add_argument("--configs", metavar="FLAGS", default="",
+                    help="extra -D flags appended to every selected build's "
+                         "configs, for a non-default configuration: run the "
+                         "reference and the change (--against) with the same "
+                         "flags. The catalog baselines were recorded without "
+                         "them, so they are not gated, and none is recorded. "
+                         "Pass as --configs=\"-D...\" (the value starts with -)")
     ap.add_argument("--xlen", type=int, default=32, choices=(32, 64),
                     help="ISA width of the builds that do not pin their own "
                          "(default: 32)")
@@ -1548,6 +1555,9 @@ def main(argv=None, default_tool="xilinx"):
     tool.check_env()
     if args.against and tool.name != "beacon":
         sys.exit("ERROR: --against compares Beacon runs; use it with --tool=beacon")
+    if args.configs and args.update_baseline:
+        sys.exit("ERROR: --configs cannot record a baseline: the catalog "
+                 "baselines are the catalog configurations")
 
     if args.jobs < 1:
         sys.exit("ERROR: --jobs must be >= 1")
@@ -1558,6 +1568,10 @@ def main(argv=None, default_tool="xilinx"):
     env = tool.env(args)
 
     selected = select(builds, args.build)
+    if args.configs:
+        for b in selected:
+            b["configs"] = (b["configs"] + " " + args.configs).strip()
+            b["baseline"] = {}
     for b in selected:
         warning = tool.env_warning(b, env)
         if warning:
