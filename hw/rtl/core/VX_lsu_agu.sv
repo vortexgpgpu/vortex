@@ -62,9 +62,10 @@ module VX_lsu_agu import VX_gpu_pkg::*; (
 `ifdef VX_CFG_LSU_STACK_INTERLEAVE_ENABLE
     // Thread t's stack is the STACK_SIZE bytes below STACK_TOP - t*STACK_SIZE.
     // Within each group of NUM_THREADS stacks, offset {thread, word, byte} is
-    // stored as {word ^ group, thread, byte}, so one frame slot across a warp's
-    // threads is contiguous. The XOR keeps equal frame slots of different warps
-    // out of the same cache set, since a group spans a power of two. The map
+    // stored as {word ^ (group * SKEW), thread, byte}, so one frame slot across a
+    // warp's threads is contiguous. The XOR keeps equal frame slots of different
+    // warps out of the same cache set, since a group spans a power of two; SKEW
+    // steps it by whole dcache lines when a slot row is narrower than one. The map
     // depends on the address alone, so any thread may dereference another
     // thread's stack pointer.
     //
@@ -78,6 +79,9 @@ module VX_lsu_agu import VX_gpu_pkg::*; (
         localparam SLOT_BITS   = STACK_BITS - WORD_BITS;
         localparam GROUP_BITS  = STACK_BITS + THREAD_BITS;
         localparam WIN_BITS    = `VX_CFG_XLEN - STACK_BITS;
+        localparam ROW_BITS    = THREAD_BITS + WORD_BITS;
+        localparam LINE_BITS   = `CLOG2(`VX_CFG_DCACHE_LINE_SIZE);
+        localparam SKEW_BITS   = (LINE_BITS > ROW_BITS) ? (LINE_BITS - ROW_BITS) : 0;
 
         `STATIC_ASSERT(`IS_POW2(`VX_CFG_NUM_THREADS), ("invalid parameter: NUM_THREADS=%0d", `VX_CFG_NUM_THREADS))
         `STATIC_ASSERT(`VX_CFG_FLEN <= `VX_CFG_XLEN, ("invalid parameter: stack accesses must fit a word"))
@@ -93,7 +97,7 @@ module VX_lsu_agu import VX_gpu_pkg::*; (
                      && (lin_win <  WIN_BITS'(STACK_WINDOW_TOP >> STACK_BITS));
 
         wire [SLOT_BITS-1:0] stack_slot = lin_addr[STACK_BITS-1:WORD_BITS]
-                                        ^ lin_addr[GROUP_BITS +: SLOT_BITS];
+                                        ^ (lin_addr[GROUP_BITS +: SLOT_BITS] << SKEW_BITS);
 
         wire [`VX_CFG_XLEN-1:0] stack_addr = {
             lin_addr[`VX_CFG_XLEN-1:GROUP_BITS],

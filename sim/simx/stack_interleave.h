@@ -20,9 +20,10 @@ namespace vortex {
 
 // Thread t's stack is the STACK_SIZE bytes below STACK_TOP - t*STACK_SIZE.
 // Within each group of NUM_THREADS stacks, offset {thread, word, byte} is
-// stored as {word ^ group, thread, byte}, so one frame slot across a warp's
-// threads is contiguous. The XOR keeps equal frame slots of different warps
-// out of the same cache set, since a group spans a power of two. The map
+// stored as {word ^ (group * SKEW), thread, byte}, so one frame slot across a
+// warp's threads is contiguous. The XOR keeps equal frame slots of different
+// warps out of the same cache set, since a group spans a power of two; SKEW
+// steps it by whole dcache lines when a slot row is narrower than one. The map
 // depends on the address alone, so any thread may dereference another
 // thread's stack pointer.
 class StackInterleave {
@@ -39,6 +40,8 @@ public:
   static constexpr uint64_t NUM_STACKS  = uint64_t(VX_CFG_NUM_CLUSTERS) * NUM_SOCKETS * VX_CFG_SOCKET_SIZE
                                         * VX_CFG_NUM_WARPS * NUM_THREADS;
   static constexpr uint64_t GROUP_SIZE = NUM_THREADS * STACK_SIZE;
+  static constexpr uint64_t ROW_SIZE   = NUM_THREADS * WORD_SIZE;
+  static constexpr uint64_t SKEW       = (VX_CFG_DCACHE_LINE_SIZE > ROW_SIZE) ? (VX_CFG_DCACHE_LINE_SIZE / ROW_SIZE) : 1;
   static constexpr uint64_t TOP        = VX_MEM_STACK_BASE_ADDR;
   static constexpr uint64_t SPAN       = NUM_STACKS * STACK_SIZE;
   static constexpr uint64_t BOTTOM     = TOP - SPAN;
@@ -59,7 +62,7 @@ public:
     uint64_t group  = addr / GROUP_SIZE;
     uint64_t thread = (addr / STACK_SIZE) % NUM_THREADS;
     uint64_t words  = STACK_SIZE / WORD_SIZE;
-    uint64_t word   = ((addr % STACK_SIZE) / WORD_SIZE) ^ (group % words);
+    uint64_t word   = ((addr % STACK_SIZE) / WORD_SIZE) ^ ((group * SKEW) % words);
     return group * GROUP_SIZE + (word * NUM_THREADS + thread) * WORD_SIZE + (addr % WORD_SIZE);
   }
 };

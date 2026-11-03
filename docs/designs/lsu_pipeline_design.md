@@ -76,7 +76,7 @@ separate cache lines with the same set index, all in one dcache bank.
 With `VX_CFG_LSU_STACK_INTERLEAVE_ENABLE` (on by default) the AGU remaps
 every address inside the stack window so that, within each group of
 `NUM_THREADS` stacks, offset `{thread, word, byte}` is stored as
-`{word ⊕ group, thread, byte}`. A warp-wide spill fills one contiguous
+`{word ⊕ (group × S), thread, byte}`. A warp-wide spill fills one contiguous
 block — the layout NVIDIA local memory and AMD scratch use.
 
 Load-bearing properties:
@@ -86,13 +86,17 @@ Load-bearing properties:
   Software, `sp`, and frame offsets are unchanged.
 - **The XOR with the group index is what spreads warps across sets.** A
   group spans a power of two larger than a cache way; without the skew, the
-  same frame slot of every warp would share a set.
+  same frame slot of every warp would share a set. The skew moves in whole
+  dcache lines: one slot row is `NUM_THREADS` words, and when that is
+  narrower than a line (16 B against 64 B at 4 threads), `S` is the rows per
+  line, otherwise 1. A skew of one row would keep up to `S` warps in one line's
+  set.
 - **It is a bit permutation plus one narrow XOR, with no arithmetic.** The
   window top `VX_MEM_STACK_BASE_ADDR` is a multiple of the group size
   (`NUM_THREADS` stacks), so groups start on absolute group boundaries and
   the map needs no subtract or add of the window base: it rewires the
   thread and word fields and XORs the word field with the low bits of the
-  group index. The base is aligned to the larger of 256 KB and a group, so
+  group index shifted left by log2(`S`). The base is aligned to the larger of 256 KB and a group, so
   any thread count keeps it a group multiple; above 32 threads it moves down,
   and the local memory window, which starts there, moves with it.
 - **Window membership is a narrow compare.** Both window bounds are asserted
