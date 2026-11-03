@@ -161,7 +161,10 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .MREQ_SIZE    (MREQ_SIZE),
             .LATENCY      (LATENCY),
             .TAG_WIDTH    (TAG_WIDTH),
-            .CORE_OUT_BUF (BYPASS_ENABLE ? 1 : CORE_OUT_BUF),
+            // the bypass's response arbitration sits behind the cache's
+            // response outputs, so they take a registered ready (same latency,
+            // one more slot)
+            .CORE_OUT_BUF (BYPASS_ENABLE ? 2 : CORE_OUT_BUF),
             // with several banks the memory-request crossbar's arbitration
             // sits between the bypass arbiter and the bank queues, so its
             // output takes a registered ready (same latency, one more slot)

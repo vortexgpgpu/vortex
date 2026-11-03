@@ -67,6 +67,7 @@ module VX_cache_init import VX_gpu_pkg::*; #(
     // answers to the requesters' tokens
     output wire                       flush_rsp_valid,
     output wire [REQ_SEL_WIDTH-1:0]   flush_rsp_idx,
+    output wire [NUM_REQS-1:0]        flush_rsp_onehot,
     output wire [TAG_WIDTH-1:0]       flush_rsp_tag,
     input wire                        flush_rsp_ready
 );
@@ -152,6 +153,7 @@ module VX_cache_init import VX_gpu_pkg::*; #(
     );
     assign flush_rsp_valid = (state == STATE_RESPOND) && rsp_sel_valid;
     assign flush_rsp_idx   = rsp_sel_idx;
+    assign flush_rsp_onehot = rsp_sel_onehot;
     wire flush_rsp_fire = flush_rsp_valid && flush_rsp_ready;
 
     wire [NUM_REQS-1:0][TAG_WIDTH-1:0] core_bus_in_tag;
