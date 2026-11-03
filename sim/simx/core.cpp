@@ -54,6 +54,21 @@
 
 using namespace vortex;
 
+// Units whose output channel already holds every register ahead of the commit
+// arbiter except the lane gather's.
+static bool commit_single_hop(uint32_t fu) {
+  switch ((FUType)fu) {
+  case FUType::LSU:
+  case FUType::SFU:
+#ifdef VX_CFG_EXT_TCU_ENABLE
+  case FUType::TCU:
+#endif
+    return true;
+  default:
+    return false;
+  }
+}
+
 class Core::Impl {
 public:
   Impl(const SimContext& ctx, Core* simobject)
@@ -366,7 +381,7 @@ public:
         // A unit's lane gather holds two results. The LSU's, the SFU's and the
         // TCU's cross one register into it; the others cross two and take a
         // third slot so that they still retire one result per cycle.
-        uint32_t capacity = (fu == (uint32_t)FUType::LSU || fu == (uint32_t)FUType::SFU || fu == (uint32_t)FUType::TCU) ? 2 : 3;
+        uint32_t capacity = commit_single_hop(fu) ? 2 : 3;
         queues.emplace_back(std::make_unique<SimChannel<instr_trace_t*>>(simobject_, capacity));
       }
     }
@@ -936,7 +951,7 @@ public:
         // result arbiter, the SFU's result buffer and response switch, and the
         // TCU's result landing queue are in their channels, leaving each its
         // lane gather.
-        uint32_t commit_delay = (fu == (uint32_t)FUType::LSU || fu == (uint32_t)FUType::SFU || fu == (uint32_t)FUType::TCU) ? 1 : 2;
+        uint32_t commit_delay = commit_single_hop(fu) ? 1 : 2;
         if (arb_in.try_send(trace, commit_delay)) {
           // Release the warp as soon as its stalling instruction's result leaves
           // the functional unit — the branch target / fence / warp-control is
