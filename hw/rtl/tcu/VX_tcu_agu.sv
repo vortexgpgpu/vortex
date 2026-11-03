@@ -16,8 +16,11 @@
 `ifdef TCU_META_ENABLE
 
 // A TCU block's TCU_LD unit: one warp-wide load in flight through an LSU
-// scheduler client port. Response fragments are written straight into the
-// block's metadata RAM, lane by lane, so nothing is buffered here. The load
+// scheduler client port, in NUM_LANES / NUM_LSU_LANES batches of LSU-width
+// requests when the LSU is narrower than the TCU (as an LD/ST unit serves a
+// warp in several passes); each request's tag carries its batch. Response
+// fragments are written straight into the block's metadata RAM, lane by lane,
+// so nothing is buffered here. The load
 // cannot overwrite metadata an older MMA still needs: TCU_LD enters the block
 // in order behind that MMA, which reads the RAM when it issues.
 
@@ -46,7 +49,11 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input wire              result_ready
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    `STATIC_ASSERT (NUM_LANES == `VX_CFG_NUM_LSU_LANES, ("TCU_LD requires NUM_TCU_LANES == NUM_LSU_LANES"))
+    localparam LSU_LANES = `VX_CFG_NUM_LSU_LANES;
+    localparam BATCHES   = NUM_LANES / LSU_LANES;
+    localparam BATCH_W   = `LOG2UP(BATCHES);
+    `STATIC_ASSERT ((NUM_LANES % LSU_LANES) == 0, ("TCU_LD requires NUM_LSU_LANES to divide NUM_TCU_LANES"))
+    `STATIC_ASSERT (LSU_CLIENT_TAG_WIDTH >= BATCH_W, ("TCU_LD batch index wider than the LSU client tag"))
 
     // An LSU word holds XLEN/32 metadata words; lane i reads word i.
     localparam LSU_W32_RATIO = LSU_WORD_SIZE / 4;
@@ -62,6 +69,11 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire rsp_fire    = client_if.rsp_valid && client_if.rsp_ready;
     wire result_fire = result_valid && result_ready;
 
+    // the batch the next request carries, the batch a response belongs to,
+    // and whether this response ends the load
+    wire [BATCH_W-1:0] req_batch, rsp_batch;
+    wire               req_last, rsp_last;
+
     always @(posedge clk) begin
         if (reset) begin
             busy_r   <= 1'b0;
@@ -71,10 +83,10 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             if (ld_fire) begin
                 busy_r <= 1'b1;
             end
-            if (req_fire) begin
+            if (req_fire && req_last) begin
                 issued_r <= 1'b1;
             end
-            if (rsp_fire && client_if.rsp_data.eop) begin
+            if (rsp_fire && rsp_last) begin
                 done_r <= 1'b1;
             end
             if (result_fire) begin
@@ -88,6 +100,37 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             slot_r   <= ld_data.op_args.tcu.fmt_d;
             addr_r   <= ld_data.rs1_data[0];
         end
+    end
+
+    if (BATCHES == 1) begin : g_one_batch
+        assign req_batch = '0;
+        assign rsp_batch = '0;
+        assign req_last  = 1'b1;
+        assign rsp_last  = client_if.rsp_data.eop;
+        `UNUSED_VAR (client_if.rsp_data.tag)
+    end else begin : g_batches
+        // Requests go out in batch order; responses may interleave across
+        // batches, so the load ends at the last fragment of every batch.
+        reg [BATCH_W-1:0] req_batch_r;
+        reg [BATCH_W:0]   eop_cnt_r;
+        always @(posedge clk) begin
+            if (reset || ld_fire) begin
+                req_batch_r <= '0;
+                eop_cnt_r   <= '0;
+            end else begin
+                if (req_fire) begin
+                    req_batch_r <= req_batch_r + BATCH_W'(1);
+                end
+                if (rsp_fire && client_if.rsp_data.eop) begin
+                    eop_cnt_r <= eop_cnt_r + (BATCH_W+1)'(1);
+                end
+            end
+        end
+        assign req_batch = req_batch_r;
+        assign rsp_batch = client_if.rsp_data.tag[BATCH_W-1:0];
+        assign req_last  = (req_batch_r == BATCH_W'(BATCHES-1));
+        assign rsp_last  = client_if.rsp_data.eop && (eop_cnt_r == (BATCH_W+1)'(BATCHES-1));
+        `UNUSED_VAR (client_if.rsp_data.tag)
     end
 
     assign ld_ready = ~busy_r;
@@ -124,9 +167,10 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     always_comb begin
         req_data      = '0;
         req_data.rw   = 1'b0;
-        req_data.mask = {NUM_LANES{1'b1}};
-        for (int i = 0; i < NUM_LANES; ++i) begin
-            req_data.addr[i]   = base_word_addr + (LSU_ADDR_WIDTH'(i) >> LG_W32_RATIO);
+        req_data.mask = {LSU_LANES{1'b1}};
+        req_data.tag  = LSU_CLIENT_TAG_WIDTH'(req_batch);
+        for (int i = 0; i < LSU_LANES; ++i) begin
+            req_data.addr[i]   = base_word_addr + (LSU_ADDR_WIDTH'(int'(req_batch) * LSU_LANES + i) >> LG_W32_RATIO);
             req_data.byteen[i] = {LSU_WORD_SIZE{1'b1}};
             req_data.attr[i]   = req_attr;
         end
@@ -136,9 +180,8 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     assign client_if.req_data  = req_data;
     assign client_if.rsp_ready = 1'b1;
     `UNUSED_VAR (client_if.rsp_data.sop)
-    `UNUSED_VAR (client_if.rsp_data.tag)
 
-    `RUNTIME_ASSERT(~client_if.rsp_valid || (issued_r && ~done_r),
+    `RUNTIME_ASSERT(~client_if.rsp_valid || ((issued_r || (req_batch != '0)) && ~done_r),
         ("%t: *** %s unexpected TCU_LD response", $time, INSTANCE_ID))
 
 `ifdef VX_CFG_LSU_STACK_INTERLEAVE_ENABLE
@@ -158,10 +201,12 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     assign meta_wr_wid = header_r.wid;
     assign meta_wr_idx = slot_r;
 
+    // TCU lane t is LSU lane t % LSU_LANES of batch t / LSU_LANES.
     for (genvar i = 0; i < TCU_BLOCK_CAP; ++i) begin : g_meta_wr
         if (i < NUM_LANES) begin : g_lane
-            wire [LSU_W32_RATIO-1:0][31:0] rsp_w32 = client_if.rsp_data.data[i];
-            assign meta_wr_mask[i] = client_if.rsp_data.mask[i];
+            wire [LSU_W32_RATIO-1:0][31:0] rsp_w32 = client_if.rsp_data.data[i % LSU_LANES];
+            assign meta_wr_mask[i] = client_if.rsp_data.mask[i % LSU_LANES]
+                                  && (rsp_batch == BATCH_W'(i / LSU_LANES));
             assign meta_wr_data[i] = rsp_w32[i % LSU_W32_RATIO];
             `UNUSED_VAR (rsp_w32)
         end else begin : g_pad
