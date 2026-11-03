@@ -303,7 +303,10 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     wire [MSHR_ADDR_WIDTH-1:0] deq_next_id = next_index[dequeue_id];
     wire [`CS_LINE_ADDR_WIDTH-1:0] deq_addr_cur, deq_addr_next, deq_addr_fin;
     wire [`CS_LINE_ADDR_WIDTH-1:0] deq_addr_base = fill_valid ? fill_addr : deq_addr_cur;
-    wire deq_rw_base = write_table[fill_valid ? fill_id : dequeue_id];
+    // both entries looked up, the fill (a late grant) selects after
+    wire deq_rw_fill = write_table[fill_id];
+    wire deq_rw_cur  = write_table[dequeue_id];
+    wire deq_rw_base = fill_valid ? deq_rw_fill : deq_rw_cur;
 
     always @(posedge clk) begin
         if (reset) begin

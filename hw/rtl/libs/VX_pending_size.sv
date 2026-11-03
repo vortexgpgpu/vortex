@@ -74,6 +74,27 @@ module VX_pending_size #(
 
             assign size_n = $signed(size_r) + SIZEW'($signed(delta));
 
+            // The step usually arrives late (a grant, a handshake). With few
+            // step values the next size and its flags are formed for each
+            // {incr, decr} from the registered size, and the step selects them.
+            localparam NI = 1 << INCRW;
+            localparam ND = 1 << DECRW;
+            wire [SIZEW+3:0] next_sf;   // {empty, full, alm_empty, alm_full, size}
+            if (NI * ND <= 16) begin : g_cand
+                wire [NI*ND-1:0][SIZEW+3:0] cand;
+                for (genvar i = 0; i < NI; ++i) begin : g_i
+                    for (genvar j = 0; j < ND; ++j) begin : g_j
+                        wire [SIZEW-1:0] sz = size_r + SIZEW'(i) - SIZEW'(j);
+                        assign cand[i * ND + j] = {(sz == SIZEW'(0)), (sz == SIZEW'(SIZE)),
+                                                   (sz <= SIZEW'(ALM_EMPTY)), (sz >= SIZEW'(ALM_FULL)), sz};
+                    end
+                end
+                assign next_sf = cand[{incr, decr}];
+            end else begin : g_direct
+                assign next_sf = {(size_n == SIZEW'(0)), (size_n == SIZEW'(SIZE)),
+                                  (size_n <= SIZEW'(ALM_EMPTY)), (size_n >= SIZEW'(ALM_FULL)), size_n};
+            end
+
             always @(posedge clk) begin
                 if (reset) begin
                     empty_r     <= 1;
@@ -84,11 +105,7 @@ module VX_pending_size #(
                 end else begin
                     `ASSERT((DELTAW'(incr) <= DELTAW'(decr)) || (size_n >= size_r), ("runtime error: counter overflow"));
                     `ASSERT((DELTAW'(incr) >= DELTAW'(decr)) || (size_n <= size_r), ("runtime error: counter underflow"));
-                    empty_r     <= (size_n == SIZEW'(0));
-                    full_r      <= (size_n == SIZEW'(SIZE));
-                    alm_empty_r <= (size_n <= SIZEW'(ALM_EMPTY));
-                    alm_full_r  <= (size_n >= SIZEW'(ALM_FULL));
-                    size_r      <= size_n;
+                    {empty_r, full_r, alm_empty_r, alm_full_r, size_r} <= next_sf;
                 end
             end
 
