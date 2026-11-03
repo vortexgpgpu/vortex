@@ -395,6 +395,9 @@ vx_result_t Device::cp_init() {
                       new vortex::VMManager(vm_io_.get()));
         if (vm_mgr_->init() != 0)
             return VX_ERR_DEVICE_LOST;
+        if (pinned_size_ > 0
+            && vm_mgr_->reserve_identity_window(pinned_base_, pinned_size_) != 0)
+            return VX_ERR_DEVICE_LOST;
         const uint64_t satp = vm_mgr_->satp();
         CP_WR(CP_SATP_LO, uint32_t(satp & 0xFFFFFFFFu));
         CP_WR(CP_SATP_HI, uint32_t(satp >> 32));
