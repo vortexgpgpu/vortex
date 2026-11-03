@@ -100,10 +100,11 @@ module VX_pe_serializer #(
         reg [BATCH_SIZEW-1:0] batch_in_idx, batch_out_idx;
         reg batch_in_done, batch_out_done;
 
-        for (genvar i = 0; i < NUM_PES; ++i) begin : g_pe_data_out_w
-            assign pe_data_out_w[i] = data_in[batch_in_idx * NUM_PES + i];
-            assign pe_mask_out_w[i] = mask_in[batch_in_idx * NUM_PES + i];
-        end
+        // The lanes viewed as batches of NUM_PES: a batch select, no index arithmetic.
+        wire [BATCH_SIZE-1:0][NUM_PES-1:0][DATA_IN_WIDTH-1:0] data_in_b = data_in;
+        wire [BATCH_SIZE-1:0][NUM_PES-1:0] mask_in_b = mask_in;
+        assign pe_data_out_w = data_in_b[batch_in_idx];
+        assign pe_mask_out_w = mask_in_b[batch_in_idx];
 
         always @(posedge clk) begin
             if (reset) begin
