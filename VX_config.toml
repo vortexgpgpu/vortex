@@ -366,6 +366,10 @@ tcu_latency_dpi   = 4
 # (DSP48 PREG on FPGA), 4 = single-cycle multiply used in simulation.
 tcu_latency_tfr   = "expr: 5 if ($VIVADO or $QUARTUS) else 4"
 VX_CFG_TCU_LATENCY = "expr: $tcu_latency_dsp if $VX_CFG_TCU_TYPE_DSP else ($tcu_latency_bhf if $VX_CFG_TCU_TYPE_BHF else ($tcu_latency_fpnew if $VX_CFG_TCU_TYPE_FPNEW else ($tcu_latency_dpi if $VX_CFG_TCU_TYPE_DPI else $tcu_latency_tfr)))"
+# Tensor throughput divider: the FEDP array holds TC_M x TC_N / ratio dot
+# products and a micro-op occupies it for `ratio` cycles. A power of two that
+# divides TC_M x TC_N (= NUM_THREADS); VX_tcu_core and SimX reject any other.
+VX_CFG_TCU_PE_RATIO = 1
 VX_CFG_TCU_TF32_ENABLE = false
 VX_CFG_TCU_FP16_ENABLE = true
 VX_CFG_TCU_FP8_ENABLE = false

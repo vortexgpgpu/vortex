@@ -46,6 +46,12 @@ static constexpr uint32_t kFedpLatency = VX_CFG_TCU_LATENCY;
 // End-to-end MMA uop cost: dispatch plus the dot-product pipeline (an
 // unblocked result bypasses the landing queue).
 static constexpr uint32_t kMmaLatency = 1 + kFedpLatency;
+// The FEDP array holds tcM x tcN / kPeRatio dot products: a compute uop
+// occupies it for kPeRatio cycles, one output slice per cycle.
+static constexpr uint32_t kPeRatio = VX_CFG_TCU_PE_RATIO;
+static_assert(kPeRatio != 0 && (kPeRatio & (kPeRatio - 1)) == 0
+           && ((cfg::tcM * cfg::tcN) % kPeRatio) == 0,
+              "VX_CFG_TCU_PE_RATIO must be a power of two that divides tcM x tcN");
 
 static constexpr uint64_t kLineMask = ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
 
@@ -337,6 +343,7 @@ public:
     , perf_stats_()
   {
     exec_done_.fill(false);
+    slices_.fill(0);
     in_wgmma_.fill(false);
     wgmma_desc_.fill({0, 0});
   }
@@ -357,6 +364,7 @@ public:
     }
   #endif
     exec_done_.fill(false);
+    slices_.fill(0);
     for (auto& due : result_due_) {
       due.clear();
     }
@@ -678,9 +686,25 @@ public:
         exec_done_.at(b) = true;
       }
 
+      // A compute uop holds its input while its leading output slices go
+      // through the FEDP array, under the admission conditions of its fire,
+      // and leaves with the last one.
+      if (kPeRatio > 1 && !tpuArgs.is_setup_uop && slices_.at(b) + 1 < kPeRatio) {
+      #ifdef VX_CFG_TCU_WGMMA_ENABLE
+        bool tbuf_ready = !tcu_is_wgmma(tcu_type) || ((wgmma_ready >> b) & 1u);
+      #else
+        bool tbuf_ready = true;
+      #endif
+        if (tbuf_ready && !simobject_->Outputs.at(b).full()) {
+          ++slices_.at(b);
+        }
+        continue;
+      }
+
       if (simobject_->Outputs.at(b).try_send(trace, kMmaLatency)) {
         due.push_back(now + kMmaLatency);
         exec_done_.at(b) = false;
+        slices_.at(b) = 0;
         DT(3, simobject_->name() << " execute: op=" << tcu_type << ", " << *trace);
         input.pop();
       }
@@ -775,7 +799,8 @@ public:
     int32_t rep = -1;
     for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
       auto& input = simobject_->Inputs.at(b);
-      if (input.empty() || exec_done_.at(b)) {
+      // A uop still feeding output slices keeps its tile-buffer request.
+      if (input.empty() || (exec_done_.at(b) && slices_.at(b) + 1 >= kPeRatio)) {
         continue;
       }
       auto trace = input.peek();
@@ -1585,6 +1610,8 @@ private:
   mutable PerfStats perf_stats_;
   // Per-block guard: execute already happened for this trace; reset on pop().
   std::array<bool, VX_CFG_NUM_TCU_BLOCKS> exec_done_;
+  // Output slices of the head uop already through the FEDP array.
+  std::array<uint32_t, VX_CFG_NUM_TCU_BLOCKS> slices_;
   // Cycles at which each block's results sent so far become visible.
   std::array<std::vector<uint64_t>, VX_CFG_NUM_TCU_BLOCKS> result_due_;
   // True while a block is between its first and last WGMMA uop.

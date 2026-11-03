@@ -22,6 +22,7 @@
     "VX_CFG_EXT_MUFU_ENABLE": true,
     "VX_CFG_NUM_MUFU_LANES": 16,
     "VX_CFG_EXT_TCU_ENABLE": true,
+    "VX_CFG_TCU_PE_RATIO": 4,
     "VX_CFG_TCU_TF32_ENABLE": true,
     "VX_CFG_TCU_FP8_ENABLE": true,
     "VX_CFG_TCU_INT8_ENABLE": true,
@@ -68,6 +69,7 @@
     "PLATFORM_MEMORY_TYPE, PLATFORM_MEMORY_NUM_BANKS, PLATFORM_MEMORY_DATA_RATE, PLATFORM_MEMORY_PEAK_BW": "8 HBM3 stacks, 8192-bit, 5.3 TB/s: modelled as 64 128-bit channels at 5200 MT/s = 5.32 TB/s; latency not calibrated",
     "PLATFORM_CLOCK_RATE": "2100 MHz peak engine clock",
     "EXT_TCU_ENABLE, TCU_*": "4 matrix cores per CU, one per SIMD as NUM_TCU_BLOCKS=ISSUE_WIDTH: FP16/BF16, TF32, FP8, INT8, with structured sparsity. Matrix FP64/FP32 are not modelled",
+    "TCU_PE_RATIO": "1024 dense FP16 FMA per clock per CU: 1307 TFLOPS at 2100 MHz over 304 CUs (AMD CDNA 3 white paper). A TCU block at NUM_THREADS=64 computes an 8x8x8-word tile, 1024 FP16 FMA per clock, so the 4 blocks give 4096: ratio 4",
     "FDIV_PE_RATIO, FSQRT_PE_RATIO": "Transcendentals (reciprocal, reciprocal square root, on which division and square root are built) run at a quarter of the FP32 rate on GCN, RDNA and CDNA: FPU lanes / 4"
   }
 }

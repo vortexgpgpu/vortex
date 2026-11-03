@@ -178,6 +178,24 @@ tests:
   app: sgemm_tcu
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32
 
+# A FEDP array of half the block (VX_CFG_TCU_PE_RATIO=2): each micro-op takes
+# two cycles, one output slice per cycle.
+- id: sgemm_tcu-pe-ratio2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_PE_RATIO=2 -DITYPE=fp16 -DOTYPE=fp32
+
+# Parity of the sliced micro-op's occupancy. Ratio 4 at 8 threads slices both
+# block dimensions (4x2 block, 2 elements per slice).
+- id: model_parity-pe-ratio4
+  check: model_parity
+  via: blackbox
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_PE_RATIO=4 -DITYPE=fp16 -DOTYPE=fp32
+
 # Perf-regression twin of the model_parity-fp16 benchmark (same run, cycles-vs-baseline).
 - id: perf_gate-fp16
   check: perf_gate

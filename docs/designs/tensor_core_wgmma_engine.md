@@ -254,6 +254,18 @@ d[i,j] = c[i,j] + Σ_k a[i,k] · b[k,j]
 over the FEDP width — `TC_K` words, or `2 × TC_K` for a dense WGMMA with
 `VX_CFG_TCU_FEDP2K`.
 
+`VX_CFG_TCU_PE_RATIO` (`R`, default 1) divides the grid, as the FPU's
+`*_PE_RATIO` knobs divide its lanes: it holds `TC_M × TC_N / R` elements, and
+a micro-op occupies it for `R` cycles, one output slice per cycle. Slices
+split `TC_N` first and `TC_M` only when `R > TC_N`, so up to `R = TC_N` an
+element keeps its A row and its sparse-gather row and only the B column and
+C element move. The micro-op holds the execute interface while its leading
+slices enter, under the same admission conditions as a fire, and fires with
+the last: its result completes `FEDP latency + 1` cycles after the fire, as
+an unsliced one does, and the earlier slices wait in one register each
+(`(R − 1) × TC_M × TC_N / R` words). A block's peak is `1 / R` micro-ops per
+cycle. `R = 1` is the unsliced grid.
+
 ### 5.4 Flow control without an enable
 
 The grid **free-runs**: it has no back-pressure enable. A clock-enable
@@ -457,6 +469,11 @@ bit. On an FPGA its multipliers map onto DSP blocks through
 Operand loads go through simulation channels; the tensor path never reads
 memory directly.
 
+Timing: a compute micro-op leaves the input `VX_CFG_TCU_PE_RATIO` admissible
+cycles after it arrives (output space free, tile buffers ready, no result
+waiting on a stalled commit), and its result is due `FEDP latency + 1`
+cycles after it leaves, as in `VX_tcu_core`.
+
 Numerics follow the configured backend for fp32 results from float and
 block-scaled (MX, NVFP4) sources. Under `TFR`, each dot product is the
 `TfrFedp` model, the same one the RTL is checked against bit for bit in
@@ -484,6 +501,7 @@ waited on tile-buffer data), `TCU_TBUF_CACHE_HITS` (0xB04, B rows reused),
 | `VX_CFG_TCU_LATENCY` | from the backend | FEDP pipeline depth |
 | `VX_CFG_TCU_WGMMA_ENABLE` | false | WGMMA, the tile buffers, the lockstep gate |
 | `VX_CFG_TCU_FEDP2K` | false | dense WGMMA dot product of `2 × TC_K`, one K step |
+| `VX_CFG_TCU_PE_RATIO` | 1 | cycles per micro-op; the grid holds `TC_M × TC_N / R` FEDPs (§5.3). A power of two dividing `NUM_THREADS` |
 | `VX_CFG_TCU_SPARSE_ENABLE` | false | 2:4 sparsity |
 | `VX_CFG_TCU_DSM_ENABLE` | false | dynamic sparsity mask |
 | `VX_CFG_TCU_MX_ENABLE` | false | block-scaled formats |
