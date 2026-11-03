@@ -305,13 +305,17 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
 
         wire                wb_push;
         wire                wb_coalesce;
-        wire [WBQ_IDXW-1:0] wb_slot;
+        // the coalesce and the target slot for either drain outcome
+        wire                wb_coalesce_hold, wb_coalesce_drain;
+        reg [WBQ_SIZE-1:0]  wb_coal_hit;    // the result's word is queued in this slot
+        wire [WBQ_IDXW-1:0] wb_slot_hold, wb_slot_drain;
 
         // Next occupancy of the queue, as the state update below applies it.
         wire wb_enq = wb_push && ~wb_coalesce;
         wire [WBQ_CNTW-1:0] wbq_count_n = (wb_enq && ~wb_fire) ? (wbq_count + WBQ_CNTW'(1))
                                         : (~wb_enq && wb_fire) ? (wbq_count - WBQ_CNTW'(1))
                                                                : wbq_count;
+
 
         wire [WBQ_SIZE-1:0] wbq_key_st1;
         for (genvar i = 0; i < WBQ_SIZE; ++i) begin : g_wbq_key_st1
@@ -343,30 +347,53 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
             wire cmp_key_n   = (cmp_addr == res_addr_n) && (cmp_wsel == word_idx_n);
             wire post_key_n  = (post_wb_addr == res_addr_n) && (post_wb_wsel == word_idx_n);
 
-            wire [WBQ_SIZE-1:0] wbq_key  = pipe_stall ? wbq_key_st1 : wbq_key_n;
-            wire                cmp_key  = pipe_stall ? cmp_key_st1 : cmp_key_n;
             wire                post_key = pipe_stall ? post_key_st1 : post_key_n;
 
             wire post_wb_valid_n = wb_fire || (post_wb_age == 2'd2);
 
-            // Mirrors the queue update below: the push lands after the drain shift.
-            reg [WBQ_SIZE-1:0]      hit_n;
-            reg [LANE_IDXW-1:0]     lane_n [WBQ_SIZE];
-            always @(*) begin
-                for (integer i = 0; i < WBQ_SIZE; ++i) begin
-                    if (wb_push && (wb_slot == WBQ_IDXW'(i))) begin
-                        hit_n[i]  = cmp_key;
-                        lane_n[i] = cmp_lane;
-                    end else if (wb_fire && (i < WBQ_SIZE-1)) begin
-                        hit_n[i]  = (WBQ_CNTW'(i) < wbq_count_n) && wbq_key[(i < WBQ_SIZE-1) ? (i + 1) : i];
-                        lane_n[i] = wbq_lane[(i < WBQ_SIZE-1) ? (i + 1) : i];
-                    end else begin
-                        hit_n[i]  = (WBQ_CNTW'(i) < wbq_count_n) && wbq_key[i];
-                        lane_n[i] = wbq_lane[i];
+            // Mirrors the queue update below: the push lands after the drain
+            // shift. The drain, the push and the stall are the latest signals
+            // here, so each lane hit is formed for every combination of them
+            // (v = {stall, push, drain}) and they select last.
+            // The push's target slot as a one-hot test per slot: the highest
+            // coalesce hit (wb_coal_idx), or the tail, shifted down on a drain
+            // -- compares against constants instead of index arithmetic.
+            wire [WBQ_SIZE-1:0] coal_top;
+            for (genvar k = 0; k < WBQ_SIZE; ++k) begin : g_coal_top
+                if (k == WBQ_SIZE-1) begin : g_last
+                    assign coal_top[k] = wb_coal_hit[k];
+                end else begin : g_mid
+                    assign coal_top[k] = wb_coal_hit[k] && ~(| wb_coal_hit[WBQ_SIZE-1:k+1]);
+                end
+            end
+            wire [7:0][WBQ_SIZE-1:0][NUM_LANES-1:0] lane_hit_v;
+            for (genvar v = 0; v < 8; ++v) begin : g_variant
+                localparam F  = v & 1;          // wb_fire
+                localparam P  = (v >> 1) & 1;   // wb_push
+                localparam ST = (v >> 2) & 1;   // pipe_stall
+                wire                coal_f = (F != 0) ? wb_coalesce_drain : wb_coalesce_hold;
+                wire                enq_v  = (P != 0) && ~coal_f;
+                wire [WBQ_CNTW-1:0] cnt_v  = (enq_v && (F == 0)) ? (wbq_count + WBQ_CNTW'(1))
+                                           : (~enq_v && (F != 0)) ? (wbq_count - WBQ_CNTW'(1))
+                                                                  : wbq_count;
+                wire [WBQ_SIZE-1:0] key_v  = (ST != 0) ? wbq_key_st1 : wbq_key_n;
+                wire                ckey_v = (ST != 0) ? cmp_key_st1 : cmp_key_n;
+                for (genvar i = 0; i < WBQ_SIZE; ++i) begin : g_slot
+                    localparam J = ((F != 0) && (i < WBQ_SIZE-1)) ? (i + 1) : i;
+                    // slot i is the target: (wb_slot_drain or wb_slot_hold) == i
+                    localparam M = (F != 0) ? ((i + 1) % (1 << WBQ_IDXW)) : i;
+                    wire coal_at_m = (M < WBQ_SIZE) ? coal_top[(M < WBQ_SIZE) ? M : 0] : 1'b0;
+                    wire tgt_i  = coal_f ? coal_at_m : (WBQ_IDXW'(wbq_count) == WBQ_IDXW'(M));
+                    wire push_i = (P != 0) && tgt_i;
+                    wire                 hit_i  = push_i ? ckey_v : ((WBQ_CNTW'(i) < cnt_v) && key_v[J]);
+                    wire [LANE_IDXW-1:0] lane_i = push_i ? cmp_lane : wbq_lane[J];
+                    for (genvar l = 0; l < NUM_LANES; ++l) begin : g_lane
+                        assign lane_hit_v[v][i][l] = hit_i && (lane_i == LANE_IDXW'(l));
                     end
                 end
             end
-            wire                 post_hit_n  = post_wb_valid_n && (wb_fire ? wbq_key[0] : post_key);
+            wire [WBQ_SIZE-1:0][NUM_LANES-1:0] lane_hit_n = lane_hit_v[{pipe_stall, wb_push, wb_fire}];
+            wire                 post_hit_n  = post_wb_valid_n && (wb_fire ? (pipe_stall ? wbq_key_st1[0] : wbq_key_n[0]) : post_key);
             wire [LANE_IDXW-1:0] post_lane_n = wb_fire ? wbq_lane[0] : post_wb_lane;
 
             reg [WBQ_SIZE-1:0][NUM_LANES-1:0] wbq_lane_hit_r;
@@ -376,11 +403,7 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
                     wbq_lane_hit_r  <= '0;
                     post_lane_hit_r <= '0;
                 end else begin
-                    for (integer i = 0; i < WBQ_SIZE; ++i) begin
-                        for (integer l = 0; l < NUM_LANES; ++l) begin
-                            wbq_lane_hit_r[i][l] <= hit_n[i] && (lane_n[i] == LANE_IDXW'(l));
-                        end
-                    end
+                    wbq_lane_hit_r <= lane_hit_n;
                     for (integer l = 0; l < NUM_LANES; ++l) begin
                         post_lane_hit_r[l] <= post_hit_n && (post_lane_n == LANE_IDXW'(l));
                     end
@@ -574,7 +597,18 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         `UNUSED_VAR (ret_word_unused)
 
         // place the computed value at its byte offset within the lane
-        wire [LANE_WIDTH-1:0] wb_data_w = LANE_WIDTH'(new_word) << cmp_bit_off;
+        // An atomic is naturally aligned, so its bit offset in the lane is a
+        // multiple of 32 (bit_off_st1): the placement selects among the
+        // LANE_WIDTH/32 word positions, not a bit-granular shift.
+        wire [LANE_WIDTH-1:0] wb_data_w;
+        if (LANE_OFF_BITS > 5) begin : g_wb_place
+            wire [LANE_OFF_BITS-6:0] wb_word_off = cmp_bit_off[LANE_OFF_BITS-1:5];
+            assign wb_data_w = LANE_WIDTH'(new_word) << {wb_word_off, 5'b0};
+            `UNUSED_VAR (cmp_bit_off[4:0])
+        end else begin : g_wb_place0
+            assign wb_data_w = LANE_WIDTH'(new_word);
+            `UNUSED_VAR (cmp_bit_off)
+        end
 
         // Compute finished this cycle (result ready to enqueue): the compute
         // stage is occupied and not being reloaded by a fresh latch.
@@ -587,7 +621,6 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         // independent of the drain: the highest match is the target either way
         // unless it is the draining head, so wb_fire, which arrives late with
         // the bank's stall, only picks between the two precomputed outcomes.
-        reg [WBQ_SIZE-1:0]  wb_coal_hit;
         reg [WBQ_IDXW-1:0]  wb_coal_idx;    // pre-shift index of the coalesce target
         always @(*) begin
             wb_coal_idx = '0;
@@ -599,17 +632,16 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
                 end
             end
         end
-        wire wb_coalesce_hold  = (| wb_coal_hit);
-        wire wb_coalesce_drain = (| wb_coal_hit[WBQ_SIZE-1:1]);
+        assign wb_coalesce_hold  = (| wb_coal_hit);
+        assign wb_coalesce_drain = (| wb_coal_hit[WBQ_SIZE-1:1]);
         assign wb_coalesce = wb_fire ? wb_coalesce_drain : wb_coalesce_hold;
         // Merge source: the pre-shift coalesce-target entry (old value).
         wire [LANE_WIDTH-1:0] coal_src_data   = wbq_data[wb_coal_idx];
         wire [LANE_SIZE-1:0]  coal_src_byteen = wbq_byteen[wb_coal_idx];
         // New entry lands at the post-pop tail; a coalesce slot shifts down on a pop.
-        wire [WBQ_IDXW-1:0] wb_slot_hold  = wb_coalesce_hold ? wb_coal_idx : WBQ_IDXW'(wbq_count);
-        wire [WBQ_IDXW-1:0] wb_slot_drain = wb_coalesce_drain ? (wb_coal_idx - WBQ_IDXW'(1))
-                                                              : WBQ_IDXW'(wbq_count - WBQ_CNTW'(1));
-        assign wb_slot = wb_fire ? wb_slot_drain : wb_slot_hold;
+        assign wb_slot_hold  = wb_coalesce_hold ? wb_coal_idx : WBQ_IDXW'(wbq_count);
+        assign wb_slot_drain = wb_coalesce_drain ? (wb_coal_idx - WBQ_IDXW'(1))
+                                                 : WBQ_IDXW'(wbq_count - WBQ_CNTW'(1));
 
         // A result queued for the settling entry's {line, word, lane} is newer
         // than it: drop those bytes from the settling entry, so the forward
@@ -646,20 +678,27 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
             wire [LANE_SIZE-1:0] byteen_h = wbq_byteen[i] & ~(wbq_clr_hit[i] ? clr_byteen[i] : {LANE_SIZE{1'b0}});
             wire [LANE_WIDTH-1:0] data_d = wbq_data[J];
             wire [LANE_WIDTH-1:0] data_h = wbq_data[i];
-            wire [LANE_WIDTH-1:0] pdata_d, pdata_h;
-            for (genvar b = 0; b < LANE_SIZE; ++b) begin : g_bytes
-                assign pdata_d[b*8 +: 8] = cmp_byteen[b] ? wb_data_w[b*8 +: 8]
-                                         : (wb_coalesce_drain ? coal_src_data[b*8 +: 8] : data_d[b*8 +: 8]);
-                assign pdata_h[b*8 +: 8] = cmp_byteen[b] ? wb_data_w[b*8 +: 8]
-                                         : (wb_coalesce_hold ? coal_src_data[b*8 +: 8] : data_h[b*8 +: 8]);
-            end
             wire push_d = wb_push && (wb_slot_drain == WBQ_IDXW'(i));
             wire push_h = wb_push && (wb_slot_hold == WBQ_IDXW'(i));
+            // The computed bytes settle last: every other source of the slot's
+            // next data is selected beside them, and they enter at the final select.
+            wire [LANE_WIDTH-1:0] data_n_old;
+            wire [LANE_SIZE-1:0]  data_n_new;
+            for (genvar b = 0; b < LANE_SIZE; ++b) begin : g_bytes
+                wire [7:0] keep_d = (push_d && wb_coalesce_drain) ? coal_src_data[b*8 +: 8] : data_d[b*8 +: 8];
+                wire [7:0] keep_h = (push_h && wb_coalesce_hold)  ? coal_src_data[b*8 +: 8] : data_h[b*8 +: 8];
+                assign data_n_old[b*8 +: 8] = wb_fire ? keep_d : keep_h;
+                assign data_n_new[b] = cmp_byteen[b] && (wb_fire ? push_d : push_h);
+            end
+            wire [LANE_WIDTH-1:0] data_n;
+            for (genvar b = 0; b < LANE_SIZE; ++b) begin : g_bytes_n
+                assign data_n[b*8 +: 8] = data_n_new[b] ? wb_data_w[b*8 +: 8] : data_n_old[b*8 +: 8];
+            end
             assign wbq_addr_n[i]   = wb_fire ? (push_d ? cmp_addr  : wbq_addr[J]) : (push_h ? cmp_addr  : wbq_addr[i]);
             assign wbq_wsel_n[i]   = wb_fire ? (push_d ? cmp_wsel  : wbq_wsel[J]) : (push_h ? cmp_wsel  : wbq_wsel[i]);
             assign wbq_lane_n[i]   = wb_fire ? (push_d ? cmp_lane  : wbq_lane[J]) : (push_h ? cmp_lane  : wbq_lane[i]);
             assign wbq_byteen_n[i] = wb_fire ? (push_d ? pbyteen_d : byteen_d)    : (push_h ? pbyteen_h : byteen_h);
-            assign wbq_data_n[i]   = wb_fire ? (push_d ? pdata_d   : data_d)      : (push_h ? pdata_h   : data_h);
+            assign wbq_data_n[i]   = data_n;
             assign wbq_tag_n[i]    = wb_fire ? (push_d ? cmp_tag   : wbq_tag[J])  : (push_h ? cmp_tag   : wbq_tag[i]);
             assign wbq_idx_n[i]    = wb_fire ? (push_d ? cmp_idx   : wbq_idx[J])  : (push_h ? cmp_idx   : wbq_idx[i]);
             assign wbq_attr_n[i]   = wb_fire ? (push_d ? cmp_attr  : wbq_attr[J]) : (push_h ? cmp_attr  : wbq_attr[i]);
