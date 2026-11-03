@@ -168,8 +168,10 @@ module VX_warp_shared_unit import VX_gpu_pkg::*; #(
 
     wire bar_read_phase;
 
+    // Registered completions take the phase from the store's output register.
     VX_bar_unit #(
-        .INSTANCE_ID (`SFORMATF(("%s-barrier", INSTANCE_ID)))
+        .INSTANCE_ID (`SFORMATF(("%s-barrier", INSTANCE_ID))),
+        .PHASE_REG   (DIRECT ? 0 : 1)
     ) bar_unit (
         .clk          (clk),
         .reset        (reset),
@@ -239,17 +241,15 @@ module VX_warp_shared_unit import VX_gpu_pkg::*; #(
         assign rsp_phase_out = bar_read_phase;
     end else begin : g_rsp_reg
         reg [NUM_REQS-1:0] rsp_valid_r;
-        reg                rsp_phase_r;
         always @(posedge clk) begin
             if (reset) begin
                 rsp_valid_r <= '0;
             end else begin
                 rsp_valid_r <= rsp_valid;
             end
-            rsp_phase_r <= bar_read_phase;
         end
         assign rsp_valid_out = rsp_valid_r;
-        assign rsp_phase_out = rsp_phase_r;
+        assign rsp_phase_out = bar_read_phase; // already a cycle late (PHASE_REG)
     end
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_rsp
