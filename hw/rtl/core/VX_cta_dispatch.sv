@@ -556,14 +556,13 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // multicast resolves receiver addresses as issuer_addr + r*smem_stride;
     // a non-aligned stride would target the wrong block).
     wire [LMEM_LOG:0] stride = kmu_req.aligned_lmem_size;
-    wire is_first_of_cluster = eff_is_first;
+
+    localparam ADMIT_REG = (NUM_CTA_SLOTS > 8);
+    wire              is_first_of_cluster;
+    wire [LMEM_LOG:0] adm_stride;
+    wire [NW_WIDTH:0] cluster_k;
 
     reg [NW_WIDTH:0] usable_slots_r;
-    // Cluster member count K, capped at the slot count (a cluster larger than
-    // co-residency degenerates to a clamp).
-    wire [NW_WIDTH:0] cluster_k_raw = eff_cluster_size;
-    wire [NW_WIDTH:0] cluster_k = (cluster_k_raw > usable_slots_r) ? usable_slots_r
-                                : (cluster_k_raw == 0) ? (NW_WIDTH+1)'(1) : cluster_k_raw;
 
     // Occupancy bound, registered (off the ready path). usable = largest m in
     // [1, NUM_WARPS] with m*stride <= LMEM_SIZE; all slots when stride == 0.
@@ -571,24 +570,68 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // per m, so the NUM_WARPS-wide comparator tree has neither a multiplier nor
     // a divider.
     localparam PROD_W = LMEM_LOG + NW_WIDTH + 2;
+    reg [NW_WIDTH:0] usable_slots_n;
+    always @(*) begin
+        if (stride == 0) begin
+            usable_slots_n = (NW_WIDTH+1)'(NUM_CTA_SLOTS);
+        end else begin
+            // Granting one slot to a CTA that exceeds capacity keeps the
+            // launch making forward progress, at the cost of letting it
+            // write past its slot.
+            usable_slots_n = (NW_WIDTH+1)'(1);
+            for (integer m = 1; m <= NUM_CTA_SLOTS; m = m + 1) begin
+                if (PROD_W'(stride) <= PROD_W'(LMEM_SIZE / m)) begin
+                    usable_slots_n = (NW_WIDTH+1)'(m);
+                end
+            end
+        end
+    end
     always_ff @(posedge clk) begin
         if (reset) begin
             usable_slots_r <= (NW_WIDTH+1)'(NUM_CTA_SLOTS);
         end else begin
-            if (stride == 0) begin
-                usable_slots_r <= (NW_WIDTH+1)'(NUM_CTA_SLOTS);
-            end else begin
-                // Granting one slot to a CTA that exceeds capacity keeps the
-                // launch making forward progress, at the cost of letting it
-                // write past its slot.
-                usable_slots_r <= (NW_WIDTH+1)'(1);
-                for (integer m = 1; m <= NUM_CTA_SLOTS; m = m + 1) begin
-                    if (PROD_W'(stride) <= PROD_W'(LMEM_SIZE / m)) begin
-                        usable_slots_r <= (NW_WIDTH+1)'(m);
-                    end
-                end
-            end
+            usable_slots_r <= usable_slots_n;
         end
+    end
+
+    // Cluster member count K, capped at the slot count (a cluster larger than
+    // co-residency degenerates to a clamp).
+    function automatic [NW_WIDTH:0] clamp_k(input [NW_WIDTH:0] k_raw, input [NW_WIDTH:0] usable);
+        clamp_k = (k_raw > usable) ? usable : (k_raw == 0) ? (NW_WIDTH+1)'(1) : k_raw;
+    endfunction
+
+    // Over many slots the admission is registered (ADMIT_REG, below) and only
+    // used once the head has waited two idle cycles, so its descriptor inputs
+    // come from registers too: the head is the same one a cycle back. The
+    // clamp's compare is taken a cycle ahead as well: m CTAs fit for every m
+    // up to the bound usable_slots_r is about to take, so K exceeds that bound
+    // exactly when K CTAs do not fit (or K is beyond the slot count).
+    if (ADMIT_REG) begin : g_admit_in
+        wire [NUM_CTA_SLOTS:0] fits;
+        assign fits[0] = 1'b1;
+        for (genvar m = 1; m <= NUM_CTA_SLOTS; ++m) begin : g_fits
+            assign fits[m] = (stride == 0) || (PROD_W'(stride) <= PROD_W'(LMEM_SIZE / m));
+        end
+        wire k_over_n = (eff_cluster_size > (NW_WIDTH+1)'(NUM_CTA_SLOTS)) || ~fits[eff_cluster_size];
+
+        reg              is_first_r;
+        reg [NW_WIDTH:0] k_raw_r;
+        reg              k_over_r;
+        reg [LMEM_LOG:0] stride_r;
+        always @(posedge clk) begin
+            is_first_r <= eff_is_first;
+            k_raw_r    <= eff_cluster_size;
+            k_over_r   <= k_over_n;
+            stride_r   <= stride;
+        end
+        assign is_first_of_cluster = is_first_r;
+        assign cluster_k           = k_over_r ? usable_slots_r
+                                   : ((k_raw_r == 0) ? (NW_WIDTH+1)'(1) : k_raw_r);
+        assign adm_stride          = stride_r;
+    end else begin : g_admit_in_now
+        assign is_first_of_cluster = eff_is_first;
+        assign cluster_k           = clamp_k(eff_cluster_size, usable_slots_r);
+        assign adm_stride          = stride;
     end
 
     // `data` is a launch descriptor only while `valid` is high: the launch buffers
@@ -601,9 +644,12 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // Compares are full (NW_WIDTH+2)-bit to admit usable_slots_r == NUM_CTA_SLOTS.
     wire [NW_WIDTH+1:0] tail_ext = {2'b0, tail_r};
     wire [NW_WIDTH+1:0] usable_ext = {1'b0, usable_slots_r};
-    wire [CS_BITS-1:0] base_tail = (tail_ext >= usable_ext) ? CS_BITS'(0) : tail_r;
-    wire cluster_prewrap = is_first_of_cluster
-        && (({2'b0, base_tail} + {1'b0, cluster_k}) > usable_ext);
+    wire tail_over = (tail_ext >= usable_ext);
+    wire [CS_BITS-1:0] base_tail = tail_over ? CS_BITS'(0) : tail_r;
+    // K never exceeds usable_slots_r, so a window based at slot 0 never
+    // pre-wraps: the test needs only the tail, taken beside its normalize.
+    wire cluster_prewrap = is_first_of_cluster && ~tail_over
+        && (({2'b0, tail_r} + {1'b0, cluster_k}) > usable_ext);
     wire [CS_BITS-1:0] base_slot = cluster_prewrap ? CS_BITS'(0) : base_tail;
 
     // Round-robin advance: next slot wraps to 0 at usable_slots_r. Computed
@@ -616,7 +662,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
 
     // Slot LMEM base = base_slot * stride (small multiply, latched at accept;
     // off the ready path).
-    wire [LMEM_LOG-1:0] base_lmem = (LMEM_LOG)'((LMEM_LOG+NW_WIDTH+1)'(base_slot) * (LMEM_LOG+NW_WIDTH+1)'(stride));
+    wire [LMEM_LOG-1:0] base_lmem = (LMEM_LOG)'((LMEM_LOG+NW_WIDTH+1)'(base_slot) * (LMEM_LOG+NW_WIDTH+1)'(adm_stride));
 
     // Admission: a standalone CTA / following cluster member needs its single
     // slot free; a first-of-cluster needs all K window slots free. The window
@@ -631,11 +677,14 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     for (genvar i = 0; i < NUM_CTA_SLOTS; ++i) begin : g_window_ones
         assign window_ones[i] = ((NW_WIDTH+1)'(i) < cluster_k);
     end
-    wire [NUM_CTA_SLOTS-1:0] slot_valid_tail = slot_valid_r >> base_tail;
+    // Both bases are tested from the registered tail: a normalized tail is
+    // slot 0, as is a pre-wrapped window.
+    wire [NUM_CTA_SLOTS-1:0] slot_valid_tail = slot_valid_r >> tail_r;
     wire window_free_tail = ((slot_valid_tail & window_ones) == '0);
     wire window_free_zero = ((slot_valid_r & window_ones) == '0);
-    wire cluster_window_free = cluster_prewrap ? window_free_zero : window_free_tail;
-    wire admit_ok = is_first_of_cluster ? cluster_window_free : ~slot_valid_r[base_tail];
+    wire cluster_window_free = (cluster_prewrap || tail_over) ? window_free_zero : window_free_tail;
+    wire slot_free = tail_over ? ~slot_valid_r[0] : ~slot_valid_r[tail_r];
+    wire admit_ok = is_first_of_cluster ? cluster_window_free : slot_free;
     // A fragment launch's stamps land in the warp record TID_STAGES cycles after the
     // warp fires (the thread-index ripple), but frag_stamps_r is a single bank. So a
     // new launch must not overwrite it while an earlier fragment warp is still in that
@@ -648,9 +697,8 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // check) is too deep to drive the accept and its enables in one cycle, so
     // it is registered: an accept uses the admission of the previous cycle,
     // which describes this head once it has been waiting, idle, for two cycles
-    // (usable_slots_r follows the head's stride a cycle late). A slot freed
-    // meanwhile only delays the accept by a cycle.
-    localparam ADMIT_REG = (NUM_CTA_SLOTS > 8);
+    // (usable_slots_r and the registered descriptor fields follow the head a
+    // cycle late). A slot freed meanwhile only delays the accept by a cycle.
     wire                admit_ok_a;
     wire [CS_BITS-1:0]  base_slot_a, next_tail_a;
     wire [LMEM_LOG-1:0] base_lmem_a;
