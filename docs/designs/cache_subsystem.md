@@ -997,11 +997,15 @@ gives the best hit rate on reuse-heavy workloads but stores per-set tree bits;
 FIFO is a single counter per set and within a few percent on streaming GPU
 workloads; random is cheapest and degrades gracefully.
 
-**`*_MSHR_SIZE`** (16 everywhere) — outstanding **missed requests** per bank (see
+**`*_MSHR_SIZE`** — outstanding **missed requests** per bank (see
 [§4.5](#45-mshr-and-same-line-chaining) — *not* distinct lines). Total MLP per
-cache = `NUM_BANKS × MSHR_SIZE`. Also the tag-id space the next level sees. Raise
-it when the next level's latency is long enough that banks stall with all entries
-pending.
+cache = `NUM_BANKS × MSHR_SIZE`. Also the tag-id space the next level sees. The
+icache keeps 16. The dcache, L2 and L3 derive it from Little's law: the platform
+keeps `PLATFORM_MEMORY_PEAK_BW / PLATFORM_CLOCK_RATE × PLATFORM_MEMORY_LATENCY`
+bytes in flight at peak bandwidth, and each bank needs its share of them in
+sectors (a dcache bank's share is per dcache instance), rounded up to a power of
+two, within 16 to 256 (64 for the dcache). With no platform latency (the default)
+or a disabled level it is 16. A profile may still set it outright.
 
 **`*_MRSQ_SIZE`** (icache 0, others 4) — memory response staging queue depth.
 Elastic buffering between the memory port and the bank fill path; `0` collapses to

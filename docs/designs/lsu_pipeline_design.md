@@ -252,13 +252,21 @@ thread mask on acquire and cleared lane by lane as responses arrive.
 | structure | knob | default | holds | sized for |
 |---|---|---|---|---|
 | staging queue | `VX_CFG_LSU_QUEUE_IN_SIZE` | `max(4, 2 × SIMD / lanes)` | whole requests, every lane's address and data | back-pressure |
-| outstanding pool | `VX_CFG_LSU_PENDING_SIZE` | `min(32, max(8, 2 × warps × SIMD / lanes))` | a tag and a lane mask | miss latency |
+| outstanding pool | `VX_CFG_LSU_PENDING_SIZE` | `min(LSU_PENDING_LIMIT, max(8, 2 × warps × SIMD / lanes))` | a tag and a lane mask | miss latency |
 | memory-side queue | derived | `max(pool, LSU_LINE_SIZE / word)` | the coalescer's in-flight entries | covering the pool |
 
 The staging queue and the pool are deliberately decoupled. A staging entry is
 `lanes ×` (address + data + byte-enable + attribute) wide and is expensive to
 deepen; a pool entry is a tag. Decoupling them lets the pool be provisioned
 for about two loads in flight per warp without widening the staging queue.
+
+The pool's bound, `VX_CFG_LSU_PENDING_LIMIT`, is the block's share of the bytes
+the platform keeps in flight to reach its peak memory bandwidth (Little's law:
+`PLATFORM_MEMORY_PEAK_BW / PLATFORM_CLOCK_RATE × PLATFORM_MEMORY_LATENCY`),
+counted in `LSU_LINE_SIZE` packets and rounded up to a power of two, within
+32 to 256. With no platform latency it is 32. Every width that depends on the
+pool (the tag id, the packet slots, the dcache tag) derives from its size, so
+a profile may raise the bound.
 
 The memory-side depth is **not** a knob. It sets the width of the tag's
 index field facing the data cache and must cover the pool, so it is derived
@@ -407,6 +415,7 @@ pool does.
 | `VX_CFG_LSU_LINE_SIZE` | `min(lanes × XLEN/8, L1_LINE_SIZE)` | the coalescer's default output granule |
 | `VX_CFG_LSU_QUEUE_IN_SIZE` | §4.3 | staging depth |
 | `VX_CFG_LSU_PENDING_SIZE` | §4.3 | outstanding-pool depth |
+| `VX_CFG_LSU_PENDING_LIMIT` | §4.3 | bound on the outstanding pool |
 
 `NUM_THREADS` must be a power of two for the stack interleave, the stack
 window top must be a multiple of `NUM_THREADS` stacks, and a stack access

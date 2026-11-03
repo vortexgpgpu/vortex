@@ -97,6 +97,11 @@ VX_CFG_PLATFORM_MEMORY_TYPE = "HBM2"
 VX_CFG_PLATFORM_MEMORY_DATA_RATE = "expr: 2 * $VX_CFG_PLATFORM_CLOCK_RATE"
 VX_CFG_PLATFORM_MEMORY_LATENCY = 0
 VX_CFG_PLATFORM_MEMORY_QUEUE_SIZE = 0
+# Little's law: the bytes the chip keeps in flight to sustain its peak memory
+# bandwidth (MB/s over MHz is bytes per clock) across the memory latency. The
+# miss-tracking depths derive from it and stay at their floors when the
+# latency is zero, as in the default.
+mem_bytes_in_flight = "expr: ($VX_CFG_PLATFORM_MEMORY_PEAK_BW // $VX_CFG_PLATFORM_CLOCK_RATE) * $VX_CFG_PLATFORM_MEMORY_LATENCY"
 
 [alu]
 VX_CFG_NUM_ALU_LANES = "expr: $VX_CFG_SIMD_WIDTH"
@@ -116,9 +121,13 @@ VX_CFG_LSU_STACK_INTERLEAVE_ENABLE = true
 VX_CFG_LSU_LINE_SIZE = "expr: min($VX_CFG_NUM_LSU_LANES * ($VX_CFG_XLEN / 8), $VX_CFG_L1_LINE_SIZE)"
 VX_CFG_LSU_QUEUE_IN_SIZE = "expr: max(4, 2 * ($VX_CFG_SIMD_WIDTH // $VX_CFG_NUM_LSU_LANES))"
 # Outstanding-load pool (MLP depth): decoupled from the input staging queue and
-# provisioned for miss-latency hiding (~2 in-flight loads per warp), clamped so
-# the slot id stays cheap in the dcache tag.
-VX_CFG_LSU_PENDING_SIZE = "expr: min(32, max(8, 2 * $VX_CFG_NUM_WARPS * ($VX_CFG_SIMD_WIDTH // $VX_CFG_NUM_LSU_LANES)))"
+# provisioned for miss-latency hiding (~2 in-flight loads per warp), bounded by
+# LSU_PENDING_LIMIT.
+VX_CFG_LSU_PENDING_SIZE = "expr: min($VX_CFG_LSU_PENDING_LIMIT, max(8, 2 * $VX_CFG_NUM_WARPS * ($VX_CFG_SIMD_WIDTH // $VX_CFG_NUM_LSU_LANES)))"
+# The pool's bound: an LSU block's share of the memory bytes in flight, in
+# full packets, and at least 32, which keeps the slot id cheap in the dcache tag.
+VX_CFG_LSU_PENDING_LIMIT = "expr: clamp(pow(2, clog2(($mem_bytes_in_flight + $lsu_inflight_bytes - 1) // $lsu_inflight_bytes)), 32, 256)"
+lsu_inflight_bytes = "expr: $VX_CFG_NUM_CLUSTERS * $VX_CFG_NUM_CORES * $VX_CFG_NUM_LSU_BLOCKS * $VX_CFG_LSU_LINE_SIZE"
 # The mem-side queue depth is not a knob: it sets the dcache-facing tag-id
 # width and must cover the outstanding pool, so each implementation derives
 # it internally from the pool size.
@@ -257,7 +266,11 @@ VX_CFG_DCACHE_WRITEBACK = "expr: int($dcache_is_llc and $single_core)"
 VX_CFG_DCACHE_DIRTYBYTES = "expr: $VX_CFG_DCACHE_LAZY_FETCH"
 VX_CFG_DCACHE_LAZY_FETCH = "expr: int($VX_CFG_DCACHE_WRITEBACK and $dcache_is_llc)"
 VX_CFG_DCACHE_REPL_POLICY = "expr: $__cache_repl_fifo"
-VX_CFG_DCACHE_MSHR_SIZE = 16
+# Misses per bank: the bank's share of the memory bytes in flight, in sectors,
+# rounded up to a power of two, here and at the L2 and L3. The floor is the
+# depth a platform without a memory latency, or a disabled level, gets.
+VX_CFG_DCACHE_MSHR_SIZE = "expr: clamp(pow(2, clog2(($mem_bytes_in_flight + $dcache_inflight_bytes - 1) // $dcache_inflight_bytes)), 16, 64) if $VX_CFG_DCACHE_ENABLE else 16"
+dcache_inflight_bytes = "expr: $VX_CFG_NUM_CLUSTERS * up($VX_CFG_NUM_CORES // $VX_CFG_SOCKET_SIZE) * up($VX_CFG_NUM_DCACHES) * $VX_CFG_DCACHE_NUM_BANKS * $VX_CFG_DCACHE_SECTOR_SIZE"
 # dcache is unsectored: line = sector = mem transaction granule = L1_LINE (which
 # defaults to MEM_BLOCK but can be configured smaller). Banking comes from the
 # reduced WORD above (>= sector is clamped), not the line. Deriving from L1_LINE
@@ -292,7 +305,8 @@ VX_CFG_L2_WRITEBACK = "expr: int($l2_is_llc and $single_cluster)"
 VX_CFG_L2_DIRTYBYTES = "expr: $VX_CFG_L2_LAZY_FETCH"
 VX_CFG_L2_LAZY_FETCH = "expr: int($VX_CFG_L2_WRITEBACK and $l2_is_llc)"
 VX_CFG_L2_REPL_POLICY = "expr: $__cache_repl_fifo"
-VX_CFG_L2_MSHR_SIZE = 16
+VX_CFG_L2_MSHR_SIZE = "expr: clamp(pow(2, clog2(($mem_bytes_in_flight + $l2_inflight_bytes - 1) // $l2_inflight_bytes)), 16, 256) if $VX_CFG_L2_ENABLE else 16"
+l2_inflight_bytes = "expr: $VX_CFG_NUM_CLUSTERS * $VX_CFG_L2_NUM_BANKS * $VX_CFG_L2_SECTOR_SIZE"
 VX_CFG_L2_LATENCY = "expr: 4 + max(0, clog2($VX_CFG_L2_SIZE) - clog2(1048576))"
 VX_CFG_L2_MRSQ_SIZE = 4
 VX_CFG_L2_MREQ_SIZE = 0
@@ -311,7 +325,8 @@ VX_CFG_L3_WRITEBACK = "expr: int($l3_is_llc)"
 VX_CFG_L3_DIRTYBYTES = "expr: $VX_CFG_L3_LAZY_FETCH"
 VX_CFG_L3_LAZY_FETCH = "expr: int($VX_CFG_L3_WRITEBACK and $l3_is_llc)"
 VX_CFG_L3_REPL_POLICY = "expr: $__cache_repl_fifo"
-VX_CFG_L3_MSHR_SIZE = 16
+VX_CFG_L3_MSHR_SIZE = "expr: clamp(pow(2, clog2(($mem_bytes_in_flight + $l3_inflight_bytes - 1) // $l3_inflight_bytes)), 16, 256) if $VX_CFG_L3_ENABLE else 16"
+l3_inflight_bytes = "expr: $VX_CFG_L3_NUM_BANKS * $VX_CFG_L3_SECTOR_SIZE"
 VX_CFG_L3_LATENCY = "expr: 4 + max(0, clog2($VX_CFG_L3_SIZE) - clog2(2097152))"
 VX_CFG_L3_MRSQ_SIZE = 4
 VX_CFG_L3_MREQ_SIZE = 0
