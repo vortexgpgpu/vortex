@@ -1089,6 +1089,33 @@ and the LSU's pending pool, which wait on both crossings, size from
 `PLATFORM_MEMORY_LATENCY + 2 × L2_LINK_LATENCY`; the L2 and L3 MSHRs from the
 memory latency alone.
 
+**`L1_LINK_LATENCY`** (`0`) — the link between each core's memory ports and the
+dcache, in cycles **each way**. On some GPUs (Fermi, Kepler, Maxwell, Pascal) a
+global load goes through the L1/texture pipeline and an L1 hit takes 35 to 96
+cycles; `DCACHE_LATENCY` is the bank pipeline with its commit logic and cannot
+stand for that. The link sits in `VX_socket` on the dcache side of the dMMU,
+between each core lane (`dcache_phys_bus_if`) and the dcache's core port: the
+same `VX_mem_bus_delay` as the L2 link, so a request reaches the dcache
+`L1_LINK_LATENCY` cycles after the core (or the dMMU) offers it and a response
+its core as long after the dcache does. Every global access, an L1 hit, an L2
+hit or a DRAM access, gains `2 × L1_LINK_LATENCY` cycles of round trip; shared
+memory, inside the core, does not. At `0` the lanes are wires.
+A store past the core is ack-less, so whatever holds one outside the core's own
+drain status must be drained explicitly. Each lane is a FIFO with one fixed
+delay, so it keeps its requests in order, and the order across lanes at the
+dcache is set, as without the link, by the dcache's per-lane back-pressure;
+fence and flush tokens order per lane, so they need nothing more. The dcache
+flush that a DCR request starts does assume the core's stores are in the dcache
+once they leave the core: it waits until the core's lanes on the link are empty
+(and, under VM, its dMMU lanes idle), latching the start since the token
+crosses the link too, and the socket stays busy while any lane holds a request.
+SimX models it with a `DelayBuffer` per direction on each core dcache port in
+`Socket`; its run and flush loops wait for an idle platform, which counts the
+packets on the links. The LSU's pending pool sizes from
+`PLATFORM_MEMORY_LATENCY + 2 × L2_LINK_LATENCY + 2 × L1_LINK_LATENCY`; the
+dcache MSHRs, which a miss holds only below the dcache, do not count the L1
+link.
+
 **Icache exceptions.** The icache has no `NUM_BANKS`, `WRITEBACK`, `DIRTYBYTES`,
 `LINE_SIZE`, `WORD_SIZE`, or `SECTOR_SIZE` knob. Its geometry beyond size and ways
 is fixed in `VX_gpu_pkg.sv` and at its instantiation (`NUM_BANKS=1`, `NUM_REQS=1`,

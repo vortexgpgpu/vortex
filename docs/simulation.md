@@ -300,12 +300,15 @@ $ cd build64 && python3 ../ci/profile_check.py --profile=a100 --metrics=peak,lat
 It exits 1 when a metric is off by more than `--tolerance` (10% by default),
 and 2 when a run fails.
 
-The two chase latencies are calibrated in that order. `l2_hit_cycles` sets
-`VX_CFG_L2_LINK_LATENCY`, the link between the sockets and the L2 (cycles
-each way, so a hit gains twice it): on the parts most of an L2 hit is the
-SM-to-L2 network. A DRAM access crosses the link too, so
-`VX_CFG_PLATFORM_MEMORY_LATENCY` then takes what `dram_cycles` still needs.
-Both latencies move the measured ones one for one (the link two for one).
+The three chase latencies are calibrated in that order. `l1_hit_cycles` sets
+`VX_CFG_L1_LINK_LATENCY`, the link between a core and the dcache (cycles each
+way, so every global access gains twice it), for the parts whose global loads
+go through the L1/texture pipeline and take longer than the dcache's own
+pipeline. `l2_hit_cycles` then sets `VX_CFG_L2_LINK_LATENCY`, the link between
+the sockets and the L2: on the parts most of an L2 hit is the SM-to-L2
+network. A DRAM access crosses both links, so
+`VX_CFG_PLATFORM_MEMORY_LATENCY` last takes what `dram_cycles` still needs.
+The memory latency moves the measured ones one for one, each link two for one.
 
 ### Configuring the DRAM Model
 

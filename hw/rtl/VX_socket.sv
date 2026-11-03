@@ -209,6 +209,35 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .TAG_WIDTH (DCACHE_TAG_WIDTH)
     ) dcache_phys_bus_if[`VX_CFG_SOCKET_SIZE * DCACHE_NUM_REQS]();
 
+    // dcache side of the cores' link to it
+    VX_mem_bus_if #(
+        .DATA_SIZE (DCACHE_WORD_SIZE),
+        .TAG_WIDTH (DCACHE_TAG_WIDTH)
+    ) dcache_link_bus_if[`VX_CFG_SOCKET_SIZE * DCACHE_NUM_REQS]();
+
+    // The cores' link to the dcache: L1_LINK_LATENCY cycles each way, past the
+    // dMMU, so it carries physical requests.
+    wire [`VX_CFG_SOCKET_SIZE * DCACHE_NUM_REQS-1:0] dcache_link_empty;
+    for (genvar i = 0; i < `VX_CFG_SOCKET_SIZE * DCACHE_NUM_REQS; ++i) begin : g_dcache_link
+        if (`VX_CFG_L1_LINK_LATENCY != 0) begin : g_delay
+            VX_mem_bus_delay #(
+                .DATA_SIZE (DCACHE_WORD_SIZE),
+                .TAG_WIDTH (DCACHE_TAG_WIDTH),
+                .LATENCY   (`VX_CFG_L1_LINK_LATENCY)
+            ) link (
+                .clk        (clk),
+                .reset      (reset),
+                .bus_in_if  (dcache_phys_bus_if[i]),
+                .bus_out_if (dcache_link_bus_if[i]),
+                .empty      (dcache_link_empty[i])
+            );
+        end else begin : g_wire
+            `ASSIGN_VX_MEM_BUS_IF (dcache_link_bus_if[i], dcache_phys_bus_if[i]);
+            assign dcache_link_empty[i] = 1'b1;
+        end
+    end
+    wire dcache_link_busy = ~(& dcache_link_empty);
+
     VX_mem_bus_if #(
         .DATA_SIZE (DCACHE_SECTOR_SIZE),
         .TAG_WIDTH (DCACHE_MEM_TAG_WIDTH)
@@ -254,7 +283,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     `endif
         .clk            (clk),
         .reset          (reset),
-        .core_bus_if    (dcache_phys_bus_if),
+        .core_bus_if    (dcache_link_bus_if),
         .mem_bus_if     (dcache_mem_bus_if),
         .req_empty      (dcache_req_empty)
     );
@@ -984,6 +1013,15 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
 
     ///////////////////////////////////////////////////////////////////////////
 
+    // Per dcache lane: none of its requests is held between its core and the
+    // dcache, in the dMMU or on the link.
+    wire [`VX_CFG_SOCKET_SIZE * DCACHE_NUM_REQS-1:0] dcache_path_idle;
+`ifdef VX_CFG_VM_ENABLE
+    assign dcache_path_idle = dmmu_lane_idle & dcache_link_empty;
+`else
+    assign dcache_path_idle = dcache_link_empty;
+`endif
+
     wire [`VX_CFG_SOCKET_SIZE-1:0] per_core_busy;
     wire [`VX_CFG_SOCKET_SIZE-1:0][`VX_CFG_NUM_LSU_BLOCKS-1:0] per_core_lsu_busy;
 `ifdef EXT_GFX_ANY_ENABLE
@@ -1082,8 +1120,8 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
 
         `ifdef VX_CFG_VM_ENABLE
             .mmu_drained    (socket_mmu_drained),
-            .dcache_mmu_drained (& dmmu_lane_idle[core_id * DCACHE_NUM_REQS +: DCACHE_NUM_REQS]),
         `endif
+            .dcache_path_drained (& dcache_path_idle[core_id * DCACHE_NUM_REQS +: DCACHE_NUM_REQS]),
 
         `ifdef EXT_GFX_ANY_ENABLE
             .cluster_flush_if (per_core_cluster_flush_if[core_id]),
@@ -1116,8 +1154,8 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     wire mmu_busy = 1'b0;
 `endif
     // Stores are ack-less, so the cores go idle with their last requests still
-    // on the way out; the socket stays busy until none is held in its caches'
-    // uncached paths or arbiters.
+    // on the way out; the socket stays busy until none is held on the link to
+    // the dcache or in its caches' uncached paths or arbiters.
 `ifndef VX_CFG_EXT_TEX_ENABLE
     assign tcache_req_empty = 1'b1;
 `endif
@@ -1129,7 +1167,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     wire issued_busy = BUSY_REG ? (dcr_bus_if.req_valid | (| per_core_kmu_fire)) : 1'b0;
     wire skid_busy   = BUSY_REG ? (| per_core_kmu_valid) : 1'b0;
     wire busy_r;
-    `BUFFER_EX(busy_r, (|per_core_busy) | (|per_core_lsu_busy) | ~mem_req_empty | mmu_busy | issued_busy, 1'b1, 1, BUSY_REG);
+    `BUFFER_EX(busy_r, (|per_core_busy) | (|per_core_lsu_busy) | dcache_link_busy | ~mem_req_empty | mmu_busy | issued_busy, 1'b1, 1, BUSY_REG);
     assign busy = busy_r | skid_busy;
 
 endmodule

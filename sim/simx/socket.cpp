@@ -16,6 +16,7 @@
 #include "core.h"
 #include "cluster.h"
 #include "constants.h"
+#include "delay_buffer.h"
 #include "types.h"
 #ifdef SIMX_SOCKET_UNIT_MMU
 #include "mem/mmu.h"
@@ -325,6 +326,27 @@ public:
       cores_.at(i) = Core::Create(sname, core_id, simobject_);
     }
 
+    // A core's dcache port reaches the dcache across the link to it,
+    // VX_CFG_L1_LINK_LATENCY cycles each way.
+    auto bind_l1_link = [&](uint32_t core, uint32_t port,
+                            SimChannel<MemReq>& req_src, SimChannel<MemReq>& req_dst,
+                            SimChannel<MemRsp>& rsp_src, SimChannel<MemRsp>& rsp_dst) {
+      if constexpr (VX_CFG_L1_LINK_LATENCY != 0) {
+        snprintf(sname, 100, "%s-l1link%d-req%d", name.c_str(), core, port);
+        auto req_link = DelayBuffer<MemReq>::Create(sname, VX_CFG_L1_LINK_LATENCY);
+        snprintf(sname, 100, "%s-l1link%d-rsp%d", name.c_str(), core, port);
+        auto rsp_link = DelayBuffer<MemRsp>::Create(sname, VX_CFG_L1_LINK_LATENCY);
+        req_src.bind(&req_link->In);
+        req_link->Out.bind(&req_dst);
+        rsp_src.bind(&rsp_link->In);
+        rsp_link->Out.bind(&rsp_dst);
+      } else {
+        __unused(core, port);
+        req_src.bind(&req_dst);
+        rsp_src.bind(&rsp_dst);
+      }
+    };
+
     // connect cores to caches
     for (uint32_t i = 0; i < cores_per_socket; ++i) {
       for (uint32_t j = 0; j < ICACHE_NUM_REQS; ++j) {
@@ -333,8 +355,8 @@ public:
       }
 
       for (uint32_t j = 0; j < VX_CFG_DCACHE_NUM_REQS; ++j) {
-        cores_.at(i)->dcache_req_out.at(j).bind(&dcaches_->core_req_in.at(i).at(j));
-        dcaches_->core_rsp_out.at(i).at(j).bind(&cores_.at(i)->dcache_rsp_in.at(j));
+        bind_l1_link(i, j, cores_.at(i)->dcache_req_out.at(j), dcaches_->core_req_in.at(i).at(j),
+                     dcaches_->core_rsp_out.at(i).at(j), cores_.at(i)->dcache_rsp_in.at(j));
       }
     }
 

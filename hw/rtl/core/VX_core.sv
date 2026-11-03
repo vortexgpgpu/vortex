@@ -46,9 +46,10 @@ import VX_tcu_pkg::*;
     // Translation happens at the socket (one MMU per L1 cache): the core emits
     // virtual addresses, and busy/barrier logic waits on the socket MMU draining.
     input wire              mmu_drained,
-    // This core's own dMMU lanes hold none of its requests.
-    input wire              dcache_mmu_drained,
 `endif
+    // None of this core's requests is held on its way to the dcache, in its
+    // dMMU lanes or on the link.
+    input wire              dcache_path_drained,
 
 `ifdef VX_CFG_EXT_DXA_ENABLE
     VX_dxa_req_bus_if.master dxa_req_bus_if,
@@ -165,25 +166,26 @@ import VX_tcu_pkg::*;
     // Stores are ack-less and lag warp exit, so the dcache flush waits until every
     // store of this core has reached L1.
     wire store_drained = (&lsu_sched_empty) && mem_unit_empty;
-`ifdef VX_CFG_VM_ENABLE
-    // Under VM a store may still be parked on a TLB miss in this core's dMMU
-    // lanes, which a flush token on another lane would overtake: the flush also
-    // waits for those lanes. The request is level-held and the token's own trip
-    // through the MMU clears the lanes' idle, so the start is latched until the
-    // flush request drops.
-    reg dcache_flush_go_r;
-    always @(posedge clk) begin
-        if (reset || ~dcr_flush_if.req) begin
-            dcache_flush_go_r <= 1'b0;
-        end else if (store_drained && dcache_mmu_drained) begin
-            dcache_flush_go_r <= 1'b1;
+    // Past the core a store may still be parked on a TLB miss in this core's
+    // dMMU lanes (VM) or crossing the link to the dcache, where a flush token on
+    // another lane would overtake it: the flush also waits for those lanes. The
+    // request is level-held and the token's own trip clears the lanes' idle, so
+    // the start is latched until the flush request drops.
+    if ((`VX_CFG_VM_ENABLED != 0) || (`VX_CFG_L1_LINK_LATENCY != 0)) begin : g_flush_path
+        reg dcache_flush_go_r;
+        always @(posedge clk) begin
+            if (reset || ~dcr_flush_if.req) begin
+                dcache_flush_go_r <= 1'b0;
+            end else if (store_drained && dcache_path_drained) begin
+                dcache_flush_go_r <= 1'b1;
+            end
         end
+        assign dcr_flush_dcache_if.req = dcr_flush_if.req
+                                      && ((store_drained && dcache_path_drained) || dcache_flush_go_r);
+    end else begin : g_flush_direct
+        `UNUSED_VAR (dcache_path_drained)
+        assign dcr_flush_dcache_if.req = dcr_flush_if.req && store_drained;
     end
-    assign dcr_flush_dcache_if.req = dcr_flush_if.req
-                                  && ((store_drained && dcache_mmu_drained) || dcache_flush_go_r);
-`else
-    assign dcr_flush_dcache_if.req = dcr_flush_if.req && store_drained;
-`endif
     // Only the dcache flush walks the shared levels (the icache does not
     // forward its flush), so the icache flushes alongside it.
     assign dcr_flush_icache_if.req = dcr_flush_if.req;

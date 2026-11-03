@@ -104,6 +104,8 @@ VX_CFG_PLATFORM_MEMORY_QUEUE_SIZE = 0
 mem_bytes_in_flight = "expr: ($VX_CFG_PLATFORM_MEMORY_PEAK_BW // $VX_CFG_PLATFORM_CLOCK_RATE) * $VX_CFG_PLATFORM_MEMORY_LATENCY"
 # Above the L2 a miss also crosses the link to it, both ways.
 l1_mem_bytes_in_flight = "expr: ($VX_CFG_PLATFORM_MEMORY_PEAK_BW // $VX_CFG_PLATFORM_CLOCK_RATE) * ($VX_CFG_PLATFORM_MEMORY_LATENCY + 2 * $VX_CFG_L2_LINK_LATENCY)"
+# Above the dcache a load also crosses the link to it, both ways.
+lsu_mem_bytes_in_flight = "expr: ($VX_CFG_PLATFORM_MEMORY_PEAK_BW // $VX_CFG_PLATFORM_CLOCK_RATE) * ($VX_CFG_PLATFORM_MEMORY_LATENCY + 2 * $VX_CFG_L2_LINK_LATENCY + 2 * $VX_CFG_L1_LINK_LATENCY)"
 
 [alu]
 VX_CFG_NUM_ALU_LANES = "expr: $VX_CFG_SIMD_WIDTH"
@@ -128,7 +130,7 @@ VX_CFG_LSU_QUEUE_IN_SIZE = "expr: max(4, 2 * ($VX_CFG_SIMD_WIDTH // $VX_CFG_NUM_
 VX_CFG_LSU_PENDING_SIZE = "expr: min($VX_CFG_LSU_PENDING_LIMIT, max(8, 2 * $VX_CFG_NUM_WARPS * ($VX_CFG_SIMD_WIDTH // $VX_CFG_NUM_LSU_LANES)))"
 # The pool's bound: an LSU block's share of the memory bytes in flight, in
 # full packets, and at least 32, which keeps the slot id cheap in the dcache tag.
-VX_CFG_LSU_PENDING_LIMIT = "expr: clamp(pow(2, clog2(($l1_mem_bytes_in_flight + $lsu_inflight_bytes - 1) // $lsu_inflight_bytes)), 32, 256)"
+VX_CFG_LSU_PENDING_LIMIT = "expr: clamp(pow(2, clog2(($lsu_mem_bytes_in_flight + $lsu_inflight_bytes - 1) // $lsu_inflight_bytes)), 32, 256)"
 lsu_inflight_bytes = "expr: $VX_CFG_NUM_CLUSTERS * $VX_CFG_NUM_CORES * $VX_CFG_NUM_LSU_BLOCKS * $VX_CFG_LSU_LINE_SIZE"
 # The mem-side queue depth is not a knob: it sets the dcache-facing tag-id
 # width and must cover the outstanding pool, so each implementation derives
@@ -286,6 +288,14 @@ dcache_inflight_bytes = "expr: $VX_CFG_NUM_CLUSTERS * up($VX_CFG_NUM_CORES // $V
 VX_CFG_DCACHE_LINE_SIZE = "expr: $VX_CFG_L1_LINE_SIZE"
 VX_CFG_DCACHE_SECTOR_SIZE = "expr: $VX_CFG_L1_LINE_SIZE"
 VX_CFG_DCACHE_LATENCY = "expr: 2 + max(0, clog2($VX_CFG_DCACHE_SIZE) - clog2(16384))"
+# The link between a core's memory port and the dcache, in cycles each way: a
+# request reaches the dcache, and its response the core, this many cycles
+# later, at full throughput, so every global access (an L1 hit, and every
+# miss) grows by twice it, and shared memory, inside the core, does not. It
+# stands for a GPU whose global loads go through its L1/texture pipeline,
+# which DCACHE_LATENCY (the bank pipeline) is not. The dcache MSHRs do not
+# wait on it; the LSU's pending pool does.
+VX_CFG_L1_LINK_LATENCY = 0
 VX_CFG_DCACHE_MRSQ_SIZE = 4
 VX_CFG_DCACHE_MREQ_SIZE = 0
 VX_CFG_DCACHE_CRSQ_SIZE = 0
