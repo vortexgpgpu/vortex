@@ -601,7 +601,10 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
 
     // F2I overflow detection (I32 target)
     wire f2i_s32_pos_ovf = is_signed_s5 && !is_int64_s5 && !input_sign_s5 && (|rounded_abs_s5[S_MAN_WIDTH-1:31]);
-    wire f2i_s32_neg_ovf = is_signed_s5 && !is_int64_s5 &&  input_sign_s5 && (rounded_abs_s5 > S_MAN_WIDTH'(32'h80000000));
+    // A magnitude of 2^S_MAN_WIDTH or more aligns unshifted (-2^64 would read
+    // as -2^63), so the signed negative checks also take the true exponent.
+    wire f2i_s32_neg_ovf = is_signed_s5 && !is_int64_s5 &&  input_sign_s5
+                         && ((unpacked_exp_s5 >= S_EXP_WIDTH'(32)) || (rounded_abs_s5 > S_MAN_WIDTH'(32'h80000000)));
     wire f2i_u32_neg_ovf = !is_signed_s5 && !is_int64_s5 && rounded_sign_s5 && (|rounded_abs_s5);
 
     // Unsigned positive overflow: magnitude >= 2^TW (TW=32/64). When S_MAN_WIDTH
@@ -610,7 +613,7 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
     // all-ones magnitude (e.g. 2^32-1 rounding up to 2^32).
     wire round_carry_out_s5 = (rounded_abs_s5 == '0) && (|pre_round_abs_s5);
     wire f2i_u32_pos_ovf = !is_signed_s5 && !is_int64_s5 && !input_sign_s5
-                         && ((unpacked_exp_s5 >= S_EXP_WIDTH'(32)) || round_carry_out_s5);
+                         && ((unpacked_exp_s5 >= S_EXP_WIDTH'(32)) || round_carry_out_s5 || (|(rounded_abs_s5 >> 32)));
     wire f2i_u64_pos_ovf;
     if (`VX_CFG_XLEN == 64) begin : g_f2i_u64pos
         assign f2i_u64_pos_ovf = !is_signed_s5 && is_int64_s5 && !input_sign_s5
@@ -623,7 +626,8 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
     wire f2i_s64_pos_ovf, f2i_s64_neg_ovf, f2i_u64_neg_ovf;
     if (`VX_CFG_XLEN == 64) begin : g_f2i_64ovf
         assign f2i_s64_pos_ovf = is_signed_s5 && is_int64_s5 && !input_sign_s5 && (|rounded_abs_s5[S_MAN_WIDTH-1:63]);
-        assign f2i_s64_neg_ovf = is_signed_s5 && is_int64_s5 &&  input_sign_s5 && (rounded_abs_s5 > S_MAN_WIDTH'(64'h8000000000000000));
+        assign f2i_s64_neg_ovf = is_signed_s5 && is_int64_s5 &&  input_sign_s5
+                               && ((unpacked_exp_s5 >= S_EXP_WIDTH'(64)) || (rounded_abs_s5 > S_MAN_WIDTH'(64'h8000000000000000)));
         assign f2i_u64_neg_ovf = !is_signed_s5 && is_int64_s5 && rounded_sign_s5 && (|rounded_abs_s5);
     end else begin : g_f2i_no64ovf
         assign f2i_s64_pos_ovf = 1'b0;
