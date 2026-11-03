@@ -60,6 +60,7 @@ static bool commit_single_hop(uint32_t fu) {
   switch ((FUType)fu) {
   case FUType::LSU:
   case FUType::SFU:
+  case FUType::FPU:
 #ifdef VX_CFG_EXT_TCU_ENABLE
   case FUType::TCU:
 #endif
@@ -67,6 +68,24 @@ static bool commit_single_hop(uint32_t fu) {
   default:
     return false;
   }
+}
+
+// Lanes per pass of a unit whose lane gather merges the passes of one SIMD
+// slice of an instruction into a single commit beat; 0 when the unit takes a
+// whole SIMD slice per pass.
+static uint32_t gather_merge_lanes(uint32_t fu) {
+  uint32_t lanes = 0;
+  switch ((FUType)fu) {
+  case FUType::ALU: lanes = VX_CFG_NUM_ALU_LANES; break;
+  case FUType::LSU: lanes = VX_CFG_NUM_LSU_LANES; break;
+  case FUType::SFU: lanes = VX_CFG_NUM_SFU_LANES; break;
+  case FUType::FPU: lanes = VX_CFG_NUM_FPU_LANES; break;
+#ifdef VX_CFG_EXT_TCU_ENABLE
+  case FUType::TCU: lanes = VX_CFG_NUM_TCU_LANES; break;
+#endif
+  default: break;
+  }
+  return (lanes < VX_CFG_SIMD_WIDTH) ? lanes : 0;
 }
 
 class Core::Impl {
@@ -381,13 +400,15 @@ public:
     for (uint32_t iw = 0; iw < VX_CFG_ISSUE_WIDTH; ++iw) {
       auto& queues = commit_queues_.emplace_back();
       for (uint32_t fu = 0; fu < (uint32_t)FUType::Count; ++fu) {
-        // A unit's lane gather holds two results. The LSU's, the SFU's and the
-        // TCU's cross one register into it; the others cross two and take a
-        // third slot so that they still retire one result per cycle.
+        // A unit's lane gather holds two results. The LSU's, the SFU's, the
+        // FPU's and the TCU's cross one register into it; the ALU's crosses
+        // two and takes a third slot so that it still retires one result per
+        // cycle.
         uint32_t capacity = commit_single_hop(fu) ? 2 : 3;
         queues.emplace_back(std::make_unique<SimChannel<instr_trace_t*>>(simobject_, capacity));
       }
     }
+    gather_holds_.resize(VX_CFG_ISSUE_WIDTH, std::vector<GatherHold>((uint32_t)FUType::Count));
 
     this->reset();
   }
@@ -410,6 +431,10 @@ public:
 
     pending_instrs_.clear();
     pending_ifetches_ = 0;
+
+    for (auto& holds : gather_holds_) {
+      std::fill(holds.begin(), holds.end(), GatherHold());
+    }
 
     std::fill(ibuf_inflight_.begin(), ibuf_inflight_.end(), 0);
     std::fill(ibuf_full_r_.begin(), ibuf_full_r_.end(), false);
@@ -951,9 +976,9 @@ public:
         auto& arb_in = *commit_queues_.at(iw).at(fu);
         // The unit's output registers ahead of the commit arbiter that its
         // output channel does not already carry: the LSU's response buffer and
-        // result arbiter, the SFU's result buffer and response switch, and the
-        // TCU's result landing queue are in their channels, leaving each its
-        // lane gather.
+        // result arbiter, the SFU's result buffer and response switch, the
+        // FPU's output register and the TCU's result landing queue are in
+        // their channels, leaving each its lane gather.
         uint32_t commit_delay = commit_single_hop(fu) ? 1 : 2;
         if (arb_in.try_send(trace, commit_delay)) {
           // Release the warp as soon as its stalling instruction's result leaves
@@ -971,6 +996,12 @@ public:
     // process completed instructions: one beat per issue slice per cycle,
     // granted fixed-priority in EX-unit order (ALU highest, then LSU, SFU,
     // FPU, TCU) — a busy higher class starves lower ones' writebacks.
+    //
+    // A narrow unit's lane gather holds the passes of one SIMD slice of an
+    // instruction and commits them in the beat of the pass that completes the
+    // slice. Taking a pass into the hold costs no beat; a hold that the next
+    // result does not continue leaves in a beat of its own, ahead of that
+    // result.
     static constexpr FUType kCommitPrio[] = {
       FUType::ALU, FUType::LSU, FUType::SFU, FUType::FPU,
     #ifdef VX_CFG_EXT_TCU_ENABLE
@@ -978,6 +1009,7 @@ public:
     #endif
     };
     for (uint32_t iw = 0; iw < VX_CFG_ISSUE_WIDTH; ++iw) {
+      auto& holds = gather_holds_.at(iw);
       SimChannel<instr_trace_t*>* granted = nullptr;
       FUType granted_fu = FUType::ALU;
       for (auto fu : kCommitPrio) {
@@ -987,10 +1019,25 @@ public:
         auto& queue = (fu == FUType::FPU && !FpuUnit::kGather)
                     ? func_units_.at((uint32_t)fu)->output(iw)
                     : *commit_queues_.at(iw).at((uint32_t)fu);
-        if (!queue.empty()) {
+        if (queue.empty()) {
+          continue;
+        }
+        uint32_t lanes = gather_merge_lanes((uint32_t)fu);
+        if (lanes != 0) {
+          auto trace = queue.peek();
+          auto& hold = holds.at((uint32_t)fu);
+          if (!this->gather_completes(trace, lanes)
+           && (!hold.valid || hold.continues(trace, lanes))) {
+            // the pass joins the hold this cycle, without a beat
+            hold.take(trace, lanes);
+            this->retire(trace, iw);
+            queue.pop();
+            continue;
+          }
+        }
+        if (!granted) {
           granted = &queue;
           granted_fu = fu;
-          break;
         }
       }
       if (!granted)
@@ -1001,53 +1048,89 @@ public:
         scheduler_->resume(trace->wid);
       }
 
-      // advance to commit stage
-      DT(3, simobject_->name() << "-pipeline commit: " << *trace);
-      assert(trace->cid == simobject_->id());
-
-      // Per-pid writeback: dispatcher splits multi-pid traces into copies
-      // each carrying its own lane-subset tmask + dst_data; every pid pass
-      // writes back independently. Scoreboard release counts COMMITS via
-      // num_pkts (set by dispatcher at sop) rather than gating on eop —
-      // cache responses can complete out of order, so a SIMD-split eop
-      // packet may reach commit before its peers; releasing on eop would
-      // expose stale lanes to the next dependent instruction's
-      // fetch_operands. Perf accounting still gates on eop.
-      if (trace->wb) {
-        operands_.at(iw)->writeback(trace);
-        if (scoreboard_->commit_packet(trace)) {
-          scoreboard_->release(trace);
+      uint32_t lanes = gather_merge_lanes((uint32_t)granted_fu);
+      if (lanes != 0) {
+        auto& hold = holds.at((uint32_t)granted_fu);
+        if (hold.valid && !hold.continues(trace, lanes)) {
+          // the beat drains the hold alone; a pass that does not complete its
+          // instruction takes the hold's place in the same cycle, one that
+          // does waits for the next beat
+          hold.valid = false;
+          if (!this->gather_completes(trace, lanes)) {
+            hold.take(trace, lanes);
+            this->retire(trace, iw);
+            granted->pop();
+          }
+          continue;
         }
-      }
-      if (trace->eop && trace->instr_ptr->fcsr_writes()) {
-        scoreboard_->release_fcsr(trace);
+        hold.valid = false;
       }
 
-      if (trace->eop) {
-
-        // instruction mix profiling
-        switch (trace->fu_type) {
-        case FUType::ALU: ++perf_stats_.alu_instrs; break;
-        case FUType::FPU: ++perf_stats_.fpu_instrs; break;
-        case FUType::LSU: ++perf_stats_.lsu_instrs; break;
-        case FUType::SFU: ++perf_stats_.sfu_instrs; break;
-      #ifdef VX_CFG_EXT_TCU_ENABLE
-        case FUType::TCU: ++perf_stats_.tcu_instrs; break;
-      #endif
-        default: assert(false);
-        }
-        // track committed instructions
-        perf_stats_.instrs += 1;
-
-        // instruction completed
-        pending_instrs_.remove(trace);
-      }
-
-      trace->~instr_trace_t();
-      trace_pool_.deallocate(trace, 1);
-
+      this->retire(trace, iw);
       granted->pop();
     }
+  }
+
+  // A pass completes its commit beat when it is the last pass of its SIMD
+  // slice, or when nothing of the instruction can follow it.
+  bool gather_completes(const instr_trace_t* trace, uint32_t lanes) const {
+    uint32_t passes = VX_CFG_SIMD_WIDTH / lanes;
+    if ((uint32_t)trace->pid % passes == passes - 1) {
+      return true;
+    }
+    // responses complete out of order: the last one to arrive ends the
+    // instruction
+    if (trace->rsp_tracked) {
+      return trace->rsp_last;
+    }
+    return trace->eop;
+  }
+
+  void retire(instr_trace_t* trace, uint32_t iw) {
+    // advance to commit stage
+    DT(3, simobject_->name() << "-pipeline commit: " << *trace);
+    assert(trace->cid == simobject_->id());
+
+    // Per-pid writeback: dispatcher splits multi-pid traces into copies
+    // each carrying its own lane-subset tmask + dst_data; every pid pass
+    // writes back independently. Scoreboard release counts COMMITS via
+    // num_pkts (set by dispatcher at sop) rather than gating on eop —
+    // cache responses can complete out of order, so a SIMD-split eop
+    // packet may reach commit before its peers; releasing on eop would
+    // expose stale lanes to the next dependent instruction's
+    // fetch_operands. Perf accounting still gates on eop.
+    if (trace->wb) {
+      operands_.at(iw)->writeback(trace);
+      if (scoreboard_->commit_packet(trace)) {
+        scoreboard_->release(trace);
+      }
+    }
+    if (trace->eop && trace->instr_ptr->fcsr_writes()) {
+      scoreboard_->release_fcsr(trace);
+    }
+
+    if (trace->eop) {
+
+      // instruction mix profiling
+      switch (trace->fu_type) {
+      case FUType::ALU: ++perf_stats_.alu_instrs; break;
+      case FUType::FPU: ++perf_stats_.fpu_instrs; break;
+      case FUType::LSU: ++perf_stats_.lsu_instrs; break;
+      case FUType::SFU: ++perf_stats_.sfu_instrs; break;
+    #ifdef VX_CFG_EXT_TCU_ENABLE
+      case FUType::TCU: ++perf_stats_.tcu_instrs; break;
+    #endif
+      default: assert(false);
+      }
+      // track committed instructions
+      perf_stats_.instrs += 1;
+
+      // instruction completed
+      pending_instrs_.remove(trace);
+    }
+
+    trace->~instr_trace_t();
+    trace_pool_.deallocate(trace, 1);
   }
 
   // ----- Public-facing API (called from outer Core trampolines) -----
@@ -1274,6 +1357,35 @@ private:
   // [iw][fu] commit staging: FU outputs land here one registered stage
   // before retirement; commit() grants among them fixed-priority.
   std::vector<std::vector<std::unique_ptr<SimChannel<instr_trace_t*>>>> commit_queues_;
+
+  // A lane gather's hold: the SIMD slice of an instruction whose passes wait
+  // for the beat of the pass that completes it. Micro-ops of one instruction
+  // share its PC and differ in destination.
+  struct GatherHold {
+    bool     valid   = false;
+    uint32_t wid     = 0;
+    uint32_t sid     = 0;
+    uint64_t PC      = 0;
+    uint32_t dst     = 0;
+    uint32_t bytesel = 0;
+    static uint32_t slice_of(const instr_trace_t* trace, uint32_t lanes) {
+      return (uint32_t)trace->pid / (VX_CFG_SIMD_WIDTH / lanes);
+    }
+    bool continues(const instr_trace_t* trace, uint32_t lanes) const {
+      return valid && trace->wid == wid && slice_of(trace, lanes) == sid
+          && trace->PC == PC && trace->dst_reg.id() == dst
+          && trace->dst_bytesel == bytesel;
+    }
+    void take(const instr_trace_t* trace, uint32_t lanes) {
+      valid   = true;
+      wid     = trace->wid;
+      sid     = slice_of(trace, lanes);
+      PC      = trace->PC;
+      dst     = trace->dst_reg.id();
+      bytesel = trace->dst_bytesel;
+    }
+  };
+  std::vector<std::vector<GatherHold>> gather_holds_; // [iw][fu]
 
   std::vector<Arbiter> ibuffer_arbs_;
 

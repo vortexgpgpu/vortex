@@ -413,9 +413,10 @@ void FpuUnit::on_tick() {
       if (!output.full()) {
         auto trace = input.peek();
         this->execute(trace);
-        // Without a lane-gather stage commit reads this port directly, so the
-        // result also takes the registered stage other units cross into commit.
-        uint32_t delay = this->latency_of(trace) + (kGather ? 0 : 1);
+        // The result crosses the unit's output register on this port and
+        // keeps its tag until the lane gather, or without one the commit
+        // arbiter, takes it.
+        uint32_t delay = this->latency_of(trace) + 1;
         output.send(trace, delay);
         input.pop();
         if (!kGather && trace->eop) {

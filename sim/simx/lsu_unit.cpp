@@ -391,8 +391,21 @@ void LsuUnit::process_response_step(uint32_t b) {
 	if (is_final) {
 		state.pending_reqs.release(lsu_rsp.tag);
 	}
+	// The instruction's last response is the final fragment of its last
+	// outstanding request once its final request has issued.
+	bool rsp_last = false;
+	if (is_final) {
+		auto it = state.rsp_tracks.find(rsp_track_key(trace));
+		assert(it != state.rsp_tracks.end() && it->second.outstanding != 0);
+		if (--it->second.outstanding == 0 && it->second.last_issued) {
+			rsp_last = true;
+			state.rsp_tracks.erase(it);
+		}
+	}
 	if (is_final && entry.eop) {
 		// the response buffer, then the result arbiter's register
+		trace->rsp_tracked = true;
+		trace->rsp_last = rsp_last;
 		output.send(trace, 2);
 	} else {
 		// A non-final fragment still spends a commit-port slot: it drains
@@ -403,6 +416,8 @@ void LsuUnit::process_response_step(uint32_t b) {
 		auto beat = new (beat_alloc) instr_trace_t(*trace);
 		beat->wb = false;
 		beat->eop = false;
+		beat->rsp_tracked = true;
+		beat->rsp_last = rsp_last;
 		output.send(beat, 2);
 	}
 	pending_loads_ -= lsu_rsp.mask.count();
@@ -753,6 +768,9 @@ void LsuUnit::process_request_step(uint32_t b) {
 				state.head_staged = false;
 			}
 			tag = state.pending_reqs.allocate({trace, count, is_eop, std::move(lane_entries), entry_args, true});
+			auto& track = state.rsp_tracks[rsp_track_key(trace)];
+			++track.outstanding;
+			track.last_issued |= (trace->eop && is_eop);
 		}
 		lsu_req.tag  = tag;
 		lsu_req.cid  = trace->cid;

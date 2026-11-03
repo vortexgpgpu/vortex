@@ -276,6 +276,24 @@ tests:
   via: blackbox
   app: ldst_wide
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_LSU_LANES=4
+# Half-width ALU, FPU and LSU on interleaved integer and FMA chains: every
+# instruction takes two passes, and each unit's lane gather commits the two in
+# one writeback beat. Multiplies, minimums and conversions return between the
+# chains' passes.
+- id: parity-mixfu-lanes
+  check: model_parity
+  via: blackbox
+  app: mixfu
+  args: -n32 -i128
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_NUM_ALU_LANES=8 -DVX_CFG_NUM_FPU_LANES=8 -DVX_CFG_NUM_LSU_LANES=8
+# The same with two SIMD slices per warp: each slice commits in its own beat,
+# and the last block of each row runs half masked.
+- id: parity-mixfu-simd
+  check: model_parity
+  via: blackbox
+  app: mixfu
+  args: -n40 -i64
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_SIMD_WIDTH=8 -DVX_CFG_NUM_ALU_LANES=4 -DVX_CFG_NUM_FPU_LANES=4 -DVX_CFG_NUM_LSU_LANES=4
 # Matrix fragment loads and stores: SimX and RTL expand and time them alike.
 - id: parity-ldst-matrix
   check: model_parity

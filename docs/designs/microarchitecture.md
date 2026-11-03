@@ -74,6 +74,10 @@ Vortex has a 6-stage pipeline:
     - Handle warp matrix multiply accumulate operations
 - **Commit**
   - Write result back to the register file and update the Scoreboard.
+  - A unit with fewer lanes than a SIMD slice (`NUM_*_LANES` < `SIMD_WIDTH`)
+    runs each slice of an instruction in several passes; its lane gather holds
+    the earlier passes and commits the slice in one writeback beat, with the
+    pass that completes it.
 
 ### Core partitioning
 

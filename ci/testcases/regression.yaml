@@ -103,6 +103,18 @@ tests:
   configs: -DVX_CFG_SIMD_WIDTH=1
   shape:
     threads: 4
+# Half-width ALU, FPU and LSU: each lane gather commits an instruction's two
+# passes in one beat, and the last block of each row runs half masked.
+- id: mixfu-lanes
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: mixfu
+  args: -n40 -i32
+  configs: -DVX_CFG_NUM_WARPS=16 -DVX_CFG_NUM_ALU_LANES=8 -DVX_CFG_NUM_FPU_LANES=8 -DVX_CFG_NUM_LSU_LANES=8
+  shape:
+    threads: 16
 # Matrix fragment loads and stores (vx_ldm, vx_stm): every shape of the
 # configuration, local and global memory, row strides that are not powers of
 # two, zero/positive/negative offsets, aligned and unaligned register bases.
