@@ -532,7 +532,8 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
   RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
 
-  uint32_t smem_size = (cta_M * cfg::tileK + cfg::tileK * cfg::tileN) * sizeof(itype_t);
+  // two stages: the kernel copies the next K tile while it computes on the other
+  uint32_t smem_size = 2 * (cta_M * cfg::tileK + cfg::tileK * cfg::tileN) * sizeof(itype_t);
 
   // Host result buffer — must outlive the async read enqueued below.
   std::vector<otype_t> h_C(sizeC);
