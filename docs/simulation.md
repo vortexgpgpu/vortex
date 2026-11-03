@@ -234,7 +234,7 @@ machine from it: SimX, rtlsim, the FPGA and ASIC flows, and the kernels.
 | `rtx1080` | GeForce GTX 1080 (Pascal): 20 cores x 64 warps x 32 threads, 2 MB L2, GDDR5X as 16 GDDR6 channels |
 | `v100` | Tesla V100 (Volta): 80 cores, 4 MB L2, 32 HBM2 channels at 1752 MT/s |
 | `a100` | A100 (Ampere): 108 cores, 32 MB L2, HBM2 at the card's 1555 GB/s |
-| `a100_lite`, `a100_lite_m<n>` | A stripped A100-class SM (RV64IMAF, TCU, MUFU, no graphics) with the A100's divide/sqrt/convert and shared-memory rates; 1 or n = 4..128 SMs, L2 banks, L2 size and HBM channels/bandwidth scaled to n/108 of the A100's |
+| `a100_lite`, `a100_lite_m<n>` | A stripped A100-class SM (RV64IMAF, TCU, MUFU, no graphics) with the A100's divide/sqrt/convert, LD/ST, L1 and shared-memory rates; 1 or n = 4..128 SMs, L2 banks, L2 size and HBM channels/bandwidth scaled to n/108 of the A100's |
 | `h100` | H100 SXM5 (Hopper): 132 cores, 32 MB L2, HBM3 at the card's 3.35 TB/s |
 | `rtx5080` | GeForce RTX 5080 (Blackwell): 84 cores x 48 warps, 64 MB L2, GDDR7 bandwidth on the GDDR6 model |
 
