@@ -27,7 +27,9 @@ Key features:
   - Supports [[enum]] blocks in TOML to declare enum-typed parameters.
   - Supports [[builtin]] blocks in TOML to declare environment-sourced variables used only in expr evaluation.
   - Supports [[param]] blocks in TOML to declare parameter variables used only in expr evaluation / unresolved RHS.
-  - builtin/param variables are NOT emitted to outputs.
+  - Supports [[extern]] blocks in TOML to declare macros the consumer defines (e.g. a VX_config knob a
+    VX_types address depends on); in resolved mode a key that depends on one stays a macro expression over it.
+  - builtin/param/extern variables are NOT emitted to outputs.
   - Supports "expr:" values in TOML, with $NAME references.
   - supports local/private variables as lowercase definitions to use with expressions.
   - Auto-generates an integer `X_ENABLED` (1/0) mirror for every boolean
@@ -203,6 +205,7 @@ def _scan_hex_literals(toml_path: str) -> Dict[str, HexMeta]:
   in_enum = False
   in_builtin = False
   in_param = False
+  in_extern = False
   with open(toml_path, "r", encoding="utf-8") as f:
     for raw_line in f:
       line = raw_line.rstrip("\n")
@@ -213,13 +216,15 @@ def _scan_hex_literals(toml_path: str) -> Dict[str, HexMeta]:
         in_enum = (s == "[[enum]]")
         in_builtin = (s == "[[builtin]]")
         in_param = (s == "[[param]]")
+        in_extern = (s == "[[extern]]")
         continue
       if s.startswith("[") and s.endswith("]"):
         in_enum = False
         in_builtin = False
         in_param = False
+        in_extern = False
         continue
-      if in_enum or in_builtin or in_param:
+      if in_enum or in_builtin or in_param or in_extern:
         continue
       if "=" in line:
         rhs = line.split("=", 1)[1].lstrip()
@@ -282,7 +287,7 @@ def _flatten_with_layout(toml_data: Dict[str, Any]) -> Tuple[Dict[str, Any], Lay
 
   root_keys: List[str] = []
   for top_k, top_v in toml_data.items():
-    if top_k in ("enum", "builtin", "param"):
+    if top_k in ("enum", "builtin", "param", "extern"):
       continue
     if isinstance(top_v, dict):
       sec_keys: List[str] = []
@@ -887,16 +892,22 @@ def _inline_locals_into(node: ast.AST, locals_ast: Dict[str, ast.AST]) -> ast.AS
 # -----------------------------
 
 class MacroExprTranslator:
-  def __init__(self, d: Dialect, params: Set[str], expr_src: Optional[str] = None) -> None:
+  def __init__(self, d: Dialect, params: Set[str], expr_src: Optional[str] = None,
+               sv_lit_width: Optional[int] = None) -> None:
     self.d = d
     self.params = params
     self.expr_src = expr_src
+    self.sv_lit_width = sv_lit_width
 
   def translate(self, expr: str, current_key: Optional[str], enums: Dict[str, EnumSpec]) -> str:
     expr2 = _preprocess_expr(expr)
     tree = ast.parse(expr2, mode="eval")
     self.expr_src = expr2
     return self._emit(tree.body, current_key=current_key, enums=enums)
+
+  def translate_node(self, node: ast.AST, current_key: Optional[str], enums: Dict[str, EnumSpec]) -> str:
+    self.expr_src = None
+    return self._emit(node, current_key=current_key, enums=enums)
 
   def _name_ref(self, name: str) -> str:
     if self.d.kind == "sv" and name in self.params:
@@ -915,7 +926,9 @@ class MacroExprTranslator:
       if isinstance(node.value, int):
         if self.expr_src is not None:
           return _format_int_from_expr_source(self.d.kind, node, node.value, self.expr_src)
-        return str(node.value)
+        if self.d.kind == "sv" and self.sv_lit_width is not None and node.value >= 2**31:
+          return f"{self.sv_lit_width}'h{node.value:X}"
+        return _format_int_literal(self.d.kind, "", node.value, {})
       if isinstance(node.value, str):
         if current_key is not None and current_key in enums:
           if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", node.value):
@@ -1409,14 +1422,20 @@ def _py_clog2(x: Any) -> Any:
   return (xi - 1).bit_length()
 
 
+class _Deferred(Exception):
+  """A key depends on an [[extern]] macro, so it has no value until the consumer defines it."""
+
+
 class Resolver:
   def __init__(self, base: Dict[str, Any], overrides: Dict[str, Any],
-               enums: Dict[str, EnumSpec], builtins: Dict[str, VarSpec], params: Dict[str, VarSpec]) -> None:
+               enums: Dict[str, EnumSpec], builtins: Dict[str, VarSpec], params: Dict[str, VarSpec],
+               externs: Optional[Set[str]] = None) -> None:
     self.base = base
     self.overrides = overrides
     self.enums = enums
     self.builtins = builtins
     self.params = params
+    self.externs = externs or set()
     self.cache: Dict[str, Any] = {}
     self.visiting: Set[str] = set()
 
@@ -1425,6 +1444,8 @@ class Resolver:
       return self.cache[key]
     if key in self.visiting:
       raise ValueError(f"Cycle detected while resolving '{key}'")
+    if key in self.externs:
+      raise _Deferred(key)
 
     if key in self.builtins:
       # [[builtin]] variables are sourced from the environment, so a TOML can
@@ -1498,6 +1519,8 @@ class Resolver:
       tree = _IntDivXform().visit(tree)
       ast.fix_missing_locations(tree)
       return eval(compile(tree, "<cfg-expr>", "eval"), {"__builtins__": {}}, scope)  # noqa: S307
+    except _Deferred:
+      raise
     except Exception as e:
       raise ValueError(f"Failed to eval expr '{expr}': {e}") from e
 
@@ -1533,11 +1556,41 @@ class EvalScope(dict):
     return self.r.resolve(k)
 
 
+def _fold_deferred(raw: Any, r: Resolver, symbolic: Set[str], locals_ast: Dict[str, ast.AST]) -> ast.AST:
+  """Evaluate every subexpression of a deferred key that does not reference a
+  symbolic name ([[extern]] or another deferred key), leaving an expression
+  over those names alone."""
+  expr = _extract_expr(str(raw))
+  if expr is None:
+    raise ValueError(f"Bad expr syntax: {raw}")
+  tree = _inline_locals_into(ast.parse(_preprocess_expr(expr), mode="eval").body, locals_ast)
+
+  def is_symbolic(n: ast.AST) -> bool:
+    return any(isinstance(x, ast.Name) and x.id in symbolic for x in ast.walk(n))
+
+  class Fold(ast.NodeTransformer):
+    def visit(self, node: ast.AST) -> ast.AST:
+      if isinstance(node, ast.expr) and not is_symbolic(node):
+        e = _IntDivXform().visit(ast.Expression(body=copy.deepcopy(node)))
+        ast.fix_missing_locations(e)
+        v = eval(compile(e, "<cfg-expr>", "eval"), {"__builtins__": {}}, EvalScope(r))  # noqa: S307
+        return ast.copy_location(ast.Constant(value=v), node)
+      if isinstance(node, ast.IfExp):
+        test = self.visit(node.test)
+        if isinstance(test, ast.Constant):
+          return self.visit(node.body if test.value else node.orelse)
+      return self.generic_visit(node)
+
+  return Fold().visit(tree)
+
+
 def emit_resolved_header(cfg: Dict[str, Any], layout: Layout, enums: Dict[str, EnumSpec],
-                         fmt: str, output_path: Optional[str], hex_meta: Dict[str, HexMeta]) -> str:
+                         fmt: str, output_path: Optional[str], hex_meta: Dict[str, HexMeta],
+                         deferred: Optional[Dict[str, ast.AST]] = None) -> str:
   d = Dialect("c" if fmt == "cpp" else "sv")
   tool = os.path.basename(sys.argv[0])
   guard = _make_guard_macro(output_path, "GEN_CONFIG")
+  deferred = deferred or {}
 
   lines: List[str] = []
   lines.append(f"// Auto-generated by {tool}")
@@ -1545,6 +1598,14 @@ def emit_resolved_header(cfg: Dict[str, Any], layout: Layout, enums: Dict[str, E
   lines.append(f"{d.ifndef()} {guard}")
   lines.append(f"{d.define()} {guard}")
   lines.append("")
+
+  helpers: Set[str] = set()
+  for node in deferred.values():
+    for n in ast.walk(node):
+      if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in HELPERS:
+        helpers.add(n.func.id)
+  for fn in sorted(helpers):
+    lines.extend(HELPERS[fn].emit(d))
 
   def emit_define(sec_lines: List[str], k: str, v: Any) -> None:
     if not _has_public_scope(k):
@@ -1569,6 +1630,12 @@ def emit_resolved_header(cfg: Dict[str, Any], layout: Layout, enums: Dict[str, E
   for sec, keys in layout.sections:
     sec_lines: List[str] = []
     for k in keys:
+      if k in deferred and _has_public_scope(k):
+        # Its operators widen to the use site's context, which may be any
+        # address width: a 64-bit literal keeps every operand at least as wide.
+        tr = MacroExprTranslator(d, params=set(), sv_lit_width=64)
+        sec_lines.append(f"{d.define()} {k} {tr.translate_node(deferred[k], current_key=k, enums=enums)}")
+        continue
       if k not in cfg:
         continue
       emit_define(sec_lines, k, cfg[k])
@@ -1649,6 +1716,7 @@ def main(argv: List[str]) -> int:
   builtins = _load_var_table(toml_data, "builtin")
   params_tbl = _load_var_table(toml_data, "param")
   params_set = set(params_tbl.keys())
+  externs_set = set(_load_var_table(toml_data, "extern").keys())
 
   toml_defs, layout = _flatten_with_layout(toml_data)
 
@@ -1683,8 +1751,8 @@ def main(argv: List[str]) -> int:
   defs += _parse_defines_from_cflags(args.cflags)
   defs += _parse_defines(unknown)
   overrides, _explicit = _apply_overrides(defs, enums)
-  # - A name declared under [[param]] / [[builtin]] is a read-only symbol used only for expression evaluation.
-  ro = params_set | set(builtins.keys())
+  # - A name declared under [[param]] / [[builtin]] / [[extern]] is a read-only symbol used only for expression evaluation.
+  ro = params_set | set(builtins.keys()) | externs_set
   assigned = set(toml_defs.keys()) & ro
   if assigned:
     names = ", ".join(sorted(assigned))
@@ -1704,20 +1772,31 @@ def main(argv: List[str]) -> int:
   resolved = True if args.format == "cflags" else args.resolved
 
   if resolved:
-    r = Resolver(base=toml_defs, overrides=overrides, enums=enums, builtins=builtins, params=params_tbl)
+    r = Resolver(base=toml_defs, overrides=overrides, enums=enums, builtins=builtins, params=params_tbl,
+                 externs=externs_set)
     cfg: Dict[str, Any] = {}
+    deferred_keys: List[str] = []
     for k in layout.ordered_keys:
-      cfg[k] = r.resolve(k)
+      try:
+        cfg[k] = r.resolve(k)
+      except _Deferred:
+        deferred_keys.append(k)
     for k in enums.keys():
       if k not in cfg:
         cfg[k] = r.resolve(k)
+    deferred: Dict[str, ast.AST] = {}
+    if deferred_keys:
+      locals_ast = _build_local_asts(toml_defs)
+      symbolic = externs_set | set(deferred_keys)
+      for k in deferred_keys:
+        deferred[k] = _fold_deferred(toml_defs[k], r, symbolic, locals_ast)
 
     if args.format == "cflags":
       out = emit_cflags(cfg, layout, enums, hex_meta)
     elif args.format == "cpp":
-      out = emit_resolved_header(cfg, layout, enums, "cpp", args.output, hex_meta)
+      out = emit_resolved_header(cfg, layout, enums, "cpp", args.output, hex_meta, deferred)
     else:
-      out = emit_resolved_header(cfg, layout, enums, "verilog", args.output, hex_meta)
+      out = emit_resolved_header(cfg, layout, enums, "verilog", args.output, hex_meta, deferred)
   else:
     if args.format == "cflags":
       raise ValueError("Internal: cflags output is always resolved")

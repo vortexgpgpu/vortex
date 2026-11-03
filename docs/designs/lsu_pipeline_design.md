@@ -92,7 +92,9 @@ Load-bearing properties:
   (`NUM_THREADS` stacks), so groups start on absolute group boundaries and
   the map needs no subtract or add of the window base: it rewires the
   thread and word fields and XORs the word field with the low bits of the
-  group index. The 256 KB-aligned base covers up to 32 threads.
+  group index. The base is aligned to the larger of 256 KB and a group, so
+  any thread count keeps it a group multiple; above 32 threads it moves down,
+  and the local memory window, which starts there, moves with it.
 - **Window membership is a narrow compare.** Both window bounds are asserted
   to be multiples of the stack size, so the test uses only the bits above it.
 

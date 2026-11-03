@@ -1855,13 +1855,6 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
         constexpr uint32_t lg_k = (wmma::k_steps > 1) ? log2ceil(wmma::k_steps) : 0;
         constexpr uint32_t step_bits = lg_n + lg_k;
         constexpr uint32_t step_mask = step_bits ? ((1u << step_bits) - 1) : 0;
-        constexpr uint32_t sym_mask_lo = []() {
-          uint32_t mask = 0;
-          for (uint32_t lane = 0; lane < VX_CFG_NUM_THREADS; ++lane)
-            if ((lane % wmma::tcN) < (wmma::tcN / 2)) mask |= (1u << lane);
-          return mask;
-        }();
-        constexpr uint32_t all_lanes = (VX_CFG_NUM_THREADS == 32) ? 0xffffffffu : ((1u << VX_CFG_NUM_THREADS) - 1);
 
         uint32_t n_sp = step_bits ? (mma_idx & step_mask) : 0;
         uint32_t m_sp = mma_idx >> step_bits;
@@ -1875,8 +1868,16 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
         uop_instr->set_src_reg(0, ra_base + m_sp, RegType::Float);
         uop_instr->set_src_reg(1, rb_base + n_sp, RegType::Float);
         uop_instr->set_src_reg(2, reg_rs3, RegType::Float);
-        // Symmetric sparse: no k-loop, always wb=1 and always reads C from RF
-        uop_instr->set_tmask(ThreadMask(VX_CFG_NUM_THREADS, (mma_idx & 1) ? (all_lanes & ~sym_mask_lo) : sym_mask_lo));
+        // Symmetric sparse: no k-loop, always wb=1 and always reads C from RF.
+        // Even uops run the low half of each block's columns, odd uops the high half.
+        ThreadMask tmask(VX_CFG_NUM_THREADS);
+        bool hi_half = (mma_idx & 1);
+        for (uint32_t lane = 0; lane < VX_CFG_NUM_THREADS; ++lane) {
+          if (((lane % wmma::tcN) >= (wmma::tcN / 2)) == hi_half) {
+            tmask.set(lane);
+          }
+        }
+        uop_instr->set_tmask(tmask);
       } else {
         // Standard k-major triple loop (dense or non-sym sparse)
         uint32_t mn = wmma::m_steps * wmma::n_steps;

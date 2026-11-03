@@ -29,6 +29,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     VX_result_if.master     result_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
+    `STATIC_ASSERT(`VX_CFG_NUM_THREADS <= `VX_CFG_XLEN, ("a thread mask must fit a register: NUM_THREADS=%0d", `VX_CFG_NUM_THREADS))
     localparam PID_BITS   = `CLOG2(`VX_CFG_NUM_THREADS / NUM_LANES);
     localparam WCTL_WIDTH = $bits(tmc_t) + $bits(split_t) + $bits(join_t);
 

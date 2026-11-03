@@ -159,6 +159,17 @@ tests:
   app: sgemm_tcu
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_FEDP2K -DITYPE=fp16 -DOTYPE=fp32
 
+# A 64-thread warp: an 8x8x8 block, with the stack window moved to a 512 KB
+# boundary. A thread mask is a register, so 64 threads need XLEN 64.
+- id: sgemm_tcu-nt64
+  via: blackbox
+  xlen: [64]
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=64 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32
+
 # SimX<->rtlsim cycle parity on the native (non-DPI) fp16 TCU datapath: same
 # config on both drivers, cycles must agree within tolerance (see core.yaml).
 - id: model_parity-fp16
