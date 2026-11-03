@@ -52,11 +52,11 @@ module foldsim_mem_ser #(
     output wire [PORTS*RSP_W-1:0] s_bits,
 
     // The record streams.
-    output reg                    req_valid,
+    output wire                   req_valid,
     input  wire                   req_ready,
-    output reg  [CW-1:0]          req_chan,
-    output reg                    req_treset,
-    output reg  [REQ_W-1:0]       req_bits,
+    output wire [CW-1:0]          req_chan,
+    output wire                   req_treset,
+    output wire [REQ_W-1:0]       req_bits,
 
     input  wire                   rsp_valid,
     output wire                   rsp_ready,
@@ -94,11 +94,17 @@ module foldsim_mem_ser #(
     reg  [SF-1:0]    s_sent [PORTS];
     reg  [RSP_W-1:0] s_rec  [PORTS];
 
-    // The complete REQ records into a register stage: a pointer visits the
-    // ports one a host cycle and sends the record of the port it is on when
-    // that record is complete.
+    // The complete REQ records: a pointer visits the ports one a host cycle
+    // and offers the record of the port it is on when that record is
+    // complete. The receiver's ready is per channel: a record it cannot take
+    // now is offered again at the port's next visit and never holds back
+    // another port's (PORTFOLD_IFACE.md section 7).
     reg  [CW-1:0]    qp;
-    wire             q_send = q_done[qp] & (!req_valid || req_ready);
+    wire             q_send = q_done[qp] & req_ready;
+    assign req_valid  = q_done[qp];
+    assign req_chan   = qp;
+    assign req_bits   = q_rec[qp];
+    assign req_treset = q_rst[qp];
     assign rsp_ready = !s_full[rsp_chan];
 
     for (genvar p = 0; p < PORTS; ++p) begin : g_port
@@ -147,20 +153,9 @@ module foldsim_mem_ser #(
     end
 
     always @(posedge clk) begin
-        if (reset) begin
-            req_valid <= 1'b0;
-            qp        <= '0;
-        end else begin
-            if (req_valid && req_ready)
-                req_valid <= 1'b0;
-            if (q_send)
-                req_valid <= 1'b1;
+        if (reset)
+            qp <= '0;
+        else
             qp <= (qp == CW'(PORTS - 1)) ? '0 : qp + 1'b1;
-        end
-        if (q_send) begin
-            req_chan   <= qp;
-            req_bits   <= q_rec[qp];
-            req_treset <= q_rst[qp];
-        end
     end
 endmodule

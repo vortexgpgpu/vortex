@@ -81,10 +81,10 @@ module foldsim_mem_fold #(
     input  wire                   req_treset,
     input  wire [REQ_W-1:0]       req_bits,
 
-    output reg                    rsp_valid,
+    output wire                   rsp_valid,
     input  wire                   rsp_ready,
-    output reg  [CW-1:0]          rsp_chan,
-    output reg  [RSP_W-1:0]       rsp_bits,
+    output wire [CW-1:0]          rsp_chan,
+    output wire [RSP_W-1:0]       rsp_bits,
 
     // The one AXI4 master to device memory.
     output wire                   m_awvalid,
@@ -379,11 +379,15 @@ module foldsim_mem_fold #(
     wire b_in = m_bvalid & m_bready;
 
     // The RSP stream: a pointer visits the ports one a host cycle, as the
-    // threads take turns, and sends the record of the port it is on when
-    // that record is complete.
+    // threads take turns, and offers the record of the port it is on when
+    // that record is complete. The receiver's ready is per channel: a record
+    // it cannot take now is offered again at the port's next visit, and
+    // never holds back another port's (PORTFOLD_IFACE.md section 7).
     reg  [CW-1:0]    sp;
     wire [PORTS-1:0] s_done;
-    wire             s_send = s_done[sp] & (!rsp_valid || rsp_ready);
+    wire             s_send = s_done[sp] & rsp_ready;
+    assign rsp_valid = s_done[sp];
+    assign rsp_chan  = sp;
 
     wire [QF-1:0] q_fire = {QF{run}} & q_valid & q_ready;
     wire [SF-1:0] s_fire = {SF{run}} & s_valid & s_ready;
@@ -464,6 +468,7 @@ module foldsim_mem_fold #(
     // A port's RSP record, a memory per field: the fields fire at different
     // turns, each written alone.
     wire [RSP_W-1:0] s_rec;
+    assign rsp_bits = s_rec;
     for (genvar f = 0; f < SF; ++f) begin : g_sfield
         (* ram_style = "distributed" *) reg [`FMR_RSP_W(f)-1:0] s_mem [PORTS];
         always @(posedge clk)
@@ -475,16 +480,11 @@ module foldsim_mem_fold #(
     // The RSP stream and the shared master.
     always @(posedge clk) begin
         if (reset) begin
-            rsp_valid <= 1'b0;
             sp <= '0;
             ar_n <= '0; aw_n <= '0; w_n <= '0; rt_n <= '0; bt_n <= '0;
             ar_h <= '0; ar_t <= '0; aw_h <= '0; aw_t <= '0; w_h <= '0; w_t <= '0;
             rt_h <= '0; rt_t <= '0; bt_h <= '0; bt_t <= '0;
         end else begin
-            if (rsp_valid && rsp_ready)
-                rsp_valid <= 1'b0;
-            if (s_send)
-                rsp_valid <= 1'b1;
             sp <= (sp == CW'(PORTS - 1)) ? '0 : sp + 1'b1;
             if (ar_take) begin
                 ar_t <= ar_t + 1'b1;
@@ -505,10 +505,6 @@ module foldsim_mem_fold #(
             w_n  <= w_n  + (QW+1)'(aw_take) - (QW+1)'(m_wvalid && m_wready);
             rt_n <= rt_n + (QW+1)'(ar_take) - (QW+1)'(r_in);
             bt_n <= bt_n + (QW+1)'(aw_take) - (QW+1)'(b_in);
-        end
-        if (s_send) begin
-            rsp_chan <= sp;
-            rsp_bits <= s_rec;
         end
         if (ar_take) begin
             arq[ar_t]  <= {t, t_araddr, t_arlen};
