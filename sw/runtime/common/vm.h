@@ -15,6 +15,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <map>
 #include <memory>
 #include <random>
 #include <unordered_map>
@@ -86,6 +87,11 @@ public:
   // Uses megapage PTEs where alignment + size permit, leaf PTEs otherwise.
   int install_identity_map(uint64_t addr, uint64_t size);
 
+  // Keep [addr, addr + size) out of the VA heap so identity maps installed
+  // in it later (VX_MEM_PHYS buffers in the pinned slab) cannot collide
+  // with a heap VA. Installs no PTEs.
+  int reserve_identity_window(uint64_t addr, uint64_t size);
+
   // Push every dirty shadow PT page to device memory (one device write
   // per dirty page). Implicitly invoked at the end of init() /
   // phy_to_virt_map() / install_identity_map() / map_p2v() so callers
@@ -117,6 +123,10 @@ private:
   MemoryAllocator* page_table_mem_;
   MemoryAllocator* virtual_mem_;
   std::unordered_map<uint64_t, uint64_t> addr_mapping;
+  // Identity-mapped VA ranges, start -> end, disjoint and merged.
+  std::map<uint64_t, uint64_t> identity_ranges_;
+  // VA ranges withheld from the heap for later identity maps.
+  std::map<uint64_t, uint64_t> identity_windows_;
 
   // Host shadow: key = PT-page-aligned PA, value = VX_VM_PT_SIZE bytes.
   std::unordered_map<uint64_t, std::vector<uint8_t>> shadow_pt_;

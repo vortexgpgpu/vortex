@@ -42,6 +42,12 @@ constexpr unsigned vm_clog2(uint64_t n) {
 }
 // VPN bits per page-table level = log2(PTEs per table). SV39 -> 9, SV32 -> 10.
 constexpr unsigned VM_VPN_BITS = vm_clog2(VX_VM_PT_SIZE / VX_VM_PTE_SIZE);
+
+// Whether [lo, hi) lies inside one range of a disjoint, merged start -> end map.
+bool range_within(const std::map<uint64_t, uint64_t>& ranges, uint64_t lo, uint64_t hi) {
+  auto it = ranges.upper_bound(lo);
+  return it != ranges.begin() && std::prev(it)->second >= hi;
+}
 } // namespace
 
 VMManager::VMManager(DeviceMemIO* dev_io)
@@ -343,6 +349,14 @@ int16_t VMManager::update_page_table(uint64_t ppn, uint64_t vpn, uint32_t pte_fl
   return 0;
 }
 
+int VMManager::reserve_identity_window(uint64_t addr, uint64_t size) {
+  if (range_within(identity_ranges_, addr, addr + size))
+    return 0;
+  CHECK_ERR(virtual_mem_->reserve(addr, size), { return err; });
+  identity_windows_[addr] = addr + size;
+  return 0;
+}
+
 int VMManager::install_identity_map(uint64_t addr, uint64_t size) {
   // Per-level page coverage: L0 = VX_VM_PAGE_SIZE, each higher level
   // multiplies by PT entries-per-table. SV32: L1=4MB. SV39: L1=2MB, L2=1GB.
@@ -358,25 +372,61 @@ int VMManager::install_identity_map(uint64_t addr, uint64_t size) {
   constexpr uint32_t IDENTITY_PTE_FLAGS =
       PTE_V | PTE_R | PTE_W | PTE_X | PTE_U | PTE_A | PTE_D;
 
-  (void)virtual_mem_->reserve(addr, size);
-
+  // Only the parts not yet identity-mapped need a VA reservation and PTEs:
+  // a range can legitimately fall inside an earlier one (an XLEN=64 kernel
+  // image at STARTUP_ADDR lies in the high system region mapped by init()).
+  const uint64_t end = addr + size;
+  std::vector<std::pair<uint64_t, uint64_t>> gaps;
   uint64_t cur = addr;
-  uint64_t end = addr + size;
-  while (cur < end) {
-    uint64_t remaining = end - cur;
-    uint8_t leaf_level = 0;
-    for (int l = VX_VM_PT_LEVEL - 1; l > 0; --l) {
-      if ((cur % level_size[l]) == 0 && remaining >= level_size[l]) {
-        leaf_level = (uint8_t)l;
-        break;
-      }
-    }
-    uint64_t vpn = cur >> VX_VM_PAGE_LOG2_SIZE;
-    CHECK_ERR(update_page_table(vpn, vpn, IDENTITY_PTE_FLAGS, leaf_level), {
-      return err;
-    });
-    cur += level_size[leaf_level];
+  auto it = identity_ranges_.upper_bound(addr);
+  if (it != identity_ranges_.begin())
+    --it;
+  for (; cur < end && it != identity_ranges_.end() && it->first < end; ++it) {
+    if (it->second <= cur)
+      continue;
+    if (it->first > cur)
+      gaps.emplace_back(cur, it->first);
+    cur = it->second;
   }
+  if (cur < end)
+    gaps.emplace_back(cur, end);
+  if (gaps.empty())
+    return 0;
+
+  for (auto& gap : gaps) {
+    if (!range_within(identity_windows_, gap.first, gap.second)) {
+      CHECK_ERR(virtual_mem_->reserve(gap.first, gap.second - gap.first), {
+        return err;
+      });
+    }
+    cur = gap.first;
+    while (cur < gap.second) {
+      uint64_t remaining = gap.second - cur;
+      uint8_t leaf_level = 0;
+      for (int l = VX_VM_PT_LEVEL - 1; l > 0; --l) {
+        if ((cur % level_size[l]) == 0 && remaining >= level_size[l]) {
+          leaf_level = (uint8_t)l;
+          break;
+        }
+      }
+      uint64_t vpn = cur >> VX_VM_PAGE_LOG2_SIZE;
+      CHECK_ERR(update_page_table(vpn, vpn, IDENTITY_PTE_FLAGS, leaf_level), {
+        return err;
+      });
+      cur += level_size[leaf_level];
+    }
+  }
+
+  uint64_t lo = addr, hi = end;
+  it = identity_ranges_.upper_bound(addr);
+  if (it != identity_ranges_.begin() && std::prev(it)->second >= addr)
+    --it;
+  while (it != identity_ranges_.end() && it->first <= end) {
+    lo = std::min(lo, it->first);
+    hi = std::max(hi, it->second);
+    it = identity_ranges_.erase(it);
+  }
+  identity_ranges_[lo] = hi;
   return flush();
 }
 
