@@ -4,8 +4,9 @@
   "description": "NVIDIA GeForce GTX 1060 6GB (GP106, Pascal, sm_61) at its 1506 MHz base clock: one Vortex core per SM; the SM is GP104's (gtx1080).",
   "chip": {
     "VX_CFG_NUM_CORES": 10,
-    "VX_CFG_L2_SIZE": 1048576,
-    "VX_CFG_L2_NUM_BANKS": 8
+    "VX_CFG_L2_SIZE": 1572864,
+    "VX_CFG_L2_NUM_BANKS": 8,
+    "VX_CFG_L2_NUM_WAYS": 24
   },
   "platform": {
     "VX_CFG_PLATFORM_MEMORY_NUM_BANKS": 8,
@@ -17,7 +18,7 @@
   "sources": {
     "SM (all core knobs)": "Inherited from gtx1080: GP106 uses the same Pascal SM as GP104 (128 CUDA cores, 32 LD/ST, 32 SFU, 4 FP64, 96 KB shared memory, 48 KB L1/texture)",
     "NUM_CORES": "10 SMs, 1280 CUDA cores (GTX 1060 6GB)",
-    "L2_SIZE, L2_NUM_BANKS": "1.5 MB L2 in 12 slices (6 x 32-bit controllers, 2 slices each), rounded down to the power-of-two 1 MB and 8 banks",
+    "L2_SIZE, L2_NUM_BANKS": "1.5 MB L2 in 12 slices (6 x 32-bit controllers, 2 slices each): 24 ways over power-of-two sets, 8 banks",
     "PLATFORM_MEMORY_TYPE, PLATFORM_MEMORY_NUM_BANKS, PLATFORM_MEMORY_DATA_RATE, PLATFORM_MEMORY_PEAK_BW": "192-bit GDDR5 at 8 Gbps (192 GB/s) modelled as 8 GDDR6 x16 channels at 12000 MT/s for a power-of-two interleave: 8 x 2 B x 12 GT/s = 192 GB/s, the card's bandwidth; latency not calibrated",
     "PLATFORM_CLOCK_RATE": "1506 MHz base clock (1708 MHz boost), base as in gtx1080"
   }

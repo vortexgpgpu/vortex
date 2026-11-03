@@ -33,8 +33,8 @@
     "VX_CFG_NUM_CLUSTERS": 1,
     "VX_CFG_NUM_CORES": 80,
     "VX_CFG_L2_ENABLE": true,
-    "VX_CFG_L2_SIZE": 4194304,
-    "VX_CFG_L2_NUM_WAYS": 16,
+    "VX_CFG_L2_SIZE": 6291456,
+    "VX_CFG_L2_NUM_WAYS": 24,
     "VX_CFG_L2_NUM_BANKS": 32,
     "VX_CFG_CP_LLC_CLIENT": 1
   },
@@ -48,7 +48,7 @@
   "sources": {
     "NUM_CORES, NUM_WARPS, NUM_THREADS, ISSUE_WIDTH": "80 SMs, 64 resident warps/SM, 4 processing blocks with one scheduler each (NVIDIA Tesla V100 GPU Architecture whitepaper, Table 1)",
     "DCACHE_SIZE": "128 KB combined L1/shared per SM (whitepaper)",
-    "L2_SIZE, L2_NUM_WAYS, L2_NUM_BANKS": "6 MB L2 (whitepaper), rounded down to the power of two the cache accepts; 16 ways, 32 banks for the 32 memory channels",
+    "L2_SIZE, L2_NUM_WAYS, L2_NUM_BANKS": "6 MB L2 (whitepaper): 24 ways over power-of-two sets, 32 banks for the 32 memory channels",
     "PLATFORM_MEMORY_TYPE, PLATFORM_MEMORY_NUM_BANKS, PLATFORM_MEMORY_DATA_RATE": "4 HBM2 stacks x 8 128-bit channels = 32 channels at 1752 MT/s: 32 x 16 B x 1752 MT/s = 897 GB/s (whitepaper)",
     "PLATFORM_CLOCK_RATE, PLATFORM_MEMORY_PEAK_BW": "1530 MHz boost clock, 900 GB/s (whitepaper, Table 1)",
     "FETCH_WIDTH": "4 SM processing blocks, each with its own warp scheduler, dispatch unit and L0 instruction cache (NVIDIA Tesla V100 GPU Architecture whitepaper)",

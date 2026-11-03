@@ -9,7 +9,7 @@
     "VX_CFG_NUM_ALU_LANES": 32,
     "VX_CFG_NUM_FPU_LANES": 32,
     "VX_CFG_NUM_LSU_LANES": 8,
-    "VX_CFG_DCACHE_SIZE": 32768,
+    "VX_CFG_DCACHE_SIZE": 49152,
     "VX_CFG_FETCH_WIDTH": 4,
     "VX_CFG_LMEM_LOG_SIZE": 16,
     "VX_CFG_LMEM_NUM_BANKS": 16,
@@ -24,7 +24,8 @@
     "VX_CFG_EXT_RASTER_ENABLE": true,
     "VX_CFG_EXT_OM_ENABLE": true,
     "VX_CFG_FDIV_PE_RATIO": 4,
-    "VX_CFG_FSQRT_PE_RATIO": 4
+    "VX_CFG_FSQRT_PE_RATIO": 4,
+    "VX_CFG_DCACHE_NUM_WAYS": 6
   },
   "chip": {
     "VX_CFG_NUM_CLUSTERS": 1,
@@ -44,7 +45,7 @@
   },
   "sources": {
     "NUM_CORES, NUM_WARPS, NUM_THREADS, ISSUE_WIDTH": "20 SMs, 64 resident warps/SM, 4 schedulers x 32 lanes (NVIDIA GeForce GTX 1080 whitepaper)",
-    "DCACHE_SIZE": "48 KB unified L1/texture per SM (whitepaper), rounded down to the power of two the cache accepts",
+    "DCACHE_SIZE": "48 KB unified L1/texture per SM (whitepaper): 6 ways over power-of-two sets",
     "L2_SIZE, L2_NUM_WAYS, L2_NUM_BANKS": "2 MB L2 (whitepaper); 16 ways, 16 banks for the 16 memory channels",
     "PLATFORM_MEMORY_TYPE, PLATFORM_MEMORY_NUM_BANKS, PLATFORM_MEMORY_DATA_RATE": "256-bit GDDR5X at 10 Gbps modelled as 16 GDDR6 x16 channels at 10000 MT/s: 16 x 2 B x 10 GT/s = 320 GB/s, the card's bandwidth; latency not calibrated",
     "PLATFORM_CLOCK_RATE, PLATFORM_MEMORY_PEAK_BW": "1607 MHz base clock, 320 GB/s (whitepaper)",
