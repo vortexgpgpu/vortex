@@ -18,7 +18,8 @@
 // selected at runtime by src_fmt/dst_fmt (0=F32, 1=F64). The canonical
 // datapath is sized to the widest enabled float format (SUPER_*); narrower
 // formats occupy the low bits. FLEN=32 elaborates to the original F32 logic.
-// LATENCY: 5 for XLEN=32, 6 for XLEN=64 (separates S0 negate from S1 LZC).
+// LATENCY: 5 for XLEN=32, 6 for XLEN=64 (registers the unpacked source
+// ahead of the S1 integer negate and LZC).
 module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
 #(
     parameter LATENCY   = 5,
@@ -71,6 +72,7 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
     localparam S_MAN_WIDTH      = `MAX(1 + SUPER_MAN, `VX_CFG_XLEN);
     localparam S_EXP_WIDTH      = `MAX(`CLOG2(`VX_CFG_XLEN), SUPER_EXP + 2) + 2;
     localparam LZC_RESULT_WIDTH = `CLOG2(S_MAN_WIDTH);
+    localparam ALIGN_SH_WIDTH   = `CLOG2(S_MAN_WIDTH + 2);
 
     `UNUSED_VAR (src_fmt)
     `UNUSED_VAR (dst_fmt)
@@ -165,8 +167,6 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
         : src_is_d ? S_MAN_WIDTH'({fclass.is_normal, safe_dataa[F64_MAN-1:0]})
                    : S_MAN_WIDTH'({fclass.is_normal, s_op[F32_MAN-1:0]});
 
-    wire signed [S_EXP_WIDTH-1:0] src_bias_s = src_is_h ? S_EXP_WIDTH'(F16_BIAS)
-                                             : src_is_d ? S_EXP_WIDTH'(F64_BIAS) : S_EXP_WIDTH'(F32_BIAS);
     wire [SUPER_EXP-1:0] src_exp_sd;
     if (HAS_D) begin : g_srcexp_d
         assign src_exp_sd = src_is_d ? safe_dataa[F64_MAN +: F64_EXP]
@@ -177,83 +177,73 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
     wire [SUPER_EXP-1:0] src_exp_raw = src_is_h ? SUPER_EXP'(h_op[F16_MAN +: F16_EXP]) : src_exp_sd;
 
     wire i_sign = safe_dataa[is_int64 ? (`VX_CFG_XLEN-1) : 31] && is_signed;
-    wire [`VX_CFG_XLEN-1:0] i_mag_raw = i_sign ? (-dataa) : dataa;
-    wire [`VX_CFG_XLEN-1:0] i_mag = is_int64 ? i_mag_raw : `VX_CFG_XLEN'(i_mag_raw[31:0]);
+    // A negative integer source is carried as its one's complement y = ~x; the
+    // magnitude |x| = y + 1 is formed in stage 1, beside the LZC that reads y.
+    wire [`VX_CFG_XLEN-1:0] i_inv_raw = dataa ^ {`VX_CFG_XLEN{i_sign}};
+    wire [`VX_CFG_XLEN-1:0] i_inv     = is_int64 ? i_inv_raw : `VX_CFG_XLEN'(i_inv_raw[31:0]);
 
-    logic [S_MAN_WIDTH-1:0]        unpacked_mant_s0;
-    logic signed [S_EXP_WIDTH-1:0] unpacked_exp_s0;
+    // The source exponent is carried biased; stage 1 folds the bias into its
+    // per-format constants.
+    logic [S_MAN_WIDTH-1:0] mant_raw_s0;
+    logic [SUPER_EXP-1:0]   exp_raw_s0;
+    logic                   exp_sub_s0;
     wire input_sign_s0 = is_itof ? i_sign : input_fp_sgn;
+    wire mant_neg_s0   = is_itof && i_sign;
 
     always_comb begin
         if (is_itof) begin
-            unpacked_mant_s0 = S_MAN_WIDTH'(i_mag);
-            unpacked_exp_s0  = S_EXP_WIDTH'(`VX_CFG_XLEN - 1);
+            mant_raw_s0 = S_MAN_WIDTH'(i_inv);
+            exp_raw_s0  = '0;
+            exp_sub_s0  = 1'b0;
         end else begin // float source: F2I or F2F
-            unpacked_mant_s0 = fp_unpacked_mant;
-            unpacked_exp_s0  = S_EXP_WIDTH'(src_exp_raw) - src_bias_s
-                             + S_EXP_WIDTH'({1'b0, fclass.is_subnormal});
+            mant_raw_s0 = fp_unpacked_mant;
+            exp_raw_s0  = src_exp_raw;
+            exp_sub_s0  = fclass.is_subnormal;
         end
     end
 
     // Stage 0 -> Stage 1
-    wire is_itof_s1, is_ftoi_s1, is_f2f_s1, is_signed_s1, is_int64_s1, input_sign_s1, src_d_s1, dst_d_s1, src_h_s1, dst_h_s1;
+    wire is_itof_s1, is_ftoi_s1, is_f2f_s1, is_signed_s1, is_int64_s1, input_sign_s1, mant_neg_s1, src_d_s1, dst_d_s1, src_h_s1, dst_h_s1;
     wire [INST_FRM_BITS-1:0] frm_s1;
     fclass_t fclass_s1;
-    wire [S_MAN_WIDTH-1:0]        unpacked_mant_s1;
-    wire signed [S_EXP_WIDTH-1:0] unpacked_exp_s1;
+    wire [S_MAN_WIDTH-1:0]        mant_raw_s1;
+    wire [SUPER_EXP-1:0]          exp_raw_s1;
+    wire                          exp_sub_s1;
 
     VX_pipe_register #(
-        .DATAW (10 + INST_FRM_BITS + $bits(fclass_t) + S_MAN_WIDTH + S_EXP_WIDTH),
+        .DATAW (12 + INST_FRM_BITS + $bits(fclass_t) + S_MAN_WIDTH + SUPER_EXP),
         .DEPTH (LATENCY > 5)
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
         .enable   (enable && mask),
-        .data_in  ({is_itof,    is_ftoi,    f2f,       is_signed,    is_int64,    src_is_d, dst_is_d, src_is_h, dst_is_h, input_sign_s0, frm,    fclass,    unpacked_mant_s0, unpacked_exp_s0}),
-        .data_out ({is_itof_s1, is_ftoi_s1, is_f2f_s1, is_signed_s1, is_int64_s1, src_d_s1, dst_d_s1, src_h_s1, dst_h_s1, input_sign_s1, frm_s1, fclass_s1, unpacked_mant_s1, unpacked_exp_s1})
+        .data_in  ({is_itof,    is_ftoi,    f2f,       is_signed,    is_int64,    src_is_d, dst_is_d, src_is_h, dst_is_h, input_sign_s0, mant_neg_s0, frm,    fclass,    mant_raw_s0, exp_raw_s0, exp_sub_s0}),
+        .data_out ({is_itof_s1, is_ftoi_s1, is_f2f_s1, is_signed_s1, is_int64_s1, src_d_s1, dst_d_s1, src_h_s1, dst_h_s1, input_sign_s1, mant_neg_s1, frm_s1, fclass_s1, mant_raw_s1, exp_raw_s1, exp_sub_s1})
     );
 
     // ======================================================================
-    // Stage 1: Leading Zero Count (LZC)
+    // Stage 1: Integer magnitude, Leading Zero Count (LZC), exponent offsets
     // ======================================================================
 
-    wire [LZC_RESULT_WIDTH-1:0] renorm_shamt_s1;
-    wire mant_is_nonzero_s1;
+    wire [S_MAN_WIDTH-1:0] unpacked_mant_s1 = mant_raw_s1 + S_MAN_WIDTH'(mant_neg_s1);
 
-    wire [S_MAN_WIDTH-1:0] lzc_in_s1;
-    wire                   lzc_neg_s1;
-    wire                   lzc_lowmask_s1;
-    if (LATENCY > 5) begin : g_lzc_mag
-        assign lzc_in_s1      = unpacked_mant_s1;
-        assign lzc_neg_s1     = 1'b0;
-        assign lzc_lowmask_s1 = 1'b0;
-    end else begin : g_lzc_inv
-        // Stages 0 and 1 share a cycle, so the LZC does not wait on the
-        // integer negate: it reads the one's complement y = ~x of a negative
-        // integer. |x| = y + 1 leads where y does, except when y is all ones
-        // below its leading one (zero included), where |x| leads one place
-        // higher.
-        wire [`VX_CFG_XLEN-1:0] i_inv_raw = dataa ^ {`VX_CFG_XLEN{i_sign}};
-        wire [`VX_CFG_XLEN-1:0] i_inv     = is_int64 ? i_inv_raw : `VX_CFG_XLEN'(i_inv_raw[31:0]);
-        assign lzc_in_s1      = is_itof ? S_MAN_WIDTH'(i_inv) : fp_unpacked_mant;
-        assign lzc_neg_s1     = is_itof && i_sign;
-        assign lzc_lowmask_s1 = ~(| ((i_inv >> 1) & ~i_inv));
-    end
-
+    // |x| = y + 1 leads where y does, except when y is all ones below its
+    // leading one (zero included), where |x| leads one place higher.
     wire [LZC_RESULT_WIDTH-1:0] lzc_raw_s1;
     wire                        lzc_valid_s1;
     VX_lzc #(
         .N (S_MAN_WIDTH)
     ) lzc (
-        .data_in   (lzc_in_s1),
+        .data_in   (mant_raw_s1),
         .data_out  (lzc_raw_s1),
         .valid_out (lzc_valid_s1)
     );
+    wire lzc_lowmask_s1 = ~(| ((mant_raw_s1 >> 1) & ~mant_raw_s1));
 
-    assign renorm_shamt_s1    = ~lzc_neg_s1   ? lzc_raw_s1
-                              : ~lzc_valid_s1 ? LZC_RESULT_WIDTH'(S_MAN_WIDTH - 1)
-                                              : (lzc_raw_s1 - LZC_RESULT_WIDTH'(lzc_lowmask_s1));
-    assign mant_is_nonzero_s1 = lzc_valid_s1 || lzc_neg_s1;
+    wire [LZC_RESULT_WIDTH-1:0] renorm_shamt_s1 = ~mant_neg_s1  ? lzc_raw_s1
+                                                : ~lzc_valid_s1 ? LZC_RESULT_WIDTH'(S_MAN_WIDTH - 1)
+                                                                : (lzc_raw_s1 - LZC_RESULT_WIDTH'(lzc_lowmask_s1));
+    wire mant_is_zero_s1 = ~(lzc_valid_s1 || mant_neg_s1);
 
 `ifdef SIMULATION
     wire [LZC_RESULT_WIDTH-1:0] ref_shamt_s1;
@@ -265,209 +255,340 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
         .data_out  (ref_shamt_s1),
         .valid_out (ref_nonzero_s1)
     );
-    `RUNTIME_ASSERT (~(enable && mask && (LATENCY <= 5))
-                  || ((mant_is_nonzero_s1 == ref_nonzero_s1) && (~ref_nonzero_s1 || (renorm_shamt_s1 == ref_shamt_s1))),
+    `RUNTIME_ASSERT (~(enable && stg2_mask)
+                  || ((mant_is_zero_s1 != ref_nonzero_s1) && (~ref_nonzero_s1 || (renorm_shamt_s1 == ref_shamt_s1))),
         ("%t: fcvt leading-zero count differs from the magnitude's", $time))
 `endif
 
-    wire mant_is_zero_s1 = ~mant_is_nonzero_s1;
+    // The true source exponent is ue = exp_raw + exp_sub + C, with C = -bias
+    // for a float source and XLEN-1 for an integer (exp_raw = exp_sub = 0).
+    // The destination exponent is ue - renorm_shamt + K, with K the source's
+    // mantissa offset (float sources) plus the destination bias. C and K are
+    // constants of the (source, destination) formats, folded into one table
+    // per use, so that each use is a single add to exp_raw + exp_sub here and
+    // stage 2 only subtracts the shift amount.
+    localparam integer SRC_OFF_S = S_MAN_WIDTH - 1 - F32_MAN;
+    localparam integer SRC_OFF_D = S_MAN_WIDTH - 1 - F64_MAN;
+    localparam integer SRC_OFF_H = S_MAN_WIDTH - 1 - F16_MAN;
+    wire [1:0] src_sel_s1 = is_itof_s1 ? 2'd3 : (src_h_s1 ? 2'd2 : (src_d_s1 ? 2'd1 : 2'd0));
+    wire [1:0] dst_sel_s1 = dst_h_s1 ? 2'd2 : (dst_d_s1 ? 2'd1 : 2'd0);
+    wire [3:0][2:0][S_EXP_WIDTH-1:0] exp_k_tbl, exp_dk_tbl;
+    wire [3:0][S_EXP_WIDTH-1:0] f2i_sh_tbl, f2i_lo_tbl, ge32_tbl, ge64_tbl;
+    for (genvar s = 0; s < 4; ++s) begin : g_exp_src
+        localparam integer SRC_OFF = (s == 3) ? 0 : ((s == 2) ? SRC_OFF_H : ((s == 1) ? SRC_OFF_D : SRC_OFF_S));
+        localparam integer C_UE    = (s == 3) ? (`VX_CFG_XLEN - 1) : -((s == 2) ? F16_BIAS : ((s == 1) ? F64_BIAS : F32_BIAS));
+        for (genvar d = 0; d < 3; ++d) begin : g_exp_dst
+            localparam integer DST_BIAS = (d == 2) ? F16_BIAS : ((d == 1) ? F64_BIAS : F32_BIAS);
+            assign exp_k_tbl[s][d]  = S_EXP_WIDTH'(C_UE + SRC_OFF + DST_BIAS);
+            assign exp_dk_tbl[s][d] = S_EXP_WIDTH'(1 - C_UE - SRC_OFF - DST_BIAS);
+        end
+        assign f2i_sh_tbl[s] = S_EXP_WIDTH'(S_MAN_WIDTH - 1 - C_UE);  // F2I shift = this - (ue - C)
+        assign f2i_lo_tbl[s] = S_EXP_WIDTH'(-2 - C_UE);               // F2I shift > S_MAN_WIDTH + 1 below this
+        assign ge32_tbl[s]   = S_EXP_WIDTH'(32 - C_UE);
+        assign ge64_tbl[s]   = S_EXP_WIDTH'(64 - C_UE);
+    end
+    wire signed [S_EXP_WIDTH-1:0] exp_s1 = S_EXP_WIDTH'(exp_raw_s1) + S_EXP_WIDTH'(exp_sub_s1); // ue - C
+
+    wire signed [S_EXP_WIDTH-1:0] exp_k_s1  = exp_k_tbl[src_sel_s1][dst_sel_s1];
+    wire signed [S_EXP_WIDTH-1:0] exp_dk_s1 = exp_dk_tbl[src_sel_s1][dst_sel_s1];
+    wire signed [S_EXP_WIDTH-1:0] dst_exp_base_s1   = exp_s1 + exp_k_s1;   // dst_exp + renorm_shamt
+    wire signed [S_EXP_WIDTH-1:0] denorm_sh_base_s1 = exp_dk_s1 - exp_s1;  // 1 - dst_exp - renorm_shamt
+
+    // F2I: alignment (S_MAN_WIDTH - 1 - ue, clamped to [0, S_MAN_WIDTH + 1])
+    // from the pre-renorm exponent, to avoid double-shifting.
+    wire signed [S_EXP_WIDTH-1:0] f2i_sh_k_s1  = f2i_sh_tbl[src_sel_s1];
+    wire signed [S_EXP_WIDTH-1:0] f2i_lo_k_s1  = f2i_lo_tbl[src_sel_s1];
+    wire [ALIGN_SH_WIDTH-1:0]     f2i_shamt_s1 = ALIGN_SH_WIDTH'(f2i_sh_k_s1 - exp_s1);
+    wire [ALIGN_SH_WIDTH-1:0] f2i_align_s1 = (exp_s1 < f2i_lo_k_s1) ? ALIGN_SH_WIDTH'(S_MAN_WIDTH + 1) :
+                                             (exp_s1 > f2i_sh_k_s1) ? '0 : f2i_shamt_s1;
+    // F2I overflow from the true magnitude exponent: ue >= 32, ue >= 64.
+    wire exp_ge32_s1 = (exp_s1 >= $signed(ge32_tbl[src_sel_s1]));
+    wire exp_ge64_s1 = (exp_s1 >= $signed(ge64_tbl[src_sel_s1]));
+
+    // F2F narrowing (FCVT.S.D, FCVT.H.S, FCVT.H.D) can under/overflow the
+    // destination range; widening is always exact, so it never does. Only the
+    // F32/F16-dst finite nonzero case matters here.
+    wire f2f_narrow_s1 = is_f2f_s1 & ~dst_d_s1 & ~fclass_s1.is_nan & ~fclass_s1.is_inf & ~fclass_s1.is_zero;
 
     // Stage 1 -> Stage 2
-    wire is_itof_s2, is_ftoi_s2, is_f2f_s2, is_signed_s2, is_int64_s2, input_sign_s2, mant_is_zero_s2, src_d_s2, dst_d_s2, src_h_s2, dst_h_s2;
+    wire is_ftoi_s2, is_f2f_s2, is_signed_s2, is_int64_s2, input_sign_s2, mant_is_zero_s2, dst_d_s2, dst_h_s2;
+    wire f2f_narrow_s2, exp_ge32_s2, exp_ge64_s2;
     wire [INST_FRM_BITS-1:0] frm_s2;
     fclass_t fclass_s2;
     wire [S_MAN_WIDTH-1:0]        unpacked_mant_s2;
-    wire signed [S_EXP_WIDTH-1:0] unpacked_exp_s2;
     wire [LZC_RESULT_WIDTH-1:0]   renorm_shamt_s2;
+    wire signed [S_EXP_WIDTH-1:0] dst_exp_base_s2, denorm_sh_base_s2;
+    wire [ALIGN_SH_WIDTH-1:0]     f2i_align_s2;
 
     VX_pipe_register #(
-        .DATAW (11 + INST_FRM_BITS + $bits(fclass_t) + S_MAN_WIDTH + S_EXP_WIDTH + LZC_RESULT_WIDTH),
+        .DATAW (11 + INST_FRM_BITS + $bits(fclass_t) + S_MAN_WIDTH + LZC_RESULT_WIDTH + 2*S_EXP_WIDTH + ALIGN_SH_WIDTH),
         .DEPTH (LATENCY > 4)
     ) pipe_reg2 (
         .clk      (clk),
         .reset    (reset),
         .enable   (enable && stg2_mask),
-        .data_in  ({is_itof_s1, is_ftoi_s1, is_f2f_s1, is_signed_s1, is_int64_s1, input_sign_s1, mant_is_zero_s1, src_d_s1, dst_d_s1, src_h_s1, dst_h_s1, frm_s1, fclass_s1, unpacked_mant_s1, unpacked_exp_s1, renorm_shamt_s1}),
-        .data_out ({is_itof_s2, is_ftoi_s2, is_f2f_s2, is_signed_s2, is_int64_s2, input_sign_s2, mant_is_zero_s2, src_d_s2, dst_d_s2, src_h_s2, dst_h_s2, frm_s2, fclass_s2, unpacked_mant_s2, unpacked_exp_s2, renorm_shamt_s2})
+        .data_in  ({is_ftoi_s1, is_f2f_s1, is_signed_s1, is_int64_s1, input_sign_s1, mant_is_zero_s1, dst_d_s1, dst_h_s1, f2f_narrow_s1, exp_ge32_s1, exp_ge64_s1, frm_s1, fclass_s1, unpacked_mant_s1, renorm_shamt_s1, dst_exp_base_s1, denorm_sh_base_s1, f2i_align_s1}),
+        .data_out ({is_ftoi_s2, is_f2f_s2, is_signed_s2, is_int64_s2, input_sign_s2, mant_is_zero_s2, dst_d_s2, dst_h_s2, f2f_narrow_s2, exp_ge32_s2, exp_ge64_s2, frm_s2, fclass_s2, unpacked_mant_s2, renorm_shamt_s2, dst_exp_base_s2, denorm_sh_base_s2, f2i_align_s2})
     );
 
     // ======================================================================
-    // Stage 2: Normalize (Left Shift)
+    // Stage 2: Normalize (Left Shift) & Alignment Shift Amount
     // ======================================================================
 
-    // The significand {hidden, mantissa} occupies the low (1+src_man) bits of
-    // the S_MAN_WIDTH field. LZC counts the high padding too: subtract it back
-    // for float inputs, using the source format's mantissa width.
-    wire [S_EXP_WIDTH-1:0] fp_mant_offset_s2 = S_EXP_WIDTH'(S_MAN_WIDTH - 1)
-        - (src_h_s2 ? S_EXP_WIDTH'(F16_MAN) : src_d_s2 ? S_EXP_WIDTH'(F64_MAN) : S_EXP_WIDTH'(F32_MAN));
-    `UNUSED_VAR (src_d_s2)
-
     wire [S_MAN_WIDTH-1:0]        norm_mant_s2 = unpacked_mant_s2 << renorm_shamt_s2;
-    wire signed [S_EXP_WIDTH-1:0] norm_exp_s2  = unpacked_exp_s2 - S_EXP_WIDTH'({1'b0, renorm_shamt_s2})
-        + (is_itof_s2 ? S_EXP_WIDTH'(0) : fp_mant_offset_s2);
+    wire signed [S_EXP_WIDTH-1:0] dst_exp_s2   = dst_exp_base_s2 - S_EXP_WIDTH'({1'b0, renorm_shamt_s2});
+    wire signed [S_EXP_WIDTH-1:0] denorm_sh_s2 = denorm_sh_base_s2 + S_EXP_WIDTH'({1'b0, renorm_shamt_s2}); // right-shift to denormalize
+    wire signed [S_EXP_WIDTH-1:0] dst_inf_exp_s2 = dst_h_s2 ? S_EXP_WIDTH'(31) : S_EXP_WIDTH'(255);
+
+    wire f2f_uf_s2    = f2f_narrow_s2 & (dst_exp_s2 <= 0);              // -> subnormal/zero
+    wire f2f_of_s2    = f2f_narrow_s2 & (dst_exp_s2 >= dst_inf_exp_s2); // -> overflow
+    wire f2f_tiny0_s2 = f2f_narrow_s2 & (dst_exp_s2 == 0);
+
+    // Alignment right-shift: F2I integer align, or F2F destination denormalization.
+    logic [ALIGN_SH_WIDTH-1:0] align_shamt_s2;
+    always_comb begin
+        if (is_ftoi_s2) begin // F2I
+            align_shamt_s2 = f2i_align_s2;
+        end else if (f2f_uf_s2) begin // F2F underflow -> denormalize into subnormal position
+            align_shamt_s2 = (denorm_sh_s2 > S_EXP_WIDTH'(S_MAN_WIDTH + 1)) ? ALIGN_SH_WIDTH'(S_MAN_WIDTH + 1) : ALIGN_SH_WIDTH'(denorm_sh_s2);
+        end else begin // I2F, normal F2F
+            align_shamt_s2 = '0;
+        end
+    end
+
+    wire [SUPER_EXP-1:0] final_exp_s2 = SUPER_EXP'(dst_exp_s2);
 
     // Stage 2 -> Stage 3
-    wire is_itof_s3, is_ftoi_s3, is_f2f_s3, is_signed_s3, is_int64_s3, input_sign_s3, mant_is_zero_s3, src_d_s3, dst_d_s3, dst_h_s3;
+    wire is_ftoi_s3, is_f2f_s3, is_signed_s3, is_int64_s3, input_sign_s3, mant_is_zero_s3, dst_d_s3, dst_h_s3;
+    wire f2f_uf_s3, f2f_of_s3, f2f_tiny0_s3, exp_ge32_s3, exp_ge64_s3;
     wire [INST_FRM_BITS-1:0] frm_s3;
     fclass_t fclass_s3;
-    wire [S_MAN_WIDTH-1:0]        norm_mant_s3;
-    wire signed [S_EXP_WIDTH-1:0] norm_exp_s3;
-    wire signed [S_EXP_WIDTH-1:0] unpacked_exp_s3; // pre-renorm exp, needed for f2i_shamt
+    wire [S_MAN_WIDTH-1:0]    norm_mant_s3;
+    wire [ALIGN_SH_WIDTH-1:0] align_shamt_s3;
+    wire [SUPER_EXP-1:0]      final_exp_s3;
 
     VX_pipe_register #(
-        .DATAW (10 + INST_FRM_BITS + $bits(fclass_t) + S_MAN_WIDTH + 2*S_EXP_WIDTH),
+        .DATAW (13 + INST_FRM_BITS + $bits(fclass_t) + S_MAN_WIDTH + ALIGN_SH_WIDTH + SUPER_EXP),
         .DEPTH (LATENCY > 3)
     ) pipe_reg3 (
         .clk      (clk),
         .reset    (reset),
         .enable   (enable && mask_pipe[LATENCY-5]),
-        .data_in  ({is_itof_s2, is_ftoi_s2, is_f2f_s2, is_signed_s2, is_int64_s2, input_sign_s2, mant_is_zero_s2, src_d_s2, dst_d_s2, dst_h_s2, frm_s2, fclass_s2, norm_mant_s2, norm_exp_s2,  unpacked_exp_s2}),
-        .data_out ({is_itof_s3, is_ftoi_s3, is_f2f_s3, is_signed_s3, is_int64_s3, input_sign_s3, mant_is_zero_s3, src_d_s3, dst_d_s3, dst_h_s3, frm_s3, fclass_s3, norm_mant_s3, norm_exp_s3,  unpacked_exp_s3})
+        .data_in  ({is_ftoi_s2, is_f2f_s2, is_signed_s2, is_int64_s2, input_sign_s2, mant_is_zero_s2, dst_d_s2, dst_h_s2, f2f_uf_s2, f2f_of_s2, f2f_tiny0_s2, exp_ge32_s2, exp_ge64_s2, frm_s2, fclass_s2, norm_mant_s2, align_shamt_s2, final_exp_s2}),
+        .data_out ({is_ftoi_s3, is_f2f_s3, is_signed_s3, is_int64_s3, input_sign_s3, mant_is_zero_s3, dst_d_s3, dst_h_s3, f2f_uf_s3, f2f_of_s3, f2f_tiny0_s3, exp_ge32_s3, exp_ge64_s3, frm_s3, fclass_s3, norm_mant_s3, align_shamt_s3, final_exp_s3})
     );
 
     // ======================================================================
-    // Stage 3: Calculate Alignment Shift
+    // Stage 3: Align & Extract Sticky (Right Shift)
     // ======================================================================
 
-    // F2I: use pre-renorm exponent to avoid double-shifting
-    wire signed [S_EXP_WIDTH-1:0] f2i_shamt_s3 = S_EXP_WIDTH'(S_MAN_WIDTH - 1) - unpacked_exp_s3;
+    wire [2*S_MAN_WIDTH:0] aligned_mant_full_s3 = {norm_mant_s3, {(S_MAN_WIDTH+1){1'b0}}} >> align_shamt_s3;
 
-    // Destination float bias and true biased destination exponent.
-    wire signed [S_EXP_WIDTH-1:0] dst_bias_s3 = dst_h_s3 ? S_EXP_WIDTH'(F16_BIAS)
-                                              : dst_d_s3 ? S_EXP_WIDTH'(F64_BIAS) : S_EXP_WIDTH'(F32_BIAS);
-    wire signed [S_EXP_WIDTH-1:0] dst_exp_s3  = norm_exp_s3 + dst_bias_s3;
-    wire signed [S_EXP_WIDTH-1:0] dst_inf_exp_s3 = dst_h_s3 ? S_EXP_WIDTH'(31) : S_EXP_WIDTH'(255);
+    wire [S_MAN_WIDTH-1:0] aligned_mant_s3 = aligned_mant_full_s3[2*S_MAN_WIDTH : S_MAN_WIDTH+1];
+    wire                   guard_bit_s3    = aligned_mant_full_s3[S_MAN_WIDTH];
+    wire                   round_bit_s3    = aligned_mant_full_s3[S_MAN_WIDTH-1];
+    wire                   sticky_bit_s3   = |aligned_mant_full_s3[S_MAN_WIDTH-2:0];
 
-    // F2F narrowing (FCVT.S.D, FCVT.H.S, FCVT.H.D) can under/overflow the
-    // destination range; widening is always exact, so it never does. Only the
-    // F32/F16-dst finite nonzero case matters here.
-    wire f2f_narrow_s3 = is_f2f_s3 & ~dst_d_s3 & ~fclass_s3.is_nan & ~fclass_s3.is_inf & ~fclass_s3.is_zero;
-    wire f2f_uf_s3     = f2f_narrow_s3 & (dst_exp_s3 <= 0);                  // -> subnormal/zero
-    wire f2f_of_s3     = f2f_narrow_s3 & (dst_exp_s3 >= dst_inf_exp_s3);     // -> overflow
-    wire f2f_tiny0_s3  = f2f_narrow_s3 & (dst_exp_s3 == 0);
-    wire signed [S_EXP_WIDTH-1:0] denorm_sh_s3 = S_EXP_WIDTH'(1) - dst_exp_s3; // right-shift to denormalize
+    // Kept significand = {hidden, dst_man}. The round (guard) bit is the first bit
+    // BELOW the kept LSB; sticky ORs everything beneath the guard. (Folding the
+    // guard into sticky, as a naive low-mask would, breaks RNE on exact ties.)
+    // The kept width is a constant of the destination format (0=F32, 1=F64,
+    // 2=F16), so each format's split is wiring and the format selects one.
+    wire [S_MAN_WIDTH:0] rnd_ext_s3  = {aligned_mant_s3, guard_bit_s3};
+    wire [S_MAN_WIDTH:0] fine_ext_s3 = {norm_mant_s3, 1'b0};
 
-    // Alignment right-shift: F2I integer align, or F2F destination denormalization.
-    logic [S_EXP_WIDTH-1:0] align_shamt_s3;
-    always_comb begin
-        if (is_ftoi_s3) begin // F2I
-            align_shamt_s3 = (f2i_shamt_s3 > S_EXP_WIDTH'(S_MAN_WIDTH + 1)) ? S_EXP_WIDTH'(S_MAN_WIDTH + 1) :
-                             (f2i_shamt_s3 < 0) ? '0 : f2i_shamt_s3;
-        end else if (f2f_uf_s3) begin // F2F underflow -> denormalize into subnormal position
-            align_shamt_s3 = (denorm_sh_s3 > S_EXP_WIDTH'(S_MAN_WIDTH + 1)) ? S_EXP_WIDTH'(S_MAN_WIDTH + 1) : denorm_sh_s3;
-        end else begin // I2F, normal F2F
-            align_shamt_s3 = '0;
+    wire [2:0][S_MAN_WIDTH-1:0] fmt_trunc_s3;
+    wire [2:0] fmt_guard_s3, fmt_sticky_s3, fmt_fine_s3;
+    wire [2:0][1:0] fmt_fine_rs_s3;
+    for (genvar f = 0; f < 3; ++f) begin : g_fmt
+        localparam integer MAN = (f == 1) ? F64_MAN : ((f == 2) ? F16_MAN : F32_MAN);
+        localparam integer TSH = S_MAN_WIDTH - 1 - MAN; // bits below the kept LSB
+        if (TSH >= 0) begin : g_valid
+            assign fmt_trunc_s3[f] = aligned_mant_s3 >> TSH;
+            assign fmt_guard_s3[f] = rnd_ext_s3[TSH];
+            assign fmt_fine_s3[f]  = &norm_mant_s3[S_MAN_WIDTH-1:TSH];
+            assign fmt_fine_rs_s3[f][1] = fine_ext_s3[TSH];
+            if (TSH > 0) begin : g_sticky
+                assign fmt_sticky_s3[f]     = |rnd_ext_s3[TSH-1:0];
+                assign fmt_fine_rs_s3[f][0] = |fine_ext_s3[TSH-1:0];
+            end else begin : g_no_sticky
+                assign fmt_sticky_s3[f]     = 1'b0;
+                assign fmt_fine_rs_s3[f][0] = 1'b0;
+            end
+        end else begin : g_none
+            assign fmt_trunc_s3[f]   = '0;
+            assign fmt_guard_s3[f]   = 1'b0;
+            assign fmt_sticky_s3[f]  = 1'b0;
+            assign fmt_fine_s3[f]    = 1'b0;
+            assign fmt_fine_rs_s3[f] = '0;
         end
     end
 
-    wire [SUPER_EXP-1:0] final_exp_s3 = SUPER_EXP'(dst_exp_s3);
+    wire [1:0] dst_fmt_s3 = dst_h_s3 ? 2'd2 : (dst_d_s3 ? 2'd1 : 2'd0);
+
+    wire [S_MAN_WIDTH-1:0] fp_trunc_s3   = fmt_trunc_s3[dst_fmt_s3];
+    wire                   fp_guard_s3   = fmt_guard_s3[dst_fmt_s3];
+    wire                   sticky_red_s3 = fmt_sticky_s3[dst_fmt_s3] | round_bit_s3 | sticky_bit_s3;
+    wire [2:0]             fine_round_s3 = {fmt_fine_s3[dst_fmt_s3], fmt_fine_rs_s3[dst_fmt_s3]};
+
+    logic [1:0]            round_sticky_bits_s3;
+    logic [S_MAN_WIDTH-1:0] pre_round_abs_s3;
+
+    always_comb begin
+        if (is_ftoi_s3) begin // F2I
+            // Integer LSB is aligned_mant_full_s3[S_MAN_WIDTH+1], so the first
+            // fractional bit below it is guard_bit_s3; sticky ORs everything beneath.
+            round_sticky_bits_s3 = {guard_bit_s3, round_bit_s3 | sticky_bit_s3};
+            pre_round_abs_s3     = aligned_mant_s3;
+        end else begin // I2F, F2F
+            round_sticky_bits_s3 = {fp_guard_s3, sticky_red_s3};
+            pre_round_abs_s3     = fp_trunc_s3;
+        end
+    end
 
     // Stage 3 -> Stage 4
-    wire is_itof_s4, is_ftoi_s4, is_f2f_s4, is_signed_s4, is_int64_s4, input_sign_s4, mant_is_zero_s4, src_d_s4, dst_d_s4, dst_h_s4;
-    wire f2f_uf_s4, f2f_of_s4, f2f_tiny0_s4;
+    wire is_ftoi_s4, is_f2f_s4, is_signed_s4, is_int64_s4, input_sign_s4, mant_is_zero_s4, dst_d_s4, dst_h_s4;
+    wire f2f_uf_s4, f2f_of_s4, f2f_tiny0_s4, exp_ge32_s4, exp_ge64_s4;
+    wire [2:0] fine_round_s4;
     wire [INST_FRM_BITS-1:0] frm_s4;
     fclass_t fclass_s4;
-    wire [S_MAN_WIDTH-1:0]  norm_mant_s4;
-    wire [S_EXP_WIDTH-1:0]  align_shamt_s4;
-    wire [SUPER_EXP-1:0]    final_exp_s4;
-    wire signed [S_EXP_WIDTH-1:0] unpacked_exp_s4; // true magnitude exponent (F2I overflow)
+    wire [1:0]             round_sticky_bits_s4;
+    wire [S_MAN_WIDTH-1:0] pre_round_abs_s4;
+    wire [SUPER_EXP-1:0]   final_exp_s4;
 
     VX_pipe_register #(
-        .DATAW (13 + INST_FRM_BITS + $bits(fclass_t) + S_MAN_WIDTH + S_EXP_WIDTH + SUPER_EXP + S_EXP_WIDTH),
+        .DATAW (16 + INST_FRM_BITS + $bits(fclass_t) + 2 + S_MAN_WIDTH + SUPER_EXP),
         .DEPTH (LATENCY > 2)
     ) pipe_reg4 (
         .clk      (clk),
         .reset    (reset),
         .enable   (enable && mask_pipe[LATENCY-4]),
-        .data_in  ({is_itof_s3, is_ftoi_s3, is_f2f_s3, is_signed_s3, is_int64_s3, input_sign_s3, mant_is_zero_s3, src_d_s3, dst_d_s3, dst_h_s3, f2f_uf_s3, f2f_of_s3, f2f_tiny0_s3, frm_s3, fclass_s3, norm_mant_s3, align_shamt_s3, final_exp_s3, unpacked_exp_s3}),
-        .data_out ({is_itof_s4, is_ftoi_s4, is_f2f_s4, is_signed_s4, is_int64_s4, input_sign_s4, mant_is_zero_s4, src_d_s4, dst_d_s4, dst_h_s4, f2f_uf_s4, f2f_of_s4, f2f_tiny0_s4, frm_s4, fclass_s4, norm_mant_s4, align_shamt_s4, final_exp_s4, unpacked_exp_s4})
+        .data_in  ({is_ftoi_s3, is_f2f_s3, is_signed_s3, is_int64_s3, input_sign_s3, mant_is_zero_s3, dst_d_s3, dst_h_s3, f2f_uf_s3, f2f_of_s3, f2f_tiny0_s3, exp_ge32_s3, exp_ge64_s3, fine_round_s3, frm_s3, fclass_s3, round_sticky_bits_s3, pre_round_abs_s3, final_exp_s3}),
+        .data_out ({is_ftoi_s4, is_f2f_s4, is_signed_s4, is_int64_s4, input_sign_s4, mant_is_zero_s4, dst_d_s4, dst_h_s4, f2f_uf_s4, f2f_of_s4, f2f_tiny0_s4, exp_ge32_s4, exp_ge64_s4, fine_round_s4, frm_s4, fclass_s4, round_sticky_bits_s4, pre_round_abs_s4, final_exp_s4})
     );
 
     // ======================================================================
-    // Stage 4: Align & Extract Sticky (Right Shift)
+    // Stage 4: Rounding
     // ======================================================================
 
-    wire [2*S_MAN_WIDTH:0] aligned_mant_full_s4 = {norm_mant_s4, {(S_MAN_WIDTH+1){1'b0}}} >> align_shamt_s4;
+    wire round_up_s4;
+    wire rounded_sign_s4;
 
-    wire [S_MAN_WIDTH-1:0] aligned_mant_s4 = aligned_mant_full_s4[2*S_MAN_WIDTH : S_MAN_WIDTH+1];
-    wire                   guard_bit_s4    = aligned_mant_full_s4[S_MAN_WIDTH];
-    wire                   round_bit_s4    = aligned_mant_full_s4[S_MAN_WIDTH-1];
-    wire                   sticky_bit_s4   = |aligned_mant_full_s4[S_MAN_WIDTH-2:0];
+    VX_fp_rounding #(
+        .DAT_WIDTH (S_MAN_WIDTH)
+    ) fp_rounding (
+        .abs_value_i         (pre_round_abs_s4),
+        .sign_i              (input_sign_s4),
+        .round_sticky_bits_i (round_sticky_bits_s4),
+        .rnd_mode_i          (frm_s4),
+        .effective_subtraction_i (1'b0),
+        `UNUSED_PIN          (abs_rounded_o),
+        .sign_o              (rounded_sign_s4),
+        `UNUSED_PIN          (exact_zero_o),
+        .round_up_o          (round_up_s4)
+    );
 
-    // Destination float mantissa width (I2F / F2F)
-    wire [5:0] dst_man_w_s4 = dst_h_s4 ? 6'(F16_MAN) : dst_d_s4 ? 6'(F64_MAN) : 6'(F32_MAN);
+    // The increment runs beside the round-up decision, which then selects.
+    wire [S_MAN_WIDTH-1:0] pre_inc_s4     = pre_round_abs_s4 + S_MAN_WIDTH'(1);
+    wire [S_MAN_WIDTH-1:0] rounded_abs_s4 = round_up_s4 ? pre_inc_s4 : pre_round_abs_s4;
 
-    // Kept significand = {hidden, dst_man}. The round (guard) bit is the first bit
-    // BELOW the kept LSB; sticky ORs everything beneath the guard. (Folding the
-    // guard into sticky, as a naive low-mask would, breaks RNE on exact ties.)
-    wire [6:0] fp_trunc_sh_s4 = 7'(S_MAN_WIDTH - 1) - 7'(dst_man_w_s4);
-    wire [S_MAN_WIDTH-1:0] fp_trunc_s4      = aligned_mant_s4 >> fp_trunc_sh_s4;
-    wire                   fp_guard_s4      = aligned_mant_s4[LZC_RESULT_WIDTH'(fp_trunc_sh_s4 - 7'd1)];
-    wire [S_MAN_WIDTH-1:0] fp_sticky_mask_s4= (S_MAN_WIDTH'(1) << (fp_trunc_sh_s4 - 7'd1)) - 1;
-    wire                   sticky_red_s4    = |(aligned_mant_s4 & fp_sticky_mask_s4) | guard_bit_s4 | round_bit_s4 | sticky_bit_s4;
+    // F2I result -(pre + round_up): ~pre when rounding up, else -pre.
+    wire [`VX_CFG_XLEN-1:0] pre_xlen_s4 = pre_round_abs_s4[`VX_CFG_XLEN-1:0];
+    wire [`VX_CFG_XLEN-1:0] pre_neg_s4  = -pre_xlen_s4;
+    wire [`VX_CFG_XLEN-1:0] int_res_s4  = rounded_sign_s4 ? (round_up_s4 ? ~pre_xlen_s4 : pre_neg_s4)
+                                                          : rounded_abs_s4[`VX_CFG_XLEN-1:0];
+    wire [S_MAN_WIDTH-1:0]  res_mag_s4  = is_ftoi_s4 ? S_MAN_WIDTH'(int_res_s4) : rounded_abs_s4;
 
-    wire [S_MAN_WIDTH-1:0] fine_trunc_s4    = norm_mant_s4 >> fp_trunc_sh_s4;
-    wire [S_MAN_WIDTH-1:0] fine_ones_s4     = (S_MAN_WIDTH'(1) << (dst_man_w_s4 + 6'd1)) - 1;
-    wire [2:0]             fine_round_s4    = {fine_trunc_s4 == fine_ones_s4,
-                                               norm_mant_s4[LZC_RESULT_WIDTH'(fp_trunc_sh_s4 - 7'd1)],
-                                               |(norm_mant_s4 & fp_sticky_mask_s4)};
+    // F2I range checks of the rounded magnitude pre + round_up (wrapping to 0
+    // from all ones), resolved from the unrounded one so that they run beside
+    // the increment, not after it. A magnitude of 2^S_MAN_WIDTH or more aligns
+    // unshifted, so the signed negative checks also take the true exponent.
+    wire pre_all1_s4 = &pre_round_abs_s4;
+    wire rnd_nz_s4   = round_up_s4 ? ~pre_all1_s4 : (|pre_round_abs_s4); // rounded != 0
 
-    logic [1:0]            round_sticky_bits_s4;
-    logic [S_MAN_WIDTH-1:0] pre_round_abs_s4;
+    // rounded >= 2^K
+    function automatic logic rnd_ge_pow2(input logic [S_MAN_WIDTH-1:0] pre, input logic ru, input logic all1, input integer K);
+        logic hi, lo1;
+        hi  = |(pre >> K);
+        lo1 = &(pre | ~((S_MAN_WIDTH'(1) << K) - S_MAN_WIDTH'(1)));
+        rnd_ge_pow2 = ru ? ((hi | lo1) & ~all1) : hi;
+    endfunction
+    // rounded > 2^K
+    function automatic logic rnd_gt_pow2(input logic [S_MAN_WIDTH-1:0] pre, input logic ru, input logic all1, input integer K);
+        logic hi, at, lo0;
+        hi  = |(pre >> (K + 1));
+        at  = pre[K];
+        lo0 = |(pre & ((S_MAN_WIDTH'(1) << K) - S_MAN_WIDTH'(1)));
+        rnd_gt_pow2 = ru ? ((hi | at) & ~all1) : (hi | (at & lo0));
+    endfunction
 
-    always_comb begin
-        if (is_ftoi_s4) begin // F2I
-            // Integer LSB is aligned_mant_full_s4[S_MAN_WIDTH+1], so the first
-            // fractional bit below it is guard_bit_s4; sticky ORs everything beneath.
-            round_sticky_bits_s4 = {guard_bit_s4, round_bit_s4 | sticky_bit_s4};
-            pre_round_abs_s4     = aligned_mant_s4;
-        end else begin // I2F, F2F
-            round_sticky_bits_s4 = {fp_guard_s4, sticky_red_s4};
-            pre_round_abs_s4     = fp_trunc_s4;
-        end
+    wire f2i_s32_pos_ovf_s4 = is_signed_s4 && !is_int64_s4 && !input_sign_s4 && rnd_ge_pow2(pre_round_abs_s4, round_up_s4, pre_all1_s4, 31);
+    wire f2i_s32_neg_ovf_s4 = is_signed_s4 && !is_int64_s4 &&  input_sign_s4
+                           && (exp_ge32_s4 || rnd_gt_pow2(pre_round_abs_s4, round_up_s4, pre_all1_s4, 31));
+    wire f2i_u32_neg_ovf_s4 = !is_signed_s4 && !is_int64_s4 && rounded_sign_s4 && rnd_nz_s4;
+
+    // Unsigned positive overflow: magnitude >= 2^TW (TW=32/64). When S_MAN_WIDTH
+    // equals the target width the high bits aren't representable in rounded_abs,
+    // so detect from the true exponent; also catch a round-up carry out of the
+    // all-ones magnitude (e.g. 2^32-1 rounding up to 2^32).
+    wire round_carry_out_s4 = round_up_s4 && pre_all1_s4;
+    wire f2i_u32_pos_ovf_s4 = !is_signed_s4 && !is_int64_s4 && !input_sign_s4
+                           && (exp_ge32_s4 || round_carry_out_s4 || rnd_ge_pow2(pre_round_abs_s4, round_up_s4, pre_all1_s4, 32));
+    wire f2i_u64_pos_ovf_s4;
+    if (`VX_CFG_XLEN == 64) begin : g_f2i_u64pos
+        assign f2i_u64_pos_ovf_s4 = !is_signed_s4 && is_int64_s4 && !input_sign_s4 && (exp_ge64_s4 || round_carry_out_s4);
+    end else begin : g_f2i_no_u64pos
+        `UNUSED_VAR (exp_ge64_s4)
+        assign f2i_u64_pos_ovf_s4 = 1'b0;
     end
 
+    // F2I overflow detection (I64 target, XLEN=64 only)
+    wire f2i_s64_pos_ovf_s4, f2i_s64_neg_ovf_s4, f2i_u64_neg_ovf_s4;
+    if (`VX_CFG_XLEN == 64) begin : g_f2i_64ovf
+        assign f2i_s64_pos_ovf_s4 = is_signed_s4 && is_int64_s4 && !input_sign_s4 && rnd_ge_pow2(pre_round_abs_s4, round_up_s4, pre_all1_s4, 63);
+        assign f2i_s64_neg_ovf_s4 = is_signed_s4 && is_int64_s4 &&  input_sign_s4
+                                 && (exp_ge64_s4 || rnd_gt_pow2(pre_round_abs_s4, round_up_s4, pre_all1_s4, 63));
+        assign f2i_u64_neg_ovf_s4 = !is_signed_s4 && is_int64_s4 && rounded_sign_s4 && rnd_nz_s4;
+    end else begin : g_f2i_no64ovf
+        assign f2i_s64_pos_ovf_s4 = 1'b0;
+        assign f2i_s64_neg_ovf_s4 = 1'b0;
+        assign f2i_u64_neg_ovf_s4 = 1'b0;
+    end
+
+    wire [7:0] f2i_ovf_s4 = {f2i_s32_pos_ovf_s4, f2i_s32_neg_ovf_s4, f2i_u32_neg_ovf_s4, f2i_u32_pos_ovf_s4,
+                             f2i_u64_pos_ovf_s4, f2i_s64_pos_ovf_s4, f2i_s64_neg_ovf_s4, f2i_u64_neg_ovf_s4};
+    wire rs_any_s4 = |round_sticky_bits_s4;
+
     // Stage 4 -> Stage 5
-    wire is_itof_s5, is_ftoi_s5, is_f2f_s5, is_signed_s5, is_int64_s5, input_sign_s5, mant_is_zero_s5, src_d_s5, dst_d_s5, dst_h_s5;
-    wire f2f_uf_s5, f2f_of_s5, f2f_tiny0_s5;
+    wire is_ftoi_s5, is_f2f_s5, is_signed_s5, is_int64_s5, input_sign_s5, rounded_sign_s5, mant_is_zero_s5, dst_d_s5, dst_h_s5;
+    wire f2f_uf_s5, f2f_of_s5, f2f_tiny0_s5, rs_any_s5;
     wire [2:0] fine_round_s5;
     wire [INST_FRM_BITS-1:0] frm_s5;
     fclass_t fclass_s5;
-    wire [1:0]            round_sticky_bits_s5;
-    wire [S_MAN_WIDTH-1:0] pre_round_abs_s5;
-    wire [SUPER_EXP-1:0]  final_exp_s5;
-    wire signed [S_EXP_WIDTH-1:0] unpacked_exp_s5;
+    wire [7:0]             f2i_ovf_s5;
+    wire [S_MAN_WIDTH-1:0] res_mag_s5;
+    wire [SUPER_EXP-1:0]   final_exp_s5;
 
     VX_pipe_register #(
-        .DATAW (16 + INST_FRM_BITS + $bits(fclass_t) + 2 + S_MAN_WIDTH + SUPER_EXP + S_EXP_WIDTH),
+        .DATAW (16 + INST_FRM_BITS + $bits(fclass_t) + 8 + S_MAN_WIDTH + SUPER_EXP),
         .DEPTH (LATENCY > 1)
     ) pipe_reg5 (
         .clk      (clk),
         .reset    (reset),
         .enable   (enable && mask_pipe[LATENCY-3]),
-        .data_in  ({is_itof_s4, is_ftoi_s4, is_f2f_s4, is_signed_s4, is_int64_s4, input_sign_s4, mant_is_zero_s4, src_d_s4, dst_d_s4, dst_h_s4, f2f_uf_s4, f2f_of_s4, f2f_tiny0_s4, fine_round_s4, frm_s4, fclass_s4, round_sticky_bits_s4, pre_round_abs_s4, final_exp_s4, unpacked_exp_s4}),
-        .data_out ({is_itof_s5, is_ftoi_s5, is_f2f_s5, is_signed_s5, is_int64_s5, input_sign_s5, mant_is_zero_s5, src_d_s5, dst_d_s5, dst_h_s5, f2f_uf_s5, f2f_of_s5, f2f_tiny0_s5, fine_round_s5, frm_s5, fclass_s5, round_sticky_bits_s5, pre_round_abs_s5, final_exp_s5, unpacked_exp_s5})
+        .data_in  ({is_ftoi_s4, is_f2f_s4, is_signed_s4, is_int64_s4, input_sign_s4, rounded_sign_s4, mant_is_zero_s4, dst_d_s4, dst_h_s4, f2f_uf_s4, f2f_of_s4, f2f_tiny0_s4, rs_any_s4, fine_round_s4, frm_s4, fclass_s4, f2i_ovf_s4, res_mag_s4, final_exp_s4}),
+        .data_out ({is_ftoi_s5, is_f2f_s5, is_signed_s5, is_int64_s5, input_sign_s5, rounded_sign_s5, mant_is_zero_s5, dst_d_s5, dst_h_s5, f2f_uf_s5, f2f_of_s5, f2f_tiny0_s5, rs_any_s5, fine_round_s5, frm_s5, fclass_s5, f2i_ovf_s5, res_mag_s5, final_exp_s5})
     );
 
     // ======================================================================
-    // Stage 5: Rounding & Pack
+    // Stage 5: Pack & Select
     // ======================================================================
 
-    wire [S_MAN_WIDTH-1:0] rounded_abs_s5;
-    wire rounded_sign_s5;
-
-    VX_fp_rounding #(
-        .DAT_WIDTH (S_MAN_WIDTH)
-    ) fp_rounding (
-        .abs_value_i         (pre_round_abs_s5),
-        .sign_i              (input_sign_s5),
-        .round_sticky_bits_i (round_sticky_bits_s5),
-        .rnd_mode_i          (frm_s5),
-        .effective_subtraction_i (1'b0),
-        .abs_rounded_o       (rounded_abs_s5),
-        .sign_o              (rounded_sign_s5),
-        `UNUSED_PIN          (exact_zero_o)
-    );
+    wire [S_MAN_WIDTH-1:0] rounded_abs_s5 = res_mag_s5;
+    wire f2i_s32_pos_ovf, f2i_s32_neg_ovf, f2i_u32_neg_ovf, f2i_u32_pos_ovf;
+    wire f2i_u64_pos_ovf, f2i_s64_pos_ovf, f2i_s64_neg_ovf, f2i_u64_neg_ovf;
+    assign {f2i_s32_pos_ovf, f2i_s32_neg_ovf, f2i_u32_neg_ovf, f2i_u32_pos_ovf,
+            f2i_u64_pos_ovf, f2i_s64_pos_ovf, f2i_s64_neg_ovf, f2i_u64_neg_ovf} = f2i_ovf_s5;
 
     wire [63:0] safe_rounded_abs = 64'(rounded_abs_s5);
     wire [15:0] final_exp_16     = 16'(final_exp_s5);
@@ -476,8 +597,7 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
     wire [15:0] safe_dst_exp     = (mant_is_zero_s5 | f2f_uf_s5) ? 16'h0 : final_exp_16;
 
     // Integer result (F2I)
-    wire [63:0] abs_xlen_64  = 64'(rounded_abs_s5[`VX_CFG_XLEN-1:0]);
-    wire [63:0] safe_int_res = rounded_sign_s5 ? (-abs_xlen_64) : abs_xlen_64;
+    wire [63:0] safe_int_res = 64'(res_mag_s5[`VX_CFG_XLEN-1:0]); // signed in stage 4
     wire [31:0] int_32_res   = safe_int_res[31:0];
     wire [63:0] int_64_res   = safe_int_res;
 
@@ -558,7 +678,8 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
             .effective_subtraction_i (1'b0),
             .abs_rounded_o       (fine_rounded),
             `UNUSED_PIN          (sign_o),
-            `UNUSED_PIN          (exact_zero_o)
+            `UNUSED_PIN          (exact_zero_o),
+            `UNUSED_PIN          (round_up_o)
         );
         `UNUSED_VAR (fine_rounded[0])
         wire not_tiny = f2f_tiny0_s5 & fine_round_s5[2] & fine_rounded[1];
@@ -582,9 +703,9 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
         assign f2f_nv_s5     = is_f2f_s5 & fclass_s5.is_signaling;
         assign f2f_of_out_s5 = f2f_of_s5 | of_post;
         assign f2f_uf_out_s5 = f2f_uf_s5 & ~not_tiny;
-        assign f2f_nx_s5     = is_fin_src & ((|round_sticky_bits_s5) | f2f_of_out_s5);
+        assign f2f_nx_s5     = is_fin_src & (rs_any_s5 | f2f_of_out_s5);
     end else begin : g_fp_pack_s
-        `UNUSED_VAR ({dst_h_s5, f2f_of_s5, f2f_tiny0_s5, fine_round_s5})
+        `UNUSED_VAR ({dst_h_s5, f2f_of_s5, f2f_tiny0_s5, fine_round_s5, frm_s5})
         assign fp_dst_res    = f32_boxed;
         assign f2f_nv_s5     = 1'b0;
         assign f2f_nx_s5     = 1'b0;
@@ -598,42 +719,6 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
                                              : (is_signed_s5 ? 32'h7FFFFFFF : 32'hFFFFFFFF);
     wire [63:0] nan_inf_64 = use_neg_sat_s5 ? (is_signed_s5 ? 64'h8000000000000000 : 64'h0000000000000000)
                                              : (is_signed_s5 ? 64'h7FFFFFFFFFFFFFFF : 64'hFFFFFFFFFFFFFFFF);
-
-    // F2I overflow detection (I32 target)
-    wire f2i_s32_pos_ovf = is_signed_s5 && !is_int64_s5 && !input_sign_s5 && (|rounded_abs_s5[S_MAN_WIDTH-1:31]);
-    // A magnitude of 2^S_MAN_WIDTH or more aligns unshifted (-2^64 would read
-    // as -2^63), so the signed negative checks also take the true exponent.
-    wire f2i_s32_neg_ovf = is_signed_s5 && !is_int64_s5 &&  input_sign_s5
-                         && ((unpacked_exp_s5 >= S_EXP_WIDTH'(32)) || (rounded_abs_s5 > S_MAN_WIDTH'(32'h80000000)));
-    wire f2i_u32_neg_ovf = !is_signed_s5 && !is_int64_s5 && rounded_sign_s5 && (|rounded_abs_s5);
-
-    // Unsigned positive overflow: magnitude >= 2^TW (TW=32/64). When S_MAN_WIDTH
-    // equals the target width the high bits aren't representable in rounded_abs,
-    // so detect from the true exponent; also catch a round-up carry out of the
-    // all-ones magnitude (e.g. 2^32-1 rounding up to 2^32).
-    wire round_carry_out_s5 = (rounded_abs_s5 == '0) && (|pre_round_abs_s5);
-    wire f2i_u32_pos_ovf = !is_signed_s5 && !is_int64_s5 && !input_sign_s5
-                         && ((unpacked_exp_s5 >= S_EXP_WIDTH'(32)) || round_carry_out_s5 || (|(rounded_abs_s5 >> 32)));
-    wire f2i_u64_pos_ovf;
-    if (`VX_CFG_XLEN == 64) begin : g_f2i_u64pos
-        assign f2i_u64_pos_ovf = !is_signed_s5 && is_int64_s5 && !input_sign_s5
-                               && ((unpacked_exp_s5 >= S_EXP_WIDTH'(64)) || round_carry_out_s5);
-    end else begin : g_f2i_no_u64pos
-        assign f2i_u64_pos_ovf = 1'b0;
-    end
-
-    // F2I overflow detection (I64 target, XLEN=64 only)
-    wire f2i_s64_pos_ovf, f2i_s64_neg_ovf, f2i_u64_neg_ovf;
-    if (`VX_CFG_XLEN == 64) begin : g_f2i_64ovf
-        assign f2i_s64_pos_ovf = is_signed_s5 && is_int64_s5 && !input_sign_s5 && (|rounded_abs_s5[S_MAN_WIDTH-1:63]);
-        assign f2i_s64_neg_ovf = is_signed_s5 && is_int64_s5 &&  input_sign_s5
-                               && ((unpacked_exp_s5 >= S_EXP_WIDTH'(64)) || (rounded_abs_s5 > S_MAN_WIDTH'(64'h8000000000000000)));
-        assign f2i_u64_neg_ovf = !is_signed_s5 && is_int64_s5 && rounded_sign_s5 && (|rounded_abs_s5);
-    end else begin : g_f2i_no64ovf
-        assign f2i_s64_pos_ovf = 1'b0;
-        assign f2i_s64_neg_ovf = 1'b0;
-        assign f2i_u64_neg_ovf = 1'b0;
-    end
 
     logic [63:0] res_val_64;
     logic [31:0] res_val_32;
@@ -685,7 +770,7 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
             end else begin
                 res_val_64 = is_int64_s5 ? int_64_res : {{32{int_32_res[31]}}, int_32_res};
                 res_val_32 = int_32_res;
-                final_fflags_s5.NX = (|round_sticky_bits_s5);
+                final_fflags_s5.NX = rs_any_s5;
             end
         end else begin
             // I2F or F2F: float destination
@@ -693,12 +778,12 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
             res_val_32 = fp_dst_res[31:0];
             final_fflags_s5.NV = f2f_nv_s5;
             final_fflags_s5.OF = f2f_of_out_s5;
-            final_fflags_s5.UF = f2f_uf_out_s5 & (|round_sticky_bits_s5);
-            final_fflags_s5.NX = is_f2f_s5 ? f2f_nx_s5 : (|round_sticky_bits_s5);
+            final_fflags_s5.UF = f2f_uf_out_s5 & rs_any_s5;
+            final_fflags_s5.NX = is_f2f_s5 ? f2f_nx_s5 : rs_any_s5;
         end
     end
 
-    `UNUSED_VAR ({is_itof_s5, src_d_s5, dst_d_s5, fclass_s5, safe_rounded_abs, safe_dst_exp, res_val_64, res_val_32})
+    `UNUSED_VAR ({dst_d_s5, fclass_s5, safe_rounded_abs, safe_dst_exp, res_val_64, res_val_32})
 
     wire [`VX_CFG_XLEN-1:0] final_result_s5;
     if (`VX_CFG_XLEN == 64) begin : g_out_x64
