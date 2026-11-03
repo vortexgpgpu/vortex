@@ -1024,6 +1024,19 @@ module VX_decode import
         endcase
     end
 
+    // Without its extension a TCU or DXA instruction decodes to no unit, and
+    // its undefined ex/op fields would dispatch an arbitrary operation.
+`ifndef VX_CFG_EXT_TCU_ENABLE
+    `RUNTIME_ASSERT(~(fetch_if.valid && (opcode == INST_EXT1) && (funct7 == 7'h02)),
+        ("%t: %s TCU instruction on a core built without VX_CFG_EXT_TCU_ENABLE, wid=%0d, PC=0x%0h (#%0d)",
+            $time, INSTANCE_ID, fetch_if.data.wid, to_fullPC(fetch_if.data.PC), fetch_if.data.uuid))
+`endif
+`ifndef VX_CFG_EXT_DXA_ENABLE
+    `RUNTIME_ASSERT(~(fetch_if.valid && (opcode == INST_EXT1) && (funct7 == 7'h03)),
+        ("%t: %s DXA instruction on a core built without VX_CFG_EXT_DXA_ENABLE, wid=%0d, PC=0x%0h (#%0d)",
+            $time, INSTANCE_ID, fetch_if.data.wid, to_fullPC(fetch_if.data.PC), fetch_if.data.uuid))
+`endif
+
     // disable writes to x0
     wire wb = use_regs[RV_RD] && (reg_ids[RV_RD] != 0);
 

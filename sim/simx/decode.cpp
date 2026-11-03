@@ -1024,6 +1024,10 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       instr->set_src_reg(0, rs1, RegType::Integer);
       instr->set_src_reg(1, rs2, RegType::Integer);
     } break;
+#else
+    case 3:
+      std::cout << "Error: DXA instruction on a core built without VX_CFG_EXT_DXA_ENABLE" << std::endl;
+      std::abort();
 #endif
   #ifdef VX_CFG_EXT_TCU_ENABLE
     case 2: {
@@ -1064,6 +1068,10 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         std::abort();
       }
     } break;
+  #else
+    case 2:
+      std::cout << "Error: TCU instruction on a core built without VX_CFG_EXT_TCU_ENABLE" << std::endl;
+      std::abort();
   #endif
     case 4: { // Load/Store Packing extensions — macro-ops, sequencer expands to N single-elem uops
       instr->set_fu_type(FUType::LSU);
