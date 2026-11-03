@@ -102,6 +102,8 @@ VX_CFG_PLATFORM_MEMORY_QUEUE_SIZE = 0
 # miss-tracking depths derive from it and stay at their floors when the
 # latency is zero, as in the default.
 mem_bytes_in_flight = "expr: ($VX_CFG_PLATFORM_MEMORY_PEAK_BW // $VX_CFG_PLATFORM_CLOCK_RATE) * $VX_CFG_PLATFORM_MEMORY_LATENCY"
+# Above the L2 a miss also crosses the link to it, both ways.
+l1_mem_bytes_in_flight = "expr: ($VX_CFG_PLATFORM_MEMORY_PEAK_BW // $VX_CFG_PLATFORM_CLOCK_RATE) * ($VX_CFG_PLATFORM_MEMORY_LATENCY + 2 * $VX_CFG_L2_LINK_LATENCY)"
 
 [alu]
 VX_CFG_NUM_ALU_LANES = "expr: $VX_CFG_SIMD_WIDTH"
@@ -126,7 +128,7 @@ VX_CFG_LSU_QUEUE_IN_SIZE = "expr: max(4, 2 * ($VX_CFG_SIMD_WIDTH // $VX_CFG_NUM_
 VX_CFG_LSU_PENDING_SIZE = "expr: min($VX_CFG_LSU_PENDING_LIMIT, max(8, 2 * $VX_CFG_NUM_WARPS * ($VX_CFG_SIMD_WIDTH // $VX_CFG_NUM_LSU_LANES)))"
 # The pool's bound: an LSU block's share of the memory bytes in flight, in
 # full packets, and at least 32, which keeps the slot id cheap in the dcache tag.
-VX_CFG_LSU_PENDING_LIMIT = "expr: clamp(pow(2, clog2(($mem_bytes_in_flight + $lsu_inflight_bytes - 1) // $lsu_inflight_bytes)), 32, 256)"
+VX_CFG_LSU_PENDING_LIMIT = "expr: clamp(pow(2, clog2(($l1_mem_bytes_in_flight + $lsu_inflight_bytes - 1) // $lsu_inflight_bytes)), 32, 256)"
 lsu_inflight_bytes = "expr: $VX_CFG_NUM_CLUSTERS * $VX_CFG_NUM_CORES * $VX_CFG_NUM_LSU_BLOCKS * $VX_CFG_LSU_LINE_SIZE"
 # The mem-side queue depth is not a knob: it sets the dcache-facing tag-id
 # width and must cover the outstanding pool, so each implementation derives
@@ -269,7 +271,7 @@ VX_CFG_DCACHE_REPL_POLICY = "expr: $__cache_repl_fifo"
 # Misses per bank: the bank's share of the memory bytes in flight, in sectors,
 # rounded up to a power of two, here and at the L2 and L3. The floor is the
 # depth a platform without a memory latency, or a disabled level, gets.
-VX_CFG_DCACHE_MSHR_SIZE = "expr: clamp(pow(2, clog2(($mem_bytes_in_flight + $dcache_inflight_bytes - 1) // $dcache_inflight_bytes)), 16, 64) if $VX_CFG_DCACHE_ENABLE else 16"
+VX_CFG_DCACHE_MSHR_SIZE = "expr: clamp(pow(2, clog2(($l1_mem_bytes_in_flight + $dcache_inflight_bytes - 1) // $dcache_inflight_bytes)), 16, 64) if $VX_CFG_DCACHE_ENABLE else 16"
 dcache_inflight_bytes = "expr: $VX_CFG_NUM_CLUSTERS * up($VX_CFG_NUM_CORES // $VX_CFG_SOCKET_SIZE) * up($VX_CFG_NUM_DCACHES) * $VX_CFG_DCACHE_NUM_BANKS * $VX_CFG_DCACHE_SECTOR_SIZE"
 # dcache is unsectored: line = sector = mem transaction granule = L1_LINE (which
 # defaults to MEM_BLOCK but can be configured smaller). Banking comes from the
@@ -308,6 +310,11 @@ VX_CFG_L2_REPL_POLICY = "expr: $__cache_repl_fifo"
 VX_CFG_L2_MSHR_SIZE = "expr: clamp(pow(2, clog2(($mem_bytes_in_flight + $l2_inflight_bytes - 1) // $l2_inflight_bytes)), 16, 256) if $VX_CFG_L2_ENABLE else 16"
 l2_inflight_bytes = "expr: $VX_CFG_NUM_CLUSTERS * $VX_CFG_L2_NUM_BANKS * $VX_CFG_L2_SECTOR_SIZE"
 VX_CFG_L2_LATENCY = "expr: 4 + max(0, clog2($VX_CFG_L2_SIZE) - clog2(1048576))"
+# The link between the sockets and the L2, in cycles each way: a request
+# reaches the L2, and its response the socket, this many cycles later, at full
+# throughput, so an L2 hit's round trip grows by twice it. It stands for a
+# large GPU's SM-to-L2 network, which L2_LATENCY (the bank pipeline) is not.
+VX_CFG_L2_LINK_LATENCY = 0
 VX_CFG_L2_MRSQ_SIZE = 4
 VX_CFG_L2_MREQ_SIZE = 0
 VX_CFG_L2_CRSQ_SIZE = 0

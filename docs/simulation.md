@@ -290,6 +290,13 @@ $ cd build64 && python3 ../ci/profile_check.py --profile=a100 --metrics=peak,lat
 It exits 1 when a metric is off by more than `--tolerance` (10% by default),
 and 2 when a run fails.
 
+The two chase latencies are calibrated in that order. `l2_hit_cycles` sets
+`VX_CFG_L2_LINK_LATENCY`, the link between the sockets and the L2 (cycles
+each way, so a hit gains twice it): on the parts most of an L2 hit is the
+SM-to-L2 network. A DRAM access crosses the link too, so
+`VX_CFG_PLATFORM_MEMORY_LATENCY` then takes what `dram_cycles` still needs.
+Both latencies move the measured ones one for one (the link two for one).
+
 ### Configuring the DRAM Model
 
 The simulators (simx, rtlsim, opaesim, xrtsim) all model the device memory

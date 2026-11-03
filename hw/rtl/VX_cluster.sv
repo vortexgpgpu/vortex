@@ -196,6 +196,12 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .TAG_WIDTH (L2_TAG_WIDTH)
     ) socket_mem_bus_if[L2_SOCKET_REQS]();
 
+    // L2 side of the sockets' trunk, ahead of the link to the L2
+    VX_mem_bus_if #(
+        .DATA_SIZE (`VX_CFG_L1_LINE_SIZE),
+        .TAG_WIDTH (L2_TAG_WIDTH)
+    ) l2_link_bus_if[L2_SOCKET_REQS]();
+
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     VX_mem_bus_if #(
         .DATA_SIZE (`VX_CFG_L1_LINE_SIZE),
@@ -286,15 +292,37 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
     ) gfx_l2_out_bus_if [L2_SOCKET_REQS]();
 
     for (genvar i = 0; i < L2_SOCKET_REQS; ++i) begin : g_socket_l2
-        `ASSIGN_VX_MEM_BUS_IF (per_socket_mem_bus_if[i], gfx_l2_out_bus_if[i]);
+        `ASSIGN_VX_MEM_BUS_IF (l2_link_bus_if[i], gfx_l2_out_bus_if[i]);
     end
 `else
     // Sockets connect straight to their L2 input ports (TEX/RTU/DXA traffic
     // already merged at each socket's L2-facing arb).
     for (genvar i = 0; i < L2_SOCKET_REQS; ++i) begin : g_socket_l2
-        `ASSIGN_VX_MEM_BUS_IF (per_socket_mem_bus_if[i], socket_mem_bus_if[i]);
+        `ASSIGN_VX_MEM_BUS_IF (l2_link_bus_if[i], socket_mem_bus_if[i]);
     end
 `endif
+
+    // The sockets' link to the L2: L2_LINK_LATENCY cycles each way.
+    wire [L2_SOCKET_REQS-1:0] l2_link_empty;
+    for (genvar i = 0; i < L2_SOCKET_REQS; ++i) begin : g_l2_link
+        if (`VX_CFG_L2_LINK_LATENCY != 0) begin : g_delay
+            VX_mem_bus_delay #(
+                .DATA_SIZE (`VX_CFG_L1_LINE_SIZE),
+                .TAG_WIDTH (L2_TAG_WIDTH),
+                .LATENCY   (`VX_CFG_L2_LINK_LATENCY)
+            ) link (
+                .clk        (clk),
+                .reset      (reset),
+                .bus_in_if  (l2_link_bus_if[i]),
+                .bus_out_if (per_socket_mem_bus_if[i]),
+                .empty      (l2_link_empty[i])
+            );
+        end else begin : g_wire
+            `ASSIGN_VX_MEM_BUS_IF (per_socket_mem_bus_if[i], l2_link_bus_if[i]);
+            assign l2_link_empty[i] = 1'b1;
+        end
+    end
+    wire l2_link_busy = ~(& l2_link_empty);
 
     for (genvar i = 0; i < L2_MEM_PORTS; ++i) begin : g_l2_mem_out
         `ASSIGN_VX_MEM_BUS_IF (mem_bus_if[i], l2_mem_bus_if[i]);
@@ -611,9 +639,9 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
 
     wire busy_r;
 `ifdef EXT_GFX_ANY_ENABLE
-    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy) | socket_issued_busy | gfx_busy | mmu_busy | ~l2_req_empty, 1'b1, 1, (NUM_SOCKETS > 1));
+    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy) | socket_issued_busy | gfx_busy | mmu_busy | l2_link_busy | ~l2_req_empty, 1'b1, 1, (NUM_SOCKETS > 1));
 `else
-    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy) | socket_issued_busy | mmu_busy | ~l2_req_empty, 1'b1, 1, (NUM_SOCKETS > 1));
+    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy) | socket_issued_busy | mmu_busy | l2_link_busy | ~l2_req_empty, 1'b1, 1, (NUM_SOCKETS > 1));
 `endif
     assign busy = busy_r | dcr_bus_if.req_valid | launch_link_busy;
 

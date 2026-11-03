@@ -220,6 +220,27 @@ These modules implement elastic pipeline buffering with valid/ready handshake pr
 
 ---
 
+### VX_delay_buffer
+
+**File:** `VX_delay_buffer.sv`  
+**Purpose:** Elastic buffer with a fixed latency at full throughput.
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `DATAW` | - | Data width in bits |
+| `LATENCY` | 1 | Cycles from acceptance to output |
+| `SIZE` | power of two at least `LATENCY` | FIFO entries |
+| `LUTRAM` | 0 | Use LUTRAM for storage |
+
+**Features:**
+- An entry accepted on cycle t is offered on cycle t + `LATENCY`, one per cycle with no bubbles
+- The entries wait in a `VX_fifo_queue` (block RAM at size); a delay line of valid bits releases them in order into a `VX_stream_buffer`, the registered output
+- `ready_in` is the FIFO's registered full flag, and `ready_out` reaches only the stream buffer
+- `empty` reports nothing in flight; `LATENCY=0` is a wire
+- Models a link of fixed length, such as the sockets' link to the L2 (`VX_mem_bus_delay`)
+
+---
+
 ### VX_elastic_adapter
 
 **File:** `VX_elastic_adapter.sv`  
@@ -1875,63 +1896,64 @@ Infrastructure for runtime debug observation and serial trace extraction.
 | 13 | VX_csa_mod4 | CSA | Varies | O(log N) |
 | 14 | VX_csa_tree | CSA | Varies | O(log N) |
 | 15 | VX_cyclic_arbiter | Arbiter | Small | 0 cycles |
-| 16 | VX_demux | Mux/Demux | Small | 0 cycles |
-| 17 | VX_divider | Arithmetic | Large | Configurable |
-| 18 | VX_dp_ram | Memory | Varies | 0-1 cycles |
-| 19 | VX_edge_trigger | Sync | Minimal | 1 cycle |
-| 20 | VX_elastic_adapter | Buffer | Minimal | 0-1 cycles |
-| 21 | VX_elastic_buffer | Buffer | Varies | Configurable |
-| 22 | VX_fifo_queue | Memory | Varies | 0-1 cycles |
-| 23 | VX_find_first | Encoder | Small | O(log N) |
-| 24 | VX_fold_mul | Arithmetic | Medium | Configurable |
-| 25 | VX_generic_arbiter | Arbiter | Varies | 0 cycles |
-| 26 | VX_gto_arbiter | Arbiter | Medium | 0 cycles |
-| 27 | VX_index_buffer | Memory | Medium | 0-1 cycles |
-| 28 | VX_index_queue | Memory | Medium | 0-1 cycles |
-| 29 | VX_ks_adder | Arithmetic | Medium | O(log N) |
-| 30 | VX_lzc | Encoder | Small | O(log N) |
-| 31 | VX_matrix_arbiter | Arbiter | Medium | 0 cycles |
-| 32 | VX_mem_bank_adapter | Memory Adapter | Large | Multi-cycle |
-| 33 | VX_mem_coalescer | Memory Adapter | Large | Multi-cycle |
-| 34 | VX_mem_data_adapter | Memory Adapter | Medium | Multi-cycle |
-| 35 | VX_mem_scheduler | Scheduler | Large | Multi-cycle |
-| 36 | VX_multiplier | Arithmetic | Varies | Configurable |
-| 37 | VX_mux | Mux/Demux | Small | 0 cycles |
-| 38 | VX_nz_iterator | Stream Util | Small | 0-1 cycles |
-| 39 | VX_onehot_encoder | Encoder | Small | O(log N) |
-| 40 | VX_onehot_mux | Mux/Demux | Small | 0 cycles |
-| 41 | VX_onehot_shift | Bit Manip | Small | 0 cycles |
-| 42 | VX_pe_serializer | Stream Util | Medium | Multi-cycle |
-| 43 | VX_pending_size | Counter | Small | 0-1 cycles |
-| 44 | VX_pipe_buffer | Buffer | Varies | N cycles |
-| 45 | VX_pipe_register | Buffer | Varies | N cycles |
-| 46 | VX_popcount | Arithmetic | Small | O(log N) |
-| 47 | VX_priority_arbiter | Arbiter | Small | 0 cycles |
-| 48 | VX_priority_encoder | Encoder | Small | O(log N) |
-| 49 | VX_reduce_tree | Arithmetic | Small | O(log N) |
-| 50 | VX_reset_relay | Sync | Small | 1 cycle |
-| 51 | VX_rom | Memory | Varies | 0-1 cycles |
-| 52 | VX_rr_arbiter | Arbiter | Medium | 0 cycles |
-| 53 | VX_scan | Encoder | Medium | O(log N) |
-| 54 | VX_scope_switch | Debug | Small | 0 cycles |
-| 55 | VX_scope_tap | Debug | Large | Multi-cycle |
-| 56 | VX_serial_div | Arithmetic | Small | Multi-cycle |
-| 57 | VX_serial_mul | Arithmetic | Small | Multi-cycle |
-| 58 | VX_shift_register | Buffer | Varies | N cycles |
-| 59 | VX_skid_buffer | Buffer | Small | 0-1 cycles |
-| 60 | VX_sp_ram | Memory | Varies | 0-1 cycles |
-| 61 | VX_stream_arb | Interconnect | Medium | 0-1 cycles |
-| 62 | VX_stream_buffer | Buffer | Small | 0-1 cycles |
-| 63 | VX_stream_dispatch | Stream Util | Medium | 0-1 cycles |
-| 64 | VX_stream_fork | Stream Util | Small | 0 cycles |
-| 65 | VX_stream_join | Stream Util | Small | 0 cycles |
-| 66 | VX_stream_omega | Interconnect | Large | O(log N) |
-| 67 | VX_stream_pack | Stream Util | Medium | 0-1 cycles |
-| 68 | VX_stream_switch | Interconnect | Medium | 0-1 cycles |
-| 69 | VX_stream_unpack | Stream Util | Medium | Multi-cycle |
-| 70 | VX_stream_xbar | Interconnect | Large | 0-1 cycles |
-| 71 | VX_stream_xpoint | Interconnect | Medium | 0-1 cycles |
-| 72 | VX_ticket_lock | Allocator | Small | 0-1 cycles |
-| 73 | VX_toggle_buffer | Buffer | Small | 1 cycle |
-| 74 | VX_transpose | Bit Manip | Zero | 0 cycles |
-| 75 | VX_wallace_mul | Arithmetic | Large | O(log N) |
+| 16 | VX_delay_buffer | Buffer | Varies | N cycles |
+| 17 | VX_demux | Mux/Demux | Small | 0 cycles |
+| 18 | VX_divider | Arithmetic | Large | Configurable |
+| 19 | VX_dp_ram | Memory | Varies | 0-1 cycles |
+| 20 | VX_edge_trigger | Sync | Minimal | 1 cycle |
+| 21 | VX_elastic_adapter | Buffer | Minimal | 0-1 cycles |
+| 22 | VX_elastic_buffer | Buffer | Varies | Configurable |
+| 23 | VX_fifo_queue | Memory | Varies | 0-1 cycles |
+| 24 | VX_find_first | Encoder | Small | O(log N) |
+| 25 | VX_fold_mul | Arithmetic | Medium | Configurable |
+| 26 | VX_generic_arbiter | Arbiter | Varies | 0 cycles |
+| 27 | VX_gto_arbiter | Arbiter | Medium | 0 cycles |
+| 28 | VX_index_buffer | Memory | Medium | 0-1 cycles |
+| 29 | VX_index_queue | Memory | Medium | 0-1 cycles |
+| 30 | VX_ks_adder | Arithmetic | Medium | O(log N) |
+| 31 | VX_lzc | Encoder | Small | O(log N) |
+| 32 | VX_matrix_arbiter | Arbiter | Medium | 0 cycles |
+| 33 | VX_mem_bank_adapter | Memory Adapter | Large | Multi-cycle |
+| 34 | VX_mem_coalescer | Memory Adapter | Large | Multi-cycle |
+| 35 | VX_mem_data_adapter | Memory Adapter | Medium | Multi-cycle |
+| 36 | VX_mem_scheduler | Scheduler | Large | Multi-cycle |
+| 37 | VX_multiplier | Arithmetic | Varies | Configurable |
+| 38 | VX_mux | Mux/Demux | Small | 0 cycles |
+| 39 | VX_nz_iterator | Stream Util | Small | 0-1 cycles |
+| 40 | VX_onehot_encoder | Encoder | Small | O(log N) |
+| 41 | VX_onehot_mux | Mux/Demux | Small | 0 cycles |
+| 42 | VX_onehot_shift | Bit Manip | Small | 0 cycles |
+| 43 | VX_pe_serializer | Stream Util | Medium | Multi-cycle |
+| 44 | VX_pending_size | Counter | Small | 0-1 cycles |
+| 45 | VX_pipe_buffer | Buffer | Varies | N cycles |
+| 46 | VX_pipe_register | Buffer | Varies | N cycles |
+| 47 | VX_popcount | Arithmetic | Small | O(log N) |
+| 48 | VX_priority_arbiter | Arbiter | Small | 0 cycles |
+| 49 | VX_priority_encoder | Encoder | Small | O(log N) |
+| 50 | VX_reduce_tree | Arithmetic | Small | O(log N) |
+| 51 | VX_reset_relay | Sync | Small | 1 cycle |
+| 52 | VX_rom | Memory | Varies | 0-1 cycles |
+| 53 | VX_rr_arbiter | Arbiter | Medium | 0 cycles |
+| 54 | VX_scan | Encoder | Medium | O(log N) |
+| 55 | VX_scope_switch | Debug | Small | 0 cycles |
+| 56 | VX_scope_tap | Debug | Large | Multi-cycle |
+| 57 | VX_serial_div | Arithmetic | Small | Multi-cycle |
+| 58 | VX_serial_mul | Arithmetic | Small | Multi-cycle |
+| 59 | VX_shift_register | Buffer | Varies | N cycles |
+| 60 | VX_skid_buffer | Buffer | Small | 0-1 cycles |
+| 61 | VX_sp_ram | Memory | Varies | 0-1 cycles |
+| 62 | VX_stream_arb | Interconnect | Medium | 0-1 cycles |
+| 63 | VX_stream_buffer | Buffer | Small | 0-1 cycles |
+| 64 | VX_stream_dispatch | Stream Util | Medium | 0-1 cycles |
+| 65 | VX_stream_fork | Stream Util | Small | 0 cycles |
+| 66 | VX_stream_join | Stream Util | Small | 0 cycles |
+| 67 | VX_stream_omega | Interconnect | Large | O(log N) |
+| 68 | VX_stream_pack | Stream Util | Medium | 0-1 cycles |
+| 69 | VX_stream_switch | Interconnect | Medium | 0-1 cycles |
+| 70 | VX_stream_unpack | Stream Util | Medium | Multi-cycle |
+| 71 | VX_stream_xbar | Interconnect | Large | 0-1 cycles |
+| 72 | VX_stream_xpoint | Interconnect | Medium | 0-1 cycles |
+| 73 | VX_ticket_lock | Allocator | Small | 0-1 cycles |
+| 74 | VX_toggle_buffer | Buffer | Small | 1 cycle |
+| 75 | VX_transpose | Bit Manip | Zero | 0 cycles |
+| 76 | VX_wallace_mul | Arithmetic | Large | O(log N) |

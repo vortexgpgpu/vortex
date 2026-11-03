@@ -41,7 +41,9 @@
     "VX_CFG_L2_SIZE": 52428800,
     "VX_CFG_L2_NUM_WAYS": 25,
     "VX_CFG_L2_NUM_BANKS": 64,
-    "VX_CFG_CP_LLC_CLIENT": 1
+    "VX_CFG_CP_LLC_CLIENT": 1,
+    "VX_CFG_L2_LINK_LATENCY": 94,
+    "VX_CFG_L2_MSHR_SIZE": 256
   },
   "platform": {
     "VX_CFG_PLATFORM_MEMORY_NUM_BANKS": 32,
@@ -49,7 +51,7 @@
     "VX_CFG_PLATFORM_MEMORY_PEAK_BW": 3350000,
     "VX_CFG_PLATFORM_MEMORY_TYPE": "HBM3",
     "VX_CFG_PLATFORM_MEMORY_DATA_RATE": 6545,
-    "VX_CFG_PLATFORM_MEMORY_LATENCY": 492
+    "VX_CFG_PLATFORM_MEMORY_LATENCY": 304
   },
   "reference": {
     "fp32_lanes": 16896,
@@ -78,6 +80,8 @@
     "DCACHE_NUM_BANKS": "128 B per clock of L1 data per SM: 4 banks of the 32 B dcache word. The default (one bank per LSU request channel) gives 8, twice the part",
     "LMEM_SIZE, LMEM_LOG_SIZE, DCACHE_SIZE": "228 KB maximum shared memory per SM (CUDA Programming Guide, compute capability 9.0) in a 256 KB window. DCACHE_SIZE keeps the whole 256 KB L1/shared pool: the driver gives a kernel the L1 its shared-memory use leaves",
     "reference": "fp32_lanes is the vendor FP32 core count (FP32 FMA lanes per chip, clock-free); dram_bandwidth_gbs the vendor peak. Checked by ci/profile_check.py. Latencies: Microbenchmarking NVIDIA's Blackwell Architecture (arXiv 2507.10789), GH100: L2 hit ~273 cycles, global memory ~658.7 cycles beyond 55 MB. Measured on the HBM2e (PCIe) part; the SXM5 part's HBM3 is not separately published. L1 (30-40 cycles) is a range, not checked",
-    "PLATFORM_MEMORY_LATENCY": "492 core cycles of PHY/NoC latency, calibrated with ci/profile_check.py so the SimX cold pointer chase gives the 658.7-cycle global memory latency in 'reference' (measured on the HBM2e part)"
+    "L2_LINK_LATENCY": "94 core cycles each way between an SM and the L2, the SM-to-L2 network, which the L2 bank pipeline (L2_LATENCY) does not model: calibrated with ci/profile_check.py so the SimX pointer chase gives the 273-cycle L2 hit latency in 'reference'",
+    "PLATFORM_MEMORY_LATENCY": "304 core cycles of PHY/NoC latency beyond the L2 link, calibrated with ci/profile_check.py so the SimX cold pointer chase gives the 658.7-cycle global memory latency in 'reference' (measured on the HBM2e part)",
+    "L2_MSHR_SIZE": "256 per bank: Little's law on the L2-miss round trip ci/profile_check.py measures (DRAM 658.7 - L2 hit 273 = 386 cycles) x 1692 B/cycle (3350 GB/s / 1980 MHz) / (64 banks x 64 B) = 159.5, rounded up to a power of two. The derived default counts only PLATFORM_MEMORY_LATENCY, which the link latency now mostly replaces"
   }
 }

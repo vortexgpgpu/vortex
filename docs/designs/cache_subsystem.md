@@ -1070,6 +1070,25 @@ cannot drive latency below 2 (L1) or 4 (L2/L3), because `LATENCY >= 2` is a stat
 assert and the classic bank needs both stages. Each base constant equals that
 level's own default size.
 
+**`L2_LINK_LATENCY`** (`0`) — the link between the sockets and the L2, in cycles
+**each way**. `L2_LATENCY` is the bank pipeline, so it cannot stand for a large
+GPU's SM-to-L2 network, whose hundreds of cycles would be register stages in every
+bank. The link sits in `VX_cluster` between each socket memory port and its L2
+input (after the graphics block's peel, when OM is on): a `VX_mem_bus_delay`, one
+`VX_delay_buffer` per direction. A request reaches the L2 `L2_LINK_LATENCY` cycles
+after the socket offers it, and a response its socket as long after the L2 does,
+so an L2 hit, and every miss, gains `2 × L2_LINK_LATENCY` cycles of round trip.
+Each direction is a FIFO of a power of two at least the latency (block RAM at
+size) whose entries a delay line of valid bits releases in order into a stream
+buffer, so a port keeps one transfer per cycle, its outputs are registers, and its
+back-pressure is the FIFO's registered full flag.
+At `0` the ports are wires, the design of a build without the knob. The command
+processor's and the walker's L2 ports are not socket traffic and do not cross it.
+SimX models it with a `DelayBuffer` per direction in `Cluster`. The dcache MSHRs
+and the LSU's pending pool, which wait on both crossings, size from
+`PLATFORM_MEMORY_LATENCY + 2 × L2_LINK_LATENCY`; the L2 and L3 MSHRs from the
+memory latency alone.
+
 **Icache exceptions.** The icache has no `NUM_BANKS`, `WRITEBACK`, `DIRTYBYTES`,
 `LINE_SIZE`, `WORD_SIZE`, or `SECTOR_SIZE` knob. Its geometry beyond size and ways
 is fixed in `VX_gpu_pkg.sv` and at its instantiation (`NUM_BANKS=1`, `NUM_REQS=1`,

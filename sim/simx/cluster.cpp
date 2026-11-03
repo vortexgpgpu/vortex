@@ -13,6 +13,7 @@
 
 #include "cluster.h"
 #include <algorithm>
+#include "delay_buffer.h"
 #include "socket.h"
 #include "core.h"
 #include "local_mem.h"
@@ -117,6 +118,27 @@ public:
       simobject_->mem_rsp_in.at(i).bind(&l2cache_->mem_rsp_in.at(i));
     }
 
+    // A socket memory port reaches its L2 port across the link to the L2,
+    // VX_CFG_L2_LINK_LATENCY cycles each way.
+    auto bind_l2_link = [&](uint32_t port,
+                            SimChannel<MemReq>& req_src, SimChannel<MemReq>& req_dst,
+                            SimChannel<MemRsp>& rsp_src, SimChannel<MemRsp>& rsp_dst) {
+      if constexpr (VX_CFG_L2_LINK_LATENCY != 0) {
+        snprintf(sname, 100, "%s-l2link-req%d", name.c_str(), port);
+        auto req_link = DelayBuffer<MemReq>::Create(sname, VX_CFG_L2_LINK_LATENCY);
+        snprintf(sname, 100, "%s-l2link-rsp%d", name.c_str(), port);
+        auto rsp_link = DelayBuffer<MemRsp>::Create(sname, VX_CFG_L2_LINK_LATENCY);
+        req_src.bind(&req_link->In);
+        req_link->Out.bind(&req_dst);
+        rsp_src.bind(&rsp_link->In);
+        rsp_link->Out.bind(&rsp_dst);
+      } else {
+        __unused(port);
+        req_src.bind(&req_dst);
+        rsp_src.bind(&rsp_dst);
+      }
+    };
+
     // ── L2 fan-in: sockets + cluster-resident gfx caches ────────────────
     // Row 0 = sockets (high priority; TEX/RTU/DXA traffic already merged at
     // each socket's L2-facing arb).
@@ -134,8 +156,8 @@ public:
     for (uint32_t i = 0; i < sockets_per_cluster; ++i) {
       for (uint32_t j = 0; j < VX_CFG_L1_MEM_PORTS; ++j) {
         uint32_t port = i * VX_CFG_L1_MEM_PORTS + j;
-        sockets_.at(i)->mem_req_out.at(j).bind(&l2arb->ReqIn.at(kL2Rows * port + 0));
-        l2arb->RspOut.at(kL2Rows * port + 0).bind(&sockets_.at(i)->mem_rsp_in.at(j));
+        bind_l2_link(port, sockets_.at(i)->mem_req_out.at(j), l2arb->ReqIn.at(kL2Rows * port + 0),
+                     l2arb->RspOut.at(kL2Rows * port + 0), sockets_.at(i)->mem_rsp_in.at(j));
       }
     }
     // A gfx cache's memory port reaches the L2 arbiter through the cluster
@@ -163,8 +185,9 @@ public:
     // No cluster-resident gfx caches: direct sockets → L2.
     for (uint32_t i = 0; i < sockets_per_cluster; ++i) {
       for (uint32_t j = 0; j < VX_CFG_L1_MEM_PORTS; ++j) {
-        sockets_.at(i)->mem_req_out.at(j).bind(&l2cache_->core_req_in.at(i * VX_CFG_L1_MEM_PORTS + j));
-        l2cache_->core_rsp_out.at(i * VX_CFG_L1_MEM_PORTS + j).bind(&sockets_.at(i)->mem_rsp_in.at(j));
+        uint32_t port = i * VX_CFG_L1_MEM_PORTS + j;
+        bind_l2_link(port, sockets_.at(i)->mem_req_out.at(j), l2cache_->core_req_in.at(port),
+                     l2cache_->core_rsp_out.at(port), sockets_.at(i)->mem_rsp_in.at(j));
       }
     }
 #endif // cluster-resident gfx caches

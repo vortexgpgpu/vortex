@@ -200,6 +200,24 @@ tests:
   args: -n64
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8
   shape: {cores: 2, l2cache: true}
+# The same shape behind a 20-cycle link to the L2, each way: both cores' L2
+# traffic, its fills and its back-pressure cross the link's delay buffers.
+- id: parity-sgemm-mc64-l2link
+  check: model_parity
+  via: blackbox
+  app: sgemm
+  args: -n64
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_L2_LINK_LATENCY=20
+  shape: {cores: 2, l2cache: true}
+# L2-hit load-to-use latency through the link: a pointer chase that misses the
+# dcache and hits the L2, one dependent load at a time.
+- id: parity-chase-l2link
+  check: model_parity
+  via: blackbox
+  app: chase
+  args: -b262144 -w1 -i512
+  configs: -DVX_CFG_L2_LINK_LATENCY=20
+  shape: {l2cache: true}
 # SGEMM on two frontend slices feeding four issue slices: per-slice fetch on a
 # two-port icache, CTAs as wide as the core, a 16-port dcache.
 - id: parity-sgemm-fw2

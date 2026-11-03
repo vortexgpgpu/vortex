@@ -50,7 +50,8 @@
     "VX_CFG_L2_NUM_WAYS": 16,
     "VX_CFG_L2_NUM_BANKS": 64,
     "VX_CFG_L2_MSHR_SIZE": 192,
-    "VX_CFG_CP_LLC_CLIENT": 1
+    "VX_CFG_CP_LLC_CLIENT": 1,
+    "VX_CFG_L2_LINK_LATENCY": 137
   },
   "platform": {
     "VX_CFG_PLATFORM_MEMORY_NUM_BANKS": 32,
@@ -58,7 +59,7 @@
     "VX_CFG_PLATFORM_MEMORY_PEAK_BW": 960000,
     "VX_CFG_PLATFORM_MEMORY_TYPE": "GDDR6",
     "VX_CFG_PLATFORM_MEMORY_DATA_RATE": 15000,
-    "VX_CFG_PLATFORM_MEMORY_LATENCY": 675
+    "VX_CFG_PLATFORM_MEMORY_LATENCY": 367
   },
   "reference": {
     "fp32_lanes": 10752,
@@ -95,7 +96,8 @@
     "PLATFORM_CLOCK_RATE, PLATFORM_MEMORY_PEAK_BW": "2295 MHz base clock, 960 GB/s (whitepaper App. B)",
     "reference": "Nsight Compute on an RTX 5080 at its 2295 MHz base clock with a cold L2, 2026-10-05. fp32_lanes is the vendor FP32 core count (FP32 FMA lanes per chip, clock-free); dram_bandwidth_gbs the vendor peak. Checked by ci/profile_check.py. l1_hit_cycles comes from an index chase (p = next[p]: an index multiply-add per load), so it sits above ci/profile_check.py's pointer chase (p = *p) by that arithmetic",
     "PLATFORM_MEMORY_TYPE, PLATFORM_MEMORY_DATA_RATE": "30 Gbps GDDR7 x8 channels modelled as GDDR6 x16 channels at 15000 MT/s: the same channel count, 32 B burst time and 960 GB/s (32 x 2 B x 15 GT/s)",
-    "PLATFORM_MEMORY_LATENCY": "675 core cycles of PHY/NoC latency, calibrated in SimX against the 802-cycle pointer-chase DRAM latency in 'reference' with the same chase (random cyclic permutation, 128 B stride, one thread, cold L2 with CP_LLC_CLIENT=0; cycle difference between 128 KiB and 256 KiB footprints over the 1024 extra loads: 802.1). The L2 link latency is not modelled, so an L2 hit is about 79 cycles against the card's 354. Recalibrate when the memory model changes",
+    "L2_LINK_LATENCY": "137 core cycles each way between an SM and the L2, the SM-to-L2 network, which the L2 bank pipeline (L2_LATENCY) does not model: calibrated with ci/profile_check.py so the SimX pointer chase gives the 354.4-cycle L2 hit latency in 'reference'",
+    "PLATFORM_MEMORY_LATENCY": "367 core cycles of PHY/NoC latency beyond the L2 link, calibrated with ci/profile_check.py so the SimX cold pointer chase gives the 802-cycle DRAM latency in 'reference'. Recalibrate when the memory model changes",
     "FETCH_WIDTH": "4 SM processing blocks, each with its own warp scheduler, dispatch unit and L0 instruction cache (NVIDIA RTX Blackwell GPU Architecture whitepaper)",
     "CP_LLC_CLIENT": "Host copies reach device memory through the L2 like every other client, so uploaded data is L2-resident at launch",
     "LMEM_NUM_BANKS": "128 B per clock per SM: 32 banks of 4 B on the part (CUDA C++ Programming Guide, shared memory). Vortex banks are XLEN wide (8 B), so 16 banks carry the same bytes per clock; lanes reading one 8 B word share its bank access, so a stride-1 FP32 warp read is conflict-free as on the part",

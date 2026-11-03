@@ -40,7 +40,9 @@
     "VX_CFG_L2_SIZE": 41943040,
     "VX_CFG_L2_NUM_WAYS": 20,
     "VX_CFG_L2_NUM_BANKS": 64,
-    "VX_CFG_CP_LLC_CLIENT": 1
+    "VX_CFG_CP_LLC_CLIENT": 1,
+    "VX_CFG_L2_LINK_LATENCY": 61,
+    "VX_CFG_L2_MSHR_SIZE": 32
   },
   "platform": {
     "VX_CFG_PLATFORM_MEMORY_NUM_BANKS": 32,
@@ -48,7 +50,7 @@
     "VX_CFG_PLATFORM_MEMORY_PEAK_BW": 1555000,
     "VX_CFG_PLATFORM_MEMORY_TYPE": "HBM2",
     "VX_CFG_PLATFORM_MEMORY_DATA_RATE": 3038,
-    "VX_CFG_PLATFORM_MEMORY_LATENCY": 133,
+    "VX_CFG_PLATFORM_MEMORY_LATENCY": 11,
     "VX_CFG_PLATFORM_MEMORY_QUEUE_SIZE": 257
   },
   "reference": {
@@ -80,6 +82,8 @@
     "LMEM_SIZE, LMEM_LOG_SIZE, DCACHE_SIZE": "164 KB maximum shared memory per SM (CUDA Programming Guide, compute capability 8.0) in a 256 KB window. DCACHE_SIZE is the whole 192 KB L1/shared pool: the driver gives a kernel the L1 its shared-memory use leaves",
     "reference": "fp32_lanes is the vendor FP32 core count (FP32 FMA lanes per chip, clock-free); dram_bandwidth_gbs the vendor peak. Checked by ci/profile_check.py. Latencies: Abdelkhalik et al., Demystifying the Nvidia Ampere Architecture through Microbenchmarking and Instruction-level Analysis (HPEC 2022), Table IV: L1 33, L2 200, global memory 290 cycles",
     "PLATFORM_MEMORY_QUEUE_SIZE": "Per-channel request queue of GPGPU-Sim's SM80_A100 configuration (accel-sim gpu-simulator/configs/tested-cfgs/SM80_A100/gpgpusim.config)",
-    "PLATFORM_MEMORY_LATENCY": "133 core cycles of PHY/NoC latency, calibrated with ci/profile_check.py so the SimX cold pointer chase gives the 290-cycle global memory latency in 'reference' (GPGPU-Sim's SM80_A100 fixed latency of 190 gives 347)"
+    "L2_LINK_LATENCY": "61 core cycles each way between an SM and the L2, the SM-to-L2 network, which the L2 bank pipeline (L2_LATENCY) does not model: calibrated with ci/profile_check.py so the SimX pointer chase gives the 200-cycle L2 hit latency in 'reference'",
+    "PLATFORM_MEMORY_LATENCY": "11 core cycles of PHY/NoC latency beyond the L2 link, calibrated with ci/profile_check.py so the SimX cold pointer chase gives the 290-cycle global memory latency in 'reference' (GPGPU-Sim's SM80_A100 has a fixed latency of 190 and no link)",
+    "L2_MSHR_SIZE": "32 per bank: Little's law on the L2-miss round trip ci/profile_check.py measures (DRAM 290 - L2 hit 200 = 90 cycles) x 1103 B/cycle (1555 GB/s / 1410 MHz) / (64 banks x 64 B) = 24.2, rounded up to a power of two. The derived default counts only PLATFORM_MEMORY_LATENCY, which the link latency now mostly replaces"
   }
 }
