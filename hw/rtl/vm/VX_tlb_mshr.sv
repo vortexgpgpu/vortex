@@ -103,13 +103,14 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
     `STATIC_ASSERT(((MSHR_SIZE & (MSHR_SIZE-1)) == 0), ("VX_tlb_mshr requires MSHR_SIZE power-of-two"))
     `STATIC_ASSERT((ID_WIDTH >= IDX_W), ("VX_tlb_mshr requires ID_WIDTH >= CLOG2(MSHR_SIZE)"))
 
-    reg [MSHR_SIZE-1:0]        valid_r;
-    reg [MSHR_SIZE-1:0]        issued_r;
-    reg [MSHR_SIZE-1:0]        filled_r;
-    reg [MSHR_SIZE-1:0]        fault_r;
-    reg [TLB_VPN_WIDTH-1:0]    vpn_r    [MSHR_SIZE];
-    tlb_access_e               access_r [MSHR_SIZE];
-    reg [MSHR_SIZE-1:0]        amo_r;
+    // Entry state, one register set per entry (see the state update below).
+    wire [MSHR_SIZE-1:0]                    valid_r;
+    wire [MSHR_SIZE-1:0]                    issued_r;
+    wire [MSHR_SIZE-1:0]                    filled_r;
+    wire [MSHR_SIZE-1:0]                    fault_r;
+    wire [MSHR_SIZE-1:0][TLB_VPN_WIDTH-1:0] vpn_r;
+    wire [MSHR_SIZE-1:0][1:0]               access_r;
+    wire [MSHR_SIZE-1:0]                    amo_r;
 
     // ---------------------------------------------------------------------
     // VPN probes and allocate target
@@ -121,38 +122,40 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
     // whose requesters are killed rather than replayed: a new request re-walks.
     wire [MSHR_SIZE-1:0] live = DEDUP_LIVE_EXCLUDES_FAULT ? (valid_r & ~fault_r) : valid_r;
 
-    wire [NUM_REQS-1:0][IDX_W-1:0] probe_slot;
+    // Live entries hold distinct VPNs, so a lane's match vector is one-hot
+    // (or empty) and selects the entry directly, with no index encode.
+    wire [NUM_REQS-1:0][MSHR_SIZE-1:0] probe_m;
     for (genvar l = 0; l < NUM_REQS; ++l) begin : g_probe
-        wire [MSHR_SIZE-1:0] m;
         for (genvar e = 0; e < MSHR_SIZE; ++e) begin : g_m
-            assign m[e] = live[e] && (vpn_r[e] == probe_vpn[l]);
+            assign probe_m[l][e] = live[e] && (vpn_r[e] == probe_vpn[l]);
         end
-        VX_priority_encoder #(
-            .N (MSHR_SIZE)
-        ) probe_enc (
-            .data_in    (m),
-            `UNUSED_PIN (onehot_out),
-            .index_out  (probe_slot[l]),
-            .valid_out  (probe_match[l])
-        );
+        assign probe_match[l] = (| probe_m[l]);
     end
 
     // Allocate reuses the probing lane's dedup result.
-    wire             has_match  = probe_match[alloc_lane];
-    wire [IDX_W-1:0] match_slot = probe_slot[alloc_lane];
+    wire                 has_match = probe_match[alloc_lane];
+    wire [MSHR_SIZE-1:0] match_oh  = probe_m[alloc_lane];
 
-    wire             has_free;
-    wire [IDX_W-1:0] free_slot;
+    wire                 has_free;
+    wire [MSHR_SIZE-1:0] free_oh;
     VX_priority_encoder #(
         .N (MSHR_SIZE)
     ) free_enc (
         .data_in    (~valid_r),
-        `UNUSED_PIN (onehot_out),
-        .index_out  (free_slot),
+        .onehot_out (free_oh),
+        `UNUSED_PIN (index_out),
         .valid_out  (has_free)
     );
 
-    wire [IDX_W-1:0] alloc_target = has_match ? match_slot : free_slot;
+    wire [MSHR_SIZE-1:0] alloc_oh = has_match ? match_oh : free_oh;
+    wire [IDX_W-1:0]     alloc_target;
+    VX_onehot_encoder #(
+        .N (MSHR_SIZE)
+    ) alloc_enc (
+        .data_in   (alloc_oh),
+        .data_out  (alloc_target),
+        `UNUSED_PIN (valid_out)
+    );
 
     // ---------------------------------------------------------------------
     // Per-entry requester queues, pooled into one shared payload RAM. Entry e
@@ -188,20 +191,22 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
     // so an accepted request would be dropped with no replay or kill; the
     // requester retries against the flushed TLB instead.
     // ---------------------------------------------------------------------
-    assign alloc_ready = !flush && (has_match ? !q_full[match_slot] : has_free);
+    assign alloc_ready = !flush && (has_match ? ~(| (match_oh & q_full)) : has_free);
     wire alloc_fire = alloc_valid && alloc_ready;
+    wire [MSHR_SIZE-1:0] alloc_new_oh = (alloc_fire && !has_match) ? free_oh : '0;
 
     // ---------------------------------------------------------------------
     // Issue
     // ---------------------------------------------------------------------
     wire [MSHR_SIZE-1:0] issue_pend = valid_r & ~issued_r;
-    wire             has_issue;
-    wire [IDX_W-1:0] issue_sel;
+    wire                 has_issue;
+    wire [IDX_W-1:0]     issue_sel;
+    wire [MSHR_SIZE-1:0] issue_oh;
     VX_priority_encoder #(
         .N (MSHR_SIZE)
     ) issue_enc (
         .data_in    (issue_pend),
-        `UNUSED_PIN (onehot_out),
+        .onehot_out (issue_oh),
         .index_out  (issue_sel),
         .valid_out  (has_issue)
     );
@@ -248,7 +253,7 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
 
     assign fault_valid  = fill_fire && fill_fault;
     assign fault_vpn    = vpn_r[fill_idx];
-    assign fault_access = access_r[fill_idx];
+    assign fault_access = tlb_access_e'(access_r[fill_idx]);
 
     // ---------------------------------------------------------------------
     // Drain slot selection, computed one cycle ahead so both payload reads
@@ -265,9 +270,10 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
     wire                 drain_pop;
     wire [MSHR_SIZE-1:0] fill_mask;
 
-    reg [IDX_W-1:0] drain_sel_r;
-    reg             has_drain_r;
-    reg [IDX_W-1:0] drain_rr_r;
+    reg [IDX_W-1:0]     drain_sel_r;
+    reg [MSHR_SIZE-1:0] drain_oh_r;
+    reg                 has_drain_r;
+    reg [IDX_W-1:0]     drain_rr_r;
 
     for (genvar e = 0; e < MSHR_SIZE; ++e) begin : g_fill_mask
         assign fill_mask[e] = fill_fire && (fill_idx == IDX_W'(e));
@@ -275,34 +281,51 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
 
     wire [MSHR_SIZE-1:0] drain_pend_n = (valid_r & filled_r) | fill_mask;
 
-    // Rotate the pending vector to the registered pointer: the pointer lags
-    // its pop by one cycle, keeping the ready path out of the read-address
-    // cone. An entry can win at most two consecutive pops, so the wait bound
-    // doubles but stays bounded. Power-of-two MSHR_SIZE makes the index
-    // addition below wrap for free.
-    wire [2*MSHR_SIZE-1:0] pend_dup = {drain_pend_n, drain_pend_n} >> drain_rr_r;
-    wire [MSHR_SIZE-1:0]   pend_rot = pend_dup[MSHR_SIZE-1:0];
-    `UNUSED_VAR (pend_dup)
+    // Round-robin from the registered pointer: the first pending entry at or
+    // above it, else the first pending entry. The pointer lags its pop by one
+    // cycle, keeping the ready path out of the read-address cone. An entry can
+    // win at most two consecutive pops, so the wait bound doubles but stays
+    // bounded.
+    wire [MSHR_SIZE-1:0] rr_upper = {MSHR_SIZE{1'b1}} << drain_rr_r;
+    wire [MSHR_SIZE-1:0] pend_upper = drain_pend_n & rr_upper;
 
-    wire             has_drain_n;
-    wire [IDX_W-1:0] sel_rot;
+    wire                 has_upper, has_drain_n;
+    wire [MSHR_SIZE-1:0] upper_oh, lower_oh;
+    VX_priority_encoder #(
+        .N (MSHR_SIZE)
+    ) drain_upper_enc (
+        .data_in    (pend_upper),
+        .onehot_out (upper_oh),
+        `UNUSED_PIN (index_out),
+        .valid_out  (has_upper)
+    );
     VX_priority_encoder #(
         .N (MSHR_SIZE)
     ) drain_enc (
-        .data_in    (pend_rot),
-        `UNUSED_PIN (onehot_out),
-        .index_out  (sel_rot),
+        .data_in    (drain_pend_n),
+        .onehot_out (lower_oh),
+        `UNUSED_PIN (index_out),
         .valid_out  (has_drain_n)
     );
-    wire [IDX_W-1:0] drain_sel_n = sel_rot + drain_rr_r;
+    wire [MSHR_SIZE-1:0] drain_oh_n = has_upper ? upper_oh : lower_oh;
+    wire [IDX_W-1:0]     drain_sel_n;
+    VX_onehot_encoder #(
+        .N (MSHR_SIZE)
+    ) drain_sel_enc (
+        .data_in   (drain_oh_n),
+        .data_out  (drain_sel_n),
+        `UNUSED_PIN (valid_out)
+    );
 
     always @(posedge clk) begin
         if (reset || flush) begin
             drain_sel_r <= '0;
+            drain_oh_r  <= '0;
             has_drain_r <= 1'b0;
             drain_rr_r  <= '0;
         end else begin
             drain_sel_r <= drain_sel_n;
+            drain_oh_r  <= drain_oh_n;
             has_drain_r <= has_drain_n;
             if (drain_pop) begin
                 drain_rr_r <= drain_sel_r + IDX_W'(1);
@@ -310,7 +333,7 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
         end
     end
 
-    wire drain_ne = !q_empty[drain_sel_r];
+    wire drain_ne = (| (drain_oh_r & ~q_empty));
 
     // ---------------------------------------------------------------------
     // Requester payload pool: one VX_dp_ram shared by all entries, addressed
@@ -319,8 +342,31 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
     // registered read streams one token per cycle. The count==1 pop+push case
     // reads the slot written this cycle; the write-first read covers it.
     // ---------------------------------------------------------------------
-    wire [POOL_AW-1:0] pool_waddr = {alloc_target, tail_r[alloc_target]};
-    wire [PW-1:0] pool_rptr_n = head_r[drain_sel_n] + (q_pop[drain_sel_n] ? PW'(1) : PW'(0));
+    // Pointers selected one-hot; each entry's post-pop head is formed in
+    // parallel ahead of the select.
+    wire [MSHR_SIZE-1:0][PW-1:0] tail_vec, head_next;
+    for (genvar e = 0; e < MSHR_SIZE; ++e) begin : g_ptrs
+        assign tail_vec[e]  = tail_r[e];
+        assign head_next[e] = head_r[e] + (q_pop[e] ? PW'(1) : PW'(0));
+    end
+    wire [PW-1:0] pool_wptr, pool_rptr_n;
+    VX_onehot_mux #(
+        .DATAW (PW),
+        .N     (MSHR_SIZE)
+    ) wptr_mux (
+        .data_in  (tail_vec),
+        .sel_in   (alloc_oh),
+        .data_out (pool_wptr)
+    );
+    VX_onehot_mux #(
+        .DATAW (PW),
+        .N     (MSHR_SIZE)
+    ) rptr_mux (
+        .data_in  (head_next),
+        .sel_in   (drain_oh_n),
+        .data_out (pool_rptr_n)
+    );
+    wire [POOL_AW-1:0] pool_waddr = {alloc_target, pool_wptr};
     wire [POOL_AW-1:0] pool_raddr = {drain_sel_n, pool_rptr_n};
     wire [QDATA_W-1:0] pool_rdata;
 
@@ -372,56 +418,75 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
     // Drain
     // ---------------------------------------------------------------------
     assign drain_valid = has_drain_r && drain_ne;
-    assign drain_fault = fault_r[drain_sel_r];
+    assign drain_fault = (| (drain_oh_r & fault_r));
     assign drain_qdata = pool_rdata;
     assign drain_pop   = drain_valid && drain_ready;
 
     // ---------------------------------------------------------------------
     // Queue push / pop wiring
     // ---------------------------------------------------------------------
+    wire [MSHR_SIZE-1:0] q_one;
     for (genvar e = 0; e < MSHR_SIZE; ++e) begin : g_qctrl
-        assign q_push[e] = alloc_fire && (alloc_target == IDX_W'(e));
-        assign q_pop[e]  = drain_pop && (drain_sel_r == IDX_W'(e));
+        assign q_push[e] = alloc_fire && alloc_oh[e];
+        assign q_pop[e]  = drain_pop && drain_oh_r[e];
+        assign q_one[e]  = (q_size[e] == SIZE_W'(1));
     end
 
     // Free the drained entry once its queue empties with no concurrent push.
-    wire drain_push = alloc_fire && (alloc_target == drain_sel_r);
+    wire drain_push = alloc_fire && (| (alloc_oh & drain_oh_r));
     assign drain_free = has_drain_r
-        && ((drain_ne && drain_pop && (q_size[drain_sel_r] == SIZE_W'(1)) && !drain_push)
+        && ((drain_ne && drain_pop && (| (drain_oh_r & q_one)) && !drain_push)
          || (!drain_ne && !drain_push));
 
     // ---------------------------------------------------------------------
     // State update
     // ---------------------------------------------------------------------
-    always @(posedge clk) begin
-        if (reset || flush) begin
-            valid_r  <= '0;
-            issued_r <= '0;
-            filled_r <= '0;
-            fault_r  <= '0;
-            amo_r    <= '0;
-        end else begin
-            if (alloc_fire && !has_match) begin
-                valid_r[free_slot]  <= 1'b1;
-                issued_r[free_slot] <= 1'b0;
-                filled_r[free_slot] <= 1'b0;
-                fault_r[free_slot]  <= 1'b0;
-                vpn_r[free_slot]    <= alloc_vpn;
-                access_r[free_slot] <= alloc_access;
-                amo_r[free_slot]    <= alloc_amo;
-            end
-            if (issue_fire) begin
-                issued_r[issue_sel] <= 1'b1;
-            end
-            if (fill_fire) begin
-                filled_r[fill_idx] <= 1'b1;
-                fault_r[fill_idx]  <= fill_fault;
-            end
-            if (drain_free) begin
-                valid_r[drain_sel_r]  <= 1'b0;
-                filled_r[drain_sel_r] <= 1'b0;
+    // Per entry, each decoding its own events; later events take precedence.
+    for (genvar e = 0; e < MSHR_SIZE; ++e) begin : g_entries
+        reg                     e_valid, e_issued, e_filled, e_fault, e_amo;
+        reg [TLB_VPN_WIDTH-1:0] e_vpn;
+        reg [1:0]               e_access;
+        always @(posedge clk) begin
+            if (reset || flush) begin
+                e_valid  <= 1'b0;
+                e_issued <= 1'b0;
+                e_filled <= 1'b0;
+                e_fault  <= 1'b0;
+                e_amo    <= 1'b0;
+            end else begin
+                if (alloc_new_oh[e]) begin
+                    e_valid  <= 1'b1;
+                    e_issued <= 1'b0;
+                    e_filled <= 1'b0;
+                    e_fault  <= 1'b0;
+                    e_amo    <= alloc_amo;
+                end
+                if (issue_fire && issue_oh[e]) begin
+                    e_issued <= 1'b1;
+                end
+                if (fill_mask[e]) begin
+                    e_filled <= 1'b1;
+                    e_fault  <= fill_fault;
+                end
+                if (drain_free && drain_oh_r[e]) begin
+                    e_valid  <= 1'b0;
+                    e_filled <= 1'b0;
+                end
             end
         end
+        always @(posedge clk) begin
+            if (alloc_new_oh[e]) begin
+                e_vpn    <= alloc_vpn;
+                e_access <= alloc_access;
+            end
+        end
+        assign valid_r[e]  = e_valid;
+        assign issued_r[e] = e_issued;
+        assign filled_r[e] = e_filled;
+        assign fault_r[e]  = e_fault;
+        assign amo_r[e]    = e_amo;
+        assign vpn_r[e]    = e_vpn;
+        assign access_r[e] = e_access;
     end
 
     // Pool ring pointers. QDEPTH is a power of two, so tail/head wrap for free.
