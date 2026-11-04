@@ -71,6 +71,9 @@
 // half of the map, up to 32 ports.
 `define FOLDSIM_REG_MEM_TIMING  12'h400
 `define FOLDSIM_REG_MEM_STATS   12'h800
+// Port p's device-memory telemetry (foldsim_mem axi_stats), eight 32-bit
+// words from FOLDSIM_REG_MEM_AXI + 0x20 * p, for p < 24.
+`define FOLDSIM_REG_MEM_AXI     12'h480
 
 `define FOLDSIM_CMD_NONE        3'd0
 `define FOLDSIM_CMD_DCR_WRITE   3'd1

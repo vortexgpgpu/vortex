@@ -82,6 +82,12 @@ module foldsim_mem #(
     // Reads, writes, row hits, misses, conflicts, read latency sum,
     // refreshes, target cycles the port could take no read.
     output wire [8*64-1:0]       stats,
+    // Device-memory telemetry, 32-bit counters from reset: AR, R, AW, W and B
+    // handshakes; host cycles with no R while reads are in memory; host
+    // cycles with R offered and not taken; then the occupancy now: [7:0]
+    // reads queued for memory, [15:8] reads in memory, [23:16] writes in
+    // memory, [31:24] write data held.
+    output wire [8*32-1:0]       axi_stats,
     // No transaction in flight, at the target or in memory.
     output wire                  idle,
     output reg                   error,
@@ -548,6 +554,23 @@ module foldsim_mem #(
         if (rd_push)
             slot_data[arq_slot[rs_head]] <= m_rdata;
     end
+
+    reg [31:0] t_ar, t_r, t_aw, t_w, t_b, t_r_starve, t_r_wait;
+    always @(posedge clk) begin
+        if (reset) begin
+            t_ar <= 0; t_r <= 0; t_aw <= 0; t_w <= 0; t_b <= 0; t_r_starve <= 0; t_r_wait <= 0;
+        end else begin
+            t_ar <= t_ar + 32'(arq_pop);
+            t_r  <= t_r + 32'(rd_push);
+            t_aw <= t_aw + 32'(awm_pop);
+            t_w  <= t_w + 32'(wm_pop);
+            t_b  <= t_b + 32'(b_push);
+            t_r_starve <= t_r_starve + {31'd0, ~m_rvalid & (t_ar != t_r)};
+            t_r_wait   <= t_r_wait + {31'd0, m_rvalid & ~m_rready};
+        end
+    end
+    assign axi_stats = {8'(wm_count), 8'(t_aw - t_b), 8'(t_ar - t_r), 8'(arq_count),
+                        t_r_wait, t_r_starve, t_b, t_w, t_aw, t_r, t_ar};
 
     // A flush comes once memory has answered everything: nothing is offered
     // to it or expected from it, and what is left are lone halves of writes

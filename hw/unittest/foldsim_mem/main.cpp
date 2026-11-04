@@ -225,7 +225,7 @@ struct Hbm {
   std::deque<uint64_t> aw;
   std::deque<std::pair<Line, uint64_t>> w;
   std::set<uint64_t> ar_seen;
-  uint64_t n_ar = 0, n_aw = 0, n_w = 0;
+  uint64_t n_ar = 0, n_aw = 0, n_w = 0, n_r = 0, n_b = 0;
   bool arready = false, awready = false, wready = false;
   bool ar_held = false, aw_held = false, w_held = false;
   uint64_t ar_a = 0, aw_a = 0;
@@ -285,10 +285,14 @@ struct Hbm {
     aw_a = dut->m_awaddr;
     w_d = wdata();
 
-    if (dut->m_rvalid)
+    if (dut->m_rvalid) {
       r.pop_front();
-    if (dut->m_bvalid)
+      ++n_r;
+    }
+    if (dut->m_bvalid) {
       b.pop_front();
+      ++n_b;
+    }
     if (ar_hs) {
       ++n_ar;
       const uint64_t a = dut->m_araddr;
@@ -873,6 +877,14 @@ int run_setup(const Setup& s) {
   CHECK(!hbm.ar_seen.count(kBase + kMagic), "a request made in reset reached HBM");
   CHECK(!hbm.ar_seen.count(kBase + kBurstAddr), "a burst reached HBM");
   CHECK(dut->idle, "endpoint not idle at the end");
+  // The device-memory telemetry counts what HBM saw, and reads nothing in flight once idle.
+  const uint64_t tel[5] = {hbm.n_ar, hbm.n_r, hbm.n_aw, hbm.n_w, hbm.n_b};
+  const char* tel_name[5] = {"AR", "R", "AW", "W", "B"};
+  for (int i = 0; i < 5; ++i)
+    CHECK(dut->axi_stats[i] == uint32_t(tel[i]), "telemetry %s %u, HBM saw %lu", tel_name[i],
+          dut->axi_stats[i], (unsigned long)tel[i]);
+  CHECK(dut->axi_stats[6] == 0, "telemetry: R offered and not taken %u times", dut->axi_stats[6]);
+  CHECK(dut->axi_stats[7] == 0, "telemetry occupancy 0x%08x at idle", dut->axi_stats[7]);
   CHECK(master.stale == 0, "%lu stale responses", (unsigned long)master.stale);
   // One bank's conflicts leave too little in flight for every reset to meet.
   if (s.traffic != Traffic::OneBank)

@@ -76,6 +76,7 @@
 #define FOLDSIM_REG_MEM_RFC     0x0F8u  // refresh: DRAM clocks a refreshed bank may not activate
 #define FOLDSIM_REG_MEM_TIMING(i) (0x400u + 4u * (i))  // FOLDSIM_MEM_T_*, 12 bits each
 #define FOLDSIM_REG_MEM_STATS(p, i) (0x800u + 0x40u * (p) + 8u * (i))  // port p's FOLDSIM_MEM_STAT_*, lo/hi (p < 32)
+#define FOLDSIM_REG_MEM_AXI(p, i) (0x480u + 0x20u * (p) + 4u * (i))  // port p's FOLDSIM_MEM_AXI_*, 32 bits (p < 24)
 
 #define FOLDSIM_MEM_REFRESH_OFF  0u
 #define FOLDSIM_MEM_REFRESH_BANK 1u  // per bank, the banks in turn
@@ -97,6 +98,13 @@ enum {
   FOLDSIM_MEM_STAT_READS, FOLDSIM_MEM_STAT_WRITES, FOLDSIM_MEM_STAT_HITS, FOLDSIM_MEM_STAT_MISSES,
   FOLDSIM_MEM_STAT_CONFLICTS, FOLDSIM_MEM_STAT_LATENCY, FOLDSIM_MEM_STAT_REFRESHES,
   FOLDSIM_MEM_STAT_FULL, FOLDSIM_MEM_NUM_STATS
+};
+// Device-memory telemetry per port (32-bit, from reset): AR / R / AW / W / B handshakes, host cycles with no R while
+// reads are in memory, host cycles with R offered and not taken, and the occupancy now ([7:0] reads queued for memory,
+// [15:8] reads in memory, [23:16] writes in memory, [31:24] write data held).
+enum {
+  FOLDSIM_MEM_AXI_AR, FOLDSIM_MEM_AXI_R, FOLDSIM_MEM_AXI_AW, FOLDSIM_MEM_AXI_W, FOLDSIM_MEM_AXI_B,
+  FOLDSIM_MEM_AXI_R_STARVE, FOLDSIM_MEM_AXI_R_WAIT, FOLDSIM_MEM_AXI_OCC, FOLDSIM_MEM_NUM_AXI
 };
 
 #define FOLDSIM_STATUS_BUSY     0x1u  // queued, running, or memory in flight
