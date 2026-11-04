@@ -193,8 +193,25 @@ module VX_warp_shared_unit import VX_gpu_pkg::*; #(
     reg [`VX_CFG_MEM_ADDR_WIDTH-1:0] wspawn_mscratch_r;
     reg is_single_warp;
 
-    wire [`CLOG2(`VX_CFG_NUM_WARPS+1)-1:0] active_warps_cnt;
-    `POP_COUNT(active_warps_cnt, active_warps);
+    // Exactly one warp active, without counting them: pairs of (any, two or
+    // more) are combined in a tree, so the test is a few LUT levels rather
+    // than a population count's adder chain and a compare.
+    localparam AW_LEVELS = `CLOG2(`VX_CFG_NUM_WARPS);
+    localparam AW_SIZE   = 1 << AW_LEVELS;
+    wire [AW_LEVELS:0][AW_SIZE-1:0] aw_any, aw_many;
+    assign aw_any[0]  = AW_SIZE'(active_warps);
+    assign aw_many[0] = '0;
+    for (genvar l = 0; l < AW_LEVELS; ++l) begin : g_aw_level
+        for (genvar j = 0; j < (AW_SIZE >> (l + 1)); ++j) begin : g_aw_pair
+            assign aw_any[l+1][j]  = aw_any[l][2*j] || aw_any[l][2*j+1];
+            assign aw_many[l+1][j] = aw_many[l][2*j] || aw_many[l][2*j+1] || (aw_any[l][2*j] && aw_any[l][2*j+1]);
+        end
+        if ((AW_SIZE >> (l + 1)) < AW_SIZE) begin : g_aw_pad
+            assign aw_any[l+1][AW_SIZE-1:(AW_SIZE >> (l + 1))]  = '0;
+            assign aw_many[l+1][AW_SIZE-1:(AW_SIZE >> (l + 1))] = '0;
+        end
+    end
+    wire single_warp = aw_any[AW_LEVELS][0] && ~aw_many[AW_LEVELS][0];
 
     assign wspawn_apply = wspawn_valid_r && is_single_warp;
 
@@ -203,7 +220,7 @@ module VX_warp_shared_unit import VX_gpu_pkg::*; #(
             wspawn_valid_r <= 1'b0;
             is_single_warp <= 1'b0;
         end else begin
-            is_single_warp <= (active_warps_cnt == $bits(active_warps_cnt)'(1));
+            is_single_warp <= single_warp;
             if (act_wspawn) begin
                 wspawn_valid_r <= 1'b1;
             end
