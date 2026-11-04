@@ -119,12 +119,18 @@
 `endif
 `endif
 
-// Integer mul/div via DPI: simulation only (not synthesis) with DPI enabled.
-// Internal derived macros — not VX_CFG_* knobs.
+// Integer mul/div via DPI: simulation only (not synthesis) with DPI enabled,
+// and only when asked for (VX_CFG_IMUL_DPI_ENABLE / VX_CFG_IDIV_DPI_ENABLE,
+// off by default): the DPI models are not timed as the hardware's units.
+// Internal derived macros.
 `ifndef SYNTHESIS
 `ifdef SV_DPI
+`ifdef VX_CFG_IMUL_DPI_ENABLE
     `define IMUL_DPI
+`endif
+`ifdef VX_CFG_IDIV_DPI_ENABLE
     `define IDIV_DPI
+`endif
 `endif
 `endif
 

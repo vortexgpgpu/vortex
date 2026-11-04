@@ -307,7 +307,7 @@ that nobody would set directly, does not carry the prefix:
 | configuration knob | `VX_config.toml` | `VX_CFG_*`, `VX_DBG_*` | `VX_CFG_NUM_THREADS`, `VX_DBG_DEBUG_LEVEL` |
 | tool predicate | `VX_config.toml` `[toolchain]` | bare | `ASIC`, `SYNTHESIS`, `VIVADO`, `SV_DPI` |
 | contract constant | `VX_types.toml` | `VX_CSR_*`, `VX_DCR_*`, `VX_MEM_*`, … | `VX_MEM_IO_BASE_ADDR` |
-| internal flag read by RTL or C++ | [`hw/rtl/VX_define.vh`](../../hw/rtl/VX_define.vh), mirrored in a C++ header when a simulator gates on it | bare | `TCU_META_ENABLE`, `IMUL_DPI`, `IDIV_DPI` |
+| internal flag read by RTL or C++ | [`hw/rtl/VX_define.vh`](../../hw/rtl/VX_define.vh), mirrored in a C++ header when a simulator gates on it | bare | `TCU_META_ENABLE`, `IMUL_DPI` (from `VX_CFG_IMUL_DPI_ENABLE`), `IDIV_DPI` |
 | helper read only by other `expr:` keys | `VX_config.toml` | lowercase | `dpi_is_enabled`, `fpu_dsp_vivado` |
 
 This keeps `VX_CFG_*` an honest catalog of what is configurable rather than a

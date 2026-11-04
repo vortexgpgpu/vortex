@@ -100,6 +100,13 @@ VX_CFG_PLATFORM_MEMORY_QUEUE_SIZE = 0
 [alu]
 VX_CFG_NUM_ALU_LANES = "expr: $VX_CFG_SIMD_WIDTH"
 VX_CFG_NUM_ALU_BLOCKS = "expr: $VX_CFG_ISSUE_WIDTH"
+# Simulation only (SV_DPI, not SYNTHESIS; ignored by synthesis): integer multiply / divide
+# computed by a DPI C model behind a LATENCY_IMUL pipeline, instead of the units the
+# hardware has (VX_serial_mul at XLEN 64, VX_multiplier at 32; VX_serial_div). Faster to
+# simulate, but its cycles are not the hardware's, so off by default: rtlsim simulates the
+# RTL that ships, and SimX times what each setting builds.
+VX_CFG_IMUL_DPI_ENABLE = false
+VX_CFG_IDIV_DPI_ENABLE = false
 
 [sfu]
 VX_CFG_NUM_SFU_LANES = "expr: $VX_CFG_SIMD_WIDTH"

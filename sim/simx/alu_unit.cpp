@@ -77,17 +77,18 @@ uint32_t AluUnit::latency_of(const instr_trace_t* trace) const {
 		auto mdv_type = std::get<MdvType>(trace->op_type);
 		switch (mdv_type) {
 		// Three multiplier stages plus the multiply/divide response register,
-		// against the integer ALU's single response stage; simulation divides
-		// run in that same pipeline rather than iteratively.
+		// against the integer ALU's single response stage, or the iterative
+		// units' operand width (see kSerialMul / kSerialDiv).
 		case MdvType::MUL:
 		case MdvType::MULHU:
 		case MdvType::MULH:
 		case MdvType::MULHSU:
+			return kSerialMul ? kSerialMulLatency : kMulDivLatency;
 		case MdvType::DIV:
 		case MdvType::DIVU:
 		case MdvType::REM:
 		case MdvType::REMU:
-			return kMulDivLatency;
+			return kSerialDiv ? kSerialDivLatency : kMulDivLatency;
 		default:
 			std::abort();
 		}
@@ -562,14 +563,41 @@ void AluUnit::execute(instr_trace_t* trace) {
 	}
 }
 
+int AluUnit::serial_unit(const instr_trace_t* trace) {
+  auto mdv = std::get_if<MdvType>(&trace->op_type);
+  if (!mdv)
+    return -1;
+  switch (*mdv) {
+  case MdvType::DIV:
+  case MdvType::DIVU:
+  case MdvType::REM:
+  case MdvType::REMU:
+    return kSerialDiv ? 1 : -1;
+  default:
+    return kSerialMul ? 0 : -1;
+  }
+}
+
+void AluUnit::on_reset() {
+  for (auto& b : serial_free_)
+    b.fill(0);
+}
+
 void AluUnit::on_tick() {
   bool idle = true;
+  const uint64_t now = SimPlatform::instance().cycles();
   for (uint32_t b = 0; b < VX_CFG_NUM_ALU_BLOCKS; ++b) {
     auto& input = Inputs.at(b);
     if (!input.empty()) {
       auto& output = Outputs.at(b);
-      if (!output.full()) {
+      // An operation for a busy iterative unit holds the block's input, as
+      // VX_alu_unit's dispatch holds it for the unit's ready.
+      const int su = serial_unit(input.peek());
+      if (!output.full() && (su < 0 || now >= serial_free_.at(b).at(su))) {
         auto trace = input.peek();
+        if (su >= 0) {
+          serial_free_.at(b).at(su) = now + (su ? kSerialDivLatency : kSerialMulLatency) + 1;
+        }
         this->execute(trace);
         // A branch releases its warp as it resolves, not when its result
         // retires.
