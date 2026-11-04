@@ -474,6 +474,59 @@ public:
   }
 };
 
+// 17/18) LR/SC hart isolation (global / local memory): in each warp thread 0
+//     holds an LR reservation while every other thread issues an SC to the
+//     same word. A reservation belongs to one hart, so all those SCs must fail
+//     and leave the word unwritten; thread 0's own SC may succeed or fail, but
+//     the word must agree with what it reported.
+class Test_LRSC_HART_ISOLATION : public ITestCase {
+public:
+  Test_LRSC_HART_ISOLATION(TestSuite* s, const char* name, uint32_t num_threads, bool lmem)
+    : ITestCase(s, name), num_threads_(num_threads), lmem_(lmem) {}
+  void setup(uint32_t n, uint32_t* /*shared*/, uint32_t* per_hart) override {
+    for (uint32_t h = 0; h < n; ++h) per_hart[h] = SENTINEL;
+  }
+  int verify(uint32_t n, uint32_t /*iters*/,
+             const uint32_t* shared, const uint32_t* per_hart) override {
+    int errors = 0;
+    uint32_t warps = 0;
+    for (uint32_t w = 0; w + num_threads_ <= n; w += num_threads_) {
+      if (per_hart[w] == SENTINEL) continue;  // warp not launched
+      ++warps;
+      const uint32_t word = shared[w * 16 + 1];  // as thread 0 read it
+      for (uint32_t t = 1; t < num_threads_; ++t) {
+        if (per_hart[w + t] == 0) {
+          if (errors < 8)
+            std::cout << "  hart " << (w + t) << " (warp hart " << w << ", thread " << t
+                      << "): SC without a reservation succeeded" << std::endl;
+          ++errors;
+        } else if (per_hart[w + t] == SENTINEL) {
+          std::cout << "  hart " << (w + t) << " did not report" << std::endl;
+          ++errors;
+        }
+      }
+      const uint32_t expected = (per_hart[w] == 0) ? (LRSC_ISO_MARK + 0) : 0;
+      if (word != expected || (!lmem_ && shared[w * 16] != word)) {
+        if (errors < 8)
+          std::cout << "  warp hart " << w << ": word=0x" << std::hex << word
+                    << " expected=0x" << expected << std::dec
+                    << " (thread 0 SC " << (per_hart[w] == 0 ? "succeeded" : "failed") << ")"
+                    << std::endl;
+        ++errors;
+      }
+    }
+    if (warps == 0) {
+      std::cout << "  no warp reported -- the kernel did not run" << std::endl;
+      return 1;
+    }
+    return errors;
+  }
+private:
+  static constexpr uint32_t SENTINEL = 0xdeadbeefu;
+  uint32_t num_threads_;
+  bool lmem_;
+};
+
 inline TestSuite::TestSuite(vx_device_h device) : device_(device) {
   // Test_ATOMIC_CRITICAL needs to know VX_CFG_NUM_THREADS to compute the
   // expected count; query it from the device caps.
@@ -502,6 +555,8 @@ inline TestSuite::TestSuite(vx_device_h device) : device_(device) {
   add_test(new Test_CAS_LADDER(this));
   add_test(new Test_CAS_LMEM(this));
 #endif
+  add_test(new Test_LRSC_HART_ISOLATION(this, "lrsc_hart_isolation", (uint32_t)num_threads, false));
+  add_test(new Test_LRSC_HART_ISOLATION(this, "lrsc_hart_isolation_lmem", (uint32_t)num_threads, true));
 }
 
 inline TestSuite::~TestSuite() {

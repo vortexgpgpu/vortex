@@ -230,10 +230,15 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
         assign lane_amo.amo_cmp      = execute_if.data.rs3_data[i];
     `endif
         // make_hart_id(cid, wid, tid) — packed concatenation, low bits = tid.
+        // A warp wider than the LSU issues over several packets, so the
+        // lane's thread is pid * NUM_LANES + i: the reservation is per hart.
+        wire [HART_ID_WIDTH-1:0] lane_tid = (PID_BITS != 0)
+            ? HART_ID_WIDTH'(execute_if.data.header.pid * NUM_LANES + i)
+            : HART_ID_WIDTH'(i);
         assign lane_amo.hart_id      = HART_ID_WIDTH'(
             (HART_ID_WIDTH'(core_id) << (NW_BITS + NT_BITS))
           | (HART_ID_WIDTH'(execute_if.data.header.wid) << NT_BITS)
-          |  HART_ID_WIDTH'(i)
+          |  lane_tid
         );
         assign mem_req_attr_struct[i].amo = lane_amo;
     `else

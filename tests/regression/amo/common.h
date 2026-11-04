@@ -13,6 +13,10 @@
 #define CAS_LMEM_SLOTS      16
 #define CAS_LMEM_GROUP_MARK 0x10000u
 
+// Value thread t of a warp stores with its store-conditional in the LR/SC
+// hart-isolation case: LRSC_ISO_MARK + t. The word starts at 0.
+#define LRSC_ISO_MARK 0x5c000000u
+
 // Args shared between host (main.cpp) and the GPU kernel (kernel.cpp).
 // Layout matches dogfood's, with `iters` added for the contention loops.
 typedef struct {

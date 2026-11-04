@@ -39,6 +39,12 @@ tests:
     app: amo
     drivers: [simx]
     configs+: "-DVX_CFG_DCACHE_WRITEBACK=1 -DVX_CFG_DCACHE_NUM_WAYS=4"
+  # A warp issued over two LSU packets (2 lanes, 4 threads), the LLC on the L2:
+  # each thread keeps its own LR/SC reservation (lrsc_hart_isolation*).
+  - id: narrow-lsu
+    app: amo
+    drivers: [simx, rtlsim]
+    configs+: "-DVX_CFG_L2_ENABLE -DVX_CFG_NUM_LSU_LANES=2"
   # 8 threads, single block.
   - id: threads8
     app: amo

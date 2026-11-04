@@ -401,6 +401,64 @@ void kernel_cas_lmem(kernel_arg_t* __UNIFORM__ arg) {
 }
 #endif
 
+// 17) LR/SC reservations are per hart.
+//   In every warp, thread 0 reserves its warp's word with an LR. Then every
+//   other thread of the warp issues an SC to that word without ever having
+//   reserved it: each must fail and leave the word alone. Thread 0's own SC
+//   follows; it may succeed or (spuriously) fail, but its outcome must match
+//   the word. Every thread records its SC result, thread 0 also the word.
+//   Run on global memory (the LLC resolves it) and on local memory.
+static void lrsc_hart_isolation(volatile int32_t* word, uint32_t* out_sc,
+                                uint32_t* out_word) {
+  const uint32_t tid = vx_thread_id();
+  const int32_t mark = (int32_t)(LRSC_ISO_MARK + tid);
+  if (tid == 0) {
+    int32_t old;
+    asm volatile ("lr.w %0, (%1)" : "=r"(old) : "r"(word) : "memory");
+    (void)old;
+  }
+  vx_fence();  // the reservation is in place before any SC issues
+  int32_t sc_fail = 0;
+  if (tid != 0) {
+    asm volatile ("sc.w %0, %2, (%1)" : "=r"(sc_fail) : "r"(word), "r"(mark) : "memory");
+  }
+  vx_fence();
+  if (tid == 0) {
+    asm volatile ("sc.w %0, %2, (%1)" : "=r"(sc_fail) : "r"(word), "r"(mark) : "memory");
+  }
+  vx_fence();
+  *out_sc = (uint32_t)sc_fail;
+  if (tid == 0) {
+    *out_word = (uint32_t)*word;
+  }
+}
+
+void kernel_lrsc_hart_isolation(kernel_arg_t* __UNIFORM__ arg) {
+  const uint32_t hid  = hart_id();
+  const uint32_t warp = hid - vx_thread_id();  // the warp's first hart id
+  auto shared   = (int32_t*)arg->shared_addr;
+  auto per_hart = (uint32_t*)arg->per_hart_addr;
+  // One 64-byte line per warp; the result word sits after all of them.
+  lrsc_hart_isolation(&shared[warp * 16], &per_hart[hid],
+                      (uint32_t*)&shared[warp * 16 + 1]);
+}
+
+void kernel_lrsc_hart_isolation_lmem(kernel_arg_t* __UNIFORM__ arg) {
+  const uint32_t hid  = hart_id();
+  const uint32_t tid  = vx_thread_id();
+  auto lmem     = (int32_t*)__local_mem();
+  auto shared   = (int32_t*)arg->shared_addr;
+  auto per_hart = (uint32_t*)arg->per_hart_addr;
+  const uint32_t lwarp = threadIdx.x - tid;  // the warp's first thread in its group
+  if (tid == 0) {
+    lmem[lwarp] = 0;
+  }
+  vx_fence();
+  const uint32_t warp = hid - tid;
+  lrsc_hart_isolation(&lmem[lwarp], &per_hart[hid],
+                      (uint32_t*)&shared[warp * 16 + 1]);
+}
+
 static const PFN_Kernel sc_tests[] = {
   kernel_amoadd,             // 0
   kernel_amoor,              // 1
@@ -421,6 +479,8 @@ static const PFN_Kernel sc_tests[] = {
   kernel_cas_ladder,         // 15  native compare-and-swap (Zacas amocas)
   kernel_cas_lmem,           // 16  compare-and-swap on local memory (LMEM banks)
 #endif
+  kernel_lrsc_hart_isolation,      // 17 (15 without Zacas)  SC without a reservation fails
+  kernel_lrsc_hart_isolation_lmem, // 18 (16 without Zacas)  the same on local memory
 };
 
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
