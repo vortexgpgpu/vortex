@@ -763,7 +763,7 @@ private:
                 who, (unsigned long)reads, (unsigned long)st[FOLDSIM_MEM_STAT_WRITES],
                 (unsigned long)st[FOLDSIM_MEM_STAT_HITS], (unsigned long)st[FOLDSIM_MEM_STAT_MISSES],
                 (unsigned long)st[FOLDSIM_MEM_STAT_CONFLICTS],
-                reads ? double(st[FOLDSIM_MEM_STAT_LATENCY]) / double(reads) : 0.0,
+                reads ? double(int64_t(st[FOLDSIM_MEM_STAT_LATENCY])) / double(reads) : 0.0,  // signed: see the progress print
                 (unsigned long)st[FOLDSIM_MEM_STAT_REFRESHES], (unsigned long)st[FOLDSIM_MEM_STAT_FULL]);
       }
     }
@@ -964,11 +964,14 @@ private:
         std::string ports;
         for (uint32_t p = 0; p < mem_ports_; ++p) {
           char b[96];
-          snprintf(b, sizeof(b), " p%u %llu/%llu full %llu lat %llu", p,
+          // The latency statistic adds a read's completion cycle and subtracts its issue cycle (foldsim_mem_bank
+          // stat_latency): mid-launch it is the completed reads' latency sum minus the issue cycles of the reads in
+          // flight, negative while many are -- a signed value, printed as one (as unsigned it read 1.8e19).
+          snprintf(b, sizeof(b), " p%u %llu/%llu full %llu lat %lld", p,
                    (unsigned long long)read64(FOLDSIM_REG_MEM_STATS(p, FOLDSIM_MEM_STAT_READS)),
                    (unsigned long long)read64(FOLDSIM_REG_MEM_STATS(p, FOLDSIM_MEM_STAT_WRITES)),
                    (unsigned long long)read64(FOLDSIM_REG_MEM_STATS(p, FOLDSIM_MEM_STAT_FULL)),
-                   (unsigned long long)read64(FOLDSIM_REG_MEM_STATS(p, FOLDSIM_MEM_STAT_LATENCY)));
+                   (long long)(int64_t)read64(FOLDSIM_REG_MEM_STATS(p, FOLDSIM_MEM_STAT_LATENCY)));
           ports += b;
         }
         // VORTEX_FOLDSIM_AXI_STATS: also the device-memory telemetry (FOLDSIM_REG_MEM_AXI), on images that have it.
