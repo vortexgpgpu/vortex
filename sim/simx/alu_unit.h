@@ -26,18 +26,23 @@ public:
   static constexpr uint32_t kMulDivLatency = 3;
 
   // The iterative units of VX_alu_muldiv, each one operation at a time per
-  // block: VX_serial_mul (XLEN 64; an XLEN+1-bit operand, a bit a cycle) and
-  // VX_serial_div (a bit of the XLEN-bit quotient a cycle). An operation's
-  // result is ready its width + 1 cycles after it enters, and the unit takes
-  // the next one the cycle after it hands the result on.
+  // block, as VX_alu_muldiv instantiates them: VX_serial_mul (XLEN 64) with
+  // A_WIDTH = XLEN + 1, one step per operand bit (X_WIDTH steps), and
+  // VX_serial_div with WIDTHN = XLEN: a step that takes the operands'
+  // magnitudes, WIDTHN division steps, and a step that applies the result
+  // signs. A unit is busy for its steps; its result is ready the cycle after
+  // the last one, and it takes the next operation the cycle after it hands
+  // the result on.
 #if defined(VX_CFG_XLEN_64) && !VX_CFG_IMUL_DPI_ENABLED
   static constexpr bool kSerialMul = true;
 #else
   static constexpr bool kSerialMul = false;
 #endif
   static constexpr bool kSerialDiv = !VX_CFG_IDIV_DPI_ENABLED;
-  static constexpr uint32_t kSerialMulLatency = (VX_CFG_XLEN + 1) + 1;
-  static constexpr uint32_t kSerialDivLatency = VX_CFG_XLEN + 1;
+  static constexpr uint32_t kSerialMulSteps = VX_CFG_XLEN + 1;      // X_WIDTH
+  static constexpr uint32_t kSerialDivSteps = 1 + VX_CFG_XLEN + 1;  // magnitudes, WIDTHN, signs
+  static constexpr uint32_t kSerialMulLatency = kSerialMulSteps + 1;
+  static constexpr uint32_t kSerialDivLatency = kSerialDivSteps + 1;
 
   // Partial bandwidth: a lane-gather stage registers the results once more.
   static constexpr bool kGather = (VX_CFG_NUM_ALU_BLOCKS != VX_CFG_ISSUE_WIDTH)
