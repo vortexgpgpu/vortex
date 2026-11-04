@@ -644,21 +644,28 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     assign allocate_id = allocate_id_r;
     assign allocate_previd = prev_idx;
 
-    // The probes below exclude the entry a replay frees this cycle, but
-    // dequeue_free resolves late (it waits on the bank's input arbitration and
-    // stall) and their results gate the bank's data array. Each reduction is
-    // therefore formed twice from early terms, without that entry and with it
-    // alone, and dequeue_free selects at the end.
+    // The probes below exclude the entries a replay and a release free this
+    // cycle, but dequeue_free and the release resolve late (they wait on the
+    // bank's input arbitration and stall) and the probes' results gate the
+    // bank's data array. Each reduction is therefore formed from early terms,
+    // without those entries and with each alone, and the late frees select at
+    // the end.
     wire [MSHR_SIZE-1:0] probe_base;
     wire [MSHR_SIZE-1:0] dequeue_oh;
+    wire [MSHR_SIZE-1:0] finalize_oh;
     for (genvar i = 0; i < MSHR_SIZE; ++i) begin : g_probe_base
-        assign probe_base[i] = valid_table[i] && entry_match[i] && ~amo_mask[i]
-                            && ~(finalize_valid && finalize_is_release && (finalize_id == MSHR_ADDR_WIDTH'(i)));
-        assign dequeue_oh[i] = (dequeue_id == MSHR_ADDR_WIDTH'(i));
+        assign probe_base[i]  = valid_table[i] && entry_match[i] && ~amo_mask[i];
+        assign dequeue_oh[i]  = (dequeue_id == MSHR_ADDR_WIDTH'(i));
+        assign finalize_oh[i] = (finalize_id == MSHR_ADDR_WIDTH'(i));
     end
-    wire [MSHR_SIZE-1:0] probe_rest = probe_base & ~dequeue_oh;
-    wire [MSHR_SIZE-1:0] probe_deq  = probe_base & dequeue_oh;
-    `define MSHR_PROBE(mask) ((| (probe_rest & (mask))) || ((| (probe_deq & (mask))) && ~dequeue_free))
+    wire fin_free   = finalize_valid && finalize_is_release;
+    wire deq_is_fin = (dequeue_id == finalize_id);
+    wire [MSHR_SIZE-1:0] probe_rest = probe_base & ~dequeue_oh & ~finalize_oh;
+    wire [MSHR_SIZE-1:0] probe_deq  = probe_base &  dequeue_oh & ~finalize_oh;
+    wire [MSHR_SIZE-1:0] probe_fin  = probe_base &  finalize_oh;
+    `define MSHR_PROBE(mask) ((| (probe_rest & (mask))) \
+                           || ((| (probe_deq & (mask))) && ~dequeue_free) \
+                           || ((| (probe_fin & (mask))) && ~fin_free && ~(deq_is_fin && dequeue_free)))
 
     if (WRITEBACK) begin : g_pending_wb
         assign allocate_pending = `MSHR_PROBE({MSHR_SIZE{1'b1}});
