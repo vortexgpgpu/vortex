@@ -41,7 +41,8 @@
     "VX_CFG_FDIV_PE_RATIO": 8,
     "VX_CFG_FSQRT_PE_RATIO": 8,
     "VX_CFG_FCVT_PE_RATIO": 8,
-    "VX_CFG_FMA64_PE_RATIO": 64
+    "VX_CFG_FMA64_PE_RATIO": 64,
+    "VX_CFG_L1_LINK_LATENCY": 2
   },
   "chip": {
     "VX_CFG_NUM_CLUSTERS": 1,
@@ -52,7 +53,7 @@
     "VX_CFG_L2_NUM_BANKS": 64,
     "VX_CFG_L2_MSHR_SIZE": 192,
     "VX_CFG_CP_LLC_CLIENT": 1,
-    "VX_CFG_L2_LINK_LATENCY": 137
+    "VX_CFG_L2_LINK_LATENCY": 135
   },
   "platform": {
     "VX_CFG_PLATFORM_MEMORY_NUM_BANKS": 32,
@@ -66,7 +67,7 @@
     "fp32_lanes": 10752,
     "dram_bandwidth_gbs": 960,
     "clock_mhz": 2295,
-    "l1_hit_cycles": 44.1,
+    "l1_hit_cycles": 35,
     "l2_hit_cycles": 354.4,
     "dram_cycles": 802,
     "dram_peak_bytes_per_cycle": 423,
@@ -95,9 +96,9 @@
     "DCACHE_MSHR_SIZE, L2_MSHR_SIZE": "384 L1 MSHR entries per SM (24 x 16 banks) and 192 per L2 slice, GPGPU-Sim SM86_RTX3070 (-gpgpu_cache:dl1 A:384:48, dl2 A:192:4)",
     "PLATFORM_MEMORY_NUM_BANKS": "8 x 32-bit GDDR7 devices = 32 independent channels (whitepaper App. B)",
     "PLATFORM_CLOCK_RATE, PLATFORM_MEMORY_PEAK_BW": "2295 MHz base clock, 960 GB/s (whitepaper App. B)",
-    "reference": "Nsight Compute on an RTX 5080 at its 2295 MHz base clock with a cold L2, 2026-10-05. fp32_lanes is the vendor FP32 core count (FP32 FMA lanes per chip, clock-free); dram_bandwidth_gbs the vendor peak. Checked by ci/profile_check.py. l1_hit_cycles comes from an index chase (p = next[p]: an index multiply-add per load), so it sits above ci/profile_check.py's pointer chase (p = *p) by that arithmetic",
+    "reference": "Nsight Compute on an RTX 5080 at its 2295 MHz base clock with a cold L2, 2026-10-05: l2_hit_cycles, dram_cycles and the stream and sgemm cycles. l1_hit_cycles: Dissecting the NVIDIA Blackwell Architecture with Microbenchmarks (arXiv 2507.10789) Sec. VI-B, the GB203 pointer chase 'consistent at 30-40 cycles', taken at its midpoint; the Nsight L1 figure (44.1) came from an index chase (p = next[p]: an index multiply-add per load) and sits above a pointer chase by that arithmetic. fp32_lanes is the vendor FP32 core count (FP32 FMA lanes per chip, clock-free); dram_bandwidth_gbs the vendor peak. Checked by ci/profile_check.py",
     "PLATFORM_MEMORY_TYPE, PLATFORM_MEMORY_DATA_RATE": "30 Gbps GDDR7 x8 channels modelled as GDDR6 x16 channels at 15000 MT/s: the same channel count, 32 B burst time and 960 GB/s (32 x 2 B x 15 GT/s)",
-    "L2_LINK_LATENCY": "137 core cycles each way between an SM and the L2, the SM-to-L2 network, which the L2 bank pipeline (L2_LATENCY) does not model: calibrated with ci/profile_check.py so the SimX pointer chase gives the 354.4-cycle L2 hit latency in 'reference'",
+    "L2_LINK_LATENCY": "135 core cycles each way between an SM and the L2, the SM-to-L2 network, which the L2 bank pipeline (L2_LATENCY) does not model: calibrated with ci/profile_check.py, after the L1 link, so the SimX pointer chase gives the 354.4-cycle L2 hit latency in 'reference'",
     "PLATFORM_MEMORY_LATENCY": "367 core cycles of PHY/NoC latency beyond the L2 link, calibrated with ci/profile_check.py so the SimX cold pointer chase gives the 802-cycle DRAM latency in 'reference'. Recalibrate when the memory model changes",
     "FETCH_WIDTH": "4 SM processing blocks, each with its own warp scheduler, dispatch unit and L0 instruction cache (NVIDIA RTX Blackwell GPU Architecture whitepaper)",
     "CP_LLC_CLIENT": "Host copies reach device memory through the L2 like every other client, so uploaded data is L2-resident at launch",
@@ -112,8 +113,9 @@
     "RTU_TLAS_ENABLE": "RT cores traverse two-level acceleration structures (instance TLAS over BLAS), as DXR/Vulkan ray tracing requires",
     "NUM_MUFU_LANES": "16 special-function results per clock per SM (4 SFUs in each of the 4 processing blocks) for the reciprocal, reciprocal square root, log2, exp2, sine and cosine (CUDA C++ Programming Guide, arithmetic instruction throughput, compute capability 12.0)",
     "NUM_ALU_LANES, NUM_FPU_LANES, NUM_LSU_LANES": "GB203 SM (RTX Blackwell whitepaper, Figure 5 and App. B): 4 processing blocks, each with 32 unified FP32/INT32 CUDA cores (INT32 TOPS = FP32 TFLOPS, Table 4), 4 LD/ST units and 1 SFU, 1 tensor core; 2 FP64 cores per SM. One Vortex ALU/FPU/LSU block per processing block (ISSUE_WIDTH=4) with the part's INT32, FP32 and LD/ST lanes; a 32-thread warp instruction issues over NUM_THREADS/lanes cycles, as on the part. The TCU stays full-warp (NUM_TCU_LANES == NUM_THREADS). FP64 FMAs run on their own F64 FMA PE (FMA64_PE_RATIO)",
-    "FMA64_PE_RATIO": "FP64 FMA at 1/64 of the FP32 rate: 2 FP64 cores per SM, half a core per processing block (CUDA C++ Programming Guide, arithmetic instruction throughput, compute capability 12.0). A block keeps at least one PE, so 32 FPU lanes / 64 rounds up to 1 F64 FMA PE: 1/32 of FP32, twice the part's FP64 rate. FP64 division, square root and conversions take the FDIV/FSQRT/FCVT rates",
+    "FMA64_PE_RATIO": "FP64 FMA at 1/64 of the FP32 rate: 2 FP64 results per clock per SM against 128 FP32 (CUDA C++ Programming Guide, arithmetic instruction throughput, compute capability 12.0; arXiv 2507.10789 Table I: 2 FP64 units per SM on GB203). How those units map onto the 4 processing blocks is not documented. A Vortex block keeps at least one full-rate PE, so 32 FPU lanes / 64 rounds up to 1 F64 FMA PE: 1/32 of FP32, twice the part's FP64 rate. FP64 division, square root and conversions take the FDIV/FSQRT/FCVT rates",
     "FDIV_PE_RATIO, FSQRT_PE_RATIO, FCVT_PE_RATIO": "16 results per clock per SM, 4 per processing block: FP32 reciprocal and reciprocal square root, on which division and square root are built, and the 32-bit type conversions (CUDA C++ Programming Guide, arithmetic instruction throughput); 32 FPU lanes / 8, compute capability 12.0",
-    "LMEM_SIZE, LMEM_LOG_SIZE, DCACHE_SIZE": "100 KB maximum shared memory per SM (compute capability 12.0 device query: 102400 B per SM) in a 128 KB window. DCACHE_SIZE keeps the whole 128 KB L1/shared pool: the driver gives a kernel the L1 its shared-memory use leaves"
+    "LMEM_SIZE, LMEM_LOG_SIZE, DCACHE_SIZE": "100 KB maximum shared memory per SM (compute capability 12.0 device query: 102400 B per SM) in a 128 KB window. DCACHE_SIZE keeps the whole 128 KB L1/shared pool: the driver gives a kernel the L1 its shared-memory use leaves",
+    "L1_LINK_LATENCY": "2 core cycles each way between a core and its dcache, the L1 load pipeline, which the dcache bank pipeline (DCACHE_LATENCY) does not model: calibrated with ci/profile_check.py so the SimX pointer chase gives the 35-cycle L1 hit latency in 'reference'"
   }
 }
