@@ -943,9 +943,19 @@ private:
       if (busy && progress_s_ > 0 && elapsed_s(last_progress_print_) >= progress_s_) {
         last_progress_print_ = std::chrono::steady_clock::now();
         const uint64_t t = read64(FOLDSIM_REG_TCYCLES_LO), hc = read64(FOLDSIM_REG_HCYCLES_LO);
-        printf("[VXDRV] launch %.0f s: target cycles %llu, host cycles %llu, memory stalls %llu, status 0x%x\n",
+        std::string ports;
+        for (uint32_t p = 0; p < mem_ports_; ++p) {
+          char b[64];
+          snprintf(b, sizeof(b), " p%u %llu/%llu", p,
+                   (unsigned long long)read64(FOLDSIM_REG_MEM_STATS(p, FOLDSIM_MEM_STAT_READS)),
+                   (unsigned long long)read64(FOLDSIM_REG_MEM_STATS(p, FOLDSIM_MEM_STAT_WRITES)));
+          ports += b;
+        }
+        printf("[VXDRV] launch %.0f s: target cycles %llu, host cycles %llu, memory stalls %llu, status 0x%x; "
+               "reads/writes per port:%s; memory base 0x%llx\n",
                elapsed_s(launch_start_), (unsigned long long)t, (unsigned long long)hc,
-               (unsigned long long)read64(FOLDSIM_REG_MSTALL_LO), s);
+               (unsigned long long)read64(FOLDSIM_REG_MSTALL_LO), s, ports.c_str(),
+               (unsigned long long)read64(FOLDSIM_REG_MEM_BASE_LO));
         fflush(stdout);
       }
       poll_backoff(busy);
