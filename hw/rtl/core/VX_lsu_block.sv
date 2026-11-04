@@ -387,8 +387,8 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
     // we should track and flag SOP and EOP responses.
 
     if (PID_BITS != 0) begin : g_pid
-        reg [`VX_CFG_LSU_PENDING_SIZE-1:0][PID_BITS:0] pkt_ctr;
-        reg [`VX_CFG_LSU_PENDING_SIZE-1:0] pkt_sop, pkt_eop;
+        wire [`VX_CFG_LSU_PENDING_SIZE-1:0][PID_BITS:0] pkt_ctr;
+        wire [`VX_CFG_LSU_PENDING_SIZE-1:0] pkt_sop, pkt_eop;
 
         wire mem_req_rd_fire     = mem_req_fire && ~mem_req_rw;
         wire mem_req_rd_sop_fire = mem_req_rd_fire && execute_if.data.header.sop;
@@ -410,43 +410,54 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
             .full       (full)
         );
 
-        wire rw_collision = mem_req_rd_fire && mem_rsp_eop_fire && (pkt_raddr == pkt_waddr);
-
-        always @(posedge clk) begin
-            if (reset) begin
-                pkt_ctr <= '0;
-                pkt_sop <= '0;
-                pkt_eop <= '0;
-            end else begin
-                if (mem_req_rd_sop_fire) begin
-                    pkt_sop[pkt_waddr] <= 1;
-                end
-                if (mem_req_rd_eop_fire) begin
-                    pkt_eop[pkt_waddr] <= 1;
-                end
-                if (mem_rsp_fire) begin
-                    pkt_sop[pkt_raddr] <= 0;
-                end
-                if (mem_rsp_eop_pkt_fire) begin
-                    pkt_eop[pkt_raddr] <= 0;
-                end
-                if (~rw_collision) begin
-                    if (mem_req_rd_fire) begin
-                        pkt_ctr[pkt_waddr] <= pkt_ctr[pkt_waddr] + PID_BITS'(1);
+        // Each slot counts on its own: the response's slot (pkt_raddr, read out
+        // of the memory scheduler's index table late in the cycle) only selects
+        // which counters step, never the value a counter steps from. A request
+        // and a response on the same slot in one cycle cancel.
+        for (genvar k = 0; k < `VX_CFG_LSU_PENDING_SIZE; ++k) begin : g_pkt
+            wire is_w = (pkt_waddr == LSUQ_SIZEW'(k));
+            wire is_r = (pkt_raddr == LSUQ_SIZEW'(k));
+            wire inc  = mem_req_rd_fire && is_w;
+            wire dec  = mem_rsp_eop_fire && is_r;
+            reg [PID_BITS:0] ctr_r;
+            reg sop_r, eop_r;
+            always @(posedge clk) begin
+                if (reset) begin
+                    ctr_r <= '0;
+                    sop_r <= 0;
+                    eop_r <= 0;
+                end else begin
+                    if (mem_req_rd_sop_fire && is_w) begin
+                        sop_r <= 1;
                     end
-                    if (mem_rsp_eop_fire) begin
-                        pkt_ctr[pkt_raddr] <= pkt_ctr[pkt_raddr] - PID_BITS'(1);
+                    if (mem_req_rd_eop_fire && is_w) begin
+                        eop_r <= 1;
+                    end
+                    if (mem_rsp_fire && is_r) begin
+                        sop_r <= 0;
+                    end
+                    if (dec && eop_r && (ctr_r == (PID_BITS+1)'(1))) begin
+                        eop_r <= 0;
+                    end
+                    if (inc && ~dec) begin
+                        ctr_r <= ctr_r + (PID_BITS+1)'(1);
+                    end
+                    if (dec && ~inc) begin
+                        ctr_r <= ctr_r - (PID_BITS+1)'(1);
                     end
                 end
             end
+            assign pkt_ctr[k] = ctr_r;
+            assign pkt_sop[k] = sop_r;
+            assign pkt_eop[k] = eop_r;
         end
 
         assign mem_rsp_sop_pkt = pkt_sop[pkt_raddr];
         assign mem_rsp_eop_pkt = mem_rsp_eop && pkt_eop[pkt_raddr] && (pkt_ctr[pkt_raddr] == 1);
         `RUNTIME_ASSERT(~(mem_req_rd_fire && full), ("allocator full!"))
         `RUNTIME_ASSERT(~(mem_req_rd_sop_fire && pkt_ctr[pkt_waddr] != 0), ("oops! broken sop request!"))
-        // pkt_ctr is guarded against a same-cycle same-slot request/response by
-        // rw_collision; pkt_eop and pkt_sop are not, so the release wins and the
+        // pkt_ctr is guarded against a same-cycle same-slot request/response
+        // (the two cancel); pkt_eop and pkt_sop are not, so the release wins and the
         // incoming packet loses the flag that would ever complete it.
         `RUNTIME_ASSERT(~(mem_req_rd_eop_fire && mem_rsp_eop_pkt_fire && (pkt_waddr == pkt_raddr)),
             ("%t: *** pkt_eop collision on slot %0d: incoming packet loses its eop flag", $time, pkt_waddr))

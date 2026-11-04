@@ -48,10 +48,10 @@ static int failures = 0;
 static void clear_inputs(VVX_cache_mshr* m) {
   m->fill_valid = 0; m->fill_id = 0;
   m->probe_addr = 0;
-  m->dequeue_ready = 0; m->dequeue_park = 0; m->dequeue_park_retry = 0; m->dequeue_block = 0;
+  m->dequeue_ready = 0; m->dequeue_lookup = 0; m->dequeue_park = 0; m->dequeue_park_retry = 0; m->dequeue_block = 0;
   m->allocate_valid = 0; m->allocate_addr = 0; m->allocate_sector = 0; m->allocate_word_idx = 0;
   m->allocate_rw = 0; m->allocate_is_amo = 0; m->allocate_refetch = 0; m->allocate_data = 0;
-  m->finalize_valid = 0; m->finalize_is_release = 0; m->finalize_is_pending = 0;
+  m->finalize_valid = 0; m->finalize_lookup = 0; m->finalize_is_release = 0; m->finalize_is_pending = 0;
   m->finalize_previd = 0; m->finalize_id = 0;
   m->deq_req_uuid = 0; m->alc_req_uuid = 0; m->fin_req_uuid = 0;
 }
@@ -99,9 +99,9 @@ static void run_seed(int seed) {
   CHECK(m->dequeue_id == id, "seed %d: dequeue_id=%u, filled %u", seed, (unsigned)m->dequeue_id, id);
   CHECK(m->dequeue_addr == addr, "seed %d: dequeue_addr=0x%x, allocated 0x%x", seed, (unsigned)m->dequeue_addr, addr);
   CHECK(m->dequeue_data == 0xBEEF, "seed %d: dequeue_data=0x%x", seed, (unsigned)m->dequeue_data);
-  m->dequeue_ready = 1;
+  m->dequeue_ready = 1; m->dequeue_lookup = 1;
   cycle(ctx.get(), m.get());
-  m->dequeue_ready = 0;
+  m->dequeue_ready = 0; m->dequeue_lookup = 0;
   cycle(ctx.get(), m.get());
   CHECK(!m->dequeue_valid, "seed %d: dequeue still valid after the last entry", seed);
   CHECK(!ctx->gotError(), "seed %d: assertion fired", seed);

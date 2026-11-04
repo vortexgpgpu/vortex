@@ -115,6 +115,9 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     output wire [DATA_WIDTH-1:0]        dequeue_data,
     output wire [MSHR_ADDR_WIDTH-1:0]   dequeue_id,
     input wire                          dequeue_ready,
+    // dequeue_ready as the allocate lookups see it: the bank's stall left out
+    // (as finalize_lookup).
+    input wire                          dequeue_lookup,
     // park the chain at its head instead of consuming it: the entry stays
     // allocated (it becomes the root of a refetch) and the walk stops.
     input wire                          dequeue_park,
@@ -142,6 +145,10 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
 
     // finalize
     input wire                          finalize_valid,
+    // The finalize as the allocate lookups see it: the bank's stall left out.
+    // A stall also holds the stage that consumes the lookups, so they only
+    // count in cycles where it equals finalize_valid.
+    input wire                          finalize_lookup,
     input wire                          finalize_is_release,
     input wire                          finalize_is_pending,
     input wire [MSHR_ADDR_WIDTH-1:0]    finalize_previd,
@@ -190,6 +197,7 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     wire dequeue_fire = dequeue_valid && dequeue_ready;
     wire dequeue_park_fire = (LAZY_FETCH != 0) && dequeue_fire && dequeue_park;
     wire dequeue_free = dequeue_fire && ~dequeue_park_fire;
+    wire dequeue_free_lk = dequeue_valid && dequeue_lookup && ~((LAZY_FETCH != 0) && dequeue_park);
 
     // Entry holds the allocate request's {line, sector} / the probe's line.
     // Coalescing matches on {line, sector} so same-line different-sector misses
@@ -210,8 +218,8 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
         // it would wait forever. Exclude it too — the requester re-looks-up
         // and hits the line the releasing entry just installed.
         assign addr_matches[i] = valid_table[i] && entry_match[i] && ~amo_mask[i]
-                              && ~(dequeue_free && (dequeue_id == MSHR_ADDR_WIDTH'(i)))
-                              && ~(finalize_valid && finalize_is_release && (finalize_id == MSHR_ADDR_WIDTH'(i)));
+                              && ~(dequeue_free_lk && (dequeue_id == MSHR_ADDR_WIDTH'(i)))
+                              && ~(finalize_lookup && finalize_is_release && (finalize_id == MSHR_ADDR_WIDTH'(i)));
     end
 
     // Free-slot select input, retimed off the bank replay chain. Rather than
@@ -239,11 +247,16 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
         `UNUSED_PIN (onehot_out)
     );
 
-    // find matching tail-entry
+    // find matching tail-entry; an entry a finalize links a successor to this
+    // cycle is no longer one (next_table_x, with the lookup's finalize)
+    wire [MSHR_SIZE-1:0] link_lookup;
+    for (genvar i = 0; i < MSHR_SIZE; ++i) begin : g_link_lookup
+        assign link_lookup[i] = finalize_lookup && finalize_is_pending && (finalize_previd == MSHR_ADDR_WIDTH'(i));
+    end
     VX_priority_encoder #(
         .N (MSHR_SIZE)
     ) prev_sel (
-        .data_in (addr_matches & ~next_table_x),
+        .data_in (addr_matches & ~next_table & ~link_lookup),
         .index_out (prev_idx),
         `UNUSED_PIN (valid_out),
         `UNUSED_PIN (onehot_out)
@@ -644,21 +657,28 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     assign allocate_id = allocate_id_r;
     assign allocate_previd = prev_idx;
 
-    // The probes below exclude the entry a replay frees this cycle, but
-    // dequeue_free resolves late (it waits on the bank's input arbitration and
-    // stall) and their results gate the bank's data array. Each reduction is
-    // therefore formed twice from early terms, without that entry and with it
-    // alone, and dequeue_free selects at the end.
+    // The probes below exclude the entries a replay and a release free this
+    // cycle, but dequeue_free and the release resolve late (they wait on the
+    // bank's input arbitration and stall) and the probes' results gate the
+    // bank's data array. Each reduction is therefore formed from early terms,
+    // without those entries and with each alone, and the late frees select at
+    // the end.
     wire [MSHR_SIZE-1:0] probe_base;
     wire [MSHR_SIZE-1:0] dequeue_oh;
+    wire [MSHR_SIZE-1:0] finalize_oh;
     for (genvar i = 0; i < MSHR_SIZE; ++i) begin : g_probe_base
-        assign probe_base[i] = valid_table[i] && entry_match[i] && ~amo_mask[i]
-                            && ~(finalize_valid && finalize_is_release && (finalize_id == MSHR_ADDR_WIDTH'(i)));
-        assign dequeue_oh[i] = (dequeue_id == MSHR_ADDR_WIDTH'(i));
+        assign probe_base[i]  = valid_table[i] && entry_match[i] && ~amo_mask[i];
+        assign dequeue_oh[i]  = (dequeue_id == MSHR_ADDR_WIDTH'(i));
+        assign finalize_oh[i] = (finalize_id == MSHR_ADDR_WIDTH'(i));
     end
-    wire [MSHR_SIZE-1:0] probe_rest = probe_base & ~dequeue_oh;
-    wire [MSHR_SIZE-1:0] probe_deq  = probe_base & dequeue_oh;
-    `define MSHR_PROBE(mask) ((| (probe_rest & (mask))) || ((| (probe_deq & (mask))) && ~dequeue_free))
+    wire fin_free   = finalize_lookup && finalize_is_release;
+    wire deq_is_fin = (dequeue_id == finalize_id);
+    wire [MSHR_SIZE-1:0] probe_rest = probe_base & ~dequeue_oh & ~finalize_oh;
+    wire [MSHR_SIZE-1:0] probe_deq  = probe_base &  dequeue_oh & ~finalize_oh;
+    wire [MSHR_SIZE-1:0] probe_fin  = probe_base &  finalize_oh;
+    `define MSHR_PROBE(mask) ((| (probe_rest & (mask))) \
+                           || ((| (probe_deq & (mask))) && ~dequeue_free_lk) \
+                           || ((| (probe_fin & (mask))) && ~fin_free && ~(deq_is_fin && dequeue_free_lk)))
 
     if (WRITEBACK) begin : g_pending_wb
         assign allocate_pending = `MSHR_PROBE({MSHR_SIZE{1'b1}});

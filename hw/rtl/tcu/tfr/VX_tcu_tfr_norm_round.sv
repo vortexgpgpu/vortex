@@ -128,26 +128,18 @@ module VX_tcu_tfr_norm_round import VX_tcu_pkg::*; #(
     wire carry_out = rounded_sig_full[24];
     wire [22:0] final_man = carry_out ? rounded_sig_full[23:1] : rounded_sig_full[22:0];
 
-    // Final exponent and exception
-    wire signed [EXP_W-1:0] final_exp_s = carry_out ? norm_exp_plus1 : norm_exp_base;
+    // Final exponent and exception. The range checks run beside the
+    // rounding, on both exponents the rounding carry chooses between, and
+    // the carry selects their outcome.
+    wire [7:0] final_exp = carry_out ? norm_exp_plus1[7:0] : norm_exp_base[7:0];
 
-    logic [7:0] packed_exp;
-    logic exp_overflow, exp_underflow;
-    always_comb begin
-        if (final_exp_s >= 255) begin
-            packed_exp = 8'hFF;
-            exp_overflow = 1'b1;
-            exp_underflow = 1'b0;
-        end else if (final_exp_s <= 0) begin
-            packed_exp = 8'h00;
-            exp_overflow = 1'b0;
-            exp_underflow = 1'b1;
-        end else begin
-            packed_exp = final_exp_s[7:0];
-            exp_overflow = 1'b0;
-            exp_underflow = 1'b0;
-        end
-    end
+    wire ovf_base = (norm_exp_base >= 255);
+    wire ovf_plus1 = (norm_exp_plus1 >= 255);
+    wire unf_base = (norm_exp_base <= 0);
+    wire unf_plus1 = (norm_exp_plus1 <= 0);
+    wire exp_overflow  = carry_out ? ovf_plus1 : ovf_base;
+    wire exp_underflow = ~exp_overflow & (carry_out ? unf_plus1 : unf_base);
+    wire [7:0] packed_exp = exp_overflow ? 8'hFF : (exp_underflow ? 8'h00 : final_exp);
 
     wire [31:0] fp_nan_result = {1'b0, 8'hFF, 1'b1, 22'd0};
     wire [31:0] fp_inf_result = {exceptions_c.sign, 8'hFF, 23'd0};
@@ -211,7 +203,7 @@ module VX_tcu_tfr_norm_round import VX_tcu_pkg::*; #(
     always_ff @(posedge clk) begin
         if (valid_c) begin
             `TRACE(4, ("%t: %s FEDP-NORM(%0d): is_int=%b, abs_sum=0x%0h, sign=%b, norm_exp=%0d, shifted=0x%0h, R=%b, S=%b, Rup=%b, carry=%b, final_exp=%0d, result=0x%0h\n",
-                $time, INSTANCE_ID, req_id_c, is_int_c, abs_sum, sum_sign, norm_exp_base, shifted_sum, round_bit, sticky_bit, round_up, carry_out, final_exp_s, result));
+                $time, INSTANCE_ID, req_id_c, is_int_c, abs_sum, sum_sign, norm_exp_base, shifted_sum, round_bit, sticky_bit, round_up, carry_out, final_exp, result));
         end
     end
 `endif

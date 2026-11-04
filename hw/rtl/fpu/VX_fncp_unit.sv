@@ -109,8 +109,10 @@ module VX_fncp_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     VX_fp_classifier #(.EXP_BITS(F32_EXP), .MAN_BITS(F32_MAN)) fp_class_b32 (
         .exp_i (b32_op[30:23]), .man_i (b32_op[22:0]), .clss_o (b32_class));
 
-    wire a32_smaller = (a32_op < b32_op) ^ (a32_sign || b32_sign);
-    wire ab32_equal  = (a32_op == b32_op)
+    // The ordering reads the raw low words: it only matters when neither
+    // operand is a NaN, and an operand that is not NaN-boxed is one.
+    wire a32_smaller = (dataa[31:0] < datab[31:0]) ^ (a32_sign || b32_sign);
+    wire ab32_equal  = (dataa[31:0] == datab[31:0])
                     || (a32_class.is_zero && b32_class.is_zero);
 
     // --- F64 (only when FLEN supports it) ---
@@ -128,7 +130,12 @@ module VX_fncp_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         VX_fp_classifier #(.EXP_BITS(F64_EXP), .MAN_BITS(F64_MAN)) fp_class_b64 (
             .exp_i (datab[62:52]), .man_i (datab[51:0]), .clss_o (b64_class));
 
-        wire a64_smaller = (dataa < datab) ^ (a64_sign || b64_sign);
+        // the 64-bit order compare in two 32-bit halves: a single compare
+        // is one long carry chain
+        wire a64_hi_lt = (dataa[63:32] < datab[63:32]);
+        wire a64_hi_eq = (dataa[63:32] == datab[63:32]);
+        wire a64_lo_lt = (dataa[31:0] < datab[31:0]);
+        wire a64_smaller = (a64_hi_lt || (a64_hi_eq && a64_lo_lt)) ^ (a64_sign || b64_sign);
         wire ab64_equal  = (dataa == datab)
                         || (a64_class.is_zero && b64_class.is_zero);
 

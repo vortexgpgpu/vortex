@@ -65,6 +65,7 @@ all:
 	$(MAKE) -C fdivsqrt_unit
 	$(MAKE) -C tex_lerp
 	$(MAKE) -C mufu_unit
+	$(MAKE) -C serial_muldiv
 
 run:
 	$(MAKE) -C generic_queue run
@@ -133,6 +134,7 @@ run:
 	$(MAKE) -C fdivsqrt_unit run
 	$(MAKE) -C tex_lerp run
 	$(MAKE) -C mufu_unit run
+	$(MAKE) -C serial_muldiv run
 
 # FPU arithmetic units only — executed (not just built) so CI gates correctness.
 run-fpu:
@@ -269,3 +271,4 @@ clean:
 	$(MAKE) -C fdivsqrt_unit clean
 	$(MAKE) -C tex_lerp clean
 	$(MAKE) -C mufu_unit clean
+	$(MAKE) -C serial_muldiv clean

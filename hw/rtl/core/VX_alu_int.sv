@@ -36,19 +36,16 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     localparam LANE_WIDTH     = `UP(LANE_BITS);
     localparam SHIFT_IMM_BITS = `CLOG2(`VX_CFG_XLEN);
 
-    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] add_result;
-    wire [NUM_LANES-1:0][`VX_CFG_XLEN:0]   sub_result; // +1 bit for branch compare
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN:0]   ln_sum;     // +1 bit for the compare
     reg  [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] shr_zic_result;
     reg  [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] msc_result;
 
-    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] add_result_w;
-    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] sub_result_w;
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] shr_result_w;
     reg  [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] msc_result_w;
     reg  [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] vote_result;
     wire  [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] shfl_result;
 
-    reg [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] alu_result;
+    logic [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] alu_result;
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] alu_result_r;
 
 `ifdef VX_CFG_XLEN_64
@@ -75,7 +72,6 @@ module VX_alu_int import VX_gpu_pkg::*; #(
 
     wire [1:0] wg_src_offset = execute_if.data.op_args.alu.imm20[1:0]; // group-relative source index
 
-    wire is_br_jal_op = is_br_op && (br_op <= INST_BR_JAL);
     wire is_lui_op = is_alu_op && (alu_op == INST_ALU_LUI || alu_op == INST_ALU_AUIPC);
 
     wire [31:0] lui_imm32 = {execute_if.data.op_args.alu.imm20, 12'd0};
@@ -84,39 +80,52 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     wire [`VX_CFG_XLEN-1:0] alu_imm = `SEXT(`VX_CFG_XLEN, execute_if.data.op_args.alu.imm20);
     wire [`VX_CFG_XLEN-1:0] lui_imm = `SEXT(`VX_CFG_XLEN, lui_imm32);
     wire [`VX_CFG_XLEN-1:0] br_imm  = `SEXT(`VX_CFG_XLEN, br_imm21);
-    wire [`VX_CFG_XLEN-1:0] add_imm = is_lui_op ? lui_imm : (is_br_jal_op ? br_imm : alu_imm);
 
-    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] add_in1_PC  = execute_if.data.op_args.alu.use_PC ? {NUM_LANES{to_fullPC(execute_if.data.header.PC)}} : alu_in1;
-    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] add_in2_imm = execute_if.data.op_args.alu.use_imm ? {NUM_LANES{add_imm}} : alu_in2;
-    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] sub_in2_imm = (execute_if.data.op_args.alu.use_imm && ~is_br_op) ? {NUM_LANES{alu_imm}} : alu_in2;
+    // The PC-relative adds (AUIPC, JAL and the conditional branch target)
+    // are the same for every lane: one adder of their own, straight off the
+    // PC, beside the lanes' rs1 + rs2/imm (ADD*, ADDI*, JALR). LUI is its
+    // immediate.
+    wire use_pc_add = execute_if.data.op_args.alu.use_PC;
+    wire is_lui_imm = is_lui_op && ~use_pc_add;
+    wire [`VX_CFG_XLEN-1:0] pc_base = to_fullPC(execute_if.data.header.PC);
+    wire [`VX_CFG_XLEN-1:0] pc_imm  = is_br_op ? br_imm : lui_imm;  // JAL, B*: offset; AUIPC: upper
+    wire [`VX_CFG_XLEN-1:0] pc_add;
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] alu_in2_imm = execute_if.data.op_args.alu.use_imm ? {NUM_LANES{alu_imm}} : alu_in2;
 
-    // At XLEN 64 the add and the subtract are carry-select at bit 32: the
-    // upper half both ways beside the lower half's carry, which selects.
-    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_add_result
-        if (`VX_CFG_XLEN > 32) begin : g_csel
-            wire [32:0] lo = {1'b0, add_in1_PC[i][31:0]} + {1'b0, add_in2_imm[i][31:0]};
-            wire [`VX_CFG_XLEN-33:0] hi0 = add_in1_PC[i][`VX_CFG_XLEN-1:32] + add_in2_imm[i][`VX_CFG_XLEN-1:32];
-            wire [`VX_CFG_XLEN-33:0] hi1 = add_in1_PC[i][`VX_CFG_XLEN-1:32] + add_in2_imm[i][`VX_CFG_XLEN-1:32] + (`VX_CFG_XLEN-32)'(1);
-            assign add_result[i] = {(lo[32] ? hi1 : hi0), lo[31:0]};
-        end else begin : g_plain
-            assign add_result[i] = add_in1_PC[i] + add_in2_imm[i];
-        end
-        assign add_result_w[i] = `VX_CFG_XLEN'($signed(alu_in1[i][31:0] + alu_in2_imm[i][31:0]));
+    // At XLEN 64 the adds are carry-select at bit 32: the upper half both
+    // ways beside the lower half's carry, which selects (a + b + 1 as one
+    // adder, its carry-in in a forced low bit).
+    if (`VX_CFG_XLEN > 32) begin : g_pc_csel
+        wire [32:0] lo = {1'b0, pc_base[31:0]} + {1'b0, pc_imm[31:0]};
+        wire [`VX_CFG_XLEN-33:0] hi0 = pc_base[`VX_CFG_XLEN-1:32] + pc_imm[`VX_CFG_XLEN-1:32];
+        wire [`VX_CFG_XLEN-32:0] hi1 = {pc_base[`VX_CFG_XLEN-1:32], 1'b1} + {pc_imm[`VX_CFG_XLEN-1:32], 1'b1};
+        assign pc_add = {(lo[32] ? hi1[`VX_CFG_XLEN-32:1] : hi0), lo[31:0]};
+        `UNUSED_VAR (hi1[0])
+    end else begin : g_pc_plain
+        assign pc_add = pc_base + pc_imm;
     end
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_sub_result
-        wire [`VX_CFG_XLEN:0] sub_in1 = {is_signed & alu_in1[i][`VX_CFG_XLEN-1], alu_in1[i]};
-        wire [`VX_CFG_XLEN:0] sub_in2 = {is_signed & sub_in2_imm[i][`VX_CFG_XLEN-1], sub_in2_imm[i]};
+    // One adder per lane: rs1 + rs2/imm (ADD*, ADDI*, JALR) or rs1 - rs2/imm
+    // (SUB*, SLT*, and the conditional branches' compare, against rs2),
+    // one bit wider for the compare's sign.
+    wire ln_sub = execute_if.data.op_args.alu.is_sub;   // op_class == 2'b01, from the decoder
+    wire ln_imm = execute_if.data.op_args.alu.use_imm && ~(is_br_op && ln_sub);
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_ln_add
+        wire [`VX_CFG_XLEN-1:0] b = ln_imm ? alu_imm : alu_in2[i];
+        wire [`VX_CFG_XLEN:0] in1 = {is_signed & alu_in1[i][`VX_CFG_XLEN-1], alu_in1[i]};
+        wire [`VX_CFG_XLEN:0] in2 = {is_signed & b[`VX_CFG_XLEN-1], b} ^ {(`VX_CFG_XLEN+1){ln_sub}};
         if (`VX_CFG_XLEN > 32) begin : g_csel
-            wire [32:0] lo = {1'b0, sub_in1[31:0]} - {1'b0, sub_in2[31:0]};   // lo[32]: borrow
-            wire [`VX_CFG_XLEN-32:0] hi0 = sub_in1[`VX_CFG_XLEN:32] - sub_in2[`VX_CFG_XLEN:32];
-            wire [`VX_CFG_XLEN-32:0] hi1 = sub_in1[`VX_CFG_XLEN:32] - sub_in2[`VX_CFG_XLEN:32] - (`VX_CFG_XLEN-31)'(1);
-            assign sub_result[i] = {(lo[32] ? hi1 : hi0), lo[31:0]};
+            wire [33:0] lo_c = {1'b0, in1[31:0], 1'b1} + {1'b0, in2[31:0], ln_sub};
+            wire [32:0] lo = lo_c[33:1];
+            `UNUSED_VAR (lo_c[0])
+            wire [`VX_CFG_XLEN-32:0] hi0 = in1[`VX_CFG_XLEN:32] + in2[`VX_CFG_XLEN:32];
+            wire [`VX_CFG_XLEN-31:0] hi1_c = {in1[`VX_CFG_XLEN:32], 1'b1} + {in2[`VX_CFG_XLEN:32], 1'b1};
+            wire [`VX_CFG_XLEN-32:0] hi1 = hi1_c[`VX_CFG_XLEN-31:1];
+            `UNUSED_VAR (hi1_c[0])
+            assign ln_sum[i] = {(lo[32] ? hi1 : hi0), lo[31:0]};
         end else begin : g_plain
-            assign sub_result[i] = sub_in1 - sub_in2;
+            assign ln_sum[i] = in1 + in2 + (`VX_CFG_XLEN+1)'(ln_sub);
         end
-        assign sub_result_w[i] = `VX_CFG_XLEN'($signed(alu_in1[i][31:0] - alu_in2_imm[i][31:0]));
     end
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_shr_result
@@ -246,12 +255,11 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_alu_result
         // the difference is zero exactly when the operands are equal, which
         // a compare decides alongside the subtractor rather than after it
-        wire is_equal_i = (alu_in1[i] == sub_in2_imm[i]);
-        wire [`VX_CFG_XLEN-1:0] slt_br_result = `VX_CFG_XLEN'({is_br_op && is_equal_i, sub_result[i][`VX_CFG_XLEN]});
-        // The add and the subtract settle last, so they are selected last.
+        wire is_equal_i = (alu_in1[i] == g_ln_add[i].b);
+        wire [`VX_CFG_XLEN-1:0] slt_br_result = `VX_CFG_XLEN'({is_br_op && is_equal_i, ln_sum[i][`VX_CFG_XLEN]});
         wire is_arith  = (execute_if.data.op_args.alu.xtype != ALU_TYPE_OTHER);
-        wire take_add  = is_arith && ({is_alu_w, op_class} == 3'b000);
-        wire take_sub  = is_arith && ({is_alu_w, op_class} == 3'b001) && (is_sub_op && ~is_br_op);
+        wire take_add  = is_arith && (op_class == 2'b00);                                   // ADD*, LUI, AUIPC, JAL*
+        wire take_sub  = is_arith && (op_class == 2'b01) && (is_alu_w || (is_sub_op && ~is_br_op)); // SUB, SUBW
         wire take_slt  = is_arith && ({is_alu_w, op_class} == 3'b001) && ~(is_sub_op && ~is_br_op);
         reg [`VX_CFG_XLEN-1:0] rest_result;
         always @(*) begin
@@ -266,25 +274,35 @@ module VX_alu_int import VX_gpu_pkg::*; #(
                 case ({is_alu_w, op_class})
                     3'b010: rest_result = shr_zic_result[i];  // SRL, SRA, SRLI, SRAI, CZERO*
                     3'b011: rest_result = msc_result[i];      // AND, OR, XOR, SLL, SLLI
-                    3'b100: rest_result = add_result_w[i];    // ADDIW, ADDW
-                    3'b101: rest_result = sub_result_w[i];    // SUBW
                     3'b110: rest_result = shr_result_w[i];    // SRLW, SRAW, SRLIW, SRAIW
                     3'b111: rest_result = msc_result_w[i];    // SLLW
-                    default: rest_result = '0;                // ADD, SUB, SLT*, BR* below
+                    default: rest_result = '0;                // ADD*, SUB*, SLT*, BR* below
                 endcase
             end
         end
         // rest_result is zero for SLT*/BR*, whose result is bits [1:0] only
-        wire [`VX_CFG_XLEN-1:0] rest_slt_result = rest_result | (take_slt ? slt_br_result : '0);
-        always @(*) begin
-            if (take_add) begin
-                alu_result[i] = add_result[i];                         // ADD, LUI, AUIPC
-            end else if (take_sub) begin
-                alu_result[i] = sub_result[i][`VX_CFG_XLEN-1:0];       // SUB
-            end else begin
-                alu_result[i] = rest_slt_result;                       // SLTU, SLTI, BR*, others
+        wire [`VX_CFG_XLEN-1:0] rest_slt_result = rest_result | (take_slt ? slt_br_result : '0)
+                                                | (is_lui_imm ? lui_imm : '0);
+        wire take_pc_add = take_add && use_pc_add;                                 // AUIPC, JAL
+        wire take_arith  = (take_add && ~use_pc_add && ~is_lui_imm) || take_sub;    // the lane adder's sum
+        wire [`VX_CFG_XLEN-1:0] early_result = take_pc_add ? pc_add : rest_slt_result;
+    `ifdef VX_CFG_XLEN_64
+        // The lane adder settles last, so it selects last: its carry picks the
+        // upper half, and a word form (ADDW, ADDIW, SUBW) picks all ones or
+        // all zeros by its sign bit instead.
+        wire c_sel = is_alu_w ? g_ln_add[i].g_csel.lo[31] : g_ln_add[i].g_csel.lo[32];
+        for (genvar k = 0; k < `VX_CFG_XLEN; ++k) begin : g_bit
+            if (k < 32) begin : g_lo
+                assign alu_result[i][k] = take_arith ? g_ln_add[i].g_csel.lo[k] : early_result[k];
+            end else begin : g_hi
+                wire x0_k = ~is_alu_w & g_ln_add[i].g_csel.hi0[k-32];
+                wire x1_k =  is_alu_w | g_ln_add[i].g_csel.hi1[k-32];
+                assign alu_result[i][k] = take_arith ? (c_sel ? x1_k : x0_k) : early_result[k];
             end
         end
+    `else
+        assign alu_result[i] = take_arith ? ln_sum[i][`VX_CFG_XLEN-1:0] : early_result;
+    `endif
     end
 
     // branch
@@ -293,7 +311,7 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     wire [PC_BITS-1:0] cbr_dest, cbr_dest_r;
     wire is_br_op_r;
 
-    assign cbr_dest = from_fullPC(add_result[0]);
+    assign cbr_dest = from_fullPC(pc_add); // conditional branches: PC + offset
 
     if (LANE_BITS != 0) begin : g_last_tid
         VX_priority_encoder #(
