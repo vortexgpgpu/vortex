@@ -87,15 +87,47 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     //   aligned_lmem_size : per-CTA LMEM footprint rounded up to MEM_BLOCK_SIZE.
     // Registered so the broadcast path is flop-driven; DCRs are written before
     // `start`, so both values are settled before the first CTA is dispatched.
+    // The cluster size is maintained as the cluster dimensions are written: a
+    // write multiplies the new dimension by the registered product of the
+    // other two (each pairwise product kept the same way), so a single
+    // multiply separates the write from the registered size, which settles
+    // with the dimension itself. Products are taken modulo 2^(NW_WIDTH+1).
     reg [NW_WIDTH:0]                 cluster_size_r;
+    reg [NW_WIDTH:0]                 cluster_xy_r, cluster_xz_r, cluster_yz_r;
     reg [`VX_CFG_LMEM_LOG_SIZE:0]    aligned_lmem_size_r;
+    wire [NW_WIDTH:0] dcr_dim_in = dcr_req_data[NW_WIDTH:0];
+    wire dcr_dim_write = dcr_req_valid && dcr_req_rw;
     always_ff @(posedge clk) begin
         if (reset) begin
-            cluster_size_r      <= (NW_WIDTH+1)'(1);
+            cluster_size_r <= (NW_WIDTH+1)'(1);
+            cluster_xy_r   <= (NW_WIDTH+1)'(1);
+            cluster_xz_r   <= (NW_WIDTH+1)'(1);
+            cluster_yz_r   <= (NW_WIDTH+1)'(1);
+        end else if (dcr_dim_write) begin
+            case (dcr_req_addr)
+            `VX_DCR_KMU_CLUSTER_DIM_X: begin
+                cluster_size_r <= (NW_WIDTH+1)'(dcr_dim_in * cluster_yz_r);
+                cluster_xy_r   <= (NW_WIDTH+1)'(dcr_dim_in * dcr_cluster_dim[1]);
+                cluster_xz_r   <= (NW_WIDTH+1)'(dcr_dim_in * dcr_cluster_dim[2]);
+            end
+            `VX_DCR_KMU_CLUSTER_DIM_Y: begin
+                cluster_size_r <= (NW_WIDTH+1)'(dcr_dim_in * cluster_xz_r);
+                cluster_xy_r   <= (NW_WIDTH+1)'(dcr_cluster_dim[0] * dcr_dim_in);
+                cluster_yz_r   <= (NW_WIDTH+1)'(dcr_dim_in * dcr_cluster_dim[2]);
+            end
+            `VX_DCR_KMU_CLUSTER_DIM_Z: begin
+                cluster_size_r <= (NW_WIDTH+1)'(dcr_dim_in * cluster_xy_r);
+                cluster_xz_r   <= (NW_WIDTH+1)'(dcr_cluster_dim[0] * dcr_dim_in);
+                cluster_yz_r   <= (NW_WIDTH+1)'(dcr_cluster_dim[1] * dcr_dim_in);
+            end
+            default: ;
+            endcase
+        end
+    end
+    always_ff @(posedge clk) begin
+        if (reset) begin
             aligned_lmem_size_r <= '0;
         end else begin
-            cluster_size_r <= (NW_WIDTH+1)'(dcr_cluster_dim[0] * dcr_cluster_dim[1]
-                                          * dcr_cluster_dim[2]);
             aligned_lmem_size_r <=
                 ((`VX_CFG_LMEM_LOG_SIZE+1)'(dcr_lmem_size) + (`VX_CFG_LMEM_LOG_SIZE+1)'(`VX_CFG_MEM_BLOCK_SIZE - 1))
                 & ~((`VX_CFG_LMEM_LOG_SIZE+1)'(`VX_CFG_MEM_BLOCK_SIZE - 1));
