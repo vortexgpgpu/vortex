@@ -942,13 +942,33 @@ private:
       }
       if (busy && progress_s_ > 0 && elapsed_s(last_progress_print_) >= progress_s_) {
         last_progress_print_ = std::chrono::steady_clock::now();
+        if (!progress_config_printed_) {
+          // Once: the memory model's configuration as the device holds it, to compare with what was written.
+          progress_config_printed_ = true;
+          uint32_t v[7] = {};
+          const uint32_t regs[7] = {FOLDSIM_REG_MEM_CLOCK, FOLDSIM_REG_MEM_LATENCY, FOLDSIM_REG_MEM_QUEUE,
+                                    FOLDSIM_REG_MEM_GEOM, FOLDSIM_REG_MEM_WMARK, FOLDSIM_REG_MEM_REFI,
+                                    FOLDSIM_REG_MEM_RFC};
+          for (int i = 0; i < 7; ++i)
+            transport_.reg_read(regs[i], &v[i]);
+          std::string t;
+          for (uint32_t i = 0; i < FOLDSIM_MEM_NUM_TIMINGS; ++i) {
+            uint32_t x = 0;
+            transport_.reg_read(FOLDSIM_REG_MEM_TIMING(i), &x);
+            t += " " + std::to_string(x);
+          }
+          printf("[VXDRV] memory model as held: clock 0x%x latency %u queue 0x%x geom 0x%x wmark 0x%x refi %u rfc %u "
+                 "refresh %u; timings%s\n", v[0], v[1], v[2], v[3], v[4], v[5], v[6], refresh_, t.c_str());
+        }
         const uint64_t t = read64(FOLDSIM_REG_TCYCLES_LO), hc = read64(FOLDSIM_REG_HCYCLES_LO);
         std::string ports;
         for (uint32_t p = 0; p < mem_ports_; ++p) {
-          char b[64];
-          snprintf(b, sizeof(b), " p%u %llu/%llu", p,
+          char b[96];
+          snprintf(b, sizeof(b), " p%u %llu/%llu full %llu lat %llu", p,
                    (unsigned long long)read64(FOLDSIM_REG_MEM_STATS(p, FOLDSIM_MEM_STAT_READS)),
-                   (unsigned long long)read64(FOLDSIM_REG_MEM_STATS(p, FOLDSIM_MEM_STAT_WRITES)));
+                   (unsigned long long)read64(FOLDSIM_REG_MEM_STATS(p, FOLDSIM_MEM_STAT_WRITES)),
+                   (unsigned long long)read64(FOLDSIM_REG_MEM_STATS(p, FOLDSIM_MEM_STAT_FULL)),
+                   (unsigned long long)read64(FOLDSIM_REG_MEM_STATS(p, FOLDSIM_MEM_STAT_LATENCY)));
           ports += b;
         }
         printf("[VXDRV] launch %.0f s: target cycles %llu, host cycles %llu, memory stalls %llu, status 0x%x; "
@@ -994,6 +1014,7 @@ private:
   const double control_timeout_s_ = (launch_timeout_s_ > 0) ? launch_timeout_s_ : kControlTimeoutS;
   std::chrono::steady_clock::time_point launch_start_, last_progress_print_;
   const double progress_s_ = progress_env();
+  bool progress_config_printed_ = false;
   bool failed_ = false;
   bool open_ = false;
   uint32_t refresh_ = 0;
