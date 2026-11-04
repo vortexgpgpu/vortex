@@ -87,7 +87,10 @@ module VX_amo_alu import VX_gpu_pkg::*; #(
     if (ARW > 32) begin : g_add_d
         wire [32:0]     lo_sum  = {1'b0, a_v[31:0]} + {1'b0, b_v[31:0]};
         wire [ARW-33:0] hi_sum0 = a_v[ARW-1:32] + b_v[ARW-1:32];
-        wire [ARW-33:0] hi_sum1 = a_v[ARW-1:32] + b_v[ARW-1:32] + (ARW-32)'(1);
+        // a + b + 1 as one adder: the carry-in rides in a forced low bit
+        wire [ARW-32:0] hi_sum1_c = {a_v[ARW-1:32], 1'b1} + {b_v[ARW-1:32], 1'b1};
+        wire [ARW-33:0] hi_sum1 = hi_sum1_c[ARW-32:1];
+        `UNUSED_VAR (hi_sum1_c[0])
         assign sum = {(lo_sum[32] ? hi_sum1 : hi_sum0), lo_sum[31:0]};
     end else begin : g_add_w
         assign sum = a_v + b_v;
