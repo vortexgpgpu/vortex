@@ -971,11 +971,29 @@ private:
                    (unsigned long long)read64(FOLDSIM_REG_MEM_STATS(p, FOLDSIM_MEM_STAT_LATENCY)));
           ports += b;
         }
+        // VORTEX_FOLDSIM_AXI_STATS: also the device-memory telemetry (FOLDSIM_REG_MEM_AXI), on images that have it.
+        std::string axi;
+        const bool axi_stats = getenv("VORTEX_FOLDSIM_AXI_STATS") != nullptr;
+        for (uint32_t p = 0; axi_stats && p < mem_ports_ && p < 24; ++p) {
+          uint32_t v[FOLDSIM_MEM_NUM_AXI] = {};
+          for (uint32_t i = 0; i < FOLDSIM_MEM_NUM_AXI; ++i)
+            transport_.reg_read(FOLDSIM_REG_MEM_AXI(p, i), &v[i]);
+          char b[200];
+          snprintf(b, sizeof(b), "\n[VXDRV]   p%u AR %u R %u AW %u W %u B %u | no-R-while-reading %u, R-not-taken %u | "
+                   "queued %u, reads in memory %u, writes in memory %u, write data %u", p,
+                   v[FOLDSIM_MEM_AXI_AR], v[FOLDSIM_MEM_AXI_R], v[FOLDSIM_MEM_AXI_AW], v[FOLDSIM_MEM_AXI_W],
+                   v[FOLDSIM_MEM_AXI_B], v[FOLDSIM_MEM_AXI_R_STARVE], v[FOLDSIM_MEM_AXI_R_WAIT],
+                   v[FOLDSIM_MEM_AXI_OCC] & 0xff, (v[FOLDSIM_MEM_AXI_OCC] >> 8) & 0xff,
+                   (v[FOLDSIM_MEM_AXI_OCC] >> 16) & 0xff, v[FOLDSIM_MEM_AXI_OCC] >> 24);
+          axi += b;
+        }
         printf("[VXDRV] launch %.0f s: target cycles %llu, host cycles %llu, memory stalls %llu, status 0x%x; "
                "reads/writes per port:%s; memory base 0x%llx\n",
                elapsed_s(launch_start_), (unsigned long long)t, (unsigned long long)hc,
                (unsigned long long)read64(FOLDSIM_REG_MSTALL_LO), s, ports.c_str(),
                (unsigned long long)read64(FOLDSIM_REG_MEM_BASE_LO));
+        if (axi_stats)
+          printf("%s\n", axi.c_str() + 1);
         fflush(stdout);
       }
       poll_backoff(busy);
