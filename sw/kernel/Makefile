@@ -37,6 +37,10 @@ CFLAGS += $(XCONFIGS)
 PROJECT := libvortex
 PROJECT2 := libvortex2
 
+# The library is compiled with CONFIGS: a stamp of the flags makes a change
+# rebuild it, as the runtimes and simulators do.
+CONFIG_FILE := kernel_config.stamp
+
 SRCS := $(SRC_DIR)/vx_start.S $(SRC_DIR)/vx_syscalls.c $(SRC_DIR)/vx_print.S $(SRC_DIR)/tinyprintf.c $(SRC_DIR)/vx_print.c $(SRC_DIR)/vx_spawn.c $(SRC_DIR)/vx_serial.S
 
 OBJS := $(addsuffix .o, $(notdir $(SRCS)))
@@ -52,16 +56,16 @@ $(PROJECT2).dump: $(PROJECT2).a
 
 STARTUP_FLAGS := -DNEED_GP -DNEED_TLS -DNEED_INITFINI
 
-%.S.o: $(SRC_DIR)/%.S
+%.S.o: $(SRC_DIR)/%.S $(CONFIG_FILE)
 	$(CC) $(CFLAGS) $(STARTUP_FLAGS) -c $< -o $@
 
-%.c.o: $(SRC_DIR)/%.c
+%.c.o: $(SRC_DIR)/%.c $(CONFIG_FILE)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-%.S.2.o: $(SRC_DIR)/%.S
+%.S.2.o: $(SRC_DIR)/%.S $(CONFIG_FILE)
 	$(CC) $(CFLAGS) $(STARTUP_FLAGS) -DKMU_ENABLE -c $< -o $@
 
-%.c.2.o: $(SRC_DIR)/%.c
+%.c.2.o: $(SRC_DIR)/%.c $(CONFIG_FILE)
 	$(CC) $(CFLAGS) -DKMU_ENABLE -c $< -o $@
 
 $(PROJECT).a: $(OBJS)
@@ -73,5 +77,20 @@ $(PROJECT2).a: $(OBJS2)
 .depend: $(SRCS)
 	$(CC) $(CFLAGS) -MM $^ > .depend;
 
+# updates the timestamp when flags changed.
+# PID-suffixed tmp file: test Makefiles may enter here concurrently.
+$(CONFIG_FILE): force
+	@TMP=$@.tmp.$$$$ ; \
+	 printf '%s\n' "$(CFLAGS)" > $$TMP ; \
+	 if ! cmp -s $$TMP $@ 2>/dev/null; then \
+	   mv -f $$TMP $@ ; \
+	 else \
+	   rm -f $$TMP ; \
+	 fi
+
+.PHONY: all force clean
+
+force:
+
 clean:
-	rm -rf *.a *.o *.dump .depend
+	rm -rf *.a *.o *.dump .depend $(CONFIG_FILE)

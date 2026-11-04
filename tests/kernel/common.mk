@@ -45,7 +45,9 @@ $(PROJECT).dump: $(PROJECT).elf
 $(PROJECT).vxbin: $(PROJECT).elf
 	OBJCOPY=$(CP) $(VORTEX_HOME)/sw/kernel/scripts/vxbin.py $< $@
 
-$(VORTEX_KN_PATH)/libvortex.a:
+# FORCE: the kernel library's own make rebuilds it when CONFIGS changed (its
+# config stamp); a bare rule would link the first build's library forever.
+$(VORTEX_KN_PATH)/libvortex.a: FORCE
 	$(MAKE) -C $(VORTEX_KN_PATH)
 
 vx_start.o: $(SRCS) $(VORTEX_KN_PATH)/libvortex.a
@@ -79,3 +81,5 @@ run-simx: $(PROJECT).vxbin $(SIMX_BIN)
 
 clean:
 	rm -rf *.elf *.bin *.dump *.o *.log .depend
+
+FORCE:

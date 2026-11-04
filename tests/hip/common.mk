@@ -126,7 +126,9 @@ all: $(PROJECT)
 
 RUNTIME_ARGS = CONFIGS="$(CONFIGS)" $(if $(DEBUG),DEBUG=$(DEBUG)) $(if $(PERF),PERF=$(PERF))
 
-$(VORTEX_KN_PATH)/libvortex2.a:
+# FORCE: the kernel library's own make rebuilds it when CONFIGS changed (its
+# config stamp); a bare rule would link the first build's library forever.
+$(VORTEX_KN_PATH)/libvortex2.a: FORCE
 	$(MAKE) -C $(VORTEX_KN_PATH)
 
 # FORCE, not a bare rule: a rule with no prerequisites runs only when its target
