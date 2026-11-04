@@ -236,7 +236,7 @@ void Mmu::on_tick() {
     miss.amo = memop_is_amo(head.op);
     miss.client_id = client_id_;
     miss.slot = (uint32_t)i;
-    TlbMissOut.send(miss, 1);
+    TlbMissOut.send(miss, 1 + INPUT_STAGE_LATENCY);
     DT(4, this->name() << " tlb-miss: " << miss);
     e.issued = true;
     break;
@@ -253,6 +253,9 @@ void Mmu::on_tick() {
   // while older requests are still parked, so only same-address order is
   // guaranteed — those share a VPN, hence one entry and its arrival-order
   // parked list. Replays drain ahead of new input on the same port.
+  // A new request spends one cycle in the RTL's input stage (the TLB tag
+  // compare) before its lookup: hits and bypasses leave a cycle later than
+  // replays, and a miss reaches the walker a cycle later.
   for (uint32_t p = 0; p < num_ports_; ++p) {
     if (!replay_.at(p).empty()) {
       if (ReqOut.at(p).try_send(replay_.at(p).front())) {
@@ -267,7 +270,7 @@ void Mmu::on_tick() {
     const MemReq& req = ReqIn.at(p).peek();
 
     if (!needs_translation(req)) {
-      if (ReqOut.at(p).try_send(req)) {
+      if (ReqOut.at(p).try_send(req, 1 + INPUT_STAGE_LATENCY)) {
         ReqIn.at(p).pop();
       }
       continue;
@@ -288,7 +291,7 @@ void Mmu::on_tick() {
       MemReq translated = req;
       translated.addr = (res.ppn << VX_VM_PAGE_LOG2_SIZE) |
                         (req.addr & ((1ULL << VX_VM_PAGE_LOG2_SIZE) - 1));
-      if (ReqOut.at(p).try_send(translated)) {
+      if (ReqOut.at(p).try_send(translated, 1 + INPUT_STAGE_LATENCY)) {
         ReqIn.at(p).pop();
       }
     } else {

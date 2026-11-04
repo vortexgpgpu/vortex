@@ -106,6 +106,10 @@ private:
   // Requests of one VPN that a single miss-station entry can absorb.
   static constexpr size_t MAX_PARKED_PER_ENTRY = 2;
 
+  // The RTL's input stage (VX_mmu): a request's TLB tag compare runs as it
+  // enters, its lookup a cycle later.
+  static constexpr uint64_t INPUT_STAGE_LATENCY = 1;
+
   friend class SimObject<Mmu>;
 };
 

@@ -146,19 +146,25 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     // a CTA counts from its accept cycle, which busy leaves to the issuer
     wire kmu_fire = kmu_bus_if.valid && kmu_bus_if.ready;
 
+    // The commit count is registered before it is accumulated: the population
+    // count over all warps and the wide add are not in series, and instret
+    // counts a commit one cycle after it.
     reg [PERF_CTR_BITS-1:0] cycles_r;
     reg [PERF_CTR_BITS-1:0] instret_r;
     wire [`CLOG2(`VX_CFG_NUM_WARPS+1)-1:0] committed_warps_cnt;
+    reg  [`CLOG2(`VX_CFG_NUM_WARPS+1)-1:0] committed_warps_cnt_r;
     `POP_COUNT(committed_warps_cnt, committed_warps);
     always @(posedge clk) begin
         if (reset) begin
             cycles_r  <= '0;
             instret_r <= '0;
+            committed_warps_cnt_r <= '0;
         end else begin
             if (busy || kmu_fire) begin
                 cycles_r <= cycles_r + 1;
             end
-            instret_r <= instret_r + PERF_CTR_BITS'(committed_warps_cnt);
+            committed_warps_cnt_r <= committed_warps_cnt;
+            instret_r <= instret_r + PERF_CTR_BITS'(committed_warps_cnt_r);
         end
     end
     assign cycles  = cycles_r;

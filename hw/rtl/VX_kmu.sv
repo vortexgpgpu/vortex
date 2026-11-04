@@ -321,13 +321,14 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
                     block_idx_r[2] <= group_origin[2];
                 end
             end else begin
-                // advance within the cluster: block_idx = group_origin + intra_n
-                block_idx_r[0] <= intra_x_wrap ? group_origin[0] : (group_origin[0] + 32'(intra_x_n));
+                // advance within the cluster: block_idx = group_origin + intra_n,
+                // which is the current block_idx plus one along the advancing axis
+                block_idx_r[0] <= intra_x_wrap ? group_origin[0] : (block_idx_r[0] + 32'd1);
                 if (intra_x_wrap) begin
-                    block_idx_r[1] <= intra_y_wrap ? group_origin[1] : (group_origin[1] + 32'(intra_y_n));
+                    block_idx_r[1] <= intra_y_wrap ? group_origin[1] : (block_idx_r[1] + 32'd1);
                 end
                 if (intra_y_wrap) begin
-                    block_idx_r[2] <= group_origin[2] + 32'(intra_z_n);
+                    block_idx_r[2] <= block_idx_r[2] + 32'd1;
                 end
             end
         end

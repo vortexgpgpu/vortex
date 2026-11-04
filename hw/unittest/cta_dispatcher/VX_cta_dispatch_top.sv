@@ -13,8 +13,10 @@
 
 `include "VX_define.vh"
 
-module VX_cta_dispatch_top import VX_gpu_pkg::*;
-(
+// NUM_LANES launch lanes, as the scheduler instantiates it (one per fetch slot).
+module VX_cta_dispatch_top import VX_gpu_pkg::*; #(
+    parameter NUM_LANES = `VX_CFG_FETCH_WIDTH
+) (
     input wire                          clk,
     input wire                          reset,
 
@@ -38,14 +40,23 @@ module VX_cta_dispatch_top import VX_gpu_pkg::*;
     input  wire [CTA_TID_WIDTH-1:0]     in_warp_step_x,
     input  wire [CTA_TID_WIDTH-1:0]     in_warp_step_y,
     input  wire [CTA_TID_WIDTH-1:0]     in_warp_step_z,
+    input  wire [7:0]                   in_ctx_id,
 
     input  wire [`VX_CFG_NUM_WARPS-1:0]        active_warps,
     input  wire                         warp_done,
     input  wire [NW_WIDTH-1:0]          warp_done_wid,
 
-    // Outputs
-    output wire                         cta_fire,
-    output wire [NW_WIDTH-1:0]          cta_wid
+    // Outputs: the warps launched, one per lane
+    output wire [NUM_LANES-1:0]         cta_fire,
+    output wire [NUM_LANES-1:0][NW_WIDTH-1:0] cta_wid,
+    output wire [NUM_LANES-1:0][`VX_CFG_NUM_THREADS-1:0] cta_tmask,
+    output wire [NUM_LANES-1:0]         cta_init,
+    // each lane's warp record (rank and thread indices), written TID_STAGES later
+    output wire [NUM_LANES-1:0]         rec_write,
+    output wire [NUM_LANES-1:0][NW_WIDTH-1:0] rec_wid,
+    output wire [NUM_LANES-1:0][NW_WIDTH-1:0] rec_rank,
+    output wire [NUM_LANES-1:0][`VX_CFG_NUM_THREADS-1:0][CTA_TID_LANE_BITS-1:0] rec_tid,
+    output wire                         busy
 );
 
     VX_kmu_bus_if kmu_bus();
@@ -68,7 +79,7 @@ module VX_cta_dispatch_top import VX_gpu_pkg::*;
         kmu_req.PC                = in_PC;
         kmu_req.entry             = in_PC;
         kmu_req.param             = in_param;
-        kmu_req.ctx_id            = '0;
+        kmu_req.ctx_id            = in_ctx_id;
         kmu_req.aligned_lmem_size = aligned_lmem_size_w;
         kmu_req.args.compute.grid_dim[0]  = in_grid_dim_x;
         kmu_req.args.compute.grid_dim[1]  = in_grid_dim_y;
@@ -96,25 +107,30 @@ module VX_cta_dispatch_top import VX_gpu_pkg::*;
     `UNUSED_VAR (in_cta_id)
 
     wire [PC_BITS-1:0]      cta_PC;
-    wire [`VX_CFG_NUM_THREADS-1:0] cta_tmask;
     wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] cta_param;
-    wire                    cta_init;
-    wire                    busy;
 
-    // The CTA-CSR broadcast is unexercised by this bench (it only checks warp
-    // dispatch via cta_fire/cta_wid).
-    cta_bcast_t             cta_bcast;
-    cta_lane_bcast_t        cta_lane_bcast;
+    // The per-CTA context broadcast is unexercised by this bench; each lane's
+    // warp record is checked.
+    cta_bcast_t                       cta_bcast;
+    cta_lane_bcast_t [NUM_LANES-1:0]  cta_lane_bcast;
 
     `UNUSED_VAR (cta_PC)
-    `UNUSED_VAR (cta_tmask)
     `UNUSED_VAR (cta_param)
-    `UNUSED_VAR (cta_init)
-    `UNUSED_VAR (busy)
     `UNUSED_VAR (cta_bcast)
-    `UNUSED_VAR (cta_lane_bcast)
 
-    VX_cta_dispatch cta_dispatch (
+    for (genvar l = 0; l < NUM_LANES; ++l) begin : g_rec
+        assign rec_write[l] = cta_lane_bcast[l].warp_write;
+        assign rec_wid[l]   = cta_lane_bcast[l].warp_waddr;
+        assign rec_rank[l]  = cta_lane_bcast[l].warp_wdata.cta_rank;
+        for (genvar i = 0; i < `VX_CFG_NUM_THREADS; ++i) begin : g_tid
+            assign rec_tid[l][i] = CTA_TID_LANE_BITS'(cta_lane_bcast[l].warp_wdata.lane_launch[i]);
+        end
+        `UNUSED_VAR ({cta_lane_bcast[l].id_write, cta_lane_bcast[l].id_wid, cta_lane_bcast[l].id_cta})
+    end
+
+    VX_cta_dispatch #(
+        .NUM_LANES (NUM_LANES)
+    ) cta_dispatch (
         .clk           (clk),
         .reset         (reset),
         .kmu_bus_if    (kmu_bus),

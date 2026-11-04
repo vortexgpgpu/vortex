@@ -36,7 +36,17 @@ module VX_tlb_l1 import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     output mmu_perf_t    mmu_perf,
 `endif
 
-    // Per-lane combinational lookup (VPN in, raw translation out).
+    // Tag compare a cycle ahead of the lookup (see VX_tlb_cam PRE_MATCH): the
+    // caller holds each probe's match vector, applies the installs reported
+    // here to it, and looks it up through lookup_match.
+    input  wire [NUM_REQS-1:0][TLB_VPN_WIDTH-1:0]   probe_vpn,
+    output wire [NUM_REQS-1:0][TLB_SIZE-1:0]        probe_match,
+    input  wire [NUM_REQS-1:0][TLB_SIZE-1:0]        lookup_match,
+    output wire                                     install_fire,
+    output wire [`UP(`CLOG2(TLB_SIZE))-1:0]         install_victim,
+    output tlb_entry_t                              install_data,
+
+    // Per-lane lookup (VPN in, raw translation out).
     input  wire [NUM_REQS-1:0][TLB_VPN_WIDTH-1:0]   lookup_vpn,
     output wire [NUM_REQS-1:0]                       lookup_hit,
     output wire [NUM_REQS-1:0][TLB_PPN_WIDTH-1:0]    lookup_ppn,
@@ -51,7 +61,7 @@ module VX_tlb_l1 import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     input  wire [TLB_VPN_WIDTH-1:0]  park_vpn,
     input  tlb_access_e              park_access,
     input  wire                      park_amo,
-    input  wire [`UP(`CLOG2(NUM_REQS))-1:0] park_lane,
+    input  wire [NUM_REQS-1:0]              park_sel,    // one-hot: the parking lane
     input  wire [PAYLOAD_W-1:0]      park_payload,
     output wire                      park_ready,
 
@@ -86,11 +96,15 @@ module VX_tlb_l1 import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     wire               install_evict;
 
     VX_tlb_cam #(
-        .NUM_REQS (NUM_REQS),
-        .TLB_SIZE  (TLB_SIZE)
+        .NUM_REQS  (NUM_REQS),
+        .TLB_SIZE  (TLB_SIZE),
+        .PRE_MATCH (1)
     ) cam (
         .clk           (clk),
         .reset         (reset),
+        .probe_vpn     (probe_vpn),
+        .probe_match   (probe_match),
+        .lookup_match  (lookup_match),
         .lookup_vpn    (lookup_vpn),
         .lookup_hit    (lookup_hit),
         .lookup_ppn    (lookup_ppn),
@@ -104,8 +118,11 @@ module VX_tlb_l1 import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         .install_valid (install_valid),
         .install_entry (install_entry),
         .install_evict (install_evict),
+        .install_victim(install_victim),
         .flush         (flush)
     );
+    assign install_fire = install_valid;
+    assign install_data = install_entry;
 `ifndef PERF_ENABLE
     `UNUSED_VAR (install_evict)
 `endif
@@ -150,7 +167,7 @@ module VX_tlb_l1 import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         .alloc_vpn     (park_vpn),
         .alloc_access  (park_access),
         .alloc_amo     (park_amo),
-        .alloc_lane    (park_lane),
+        .alloc_sel     (park_sel),
         .alloc_qdata   (park_payload),
         .alloc_ready   (park_ready),
         .issue_valid   (tlb_bus_if.req_valid),

@@ -152,24 +152,80 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
         reg active_r, active_n;
         reg stalled_r, stalled_n;
         reg [`VX_CFG_NUM_THREADS-1:0] tmask_r, tmask_n;
-        reg [PC_BITS-1:0] pc_r, pc_n;
+        reg [PC_BITS-1:0] pc_r;
+        wire [PC_BITS-1:0] pc_n;
 
         wire ctl_hit  = (ctl_lid[QS] == LID);
         wire br_hit   = branch[QA].valid && (br_lid[QA] == LID);
         wire join_hit = join_valid[QS] && (join_k[QS] == K);
 
+        // Next PC: every source is formed in parallel and the last writer in
+        // the update order below wins, through a one-hot select, so no source
+        // (the increments in particular) feeds a chain of muxes. The increments
+        // are carry-select: the upper bits' +1/-1 is formed beside the lower add.
+        localparam PC_LO = (PC_BITS > 32) ? 32 : PC_BITS;
+        localparam PC_HI = PC_BITS - PC_LO;
+        wire [PC_BITS-1:0] pc_inc, pc_rewind;
+        // Reusing a warp for the next CTA skips the one-time prologue and rewinds to the
+        // kernel's per-CTA dispatch window: a fixed 20-byte (5-instruction) sequence that
+        // reloads the entry pointer and kargs before re-calling.
+        wire [PC_LO:0] rewind_lo = {1'b0, pc_r[PC_LO-1:0]} - (PC_LO+1)'(from_fullPC(`VX_CFG_XLEN'(20)));
+    `ifdef VX_CFG_EXT_C_ENABLE
+        wire [PC_LO:0] inc_lo = {1'b0, pc_r[PC_LO-1:0]}
+                              + (PC_LO+1)'(from_fullPC(decode_sched_if.is_rvc ? `VX_CFG_XLEN'(2) : `VX_CFG_XLEN'(4)));
+    `else
+        wire [PC_LO:0] inc_lo = {1'b0, pc_r[PC_LO-1:0]} + (PC_LO+1)'(from_fullPC(`VX_CFG_XLEN'(4)));
+    `endif
+        if (PC_HI != 0) begin : g_pc_hi
+            wire [PC_HI-1:0] pc_hi = pc_r[PC_BITS-1:PC_LO];
+            wire [PC_HI-1:0] pc_hi_p1 = pc_hi + PC_HI'(1);
+            wire [PC_HI-1:0] pc_hi_m1 = pc_hi - PC_HI'(1);
+            assign pc_inc    = {(inc_lo[PC_LO] ? pc_hi_p1 : pc_hi), inc_lo[PC_LO-1:0]};
+            assign pc_rewind = {(rewind_lo[PC_LO] ? pc_hi_m1 : pc_hi), rewind_lo[PC_LO-1:0]};
+        end else begin : g_pc_lo
+            `UNUSED_VAR (inc_lo[PC_LO])
+            `UNUSED_VAR (rewind_lo[PC_LO])
+            assign pc_inc    = inc_lo[PC_LO-1:0];
+            assign pc_rewind = rewind_lo[PC_LO-1:0];
+        end
+
+        wire pc_from_cta  = sched_if.cta_fire && (sched_if.cta_lid == LID);
+        wire pc_from_wsp  = sched_if.wspawn_apply && sched_if.wspawn_wmask[l]
+                         && !(sched_if.wspawn_src && (sched_if.wspawn_src_lid == LID));
+        wire pc_from_join = join_hit && join_is_dvg[QS] && join_is_else[QS];
+        wire pc_from_br   = br_hit && (branch[QA].is_trap || branch[QA].is_mret || branch[QA].taken);
+    `ifdef VX_CFG_EXT_C_ENABLE
+        wire pc_from_inc  = decode_sched_if.valid && (dec_lid == LID);
+    `else
+        wire pc_from_inc  = sched_fire && cand_onehot[l];
+    `endif
+        wire [PC_BITS-1:0] br_pc = branch[QA].is_trap ? from_fullPC(mtvec_r[l] & ~`VX_CFG_XLEN'(3))
+                                 : branch[QA].is_mret ? from_fullPC(mepc_r[l])
+                                 : branch[QA].dest;
+        wire [5:0] pc_win;
+        assign pc_win[5] = pc_from_inc;
+        assign pc_win[4] = pc_from_br   && !pc_from_inc;
+        assign pc_win[3] = pc_from_join && !pc_from_br && !pc_from_inc;
+        assign pc_win[2] = pc_from_wsp  && !pc_from_join && !pc_from_br && !pc_from_inc;
+        assign pc_win[1] = pc_from_cta  && !pc_from_wsp && !pc_from_join && !pc_from_br && !pc_from_inc;
+        assign pc_win[0] = !(pc_from_cta || pc_from_wsp || pc_from_join || pc_from_br || pc_from_inc);
+        VX_onehot_mux #(
+            .DATAW (PC_BITS),
+            .N     (6)
+        ) pc_mux (
+            .data_in  ({pc_inc, br_pc, join_pc[QS], sched_if.wspawn_pc,
+                        (sched_if.cta_init ? sched_if.cta_PC : pc_rewind), pc_r}),
+            .sel_in   (pc_win),
+            .data_out (pc_n)
+        );
+
         always @(*) begin
             active_n  = active_r;
             stalled_n = stalled_r;
             tmask_n   = tmask_r;
-            pc_n      = pc_r;
 
             if (sched_if.cta_fire && (sched_if.cta_lid == LID)) begin
                 active_n = 1;
-                // Reusing a warp for the next CTA skips the one-time prologue and rewinds to the
-                // kernel's per-CTA dispatch window: a fixed 20-byte (5-instruction) sequence that
-                // reloads the entry pointer and kargs before re-calling.
-                pc_n    = sched_if.cta_init ? sched_if.cta_PC : (pc_r - from_fullPC(`VX_CFG_XLEN'(20)));
                 tmask_n = sched_if.cta_tmask;
             end
 
@@ -182,7 +238,6 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
                     active_n = 1;
                     if (!(sched_if.wspawn_src && (sched_if.wspawn_src_lid == LID))) begin
                         tmask_n[0] = 1;
-                        pc_n = sched_if.wspawn_pc;
                     end
                 end
                 if (sched_if.wspawn_src && (sched_if.wspawn_src_lid == LID)) begin
@@ -205,9 +260,6 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
 
             if (join_hit) begin
                 if (join_is_dvg[QS]) begin
-                    if (join_is_else[QS]) begin
-                        pc_n = join_pc[QS];
-                    end
                     tmask_n = join_tmask[QS];
                 end
                 stalled_n = 0;
@@ -230,34 +282,18 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
                 stalled_n = 0;
             end
 
+            // A branch redirects to the trap vector (ECALL/EBREAK; mtvec[1:0] is the MODE
+            // field), the saved PC (MRET/SRET/URET) or its taken target: br_pc above.
             if (br_hit) begin
-                if (branch[QA].is_trap) begin
-                    // ECALL/EBREAK: redirect to trap vector (mtvec[1:0] = MODE field; mask off to get base address).
-                    pc_n = from_fullPC(mtvec_r[l] & ~`VX_CFG_XLEN'(3));
-                end else if (branch[QA].is_mret) begin
-                    // MRET/SRET/URET: restore the saved PC from mepc.
-                    pc_n = from_fullPC(mepc_r[l]);
-                end else if (branch[QA].taken) begin
-                    pc_n = branch[QA].dest;
-                end
                 stalled_n = 0;
             end
 
-            // stall the warp until decode stage
+            // stall the warp until decode stage (without C, the PC advances here; with C it
+            // advances at decode: every redirect source stalls its warp from schedule until
+            // it resolves, so no redirect writes a warp's PC on the cycle it decode-advances)
             if (sched_fire && cand_onehot[l]) begin
                 stalled_n = 1;
-            `ifndef VX_CFG_EXT_C_ENABLE
-                pc_n = pc_r + from_fullPC(`VX_CFG_XLEN'(4));
-            `endif
             end
-
-        `ifdef VX_CFG_EXT_C_ENABLE
-            // Every redirect source stalls its warp from schedule until it resolves, so
-            // no redirect writes a warp's PC on the cycle that warp decode-advances.
-            if (decode_sched_if.valid && (dec_lid == LID)) begin
-                pc_n = pc_r + from_fullPC(decode_sched_if.is_rvc ? `VX_CFG_XLEN'(2) : `VX_CFG_XLEN'(4));
-            end
-        `endif
 
         `ifdef VX_CFG_EXT_RTU_ENABLE
             // A wstall'd TRACE retires: resume the warp so it proceeds to WAIT.

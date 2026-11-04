@@ -14,7 +14,11 @@
 `include "VX_define.vh"
 
 module VX_bar_unit import VX_gpu_pkg::*; #(
-    parameter `STRING INSTANCE_ID = ""
+    parameter `STRING INSTANCE_ID = "",
+    // 0: read_phase is the phase at read_addr in the same cycle (asynchronous
+    // read). 1: read_phase is the phase at the previous cycle's read_addr, read
+    // through the store's output register.
+    parameter PHASE_REG = 0
 ) (
     input wire                clk,
     input wire                reset,
@@ -26,7 +30,7 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
     input wire [NW_WIDTH-1:0] req_wid,
     input barrier_t           req_data,
     input wire [BAR_ADDR_W-1:0] read_addr, // valid one cycle before req_valid
-    output wire               read_phase,  // asynchronous phase bit return at read_addr
+    output wire               read_phase,  // phase bit at read_addr (see PHASE_REG)
 
     // global barrier interface
     VX_gbar_bus_if.master gbar_bus_if,
@@ -226,28 +230,8 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
         .rdata (store_state_rdata)
     );
 
-    VX_dp_ram #(
-        .DATAW    (1),
-        .SIZE     (1 << BAR_ADDR_BITS),
-        .RDW_MODE ("W"),
-        .RADDR_REG(1)
-    ) barrier_phase_store (
-        .clk   (clk),
-        .reset (reset),
-        .read  (1'b1),
-        .write (store_phase_write),
-        .wren  (1'b1),
-        .raddr (store_raddr),
-        .waddr (store_phase_waddr),
-        .wdata (store_phase_wdata),
-        .rdata (store_phase_rdata)
-    );
-
     // Store reset handling
     reg [(1 << BAR_ADDR_BITS)-1:0] store_valids;
-    wire is_phase_rdw_hazard = store_phase_write && (store_phase_waddr == store_raddr);
-
-    wire store_phase_rdata_v = store_valids[store_raddr] ? store_phase_rdata : '0;
 
     // The state read's valid bit is registered with its address (forwarding a
     // same-cycle write), so the state's consumers start from a flop rather than
@@ -258,20 +242,75 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
         if (reset) begin
             store_valids <= '0;
             store_state_valid <= 0;
-            phase_r <= '0;
         end else begin
             if (store_state_write) begin
                 store_valids[store_waddr] <= 1'b1;
             end
             store_state_valid <= store_valids[store_raddr] || (store_state_write && (store_waddr == store_raddr));
-            phase_r <= is_phase_rdw_hazard ? store_phase_wdata : store_phase_rdata_v;
         end
         store_waddr <= store_raddr;
     end
 
     assign {mask_r, count_r, events_r} = store_state_valid ? store_state_rdata : '0;
 
-    wire phase_async = is_phase_rdw_hazard ? store_phase_wdata : store_phase_rdata_v;
+    wire phase_async;
+
+    if (PHASE_REG) begin : g_phase_reg
+        // Read like the state store: write-first through the output register,
+        // so a same-cycle write is seen and the read address is the last logic
+        // in the cycle. A phase is written only with or after its state, so the
+        // state's valid bit covers it.
+        VX_dp_ram #(
+            .DATAW    (1),
+            .SIZE     (1 << BAR_ADDR_BITS),
+            .RDW_MODE ("W"),
+            .OUT_REG  (1),
+            .LUTRAM   (1)
+        ) barrier_phase_store (
+            .clk   (clk),
+            .reset (reset),
+            .read  (1'b1),
+            .write (store_phase_write),
+            .wren  (1'b1),
+            .raddr (store_raddr),
+            .waddr (store_phase_waddr),
+            .wdata (store_phase_wdata),
+            .rdata (store_phase_rdata)
+        );
+        assign phase_r     = store_state_valid && store_phase_rdata;
+        assign phase_async = phase_r;
+    end else begin : g_phase_async
+        VX_dp_ram #(
+            .DATAW    (1),
+            .SIZE     (1 << BAR_ADDR_BITS),
+            .RDW_MODE ("W"),
+            .RADDR_REG(1)
+        ) barrier_phase_store (
+            .clk   (clk),
+            .reset (reset),
+            .read  (1'b1),
+            .write (store_phase_write),
+            .wren  (1'b1),
+            .raddr (store_raddr),
+            .waddr (store_phase_waddr),
+            .wdata (store_phase_wdata),
+            .rdata (store_phase_rdata)
+        );
+
+        wire is_phase_rdw_hazard = store_phase_write && (store_phase_waddr == store_raddr);
+        wire store_phase_rdata_v = store_valids[store_raddr] ? store_phase_rdata : '0;
+        assign phase_async = is_phase_rdw_hazard ? store_phase_wdata : store_phase_rdata_v;
+
+        reg phase_q;
+        always @(posedge clk) begin
+            if (reset) begin
+                phase_q <= '0;
+            end else begin
+                phase_q <= phase_async;
+            end
+        end
+        assign phase_r = phase_q;
+    end
 
     reg unlock_valid_r;
     reg [`VX_CFG_NUM_WARPS-1:0] unlock_mask_r;

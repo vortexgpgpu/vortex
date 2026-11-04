@@ -8,6 +8,8 @@ all:
 	$(MAKE) -C mem_unit
 	$(MAKE) -C tcu_fedp
 	$(MAKE) -C cta_dispatcher
+	$(MAKE) -C mmu
+	$(MAKE) -C tlb_l2
 	$(MAKE) -C kmu
 	$(MAKE) -C dxa_core
 	$(MAKE) -C tcu_unit
@@ -74,6 +76,8 @@ run:
 	$(MAKE) -C mem_unit run
 	$(MAKE) -C tcu_fedp run
 	$(MAKE) -C cta_dispatcher run
+	$(MAKE) -C mmu run
+	$(MAKE) -C tlb_l2 run
 	$(MAKE) -C kmu run
 	$(MAKE) -C dxa_core run
 	$(MAKE) -C tcu_unit run
@@ -210,6 +214,8 @@ clean:
 	$(MAKE) -C mem_unit clean
 	$(MAKE) -C tcu_fedp clean
 	$(MAKE) -C cta_dispatcher clean
+	$(MAKE) -C mmu clean
+	$(MAKE) -C tlb_l2 clean
 	$(MAKE) -C kmu clean
 	$(MAKE) -C dxa_core clean
 	$(MAKE) -C tcu_unit clean
