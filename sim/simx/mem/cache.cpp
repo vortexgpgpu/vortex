@@ -843,6 +843,7 @@ public:
     token_flush_skip_ = skip;
     token_flush_idx_ = 0;
     token_flush_settle_ = 0;
+    token_flush_walking_ = false;
     flush_sector_idx_ = 0;
     this->tick_wake();
   }
@@ -895,6 +896,7 @@ protected:
     flush_sector_idx_ = 0;
     token_flushing_ = false;
     token_flush_idx_ = 0;
+    token_flush_walking_ = false;
 #if VX_CFG_EXT_A_ENABLED
     amo_unit_.reset();
     for (auto &e : amo_passthru_) {
@@ -2177,12 +2179,18 @@ private:
       return;
     }
     if (pending_fill_reqs_ != 0
+     || this->core_req_in.size() != 0
      || pipe_req_->size() != 0
      || !mshr_.empty()) {
       return;
     }
     if (token_flush_skip_) {
       token_flush_settle_ = TOKEN_FLUSH_SETTLE;
+      return;
+    }
+    // the walk starts the cycle after the bank is seen quiet
+    if (!token_flush_walking_) {
+      token_flush_walking_ = true;
       return;
     }
     uint32_t ways = config_.write_back ? params_.lines_per_set : 1;
@@ -2216,7 +2224,8 @@ private:
       }
     }
     if (++token_flush_idx_ == params_.sets_per_bank * ways) {
-      token_flush_settle_ = TOKEN_FLUSH_SETTLE;
+      // the last line leaves the pipeline before the bank sees it empty
+      token_flush_settle_ = config_.latency + TOKEN_FLUSH_SETTLE;
     }
   }
 
@@ -2303,6 +2312,7 @@ private:
   bool     token_flush_skip_ = false;
   static constexpr uint32_t TOKEN_FLUSH_SETTLE = 2;
   uint32_t token_flush_settle_ = 0;
+  bool     token_flush_walking_ = false;
   uint32_t token_flush_idx_;
 
 #if VX_CFG_EXT_A_ENABLED
@@ -2392,6 +2402,9 @@ public:
   uint32_t merge_bits() const { return (merge_group_ > 1) ? merge_group_ : 0; }
 
   uint64_t collisions() const { return collisions_; }
+
+  // Tree levels register requests ahead of the banks.
+  bool has_tree() const { return !levels_.empty(); }
 
   bool is_token(uint32_t i) const {
     return !ReqIn.at(i).empty() && ReqIn.at(i).peek().flags.flush;
@@ -3117,9 +3130,16 @@ public:
   void flush_step() {
     switch (flush_state_) {
     case FlushState::Idle:
-      if (port_arb_->any_token()) {
-        flush_state_ = FlushState::Drain;
+      if (!port_arb_->any_token()) {
+        break;
       }
+      // a request tree can hold requests apart from their port order, so it
+      // drains first; without one the tokens are served at once
+      if (port_arb_->has_tree()) {
+        flush_state_ = FlushState::Drain;
+        break;
+      }
+      this->flush_serve();
       break;
     case FlushState::Drain: {
       if (!port_arb_->drained()) {
@@ -3130,22 +3150,15 @@ public:
           return;
         }
       }
-      auto kinds = this->token_kinds();
-      bool walk = kinds.walk(config_.shared_llc);
-      if (!walk && !kinds.drain(config_.shared_llc)) {
-        rsp_pending_ = port_arb_->tokens();
-        flush_state_ = FlushState::Respond;
-        break;
-      }
-      // with no walk owed, an IO or release token still quiesces the banks
-      // and goes down
-      walk_skip_ = !walk;
+      this->flush_serve();
+      break;
+    }
+    case FlushState::Begin:
       for (auto &bank : banks_) {
         bank->token_flush_begin(walk_skip_);
       }
       flush_state_ = FlushState::Walk;
       break;
-    }
     case FlushState::Walk: {
       for (auto &bank : banks_) {
         if (!bank->token_flush_done()) {
@@ -3232,12 +3245,31 @@ public:
       MemRsp rsp{token.tag, token.hart_id, token.uuid};
       if (simobject_->core_rsp_out.at(i).try_send(rsp, core_rsp_delay_)) {
         DT(3, simobject_->name() << " flush-rsp: " << rsp);
+        if (std::find(next + 1, rsp_pending_.end(), true) == rsp_pending_.end()) {
+          flush_state_ = FlushState::Idle;
+        }
         port_arb_->take_token(i);
         rsp_pending_.at(i) = false;
       }
       break;
     }
     }
+  }
+
+  // Tokens owing nothing are answered from the next cycle; otherwise the
+  // banks start their walk, or only quiesce, the next cycle.
+  void flush_serve() {
+    auto kinds = this->token_kinds();
+    bool walk = kinds.walk(config_.shared_llc);
+    if (!walk && !kinds.drain(config_.shared_llc)) {
+      rsp_pending_ = port_arb_->tokens();
+      flush_state_ = FlushState::Respond;
+      return;
+    }
+    // with no walk owed, an IO or release token still quiesces the banks
+    // and goes down
+    walk_skip_ = !walk;
+    flush_state_ = FlushState::Begin;
   }
 
   struct token_kinds_t {
@@ -3376,7 +3408,7 @@ private:
   // the core-response network's levels, then the non-cacheable bypass
   // layer's response arbiter
   uint32_t core_rsp_delay_ = 0;
-  enum class FlushState { Idle, Drain, Walk, Forward, Respond };
+  enum class FlushState { Idle, Drain, Begin, Walk, Forward, Respond };
   FlushState flush_state_ = FlushState::Idle;
   std::vector<bool> rsp_pending_;
   uint64_t fwd_sent_ = 0;

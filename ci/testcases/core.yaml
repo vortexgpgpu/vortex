@@ -273,6 +273,16 @@ tests:
   via: blackbox
   app: printf
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_FETCH_WIDTH=2
+# The same fences on a data cache shared by two cores, below an L2: each core's
+# token rides its own flush injection, and every fence walks the data cache.
+- id: parity-printf-ss2
+  check: model_parity
+  via: blackbox
+  app: printf
+  configs: -DVX_CFG_SOCKET_SIZE=2
+  shape:
+    cores: 2
+    l2cache: true
 # Same-word reads from several coalescer channels of one warp, served by one
 # dcache bank access and returned to every channel.
 - id: parity-uniform-ld

@@ -254,12 +254,18 @@ public:
       }
     }
 
-    // The first data-cache port also carries the cache-flush injection, whose
-    // arbiter buffers and registers its requests once more.
-    snprintf(sname, 100, "%s-dcache_flush_buf", name.c_str());
-    dcache_flush_buf_ = TxBuffer<MemReq>::Create(sname, 2);
-    dc_req_out.at(0)->bind(&dcache_flush_buf_->In);
-    dc_req_out.at(0) = &dcache_flush_buf_->Out;
+    // A data-cache port carrying the cache-flush injection goes through its
+    // arbiter, which buffers and registers its requests once more. A private
+    // dcache takes the injection on the first port only; a shared one on every
+    // port, each carrying its own token behind its stores.
+    constexpr bool dcache_private = (VX_CFG_SOCKET_SIZE == VX_CFG_NUM_DCACHES);
+    dcache_flush_bufs_.resize(dcache_private ? 1 : dc_req_out.size());
+    for (uint32_t p = 0; p < dcache_flush_bufs_.size(); ++p) {
+      snprintf(sname, 100, "%s-dcache_flush_buf%d", name.c_str(), p);
+      dcache_flush_bufs_.at(p) = TxBuffer<MemReq>::Create(sname, 2);
+      dc_req_out.at(p)->bind(&dcache_flush_bufs_.at(p)->In);
+      dc_req_out.at(p) = &dcache_flush_bufs_.at(p)->Out;
+    }
 
     // The first icache port does the same for the icache.
     snprintf(sname, 100, "%s-icache_flush_buf", name.c_str());
@@ -1352,7 +1358,7 @@ private:
   LocalMem::Ptr local_mem_;
   std::vector<LocalMemSwitch::Ptr> lmem_switch_;
   std::vector<MemCoalescer::Ptr> mem_coalescers_;
-  TxBuffer<MemReq>::Ptr dcache_flush_buf_;
+  std::vector<TxBuffer<MemReq>::Ptr> dcache_flush_bufs_;
   TxBuffer<MemReq>::Ptr icache_flush_buf_;
 
   std::vector<std::unique_ptr<TFifo<instr_trace_t*>>> fetch_latch_;
