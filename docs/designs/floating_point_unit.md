@@ -201,6 +201,42 @@ conversions run on the merged units of their classes, at the
 In `VX_fpu_std`, division and square root share one unit and serializer, so
 `VX_CFG_FSQRT_PE_RATIO` must equal `VX_CFG_FDIV_PE_RATIO`.
 
+### 5.3 The result path
+
+A result reaches the commit stage two cycles after its core's latency `L`,
+counted from the last batch:
+
+| cycle | where the result is |
+|---|---|
+| `L` | the core's last unit stage |
+| `L + 1` | the core's output buffer (`FPU_CORE_OUT_BUF` in `VX_fpu_pkg`): two entries, registered output and ready |
+| `L + 2` | the response arbiter's registered output, read by the commit arbiter or the lane gather |
+
+The core output buffer costs a cycle on every operation, and with the default
+tag store of two entries (§10) every cycle of latency is a cycle of FPU
+throughput. It stays because it registers the ready that drives the core's
+clock enable, a net that reaches every unit of the core: the vendor
+operators' clock enables and every pipeline register. Without it the enable
+starts at the response arbiter's round-robin state, and Beacon counts every
+enable two to three levels deeper, on the nets with the highest fanout in the
+FPU, which Beacon does not price.
+
+The buffer also absorbs collisions: when two cores finish together, the one
+the arbiter defers parks in its buffer and its pipeline keeps going; a core
+stalls only when its buffer holds two results.
+
+`VX_fpu_dpi` puts the same buffer behind each class's pipeline, and SimX adds
+its cycle (§11), so the simulation backends time as the synthesized ones: on a
+backend-level bench with random traffic and random back-pressure,
+`VX_fpu_dpi` matches `VX_fpu_dsp` cycle for cycle, at ratios of 1 and above.
+
+`VX_fpu_std` differs from `VX_fpu_dsp` in one place. Its division and square
+root share a unit, a serializer and an output buffer, so under back-pressure a
+waiting divide stalls the square roots behind it, and the reverse;
+`VX_fpu_dsp` gives each its own buffer and arbitrates between them. Without
+back-pressure, and with the two at the same ratio, they time alike.
+`VX_fpu_dpi` follows `VX_fpu_dsp`, the FPGA target.
+
 ---
 
 ## 6. FMA — `VX_fma_unit`
@@ -428,7 +464,7 @@ cores and is conformant.
 | `VX_CFG_F{MA,DIV,SQRT,CVT,NCP}_PE_RATIO` | 1 | lanes per processing element |
 | `VX_CFG_FMA64_PE_RATIO` | 1 | lanes per F64 FMA processing element (§5.2) |
 | `VX_CFG_FNCP_LATENCY` | 2 | |
-| `VX_CFG_FCVT_LATENCY` | 5 | plus one at `XLEN = 64` |
+| `VX_CFG_FCVT_LATENCY` | 5 | plus one at `XLEN = 64`, in every backend |
 
 The arithmetic latencies are derived from the backend and the flow:
 
@@ -456,7 +492,7 @@ latencies:
 |---|---|
 | FMA | `VX_CFG_FMA_LATENCY` |
 | DIV, SQRT | `VX_CFG_FDIV_LATENCY`, `VX_CFG_FSQRT_LATENCY` |
-| CVT | `VX_CFG_FCVT_LATENCY` |
+| CVT | `VX_CFG_FCVT_LATENCY`, plus one at `XLEN = 64` |
 | NCP | `VX_CFG_FNCP_LATENCY` |
 
 An operation holds its block's input for the `B` cycles of its class's lane
@@ -471,9 +507,9 @@ flight, and a result waiting on the commit arbiter keeps its tag:
 
 - At full bandwidth (`NUM_FPU_BLOCKS == ISSUE_WIDTH` and
   `NUM_FPU_LANES == SIMD_WIDTH`) the commit arbiter reads the response port
-  directly and frees the tag when it grants the result. The result also takes
-  the one registered stage the other units cross into commit, so an FMA
-  commits `VX_CFG_FMA_LATENCY + 1` cycles after it enters.
+  directly and frees the tag when it grants the result. The result crosses
+  its core's output buffer and the response arbiter's register (§5.3), so an
+  FMA commits `VX_CFG_FMA_LATENCY + 2` cycles after it enters.
 - At partial bandwidth the lane-gather stage takes the result off the port and
   frees the tag.
 
@@ -518,8 +554,6 @@ concurrently; it ignores `frm` and never writes `fflags`. The FPU's
   path does not exist.
 - **Vendor operators are not IEEE-conformant** (§9.2): round-to-nearest-even
   only, flush-to-zero, no inexact flag.
-- **SimX conversion latency at `XLEN = 64`.** The RTL adds a stage; SimX
-  models `VX_CFG_FCVT_LATENCY` on every build, one cycle short.
 - **Double precision on a 32-bit build** (§4.1) is not supported by the
   operand path.
 - **FPNEW narrowing of infinity.** The pinned cvfpu treats an infinite F2F

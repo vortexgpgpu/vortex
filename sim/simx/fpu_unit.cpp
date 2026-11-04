@@ -83,7 +83,8 @@ uint32_t FpuUnit::latency_of(const instr_trace_t* trace) const {
 	case FpuType::F2I:
 	case FpuType::I2F:
 	case FpuType::F2F:
-		return VX_CFG_FCVT_LATENCY;
+		// A 64-bit build splits the 64-bit negate from the leading-zero count.
+		return VX_CFG_FCVT_LATENCY + ((VX_CFG_XLEN == 64) ? 1 : 0);
 	default:
 		std::abort();
 	}
@@ -466,10 +467,10 @@ void FpuUnit::on_tick() {
         }
         batch_idx_.at(b) = 0;
         this->execute(trace);
-        // The result crosses the unit's output register on this port and
-        // keeps its tag until the lane gather, or without one the commit
-        // arbiter, takes it.
-        uint32_t delay = this->latency_of(trace) + 1;
+        // The result crosses its class's registered output buffer, then the
+        // response arbiter's output register on this port, and keeps its tag
+        // until the lane gather, or without one the commit arbiter, takes it.
+        uint32_t delay = this->latency_of(trace) + 2;
         output.send(trace, delay);
         input.pop();
         if (!kGather && trace->eop) {
