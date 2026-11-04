@@ -131,7 +131,7 @@ static uint64_t translate(const Pte& p, uint64_t vpn) {
 }
 
 struct Req {
-  int lane; bool rw, amo, io; uint64_t addr; int gen_in; int seq;
+  int lane; bool rw, amo, io; uint64_t addr; int gen_in; int seq; int t0;
   bool done = false;
 };
 
@@ -143,8 +143,14 @@ int main(int argc, char **argv) {
   Verilated::commandArgs(argc, argv);
   unsigned seed = 1;
   int num_reqs = 20000;
+  // --fair: every lane always presents a miss to a fresh page and the walker
+  // answers at a fixed latency; a lane whose request waits longer than
+  // FAIR_WAIT cycles to be accepted is starved by the others' misses.
+  bool fair = false;
+  constexpr int FAIR_WAIT = 1000;
   for (int i = 1; i < argc; ++i) {
     std::string a(argv[i]);
+    if (a == "--fair") fair = true;
     if (a.rfind("--seed=", 0) == 0) seed = std::stoul(a.substr(7));
     if (a.rfind("--reqs=", 0) == 0) num_reqs = std::stoi(a.substr(7));
   }
@@ -174,6 +180,12 @@ int main(int argc, char **argv) {
   int gen = 0, flushes = 0, issued = 0, outs = 0, kills = 0, faults = 0, walks_n = 0;
   bool flush_hold = false;
   std::vector<int> seq_ctr(NL, 0);
+  uint64_t fair_vpn = 0x10000;
+  auto next_fair_vpn = [&]() {
+    // a base page that maps (see walk()), never seen before
+    do { ++fair_vpn; } while (int(fair_vpn & 0x3f) % 11 == 5);
+    return fair_vpn;
+  };
 
   auto expect_fault = [&](const Req& r, const Pte& p) {
     return p.fault || ((r.rw || r.amo) && !(p.flags & F_W));
@@ -182,13 +194,14 @@ int main(int argc, char **argv) {
   for (cycle = 0; cycle < 4000000; ++cycle) {
     // drive the inputs
     for (int l = 0; l < NL; ++l) {
-      if (pending[l] < 0 && issued < num_reqs && !flush_hold && (rng() % 3 != 0)) {
+      if (pending[l] < 0 && issued < num_reqs && !flush_hold && (fair || rng() % 3 != 0)) {
         Req r;
         r.lane = l;
-        uint64_t vpn = pages[rng() % pages.size()];
-        r.io  = (rng() % 10 == 0);
-        r.rw  = (rng() % 3 == 0);
-        r.amo = !r.rw && (rng() % 12 == 0);
+        uint64_t vpn = fair ? next_fair_vpn() : pages[rng() % pages.size()];
+        r.io  = !fair && (rng() % 10 == 0);
+        r.rw  = !fair && (rng() % 3 == 0);
+        r.amo = !fair && !r.rw && (rng() % 12 == 0);
+        r.t0  = cycle;
         r.addr = (vpn << OFF_W) | (rng() % (1u << OFF_W));
         r.seq = seq_ctr[l]++;
         r.gen_in = -1;
@@ -207,10 +220,20 @@ int main(int argc, char **argv) {
         set_bits(sim->in_tag, l * TAG_W, TAG_W, uint64_t(id));
       }
     }
-    sim->out_ready  = rng() % 16;
-    sim->crsp_ready = rng() % 16;
-    sim->walk_ready = (rng() % 4 != 0);
-    if (!flush_hold && issued > 100 && issued < num_reqs && rng() % 300 == 0) flush_hold = true;
+    sim->out_ready  = fair ? ((1u << NL) - 1) : rng() % 16;
+    sim->crsp_ready = fair ? ((1u << NL) - 1) : rng() % 16;
+    sim->walk_ready = fair || (rng() % 4 != 0);
+    if (!fair && !flush_hold && issued > 100 && issued < num_reqs && rng() % 300 == 0) flush_hold = true;
+    if (fair) {
+      bool starved = false;
+      for (int l = 0; l < NL; ++l) {
+        if (pending[l] >= 0 && cycle - reqs[pending[l]].t0 > FAIR_WAIT) {
+          CHECK(false, "lane " << l << " starved: request " << pending[l] << " waiting " << (cycle - reqs[pending[l]].t0) << " cycles");
+          starved = true;
+        }
+      }
+      if (starved) break;
+    }
     sim->flush_req = flush_hold;
     if (!sim->fill_valid && !walks.empty() && walks.front().due <= cycle) {
       const Walk& w = walks.front();
@@ -278,7 +301,7 @@ int main(int argc, char **argv) {
     }
     bool walk_fire = sim->walk_valid && sim->walk_ready;
     Walk nw{0, 0, 0};
-    if (walk_fire) { nw.id = sim->walk_id; nw.vpn = sim->walk_vpn; nw.due = cycle + 2 + int(rng() % 30); }
+    if (walk_fire) { nw.id = sim->walk_id; nw.vpn = sim->walk_vpn; nw.due = cycle + (fair ? 8 : 2 + int(rng() % 30)); }
     bool fill_fire = sim->fill_valid && sim->fill_ready;
     bool fdone = sim->flush_req && sim->flush_done;
     faults += sim->fault_valid;

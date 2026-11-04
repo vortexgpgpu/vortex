@@ -273,15 +273,34 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     wire [NUM_REQS-1:0] cat_pfault;
     wire [NUM_REQS-1:0] pfault_fire;
 
+    // Park rounds: a lane that parks sits out until every other lane waiting
+    // to park has had its turn, so a lane above a steady stream of lower-lane
+    // misses still parks within NUM_REQS parks (the lowest-lane select alone
+    // starves it). A round ends the cycle after no eligible lane asked to park.
+    // Eligibility gates the request's valid, off the TLB compare path.
+    reg [NUM_REQS-1:0] park_elig;
+    reg                park_any_r;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            park_elig  <= '1;
+            park_any_r <= 1'b0;
+        end else begin
+            park_elig  <= (park_any_r ? park_elig : '1) & ~(park_sel & {NUM_REQS{park_ready}});
+            park_any_r <= park_valid;
+        end
+    end
+
     for (genvar l = 0; l < NUM_REQS; ++l) begin : g_cat
         assign cam_acc[l]    = req_acc[l];
         assign cat_bypass[l] = req_valid[l] && req_bypass[l];
-        assign cat_park[l]   = req_valid[l] && !req_bypass[l] && (mshr_match[l] || !cam_hit[l]);
+        assign cat_park[l]   = req_valid[l] && park_elig[l] && !req_bypass[l] && (mshr_match[l] || !cam_hit[l]);
         assign cat_hit[l]    = req_valid[l] && !req_bypass[l] && !mshr_match[l] && cam_hit[l] && cam_perm[l];
         assign cat_pfault[l] = req_valid[l] && !req_bypass[l] && !mshr_match[l] && cam_hit[l] && !cam_perm[l];
     end
 
-    // Park arbitration: at most one lane parks a miss per cycle (lowest lane).
+    // Park arbitration: at most one lane parks a miss per cycle (lowest
+    // eligible lane).
     // The parked fields are taken with a one-hot select straight off the lane
     // categories; the encoded lane only rides in the payload.
     localparam PARK_W = TLB_VPN_WIDTH + $bits(tlb_access_e) + 1 + FIELDS_W;

@@ -156,6 +156,8 @@ module VX_pending_size #(
                         full_r  <= 0;
                         used_r  <= '0;
                     end else begin
+                        `ASSERT(~(incr && ~decr && full_r), ("runtime error: counter overflow"));
+                        `ASSERT(~(decr && ~incr && empty_r), ("runtime error: counter underflow"));
                         if (incr) begin
                             if (~decr) begin
                                 empty_r <= 0;
@@ -179,6 +181,8 @@ module VX_pending_size #(
                         full_r  <= 0;
                         used_r  <= '0;
                     end else begin
+                        `ASSERT(~(incr && ~decr && full_r), ("runtime error: counter overflow"));
+                        `ASSERT(~(decr && ~incr && empty_r), ("runtime error: counter underflow"));
                         empty_r <= (empty_r & ~incr) | (~full_r & decr & ~incr);
                         full_r  <= (~empty_r & incr & ~decr) | (full_r & ~(decr ^ incr));
                         used_r  <= used_r ^ (incr ^ decr);

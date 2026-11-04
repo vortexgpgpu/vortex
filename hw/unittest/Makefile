@@ -78,6 +78,7 @@ run:
 	$(MAKE) -C tcu_fedp run
 	$(MAKE) -C cta_dispatcher run
 	$(MAKE) -C mmu run
+	$(MAKE) -C mmu run OPTS=--fair
 	$(MAKE) -C tlb_l2 run
 	$(MAKE) -C kmu run
 	$(MAKE) -C dxa_core run

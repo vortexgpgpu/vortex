@@ -137,6 +137,20 @@ tests:
     OPTS: -t2 -n16 -p4
   env:
     VORTEX_RANDOMIZE_VA: 1
+# Many warps' stacks thrash the dTLB, so every LSU block parks misses in the
+# same cycles; the L2 keeps walks short enough that the lower blocks always
+# have a miss waiting, and the warp stall timeout turns a starved block into a
+# failure instead of a slow run.
+- id: tlb-park-fair
+  via: make-run
+  xlen: [64]
+  drivers:
+  - rtlsim
+  dir: tests/regression/demo
+  target: run-{driver}
+  configs+: -DVX_CFG_NUM_WARPS=64 -DVX_CFG_NUM_THREADS=8 -DVX_CFG_L2_ENABLE -DVX_DBG_STALL_TIMEOUT=30000
+  vars:
+    OPTS: -n64
 # TLB-pressure sweep mixed with a VX_MEM_PHYS identity-mapped buffer: every
 # task strides across pages (odd stride) while also reading through the
 # pinned slab, so paged and identity translations contend in the same run.
