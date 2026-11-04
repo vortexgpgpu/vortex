@@ -34,11 +34,11 @@ protected:
 	uint32_t 	addr_bits_;
 #if VX_CFG_EXT_A_ENABLED
 	AmoUnit   amo_unit_;
-	// Per-bank atomic occupancy. A bank has a single port and the value read out
-	// is registered before the update is computed, so an atomic owns its bank
-	// for three cycles -- read, capture, write back -- and it accepts nothing
-	// else meanwhile.
-	static constexpr uint32_t AMO_BANK_STALL_CYCLES = 2;
+	// Per-bank atomic occupancy. A bank has a single port, and the value read out
+	// and the computed update are each registered, so an atomic owns its bank
+	// for four cycles -- read, capture, compute, write back -- and it accepts
+	// nothing else meanwhile.
+	static constexpr uint32_t AMO_BANK_STALL_CYCLES = 3;
 	std::vector<uint32_t> amo_busy_;
 	// The word the atomic now occupying the bank writes back, and whether it
 	// writes at all: a load-reserved never writes and a failed
@@ -299,7 +299,7 @@ public:
 				amo_wb_addr_[i]     = this->bank_word(bank_req.addr);
 				amo_rdw_pending_[i] = do_store;
 				xbar_req_out.pop();
-				amo_busy_[i] = AMO_BANK_STALL_CYCLES;   // capture, then write back
+				amo_busy_[i] = AMO_BANK_STALL_CYCLES;   // capture, compute, then write back
 				continue;
 			}
 #endif

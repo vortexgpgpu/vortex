@@ -118,10 +118,17 @@ module VX_local_mem_bank import VX_gpu_pkg::*; #(
         // BRAM-out-to-flop and flop-through-adder-to-BRAM-in, which is what keeps
         // the atomic adder off the critical path.
         //
-        // The port is single-ported, so an atomic owns its bank for three cycles:
-        // read, capture, write back.
+        // The computed word is registered too: the ALU's 64-bit compare and
+        // add, its result select, the lane placement and the SRAM's write-data
+        // select do not fit one cycle together.
+        //
+        // The port is single-ported, so an atomic owns its bank for four cycles:
+        // read, capture, compute, write back.
         reg                       amo_rd_valid_r;
+        reg                       amo_cmp_valid_r;
         reg                       amo_wb_valid_r;
+        reg [WORD_WIDTH-1:0]      amo_wb_data_r;
+        wire [WORD_WIDTH-1:0]     amo_old_in, amo_rhs_in;
         reg [WORD_WIDTH-1:0]      amo_old_r;
         reg [BANK_ADDR_WIDTH-1:0] amo_wb_addr_r;
         reg [WORD_SIZE-1:0]       amo_wb_byteen_r;
@@ -210,25 +217,27 @@ module VX_local_mem_bank import VX_gpu_pkg::*; #(
         // A load-reserved leaves the word alone, and a failed store-conditional
         // must not store; every other atomic writes its computed value back.
         assign amo_wb_store = amo_wb_valid_r && ~amo_wb_is_lr_r && ~amo_wb_sc_fail_r;
-        assign amo_busy = amo_rd_valid_r || amo_wb_valid_r;
+        assign amo_busy = amo_rd_valid_r || amo_cmp_valid_r || amo_wb_valid_r;
 
         always @(posedge clk) begin
             if (reset) begin
-                amo_rd_valid_r <= 1'b0;
-                amo_wb_valid_r <= 1'b0;
+                amo_rd_valid_r  <= 1'b0;
+                amo_cmp_valid_r <= 1'b0;
+                amo_wb_valid_r  <= 1'b0;
             end else begin
-                amo_rd_valid_r <= amo_accept;
-                amo_wb_valid_r <= amo_rd_valid_r;
+                amo_rd_valid_r  <= amo_accept;
+                amo_cmp_valid_r <= amo_rd_valid_r;
+                amo_wb_valid_r  <= amo_cmp_valid_r;
             end
             if (amo_rd_valid_r) begin
-                amo_old_r <= rsp_rdata;
+                amo_old_r <= amo_old_in;
             end
             if (amo_accept) begin
                 amo_wb_addr_r     <= req_addr;
                 amo_wb_byteen_r   <= req_byteen;
                 amo_wb_op_r       <= req_amo_op;
                 amo_wb_unsigned_r <= req_amo_unsigned;
-                amo_wb_rhs_r      <= req_data;
+                amo_wb_rhs_r      <= amo_rhs_in;
             `ifdef VX_CFG_EXT_ZACAS_ENABLE
                 amo_wb_cmp_r      <= req_amo_cmp;
             `endif
@@ -238,29 +247,42 @@ module VX_local_mem_bank import VX_gpu_pkg::*; #(
         // old_word is this cycle's SRAM output -- the same value the response
         // carries back, which is why ret_word is not used here.
         wire [63:0] amo_new_word, amo_ret_word;
+        wire [WORD_WIDTH-1:0] amo_new_data = amo_new_word[WORD_WIDTH-1:0];
 
         // Lane-align the RMW operands. The bank word is XLEN wide, so on a
         // 64-bit hart a .W atomic addresses one of two 32-bit lanes; the
         // ALU computes right-aligned. Store data arrives lane-positioned
         // (same packing as a plain store), so old and rhs shift down by
-        // the lane offset and the result shifts back up under the request
-        // byteen. The comparand arrives right-aligned from rs3 and needs
-        // no shift. The addressed lane is recovered from the byteen: an
-        // atomic is naturally aligned, so a .W to the upper lane never
-        // covers byte 0 and a .D covers the full word.
+        // the lane offset as they are captured, and the result shifts back
+        // up under the request byteen on its way to the SRAM. The comparand
+        // arrives right-aligned from rs3 and needs no shift. The addressed
+        // lane is recovered from the byteen: an atomic is naturally aligned,
+        // so a .W to the upper lane never covers byte 0 and a .D covers the
+        // full word.
         wire [63:0] amo_old_lane, amo_rhs_lane;
         wire [1:0]  amo_width;
         if (WORD_WIDTH == 64) begin : g_amo_lane
-            wire lane_hi = ~amo_wb_byteen_r[0];
-            assign amo_width    = (&amo_wb_byteen_r) ? 2'd3 : 2'd2;
-            assign amo_old_lane = lane_hi ? {32'h0, amo_old_r[63:32]} : amo_old_r;
-            assign amo_rhs_lane = lane_hi ? {32'h0, amo_wb_rhs_r[63:32]} : amo_wb_rhs_r;
-            assign amo_wb_data  = lane_hi ? {amo_new_word[31:0], 32'h0} : amo_new_word;
+            reg amo_wb_is_d_r;
+            always @(posedge clk) begin
+                if (amo_accept) begin
+                    amo_wb_is_d_r <= (&req_byteen);
+                end
+            end
+            wire lane_hi    = ~amo_wb_byteen_r[0];
+            wire lane_hi_in = ~req_byteen[0];
+            assign amo_old_in   = lane_hi ? {32'h0, rsp_rdata[63:32]} : rsp_rdata;
+            assign amo_rhs_in   = lane_hi_in ? {32'h0, req_data[63:32]} : req_data;
+            assign amo_width    = amo_wb_is_d_r ? 2'd3 : 2'd2;
+            assign amo_old_lane = amo_old_r;
+            assign amo_rhs_lane = amo_wb_rhs_r;
+            assign amo_wb_data  = lane_hi ? {amo_wb_data_r[31:0], 32'h0} : amo_wb_data_r;
         end else begin : g_amo_word
+            assign amo_old_in   = rsp_rdata;
+            assign amo_rhs_in   = req_data;
             assign amo_width    = 2'd2;
             assign amo_old_lane = 64'(amo_old_r);
             assign amo_rhs_lane = 64'(amo_wb_rhs_r);
-            assign amo_wb_data  = amo_new_word[WORD_WIDTH-1:0];
+            assign amo_wb_data  = amo_wb_data_r;
         end
         // VX_CFG_AMO_RS_SIZE sizes ONE shared LLC bank's contention; deployed
         // per lmem bank it multiplies by NUM_LMEM_BANKS x NUM_CORES. After the
@@ -309,6 +331,12 @@ module VX_local_mem_bank import VX_gpu_pkg::*; #(
         `UNUSED_VAR (amo_ret_word)
         if (WORD_WIDTH < 64) begin : g_amo_hi_unused
             `UNUSED_VAR (amo_new_word[63:WORD_WIDTH])
+        end
+
+        always @(posedge clk) begin
+            if (amo_cmp_valid_r) begin
+                amo_wb_data_r <= amo_new_data;
+            end
         end
 
         assign amo_wb_addr   = amo_wb_addr_r;

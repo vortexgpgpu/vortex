@@ -100,7 +100,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
             .clk              (clk),
             .reset            (reset),
             .core_id          (core_id),
-            .execute_if       (per_block_execute_if[block_idx]),
+            .execute_in_if    (per_block_execute_if[block_idx]),
             .result_if        (per_block_result_if[block_idx]),
         `ifdef PERF_ENABLE
             .perf_rd_req_fire (perf_rd_req_fire[block_idx]),

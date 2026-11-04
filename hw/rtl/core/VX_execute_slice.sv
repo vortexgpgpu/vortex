@@ -181,7 +181,7 @@ import VX_tcu_pkg::*;
         .clk              (clk),
         .reset            (reset),
         .core_id          (core_id),
-        .execute_if       (lsu_execute_if[0]),
+        .execute_in_if    (lsu_execute_if[0]),
         .result_if        (lsu_result_if[0]),
     `ifdef PERF_ENABLE
         .perf_rd_req_fire (lsu_perf_rd_req_fire),

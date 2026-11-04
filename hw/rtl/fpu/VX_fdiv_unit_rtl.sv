@@ -465,7 +465,8 @@ module VX_fdiv_unit_rtl import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         .effective_subtraction_i(1'b0),
         .abs_rounded_o          (abs_rounded),
         .sign_o                 (round_sign),
-        .exact_zero_o           (exact_zero)
+        .exact_zero_o           (exact_zero),
+        `UNUSED_PIN   (round_up_o)
     );
 
     // Carry: normal -> exponent++ on integer-bit carry; subnormal that rounds up

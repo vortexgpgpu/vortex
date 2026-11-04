@@ -139,10 +139,11 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [MEM_PORTS-1:0]     mem_flush_ready;
     wire                     mem_flush_rsp_phase;
     wire [MEM_PORTS-1:0]     mem_flush_rsp_valid;
-    wire                     flush_rsp_valid;
-    wire [REQ_SEL_WIDTH-1:0] flush_rsp_idx;
-    wire [TAG_WIDTH-1:0]     flush_rsp_tag;
-    wire                     flush_rsp_ready;
+    wire                     flush_rsp_valid,   flush_rsp_valid_w;
+    wire [REQ_SEL_WIDTH-1:0] flush_rsp_idx,     flush_rsp_idx_w;
+    wire [NUM_REQS-1:0]      flush_rsp_onehot,  flush_rsp_onehot_w;
+    wire [TAG_WIDTH-1:0]     flush_rsp_tag,     flush_rsp_tag_w;
+    wire                     flush_rsp_ready,   flush_rsp_ready_w;
     VX_cache_init #(
         .NUM_REQS         (NUM_REQS),
         .NUM_BANKS        (NUM_BANKS),
@@ -170,10 +171,11 @@ module VX_cache import VX_gpu_pkg::*; #(
         .mem_flush_ready     (mem_flush_ready),
         .mem_flush_rsp_phase (mem_flush_rsp_phase),
         .mem_flush_rsp_valid (mem_flush_rsp_valid),
-        .flush_rsp_valid     (flush_rsp_valid),
-        .flush_rsp_idx       (flush_rsp_idx),
-        .flush_rsp_tag       (flush_rsp_tag),
-        .flush_rsp_ready     (flush_rsp_ready)
+        .flush_rsp_valid     (flush_rsp_valid_w),
+        .flush_rsp_idx       (flush_rsp_idx_w),
+        .flush_rsp_onehot    (flush_rsp_onehot_w),
+        .flush_rsp_tag       (flush_rsp_tag_w),
+        .flush_rsp_ready     (flush_rsp_ready_w)
     );
     VX_mem_bus_if #(
         .DATA_SIZE (SECTOR_SIZE),
@@ -588,6 +590,25 @@ module VX_cache import VX_gpu_pkg::*; #(
     for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_per_bank_core_rsp_pdata
         assign per_bank_core_rsp_pdata[i] = {per_bank_core_rsp_data[i], per_bank_core_rsp_tag[i][BANK_TAG_WIDTH-1 -: TAG_WIDTH]};
     end
+    // A flush token's answer is buffered on its way to the response crossbar:
+    // the token is consumed against the buffer's registered ready, not against
+    // the crossbar's, and the answer enters the crossbar from registers. The
+    // answer of a flush, a rare event, takes a cycle longer.
+    VX_elastic_buffer #(
+        .DATAW   (NUM_REQS + REQ_SEL_WIDTH + TAG_WIDTH),
+        .SIZE    (2),
+        .OUT_REG (1)
+    ) flush_rsp_buf (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (flush_rsp_valid_w),
+        .ready_in  (flush_rsp_ready_w),
+        .data_in   ({flush_rsp_onehot_w, flush_rsp_idx_w, flush_rsp_tag_w}),
+        .data_out  ({flush_rsp_onehot,   flush_rsp_idx,   flush_rsp_tag}),
+        .valid_out (flush_rsp_valid),
+        .ready_out (flush_rsp_ready)
+    );
+
     // A flush token's answer takes bank 0's lane into the response crossbar
     // when the bank has no response of its own, so it leaves through the same
     // registered outputs as every other response.
@@ -624,7 +645,7 @@ module VX_cache import VX_gpu_pkg::*; #(
             wire [NUM_REQS-1:0] targets;
             if (i == 0) begin : g_flush_targets
                 assign targets = per_bank_core_rsp_valid[0] ? per_bank_core_rsp_targets[0]
-                                                           : (NUM_REQS'(1) << flush_rsp_idx);
+                                                           : flush_rsp_onehot;
             end else begin : g_bank_targets
                 assign targets = per_bank_core_rsp_targets[i];
             end
@@ -665,6 +686,7 @@ module VX_cache import VX_gpu_pkg::*; #(
         end
     end else begin : g_core_rsp_xbar
         `UNUSED_VAR (per_bank_core_rsp_targets)
+        `UNUSED_VAR (flush_rsp_onehot)
         VX_stream_omega #(
             .NUM_INPUTS  (NUM_BANKS),
             .NUM_OUTPUTS (NUM_REQS),

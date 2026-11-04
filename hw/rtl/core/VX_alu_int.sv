@@ -91,15 +91,31 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] sub_in2_imm = (execute_if.data.op_args.alu.use_imm && ~is_br_op) ? {NUM_LANES{alu_imm}} : alu_in2;
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] alu_in2_imm = execute_if.data.op_args.alu.use_imm ? {NUM_LANES{alu_imm}} : alu_in2;
 
+    // At XLEN 64 the add and the subtract are carry-select at bit 32: the
+    // upper half both ways beside the lower half's carry, which selects.
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_add_result
-        assign add_result[i] = add_in1_PC[i] + add_in2_imm[i];
+        if (`VX_CFG_XLEN > 32) begin : g_csel
+            wire [32:0] lo = {1'b0, add_in1_PC[i][31:0]} + {1'b0, add_in2_imm[i][31:0]};
+            wire [`VX_CFG_XLEN-33:0] hi0 = add_in1_PC[i][`VX_CFG_XLEN-1:32] + add_in2_imm[i][`VX_CFG_XLEN-1:32];
+            wire [`VX_CFG_XLEN-33:0] hi1 = add_in1_PC[i][`VX_CFG_XLEN-1:32] + add_in2_imm[i][`VX_CFG_XLEN-1:32] + (`VX_CFG_XLEN-32)'(1);
+            assign add_result[i] = {(lo[32] ? hi1 : hi0), lo[31:0]};
+        end else begin : g_plain
+            assign add_result[i] = add_in1_PC[i] + add_in2_imm[i];
+        end
         assign add_result_w[i] = `VX_CFG_XLEN'($signed(alu_in1[i][31:0] + alu_in2_imm[i][31:0]));
     end
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_sub_result
         wire [`VX_CFG_XLEN:0] sub_in1 = {is_signed & alu_in1[i][`VX_CFG_XLEN-1], alu_in1[i]};
         wire [`VX_CFG_XLEN:0] sub_in2 = {is_signed & sub_in2_imm[i][`VX_CFG_XLEN-1], sub_in2_imm[i]};
-        assign sub_result[i]   = sub_in1 - sub_in2;
+        if (`VX_CFG_XLEN > 32) begin : g_csel
+            wire [32:0] lo = {1'b0, sub_in1[31:0]} - {1'b0, sub_in2[31:0]};   // lo[32]: borrow
+            wire [`VX_CFG_XLEN-32:0] hi0 = sub_in1[`VX_CFG_XLEN:32] - sub_in2[`VX_CFG_XLEN:32];
+            wire [`VX_CFG_XLEN-32:0] hi1 = sub_in1[`VX_CFG_XLEN:32] - sub_in2[`VX_CFG_XLEN:32] - (`VX_CFG_XLEN-31)'(1);
+            assign sub_result[i] = {(lo[32] ? hi1 : hi0), lo[31:0]};
+        end else begin : g_plain
+            assign sub_result[i] = sub_in1 - sub_in2;
+        end
         assign sub_result_w[i] = `VX_CFG_XLEN'($signed(alu_in1[i][31:0] - alu_in2_imm[i][31:0]));
     end
 
@@ -232,26 +248,41 @@ module VX_alu_int import VX_gpu_pkg::*; #(
         // a compare decides alongside the subtractor rather than after it
         wire is_equal_i = (alu_in1[i] == sub_in2_imm[i]);
         wire [`VX_CFG_XLEN-1:0] slt_br_result = `VX_CFG_XLEN'({is_br_op && is_equal_i, sub_result[i][`VX_CFG_XLEN]});
-        wire [`VX_CFG_XLEN-1:0] sub_slt_br_result = (is_sub_op && ~is_br_op) ? sub_result[i][`VX_CFG_XLEN-1:0] : slt_br_result;
+        // The add and the subtract settle last, so they are selected last.
+        wire is_arith  = (execute_if.data.op_args.alu.xtype != ALU_TYPE_OTHER);
+        wire take_add  = is_arith && ({is_alu_w, op_class} == 3'b000);
+        wire take_sub  = is_arith && ({is_alu_w, op_class} == 3'b001) && (is_sub_op && ~is_br_op);
+        wire take_slt  = is_arith && ({is_alu_w, op_class} == 3'b001) && ~(is_sub_op && ~is_br_op);
+        reg [`VX_CFG_XLEN-1:0] rest_result;
         always @(*) begin
-            if (execute_if.data.op_args.alu.xtype == ALU_TYPE_OTHER) begin
+            if (~is_arith) begin
                 case (alu_op[3:2])
-                    2'b00: alu_result[i] = vote_result[i];
-                    2'b01: alu_result[i] = shfl_result[i];
-                    2'b10: alu_result[i] = wgather_result[i];
-                    default: alu_result[i] = vote_result[i];
+                    2'b00: rest_result = vote_result[i];
+                    2'b01: rest_result = shfl_result[i];
+                    2'b10: rest_result = wgather_result[i];
+                    default: rest_result = vote_result[i];
                 endcase
             end else begin
                 case ({is_alu_w, op_class})
-                    3'b000: alu_result[i] = add_result[i];      // ADD, LUI, AUIPC
-                    3'b001: alu_result[i] = sub_slt_br_result;  // SUB, SLTU, SLTI, BR*
-                    3'b010: alu_result[i] = shr_zic_result[i];  // SRL, SRA, SRLI, SRAI, CZERO*
-                    3'b011: alu_result[i] = msc_result[i];      // AND, OR, XOR, SLL, SLLI
-                    3'b100: alu_result[i] = add_result_w[i];    // ADDIW, ADDW
-                    3'b101: alu_result[i] = sub_result_w[i];    // SUBW
-                    3'b110: alu_result[i] = shr_result_w[i];    // SRLW, SRAW, SRLIW, SRAIW
-                    3'b111: alu_result[i] = msc_result_w[i];    // SLLW
+                    3'b010: rest_result = shr_zic_result[i];  // SRL, SRA, SRLI, SRAI, CZERO*
+                    3'b011: rest_result = msc_result[i];      // AND, OR, XOR, SLL, SLLI
+                    3'b100: rest_result = add_result_w[i];    // ADDIW, ADDW
+                    3'b101: rest_result = sub_result_w[i];    // SUBW
+                    3'b110: rest_result = shr_result_w[i];    // SRLW, SRAW, SRLIW, SRAIW
+                    3'b111: rest_result = msc_result_w[i];    // SLLW
+                    default: rest_result = '0;                // ADD, SUB, SLT*, BR* below
                 endcase
+            end
+        end
+        // rest_result is zero for SLT*/BR*, whose result is bits [1:0] only
+        wire [`VX_CFG_XLEN-1:0] rest_slt_result = rest_result | (take_slt ? slt_br_result : '0);
+        always @(*) begin
+            if (take_add) begin
+                alu_result[i] = add_result[i];                         // ADD, LUI, AUIPC
+            end else if (take_sub) begin
+                alu_result[i] = sub_result[i][`VX_CFG_XLEN-1:0];       // SUB
+            end else begin
+                alu_result[i] = rest_slt_result;                       // SLTU, SLTI, BR*, others
             end
         end
     end

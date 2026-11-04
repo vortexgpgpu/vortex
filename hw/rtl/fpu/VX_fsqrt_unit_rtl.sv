@@ -470,7 +470,8 @@ module VX_fsqrt_unit_rtl import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         .effective_subtraction_i(1'b0),
         .abs_rounded_o          (abs_rounded),
         .sign_o                 (round_sign),
-        .exact_zero_o           (exact_zero)
+        .exact_zero_o           (exact_zero),
+        `UNUSED_PIN   (round_up_o)
     );
 
     wire sub_carry = abs_rounded[SUPER_MAN];

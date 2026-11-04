@@ -59,32 +59,78 @@ module VX_amo_alu import VX_gpu_pkg::*; #(
     wire [AW-1:0] a = old_word[AW-1:0];
     wire [AW-1:0] b = rhs[AW-1:0];
 
-    // Mask to width-sized values; sign-extend at the 32-bit boundary for MIN/MAX.
     wire [ARW-1:0] a_v = a[ARW-1:0];
     wire [ARW-1:0] b_v = b[ARW-1:0];
-    wire [ARW-1:0] a_u = arith_w ? {{(ARW-32){1'b0}},  a_v[31:0]} : a_v;
-    wire [ARW-1:0] b_u = arith_w ? {{(ARW-32){1'b0}},  b_v[31:0]} : b_v;
-    wire signed [ARW-1:0] a_s = arith_w ? {{(ARW-32){a_v[31]}}, a_v[31:0]} : a_v;
-    wire signed [ARW-1:0] b_s = arith_w ? {{(ARW-32){b_v[31]}}, b_v[31:0]} : b_v;
 
-    reg [ARW-1:0] arith_res;
+    // a < b, signed or unsigned, at .W or .D. The compare is split at bit 32:
+    // two 32-bit compares side by side instead of one full-width one, and
+    // the raw operands feed them (the extension of a .W operand only decides
+    // the sign, which is taken from bit 31 instead).
+    wire lo_ltu  = (a_v[31:0] < b_v[31:0]);
+    wire lt_w    = (~is_unsigned && (a_v[31] != b_v[31])) ? a_v[31] : lo_ltu;
+    wire lt;
+    if (ARW > 32) begin : g_lt_d
+        wire [ARW-33:0] a_hi = a_v[ARW-1:32];
+        wire [ARW-33:0] b_hi = b_v[ARW-1:32];
+        wire hi_ltu = (a_hi < b_hi);
+        wire hi_eq  = (a_hi == b_hi);
+        wire hi_lt  = (~is_unsigned && (a_hi[ARW-33] != b_hi[ARW-33])) ? a_hi[ARW-33] : hi_ltu;
+        assign lt = arith_w ? lt_w : (hi_eq ? lo_ltu : hi_lt);
+    end else begin : g_lt_w
+        assign lt = lt_w;
+    end
+
+    // a + b: the upper half is added both ways beside the lower half's
+    // carry, which then selects.
+    wire [ARW-1:0] sum;
+    if (ARW > 32) begin : g_add_d
+        wire [32:0]     lo_sum  = {1'b0, a_v[31:0]} + {1'b0, b_v[31:0]};
+        wire [ARW-33:0] hi_sum0 = a_v[ARW-1:32] + b_v[ARW-1:32];
+        wire [ARW-33:0] hi_sum1 = a_v[ARW-1:32] + b_v[ARW-1:32] + (ARW-32)'(1);
+        assign sum = {(lo_sum[32] ? hi_sum1 : hi_sum0), lo_sum[31:0]};
+    end else begin : g_add_w
+        assign sum = a_v + b_v;
+    end
+
+    // A .W result is the low word, zero-extended; the extension is applied to
+    // each candidate rather than after the op select.
+    function automatic [ARW-1:0] wext(input [ARW-1:0] x, input w);
+        wext = w ? {{(ARW-32){1'b0}}, x[31:0]} : x;
+    endfunction
+
+    // MIN keeps a when a < b, MAX keeps b; equal operands give the same value.
+    // Both orderings are formed beside the compare, which then selects.
+    wire           is_min    = (op == AMO_OP_MIN);
+    wire           is_minmax = (op == AMO_OP_MIN) || (op == AMO_OP_MAX);
+    wire           is_add    = (op == AMO_OP_ADD);
+    wire [ARW-1:0] minmax_lt = wext(is_min ? a_v : b_v, arith_w);
+    wire [ARW-1:0] minmax_ge = wext(is_min ? b_v : a_v, arith_w);
+
+    // Every other op settles from the operands; it is zero for ADD and
+    // MIN/MAX, whose results (the latest) are ORed in, one level after them.
+    reg [ARW-1:0] early_res;
     always @(*) begin
         case (op)
-            AMO_OP_LR:    arith_res = a_u;
-            AMO_OP_SC:    arith_res = b_u;
-            AMO_OP_SWAP:  arith_res = b_u;
-            AMO_OP_ADD:   arith_res = a_u + b_u;
-            AMO_OP_AND:   arith_res = a_u & b_u;
-            AMO_OP_OR:    arith_res = a_u | b_u;
-            AMO_OP_XOR:   arith_res = a_u ^ b_u;
-            AMO_OP_MIN:   arith_res = is_unsigned ? ((a_u < b_u) ? a_u : b_u)
-                                                  : ((a_s < b_s) ? a_s : b_s);
-            AMO_OP_MAX:   arith_res = is_unsigned ? ((a_u > b_u) ? a_u : b_u)
-                                                  : ((a_s > b_s) ? a_s : b_s);
-            default:      arith_res = a_u;
+            AMO_OP_LR:    early_res = a_v;
+            AMO_OP_SC:    early_res = b_v;
+            AMO_OP_SWAP:  early_res = b_v;
+            AMO_OP_AND:   early_res = a_v & b_v;
+            AMO_OP_OR:    early_res = a_v | b_v;
+            AMO_OP_XOR:   early_res = a_v ^ b_v;
+            AMO_OP_ADD,
+            AMO_OP_MIN,
+            AMO_OP_MAX:   early_res = '0;
+        `ifdef VX_CFG_EXT_ZACAS_ENABLE
+            AMO_OP_CAS:   early_res = '0;   // ORed in below
+        `endif
+            default:      early_res = a_v;
         endcase
-        if (arith_w) arith_res = {{(ARW-32){1'b0}}, arith_res[31:0]};
+        early_res = wext(early_res, arith_w);
     end
+
+    wire [ARW-1:0] arith_res = early_res
+                             | ({ARW{is_add}}    & wext(sum, arith_w))
+                             | ({ARW{is_minmax}} & (lt ? minmax_lt : minmax_ge));
 
 `ifdef VX_CFG_EXT_ZACAS_ENABLE
     wire [AW-1:0] c = cmp[AW-1:0];
@@ -99,7 +145,7 @@ module VX_amo_alu import VX_gpu_pkg::*; #(
     // reservations on the word, which is the required behaviour and the
     // reason it is not treated as a no-op.
     wire [AW-1:0] cas_res = (a_cu == c_cu) ? b_cu : a_cu;
-    wire [AW-1:0] res = (op == AMO_OP_CAS) ? cas_res : AW'(arith_res);
+    wire [AW-1:0] res = ({AW{op == AMO_OP_CAS}} & cas_res) | AW'(arith_res);
 `else
     `UNUSED_VAR (cmp)
     if (ARW < AW) begin : g_arith_hi_unused

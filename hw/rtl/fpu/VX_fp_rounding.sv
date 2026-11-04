@@ -28,7 +28,8 @@ module VX_fp_rounding import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     // outputs
     output wire [DAT_WIDTH-1:0] abs_rounded_o, // absolute value without sign
     output wire                 sign_o,
-    output wire                 exact_zero_o             // output is an exact zero
+    output wire                 exact_zero_o,            // output is an exact zero
+    output wire                 round_up_o               // abs_rounded_o = abs_value_i + 1
 );
 
     reg round_up;
@@ -52,6 +53,7 @@ module VX_fp_rounding import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     end
 
     assign abs_rounded_o = abs_value_i + DAT_WIDTH'(round_up);
+    assign round_up_o    = round_up;
 
     // Exact zero: no round/sticky bits set
     assign exact_zero_o = (abs_value_i == 0) && (round_sticky_bits_i == 0);

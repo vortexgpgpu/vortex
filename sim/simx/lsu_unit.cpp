@@ -103,6 +103,7 @@ bool LsuUnit::drained() const {
 #endif
 	for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
 		if (!states_.at(b).req_queue.empty()) return false;
+		if (states_.at(b).agu_stage[0] != nullptr || states_.at(b).agu_stage[1] != nullptr) return false;
 		if (!states_.at(b).pending_reqs.empty()) return false;
 	}
 	return true;
@@ -330,16 +331,32 @@ void LsuUnit::process_response_step(uint32_t b) {
 	lsu_rsp_in.pop();
 }
 
-// Move ONE trace from Inputs[b] into the dispatch-side req_queue per cycle.
-// At most one transaction/cycle: the trace is not dispatchable until the next
-// cycle, so req_queue adds a real cycle of latency. A while-loop here would
-// fabricate write bandwidth and collapse that latency to zero.
+// Move ONE trace from the address stages into the dispatch-side req_queue per
+// cycle, then advance the stages and refill them from Inputs[b]. At most one
+// transaction/cycle: the trace is not dispatchable until the next cycle, so
+// req_queue adds a real cycle of latency, and the two address stages two more
+// (VX_lsu_block registers the AGU's sum, then its stack interleave, with the
+// request). A stage refills in the cycle it drains, as the RTL's buffers do. A while-loop here would fabricate write bandwidth
+// and collapse that latency to zero.
 void LsuUnit::ingest_inputs(uint32_t b) {
 	auto& state = states_.at(b);
 	auto& input = Inputs.at(b);
-	if (input.empty() || state.req_queue.full())
+	this->ingest_staged(b);
+	if (state.agu_stage[1] == nullptr) {
+		state.agu_stage[1] = state.agu_stage[0];
+		state.agu_stage[0] = nullptr;
+	}
+	if (state.agu_stage[0] == nullptr && !input.empty()) {
+		state.agu_stage[0] = input.peek();
+		input.pop();
+	}
+}
+
+void LsuUnit::ingest_staged(uint32_t b) {
+	auto& state = states_.at(b);
+	if (state.agu_stage[1] == nullptr || state.req_queue.full())
 		return;
-	auto trace = input.peek();
+	auto trace = state.agu_stage[1];
 	// Hold a fence at the input head until req_queue is empty so the
 	// fence becomes the next dispatched item — preserves total
 	// barrier semantics on a per-block basis.
@@ -366,7 +383,7 @@ void LsuUnit::ingest_inputs(uint32_t b) {
 		trace = copy;
 	}
 	state.req_queue.push(trace);
-	input.pop();
+	state.agu_stage[1] = nullptr;
 }
 
 // The fence travels to the data cache as a flush token on the lanes of its
