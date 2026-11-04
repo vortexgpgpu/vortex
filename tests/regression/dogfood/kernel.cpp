@@ -439,6 +439,19 @@ void kernel_gbar(kernel_arg_t* __UNIFORM__ arg) {
 	dst_ptr[gid] += 1;
 }
 
+void kernel_imul64(kernel_arg_t* __UNIFORM__ arg) {
+	size_t count  = arg->task_size;
+	auto src0_ptr = (uint32_t*)arg->src0_addr;
+	auto src1_ptr = (uint32_t*)arg->src1_addr;
+	auto dst_ptr  = (uint32_t*)arg->dst_addr;
+	uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
+	auto offset = gid * count;
+
+	for (size_t i = 0; i < count; ++i) {
+		dst_ptr[offset+i] = imul64_mix(src0_ptr[offset+i], src1_ptr[offset+i]);
+	}
+}
+
 static const PFN_Kernel sc_tests[] = {
 	kernel_iadd, kernel_imul, kernel_idiv, kernel_idiv_mul,
 	kernel_fadd, kernel_fsub, kernel_fmul, kernel_fmadd,
@@ -446,6 +459,7 @@ static const PFN_Kernel sc_tests[] = {
 	kernel_fdiv, kernel_fdiv2, kernel_fsqrt, kernel_ftoi,
 	kernel_ftou, kernel_itof, kernel_utof, kernel_fclamp,
 	kernel_iclamp, kernel_trigo, kernel_bar, kernel_gbar,
+	kernel_imul64,
 };
 
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {

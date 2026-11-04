@@ -28,7 +28,7 @@ AluUnit::AluUnit(const SimContext& ctx, const char* name, Core* core)
 	// The output channel also counts results still in flight: it covers the
 	// deepest path plus the result waiting for the commit side, so the
 	// multiplier keeps one result per cycle.
-	: FuncUnit<VX_CFG_NUM_ALU_BLOCKS>(ctx, name, core, kMulDivLatency + (kGather ? 1 : 0) + 2)
+	: FuncUnit<VX_CFG_NUM_ALU_BLOCKS>(ctx, name, core, kMulLatency + (kGather ? 1 : 0) + 2)
 	, branch_ctl_out(this, VX_CFG_NUM_WARPS)
 {}
 
@@ -77,13 +77,14 @@ uint32_t AluUnit::latency_of(const instr_trace_t* trace) const {
 		auto mdv_type = std::get<MdvType>(trace->op_type);
 		switch (mdv_type) {
 		// Three multiplier stages plus the multiply/divide response register,
-		// against the integer ALU's single response stage, or the iterative
-		// units' operand width (see kSerialMul / kSerialDiv).
+		// against the integer ALU's single response stage (from the last pass,
+		// plus the accumulate stage of the multi-pass multiplier at XLEN 64),
+		// or the iterative divider's steps (see kSerialDiv).
 		case MdvType::MUL:
 		case MdvType::MULHU:
 		case MdvType::MULH:
 		case MdvType::MULHSU:
-			return kSerialMul ? kSerialMulLatency : kMulDivLatency;
+			return kMulLatency;
 		case MdvType::DIV:
 		case MdvType::DIVU:
 		case MdvType::REM:
@@ -563,41 +564,57 @@ void AluUnit::execute(instr_trace_t* trace) {
 	}
 }
 
-int AluUnit::serial_unit(const instr_trace_t* trace) {
+uint32_t AluUnit::mul_passes(const instr_trace_t* trace) {
+  if (!kMultiPassMul)
+    return 1;
   auto mdv = std::get_if<MdvType>(&trace->op_type);
   if (!mdv)
-    return -1;
+    return 1;
+  auto args = trace->instr_ptr->get_args();
   switch (*mdv) {
-  case MdvType::DIV:
-  case MdvType::DIVU:
-  case MdvType::REM:
-  case MdvType::REMU:
-    return kSerialDiv ? 1 : -1;
+  case MdvType::MUL:
+    return std::get<IntrMdvArgs>(args).is_w ? 1 : 3;
+  case MdvType::MULH:
+  case MdvType::MULHSU:
+  case MdvType::MULHU:
+    return 4;
   default:
-    return kSerialMul ? 0 : -1;
+    return 1;
   }
 }
 
 void AluUnit::on_reset() {
-  for (auto& b : serial_free_)
-    b.fill(0);
+  mul_pass_.fill(0);
+  div_free_.fill(0);
 }
 
 void AluUnit::on_tick() {
   bool idle = true;
-  const uint64_t now = SimPlatform::instance().cycles();
   for (uint32_t b = 0; b < VX_CFG_NUM_ALU_BLOCKS; ++b) {
     auto& input = Inputs.at(b);
     if (!input.empty()) {
       auto& output = Outputs.at(b);
-      // An operation for a busy iterative unit holds the block's input, as
-      // VX_alu_unit's dispatch holds it for the unit's ready.
-      const int su = serial_unit(input.peek());
-      if (!output.full() && (su < 0 || now >= serial_free_.at(b).at(su))) {
+      if (!output.full()) {
         auto trace = input.peek();
-        if (su >= 0) {
-          serial_free_.at(b).at(su) = now + (su ? kSerialDivLatency : kSerialMulLatency) + 1;
+        // A multi-pass multiply holds the block's input, one pass a cycle
+        // while the multiplier advances, and leaves on its last pass.
+        if (mul_pass_.at(b) + 1 < mul_passes(trace)) {
+          ++mul_pass_.at(b);
+          idle = false;
+          continue;
         }
+        // An operation for the busy iterative divider holds the block's input.
+        auto mdv = std::get_if<MdvType>(&trace->op_type);
+        bool is_div = kSerialDiv && mdv && (*mdv == MdvType::DIV || *mdv == MdvType::DIVU
+                                         || *mdv == MdvType::REM || *mdv == MdvType::REMU);
+        const uint64_t now = SimPlatform::instance().cycles();
+        if (is_div && now < div_free_.at(b)) {
+          idle = false;
+          continue;
+        }
+        if (is_div)
+          div_free_.at(b) = now + kSerialDivLatency + 1;
+        mul_pass_.at(b) = 0;
         this->execute(trace);
         // A branch releases its warp as it resolves, not when its result
         // retires.
@@ -611,7 +628,8 @@ void AluUnit::on_tick() {
     }
     idle &= (input.size() == 0);
   }
-  // no cross-tick state: sleep until a new trace is reserved toward an input.
+  // the only cross-tick state, a multiply's passes, keeps its input busy:
+  // sleep until a new trace is reserved toward an input.
   if (idle) {
     this->tick_sleep();
   }
