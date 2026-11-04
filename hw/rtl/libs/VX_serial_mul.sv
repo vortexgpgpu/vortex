@@ -38,15 +38,18 @@ module VX_serial_mul #(
     localparam X_WIDTH = SIGNED ? `MAX(A_WIDTH, B_WIDTH) : A_WIDTH;
     localparam Y_WIDTH = SIGNED ? `MAX(A_WIDTH, B_WIDTH) : B_WIDTH;
     localparam P_WIDTH = X_WIDTH + Y_WIDTH;
+    localparam S_WIDTH = X_WIDTH + 1;     // a step's partial sum
+    localparam L_WIDTH = S_WIDTH / 2;     // its carry-select split
 
     localparam CNTRW = `CLOG2(X_WIDTH);
 
     reg [LANES-1:0][X_WIDTH-1:0] a;
-	reg [LANES-1:0][Y_WIDTH-1:0] b;
-	reg [LANES-1:0][P_WIDTH-1:0] p;
+    reg [LANES-1:0][Y_WIDTH-1:0] b;
+    reg [LANES-1:0][P_WIDTH-1:0] p;
 
     reg [CNTRW-1:0] cntr;
     reg busy_r;
+    reg last_r; // the step in progress is the last one (cntr == 0)
 
     always @(posedge clk) begin
         if (reset) begin
@@ -55,18 +58,38 @@ module VX_serial_mul #(
             if (strobe) begin
                 busy_r <= 1;
             end
-            if (busy_r && cntr == 0) begin
+            if (busy_r && last_r) begin
                 busy_r <= 0;
             end
         end
-        cntr <= cntr - CNTRW'(1);
+        cntr   <= cntr - CNTRW'(1);
+        last_r <= (cntr == CNTRW'(1));
         if (strobe) begin
-            cntr <= CNTRW'(X_WIDTH-1);
+            cntr   <= CNTRW'(X_WIDTH-1);
+            last_r <= (X_WIDTH == 1);
         end
     end
 
     for (genvar i = 0; i < LANES; ++i) begin : g_mul
-        wire [X_WIDTH-1:0] axb = b[i][0] ? a[i] : '0;
+        // Shift-and-add over the multiplier's bits. Signed, the last bit has
+        // a negative weight, so the last step subtracts: the multiplicand is
+        // complemented and the carry-in is set, and the partial sum is one
+        // bit wider than the product's upper half, so it never overflows.
+        wire [S_WIDTH-1:0] p_hi = SIGNED ? {p[i][P_WIDTH-1], p[i][P_WIDTH-1:Y_WIDTH]}
+                                         : {1'b0, p[i][P_WIDTH-1:Y_WIDTH]};
+        wire [S_WIDTH-1:0] axb  = b[i][0] ? (SIGNED ? {a[i][X_WIDTH-1], a[i]} : {1'b0, a[i]}) : '0;
+        wire               neg  = SIGNED && last_r;
+        wire [S_WIDTH-1:0] addend = axb ^ {S_WIDTH{neg}};
+
+        // carry-select at L_WIDTH: the upper part both ways beside the
+        // lower part's carry, each a single adder (a carry-in rides in a
+        // forced low bit)
+        wire [L_WIDTH+1:0] lo = {1'b0, p_hi[L_WIDTH-1:0], 1'b1} + {1'b0, addend[L_WIDTH-1:0], neg};
+        wire [S_WIDTH-L_WIDTH-1:0] hi0 = p_hi[S_WIDTH-1:L_WIDTH] + addend[S_WIDTH-1:L_WIDTH];
+        wire [S_WIDTH-L_WIDTH:0]   hi1 = {p_hi[S_WIDTH-1:L_WIDTH], 1'b1} + {addend[S_WIDTH-1:L_WIDTH], 1'b1};
+        wire [S_WIDTH-1:0] sum = {(lo[L_WIDTH+1] ? hi1[S_WIDTH-L_WIDTH:1] : hi0), lo[L_WIDTH:1]};
+        `UNUSED_VAR (lo[0])
+        `UNUSED_VAR (hi1[0])
 
         always @(posedge clk) begin
             if (strobe) begin
@@ -81,25 +104,12 @@ module VX_serial_mul #(
             end else if (busy_r) begin
                 b[i] <= (b[i] >> 1);
                 p[i][Y_WIDTH-2:0] <= p[i][Y_WIDTH-1:1];
-                if (SIGNED) begin
-                    if (cntr == 0) begin
-                        p[i][P_WIDTH-1:Y_WIDTH-1] <= {1'b0, p[i][P_WIDTH-1:Y_WIDTH]} + {1'b0, axb[X_WIDTH-1], ~axb[X_WIDTH-2:0]};
-                    end else begin
-                        p[i][P_WIDTH-1:Y_WIDTH-1] <= {1'b0, p[i][P_WIDTH-1:Y_WIDTH]} + {1'b0, ~axb[X_WIDTH-1], axb[X_WIDTH-2:0]};
-                    end
-                end else begin
-                    p[i][P_WIDTH-1:Y_WIDTH-1] <= {1'b0, p[i][P_WIDTH-1:Y_WIDTH]} + ((b[i][0]) ? {1'b0, a[i]} : 0);
-                end
+                p[i][P_WIDTH-1:Y_WIDTH-1] <= sum;
             end
         end
 
-        if (SIGNED) begin : g_signed
-            assign result[i] = R_WIDTH'(p[i][P_WIDTH-1:0] + {1'b1, {(X_WIDTH-2){1'b0}}, 1'b1, {(Y_WIDTH){1'b0}}});
-        end else begin : g_unsigned
-            assign result[i] = R_WIDTH'(p[i]);
-        end
+        assign result[i] = R_WIDTH'(p[i]);
     end
-    `UNUSED_VAR (p)
 
     assign busy = busy_r;
 
