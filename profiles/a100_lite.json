@@ -1,7 +1,7 @@
 {
   "name": "a100_lite",
   "extends": "a100",
-  "description": "A stripped NVIDIA A100-class SM (GA100, Ampere, sm_80), one SM with its 1/108 share of the chip's L2 and HBM bandwidth: 64-bit integer and addresses with an FP32-only FPU (RV64IMAF, FLEN 32), VM, atomics with CAS, L2, an Ampere tensor core (FP16/BF16, TF32, INT8, INT4, 2:4 sparse), MUFU; no FP64, no graphics, no DXA/DMA, no WGMMA. One Vortex core per SM, four compute slices per core (one per SM partition). The a100_lite_m<n> profiles are the same SM at n SMs with the memory system scaled to n.",
+  "description": "A stripped NVIDIA A100-class SM (GA100, Ampere, sm_80), one SM with its 1/108 share of the chip's L2 and HBM bandwidth: 64-bit integer and addresses, FP32 at 16 lanes and FP64 at 8 lanes per partition (RV64IMAFD), VM, atomics with CAS, L2, an Ampere tensor core (FP16/BF16, TF32, INT8, INT4, 2:4 sparse), MUFU; no FP64 tensor-core path (DMMA), no graphics, no DXA/DMA, no WGMMA. One Vortex core per SM, four compute slices per core (one per SM partition). The a100_lite_m<n> profiles are the same SM at n SMs with the memory system scaled to n.",
   "core": {
     "VX_CFG_NUM_WARPS": 64,
     "VX_CFG_NUM_THREADS": 32,
@@ -10,13 +10,14 @@
     "VX_CFG_NUM_SFU_BLOCKS": 4,
     "VX_CFG_NUM_ALU_LANES": 16,
     "VX_CFG_NUM_FPU_LANES": 16,
+    "VX_CFG_NUM_FP64_LANES": 8,
     "VX_CFG_FDIV_PE_RATIO": 16,
     "VX_CFG_FSQRT_PE_RATIO": 16,
     "VX_CFG_FCVT_PE_RATIO": 4,
     "VX_CFG_NUM_LSU_LANES": 8,
     "VX_CFG_NUM_BARRIERS": 16,
     "VX_CFG_VM_ENABLE": true,
-    "VX_CFG_EXT_D_ENABLE": false,
+    "VX_CFG_EXT_D_ENABLE": true,
     "VX_CFG_EXT_A_ENABLE": true,
     "VX_CFG_EXT_ZACAS_ENABLE": true,
     "VX_CFG_EXT_ZFHMIN_ENABLE": true,
@@ -67,7 +68,7 @@
   "sources": {
     "inherited (a100)": "64 warps x 32 threads, 4 schedulers; 1410 MHz; HBM2 at GPGPU-Sim SM80_A100's DRAM latency and queue",
     "XLEN 64, VM, A + ZACAS, ZFHMIN": "64-bit addresses, unified virtual memory, atomicCAS; FP16 load/store/convert",
-    "EXT_D off (FLEN 32)": "milestone choice: the A100's 32 FP64 units per SM (8 per partition) and its FP64 tensor-core path (DMMA) are left out; FP32-only FPU on a 64-bit core (RV64IMAF, ABI lp64f)",
+    "EXT_D on, NUM_FP64_LANES 8": "32 FP64 units per SM, 8 per partition (A100 whitepaper, Fig. 7): FP64 at half the FP32 rate, on a narrow FP64 datapath beside the 16-lane FP32-only one (VX_fpu_datapath); the FP64 tensor-core path (DMMA) is left out",
     "FETCH_WIDTH 4, NUM_SFU_BLOCKS 4": "4 SM partitions (processing blocks), each its own warp scheduler and dispatch: four compute slices per core",
     "ALU/FPU lanes 16": "64 FP32 + 64 INT32 cores per SM = 16 per partition (A100 whitepaper, Fig. 7); a 32-thread warp issues over two 16-lane packets, as on Ampere",
     "FDIV_PE_RATIO 16, FSQRT_PE_RATIO 16": "the SM has no per-lane divide or square-root units (CUDA C++ Programming Guide, arithmetic instruction throughput, cc 8.0: division and square root are multi-instruction sequences on the SFU and FMA pipes); one shared divider and one square-root unit per partition (16 FPU lanes / 16)",
