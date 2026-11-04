@@ -60,6 +60,10 @@ endif
 
 PROJECT := libvortex.so
 
+# Compiled with CONFIGS (the VM, memory and capability defines): a stamp of the
+# flags makes a change rebuild it, as the backend runtimes do.
+CONFIG_FILE := $(OUT_DIR)/stub_rt_config.stamp
+
 all: $(OUT_DIR)/$(PROJECT)
 
 # The graphics oracle this library exports (Binning) inlines the shared setup
@@ -74,11 +78,26 @@ RT_HDRS := $(wildcard $(SW_COMMON_DIR)/*.h) \
            $(wildcard $(RT_COMMON_DIR)/*.h) \
            $(wildcard $(INC_DIR)/*.h)
 
-$(OUT_DIR)/$(PROJECT): $(SRCS) $(RT_HDRS)
+$(OUT_DIR)/$(PROJECT): $(SRCS) $(RT_HDRS) $(CONFIG_FILE)
 	@mkdir -p $(OUT_DIR)
-	$(CXX) $(CXXFLAGS) $(filter-out $(RT_HDRS),$^) $(LDFLAGS) -o $@
+	$(CXX) $(CXXFLAGS) $(filter-out $(RT_HDRS) $(CONFIG_FILE),$^) $(LDFLAGS) -o $@
+
+# updates the timestamp when flags changed.
+# PID-suffixed tmp file: every test Makefile enters here (FORCE), concurrently.
+$(CONFIG_FILE): force
+	@mkdir -p $(@D)
+	@TMP=$@.tmp.$$$$ ; \
+	 printf '%s\n' "$(CXXFLAGS)" > $$TMP ; \
+	 if ! cmp -s $$TMP $@ 2>/dev/null; then \
+	   mv -f $$TMP $@ ; \
+	 else \
+	   rm -f $$TMP ; \
+	 fi
+
+force:
 
 clean:
 	rm -f $(DESTDIR)/$(PROJECT) $(DESTDIR)/aarch64/$(PROJECT) $(DESTDIR)/armhf/$(PROJECT)
+	rm -f $(DESTDIR)/stub_rt_config.stamp $(DESTDIR)/aarch64/stub_rt_config.stamp $(DESTDIR)/armhf/stub_rt_config.stamp
 
-.PHONY: all clean
+.PHONY: all force clean
