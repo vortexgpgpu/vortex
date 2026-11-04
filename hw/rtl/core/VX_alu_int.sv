@@ -108,7 +108,7 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     // One adder per lane: rs1 + rs2/imm (ADD*, ADDI*, JALR) or rs1 - rs2/imm
     // (SUB*, SLT*, and the conditional branches' compare, against rs2),
     // one bit wider for the compare's sign.
-    wire ln_sub = (op_class == 2'b01);
+    wire ln_sub = execute_if.data.op_args.alu.is_sub;   // op_class == 2'b01, from the decoder
     wire ln_imm = execute_if.data.op_args.alu.use_imm && ~(is_br_op && ln_sub);
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_ln_add
         wire [`VX_CFG_XLEN-1:0] b = ln_imm ? alu_imm : alu_in2[i];

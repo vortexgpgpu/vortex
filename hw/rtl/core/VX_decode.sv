@@ -926,6 +926,13 @@ module VX_decode import
         `endif
             default:;
         endcase
+
+        // Decoded here so that the ALU's adder operand (rs2 or the immediate,
+        // inverted to subtract) is one LUT ahead of its carry chain.
+        if (ex_type == EX_ALU) begin
+            op_args.alu.is_sub = (op_args.alu.xtype == ALU_TYPE_BRANCH) ? ~op_type[3]
+                               : ((op_args.alu.xtype == ALU_TYPE_ARITH) && (op_type[3:2] == 2'b01));
+        end
     end
 
     // disable writes to x0

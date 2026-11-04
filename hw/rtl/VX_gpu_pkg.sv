@@ -1126,7 +1126,8 @@ package VX_gpu_pkg;
     localparam INST_ARGS_BITS = 3 + ALU_TYPE_BITS + 20 + 2;
 
     typedef struct packed {
-        logic [1:0] __padding;
+        logic __padding;
+        logic is_sub;       // the ALU adder subtracts (SUB*, SLT*); set by the decoder
         logic use_PC;
         logic use_imm;
         logic is_w;
@@ -1137,7 +1138,8 @@ package VX_gpu_pkg;
 
     // Branch instructions (JAL/JALR/B/SYS) execute on the ALU pipeline.
     typedef struct packed {
-        logic [1:0] __padding;
+        logic __padding;
+        logic is_sub;       // the ALU adder subtracts (conditional branch compare); set by the decoder
         logic use_PC;
         logic use_imm;
         logic is_rvc;
