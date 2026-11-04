@@ -276,25 +276,51 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     // Park rounds: a lane that parks sits out until every other lane waiting
     // to park has had its turn, so a lane above a steady stream of lower-lane
     // misses still parks within NUM_REQS parks (the lowest-lane select alone
-    // starves it). A round ends the cycle after no eligible lane asked to park.
-    // Eligibility gates the request's valid, off the TLB compare path.
-    reg [NUM_REQS-1:0] park_elig;
-    reg                park_any_r;
+    // starves it). A lane is only made to sit out when another lane is waiting
+    // to park, so a lone requester parks back to back; when the last eligible
+    // waiter parks, the next round opens at once with everyone but that lane.
+    // Eligibility gates the request's valid, off the TLB compare path; both
+    // "another waiter" tests are at-least-two reductions beside the select.
+    reg  [NUM_REQS-1:0] park_elig;
+    wire [NUM_REQS-1:0] park_raw;   // wants to park, eligible or not
+    wire [NUM_REQS-1:0] park_raw_below;
+    wire [NUM_REQS-1:0] park_cat_below;
+
+    for (genvar l = 0; l < NUM_REQS; ++l) begin : g_park_raw
+        assign park_raw[l] = req_valid[l] && !req_bypass[l] && (mshr_match[l] || !cam_hit[l]);
+        if (l == 0) begin : g_lo
+            assign park_raw_below[l] = 1'b0;
+            assign park_cat_below[l] = 1'b0;
+        end else begin : g_hi
+            assign park_raw_below[l] = (| park_raw[l-1:0]);
+            assign park_cat_below[l] = (| cat_park[l-1:0]);
+        end
+    end
+    // another eligible lane waits besides the selected one / another lane at all
+    wire park_more_elig = (| (cat_park & park_cat_below));
+    wire park_more_raw  = (| (park_raw & park_raw_below));
+    wire park_fire      = park_valid && park_ready;
 
     always @(posedge clk) begin
         if (reset) begin
-            park_elig  <= '1;
-            park_any_r <= 1'b0;
-        end else begin
-            park_elig  <= (park_any_r ? park_elig : '1) & ~(park_sel & {NUM_REQS{park_ready}});
-            park_any_r <= park_valid;
+            park_elig <= '1;
+        end else if (park_fire) begin
+            if (park_more_elig) begin
+                park_elig <= park_elig & ~park_sel;   // the round goes on
+            end else if (park_more_raw) begin
+                park_elig <= ~park_sel;               // next round, the others first
+            end else begin
+                park_elig <= '1;                      // no one else waits
+            end
+        end else if (!park_valid) begin
+            park_elig <= '1;                          // no eligible waiter: open a round
         end
     end
 
     for (genvar l = 0; l < NUM_REQS; ++l) begin : g_cat
         assign cam_acc[l]    = req_acc[l];
         assign cat_bypass[l] = req_valid[l] && req_bypass[l];
-        assign cat_park[l]   = req_valid[l] && park_elig[l] && !req_bypass[l] && (mshr_match[l] || !cam_hit[l]);
+        assign cat_park[l]   = park_raw[l] && park_elig[l];
         assign cat_hit[l]    = req_valid[l] && !req_bypass[l] && !mshr_match[l] && cam_hit[l] && cam_perm[l];
         assign cat_pfault[l] = req_valid[l] && !req_bypass[l] && !mshr_match[l] && cam_hit[l] && !cam_perm[l];
     end
