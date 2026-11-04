@@ -35,6 +35,10 @@ module VX_ptw import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
 
     input wire [`VX_CFG_XLEN-1:0] satp,
 
+`ifdef PERF_ENABLE
+    output mmu_perf_t      ptw_perf,
+`endif
+
     VX_tlb_bus_if.slave    miss_if,
     VX_mem_bus_if.master   mem_bus_if,
     VX_tlb_flush_if.slave  flush_if,
@@ -279,5 +283,30 @@ module VX_ptw import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     // ---------------------------------------------------------------------
     assign empty = ~(| w_active);
     assign flush_if.done = flush_if.req && ~(| w_active);
+
+`ifdef PERF_ENABLE
+    // Walks dispatched and the walker-cycles they spent in flight (the sum of
+    // every walk's dispatch-to-response time); the TLB fields are the L1s'.
+    wire [`CLOG2(NUM_WALKERS+1)-1:0] n_active;
+    `POP_COUNT(n_active, w_active);
+
+    reg [PERF_CTR_BITS-1:0] perf_walks, perf_walk_cycles;
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_walks       <= '0;
+            perf_walk_cycles <= '0;
+        end else begin
+            perf_walks       <= perf_walks + PERF_CTR_BITS'(dispatch_fire);
+            perf_walk_cycles <= perf_walk_cycles + PERF_CTR_BITS'(n_active);
+        end
+    end
+
+    assign ptw_perf.tlb_reads     = '0;
+    assign ptw_perf.tlb_hits      = '0;
+    assign ptw_perf.tlb_misses    = '0;
+    assign ptw_perf.tlb_evictions = '0;
+    assign ptw_perf.ptw_walks     = perf_walks;
+    assign ptw_perf.ptw_latency   = perf_walk_cycles;
+`endif
 
 endmodule

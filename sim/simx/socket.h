@@ -46,6 +46,15 @@ public:
     RtuCore::PerfStats rtu;
     Cache::PerfStats   rtcache;
 #endif
+#ifdef VX_CFG_VM_ENABLE
+    // TLB counters of the socket's cores, as the RTL's shared socket MMU counts them.
+    struct {
+      uint64_t tlb_reads = 0;
+      uint64_t tlb_hits = 0;
+      uint64_t tlb_misses = 0;
+      uint64_t tlb_evictions = 0;
+    } mmu;
+#endif
   };
 
   std::vector<SimChannel<MemReq>> mem_req_out;

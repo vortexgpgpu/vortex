@@ -1498,7 +1498,7 @@ package VX_gpu_pkg;
 
 // Declared unconditionally, because its references do not agree on a guard:
 // the ports of VX_mmu and VX_tlb_l1 and the signals in VX_socket are gated on
-// PERF_ENABLE, while the field in pipeline_perf_t is gated on VM. Gating the
+// PERF_ENABLE, while the field in sysmem_perf_t is gated on VM. Gating the
 // declaration on either one alone breaks the other combination -- VM without
 // PERF, or PERF without VM. The latter is what failed here: Vivado elaborates
 // every file in the source list whether or not the module is ever instantiated,
@@ -1607,6 +1607,9 @@ package VX_gpu_pkg;
         lmem_perf_t  lmem;
         coalescer_perf_t coalescer;
         mem_perf_t   mem;
+    `ifdef VX_CFG_VM_ENABLE
+        mmu_perf_t   mmu;   // TLB counters per socket, walker counters per device
+    `endif
     `ifdef VX_CFG_EXT_DXA_ENABLE
         dxa_perf_t   dxa;
     `endif
@@ -1634,9 +1637,6 @@ package VX_gpu_pkg;
         issue_perf_t              issue;
     `ifdef VX_CFG_EXT_TCU_ENABLE
         tcu_perf_t                tcu;
-    `endif
-    `ifdef VX_CFG_VM_ENABLE
-        mmu_perf_t                mmu;
     `endif
         logic [PERF_CTR_BITS-1:0] ifetches;
         logic [PERF_CTR_BITS-1:0] loads;

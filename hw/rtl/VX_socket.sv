@@ -115,11 +115,21 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     rtu_perf_t   socket_rtu_perf;
     cache_perf_t socket_rtcache_perf;
 `endif
+`ifdef VX_CFG_VM_ENABLE
+    reg [PERF_CTR_BITS-1:0] mmu_tlb_reads, mmu_tlb_hits, mmu_tlb_misses, mmu_tlb_evicts;
+`endif
     sysmem_perf_t sysmem_perf_tmp;
     always @(*) begin
         sysmem_perf_tmp = sysmem_perf;
         sysmem_perf_tmp.icache = icache_perf;
         sysmem_perf_tmp.dcache = dcache_perf;
+    `ifdef VX_CFG_VM_ENABLE
+        // the walker fields come from the device walker
+        sysmem_perf_tmp.mmu.tlb_reads     = mmu_tlb_reads;
+        sysmem_perf_tmp.mmu.tlb_hits      = mmu_tlb_hits;
+        sysmem_perf_tmp.mmu.tlb_misses    = mmu_tlb_misses;
+        sysmem_perf_tmp.mmu.tlb_evictions = mmu_tlb_evicts;
+    `endif
     `ifdef VX_CFG_EXT_DXA_ENABLE
         sysmem_perf_tmp.dxa = dxa_core_perf;
     `endif
@@ -384,10 +394,23 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
         ("%t: *** %s socket MMU reported drained while it holds a request", $time, INSTANCE_ID))
 
 `ifdef PERF_ENABLE
-    // Surfacing these through sysmem_perf needs a dedicated mmu slot; until that
-    // exists the socket MMU counters are computed but not consumed.
-    `UNUSED_VAR (dmmu_perf)
-    `UNUSED_VAR (immu_perf)
+    // Socket TLB counters, data + instruction side. Walks and their latency are
+    // counted once, at the device walker, so the L1s' walk-request counts are
+    // not reported.
+    always @(posedge clk) begin
+        if (reset) begin
+            mmu_tlb_reads  <= '0;
+            mmu_tlb_hits   <= '0;
+            mmu_tlb_misses <= '0;
+            mmu_tlb_evicts <= '0;
+        end else begin
+            mmu_tlb_reads  <= dmmu_perf.tlb_reads     + immu_perf.tlb_reads;
+            mmu_tlb_hits   <= dmmu_perf.tlb_hits      + immu_perf.tlb_hits;
+            mmu_tlb_misses <= dmmu_perf.tlb_misses    + immu_perf.tlb_misses;
+            mmu_tlb_evicts <= dmmu_perf.tlb_evictions + immu_perf.tlb_evictions;
+        end
+    end
+    `UNUSED_VAR ({dmmu_perf.ptw_walks, dmmu_perf.ptw_latency, immu_perf.ptw_walks, immu_perf.ptw_latency})
 `endif
 
     // Merge the two MMU tlb buses onto the one cluster-facing bus.

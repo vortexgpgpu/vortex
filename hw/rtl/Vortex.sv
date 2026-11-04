@@ -132,10 +132,16 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*, VX_tlb_pkg::*; (
     cache_perf_t l3_perf;
     mem_perf_t mem_perf;
     sysmem_perf_t sysmem_perf;
+`ifdef VX_CFG_VM_ENABLE
+    mmu_perf_t ptw_perf;
+`endif
     always @(*) begin
         sysmem_perf = '0;
         sysmem_perf.l3cache = l3_perf;
         sysmem_perf.mem = mem_perf;
+    `ifdef VX_CFG_VM_ENABLE
+        sysmem_perf.mmu = ptw_perf;
+    `endif
     end
 `endif
 
@@ -357,6 +363,9 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*, VX_tlb_pkg::*; (
         .clk        (clk),
         .reset      (reset),
         .satp       (mmu_satp),
+    `ifdef PERF_ENABLE
+        .ptw_perf   (ptw_perf),
+    `endif
         .miss_if    (dev_ptw_bus_if),
         .mem_bus_if (dev_ptw_mem_if),
         .flush_if   (dev_ptw_flush_if),

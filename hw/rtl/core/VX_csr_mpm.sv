@@ -158,12 +158,12 @@ module VX_csr_mpm import VX_gpu_pkg::*; #(
                         `CSR_READ_64(`VX_CSR_MPM_COALESCER_MISS, dcr_data_w, sysmem_perf.coalescer.misses);
                     `ifdef VX_CFG_VM_ENABLE
                         // PERF: VM/MMU (icache + dcache MMU summed)
-                        `CSR_READ_64(`VX_CSR_MPM_TLB_READS,   dcr_data_w, pipeline_perf.mmu.tlb_reads);
-                        `CSR_READ_64(`VX_CSR_MPM_TLB_HITS,    dcr_data_w, pipeline_perf.mmu.tlb_hits);
-                        `CSR_READ_64(`VX_CSR_MPM_TLB_MISSES,  dcr_data_w, pipeline_perf.mmu.tlb_misses);
-                        `CSR_READ_64(`VX_CSR_MPM_TLB_EVICTS,  dcr_data_w, pipeline_perf.mmu.tlb_evictions);
-                        `CSR_READ_64(`VX_CSR_MPM_PTW_WALKS,   dcr_data_w, pipeline_perf.mmu.ptw_walks);
-                        `CSR_READ_64(`VX_CSR_MPM_PTW_LATENCY, dcr_data_w, pipeline_perf.mmu.ptw_latency);
+                        `CSR_READ_64(`VX_CSR_MPM_TLB_READS,   dcr_data_w, sysmem_perf.mmu.tlb_reads);
+                        `CSR_READ_64(`VX_CSR_MPM_TLB_HITS,    dcr_data_w, sysmem_perf.mmu.tlb_hits);
+                        `CSR_READ_64(`VX_CSR_MPM_TLB_MISSES,  dcr_data_w, sysmem_perf.mmu.tlb_misses);
+                        `CSR_READ_64(`VX_CSR_MPM_TLB_EVICTS,  dcr_data_w, sysmem_perf.mmu.tlb_evictions);
+                        `CSR_READ_64(`VX_CSR_MPM_PTW_WALKS,   dcr_data_w, sysmem_perf.mmu.ptw_walks);
+                        `CSR_READ_64(`VX_CSR_MPM_PTW_LATENCY, dcr_data_w, sysmem_perf.mmu.ptw_latency);
                     `endif
                         default:;
                         endcase

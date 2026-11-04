@@ -148,10 +148,6 @@ import VX_tcu_pkg::*;
     wire mem_unit_busy;
 
 `ifdef VX_CFG_VM_ENABLE
-`ifdef PERF_ENABLE
-    // the MMU perf counters are kept at the socket
-    assign pipeline_perf.mmu = '0;
-`endif
     // Translation drains at the socket MMU. The socket's status covers the
     // requests the MMUs hold; this core adds its own requests still waiting at
     // their inputs, so a barrier drains this core's traffic, not another core's.

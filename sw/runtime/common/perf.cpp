@@ -643,15 +643,23 @@ extern "C" vx_result_t vx_device_dump_perf(vx_device_h hdevice, FILE *stream) {
         CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_COALESCER_MISS, core_id, &cm), { return err; });
         perf_print_core(stream, core_id, "coalescer: misses=%" PRIu64, cm);
       }
-      // VM/MMU (per-core; hardware sums icache + dcache MMU counters).
-      if (vm_enabled) {
+    }
+    // VM/MMU: the TLB counters are the socket MMU's (icache + dcache side),
+    // read at the socket's first core; the walk counters are the device
+    // walker's, the same in every socket.
+    if (vm_enabled) {
+      const uint64_t num_sockets = (num_cores + socket_size - 1) / socket_size;
+      for (uint32_t s = 0; s < num_sockets; ++s) {
+        uint32_t rep_core = s * (uint32_t)socket_size;
+        if (rep_core >= num_cores)
+          continue;
         uint64_t reads = 0, hits = 0, evicts = 0, walks = 0, lat = 0;
-        CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_TLB_READS,   core_id, &reads),  { return err; });
-        CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_TLB_HITS,    core_id, &hits),   { return err; });
-        CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_TLB_EVICTS,  core_id, &evicts), { return err; });
-        CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_PTW_WALKS,   core_id, &walks),  { return err; });
-        CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_PTW_LATENCY, core_id, &lat),    { return err; });
-        perf_print_core(stream, core_id, "vm: tlb_reads=%" PRIu64 ", hit=%d%%, evicts=%" PRIu64 ", ptw_walks=%" PRIu64 ", ptw_avg_lat=%.2f",
+        CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_TLB_READS,   rep_core, &reads),  { return err; });
+        CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_TLB_HITS,    rep_core, &hits),   { return err; });
+        CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_TLB_EVICTS,  rep_core, &evicts), { return err; });
+        CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_PTW_WALKS,   rep_core, &walks),  { return err; });
+        CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_PTW_LATENCY, rep_core, &lat),    { return err; });
+        perf_print_core(stream, rep_core, "vm: tlb_reads=%" PRIu64 ", hit=%d%%, evicts=%" PRIu64 ", ptw_walks=%" PRIu64 ", ptw_avg_lat=%.2f",
                         reads, calc_percent(hits, reads), evicts, walks, safe_div((double)lat, (double)walks));
       }
     }

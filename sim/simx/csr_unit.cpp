@@ -217,7 +217,7 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
           coalescer_misses += core_->mem_coalescer(i)->perf_stats().misses;
         }
       #ifdef VX_CFG_VM_ENABLE
-        auto mmu_perf = core_->mmu_perf_stats();
+        auto mmu_perf = core_->socket()->perf_stats().mmu;
       #endif
         switch (addr) {
         CSR_READ_64(VX_CSR_MPM_MEM_READS, proc_perf.mem_reads);

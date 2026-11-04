@@ -391,6 +391,15 @@ public:
     perf_stats.rtu     = rtu_core_->perf_stats();
     perf_stats.rtcache = rtcache_->perf_stats();
 #endif
+#ifdef VX_CFG_VM_ENABLE
+    for (auto& core : cores_) {
+      auto m = core->mmu_perf_stats();
+      perf_stats.mmu.tlb_reads     += m.tlb_reads;
+      perf_stats.mmu.tlb_hits      += m.tlb_hits;
+      perf_stats.mmu.tlb_misses    += m.tlb_misses;
+      perf_stats.mmu.tlb_evictions += m.tlb_evictions;
+    }
+#endif
     return perf_stats;
   }
 
