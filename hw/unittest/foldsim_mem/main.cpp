@@ -35,6 +35,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 #include <deque>
 #include <map>
 #include <memory>
@@ -52,7 +53,10 @@ using namespace vortex;
 namespace {
 
 constexpr int kWords = 16;  // DATA_W = 512
-constexpr int kIdW = 4;     // ID_W
+#ifndef FOLDSIM_MEM_ID_W
+#define FOLDSIM_MEM_ID_W 4
+#endif
+constexpr int kIdW = FOLDSIM_MEM_ID_W;  // ID_W
 
 // With SPEC, the endpoint takes R's ready SPEC cycles late and offers R and
 // AR's ready (and with SPEC 2, AW and W's too) as candidates, by R having fired
@@ -153,6 +157,13 @@ const Setup kSetups[] = {
    Traffic::Small, 0.9, 0.3, 1.0, 4000, DramBankModel::Refresh::Off, 0, 0, 300},
 };
 
+// Sweep knobs (plusargs): +seed=<n> the random stream; +tail=<p> the probability an HBM answer (R or B) takes
+// 100 .. +tailmax=<n> (600) host cycles instead of its usual latency; +blat=<n> B's latency range added on top of
+// R's (B behind later reads); +ready=<p> AR / AW / W ready probability outside the busy windows (0.7).
+uint32_t g_seed = 7;
+double g_tail = 0.0, g_ready = 0.7;
+int g_tailmax = 600, g_blat = 0;
+
 const Setup* setup = nullptr;
 Vfoldsim_mem* dut = nullptr;
 std::mt19937 rng(7);
@@ -222,8 +233,11 @@ struct Hbm {
 
   size_t outstanding() const { return r.size() + b.size() + aw.size() + w.size(); }
 
-  uint64_t when(uint64_t last) {
-    return std::max(last, host_cycle + uint64_t(rand_int(lat_lo, lat_hi)));
+  uint64_t when(uint64_t last, int extra = 0) {
+    int lat = rand_int(lat_lo, lat_hi) + (extra > 0 ? rand_int(0, extra) : 0);
+    if (g_tail > 0 && chance(g_tail))
+      lat = rand_int(100, g_tailmax);
+    return std::max(last, host_cycle + uint64_t(lat));
   }
 
   void drive() {
@@ -300,7 +314,7 @@ struct Hbm {
             m[i] = (m[i] & ~(0xffu << (8 * k))) | (d[i] & (0xffu << (8 * k)));
       aw.pop_front();
       w.pop_front();
-      b.push_back(when(b.empty() ? 0 : b.back()));
+      b.push_back(when(b.empty() ? 0 : b.back(), g_blat));
     }
   }
 };
@@ -803,12 +817,13 @@ void configure() {
 
 int run_setup(const Setup& s) {
   setup = &s;
-  rng.seed(7);
+  rng.seed(g_seed);
   host_cycle = tcycle = 0;
   prev_fire = prev_fire2 = false;
   reset_cycles_done = drained_at_reset = compared = 0;
   hbm = Hbm();
   hbm.lat_hi = s.hbm_lat;
+  hbm.ready_p = g_ready;
   master = Master();
   for (int i = 0; i < NUM_IN; ++i) taken[i] = false;
   for (int j = 0; j < NUM_OUT; ++j) got[j] = false;
@@ -842,7 +857,7 @@ int run_setup(const Setup& s) {
       run(1);
     hbm.lat_lo = 1;
     hbm.lat_hi = s.hbm_lat;
-    hbm.ready_p = 0.7;
+    hbm.ready_p = g_ready;
     reset_cycles(rand_int(1, 4), true);
     run(s.cycles / 2);
   }
@@ -886,9 +901,22 @@ int run_setup(const Setup& s) {
 int main(int argc, char** argv) {
   Verilated::commandArgs(argc, argv);
   const char* only = nullptr;
-  for (int i = 1; i < argc; ++i)
-    if (argv[i][0] != '+')
+  for (int i = 1; i < argc; ++i) {
+    if (argv[i][0] != '+') {
       only = argv[i];
+      continue;
+    }
+    std::string a = argv[i];
+    auto val = [&](const char* k) -> const char* {
+      const size_t n = std::strlen(k);
+      return a.compare(0, n, k) == 0 ? a.c_str() + n : nullptr;
+    };
+    if (const char* v = val("+seed=")) g_seed = uint32_t(std::strtoul(v, nullptr, 0));
+    if (const char* v = val("+tail=")) g_tail = std::atof(v);
+    if (const char* v = val("+tailmax=")) g_tailmax = std::atoi(v);
+    if (const char* v = val("+blat=")) g_blat = std::atoi(v);
+    if (const char* v = val("+ready=")) g_ready = std::atof(v);
+  }
   for (const auto& s : kSetups) {
     if (only && std::strcmp(only, s.name))
       continue;
