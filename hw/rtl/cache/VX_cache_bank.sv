@@ -198,7 +198,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire mshr_pending_ovl_raw;
 
     // MSHR replay (dequeue) sideband
-    wire                           replay_valid, replay_ready, replay_rw;
+    wire                           replay_valid, replay_ready, replay_rw, replay_ready_lk;
     wire [`CS_LINE_ADDR_WIDTH-1:0] replay_addr;
     wire [WORD_SEL_WIDTH-1:0]      replay_wsel;
     wire [WORD_SIZE-1:0]           replay_byteen;
@@ -233,7 +233,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // fwd_head: the pending-chain head is a forwardable read this cycle;
     // fwd_fire: it completes at the forward-response port; fwd_pending: a
     // forward drain is in progress (blocks the next fill from re-staging).
-    wire fwd_head, fwd_fire, fwd_pending;
+    wire fwd_head, fwd_fire, fwd_pending, fwd_head_lk;
     wire [`CS_WORD_WIDTH-1:0] fwd_word;
 
     // Fill buffer: the sector staged at fill accept; it feeds the forward-
@@ -366,10 +366,11 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // disjoint words carry no order constraint, so the entry may hide and the
     // prober proceed as a fresh hit — which keeps a streaming drain from being
     // stalled one cycle per incoming same-line beat.
-    wire replay_link_hold = replay_valid && mshr_allocate_st0 && ~pipe_stall
-                         && (st0.req.addr == replay_addr)
-                         && (replay_rw || st0.req.rw)
-                         && (replay_wsel == st0.req.word_idx);
+    wire replay_link_hold_lk = replay_valid && mshr_allocate_st0
+                            && (st0.req.addr == replay_addr)
+                            && (replay_rw || st0.req.rw)
+                            && (replay_wsel == st0.req.word_idx);
+    wire replay_link_hold = replay_link_hold_lk && ~pipe_stall;
 
     // Lazy fetch: a write-miss root's fill loops back (lazyq) as a data-less
     // fill below memory fills. A load/AMO head of a partial chain parks and
@@ -420,7 +421,10 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire amo_wb_path   = amo_wb_pending && ~amo_hit_st1;
     wire creq_enable   = creq_grant && (amo_creq_path || amo_wb_path);
 
-    assign replay_ready   = replay_grant && ~fwd_head && ~replay_link_hold && ~(!WRITEBACK && replay_rw && mreq_queue_alm_full) && ~pipe_stall;
+    // the replay's dequeue as the MSHR's stage-0 lookups see it: the stall left
+    // out, since a stall also holds stage 0 and its lookups count for nothing
+    assign replay_ready_lk = replay_grant && ~fwd_head_lk && ~replay_link_hold_lk && ~(!WRITEBACK && replay_rw && mreq_queue_alm_full);
+    assign replay_ready   = replay_ready_lk && ~pipe_stall;
     assign mem_rsp_ready  = fill_grant && ~fwd_pending && ~replay_link_hold && ~amo_wbq_full && ~refetch_inflight
                          && ~replay_block && ~(WRITEBACK && mreq_queue_alm_full) && ~pipe_stall;
     assign flush_ready    = flush_grant && ~(WRITEBACK && mreq_queue_alm_full) && ~pipe_stall;
@@ -1064,6 +1068,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .dequeue_data        ({replay_wsel, replay_byteen, replay_data, replay_tag, replay_idx, replay_amo}),
         .dequeue_id          (replay_id),
         .dequeue_ready       (replay_ready || fwd_fire),
+        .dequeue_lookup      (replay_ready_lk || (fwd_head_lk && crsp_queue_ready)),
         .dequeue_park        (park_sel),
         .dequeue_park_retry  (chain_retry),
         .dequeue_block       (replay_block),
@@ -1085,6 +1090,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         `UNUSED_PIN (allocate_ready),
         .allocate_line_ready (mshr_line_ready),
         .finalize_valid      (mshr_finalize_st1 && ~pipe_stall),
+        .finalize_lookup     (mshr_finalize_st1),
         .finalize_is_release (mshr_release_st1),
         // Only link an entry into the pending chain if it is KEPT (a miss). A
         // released (hit) entry must never become a chain member: otherwise the
@@ -1286,9 +1292,10 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // stream must not starve the chain. The ~pipe_stall gate keeps the
     // dequeue aligned with S1 finalize so a stalled late joiner cannot be
     // orphaned mid-link.
-    assign fwd_head    = fwd_active_r && replay_valid
+    assign fwd_head_lk = fwd_active_r && replay_valid
                       && ~replay_rw && ~replay_amo.amo_valid
-                      && ~crsp_queue_valid && ~pipe_stall;
+                      && ~crsp_queue_valid;
+    assign fwd_head    = fwd_head_lk && ~pipe_stall;
     assign fwd_pending = fwd_active_r && replay_valid;
     assign fwd_fire    = fwd_head && crsp_queue_ready;
 
