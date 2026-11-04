@@ -63,21 +63,22 @@ module VX_amo_alu import VX_gpu_pkg::*; #(
     wire [ARW-1:0] b_v = b[ARW-1:0];
 
     // a < b, signed or unsigned, at .W or .D. The compare is split at bit 32:
-    // two 32-bit compares side by side instead of one full-width one, and
-    // the raw operands feed them (the extension of a .W operand only decides
-    // the sign, which is taken from bit 31 instead).
-    wire lo_ltu  = (a_v[31:0] < b_v[31:0]);
-    wire lt_w    = (~is_unsigned && (a_v[31] != b_v[31])) ? a_v[31] : lo_ltu;
+    // two 32-bit compares side by side instead of one full-width one. A
+    // signed compare is the unsigned compare of the operands with their sign
+    // bits flipped, so each compare's output is the order itself; the low
+    // half is signed only as a .W operand (the extension of a .W operand
+    // only decides the sign, taken from bit 31).
+    wire sgn_lo = ~is_unsigned && arith_w;
+    wire lo_lt  = ({a_v[31] ^ sgn_lo, a_v[30:0]} < {b_v[31] ^ sgn_lo, b_v[30:0]});
     wire lt;
     if (ARW > 32) begin : g_lt_d
         wire [ARW-33:0] a_hi = a_v[ARW-1:32];
         wire [ARW-33:0] b_hi = b_v[ARW-1:32];
-        wire hi_ltu = (a_hi < b_hi);
+        wire hi_lt  = ({a_hi[ARW-33] ^ ~is_unsigned, a_hi[ARW-34:0]} < {b_hi[ARW-33] ^ ~is_unsigned, b_hi[ARW-34:0]});
         wire hi_eq  = (a_hi == b_hi);
-        wire hi_lt  = (~is_unsigned && (a_hi[ARW-33] != b_hi[ARW-33])) ? a_hi[ARW-33] : hi_ltu;
-        assign lt = arith_w ? lt_w : (hi_eq ? lo_ltu : hi_lt);
+        assign lt = (arith_w || hi_eq) ? lo_lt : hi_lt;
     end else begin : g_lt_w
-        assign lt = lt_w;
+        assign lt = lo_lt;
     end
 
     // a + b: the upper half is added both ways beside the lower half's
