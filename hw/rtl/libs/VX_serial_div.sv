@@ -41,10 +41,11 @@ module VX_serial_div #(
 
     // -x, carry-select at half width past 32 bits: -x = {-x_hi - b, -x_lo},
     // the borrow b being whether x_lo is nonzero (and -x_hi - 1 = ~x_hi)
-    `define SERIAL_DIV_NEG(y, x, W) \
-        if ((W) > 32) begin \
+    // (the generate block is named blk either way, as -Wall's GENUNNAMED asks)
+    `define SERIAL_DIV_NEG(blk, y, x, W) \
+        if ((W) > 32) begin : blk \
             assign y = {((| x[(W)/2-1:0]) ? ~x[(W)-1:(W)/2] : -x[(W)-1:(W)/2]), -x[(W)/2-1:0]}; \
-        end else begin \
+        end else begin : blk \
             assign y = -x; \
         end
 
@@ -98,10 +99,10 @@ module VX_serial_div #(
         wire [WIDTHD-1:0] d_neg;
         wire [WIDTHQ-1:0] q_neg;
         wire [WIDTHR-1:0] r_neg;
-        if (1) begin : g_n `SERIAL_DIV_NEG(n_neg, n, WIDTHN) end
-        if (1) begin : g_d `SERIAL_DIV_NEG(d_neg, d, WIDTHD) end
-        if (1) begin : g_q `SERIAL_DIV_NEG(q_neg, q, WIDTHQ) end
-        if (1) begin : g_r `SERIAL_DIV_NEG(r_neg, r, WIDTHR) end
+        `SERIAL_DIV_NEG(g_n, n_neg, n, WIDTHN)
+        `SERIAL_DIV_NEG(g_d, d_neg, d, WIDTHD)
+        `SERIAL_DIV_NEG(g_q, q_neg, q, WIDTHQ)
+        `SERIAL_DIV_NEG(g_r, r_neg, r, WIDTHR)
 
         // the quotient is negative for operands of opposite signs, but a
         // division by zero (all ones) is not; the remainder takes the
