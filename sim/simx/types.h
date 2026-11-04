@@ -955,6 +955,8 @@ public:
   IArbiterImpl() {}
   virtual ~IArbiterImpl() {}
   virtual uint32_t grant(const BitVector<>& requests) = 0;
+  // Sees the requests of every cycle, including cycles with no grant.
+  virtual void observe(const BitVector<>& /*requests*/) {}
   virtual void reset() = 0;
 };
 
@@ -1058,8 +1060,11 @@ private:
   std::vector<std::vector<bool>> priority_matrix_;
 };
 
-// Greedy round-robin: keeps granting the current owner while it requests,
-// then hands over to the next requester after it in index order.
+// Greedy round-robin: keeps granting the current owner while it requests
+// without a break, then hands over to the next requester after it in index
+// order. The hold ends in the first cycle the owner does not request, also
+// when nobody requests (see observe): an owner that asks again later takes
+// its round-robin turn like the others, as the RTL sticky arbiters do.
 class GreedyRRArbiter : public IArbiterImpl {
 public:
   GreedyRRArbiter(uint32_t size) : size_(size) {
@@ -1068,7 +1073,7 @@ public:
 
   uint32_t grant(const BitVector<>& requests) override {
     assert(requests.size() == size_);
-    if (last_grant_ < size_ && requests.test(last_grant_)) {
+    if (held_ && requests.test(last_grant_)) {
       return last_grant_;
     }
     uint32_t start = (last_grant_ < size_) ? (last_grant_ + 1) % size_ : 0;
@@ -1076,19 +1081,30 @@ public:
       uint32_t idx = (start + i) % size_;
       if (requests.test(idx)) {
         last_grant_ = idx;
+        held_ = true;
         return idx;
       }
     }
+    held_ = false;
     return -1u;
+  }
+
+  void observe(const BitVector<>& requests) override {
+    assert(requests.size() == size_);
+    if (held_ && !requests.test(last_grant_)) {
+      held_ = false;
+    }
   }
 
   void reset() override {
     last_grant_ = -1u;
+    held_ = false;
   }
 
 private:
   uint32_t size_;
   uint32_t last_grant_;
+  bool     held_;
 };
 
 class Arbiter {
@@ -1131,6 +1147,10 @@ public:
 
   uint32_t grant(const BitVector<>& requests) {
     return impl_->grant(requests);
+  }
+
+  void observe(const BitVector<>& requests) {
+    impl_->observe(requests);
   }
 
   void reset() {

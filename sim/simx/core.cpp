@@ -732,6 +732,9 @@ public:
         }
       }
 
+      // A greedy hold ends in any cycle its owner does not request.
+      ibuffer_arbs_.at(iw).observe(ready_set);
+
       // The arbiter advances only on an issue that fires.
       if (ready_set.any() && !operands_.at(iw)->Input.full()) {
         // select one instruction from ready set

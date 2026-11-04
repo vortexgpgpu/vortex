@@ -51,6 +51,10 @@ module VX_gto_arbiter #(
                 prev_grant <= '0;
             end else if (grant_valid && grant_ready) begin
                 prev_grant <= grant_onehot;
+            end else begin
+                // The hold ends once its request drops; asking again later
+                // competes under the base policy like any other request.
+                prev_grant <= prev_grant & requests;
             end
         end
 

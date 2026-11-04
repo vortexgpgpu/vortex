@@ -63,6 +63,14 @@ tests:
     via: script
     run: "make -C hw/unittest/stream_arb run"
     touches: [hw/rtl/libs/VX_stream_arb.sv, hw/unittest/stream_arb]
+  # Sticky (greedy) arbitration of every VX_generic_arbiter policy: the hold
+  # ends when the grantee's request drops, and requests that appear together
+  # only in short windows (the scoreboard's LSU-credit pattern) are all served
+  # within NUM_REQS windows.
+  - id: hw-sticky-arb
+    via: script
+    run: "make -C hw/unittest/sticky_arb run"
+    touches: [hw/rtl/libs/VX_generic_arbiter.sv, hw/rtl/libs/VX_priority_arbiter.sv, hw/rtl/libs/VX_rr_arbiter.sv, hw/rtl/libs/VX_matrix_arbiter.sv, hw/rtl/libs/VX_cyclic_arbiter.sv, hw/rtl/libs/VX_gto_arbiter.sv, hw/unittest/sticky_arb]
   # Texel blend (VX_tex_lerp, both forms the sampler uses) against the C model
   # the SW sampler and SimX share, and the exact Vulkan f/256 blend, over every
   # input.

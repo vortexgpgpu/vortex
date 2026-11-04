@@ -58,6 +58,7 @@ all:
 	$(MAKE) -C cp_dma
 	$(MAKE) -C cp_llc_port
 	$(MAKE) -C stream_arb
+	$(MAKE) -C sticky_arb
 	$(MAKE) -C cp_core
 	$(MAKE) -C fma_unit
 	$(MAKE) -C fdiv_unit
@@ -130,6 +131,7 @@ run:
 	$(MAKE) -C cp_dma run
 	$(MAKE) -C cp_llc_port run
 	$(MAKE) -C stream_arb run
+	$(MAKE) -C sticky_arb run
 	$(MAKE) -C cp_core run
 	$(MAKE) -C fma_unit run
 	$(MAKE) -C fdiv_unit run
@@ -236,6 +238,7 @@ clean:
 	$(MAKE) -C cp_dma clean
 	$(MAKE) -C cp_llc_port clean
 	$(MAKE) -C stream_arb clean
+	$(MAKE) -C sticky_arb clean
 	$(MAKE) -C cp_core clean
 	$(MAKE) -C foldsim_mem clean
 	$(MAKE) -C foldsim_mem_staged clean
