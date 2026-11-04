@@ -354,17 +354,34 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     // has no path from the cores' requests: a core adds its own requests still
     // waiting at the MMU inputs, so one core's barrier never waits on another
     // core's not-yet-accepted request.
-    wire socket_mmu_drained = dmmu_empty && immu_empty;
+    //
+    // The status is registered: it is set only when both MMUs held nothing and
+    // accepted nothing in the cycle before, so it never reports an MMU empty
+    // that holds a request; it can report a drain one cycle late, which only
+    // makes a waiter wait one cycle longer.
+    reg socket_mmu_drained;
 
     // Requests still waiting at the MMU inputs, for the socket's own busy.
-    wire [`VX_CFG_SOCKET_SIZE * DCACHE_NUM_REQS-1:0] dmmu_in_valid;
-    wire [`VX_CFG_SOCKET_SIZE * ICACHE_NUM_REQS-1:0] immu_in_valid;
+    wire [`VX_CFG_SOCKET_SIZE * DCACHE_NUM_REQS-1:0] dmmu_in_valid, dmmu_in_fire;
+    wire [`VX_CFG_SOCKET_SIZE * ICACHE_NUM_REQS-1:0] immu_in_valid, immu_in_fire;
     for (genvar i = 0; i < `VX_CFG_SOCKET_SIZE * DCACHE_NUM_REQS; ++i) begin : g_dmmu_in_valid
         assign dmmu_in_valid[i] = per_core_dcache_bus_if[i].req_valid;
+        assign dmmu_in_fire[i]  = per_core_dcache_bus_if[i].req_valid && per_core_dcache_bus_if[i].req_ready;
     end
     for (genvar i = 0; i < `VX_CFG_SOCKET_SIZE * ICACHE_NUM_REQS; ++i) begin : g_immu_in_valid
         assign immu_in_valid[i] = per_core_icache_bus_if[i].req_valid;
+        assign immu_in_fire[i]  = per_core_icache_bus_if[i].req_valid && per_core_icache_bus_if[i].req_ready;
     end
+
+    always @(posedge clk) begin
+        if (reset) begin
+            socket_mmu_drained <= 1'b1;
+        end else begin
+            socket_mmu_drained <= dmmu_empty && immu_empty && ~(| dmmu_in_fire) && ~(| immu_in_fire);
+        end
+    end
+    `RUNTIME_ASSERT(reset || ~socket_mmu_drained || (dmmu_empty && immu_empty),
+        ("%t: *** %s socket MMU reported drained while it holds a request", $time, INSTANCE_ID))
 
 `ifdef PERF_ENABLE
     // Surfacing these through sysmem_perf needs a dedicated mmu slot; until that
