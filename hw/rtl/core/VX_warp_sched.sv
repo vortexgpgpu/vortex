@@ -380,7 +380,13 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
                 ibuf_full_r <= ibuf_full_n[l];
             end
         end
-        assign ibuf_full_n[l] = (ibuf_size_n == IBUF_CW'(`VX_CFG_IBUF_SIZE));
+        // The next full is chosen by the late push/pop from compares of the
+        // registered size (equal, one below, one above the capacity), rather
+        // than compared after the size's add and subtract.
+        wire size_eq  = (ibuf_size_r == IBUF_CW'(`VX_CFG_IBUF_SIZE));
+        wire size_eqm = (ibuf_size_r == IBUF_CW'(`VX_CFG_IBUF_SIZE - 1));
+        wire size_eqp = (ibuf_size_r == IBUF_CW'(`VX_CFG_IBUF_SIZE + 1));
+        assign ibuf_full_n[l] = (ibuf_incr == ibuf_pop[l]) ? size_eq : (ibuf_incr ? size_eqm : size_eqp);
         assign ibuf_full[l]   = ibuf_full_r;
 
         VX_pending_size #(
