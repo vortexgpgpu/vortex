@@ -924,7 +924,7 @@ private:
     };
     h.vortex_start = [this]() {
       if (!failed_ && command(FOLDSIM_CMD_START, 0, 0) == 0)
-        launch_start_ = std::chrono::steady_clock::now();
+        launch_start_ = last_progress_print_ = std::chrono::steady_clock::now();
     };
     // A failed device reads idle, so the launch ends; the access after it
     // reports the failure.
@@ -939,6 +939,14 @@ private:
                  "the simulation is stopped", launch_timeout_s_);
         fail(msg);
         return false;
+      }
+      if (busy && progress_s_ > 0 && elapsed_s(last_progress_print_) >= progress_s_) {
+        last_progress_print_ = std::chrono::steady_clock::now();
+        const uint64_t t = read64(FOLDSIM_REG_TCYCLES_LO), hc = read64(FOLDSIM_REG_HCYCLES_LO);
+        printf("[VXDRV] launch %.0f s: target cycles %llu, host cycles %llu, memory stalls %llu, status 0x%x\n",
+               elapsed_s(launch_start_), (unsigned long long)t, (unsigned long long)hc,
+               (unsigned long long)read64(FOLDSIM_REG_MSTALL_LO), s);
+        fflush(stdout);
       }
       poll_backoff(busy);
       return busy;
@@ -958,6 +966,12 @@ private:
   // default, never. A command, DCR read or reset the target leaves unanswered
   // while it advances no cycle for that long fails it too, after 60 s when it
   // is unset.
+  // VORTEX_FOLDSIM_PROGRESS_S=<s>: while a launch runs, print the simulator's target and host cycles every <s>
+  // seconds (registers the runtime reads anyway), so a slow run can be told from a stopped one.
+  static double progress_env() {
+    const char* s = getenv("VORTEX_FOLDSIM_PROGRESS_S");
+    return (s != nullptr && s[0] != '\0') ? atof(s) : 0.0;
+  }
   static double timeout_env() {
     const char* s = getenv("VORTEX_FOLDSIM_TIMEOUT_S");
     return (s != nullptr && s[0] != '\0') ? atof(s) : 0.0;
@@ -968,7 +982,8 @@ private:
   uint64_t busy_polls_ = 0;
   const double launch_timeout_s_ = timeout_env();
   const double control_timeout_s_ = (launch_timeout_s_ > 0) ? launch_timeout_s_ : kControlTimeoutS;
-  std::chrono::steady_clock::time_point launch_start_;
+  std::chrono::steady_clock::time_point launch_start_, last_progress_print_;
+  const double progress_s_ = progress_env();
   bool failed_ = false;
   bool open_ = false;
   uint32_t refresh_ = 0;
