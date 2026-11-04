@@ -31,6 +31,14 @@ tests:
     via: script
     run: "make -C hw/unittest run-tcu-dsp"
     touches: [hw/rtl/tcu, hw/unittest/tcu_fedp]
+  # TLB miss stations under a saturated walker: the L2 TLB's (and the dMMU's)
+  # VX_tlb_mshr must issue every pending miss within a bounded number of walks.
+  # A lowest-entry-first issue let the low entries recycle ahead of a waiting
+  # high entry forever (4-SM A100-class demo hang); --fair fails on that.
+  - id: hw-tlb-l2-fair
+    via: script
+    run: "make -C hw/unittest/tlb_l2 run OPTS=--fair"
+    touches: [hw/rtl/vm, hw/unittest/tlb_l2]
   # The command processor's DMA port into the last-level cache: a launch behind
   # DMA writes must wait for them to reach the cache. No runtime path launches
   # right behind a DMA write, so no system test observes this ordering.

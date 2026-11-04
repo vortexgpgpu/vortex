@@ -172,6 +172,7 @@ static uint64_t vpn_of(uint64_t v2, uint64_t v1, uint64_t v0) {
 
 struct Req {
   int socket; uint32_t id; uint64_t vpn; int acc; bool amo; int gen_in;
+  int accept_cycle = -1;
   bool done = false;
 };
 
@@ -189,10 +190,18 @@ int main(int argc, char **argv) {
   Verilated::commandArgs(argc, argv);
   unsigned seed = 1;
   int num_reqs = 30000;
+  // --fair: every socket always presents a miss to a fresh, validly mapped base
+  // page, answers are always taken and memory answers at a fixed latency, so
+  // the walker stays saturated; every request must be answered within
+  // FAIR_BOUND cycles of its accept (a starved miss entry fails the test).
+  bool fair = false;
+  static constexpr int FAIR_BOUND = 3000;
+  int max_wait = 0;
   for (int i = 1; i < argc; ++i) {
     std::string a(argv[i]);
     if (a.rfind("--seed=", 0) == 0) seed = std::stoul(a.substr(7));
     if (a.rfind("--reqs=", 0) == 0) num_reqs = std::stoi(a.substr(7));
+    if (a == "--fair") fair = true;
   }
   std::mt19937 rng(seed);
 
@@ -235,6 +244,20 @@ int main(int argc, char **argv) {
   int mem_sel = -1;
   int gen = 0, flushes = 0, issued = 0, answered = 0, faults = 0, mem_reads = 0, fault_reports = 0;
   bool flush_hold = false;
+  // fresh base pages with a leaf mapping: level-1 slots and leaf indices that
+  // the table above maps to an ordinary page
+  uint64_t fair_v1 = 0, fair_v0 = 0;
+  auto next_fair_vpn = [&]() {
+    for (;;) {
+      if (++fair_v0 == 512) {
+        fair_v0 = 0;
+        do { ++fair_v1; } while (fair_v1 % 16 == 5 || fair_v1 % 16 == 13 || fair_v1 % 16 == 9);
+      }
+      uint64_t k = fair_v0;
+      if (k % 11 == 5 || k % 13 == 7 || k % 17 == 3) continue;
+      return vpn_of(4, fair_v1, k);
+    }
+  };
 
   for (cycle = 0; cycle < 4000000; ++cycle) {
     // Alternate phases: a mixed working set at a long memory latency, then a
@@ -245,7 +268,7 @@ int main(int argc, char **argv) {
     // requests
     for (int s = 0; s < NS; ++s) {
       if (pending[s] < 0 && issued < num_reqs && !flush_hold && outstanding[s].size() < NUM_IDS
-       && (rng() % 3 != 0)) {
+       && (fair || rng() % 3 != 0)) {
         uint32_t id = rng() % NUM_IDS;
         while (outstanding[s].count(id)) id = (id + 1) % NUM_IDS;
         Req r;
@@ -255,7 +278,9 @@ int main(int argc, char **argv) {
         // gigapage and the faults; superpage requests vary the VPN bits below
         // their level
         uint32_t c = rng() % 20;
-        if (c < (storm ? 1u : 8u)) {
+        if (fair) {
+          r.vpn = next_fair_vpn();
+        } else if (c < (storm ? 1u : 8u)) {
           r.vpn = pages[rng() % 48];
         } else if (c < 17) {
           r.vpn = (pages[48 + rng() % 24] & ~511ull) | (rng() % 512);
@@ -263,8 +288,8 @@ int main(int argc, char **argv) {
           size_t k = 72 + rng() % (pages.size() - 72);
           r.vpn = (k < 74) ? ((pages[k] & ~0x3ffffull) | (rng() % 0x40000)) : pages[k];
         }
-        r.acc = int(rng() % 3);
-        r.amo = (rng() % 8 == 0);
+        r.acc = fair ? 0 : int(rng() % 3);
+        r.amo = !fair && (rng() % 8 == 0);
         r.gen_in = -1;
         pending[s] = int(reqs.size());
         outstanding[s][id] = pending[s];
@@ -282,9 +307,9 @@ int main(int argc, char **argv) {
       }
     }
     sim->rsp_ready = 0;
-    for (int s = 0; s < NS; ++s) set_bits(sim->rsp_ready, s, 1, (rng() % 8) < (storm ? 1u : 4u));
-    sim->mem_req_ready = (rng() % 4 != 0);
-    if (!flush_hold && issued > 200 && issued < num_reqs && rng() % 4000 == 0) flush_hold = true;
+    for (int s = 0; s < NS; ++s) set_bits(sim->rsp_ready, s, 1, fair || (rng() % 8) < (storm ? 1u : 4u));
+    sim->mem_req_ready = fair || (rng() % 4 != 0);
+    if (!fair && !flush_hold && issued > 200 && issued < num_reqs && rng() % 4000 == 0) flush_hold = true;
     sim->flush_req = flush_hold;
 
     // memory: one response at a time, any due request, in random order
@@ -337,6 +362,12 @@ int main(int argc, char **argv) {
               << " ppn " << w.ppn << " flags " << w.flags << std::dec);
       }
       faults += fault;
+      if (fair) {
+        int wait = cycle - r.accept_cycle;
+        max_wait = std::max(max_wait, wait);
+        CHECK(wait <= FAIR_BOUND, "request " << it->second << " (socket " << s << ") answered " << wait
+              << " cycles after its accept");
+      }
       r.done = true;
       ++answered;
       outstanding[s].erase(it);
@@ -347,7 +378,7 @@ int main(int argc, char **argv) {
       CHECK(!sim->mem_req_rw, "walker write");
       nm.tag = sim->mem_req_tag;
       nm.addr = sim->mem_req_addr;
-      nm.due = cycle + 2 + int(rng() % (storm ? 4 : 40));
+      nm.due = cycle + (fair ? 30 : 2 + int(rng() % (storm ? 4 : 40)));
     }
     bool mrsp_fire = sim->mem_rsp_valid && sim->mem_rsp_ready;
     bool fdone = sim->flush_req && sim->flush_done;
@@ -358,11 +389,28 @@ int main(int argc, char **argv) {
 
     for (int s : acc) {
       reqs[pending[s]].gen_in = gen;
+      reqs[pending[s]].accept_cycle = cycle;
       pending[s] = -1;
     }
     if (mrsp_fire) { mem_q.erase(mem_q.begin() + mem_sel); mem_sel = -1; }
     if (mreq_fire) { mem_q.push_back(nm); ++mem_reads; }
     if (fdone) { flush_hold = false; ++gen; ++flushes; }
+
+    if (fair && (cycle % 1000) == 0) {
+      bool starved = false;
+      for (int s = 0; s < NS && !starved; ++s) {
+        for (auto& [id, q] : outstanding[s]) {
+          const Req& r = reqs[q];
+          if (r.accept_cycle >= 0 && cycle - r.accept_cycle > FAIR_BOUND) {
+            CHECK(false, "request " << q << " (socket " << s << ", id " << id << ") waiting "
+                  << (cycle - r.accept_cycle) << " cycles since its accept");
+            starved = true;
+            break;
+          }
+        }
+      }
+      if (starved) break;
+    }
 
     if (issued == num_reqs) {
       bool all = true;
@@ -375,6 +423,7 @@ int main(int argc, char **argv) {
   for (size_t i = 0; i < reqs.size(); ++i) {
     const Req& r = reqs[i];
     if (r.done) continue;
+    if (fair && lost < 10 && r.accept_cycle >= 0) std::cout << "  (accepted at cycle " << r.accept_cycle << ")" << std::endl;
     if (++lost <= 10) std::cout << "request " << i << " never answered (socket " << r.socket << ", id " << r.id
                                 << ", vpn " << std::hex << r.vpn << std::dec << ", gen " << r.gen_in << ")" << std::endl;
   }
@@ -383,7 +432,9 @@ int main(int argc, char **argv) {
 
   std::cout << "seed " << seed << ": " << issued << " requests, " << answered << " answered, " << faults << " faults, "
             << mem_reads << " PTE reads, " << fault_reports << " fault reports, " << flushes << " flushes, "
-            << cycle << " cycles, " << errors << " errors" << std::endl;
+            << cycle << " cycles, " << errors << " errors";
+  if (fair) std::cout << ", max wait " << max_wait;
+  std::cout << std::endl;
   if (errors) {
     std::cout << "FAILED!" << std::endl;
     return 1;

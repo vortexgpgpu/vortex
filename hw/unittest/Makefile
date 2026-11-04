@@ -81,6 +81,7 @@ run:
 	$(MAKE) -C mmu run
 	$(MAKE) -C mmu run OPTS=--fair
 	$(MAKE) -C tlb_l2 run
+	$(MAKE) -C tlb_l2 run OPTS=--fair
 	$(MAKE) -C kmu run
 	$(MAKE) -C dxa_core run
 	$(MAKE) -C tcu_unit run

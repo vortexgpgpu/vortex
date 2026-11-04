@@ -207,18 +207,36 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
     // ---------------------------------------------------------------------
     // Issue
     // ---------------------------------------------------------------------
+    // Round-robin from a pointer that rotates past each issued entry: the first
+    // pending entry at or above it, else the first pending entry. A freed entry
+    // is re-allocated lowest-first, so a lowest-first issue would let the low
+    // entries recycle ahead of a waiting high entry for as long as the walker
+    // stays saturated; with the rotation a pending entry issues within
+    // MSHR_SIZE issues.
     wire [MSHR_SIZE-1:0] issue_pend = valid_r & ~issued_r;
-    wire                 has_issue;
-    wire [IDX_W-1:0]     issue_sel;
-    wire [MSHR_SIZE-1:0] issue_oh;
+    reg  [IDX_W-1:0]     issue_rr_r;
+    wire [MSHR_SIZE-1:0] issue_pend_upper = issue_pend & ({MSHR_SIZE{1'b1}} << issue_rr_r);
+    wire                 has_issue, has_issue_upper;
+    wire [IDX_W-1:0]     issue_sel, issue_sel_upper, issue_sel_lower;
+    wire [MSHR_SIZE-1:0] issue_oh, issue_oh_upper, issue_oh_lower;
+    VX_priority_encoder #(
+        .N (MSHR_SIZE)
+    ) issue_upper_enc (
+        .data_in    (issue_pend_upper),
+        .onehot_out (issue_oh_upper),
+        .index_out  (issue_sel_upper),
+        .valid_out  (has_issue_upper)
+    );
     VX_priority_encoder #(
         .N (MSHR_SIZE)
     ) issue_enc (
         .data_in    (issue_pend),
-        .onehot_out (issue_oh),
-        .index_out  (issue_sel),
+        .onehot_out (issue_oh_lower),
+        .index_out  (issue_sel_lower),
         .valid_out  (has_issue)
     );
+    assign issue_oh  = has_issue_upper ? issue_oh_upper  : issue_oh_lower;
+    assign issue_sel = has_issue_upper ? issue_sel_upper : issue_sel_lower;
 
     // Register the outgoing issue interface; the entry selection above is combinational.
     localparam ISSUE_W = `UP(ID_WIDTH) + $bits(tlb_access_e) + 1 + TLB_VPN_WIDTH;
@@ -243,6 +261,14 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
     assign issue_amo    = issue_dout[TLB_VPN_WIDTH];
     assign issue_vpn    = issue_dout[TLB_VPN_WIDTH-1:0];
     wire issue_fire = has_issue && issue_accept;
+
+    always @(posedge clk) begin
+        if (reset || flush) begin
+            issue_rr_r <= '0;
+        end else if (issue_fire) begin
+            issue_rr_r <= issue_sel + IDX_W'(1);
+        end
+    end
 
     // ---------------------------------------------------------------------
     // Fill
