@@ -505,10 +505,13 @@ The register block is `[dcr_mmu]` in [`VX_types.toml`](../../VX_types.toml):
 `l2_flush_if.done ∧ ptw_flush_if.done`. The first-fault latch takes
 `{va, access, amo}` from the lowest-indexed cluster raising `fault_valid`,
 ignores later faults until cleared, and is also cleared by the `SATP_HI`
-write so a report from before the address space was valid is discarded. DCR
-reads are pulse-then-poll — the host asserts the request for one cycle and
-samples later — so the MMU read response is latched when the read is seen and
-held until the next DCR access retires it, muxed ahead of the cluster reply.
+write so a report from before the address space was valid is discarded. A
+DCR read of the fault registers is answered like a core's DCR read: a
+one-cycle response pulse the cycle after the read, muxed ahead of the cluster
+reply. Every requester takes the first response after its read, so a response
+must not outlive its pulse (one held until the next DCR access answered the
+CP's next read: the CP's register slice delays its request past the start of
+its wait).
 
 ### 8.2 The socket tap — `VX_mmu_snoop`
 

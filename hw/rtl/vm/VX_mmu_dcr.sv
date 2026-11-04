@@ -126,19 +126,18 @@ module VX_mmu_dcr import VX_gpu_pkg::*; #(
     wire is_fault_vahi_rd = dcr_rd && (dcr_bus_if.req_data.addr == `VX_DCR_MMU_FAULT_VA_HI);
     wire is_mmu_rd = is_fault_info_rd || is_fault_va_rd || is_fault_vahi_rd;
 
-    // The DCR read handshake is pulse-then-poll: the host asserts the request
-    // for one cycle, drops it, then samples rsp_valid. A response tied to the
-    // request cycle is gone before the poll, so latch it when the read is seen
-    // and hold it until the next DCR access retires it.
+    // A DCR read is answered by a one-cycle response pulse, the cycle after
+    // the read, as VX_dcr_data answers the core reads. Every requester (the
+    // CP's DCR proxy, the rtlsim, FireSim and Foldsim hosts) waits for the
+    // first response valid after its read, so a response held past its pulse
+    // would answer the requester's next read in its place.
     reg       mmu_rsp_valid_r;
     reg [31:0] mmu_rsp_data_r;
     always @(posedge clk) begin
         if (reset) begin
             mmu_rsp_valid_r <= 1'b0;
-        end else if (is_mmu_rd) begin
-            mmu_rsp_valid_r <= 1'b1;
-        end else if (dcr_bus_if.req_valid) begin
-            mmu_rsp_valid_r <= 1'b0;
+        end else begin
+            mmu_rsp_valid_r <= is_mmu_rd;
         end
         if (is_fault_info_rd) begin
             mmu_rsp_data_r <= fault_info_word;
@@ -163,5 +162,8 @@ module VX_mmu_dcr import VX_gpu_pkg::*; #(
     assign dcr_bus_if.rsp_valid = mmu_rsp_valid_r || dcr_bus_out_if.rsp_valid;
     assign dcr_bus_if.rsp_data  = mmu_rsp_valid_r ? dcr_rsp_t'(mmu_rsp_data_r)
                                                   : dcr_bus_out_if.rsp_data;
+
+    // one read at a time: the MMU and the clusters never answer together
+    `RUNTIME_ASSERT (~(mmu_rsp_valid_r && dcr_bus_out_if.rsp_valid), ("%t: MMU and cluster DCR responses in the same cycle", $time))
 
 endmodule

@@ -38,6 +38,15 @@ tests:
     via: script
     run: "make -C hw/unittest/cp_llc_port run"
     touches: [hw/rtl/mem/VX_cp_llc_port.sv, hw/unittest/cp_llc_port]
+  # The command processor's DCR reads through its GPU register slice with the
+  # device MMU's responder on the bus: after the post-launch MMU fault read,
+  # every perf-counter read and every core's flush answer must be its own. A
+  # response outliving its one-cycle pulse answers the next read; whether a
+  # system run sees it depends on host timing.
+  - id: hw-cp-dcr-mmu
+    via: script
+    run: "make -C hw/unittest/cp_dcr_mmu run"
+    touches: [hw/rtl/vm/VX_mmu_dcr.sv, hw/rtl/cp/VX_cp_dcr_proxy.sv, hw/rtl/cp/VX_cp_gpu_slice.sv, hw/rtl/core/VX_dcr_data.sv, hw/unittest/cp_dcr_mmu]
   # Stream arbiters over more than 1.5x MAX_FANOUT requests become trees of
   # slices; a last slice narrower than the arbiter's other side must keep every
   # request on its own output and select. The system shapes reach only a few of
