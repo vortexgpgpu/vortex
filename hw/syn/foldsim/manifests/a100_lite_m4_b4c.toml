@@ -180,8 +180,17 @@ mem_id_width = 6                 # 4 + clog2(mem_ports)
 mem_channel_shift = 2            # interleaved ports (VX_CFG_PLATFORM_MEMORY_INTERLEAVE)
 clock_mhz = 250                  # FOLDSIM_FREQ (B4c images: img_b4c 250, img_b4c50 50)
 device = "xcv80-lsva4737-2MHP-e-S"
-control = { start = "start", busy = "busy", dcr_req = "dcr_req", dcr_rsp = "dcr_rsp" }
 axi_spec = 2
+
+[platform.control]
+# The control endpoint's roles bound to Vortex's ports (foldsim_target.sv): the endpoint's own names.
+reset = "reset"
+start = "start"
+busy = "busy"
+csr_addr_width = 12
+csr_data_width = 32
+csr_req = { valid = "dcr_req_valid", rw = "dcr_req_rw", addr = "dcr_req_addr", data = "dcr_req_data" }
+csr_rsp = { valid = "dcr_rsp_valid", data = "dcr_rsp_data" }
 
 [options]
 modulo = true
