@@ -309,6 +309,14 @@ public:
     #ifdef VX_CFG_EXT_TCU_ENABLE
       dispatchers_.at((int)FUType::TCU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_TCU_BLOCKS, VX_CFG_NUM_TCU_LANES, 1);
     #endif
+      // Fed directly, the ALU block takes a multi-pass multiply on its last
+      // pass (VX_alu_muldiv's ready), and the dispatch queue returns the op's
+      // credit then (VX_dispatcher's fu_release); behind the lane-gather
+      // stage the credit returns as the op enters that stage's buffer.
+      if (!AluUnit::kGather) {
+        dispatchers_.at((int)FUType::ALU)->set_input_hold(
+          [](const instr_trace_t* t) { return AluUnit::mul_passes(t) - 1; });
+      }
       for (uint32_t fu = 0; fu < (uint32_t)FUType::Count; ++fu) {
         auto& dispatch = dispatchers_.at(fu);
         auto& func_unit = func_units_.at(fu);

@@ -4,6 +4,8 @@
 #include <math.h>
 #include <limits>
 #include <assert.h>
+#include <stdint.h>
+#include "common.h"
 
 void cleanup();
 
@@ -170,6 +172,40 @@ public:
     auto c = (int32_t*)dst;
     for (uint32_t i = 0; i < n; ++i) {
       auto ref = a[i] * b[i];
+      if (c[i] != ref) {
+        std::cout << "error at result #" << std::dec << i << std::hex << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        ++errors;
+      }
+    }
+    return errors;
+  }
+};
+
+class Test_IMUL64 : public ITestCase {
+public:
+  Test_IMUL64(TestSuite* suite) : ITestCase(suite, "imul64") {}
+
+  int setup(uint32_t n, void* src1, void* src2) override {
+    auto a = (uint32_t*)src1;
+    auto b = (uint32_t*)src2;
+    uint64_t s = 0x9E3779B97F4A7C15ull;
+    for (uint32_t i = 0; i < n; ++i) {
+      s = s * 6364136223846793005ull + 1442695040888963407ull;
+      a[i] = (uint32_t)(s >> 32);
+      s = s * 6364136223846793005ull + 1442695040888963407ull;
+      // every fourth operand small, so some partial products are zero
+      b[i] = (i % 4 == 3) ? (uint32_t)(s >> 59) : (uint32_t)(s >> 32);
+    }
+    return 0;
+  }
+
+  int verify(uint32_t n, void* dst, const void* src1, const void* src2) override {
+    int errors = 0;
+    auto a = (const uint32_t*)src1;
+    auto b = (const uint32_t*)src2;
+    auto c = (const uint32_t*)dst;
+    for (uint32_t i = 0; i < n; ++i) {
+      auto ref = imul64_mix(a[i], b[i]);
       if (c[i] != ref) {
         std::cout << "error at result #" << std::dec << i << std::hex << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
@@ -897,6 +933,7 @@ TestSuite::TestSuite(vx_device_h device)
   this->add_test(new Test_TRIGO(this));
   this->add_test(new Test_BAR(this));
   this->add_test(new Test_GBAR(this));
+  this->add_test(new Test_IMUL64(this));
 }
 
 TestSuite::~TestSuite() {

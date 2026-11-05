@@ -92,60 +92,37 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
 
 `else
 
-    wire [NUM_LANES-1:0][2*(`VX_CFG_XLEN+1)-1:0] mul_result_tmp;
-    wire is_mulh_out;
-    wire is_mul_w_out;
-
 `ifdef VX_CFG_XLEN_64
 
-    wire [NUM_LANES-1:0][`VX_CFG_XLEN:0] mul_in1;
-    wire [NUM_LANES-1:0][`VX_CFG_XLEN:0] mul_in2;
-
-    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mul_in
-        assign mul_in1[i] = is_alu_w ? {{(`VX_CFG_XLEN-31){execute_if.data.rs1_data[i][31]}}, execute_if.data.rs1_data[i][31:0]} : {is_signed_mul_a && execute_if.data.rs1_data[i][`VX_CFG_XLEN-1], execute_if.data.rs1_data[i]};
-        assign mul_in2[i] = is_alu_w ? {{(`VX_CFG_XLEN-31){execute_if.data.rs2_data[i][31]}}, execute_if.data.rs2_data[i][31:0]} : {is_signed_mul_b && execute_if.data.rs2_data[i][`VX_CFG_XLEN-1], execute_if.data.rs2_data[i]};
-    end
-
-    wire mul_strode;
-    wire mul_busy;
-
-    VX_elastic_adapter mul_elastic_adapter (
+    // 64-bit multiplies run as 1 (W), 3 (low) or 4 (high) passes through a
+    // pipelined 33 x 33 multiplier per lane, as a GPU's 32-bit IMAD runs them.
+    VX_mul_multipass #(
+        .LANES     (NUM_LANES),
+        .TAG_WIDTH (TAG_WIDTH),
+        .LATENCY   (`LATENCY_IMUL)
+    ) mul_multipass (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (mul_valid_in),
         .ready_in  (mul_ready_in),
+        .is_w      (is_alu_w),
+        .is_high   (is_mulh_in),
+        .signed_a  (is_signed_mul_a),
+        .signed_b  (is_signed_mul_b),
+        .dataa     (execute_if.data.rs1_data),
+        .datab     (execute_if.data.rs2_data),
+        .tag_in    (execute_if.data.header),
         .valid_out (mul_valid_out),
         .ready_out (mul_ready_out),
-        .strobe    (mul_strode),
-        .busy      (mul_busy)
+        .result    (mul_result_out),
+        .tag_out   (mul_hdr_out)
     );
-
-    VX_serial_mul #(
-        .A_WIDTH (`VX_CFG_XLEN+1),
-        .LANES   (NUM_LANES),
-        .SIGNED  (1)
-    ) serial_mul (
-        .clk       (clk),
-        .reset     (reset),
-
-        .strobe    (mul_strode),
-        .busy      (mul_busy),
-
-        .dataa     (mul_in1),
-        .datab     (mul_in2),
-        .result    (mul_result_tmp)
-    );
-
-    reg [TAG_WIDTH+2-1:0] mul_tag_r;
-    always @(posedge clk) begin
-        if (mul_valid_in && mul_ready_in) begin
-            mul_tag_r <= {execute_if.data.header, is_mulh_in, is_alu_w};
-        end
-    end
-
-    assign {mul_hdr_out, is_mulh_out, is_mul_w_out} = mul_tag_r;
 
 `else
+
+    wire [NUM_LANES-1:0][2*(`VX_CFG_XLEN+1)-1:0] mul_result_tmp;
+    wire is_mulh_out;
+    wire is_mul_w_out;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_multiplier
         wire [`VX_CFG_XLEN:0] mul_in1 = {is_signed_mul_a && execute_if.data.rs1_data[i][`VX_CFG_XLEN-1], execute_if.data.rs1_data[i]};
@@ -180,18 +157,12 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
 
     assign mul_ready_in = mul_ready_out || ~mul_valid_out;
 
-`endif
-
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mul_result_out
-    `ifdef VX_CFG_XLEN_64
-        assign mul_result_out[i] = is_mulh_out ? mul_result_tmp[i][2*(`VX_CFG_XLEN)-1:`VX_CFG_XLEN] :
-                                                 (is_mul_w_out ? `VX_CFG_XLEN'($signed(mul_result_tmp[i][31:0])) :
-                                                                 mul_result_tmp[i][`VX_CFG_XLEN-1:0]);
-    `else
         assign mul_result_out[i] = is_mulh_out ? mul_result_tmp[i][2*(`VX_CFG_XLEN)-1:`VX_CFG_XLEN] : mul_result_tmp[i][`VX_CFG_XLEN-1:0];
-        `UNUSED_VAR (is_mul_w_out)
-    `endif
     end
+    `UNUSED_VAR (is_mul_w_out)
+
+`endif
 
 `endif
 

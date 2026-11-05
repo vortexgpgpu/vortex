@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Vortex hardware IP library (`hw/rtl/libs/`) provides a comprehensive collection of 76 reusable, parameterized SystemVerilog IP modules used throughout the Vortex GPGPU processor. These modules cover arbitration, buffering, arithmetic, memory, interconnect, and debug infrastructure, forming the foundational building blocks of the Vortex microarchitecture.
+The Vortex hardware IP library (`hw/rtl/libs/`) provides a comprehensive collection of 77 reusable, parameterized SystemVerilog IP modules used throughout the Vortex GPGPU processor. These modules cover arbitration, buffering, arithmetic, memory, interconnect, and debug infrastructure, forming the foundational building blocks of the Vortex microarchitecture.
 
 All modules are parameterized for data width, depth, and implementation strategy, with support for both FPGA (Xilinx/Intel) and ASIC synthesis flows.
 
@@ -958,6 +958,25 @@ Parameterized arithmetic units supporting various area/performance trade-offs.
 
 ---
 
+### VX_mul_multipass
+
+**File:** `VX_mul_multipass.sv`  
+**Purpose:** Multi-pass 64-bit integer multiplier: a pipelined 33 x 33 multiplier per lane run 1-4 times per operation, as a GPU runs its 32-bit IMAD for 64-bit multiplies.
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `LANES` | 1 | Number of parallel lanes |
+| `TAG_WIDTH` | 1 | Width of the tag carried beside each operation |
+| `LATENCY` | 3 | The 33 x 33 multiplier's pipeline depth |
+
+**Features:**
+- 1 pass for the 32-bit (W) product, 3 for the low and 4 for the high 64 bits of the 128-bit product; signed, unsigned and mixed (MULHSU) operands
+- An operation holds its input until its last pass; a new one can issue the next cycle
+- Result `LATENCY + 1` cycles after the last pass (a per-lane carry-select accumulator)
+- Used by `VX_alu_muldiv` at XLEN 64
+
+---
+
 ### VX_fold_mul
 
 **File:** `VX_fold_mul.sv`  
@@ -1845,43 +1864,44 @@ Infrastructure for runtime debug observation and serial trace extraction.
 | 32 | VX_mem_coalescer | Memory Adapter | Large | Multi-cycle |
 | 33 | VX_mem_data_adapter | Memory Adapter | Medium | Multi-cycle |
 | 34 | VX_mem_scheduler | Scheduler | Large | Multi-cycle |
-| 35 | VX_multiplier | Arithmetic | Varies | Configurable |
-| 36 | VX_mux | Mux/Demux | Small | 0 cycles |
-| 37 | VX_nz_iterator | Stream Util | Small | 0-1 cycles |
-| 38 | VX_onehot_encoder | Encoder | Small | O(log N) |
-| 39 | VX_onehot_mux | Mux/Demux | Small | 0 cycles |
-| 40 | VX_onehot_shift | Bit Manip | Small | 0 cycles |
-| 41 | VX_pe_serializer | Stream Util | Medium | Multi-cycle |
-| 42 | VX_pending_size | Counter | Small | 0-1 cycles |
-| 43 | VX_pipe_buffer | Buffer | Varies | N cycles |
-| 44 | VX_pipe_register | Buffer | Varies | N cycles |
-| 45 | VX_popcount | Arithmetic | Small | O(log N) |
-| 46 | VX_priority_arbiter | Arbiter | Small | 0 cycles |
-| 47 | VX_priority_encoder | Encoder | Small | O(log N) |
-| 48 | VX_reduce_tree | Arithmetic | Small | O(log N) |
-| 49 | VX_reset_relay | Sync | Small | 1 cycle |
-| 50 | VX_rom | Memory | Varies | 0-1 cycles |
-| 51 | VX_rr_arbiter | Arbiter | Medium | 0 cycles |
-| 52 | VX_scan | Encoder | Medium | O(log N) |
-| 53 | VX_scope_switch | Debug | Small | 0 cycles |
-| 54 | VX_scope_tap | Debug | Large | Multi-cycle |
-| 55 | VX_serial_div | Arithmetic | Small | Multi-cycle |
-| 56 | VX_serial_mul | Arithmetic | Small | Multi-cycle |
-| 57 | VX_shift_register | Buffer | Varies | N cycles |
-| 58 | VX_skid_buffer | Buffer | Small | 0-1 cycles |
-| 59 | VX_sp_ram | Memory | Varies | 0-1 cycles |
-| 60 | VX_stream_arb | Interconnect | Medium | 0-1 cycles |
-| 61 | VX_stream_buffer | Buffer | Small | 0-1 cycles |
-| 62 | VX_stream_dispatch | Stream Util | Medium | 0-1 cycles |
-| 63 | VX_stream_fork | Stream Util | Small | 0 cycles |
-| 64 | VX_stream_join | Stream Util | Small | 0 cycles |
-| 65 | VX_stream_omega | Interconnect | Large | O(log N) |
-| 66 | VX_stream_pack | Stream Util | Medium | 0-1 cycles |
-| 67 | VX_stream_switch | Interconnect | Medium | 0-1 cycles |
-| 68 | VX_stream_unpack | Stream Util | Medium | Multi-cycle |
-| 69 | VX_stream_xbar | Interconnect | Large | 0-1 cycles |
-| 70 | VX_stream_xpoint | Interconnect | Medium | 0-1 cycles |
-| 71 | VX_ticket_lock | Allocator | Small | 0-1 cycles |
-| 72 | VX_toggle_buffer | Buffer | Small | 1 cycle |
-| 73 | VX_transpose | Bit Manip | Zero | 0 cycles |
-| 74 | VX_wallace_mul | Arithmetic | Large | O(log N) |
+| 35 | VX_mul_multipass | Arithmetic | Medium | Multi-pass |
+| 36 | VX_multiplier | Arithmetic | Varies | Configurable |
+| 37 | VX_mux | Mux/Demux | Small | 0 cycles |
+| 38 | VX_nz_iterator | Stream Util | Small | 0-1 cycles |
+| 39 | VX_onehot_encoder | Encoder | Small | O(log N) |
+| 40 | VX_onehot_mux | Mux/Demux | Small | 0 cycles |
+| 41 | VX_onehot_shift | Bit Manip | Small | 0 cycles |
+| 42 | VX_pe_serializer | Stream Util | Medium | Multi-cycle |
+| 43 | VX_pending_size | Counter | Small | 0-1 cycles |
+| 44 | VX_pipe_buffer | Buffer | Varies | N cycles |
+| 45 | VX_pipe_register | Buffer | Varies | N cycles |
+| 46 | VX_popcount | Arithmetic | Small | O(log N) |
+| 47 | VX_priority_arbiter | Arbiter | Small | 0 cycles |
+| 48 | VX_priority_encoder | Encoder | Small | O(log N) |
+| 49 | VX_reduce_tree | Arithmetic | Small | O(log N) |
+| 50 | VX_reset_relay | Sync | Small | 1 cycle |
+| 51 | VX_rom | Memory | Varies | 0-1 cycles |
+| 52 | VX_rr_arbiter | Arbiter | Medium | 0 cycles |
+| 53 | VX_scan | Encoder | Medium | O(log N) |
+| 54 | VX_scope_switch | Debug | Small | 0 cycles |
+| 55 | VX_scope_tap | Debug | Large | Multi-cycle |
+| 56 | VX_serial_div | Arithmetic | Small | Multi-cycle |
+| 57 | VX_serial_mul | Arithmetic | Small | Multi-cycle |
+| 58 | VX_shift_register | Buffer | Varies | N cycles |
+| 59 | VX_skid_buffer | Buffer | Small | 0-1 cycles |
+| 60 | VX_sp_ram | Memory | Varies | 0-1 cycles |
+| 61 | VX_stream_arb | Interconnect | Medium | 0-1 cycles |
+| 62 | VX_stream_buffer | Buffer | Small | 0-1 cycles |
+| 63 | VX_stream_dispatch | Stream Util | Medium | 0-1 cycles |
+| 64 | VX_stream_fork | Stream Util | Small | 0 cycles |
+| 65 | VX_stream_join | Stream Util | Small | 0 cycles |
+| 66 | VX_stream_omega | Interconnect | Large | O(log N) |
+| 67 | VX_stream_pack | Stream Util | Medium | 0-1 cycles |
+| 68 | VX_stream_switch | Interconnect | Medium | 0-1 cycles |
+| 69 | VX_stream_unpack | Stream Util | Medium | Multi-cycle |
+| 70 | VX_stream_xbar | Interconnect | Large | 0-1 cycles |
+| 71 | VX_stream_xpoint | Interconnect | Medium | 0-1 cycles |
+| 72 | VX_ticket_lock | Allocator | Small | 0-1 cycles |
+| 73 | VX_toggle_buffer | Buffer | Small | 1 cycle |
+| 74 | VX_transpose | Bit Manip | Zero | 0 cycles |
+| 75 | VX_wallace_mul | Arithmetic | Large | O(log N) |

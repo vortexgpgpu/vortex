@@ -14,6 +14,7 @@
 #pragma once
 
 #include "instr_trace.h"
+#include <functional>
 #include <queue>
 #include <vector>
 
@@ -33,6 +34,13 @@ public:
 
 	virtual ~Dispatcher();
 
+	// Cycles the unit holds an op at its input before taking it, when the
+	// queue feeds the unit directly: the op keeps its queue slot, and so its
+	// issue credit, until the unit takes it.
+	void set_input_hold(std::function<uint32_t(const instr_trace_t*)> hold) {
+		input_hold_ = std::move(hold);
+	}
+
 protected:
 	virtual void on_reset();
 	virtual void on_tick();
@@ -46,6 +54,7 @@ private:
 	uint32_t batch_idx_;
 	uint32_t out_delay_;
 	std::vector<int> block_pids_;
+	std::function<uint32_t(const instr_trace_t*)> input_hold_;
 
 	friend class SimObject<Dispatcher>;
 };

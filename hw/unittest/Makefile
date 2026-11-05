@@ -68,6 +68,7 @@ all:
 	$(MAKE) -C tex_lerp
 	$(MAKE) -C mufu_unit
 	$(MAKE) -C serial_muldiv
+	$(MAKE) -C alu_muldiv
 
 run:
 	$(MAKE) -C generic_queue run
@@ -141,6 +142,7 @@ run:
 	$(MAKE) -C tex_lerp run
 	$(MAKE) -C mufu_unit run
 	$(MAKE) -C serial_muldiv run
+	$(MAKE) -C alu_muldiv run
 
 # FPU arithmetic units only — executed (not just built) so CI gates correctness.
 run-fpu:
@@ -280,3 +282,4 @@ clean:
 	$(MAKE) -C tex_lerp clean
 	$(MAKE) -C mufu_unit clean
 	$(MAKE) -C serial_muldiv clean
+	$(MAKE) -C alu_muldiv clean

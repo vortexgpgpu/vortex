@@ -118,7 +118,7 @@ void Dispatcher::on_tick() {
       } else {
         block_pids_.at(b) = -1; // mark block as processed
         input.pop();
-        ReleaseOut.send(trace, 0);
+        ReleaseOut.send(trace, input_hold_ ? input_hold_(trace) : 0);
         ++block_sent;
       }
       ThreadMask tmask(VX_CFG_NUM_THREADS);
@@ -132,7 +132,7 @@ void Dispatcher::on_tick() {
     } else {
       // issue the trace
       input.pop();
-      ReleaseOut.send(trace, 0);
+      ReleaseOut.send(trace, input_hold_ ? input_hold_(trace) : 0);
       ++block_sent;
     }
     DT(3, this->name() << "-pipeline dispatch: " << *new_trace);

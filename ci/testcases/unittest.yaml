@@ -31,6 +31,13 @@ tests:
     via: script
     run: "make -C hw/unittest run-tcu-dsp"
     touches: [hw/rtl/tcu, hw/unittest/tcu_fedp]
+  # VX_alu_muldiv as synthesized (no DPI models): every M opcode against the
+  # RISC-V definitions under random input bubbles and output stalls, and the
+  # multiplier's passes and latency (multi-pass 64-bit multiply at XLEN 64).
+  - id: hw-alu-muldiv
+    via: script
+    run: "make -C hw/unittest/alu_muldiv run"
+    touches: [hw/rtl/core/VX_alu_muldiv.sv, hw/rtl/libs/VX_mul_multipass.sv, hw/rtl/libs/VX_multiplier.sv, hw/rtl/libs/VX_serial_div.sv, hw/unittest/alu_muldiv]
   # TLB miss stations under a saturated walker: the L2 TLB's (and the dMMU's)
   # VX_tlb_mshr must issue every pending miss within a bounded number of walks.
   # A lowest-entry-first issue let the low entries recycle ahead of a waiting
