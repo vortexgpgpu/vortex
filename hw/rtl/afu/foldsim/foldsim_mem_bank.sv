@@ -134,6 +134,11 @@ module foldsim_mem_bank #(
     output wire                  no_reads,
     // The target cycle's DRAM clocks are done.
     output wire                  done,
+    // Why `done` may be low, for telemetry: [2:0] the clock engine's state, [6:3] the reservations engine's, then
+    // the clock waits for the reservations' lag, waits for buffer room, the reservations have caught up, the lag
+    // is negative, the ingress queue holds a request, its head has room, no DRAM-clock credit, and the fast path
+    // waits for room.
+    output wire [14:0]           dbg,
 
     // Reads, writes, row hits, misses, conflicts, the sum of read latencies
     // (target cycles from AR to R), refreshes, and target cycles the port
@@ -1999,5 +2004,9 @@ module foldsim_mem_bank #(
                 cm_busy[m] <= 1'b0;
         end
     end
+
+    // The engines' waits, for the endpoint's telemetry.
+    assign dbg = {f_wait_room, cr1[33], ih_room, (iq_count != 0), lag[15], caught, a_wait_room, a_wait_lag,
+                  state, a_state};
 
 endmodule

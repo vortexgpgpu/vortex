@@ -26,6 +26,8 @@
 //     it to the target after it;
 //   * a burst sets `error` and reaches HBM in no part, and a reset clears it.
 //
+// FOLDSIM_MEM_GATE: the endpoint is a synthesized netlist of the RTL before the stall-reason word (no `dbg`).
+//
 //   ./foldsim_mem            every setup
 //   ./foldsim_mem <name>     one setup
 
@@ -49,6 +51,9 @@
 #include "verilated.h"
 #ifdef FOLDSIM_MEM_COVER
 #include "Vfoldsim_mem___024root.h"
+#endif
+#if VM_TRACE
+#include "verilated_vcd_c.h"
 #endif
 
 using namespace vortex;
@@ -720,11 +725,24 @@ void sample_tokens(bool in_take[NUM_IN], bool out_take[NUM_OUT]) {
 uint64_t cov_res_take = 0, cov_res_full = 0, cov_stall = 0, cov_take = 0, cov_aroom = 0, cov_froom = 0, cov_noroom = 0;
 #endif
 
+#if VM_TRACE
+// A --trace build: FOLDSIM_MEM_VCD=<file> dumps the first FOLDSIM_MEM_VCD_CYCLES (20000) host cycles of a setup.
+VerilatedVcdC* vcd = nullptr;
+uint64_t vcd_cycles = 0;
+void vcd_dump(int half) {
+  if (vcd != nullptr && host_cycle < vcd_cycles)
+    vcd->dump(2 * host_cycle + uint64_t(half));
+}
+#else
+void vcd_dump(int) {}
+#endif
+
 void host_step() {
   drive_tokens();
   hbm.drive();
   dut->clk = 0;
   dut->eval();
+  vcd_dump(0);
 #ifdef FOLDSIM_MEM_COVER
   {
     auto* r = dut->rootp;
@@ -754,8 +772,17 @@ void host_step() {
           "reset cycle finished with requests offered to HBM");
   }
   hbm.sample();
+#ifndef FOLDSIM_MEM_GATE
+  const bool stall_before = dut->stall, error_before = dut->error;
+#endif
   dut->clk = 1;
   dut->eval();
+  vcd_dump(1);
+#ifndef FOLDSIM_MEM_GATE
+  // The stall-reason word holds the host cycle before.
+  CHECK(((dut->dbg >> 7) & 1) == stall_before, "dbg stall bit %u, stall was %d", (dut->dbg >> 7) & 1, stall_before);
+  CHECK((dut->dbg >> 31) == error_before, "dbg error bit %u, error was %d", dut->dbg >> 31, error_before);
+#endif
   ++host_cycle;
   if (rr_lagged() && in_take[I_RREADY])
     rr_q.pop_front();
@@ -833,6 +860,10 @@ void run(uint64_t n) {
       host_step();
       if (++spins > 200000) {
         printf("FAIL %s: target cycle %lu never completes\n", setup->name, (unsigned long)tcycle);
+#if VM_TRACE
+        if (vcd != nullptr)
+          vcd->close();
+#endif
         exit(1);
       }
     }
@@ -937,6 +968,16 @@ int run_setup(const Setup& s) {
   const int failures_before = failures;
 
   dut = new Vfoldsim_mem();
+#if VM_TRACE
+  if (const char* path = getenv("FOLDSIM_MEM_VCD")) {
+    Verilated::traceEverOn(true);
+    vcd = new VerilatedVcdC();
+    dut->trace(vcd, 99);
+    vcd->open(path);
+    const char* n = getenv("FOLDSIM_MEM_VCD_CYCLES");
+    vcd_cycles = n ? std::strtoull(n, nullptr, 0) : 20000;
+  }
+#endif
   configure();
   dut->reset = 1;
   for (int i = 0; i < 8; ++i) {
@@ -983,6 +1024,11 @@ int run_setup(const Setup& s) {
   CHECK(!hbm.ar_seen.count(kBase + kMagic), "a request made in reset reached HBM");
   CHECK(!hbm.ar_seen.count(kBase + kBurstAddr), "a burst reached HBM");
   CHECK(dut->idle, "endpoint not idle at the end");
+#ifndef FOLDSIM_MEM_GATE
+  // Idle: no R candidate, so R's data is in for all; no write or reset waits for memory.
+  CHECK(((dut->dbg >> 8) & 0xf) == 0 && (dut->dbg & 1) && ((dut->dbg >> 4) & 0x3) == 0, "dbg 0x%08x at idle",
+        dut->dbg);
+#endif
   // The device-memory telemetry counts what HBM saw, and reads nothing in flight once idle.
   const uint64_t tel[5] = {hbm.n_ar, hbm.n_r, hbm.n_aw, hbm.n_w, hbm.n_b};
   const char* tel_name[5] = {"AR", "R", "AW", "W", "B"};
@@ -1018,6 +1064,13 @@ int run_setup(const Setup& s) {
          (unsigned long)st.refreshes, (unsigned long)st.deferred, master.max_reads,
          (unsigned long)(uint64_t(dut->stats[14]) | (uint64_t(dut->stats[15]) << 32)),
          failures == failures_before ? "ok" : "FAILED");
+#if VM_TRACE
+  if (vcd != nullptr) {
+    vcd->close();
+    delete vcd;
+    vcd = nullptr;
+  }
+#endif
   delete dut;
   dut = nullptr;
   return failures - failures_before;

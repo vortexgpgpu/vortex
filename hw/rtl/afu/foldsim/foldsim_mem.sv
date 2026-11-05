@@ -93,6 +93,12 @@ module foldsim_mem #(
     output reg                   error,
     // A host cycle a target cycle waits for memory.
     output wire                  stall,
+    // Why a target cycle has not finished, as of the host cycle before (telemetry): [0] R's data is in for every
+    // candidate offered, [1] the bank model's DRAM clocks are done, [2] every input token is in, [3] every output
+    // token is taken, [4] a write waits for memory's room, [5] a reset cycle waits for memory, [6] R's ready for
+    // the bank model is in, [7] stall, [11:8] the R candidates offered, [15:12] those whose data is in, [30:16] the
+    // bank model's engines (foldsim_mem_bank dbg), [31] error.
+    output reg  [31:0]           dbg,
 
     // The target's reset, from the control endpoint.
     input  wire                  treset_valid,  output wire treset_ready,  input wire              treset_bits,
@@ -239,6 +245,7 @@ module foldsim_mem #(
 
     // The bank model's state: the port's readiness, R and B.
     wire          bk_room, bk_slot_free, bk_r_valid, bk_b_valid, bk_no_reads, bk_done;
+    wire [14:0]   bk_dbg;
     wire [SW-1:0] bk_alloc_slot, bk_r_slot;
     wire [ID_W-1:0] bk_b_id;
     /* verilator lint_off UNUSEDSIGNAL */
@@ -635,6 +642,9 @@ module foldsim_mem #(
             t_r_wait   <= t_r_wait + {31'd0, m_rvalid & ~m_rready};
         end
     end
+    always @(posedge clk)
+        dbg <= {error, bk_dbg, c_arr, bk_c_valid, stall, have[12], drain_wait, full_wait, &done, &have, bk_done, ok};
+
     assign axi_stats = {8'(wm_count), 8'(t_aw - t_b), 8'(t_ar - t_r), 8'(arq_count),
                         t_r_wait, t_r_starve, t_b, t_w, t_aw, t_r, t_ar};
 
@@ -821,6 +831,7 @@ module foldsim_mem #(
         .ar_take_slot   (bk_ar_take_slot),
         .no_reads       (bk_no_reads),
         .done           (bk_done),
+        .dbg            (bk_dbg),
         .stat_reads     (stats[0*64 +: 64]),
         .stat_writes    (stats[1*64 +: 64]),
         .stat_hits      (stats[2*64 +: 64]),

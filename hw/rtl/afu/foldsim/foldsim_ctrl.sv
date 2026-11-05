@@ -88,7 +88,12 @@ module foldsim_ctrl #(
     input  wire                  vmem_moving,
     // Per memory port, its counters.
     input  wire [MEM_PORTS*8*64-1:0] mem_stats,
+    // (A port past the 24th has no window for it.)
+    /* verilator lint_off UNUSEDSIGNAL */
     input  wire [MEM_PORTS*8*32-1:0] mem_axi,
+    /* verilator lint_on UNUSEDSIGNAL */
+    // Each port's stall-reason word (foldsim_mem dbg).
+    input  wire [MEM_PORTS*32-1:0]   mem_dbg,
     input  wire                  mem_idle,
     input  wire                  mem_error,
     input  wire                  mem_stall,
@@ -218,7 +223,26 @@ module foldsim_ctrl #(
     reg [11:0] ar_addr;
     // Offsets into the counter and finish windows of the address being read.
     wire [11:0] stat_off = ar_addr - `FOLDSIM_REG_MEM_STATS;
-    wire [11:2] axi_off  = 10'((ar_addr - `FOLDSIM_REG_MEM_AXI) >> 2);
+    // The memory ports' telemetry windows, FOLDSIM_REG_MEM_AXI (0x480 + 0x20 per port, 24 ports at most) and
+    // FOLDSIM_REG_MEM_DBG (0x780 + 4 per port, 32 at most), are read as the read is taken: words of the 0x400 block
+    // by address bits, so the read data's selection has one stage for both and no address arithmetic.
+    localparam AP = (MEM_PORTS < 24) ? MEM_PORTS : 24, DP = (MEM_PORTS < 32) ? MEM_PORTS : 32;
+    wire [31:0] win_word [256];
+    for (genvar i = 0; i < 256; ++i) begin : g_win
+        if (i >= 32 && i < 32 + 8 * AP) begin : g_axi
+            assign win_word[i] = mem_axi[(i - 32) * 32 +: 32];
+        end else if (i >= 224 && i < 224 + DP) begin : g_dbg
+            assign win_word[i] = mem_dbg[(i - 224) * 32 +: 32];
+        end else begin : g_none
+            assign win_word[i] = 32'd0;
+        end
+    end
+    wire [7:0]  win_idx = s_araddr[9:2];
+    wire        win_in  = (s_araddr[11:10] == 2'b01)
+                        && (((win_idx >= 8'd32) && (32'(win_idx) < 32 + 8 * AP))
+                         || ((win_idx >= 8'd224) && (32'(win_idx) < 224 + DP)));
+    reg         win_hit;
+    reg  [31:0] win_rdata;
     localparam CW = (NUM_CLASSES > 1) ? $clog2(NUM_CLASSES) : 1;
     wire [CW-1:0] fin_idx = CW'((ar_addr - `FOLDSIM_REG_FINISH_BASE) >> 3);
     reg [31:0] w_data;
@@ -358,6 +382,8 @@ module foldsim_ctrl #(
             if (s_arvalid & s_arready) begin
                 ar_got  <= 1'b1;
                 ar_addr <= s_araddr;
+                win_hit   <= win_in;
+                win_rdata <= win_word[win_idx];
             end
             if (ar_got) begin
                 ar_got   <= 1'b0;
@@ -398,9 +424,10 @@ module foldsim_ctrl #(
                 // 32 ports end the window at 0x1000, past 12 bits: compared in 32.
                 if (ar_addr >= `FOLDSIM_REG_MEM_STATS && 32'(ar_addr) < 32'(`FOLDSIM_REG_MEM_STATS) + 32'(64 * MEM_PORTS))
                     s_rdata <= mem_stats[32'(stat_off[11:6]) * (8 * 64) + 32'(stat_off[5:0]) * 8 +: 32];
-                // A port's device-memory telemetry at FOLDSIM_REG_MEM_AXI + 0x20 per port (24 ports at most).
-                if (ar_addr >= `FOLDSIM_REG_MEM_AXI && 32'(ar_addr) < 32'(`FOLDSIM_REG_MEM_AXI) + 32'(32 * (MEM_PORTS < 24 ? MEM_PORTS : 24)))
-                    s_rdata <= mem_axi[32'(axi_off[11:5]) * (8 * 32) + 32'(axi_off[4:2]) * 32 +: 32];
+                // A port's device-memory telemetry at FOLDSIM_REG_MEM_AXI + 0x20 per port (24 ports at most), and its
+                // stall-reason word at FOLDSIM_REG_MEM_DBG + 4 per port (32 at most), chosen as the read was taken.
+                if (win_hit)
+                    s_rdata <= win_rdata;
                 if (ar_addr >= `FOLDSIM_REG_FINISH_BASE
                  && ar_addr < `FOLDSIM_REG_FINISH_BASE + 12'(8 * NUM_CLASSES)) begin
                     s_rdata <= ar_addr[2] ? 32'(finishes[fin_idx] >> 32)

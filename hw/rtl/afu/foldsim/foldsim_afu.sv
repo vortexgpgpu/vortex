@@ -979,6 +979,7 @@ module foldsim_afu #(
     wire [18*12-1:0] mem_timing;
     wire [PORTS*8*64-1:0] mem_stats;
     wire [PORTS*8*32-1:0] mem_axi;
+    wire [PORTS*32-1:0]   mem_dbg;
     wire [1:0]  mem_refresh;
     wire [15:0] mem_refi, mem_rfc;
     wire [PORTS-1:0] mem_idle, mem_error, mem_stall;
@@ -1017,6 +1018,7 @@ module foldsim_afu #(
             .cfg_rfc       (mem_rfc),
             .stats         (mem_stats[p*8*64 +: 8*64]),
             .axi_stats     (mem_axi[p*8*32 +: 8*32]),
+            .dbg           (mem_dbg[p*32 +: 32]),
             .idle          (mem_idle[p]),
             .error         (mem_error[p]),
             .stall         (mem_stall[p]),
@@ -1108,6 +1110,7 @@ module foldsim_afu #(
 `endif
         .mem_stats         (mem_stats),
         .mem_axi           (mem_axi),
+        .mem_dbg           (mem_dbg),
         .mem_idle          (&mem_idle),
         .mem_error         (|mem_error),
         .mem_stall         (|mem_stall),
