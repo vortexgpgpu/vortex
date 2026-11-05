@@ -621,7 +621,7 @@ void AluUnit::on_tick() {
         // as its result leaves the integer unit, behind a multiply or divide
         // result that the unit's result switch takes first.
         if (std::get_if<BrType>(&trace->op_type) && trace->eop && trace->resume_warp) {
-          branch_ctl_out.send(trace->wid, (kGather ? 1 : 2) + wait);
+          branch_ctl_out.send(trace->wid, 2 + wait);
           trace->resume_warp = false;
         }
         output.send(trace, latency);

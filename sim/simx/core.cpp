@@ -338,6 +338,10 @@ public:
     snprintf(sname, 100, "%s-tcu", name.c_str());
     tcu_unit_ = SimPlatform::instance().create_object<TcuUnit>(sname, simobject_);
     func_units_.at((int)FUType::TCU) = tcu_unit_;
+    // Created after the TCU so it ticks after it: a fill the TCU starts sends
+    // its first read in the same cycle, seen by the LMEM the next.
+    snprintf(sname, 100, "%s-tcu-tbuf", name.c_str());
+    tcu_unit_->set_tbuf(TcuTbuf::Create(sname));
 
   #ifdef VX_CFG_TCU_WGMMA_ENABLE
     // Bind the TCU tile-buffer subsystem (TcuTbuf) to the LMEM DMA port,
@@ -368,8 +372,8 @@ public:
     {
       // A reduced-width ALU or FPU takes the op through its lane-dispatch
       // buffer; a full-bandwidth one takes it as the queue releases it.
-      uint32_t alu_dly = AluUnit::kGather ? 2 : 0;
-      uint32_t fpu_dly = FpuUnit::kGather ? 2 : 0;
+      uint32_t alu_dly = AluUnit::kGather ? 1 : 0;
+      uint32_t fpu_dly = FpuUnit::kGather ? 1 : 0;
       dispatchers_.at((int)FUType::ALU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_ALU_BLOCKS, VX_CFG_NUM_ALU_LANES, alu_dly);
       dispatchers_.at((int)FUType::FPU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_FPU_BLOCKS, VX_CFG_NUM_FPU_LANES, fpu_dly);
       dispatchers_.at((int)FUType::LSU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_LSU_BLOCKS, VX_CFG_NUM_LSU_LANES, 1);

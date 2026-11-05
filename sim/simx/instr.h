@@ -266,4 +266,14 @@ private:
   friend std::ostream &operator<<(std::ostream &, const Instr &);
 };
 
+// A micro-op's uuid puts its index in the top byte of the low word, over the
+// parent's low 24 bits. The index wraps past 255 micro-ops (trace naming only).
+inline uint64_t make_uop_uuid(uint64_t parent_uuid, uint32_t uop_index) {
+  constexpr uint32_t kIndexShift = 24;
+  constexpr uint32_t kIndexMask = (1u << (32 - kIndexShift)) - 1;
+  uint64_t lo = (uint64_t(uop_index & kIndexMask) << kIndexShift)
+              | (parent_uuid & ((1u << kIndexShift) - 1));
+  return (parent_uuid & ~uint64_t(0xffffffff)) | lo;
+}
+
 }

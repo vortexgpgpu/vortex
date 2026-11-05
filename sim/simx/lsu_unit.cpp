@@ -55,14 +55,7 @@ uint32_t LsuUopGen::uop_count(const Instr& instr) {
 
 Instr::Ptr LsuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
   uint64_t parent_uuid = macro_instr.get_uuid();
-  uint32_t total = uop_count(macro_instr);
-
-  // Embed uop_index in the upper bits of the low half of the UUID so that
-  // each uop has a distinct UUID for trace logging.
-  uint32_t uuid_hi = (parent_uuid >> 32) & 0xffffffff;
-  uint32_t uuid_lo = parent_uuid & 0xffffffff;
-  uint32_t steps_shift = (total > 1) ? (32 - log2ceil(total)) : 0;
-  uint64_t uop_uuid = (static_cast<uint64_t>(uuid_hi) << 32) | ((uop_index << steps_shift) | uuid_lo);
+  uint64_t uop_uuid = make_uop_uuid(parent_uuid, uop_index);
 
   if (auto amo = std::get_if<IntrAmoArgs>(&macro_instr.get_args())) {
     auto uop_instr = std::allocate_shared<Instr>(pool_, uop_uuid, FUType::LSU);

@@ -799,8 +799,9 @@ public:
     int32_t rep = -1;
     for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
       auto& input = simobject_->Inputs.at(b);
-      // A uop still feeding output slices keeps its tile-buffer request.
-      if (input.empty() || (exec_done_.at(b) && slices_.at(b) + 1 >= kPeRatio)) {
+      // A uop requests its tiles for as long as it holds the block's input,
+      // through its last output slice and any wait for the result side.
+      if (input.empty()) {
         continue;
       }
       auto trace = input.peek();
@@ -1851,13 +1852,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
   auto tcu_type = std::get<TcuType>(macro_instr.get_op_type());
   auto args = std::get<IntrTcuArgs>(macro_instr.get_args());
   uint64_t parent_uuid = macro_instr.get_uuid();
-  uint32_t total = uop_count(macro_instr);
-
-  // Compute UUID for this micro-op
-  uint32_t uuid_hi = (parent_uuid >> 32) & 0xffffffff;
-  uint32_t uuid_lo = parent_uuid & 0xffffffff;
-  uint32_t steps_shift = (total > 1) ? (32 - log2ceil(total)) : 0;
-  uint64_t uop_uuid = (static_cast<uint64_t>(uuid_hi) << 32) | ((uop_index << steps_shift) | uuid_lo);
+  uint64_t uop_uuid = make_uop_uuid(parent_uuid, uop_index);
 
   auto uop_instr = std::allocate_shared<Instr>(pool_, uop_uuid, FUType::TCU);
   uop_instr->set_parent_uuid(parent_uuid);
@@ -1945,6 +1940,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
     bool needs_setup = kFedp2K && !is_a_smem && !is_sparse;
     uint32_t cd_nregs = args.cd_nregs;
     uint32_t k_count = is_sparse ? std::max(1u, k_steps / 2) : k_steps;
+    uint32_t total = uop_count(macro_instr);
     constexpr uint32_t a0 = 10, a1 = 11;
 
     {
@@ -2011,17 +2007,17 @@ TcuUnit::TcuUnit(const SimContext &ctx, const char* name, Core* core)
 	, agu_rsp_in(TCU_AGU_PORTS, this)
 #endif
 	, impl_(new Impl(this, core))
-{
-  char sname[128];
-  snprintf(sname, sizeof(sname), "%s-tbuf", name);
-  tbuf_ = TcuTbuf::Create(sname);
-}
+{}
 
 TcuUnit::~TcuUnit() {
   delete impl_;
 }
 
-TcuTbuf::Ptr& TcuUnit::tbuf() {
+void TcuUnit::set_tbuf(TcuTbuf::Ptr tbuf) {
+  tbuf_ = std::move(tbuf);
+}
+
+const TcuTbuf::Ptr& TcuUnit::tbuf() const {
   return tbuf_;
 }
 

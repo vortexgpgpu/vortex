@@ -173,7 +173,8 @@ void Dispatcher::on_tick() {
       ++block_sent;
     }
     DT(3, this->name() << "-pipeline dispatch: " << *new_trace);
-    output.send(new_trace, out_delay_);
+    // A registered iterator presents each packet a cycle after it takes it.
+    output.send(new_trace, out_delay_ + (iter_out_reg_ ? 1 : 0));
   }
 
   // advance to next batch once all blocks in the current batch have been processed

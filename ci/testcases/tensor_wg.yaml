@@ -221,6 +221,16 @@ tests:
   # several times the size, and a hosted CI runner cannot build it in a job.
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
     -DVX_CFG_TCU_INT8_ENABLE -DITYPE=int8 -DOTYPE=int32 -DWGMMA_NRC=32
+# The same at 64x64x64: the four issue slots share the ALU block through a
+# long address loop, and each CTA's four warps start every WGMMA together once
+# the tile buffers fill, or a late one waits for the other CTA's WGMMA.
+- id: model_parity-wgmma-int8-m64
+  check: model_parity
+  via: blackbox
+  app: sgemm_tcu_wg
+  args: -m64 -n64 -k64
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
+    -DVX_CFG_TCU_INT8_ENABLE -DITYPE=int8 -DOTYPE=int32 -DWGMMA_NRC=32
 
 # Dense WGMMA fp16 SS datapath, cycles-vs-baseline.
 - id: perf_gate-wgmma-fp16-ss

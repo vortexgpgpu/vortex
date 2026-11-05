@@ -28,7 +28,8 @@ public:
 	// An op leaving its slot queue, which returns its issue credit.
 	SimChannel<instr_trace_t*> ReleaseOut;
 
-	// out_delay: cycles from leaving the slot queue to the unit taking the op.
+	// out_delay: cycles from the slot queue's head to the unit taking the op,
+	// past the lane-dispatch buffer when the unit has one.
 	Dispatcher(const SimContext& ctx, const char* name, Core* core, uint32_t queue_size, uint32_t block_size, uint32_t num_lanes, uint32_t out_delay);
 
 	virtual ~Dispatcher();

@@ -31,12 +31,7 @@ uint32_t OmUopGen::uop_count(const Instr& instr) {
 Instr::Ptr OmUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
   uint64_t parent_uuid = macro_instr.get_uuid();
   uint32_t total = uop_count(macro_instr);
-
-  // Distinct UUID per uop for trace logging, matching LsuUopGen's scheme.
-  uint32_t uuid_hi = (parent_uuid >> 32) & 0xffffffff;
-  uint32_t uuid_lo = parent_uuid & 0xffffffff;
-  uint32_t steps_shift = (total > 1) ? (32 - log2ceil(total)) : 0;
-  uint64_t uop_uuid = (static_cast<uint64_t>(uuid_hi) << 32) | ((uop_index << steps_shift) | uuid_lo);
+  uint64_t uop_uuid = make_uop_uuid(parent_uuid, uop_index);
 
   auto args = std::get<IntrOmArgs>(macro_instr.get_args());
 
