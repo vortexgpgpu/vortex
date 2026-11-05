@@ -340,6 +340,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .NUM_REQS    (`VX_CFG_SOCKET_SIZE * DCACHE_NUM_REQS),
         .TLB_SIZE    (`VX_CFG_DTLB_SIZE),
         .EXEC_SIDE   (0),
+        .REQ_SKID    (1),
         .DATA_SIZE   (DCACHE_WORD_SIZE),
         .TAG_WIDTH   (DCACHE_TAG_WIDTH_BASE)
     ) dmmu (
@@ -363,6 +364,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .NUM_REQS    (`VX_CFG_SOCKET_SIZE * ICACHE_NUM_REQS),
         .TLB_SIZE    (`VX_CFG_ITLB_SIZE),
         .EXEC_SIDE   (1),
+        .REQ_SKID    (1),
         .DATA_SIZE   (ICACHE_WORD_SIZE),
         .TAG_WIDTH   (ICACHE_TAG_WIDTH)
     ) immu (

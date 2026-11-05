@@ -54,6 +54,7 @@ public:
 		bool    mem_rsp_slice = false; // a registered boundary ahead of the memory-response port stands for that queue's register
 		bool    acq_forward = false;   // an acquire flush also invalidates the next level
 		bool    merge_line = false;    // read merging takes any read of the same line, each merged port keeping its own tag and word
+		bool    core_req_skid = false; // banks behind a combinational request crossbar take requests through a skid register
 	};
 
 	struct PerfStats {

@@ -38,6 +38,10 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     // station the next cycle. Takes the lane arbitration off the miss
     // station's update cone; a lane on the staged page holds meanwhile.
     parameter PARK_REG     = 0,
+    // 1: each lane takes its requests through a skid register, so the accept,
+    // which follows the lookup of the offered request, reaches the client
+    // registered. No added latency.
+    parameter REQ_SKID     = 0,
     parameter DATA_SIZE    = DCACHE_WORD_SIZE,
     parameter TAG_WIDTH    = DCACHE_TAG_WIDTH_BASE,
     parameter ADDR_WIDTH   = `VX_CFG_MEM_ADDR_WIDTH - `CLOG2(DATA_SIZE),
@@ -66,9 +70,18 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
 );
     `UNUSED_PARAM (INSTANCE_ID)
 
-    // The client's bus as the MMU drives it: requests pass straight through to
-    // the lookup (the client registers its own request output), responses
-    // through an optional MMU-owned stage.
+    localparam DATA_WIDTH    = DATA_SIZE * 8;
+
+    // The client's bus as the MMU drives it: requests reach the lookup through
+    // an optional skid register (REQ_SKID), responses through an optional
+    // MMU-owned stage.
+    VX_mem_bus_if #(
+        .DATA_SIZE  (DATA_SIZE),
+        .TAG_WIDTH  (TAG_WIDTH),
+        .ADDR_WIDTH (ADDR_WIDTH),
+        .ATTR_WIDTH (ATTR_WIDTH)
+    ) skid_if [NUM_REQS] ();
+
     VX_mem_bus_if #(
         .DATA_SIZE  (DATA_SIZE),
         .TAG_WIDTH  (TAG_WIDTH),
@@ -76,7 +89,31 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         .ATTR_WIDTH (ATTR_WIDTH)
     ) req_if [NUM_REQS] ();
 
-    for (genvar l = 0; l < NUM_REQS; ++l) begin : g_rsp_buf
+    localparam REQ_DATAW = 1 + ADDR_WIDTH + DATA_WIDTH + DATA_SIZE + `UP(ATTR_WIDTH) + TAG_WIDTH;
+
+    for (genvar l = 0; l < NUM_REQS; ++l) begin : g_lane_bus
+        wire [REQ_DATAW-1:0] skid_data_in = core_bus_if[l].req_data;
+        wire [REQ_DATAW-1:0] skid_data_out;
+
+        VX_bypass_buffer #(
+            .DATAW    (REQ_DATAW),
+            .PASSTHRU (REQ_SKID == 0)
+        ) req_skid (
+            .clk       (clk),
+            .reset     (reset),
+            .valid_in  (core_bus_if[l].req_valid),
+            .ready_in  (core_bus_if[l].req_ready),
+            .data_in   (skid_data_in),
+            .data_out  (skid_data_out),
+            .valid_out (skid_if[l].req_valid),
+            .ready_out (skid_if[l].req_ready)
+        );
+        assign skid_if[l].req_data = skid_data_out;
+
+        assign core_bus_if[l].rsp_valid = skid_if[l].rsp_valid;
+        assign core_bus_if[l].rsp_data  = skid_if[l].rsp_data;
+        assign skid_if[l].rsp_ready     = core_bus_if[l].rsp_ready;
+
         VX_mem_bus_slice #(
             .DATA_SIZE   (DATA_SIZE),
             .TAG_WIDTH   (TAG_WIDTH),
@@ -87,12 +124,11 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         ) rsp_buf (
             .clk        (clk),
             .reset      (reset),
-            .bus_in_if  (core_bus_if[l]),
+            .bus_in_if  (skid_if[l]),
             .bus_out_if (req_if[l])
         );
     end
 
-    localparam DATA_WIDTH    = DATA_SIZE * 8;
     localparam LANE_W        = `UP(`CLOG2(NUM_REQS));
     localparam PAGE_OFFSET_W = `VX_VM_PAGE_LOG2_SIZE - `CLOG2(DATA_SIZE);
 
@@ -586,12 +622,12 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     // Drain status
     // ---------------------------------------------------------------------
     // The MMU is drained only when no request is anywhere in its front pipeline
-    // (incoming or output stage) and the TLB miss station is idle. Omitting the
-    // incoming stage would let `empty` assert a cycle early while a request is
-    // still in flight, releasing the socket drain gate prematurely.
+    // (incoming, skid or output stage) and the TLB miss station is idle.
+    // Omitting the incoming stage would let `empty` assert a cycle early while
+    // a request is still in flight, releasing the socket drain gate prematurely.
     wire [NUM_REQS-1:0] pipe_busy;
     for (genvar l = 0; l < NUM_REQS; ++l) begin : g_busy
-        assign pipe_busy[l] = core_bus_if[l].req_valid   // incoming (client held)
+        assign pipe_busy[l] = req_if[l].req_valid        // incoming or skid
                            || mem_bus_if[l].req_valid    // output stage
                            || pf_rsp_busy[l];            // owed fault response
         assign lane_idle[l] = ~pipe_busy[l] && ~lane_parked[l];

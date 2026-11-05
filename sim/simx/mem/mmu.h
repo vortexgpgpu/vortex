@@ -58,7 +58,8 @@ public:
       bool exec_side,
       bool rsp_reg = false,
       bool write_enable = true,
-      bool park_reg = false);
+      bool park_reg = false,
+      bool req_skid = false);
 
   ~Mmu();
 
@@ -144,6 +145,11 @@ private:
 
   // Requests of one VPN that a single miss-station entry can absorb.
   static constexpr size_t MAX_PARKED_PER_ENTRY = 2;
+
+  // A port holds its client's two-entry output buffer; a lane that takes its
+  // requests through a skid register adds that entry, and its client then
+  // sees the occupancy as of the previous cycle.
+  static constexpr uint32_t REQ_IN_SIZE = 2;
 
   friend class SimObject<Mmu>;
 };

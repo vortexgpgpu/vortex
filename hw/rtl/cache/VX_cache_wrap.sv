@@ -58,6 +58,8 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
 
     parameter MEM_OUT_BUF           = 3,      // Memory request output buffer
 
+    parameter CORE_REQ_SKID         = 0,      // Banks behind an unbuffered request crossbar take requests through a skid register
+
     parameter IS_LLC                = 0,      // Set when this cache is the LLC (enables AMO completion at this level).
     parameter SHARED_LLC            = 0,      // The LLC serves every memory client alone (point of coherence).
     parameter ACQ_FORWARD           = 0,      // An acquire flush also invalidates the next level.
@@ -163,6 +165,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .TAG_WIDTH    (TAG_WIDTH),
             .CORE_OUT_BUF (BYPASS_ENABLE ? 1 : CORE_OUT_BUF),
             .MEM_OUT_BUF  (BYPASS_ENABLE ? 1 : MEM_OUT_BUF),
+            .CORE_REQ_SKID (CORE_REQ_SKID),
             .IS_LLC       (IS_LLC),
             .SHARED_LLC   (SHARED_LLC),
             .ACQ_FORWARD  (ACQ_FORWARD),

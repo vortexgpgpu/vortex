@@ -94,7 +94,7 @@ These modules implement elastic pipeline buffering with valid/ready handshake pr
 ### VX_bypass_buffer
 
 **File:** `VX_bypass_buffer.sv`  
-**Purpose:** Full-bandwidth buffer with combinational bypass path.
+**Purpose:** Zero-latency skid buffer: full bandwidth, combinational bypass path, registered `ready_in`.
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
@@ -113,10 +113,10 @@ These modules implement elastic pipeline buffering with valid/ready handshake pr
 | `ready_out` | input | 1 | Output ready |
 
 **Features:**
-- Single register with bypass multiplexer for full-bandwidth throughput
-- `ready_in` and `ready_out` are **coupled** (not decoupled)
-- `data_out` is **not** registered -- creates a combinational path from input to output
-- Best used when downstream timing is not critical
+- Single register with bypass multiplexer for full-bandwidth throughput; an input passes straight through while the register is empty
+- `ready_in` is **registered** (the register is empty): `ready_out` never reaches the input, so a receiver whose ready depends on a lookup of the offered request keeps that cone out of the sender
+- The input takes nothing in the cycle a held entry leaves; the output still moves one entry per cycle
+- `data_out` and `valid_out` are **not** registered -- creates a combinational path from input to output
 
 ---
 

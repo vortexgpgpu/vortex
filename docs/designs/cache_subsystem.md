@@ -666,8 +666,11 @@ While any token is visible at any input, every input presents `valid=0`
 downstream and `ready=0` upstream, so upstream stalls.
 
 - `STATE_WAIT1` waits for `BANK_SEL_LATENCY × NUM_BANKS` outstanding crossbar
-  requests to drain. When there is no crossbar latency this state is bypassed and
-  IDLE goes straight to FLUSH.
+  requests to drain, and for every bank's core-request skid register
+  (`CORE_REQ_SKID`, behind an unbuffered crossbar) to empty: a request held there
+  has left its input but not reached its bank. When there is no crossbar latency
+  and no skid holds a request, this state is bypassed and IDLE goes straight to
+  FLUSH.
 - `STATE_FLUSH` is one cycle: it pulses `flush_begin` to **all** banks at once.
 - `STATE_WAIT2` accumulates `flush_done |= flush_end` until every bank has
   reported. The tokens visible at that point are the ones this walk answers;

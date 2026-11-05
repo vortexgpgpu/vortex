@@ -22,9 +22,10 @@ Mmu::Mmu(const SimContext& ctx,
          bool exec_side,
          bool rsp_reg,
          bool write_enable,
-         bool park_reg)
+         bool park_reg,
+         bool req_skid)
   : SimObject(ctx, name)
-  , ReqIn(num_ports, this)
+  , ReqIn(num_ports, SimChannel<MemReq>(this, REQ_IN_SIZE + (req_skid ? 1 : 0)))
   , RspOut(num_ports, this)
   , ReqOut(num_ports, this)
   , RspIn(num_ports, this)
@@ -41,7 +42,13 @@ Mmu::Mmu(const SimContext& ctx,
   , replay_(num_ports)
   , fault_rsp_(num_ports)
   , pf_slot_(num_ports)
-{}
+{
+  if (req_skid) {
+    for (auto& in : ReqIn) {
+      in.set_registered_ready(true);
+    }
+  }
+}
 
 Mmu::~Mmu() {}
 

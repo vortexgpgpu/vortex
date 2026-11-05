@@ -2358,7 +2358,7 @@ public:
 
   CachePortArb(const SimContext& ctx, const char* name, const params_t& params,
                uint32_t num_inputs, uint32_t num_banks, uint32_t merge_group,
-               bool merge_line)
+               bool merge_line, bool skid)
     : SimObject<CachePortArb>(ctx, name)
     , ReqIn(num_inputs, this)
     , ReqOut(num_banks, this)
@@ -2370,6 +2370,7 @@ public:
     , levels_(arb_tree_levels(num_inputs))
     , merge_group_(merge_group)
     , merge_line_(merge_line)
+    , skid_(skid)
   {
     __assert(merge_group_ <= 1 || (merge_group_ <= 64 && ispow2(merge_group_) && (num_inputs % merge_group_) == 0),
              "a read-merge group must be a power of two of at most 64 dividing the ports");
@@ -2388,7 +2389,10 @@ public:
   // bank takes it, where a later same-word read can still merge with it. The
   // arbiter then offers each bank one request per cycle and dequeues the ports
   // only when the bank pops the offer; an offer still pending next cycle is
-  // withdrawn and the ports are arbitrated afresh.
+  // withdrawn and the ports are arbitrated afresh. With a bank skid register
+  // the untaken offer is caught there instead and the ports are released; the
+  // register's occupancy is the bank's ready, so the bank is offered nothing
+  // while it holds a request, the cycle the bank takes it included.
   void attach_bank(uint32_t b, SimChannel<MemReq>* bank_in) {
     if (!this->offers_enabled()) {
       return;
@@ -2446,6 +2450,11 @@ public:
     return mask;
   }
 
+  // A bank's skid register holds a request: its occupancy as of the start of
+  // the cycle, as the RTL's registered ready sees it, even if the bank takes
+  // the request later this cycle.
+  bool any_held() const { return held_; }
+
   // No cacheable request is left between the ports and the banks.
   bool drained() const {
     for (auto &level : tree_stage_) {
@@ -2481,7 +2490,9 @@ protected:
     for (auto& offer : offers_) {
       offer.valid = false;
       offer.withdrawing = false;
+      offer.held = false;
     }
+    held_ = false;
   }
 
   // Slices of the arbiter level s: level 0 grants the ports, each level above
@@ -2506,8 +2517,18 @@ protected:
     }
     uint32_t nb = ReqOut.size();
     uint32_t nl = levels_.size();
-    for (auto& offer : offers_) {
-      if (offer.valid) {
+    held_ = false;
+    for (uint32_t b = 0, n = offers_.size(); b < n; ++b) {
+      auto& offer = offers_.at(b);
+      held_ |= offer.held;
+      if (!offer.valid) {
+        continue;
+      }
+      if (skid_) {
+        this->release_ports(b);
+        offer.held = true;
+        held_ = true;
+      } else {
         offer.withdrawing = true;
         offer.bank_in->pop();
         offer.withdrawing = false;
@@ -2602,6 +2623,9 @@ protected:
       if (wants.at(b) == 0) {
         continue;
       }
+      if (this->offers_enabled() && offers_.at(b).held) {
+        continue;
+      }
       bool granted = false;
       for (uint32_t sl = 0; sl < slices; ++sl) {
         uint32_t slice_want = want.at(b * slices + sl);
@@ -2654,7 +2678,17 @@ protected:
     if (offer.withdrawing) {
       return;
     }
+    if (offer.held) {
+      offer.held = false;
+      return;
+    }
     __assert(offer.valid, "bank took a request the arbiter did not offer");
+    this->release_ports(b);
+  }
+
+  // Dequeue bank b's offered port, and the ports merged into it.
+  void release_ports(uint32_t b) {
+    auto& offer = offers_.at(b);
     uint32_t i = offer.port;
     if (offer.mask != 0) {
       uint32_t base = (i / merge_group_) * merge_group_;
@@ -2727,11 +2761,14 @@ private:
   std::vector<std::vector<uint32_t>> rr_;                   // [arbiter level][bank][slice] next to grant
   uint32_t merge_group_;
   bool merge_line_;
+  bool skid_;
+  bool held_ = false; // some bank's skid register is occupied this cycle
   uint64_t collisions_ = 0;
   struct offer_t {
     SimChannel<MemReq>* bank_in = nullptr;
     bool     valid       = false;
     bool     withdrawing = false;
+    bool     held        = false; // caught by the bank's skid register
     uint32_t port        = 0;
     uint64_t mask        = 0;
     uint32_t collisions  = 0;
@@ -3015,7 +3052,8 @@ public:
     snprintf(sname, 100, "%s-port_arb", simobject->name().c_str());
     uint32_t merge_group = std::min<uint32_t>(config_.read_merge, config_.num_inputs);
     const bool merge_line = config_.merge_line && merge_group > 1;
-    port_arb_ = CachePortArb::Create(sname, params_, config_.num_inputs, num_banks, merge_group, merge_line);
+    port_arb_ = CachePortArb::Create(sname, params_, config_.num_inputs, num_banks, merge_group, merge_line,
+                                     config_.core_req_skid);
     for (uint32_t i = 0; i < config_.num_inputs; ++i) {
       simobject->core_req_in.at(i).bind(&port_arb_->ReqIn.at(i));
     }
@@ -3133,9 +3171,10 @@ public:
       if (!port_arb_->any_token()) {
         break;
       }
-      // a request tree can hold requests apart from their port order, so it
-      // drains first; without one the tokens are served at once
-      if (port_arb_->has_tree()) {
+      // a request tree can hold requests apart from their port order, and a
+      // bank's skid register one its port already released, so both drain
+      // first; without either the tokens are served at once
+      if (port_arb_->has_tree() || port_arb_->any_held()) {
         flush_state_ = FlushState::Drain;
         break;
       }

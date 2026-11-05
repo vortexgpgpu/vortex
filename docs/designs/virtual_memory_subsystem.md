@@ -202,6 +202,12 @@ storage be reused by the cluster TLB's megapage side array.
 
 ### 3.3 The hit path
 
+With `REQ_SKID` (the socket's dMMU and iMMU), each lane takes its requests
+through a zero-latency skid register (`VX_bypass_buffer`): the lane's accept
+follows the lookup of the offered request, and the skid keeps that cone out of
+the client's output register by presenting a registered ready. An empty skid
+passes the request straight to the lookup.
+
 Each lane packs its request once (`req_fields = {rw, addr, data, byteen,
 attr, tag}`), extracts `vpn`, `access` (`EX` on the instruction side, else
 `WR`/`RD` from `rw`) and `amo`, and probes the CAM and the miss station in
@@ -303,8 +309,8 @@ the token's own trip through the MMU makes a lane busy again.
 
 `flush_clear = flush_if.req ∧ tlb_empty`: the CAM and the miss station clear
 together, only once no walk is outstanding, and `flush_if.done` reports the
-same condition. `empty` — no request in the incoming or output stage and the
-miss station idle — feeds `socket_mmu_drained = dmmu.empty ∧ immu.empty`,
+same condition. `empty` — no request in the incoming stage, the request skid
+or the output stage, and the miss station idle — feeds `socket_mmu_drained = dmmu.empty ∧ immu.empty`,
 which every core's busy logic waits on. Omitting the incoming stage would let
 `empty` assert a cycle early while a request is still in flight.
 

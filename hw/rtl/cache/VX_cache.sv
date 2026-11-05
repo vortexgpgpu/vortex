@@ -51,6 +51,8 @@ module VX_cache import VX_gpu_pkg::*; #(
     parameter CORE_OUT_BUF          = 3,      // core response output buffer (bank-level buffering derived internally)
     parameter MEM_OUT_BUF           = 3,
 
+    parameter CORE_REQ_SKID         = 0,      // banks behind an unbuffered request crossbar take requests through a skid register
+
     parameter IS_LLC                = 0,      // last-level cache: banks own AMO commit + RVA reservation tracking
     parameter SHARED_LLC            = 0,      // the LLC serves every memory client alone (point of coherence)
     parameter ACQ_FORWARD           = 0,      // an acquire flush also invalidates the next level
@@ -131,6 +133,8 @@ module VX_cache import VX_gpu_pkg::*; #(
     // requests the crossbar can hold when slices let them pass each other;
     // the flush sequencer drains them before it walks or answers a token
     localparam REQ_XBAR_SIZE   = (REQ_XBAR_SLICE_SLOTS != 0) ? (NUM_BANKS * (REQ_XBAR_SLICE_SLOTS + `TO_OUT_BUF_SIZE(REQ_XBAR_BUF))) : 0;
+    // a buffered crossbar already registers the banks' ready
+    localparam CORE_REQ_SKID_ON = (CORE_REQ_SKID != 0) && (REQ_XBAR_BUF == 0);
     localparam CORE_RSP_BUF_ENABLE = (NUM_BANKS != 1) || (NUM_REQS != 1);
     localparam MEM_REQ_BUF_ENABLE = (NUM_BANKS != 1);
     `STATIC_ASSERT(!DO_READ_MERGE || (`IS_POW2(MERGE_GROUP) && `IS_DIVISBLE(NUM_REQS, MERGE_GROUP)), ("invalid parameter: read merge group"))
@@ -150,6 +154,7 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0] per_bank_flush_end;
     wire [NUM_REQS-1:0]  core_req_xbar_fire;
     wire [NUM_BANKS-1:0] per_bank_core_req_fire;
+    wire [NUM_BANKS-1:0] per_bank_core_req_held;
     wire                     mem_req_empty;
     wire [MEM_PORTS-1:0]     mem_flush_valid;
     wire                     mem_flush_l1_only;
@@ -179,6 +184,7 @@ module VX_cache import VX_gpu_pkg::*; #(
         .core_bus_out_if     (core_bus2_if),
         .xbar_req_fire       (core_req_xbar_fire),
         .bank_req_fire       (per_bank_core_req_fire),
+        .bank_req_held       (per_bank_core_req_held),
         .flush_begin         (per_bank_flush_begin),
         .flush_skip          (flush_skip),
         .flush_uuid          (flush_uuid),
@@ -436,6 +442,10 @@ module VX_cache import VX_gpu_pkg::*; #(
     end
     // a merged read enters the crossbar once, as its leader
     assign core_req_xbar_fire     = core_req_valid & ~core_req_follower & core_req_xbar_ready;
+    wire [NUM_BANKS-1:0]                     xbar_bank_valid;
+    wire [NUM_BANKS-1:0][CORE_REQ_DATAW-1:0] xbar_bank_data;
+    wire [NUM_BANKS-1:0][REQ_SEL_WIDTH-1:0]  xbar_bank_idx;
+    wire [NUM_BANKS-1:0]                     xbar_bank_ready;
     assign per_bank_core_req_fire = per_bank_core_req_valid & per_bank_core_req_ready;
 `ifdef PERF_ENABLE
     wire [PERF_CTR_BITS-1:0] perf_collisions;
@@ -459,11 +469,32 @@ module VX_cache import VX_gpu_pkg::*; #(
         .data_in   (core_req_data_in),
         .sel_in    (core_req_bid),
         .ready_in  (core_req_xbar_ready),
-        .valid_out (per_bank_core_req_valid),
-        .data_out  (core_req_data_out),
-        .sel_out   (per_bank_core_req_idx),
-        .ready_out (per_bank_core_req_ready)
+        .valid_out (xbar_bank_valid),
+        .data_out  (xbar_bank_data),
+        .sel_out   (xbar_bank_idx),
+        .ready_out (xbar_bank_ready)
     );
+    // A bank's ready follows its lookup of the request it is offered. Without
+    // a crossbar output buffer it reaches the requesters' output registers in
+    // the same cycle; a skid register per bank cuts it there, with no added
+    // latency and a registered ready toward the crossbar.
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_core_req_skid
+        VX_bypass_buffer #(
+            .DATAW    (REQ_SEL_WIDTH + CORE_REQ_DATAW),
+            .PASSTHRU (!CORE_REQ_SKID_ON)
+        ) req_skid (
+            .clk       (clk),
+            .reset     (reset),
+            .valid_in  (xbar_bank_valid[i]),
+            .ready_in  (xbar_bank_ready[i]),
+            .data_in   ({xbar_bank_idx[i], xbar_bank_data[i]}),
+            .data_out  ({per_bank_core_req_idx[i], core_req_data_out[i]}),
+            .valid_out (per_bank_core_req_valid[i]),
+            .ready_out (per_bank_core_req_ready[i])
+        );
+        // the skid holds a request exactly while it refuses the crossbar
+        assign per_bank_core_req_held[i] = CORE_REQ_SKID_ON && ~xbar_bank_ready[i];
+    end
     for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_core_req_data_out
         assign {
             per_bank_core_req_addr[i],

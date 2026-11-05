@@ -25,7 +25,9 @@
 // input's earlier requests were accepted, so the walk covered them.
 // A request crossbar that can hold requests apart from their input order
 // (XBAR_SIZE != 0) drains into the banks first, while the inputs are held,
-// so no earlier request of a token's input is passed by a later one.
+// so no earlier request of a token's input is passed by a later one. A
+// request held in a bank's skid register has left its input but not reached
+// the bank, so the walk also waits for every skid to empty.
 // An L1-only token (any byteen bit set: a next level with wider words sees
 // the bit at the token's line offset) is forwarded with its kind. A
 // last-level cache that alone serves every memory client is the point of
@@ -62,6 +64,7 @@ module VX_cache_init import VX_gpu_pkg::*; #(
     VX_mem_bus_if.master              core_bus_out_if [NUM_REQS],
     input wire [NUM_REQS-1:0]         xbar_req_fire,
     input wire [NUM_BANKS-1:0]        bank_req_fire,
+    input wire [NUM_BANKS-1:0]        bank_req_held, // a request sits in a bank's skid register
     output wire [NUM_BANKS-1:0]       flush_begin,
     output wire                       flush_skip,    // the banks only quiesce: no walk is owed
     output wire [`UP(UUID_WIDTH)-1:0] flush_uuid,
@@ -151,7 +154,7 @@ module VX_cache_init import VX_gpu_pkg::*; #(
         assign no_inflight_reqs = xbar_empty && ~(| xbar_req_fire_r) && (xbar_req_cnt_r == '0);
 
     end else begin : g_no_xbar_inflight
-        assign no_inflight_reqs = 0;
+        assign no_inflight_reqs = 1;
         `UNUSED_VAR ({xbar_req_fire, bank_req_fire})
     end
 
@@ -299,7 +302,7 @@ module VX_cache_init import VX_gpu_pkg::*; #(
             // STATE_IDLE:
             default: begin
                 if (flush_req_enable) begin
-                    if (XBAR_SIZE != 0) begin
+                    if ((XBAR_SIZE != 0) || (| bank_req_held)) begin
                         state_n = STATE_WAIT1;
                     end else if (~flush_walk && ~flush_drain) begin
                         rsp_pending_n = flush_req_mask;
@@ -316,7 +319,7 @@ module VX_cache_init import VX_gpu_pkg::*; #(
                 end
             end
             STATE_WAIT1: begin
-                if (no_inflight_reqs) begin
+                if (no_inflight_reqs && ~(| bank_req_held)) begin
                     if (~flush_walk && ~flush_drain) begin
                         rsp_pending_n = flush_req_mask;
                         state_n = STATE_RESPOND;

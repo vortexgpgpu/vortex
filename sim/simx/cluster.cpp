@@ -108,6 +108,10 @@ public:
         0,                             // read_merge
         CP_ON_L2 != 0,                 // write_around
         VX_CFG_L2_MRSQ_SIZE != 0,      // memory-response queue
+        false,                         // memory-response slice
+        false,                         // acquire forward
+        false,                         // line merging
+        true,                          // core-request skid
       });
     }
 

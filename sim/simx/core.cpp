@@ -281,14 +281,16 @@ public:
     uint32_t local_core = simobject_->id() % cores_per_cluster;
     snprintf(sname, 100, "%s-dcache_mmu", name.c_str());
     dcache_mmu_ = Mmu::Create(sname, VX_CFG_DCACHE_NUM_REQS,
-                              VX_CFG_DTLB_SIZE, local_core * 2 + 0, false);
+                              VX_CFG_DTLB_SIZE, local_core * 2 + 0, false,
+                              false, true, false, true);
 
     // Per-core icache MMU, one port per frontend slice. Fetch reads/writes its
     // upstream channels directly; the downstream side is bound to the Core's
     // icache ports below.
     snprintf(sname, 100, "%s-icache_mmu", name.c_str());
     icache_mmu_ = Mmu::Create(sname, ICACHE_NUM_REQS,
-                              VX_CFG_ITLB_SIZE, local_core * 2 + 1, true);
+                              VX_CFG_ITLB_SIZE, local_core * 2 + 1, true,
+                              false, true, false, true);
 
     // LSU memory side -> dcache MMU -> core's dcache port
     for (uint32_t p = 0; p < VX_CFG_NUM_LSU_BLOCKS * DCACHE_CHANNELS; ++p) {
