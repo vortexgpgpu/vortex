@@ -30,6 +30,7 @@ all:
 	$(MAKE) -C foldsim_mem_spec_s8
 	$(MAKE) -C foldsim_mem_spec2_s8
 	$(MAKE) -C foldsim_mem_ch2
+	$(MAKE) -C foldsim_mem_war
 	$(MAKE) -C foldsim_vmem
 	$(MAKE) -C foldsim_vmem_dw32
 	$(MAKE) -C foldsim_vmem_dw1024
@@ -52,6 +53,11 @@ all:
 	$(MAKE) -C foldsim_vmem_share
 	$(MAKE) -C foldsim_vmem_share_w
 	$(MAKE) -C foldsim_vmem_share_c
+	$(MAKE) -C foldsim_vmem_group
+	$(MAKE) -C foldsim_vmem_group_c64
+	$(MAKE) -C foldsim_vmem_group_np2
+	$(MAKE) -C foldsim_vmem_group_m1
+	$(MAKE) -C foldsim_vmem_group_l2
 	$(MAKE) -C foldsim_ctrl
 	$(MAKE) -C foldsim_ctrl_p2
 	$(MAKE) -C cp_axi_path

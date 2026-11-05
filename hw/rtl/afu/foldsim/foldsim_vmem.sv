@@ -20,8 +20,11 @@
 // row tagged with its instance, in any order across instances.
 //
 // Row `row` of instance `inst` lives at base + ((row * INSTANCES + inst) <<
-// log2(ROW_BYTES)), ROW_BYTES being DW/8 rounded up to a power of two of at
-// least 64: one burst of ceil(DW/512) beats, which never crosses 4 KiB.
+// log2(ROW_BYTES)), ROW_BYTES a power of two of at least DW/8: one burst of
+// ceil(DW/512) beats, which never crosses 4 KiB, or (ROW_BYTES < 64) a part of
+// a 64-byte line that other rows share, read as the whole line (the row taken
+// out of it) and written with the row's byte strobes only. A row of DW bits
+// not whole bytes is kept as whole bytes, the bits above DW zero.
 //
 // Requests flow in order through four stages:
 //   X  the inputs, registered (two cycles more for INSTANCES not a power of
@@ -38,8 +41,10 @@
 //      partial write's B first.
 // Writes leave the buffer in order on AW and W (one AXI id, so their B's
 // come back in order) and free their slot on B. Reads leave the read queue in
-// order on AR, each with its own id; R data may come back in any order and
-// interleaved, and its last beat answers the read.
+// order on AR, up to OUTSTANDING of them, the ids taken in turn: AXI answers
+// one id's reads in order, so each id keeps its reads in a ring, and R (any
+// order and interleaved across ids) answers the oldest of its id with its
+// last beat.
 //
 // The host cache (CACHE_ROWS > 0, up to a line per row) is direct-mapped and
 // write-back, indexed by the low bits of row * INSTANCES + inst (consecutive
@@ -74,13 +79,21 @@
 // read-first pair's read sees the row before its write. The bits are looked
 // up as requests are taken, so they follow request order; the reset clears
 // them, a word of each of KBANKS one-bit memories a cycle, within its drain.
-// With `zero` low the controller behaves as without the bits.
+// With `zero` low the controller behaves as without the bits. A bit may stand
+// for a block of 2^KZ_SHIFT consecutive rows of the image (row * INSTANCES +
+// inst), written since the reset once any of its rows is: the others are
+// still zero in memory, so only the rows of untouched blocks are known zero.
 //
 // Reset takes no request, drops every read not yet on AR and answers none
 // from before it; every write taken before it still goes to the cache or
 // memory, and then every dirty line goes to memory and every line is
 // invalidated: memory holds the RAM's image (which the host may then change). It finishes, with free back at
 // QUEUE, once memory has answered every transaction: until then free stays 0.
+//
+// With TAGW tag bits (foldsim_vmem_group), rd_inst and wr_inst carry a member
+// tag above the instance: the response returns it, the address ignores it (the
+// group gives its members disjoint rows), and the simulator's guarantees hold
+// per (tag, instance).
 //
 // A region move (`move`, the host placing the image elsewhere, as a new
 // process does without a reset) ends the old region's use as a reset does,
@@ -97,7 +110,8 @@ module foldsim_vmem #(
     parameter IW             = 8,
     // Row-address bits.
     parameter AW             = 10,
-    // Row data bits: a multiple of 8, up to 4096.
+    // Row data bits, up to 4096: any width with a whole-row enable (MW = 1),
+    // else a multiple of 8.
     parameter DW             = 512,
     // Mask bits: DW/8 byte enables, or 1 for a whole-row enable. A bit
     // enables DW/8/MW bytes.
@@ -108,32 +122,45 @@ module foldsim_vmem #(
     // Request-queue entries.
     parameter QUEUE          = 32,
     parameter AXI_ID_W       = 4,
-    // Reads on AXI at once, at most 2^AXI_ID_W.
+    // Reads on AXI at once, a power of two: each id (2^AXI_ID_W of them, or
+    // fewer) carries OUTSTANDING / ids of them, in order.
     parameter OUTSTANDING    = 16,
     // The instances the layout spaces rows by.
     parameter INSTANCES      = 1 << IW,
     // Host-cache rows, a power of two up to 2^(AW + clog2(INSTANCES)), a
     // line per row (0: direct).
     parameter CACHE_ROWS     = 0,
-    // Known-zero rows: a bit per row of the image (0: none, `zero` unused).
-    parameter KNOWN_ZERO     = 1
+    // Known-zero rows: a bit per row of the image (0: none, `zero` unused),
+    // or per block of 2^KZ_SHIFT rows.
+    parameter KNOWN_ZERO     = 1,
+    parameter KZ_SHIFT       = 0,
+    // A row's bytes in memory: a power of two of at least DW/8 (below 64,
+    // rows share 64-byte lines).
+    parameter ROW_BYTES      = (((DW + 7) / 8) > 64) ? (1 << $clog2((DW + 7) / 8)) : 64,
+    // Tag bits above the instance index in rd_inst, wr_inst and rsp_inst
+    // (foldsim_vmem_group's member): carried to the response, never part of
+    // the address. Requests of different tags may share lines, so read-first
+    // pairs pin theirs wherever lines are not one per row; and the cache's
+    // index hashes the row's high bits in, so members using the same rows of
+    // their own do not take the same lines.
+    parameter TAGW           = 0
 ) (
     input  wire                        clk,
     input  wire                        reset,
 
     input  wire                        rd_valid,
-    input  wire [IW-1:0]               rd_inst,
+    input  wire [IW+TAGW-1:0]          rd_inst,
     input  wire [AW-1:0]               rd_row,
 
     input  wire                        wr_valid,
-    input  wire [IW-1:0]               wr_inst,
+    input  wire [IW+TAGW-1:0]          wr_inst,
     input  wire [AW-1:0]               wr_row,
     input  wire [DW-1:0]               wr_data,
     input  wire [MW-1:0]               wr_mask,
 
     output wire                        rsp_valid,
-    output reg  [IW-1:0]               rsp_inst,
-    output reg  [DW-1:0]               rsp_data,
+    output reg  [IW+TAGW-1:0]          rsp_inst,
+    output wire [DW-1:0]               rsp_data,
 
     output reg  [$clog2(QUEUE+1)-1:0]  free,
 
@@ -174,14 +201,27 @@ module foldsim_vmem #(
     /* verilator lint_on UNUSEDSIGNAL */
 );
     localparam FW     = $clog2(QUEUE + 1);
+    localparam IT     = IW + TAGW;
     localparam QW     = (QUEUE > 1) ? $clog2(QUEUE) : 1;
     localparam OW     = (OUTSTANDING > 1) ? $clog2(OUTSTANDING) : 1;
+    // The ids in use and their reads in flight each: a read's slot of the
+    // tables is {its place in its id's ring, its id}.
+    localparam NID    = ((1 << AXI_ID_W) < OUTSTANDING) ? (1 << AXI_ID_W) : OUTSTANDING;
+    localparam IDW    = (NID > 1) ? $clog2(NID) : 1;
+    localparam DEPTH  = OUTSTANDING / NID;
+    localparam DPW    = (DEPTH > 1) ? $clog2(DEPTH) : 1;
+    localparam LNID   = $clog2(NID);
     localparam KB     = $clog2(INSTANCES);
     localparam POW2   = ((INSTANCES & (INSTANCES - 1)) == 0) ? 1 : 0;
     localparam LW     = AW + KB;
-    localparam BYTES  = DW / 8;
-    localparam RB     = ($clog2(BYTES) > 6) ? $clog2(BYTES) : 6;
-    localparam BEATS  = (DW + 511) / 512;
+    // The row in whole bytes.
+    localparam DB     = (DW + 7) / 8 * 8;
+    localparam BYTES  = DB / 8;
+    localparam RB     = $clog2(ROW_BYTES);
+    // Rows sharing a 64-byte line (SUB); a row's place in its line, in bits.
+    localparam SUB    = (RB < 6) ? 1 : 0;
+    localparam SLW    = (RB < 6) ? 6 - RB : 1;
+    localparam BEATS  = (DB + 511) / 512;
     localparam BW     = (BEATS > 1) ? $clog2(BEATS) : 1;
     localparam GROUP  = BYTES / MW;
     // A row's offset in the image: its bits.
@@ -194,13 +234,20 @@ module foldsim_vmem #(
     // INSTANCES is a power of two, at most CACHE_ROWS, or when every row has
     // a line): read-first pairs pin theirs (PINS at once).
     localparam PIN    = (CACHE != 0) && (CACHE_ROWS < (1 << AW) * INSTANCES)
-                     && (POW2 == 0 || CACHE_ROWS < INSTANCES);
+                     && (POW2 == 0 || CACHE_ROWS < INSTANCES || TAGW > 0);
     localparam PINS   = 8;
     localparam PW     = $clog2(PINS);
     localparam KZ     = (KNOWN_ZERO != 0) ? 1 : 0;
     // A move's flush starts once no request has come for this many cycles:
-    // past the simulator's lead (L = 3) after free dropped to 0.
+    // past the simulator's lead (L = 4) after free dropped to 0.
     localparam QUIET  = 15;
+    // A line's index: the row's low bits, with (TAGW > 0) the bits above them
+    // XORed in, CI at a time from the top: the tag's top bits reach the
+    // index's top bits, so members (largest first, each at a multiple of its
+    // size) using their low rows alike take different parts of the cache. The
+    // tag keeps the bits above, so the row is {tag, index ^ fold(tag)}.
+    localparam HASH   = (TAGW > 0) && (CACHE != 0) && (LW > CI);
+    localparam HPAD   = (CI - (CT % CI)) % CI;
 
     // Where a local answer's row comes from.
     localparam SRC_WB = 2'd0;  // the write buffer
@@ -210,16 +257,20 @@ module foldsim_vmem #(
 
 `ifdef SIMULATION
     initial begin
-        if ((DW % 8) != 0 || DW > 4096)
-            $error("foldsim_vmem: DW must be a multiple of 8, at most 4096");
+        if (DW < 1 || DW > 4096 || ((DW % 8) != 0 && MW != 1))
+            $error("foldsim_vmem: DW must be 1 to 4096 bits, a multiple of 8 with byte enables");
         if ((BYTES % MW) != 0)
             $error("foldsim_vmem: MW must divide DW/8");
-        if (OUTSTANDING > (1 << AXI_ID_W))
-            $error("foldsim_vmem: OUTSTANDING exceeds the AXI ids");
+        if (OUTSTANDING < 1 || (OUTSTANDING & (OUTSTANDING - 1)) != 0)
+            $error("foldsim_vmem: OUTSTANDING must be a power of two");
+        if ((ROW_BYTES & (ROW_BYTES - 1)) != 0 || ROW_BYTES < BYTES)
+            $error("foldsim_vmem: ROW_BYTES must be a power of two of at least DW/8");
+        if (KZ_SHIFT < 0 || KZ_SHIFT >= LW)
+            $error("foldsim_vmem: KZ_SHIFT must be below the image's row bits");
         if (INSTANCES > (1 << IW))
             $error("foldsim_vmem: INSTANCES exceeds the instance index");
-        if (QUEUE < 4)
-            $error("foldsim_vmem: QUEUE must be at least 4");
+        if (QUEUE < 10)
+            $error("foldsim_vmem: QUEUE must be at least 10, the simulator's room (VMEM_INTERFACE.md guarantee 2)");
         if (CACHE_ROWS != 0 && (CACHE_ROWS < 2 || (CACHE_ROWS & (CACHE_ROWS - 1)) != 0 || CI > LW))
             $error("foldsim_vmem: CACHE_ROWS must be a power of two, at most 2^(AW + clog2(INSTANCES))");
     end
@@ -236,11 +287,20 @@ module foldsim_vmem #(
                 onehot_index = onehot_index | QW'(i);
     endfunction
 
-    function automatic [OW-1:0] first_zero(input [OUTSTANDING-1:0] v);
-        first_zero = '0;
-        for (integer i = OUTSTANDING - 1; i >= 0; --i)
-            if (!v[i])
-                first_zero = OW'(i);
+    // A read's slot of the tables: its place in its id's ring, and its id.
+    function automatic [OW-1:0] tag_of(input [DPW-1:0] place, input [IDW-1:0] id);
+        tag_of = OW'((32'(place) & (DEPTH - 1)) << LNID) | OW'(32'(id) & (NID - 1));
+    endfunction
+
+    function automatic [CI-1:0] fold(input [LW-1:0] hi);
+        reg [LW+CI-1:0] t;
+        t    = (LW+CI)'(hi) << HPAD;
+        fold = '0;
+        for (integer c = 0; c < LW + CI; c += CI)
+            fold = fold ^ CI'(t >> c);
+    endfunction
+    function automatic [CI-1:0] cidx(input [LW-1:0] lin);
+        cidx = (HASH != 0) ? (lin[CI-1:0] ^ fold(lin >> CI)) : lin[CI-1:0];
     endfunction
 
     function automatic [BYTES-1:0] byte_enables(input [MW-1:0] mask);
@@ -260,7 +320,13 @@ module foldsim_vmem #(
     // Writes in the buffer: all, before AW, before their last W beat, before B.
     reg [FW-1:0]     wb_cnt, n_aw, n_w, n_b;
     reg [BW-1:0]     w_beat;
-    reg [OUTSTANDING-1:0] id_busy;
+    // Each id's reads in flight, its ring's oldest and next slots; the id
+    // the next read takes; reads in flight in all.
+    reg [DPW:0]      id_cnt  [NID];
+    reg [DPW-1:0]    id_head [NID];
+    reg [DPW-1:0]    id_tail [NID];
+    reg [IDW-1:0]    ar_rr;
+    reg [OW:0]       rd_out;
     reg              rc_valid;
     reg [63:0]       base_q;
 `ifdef SIMULATION
@@ -285,13 +351,26 @@ module foldsim_vmem #(
         n_w       = '0;
         n_b       = '0;
         w_beat    = '0;
-        id_busy   = '0;
+        for (integer i = 0; i < NID; ++i) begin
+            id_cnt[i]  = '0;
+            id_head[i] = '0;
+            id_tail[i] = '0;
+        end
+        ar_rr     = '0;
+        rd_out    = '0;
         rc_valid  = 1'b0;
         m_awvalid = 1'b0;
         m_wvalid  = 1'b0;
         m_arvalid = 1'b0;
     end
 `endif
+
+    if (TAGW > 0) begin : g_tag
+        // A write's tag only names its member, for the checks below.
+        /* verilator lint_off UNUSEDSIGNAL */
+        wire unused = |wr_inst[IT-1:IW];
+        /* verilator lint_on UNUSEDSIGNAL */
+    end
 
     wire accept = ~reset & ~draining;
     wire taken_rd = rd_valid & accept;
@@ -300,9 +379,9 @@ module foldsim_vmem #(
     // ---- Intake: a row's index in the image, row * INSTANCES + inst ----
     // i_busy, i_rbusy: a write, a read, still in the multiply.
     wire              i_rd, i_wr, i_busy, i_rbusy;
-    wire [IW-1:0]     i_rinst;
+    wire [IT-1:0]     i_rinst;
     wire [LW-1:0]     i_rlin, i_wlin;
-    wire [DW-1:0]     i_wdata;
+    wire [DB-1:0]     i_wdata;
     wire [MW-1:0]     i_wmask;
     if (POW2 != 0) begin : g_lin_shift
         // inst < INSTANCES: its low KB bits.
@@ -311,9 +390,9 @@ module foldsim_vmem #(
         assign i_busy  = 1'b0;
         assign i_rbusy = 1'b0;
         assign i_rinst = rd_inst;
-        assign i_rlin  = (LW'(rd_row) << KB) | LW'(rd_inst & IW'(INSTANCES - 1));
-        assign i_wlin  = (LW'(wr_row) << KB) | LW'(wr_inst & IW'(INSTANCES - 1));
-        assign i_wdata = wr_data;
+        assign i_rlin  = (LW'(rd_row) << KB) | LW'(rd_inst[IW-1:0] & IW'(INSTANCES - 1));
+        assign i_wlin  = (LW'(wr_row) << KB) | LW'(wr_inst[IW-1:0] & IW'(INSTANCES - 1));
+        assign i_wdata = DB'(wr_data);
         assign i_wmask = wr_mask;
     end else begin : g_lin_mul
         // The multiply in a DSP, its input and product registered: two more
@@ -321,9 +400,10 @@ module foldsim_vmem #(
         // reset.
         reg          a_rd, a_wr, p_rd, p_wr;
         reg [AW-1:0] a_rrow, a_wrow;
-        reg [IW-1:0] a_rinst, a_winst, p_rinst, p_winst;
+        reg [IT-1:0] a_rinst, p_rinst;
+        reg [IW-1:0] a_winst, p_winst;
         reg [LW-1:0] p_rprod, p_wprod;
-        reg [DW-1:0] a_wdata, p_wdata;
+        reg [DB-1:0] a_wdata, p_wdata;
         reg [MW-1:0] a_wmask, p_wmask;
 `ifdef SIMULATION
         initial begin
@@ -339,8 +419,8 @@ module foldsim_vmem #(
             a_rrow  <= rd_row;
             a_wrow  <= wr_row;
             a_rinst <= rd_inst;
-            a_winst <= wr_inst;
-            a_wdata <= wr_data;
+            a_winst <= wr_inst[IW-1:0];
+            a_wdata <= DB'(wr_data);
             a_wmask <= wr_mask;
             p_rd    <= a_rd & ~reset;
             p_wr    <= a_wr;
@@ -356,7 +436,7 @@ module foldsim_vmem #(
         assign i_busy  = a_wr | p_wr;
         assign i_rbusy = a_rd | p_rd;
         assign i_rinst = p_rinst;
-        assign i_rlin  = p_rprod + LW'(p_rinst);
+        assign i_rlin  = p_rprod + LW'(p_rinst[IW-1:0]);
         assign i_wlin  = p_wprod + LW'(p_winst);
         assign i_wdata = p_wdata;
         assign i_wmask = p_wmask;
@@ -390,7 +470,7 @@ module foldsim_vmem #(
     // the row, after its answer): the fill is dropped then.
     wire             fl_v;
     wire [LW-1:0]    fl_lin;
-    wire [DW-1:0]    fl_data;
+    wire [DB-1:0]    fl_data;
     // A move (mv_busy) fills nothing either: its sweep empties the cache.
     reg              mv_busy;
     wire             fill_go = fl_v & ~i_wr & ~reset & ~draining & ~mv_busy;
@@ -412,9 +492,9 @@ module foldsim_vmem #(
 
     // ---- X: the requests, in the image's terms; the tags are read ----
     reg              x_rd;
-    reg [IW-1:0]     x_rinst;
+    reg [IT-1:0]     x_rinst;
     reg [LW-1:0]     x_rlin, x_wlin;
-    reg [DW-1:0]     x_wdata;
+    reg [DB-1:0]     x_wdata;
     reg [MW-1:0]     x_wmask;
     reg [CI-1:0]     x_swidx;
 
@@ -432,7 +512,7 @@ module foldsim_vmem #(
     end
 
     // A write of a known-zero row, made whole: zeros where its mask is off.
-    reg [DW-1:0] x_wzdata;
+    reg [DB-1:0] x_wzdata;
     always @(*) begin
         for (integer j = 0; j < BYTES; ++j)
             x_wzdata[j*8 +: 8] = (kz_w & ~x_wmask[j / GROUP]) ? 8'd0 : x_wdata[j*8 +: 8];
@@ -444,9 +524,9 @@ module foldsim_vmem #(
 
     // ---- Y: the newest earlier copy of the read's row ----
     reg              y_rd, y_wfull, y_zero;
-    reg [IW-1:0]     y_rinst;
+    reg [IT-1:0]     y_rinst;
     reg [LW-1:0]     y_rlin, y_wlin;
-    reg [DW-1:0]     y_wdata;
+    reg [DB-1:0]     y_wdata;
     reg [MW-1:0]     y_wmask;
     reg [CI-1:0]     y_swidx;
     reg [63:0]       y_raddr;
@@ -471,7 +551,7 @@ module foldsim_vmem #(
     // line holds a dirty row.
     wire             c_rhit, c_whit, c_victim, c_same_idx;
     wire [CT-1:0]    c_vtag;
-    wire [DW-1:0]    c_ca, c_cb;
+    wire [DB-1:0]    c_ca, c_cb;
 
     wire y_same_row = y_rd & y_wr & (y_rlin == y_wlin);
     wire rf_pair    = y_same_row & (RDW_READ_FIRST != 0);
@@ -489,8 +569,8 @@ module foldsim_vmem #(
     wire evict    = (w_alloc | y_sw) & c_victim;
     // A fill takes a line that holds no dirty row (no write-back, no pin).
     wire f_alloc  = (CACHE != 0) & y_fl & ~c_victim;
-    wire [CI-1:0] y_widx = y_sw ? y_swidx : y_wlin[CI-1:0];
-    wire [LW-1:0] ev_lin = LW'({c_vtag, y_widx});
+    wire [CI-1:0] y_widx = y_sw ? y_swidx : cidx(y_wlin);
+    wire [LW-1:0] ev_lin = (HASH != 0) ? LW'({c_vtag, y_widx ^ fold(LW'(c_vtag))}) : LW'({c_vtag, y_widx});
     // The write is done with the cache: its room is free.
     wire y_wdone  = y_wr & ~w_around & ~evict;
 
@@ -506,7 +586,7 @@ module foldsim_vmem #(
     // one live write: a read's match needs no priority.
     reg [LW-1:0]     wb_lin  [QUEUE];
     reg [QUEUE-1:0]  wb_live, wb_full, wb_blk;
-    reg [DW-1:0]     wb_data [QUEUE];
+    reg [DB-1:0]     wb_data [QUEUE];
     reg [MW-1:0]     wb_mask [QUEUE];
     reg [63:0]       wb_addr [QUEUE];
 
@@ -516,10 +596,10 @@ module foldsim_vmem #(
     reg [1:0]        z_src;
     reg [QUEUE-1:0]  z_hit;
     reg [QW-1:0]     z_zslot;
-    reg [IW-1:0]     z_rinst;
+    reg [IT-1:0]     z_rinst;
     reg [63:0]       z_raddr;
     reg [LW-1:0]     z_alin;
-    reg [DW-1:0]     z_wdata;
+    reg [DB-1:0]     z_wdata;
     reg [MW-1:0]     z_wmask;
 
     wire z_alloc = z_wa | z_ev;
@@ -573,7 +653,7 @@ module foldsim_vmem #(
     // A slot valid at Y is not taken again before R ends (a write taken
     // needs the room its B gave back, and reaches Z three cycles later), so
     // its data is still the matched write's.
-    wire [DW-1:0]    z_adata = z_ev ? c_cb : z_wdata;
+    wire [DB-1:0]    z_adata = z_ev ? c_cb : z_wdata;
     wire [MW-1:0]    z_amask = z_ev ? '1 : z_wmask;
     wire [63:0]      z_aaddr = row_addr(z_alin);
     wire [QW-1:0]    z_slot  = z_pair ? wb_tail : (z_zhit ? z_zslot : onehot_index(z_hit));
@@ -586,7 +666,7 @@ module foldsim_vmem #(
     end
 
     // A write-first pair's line: the old row under the write.
-    reg [DW-1:0] z_pdata;
+    reg [DB-1:0] z_pdata;
     always @(*) begin
         for (integer j = 0; j < BYTES; ++j)
             z_pdata[j*8 +: 8] = (z_merge & z_wmask[j / GROUP]) ? z_wdata[j*8 +: 8] : c_cb[j*8 +: 8];
@@ -597,9 +677,9 @@ module foldsim_vmem #(
     reg [PW-1:0]     r_pinid;
     reg [1:0]        r_src;
     reg [QW-1:0]     r_slot, r_ubslot;
-    reg [IW-1:0]     r_inst;
+    reg [IT-1:0]     r_inst;
     reg [63:0]       r_addr;
-    reg [DW-1:0]     r_pdata;
+    reg [DB-1:0]     r_pdata;
 
     always @(posedge clk) begin
         r_local  <= z_local & ~reset;
@@ -622,7 +702,7 @@ module foldsim_vmem #(
     wire b_pop = m_bvalid;
 
     reg [63:0]       rq_addr  [QUEUE];
-    reg [IW-1:0]     rq_inst  [QUEUE];
+    reg [IT-1:0]     rq_inst  [QUEUE];
     reg              rq_ub    [QUEUE];
     reg [QW-1:0]     rq_ubslot [QUEUE];
     reg [QW-1:0]     rq_dslot [QUEUE];
@@ -637,20 +717,20 @@ module foldsim_vmem #(
     wire rq_push = r_rd;
     wire r_dep   = r_part & wb_valid[r_slot] & ~(b_pop & (wb_head == r_slot));
 
-    // ---- AR: the read queue's head, with a free id ----
-    wire          id_avail = ~(&id_busy);
-    wire [OW-1:0] id_next  = first_zero(id_busy);
+    // ---- AR: the read queue's head, on the next id while its ring has room ----
+    wire          id_avail = (id_cnt[ar_rr] != (DPW+1)'(DEPTH));
+    wire [OW-1:0] id_next  = tag_of(id_tail[ar_rr], ar_rr);
     wire          rq_issue = (rq_count != 0) & ~rq_dep[rq_head] & id_avail
                            & (~m_arvalid | m_arready) & ~reset;
 
-    reg [IW-1:0]  tbl_inst  [OUTSTANDING];
+    reg [IT-1:0]  tbl_inst  [OUTSTANDING];
+    reg [SLW-1:0] tbl_off   [OUTSTANDING];
     reg           tbl_ub    [OUTSTANDING];
     reg [QW-1:0]  tbl_ubslot [OUTSTANDING];
     reg           tbl_pin   [OUTSTANDING];
     reg           tbl_fill  [OUTSTANDING];
     reg [LW-1:0]  tbl_lin   [OUTSTANDING];
     reg [PW-1:0]  tbl_pinid [OUTSTANDING];
-    reg [BW-1:0]  rcnt      [OUTSTANDING];
 
     always @(posedge clk) begin
         if (rq_push) begin
@@ -683,8 +763,10 @@ module foldsim_vmem #(
             rq_count <= rq_count + FW'(rq_push) - FW'(rq_issue);
         end
         if (rq_issue) begin
-            m_araddr            <= rq_addr[rq_head];
-            m_arid              <= AXI_ID_W'(id_next);
+            // A row of a shared line: the line is read, the row's place kept.
+            m_araddr            <= (SUB != 0) ? {rq_addr[rq_head][63:6], 6'd0} : rq_addr[rq_head];
+            m_arid              <= AXI_ID_W'(ar_rr);
+            tbl_off[id_next]    <= SLW'(rq_addr[rq_head] >> RB);
             tbl_inst[id_next]   <= rq_inst[rq_head];
             tbl_ub[id_next]     <= rq_ub[rq_head];
             tbl_ubslot[id_next] <= rq_ubslot[rq_head];
@@ -700,62 +782,88 @@ module foldsim_vmem #(
     end
     assign m_arlen = 8'(BEATS - 1);
 
-    // ---- R: beats by id, the last one answers ----
-    reg [OW-1:0]  rc_id;
+    // ---- R: beats by id (one burst of an id at a time), the last one
+    // answers its id's oldest read ----
+    reg [IDW-1:0] rc_id;
     reg [511:0]   rc_data;
     /* verilator lint_off UNUSEDSIGNAL */
     reg           rc_rlast;
     /* verilator lint_on UNUSEDSIGNAL */
     always @(posedge clk) begin
         rc_valid <= m_rvalid & m_rready;
-        rc_id    <= OW'(m_rid);
+        rc_id    <= IDW'(m_rid);
         rc_data  <= m_rdata;
         rc_rlast <= m_rlast;
     end
+    reg  [BW-1:0] rcnt [NID];
+`ifdef SIMULATION
+    initial begin
+        for (integer i = 0; i < NID; ++i)
+            rcnt[i] = '0;
+    end
+`endif
     wire [BW-1:0] rc_beat = rcnt[rc_id];
     wire          rc_last = (rc_beat == BW'(BEATS - 1));
     wire          rc_done = rc_valid & rc_last;
+    // The read answered: its slot of the tables.
+    wire [OW-1:0] rc_tag  = tag_of(id_head[rc_id], rc_id);
 
-    // The last beat's bits past DW are padding.
+    // The last beat's bits past the row are padding; a row of a shared line
+    // is its part of the beat.
     /* verilator lint_off UNUSEDSIGNAL */
     wire [BEATS*512-1:0] rc_row;
     /* verilator lint_on UNUSEDSIGNAL */
     if (BEATS > 1) begin : g_beats
         for (genvar k = 0; k < BEATS - 1; ++k) begin : g_bm
-            reg [511:0] bm [OUTSTANDING];
+            reg [511:0] bm [NID];
             always @(posedge clk)
                 if (rc_valid & (rc_beat == BW'(k)))
                     bm[rc_id] <= rc_data;
             assign rc_row[k*512 +: 512] = bm[rc_id];
         end
     end
-    assign rc_row[(BEATS-1)*512 +: 512] = rc_data;
+    if (SUB != 0) begin : g_sub_r
+        wire [SLW-1:0] off = tbl_off[rc_tag];
+        assign rc_row = 512'(rc_data[32'(off) * (ROW_BYTES * 8) +: ROW_BYTES * 8]);
+    end else begin : g_line_r
+        /* verilator lint_off UNUSEDSIGNAL */
+        wire unused = |tbl_off[rc_tag];
+        /* verilator lint_on UNUSEDSIGNAL */
+        assign rc_row[(BEATS-1)*512 +: 512] = rc_data;
+    end
 
-    // An id's beat count restarts with its read.
+    // A burst's beats are counted per id; the count is back at 0 after its
+    // last.
     always @(posedge clk) begin
         if (rc_valid)
             rcnt[rc_id] <= rc_last ? '0 : rc_beat + 1'b1;
-        if (rq_issue)
-            rcnt[id_next] <= '0;
     end
 
     // ---- Responses: local (R) or from memory ----
     // None is offered while reset is high, not even one made before it.
-    reg rsp_q;
+    reg          rsp_q;
+    reg [DB-1:0] rsp_row;
     assign rsp_valid = rsp_q & ~reset;
+    // A row's bits above DW are zero (written so), never answered.
+    assign rsp_data  = rsp_row[DW-1:0];
+    if (DB > DW) begin : g_pad
+        /* verilator lint_off UNUSEDSIGNAL */
+        wire unused = |rsp_row[DB-1:DW];
+        /* verilator lint_on UNUSEDSIGNAL */
+    end
     always @(posedge clk) begin
         rsp_q <= (r_local | (rc_done & ~draining)) & ~reset;
         if (r_local) begin
             rsp_inst <= r_inst;
             case (r_src)
-            SRC_CA:  rsp_data <= c_ca;
-            SRC_CB:  rsp_data <= r_pdata;
-            SRC_ZR:  rsp_data <= '0;
-            default: rsp_data <= wb_data[r_slot];
+            SRC_CA:  rsp_row <= c_ca;
+            SRC_CB:  rsp_row <= r_pdata;
+            SRC_ZR:  rsp_row <= '0;
+            default: rsp_row <= wb_data[r_slot];
             endcase
         end else begin
-            rsp_inst <= tbl_inst[rc_id];
-            rsp_data <= rc_row[DW-1:0];
+            rsp_inst <= tbl_inst[rc_tag];
+            rsp_row  <= rc_row[DB-1:0];
         end
     end
 
@@ -764,15 +872,15 @@ module foldsim_vmem #(
     if (CACHE != 0) begin : g_fill
         reg          v;
         reg [LW-1:0] lin;
-        reg [DW-1:0] data;
+        reg [DB-1:0] data;
 `ifdef SIMULATION
         initial v = 1'b0;
 `endif
         always @(posedge clk) begin
-            if (rc_done & tbl_fill[rc_id] & ~draining & ~reset & ~mv_busy & ~move) begin
+            if (rc_done & tbl_fill[rc_tag] & ~draining & ~reset & ~mv_busy & ~move) begin
                 v    <= 1'b1;
-                lin  <= tbl_lin[rc_id];
-                data <= rc_row[DW-1:0];
+                lin  <= tbl_lin[rc_tag];
+                data <= rc_row[DB-1:0];
             end else if (reset | move | fill_go | (i_wr & (i_wlin == lin))) begin
                 v    <= 1'b0;
             end
@@ -782,7 +890,7 @@ module foldsim_vmem #(
         assign fl_data = data;
     end else begin : g_no_fill
         /* verilator lint_off UNUSEDSIGNAL */
-        wire unused = tbl_fill[rc_id] | (|tbl_lin[rc_id]);
+        wire unused = tbl_fill[rc_tag] | (|tbl_lin[rc_tag]);
         /* verilator lint_on UNUSEDSIGNAL */
         assign fl_v    = 1'b0;
         assign fl_lin  = '0;
@@ -794,12 +902,22 @@ module foldsim_vmem #(
     wire w_issue  = (n_w != 0) & (~m_wvalid | m_wready);
     wire w_end    = w_issue & (w_beat == BW'(BEATS - 1));
 
-    wire [BEATS*512-1:0] w_row  = (BEATS*512)'(wb_data[wb_w]);
-    wire [BEATS*64-1:0]  w_strb = (BEATS*64)'(byte_enables(wb_mask[wb_w]));
+    // A row of a shared line: in its every place of the beat, strobed in its
+    // own.
+    wire [BEATS*512-1:0] w_row;
+    wire [BEATS*64-1:0]  w_strb;
+    if (SUB != 0) begin : g_sub_w
+        wire [SLW-1:0] off = SLW'(wb_addr[wb_w] >> RB);
+        assign w_row  = {(64 / ROW_BYTES){(ROW_BYTES * 8)'(wb_data[wb_w])}};
+        assign w_strb = 64'(byte_enables(wb_mask[wb_w])) << (32'(off) * ROW_BYTES);
+    end else begin : g_line_w
+        assign w_row  = (BEATS*512)'(wb_data[wb_w]);
+        assign w_strb = (BEATS*64)'(byte_enables(wb_mask[wb_w]));
+    end
 
     always @(posedge clk) begin
         if (aw_issue) begin
-            m_awaddr <= wb_addr[wb_aw];
+            m_awaddr <= (SUB != 0) ? {wb_addr[wb_aw][63:6], 6'd0} : wb_addr[wb_aw];
             wb_aw    <= qinc(wb_aw);
         end
         if (aw_issue)
@@ -849,8 +967,8 @@ module foldsim_vmem #(
         // data.
         if (r_local & r_ub)
             wb_blk[r_ubslot] <= 1'b0;
-        if (rc_done & tbl_ub[rc_id])
-            wb_blk[tbl_ubslot[rc_id]] <= 1'b0;
+        if (rc_done & tbl_ub[rc_tag])
+            wb_blk[tbl_ubslot[rc_tag]] <= 1'b0;
         if (z_alloc)
             wb_blk[wb_tail] <= z_wa & z_blk;
 
@@ -867,30 +985,31 @@ module foldsim_vmem #(
         end
     end
 
-    // ---- Ids: busy from AR until the last beat of R ----
+    // ---- Ids: each a ring of its reads, from AR until the last beat of R ----
     always @(posedge clk) begin
-        begin : ids_
-            reg [OUTSTANDING-1:0] b;
-            b = id_busy;
-            if (rc_done)
-                b[rc_id] = 1'b0;
-            if (rq_issue)
-                b[id_next] = 1'b1;
-            id_busy <= b;
+        for (integer i = 0; i < NID; ++i)
+            id_cnt[i] <= id_cnt[i] + (DPW+1)'(rq_issue & (ar_rr == IDW'(i)))
+                                   - (DPW+1)'(rc_done & (rc_id == IDW'(i)));
+        if (rq_issue) begin
+            id_tail[ar_rr] <= id_tail[ar_rr] + 1'b1;
+            ar_rr          <= (ar_rr == IDW'(NID - 1)) ? '0 : ar_rr + 1'b1;
         end
+        if (rc_done)
+            id_head[rc_id] <= id_head[rc_id] + 1'b1;
+        rd_out <= rd_out + (OW+1)'(rq_issue) - (OW+1)'(rc_done);
     end
 
     // ---- Pins: a shared line held for its read-first pair's read ----
     // Released when the read has its data (one answer a cycle at most). A
     // reset drops them all: no read from before it answers.
-    wire          pin_rel   = (r_local & r_pin) | (rc_done & tbl_pin[rc_id]);
-    wire [PW-1:0] pin_relid = r_local ? r_pinid : tbl_pinid[rc_id];
+    wire          pin_rel   = (r_local & r_pin) | (rc_done & tbl_pin[rc_tag]);
+    wire [PW-1:0] pin_relid = r_local ? r_pinid : tbl_pinid[rc_tag];
 
     if (PIN) begin : g_pin
         reg [PINS-1:0] pin_v;
         reg [CI-1:0]   pin_idx [PINS];
         reg            pinned_q;
-        wire [CI-1:0]  x_idx = x_wlin[CI-1:0];
+        wire [CI-1:0]  x_idx = cidx(x_wlin);
         reg  [PINS-1:0] pm;
         always @(*) begin
             for (integer i = 0; i < PINS; ++i)
@@ -898,9 +1017,9 @@ module foldsim_vmem #(
         end
         always @(posedge clk) begin
             // A pair at Y may pin X's line this cycle: taken as pinned.
-            pinned_q <= (|pm) | (rf_pair & y_wfull & (y_wlin[CI-1:0] == x_idx));
+            pinned_q <= (|pm) | (rf_pair & y_wfull & (cidx(y_wlin) == x_idx));
             if (y_pin)
-                pin_idx[pin_next] <= y_wlin[CI-1:0];
+                pin_idx[pin_next] <= cidx(y_wlin);
             begin : v_
                 reg [PINS-1:0] v;
                 v = pin_v;
@@ -959,13 +1078,14 @@ module foldsim_vmem #(
             end
         end
 `endif
-        wire [CI-1:0] y_ridx = y_rlin[CI-1:0];
-        wire [CI-1:0] x_widx = x_sw ? x_swidx : x_wlin[CI-1:0];
+        wire [CI-1:0] y_ridx = cidx(y_rlin);
+        wire [CI-1:0] x_ridx = cidx(x_rlin);
+        wire [CI-1:0] x_widx = x_sw ? x_swidx : cidx(x_wlin);
         wire          tu_we  = c_whit | w_alloc | f_alloc | y_sw;
         wire [TW-1:0] tu_new = y_sw ? '0 : {1'b1, y_wr, CT'(y_wlin >> CI)};
 
         always @(posedge clk) begin
-            tr_q <= tag_r[x_rlin[CI-1:0]];
+            tr_q <= tag_r[x_ridx];
             tw_q <= tag_w[x_widx];
             if (tu_we) begin
                 tag_r[y_widx] <= {tu_new[TW-1], tu_new[CT-1:0]};
@@ -973,7 +1093,7 @@ module foldsim_vmem #(
             end
             tu_v   <= tu_we;
             tu_ent <= tu_new;
-            selr_q <= (y_wr | y_sw | y_fl) & (y_widx == x_rlin[CI-1:0]);
+            selr_q <= (y_wr | y_sw | y_fl) & (y_widx == x_ridx);
             selw_q <= (y_wr | y_sw | y_fl) & (y_widx == x_widx);
             bhr_q  <= ~y_sw & (CT'(y_wlin >> CI) == CT'(x_rlin >> CI));
             bhw_q  <= ~y_sw & (CT'(y_wlin >> CI) == CT'(x_wlin >> CI));
@@ -990,8 +1110,8 @@ module foldsim_vmem #(
         // The rows: port A reads for the read (two cycles: an output
         // register); port B writes for the write, reading first the line it
         // replaces or the read of its cycle shares.
-        reg [DW-1:0] cdata [CACHE_ROWS];
-        reg [DW-1:0] ca1, ca2, cb1;
+        reg [DB-1:0] cdata [CACHE_ROWS];
+        reg [DB-1:0] ca1, ca2, cb1;
         // An allocation's mask is whole: the enables are the write's own,
         // apart from whether it writes the line at all.
         wire             cwe = c_whit | w_alloc | f_alloc;
@@ -1030,17 +1150,22 @@ module foldsim_vmem #(
     // request; a write taken before it and still in the multiply then sets
     // nothing, as the reset forgets it anyway.
     if (KZ != 0) begin : g_kz
-        localparam KROWS  = (1 << AW) * INSTANCES;
-        localparam KBB    = (AW < 4) ? AW : 4;
+        // Bits, a block of 2^KZ_SHIFT rows each; bit b is word b / KBANKS of
+        // bank b % KBANKS.
+        localparam KLW    = LW - KZ_SHIFT;
+        localparam KROWS  = int'(((64'd1 << AW) * 64'(INSTANCES) + (64'd1 << KZ_SHIFT) - 1) >> KZ_SHIFT);
+        localparam KBB    = (KLW < 4) ? KLW : 4;
         localparam KBANKS = 1 << KBB;
         localparam KDEPTH = (KROWS + KBANKS - 1) / KBANKS;
         localparam KAW    = (KDEPTH > 1) ? $clog2(KDEPTH) : 1;
         reg              zv, done, looked;
         reg [KAW-1:0]    ptr;
+        wire [KLW-1:0]   wblk  = KLW'(i_wlin >> KZ_SHIFT);
+        wire [KLW-1:0]   rblk  = KLW'(i_rlin >> KZ_SHIFT);
         wire             clear = (draining | mv_flush) & ~reset & ~done;
         wire             set   = i_wr & ~reset & ~draining;
-        wire [KAW-1:0]   wa    = clear ? ptr : KAW'(i_wlin >> KBB);
-        wire [KAW-1:0]   ra    = KAW'(i_rlin >> KBB);
+        wire [KAW-1:0]   wa    = clear ? ptr : KAW'(wblk >> KBB);
+        wire [KAW-1:0]   ra    = KAW'(rblk >> KBB);
         wire [KBANKS-1:0] wq, rq;
         for (genvar b = 0; b < KBANKS; ++b) begin : g_bank
             reg mem [KDEPTH];
@@ -1048,7 +1173,7 @@ module foldsim_vmem #(
             always @(posedge clk) begin
                 wo <= mem[wa];
                 ro <= mem[ra];
-                if (clear | (set & (i_wlin[KBB-1:0] == KBB'(b))))
+                if (clear | (set & (wblk[KBB-1:0] == KBB'(b))))
                     mem[wa] <= ~clear;
             end
             assign wq[b] = wo;
@@ -1066,8 +1191,8 @@ module foldsim_vmem #(
                     done <= 1'b1;
             end
         end
-        assign kz_w    = looked & zv & ~wq[x_wlin[KBB-1:0]];
-        assign kz_r    = zv & ~rq[x_rlin[KBB-1:0]];
+        assign kz_w    = looked & zv & ~wq[KBB'(x_wlin >> KZ_SHIFT)];
+        assign kz_r    = zv & ~rq[KBB'(x_rlin >> KZ_SHIFT)];
         assign kz_done = done;
     end else begin : g_no_kz
         /* verilator lint_off UNUSEDSIGNAL */
@@ -1096,14 +1221,14 @@ module foldsim_vmem #(
 
     // ---- Room, and the drain after a reset ----
     wire idle = sw_done & kz_done & ~i_busy & ~x_wr & ~y_wr & ~x_sw & ~y_sw & ~x_fl & ~y_fl & ~z_alloc
-              & (wb_cnt == 0) & (id_busy == '0)
+              & (wb_cnt == 0) & (rd_out == '0)
               & ~m_arvalid & ~m_awvalid & ~m_wvalid & ~rc_valid;
 
     // ---- A move: serve what was taken, then the flush ----
     // Nothing taken is in flight but writes in the buffer: no read anywhere,
     // no write still to look up its known-zero bit or reach the cache.
     wire quiet = ~i_busy & ~i_rbusy & ~x_rd & ~y_rd & ~z_rd & ~r_rd & ~r_local & (rq_count == '0)
-               & (id_busy == '0) & ~rc_valid & ~x_wr & ~y_wr;
+               & (rd_out == '0) & ~rc_valid & ~x_wr & ~y_wr;
     reg  [3:0] mv_cnt;
     wire       mv_start = move & ~mv_busy & ~reset & ~draining;
     assign     mv_go    = mv_busy & ~mv_flush & quiet & (mv_cnt == 4'(QUIET));
@@ -1158,13 +1283,13 @@ module foldsim_vmem #(
 
 `ifdef SIMULATION
     // The simulator's guarantees, and the protocol memory must keep.
-    reg sim_pending [1 << IW];
+    reg sim_pending [1 << IT];
     always @(posedge clk) begin
         if (reset) begin
-            for (integer i = 0; i < (1 << IW); ++i)
+            for (integer i = 0; i < (1 << IT); ++i)
                 sim_pending[i] <= 1'b0;
         end else begin
-            if ((rd_valid && 32'(rd_inst) >= INSTANCES) || (wr_valid && 32'(wr_inst) >= INSTANCES))
+            if ((rd_valid && 32'(rd_inst[IW-1:0]) >= INSTANCES) || (wr_valid && 32'(wr_inst[IW-1:0]) >= INSTANCES))
                 $error("foldsim_vmem: an instance index past INSTANCES");
             if ((FW+1)'(rd_valid) + (FW+1)'(wr_valid) > (FW+1)'(room))
                 $error("foldsim_vmem: a request without room (%0d)", room);
@@ -1179,7 +1304,7 @@ module foldsim_vmem #(
             if (taken_rd)
                 sim_pending[rd_inst] <= 1'b1;
         end
-        if ((m_rvalid & m_rready) && (32'(m_rid) >= OUTSTANDING || !id_busy[OW'(m_rid)]))
+        if ((m_rvalid & m_rready) && (32'(m_rid) >= NID || id_cnt[IDW'(m_rid)] == '0))
             $error("foldsim_vmem: R for id %0d, which has no read", m_rid);
         if (rc_valid && (rc_rlast != rc_last))
             $error("foldsim_vmem: R's last beat out of place for id %0d", rc_id);

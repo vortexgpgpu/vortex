@@ -134,6 +134,11 @@ module foldsim_mem_bank #(
     output wire                  no_reads,
     // The target cycle's DRAM clocks are done.
     output wire                  done,
+    // Why `done` may be low, for telemetry: [2:0] the clock engine's state, [6:3] the reservations engine's, then
+    // the clock waits for the reservations' lag, waits for buffer room, the reservations have caught up, the lag
+    // is negative, the ingress queue holds a request, its head has room, no DRAM-clock credit, and the fast path
+    // waits for room.
+    output wire [14:0]           dbg,
 
     // Reads, writes, row hits, misses, conflicts, the sum of read latencies
     // (target cycles from AR to R), refreshes, and target cycles the port
@@ -186,6 +191,8 @@ module foldsim_mem_bank #(
     reg signed [15:0] k_wrpre, k_dep, k_ccdl1, k_rcdrd, k_rcdwr, k_rp, k_ras, k_rc, k_rtp;
     reg signed [15:0] k_rrds, k_rrdl, k_rfc;
     reg [16:0]        k_twoclk;
+    // The data-rate accumulators' values out of reset, a stage per subtraction.
+    reg signed [33:0] k_cr1_0, k_cr2_0;
     reg [2:0]         k_bb;
     reg [4:0]         k_rowsh;
     reg [24:0]        k_bmask;
@@ -212,6 +219,8 @@ module foldsim_mem_bank #(
         k_rrdl    <= 16'(T[I_RRDL]);
         k_rfc     <= $signed(cfg_rfc);
         k_twoclk  <= {cfg_core_clock, 1'b0};
+        k_cr1_0   <= 34'(cfg_data_rate) - 34'(k_twoclk);
+        k_cr2_0   <= k_cr1_0 - 34'(k_twoclk);
         k_bb      <= 3'(g_lpcs) + 3'(g_lbgs) + 3'(g_lbanks);
         k_rowsh   <= 5'(g_lpcs) + 5'(g_lbgs) + 5'(g_lbanks) + 5'(g_lrow);
         k_bmask   <= (25'd1 << (3'(g_lpcs) + 3'(g_lbgs) + 3'(g_lbanks))) - 25'd1;
@@ -1674,8 +1683,8 @@ module foldsim_mem_bank #(
                 rb_reach    <= '0;
                 wb_reach    <= '0;
                 state       <= S_IDLE;
-                cr1         <= 34'(cfg_data_rate) - 34'(k_twoclk);
-                cr2         <= 34'(cfg_data_rate) - 34'(k_twoclk) - 34'(k_twoclk);
+                cr1         <= k_cr1_0;
+                cr2         <= k_cr2_0;
                 rq_cnt      <= '0;
                 wq_cnt      <= '0;
                 wmode       <= 1'b0;
@@ -1745,6 +1754,11 @@ module foldsim_mem_bank #(
                     ar_pend_f  <= ar_fire_c;
                     ar_pend_id <= ar_id;
                     {ar_pend_bank, ar_pend_row} <= decode(ar_addr[29:5]);
+                    // SPEC 0/1's R registers are unused here (cur_r_valid stays 0); held at 0, never left undriven.
+                    cur_r_slot <= '0;
+                    cur_r_id   <= '0;
+                    cr1_slot   <= '0;
+                    cr1_id     <= '0;
                 end else if (SPEC != 0) begin : release_spec_
                     // This cycle's R is the candidate the last cycle's fire
                     // chose; then the next cycle's candidates, from the ready
@@ -1801,6 +1815,12 @@ module foldsim_mem_bank #(
                     end
                     slots_used <= slots_used + (SW+1)'(ar_fire) - (SW+1)'(r_fire);
                 end
+                // SPEC 2's candidate slots and ids are unused otherwise (cv stays 0); held at 0, never left undriven.
+                if (SPEC != 2)
+                    for (integer x = 0; x < 4; ++x) begin
+                        cs[x] <= '0;
+                        ci[x] <= '0;
+                    end
                 begin : release_b_
                     reg b_load;
                     b_load = (~cur_b_valid | b_fire) & (af_count != 0);
@@ -1999,5 +2019,9 @@ module foldsim_mem_bank #(
                 cm_busy[m] <= 1'b0;
         end
     end
+
+    // The engines' waits, for the endpoint's telemetry.
+    assign dbg = {f_wait_room, cr1[33], ih_room, (iq_count != 0), lag[15], caught, a_wait_room, a_wait_lag,
+                  state, a_state};
 
 endmodule

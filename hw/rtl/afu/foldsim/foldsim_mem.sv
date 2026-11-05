@@ -82,11 +82,23 @@ module foldsim_mem #(
     // Reads, writes, row hits, misses, conflicts, read latency sum,
     // refreshes, target cycles the port could take no read.
     output wire [8*64-1:0]       stats,
+    // Device-memory telemetry, 32-bit counters from reset: AR, R, AW, W and B
+    // handshakes; host cycles with no R while reads are in memory; host
+    // cycles with R offered and not taken; then the occupancy now: [7:0]
+    // reads queued for memory, [15:8] reads in memory, [23:16] writes in
+    // memory, [31:24] write data held.
+    output wire [8*32-1:0]       axi_stats,
     // No transaction in flight, at the target or in memory.
     output wire                  idle,
     output reg                   error,
     // A host cycle a target cycle waits for memory.
     output wire                  stall,
+    // Why a target cycle has not finished, as of the host cycle before (telemetry): [0] R's data is in for every
+    // candidate offered, [1] the bank model's DRAM clocks are done, [2] every input token is in, [3] every output
+    // token is taken, [4] a write waits for memory's room, [5] a reset cycle waits for memory, [6] R's ready for
+    // the bank model is in, [7] stall, [11:8] the R candidates offered, [15:12] those whose data is in, [30:16] the
+    // bank model's engines (foldsim_mem_bank dbg), [31] error.
+    output reg  [31:0]           dbg,
 
     // The target's reset, from the control endpoint.
     input  wire                  treset_valid,  output wire treset_ready,  input wire              treset_bits,
@@ -237,6 +249,7 @@ module foldsim_mem #(
 
     // The bank model's state: the port's readiness, R and B.
     wire          bk_room, bk_slot_free, bk_r_valid, bk_b_valid, bk_no_reads, bk_done;
+    wire [14:0]   bk_dbg;
     wire [SW-1:0] bk_alloc_slot, bk_r_slot;
     wire [ID_W-1:0] bk_b_id;
     /* verilator lint_off UNUSEDSIGNAL */
@@ -451,6 +464,44 @@ module foldsim_mem #(
     // The addresses at the heads of the read and write queues, kept as the
     // queues move.
     reg [63:0] arh_addr, awh_addr;
+    // Target order between the reads and writes of a block, as a memory
+    // controller's same-address check keeps it: memory may answer a read with
+    // a write that reached it before the read's data left, so a write must not
+    // reach memory while an older read of its block is unanswered, and a read
+    // waits only for the older writes of its block. A read is older than a
+    // write if the model took it before the write was formed; of one cycle,
+    // the write is first (the read waits for writes formed with it).
+    // - RAW: ah_old, the head read's older writes not yet acknowledged
+    //   (arq_wf: the writes formed when each read was taken; wf_n / wa_n:
+    //   writes formed / acknowledged), loaded as the head moves, less each
+    //   acknowledgement; the head waits for those of them of its block.
+    // - WAR: reads are counted by a hash of the target's block (out_n: taken,
+    //   not answered). A write's entry takes its bucket's count with its AW
+    //   (war_n), counts the reads of the bucket taken until it is formed, and
+    //   loses one per answer to a read of the bucket (reads are answered in
+    //   order, so these are its older ones); it waits for zero.
+    //   Answers are counted a host cycle after they come (rdq): a write may
+    //   wait a host cycle more, never less.
+    // A bucket shared by other blocks only delays a write behind older reads,
+    // which never wait for it, so no wait closes a cycle.
+    localparam OW = HCW + 1;
+    localparam NBK = 16, BKW = 4;
+    /* verilator lint_off UNUSEDSIGNAL */
+    function automatic [BKW-1:0] bucket(input [63:0] a);
+        bucket = a[LB + CH_SHIFT +: BKW] ^ a[LB + CH_SHIFT + BKW +: BKW];
+    endfunction
+    /* verilator lint_on UNUSEDSIGNAL */
+    reg [OW-1:0]  wf_n, wa_n, wf_n1, wa_n1;   // and each plus one
+    reg           rdq;
+    reg [BKW-1:0] rdq_bkt;
+    reg [OW-1:0]  arq_wf [HD];
+    reg [BKW-1:0] arq_bkt [HD];
+    reg [BKW-1:0] awm_bkt [DEPTH];
+    reg [HCW-1:0] out_n [NBK];
+    reg [HCW-1:0] war_n [DEPTH];
+    reg [DEPTH-1:0] war_fm;   // the entry's write is formed
+    reg [CW-1:0]  ah_old;
+    reg [BKW-1:0] ar_held_bkt;
     // The entries after them, read whether or not the heads move.
     (* keep = "true" *) wire [63:0] arq_next = arq_addr[HPW'(arq_head + 1'b1)];
     (* keep = "true" *) wire [63:0] awm_next = awm_addr[PW'(awm_head + 1'b1)];
@@ -465,6 +516,24 @@ module foldsim_mem #(
     always @(posedge clk)
         if (finish)
             ar_held_addr <= base + 64'(araddr);
+    always @(posedge clk)
+        if (finish)
+            ar_held_bkt <= bucket(64'(araddr));
+    wire [BKW-1:0] arq_in_bkt = finish ? bucket(64'(araddr)) : ar_held_bkt;
+    // The read answered now, the next head read's count, and the forming
+    // write (writes form in AW order from the ring's start: its index is the
+    // count of writes formed; its AW may come now).
+    wire [PW-1:0]  form_i   = PW'(wf_n);
+    wire [BKW-1:0] aw_bkt   = bucket(64'(awaddr));
+    // One more, one less, or the same, as one addition.
+    function automatic [HCW-1:0] step(input inc, input dec);
+        step = {{(HCW-1){dec & ~inc}}, inc ^ dec};
+    endfunction
+    function automatic [CW-1:0] older(input [OW-1:0] formed, input [OW-1:0] acked);
+        reg [OW-1:0] d;
+        d = formed - acked;
+        older = d[OW-1] ? '0 : CW'(d);
+    endfunction
     wire arq_pop  = m_arvalid & m_arready;
     wire awm_push = take & aw_fire;
     wire awm_pop  = m_awvalid & m_awready;
@@ -473,6 +542,9 @@ module foldsim_mem #(
     wire form     = take & new_write;
     wire rd_push  = m_rvalid & m_rready;
     wire b_push   = m_bvalid & m_bready;
+    // Writes formed and acknowledged, this cycle's included.
+    wire [OW-1:0]  wf_now   = form ? wf_n1 : wf_n;
+    wire [OW-1:0]  wa_now   = b_push ? wa_n1 : wa_n;
     assign full_wait = ~treset & ((aw_fire & (awm_live == CW'(DEPTH))) | (w_fire & (wm_count == CW'(DEPTH))));
     // SPEC 2: whether the data of the ready queue's first four slots is in, as the
     // cycle ends.
@@ -495,7 +567,7 @@ module foldsim_mem #(
         ar_hit = 1'b0;
         aw_hit = 1'b0;
         for (integer i = 0; i < DEPTH; ++i) begin
-            if ((off(PW'(i)) < wr_out[CW-1:0]) && (awm_addr[i][63:LB] == arh_addr[63:LB]))
+            if ((off(PW'(i)) < ah_old) && (awm_addr[i][63:LB] == arh_addr[63:LB]))
                 ar_hit = 1'b1;
             if ((off(PW'(i)) < aw_taken) && (awm_addr[i][63:LB] == awh_addr[63:LB]))
                 aw_hit = 1'b1;
@@ -518,16 +590,24 @@ module foldsim_mem #(
     assign m_wlast   = 1'b1;
     assign m_bready  = 1'b1;
 
+    // The head write waits for its older reads; its count is written as it is
+    // formed, so a test made before then is no test: a head not yet formed is
+    // a hit.
     always @(posedge clk)
-        aw_hit_q <= aw_hit;
+        aw_hit_q <= aw_hit | (war_n[awm_head] != '0) | (aw_formed == 0);
 
     always @(posedge clk) begin
         if (arq_push) begin
             arq_addr[arq_tail] <= finish ? base + 64'(araddr) : ar_held_addr;
+            arq_wf[arq_tail]   <= wf_now;
+            arq_bkt[arq_tail]  <= arq_in_bkt;
             arq_slot[arq_tail] <= arq_new_slot;
         end
-        if (awm_push)
+        if (awm_push) begin
             awm_addr[awm_tail] <= base + 64'(awaddr);
+            awm_bkt[awm_tail]  <= aw_bkt;
+        end
+        rdq_bkt <= arq_bkt[rs_head];
         begin : heads_
             reg [HPW-1:0] ah;
             reg [PW-1:0]  wh;
@@ -551,6 +631,26 @@ module foldsim_mem #(
         if (rd_push)
             slot_data[arq_slot[rs_head]] <= m_rdata;
     end
+
+    reg [31:0] t_ar, t_r, t_aw, t_w, t_b, t_r_starve, t_r_wait;
+    always @(posedge clk) begin
+        if (reset) begin
+            t_ar <= 0; t_r <= 0; t_aw <= 0; t_w <= 0; t_b <= 0; t_r_starve <= 0; t_r_wait <= 0;
+        end else begin
+            t_ar <= t_ar + 32'(arq_pop);
+            t_r  <= t_r + 32'(rd_push);
+            t_aw <= t_aw + 32'(awm_pop);
+            t_w  <= t_w + 32'(wm_pop);
+            t_b  <= t_b + 32'(b_push);
+            t_r_starve <= t_r_starve + {31'd0, ~m_rvalid & (t_ar != t_r)};
+            t_r_wait   <= t_r_wait + {31'd0, m_rvalid & ~m_rready};
+        end
+    end
+    always @(posedge clk)
+        dbg <= {error, bk_dbg, c_arr, bk_c_valid, stall, have[12], drain_wait, full_wait, &done, &have, bk_done, ok};
+
+    assign axi_stats = {8'(wm_count), 8'(t_aw - t_b), 8'(t_ar - t_r), 8'(arq_count),
+                        t_r_wait, t_r_starve, t_b, t_w, t_aw, t_r, t_ar};
 
     // A flush comes once memory has answered everything: nothing is offered
     // to it or expected from it, and what is left are lone halves of writes
@@ -577,7 +677,54 @@ module foldsim_mem #(
             ar_shown  <= 1'b0;
             aw_shown  <= 1'b0;
             aw_fresh  <= 1'b0;
+            wf_n      <= '0;
+            wa_n      <= '0;
+            wf_n1     <= OW'(1);
+            wa_n1     <= OW'(1);
+            rdq       <= 1'b0;
+            ah_old    <= '0;
+            for (integer b = 0; b < NBK; ++b)
+                out_n[b] <= '0;
+            for (integer e = 0; e < DEPTH; ++e)
+                war_n[e] <= '0;
+            war_fm    <= '0;
         end else begin
+            wf_n  <= wf_n + OW'(form);
+            wa_n  <= wa_n + OW'(b_push);
+            wf_n1 <= wf_n1 + OW'(form);
+            wa_n1 <= wa_n1 + OW'(b_push);
+            rdq   <= rd_push;
+            for (integer b = 0; b < NBK; ++b)
+                out_n[b] <= out_n[b] + step(arq_push & (arq_in_bkt == BKW'(b)), rdq & (rdq_bkt == BKW'(b)));
+            for (integer e = 0; e < DEPTH; ++e) begin : war_
+                reg fe, pe;
+                reg [BKW-1:0] b;
+                fe = form & (form_i == PW'(e));          // formed now: a read taken now is younger
+                pe = awm_push & (awm_tail == PW'(e));
+                b  = pe ? aw_bkt : awm_bkt[e];
+                if (pe)
+                    war_n[e] <= out_n[aw_bkt] + step(arq_push & (arq_in_bkt == aw_bkt) & ~fe,
+                                                     rdq & (rdq_bkt == aw_bkt));
+                else
+                    war_n[e] <= war_n[e] + step(arq_push & (arq_in_bkt == b) & ~war_fm[e] & ~fe,
+                                                rdq & (rdq_bkt == b) & (war_n[e] != '0));
+                if (pe)
+                    war_fm[e] <= fe;
+                else if (fe)
+                    war_fm[e] <= 1'b1;
+            end
+            // The head read's older writes: a new head's from its count, the
+            // same head's less this acknowledgement.
+            begin : ah_old_
+                reg [HPW-1:0] ah;
+                ah = arq_head + HPW'(arq_pop);
+                if (arq_push & (arq_tail == ah))
+                    ah_old <= older(wf_now, wa_now);
+                else if (arq_pop)
+                    ah_old <= older(arq_wf[HPW'(arq_head + 1'b1)], wa_now);
+                else if (b_push && (ah_old != '0))
+                    ah_old <= ah_old - 1'b1;
+            end
             if (arq_push)
                 arq_tail <= arq_tail + 1'b1;
             if (arq_pop)
@@ -688,6 +835,7 @@ module foldsim_mem #(
         .ar_take_slot   (bk_ar_take_slot),
         .no_reads       (bk_no_reads),
         .done           (bk_done),
+        .dbg            (bk_dbg),
         .stat_reads     (stats[0*64 +: 64]),
         .stat_writes    (stats[1*64 +: 64]),
         .stat_hits      (stats[2*64 +: 64]),

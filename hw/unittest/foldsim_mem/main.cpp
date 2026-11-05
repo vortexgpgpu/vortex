@@ -26,6 +26,8 @@
 //     it to the target after it;
 //   * a burst sets `error` and reaches HBM in no part, and a reset clears it.
 //
+// FOLDSIM_MEM_GATE: the endpoint is a synthesized netlist of the RTL before the stall-reason word (no `dbg`).
+//
 //   ./foldsim_mem            every setup
 //   ./foldsim_mem <name>     one setup
 
@@ -35,6 +37,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 #include <deque>
 #include <map>
 #include <memory>
@@ -46,13 +49,22 @@
 
 #include "Vfoldsim_mem.h"
 #include "verilated.h"
+#ifdef FOLDSIM_MEM_COVER
+#include "Vfoldsim_mem___024root.h"
+#endif
+#if VM_TRACE
+#include "verilated_vcd_c.h"
+#endif
 
 using namespace vortex;
 
 namespace {
 
 constexpr int kWords = 16;  // DATA_W = 512
-constexpr int kIdW = 4;     // ID_W
+#ifndef FOLDSIM_MEM_ID_W
+#define FOLDSIM_MEM_ID_W 4
+#endif
+constexpr int kIdW = FOLDSIM_MEM_ID_W;  // ID_W
 
 // With SPEC, the endpoint takes R's ready SPEC cycles late and offers R and
 // AR's ready (and with SPEC 2, AW and W's too) as candidates, by R having fired
@@ -103,6 +115,8 @@ struct Setup {
   uint32_t refi = 0, rfc = 0;
   // HBM's slowest answer, in host cycles, outside the busy windows.
   int hbm_lat = 40;
+  // The reads the target keeps in flight (+reads overrides): more than the read slots holds every one.
+  int reads = 16;
 };
 
 const Setup kSetups[] = {
@@ -151,7 +165,48 @@ const Setup kSetups[] = {
   // model has acknowledged and HBM has not taken yet.
   {"early_b",        dram_timing::Standard::HBM2, 400, 800, 0, 0, 32, 32, 26, 7,
    Traffic::Small, 0.9, 0.3, 1.0, 4000, DramBankModel::Refresh::Off, 0, 0, 300},
+  // The mini A100-class platform (s4x, B4): HBM2 at 900 MT/s under a 1410 MHz core, 190 cycles' latency, mostly
+  // reads as a matrix load is; HBM as fast as the V80's (9 host cycles) and twice the reads the port has slots for:
+  // the slots stay held, an AR's fire turns on R's fire the cycle before (the bank model's late AR), and the read
+  // buffer fills.
+  {"bank_s4x",       dram_timing::Standard::HBM2, 1410, 900, 190, 257, 32, 32, 26, 7,
+   Traffic::Random, 0.9, 0.05, 0.9, 6000, DramBankModel::Refresh::Off, 0, 0, 9, 64},
+  {"bank_s4x_rd",    dram_timing::Standard::HBM2, 1410, 900, 190, 257, 32, 32, 26, 7,
+   Traffic::Stream, 1.0, 0.0, 1.0, 6000, DramBankModel::Refresh::Off, 0, 0, 9, 64},
+  {"bank_s4x_rows",  dram_timing::Standard::HBM2, 1410, 900, 190, 257, 32, 32, 26, 7,
+   Traffic::Rows, 1.0, 0.0, 1.0, 6000, DramBankModel::Refresh::Off, 0, 0, 9, 64},
+  {"bank_s4x_1b",    dram_timing::Standard::HBM2, 1410, 900, 190, 257, 32, 32, 26, 7,
+   Traffic::OneBank, 1.0, 0.0, 1.0, 6000, DramBankModel::Refresh::Off, 0, 0, 9, 64},
 };
+
+// Sweep knobs (plusargs): +seed=<n> the random stream; +tail=<p> the probability an HBM answer (R or B) takes
+// 100 .. +tailmax=<n> (600) host cycles instead of its usual latency; +blat=<n> B's latency range added on top of
+// R's (B behind later reads); +ready=<p> AR / AW / W ready probability outside the busy windows (0.7).
+// +reads=<n> the reads the target keeps in flight, each with its own id (the setup's, up to 2^ID_W): more than SLOTS
+// holds every slot; +hbmlo=<n> / +hbmhi=<n> HBM's answer latency range in host cycles (1 .. the setup's);
+// +rrlag=<n> (SPEC) R's ready reaches the endpoint up to n host cycles after its cycle starts, as late as SPEC
+// cycles behind, as the simulator may deliver it (0: with its cycle); +tokdelay=<n> every other input token
+// arrives, and every output is taken, up to n host cycles into its cycle, and +tokmin=<m> at least m, as a fold's
+// initiation interval spaces them; +idle=<n> n target cycles with no request before the traffic starts and before
+// each reset phase's (a kernel launched long after reset); +arstall=<n> now and then (1 in 64 host cycles) HBM
+// takes no AR for up to n host cycles, as a NoC's credits run out.
+// +war=<p>: the probability a write may go to a block with reads outstanding (none by an AXI-careful master; a
+// target's reads and later writes of one block, as a simulated GPU makes them); a read the target made before the
+// write must return the block before it, which only an HBM that answers a read with the block as its data leaves
+// (+rdepart) can get wrong: the endpoint must keep the read ahead of the write. Without a pending write, a read
+// fired after the write's AW is not checked (its data depends on the write's place).
+uint32_t g_seed = 7;
+int g_arstall = 0;
+double g_tail = 0.0, g_ready = 0.7, g_war = 0.0;
+int g_tailmax = 600, g_blat = 0;
+int g_reads = 0, g_hbm_lo = 1, g_hbm_hi = 0;
+int g_rrlag = 0, g_tokdelay = 0, g_tokmin = 0, g_idle = 0;
+bool g_rdepart = false;
+#ifdef FOLDSIM_MEM_WAR
+// The write-after-read test (hw/unittest/foldsim_mem_war): reads and later writes of one block outstanding at
+// once, against an HBM answering at departure with long tails.
+struct WarDefaults { WarDefaults() { g_war = 0.6; g_rdepart = true; g_tail = 0.05; } } war_defaults;
+#endif
 
 const Setup* setup = nullptr;
 Vfoldsim_mem* dut = nullptr;
@@ -208,13 +263,13 @@ struct Hbm {
   std::map<uint64_t, Line> mem;
   double ready_p = 0.7;
   int lat_lo = 1, lat_hi = 40;
-  struct Pending { uint64_t at; Line data; };
+  struct Pending { uint64_t at; Line data; uint64_t addr; };
   std::deque<Pending> r;
   std::deque<uint64_t> b;
   std::deque<uint64_t> aw;
   std::deque<std::pair<Line, uint64_t>> w;
   std::set<uint64_t> ar_seen;
-  uint64_t n_ar = 0, n_aw = 0, n_w = 0;
+  uint64_t n_ar = 0, n_aw = 0, n_w = 0, n_r = 0, n_b = 0;
   bool arready = false, awready = false, wready = false;
   bool ar_held = false, aw_held = false, w_held = false;
   uint64_t ar_a = 0, aw_a = 0;
@@ -222,20 +277,32 @@ struct Hbm {
 
   size_t outstanding() const { return r.size() + b.size() + aw.size() + w.size(); }
 
-  uint64_t when(uint64_t last) {
-    return std::max(last, host_cycle + uint64_t(rand_int(lat_lo, lat_hi)));
+  uint64_t when(uint64_t last, int extra = 0) {
+    int lat = rand_int(lat_lo, lat_hi) + (extra > 0 ? rand_int(0, extra) : 0);
+    if (g_tail > 0 && chance(g_tail))
+      lat = rand_int(100, g_tailmax);
+    return std::max(last, host_cycle + uint64_t(lat));
   }
 
+  uint64_t ar_stall_until = 0;
   void drive() {
-    arready = chance(ready_p);
+    if (g_arstall > 0 && host_cycle >= ar_stall_until && chance(1.0 / 64))
+      ar_stall_until = host_cycle + uint64_t(rand_int(1, g_arstall));
+    arready = host_cycle >= ar_stall_until && chance(ready_p);
     awready = chance(ready_p);
     wready = chance(ready_p);
     dut->m_arready = arready;
     dut->m_awready = awready;
     dut->m_wready = wready;
     dut->m_rvalid = !r.empty() && r.front().at <= host_cycle;
+    // +rdepart: the block as the read leaves, not as it arrived.
+    Line rd = r.empty() ? Line{} : r.front().data;
+    if (g_rdepart && !r.empty()) {
+      const auto it = mem.find(r.front().addr);
+      rd = (it != mem.end()) ? it->second : Line{};
+    }
     for (int i = 0; i < kWords; ++i)
-      dut->m_rdata[i] = r.empty() ? 0 : r.front().data[i];
+      dut->m_rdata[i] = rd[i];
     dut->m_bvalid = !b.empty() && b.front() <= host_cycle;
   }
 
@@ -271,16 +338,20 @@ struct Hbm {
     aw_a = dut->m_awaddr;
     w_d = wdata();
 
-    if (dut->m_rvalid)
+    if (dut->m_rvalid) {
       r.pop_front();
-    if (dut->m_bvalid)
+      ++n_r;
+    }
+    if (dut->m_bvalid) {
       b.pop_front();
+      ++n_b;
+    }
     if (ar_hs) {
       ++n_ar;
       const uint64_t a = dut->m_araddr;
       ar_seen.insert(a);
       auto it = mem.find(a);
-      r.push_back({when(r.empty() ? 0 : r.back().at), it != mem.end() ? it->second : Line{}});
+      r.push_back({when(r.empty() ? 0 : r.back().at), it != mem.end() ? it->second : Line{}, a});
     }
     if (aw_hs) {
       ++n_aw;
@@ -300,12 +371,14 @@ struct Hbm {
             m[i] = (m[i] & ~(0xffu << (8 * k))) | (d[i] & (0xffu << (8 * k)));
       aw.pop_front();
       w.pop_front();
-      b.push_back(when(b.empty() ? 0 : b.back()));
+      b.push_back(when(b.empty() ? 0 : b.back(), g_blat));
     }
   }
 };
 
 Hbm hbm;
+
+int max_reads_() { return g_reads > 0 ? g_reads : (setup ? setup->reads : 16); }
 
 // ---- The target: an AXI4 master issuing single-beat reads and writes ----
 // Like Vortex's AXI adapter, it has no two reads with one id outstanding.
@@ -339,6 +412,7 @@ struct Master {
   int next_wid = 0;
   uint64_t stream = 0;
   uint64_t n_r = 0, n_b = 0, stale = 0;
+  size_t max_reads = 0;
   // Reads made of a block whose acknowledged write HBM does not hold yet.
   uint64_t early_reads = 0;
 
@@ -346,7 +420,7 @@ struct Master {
 
   void clear_ids() {
     free_rids.clear();
-    for (int i = 0; i < 16; ++i)
+    for (int i = 0; i < std::min(max_reads_(), 1 << kIdW); ++i)
       free_rids.insert(i);
   }
 
@@ -381,7 +455,7 @@ struct Master {
   void make_requests() {
     if (!generate || reset)
       return;
-    if (ar_q.size() + reads.size() < 16 && !free_rids.empty() && chance(setup->p_read)) {
+    if (ar_q.size() + reads.size() < size_t(max_reads_()) && !free_rids.empty() && chance(setup->p_read)) {
       const uint64_t a = this->pick_addr();
       if (!pending_writes.count(a)) {
         ++busy[a];
@@ -392,7 +466,7 @@ struct Master {
     }
     if (aw_q.size() + writes.size() < 24 && chance(setup->p_write)) {
       const uint64_t a = this->pick_addr();
-      if (busy[a] == 0) {
+      if (busy[a] == 0 || (g_war > 0 && !pending_writes.count(a) && chance(g_war))) {
         ++busy[a];
         Op op{a, next_wid++ & 15, make_line(a, version++)};
         aw_q.push_back(op);
@@ -512,6 +586,10 @@ struct Master {
         read_done(e.op.addr);
       }
     }
+    // +war: a read fired from the write's AW on, until its B, may see the write
+    // or not (a read and a write of one cycle are not ordered): not checked.
+    if (g_war > 0 && aw_v && awready && aw_len == 0)
+      unknown.insert(aw.addr);
     if (ar_v && arready) {
       ar_v = false;
       if (ar_len == 0) {
@@ -525,6 +603,7 @@ struct Master {
             ++early_reads;
         }
         reads[ar.id] = e;
+        max_reads = std::max(max_reads, reads.size());
       } else {
         burst = 0;
       }
@@ -562,6 +641,11 @@ enum { O_AWREADY, O_WREADY, O_ARREADY, O_RVALID, O_RDATA, O_RLAST, O_RID, O_RRES
        O_BRESP, O_BID, NUM_OUT };
 
 bool taken[NUM_IN], got[NUM_OUT];
+uint64_t in_at[NUM_IN], out_at[NUM_OUT];
+// R's readies on their way to the endpoint (+rrlag): value, the host cycle it arrives.
+std::deque<std::pair<bool, uint64_t>> rr_q;
+uint64_t rr_last = 0;
+bool rr_lagged() { return FOLDSIM_MEM_SPEC != 0 && g_rrlag > 0; }
 bool o_awready, o_wready, o_arready, o_rvalid, o_bvalid;
 int o_rid, o_bid;
 Line o_rdata;
@@ -573,14 +657,14 @@ uint64_t total_early_reads = 0;
 void drive_tokens() {
   const Master& m = master;
 #define IN(ch, name, value)                                                    \
-  dut->name##_valid = !taken[ch];                                              \
+  dut->name##_valid = !taken[ch] && host_cycle >= in_at[ch];                   \
   dut->name##_bits = (value)
   IN(I_AWVALID, awvalid, m.aw_v);
   IN(I_AWADDR, awaddr, m.aw.addr);
   IN(I_AWID, awid, m.aw.id);
   IN(I_AWLEN, awlen, m.aw_len);
   IN(I_WVALID, wvalid, m.w_v);
-  dut->wdata_valid = !taken[I_WDATA];
+  dut->wdata_valid = !taken[I_WDATA] && host_cycle >= in_at[I_WDATA];
   for (int i = 0; i < kWords; ++i)
     dut->wdata_bits[i] = m.w.data[i];
   IN(I_WSTRB, wstrb, ~0ull);
@@ -589,11 +673,16 @@ void drive_tokens() {
   IN(I_ARADDR, araddr, m.ar.addr);
   IN(I_ARID, arid, m.ar.id);
   IN(I_ARLEN, arlen, m.ar_len);
-  IN(I_RREADY, rready, m.rready);
+  if (rr_lagged()) {
+    dut->rready_valid = !rr_q.empty() && rr_q.front().second <= host_cycle;
+    dut->rready_bits = !rr_q.empty() && rr_q.front().first;
+  } else {
+    IN(I_RREADY, rready, m.rready);
+  }
   IN(I_BREADY, bready, m.bready);
   IN(I_TRESET, treset, m.reset);
 #undef IN
-#define OUT(ch, name) dut->name##_ready = !got[ch]
+#define OUT(ch, name) dut->name##_ready = !got[ch] && host_cycle >= out_at[ch]
   OUT(O_AWREADY, awready); OUT(O_WREADY, wready); OUT(O_ARREADY, arready);
   OUT(O_RVALID, rvalid); OUT(O_RDATA, rdata); OUT(O_RLAST, rlast); OUT(O_RID, rid);
   OUT(O_RRESP, rresp); OUT(O_BVALID, bvalid); OUT(O_BRESP, bresp); OUT(O_BID, bid);
@@ -631,11 +720,44 @@ void sample_tokens(bool in_take[NUM_IN], bool out_take[NUM_OUT]) {
   if (out_take[O_BRESP]) CHECK(dut->bresp_bits == 0, "BRESP not OKAY");
 }
 
+#ifdef FOLDSIM_MEM_COVER
+// Coverage (a --public-flat-rw build): late ARs, and those with every slot held; host cycles stalled.
+uint64_t cov_res_take = 0, cov_res_full = 0, cov_stall = 0, cov_take = 0, cov_aroom = 0, cov_froom = 0, cov_noroom = 0;
+#endif
+
+#if VM_TRACE
+// A --trace build: FOLDSIM_MEM_VCD=<file> dumps the first FOLDSIM_MEM_VCD_CYCLES (20000) host cycles of a setup.
+VerilatedVcdC* vcd = nullptr;
+uint64_t vcd_cycles = 0;
+void vcd_dump(int half) {
+  if (vcd != nullptr && host_cycle < vcd_cycles)
+    vcd->dump(2 * host_cycle + uint64_t(half));
+}
+#else
+void vcd_dump(int) {}
+#endif
+
 void host_step() {
   drive_tokens();
   hbm.drive();
   dut->clk = 0;
   dut->eval();
+  vcd_dump(0);
+#ifdef FOLDSIM_MEM_COVER
+  {
+    auto* r = dut->rootp;
+    if (r->foldsim_mem__DOT__bank_model__DOT__res_take) {
+      ++cov_res_take;
+      if (r->foldsim_mem__DOT__bank_model__DOT__slots_used >= FOLDSIM_MEM_READ_SLOTS - 1)
+        ++cov_res_full;
+    }
+    cov_stall += dut->stall;
+    cov_take += dut->m_arvalid && dut->m_arready;
+    cov_aroom += r->foldsim_mem__DOT__bank_model__DOT__a_wait_room;
+    cov_froom += r->foldsim_mem__DOT__bank_model__DOT__f_wait_room;
+    cov_noroom += (r->foldsim_mem__DOT__bank_model__DOT__iq_count != 0) && !r->foldsim_mem__DOT__bank_model__DOT__ih_room;
+  }
+#endif
   bool in_take[NUM_IN], out_take[NUM_OUT];
   sample_tokens(in_take, out_take);
   bool any_out = false;
@@ -650,9 +772,20 @@ void host_step() {
           "reset cycle finished with requests offered to HBM");
   }
   hbm.sample();
+#ifndef FOLDSIM_MEM_GATE
+  const bool stall_before = dut->stall, error_before = dut->error;
+#endif
   dut->clk = 1;
   dut->eval();
+  vcd_dump(1);
+#ifndef FOLDSIM_MEM_GATE
+  // The stall-reason word holds the host cycle before.
+  CHECK(((dut->dbg >> 7) & 1) == stall_before, "dbg stall bit %u, stall was %d", (dut->dbg >> 7) & 1, stall_before);
+  CHECK((dut->dbg >> 31) == error_before, "dbg error bit %u, error was %d", dut->dbg >> 31, error_before);
+#endif
   ++host_cycle;
+  if (rr_lagged() && in_take[I_RREADY])
+    rr_q.pop_front();
   for (int i = 0; i < NUM_IN; ++i)
     taken[i] |= in_take[i];
   for (int j = 0; j < NUM_OUT; ++j)
@@ -698,12 +831,23 @@ void run(uint64_t n) {
   for (uint64_t k = 0; k < n; ++k) {
     master.make_requests();
     master.offer();
+    if (rr_lagged()) {
+      rr_last = std::max(rr_last, host_cycle + uint64_t(g_tokmin + rand_int(0, g_rrlag)));
+      rr_q.push_back({master.rready, rr_last});
+    }
     if (master.reset && hbm.outstanding() != 0)
       ++drained_at_reset;
-    for (int i = 0; i < NUM_IN; ++i)
+    for (int i = 0; i < NUM_IN; ++i) {
       taken[i] = false;
-    for (int j = 0; j < NUM_OUT; ++j)
+      in_at[i] = host_cycle + uint64_t(g_tokmin + (g_tokdelay ? rand_int(0, g_tokdelay) : 0));
+    }
+    for (int j = 0; j < NUM_OUT; ++j) {
       got[j] = false;
+      out_at[j] = host_cycle + uint64_t(g_tokmin + (g_tokdelay ? rand_int(0, g_tokdelay) : 0));
+    }
+    // A lagged R ready is not this cycle's to give: the endpoint waits for the one it needs.
+    if (rr_lagged())
+      taken[I_RREADY] = true;
     uint64_t spins = 0;
     for (;;) {
       bool all = true;
@@ -716,6 +860,10 @@ void run(uint64_t n) {
       host_step();
       if (++spins > 200000) {
         printf("FAIL %s: target cycle %lu never completes\n", setup->name, (unsigned long)tcycle);
+#if VM_TRACE
+        if (vcd != nullptr)
+          vcd->close();
+#endif
         exit(1);
       }
     }
@@ -803,19 +951,33 @@ void configure() {
 
 int run_setup(const Setup& s) {
   setup = &s;
-  rng.seed(7);
+  rng.seed(g_seed);
   host_cycle = tcycle = 0;
   prev_fire = prev_fire2 = false;
   reset_cycles_done = drained_at_reset = compared = 0;
   hbm = Hbm();
-  hbm.lat_hi = s.hbm_lat;
+  hbm.lat_lo = g_hbm_lo;
+  hbm.lat_hi = g_hbm_hi ? g_hbm_hi : s.hbm_lat;
+  hbm.ready_p = g_ready;
   master = Master();
-  for (int i = 0; i < NUM_IN; ++i) taken[i] = false;
-  for (int j = 0; j < NUM_OUT; ++j) got[j] = false;
+  for (int i = 0; i < NUM_IN; ++i) { taken[i] = false; in_at[i] = 0; }
+  for (int j = 0; j < NUM_OUT; ++j) { got[j] = false; out_at[j] = 0; }
+  rr_q.clear();
+  rr_last = 0;
   after_reset = false;
   const int failures_before = failures;
 
   dut = new Vfoldsim_mem();
+#if VM_TRACE
+  if (const char* path = getenv("FOLDSIM_MEM_VCD")) {
+    Verilated::traceEverOn(true);
+    vcd = new VerilatedVcdC();
+    dut->trace(vcd, 99);
+    vcd->open(path);
+    const char* n = getenv("FOLDSIM_MEM_VCD_CYCLES");
+    vcd_cycles = n ? std::strtoull(n, nullptr, 0) : 20000;
+  }
+#endif
   configure();
   dut->reset = 1;
   for (int i = 0; i < 8; ++i) {
@@ -828,6 +990,7 @@ int run_setup(const Setup& s) {
   dut->reset = 0;
 
   reset_cycles(4, true);
+  run(uint64_t(g_idle));
   master.generate = true;
   run(s.cycles);
 
@@ -840,10 +1003,13 @@ int run_setup(const Setup& s) {
     // Few read slots can leave HBM idle at the random point; reset once it is not.
     for (int t = 0; t < 2000 && hbm.outstanding() == 0; ++t)
       run(1);
-    hbm.lat_lo = 1;
-    hbm.lat_hi = s.hbm_lat;
-    hbm.ready_p = 0.7;
+    hbm.lat_lo = g_hbm_lo;
+    hbm.lat_hi = g_hbm_hi ? g_hbm_hi : s.hbm_lat;
+    hbm.ready_p = g_ready;
     reset_cycles(rand_int(1, 4), true);
+    master.generate = false;
+    run(uint64_t(g_idle));
+    master.generate = true;
     run(s.cycles / 2);
   }
 
@@ -858,24 +1024,53 @@ int run_setup(const Setup& s) {
   CHECK(!hbm.ar_seen.count(kBase + kMagic), "a request made in reset reached HBM");
   CHECK(!hbm.ar_seen.count(kBase + kBurstAddr), "a burst reached HBM");
   CHECK(dut->idle, "endpoint not idle at the end");
+#ifndef FOLDSIM_MEM_GATE
+  // Idle: no R candidate, so R's data is in for all; no write or reset waits for memory.
+  CHECK(((dut->dbg >> 8) & 0xf) == 0 && (dut->dbg & 1) && ((dut->dbg >> 4) & 0x3) == 0, "dbg 0x%08x at idle",
+        dut->dbg);
+#endif
+  // The device-memory telemetry counts what HBM saw, and reads nothing in flight once idle.
+  const uint64_t tel[5] = {hbm.n_ar, hbm.n_r, hbm.n_aw, hbm.n_w, hbm.n_b};
+  const char* tel_name[5] = {"AR", "R", "AW", "W", "B"};
+  for (int i = 0; i < 5; ++i)
+    CHECK(dut->axi_stats[i] == uint32_t(tel[i]), "telemetry %s %u, HBM saw %lu", tel_name[i],
+          dut->axi_stats[i], (unsigned long)tel[i]);
+  CHECK(dut->axi_stats[6] == 0, "telemetry: R offered and not taken %u times", dut->axi_stats[6]);
+  CHECK(dut->axi_stats[7] == 0, "telemetry occupancy 0x%08x at idle", dut->axi_stats[7]);
   CHECK(master.stale == 0, "%lu stale responses", (unsigned long)master.stale);
   // One bank's conflicts leave too little in flight for every reset to meet.
   if (s.traffic != Traffic::OneBank)
     CHECK(drained_at_reset >= 4, "only %lu resets found HBM busy", (unsigned long)drained_at_reset);
 
   total_early_reads += master.early_reads;
+#ifdef FOLDSIM_MEM_COVER
+  printf("cover %s: late ARs %lu (%lu with the slots full), stalled host cycles %lu, ARs to HBM %lu; room waits clock %lu "
+         "fast %lu, ingress head without room %lu\n", s.name,
+         (unsigned long)cov_res_take, (unsigned long)cov_res_full, (unsigned long)cov_stall, (unsigned long)cov_take,
+         (unsigned long)cov_aroom, (unsigned long)cov_froom, (unsigned long)cov_noroom);
+  cov_res_take = cov_res_full = cov_stall = cov_take = cov_aroom = cov_froom = cov_noroom = 0;
+#endif
   const auto& st = golden_bank->model().stats();
   printf("%-12s target cycles %lu, host cycles %lu, %lu compared; %lu reads (%lu ahead of HBM's "
          "write), %lu writes; "
          "%lu reset cycles, %lu with HBM busy; model since last reset: %lu reads, %lu writes, "
-         "%lu hits, %lu misses, %lu conflicts, %lu refreshes, %lu deferred: %s\n",
+         "%lu hits, %lu misses, %lu conflicts, %lu refreshes, %lu deferred; at most %zu reads in flight, "
+         "%lu cycles every slot held: %s\n",
          s.name, (unsigned long)tcycle, (unsigned long)host_cycle, (unsigned long)compared,
          (unsigned long)master.n_r, (unsigned long)master.early_reads, (unsigned long)master.n_b,
          (unsigned long)reset_cycles_done,
          (unsigned long)drained_at_reset, (unsigned long)st.reads, (unsigned long)st.writes,
          (unsigned long)st.hits, (unsigned long)st.misses, (unsigned long)st.conflicts,
-         (unsigned long)st.refreshes, (unsigned long)st.deferred,
+         (unsigned long)st.refreshes, (unsigned long)st.deferred, master.max_reads,
+         (unsigned long)(uint64_t(dut->stats[14]) | (uint64_t(dut->stats[15]) << 32)),
          failures == failures_before ? "ok" : "FAILED");
+#if VM_TRACE
+  if (vcd != nullptr) {
+    vcd->close();
+    delete vcd;
+    vcd = nullptr;
+  }
+#endif
   delete dut;
   dut = nullptr;
   return failures - failures_before;
@@ -886,9 +1081,32 @@ int run_setup(const Setup& s) {
 int main(int argc, char** argv) {
   Verilated::commandArgs(argc, argv);
   const char* only = nullptr;
-  for (int i = 1; i < argc; ++i)
-    if (argv[i][0] != '+')
+  for (int i = 1; i < argc; ++i) {
+    if (argv[i][0] != '+') {
       only = argv[i];
+      continue;
+    }
+    std::string a = argv[i];
+    auto val = [&](const char* k) -> const char* {
+      const size_t n = std::strlen(k);
+      return a.compare(0, n, k) == 0 ? a.c_str() + n : nullptr;
+    };
+    if (const char* v = val("+seed=")) g_seed = uint32_t(std::strtoul(v, nullptr, 0));
+    if (const char* v = val("+tail=")) g_tail = std::atof(v);
+    if (const char* v = val("+tailmax=")) g_tailmax = std::atoi(v);
+    if (const char* v = val("+blat=")) g_blat = std::atoi(v);
+    if (const char* v = val("+ready=")) g_ready = std::atof(v);
+    if (const char* v = val("+reads=")) g_reads = std::atoi(v);
+    if (const char* v = val("+hbmlo=")) g_hbm_lo = std::atoi(v);
+    if (const char* v = val("+hbmhi=")) g_hbm_hi = std::atoi(v);
+    if (const char* v = val("+rrlag=")) g_rrlag = std::atoi(v);
+    if (const char* v = val("+tokdelay=")) g_tokdelay = std::atoi(v);
+    if (const char* v = val("+idle=")) g_idle = std::atoi(v);
+    if (const char* v = val("+tokmin=")) g_tokmin = std::atoi(v);
+    if (const char* v = val("+arstall=")) g_arstall = std::atoi(v);
+    if (const char* v = val("+war=")) g_war = std::atof(v);
+    if (a == "+rdepart") g_rdepart = true;
+  }
   for (const auto& s : kSetups) {
     if (only && std::strcmp(only, s.name))
       continue;

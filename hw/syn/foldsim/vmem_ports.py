@@ -25,6 +25,20 @@ foldsim_afu.sv of a kernel.vh without FOLDSIM_VMEM_PER_MEMORY_ROWS takes the
 global one for every memory. Nothing for a simulator without them.
 With --masters, it prints the kernel's device-memory masters instead.
 
+Grouped memories (foldsim --vmem-group: FOLDSIM_VMEM_GROUPS in
+foldsim_sim.vh, each memory's FOLDSIM_VMEM_<k>_GROUP): the controllers are the
+groups, so FOLDSIM_VMEM_REPEAT and the masters below count groups, `f(port, g)`;
+FOLDSIM_VMEM_MEMBERS(f,s) lists every memory k of group g as member i,
+`f(g, i, k)`, and FOLDSIM_VMEM_G<g>_REPEAT(f,s) the members of group g. Group
+g's host cache: FOLDSIM_VMEM_G<g>_CACHE_ROWS where the compiler gave it, else
+--cache-rows.
+
+Layout v7 (FOLDSIM_VMEM_LAYOUT_V7): each controller's row bytes in device
+memory, known-zero bits on or off and their block (FOLDSIM_VMEM_<k>_ROW_BYTES,
+_KNOWN_ZERO, _KZ_SHIFT; groups G<g>) are the compiler's where foldsim_sim.vh
+gives them, else the v6 layout's (DW/8 rounded up to a power of two of at
+least 64 bytes; a bit per row).
+
 Masters for the controllers (--vmem-masters M, Makefile FOLDSIM_VMEM_MASTERS):
 by default one per controller, as many as fit beside the memory ports (at
 most MAX_MASTERS in all). With fewer masters M than controllers N, controller k
@@ -50,6 +64,36 @@ def vmem_count(sim_vh):
     return int(m.group(1)) if m else 0
 
 
+def vmem_groups(sim_vh):
+    """Each group's memories, in member order, from foldsim_sim.vh; None
+    without groups."""
+    with open(sim_vh) as f:
+        text = f.read()
+    m = re.search(r'^`define FOLDSIM_VMEM_GROUPS (\d+)\s*$', text, re.M)
+    if not m:
+        return None
+    groups = [[] for _ in range(int(m.group(1)))]
+    for k, g in sorted((int(k), int(g)) for k, g in
+                       re.findall(r'^`define FOLDSIM_VMEM_(\d+)_GROUP (\d+)\s*$', text, re.M)):
+        groups[g].append(k)
+    return groups
+
+
+def vmem_widths(sim_vh):
+    """Each memory's and each group's DW from foldsim_sim.vh: {'<k>' or 'G<g>': DW}."""
+    with open(sim_vh) as f:
+        return {k: int(w) for k, w in re.findall(r'^`define FOLDSIM_VMEM_(G?\d+)_DW (\d+)\s*$', f.read(), re.M)}
+
+
+def layout_defaults(name, dw):
+    """The v6 layout's row bytes and a known-zero bit per row, where the
+    compiler gave none."""
+    nb = (dw + 7) // 8
+    rb = max(64, 1 << (nb - 1).bit_length())
+    return ''.join(f'`ifndef FOLDSIM_VMEM_{name}_{key}\n`define FOLDSIM_VMEM_{name}_{key} {v}\n`endif\n'
+                   for key, v in (('ROW_BYTES', rb), ('KNOWN_ZERO', 1), ('KZ_SHIFT', 0))).rstrip('\n')
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument('--sim-vh', required=True, help="the simulator's foldsim_sim.vh")
@@ -60,7 +104,8 @@ def main():
                     help="the controllers' own masters (default: one each, or as many as fit; "
                          "0: none, on the memory ports' masters)")
     a = ap.parse_args()
-    n = vmem_count(a.sim_vh)
+    groups = vmem_groups(a.sim_vh)
+    n = len(groups) if groups is not None else vmem_count(a.sim_vh)
     room = MAX_MASTERS - a.mem_ports
     m = min(n, room if a.vmem_masters is None else a.vmem_masters)
     if m < 0:
@@ -89,8 +134,20 @@ def main():
     if a.cache_rows:
         print(f'`define FOLDSIM_VMEM_CACHE_ROWS {a.cache_rows}')
     print('`define FOLDSIM_VMEM_PER_MEMORY_ROWS')
+    print('`define FOLDSIM_VMEM_LAYOUT_V7')
+    widths = vmem_widths(a.sim_vh)
+    if groups is not None:
+        print('`define FOLDSIM_VMEM_MEMBERS(f,s) '
+              + ' `s '.join(f'`f({g}, {i}, {k})' for g, ks in enumerate(groups) for i, k in enumerate(ks)))
+        for g, ks in enumerate(groups):
+            print(f'`define FOLDSIM_VMEM_G{g}_REPEAT(f,s) '
+                  + ' `s '.join(f'`f({g}, {i}, {k})' for i, k in enumerate(ks)))
+            print(f'`ifndef FOLDSIM_VMEM_G{g}_CACHE_ROWS\n`define FOLDSIM_VMEM_G{g}_CACHE_ROWS {a.cache_rows}\n`endif')
+            print(layout_defaults(f'G{g}', widths[f'G{g}']))
+        return
     for k in range(n):
         print(f'`ifndef FOLDSIM_VMEM_{k}_CACHE_ROWS\n`define FOLDSIM_VMEM_{k}_CACHE_ROWS {a.cache_rows}\n`endif')
+        print(layout_defaults(str(k), widths[str(k)]))
 
 
 if __name__ == '__main__':

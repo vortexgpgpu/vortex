@@ -111,7 +111,7 @@ constexpr uint64_t kRegion = (kImageBytes + 4095) & ~4095ull;
 constexpr uint64_t kSpace = kRegion * kNc;
 constexpr uint64_t kBase = 0x123400000ull;
 constexpr uint64_t kStride = 0x104000000ull;
-constexpr int kLead = 3;
+constexpr int kLead = 4;
 
 using Row = std::vector<uint8_t>;
 using Line = std::array<uint8_t, 64>;
@@ -386,7 +386,7 @@ struct Hbm {
     if (ar_hs) {
       ++n_ar;
       const int id = dut->m_arid;
-      CHECK(id < VM_OUTSTANDING, "AR id %d beyond OUTSTANDING", id);
+      CHECK(id < (1 << VM_AXI_ID_W), "AR id %d", id);
       check_addr(dut->m_araddr, "AR");
       Read r;
       r.addr = dut->m_araddr;

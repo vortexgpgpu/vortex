@@ -49,7 +49,8 @@ constexpr uint32_t kBeat = 64;
 #error "FOLDSIM_MEM_PORTS comes from the generated foldsim_kernel.vh"
 #endif
 // The virtual memories' controllers (FOLDSIM_VMEM_COUNT of the generated
-// foldsim_sim.vh), each with a master after the memory ports', or sharing
+// foldsim_sim.vh, or its FOLDSIM_VMEM_GROUPS where memories share them: the
+// Makefile passes the smaller), each with a master after the memory ports', or sharing
 // FOLDSIM_VMEM_MASTERS of them (foldsim_kernel.vh; 0: the memory ports').
 #ifndef FOLDSIM_VMEM_COUNT
 #define FOLDSIM_VMEM_COUNT 0
