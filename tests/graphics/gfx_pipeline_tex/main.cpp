@@ -207,6 +207,7 @@ int main(int argc, char** argv) {
   vx_enqueue_dcr_write(q, VX_DCR_OM_DEPTH_WRITEMASK, 0, 0, nullptr, nullptr);
   vx_enqueue_dcr_write(q, VX_DCR_OM_STENCIL_FUNC, VX_OM_DEPTH_FUNC_ALWAYS, 0, nullptr, nullptr);
   vx_enqueue_dcr_write(q, VX_DCR_OM_STENCIL_ZPASS, VX_OM_STENCIL_OP_KEEP, 0, nullptr, nullptr);
+  vx_enqueue_dcr_write(q, VX_DCR_OM_STENCIL_ZFAIL, VX_OM_STENCIL_OP_KEEP, 0, nullptr, nullptr);
   vx_enqueue_dcr_write(q, VX_DCR_OM_STENCIL_FAIL, VX_OM_STENCIL_OP_KEEP, 0, nullptr, nullptr);
   vx_enqueue_dcr_write(q, VX_DCR_OM_STENCIL_REF, 0, 0, nullptr, nullptr);
   vx_enqueue_dcr_write(q, VX_DCR_OM_STENCIL_MASK, OM_STENCIL_MASK, 0, nullptr, nullptr);

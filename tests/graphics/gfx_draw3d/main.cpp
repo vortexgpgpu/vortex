@@ -414,7 +414,7 @@ int render(const CGLTrace& trace) {
       auto stencil_fail  = toVXStencilOp(states.stencil_fail);
       OM_DCR_WRITE(VX_DCR_OM_STENCIL_FUNC, stencil_func);
       OM_DCR_WRITE(VX_DCR_OM_STENCIL_ZPASS, stencil_zpass);
-      OM_DCR_WRITE(VX_DCR_OM_STENCIL_ZPASS, stencil_zfail);
+      OM_DCR_WRITE(VX_DCR_OM_STENCIL_ZFAIL, stencil_zfail);
       OM_DCR_WRITE(VX_DCR_OM_STENCIL_FAIL, stencil_fail);
       OM_DCR_WRITE(VX_DCR_OM_STENCIL_REF, states.stencil_ref);
       OM_DCR_WRITE(VX_DCR_OM_STENCIL_MASK, states.stencil_mask);
@@ -422,7 +422,7 @@ int render(const CGLTrace& trace) {
     } else {
       OM_DCR_WRITE(VX_DCR_OM_STENCIL_FUNC, VX_OM_DEPTH_FUNC_ALWAYS);
       OM_DCR_WRITE(VX_DCR_OM_STENCIL_ZPASS, VX_OM_STENCIL_OP_KEEP);
-      OM_DCR_WRITE(VX_DCR_OM_STENCIL_ZPASS, VX_OM_STENCIL_OP_KEEP);
+      OM_DCR_WRITE(VX_DCR_OM_STENCIL_ZFAIL, VX_OM_STENCIL_OP_KEEP);
       OM_DCR_WRITE(VX_DCR_OM_STENCIL_FAIL, VX_OM_STENCIL_OP_KEEP);
       OM_DCR_WRITE(VX_DCR_OM_STENCIL_REF, 0);
       OM_DCR_WRITE(VX_DCR_OM_STENCIL_MASK, OM_STENCIL_MASK);
