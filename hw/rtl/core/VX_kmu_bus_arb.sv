@@ -169,20 +169,35 @@ module VX_kmu_bus_arb import VX_gpu_pkg::*; #(
 
         wire [SEL_O-1:0] dest_sel = SEL_O'(m_data[PW_DEST +: KMU_DEST_W] >> DEST_LSB);
 
-        // Round-robin over the ready outputs, starting at rr_ptr. Descending
-        // scan so the nearest ready output (smallest step from rr_ptr) is the
-        // last assignment and therefore wins.
-        reg [SEL_O-1:0] rr_sel;
-        always @(*) begin
-            rr_sel = rr_ptr;
-            for (integer k = NUM_OUTPUTS - 1; k >= 0; --k) begin
-                automatic logic [SEL_O-1:0] idx =
-                    SEL_O'((32'(rr_ptr) + k) % NUM_OUTPUTS);
-                if (out_ready[idx]) begin
-                    rr_sel = idx;
-                end
-            end
-        end
+        // Round-robin over the ready outputs: the first ready output at or after
+        // rr_ptr (cyclically), else rr_ptr. One masked and one plain LSB priority
+        // encoder (the ready outputs at or after rr_ptr first, then any): linear
+        // in NUM_OUTPUTS, where a scan of the N rotations is quadratic.
+        wire [SEL_O-1:0] rr_base = (32'(rr_ptr) >= NUM_OUTPUTS) ? SEL_O'(32'(rr_ptr) - NUM_OUTPUTS) : rr_ptr;
+        wire [NUM_OUTPUTS-1:0] rr_upper = out_ready & ~((NUM_OUTPUTS'(1) << rr_base) - NUM_OUTPUTS'(1));
+        wire [SEL_O-1:0] rr_upper_idx, rr_any_idx;
+        wire rr_upper_valid, rr_any_valid;
+
+        VX_priority_encoder #(
+            .N (NUM_OUTPUTS)
+        ) rr_upper_pe (
+            .data_in    (rr_upper),
+            `UNUSED_PIN (onehot_out),
+            .index_out  (rr_upper_idx),
+            .valid_out  (rr_upper_valid)
+        );
+
+        VX_priority_encoder #(
+            .N (NUM_OUTPUTS)
+        ) rr_any_pe (
+            .data_in    (out_ready),
+            `UNUSED_PIN (onehot_out),
+            .index_out  (rr_any_idx),
+            .valid_out  (rr_any_valid)
+        );
+
+        wire [SEL_O-1:0] rr_sel = rr_upper_valid ? rr_upper_idx
+                                : (rr_any_valid ? rr_any_idx : rr_ptr);
 
         wire [SEL_O-1:0] sel_new = (m_data[PW_KIND] == KMU_KIND_FRAGMENT)
                                  ? dest_sel : rr_sel;
