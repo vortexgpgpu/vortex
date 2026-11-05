@@ -108,6 +108,8 @@ public:
     , fu_full_seen_(VX_CFG_ISSUE_WIDTH, BitVector<>((uint32_t)FUType::Count, 0))
     , ibuf_inflight_(VX_CFG_NUM_WARPS, 0)
     , ibuf_full_r_(VX_CFG_NUM_WARPS, false)
+    , ibuf_queued_(VX_CFG_NUM_WARPS, 0)
+    , ibuf_queue_full_r_(VX_CFG_NUM_WARPS, false)
     , last_issue_(VX_CFG_NUM_WARPS, 0)
     , staged_since_(VX_CFG_NUM_WARPS, 0)
     , head_staged_(VX_CFG_NUM_WARPS, false)
@@ -449,6 +451,8 @@ public:
 
     std::fill(ibuf_inflight_.begin(), ibuf_inflight_.end(), 0);
     std::fill(ibuf_full_r_.begin(), ibuf_full_r_.end(), false);
+    std::fill(ibuf_queued_.begin(), ibuf_queued_.end(), 0);
+    std::fill(ibuf_queue_full_r_.begin(), ibuf_queue_full_r_.end(), false);
 
     // perf_stats_ deliberately survives: these are the MPM counters, which
     // accumulate from device reset. A kernel launch re-enters reset() here but
@@ -527,6 +531,7 @@ public:
     }
     for (uint32_t w = 0; w < VX_CFG_NUM_WARPS; ++w) {
       ibuf_full_r_.at(w) = (ibuf_inflight_.at(w) == VX_CFG_IBUF_SIZE);
+      ibuf_queue_full_r_.at(w) = (ibuf_queued_.at(w) >= VX_CFG_IBUF_SIZE);
     }
 
     scheduler_->schedule_end();
@@ -567,25 +572,38 @@ public:
       auto trace = pending_icache.at(mem_rsp.tag);
       assert(mem_rsp.data && "icache response must carry line payload");
 
+      // Decode passes the response straight into its warp's buffer, so a full
+      // buffer holds it at the icache output, in front of the responses behind
+      // it. The buffer's full flag is registered: a slot it frees this cycle
+      // takes an instruction from the next.
+      bool ibuf_room = !ibuf_queue_full_r_.at(trace->wid);
     #ifdef VX_CFG_EXT_C_ENABLE
       // Decompressor classifies the rsp: emit-ready (sets trace->code) or
       // queues a refetch internally for cross-word 32-bit completion.
       bool emit = decompressor->on_icache_rsp(trace, *mem_rsp.data);
-      bool progressed = !emit || decode_latch.try_push(trace);
+      bool progressed = !emit || (ibuf_room && decode_latch.try_push(trace));
       if (emit && progressed) {
         decompressor->on_emit(trace);
       }
     #else
       bool emit = true;
       bool progressed = false;
-      if (decode_latch.try_push(trace)) {
+      if (ibuf_room && decode_latch.try_push(trace)) {
         uint32_t offset = trace->PC & (VX_CFG_MEM_BLOCK_SIZE - 1);
         std::memcpy(&trace->code, mem_rsp.data->data() + offset, sizeof(uint32_t));
         progressed = true;
       }
     #endif
+      if (emit && !ibuf_room) {
+        if (!trace->log_once(true)) {
+          DT(4, simobject_->name() << " ibuffer-stall: " << *trace);
+        }
+        ++perf_stats_.ibuf_stalls;
+      }
       if (progressed) {
         if (emit) {
+          trace->log_once(false);
+          ++ibuf_queued_.at(trace->wid);
           DP(1, "Fetch: code=0x" << std::hex << trace->code << std::dec << ", cid=" << trace->cid
                  << ", wid=" << trace->wid << ", tmask=" << trace->tmask
                  << ", PC=0x" << std::hex << trace->PC << " (#" << std::dec << trace->uuid << ")");
@@ -664,17 +682,9 @@ public:
 
     auto trace = decode_latch.peek();
 
-    // check ibuffer capacity
+    // the icache response took the buffer slot this instruction lands in
     auto& ibuffer = ibuffers_.at(trace->wid);
-    if (ibuffer->full()) {
-      if (!trace->log_once(true)) {
-        DT(4, simobject_->name() << " ibuffer-stall: " << *trace);
-      }
-      ++perf_stats_.ibuf_stalls;
-      return;
-    } else {
-      trace->log_once(false);
-    }
+    assert(!ibuffer->full());
 
     // Decode: fill trace metadata from instruction bits. The decoder
     // recognises RVC encoding (low 2 bits != 11), expands internally, and
@@ -903,6 +913,11 @@ public:
                 this->ibuf_release(wid);
               }
             }
+          } else if (seq->last() && !head_staged_.at(wid)) {
+            // The macro's last micro-op takes the staging register as this one
+            // leaves it, and the macro leaves the buffer with it.
+            head_staged_.at(wid) = true;
+            this->ibuf_release(wid);
           }
         }
       }
@@ -914,19 +929,14 @@ public:
     }
   }
 
-  // Release an ibuffer backpressure slot (matches ++ in schedule()).
-  // Saturating decrement: flush_warp_pipeline only drains the ibuffer and
-  // resets ibuf_inflight to 0, but fetch_latch_ / decode-stage entries
-  // scheduled pre-trap can still arrive at issue() post-flush and decrement
-  // the (now-zeroed) counter. Async-trap users (RTU CB_YIELD path: AHS, CHS,
-  // MISS) routinely hit this; a non-saturating decrement underflows to
-  // UINT32_MAX and stalls scheduling. Proper fix is to extend
-  // flush_warp_pipeline to also drain fetch_latch_ + pending icache fetches
-  // for the warp.
+  // Release an ibuffer slot; ibuf_inflight_ saturates because an async-trap
+  // flush zeroes it while the warp's earlier fetches are still in flight.
   void ibuf_release(uint32_t wid) {
     if (ibuf_inflight_.at(wid) > 0) {
       --ibuf_inflight_.at(wid);
     }
+    assert(ibuf_queued_.at(wid) > 0);
+    --ibuf_queued_.at(wid);
   }
 
   void update_queue_full() {
@@ -1190,6 +1200,7 @@ public:
     auto& ibuffer = ibuffers_.at(wid);
     Word first_pc = 0;
     bool have_first = false;
+    uint32_t popped = 0;
     while (!ibuffer->empty()) {
       auto trace = ibuffer->peek();
       if (!have_first) {
@@ -1200,8 +1211,14 @@ public:
       trace->~instr_trace_t();
       trace_pool_.deallocate(trace, 1);
       ibuffer->pop();
+      ++popped;
     }
     ibuf_inflight_.at(wid) = 0;
+    // A staged head already released its count; the instructions still in
+    // the decode latch keep theirs.
+    uint32_t drained = popped - (head_staged_.at(wid) ? 1 : 0);
+    assert(popped >= drained && ibuf_queued_.at(wid) >= drained);
+    ibuf_queued_.at(wid) -= drained;
     head_staged_.at(wid) = false;
     uint32_t iw = wid % VX_CFG_ISSUE_WIDTH;
     if (issue_lock_owner_.at(iw) == wid / VX_CFG_ISSUE_WIDTH) {
@@ -1419,6 +1436,8 @@ private:
 
   std::vector<uint32_t> ibuf_inflight_;
   std::vector<bool> ibuf_full_r_;
+  std::vector<uint32_t> ibuf_queued_;      // [wid] instructions past the icache, not yet staged
+  std::vector<bool>     ibuf_queue_full_r_; // [wid] full flag from ibuf_queued_, registered
   std::vector<uint64_t> last_issue_;   // [wid] cycle of the warp's last issue
   std::vector<uint64_t> staged_since_; // [wid] cycle the last issued candidate was staged
   std::vector<bool>     head_staged_;  // [wid] the buffer head has left for staging

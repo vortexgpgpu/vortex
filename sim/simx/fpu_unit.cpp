@@ -95,6 +95,43 @@ constexpr uint32_t pe_batches(uint32_t pe_ratio) {
   constexpr uint32_t kLanes = VX_CFG_NUM_FPU_LANES;
   return kLanes / std::max<uint32_t>(kLanes / pe_ratio, 1);
 }
+// A 64-bit FMA on fewer processing elements than the 32-bit one has its own
+// pipeline and response arbiter input.
+constexpr bool kFma64Split = (VX_CFG_FLEN >= 64)
+                          && (pe_batches(VX_CFG_FMA64_PE_RATIO) != pe_batches(VX_CFG_FMA_PE_RATIO));
+constexpr uint32_t kRspInputs = kFma64Split ? 5 : 4;
+}
+
+uint32_t FpuUnit::pipe_of(const instr_trace_t* trace) const {
+  switch (std::get<FpuType>(trace->op_type)) {
+  case FpuType::FADD:
+  case FpuType::FSUB:
+  case FpuType::FMUL:
+  case FpuType::FMADD:
+  case FpuType::FMSUB:
+  case FpuType::FNMADD:
+  case FpuType::FNMSUB: {
+    const auto& fpu_args = std::get<IntrFpuArgs>(trace->instr_ptr->get_args());
+    return (kFma64Split && fpu_args.is_f64) ? kPipeFma64 : kPipeFma;
+  }
+  case FpuType::FDIV:
+    return kPipeDiv;
+  case FpuType::FSQRT:
+    return kPipeSqrt;
+  case FpuType::F2I:
+  case FpuType::I2F:
+  case FpuType::F2F:
+    return kPipeCvt;
+  case FpuType::FCMP:
+  case FpuType::FSGNJ:
+  case FpuType::FCLASS:
+  case FpuType::FMVXW:
+  case FpuType::FMVWX:
+  case FpuType::FMINMAX:
+    return kPipeNcp;
+  default:
+    std::abort();
+  }
 }
 
 uint32_t FpuUnit::batches_of(const instr_trace_t* trace) const {
@@ -446,17 +483,51 @@ void FpuUnit::execute(instr_trace_t* trace) {
 
 void FpuUnit::on_reset() {
   batch_idx_.fill(0);
+  for (auto& pipes : results_) {
+    for (auto& pipe : pipes) {
+      pipe.clear();
+    }
+  }
+  num_results_.fill(0);
+  // the arbiter's reset seed gives its first input the first grant
+  rsp_grant_.fill(kRspInputs - 1);
+}
+
+void FpuUnit::respond(uint32_t b) {
+  auto& pipes = results_.at(b);
+  uint64_t now = SimPlatform::instance().cycles();
+  auto ready = [&](uint32_t p) {
+    return !pipes.at(p).empty() && pipes.at(p).front().ready <= now;
+  };
+  for (uint32_t i = 1; i <= kRspInputs; ++i) {
+    uint32_t input = (rsp_grant_.at(b) + i) % kRspInputs;
+    uint32_t p = input;
+    if (input == kPipeDiv && !ready(kPipeDiv)) {
+      p = kPipeSqrt;
+    }
+    if (!ready(p)) {
+      continue;
+    }
+    // the arbiter's output register
+    if (Outputs.at(b).try_send(pipes.at(p).front().trace, 1)) {
+      pipes.at(p).pop_front();
+      --num_results_.at(b);
+      rsp_grant_.at(b) = input;
+    }
+    return;
+  }
 }
 
 void FpuUnit::on_tick() {
   bool idle = true;
   for (uint32_t b = 0; b < VX_CFG_NUM_FPU_BLOCKS; ++b) {
+    this->respond(b);
     auto& input = Inputs.at(b);
     if (!input.empty()) {
       auto& output = Outputs.at(b);
       // A full response port (every tag in use) stalls admission even though
       // the arithmetic pipelines are deeper.
-      if (!output.full()) {
+      if (!output.full() && output.size() + num_results_.at(b) < output.capacity()) {
         auto trace = input.peek();
         // The operation holds the block's input, whatever its class, until its
         // last batch of lanes enters the pipeline.
@@ -467,20 +538,21 @@ void FpuUnit::on_tick() {
         }
         batch_idx_.at(b) = 0;
         this->execute(trace);
-        // The result crosses its class's registered output buffer, then the
-        // response arbiter's output register on this port, and keeps its tag
-        // until the lane gather, or without one the commit arbiter, takes it.
-        uint32_t delay = this->latency_of(trace) + 2;
-        output.send(trace, delay);
+        // The result crosses its class's registered output buffer to the
+        // response arbiter, and keeps its tag until the lane gather, or
+        // without one the commit arbiter, takes it.
+        uint64_t ready = SimPlatform::instance().cycles() + this->latency_of(trace) + 1;
+        results_.at(b).at(this->pipe_of(trace)).push_back({ready, trace});
+        ++num_results_.at(b);
         input.pop();
         if (!kGather && trace->eop) {
           ReleaseOut.send(trace, 0);
         }
       }
     }
-    idle &= (input.size() == 0);
+    idle &= (input.size() == 0) && (num_results_.at(b) == 0);
   }
-  // no cross-tick state: sleep until a new trace is reserved toward an input.
+  // sleep until a new trace is reserved toward an input.
   if (idle) {
     this->tick_sleep();
   }
