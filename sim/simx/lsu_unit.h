@@ -15,8 +15,6 @@
 
 #include <array>
 #include <deque>
-#include <map>
-#include <tuple>
 #include <mempool.h>
 #include <ringqueue.h>
 #include "func_unit.h"
@@ -108,11 +106,6 @@ private:
 
 	void compute_addrs(uint32_t b, instr_trace_t* trace);
 
-	// An instruction's micro-ops share its uuid and differ in destination.
-	static std::tuple<uint64_t, uint32_t, uint8_t> rsp_track_key(const instr_trace_t* trace) {
-		return {trace->uuid, trace->dst_reg.id(), trace->dst_bytesel};
-	}
-
 	// Per-cycle handlers.
 	void process_response_step(uint32_t b);
 	void process_request_step(uint32_t b);
@@ -136,6 +129,8 @@ private:
 		std::vector<mem_addr_size_t> lanes;
 		IntrLsuArgs lsu_args;
 		bool        is_load;
+		// The instruction's response-tracking slot.
+		uint32_t    track      = 0;
 		// TCU metadata client entry: response fragments are forwarded to
 		// TcuRspOut with client_tag restored instead of written to registers.
 		bool        is_tcu     = false;
@@ -143,6 +138,8 @@ private:
 		// A fence's flush token: its response only releases the fence.
 		bool        is_flush   = false;
 	};
+
+	static constexpr uint32_t kNoTrack = -1u;
 
 	// Per-block LSU state. Each member is a named hardware sub-block.
 	struct lsu_state_t {
@@ -162,13 +159,15 @@ private:
 		std::deque<LsuReq>        meta_reqs;
 		bool                      meta_last = false;
 		bool                      head_staged = false;
-		// Requests of each instruction still awaiting their last response,
-		// and whether its final request has issued.
+		// A load or AMO's requests still awaiting their last response, and
+		// whether its final request has issued, in a slot the instruction
+		// takes with its first request and keeps until its last.
 		struct rsp_track_t {
 			uint32_t outstanding = 0;
 			bool     last_issued = false;
 		};
-		std::map<std::tuple<uint64_t, uint32_t, uint8_t>, rsp_track_t> rsp_tracks;
+		HashTable<rsp_track_t>    rsp_tracks{VX_CFG_LSU_PENDING_SIZE};
+		uint32_t                  open_track = kNoTrack;
 		FenceController           fence;
 		// the engaged fence's flush token is still to be sent
 		bool                      fence_token = false;
@@ -187,6 +186,7 @@ private:
 			this->addr_list.clear();
 			this->remain_addrs = 0;
 			this->rsp_tracks.clear();
+			this->open_track = kNoTrack;
 		}
 	};
 

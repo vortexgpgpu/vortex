@@ -381,6 +381,7 @@ void LsuUnit::process_response_step(uint32_t b) {
 	}
 	entry.count -= lsu_rsp.mask.count(); // track remaining
 	bool is_final = (entry.count == 0);
+	uint32_t track_id = entry.track;
 	if (is_final) {
 		state.pending_reqs.release(lsu_rsp.tag);
 	}
@@ -388,11 +389,11 @@ void LsuUnit::process_response_step(uint32_t b) {
 	// outstanding request once its final request has issued.
 	bool rsp_last = false;
 	if (is_final) {
-		auto it = state.rsp_tracks.find(rsp_track_key(trace));
-		assert(it != state.rsp_tracks.end() && it->second.outstanding != 0);
-		if (--it->second.outstanding == 0 && it->second.last_issued) {
+		auto& track = state.rsp_tracks.at(track_id);
+		assert(track.outstanding != 0);
+		if (--track.outstanding == 0 && track.last_issued) {
 			rsp_last = true;
-			state.rsp_tracks.erase(it);
+			state.rsp_tracks.release(track_id);
 		}
 	}
 	if (is_final && entry.eop) {
@@ -760,10 +761,19 @@ void LsuUnit::process_request_step(uint32_t b) {
 				--state.staged_reads;
 				state.head_staged = false;
 			}
-			tag = state.pending_reqs.allocate({trace, count, is_eop, std::move(lane_entries), entry_args, true});
-			auto& track = state.rsp_tracks[rsp_track_key(trace)];
+			if (state.open_track == kNoTrack) {
+				state.open_track = state.rsp_tracks.allocate({});
+			}
+			uint32_t track_id = state.open_track;
+			auto& track = state.rsp_tracks.at(track_id);
 			++track.outstanding;
-			track.last_issued |= (trace->eop && is_eop);
+			if (trace->eop && is_eop) {
+				track.last_issued = true;
+				state.open_track = kNoTrack;
+			}
+			pending_req_t entry{trace, count, is_eop, std::move(lane_entries), entry_args, true};
+			entry.track = track_id;
+			tag = state.pending_reqs.allocate(std::move(entry));
 		}
 		lsu_req.tag  = tag;
 		lsu_req.cid  = trace->cid;
