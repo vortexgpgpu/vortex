@@ -185,12 +185,23 @@ const Setup kSetups[] = {
 // initiation interval spaces them; +idle=<n> n target cycles with no request before the traffic starts and before
 // each reset phase's (a kernel launched long after reset); +arstall=<n> now and then (1 in 64 host cycles) HBM
 // takes no AR for up to n host cycles, as a NoC's credits run out.
+// +war=<p>: the probability a write may go to a block with reads outstanding (none by an AXI-careful master; a
+// target's reads and later writes of one block, as a simulated GPU makes them); a read the target made before the
+// write must return the block before it, which only an HBM that answers a read with the block as its data leaves
+// (+rdepart) can get wrong: the endpoint must keep the read ahead of the write. Without a pending write, a read
+// fired after the write's AW is not checked (its data depends on the write's place).
 uint32_t g_seed = 7;
 int g_arstall = 0;
-double g_tail = 0.0, g_ready = 0.7;
+double g_tail = 0.0, g_ready = 0.7, g_war = 0.0;
 int g_tailmax = 600, g_blat = 0;
 int g_reads = 0, g_hbm_lo = 1, g_hbm_hi = 0;
 int g_rrlag = 0, g_tokdelay = 0, g_tokmin = 0, g_idle = 0;
+bool g_rdepart = false;
+#ifdef FOLDSIM_MEM_WAR
+// The write-after-read test (hw/unittest/foldsim_mem_war): reads and later writes of one block outstanding at
+// once, against an HBM answering at departure with long tails.
+struct WarDefaults { WarDefaults() { g_war = 0.6; g_rdepart = true; g_tail = 0.05; } } war_defaults;
+#endif
 
 const Setup* setup = nullptr;
 Vfoldsim_mem* dut = nullptr;
@@ -247,7 +258,7 @@ struct Hbm {
   std::map<uint64_t, Line> mem;
   double ready_p = 0.7;
   int lat_lo = 1, lat_hi = 40;
-  struct Pending { uint64_t at; Line data; };
+  struct Pending { uint64_t at; Line data; uint64_t addr; };
   std::deque<Pending> r;
   std::deque<uint64_t> b;
   std::deque<uint64_t> aw;
@@ -279,8 +290,14 @@ struct Hbm {
     dut->m_awready = awready;
     dut->m_wready = wready;
     dut->m_rvalid = !r.empty() && r.front().at <= host_cycle;
+    // +rdepart: the block as the read leaves, not as it arrived.
+    Line rd = r.empty() ? Line{} : r.front().data;
+    if (g_rdepart && !r.empty()) {
+      const auto it = mem.find(r.front().addr);
+      rd = (it != mem.end()) ? it->second : Line{};
+    }
     for (int i = 0; i < kWords; ++i)
-      dut->m_rdata[i] = r.empty() ? 0 : r.front().data[i];
+      dut->m_rdata[i] = rd[i];
     dut->m_bvalid = !b.empty() && b.front() <= host_cycle;
   }
 
@@ -329,7 +346,7 @@ struct Hbm {
       const uint64_t a = dut->m_araddr;
       ar_seen.insert(a);
       auto it = mem.find(a);
-      r.push_back({when(r.empty() ? 0 : r.back().at), it != mem.end() ? it->second : Line{}});
+      r.push_back({when(r.empty() ? 0 : r.back().at), it != mem.end() ? it->second : Line{}, a});
     }
     if (aw_hs) {
       ++n_aw;
@@ -444,7 +461,7 @@ struct Master {
     }
     if (aw_q.size() + writes.size() < 24 && chance(setup->p_write)) {
       const uint64_t a = this->pick_addr();
-      if (busy[a] == 0) {
+      if (busy[a] == 0 || (g_war > 0 && !pending_writes.count(a) && chance(g_war))) {
         ++busy[a];
         Op op{a, next_wid++ & 15, make_line(a, version++)};
         aw_q.push_back(op);
@@ -564,6 +581,10 @@ struct Master {
         read_done(e.op.addr);
       }
     }
+    // +war: a read fired from the write's AW on, until its B, may see the write
+    // or not (a read and a write of one cycle are not ordered): not checked.
+    if (g_war > 0 && aw_v && awready && aw_len == 0)
+      unknown.insert(aw.addr);
     if (ar_v && arready) {
       ar_v = false;
       if (ar_len == 0) {
@@ -1030,6 +1051,8 @@ int main(int argc, char** argv) {
     if (const char* v = val("+idle=")) g_idle = std::atoi(v);
     if (const char* v = val("+tokmin=")) g_tokmin = std::atoi(v);
     if (const char* v = val("+arstall=")) g_arstall = std::atoi(v);
+    if (const char* v = val("+war=")) g_war = std::atof(v);
+    if (a == "+rdepart") g_rdepart = true;
   }
   for (const auto& s : kSetups) {
     if (only && std::strcmp(only, s.name))

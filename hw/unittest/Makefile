@@ -27,6 +27,7 @@ all:
 	$(MAKE) -C foldsim_mem_spec_s8
 	$(MAKE) -C foldsim_mem_spec2_s8
 	$(MAKE) -C foldsim_mem_ch2
+	$(MAKE) -C foldsim_mem_war
 	$(MAKE) -C foldsim_vmem
 	$(MAKE) -C foldsim_vmem_dw32
 	$(MAKE) -C foldsim_vmem_dw1024
