@@ -75,6 +75,8 @@ module foldsim_mem_fold #(
     // in the first port's words; the other ports' words are zero (their
     // device-memory paths are idle).
     output wire [PORTS*8*32-1:0]  axi_stats,
+    // Each port's stall-reason word (foldsim_mem's dbg), as of its last turn.
+    output wire [PORTS*32-1:0]    dbg,
     output wire                   idle,
     output wire                   error,
     output wire                   stall,
@@ -225,8 +227,11 @@ module foldsim_mem_fold #(
     assign error = |p_error;
     assign stall = |p_stall;
     reg  [8*64-1:0]    p_stats [PORTS];
+    wire [31:0]        t_dbg;
+    reg  [31:0]        p_dbg [PORTS];
     for (genvar p = 0; p < PORTS; ++p) begin : g_stats
         assign stats[p*8*64 +: 8*64] = p_stats[p];
+        assign dbg[p*32 +: 32]       = p_dbg[p];
     end
 
 `define FMF_Q(i) qb[req_off(i) +: `FMR_REQ_W(i)]
@@ -305,6 +310,7 @@ module foldsim_mem_fold #(
         .m_rdata_sink_valid (1'b1), .m_rdata_sink_bits (r_data[t]), .m_rdata_sink_ready (),
         // Its outputs, every one taken at its turn.
         .stats_source_ready (1'b1), .stats_source_valid (), .stats_source_bits (t_stats),
+        .dbg_source_ready (1'b1), .dbg_source_valid (), .dbg_source_bits (t_dbg),
         // TELEMETRY 0 (portfold_gen.sh): zero; the shared master counts instead.
         .axi_stats_source_ready (1'b1), .axi_stats_source_valid (), .axi_stats_source_bits (),
         .idle_source_ready (1'b1), .idle_source_valid (), .idle_source_bits (t_idle),
@@ -491,8 +497,10 @@ module foldsim_mem_fold #(
             end
             if (req_in)
                 q_treset[p] <= req_treset;
-            if (cur && run)
+            if (cur && run) begin
                 p_stats[p] <= t_stats;
+                p_dbg[p]   <= t_dbg;
+            end
         end
     end
 

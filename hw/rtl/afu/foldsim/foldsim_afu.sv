@@ -1065,6 +1065,7 @@ module foldsim_afu #(
         .cfg_rfc       (mem_rfc),
         .stats         (mem_stats),
         .axi_stats     (mem_axi),
+        .dbg           (mem_dbg),
         .idle          (pf_idle),
         .error         (pf_error),
         .stall         (pf_stall),

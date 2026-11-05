@@ -261,6 +261,7 @@ module foldsim_mem_par #(
             // The reference's endpoints' telemetry is not read.
             /* verilator lint_off PINCONNECTEMPTY */
             .axi_stats      (),
+            .dbg            (),
             /* verilator lint_on PINCONNECTEMPTY */
             .idle           (p_idle[p]),
             .error          (p_error[p]),
