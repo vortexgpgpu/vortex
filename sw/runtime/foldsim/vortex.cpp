@@ -981,13 +981,26 @@ private:
           uint32_t v[FOLDSIM_MEM_NUM_AXI] = {};
           for (uint32_t i = 0; i < FOLDSIM_MEM_NUM_AXI; ++i)
             transport_.reg_read(FOLDSIM_REG_MEM_AXI(p, i), &v[i]);
-          char b[200];
+          char b[400];
           snprintf(b, sizeof(b), "\n[VXDRV]   p%u AR %u R %u AW %u W %u B %u | no-R-while-reading %u, R-not-taken %u | "
                    "queued %u, reads in memory %u, writes in memory %u, write data %u", p,
                    v[FOLDSIM_MEM_AXI_AR], v[FOLDSIM_MEM_AXI_R], v[FOLDSIM_MEM_AXI_AW], v[FOLDSIM_MEM_AXI_W],
                    v[FOLDSIM_MEM_AXI_B], v[FOLDSIM_MEM_AXI_R_STARVE], v[FOLDSIM_MEM_AXI_R_WAIT],
                    v[FOLDSIM_MEM_AXI_OCC] & 0xff, (v[FOLDSIM_MEM_AXI_OCC] >> 8) & 0xff,
                    (v[FOLDSIM_MEM_AXI_OCC] >> 16) & 0xff, v[FOLDSIM_MEM_AXI_OCC] >> 24);
+          axi += b;
+          // Why the port's target cycle has not finished (reads zero on images without the word).
+          uint32_t w = 0;
+          transport_.reg_read(FOLDSIM_REG_MEM_DBG(p), &w);
+          snprintf(b, sizeof(b), "\n[VXDRV]   p%u stall-reason 0x%08x: r_ok %u bank_done %u have_all %u done_all %u "
+                   "rready_in %u stall %u | candidates 0x%x arrived 0x%x | clock engine %u, reservations %u, wait lag %u "
+                   "wait room %u caught %u ingress %u head room %u no credit %u", p, w,
+                   !!(w & FOLDSIM_MEM_DBG_R_OK), !!(w & FOLDSIM_MEM_DBG_BANK_DONE), !!(w & FOLDSIM_MEM_DBG_HAVE_ALL),
+                   !!(w & FOLDSIM_MEM_DBG_DONE_ALL), !!(w & FOLDSIM_MEM_DBG_RREADY_IN), !!(w & FOLDSIM_MEM_DBG_STALL),
+                   FOLDSIM_MEM_DBG_C_VALID(w), FOLDSIM_MEM_DBG_C_ARR(w), FOLDSIM_MEM_DBG_A_STATE(w),
+                   FOLDSIM_MEM_DBG_STATE(w), !!(w & FOLDSIM_MEM_DBG_WAIT_LAG), !!(w & FOLDSIM_MEM_DBG_WAIT_ROOM),
+                   !!(w & FOLDSIM_MEM_DBG_CAUGHT), !!(w & FOLDSIM_MEM_DBG_INGRESS), !!(w & FOLDSIM_MEM_DBG_HEAD_ROOM),
+                   !!(w & FOLDSIM_MEM_DBG_NO_CREDIT));
           axi += b;
         }
         printf("[VXDRV] launch %.0f s: target cycles %llu, host cycles %llu, memory stalls %llu, status 0x%x; "

@@ -77,6 +77,7 @@
 #define FOLDSIM_REG_MEM_TIMING(i) (0x400u + 4u * (i))  // FOLDSIM_MEM_T_*, 12 bits each
 #define FOLDSIM_REG_MEM_STATS(p, i) (0x800u + 0x40u * (p) + 8u * (i))  // port p's FOLDSIM_MEM_STAT_*, lo/hi (p < 32)
 #define FOLDSIM_REG_MEM_AXI(p, i) (0x480u + 0x20u * (p) + 4u * (i))  // port p's FOLDSIM_MEM_AXI_*, 32 bits (p < 24)
+#define FOLDSIM_REG_MEM_DBG(p)    (0x780u + 4u * (p))  // port p's stall-reason word, FOLDSIM_MEM_DBG_* (p < 32)
 
 #define FOLDSIM_MEM_REFRESH_OFF  0u
 #define FOLDSIM_MEM_REFRESH_BANK 1u  // per bank, the banks in turn
@@ -106,6 +107,29 @@ enum {
   FOLDSIM_MEM_AXI_AR, FOLDSIM_MEM_AXI_R, FOLDSIM_MEM_AXI_AW, FOLDSIM_MEM_AXI_W, FOLDSIM_MEM_AXI_B,
   FOLDSIM_MEM_AXI_R_STARVE, FOLDSIM_MEM_AXI_R_WAIT, FOLDSIM_MEM_AXI_OCC, FOLDSIM_MEM_NUM_AXI
 };
+// A port's stall-reason word (foldsim_mem dbg), as of the host cycle before it is read: why the target cycle has not
+// finished. Reads zero on images without it.
+#define FOLDSIM_MEM_DBG_R_OK        (1u << 0)   // R's data is in for every candidate offered
+#define FOLDSIM_MEM_DBG_BANK_DONE   (1u << 1)   // the bank model's DRAM clocks of the cycle are done
+#define FOLDSIM_MEM_DBG_HAVE_ALL    (1u << 2)   // every input token is in
+#define FOLDSIM_MEM_DBG_DONE_ALL    (1u << 3)   // every output token is taken
+#define FOLDSIM_MEM_DBG_FULL_WAIT   (1u << 4)   // a write waits for memory's room
+#define FOLDSIM_MEM_DBG_DRAIN_WAIT  (1u << 5)   // a reset cycle waits for memory
+#define FOLDSIM_MEM_DBG_RREADY_IN   (1u << 6)   // R's ready the bank model needs is in
+#define FOLDSIM_MEM_DBG_STALL       (1u << 7)
+#define FOLDSIM_MEM_DBG_C_VALID(w)  (((w) >> 8) & 0xfu)    // the R candidates offered
+#define FOLDSIM_MEM_DBG_C_ARR(w)    (((w) >> 12) & 0xfu)   // those whose data is in
+#define FOLDSIM_MEM_DBG_A_STATE(w)  (((w) >> 16) & 0x7u)   // the clock engine's state
+#define FOLDSIM_MEM_DBG_STATE(w)    (((w) >> 19) & 0xfu)   // the reservations engine's state
+#define FOLDSIM_MEM_DBG_WAIT_LAG    (1u << 23)  // the clock waits for the reservations' lag
+#define FOLDSIM_MEM_DBG_WAIT_ROOM   (1u << 24)  // the clock waits for buffer room
+#define FOLDSIM_MEM_DBG_CAUGHT      (1u << 25)  // the reservations have caught up with the clock
+#define FOLDSIM_MEM_DBG_LAG_NEG     (1u << 26)
+#define FOLDSIM_MEM_DBG_INGRESS     (1u << 27)  // the ingress queue holds a request
+#define FOLDSIM_MEM_DBG_HEAD_ROOM   (1u << 28)  // its head has room in its buffer
+#define FOLDSIM_MEM_DBG_NO_CREDIT   (1u << 29)  // no DRAM-clock credit left this cycle
+#define FOLDSIM_MEM_DBG_FAST_ROOM   (1u << 30)  // the fast path waits for room
+#define FOLDSIM_MEM_DBG_ERROR       (1u << 31)
 
 #define FOLDSIM_STATUS_BUSY     0x1u  // queued, running, or memory in flight
 #define FOLDSIM_STATUS_FULL     0x2u  // the command queue is full
