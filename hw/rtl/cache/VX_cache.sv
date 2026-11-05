@@ -123,10 +123,18 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0] perf_evictions_per_bank;
     wire [NUM_BANKS-1:0] perf_mshr_stall_per_bank;
 `endif
-    VX_mem_bus_if #(
-        .DATA_SIZE (WORD_SIZE),
-        .TAG_WIDTH (TAG_WIDTH)
-    ) core_bus2_if[NUM_REQS]();
+    // the inputs' flush tokens and gating (VX_cache_req_port, VX_cache_init)
+    wire [NUM_REQS-1:0]                flush_req_mask;
+    wire [NUM_REQS-1:0]                flush_full_mask;
+    wire [NUM_REQS-1:0]                flush_l1_mask;
+    wire [NUM_REQS-1:0]                flush_io_mask;
+    wire [NUM_REQS-1:0][TAG_WIDTH-1:0] flush_req_tag;
+    wire [NUM_REQS-1:0]                flush_rsp_pending;
+    wire                               flush_hold;
+    wire [NUM_REQS-1:0]                flush_dbg_stall;
+    wire                               flush_pending_load;
+    wire                               flush_pending_owed;
+    wire [NUM_REQS-1:0]                flush_rsp_take;
     wire [NUM_BANKS-1:0] per_bank_flush_begin;
     wire                 flush_skip;
     wire [`UP(UUID_WIDTH)-1:0] flush_uuid;
@@ -156,8 +164,17 @@ module VX_cache import VX_gpu_pkg::*; #(
     ) cache_init (
         .clk                 (clk),
         .reset               (reset),
-        .core_bus_in_if      (core_bus_if),
-        .core_bus_out_if     (core_bus2_if),
+        .flush_req_mask      (flush_req_mask),
+        .flush_full_mask     (flush_full_mask),
+        .flush_l1_mask       (flush_l1_mask),
+        .flush_io_mask       (flush_io_mask),
+        .req_tag             (flush_req_tag),
+        .rsp_pending         (flush_rsp_pending),
+        .flush_hold          (flush_hold),
+        .dbg_stall           (flush_dbg_stall),
+        .pending_load        (flush_pending_load),
+        .pending_owed        (flush_pending_owed),
+        .rsp_take            (flush_rsp_take),
         .req_stage_empty     (core_req_stage_empty),
         .flush_begin         (per_bank_flush_begin),
         .flush_skip          (flush_skip),
@@ -298,59 +315,79 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0][BANK_MEM_TAG_WIDTH-1:0] per_bank_mem_req_tag;
     wire [NUM_BANKS-1:0][`UP(MEM_ATTR_WIDTH)-1:0]  per_bank_mem_req_attr;
     wire [NUM_BANKS-1:0]                        per_bank_mem_req_ready;
+    // Each input up to the bank arbiters is one VX_cache_req_port: its flush
+    // token's kind and answer state, its admission, its bank select, the
+    // request stage and its one-hot request to the banks. What combines the
+    // inputs stays here: read merging and the bank arbiters.
     wire [NUM_REQS-1:0]                      core_req_valid;
-    wire [NUM_REQS-1:0][`CS_WORD_ADDR_WIDTH-1:0] core_req_addr;
     wire [NUM_REQS-1:0]                      core_req_rw;
-    wire [NUM_REQS-1:0][WORD_SIZE-1:0]       core_req_byteen;
-    wire [NUM_REQS-1:0][`CS_WORD_WIDTH-1:0]  core_req_data;
+    wire [NUM_REQS-1:0][`CS_WORD_ADDR_WIDTH-1:0] core_req_addr;
     wire [NUM_REQS-1:0][TAG_WIDTH-1:0]       core_req_tag;
     wire [NUM_REQS-1:0][`UP(MEM_ATTR_WIDTH)-1:0] core_req_attr;
-    wire [NUM_REQS-1:0]                      core_req_ready;
-    wire [NUM_REQS-1:0][LINE_ADDR_WIDTH-1:0] core_req_line_addr;
-    wire [NUM_REQS-1:0][BANK_SEL_WIDTH-1:0]  core_req_bid;
-    wire [NUM_REQS-1:0][WORD_SEL_WIDTH-1:0]  core_req_wsel;
-    wire [NUM_REQS-1:0][CORE_REQ_DATAW-1:0]  core_req_data_in;
-    wire [NUM_BANKS-1:0][CORE_REQ_DATAW-1:0] core_req_data_out;
+    wire [NUM_REQS-1:0]                      core_req_stage_ready;
+    wire [NUM_REQS-1:0]                      core_req_follower;
+    wire [NUM_REQS-1:0]                      core_req_merge_ready;
+    wire [NUM_REQS-1:0][`UP(MERGE_GROUP > 1 ? MERGE_GROUP : 0)-1:0] core_req_merge_mask;
+    wire [NUM_REQS-1:0]                      core_req_stage_valid;
+    wire [NUM_REQS-1:0][NUM_BANKS-1:0]       core_req_bank_valid;
+    wire [NUM_REQS-1:0][CORE_REQ_DATAW-1:0]  core_req_bank_data;
+    wire [NUM_REQS-1:0][NUM_BANKS-1:0]       core_req_bank_ready;
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_req
-        assign core_req_valid[i]  = core_bus2_if[i].req_valid;
-        assign core_req_rw[i]     = core_bus2_if[i].req_data.rw;
-        assign core_req_byteen[i] = core_bus2_if[i].req_data.byteen;
-        assign core_req_addr[i]   = core_bus2_if[i].req_data.addr;
-        assign core_req_data[i]   = core_bus2_if[i].req_data.data;
-        assign core_req_tag[i]    = core_bus2_if[i].req_data.tag;
-        assign core_req_attr[i]  = `UP(MEM_ATTR_WIDTH)'(core_bus2_if[i].req_data.attr);
-        assign core_bus2_if[i].req_ready = core_req_ready[i];
+        assign core_req_rw[i]   = core_bus_if[i].req_data.rw;
+        assign core_req_addr[i] = core_bus_if[i].req_data.addr;
+        assign core_req_tag[i]  = core_bus_if[i].req_data.tag;
+        assign core_req_attr[i] = `UP(MEM_ATTR_WIDTH)'(core_bus_if[i].req_data.attr);
+        assign flush_req_tag[i] = core_req_tag[i];
     end
-    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_req_wsel
-        if (WORDS_PER_LINE > 1) begin : g_wsel
-            assign core_req_wsel[i] = core_req_addr[i][0 +: WORD_SEL_BITS];
-        end else begin : g_no_wsel
-            assign core_req_wsel[i] = '0;
-        end
-    end
-    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_req_line_addr
-        assign core_req_line_addr[i] = core_req_addr[i][(BANK_SEL_BITS + WORD_SEL_BITS) +: LINE_ADDR_WIDTH];
-    end
-    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_req_bid
-        if (NUM_BANKS > 1) begin : g_multibanks
-            wire [BANK_SEL_BITS-1:0] raw_bid = core_req_addr[i][WORD_SEL_BITS +: BANK_SEL_BITS];
-            if (BANK_HASH != 0) begin : g_hash
-                assign core_req_bid[i] = raw_bid ^ BANK_SEL_BITS'(cache_bank_hash(32'(core_req_line_addr[i]), BANK_SEL_BITS));
-            end else begin : g_raw
-                assign core_req_bid[i] = raw_bid;
-            end
-        end else begin : g_singlebank
-            assign core_req_bid[i] = '0;
-        end
+    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_req_ports
+        VX_cache_req_port #(
+            .NUM_BANKS     (NUM_BANKS),
+            .WORD_SIZE     (WORD_SIZE),
+            .WORD_SEL_BITS (WORD_SEL_BITS),
+            .ADDR_WIDTH    (`CS_WORD_ADDR_WIDTH),
+            .TAG_WIDTH     (TAG_WIDTH),
+            .MERGE_GROUP   (MERGE_GROUP),
+            .BANK_HASH     (BANK_HASH),
+            .SHARED_LLC    (SHARED_LLC),
+            .REQ_STAGE     (CORE_REQ_STAGE),
+            .SEL_READY     (NUM_REQS == 1)
+        ) req_port (
+            .clk            (clk),
+            .reset          (reset),
+            .in_valid       (core_bus_if[i].req_valid),
+            .in_rw          (core_req_rw[i]),
+            .in_addr        (core_req_addr[i]),
+            .in_data        (core_bus_if[i].req_data.data),
+            .in_byteen      (core_bus_if[i].req_data.byteen),
+            .in_attr        (core_req_attr[i]),
+            .in_tag         (core_req_tag[i]),
+            .in_ready       (core_bus_if[i].req_ready),
+            .flush          (flush_req_mask[i]),
+            .flush_full     (flush_full_mask[i]),
+            .flush_l1       (flush_l1_mask[i]),
+            .flush_io       (flush_io_mask[i]),
+            .flush_hold     (flush_hold),
+            .dbg_stall      (flush_dbg_stall[i]),
+            .pending_load   (flush_pending_load),
+            .pending_owed   (flush_pending_owed),
+            .rsp_take       (flush_rsp_take[i]),
+            .pending        (flush_rsp_pending[i]),
+            .req_valid      (core_req_valid[i]),
+            .req_ready      (core_req_stage_ready[i]),
+            .merge_follower (core_req_follower[i]),
+            .merge_ready    (core_req_merge_ready[i]),
+            .merge_mask     (core_req_merge_mask[i]),
+            .stage_valid    (core_req_stage_valid[i]),
+            .bank_valid     (core_req_bank_valid[i]),
+            .bank_data      (core_req_bank_data[i]),
+            .bank_ready     (core_req_bank_ready[i])
+        );
     end
     // Read merging: plain reads of the same word with the same tag from ports
     // of one group in the same cycle are served by one bank access. The lowest
     // such port leads; the others stay out of the request crossbar and are
     // accepted in the cycle their leader is, so every port keeps its own
     // request order into the bank.
-    wire [NUM_REQS-1:0]                     core_req_follower;
-    wire [NUM_REQS-1:0]                     core_req_xbar_ready;
-    wire [NUM_REQS-1:0][BANK_TAG_WIDTH-1:0] core_req_bank_tag;
     if (DO_READ_MERGE) begin : g_read_merge
         // a plain read has no flush, I/O, local, OM or atomic attribute
         localparam [`UP(MEM_ATTR_WIDTH)-1:0] SPECIAL_ATTRS = `UP(MEM_ATTR_WIDTH)'((1 << MEM_ATTR_FLUSH_OFFS)
@@ -380,6 +417,8 @@ module VX_cache import VX_gpu_pkg::*; #(
                 end
             end
         end
+        // a port's own access is accepted when its request stage takes it
+        wire [NUM_REQS-1:0] leader_ready = ~core_req_follower & core_req_stage_ready;
         for (genvar i = 0; i < NUM_REQS; ++i) begin : g_merge
             localparam GROUP_BASE = (i / MERGE_GROUP) * MERGE_GROUP;
             wire [MERGE_GROUP-1:0] merged_mask;
@@ -388,91 +427,80 @@ module VX_cache import VX_gpu_pkg::*; #(
                 assign merged_mask[k] = same_word[GROUP_BASE + k][i - GROUP_BASE];
             end
             for (genvar k = 0; k < MERGE_GROUP; ++k) begin : g_leader_fire
-                assign leader_fire[k] = same_word[i][k] && ~core_req_follower[GROUP_BASE + k]
-                                     && core_req_xbar_ready[GROUP_BASE + k];
+                assign leader_fire[k] = same_word[i][k] && leader_ready[GROUP_BASE + k];
             end
-            assign core_req_follower[i] = (| same_word[i]);
-            assign core_req_bank_tag[i] = {core_req_tag[i], merged_mask};
-            assign core_req_ready[i]    = core_req_follower[i] ? (| leader_fire) : core_req_xbar_ready[i];
+            assign core_req_follower[i]    = (| same_word[i]);
+            assign core_req_merge_mask[i]  = merged_mask;
+            assign core_req_merge_ready[i] = (| leader_fire);
         end
     end else begin : g_no_read_merge
-        assign core_req_follower = '0;
-        assign core_req_bank_tag = core_req_tag;
-        assign core_req_ready    = core_req_xbar_ready;
+        `UNUSED_VAR (core_req_valid)
+        `UNUSED_VAR (core_req_rw)
+        `UNUSED_VAR (core_req_stage_ready)
+        assign core_req_follower    = '0;
+        assign core_req_merge_ready = '0;
+        assign core_req_merge_mask  = '0;
     end
-    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_req_data_in
-        assign core_req_data_in[i] = {
-            core_req_line_addr[i],
-            core_req_rw[i],
-            core_req_wsel[i],
-            core_req_byteen[i],
-            core_req_data[i],
-            core_req_bank_tag[i],
-            core_req_attr[i]
-        };
-    end
-    wire [NUM_REQS-1:0]                      core_req_xbar_valid;
-    wire [NUM_REQS-1:0][CORE_REQ_DATAW-1:0]  core_req_xbar_data;
-    wire [NUM_REQS-1:0][BANK_SEL_WIDTH-1:0]  core_req_xbar_bid;
-    wire [NUM_REQS-1:0]                      core_req_xbar_in_ready;
-    if (CORE_REQ_STAGE) begin : g_core_req_stage
-        for (genvar i = 0; i < NUM_REQS; ++i) begin : g_lanes
-            VX_elastic_buffer #(
-                .DATAW   (BANK_SEL_WIDTH + CORE_REQ_DATAW),
-                .SIZE    (2),
-                .OUT_REG (0)
-            ) req_stage (
-                .clk       (clk),
-                .reset     (reset),
-                .valid_in  (core_req_valid[i] && ~core_req_follower[i]),
-                .data_in   ({core_req_bid[i], core_req_data_in[i]}),
-                .ready_in  (core_req_xbar_ready[i]),
-                .valid_out (core_req_xbar_valid[i]),
-                .data_out  ({core_req_xbar_bid[i], core_req_xbar_data[i]}),
-                .ready_out (core_req_xbar_in_ready[i])
-            );
+    // a stream buffer holds an entry exactly when its output is valid
+    assign core_req_stage_empty = ~(| core_req_stage_valid);
+    // The bank arbiters (a crossbar whose inputs, the ports, demultiplex their
+    // own requests). Over more than 12 ports the arbiters are a tree anyway;
+    // slices of four instead of eight keep its depth and shorten the
+    // round-robin each stage entry's pop waits on.
+    localparam REQ_ARB_FANOUT = (NUM_REQS > 12) ? 4 : `MAX_FANOUT;
+    wire [NUM_BANKS-1:0][CORE_REQ_DATAW-1:0] core_req_data_out;
+    for (genvar b = 0; b < NUM_BANKS; ++b) begin : g_core_req_xbar
+        wire [NUM_REQS-1:0] arb_valid_in, arb_ready_in;
+        for (genvar i = 0; i < NUM_REQS; ++i) begin : g_in
+            assign arb_valid_in[i] = core_req_bank_valid[i][b];
+            assign core_req_bank_ready[i][b] = arb_ready_in[i];
         end
-        // a stream buffer holds an entry exactly when its output is valid
-        assign core_req_stage_empty = ~(| core_req_xbar_valid);
-    end else begin : g_no_core_req_stage
-        assign core_req_xbar_valid  = core_req_valid & ~core_req_follower;
-        assign core_req_xbar_data   = core_req_data_in;
-        assign core_req_xbar_bid    = core_req_bid;
-        assign core_req_xbar_ready  = core_req_xbar_in_ready;
-        assign core_req_stage_empty = 1'b1;
+        VX_stream_arb #(
+            .NUM_INPUTS  (NUM_REQS),
+            .NUM_OUTPUTS (1),
+            .DATAW       (CORE_REQ_DATAW),
+            .ARBITER     ("R"),
+            .MAX_FANOUT  (REQ_ARB_FANOUT),
+            .OUT_BUF     (REQ_XBAR_BUF)
+        ) xbar_arb (
+            .clk       (clk),
+            .reset     (reset),
+            .valid_in  (arb_valid_in),
+            .data_in   (core_req_bank_data),
+            .ready_in  (arb_ready_in),
+            .valid_out (per_bank_core_req_valid[b]),
+            .data_out  (core_req_data_out[b]),
+            .sel_out   (per_bank_core_req_idx[b]),
+            .ready_out (per_bank_core_req_ready[b])
+        );
     end
 `ifdef PERF_ENABLE
+    // bank conflicts: a port and a higher one requesting the same bank in a
+    // cycle one of them is accepted
     wire [PERF_CTR_BITS-1:0] perf_collisions;
+    reg [NUM_REQS-1:0] perf_collision_per_req, perf_collision_per_req_r;
+    always @(*) begin
+        perf_collision_per_req = '0;
+        for (integer i = 0; i < NUM_REQS; ++i) begin
+            for (integer j = i + 1; j < NUM_REQS; ++j) begin
+                perf_collision_per_req[i] |= (| (core_req_bank_valid[i] & core_req_bank_valid[j]))
+                                          && ((| core_req_bank_ready[i]) | (| core_req_bank_ready[j]));
+            end
+        end
+    end
+    `BUFFER(perf_collision_per_req_r, perf_collision_per_req);
+    wire [`CLOG2(NUM_REQS+1)-1:0] perf_collision_count;
+    `POP_COUNT(perf_collision_count, perf_collision_per_req_r);
+    reg [PERF_CTR_BITS-1:0] perf_collisions_r;
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_collisions_r <= '0;
+        end else begin
+            perf_collisions_r <= perf_collisions_r + PERF_CTR_BITS'(perf_collision_count);
+        end
+    end
+    assign perf_collisions = perf_collisions_r;
 `endif
-    // Over more than 12 ports the arbiters are a tree anyway; slices of four
-    // instead of eight keep its depth and shorten the round-robin each stage
-    // entry's pop waits on.
-    localparam REQ_ARB_FANOUT = (NUM_REQS > 12) ? 4 : `MAX_FANOUT;
-    VX_stream_xbar #(
-        .NUM_INPUTS  (NUM_REQS),
-        .NUM_OUTPUTS (NUM_BANKS),
-        .DATAW       (CORE_REQ_DATAW),
-        .PERF_CTR_BITS (PERF_CTR_BITS),
-        .ARBITER     ("R"),
-        .MAX_FANOUT  (REQ_ARB_FANOUT),
-        .OUT_BUF     (REQ_XBAR_BUF)
-    ) core_req_xbar (
-        .clk       (clk),
-        .reset     (reset),
-    `ifdef PERF_ENABLE
-        .collisions(perf_collisions),
-    `else
-        `UNUSED_PIN(collisions),
-    `endif
-        .valid_in  (core_req_xbar_valid),
-        .data_in   (core_req_xbar_data),
-        .sel_in    (core_req_xbar_bid),
-        .ready_in  (core_req_xbar_in_ready),
-        .valid_out (per_bank_core_req_valid),
-        .data_out  (core_req_data_out),
-        .sel_out   (per_bank_core_req_idx),
-        .ready_out (per_bank_core_req_ready)
-    );
     for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_core_req_data_out
         assign {
             per_bank_core_req_addr[i],
@@ -709,9 +737,9 @@ module VX_cache import VX_gpu_pkg::*; #(
         );
     end
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_rsp
-        assign core_bus2_if[i].rsp_valid = core_rsp_valid[i];
-        assign {core_bus2_if[i].rsp_data.data, core_bus2_if[i].rsp_data.tag} = core_rsp_pdata[i];
-        assign core_rsp_ready[i] = core_bus2_if[i].rsp_ready;
+        assign core_bus_if[i].rsp_valid = core_rsp_valid[i];
+        assign {core_bus_if[i].rsp_data.data, core_bus_if[i].rsp_data.tag} = core_rsp_pdata[i];
+        assign core_rsp_ready[i] = core_bus_if[i].rsp_ready;
     end
     wire [NUM_BANKS-1:0][MEM_REQ_DATAW-1:0] per_bank_mem_req_pdata;
     for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_per_bank_mem_req_pdata
@@ -862,6 +890,9 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [NUM_REQS-1:0]  perf_core_writes_per_req;
     wire [NUM_REQS-1:0]  perf_crsp_stall_per_req;
     wire [MEM_PORTS-1:0] perf_mem_stall_per_port;
+    // an admitted request is accepted with its stage's or its leader's access
+    wire [NUM_REQS-1:0]  core_req_ready = (core_req_follower & core_req_merge_ready)
+                                        | (~core_req_follower & core_req_stage_ready);
     // a merged read counts once, as the bank access that serves it
     `BUFFER(perf_core_reads_per_req, core_req_valid & core_req_ready & ~core_req_rw & ~core_req_follower);
     `BUFFER(perf_core_writes_per_req, core_req_valid & core_req_ready & core_req_rw);
