@@ -45,10 +45,11 @@ uint64_t env_or(const char* name, uint64_t value) {
 constexpr uint64_t kPage = 4096;
 constexpr uint32_t kBeat = 64;
 
-#ifndef FOLDSIM_MEM_PORTS
-#error "FOLDSIM_MEM_PORTS comes from the generated foldsim_kernel.vh"
+#ifndef FOLDSIM_MEM_MASTERS
+#error "FOLDSIM_MEM_MASTERS comes from the generated foldsim_kernel.vh"
 #endif
-// The virtual memories' controllers (FOLDSIM_VMEM_COUNT of the generated
+// The memory ports' masters (FOLDSIM_MEM_MASTERS: one per port, one where the
+// simulator folds them). The virtual memories' controllers (FOLDSIM_VMEM_COUNT of the generated
 // foldsim_sim.vh, or its FOLDSIM_VMEM_GROUPS where memories share them: the
 // Makefile passes the smaller), each with a master after the memory ports', or sharing
 // FOLDSIM_VMEM_MASTERS of them (foldsim_kernel.vh; 0: the memory ports').
@@ -58,8 +59,8 @@ constexpr uint32_t kBeat = 64;
 #ifndef FOLDSIM_VMEM_MASTERS
 #define FOLDSIM_VMEM_MASTERS FOLDSIM_VMEM_COUNT
 #endif
-#define FOLDSIM_AXI_PORTS (FOLDSIM_MEM_PORTS + FOLDSIM_VMEM_MASTERS)
-static_assert(FOLDSIM_MEM_PORTS >= 1 && FOLDSIM_MEM_PORTS <= 32, "the kernel has 1 to 32 memory ports");
+#define FOLDSIM_AXI_PORTS (FOLDSIM_MEM_MASTERS + FOLDSIM_VMEM_MASTERS)
+static_assert(FOLDSIM_MEM_MASTERS >= 1 && FOLDSIM_MEM_MASTERS <= 32, "the kernel has 1 to 32 memory-port masters");
 static_assert(FOLDSIM_AXI_PORTS <= 32, "the kernel has at most 32 device-memory masters");
 
 // Device memory: sparse, zero where never written.
@@ -96,10 +97,10 @@ public:
 
   ~Impl() {
     // What the virtual memories' controllers asked of device memory.
-    for (int k = FOLDSIM_MEM_PORTS; k < FOLDSIM_AXI_PORTS; ++k) {
+    for (int k = FOLDSIM_MEM_MASTERS; k < FOLDSIM_AXI_PORTS; ++k) {
       const auto& p = ports_[k];
       fprintf(stderr, "[foldsim] vmem %d%s (master %d): %lu reads, %lu writes; %lu beats read, %lu written\n",
-              k - FOLDSIM_MEM_PORTS, FOLDSIM_VMEM_MASTERS < FOLDSIM_VMEM_COUNT ? " and its sharers" : "", k,
+              k - FOLDSIM_MEM_MASTERS, FOLDSIM_VMEM_MASTERS < FOLDSIM_VMEM_COUNT ? " and its sharers" : "", k,
               (unsigned long)p.n_ar, (unsigned long)p.n_aw, (unsigned long)p.n_r, (unsigned long)p.n_w);
     }
 #ifdef VM_TRACE

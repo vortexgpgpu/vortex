@@ -215,9 +215,15 @@ the host-memory master: `s_axi_control` and one device-memory master
 aperture (the linker gives each its own way in). The target has as many
 memory ports as its configuration has platform memory banks
 (`VX_CFG_PLATFORM_MEMORY_NUM_BANKS`: 1, 2, 4, 8, 16 or 32; `VX_config.toml`'s 2 unless
-`CONFIGS` sets it); the flow writes their number, the shift to a port's
-channel, their AXI id width and `FOLDSIM_MEM_REPEAT0` to `3`, which list the
-ports whose names carry their index, 8 to a part, into `gen/foldsim_kernel.vh`
+`CONFIGS` sets it). A simulator whose memory ports are folded (`foldsim
+--fold-ports`, `FOLDSIM_PORTS` in `foldsim_sim.vh`) has one memory endpoint
+for all of them (`foldsim_mem_fold` around the endpoint threaded by
+`portfold_gen.sh`, frozen into the kernel sources), and so one master
+`m_axi_mem_0`: binding a master per port would leave all but one idle and
+still cost the linker's SmartConnect inputs. The flow writes the ports' number,
+the shift to a port's channel, their AXI id width, the masters they take
+(`FOLDSIM_MEM_MASTERS`) and `FOLDSIM_MEM_REPEAT0` to `3`, which list those
+masters, whose names carry their index, 8 to a part, into `gen/foldsim_kernel.vh`
 (spelled out, as Vivado's IP packager does not paste an expanded macro argument
 into a macro name; in parts on lines of their own, as Verilator takes at most
 40000 tokens on a line). It instantiates `foldsim_sim`, a

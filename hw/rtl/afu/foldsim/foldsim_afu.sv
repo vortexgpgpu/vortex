@@ -23,13 +23,15 @@
 // native V80 kernel's, but for the host-memory master it does not need: one
 // device-memory master per memory port of the target (FOLDSIM_MEM_PORTS, from
 // foldsim_kernel.vh, with the ports' id width), each its own way into device
-// memory. A simulator with virtual memories (FOLDSIM_VMEM_COUNT, from
+// memory, or, where the simulator folds its memory ports (FOLDSIM_PORTS), one
+// master in all for the folded endpoint (FOLDSIM_MEM_MASTERS). A simulator
+// with virtual memories (FOLDSIM_VMEM_COUNT, from
 // foldsim_sim.vh) has a foldsim_vmem controller for each, with a master of its
 // own after the memory ports' (FOLDSIM_VMEM_REPEAT), or, where
 // foldsim_kernel.vh gives fewer (FOLDSIM_VMEM_MASTERS), controller k on master
 // k mod FOLDSIM_VMEM_MASTERS with the others there (foldsim_vmem_share); with
 // no master left beside the memory ports' (FOLDSIM_VMEM_ON_PORTS), controller k
-// shares memory port k mod FOLDSIM_MEM_PORTS's master with its endpoint. With
+// shares the memory ports' master k mod FOLDSIM_MEM_MASTERS with its endpoint. With
 // FOLDSIM_VMEM_GROUPS (foldsim --vmem-group), the controllers are groups: group
 // g's members (FOLDSIM_VMEM_G<g>_REPEAT) share one foldsim_vmem_group (one
 // foldsim_vmem alone), and FOLDSIM_VMEM_REPEAT lists the groups.
@@ -117,6 +119,17 @@ module foldsim_afu #(
 `undef FOLDSIM_AXI_MEM
     localparam DATA_W = C_M_AXI_MEM_DATA_WIDTH;
     localparam PORTS  = `FOLDSIM_MEM_PORTS;
+    // The memory ports' device-memory masters (m_axi_mem_0 ..).
+    localparam MEM_MASTERS = `FOLDSIM_MEM_MASTERS;
+`ifdef FOLDSIM_PORTS
+    if (MEM_MASTERS != 1) begin : g_masters_check
+        $error("foldsim_afu: folded memory ports have one master, not %0d", MEM_MASTERS);
+    end
+`else
+    if (MEM_MASTERS != PORTS) begin : g_masters_check
+        $error("foldsim_afu: %0d memory ports on %0d masters", PORTS, MEM_MASTERS);
+    end
+`endif
     // The memory endpoints offer R and AR's ready for either fire of R in the
     // cycle before (foldsim_mem's SPEC): those channels carry both values. At
     // depth 2, for the fires of the two cycles before, and AW's and W's ready
@@ -188,19 +201,19 @@ module foldsim_afu #(
 `undef FOLDSIM_MCH
 `endif
 
-    // Device memory, by port.
-    wire                   hbm_awvalid [PORTS], hbm_awready [PORTS];
-    wire [63:0]            hbm_awaddr  [PORTS];
-    wire [7:0]             hbm_awlen   [PORTS];
-    wire                   hbm_wvalid  [PORTS], hbm_wready [PORTS], hbm_wlast [PORTS];
-    wire [DATA_W-1:0]      hbm_wdata   [PORTS];
-    wire [DATA_W/8-1:0]    hbm_wstrb   [PORTS];
-    wire                   hbm_bvalid  [PORTS], hbm_bready [PORTS];
-    wire                   hbm_arvalid [PORTS], hbm_arready [PORTS];
-    wire [63:0]            hbm_araddr  [PORTS];
-    wire [7:0]             hbm_arlen   [PORTS];
-    wire                   hbm_rvalid  [PORTS], hbm_rready [PORTS];
-    wire [DATA_W-1:0]      hbm_rdata   [PORTS];
+    // Device memory, by master of the memory ports.
+    wire                   hbm_awvalid [MEM_MASTERS], hbm_awready [MEM_MASTERS];
+    wire [63:0]            hbm_awaddr  [MEM_MASTERS];
+    wire [7:0]             hbm_awlen   [MEM_MASTERS];
+    wire                   hbm_wvalid  [MEM_MASTERS], hbm_wready [MEM_MASTERS], hbm_wlast [MEM_MASTERS];
+    wire [DATA_W-1:0]      hbm_wdata   [MEM_MASTERS];
+    wire [DATA_W/8-1:0]    hbm_wstrb   [MEM_MASTERS];
+    wire                   hbm_bvalid  [MEM_MASTERS], hbm_bready [MEM_MASTERS];
+    wire                   hbm_arvalid [MEM_MASTERS], hbm_arready [MEM_MASTERS];
+    wire [63:0]            hbm_araddr  [MEM_MASTERS];
+    wire [7:0]             hbm_arlen   [MEM_MASTERS];
+    wire                   hbm_rvalid  [MEM_MASTERS], hbm_rready [MEM_MASTERS];
+    wire [DATA_W-1:0]      hbm_rdata   [MEM_MASTERS];
 
 `define FOLDSIM_HBM(i) \
     assign m_axi_mem_``i``_awvalid = hbm_awvalid[i]; \
@@ -754,28 +767,29 @@ module foldsim_afu #(
 `endif
 
 `ifdef FOLDSIM_VMEM_ON_PORTS
-    // Memory port p's master: its endpoint, then controllers p, p + PORTS,
-    // ... The endpoint's transactions are single beats of id 0: the route of
-    // R holds as many of its reads in flight (more only wait for room).
+    // The memory ports' master p: its endpoint, then controllers p,
+    // p + MEM_MASTERS, ... The endpoint's transactions are single beats of id
+    // 0: the route of R holds as many of its reads in flight (more only wait
+    // for room).
     localparam VMEM_PORT_READS = 64;
-    wire                       pm_awvalid [PORTS], pm_awready [PORTS];
-    wire [63:0]                pm_awaddr  [PORTS];
-    wire [VMEM_ID_W-1:0]       pm_awid    [PORTS];
-    wire [7:0]                 pm_awlen   [PORTS];
-    wire                       pm_wvalid  [PORTS], pm_wready [PORTS], pm_wlast [PORTS];
-    wire [DATA_W-1:0]          pm_wdata   [PORTS];
-    wire [DATA_W/8-1:0]        pm_wstrb   [PORTS];
-    wire                       pm_bvalid  [PORTS], pm_bready [PORTS];
-    wire [VMEM_ID_W-1:0]       pm_bid     [PORTS];
-    wire                       pm_arvalid [PORTS], pm_arready [PORTS];
-    wire [63:0]                pm_araddr  [PORTS];
-    wire [VMEM_ID_W-1:0]       pm_arid    [PORTS];
-    wire [7:0]                 pm_arlen   [PORTS];
-    wire                       pm_rvalid  [PORTS], pm_rready [PORTS], pm_rlast [PORTS];
-    wire [DATA_W-1:0]          pm_rdata   [PORTS];
-    wire [VMEM_ID_W-1:0]       pm_rid     [PORTS];
-    for (genvar p = 0; p < PORTS; ++p) begin : g_vmem_port
-        localparam G = (p < VMEM_N) ? (VMEM_N - p + PORTS - 1) / PORTS : 0;
+    wire                       pm_awvalid [MEM_MASTERS], pm_awready [MEM_MASTERS];
+    wire [63:0]                pm_awaddr  [MEM_MASTERS];
+    wire [VMEM_ID_W-1:0]       pm_awid    [MEM_MASTERS];
+    wire [7:0]                 pm_awlen   [MEM_MASTERS];
+    wire                       pm_wvalid  [MEM_MASTERS], pm_wready [MEM_MASTERS], pm_wlast [MEM_MASTERS];
+    wire [DATA_W-1:0]          pm_wdata   [MEM_MASTERS];
+    wire [DATA_W/8-1:0]        pm_wstrb   [MEM_MASTERS];
+    wire                       pm_bvalid  [MEM_MASTERS], pm_bready [MEM_MASTERS];
+    wire [VMEM_ID_W-1:0]       pm_bid     [MEM_MASTERS];
+    wire                       pm_arvalid [MEM_MASTERS], pm_arready [MEM_MASTERS];
+    wire [63:0]                pm_araddr  [MEM_MASTERS];
+    wire [VMEM_ID_W-1:0]       pm_arid    [MEM_MASTERS];
+    wire [7:0]                 pm_arlen   [MEM_MASTERS];
+    wire                       pm_rvalid  [MEM_MASTERS], pm_rready [MEM_MASTERS], pm_rlast [MEM_MASTERS];
+    wire [DATA_W-1:0]          pm_rdata   [MEM_MASTERS];
+    wire [VMEM_ID_W-1:0]       pm_rid     [MEM_MASTERS];
+    for (genvar p = 0; p < MEM_MASTERS; ++p) begin : g_vmem_port
+        localparam G = (p < VMEM_N) ? (VMEM_N - p + MEM_MASTERS - 1) / MEM_MASTERS : 0;
         if (G == 0) begin : g_alone
             assign pm_awvalid[p]  = hbm_awvalid[p];
             assign hbm_awready[p] = pm_awready[p];
@@ -841,7 +855,7 @@ module foldsim_afu #(
             wire unused = (|s_bid[0]) | (|s_rid[0]) | s_rlast[0];
             /* verilator lint_on UNUSEDSIGNAL */
             for (genvar i = 0; i < G; ++i) begin : g_ctrl
-                localparam K = p + i * PORTS;
+                localparam K = p + i * MEM_MASTERS;
                 assign s_awvalid[i+1] = vmc_awvalid[K];
                 assign vmc_awready[K] = s_awready[i+1];
                 assign s_awaddr[i+1]  = vmc_awaddr[K];
@@ -1026,8 +1040,8 @@ module foldsim_afu #(
     assign mem_stall = {PORTS{pf_stall}};
     // One memory endpoint threaded PORTS ways (foldsim_mem_fold, the threaded
     // module from a portfold_gen.sh snapshot made for these parameters) and
-    // one AXI master, on the first port's device-memory path: every port's
-    // data at base plus its target address, as before; the other paths idle.
+    // one AXI master (m_axi_mem_0): every port's data at base plus its target
+    // address, as before.
     wire                pf_awvalid, pf_awready, pf_wvalid, pf_wready, pf_wlast, pf_bvalid, pf_bready;
     wire                pf_arvalid, pf_arready, pf_rvalid, pf_rready;
     wire [63:0]         pf_awaddr, pf_araddr;
@@ -1084,45 +1098,24 @@ module foldsim_afu #(
         .m_arvalid (pf_arvalid), .m_arready (pf_arready), .m_araddr  (pf_araddr), .m_arlen (pf_arlen),
         .m_rvalid  (pf_rvalid),  .m_rready  (pf_rready),  .m_rdata   (pf_rdata)
     );
-    for (genvar p = 0; p < PORTS; ++p) begin : g_mem
-        if (p == 0) begin : g_used
-            assign hbm_awvalid[p] = pf_awvalid;
-            assign pf_awready     = hbm_awready[p];
-            assign hbm_awaddr[p]  = pf_awaddr;
-            assign hbm_awlen[p]   = pf_awlen;
-            assign hbm_wvalid[p]  = pf_wvalid;
-            assign pf_wready      = hbm_wready[p];
-            assign hbm_wdata[p]   = pf_wdata;
-            assign hbm_wstrb[p]   = pf_wstrb;
-            assign hbm_wlast[p]   = pf_wlast;
-            assign pf_bvalid      = hbm_bvalid[p];
-            assign hbm_bready[p]  = pf_bready;
-            assign hbm_arvalid[p] = pf_arvalid;
-            assign pf_arready     = hbm_arready[p];
-            assign hbm_araddr[p]  = pf_araddr;
-            assign hbm_arlen[p]   = pf_arlen;
-            assign pf_rvalid      = hbm_rvalid[p];
-            assign hbm_rready[p]  = pf_rready;
-            assign pf_rdata       = hbm_rdata[p];
-        end else begin : g_idle
-            assign hbm_awvalid[p] = 1'b0;
-            assign hbm_awaddr[p]  = '0;
-            assign hbm_awlen[p]   = '0;
-            assign hbm_wvalid[p]  = 1'b0;
-            assign hbm_wdata[p]   = '0;
-            assign hbm_wstrb[p]   = '0;
-            assign hbm_wlast[p]   = 1'b0;
-            assign hbm_bready[p]  = 1'b1;
-            assign hbm_arvalid[p] = 1'b0;
-            assign hbm_araddr[p]  = '0;
-            assign hbm_arlen[p]   = '0;
-            assign hbm_rready[p]  = 1'b1;
-            /* verilator lint_off UNUSEDSIGNAL */
-            wire unused = &{1'b0, hbm_awready[p], hbm_wready[p], hbm_bvalid[p], hbm_arready[p], hbm_rvalid[p],
-                            hbm_rdata[p]};
-            /* verilator lint_on UNUSEDSIGNAL */
-        end
-    end
+    assign hbm_awvalid[0] = pf_awvalid;
+    assign pf_awready     = hbm_awready[0];
+    assign hbm_awaddr[0]  = pf_awaddr;
+    assign hbm_awlen[0]   = pf_awlen;
+    assign hbm_wvalid[0]  = pf_wvalid;
+    assign pf_wready      = hbm_wready[0];
+    assign hbm_wdata[0]   = pf_wdata;
+    assign hbm_wstrb[0]   = pf_wstrb;
+    assign hbm_wlast[0]   = pf_wlast;
+    assign pf_bvalid      = hbm_bvalid[0];
+    assign hbm_bready[0]  = pf_bready;
+    assign hbm_arvalid[0] = pf_arvalid;
+    assign pf_arready     = hbm_arready[0];
+    assign hbm_araddr[0]  = pf_araddr;
+    assign hbm_arlen[0]   = pf_arlen;
+    assign pf_rvalid      = hbm_rvalid[0];
+    assign hbm_rready[0]  = pf_rready;
+    assign pf_rdata       = hbm_rdata[0];
 `else
     for (genvar p = 0; p < PORTS; ++p) begin : g_mem
         foldsim_mem #(
