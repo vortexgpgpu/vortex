@@ -35,6 +35,7 @@ public:
   SimChannel<instr_trace_t*> ReleaseOut;
 
 protected:
+  void on_reset() override;
   void on_tick() override;
 
 private:
@@ -44,6 +45,17 @@ private:
   void execute(instr_trace_t* trace);
 
   uint32_t latency_of(const instr_trace_t* trace) const;
+
+  // Cycles a result entering the block's output on `ready` waits there behind
+  // the results already headed to it, one leaving per cycle.
+  uint32_t output_wait(uint32_t b, uint64_t ready);
+
+  // Per block: the cycles on which results already sent reach the output, in
+  // the order they reach it.
+  std::array<std::vector<uint64_t>, VX_CFG_NUM_ALU_BLOCKS> out_ready_;
+  // Per block: the first cycle the output is free after the results already
+  // gone from out_ready_.
+  std::array<uint64_t, VX_CFG_NUM_ALU_BLOCKS> out_free_{};
 };
 
 }

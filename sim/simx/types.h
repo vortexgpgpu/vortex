@@ -14,6 +14,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <algorithm>
 #include <array>
 #include <bitset>
 #include <memory>
@@ -958,11 +959,15 @@ inline std::ostream &operator<<(std::ostream &os, const ArbiterType& type) {
   return os;
 }
 
+// select() names the requester an arbiter would grant without changing its
+// state; commit() records that grant, so a grant the receiver refuses leaves
+// the order as it was.
 class IArbiterImpl {
 public:
   IArbiterImpl() {}
   virtual ~IArbiterImpl() {}
-  virtual uint32_t grant(const BitVector<>& requests) = 0;
+  virtual uint32_t select(const BitVector<>& requests) const = 0;
+  virtual void commit(uint32_t idx) = 0;
   virtual void reset() = 0;
 };
 
@@ -972,7 +977,7 @@ public:
     this->reset();
   }
 
-  uint32_t grant(const BitVector<>& requests) override {
+  uint32_t select(const BitVector<>& requests) const override {
     assert(requests.size() == size_);
     for (uint32_t i = 0; i < size_; ++i) {
       if (requests.test(i)) {
@@ -981,6 +986,8 @@ public:
     }
     return -1;
   }
+
+  void commit(uint32_t) override {}
 
   void reset() override {
     //--
@@ -995,17 +1002,20 @@ public:
     this->reset();
   }
 
-  uint32_t grant(const BitVector<>& requests) override {
+  uint32_t select(const BitVector<>& requests) const override {
     assert(requests.size() == size_);
     uint32_t start = (last_grant_ + 1) % size_;
     for (uint32_t i = 0; i < size_; ++i) {
       uint32_t idx = (start + i) % size_;
       if (requests.test(idx)) {
-        last_grant_ = idx;
         return idx;
       }
     }
     return -1;
+  }
+
+  void commit(uint32_t idx) override {
+    last_grant_ = idx;
   }
 
   void reset() override {
@@ -1027,21 +1037,26 @@ public:
     this->reset();
   }
 
-  uint32_t grant(const BitVector<>& requests) override {
+  uint32_t select(const BitVector<>& requests) const override {
     assert(requests.size() == size_);
     if (greedy_ && last_grant_ < size_ && requests.test(last_grant_)) {
       return last_grant_;
     }
-    for (auto it = order_.begin(); it != order_.end(); ++it) {
-      uint32_t idx = *it;
+    for (uint32_t idx : order_) {
       if (requests.test(idx)) {
-        order_.erase(it);
-        order_.push_back(idx);
-        last_grant_ = idx;
         return idx;
       }
     }
     return -1u;
+  }
+
+  void commit(uint32_t idx) override {
+    if (greedy_ && idx == last_grant_) {
+      return;
+    }
+    order_.erase(std::find(order_.begin(), order_.end(), idx));
+    order_.push_back(idx);
+    last_grant_ = idx;
   }
 
   void reset() override {
@@ -1067,7 +1082,7 @@ public:
     this->reset();
   }
 
-  uint32_t grant(const BitVector<>& requests) override {
+  uint32_t select(const BitVector<>& requests) const override {
     assert(requests.size() == size_);
     if (last_grant_ < size_ && requests.test(last_grant_)) {
       return last_grant_;
@@ -1076,11 +1091,14 @@ public:
     for (uint32_t i = 0; i < size_; ++i) {
       uint32_t idx = (start + i) % size_;
       if (requests.test(idx)) {
-        last_grant_ = idx;
         return idx;
       }
     }
     return -1u;
+  }
+
+  void commit(uint32_t idx) override {
+    last_grant_ = idx;
   }
 
   void reset() override {
@@ -1133,8 +1151,21 @@ public:
 
   virtual ~Arbiter() {}
 
+  // A grant the receiver always takes.
   uint32_t grant(const BitVector<>& requests) {
-    return impl_->grant(requests);
+    uint32_t idx = impl_->select(requests);
+    if (idx != -1u) {
+      impl_->commit(idx);
+    }
+    return idx;
+  }
+
+  uint32_t select(const BitVector<>& requests) const {
+    return impl_->select(requests);
+  }
+
+  void commit(uint32_t idx) {
+    impl_->commit(idx);
   }
 
   void reset() {
@@ -1604,13 +1635,14 @@ void TxArbiter<Type>::on_tick() {
       requests.set(r, !Inputs.at(i).empty());
     }
     if (requests.any()) {
-      uint32_t g = arbiters_.at(o).grant(requests);
+      uint32_t g = arbiters_.at(o).select(requests);
       uint32_t i = o * R + g;
       auto& req_in = Inputs.at(i);
       auto& req = req_in.peek();
       if (Outputs.at(o).try_send(RspType(req, i), delay_)) {
         DT(4, this->name() << " req" << i << "_" << o << ": " << req);
         req_in.pop();
+        arbiters_.at(o).commit(g);
       }
     }
   }
@@ -2011,7 +2043,7 @@ void TxRxCrossBar<Req, Rsp>::on_tick() {
       requests.set(o);
     }
     if (requests.any()) {
-      uint32_t g = arbiter_.grant(requests);
+      uint32_t g = arbiter_.select(requests);
       auto& rsp_in = RspIn.at(g);
       auto& rsp = rsp_in.peek();
       Rsp out_rsp(rsp);
@@ -2021,6 +2053,7 @@ void TxRxCrossBar<Req, Rsp>::on_tick() {
       if (RspOut.at(i).try_send(out_rsp, rsp_delay_)) {
         DT(4, this->name() << " rsp" << g << "_" << i << ": " << out_rsp);
         rsp_in.pop();
+        arbiter_.commit(g);
       }
     }
   }

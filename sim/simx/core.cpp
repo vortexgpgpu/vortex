@@ -831,7 +831,7 @@ public:
       // The arbiter advances only on an issue that fires.
       if (ready_set.any() && !operands_.at(iw)->Input.full()) {
         // select one instruction from ready set
-        auto w = ibuffer_arbs_.at(iw).grant(ready_set);
+        auto w = ibuffer_arbs_.at(iw).select(ready_set);
         uint32_t wid = w * VX_CFG_ISSUE_WIDTH + iw;
         auto& ibuffer = ibuffers_.at(wid);
         auto trace = ibuffer->peek();
@@ -842,6 +842,7 @@ public:
 
         // to operand stage
         if (operands_.at(iw)->Input.try_send(uop_trace)) {
+          ibuffer_arbs_.at(iw).commit(w);
           // capture register operands at issue (Operands owns regfile)
           operands_.at(iw)->fetch_operands(uop_trace);
           // spend a dispatch credit for the target FU
