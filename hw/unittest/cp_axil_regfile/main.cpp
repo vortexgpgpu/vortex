@@ -334,8 +334,22 @@ int main(int argc, char** argv) {
                "T11: caps must not be the DECERR sentinel");
         uint64_t dev_caps = ((uint64_t)dhi << 32) | dlo;
         uint64_t isa_caps = ((uint64_t)ihi << 32) | ilo;
-        // dev_caps reserved bits [63:42] must be zero.
-        EXPECT((dev_caps >> 42) == 0, "T11: dev_caps reserved bits set");
+        // dev_caps [63:42] carry the exact warp (7 bits @42), cores-per-cluster
+        // (8 @49) and cluster (7 @57) counts; each must be non-zero and agree with
+        // its log2 field (@11, @17, @20): 2^(L-1) < exact <= 2^L.
+        {
+            struct { unsigned lsb, mask, log2_lsb; const char* name; } f[] = {
+                {42, 0x7F, 11, "warps"}, {49, 0xFF, 17, "cluster size"}, {57, 0x7F, 20, "clusters"}};
+            for (auto& x : f) {
+                uint64_t exact = (dev_caps >> x.lsb) & x.mask;
+                uint64_t pow2  = 1ull << ((dev_caps >> x.log2_lsb) & 0x7);
+                if (!(exact != 0 && exact <= pow2 && 2 * exact > pow2)) {
+                    std::printf("T11: dev_caps %s exact=%llu log2 field -> %llu\n", x.name,
+                                (unsigned long long)exact, (unsigned long long)pow2);
+                    EXPECT(false, "T11: dev_caps exact count disagrees with its log2 field");
+                }
+            }
+        }
         // isa_caps XLEN field [31:30] = clog2(XLEN)-4, so 1 (RV32) or 2 (RV64).
         uint32_t xlen_field = (uint32_t)((isa_caps >> 30) & 0x3);
         EXPECT(xlen_field == 1 || xlen_field == 2, "T11: isa_caps XLEN field");
