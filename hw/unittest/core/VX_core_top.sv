@@ -155,7 +155,7 @@ module VX_core_top import VX_gpu_pkg::*;
         .TAG_WIDTH (DCACHE_TAG_WIDTH)
     ) dcache_bus_if[DCACHE_NUM_REQS]();
 
-    for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin
+    for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin : g_dcache_bus_if
         assign dcache_req_valid[i] = dcache_bus_if[i].req_valid;
         assign dcache_req_rw[i] = dcache_bus_if[i].req_data.rw;
         assign dcache_req_byteen[i] = dcache_bus_if[i].req_data.byteen;
@@ -230,6 +230,11 @@ module VX_core_top import VX_gpu_pkg::*;
         .dcache_bus_if  (dcache_bus_if),
 
         .icache_bus_if  (icache_bus_if),
+
+    `ifdef VX_CFG_VM_ENABLE
+        // No socket MMU behind this standalone core: nothing is ever in translation.
+        .mmu_drained    (1'b1),
+    `endif
 
         .gbar_bus_if    (gbar_bus_if),
 
