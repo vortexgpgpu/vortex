@@ -48,8 +48,18 @@ module VX_cache_init import VX_gpu_pkg::*; #(
 ) (
     input wire                        clk,
     input wire                        reset,
-    VX_mem_bus_if.slave               core_bus_in_if [NUM_REQS],
-    VX_mem_bus_if.master              core_bus_out_if [NUM_REQS],
+    // the inputs (VX_cache_req_port): their tokens, and the inputs' gating
+    input wire [NUM_REQS-1:0]         flush_req_mask,  // a token is visible at the input
+    input wire [NUM_REQS-1:0]         flush_full_mask,
+    input wire [NUM_REQS-1:0]         flush_l1_mask,
+    input wire [NUM_REQS-1:0]         flush_io_mask,
+    input wire [NUM_REQS-1:0][TAG_WIDTH-1:0] req_tag,
+    input wire [NUM_REQS-1:0]         rsp_pending,     // the input's token is still to be answered
+    output wire                       flush_hold,      // every input closed for a token
+    output wire [NUM_REQS-1:0]        dbg_stall,
+    output wire                       pending_load,    // the visible tokens become pending
+    output wire                       pending_owed,    // only those a quiesce without a walk serves
+    output wire [NUM_REQS-1:0]        rsp_take,        // the input's token is answered now
     input wire                        req_stage_empty, // nothing accepted at the outputs short of the banks
     output wire [NUM_BANKS-1:0]       flush_begin,
     output wire                       flush_skip,    // the banks only quiesce: no walk is owed
@@ -91,17 +101,12 @@ module VX_cache_init import VX_gpu_pkg::*; #(
         `UNUSED_VAR (req_stage_empty)
     end
 
-    wire [NUM_REQS-1:0] flush_req_mask;
-    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_flush_req_mask
-        assign flush_req_mask[i] = core_bus_in_if[i].req_valid && core_bus_in_if[i].req_data.attr[MEM_ATTR_FLUSH_OFFS];
-    end
     wire flush_req_enable = (| flush_req_mask);
     // Over many inputs the hold of every input on any input's token is
     // registered: the other inputs close a cycle after a token shows (they are
     // not ordered against it, and the walk waits for what they sent), while a
     // token's own input never passes it.
     localparam HOLD_REG = (NUM_REQS > 4);
-    wire flush_hold;
     if (HOLD_REG) begin : g_hold_reg
         reg flush_hold_r;
         always @(posedge clk) begin
@@ -116,12 +121,7 @@ module VX_cache_init import VX_gpu_pkg::*; #(
         assign flush_hold = flush_req_enable;
     end
 
-    wire [NUM_REQS-1:0] flush_l1_mask, flush_io_mask;
-    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_flush_kind_mask
-        assign flush_io_mask[i] = flush_req_mask[i] && core_bus_in_if[i].req_data.attr[MEM_ATTR_IO_OFFS];
-        assign flush_l1_mask[i] = flush_req_mask[i] && ~flush_io_mask[i] && (| core_bus_in_if[i].req_data.byteen);
-    end
-    wire any_full = (| (flush_req_mask & ~flush_l1_mask & ~flush_io_mask));
+    wire any_full = (| flush_full_mask);
     wire any_l1   = (| flush_l1_mask);
     wire any_io   = (| flush_io_mask);
     // every visible token is L1-only
@@ -133,7 +133,7 @@ module VX_cache_init import VX_gpu_pkg::*; #(
     reg                 fwd_go, fwd_go_n;   // the crossbar drained; only tokens enter it now
     reg [MEM_PORTS-1:0] fwd_sent, fwd_sent_n;
     reg [MEM_PORTS-1:0] fwd_done, fwd_done_n;
-    reg [NUM_REQS-1:0]  rsp_pending, rsp_pending_n; // token still to be answered
+    reg                 pending_load_n, pending_owed_n;
     reg [`UP(UUID_WIDTH)-1:0] flush_uuid_r, flush_uuid_n;
     reg                 l1_only_r, l1_only_n;
     reg                 io_r, io_n;
@@ -156,20 +156,15 @@ module VX_cache_init import VX_gpu_pkg::*; #(
     assign flush_rsp_onehot = rsp_sel_onehot;
     wire flush_rsp_fire = flush_rsp_valid && flush_rsp_ready;
 
-    wire [NUM_REQS-1:0][TAG_WIDTH-1:0] core_bus_in_tag;
-    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_bus_in_tag
-        assign core_bus_in_tag[i] = core_bus_in_if[i].req_data.tag;
-    end
     VX_onehot_mux #(
         .DATAW (TAG_WIDTH),
         .N     (NUM_REQS)
     ) rsp_tag_mux (
-        .data_in  (core_bus_in_tag),
+        .data_in  (req_tag),
         .sel_in   (rsp_sel_onehot),
         .data_out (flush_rsp_tag)
     );
 
-    wire [NUM_REQS-1:0] dbg_stall;
 `ifdef DBG_FLUSH_STALL
     // Random input backpressure, a new mask every 128 cycles (each input
     // stalled half the time), to widen ordering windows under test.
@@ -194,26 +189,13 @@ module VX_cache_init import VX_gpu_pkg::*; #(
     assign dbg_stall = '0;
 `endif
 
-    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_bus_out_req
-        // Normal requests stay blocked while any token is visible. A token is
-        // consumed here when its answer is sent and never reaches the banks.
-        wire take_token = flush_rsp_fire && rsp_sel_onehot[i];
-        wire input_enable = ~flush_hold && ~flush_req_mask[i] && ~dbg_stall[i];
-        assign core_bus_out_if[i].req_valid = core_bus_in_if[i].req_valid && input_enable;
-        assign core_bus_out_if[i].req_data  = core_bus_in_if[i].req_data;
-        assign core_bus_in_if[i].req_ready  = take_token || (core_bus_out_if[i].req_ready && input_enable);
-    end
+    // the token answered now: its input consumes it (VX_cache_req_port)
+    assign rsp_take = rsp_sel_onehot & {NUM_REQS{flush_rsp_fire}};
 
-    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_bus_in_rsp
-        assign core_bus_in_if[i].rsp_valid = core_bus_out_if[i].rsp_valid;
-        assign core_bus_in_if[i].rsp_data  = core_bus_out_if[i].rsp_data;
-        assign core_bus_out_if[i].rsp_ready = core_bus_in_if[i].rsp_ready;
-    end
-
-    reg [NUM_REQS-1:0][`UP(UUID_WIDTH)-1:0] core_bus_in_uuid;
+    wire [NUM_REQS-1:0][`UP(UUID_WIDTH)-1:0] core_bus_in_uuid;
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_bus_in_uuid
         if (UUID_WIDTH != 0) begin : g_uuid
-            assign core_bus_in_uuid[i] = core_bus_in_if[i].req_data.tag.uuid;
+            assign core_bus_in_uuid[i] = req_tag[i][TAG_WIDTH-1 -: UUID_WIDTH];
         end else begin : g_no_uuid
             assign core_bus_in_uuid[i] = 0;
         end
@@ -229,7 +211,8 @@ module VX_cache_init import VX_gpu_pkg::*; #(
         fwd_go_n      = fwd_go;
         fwd_sent_n    = fwd_sent;
         fwd_done_n    = fwd_done;
-        rsp_pending_n = rsp_pending & ~(rsp_sel_onehot & {NUM_REQS{flush_rsp_fire}});
+        pending_load_n = 1'b0;
+        pending_owed_n = 1'b0;
         flush_uuid_n  = flush_uuid_r;
         l1_only_n     = l1_only_r;
         io_n          = io_r;
@@ -241,7 +224,7 @@ module VX_cache_init import VX_gpu_pkg::*; #(
                     if (REQ_STAGE != 0) begin
                         state_n = STATE_WAIT1;
                     end else if (~flush_walk && ~any_io) begin
-                        rsp_pending_n = flush_req_mask;
+                        pending_load_n = 1'b1;
                         state_n = STATE_RESPOND;
                     end else begin
                         skip_n = ~flush_walk;
@@ -257,7 +240,7 @@ module VX_cache_init import VX_gpu_pkg::*; #(
             STATE_WAIT1: begin
                 if (no_inflight_reqs) begin
                     if (~flush_walk && ~any_io) begin
-                        rsp_pending_n = flush_req_mask;
+                        pending_load_n = 1'b1;
                         state_n = STATE_RESPOND;
                     end else begin
                         skip_n = ~flush_walk;
@@ -276,8 +259,8 @@ module VX_cache_init import VX_gpu_pkg::*; #(
                     flush_done_n = '0;
                     // answer the tokens visible now; later ones start a new walk.
                     // A quiesce without a walk serves only the tokens owing none.
-                    rsp_pending_n = skip_r ? (flush_io_mask | (SHARED_LLC ? flush_l1_mask : '0))
-                                           : flush_req_mask;
+                    pending_load_n = 1'b1;
+                    pending_owed_n = skip_r;
                     l1_only_n = flush_l1_only && ~skip_r;
                     io_n = skip_r;
                     state_n = FLUSH_FORWARD ? STATE_FORWARD : STATE_RESPOND;
@@ -295,7 +278,7 @@ module VX_cache_init import VX_gpu_pkg::*; #(
                 end
             end
             STATE_RESPOND: begin
-                if (rsp_pending_n == '0) begin
+                if ((rsp_pending & ~rsp_take) == '0) begin
                     state_n = STATE_IDLE;
                 end
             end
@@ -309,20 +292,21 @@ module VX_cache_init import VX_gpu_pkg::*; #(
             fwd_go      <= 1'b0;
             fwd_sent    <= '0;
             fwd_done    <= '0;
-            rsp_pending <= '0;
         end else begin
             state       <= state_n;
             flush_done  <= flush_done_n;
             fwd_go      <= fwd_go_n;
             fwd_sent    <= fwd_sent_n;
             fwd_done    <= fwd_done_n;
-            rsp_pending <= rsp_pending_n;
         end
         flush_uuid_r <= flush_uuid_n;
         l1_only_r    <= l1_only_n;
         io_r         <= io_n;
         skip_r       <= skip_n;
     end
+
+    assign pending_load = pending_load_n;
+    assign pending_owed = pending_owed_n;
 
     assign flush_begin = {NUM_BANKS{state == STATE_FLUSH}};
     assign flush_skip  = skip_r;
