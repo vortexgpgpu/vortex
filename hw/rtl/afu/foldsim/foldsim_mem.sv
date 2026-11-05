@@ -58,6 +58,10 @@ module foldsim_mem #(
     // SPEC 2: R's ready two cycles late, and AW and W's ready too offered for
     // each pair of R fires in the two cycles before ({before, last}).
     parameter SPEC = 0,
+    // TELEMETRY 0: no device-memory counters (axi_stats reads zero): the
+    // endpoint threaded for folded ports, whose shared AXI master counts them
+    // (foldsim_mem_fold).
+    parameter TELEMETRY = 1,
     parameter NC   = (SPEC == 2) ? 4 : ((SPEC != 0) ? 2 : 1),
     parameter NW   = (SPEC == 2) ? 4 : 1
 ) (
@@ -558,8 +562,11 @@ module foldsim_mem #(
     // for every whole write before it (memory answers reads and writes apart),
     // a write for those memory has taken (same-id writes complete in order,
     // but need not reach memory in it). Once offered, it stays offered.
-    function automatic [CW-1:0] off(input [PW-1:0] i);
-        off = CW'(PW'(i - awm_ack));
+    // (The ring offset from the oldest unacknowledged write; its base an
+    // argument: a function reading module state is not a constant function
+    // to Yosys.)
+    function automatic [CW-1:0] ring_off(input [PW-1:0] i, input [PW-1:0] head);
+        ring_off = CW'(PW'(i - head));
     endfunction
     wire [CW-1:0] aw_taken = wr_out[CW-1:0] - aw_formed;
     reg ar_hit, aw_hit, ar_shown, aw_shown;
@@ -567,9 +574,9 @@ module foldsim_mem #(
         ar_hit = 1'b0;
         aw_hit = 1'b0;
         for (integer i = 0; i < DEPTH; ++i) begin
-            if ((off(PW'(i)) < ah_old) && (awm_addr[i][63:LB] == arh_addr[63:LB]))
+            if ((ring_off(PW'(i), PW'(awm_ack)) < ah_old) && (awm_addr[i][63:LB] == arh_addr[63:LB]))
                 ar_hit = 1'b1;
-            if ((off(PW'(i)) < aw_taken) && (awm_addr[i][63:LB] == awh_addr[63:LB]))
+            if ((ring_off(PW'(i), PW'(awm_ack)) < aw_taken) && (awm_addr[i][63:LB] == awh_addr[63:LB]))
                 aw_hit = 1'b1;
         end
     end
@@ -632,25 +639,29 @@ module foldsim_mem #(
             slot_data[arq_slot[rs_head]] <= m_rdata;
     end
 
-    reg [31:0] t_ar, t_r, t_aw, t_w, t_b, t_r_starve, t_r_wait;
-    always @(posedge clk) begin
-        if (reset) begin
-            t_ar <= 0; t_r <= 0; t_aw <= 0; t_w <= 0; t_b <= 0; t_r_starve <= 0; t_r_wait <= 0;
-        end else begin
-            t_ar <= t_ar + 32'(arq_pop);
-            t_r  <= t_r + 32'(rd_push);
-            t_aw <= t_aw + 32'(awm_pop);
-            t_w  <= t_w + 32'(wm_pop);
-            t_b  <= t_b + 32'(b_push);
-            t_r_starve <= t_r_starve + {31'd0, ~m_rvalid & (t_ar != t_r)};
-            t_r_wait   <= t_r_wait + {31'd0, m_rvalid & ~m_rready};
+    if (TELEMETRY != 0) begin : g_telemetry
+        reg [31:0] t_ar, t_r, t_aw, t_w, t_b, t_r_starve, t_r_wait;
+        always @(posedge clk) begin
+            if (reset) begin
+                t_ar <= 0; t_r <= 0; t_aw <= 0; t_w <= 0; t_b <= 0; t_r_starve <= 0; t_r_wait <= 0;
+            end else begin
+                t_ar <= t_ar + 32'(arq_pop);
+                t_r  <= t_r + 32'(rd_push);
+                t_aw <= t_aw + 32'(awm_pop);
+                t_w  <= t_w + 32'(wm_pop);
+                t_b  <= t_b + 32'(b_push);
+                t_r_starve <= t_r_starve + {31'd0, ~m_rvalid & (t_ar != t_r)};
+                t_r_wait   <= t_r_wait + {31'd0, m_rvalid & ~m_rready};
+            end
         end
+        assign axi_stats = {8'(wm_count), 8'(t_aw - t_b), 8'(t_ar - t_r), 8'(arq_count),
+                            t_r_wait, t_r_starve, t_b, t_w, t_aw, t_r, t_ar};
+    end else begin : g_no_telemetry
+        assign axi_stats = '0;
     end
     always @(posedge clk)
         dbg <= {error, bk_dbg, c_arr, bk_c_valid, stall, have[12], drain_wait, full_wait, &done, &have, bk_done, ok};
 
-    assign axi_stats = {8'(wm_count), 8'(t_aw - t_b), 8'(t_ar - t_r), 8'(arq_count),
-                        t_r_wait, t_r_starve, t_b, t_w, t_aw, t_r, t_ar};
 
     // A flush comes once memory has answered everything: nothing is offered
     // to it or expected from it, and what is left are lone halves of writes

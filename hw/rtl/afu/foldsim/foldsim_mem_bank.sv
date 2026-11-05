@@ -189,7 +189,7 @@ module foldsim_mem_bank #(
 
     reg signed [15:0] k_ccds, k_ccdl, k_rtw, k_wtrs, k_wtrl, k_reach_r, k_reach_w, k_reach_a;
     reg signed [15:0] k_wrpre, k_dep, k_ccdl1, k_rcdrd, k_rcdwr, k_rp, k_ras, k_rc, k_rtp;
-    reg signed [15:0] k_rrds, k_rrdl, k_rfc;
+    reg signed [15:0] k_rrds, k_rrdl, k_rfc, k_rrdfaw;
     reg [16:0]        k_twoclk;
     // The data-rate accumulators' values out of reset, a stage per subtraction.
     reg signed [33:0] k_cr1_0, k_cr2_0;
@@ -204,8 +204,9 @@ module foldsim_mem_bank #(
         k_wtrl    <= 16'(T[I_CWL]) + 16'(T[I_BL]) + 16'(T[I_WTRL]);
         k_reach_r <= smax(smax(k_ccds, k_ccdl), k_rtw) - 16'sd1;
         k_reach_w <= smax(smax(k_ccds, k_ccdl), smax(k_wtrs, k_wtrl)) - 16'sd1;
-        k_reach_a <= smax(smax(smax(16'(T[I_RRDS]), 16'(T[I_RRDL])), 16'(T[I_FAW])) - 16'sd1,
-                          g_act2 ? 16'sd1 : 16'sd0);
+        // A stage per maximum, like the other k_ constants (Beacon: cfg_t -> k_reach_a was 14 levels).
+        k_rrdfaw  <= smax(smax(16'(T[I_RRDS]), 16'(T[I_RRDL])), 16'(T[I_FAW]));
+        k_reach_a <= smax(k_rrdfaw - 16'sd1, g_act2 ? 16'sd1 : 16'sd0);
         k_wrpre   <= 16'(T[I_CWL]) + 16'(T[I_BL]) + 16'(T[I_WR]);
         k_dep     <= 16'(T[I_CL]) + 16'(T[I_BL]);
         k_ccdl1   <= smax(16'(T[I_CCDL]), 16'sd1);
@@ -445,6 +446,12 @@ module foldsim_mem_bank #(
     reg [15:0]       bt_colr [32];
     reg [15:0]       bt_prer [32];
     reg [4:0]        scrub_b;
+    // The scrub's reads of the table, as wires (circt-verilog keeps a memory
+    // read inside the clocked process from dominating its use).
+    wire [ROW_W-1:0] bt_row_sc  = bt_row[scrub_b];
+    wire [15:0]      bt_act_sc  = bt_act[scrub_b];
+    wire [15:0]      bt_colr_sc = bt_colr[scrub_b];
+    wire [15:0]      bt_prer_sc = bt_prer[scrub_b];
 
     reg  [15:0]      e;                              // the first clock a reservation may take: d + 1
     wire [HLOG2-1:0] base  = HLOG2'(e);              // its place on the ring
@@ -659,8 +666,11 @@ module foldsim_mem_bank #(
     // The clocks of the word from its first free one on.
     function automatic [63:0] from_first(input [63:0] x);
         from_first = x;
-        for (integer k = 1; k < 64; k = k * 2)
-            from_first = from_first | (from_first << k);
+        // Shifts of 1, 2, 4 .. 32 (a unit-step loop: circt-verilog does not
+        // unroll one stepping by k * 2, and the clocked process calling it
+        // then does not lower to registers).
+        for (integer i = 0; i < 6; i = i + 1)
+            from_first = from_first | (from_first << (1 << i));
     endfunction
 
     // The bounds a command's search starts from that do not depend on the
@@ -918,6 +928,11 @@ module foldsim_mem_bank #(
     reg [ROW_W-1:0]  cw_row;
     wire [15:0]      cw_colr = op_ref ? bt_colr[op_bank] : e + rk_colr;
     wire [15:0]      cw_prer = op_ref ? bt_prer[op_bank] : e + rk_prer;
+    // The operation's bank's entries, as wires (see bt_row_sc).
+    wire [ROW_W-1:0] bt_row_op  = bt_row[op_bank];
+    wire [15:0]      bt_act_op  = bt_act[op_bank];
+    wire [15:0]      bt_colr_op = bt_colr[op_bank];
+    wire [15:0]      bt_prer_op = bt_prer[op_bank];
     wire             bt_commit = (state == S_COMMIT) & cm_start & ~(op_ref & cfg_refresh[1]);
     wire [4:0]       bt_wa     = bt_commit ? op_bank : sc_b;
     function automatic [15:0] scrubbed(input [15:0] t);
@@ -973,52 +988,46 @@ module foldsim_mem_bank #(
     // cycle early): the reservations then go straight on to it.
     wire next_clock = active & ~bm_clear_all & lag_ge2;
 
+    // The clocked process's shared steps, inlined where used (as macros, not
+    // tasks: circt-verilog lowers a task that assigns module state only as a
+    // coroutine, which keeps the process from lowering to registers).
     // A search from the first clock the command may take, to the horizon.
-    task automatic search(input signed [15:0] lb, input [HLOG2-1:0] pos);
-        if (lb >= 16'(HE)) begin
-            state <= S_END;
-        end else begin
-            s_word <= WW'(pos >> 6);
-            s_wrel <= HLOG2'(lb) - HLOG2'(pos[5:0]);
-            s_mask <= from_bit(pos[5:0]) & ((WW'(pos >> 6) == s_lw) ? s_hmask : ~64'd0);
-            state  <= S_SRCH;
+`define FMB_SEARCH(LB, POS) \
+        if ((LB) >= 16'(HE)) begin \
+            state <= S_END; \
+        end else begin \
+            s_word <= WW'((POS) >> 6); \
+            s_wrel <= HLOG2'(LB) - HLOG2'((POS) & 6'h3f); \
+            s_mask <= from_bit(6'((POS) & 6'h3f)) & ((WW'((POS) >> 6) == s_lw) ? s_hmask : ~64'd0); \
+            state  <= S_SRCH; \
         end
-    endtask
-
-    task automatic end_clock();
-        end_clock_cols(ed_kr, ed_kw);
-    endtask
-
     // Clock d ends, with clock d+1's columns as given.
-    task automatic end_clock_cols(input kr, input kw);
-        rq_cnt <= rq_cnt - (kr ? 8'd1 : 8'd0);
-        wq_cnt <= wq_cnt - (kw ? 8'd1 : 8'd0);
-        // The ring's word ends with this clock: it is all past.
-        if (base[5:0] == 6'd63) begin
-            bm_clear      <= 1'b1;
-            bm_clear_word <= end_word;
-        end
-        if ($signed(frontier - e) < 0)      frontier      <= e;
-        if ($signed(batch_last - e) < 0)    batch_last    <= e;
-        if ($signed(batch_floor - e) < 0)   batch_floor   <= e;
-        if ($signed(read_floor - e) < 0)    read_floor    <= e;
-        if ($signed(ab_prer - e) < 0)       ab_prer       <= e;
-        if ($signed(ab_actrc - e) < 0)      ab_actrc      <= e;
-        if ($signed(ab_floor - e) < 0)      ab_floor      <= e;
-        d <= d + 16'd1;
+`define FMB_END_CLOCK_COLS(KR, KW) \
+        rq_cnt <= rq_cnt - ((KR) ? 8'd1 : 8'd0); \
+        wq_cnt <= wq_cnt - ((KW) ? 8'd1 : 8'd0); \
+        if (base[5:0] == 6'd63) begin \
+            bm_clear      <= 1'b1; \
+            bm_clear_word <= end_word; \
+        end \
+        if ($signed(frontier - e) < 0)      frontier      <= e; \
+        if ($signed(batch_last - e) < 0)    batch_last    <= e; \
+        if ($signed(batch_floor - e) < 0)   batch_floor   <= e; \
+        if ($signed(read_floor - e) < 0)    read_floor    <= e; \
+        if ($signed(ab_prer - e) < 0)       ab_prer       <= e; \
+        if ($signed(ab_actrc - e) < 0)      ab_actrc      <= e; \
+        if ($signed(ab_floor - e) < 0)      ab_floor      <= e; \
+        d <= d + 16'd1; \
         e <= e + 16'd1;
-    endtask
-
+`define FMB_END_CLOCK `FMB_END_CLOCK_COLS(ed_kr, ed_kw)
     // The clock engine's clock da ends: clock da+1's departing read leaves
     // the controller.
-    task automatic end_clock_a();
-        rfp_valid <= ed_depv;
-        rfp_slot  <= ed_slot;
-        rfp_cyc   <= f_dcyc;
-        ig        <= ($signed(ig) >= 0) ? 16'd0 : ig + 16'd1;
-        da        <= da + 16'd1;
+`define FMB_END_CLOCK_A \
+        rfp_valid <= ed_depv; \
+        rfp_slot  <= ed_slot; \
+        rfp_cyc   <= f_dcyc; \
+        ig        <= ($signed(ig) >= 0) ? 16'd0 : ig + 16'd1; \
+        da        <= da + 16'd1; \
         ea        <= ea + 16'd1;
-    endtask
 
     // A clock ends in either engine, and the columns of the reservations'.
     wire             da_inc = ((a_state == A_FAST) & f_clock) | (a_state == A_END);
@@ -1359,7 +1368,7 @@ module foldsim_mem_bank #(
             end
         end
         A_END: begin
-            end_clock_a();
+            `FMB_END_CLOCK_A
             a_state <= A_TICK;
         end
         A_WALK: begin
@@ -1399,10 +1408,10 @@ module foldsim_mem_bank #(
             ed_kw   <= ek_w;
             sc_pend <= ~bt_fresh[scrub_b];
             sc_b    <= scrub_b;
-            sc_row  <= bt_row[scrub_b];
-            sc_act  <= scrubbed(bt_act[scrub_b]);
-            sc_colr <= scrubbed(bt_colr[scrub_b]);
-            sc_prer <= scrubbed(bt_prer[scrub_b]);
+            sc_row  <= bt_row_sc;
+            sc_act  <= scrubbed(bt_act_sc);
+            sc_colr <= scrubbed(bt_colr_sc);
+            sc_prer <= scrubbed(bt_prer_sc);
             scrub_b <= scrub_b + 1'b1;
             if (tk_empty) begin
                 // A clock with nothing to reserve.
@@ -1411,7 +1420,7 @@ module foldsim_mem_bank #(
                     batch_floor <= tk_bfloor;
                 if (tk_to_read)
                     read_floor <= batch_last + 16'd1;
-                end_clock_cols(ek_r, ek_w);
+                `FMB_END_CLOCK_COLS(ek_r, ek_w)
                 state <= next_clock ? S_TICK : S_IDLE;
             end else begin
                 // The channel picks reads or writes, and the head of that
@@ -1438,14 +1447,14 @@ module foldsim_mem_bank #(
             // Against its bank; then the first command's bound.
             reg               open, hit;
             open = bt_open[op_bank];
-            hit  = open & (bt_row[op_bank] == op_row);
+            hit  = open & (bt_row_op == op_row);
             op_pc   <= (g_lpcs != 0) ? op_bank[0] : 1'b0;
             op_pg   <= 3'((32'(op_bank) & ((32'd1 << (32'(g_lpcs) + 32'(g_lbgs))) - 32'd1)));
             op_hit  <= hit;
             op_conf <= open & ~hit;
-            r_actrc <= (bt_fresh[op_bank] ? -16'sd16384 : rel(bt_act[op_bank])) + k_rc;
-            r_colr  <= bt_fresh[op_bank] ? -16'sd1 : rel(bt_colr[op_bank]);
-            r_prer  <= bt_fresh[op_bank] ? -16'sd1 : rel(bt_prer[op_bank]);
+            r_actrc <= (bt_fresh[op_bank] ? -16'sd16384 : rel(bt_act_op)) + k_rc;
+            r_colr  <= bt_fresh[op_bank] ? -16'sd1 : rel(bt_colr_op);
+            r_prer  <= bt_fresh[op_bank] ? -16'sd1 : rel(bt_prer_op);
             kind    <= hit ? K_C0 : (open ? K_PRE : K_ACT);
             state   <= S_SETUP;
         end
@@ -1455,7 +1464,7 @@ module foldsim_mem_bank #(
             state <= S_START;
         end
         S_START: begin
-            search(s_lbr, s_lpr);
+            `FMB_SEARCH(s_lbr, s_lpr)
         end
         S_SRCH: begin
             // A word a cycle, masked to the clocks left: its first free clock
@@ -1519,8 +1528,8 @@ module foldsim_mem_bank #(
                                             : rx_hi[m][k] - rx_lo[m][k] + 16'sd1;
                 end
             end
-            cw_row  <= (op_hit | op_ref) ? bt_row[op_bank] : op_row;
-            cw_act  <= op_ref ? e + c_ref + k_rfc - k_rc : (op_hit ? bt_act[op_bank] : e + c_act);
+            cw_row  <= (op_hit | op_ref) ? bt_row_op : op_row;
+            cw_act  <= op_ref ? e + c_ref + k_rfc - k_rc : (op_hit ? bt_act_op : e + c_act);
             rk_colr <= ck_colr;
             rk_prer <= ck_prer;
             begin : check2_
@@ -1582,12 +1591,12 @@ module foldsim_mem_bank #(
                 else
                     stat_misses <= stat_misses + 64'd1;
             end else if (!cm_any) begin
-                end_clock();
+                `FMB_END_CLOCK
                 state <= next_clock ? S_TICK : S_IDLE;
             end
         end
         S_END: begin
-            end_clock();
+            `FMB_END_CLOCK
             state <= next_clock ? S_TICK : S_IDLE;
         end
         S_RBANK: begin
@@ -1608,8 +1617,8 @@ module foldsim_mem_bank #(
                 kind    <= ab_open ? K_PRE : K_REF;
             end else begin
                 op_conf <= bt_open[op_bank];
-                r_prer  <= bt_fresh[op_bank] ? -16'sd1 : rel(bt_prer[op_bank]);
-                r_actrc <= (bt_fresh[op_bank] ? -16'sd16384 : rel(bt_act[op_bank])) + k_rc;
+                r_prer  <= bt_fresh[op_bank] ? -16'sd1 : rel(bt_prer_op);
+                r_actrc <= (bt_fresh[op_bank] ? -16'sd16384 : rel(bt_act_op)) + k_rc;
                 kind    <= bt_open[op_bank] ? K_PRE : K_REF;
             end
             state <= S_SETUP;
@@ -2024,4 +2033,8 @@ module foldsim_mem_bank #(
     assign dbg = {f_wait_room, cr1[33], ih_room, (iq_count != 0), lag[15], caught, a_wait_room, a_wait_lag,
                   state, a_state};
 
+`undef FMB_SEARCH
+`undef FMB_END_CLOCK_COLS
+`undef FMB_END_CLOCK
+`undef FMB_END_CLOCK_A
 endmodule
