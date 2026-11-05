@@ -1,0 +1,270 @@
+# Vortex A100-lite 4-SM FP64 fold "B4c": its foldsim target manifest, the whole recipe of the fold.
+# make FOLDSIM_MANIFEST=manifests/a100_lite_m4_b4c.toml generate: the configuration ([flow] configs, xlen), the
+# units lifted ([lift]), the classes and every driver option; [platform] binds the kernel shell (AXI4 memory
+# ports, the clock). ${FOLDSIM_WORK_DIR}: the flow's work dir (its lift/srcs.f is the driver's source list).
+[design]
+format = 1
+name = "vortex-a100-m4-b4c"
+top = "foldsim_target"
+
+[rtl]
+srcs = "${FOLDSIM_WORK_DIR}/lift/srcs.f"
+max_unroll_trip_count = 8192
+max_generate_steps = 4194304
+
+[classes]
+at = [
+  "l2fs@*.l2cache.*.core_req_xbar.*.fanout_slice_arb",
+  "l2req@inner:*.l2cache.*.core_req_xbar.*.xbar_arb",
+  "l2req@inner:*.l2cache.*.core_req_xbar.*.fanout_join_arb",
+  "l2sw@*.l2cache.*.g_omega.*.xbar_switch",
+  "l2x@*.l2cache.*.xbar_arb",
+  "axix@*.axi_adapter.*.xbar_arb",
+  "l2rs@*.l2cache.*.g_core_req_stage.*.req_stage",
+  "l2nb@*.l2cache.*.core_bus_nc_switch.rsp_arb.*.out_buf",
+  "l2ab@*.l2cache.*.core_bus_nc_arb.*.fanout_slice_arb.*.out_buf",
+  "lmq@*.local_mem.req_xbar.*.xbar_arb",
+  "lms@*.local_mem.rsp_xbar.*.xbar_arb",
+  "l1req@*.dcache.*.core_req_xbar.*.xbar_arb",
+  "l1rsp@*.dcache.*.core_rsp_arb",
+  "l1sw@*.dcache.*.g_omega.*.xbar_switch",
+  "l1x@*.dcache.*.xbar_arb",
+  "l2mo@*.l2cache.*.mem_bus_out_arb.req_arb.*.out_buf",
+  "kmub@*.cluster.kmu_arb.*.out_buf.g_eb2.stream_buffer",
+]
+absorb_exclusive = [
+  "l2rs",
+  "l2nb",
+  "l2mo",
+  "l2ab*",
+  "kmub",
+]
+nest = true
+copies = { lms = 2, VX_tcu_fedp_tfr = 4, VX_fncp_unit = 2 }
+modules = [
+  "VX_socket__lift",
+  "VX_core__lift",
+  "VX_compute_slice__lift",
+  "VX_fdiv_unit",
+  "VX_fsqrt_unit",
+  "VX_fcvt_unit",
+  "VX_fncp_unit",
+  "VX_mufu_pe",
+  "VX_tcu_fedp_tfr",
+  "l2req+VX_cache_bank__lift_l2cache",
+  "VX_cache_bank__lift_icache",
+  "lmq+VX_local_mem_bank",
+  "l1req+VX_cache_bank__lift_dcache",
+  "VX_opc_unit",
+]
+
+[env]
+sinks = [
+  "busy",
+  "dcr_rsp_valid",
+  "dcr_rsp_data",
+]
+
+[memory]
+virtual = "__lift_l2cache:.*cache_data/g_data_slice_[0-9]+\\.data_store/"
+vmem_cache_rows = "auto"
+compact_links = true
+link_block_depth = 64
+link_ultra_depth = 2048
+link_kinds = [
+  "VX_cache_bank__lift_icache:VX_socket__lift_model:distributed",
+  "VX_compute_slice__lift_model:VX_compute_slice__lift_model:distributed",
+  "VX_compute_slice__lift_model:VX_core__lift_model:distributed",
+  "VX_compute_slice__lift_model:VX_fcvt_unit:distributed",
+  "VX_compute_slice__lift_model:VX_fdiv_unit:distributed",
+  "VX_compute_slice__lift_model:VX_fncp_unit:distributed",
+  "VX_compute_slice__lift_model:VX_fsqrt_unit:distributed",
+  "VX_compute_slice__lift_model:VX_mufu_pe:distributed",
+  "VX_compute_slice__lift_model:VX_opc_unit:distributed",
+  "VX_compute_slice__lift_model:VX_tcu_fedp_tfr:distributed",
+  "VX_compute_slice__lift_model:lmq_VX_local_mem_bank:distributed",
+  "VX_compute_slice__lift_model:lms:distributed",
+  "VX_core__lift_model:VX_compute_slice__lift_model:distributed",
+  "VX_core__lift_model:VX_socket__lift_model:distributed",
+  "VX_core__lift_model:lmq_VX_local_mem_bank:distributed",
+  "VX_core__lift_model:lms:distributed",
+  "VX_fcvt_unit:VX_compute_slice__lift_model:distributed",
+  "VX_fdiv_unit:VX_compute_slice__lift_model:distributed",
+  "VX_fncp_unit:VX_compute_slice__lift_model:distributed",
+  "VX_fsqrt_unit:VX_compute_slice__lift_model:distributed",
+  "VX_mufu_pe:VX_compute_slice__lift_model:distributed",
+  "VX_opc_unit:VX_compute_slice__lift_model:distributed",
+  "VX_socket__lift_model:VX_cache_bank__lift_icache:distributed",
+  "VX_socket__lift_model:VX_compute_slice__lift_model:distributed",
+  "VX_socket__lift_model:VX_core__lift_model:distributed",
+  "VX_socket__lift_model:l1req_VX_cache_bank__lift_dcache:distributed",
+  "VX_socket__lift_model:l1rsp:distributed",
+  "VX_socket__lift_model:l1sw_0:distributed",
+  "VX_socket__lift_model:l1sw_1:distributed",
+  "VX_socket__lift_model:l2nb:distributed",
+  "VX_tcu_fedp_tfr:VX_compute_slice__lift_model:distributed",
+  "axix_1:l2nb:distributed",
+  "kmub:VX_core__lift_model:distributed",
+  "kmub:VX_socket__lift_model:distributed",
+  "l1req_VX_cache_bank__lift_dcache:VX_socket__lift_model:distributed",
+  "l1req_VX_cache_bank__lift_dcache:l1sw_0:distributed",
+  "l1rsp:VX_socket__lift_model:distributed",
+  "l1sw_0:VX_socket__lift_model:distributed",
+  "l1sw_0:l1req_VX_cache_bank__lift_dcache:distributed",
+  "l1sw_0:l1sw_0:distributed",
+  "l1sw_1:VX_socket__lift_model:distributed",
+  "l1sw_1:l1req_VX_cache_bank__lift_dcache:distributed",
+  "l1sw_1:l1sw_1:distributed",
+  "l2fs_0:l2req_VX_cache_bank__lift_l2cache:distributed",
+  "l2fs_1:l2req_VX_cache_bank__lift_l2cache:distributed",
+  "l2nb:VX_socket__lift_model:distributed",
+  "l2req_VX_cache_bank__lift_l2cache:l2sw_0:distributed",
+  "l2req_VX_cache_bank__lift_l2cache:l2sw_1:distributed",
+  "l2rs:l2fs_0:distributed",
+  "l2sw_0:l2req_VX_cache_bank__lift_l2cache:distributed",
+  "l2sw_1:l2sw_1:distributed",
+  "l2sw_1:l2nb:distributed",
+  "l2sw_2:l2mo:distributed",
+  "l2sw_2:l2req_VX_cache_bank__lift_l2cache:distributed",
+  "lmq_VX_local_mem_bank:VX_core__lift_model:distributed",
+  "lmq_VX_local_mem_bank:lms:distributed",
+  "lms:VX_compute_slice__lift_model:distributed",
+  "lms:VX_core__lift_model:distributed",
+]
+staged_links = true
+share_links = true
+storage = [
+  "VX_socket__lift_model:regs>=0=registers",
+  "VX_socket__lift_model:regs>=1=distributed",
+  "VX_socket__lift_model:inner/dmmu/tlb/mshr/reqpool/g_no_asic.g_sync.g_auto.g_write_first.g_no_wren.ram=distributed",
+  "VX_socket__lift_model:inner/immu/tlb/mshr/reqpool/g_no_asic.g_sync.g_auto.g_write_first.g_no_wren.ram=distributed",
+  "VX_cache_bank__lift_icache:inner/cache_repl/g_enable.g_fifo.fifo_store/g_no_asic.g_sync.g_auto.g_read_first.g_no_wren.ram=distributed",
+  "VX_core__lift_model:regs>=0=registers",
+  "VX_core__lift_model:inner/scheduler/warp_shared_unit/bar_unit/barrier_state_store/g_no_asic.g_sync.g_lutram.g_write_first.g_no_wren.ram=block",
+  "VX_compute_slice__lift_model:inner/backend_slice/issue_slice/ibuffer/g_bufs_0.instr_buf/g_ebN.fifo_queue/g_depth_n.dp_ram/g_no_asic.g_sync.g_auto.g_write_first.g_no_wren.ram=distributed",
+  "VX_compute_slice__lift_model:inner/backend_slice/issue_slice/ibuffer/g_bufs_1.instr_buf/g_ebN.fifo_queue/g_depth_n.dp_ram/g_no_asic.g_sync.g_auto.g_write_first.g_no_wren.ram=distributed",
+  "VX_compute_slice__lift_model:inner/backend_slice/issue_slice/ibuffer/g_bufs_2.instr_buf/g_ebN.fifo_queue/g_depth_n.dp_ram/g_no_asic.g_sync.g_auto.g_write_first.g_no_wren.ram=distributed",
+  "VX_compute_slice__lift_model:inner/backend_slice/issue_slice/ibuffer/g_bufs_3.instr_buf/g_ebN.fifo_queue/g_depth_n.dp_ram/g_no_asic.g_sync.g_auto.g_write_first.g_no_wren.ram=distributed",
+  "VX_compute_slice__lift_model:inner/backend_slice/issue_slice/ibuffer/g_bufs_4.instr_buf/g_ebN.fifo_queue/g_depth_n.dp_ram/g_no_asic.g_sync.g_auto.g_write_first.g_no_wren.ram=distributed",
+  "VX_compute_slice__lift_model:inner/backend_slice/issue_slice/ibuffer/g_bufs_5.instr_buf/g_ebN.fifo_queue/g_depth_n.dp_ram/g_no_asic.g_sync.g_auto.g_write_first.g_no_wren.ram=distributed",
+  "VX_compute_slice__lift_model:inner/backend_slice/issue_slice/ibuffer/g_bufs_6.instr_buf/g_ebN.fifo_queue/g_depth_n.dp_ram/g_no_asic.g_sync.g_auto.g_write_first.g_no_wren.ram=distributed",
+  "VX_compute_slice__lift_model:inner/backend_slice/issue_slice/ibuffer/g_bufs_7.instr_buf/g_ebN.fifo_queue/g_depth_n.dp_ram/g_no_asic.g_sync.g_auto.g_write_first.g_no_wren.ram=distributed",
+  "VX_compute_slice__lift_model:inner/backend_slice/issue_slice/ibuffer/g_bufs_8.instr_buf/g_ebN.fifo_queue/g_depth_n.dp_ram/g_no_asic.g_sync.g_auto.g_write_first.g_no_wren.ram=distributed",
+  "VX_compute_slice__lift_model:inner/backend_slice/issue_slice/ibuffer/g_bufs_9.instr_buf/g_ebN.fifo_queue/g_depth_n.dp_ram/g_no_asic.g_sync.g_auto.g_write_first.g_no_wren.ram=distributed",
+  "VX_compute_slice__lift_model:inner/backend_slice/issue_slice/ibuffer/g_bufs_10.instr_buf/g_ebN.fifo_queue/g_depth_n.dp_ram/g_no_asic.g_sync.g_auto.g_write_first.g_no_wren.ram=distributed",
+  "VX_compute_slice__lift_model:inner/backend_slice/issue_slice/ibuffer/g_bufs_11.instr_buf/g_ebN.fifo_queue/g_depth_n.dp_ram/g_no_asic.g_sync.g_auto.g_write_first.g_no_wren.ram=distributed",
+  "VX_compute_slice__lift_model:inner/backend_slice/issue_slice/ibuffer/g_bufs_12.instr_buf/g_ebN.fifo_queue/g_depth_n.dp_ram/g_no_asic.g_sync.g_auto.g_write_first.g_no_wren.ram=distributed",
+  "VX_compute_slice__lift_model:inner/backend_slice/issue_slice/ibuffer/g_bufs_13.instr_buf/g_ebN.fifo_queue/g_depth_n.dp_ram/g_no_asic.g_sync.g_auto.g_write_first.g_no_wren.ram=distributed",
+  "VX_compute_slice__lift_model:inner/backend_slice/issue_slice/ibuffer/g_bufs_14.instr_buf/g_ebN.fifo_queue/g_depth_n.dp_ram/g_no_asic.g_sync.g_auto.g_write_first.g_no_wren.ram=distributed",
+  "VX_compute_slice__lift_model:inner/backend_slice/issue_slice/ibuffer/g_bufs_15.instr_buf/g_ebN.fifo_queue/g_depth_n.dp_ram/g_no_asic.g_sync.g_auto.g_write_first.g_no_wren.ram=distributed",
+  "VX_compute_slice__lift_model:inner/backend_slice/issue_slice/dispatcher/g_buffers_0.buffer/g_ebN.fifo_queue/g_depth_n.dp_ram/g_no_asic.g_sync.g_auto.g_write_first.g_no_wren.ram=distributed",
+  "VX_compute_slice__lift_model:inner/backend_slice/issue_slice/dispatcher/g_buffers_1.buffer/g_ebN.fifo_queue/g_depth_n.dp_ram/g_no_asic.g_sync.g_auto.g_write_first.g_no_wren.ram=distributed",
+  "VX_compute_slice__lift_model:inner/backend_slice/issue_slice/dispatcher/g_buffers_2.buffer/g_ebN.fifo_queue/g_depth_n.dp_ram/g_no_asic.g_sync.g_auto.g_write_first.g_no_wren.ram=distributed",
+  "VX_compute_slice__lift_model:inner/backend_slice/issue_slice/dispatcher/g_buffers_3.buffer/g_ebN.fifo_queue/g_depth_n.dp_ram/g_no_asic.g_sync.g_auto.g_write_first.g_no_wren.ram=distributed",
+  "VX_compute_slice__lift_model:inner/backend_slice/issue_slice/dispatcher/g_buffers_4.buffer/g_ebN.fifo_queue/g_depth_n.dp_ram/g_no_asic.g_sync.g_auto.g_write_first.g_no_wren.ram=distributed",
+  "VX_compute_slice__lift_model:inner/backend_slice/execute_slice/tcu_block/tcu_core/landing_queue/g_depth_n.dp_ram/g_no_asic.g_sync.g_lutram.g_write_first.g_no_wren.ram=block",
+  "VX_fncp_unit:regs>=65=block",
+  "VX_tcu_fedp_tfr:regs>=1=registers",
+  "VX_tcu_fedp_tfr:regs>=3=block",
+  "l1req_VX_cache_bank__lift_dcache:inner/cache_repl/g_enable.g_fifo.fifo_store/g_no_asic.g_sync.g_auto.g_read_first.g_no_wren.ram=distributed",
+  "l2req_VX_cache_bank__lift_l2cache:regs>=1=registers",
+  "l2req_VX_cache_bank__lift_l2cache:inner/cache_repl/g_enable.g_fifo.fifo_store/g_no_asic.g_sync.g_auto.g_read_first.g_no_wren.ram=distributed",
+]
+memory_registers = "auto"
+
+[platform]
+kernel = "foldsim_afu"
+adapter = "axi4"                 # the target's memory: AXI4 masters m_axi_mem_<k>, one endpoint each
+mem_ports = 4                    # VX_CFG_PLATFORM_MEMORY_NUM_BANKS
+mem_id_width = 6                 # 4 + clog2(mem_ports)
+mem_channel_shift = 2            # interleaved ports (VX_CFG_PLATFORM_MEMORY_INTERLEAVE)
+clock_mhz = 250                  # FOLDSIM_FREQ (B4c images: img_b4c 250, img_b4c50 50)
+device = "xcv80-lsva4737-2MHP-e-S"
+control = { start = "start", busy = "busy", dcr_req = "dcr_req", dcr_rsp = "dcr_rsp" }
+axi_spec = 2
+
+[options]
+modulo = true
+bubbles = true
+zero_chain_hops = 2
+zero_latency_chains = true
+zero_latency_links = true
+static = true
+
+[lift]
+units = [
+  "VX_socket:drop=INSTANCE_ID",
+  "VX_core:drop=INSTANCE_ID",
+  "VX_compute_slice:drop=INSTANCE_ID,SLICE_STR",
+  "VX_cache_bank:drop=INSTANCE_ID,BANK_ID;sets",
+]
+
+[flow]
+generator = "vortex"             # hw/syn/foldsim `sources` (ci/gen_config.py + gen_sources.sh)
+xlen = 64
+vortex = "fa40cf125"             # a100/timing-int, as built for B4c
+policy = "st32_1031/lk2/calm4a3/policy_cal.json"   # where memory.* came from (gen.sh)
+configs = [
+  "-DVX_CFG_DCACHE_MSHR_SIZE=24",
+  "-DVX_CFG_DCACHE_NUM_WAYS=8",
+  "-DVX_CFG_DCACHE_SIZE=131072",
+  "-DVX_CFG_EXT_A_ENABLE",
+  "-DVX_CFG_EXT_D_ENABLE",
+  "-DVX_CFG_EXT_DMA_DISABLE",
+  "-DVX_CFG_EXT_DXA_DISABLE",
+  "-DVX_CFG_EXT_MUFU_ENABLE",
+  "-DVX_CFG_EXT_OM_DISABLE",
+  "-DVX_CFG_EXT_RASTER_DISABLE",
+  "-DVX_CFG_EXT_RTU_DISABLE",
+  "-DVX_CFG_EXT_TCU_ENABLE",
+  "-DVX_CFG_EXT_TEX_DISABLE",
+  "-DVX_CFG_EXT_ZACAS_ENABLE",
+  "-DVX_CFG_EXT_ZFHMIN_ENABLE",
+  "-DVX_CFG_FCVT_PE_RATIO=4",
+  "-DVX_CFG_FDIV_PE_RATIO=16",
+  "-DVX_CFG_FETCH_WIDTH=4",
+  "-DVX_CFG_FSQRT_PE_RATIO=16",
+  "-DVX_CFG_ICACHE_NUM_WAYS=16",
+  "-DVX_CFG_ICACHE_SIZE=131072",
+  "-DVX_CFG_ISSUE_WIDTH=4",
+  "-DVX_CFG_L2_ENABLE",
+  "-DVX_CFG_L2_MSHR_SIZE=192",
+  "-DVX_CFG_L2_NUM_BANKS=4",
+  "-DVX_CFG_L2_NUM_WAYS=16",
+  "-DVX_CFG_L2_SIZE=1048576",
+  "-DVX_CFG_LMEM_LOG_SIZE=16",
+  "-DVX_CFG_LMEM_NUM_BANKS=16",
+  "-DVX_CFG_NUM_ALU_LANES=16",
+  "-DVX_CFG_NUM_BARRIERS=16",
+  "-DVX_CFG_NUM_CLUSTERS=1",
+  "-DVX_CFG_NUM_CORES=4",
+  "-DVX_CFG_NUM_FPU_LANES=16",
+  "-DVX_CFG_NUM_MUFU_LANES=4",
+  "-DVX_CFG_NUM_SFU_BLOCKS=4",
+  "-DVX_CFG_NUM_THREADS=32",
+  "-DVX_CFG_NUM_WARPS=64",
+  "-DVX_CFG_PLATFORM_CLOCK_RATE=1410",
+  "-DVX_CFG_PLATFORM_MEMORY_DATA_RATE=900",
+  "-DVX_CFG_PLATFORM_MEMORY_LATENCY=190",
+  "-DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=4",
+  "-DVX_CFG_PLATFORM_MEMORY_PEAK_BW=57593",
+  "-DVX_CFG_PLATFORM_MEMORY_QUEUE_SIZE=257",
+  "-DVX_CFG_PLATFORM_MEMORY_TYPE=HBM2",
+  "-DVX_CFG_SOCKET_SIZE=1",
+  "-DVX_CFG_TCU_FP16_ENABLE",
+  "-DVX_CFG_TCU_FP4_DISABLE",
+  "-DVX_CFG_TCU_FP8_DISABLE",
+  "-DVX_CFG_TCU_INT4_ENABLE",
+  "-DVX_CFG_TCU_INT8_ENABLE",
+  "-DVX_CFG_TCU_MX_DISABLE",
+  "-DVX_CFG_TCU_MXFP4_DISABLE",
+  "-DVX_CFG_TCU_NVFP4_DISABLE",
+  "-DVX_CFG_TCU_SPARSE_ENABLE",
+  "-DVX_CFG_TCU_TF32_ENABLE",
+  "-DVX_CFG_TCU_WGMMA_DISABLE",
+  "-DVX_CFG_VM_ENABLE",
+  "-DVX_PROFILE=a100_lite_m4",
+  "-DVX_CFG_NUM_LSU_LANES=8",
+  "-DVX_CFG_DCACHE_NUM_BANKS=4",
+  "-DVX_CFG_NUM_FP64_LANES=8",
+]
