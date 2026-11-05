@@ -558,6 +558,11 @@ module foldsim_mem_bank #(
                A_FAST = 3'd5, A_RES = 3'd6;
     reg [2:0]        a_state;
 
+    // The clocks the reservations lag the clock engine, da - d, and what the
+    // engines test of it, kept as either engine ends a clock.
+    reg  [15:0]        lag;
+    reg                a_wait_lag, caught, lag_ge1, lag_ge2, lag_ge4;
+
     // A cycle finishes once the clock engine is done with it; the
     // reservations may still follow, except into a target reset, which drops
     // everything.
@@ -801,10 +806,6 @@ module foldsim_mem_bank #(
     // engines change them: a reservation moves bursts from its buffer to the
     // controller's count, an entry adds its bursts, a clock's end its column.
     reg  [8:0]         wb_after, rb_after;
-    // The clocks the reservations lag the clock engine, da - d, and what the
-    // engines test of it, kept as either engine ends a clock.
-    reg  [15:0]        lag;
-    reg                a_wait_lag, caught, lag_ge1, lag_ge2, lag_ge4;
     // The queues plus the lag's columns (one a clock, at most 255).
     reg  [8:0]         lim_r, lim_w;
     // Bursts reserved and not yet issued count columns only up to the
