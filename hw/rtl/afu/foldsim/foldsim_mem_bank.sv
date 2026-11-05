@@ -189,7 +189,7 @@ module foldsim_mem_bank #(
 
     reg signed [15:0] k_ccds, k_ccdl, k_rtw, k_wtrs, k_wtrl, k_reach_r, k_reach_w, k_reach_a;
     reg signed [15:0] k_wrpre, k_dep, k_ccdl1, k_rcdrd, k_rcdwr, k_rp, k_ras, k_rc, k_rtp;
-    reg signed [15:0] k_rrds, k_rrdl, k_rfc;
+    reg signed [15:0] k_rrds, k_rrdl, k_rfc, k_rrdfaw;
     reg [16:0]        k_twoclk;
     // The data-rate accumulators' values out of reset, a stage per subtraction.
     reg signed [33:0] k_cr1_0, k_cr2_0;
@@ -204,8 +204,9 @@ module foldsim_mem_bank #(
         k_wtrl    <= 16'(T[I_CWL]) + 16'(T[I_BL]) + 16'(T[I_WTRL]);
         k_reach_r <= smax(smax(k_ccds, k_ccdl), k_rtw) - 16'sd1;
         k_reach_w <= smax(smax(k_ccds, k_ccdl), smax(k_wtrs, k_wtrl)) - 16'sd1;
-        k_reach_a <= smax(smax(smax(16'(T[I_RRDS]), 16'(T[I_RRDL])), 16'(T[I_FAW])) - 16'sd1,
-                          g_act2 ? 16'sd1 : 16'sd0);
+        // A stage per maximum, like the other k_ constants (Beacon: cfg_t -> k_reach_a was 14 levels).
+        k_rrdfaw  <= smax(smax(16'(T[I_RRDS]), 16'(T[I_RRDL])), 16'(T[I_FAW]));
+        k_reach_a <= smax(k_rrdfaw - 16'sd1, g_act2 ? 16'sd1 : 16'sd0);
         k_wrpre   <= 16'(T[I_CWL]) + 16'(T[I_BL]) + 16'(T[I_WR]);
         k_dep     <= 16'(T[I_CL]) + 16'(T[I_BL]);
         k_ccdl1   <= smax(16'(T[I_CCDL]), 16'sd1);
