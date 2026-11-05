@@ -143,7 +143,7 @@ copy_one_file() {
     fi
     if [ -n "$temp_file" ]; then rm -f "$temp_file"; fi
   else
-    cp "$file" "$copy_folder"
+    cp -f "$file" "$copy_folder"
   fi
   # Return success explicitly: under `set -e` a non-zero status from the last
   # command above (e.g. a skipped conditional) would otherwise abort the run.
