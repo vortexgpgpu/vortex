@@ -55,6 +55,8 @@ package VX_cp_pkg;
 
   localparam int CL_BYTES = 64;
   localparam int CL_BITS  = CL_BYTES * 8;
+  // A byte offset or size within a cache line, 0 .. CL_BYTES inclusive.
+  localparam int CL_OFF_W = $clog2(CL_BYTES + 1);
 
   // ------------------------------------------------------------------------
   // Command opcodes.
