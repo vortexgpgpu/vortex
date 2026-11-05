@@ -11,6 +11,20 @@ tests:
   - id: hw
     via: script
     run: "make -C hw/unittest"
+  # Every identifier in hw/rtl declared before its first use (IEEE 1800 6.10).
+  # Vivado makes an undeclared assignment or connection target a new implicit
+  # net in the using scope and leaves the real one undriven, while Verilator,
+  # Yosys, sv2v and slang bind the later declaration, so no simulation or lint
+  # sees it: foldsim_mem's rr_peek_valid, assigned in generate blocks before
+  # its wire (d6fbbfd55), froze the V80. ci/decl_before_use.py scans every
+  # .sv syntactically (all generate branches) under three define sets, in a
+  # few seconds; it fails on d6fbbfd55's parent.
+  - id: rtl-decl-before-use
+    via: script
+    run: "python3 ci/decl_before_use.py --selftest"
+    xlen: [32]
+    needs: [pyslang]
+    touches: [hw/rtl, ci/decl_before_use.py, VX_config.toml]
   # FPU arithmetic units (VX_fma/fdiv/fsqrt/fcvt/fdivsqrt): the `hw` lane above only
   # builds the unit tests; this lane executes them so a softfloat-divergent
   # regression actually fails CI (each driver checks bit-exact result+fflags over
