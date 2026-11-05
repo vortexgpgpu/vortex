@@ -71,6 +71,10 @@ module foldsim_mem_fold #(
     input  wire [15:0]            cfg_refi,
     input  wire [15:0]            cfg_rfc,
     output wire [PORTS*8*64-1:0]  stats,
+    // Device-memory telemetry (foldsim_mem's axi_stats) of the one AXI master,
+    // in the first port's words; the other ports' words are zero (their
+    // device-memory paths are idle).
+    output wire [PORTS*8*32-1:0]  axi_stats,
     output wire                   idle,
     output wire                   error,
     output wire                   stall,
@@ -301,6 +305,8 @@ module foldsim_mem_fold #(
         .m_rdata_sink_valid (1'b1), .m_rdata_sink_bits (r_data[t]), .m_rdata_sink_ready (),
         // Its outputs, every one taken at its turn.
         .stats_source_ready (1'b1), .stats_source_valid (), .stats_source_bits (t_stats),
+        // TELEMETRY 0 (portfold_gen.sh): zero; the shared master counts instead.
+        .axi_stats_source_ready (1'b1), .axi_stats_source_valid (), .axi_stats_source_bits (),
         .idle_source_ready (1'b1), .idle_source_valid (), .idle_source_bits (t_idle),
         .error_source_ready (1'b1), .error_source_valid (), .error_source_bits (t_error),
         .stall_source_ready (1'b1), .stall_source_valid (), .stall_source_bits (t_stall),
@@ -377,6 +383,41 @@ module foldsim_mem_fold #(
     assign m_bready = (b_cnt[b_port] != 6'd63);
     wire r_in = m_rvalid & m_rready;
     wire b_in = m_bvalid & m_bready;
+
+    // Telemetry, 32-bit counters from reset as foldsim_mem counts them: AR, R,
+    // AW, W and B handshakes; host cycles with no R while reads are in memory;
+    // host cycles with R offered and not taken; then the occupancy now: [7:0]
+    // reads queued for memory, [15:8] reads in memory, [23:16] writes in
+    // memory, [31:24] write data held.
+    // The handshakes are registered before they are counted (a counter lags
+    // its handshake by a host cycle): they end the master's ready chains.
+    reg [31:0] x_ar, x_r, x_aw, x_w, x_b, x_r_starve, x_r_wait;
+    reg        h_ar, h_r, h_aw, h_w, h_b, h_rv;
+    always @(posedge clk) begin
+        if (reset) begin
+            x_ar <= 0; x_r <= 0; x_aw <= 0; x_w <= 0; x_b <= 0; x_r_starve <= 0; x_r_wait <= 0;
+            h_ar <= 0; h_r <= 0; h_aw <= 0; h_w <= 0; h_b <= 0; h_rv <= 0;
+        end else begin
+            h_ar <= m_arvalid & m_arready;
+            h_r  <= r_in;
+            h_aw <= m_awvalid & m_awready;
+            h_w  <= m_wvalid & m_wready;
+            h_b  <= b_in;
+            h_rv <= m_rvalid;
+            x_ar <= x_ar + 32'(h_ar);
+            x_r  <= x_r + 32'(h_r);
+            x_aw <= x_aw + 32'(h_aw);
+            x_w  <= x_w + 32'(h_w);
+            x_b  <= x_b + 32'(h_b);
+            // As foldsim_mem counts them, a host cycle late: no R while reads
+            // are in memory; R offered and not taken.
+            x_r_starve <= x_r_starve + {31'd0, ~h_rv & (x_ar != x_r)};
+            x_r_wait   <= x_r_wait + {31'd0, h_rv & ~h_r};
+        end
+    end
+    assign axi_stats = {{((PORTS - 1) * 8 * 32){1'b0}},
+                        8'(w_n), 8'(x_aw - x_b), 8'(x_ar - x_r), 8'(ar_n),
+                        x_r_wait, x_r_starve, x_b, x_w, x_aw, x_r, x_ar};
 
     // The RSP stream: a pointer visits the ports one a host cycle, as the
     // threads take turns, and offers the record of the port it is on when

@@ -258,6 +258,10 @@ module foldsim_mem_par #(
             .cfg_refi       (cfg_refi),
             .cfg_rfc        (cfg_rfc),
             .stats          (stats[p*8*64 +: 8*64]),
+            // The reference's endpoints' telemetry is not read.
+            /* verilator lint_off PINCONNECTEMPTY */
+            .axi_stats      (),
+            /* verilator lint_on PINCONNECTEMPTY */
             .idle           (p_idle[p]),
             .error          (p_error[p]),
             .stall          (p_stall[p]),
