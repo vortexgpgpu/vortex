@@ -49,7 +49,15 @@ module axi_mem #(parameter DATA_W = 512) (
 endmodule
 
 module tb;
-  localparam PORTS = 32, ID_W = 9, ADDR_W = 64, DATA_W = 512, SPEC = 2, NC = 4, NW = 4, CW = 5;
+`ifndef TB_PORTS
+`define TB_PORTS 32
+`endif
+`ifndef TB_ID_W
+`define TB_ID_W 9
+`endif
+  // TB_PORTS / TB_ID_W (run.sh's TB_DEFS): the image's 32 ports by default; the threaded snapshot must be made for
+  // the same PORTS, ID_W and CH_SHIFT = log2(PORTS) (portfold_gen.sh).
+  localparam PORTS = `TB_PORTS, ID_W = `TB_ID_W, ADDR_W = 64, DATA_W = 512, SPEC = 2, NC = 4, NW = 4, CW = $clog2(PORTS);
   localparam REQ_W    = 6 + 2 * ADDR_W + 2 * ID_W + 16 + DATA_W + DATA_W / 8;
   localparam RSP_W = 2 * NW + 2 * NC + NC * DATA_W + NC + NC * ID_W + NC * 2 + 3 + ID_W;
   // The DRAM model's configuration: the foldsim_mem unit test's bank setups (HBM2, data rate 800, core clock 400,
@@ -88,8 +96,8 @@ module tb;
     bit rd = act && (mode == 2 ? 1'b1 : (h(p, k, 1) % 100 < 45));
     bit wr = act && (mode == 2 ? 1'b1 : (h(p, k, 2) % 100 < 30));
     logic [63:0] blk = (mode == 3) ? 64'(h(p, k, 3) % 8) : 64'(h(p, k, 3) % 4096);
-    logic [63:0] ra = (((blk << 5) | 64'(p)) << 6), wa = ((((64'(h(p, k, 4) % 4096)) << 5) | 64'(p)) << 6);
-    if (mode == 3) wa = (((64'(h(p, k, 4) % 8) << 5) | 64'(p)) << 6);
+    logic [63:0] ra = (((blk << CW) | 64'(p)) << 6), wa = ((((64'(h(p, k, 4) % 4096)) << CW) | 64'(p)) << 6);
+    if (mode == 3) wa = (((64'(h(p, k, 4) % 8) << CW) | 64'(p)) << 6);
     r[o +: 1] = wr; o += 1;                          // awvalid
     r[o +: ADDR_W] = wa; o += ADDR_W;                // awaddr
     r[o +: ID_W] = ID_W'(h(p, k, 5) % 4); o += ID_W; // awid
@@ -201,7 +209,7 @@ module tb;
 `define CFG .base(64'h0), .cfg_data_rate(16'd800), .cfg_core_clock(16'd400), .cfg_latency(16'd0), \
     .cfg_queue(16'd0), .cfg_rq(8'd32), .cfg_wq(8'd32), .cfg_wr_high(8'd26), .cfg_wr_low(8'd7), \
     .cfg_geom(CFG_GEOM), .cfg_t(CFG_T), .cfg_refresh(cfg_refresh), .cfg_refi(cfg_refi), .cfg_rfc(cfg_rfc)
-  foldsim_mem_par #(.PORTS(PORTS), .ID_W(ID_W), .DATA_W(DATA_W), .SPEC(SPEC), .CH_SHIFT(5)) par (
+  foldsim_mem_par #(.PORTS(PORTS), .ID_W(ID_W), .DATA_W(DATA_W), .SPEC(SPEC), .CH_SHIFT(CW)) par (
     .clk, .reset, `CFG, .stats(p_stats), .idle(p_idle), .error(p_error), .stall(p_stall),
     .req_valid(p_req_valid), .req_ready(p_req_ready), .req_chan(p_req_chan), .req_treset(p_req_treset),
     .req_bits(p_req_bits), .rsp_valid(p_rsp_valid), .rsp_ready(p_rsp_ready), .rsp_chan(p_rsp_chan),
