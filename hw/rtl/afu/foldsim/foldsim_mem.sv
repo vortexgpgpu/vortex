@@ -174,6 +174,10 @@ module foldsim_mem #(
     wire [DATA_W-1:0]   wdata;
     wire [DATA_W/8-1:0] wstrb;
     wire [14:0]         have;
+    // Declared before the generate blocks that drive it: an assignment ahead
+    // of the declaration makes Vivado create an implicit wire local to the
+    // block and leave this one undriven (constant 0).
+    wire                rr_peek_valid;
 
     foldsim_token_in #(1, STAGED)        t_awvalid (clk, reset, awvalid_valid, awvalid_ready, awvalid_bits, finish, have[0],  awvalid);
     foldsim_token_in #(ADDR_W, STAGED)   t_awaddr  (clk, reset, awaddr_valid,  awaddr_ready,  awaddr_bits,  finish, have[1],  awaddr);
@@ -260,7 +264,6 @@ module foldsim_mem #(
     // SPEC 2: the bank model's candidates, a read it takes, and R's ready of
     // the cycle before for an AR it resolves late.
     /* verilator lint_off UNUSEDSIGNAL */
-    wire          rr_peek_valid;
     wire [3:0]    bk_c_valid, bk_c_sf;
     wire [4*SW-1:0] bk_c_slot, bk_c_slot_n;
     wire [4*ID_W-1:0] bk_c_id;
