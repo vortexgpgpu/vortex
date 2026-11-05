@@ -1151,15 +1151,6 @@ public:
 
   virtual ~Arbiter() {}
 
-  // A grant the receiver always takes.
-  uint32_t grant(const BitVector<>& requests) {
-    uint32_t idx = impl_->select(requests);
-    if (idx != -1u) {
-      impl_->commit(idx);
-    }
-    return idx;
-  }
-
   uint32_t select(const BitVector<>& requests) const {
     return impl_->select(requests);
   }

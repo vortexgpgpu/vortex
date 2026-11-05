@@ -929,12 +929,9 @@ public:
     }
   }
 
-  // Release an ibuffer slot; ibuf_inflight_ saturates because an async-trap
-  // flush zeroes it while the warp's earlier fetches are still in flight.
   void ibuf_release(uint32_t wid) {
-    if (ibuf_inflight_.at(wid) > 0) {
-      --ibuf_inflight_.at(wid);
-    }
+    assert(ibuf_inflight_.at(wid) > 0);
+    --ibuf_inflight_.at(wid);
     assert(ibuf_queued_.at(wid) > 0);
     --ibuf_queued_.at(wid);
   }
@@ -1189,51 +1186,6 @@ public:
         ++count;
     }
     return count > 1; // more than 1 because the current instruction is also counted
-  }
-
-  // Drop every unissued instruction for the given warp and return the PC
-  // at which execution should resume. Used by Scheduler::raise_async_trap
-  // to emulate a real RISC-V trap-entry pipeline flush — without it, the
-  // pre-trap instructions in the ibuffer prevent the post-trap fetch from
-  // making progress (ibuf_inflight pegged at IBUF_SIZE).
-  Word flush_warp_pipeline(uint32_t wid) {
-    auto& ibuffer = ibuffers_.at(wid);
-    Word first_pc = 0;
-    bool have_first = false;
-    uint32_t popped = 0;
-    while (!ibuffer->empty()) {
-      auto trace = ibuffer->peek();
-      if (!have_first) {
-        first_pc = trace->PC;
-        have_first = true;
-      }
-      pending_instrs_.remove(trace);
-      trace->~instr_trace_t();
-      trace_pool_.deallocate(trace, 1);
-      ibuffer->pop();
-      ++popped;
-    }
-    ibuf_inflight_.at(wid) = 0;
-    // A staged head already released its count; the instructions still in
-    // the decode latch keep theirs.
-    uint32_t drained = popped - (head_staged_.at(wid) ? 1 : 0);
-    assert(popped >= drained && ibuf_queued_.at(wid) >= drained);
-    ibuf_queued_.at(wid) -= drained;
-    head_staged_.at(wid) = false;
-    uint32_t iw = wid % VX_CFG_ISSUE_WIDTH;
-    if (issue_lock_owner_.at(iw) == wid / VX_CFG_ISSUE_WIDTH) {
-      issue_lock_owner_.at(iw) = kLockOpen;
-    }
-    // The sequencer may cache the just-flushed trace in state_.current_uop
-    // (set by seq->get() during a prior issue tick where the trace stalled
-    // on scoreboard or the issue lock). That cached pointer is now dangling —
-    // drop it so the post-trap issue cycle re-derives state from the
-    // post-mret ibuffer.
-    sequencers_.at(wid)->flush();
-    // If the ibuffer was empty (rare: trap fires before any post-TRACE
-    // instruction made it into ibuffer), the caller's warp.PC is the
-    // correct resume point. Caller handles that case.
-    return have_first ? first_pc : Word(0);
   }
 
   bool lsu_drained() const {
@@ -1628,10 +1580,6 @@ SimChannel<TlbRsp>& Core::tlb_fill_in(uint32_t which) {
 
 PoolAllocator<instr_trace_t, 64>& Core::trace_pool() {
   return impl_->trace_pool();
-}
-
-Word Core::flush_warp_pipeline(uint32_t wid) {
-  return impl_->flush_warp_pipeline(wid);
 }
 
 #ifdef VX_CFG_VM_ENABLE
