@@ -125,9 +125,10 @@ static uint32_t check_region(const kernel_arg_t* arg, uint32_t region) {
 }
 
 // The first SECTOR_WORDS threads of a block store one word each of a sector,
-// every warp at once after a barrier, and load it right away: the loads reach
-// the cache while the stores' allocation is still pending. The second store
-// lands while that chain is being refetched.
+// every warp at once after a barrier, and load it back after a second barrier:
+// every store of the sector is issued before its first load, which reaches the
+// cache while the stores' allocation is still pending. The second store lands
+// while that chain is being refetched.
 static inline uint32_t run_full_chain(const kernel_arg_t* arg, uint32_t gid) {
   auto base = reinterpret_cast<volatile uint32_t*>(arg->full_addr);
   auto err = reinterpret_cast<volatile uint32_t*>(arg->err_addr);
@@ -143,6 +144,9 @@ static inline uint32_t run_full_chain(const kernel_arg_t* arg, uint32_t gid) {
       __syncthreads();
       if (t < SECTOR_WORDS) {
         *dst = full_value(line, s + t);
+      }
+      __syncthreads();
+      if (t < SECTOR_WORDS) {
         uint32_t first = base[idx];
         *dst = full_value2(line, s + t);
         uint32_t second = base[idx];
