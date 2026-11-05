@@ -50,7 +50,13 @@ public:
   static constexpr bool kGather = (VX_CFG_NUM_ALU_BLOCKS != VX_CFG_ISSUE_WIDTH)
                                || (VX_CFG_NUM_ALU_LANES != VX_CFG_SIMD_WIDTH);
 
+  // Ops the block's input channel holds (see the constructor).
+  static constexpr uint32_t kInputSlots = kGather ? 2 : 1;
+
   AluUnit(const SimContext& ctx, const char* name, Core*);
+
+  // Passes a multiply takes on the multiplier (1 for every other operation).
+  static uint32_t mul_passes(const instr_trace_t* trace);
 
   // Resolved branch of a stalled warp, registered toward the scheduler.
   SimChannel<uint32_t> branch_ctl_out;
@@ -66,9 +72,6 @@ private:
   void execute(instr_trace_t* trace);
 
   uint32_t latency_of(const instr_trace_t* trace) const;
-
-  // Passes a multiply takes on the multiplier (1 for every other operation).
-  static uint32_t mul_passes(const instr_trace_t* trace);
 
   // Per block, the passes the multiply at its input has issued so far.
   std::array<uint32_t, VX_CFG_NUM_ALU_BLOCKS> mul_pass_{};

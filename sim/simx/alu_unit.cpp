@@ -25,10 +25,14 @@
 using namespace vortex;
 
 AluUnit::AluUnit(const SimContext& ctx, const char* name, Core* core)
+	// The input holds the op on its way in: without the lane-gather stage the
+	// dispatch queue feeds the block directly (VX_lane_dispatch OUT_BUF 0),
+	// so an op the block holds waits at the queue's head; with it, the
+	// stage's 2-entry buffer (OUT_BUF 3) sits in between.
 	// The output channel also counts results still in flight: it covers the
 	// deepest path plus the result waiting for the commit side, so the
 	// multiplier keeps one result per cycle.
-	: FuncUnit<VX_CFG_NUM_ALU_BLOCKS>(ctx, name, core, kMulLatency + (kGather ? 1 : 0) + 2)
+	: FuncUnit<VX_CFG_NUM_ALU_BLOCKS>(ctx, name, core, kMulLatency + (kGather ? 1 : 0) + 2, kInputSlots)
 	, branch_ctl_out(this, VX_CFG_NUM_WARPS)
 {}
 
