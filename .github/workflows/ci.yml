@@ -235,9 +235,11 @@ jobs:
       # A check's cell gathers cases from every category, so per-case tools are
       # keyed on the cell's needs, not its name.
       - name: Per-case tools
-        if: contains(matrix.needs, 'foldsim')
+        if: contains(matrix.needs, 'foldsim') || contains(matrix.needs, 'pyslang')
         run: |
-          (cd build${{ matrix.xlen }} && bash ci/toolchain_install.sh --foldsim)
+          if ${{ contains(matrix.needs, 'foldsim') }}; then
+            (cd build${{ matrix.xlen }} && bash ci/toolchain_install.sh --foldsim)
+          fi
           pip install --quiet pyslang==12.0.0
       - name: Run cell
         run: |

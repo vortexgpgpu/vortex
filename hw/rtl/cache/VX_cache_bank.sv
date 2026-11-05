@@ -1027,6 +1027,10 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
 
     assign mshr_alm_full = mshr_req_full || ~mshr_line_ready;
 
+    // The core response queue's ready (driven at the queue below): the MSHR's
+    // forwarding lookup reads it.
+    wire crsp_queue_ready;
+
     VX_cache_mshr #(
         .INSTANCE_ID (`SFORMATF(("%s-mshr", INSTANCE_ID))),
         .BANK_ID     (BANK_ID),
@@ -1248,7 +1252,6 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // while a same-line AMO is chain-stalled so a held read enqueues once.
     // ========================================================================
     wire crsp_queue_valid = do_read_stc && eff_hit_stc && ~is_amo_fwd_st1 && ~amo_chain_stall;
-    wire crsp_queue_ready;
     // Plain-read responses byte-merge the AMO engine's in-flight writeback
     // bytes over the array word (stale until the writeback lands).
     if (AMO_ENABLE && IS_LLC) begin : g_read_word_fwd

@@ -102,6 +102,9 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0] rs2_data;
 `endif
     wire exe_ready_extra; // additional ready gating (tbuf_ready)
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
+    wire [TCU_MAX_META_BLOCK_WIDTH-1:0] wmma_sp_meta; // the sparse metadata SRAM's block (VX_tcu_sp_meta below)
+`endif
 
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
     wire is_wgmma = (execute_if.data.op_type == INST_TCU_WGMMA)
@@ -300,9 +303,6 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         (WG_B_OFF_W'(step_n) & WG_B_OFF_W'(TCU_WG_B_SUB_BLOCKS-1)) << LG_WG_B_BS;
 `endif
 
-`ifdef VX_CFG_TCU_SPARSE_ENABLE
-    wire [TCU_MAX_META_BLOCK_WIDTH-1:0] wmma_sp_meta;
-`endif
 `ifdef VX_CFG_TCU_MX_ENABLE
     wire [TCU_BLOCK_CAP-1:0][31:0] mx_meta_a;
     wire [TCU_BLOCK_CAP-1:0][31:0] mx_meta_b;
