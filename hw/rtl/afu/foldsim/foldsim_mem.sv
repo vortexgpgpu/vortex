@@ -525,8 +525,6 @@ module foldsim_mem #(
     // count of writes formed; its AW may come now).
     wire [PW-1:0]  form_i   = PW'(wf_n);
     wire [BKW-1:0] aw_bkt   = bucket(64'(awaddr));
-    wire [OW-1:0]  wf_now   = form ? wf_n1 : wf_n;     // formed, this cycle's included
-    wire [OW-1:0]  wa_now   = b_push ? wa_n1 : wa_n;   // acknowledged, likewise
     // One more, one less, or the same, as one addition.
     function automatic [HCW-1:0] step(input inc, input dec);
         step = {{(HCW-1){dec & ~inc}}, inc ^ dec};
@@ -544,6 +542,9 @@ module foldsim_mem #(
     wire form     = take & new_write;
     wire rd_push  = m_rvalid & m_rready;
     wire b_push   = m_bvalid & m_bready;
+    // Writes formed and acknowledged, this cycle's included.
+    wire [OW-1:0]  wf_now   = form ? wf_n1 : wf_n;
+    wire [OW-1:0]  wa_now   = b_push ? wa_n1 : wa_n;
     assign full_wait = ~treset & ((aw_fire & (awm_live == CW'(DEPTH))) | (w_fire & (wm_count == CW'(DEPTH))));
     // SPEC 2: whether the data of the ready queue's first four slots is in, as the
     // cycle ends.
