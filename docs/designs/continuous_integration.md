@@ -395,6 +395,17 @@ Beacon has profiles for the V80 and the U55C only, and fails on any other
 | no output of a build's `interfaces` modules reached combinationally from outside the instance in more bits than its baseline | modules register their outgoing interfaces: a path that runs through a core, socket or cluster boundary is what fails routing across SLRs, and Beacon names it by port |
 | no resource of the design (`lut`, `ff`, `lutram`, `bram`, `uram`, `dsp`) more than 5 % above its baseline | area found in minutes, not in a nightly Vivado run; a memory that moves between distributed and block RAM moves two columns, and `beacon_area.txt` names each memory's placement |
 
+Beside the assertions, each build reports what levels miss: the learned
+calibration ([beacon.md §7.1](beacon.md)) scores every register from its
+levels, width, fan-out and span, and `beacon_risk.txt` lists the slowest
+predicted, with the design's predicted Fmax and its count of likely failures
+as the `p_fmax` and `risk` columns. They are recorded, not gated: held out,
+the ranking finds Vivado's near-critical registers far better than levels,
+but the Fmax is within about 7 %. A wide enable driven across an instance by
+a same-cycle lookup (the 250 MHz misses of `tensor` and `top`) ranks first
+there and in the hundreds by levels. `fpga_gate` writes every build's end
+point table (`ep.csv`), which retrains it.
+
 `interfaces` lists modules by name; their instances keep their ports through
 Beacon's mapping (`BEACON_INTERFACES` in the DUT flow), and `ports.csv`
 counts, per output port, the bits a combinational path from outside the

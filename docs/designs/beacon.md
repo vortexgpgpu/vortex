@@ -482,9 +482,9 @@ make -C hw/syn/yosys/dut om TARGET=beacon
 The third synthesis gate, beside `fpga_gate` (Vivado, nightly) and
 `asic_gate` (Yosys + OpenSTA, nightly); see
 [continuous_integration.md §3.5](continuous_integration.md). It runs Beacon on
-`fpga_gate`'s builds (`ci/testcases/logic_gate.yaml`, all but `top`, whose
-`VX_cp_core` keeps LLHD reference ports) in about four minutes, and checks
-each against `ci/baselines/synthesis/beacon/`:
+`fpga_gate`'s builds (`ci/testcases/logic_gate.yaml`; `top` as its Vortex
+core, `top_vortex`, since `VX_cp_core` keeps LLHD reference ports) in about
+four minutes, and checks each against `ci/baselines/synthesis/beacon/`:
 
 - a **unit** that gets deeper fails, by name;
 - a **new unit** at or above the fix threshold (12) fails;
@@ -498,8 +498,11 @@ each against `ci/baselines/synthesis/beacon/`:
   distributed and block RAM shows as both columns moving.
 
 A failing build names its `beacon_paths.txt`, where the failing unit is a
-heading with its paths op by op, and its `beacon_area.txt`; CI uploads them
-with the build's logs.
+heading with its paths op by op, its `beacon_area.txt`, and its
+`beacon_risk.txt`, the registers the learned calibration (§7.1) predicts
+slowest; CI uploads them with the build's logs. The calibration's Fmax and
+count of likely failures are columns of the report (`p_fmax`, `risk`), not
+gated: a wire-dominated path that levels rank low shows there first.
 
 Depth is deterministic, so the tolerance is zero. Area is as
 deterministic, but a feature adds some by design, so it has the Fmax gate's
@@ -634,9 +637,9 @@ The model is three tree ensembles: the worst slack (capped at 1 ns, the
 under 0 ns. A register never ranks safer for being deeper (a monotone
 constraint on levels). `calibrate` trains them with scikit-learn and writes
 them as plain JSON trees; `score` evaluates them in pure Python, in about
-4 s for a core. The model trained on the 13 builds below ships as
+4 s for a core. The model trained on the 28 builds below ships as
 [`hw/scripts/beacon_calibration_u55c.json`](../../hw/scripts/beacon_calibration_u55c.json);
-it applies to the U55C at 300 MHz, the target it was trained on.
+it applies to the U55C, its slacks at 300 MHz.
 
 ```bash
 ci/beacon.py score build_core/beacon hw/scripts/beacon_calibration_u55c.json \
@@ -694,8 +697,51 @@ the same RTL (it1, it2) reaches 0.80. AP for failing registers goes from
   than the top-50 mean of levels: Spearman 0.15 (lineage out) or 0.42 (DUT
   out), against 0.53. The lsuagu regression, −1.3 ns, moves it by 0.02 ns.
 
+**Retrained on the gates' DUTs.** The shipped model adds the routed
+`fpga_gate` builds of 13 DUTs (cache, core, dxa, gfx, lmem, om, raster, rtu,
+tcu, tensor, tex, vm, and `top` as its Vortex core), 11 of them at 3.333 ns
+and four at 4.0 ns, to the 13 builds above: 28 builds. Slacks at 4.0 ns are
+moved to 3.333 ns (`xilinx_ep_dump.tcl`'s reference period). Each DUT is
+held out (all its builds) and scored by a model trained on the rest:
+
+| held out | near-critical AP: levels / model | Spearman vs −slack: levels / model | Fmax: Vivado / model |
+|---|---|---|---|
+| cache | 0.61 / 0.75 | 0.54 / 0.64 | 297.3 / 277.5 |
+| core | 0.33 / 0.68 | 0.33 / 0.66 | 300.6 / 280.1 |
+| dxa | 0.56 / 0.80 | 0.41 / 0.52 | 306.0 / 289.3 |
+| gfx | 0.68 / 0.79 | 0.42 / 0.58 | 246.5 / 266.2 |
+| lmem | 0.07 / 0.32 | 0.25 / 0.35 | 308.0 / 331.3 |
+| rtu | 0.37 / 0.33 | 0.35 / 0.42 | 310.6 / 275.6 |
+| tcu | 0.55 / 0.65 | −0.01 / 0.10 | 295.2 / 265.5 |
+| tensor | 0.69 / 0.90 | 0.40 / 0.66 | 240.6 / 240.1 |
+| tex | 0.23 / 0.24 | 0.25 / 0.18 | 298.2 / 282.8 |
+| top (Vortex core) | 0.59 / 0.73 | 0.29 / 0.46 | 243.0 / 265.3 |
+| vm | 0.78 / 0.88 | 0.47 / 0.61 | 251.6 / 243.5 |
+| **mean** | **0.50 / 0.64** | **0.34 / 0.47** | **±7 %** |
+
+(om and raster have no near-critical register.) Before this retrain, the
+shipped model already put the registers that failed `tensor` and `top` at
+250 MHz first: of 2884 and 2574 registers, the tensor socket arbiter's
+output buffer ranks first by P(fail), and top's flush-arbiter output buffer
+first and second by predicted slack. Both are wide enables driven across an
+instance by a same-cycle lookup (an L2 tag compare, a TLB match), which
+levels rank in the hundreds.
+
+The design's Fmax, from its slowest predicted register, is within about 7 %
+of Vivado's held out, misses top's failure, and on the core lineage moves
+by nothing where Vivado moved by +4.5 % (it1) or −27 % (lsuagu, held out).
+
 So the model is a ranking for where to look first, not a gate. `diff` and
-`logic_gate` keep gating on levels.
+`logic_gate` keep gating on levels; `logic_gate` records the model's Fmax
+and the count of registers at P(fail) ≥ 0.5 (`p_fmax`, `risk`, not gated)
+and writes each build's 40 lowest predicted slacks to `beacon_risk.txt`.
+
+**More builds.** The DUT flow writes every routed build's end point table
+(`ep.csv`, at 3.333 ns, through `hw/scripts/xilinx_ep_dump.tcl`), and
+`fpga_gate` uploads it. A build's Beacon run is regenerated from its commit
+(Beacon is deterministic), so each nightly `fpga_gate` adds a build of every
+DUT to train on; `calibrate --holdout` is the measure of whether the Fmax
+has become good enough to gate.
 
 ### 7.2 Area
 
@@ -811,8 +857,9 @@ Beacon cannot answer, run on a checkpoint
   levels on every held-out gate, so Beacon has none. Route-dominated
   failures with few levels are invisible to it: recall at ≥ 12 levels is
   0.13–0.57. The learned calibration (§7.1) ranks near-critical registers
-  better from width, span and fan-out, but it is trained on three U55C DUTs
-  and is advisory.
+  better from width, span and fan-out (held out: AP 0.64 against 0.50 over
+  11 DUTs), and `logic_gate` reports it, but its Fmax is within about 7 %
+  of Vivado's, so it is advisory.
 - **Retiming and packing.** Vivado retimes and packs across what the RTL
   separates: a popcount, its adders and a compare become a LUT6 tree with a
   retimed register inside. Beacon's depths are RTL stage depths, about

@@ -26,8 +26,8 @@
 #   builds:  what ci/logic_gate.py reads -- the build list. The pytest loader
 #            ignores this key.
 #
-# The builds are fpga_gate.yaml's, DUT for DUT and config for config (all but
-# `top`, see below), so where both gates run a DUT they measure the same RTL, and a unit this gate flags
+# The builds are fpga_gate.yaml's, DUT for DUT and config for config (`top` as
+# its Vortex core, see below), so where both gates run a DUT they measure the same RTL, and a unit this gate flags
 # can be read against the Fmax gate's critical paths. clock_mhz is the Fmax
 # gate's target, recorded for that comparison; Beacon's thresholds are
 # 300 MHz ones.
@@ -109,9 +109,21 @@ builds:
   clock_mhz: 300
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_A_ENABLE
 
-# fpga_gate's `top` is not measured: CIRCT's import leaves the command
-# processor's AXI-Lite response ports (VX_cp_core) as LLHD references, which
-# no HW/Comb/Seq tool reads. It joins this list when the import lowers them.
+# fpga_gate's `top` at its config, without the AFU shell: CIRCT's import
+# leaves the command processor's AXI-Lite response ports (VX_cp_core) as LLHD
+# references, which no HW/Comb/Seq tool reads. The Vortex core of it closes the
+# same cross-module paths (socket arbiters, socket MMU, cluster mem network)
+# the per-unit DUTs cut at their ports.
+- id: top_vortex
+  group: core
+  dut: vortex
+  clock_mhz: 250
+  interfaces: VX_core VX_socket VX_cluster
+  configs: >-
+    -DVX_CFG_NUM_THREADS=4 -DVX_CFG_NUM_WARPS=4
+    -DVX_CFG_NUM_CORES=2
+    -DVX_CFG_EXT_A_ENABLE -DVX_CFG_VM_ENABLE
+    -DVX_CFG_DCACHE_LATENCY=3
 
 # --- dxa ---------------------------------------------------------------------
 

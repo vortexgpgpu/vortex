@@ -824,6 +824,7 @@ CAL_OPS = ('lut', 'carry', 'cmp', 'lutram', 'bram', 'dsp')
 CAL_KINDS = {'d': 'd', 'wd': 'wd', 'wa': 'wctl', 'we': 'wctl', 'wm': 'wctl',
              'ra': 'rd', 're': 'rd'}
 CAL_NEAR = 0.3     # ns: the near-critical set the model ranks
+CAL_PERIOD = 3.333  # ns: the clock the end point tables' slacks are at
 CAL_CENSOR = 1.0   # ns: a gate's ep.csv lists end points under 1 ns only
 
 
@@ -1078,7 +1079,7 @@ def cmd_calibrate(args):
     reg, near, fail = fit(builds)
     model = dict(
         features=list(CAL_FEATURES), path_levels=args.path_levels, near=CAL_NEAR,
-        censor=CAL_CENSOR, sklearn=sklearn.__version__,
+        censor=CAL_CENSOR, period_ns=CAL_PERIOD, sklearn=sklearn.__version__,
         builds=[dict(run=b['run'], group=b['group'], registers=len(b['y']),
                      failing=int((b['y'] < 0).sum())) for b in builds],
         slack=hgb_json(reg, 'identity'), p_near=hgb_json(near, 'logistic'),
@@ -1089,23 +1090,32 @@ def cmd_calibrate(args):
           f'{len(builds)} builds)')
 
 
-def cmd_score(args):
-    """Rank a run's registers by the calibrated near-critical probability,
-    with the predicted worst slack. Advisory: the gates stay on levels."""
-    with open(args.model) as f:
-        model = json.load(f)
-    feats, _, _ = register_features(args.run_dir, model['path_levels'])
+def score_run(run_dir, model):
+    """(P(near), predicted slack, P(fail), levels, register) for every register
+    of a run, near-critical first; the slack is at the model's period. Also
+    whether registers at the model's path depth lack their path."""
+    feats, _, _ = register_features(run_dir, model['path_levels'])
     names = model['features']
-    if any(math.isnan(x['p_lut']) for x in feats.values()
-           if x['lev'] >= model['path_levels']):
-        print(f'warning: registers at or above {model["path_levels"]} levels lack '
-              f'a path in paths.jsonl; rerun with path-levels={model["path_levels"]}')
+    pathless = any(math.isnan(x['p_lut']) for x in feats.values()
+                   if x['lev'] >= model['path_levels'])
     rows = []
     for k, x in feats.items():
         v = [x[n] for n in names]
         rows.append((hgb_predict(model['p_near'], v), hgb_predict(model['slack'], v),
                      hgb_predict(model['p_fail'], v), x['lev'], k))
     rows.sort(key=lambda r: (-r[0], r[1]))
+    return rows, pathless
+
+
+def cmd_score(args):
+    """Rank a run's registers by the calibrated near-critical probability,
+    with the predicted worst slack."""
+    with open(args.model) as f:
+        model = json.load(f)
+    rows, pathless = score_run(args.run_dir, model)
+    if pathless:
+        print(f'warning: registers at or above {model["path_levels"]} levels lack '
+              f'a path in paths.jsonl; rerun with path-levels={model["path_levels"]}')
     low = sorted(r[1] for r in rows)[:50]
     print(f'{len(rows)} registers; P(slack < {model["near"]} ns) >= 0.5: '
           f'{sum(r[0] >= 0.5 for r in rows)}; mean of the 50 lowest predicted '

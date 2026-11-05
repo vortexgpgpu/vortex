@@ -130,6 +130,7 @@ jobs:
             build32_fpga_gate/hw/syn/xilinx/dut/fpga_gate_*/build.log
             build32_fpga_gate/hw/syn/xilinx/dut/fpga_gate_*/*.rpt
             build32_fpga_gate/hw/syn/xilinx/dut/fpga_gate_*/synth_summary.csv
+            build32_fpga_gate/hw/syn/xilinx/dut/fpga_gate_*/ep.csv
           # A build that dies in elaboration leaves only its build.log, so a
           # path matching nothing turns a red gate into a red X with no evidence.
           if-no-files-found: error

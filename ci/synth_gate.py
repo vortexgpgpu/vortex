@@ -488,11 +488,12 @@ class Beacon(Tool):
 
     area_metrics = ("lut", "ff", "lutram", "bram", "uram", "dsp")
     metrics = ("max_levels", "deep_endpoints", "watch_endpoints",
-               "endpoints") + area_metrics + ("build_time_s",)
+               "endpoints") + area_metrics + ("pred_fmax_mhz", "risk_endpoints",
+                                              "build_time_s")
     gated = ("max_levels",) + area_metrics
     integral = ("max_levels", "deep_endpoints", "watch_endpoints",
                 "endpoints", "lut", "ff", "lutram", "uram", "dsp",
-                "build_time_s")
+                "risk_endpoints", "build_time_s")
     key_metric = "max_levels"
     summary = "beacon_summary.csv"
     tolerance = 0.0
@@ -503,7 +504,9 @@ class Beacon(Tool):
                ("ends", "endpoints", "%d", 9),
                ("lut", "lut", "%d", 9), ("ff", "ff", "%d", 9),
                ("lutram", "lutram", "%d", 9), ("bram", "bram", "%g", 8),
-               ("uram", "uram", "%d", 6), ("dsp", "dsp", "%d", 6))
+               ("uram", "uram", "%d", 6), ("dsp", "dsp", "%d", 6),
+               ("p_fmax", "pred_fmax_mhz", "%.1f", 8),
+               ("risk", "risk_endpoints", "%d", 6))
 
     # Elaboration and mapping of the widest DUTs; the level count itself is
     # seconds.
@@ -529,6 +532,10 @@ class Beacon(Tool):
     UNITS = "beacon_units.json"
     PATHS = "beacon_paths.txt"
     AREA = "beacon_area.txt"
+    RISK = "beacon_risk.txt"
+    # The learned calibration per device family (docs/designs/beacon.md 7.1).
+    CALIBRATIONS = {"xcu55c": "beacon_calibration_u55c.json"}
+    RISK_ROWS = 40
 
     def env(self, args):
         return {"circt": tool_version("circt-verilog", "--version",
@@ -575,11 +582,50 @@ class Beacon(Tool):
                 doc = json.load(fh)
         except (OSError, ValueError):
             return {}
-        return {"units": doc.get("units", {}),
-                "interfaces": doc.get("interfaces", {}),
-                "deepest_paths": doc.get("deepest_paths", []),
-                "fix_levels": doc.get("fix_levels"),
-                "watch_levels": doc.get("watch_levels")}
+        out = {"units": doc.get("units", {}),
+               "interfaces": doc.get("interfaces", {}),
+               "deepest_paths": doc.get("deepest_paths", []),
+               "fix_levels": doc.get("fix_levels"),
+               "watch_levels": doc.get("watch_levels")}
+        out.update(self.risk(work))
+        return out
+
+    def risk(self, work):
+        """The learned calibration's Fmax for the design, the slowest register's,
+        and its registers likely to fail, written to beacon_risk.txt. Levels
+        miss what wires decide (a wide enable driven across instances); the
+        calibration reads width, fan-out and span as well, and ranks a design's
+        registers far better than levels do. Advisory: its Fmax is not gated."""
+        device = os.environ.get("DEVICE", "xcu55c-fsvh2892-2L-e")
+        cal = next((f for d, f in self.CALIBRATIONS.items()
+                    if device.startswith(d)), None)
+        run = os.path.join(work, "beacon")
+        if cal is None or not os.path.isdir(run):
+            return {}
+        import beacon
+        with open(os.path.join(source_root(), "hw", "scripts", cal)) as fh:
+            model = json.load(fh)
+        rows, pathless = beacon.score_run(run, model)
+        if not rows:
+            return {}
+        period = model.get("period_ns", beacon.CAL_PERIOD)
+        rows.sort(key=lambda r: r[1])
+        fmax = 1000.0 / (period - rows[0][1])
+        risky = sum(1 for r in rows if r[2] >= 0.5)
+        with open(os.path.join(work, self.RISK), "w") as fh:
+            fh.write("predicted Fmax %.1f MHz (slowest register, advisory); %d of %d "
+                     "registers P(fail) >= 0.5 at %.3f ns; model %s\n"
+                     % (fmax, risky, len(rows), period, cal))
+            if pathless:
+                fh.write("warning: registers at %d levels or more lack a path; "
+                         "the scores of those are partial\n"
+                         % model["path_levels"])
+            fh.write("\n%8s %7s %7s %4s  register\n"
+                     % ("fmax", "slack", "P(fail)", "lv"))
+            for p_near, slack, p_fail, lv, reg in rows[:self.RISK_ROWS]:
+                fh.write("%8.1f %+7.3f %7.2f %4d  %s\n"
+                         % (1000.0 / (period - slack), slack, p_fail, lv, reg))
+        return {"pred_fmax_mhz": round(fmax, 1), "risk_endpoints": risky}
 
     def incomplete(self, metrics):
         return metrics.get("units") is None
@@ -628,7 +674,8 @@ class Beacon(Tool):
         # failing unit is a heading there; the area by unit and each memory's
         # placement.
         return [p for p in (os.path.join(work, self.PATHS),
-                            os.path.join(work, self.AREA))
+                            os.path.join(work, self.AREA),
+                            os.path.join(work, self.RISK))
                 if os.path.exists(p)]
 
     def describe(self, m):

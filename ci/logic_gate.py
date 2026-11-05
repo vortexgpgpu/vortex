@@ -16,7 +16,9 @@ ci/synth_gate.py; this entry point only pins the tool.
   Baselines : ci/baselines/synthesis/beacon/<group>.json   (last accepted levels)
   Builds    : hw/syn/xilinx/dut/logic_gate_<dut>          (no Vivado)
   Metrics   : <build>/beacon_summary.csv, beacon_units.json, beacon_area.txt
-              (written by hw/syn/xilinx/dut's `beacon` target)
+              (written by hw/syn/xilinx/dut's `beacon` target), and
+              beacon_risk.txt: the learned calibration's slowest registers
+              and its Fmax, reported, not gated
 
 It needs CIRCT and foldsim (ci/toolchain_install.sh --circt --foldsim); the
 Xilinx environment is not used.
