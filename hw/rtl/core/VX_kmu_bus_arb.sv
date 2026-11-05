@@ -174,7 +174,14 @@ module VX_kmu_bus_arb import VX_gpu_pkg::*; #(
         // encoder (the ready outputs at or after rr_ptr first, then any): linear
         // in NUM_OUTPUTS, where a scan of the N rotations is quadratic.
         wire [SEL_O-1:0] rr_base = (32'(rr_ptr) >= NUM_OUTPUTS) ? SEL_O'(32'(rr_ptr) - NUM_OUTPUTS) : rr_ptr;
-        wire [NUM_OUTPUTS-1:0] rr_upper = out_ready & ~((NUM_OUTPUTS'(1) << rr_base) - NUM_OUTPUTS'(1));
+        wire [NUM_OUTPUTS-1:0] rr_upper;
+        for (genvar o = 0; o < NUM_OUTPUTS; ++o) begin : g_rr_upper
+            if (o == (1 << SEL_O) - 1) begin : g_last  // at or after any rr_base
+                assign rr_upper[o] = out_ready[o];
+            end else begin : g_cmp
+                assign rr_upper[o] = out_ready[o] && (rr_base <= SEL_O'(o));
+            end
+        end
         wire [SEL_O-1:0] rr_upper_idx, rr_any_idx;
         wire rr_upper_valid, rr_any_valid;
 
