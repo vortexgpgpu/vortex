@@ -223,8 +223,9 @@ VMEM_PORTS = python3 $(SRC_DIR)/vmem_ports.py --sim-vh $(GEN_DIR)/foldsim_sim.vh
 # foldsim's design-independent kernel flow: given FOLDSIM_HOME (a foldsim tree)
 # and FOLDSIM_MANIFEST, the kernel header, the kernel's top (the control
 # endpoint bound by the manifest's [platform.control]), its source list (the
-# shell in foldsim's rtl/kernel; FOLDSIM_THREADED: the threaded endpoint of
-# folded memory ports) and the linker config come from foldsim_flow.py. Vortex
+# shell in foldsim's rtl/kernel; the threaded endpoint of folded memory ports
+# from FOLDSIM_THREADED, else FOLDSIM_RTL_DIR, a portfold_gen.sh snapshot) and
+# the linker config come from foldsim_flow.py. Vortex
 # keeps its sources, its manifest and its target wrapper (target/foldsim_target.sv).
 FOLDSIM_HOME ?=
 ifneq ($(FOLDSIM_HOME),)
