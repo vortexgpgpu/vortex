@@ -1754,6 +1754,11 @@ module foldsim_mem_bank #(
                     ar_pend_f  <= ar_fire_c;
                     ar_pend_id <= ar_id;
                     {ar_pend_bank, ar_pend_row} <= decode(ar_addr[29:5]);
+                    // SPEC 0/1's R registers are unused here (cur_r_valid stays 0); held at 0, never left undriven.
+                    cur_r_slot <= '0;
+                    cur_r_id   <= '0;
+                    cr1_slot   <= '0;
+                    cr1_id     <= '0;
                 end else if (SPEC != 0) begin : release_spec_
                     // This cycle's R is the candidate the last cycle's fire
                     // chose; then the next cycle's candidates, from the ready
@@ -1810,6 +1815,12 @@ module foldsim_mem_bank #(
                     end
                     slots_used <= slots_used + (SW+1)'(ar_fire) - (SW+1)'(r_fire);
                 end
+                // SPEC 2's candidate slots and ids are unused otherwise (cv stays 0); held at 0, never left undriven.
+                if (SPEC != 2)
+                    for (integer x = 0; x < 4; ++x) begin
+                        cs[x] <= '0;
+                        ci[x] <= '0;
+                    end
                 begin : release_b_
                     reg b_load;
                     b_load = (~cur_b_valid | b_fire) & (af_count != 0);
