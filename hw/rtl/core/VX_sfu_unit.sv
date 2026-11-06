@@ -68,7 +68,7 @@ import VX_raster_pkg::*;
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam BLOCK_SIZE   = 1;
     localparam NUM_LANES    = `VX_CFG_NUM_SFU_LANES;
-    localparam PE_COUNT     = 2 + `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_OM_ENABLED + `VX_CFG_EXT_RASTER_ENABLED + `VX_CFG_EXT_RTU_ENABLED;
+    localparam PE_COUNT     = 2 + `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_OM_ENABLED + `VX_CFG_EXT_RASTER_ENABLED + `VX_CFG_EXT_RTU_ENABLED + `VX_CFG_EXT_MUFU_ENABLED;
     localparam PE_SEL_BITS  = `CLOG2(PE_COUNT);
     localparam PE_IDX_WCTL  = 0;
     localparam PE_IDX_CSRS  = 1;
@@ -86,6 +86,9 @@ import VX_raster_pkg::*;
 `endif
 `ifdef VX_CFG_EXT_RTU_ENABLE
     localparam PE_IDX_RTUW  = 2 + `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_OM_ENABLED + `VX_CFG_EXT_RASTER_ENABLED;
+`endif
+`ifdef VX_CFG_EXT_MUFU_ENABLE
+    localparam PE_IDX_MUFU  = 2 + `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_OM_ENABLED + `VX_CFG_EXT_RASTER_ENABLED + `VX_CFG_EXT_RTU_ENABLED;
 `endif
 
     VX_execute_if #(
@@ -144,6 +147,11 @@ import VX_raster_pkg::*;
     `ifdef VX_CFG_EXT_RTU_ENABLE
         if (per_block_execute_if[0].data.op_type == INST_SFU_RTUW) begin
             pe_select = PE_SEL_BITS'(PE_IDX_RTUW);
+        end
+    `endif
+    `ifdef VX_CFG_EXT_MUFU_ENABLE
+        if (per_block_execute_if[0].data.op_type == INST_SFU_MUFU) begin
+            pe_select = PE_SEL_BITS'(PE_IDX_MUFU);
         end
     `endif
     end
@@ -288,6 +296,18 @@ import VX_raster_pkg::*;
         .rtu_bus_if (rtu_bus_if),
         .sched_unlock_if (sched_unlock_if)
     `endif
+    );
+`endif
+
+`ifdef VX_CFG_EXT_MUFU_ENABLE
+    VX_mufu_unit #(
+        .INSTANCE_ID (`SFORMATF(("%s-mufu", INSTANCE_ID))),
+        .NUM_LANES   (NUM_LANES)
+    ) mufu_unit (
+        .clk        (clk),
+        .reset      (reset),
+        .execute_if (pe_execute_if[PE_IDX_MUFU]),
+        .result_if  (pe_result_if[PE_IDX_MUFU])
     );
 `endif
 

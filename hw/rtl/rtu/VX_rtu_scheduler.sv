@@ -61,6 +61,10 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     input  wire clk,
     input  wire reset,
 
+`ifdef PERF_ENABLE
+    output rtu_sched_events_t perf_events,
+`endif
+
     // ── slot launch (from the core's fill engine) ─────────────────────
     // slot_start arms the slot (mask + warp-uniform ray scalars) before any of
     // its rays land; each lane's ray then arrives on ray_wr, which is also that
@@ -1908,6 +1912,11 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         ("%t: rtu walk deeper than %0d levels", $time, (1 << LVLW) - 1))
     assign path_wlvl     = path_wlvl_r;
     assign path_wdata    = path_wdata_r;
+
+`ifdef PERF_ENABLE
+    assign perf_events.box_test = box_feed || box_feed_raw;
+    assign perf_events.tri_test = tri_feed;
+`endif
     assign mem_req_valid = x_valid && mem_issue;
     assign mem_req_addr  = structaddr_q + (ADDRW'(mem_fslot) << RTU_LINE_SEL_BITS);
     assign mem_req_tag   = sel_q;

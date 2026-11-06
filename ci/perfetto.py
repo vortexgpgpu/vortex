@@ -14,7 +14,7 @@
 # limitations under the License.
 
 """
-vortex_perfetto.py
+perfetto.py
 
 Convert Vortex GPU RTL or SimX log traces into a Perfetto-compatible trace
 (Chrome Trace JSON).
@@ -30,13 +30,13 @@ Design goals (per Vortex project requirements)
 
 Usage examples
   # SimX (default), compressed:
-  python3 vortex_perfetto.py run_simx.log -c -o vortex.perfetto.json.gz
+  python3 ci/perfetto.py run_simx.log -c -o vortex.perfetto.json.gz
 
   # RTL sim:
-  python3 vortex_perfetto.py run.log -t rtlsim -c -o vortex.perfetto.json.gz
+  python3 ci/perfetto.py run.log -t rtlsim -c -o vortex.perfetto.json.gz
 
   # Limit export to a cycle window:
-  python3 vortex_perfetto.py run.log -t rtlsim --cycle-min 10000 --cycle-max 20000 -c -o win.json.gz
+  python3 ci/perfetto.py run.log -t rtlsim --cycle-min 10000 --cycle-max 20000 -c -o win.json.gz
 
 Open in Perfetto UI
   - Web UI: https://ui.perfetto.dev (load the .json or .json.gz)

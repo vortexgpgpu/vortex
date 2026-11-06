@@ -99,7 +99,7 @@ public:
 	virtual ~Impl() {}
 
 	void reset() {
-		perf_stats_ = PerfStats();
+		// perf_stats_ survives: the MPM counters run from device reset.
 #if VX_CFG_EXT_A_ENABLED
 		amo_unit_.reset();
 		std::fill(amo_busy_.begin(), amo_busy_.end(), 0);

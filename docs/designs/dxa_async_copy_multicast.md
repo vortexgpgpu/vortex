@@ -58,10 +58,10 @@ There is no software→global path; DXA is GMEM-read / LMEM-write only.
   `VX_CFG_NUM_DXA_UNITS = max(1, ceil(NUM_CORES/8))`,
   `VX_CFG_DXA_QUEUE_SIZE = 16`, `VX_CFG_DXA_MAX_INFLIGHT = 8`,
   `VX_DCR_DXA_DESC_COUNT = 16`.
-- **Perf CSRs** `[csr_mpm_dxa]` 0xB03–0xB07 (transfers, gmem_reads,
-  gmem_dedup, lmem_writes, gmem_latency),
-  `VX_DCR_MPM_CLASS_DXA = 6`
-  ([`VX_types.toml:557-568`](../../VX_types.toml#L557)).
+- **Perf CSRs** `[csr_mpm_dxa]` 0xB03–0xB08 (transfers, gmem_reads,
+  gmem_dedup, lmem_writes, gmem_latency, noslot_stalls),
+  `VX_DCR_MPM_CLASS_DXA = 16`
+  ([`VX_types.toml:767-780`](../../VX_types.toml#L767)).
 - **Cluster dispatch** (multicast prerequisite):
   `VX_CSR_CTA_CLUSTER_SIZE = 0xCE0`,
   `VX_DCR_KMU_CLUSTER_DIM_{X,Y,Z}`

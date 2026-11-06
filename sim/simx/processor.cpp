@@ -331,9 +331,7 @@ void ProcessorImpl::forward_delegated_launch() {
 
 void ProcessorImpl::reset() {
   SimPlatform::instance().reset();
-  perf_mem_reads_ = 0;
-  perf_mem_writes_ = 0;
-  perf_mem_latency_ = 0;
+  // The perf_mem_* counters survive: the MPM counters run from device reset.
   perf_mem_pending_reads_ = 0;
   is_cycle_initialized_ = false;
 }

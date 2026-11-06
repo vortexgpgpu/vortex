@@ -97,7 +97,7 @@ SECTIONS
   .gcc_except_table   : ONLY_IF_RW { *(.gcc_except_table .gcc_except_table.*) }
   .exception_ranges   : ONLY_IF_RW { *(.exception_ranges*) }
   /* Thread Local Storage sections  */
-  .tdata	  :
+  .tdata	  : ALIGN(8)
    {
      PROVIDE_HIDDEN (__tdata_start = .);
      *(.tdata .tdata.* .gnu.linkonce.td.*)
@@ -115,8 +115,10 @@ SECTIONS
   /* Per-hart stride for the TLS image, which spans .tdata + .tbss.
      vx_start.S places each hart's TLS block this far apart; using
      __tbss_size alone made adjacent harts' images overlap by
-     __tbss_offset bytes. __tbss_offset and __tbss_size are both
-     section-aligned, so their sum keeps the image alignment. */
+     __tbss_offset bytes. .tdata is aligned like .tbss: when it is empty
+     the linker drops it and the TLS image starts at .tbss, so an unaligned
+     __tdata_start would skew __tbss_offset and the stride off the 8-byte
+     boundary that every hart's tp must keep. */
   PROVIDE(__tls_block_size = __tbss_offset + __tbss_size);
   .preinit_array    :
   {
