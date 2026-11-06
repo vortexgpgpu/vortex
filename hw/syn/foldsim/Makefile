@@ -297,7 +297,9 @@ $(IP_DIR)/component.xml: $(KERNEL_SRCS) $(KERNEL_VH) $(OOC_XDC) $(wildcard $(FOL
 
 # foldsim --slr-groups writes a floorplan that keeps each threaded copy whole
 # in one SLR; the implementation applies it before opt_design (floorplan.tcl).
-FLOORPLAN_ENV := $(if $(findstring --slr-groups,$(FOLDSIM_FLAGS)),FOLDSIM_FLOORPLAN=$(GEN_DIR)/foldsim_floorplan.tcl)
+# The option may be the flags' or the manifest's: the generated floorplan
+# says it was given.
+FLOORPLAN_ENV = $(if $(or $(findstring --slr-groups,$(FOLDSIM_FLAGS)),$(wildcard $(GEN_DIR)/foldsim_floorplan.tcl)),FOLDSIM_FLOORPLAN=$(GEN_DIR)/foldsim_floorplan.tcl)
 
 # The kernel alone, out of context at FOLDSIM_FREQ: synthesis with global
 # retiming, placement and routing, without the shell, its reports in
