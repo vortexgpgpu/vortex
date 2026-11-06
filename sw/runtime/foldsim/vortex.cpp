@@ -34,6 +34,7 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <algorithm>
 #include <chrono>
 #include <cstring>
 #include <map>
@@ -447,8 +448,73 @@ public:
       return -1;
     if (mem_error(s))
       return -1;
+    if (this->settle() != 0)
+      return -1;
     open_ = true;
     return 0;
+  }
+
+  // After a reset Vortex's caches invalidate their lines, a set per cycle,
+  // and hold every request until they have. The host's next command comes as
+  // many target cycles later as the simulator runs in the host's time: fewer
+  // the slower it simulates (bubbles, a large II, state off chip), so a
+  // kernel started inside the invalidation would wait for it and its cycles
+  // would depend on the host. The target first runs past it:
+  // VORTEX_FOLDSIM_SETTLE=<target cycles>, by default twice the most sets a
+  // cache of this machine has in a bank plus the reset's spread.
+  static uint64_t cache_sets(uint64_t size, uint64_t line, uint64_t ways, uint64_t banks) {
+    const uint64_t d = line * ways * banks;
+    return d ? size / d : 0;
+  }
+  static uint64_t settle_default() {
+    uint64_t sets = 0;
+#if defined(VX_CFG_ICACHE_SIZE) && defined(VX_CFG_ICACHE_NUM_WAYS) && defined(VX_CFG_ICACHE_NUM_BANKS) && defined(VX_CFG_L1_LINE_SIZE)
+    sets = std::max(sets, cache_sets(VX_CFG_ICACHE_SIZE, VX_CFG_L1_LINE_SIZE, VX_CFG_ICACHE_NUM_WAYS,
+                                     VX_CFG_ICACHE_NUM_BANKS));
+#endif
+#if defined(VX_CFG_DCACHE_SIZE) && defined(VX_CFG_DCACHE_NUM_WAYS) && defined(VX_CFG_DCACHE_NUM_BANKS) && defined(VX_CFG_DCACHE_LINE_SIZE)
+    sets = std::max(sets, cache_sets(VX_CFG_DCACHE_SIZE, VX_CFG_DCACHE_LINE_SIZE, VX_CFG_DCACHE_NUM_WAYS,
+                                     VX_CFG_DCACHE_NUM_BANKS));
+#endif
+#if defined(VX_CFG_L2_ENABLE) && defined(VX_CFG_L2_SIZE) && defined(VX_CFG_L2_NUM_WAYS) && defined(VX_CFG_L2_NUM_BANKS) && defined(VX_CFG_L2_LINE_SIZE)
+    sets = std::max(sets, cache_sets(VX_CFG_L2_SIZE, VX_CFG_L2_LINE_SIZE, VX_CFG_L2_NUM_WAYS,
+                                     VX_CFG_L2_NUM_BANKS));
+#endif
+#if defined(VX_CFG_L3_ENABLE) && defined(VX_CFG_L3_SIZE) && defined(VX_CFG_L3_NUM_WAYS) && defined(VX_CFG_L3_NUM_BANKS) && defined(VX_CFG_L3_LINE_SIZE)
+    sets = std::max(sets, cache_sets(VX_CFG_L3_SIZE, VX_CFG_L3_LINE_SIZE, VX_CFG_L3_NUM_WAYS,
+                                     VX_CFG_L3_NUM_BANKS));
+#endif
+    return sets ? 2 * sets + 256 : 4096;
+  }
+  int settle() {
+    uint64_t cycles = settle_default();
+    if (const char* e = getenv("VORTEX_FOLDSIM_SETTLE")) {
+      char* end = nullptr;
+      cycles = strtoull(e, &end, 0);
+      if (e[0] == '\0' || *end != '\0') {
+        fprintf(stderr, "[VXDRV] VORTEX_FOLDSIM_SETTLE must be a count of target cycles (got '%s')\n", e);
+        return -1;
+      }
+    }
+    const uint64_t from = read64(FOLDSIM_REG_TCYCLES_LO);
+    uint64_t last = from;
+    auto last_progress = std::chrono::steady_clock::now();
+    for (;;) {
+      if (failed_)
+        return -1;
+      const uint64_t now = read64(FOLDSIM_REG_TCYCLES_LO);
+      if (now - from >= cycles) {
+        poll_backoff(false);
+        return 0;
+      }
+      if (now != last) {
+        last = now;
+        last_progress = std::chrono::steady_clock::now();
+      } else if (elapsed_s(last_progress) > control_timeout_s_) {
+        return fail("the target stopped advancing while it settled after its reset");
+      }
+      poll_backoff(true);
+    }
   }
 
   // ----- CP register channel -----
@@ -697,7 +763,7 @@ private:
                 who, (unsigned long)reads, (unsigned long)st[FOLDSIM_MEM_STAT_WRITES],
                 (unsigned long)st[FOLDSIM_MEM_STAT_HITS], (unsigned long)st[FOLDSIM_MEM_STAT_MISSES],
                 (unsigned long)st[FOLDSIM_MEM_STAT_CONFLICTS],
-                reads ? double(st[FOLDSIM_MEM_STAT_LATENCY]) / double(reads) : 0.0,
+                reads ? double(int64_t(st[FOLDSIM_MEM_STAT_LATENCY])) / double(reads) : 0.0,  // signed: see the progress print
                 (unsigned long)st[FOLDSIM_MEM_STAT_REFRESHES], (unsigned long)st[FOLDSIM_MEM_STAT_FULL]);
       }
     }
@@ -858,7 +924,7 @@ private:
     };
     h.vortex_start = [this]() {
       if (!failed_ && command(FOLDSIM_CMD_START, 0, 0) == 0)
-        launch_start_ = std::chrono::steady_clock::now();
+        launch_start_ = last_progress_print_ = std::chrono::steady_clock::now();
     };
     // A failed device reads idle, so the launch ends; the access after it
     // reports the failure.
@@ -873,6 +939,78 @@ private:
                  "the simulation is stopped", launch_timeout_s_);
         fail(msg);
         return false;
+      }
+      if (busy && progress_s_ > 0 && elapsed_s(last_progress_print_) >= progress_s_) {
+        last_progress_print_ = std::chrono::steady_clock::now();
+        if (!progress_config_printed_) {
+          // Once: the memory model's configuration as the device holds it, to compare with what was written.
+          progress_config_printed_ = true;
+          uint32_t v[7] = {};
+          const uint32_t regs[7] = {FOLDSIM_REG_MEM_CLOCK, FOLDSIM_REG_MEM_LATENCY, FOLDSIM_REG_MEM_QUEUE,
+                                    FOLDSIM_REG_MEM_GEOM, FOLDSIM_REG_MEM_WMARK, FOLDSIM_REG_MEM_REFI,
+                                    FOLDSIM_REG_MEM_RFC};
+          for (int i = 0; i < 7; ++i)
+            transport_.reg_read(regs[i], &v[i]);
+          std::string t;
+          for (uint32_t i = 0; i < FOLDSIM_MEM_NUM_TIMINGS; ++i) {
+            uint32_t x = 0;
+            transport_.reg_read(FOLDSIM_REG_MEM_TIMING(i), &x);
+            t += " " + std::to_string(x);
+          }
+          printf("[VXDRV] memory model as held: clock 0x%x latency %u queue 0x%x geom 0x%x wmark 0x%x refi %u rfc %u "
+                 "refresh %u; timings%s\n", v[0], v[1], v[2], v[3], v[4], v[5], v[6], refresh_, t.c_str());
+        }
+        const uint64_t t = read64(FOLDSIM_REG_TCYCLES_LO), hc = read64(FOLDSIM_REG_HCYCLES_LO);
+        std::string ports;
+        for (uint32_t p = 0; p < mem_ports_; ++p) {
+          char b[96];
+          // The latency statistic adds a read's completion cycle and subtracts its issue cycle (foldsim_mem_bank
+          // stat_latency): mid-launch it is the completed reads' latency sum minus the issue cycles of the reads in
+          // flight, negative while many are -- a signed value, printed as one (as unsigned it read 1.8e19).
+          snprintf(b, sizeof(b), " p%u %llu/%llu full %llu lat %lld", p,
+                   (unsigned long long)read64(FOLDSIM_REG_MEM_STATS(p, FOLDSIM_MEM_STAT_READS)),
+                   (unsigned long long)read64(FOLDSIM_REG_MEM_STATS(p, FOLDSIM_MEM_STAT_WRITES)),
+                   (unsigned long long)read64(FOLDSIM_REG_MEM_STATS(p, FOLDSIM_MEM_STAT_FULL)),
+                   (long long)(int64_t)read64(FOLDSIM_REG_MEM_STATS(p, FOLDSIM_MEM_STAT_LATENCY)));
+          ports += b;
+        }
+        // VORTEX_FOLDSIM_AXI_STATS: also the device-memory telemetry (FOLDSIM_REG_MEM_AXI), on images that have it.
+        std::string axi;
+        const bool axi_stats = getenv("VORTEX_FOLDSIM_AXI_STATS") != nullptr;
+        for (uint32_t p = 0; axi_stats && p < mem_ports_ && p < 24; ++p) {
+          uint32_t v[FOLDSIM_MEM_NUM_AXI] = {};
+          for (uint32_t i = 0; i < FOLDSIM_MEM_NUM_AXI; ++i)
+            transport_.reg_read(FOLDSIM_REG_MEM_AXI(p, i), &v[i]);
+          char b[400];
+          snprintf(b, sizeof(b), "\n[VXDRV]   p%u AR %u R %u AW %u W %u B %u | no-R-while-reading %u, R-not-taken %u | "
+                   "queued %u, reads in memory %u, writes in memory %u, write data %u", p,
+                   v[FOLDSIM_MEM_AXI_AR], v[FOLDSIM_MEM_AXI_R], v[FOLDSIM_MEM_AXI_AW], v[FOLDSIM_MEM_AXI_W],
+                   v[FOLDSIM_MEM_AXI_B], v[FOLDSIM_MEM_AXI_R_STARVE], v[FOLDSIM_MEM_AXI_R_WAIT],
+                   v[FOLDSIM_MEM_AXI_OCC] & 0xff, (v[FOLDSIM_MEM_AXI_OCC] >> 8) & 0xff,
+                   (v[FOLDSIM_MEM_AXI_OCC] >> 16) & 0xff, v[FOLDSIM_MEM_AXI_OCC] >> 24);
+          axi += b;
+          // Why the port's target cycle has not finished (reads zero on images without the word).
+          uint32_t w = 0;
+          transport_.reg_read(FOLDSIM_REG_MEM_DBG(p), &w);
+          snprintf(b, sizeof(b), "\n[VXDRV]   p%u stall-reason 0x%08x: r_ok %u bank_done %u have_all %u done_all %u "
+                   "rready_in %u stall %u | candidates 0x%x arrived 0x%x | clock engine %u, reservations %u, wait lag %u "
+                   "wait room %u caught %u ingress %u head room %u no credit %u", p, w,
+                   !!(w & FOLDSIM_MEM_DBG_R_OK), !!(w & FOLDSIM_MEM_DBG_BANK_DONE), !!(w & FOLDSIM_MEM_DBG_HAVE_ALL),
+                   !!(w & FOLDSIM_MEM_DBG_DONE_ALL), !!(w & FOLDSIM_MEM_DBG_RREADY_IN), !!(w & FOLDSIM_MEM_DBG_STALL),
+                   FOLDSIM_MEM_DBG_C_VALID(w), FOLDSIM_MEM_DBG_C_ARR(w), FOLDSIM_MEM_DBG_A_STATE(w),
+                   FOLDSIM_MEM_DBG_STATE(w), !!(w & FOLDSIM_MEM_DBG_WAIT_LAG), !!(w & FOLDSIM_MEM_DBG_WAIT_ROOM),
+                   !!(w & FOLDSIM_MEM_DBG_CAUGHT), !!(w & FOLDSIM_MEM_DBG_INGRESS), !!(w & FOLDSIM_MEM_DBG_HEAD_ROOM),
+                   !!(w & FOLDSIM_MEM_DBG_NO_CREDIT));
+          axi += b;
+        }
+        printf("[VXDRV] launch %.0f s: target cycles %llu, host cycles %llu, memory stalls %llu, status 0x%x; "
+               "reads/writes per port:%s; memory base 0x%llx\n",
+               elapsed_s(launch_start_), (unsigned long long)t, (unsigned long long)hc,
+               (unsigned long long)read64(FOLDSIM_REG_MSTALL_LO), s, ports.c_str(),
+               (unsigned long long)read64(FOLDSIM_REG_MEM_BASE_LO));
+        if (axi_stats)
+          printf("%s\n", axi.c_str() + 1);
+        fflush(stdout);
       }
       poll_backoff(busy);
       return busy;
@@ -892,6 +1030,12 @@ private:
   // default, never. A command, DCR read or reset the target leaves unanswered
   // while it advances no cycle for that long fails it too, after 60 s when it
   // is unset.
+  // VORTEX_FOLDSIM_PROGRESS_S=<s>: while a launch runs, print the simulator's target and host cycles every <s>
+  // seconds (registers the runtime reads anyway), so a slow run can be told from a stopped one.
+  static double progress_env() {
+    const char* s = getenv("VORTEX_FOLDSIM_PROGRESS_S");
+    return (s != nullptr && s[0] != '\0') ? atof(s) : 0.0;
+  }
   static double timeout_env() {
     const char* s = getenv("VORTEX_FOLDSIM_TIMEOUT_S");
     return (s != nullptr && s[0] != '\0') ? atof(s) : 0.0;
@@ -902,7 +1046,9 @@ private:
   uint64_t busy_polls_ = 0;
   const double launch_timeout_s_ = timeout_env();
   const double control_timeout_s_ = (launch_timeout_s_ > 0) ? launch_timeout_s_ : kControlTimeoutS;
-  std::chrono::steady_clock::time_point launch_start_;
+  std::chrono::steady_clock::time_point launch_start_, last_progress_print_;
+  const double progress_s_ = progress_env();
+  bool progress_config_printed_ = false;
   bool failed_ = false;
   bool open_ = false;
   uint32_t refresh_ = 0;

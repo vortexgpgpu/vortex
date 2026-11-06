@@ -72,6 +72,11 @@ VMManager::VMManager(DeviceMemIO* dev_io)
   if (megapage_heap_) {
     std::cout << "[VM] Heap mapped with superpages" << std::endl;
   }
+
+  // VORTEX_VM_TRACE=1: print the SATP the device is given and every buffer's PA->VA mapping, so a run's log
+  // shows which addresses the MMU translates (DBGPRINT needs a debug build).
+  const char* trace_env = std::getenv("VORTEX_VM_TRACE");
+  trace_ = (trace_env != nullptr && std::atoi(trace_env) != 0);
 }
 
 VMManager::~VMManager() {
@@ -116,6 +121,13 @@ int VMManager::init() {
   // PT base. The simulator's hardware MMU sees SATP via the kernel's
   // csrw at boot — VMManager does not push it into the simulator.
   satp_ = std::make_unique<SATP_t>(pt_addr, /*asid=*/0);
+  if (trace_) {
+    printf("[VM] satp=0x%016llx mode=%u (%s) asid=%u root_ppn=0x%llx (PT root PA 0x%llx), page %u B, %u levels\n",
+           (unsigned long long)satp_->get_satp(), (unsigned)satp_->get_mode(),
+           VX_VM_ADDR_MODE == SV39 ? "Sv39" : (VX_VM_ADDR_MODE == SV32 ? "Sv32" : "Bare"),
+           (unsigned)satp_->get_asid(), (unsigned long long)satp_->get_base_ppn(), (unsigned long long)pt_addr,
+           (unsigned)VX_VM_PAGE_SIZE, (unsigned)VX_VM_PT_LEVEL);
+  }
 
   if (VX_VM_ADDR_MODE != BARE) {
     // Identity-map system regions that are PA-addressed by the kernel
@@ -283,6 +295,11 @@ int VMManager::phy_to_virt_map(uint64_t size, uint64_t* dev_pAddr, uint32_t flag
   }
 
   assert(page_table_walk(init_vAddr) == init_pAddr && "VA->PA round-trip mismatch");
+  if (trace_) {
+    printf("[VM] map PA 0x%llx -> VA 0x%llx, %llu B (%llu pages), %s%s\n", (unsigned long long)init_pAddr,
+           (unsigned long long)init_vAddr, (unsigned long long)size, (unsigned long long)num_pages,
+           (flags & VX_MEM_WRITE) ? "RW" : "R", init_vAddr == init_pAddr ? ", identity" : "");
+  }
 
   *dev_pAddr = init_vAddr;
   return flush();

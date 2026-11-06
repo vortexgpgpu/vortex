@@ -139,6 +139,7 @@ private:
 
   // Heap mapped once with superpages (VORTEX_VM_MEGAPAGE_HEAP).
   bool megapage_heap_;
+  bool trace_;   // VORTEX_VM_TRACE: print SATP and every PA->VA mapping
 };
 
 } // namespace vortex
