@@ -14,8 +14,8 @@ This is the canonical entry point for **both human contributors and AI coding ag
 
 ### Codebase orientation
 - [docs/codebase.md](docs/codebase.md) — repo file-tree map
-- [docs/microarchitecture.md](docs/microarchitecture.md) — pipeline & cache architecture
-- [docs/cache_subsystem.md](docs/cache_subsystem.md) — cache subsystem details
+- [docs/designs/microarchitecture.md](docs/designs/microarchitecture.md) — pipeline & cache architecture
+- [docs/designs/cache_subsystem.md](docs/designs/cache_subsystem.md) — cache subsystem details
 - [docs/hardware_library.md](docs/hardware_library.md) — `hw/rtl/libs/` reference
 
 ### Coding conventions
@@ -26,7 +26,7 @@ This is the canonical entry point for **both human contributors and AI coding ag
 - [docs/simulation.md](docs/simulation.md) — driver modes (simx, rtlsim, opae, xrt) and blackbox usage
 - [docs/testing.md](docs/testing.md) — test and regression flow
 - [docs/debugging.md](docs/debugging.md) — debug traces (`--debug`), VCD (`--vcd`), scope, trace_csv
-- [docs/debug_mode.md](docs/debug_mode.md) — debug-mode hardware support
+- [docs/kernel_debugging.md](docs/kernel_debugging.md) — debug-mode hardware support (GDB/OpenOCD)
 - [docs/perfetto_analysis.md](docs/perfetto_analysis.md) — Perfetto trace and analysis
 - [docs/synthesis_analysis.md](docs/synthesis_analysis.md) — synthesis/PPA analysis
 
