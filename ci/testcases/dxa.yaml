@@ -648,3 +648,18 @@ tests:
   configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=16 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1 -DVX_CFG_EXT_LDST_MATRIX_ENABLE
   shape: {threads: 32, warps: 8}
   touches: [hw/rtl/tcu, hw/rtl/core/VX_uop_packld.sv, hw/rtl/core/VX_decode.sv, sim/simx/tcu, sim/simx/fragment_layout.h, sim/simx/lsu_unit.cpp, sim/simx/decode.cpp, hw/rtl/VX_gpu_pkg.sv, sw/kernel/include/vx_tensor.h, sw/kernel/include/vx_intrinsics.h]
+- id: sgemm_tcu_wg_sp_dxa-ldm
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_wg_sp_dxa
+  configs: -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=8 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1 -DVX_CFG_EXT_LDST_MATRIX_ENABLE
+  shape: {threads: 32, warps: 8}
+  touches: [hw/rtl/tcu, hw/rtl/core/VX_uop_packld.sv, hw/rtl/core/VX_decode.sv, sim/simx/tcu, sim/simx/fragment_layout.h, sim/simx/lsu_unit.cpp, sim/simx/decode.cpp, hw/rtl/VX_gpu_pkg.sv, sw/kernel/include/vx_tensor.h, sw/kernel/include/vx_intrinsics.h]
+- id: sgemm_tcu_wg_dxa_mcast-ldm
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_wg_dxa_mcast
+  configs: -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_EXT_LDST_MATRIX_ENABLE
+  touches: [hw/rtl/tcu, hw/rtl/core/VX_uop_packld.sv, hw/rtl/core/VX_decode.sv, sim/simx/tcu, sim/simx/fragment_layout.h, sim/simx/lsu_unit.cpp, sim/simx/decode.cpp, hw/rtl/VX_gpu_pkg.sv, sw/kernel/include/vx_tensor.h, sw/kernel/include/vx_intrinsics.h]
