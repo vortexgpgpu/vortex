@@ -42,6 +42,13 @@
 #if defined(VX_CFG_EXT_LDST_MATRIX_ENABLE) && !defined(VX_CFG_EXT_F_ENABLE)
 #error "VX_CFG_EXT_LDST_MATRIX_ENABLE requires VX_CFG_EXT_F_ENABLE"
 #endif
+#if !defined(VX_CFG_EXT_TCU_ENABLE) && (defined(VX_CFG_TCU_WGMMA_ENABLE) || defined(VX_CFG_TCU_SPARSE_ENABLE) \
+                                     || defined(VX_CFG_TCU_MX_ENABLE) || defined(VX_CFG_TCU_DSM_ENABLE))
+#error "VX_CFG_TCU_WGMMA/SPARSE/MX/DSM_ENABLE require VX_CFG_EXT_TCU_ENABLE"
+#endif
+#if defined(VX_CFG_EXT_DXA_ENABLE) && !defined(VX_CFG_LMEM_ENABLE)
+#error "VX_CFG_EXT_DXA_ENABLE requires VX_CFG_LMEM_ENABLE"
+#endif
 
 using namespace vortex;
 

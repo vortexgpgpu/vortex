@@ -141,6 +141,29 @@
     `endif
 `endif
 
+// The TCU's structural modes add datapath and ports; its number formats are
+// only selections inside the TCU and are inert without one.
+`ifndef VX_CFG_EXT_TCU_ENABLE
+    `ifdef VX_CFG_TCU_WGMMA_ENABLE
+        `error "VX_CFG_TCU_WGMMA_ENABLE requires VX_CFG_EXT_TCU_ENABLE"
+    `endif
+    `ifdef VX_CFG_TCU_SPARSE_ENABLE
+        `error "VX_CFG_TCU_SPARSE_ENABLE requires VX_CFG_EXT_TCU_ENABLE"
+    `endif
+    `ifdef VX_CFG_TCU_MX_ENABLE
+        `error "VX_CFG_TCU_MX_ENABLE requires VX_CFG_EXT_TCU_ENABLE"
+    `endif
+    `ifdef VX_CFG_TCU_DSM_ENABLE
+        `error "VX_CFG_TCU_DSM_ENABLE requires VX_CFG_EXT_TCU_ENABLE"
+    `endif
+`endif
+
+`ifdef VX_CFG_EXT_DXA_ENABLE
+    `ifndef VX_CFG_LMEM_ENABLE
+        `error "VX_CFG_EXT_DXA_ENABLE requires VX_CFG_LMEM_ENABLE"
+    `endif
+`endif
+
 // Convenience flag: a wide or matrix load/store extension is enabled; both are
 // macro-ops of the packed-load uop expander. Internal derived macro.
 `ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
