@@ -411,7 +411,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     // -----------------------------------------------------------------------
 `ifdef VX_CFG_TCU_SPARSE_ENABLE
     logic [3:0] n_sp_s;
-    logic [3:0] m_sp_s;
+    logic [1:0] m_sp_s;
 `endif
 
     ibuffer_t ibuf_r;
@@ -479,10 +479,10 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
                 ? (eff_ctr[0] ? ibuf_in.tmask & ~sym_mask_lo : ibuf_in.tmask &  sym_mask_lo)
                 : ibuf_in.tmask;
             n_sp_s = 4'(eff_ctr[0 +: (LG_N + LG_K)]);
-            m_sp_s = 4'(eff_ctr[(LG_N + LG_K) +: LG_M]);
+            m_sp_s = 2'(eff_ctr[(LG_N + LG_K) +: LG_M]);
         end
 
-        ibuf_r.op_args.tcu.step_m = SYM_SPARSE && is_sparse ? 2'(m_sp_s) : 2'(m_index);
+        ibuf_r.op_args.tcu.step_m = SYM_SPARSE && is_sparse ? m_sp_s : 2'(m_index);
         ibuf_r.op_args.tcu.step_n = SYM_SPARSE && is_sparse ? 7'(n_sp_s >> LG_K) : 7'(n_index);
         ibuf_r.op_args.tcu.step_k = SYM_SPARSE && is_sparse ? 2'(0)      : 2'(k_index);
         ibuf_r.wb = 1'b1;
