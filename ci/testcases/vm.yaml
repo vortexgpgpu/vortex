@@ -310,6 +310,19 @@ tests:
   via: blackbox
   app: vecadd
   args: -n16384
+# A Kepler SMX's core (keplertitan profile): 16 warps behind each of four fetch
+# slices and four 8-lane LSU blocks keep the kernel's code and argument pages
+# busy on every MMU lane, so once a page fills its accesses must hit the TLB
+# rather than queue behind the page's miss-station entry.
+- id: parity-vm-vecadd-wide
+  check: model_parity
+  via: blackbox
+  app: vecadd
+  args: -n16384
+  configs+: >-
+    -DVX_CFG_NUM_WARPS=64 -DVX_CFG_NUM_THREADS=32 -DVX_CFG_ISSUE_WIDTH=4
+    -DVX_CFG_FETCH_WIDTH=4 -DVX_CFG_NUM_ALU_LANES=32 -DVX_CFG_NUM_FPU_LANES=32
+    -DVX_CFG_NUM_LSU_LANES=8 -DVX_CFG_L1_LINK_LATENCY=4
 - id: parity-vm-rt_raycast
   check: model_parity
   via: blackbox

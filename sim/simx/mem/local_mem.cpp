@@ -428,7 +428,7 @@ public:
   Impl(LocalMem* simobject, const Config& config)
     : simobject_(simobject)
     , config_(config)
-    , ram_(config.capacity)
+    , ram_(1ull << log2ceil(config.capacity))
     , addr_bits_(log2ceil(config.capacity))
     , lg2_word_(log2ceil(config.word_size))
 #if VX_CFG_EXT_A_ENABLED

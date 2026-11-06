@@ -45,7 +45,8 @@ module VX_tlb_l1 import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     input  wire [NUM_REQS-1:0]                       lookup_amo,
     output wire [NUM_REQS-1:0]                       lookup_perm,
     input  wire [NUM_REQS-1:0]                       access_hit,
-    output wire [NUM_REQS-1:0]                       mshr_match,
+    input  wire [NUM_REQS-1:0]                       mshr_order,
+    output wire [NUM_REQS-1:0]                       mshr_join,
 
     // Park a miss (payload is opaque; the parent splices on replay).
     input  wire                      park_valid,
@@ -147,7 +148,8 @@ module VX_tlb_l1 import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         .clk           (clk),
         .reset         (reset),
         .probe_vpn     (lookup_vpn),
-        .probe_match   (mshr_match),
+        .probe_order   (mshr_order),
+        .probe_join    (mshr_join),
         .alloc_valid   (park_valid),
         .alloc_vpn     (park_vpn),
         .alloc_access  (park_access),

@@ -220,13 +220,21 @@ mutually exclusive by priority:
 | category | condition | what happens |
 |---|---|---|
 | `cat_bypass` | `valid ∧ req_bypass` | fields forwarded unchanged |
-| `cat_hit` | `valid ∧ ¬bypass ∧ ¬mshr_match ∧ cam_hit ∧ perm_ok` | `PA = {ppn_spliced, addr[11:0]}` forwarded; MRU bump |
-| `cat_park` | `valid ∧ ¬bypass ∧ (mshr_match ∨ ¬cam_hit)` | lowest parking lane parks; others hold and retry |
-| `cat_pfault` | `valid ∧ ¬bypass ∧ ¬mshr_match ∧ cam_hit ∧ ¬perm_ok` | accepted, never sent to memory; a data-side load or atomic is answered with zeroed data (§3.5); fault sideband pulses |
+| `cat_hit` | `valid ∧ ¬bypass ∧ ¬mshr_join ∧ cam_hit ∧ perm_ok` | `PA = {ppn_spliced, addr[11:0]}` forwarded; MRU bump |
+| `cat_park` | `valid ∧ ¬bypass ∧ (mshr_join ∨ ¬cam_hit)` | lowest parking lane parks; others hold and retry |
+| `cat_pfault` | `valid ∧ ¬bypass ∧ ¬mshr_join ∧ cam_hit ∧ ¬perm_ok` | accepted, never sent to memory; a data-side load or atomic is answered with zeroed data (§3.5); fault sideband pulses |
 
-`mshr_match` outranks `cam_hit` on purpose: a request to a page whose walk is
-still landing must queue behind that page's parked requests, or a same-lane
-access could overtake an older one on the hit path (§3.5). Bypass and hit
+`mshr_join` (the lane's VPN matches a live miss-station entry and the lane
+must keep order behind it) outranks `cam_hit` on purpose: a request to a page
+whose walk is still landing must queue behind that page's parked requests, or
+a same-lane access could overtake an older one on the hit path (§3.5). Only a
+lane with requests of its own in the station needs that order, so a data-side
+lane joins only while its parked count (§3.5) is non-zero; an instruction-side
+lane never joins, since a warp has one fetch in flight. Any other lane takes a
+hit as soon as the fill lands: joining would funnel every access to a hot page
+through the one-token-per-cycle drain, lowest lane first, and starve the
+others. `ummu` and `cmmu` register their park (§3.8, §3.9), so their probe is
+a cycle stale and they always join. Bypass and hit
 requests enter a per-lane `VX_elastic_buffer` (`SIZE=2, OUT_REG=1`) that
 registers the outgoing request and presents a registered `pipe_ready`
 back, so the accept cone stays shallow; a replay landing on the lane takes
@@ -285,7 +293,8 @@ out behind any kill on that lane.
 Ordering follows from the structure. The stage is hit-under-miss, so only
 same-page order is guaranteed: accesses to one VPN share an entry and drain in
 arrival order, and the miss-station probe matches filled-but-not-yet-freed
-entries so a later same-page request cannot slip past on the hit path.
+entries so a later same-page request from a lane with parked requests cannot
+slip past on the hit path.
 `DEDUP_LIVE_EXCLUDES_FAULT = 1` at L1 stops a faulted entry attracting
 joiners: the next same-VPN request re-walks rather than inheriting the kill.
 Allocation is refused during a flush, because every entry clears at that
@@ -317,7 +326,8 @@ which every core's busy logic waits on. Omitting the incoming stage would let
 ### 3.7 The instruction side
 
 The iMMU is the same module with `EXEC_SIDE = 1`: `access = EX` for every
-request, one lane per core, `ITLB_SIZE` (8) entries. Fetch reaches it through
+request, one lane per fetch slice of each core (`VX_CFG_FETCH_WIDTH`),
+`ITLB_SIZE` (8) entries. Fetch reaches it through
 `VX_dcr_flush`, which injects the DCR-triggered cache-flush request into the
 icache stream; that request carries the FLUSH attribute and bypasses
 translation.
@@ -565,8 +575,9 @@ through a `VX_stream_arb` (`OUT_BUF = 2`). `empty = no walker active`;
 1. **Lane 0 misses on page P.** CAM and miss-station probes both miss →
    `cat_park`. Slot `s` is allocated with `{vpn, access, amo}` and the token
    `{lane 0, fields}`; the LSU sees the request accepted.
-2. **Lane 2 misses on P two cycles later.** The miss-station probe matches
-   slot `s` → `cat_park` joins it, queuing behind lane 0's token.
+2. **Lane 2 misses on P two cycles later** → `cat_park`. The allocate's
+   miss-station probe matches slot `s`, so it joins, queuing behind lane 0's
+   token.
 3. **Lane 1 hits on page Q** in the meantime and leaves through its output
    stage: nothing waits on the walk.
 4. **Issue.** `tlb_bus req {id = s, …}` climbs the socket and cluster

@@ -168,7 +168,8 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     wire [NUM_REQS-1:0][$bits(tlb_access_e)-1:0] cam_acc;
     wire [NUM_REQS-1:0]                      cam_perm;
     wire [NUM_REQS-1:0]                      cam_access_hit;
-    wire [NUM_REQS-1:0]                      mshr_match;
+    wire [NUM_REQS-1:0]                      mshr_order;
+    wire [NUM_REQS-1:0]                      mshr_join;
 
     for (genvar l = 0; l < NUM_REQS; ++l) begin : g_decode
         assign req_valid[l] = req_if[l].req_valid;
@@ -242,7 +243,8 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         .lookup_amo    (req_amo),
         .lookup_perm   (cam_perm),
         .access_hit    (cam_access_hit),
-        .mshr_match    (mshr_match),
+        .mshr_order    (mshr_order),
+        .mshr_join     (mshr_join),
         .park_valid    (park_valid),
         .park_vpn      (park_vpn),
         .park_access   (park_access),
@@ -278,15 +280,25 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     wire [NUM_REQS-1:0] pf_rsp_busy;   // a fault response is owed on the lane
     wire [NUM_REQS-1:0] lane_parked;   // the lane has requests in the miss station
 
+    // The join below reads the per-lane parked count, kept only for writing clients.
+    `STATIC_ASSERT ((EXEC_SIDE != 0) || (PARK_REG != 0) || (WRITE_ENABLE != 0),
+                    ("invalid parameter: a data-side MMU without a registered park must be WRITE_ENABLE"))
+
     for (genvar l = 0; l < NUM_REQS; ++l) begin : g_cat
         // A flush token holds behind its lane's parked requests (see g_parked).
         wire flush_hold = req_attr[l][MEM_ATTR_FLUSH_OFFS] && lane_parked[l];
         wire xlat = req_valid[l] && !req_bypass[l] && !stage_hold[l];
+        // A hit joins its page's live entry only to stay behind the lane's own
+        // parked requests (per-lane program order). Joining otherwise would funnel
+        // every access to a hot page through the one-per-cycle miss station
+        // drain, lowest lane first. A fetch needs no order (one request in flight
+        // per warp). A registered park joins always: its stage is a cycle stale.
+        assign mshr_order[l] = (EXEC_SIDE == 0) && ((PARK_REG != 0) || lane_parked[l]);
         assign cam_acc[l]    = req_acc[l];
         assign cat_bypass[l] = req_valid[l] && req_bypass[l] && !flush_hold;
-        assign cat_park[l]   = xlat && (mshr_match[l] || !cam_hit[l]);
-        assign cat_hit[l]    = xlat && !mshr_match[l] && cam_hit[l] && cam_perm[l];
-        assign cat_pfault[l] = xlat && !mshr_match[l] && cam_hit[l] && !cam_perm[l];
+        assign cat_park[l]   = xlat && (mshr_join[l] || !cam_hit[l]);
+        assign cat_hit[l]    = xlat && !mshr_join[l] && cam_hit[l] && cam_perm[l];
+        assign cat_pfault[l] = xlat && !mshr_join[l] && cam_hit[l] && !cam_perm[l];
     end
 
     // Park arbitration: at most one lane parks a miss per cycle (lowest lane).

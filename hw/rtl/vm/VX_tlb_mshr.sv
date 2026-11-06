@@ -19,9 +19,10 @@
 //
 // NUM_REQS lanes probe the table in parallel for hit-under-miss; the allocate
 // path reuses the probing lane's result (alloc_vpn == probe_vpn[alloc_lane]) so
-// the wide dedup compare stays off the enqueue path. A same-VPN request joins
-// its entry through the fill: queuing behind the entry's parked requests keeps
-// per-lane program order for same-page accesses, which the requester relies on.
+// the wide dedup compare stays off the enqueue path. A lane flagged probe_order
+// joins a same-VPN entry through the fill (probe_join): queuing behind the
+// entry's parked requests keeps per-lane program order for same-page accesses.
+// A lane without it takes its translation from the array once the fill lands.
 // DEDUP_LIVE_EXCLUDES_FAULT drops faulted entries from dedup (a new same-VPN
 // request re-walks); with it clear the request joins and shares the fault.
 // ALLOC_PROBE dedups the allocate against its own VPN instead: for a requester
@@ -50,9 +51,10 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
     input wire clk,
     input wire reset,
 
-    // Per-lane VPN probe: does the VPN match a dedup-live entry?
+    // Per-lane VPN probe: must the lane join a dedup-live entry of its VPN?
     input  wire [NUM_REQS-1:0][TLB_VPN_WIDTH-1:0] probe_vpn,
-    output wire [NUM_REQS-1:0]                     probe_match,
+    input  wire [NUM_REQS-1:0]                     probe_order,
+    output wire [NUM_REQS-1:0]                     probe_join,
 
     // Allocate / append (at most one per cycle).
     input  wire                             alloc_valid,
@@ -120,19 +122,26 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
     // ---------------------------------------------------------------------
     // VPN probes and allocate target
     // ---------------------------------------------------------------------
-    // Dedup-live entries: a filled entry stays joinable until it frees — a
-    // same-page request must queue behind the entry's parked requests so it
-    // cannot overtake an older same-lane access on the hit path (per-lane
-    // program order). DEDUP_LIVE_EXCLUDES_FAULT drops only faulted entries,
-    // whose requesters are killed rather than replayed: a new request re-walks.
+    // Dedup-live entries: a filled entry stays joinable until it frees — an
+    // ordered same-page request must queue behind the entry's parked requests
+    // so it cannot overtake an older same-lane access on the hit path.
+    // DEDUP_LIVE_EXCLUDES_FAULT drops only faulted entries, whose requesters
+    // are killed rather than replayed: a new request re-walks.
     wire [MSHR_SIZE-1:0] live = DEDUP_LIVE_EXCLUDES_FAULT ? (valid_r & ~fault_r) : valid_r;
 
+    wire [NUM_REQS-1:0]            probe_match;
     wire [NUM_REQS-1:0][IDX_W-1:0] probe_slot;
     for (genvar l = 0; l < NUM_REQS; ++l) begin : g_probe
         wire [MSHR_SIZE-1:0] m;
+        wire [MSHR_SIZE-1:0] j;
         for (genvar e = 0; e < MSHR_SIZE; ++e) begin : g_m
-            assign m[e] = live[e] && (vpn_r[e] == probe_vpn[l]);
+            wire vpn_eq = (vpn_r[e] == probe_vpn[l]);
+            assign m[e] = live[e] && vpn_eq;
+            // The order bit gates each entry's compare rather than the reduced
+            // match, so it folds into the compare tree, not the requester's.
+            assign j[e] = live[e] && probe_order[l] && vpn_eq;
         end
+        assign probe_join[l] = (| j);
         VX_priority_encoder #(
             .N (MSHR_SIZE)
         ) probe_enc (
@@ -162,6 +171,7 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
         );
         assign rearm = has_match && retired[match_slot];
         `UNUSED_VAR (alloc_lane)
+        `UNUSED_VAR (probe_match)
         `UNUSED_VAR (probe_slot)
     end else begin : g_lane_probe
         // Allocate reuses the probing lane's dedup result.
