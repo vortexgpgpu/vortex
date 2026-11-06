@@ -1,10 +1,13 @@
 # Memory-Level Parallelism Optimizations
 
 A GPU hides memory latency by keeping many memory requests in flight at once. This is memory-level parallelism (MLP). It runs from the lanes of one warp, through the caches and the command processor's DMA, out to the DRAM channels. This document describes the features that raise Vortex's MLP:
+- how the front end feeds the core;
 - how the cache hierarchy is organized;
 - how misses are handled;
 - how same-address requests are merged;
 - how coherence and ordering are kept cheap;
+- how local memory serves a warp;
+- how the load/store unit moves data;
 - how the DMA engines share the memory system;
 - how the FPGA shell reaches HBM.
 
@@ -18,29 +21,45 @@ Each section says what problem the feature removes, how it works, and what it ga
 
 ## Summary
 
-| Feature | Level | What it removes | Best measured gain | Default |
-|---|---|---|---|---|
-| [Sectored L2/L3](#sectored-l2-and-l3-caches) | L2/L3 | Half of the LLC tags | Tag area halved | On |
-| [Word-size dcache banking](#dcache-banks-follow-the-thread-count) | L1D | Fixed bank count as threads grow | Bank count scales with threads | On |
-| [Hashed bank select](#hashed-bank-select) | L1D, L2 | Power-of-two strides on one bank | sgemv −32.8% | On (L2; dcache ≥ 4 banks) |
-| [Fill forwarding](#fill-forwarding) | All caches | Replaying waiters after a fill | sgemv −5.0% | On |
-| [Back-to-back fills](#back-to-back-fills) | All caches | A bubble after each fill | rtx5080 stream −6.2% | On |
-| [Write-allocate without fetch](#write-allocate-without-fetch-lazy-fetch) | Write-back caches | Reading a line only to overwrite it | DRAM reads −33% | On where the cache is a write-back LLC |
-| [Full-sector refetch skip](#full-sector-refetch-skip) | Write-back caches | Refetching a fully written sector | rtx5080 sgemm −43.5% with lazy L2 | On with lazy fetch |
-| [Dcache read merge](#dcache-read-merge) | L1D | Same-word loads serialized on one bank | sgemm −17.2% | On |
-| [Icache same-line merge](#icache-same-line-merge) | L1I | Fetch slices serialized on one line | rtx5080 sgemm −25.8% | On |
-| [Broadcast flush, per-port tokens](#broadcast-flush-and-per-port-flush-tokens) | Whole hierarchy | Serial per-core flushes; lost writes | Flush 2.76M → 16.5k cycles per launch | On |
-| [L1-only launch flush](#l1-only-flush-between-launches) | Whole hierarchy | Walking the LLC at every launch | Flush 2,750 → 180 cycles per launch | On |
-| [Argument upload slots](#launch-argument-slots) | Runtime + LLC | A full flush after each argument upload | multikernel −7.5% | On |
-| [Targeted fences](#targeted-fences) | L1D, LLC | A full flush per fence | printf 13.6× faster | On |
-| [Acquire/release fences](#acquire-and-release-fences) | L1D | Doing both halves of a fence | Ordering-correct atomics at minimal cost | On |
-| [Atomics at the LLC](#atomics-at-the-last-level-cache) | L1D, LLC | Atomics racing across private caches | Correct atomics across the hierarchy | With the A extension |
-| [Write-through ordering](#write-through-ordering) | L1D | A load returning data older than its own store | Correctness | On |
-| [CP DMA through the LLC](#command-processor-dma-through-the-llc) | CP, LLC | An LLC walk for every host transfer | multikernel −42.7% | Off (on in GPU profiles) |
-| [LMEM DMA round-robin](#local-memory-dma-round-robin) | Local memory | DXA starving tensor-core reads | WGMMA with DXA −10.2% | On |
-| [Per-block LSU memory paths](#per-block-lsu-memory-paths) | Core | One shared core memory path | Scales with LSU blocks | On |
-| [Many AXI transactions in flight](#many-axi-transactions-in-flight) | FPGA shell | One outstanding request per port | 4-core sgemv 1.30× | On |
-| [Ports follow the GPU; write fall-through](#memory-ports-follow-the-gpu-and-write-fall-through) | FPGA shell | A fixed port count; a cycle per write | Write throughput 2× | On |
+Every MLP feature of Phase 1 and Phase 2, plus the earlier features this design builds on. **Phase** is P1, P2, or "pre" for features that were on master before Phase 1. **Compiler** says whether the feature needs compiler support: "N" means it works with the CI compiler and needs nothing new. **Gain** is the best measured change in cycles against the same configuration with the feature off (rtlsim unless marked). **Area** is a Beacon or Vivado measurement where one exists; "n/m" means not measured.
+
+| Phase | Feature | What it does | Commit(s) | Knob | Default | Compiler | Gain | Area |
+|---|---|---|---|---|---|---|---|---|
+| pre | [Sectored L2/L3](#sectored-l2-and-l3-caches) | One tag per two bus granules, a valid bit per sector | master | `VX_CFG_{L2,L3}_SECTOR_SIZE` | one bus granule | N | LLC tags halved | tags −50% |
+| pre | [Word-size dcache banking](#dcache-banks-follow-the-thread-count) | Dcache banks = line / coalescer word, one per lane | master | `VX_CFG_DCACHE_WORD_SIZE` | derived | N | banks scale with threads | n/m |
+| pre | [Fill forwarding](#fill-forwarding) | Reads at the head of an MSHR chain take the fill data directly | master | none | on | N | sgemv −5.0% | n/m |
+| pre | [Atomics at the LLC](#atomics-at-the-last-level-cache) | A-extension RMW at the last-level cache, L1 copies dropped | master | `VX_CFG_EXT_A_ENABLE` | off | N | correctness | n/m |
+| P1 | [Broadcast flush, per-port tokens](#broadcast-flush-and-per-port-flush-tokens) | One flush DCR starts every core; a token down every memory port | `046ff33b0`, `62dc764f4` | none | on | N | flush per launch 2.76M → 16.5k cycles; fixes lost writes | n/m |
+| P1 | [Hashed bank select](#hashed-bank-select) | Bank = low line bits XOR an IPOLY fold of the upper bits | `ef75f8e62` | `VX_CFG_DCACHE_BANK_HASH`, `VX_CFG_L2_BANK_HASH` | L2 on; dcache on at ≥ 4 banks | N | sgemv −32.8%, fp16 tensor −13.8%, WGMMA+DXA −13.5% | cache DUT 281.4 vs 278.8 MHz; LUT n/m |
+| P1 | [Back-to-back fills](#back-to-back-fills) | Fills enter a bank on consecutive cycles, each with its own staged sector | `f9dfa6a13` | none | on | N | rtx5080 stream −6.2% | cache DUT 300.4 → 309.6 MHz |
+| P1 | [L1-only launch flush](#l1-only-flush-between-launches) | The shared LLC answers a launch's L1-only token without a walk | `7ce8a7483`, `9473f26e9` | none (from topology) | on | N | flush 2,750 → 180 cycles; chained launches −11% | n/m |
+| P1 | [Write-allocate without fetch (lazy fetch)](#write-allocate-without-fetch-lazy-fetch) | A store miss installs the sector with a dirty-byte mask, no fill | `4f173e313`, `bdf39536d`, `1de9126e6`, default `a99c1be47` | `VX_CFG_{DCACHE,L2,L3}_LAZY_FETCH` | on where the cache is a write-back LLC | N | DRAM reads −33% (cycles flat) | cache DUT +2,629 LUT |
+| P1 | [Per-slice fetch and core partitioning](#per-slice-fetch) | FW fetch slices, each with scheduler, fetch, decode and icache port | `e58720478`, `8705e2b7b` | `VX_CFG_FETCH_WIDTH` | = issue width | N | sgemm IW4 −31.6%; SimX profiles −29.7% / −40.7% | +0.33% LUT at FW2 |
+| P1 | [Device-wide global barrier](#device-wide-global-barrier) | One gbar unit counts every core across clusters | `5f1ef4fad`, `c1516d3e1` | none | on | N | correctness at > 1 cluster | n/m |
+| P1 | [Targeted fences](#targeted-fences) | L1-only token for memory fences; I/O fences drain without a walk | `3f27ba402`, `18b6fe521` | none | on | N | printf 13.6×, fence −55% | n/m |
+| P1 | [CP DMA through the LLC](#command-processor-dma-through-the-llc) | The command processor's DMA is a client of the shared LLC | `1d3db49b6`, `cc7bb17cc`, `bbad636e3`, `f93df327f`, default `60d79470a` | `VX_CFG_CP_LLC_CLIENT` | on (acts only with one shared LLC) | N | multikernel −42.7%, dogfood −30% | est. +2–3k LUT (not synthesized) |
+| P1 | [Dcache read merge](#dcache-read-merge) | Same-word reads of one LSU block share one bank access | `4e1d2a7ec`, `2342ffdcd`, port 0 `d6be497d7` | `VX_CFG_DCACHE_READ_MERGE` | on | N | sgemm −6.5% to −17.2% | n/m |
+| P1 | [LMEM DMA round-robin](#local-memory-dma-round-robin) | DXA writes and TCU reads share the LMEM DMA port round-robin | `c96140253` | none | on | N | WGMMA+DXA −10.2%, sparse −11.6% | 1 bit |
+| P1 | [Per-block LSU memory paths](#per-block-lsu-memory-paths) | Each LSU block owns its memory path; TCU blocks their metadata ports | `8e2aa619c`, `304e0db17`, `8410590f4`, `47844854f`, `fc0a35bb4`, `0c603f49b` | none | on | N | cycle-identical; bandwidth scales with blocks | n/m |
+| P1 | [Non-power-of-two warps per slice](#non-power-of-two-gpu-shapes) | %, / and * instead of bit slices in OPC, IPDOM, mhartid | `e311957d9`, `365895a61` | none | on | N | enables 48-warp rtx5080 | pow2 netlists unchanged |
+| P1 | [Many AXI transactions in flight](#many-axi-transactions-in-flight) | AXI limit removed, responses routed by ID | `45e6a2356` | none | on | N | xrtsim 4-core sgemv 1.30× | n/m |
+| P2 | [Non-power-of-two cores, sockets, clusters](#non-power-of-two-gpu-shapes) | Removes pow2 asserts; CP reports the exact socket size | `1a3055f04` | none | on | N | enables 84/108/132-SM shapes | pow2 netlists unchanged |
+| P2 | [AFU ports follow the GPU, write fall-through](#memory-ports-follow-the-gpu-and-write-fall-through) | One AXI port per GPU memory port; W leaves with AW | `afd433150`, `3f25c838c`, `5391be583`, `2339de0b9` | none | on | N | single-beat writes 2× | n/m |
+| P2 | [Full-sector refetch skip](#full-sector-refetch-skip) | A fully written partial sector loops back as a data-less fill | `05d1237ff`, `d0cb49c70` | follows `*_LAZY_FETCH` | with lazy fetch | N | SimX rtx5080 sgemm −43.5% with L2 lazy | n/m |
+| P2 | [Launch argument slots](#launch-argument-slots) | Arguments and descriptors go to clean pooled slots, no flush | `347c914a6` | none | on | N | multikernel −7.5% | n/m |
+| P2 | [Acquire/release fences](#acquire-and-release-fences) | Fence pred/succ picks invalidate, drain or both; .aq/.rl AMOs ordered | `03e8304a2`, `a010af42d` | none | on | N | correctness (seq-cst AMOs pay +95%) | n/m |
+| P2 | [Icache same-line merge](#icache-same-line-merge) | Same-line fetches of different slices share one bank access | `c9b78161c` | `VX_CFG_ICACHE_READ_MERGE` | on (no effect at FW 1) | N | IW4 sgemm −12.1%; rtx5080 sgemm −25.8% | n/m |
+| P2 | [Write-through ordering](#write-through-ordering) | A draining write-through store stays a hazard for same-word loads | `1babe84fb` | none | on | N | correctness | n/m |
+| P2 | [Warp-wide local-memory unit](#warp-wide-local-memory-unit) | Whole-warp LMEM requests served in bank passes, same-word reads ride along; a second read engine on the banks' second port | `b95dd2b4d` (read merge), `0b0d7ca4d` (unit) | none | on | N | SimX sgemm2 16×16 −0.4% / −0.5% (mainly timing) | LMEM deepest path 18 → 9 levels; lmem DUT 26,822 LUT |
+| P2 | [Lane-gather writeback merge](#lane-gather-writeback-merge) | An instruction's partial lane passes write back as one beat | `c69145562` | none | on | N | sgemm −9.7% (16T) / −20.6% (32T); mixfu −8.7% / −9.1% | −2,428 LUT per gather |
+| P2 | [Miss tracking from bandwidth × latency](#miss-tracking-sized-by-littles-law) | MSHRs and the LSU pending pool sized by Little's law from the platform | `7d2883ca0` | `VX_CFG_{DCACHE,L2,L3}_MSHR_SIZE` (derived), `VX_CFG_LSU_PENDING_LIMIT` | derived (stock shapes unchanged) | N | not measured (a100 L2 MSHR 16 → 64) | grows only where the platform needs it |
+| P2 | [Victim advance on a new line only](#victim-advance-on-a-new-line-only) | FIFO and random replacement step only when a line is new | `3032f6471` | none | on | N | 8 same-set lines: memory reads 25 → 9 | 0 LUT |
+| P2 | [Non-power-of-two way count](#non-power-of-two-way-count) | Exact cache capacities of the profiled parts | `c9c82b7a0` | `VX_CFG_*_NUM_WAYS` | — | N | capacity fidelity | default unchanged |
+| P2 | [Stack interleave by whole lines](#stack-interleave-by-whole-lines) | The per-warp stack skew steps by dcache lines | `8b4e6e8d9` | `VX_CFG_LSU_STACK_INTERLEAVE_ENABLE` | on | N | raycast −0.3% | one narrow XOR |
+| P2 | [TCU_LD in LSU-lane passes](#tcu-loads-in-lsu-lane-passes) | TCU loads issue in LSU-width passes when the LSU is narrower than the warp | `d47fead9c` | none | on | N | enables narrow-LSU TCU shapes | default unchanged |
+| P2 | [Wide loads and stores](#wide-loads-and-stores) | `vx_flw.d/.q`, `vx_fsw.d/.q`: 2 or 4 words to an aligned FP register group, one fetched instruction | `9f116ff7a`, knob and intrinsics `5ad62a09d` | `VX_CFG_EXT_LDST_WIDE_ENABLE` | **off** | N (intrinsics; LLVM `+xvortexldstwide` optional, off by default) | knob on vs off (unrolled scalar): sgemm_v1 −9.5% / −7.5%, sgemm2 −7.2% / −8.3%, sgemm2_dxa_mcast −5.7% / −8.0%, sgemm2_dxa −2.6% / −3.8%, sgemm −2.5% to −6.2%, sgemmx −2.1% | decode +33 LUT, expander +3 LUT per warp; knobs off: core −89 LUT |
+| P2 | [Matrix fragment loads and stores](#matrix-fragment-loads-and-stores) | `vx_ldm`, `vx_stm`: a fragment in one macro-op, expanded per register | `d72b25c0a`, knob and TCU decoupling `5ad62a09d` | `VX_CFG_EXT_LDST_MATRIX_ENABLE` | **off** | N (intrinsics) | dense, mx and sparse TCU kernels −3.4% to −10.1% | +169 LUT with TCU, +157 LUT without |
+| P2 | [Zero-latency request skids](#request-skids-at-the-l2-and-mmu-inputs) | Registered ready at the L2 core-request and MMU inputs; flushes wait for held requests | `ddd4ea511` | none | on | N | 0 cycles (perf_gate identical); tensor 240.6 → 251.6 MHz, top 243.0 → 256.1 MHz | +0.03% to +0.2% LUT |
 
 ## Configuration knobs
 
@@ -54,16 +73,37 @@ Some of these features can be set with a `VX_CFG_*` knob (see [Build Configurati
 | Dcache read merge | `VX_CFG_DCACHE_READ_MERGE` | 1 (on) |
 | Icache same-line merge | `VX_CFG_ICACHE_READ_MERGE` | 1 (on). No effect with one fetch slice. |
 | CP DMA through the LLC | `VX_CFG_CP_LLC_CLIENT` | 1 (on). Takes effect only when one LLC serves every core. |
+| Per-slice fetch | `VX_CFG_FETCH_WIDTH` | The issue width's lowest set bit, so equal to a power-of-two issue width |
+| Miss tracking | `VX_CFG_{DCACHE,L2,L3}_MSHR_SIZE`, `VX_CFG_LSU_PENDING_LIMIT` | Derived from the platform's bandwidth × latency; the stock shapes resolve to the earlier values |
+| Stack interleave | `VX_CFG_LSU_STACK_INTERLEAVE_ENABLE` | On |
+| Wide loads and stores | `VX_CFG_EXT_LDST_WIDE_ENABLE` | **Off.** Needs F with 32-bit FP registers. |
+| Matrix fragment loads and stores | `VX_CFG_EXT_LDST_MATRIX_ENABLE` | **Off.** Independent of the TCU. |
 | Atomics at the LLC | `VX_CFG_EXT_A_ENABLE` | Off |
 | Sectored L2/L3 | `VX_CFG_{L2,L3}_SECTOR_SIZE` (a size) | One bus granule. Setting it to the line size removes sectoring. |
 | Dcache word-size banking | `VX_CFG_DCACHE_WORD_SIZE` (a size) | Derived from the lane count and XLEN |
 
-**Always on:** fill forwarding, back-to-back fills, broadcast flush and per-port flush tokens, launch argument slots, targeted fences, acquire/release fences, write-through ordering, local-memory DMA round-robin, per-block LSU memory paths, many AXI transactions in flight, and write fall-through.
+**Always on:** fill forwarding, back-to-back fills, broadcast flush and per-port flush tokens, launch argument slots, targeted fences, acquire/release fences, the device-wide global barrier, write-through ordering, victim advance on a new line only, request skids at the L2 and MMU inputs, the warp-wide local-memory unit, the lane-gather writeback merge, local-memory DMA round-robin, per-block LSU memory paths, TCU loads in LSU-lane passes, non-power-of-two GPU shapes, many AXI transactions in flight, and write fall-through.
 
 **Selected automatically:**
 - The L1-only launch flush and the fence shortcuts apply whenever a single LLC is the point of coherence.
 - Write-allocate without fetch, the full-sector refetch skip and the dirty-byte masks turn on in whichever cache is a write-back LLC.
 - The FPGA shell's memory port count follows the GPU's memory ports.
+
+---
+
+## Front end
+
+### Per-slice fetch
+
+**Problem.** With an issue width above one, the issue slices were fed by a single fetch and decode path, one instruction per cycle. Warps on different slices waited for the front end, not for their operands, so a wider core issued little more than a narrow one.
+
+**How it works.** The front end is split into `FETCH_WIDTH` slices. Each has its own warp scheduler, fetch, decode and icache port, and serves its share of the warps. The core's structure (issue slices, execution blocks, icache banks) is derived from the fetch width, the issue width and the block counts. The slices share the icache; the [icache same-line merge](#icache-same-line-merge) keeps them from queuing on the same line. Controlled by `VX_CFG_FETCH_WIDTH`, which defaults to the issue width (its lowest set bit), so a one-wide core is unchanged.
+
+**Gain:**
+- rtlsim, issue width 4: sgemm 103,793 → 70,957 cycles (−31.6%) at two fetch slices; raycast −2.7%.
+- SimX GPU profiles at four fetch slices: −29.7% and −40.7%.
+- The one-wide default moves by at most 132 cycles.
+- Area: +0.33% LUT at two fetch slices.
 
 ---
 
@@ -101,6 +141,14 @@ Some of these features can be set with a `VX_CFG_*` knob (see [Build Configurati
 - WGMMA with DXA: −13.5%
 - multi-core sgemm: −8.2%
 - SimX, rtx5080, N=256: −34%
+
+### Non-power-of-two way count
+
+**Problem.** The profiled GPUs have caches with 6, 12, 20 or 24 ways. With power-of-two ways only, a profile had to round its capacity, which changes hit rates.
+
+**How it works.** The way select, the replacement state and the victim choice use the exact way count instead of a bit slice. Power-of-two way counts produce the same logic as before.
+
+**Gain:** the profiles get their parts' exact cache capacities. Beacon shows the default cache unchanged in depth and area.
 
 ---
 
@@ -148,6 +196,30 @@ Some of these features can be set with a `VX_CFG_*` knob (see [Build Configurati
 **Gain:**
 - DRAM reads: 145 → 17 at the dcache and 539 → 27 at the L2, on a fully written stream.
 - SimX, rtx5080 profile, 4 cores, sgemm -n192 with L2 lazy fetch: 285,006 → 161,121 cycles (−43.5%). Lazy fetch is now slightly faster than having it off.
+
+### Miss tracking sized by Little's law
+
+**Problem.** To reach a memory system's peak bandwidth, bandwidth × latency bytes must be in flight. The dcache, L2 and L3 MSHRs had 16 entries and the LSU's pending pool was capped at 32, on every platform. A high-bandwidth, high-latency platform could not keep enough misses outstanding.
+
+**How it works.** The configuration computes the bytes in flight the platform needs: peak bandwidth ÷ clock rate × memory latency. Each cache level sizes its MSHR from its bank's share of that, in sectors: a power of two, at least 16, at most 256 (64 for the dcache). `VX_CFG_LSU_PENDING_LIMIT` (32 to 256) bounds the LSU's pending pool per block the same way. Every RTL width derived from these sizes follows them, and SimX uses the same capacities.
+
+**Gain:** the stock shapes resolve to the same sizes as before. The a100 profile gets a 64-entry L2 MSHR; a profile that pins a value keeps it. Not measured separately.
+
+### Victim advance on a new line only
+
+**Problem.** The bank updated the replacement state on every fill, including a sector refill into a line already present. A stream reading both sectors of each line moved the FIFO pointer twice per line, so only every other way was ever chosen as a victim. The random policy stepped its generator on refills too.
+
+**How it works.** The replacement state advances only when a fill brings in a new line. PLRU, which updates on hits, is unaffected.
+
+**Gain:** one thread filling a set to its way count, re-reading it and adding one more line: 25 memory reads before, 9 after (the spread-out control is 9). No area change.
+
+### Request skids at the L2 and MMU inputs
+
+**Problem.** The L2 decided whether to accept a request in the same cycle as its tag lookup, and the MMUs in the same cycle as their TLB lookup. That ready signal fed back into the sender's output register across a module boundary, so the lookup and the sender's register enable formed one long loop. It was the slowest path on the tensor and full-GPU builds.
+
+**How it works.** A zero-latency skid register sits at each L2 bank's core-request input and at each MMU request lane. The sender sees a registered ready: the skid accepts whenever it is empty, and a request passes straight through when the bank accepts it at once, so no cycle is added. A flush waits until no request is held in a skid, so it can't overtake one. SimX models the held requests the same way.
+
+**Gain:** cycles unchanged (perf_gate identical). FPGA: tensor 240.6 → 251.6 MHz and full GPU 243.0 → 256.1 MHz, for +0.03% to +0.2% LUT.
 
 ---
 
@@ -274,6 +346,33 @@ Atomics with `.aq`/`.rl` get these steps around them. All of it is skipped when 
 
 **Gain:** correctness. The ordering test fails without the rule and passes with it.
 
+### Device-wide global barrier
+
+**Problem.** Each cluster had its own global-barrier unit. A barrier across clusters counted each cluster's cores separately, so SimX hung and the RTL timed out or released early with more than one cluster.
+
+**How it works.** One device-level unit counts the arrivals of every core and releases them together.
+
+**Gain:** correct global barriers at any cluster count.
+
+---
+
+## Local memory
+
+### Warp-wide local-memory unit
+
+**Problem.** Local memory served LSU requests lane by lane through a request crossbar. Same-word reads, such as a tile row every thread of a warp reads, each took their own bank access, and the crossbar was an 18-level path that limited the core's clock.
+
+**How it works:**
+- The unit takes a whole warp's request per cycle and serves it in passes. In each pass every bank goes to the lowest pending lane that maps to it, and every pending read lane of the same word rides along. Lanes left over replay in the next pass.
+- A request retires before the next one starts, so the banks see every lane in program order.
+- With several LSU blocks, a second, read-only engine uses the banks' second port, so two warps' reads go through each cycle. Stores and atomics use the first engine and are ordered against every read.
+- Each block's response leaves from its own register, with no added latency.
+- DXA writes and TCU reads take whole bank rows.
+
+**Gain:**
+- Timing: the local memory's deepest path goes from 18 to 9 logic levels (Beacon), and registers at 8 or more levels from 789 to 337.
+- Cycles: SimX, sgemm2 at 16 threads × 16 warps, -t16: −0.4% at -n128 (1,065,573 → 1,060,979) and −0.5% at -n256. The same-word ride-along already existed as the earlier LSU-side read merge, which this unit replaces.
+
 ---
 
 ## DMA
@@ -325,6 +424,87 @@ Atomics with `.aq`/`.rl` get these steps around them. All of it is skipped when 
 **How it works.** Each LSU block owns its path to its own dcache ports, along with its own status signals. The tensor-core blocks also get their own metadata ports into their slice's LSU. This is the processing-block organization of NVIDIA SMs: each partition has its own load/store path.
 
 **Gain:** cycle-identical at today's shapes. It is the structure that lets memory bandwidth scale with the number of LSU blocks, and it shortens the wires in the core.
+
+### Lane-gather writeback merge
+
+**Problem.** When the ALU or FPU has fewer lanes than the warp has threads, an instruction executes in several partial passes. Each pass wrote back on its own, so a 32-thread instruction on 8 lanes took 4 writeback beats and held the commit port for all of them.
+
+**How it works.** The lane gather collects an instruction's partial passes and writes them back as one beat. The per-lane demultiplexer that routed each pass is gone.
+
+**Gain (rtlsim):**
+- 16 threads, 8 ALU/FPU lanes: mixfu −8.7%, sgemm −9.7%.
+- 32 threads, 16 ALU/FPU lanes, 8 LSU lanes: mixfu −9.1%, sgemm −20.6%.
+- Area: −2,428 LUT per gather.
+
+### Stack interleave by whole lines
+
+**Problem.** The stack interleave XORs a frame slot's word index with the warp index, so the same slot of different warps lands in different cache sets. When a slot row (one word per thread) is narrower than a dcache line, a one-row skew moved the slot within the same line, and several warps still shared a set.
+
+**How it works.** The warp index is shifted by log2(line ÷ row) before the XOR, so the skew steps by whole lines. It stays a bit permutation plus one narrow XOR, and nothing changes when a row is a line or wider. Controlled by `VX_CFG_LSU_STACK_INTERLEAVE_ENABLE`.
+
+**Gain:** raycast −0.3% (SimX and rtlsim), instructions identical.
+
+### TCU loads in LSU-lane passes
+
+**Problem.** The TCU's operand loads assumed an LSU as wide as the warp. A shape with fewer LSU lanes than threads could not run tensor kernels.
+
+**How it works.** A TCU load issues in LSU-width passes when the LSU is narrower than the warp, like any other load.
+
+**Gain:** narrow-LSU shapes run tensor kernels. Beacon shows the default configuration unchanged.
+
+### Wide loads and stores
+
+**Problem.** A thread that reads consecutive words, such as a row of a matrix tile, fetches and decodes one load per word. At one fetched instruction per cycle, those loads take front-end slots the arithmetic needs.
+
+**How it works:**
+- `vx_flw.d` and `vx_flw.q` load 2 or 4 consecutive words into an aligned group of FP registers; `vx_fsw.d` and `vx_fsw.q` store them. Each is exactly its sequence of `flw`/`fsw`: word k goes between address + 4k and register + k, with 4-byte alignment, in any memory space.
+- The register must be even (`.d`) or a multiple of 4 (`.q`), and the immediate a multiple of 8 or 16, so the hardware expands the instruction without an adder.
+- Decode marks it as a macro-op, and the micro-op sequencer expands it into its 2 or 4 `flw`/`fsw` micro-ops. They issue like scalar loads, each with its own register in the scoreboard. SimX expands it the same way.
+- Controlled by `VX_CFG_EXT_LDST_WIDE_ENABLE`, **off by default**. Without it the encodings are not decoded.
+- Kernels use it explicitly through the `vx_flw_d/q<FD, OFF>()` and `vx_fsw_d/q<FD, OFF>()` intrinsics in `vx_intrinsics.h`, defined only when the knob is set. The FP register group is a template argument, so two groups can be live at once. They are `.insn` encodings and need no compiler support. LLVM can also emit the instructions itself under its `xvortexldstwide` extension, which is off unless passed.
+- The device reports the extension in its ISA flags (`VX_ISA_EXT_LDST_WIDE`).
+
+**Gain:** the comparison is against a scalar loop unrolled the same way, so it measures only the instruction. SimX cycles, default core (one fetch per cycle), knob off → on; rtlsim agrees within 0.1%:
+
+| Kernel | Args | Off | On | Change |
+|---|---|---|---|---|
+| sgemm | -n32 / -n64 | 115,075 / 799,794 | 107,995 / 779,750 | −6.2% / −2.5% |
+| sgemm_v1 | -n32 / -n64 | 130,947 / 898,758 | 118,453 / 831,043 | −9.5% / −7.5% |
+| sgemm2 | -n32 -t4 / -n64 -t4 | 200,115 / 1,401,158 | 185,693 / 1,284,375 | −7.2% / −8.3% |
+| sgemm2_dxa | -n32 -t4 / -n64 -t4 | 223,860 / 1,363,392 | 218,055 / 1,311,699 | −2.6% / −3.8% |
+| sgemm2_dxa_mcast | default / -n64 | 31,717 / 1,351,321 | 29,901 / 1,242,753 | −5.7% / −8.0% |
+| sgemmx | -n128 | 4,251,851 | 4,164,415 | −2.1% |
+| sgemm2_v1 | default | 4,800,667 | 4,804,766 | +0.1% |
+
+Retired instructions barely change; the gain comes from fetch. Order matters where the loads conflict on banks. In sgemm2_dxa every thread reads a different local-memory row, and with 4 banks each A load conflicts 4 ways. Issued first, the quad puts 4 slow loads into the LSU's shared dispatch queue at once, and the cheap B loads and the first FMA wait behind them: +1.2% to +4.6% slower than scalar. Issuing the B loads before the quad turns this into the gain above.
+
+Area: +33 LUT in decode and +3 LUT per warp in the expander, with no path deeper. With both load/store knobs off, the core is 89 LUT smaller than when the extensions were always built.
+
+Stepping these kernels' K loop by 4 is worth more than the instruction on any hardware: −16% to −35% against stepping by 1 (the original loops). The kernels now step by 4.
+
+### Matrix fragment loads and stores
+
+**Problem.** A tensor kernel loads each matrix fragment with one `flw` per register and per K step, plus the per-lane address arithmetic. In the K loop that is 21 to 24 fetched instructions per tile for the fragment loads alone.
+
+**How it works:**
+- `vx_ldm` and `vx_stm` move a whole fragment. The immediate's low 5 bits name the fragment shape (A, B, C, sparse A, symmetric sparse B, WGMMA C), and the micro-op sequencer expands the instruction into one `flw` or `fsw` per register, with each register's row and column computed from the micro-op counter.
+- Any kernel can use it: it does not depend on the TCU. The fragment geometry and shape table live in `VX_gpu_pkg`, and SimX's `fragment_layout.h` is shared by the LSU and the TCU model. Every shape is valid whenever the knob is on; the symmetric sparse B shape needs 4 or 16 threads.
+- Controlled by `VX_CFG_EXT_LDST_MATRIX_ENABLE`, **off by default**. Kernels use it through the `vx_ldm`/`vx_stm` intrinsics in `vx_intrinsics.h` (`.insn` encodings, no compiler support needed); `vx_tensor.h` calls them when a context is built with `ldst_matrix`. The device reports it in its ISA flags (`VX_ISA_EXT_LDST_MATRIX`).
+- Two shapes that lost to scalar loads on rtlsim were removed: asymmetric sparse B, and sparse MX, which keeps scalar loads.
+
+**Gain (rtlsim):** dense, MX and sparse TCU kernels −3.4% to −10.1%, with bit-identical results. Fetched instructions per K tile: 21–24 → 9 (NT 8). Area: core with TCU +169 LUT; core without the TCU +157 LUT; nothing deeper.
+
+---
+
+## GPU shape
+
+### Non-power-of-two GPU shapes
+
+**Problem.** Warp, core, socket and cluster counts had to be powers of two, because indices were bit slices. The profiled GPUs are not: 48 warps per SM (RTX 5080), 84, 108 or 132 SMs.
+
+**How it works.** The warp control, IPDOM stack and hart IDs, and the core, socket and cluster indexing use %, / and * instead of bit slices. The command processor reports the exact socket size in a capability word. Power-of-two shapes produce the same netlists as before.
+
+**Gain:** the profiles run at their real shapes (this fixed a 48-warp deadlock). A non-power-of-two shape runs within 1.08% of SimX on rtlsim.
 
 ---
 
