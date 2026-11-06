@@ -2,6 +2,8 @@ all:
 	$(MAKE) -C generic_queue
 	$(MAKE) -C mem_scheduler
 	$(MAKE) -C cache
+	$(MAKE) -C cache_mem_bp
+	$(MAKE) -C mem_to_axi
 	$(MAKE) -C core
 	$(MAKE) -C issue
 	$(MAKE) -C local_mem
@@ -80,6 +82,8 @@ run:
 	$(MAKE) -C generic_queue run
 	$(MAKE) -C mem_scheduler run
 	$(MAKE) -C cache run
+	$(MAKE) -C cache_mem_bp run
+	$(MAKE) -C mem_to_axi run
 	$(MAKE) -C core run
 	$(MAKE) -C issue run
 	$(MAKE) -C local_mem run

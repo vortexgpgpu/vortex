@@ -101,10 +101,20 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
 );
     localparam PIPELINE_STAGES = LATENCY;
     localparam PIPE_EX = LATENCY - 2;       // extra data-deferral stages (0 = classic 2-stage)
-    // mem-req queue depth (pow2): max of pipeline floor (2*PIPELINE) and writeback reservation (MSHR), plus MREQ_SIZE extra slots.
-    // A writeback cache emits an eviction request alongside the fill on a dirty miss, so up to MSHR_SIZE writebacks can
-    // enqueue at once (one per outstanding miss); reserving MSHR_SIZE slots keeps the queue from stalling the fill drain that frees them.
-    localparam MREQ_QUEUE_SIZE = 1 << `CLOG2(`MAX(2 * PIPELINE_STAGES, WRITEBACK ? MSHR_SIZE : 0) + MREQ_SIZE);
+    // A write-back fill may evict a dirty line, one writeback beat per sector. The
+    // queue drains in order, and memory may hold a read at its head until a
+    // response is taken (bounded AXI IDs or read slots), so a fill that waited on
+    // queue room could wait on itself. Every read in flight therefore keeps room
+    // for its fill's writeback; requests that start new misses (and flushes) are
+    // admitted against that reservation, and fills never wait on the queue. The
+    // slack covers the operations in the pipeline (each pushes at most one
+    // request and reserves one writeback) and the registered admission.
+    localparam WB_BEATS        = `CS_SECTORS_PER_LINE;
+    localparam MREQ_RSV_SLACK  = (1 + WB_BEATS) * (PIPELINE_STAGES + 2);
+    // mem-req queue depth (pow2): the pipeline floor (2*PIPELINE) or, write-back, the writeback reservation of every
+    // outstanding miss plus the slack, plus MREQ_SIZE extra slots.
+    localparam MREQ_QUEUE_SIZE = 1 << `CLOG2(`MAX(2 * PIPELINE_STAGES, WRITEBACK ? (WB_BEATS * MSHR_SIZE + MREQ_RSV_SLACK) : 0) + MREQ_SIZE);
+    localparam MREQ_SIZEW      = `CLOG2(MREQ_QUEUE_SIZE + 1);
     // core-rsp queue depth (pow2): registered-skid minimum (2) plus CRSQ_SIZE extra slots
     localparam CRSQ_QUEUE_SIZE = 1 << `CLOG2(2 + CRSQ_SIZE);
     `STATIC_ASSERT(LATENCY >= 2, ("invalid parameter: cache bank LATENCY must be >= 2"))
@@ -187,7 +197,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire mshr_valid_empty;
     wire mshr_probe_pending_ld, mshr_probe_pending_amo;
     wire mshr_any_ld, mshr_any_amo, mshr_persist_ld, mshr_persist_amo;
-    wire mreq_queue_empty, mreq_queue_alm_full;
+    wire mreq_queue_empty, mreq_queue_alm_full, mreq_queue_full;
+    wire mreq_room; // write-back: room for a new miss's request and its writeback
     wire [`CS_LINE_ADDR_WIDTH-1:0] mem_rsp_addr;
     wire [`UP(`CS_SECTOR_SEL_BITS)-1:0] mem_rsp_sector; // sector this fill installs
     wire [MSHR_ADDR_WIDTH-1:0] mshr_alloc_id, mshr_previd;
@@ -426,10 +437,10 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     assign replay_ready_lk = replay_grant && ~fwd_head_lk && ~replay_link_hold_lk && ~(!WRITEBACK && replay_rw && mreq_queue_alm_full);
     assign replay_ready   = replay_ready_lk && ~pipe_stall;
     assign mem_rsp_ready  = fill_grant && ~fwd_pending && ~replay_link_hold && ~amo_wbq_full && ~refetch_inflight
-                         && ~replay_block && ~(WRITEBACK && mreq_queue_alm_full) && ~pipe_stall;
-    assign flush_ready    = flush_grant && ~(WRITEBACK && mreq_queue_alm_full) && ~pipe_stall;
+                         && ~replay_block && ~pipe_stall;
+    assign flush_ready    = flush_grant && ~(WRITEBACK && ~mreq_room) && ~pipe_stall;
     // a core request may become a write-miss root, which pushes to lazyq.
-    wire   creq_alm_full  = mreq_queue_alm_full || lazyq_alm_full || replay_block;
+    wire   creq_alm_full  = (WRITEBACK ? ~mreq_room : mreq_queue_alm_full) || lazyq_alm_full || replay_block;
     assign core_req_ready = creq_grant && ~creq_alm_full && ~mshr_alm_full && ~pipe_stall
                          && ~amo_commit_busy && ~req_input_defer;
 
@@ -1370,6 +1381,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // ========================================================================
     localparam SEC = `CS_SECTORS_PER_LINE;
     wire mreq_queue_push, mreq_queue_pop;
+    wire [MREQ_SIZEW-1:0] mreq_queue_size;
     wire [`CS_SECTOR_WIDTH-1:0] mreq_queue_data;
     wire [SECTOR_SIZE-1:0] mreq_queue_byteen;
     wire [`CS_LINE_SECTOR_ADDR_WIDTH-1:0] mreq_queue_addr;
@@ -1416,7 +1428,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         `UNUSED_PIN (onehot_out)
     );
     wire [SEC-1:0] wb_sec_oh = SEC'(1) << wb_sector;
-    wire wb_beat_accept = is_wb_beat && ~mreq_queue_alm_full;
+    wire wb_beat_accept = is_wb_beat && ~mreq_queue_full; // reserved: never waits in practice
     wire [SEC-1:0] wb_mask_nxt = wb_beat_accept ? (wb_mask_cur & ~wb_sec_oh) : wb_mask_cur;
     assign wb_hold = (| wb_mask_nxt); // beats remain after this cycle -> hold stC
     always @(posedge clk) begin
@@ -1566,11 +1578,36 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .data_out ({mem_req_rw, mem_req_addr, mem_req_byteen, mem_req_data, mem_req_tag, mem_req_attr}),
         .empty    (mreq_queue_empty),
         .alm_full (mreq_queue_alm_full),
-        `UNUSED_PIN (full),
+        .full     (mreq_queue_full),
         `UNUSED_PIN (alm_empty),
-        `UNUSED_PIN (size)
+        .size     (mreq_queue_size)
     );
     assign mem_req_valid = ~mreq_queue_empty;
+
+    if (WRITEBACK) begin : g_mreq_rsv
+        // reads queued or in memory whose fill has not entered the bank
+        reg [MREQ_SIZEW-1:0] fills_due;
+        reg mreq_room_r;
+        wire rd_push = mreq_queue_push && ~mreq_queue_rw;
+        // +1, -1 or 0 as one addend: one carry chain behind the late fill handshake
+        wire [MREQ_SIZEW-1:0] fills_delta = (rd_push == mem_rsp_fire) ? '0 : (rd_push ? MREQ_SIZEW'(1) : {MREQ_SIZEW{1'b1}});
+        always @(posedge clk) begin
+            if (reset) begin
+                fills_due   <= '0;
+                mreq_room_r <= 1'b1;
+            end else begin
+                fills_due   <= fills_due + fills_delta;
+                mreq_room_r <= ((MREQ_SIZEW+2)'(mreq_queue_size) + (MREQ_SIZEW+2)'(WB_BEATS) * (MREQ_SIZEW+2)'(fills_due)
+                                + (MREQ_SIZEW+2)'(MREQ_RSV_SLACK)) <= (MREQ_SIZEW+2)'(MREQ_QUEUE_SIZE);
+            end
+        end
+        `RUNTIME_ASSERT (~(mem_rsp_fire && fills_due == 0 && ~rd_push), ("%t: %s fill without a read in flight", $time, INSTANCE_ID))
+        `RUNTIME_ASSERT (~(mreq_queue_push && mreq_queue_full), ("%t: %s memory request queue overflow", $time, INSTANCE_ID))
+        assign mreq_room = mreq_room_r;
+    end else begin : g_no_mreq_rsv
+        `UNUSED_VAR ({mreq_queue_size, mreq_queue_full})
+        assign mreq_room = ~mreq_queue_alm_full;
+    end
 
     // Lazy-fetch loopback: write-miss roots awaiting their data-less fill.
     // Sized like the memory request queue's reservation: a core request is
