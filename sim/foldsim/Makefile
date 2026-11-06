@@ -27,6 +27,10 @@ LDFLAGS += $(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
 
 VL_FLAGS += -O3 -Wno-fatal -Wno-lint -Wno-style -Wno-MULTIDRIVEN --x-initial 0 --x-assign 0
 VL_FLAGS += -I$(FOLDSIM_RTL_DIR) -I$(WORK_DIR)/gen -I$(DPI_DIR)
+# The kernel expands its virtual-memory controllers from one macro line
+# (FOLDSIM_VMEM_REPEAT): past ~32 controllers that line holds more than
+# Verilator's default 40000 preprocessor tokens.
+VL_FLAGS += --preproc-token-limit 4000000
 ifdef VCD
 VL_FLAGS += --trace --trace-structs
 endif
