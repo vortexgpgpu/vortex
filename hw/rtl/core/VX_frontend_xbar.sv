@@ -74,6 +74,7 @@ module VX_frontend_xbar import VX_gpu_pkg::*; (
     localparam NPA = FETCH_ALU_PORTS;
     localparam NPS = FETCH_SFU_PORTS;
 
+    `STATIC_ASSERT (`IS_POW2(IW), ("ISSUE_WIDTH must be a power of two: wid_to_isw takes the slice from the low bits of the warp id"))
     `STATIC_ASSERT (`IS_POW2(FW) && (FW <= IW) && ((IW % FW) == 0), ("invalid parameter"))
 
     // instruction path

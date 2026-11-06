@@ -63,7 +63,8 @@ VX_CFG_MAX_BAR_EVENTS = 32
 
 VX_CFG_IBUF_SIZE = 4
 VX_CFG_DISPATCH_QUEUE_SIZE = 4
-VX_CFG_ISSUE_WIDTH = "expr: up($VX_CFG_NUM_WARPS / 16)"
+# A power of two: a warp's issue slice is the low bits of its id.
+VX_CFG_ISSUE_WIDTH = "expr: pow(2, clog2(up($VX_CFG_NUM_WARPS / 16)))"
 # Fetch slices, each scheduling and fetching its own warps on its own icache
 # port: a power of two that divides ISSUE_WIDTH. One per issue slice by
 # default (the largest power of two dividing ISSUE_WIDTH).
