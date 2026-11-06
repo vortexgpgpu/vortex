@@ -84,6 +84,13 @@ module foldsim_vmem_group #(
     parameter KZ_SHIFT       = 0,
     // The controller's row bytes in memory (foldsim_vmem).
     parameter ROW_BYTES      = (((DW + 7) / 8) > 64) ? (1 << $clog2((DW + 7) / 8)) : 64,
+    // The controller's writes on AXI waiting for B, hazard-table bits and
+    // write-number bits (foldsim_vmem).
+    parameter WRITES_OUT     = 128,
+    parameter HAZARD_BITS    = $clog2(QUEUE + WRITES_OUT) + 3,
+    parameter SEQ_W          = 16,
+    // Reads answered from the write buffer, or never (foldsim_vmem).
+    parameter FORWARD        = 1,
     // FIFO entries per member, a power of two of at least 8.
     parameter FIFO           = 8,
     localparam GF            = $clog2(2 * FIFO + 1)
@@ -413,7 +420,11 @@ module foldsim_vmem_group #(
         .KNOWN_ZERO     (KNOWN_ZERO),
         .KZ_SHIFT       (KZ_SHIFT),
         .ROW_BYTES      (ROW_BYTES),
-        .TAGW           (TW)
+        .TAGW           (TW),
+        .WRITES_OUT     (WRITES_OUT),
+        .HAZARD_BITS    (HAZARD_BITS),
+        .SEQ_W          (SEQ_W),
+        .FORWARD        (FORWARD)
     ) vmem (
         .clk       (clk),
         .reset     (c_reset),

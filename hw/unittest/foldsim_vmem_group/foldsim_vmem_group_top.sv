@@ -32,6 +32,9 @@ module foldsim_vmem_group_top #(
     parameter KZ_SHIFT       = 0,
     parameter ROW_BYTES      = (((DW + 7) / 8) > 64) ? (1 << $clog2((DW + 7) / 8)) : 64,
     parameter FIFO           = 8,
+    parameter WRITES_OUT     = 128,
+    parameter HAZARD_BITS    = $clog2(32 + WRITES_OUT) + 3,
+    parameter SEQ_W          = 16,
     localparam GF            = $clog2(2 * FIFO + 1)
 ) (
     input  wire                 clk,
@@ -138,7 +141,10 @@ module foldsim_vmem_group_top #(
         .KZ_SHIFT       (KZ_SHIFT),
         .ROW_BYTES      (ROW_BYTES),
         .CACHE_ROWS     (CACHE_ROWS),
-        .FIFO           (FIFO)
+        .FIFO           (FIFO),
+        .WRITES_OUT     (WRITES_OUT),
+        .HAZARD_BITS    (HAZARD_BITS),
+        .SEQ_W          (SEQ_W)
     ) group (
         .clk       (clk),
         .reset     (reset_r),

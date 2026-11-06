@@ -732,13 +732,15 @@ struct Tb {
   }
 
   void quiesce() {
-    for (int i = 0; i < 300000; ++i) {
+    // Quiet for a few cycles in a row: free is back at QUEUE once a write's
+    // last W beat is out, a cycle or two before memory has it.
+    for (int i = 0, quiet = 0; i < 300000 && quiet < 8; ++i) {
       bool any = false;
       for (auto& x : c)
         for (bool p : x.pending) any |= p;
       bool full = true;
       for (int k = 0; k < kNc; ++k) full &= get_u(dut->free, k * kFw, kFw) == VM_QUEUE;
-      if (!any && hbm.outstanding() == 0 && full && !draining_any() && !moving) break;
+      quiet = (!any && hbm.outstanding() == 0 && full && !draining_any() && !moving) ? quiet + 1 : 0;
       cycle(false, false);
     }
     for (int i = 0; i < 8; ++i) cycle(false, false);
@@ -749,7 +751,8 @@ struct Tb {
       CHECK(get_u(dut->free, k * kFw, kFw) == VM_QUEUE, "controller %d: free %lu at rest", k,
             (unsigned long)get_u(dut->free, k * kFw, kFw));
     }
-    CHECK(hbm.outstanding() == 0, "HBM left with %zu transactions", hbm.outstanding());
+    CHECK(hbm.outstanding() == 0, "HBM left with %zu transactions (%zu reads, %zu AW, %zu W, %zu writes before B)",
+          hbm.outstanding(), hbm.n_reads(), hbm.aw.size(), hbm.w.size(), hbm.writes.size());
   }
 
   void start(const Setup& setup, uint64_t seed) {

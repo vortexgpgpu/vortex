@@ -113,7 +113,15 @@
 #ifndef VM_KZ_SHIFT
 #define VM_KZ_SHIFT 0
 #endif
+// Writes on AXI waiting for their B (the buffer frees a slot with its last W beat).
+#ifndef VM_WRITES_OUT
+#define VM_WRITES_OUT 128
+#endif
 // 0: the controller's default (DW/8 rounded up to a power of two, at least 64).
+// Reads answered from the write buffer (1) or never (0).
+#ifndef VM_FORWARD
+#define VM_FORWARD 1
+#endif
 #ifndef VM_ROW_BYTES
 #define VM_ROW_BYTES 0
 #endif
@@ -433,6 +441,7 @@ struct Hbm {
       ++n_reads;
     }
     if (aw_hs) {
+      CHECK(n_aw - n_b < uint64_t(VM_WRITES_OUT), "AW beyond WRITES_OUT writes waiting for B");
       ++n_aw;
       check_addr(dut->m_awaddr, "AW");
       aw.push_back({dut->m_awaddr});
@@ -614,7 +623,11 @@ struct Tb {
   std::map<uint64_t, int> wr_inflight;
 
   uint64_t n_reads = 0, n_writes = 0, n_checked = 0, n_pairs_same = 0, n_raw = 0, n_resets = 0,
-           n_resets_busy = 0, max_rsp_lat = 0, full_cycles = 0, dropped = 0, n_quick = 0;
+           n_resets_busy = 0, max_rsp_lat = 0, full_cycles = 0, dropped = 0, n_quick = 0,
+           n_fwd = 0;
+  // Without a cache: whether each instance's read met a write of its row in
+  // flight (answered on chip, it came from the write buffer).
+  std::vector<bool> raw_at = std::vector<bool>(kInstances, false);
 
   void tick() {
     dut->clk = 0;
@@ -743,7 +756,10 @@ struct Tb {
         max_rsp_lat = std::max(max_rsp_lat, now - issued_at[ri]);
         rsp_lat[ri] = now - issued_at[ri];
         // Answered without memory: the cache or the write buffer.
-        if (now - issued_at[ri] <= kLocal + 1) ++n_quick;
+        if (now - issued_at[ri] <= kLocal + 1) {
+          ++n_quick;
+          if (raw_at[ri]) ++n_fwd;
+        }
       }
     }
     if (fr == 0 && !draining && !rst) ++full_cycles;
@@ -760,6 +776,7 @@ struct Tb {
       if (rd) {
         ++n_reads;
         if (VM_CACHE_ROWS == 0 && wr_inflight.count(ra)) ++n_raw;
+        raw_at[inst] = VM_CACHE_ROWS == 0 && wr_inflight.count(ra);
         pending[inst] = true;
         issued_at[inst] = now;
       }
@@ -868,10 +885,12 @@ struct Tb {
   }
 
   void quiesce() {
-    for (int i = 0; i < 200000; ++i) {
+    // Quiet for a few cycles in a row: free is back at QUEUE once a write's
+    // last W beat is out, a cycle or two before memory has it.
+    for (int i = 0, quiet = 0; i < 200000 && quiet < 8; ++i) {
       bool any = false;
       for (bool p : pending) any |= p;
-      if (!any && hbm.outstanding() == 0 && dut->free == VM_QUEUE && !draining && !moving_tb) break;
+      quiet = (!any && hbm.outstanding() == 0 && dut->free == VM_QUEUE && !draining && !moving_tb) ? quiet + 1 : 0;
       cycle(false, false);
     }
     for (int i = 0; i < 8; ++i) cycle(false, false);
@@ -943,7 +962,8 @@ struct Tb {
     last_free = 0;
     last_taken = 0;
     n_reads = n_writes = n_checked = n_pairs_same = n_raw = n_resets = n_resets_busy = max_rsp_lat = 0;
-    full_cycles = dropped = n_quick = 0;
+    full_cycles = dropped = n_quick = n_fwd = 0;
+    raw_at.assign(kInstances, false);
 
     dut = new Vfoldsim_vmem();
     dut->base = kBase;
@@ -1037,6 +1057,14 @@ struct Tb {
            (unsigned long)drain_cycles, (unsigned long)n_moves, (unsigned long)n_moves_busy,
            (unsigned long)move_cycles, (unsigned long)lead_taken, (unsigned long)n_toggles,
            failures == before ? "ok" : "FAILED");
+    // Without forwarding, no read is answered from the write buffer: one that
+    // met a write of its row in flight waits for its B and reads memory.
+    if (VM_CACHE_ROWS == 0) {
+      printf("%-8s reads meeting a write in flight answered from the buffer: %lu of %lu\n",
+             setup.name, (unsigned long)n_fwd, (unsigned long)n_raw);
+      if (VM_FORWARD == 0)
+        CHECK(n_fwd == 0, "FORWARD 0: %lu reads answered from the write buffer", (unsigned long)n_fwd);
+    }
     // A cache with a line per row can keep HBM idle under any traffic.
     if (uint64_t(VM_CACHE_ROWS) < kImageRows) {
       CHECK(n_resets_busy >= uint64_t(setup.resets), "only %lu of the resets found HBM busy",
@@ -1323,15 +1351,22 @@ struct Tb {
         ++steps;
 
         // I: a pair whose read is answered from the buffer (its row evicted,
-        // the write-back not yet acknowledged) releases its pin there.
+        // the write-back not yet out: the pair right behind the evicting write,
+        // as a slot is freed by its last W beat) releases its pin there.
         hbm.lat_lo = hbm.lat_hi = 400;
         issue(false, true, p, r5);
-        issue(false, true, q1, rq1);
         for (int i = 0; i < 10; ++i) cycle(false, false);
+        issue(false, true, q1, rq1);
         issue(true, true, p, r5);
         await(p, 0);
-        CHECK(quick(p), "I: the pair's read was not answered from the buffer (%lu cycles)",
-              (unsigned long)rsp_lat[p]);
+        // Without forwarding (FORWARD 0) the read waits for the write-back's
+        // B and reads memory; the pin is released when it has its data.
+        if (VM_FORWARD)
+          CHECK(quick(p), "I: the pair's read was not answered from the buffer (%lu cycles)",
+                (unsigned long)rsp_lat[p]);
+        else
+          CHECK(!quick(p), "I: the pair's read was answered from the buffer without FORWARD (%lu cycles)",
+                (unsigned long)rsp_lat[p]);
         const size_t from = hbm.aw_log.size();
         issue(false, true, q2, rq2);
         for (int i = 0; i < 1500; ++i) cycle(false, false);
@@ -1340,7 +1375,7 @@ struct Tb {
           evicted |= hbm.aw_log[i] == row_addr(p, r5);
           around |= hbm.aw_log[i] == row_addr(q2, rq2);
         }
-        CHECK(evicted && !around, "I: the line stayed pinned after its read was answered from the buffer");
+        CHECK(evicted && !around, "I: the line stayed pinned after its read was answered from the buffer (evicted %d around %d)", int(evicted), int(around));
         hbm.lat_lo = hbm.lat_hi = 50;
         ++steps;
 
@@ -1716,6 +1751,59 @@ struct Tb {
     return failures - before;
   }
 
+  // ---- Directed: write throughput ----
+  // Writes that go to memory (no host cache), back to back, against a memory
+  // of fixed latency L that is always ready: a write holds its buffer slot
+  // only until its last W beat, so up to WRITES_OUT wait for B at once and
+  // the controller takes min(1, WRITES_OUT / L) writes a cycle (a slot until B
+  // would allow QUEUE / L). Then reads of every row just written, while their
+  // writes still wait for B, each answered with its write's data (the
+  // reference): none reaches AR before its write's B.
+  int run_wrate_directed(uint64_t seed) {
+    static const Setup kW = {"wrate", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 400, 400, 1.0, 0, 0, 0};
+    const int before = failures;
+    start(kW, seed);
+    hbm.rvalid_p = 1.0;
+    const uint64_t span = 8000, w0 = n_writes, c0 = now;
+    uint32_t k = 0;
+    std::vector<std::pair<uint32_t, uint32_t>> last;
+    while (now - c0 < span) {
+      if (lead_ok(1)) {
+        const uint32_t i = k % kInstances, r = (k / kInstances) % kRows;
+        issue(false, true, i, r);
+        last.push_back({i, r});
+        if (last.size() > 64) last.erase(last.begin());
+        ++k;
+      } else {
+        cycle(false, false);
+      }
+    }
+    const double rate = double(n_writes - w0) / double(span);
+    const double bound = std::min(1.0, double(VM_WRITES_OUT) / 400.0);
+    // A queue near the simulator's room (10) admits a write only when nearly
+    // empty: the rate is then the room's, not the memory's.
+    if (VM_QUEUE >= 32)
+      CHECK(rate >= 0.8 * bound, "wrate: %.3f writes a cycle, expected about %.3f", rate, bound);
+    // Reads of the last rows written, in flight on AXI.
+    uint64_t raw = 0;
+    for (auto [i, r] : last) {
+      while (!lead_ok(1) || pending[i]) cycle(false, false);
+      if (wr_inflight.count(row_addr(i, r))) ++raw;
+      issue(true, false, i, r);
+    }
+    // (Few writes on AXI keep the queue full of writes: reads then wait
+    // until their B's are back.)
+    if (VM_QUEUE >= 32 && VM_WRITES_OUT >= 32) CHECK(raw > 0, "wrate: no read met its write in flight");
+    finish();
+    printf("wrate %lu writes in %lu cycles: %.3f a cycle (WRITES_OUT %d, QUEUE %d, latency 400: bound %.3f); "
+           "%lu reads of rows whose writes wait for B: %s\n",
+           (unsigned long)(n_writes - w0), (unsigned long)span, rate, VM_WRITES_OUT, VM_QUEUE, bound,
+           (unsigned long)raw, failures == before ? "ok" : "FAILED");
+    delete dut;
+    dut = nullptr;
+    return failures - before;
+  }
+
   int run_move_directed(uint64_t seed) {
     static const Setup kM = {"mdirected", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 50, 50, 1.0, 0, 0, 0};
     const int before = failures;
@@ -1924,14 +2012,15 @@ int main(int argc, char** argv) {
   for (int i = 1; i < argc; ++i)
     if (argv[i][0] != '+') only = argv[i];
   printf("foldsim_vmem: IW %d AW %d DW %d MW %d RDW_READ_FIRST %d QUEUE %d AXI_ID_W %d OUTSTANDING %d INSTANCES %u "
-         "CACHE_ROWS %d KNOWN_ZERO %d KZ_SHIFT %d ROW_BYTES %d\n",
+         "CACHE_ROWS %d KNOWN_ZERO %d KZ_SHIFT %d ROW_BYTES %d WRITES_OUT %d\n",
          VM_IW, VM_AW, VM_DW, VM_MW, VM_RDW_READ_FIRST, VM_QUEUE, VM_AXI_ID_W, VM_OUTSTANDING, kInstances,
-         VM_CACHE_ROWS, VM_KNOWN_ZERO, VM_KZ_SHIFT, 1 << kRowLog2);
+         VM_CACHE_ROWS, VM_KNOWN_ZERO, VM_KZ_SHIFT, 1 << kRowLog2, VM_WRITES_OUT);
   Tb tb;
   if (VM_CACHE_ROWS > 0 && (!only || !std::strcmp(only, "directed"))) tb.run_directed(1);
   if (VM_KNOWN_ZERO && VM_KZ_SHIFT == 0 && (!only || !std::strcmp(only, "zdirected"))) tb.run_kz_directed(1);
   if (VM_KNOWN_ZERO && VM_KZ_SHIFT > 0 && (!only || !std::strcmp(only, "zbdirected"))) tb.run_kzb_directed(1);
   if (!only || !std::strcmp(only, "mdirected")) tb.run_move_directed(1);
+  if (VM_CACHE_ROWS == 0 && (!only || !std::strcmp(only, "wrate"))) tb.run_wrate_directed(1);
   uint64_t seed = 1;
   for (const auto& s : kSetups) {
     ++seed;

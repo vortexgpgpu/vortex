@@ -45,6 +45,10 @@ all:
 	$(MAKE) -C foldsim_vmem_c16q8
 	$(MAKE) -C foldsim_vmem_c8dw4096
 	$(MAKE) -C foldsim_vmem_i1
+	$(MAKE) -C foldsim_vmem_eng_f1
+	$(MAKE) -C foldsim_vmem_eng_f0
+	$(MAKE) -C foldsim_vmem_c64f0
+	$(MAKE) -C foldsim_vmem_i1f0
 	$(MAKE) -C foldsim_vmem_i1c256
 	$(MAKE) -C foldsim_vmem_i4c64
 	$(MAKE) -C foldsim_vmem_c16pin
@@ -126,6 +130,10 @@ run:
 	$(MAKE) -C foldsim_vmem_c16q8 run
 	$(MAKE) -C foldsim_vmem_c8dw4096 run
 	$(MAKE) -C foldsim_vmem_i1 run
+	$(MAKE) -C foldsim_vmem_eng_f1 run
+	$(MAKE) -C foldsim_vmem_eng_f0 run
+	$(MAKE) -C foldsim_vmem_c64f0 run
+	$(MAKE) -C foldsim_vmem_i1f0 run
 	$(MAKE) -C foldsim_vmem_i1c256 run
 	$(MAKE) -C foldsim_vmem_i4c64 run
 	$(MAKE) -C foldsim_vmem_c16pin run

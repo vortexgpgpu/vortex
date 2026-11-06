@@ -62,6 +62,9 @@ import sys
 
 # The kernel's device-memory masters, as the emulator binds them.
 MAX_MASTERS = 32
+# FOLDSIM_VMEM_REPEAT_P<q>: the controllers in parts of PART_SIZE, PARTS of them.
+PART_SIZE = 8
+PARTS = 16
 
 
 def vmem_count(sim_vh):
@@ -139,13 +142,20 @@ def main():
         return
     if n == 0:
         return
+    port = (lambda k: k % p) if m == 0 else (lambda k: p + k % m)
+    print('`define FOLDSIM_VMEM_REPEAT(f,s) ' + ' `s '.join(f'`f({port(k)}, {k})' for k in range(n)))
+    # The same in parts of PART_SIZE, each a line of its own where the kernel
+    # instantiates the controllers (a part after the first led by `s unless
+    # it is empty): Verilator takes at most 40000 tokens on a line.
+    print(f'`define FOLDSIM_VMEM_PARTS {PARTS}')
+    for q in range(PARTS):
+        ks = range(q * PART_SIZE, min(n, (q + 1) * PART_SIZE))
+        print(f'`define FOLDSIM_VMEM_REPEAT_P{q}(f,s) ' + ('`s ' if q and ks else '')
+              + ' `s '.join(f'`f({port(k)}, {k})' for k in ks))
+    if n > PARTS * PART_SIZE:
+        sys.exit(f'vmem_ports.py: {n} controllers; the kernel lists at most {PARTS * PART_SIZE}')
     if m == 0:
-        print('`define FOLDSIM_VMEM_REPEAT(f,s) '
-              + ' `s '.join(f'`f({k % p}, {k})' for k in range(n)))
         print('`define FOLDSIM_VMEM_ON_PORTS')
-    else:
-        print('`define FOLDSIM_VMEM_REPEAT(f,s) '
-              + ' `s '.join(f'`f({p + k % m}, {k})' for k in range(n)))
     if 0 < m < n:
         print(f'`define FOLDSIM_VMEM_MASTERS {m}')
         print('`define FOLDSIM_VMEM_MASTER_REPEAT(f,s) '

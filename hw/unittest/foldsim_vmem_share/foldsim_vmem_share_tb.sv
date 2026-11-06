@@ -28,6 +28,8 @@ module foldsim_vmem_share_tb #(
     parameter INSTANCES      = 1 << IW,
     parameter CACHE_ROWS     = 0,
     parameter KNOWN_ZERO     = 1,
+    // Each controller's writes on AXI waiting for B: the sharing's route of B holds them all.
+    parameter WRITES_OUT     = 128,
     parameter FW             = $clog2(QUEUE + 1)
 ) (
     input  wire                     clk,
@@ -103,7 +105,8 @@ module foldsim_vmem_share_tb #(
             .OUTSTANDING    (OUTSTANDING),
             .INSTANCES      (INSTANCES),
             .CACHE_ROWS     (CACHE_ROWS),
-            .KNOWN_ZERO     (KNOWN_ZERO)
+            .KNOWN_ZERO     (KNOWN_ZERO),
+            .WRITES_OUT     (WRITES_OUT)
         ) vmem (
             .clk       (clk),
             .reset     (reset),
@@ -153,7 +156,7 @@ module foldsim_vmem_share_tb #(
         .N      (NC),
         .ID_W   (AXI_ID_W),
         .RDEPTH (NC * (OUTSTANDING > (1 << AXI_ID_W) ? OUTSTANDING >> AXI_ID_W : 1)),
-        .WDEPTH (NC * QUEUE)
+        .WDEPTH (NC * WRITES_OUT)
     ) share (
         .clk       (clk),
         .s_awvalid (s_awvalid), .s_awready (s_awready), .s_awaddr (s_awaddr), .s_awid (s_awid),

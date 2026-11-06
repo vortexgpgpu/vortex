@@ -40,11 +40,19 @@
 `ifndef VG_X
 `define VG_X AXI_ID_W = 4, OUTSTANDING = 16, ROW_BYTES = 64, KZ_SHIFT = 0
 `endif
+// VG_SMALL_W: two writes on AXI at once, a two-entry hazard table and 7-bit
+// write numbers (every read meets another row's write; numbers wrap).
+`ifdef VG_SMALL_W
+`define VG_W WRITES_OUT = 2, HAZARD_BITS = 1, SEQ_W = 7
+`else
+`define VG_W WRITES_OUT = 128, HAZARD_BITS = 11, SEQ_W = 16
+`endif
 
 module foldsim_vmem_group_tb #(
     parameter `VG_P,
     parameter int `VG_M,
     parameter `VG_X,
+    parameter `VG_W,
     parameter FIFO     = 8,
     localparam GF      = $clog2(2 * FIFO + 1)
 ) (
@@ -107,6 +115,9 @@ module foldsim_vmem_group_tb #(
         .ROW_BYTES      (ROW_BYTES),
         .KZ_SHIFT       (KZ_SHIFT),
         .CACHE_ROWS     (CACHE),
+        .WRITES_OUT     (WRITES_OUT),
+        .HAZARD_BITS    (HAZARD_BITS),
+        .SEQ_W          (SEQ_W),
         .FIFO           (FIFO)
     ) group (.*);
 endmodule
