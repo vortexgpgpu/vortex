@@ -70,11 +70,14 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   // ── Compute: 1 row × tile_size cols ───────────────────────────────────────
   const size_t l_col = threadIdx.x;  // 0..tile_size-1 (single warp)
   TYPE sum(0);
-#if LDST_WIDE
   size_t k = 0;
-  static_assert(__is_same(TYPE, float), "LDST_WIDE needs float");
   for (; k + 4 <= chunk_k; k += 4) {
+#if LDST_WIDE
+    static_assert(__is_same(TYPE, float), "LDST_WIDE needs float");
     vx_float4 a = vx_flw_q(&shA[k]);
+#else
+    TYPE a[4] = {shA[k], shA[k + 1], shA[k + 2], shA[k + 3]};
+#endif
     sum += a[0] * shB[k * tile_size + l_col];
     sum += a[1] * shB[(k + 1) * tile_size + l_col];
     sum += a[2] * shB[(k + 2) * tile_size + l_col];
@@ -83,11 +86,6 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   for (; k < chunk_k; ++k) {
     sum += shA[k] * shB[k * tile_size + l_col];
   }
-#else
-  for (size_t k = 0; k < chunk_k; ++k) {
-    sum += shA[k] * shB[k * tile_size + l_col];
-  }
-#endif
 
   // Store C[row, col_blk*tile_size + l_col]
   C[row * size + col_blk * tile_size + l_col] = sum;

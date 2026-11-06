@@ -39,24 +39,23 @@ void kernel_body(kernel_arg_t *arg) {
 
     __syncthreads();
 
-#if LDST_WIDE
+    const TYPE* a_row = &local_A[l_row * chunk_k];
     size_t j = 0;
-    static_assert(__is_same(TYPE, float), "LDST_WIDE needs float");
     for (; j + 4 <= chunk_k; j += 4) {
-      vx_float4 a = vx_flw_q(&local_A[l_row * chunk_k + j]);
+#if LDST_WIDE
+      static_assert(__is_same(TYPE, float), "LDST_WIDE needs float");
+      vx_float4 a = vx_flw_q(&a_row[j]);
+#else
+      TYPE a[4] = {a_row[j], a_row[j + 1], a_row[j + 2], a_row[j + 3]};
+#endif
       sum += a[0] * local_B[j * tile_size + l_col];
       sum += a[1] * local_B[(j + 1) * tile_size + l_col];
       sum += a[2] * local_B[(j + 2) * tile_size + l_col];
       sum += a[3] * local_B[(j + 3) * tile_size + l_col];
     }
     for (; j < chunk_k; ++j) {
-      sum += local_A[l_row * chunk_k + j] * local_B[j * tile_size + l_col];
+      sum += a_row[j] * local_B[j * tile_size + l_col];
     }
-#else
-    for (size_t j = 0; j < chunk_k; ++j) {
-      sum += local_A[l_row * chunk_k + j] * local_B[j * tile_size + l_col];
-    }
-#endif
 
     __syncthreads();
   }
