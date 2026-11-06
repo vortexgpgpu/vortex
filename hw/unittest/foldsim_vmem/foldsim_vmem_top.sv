@@ -73,7 +73,8 @@ module foldsim_vmem_top #(
     output reg                         m_rready,
     input  wire [511:0]                m_rdata,
     input  wire [AXI_ID_W-1:0]         m_rid,
-    input  wire                        m_rlast
+    input  wire                        m_rlast,
+    output reg  [7*48-1:0]             tel
 );
     localparam FW = $clog2(QUEUE + 1);
 
@@ -111,6 +112,8 @@ module foldsim_vmem_top #(
         rid_r      <= m_rid;
         rlast_r    <= m_rlast;
     end
+
+    wire [7*48-1:0]   tel_w;
 
     wire                rsp_valid_w;
     wire [IW-1:0]       rsp_inst_w;
@@ -182,10 +185,12 @@ module foldsim_vmem_top #(
         .m_rready  (rready_w),
         .m_rdata   (rdata_r),
         .m_rid     (rid_r),
-        .m_rlast   (rlast_r)
+        .m_rlast   (rlast_r),
+        .tel       (tel_w)
     );
 
     always @(posedge clk) begin
+        tel       <= tel_w;
         rsp_valid <= rsp_valid_w;
         rsp_inst  <= rsp_inst_w;
         rsp_data  <= rsp_data_w;

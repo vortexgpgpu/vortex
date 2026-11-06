@@ -450,8 +450,31 @@ public:
       return -1;
     if (this->settle() != 0)
       return -1;
+    // The virtual memories' telemetry counts from the kernel's reset: this process's share is from here.
+    vmem_tel_base_ = vmem_tel();
     open_ = true;
     return 0;
+  }
+
+  // The virtual memories' controllers' telemetry counters (FOLDSIM_REG_VMEM_TEL), since the kernel's reset; none on
+  // images without them. Controllers past the simulator's plain virtual memories are its page engines and link
+  // streams (foldsim --page-engines, hbm link kinds), in foldsim_sim.vh's order.
+  std::vector<std::vector<uint64_t>> vmem_tel() {
+    std::vector<std::vector<uint64_t>> t;
+    uint32_t caps = 0;
+    if (transport_.reg_read(FOLDSIM_REG_VMEM_TEL_SEL, &caps) != 0 || caps == 0)
+      return t;
+    const uint32_t n = caps & 0xffff, counters = std::min<uint32_t>((caps >> 16) & 0xff, FOLDSIM_VMEM_NUM_TEL);
+    for (uint32_t k = 0; k < n; ++k) {
+      transport_.reg_write(FOLDSIM_REG_VMEM_TEL_SEL, k);
+      // The kernel registers the pick twice before the counters: a read of the count first.
+      transport_.reg_read(FOLDSIM_REG_VMEM_TEL_SEL, &caps);
+      std::vector<uint64_t> c(FOLDSIM_VMEM_NUM_TEL, 0);
+      for (uint32_t i = 0; i < counters; ++i)
+        c[i] = read64(FOLDSIM_REG_VMEM_TEL(i));
+      t.push_back(c);
+    }
+    return t;
   }
 
   // After a reset Vortex's caches invalidate their lines, a set per cycle,
@@ -728,6 +751,30 @@ private:
     if (vmem_bytes_ != 0)
       fprintf(stderr, "[foldsim] virtual memories: %lu bytes of device memory at 0x%lx\n",
               (unsigned long)vmem_bytes_, (unsigned long)vmem_base_);
+    // Each controller's telemetry, this process's share.
+    {
+      const auto now = vmem_tel();
+      uint64_t sum[FOLDSIM_VMEM_NUM_TEL] = {};
+      for (size_t k = 0; k < now.size(); ++k) {
+        uint64_t d[FOLDSIM_VMEM_NUM_TEL];
+        for (int i = 0; i < FOLDSIM_VMEM_NUM_TEL; ++i) {
+          d[i] = now[k][i] - (k < vmem_tel_base_.size() ? vmem_tel_base_[k][i] : 0);
+          sum[i] += d[i];
+        }
+        fprintf(stderr,
+                "[foldsim] vmem %zu: %lu reads (%lu on chip, %lu row fetches), %lu writes, %lu write-backs; "
+                "%lu host cycles without room, %lu with a read on AXI\n",
+                k, (unsigned long)d[FOLDSIM_VMEM_TEL_RD], (unsigned long)d[FOLDSIM_VMEM_TEL_LOCAL],
+                (unsigned long)d[FOLDSIM_VMEM_TEL_FETCH], (unsigned long)d[FOLDSIM_VMEM_TEL_WR],
+                (unsigned long)d[FOLDSIM_VMEM_TEL_WB], (unsigned long)d[FOLDSIM_VMEM_TEL_STALL],
+                (unsigned long)d[FOLDSIM_VMEM_TEL_BUSY]);
+      }
+      if (!now.empty())
+        fprintf(stderr, "[foldsim] vmem all %zu: %lu reads (%lu on chip, %lu row fetches), %lu writes, %lu write-backs\n",
+                now.size(), (unsigned long)sum[FOLDSIM_VMEM_TEL_RD], (unsigned long)sum[FOLDSIM_VMEM_TEL_LOCAL],
+                (unsigned long)sum[FOLDSIM_VMEM_TEL_FETCH], (unsigned long)sum[FOLDSIM_VMEM_TEL_WR],
+                (unsigned long)sum[FOLDSIM_VMEM_TEL_WB]);
+    }
     // Each class finishes each of its threads once a target cycle, so its
     // finishes per host cycle is how busy its one physical copy is.
     uint32_t classes = 0;
@@ -1054,6 +1101,7 @@ private:
   uint32_t refresh_ = 0;
   uint32_t mem_ports_ = 1;
   uint64_t vmem_bytes_ = 0, vmem_base_ = 0;
+  std::vector<std::vector<uint64_t>> vmem_tel_base_;
   vortex::CommandProcessor cp_;
   std::mutex host_mu_;
   std::map<uint64_t, uint64_t> host_regions_;

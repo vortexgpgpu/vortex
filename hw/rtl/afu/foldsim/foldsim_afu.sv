@@ -357,6 +357,19 @@ module foldsim_afu #(
     localparam VMEM_CTRLS = `FOLDSIM_VMEM_COUNT;
 `endif
     wire [VMEM_CTRLS-1:0] vmem_moving;
+    // Each controller's telemetry counters (foldsim_vmem `tel`); the one the
+    // control endpoint picks (vmem_tel_sel) registered twice: its index, then
+    // its counters (the endpoint reads them three or more cycles after the
+    // pick changes).
+    localparam VMEM_TW = (VMEM_CTRLS > 1) ? $clog2(VMEM_CTRLS) : 1;
+    wire [7*48-1:0] vmem_tel [VMEM_CTRLS];
+    wire [15:0]     vmem_tel_sel;
+    reg  [15:0]     vmem_tel_idx;
+    reg  [7*48-1:0] vmem_tel_q;
+    always @(posedge ap_clk) begin
+        vmem_tel_idx <= vmem_tel_sel;
+        vmem_tel_q   <= (32'(vmem_tel_idx) < VMEM_CTRLS) ? vmem_tel[VMEM_TW'(vmem_tel_idx)] : '0;
+    end
 
     // Controller k's master: m_axi_mem_<p>, or its slot of the sharing.
 `ifdef FOLDSIM_VMEM_ON_PORTS
@@ -467,7 +480,8 @@ module foldsim_afu #(
         .m_rready  (`FOLDSIM_VMEM_AXI(p, k, rready)), \
         .m_rdata   (`FOLDSIM_VMEM_AXI(p, k, rdata)), \
         .m_rid     (`FOLDSIM_VMEM_AXI(p, k, rid)), \
-        .m_rlast   (`FOLDSIM_VMEM_AXI(p, k, rlast)) \
+        .m_rlast   (`FOLDSIM_VMEM_AXI(p, k, rlast)), \
+        .tel       (vmem_tel[k]) \
     )
 
 `ifdef FOLDSIM_VMEM_GROUPS
@@ -589,7 +603,8 @@ module foldsim_afu #(
             .zero      (vmem_zero), \
             .move      (vmem_move), \
             .moving    (vmem_moving[g]), \
-            `FOLDSIM_VMEM_AXI_PORTS(p, g) \
+            `FOLDSIM_VMEM_AXI_PORTS(p, g), \
+            .tel       (vmem_tel[g]) \
         ); \
     end else begin : g_vg``g \
         if (`FOLDSIM_VMEM_TW(g) != 0) begin : g_tagged \
@@ -640,7 +655,8 @@ module foldsim_afu #(
             .zero      (vmem_zero), \
             .move      (vmem_move), \
             .moving    (vmem_moving[g]), \
-            `FOLDSIM_VMEM_AXI_PORTS(p, g) \
+            `FOLDSIM_VMEM_AXI_PORTS(p, g), \
+            .tel       (vmem_tel[g]) \
         ); \
     end
 `define FOLDSIM_VMEM_AXI_PORTS(p, k) \
@@ -1251,6 +1267,7 @@ module foldsim_afu #(
         .MEM_CAPS    (MEM_CAPS),
 `ifdef FOLDSIM_VMEM_COUNT
         .VMEM_BYTES  (VMEM_BYTES),
+        .VMEM_TEL_N  (VMEM_CTRLS),
 `endif
         .BUBBLES     (BUBBLES)
     ) ctrl (
@@ -1287,6 +1304,8 @@ module foldsim_afu #(
         .vmem_zero         (vmem_zero),
         .vmem_move         (vmem_move),
         .vmem_moving       (|vmem_moving),
+        .vmem_tel_sel      (vmem_tel_sel),
+        .vmem_tel          (vmem_tel_q),
 `else
         // Without virtual memories, the region is never used.
         /* verilator lint_off PINCONNECTEMPTY */
@@ -1294,8 +1313,10 @@ module foldsim_afu #(
         .vmem_on           (),
         .vmem_zero         (),
         .vmem_move         (),
+        .vmem_tel_sel      (),
         /* verilator lint_on PINCONNECTEMPTY */
         .vmem_moving       (1'b0),
+        .vmem_tel          ('0),
 `endif
         .mem_stats         (mem_stats),
         .mem_axi           (mem_axi),

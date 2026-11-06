@@ -98,6 +98,10 @@ module foldsim_vmem_group_tb #(
     input  wire [AXI_ID_W-1:0]  m_rid,
     input  wire                 m_rlast
 );
+    // The controller's telemetry (tested by foldsim_vmem's test).
+    /* verilator lint_off UNUSEDSIGNAL */
+    wire [7*48-1:0] tel;
+    /* verilator lint_on UNUSEDSIGNAL */
     foldsim_vmem_group #(
         .N              (N),
         .IW             (IW),

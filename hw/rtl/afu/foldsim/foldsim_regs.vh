@@ -39,6 +39,11 @@
 `define FOLDSIM_REG_MSTALL_LO   12'h030
 `define FOLDSIM_REG_MSTALL_HI   12'h034
 `define FOLDSIM_REG_NUM_CLASSES 12'h038
+// The virtual memories' telemetry (foldsim_vmem `tel`): a write of
+// VMEM_TEL_SEL picks a controller ([15:0]); a read gives [15:0] the
+// controllers, [23:16] the counters each, [31:24] their bits (0: none).
+// VMEM_TEL + 8 * c: the picked controller's counter c, low word then high.
+`define FOLDSIM_REG_VMEM_TEL_SEL 12'h03C
 `define FOLDSIM_REG_MEM_BASE_LO 12'h0C0
 `define FOLDSIM_REG_MEM_BASE_HI 12'h0C4
 `define FOLDSIM_REG_BUBBLE      12'h0C8
@@ -70,6 +75,7 @@
 // counters, 64-bit each, from FOLDSIM_REG_MEM_STATS + 0x40 * p: the upper
 // half of the map, up to 32 ports.
 `define FOLDSIM_REG_MEM_TIMING  12'h400
+`define FOLDSIM_REG_VMEM_TEL    12'h448
 `define FOLDSIM_REG_MEM_STATS   12'h800
 // Port p's device-memory telemetry (foldsim_mem axi_stats), eight 32-bit
 // words from FOLDSIM_REG_MEM_AXI + 0x20 * p, for p < 24.

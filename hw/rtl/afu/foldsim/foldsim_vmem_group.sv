@@ -93,6 +93,8 @@ module foldsim_vmem_group #(
     parameter FORWARD        = 1,
     // FIFO entries per member, a power of two of at least 8.
     parameter FIFO           = 8,
+    // The controller's telemetry counters (foldsim_vmem TELEMETRY).
+    parameter TELEMETRY      = 1,
     localparam GF            = $clog2(2 * FIFO + 1)
 ) (
     input  wire                        clk,
@@ -140,7 +142,10 @@ module foldsim_vmem_group #(
     output wire                        m_rready,
     input  wire [511:0]                m_rdata,
     input  wire [AXI_ID_W-1:0]         m_rid,
-    input  wire                        m_rlast
+    input  wire                        m_rlast,
+
+    // The controller's telemetry counters (foldsim_vmem `tel`).
+    output wire [7*48-1:0]             tel
 );
     localparam TW    = (N > 1) ? $clog2(N) : 1;
     localparam FW    = $clog2(QUEUE + 1);
@@ -424,7 +429,8 @@ module foldsim_vmem_group #(
         .WRITES_OUT     (WRITES_OUT),
         .HAZARD_BITS    (HAZARD_BITS),
         .SEQ_W          (SEQ_W),
-        .FORWARD        (FORWARD)
+        .FORWARD        (FORWARD),
+        .TELEMETRY      (TELEMETRY)
     ) vmem (
         .clk       (clk),
         .reset     (c_reset),
@@ -466,7 +472,8 @@ module foldsim_vmem_group #(
         .m_rready  (m_rready),
         .m_rdata   (m_rdata),
         .m_rid     (m_rid),
-        .m_rlast   (m_rlast)
+        .m_rlast   (m_rlast),
+        .tel       (tel)
     );
 
 endmodule

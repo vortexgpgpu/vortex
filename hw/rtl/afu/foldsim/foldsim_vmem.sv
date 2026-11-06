@@ -173,7 +173,15 @@ module foldsim_vmem #(
     // read by the W channel alone (one read port, half its distributed RAM);
     // for an image whose static order puts a row's read long after its write
     // (page engines, link streams, folds of long frames), nothing waits.
-    parameter FORWARD        = 1
+    parameter FORWARD        = 1,
+    // Telemetry counters (`tel`), TEL_N of TEL_W bits each, from the reset:
+    // [0] reads taken, [1] writes taken, [2] reads answered on chip (cache,
+    // write buffer, known-zero row), [3] row fetches (AR), [4] write-backs
+    // (AW), [5] host cycles with no room for the simulator (free == 0),
+    // [6] host cycles with a read on AXI. 0: none (`tel` reads zero).
+    parameter TELEMETRY      = 1,
+    localparam TEL_N         = 7,
+    localparam TEL_W         = 48
 ) (
     input  wire                        clk,
     input  wire                        reset,
@@ -227,8 +235,11 @@ module foldsim_vmem #(
     input  wire [511:0]                m_rdata,
     input  wire [AXI_ID_W-1:0]         m_rid,
     /* verilator lint_off UNUSEDSIGNAL */
-    input  wire                        m_rlast
+    input  wire                        m_rlast,
     /* verilator lint_on UNUSEDSIGNAL */
+
+    // The telemetry counters, counter c at [c * TEL_W +: TEL_W].
+    output wire [TEL_N*TEL_W-1:0]      tel
 );
     localparam FW     = $clog2(QUEUE + 1);
     localparam IT     = IW + TAGW;
@@ -1398,6 +1409,29 @@ module foldsim_vmem #(
             free <= '0;
         else
             free <= room_n;
+    end
+
+    // ---- Telemetry ----
+    // Each event registered first, then counted: the counters add no logic
+    // to the controller's paths, and read a cycle late.
+    if (TELEMETRY != 0) begin : g_tel
+        reg [TEL_N-1:0] ev;
+        reg [TEL_W-1:0] cnt [TEL_N];
+        always @(posedge clk) begin
+            ev <= {(rd_out != '0), (free == '0), (m_awvalid & m_awready), (m_arvalid & m_arready),
+                   r_local, taken_wr, taken_rd} & {TEL_N{~reset}};
+            for (integer c = 0; c < TEL_N; ++c) begin
+                if (reset)
+                    cnt[c] <= '0;
+                else if (ev[c])
+                    cnt[c] <= cnt[c] + 1'b1;
+            end
+        end
+        for (genvar c = 0; c < TEL_N; ++c) begin : g_out
+            assign tel[c * TEL_W +: TEL_W] = cnt[c];
+        end
+    end else begin : g_no_tel
+        assign tel = '0;
     end
 
 `ifdef SIMULATION

@@ -148,7 +148,10 @@ module foldsim_vmem_share_tb #(
             .m_rready  (s_rready[k]),
             .m_rdata   (s_rdata[k]),
             .m_rid     (s_rid[k]),
-            .m_rlast   (s_rlast[k])
+            .m_rlast   (s_rlast[k]),
+            /* verilator lint_off PINCONNECTEMPTY */
+            .tel       ()
+            /* verilator lint_on PINCONNECTEMPTY */
         );
     end
 

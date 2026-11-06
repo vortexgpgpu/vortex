@@ -36,6 +36,21 @@
 #define FOLDSIM_REG_MSTALL_LO   0x030u  // host cycles waiting for device memory
 #define FOLDSIM_REG_MSTALL_HI   0x034u
 #define FOLDSIM_REG_NUM_CLASSES 0x038u  // classes of threaded models
+// The virtual memories' telemetry (foldsim_vmem): write a controller's index to VMEM_TEL_SEL, then read its counters
+// at VMEM_TEL(c) (lo, hi: 48 bits). VMEM_TEL_SEL reads [15:0] the controllers, [23:16] the counters each, [31:24] their
+// bits; zero on images without them. Counters from the kernel's reset.
+#define FOLDSIM_REG_VMEM_TEL_SEL 0x03Cu
+#define FOLDSIM_REG_VMEM_TEL(c) (0x448u + 8u * (c))
+enum {
+  FOLDSIM_VMEM_TEL_RD,      // reads taken
+  FOLDSIM_VMEM_TEL_WR,      // writes taken
+  FOLDSIM_VMEM_TEL_LOCAL,   // reads answered on chip (host cache, write buffer, known-zero row)
+  FOLDSIM_VMEM_TEL_FETCH,   // row fetches (AXI AR)
+  FOLDSIM_VMEM_TEL_WB,      // write-backs (AXI AW)
+  FOLDSIM_VMEM_TEL_STALL,   // host cycles with no room for the simulator
+  FOLDSIM_VMEM_TEL_BUSY,    // host cycles with a read on AXI
+  FOLDSIM_VMEM_NUM_TEL
+};
 #define FOLDSIM_REG_MEM_BASE_LO 0x0C0u  // device address of target address 0
 #define FOLDSIM_REG_MEM_BASE_HI 0x0C4u
 // [7:0]: idle slots the kernel puts in the simulator's frames, in 256ths of its

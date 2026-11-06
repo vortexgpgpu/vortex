@@ -40,10 +40,34 @@ int failures = 0;
 // Cycles vmem_move was high.
 uint32_t moves = 0;
 
+#ifndef VMEM_TEL_N
+#define VMEM_TEL_N 0
+#endif
+
+// Controller k's telemetry counter c, as the kernel would hold it: 48 bits.
+uint64_t tel_val(uint32_t k, int c) { return ((uint64_t(k) * 7 + c + 1) * 0x9E3779B97F4Bull) & 0xFFFFFFFFFFFFull; }
+
+// The kernel's selection of vmem_tel: the pick registered, then the counters.
+uint32_t tel_idx = 0;
+// (A variable: a compile-time 0 makes the bound check a warning.)
+uint32_t tel_n = VMEM_TEL_N;
+
 void tick() {
   dut->clk = 0;
   dut->eval();
   moves += dut->vmem_move;
+  const uint32_t sel = dut->vmem_tel_sel;
+  for (int c = 0; c < 7; ++c) {
+    const uint64_t v = tel_idx < tel_n ? tel_val(tel_idx, c) : 0;
+    for (int b = 0; b < 48; ++b) {
+      const int bit = 48 * c + b;
+      if ((v >> b) & 1)
+        dut->vmem_tel[bit / 32] |= 1u << (bit % 32);
+      else
+        dut->vmem_tel[bit / 32] &= ~(1u << (bit % 32));
+    }
+  }
+  tel_idx = sel;
   dut->clk = 1;
   dut->eval();
 }
@@ -204,8 +228,11 @@ int main(int argc, char** argv) {
     check(got == 0, "a move over", FOLDSIM_REG_STATUS, got, 0);
   }
 
-  got = reg_read(FOLDSIM_REG_MEM_TIMING(FOLDSIM_MEM_NUM_TIMINGS));
-  check(got == 0, "past the timings", FOLDSIM_REG_MEM_TIMING(FOLDSIM_MEM_NUM_TIMINGS), got, 0);
+  // Past the timings: the telemetry counters' window, else nothing.
+  if (VMEM_TEL_N == 0) {
+    got = reg_read(FOLDSIM_REG_MEM_TIMING(FOLDSIM_MEM_NUM_TIMINGS));
+    check(got == 0, "past the timings", FOLDSIM_REG_MEM_TIMING(FOLDSIM_MEM_NUM_TIMINGS), got, 0);
+  }
 
   for (int p = 0; p < MEM_PORTS; ++p) {
     for (uint32_t i = 0; i < FOLDSIM_MEM_NUM_STATS; ++i) {
@@ -232,6 +259,23 @@ int main(int argc, char** argv) {
   if (NUM_CLASSES < 96) {
     got = reg_read(FOLDSIM_REG_FINISH(NUM_CLASSES));
     check(got == 0, "past the classes", FOLDSIM_REG_FINISH(NUM_CLASSES), got, 0);
+  }
+
+  // The virtual memories' telemetry: the count, then each controller's counters by its pick.
+  got = reg_read(FOLDSIM_REG_VMEM_TEL_SEL);
+  check(got == (VMEM_TEL_N ? (48u << 24 | 7u << 16 | VMEM_TEL_N) : 0u), "telemetry controllers", FOLDSIM_REG_VMEM_TEL_SEL,
+        got, VMEM_TEL_N ? (48u << 24 | 7u << 16 | VMEM_TEL_N) : 0u);
+  for (uint32_t k = 0; k < (VMEM_TEL_N ? VMEM_TEL_N : 1u); ++k) {
+    reg_write(FOLDSIM_REG_VMEM_TEL_SEL, k);
+    check(dut->vmem_tel_sel == (VMEM_TEL_N ? k : 0u), "telemetry pick", FOLDSIM_REG_VMEM_TEL_SEL, dut->vmem_tel_sel,
+          VMEM_TEL_N ? k : 0u);
+    for (int c = 0; c < FOLDSIM_VMEM_NUM_TEL; ++c) {
+      const uint64_t v = VMEM_TEL_N ? tel_val(k, c) : 0;
+      got = reg_read(FOLDSIM_REG_VMEM_TEL(c));
+      check(got == uint32_t(v), "telemetry counter, low", FOLDSIM_REG_VMEM_TEL(c), got, uint32_t(v));
+      got = reg_read(FOLDSIM_REG_VMEM_TEL(c) + 4);
+      check(got == uint32_t(v >> 32), "telemetry counter, high", FOLDSIM_REG_VMEM_TEL(c) + 4, got, uint32_t(v >> 32));
+    }
   }
 
   // A reset takes the virtual memories' known-zero state back.

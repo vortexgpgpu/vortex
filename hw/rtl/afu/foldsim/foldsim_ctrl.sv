@@ -40,7 +40,11 @@ module foldsim_ctrl #(
     // holds a rate, else it stays 0.
     parameter BUBBLES      = 0,
     // The device memory the simulator's virtual memories need (0: none).
-    parameter [63:0] VMEM_BYTES = 64'd0
+    parameter [63:0] VMEM_BYTES = 64'd0,
+    // The virtual memories' controllers with telemetry counters (foldsim_vmem
+    // `tel`): FOLDSIM_REG_VMEM_TEL_SEL picks one, FOLDSIM_REG_VMEM_TEL reads
+    // its counters (0: none, both read zero).
+    parameter VMEM_TEL_N   = 0
 ) (
     input  wire                  clk,
     input  wire                  reset,
@@ -86,6 +90,10 @@ module foldsim_ctrl #(
     output wire                  vmem_zero,
     output wire                  vmem_move,
     input  wire                  vmem_moving,
+    // The controller whose telemetry counters vmem_tel holds (a few cycles
+    // after vmem_tel_sel changes: the kernel registers its selection).
+    output wire [15:0]           vmem_tel_sel,
+    input  wire [7*48-1:0]       vmem_tel,
     // Per memory port, its counters.
     input  wire [MEM_PORTS*8*64-1:0] mem_stats,
     // (A port past the 24th has no window for it.)
@@ -221,7 +229,12 @@ module foldsim_ctrl #(
     reg       aw_got, w_got, ar_got;
     // A read takes two host cycles: each window's word is registered, then
     // the address's window chooses among them.
-    reg        rd_sel, r_in_tim, r_in_stat, r_in_fin, r_in_vm;
+    reg        rd_sel, r_in_tim, r_in_stat, r_in_fin, r_in_vm, r_in_tel;
+    reg [31:0] r_tel;
+    // The selected controller's counter of the address being read, 48 bits.
+    wire [2:0]      tel_idx = 3'((ar_addr - `FOLDSIM_REG_VMEM_TEL) >> 3);
+    wire [8*48-1:0] tel_pad = {48'd0, vmem_tel};
+    wire [47:0]     tel_cnt = tel_pad[48 * tel_idx +: 48];
     reg [31:0] r_base, r_tim, r_stat, r_fin, r_vm;
     reg [11:2] aw_addr;
     reg [11:0] ar_addr;
@@ -416,6 +429,7 @@ module foldsim_ctrl #(
                 `FOLDSIM_REG_MSTALL_LO:   r_base <= mem_stalls[31:0];
                 `FOLDSIM_REG_MSTALL_HI:   r_base <= mem_stalls[63:32];
                 `FOLDSIM_REG_NUM_CLASSES: r_base <= 32'(NUM_CLASSES);
+                `FOLDSIM_REG_VMEM_TEL_SEL: r_base <= (VMEM_TEL_N != 0) ? {8'd48, 8'd7, 16'(VMEM_TEL_N)} : 32'd0;
                 `FOLDSIM_REG_MEM_REFRESH: r_base <= 32'(mem_refresh_r);
                 `FOLDSIM_REG_MEM_CAPS:    r_base <= MEM_CAPS;
                 `FOLDSIM_REG_MEM_CLOCK:   r_base <= mem_clock;
@@ -436,6 +450,9 @@ module foldsim_ctrl #(
                 r_in_fin <= ar_addr >= `FOLDSIM_REG_FINISH_BASE
                          && ar_addr < `FOLDSIM_REG_FINISH_BASE + 12'(8 * NUM_CLASSES);
                 r_fin    <= ar_addr[2] ? 32'(finishes[fin_idx] >> 32) : finishes[fin_idx][31:0];
+                r_in_tel <= (VMEM_TEL_N != 0) && ar_addr >= `FOLDSIM_REG_VMEM_TEL
+                         && ar_addr < `FOLDSIM_REG_VMEM_TEL + 12'(8 * 7);
+                r_tel    <= ar_addr[2] ? {16'd0, tel_cnt[47:32]} : tel_cnt[31:0];
                 r_in_vm <= 1'b0;
                 r_vm    <= 32'd0;
                 if (VMEM_BYTES != 0) begin
@@ -454,11 +471,25 @@ module foldsim_ctrl #(
                 // A port's device-memory telemetry (FOLDSIM_REG_MEM_AXI + 0x20 per port, 24 ports at most) and its
                 // stall-reason word (FOLDSIM_REG_MEM_DBG + 4 per port, 32 at most): win_rdata, registered as the read
                 // was taken and held until the response.
-                s_rdata  <= r_in_vm ? r_vm : r_in_fin ? r_fin : win_hit ? win_rdata : r_in_stat ? r_stat : r_in_tim ? r_tim : r_base;
+                s_rdata  <= r_in_vm ? r_vm : r_in_tel ? r_tel : r_in_fin ? r_fin : win_hit ? win_rdata : r_in_stat ? r_stat : r_in_tim ? r_tim : r_base;
             end
             if (s_rvalid & s_rready)
                 s_rvalid <= 1'b0;
         end
+    end
+
+    // The virtual memories' telemetry: the controller selected.
+    if (VMEM_TEL_N != 0) begin : g_tel
+        reg [15:0] sel_r;
+        always @(posedge clk) begin
+            if (reset)
+                sel_r <= 16'd0;
+            else if (wr & (wa == `FOLDSIM_REG_VMEM_TEL_SEL))
+                sel_r <= w_data[15:0];
+        end
+        assign vmem_tel_sel = sel_r;
+    end else begin : g_no_tel
+        assign vmem_tel_sel = 16'd0;
     end
 
     // The virtual memories' region: the runtime places it before the

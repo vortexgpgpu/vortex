@@ -975,9 +975,46 @@ struct Tb {
     if (setup.zero) host_zero();
   }
 
+  // The controller's telemetry counter c (foldsim_vmem `tel`, 48 bits each).
+  uint64_t tel(int c) {
+    uint8_t b[42];
+    get_bytes(dut->tel, b, 42);
+    uint64_t v = 0;
+    for (int i = 0; i < 6; ++i) v |= uint64_t(b[6 * c + i]) << (8 * i);
+    return v;
+  }
+
+  // Telemetry over a window of traffic between two quiet points, with no
+  // reset or move: the counters move as the requests, AR and AW do.
+  void check_telemetry() {
+    enum { RD, WR, LOCAL, FETCH, WB, STALL, BUSY, N };
+    uint64_t t0[N];
+    for (int c = 0; c < N; ++c) t0[c] = tel(c);
+    const uint64_t rd0 = n_reads, wr0 = n_writes, ar0 = hbm.n_ar, aw0 = hbm.n_aw, c0 = now;
+    for (int c = 0; c < 20000; ++c) cycle();
+    quiesce();
+    uint64_t d[N];
+    for (int c = 0; c < N; ++c) d[c] = tel(c) - t0[c];
+    const uint64_t drd = n_reads - rd0, dwr = n_writes - wr0, dar = hbm.n_ar - ar0, daw = hbm.n_aw - aw0;
+    CHECK(d[RD] == drd, "telemetry: %lu reads counted, %lu taken", (unsigned long)d[RD], (unsigned long)drd);
+    CHECK(d[WR] == dwr, "telemetry: %lu writes counted, %lu taken", (unsigned long)d[WR], (unsigned long)dwr);
+    CHECK(d[FETCH] == dar, "telemetry: %lu row fetches counted, %lu AR", (unsigned long)d[FETCH], (unsigned long)dar);
+    CHECK(d[WB] == daw, "telemetry: %lu write-backs counted, %lu AW", (unsigned long)d[WB], (unsigned long)daw);
+    CHECK(d[LOCAL] + d[FETCH] == d[RD], "telemetry: %lu local + %lu fetched reads, %lu taken", (unsigned long)d[LOCAL],
+          (unsigned long)d[FETCH], (unsigned long)d[RD]);
+    CHECK((d[BUSY] != 0) == (dar != 0) && d[BUSY] <= now - c0, "telemetry: %lu cycles with a read on AXI, %lu AR",
+          (unsigned long)d[BUSY], (unsigned long)dar);
+    CHECK(d[STALL] <= now - c0, "telemetry: %lu stall cycles of %lu", (unsigned long)d[STALL], (unsigned long)(now - c0));
+    printf("%-8s telemetry window: %lu reads (%lu local, %lu fetched), %lu writes, %lu write-backs, %lu stall, %lu busy "
+           "cycles of %lu\n", setup_name, (unsigned long)d[RD], (unsigned long)d[LOCAL], (unsigned long)d[FETCH],
+           (unsigned long)d[WR], (unsigned long)d[WB], (unsigned long)d[STALL], (unsigned long)d[BUSY],
+           (unsigned long)(now - c0));
+  }
+
   // Quiet, then a last reset: memory holds the RAM's image.
   void finish() {
     quiesce();
+    check_telemetry();
     reset_dut(2);
     while (draining) cycle(false, false);
     CHECK(hbm.outstanding() == 0, "HBM left with %zu transactions after the last drain", hbm.outstanding());
