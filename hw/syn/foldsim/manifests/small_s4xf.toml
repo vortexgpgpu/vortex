@@ -1,0 +1,134 @@
+# Vortex small GPU "s4xf" (st32_1031/lk2/m1tel/img_s4xf): its target manifest (driver keys from its GEN).
+[design]
+format = 1
+name = "vortex-small-gpu-s4xf"
+top = "foldsim_target"
+
+[rtl]
+srcs = "${FOLDSIM_WORK_DIR}/lift/srcs.f"
+max_unroll_trip_count = 8192
+max_generate_steps = 4194304
+
+[classes]
+at = [
+  "l2fs@*.l2cache.*.core_req_xbar.*.fanout_slice_arb",
+  "l2req@inner:*.l2cache.*.core_req_xbar.*.xbar_arb",
+  "l2req@inner:*.l2cache.*.core_req_xbar.*.fanout_join_arb",
+  "l2sw@*.l2cache.*.g_omega.*.xbar_switch",
+  "l2x@*.l2cache.*.xbar_arb",
+  "axix@*.axi_adapter.*.xbar_arb",
+  "l2rs@*.l2cache.*.g_core_req_stage.*.req_stage",
+  "l2nb@*.l2cache.*.core_bus_nc_switch.rsp_arb.*.out_buf",
+  "l2ab@*.l2cache.*.core_bus_nc_arb.*.fanout_slice_arb.*.out_buf",
+  "lmq@*.local_mem.req_xbar.*.xbar_arb",
+  "lms@*.local_mem.rsp_xbar.*.xbar_arb",
+  "l1req@*.dcache.*.core_req_xbar.*.xbar_arb",
+  "l1rsp@*.dcache.*.core_rsp_arb",
+  "l1sw@*.dcache.*.g_omega.*.xbar_switch",
+  "l1x@*.dcache.*.xbar_arb",
+  "l2mo@*.l2cache.*.mem_bus_out_arb.req_arb.*.out_buf",
+  "kmub@*.cluster.kmu_arb.*.out_buf.g_eb2.stream_buffer",
+]
+absorb_exclusive = [
+  "l2rs",
+  "l2nb",
+  "l2mo",
+  "l2ab*",
+  "kmub",
+]
+nest = true
+copies = { lms = 2 }
+modules = [
+  "VX_socket__lift",
+  "VX_core__lift",
+  "VX_compute_slice__lift",
+  "lmq+VX_local_mem_bank",
+  "l1req+VX_cache_bank__lift_dcache",
+  "l2req+VX_cache_bank__lift_l2cache",
+  "VX_opc_unit",
+  "VX_tcu_fedp_tfr",
+]
+
+[env]
+sinks = [
+  "busy",
+  "dcr_rsp_valid",
+  "dcr_rsp_data",
+]
+
+[memory]
+virtual = "__lift_l2cache:.*cache_data/g_data_slice_[0-9]+\\.data_store/"
+vmem_cache_rows = "auto"
+compact_links = true
+link_block_depth = 64
+link_ultra_depth = 2048
+staged_links = true
+share_links = true
+memory_registers = "auto"
+
+[platform]
+kernel = "foldsim_afu"
+adapter = "axi4"
+mem_ports = 4
+mem_id_width = 6
+mem_channel_shift = 2
+clock_mhz = 50                   # img_s4xf (FOLDSIM_FREQ 50)
+device = "xcv80-lsva4737-2MHP-e-S"
+
+axi_spec = 2
+
+
+[platform.control]
+# The control endpoint's roles bound to Vortex's ports (foldsim_target.sv): the endpoint's own names.
+reset = "reset"
+start = "start"
+busy = "busy"
+csr_addr_width = 12
+csr_data_width = 32
+csr_req = { valid = "dcr_req_valid", rw = "dcr_req_rw", addr = "dcr_req_addr", data = "dcr_req_data" }
+csr_rsp = { valid = "dcr_rsp_valid", data = "dcr_rsp_data" }
+
+[options]
+modulo = true
+bubbles = true
+zero_chain_hops = 2
+zero_latency_chains = true
+zero_latency_links = true
+static = true
+
+[lift]
+units = [
+  "VX_socket:drop=INSTANCE_ID",
+  "VX_core:drop=INSTANCE_ID",
+  "VX_compute_slice:drop=INSTANCE_ID,SLICE_STR",
+  "VX_cache_bank:drop=INSTANCE_ID,BANK_ID;sets",
+]
+
+[flow]
+generator = "vortex"
+xlen = 64
+configs = [
+  "-DVX_CFG_NUM_CLUSTERS=1",
+  "-DVX_CFG_NUM_CORES=2",
+  "-DVX_CFG_SOCKET_SIZE=2",
+  "-DVX_CFG_NUM_WARPS=8",
+  "-DVX_CFG_NUM_THREADS=4",
+  "-DVX_CFG_ISSUE_WIDTH=4",
+  "-DVX_CFG_FETCH_WIDTH=4",
+  "-DVX_CFG_NUM_SFU_BLOCKS=4",
+  "-DVX_CFG_L2_ENABLE",
+  "-DVX_CFG_EXT_A_ENABLE",
+  "-DVX_CFG_EXT_TCU_ENABLE",
+  "-DVX_CFG_TCU_FP16_ENABLE",
+  "-DVX_CFG_TCU_SPARSE_ENABLE",
+  "-DVX_CFG_FPU_TYPE_STD",
+  "-DVX_CFG_TCU_TYPE_TFR",
+  "-DVX_CFG_VM_ENABLE",
+  "-DVX_CFG_PLATFORM_CLOCK_RATE=1410",
+  "-DVX_CFG_PLATFORM_MEMORY_DATA_RATE=900",
+  "-DVX_CFG_PLATFORM_MEMORY_LATENCY=190",
+  "-DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=4",
+  "-DVX_CFG_PLATFORM_MEMORY_PEAK_BW=57593",
+  "-DVX_CFG_PLATFORM_MEMORY_QUEUE_SIZE=257",
+  "-DVX_CFG_PLATFORM_MEMORY_TYPE=HBM2",
+]
