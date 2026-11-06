@@ -22,3 +22,4 @@ hw/syn/libs/asap7/install.sh
 # Built by third_party/Makefile
 third_party/ramulator_ext/*.o
 third_party/ramulator_ext/*.so
+third_party/softfloat.opts

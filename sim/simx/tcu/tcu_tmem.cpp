@@ -48,7 +48,7 @@ void TcuTmem::reset() {
   }
   ldst_wr_won_.reset();
   grants_ = Grants{};
-  perf_stats_ = PerfStats{};
+  // perf_stats_ survives: the MPM counters run from device reset.
 }
 
 ///////////////////////////////////////////////////////////////////////////////

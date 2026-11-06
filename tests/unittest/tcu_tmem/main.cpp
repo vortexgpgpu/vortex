@@ -19,6 +19,7 @@
 // warpgroup always target four different banks. These tests drive
 // the arbiter directly so the contended cases actually execute.
 
+#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -240,7 +241,7 @@ void test_reset_restores_rotation() {
   CHECK(tmem.perf_stats().bank_stalls == 1);
 
   tmem.reset();
-  CHECK(tmem.perf_stats().bank_stalls == 0);
+  CHECK(tmem.perf_stats().bank_stalls == 1);  // MPM counters run from device reset
 
   // Post-reset the same requester wins first again
   step(tmem, reqs);
@@ -257,31 +258,36 @@ void test_allocator() {
   // CTA-scoped idempotency: sibling warps of one CTA get the same handle.
   uint32_t h0 = tmem.alloc(32, /*cta_id*/ 0);
   CHECK(tmem.alloc(32, 0) == h0);
-  CHECK(tmem.alloc_ncols(h0) == 32);
+  CHECK(tmem.alloc_cols_from(h0) == 32);
 
   // A different CTA gets a disjoint range.
   uint32_t h1 = tmem.alloc(32, 1);
   CHECK(h1 != h0);
   CHECK(h1 >= h0 + 32 || h0 >= h1 + 32);
 
-  // Not-live handles report zero width rather than aborting, which is what
-  // UMMA's per-uop range check relies on.
-  CHECK(tmem.alloc_ncols(h0 + 1) == 0);
+  // A column inside a live range reports the columns left from it, so UMMA's
+  // accumulator can start past the allocation's base.
+  CHECK(tmem.alloc_cols_from(h0 + 1) == 31);
+  CHECK(tmem.alloc_cols_from(h0 + 31) == 1);
+
+  // A column outside every live range reports zero rather than aborting, which
+  // is what UMMA's per-uop range check relies on.
+  CHECK(tmem.alloc_cols_from(std::max(h0, h1) + 32) == 0);
 
   // A range is only freed once every warp of the CTA has released it.
   tmem.dealloc(h0, 0, /*wid*/ 0, /*cta_size*/ 2);
-  CHECK(tmem.alloc_ncols(h0) == 32);  // still held by the sibling warp
+  CHECK(tmem.alloc_cols_from(h0) == 32);  // still held by the sibling warp
   tmem.dealloc(h0, 0, /*wid*/ 0, /*cta_size*/ 2);
-  CHECK(tmem.alloc_ncols(h0) == 32);  // same warp twice must not count twice
+  CHECK(tmem.alloc_cols_from(h0) == 32);  // same warp twice must not count twice
   tmem.dealloc(h0, 0, /*wid*/ 1, /*cta_size*/ 2);
-  CHECK(tmem.alloc_ncols(h0) == 0);
+  CHECK(tmem.alloc_cols_from(h0) == 0);
 
   tmem.dealloc(h1, 1, 0, 1);
 
   // Coalescing: after freeing everything, the whole array must be allocatable
   // as one range again.
   uint32_t whole = tmem.alloc(TcuTmem::kCols, 2);
-  CHECK(tmem.alloc_ncols(whole) == TcuTmem::kCols);
+  CHECK(tmem.alloc_cols_from(whole) == TcuTmem::kCols);
   tmem.dealloc(whole, 2, 0, 1);
 }
 

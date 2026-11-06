@@ -1,0 +1,179 @@
+{
+  "mufu": {
+    "clock_mhz": 300,
+    "config_hash": "5d5eb85429e40b51",
+    "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
+    "dut": "mufu",
+    "result": {
+      "bram": 1,
+      "build_time_s": 712,
+      "critical_paths": [
+        {
+          "endpoint": "mufu_unit/g_pes[0].pe/s1_reg/g_pipe.g_no_reset.pipe_reg[0][16]/D",
+          "group": "core_clock",
+          "levels": 12,
+          "logic_ns": 1.33,
+          "route_ns": 1.795,
+          "route_pct": 57.443,
+          "slack_ns": 0.187,
+          "startpoint": "mufu_unit/pe_serializer/g_serialize.batch_in_idx_reg[1]/C"
+        },
+        {
+          "endpoint": "mufu_unit/g_pes[0].pe/s1_reg/g_pipe.g_no_reset.pipe_reg[0][16]/D",
+          "group": "core_clock",
+          "levels": 12,
+          "logic_ns": 1.33,
+          "route_ns": 1.792,
+          "route_pct": 57.397,
+          "slack_ns": 0.191,
+          "startpoint": "mufu_unit/pe_serializer/g_serialize.batch_in_idx_reg[1]/C"
+        },
+        {
+          "endpoint": "mufu_unit/g_pes[0].pe/s1_reg/g_pipe.g_no_reset.pipe_reg[0][16]/D",
+          "group": "core_clock",
+          "levels": 12,
+          "logic_ns": 1.328,
+          "route_ns": 1.793,
+          "route_pct": 57.452,
+          "slack_ns": 0.191,
+          "startpoint": "mufu_unit/pe_serializer/g_serialize.batch_in_idx_reg[1]/C"
+        },
+        {
+          "endpoint": "mufu_unit/g_pes[0].pe/s1_reg/g_pipe.g_no_reset.pipe_reg[0][16]/D",
+          "group": "core_clock",
+          "levels": 12,
+          "logic_ns": 1.329,
+          "route_ns": 1.791,
+          "route_pct": 57.402,
+          "slack_ns": 0.193,
+          "startpoint": "mufu_unit/pe_serializer/g_serialize.batch_in_idx_reg[1]/C"
+        },
+        {
+          "endpoint": "mufu_unit/g_pes[0].pe/s1_reg/g_pipe.g_no_reset.pipe_reg[0][16]/D",
+          "group": "core_clock",
+          "levels": 11,
+          "logic_ns": 1.225,
+          "route_ns": 1.879,
+          "route_pct": 60.54,
+          "slack_ns": 0.209,
+          "startpoint": "mufu_unit/pe_serializer/g_serialize.batch_in_idx_reg[3]/C"
+        },
+        {
+          "endpoint": "mufu_unit/g_pes[0].pe/s1_reg/g_pipe.g_no_reset.pipe_reg[0][16]/D",
+          "group": "core_clock",
+          "levels": 13,
+          "logic_ns": 1.333,
+          "route_ns": 1.739,
+          "route_pct": 56.615,
+          "slack_ns": 0.24,
+          "startpoint": "mufu_unit/pe_serializer/g_serialize.batch_in_idx_reg[1]/C"
+        },
+        {
+          "endpoint": "mufu_unit/g_pes[0].pe/s1_reg/g_pipe.g_no_reset.pipe_reg[0][16]/D",
+          "group": "core_clock",
+          "levels": 13,
+          "logic_ns": 1.335,
+          "route_ns": 1.737,
+          "route_pct": 56.545,
+          "slack_ns": 0.24,
+          "startpoint": "mufu_unit/pe_serializer/g_serialize.batch_in_idx_reg[1]/C"
+        },
+        {
+          "endpoint": "mufu_unit/g_pes[0].pe/s1_reg/g_pipe.g_no_reset.pipe_reg[0][16]/D",
+          "group": "core_clock",
+          "levels": 13,
+          "logic_ns": 1.334,
+          "route_ns": 1.737,
+          "route_pct": 56.568,
+          "slack_ns": 0.241,
+          "startpoint": "mufu_unit/pe_serializer/g_serialize.batch_in_idx_reg[1]/C"
+        },
+        {
+          "endpoint": "mufu_unit/g_pes[0].pe/s1_reg/g_pipe.g_no_reset.pipe_reg[0][16]/D",
+          "group": "core_clock",
+          "levels": 13,
+          "logic_ns": 1.332,
+          "route_ns": 1.733,
+          "route_pct": 56.544,
+          "slack_ns": 0.247,
+          "startpoint": "mufu_unit/pe_serializer/g_serialize.batch_in_idx_reg[1]/C"
+        },
+        {
+          "endpoint": "mufu_unit/g_pes[0].pe/s1_reg/g_pipe.g_no_reset.pipe_reg[0][16]/D",
+          "group": "core_clock",
+          "levels": 13,
+          "logic_ns": 1.31,
+          "route_ns": 1.752,
+          "route_pct": 57.215,
+          "slack_ns": 0.251,
+          "startpoint": "mufu_unit/pe_serializer/g_serialize.batch_in_idx_reg[1]/C"
+        }
+      ],
+      "dsp": 3,
+      "env": {
+        "device": "xcu55c-fsvh2892-2L-e",
+        "opt_level": 3,
+        "vivado": "2024.2",
+        "xlen": 32
+      },
+      "ff": 1105,
+      "fmax_mhz": 317.9,
+      "high_fanout_nets": [
+        {
+          "driver": "FDRE",
+          "fanout": 1044,
+          "net": "mufu_unit/pe_serializer/shift_reg/pe_valid_in"
+        },
+        {
+          "driver": "LUT2",
+          "fanout": 718,
+          "net": "mufu_unit/pe_serializer/pe_enable"
+        },
+        {
+          "driver": "FDRE",
+          "fanout": 165,
+          "net": "mufu_unit/pe_serializer/g_serialize.batch_out_idx_reg[3]_rep_n_0"
+        },
+        {
+          "driver": "MUXF8",
+          "fanout": 164,
+          "net": "mufu_unit/pe_serializer/pe_data_in[0]_39[24]"
+        },
+        {
+          "driver": "MUXF8",
+          "fanout": 162,
+          "net": "mufu_unit/pe_serializer/pe_data_in[0]_39[23]"
+        },
+        {
+          "driver": "FDRE",
+          "fanout": 154,
+          "net": "mufu_unit/pe_serializer/g_serialize.batch_out_idx[3]"
+        },
+        {
+          "driver": "MUXF8",
+          "fanout": 148,
+          "net": "mufu_unit/pe_serializer/pe_data_in[0]_39[25]"
+        },
+        {
+          "driver": "FDRE",
+          "fanout": 133,
+          "net": "mufu_unit/pe_serializer/g_serialize.batch_in_idx[0]"
+        },
+        {
+          "driver": "FDRE",
+          "fanout": 132,
+          "net": "mufu_unit/pe_serializer/g_serialize.batch_in_idx[1]"
+        },
+        {
+          "driver": "FDRE",
+          "fanout": 131,
+          "net": "mufu_unit/pe_serializer/g_serialize.batch_out_idx[1]"
+        }
+      ],
+      "lut": 2030,
+      "lutram": 64,
+      "uram": 0,
+      "wns_ns": 0.187
+    }
+  }
+}

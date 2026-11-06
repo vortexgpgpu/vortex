@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Vortex hardware IP library (`hw/rtl/libs/`) provides a comprehensive collection of 75 reusable, parameterized SystemVerilog IP modules used throughout the Vortex GPGPU processor. These modules cover arbitration, buffering, arithmetic, memory, interconnect, and debug infrastructure, forming the foundational building blocks of the Vortex microarchitecture.
+The Vortex hardware IP library (`hw/rtl/libs/`) provides a comprehensive collection of 76 reusable, parameterized SystemVerilog IP modules used throughout the Vortex GPGPU processor. These modules cover arbitration, buffering, arithmetic, memory, interconnect, and debug infrastructure, forming the foundational building blocks of the Vortex microarchitecture.
 
 All modules are parameterized for data width, depth, and implementation strategy, with support for both FPGA (Xilinx/Intel) and ASIC synthesis flows.
 
@@ -1260,6 +1260,25 @@ Parameterized memory primitives with support for FPGA (LUTRAM/BRAM) and ASIC syn
 
 ---
 
+### VX_rom
+
+**File:** `VX_rom.sv`  
+**Purpose:** Read-only memory whose contents are a packed parameter, so it needs no init file.
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `DATAW` | 1 | Data width in bits |
+| `SIZE` | 1 | Number of entries |
+| `OUT_REG` | 0 | Registered read (one cycle) instead of an asynchronous read |
+| `INIT_DATA` | `'0` | Contents, `SIZE*DATAW` bits; entry `i` is `INIT_DATA[i*DATAW +: DATAW]` |
+
+**Features:**
+- Contents are elaborated as constants, so they survive the ASIC flow, where `VX_sp_ram`'s `INIT_FILE` loading is compiled out
+- Under synthesis, a registered ROM that passes `FORCE_BRAM` is tagged for block ROM (`rom_style`/`romstyle`); otherwise it maps to logic
+- Generated tables (e.g. `hw/rtl/mufu/VX_mufu_rom.sv`) instantiate it directly
+
+---
+
 ### VX_async_ram_patch
 
 **File:** `VX_async_ram_patch.sv`  
@@ -1858,27 +1877,28 @@ Infrastructure for runtime debug observation and serial trace extraction.
 | 49 | VX_priority_encoder | Encoder | Small | O(log N) |
 | 50 | VX_reduce_tree | Arithmetic | Small | O(log N) |
 | 51 | VX_reset_relay | Sync | Small | 1 cycle |
-| 52 | VX_rr_arbiter | Arbiter | Medium | 0 cycles |
-| 53 | VX_scan | Encoder | Medium | O(log N) |
-| 54 | VX_scope_switch | Debug | Small | 0 cycles |
-| 55 | VX_scope_tap | Debug | Large | Multi-cycle |
-| 56 | VX_serial_div | Arithmetic | Small | Multi-cycle |
-| 57 | VX_serial_mul | Arithmetic | Small | Multi-cycle |
-| 58 | VX_shift_register | Buffer | Varies | N cycles |
-| 59 | VX_skid_buffer | Buffer | Small | 0-1 cycles |
-| 60 | VX_sp_ram | Memory | Varies | 0-1 cycles |
-| 61 | VX_stream_arb | Interconnect | Medium | 0-1 cycles |
-| 62 | VX_stream_buffer | Buffer | Small | 0-1 cycles |
-| 63 | VX_stream_dispatch | Stream Util | Medium | 0-1 cycles |
-| 64 | VX_stream_fork | Stream Util | Small | 0 cycles |
-| 65 | VX_stream_join | Stream Util | Small | 0 cycles |
-| 66 | VX_stream_omega | Interconnect | Large | O(log N) |
-| 67 | VX_stream_pack | Stream Util | Medium | 0-1 cycles |
-| 68 | VX_stream_switch | Interconnect | Medium | 0-1 cycles |
-| 69 | VX_stream_unpack | Stream Util | Medium | Multi-cycle |
-| 70 | VX_stream_xbar | Interconnect | Large | 0-1 cycles |
-| 71 | VX_stream_xpoint | Interconnect | Medium | 0-1 cycles |
-| 72 | VX_ticket_lock | Allocator | Small | 0-1 cycles |
-| 73 | VX_toggle_buffer | Buffer | Small | 1 cycle |
-| 74 | VX_transpose | Bit Manip | Zero | 0 cycles |
-| 75 | VX_wallace_mul | Arithmetic | Large | O(log N) |
+| 52 | VX_rom | Memory | Varies | 0-1 cycles |
+| 53 | VX_rr_arbiter | Arbiter | Medium | 0 cycles |
+| 54 | VX_scan | Encoder | Medium | O(log N) |
+| 55 | VX_scope_switch | Debug | Small | 0 cycles |
+| 56 | VX_scope_tap | Debug | Large | Multi-cycle |
+| 57 | VX_serial_div | Arithmetic | Small | Multi-cycle |
+| 58 | VX_serial_mul | Arithmetic | Small | Multi-cycle |
+| 59 | VX_shift_register | Buffer | Varies | N cycles |
+| 60 | VX_skid_buffer | Buffer | Small | 0-1 cycles |
+| 61 | VX_sp_ram | Memory | Varies | 0-1 cycles |
+| 62 | VX_stream_arb | Interconnect | Medium | 0-1 cycles |
+| 63 | VX_stream_buffer | Buffer | Small | 0-1 cycles |
+| 64 | VX_stream_dispatch | Stream Util | Medium | 0-1 cycles |
+| 65 | VX_stream_fork | Stream Util | Small | 0 cycles |
+| 66 | VX_stream_join | Stream Util | Small | 0 cycles |
+| 67 | VX_stream_omega | Interconnect | Large | O(log N) |
+| 68 | VX_stream_pack | Stream Util | Medium | 0-1 cycles |
+| 69 | VX_stream_switch | Interconnect | Medium | 0-1 cycles |
+| 70 | VX_stream_unpack | Stream Util | Medium | Multi-cycle |
+| 71 | VX_stream_xbar | Interconnect | Large | 0-1 cycles |
+| 72 | VX_stream_xpoint | Interconnect | Medium | 0-1 cycles |
+| 73 | VX_ticket_lock | Allocator | Small | 0-1 cycles |
+| 74 | VX_toggle_buffer | Buffer | Small | 1 cycle |
+| 75 | VX_transpose | Bit Manip | Zero | 0 cycles |
+| 76 | VX_wallace_mul | Arithmetic | Large | O(log N) |
