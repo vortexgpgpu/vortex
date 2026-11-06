@@ -1,0 +1,147 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 660" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+  </defs>
+
+  <style>
+    .box     { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.5; }
+    .unit    { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .llc     { fill:#eef7ee; stroke:#3a7d44; stroke-width:2; }
+    .mem     { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .core    { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.5; }
+    .grp     { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .t       { fill:#1b2733; font-size:15px; }
+    .tb      { fill:#1b2733; font-size:16px; font-weight:bold; }
+    .ts      { fill:#44525f; font-size:12.5px; }
+    .tt      { fill:#5a6772; font-size:12px; font-style:italic; }
+    .flow    { stroke:#444; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+  </style>
+
+  <rect x="0" y="0" width="1400" height="660" fill="#ffffff"/>
+  <text x="24" y="34" class="tb" font-size="20">Atomics across the cache hierarchy — who forwards, who commits</text>
+
+  <!-- ══════════ Panel A ══════════ -->
+  <rect x="24" y="56" width="660" height="540" class="grp"/>
+  <text x="36" y="80" class="tb">4 × L1 → 1 × L2 — L2 is the last level</text>
+
+  <rect x="48"  y="100" width="138" height="52" rx="6" class="core"/>
+  <text x="117" y="131" class="t" text-anchor="middle">core 0</text>
+  <rect x="206" y="100" width="138" height="52" rx="6" class="core"/>
+  <text x="275" y="131" class="t" text-anchor="middle">core 1</text>
+  <rect x="364" y="100" width="138" height="52" rx="6" class="core"/>
+  <text x="433" y="131" class="t" text-anchor="middle">core 2</text>
+  <rect x="522" y="100" width="138" height="52" rx="6" class="core"/>
+  <text x="591" y="131" class="t" text-anchor="middle">core 3</text>
+
+  <rect x="48"  y="196" width="138" height="84" rx="6" class="unit"/>
+  <text x="117" y="220" class="t" text-anchor="middle">L1 dcache</text>
+  <text x="117" y="240" class="ts" text-anchor="middle">passthrough</text>
+  <text x="117" y="258" class="ts" text-anchor="middle">write-through</text>
+  <rect x="206" y="196" width="138" height="84" rx="6" class="unit"/>
+  <text x="275" y="220" class="t" text-anchor="middle">L1 dcache</text>
+  <text x="275" y="240" class="ts" text-anchor="middle">passthrough</text>
+  <text x="275" y="258" class="ts" text-anchor="middle">write-through</text>
+  <rect x="364" y="196" width="138" height="84" rx="6" class="unit"/>
+  <text x="433" y="220" class="t" text-anchor="middle">L1 dcache</text>
+  <text x="433" y="240" class="ts" text-anchor="middle">passthrough</text>
+  <text x="433" y="258" class="ts" text-anchor="middle">write-through</text>
+  <rect x="522" y="196" width="138" height="84" rx="6" class="unit"/>
+  <text x="591" y="220" class="t" text-anchor="middle">L1 dcache</text>
+  <text x="591" y="240" class="ts" text-anchor="middle">passthrough</text>
+  <text x="591" y="258" class="ts" text-anchor="middle">write-through</text>
+
+  <path d="M 117 152 L 117 196" class="flow"/>
+  <path d="M 275 152 L 275 196" class="flow"/>
+  <path d="M 433 152 L 433 196" class="flow"/>
+  <path d="M 591 152 L 591 196" class="flow"/>
+
+  <rect x="48" y="336" width="612" height="104" rx="6" class="llc"/>
+  <text x="354" y="362" class="tb" text-anchor="middle">L2 — last-level cache</text>
+  <text x="354" y="384" class="ts" text-anchor="middle">commits every atomic: read-modify-write, writeback queue</text>
+  <text x="354" y="402" class="ts" text-anchor="middle">reservation stations per bank</text>
+  <text x="354" y="424" class="tt" text-anchor="middle">the first level all four cores share</text>
+
+  <path d="M 117 280 L 117 336" class="flow"/>
+  <path d="M 275 280 L 275 336" class="flow"/>
+  <path d="M 433 280 L 433 336" class="flow"/>
+  <path d="M 591 280 L 591 336" class="flow"/>
+
+  <rect x="48" y="496" width="612" height="52" rx="6" class="mem"/>
+  <text x="354" y="527" class="t" text-anchor="middle">memory</text>
+  <path d="M 354 440 L 354 496" class="flow"/>
+
+  <text x="48" y="580" class="tt">An atomic crosses one passthrough level; the L1s never talk to each other.</text>
+
+  <!-- ══════════ Panel B ══════════ -->
+  <rect x="716" y="56" width="660" height="540" class="grp"/>
+  <text x="728" y="80" class="tb">4 × L2 → 1 × L3 — L3 is the last level</text>
+
+  <rect x="740"  y="100" width="138" height="52" rx="6" class="core"/>
+  <text x="809"  y="123" class="t" text-anchor="middle">cluster 0</text>
+  <text x="809"  y="141" class="ts" text-anchor="middle">4 cores</text>
+  <rect x="898"  y="100" width="138" height="52" rx="6" class="core"/>
+  <text x="967"  y="123" class="t" text-anchor="middle">cluster 1</text>
+  <text x="967"  y="141" class="ts" text-anchor="middle">4 cores</text>
+  <rect x="1056" y="100" width="138" height="52" rx="6" class="core"/>
+  <text x="1125" y="123" class="t" text-anchor="middle">cluster 2</text>
+  <text x="1125" y="141" class="ts" text-anchor="middle">4 cores</text>
+  <rect x="1214" y="100" width="138" height="52" rx="6" class="core"/>
+  <text x="1283" y="123" class="t" text-anchor="middle">cluster 3</text>
+  <text x="1283" y="141" class="ts" text-anchor="middle">4 cores</text>
+
+  <rect x="740"  y="182" width="138" height="52" rx="6" class="unit"/>
+  <text x="809"  y="205" class="t" text-anchor="middle">4 × L1</text>
+  <text x="809"  y="223" class="ts" text-anchor="middle">passthrough</text>
+  <rect x="898"  y="182" width="138" height="52" rx="6" class="unit"/>
+  <text x="967"  y="205" class="t" text-anchor="middle">4 × L1</text>
+  <text x="967"  y="223" class="ts" text-anchor="middle">passthrough</text>
+  <rect x="1056" y="182" width="138" height="52" rx="6" class="unit"/>
+  <text x="1125" y="205" class="t" text-anchor="middle">4 × L1</text>
+  <text x="1125" y="223" class="ts" text-anchor="middle">passthrough</text>
+  <rect x="1214" y="182" width="138" height="52" rx="6" class="unit"/>
+  <text x="1283" y="205" class="t" text-anchor="middle">4 × L1</text>
+  <text x="1283" y="223" class="ts" text-anchor="middle">passthrough</text>
+
+  <rect x="740"  y="258" width="138" height="52" rx="6" class="unit"/>
+  <text x="809"  y="281" class="t" text-anchor="middle">L2</text>
+  <text x="809"  y="299" class="ts" text-anchor="middle">passthrough</text>
+  <rect x="898"  y="258" width="138" height="52" rx="6" class="unit"/>
+  <text x="967"  y="281" class="t" text-anchor="middle">L2</text>
+  <text x="967"  y="299" class="ts" text-anchor="middle">passthrough</text>
+  <rect x="1056" y="258" width="138" height="52" rx="6" class="unit"/>
+  <text x="1125" y="281" class="t" text-anchor="middle">L2</text>
+  <text x="1125" y="299" class="ts" text-anchor="middle">passthrough</text>
+  <rect x="1214" y="258" width="138" height="52" rx="6" class="unit"/>
+  <text x="1283" y="281" class="t" text-anchor="middle">L2</text>
+  <text x="1283" y="299" class="ts" text-anchor="middle">passthrough</text>
+
+  <path d="M 809 152 L 809 182" class="flow"/>
+  <path d="M 967 152 L 967 182" class="flow"/>
+  <path d="M 1125 152 L 1125 182" class="flow"/>
+  <path d="M 1283 152 L 1283 182" class="flow"/>
+  <path d="M 809 234 L 809 258" class="flow"/>
+  <path d="M 967 234 L 967 258" class="flow"/>
+  <path d="M 1125 234 L 1125 258" class="flow"/>
+  <path d="M 1283 234 L 1283 258" class="flow"/>
+
+  <rect x="740" y="336" width="612" height="104" rx="6" class="llc"/>
+  <text x="1046" y="362" class="tb" text-anchor="middle">L3 — last-level cache</text>
+  <text x="1046" y="384" class="ts" text-anchor="middle">commits every atomic: read-modify-write, writeback queue</text>
+  <text x="1046" y="402" class="ts" text-anchor="middle">reservation stations per bank</text>
+  <text x="1046" y="424" class="tt" text-anchor="middle">the first level all four clusters share</text>
+
+  <path d="M 809 310 L 809 336" class="flow"/>
+  <path d="M 967 310 L 967 336" class="flow"/>
+  <path d="M 1125 310 L 1125 336" class="flow"/>
+  <path d="M 1283 310 L 1283 336" class="flow"/>
+
+  <rect x="740" y="496" width="612" height="52" rx="6" class="mem"/>
+  <text x="1046" y="527" class="t" text-anchor="middle">memory</text>
+  <path d="M 1046 440 L 1046 496" class="flow"/>
+
+  <text x="740" y="580" class="tt">Same cache module at every level; the atomic crosses two passthrough levels.</text>
+
+  <text x="24" y="632" class="tt">Blue = passthrough (VX_cache_amo, IS_LLC = 0): drops its own copy, forwards, installs nothing · green = commit (IS_LLC = 1) · every blue level must be write-through.</text>
+</svg>

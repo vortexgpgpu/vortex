@@ -1,0 +1,139 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 800" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="arrb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1c6ca8"/>
+    </marker>
+  </defs>
+
+  <style>
+    .box     { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.5; }
+    .unit    { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .mem     { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .sw      { fill:#eef7ee; stroke:#3a7d44; stroke-width:1.5; }
+    .core    { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.5; }
+    .grp     { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .t       { fill:#1b2733; font-size:15px; }
+    .tb      { fill:#1b2733; font-size:16px; font-weight:bold; }
+    .ts      { fill:#44525f; font-size:12.5px; }
+    .tt      { fill:#5a6772; font-size:12px; font-style:italic; }
+    .mono    { font-family:'SF Mono',Consolas,monospace; font-size:12px; fill:#1b2733; }
+    .flow    { stroke:#444; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+    .flowb   { stroke:#1c6ca8; stroke-width:1.8; fill:none; marker-end:url(#arrb); stroke-dasharray:7 4; }
+    .lbl     { fill:#1c6ca8; font-size:12px; }
+    .lbk     { fill:#44525f; font-size:12px; }
+  </style>
+
+  <rect x="0" y="0" width="1400" height="800" fill="#ffffff"/>
+  <text x="24" y="34" class="tb" font-size="20">Vortex atomics — one request, two commit points</text>
+
+  <!-- ══════════ SIMT core ══════════ -->
+  <rect x="24" y="56" width="420" height="470" class="grp"/>
+  <text x="36" y="80" class="tb">SIMT core</text>
+
+  <rect x="40" y="96" width="388" height="170" rx="6" class="core"/>
+  <text x="52" y="118" class="tb">VX_decode — opcode 0x2F</text>
+  <text x="52" y="140" class="ts">funct5 → amo_op (LR, SC, SWAP, ADD, XOR, OR, AND, MIN, MAX)</text>
+  <text x="52" y="156" class="ts">MINU / MAXU → MIN / MAX + amo_unsigned</text>
+  <text x="52" y="172" class="ts">funct3 → width: 010 = .W, 011 = .D</text>
+  <text x="52" y="192" class="ts">routed to the LSU as a load (is_store = 0): every atomic</text>
+  <text x="52" y="208" class="ts">returns a value to rd</text>
+  <text x="52" y="228" class="ts">Zacas: funct5 00101 → CAS, rd read as the comparand</text>
+  <text x="52" y="250" class="tt">aq / rl are captured and carry no behavior</text>
+
+  <rect x="40" y="296" width="388" height="214" rx="6" class="core"/>
+  <text x="52" y="318" class="tb">VX_lsu_slice — per-lane sideband</text>
+  <text x="52" y="340" class="ts">packs amo_req_t into each lane's mem_bus_attr_t:</text>
+  <text x="64" y="360" class="mono">hart_id       {core, warp, thread}</text>
+  <text x="64" y="376" class="mono">amo_cmp       comparand (Zacas only)</text>
+  <text x="64" y="392" class="mono">amo_unsigned  MIN / MAX variant</text>
+  <text x="64" y="408" class="mono">amo_op        amo_op_e</text>
+  <text x="64" y="424" class="mono">amo_valid     attr bit MEM_ATTR_AMO_OFFS</text>
+  <text x="52" y="448" class="ts">request rw is forced to 0, SC included</text>
+  <text x="52" y="464" class="ts">rs2 rides the request data word as the operand</text>
+  <text x="52" y="490" class="tt">width is not carried: the bank counts byteen bits</text>
+
+  <path d="M 234 266 L 234 296" class="flow"/>
+
+  <!-- ══════════ Memory fabric ══════════ -->
+  <rect x="484" y="56" width="372" height="470" class="grp"/>
+  <text x="496" y="80" class="tb">Memory fabric (per core)</text>
+
+  <rect x="500" y="96" width="340" height="150" rx="6" class="unit"/>
+  <text x="512" y="118" class="tb">VX_lmem_switch</text>
+  <text x="512" y="140" class="ts">splits a request's lanes by address class</text>
+  <text x="512" y="160" class="ts">is_addr_local → local memory banks</text>
+  <text x="512" y="176" class="ts">everything else → data cache</text>
+  <text x="512" y="200" class="ts">the attribute field passes through untouched</text>
+  <text x="512" y="226" class="tt">both subsets may be non-empty in one request</text>
+
+  <rect x="500" y="296" width="340" height="150" rx="6" class="unit"/>
+  <text x="512" y="318" class="tb">VX_mem_coalescer</text>
+  <text x="512" y="340" class="ts">merges same-word lanes of plain loads and stores</text>
+  <text x="512" y="364" class="ts">in_req_no_merge = amo_valid:</text>
+  <text x="512" y="380" class="ts">an atomic lane is never merged — each lane is its</text>
+  <text x="512" y="396" class="ts">own read-modify-write</text>
+  <text x="512" y="426" class="tt">library block sees a generic flag, not an AMO</text>
+
+  <path d="M 428 400 L 464 400 L 464 170 L 500 170" class="flow"/>
+  <path d="M 670 246 L 670 296" class="flow"/>
+  <text x="680" y="276" class="lbk">global lanes</text>
+
+  <!-- ══════════ Local memory ══════════ -->
+  <rect x="896" y="56" width="480" height="222" class="grp"/>
+  <text x="908" y="80" class="tb">Commit point 1 — shared (local) memory</text>
+
+  <rect x="912" y="96" width="448" height="166" rx="6" class="mem"/>
+  <text x="924" y="118" class="tb">VX_local_mem bank</text>
+  <text x="924" y="140" class="ts">single-ported SRAM: an atomic owns its bank for 3 cycles</text>
+  <text x="924" y="160" class="ts">① read the word      ② register it, resolve the reservation</text>
+  <text x="924" y="176" class="ts">③ VX_amo_alu result written back under the request byteen</text>
+  <text x="924" y="200" class="ts">VX_amo_unit: min(AMO_RS_SIZE, 4) stations, 3-bit hold credit</text>
+  <text x="924" y="216" class="ts">a plain store to the word also breaks its reservation</text>
+  <text x="924" y="244" class="tt">one instance per core: shared memory is visible to one core's warps</text>
+
+  <path d="M 840 150 L 912 150" class="flow"/>
+
+  <!-- ══════════ Cache hierarchy ══════════ -->
+  <rect x="896" y="306" width="480" height="388" class="grp"/>
+  <text x="908" y="330" class="tb">Commit point 2 — global memory</text>
+
+  <rect x="912" y="346" width="448" height="120" rx="6" class="unit"/>
+  <text x="924" y="368" class="tb">cache bank above the LLC — passthrough</text>
+  <text x="924" y="390" class="ts">VX_cache_amo (IS_LLC = 0)</text>
+  <text x="924" y="408" class="ts">drops its own copy of the line, forwards the atomic down,</text>
+  <text x="924" y="424" class="ts">returns the result word without installing a line</text>
+  <text x="924" y="450" class="tt">present only when L2 or L3 is enabled</text>
+
+  <rect x="912" y="496" width="448" height="182" rx="6" class="unit"/>
+  <text x="924" y="518" class="tb">last-level cache bank — commit</text>
+  <text x="924" y="540" class="ts">VX_cache_amo (IS_LLC = 1)</text>
+  <text x="924" y="560" class="ts">response: the old word, straight from the commit stage</text>
+  <text x="924" y="576" class="ts">compute stage: VX_amo_alu on the atomic's 8-byte lane</text>
+  <text x="924" y="592" class="ts">writeback queue → synthetic store through the bank pipe</text>
+  <text x="924" y="612" class="ts">VX_amo_unit: VX_CFG_AMO_RS_SIZE stations, 6-bit hold credit</text>
+  <text x="924" y="628" class="ts">any committed store to the line breaks its reservation</text>
+  <text x="924" y="656" class="tt">every level above it is write-through, so it sees every store</text>
+
+  <path d="M 840 370 L 876 370 L 876 406 L 912 406" class="flow"/>
+  <path d="M 1136 466 L 1136 496" class="flow"/>
+  <text x="1126" y="486" class="lbk" text-anchor="end">memory request: rw = 0, attr = sideband</text>
+
+  <!-- ══════════ Response ══════════ -->
+  <rect x="24" y="566" width="832" height="128" rx="6" class="box"/>
+  <text x="36" y="588" class="tb">Response — the load path</text>
+  <text x="36" y="610" class="ts">LR, AMO*, CAS return the word as it was before the operation; SC returns 0 on success, 1 on failure, placed in the addressed lane.</text>
+  <text x="36" y="630" class="ts">The LSU extracts the sub-word by address and sign-extends at the operation width into rd, exactly as for a load.</text>
+  <text x="36" y="658" class="tt">An atomic takes a load-class response slot in the LSU, so a missing response would hang the warp — every commit point always answers.</text>
+  <text x="36" y="678" class="tt">A refused or evicted reservation surfaces only as SC = 1, which RISC-V permits for any reason.</text>
+
+  <path d="M 912 600 L 856 600" class="flowb"/>
+  <path d="M 1376 180 L 1390 180 L 1390 720 L 440 720 L 440 694" class="flowb"/>
+  <text x="620" y="738" class="lbl">old word / SC outcome</text>
+  <path d="M 234 566 L 234 510" class="flowb"/>
+  <text x="244" y="546" class="lbl">to rd</text>
+
+  <text x="24" y="776" class="tt">Purple = SIMT core · blue = fabric and cache logic · gold = memory that commits in place · dashed blue = response.</text>
+</svg>

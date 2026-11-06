@@ -1,0 +1,142 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1560 900" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="arrb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1c6ca8"/>
+    </marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b58900"/>
+    </marker>
+  </defs>
+
+  <style>
+    .box     { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.5; }
+    .unit    { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .mem     { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .sw      { fill:#eef7ee; stroke:#3a7d44; stroke-width:1.5; }
+    .core    { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.5; }
+    .pe      { fill:#ffffff; stroke:#2e5e82; stroke-width:1.2; }
+    .none    { fill:#fafafa; stroke:#9aa5af; stroke-width:1.2; stroke-dasharray:5 4; }
+    .grp     { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .t       { fill:#1b2733; font-size:15px; }
+    .tb      { fill:#1b2733; font-size:16px; font-weight:bold; }
+    .th      { fill:#1b2733; font-size:13.5px; font-weight:bold; }
+    .ts      { fill:#44525f; font-size:12.5px; }
+    .tt      { fill:#5a6772; font-size:12px; font-style:italic; }
+    .mono    { font-family:'SF Mono',Consolas,monospace; font-size:12px; fill:#1b2733; }
+    .flow    { stroke:#444; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+    .flowb   { stroke:#1c6ca8; stroke-width:1.8; fill:none; marker-end:url(#arrb); stroke-dasharray:7 4; }
+    .flowg   { stroke:#b58900; stroke-width:1.8; fill:none; marker-end:url(#arrg); }
+    .lbl     { fill:#1c6ca8; font-size:12px; }
+    .lbg     { fill:#8a6d00; font-size:12px; }
+    .lbk     { fill:#44525f; font-size:12px; }
+    .rule    { stroke:#d5dce3; stroke-width:1; }
+  </style>
+
+  <rect x="0" y="0" width="1560" height="900" fill="#ffffff"/>
+  <text x="24" y="34" class="tb" font-size="20">Synthesis gates — one implementation, two tool adapters</text>
+
+  <rect x="24" y="56" width="1512" height="204" class="grp"/>
+  <text x="40" y="86" class="tb">spec and golden</text>
+  <text x="40" y="110" class="ts">split, as everywhere</text>
+  <text x="40" y="126" class="ts">in the catalog</text>
+  <text x="40" y="150" class="ts">tied together by a</text>
+  <text x="40" y="166" class="ts">config hash</text>
+  <rect x="270" y="72" width="400" height="172" rx="6" class="mem"/>
+  <text x="282" y="94" class="tb">ci/testcases/{fpga,asic}_gate.yaml</text>
+  <text x="282" y="116" class="ts">hand-authored and reviewed</text>
+  <text x="282" y="140" class="ts">per build: a DUT, a target clock, CONFIGS,</text>
+  <text x="282" y="156" class="ts">a group, optional thresholds and</text>
+  <text x="282" y="172" class="ts">known_issue</text>
+  <rect x="700" y="72" width="400" height="172" rx="6" class="mem"/>
+  <text x="712" y="94" class="tb">ci/baselines/synthesis/&lt;tool&gt;/&lt;group&gt;.json</text>
+  <text x="712" y="116" class="ts">machine-written, never hand-edited</text>
+  <text x="712" y="140" class="ts">per build: measured metrics, the config</text>
+  <text x="712" y="156" class="ts">hash, the tool versions and environment</text>
+  <text x="712" y="172" class="ts">they were measured under</text>
+  <rect x="1130" y="72" width="406" height="172" rx="6" class="box"/>
+  <text x="1142" y="94" class="tb">hw/syn/&lt;tool&gt;/dut/catalog.mk</text>
+  <text x="1142" y="116" class="ts">each flow declares its DUTs once</text>
+  <text x="1142" y="140" class="ts">a developer and the gate both build through</text>
+  <text x="1142" y="156" class="ts">it, so the two commands cannot diverge</text>
+  <text x="1142" y="180" class="ts">an unknown dut: is rejected before any build</text>
+  <rect x="24" y="306" width="1512" height="334" class="grp"/>
+  <text x="40" y="336" class="tb">ci/synth_gate.py</text>
+  <text x="40" y="360" class="ts">everything that is</text>
+  <text x="40" y="376" class="ts">not tool-specific</text>
+  <text x="40" y="400" class="ts">fpga_gate.py and</text>
+  <text x="40" y="416" class="ts">asic_gate.py are</text>
+  <text x="40" y="432" class="ts">entry points that pin</text>
+  <text x="40" y="448" class="ts">the tool</text>
+  <rect x="270" y="322" width="290" height="140" rx="6" class="unit"/>
+  <text x="282" y="344" class="tb">schedule</text>
+  <text x="282" y="366" class="ts">longest build first, from the</text>
+  <text x="282" y="382" class="ts">recorded build times</text>
+  <text x="282" y="406" class="ts">-j parallel builds, each with a</text>
+  <text x="282" y="422" class="ts">unique PREFIX and build tree</text>
+  <rect x="590" y="322" width="290" height="140" rx="6" class="unit"/>
+  <text x="602" y="344" class="tb">build and watch</text>
+  <text x="602" y="366" class="ts">follows the tool log live</text>
+  <text x="602" y="390" class="ts">reports phase transitions and the</text>
+  <text x="602" y="406" class="ts">point past which a front-end</text>
+  <text x="602" y="422" class="ts">error can no longer occur</text>
+  <rect x="910" y="322" width="290" height="140" rx="6" class="unit"/>
+  <text x="922" y="344" class="tb">resume</text>
+  <text x="922" y="366" class="ts">a stamp in each build directory:</text>
+  <text x="922" y="382" class="ts">config hash, status, metrics</text>
+  <text x="922" y="406" class="ts">reuses a finished build; rebuilds</text>
+  <text x="922" y="422" class="ts">one whose config changed</text>
+  <rect x="1230" y="322" width="306" height="140" rx="6" class="unit"/>
+  <text x="1242" y="344" class="tb">gate</text>
+  <text x="1242" y="366" class="ts">Fmax and area against the</text>
+  <text x="1242" y="382" class="ts">baseline, within tolerance</text>
+  <text x="1242" y="406" class="ts">Fmax against the target clock,</text>
+  <text x="1242" y="422" class="ts">independent of the baseline</text>
+  <path d="M 560 392 L 590 392" class="flow"/>
+  <path d="M 880 392 L 910 392" class="flow"/>
+  <path d="M 1200 392 L 1230 392" class="flow"/>
+  <text x="270" y="496" class="tt">Tool adapter — supplies only what differs: metric names, how the flow is invoked, what its log looks like, what makes two runs comparable</text>
+  <rect x="270" y="508" width="620" height="118" rx="6" class="box"/>
+  <text x="282" y="530" class="t">xilinx — fpga_gate</text>
+  <text x="282" y="552" class="ts">Vivado synthesis + place and route · hw/syn/xilinx/dut</text>
+  <text x="282" y="568" class="ts">gated: fmax_mhz, lut</text>
+  <text x="282" y="584" class="ts">recorded: wns, lutram, ff, bram, uram, dsp, critical paths, high-fanout nets</text>
+  <text x="282" y="600" class="ts">comparable when: same device, opt level, xlen</text>
+  <rect x="916" y="508" width="620" height="118" rx="6" class="box"/>
+  <text x="928" y="530" class="t">yosys — asic_gate</text>
+  <text x="928" y="552" class="ts">sv2v → Yosys → ABC → OpenSTA on ASAP7 · hw/syn/yosys/dut</text>
+  <text x="928" y="568" class="ts">gated: fmax_mhz, cell_area_um2</text>
+  <text x="928" y="584" class="ts">recorded: wns, tns, sequential and SRAM area, cell count, power</text>
+  <text x="928" y="600" class="ts">comparable when: same PDK, VT, corner, xlen</text>
+  <path d="M 470 244 L 470 322" class="flow"/>
+  <path d="M 900 244 L 900 282 L 1383 282 L 1383 322" class="flowg"/>
+  <text x="1000" y="276" class="lbg">baseline</text>
+  <rect x="24" y="686" width="1512" height="160" class="grp"/>
+  <text x="40" y="716" class="tb">verdict</text>
+  <text x="40" y="740" class="ts">a run is diagnosed</text>
+  <text x="40" y="756" class="ts">from its GitHub page</text>
+  <rect x="270" y="702" width="290" height="128" rx="6" class="box"/>
+  <text x="282" y="724" class="t">per build</text>
+  <text x="282" y="746" class="ts">PASS · KNOWN-ISSUE · XPASS</text>
+  <text x="282" y="762" class="ts">REGRESSION · IMPROVED (both fail)</text>
+  <text x="282" y="778" class="ts">STALE · FAIL</text>
+  <rect x="590" y="702" width="290" height="128" rx="6" class="mem"/>
+  <text x="602" y="724" class="t">--report JSON</text>
+  <text x="602" y="746" class="ts">spec, config hash, metrics,</text>
+  <text x="602" y="762" class="ts">critical paths, tool environment,</text>
+  <text x="602" y="778" class="ts">for the build and its baseline</text>
+  <rect x="910" y="702" width="290" height="128" rx="6" class="unit"/>
+  <text x="922" y="724" class="t">ci/synth_report.py</text>
+  <text x="922" y="746" class="ts">workflow summary + one</text>
+  <text x="922" y="762" class="ts">annotation per finding</text>
+  <rect x="1230" y="702" width="306" height="128" rx="6" class="sw"/>
+  <text x="1242" y="724" class="t">--update-baseline</text>
+  <text x="1242" y="746" class="ts">a human runs it and reviews the</text>
+  <text x="1242" y="762" class="ts">diff; CI never does</text>
+  <path d="M 560 766 L 590 766" class="flow"/>
+  <path d="M 880 766 L 910 766" class="flow"/>
+  <path d="M 1383 462 L 1383 468 L 1550 468 L 1550 666 L 415 666 L 415 702" class="flow"/>
+  <text x="24" y="878" class="tt">Gold = data · blue = gate logic · green = the only path that writes a baseline.</text>
+</svg>

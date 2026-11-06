@@ -3,8 +3,8 @@ DESTDIR ?= .
 CONFIGS +=
 PARAMS +=
 
-CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Wno-array-bounds
-CXXFLAGS += -fPIC -Wno-maybe-uninitialized
+CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Werror
+CXXFLAGS += -fPIC
 CXXFLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
 CXXFLAGS += $(CONFIGS)
 
@@ -12,7 +12,7 @@ LDFLAGS +=
 RTL_PKGS +=
 RTL_INCLUDE +=
 
-DBG_FLAGS += -DVX_DBG_DEBUG_LEVEL=$(DEBUG) -DVCD_OUTPUT $(DBG_TRACE_FLAGS)
+DBG_FLAGS += -DVX_DBG_DEBUG_LEVEL=$(DEBUG) $(DBG_TRACE_FLAGS)
 
 VL_FLAGS += --exe
 VL_FLAGS += --language 1800-2012 --assert -Wall -Wpedantic
@@ -40,7 +40,7 @@ VL_FLAGS += -j $(THREADS)
 
 # Debugging
 ifdef DEBUG
-	VL_FLAGS += --trace --trace-structs $(DBG_FLAGS)
+	VL_FLAGS += $(DBG_FLAGS)
 	CXXFLAGS += -g -O0 $(DBG_FLAGS)
 else
 	VL_FLAGS += -DNDEBUG
@@ -53,6 +53,12 @@ ifdef PERF
 	CXXFLAGS += -DPERF_ENABLE
 endif
 
+# Enable VCD waveform
+ifdef VCD
+	VL_FLAGS += --trace --trace-structs
+	CXXFLAGS += -DVCD_OUTPUT
+endif
+
 # Enable SAIF tracing
 ifdef SAIF
 	VL_FLAGS += --trace-saif
@@ -61,8 +67,10 @@ endif
 
 all: $(DESTDIR)/$(PROJECT)
 
+# verilator --build runs its own make (parallelized by -j in VL_FLAGS) that
+# cannot reach this make's jobserver, so it gets a clean MAKEFLAGS.
 $(DESTDIR)/$(PROJECT): $(SRCS) $(RTL_SRCS)
-	$(VERILATOR_PATH)/bin/verilator --build $(VL_FLAGS) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' -MMD -o ../$@
+	MAKEFLAGS= $(VERILATOR_PATH)/bin/verilator --build $(VL_FLAGS) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' -MMD -o ../$@
 
 run: $(DESTDIR)/$(PROJECT)
 	$(DESTDIR)/$(PROJECT) $(OPTS)

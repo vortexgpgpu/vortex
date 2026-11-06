@@ -14,6 +14,7 @@
 #include "scope.h"   // vx_scope_drain — lossless SCOPE tap-ring drainer
 #endif
 
+#include <algorithm>
 #include <cassert>
 #include <chrono>
 #include <cstdio>
@@ -24,6 +25,9 @@
 #include <vector>
 
 namespace vx {
+
+// Upper bound on one CP-visible host staging buffer for a device transfer.
+static constexpr uint64_t CP_STAGING_CHUNK = uint64_t(64) << 20;
 
 // Resolve the pinned-region size: compile-time default
 // VX_CFG_VM_PINNED_REGION_SIZE, optionally overridden by the
@@ -974,25 +978,28 @@ vx_result_t Device::cp_submit_mem_write(uint64_t dev_dst, const void* host_src,
                                         uint64_t size, bool physical) {
     if (size == 0)  return VX_SUCCESS;
     if (!host_src)  return VX_ERR_INVALID_VALUE;
-    // Stage the payload into CP-visible host memory (a plain memcpy through
-    // the host pointer), then have the CP DMA it to device memory. `physical`
+    // Stage through a bounded CP-visible host buffer, one chunk at a time:
+    // a backend can cap a single host allocation well below a large upload
+    // (an acceleration structure runs to GBs). Each chunk is a plain memcpy
+    // through the host pointer, then a CP DMA to device memory. `physical`
     // (set for page-table writes) tells the CP DMA to skip VM translation.
     HostMem staging;
-    auto r = host_alloc(size, &staging);
+    auto r = host_alloc(std::min(size, CP_STAGING_CHUNK), &staging);
     if (r != VX_SUCCESS) return r;
-    std::memcpy(staging.host_ptr, host_src, size);
-    // Make the fill visible to the CP before the command that reads it can
-    // be fetched. On shadowing backends this is the ONLY push of this
-    // region: the backend's doorbell publish deliberately does not touch
-    // generic regions (a blanket publish can push a half-filled or stale
-    // shadow over device bytes another agent owns).
-    r = platform()->host_mem_push(staging.cp_addr);
-    if (r != VX_SUCCESS) {
-        host_free(staging.cp_addr);
-        return r;
+    auto src = static_cast<const uint8_t*>(host_src);
+    for (uint64_t off = 0; off < size && r == VX_SUCCESS; off += CP_STAGING_CHUNK) {
+        const uint64_t n = std::min(size - off, CP_STAGING_CHUNK);
+        std::memcpy(staging.host_ptr, src + off, n);
+        // Make the fill visible to the CP before the command that reads it can
+        // be fetched. On shadowing backends this is the ONLY push of this
+        // region: the backend's doorbell publish deliberately does not touch
+        // generic regions (a blanket publish can push a half-filled or stale
+        // shadow over device bytes another agent owns).
+        r = platform()->host_mem_push(staging.cp_addr);
+        if (r == VX_SUCCESS)
+            r = cp_submit_mem_(CP_OPCODE_MEM_WRITE, dev_dst + off,
+                               staging.cp_addr, n, physical);
     }
-    r = cp_submit_mem_(CP_OPCODE_MEM_WRITE, dev_dst, staging.cp_addr, size,
-                       physical);
     host_free(staging.cp_addr);
     return r;
 }
@@ -1001,22 +1008,25 @@ vx_result_t Device::cp_submit_mem_read(void* host_dst, uint64_t dev_src,
                                        uint64_t size, bool physical) {
     if (size == 0)  return VX_SUCCESS;
     if (!host_dst)  return VX_ERR_INVALID_VALUE;
-    // Have the CP DMA device->host into a CP-visible host staging buffer,
-    // then memcpy it back to the caller's pointer.
+    // Have the CP DMA device->host into a bounded CP-visible host staging
+    // buffer chunk by chunk (see cp_submit_mem_write), copying each back.
     HostMem staging;
-    auto r = host_alloc(size, &staging);
+    auto r = host_alloc(std::min(size, CP_STAGING_CHUNK), &staging);
     if (r != VX_SUCCESS) return r;
-    r = cp_submit_mem_(CP_OPCODE_MEM_READ, staging.cp_addr, dev_src, size,
-                       physical);
-    if (r == VX_SUCCESS) {
+    auto dst = static_cast<uint8_t*>(host_dst);
+    for (uint64_t off = 0; off < size && r == VX_SUCCESS; off += CP_STAGING_CHUNK) {
+        const uint64_t n = std::min(size - off, CP_STAGING_CHUNK);
+        r = cp_submit_mem_(CP_OPCODE_MEM_READ, staging.cp_addr, dev_src + off,
+                           n, physical);
         // The CP wrote the staging region; on a backend that shadows CP
         // memory the host copy is stale until pulled. The submit's Q_SEQNUM
         // poll has already fenced on the completion line, so the pull reads
         // settled bytes.
-        r = platform()->host_mem_pull(staging.cp_addr);
+        if (r == VX_SUCCESS)
+            r = platform()->host_mem_pull(staging.cp_addr);
+        if (r == VX_SUCCESS)
+            std::memcpy(dst + off, staging.host_ptr, n);
     }
-    if (r == VX_SUCCESS)
-        std::memcpy(host_dst, staging.host_ptr, size);
     host_free(staging.cp_addr);
     return r;
 }

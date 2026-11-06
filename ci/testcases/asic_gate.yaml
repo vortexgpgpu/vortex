@@ -1,0 +1,215 @@
+# ASIC synthesis-regression gate: post-synthesis cell area must not regress past
+# a threshold vs. a checked-in golden result
+# (ci/baselines/synthesis/yosys/<group>.json), and Fmax must meet the build's
+# target clock.
+#
+# Sibling of the fpga_gate (fpga_gate.yaml): same discipline — golden baseline,
+# hard threshold, ratcheted improvements, results only ever re-recorded by a
+# human — over the open-source flow instead of Vivado. What changes is the
+# target: LUT/BRAM/DSP have no ASIC meaning, standard-cell area and SRAM area do.
+#
+# ---------------------------------------------------------------------------
+# Two blocks, two consumers, exactly as in fpga_gate.yaml:
+#
+#   tests:   what pytest/CI sees — ONE case, whose `run:` is literally the
+#            command CI executes. No second entry point, no divergence.
+#   builds:  what ci/asic_gate.py reads — the build list, with its per-build
+#            `known_issue` and `thresholds`. The pytest loader ignores this key.
+#
+# UNLIKE fpga_gate, THIS ONE RUNS ON A HOSTED RUNNER. Yosys, sv2v and OpenSTA
+# ship in the prebuilt toolchain (ci/toolchain_install.sh installs all three by
+# default) and ASAP7 is a 59 MB content-addressed fetch, so there is no licence
+# and no dedicated machine in the way — which is the whole point of having an
+# open-source flow.
+#
+# It is still nightly, not a PR gate: a DUT takes 1-2 hours. Tier `asic` is
+# OPT-IN (OPT_IN_TIERS in testcase.py), so ci.yml's hosted matrix never emits a
+# cell for it; .github/workflows/asic_gate.yml owns it, fanning the `builds:`
+# block below out to ONE JOB PER BUILD so the wall times run concurrently
+# instead of in series.
+#
+# The DUTs are the hw/unittest/*/VX_*_top.sv wrappers the Xilinx gate also
+# synthesizes (hw/syn/yosys/dut/catalog.mk holds each one's top, include path
+# and defines), so where the two gates share a DUT they measure the same module
+# and a divergence between them is a real finding, not an artefact of two lists.
+#
+# THIS LIST IS BOUNDED BY MEMORY. It gates the same DUTs as fpga_gate.yaml, but
+# the wide ones at a reduced NT=NW. A hosted runner has 16 GB of RAM; Yosys
+# holds the whole elaborated netlist and offers no cap to tune, so a DUT that
+# needs more does not fail -- the VM is killed under it and the job ends at
+# exit 143 with no report, which looks exactly like an infrastructure outage. At
+# 16/16, `gfx` measured a 44.2 GB peak RSS for a single Yosys process (3.76M
+# cells, 100 min wall), and `core` and `tex` measured 20.7 GB and 28.0 GB;
+# NT and NW size the lane x warp product that carries that cost, so the wide
+# DUTs are gated at NT=NW=8, and `top` and `gfx` at NT=NW=4: at 8/8 they peak
+# at 18.6 and 19.5 GB. fpga_gate.yaml gates the full-width configurations.
+#
+# `vm` once passed a hosted nightly at 1.0M cells in 11 minutes only because its
+# L2 was a BYPASS: VX_vm_top wires the L2 as
+# `VX_cache_wrap #(.PASSTHRU(!`VX_CFG_L2_ENABLED))`, and the Yosys catalog was
+# missing L2_ENABLE. It now carries the real 256 KB L2, as `gfx` and `tensor` do.
+#
+# See docs/designs/continuous_integration.md §3.5.
+category: asic_gate
+defaults:
+  # 32-bit only: synthesis results are recorded against RV32.
+  xlen:
+  - 32
+  tier: asic
+  via: script
+  # Any RTL change can move Fmax or area.
+  touches:
+  - hw/rtl/
+tests:
+# The base command. asic_gate.yml reads it from here and appends `-b <id>` for
+# the one build that job owns, so what CI runs and what the catalog says cannot
+# drift apart. Run bare, it gates every build in series.
+#
+# `-j 1`: the workflow gets its parallelism from the job fan-out, and one Yosys
+# build already saturates a hosted runner's two cores.
+- id: gate
+  run: ci/asic_gate.py -j 1
+
+# ---------------------------------------------------------------------------
+# builds — read by ci/asic_gate.py, ignored by the pytest catalog loader.
+#
+#   dut         hw/syn/yosys/dut/catalog.mk target to synthesize; that catalog
+#               carries the DUT's top module, include path and defines
+#   clock_mhz   target clock the design is constrained to, via CLOCK_FREQ. Fmax
+#               is derived from it and the worst slack, and the gate also asserts
+#               the design MEETS it — so this is a commitment, not a hint.
+#   configs     EXTRA defines, appended to the catalog's. Usually empty: the DUT
+#               configuration belongs in one place, and that place is catalog.mk.
+#   group       which golden file the results land in (mirrors the Xilinx groups)
+#   thresholds  per-metric gate tolerance, overriding --metric-threshold and
+#               --threshold (e.g. {cell_area_um2: 0.10})
+#   known_issue tracked expected failure: still builds and reports, does not fail
+#               the run (same contract as a known_issue: test case)
+#
+# Run one by name:  ci/asic_gate.py -b tcu
+# Run a group:      ci/asic_gate.py -b graphics
+# By hand, no gate: make -C hw/syn/yosys/dut tcu
+# Re-record:        ci/asic_gate.py --update-baseline   (human-reviewed, never CI)
+#
+# PDK: ASAP7 7.5-track, RVT, TT corner (hw/syn/yosys/Makefile defaults). The
+# corner is part of config_hash — RVT-TT and LVT-SS numbers are not comparable.
+# ---------------------------------------------------------------------------
+builds:
+
+# --- core: the base pipeline and its memory system ---------------------------
+
+# L1/LLC datapath with atomics: tag/data pipeline, MSHR, AMO unit.
+- id: cache
+  group: core
+  dut: cache
+  clock_mhz: 800
+  configs: ""
+
+# Wide-SIMD core: issue/operand-collect/LSU/FPU at NT=NW=16, plus the RVC
+# decompressor and atomics.
+# NT/NW cut from the catalog's 16/16, which measured a 20.7 GB peak RSS against
+# a hosted runner's 16 GB: NUM_FPU_LANES tracks SIMD_WIDTH, so a 16-lane STD FPU
+# plus a 16-warp register file is what carries the cost. Halving both quarters
+# the lane x warp product. fpga_gate still gates the 16/16 configuration.
+- id: core
+  group: core
+  dut: core
+  clock_mhz: 400
+  configs: "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8"
+
+# Multi-core system top: 2 cores with atomics and virtual memory behind the AFU
+# wrapper. Closes the cross-module boundaries (socket arbiters, socket MMU,
+# cluster mem network) that the per-unit DUTs do not.
+- id: top
+  group: core
+  dut: top
+  clock_mhz: 400
+  # 11.2 GB Yosys peak at NT=NW=4 (8/8: 18.6 GB).
+  configs: "-DVX_CFG_NUM_THREADS=4 -DVX_CFG_NUM_WARPS=4"
+
+# --- dxa ---------------------------------------------------------------------
+
+# DXA engine: descriptor queue, address generation, multicast distribution.
+- id: dxa
+  group: dxa
+  dut: dxa
+  clock_mhz: 800
+  configs: ""
+
+# --- mufu --------------------------------------------------------------------
+
+# Special-function datapath at its default single lane, serialized from a
+# 16-lane SFU: the 7-stage table+polynomial pipeline and the 512x72 table ROM.
+- id: mufu
+  group: mufu
+  dut: mufu
+  clock_mhz: 800
+  configs: ""
+
+# --- tensor ------------------------------------------------------------------
+
+# TFR tensor core with every datatype plus sparsity and WGMMA. The widest
+# datapath in the tree, so it is the area + Fmax bellwether.
+- id: tcu
+  group: tensor
+  dut: tcu
+  clock_mhz: 500
+  configs: ""
+
+# Full tensor subsystem: TCU (WGMMA + MX) + dxa behind a shared L2, 2 cores per
+# socket.
+- id: tensor
+  group: tensor
+  dut: tensor
+  clock_mhz: 400
+  configs: "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8"
+
+# --- graphics ----------------------------------------------------------------
+
+# Rasterizer: bin/block/quad walker, edge evaluators, rcache port.
+- id: raster
+  group: graphics
+  dut: raster
+  clock_mhz: 800
+  configs: ""
+
+# Output merger: depth/stencil test, blend, ocache port.
+- id: om
+  group: graphics
+  dut: om
+  clock_mhz: 800
+  configs: ""
+
+# Texture unit: address generation, LOD, bilinear filter, tcache port.
+# NT/NW cut from the catalog's 16/16 for the same reason as core: 28.0 GB there.
+- id: tex
+  group: graphics
+  dut: tex
+  clock_mhz: 800
+  configs: "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8"
+
+# Ray-tracing unit: CW-BVH4 walker, box/triangle PEs, short stack.
+- id: rtu
+  group: graphics
+  dut: rtu
+  clock_mhz: 400
+  configs: ""
+
+# Full graphics subsystem: raster + om + tex + rtu + dxa behind a shared L2,
+# 2 cores per socket.
+- id: gfx
+  group: graphics
+  dut: gfx
+  clock_mhz: 400
+  # 14.6 GB Yosys peak at NT=NW=4 (8/8: 19.5 GB).
+  configs: "-DVX_CFG_NUM_THREADS=4 -DVX_CFG_NUM_WARPS=4"
+
+# --- vm ----------------------------------------------------------------------
+
+# Standalone MMU network: dTLB + iTLB, pooled L1 TLB MSHR, L2 TLB, PTW walker
+# hierarchy, fed by a 256 KB shared L2.
+- id: vm
+  group: vm
+  dut: vm
+  clock_mhz: 400
+  configs: "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8"

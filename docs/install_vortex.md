@@ -40,8 +40,10 @@
    sourcing is required and multiple Vortex trees can coexist on one
    machine without a global `~/.bashrc` clobber.
 
-   Useful configure options: `--xlen={32,64}` selects the ISA width and
-   `--prefix=<path>` the install location. Two SimX build knobs are plain
+   Useful configure options: `--xlen={32,64}` selects the ISA width,
+   `--prefix=<path>` the install location, and `--profile=<name>` builds the
+   machine described by `profiles/<name>.json` by default (see
+   [Hardware Profiles](simulation.md#hardware-profiles)). Two SimX build knobs are plain
    config defines, passed like any `VX_CFG_*` option through `CONFIGS`:
    `-DSIMX_MT=<T>` runs the simulator on `T` host threads (default serial;
    cycle results are bit-identical for every thread count), and
@@ -122,3 +124,40 @@ Note: depending on the system, some of the toolchain may need to be recompiled f
    ```
 
    See the Ubuntu section above for the install-tree layout.
+
+## RHEL 9 (Rocky / AlmaLinux / CentOS Stream 9)
+
+`configure` detects EL9 and selects the `rhel/9` prebuilt bundles, built natively
+on RHEL 9.8 (glibc 2.34, system GCC 11). The `ubuntu/focal` bundles do not run on
+EL9: they need glibc 2.35 / `GLIBCXX_3.4.30`. No toolchain component has to be
+compiled locally.
+
+1. Install the build dependencies:
+
+   ```
+   sudo dnf install gcc gcc-c++ make cmake ccache zlib-devel ncurses-devel
+   ```
+
+   The graphics library (`third_party/cocogfx`, built by a plain `make`) also needs
+   `libpng-devel` and `boost-devel`. OpenCL and HIP tests need the `ocl-icd` loader.
+
+2. Configure and install the toolchain as in the Ubuntu section:
+
+   ```
+   $ mkdir -p build && cd build
+   $ ../configure --xlen=32 --tooldir=$HOME/tools
+   $ ./ci/toolchain_install.sh
+   ```
+
+   Limits of the `rhel/9` bundle set: gem5 is not provided (`--gem5` / `--all`
+   fail), and `riscv*-unknown-elf-gdb` does not start (it links `libpython2.7`).
+   Neither is used by the build or the simulators.
+
+3. Build with `make -s`. Without `libpng-devel` / `boost-devel`, build only what
+   simx and rtlsim need:
+
+   ```
+   $ make -C ../third_party softfloat ramulator
+   $ make -C sw/kernel && make -C sw/runtime/stub
+   $ ./ci/blackbox.sh --driver=simx --app=sgemm --args="-n16"
+   ```

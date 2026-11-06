@@ -87,7 +87,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire [NUM_FPCORES-1:0] per_core_ready_out;
 
     // Decode FPU core selector
-    wire [FPCORES_BITS-1:0] core_select = (op_type == INST_FPU_F2F) ? FPCORES_BITS'(FPU_CVT)
+    wire [FPCORES_BITS-1:0] core_select = (op_type == INST_FPU_F2F || op_type == INST_FPU_F2H) ? FPCORES_BITS'(FPU_CVT)
                                                                      : FPCORES_BITS'(op_type[3:2]);
 
     VX_stream_switch #(
@@ -413,17 +413,21 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             wire [INST_FMT_BITS-1:0] pe_fmt = pe_shared[INST_FRM_BITS+:INST_FMT_BITS];
             wire [INST_FPU_BITS-1:0] pe_op  = pe_shared[INST_FRM_BITS+INST_FMT_BITS+:INST_FPU_BITS];
 
-            wire is_f2f    = (pe_op == INST_FPU_F2F);
+            wire is_f2h    = (pe_op == INST_FPU_F2H);
+            wire is_f2f    = (pe_op == INST_FPU_F2F) || is_f2h;
             wire is_itof   = pe_op[1] & ~is_f2f;
             wire is_ftoi   = ~pe_op[1] & ~is_f2f;
             wire is_signed = ~pe_op[0];
             wire is_int64  = pe_fmt[1];
-            wire src_fmt   = is_f2f ? ~pe_fmt[0] : pe_fmt[0]; // F2F: src is the other format
+            wire src_fmt   = (is_f2f && !is_f2h) ? ~pe_fmt[0] : pe_fmt[0]; // F2F: src is the other format
             wire dst_fmt   = pe_fmt[0];
 
             VX_fcvt_unit #(
                 .LATENCY (CVT_LATENCY),
                 .FLEN    (`VX_CFG_FLEN),
+            `ifdef VX_CFG_EXT_ZFHMIN_ENABLE
+                .HALF_ENABLE (1),
+            `endif
                 .OUT_REG (1)
             ) fcvt_unit (
                 .clk        (clk),
@@ -438,6 +442,8 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 .is_int64   (is_int64),
                 .src_fmt    (src_fmt),
                 .dst_fmt    (dst_fmt),
+                .src_h      (is_f2f && !is_f2h && pe_fmt[1]),
+                .dst_h      (is_f2h),
                 .dataa      (pe_data_in[i][0+:`VX_CFG_XLEN]),
                 .result     (pe_data_out[i][0+:`VX_CFG_XLEN]),
                 .fflags     (pe_data_out[i][`VX_CFG_XLEN+:`FP_FLAGS_BITS])

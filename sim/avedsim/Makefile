@@ -10,8 +10,12 @@ XRTSIM_DIR := $(VORTEX_HOME)/sim/xrtsim
 AFU_DIR := $(RTL_DIR)/afu/aved
 AFU_COMMON_DIR := $(RTL_DIR)/afu/common
 
-CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Wno-array-bounds
-CXXFLAGS += -fPIC -Wno-maybe-uninitialized
+CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Werror
+CXXFLAGS += -fPIC
+# GCC 13 turns the generated per-word copy of a wide signal into a memcpy and
+# inlines it with aligned 16-byte stores, faulting on a destination that is only
+# 8-byte aligned in the root class (NUM_THREADS=16 + RTU crashes in reset).
+CXXFLAGS += -fno-tree-loop-distribute-patterns
 CXXFLAGS += -I$(SRC_DIR) -I$(XRTSIM_DIR) -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SIM_COMMON_DIR) -I$(SW_COMMON_DIR) -I$(DESTDIR)
 CXXFLAGS += -I/$(THIRD_PARTY_DIR)/softfloat/source/include
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/ramulator/ext/spdlog/include
@@ -21,7 +25,7 @@ CXXFLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
 CXXFLAGS += $(CONFIGS)
 
 LDFLAGS += -shared $(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
-LDFLAGS += -Wl,-rpath,$(THIRD_PARTY_DIR)/ramulator -L$(THIRD_PARTY_DIR)/ramulator -lramulator -pthread
+LDFLAGS += -Wl,-rpath,$(THIRD_PARTY_DIR)/ramulator -L$(THIRD_PARTY_DIR)/ramulator -lramulator -Wl,-rpath,$(THIRD_PARTY_DIR)/ramulator_ext -L$(THIRD_PARTY_DIR)/ramulator_ext -Wl,--push-state,--no-as-needed -lramulator-vortex -Wl,--pop-state -pthread
 
 # control RTL debug tracing states
 DBG_TRACE_FLAGS += -DDBG_TRACE_PIPELINE
@@ -38,7 +42,7 @@ DBG_SCOPE_FLAGS += -DDBG_SCOPE_ISSUE
 DBG_SCOPE_FLAGS += -DDBG_SCOPE_FETCH
 DBG_SCOPE_FLAGS += -DDBG_SCOPE_LSU
 
-DBG_FLAGS += -DVX_DBG_DEBUG_LEVEL=$(DEBUG) -DVCD_OUTPUT $(DBG_TRACE_FLAGS)
+DBG_FLAGS += -DVX_DBG_DEBUG_LEVEL=$(DEBUG) $(DBG_TRACE_FLAGS)
 
 # `override` so a command-line `make CONFIGS=...` cannot drop these mandatory flags.
 override CONFIGS += -DSIMULATION -DSV_DPI
@@ -129,6 +133,11 @@ ifneq (,$(filter -DVX_CFG_EXT_RTU_ENABLE, $(XCONFIGS)))
 	RTL_INCLUDE += -I$(RTL_DIR)/rtu
 endif
 
+# Add MUFU extension sources
+ifneq (,$(filter -DVX_CFG_EXT_MUFU_ENABLE, $(XCONFIGS)))
+	RTL_INCLUDE += -I$(RTL_DIR)/mufu
+endif
+
 RTL_PKGS += $(RTL_DIR)/VX_trace_pkg.sv
 
 # Command Processor: declare the package only. Interfaces live in
@@ -161,7 +170,7 @@ VL_FLAGS += -j $(THREADS)
 
 # Debugging
 ifdef DEBUG
-	VL_FLAGS += --trace --trace-structs $(DBG_FLAGS)
+	VL_FLAGS += $(DBG_FLAGS)
 	CXXFLAGS += -g -O0 $(DBG_FLAGS)
 else
 	VL_FLAGS += -DNDEBUG
@@ -179,6 +188,12 @@ endif
 ifdef PERF
 	VL_FLAGS += -DPERF_ENABLE
 	CXXFLAGS += -DPERF_ENABLE
+endif
+
+# Enable VCD waveform
+ifdef VCD
+	VL_FLAGS += --trace --trace-structs
+	CXXFLAGS += -DVCD_OUTPUT
 endif
 
 # Enable SAIF tracing
@@ -203,8 +218,10 @@ $(DESTDIR)/vortex.json: $(CONFIG_FILE)
 $(DESTDIR)/scope.json: $(DESTDIR)/vortex.json
 	$(SCRIPT_DIR)/scope.py $^ -o $@
 
+# verilator --build runs its own make (parallelized by -j in VL_FLAGS) that
+# cannot reach this make's jobserver, so it gets a clean MAKEFLAGS.
 $(DESTDIR)/$(PROJECT): $(SRCS) $(SCOPE_JSON) $(CONFIG_FILE) $(RTL_SRCS)
-	$(VERILATOR_PATH)/bin/verilator --build --exe $(VL_FLAGS) --cc $(TOP) --top-module $(TOP) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' --Mdir $@.obj_dir -o $@
+	MAKEFLAGS= $(VERILATOR_PATH)/bin/verilator --build --exe $(VL_FLAGS) --cc $(TOP) --top-module $(TOP) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' --Mdir $@.obj_dir -o $@
 
 # updates the timestamp when flags changed.
 $(CONFIG_FILE): force

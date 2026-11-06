@@ -3,8 +3,6 @@ include $(ROOT_DIR)/config.mk
 
 PREFIX ?= build
 
-BUILD_DIR := $(PREFIX)
-
 SAIF_FILE ?=
 SAIF_INST ?=
 
@@ -13,118 +11,26 @@ SAIF_INST ?=
 OPT_LEVEL ?= 3
 export OPT_LEVEL
 
-.PHONY: unittest scope mem_unit lmem cache vm tensor gfx fpu tcu dxa tex raster om rtu rtu_top cp core issue vortex top
+# DUTS + the per-DUT definitions. Adding a DUT touches catalog.mk only.
+include catalog.mk
 
-unittest:
-	mkdir -p unittest/$(BUILD_DIR)
-	cp unittest/Makefile unittest/$(BUILD_DIR)
-	$(MAKE) -C unittest/$(BUILD_DIR) clean && $(MAKE) -C unittest/$(BUILD_DIR) > unittest/$(BUILD_DIR)/build.log 2>&1 &
-
-scope:
-	mkdir -p scope/$(BUILD_DIR)
-	cp scope/Makefile scope/$(BUILD_DIR)
-	$(MAKE) -C scope/$(BUILD_DIR) clean && $(MAKE) -C scope/$(BUILD_DIR) > scope/$(BUILD_DIR)/build.log 2>&1 &
-
-mem_unit:
-	mkdir -p mem_unit/$(BUILD_DIR)
-	cp mem_unit/Makefile mem_unit/$(BUILD_DIR)
-	$(MAKE) -C mem_unit/$(BUILD_DIR) clean && $(MAKE) -C mem_unit/$(BUILD_DIR) > mem_unit/$(BUILD_DIR)/build.log 2>&1 &
-
-lmem:
-	mkdir -p lmem/$(BUILD_DIR)
-	cp lmem/Makefile lmem/$(BUILD_DIR)
-	$(MAKE) -C lmem/$(BUILD_DIR) clean && $(MAKE) -C lmem/$(BUILD_DIR) > lmem/$(BUILD_DIR)/build.log 2>&1 &
-
-cache:
-	mkdir -p cache/$(BUILD_DIR)
-	cp cache/Makefile cache/$(BUILD_DIR)
-	$(MAKE) -C cache/$(BUILD_DIR) clean && $(MAKE) -C cache/$(BUILD_DIR) > cache/$(BUILD_DIR)/build.log 2>&1 &
-
-vm:
-	mkdir -p vm/$(BUILD_DIR)
-	cp vm/Makefile vm/$(BUILD_DIR)
-	$(MAKE) -C vm/$(BUILD_DIR) clean && $(MAKE) -C vm/$(BUILD_DIR) > vm/$(BUILD_DIR)/build.log 2>&1 &
-
-tensor:
-	mkdir -p tensor/$(BUILD_DIR)
-	cp tensor/Makefile tensor/$(BUILD_DIR)
-	$(MAKE) -C tensor/$(BUILD_DIR) clean && $(MAKE) -C tensor/$(BUILD_DIR) > tensor/$(BUILD_DIR)/build.log 2>&1 &
-
-gfx:
-	mkdir -p gfx/$(BUILD_DIR)
-	cp gfx/Makefile gfx/$(BUILD_DIR)
-	$(MAKE) -C gfx/$(BUILD_DIR) clean && $(MAKE) -C gfx/$(BUILD_DIR) > gfx/$(BUILD_DIR)/build.log 2>&1 &
-
-fpu:
-	mkdir -p fpu/$(BUILD_DIR)
-	cp fpu/Makefile fpu/$(BUILD_DIR)
-	$(MAKE) -C fpu/$(BUILD_DIR) clean && $(MAKE) -C fpu/$(BUILD_DIR) > fpu/$(BUILD_DIR)/build.log 2>&1 &
-
-tcu:
-	mkdir -p tcu/$(BUILD_DIR)
-	cp tcu/Makefile tcu/$(BUILD_DIR)
-	$(MAKE) -C tcu/$(BUILD_DIR) clean && $(MAKE) -C tcu/$(BUILD_DIR) > tcu/$(BUILD_DIR)/build.log 2>&1 &
-
-core:
-	mkdir -p core/$(BUILD_DIR)
-	cp core/Makefile core/$(BUILD_DIR)
-	$(MAKE) -C core/$(BUILD_DIR) clean && $(MAKE) -C core/$(BUILD_DIR) > core/$(BUILD_DIR)/build.log 2>&1 &
-
-issue:
-	mkdir -p issue/$(BUILD_DIR)
-	cp issue/Makefile issue/$(BUILD_DIR)
-	$(MAKE) -C issue/$(BUILD_DIR) clean && $(MAKE) -C issue/$(BUILD_DIR) > issue/$(BUILD_DIR)/build.log 2>&1 &
-
-vortex:
-	mkdir -p vortex/$(BUILD_DIR)
-	cp vortex/Makefile vortex/$(BUILD_DIR)
-	$(MAKE) -C vortex/$(BUILD_DIR) clean && $(MAKE) -C vortex/$(BUILD_DIR) > vortex/$(BUILD_DIR)/build.log 2>&1 &
-
-top:
-	mkdir -p top/$(BUILD_DIR)
-	cp top/Makefile top/$(BUILD_DIR)
-	$(MAKE) -C top/$(BUILD_DIR) clean && $(MAKE) -C top/$(BUILD_DIR) > top/$(BUILD_DIR)/build.log 2>&1 &
-
-dxa:
-	mkdir -p dxa/$(BUILD_DIR)
-	cp dxa/Makefile dxa/$(BUILD_DIR)
-	$(MAKE) -C dxa/$(BUILD_DIR) clean && $(MAKE) -C dxa/$(BUILD_DIR) > dxa/$(BUILD_DIR)/build.log 2>&1 &
-
-cp:
-	mkdir -p cp/$(BUILD_DIR)
-	cp cp/Makefile cp/$(BUILD_DIR)
-	$(MAKE) -C cp/$(BUILD_DIR) clean && $(MAKE) -C cp/$(BUILD_DIR) > cp/$(BUILD_DIR)/build.log 2>&1 &
-
-tex:
-	mkdir -p tex/$(BUILD_DIR)
-	cp tex/Makefile tex/$(BUILD_DIR)
-	$(MAKE) -C tex/$(BUILD_DIR) clean && $(MAKE) -C tex/$(BUILD_DIR) > tex/$(BUILD_DIR)/build.log 2>&1 &
-
-raster:
-	mkdir -p raster/$(BUILD_DIR)
-	cp raster/Makefile raster/$(BUILD_DIR)
-	$(MAKE) -C raster/$(BUILD_DIR) clean && $(MAKE) -C raster/$(BUILD_DIR) > raster/$(BUILD_DIR)/build.log 2>&1 &
-
-om:
-	mkdir -p om/$(BUILD_DIR)
-	cp om/Makefile om/$(BUILD_DIR)
-	$(MAKE) -C om/$(BUILD_DIR) clean && $(MAKE) -C om/$(BUILD_DIR) > om/$(BUILD_DIR)/build.log 2>&1 &
-
-rtu:
-	mkdir -p rtu/$(BUILD_DIR)
-	cp rtu/Makefile rtu/$(BUILD_DIR)
-	$(MAKE) -C rtu/$(BUILD_DIR) clean && $(MAKE) -C rtu/$(BUILD_DIR) > rtu/$(BUILD_DIR)/build.log 2>&1 &
-
-rtu_top:
-	mkdir -p rtu_top/$(BUILD_DIR)
-	cp rtu_top/Makefile rtu_top/$(BUILD_DIR)
-	$(MAKE) -C rtu_top/$(BUILD_DIR) clean && $(MAKE) -C rtu_top/$(BUILD_DIR) > rtu_top/$(BUILD_DIR)/build.log 2>&1 &
+# Each DUT builds out-of-tree in its own <PREFIX>_<dut>/ so parallel builds (and
+# a hand-run synthesis on the same machine) cannot collide. build.mk is copied
+# in as the Makefile, exactly as the per-DUT Makefiles used to be.
+.PHONY: $(DUTS)
+$(DUTS):
+	mkdir -p $(PREFIX)_$@
+	cp build.mk $(PREFIX)_$@/Makefile
+	$(MAKE) -C $(PREFIX)_$@ DUT=$@ clean && $(MAKE) -C $(PREFIX)_$@ DUT=$@ > $(PREFIX)_$@/build.log 2>&1 &
 
 # Re-run power analysis on an existing build without rebuilding the design.
 # Usage: make <target>-power SAIF_FILE=<saif-path> [SAIF_INST=<top-module-instance-path>]
 %-power:
-	@target=$*; \
-	if [ ! -d $$target/$(BUILD_DIR) ]; then \
-	  echo "ERROR: $$target/$(BUILD_DIR) not found. Run 'make $$target' first."; exit 1; \
+	@if [ ! -d $(PREFIX)_$* ]; then \
+	  echo "ERROR: $(PREFIX)_$* not found. Run 'make $*' first."; exit 1; \
 	fi
-	$(MAKE) -C $*/$(BUILD_DIR) power SAIF_FILE=$(SAIF_FILE) SAIF_INST=$(SAIF_INST)
+	$(MAKE) -C $(PREFIX)_$* DUT=$* power SAIF_FILE=$(SAIF_FILE) SAIF_INST=$(SAIF_INST)
+
+.PHONY: list
+list:
+	@echo $(DUTS) | tr ' ' '\n'

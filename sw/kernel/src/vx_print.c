@@ -43,7 +43,7 @@ typedef struct {
 
 static void __putint_cb(const putint_arg_t* arg) {
 	char tmp[33];
-	float value = arg->value;
+	int value = arg->value;
 	int base = arg->base;
 	itoa(value, tmp, base);
 	for (int i = 0; i < 33; ++i) {

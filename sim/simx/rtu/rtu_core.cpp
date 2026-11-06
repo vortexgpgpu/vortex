@@ -26,6 +26,7 @@
 #include "rtu_isect.h"       // BoxPe / TriPe pipeline depths
 #include "rtu_walker.h"      // FlatWalker / Bvh4Walker
 #include "rtu_memory.h"      // MemoryEngine
+#include "rtu_raylog.h"
 #include "socket.h"
 #include "constants.h"
 #include "debug.h"
@@ -183,8 +184,6 @@ public:
       port.send(rsp);
       warp_cb_inflight_[anchor_warp] = true;
       ++perf_.reformation_yields;
-      // cb_type is uniform within a batched yield (grouped by sbt_idx), so one
-      // sample names the per-yield-type counter.
       for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
         if (!(cb_mask & (1u << t))) continue;
         switch (rsp.cb_type[t]) {
@@ -194,7 +193,6 @@ public:
           case VX_RT_CB_TYPE_MISS:   ++perf_.miss_callbacks; break;
           default:                                            break;
         }
-        break;
       }
       DT(3, "rtu-core reform cb_yield: warp=" << anchor_warp
             << ", sbt=" << anchor_sbt
@@ -254,7 +252,7 @@ public:
     const auto& p = perf_stats_;
     std::fprintf(stderr,
         "[rtu-stats] slots=%u ctx=%u merge=%u\n"
-        "[rtu-stats] rays_issued=%llu rays_hit=%llu rays_miss=%llu\n"
+        "[rtu-stats] traces=%llu rays=%llu rays_hit=%llu rays_miss=%llu\n"
         "[rtu-stats] mem_reads=%llu fetches_merged=%llu mshr_full=%llu\n"
         "[rtu-stats] bvh_nodes=%llu bvh_leaves=%llu box_tests=%llu tri_tests=%llu\n"
         "[rtu-stats] busy_ticks=%llu front_end_ticks=%llu mem_issue_ticks=%llu\n"
@@ -262,7 +260,8 @@ public:
         "[rtu-stats] cb_ahs=%llu cb_chs=%llu cb_miss=%llu cb_is=%llu reform=%llu\n",
         uint32_t(VX_CFG_RTU_NUM_SLOTS), uint32_t(VX_CFG_RTU_NUM_CTX),
         uint32_t(VX_CFG_RTU_MERGE_DEPTH),
-        (unsigned long long)p.rays_issued,
+        (unsigned long long)p.traces,
+        (unsigned long long)p.rays,
         (unsigned long long)p.rays_hit,
         (unsigned long long)p.rays_miss,
         (unsigned long long)p.mem_reads,
@@ -290,7 +289,8 @@ public:
     for (auto& cx : contexts_) cx = Context{};
     mem_engine_.reset();
     reform_.reset();
-    perf_stats_ = RtuCore::PerfStats();
+    // perf_stats_ survives: the MPM counters run from device reset, and every
+    // kernel launch re-enters reset().
     last_signature_ = 0;
     rr_exec_ = 0;
     step_cycles_left_   = 0;
@@ -340,9 +340,11 @@ public:
       s.req   = req;
       s.state = SlotState::READY;
       uint32_t first_active = uint32_t(-1);
+      s.lanes = {};
       for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
         if (s.req.tmask_bits & (1u << t)) {
           s.lanes[t].active = true;
+          s.lanes[t].walk_needed = true;
           if (first_active == uint32_t(-1)) first_active = t;
         }
       }
@@ -354,8 +356,10 @@ public:
         if (s.req.dir_z[first_active] < 0.f) sig |= 0x4;
         s.coh_signature = sig;
       }
+      if (raylog::enabled()) raylog::on_accept(this, idx, s.req);
       ch.pop();
-      ++perf_stats_.rays_issued;
+      ++perf_stats_.traces;
+      perf_stats_.rays += __builtin_popcount(s.req.tmask_bits);
       DT(3, "rtu-core accept: tag=" << s.req.tag << ", slot=" << idx);
       rr_req_ = (cid + 1) % chs.size();
       return;
@@ -375,7 +379,16 @@ public:
       LaneState& l = s.lanes[t];
       if (!l.cb_pending) continue;
       uint32_t action = req.cb_action[t];
-      if (action == VX_RT_CB_ACCEPT || action == VX_RT_CB_TERMINATE) {
+      const bool decides = (l.cb_type == VX_RT_CB_TYPE_ANYHIT
+                         || l.cb_type == VX_RT_CB_TYPE_PROC);
+      const bool accept  = (action == VX_RT_CB_ACCEPT || action == VX_RT_CB_TERMINATE);
+      // An intersection shader reports its own t, which need not be nearer than
+      // what the walk already committed: only a nearer hit inside the ray's
+      // interval replaces it.
+      const float new_t  = (l.cb_type == VX_RT_CB_TYPE_PROC) ? req.cb_hit_t[t] : l.cand_t;
+      const bool commits = accept && (!decides
+          || (new_t >= s.req.tmin[t] && new_t < (l.hit ? l.hit_t : s.req.tmax[t])));
+      if (commits) {
         l.hit = true;
         // A procedural (IS) accept commits the shader's own hit_t; a triangle
         // AHS keeps the geometric candidate t. Either way the hitAttribute the
@@ -398,15 +411,25 @@ public:
         }
       }
       // IGNORE leaves the committed hit alone; DONE means the CHS dispatcher has
-      // finished shading an already-committed hit. Traversal is
-      // single-yield-per-lane, so either way the lane is resolved and the slot
-      // drops to its terminal record once every yielding lane has answered.
+      // finished shading an already-committed hit. An any-hit / intersection
+      // verdict that does not end the ray resumes its walk above the decided
+      // candidate, so every candidate along the ray is offered in (t, key)
+      // order; TERMINATE, or an accept under TERMINATE_ON_FIRST_HIT, ends it.
       l.cb_pending = false;
-      bool any_pending = false;
-      for (auto const& ll : s.lanes) {
-        if (ll.cb_pending) { any_pending = true; break; }
+      const bool ends = action == VX_RT_CB_TERMINATE
+          || (commits && (s.req.flags[t] & VX_RT_FLAG_TERMINATE_ON_FIRST_HIT));
+      if (decides && !ends) {
+        l.has_floor   = true;
+        l.floor_t     = l.cand_t;
+        l.floor_key   = l.cand_key;
+        l.walk_needed = true;
       }
-      if (!any_pending) s.state = SlotState::RESP;
+      bool any_pending = false, any_walk = false;
+      for (auto const& ll : s.lanes) {
+        any_pending |= ll.cb_pending;
+        any_walk    |= ll.walk_needed;
+      }
+      if (!any_pending) s.state = any_walk ? SlotState::READY : SlotState::RESP;
     }
     // Clear this warp's callback-in-flight gate so the next queued CB_YIELD for
     // the same warp (e.g. the second SBT group) can be emitted.
@@ -436,7 +459,7 @@ public:
     Slot& s = pool_.at(best);
     uint32_t need = 0;
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-      if (s.lanes[t].active) ++need;
+      if (s.lanes[t].active && s.lanes[t].walk_needed) ++need;
     }
     uint32_t avail = 0;
     for (const auto& cx : contexts_) {
@@ -452,7 +475,8 @@ public:
 
     uint32_t next_free = 0;
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-      if (!s.lanes[t].active) continue;
+      if (!s.lanes[t].active || !s.lanes[t].walk_needed) continue;
+      s.lanes[t].walk_needed = false;
       while (contexts_[next_free].valid) ++next_free;
       bind_context(next_free, best, t, s.req.scene_root[t]);
       ++next_free;
@@ -463,14 +487,14 @@ public:
   }
 
   void bind_context(uint32_t ci, uint32_t slot, uint32_t lane,
-                    uint32_t scene_root) {
+                    uint64_t scene_root) {
     Context& cx = contexts_[ci];
     cx = Context{};
     cx.valid = true;
     cx.slot  = slot;
     cx.lane  = lane;
-    cx.base_line = uint64_t(scene_root) & kRtuLineMask;
-    cx.byte_off  = uint32_t(uint64_t(scene_root) - cx.base_line);
+    cx.base_line = scene_root & kRtuLineMask;
+    cx.byte_off  = uint32_t(scene_root - cx.base_line);
     // The ray opens on the reciprocal (1/dir) setup and the scene-header fetch,
     // which cost front-end states like any other step, then drain the reciprocal
     // pipeline before the first node can be tested.
@@ -545,13 +569,12 @@ public:
                   + inst   * kRtuImageStatesPerInst;
     // Behind the last test fed, the PE pipeline drains while the context is
     // PARKED — box and tri results both carry their context id, so waiting for
-    // one costs the shared front end nothing. A trail restart re-descends every
-    // subtree the short stack had to evict.
+    // one costs the shared front end nothing. A trail restart's re-descent is
+    // already in the node and box counts above.
     uint32_t lat = 0;
     if (box) lat = std::max(lat, BoxPe::pipe_depth());
     if (tri) lat = std::max(lat, TriPe::pipe_depth());
     lat += kRtuXformLatency * inst;
-    lat += VX_CFG_RTU_STACK_DEPTH * restart;
     cx.pe_lat = lat;
     perf_stats_.walker_cycles_total += cx.fsm_states * kRtuPhasesPerStep
                                      + cx.img_states * kRtuPhasesImageAdd + lat;
@@ -561,6 +584,7 @@ public:
       cx.next_state = CtxState::REQ;
     } else {
       s.lanes[cx.lane] = result;   // carries cb_pending if the ray yielded
+      if (raylog::enabled()) raylog::on_walk_done(cx.lines);
       cx.next_state = CtxState::DONE;
     }
     cx.state = (cx.fsm_states || lat) ? CtxState::PE : cx.next_state;
@@ -633,6 +657,7 @@ public:
         const LaneState& l = s.lanes[t];
         if (!l.active || !l.cb_pending) continue;
         any_cb = true;
+        if (raylog::enabled()) raylog::on_callback(this, i, t, l.cb_type);
         QueueEntry e{i, s.req.warp_id, uint8_t(t),
                      l.sbt_idx, l.cb_type,
                      l.cand_t, l.cand_u, l.cand_v, l.cand_prim,
@@ -688,6 +713,7 @@ public:
       // so it stays live until the WAIT that consumes the record calls
       // free_slot(). Until then it sits in EMITTED and is not re-sent.
       rsp.slot_idx = i;
+      if (raylog::enabled()) raylog::on_terminal(this, i, s.req, s.lanes);
       port.send(rsp);
       DT(3, "rtu-core complete: tag=" << s.req.tag << ", slot=" << i);
       s.state = SlotState::EMITTED;
@@ -696,8 +722,18 @@ public:
 
   void sample_occupancy() {
     uint32_t slots_used = 0;
+    bool busy = false;
     for (uint32_t i = 0; i < pool_.size(); ++i) {
-      if (pool_.at(i).in_use) ++slots_used;
+      const Slot& s = pool_.at(i);
+      if (s.in_use) ++slots_used;
+      // A slot is reserved before its rays arrive and stays emitted until the
+      // warp consumes its record; it holds no trace in either state.
+      if (s.in_use && s.state != SlotState::RESERVED && s.state != SlotState::EMITTED) {
+        busy = true;
+      }
+    }
+    if (busy) {
+      ++perf_stats_.rtu_busy_ticks;
     }
     uint32_t bound = 0, active = 0;
     for (const auto& cx : contexts_) {
@@ -711,7 +747,6 @@ public:
     perf_stats_.slot_busy_ticks  += slots_used;
     perf_stats_.ctx_bound_ticks  += bound;
     perf_stats_.ctx_active_ticks += active;
-    if (slots_used != 0) ++perf_stats_.rtu_busy_ticks;
   }
 
   const RtuCore::PerfStats& perf_stats() const { return perf_stats_; }

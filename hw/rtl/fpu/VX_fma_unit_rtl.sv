@@ -115,9 +115,9 @@ module VX_fma_unit_rtl import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
     // DAZ: flush a subnormal operand to signed zero when subnormals are disabled.
     localparam DAZ = (SUBNORM_ENABLE == 0);
-    function automatic [FLOAT_BITS-1:0] daz_f(input [FLOAT_BITS-1:0] v);
-        daz_f = (DAZ && (v[FLOAT_BITS-2:MAN_BITS] == '0) && (|v[MAN_BITS-1:0]))
-              ? {v[FLOAT_BITS-1], {(FLOAT_BITS-1){1'b0}}} : v;
+    function automatic [FLOAT_BITS-1:0] daz_f(input [FLOAT_BITS-1:0] val);
+        daz_f = (DAZ && (val[FLOAT_BITS-2:MAN_BITS] == '0) && (|val[MAN_BITS-1:0]))
+              ? {val[FLOAT_BITS-1], {(FLOAT_BITS-1){1'b0}}} : val;
     endfunction
 
     wire [FLOAT_BITS-1:0] op_a = daz_f(dataa);

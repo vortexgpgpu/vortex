@@ -87,7 +87,7 @@ namespace detail {
       }
     }
 
-    static __attribute__((always_inline)) D pack_row(const Type *base, uint32_t ldm) {
+    static __attribute__((always_inline)) D pack_row(const Type *base, size_t ldm) {
       static_assert(sizeof(D) % sizeof(Type) == 0, "D must be a multiple of Type in size");
       if constexpr (sizeof(Type) == 1 && sizeof(D) == 4) {
         // 4 × 1-byte strided loads → single pack-load byte instruction
@@ -368,7 +368,7 @@ public:
           k_bases[0] = base;
           if constexpr (num_k_groups >= 2) {
             asm volatile("" : "+r"(k_bases[0])); // prevent reverse strength reduction
-            auto k_ldm_step = k_stride * (uint32_t)ldm;
+            size_t k_ldm_step = k_stride * ldm;
             detail::unroll_for<num_k_groups - 1>([&](auto i) {
               k_bases[i + 1] = k_bases[i] + k_ldm_step;
             });
@@ -393,7 +393,7 @@ public:
           n_bases[0] = base;
           if constexpr (num_n_groups >= 2) {
             asm volatile("" : "+r"(n_bases[0])); // prevent reverse strength reduction
-            auto n_ldm_step = n_stride * (uint32_t)ldm;
+            size_t n_ldm_step = n_stride * ldm;
             detail::unroll_for<num_n_groups - 1>([&](auto i) {
               n_bases[i + 1] = n_bases[i] + n_ldm_step;
             });
@@ -745,7 +745,8 @@ public:
   // BLOCK = micro-tile (tcM × tcK or tcK × tcN), measured in input_t element units.
   static constexpr uint32_t a_blk_elems  = tcM * fedpK * i_ratio; // elements per A block
   static constexpr uint32_t a_warp_elems = xtileM * tileK;      // elements per warp's A slice
-  static constexpr uint32_t b_blk_elems  = fedpK * i_ratio * tcN; // elements per B block
+  static constexpr uint32_t b_blk_k      = fedpK * i_ratio;     // K elements per B block
+  static constexpr uint32_t b_blk_elems  = b_blk_k * tcN;       // elements per B block
 
   // Cooperative-load index into A_smem for an (r, c) target in the
   // row-major-equivalent A view (r ∈ [0, cta_M), c ∈ [0, tileK)).
@@ -767,12 +768,12 @@ public:
   // Within-block layout: N outer, K inner — each 32-bit word packs i_ratio
   // K-elements at one (j, k_word) cell, matching tcu_core's b_off + j*TC_K + k.
   static __attribute__((always_inline)) uint32_t b_blockmajor_idx(uint32_t r, uint32_t c) {
-    uint32_t k_blk = r / (fedpK * i_ratio);
-    uint32_t r_in  = r % (fedpK * i_ratio);
+    uint32_t k_blk = r / b_blk_k;
+    uint32_t r_in  = r % b_blk_k;
     uint32_t n_blk = c / tcN;
     uint32_t n_in  = c % tcN;
     return (k_blk * n_steps + n_blk) * b_blk_elems
-         + n_in * (fedpK * i_ratio) + r_in;
+         + n_in * b_blk_k + r_in;
   }
 
   // Flat sparse-B SMEM layout: per (k_blk, n_blk) block, words are stored
@@ -863,7 +864,7 @@ public:
     uint32_t k_in_elem = (lane % tcK) * i_ratio;
 
     auto load_reg = [&](uint32_t m_blk, uint32_t k_blk) {
-      uint32_t elem_off;
+      size_t elem_off;
       if (ldm == 0) {
         // Block-major SMEM: blocks contiguous, k-block outer.
         constexpr uint32_t block_elems = is_sparse ? sparse_blk_elems : a_blk_elems;
@@ -872,7 +873,7 @@ public:
                  + k_in_elem;
       } else {
         // Row-major SMEM: standard row*ldm + col.
-        elem_off = (m_blk * tcM + i_in) * uint32_t(ldm)
+        elem_off = (m_blk * tcM + i_in) * ldm
                  + (k_blk * k_row_elems + k_in_elem);
       }
       return *reinterpret_cast<const vreg_t*>(
@@ -892,14 +893,14 @@ public:
         uint32_t m_blk = r / a_reg_k_steps;
         uint32_t k_blk = r % a_reg_k_steps;
         if constexpr (k_steps == 1) {
-          uint32_t elem_off;
+          size_t elem_off;
           if (ldm == 0) {
             elem_off = m_blk * a_blk_elems
                      + i_in * (fedpK * i_ratio)
                      + k_blk * k_row_elems
                      + k_in_elem;
           } else {
-            elem_off = (m_blk * tcM + i_in) * uint32_t(ldm)
+            elem_off = (m_blk * tcM + i_in) * ldm
                      + (k_blk * k_row_elems + k_in_elem);
           }
           dst.data[r] = *reinterpret_cast<const vreg_t*>(

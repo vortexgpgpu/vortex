@@ -891,31 +891,20 @@ Vortex runtime and nothing from `$TOOLDIR/firesim` — the transport links
 against XRT directly. Install this component if you intend to elaborate a
 target or build a bitstream.
 
-### Prebuilt (recommended)
+### Installing
 
-Same as every other component — one command, no source build:
-
-```bash
-./ci/toolchain_install.sh --firesim
-```
-
-It is **not** in the default set (`./ci/toolchain_install.sh` with no
-arguments) or in `--all`. Like gem5, it is opt-in: the bundle is 1.2 GB and
-only an FPGA flow can use it, so CI runners that never touch a card do not pay
-for it.
-
-### From source
+FireSim is **not** provisioned by `ci/toolchain_install.sh`. Like XRT, it is a
+platform stack an administrator installs once per machine — CI never consumes
+it, and only an FPGA flow can use it. Install it by hand:
 
 ```bash
-./ci/firesim_install.sh
+git clone --branch vortex_3.x https://github.com/vortexgpgpu/firesim.git ~/dev/firesim
+cd ~/dev/firesim && ./build-setup.sh --skip-validate
+ln -s ~/dev/firesim $TOOLDIR/firesim
 ```
 
-Same shape as [`ci/chipstar_install.sh`](#7-chipstar-hip-host-runtime) and
-`ci/gem5_install.sh`: clones
-[`vortexgpgpu/firesim`](https://github.com/vortexgpgpu/firesim) `vortex_3.x`
-(based on upstream tag 1.21.0) into `$TOOLDIR/firesim` and runs
-`build-setup.sh --skip-validate`. Override the source with `FIRESIM_REPO` /
-`FIRESIM_REV`.
+`vortex_3.x` is based on upstream tag 1.21.0. Clone it wherever you keep
+sources; `$TOOLDIR/firesim` only has to resolve to the checkout.
 
 Unlike POCL, Mesa or chipStar there is no compile-and-install step: FireSim is
 consumed as a *source tree*, because the Vortex flow stages its Chisel target
@@ -924,38 +913,35 @@ checkout itself rather than an install prefix, and it is what `config.mk`
 exposes as `$(FIRESIM_PATH)`.
 
 What costs time is the conda environment `build-setup.sh` resolves — a JVM,
-sbt and Scala for Golden Gate. The sources themselves are a plain clone. That
-is the whole reason the prebuilt bundle exists.
+sbt and Scala for Golden Gate. The sources themselves are a plain clone.
 
-If you are developing FireSim itself, clone it wherever you keep sources and
-point the toolchain slot at it:
+Verify the result with:
 
 ```bash
-git clone --branch vortex_3.x https://github.com/vortexgpgpu/firesim.git ~/dev/firesim
-cd ~/dev/firesim && ./build-setup.sh --skip-validate
-ln -s ~/dev/firesim $TOOLDIR/firesim
+source $TOOLDIR/firesim/.conda-env/bin/activate
+make -C hw/syn/firesim check-firesim
 ```
 
 ### Notes
 
 - **The environment is not relocatable as built.** A conda environment
   records its own prefix in every script shebang and in its package
-  metadata, so moving `$TOOLDIR/firesim` afterwards breaks `conda activate`
-  with an error naming the *old* path. The prebuilt bundle handles this with
-  `conda-pack` / `conda-unpack`; a hand-built tree should stay where it was
-  created, or be re-packed.
+  metadata, so moving the checkout afterwards breaks `conda activate` with an
+  error naming the *old* path. Keep the tree where it was created; if it has
+  to move, re-pack it with `conda-pack` and run `conda-unpack` at the new
+  location, or simply re-run `build-setup.sh`.
 - **Activate with `bin/activate`, not `conda activate`.**
 
   ```bash
   source $TOOLDIR/firesim/.conda-env/bin/activate
   ```
 
-  `conda-pack` rewrites script shebangs to `#!/usr/bin/env python`, including
-  the one on `bin/conda` itself. A stock Ubuntu ships `python3` and no
-  `python`, so on an installed bundle `conda activate` fails with a bare
-  `/usr/bin/env: 'python': No such file or directory` that names neither conda
-  nor the environment. `bin/activate` only manipulates `PATH`, so it works on
-  a hand-built tree and an installed bundle alike.
+  `bin/activate` only manipulates `PATH`, so it works regardless of how the
+  environment was produced. `conda activate` can fail on a re-packed tree,
+  because `conda-pack` rewrites script shebangs to `#!/usr/bin/env python` —
+  including the one on `bin/conda` — and a stock Ubuntu ships `python3` and no
+  `python`, giving a bare `/usr/bin/env: 'python': No such file or directory`
+  that names neither conda nor the environment.
 - **Elaboration needs the environment; the driver build needs only `gmp`.**
   `sim/firesim/Makefile` picks up `gmp.h` from `$CONDA_PREFIX/include`. On a
   host with `libgmp-dev` installed, building the transport works without
@@ -1033,23 +1019,18 @@ expected when `ami` is not installed.
 Full procedure, including removing a previous source install:
 [`xilinx_slash_setup.md §3`](xilinx_slash_setup.md).
 
-A tarball path also exists for hosts where packages are impractical:
+Point `VRT_HOME` at the prefix the install actually used — the packages land in
+the system prefix, a source install wherever it was configured. `config.mk.in`
+defaults it to `/usr/local`:
 
 ```bash
-./ci/toolchain_install.sh --slash
-export VRT_HOME=$TOOLDIR/slash
+export VRT_HOME=<slash install prefix>
 ```
 
-The tarball installs userspace only — the kernel module and `vrtd` service are
-still yours to set up, which is why the packages are preferred. See
-[`proposals/v80_release_setup_proposal.md`](proposals/v80_release_setup_proposal.md)
-for what the packaged path replaced and the defects fixed to make it work.
-
-`--slash` is **opt-in** and deliberately excluded from the default
-install: the userspace half installs like any other component, but a
-working board also needs kernel modules built against the running
-kernel and Vivado on `PATH` for `slashkit`. Pulling that into the
-default would fail on every machine without a V80.
+SLASH is **not** provisioned by `ci/toolchain_install.sh`. Like XRT, it is a
+platform stack an administrator installs once per machine: a working board
+needs kernel modules built against the running kernel and Vivado on `PATH` for
+`slashkit`, neither of which a toolchain fetch can supply.
 
 ### The kernel module
 
@@ -1223,6 +1204,36 @@ cd vortex-toolchain-prebuilt
 
 Then `git add` / `git commit` the regenerated bundles in that repo and
 push, moving the release tag that `$TOOLCHAIN_REV` pins.
+
+### Per-OS bundles
+
+`configure` picks `$OSVERSION` from `/etc/os-release`: Ubuntu 20.04+ →
+`ubuntu/focal`, EL7/EL8 → `centos/7`, EL9 (RHEL, Rocky, AlmaLinux, CentOS
+Stream) → `rhel/9`. The `ubuntu/focal` bundles are built on Ubuntu 22.04 and
+need glibc 2.35 / `GLIBCXX_3.4.30`, so they do not load on EL9.
+
+`rhel/9` holds only the components whose host binaries had to be rebuilt.
+`toolchain_install.sh` reuses the `ubuntu/focal` riscv32/riscv64 and sv2v
+bundles there, because they need only glibc 2.14. The `centos/7` riscv bundle
+is GCC 13, and its newlib no longer defines `HAVE_INITFINI_ARRAY`, which the
+kernel library depends on.
+
+| Component | `rhel/9` build |
+|---|---|
+| llvm-vortex | §3 at the focal bundle's commit, system GCC 11, Ninja; `LLVM_ENABLE_LIBXML2=OFF` (EL9 has no `libxml2-devel` by default; only `llvm-mt` uses it) |
+| verilator | §1 at the focal version, `--disable-tcmalloc` (so no gperftools runtime dependency) |
+| yosys | CMake, `BUILD_SHARED_LIBS=OFF`, `YOSYS_ENABLE_UNIT_TESTS=OFF`, libffi linked statically |
+| sta | §8 at the focal commit; CUDD, SWIG and Eigen built into a private prefix |
+| pocl, chipstar, mesa-vortex | the focal binaries, copied unchanged (glibc ≤ 2.34, `GLIBCXX` ≤ 3.4.29); they link the `rhel/9` LLVM, which has the same sonames and ABI |
+
+Keep the two OS slots in lockstep. When llvm, verilator, yosys or sta is
+refreshed for `ubuntu/focal`, rebuild it on EL9 and package it with
+`OSVERSION=rhel/9 ./ci/toolchain_prebuilt.sh --<component>`. When pocl, chipstar
+or mesa is refreshed, copy the new tarball into `<component>/rhel/9/`. After any
+`rhel/9` refresh, confirm the binaries still load on a stock EL9 host (no
+`GLIBC_2.35` / `GLIBCXX_3.4.30` references in `objdump -T`). gem5 has no
+`rhel/9` bundle: its focal build needs Python 3.10, HDF5 and protobuf runtimes
+that EL9 does not provide.
 
 ### `ci/toolchain_install.sh` — install the prebuilt toolchain
 

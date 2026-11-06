@@ -42,9 +42,10 @@ module VX_shift_register #(
         assign data_out = data_in;
     end else begin : g_shift
 
-        reg [DEPTH-1:0][DATAW-1:0] pipe;
+        wire [DEPTH-1:0][DATAW-1:0] pipe_out;
 
         if (RESETW == DATAW) begin : g_full_reset
+            reg [DEPTH-1:0][DATAW-1:0] pipe;
             always_ff @(posedge clk) begin
                 if (reset) begin
                     pipe <= {DEPTH{INIT_VALUE}};
@@ -55,30 +56,42 @@ module VX_shift_register #(
                     end
                 end
             end
+            assign pipe_out = pipe;
         end else if (RESETW != 0) begin : g_partial_reset
+            // The reset-bearing high bits and the free low bits are separate
+            // banks of flops, so each is its own variable. An always_ff
+            // variable must have a single driver, so one vector driven by both
+            // blocks is illegal even though the slices are disjoint.
+            localparam FREEW = DATAW - RESETW;
+            reg [DEPTH-1:0][RESETW-1:0] pipe_rst;
+            reg [DEPTH-1:0][FREEW-1:0]  pipe_free;
             always_ff @(posedge clk) begin
                 if (reset) begin
                     for (int i = 0; i < DEPTH; ++i) begin
-                        pipe[i][DATAW-1 : DATAW-RESETW] <= INIT_VALUE;
+                        pipe_rst[i] <= INIT_VALUE;
                     end
                 end else if (enable) begin
-                    pipe[0][DATAW-1 : DATAW-RESETW] <= data_in[DATAW-1 : DATAW-RESETW];
+                    pipe_rst[0] <= data_in[DATAW-1 : FREEW];
                     for (int i = 1; i < DEPTH; ++i) begin
-                        pipe[i][DATAW-1 : DATAW-RESETW] <= pipe[i-1][DATAW-1 : DATAW-RESETW];
+                        pipe_rst[i] <= pipe_rst[i-1];
                     end
                 end
             end
             always_ff @(posedge clk) begin
                 if (enable) begin
-                    pipe[0][DATAW-RESETW-1 : 0] <= data_in[DATAW-RESETW-1 : 0];
+                    pipe_free[0] <= data_in[FREEW-1 : 0];
                     for (int i = 1; i < DEPTH; ++i) begin
-                        pipe[i][DATAW-RESETW-1 : 0] <= pipe[i-1][DATAW-RESETW-1 : 0];
+                        pipe_free[i] <= pipe_free[i-1];
                     end
                 end
+            end
+            for (genvar i = 0; i < DEPTH; ++i) begin : g_join
+                assign pipe_out[i] = {pipe_rst[i], pipe_free[i]};
             end
         end else begin : g_no_reset
             `UNUSED_VAR (reset)
             `UNUSED_PARAM (INIT_VALUE)
+            reg [DEPTH-1:0][DATAW-1:0] pipe;
             always_ff @(posedge clk) begin
                 if (enable) begin
                     pipe[0] <= data_in;
@@ -87,10 +100,11 @@ module VX_shift_register #(
                     end
                 end
             end
+            assign pipe_out = pipe;
         end
 
         for (genvar i = 0; i < NUM_TAPS; ++i) begin : g_taps
-            assign data_out[i] = pipe[i * TAP_STRIDE + TAP_START];
+            assign data_out[i] = pipe_out[i * TAP_STRIDE + TAP_START];
         end
     end
 

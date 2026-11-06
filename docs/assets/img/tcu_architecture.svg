@@ -1,0 +1,163 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1560 1040" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="arrb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1c6ca8"/>
+    </marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b58900"/>
+    </marker>
+  </defs>
+
+  <style>
+    .box     { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.5; }
+    .unit    { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .mem     { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .sw      { fill:#eef7ee; stroke:#3a7d44; stroke-width:1.5; }
+    .core    { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.5; }
+    .pe      { fill:#ffffff; stroke:#2e5e82; stroke-width:1.2; }
+    .none    { fill:#fafafa; stroke:#9aa5af; stroke-width:1.2; stroke-dasharray:5 4; }
+    .grp     { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .t       { fill:#1b2733; font-size:15px; }
+    .tb      { fill:#1b2733; font-size:16px; font-weight:bold; }
+    .th      { fill:#1b2733; font-size:13.5px; font-weight:bold; }
+    .ts      { fill:#44525f; font-size:12.5px; }
+    .tt      { fill:#5a6772; font-size:12px; font-style:italic; }
+    .mono    { font-family:'SF Mono',Consolas,monospace; font-size:12px; fill:#1b2733; }
+    .flow    { stroke:#444; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+    .flowb   { stroke:#1c6ca8; stroke-width:1.8; fill:none; marker-end:url(#arrb); stroke-dasharray:7 4; }
+    .flowg   { stroke:#b58900; stroke-width:1.8; fill:none; marker-end:url(#arrg); }
+    .lbl     { fill:#1c6ca8; font-size:12px; }
+    .lbg     { fill:#8a6d00; font-size:12px; }
+    .lbk     { fill:#44525f; font-size:12px; }
+    .rule    { stroke:#d5dce3; stroke-width:1; }
+  </style>
+
+  <rect x="0" y="0" width="1560" height="1040" fill="#ffffff"/>
+  <text x="24" y="34" class="tb" font-size="20">Vortex tensor core unit — micro-op expansion, operand sourcing, and the FEDP grid</text>
+
+  <rect x="24" y="56" width="1512" height="194" class="grp"/>
+  <text x="40" y="86" class="tb">decode stage</text>
+  <text x="40" y="110" class="ts">VX_uop_sequencer</text>
+  <text x="40" y="134" class="ts">one macro instruction</text>
+  <text x="40" y="150" class="ts">becomes a sequence of</text>
+  <text x="40" y="166" class="ts">micro-ops</text>
+  <rect x="270" y="72" width="300" height="162" rx="6" class="core"/>
+  <text x="282" y="94" class="tb">macro instruction</text>
+  <text x="282" y="116" class="ts">WMMA, WGMMA and their sparse variants;</text>
+  <text x="282" y="132" class="ts">TCU_LD for metadata</text>
+  <text x="282" y="156" class="ts">fmt_s, fmt_d, cd_nregs, operand source</text>
+  <text x="282" y="172" class="ts">in the instruction word</text>
+  <rect x="600" y="72" width="420" height="162" rx="6" class="unit"/>
+  <text x="612" y="94" class="tb">VX_tcu_uops</text>
+  <text x="612" y="116" class="ts">walks the tile: k outer, n middle, m inner</text>
+  <text x="612" y="132" class="ts">each micro-op names its step (m, n, k) and the</text>
+  <text x="612" y="148" class="ts">registers it reads and accumulates into</text>
+  <text x="612" y="172" class="ts">marks the first and last micro-op; holds the</text>
+  <text x="612" y="188" class="ts">functional unit for the whole sequence</text>
+  <rect x="1050" y="72" width="486" height="162" rx="6" class="box"/>
+  <text x="1062" y="94" class="tb">what a micro-op carries</text>
+  <text x="1062" y="116" class="ts">op_type · fmt_s · fmt_d · step_m · step_n · step_k</text>
+  <text x="1062" y="132" class="ts">cd_nregs · a_from_smem · is_first_uop · is_last_uop</text>
+  <text x="1062" y="148" class="ts">rs1 = A block, rs2 = B block, rs3 = C accumulator</text>
+  <text x="1062" y="164" class="ts">rd = the same accumulator register</text>
+  <text x="1062" y="188" class="ts">fu_lock / fu_unlock bracket the sequence</text>
+  <path d="M 570 152 L 600 152" class="flow"/>
+  <path d="M 1020 152 L 1050 152" class="flow"/>
+  <rect x="24" y="296" width="1512" height="664" class="grp"/>
+  <text x="40" y="326" class="tb">VX_tcu_unit</text>
+  <text x="40" y="350" class="ts">execute stage</text>
+  <text x="40" y="374" class="ts">Q = NUM_TCU_BLOCKS</text>
+  <text x="40" y="390" class="ts">blocks, one per issue</text>
+  <text x="40" y="406" class="ts">slot</text>
+  <rect x="270" y="312" width="1266" height="64" rx="6" class="core"/>
+  <text x="282" y="334" class="tb">VX_lane_dispatch</text>
+  <text x="450" y="334" class="ts">issue slots → per-block execute interfaces; each block is then split by op_type between the two consumers below</text>
+  <text x="450" y="356" class="tt">ready is muxed by op_type, so exactly one consumer drives a block at a time</text>
+  <rect x="270" y="412" width="380" height="400" rx="6" class="unit"/>
+  <text x="282" y="434" class="tb">metadata path — TCU_LD</text>
+  <rect x="282" y="448" width="356" height="150" rx="4" class="box"/>
+  <text x="294" y="470" class="t">VX_tcu_agu</text>
+  <text x="294" y="492" class="ts">one warp-level fetch per TCU_LD:</text>
+  <text x="294" y="508" class="ts">lane T loads word T of the metadata tile</text>
+  <text x="294" y="532" class="ts">a client of the core's LSU scheduler,</text>
+  <text x="294" y="548" class="ts">so it reuses the LSU's memory port</text>
+  <rect x="282" y="612" width="356" height="186" rx="4" class="mem"/>
+  <text x="294" y="634" class="t">VX_tcu_meta</text>
+  <text x="294" y="656" class="ts">one warp-indexed RAM per block; the AGU's</text>
+  <text x="294" y="672" class="ts">write is broadcast to every block</text>
+  <text x="294" y="696" class="ts">namespaces selected by the destination</text>
+  <text x="294" y="712" class="ts">register: sparse lane-validity, MX scales</text>
+  <text x="294" y="728" class="ts">for A, MX scales for B</text>
+  <text x="294" y="786" class="tt">read combinationally at issue</text>
+  <path d="M 460 598 L 460 612" class="flow"/>
+  <rect x="680" y="412" width="420" height="400" rx="6" class="unit"/>
+  <text x="692" y="434" class="tb">shared-memory operands — VX_tcu_wgmma</text>
+  <rect x="692" y="448" width="396" height="96" rx="4" class="box"/>
+  <text x="704" y="470" class="t">VX_tcu_lockstep</text>
+  <text x="704" y="492" class="ts">one CTA at a time owns the shared B buffer;</text>
+  <text x="704" y="508" class="ts">a block of another CTA waits for the last</text>
+  <text x="704" y="524" class="ts">micro-op of the resident one</text>
+  <rect x="692" y="558" width="190" height="150" rx="4" class="mem"/>
+  <text x="704" y="580" class="t">VX_tcu_abuf × Q</text>
+  <text x="704" y="602" class="ts">per block</text>
+  <text x="704" y="626" class="ts">one k-stripe of A:</text>
+  <text x="704" y="642" class="ts">M_STEPS blocks</text>
+  <rect x="898" y="558" width="190" height="150" rx="4" class="mem"/>
+  <text x="910" y="580" class="t">VX_tcu_bbuf × 1</text>
+  <text x="910" y="602" class="ts">shared by all blocks</text>
+  <text x="910" y="626" class="ts">the row of B holding</text>
+  <text x="910" y="642" class="ts">block (k, n)</text>
+  <rect x="692" y="722" width="396" height="76" rx="4" class="box"/>
+  <text x="704" y="744" class="t">memory arbiter</text>
+  <text x="704" y="766" class="ts">Q + 1 masters → one bank-parallel local-memory port</text>
+  <path d="M 787 708 L 787 722" class="flow"/>
+  <path d="M 993 708 L 993 722" class="flow"/>
+  <rect x="1130" y="412" width="406" height="400" rx="6" class="unit"/>
+  <text x="1142" y="434" class="tb">VX_tcu_core × Q</text>
+  <rect x="1142" y="448" width="382" height="76" rx="4" class="box"/>
+  <text x="1154" y="470" class="t">operand select</text>
+  <text x="1154" y="492" class="ts">A and B from the register file, or from the tile</text>
+  <text x="1154" y="508" class="ts">buffers (dashed) when the source is shared memory</text>
+  <rect x="1142" y="538" width="382" height="92" rx="4" class="box"/>
+  <text x="1154" y="560" class="t">lane conditioning</text>
+  <text x="1154" y="582" class="ts">sparse: 2:4 gather of B by the validity metadata</text>
+  <text x="1154" y="598" class="ts">MX: per-block scale bytes for A and B</text>
+  <text x="1154" y="614" class="ts">DSM: mask lanes whose operand is zero</text>
+  <rect x="1142" y="644" width="382" height="92" rx="4" class="pe"/>
+  <text x="1154" y="666" class="t">FEDP grid</text>
+  <text x="1154" y="688" class="ts">TC_M × TC_N fused dot products, each</text>
+  <text x="1154" y="704" class="ts">Σ a·b over K elements, plus the accumulator c</text>
+  <text x="1154" y="720" class="ts">free-running: no back-pressure enable</text>
+  <rect x="1142" y="750" width="382" height="48" rx="4" class="box"/>
+  <text x="1154" y="772" class="t">result landing queue</text>
+  <text x="1320" y="772" class="tt">a slot is reserved at admission</text>
+  <path d="M 1333 524 L 1333 538" class="flow"/>
+  <path d="M 1333 630 L 1333 644" class="flow"/>
+  <path d="M 1333 736 L 1333 750" class="flow"/>
+  <path d="M 460 376 L 460 412" class="flow"/>
+  <text x="470" y="398" class="lbk">TCU_LD</text>
+  <path d="M 890 376 L 890 412" class="flow"/>
+  <text x="900" y="398" class="lbk">observes WGMMA micro-ops</text>
+  <path d="M 1333 376 L 1333 412" class="flow"/>
+  <text x="1343" y="398" class="lbk">every MMA micro-op</text>
+  <path d="M 638 712 L 665 712 L 665 832 L 1120 832 L 1120 584 L 1142 584" class="flowb"/>
+  <text x="905" y="846" class="lbl">sparse validity and MX scales, read by warp</text>
+  <path d="M 1088 632 L 1108 632 L 1108 486 L 1142 486" class="flowb"/>
+  <rect x="270" y="862" width="380" height="82" rx="6" class="box"/>
+  <text x="282" y="884" class="t">to the LSU scheduler</text>
+  <text x="282" y="906" class="ts">VX_lsu_sched_if — client 1 on block 0</text>
+  <rect x="680" y="862" width="420" height="82" rx="6" class="box"/>
+  <text x="692" y="884" class="t">to local memory</text>
+  <text x="692" y="906" class="ts">bank-parallel read port, shared with the DXA</text>
+  <rect x="1130" y="862" width="406" height="82" rx="6" class="core"/>
+  <text x="1142" y="884" class="t">VX_lane_gather</text>
+  <text x="1142" y="906" class="ts">results of both consumers → commit</text>
+  <path d="M 460 812 L 460 862" class="flowg"/>
+  <path d="M 890 812 L 890 862" class="flowg"/>
+  <path d="M 1333 812 L 1333 862" class="flow"/>
+  <text x="24" y="988" class="tt">Purple = pipeline glue · blue = tensor logic · gold = storage · white = the arithmetic array · dashed blue = operands and metadata into the core · gold arrows = memory traffic.</text>
+  <text x="24" y="1010" class="tt">VX_tcu_wgmma, the tile buffers and the lockstep gate exist only with VX_CFG_TCU_WGMMA_ENABLE; the metadata path exists only with sparse or MX formats enabled.</text>
+</svg>

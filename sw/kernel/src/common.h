@@ -13,7 +13,7 @@
 
 #define RISCV_CUSTOM0 0x0B
 
-#ifdef VX_CFG_XLEN_64
+#if __riscv_xlen == 64
   #define LOAD_IMMEDIATE64(rd, imm) \
     li   t0, (imm >> 32); \
     slli t0, t0, 32; \

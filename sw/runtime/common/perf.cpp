@@ -161,6 +161,75 @@ struct CacheCounters {
   uint64_t mshr_st = 0;
 };
 
+struct RtuCounters {
+  uint64_t rays = 0;
+  uint64_t hits = 0;
+  uint64_t box_tests = 0;
+  uint64_t tri_tests = 0;
+  uint64_t callbacks = 0;
+  uint64_t busy = 0;
+  CacheCounters rtcache;
+
+  RtuCounters& operator+=(const RtuCounters& rhs) {
+    rays           += rhs.rays;
+    hits           += rhs.hits;
+    box_tests      += rhs.box_tests;
+    tri_tests      += rhs.tri_tests;
+    callbacks      += rhs.callbacks;
+    busy           += rhs.busy;
+    rtcache.reads  += rhs.rtcache.reads;
+    rtcache.miss_r += rhs.rtcache.miss_r;
+    return *this;
+  }
+};
+
+static vx_result_t query_rtu_counters(vx_device_h hdevice, uint32_t mpm_class,
+                                      uint32_t core_id, RtuCounters* c) {
+  const struct {
+    uint32_t addr;
+    uint64_t* value;
+  } fields[] = {
+    {VX_CSR_MPM_RTU_RAYS,       &c->rays},
+    {VX_CSR_MPM_RTU_HITS,       &c->hits},
+    {VX_CSR_MPM_RTU_BOX_TESTS,  &c->box_tests},
+    {VX_CSR_MPM_RTU_TRI_TESTS,  &c->tri_tests},
+    {VX_CSR_MPM_RTU_CALLBACKS,  &c->callbacks},
+    {VX_CSR_MPM_RTU_BUSY,       &c->busy},
+    {VX_CSR_MPM_RTCACHE_READS,  &c->rtcache.reads},
+    {VX_CSR_MPM_RTCACHE_MISS_R, &c->rtcache.miss_r},
+  };
+  for (const auto& f : fields) {
+    CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, f.addr, core_id, f.value), { return err; });
+  }
+  return VX_SUCCESS;
+}
+
+// Raw counters first (name=value), derived metrics in parentheses. `units` is
+// the number of RTU sockets the counters were summed over, so the utilization
+// stays a per-RTU average.
+static void print_rtu_counters(FILE* stream, int core_id, const RtuCounters& c,
+                               uint64_t cycles, uint64_t units) {
+  const double rays = (double)c.rays;
+  const double unit_cycles = (double)cycles * (double)units;
+  char buf[512];
+  std::snprintf(buf, sizeof(buf),
+    "rtu: rays=%" PRIu64 ", hits=%" PRIu64 " (rate=%d%%), box_tests=%" PRIu64 " (%.1f/ray)"
+    ", tri_tests=%" PRIu64 " (%.1f/ray), callbacks=%" PRIu64 ", busy=%" PRIu64 " (util=%d%%)"
+    "; rtcache: reqs=%" PRIu64 " (%.1f/ray), miss=%" PRIu64 " (hit=%d%%)",
+    c.rays, c.hits, calc_percent(c.hits, c.rays),
+    c.box_tests, safe_div((double)c.box_tests, rays),
+    c.tri_tests, safe_div((double)c.tri_tests, rays),
+    c.callbacks,
+    c.busy, (int)std::lround(safe_div((double)c.busy, unit_cycles) * 100.0),
+    c.rtcache.reads, safe_div((double)c.rtcache.reads, rays),
+    c.rtcache.miss_r, calc_ratio(c.rtcache.miss_r, c.rtcache.reads));
+  if (core_id >= 0) {
+    perf_print_core(stream, core_id, "%s", buf);
+  } else {
+    perf_print(stream, "%s", buf);
+  }
+}
+
 struct Metric {
   const char *label;
   int value;
@@ -276,6 +345,7 @@ extern "C" vx_result_t vx_device_dump_perf(vx_device_h hdevice, FILE *stream) {
   const bool tex_en = (isa_flags & VX_ISA_EXT_TEX) != 0;
   const bool raster_en = (isa_flags & VX_ISA_EXT_RASTER) != 0;
   const bool om_en = (isa_flags & VX_ISA_EXT_OM) != 0;
+  const bool rtu_en = (isa_flags & VX_ISA_EXT_RTU) != 0;
 
   std::vector<CoreCounters> cores(num_cores);
   uint64_t total_instrs = 0;
@@ -602,32 +672,34 @@ extern "C" vx_result_t vx_device_dump_perf(vx_device_h hdevice, FILE *stream) {
     // DXA counters are cluster-level; query representative core per cluster.
     uint64_t cores_per_cluster = (num_cores + num_clusters - 1) / num_clusters;
     uint64_t tot_transfers = 0, tot_gmem_reads = 0, tot_gmem_dedup = 0;
-    uint64_t tot_lmem_writes = 0, tot_gmem_lt = 0;
+    uint64_t tot_lmem_writes = 0, tot_gmem_lt = 0, tot_noslot = 0;
     for (uint32_t c = 0; c < num_clusters; ++c) {
       uint32_t rep_core = (uint32_t)(c * cores_per_cluster);
       if (rep_core >= num_cores)
         break;
-      uint64_t transfers = 0, gmem_reads = 0, gmem_dedup = 0, lmem_writes = 0, gmem_lt = 0;
+      uint64_t transfers = 0, gmem_reads = 0, gmem_dedup = 0, lmem_writes = 0, gmem_lt = 0, noslot = 0;
       CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DXA_TRANSFERS,  rep_core, &transfers),  { return err; });
       CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DXA_GMEM_READS, rep_core, &gmem_reads), { return err; });
       CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DXA_GMEM_DEDUP, rep_core, &gmem_dedup), { return err; });
       CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DXA_LMEM_WRITES,rep_core, &lmem_writes),{ return err; });
       CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DXA_GMEM_LT,    rep_core, &gmem_lt),    { return err; });
+      CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DXA_NOSLOT_STALLS, rep_core, &noslot),   { return err; });
       tot_transfers  += transfers;
       tot_gmem_reads += gmem_reads;
       tot_gmem_dedup += gmem_dedup;
       tot_lmem_writes+= lmem_writes;
       tot_gmem_lt    += gmem_lt;
+      tot_noslot     += noslot;
       double avg_lat = safe_div((double)gmem_lt, (double)transfers);
       int dedup_pct  = calc_percent(gmem_dedup, gmem_reads + gmem_dedup);
-      perf_print_core(stream, rep_core, "dxa: transfers=%" PRIu64 ", gmem_reads=%" PRIu64 ", gmem_dedup=%" PRIu64 " (rate=%d%%), lmem_writes=%" PRIu64 ", avg_gmem_lat=%.1f",
-                      transfers, gmem_reads, gmem_dedup, dedup_pct, lmem_writes, avg_lat);
+      perf_print_core(stream, rep_core, "dxa: transfers=%" PRIu64 ", gmem_reads=%" PRIu64 ", gmem_dedup=%" PRIu64 " (rate=%d%%), lmem_writes=%" PRIu64 ", avg_gmem_lat=%.1f, noslot_stalls=%" PRIu64,
+                      transfers, gmem_reads, gmem_dedup, dedup_pct, lmem_writes, avg_lat, noslot);
     }
     {
       double avg_lat = safe_div((double)tot_gmem_lt, (double)tot_transfers);
       int dedup_pct  = calc_percent(tot_gmem_dedup, tot_gmem_reads + tot_gmem_dedup);
-      perf_print(stream, "dxa: transfers=%" PRIu64 ", gmem_reads=%" PRIu64 ", gmem_dedup=%" PRIu64 " (rate=%d%%), lmem_writes=%" PRIu64 ", avg_gmem_lat=%.1f",
-                 tot_transfers, tot_gmem_reads, tot_gmem_dedup, dedup_pct, tot_lmem_writes, avg_lat);
+      perf_print(stream, "dxa: transfers=%" PRIu64 ", gmem_reads=%" PRIu64 ", gmem_dedup=%" PRIu64 " (rate=%d%%), lmem_writes=%" PRIu64 ", avg_gmem_lat=%.1f, noslot_stalls=%" PRIu64,
+                 tot_transfers, tot_gmem_reads, tot_gmem_dedup, dedup_pct, tot_lmem_writes, avg_lat, tot_noslot);
     }
   } break;
 
@@ -659,9 +731,14 @@ extern "C" vx_result_t vx_device_dump_perf(vx_device_h hdevice, FILE *stream) {
       perf_print(stream, "TEX not supported");
       break;
     }
+    // Socket-scoped counters: every core of a socket reads the same values.
+    const uint64_t num_sockets = (num_cores + socket_size - 1) / socket_size;
     uint64_t tot_reads = 0, tot_lat = 0, tot_st = 0;
     CacheCounters tcache_tot;
-    for (uint32_t core_id = 0; core_id < num_cores; ++core_id) {
+    for (uint32_t s = 0; s < num_sockets; ++s) {
+      uint32_t core_id = s * (uint32_t)socket_size;
+      if (core_id >= num_cores)
+        break;
       uint64_t reads = 0, lat = 0, st = 0;
       CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_TEX_READS, core_id, &reads), { return err; });
       CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_TEX_LAT,   core_id, &lat),   { return err; });
@@ -694,9 +771,14 @@ extern "C" vx_result_t vx_device_dump_perf(vx_device_h hdevice, FILE *stream) {
       perf_print(stream, "RASTER not supported");
       break;
     }
+    // Cluster-scoped counters: every core of a cluster reads the same values.
+    const uint64_t cores_per_cluster = (num_cores + num_clusters - 1) / num_clusters;
     uint64_t tot_reads = 0, tot_lat = 0, tot_st = 0;
     CacheCounters rcache_tot;
-    for (uint32_t core_id = 0; core_id < num_cores; ++core_id) {
+    for (uint32_t c = 0; c < num_clusters; ++c) {
+      uint32_t core_id = c * (uint32_t)cores_per_cluster;
+      if (core_id >= num_cores)
+        break;
       uint64_t reads = 0, lat = 0, st = 0;
       CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_RASTER_READS, core_id, &reads), { return err; });
       CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_RASTER_LAT,   core_id, &lat),   { return err; });
@@ -729,9 +811,14 @@ extern "C" vx_result_t vx_device_dump_perf(vx_device_h hdevice, FILE *stream) {
       perf_print(stream, "OM not supported");
       break;
     }
+    // Cluster-scoped counters: every core of a cluster reads the same values.
+    const uint64_t cores_per_cluster = (num_cores + num_clusters - 1) / num_clusters;
     uint64_t tot_reads = 0, tot_writes = 0, tot_lat = 0, tot_st = 0;
     CacheCounters ocache_tot;
-    for (uint32_t core_id = 0; core_id < num_cores; ++core_id) {
+    for (uint32_t c = 0; c < num_clusters; ++c) {
+      uint32_t core_id = c * (uint32_t)cores_per_cluster;
+      if (core_id >= num_cores)
+        break;
       uint64_t reads = 0, writes = 0, lat = 0, st = 0;
       CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_OM_READS,  core_id, &reads),  { return err; });
       CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_OM_WRITES, core_id, &writes), { return err; });
@@ -766,6 +853,28 @@ extern "C" vx_result_t vx_device_dump_perf(vx_device_h hdevice, FILE *stream) {
       ocache_tot.miss_w, calc_ratio(ocache_tot.miss_w, ocache_tot.writes),
       ocache_tot.bank_st, calc_utility(ocache_tot.reads + ocache_tot.writes, ocache_tot.bank_st),
       ocache_tot.mshr_st, calc_utility(ocache_tot.miss_r + ocache_tot.miss_w, ocache_tot.mshr_st));
+  } break;
+
+  case VX_DCR_MPM_CLASS_RTU: {
+    if (!rtu_en) {
+      perf_print(stream, "RTU not supported");
+      break;
+    }
+    // Socket-scoped counters: every core of a socket reads the same values.
+    const uint64_t num_sockets = (num_cores + socket_size - 1) / socket_size;
+    RtuCounters tot;
+    for (uint32_t s = 0; s < num_sockets; ++s) {
+      uint32_t rep_core = s * (uint32_t)socket_size;
+      if (rep_core >= num_cores)
+        break;
+      RtuCounters c;
+      CHECK_ERR(query_rtu_counters(hdevice, mpm_class, rep_core, &c), { return err; });
+      if (num_sockets > 1) {
+        print_rtu_counters(stream, rep_core, c, cores[rep_core].cycles, 1);
+      }
+      tot += c;
+    }
+    print_rtu_counters(stream, -1, tot, max_cycles, num_sockets);
   } break;
 
   default:

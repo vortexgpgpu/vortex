@@ -1,447 +1,340 @@
 # Multi-Cache AMO Coherence — Design
 
-**Scope:** the behavior of RISC-V "A"-extension atomics across a multi-cache
-hierarchy (4× L1 → 1× L2 and 4× L2 → 1× L3), in both the RTL
-([`hw/rtl/cache/VX_amo_unit.sv`](../../hw/rtl/cache/VX_amo_unit.sv),
+**Scope:** how RISC-V "A"-extension atomics behave across a multi-level cache
+hierarchy — the coherence model, the passthrough role of every cache above
+the last level, issuer self-consistency, same-line ordering, forward progress
+for `LR`/`SC` across a long round trip, and what the model deliberately leaves
+to software. Covers the RTL
+([`VX_cache_amo.sv`](../../hw/rtl/cache/VX_cache_amo.sv),
 [`VX_cache_bank.sv`](../../hw/rtl/cache/VX_cache_bank.sv),
 [`VX_cache_tags.sv`](../../hw/rtl/cache/VX_cache_tags.sv),
-[`VX_cache_mshr.sv`](../../hw/rtl/cache/VX_cache_mshr.sv)) and the SimX model
-([`sim/simx/amo/`](../../sim/simx/amo/),
-[`sim/simx/mem/cache.cpp`](../../sim/simx/mem/cache.cpp)).
+[`VX_cache_mshr.sv`](../../hw/rtl/cache/VX_cache_mshr.sv),
+[`VX_amo_unit.sv`](../../hw/rtl/cache/VX_amo_unit.sv)) and the SimX model
+([`sim/simx/mem/cache.cpp`](../../sim/simx/mem/cache.cpp),
+[`sim/simx/amo/`](../../sim/simx/amo/)).
 
-This document builds on the single-LLC atomics design
-([`atomic_memory_operations.md`](atomic_memory_operations.md)) — the decode,
-LSU sideband, AMO ALU, and "atomics resolve at the last-level cache (LLC)"
-foundation are described there and assumed here.
+Decode, the LSU sideband, the read-modify-write kernel, the reservation
+stations, and the commit datapath at the last-level bank are in
+[`atomic_memory_operations.md`](atomic_memory_operations.md) and assumed
+here. The cache bank itself is in
+[`cache_subsystem.md`](cache_subsystem.md). This document is the
+multi-level deep-dive.
 
-**Coherence model:** GPU-weak / PULL, matching NVIDIA, ARM Mali, and
-Imagination PowerVR — atomics resolve at the LLC; inner caches are
-write-through and not hardware-coherent; cross-core *plain-data* visibility
-is restored by consumer-side invalidation at acquire points, not by snooping.
-
----
-
-## 1. The problem
-
-Resolving every atomic at the LLC bank is sufficient for a single L1 (the L1
-*is* the LLC). Once L2 (or L2+L3) is enabled, three things must hold that a
-naive single-LLC design does not provide:
-
-1. **LR/SC forward progress under contention** — every hart must eventually
-   win its `SC`, independent of how many harts contend.
-2. **Atomic correctness across levels** — an atomic arriving at a non-LLC
-   bank must be forwarded to the LLC (which owns the RMW) and its result
-   routed back, without leaving a stale or duplicate copy behind.
-3. **Issuer self-consistency** — a hart that issues an atomic and later does
-   a plain load of the same address must observe its own update, even though
-   its L1 is write-through and non-coherent.
-
-A *fourth* concern — a **plain load on another core** holding a stale copy
-of an atomically-updated line — is the GPU-weak model's deferred case
-(Regime B, §6), resolved by a consumer acquire-invalidate exactly as
-`ld.acquire` / `__threadfence` do on a real GPU.
+![Atomics across the cache hierarchy](../assets/img/amo_multicache_topology.svg)
 
 ---
 
-## 2. Reference architecture: how GPUs do this
+## 1. Overview
 
-The cross-vendor pattern is unanimous and is **PULL**, not directory-based:
+Exactly one cache level — the **last-level cache (LLC)** — commits atomics
+and holds the reservation stations. Every level above it is a
+**passthrough**: it forwards the atomic down, returns the result up, and
+keeps no copy of the line.
 
-- **Atomics resolve at the shared L2 / memory partition** by dedicated RMW
-  ALUs, with the target line locked for the duration (the serialization
-  point). NVIDIA performs the RMW at each memory partition's Atomic
-  Operation Unit; PowerVR reserves the L2 line so it "cannot be read or
-  written until the atomic operation has been completely processed"; Mali
-  resolves atomics near the L2 coherency point.
-- **Per-core L1 caches are write-through and not hardware-coherent.** Mali:
-  "coherency is guaranteed only for the LSC; the driver manages the other
-  caches." NVIDIA: write-through L1 with non-coherent stores that reach the
-  level "at which a cache coherency policy is enforced" (L2).
-- **Cross-core visibility is restored at synchronization points** by
-  flush/invalidate, not snooping — the consumer-side bulk L1 invalidate
-  behind `ld.acquire` / `__threadfence`.
+```
+DCACHE_IS_LLC = ¬L2 ∧ ¬L3
+L2_IS_LLC     =  L2 ∧ ¬L3
+L3_IS_LLC     =  L3
+```
 
-Sources: [GPU atomics @ memory partition (HPCA'13)](https://www2.cs.sfu.ca/~ashriram/papers/2013_HPCA_GPUCoherence.pdf),
+The coherence model is **GPU-weak, pull-based**: atomics are coherent with
+each other with no software help; inner caches are write-through and are not
+kept coherent by hardware; cross-core visibility of *plain* data is the
+consumer's responsibility at a synchronization point.
+
+| property | how it holds |
+|---|---|
+| atomic vs. atomic, any cores | every atomic serializes at the LLC |
+| a hart reads its own atomic through a plain load | the issuing cache drops its copy as the atomic passes (§5.2) |
+| same-hart program order, atomic vs. load | the younger access waits at the bank input (§5.3) |
+| `LR`/`SC` forward progress across the round trip | the reservation holder is protected (§5.4) |
+| another core's plain load sees a remote atomic | **not by hardware** — Regime B (§6) |
+
+---
+
+## 2. The problem
+
+Committing every atomic at the LLC bank is sufficient when there is a single
+L1, because that L1 *is* the LLC. Once an L2 or an L3 is enabled, three more
+things must hold:
+
+1. **Correctness across levels.** An atomic arriving at a bank that is not
+   the LLC must reach the LLC and have its result routed back, without
+   leaving a stale or duplicate copy of the line behind.
+2. **Issuer self-consistency.** A hart that issues an atomic and then plain
+   loads the same address must observe its own update, although its L1 is
+   write-through and not coherent.
+3. **`LR`/`SC` forward progress.** `LR` and `SC` become two separate round
+   trips to the LLC. The window between them grows from a few cycles to a
+   full miss round trip, and every contending hart's `LR` can land inside
+   it.
+
+A fourth concern — a plain load on **another** core holding a copy of a line
+that was then atomically updated — is the weak model's deferred case.
+
+---
+
+## 3. Reference architecture: how GPUs do this
+
+The cross-vendor pattern is consistent, and it is pull-based rather than
+directory-based:
+
+- **Atomics resolve at the shared L2 or memory partition**, in dedicated
+  read-modify-write units, with the line held for the duration. NVIDIA
+  performs the operation at each memory partition's atomic operation unit;
+  PowerVR reserves the L2 line so that it cannot be read or written until the
+  atomic has completed; Mali resolves atomics near the L2 coherency point.
+- **Per-core L1 caches are write-through and not hardware-coherent.** Stores
+  travel to the level at which a coherence policy is enforced.
+- **Cross-core visibility is restored at synchronization points**, by flush
+  or invalidate on the consumer side, not by snooping.
+
+Sources:
+[GPU atomics at the memory partition (HPCA'13)](https://www2.cs.sfu.ca/~ashriram/papers/2013_HPCA_GPUCoherence.pdf),
 [non-coherent write-through L1 (US 9047197)](https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/9047197),
-[barrier-initiated flush/invalidate (US 9563561)](https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/9563561),
+[barrier-initiated flush and invalidate (US 9563561)](https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/9563561),
 [PowerVR L2-locked atomics (US 8108610)](https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/8108610),
 [Mali Bifrost (Hot Chips 28)](https://old.hotchips.org/wp-content/uploads/hc_archives/hc28/HC28.22-Monday-Epub/HC28.22.10-GPU-HPC-Epub/HC28.22.110-Bifrost-JemDavies-ARM-v04-9.pdf).
 
-Vortex already resolves atomics at the LLC and enforces write-through inner
-caches ([`Vortex.sv`](../../hw/rtl/Vortex.sv),
-[`processor.cpp`](../../sim/simx/processor.cpp)); this design adds the
-forwarding, self-consistency, and consumer-invalidate pieces.
-
 ---
 
-## 3. Design decisions
+## 4. Design decisions
 
-| Question | Decision | Rationale |
+| question | decision | rationale |
 |---|---|---|
-| Coherence scope | AMO-triggered, weak (GPU) model | Plain store→load across cores stays the programmer's responsibility (fences), as on every real GPU. Smallest change. |
-| How is a remote stale copy cleaned? | **PULL** | The consumer invalidates its *own* inner cache at an acquire fence; the LLC never pushes invalidations upward (what NVIDIA/Mali do; least code). |
-| Topology | Same cache module at every level | The mechanism lives inside the one reusable cache; recursion to L3 is free (§5.6). |
-| Reservation tracking | **Per hart** | One reservation per hart matches RISC-V and guarantees forward progress (§5.1). |
+| Coherence scope | atomic-triggered, weak | plain store-to-load visibility across cores stays the program's responsibility, as on every real GPU; the smallest change |
+| How is a remote stale copy cleaned? | **pull** | the consumer invalidates its own inner cache; the LLC never pushes invalidations upward |
+| Topology | the same cache module at every level | the mechanism lives inside the one reusable cache, so a deeper hierarchy costs nothing new (§5.5) |
+| Reservation storage | a bounded, line-indexed station set per LLC bank | independent of the hart count; forward progress comes from protecting the holder, not from one slot per hart |
+| Passthrough bookkeeping | reuse the miss → fill → replay path | no second side-table and no second response route through the bank |
 
-**Rejected: PUSH + directory/snoop-filter.** Back-invalidating remote inner
-caches from the LLC would make atomics coherent with no software fence, but
-needs an upstream back-probe channel, a per-line sharer directory, an
-ack/ordering protocol, and recursive re-probing — a whole coherence
-subsystem that does not scale O(cores) and that real GPUs avoid. Recorded as
-future work (§7).
+**Rejected: push with a directory or snoop filter.** Back-invalidating remote
+inner caches from the LLC would make plain data coherent with no software
+fence, but it needs an upstream probe channel, a per-line sharer directory,
+an acknowledge and ordering protocol, and recursive re-probing through each
+level — a coherence subsystem that scales with the core count and that real
+GPUs avoid.
 
----
-
-## 4. Core invariant and the two regimes
-
-> **An atomic never leaves a copy of its line in any inner (non-LLC) cache.**
-
-It holds because (a) the requesting cache self-invalidates the line as the
-atomic is forwarded down, (b) the atomic is non-allocating, so no fill is
-installed afterward, and (c) the atomic never touches sibling inner caches.
-The only way an inner cache can hold a line being atomically updated is a
-**plain load** on that core. This splits all behavior into two regimes:
-
-- **Regime A — atomic-only sharing** (spinlock, atomic counter; the common
-  case). No inner cache ever holds the line; every atomic serializes at the
-  LLC. **Fully implemented and validated.** Zero new coherence traffic.
-- **Regime B — a plain load cached the line on another core.** That copy is
-  stale after a remote atomic. Resolved by the consumer's acquire-invalidate
-  (§7), exactly as a GPU requires `ld.acquire` / `__threadfence`. **Deferred**
-  until a mixed atomic/plain-load workload needs it.
+**Rejected: one reservation slot per hart.** It guarantees forward progress
+trivially, but it is `NUM_HARTS` line addresses and a `NUM_HARTS`-way compare
+in every LLC bank. SimX still models reservations this way
+([`atomic_memory_operations.md`](atomic_memory_operations.md) §8).
 
 ---
 
-## 5. Mechanisms (implemented)
+## 5. Mechanisms
 
-Each mechanism is realized in both SimX and RTL. The SimX model was brought
-up first as the goal-reference oracle; the RTL mirrors its behavior at the
-cache-bank microarchitecture.
+![One atomic through a passthrough level](../assets/img/amo_passthrough_sequence.svg)
 
-### 5.1 Per-hart LR/SC reservations
+### 5.1 Passthrough
 
-A shared, capacity-bounded reservation table with LRU eviction does not
-guarantee forward progress: once contending harts exceed the table size, a
-hart's reservation can be evicted by another hart's `LR` between its own `LR`
-and `SC`, so the `SC` never succeeds (`lrsc_counter` hangs at ≥ 64 harts).
+`VX_cache_amo` with `IS_LLC = 0`. The bank's existing miss path is reused
+rather than building a separate table:
 
-The reservation store is **per hart** — each hart owns exactly one
-reservation, never displaced by another hart's `LR`, broken only by a
-committed write to the line. This matches RISC-V (a reservation is a property
-of the hart) and guarantees a winner each retry round.
+| step | what happens | where |
+|---|---|---|
+| allocate | the atomic takes an ordinary MSHR entry, flagged as a passthrough | `ptw_flag[]`, the MSHR's `amo_table` |
+| forward | a memory request leaves with `rw = 0`, the word's byte-enable, the operand in the data word, and the attribute carrying the sideband | the bank's memory-request queue |
+| fill | the response is recognized as a passthrough fill: the addressed word is latched, **no line is installed** | `is_passthru_fill_sel`, `ptw_word[]` |
+| replay | the entry replays and counts as a hit at the commit stage; its response data is the latched word | `is_amo_replay_st1` |
 
-- **SimX:** a `hart_id → line` map in
-  [`amo_unit.{h,cpp}`](../../sim/simx/amo/amo_unit.cpp).
-- **RTL:** a directly-indexed array of `NUM_HARTS = 1 << HART_ID_WIDTH` slots
-  `{valid, line_addr}` in [`VX_amo_unit.sv`](../../hw/rtl/cache/VX_amo_unit.sv);
-  `reserve`/`check` index the requester's slot, `invalidate` clears matching
-  slots of other harts. `VX_CFG_AMO_RS_SIZE` is retained for compatibility
-  and no longer bounds correctness.
+A passthrough entry is **never coalesced**. The MSHR masks flagged entries
+out of its address match and the requester is forced non-pending, so each
+atomic makes its own round trip. At the LLC the opposite holds: same-line
+atomics that miss together coalesce on one fill and replay back to back.
 
-### 5.2 Plain-write reservation invalidation
+A passthrough entry is also held until its downstream response returns, not
+released on a hit the way a load's entry is.
 
-The LLC breaks a hart's reservation on **any** committed write to the
-reserved line, not only atomic stores, so a plain store from another hart
-fails a racing `SC`. SimX pulses `invalidate(line, except=hart)` on every LLC
-write-through path; RTL drives `amo_res_invalidate_w = amo_do_store_st1 ||
-do_write_st1` into the AMO unit.
+### 5.2 Issuer self-consistency
 
-### 5.3 Non-LLC AMO passthrough
+As the atomic is forwarded, the issuing cache **invalidates its own copy**:
+[`VX_cache_tags.sv`](../../hw/rtl/cache/VX_cache_tags.sv) takes an
+`invalidate` input that clears the addressed sector's valid bit on a tag
+match. The match excludes a line being filled in the same cycle. Only the
+valid vector is written; the tag is left in place.
 
-A non-LLC bank does not own the atomic. It forwards the AMO downstream
-non-allocating and routes the result word back up.
+The hart's next plain load therefore misses and refetches from the LLC. With
+§5.1 installing nothing on the way back, this gives the core invariant:
 
-- **SimX:** an `AmoProbe` ([`cache.cpp`](../../sim/simx/mem/cache.cpp))
-  probes the local line, invalidates on hit, and forwards without installing
-  a fill.
-- **RTL:** the existing miss→fill→replay path is **reused** rather than
-  adding a separate side-table ([`VX_cache_bank.sv`](../../hw/rtl/cache/VX_cache_bank.sv)
-  `g_amo_ptw`). The AMO allocates a normal MSHR entry, flagged in a parallel
-  `amo_ptw_flag[]` with the result word-select in `amo_ptw_wsel[]`. On the
-  downstream fill the flagged entry captures the result word, **installs no
-  line**, and replays carrying the result up to `core_rsp`
-  (`eff_hit_st1 = is_hit_st1 || is_amo_replay_st1`). AMOs are excluded from
-  MSHR coalescing (`amo_table` masks them out of `addr_matches`, and the
-  requester is forced non-pending) so each atomic takes its own round-trip;
-  at the LLC, same-line AMO coalescing is preserved (`allocate_is_amo` gated
-  to non-LLC).
+> **An atomic never leaves a copy of its line in any cache above the LLC.**
 
-### 5.4 Issuer self-consistency
+The only way an inner cache can hold a line that is being atomically updated
+is a **plain load** on that core.
 
-A hart that issues an atomic and later plain-loads the same address must see
-its own update. As the atomic is forwarded, the issuing cache invalidates its
-local copy so the next load misses and refetches from the LLC. In SimX this
-falls out of the `AmoProbe` self-invalidate; in RTL,
-[`VX_cache_tags.sv`](../../hw/rtl/cache/VX_cache_tags.sv) gains an
-`invalidate` input that clears `line_valid` on a tag match (using a raw hit
-that excludes a line being filled this cycle), driven by
-`is_amo_fwd_st0 && is_hit_st0`.
+### 5.3 Same-line age ordering
 
-### 5.5 AMO/fill age-ordering
+A load followed by an atomic to the same line — or the reverse — can race the
+invalidate against an in-flight fill. The younger access is held at the bank
+input until the older one drains:
 
-A load-then-AMO (or AMO-then-load) to the same line can race the
-probe/invalidate against an in-flight fill in the bank pipeline. Symmetric
-age-ordering holds the younger access at admission until the older drains:
+| incoming | waits while | so that |
+|---|---|---|
+| an atomic | a line-filling request is pending for its line | its invalidate lands on the installed line, not before it |
+| a plain load | an atomic passthrough is pending for its line | the load cannot install a line fetched before the atomic committed |
 
-- an incoming AMO waits while a load fill is pending for its line (so its
-  invalidate lands on the installed line);
-- an incoming plain load waits while an AMO passthrough is pending for its
-  line (so the load observes the AMO — same-hart same-address program order).
+The MSHR exposes the two conditions as probes of the waiting request's
+address. They are consumed **registered**, which keeps the MSHR's address
+compare off the request-ready path; two extra terms close the windows a
+registered result cannot see — an allocation in the lookup stage this cycle,
+and an entry that became persistent last cycle. The defer is therefore a
+superset of the exact condition: it can hold a request one cycle longer than
+necessary, and never shorter.
 
-SimX defers the `AmoProbe` in `processInputs` and re-issues a vanished-line
-replay as a fresh miss. RTL uses MSHR probe ports
-(`probe_pending_ld` / `probe_pending_amo`,
-[`VX_cache_mshr.sv`](../../hw/rtl/cache/VX_cache_mshr.sv)) to drive
-`amo_input_defer` / `load_input_defer` at the bank input, plus a same-cycle
-allocation guard for the admit→allocate window.
+### 5.4 `LR`/`SC` forward progress
 
-### 5.6 LLC AMO commit-window serialization (RTL)
+Above an LLC, the `LR`→`SC` window is a full round trip. Every hart
+contending one word maps to the same reservation station, so if each `LR`
+overwrote the station, the holder's reservation would be gone before its
+`SC` arrived and no `SC` would ever succeed.
 
-The LLC AMO writeback path is single-outstanding (it chains only same-line
-AMOs). Admitting a second AMO to a different line while the first is still in
-its writeback window would let it reach S1 with the writeback busy and drop
-its store. The bank closes the whole window — `amo_commit_busy = amo_wb_pending
-|| amo_do_store_st1 || amo_do_store_st0` gates the AMO request path and
-`core_req_ready`. All terms are zero at non-LLC banks, so this serialization
-applies only at the LLC.
+The station therefore **refuses an `LR` from a different hart for a line it
+already holds**, for a bounded number of refusals. The holder's `SC` lands
+first and one hart wins each round. The bound — 63 refusals at a cache LLC —
+is sized for the miss round trip and frees a station whose holder abandoned
+its attempt. Mechanism and sizing are in
+[`atomic_memory_operations.md`](atomic_memory_operations.md) §5.3.
 
-### 5.7 Recursion to L3 is free
+Any committed store to the line breaks the reservation, whichever hart made
+it: an atomic's own store, the LLC's write hit, and a plain store arriving
+write-through from a level above. This is why the levels above the LLC must
+be write-through — a write-back level could absorb a store the LLC never
+sees.
 
-The mechanism is per-cache and the same cache module is instantiated at every
-level. An atomic under an L3 config travels L1→L2→L3, self-invalidating L1
-**and** L2 on the way down (both act as non-LLC), and the L3 performs the RMW.
-No per-level special-casing and no inter-level messaging beyond the normal
-request flow. The `AMO_ENABLE` parameter on each cache is driven by
-`VX_CFG_EXT_A_ENABLED` alone (not gated to the LLC), so non-LLC data caches
-synthesize the passthrough; the LLC-vs-passthrough distinction is made inside
-the bank.
+### 5.5 Deeper hierarchies
+
+The mechanism is per-cache and the same module is instantiated at every
+level. Under an L3, an atomic travels L1 → L2 → L3, invalidating its line in
+the L1 **and** in the L2 on the way down, and the L3 commits. There is no
+per-level special case and no inter-level message beyond the ordinary
+request and response.
+
+`AMO_ENABLE` on each cache is driven by `VX_CFG_EXT_A_ENABLED` alone, not
+gated to the LLC, so the levels above it synthesize the passthrough. The
+role is selected inside the bank by `IS_LLC`.
+
+### 5.6 Commit serialization at the LLC
+
+The LLC commits one atomic instruction at a time. `commit_busy` holds off new
+core requests from the lookup-stage prediction through the compute stage and
+the writeback, so an atomic to a different line cannot reach the commit stage
+while the previous result is still in flight. It is zero at every
+passthrough bank — serialization applies only where atomics commit.
 
 ---
 
-## 6. Worked walkthroughs
+## 6. The two regimes
 
-### 6.1 4× L1 → 1× L2 (L2 = LLC)
+![Sharing regimes](../assets/img/amo_coherence_regimes.svg)
 
-```
-   core0   core1   core2   core3
-    L1_0    L1_1    L1_2    L1_3      write-through, non-coherent
-      └──────┴───┬───┴──────┘
-                 L2 (LLC: RMW + per-hart reservations)
-                 memory
-```
+### 6.1 Regime A — atomic-only sharing
 
-**Regime A — `amoadd counter` by all cores:** each core's atomic invalidates
-its own L1 copy of `counter` and increments at L2; no L1 ever holds
-`counter`; the final value and the unique fetch-add returns are correct with
-zero cross-L1 traffic.
+Spinlocks, atomic counters, reductions: the common case. No inner cache ever
+holds the line, every operation serializes at the LLC, and there is no
+coherence traffic between the L1s at all. Fully implemented in both models.
 
-**Regime B — producer/consumer via a plain load:** if `core0` previously
-plain-loaded `flag` (caching it) and `core3` then `amoadd flag,1`, `core0`'s
-next plain load hits its stale L1 copy until `core0` issues an
-acquire-invalidate (§7), after which it misses and refetches the current
-value from L2. The L2 never reaches up.
+### 6.2 Regime B — a plain load cached the line
 
-### 6.2 4× L2 → 1× L3 (L3 = LLC)
+If core 0 plain-loaded a word, caching its line, and core 3 then atomically
+updates it, core 0's copy is stale. The LLC never reaches up. The weak model
+resolves this the way a GPU does: the **consumer** discards its own copies at
+an acquire point and refetches.
 
-```
- cluster0           ...            cluster3
- L1×4 → L2_0                       L1×4 → L2_3
-    └───────────────┬─────────────────┘
-                  L3 (LLC: RMW + per-hart reservations)
-                  memory
-```
+There is no dedicated acquire-invalidate. What exists today:
 
-A core in cluster0 doing `amoadd X` self-invalidates **L1 and L2_0** en route
-(both non-LLC) and the L3 performs the RMW. Identical mechanism, one extra
-level traversed, no new code.
-
----
-
-## 7. Deferred: Regime-B acquire-invalidate
-
-The one unimplemented piece is the consumer-side **bulk invalidate** at an
-acquire synchronization point — clearing the inner cache's valid bits (no
-writeback; inner caches are write-through, never dirty) so the next plain load
-refetches from the LLC. The design reuses the existing flush walk with an
-invalidate mode and routes a `FENCE`/acquire through the LSU as a new memory
-op on the existing core→cache path — no new fabric channel. It is deferred
-until a mixed atomic/plain-load workload requires fence-managed cross-core
-data visibility.
-
----
-
-## 8. Elastic cache-bank pipeline (configurable latency)
-
-[`VX_cache_bank.sv`](../../hw/rtl/cache/VX_cache_bank.sv) supports a
-per-cache pipeline depth `LATENCY` (from `VX_CFG_<CACHE>_LATENCY`, default
-`2` = the classic lookup/commit pipe, reproduced bit-for-bit). A small,
-latency-critical L1 wants depth 2; a large last-level cache cannot close
-300 MHz at depth 2 because the tag read, the way-resolving compare, and the
-data-array access are crammed into one cycle, producing a BRAM→BRAM critical
-path whose delay is ~78 % routing and cannot be retimed away. Raising the
-knob inserts register stages on the long paths, trading a few cycles of hit
-latency — which the non-blocking, MSHR-backed cache hides — for Fmax. This is
-how real GPU L2/L3 caches are built: deep, fully pipelined, latency-tolerant
-behind a large miss pool.
-
-### 8.1 Motivating timing data
-
-Post-route WNS on the standalone `Vortex` DUT (`xcu55c`, 300 MHz, after the
-dirty-mask LUTRAM fix), 2-core build with the 1 MB 8-way L2:
-
-| Config | WNS @300 MHz | Implied Fmax | Worst path |
-|--------|-------------:|-------------:|------------|
-| L2 write-back    | **−1.380 ns** | ~212 MHz | `tag_store` → `data_store` EN/WE |
-| L2 write-through | **−1.008 ns** | ~230 MHz | same structure |
-
-The path sits in the L2, so the *whole device* is capped at ~210–230 MHz; the
-single-cycle BRAM→BRAM dependency cannot be placed/routed away — the cycle
-boundary must move.
-
-### 8.2 Bank pipeline structure
-
-The bank carries all per-request control/data in a packed payload struct
-through a generate-loop register chain of depth `LATENCY` (replacing the
-hand-instantiated `_sel`/`_st0`/`_st1` wires), with control anchored to
-**symbolic stage indices** so the feedback loops stay one-request-per-cycle
-at any depth:
-
-```
-HIT_ST  = TAG_RD_LAT        // tag compare consumes stg[HIT_ST]
-DATA_ST = HIT_ST + 1        // data access uses *registered* way
-RESP_ST = LATENCY - 1       // crsp / mem-req fire here
-```
-
-The whole data-array access (read **and** write, plus fill/flush) is deferred
-together by `PIPE_EX = LATENCY-2` stages so the data BRAM is driven by
-*registered* `tag_matches`/way/line/byteen — the tag-compare→data-EN and
-→data-addr paths (bottlenecks 1 and 2 above) become register→BRAM,
-intra-stage. Because read and write move to the *same* deferred stage,
-pipeline order is preserved (a younger same-line read always reaches the
-array after an older write), so store→load forwarding is automatic — **no
-1R1W split, no forwarding logic, no hazard scoreboard** beyond the same-line
-AMO pacing (§8.4). The tag array stays at S0/S1, so its existing
-read-during-write bypasses (`rdw_fill`/`rdw_write`) are unchanged.
-
-### 8.3 The MSHR must NOT be deferred (critical constraint)
-
-[`VX_cache_mshr.sv`](../../hw/rtl/cache/VX_cache_mshr.sv) is strongly coupled
-to the bank: its coalescing chain needs `allocate` (S0) and `finalize` (S1)
-**exactly one cycle apart**. The tail-find (`prev_idx`) only sees a
-predecessor's link once that predecessor finalizes; deferring finalize makes
-3+ coalesced same-line misses (e.g. sequential icache fetches to one line)
-all link to the same predecessor, orphaning intermediate entries → they never
-replay → **bank deadlock** (confirmed empirically — a naive "defer
-everything" hung at LATENCY=3 and 4). So the pipeline is **decoupled**:
-
-- **S0/S1 (fixed, 1 cycle apart):** tag compare, replacement victim-select,
-  MSHR allocate **and** finalize, replacement update — untouched.
-- **stD = S0 + PIPE_EX:** data-array access (pass-through chain off S0).
-- **stC = S1 + PIPE_EX:** core response + memory request (off S1), aligned
-  with the deferred data output.
-
-`PIPE_EX=0` collapses stD→S0, stC→S1, reproducing the 2-stage bank exactly
-(LATENCY=2 gives identical cycle counts).
-
-**Mem-request queue sizing:** the mem-req push now fires `LATENCY` stages
-after admission, so the almost-full margin must reserve `LATENCY` slots —
-**`MREQ_SIZE > LATENCY`** (else `ALM_FULL ≤ 0` → permanent almost-full →
-admission deadlock). The config grows `MREQ_SIZE` by `(LATENCY−2)` to hold
-the margin constant.
-
-### 8.4 AMO under elastic latency
-
-The LLC atomic (§5.6) is the most stage-coupled block. Under the elastic pipe
-its anchors are re-expressed on the symbolic stage constants rather than
-literal `st0`/`st1`: the RMW reads the line word at the data-output stage,
-runs the AMO ALU (add/min/max/swap/compare) in the following stage, and
-writes back at the commit stage — so deepening *relaxes* the AMO ALU path
-(it gets its own stage) rather than complicating it. Same-line AMO chaining
-(a chained atomic must observe the previous result) has a commit→visible
-round trip of `L−1` cycles, so the `chain_stall`/`commit_busy` pacing scales
-with `LATENCY` and **collapses into one depth-sized same-line scoreboard**
-(a chained atomic targets a line that scoreboard already marks in-flight).
-Non-LLC AMO forward/passthru-replay ordering and LR/SC reservations are
-event-ordered (line addresses, not cycles), so they are latency-agnostic
-once keyed off the stage constants. At `LATENCY=2` behavior is identical to
-today (chain window = 1).
-
-### 8.5 Configuration, cost, and SimX parity
-
-Per-cache knobs in `VX_config.toml` (default 2; raise large LLCs):
-
-```
-VX_CFG_L2_LATENCY  = expr: 4 if $VX_CFG_L2_CACHE_SIZE > 65536 else 2
-VX_CFG_L3_LATENCY  = expr: 4 if $VX_CFG_L3_CACHE_SIZE > 65536 else 2
-VX_CFG_L2_MREQ_SIZE = expr: 4 + ($VX_CFG_L2_LATENCY - 2) + ...   # keep margin
-```
-
-The 64 KB threshold: below it the tag/data arrays fit in a few adjacent BRAMs
-and the single-cycle path closes; above it (1 MB L2, 2 MB L3) the arrays span
-many BRAM columns and the cross-array route cannot meet 3.333 ns.
-
-- **Area** (1 MB L2 bank, depth 2→4): ~+1 % FF (two ~590 b payload stages),
-  ~0 BRAM (read/write split is BRAM-native dual-port), a few hundred LUT —
-  cheap for a +42 % clock.
-- **AMAT:** `Δt_L2 = +2 cyc ⇒ ΔAMAT ≈ m_L1·2 cyc` (~+0.2–0.4 cyc for
-  `m_L1≈0.1–0.2`), in the noise against a hundreds-of-cycle `t_mem`. The
-  decisive comparison is wall-clock: a single L2 hit is ~3.9 ns slower but
-  every cycle everywhere is 42 % faster and the latency is MSHR-hidden.
-- **SimX parity:** the SimX bank already models a `latency`-deep pipe
-  (`Cache::Config::latency`); the gap is only that L2/L3 use a hardcoded `2`
-  ([`cluster.cpp`](../../sim/simx/cluster.cpp),
-  [`processor.cpp`](../../sim/simx/processor.cpp)) instead of the macro.
-  Sourcing both the RTL bank parameter and the SimX pipe depth from the same
-  `VX_CFG_*_LATENCY` keeps them from diverging. The same-line RAW/AMO-chain
-  stall must also be modeled in the SimX bank (a marked-line check on
-  `pipe_req_` occupancy) so throughput — not just latency — matches.
-
-> Status: `LATENCY=2` is bit-identical to the pre-refactor baseline and
-> `LATENCY=3` is functionally validated (rtlsim vecadd/sgemm). `LATENCY=4`
-> (with bumped `MREQ_SIZE`), the AMO sweep across depths, SimX parity wiring,
-> and the 1 MB-L2 DUT synth confirming WNS ≥ 0 @300 MHz remain to land.
-> Depends on the `VX_sp_ram`/`VX_dp_ram` `USE_FAST_BRAM` LUTRAM fix.
-
----
-
-## 9. Validation
-
-`tests/regression/amo` across all configs, on both SimX and rtlsim:
-
-| config | result |
+| model | what a `fence` does to the issuing core's data cache |
 |---|---|
-| 1 core, no L2 | 13/13 |
-| 4× L1 → 1× L2 | 12/12 |
-| 4× L2 → 1× L3 | 12/12 |
+| RTL | the LSU sends the fence as a request with `is_flush` set, which starts the **whole-cache flush**; on a write-through cache the walk clears every valid bit |
+| SimX | the fence is an ordering barrier in the LSU only; a flush of a write-through cache is a no-op and no line is invalidated |
 
-The suite includes `lrsc_counter` (forward-progress repro for §5.1) and
-`self_consistency` (per-hart private 64 B line; exercises §5.4/§5.6 and fails
-a design lacking the local-invalidate and commit-window serialization).
-`atomic_critical` is skipped on multi-core: it relies on plain load/store
-inside a critical section, which needs Regime-B coherence (§7).
-`rv32ua`/`rv64ua` ISA conformance (LR/SC + all AMOs) passes. The full
-`regression --cache` suite (L1/L2/L3 enable+disable, banking, ways,
-replacement policy, writeback, clustering, reduced line-size) passes,
-confirming the `AMO_ENABLE` plumbing and bank/tag/MSHR changes do not regress
-non-AMO cache behavior.
+So an RTL `fence` happens to give the consumer-side invalidate, at the cost
+of a full flush walk that locks the cache's inputs for its duration, and
+SimX does not model it. **The two models disagree, and no regression case
+exercises fence-managed cross-core visibility** — `atomic_critical`, which
+runs plain loads and stores inside a lock, is skipped on multi-core
+configurations for exactly this reason.
 
-Outstanding: xrt sign-off at the multi-core configs and U55C @ 300 MHz timing
-closure. The new state is the per-hart reservation array (scales with
-`NUM_HARTS`) and the per-MSHR-entry passthrough word table; if the §5.1
-`invalidate` compare or the §5.4 local-invalidate is critical, it can be
-pipelined off the SC-success / hit path (both tolerate an extra cycle).
+Programs that share data across cores through plain memory are outside what
+is validated. Share through atomics, or through the single shared level.
 
 ---
 
-## 10. Out of scope / future work
+## 7. Atomics under a deep bank pipeline
 
-- **Regime-B acquire-invalidate** (§7) — the consumer-side bulk invalidate
-  for fence-managed cross-core plain-data visibility.
-- **PUSH + directory/snoop-filter** — fence-free cross-core plain-data
-  coherence; requires an upstream back-probe channel, per-line sharer
-  tracking, an ack/ordering protocol, and recursive re-probing. Not what GPUs
-  do; revisit only if a strong cross-core guarantee is ever required.
-- **Per-line acquire invalidate** — finer-grained than the whole-cache flash
-  invalidate, if profiling shows bulk invalidation hurts hit rate.
-- The RTL AMO unit testbench and AMO performance counters
-  ([`atomic_memory_operations.md`](atomic_memory_operations.md) §6.3–§6.4).
+A large cache cannot close timing with tag read, way compare and data access
+in one cycle, so a bank's depth is a parameter
+([`cache_subsystem.md`](cache_subsystem.md) §4.1). With the default sizes the
+L1 runs at depth 2 and an L2 or L3 at depth 4, so **the LLC of a multi-level
+hierarchy is a deep bank**. The depth beyond two stages is
+`PIPE_EX = LATENCY − 2`, and it separates the lookup stage from the commit
+stage by that many cycles.
+
+| concern | at `PIPE_EX = 0` | at `PIPE_EX > 0` |
+|---|---|---|
+| where the engine's commit ports attach | the second stage | the commit stage, `PIPE_EX` stages later, aligned with the deferred data read |
+| `commit_busy` between prediction and commit | the two are adjacent | a `PIPE_EX`-deep shift of the prediction bridges the gap |
+| reservation look-ahead address | the lookup-stage request | the request one stage before commit |
+| writeback-queue key compares | combinational at commit | registered a stage early when the word spans several lanes |
+| passthrough release decision | evaluated at the commit port | evaluated on the second-stage request, where the MSHR decides |
+
+The MSHR itself is **not** deferred: its chain needs allocate and finalize
+exactly one cycle apart, so those stay in the first two stages at every
+depth. Reservations and passthrough ordering are keyed on line addresses, not
+cycle counts, so they are unaffected by depth.
+
+At `PIPE_EX = 0` every one of these collapses to the two-stage bank.
+
+---
+
+## 8. SimX model
+
+| mechanism | RTL | SimX |
+|---|---|---|
+| passthrough | MSHR entry + latched result word | a dedicated `AmoProbe` request type and an 8-entry passthrough table |
+| response routing | MSHR replay | the memory tag space is partitioned: passthrough ids sit above the MSHR ids |
+| self-invalidate | tag-store `invalidate` | the probe invalidates the addressed sector on a hit |
+| a dirty copy at the probe | cannot occur — levels above the LLC are write-through | the probe writes it back first |
+| age ordering | registered MSHR probes | the probe is deferred in `processInputs` while the line has a pending fill |
+| reservations | bounded stations, holder protected | one reservation per hart |
+
+The models agree on results and differ in `LR`/`SC` retry counts, so an
+application that uses `LR`/`SC` cannot host a `model_parity` case
+([`atomic_memory_operations.md`](atomic_memory_operations.md) §8).
+
+---
+
+## 9. Verification
+
+The multi-core cases in
+[`ci/testcases/amo.yaml`](../../ci/testcases/amo.yaml) run
+`tests/regression/amo` over both hierarchies:
+
+| case | hierarchy | drivers | tier |
+|---|---|---|---|
+| `mc-l2` | 4 cores, 4 × L1 → 1 × L2 | simx | full |
+| `mc-l3` | 4 cores, L1 → L2 → L3, `L2_WRITEBACK = 0` | simx, rtlsim | full |
+
+Two cases in the suite exist for this design:
+
+- `lrsc_counter` — the forward-progress case for §5.4. It livelocks on a
+  design that lets any `LR` overwrite the station.
+- `self_consistency` — each hart caches a private word, atomically
+  increments it, and must read the increment back through a plain load. It
+  fails on a design without the self-invalidate (§5.2) or without commit
+  serialization (§5.6).
+
+`atomic_critical` is skipped when `cores > 1` (§6.2).
+
+---
+
+## 10. Not implemented
+
+- **A dedicated acquire-invalidate** (§6.2) — a consumer-side invalidate that
+  clears the inner cache's valid bits without the full flush walk, modeled
+  identically in RTL and SimX, with a regression case for fence-managed
+  visibility.
+- **rtlsim coverage of the L2-as-LLC hierarchy.** `mc-l2` runs on SimX only.
+- **Push coherence** with a directory or snoop filter (§4) — revisit only if
+  a strong cross-core guarantee is ever required.
+- **Per-line acquire invalidate**, finer than a whole-cache invalidate, if
+  profiling shows bulk invalidation costs hit rate.

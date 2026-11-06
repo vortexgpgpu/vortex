@@ -203,7 +203,6 @@ static int shrLogV(int iLogMode, int iErrNum, const char* cFormatString, va_list
 {
     static FILE* pFileStream0 = NULL;
     static FILE* pFileStream1 = NULL;
-    size_t szNumWritten = 0;
     char cFileMode [3];
 
     // if the sample log file is closed and the call incudes a "write-to-file", open file for writing
@@ -318,12 +317,12 @@ static int shrLogV(int iLogMode, int iErrNum, const char* cFormatString, va_list
         // print string to console if flagged
         if (iLogMode & LOGCONSOLE) 
         {
-            szNumWritten = printf ("\n !!! Error # %i at ", iErrNum);                           // console 
+            printf ("\n !!! Error # %i at ", iErrNum);                           // console 
         }
         // print string to file if flagged
         if (iLogMode & LOGFILE) 
         {
-            szNumWritten = fprintf (pFileStream0, "\n !!! Error # %i at ", iErrNum);            // sample log file
+            fprintf (pFileStream0, "\n !!! Error # %i at ", iErrNum);            // sample log file
         }
     }
 
@@ -347,14 +346,14 @@ static int shrLogV(int iLogMode, int iErrNum, const char* cFormatString, va_list
             // character is not '%', so print it verbatim to console and/or files as flagged
             if (iLogMode & LOGCONSOLE) 
             {
-                szNumWritten = putc(*pStr, stdout);                                             // console 
+                putc(*pStr, stdout);                                             // console 
             }
             if (iLogMode & LOGFILE)    
             {
-                szNumWritten  = putc(*pStr, pFileStream0);                                      // sample log file
+                putc(*pStr, pFileStream0);                                      // sample log file
                 if (iLogMode & MASTER)                          
                 {
-                    szNumWritten = putc(*pStr, pFileStream1);                                   // master log file
+                    putc(*pStr, pFileStream1);                                   // master log file
                 }
             }
         } 
@@ -399,16 +398,26 @@ static int shrLogV(int iLogMode, int iErrNum, const char* cFormatString, va_list
             {
                 case '%':   // special handling for string of %%%%
                 {
+                    // collapse each "%%" to a literal '%', as printf would
+                    std::string sLiteral;
+                    for (size_t i = 0; i < sFormatSpec.size(); ++i)
+                    {
+                        sLiteral += sFormatSpec[i];
+                        if ((sFormatSpec[i] == '%') && (i + 1 < sFormatSpec.size()) && (sFormatSpec[i + 1] == '%'))
+                        {
+                            ++i;
+                        }
+                    }
                     if (iLogMode & LOGCONSOLE) 
                     {
-                        szNumWritten = printf(sFormatSpec.c_str());                             // console 
+                        fputs(sLiteral.c_str(), stdout);                        // console 
                     }
                     if (iLogMode & LOGFILE)
                     {
-                        szNumWritten = fprintf (pFileStream0, sFormatSpec.c_str());             // sample log file
+                        fputs(sLiteral.c_str(), pFileStream0);                  // sample log file
                         if (iLogMode & MASTER)                          
                         {
-                            szNumWritten  = fprintf(pFileStream1, sFormatSpec.c_str());         // master log file
+                            fputs(sLiteral.c_str(), pFileStream1);              // master log file
                         }
                     }
                     continue;
@@ -420,14 +429,14 @@ static int shrLogV(int iLogMode, int iErrNum, const char* cFormatString, va_list
                     cArg = va_arg(vaArgList, char*);
                     if (iLogMode & LOGCONSOLE) 
                     {
-                        szNumWritten = printf(sFormatSpec.c_str(), cArg);                       // console 
+                        printf(sFormatSpec.c_str(), cArg);                       // console 
                     }
                     if (iLogMode & LOGFILE)
                     {
-                        szNumWritten = fprintf (pFileStream0, sFormatSpec.c_str(), cArg);       // sample log file
+                        fprintf (pFileStream0, sFormatSpec.c_str(), cArg);       // sample log file
                         if (iLogMode & MASTER)                          
                         {
-                            szNumWritten  = fprintf(pFileStream1, sFormatSpec.c_str(), cArg);   // master log file
+                            fprintf(pFileStream1, sFormatSpec.c_str(), cArg);   // master log file
                         }
                     }
                     continue;
@@ -439,14 +448,14 @@ static int shrLogV(int iLogMode, int iErrNum, const char* cFormatString, va_list
                     iArg = va_arg(vaArgList, int);
                     if (iLogMode & LOGCONSOLE) 
                     {
-                        szNumWritten = printf(sFormatSpec.c_str(), iArg);                       // console 
+                        printf(sFormatSpec.c_str(), iArg);                       // console 
                     }
                     if (iLogMode & LOGFILE)
                     {
-                        szNumWritten = fprintf (pFileStream0, sFormatSpec.c_str(), iArg);       // sample log file  
+                        fprintf (pFileStream0, sFormatSpec.c_str(), iArg);       // sample log file  
                         if (iLogMode & MASTER)                          
                         {
-                            szNumWritten  = fprintf(pFileStream1, sFormatSpec.c_str(), iArg);   // master log file
+                            fprintf(pFileStream1, sFormatSpec.c_str(), iArg);   // master log file
                         }
                     }
                     continue;
@@ -460,14 +469,14 @@ static int shrLogV(int iLogMode, int iErrNum, const char* cFormatString, va_list
                     uiArg = va_arg(vaArgList, unsigned int);
                     if (iLogMode & LOGCONSOLE)                                                  
                     {
-                        szNumWritten = printf(sFormatSpec.c_str(), uiArg);                      // console 
+                        printf(sFormatSpec.c_str(), uiArg);                      // console 
                     }
                     if (iLogMode & LOGFILE)
                     {
-                        szNumWritten = fprintf (pFileStream0, sFormatSpec.c_str(), uiArg);      // sample log file
+                        fprintf (pFileStream0, sFormatSpec.c_str(), uiArg);      // sample log file
                         if (iLogMode & MASTER)                          
                         {
-                            szNumWritten  = fprintf(pFileStream1, sFormatSpec.c_str(), uiArg);  // master log file
+                            fprintf(pFileStream1, sFormatSpec.c_str(), uiArg);  // master log file
                         }
                     }
                     continue;
@@ -484,14 +493,14 @@ static int shrLogV(int iLogMode, int iErrNum, const char* cFormatString, va_list
                     dArg = va_arg(vaArgList, double);
                     if (iLogMode & LOGCONSOLE) 
                     {
-                        szNumWritten = printf(sFormatSpec.c_str(), dArg);                       // console 
+                        printf(sFormatSpec.c_str(), dArg);                       // console 
                     }
                     if (iLogMode & LOGFILE)
                     {
-                        szNumWritten = fprintf (pFileStream0, sFormatSpec.c_str(), dArg);       // sample log file
+                        fprintf (pFileStream0, sFormatSpec.c_str(), dArg);       // sample log file
                         if (iLogMode & MASTER)                          
                         {
-                            szNumWritten  = fprintf(pFileStream1, sFormatSpec.c_str(), dArg);   // master log file
+                            fprintf(pFileStream1, sFormatSpec.c_str(), dArg);   // master log file
                         }
                     }
                     continue;
@@ -501,14 +510,14 @@ static int shrLogV(int iLogMode, int iErrNum, const char* cFormatString, va_list
                     // print arg of unknown/unsupported type to console and/or file if flagged
                     if (iLogMode & LOGCONSOLE)                          // console 
                     {
-                        szNumWritten = putc(*pStr, stdout);
+                        putc(*pStr, stdout);
                     }
                     if (iLogMode & LOGFILE)    
                     {
-                        szNumWritten  = putc(*pStr, pFileStream0);      // sample log file
+                        putc(*pStr, pFileStream0);      // sample log file
                         if (iLogMode & MASTER)                          
                         {
-                            szNumWritten  = putc(*pStr, pFileStream1);  // master log file
+                            putc(*pStr, pFileStream1);  // master log file
                         }
                     }
                 }

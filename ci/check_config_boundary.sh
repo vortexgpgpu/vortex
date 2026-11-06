@@ -32,7 +32,7 @@ if [ -n "$hits" ]; then
   echo "vx_device_query() for device properties, config.mk for build"
   echo "parameters, or the gen_config.py --cflags -D injection for"
   echo "compile-time hardware config."
-  echo "See docs/proposals/config_hw_sw_layering_proposal.md"
+  echo "See docs/designs/build_configuration_system.md"
   exit 1
 fi
 

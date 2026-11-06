@@ -323,25 +323,25 @@ public:
       sfu->dxa_req_out.bind(&dxa_core_->dxa_req_in.at(c));
     }
 
-    // DxaCore::lmem_req_out[c] → core's LocalMem.Inputs[port_dxa].
+    // DxaCore::lmem_req_out[c] → core's LocalMem DMA port (first client).
     // A tx_callback on the channel fires barrier_event_release for each
     // DXA-write packet carrying notify_done at the cycle LMEM receives it.
-    uint32_t port_dxa = LSU_NUM_REQS;
-  #ifdef VX_CFG_EXT_TCU_ENABLE
-    port_dxa += 1;
-  #endif
+    static_assert(DxaCore::LMEM_PORTS_PER_CORE == LocalMem::DMA_PORTS,
+                  "a DXA row write spans the LMEM DMA ports");
     for (uint32_t c = 0; c < cores_per_socket; ++c) {
       Core* core = cores_.at(c).get();
-      auto& ch = dxa_core_->lmem_req_out.at(c);
-      ch.bind(&core->local_mem()->Inputs.at(port_dxa));
-      ch.tx_callback([core](const MemReq& req, uint64_t /*cycles*/) {
-        if (req.is_write() && req.flags.dxa_notify_done) {
-          // notify_bar_id arrives in raw (encoded) form: low byte = cta_no,
-          // bits[30:8] = bar_no. Decode to flat barrier index before release.
-          uint32_t decoded = bar_decode_id(req.flags.dxa_notify_bar_id, VX_CFG_NUM_BARRIERS);
-          core->barrier_event_release(decoded);
-        }
-      });
+      for (uint32_t p = 0; p < DxaCore::LMEM_PORTS_PER_CORE; ++p) {
+        auto& ch = dxa_core_->lmem_req_out.at(c * DxaCore::LMEM_PORTS_PER_CORE + p);
+        ch.bind(&core->local_mem()->DmaInputs.at(p));
+        ch.tx_callback([core](const MemReq& req, uint64_t /*cycles*/) {
+          if (req.is_write() && req.flags.dxa_notify_done) {
+            // notify_bar_id arrives in raw (encoded) form: low byte = cta_no,
+            // bits[30:8] = bar_no. Decode to flat barrier index before release.
+            uint32_t decoded = bar_decode_id(req.flags.dxa_notify_bar_id, VX_CFG_NUM_BARRIERS);
+            core->barrier_event_release(decoded);
+          }
+        });
+      }
     }
 #endif
   }

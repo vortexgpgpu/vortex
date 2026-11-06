@@ -52,6 +52,7 @@ void cleanup() {
     if (kernel)       vx_kernel_release(kernel);
     if (module_)      vx_module_release(module_);
     if (queue)        vx_queue_release(queue);
+    vx_device_dump_perf(device, stdout);
     vx_device_release(device);
   }
 }
@@ -88,7 +89,7 @@ int main(int /*argc*/, char* /*argv*/[]) {
       float* xform = reinterpret_cast<float*>(inst);
       xform[0] = 1.f; xform[1] = 0.f; xform[2]  = 0.f; xform[3]  = 0.f;
       xform[4] = 0.f; xform[5] = 1.f; xform[6]  = 0.f; xform[7]  = 0.f;
-      xform[8] = 0.f; xform[9] = 0.f; xform[10] = 1.f; xform[11] = tz;
+      xform[8] = 0.f; xform[9] = 0.f; xform[10] = 1.f; xform[11] = -tz;   // world->object
       uint32_t* inst_tail = reinterpret_cast<uint32_t*>(
           inst + RTU_INSTANCE_BLAS_OFF_OFF);
       inst_tail[0] = kBlasOff;

@@ -11,6 +11,16 @@ VORTEX_KN_PATH ?= $(ROOT_DIR)/sw/kernel
 
 KERNEL_LIB ?= vortex
 
+# WGMMA A-operand source: RS = A from registers, SS = A from shared memory
+# (B is always shared memory). Applies only to WGMMA-enabled apps, and only
+# when the caller has not already selected a mode, so -DWGMMA_SS or an
+# explicit -DWGMMA_RS both win. Defined once here rather than per app: the
+# WGMMA tests previously carried three different hand-rolled variants of
+# this default and two had lost it entirely.
+ifneq ($(findstring -DVX_CFG_TCU_WGMMA_ENABLE,$(CONFIGS)),)
+CONFIGS := $(if $(findstring -DWGMMA_RS,$(CONFIGS))$(findstring -DWGMMA_SS,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DWGMMA_RS)
+endif
+
 XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
 
 ifneq (,$(filter -DVX_CFG_EXT_C_ENABLE, $(XCONFIGS)))
@@ -35,11 +45,17 @@ else
 	ZACAS_EXT :=
 endif
 
+ifneq (,$(filter -DVX_CFG_EXT_ZFHMIN_ENABLE, $(XCONFIGS)))
+	ZFHMIN_EXT := _zfhmin
+else
+	ZFHMIN_EXT :=
+endif
+
 ifeq ($(XLEN),64)
-	VX_CFLAGS += -march=rv64imafd$(C_EXT)$(ZACAS_EXT) -mabi=lp64d
+	VX_CFLAGS += -march=rv64imafd$(C_EXT)$(ZACAS_EXT)$(ZFHMIN_EXT) -mabi=lp64d
 	STARTUP_ADDR ?= 0x180000000
 else
-	VX_CFLAGS += -march=rv32imaf$(C_EXT)$(ZACAS_EXT) -mabi=ilp32f
+	VX_CFLAGS += -march=rv32imaf$(C_EXT)$(ZACAS_EXT)$(ZFHMIN_EXT) -mabi=ilp32f
 	STARTUP_ADDR ?= 0x80000000
 endif
 
@@ -213,6 +229,11 @@ $(RT_LIB_DIR)/libvortex.so:
 	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/stub HOST_ARCH=$(HOST_ARCH) DESTDIR=$(VORTEX_RT_LIB)
 endif
 
+# The runtime for one driver, built with the CONFIGS this app resolved, so a
+# caller that builds ahead of the run builds the model the run will use.
+runtime-%:
+	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/$* DESTDIR=$(VORTEX_RT_LIB)
+
 run-simx: $(PROJECT) kernel.vxbin
 	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/simx DESTDIR=$(VORTEX_RT_LIB)
 	LD_LIBRARY_PATH=$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=simx ./$(PROJECT) $(OPTS)
@@ -248,7 +269,7 @@ run-aved: $(PROJECT) kernel.vxbin
 ifeq ($(filter hw sim, $(TARGET)),)
 	SCOPE_JSON_PATH=$(VORTEX_RT_LIB)/scope.json LD_LIBRARY_PATH=$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=aved ./$(PROJECT) $(OPTS)
 else
-	SCOPE_JSON_PATH=$(FPGA_BIN_DIR)/scope.json VRT_DEVICE_BDF=$(VRT_DEVICE_BDF) VRT_VBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.vbin $(if $(filter hw,$(TARGET)),VORTEX_AVED_NO_PROGRAM=$(or $(VORTEX_AVED_NO_PROGRAM),1)) LD_LIBRARY_PATH=$(VRT_HOME)/lib:$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=aved ./$(PROJECT) $(OPTS)
+	SCOPE_JSON_PATH=$(FPGA_BIN_DIR)/scope.json VRT_DEVICE_BDF=$(VRT_DEVICE_BDF) VRT_VBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.vbin LD_LIBRARY_PATH=$(VRT_HOME)/lib:$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=aved ./$(PROJECT) $(OPTS)
 endif
 
 .depend: $(SRCS)

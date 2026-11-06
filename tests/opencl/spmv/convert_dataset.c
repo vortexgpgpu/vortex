@@ -83,7 +83,6 @@ int coo_to_jds(char *mtx_filename, int pad_rows, int warp_size, int pack_size,
   FILE *f;
   int nz;
   int i;
-  float *val;
   mat_entry *entries;
   row_stats *stats;
   int rows, cols;
@@ -126,10 +125,16 @@ int coo_to_jds(char *mtx_filename, int pad_rows, int warp_size, int pack_size,
 
   for (i = 0; i < nz; i++, cur_i++) {
     if (!binary) {
-      fscanf(f, "%d %d %f\n", &entries[cur_i].row, &entries[cur_i].col,
-             &entries[cur_i].val);
+      if (fscanf(f, "%d %d %f\n", &entries[cur_i].row, &entries[cur_i].col,
+                 &entries[cur_i].val) != 3) {
+        printf("Could not read matrix entry %d.\n", i);
+        exit(1);
+      }
     } else {
-      fscanf(f, "%d %d\n", &entries[cur_i].row, &entries[cur_i].col);
+      if (fscanf(f, "%d %d\n", &entries[cur_i].row, &entries[cur_i].col) != 2) {
+        printf("Could not read matrix entry %d.\n", i);
+        exit(1);
+      }
       entries[cur_i].val = 1.0;
     }
     entries[cur_i].row--;
@@ -216,7 +221,7 @@ int coo_to_jds(char *mtx_filename, int pad_rows, int warp_size, int pack_size,
   if (debug_level >= 1) {
     printf("Padding data....%d rows, %d groups\n", rows, *nz_count_len);
   }
-  int pad_to, total_padding = 0, pack_to;
+  int pad_to = 0, total_padding = 0, pack_to;
   pad_rows *= pack_size; // change padding to account for packed items
   for (i = 0; i < rows; i++) {
     // record JDS to real row number
@@ -281,7 +286,7 @@ int coo_to_jds(char *mtx_filename, int pad_rows, int warp_size, int pack_size,
    */
   irow = 0;      // keep track of which row we are in inside the fubini-ed array
   int idata = 0; // position within final data array
-  int entry_index, j;
+  int entry_index;
   int ipack; // used in internal loop for writing packed values
   mat_entry entry;
   while (1) {

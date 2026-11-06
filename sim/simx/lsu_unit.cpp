@@ -17,11 +17,13 @@
 #include <string.h>
 #include <assert.h>
 #include <util.h>
+#include <nan_box.h>
 #include "debug.h"
 #include "core.h"
 #include "local_mem_switch.h"
 #include "constants.h"
 #include "mem_block_pool.h"
+#include "stack_interleave.h"
 #include "VX_types.h"
 #include "VX_config.h"
 
@@ -163,6 +165,15 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 			// upper bits into the 64-bit address field.
 			e.addr = Word(rs1_data[t].i + (uint64_t)stride * rs2_data[t].u + offset);
 			e.size = data_bytes;
+			if (StackInterleave::contains(e.addr)) {
+				// Interleaving is word-granular; a wider access would straddle two threads.
+				if (e.size > StackInterleave::WORD_SIZE) {
+					std::cout << "Error: stack access wider than a word: addr=0x" << std::hex
+					          << e.addr << std::dec << ", size=" << e.size << std::endl;
+					std::abort();
+				}
+				e.addr = StackInterleave::map(e.addr);
+			}
 			// The datapath has no misalignment support: only a naturally aligned
 			// access is guaranteed to sit inside one memory block, which is what
 			// lets a lane's payload pack into a single block downstream.
@@ -243,6 +254,7 @@ void LsuUnit::process_response_step(uint32_t b) {
 		uint32_t byte_off   = (data_bs == 0 || data_bs == 0x0F) ? 0
 		                    : (uint32_t)__builtin_ctz(data_bs);
 		bool nan_box = dst_float && (data_bytes < 8);
+		bool half_float = VX_CFG_EXT_ZFHMIN_ENABLED && dst_float && (entry.lsu_args.width == 1);
 
 		for (uint32_t lane = 0; lane < lsu_rsp.mask.size(); ++lane) {
 			if (!lsu_rsp.mask.test(lane))
@@ -256,8 +268,11 @@ void LsuUnit::process_response_step(uint32_t b) {
 			uint64_t formatted = 0;
 			switch (entry.lsu_args.width) {
 			case 0: // LB
-			case 1: // LH
 				formatted = (uint64_t)(int64_t)sext((Word)read_data, data_width);
+				break;
+			case 1: // LH (raw bits for a Zfhmin Float dest, NaN-boxed below)
+				formatted = half_float ? read_data
+				                       : (uint64_t)(int64_t)sext((Word)read_data, data_width);
 				break;
 			case 2: // LW (sign-ext for Integer dest; raw bits for Float dest, NaN-boxed below)
 				formatted = dst_float ? read_data
@@ -274,8 +289,9 @@ void LsuUnit::process_response_step(uint32_t b) {
 			}
 			// Place at bytesel-specified position; OR-in NaN-box for Float dest.
 			auto& dst = entry.trace->dst_data.at(lane_info.tid);
+			uint32_t box_bits = half_float ? 16 : 32;
 			dst.u64 = (formatted << (8 * byte_off))
-			        | (nan_box ? 0xFFFFFFFF00000000ull : 0);
+			        | (nan_box ? nanbox::box(0, box_bits) : 0);
 		}
 	}
 	entry.count -= lsu_rsp.mask.count(); // track remaining
@@ -318,6 +334,13 @@ void LsuUnit::ingest_inputs(uint32_t b) {
 	auto lsu_type_tag = std::get_if<LsuType>(&trace->op_type);
 	if (lsu_type_tag && *lsu_type_tag == LsuType::FENCE && !state.req_queue.empty())
 		return;
+	const bool is_read = !lsu_type_tag || *lsu_type_tag == LsuType::LOAD;
+	if (is_read) {
+		if (state.pending_reqs.size() + state.staged_reads >= VX_CFG_LSU_PENDING_SIZE) {
+			return;
+		}
+		++state.staged_reads;
+	}
 	state.req_queue.push(trace);
 	input.pop();
 }
@@ -431,6 +454,7 @@ void LsuUnit::process_request_step(uint32_t b) {
 	// drained.
 	if (state.remain_addrs == 0) {
 		this->compute_addrs(b, trace);
+		state.head_staged = !is_write || is_amo;
 	}
 
 	// AMO always returns to rd, so it is not direct-commit even though it
@@ -530,6 +554,11 @@ void LsuUnit::process_request_step(uint32_t b) {
 			} else {
 				entry_args = std::get<IntrLsuArgs>(trace->instr_ptr->get_args());
 			}
+			if (state.head_staged) {
+				// the slot reserved at entry becomes this request's tag
+				--state.staged_reads;
+				state.head_staged = false;
+			}
 			tag = state.pending_reqs.allocate({trace, count, is_eop, std::move(lane_entries), entry_args, true});
 		}
 		lsu_req.tag  = tag;
@@ -552,6 +581,11 @@ void LsuUnit::process_request_step(uint32_t b) {
 	if (state.remain_addrs == 0) {
 		if (direct_commit) {
 			Outputs.at(b).send(trace);
+		}
+		if (state.head_staged) {
+			// a read with no active lane never issues: return its reservation
+			--state.staged_reads;
+			state.head_staged = false;
 		}
 		state.req_queue.pop();
 	}

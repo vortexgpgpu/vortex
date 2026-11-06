@@ -26,3 +26,15 @@ tests:
   shape:
     l2cache: true
   args: -n128
+# A read must not observe stale data for an address whose write has not yet
+# returned its B response. Response reordering plus withholding builds the
+# response pool that lets the AFU's write path race its own refills;
+# stencil3d's eviction/refill pattern is the trigger.
+- id: axi-store-order
+  via: blackbox
+  drivers:
+  - xrt
+  app: stencil3d
+  env:
+    VX_MEM_RSP_REORDER: 1
+    VX_MEM_RSP_STALL: 6

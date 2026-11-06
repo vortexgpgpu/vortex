@@ -17,7 +17,7 @@ CONFIG_FILE = $(DESTDIR)/simx_config.stamp
 SRC_DIR = $(VORTEX_HOME)/sim/simx
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Werror
-CXXFLAGS += -fPIC -Wno-maybe-uninitialized
+CXXFLAGS += -fPIC
 CXXFLAGS += -I$(SRC_DIR) -I$(SRC_DIR)/dxa -I$(SRC_DIR)/tex -I$(SRC_DIR)/om -I$(SRC_DIR)/raster -I$(SRC_DIR)/rtu -I$(SRC_DIR)/kmu -I$(SRC_DIR)/mem -I$(SRC_DIR)/dtm -I$(SW_COMMON_DIR) -I$(SIM_COMMON_DIR) -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(THIRD_PARTY_DIR)
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/softfloat/source/include
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/ramulator/ext/spdlog/include
@@ -27,7 +27,7 @@ CXXFLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
 CXXFLAGS += $(CONFIGS)
 
 LDFLAGS += $(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
-LDFLAGS += -Wl,-rpath,$(THIRD_PARTY_DIR)/ramulator -L$(THIRD_PARTY_DIR)/ramulator -lramulator
+LDFLAGS += -Wl,-rpath,$(THIRD_PARTY_DIR)/ramulator -L$(THIRD_PARTY_DIR)/ramulator -lramulator -Wl,-rpath,$(THIRD_PARTY_DIR)/ramulator_ext -L$(THIRD_PARTY_DIR)/ramulator_ext -Wl,--push-state,--no-as-needed -lramulator-vortex -Wl,--pop-state
 
 XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
 
@@ -53,6 +53,12 @@ ifneq ($(filter -DVX_CFG_EXT_TCU_ENABLE, $(XCONFIGS)),)
 	CXXFLAGS += -I$(SRC_DIR)/tcu
 	SRCS += $(SRC_DIR)/tcu/tcu_unit.cpp
 	SRCS += $(SRC_DIR)/tcu/tcu_tbuf.cpp
+endif
+
+# Add MUFU extension sources
+ifneq ($(filter -DVX_CFG_EXT_MUFU_ENABLE, $(XCONFIGS)),)
+	SRCS += $(SRC_DIR)/mufu_unit.cpp
+	SRCS += $(SW_COMMON_DIR)/mufu.cpp
 endif
 
 # Add VM sources
@@ -100,6 +106,7 @@ ifneq ($(filter -DVX_CFG_EXT_RTU_ENABLE, $(XCONFIGS)),)
 	SRCS += $(SRC_DIR)/rtu/rtu_classifier.cpp
 	SRCS += $(SRC_DIR)/rtu/rtu_walker.cpp
 	SRCS += $(SRC_DIR)/rtu/rtu_memory.cpp
+	SRCS += $(SRC_DIR)/rtu/rtu_raylog.cpp
 endif
 
 # SST integration: build libvortex.so as the SST element library and
@@ -142,8 +149,10 @@ OBJS            := $(COMMON_OBJS) $(SIM_COMMON_OBJS) $(SRC_OBJS)
 MAIN_OBJ    := $(OBJ_DIR)/main.o
 DXA_OOO_TEST_OBJ  := $(OBJ_DIR)/tests/dxa_ooo_test.o
 DXA_OOO_TEST      := $(DESTDIR)/dxa_ooo_test
+RVC_TEST_OBJ      := $(OBJ_DIR)/tests/rvc_decompress_test.o
+RVC_TEST          := $(DESTDIR)/rvc_decompress_test
 
-DEPS := $(OBJS:.o=.d) $(MAIN_OBJ:.o=.d) $(DXA_OOO_TEST_OBJ:.o=.d)
+DEPS := $(OBJS:.o=.d) $(MAIN_OBJ:.o=.d) $(DXA_OOO_TEST_OBJ:.o=.d) $(RVC_TEST_OBJ:.o=.d)
 
 # generate .d files alongside .o files
 CXXFLAGS += -MMD -MP -MF $(@:.o=.d)
@@ -166,7 +175,7 @@ PROJECT := simx
 VORTEX_LIB := libvortex.so
 VORTEX_GEM5_LIB := libvortex-gem5.so
 
-.PHONY: all force test-dxa-ooo clean clean-lib clean-exe clean-obj libvortex clean-libvortex libvortex-gem5 clean-libvortex-gem5
+.PHONY: all force test-dxa-ooo test-rvc-decompress clean clean-lib clean-exe clean-obj libvortex clean-libvortex libvortex-gem5 clean-libvortex-gem5
 
 ifeq ($(USE_SST), 1)
 all: $(DESTDIR)/$(PROJECT) $(DESTDIR)/$(VORTEX_LIB)
@@ -205,6 +214,10 @@ $(DXA_OOO_TEST_OBJ): $(VORTEX_HOME)/tests/unittest/dxa_ooo/main.cpp $(CONFIG_FIL
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
+$(RVC_TEST_OBJ): $(VORTEX_HOME)/tests/unittest/rvc_decompress/main.cpp $(CONFIG_FILE)
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
 # Main executable
 $(DESTDIR)/$(PROJECT): $(OBJS) $(MAIN_OBJ)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
@@ -213,6 +226,12 @@ test-dxa-ooo: $(DXA_OOO_TEST)
 	$(DXA_OOO_TEST)
 
 $(DXA_OOO_TEST): $(OBJS) $(DXA_OOO_TEST_OBJ)
+	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+
+test-rvc-decompress: $(RVC_TEST)
+	$(RVC_TEST)
+
+$(RVC_TEST): $(OBJS) $(RVC_TEST_OBJ)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 # Shared library

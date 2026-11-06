@@ -248,61 +248,61 @@ tests:
   drivers:
   - rtlsim
   app: diverge
-  configs: -DVX_CFG_ISSUE_WIDTH=1 -DNUM_ALU_BLOCK=1 -DVX_CFG_NUM_ALU_LANES=1
+  configs: -DVX_CFG_ISSUE_WIDTH=1 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_ALU_LANES=1
 - id: diverge-22
   via: blackbox
   drivers:
   - rtlsim
   app: diverge
-  configs: -DVX_CFG_ISSUE_WIDTH=4 -DNUM_ALU_BLOCK=2 -DVX_CFG_NUM_ALU_LANES=2
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_NUM_ALU_BLOCKS=2 -DVX_CFG_NUM_ALU_LANES=2
 - id: diverge-23
   via: blackbox
   drivers:
   - rtlsim
   app: diverge
-  configs: -DVX_CFG_ISSUE_WIDTH=4 -DNUM_ALU_BLOCK=4 -DVX_CFG_NUM_ALU_LANES=4
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_NUM_ALU_BLOCKS=4 -DVX_CFG_NUM_ALU_LANES=4
 - id: diverge-24
   via: blackbox
   drivers:
   - simx
   app: diverge
-  configs: -DVX_CFG_ISSUE_WIDTH=1 -DNUM_ALU_BLOCK=1 -DVX_CFG_NUM_ALU_LANES=1
+  configs: -DVX_CFG_ISSUE_WIDTH=1 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_ALU_LANES=1
 - id: diverge-25
   via: blackbox
   drivers:
   - simx
   app: diverge
-  configs: -DVX_CFG_ISSUE_WIDTH=4 -DNUM_ALU_BLOCK=2 -DVX_CFG_NUM_ALU_LANES=2
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_NUM_ALU_BLOCKS=2 -DVX_CFG_NUM_ALU_LANES=2
 - id: diverge-26
   via: blackbox
   drivers:
   - simx
   app: diverge
-  configs: -DVX_CFG_ISSUE_WIDTH=4 -DNUM_ALU_BLOCK=4 -DVX_CFG_NUM_ALU_LANES=4
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_NUM_ALU_BLOCKS=4 -DVX_CFG_NUM_ALU_LANES=4
 - id: regression/vecadd-1
   via: blackbox
   drivers:
   - rtlsim
   app: regression/vecadd
-  configs: -DVX_CFG_ISSUE_WIDTH=2 -DNUM_FPU_BLOCK=1 -DVX_CFG_NUM_FPU_LANES=2
+  configs: -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_NUM_FPU_BLOCKS=1 -DVX_CFG_NUM_FPU_LANES=2
 - id: regression/vecadd-2
   via: blackbox
   drivers:
   - rtlsim
   app: regression/vecadd
-  configs: -DVX_CFG_ISSUE_WIDTH=4 -DNUM_FPU_BLOCK=4 -DVX_CFG_NUM_FPU_LANES=4
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_NUM_FPU_BLOCKS=4 -DVX_CFG_NUM_FPU_LANES=4
 - id: regression/vecadd-3
   via: blackbox
   drivers:
   - simx
   app: regression/vecadd
-  configs: -DVX_CFG_ISSUE_WIDTH=2 -DNUM_FPU_BLOCK=1 -DVX_CFG_NUM_FPU_LANES=2
+  configs: -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_NUM_FPU_BLOCKS=1 -DVX_CFG_NUM_FPU_LANES=2
 - id: regression/vecadd-4
   via: blackbox
   drivers:
   - simx
   app: regression/vecadd
-  configs: -DVX_CFG_ISSUE_WIDTH=4 -DNUM_FPU_BLOCK=4 -DVX_CFG_NUM_FPU_LANES=4
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_NUM_FPU_BLOCKS=4 -DVX_CFG_NUM_FPU_LANES=4
 - id: dogfood-5
   via: blackbox
   drivers:
@@ -343,22 +343,22 @@ tests:
   drivers:
   - rtlsim
   app: regression/vecadd
-  configs: -DVX_CFG_ISSUE_WIDTH=2 -DNUM_LSU_BLOCK=1 -DVX_CFG_NUM_LSU_LANES=2
+  configs: -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_LSU_LANES=2
 - id: regression/vecadd-6
   via: blackbox
   drivers:
   - rtlsim
   app: regression/vecadd
-  configs: -DVX_CFG_ISSUE_WIDTH=4 -DNUM_LSU_BLOCK=4 -DVX_CFG_NUM_LSU_LANES=4
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_NUM_LSU_BLOCKS=4 -DVX_CFG_NUM_LSU_LANES=4
 - id: regression/vecadd-7
   via: blackbox
   drivers:
   - simx
   app: regression/vecadd
-  configs: -DVX_CFG_ISSUE_WIDTH=2 -DNUM_LSU_BLOCK=1 -DVX_CFG_NUM_LSU_LANES=2
+  configs: -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_LSU_LANES=2
 - id: regression/vecadd-8
   via: blackbox
   drivers:
   - simx
   app: regression/vecadd
-  configs: -DVX_CFG_ISSUE_WIDTH=4 -DNUM_LSU_BLOCK=4 -DVX_CFG_NUM_LSU_LANES=4
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_NUM_LSU_BLOCKS=4 -DVX_CFG_NUM_LSU_LANES=4

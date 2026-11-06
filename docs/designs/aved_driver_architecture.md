@@ -8,12 +8,11 @@ contract, the three memory paths it has to support, and where it deliberately
 diverges from its sibling backends.
 
 It is the **backend deep-dive**. The device-side command protocol lives in
-[`command_processor.md`](command_processor.md), the AFU wrapper in
-[`fpga_afu_shell.md`](fpga_afu_shell.md), and the platform's address map in
-[`../aved_address_map.md`](../aved_address_map.md); none of that is repeated
-here. The SLASH stack itself (three-PF topology, `vrtd` wire protocol, VRT
-API, `vrtbin`/`system_map.xml`, buddy allocator, connectivity language) is
-documented in [`../kb/03_slash_architecture.md`](../kb/03_slash_architecture.md).
+[`command_processor.md`](command_processor.md) and the AFU wrapper in
+[`fpga_afu_shell.md`](fpga_afu_shell.md); neither is repeated here. The
+platform's address map is §9 below. The SLASH stack itself (three-PF
+topology, `vrtd` wire protocol, VRT API, `vrtbin`/`system_map.xml`, buddy
+allocator, connectivity language) is documented by the SLASH project.
 
 The V80 is **not an XDMA shell**, so XRT does not apply to it. That single fact
 is why this backend exists rather than being a variant of `xrt`.
@@ -100,12 +99,27 @@ a specific failure this platform can produce.
 `vrt::Device(bdf, vbin_path, program)` opens the board and optionally
 reprograms the PL; `vrt::Kernel` then parses the vbin's `system_map.xml`.
 
-`VORTEX_AVED_NO_PROGRAM=1` constructs with `program=false`. This matters
-because each open that programs the PL goes through `vrtd`'s design writer,
-which runs a reset sequence whenever the requested shell differs from the
-current one — and that toggles a **secondary bus reset** on the card's root
-port. With the design already resident (loaded over JTAG), skipping the
-reprogram removes that path entirely.
+The driver always programs (`program=true`), as the XRT driver's
+`load_xclbin()` does. There is no opt-out switch.
+
+There used to be one — `VORTEX_AVED_NO_PROGRAM=1` constructed with
+`program=false` — because each open that programs the PL goes through `vrtd`'s
+design writer, which runs its reset sequence only when the requested shell
+differs from the current one. On a board whose static shell was never written
+to OSPI flash, that comparison never settles: no reset runs, the design write
+fails with `Input/output error`, and the AMC can be left in `NO_AMC`, costing a
+recovery.
+
+That is a property of an **unflashed board**, not of the driver. Write the
+static shell to flash first (§5 of `xilinx_slash_setup.md`, *both* boot
+partitions) and programming on open is well-defined. Verified on silicon:
+consecutive programs with `v80-smi list` reporting a valid shell, sgemm passing
+each time, no AMC loss.
+
+The switch and the `/tmp/v80_resident_afu.path` fallback that let a run reuse
+whatever bitstream happened to be resident were both removed. Running against a
+resident image is what silently produces results attributed to the wrong
+bitstream when `FPGA_BIN_DIR` changes.
 
 ### 3.2 The transport gate
 
@@ -159,8 +173,7 @@ The reset is now sequenced in hardware (`VX_afu_reset_seq`): the AFU withholds
 new `AW`/`AR`, waits for every master's outstanding-transaction count to reach
 zero, and only then asserts the internal reset. If a master will not drain it
 **refuses** and raises `ap_ctrl` bit 5, which `init()` checks as
-`CTL_RESET_ERROR` and reports rather than proceeding. See
-[`../proposals/afu_reset_architecture_proposal.md`](../proposals/afu_reset_architecture_proposal.md).
+`CTL_RESET_ERROR` and reports rather than proceeding.
 
 **Confirmed on silicon**, 2026-08-27: `CTL_AP_RESET` completes and the card
 survives it; `ap_ctrl` reads back afterwards; the reset succeeds with
@@ -388,3 +401,29 @@ threads. `xrt` and `aved` both guard it.
    windows and the ZMQ server through public API.
 4. **Gate the build on timing closure.** The V80 flow packages a bitstream
    that does not meet timing without saying so.
+
+---
+
+## 9. Device address map
+
+The compute shell maps the AFU's device-memory port at `0x40_0000_0000` in
+both build flavours (the BRAM model in simulation, HBM in hardware). Vortex's
+allocator is based at `VX_MEM_USER_BASE_ADDR` and a 32-bit core cannot emit
+the aperture base, so `PLATFORM_MEMORY_OFFSET` rebases every device access
+once, at the bank port in `VX_afu_wrap.sv`, for the cores and the CP alike.
+The CP's device addresses come from the same allocator and pass through to
+the arbiter unmodified. The define is a sized Verilog literal; a decimal
+constant of that size is silently truncated to 0 by the Vivado front-end.
+
+The port is tagged `MEM`, not `HBM0`: a single HBM channel is a 1 GB
+aperture, and Vortex's 32-bit map places the stack just below the top of a
+4 GB space, so any kernel's first stack push would read an address nothing
+answers and stall the LSU. The `MEM` tag routes through the HBM VNOC at the
+same base with 32 GB of range. The simulation BRAM model is 128 MB and cannot
+be grown to 4 GB, so `TARGET=sim` cannot run kernels that touch the stack;
+loopback (`minimal -l`) remains the sim-side check of the CP DMA path.
+
+Simulated host buffers are drawn from VRT's DDR window, not its HBM window,
+so they cannot collide with device memory. The authoritative settings and
+their rationale are in
+[`platforms.mk`](../../hw/syn/xilinx/aved/platforms.mk).

@@ -1,0 +1,63 @@
+{
+  "name": "rtx5080",
+  "description": "NVIDIA GeForce RTX 5080 (GB203, Blackwell, sm_120) at its 2295 MHz base clock: one Vortex core per SM.",
+  "core": {
+    "VX_CFG_NUM_WARPS": 48,
+    "VX_CFG_NUM_THREADS": 32,
+    "VX_CFG_ISSUE_WIDTH": 4,
+    "VX_CFG_DCACHE_SIZE": 131072,
+    "VX_CFG_DCACHE_MSHR_SIZE": 24
+  },
+  "chip": {
+    "VX_CFG_NUM_CLUSTERS": 1,
+    "VX_CFG_NUM_CORES": 84,
+    "VX_CFG_L2_ENABLE": true,
+    "VX_CFG_L2_SIZE": 67108864,
+    "VX_CFG_L2_NUM_WAYS": 16,
+    "VX_CFG_L2_NUM_BANKS": 32,
+    "VX_CFG_L2_MSHR_SIZE": 192
+  },
+  "platform": {
+    "VX_CFG_PLATFORM_MEMORY_NUM_BANKS": 32,
+    "VX_CFG_PLATFORM_CLOCK_RATE": 2295,
+    "VX_CFG_PLATFORM_MEMORY_PEAK_BW": 960000,
+    "VX_CFG_PLATFORM_MEMORY_TYPE": "GDDR6",
+    "VX_CFG_PLATFORM_MEMORY_DATA_RATE": 15000,
+    "VX_CFG_PLATFORM_MEMORY_LATENCY": 339
+  },
+  "reference": {
+    "clock_mhz": 2295,
+    "l1_hit_cycles": 44.1,
+    "l2_hit_cycles": 354.4,
+    "dram_cycles": 802,
+    "dram_peak_bytes_per_cycle": 423,
+    "stream_efficiency": {
+      "4MiB": 0.795,
+      "16MiB": 0.894,
+      "64MiB": 0.919
+    },
+    "sgemm_cycles": {
+      "128": 24193,
+      "256": 45476,
+      "512": 270396,
+      "1024": 1845287
+    },
+    "stream_cycles": {
+      "4MiB": 25569,
+      "16MiB": 90741,
+      "64MiB": 427878
+    }
+  },
+  "sources": {
+    "NUM_CORES, NUM_WARPS, NUM_THREADS, ISSUE_WIDTH": "84 SMs, 48 resident warps/SM, 4 schedulers x 32 lanes (NVIDIA RTX Blackwell GPU Architecture whitepaper, App. B; cudaGetDeviceProperties on an RTX 5080)",
+    "DCACHE_SIZE": "128 KB L1/shared per SM (whitepaper App. B)",
+    "L2_SIZE, L2_NUM_WAYS": "64 MB L2 (whitepaper App. B); 16 ways as in GPGPU-Sim's Ampere/Hopper L2 configs",
+    "L2_NUM_BANKS": "32 banks as the nearest power of two to the 48 L2 slices measured by arXiv 2507.10789",
+    "DCACHE_MSHR_SIZE, L2_MSHR_SIZE": "384 L1 MSHR entries per SM (24 x 16 banks) and 192 per L2 slice, GPGPU-Sim SM86_RTX3070 (-gpgpu_cache:dl1 A:384:48, dl2 A:192:4)",
+    "PLATFORM_MEMORY_NUM_BANKS": "8 x 32-bit GDDR7 devices = 32 independent channels (whitepaper App. B)",
+    "PLATFORM_CLOCK_RATE, PLATFORM_MEMORY_PEAK_BW": "2295 MHz base clock, 960 GB/s (whitepaper App. B)",
+    "reference": "Nsight Compute on an RTX 5080 at its 2295 MHz base clock with a cold L2, 2026-10-05",
+    "PLATFORM_MEMORY_TYPE, PLATFORM_MEMORY_DATA_RATE": "30 Gbps GDDR7 x8 channels modelled as GDDR6 x16 channels at 15000 MT/s: the same channel count, 32 B burst time and 960 GB/s (32 x 2 B x 15 GT/s)",
+    "PLATFORM_MEMORY_LATENCY": "339 core cycles of PHY/NoC latency: the 407 calibrated in SimX against the 802-cycle pointer-chase DRAM latency in 'reference', less the 68 cycles JEDEC GDDR6 timing adds to the device's row-conflict latency (derived, not re-run; recalibrate with a pointer chase when the memory model changes)"
+  }
+}

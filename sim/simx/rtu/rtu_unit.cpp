@@ -75,6 +75,10 @@ namespace {
 inline uint32_t fp_src_bits(const instr_trace_t* trace, uint32_t src, uint32_t t) {
   return static_cast<uint32_t>(trace->src_data[src].at(t).u64 & 0xffffffffu);
 }
+
+// The scene base rides the arm doorbell as a device address, MEM_ADDR_WIDTH wide.
+constexpr uint64_t kSceneAddrMask = (VX_CFG_MEM_ADDR_WIDTH >= 64)
+    ? ~uint64_t(0) : ((uint64_t(1) << VX_CFG_MEM_ADDR_WIDTH) - 1);
 } // namespace
 
 instr_trace_t* RtuUnit::process_wait(instr_trace_t* trace, uint32_t block_id) {
@@ -260,7 +264,7 @@ void RtuUnit::apply_response(const RtuRsp& rsp) {
     auto& lregs = wregs.at(t);
     // Written by the RTU, not by any instruction: the payload pointer rode the
     // arm and the hitAttribute rode the CONTINUE that accepted this hit.
-    lregs[VX_RT_PAYLOAD_PTR_LO]     = trace_payload_.at(rsp.warp_id);
+    stage_payload_ptr(lregs, rsp.warp_id);
     lregs[VX_RT_HIT_ATTR_0]         = rsp.hit_attr[t];
     lregs[VX_RT_HIT_T]              = float_to_bits(rsp.hit_t[t]);
     lregs[VX_RT_HIT_BARY_U]         = float_to_bits(rsp.hit_bary_u[t]);
@@ -280,6 +284,14 @@ void RtuUnit::apply_response(const RtuRsp& rsp) {
   }
 }
 
+void RtuUnit::stage_payload_ptr(RtuWindow::LaneRegs& lregs, uint32_t wid) const {
+  uint64_t payload = trace_payload_.at(wid);
+  lregs[VX_RT_PAYLOAD_PTR_LO] = uint32_t(payload);
+#ifdef VX_CFG_XLEN_64
+  lregs[VX_RT_PAYLOAD_PTR_LO + 1] = uint32_t(payload >> 32);
+#endif
+}
+
 void RtuUnit::apply_callback_payload(const RtuRsp& rsp) {
   // Stage candidate-hit attrs + cb_type + cb_handle into the RTU regs
   // for the lanes whose rays yielded, so the dispatcher's vx_rt_get
@@ -295,7 +307,7 @@ void RtuUnit::apply_callback_payload(const RtuRsp& rsp) {
     // The callback shaders read the tracing shader's payload pointer, and they
     // are a different shader — it cannot reach them any other way. A closest-hit
     // shader likewise reads the accepted hit's attribute.
-    lregs[VX_RT_PAYLOAD_PTR_LO]     = trace_payload_.at(rsp.warp_id);
+    stage_payload_ptr(lregs, rsp.warp_id);
     lregs[VX_RT_HIT_ATTR_0]         = rsp.hit_attr[t];
     lregs[VX_RT_HIT_T]              = float_to_bits(rsp.hit_t[t]);
     lregs[VX_RT_HIT_BARY_U]         = float_to_bits(rsp.hit_bary_u[t]);
@@ -394,6 +406,10 @@ Instr::Ptr RtuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
     default:
       std::abort();
     }
+    // The RTU takes one ray at a time: no other warp of the issue slot issues
+    // between its beats.
+    uop->set_fu_lock(uop_index == 0);
+    uop->set_fu_unlock(uop_index == total - 1);
   } else {
     std::abort();  // only TRACE / GETWF / GETW are SFU macro-ops
   }
@@ -433,7 +449,7 @@ instr_trace_t* RtuUnit::process_trace_uop(instr_trace_t* trace, uint32_t block_i
   case 0: {
     // GP config uop: the pool slot was claimed at issue (trace2_reserve_slot),
     // so this uop has no backpressure source. Unpack the lane-packed config
-    // (lane0=scene, lane1=payload, lane2=flags, lane3=cull — the implicit
+    // (lane1=scene, lane2=payload, lane3=flags|cull — the implicit
     // vx_wgather layout) and stage it.
     int32_t slot = trace_slot_.at(wid);
     assert(slot >= 0 && "TRACE uop0 issued without a reserved pool slot");
@@ -444,12 +460,12 @@ instr_trace_t* RtuUnit::process_trace_uop(instr_trace_t* trace, uint32_t block_i
     uint32_t flagscull = static_cast<uint32_t>(cfg.at(3).u);
     // Warp-uniform: it rides the arm doorbell, so it is staged here, not written
     // into the window. The RTU writes the payload pointer back with the record.
-    trace_payload_.at(wid) = static_cast<uint32_t>(cfg.at(2).u);
+    trace_payload_.at(wid) = cfg.at(2).u;
     trace_flags_.at(wid)   = flagscull & 0xffffu;
     trace_cull_.at(wid)    = flagscull >> 16;
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       if (!trace->tmask.test(t)) continue;
-      trace_scene_.at(wid)[t] = static_cast<uint32_t>(cfg.at(1).u);
+      trace_scene_.at(wid)[t] = uint64_t(cfg.at(1).u) & kSceneAddrMask;
       trace->dst_data[t].u    = uint32_t(slot);  // handle returns early
     }
     return trace;

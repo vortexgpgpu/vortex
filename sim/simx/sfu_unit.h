@@ -35,6 +35,9 @@
 #ifdef VX_CFG_EXT_RTU_ENABLE
 #include "rtu/rtu_unit.h"
 #endif
+#ifdef VX_CFG_EXT_MUFU_ENABLE
+#include "mufu_unit.h"
+#endif
 
 namespace vortex {
 
@@ -55,6 +58,10 @@ class RtuCore;
 class SfuUnit : public FuncUnit<VX_CFG_NUM_SFU_BLOCKS> {
 public:
 	SfuUnit(const SimContext& ctx, const char* name, Core*);
+
+	// Resolved warp-control op of a stalled warp, registered toward the
+	// scheduler.
+	SimChannel<WarpCtl> warp_ctl_out;
 
 	CsrUnit& csr_unit() { return *csr_unit_; }
 
@@ -154,6 +161,9 @@ private:
 #endif
 #ifdef VX_CFG_EXT_RTU_ENABLE
 	std::unique_ptr<RtuUnit>    rtu_unit_;
+#endif
+#ifdef VX_CFG_EXT_MUFU_ENABLE
+	MufuUnit mufu_unit_;
 #endif
 };
 

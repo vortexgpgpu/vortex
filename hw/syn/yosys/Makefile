@@ -2,7 +2,6 @@ ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
 include $(ROOT_DIR)/hw/syn/common.mk    # SV2V_PATH/YOSYS_PATH/STA_PATH + exported SV2V/YOSYS/STA
 
-CLOCK_FREQ	?= 800
 DELAY_UNC 	?= 0.02
 DELAY_IO  	?= 0.05
 ABC_DRIVER_CELL ?=
@@ -31,23 +30,37 @@ endif
 SRC_DIR := $(VORTEX_HOME)/hw/syn/yosys
 LIB_DIR := $(VORTEX_HOME)/hw/syn/libs
 ASAP7_DIR := $(ROOT_DIR)/hw/syn/libs/asap7
-ASAP7_INSTALL := $(ROOT_DIR)/ci/asap7_install.sh
+ASAP7_INSTALL := $(ASAP7_DIR)/install.sh
 ASAP7_LIB := $(ASAP7_DIR)/lib/asap7_$(ASAP7_VT)_$(CORNER).lib
 ASAP7_CELL_MODELS := $(ASAP7_DIR)/verilog/asap7_$(ASAP7_VT)_cells.v
 
 ifeq ($(PDK),asap7)
 DEFAULT_LIB := $(ASAP7_LIB)
+DEFAULT_CLOCK_FREQ := 800
 ifeq ($(strip $(ABC_DRIVER_CELL)),)
 ABC_DRIVER_CELL := BUFx4_ASAP7_75t_R
 endif
 ifeq ($(strip $(ABC_LOAD)),)
 ABC_LOAD := 5.0
 endif
+# ASAP7 ships a non-inverting flop only at x4 drive (DFFHQx4, 0.3645) against
+# DFFHQNx1 (0.2916) with an inverted output. dfflibmap picks one cell per FF
+# type: yosys 0.57 took the cheapest, 0.69 prefers non-inverting, which mapped
+# every flop in the tex DUT to x4 for +25% sequential area and no Fmax gain.
+# Withhold them so flop area does not ride on that preference.
+ifeq ($(strip $(DFF_DONT_USE)),)
+DFF_DONT_USE := *DFFHQx4* *DFFLQx4*
+endif
 else ifeq ($(PDK),nangate45)
 DEFAULT_LIB := $(LIB_DIR)/NangateOpenCellLibrary_typical.lib
+DEFAULT_CLOCK_FREQ := 800
 else
 $(error Unsupported PDK=$(PDK); expected asap7 or nangate45)
 endif
+
+# Target clock, defaulted per PDK above. It must bind for Fmax to mean anything:
+# a design that closes with slack reports its target back, not its capability.
+CLOCK_FREQ ?= $(DEFAULT_CLOCK_FREQ)
 
 ifneq ($(strip $(LIB_TGT)),)
 SYN_LIB_ENV := LIB_TGT=$(LIB_TGT)
@@ -110,14 +123,20 @@ CONFIGS_8c	:= -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=8  -DVX_CFG_L2_ENABLE
 CONFIGS_16c	:= -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=16 -DVX_CFG_L2_ENABLE
 CONFIGS_32c := -DVX_CFG_NUM_CLUSTERS=2 -DVX_CFG_NUM_CORES=16 -DVX_CFG_L2_ENABLE
 CONFIGS_64c := -DVX_CFG_NUM_CLUSTERS=4 -DVX_CFG_NUM_CORES=16 -DVX_CFG_L2_ENABLE
-CONFIGS += $(CONFIGS_$(NUM_CORES)c)
+override CONFIGS += $(CONFIGS_$(NUM_CORES)c)
 endif
 
-CONFIGS += -DSYNTHESIS -DASIC -DYOSYS
+# `override`, because these are facts about this flow, not preferences: without
+# ASIC the RAM macros infer to flip-flops (a cache DUT lands at a million cells
+# and zero SRAM area) and without SYNTHESIS the simulation-only constructs come
+# along. A caller that sets CONFIGS on the MAKE COMMAND LINE would otherwise kill
+# every `CONFIGS +=` in this file silently -- command-line variables win over
+# `+=`, and nothing warns. Extra defines belong in EXTRA_CONFIGS below.
+override CONFIGS += -DSYNTHESIS -DASIC -DYOSYS
 
 # Caller-supplied extra design macros (e.g. enabling extensions on a stock top).
 # Folded in before XCONFIGS so the conditional include blocks below pick them up.
-CONFIGS += $(EXTRA_CONFIGS)
+override CONFIGS += $(EXTRA_CONFIGS)
 
 XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
 
@@ -224,6 +243,7 @@ techmap: $(SYN_SRC_DEPS) $(SYN_LIB_DEPS) | $(BUILD_DIR)
 	SDC_FILE=$(SDC_FILE) \
 	BB_MODULES="$(BB_MODULES)" \
 	CLOCK_FREQ=$(CLOCK_FREQ) \
+	DFF_DONT_USE="$(DFF_DONT_USE)" \
 	ABC_DRIVER_CELL=$(ABC_DRIVER_CELL) \
 	ABC_LOAD=$(ABC_LOAD) \
 	YOSYS_FLATTEN=$(YOSYS_FLATTEN) \
@@ -242,6 +262,7 @@ timing: $(SYN_SRC_DEPS) $(SYN_LIB_DEPS) | $(BUILD_DIR)
 	CLOCK_FREQ=$(CLOCK_FREQ) \
 	DELAY_UNC=$(DELAY_UNC) \
 	DELAY_IO=$(DELAY_IO) \
+	DFF_DONT_USE="$(DFF_DONT_USE)" \
 	ABC_DRIVER_CELL=$(ABC_DRIVER_CELL) \
 	ABC_LOAD=$(ABC_LOAD) \
 	YOSYS_FLATTEN=$(YOSYS_FLATTEN) \
@@ -253,6 +274,8 @@ timing: $(SYN_SRC_DEPS) $(SYN_LIB_DEPS) | $(BUILD_DIR)
 	TOOL_DIR=$(SCRIPT_DIR) \
 	RUN_STA=1 \
 	$(SRC_DIR)/run_synth.sh
+	@$(SRC_DIR)/synth_summary.py --reports $(BUILD_DIR)/reports \
+	  --top $(TOP_LEVEL_ENTITY) --clock-mhz $(CLOCK_FREQ)
 
 gate-sim: techmap asap7-models
 	@if [ "$(PDK)" != "asap7" ]; then echo "ERROR: gate-sim requires PDK=asap7 functional models" >&2; exit 1; fi

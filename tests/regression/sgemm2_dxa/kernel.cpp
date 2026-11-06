@@ -11,9 +11,9 @@ constexpr uint32_t kDescB = 1;
 // Accumulate partial sum from shared memory tiles.
 // shA layout: [tile_size × chunk_k], row-major (row = l_row, col = k)
 // shB layout: [chunk_k × tile_size], row-major (row = k, col = l_col)
-static inline void gemm_accumulate(TYPE& sum, const TYPE* shA, const TYPE* shB, uint32_t tile_size,
-                                   uint32_t chunk_k, uint32_t l_row, uint32_t l_col) {
-  for (uint32_t k = 0; k < chunk_k; ++k) {
+static inline void gemm_accumulate(TYPE& sum, const TYPE* shA, const TYPE* shB, size_t tile_size,
+                                   size_t chunk_k, size_t l_row, size_t l_col) {
+  for (size_t k = 0; k < chunk_k; ++k) {
     sum += shA[l_row * chunk_k + k] * shB[k * tile_size + l_col];
   }
 }
@@ -21,25 +21,25 @@ static inline void gemm_accumulate(TYPE& sum, const TYPE* shA, const TYPE* shB, 
 __kernel void kernel_main(kernel_arg_t* arg) {
   auto C = reinterpret_cast<TYPE*>(arg->C_addr);
 
-  const uint32_t size      = arg->size;
-  const uint32_t tile_size = arg->tile_size;
-  const uint32_t chunk_k   = arg->chunk_k;
+  const size_t size        = arg->size;
+  const size_t tile_size   = arg->tile_size;
+  const size_t chunk_k     = arg->chunk_k;
   const uint32_t mode      = arg->mode;
 
   // Global and local thread coordinates.
-  const uint32_t row_base = blockIdx.x * tile_size;
-  const uint32_t col_base = blockIdx.y * tile_size;
-  const uint32_t l_row    = threadIdx.x;
-  const uint32_t l_col    = threadIdx.y;
-  const uint32_t g_row    = row_base + l_row;
-  const uint32_t g_col    = col_base + l_col;
+  const size_t row_base = blockIdx.x * tile_size;
+  const size_t col_base = blockIdx.y * tile_size;
+  const size_t l_row    = threadIdx.x;
+  const size_t l_col    = threadIdx.y;
+  const size_t g_row    = row_base + l_row;
+  const size_t g_col    = col_base + l_col;
 
   TYPE sum(0);
 
   // SMEM tile layout: A tile is [tile_size x chunk_k], B tile is [chunk_k x tile_size].
-  const uint32_t tile_elems_a = tile_size * chunk_k;
-  const uint32_t tile_elems_b = chunk_k * tile_size;
-  const uint32_t stage_elems  = tile_elems_a + tile_elems_b;
+  const size_t tile_elems_a = tile_size * chunk_k;
+  const size_t tile_elems_b = chunk_k * tile_size;
+  const size_t stage_elems  = tile_elems_a + tile_elems_b;
   // const uint32_t stage_count = (mode == 2) ? 2u : 1u;
 
   // Allocate shared memory for tile buffers.

@@ -13,7 +13,7 @@
 # the current one -- and that toggles a secondary bus reset. An SBR on root port
 # 0000:00:01.1 hard-reset this host on 2026-08-19 09:40. Loading the same PDI
 # over JTAG puts the AFU in the fabric with no PCIe transaction whatsoever, so
-# every later run can use VORTEX_AVED_NO_PROGRAM=1 and never touch that path.
+# every later run picks it up without re-loading over JTAG.
 #
 # Verified 2026-08-19: `device program` on the "Versal xcv80" target accepts the
 # partial PDI and returns OK. Partial reconfiguration does not drop the PCIe
@@ -109,7 +109,7 @@ if PDI_PATH="$PDI" timeout 1800 xsdb "$WORK/load.tcl" 2>&1 | tee /dev/stderr | g
     echo "  VORTEX AFU LOADED"
     # Record what is actually resident, so run_hw_test.sh stops guessing.
     #
-    # With VORTEX_AVED_NO_PROGRAM=1 the vbin handed to the runtime is never
+    # The vbin handed to the runtime is never
     # written to the card, but it is still read: portMemoryConfig() takes the
     # connection map out of its system_map.xml and that decides whether the CP
     # memory is staged in HBM or reached through the QDMA slave bridge. Hand it

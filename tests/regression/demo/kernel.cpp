@@ -11,11 +11,11 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 	// the flat tid = y*bdx+x reconstruction.
 	uint32_t gx = blockIdx.x * blockDim.x + threadIdx.x;
 	uint32_t gy = blockIdx.y * blockDim.y + threadIdx.y;
-	uint32_t gid = gy * arg->dim_x + gx;
-	uint32_t count = arg->task_size;
-	uint32_t offset = gid * count;
+	size_t gid = gy * arg->dim_x + gx;
+	size_t count = arg->task_size;
+	size_t offset = gid * count;
 
-	for (uint32_t i = 0; i < count; ++i) {
+	for (size_t i = 0; i < count; ++i) {
 		dst_ptr[offset+i] = src0_ptr[offset+i] + src1_ptr[offset+i];
 	}
 }

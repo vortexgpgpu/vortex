@@ -32,6 +32,8 @@ module VX_tex_bus_arb import VX_gpu_pkg::*, VX_tex_pkg::*; #(
 );
 
     localparam LOG_NUM_REQS = `ARB_SEL_BITS(NUM_INPUTS, NUM_OUTPUTS);
+    localparam SEL_COUNT    = `MIN(NUM_INPUTS, NUM_OUTPUTS);
+    localparam SEL_W        = `UP(`CLOG2(`CDIV(`MAX(NUM_INPUTS, NUM_OUTPUTS), SEL_COUNT)));
     localparam REQ_DATAW    = TAG_WIDTH + NUM_LANES * (1 + 2 * 32 + TEX_LODF_BITS) + TEX_STAGE_BITS;
     localparam RSP_DATAW    = TAG_WIDTH + NUM_LANES * 32;
 
@@ -43,7 +45,7 @@ module VX_tex_bus_arb import VX_gpu_pkg::*, VX_tex_pkg::*; #(
 
     wire [NUM_OUTPUTS-1:0]                req_valid_out;
     wire [NUM_OUTPUTS-1:0][REQ_DATAW-1:0] req_data_out;
-    wire [NUM_OUTPUTS-1:0][`UP(LOG_NUM_REQS)-1:0] req_sel_out;
+    wire [SEL_COUNT-1:0][SEL_W-1:0]       req_sel_out;
     wire [NUM_OUTPUTS-1:0]                req_ready_out;
 
     for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_req_data_in
@@ -72,15 +74,20 @@ module VX_tex_bus_arb import VX_gpu_pkg::*, VX_tex_pkg::*; #(
 
     for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin : g_bus_out_if
         wire [TAG_WIDTH-1:0] req_tag_out;
-        VX_bits_insert #(
-            .N   (TAG_WIDTH),
-            .S   (LOG_NUM_REQS),
-            .POS (TAG_SEL_IDX)
-        ) bits_insert (
-            .data_in  (req_tag_out),
-            .ins_in   (req_sel_out[i]),
-            .data_out (bus_out_if[i].req_data.tag)
-        );
+        if (NUM_INPUTS > NUM_OUTPUTS) begin : g_req_tag_sel_out
+            VX_bits_insert #(
+                .N   (TAG_WIDTH),
+                .S   (LOG_NUM_REQS),
+                .POS (TAG_SEL_IDX)
+            ) bits_insert (
+                .data_in  (req_tag_out),
+                .ins_in   (req_sel_out[i]),
+                .data_out (bus_out_if[i].req_data.tag)
+            );
+        end else begin : g_req_tag_out
+            `UNUSED_VAR (req_sel_out)
+            assign bus_out_if[i].req_data.tag = req_tag_out;
+        end
         assign bus_out_if[i].req_valid = req_valid_out[i];
         assign {req_tag_out, bus_out_if[i].req_data.mask, bus_out_if[i].req_data.coords, bus_out_if[i].req_data.lod, bus_out_if[i].req_data.stage} = req_data_out[i];
         assign req_ready_out[i] = bus_out_if[i].req_ready;

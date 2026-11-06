@@ -548,6 +548,20 @@ uint16_t rv_ftoh_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
   return from_float16_t(r);
 }
 
+uint64_t rv_htod(uint16_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = f16_to_f64(to_float16_t(a));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float64_t(r);
+}
+
+uint16_t rv_dtoh(uint64_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = f64_to_f16(to_float64_t(a));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float16_t(r);
+}
+
 uint32_t rv_btof_s(uint16_t a, uint32_t frm, uint32_t* fflags) {
   rv_init(frm);
   auto r = bf16_to_f32(to_bfloat16_t(a));

@@ -1,279 +1,515 @@
 # Tensor Core Unit (TCU / WGMMA) — Design
 
-**Scope:** the Vortex Tensor Core Unit — the matrix-multiply-accumulate
-engine implementing WMMA / WGMMA (NVIDIA-style warp / warpgroup MMA),
-2:4 structured sparsity, and tensor metadata loads. Covers the RTL
-([`hw/rtl/tcu/`](../../hw/rtl/tcu/)), the SimX functional/timing model
-([`sim/simx/tcu/`](../../sim/simx/tcu/)), and the SW surface
-([`sw/kernel/include/vx_tensor.h`](../../sw/kernel/include/vx_tensor.h),
-[`sw/common/tensor_cfg.h`](../../sw/common/tensor_cfg.h)).
+**Scope:** the Vortex tensor core unit — the matrix-multiply-accumulate
+engine behind WMMA and WGMMA (NVIDIA-style warp and warpgroup MMA), 2:4
+structured sparsity, block-scaled (MX) formats, and the metadata loads that
+feed them. Covers the instruction encoding, the tile geometry and micro-op
+expansion, the execute-stage unit and its FEDP grid, operand sourcing from
+registers and from shared memory, the metadata path, the FEDP backends, and
+the SimX model. RTL: [`hw/rtl/tcu/`](../../hw/rtl/tcu/). SimX:
+[`sim/simx/tcu/`](../../sim/simx/tcu/). Software:
+[`sw/kernel/include/vx_tensor.h`](../../sw/kernel/include/vx_tensor.h),
+[`sw/common/tensor_cfg.h`](../../sw/common/tensor_cfg.h).
 
-The TCU is a RISC-V ISA extension (`MISA` bit 9,
-[`VX_config.toml:305`](../../VX_config.toml#L305)). It is gated by
-`VX_CFG_EXT_TCU_ENABLE` and configured by a `[tcu]` block in
-[`VX_config.toml:229-245`](../../VX_config.toml#L229).
+The generic micro-op sequencer and the rules every accelerator extension
+follows are in
+[`custom_accelerator_isa_extensions.md`](custom_accelerator_isa_extensions.md).
+The asynchronous copy engine that fills shared memory for a WGMMA is in
+[`dxa_async_copy_multicast.md`](dxa_async_copy_multicast.md). The memory
+scheduler the metadata load shares with the LSU is in
+[`lsu_pipeline_design.md`](lsu_pipeline_design.md). This document is the
+tensor-unit deep-dive.
 
----
-
-## 1. Architecture overview
-
-```
-  VX_dispatch_if[ISSUE_WIDTH]                       VX_tcu_unit
-  ──────────────────────────►  ┌──────────────────────────────────────────────┐
-                               │  VX_lane_dispatch → per_block_execute_if[Q]    │
-                               │                                                │
-                               │   op_type split:                               │
-                               │   ┌── TCU_LD ──► VX_tcu_agu ──► VX_lsu_sched   │
-                               │   │              (warp AGU)     (shared client) │
-                               │   │                  │                          │
-                               │   │                  ▼  meta_wr broadcast       │
-                               │   │            VX_tcu_sp_meta (per-warp SRAM)      │
-                               │   │                                            │
-                               │   └── WMMA/WGMMA ──► VX_tcu_wgmma (orchestrator)│
-                               │           │            │                        │
-                               │           │       VX_tcu_lockstep (CTA gate)    │
-                               │           │            │                        │
-                               │           │       VX_tcu_tbuf                   │
-                               │           │       (Q×abuf + 1×bbuf + mem_arb)   │
-                               │           ▼            │                        │
-                               │     Q × VX_tcu_core ◄──┘  operands              │
-                               │       (FEDP: dpi|bhf|dsp|tfr) + VX_tcu_sp_mux   │
-                               │           │                                     │
-                               │     VX_lane_gather ──► commit_if                │
-                               └──────────────────────────────────────────────┘
-```
-
-A macro MMA op is dispatched across `ISSUE_WIDTH` issue slots; the TCU
-treats those `Q = ISSUE_WIDTH` slots as one **warpgroup** of `BLOCK_SIZE`
-lock-stepped blocks. [`VX_tcu_uops`](../../hw/rtl/tcu/VX_tcu_uops.sv)
-expands the macro into per-block micro-ops; each block executes a FEDP
-(fused element dot product) datapath in [`VX_tcu_core`](../../hw/rtl/tcu/VX_tcu_core.sv).
+![Tensor core unit architecture](../assets/img/tcu_architecture.svg)
 
 ---
 
-## 2. Data types, opcodes, and configuration
+## 1. Overview
 
-**Formats** ([`VX_tcu_pkg.sv:27-39`](../../hw/rtl/tcu/VX_tcu_pkg.sv#L27),
-[`sw/common/tensor_cfg.h`](../../sw/common/tensor_cfg.h)):
-fp32, fp16, bf16, fp8 (e4m3), bf8 (e5m2), tf32, integer
-i32/i8/u8/i4/u4, and block-scaled mxfp8/mxbf8/mxfp4/nvfp4.
-Per-format enables: `VX_CFG_TCU_TF32_ENABLE`, `_BF16_`, `_FP8_`, `_INT_`
-([`VX_config.toml:238-241`](../../VX_config.toml#L238)).
+A tensor instruction names a whole **tile** — `C += A · B` over an
+`M × N × K` region — that is far larger than one register of lanes. The unit
+executes it as a sequence of **micro-ops**, each computing one **block**:
 
-**Opcodes** (4-bit `op_type`,
-[`VX_gpu_pkg.sv:595-607`](../../hw/rtl/VX_gpu_pkg.sv#L595)):
+1. **Decode** classifies the instruction and the micro-op sequencer expands
+   it. Each micro-op carries its step `(m, n, k)` and the registers it reads.
+2. The **tensor unit** in the execute stage splits each block's micro-ops
+   between two consumers: metadata loads go to a warp-level address
+   generator, everything else to the arithmetic core.
+3. The **core** selects its operands — from the register file, or from tile
+   buffers that read shared memory — conditions the lanes for sparsity and
+   scaling, and runs a grid of **fused element dot products** (FEDP).
+4. The result accumulates into a `C` register and commits like any other
+   instruction's.
 
-| Opcode | Value | Meaning |
-|---|---|---|
-| `INST_TCU_WMMA` | 0 | Warp-level MMA |
-| `INST_TCU_WGMMA` | 1 | Warpgroup MMA |
-| `INST_TCU_WMMA_SP` | 3 | Sparse warp MMA |
-| `INST_TCU_WGMMA_SP` | 4 | Sparse warpgroup MMA |
-| `INST_TCU_LD` | 5 | Tensor metadata load (AGU path) |
+The unit is a RISC-V ISA extension (`MISA` extension bit 9), gated by
+`VX_CFG_EXT_TCU_ENABLE`. WGMMA, sparsity, and each number format are
+separate knobs on top of it (§10).
 
-Sparsity is now a distinct opcode (`*_SP`) rather than a runtime flag.
-`INST_TCU_LD` bypasses the register file and hazards through the independent
-`XREG_0` (SP) and `XREG_1` (MX) scoreboard bits
-([`VX_gpu_pkg.sv:78-80,606`](../../hw/rtl/VX_gpu_pkg.sv#L78)).
-
-**Key config** ([`VX_config.toml:229-245`](../../VX_config.toml#L229)):
-`VX_CFG_TCU_TYPE` selects the FEDP backend (`DPI`/`DSP`/`BHF`/`TFR`;
-default `TFR` for ASIC, `DSP` for synthesis, `DPI` when DPI is enabled);
-`VX_CFG_NUM_TCU_LANES = NUM_THREADS`; `VX_CFG_NUM_TCU_BLOCKS = ISSUE_WIDTH`;
-`VX_CFG_TCU_SPARSE_ENABLE`; `VX_CFG_TCU_MX_ENABLE`; `VX_CFG_TCU_WGMMA_ENABLE`;
-`VX_CFG_TCU_FEDP2K` doubles the dense WGMMA FEDP width and halves its
-K-step count
 ---
 
-## 3. RTL module inventory
+## 2. Instruction encoding
 
-`hw/rtl/tcu/`:
+All tensor instructions are R-type on opcode `0x0B` (custom-0) with
+`funct7 = 2` ([`VX_decode.sv`](../../hw/rtl/core/VX_decode.sv)). The register
+**fields** are immediates, not register numbers:
 
-| Module | Role |
+| `funct3` | instruction | `rd` field | `rs1` field | `rs2` field |
+|---|---|---|---|---|
+| 0 | WMMA | output format `fmt_d` | input format `fmt_s` | flags |
+| 1 | WGMMA | output format `fmt_d` | input format `fmt_s` | flags |
+| 2 | TCU_LD | metadata slot | **register**: base address | input format `fmt_s` |
+
+Flags of an MMA instruction:
+
+| bit | meaning |
 |---|---|
-| [`VX_tcu_pkg.sv`](../../hw/rtl/tcu/VX_tcu_pkg.sv) | Format IDs, tile/block/step geometry, WGMMA tile dims, `tcu_tbuf_req_t` ([`:364-383`](../../hw/rtl/tcu/VX_tcu_pkg.sv#L364)), FP helpers, trace tasks. |
-| [`VX_tcu_unit.sv`](../../hw/rtl/tcu/VX_tcu_unit.sv) | Thin top wrapper: lane dispatch/gather, splits TCU_LD (→AGU) from MMA (→core) by `op_type`, OR-muxes results with AGU priority. |
-| [`VX_tcu_wgmma.sv`](../../hw/rtl/tcu/VX_tcu_wgmma.sv) | WGMMA orchestrator: owns the lockstep gate, builds `tcu_tbuf_req_t` (masked by `cta_conflict`), instantiates `VX_tcu_tbuf`, WGMMA perf counters. |
-| [`VX_tcu_lockstep.sv`](../../hw/rtl/tcu/VX_tcu_lockstep.sv) | Single-owner CTA gate: `tcu_owned_r`/`tcu_owner_r` + per-block `in_expansion_r`; combinational `cta_conflict`. |
-| [`VX_tcu_tbuf.sv`](../../hw/rtl/tcu/VX_tcu_tbuf.sv) | Tile-buffer subsystem: `BLOCK_SIZE × VX_tcu_abuf` + 1 shared `VX_tcu_bbuf` + `VX_mem_arb` (Q+1 → 1 LMEM port). |
-| [`VX_tcu_abuf.sv`](../../hw/rtl/tcu/VX_tcu_abuf.sv) | Per-block A buffer (k-stripe storage); both block-major and k-major fetch paths selected by descriptor stride; refetches A on every WGMMA first-uop. |
-| [`VX_tcu_bbuf.sv`](../../hw/rtl/tcu/VX_tcu_bbuf.sv) | TB-shared B buffer; block-major and k-major dense + sparse paths. |
-| [`VX_tcu_core.sv`](../../hw/rtl/tcu/VX_tcu_core.sv) | Per-block FEDP datapath; selects the FEDP backend by `VX_CFG_TCU_TYPE`; sparse gather via `VX_tcu_sp_mux`. |
-| [`VX_tcu_uops.sv`](../../hw/rtl/tcu/VX_tcu_uops.sv) | Macro→micro-op sequencer; WGMMA iteration order k-outer/n-middle/m-inner; tags `fu_lock/fu_unlock`, `is_first_uop/is_last_uop`. |
-| [`VX_tcu_agu.sv`](../../hw/rtl/tcu/VX_tcu_agu.sv) | Warp-level AGU for `INST_TCU_LD`; FSM IDLE→ISSUE→WAIT→COMMIT; one fetch per TCU_LD into a `VX_tcu_sp_meta` slot via the shared LSU scheduler. |
-| [`VX_tcu_sp_meta.sv`](../../hw/rtl/tcu/VX_tcu_sp_meta.sv) | Per-warp sparse-metadata SRAM written by AGU TCU_LD; combinational read. |
-| [`VX_tcu_mx_meta.sv`](../../hw/rtl/tcu/VX_tcu_mx_meta.sv) | Independent per-warp MX A/B scale SRAM written by AGU TCU_LD. |
-| [`VX_tcu_sp_mux.sv`](../../hw/rtl/tcu/VX_tcu_sp_mux.sv) | 2:4 structured-sparsity B-column gather; I_RATIO ∈ {2,4,8}. |
+| `rs2[0]` | sparse — selects the `_SP` operation |
+| `rs2[2:1]` | `cd_nregs` — accumulator registers: 0 = 8, 1 = 16, 2 = 32 |
+| `rs2[3]` | `a_from_smem` — A comes from shared memory; B always does for WGMMA |
 
-**FEDP backends** (`hw/rtl/tcu/{dpi,dsp,bhf,tfr}/`) — all four compute
-`Σ(a·b)+c → d`, selected by `VX_CFG_TCU_TYPE`:
+| `op_type` | value | operation |
+|---|---|---|
+| `INST_TCU_WMMA` | 0 | warp MMA |
+| `INST_TCU_WGMMA` | 1 | warpgroup MMA |
+| `INST_TCU_WMMA_SP` | 3 | sparse warp MMA |
+| `INST_TCU_WGMMA_SP` | 4 | sparse warpgroup MMA |
+| `INST_TCU_LD` | 5 | metadata load |
 
-- **dpi** ([`dpi/VX_tcu_fedp_dpi.sv`](../../hw/rtl/tcu/dpi/VX_tcu_fedp_dpi.sv)) —
-  simulation-only; calls SystemVerilog DPI-C softfloat (`dpi_f2f`/
-  `dpi_fmul`/`dpi_fadd`). Latency 4.
-- **bhf** ([`bhf/`](../../hw/rtl/tcu/bhf/)) — Berkeley HardFloat IEEE FMA
-  tree; synthesizable.
-- **dsp** ([`dsp/VX_tcu_fedp_dsp.sv`](../../hw/rtl/tcu/dsp/VX_tcu_fedp_dsp.sv)) —
-  DSP-mapped path with explicit fp16→fp32 converters; highest latency.
-- **tfr** ([`tfr/`](../../hw/rtl/tcu/tfr/)) — default for ASIC/SimX;
-  fixed-point reduction tree (align → mul → accumulate → norm/round)
-  with max-exp extraction, lane mask, classifier, exception reduce.
+Sparsity is a distinct operation rather than a per-micro-op flag, so the
+micro-op arguments do not carry a sparse bit.
 
----
+### 2.1 Formats
 
-## 4. Execution model (as-built)
+[`VX_tcu_pkg.sv`](../../hw/rtl/tcu/VX_tcu_pkg.sv),
+[`tensor_cfg.h`](../../sw/common/tensor_cfg.h). A format is a 5-bit id.
 
-**Issue / dispatch.** A WMMA/WGMMA macro enters via
-`VX_dispatch_if[ISSUE_WIDTH]` → `VX_lane_dispatch` →
-`per_block_execute_if[BLOCK_SIZE]`. `VX_tcu_uops` expands it into `Q`
-lock-stepped micro-ops in **k-outer / n-middle / m-inner** order
-(`ctr = k*(n_steps*m_steps) + n*m_steps + m`,
-[`VX_tcu_uops.sv:113`](../../hw/rtl/tcu/VX_tcu_uops.sv#L113)), tagging each
-with `fu_lock/fu_unlock` and `is_first_uop/is_last_uop`.
+| class | formats | id |
+|---|---|---|
+| float | fp32, tf32, fp16, bf16, fp8 (e4m3), bf8 (e5m2) | 0–5 |
+| block-scaled (MX) | mxfp8, mxbf8, mxfp4, nvfp4 | 8–11 |
+| integer | i32, i8, u8, i4, u4 | 16–20 |
 
-**Operand load.** In register mode the A operand comes from registers
-(abuf bypassed). In shared-memory mode `VX_tcu_wgmma` builds a
-`tcu_tbuf_req_t` (validity masked by `cta_conflict`) and drives
-`VX_tcu_tbuf`: each block's `VX_tcu_abuf` fetches the active k-stripe's
-A-rows, while the shared `VX_tcu_bbuf` fetches one B bank-row per `(k,n)`
-and broadcasts it to all `Q` cores. Both buffers support **block-major**
-(descriptor stride 0) and **k-major / row-major** (stride ≠ 0) layouts,
-selected at first-uop from `desc[31:16]`
-([`VX_tcu_abuf.sv:186-255`](../../hw/rtl/tcu/VX_tcu_abuf.sv#L186),
-[`VX_tcu_bbuf.sv:286-601`](../../hw/rtl/tcu/VX_tcu_bbuf.sv#L286)). The
-`Q+1` LMEM masters arbitrate to one port through `VX_mem_arb`.
+An MX format has bit 3 of the id set, which is how decode recognizes that
+the instruction depends on scale metadata.
 
-**FEDP2K geometry and register operands.** The ordinary dense WGMMA FEDP
-consumes `tcK` 32-bit words per A row and executes two K steps. With
-`VX_CFG_TCU_FEDP2K`, `fedpK = 2*tcK` and dense WGMMA executes one K step.
-For RS instructions, `rs1` carries the lower `tcK` A words and `rs2`
-carries the upper `tcK` words. Sparse WGMMA remains compressed to `tcK`
-words and therefore does not consume an upper-A `rs2` operand. SS obtains
-both A halves from the tile buffer.
+### 2.2 Metadata dependencies
 
-**Descriptor transport and uop sequencing.** x10 holds the optional A
-shared-memory descriptor and x11 holds the B descriptor. FEDP2K support is
-a compile-time capability; within such a build, descriptor setup is selected
-per decoded instruction:
+Metadata is not an architectural register, so the scoreboard tracks it with
+two extra bits:
 
-| WGMMA mode | First emitted uop | Compute `rs1` | Compute `rs2` |
+| bit | namespace | written by | read by |
 |---|---|---|---|
-| Dense RS + FEDP2K | Descriptor-only setup from x11 | Lower A | Upper A |
-| Dense RS without FEDP2K | First compute, with x11 fused | A | x11 on first compute only |
-| Sparse RS, including FEDP2K | First compute, with x11 fused | Compressed A | x11 on first compute only |
-| SS, including FEDP2K | First compute, with x10/x11 fused | x10 on first compute only | x11 on first compute only |
+| `XREG_0` | sparse lane-validity | `TCU_LD` with `rd[4] = 0` | every sparse MMA |
+| `XREG_1` | MX scales | `TCU_LD` with `rd[4] = 1` | every MMA with an MX input format |
 
-Thus `needs_setup = FEDP2K && RS && dense`. This is the only combination
-where descriptor B and upper A compete for the same warp `rs2` vector.
-The setup uop does not read x10 and has no FEDP writeback; it latches the B
-descriptor and resets the tile-buffer transaction. Fused RS modes capture
-x11 when the first compute uop fires. SS likewise presents x10/x11 directly
-on its first compute uop, allowing tile-buffer refill to start without a
-descriptor-capture bubble. The descriptors are latched when that uop fires.
-Later compute uops reuse the descriptor latches. `fu_lock` marks the first
-emitted uop in either sequence, while `is_first_uop` marks the first compute
-uop, so lockstep and buffer allocation do not confuse setup with compute.
-
-**Lock-step / warpgroup gate.** `VX_tcu_lockstep` enforces single-CTA
-occupancy of the shared B buffer: a single owner latch plus per-block
-`in_expansion_r` (set on the first sub-uop, cleared on the last). A block
-presenting a different CTA's WGMMA is deferred via `cta_conflict[b]` until
-the resident warpgroup drains. SimX mirrors this gate exactly
-([`tcu_unit.cpp:450-532`](../../sim/simx/tcu/tcu_unit.cpp#L450)).
-
-**Compute / accumulate / writeback.** Each `VX_tcu_core` runs the
-configured FEDP cell. Sparse 2:4 routes B through `VX_tcu_sp_mux` using the
-`vld_block` metadata read from `VX_tcu_sp_meta` (preloaded by TCU_LD).
-Accumulation walks k through the C accumulator register; results return via
-`VX_lane_gather` → `commit_if`.
-
-For MX inputs, independent A and B scale arrays are preloaded by TCU_LD
-into `VX_tcu_mx_meta`. The core selects scale bytes by logical row/column
-and K block, including the wider FEDP2K span, and applies the format's
-block size (32 elements for MXFP formats, 16 for NVFP4). Sparse addressing
-accounts for the 2:4 logical-K expansion. MX integer-8 helper/datapath
-variants are intentionally absent; supported MX formats use the dedicated
-floating-point conversion path.
-
-**TCU_LD path.** `INST_TCU_LD` is handled by `VX_tcu_agu`, which walks the
-metadata stride and issues to the **shared** `VX_lsu_scheduler`
-([`hw/rtl/core/VX_lsu_scheduler.sv`](../../hw/rtl/core/VX_lsu_scheduler.sv),
-hoisted to `VX_core` as a multi-client resource: LSU = client 0, TCU =
-client 1, with RTX/TEX/OM ports reserved). Responses are written into
-`VX_tcu_sp_meta`; the op commits with `wr_xregs[XREG_0]=1` to release the
-scoreboard slot, and a following `wgmma_sp` stalls on that bit.
+A sparse MMA issued right after its `TCU_LD` stalls on the bit until the
+load's writeback releases it. `TCU_LD` writes no general register.
 
 ---
 
-## 5. SimX model
+## 3. Tile geometry and micro-op expansion
 
-[`sim/simx/tcu/tcu_unit.{cpp,h}`](../../sim/simx/tcu/tcu_unit.cpp)
-implements `TcuUnit` (FuncUnit) + `TcuUopGen`: wmma/wgmma/meta_store/tcu_ld,
-the lock-step probe, `plan_wgmma_lines`, and a `sparse_meta_` SRAM mirror.
-Operand load goes through channels (`load_lmem_word`); there is **no**
-`core_->mem_read` in the TCU path.
-[`tcu_tbuf.{cpp,h}`](../../sim/simx/tcu/tcu_tbuf.cpp) provides `TcuTbuf`
-(abuf×Q + bbuf×1 line caches over one `SimChannel` LMEM port) with
-`plan_a/plan_b`, `ready_a/ready_b`, `read_a/read_b`. The RTL and SimX share
-the same k-outer iteration order, per-block-A + shared-B structure, and
-lock-step deadlock contract, enabling SimX↔RTL cycle parity work.
-The uop generator uses the same `FEDP2K && RS && dense` setup predicate as
-RTL, including fused descriptor reads for SS and sparse RS. SimX also
-mirrors the widened dense A operand, persistent descriptors, and separate
-MX A/B metadata SRAMs and scale indexing.
+![Tile geometry](../assets/img/tcu_tile_geometry.svg)
 
-Perf CSRs: `TBUF_STALLS`, `TBUF_CACHE_HITS`, `LMEM_READS`
-([`VX_types.toml:570-577`](../../VX_types.toml#L570)).
+### 3.1 Geometry
+
+Everything is derived in [`VX_tcu_pkg.sv`](../../hw/rtl/tcu/VX_tcu_pkg.sv)
+from `NUM_THREADS`:
+
+| quantity | derivation |
+|---|---|
+| block capacity | `NUM_THREADS` words — one register of lanes |
+| block shape `TC_M × TC_N` | the most nearly square power-of-two split of the capacity, `M ≥ N` |
+| `TC_K` | capacity ÷ `max(TC_M, TC_N)` |
+| WMMA tile capacity | `NUM_THREADS × 8` — eight registers |
+| tile shape `M × N × K` | the same split, applied to the tile capacity |
+| steps | tile ÷ block, per axis |
+
+A tile is as many registers as it has blocks, and a block is one register.
+Geometry is counted in 32-bit words; a narrower format packs several
+elements into each word, so an FEDP sees `TC_K × (32 ÷ element bits)`
+inputs.
+
+| operand | WMMA registers | WGMMA registers |
+|---|---|---|
+| C — accumulator | from `f0` | from `f0`, 8 / 16 / 32 of them |
+| A | from `f10` | `f24`–`f27`, fixed |
+| B | from `f24` or `f28` | shared memory only |
+
+### 3.2 Order
+
+[`VX_tcu_uops.sv`](../../hw/rtl/tcu/VX_tcu_uops.sv) emits micro-ops
+**k outer, n middle, m inner**:
+
+```
+ctr = k × (N_STEPS × M_STEPS) + n × M_STEPS + m
+```
+
+Consecutive micro-ops therefore accumulate into **different** registers. A
+given accumulator is revisited only `M_STEPS × N_STEPS` micro-ops later, by
+which time its previous result has left the pipeline. The micro-ops of one
+`k` overlap inside the FEDP pipeline instead of each waiting for the last.
+
+A sparse instruction usually takes half the micro-ops, since 2:4 sparsity
+halves the stored `K`. A symmetric block geometry (`TC_M = TC_N`, WMMA only)
+keeps the count and changes the lane layout instead.
+
+### 3.3 Register-file conflicts
+
+Three operands per micro-op read three registers. The expander **permutes**
+the A, B and C register offsets so that the three always land in different
+register-file banks, which removes every read-port stall from the sequence.
+The permutation is a fixed function of `(m, n, k)`; software uses the same
+function to decide which register holds which block.
+
+### 3.4 What a micro-op carries
+
+| field | meaning |
+|---|---|
+| `step_m`, `step_n`, `step_k` | the block |
+| `fmt_s`, `fmt_d`, `cd_nregs`, `a_from_smem` | copied from the instruction |
+| `is_first_uop`, `is_last_uop` | the first and last **compute** micro-op |
+| `fu_lock` / `fu_unlock` | bracket the whole sequence, setup included |
+
+`fu_lock` holds the functional unit for the sequence so that another warp's
+tensor instruction cannot interleave. The two pairs of flags differ exactly
+when a sequence begins with a setup micro-op (§6.4).
 
 ---
 
-## 6. SW surface
+## 4. The unit — `VX_tcu_unit`
 
-[`sw/kernel/include/vx_tensor.h`](../../sw/kernel/include/vx_tensor.h):
-`vx_make_smem_desc(ptr, leading_bytes)`
-([`:35`](../../sw/kernel/include/vx_tensor.h#L35)), `wmma_context` /
-`wgmma_context`, `load_sp_metadata` (now TCU_LD-based,
-[`:213-218`](../../sw/kernel/include/vx_tensor.h#L213)), and block-major
-SMEM index helpers `a_blockmajor_idx` / `b_blockmajor_idx`
-([`:719-748`](../../sw/kernel/include/vx_tensor.h#L719)).
-[`sw/common/tensor_cfg.h`](../../sw/common/tensor_cfg.h) holds the format
-structs and tile-geometry templates; `sw/runtime/include/tensor_sp.h` and
-`sw/runtime/include/tensor_mx.h` hold host-side helpers.
+[`VX_tcu_unit.sv`](../../hw/rtl/tcu/VX_tcu_unit.sv) holds
+`Q = VX_CFG_NUM_TCU_BLOCKS` blocks, one per issue slot. After lane dispatch,
+each block's execute interface is offered to two consumers and its `ready`
+is muxed by `op_type`:
+
+| consumer | takes | module |
+|---|---|---|
+| metadata path | `TCU_LD` | `VX_tcu_agu` |
+| arithmetic | every MMA micro-op | `VX_tcu_core` |
+
+`VX_tcu_wgmma` is a third party that only **observes** the dispatch path. It
+builds the tile-buffer request from each WGMMA micro-op and returns operand
+data and a ready signal, but never drives the handshake itself; the core
+does.
 
 ---
 
-## 7. Proposed but not yet implemented
+## 5. The core — `VX_tcu_core`
 
-The following extension points remain open; they are recorded so the
-intent is preserved.
+[`VX_tcu_core.sv`](../../hw/rtl/tcu/VX_tcu_core.sv), one per block.
 
-1. **SimX↔RTL precision trace-alignment infrastructure.** Only the
-   UUID un-drops landed
-   ([`VX_tcu_abuf.sv:259`](../../hw/rtl/tcu/VX_tcu_abuf.sv#L259),
-   [`VX_tcu_bbuf.sv:385`](../../hw/rtl/tcu/VX_tcu_bbuf.sv#L385)). Still
-   unbuilt: reusable `DBG_TRACE_TXN` phase emitters, a true
-   `SMEM_WR_COMMIT` event in `VX_local_mem`, SimX barrier/TCU-read TLM
-   strengthening, and a `ci/trace_align.py` aligner. This would serve as
-   standing infrastructure for *all* future TCU/DXA/barrier ordering
-   bugs. The underlying `VX_local_mem` DMA-port read-during-write
-   interlock is the prime suspect for the NRC=8 shared-memory ordering
-   hazard.
-2. **WGMMA latency-hiding refinements**:
-   k-transition prefetch and B ping-pong buffering — deferred as optional.
-3. **DXA / k-major cleanup**: retiring the legacy block-major B-buffer
-   path (both paths currently coexist, ≈2× bbuf area) and the U55C PPA
-   quantification on Yosys/OpenSTA — deliberately deferred; block-major
-   is retained as the transition default.
-4. **TCU_LD generalization**: a
-   multi-request stride AGU, double-buffered `VX_tcu_sp_meta` slots, and
-   RTX/TEX/OM warp-level preload clients on the shared `VX_lsu_scheduler`
-   (the multi-client boundary exists; ports 2..N are reserved but unused).
-5. **MN-major SS descriptor + SMEM swizzling**: NVIDIA's third
-   descriptor leg and bank-conflict swizzle — bit space reserved, no
-   implementation.
+### 5.1 Operand select
 
-**Open bugs (status unverified):** XLEN=64 `sgemm_tcu_wg` fp16 rtlsim
-numerical failure and the tf32 rtlsim poisoned cycle-counter.
+Every difference between WMMA and WGMMA is resolved at the top of the core,
+behind one set of wires. Downstream logic never tests which it is.
 
-The k-major DXA writer that pairs with the TCU's k-major buffers is
-described in the DXA design (`dxa_async_copy_multicast.md`).
+| operand | WMMA | WGMMA, register-sourced | WGMMA, memory-sourced |
+|---|---|---|---|
+| A | `rs1` | `rs1` (and `rs2` with FEDP2K) | the block's A buffer |
+| B | `rs2` | the shared B buffer | the shared B buffer |
+| C | `rs3` | `rs3` | `rs3` |
+
+The B buffer's bus can be wider than a register of lanes, so the register
+arm is padded to match.
+
+### 5.2 Lane conditioning
+
+| stage | enabled by | does |
+|---|---|---|
+| sparse gather — `VX_tcu_sp_mux` | `VX_CFG_TCU_SPARSE_ENABLE` | selects, per dot product, the two of every four B candidates that the validity metadata marks |
+| MX scale — `VX_tcu_mx_scale` | `VX_CFG_TCU_MX_ENABLE` | addresses the scale byte of each lane's block for A and for B |
+| dynamic sparsity mask — `VX_tcu_dsm` | `VX_CFG_TCU_DSM_ENABLE` | masks a lane whose A or B element is zero |
+
+The sparse layouts of the two instruction families are **incompatible**: a
+sparse WGMMA reads B from shared memory K-major, a sparse WMMA reads it from
+the register file N-major, and the gather index is computed by a separate
+formula for each.
+
+### 5.3 The FEDP grid
+
+`TC_M × TC_N` compute elements, each
+
+```
+d[i,j] = c[i,j] + Σ_k a[i,k] · b[k,j]
+```
+
+over the FEDP width — `TC_K` words, or `2 × TC_K` for a dense WGMMA with
+`VX_CFG_TCU_FEDP2K`.
+
+### 5.4 Flow control without an enable
+
+The grid **free-runs**: it has no back-pressure enable. A clock-enable
+network spanning the whole grid is what a stalled pipeline would need, and
+it is the net that would set the timing.
+
+Instead, admission reserves a slot in a **result landing queue**. A
+completing result therefore always has somewhere to land, and the grid never
+needs to stop.
+
+| mechanism | role |
+|---|---|
+| credits | bound the results outstanding to the landing capacity — the hard overflow guarantee |
+| landing queue | parks a result whose consumer is stalled; an unblocked result bypasses it with no added latency |
+| header queue | carries each micro-op's header beside the grid, popped in lockstep with the result |
+| admission stall | holds new micro-ops while a completed result waits, keeping the queue shallow so a chained MMA never queues behind other warps |
+
+A fp32 result on a 64-bit build is NaN-boxed before it leaves.
+
+---
+
+## 6. Operands from shared memory — WGMMA
+
+![WGMMA operand sourcing](../assets/img/tcu_wgmma_operands.svg)
+
+A warpgroup is `Q` warps issuing the **same micro-op in the same cycle**.
+Each has its own A; all share one B. `VX_tcu_wgmma` owns everything that
+exists only because WGMMA does: the tile buffers, the lockstep gate, and the
+WGMMA perf counters.
+
+### 6.1 The descriptor
+
+| bits | field |
+|---|---|
+| `[15:0]` | offset of the slab in shared memory |
+| `[31:16]` | row stride in bytes; **0 selects the block-major layout** |
+
+`x10` carries the A descriptor and `x11` the B descriptor. The 16-bit offset
+is why a shared memory visible to WGMMA cannot exceed 64 KB.
+
+| layout | slab organization | fetch |
+|---|---|---|
+| block-major (stride 0) | blocks in micro-op order, each contiguous | adjacent bank rows, a whole stripe at once |
+| row-major (stride ≠ 0) | an ordinary matrix, row `r` at `r × stride` | one read per row, extracting the words the step needs |
+
+Row-major is the layout of a DXA-loaded slab. The buffers' output muxes are
+layout-agnostic; only the fetch differs.
+
+### 6.2 A buffer — `VX_tcu_abuf`
+
+One per block. It holds one **k-stripe**: the `M_STEPS` A blocks of the
+current `k`. Its refill key is `{descriptor, step_k}`, and it serves one A
+block per micro-op, selected by `step_m`.
+
+The buffer **refetches on the first compute micro-op of every WGMMA**, even
+when the descriptor is unchanged. A K-tile loop rewrites the slab in place
+and reissues the same instruction; residency keyed on the descriptor alone
+would serve the previous iteration's data.
+
+Format-aware sub-word extraction happens in the core. The buffer passes
+words through.
+
+### 6.3 B buffer — `VX_tcu_bbuf`
+
+One for the whole unit. It holds the bank row of B that contains block
+`(k, n)`, keyed on `{descriptor, bank-row index}`, and drives all `Q` cores
+from the same storage — structural fan-out, not arbitration. A row often
+holds several consecutive blocks, which the `TBUF_CACHE_HITS` counter
+reports.
+
+The `Q` A buffers and the B buffer are `Q + 1` readers of one
+bank-parallel local-memory port, merged by an arbiter.
+
+### 6.4 Descriptor transport and the setup micro-op
+
+| mode | first micro-op | `rs1` of a compute micro-op | `rs2` of a compute micro-op |
+|---|---|---|---|
+| register A, dense | first compute, `x11` fused | A | `x11`, on the first only |
+| register A, dense, FEDP2K | **setup**, carries `x11` | lower A | upper A |
+| register A, sparse | first compute, `x11` fused | compressed A | `x11`, on the first only |
+| memory A | first compute, `x10` and `x11` fused | `x10`, on the first only | `x11`, on the first only |
+
+A setup micro-op exists in exactly one case:
+
+```
+needs_setup = FEDP2K ∧ register-sourced A ∧ dense
+```
+
+That is the only combination in which the B descriptor and the upper half of
+A compete for the same `rs2`. The setup micro-op has no FEDP result; it
+latches the descriptor and resets the tile-buffer transaction. In every
+other mode the descriptors are captured when the first compute micro-op
+fires, so the buffer refill starts without a capture bubble. Later
+micro-ops reuse the latches.
+
+Sparse A stays compressed to `TC_K` words even with FEDP2K, so it never
+needs the upper-A operand.
+
+### 6.5 The lockstep gate — `VX_tcu_lockstep`
+
+The shared B buffer assumes **one CTA at a time**. A block records its CTA
+when its first compute micro-op enters and releases on its last. A block
+presenting a different CTA's WGMMA is deferred — `cta_conflict` — until the
+resident warpgroup drains.
+
+| situation | outcome |
+|---|---|
+| same CTA on several blocks | free — the production case |
+| different CTA, no expansion in progress | becomes the owner |
+| different CTA, expansion in progress | deferred |
+
+The ownership persists across memory-stall gaps, so another CTA cannot enter
+mid-expansion and corrupt the buffer's state. The consumer must AND
+`cta_conflict` into both the buffer request and the downstream ready; a
+simulation assertion catches a forgotten mask.
+
+---
+
+## 7. The metadata path — `TCU_LD`
+
+### 7.1 Address generation — `VX_tcu_agu`
+
+[`VX_tcu_agu.sv`](../../hw/rtl/tcu/VX_tcu_agu.sv) issues **one warp-wide
+fetch per `TCU_LD`**: lane `T` loads word `T` of the metadata tile at the
+base address in `rs1`. The kernel pre-advances the base per slot, so a
+multi-slot load is several instructions.
+
+The generator is **client 1 of the core's LSU scheduler** on block 0. It
+owns no memory port; it reuses the LSU's staging, outstanding pool and cache
+port. Metadata is read as a linear tile, which an interleaved per-thread
+stack cannot provide, so the generator asserts that the tile does not lie
+inside the stack window.
+
+On a 64-bit build each memory word carries two 32-bit metadata words, and a
+per-lane selector picks the half.
+
+### 7.2 Storage — `VX_tcu_meta`
+
+[`VX_tcu_meta.sv`](../../hw/rtl/tcu/VX_tcu_meta.sv) is one warp-indexed RAM
+per block holding three regions, of which only the enabled ones exist:
+
+| `rd[4]` | `rd[3:0]` | region |
+|---|---|---|
+| 0 | column-group index | sparse lane-validity |
+| 1 | 0 | MX scales for A |
+| 1 | 1 | MX scales for B |
+
+The write is **broadcast to every block**, so a later MMA reads its metadata
+whichever block the warp lands on. The read address is the micro-op's warp
+id, already registered, so the RAM is read combinationally in the issue
+cycle and the gather and scale logic consume it in that cycle.
+
+The load commits with the scoreboard bit set, which releases the dependent
+MMA (§2.2).
+
+---
+
+## 8. FEDP backends
+
+`VX_CFG_TCU_TYPE` selects one implementation of the dot product. All compute
+the same function; each asserts the configured latency against its own
+stage structure.
+
+| backend | implementation | latency |
+|---|---|---|
+| `TFR` — default | fixed-point reduction tree: multiply, align to the largest exponent, accumulate, normalize and round | 4; 5 on an FPGA flow, where the multiply takes two stages |
+| `DPI` | C soft-float through DPI; simulation only | 4 |
+| `BHF` | Berkeley HardFloat multipliers and adders | `4 + 3 × ⌈log2(2·TC_K + 1)⌉` |
+| `DSP` | vendor floating-point operators, converted to fp32 first | `9 + 11 × ⌈log2(2·TC_K + 1)⌉` |
+| `FPNEW` | CVFPU multipliers and adders | `14 + 7 × ⌈log2(2·TC_K)⌉` |
+
+`TFR` is the universal default. It is the only backend that does not pay a
+full floating-point rounding per tree level: it aligns every product to one
+exponent and adds them as integers, rounding once. On an FPGA its
+multipliers map onto DSP blocks through `VX_CFG_TCU_USE_DSP`.
+
+---
+
+## 9. SimX model and performance counters
+
+[`sim/simx/tcu/`](../../sim/simx/tcu/) mirrors the RTL structure:
+
+| RTL | SimX |
+|---|---|
+| `VX_tcu_uops` | `TcuUopGen` — same order, same setup predicate |
+| `VX_tcu_core`, `VX_tcu_agu` | `TcuUnit` |
+| `VX_tcu_tbuf`, `abuf`, `bbuf` | `TcuTbuf` — `Q` A line caches and one B, over one local-memory channel |
+| `VX_tcu_lockstep` | the same per-block ownership rule |
+| `VX_tcu_meta` | separate sparse and MX metadata stores |
+
+Operand loads go through simulation channels; the tensor path never reads
+memory directly.
+
+Perf: MPM class `TCU` — `TCU_TBUF_STALLS` (0xB03, cycles a WGMMA micro-op
+waited on tile-buffer data), `TCU_TBUF_CACHE_HITS` (0xB04, B rows reused),
+`TCU_LMEM_READS` (0xB05).
+
+---
+
+## 10. Configuration
+
+[`VX_config.toml`](../../VX_config.toml) `[tcu]`:
+
+| knob | default | meaning |
+|---|---|---|
+| `VX_CFG_EXT_TCU_ENABLE` | false | the extension |
+| `VX_CFG_TCU_TYPE` | `TFR` | FEDP backend |
+| `VX_CFG_TCU_USE_DSP` | 1 on FPGA synthesis | multipliers on DSP blocks |
+| `VX_CFG_NUM_TCU_BLOCKS` | issue width | `Q` |
+| `VX_CFG_NUM_TCU_LANES` | `NUM_THREADS` | lanes per block |
+| `VX_CFG_TCU_LATENCY` | from the backend | FEDP pipeline depth |
+| `VX_CFG_TCU_WGMMA_ENABLE` | false | WGMMA, the tile buffers, the lockstep gate |
+| `VX_CFG_TCU_FEDP2K` | false | dense WGMMA dot product of `2 × TC_K`, one K step |
+| `VX_CFG_TCU_SPARSE_ENABLE` | false | 2:4 sparsity |
+| `VX_CFG_TCU_DSM_ENABLE` | false | dynamic sparsity mask |
+| `VX_CFG_TCU_MX_ENABLE` | false | block-scaled formats |
+| `VX_CFG_TCU_{FP16,TF32,FP8,FP4,INT8,INT4,MXFP4,NVFP4}_ENABLE` | fp16 only | per-format datapaths |
+
+The metadata path — `TCU_LD`, the address generator, the metadata RAM and
+the second LSU-scheduler client — exists when either sparsity or MX is
+enabled. That condition is the internal flag `TCU_META_ENABLE`, derived in
+[`VX_define.vh`](../../hw/rtl/VX_define.vh).
+
+`NUM_THREADS` must be a power of two. The application must be compiled with
+the same `CONFIGS` as the driver: the tile geometry is a compile-time
+constant on both sides.
+
+---
+
+## 11. Software surface
+
+[`vx_tensor.h`](../../sw/kernel/include/vx_tensor.h):
+
+| API | purpose |
+|---|---|
+| `wmma_context`, `wgmma_context` | compile-time tile geometry and the instruction emitters for a given pair of formats |
+| `vx_make_smem_desc(ptr, leading_bytes)` | build a shared-memory descriptor; a zero stride selects block-major |
+| `load_sp_metadata`, `load_mx_metadata` | emit the `TCU_LD` instructions for a fragment |
+| `a_blockmajor_idx`, `b_blockmajor_idx`, `a_sp_blockmajor_idx` | where element `(r, c)` lives in a block-major slab |
+
+[`tensor_cfg.h`](../../sw/common/tensor_cfg.h) holds the format structs and
+the geometry templates shared with the simulator;
+`sw/runtime/include/tensor_sp.h` and `tensor_mx.h` hold the host-side
+packing helpers.
+
+---
+
+## 12. Verification
+
+| category | covers |
+|---|---|
+| `tensor` | WMMA across thread counts, issue widths and formats |
+| `tensor_wg` | WGMMA, register- and memory-sourced, with and without FEDP2K |
+| `tensor_sp`, `tensor_mx`, `tensor_sp_mx` | sparsity, block-scaled formats, and both together |
+| `unittest`, `hw-tcu` | the FEDP datapath per format, against a windowed reference |
+| `fpga_gate`, `asic_gate`, `tensor` device | timing and area of the unit |
+
+Test definitions are in [`ci/testcases/`](../../ci/testcases/).
+
+---
+
+## 13. Not implemented
+
+- **Retiring the block-major B path.** Both layouts are implemented in the
+  B buffer, which roughly doubles it. Block-major is kept as the default
+  while producers move to row-major slabs.
+- **Latency hiding across `k`.** There is no prefetch of the next stripe and
+  no ping-pong B buffer; a `k` transition pays a refill.
+- **A general metadata loader.** One fetch per instruction, single-buffered
+  metadata, and the tensor unit is the only second client of the LSU
+  scheduler.
+- **A third descriptor layout** and bank-conflict swizzling of shared
+  memory.
+- **MX integer formats.** The supported MX formats use the floating-point
+  conversion path.

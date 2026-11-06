@@ -66,7 +66,7 @@ struct RtuReq {
   uint32_t slot_idx = 0;
 
   // Per-lane ray descriptor snapshot (TRACE_NEW only).
-  std::array<uint32_t, VX_CFG_NUM_THREADS> scene_root = {};
+  std::array<uint64_t, VX_CFG_NUM_THREADS> scene_root = {};
   std::array<float,    VX_CFG_NUM_THREADS> origin_x   = {};
   std::array<float,    VX_CFG_NUM_THREADS> origin_y   = {};
   std::array<float,    VX_CFG_NUM_THREADS> origin_z   = {};
@@ -163,8 +163,14 @@ struct RtuRsp {
   uint32_t       slot_idx = 0;
 
   RtuRsp() = default;
+  // A lane without a hit reads back its own ray: t = t_max (the committed t a
+  // ray query reports with no hit, as the Vulkan reference does) and the world
+  // ray as its object ray.
   RtuRsp(const RtuReq& req)
     : uuid(req.uuid), tag(req.tag),
+      hit_t(req.tmax),
+      obj_o_x(req.origin_x), obj_o_y(req.origin_y), obj_o_z(req.origin_z),
+      obj_d_x(req.dir_x), obj_d_y(req.dir_y), obj_d_z(req.dir_z),
       trace(req.trace), block_id(req.block_id), warp_id(req.warp_id),
       slot_idx(req.slot_idx) {}
 
@@ -298,14 +304,14 @@ constexpr uint32_t kRtuImageStatesPerRay  = 1;   // scene header
 constexpr uint32_t kRtuSetupLatency = 17;   // reciprocal pipe depth
 constexpr uint32_t kRtuFdivLat      = 17;   // reciprocal pipe depth
 constexpr uint32_t kRtuLatencyFma   = 9;    // FMA pipe depth
-// Per-instance transform latency = 4 * FMA pipe depth = 36: an (ro-t) subtract
-// at FMA depth, then a 3-deep dot product. Charged per TLAS instance descent
-// in the SimX cost model.
-constexpr uint32_t kRtuXformLatency = 36;   // 4 * FMA pipe depth
+// Per-instance transform latency = 3 * FMA pipe depth = 27: three dependent
+// FMAs (VX_rtu_xform). Charged per TLAS instance descent in the SimX cost
+// model.
+constexpr uint32_t kRtuXformLatency = 27;   // 3 * FMA pipe depth
 
 // TLAS instance record (64 B). Lives inline after the scene header for
 // "TLAS + inline BLAS" layout.
-//   floats 0..11   = 3x4 affine transform (rows r0|r1|r2), object→world
+//   floats 0..11   = 3x4 affine transform (rows r0|r1|r2), world→object
 //   uint32 [48..52) = blas_byte_offset
 //   uint32 [52..56) = custom_id (Vulkan VK_INSTANCE_CUSTOM_INDEX_KHR)
 //   uint32 [56..60) = cull_mask (low byte = Vulkan instance mask;
@@ -436,6 +442,14 @@ struct LaneState {
   float  cand_obj_d[3]   = {0.f, 0.f, 0.f};
   uint32_t hit_instance_id = 0;
   uint32_t hit_instance_custom = 0;
+  // Multi-candidate traversal. A verdict that does not end the ray resumes its
+  // walk above the decided candidate's (t, key); `walk_needed` marks the lanes
+  // the next promote binds contexts to.
+  uint64_t cand_key   = 0;
+  bool     has_floor  = false;
+  float    floor_t    = 0.f;
+  uint64_t floor_key  = 0;
+  bool     walk_needed = false;
 };
 
 struct Slot {
@@ -528,7 +542,8 @@ struct QueueEntry {
 // ════════════════════════════════════════════════════════════════════
 
 struct PerfStats {
-  uint64_t rays_issued = 0;
+  uint64_t traces      = 0;   // warp-level traces accepted
+  uint64_t rays        = 0;   // active lanes of those traces
   uint64_t rays_hit    = 0;
   uint64_t rays_miss   = 0;
   uint64_t mem_reads   = 0;
@@ -538,12 +553,10 @@ struct PerfStats {
   uint64_t bvh_instance_descents = 0;
   uint64_t bvh_box_tests         = 0;
   uint64_t bvh_tri_tests         = 0;
-  // Short-stack overflow events: pushes past the VX_CFG_RTU_STACK_DEPTH HW
-  // stack. SimX keeps an unbounded stack (never misses a hit); each overflow
-  // entry is one the HW must re-descend for via trail-based restart, charged
-  // in the cost model.
+  // Trail restarts of the VX_CFG_RTU_STACK_DEPTH short stack. The node, box and
+  // descent counts above include the restarted walks' re-descents.
   uint64_t bvh_stack_restarts    = 0;
-  // Callback-pipeline counters.
+  // Callback-pipeline counters: candidate lanes returned to the warp, by type.
   uint64_t ahs_callbacks       = 0;
   uint64_t chs_callbacks       = 0;
   uint64_t miss_callbacks      = 0;
@@ -572,14 +585,15 @@ struct PerfStats {
   uint64_t ctx_bound_ticks     = 0;
   uint64_t ctx_active_ticks    = 0;
   uint64_t slot_busy_ticks     = 0;
-  uint64_t rtu_busy_ticks      = 0;   // ticks with any slot in use
+  uint64_t rtu_busy_ticks      = 0;   // ticks with any slot holding a trace
   // SIMD-PE cycle accounting: pipeline cycles charged across every context's
   // traversal, and ticks where at least one context was draining them.
   uint64_t walker_cycles_total = 0;
   uint64_t walker_busy_ticks   = 0;
 
   PerfStats& operator+=(const PerfStats& rhs) {
-    rays_issued            += rhs.rays_issued;
+    traces                 += rhs.traces;
+    rays                   += rhs.rays;
     rays_hit               += rhs.rays_hit;
     rays_miss              += rhs.rays_miss;
     mem_reads              += rhs.mem_reads;

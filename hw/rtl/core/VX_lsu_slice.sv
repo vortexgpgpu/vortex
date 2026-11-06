@@ -38,6 +38,15 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     localparam REQ_ASHIFT   = `CLOG2(LSU_WORD_SIZE);
     localparam MEM_ASHIFT   = `CLOG2(`VX_CFG_MEM_BLOCK_SIZE);
     localparam MEM_ADDRW    = `VX_CFG_MEM_ADDR_WIDTH - MEM_ASHIFT;
+    // Window membership is an equality on the block-address bits above the
+    // window: the LMEM base is asserted aligned to the capacity, so the prefix
+    // compare is exact and needs no end address -- which is not representable
+    // when the window ends at the top of the address space.
+`ifdef VX_CFG_LMEM_ENABLE
+    localparam LMEM_BLK_LSB = `VX_CFG_LMEM_LOG_SIZE - MEM_ASHIFT;
+    localparam [MEM_ADDRW-1:0] LMEM_BLK_BASE = MEM_ADDRW'(`VX_CFG_XLEN'(`VX_MEM_LMEM_BASE_ADDR) >> MEM_ASHIFT);
+    `STATIC_ASSERT (MEM_ADDRW > LMEM_BLK_LSB, ("LMEM window wider than the block address space"))
+`endif
     `UNUSED_PARAM (CORE_ID)
     `UNUSED_SPARAM (INSTANCE_ID)
 
@@ -113,9 +122,8 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
                                                  || lane_is_om;
     `ifdef VX_CFG_LMEM_ENABLE
         // is local memory address
-        wire [MEM_ADDRW-1:0] lmem_addr_start = MEM_ADDRW'(`VX_CFG_XLEN'(`VX_MEM_LMEM_BASE_ADDR) >> MEM_ASHIFT);
-        wire [MEM_ADDRW-1:0] lmem_addr_end = MEM_ADDRW'((`VX_CFG_XLEN'(`VX_MEM_LMEM_BASE_ADDR) + `VX_CFG_XLEN'(1 << `VX_CFG_LMEM_LOG_SIZE)) >> MEM_ASHIFT);
-        assign mem_req_attr_struct[i].is_addr_local = (block_addr >= lmem_addr_start) && (block_addr < lmem_addr_end);
+        assign mem_req_attr_struct[i].is_addr_local =
+            (block_addr[MEM_ADDRW-1:LMEM_BLK_LSB] == LMEM_BLK_BASE[MEM_ADDRW-1:LMEM_BLK_LSB]);
     `else
         assign mem_req_attr_struct[i].is_addr_local = 1'b0;
     `endif
@@ -405,12 +413,15 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 
     reg [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] rsp_data;
 
-`ifdef VX_CFG_XLEN_64
 `ifdef VX_CFG_EXT_F_ENABLE
     // apply nan-boxing to flw outputs
     wire rsp_is_float = (get_reg_type(rsp_hdr.rd) == REG_TYPE_F);
 `else
     wire rsp_is_float = 0;
+`endif
+`ifndef VX_CFG_XLEN_64
+`ifndef VX_CFG_EXT_ZFHMIN_ENABLE
+    `UNUSED_VAR (rsp_is_float)
 `endif
 `endif
 
@@ -427,7 +438,11 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         always @(*) begin
             case (inst_lsu_fmt(rsp_op_type))
             LSU_FMT_B:  rsp_data[i] = `VX_CFG_XLEN'(signed'(rsp_data8));
+        `ifdef VX_CFG_EXT_ZFHMIN_ENABLE
+            LSU_FMT_H:  rsp_data[i] = rsp_is_float ? {{(`VX_CFG_XLEN-16){1'b1}}, rsp_data16} : `VX_CFG_XLEN'(signed'(rsp_data16));
+        `else
             LSU_FMT_H:  rsp_data[i] = `VX_CFG_XLEN'(signed'(rsp_data16));
+        `endif
             LSU_FMT_BU: rsp_data[i] = `VX_CFG_XLEN'(unsigned'(rsp_data8));
             LSU_FMT_HU: rsp_data[i] = `VX_CFG_XLEN'(unsigned'(rsp_data16));
         `ifdef VX_CFG_XLEN_64

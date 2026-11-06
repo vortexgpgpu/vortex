@@ -15,7 +15,7 @@ VX_SRCS := $(SRC_DIR)/kernel.cpp
 # NUM_WARPS=16 needed so 4 co-resident CTAs of 4 warps each fit.
 CONFIGS := $(if $(findstring -DVX_CFG_NUM_WARPS=,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_NUM_WARPS=16)
 CONFIGS := $(if $(findstring -DVX_CFG_ISSUE_WIDTH=,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_ISSUE_WIDTH=4)
-CONFIGS += -DVX_CFG_TCU_WGMMA_ENABLE -DWGMMA_RS
+CONFIGS += -DVX_CFG_TCU_WGMMA_ENABLE
 
 
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/softfloat/source/include

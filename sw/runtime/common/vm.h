@@ -126,6 +126,9 @@ private:
   // Randomized VA allocation (VORTEX_RANDOMIZE_VA / VORTEX_VA_SEED).
   std::mt19937_64 rng_;
   bool randomize_va_;
+
+  // Heap mapped once with superpages (VORTEX_VM_MEGAPAGE_HEAP).
+  bool megapage_heap_;
 };
 
 } // namespace vortex

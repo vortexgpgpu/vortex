@@ -1,0 +1,175 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 880" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="arrb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1c6ca8"/>
+    </marker>
+  </defs>
+
+  <style>
+    .box     { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.5; }
+    .unit    { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .pe      { fill:#ffffff; stroke:#2e5e82; stroke-width:1.2; }
+    .mem     { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .sw      { fill:#eef7ee; stroke:#3a7d44; stroke-width:1.5; }
+    .core    { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.5; }
+    .grp     { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .t       { fill:#1b2733; font-size:15px; }
+    .tb      { fill:#1b2733; font-size:16px; font-weight:bold; }
+    .ts      { fill:#44525f; font-size:12.5px; }
+    .tt      { fill:#5a6772; font-size:12px; font-style:italic; }
+    .flow    { stroke:#444; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+    .flowb   { stroke:#1c6ca8; stroke-width:1.8; fill:none; marker-end:url(#arrb); stroke-dasharray:7 4; }
+    .lbl     { fill:#1c6ca8; font-size:12px; }
+    .lbk     { fill:#44525f; font-size:12px; }
+  </style>
+
+  <rect x="0" y="0" width="1400" height="880" fill="#ffffff"/>
+  <text x="24" y="34" class="tb" font-size="20">Vortex FPU — front end, native backend, and per-operation cores</text>
+
+  <!-- ══════════ front end ══════════ -->
+  <rect x="24" y="56" width="1352" height="180" class="grp"/>
+  <text x="36" y="80" class="tb">VX_fpu_unit — one request path per FPU block (VX_CFG_NUM_FPU_BLOCKS = issue width)</text>
+
+  <rect x="40" y="96" width="250" height="124" rx="6" class="core"/>
+  <text x="52" y="118" class="tb">VX_lane_dispatch</text>
+  <text x="52" y="140" class="ts">issue slots → FPU blocks</text>
+  <text x="52" y="156" class="ts">SIMD width → FPU lanes</text>
+  <text x="52" y="180" class="ts">operands: rs1, rs2, rs3,</text>
+  <text x="52" y="196" class="ts">XLEN wide per lane</text>
+
+  <rect x="330" y="96" width="300" height="124" rx="6" class="unit"/>
+  <text x="342" y="118" class="tb">request</text>
+  <text x="342" y="140" class="ts">tag store (VX_index_buffer): the instruction</text>
+  <text x="342" y="156" class="ts">header waits here; only a small tag travels</text>
+  <text x="342" y="180" class="ts">rounding mode: frm = DYN is replaced</text>
+  <text x="342" y="196" class="ts">by the warp's fcsr rounding mode</text>
+
+  <rect x="670" y="96" width="320" height="124" rx="6" class="box"/>
+  <text x="682" y="118" class="tb">backend — VX_CFG_FPU_TYPE</text>
+  <text x="682" y="140" class="ts">STD   soft RTL, ASIC and simulation</text>
+  <text x="682" y="156" class="ts">DSP   soft RTL + FPGA DSP / vendor IP</text>
+  <text x="682" y="172" class="ts">DPI   C soft-float model, simulation only</text>
+  <text x="682" y="188" class="ts">FPNEW third-party CVFPU, opt-in</text>
+  <text x="682" y="210" class="tt">all four share one port list</text>
+
+  <rect x="1030" y="96" width="330" height="124" rx="6" class="core"/>
+  <text x="1042" y="118" class="tb">response</text>
+  <text x="1042" y="140" class="ts">tag → header; VX_lane_gather → commit</text>
+  <text x="1042" y="160" class="ts">fflags OR-ed across the packets of one</text>
+  <text x="1042" y="176" class="ts">instruction, written to the warp's fcsr</text>
+  <text x="1042" y="192" class="ts">on the last packet</text>
+  <text x="1042" y="212" class="tt">VX_fpu_csr_if</text>
+
+  <path d="M 290 158 L 330 158" class="flow"/>
+  <path d="M 630 158 L 670 158" class="flow"/>
+  <path d="M 990 158 L 1030 158" class="flow"/>
+
+  <!-- ══════════ native backend ══════════ -->
+  <rect x="24" y="264" width="1352" height="560" class="grp"/>
+  <text x="36" y="288" class="tb">Native backend — VX_fpu_std / VX_fpu_dsp</text>
+
+  <rect x="40" y="304" width="1320" height="56" rx="6" class="unit"/>
+  <text x="52" y="326" class="tb">request switch</text>
+  <text x="200" y="326" class="ts">core = op_type[3:2] — 00 FMA · 01 DIV / SQRT · 10 CVT · 11 NCP;   F2F (1101) is steered to CVT</text>
+  <text x="200" y="346" class="tt">one request is in exactly one core; the four cores run independently and in parallel</text>
+
+  <path d="M 830 236 L 830 264" class="flowb"/>
+  <text x="840" y="256" class="lbl">STD or DSP selected</text>
+
+  <!-- FMA -->
+  <rect x="40" y="396" width="316" height="330" rx="6" class="unit"/>
+  <text x="52" y="418" class="tb">FMA core</text>
+  <text x="52" y="438" class="ts">ADD, SUB, MUL, MADD, MSUB, NMADD, NMSUB</text>
+  <rect x="52" y="450" width="292" height="40" rx="4" class="box"/>
+  <text x="62" y="468" class="ts">VX_pe_serializer</text>
+  <text x="62" y="483" class="tt">lanes ÷ FMA_PE_RATIO units</text>
+  <rect x="52" y="502" width="138" height="92" rx="4" class="pe"/>
+  <text x="62" y="522" class="t">fma32</text>
+  <text x="62" y="542" class="ts">MAN 23, EXP 8</text>
+  <text x="62" y="560" class="ts">always present</text>
+  <rect x="206" y="502" width="138" height="92" rx="4" class="pe"/>
+  <text x="216" y="522" class="t">fma64</text>
+  <text x="216" y="542" class="ts">MAN 52, EXP 11</text>
+  <text x="216" y="560" class="ts">FLEN ≥ 64 only</text>
+  <rect x="52" y="606" width="292" height="56" rx="4" class="box"/>
+  <text x="62" y="626" class="ts">result mux on fmt[0], delayed by</text>
+  <text x="62" y="642" class="ts">FMA_LATENCY; F32 result NaN-boxed</text>
+  <text x="52" y="690" class="tt">separate datapaths: F32 is the hot path</text>
+  <text x="52" y="708" class="tt">latency 8 (F32 build) / 12 (F64 build)</text>
+
+  <!-- DIVSQRT -->
+  <rect x="376" y="396" width="316" height="330" rx="6" class="unit"/>
+  <text x="388" y="418" class="tb">DIV / SQRT core</text>
+  <text x="388" y="438" class="ts">DIV, SQRT</text>
+  <rect x="388" y="450" width="292" height="40" rx="4" class="box"/>
+  <text x="398" y="468" class="ts">VX_pe_serializer</text>
+  <text x="398" y="483" class="tt">STD: one shared · DSP: one per operation</text>
+  <rect x="388" y="502" width="292" height="92" rx="4" class="pe"/>
+  <text x="398" y="522" class="t">STD: VX_fdivsqrt_unit</text>
+  <text x="398" y="542" class="ts">one iterator for both operations</text>
+  <text x="398" y="562" class="t">DSP: VX_fdiv_unit + VX_fsqrt_unit</text>
+  <text x="398" y="582" class="ts">F32 vendor IP, else the soft iterator</text>
+  <rect x="388" y="606" width="292" height="56" rx="4" class="box"/>
+  <text x="398" y="626" class="ts">the unit packs and NaN-boxes at the</text>
+  <text x="398" y="642" class="ts">active format; no result mux</text>
+  <text x="388" y="690" class="tt">merged datapath: sized for the widest format</text>
+  <text x="388" y="708" class="tt">latency 17 (F32 build) / 32 (F64 build)</text>
+
+  <!-- CVT -->
+  <rect x="712" y="396" width="316" height="330" rx="6" class="unit"/>
+  <text x="724" y="418" class="tb">CVT core</text>
+  <text x="724" y="438" class="ts">F2I, F2U, I2F, U2F, F2F</text>
+  <rect x="724" y="450" width="292" height="40" rx="4" class="box"/>
+  <text x="734" y="468" class="ts">VX_pe_serializer</text>
+  <text x="734" y="483" class="tt">lanes ÷ FCVT_PE_RATIO units</text>
+  <rect x="724" y="502" width="292" height="92" rx="4" class="pe"/>
+  <text x="734" y="522" class="t">VX_fcvt_unit</text>
+  <text x="734" y="542" class="ts">integer I32, I64, U32, U64 ↔ float</text>
+  <text x="734" y="560" class="ts">float ↔ float (FLEN ≥ 64)</text>
+  <text x="734" y="582" class="ts">one unpack, align and round tree</text>
+  <rect x="724" y="606" width="292" height="56" rx="4" class="box"/>
+  <text x="734" y="626" class="ts">result is XLEN wide: an integer, or a</text>
+  <text x="734" y="642" class="ts">boxed float</text>
+  <text x="724" y="690" class="tt">merged datapath: conversion is cross-format</text>
+  <text x="724" y="708" class="tt">latency 5 (XLEN 32) / 6 (XLEN 64)</text>
+
+  <!-- NCP -->
+  <rect x="1048" y="396" width="312" height="330" rx="6" class="unit"/>
+  <text x="1060" y="418" class="tb">NCP core</text>
+  <text x="1060" y="438" class="ts">SGNJ, MIN, MAX, CMP, CLASS, FMV</text>
+  <rect x="1060" y="450" width="288" height="40" rx="4" class="box"/>
+  <text x="1070" y="468" class="ts">VX_pe_serializer</text>
+  <text x="1070" y="483" class="tt">lanes ÷ FNCP_PE_RATIO units</text>
+  <rect x="1060" y="502" width="288" height="92" rx="4" class="pe"/>
+  <text x="1070" y="522" class="t">VX_fncp_unit</text>
+  <text x="1070" y="542" class="ts">FLEN wide, format from fmt[0]</text>
+  <text x="1070" y="560" class="ts">an F32 operand that is not NaN-boxed</text>
+  <text x="1070" y="576" class="ts">reads as the canonical quiet NaN</text>
+  <rect x="1060" y="606" width="288" height="56" rx="4" class="box"/>
+  <text x="1070" y="626" class="ts">result is XLEN wide: compare and</text>
+  <text x="1070" y="642" class="ts">classify results go to an integer register</text>
+  <text x="1060" y="690" class="tt">merged datapath: no arithmetic</text>
+  <text x="1060" y="708" class="tt">latency 2</text>
+
+  <path d="M 198 360 L 198 396" class="flow"/>
+  <path d="M 534 360 L 534 396" class="flow"/>
+  <path d="M 870 360 L 870 396" class="flow"/>
+  <path d="M 1204 360 L 1204 396" class="flow"/>
+
+  <rect x="40" y="756" width="1320" height="52" rx="6" class="unit"/>
+  <text x="52" y="778" class="tb">response arbiter</text>
+  <text x="200" y="778" class="ts">VX_stream_arb over the four cores → {per-lane result, fflags, has_fflags, tag}</text>
+  <text x="200" y="796" class="tt">each core merges fflags over its active lanes; responses leave in completion order, the tag restores the instruction</text>
+
+  <path d="M 198 726 L 198 756" class="flow"/>
+  <path d="M 534 726 L 534 756" class="flow"/>
+  <path d="M 870 726 L 870 756" class="flow"/>
+  <path d="M 1204 726 L 1204 756" class="flow"/>
+
+  <path d="M 1360 782 L 1388 782 L 1388 250 L 1196 250 L 1196 236" class="flowb"/>
+
+  <text x="24" y="856" class="tt">Purple = pipeline glue · blue = FPU logic · white = one processing element (PE), instantiated once per serialized lane group.</text>
+</svg>

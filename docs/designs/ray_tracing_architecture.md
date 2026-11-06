@@ -176,7 +176,7 @@ state as base+count bursts, so each span's members must abut.
 | 17..22 | object-space ray `origin`/`dir` (staged on an AHS/IS yield) | RTU writes |
 | 23 / 24 / 25 | candidate `cb_type` / `sbt_idx` / `cb_handle` | RTU writes |
 | 26 | **STATUS** (`VX_RT_STS_*`) | RTU writes **last** |
-| 27 / 29 | payload pointer / user `hitAttribute` | RTU writes (payload at arm; attr on commit) |
+| 27 (+28 on RV64) / 29 | payload pointer (low / high word) / user `hitAttribute` | RTU writes (payload with every record; attr on commit) |
 
 **STATUS is deliberately last.** A parked WAIT completes on the address-match
 write to slot 26, so every other result word must already be in the window when
@@ -299,9 +299,15 @@ Two work products leave the scheduler:
   returned `hitAttribute`).
 
 Robustness details worth naming: a short-stack of depth `RTU_STACK_DEPTH` bounds
-per-context node stack RAM; on overflow the walker sets an `ovf` flag and, at
-pop-time, **re-descends** the subtree pruned by the tightened `best_t` (bounded by
-`RTU_RESTART_CAP = 8` restarts) — a full traversal on a finite stack. A 16-entry
+per-context node stack RAM, and an overflow never loses a hit. The walk visits
+nodes in rank-path order (each level's child rank in the t-sorted list, an
+instance's index in its leaf); a child that does not fit is dropped and the walk
+records it, then only descends until it would pop, and instead **restarts** from
+the root along the dropped child's rank path, held in a small per-context path
+RAM. Everything before that child has been visited, a tightened `best_t` only
+culls a suffix of a node's sorted children (so ranks stay valid), and each
+restart starts strictly further along, so the walk is exact and terminates on
+any tree up to 63 levels deep. A deep tree costs restarts, not hits. A 16-entry
 box collector insertion-sorts a node's child hits t-ascending so descent is
 nearest-first. The insertion slot is decoded from the **admit thermometer**: the
 collected list is sorted and its count mask is a prefix, so the "entries at or
@@ -321,20 +327,23 @@ subnormals flushed either way), and `VX_CFG_FMA_LATENCY` /
 whatever depth results:
 
 - **`VX_rtu_box_pe`** — pipelined ray/AABB slab test, one child box per cycle,
-  emitting `{hit, t_near}`. Dequantizes the node's int8 child corners
-  (`origin + q·2^exp`), does the slab test with `VX_fma_unit` + `VX_fncp_unit`,
-  and subtracts the ray origin *before* multiplying by `inv_d` so axis-aligned
-  rays (`inv_d = ±inf`) stay NaN-free. Also handles raw/procedural boxes.
-- **`VX_rtu_tri_pe`** — pipelined Möller–Trumbore triangle test, one triangle per
-  cycle, emitting `{hit, t, u, v, back_facing}`; reuses `VX_fma_unit`,
-  `VX_fdiv_unit` (1/det), `VX_fncp_unit`, and `VX_rtu_fdot3`/`fcross3`. The
-  dot/cross helpers pipeline their 24×24 mantissa products into DSP multipliers
-  (`LATENCY_IMUL` deep) fed the **raw** mantissas: a flushed (subnormal/zero)
-  term is discarded downstream in the `VX_rtu_fmac3` accumulator by its zero
-  product-exponent, so no subnormal-flush select sits in front of the multiplier
-  inputs and the DSPs launch straight from the source flops.
-- **`VX_rtu_xform`** — TLAS world→object transform, `obj = Rᵀ·(ro−t)` — FMA-only
-  (an orthonormal TLAS rotation needs no determinant or divide). Always built:
+  emitting `{hit, t_near}`. Mirrors SimX `box_rel` + `ray_box` bit for bit:
+  corners relative to the ray, `q·2^exp + (origin − ro)` (the product exact),
+  slabs `rel·inv_d`, culled against the ray interval `[t_min, t_max]` with
+  `t_max` the committed hit. `inv_d` is `FLT_MAX` for a zero direction
+  component, so no slab is ever `0·inf`. Also handles raw/procedural boxes
+  (`origin = +0`).
+- **`VX_rtu_tri_pe`** — pipelined watertight triangle test (Woop, Benthin, Wald,
+  JCGT 2013), all F32: shear, edge functions as rounded products and a rounded
+  difference (so a shared edge evaluates to exactly negated weights in its two
+  triangles), `det = (w0 + w1) + w2`, `T` as an FMA chain, one `1/det` scaling
+  `t`, `u`, `v`. Accepts `t_min < t < t_max` (Vulkan's open triangle interval),
+  with `t_max` the committed hit, one triangle per cycle, emitting
+  `{hit, t, u, v, back_facing}`; bit-exact against SimX `ray_triangle`.
+- **`VX_rtu_xform`** — TLAS world→object transform. The instance record holds
+  the world→object matrix, so no inverse is taken; each object-ray component is
+  three dependent FMAs (`fma(z, m2, fma(y, m1, fma(x, m0, t)))`, the direction
+  seeded with `x·m0`), 18 FMA units, `3·FMA` deep. Always built:
   the CW-BVH walker descends `LEAF_INST` natively; only the flat walker's
   (`WIDTH = 0`) instancing loop is gated by `VX_CFG_RTU_TLAS_ENABLE`.
 - **`VX_rtu_recip`** — F32 reciprocal for `inv_d`, either a portable LUT+Newton
@@ -458,10 +467,49 @@ oracle**:
 
 SimX additionally models **per-warp multi-trace concurrency** (several traces in
 flight from one warp), which the RTL core does not implement — SimX remains the
-oracle for that. Perf: MPM class `RTU` plus the SimX `PerfStats` (context/slot
-occupancy, front-end busy ticks, box/tri test counts); the RTL core keeps its own
-per-slot occupancy counters (busy / write / callback / fill and the two idle
-causes: idle-with-a-ray vs starved) under `DBG_RTU_OCC`.
+oracle for that. Its exploration counters (context occupancy, fetch merging,
+walker cycle accounting) stay in `PerfStats` and the `VX_RTU_STATS=1` teardown
+dump; the architectural set below is what both models expose.
+
+### 8.1 Performance counters (MPM class 15)
+
+`--perf=15` (`VORTEX_PROFILING=15`, or `vx_device_mpm_query` with
+`VX_DCR_MPM_CLASS_RTU`) reads the RTU counters on every driver. They are
+**socket-scoped**: a socket sums its RTU cores and hands the result to each of its
+cores' CSR file, so every core of a socket reads the same values. The runtime
+queries one core per socket, prints a per-socket line when there is more than one
+socket, and always prints the device total.
+
+The set is kept to quantities every BVH ray-tracing unit has, whatever its
+internal organization, so the counters stay meaningful as the RTU evolves.
+Microarchitecture-specific measures (slots, short-stack restarts, front-end steps)
+are left to `PerfStats`; the class's CSR window (B03–B1F) leaves room for
+future counters.
+
+| CSR | Counter | Definition |
+|---|---|---|
+| B03 | `RTU_RAYS` | rays traced: the active lanes of the trace instructions |
+| B04 | `RTU_HITS` | rays whose final result is a hit (misses = rays − hits) |
+| B05 | `RTU_BOX_TESTS` | ray/box intersection tests (node children and procedural boxes) |
+| B06 | `RTU_TRI_TESTS` | ray/triangle intersection tests |
+| B07 | `RTU_CALLBACKS` | any-hit and intersection candidates returned to the shader (one per ray per candidate) |
+| B08 | `RTU_BUSY` | cycles with at least one ray in flight |
+| B09 | `RTCACHE_READS` | RTU memory requests (RTCache reads) |
+| B0A | `RTCACHE_MISS_R` | RTCache read misses |
+
+Box and triangle tests include the re-descents of restarted walks: SimX runs the
+same `VX_CFG_RTU_STACK_DEPTH` short stack and trail restart as the RTL, so both
+models do the same intersection work. Invariants: `RTU_HITS ≤ RTU_RAYS`,
+`RTU_BUSY ≤ cycles`.
+
+The `model_parity-rt_raycast` case requires rays, hits, box tests, triangle tests
+and callbacks to match SimX exactly. `RTU_BUSY` and the RTCache counters are
+timing and memory-system measures and are not gated: SimX keeps a ray's fetched
+lines where the RTL refetches per structure access.
+
+The runtime also derives the hit rate, box and triangle tests per ray, memory
+requests per ray, RTU utilization and the RTCache hit rate. In RTL the counters
+exist only in `PERF_ENABLE` builds.
 
 ---
 

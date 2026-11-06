@@ -1,0 +1,186 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 710" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="arrb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1c6ca8"/>
+    </marker>
+    <marker id="arrp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8e4a7e"/>
+    </marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3a7d44"/>
+    </marker>
+    <marker id="arry" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b58900"/>
+    </marker>
+    <marker id="arrr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b03a2e"/>
+    </marker>
+  </defs>
+  <style>
+    .blk  { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.6; }
+    .ff   { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.6; }
+    .ram  { fill:#fdf6e3; stroke:#b58900; stroke-width:1.6; }
+    .grp  { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .t    { fill:#1b2733; font-size:15px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:12.5px; }
+    .tg   { fill:#5a6772; font-size:13px; font-weight:bold; }
+    .w    { stroke:#444; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+    .wva  { stroke:#8e4a7e; stroke-width:2.0; fill:none; marker-end:url(#arrp); }
+    .whit { stroke:#3a7d44; stroke-width:2.0; fill:none; marker-end:url(#arrg); }
+    .wmis { stroke:#1c6ca8; stroke-width:1.8; fill:none; marker-end:url(#arrb); }
+    .wbus { stroke:#1c6ca8; stroke-width:1.8; fill:none; marker-end:url(#arrb); marker-start:url(#arrb); }
+    .wram { stroke:#b58900; stroke-width:1.8; fill:none; marker-end:url(#arry); }
+    .wkil { stroke:#b03a2e; stroke-width:1.8; fill:none; marker-end:url(#arrr); stroke-dasharray:5 3; }
+    .wctl { stroke:#3a7d44; stroke-width:1.5; fill:none; marker-end:url(#arrg); stroke-dasharray:4 3; }
+    .l    { fill:#444; font-size:12px; }
+    .li   { fill:#1b2733; font-size:12.5px; font-weight:bold; }
+    .lp   { fill:#8e4a7e; font-size:12px; }
+    .lg   { fill:#2f6b39; font-size:12px; }
+    .lb   { fill:#1c6ca8; font-size:12px; }
+    .ly   { fill:#8a6d00; font-size:12px; }
+    .lr   { fill:#b03a2e; font-size:12px; }
+  </style>
+
+  <rect x="0" y="0" width="1500" height="710" fill="#ffffff"/>
+  <text x="24" y="34" class="t" font-size="20">VX_tlb_l1 — entry array (VX_tlb_cam) and miss station (VX_tlb_mshr)</text>
+
+  <!-- VX_tlb_cam -->
+  <rect x="200" y="70" width="1120" height="230" rx="6" class="grp"/>
+  <text x="212" y="92" class="tg">VX_tlb_cam</text>
+
+  <rect x="220" y="110" width="200" height="90" rx="6" class="ff"/>
+  <text x="320" y="140" class="t" text-anchor="middle">Entry array</text>
+  <text x="320" y="160" class="ts" text-anchor="middle">TLB_SIZE entries · flip-flops</text>
+  <text x="320" y="176" class="ts" text-anchor="middle">{level, vpn, ppn, flags}</text>
+
+  <rect x="470" y="110" width="200" height="90" rx="6" class="blk"/>
+  <text x="570" y="140" class="t" text-anchor="middle">Match array</text>
+  <text x="570" y="160" class="ts" text-anchor="middle">TLB_SIZE × NUM_REQS</text>
+  <text x="570" y="176" class="ts" text-anchor="middle">masked VPN compare</text>
+
+  <rect x="720" y="110" width="170" height="90" rx="6" class="blk"/>
+  <text x="805" y="140" class="t" text-anchor="middle">Priority encoder</text>
+  <text x="805" y="160" class="ts" text-anchor="middle">lowest hit → one-hot</text>
+  <text x="805" y="176" class="ts" text-anchor="middle">per lane</text>
+
+  <rect x="940" y="110" width="200" height="90" rx="6" class="blk"/>
+  <text x="1040" y="140" class="t" text-anchor="middle">Select + splice</text>
+  <text x="1040" y="160" class="ts" text-anchor="middle">one-hot AND-OR mux</text>
+  <text x="1040" y="176" class="ts" text-anchor="middle">ppn | (vpn &amp; ~mask)</text>
+
+  <rect x="220" y="225" width="200" height="56" rx="6" class="blk"/>
+  <text x="320" y="248" class="t" text-anchor="middle">Victim select</text>
+  <text x="320" y="266" class="ts" text-anchor="middle">invalid → non-MRU → 0</text>
+
+  <path d="M 60 155 L 470 155" class="wva"/>
+  <text x="60" y="136" class="li">lookup_vpn[l]</text>
+  <text x="60" y="150" class="lp">×NUM_REQS</text>
+  <path d="M 420 130 L 470 130" class="w"/>
+  <text x="424" y="124" class="l">entries</text>
+  <path d="M 670 155 L 720 155" class="w"/>
+  <text x="676" y="148" class="l">hit_vec</text>
+  <path d="M 890 155 L 940 155" class="w"/>
+  <text x="896" y="148" class="l">one-hot</text>
+  <path d="M 420 180 L 445 180 L 445 215 L 920 215 L 920 180 L 940 180" class="w"/>
+  <text x="600" y="228" class="l">entry_sel {ppn, flags, level}</text>
+  <path d="M 1140 155 L 1440 155" class="whit"/>
+  <text x="1160" y="136" class="li">lookup_hit · lookup_ppn · flags · level</text>
+  <text x="1160" y="150" class="lg">→ VX_mmu (combinational)</text>
+  <path d="M 805 110 L 805 60 L 320 60 L 320 110" class="wctl"/>
+  <text x="330" y="54" class="lg">hit_index (MRU bump on access_hit)</text>
+  <path d="M 320 225 L 320 200" class="w"/>
+  <path d="M 1440 260 L 440 260" class="wram"/>
+  <text x="1160" y="254" class="ly">install_entry (from Fill)</text>
+  <path d="M 440 260 L 440 240 L 420 240" class="wram"/>
+
+  <!-- VX_tlb_mshr -->
+  <rect x="200" y="330" width="1120" height="300" rx="6" class="grp"/>
+  <text x="212" y="352" class="tg">VX_tlb_mshr</text>
+
+  <rect x="220" y="380" width="160" height="80" rx="6" class="blk"/>
+  <text x="300" y="408" class="t" text-anchor="middle">Probe</text>
+  <text x="300" y="428" class="ts" text-anchor="middle">VPN vs live entries</text>
+  <text x="300" y="444" class="ts" text-anchor="middle">×NUM_REQS</text>
+
+  <rect x="430" y="380" width="170" height="80" rx="6" class="blk"/>
+  <text x="515" y="408" class="t" text-anchor="middle">Allocate</text>
+  <text x="515" y="428" class="ts" text-anchor="middle">match ? join : free slot</text>
+  <text x="515" y="444" class="ts" text-anchor="middle">≤ 1 per cycle</text>
+
+  <rect x="650" y="380" width="200" height="80" rx="6" class="ff"/>
+  <text x="750" y="408" class="t" text-anchor="middle">Entry state</text>
+  <text x="750" y="428" class="ts" text-anchor="middle">valid · issued · filled · fault</text>
+  <text x="750" y="444" class="ts" text-anchor="middle">vpn · access · amo · ×MSHR_SIZE</text>
+
+  <rect x="900" y="380" width="160" height="80" rx="6" class="blk"/>
+  <text x="980" y="408" class="t" text-anchor="middle">Issue</text>
+  <text x="980" y="428" class="ts" text-anchor="middle">priority encoder</text>
+  <text x="980" y="444" class="ts" text-anchor="middle">VX_pipe_buffer ×1</text>
+
+  <rect x="1110" y="380" width="160" height="80" rx="6" class="blk"/>
+  <text x="1190" y="408" class="t" text-anchor="middle">Fill</text>
+  <text x="1190" y="428" class="ts" text-anchor="middle">install or fault</text>
+  <text x="1190" y="444" class="ts" text-anchor="middle">always ready</text>
+
+  <rect x="430" y="510" width="200" height="80" rx="6" class="ram"/>
+  <text x="530" y="538" class="t" text-anchor="middle">Token pool</text>
+  <text x="530" y="558" class="ts" text-anchor="middle">VX_dp_ram · MSHR_SIZE × QDEPTH</text>
+  <text x="530" y="574" class="ts" text-anchor="middle">head / tail per entry</text>
+
+  <rect x="680" y="510" width="170" height="80" rx="6" class="ram"/>
+  <text x="765" y="538" class="t" text-anchor="middle">Payload store</text>
+  <text x="765" y="558" class="ts" text-anchor="middle">VX_dp_ram MSHR_SIZE</text>
+  <text x="765" y="574" class="ts" text-anchor="middle">{ppn, level, flags}</text>
+
+  <rect x="900" y="510" width="200" height="80" rx="6" class="blk"/>
+  <text x="1000" y="538" class="t" text-anchor="middle">Drain select</text>
+  <text x="1000" y="558" class="ts" text-anchor="middle">rotating priority</text>
+  <text x="1000" y="574" class="ts" text-anchor="middle">1 cycle ahead → RAM raddr</text>
+
+  <path d="M 60 420 L 220 420" class="wva"/>
+  <text x="60" y="400" class="li">probe_vpn[l]</text>
+  <text x="60" y="414" class="lp">= lookup_vpn</text>
+  <path d="M 380 420 L 430 420" class="wmis"/>
+  <text x="384" y="413" class="lb">match · slot</text>
+  <path d="M 300 380 L 300 310 L 60 310" class="wmis"/>
+  <text x="60" y="326" class="li">mshr_match[l]</text>
+  <path d="M 60 480 L 400 480 L 400 440 L 430 440" class="wmis"/>
+  <text x="60" y="500" class="li">park</text>
+  <text x="60" y="514" class="lb">vpn · access · amo · {lane, fields}</text>
+  <path d="M 600 420 L 650 420" class="w"/>
+  <text x="606" y="413" class="l">new entry</text>
+  <path d="M 515 460 L 515 510" class="wram"/>
+  <text x="522" y="490" class="ly">push token</text>
+  <path d="M 850 420 L 900 420" class="w"/>
+  <text x="856" y="413" class="l">pending</text>
+  <path d="M 980 460 L 980 680" class="wbus"/>
+  <text x="990" y="656" class="li">tlb_bus_if</text>
+  <text x="990" y="670" class="lb">req {slot, access, amo, vpn} / rsp {slot, fault, level, ppn, flags}</text>
+  <path d="M 1190 680 L 1190 460" class="wmis"/>
+  <text x="1200" y="656" class="lb">fill</text>
+  <path d="M 1110 395 L 1090 395 L 1090 365 L 760 365 L 760 380" class="w"/>
+  <text x="800" y="360" class="l">filled · fault</text>
+  <path d="M 1190 380 L 1190 260" class="wram"/>
+  <path d="M 1110 440 L 1085 440 L 1085 475 L 765 475 L 765 510" class="wram"/>
+  <text x="790" y="470" class="ly">write {ppn, level, flags}</text>
+  <path d="M 1270 440 L 1440 440" class="wkil"/>
+  <text x="1300" y="420" class="li">mshr_fault</text>
+  <text x="1300" y="434" class="lr">vpn · access</text>
+  <path d="M 750 460 L 750 490 L 1000 490 L 1000 510" class="w"/>
+  <text x="820" y="504" class="l">valid ∧ filled</text>
+  <path d="M 900 560 L 850 560" class="w"/>
+  <path d="M 900 575 L 870 575 L 870 600 L 630 600 L 630 575" class="w"/>
+  <text x="660" y="614" class="l">drain_sel_n (raddr)</text>
+  <path d="M 430 550 L 60 550" class="whit"/>
+  <text x="60" y="570" class="li">drain → replay / kill</text>
+  <text x="60" y="584" class="lg">token · ppn · level · flags · fault</text>
+  <path d="M 680 550 L 650 550 L 650 540 L 630 540" class="whit"/>
+
+  <path d="M 60 240 L 220 240" class="wctl"/>
+  <text x="60" y="222" class="li">flush</text>
+  <path d="M 1320 600 L 1440 600" class="wctl"/>
+  <text x="1330" y="592" class="li">empty</text>
+</svg>

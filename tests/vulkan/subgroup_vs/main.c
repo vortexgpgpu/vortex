@@ -443,7 +443,7 @@ main(int argc, char **argv)
       return 1;
    }
 
-   struct sg_report r = { 0, 0, 0, 0 };
+   struct sg_report r = { 0 };
    int rc = render_subgroup(dev, queue, qf, &mp, vs, fs, &r);
 
    vkDestroyShaderModule(dev, vs, NULL);

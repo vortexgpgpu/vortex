@@ -1,0 +1,144 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 900" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2e5e82"/>
+    </marker>
+    <marker id="arrp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8e4a7e"/>
+    </marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b58900"/>
+    </marker>
+    <marker id="arrk" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3a7d44"/>
+    </marker>
+  </defs>
+  <style>
+    .lane { stroke:#c2ccd6; stroke-width:1.3; }
+    .t    { fill:#1b2733; font-size:19px; font-weight:bold; }
+    .th   { fill:#1b2733; font-size:13px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:11.5px; }
+    .tt   { fill:#5a6772; font-size:11px; font-style:italic; }
+    .act  { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.3; }
+    .actp { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.3; }
+    .actg { fill:#fdf6e3; stroke:#b58900; stroke-width:1.3; }
+    .actk { fill:#eef7ee; stroke:#3a7d44; stroke-width:1.3; }
+    .note { fill:#fbfcfd; stroke:#5a7184; stroke-width:1.2; }
+    .m    { stroke:#2e5e82; stroke-width:1.7; fill:none; marker-end:url(#arr); }
+    .mp   { stroke:#8e4a7e; stroke-width:1.7; fill:none; marker-end:url(#arrp); }
+    .mg   { stroke:#b58900; stroke-width:1.7; fill:none; marker-end:url(#arrg); }
+    .mk   { stroke:#3a7d44; stroke-width:1.7; fill:none; marker-end:url(#arrk); }
+    .lb   { fill:#2e5e82; font-size:11px; }
+    .lbp  { fill:#8e4a7e; font-size:11px; }
+    .lbg  { fill:#8a6d00; font-size:11px; }
+    .lbk  { fill:#2f6a39; font-size:11px; }
+  </style>
+
+  <rect x="0" y="0" width="1400" height="900" fill="#ffffff"/>
+  <text x="24" y="34" class="t">One atomic through a passthrough level — L1 above an L2 last-level cache</text>
+  <text x="24" y="56" class="tt">Purple = core, blue = passthrough bank, green = last-level bank, gold = memory. The same exchange repeats at each passthrough level of a deeper hierarchy.</text>
+
+  <!-- lifelines -->
+  <text x="130"  y="94" class="th" text-anchor="middle" fill="#8e4a7e">LSU (issuing hart)</text>
+  <text x="430"  y="94" class="th" text-anchor="middle" fill="#2e5e82">L1 bank — passthrough</text>
+  <text x="700"  y="94" class="th" text-anchor="middle" fill="#2e5e82">L1 MSHR</text>
+  <text x="980"  y="94" class="th" text-anchor="middle" fill="#2f6a39">L2 bank — commit</text>
+  <text x="1270" y="94" class="th" text-anchor="middle" fill="#8a6d00">memory</text>
+
+  <line x1="130"  y1="104" x2="130"  y2="850" class="lane"/>
+  <line x1="430"  y1="104" x2="430"  y2="850" class="lane"/>
+  <line x1="700"  y1="104" x2="700"  y2="850" class="lane"/>
+  <line x1="980"  y1="104" x2="980"  y2="850" class="lane"/>
+  <line x1="1270" y1="104" x2="1270" y2="850" class="lane"/>
+
+  <!-- 1. request -->
+  <path d="M 130 132 L 426 132" class="mp"/>
+  <text x="146" y="124" class="lbp">1 · atomic request: rw = 0, attr = sideband</text>
+
+  <!-- 2. input ordering -->
+  <rect x="330" y="146" width="200" height="54" rx="5" class="act"/>
+  <text x="340" y="164" class="ts">2 · hold at the input while a</text>
+  <text x="340" y="179" class="ts">load fill is pending for the</text>
+  <text x="340" y="194" class="ts">line (req_input_defer)</text>
+
+  <!-- 3. S0 -->
+  <rect x="330" y="214" width="200" height="54" rx="5" class="act"/>
+  <text x="340" y="232" class="ts">3 · lookup: on a tag hit, clear</text>
+  <text x="340" y="247" class="ts">the line's valid bit — this</text>
+  <text x="340" y="262" class="ts">cache drops its own copy</text>
+
+  <path d="M 430 290 L 696 290" class="m"/>
+  <text x="446" y="282" class="lb">4 · allocate an entry, flagged passthrough</text>
+
+  <rect x="610" y="304" width="180" height="40" rx="5" class="act"/>
+  <text x="620" y="322" class="ts">never coalesced with</text>
+  <text x="620" y="337" class="ts">another entry</text>
+
+  <!-- 4. forward -->
+  <path d="M 430 370 L 976 370" class="m"/>
+  <text x="446" y="362" class="lb">5 · forward: rw = 0, word byteen, operand in the data word, attr = sideband, tag = entry id</text>
+
+  <!-- 5. LLC commit -->
+  <rect x="870" y="386" width="220" height="40" rx="5" class="actk"/>
+  <text x="880" y="404" class="ts">6 · miss → fetch the line,</text>
+  <text x="880" y="419" class="ts">replay; hit → commit</text>
+  <path d="M 1090 398 L 1266 398" class="mg"/>
+  <text x="1102" y="390" class="lbg">fill request (on a miss)</text>
+  <path d="M 1266 420 L 1094 420" class="mg"/>
+  <text x="1102" y="434" class="lbg">line</text>
+
+  <rect x="870" y="446" width="220" height="84" rx="5" class="actk"/>
+  <text x="880" y="464" class="ts">7 · commit stage: old word →</text>
+  <text x="880" y="479" class="ts">response; reservation update</text>
+  <text x="880" y="494" class="ts">compute: VX_amo_alu</text>
+  <text x="880" y="509" class="ts">writeback queue → synthetic</text>
+  <text x="880" y="524" class="ts">store into the line</text>
+
+  <path d="M 1090 512 L 1266 512" class="mg"/>
+  <text x="1102" y="504" class="lbg">write-through of the result</text>
+  <text x="1102" y="528" class="tt">(a write-back L2 dirties the line instead)</text>
+
+  <!-- 6. response -->
+  <path d="M 976 562 L 434 562" class="mk"/>
+  <text x="560" y="554" class="lbk">8 · response: a sector whose addressed word is the result (old word, or SC 0 / 1)</text>
+
+  <!-- 7. passthrough fill -->
+  <rect x="330" y="578" width="200" height="70" rx="5" class="act"/>
+  <text x="340" y="596" class="ts">9 · passthrough fill: latch the</text>
+  <text x="340" y="611" class="ts">result word for this entry;</text>
+  <text x="340" y="626" class="ts">install no line, touch no</text>
+  <text x="340" y="641" class="ts">tag or data array</text>
+
+  <path d="M 696 672 L 434 672" class="m"/>
+  <text x="450" y="664" class="lb">10 · replay the entry</text>
+
+  <rect x="330" y="688" width="200" height="54" rx="5" class="act"/>
+  <text x="340" y="706" class="ts">11 · the replay counts as a hit</text>
+  <text x="340" y="721" class="ts">at the commit stage; its data</text>
+  <text x="340" y="736" class="ts">is the latched word</text>
+
+  <path d="M 426 766 L 134 766" class="mp"/>
+  <text x="150" y="758" class="lbp">12 · response → rd</text>
+
+  <rect x="40" y="782" width="180" height="40" rx="5" class="actp"/>
+  <text x="50" y="800" class="ts">sub-word extract and</text>
+  <text x="50" y="815" class="ts">sign-extend, as for a load</text>
+
+  <!-- notes -->
+  <rect x="1110" y="600" width="276" height="122" rx="6" class="note"/>
+  <text x="1122" y="620" class="th">Issuer self-consistency</text>
+  <text x="1122" y="640" class="ts">Steps 3 and 9 leave no copy of the line</text>
+  <text x="1122" y="656" class="ts">in L1. The hart's next plain load misses</text>
+  <text x="1122" y="672" class="ts">and refetches from L2, so it reads its</text>
+  <text x="1122" y="688" class="ts">own update.</text>
+  <text x="1122" y="710" class="tt">tests/regression/amo: self_consistency</text>
+
+  <rect x="1110" y="738" width="276" height="106" rx="6" class="note"/>
+  <text x="1122" y="758" class="th">Same-hart program order</text>
+  <text x="1122" y="778" class="ts">From 4 to 10 a plain load to the line is</text>
+  <text x="1122" y="794" class="ts">held at the L1 input, so a load issued</text>
+  <text x="1122" y="810" class="ts">after the atomic cannot install a line</text>
+  <text x="1122" y="826" class="ts">fetched before it committed.</text>
+
+  <text x="24" y="884" class="tt">When L1 is the last level there are no steps 3–5 and 8–11: the L1 bank itself runs 6–7.</text>
+</svg>

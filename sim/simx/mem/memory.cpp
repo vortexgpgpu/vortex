@@ -55,13 +55,13 @@ public:
 	Impl(Memory* simobject, const Config& config)
 		: simobject_(simobject)
 		, config_(config)
-		, dram_sim_(config.num_banks, config.block_size, config.clock_ratio)
+		, dram_sim_(config.dram)
 		, ram_(nullptr)
 	{
 		char sname[100];
 		snprintf(sname, 100, "%s-xbar", simobject->name().c_str());
-		mem_xbar_ = MemCrossBar::Create(sname, ArbiterType::RoundRobin, config.num_ports, config.num_banks,
-			[lg2_block_size = log2ceil(config.block_size), num_banks = config.num_banks](const MemCrossBar::ReqType& req) {
+		mem_xbar_ = MemCrossBar::Create(sname, ArbiterType::RoundRobin, config.num_ports, config.dram.num_channels,
+			[lg2_block_size = log2ceil(config.dram.block_size), num_banks = config.dram.num_channels](const MemCrossBar::ReqType& req) {
     	// Custom logic to calculate the output index using bank interleaving
 			return (uint32_t)((req.addr >> lg2_block_size) & (num_banks-1));
 		});
@@ -85,8 +85,10 @@ public:
 	void tick() {
 		dram_sim_.tick();
 
-		for (uint32_t i = 0; i < config_.num_banks; ++i) {
-			if (mem_xbar_->ReqOut.at(i).empty())
+		uint32_t num_banks = config_.dram.num_channels;
+		uint32_t lg2_block_size = log2ceil(config_.dram.block_size);
+		for (uint32_t i = 0; i < num_banks; ++i) {
+			if (mem_xbar_->ReqOut.at(i).empty() || !dram_sim_.can_accept(i))
 				continue;
 
 			auto& mem_req = mem_xbar_->ReqOut.at(i).peek();
@@ -126,8 +128,10 @@ public:
 
 			// enqueue the request to the memory system
 			auto req_args = new DramCallbackArgs{this, mem_req, i, rsp_data};
+			uint64_t bank_addr = ((mem_req.addr >> lg2_block_size) / num_banks) << lg2_block_size;
 			dram_sim_.send_request(
-				mem_req.addr,
+				i,
+				bank_addr,
 				mem_req.is_write(),
 				[](void* arg)->bool {
 					auto rsp_args = reinterpret_cast<const DramCallbackArgs*>(arg);

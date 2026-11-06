@@ -27,8 +27,8 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   auto pA  = reinterpret_cast<ctx::input_t *>(arg->A_addr);   // compressed A
   auto pB  = reinterpret_cast<ctx::input_t *>(arg->B_addr);   // dense B
 
-  uint32_t N = arg->N;
-  uint32_t K = arg->K;
+  size_t N = arg->N;
+  size_t K = arg->K;
 
   uint32_t tid = threadIdx.x;
   uint32_t lane = tid % VX_CFG_NUM_THREADS;
@@ -38,8 +38,8 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
   // CTA tile dimensions
   uint32_t cta_M = num_warps * ctx::xtileM;
-  uint32_t tile_row = blockIdx.y * cta_M;
-  uint32_t tile_col = blockIdx.x * ctx::xtileN;
+  size_t tile_row = blockIdx.y * cta_M;
+  size_t tile_col = blockIdx.x * ctx::xtileN;
 
   auto smem_base = reinterpret_cast<uint8_t*>(__local_mem());
   uint32_t smem_b_off =
@@ -51,28 +51,28 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   ctx::fragment_acc fragC;
   ctx::fill_fragment(fragC, 0);
 
-  uint32_t a_sp_stride = K / 2;
+  size_t a_sp_stride = K / 2;
   uint32_t num_k_tiles = K / ctx::tileK;
   uint32_t meta_words_per_tile = ctx::wg_meta_total_bytes / 4;
 
-  for (uint32_t k = 0; k < K; k += ctx::tileK) {
+  for (size_t k = 0; k < K; k += ctx::tileK) {
     uint32_t k_tile = k / ctx::tileK;
 
     // Each warp loads its compressed A tile into its private TBUF section.
     auto A_smem_w = reinterpret_cast<ctx::input_t*>(
         smem_base + warp_rank * per_warp_section);
-    for (uint32_t i = lane; i < smem_a_elems; i += VX_CFG_NUM_THREADS) {
-      uint32_t r = i / (ctx::tileK / 2);
-      uint32_t c = i % (ctx::tileK / 2);
+    for (size_t i = lane; i < smem_a_elems; i += VX_CFG_NUM_THREADS) {
+      size_t r = i / (ctx::tileK / 2);
+      size_t c = i % (ctx::tileK / 2);
       A_smem_w[i] =
           pA[(tile_row + warp_rank * ctx::xtileM + r) * a_sp_stride
              + (k / 2 + c)];
     }
 
     // Cooperative load: K-major B, matching the TBUF's strided descriptor.
-    for (uint32_t i = tid; i < smem_b_elems; i += num_threads) {
-      uint32_t r = i / ctx::xtileN;
-      uint32_t c = i % ctx::xtileN;
+    for (size_t i = tid; i < smem_b_elems; i += num_threads) {
+      size_t r = i / ctx::xtileN;
+      size_t c = i % ctx::xtileN;
       B_smem[c * ctx::tileK + r] =
           pB[(k + r) * N + (tile_col + c)];
     }

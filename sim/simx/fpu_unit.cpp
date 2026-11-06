@@ -18,6 +18,7 @@
 #include <assert.h>
 #include <util.h>
 #include <rvfloats.h>
+#include <nan_box.h>
 #include "debug.h"
 #include "core.h"
 #include "csr_unit.h"
@@ -27,27 +28,28 @@ using namespace vortex;
 
 namespace {
 inline uint64_t nan_box(uint32_t value) {
-  return value | 0xffffffff00000000;
-}
-inline bool is_nan_boxed(uint64_t value) {
-  return (uint32_t(value >> 32) == 0xffffffff);
+  return nanbox::box32(value);
 }
 inline int64_t check_boxing(int64_t a) {
-  if (is_nan_boxed(a))
-    return a;
-  return nan_box(0x7fc00000); // NaN
+  return nanbox::box32(nanbox::unbox32(a, 0x7fc00000));
+}
+inline uint64_t nan_box16(uint16_t value) {
+  return nanbox::box16(value);
+}
+inline uint16_t check_boxing16(uint64_t a) {
+  return nanbox::unbox16(a, 0x7e00);
 }
 }
 
 FpuUnit::FpuUnit(const SimContext& ctx, const char* name, Core* core)
-	// Output capacity covers the tag-bounded operations in the datapath
-	// plus one result-skid entry ahead of commit.
-	: FuncUnit<VX_CFG_NUM_FPU_BLOCKS>(ctx, name, core, VX_CFG_FPU_QUEUE_SIZE + 1)
+	// One output slot per tag: an operation holds its slot from acceptance
+	// until its result is taken off the response port, however deep the
+	// pipelines are.
+	: FuncUnit<VX_CFG_NUM_FPU_BLOCKS>(ctx, name, core, VX_CFG_FPU_QUEUE_SIZE)
 {}
 
 uint32_t FpuUnit::latency_of(const instr_trace_t* trace) const {
 	auto fpu_type = std::get<FpuType>(trace->op_type);
-	const uint32_t delay = 2;
 	switch (fpu_type) {
 	case FpuType::FCMP:
 	case FpuType::FSGNJ:
@@ -55,7 +57,7 @@ uint32_t FpuUnit::latency_of(const instr_trace_t* trace) const {
 	case FpuType::FMVXW:
 	case FpuType::FMVWX:
 	case FpuType::FMINMAX:
-		return 2+delay;
+		return VX_CFG_FNCP_LATENCY;
 	case FpuType::FADD:
 	case FpuType::FSUB:
 	case FpuType::FMUL:
@@ -63,15 +65,15 @@ uint32_t FpuUnit::latency_of(const instr_trace_t* trace) const {
 	case FpuType::FMSUB:
 	case FpuType::FNMADD:
 	case FpuType::FNMSUB:
-		return VX_CFG_FMA_LATENCY+delay;
+		return VX_CFG_FMA_LATENCY;
 	case FpuType::FDIV:
-		return VX_CFG_FDIV_LATENCY+delay;
+		return VX_CFG_FDIV_LATENCY;
 	case FpuType::FSQRT:
-		return VX_CFG_FSQRT_LATENCY+delay;
+		return VX_CFG_FSQRT_LATENCY;
 	case FpuType::F2I:
 	case FpuType::I2F:
 	case FpuType::F2F:
-		return VX_CFG_FCVT_LATENCY+delay;
+		return VX_CFG_FCVT_LATENCY;
 	default:
 		std::abort();
 	}
@@ -271,7 +273,20 @@ void FpuUnit::execute(instr_trace_t* trace) {
 			if (!tmask.test(t)) continue;
 			uint32_t frm = emu.get_fpu_rm(fpuArgs.frm, wid, t);
 			uint32_t fflags = 0;
-			if (fpuArgs.is_f64) {
+			if (fpuArgs.is_f16) {
+				if (fpuArgs.cvt == 1) {
+					rd_data[t].u64 = nan_box16(rv_dtoh(rs1_data[t].u64, frm, &fflags));
+				} else {
+					rd_data[t].u64 = nan_box16(rv_ftoh_s(check_boxing(rs1_data[t].u64), frm, &fflags));
+				}
+			} else if (fpuArgs.cvt == 2) {
+				auto h = check_boxing16(rs1_data[t].u64);
+				if (fpuArgs.is_f64) {
+					rd_data[t].u64 = rv_htod(h, frm, &fflags);
+				} else {
+					rd_data[t].u64 = nan_box(rv_htof_s(h, frm, &fflags));
+				}
+			} else if (fpuArgs.is_f64) {
 				rd_data[t].u64 = rv_ftod(check_boxing(rs1_data[t].u64), frm, &fflags);
 			} else {
 				rd_data[t].u64 = nan_box(rv_dtof(rs1_data[t].u64, frm, &fflags));
@@ -295,7 +310,9 @@ void FpuUnit::execute(instr_trace_t* trace) {
 		for (uint32_t t = thread_start; t < num_threads; ++t) {
 			if (!tmask.test(t)) continue;
 			uint32_t fflags = 0;
-			if (fpuArgs.is_f64) {
+			if (fpuArgs.is_f16) {
+				rd_data[t].i = sext((uint64_t)uint16_t(rs1_data[t].u64), 16);
+			} else if (fpuArgs.is_f64) {
 				rd_data[t].u64 = rs1_data[t].u64;
 			} else {
 				uint32_t result = (uint32_t)rs1_data[t].u64;
@@ -308,7 +325,9 @@ void FpuUnit::execute(instr_trace_t* trace) {
 		for (uint32_t t = thread_start; t < num_threads; ++t) {
 			if (!tmask.test(t)) continue;
 			uint32_t fflags = 0;
-			if (fpuArgs.is_f64) {
+			if (fpuArgs.is_f16) {
+				rd_data[t].u64 = nan_box16(uint16_t(rs1_data[t].i));
+			} else if (fpuArgs.is_f64) {
 				rd_data[t].u64 = rs1_data[t].i;
 			} else {
 				rd_data[t].u64 = nan_box((uint32_t)rs1_data[t].i);
@@ -376,28 +395,19 @@ void FpuUnit::execute(instr_trace_t* trace) {
 
 void FpuUnit::on_tick() {
   bool idle = true;
-  auto cur_cycle = SimPlatform::instance().cycles();
   for (uint32_t b = 0; b < VX_CFG_NUM_FPU_BLOCKS; ++b) {
-    auto& inflight = inflight_.at(b);
-    for (uint32_t i = 0; i < inflight.size();) {
-      if (inflight.at(i) <= cur_cycle) {
-        inflight.at(i) = inflight.back();
-        inflight.pop_back();
-      } else {
-        ++i;
-      }
-    }
     auto& input = Inputs.at(b);
     if (!input.empty()) {
       auto& output = Outputs.at(b);
-      // A full tag queue stalls admission even though the arithmetic
-      // pipelines are deeper.
-      if (!output.full() && inflight.size() < VX_CFG_FPU_QUEUE_SIZE) {
+      // A full response port (every tag in use) stalls admission even though
+      // the arithmetic pipelines are deeper.
+      if (!output.full()) {
         auto trace = input.peek();
         this->execute(trace);
-        uint32_t delay = this->latency_of(trace);
+        // Without a lane-gather stage commit reads this port directly, so the
+        // result also takes the registered stage other units cross into commit.
+        uint32_t delay = this->latency_of(trace) + (kGather ? 0 : 1);
         output.send(trace, delay);
-        inflight.push_back(cur_cycle + delay);
         input.pop();
       }
     }

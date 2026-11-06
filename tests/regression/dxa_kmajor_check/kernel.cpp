@@ -14,7 +14,7 @@ constexpr uint32_t kDescA = 0;
 constexpr uint32_t kDescB = 1;
 
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
-  const uint32_t tid     = threadIdx.x;
+  const size_t   tid     = threadIdx.x;
   const uint32_t cta_id  = blockIdx.x;   // 1D grid — one CTA per (M-tile, N-tile) pair
   const uint32_t grid_n  = arg->N / arg->tileN;
   const uint32_t cta_row = cta_id / grid_n;
@@ -37,8 +37,8 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
   // Copy both SMEM regions to dst[cta_id * cta_bytes ..]
   auto pDst = reinterpret_cast<uint8_t*>(arg->dst_addr) + cta_id * arg->cta_bytes;
-  const uint32_t total = arg->cta_bytes;
-  for (uint32_t i = tid; i < total; i += blockDim.x) {
+  const size_t total = arg->cta_bytes;
+  for (size_t i = tid; i < total; i += blockDim.x) {
     pDst[i] = A_smem[i];  // A_smem is followed by B_smem in memory
   }
   __syncthreads();

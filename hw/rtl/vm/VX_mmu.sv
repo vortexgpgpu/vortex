@@ -67,9 +67,6 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     localparam FIELDS_W    = F_RW_LO + 1;
     localparam PAYLOAD_W   = LANE_W + FIELDS_W;
 
-    function automatic [TLB_VPN_WIDTH-1:0] vpn_mask (input [TLB_LEVEL_WIDTH-1:0] level);
-        vpn_mask = {TLB_VPN_WIDTH{1'b1}} << (level * TLB_LEVEL_BITS);
-    endfunction
 
     function automatic tlb_access_e access_of (input logic rw);
         access_of = (EXEC_SIDE != 0) ? TLB_ACC_EX : (rw ? TLB_ACC_WR : TLB_ACC_RD);
@@ -91,7 +88,8 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     wire [NUM_REQS-1:0][TLB_VPN_WIDTH-1:0]   cam_vpn;
     wire [NUM_REQS-1:0]                      cam_hit;
     wire [NUM_REQS-1:0][TLB_PPN_WIDTH-1:0]   cam_ppn;
-    wire [NUM_REQS-1:0][TLB_FLAGS_WIDTH-1:0] cam_flags;
+    wire [NUM_REQS-1:0][$bits(tlb_access_e)-1:0] cam_acc;
+    wire [NUM_REQS-1:0]                      cam_perm;
     wire [NUM_REQS-1:0]                      cam_access_hit;
     wire [NUM_REQS-1:0]                      mshr_match;
 
@@ -125,6 +123,7 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     wire [TLB_VPN_WIDTH-1:0]   park_vpn;
     tlb_access_e               park_access;
     wire                       park_amo;
+    wire [LANE_W-1:0]          park_lane;
     wire [PAYLOAD_W-1:0]       park_payload;
     wire                       park_ready;
 
@@ -161,7 +160,9 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         .lookup_vpn    (cam_vpn),
         .lookup_hit    (cam_hit),
         .lookup_ppn    (cam_ppn),
-        .lookup_flags  (cam_flags),
+        .lookup_acc    (cam_acc),
+        .lookup_amo    (req_amo),
+        .lookup_perm   (cam_perm),
         .access_hit    (cam_access_hit),
         .mshr_match    (mshr_match),
         .park_valid    (park_valid),
@@ -194,36 +195,47 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     wire [NUM_REQS-1:0] cat_park;
     wire [NUM_REQS-1:0] cat_hit;
     wire [NUM_REQS-1:0] cat_pfault;
-    wire [NUM_REQS-1:0] perm_hit;
 
     for (genvar l = 0; l < NUM_REQS; ++l) begin : g_cat
-        assign perm_hit[l]   = tlb_perm_ok(cam_flags[l], req_acc[l], req_amo[l]);
+        assign cam_acc[l]    = req_acc[l];
         assign cat_bypass[l] = req_valid[l] && req_bypass[l];
         assign cat_park[l]   = req_valid[l] && !req_bypass[l] && (mshr_match[l] || !cam_hit[l]);
-        assign cat_hit[l]    = req_valid[l] && !req_bypass[l] && !mshr_match[l] && cam_hit[l] && perm_hit[l];
-        assign cat_pfault[l] = req_valid[l] && !req_bypass[l] && !mshr_match[l] && cam_hit[l] && !perm_hit[l];
+        assign cat_hit[l]    = req_valid[l] && !req_bypass[l] && !mshr_match[l] && cam_hit[l] && cam_perm[l];
+        assign cat_pfault[l] = req_valid[l] && !req_bypass[l] && !mshr_match[l] && cam_hit[l] && !cam_perm[l];
     end
 
     // Park arbitration: at most one lane parks a miss per cycle (lowest lane).
-    wire [NUM_REQS-1:0] park_sel;
-    reg [LANE_W-1:0] park_lane;
-    always @(*) begin
-        park_lane = '0;
-        for (int l = NUM_REQS-1; l >= 0; --l) begin
-            if (cat_park[l]) begin
-                park_lane = LANE_W'(l);
-            end
-        end
-    end
-    for (genvar l = 0; l < NUM_REQS; ++l) begin : g_park_sel
-        assign park_sel[l] = cat_park[l] && (park_lane == LANE_W'(l));
-    end
+    // The parked fields are taken with a one-hot select straight off the lane
+    // categories; the encoded lane only rides in the payload.
+    localparam PARK_W = TLB_VPN_WIDTH + $bits(tlb_access_e) + 1 + FIELDS_W;
 
-    assign park_valid   = (| cat_park);
-    assign park_vpn     = req_vpn[park_lane];
-    assign park_access  = req_acc[park_lane];
-    assign park_amo     = req_amo[park_lane];
-    assign park_payload = {park_lane, req_fields[park_lane]};
+    wire [NUM_REQS-1:0] park_sel;
+    VX_priority_encoder #(
+        .N (NUM_REQS)
+    ) park_enc (
+        .data_in    (cat_park),
+        .onehot_out (park_sel),
+        .index_out  (park_lane),
+        .valid_out  (park_valid)
+    );
+
+    wire [NUM_REQS-1:0][PARK_W-1:0] park_src;
+    for (genvar l = 0; l < NUM_REQS; ++l) begin : g_park_src
+        assign park_src[l] = {req_vpn[l], req_acc[l], req_amo[l], req_fields[l]};
+    end
+    wire [PARK_W-1:0] park_out;
+    VX_onehot_mux #(
+        .DATAW (PARK_W),
+        .N     (NUM_REQS)
+    ) park_mux (
+        .data_in  (park_src),
+        .sel_in   (park_sel),
+        .data_out (park_out)
+    );
+    assign park_vpn     = park_out[PARK_W-1 -: TLB_VPN_WIDTH];
+    assign park_access  = tlb_access_e'(park_out[FIELDS_W+1 +: $bits(tlb_access_e)]);
+    assign park_amo     = park_out[FIELDS_W];
+    assign park_payload = {park_lane, park_out[FIELDS_W-1:0]};
 
     // ---------------------------------------------------------------------
     // Replay decode + translation splice
@@ -240,7 +252,7 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     if (ADDR_WIDTH > PAGE_OFFSET_W + TLB_VPN_WIDTH) begin : g_replay_va_hi
         `UNUSED_VAR (replay_raddr[ADDR_WIDTH-1 : PAGE_OFFSET_W + TLB_VPN_WIDTH])
     end
-    wire [TLB_VPN_WIDTH-1:0] replay_low = replay_vpn & ~vpn_mask(replay_level);
+    wire [TLB_VPN_WIDTH-1:0] replay_low = replay_vpn & ~tlb_vpn_mask(replay_level);
     wire [TLB_PPN_WIDTH-1:0] replay_ppn_sp = replay_ppn | TLB_PPN_WIDTH'(replay_low);
     wire [ADDR_WIDTH-1:0]    replay_taddr = {replay_ppn_sp, replay_raddr[PAGE_OFFSET_W-1:0]};
 

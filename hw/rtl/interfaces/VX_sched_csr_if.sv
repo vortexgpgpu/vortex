@@ -43,14 +43,14 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
     // Per-warp machine-mode trap CSRs live in the scheduler (alongside
     // mscratch) because the scheduler owns warp PC redirection. Reads are
     // returned already selected by csr_rd_wid; csrw writes are forwarded
-    // here carrying the CSR address. csr_wr_wid is shared with mscratch.
+    // here as a one-hot {mtval, mcause, mepc, mtvec, mstatus}. csr_wr_wid is
+    // shared with mscratch.
     logic [`VX_CFG_XLEN-1:0]               csr_mstatus;
     logic [`VX_CFG_XLEN-1:0]               csr_mtvec;
     logic [`VX_CFG_XLEN-1:0]               csr_mepc;
     logic [`VX_CFG_XLEN-1:0]               csr_mcause;
     logic [`VX_CFG_XLEN-1:0]               csr_mtval;
-    logic                           trap_csr_wr_valid;
-    logic [`VX_CSR_ADDR_BITS-1:0]   trap_csr_wr_addr;
+    logic [NUM_TRAP_CSRS-1:0]       trap_csr_wr_valid;
     logic [`VX_CFG_XLEN-1:0]               trap_csr_wr_data;
 
     modport master (
@@ -75,7 +75,6 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
         input  csr_wr_wid,
         input  csr_wr_data,
         input  trap_csr_wr_valid,
-        input  trap_csr_wr_addr,
         input  trap_csr_wr_data
     );
 
@@ -101,7 +100,6 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
         output csr_wr_wid,
         output csr_wr_data,
         output trap_csr_wr_valid,
-        output trap_csr_wr_addr,
         output trap_csr_wr_data
     );
 

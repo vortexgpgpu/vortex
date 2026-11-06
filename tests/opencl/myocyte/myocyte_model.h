@@ -922,7 +922,7 @@ kernel_ecc(	fp timeinst,
 		case 2:     
 			V_hold = -55;
 			V_test = 0;
-			if(timeinst>0.5 & timeinst<200.5){
+			if((timeinst>0.5) & (timeinst<200.5)){
 				V_clamp = V_test;
 			}
 			else{
@@ -951,7 +951,7 @@ kernel_ecc(	fp timeinst,
 //========================================================================================================================================================================================================200
 
 void 
-kernel_cam(	fp timeinst,
+kernel_cam(	fp /*timeinst*/,
 			GLOBAL fp *d_initvalu,
 			GLOBAL fp *d_finavalu,
 			int valu_offset,

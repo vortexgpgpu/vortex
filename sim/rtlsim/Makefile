@@ -5,8 +5,12 @@ DESTDIR ?= $(CURDIR)
 CONFIG_FILE = $(DESTDIR)/rtlsim_config.stamp
 SRC_DIR = $(VORTEX_HOME)/sim/rtlsim
 
-CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Wno-array-bounds
-CXXFLAGS += -fPIC -Wno-maybe-uninitialized
+CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Werror
+CXXFLAGS += -fPIC
+# GCC 13 turns the generated per-word copy of a wide signal into a memcpy and
+# inlines it with aligned 16-byte stores, faulting on a destination that is only
+# 8-byte aligned in the root class (NUM_THREADS=16 + RTU crashes in reset).
+CXXFLAGS += -fno-tree-loop-distribute-patterns
 CXXFLAGS += -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SIM_COMMON_DIR) -I$(SW_COMMON_DIR)
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/softfloat/source/include
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/ramulator/ext/spdlog/include
@@ -16,7 +20,7 @@ CXXFLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
 CXXFLAGS += $(CONFIGS)
 
 LDFLAGS += $(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
-LDFLAGS += -Wl,-rpath,$(THIRD_PARTY_DIR)/ramulator  -L$(THIRD_PARTY_DIR)/ramulator -lramulator
+LDFLAGS += -Wl,-rpath,$(THIRD_PARTY_DIR)/ramulator  -L$(THIRD_PARTY_DIR)/ramulator -lramulator -Wl,-rpath,$(THIRD_PARTY_DIR)/ramulator_ext -L$(THIRD_PARTY_DIR)/ramulator_ext -Wl,--push-state,--no-as-needed -lramulator-vortex -Wl,--pop-state
 
 # control RTL debug tracing states
 DBG_TRACE_FLAGS += -DDBG_TRACE_PIPELINE
@@ -34,9 +38,6 @@ override CONFIGS += -DSIMULATION -DSV_DPI
 XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
 
 DBG_FLAGS += -DVX_DBG_DEBUG_LEVEL=$(DEBUG) $(DBG_TRACE_FLAGS)
-ifndef SAIF
-DBG_FLAGS += -DVCD_OUTPUT
-endif
 RTL_PKGS = $(RTL_DIR)/VX_gpu_pkg.sv $(RTL_DIR)/fpu/VX_fpu_pkg.sv
 
 FPU_INCLUDE = -I$(RTL_DIR)/fpu
@@ -121,6 +122,11 @@ ifneq (,$(filter -DVX_CFG_EXT_RTU_ENABLE, $(XCONFIGS)))
 	RTL_INCLUDE += -I$(RTL_DIR)/rtu
 endif
 
+# Add MUFU extension sources
+ifneq (,$(filter -DVX_CFG_EXT_MUFU_ENABLE, $(XCONFIGS)))
+	RTL_INCLUDE += -I$(RTL_DIR)/mufu
+endif
+
 RTL_PKGS += $(RTL_DIR)/VX_trace_pkg.sv
 
 SRCS = $(SW_COMMON_DIR)/util.cpp $(SIM_COMMON_DIR)/mem.cpp $(SW_COMMON_DIR)/softfloat_ext.cpp $(SW_COMMON_DIR)/rvfloats.cpp $(SIM_COMMON_DIR)/dram_sim.cpp $(SIM_COMMON_DIR)/elf_loader.cpp $(SIM_COMMON_DIR)/host_monitor.cpp $(SIM_COMMON_DIR)/cout_drainer.cpp
@@ -131,9 +137,7 @@ TOP = rtlsim_shim
 
 VL_FLAGS = --exe
 VL_FLAGS += --language 1800-2012 --assert -Wall -Wpedantic
-# Keep lint warnings visible but non-fatal: newer Verilator surfaces latent
-# UNUSED*/PINCONNECTEMPTY warnings in existing IP that older releases did not.
-VL_FLAGS += -Wno-DECLFILENAME -Wno-REDEFMACRO -Wno-fatal
+VL_FLAGS += -Wno-DECLFILENAME -Wno-REDEFMACRO
 VL_FLAGS += --x-initial unique --x-assign unique
 VL_FLAGS += verilator.vlt
 VL_FLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
@@ -164,17 +168,28 @@ VL_FLAGS += -j $(THREADS)
 
 # Debugging
 ifdef DEBUG
-	VL_FLAGS += --trace --trace-structs $(DBG_FLAGS)
+	VL_FLAGS += $(DBG_FLAGS)
 	CXXFLAGS += -g -O0 $(DBG_FLAGS)
 else
 	VL_FLAGS += -DNDEBUG
-	CXXFLAGS += -O2 -DNDEBUG
+	CXXFLAGS += -DNDEBUG
+	# The level goes through Verilator's per-class knobs, not CXXFLAGS: a level
+	# in CXXFLAGS lands after them and so also optimizes the slow-path files
+	# (constructors, reset, initialization), which run once and are most of the
+	# compile time of a large model.
+	VL_FLAGS += -MAKEFLAGS OPT_FAST=-O2 -MAKEFLAGS OPT_GLOBAL=-O2
 endif
 
 # Enable perf counters
 ifdef PERF
 	VL_FLAGS += -DPERF_ENABLE
 	CXXFLAGS += -DPERF_ENABLE
+endif
+
+# Enable VCD waveform
+ifdef VCD
+	VL_FLAGS += --trace --trace-structs
+	CXXFLAGS += -DVCD_OUTPUT
 endif
 
 # Enable SAIF tracing
@@ -189,11 +204,13 @@ PROJECT := rtlsim
 
 all: $(DESTDIR)/$(PROJECT)
 
+# verilator --build runs its own make (parallelized by -j in VL_FLAGS) that
+# cannot reach this make's jobserver, so it gets a clean MAKEFLAGS.
 $(DESTDIR)/$(PROJECT): $(SRCS) $(SRC_DIR)/main.cpp $(CONFIG_FILE) $(RTL_SRCS)
-	$(VERILATOR_PATH)/bin/verilator --build $(VL_FLAGS) $(SRCS) $(SRC_DIR)/main.cpp -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' --MMD --Mdir $@.obj_dir -o $@
+	MAKEFLAGS= $(VERILATOR_PATH)/bin/verilator --build $(VL_FLAGS) $(SRCS) $(SRC_DIR)/main.cpp -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' --MMD --Mdir $@.obj_dir -o $@
 
 $(DESTDIR)/lib$(PROJECT).so: $(SRCS) $(CONFIG_FILE) $(RTL_SRCS)
-	$(VERILATOR_PATH)/bin/verilator --build $(VL_FLAGS) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '-shared $(LDFLAGS)' --MMD --Mdir $@.obj_dir -o $@
+	MAKEFLAGS= $(VERILATOR_PATH)/bin/verilator --build $(VL_FLAGS) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '-shared $(LDFLAGS)' --MMD --Mdir $@.obj_dir -o $@
 
 # updates the timestamp when flags changed.
 $(CONFIG_FILE): force

@@ -165,7 +165,6 @@ int main(int argc, char **argv)
 
     // Create the program
     shrLog("clCreateProgramWithSource...\n");
-    cl_int binary_status;
     cl_program program;
 
     program = clCreateProgramWithSource(

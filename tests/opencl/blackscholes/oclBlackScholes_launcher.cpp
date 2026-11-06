@@ -37,9 +37,8 @@ static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) 
   return CL_SUCCESS;
 }
 
-extern "C" void initBlackScholes(cl_context cxGPUContext, cl_command_queue cqParamCommandQueue, const char **argv){
+extern "C" void initBlackScholes(cl_context cxGPUContext, cl_command_queue cqParamCommandQueue, const char ** /*argv*/){
     cl_int ciErrNum;
-    size_t kernelLength;
 
     /*shrLog("...loading BlackScholes.cl\n");
         char *cPathAndName = shrFindFilePath("BlackScholes.cl", argv[0]);
@@ -50,8 +49,6 @@ extern "C" void initBlackScholes(cl_context cxGPUContext, cl_command_queue cqPar
     shrLog("...creating BlackScholes program\n");
     uint8_t *kernel_bin = NULL;
     size_t kernel_size;
-    cl_int binary_status = 0;
-    cl_device_id device_id = oclGetFirstDev(cxGPUContext);
 
     ciErrNum = read_kernel_file("kernel.cl", &kernel_bin, &kernel_size);
     shrCheckError(ciErrNum, CL_SUCCESS);

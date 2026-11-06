@@ -68,8 +68,9 @@ inline unsigned vx_tex(unsigned stage, unsigned u, unsigned v, unsigned lod) {
 // XBITS/YBITS/RECORD_SHIFT come from the OM DCRs; the runtime programs them and
 // passes them to the kernel, so the shader just shifts and adds.
 #define VX_OM_APERTURE_ADDR_RT(xbits, ybits, record_shift, x, y, face, rt)     \
-  ((VX_MEM_OM_BASE_ADDR) +                                                     \
-   (((((uint32_t)(rt) << 1 | (uint32_t)(face)) << ((xbits) + (ybits)))         \
+  ((uintptr_t)(VX_MEM_OM_BASE_ADDR) +                                          \
+   (uintptr_t)(((((uint32_t)(rt) << 1 | (uint32_t)(face))                      \
+                 << ((xbits) + (ybits)))                                       \
      | ((uint32_t)(y) << (xbits))                                              \
      | (uint32_t)(x)) << (record_shift)))
 
@@ -84,7 +85,7 @@ inline unsigned vx_tex(unsigned stage, unsigned u, unsigned v, unsigned lod) {
 // into one ordinary store per word; the LSU never learns that OM exists.
 #define vx_om_export(addr, color, depth, mask)                     \
   __asm__ volatile (".insn r4 %0, 3, %1, x0, %2, %3, %4"           \
-      :: "i"(RISCV_CUSTOM1), "i"(mask), "r"(addr), "r"(color), "r"(depth))
+      :: "i"(RISCV_CUSTOM1), "i"(mask), "r"((uintptr_t)(addr)), "r"(color), "r"(depth))
 
 // The three record shapes.
 #define vx_om_export_color(addr, color)        vx_om_export(addr, color, 0, 1)

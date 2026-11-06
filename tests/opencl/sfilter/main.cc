@@ -56,8 +56,8 @@
     _ret;                                                                      \
   })
 
-void pfn_notify(const char *errinfo, const void *private_info, size_t cb,
-                void *user_data) {
+void pfn_notify(const char *errinfo, const void * /*private_info*/, size_t /*cb*/,
+                void * /*user_data*/) {
   fprintf(stderr, "OpenCL Error (via pfn_notify): %s\n", errinfo);
 }
 
@@ -220,7 +220,7 @@ int main(int argc, char **argv) {
   CL_CHECK(clSetKernelArg(kernel, 11, sizeof(m8), (&m8)));
 
   size_t global_offset[2]    = {1, 1};
-  size_t global_work_size[2] = {size - 2, size - 2};
+  size_t global_work_size[2] = {static_cast<size_t>(size - 2), static_cast<size_t>(size - 2)};
   size_t local_work_size[2]  = {1, 1}; // {size-2,1}
 
   printf("enqueue write buffer\n");

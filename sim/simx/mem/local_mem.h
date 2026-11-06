@@ -19,12 +19,19 @@ namespace vortex {
 
 class LocalMem : public SimObject<LocalMem> {
 public:
+  // A DMA access covers one full bank row. A row wider than a mem_block
+  // arrives as same-cycle block accesses on DMA_PORTS adjacent channels.
+  static constexpr uint32_t DMA_ROW_SIZE = VX_CFG_LMEM_NUM_BANKS * (VX_CFG_XLEN / 8);
+  static constexpr uint32_t DMA_PORTS =
+      (DMA_ROW_SIZE > VX_CFG_MEM_BLOCK_SIZE) ? (DMA_ROW_SIZE / VX_CFG_MEM_BLOCK_SIZE) : 1;
+
   struct Config {
     uint32_t capacity;
     uint32_t line_size;
     uint32_t num_reqs;
     uint32_t B; // log2 number of banks
     bool write_reponse;
+    uint32_t dma_clients; // row-wide DMA masters, in priority order
   };
 
   struct PerfStats {
@@ -42,6 +49,10 @@ public:
 
   std::vector<SimChannel<MemReq>> Inputs;
   std::vector<SimChannel<MemRsp>> Outputs;
+
+  // DMA port: client c uses channels [c * DMA_PORTS, (c + 1) * DMA_PORTS).
+  std::vector<SimChannel<MemReq>> DmaInputs;
+  std::vector<SimChannel<MemRsp>> DmaOutputs;
 
   LocalMem(const SimContext& ctx, const char* name, const Config& config);
   virtual ~LocalMem();

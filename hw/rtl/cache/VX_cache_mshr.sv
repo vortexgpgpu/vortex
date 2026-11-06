@@ -373,6 +373,11 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
         // in arrival order like any request; the probe outputs alone provide
         // the same-line ordering guard.
         assign amo_mask = (AMO_PASSTHRU != 0) ? amo_table : '0;
+        // At the LLC no request links behind a pending AMO: the bank defers
+        // every request to a line while an AMO to it waits here.
+        `RUNTIME_ASSERT (~((AMO_PASSTHRU == 0) && finalize_valid && ~finalize_is_release && finalize_is_pending
+                        && valid_table[finalize_previd] && persisted_table[finalize_previd] && amo_table[finalize_previd]),
+            ("%t: *** %s request linked behind a pending AMO: id=%0d", $time, INSTANCE_ID, finalize_previd))
 
         wire [MSHR_SIZE-1:0] probe_ld, probe_amo;
         for (genvar i = 0; i < MSHR_SIZE; ++i) begin : g_probe_matches
