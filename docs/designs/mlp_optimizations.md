@@ -471,12 +471,16 @@ Atomics with `.aq`/`.rl` get these steps around them. All of it is skipped when 
 | sgemm | -n32 / -n64 | 115,075 / 799,794 | 107,995 / 779,750 | −6.2% / −2.5% |
 | sgemm_v1 | -n32 / -n64 | 130,947 / 898,758 | 118,453 / 831,043 | −9.5% / −7.5% |
 | sgemm2 | -n32 -t4 / -n64 -t4 | 200,115 / 1,401,158 | 185,693 / 1,284,375 | −7.2% / −8.3% |
-| sgemm2_dxa | -n32 -t4 / -n64 -t4 | 223,860 / 1,363,392 | 218,055 / 1,311,699 | −2.6% / −3.8% |
+| sgemm2_dxa | default (-n16 -t4 -m1) / -n32 -t4 / -n64 -t4 | 33,883 / 223,860 / 1,363,392 | 34,045 / 213,811 / 1,278,297 | +0.5% / −4.5% / −6.2% |
 | sgemm2_dxa_mcast | default / -n64 | 31,717 / 1,351,321 | 29,901 / 1,242,753 | −5.7% / −8.0% |
 | sgemmx | -n128 | 4,251,851 | 4,164,415 | −2.1% |
-| sgemm2_v1 | default | 4,800,667 | 4,804,766 | +0.1% |
+| sgemm2_v1 | default (-n16) / -n32 / -n64 | 100,333 / 655,576 / 4,800,667 | 98,093 / 637,326 / 4,635,080 | −2.2% / −2.8% / −3.4% |
 
-Retired instructions barely change; the gain comes from fetch. Order matters where the loads conflict on banks. In sgemm2_dxa every thread reads a different local-memory row, and with 4 banks each A load conflicts 4 ways. Issued first, the quad puts 4 slow loads into the LSU's shared dispatch queue at once, and the cheap B loads and the first FMA wait behind them: +1.2% to +4.6% slower than scalar. Issuing the B loads before the quad turns this into the gain above.
+Retired instructions barely change; the gain comes from fetch. Order matters where the loads conflict on banks. In sgemm2_dxa and sgemm2_v1 the threads of a warp read different local-memory rows, and with 4 banks each A load conflicts 4 ways. The quad's 4 uops issue back to back, so they reach the LSU as a burst, where scalar loads from the warps interleave. Issued before the B loads, the quad holds the cheap B loads and the first FMA behind its slow uops: sgemm2_dxa was +1.2% to +4.6% and sgemm2_v1 +0.1% to +0.6% slower than scalar. The compiler orders the scalar loads B0, B1, then A, but it cannot move a load across the intrinsic's `asm volatile`, so these kernels write that order out: B0 and B1, then the quad, then B2 and B3. That gives the gains above; issuing all four B loads first is slower, since the FMA chain then starts later. Two points stay slower:
+- sgemm2_dxa's full-K mode (-m1), +0.5%: all warps leave the barrier together, and the last warp's quad waits behind the other three.
+- sgemm2_v1 at 16 threads with -n16, +1.7%: the best load order depends on the warp shape.
+
+Both come from the macro-op's uops reaching the LSU as one burst per warp. The fix is in hardware: interleave different warps' macro-op uops, or let the LSU take conflict-free requests ahead of conflicted ones.
 
 Area: +33 LUT in decode and +3 LUT per warp in the expander, with no path deeper. With both load/store knobs off, the core is 89 LUT smaller than when the extensions were always built.
 

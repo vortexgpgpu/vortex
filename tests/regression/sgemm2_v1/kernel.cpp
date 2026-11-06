@@ -44,14 +44,22 @@ void kernel_body(kernel_arg_t *arg) {
     for (; j + 4 <= chunk_k; j += 4) {
 #ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
       static_assert(__is_same(TYPE, float), "the wide loads read float words");
+      // B0 and B1 before the quad, B2 and B3 after: the order the compiler gives
+      // the scalar loads, which it cannot reach across the quad's asm volatile
+      TYPE b0 = local_B[j * tile_size + l_col];
+      TYPE b1 = local_B[(j + 1) * tile_size + l_col];
       vx_float4 a = vx_flw_q(&a_row[j]);
+      sum += a[0] * b0;
+      sum += a[1] * b1;
+      sum += a[2] * local_B[(j + 2) * tile_size + l_col];
+      sum += a[3] * local_B[(j + 3) * tile_size + l_col];
 #else
       TYPE a[4] = {a_row[j], a_row[j + 1], a_row[j + 2], a_row[j + 3]};
-#endif
       sum += a[0] * local_B[j * tile_size + l_col];
       sum += a[1] * local_B[(j + 1) * tile_size + l_col];
       sum += a[2] * local_B[(j + 2) * tile_size + l_col];
       sum += a[3] * local_B[(j + 3) * tile_size + l_col];
+#endif
     }
     for (; j < chunk_k; ++j) {
       sum += a_row[j] * local_B[j * tile_size + l_col];
