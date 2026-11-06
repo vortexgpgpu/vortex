@@ -29,7 +29,7 @@ Dispatcher::Dispatcher(const SimContext& ctx, const char* name, Core* core, uint
   , num_lanes_(num_lanes)
   , num_blocks_(VX_CFG_ISSUE_WIDTH / block_size)
   , num_packets_(VX_CFG_NUM_THREADS / num_lanes)
-  , batch_idx_(0)
+  , batch_idx_(num_blocks_ - 1)
   , out_delay_(out_delay)
   , block_pids_(block_size, 0)
   , block_free_(block_size, 0)
@@ -40,7 +40,7 @@ Dispatcher::Dispatcher(const SimContext& ctx, const char* name, Core* core, uint
 Dispatcher::~Dispatcher() {}
 
 void Dispatcher::on_reset() {
-  batch_idx_ = 0;
+  batch_idx_ = num_blocks_ - 1;
   for (auto& bp : block_pids_) {
     bp = 0;
   }
@@ -179,9 +179,14 @@ void Dispatcher::on_tick() {
 
   // advance to next batch once all blocks in the current batch have been processed
   if (block_sent == block_size_) {
-    // Priority grant to the lowest batch with an instruction: an empty issue
-    // slot costs no dispatch cycle. With none, the grant rests on the last.
-    batch_idx_ = valid_batches ? __builtin_ctz(valid_batches) : (num_blocks_ - 1);
+    // Round-robin grant from the last granted batch, so no issue slice is
+    // favored. With none, the grant stays.
+    if (valid_batches != 0) {
+      uint32_t n = num_blocks_;
+      uint32_t from = batch_idx_;
+      uint32_t rot = ((valid_batches >> (from + 1)) | (valid_batches << (n - 1 - from))) & ((1u << n) - 1);
+      batch_idx_ = (from + 1 + __builtin_ctz(rot)) % n;
+    }
     for (auto& bp : block_pids_) {
       bp = 0;
     }

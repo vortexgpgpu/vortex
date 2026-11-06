@@ -92,23 +92,28 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
             assign valid_batches[i] = | dispatch_valid[i * BLOCK_SIZE +: BLOCK_SIZE];
         end
 
+        wire batch_valid_n;
+
+        // Round-robin from the last granted batch: no issue slice is favored,
+        // so a warp's dispatch latency does not depend on its slice.
         VX_generic_arbiter #(
             .NUM_REQS    (BATCH_COUNT),
-            .TYPE        ("P")
+            .TYPE        ("R")
         ) batch_sel (
             .clk          (clk),
             .reset        (reset),
             .requests     (valid_batches),
             .grant_index  (batch_idx_n),
             `UNUSED_PIN (grant_onehot),
-            `UNUSED_PIN (grant_valid),
+            .grant_valid  (batch_valid_n),
             .grant_ready  (batch_done)
         );
 
+        // the arbiter's state: the last granted batch
         always @(posedge clk) begin
             if (reset) begin
-                batch_idx <= '0;
-            end else if (batch_done) begin
+                batch_idx <= BATCH_COUNT_W'(BATCH_COUNT-1);
+            end else if (batch_done && batch_valid_n) begin
                 batch_idx <= batch_idx_n;
             end
         end

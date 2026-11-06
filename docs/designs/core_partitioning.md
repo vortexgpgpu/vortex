@@ -102,7 +102,12 @@ and [`VX_commit`](../../hw/rtl/core/VX_commit.sv) holds IW commit slices
 ([`VX_commit_slice`](../../hw/rtl/core/VX_commit_slice.sv)). Each unit's
 [`VX_lane_dispatch`](../../hw/rtl/core/VX_lane_dispatch.sv) groups the IW issue
 ports into IW / B batches: block *b* takes the issue slices `b, b+B, …` in
-turn, which is the `wid mod B` ownership of §1.
+turn, which is the `wid mod B` ownership of §1. The batches are granted
+round-robin from the last granted one, so no slice is favored. A fixed
+priority to the lowest batch, with an idle grant resting on the last one,
+made a warp's dispatch latency depend on its slice, so a kernel's time
+depended on which warp took a serial role (such as the warp that issues a
+CTA's DXA copies), and the low slices could starve the high ones.
 
 ## 3. The frontend crossbar
 
