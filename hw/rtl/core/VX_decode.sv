@@ -488,42 +488,42 @@ module VX_decode import
                 `USED_IREG (rs2);
             `endif
             end
-        `ifdef VX_CFG_EXT_F_ENABLE
+        `ifdef EXT_LDST_ANY_ENABLE
             INST_EXT4: begin
                 case (funct3)
-                `ifdef VX_CFG_EXT_TCU_ENABLE
-                    // vx_ldm/vx_stm: a TCU matrix fragment, expanded into one flw/fsw
+                `ifdef VX_CFG_EXT_LDST_MATRIX_ENABLE
+                    // vx_ldm/vx_stm: a matrix fragment, expanded into one flw/fsw
                     // per register. imm[4:0] is the fragment shape, replaced by its
                     // expander code; a bytesel offset of 2 (4 registers) or 3 (8)
                     // marks the access as a fragment.
                     3'h0: begin
-                        if (VX_tcu_pkg::tcu_ldm_valid(u_12[4:0])) begin
+                        if (mtx_ldm_valid(u_12[4:0])) begin
                             ex_type = EX_LSU;
                             op_type = INST_OP_BITS'(INST_LSU_LW);
                             op_args.lsu.is_store = 0;
                             op_args.lsu.is_float = 1;
                             op_args.lsu.pack     = 2'b11;
-                            op_args.lsu.offset   = {u_12[11:5], VX_tcu_pkg::tcu_ldm_code(u_12[4:0])};
-                            bytesel = {XLENB_W'(XLENB-1), XLENB_W'({1'b1, VX_tcu_pkg::tcu_ldm_is8(u_12[4:0])})};
+                            op_args.lsu.offset   = {u_12[11:5], mtx_ldm_code(u_12[4:0])};
+                            bytesel = {XLENB_W'(XLENB-1), XLENB_W'({1'b1, mtx_ldm_is8(u_12[4:0])})};
                             `USED_IREG (rs1);
                             `USED_FREG (rd);
                         end
                     end
                     3'h2: begin
-                        if (VX_tcu_pkg::tcu_ldm_valid(rd)) begin
+                        if (mtx_ldm_valid(rd)) begin
                             ex_type = EX_LSU;
                             op_type = INST_OP_BITS'(INST_LSU_SW);
                             op_args.lsu.is_store = 1;
                             op_args.lsu.is_float = 1;
                             op_args.lsu.pack     = 2'b11;
-                            op_args.lsu.offset   = {s_imm[11:5], VX_tcu_pkg::tcu_ldm_code(rd)};
-                            bytesel = {XLENB_W'(XLENB-1), XLENB_W'({1'b1, VX_tcu_pkg::tcu_ldm_is8(rd)})};
+                            op_args.lsu.offset   = {s_imm[11:5], mtx_ldm_code(rd)};
+                            bytesel = {XLENB_W'(XLENB-1), XLENB_W'({1'b1, mtx_ldm_is8(rd)})};
                             `USED_IREG (rs1);
                             `USED_FREG (rs2);
                         end
                     end
                 `endif
-                `ifndef VX_CFG_FLEN_64
+                `ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
                     // vx_flw.d/.q and vx_fsw.d/.q: 2 or 4 words of an aligned FP register
                     // group, expanded into flw/fsw uops; the bytesel offset carries the
                     // group size.
@@ -1024,8 +1024,9 @@ module VX_decode import
         endcase
     end
 
-    // Without its extension a TCU or DXA instruction decodes to no unit, and
-    // its undefined ex/op fields would dispatch an arbitrary operation.
+    // Without its extension a TCU, DXA, wide or matrix load/store instruction
+    // decodes to no unit, and its undefined ex/op fields would dispatch an
+    // arbitrary operation.
 `ifndef VX_CFG_EXT_TCU_ENABLE
     `RUNTIME_ASSERT(~(fetch_if.valid && (opcode == INST_EXT1) && (funct7 == 7'h02)),
         ("%t: %s TCU instruction on a core built without VX_CFG_EXT_TCU_ENABLE, wid=%0d, PC=0x%0h (#%0d)",
@@ -1034,6 +1035,16 @@ module VX_decode import
 `ifndef VX_CFG_EXT_DXA_ENABLE
     `RUNTIME_ASSERT(~(fetch_if.valid && (opcode == INST_EXT1) && (funct7 == 7'h03)),
         ("%t: %s DXA instruction on a core built without VX_CFG_EXT_DXA_ENABLE, wid=%0d, PC=0x%0h (#%0d)",
+            $time, INSTANCE_ID, fetch_if.data.wid, to_fullPC(fetch_if.data.PC), fetch_if.data.uuid))
+`endif
+`ifndef VX_CFG_EXT_LDST_WIDE_ENABLE
+    `RUNTIME_ASSERT(~(fetch_if.valid && (opcode == INST_EXT4) && (funct3 >= 3'h3) && (funct3 <= 3'h6)),
+        ("%t: %s wide load/store on a core built without VX_CFG_EXT_LDST_WIDE_ENABLE, wid=%0d, PC=0x%0h (#%0d)",
+            $time, INSTANCE_ID, fetch_if.data.wid, to_fullPC(fetch_if.data.PC), fetch_if.data.uuid))
+`endif
+`ifndef VX_CFG_EXT_LDST_MATRIX_ENABLE
+    `RUNTIME_ASSERT(~(fetch_if.valid && (opcode == INST_EXT4) && ((funct3 == 3'h0) || (funct3 == 3'h2))),
+        ("%t: %s matrix load/store on a core built without VX_CFG_EXT_LDST_MATRIX_ENABLE, wid=%0d, PC=0x%0h (#%0d)",
             $time, INSTANCE_ID, fetch_if.data.wid, to_fullPC(fetch_if.data.PC), fetch_if.data.uuid))
 `endif
 

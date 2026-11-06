@@ -5,12 +5,6 @@
 #define TYPE float
 #endif
 
-// LDST_WIDE=1 reads each thread's consecutive words with the wide loads
-// (vx_flw_q); 0 keeps scalar accesses.
-#ifndef LDST_WIDE
-#define LDST_WIDE 0
-#endif
-
 // Intra-core multicast (mw = "multicast warp-group", multiple CTAs on one core).
 // `mc_group_size` CTAs co-resident on one core share the same B column block.
 // Each CTA computes one row of the output; A is per-CTA, B is multicast.

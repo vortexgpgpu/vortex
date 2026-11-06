@@ -233,8 +233,8 @@ the table in the same change.
 | | | `7` | `vx_rt_trace`, `vx_rt_wait` | R4 |
 | | | `1`, `2`, `4` | free | |
 | custom-2 `0x5B` | `funct7` | `0x00` | MUFU special functions; `fn` in `rs2`, `fmt` in `funct3` | R |
-| custom-3 `0x7B` | `funct3` | `0` | `vx_ldm fd, off(rs1), shape`: a TCU matrix fragment ← memory | I |
-| | | `2` | `vx_stm fs2, off(rs1), shape`: memory ← a TCU matrix fragment | S |
+| custom-3 `0x7B` | `funct3` | `0` | `vx_ldm fd, off(rs1), shape`: a matrix fragment ← memory | I |
+| | | `2` | `vx_stm fs2, off(rs1), shape`: memory ← a matrix fragment | S |
 | | | `3` | `vx_flw.d fd, imm(rs1)`: `fd`, `fd+1` ← two words | I |
 | | | `4` | `vx_flw.q fd, imm(rs1)`: `fd`..`fd+3` ← four words | I |
 | | | `5` | `vx_fsw.d fs2, imm(rs1)`: two words ← `fs2`, `fs2+1` | S |
@@ -249,19 +249,25 @@ windows, exceptions and lane mask, and no atomicity across the words. Each word
 needs only 4-byte alignment. The register must be a multiple of 2 (`.d`) or 4
 (`.q`) and `imm` a multiple of 8 or 16, which lets the expander place *k* in the
 low bits of both without an adder. An encoding that breaks either rule is
-reserved and its result undefined; the assembler rejects it. They are defined
-with F and FLEN 32 (no D).
+reserved and its result undefined; the assembler rejects it. They exist when
+the core is built with `VX_CFG_EXT_LDST_WIDE_ENABLE`, which requires F with
+FLEN 32 (no D); the device reports them in `VX_ISA_EXT_LDST_WIDE`.
 
-The matrix fragment load and store move one tensor-core fragment (the
-registers `vx_tensor.h`'s `load_matrix_sync`/`store_matrix_sync` fill) with one
-instruction. `imm[4:0]` is the fragment **shape**, `imm[11:5]` a byte offset
+The matrix fragment load and store move one matrix fragment (the registers
+`vx_tensor.h`'s `load_matrix_sync`/`store_matrix_sync` fill, in the register
+order the tensor core reads) with one instruction. They exist when the core is
+built with `VX_CFG_EXT_LDST_MATRIX_ENABLE`, which requires F but not the tensor
+core, so any kernel can move its data in that layout; the device reports them
+in `VX_ISA_EXT_LDST_MATRIX`. A core built without one of the two extensions
+does not decode its encodings: the RTL asserts and SimX stops on them, as for
+the other extensions. `imm[4:0]` is the fragment **shape**, `imm[11:5]` a byte offset
 `off` (a multiple of 32), and `rs1` the first of a **base group** of J integer
 registers, a multiple of J, where register `rs1 + j` holds the lane's address
 of the fragment's row group *j*. Each is a macro-op of one plain `flw`/`fsw` per
 fragment register: uop *e* moves register `fd + e` (`fs2 + e`) to or from the
 word at `x[rs1 | j(r)] + (off | c(r)·CS)`, where *r* = π⁻¹(*e*) is the fragment
-element the WMMA/WGMMA expansion reads from that register (π is its
-bank-conflict-free register order), `(j, c)` a bit split of *r*, and CS the byte
+element that register holds (π is the fragment's bank-conflict-free register
+order, the one the WMMA/WGMMA expansion reads), `(j, c)` a bit split of *r*, and CS the byte
 stride between a lane's words in a row. The register add takes the uop counter
 directly; the shape only selects the row group and column. So neither the LSU
 nor the address path does anything new: the
@@ -269,31 +275,45 @@ row step and the lane's own offset live in the base group, computed by
 software once per tile, and the column offsets are bit selects. `off` must be
 zero in the bits the column offsets use, which makes the OR an add; unrolled K
 tiles then share one base group and differ only in `off`. The shapes are
-`{ctx, role[1:0], trans, sparse}`; those a configuration has are
+`{ctx, role[1:0], trans, sparse}`. The fragment geometry follows from the warp
+width alone (a tile of 8 words per lane, computed in blocks of one word per
+lane), so every core with the extension has
 
 | shape | fragment | J | per row group | registers |
 |---|---|---|---|---|
-| `0x00` | WMMA A, row-major | M steps | K steps, `4·tcK` B apart | 8 |
-| `0x01` | WMMA sparse A, row-major | M steps | K/2 steps, `4·tcK` B apart | 4 |
-| `0x06` | WMMA B, col-major | N steps per register | K steps, `4·tcK` B apart | 4 or 8 |
-| `0x07` | WMMA symmetric sparse B, col-major | one N step per register | 1 word | 4 or 8 |
-| `0x08` | WMMA C, row-major | M steps | N steps, `4·tcN` B apart | 8 |
-| `0x18` | WGMMA C, row-major, one 8-register chunk | 2 | 4 columns, `4·tcN` B apart | 8 |
+| `0x00` | A, row-major | M steps | K steps, `4·tcK` B apart | 8 |
+| `0x01` | sparse A, row-major | M steps | K/2 steps, `4·tcK` B apart | 4 |
+| `0x06` | B, col-major | N steps per register | K steps, `4·tcK` B apart | 4 or 8 |
+| `0x07` | symmetric sparse B, col-major | one N step per register | 1 word | 4 or 8 |
+| `0x08` | C, row-major | M steps | N steps, `4·tcN` B apart | 8 |
+| `0x18` | warp-group C, row-major, one 8-register chunk | 2 | 4 columns, `4·tcN` B apart | 8 |
 
-with the sparse shapes under `VX_CFG_TCU_SPARSE_ENABLE` (sparse B only in the
-symmetric layouts, NT=4 and NT=16) and the WGMMA one under
-`VX_CFG_TCU_WGMMA_ENABLE`; every other shape is reserved (SimX stops on it).
-In the RTL, [`VX_tcu_pkg.sv`](../../hw/rtl/tcu/VX_tcu_pkg.sv) (`tcu_ldm_uop`)
-holds the shapes' geometry next to the operand permutations `VX_tcu_uops`
-reads with, and `VX_uop_packld` asserts at elaboration that every uop of
-every shape maps back through those permutations to its own register; SimX
-derives its order from the same permutations by search. So the two cannot
-drift apart. The words of a fragment register span its element type,
+with the symmetric sparse B only in the symmetric layouts (NT=4 and NT=16);
+every other shape is reserved (SimX stops on it). In the RTL,
+[`VX_gpu_pkg.sv`](../../hw/rtl/VX_gpu_pkg.sv) holds the fragment geometry
+(`MTX_*`), the bank-conflict-free register permutations (`mtx_ra/rb/rc_off`)
+and the shapes' closed-form uop order (`mtx_ldm_uop`); the tensor core takes
+its tile geometry and operand permutations from it, and `VX_uop_packld`
+asserts in simulation that every uop of every shape maps back through the
+permutations to its own register. SimX keeps the permutations in `fragment_layout.h`, shared by the
+tensor core and the LSU, and derives the uop order from them by search. So the
+layouts cannot drift apart. The words of a fragment register span its element type,
 so one shape serves every ITYPE. A layout whose register gathers words from
 several rows (a sub-word B row-major, A col-major) has no shape: software stages
 such a tile transposed. A 16- or 32-register WGMMA accumulator takes 2 or 4
 `vx_stm`, one per chunk (`fs2 = f0, f8, f16, f24`), each chunk's column offset
 in `off`.
+
+Kernels reach both extensions through explicit intrinsics in
+[`vx_intrinsics.h`](../../sw/kernel/include/vx_intrinsics.h), written as
+`.insn` so they do not depend on compiler support, and defined only when the
+matching `VX_CFG_EXT_LDST_*_ENABLE` is: `vx_flw_d/q<FD, OFF>`,
+`vx_fsw_d/q<FD, OFF>` and `vx_ldm/vx_stm<FD, NR, J, Q, IMM>`. The register
+group is a template argument, bound with register-pinned asm operands; it
+only places the instruction's operands, so any `FD` is correct, and giving
+groups that are live at once different `FD` saves the compiler register copies. `vx_tensor.h`'s contexts use
+`vx_ldm`/`vx_stm` when their `ldst_matrix` argument is set, which a kernel
+takes from `vortex::tensor::ldst_matrix_enabled`.
 
 ---
 

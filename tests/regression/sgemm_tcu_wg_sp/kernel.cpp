@@ -5,7 +5,7 @@
 
 namespace vt = vortex::tensor;
 
-using ctx = vt::wgmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, true, WGMMA_NRC, LDST_MATRIX>;
+using ctx = vt::wgmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, true, WGMMA_NRC, vt::ldst_matrix_enabled>;
 
 // Per-warp smem layout: [A_compressed][reserved metadata row], then shared B.
 static constexpr uint32_t smem_a_elems     = ctx::xtileM * (ctx::tileK / 2);

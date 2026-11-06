@@ -53,8 +53,8 @@ int main(int argc, char** argv) {
   CHECK(vx_device_query(dev, VX_CAPS_NUM_CORES,      &nc));
   CHECK(vx_device_query(dev, VX_CAPS_LOCAL_MEM_SIZE, &lmem_size));
   CHECK(vx_device_query(dev, VX_CAPS_ISA_FLAGS,      &isa));
-  if (!(isa & VX_ISA_EXT_TCU)) {
-    std::cout << "TCU extension not supported!\nFAILED!" << std::endl;
+  if (!(isa & VX_ISA_EXT_LDST_MATRIX)) {
+    std::cout << "matrix load/store extension not supported!\nFAILED!" << std::endl;
     return 1;
   }
 

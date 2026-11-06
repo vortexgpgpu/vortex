@@ -15,6 +15,7 @@
 #include <VX_types.h>
 #include "tcu_unit.h"
 #include "tensor_cfg.h"
+#include "fragment_layout.h"
 #include <rvfloats.h>
 #include <fedp.h>
 #include "core.h"
@@ -1660,158 +1661,6 @@ op_string_t TcuUnit::op_string(TcuType tcu_type, IntrTcuArgs args) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-namespace {
-
-constexpr uint32_t clog2(uint32_t x) {
-  return (x < 2) ? 0 : (1 + clog2(x / 2));
-}
-
-constexpr uint32_t kLgM   = clog2(cfg::m_steps);
-constexpr uint32_t kLgN   = clog2(cfg::n_steps);
-constexpr uint32_t kLgK   = clog2(cfg::k_steps);
-constexpr uint32_t kLgBSb = clog2(cfg::b_sub_blocks);
-
-constexpr uint32_t hi_bit(uint32_t x, uint32_t lg) {
-  return (x >> (lg ? (lg - 1) : 0)) & 1;
-}
-
-// Register offsets of the WMMA operands of step (m, n, k), permuted so the
-// three operands of a step never share a register bank.
-//   one B sub-block:   A={m[0],~m[hi],k}, B={n^k,~k}, C={m[0],~m[hi],XNOR(m[hi],n)}
-//   two B sub-blocks:  A={k[0],~m,m^k[hi]}, B={k[0],k[hi]^np,~np}, C={n[0],~m,n[hi]}
-//   asymmetric sparse: B={n[hi],~(n[0]^k),~k}, C={n[hi],m,~(m^n[0])}
-uint32_t ra_off(uint32_t m, uint32_t k) {
-  if (kLgBSb == 0) {
-    return ((m & 1) << 2) | ((1 - hi_bit(m, kLgM)) << 1) | (k & 1);
-  }
-  return ((k & 1) << 2) | ((1 - (m & 1)) << 1) | ((m & 1) ^ hi_bit(k, kLgK));
-}
-
-uint32_t rb_off(uint32_t n, uint32_t k) {
-  if (kLgBSb == 0) {
-    return (((n ^ k) & 1) << 1) | (1 - (k & 1));
-  }
-  uint32_t np = hi_bit(n, kLgN);
-  return ((k & 1) << 2) | ((hi_bit(k, kLgK) ^ np) << 1) | (1 - np);
-}
-
-uint32_t rc_off(uint32_t m, uint32_t n) {
-  if (kLgBSb == 0) {
-    uint32_t m_hi = hi_bit(m, kLgM);
-    return ((m & 1) << 2) | ((1 - m_hi) << 1) | (1 - (m_hi ^ (n & 1)));
-  }
-  return ((n & 1) << 2) | ((1 - (m & 1)) << 1) | hi_bit(n, kLgN);
-}
-
-uint32_t rb_off_sp(uint32_t n, uint32_t k) {
-  return (hi_bit(n, kLgN) << 2) | ((1 - ((n ^ k) & 1)) << 1) | (1 - (k & 1));
-}
-
-uint32_t rc_off_sp(uint32_t m, uint32_t n) {
-  return (hi_bit(n, kLgN) << 2) | ((m & 1) << 1) | (1 - ((m ^ n) & 1));
-}
-
-// vx_ldm/vx_stm shapes
-constexpr uint32_t kLdmA    = 0x00; // WMMA A, row-major
-constexpr uint32_t kLdmASp  = 0x01; // WMMA sparse A, row-major
-constexpr uint32_t kLdmB    = 0x06; // WMMA B, col-major
-constexpr uint32_t kLdmBSp  = 0x07; // WMMA symmetric sparse B, col-major
-constexpr uint32_t kLdmC    = 0x08; // WMMA C, row-major
-constexpr uint32_t kLdmWgC  = 0x18; // WGMMA C, row-major, one 8-register chunk
-
-// Byte strides between the words a lane holds along a fragment row
-constexpr uint32_t kLdmLgCsK = clog2(cfg::tcK * 4);
-constexpr uint32_t kLdmLgCsN = clog2(cfg::tcN * 4);
-// Row groups of a col-major B fragment
-constexpr uint32_t kLdmLgBRows = kLgN - kLgBSb;
-constexpr uint32_t kLdmLgKSp   = (kLgK > 0) ? (kLgK - 1) : 0;
-
-uint32_t ldm_lg_count(uint32_t shape) {
-  switch (shape) {
-  case kLdmA:   return kLgM + kLgK;
-  case kLdmASp: return kLgM + kLdmLgKSp;
-  case kLdmB:
-  case kLdmBSp: return clog2(cfg::NRB);
-  default:      return 3; // C: 8 registers
-  }
-}
-
-} // namespace
-
-bool TcuUopGen::ldm_valid(uint32_t shape) {
-  switch (shape) {
-  case kLdmA:
-  case kLdmB:
-  case kLdmC:
-    return true;
-#ifdef VX_CFG_TCU_SPARSE_ENABLE
-  case kLdmASp:
-    return true;
-  case kLdmBSp:
-    return cfg::sym_sparse;
-#endif
-#ifdef VX_CFG_TCU_WGMMA_ENABLE
-  case kLdmWgC:
-    return true;
-#endif
-  default:
-    return false;
-  }
-}
-
-uint32_t TcuUopGen::ldm_count(uint32_t shape) {
-  return 1u << ldm_lg_count(shape);
-}
-
-// Element e of a fragment: its register offset, row group and column
-static TcuUopGen::LdmUop ldm_elem(uint32_t shape, uint32_t e) {
-  TcuUopGen::LdmUop u{0, 0, 0};
-  switch (shape) {
-  case kLdmA: // e = {m, k}: row group m, word column k
-    u.grp     = e >> kLgK;
-    u.col     = (e & ((1u << kLgK) - 1)) << kLdmLgCsK;
-    u.reg_off = ra_off(e >> kLgK, e);
-    break;
-  case kLdmASp: // e = {m, k} over half the K steps; registers in order
-    u.grp     = e >> kLdmLgKSp;
-    u.col     = (e & ((1u << kLdmLgKSp) - 1)) << kLdmLgCsK;
-    u.reg_off = e;
-    break;
-  case kLdmB: // e = {k, n}: a col-major B row is one of its columns (a pair with two sub-blocks)
-    u.grp     = e & ((1u << kLdmLgBRows) - 1);
-    u.col     = (e >> kLdmLgBRows) << kLdmLgCsK;
-    u.reg_off = rb_off(u.grp << kLgBSb, e >> kLdmLgBRows);
-    break;
-  case kLdmBSp: // symmetric sparse: one row per register
-    u.grp     = e;
-    u.reg_off = e;
-    break;
-  case kLdmC: // e = {m, n}
-    u.grp     = e >> kLgN;
-    u.col     = (e & ((1u << kLgN) - 1)) << kLdmLgCsN;
-    u.reg_off = rc_off(e >> kLgN, e);
-    break;
-  default: // WGMMA C, e = {n, m}: n-major registers, two row groups
-    u.grp     = e & 1;
-    u.col     = (e >> 1) << kLdmLgCsN;
-    u.reg_off = e;
-    break;
-  }
-  return u;
-}
-
-// Uop e moves register fd/fs2 + e, holding the element whose register offset is e
-TcuUopGen::LdmUop TcuUopGen::ldm_uop(uint32_t shape, uint32_t e) {
-  uint32_t count = ldm_count(shape);
-  for (uint32_t r = 0; r < count; ++r) {
-    auto u = ldm_elem(shape, r);
-    if (u.reg_off == e) {
-      return u;
-    }
-  }
-  std::abort();
-}
-
 uint32_t TcuUopGen::uop_count(const Instr& instr) {
   if (instr.get_fu_type() != FUType::TCU)
     return 1;
@@ -1912,12 +1761,12 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
           // Sparse non-sym: A=identity, B and C permuted.
           uint32_t a_off = (m / wmma::a_sub_blocks) * k_count + k;
           reg_rs1 = ra_base + a_off;
-          reg_rs2 = rb_base + rb_off_sp(n, k);
-          reg_rs3 = rc_base + rc_off_sp(m, n);
+          reg_rs2 = rb_base + frag::rb_off_sp(n, k);
+          reg_rs3 = rc_base + frag::rc_off_sp(m, n);
         } else {
-          reg_rs1 = ra_base + ra_off(m, k);
-          reg_rs2 = rb_base + rb_off(n, k);
-          reg_rs3 = rc_base + rc_off(m, n);
+          reg_rs1 = ra_base + frag::ra_off(m, k);
+          reg_rs2 = rb_base + frag::rb_off(n, k);
+          reg_rs3 = rc_base + frag::rc_off(m, n);
         }
         uop_instr->set_op_type(is_sparse ? TcuType::WMMA_SP : TcuType::WMMA);
         uop_instr->set_args(IntrTcuArgs{0, 0, fmt_s, fmt_d, m, n, k, 0, 0, 0});

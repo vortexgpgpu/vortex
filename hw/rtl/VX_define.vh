@@ -126,6 +126,29 @@
     `endif
 `endif
 
+`ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
+    `ifndef VX_CFG_EXT_F_ENABLE
+        `error "VX_CFG_EXT_LDST_WIDE_ENABLE requires VX_CFG_EXT_F_ENABLE"
+    `endif
+    `ifdef VX_CFG_FLEN_64
+        `error "VX_CFG_EXT_LDST_WIDE_ENABLE requires FLEN 32"
+    `endif
+`endif
+
+`ifdef VX_CFG_EXT_LDST_MATRIX_ENABLE
+    `ifndef VX_CFG_EXT_F_ENABLE
+        `error "VX_CFG_EXT_LDST_MATRIX_ENABLE requires VX_CFG_EXT_F_ENABLE"
+    `endif
+`endif
+
+// Convenience flag: a wide or matrix load/store extension is enabled; both are
+// macro-ops of the packed-load uop expander. Internal derived macro.
+`ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
+    `define EXT_LDST_ANY_ENABLE
+`elsif VX_CFG_EXT_LDST_MATRIX_ENABLE
+    `define EXT_LDST_ANY_ENABLE
+`endif
+
 // Convenience flag: the TCU metadata SRAM is present when any metadata-consuming
 // mode (MX or sparse) is enabled. Internal derived macro — not a VX_CFG_* knob.
 `ifdef VX_CFG_TCU_MX_ENABLE

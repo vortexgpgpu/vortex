@@ -14,8 +14,8 @@ void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
     const TYPE* a_row = A + row * size;
     size_t e = 0;
     for (; e + 4 <= size; e += 4) {
-#if LDST_WIDE
-        static_assert(__is_same(TYPE, float), "LDST_WIDE needs float");
+#ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
+        static_assert(__is_same(TYPE, float), "the wide loads read float words");
         vx_float4 a = vx_flw_q(a_row + e);
 #else
         TYPE a[4] = {a_row[e], a_row[e + 1], a_row[e + 2], a_row[e + 3]};

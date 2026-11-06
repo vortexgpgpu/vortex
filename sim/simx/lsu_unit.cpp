@@ -26,8 +26,8 @@
 #include "stack_interleave.h"
 #include "VX_types.h"
 #include "VX_config.h"
-#ifdef VX_CFG_EXT_TCU_ENABLE
-#include "tcu_unit.h"
+#ifdef VX_CFG_EXT_LDST_MATRIX_ENABLE
+#include "fragment_layout.h"
 #endif
 
 using namespace vortex;
@@ -42,14 +42,16 @@ uint32_t LsuUopGen::uop_count(const Instr& instr) {
   // VX_FLW/VX_FSW.D: width=3, 2 words; .Q: width=4, 4 words
   // VX_LDM/VX_STM: one word per register of the fragment shape
   auto args = std::get<IntrLsuArgs>(instr.get_args());
-#ifdef VX_CFG_EXT_TCU_ENABLE
+#ifdef VX_CFG_EXT_LDST_MATRIX_ENABLE
   if (args.matrix) {
-    return TcuUopGen::ldm_count(args.offset & 0x1f);
+    return frag::ldm_count(args.offset & 0x1f);
   }
 #endif
+#ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
   if (args.width >= 3) {
     return 1u << (args.width - 2);
   }
+#endif
   return (args.width == 0) ? 4 : 2;
 }
 
@@ -82,12 +84,12 @@ Instr::Ptr LsuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
   }
 
   auto args = std::get<IntrLsuArgs>(macro_instr.get_args());
-#ifdef VX_CFG_EXT_TCU_ENABLE
+#ifdef VX_CFG_EXT_LDST_MATRIX_ENABLE
   if (args.matrix) {
     // a fragment uop reads its base from rs1 | grp, ORs its column into the
     // offset (whose low 5 bits held the shape) and moves register fd/fs2 + reg_off
     bool is_load = (std::get<LsuType>(macro_instr.get_op_type()) == LsuType::LOAD);
-    auto u = TcuUopGen::ldm_uop(args.offset & 0x1f, uop_index);
+    auto u = frag::ldm_uop(args.offset & 0x1f, uop_index);
     auto uop_instr = std::allocate_shared<Instr>(pool_, uop_uuid, FUType::LSU);
     uop_instr->set_parent_uuid(parent_uuid);
     uop_instr->set_op_type(macro_instr.get_op_type());
@@ -101,6 +103,7 @@ Instr::Ptr LsuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
     return uop_instr;
   }
 #endif
+#ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
   if (args.width >= 3) {
     // a wide access's uop k moves word k: register fd/fs2 + k, offset + 4k
     bool is_load = (std::get<LsuType>(macro_instr.get_op_type()) == LsuType::LOAD);
@@ -116,6 +119,7 @@ Instr::Ptr LsuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
     uop_instr->set_args(IntrLsuArgs{/*LW*/ 2, /*stride*/ 0, args.offset + int32_t(4 * uop_index)});
     return uop_instr;
   }
+#endif
 
   // Macro encodes elem-size as width: 0=byte (PACKLB), 1=halfword (PACKLH).
   // The uop is a regular unsigned load (LBU/LHU = width + 4) so the LSU

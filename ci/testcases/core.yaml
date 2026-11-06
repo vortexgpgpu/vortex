@@ -316,12 +316,12 @@ tests:
   check: model_parity
   via: blackbox
   app: ldst_wide
-  configs: -DVX_CFG_NUM_THREADS=16
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_LDST_WIDE_ENABLE
 - id: parity-ldst-wide-lanes
   check: model_parity
   via: blackbox
   app: ldst_wide
-  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_LSU_LANES=4
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_LDST_WIDE_ENABLE -DVX_CFG_NUM_LSU_LANES=4
 # Half-width ALU, FPU and LSU on interleaved integer and FMA chains: every
 # instruction takes two passes, and each unit's lane gather commits the two in
 # one writeback beat. Multiplies, minimums and conversions return between the
@@ -364,12 +364,19 @@ tests:
   app: raycast
   args: -w16 -h12
   configs: -DVX_CFG_FDIV_PE_RATIO=4 -DVX_CFG_FSQRT_PE_RATIO=4
-# Matrix fragment loads and stores: SimX and RTL expand and time them alike.
+# Matrix fragment loads and stores: SimX and RTL expand and time them alike,
+# with the wide loads and stores sharing the expander.
 - id: parity-ldst-matrix
   check: model_parity
   via: blackbox
   app: ldst_matrix
-  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_SPARSE_ENABLE
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_LDST_MATRIX_ENABLE -DVX_CFG_EXT_LDST_WIDE_ENABLE -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_SPARSE_ENABLE
+# Without the tensor core.
+- id: parity-ldst-matrix-notcu
+  check: model_parity
+  via: blackbox
+  app: ldst_matrix
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_LDST_MATRIX_ENABLE
 - id: parity-sgemm2-lmem
   check: model_parity
   via: blackbox
@@ -387,7 +394,7 @@ tests:
   via: blackbox
   app: sgemm2
   args: -n32 -t4
-  configs: -DVX_CFG_NUM_THREADS=16 -DLDST_WIDE=1
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_LDST_WIDE_ENABLE
 # SGEMM with local-memory tiling (kernel-managed shared memory).
 - id: parity-sgemmx
   check: model_parity

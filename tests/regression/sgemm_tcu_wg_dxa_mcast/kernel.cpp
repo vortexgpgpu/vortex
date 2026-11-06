@@ -15,7 +15,7 @@
 #include <vx_barrier.h>
 
 namespace vt = vortex::tensor;
-using ctx = vt::wgmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, false, WGMMA_NRC, LDST_MATRIX>;
+using ctx = vt::wgmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, false, WGMMA_NRC, vt::ldst_matrix_enabled>;
 
 constexpr uint32_t kDescA = 0;
 constexpr uint32_t kDescB = 1;

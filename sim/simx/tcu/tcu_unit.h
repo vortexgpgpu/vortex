@@ -53,19 +53,6 @@ public:
   // Generate micro-op Instr at uop_index for the given macro instruction.
   Instr::Ptr get(const Instr& macro_instr, uint32_t uop_index);
 
-  // Matrix fragment load/store (vx_ldm/vx_stm) shapes, {ctx, role[1:0], trans,
-  // sparse}. Uop e moves register fd/fs2 + e (reg_off = e) to or from
-  // x[rs1 | grp] + (offset | col), the address of the fragment element the
-  // WMMA/WGMMA expansion reads from that register.
-  struct LdmUop {
-    uint32_t reg_off;
-    uint32_t grp;
-    uint32_t col;
-  };
-  static bool ldm_valid(uint32_t shape);
-  static uint32_t ldm_count(uint32_t shape);
-  static LdmUop ldm_uop(uint32_t shape, uint32_t e);
-
 private:
   PoolAllocator<Instr, 64>& pool_;
 };

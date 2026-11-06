@@ -16,16 +16,23 @@ static inline void gemm_accumulate(TYPE& sum, const TYPE* shA, const TYPE* shB, 
   const TYPE* a_row = &shA[l_row * chunk_k];
   size_t k = 0;
   for (; k + 4 <= chunk_k; k += 4) {
-#if LDST_WIDE
-    static_assert(__is_same(TYPE, float), "LDST_WIDE needs float");
+#ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
+    static_assert(__is_same(TYPE, float), "the wide loads read float words");
+    // B loads first, so they do not queue behind the quad's four bank-conflicted A uops
+    TYPE b[4] = {shB[k * tile_size + l_col], shB[(k + 1) * tile_size + l_col],
+                 shB[(k + 2) * tile_size + l_col], shB[(k + 3) * tile_size + l_col]};
     vx_float4 a = vx_flw_q(&a_row[k]);
+    sum += a[0] * b[0];
+    sum += a[1] * b[1];
+    sum += a[2] * b[2];
+    sum += a[3] * b[3];
 #else
     TYPE a[4] = {a_row[k], a_row[k + 1], a_row[k + 2], a_row[k + 3]};
-#endif
     sum += a[0] * shB[k * tile_size + l_col];
     sum += a[1] * shB[(k + 1) * tile_size + l_col];
     sum += a[2] * shB[(k + 2) * tile_size + l_col];
     sum += a[3] * shB[(k + 3) * tile_size + l_col];
+#endif
   }
   for (; k < chunk_k; ++k) {
     sum += a_row[k] * shB[k * tile_size + l_col];

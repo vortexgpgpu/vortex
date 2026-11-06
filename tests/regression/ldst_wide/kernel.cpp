@@ -5,11 +5,7 @@
 // (funct3 5/6, S-type like fsd/fsq), written as .insn so the encodings are
 // tested independently of the compiler. fd/fs2 is an aligned pair or quad and
 // imm a multiple of 8 or 16; each word needs only 4-byte alignment.
-#if defined(__riscv_f) && (__riscv_flen == 32)
-#define HAS_WIDE 1
-#endif
-
-#ifdef HAS_WIDE
+#ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
 // A wide load and the reads of its registers sit in one asm block, so the
 // compiler cannot reuse them in between. The last uop's register is read first.
 #define VX_FLW_Q(r0, r1, r2, r3, off, p, w) \
@@ -151,7 +147,7 @@ static inline uint32_t check_loads(uintptr_t ro, uint32_t salt, uint32_t lid) {
   VX_FLW_D("f26", "f27", 2040, ro + (gq + 1) * 4 - 2040, w);
   errors += ro_misses(w, 2, gq + 1, salt);
 
-#ifdef HAS_WIDE
+#ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
   asm volatile (".insn i 0x7b, 4, f8, %8, 0\n\t"
                 ".insn i 0x7b, 4, f12, %8, 16\n\t"
                 "fmv.x.w %0, f8\n\t"
@@ -268,7 +264,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   const uint32_t words = arg->lmem_words;
 
   if (tid == 0) {
-  #ifdef HAS_WIDE
+  #ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
     *reinterpret_cast<uint32_t*>(arg->wide_addr) = 1;
   #else
     *reinterpret_cast<uint32_t*>(arg->wide_addr) = 0;

@@ -54,9 +54,8 @@ int main(int argc, char** argv) {
   CHECK(vx_device_query(dev, VX_CAPS_NUM_CORES,      &nc));
   CHECK(vx_device_query(dev, VX_CAPS_LOCAL_MEM_SIZE, &lmem_size));
   CHECK(vx_device_query(dev, VX_CAPS_ISA_FLAGS,      &isa));
-  // the wide forms exist with F and FLEN 32; elsewhere the kernel moves the
-  // same words with generic accesses
-  const bool wide = (isa & VX_ISA_STD_F) && !(isa & VX_ISA_STD_D);
+  // without the wide forms the kernel moves the same words with generic accesses
+  const bool wide = (isa & VX_ISA_EXT_LDST_WIDE) != 0;
   const uint32_t block = static_cast<uint32_t>(nt * nw);
   const uint32_t grid = static_cast<uint32_t>(nc * 2);
   const uint32_t num_threads = block * grid;

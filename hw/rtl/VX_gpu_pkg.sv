@@ -762,6 +762,263 @@ package VX_gpu_pkg;
     // sole requester, the core retires them from its registered request.
     localparam SLICE_RETIRE = COMPUTE_SLICES && (`VX_CFG_NUM_SFU_BLOCKS > 1);
 
+    ///////////////////////////// MATRIX FRAGMENTS ////////////////////////////
+
+    // A warp's matrix tile holds 8 words per lane for each operand and is
+    // computed in blocks of one word per lane; tile and block split their
+    // capacity over M and N, M taking the larger half of an odd power of two.
+    localparam MTX_NT           = `VX_CFG_NUM_THREADS;
+    localparam MTX_NR           = 8;
+
+    localparam MTX_TILE_CAP     = MTX_NT * MTX_NR;
+    localparam MTX_LG_TILE_CAP  = $clog2(MTX_TILE_CAP);
+    localparam MTX_TILE_EN      = MTX_LG_TILE_CAP / 2;
+    localparam MTX_TILE_EM      = MTX_LG_TILE_CAP - MTX_TILE_EN;
+    localparam MTX_TILE_M       = 1 << MTX_TILE_EM;
+    localparam MTX_TILE_N       = 1 << MTX_TILE_EN;
+    localparam MTX_TILE_K       = MTX_TILE_CAP / ((MTX_TILE_M > MTX_TILE_N) ? MTX_TILE_M : MTX_TILE_N);
+
+    localparam MTX_BLOCK_CAP    = MTX_NT;
+    localparam MTX_LG_BLOCK_CAP = $clog2(MTX_BLOCK_CAP);
+    localparam MTX_BLOCK_EN     = MTX_LG_BLOCK_CAP / 2;
+    localparam MTX_BLOCK_EM     = MTX_LG_BLOCK_CAP - MTX_BLOCK_EN;
+    localparam MTX_TC_M         = 1 << MTX_BLOCK_EM;
+    localparam MTX_TC_N         = 1 << MTX_BLOCK_EN;
+    localparam MTX_TC_K         = MTX_BLOCK_CAP / ((MTX_TC_M > MTX_TC_N) ? MTX_TC_M : MTX_TC_N);
+
+    localparam MTX_M_STEPS      = MTX_TILE_M / MTX_TC_M;
+    localparam MTX_N_STEPS      = MTX_TILE_N / MTX_TC_N;
+    localparam MTX_K_STEPS      = MTX_TILE_K / MTX_TC_K;
+    localparam MTX_B_SUB_BLOCKS = MTX_BLOCK_CAP / (MTX_TC_K * MTX_TC_N);
+    localparam MTX_NRB          = (MTX_TILE_N * MTX_TILE_K) / MTX_NT;
+    localparam MTX_SYM_SPARSE   = (MTX_BLOCK_EM == MTX_BLOCK_EN);
+
+    localparam MTX_LG_M         = $clog2(MTX_M_STEPS);
+    localparam MTX_LG_N         = $clog2(MTX_N_STEPS);
+    localparam MTX_LG_K         = $clog2(MTX_K_STEPS);
+    localparam MTX_LG_B_SB      = $clog2(MTX_B_SUB_BLOCKS);
+
+    // Matrix fragment load/store (vx_ldm/vx_stm) shapes: {ctx, role[1:0], trans, sparse}.
+    // Uop e moves fragment register fd + e between it and x[rs1 | grp] +
+    // (imm[11:5] | col): the element the fragment register layout puts there.
+    localparam MTX_LDM_A        = 5'b00000; // A, row-major
+    localparam MTX_LDM_A_SP     = 5'b00001; // sparse A, row-major
+    localparam MTX_LDM_B        = 5'b00110; // B, col-major
+    localparam MTX_LDM_B_SP     = 5'b00111; // symmetric sparse B, col-major
+    localparam MTX_LDM_C        = 5'b01000; // C, row-major
+    localparam MTX_LDM_WG_C     = 5'b11000; // warp-group C, row-major, one 8-register chunk
+
+    // Decode replaces the shape in imm[4:0] with its index, so the per-warp
+    // expander decodes 3 bits instead of 5, and marks an 8-register fragment
+    // in bytesel.
+    localparam MTX_LDM_IDX_A    = 3'd0;
+    localparam MTX_LDM_IDX_A_SP = 3'd1;
+    localparam MTX_LDM_IDX_B    = 3'd2;
+    localparam MTX_LDM_IDX_B_SP = 3'd3;
+    localparam MTX_LDM_IDX_C    = 3'd4;
+    localparam MTX_LDM_IDX_WG_C = 3'd5;
+
+    // Byte strides between the words a lane holds along a fragment row
+    localparam MTX_LDM_LG_CS_K  = $clog2(MTX_TC_K * 4);
+    localparam MTX_LDM_LG_CS_N  = $clog2(MTX_TC_N * 4);
+    localparam MTX_LDM_LG_K_SP  = (MTX_LG_K > 0) ? (MTX_LG_K - 1) : 0;
+    localparam MTX_LDM_COL_W    = MTX_LDM_LG_CS_K + 4;
+
+    typedef struct packed {
+        logic [1:0]           grp;
+        logic [MTX_LDM_COL_W-1:0] col;
+    } mtx_ldm_uop_t;
+
+    function automatic logic mtx_ldm_valid(input logic [4:0] shape);
+        case (shape)
+            MTX_LDM_A,
+            MTX_LDM_A_SP,
+            MTX_LDM_B,
+            MTX_LDM_C,
+            MTX_LDM_WG_C: return 1'b1;
+            MTX_LDM_B_SP: return 1'(MTX_SYM_SPARSE);
+            default:  return 1'b0;
+        endcase
+    endfunction
+
+    function automatic logic [4:0] mtx_ldm_code(input logic [4:0] shape);
+        case (shape)
+            MTX_LDM_A:    return 5'(MTX_LDM_IDX_A);
+            MTX_LDM_A_SP: return 5'(MTX_LDM_IDX_A_SP);
+            MTX_LDM_B:    return 5'(MTX_LDM_IDX_B);
+            MTX_LDM_B_SP: return 5'(MTX_LDM_IDX_B_SP);
+            MTX_LDM_C:    return 5'(MTX_LDM_IDX_C);
+            default:  return 5'(MTX_LDM_IDX_WG_C);
+        endcase
+    endfunction
+
+    function automatic int unsigned mtx_ldm_count(input logic [2:0] idx);
+        case (idx)
+            MTX_LDM_IDX_A_SP: return 4;
+            MTX_LDM_IDX_B,
+            MTX_LDM_IDX_B_SP: return MTX_NRB;
+            default:      return 8;
+        endcase
+    endfunction
+
+    function automatic logic mtx_ldm_is8(input logic [4:0] shape);
+        return (mtx_ldm_count(3'(mtx_ldm_code(shape))) == 8);
+    endfunction
+
+    // Register offsets of the A, B and C fragments' elements at MMA step (m, n, k),
+    // permuted so the three operands of a step never share a register bank.
+    //   one B sub-block:   A={m[0],~m[hi],k}, B={n^k,~k}, C={m[0],~m[hi],XNOR(m[hi],n)}
+    //   two B sub-blocks:  A={k[0],~m,m^k[hi]}, B={k[0],k[hi]^np,~np}, C={n[0],~m,n[hi]}
+    //   asymmetric sparse: B={n[hi],~(n[0]^k),~k}, C={n[hi],m,~(m^n[0])}
+    function automatic logic [2:0] mtx_ra_off(input logic [`UP(MTX_LG_M)-1:0] m,
+                                              input logic [`UP(MTX_LG_K)-1:0] k);
+        if (MTX_LG_B_SB == 0) begin
+            return 3'({m[0], ~m[`UP(MTX_LG_M)-1], k[0]});
+        end else begin
+            return 3'({k[0], ~m[0], m[0] ^ k[`UP(MTX_LG_K)-1]});
+        end
+    endfunction
+
+    function automatic logic [2:0] mtx_rb_off(input logic [`UP(MTX_LG_N)-1:0] n,
+                                              input logic [`UP(MTX_LG_K)-1:0] k);
+        if (MTX_LG_B_SB == 0) begin
+            return 3'({n[0] ^ k[0], ~k[0]});
+        end else begin
+            return 3'({k[0], k[`UP(MTX_LG_K)-1] ^ n[`UP(MTX_LG_N)-1], ~n[`UP(MTX_LG_N)-1]});
+        end
+    endfunction
+
+    function automatic logic [2:0] mtx_rc_off(input logic [`UP(MTX_LG_M)-1:0] m,
+                                              input logic [`UP(MTX_LG_N)-1:0] n);
+        if (MTX_LG_B_SB == 0) begin
+            return 3'({m[0], ~m[`UP(MTX_LG_M)-1], ~(m[`UP(MTX_LG_M)-1] ^ n[0])});
+        end else begin
+            return 3'({n[0], ~m[0], n[`UP(MTX_LG_N)-1]});
+        end
+    endfunction
+
+    function automatic logic [2:0] mtx_rb_off_sp(input logic [`UP(MTX_LG_N)-1:0] n,
+                                                 input logic [`UP(MTX_LG_K)-1:0] k);
+        return 3'({n[`UP(MTX_LG_N)-1], ~(n[0] ^ k[0]), ~k[0]});
+    endfunction
+
+    function automatic logic [2:0] mtx_rc_off_sp(input logic [`UP(MTX_LG_M)-1:0] m,
+                                                 input logic [`UP(MTX_LG_N)-1:0] n);
+        return 3'({n[`UP(MTX_LG_N)-1], m[0], ~(m[0] ^ n[0])});
+    endfunction
+
+    // Uop e moves register fd + e, so the counter feeds the register add
+    // directly; the shape maps e to the row group and column of the element
+    // that register holds, a few inverted and XORed bits of e that invert the
+    // permutations above. mtx_ldm_reg checks the inverse at elaboration.
+    function automatic mtx_ldm_uop_t mtx_ldm_uop(input logic [2:0] idx, input logic [2:0] e);
+        mtx_ldm_uop_t u;
+        logic [2:0] m, n, k;
+        u = '0;
+        m = '0;
+        n = '0;
+        k = '0;
+        case (idx)
+            MTX_LDM_IDX_A: begin
+                if (MTX_LG_B_SB == 0) begin
+                    m = {1'b0, ~e[1], e[2]};
+                    k = {2'b0, e[0]};
+                end else begin
+                    m = {2'b0, ~e[1]};
+                    k = {1'b0, e[0] ^ ~e[1], e[2]};
+                end
+                u.grp = 2'(m);
+                u.col = MTX_LDM_COL_W'(k) << MTX_LDM_LG_CS_K;
+            end
+            // registers in element order {m, k} over half the K steps
+            MTX_LDM_IDX_A_SP: begin
+                u.grp = 2'(e >> MTX_LDM_LG_K_SP);
+                u.col = MTX_LDM_COL_W'(e & 3'((1 << MTX_LDM_LG_K_SP) - 1)) << MTX_LDM_LG_CS_K;
+            end
+            // a col-major B row is one of its columns (a pair with two sub-blocks)
+            MTX_LDM_IDX_B: begin
+                if (MTX_LG_B_SB == 0) begin
+                    k = {2'b0, ~e[0]};
+                    n = {2'b0, e[1] ^ ~e[0]};
+                end else begin
+                    n = {2'b0, ~e[0]};
+                    k = {1'b0, e[1] ^ ~e[0], e[2]};
+                end
+                u.grp = 2'(n);
+                u.col = MTX_LDM_COL_W'(k) << MTX_LDM_LG_CS_K;
+            end
+            // symmetric sparse: one row per register
+            MTX_LDM_IDX_B_SP: begin
+                u.grp = 2'(e);
+            end
+            MTX_LDM_IDX_C: begin
+                if (MTX_LG_B_SB == 0) begin
+                    m = {1'b0, ~e[1], e[2]};
+                    n = {2'b0, e[0] ^ e[1]};
+                end else begin
+                    m = {2'b0, ~e[1]};
+                    n = {1'b0, e[0], e[2]};
+                end
+                u.grp = 2'(m);
+                u.col = MTX_LDM_COL_W'(n) << MTX_LDM_LG_CS_N;
+            end
+            // n-major registers {n, m}, two row groups
+            default: begin
+                u.grp = 2'(e[0]);
+                u.col = MTX_LDM_COL_W'(e >> 1) << MTX_LDM_LG_CS_N;
+            end
+        endcase
+        return u;
+    endfunction
+
+    // The register holding element (grp, col) of a fragment, through the forward
+    // permutations; -1 when (grp, col) is not an element of the fragment.
+    function automatic int mtx_ldm_reg(input logic [2:0] idx, input mtx_ldm_uop_t u);
+        int unsigned g, c, ck, cn;
+        g  = int'(u.grp);
+        c  = int'(u.col);
+        ck = c >> MTX_LDM_LG_CS_K;
+        cn = c >> MTX_LDM_LG_CS_N;
+        case (idx)
+            MTX_LDM_IDX_A: begin
+                if ((ck << MTX_LDM_LG_CS_K) != c || g >= MTX_M_STEPS || ck >= MTX_K_STEPS) begin
+                    return -1;
+                end
+                return int'(mtx_ra_off(`UP(MTX_LG_M)'(g), `UP(MTX_LG_K)'(ck)));
+            end
+            MTX_LDM_IDX_A_SP: begin
+                if ((ck << MTX_LDM_LG_CS_K) != c || g >= MTX_M_STEPS || ck >= (1 << MTX_LDM_LG_K_SP)) begin
+                    return -1;
+                end
+                return int'((g << MTX_LDM_LG_K_SP) | ck);
+            end
+            MTX_LDM_IDX_B: begin
+                if ((ck << MTX_LDM_LG_CS_K) != c || (g << MTX_LG_B_SB) >= `MAX(MTX_N_STEPS, 1 << MTX_LG_B_SB) || ck >= MTX_K_STEPS) begin
+                    return -1;
+                end
+                return int'(mtx_rb_off(`UP(MTX_LG_N)'(g << MTX_LG_B_SB), `UP(MTX_LG_K)'(ck)));
+            end
+            MTX_LDM_IDX_B_SP: begin
+                if (c != 0 || g >= MTX_NRB) begin
+                    return -1;
+                end
+                return int'(g);
+            end
+            MTX_LDM_IDX_C: begin
+                if ((cn << MTX_LDM_LG_CS_N) != c || g >= MTX_M_STEPS || cn >= MTX_N_STEPS) begin
+                    return -1;
+                end
+                return int'(mtx_rc_off(`UP(MTX_LG_M)'(g), `UP(MTX_LG_N)'(cn)));
+            end
+            default: begin
+                if ((cn << MTX_LDM_LG_CS_N) != c || g >= 2 || cn >= 4) begin
+                    return -1;
+                end
+                return int'((cn << 1) | g);
+            end
+        endcase
+    endfunction
+
     /////////////////////////////// TENSOR UNIT ///////////////////////////////
 
 `ifdef VX_CFG_EXT_TCU_ENABLE

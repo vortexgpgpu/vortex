@@ -6,7 +6,7 @@
 #include <vx_barrier.h>
 
 namespace vt = vortex::tensor;
-using ctx = vt::wgmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, false, WGMMA_NRC, LDST_MATRIX>;
+using ctx = vt::wgmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, false, WGMMA_NRC, vt::ldst_matrix_enabled>;
 
 // DXA descriptor slots (programmed by host in main.cpp).
 [[maybe_unused]] constexpr uint32_t kDescA = 0;

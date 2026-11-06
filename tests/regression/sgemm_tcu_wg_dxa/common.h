@@ -15,12 +15,6 @@
 #define OTYPE fp32
 #endif
 
-// LDST_MATRIX=1 moves each tensor fragment with one vx_ldm/vx_stm where its
-// shape has one; 0 keeps one flw/fsw per register.
-#ifndef LDST_MATRIX
-#define LDST_MATRIX 0
-#endif
-
 // Bytes of local memory left unused below the tile buffers, so the tiles and
 // their shared-memory descriptors can sit above a given LMEM offset.
 #ifndef LMEM_PAD

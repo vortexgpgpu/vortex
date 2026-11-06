@@ -70,6 +70,9 @@ tests:
   - simx
   - rtlsim
   app: ldst_wide
+  configs: -DVX_CFG_EXT_LDST_WIDE_ENABLE
+  xlen:
+  - 32
   shape:
     threads: 16
 # Two LSU blocks.
@@ -79,7 +82,9 @@ tests:
   - simx
   - rtlsim
   app: ldst_wide
-  configs: -DVX_CFG_ISSUE_WIDTH=2
+  configs: -DVX_CFG_EXT_LDST_WIDE_ENABLE -DVX_CFG_ISSUE_WIDTH=2
+  xlen:
+  - 32
   shape:
     threads: 32
     warps: 8
@@ -90,7 +95,9 @@ tests:
   - simx
   - rtlsim
   app: ldst_wide
-  configs: -DVX_CFG_NUM_LSU_LANES=4
+  configs: -DVX_CFG_EXT_LDST_WIDE_ENABLE -DVX_CFG_NUM_LSU_LANES=4
+  xlen:
+  - 32
   shape:
     threads: 16
 # One SIMD lane: the dispatcher splits every warp into single-lane packets.
@@ -100,7 +107,9 @@ tests:
   - simx
   - rtlsim
   app: ldst_wide
-  configs: -DVX_CFG_SIMD_WIDTH=1
+  configs: -DVX_CFG_EXT_LDST_WIDE_ENABLE -DVX_CFG_SIMD_WIDTH=1
+  xlen:
+  - 32
   shape:
     threads: 4
 # Half-width ALU, FPU and LSU: each lane gather commits an instruction's two
@@ -116,15 +125,15 @@ tests:
   shape:
     threads: 16
 # Matrix fragment loads and stores (vx_ldm, vx_stm): every shape of the
-# configuration, local and global memory, row strides that are not powers of
-# two, zero/positive/negative offsets, aligned and unaligned register bases.
+# geometry, local and global memory, row strides that are not powers of two,
+# zero/positive/negative offsets, aligned and unaligned register bases.
 - id: ldst-matrix-1
   via: blackbox
   drivers:
   - simx
   - rtlsim
   app: ldst_matrix
-  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_LDST_MATRIX_ENABLE -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI
 # Symmetric sparse geometry (4 lanes).
 - id: ldst-matrix-2
   via: blackbox
@@ -132,15 +141,15 @@ tests:
   - simx
   - rtlsim
   app: ldst_matrix
-  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_SPARSE_ENABLE
-# WGMMA accumulator chunks (16 lanes).
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_LDST_MATRIX_ENABLE -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_SPARSE_ENABLE
+# 16 lanes, with the WGMMA tensor core.
 - id: ldst-matrix-3
   via: blackbox
   drivers:
   - simx
   - rtlsim
   app: ldst_matrix
-  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_WGMMA_ENABLE
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_LDST_MATRIX_ENABLE -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_WGMMA_ENABLE
 # Each uop split into 4-lane packets, symmetric sparse shapes included.
 - id: ldst-matrix-4
   via: blackbox
@@ -148,30 +157,67 @@ tests:
   - simx
   - rtlsim
   app: ldst_matrix
-  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_NUM_LSU_LANES=4
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_LDST_MATRIX_ENABLE -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_NUM_LSU_LANES=4
+# Without the tensor core: the matrix loads and stores of a core that has
+# only them.
+- id: ldst-matrix-notcu
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: ldst_matrix
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_LDST_MATRIX_ENABLE
+# Both load/store extensions in one core: the fragment and the wide macro-ops
+# share the expander, told apart by the uop count decode carries.
+- id: ldst-matrix-wide
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: ldst_matrix
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_LDST_MATRIX_ENABLE -DVX_CFG_EXT_LDST_WIDE_ENABLE -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI
+  xlen:
+  - 32
+- id: ldst-wide-matrix
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: ldst_wide
+  configs: -DVX_CFG_EXT_LDST_WIDE_ENABLE -DVX_CFG_EXT_LDST_MATRIX_ENABLE
+  xlen:
+  - 32
+  shape:
+    threads: 16
 # The sgemm benchmarks with each thread's consecutive words read and written
-# through the wide forms (LDST_WIDE=1).
+# through the wide forms (VX_CFG_EXT_LDST_WIDE_ENABLE).
 - id: ldst-wide-sgemm
   via: blackbox
   drivers:
   - simx
   - rtlsim
   app: sgemm
-  configs: -DLDST_WIDE=1
+  configs: -DVX_CFG_EXT_LDST_WIDE_ENABLE
+  xlen:
+  - 32
 - id: ldst-wide-sgemm-v1
   via: blackbox
   drivers:
   - simx
   - rtlsim
   app: sgemm_v1
-  configs: -DLDST_WIDE=1
+  configs: -DVX_CFG_EXT_LDST_WIDE_ENABLE
+  xlen:
+  - 32
 - id: ldst-wide-sgemmx
   via: blackbox
   drivers:
   - simx
   - rtlsim
   app: sgemmx
-  configs: -DLDST_WIDE=1
+  configs: -DVX_CFG_EXT_LDST_WIDE_ENABLE
+  xlen:
+  - 32
 - id: ldst-wide-sgemm2
   via: blackbox
   drivers:
@@ -179,14 +225,18 @@ tests:
   - rtlsim
   app: sgemm2
   args: -n32 -t4
-  configs: -DLDST_WIDE=1
+  configs: -DVX_CFG_EXT_LDST_WIDE_ENABLE
+  xlen:
+  - 32
 - id: ldst-wide-sgemm2-v1
   via: blackbox
   drivers:
   - simx
   - rtlsim
   app: sgemm2_v1
-  configs: -DLDST_WIDE=1
+  configs: -DVX_CFG_EXT_LDST_WIDE_ENABLE
+  xlen:
+  - 32
 # DGEMM: the sgemm kernel in FP64, its FMAs on F64 FMA processing elements
 # serving two lanes each.
 - id: dgemm-fma64

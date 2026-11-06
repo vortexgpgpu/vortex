@@ -44,39 +44,25 @@ package VX_tcu_pkg;
     localparam TCU_FMT_WIDTH= 5;
 
     // Set configuration parameters
-    localparam TCU_NT = `VX_CFG_NUM_THREADS;
+    localparam TCU_NT = MTX_NT;
 
     localparam TCU_WG_NRA = 4;  // A registers per warp (fixed)
     localparam TCU_WG_NR = 32;  // max NRC (C/D registers, variable via cd_nregs)
 
-    localparam TCU_NR = 8;
-    localparam TCU_DK = 0;
-    localparam TCU_DP = 0;
+    // Tile and block dimensions: the warp's matrix fragment geometry
+    localparam TCU_TILE_M = MTX_TILE_M;
+    localparam TCU_TILE_N = MTX_TILE_N;
+    localparam TCU_TILE_K = MTX_TILE_K;
 
-    // Tile dimensions
-    localparam TCU_TILE_CAP = TCU_NT * TCU_NR;
-    localparam TCU_LG_TILE_CAP = $clog2(TCU_TILE_CAP);
-    localparam TCU_TILE_EN = TCU_LG_TILE_CAP / 2;
-    localparam TCU_TILE_EM = TCU_LG_TILE_CAP - TCU_TILE_EN;
-
-    localparam TCU_TILE_M = 1 << TCU_TILE_EM;
-    localparam TCU_TILE_N = 1 << TCU_TILE_EN;
-    localparam TCU_TILE_K = (TCU_DK != 0) ? TCU_DK : (TCU_DP != 0) ? TCU_DP : (TCU_TILE_CAP / ((TCU_TILE_M > TCU_TILE_N) ? TCU_TILE_M : TCU_TILE_N));
-
-    // Block dimensions
-    localparam TCU_BLOCK_CAP = TCU_NT;
-    localparam TCU_LG_BLOCK_CAP = $clog2(TCU_BLOCK_CAP);
-    localparam TCU_BLOCK_EN = TCU_LG_BLOCK_CAP / 2;
-    localparam TCU_BLOCK_EM = TCU_LG_BLOCK_CAP - TCU_BLOCK_EN;
-
-    localparam TCU_TC_M = 1 << TCU_BLOCK_EM;
-    localparam TCU_TC_N = 1 << TCU_BLOCK_EN;
-    localparam TCU_TC_K = (TCU_DP != 0) ? TCU_DP : (TCU_BLOCK_CAP / ((TCU_TC_M > TCU_TC_N) ? TCU_TC_M : TCU_TC_N));
+    localparam TCU_BLOCK_CAP = MTX_BLOCK_CAP;
+    localparam TCU_TC_M = MTX_TC_M;
+    localparam TCU_TC_N = MTX_TC_N;
+    localparam TCU_TC_K = MTX_TC_K;
 
     // Step counts
-    localparam TCU_M_STEPS = TCU_TILE_M / TCU_TC_M;
-    localparam TCU_N_STEPS = TCU_TILE_N / TCU_TC_N;
-    localparam TCU_K_STEPS = TCU_TILE_K / TCU_TC_K;
+    localparam TCU_M_STEPS = MTX_M_STEPS;
+    localparam TCU_N_STEPS = MTX_N_STEPS;
+    localparam TCU_K_STEPS = MTX_K_STEPS;
 
     // A micro-tiling
     localparam TCU_A_BLOCK_SIZE = TCU_TC_M * TCU_TC_K;
@@ -84,7 +70,7 @@ package VX_tcu_pkg;
 
     // B micro-tiling (dense)
     localparam TCU_B_BLOCK_SIZE = TCU_TC_K * TCU_TC_N;
-    localparam TCU_B_SUB_BLOCKS = TCU_BLOCK_CAP / TCU_B_BLOCK_SIZE;
+    localparam TCU_B_SUB_BLOCKS = MTX_B_SUB_BLOCKS;
 
     // WGMMA per-warp tile dimensions (NRA=4 fixed, NRC=NR variable).
     // Derived from block geometry: xtileM = 2*tcM, xtileK = 2*tcK.
@@ -119,7 +105,7 @@ package VX_tcu_pkg;
 
     // Symmetric sparse flag (NT=4, NT=16: block_em == block_en). It selects the
     // WMMA_SP layout only: WGMMA_SP always reads the full interleaved layout.
-    localparam SYM_SPARSE = (TCU_BLOCK_EM == TCU_BLOCK_EN);
+    localparam SYM_SPARSE = MTX_SYM_SPARSE;
 
     // B micro-tiling (sparse 2:4)
     // NT=8/32: standard interleaved layout (tcK × tcN × 2 = NT lanes per block)
@@ -162,7 +148,7 @@ package VX_tcu_pkg;
 
     // Register counts
     localparam TCU_NRA = (TCU_TILE_M * TCU_TILE_K) / TCU_NT;
-    localparam TCU_NRB = (TCU_TILE_N * TCU_TILE_K) / TCU_NT;
+    localparam TCU_NRB = MTX_NRB;
     localparam TCU_NRC = (TCU_TILE_M * TCU_TILE_N) / TCU_NT;
 
     // Register base addresses
@@ -176,221 +162,10 @@ package VX_tcu_pkg;
 
     localparam TCU_MAX_INPUTS = TCU_TC_K * TCU_MAX_ELT_RATIO;
 
-    localparam TCU_LG_M    = $clog2(TCU_M_STEPS);
-    localparam TCU_LG_N    = $clog2(TCU_N_STEPS);
-    localparam TCU_LG_K    = $clog2(TCU_K_STEPS);
-    localparam TCU_LG_B_SB = $clog2(TCU_B_SUB_BLOCKS);
-
-    // Register offsets of the WMMA operands of step (m, n, k), permuted so the
-    // three operands of a step never share a register bank.
-    //   one B sub-block:   A={m[0],~m[hi],k}, B={n^k,~k}, C={m[0],~m[hi],XNOR(m[hi],n)}
-    //   two B sub-blocks:  A={k[0],~m,m^k[hi]}, B={k[0],k[hi]^np,~np}, C={n[0],~m,n[hi]}
-    //   asymmetric sparse: B={n[hi],~(n[0]^k),~k}, C={n[hi],m,~(m^n[0])}
-    function automatic logic [2:0] tcu_ra_off(input logic [`UP(TCU_LG_M)-1:0] m,
-                                              input logic [`UP(TCU_LG_K)-1:0] k);
-        if (TCU_LG_B_SB == 0) begin
-            return 3'({m[0], ~m[`UP(TCU_LG_M)-1], k[0]});
-        end else begin
-            return 3'({k[0], ~m[0], m[0] ^ k[`UP(TCU_LG_K)-1]});
-        end
-    endfunction
-
-    function automatic logic [2:0] tcu_rb_off(input logic [`UP(TCU_LG_N)-1:0] n,
-                                              input logic [`UP(TCU_LG_K)-1:0] k);
-        if (TCU_LG_B_SB == 0) begin
-            return 3'({n[0] ^ k[0], ~k[0]});
-        end else begin
-            return 3'({k[0], k[`UP(TCU_LG_K)-1] ^ n[`UP(TCU_LG_N)-1], ~n[`UP(TCU_LG_N)-1]});
-        end
-    endfunction
-
-    function automatic logic [2:0] tcu_rc_off(input logic [`UP(TCU_LG_M)-1:0] m,
-                                              input logic [`UP(TCU_LG_N)-1:0] n);
-        if (TCU_LG_B_SB == 0) begin
-            return 3'({m[0], ~m[`UP(TCU_LG_M)-1], ~(m[`UP(TCU_LG_M)-1] ^ n[0])});
-        end else begin
-            return 3'({n[0], ~m[0], n[`UP(TCU_LG_N)-1]});
-        end
-    endfunction
-
-    function automatic logic [2:0] tcu_rb_off_sp(input logic [`UP(TCU_LG_N)-1:0] n,
-                                                 input logic [`UP(TCU_LG_K)-1:0] k);
-        return 3'({n[`UP(TCU_LG_N)-1], ~(n[0] ^ k[0]), ~k[0]});
-    endfunction
-
-    function automatic logic [2:0] tcu_rc_off_sp(input logic [`UP(TCU_LG_M)-1:0] m,
-                                                 input logic [`UP(TCU_LG_N)-1:0] n);
-        return 3'({n[`UP(TCU_LG_N)-1], m[0], ~(m[0] ^ n[0])});
-    endfunction
-
-    // Matrix fragment load/store (vx_ldm/vx_stm) shapes: {ctx, role[1:0], trans, sparse}.
-    // Uop e moves fragment register fd + e between it and x[rs1 | grp] +
-    // (imm[11:5] | col), the element the WMMA/WGMMA expansion reads from it.
-    localparam TCU_LDM_A    = 5'b00000; // WMMA A, row-major
-    localparam TCU_LDM_A_SP = 5'b00001; // WMMA sparse A, row-major
-    localparam TCU_LDM_B    = 5'b00110; // WMMA B, col-major
-    localparam TCU_LDM_B_SP = 5'b00111; // WMMA symmetric sparse B, col-major
-    localparam TCU_LDM_C    = 5'b01000; // WMMA C, row-major
-    localparam TCU_LDM_WG_C = 5'b11000; // WGMMA C, row-major, one 8-register chunk
-
-    // Decode replaces the shape in imm[4:0] with its index, so the per-warp
-    // expander decodes 3 bits instead of 5, and marks an 8-register fragment
-    // in bytesel.
-    localparam TCU_LDM_IDX_A    = 3'd0;
-    localparam TCU_LDM_IDX_A_SP = 3'd1;
-    localparam TCU_LDM_IDX_B    = 3'd2;
-    localparam TCU_LDM_IDX_B_SP = 3'd3;
-    localparam TCU_LDM_IDX_C    = 3'd4;
-    localparam TCU_LDM_IDX_WG_C = 3'd5;
-
-    // Byte strides between the words a lane holds along a fragment row
-    localparam TCU_LDM_LG_CS_K = $clog2(TCU_TC_K * 4);
-    localparam TCU_LDM_LG_CS_N = $clog2(TCU_TC_N * 4);
-    localparam TCU_LDM_LG_K_SP      = (TCU_LG_K > 0) ? (TCU_LG_K - 1) : 0;
-    localparam TCU_LDM_COL_W        = TCU_LDM_LG_CS_K + 4;
-
-    typedef struct packed {
-        logic [1:0]               grp;
-        logic [TCU_LDM_COL_W-1:0] col;
-    } tcu_ldm_uop_t;
-
-    function automatic logic tcu_ldm_valid(input logic [4:0] shape);
-        case (shape)
-            TCU_LDM_A,
-            TCU_LDM_B,
-            TCU_LDM_C:    return 1'b1;
-            TCU_LDM_A_SP: return 1'(`VX_CFG_TCU_SPARSE_ENABLED);
-            TCU_LDM_B_SP: return 1'(`VX_CFG_TCU_SPARSE_ENABLED && SYM_SPARSE);
-            TCU_LDM_WG_C: return 1'(`VX_CFG_TCU_WGMMA_ENABLED);
-            default:      return 1'b0;
-        endcase
-    endfunction
-
-    function automatic logic [4:0] tcu_ldm_code(input logic [4:0] shape);
-        case (shape)
-            TCU_LDM_A:    return 5'(TCU_LDM_IDX_A);
-            TCU_LDM_A_SP: return 5'(TCU_LDM_IDX_A_SP);
-            TCU_LDM_B:    return 5'(TCU_LDM_IDX_B);
-            TCU_LDM_B_SP: return 5'(TCU_LDM_IDX_B_SP);
-            TCU_LDM_C:    return 5'(TCU_LDM_IDX_C);
-            default:      return 5'(TCU_LDM_IDX_WG_C);
-        endcase
-    endfunction
-
-    function automatic int unsigned tcu_ldm_count(input logic [2:0] idx);
-        case (idx)
-            TCU_LDM_IDX_A_SP: return 4;
-            TCU_LDM_IDX_B,
-            TCU_LDM_IDX_B_SP: return TCU_NRB;
-            default:          return 8;
-        endcase
-    endfunction
-
-    function automatic logic tcu_ldm_is8(input logic [4:0] shape);
-        return (tcu_ldm_count(3'(tcu_ldm_code(shape))) == 8);
-    endfunction
-
-    // Uop e moves register fd + e, so the counter feeds the register add
-    // directly; the shape only maps e to the row group and column of the element
-    // the WMMA/WGMMA expansion reads from that register, by inverting
-    // tcu_ra_off/tcu_rb_off/tcu_rc_off (a few inverted and XORed bits of e).
-    // VX_uop_packld checks the inverse against them at elaboration.
-    function automatic tcu_ldm_uop_t tcu_ldm_uop(input logic [2:0] idx, input logic [2:0] e);
-        tcu_ldm_uop_t u;
-        logic [2:0] m, n, k;
-        u = '0;
-        m = '0;
-        n = '0;
-        k = '0;
-        case (idx)
-            TCU_LDM_IDX_A: begin
-                if (TCU_LG_B_SB == 0) begin // A={m[0],~m[1],k}
-                    m = {1'b0, ~e[1], e[2]};
-                    k = {2'b0, e[0]};
-                end else begin              // A={k[0],~m,m^k[1]}
-                    m = {2'b0, ~e[1]};
-                    k = {1'b0, e[0] ^ ~e[1], e[2]};
-                end
-                u.grp = 2'(m);
-                u.col = TCU_LDM_COL_W'(k) << TCU_LDM_LG_CS_K;
-            end
-            // registers in element order {m, k} over half the K steps
-            TCU_LDM_IDX_A_SP: begin
-                u.grp = 2'(e >> TCU_LDM_LG_K_SP);
-                u.col = TCU_LDM_COL_W'(e & 3'((1 << TCU_LDM_LG_K_SP) - 1)) << TCU_LDM_LG_CS_K;
-            end
-            // a col-major B row is one of its columns (a pair with two sub-blocks)
-            TCU_LDM_IDX_B: begin
-                if (TCU_LG_B_SB == 0) begin // B={n^k,~k}
-                    k = {2'b0, ~e[0]};
-                    n = {2'b0, e[1] ^ ~e[0]};
-                end else begin              // B={k[0],k[1]^np,~np}
-                    n = {2'b0, ~e[0]};
-                    k = {1'b0, e[1] ^ ~e[0], e[2]};
-                end
-                u.grp = 2'(n);
-                u.col = TCU_LDM_COL_W'(k) << TCU_LDM_LG_CS_K;
-            end
-            // symmetric sparse: one row per register
-            TCU_LDM_IDX_B_SP: begin
-                u.grp = 2'(e);
-            end
-            TCU_LDM_IDX_C: begin
-                if (TCU_LG_B_SB == 0) begin // C={m[0],~m[1],~(m[1]^n)}
-                    m = {1'b0, ~e[1], e[2]};
-                    n = {2'b0, e[0] ^ e[1]};
-                end else begin              // C={n[0],~m,n[1]}
-                    m = {2'b0, ~e[1]};
-                    n = {1'b0, e[0], e[2]};
-                end
-                u.grp = 2'(m);
-                u.col = TCU_LDM_COL_W'(n) << TCU_LDM_LG_CS_N;
-            end
-            // n-major registers {n, m}, two row groups
-            default: begin
-                u.grp = 2'(e[0]);
-                u.col = TCU_LDM_COL_W'(e >> 1) << TCU_LDM_LG_CS_N;
-            end
-        endcase
-        return u;
-    endfunction
-
-    // The register the WMMA/WGMMA expansion reads element (grp, col) of a
-    // fragment from, through the forward permutations; -1 when (grp, col) is not
-    // an element of the fragment.
-    function automatic int tcu_ldm_reg(input logic [2:0] idx, input tcu_ldm_uop_t u);
-        int unsigned g, c, ck, cn;
-        g  = int'(u.grp);
-        c  = int'(u.col);
-        ck = c >> TCU_LDM_LG_CS_K;
-        cn = c >> TCU_LDM_LG_CS_N;
-        case (idx)
-            TCU_LDM_IDX_A: begin
-                if ((ck << TCU_LDM_LG_CS_K) != c || g >= TCU_M_STEPS || ck >= TCU_K_STEPS) return -1;
-                return int'(tcu_ra_off(`UP(TCU_LG_M)'(g), `UP(TCU_LG_K)'(ck)));
-            end
-            TCU_LDM_IDX_A_SP: begin
-                if ((ck << TCU_LDM_LG_CS_K) != c || g >= TCU_M_STEPS || ck >= (1 << TCU_LDM_LG_K_SP)) return -1;
-                return int'((g << TCU_LDM_LG_K_SP) | ck);
-            end
-            TCU_LDM_IDX_B: begin
-                if ((ck << TCU_LDM_LG_CS_K) != c || (g << TCU_LG_B_SB) >= `MAX(TCU_N_STEPS, 1 << TCU_LG_B_SB) || ck >= TCU_K_STEPS) return -1;
-                return int'(tcu_rb_off(`UP(TCU_LG_N)'(g << TCU_LG_B_SB), `UP(TCU_LG_K)'(ck)));
-            end
-            TCU_LDM_IDX_B_SP: begin
-                if (c != 0 || g >= TCU_NRB) return -1;
-                return int'(g);
-            end
-            TCU_LDM_IDX_C: begin
-                if ((cn << TCU_LDM_LG_CS_N) != c || g >= TCU_M_STEPS || cn >= TCU_N_STEPS) return -1;
-                return int'(tcu_rc_off(`UP(TCU_LG_M)'(g), `UP(TCU_LG_N)'(cn)));
-            end
-            default: begin
-                if ((cn << TCU_LDM_LG_CS_N) != c || g >= 2 || cn >= 4) return -1;
-                return int'((cn << 1) | g);
-            end
-        endcase
-    endfunction
+    localparam TCU_LG_M    = MTX_LG_M;
+    localparam TCU_LG_N    = MTX_LG_N;
+    localparam TCU_LG_K    = MTX_LG_K;
+    localparam TCU_LG_B_SB = MTX_LG_B_SB;
 
     function automatic int unsigned mx_fedp_sf_count(
         input int unsigned data_bits,

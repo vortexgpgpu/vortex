@@ -72,8 +72,8 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   TYPE sum(0);
   size_t k = 0;
   for (; k + 4 <= chunk_k; k += 4) {
-#if LDST_WIDE
-    static_assert(__is_same(TYPE, float), "LDST_WIDE needs float");
+#ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
+    static_assert(__is_same(TYPE, float), "the wide loads read float words");
     vx_float4 a = vx_flw_q(&shA[k]);
 #else
     TYPE a[4] = {shA[k], shA[k + 1], shA[k + 2], shA[k + 3]};

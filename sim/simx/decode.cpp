@@ -32,6 +32,16 @@
 #include "tensor_cfg.h"
 #include "tcu_unit.h"
 #endif
+#ifdef VX_CFG_EXT_LDST_MATRIX_ENABLE
+#include "fragment_layout.h"
+#endif
+
+#if defined(VX_CFG_EXT_LDST_WIDE_ENABLE) && (!defined(VX_CFG_EXT_F_ENABLE) || defined(VX_CFG_FLEN_64))
+#error "VX_CFG_EXT_LDST_WIDE_ENABLE requires VX_CFG_EXT_F_ENABLE with FLEN 32"
+#endif
+#if defined(VX_CFG_EXT_LDST_MATRIX_ENABLE) && !defined(VX_CFG_EXT_F_ENABLE)
+#error "VX_CFG_EXT_LDST_MATRIX_ENABLE requires VX_CFG_EXT_F_ENABLE"
+#endif
 
 using namespace vortex;
 
@@ -1257,16 +1267,15 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     // known-violation handoff class, checked against its decoded destination.
     gfx_doctrine::check(*instr);
   } break;
-#if defined(VX_CFG_EXT_F_ENABLE) && (defined(VX_CFG_EXT_TCU_ENABLE) || !defined(VX_CFG_FLEN_64))
   case Opcode::EXT4: {
-  #ifdef VX_CFG_EXT_TCU_ENABLE
     // vx_ldm (funct3 0) and vx_stm (funct3 2): a macro-op of one flw/fsw per
-    // register of a TCU matrix fragment; imm[4:0] is the fragment shape.
+    // register of a matrix fragment; imm[4:0] is the fragment shape.
     if (funct3 == 0 || funct3 == 2) {
+    #ifdef VX_CFG_EXT_LDST_MATRIX_ENABLE
       bool is_load = (funct3 == 0);
       uint32_t imm12 = is_load ? (code >> shift_rs2) : ((funct7 << width_reg) | rd);
       uint32_t shape = imm12 & 0x1f;
-      if (!TcuUopGen::ldm_valid(shape)) {
+      if (!frag::ldm_valid(shape)) {
         std::cout << "Error: " << (is_load ? "vx_ldm" : "vx_stm") << " shape " << shape
                   << " is not supported by this configuration" << std::endl;
         std::abort();
@@ -1284,9 +1293,11 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       instr->set_args(args);
       instr->set_macro_op();
       break;
+    #else
+      std::cout << "Error: matrix load/store on a core built without VX_CFG_EXT_LDST_MATRIX_ENABLE" << std::endl;
+      std::abort();
+    #endif
     }
-  #endif
-  #ifndef VX_CFG_FLEN_64
     // vx_flw.d/.q (funct3 3/4) and vx_fsw.d/.q (funct3 5/6): a macro-op of 2
     // or 4 flw/fsw uops over an aligned FP register group. The width is the
     // access's log2 bytes, as for fld/flq.
@@ -1294,6 +1305,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     if (!is_load && funct3 != 5 && funct3 != 6) {
       std::abort();
     }
+  #ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
     uint32_t width = is_load ? funct3 : (funct3 - 2);
     uint32_t words = 1u << (width - 2);
     uint32_t reg   = is_load ? rd : rs2;
@@ -1316,10 +1328,10 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     instr->set_args(IntrLsuArgs{width, /*stride*/ 0, offset});
     instr->set_macro_op();
   #else
+    std::cout << "Error: wide load/store on a core built without VX_CFG_EXT_LDST_WIDE_ENABLE" << std::endl;
     std::abort();
   #endif
   } break;
-#endif
 #ifdef VX_CFG_EXT_MUFU_ENABLE
   case Opcode::EXT3: {
     if (funct7 != 0 || funct3 != 0 || rs2 > uint32_t(MufuType::TANH)) {

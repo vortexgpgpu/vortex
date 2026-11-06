@@ -53,8 +53,8 @@ static uint64_t timestamp = 0;
 double sc_time_stamp() { return timestamp; }
 
 // ---- TCU block dimensions (derived from VX_CFG_NUM_THREADS) ----------------------
-// TCU_BLOCK_CAP = VX_CFG_NUM_THREADS, TCU_LG_BLOCK_CAP = log2(VX_CFG_NUM_THREADS)
-// TCU_BLOCK_EM  = LG / 2 (rounded up), TCU_BLOCK_EN = LG - EM
+// MTX_BLOCK_CAP = VX_CFG_NUM_THREADS, MTX_LG_BLOCK_CAP = log2(VX_CFG_NUM_THREADS)
+// MTX_BLOCK_EM  = LG / 2 (rounded up), MTX_BLOCK_EN = LG - EM
 // TCU_TC_M = 2^EM, TCU_TC_N = 2^EN, TCU_TC_K = NT / max(TC_M, TC_N)
 
 static_assert((VX_CFG_NUM_THREADS & (VX_CFG_NUM_THREADS - 1)) == 0, "VX_CFG_NUM_THREADS must be power of 2");

@@ -200,22 +200,60 @@ uint32_t check_offsets(volatile uint32_t* src, volatile uint32_t* dst, uint32_t 
 
 constexpr uint32_t kFdB = (cfg::NRB == 8) ? 24 : 28;
 
+// The same move through the vx_ldm/vx_stm intrinsics, with the register bases
+// and 4-register groups (QS for the load, QD for the store) the fragment
+// helpers of vx_tensor.h do not use.
+template <uint32_t SHAPE, uint32_t FD, uint32_t QS, uint32_t QD>
+uint32_t check_intrinsics(volatile uint32_t* src, volatile uint32_t* dst, uint32_t region_words, uint32_t row) {
+  constexpr geom_t g = geom(SHAPE);
+  constexpr uint32_t NR = g.J * g.C;
+  constexpr uint32_t S = pow2ceil((g.C * g.CS > 32) ? (g.C * g.CS) : 32);
+  uintptr_t gs[g.J];
+  uintptr_t gd[g.J];
+  for (uint32_t j = 0; j < g.J; ++j) {
+    gs[j] = reinterpret_cast<uintptr_t>(src) + S + j * row;
+    gd[j] = reinterpret_cast<uintptr_t>(dst) + S + j * row;
+  }
+  float v[NR];
+  vx_ldm<FD, NR, g.J, QS, int32_t(SHAPE)>(v, gs);
+  vx_stm<FD, NR, g.J, QD, int32_t(SHAPE)>(v, gd);
+
+  uint32_t foot[NR];
+  uint32_t errors = 0;
+  for (uint32_t j = 0, e = 0; j < g.J; ++j) {
+    for (uint32_t c = 0; c < g.C; ++c, ++e) {
+      foot[e] = (S + j * row + c * g.CS) / 4;
+      uint32_t w;
+      __builtin_memcpy(&w, &v[frag_reg(SHAPE, j, c)], sizeof(w));
+      errors += (w != src[foot[e]]);
+    }
+  }
+  for (uint32_t e = 0; e < NR; ++e) {
+    errors += (foot[e] >= region_words) || (dst[foot[e]] != src[foot[e]]);
+  }
+  for (uint32_t e = 0; e < NR; ++e) {
+    dst[foot[e]] = 0;
+  }
+  return errors;
+}
+
 uint32_t check_shapes(volatile uint32_t* src, volatile uint32_t* dst, uint32_t region_words, uint32_t row) {
   uint32_t errors = 0;
   errors += check_offsets<SHAPE_A, 10>(src, dst, region_words, row);
   errors += check_offsets<SHAPE_A, 13>(src, dst, region_words, row);
   errors += check_offsets<SHAPE_B, kFdB>(src, dst, region_words, row);
   errors += check_offsets<SHAPE_C, 0>(src, dst, region_words, row);
-#ifdef VX_CFG_TCU_SPARSE_ENABLE
   errors += check_offsets<SHAPE_A_SP, 10>(src, dst, region_words, row);
   if constexpr (cfg::sym_sparse) {
     errors += check_offsets<SHAPE_B_SP, kFdB>(src, dst, region_words, row);
   }
-#endif
-#ifdef VX_CFG_TCU_WGMMA_ENABLE
   errors += check_offsets<SHAPE_WG_C, 0>(src, dst, region_words, row);
   errors += check_offsets<SHAPE_WG_C, 24>(src, dst, region_words, row);
-#endif
+  errors += check_intrinsics<SHAPE_A, 3, 16, 20>(src, dst, region_words, row);
+  errors += check_intrinsics<SHAPE_A_SP, 21, 24, 16>(src, dst, region_words, row);
+  errors += check_intrinsics<SHAPE_B, 17, 20, 24>(src, dst, region_words, row);
+  errors += check_intrinsics<SHAPE_C, 9, 24, 12>(src, dst, region_words, row);
+  errors += check_intrinsics<SHAPE_WG_C, 22, 28, 16>(src, dst, region_words, row);
   return errors;
 }
 
@@ -225,13 +263,8 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   const uint32_t tid = blockIdx.x * blockDim.x + lid;
 
   if (tid == 0) {
-    uint32_t shapes = (1u << SHAPE_A) | (1u << SHAPE_B) | (1u << SHAPE_C);
-  #ifdef VX_CFG_TCU_SPARSE_ENABLE
-    shapes |= (1u << SHAPE_A_SP) | (cfg::sym_sparse ? (1u << SHAPE_B_SP) : 0);
-  #endif
-  #ifdef VX_CFG_TCU_WGMMA_ENABLE
-    shapes |= (1u << SHAPE_WG_C);
-  #endif
+    uint32_t shapes = (1u << SHAPE_A) | (1u << SHAPE_A_SP) | (1u << SHAPE_B) | (1u << SHAPE_C)
+                    | (1u << SHAPE_WG_C) | (cfg::sym_sparse ? (1u << SHAPE_B_SP) : 0);
     *reinterpret_cast<uint32_t*>(arg->shape_addr) = shapes;
   }
 

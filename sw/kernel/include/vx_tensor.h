@@ -144,121 +144,38 @@ namespace detail {
     }
   };
 
-  // vx_ldm fd, imm(rs1) / vx_stm fs2, imm(rs1): imm[4:0] is the fragment
-  // shape, imm[11:5] a byte offset; rs1 is the first of J registers, a multiple
-  // of J, holding the lane's address in each of the fragment's row groups.
+  // vx_ldm/vx_stm fragment shapes; LDM_NONE marks a fragment without one
   enum ldm_shape_t : int32_t {
     LDM_NONE = -1,
-    LDM_A    = 0x00, // WMMA A, row-major
-    LDM_A_SP = 0x01, // WMMA sparse A, row-major
-    LDM_B    = 0x06, // WMMA B, col-major
-    LDM_B_SP = 0x07, // WMMA sparse B, col-major
-    LDM_C    = 0x08, // WMMA C, row-major
-    LDM_WG_C = 0x18  // WGMMA C, row-major, one 8-register chunk
+    LDM_A    = VX_LDM_A,
+    LDM_A_SP = VX_LDM_A_SP,
+    LDM_B    = VX_LDM_B,
+    LDM_B_SP = VX_LDM_B_SP,
+    LDM_C    = VX_LDM_C,
+    LDM_WG_C = VX_LDM_WG_C
   };
 
-#if __riscv_xlen == 64
-  using gpr_pair_t = unsigned __int128;
-#else
-  using gpr_pair_t = uint64_t;
-#endif
+  // vx_ldm/vx_stm, reached through a context's ldst_matrix flag: a context
+  // without it compiles for a device without the matrix loads and stores.
+  template <bool enable>
+  struct ldst_matrix_ops {
+    static_assert(!enable, "ldst_matrix needs VX_CFG_EXT_LDST_MATRIX_ENABLE");
+  };
 
-#define VX_TENSOR_FREGS_0     "f0",  "f1",  "f2",  "f3",  "f4",  "f5",  "f6",  "f7"
-#define VX_TENSOR_FREGS_8     "f8",  "f9",  "f10", "f11", "f12", "f13", "f14", "f15"
-#define VX_TENSOR_FREGS_10    "f10", "f11", "f12", "f13", "f14", "f15", "f16", "f17"
-#define VX_TENSOR_FREGS_16    "f16", "f17", "f18", "f19", "f20", "f21", "f22", "f23"
-#define VX_TENSOR_FREGS_24    "f24", "f25", "f26", "f27", "f28", "f29", "f30", "f31"
-#define VX_TENSOR_FREGS4_10   "f10", "f11", "f12", "f13"
-#define VX_TENSOR_FREGS4_28   "f28", "f29", "f30", "f31"
-
-// The register lists expand before the inner macros split them into names.
-#define VX_TENSOR_LDM8(ival, regs, ...) VX_TENSOR_LDM8_(ival, regs, __VA_ARGS__)
-#define VX_TENSOR_LDM8_(ival, r0, r1, r2, r3, r4, r5, r6, r7, ...) {                      \
-    register float x0 __asm__(r0); register float x1 __asm__(r1);                         \
-    register float x2 __asm__(r2); register float x3 __asm__(r3);                         \
-    register float x4 __asm__(r4); register float x5 __asm__(r5);                         \
-    register float x6 __asm__(r6); register float x7 __asm__(r7);                         \
-    __asm__ volatile (".insn i %[op], 0, %[x0], %[g], %[imm]"                             \
-      : [x0]"=f"(x0), "=f"(x1), "=f"(x2), "=f"(x3), "=f"(x4), "=f"(x5), "=f"(x6), "=f"(x7)\
-      : [op]"i"(RISCV_CUSTOM3), [imm]"i"(ival), __VA_ARGS__ : "memory");                  \
-    v[0] = x0; v[1] = x1; v[2] = x2; v[3] = x3; v[4] = x4; v[5] = x5; v[6] = x6; v[7] = x7; }
-#define VX_TENSOR_LDM4(ival, regs, ...) VX_TENSOR_LDM4_(ival, regs, __VA_ARGS__)
-#define VX_TENSOR_LDM4_(ival, r0, r1, r2, r3, ...) {                                      \
-    register float x0 __asm__(r0); register float x1 __asm__(r1);                         \
-    register float x2 __asm__(r2); register float x3 __asm__(r3);                         \
-    __asm__ volatile (".insn i %[op], 0, %[x0], %[g], %[imm]"                             \
-      : [x0]"=f"(x0), "=f"(x1), "=f"(x2), "=f"(x3)                                        \
-      : [op]"i"(RISCV_CUSTOM3), [imm]"i"(ival), __VA_ARGS__ : "memory");                  \
-    v[0] = x0; v[1] = x1; v[2] = x2; v[3] = x3; }
-#define VX_TENSOR_STM8(ival, regs, ...) VX_TENSOR_STM8_(ival, regs, __VA_ARGS__)
-#define VX_TENSOR_STM8_(ival, r0, r1, r2, r3, r4, r5, r6, r7, ...) {                      \
-    register float x0 __asm__(r0) = v[0]; register float x1 __asm__(r1) = v[1];           \
-    register float x2 __asm__(r2) = v[2]; register float x3 __asm__(r3) = v[3];           \
-    register float x4 __asm__(r4) = v[4]; register float x5 __asm__(r5) = v[5];           \
-    register float x6 __asm__(r6) = v[6]; register float x7 __asm__(r7) = v[7];           \
-    __asm__ volatile (".insn s %[op], 2, %[x0], %[imm](%[g])"                             \
-      :: [op]"i"(RISCV_CUSTOM3), [imm]"i"(ival), [x0]"f"(x0), "f"(x1), "f"(x2), "f"(x3),   \
-         "f"(x4), "f"(x5), "f"(x6), "f"(x7), __VA_ARGS__ : "memory"); }
-
-  // A J=2 group rides in a register pair; a J=4 group is pinned to x28..x31
-  // or x12..x15.
-#define VX_TENSOR_LDM_GROUP(EMIT)                                                         \
-    if constexpr (J == 2) {                                                               \
-      gpr_pair_t p = gpr_pair_t(g[0]) | (gpr_pair_t(g[1]) << (8 * sizeof(uintptr_t)));    \
-      EMIT([g]"R"(p));                                                                    \
-    } else if constexpr (Q == 28) {                                                       \
-      register uintptr_t q0 __asm__("x28") = g[0]; register uintptr_t q1 __asm__("x29") = g[1]; \
-      register uintptr_t q2 __asm__("x30") = g[2]; register uintptr_t q3 __asm__("x31") = g[3]; \
-      EMIT([g]"r"(q0), "r"(q1), "r"(q2), "r"(q3));                                       \
-    } else {                                                                              \
-      register uintptr_t q0 __asm__("x12") = g[0]; register uintptr_t q1 __asm__("x13") = g[1]; \
-      register uintptr_t q2 __asm__("x14") = g[2]; register uintptr_t q3 __asm__("x15") = g[3]; \
-      EMIT([g]"r"(q0), "r"(q1), "r"(q2), "r"(q3));                                       \
+#ifdef VX_CFG_EXT_LDST_MATRIX_ENABLE
+  template <>
+  struct ldst_matrix_ops<true> {
+    template <uint32_t FD, uint32_t NR, uint32_t J, uint32_t Q, int32_t IMM>
+    static __attribute__((always_inline)) void ldm(float (&v)[NR], const uintptr_t (&g)[J]) {
+      vx_ldm<FD, NR, J, Q, IMM>(v, g);
     }
 
-  // vx_ldm of NR registers from fd = FD; Q picks a J=4 group's registers.
-  template <uint32_t FD, uint32_t NR, uint32_t J, uint32_t Q, int32_t IMM>
-  __attribute__((always_inline)) inline void vx_ldm(float (&v)[NR], const uintptr_t (&g)[J]) {
-    static_assert(J == 2 || J == 4, "a fragment has 2 or 4 row groups");
-  #define VX_TENSOR_LDM_EMIT(...)                                                         \
-    if constexpr (FD == 10 && NR == 8) VX_TENSOR_LDM8(IMM, VX_TENSOR_FREGS_10, __VA_ARGS__) \
-    else if constexpr (FD == 10)       VX_TENSOR_LDM4(IMM, VX_TENSOR_FREGS4_10, __VA_ARGS__) \
-    else if constexpr (FD == 24)       VX_TENSOR_LDM8(IMM, VX_TENSOR_FREGS_24, __VA_ARGS__) \
-    else if constexpr (FD == 28)       VX_TENSOR_LDM4(IMM, VX_TENSOR_FREGS4_28, __VA_ARGS__) \
-    else { static_assert(FD == 0 && NR == 8, "unsupported fragment registers");          \
-                                       VX_TENSOR_LDM8(IMM, VX_TENSOR_FREGS_0, __VA_ARGS__) }
-    VX_TENSOR_LDM_GROUP(VX_TENSOR_LDM_EMIT)
-  #undef VX_TENSOR_LDM_EMIT
-  }
-
-  // vx_stm of 8 registers from fs2 = FD
-  template <uint32_t FD, uint32_t J, uint32_t Q, int32_t IMM>
-  __attribute__((always_inline)) inline void vx_stm(const float (&v)[8], const uintptr_t (&g)[J]) {
-    static_assert(J == 2 || J == 4, "a fragment has 2 or 4 row groups");
-  #define VX_TENSOR_STM_EMIT(...)                                                         \
-    if constexpr (FD == 0)       VX_TENSOR_STM8(IMM, VX_TENSOR_FREGS_0, __VA_ARGS__)       \
-    else if constexpr (FD == 8)  VX_TENSOR_STM8(IMM, VX_TENSOR_FREGS_8, __VA_ARGS__)       \
-    else if constexpr (FD == 16) VX_TENSOR_STM8(IMM, VX_TENSOR_FREGS_16, __VA_ARGS__)      \
-    else { static_assert(FD == 24, "unsupported fragment registers");                    \
-                                 VX_TENSOR_STM8(IMM, VX_TENSOR_FREGS_24, __VA_ARGS__) }
-    VX_TENSOR_LDM_GROUP(VX_TENSOR_STM_EMIT)
-  #undef VX_TENSOR_STM_EMIT
-  }
-
-#undef VX_TENSOR_FREGS_0
-#undef VX_TENSOR_FREGS_8
-#undef VX_TENSOR_FREGS_10
-#undef VX_TENSOR_FREGS_16
-#undef VX_TENSOR_FREGS_24
-#undef VX_TENSOR_FREGS4_10
-#undef VX_TENSOR_FREGS4_28
-#undef VX_TENSOR_LDM8
-#undef VX_TENSOR_LDM8_
-#undef VX_TENSOR_LDM4
-#undef VX_TENSOR_LDM4_
-#undef VX_TENSOR_STM8
-#undef VX_TENSOR_STM8_
-#undef VX_TENSOR_LDM_GROUP
+    template <uint32_t FD, uint32_t NR, uint32_t J, uint32_t Q, int32_t IMM>
+    static __attribute__((always_inline)) void stm(const float (&v)[NR], const uintptr_t (&g)[J]) {
+      vx_stm<FD, NR, J, Q, IMM>(v, g);
+    }
+  };
+#endif
 
   // The immediate of a fragment access at byte offset off from the group: off
   // folds in when it is a multiple of 32 and of the column span (the OR with
@@ -267,6 +184,14 @@ namespace detail {
   inline constexpr bool ldm_folds = (off % 32 == 0) && (off % int32_t(span) == 0)
                                  && (off >= -2048) && (off <= 2016);
 }
+
+// The ldst_matrix flag of a context for this device: fragments move with
+// vx_ldm/vx_stm where the device has them.
+#ifdef VX_CFG_EXT_LDST_MATRIX_ENABLE
+constexpr bool ldst_matrix_enabled = true;
+#else
+constexpr bool ldst_matrix_enabled = false;
+#endif
 
 // Hoist detail::frag_use_t into the enclosing tensor namespace
 using detail::frag_use_t;
@@ -637,8 +562,8 @@ private:
     uintptr_t g[geom::J];
     ldm_group<Frag, off_bytes>(g, src, lane_off, ldm);
     float v[geom::NR];
-    detail::vx_ldm<geom::FD, geom::NR, geom::J, geom::Q,
-                   ldm_imm<Frag, off_bytes, ldm_shape<Frag, src_layout>()>()>(v, g);
+    detail::ldst_matrix_ops<ldst_matrix>::template ldm<geom::FD, geom::NR, geom::J, geom::Q,
+        ldm_imm<Frag, off_bytes, ldm_shape<Frag, src_layout>()>()>(v, g);
     detail::unroll_for<geom::NR>([&](auto r) {
       dst.data[ldm_idx<Frag>(r)] = v[r];
     });
@@ -827,7 +752,7 @@ public:
       detail::unroll_for<8>([&](auto r) {
         v[r] = src.data[rc_idx(r)];
       });
-      detail::vx_stm<geom::FD, geom::J, geom::Q, detail::LDM_C>(v, g);
+      detail::ldst_matrix_ops<ldst_matrix>::template stm<geom::FD, 8, geom::J, geom::Q, detail::LDM_C>(v, g);
       return;
     }
     detail::unroll_for<Frag::NR>([&](auto r) {
@@ -1240,7 +1165,8 @@ public:
         detail::unroll_for<8>([&](auto r) {
           v[r] = src.data[chunk * 8 + r];
         });
-        detail::vx_stm<chunk * 8, 2, 28, int32_t(chunk * chunk_bytes) | detail::LDM_WG_C>(v, g);
+        detail::ldst_matrix_ops<ldst_matrix>::template stm<chunk * 8, 8, 2, 28,
+            int32_t(chunk * chunk_bytes) | detail::LDM_WG_C>(v, g);
       });
       return;
     }

@@ -4,7 +4,7 @@
 #include <vx_intrinsics.h>
 
 namespace vt = vortex::tensor;
-using ctx = vt::wmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, true, 8, 0, LDST_MATRIX>;
+using ctx = vt::wmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, true, 8, 0, vt::ldst_matrix_enabled>;
 
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   auto pA = reinterpret_cast<ctx::input_t *>(arg->A_addr);

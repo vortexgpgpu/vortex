@@ -45,6 +45,14 @@ VX_CFG_EXT_RASTER_ENABLE = false
 VX_CFG_EXT_OM_ENABLE = false
 VX_CFG_EXT_RTU_ENABLE = false
 VX_CFG_EXT_MUFU_ENABLE = false
+# Wide loads and stores (vx_flw.d/.q, vx_fsw.d/.q): 2 or 4 consecutive words
+# to or from an aligned FP register group, one flw/fsw uop per word. Requires
+# F with FLEN 32 (no D).
+VX_CFG_EXT_LDST_WIDE_ENABLE = false
+# Matrix loads and stores (vx_ldm, vx_stm): a warp's matrix fragment, one
+# flw/fsw uop per register, in the fragment register layout the TCU reads.
+# Requires F; does not require the TCU.
+VX_CFG_EXT_LDST_MATRIX_ENABLE = false
 VX_CFG_VLEN = "expr: $VX_CFG_XLEN * 4"
 
 [pipeline]
@@ -543,7 +551,7 @@ VX_CFG_NUM_OCACHES      = "expr: max(1, up($VX_CFG_NUM_OM_CORES / 4))"
 VX_CFG_MISA_STD = "expr: ($VX_CFG_EXT_A_ENABLED << 0) | (0 << 1) | ($VX_CFG_EXT_C_ENABLED << 2) | ($VX_CFG_EXT_D_ENABLED << 3) | (0 << 4) | ($VX_CFG_EXT_F_ENABLED << 5) | (0 << 6) | (0 << 7) | (1 << 8) | (0 << 9) | (0 << 10) | (0 << 11) | ($VX_CFG_EXT_M_ENABLED << 12) | (0 << 13) | (0 << 14) | (0 << 15) | (0 << 16) | (0 << 17) | (0 << 18) | (0 << 19) | (1 << 20) | (0 << 21) | (0 << 22) | (1 << 23) | (0 << 24) | (0 << 25)"
 
 # Custom extensions signature
-VX_CFG_MISA_EXT = "expr: ($VX_CFG_ICACHE_ENABLED << 0) | ($VX_CFG_DCACHE_ENABLED << 1) | ($VX_CFG_L2_ENABLED << 2) | ($VX_CFG_L3_ENABLED << 3) | ($VX_CFG_LMEM_ENABLED << 4) | ($VX_CFG_EXT_ZICOND_ENABLED << 5) | ($VX_CFG_EXT_TCU_ENABLED << 9) | ($VX_CFG_EXT_DXA_ENABLED << 10) | ($VX_CFG_EXT_TEX_ENABLED << 6) | ($VX_CFG_EXT_RASTER_ENABLED << 7) | ($VX_CFG_EXT_OM_ENABLED << 8) | ($VX_CFG_EXT_RTU_ENABLED << 11) | ($VX_CFG_EXT_MUFU_ENABLED << 12) | ($VX_CFG_EXT_ZFHMIN_ENABLED << 13)"
+VX_CFG_MISA_EXT = "expr: ($VX_CFG_ICACHE_ENABLED << 0) | ($VX_CFG_DCACHE_ENABLED << 1) | ($VX_CFG_L2_ENABLED << 2) | ($VX_CFG_L3_ENABLED << 3) | ($VX_CFG_LMEM_ENABLED << 4) | ($VX_CFG_EXT_ZICOND_ENABLED << 5) | ($VX_CFG_EXT_TCU_ENABLED << 9) | ($VX_CFG_EXT_DXA_ENABLED << 10) | ($VX_CFG_EXT_TEX_ENABLED << 6) | ($VX_CFG_EXT_RASTER_ENABLED << 7) | ($VX_CFG_EXT_OM_ENABLED << 8) | ($VX_CFG_EXT_RTU_ENABLED << 11) | ($VX_CFG_EXT_MUFU_ENABLED << 12) | ($VX_CFG_EXT_ZFHMIN_ENABLED << 13) | ($VX_CFG_EXT_LDST_WIDE_ENABLED << 14) | ($VX_CFG_EXT_LDST_MATRIX_ENABLED << 15)"
 
 [toolchain]
 ASIC = false

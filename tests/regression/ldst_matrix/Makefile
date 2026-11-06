@@ -1,7 +1,7 @@
 ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
 
-CONFIGS := $(if $(findstring -DVX_CFG_EXT_TCU_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_EXT_TCU_ENABLE)
+CONFIGS := $(if $(findstring -DVX_CFG_EXT_LDST_MATRIX_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_EXT_LDST_MATRIX_ENABLE)
 
 PROJECT := ldst_matrix
 

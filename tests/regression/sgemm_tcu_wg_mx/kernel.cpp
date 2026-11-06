@@ -5,7 +5,7 @@
 
 namespace vt = vortex::tensor;
 using ctx = vt::wgmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE,
-                              false, WGMMA_NRC, LDST_MATRIX>;
+                              false, WGMMA_NRC, vt::ldst_matrix_enabled>;
 
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   static_assert(sizeof(ctx::input_t) == 1, "MX WGMMA inputs use byte storage");

@@ -1,6 +1,22 @@
 #include <vx_spawn2.h>
 #include "common.h"
 
+#ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
+// The dot product of a row of As and a column of Bs, reading the row in quads
+// at constant offsets; consecutive quads take different register groups.
+template <uint32_t BLOCK_SIZE, uint32_t K = 0>
+static inline void dot_wide(TYPE& sum, const TYPE* a_row, const TYPE* b_col) {
+  if constexpr (K < BLOCK_SIZE) {
+    vx_float4 a = vx_flw_q<((K / 4) % 2) ? 28 : 24, int32_t(K * sizeof(TYPE))>(a_row);
+    sum += a[0] * b_col[K * BLOCK_SIZE];
+    sum += a[1] * b_col[(K + 1) * BLOCK_SIZE];
+    sum += a[2] * b_col[(K + 2) * BLOCK_SIZE];
+    sum += a[3] * b_col[(K + 3) * BLOCK_SIZE];
+    dot_wide<BLOCK_SIZE, K + 4>(sum, a_row, b_col);
+  }
+}
+#endif
+
 // Shared-memory tiled matrix multiply, as in the CUDA samples' matrixMul: each
 // thread computes one element of C, and the block steps BLOCK_SIZE x
 // BLOCK_SIZE tiles of A and B through local memory.
@@ -20,17 +36,10 @@ static void matrix_mul(const TYPE* A, const TYPE* B, TYPE* C, uint32_t size) {
     Bs[ty * BLOCK_SIZE + tx] = B[(t + ty) * size + col];
     __syncthreads();
 
-  #if LDST_WIDE
-    static_assert(__is_same(TYPE, float), "LDST_WIDE needs float");
-    static_assert((BLOCK_SIZE % 4) == 0, "LDST_WIDE reads A in groups of 4");
-    #pragma unroll
-    for (uint32_t k = 0; k < BLOCK_SIZE; k += 4) {
-      vx_float4 a = vx_flw_q(&As[ty * BLOCK_SIZE + k]);
-      sum += a[0] * Bs[k * BLOCK_SIZE + tx];
-      sum += a[1] * Bs[(k + 1) * BLOCK_SIZE + tx];
-      sum += a[2] * Bs[(k + 2) * BLOCK_SIZE + tx];
-      sum += a[3] * Bs[(k + 3) * BLOCK_SIZE + tx];
-    }
+  #ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
+    static_assert(__is_same(TYPE, float), "the wide loads read float words");
+    static_assert((BLOCK_SIZE % 4) == 0, "the wide loads read A in groups of 4");
+    dot_wide<BLOCK_SIZE>(sum, &As[ty * BLOCK_SIZE], &Bs[tx]);
   #else
     #pragma unroll
     for (uint32_t k = 0; k < BLOCK_SIZE; ++k) {
