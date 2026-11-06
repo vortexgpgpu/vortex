@@ -149,7 +149,13 @@ int main(int argc, char *argv[]) {
 
   std::cout << "flash_tcu_tmem: " << N << "x" << d
             << " ITYPE=" << vt::ITYPE::name << " OTYPE=" << vt::OTYPE::name
-            << " NRC=" << UMMA_NRC << std::endl;
+            << " NRC=" << UMMA_NRC
+#ifdef UMMA_A_TMEM
+            << " A=TMEM"
+#else
+            << " A=SMEM"
+#endif
+            << std::endl;
   std::cout << "UMMA geometry: tcM=" << umma_cfg::tcM << " tcN=" << umma_cfg::tcN
             << " xtileM=" << umma_cfg::xtileM << " xtileN=" << umma_cfg::xtileN
             << " tileK=" << umma_cfg::tileK
@@ -212,8 +218,14 @@ int main(int argc, char *argv[]) {
   // block_size_r steps by xtileM and block_size_c/head_dim_tile are rounded to
   // UMMA quantum.
   auto lmem_for = [&](uint32_t r, uint32_t c, uint32_t dtile) -> uint64_t {
+#ifdef UMMA_A_TMEM
+    // S, P and O live in TMEM
+    return (uint64_t)sizeof(input_t)  * ((uint64_t)r * d + (uint64_t)c * dtile)
+         + (uint64_t)sizeof(float)    * (2ull * r);
+#else
     return (uint64_t)sizeof(input_t)  * ((uint64_t)r * d + (uint64_t)c * dtile + (uint64_t)r * c)
          + (uint64_t)sizeof(float)    * ((uint64_t)r * c + (uint64_t)r * d + 3ull * r);
+#endif
   };
 
   uint32_t Br = 0, Bc = 0, dt = 0, occupancy = 0;
@@ -254,18 +266,24 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
-  // Each concurrently-resident CTA holds its own xtileN-column allocation
-  if ((uint64_t)occupancy * umma_cfg::xtileN > tmem_cols) {
-    std::cout << "Error: " << occupancy << " concurrent CTAs x xtileN="
-              << umma_cfg::xtileN << " = " << (uint64_t)occupancy * umma_cfg::xtileN
+  // Each concurrently-resident CTA holds its own allocation
+#ifdef UMMA_A_TMEM
+  // S with P packed over it, and O
+  const uint64_t cta_tmem_cols = (uint64_t)Bc + d;
+#else
+  const uint64_t cta_tmem_cols = umma_cfg::xtileN;
+#endif
+  if ((uint64_t)occupancy * cta_tmem_cols > tmem_cols) {
+    std::cout << "Error: " << occupancy << " concurrent CTAs x " << cta_tmem_cols
+              << " columns = " << (uint64_t)occupancy * cta_tmem_cols
               << " TMEM columns, which exceeds the device's " << tmem_cols
-              << ". Reduce UMMA_NRC or VX_CFG_NUM_WARPS." << std::endl;
+              << ". Reduce UMMA_NRC, the head_dim, or VX_CFG_NUM_WARPS." << std::endl;
     return -1;
   }
 
   std::cout << "num_threads=" << num_threads << " num_warps=" << num_warps
             << " lmem_size=" << lmem_size << " bytes" << std::endl;
-  std::cout << "tmem_cols=" << tmem_cols << " (using " << umma_cfg::xtileN
+  std::cout << "tmem_cols=" << tmem_cols << " (using " << cta_tmem_cols
             << " per CTA) warps/CTA=" << cta_warps
             << " (== issue_width)" << std::endl;
   std::cout << "block_size_r=" << Br << " (" << (Br / kQuantR) << " warps)"
