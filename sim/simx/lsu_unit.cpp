@@ -117,6 +117,9 @@ Instr::Ptr LsuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
       uop_instr->set_src_reg(1, macro_instr.get_src_reg(1).idx + uop_index, RegType::Float);
     }
     uop_instr->set_args(IntrLsuArgs{/*LW*/ 2, /*stride*/ 0, args.offset + int32_t(4 * uop_index)});
+    // every uop but the last may hand the next issue cycle to another warp,
+    // so several warps' wide accesses interleave as their scalar loads would
+    uop_instr->set_issue_yield(uop_index + 1 != uop_count(macro_instr));
     return uop_instr;
   }
 #endif

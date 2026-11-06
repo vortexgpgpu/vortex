@@ -103,6 +103,7 @@ public:
     // As the scoreboard's out_arb: a matrix arbiter past 8 warps per slot.
     , ibuffer_arbs_(VX_CFG_ISSUE_WIDTH, {(PER_ISSUE_WARPS > 8) ? ArbiterType::GreedyMatrix : ArbiterType::GreedyRR, PER_ISSUE_WARPS})
     , issue_lock_owner_(VX_CFG_ISSUE_WIDTH, kLockOpen)
+    , issue_yield_(VX_CFG_ISSUE_WIDTH, kNoYield)
     , fu_credits_(VX_CFG_ISSUE_WIDTH, std::vector<uint32_t>((uint32_t)FUType::Count, 0))
     , fu_full_(VX_CFG_ISSUE_WIDTH, BitVector<>((uint32_t)FUType::Count, 0))
     , fu_full_seen_(VX_CFG_ISSUE_WIDTH, BitVector<>((uint32_t)FUType::Count, 0))
@@ -440,6 +441,7 @@ public:
       fu_full_seen_.at(iw).reset();
     }
     std::fill(issue_lock_owner_.begin(), issue_lock_owner_.end(), kLockOpen);
+    std::fill(issue_yield_.begin(), issue_yield_.end(), kNoYield);
     std::fill(last_issue_.begin(), last_issue_.end(), 0);
     std::fill(staged_since_.begin(), staged_since_.end(), 0);
     std::fill(head_staged_.begin(), head_staged_.end(), false);
@@ -764,6 +766,9 @@ public:
     for (uint32_t iw = 0; iw < VX_CFG_ISSUE_WIDTH; ++iw) {
       bool any_scrb_blocked = false;
       BitVector<> ready_set(PER_ISSUE_WARPS);
+      BitVector<> yield_set(PER_ISSUE_WARPS);
+      auto yielded = issue_yield_.at(iw);
+      issue_yield_.at(iw) = kNoYield;
       for (uint32_t w = 0; w < PER_ISSUE_WARPS; ++w) {
         uint32_t wid = w * VX_CFG_ISSUE_WIDTH + iw;
         auto& ibuffer = ibuffers_.at(wid);
@@ -823,6 +828,9 @@ public:
           if (lock_owner != kLockOpen && lock_owner != w) {
             continue;
           }
+          if (yielded == w) {
+            continue;
+          }
           auto fu = (int)uop_trace->fu_type;
           // FU dispatch queue near full: the warp does not request. Credits also
           // count ops still in operand collection. The flag reaches issue through
@@ -841,6 +849,9 @@ public:
           }
         #endif
           ready_set.set(w); // mark instruction as ready
+          if (uop_trace->instr_ptr->get_issue_yield()) {
+            yield_set.set(w);
+          }
         }
       }
 
@@ -885,6 +896,11 @@ public:
             } else if (ful) {
               issue_lock_owner_.at(iw) = kLockOpen;
             }
+          }
+          // A yielding uop issued while another warp also requested with one
+          // masks its own warp for the next cycle, so the greedy grant moves on.
+          if (uop_trace->instr_ptr->get_issue_yield() && (ready_set & yield_set).count() >= 2) {
+            issue_yield_.at(iw) = w;
           }
           // Advance sequencer; pop ibuffer only when all micro-ops issued
           if (seq->advance()) {
@@ -1383,7 +1399,9 @@ private:
   std::vector<Arbiter> ibuffer_arbs_;
 
   static constexpr uint32_t kLockOpen = ~0u;
+  static constexpr uint32_t kNoYield = ~0u;
   std::vector<uint32_t> issue_lock_owner_; // [iw] slot-local warp holding the issue lock
+  std::vector<uint32_t> issue_yield_;      // [iw] slot-local warp that yields the next cycle's issue
   std::vector<std::vector<uint32_t>> fu_credits_; // [iw][fu] in-flight dispatch credits
   std::vector<BitVector<>> fu_full_;      // [iw] credits at or past the near-full mark
   std::vector<BitVector<>> fu_full_seen_; // [iw] that flag one cycle later, as issue sees it

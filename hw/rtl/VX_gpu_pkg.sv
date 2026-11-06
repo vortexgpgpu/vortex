@@ -1610,6 +1610,10 @@ package VX_gpu_pkg;
         logic [NUM_REGS_BITS-1:0]   rs3;
         logic                       fu_lock;
         logic                       fu_unlock;
+    `ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
+        // hand the next issue cycle to another ready warp
+        logic                       issue_yield;
+    `endif
     } ibuffer_t;
 
     typedef struct packed {

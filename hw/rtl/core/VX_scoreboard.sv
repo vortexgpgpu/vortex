@@ -286,10 +286,33 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     // holder is requested while it holds the lock.
     reg [PER_ISSUE_WARPS-1:0] fu_locked;
 
+`ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
+    // A warp that issues a yielding uop while another warp also requests with
+    // one sits out the next cycle, so the greedy arbiter moves on as it does
+    // between scalar instructions that arrive one per fetch.
+    reg [PER_ISSUE_WARPS-1:0] yield_r;
+    wire [PER_ISSUE_WARPS-1:0] staging_yield_vec;
+    for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_staging_yield
+        assign staging_yield_vec[w] = staging_if[w].data.issue_yield;
+    end
+    wire [PER_ISSUE_WARPS-1:0] yield_reqs = arb_valid_in & staging_yield_vec;
+    wire [PER_ISSUE_WARPS-1:0] req_below;
+    for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_req_below
+        if (w == 0) begin : g_first
+            assign req_below[w] = 1'b0;
+        end else begin : g_next
+            assign req_below[w] = req_below[w-1] || yield_reqs[w-1];
+        end
+    end
+    wire multi_req = | (yield_reqs & req_below);
+`else
+    wire [PER_ISSUE_WARPS-1:0] yield_r = '0;
+`endif
+
     for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_arb_data_in
         // operands_ready carries data-hazard + FU-congestion; fu_locked adds the
         // FU-lock gate so only the lock holder is requested during a sequence.
-        assign arb_valid_in[w] = staging_if[w].valid && operands_ready[w] && fu_locked[w];
+        assign arb_valid_in[w] = staging_if[w].valid && operands_ready[w] && fu_locked[w] && ~yield_r[w];
 
         assign arb_data_in[w] = {
             staging_if[w].data.uuid,
@@ -382,6 +405,16 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             end
         end
     end
+
+`ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
+    always @(posedge clk) begin
+        if (reset) begin
+            yield_r <= '0;
+        end else begin
+            yield_r <= arb_onehot & staging_yield_vec & {PER_ISSUE_WARPS{issue_fire && multi_req}};
+        end
+    end
+`endif
 
     VX_elastic_buffer #(
         .DATAW   (LOG_NUM_REQS + OUT_DATAW),
