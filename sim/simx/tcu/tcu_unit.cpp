@@ -599,8 +599,9 @@ public:
     // even for a requester that will not bid.
     for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
       auto& input = simobject_->Inputs.at(b);
-      if (input.empty())
+      if (input.empty()) {
         continue;
+      }
       auto trace = input.peek();
       auto tcu_type = std::get<TcuType>(trace->op_type);
       auto tpuArgs = std::get<IntrTcuArgs>(trace->instr_ptr->get_args());
@@ -644,8 +645,9 @@ public:
     // Phase 3 — resolve the compute-side sticky latches and set validity.
     for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
       auto& input = simobject_->Inputs.at(b);
-      if (input.empty())
+      if (input.empty()) {
         continue;
+      }
       auto tcu_type = std::get<TcuType>(input.peek()->op_type);
 
       if (tcu_type == TcuType::UMMA) {
@@ -695,8 +697,9 @@ public:
     std::bitset<TcuTmem::kBanks> dealloc_ready;
     for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
       auto& input = simobject_->Inputs.at(b);
-      if (input.empty() || exec_done_.at(b) || simobject_->Outputs.at(b).full())
+      if (input.empty() || exec_done_.at(b) || simobject_->Outputs.at(b).full()) {
         continue;
+      }
       switch (std::get<TcuType>(input.peek()->op_type)) {
       case TcuType::TMEM_ALLOC:   alloc_ready.set(b); break;
       case TcuType::TMEM_DEALLOC: dealloc_ready.set(b); break;
@@ -720,8 +723,12 @@ public:
     // next one. Latch it now that arbitration has consumed this cycle's
     // requests; it is cleared when the uop is admitted.
     for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
-      if (umma_rd_won_.at(b)) umma_rd_won_r_.at(b) = true;
-      if (tmem_.grants().compute_wr.test(b)) umma_wr_won_r_.at(b) = true;
+      if (umma_rd_won_.at(b)) {
+        umma_rd_won_r_.at(b) = true;
+      }
+      if (tmem_.grants().compute_wr.test(b)) {
+        umma_wr_won_r_.at(b) = true;
+      }
     }
   }
 
@@ -881,7 +888,9 @@ public:
           // Same lockstep invariant as WGMMA — UMMA shares the same bbuf.
           int32_t this_cta = (int32_t)core_->scheduler().warp(wid).cta_csrs.cta_id;
           for (uint32_t k = 0; k < VX_CFG_NUM_TCU_BLOCKS; ++k) {
-            if (k == b) continue;
+            if (k == b) {
+              continue;
+            }
             if (in_wgmma_.at(k) && cta_owner_a_.at(k) != this_cta) {
               std::cerr << "*** TCU CTA lockstep violation: block " << b
                         << " executing UMMA cta_id=" << this_cta
@@ -910,7 +919,9 @@ public:
           uint32_t ncols = rs1_data.empty() ? 0 : rs1_data.at(0).u32;
           int32_t cta_uid = this->cta_uid(wid);
           uint32_t handle = this->tmem_alloc(ncols, cta_uid);
-          for (auto& r : rd_data) r.u32 = handle;
+          for (auto& r : rd_data) {
+            r.u32 = handle;
+          }
         } break;
         case TcuType::TMEM_DEALLOC: {
           uint32_t handle = rs1_data.empty() ? 0 : rs1_data.at(0).u32;
@@ -1626,7 +1637,7 @@ public:
 #ifdef VX_CFG_TCU_TMEM_ENABLE
   // Unique per-launched-CTA identifier, linearized from block_idx against
   // grid_dim. NOT the same thing as cta_csrs.cta_id: that field is
-  // the LMEM co-residency slot index, a value that gets 
+  // the LMEM co-residency slot index, a value that gets
   // reused across different CTAs as slots free up and refill.
   // This is wrong for tmem_alloc which needs to tell CTA N's allocation
   // lifetime apart from CTA N+k's.
@@ -1654,8 +1665,9 @@ public:
     uint32_t col       = tmem_addr & 0xFFFF;
     uint32_t active    = 0;
     for (uint32_t t = 0; t < value_data.size(); ++t) {
-      if (!tmask.test(t))
+      if (!tmask.test(t)) {
         continue;
+      }
       tmem_.write(lane_base + t, col, value_data.at(t).u32);
       ++active;
     }
@@ -1668,8 +1680,9 @@ public:
     uint32_t col       = tmem_addr & 0xFFFF;
     uint32_t active    = 0;
     for (uint32_t t = 0; t < rd_data.size(); ++t) {
-      if (!tmask.test(t))
+      if (!tmask.test(t)) {
         continue;
+      }
       rd_data.at(t).u64 = nan_box(tmem_.read(lane_base + t, col));
       ++active;
     }
@@ -2414,11 +2427,10 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
 
     uop_instr->set_op_type(TcuType::UMMA);
 
-    // Loop order: m inner, n middle, k outer. RTL note: k-outer only avoids
-    // a RAW hazard on the TMEM accumulator (repeat visits to the same (m,n)
-    // location are n_steps*m_steps uops apart) if that gap is >= the FEDP
-    // pipeline's latency. SimX has no pipeline depth, so the hazard
-    // doesn't exist here.
+    // Loop order: m inner, n middle, k outer, so repeat visits to the same
+    // (m,n) accumulator are n_steps*m_steps uops apart. A pipelined datapath
+    // needs that gap to cover the FEDP latency; this model has no pipeline
+    // depth, so there is no accumulator hazard here.
     uint32_t mn = total / wg_cfg::k_steps;
     uint32_t k = uop_index / mn;
     uint32_t rem = uop_index % mn;

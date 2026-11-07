@@ -68,8 +68,7 @@ void step(TcuTmem& tmem, const TcuTmem::CycleReqs& reqs) {
 ///////////////////////////////////////////////////////////////////////////////
 
 void test_geometry() {
-  // rd_bank = lane_base[LANE_BITS-1:ROW_IDX_W], i.e. lane_base / TCU_WG_TILE_M
-  // (VX_tcu_tmem.sv g_compute_decode).
+  // A lane's bank is lane_base / TCU_WG_TILE_M.
   for (uint32_t b = 0; b < kBanks; ++b) {
     for (uint32_t row = 0; row < kBankLanes; ++row) {
       CHECK(TcuTmem::bank_of(b * kBankLanes + row) == b);
@@ -109,10 +108,8 @@ void test_no_conflict_across_banks() {
   }
 }
 
-// bank_rd_grant_onehot_d: the bank's rdata reflects the address presented one
-// cycle earlier, so the grant is delayed to match (VX_tcu_tmem.sv
-// bank_rd_grant_onehot_d). Writes are unaffected by OUT_REG and are granted in
-// the same cycle (g_wr_route).
+// A bank's read data reflects the address presented one cycle earlier, so the
+// read grant is delayed to match. Writes are granted in the same cycle.
 void test_read_grant_is_registered_write_is_not() {
   TcuTmem tmem;
   TcuTmem::CycleReqs reqs;
@@ -300,7 +297,9 @@ void test_mgmt_arbitration() {
 
   // Lowest requesting block wins within a class.
   std::bitset<kBanks> allocs;
-  for (uint32_t b = 0; b < kBanks; ++b) allocs.set(b);
+  for (uint32_t b = 0; b < kBanks; ++b) {
+    allocs.set(b);
+  }
   CHECK(TcuTmem::mgmt_grant(allocs, none) == 0);
 
   std::bitset<kBanks> alloc_hi;
@@ -319,7 +318,9 @@ void test_mgmt_arbitration() {
   // arbiter falls through to the next one that is.
   if (kBanks > 1) {
     std::bitset<kBanks> alloc_not_block0;
-    for (uint32_t b = 1; b < kBanks; ++b) alloc_not_block0.set(b);
+    for (uint32_t b = 1; b < kBanks; ++b) {
+      alloc_not_block0.set(b);
+    }
     CHECK(TcuTmem::mgmt_grant(alloc_not_block0, none) == 1);
   }
 }
@@ -481,9 +482,15 @@ void test_a_fill_contends_with_compute_and_ldst() {
   uint32_t compute_wins = 0, ldst_wins = 0, a_fill_wins = 0;
   for (uint32_t c = 0; c < 8; ++c) {
     step(tmem, reqs);
-    if (tmem.grants().compute_rd.test(0)) ++compute_wins;
-    if (tmem.grants().ldst_rd.test(0))    ++ldst_wins;
-    if (tmem.grants().a_fill_rd.test(0))  ++a_fill_wins;
+    if (tmem.grants().compute_rd.test(0)) {
+      ++compute_wins;
+    }
+    if (tmem.grants().ldst_rd.test(0)) {
+      ++ldst_wins;
+    }
+    if (tmem.grants().a_fill_rd.test(0)) {
+      ++a_fill_wins;
+    }
   }
   // Every class gets served; none is locked out by pool position.
   CHECK(compute_wins > 0);

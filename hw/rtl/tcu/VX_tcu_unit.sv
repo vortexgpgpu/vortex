@@ -210,7 +210,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [BLOCK_SIZE-1:0]                        afill_grant;
     wire [TCU_WG_TILE_M-1:0][TCU_TC_N-1:0][31:0] afill_data      [BLOCK_SIZE];
     for (genvar bi = 0; bi < BLOCK_SIZE; ++bi) begin : g_afill_lane
-        assign afill_lane_base[bi] = 
+        assign afill_lane_base[bi] =
             TCU_TMEM_LANE_BITS'(cta_rank_table[core_execute_if[bi].data.header.wid]) *
             TCU_TMEM_LANE_BITS'(TCU_WG_TILE_M);
     end
@@ -352,35 +352,35 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .INSTANCE_ID (`SFORMATF(("%s-tmem", INSTANCE_ID))),
         .BLOCK_SIZE  (BLOCK_SIZE)
     ) tmem (
-        .clk           (clk),
-        .reset         (reset),
+        .clk                   (clk),
+        .reset                 (reset),
     `ifdef PERF_ENABLE
         .perf_umma_instrs      (tmem_perf.umma_instrs),
         .perf_tmem_reads       (tmem_perf.tmem_reads),
         .perf_tmem_writes      (tmem_perf.tmem_writes),
         .perf_tmem_bank_stalls (tmem_perf.tmem_bank_stalls),
     `endif
-        .mgmt_valid    (tmem_mgmt_valid),
-        .mgmt_data     (tmem_mgmt_data),
-        .mgmt_ready    (tmem_mgmt_ready),
-        .result_valid  (tmem_result_valid_w),
-        .result_data   (tmem_result_data_w),
-        .result_ready  (tmem_result_ready_w),
-        .rd_valid      (tmem_rd_valid),
-        .rd_lane_base  (tmem_rd_lane_base),
-        .rd_col_base   (tmem_rd_col_base),
-        .rd_grant      (tmem_rd_grant),
-        .rd_data       (tmem_rd_data),
-        .wr_valid      (tmem_wr_valid),
-        .wr_lane_base  (tmem_wr_lane_base),
-        .wr_col_base   (tmem_wr_col_base),
-        .wr_data       (tmem_wr_data),
-        .wr_grant      (tmem_wr_grant),
-        .afill_valid    (afill_valid),
-        .afill_lane_base(afill_lane_base),
-        .afill_col_base (afill_col_base),
-        .afill_grant    (afill_grant),
-        .afill_data     (afill_data)
+        .mgmt_valid            (tmem_mgmt_valid),
+        .mgmt_data             (tmem_mgmt_data),
+        .mgmt_ready            (tmem_mgmt_ready),
+        .result_valid          (tmem_result_valid_w),
+        .result_data           (tmem_result_data_w),
+        .result_ready          (tmem_result_ready_w),
+        .rd_valid              (tmem_rd_valid),
+        .rd_lane_base          (tmem_rd_lane_base),
+        .rd_col_base           (tmem_rd_col_base),
+        .rd_grant              (tmem_rd_grant),
+        .rd_data               (tmem_rd_data),
+        .wr_valid              (tmem_wr_valid),
+        .wr_lane_base          (tmem_wr_lane_base),
+        .wr_col_base           (tmem_wr_col_base),
+        .wr_data               (tmem_wr_data),
+        .wr_grant              (tmem_wr_grant),
+        .afill_valid           (afill_valid),
+        .afill_lane_base       (afill_lane_base),
+        .afill_col_base        (afill_col_base),
+        .afill_grant           (afill_grant),
+        .afill_data            (afill_data)
     );
 `endif // VX_CFG_TCU_TMEM_ENABLE
 

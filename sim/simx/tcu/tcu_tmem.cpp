@@ -24,10 +24,8 @@ using namespace vortex;
 TcuTmem::TcuTmem() {
   rd_arb_.reserve(kBanks);
   wr_arb_.reserve(kBanks);
-  // Accepted divergence from RTL: RoundRobinArbiter resets last_grant_ to 0 and
-  // so begins its scan at index 1, while VX_rr_arbiter resets reqs_mask to
-  // all-ones and grants the lowest set request. The two pick different winners
-  // on the first contended cycle after a reset, and agree from then on.
+  // RoundRobinArbiter resets last_grant_ to 0, so the first contended cycle
+  // after a reset scans from index 1 rather than granting the lowest request.
   for (uint32_t r = 0; r < kBanks; ++r) {
     rd_arb_.emplace_back(ArbiterType::RoundRobin, kArbRdW);
     wr_arb_.emplace_back(ArbiterType::RoundRobin, kArbWrW);
@@ -36,7 +34,9 @@ TcuTmem::TcuTmem() {
 }
 
 void TcuTmem::reset() {
-  for (auto& row : data_) row.fill(0);
+  for (auto& row : data_) {
+    row.fill(0);
+  }
   free_.assign(1, {0, kCols});
   allocs_.clear();
   cta_handle_.clear();
@@ -72,7 +72,9 @@ uint32_t TcuTmem::alloc(uint32_t ncols, int32_t cta_id) {
     std::abort();
   }
   for (auto it = free_.begin(); it != free_.end(); ++it) {
-    if (it->second < ncols) continue;
+    if (it->second < ncols) {
+      continue;
+    }
     uint32_t handle = it->first;
     if (it->second == ncols) {
       free_.erase(it);
@@ -81,9 +83,11 @@ uint32_t TcuTmem::alloc(uint32_t ncols, int32_t cta_id) {
       it->second -= ncols;
     }
     allocs_[handle] = ncols;
-    for (uint32_t c = handle; c < handle + ncols; ++c)
-      for (auto& row : data_)
+    for (uint32_t c = handle; c < handle + ncols; ++c) {
+      for (auto& row : data_) {
         row[c] = 0;
+      }
+    }
     cta_handle_[cta_id] = handle;
     return handle;
   }
@@ -133,13 +137,16 @@ bool TcuTmem::alloc_would_stall(uint32_t ncols, int32_t cta_id) const {
               << ") exceeds kCols=" << kCols << " — unsatisfiable" << std::endl;
     std::abort();
   }
-  if (cta_handle_.count(cta_id))
+  if (cta_handle_.count(cta_id)) {
     return false;  // repeat request from a sibling warp, already satisfied
-  if (allocs_.size() >= kAllocEntries)
+  }
+  if (allocs_.size() >= kAllocEntries) {
     return true;   // no free CAM slot
+  }
   for (auto& range : free_) {
-    if (range.second >= ncols)
+    if (range.second >= ncols) {
       return false;
+    }
   }
   return true;     // no free range large enough
 }
@@ -147,20 +154,23 @@ bool TcuTmem::alloc_would_stall(uint32_t ncols, int32_t cta_id) const {
 uint32_t TcuTmem::mgmt_grant(const std::bitset<kBanks>& alloc_ready,
                              const std::bitset<kBanks>& dealloc_ready) {
   for (uint32_t b = 0; b < kBanks; ++b) {
-    if (dealloc_ready.test(b))
+    if (dealloc_ready.test(b)) {
       return b;
+    }
   }
   for (uint32_t b = 0; b < kBanks; ++b) {
-    if (alloc_ready.test(b))
+    if (alloc_ready.test(b)) {
       return b;
+    }
   }
   return kNoGrant;
 }
 
 uint32_t TcuTmem::alloc_cols_from(uint32_t col) const {
   for (auto& kv : allocs_) {
-    if (col >= kv.first && col < kv.first + kv.second)
+    if (col >= kv.first && col < kv.first + kv.second) {
       return kv.first + kv.second - col;
+    }
   }
   return 0;
 }
@@ -173,7 +183,9 @@ void TcuTmem::validate_lane_col(uint32_t lane, uint32_t col) const {
     std::abort();
   }
   for (auto& kv : allocs_) {
-    if (col >= kv.first && col < kv.first + kv.second) return;
+    if (col >= kv.first && col < kv.first + kv.second) {
+      return;
+    }
   }
   std::cout << "Error: TMEM column " << col << " not within any active allocation" << std::endl;
   std::abort();
@@ -201,7 +213,7 @@ void add_class(BitVector<>& req_vec, uint32_t bank, uint32_t base,
                const std::array<TcuTmem::BankReq, TcuTmem::kBanks>& reqs,
                const std::bitset<TcuTmem::kBanks>& suppress) {
   for (uint32_t bi = 0; bi < TcuTmem::kBanks; ++bi) {
-    if (reqs.at(bi).valid && 
+    if (reqs.at(bi).valid &&
         TcuTmem::bank_of(reqs.at(bi).lane_base) == bank &&
         !suppress.test(bi)) {
       req_vec.set(base + bi);
@@ -279,8 +291,9 @@ void TcuTmem::arb_arbitrate(const CycleReqs& reqs) {
       ++perf_stats_.bank_stalls;
     }
     uint32_t winner = wr_arb_.at(r).grant(req_vec);
-    if (winner == -1u)
+    if (winner == -1u) {
       continue;
+    }
     // Writes are consumed the cycle they are granted, so route immediately.
     if (winner < kBanks) {
       grants_.compute_wr.set(winner);
