@@ -11,7 +11,7 @@ TESTS := \
     softmax mufu zfhmin                                               \
     attention flash flash_dxa flash_tcu_wg                            \
     sgemm_tcu sgemm_tcu_mx sgemm_tcu_sp_mx sgemm_tcu_wg sgemm_tcu_wg_mx sgemm_tcu_sp sgemm_tcu_wg_sp  \
-    sgemm_tcu_tmem                                                    \
+    sgemm_tcu_tmem flash_tcu_tmem                                     \
     sgemm2_dxa sgemm2_tcu sgemm_tcu_wg_dxa sgemm_tcu_wg_sp_dxa        \
     sgemm2_dxa_mcast sgemm_tcu_wg_dxa_mcast                           \
     dxa_copy dxa_copy_mcast dxa_kmajor_check                          \
@@ -26,7 +26,7 @@ EXCLUDE :=
 EXCLUDE_simx   :=
 # The flash tests' default sizes run tens of millions of cycles; their rtlsim
 # coverage is the small cases in ci/testcases/flash.yaml.
-EXCLUDE_rtlsim := attention flash flash_dxa flash_tcu_wg
+EXCLUDE_rtlsim := attention flash flash_dxa flash_tcu_wg flash_tcu_tmem
 EXCLUDE_opae   :=
 EXCLUDE_xrt    :=
 

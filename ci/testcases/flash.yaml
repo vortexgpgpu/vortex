@@ -1,5 +1,5 @@
-# Test cases for `flash` (FlashAttention: scalar, DXA and WGMMA tiers, plus the
-# unfused attention reference).
+# Test cases for `flash` (FlashAttention: scalar, DXA, WGMMA and UMMA/TMEM
+# tiers, plus the unfused attention reference).
 category: flash
 defaults:
   xlen:
@@ -102,3 +102,69 @@ tests:
   app: flash_tcu_wg
   configs: -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
   args: -N 32 -D 16 -c 8 -d 8
+
+- id: flash_tcu_tmem-1
+  via: blackbox
+  drivers:
+  - simx
+  app: flash_tcu_tmem
+
+- id: flash_tcu_tmem-2
+  via: blackbox
+  drivers:
+  - simx
+  app: flash_tcu_tmem
+  configs: -DUMMA_A_TMEM
+
+- id: flash_tcu_tmem-3
+  via: blackbox
+  drivers:
+  - simx
+  app: flash_tcu_tmem
+  configs: -DITYPE=fp16 -DUMMA_A_TMEM
+
+- id: flash_tcu_tmem-4
+  via: blackbox
+  drivers:
+  - simx
+  app: flash_tcu_tmem
+  configs: -DITYPE=bf16 -DUMMA_A_TMEM
+
+# Head-dim tiling: O is accumulated in 8-column slices.
+- id: flash_tcu_tmem-5
+  via: blackbox
+  drivers:
+  - simx
+  app: flash_tcu_tmem
+  configs: -DITYPE=fp16 -DUMMA_A_TMEM
+  args: -d8
+
+# One-warp CTA (ISSUE_WIDTH=1).
+- id: flash_tcu_tmem-6
+  via: blackbox
+  drivers:
+  - simx
+  app: flash_tcu_tmem
+  configs: -DVX_CFG_ISSUE_WIDTH=1 -DUMMA_A_TMEM
+
+# One execution block per unit, as for flash_tcu_wg-4.
+- id: flash_tcu_tmem-7
+  via: blackbox
+  drivers:
+  - rtlsim
+  xlen:
+  - 64
+  app: flash_tcu_tmem
+  configs: -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1 -DITYPE=fp16 -DUMMA_NRC=8
+  args: -N32 -D16
+
+- id: flash_tcu_tmem-8
+  via: blackbox
+  drivers:
+  - rtlsim
+  xlen:
+  - 64
+  app: flash_tcu_tmem
+  configs: -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1 -DITYPE=fp16 -DUMMA_NRC=8
+    -DUMMA_A_TMEM
+  args: -N32 -D16
