@@ -428,10 +428,13 @@ void Mmu::on_tick() {
       continue;  // its page is in the park stage
     }
     auto res = tlb_.lookup(vpn);
-    // A page with a live miss-station entry (a re-armed one still holds its
-    // requests) parks behind it, as the RTL's station probe does, so a hit
-    // cannot overtake an older same-page request.
-    if (res.hit && !(park_reg_ && mshr_find(vpn) >= 0)) {
+    // A hit on a page with a live miss-station entry (a re-armed one still
+    // holds its requests) parks behind it when the port has requests parked,
+    // so it cannot overtake an older same-page request: a superpage fill for
+    // another page can make the entry's page hit before its own fill lands.
+    // A registered park joins always, its stage being a cycle stale.
+    bool ordered = !exec_side_ && (park_reg_ || (write_enable_ && port_parked(p)));
+    if (res.hit && !(ordered && mshr_find(vpn) >= 0)) {
       // A cached translation still has to satisfy the access: the entry
       // was installed for whichever intent first missed on this page.
       if (!tlb_perm_ok(res.flags, access_of(req), memop_is_amo(req.op))) {

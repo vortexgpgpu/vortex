@@ -106,6 +106,32 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     dst[gid] = (valid && leaf && superpage && identity) ? 1u : 0u;
     break;
   }
+  case VM_MODE_SP_ORDER: {
+    // Each round, every warp stores to its own cold page of a fresh
+    // superpage and reads it back after a delay that grows per round.
+    // Another warp's walk installs the superpage while this warp's own walk
+    // is still out, so at some delay the readback hits in the TLB ahead of
+    // its parked store; it must still return the stored value.
+    constexpr uint64_t PT_FANOUT = VX_VM_PT_SIZE / VX_VM_PTE_SIZE;
+    constexpr uint64_t SP_SIZE = uint64_t(PAGE_SIZE) * PT_FANOUT;
+    uint64_t sp_base = (arg->buf_addr + SP_SIZE - 1) & ~(SP_SIZE - 1);
+    uint32_t mismatches = 0;
+    for (uint32_t r = 0; r < pages; ++r) {
+      auto word = reinterpret_cast<volatile uint32_t*>(
+          sp_base + r * SP_SIZE + uint64_t(gid / vx_num_threads()) * PAGE_SIZE) + gid;
+      uint32_t value = 0x5A000000u + (r << 16) + gid;
+      *word = value;
+      for (uint32_t i = 0; i < r; ++i) {
+        __asm__ volatile("");
+      }
+      if (*word != value) {
+        ++mismatches;
+      }
+      __syncthreads();
+    }
+    dst[gid] = mismatches;
+    break;
+  }
   default:
     dst[gid] = 0xDEADu;
     break;
