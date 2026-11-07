@@ -1185,8 +1185,8 @@ public:
 #ifdef VX_CFG_TCU_TMEM_ENABLE
 
 // =============================================================================
-// UMMA / TMEM: A/B from SMEM via descriptors (same as WGMMA's SS mode), C/D
-// accumulator in TMEM. TMEM is allocated dynamically via vx_tmem_alloc(),
+// UMMA / TMEM: A from SMEM via a descriptor (SS, as WGMMA) or from TMEM (TS),
+// B from SMEM, C/D accumulator in TMEM. TMEM is allocated dynamically via vx_tmem_alloc(),
 // which returns a handle (base column). This lets multiple warpgroups
 // (different CTAs) hold disjoint, concurrently-live allocations.
 //
@@ -1453,7 +1453,7 @@ public:
     tmem_lanes_exit(saved_mask);
   }
 
-  // Issue a UMMA op: A/B sourced from SMEM via descriptors, C/D implicit in
+  // Issue a UMMA op: A from SMEM or TMEM, B from SMEM, C/D implicit in
   // TMEM at `handle`, the accumulator tile's first column. It may be any column
   // of the CTA's allocation, so one allocation can hold several accumulators.
   // ---- UMMA sync intrinsic ----

@@ -13,9 +13,9 @@ underlying WGMMA/tile-buffer design. Covers the RTL
 ([`sw/kernel/include/vx_tensor.h`](../../sw/kernel/include/vx_tensor.h)).
 
 UMMA/TMEM is gated by `VX_CFG_TCU_TMEM_ENABLE` and requires
-`VX_CFG_TCU_WGMMA_ENABLE` (it reuses WGMMA's dense-SS compute path).
+`VX_CFG_TCU_WGMMA_ENABLE` (it reuses WGMMA's dense compute path).
 Configured by the `[tcu]` block in
-[`VX_config.toml:236-258`](../../VX_config.toml#L236).
+[`VX_config.toml:323-324`](../../VX_config.toml#L323).
 
 ---
 
@@ -77,9 +77,9 @@ even though nothing in decode stops a kernel from encoding one:
 path is a future work.
 
 **Opcodes** (custom-0, `funct7 = 2`, TCU family; `funct3` sub-selects,
-[`VX_gpu_pkg.sv:609-613`](../../hw/rtl/VX_gpu_pkg.sv#L609), gated by
+[`VX_gpu_pkg.sv:636-640`](../../hw/rtl/VX_gpu_pkg.sv#L636), gated by
 `VX_CFG_TCU_TMEM_ENABLE`; SW-side mirror in
-[`vx_tensor.h:1190-1194`](../../sw/kernel/include/vx_tensor.h#L1190)):
+[`vx_tensor.h:1201-1205`](../../sw/kernel/include/vx_tensor.h#L1201)):
 
 | funct3 | Mnemonic | Opcode (`INST_TCU_*`) | Meaning |
 |---|---|---|---|
@@ -89,7 +89,7 @@ path is a future work.
 | 6 | TMEM_LD | `4'h9` | `rd(f) = value`, `rs1 = addr` — direct raw 32-bit word load from TMEM |
 | 7 | UMMA | `4'hA` | Warpgroup MMA with TMEM-resident C/result |
 
-Decode is in [`VX_decode.sv:652`](../../hw/rtl/core/VX_decode.sv#L652).
+Decode is in [`VX_decode.sv:705`](../../hw/rtl/core/VX_decode.sv#L705).
 
 **TMEM address encoding.** A single 32-bit word packs `bits[31:16] =
 lane_base`, `bits[15:0] = col`. `TMEM_ST`/`TMEM_LD` use this directly
@@ -102,7 +102,7 @@ micro-op, all `REG_TYPE_I`:
 
 | Register | Meaning |
 |---|---|
-| `x10` (a0) | A shared-memory descriptor (`desc_a`) |
+| `x10` (a0) | A: shared-memory descriptor (`desc_a`), or an absolute TMEM column when A comes from TMEM |
 | `x11` (a1) | B shared-memory descriptor (`desc_b`) |
 | `x12` (a2) | TMEM handle, in `rs3` |
 
@@ -122,7 +122,8 @@ in `cd_nregs` (widened from WGMMA's 2 bits):
 | 4 | 128 |
 
 `-DUMMA_NRC=<N>` selects NRC at kernel build time
-(`tests/regression/sgemm_tcu_tmem`, §6).
+(`tests/regression/sgemm_tcu_tmem`, §6). NRC is encoded per
+instruction, so one kernel may issue UMMAs of different widths.
 
 **A source.** The `flags` immediate (the instruction's `rs2` field) is:
 
@@ -149,11 +150,23 @@ TMEM[cta_rank*xtileM + row][a_col + k / elems_per_word]
 with the same `elems_per_word` packing the shared-memory path uses, so a
 sub-32-bit `It` packs several k elements into one TMEM word.
 
-Status: the ISA and decode are in place in both simx and RTL. The
-operand datapath is not implemented in either: A still comes from shared
-memory. Issuing the mode is rejected.
+**A-from-TMEM datapath.** TMEM is a third refill source for the A
+buffer (`VX_tcu_abuf`), beside shared memory, not a second read port into
+the FEDP grid. The first compute micro-op latches `a_col`; each k-stripe
+refill then reads `FEDP_K / TC_N` TMEM bank words (1, or 2 under FEDP2K)
+through the CTA's bank read port, arbitrated with accumulator reads and
+`TMEM_LD` (§4.1). Because A is re-read once per k-stripe rather than per
+micro-op, it takes a few percent of the port (about 3% at NT=8, NRC=32).
+The A buffer always refetches on a UMMA's first compute micro-op, so a
+kernel may rewrite A in TMEM between UMMAs at an unchanged column. SimX
+models the same refill and arbitration.
 
-**Key config** ([`VX_config.toml:236-258`](../../VX_config.toml#L236)):
+The TS form does not wait on `TMEM_ST` writes to A: the RAW interlock
+(§4.3) tracks only UMMA writes. Software must place a barrier between
+storing A and the `umma_sync` that reads it. `-DUMMA_A_TMEM` builds
+`sgemm_tcu_tmem` in the TS form.
+
+**Key config** ([`VX_config.toml:323-324`](../../VX_config.toml#L323)):
 
 | Parameter | Meaning |
 |---|---|
@@ -164,17 +177,19 @@ memory. Issuing the mode is rejected.
 
 ## 3. RTL module inventory
 
-UMMA reuses every WGMMA module in
+UMMA reuses the WGMMA modules in
 [`tensor_core_wgmma_engine.md`](tensor_core_wgmma_engine.md)'s module
 table (`VX_tcu_wgmma`, `VX_tcu_lockstep`, `VX_tcu_tbuf`,
-`VX_tcu_abuf`/`VX_tcu_bbuf`, `VX_tcu_uops`) unchanged. UMMA adds two
-modules, both under `hw/rtl/tcu/`:
+`VX_tcu_abuf`/`VX_tcu_bbuf`, `VX_tcu_uops`). `VX_tcu_wgmma` and
+`VX_tcu_tbuf` only route the A source and the A-fill port; the modules
+UMMA adds or extends, all under `hw/rtl/tcu/`, are:
 
 | Module | Role |
 |---|---|
 | [`VX_tcu_core.sv`](../../hw/rtl/tcu/VX_tcu_core.sv) | Shared with WGMMA (FEDP datapath); adds the TMEM read/write ports and address generation UMMA needs. |
 | [`VX_tcu_tmem.sv`](../../hw/rtl/tcu/VX_tcu_tmem.sv) | TMEM storage (one bank per `cta_rank`) plus `TMEM_ALLOC`/`TMEM_DEALLOC`/`TMEM_ST`/`TMEM_LD` request handling and bank arbitration. |
 | [`VX_tcu_tmem_alloc.sv`](../../hw/rtl/tcu/VX_tcu_tmem_alloc.sv) | The column allocator: free-list + per-CTA live-allocation tracking, instantiated by `VX_tcu_tmem.sv`. |
+| [`VX_tcu_abuf.sv`](../../hw/rtl/tcu/VX_tcu_abuf.sv) | Shared with WGMMA; adds TMEM as an A refill source for the TS form (§2). |
 
 `VX_tcu_unit.sv` recognizes `INST_TCU_UMMA` alongside WMMA/WGMMA and
 routes it through the same `VX_tcu_wgmma` orchestrator; the only thing
@@ -185,7 +200,8 @@ that differs at that level is where operand C and the result live.
 ## 4. Execution model
 
 **Issue / dispatch / operand load.** Identical to WGMMA (see that
-doc's §4) — UMMA is treated as WGMMA's dense-SS case throughout, with
+doc's §4) — UMMA follows WGMMA's dense path throughout (A from shared
+memory, or from TMEM in the TS form), with
 the same `k`-outer/`n`-middle/`m`-inner micro-op ordering, the same
 tile-buffer fetch machinery, and the same lockstep CTA gate. The only
 structural differences from WGMMA: UMMA never has a "setup" micro-op,
@@ -212,7 +228,9 @@ tmem_col       = umma_handle + step_n * TCU_TC_N + j
 
 `umma_handle` is a warp-uniform scalar, read from `rs3_data[0]` on the
 macro-op's first micro-op and latched for the rest of the macro-op
-(§2).
+(§2). It may be any `TC_N`-aligned column inside a live allocation, not
+only the allocation's base, so one allocation can hold several
+accumulators (as on `tcgen05.mma`).
 
 This addressing scheme fixes **CTA size == warpgroup size
 (`NUM_TCU_BLOCKS`)** as an architectural assumption — matching real
@@ -222,8 +240,8 @@ parameter, not a hardware constant: `VX_config.toml`'s own global
 default resolves to 1 (`VX_CFG_ISSUE_WIDTH = up(VX_CFG_NUM_WARPS /
 16)`, `VX_CFG_NUM_WARPS` itself defaulting to 4), but every WGMMA/UMMA
 regression test Makefile (`sgemm_tcu_wg`, `sgemm_tcu_tmem`, etc.)
-overrides this itself — `CONFIGS += -DVX_CFG_ISSUE_WIDTH=4` — so in practice every such test defaults to
-a 4-wide warpgroup. Checked at runtime by a
+defaults to `-DVX_CFG_ISSUE_WIDTH=4` unless `CONFIGS` sets it, so in
+practice every such test runs a 4-wide warpgroup. Checked at runtime by a
 `RUNTIME_ASSERT` in `VX_tcu_core.sv` (`cta_rank >= NUM_TCU_BLOCKS`
 fails loudly in simulation).
 
@@ -234,11 +252,12 @@ holds the entire `TCU_WG_TILE_M`-row lane range belonging to
 (`TCU_WG_TILE_M` rows × `TCU_TC_N` cols) and is addressed by
 column-group.
 
-**Arbitration.** Because a CTA's compute traffic, `TMEM_LD`, and
-`TMEM_ST` can all target the same bank in the same cycle, bank access
-is arbitrated per bank, independently for reads and writes. Losing
-requesters stall and retry the next cycle; the `tmem_bank_stalls` perf counter counts these
-events.
+**Arbitration.** Because a CTA's accumulator traffic, its TS-form A
+refills, `TMEM_LD` and `TMEM_ST` can all target the same bank in the
+same cycle, bank access is arbitrated round-robin per bank,
+independently for reads and writes. Losing requesters stall and retry
+the next cycle; the `tmem_bank_stalls` perf counter counts these events
+(§6).
 
 ### 4.2 TMEM allocator (`VX_tcu_tmem_alloc.sv`)
 
@@ -253,13 +272,15 @@ A free-list + CAM allocator over the column dimension:
   (`WARPGROUP_SIZE = NUM_TCU_BLOCKS` calls) has deallocated it.
 - **First-fit allocation** over the column dimension, with adjacent-
   range coalescing on free.
-- A kernel requesting more concurrent TMEM columns than
-  `VX_CFG_TCU_TMEM_COLS` provides is rejected before the kernel ever
-  launches (§6).
+- A request that cannot be satisfied right now (not enough free
+  columns) stalls until another CTA deallocates. A single request
+  larger than `VX_CFG_TCU_TMEM_COLS` can never be satisfied; it fails a
+  simulation assertion, so host code checks the column budget before
+  launch (§6).
 
 `alloc()` only ever reserves a column range — it does not initialize
-TMEM contents; kernels that need a defined starting value call
-`vx_tmem_fill`-style helpers explicitly (§6).
+TMEM contents; kernels that need a defined starting value call `fill_tmem`
+explicitly (§6).
 
 ### 4.3 RAW-hazard interlock
 
@@ -267,22 +288,27 @@ Because TMEM's accumulator is read-modify-write across the k-loop, an
 explicit address-compare interlock in `VX_tcu_core.sv` stalls
 admission of any new UMMA compute op whose TMEM tile address collides
 with one still in flight in the FEDP pipeline. This makes correctness independent of micro-op
-ordering timing margins.
+ordering timing margins. It covers only UMMA writes: `TMEM_ST` writes
+are ordered by software with a barrier, including those that stage a
+TS-form A operand (§2).
 
 ---
 
 ## 5. SimX model
 
-[`sim/simx/tcu/tcu_unit.cpp`](../../sim/simx/tcu/tcu_unit.cpp)'s
-`umma()` mirrors the RTL design directly: lane/handle addressing uses
-`core_->scheduler().warp(wid).cta_csrs.cta_rank` (a persistent per-warp
-member). `kTmemLanes = wg_cfg::xtileM * VX_CFG_NUM_TCU_BLOCKS` — the
-same per-warp-tile-height basis as RTL's `TCU_TMEM_LANES`. The
-free-list allocator (`tmem_alloc`/`tmem_dealloc`/`cta_uid`) implements
-the same idempotent-alloc, barrier-dealloc, first-fit-coalescing
-semantics as the RTL allocator (§4.2), and additionally performs a
-`validate_tmem_lane_col`-style bounds check on every TMEM access that
-RTL does not.
+TMEM is modeled by `TcuTmem`
+([`sim/simx/tcu/tcu_tmem.cpp`](../../sim/simx/tcu/tcu_tmem.cpp)), owned
+by `TcuUnit`: the per-`cta_rank` banks, per-bank read/write arbitration
+between accumulator traffic, A refills, `TMEM_LD` and `TMEM_ST` at the
+RTL's cycle, and the column allocator, with the same idempotent-alloc
+(keyed by `cta_uid`), barrier-dealloc and first-fit-coalescing semantics
+as the RTL allocator (§4.2). `TcuTmemWrTrack` models the RAW interlock
+(§4.3). `kLanes = wg_cfg::xtileM * VX_CFG_NUM_TCU_BLOCKS`, the same basis
+as RTL's `TCU_TMEM_LANES`.
+[`tcu_unit.cpp`](../../sim/simx/tcu/tcu_unit.cpp)'s `umma()` addresses
+lanes by `cta_rank`, as the RTL does. `validate_lane_col` bounds-checks
+every TMEM access; the RTL makes the same check as a simulation-only
+assertion (§7).
 
 `wid` is used for genuinely per-physical-warp
 bookkeeping elsewhere in `umma()` (descriptor caching, handle caching)
@@ -305,10 +331,20 @@ under `#ifdef VX_CFG_TCU_TMEM_ENABLE`:
   format, not by this function.
 - `umma_context<NT, It, Ot, NRC_>` — reuses `wgmma_context`'s tile
   geometry (`tcM`, `tcN`, `xtileM`, `xtileN`, `tileK`, `n_steps`, etc.).
-  - `umma_sync(op_a, desc_b, handle)` issues the macro-op.
+  - `umma_sync(op_a, desc_b, handle)` issues the macro-op. `op_a` is a
+    `smem_matrix_desc` (SS) or a `tmem_matrix_ref` from
+    `vx_make_tmem_ref(col)` (TS); the form is deduced from its type.
   - `fill_tmem(handle, value)`, `store_output(handle, pC, ...)` —
     helpers; both address TMEM via `vx_cta_rank()` (the
     warp's CTA-local rank intrinsic).
+  - `store_a_tmem(a_col, A, ...)` stages a warp's A tile into TMEM for
+    the TS form; `a_elems_per_word` and `a_tmem_words` give the packed
+    geometry. A barrier must separate it from the `umma_sync` that
+    reads it.
+  - An accumulator tile can be converted in place into a later TS A
+    operand: the two share lanes, with the accumulator's column `n` as
+    A's `k`, so software only repacks within each lane. The contract is
+    stated next to `a_tmem_words`.
 
 **Device capability query.** A kernel should check the device's TMEM
 column budget before choosing NRC and CTA occupancy:
@@ -318,23 +354,34 @@ uint64_t tmem_cols;
 vx_device_query(device, VX_CAPS_TCU_TMEM_COLS, &tmem_cols);
 ```
 
-`tmem_cols` is 0 if `VX_CFG_TCU_TMEM_ENABLE` is off. A kernel launch
-whose `UMMA_NRC × max-concurrently-resident-CTAs` exceeds `tmem_cols`
-structurally cannot fit — `tests/regression/sgemm_tcu_tmem/main.cpp`
-performs this check and refuses to launch.
+`tmem_cols` is 0 if `VX_CFG_TCU_TMEM_ENABLE` is off. A launch whose
+per-CTA columns times the maximum number of concurrently resident CTAs
+exceeds `tmem_cols` structurally cannot fit —
+`tests/regression/sgemm_tcu_tmem/main.cpp` checks
+`(UMMA_NRC + UMMA_ACC_OFFSET) × max-concurrently-resident-CTAs` and
+refuses to launch.
+
+**Perf counters** (TCU class, per core, summed across blocks;
+`VX_types.toml`): `UMMA_INSTRS` (UMMA micro-ops), `TMEM_READS` and
+`TMEM_WRITES` (elements, UMMA and `TMEM_LD`/`TMEM_ST`), `TMEM_BANK_STALLS`
+(cycles a bank request lost arbitration), `TMEM_HAZARD_STALLS` (cycles a
+UMMA micro-op was held by the RAW interlock) and
+`TMEM_RD_GRANT_STALLS` (cycles a UMMA micro-op waited on its
+accumulator read grant).
 
 **Test kernel:**
 [`tests/regression/sgemm_tcu_tmem/`](../../tests/regression/sgemm_tcu_tmem/)
 — an SGEMM kernel built on `umma_context`, comparable in structure to
 the WGMMA doc's `sgemm_tcu_wg` example.
 
+From the build directory (add `-DUMMA_A_TMEM` to `CONFIGS` for the TS
+form):
+
 ```bash
-cd /vortex/build_test
 CONFIGS="-DUMMA_NRC=<NRC>" ./ci/blackbox.sh --driver=rtlsim --warps=<W> --threads=<T> --app=sgemm_tcu_tmem --args="-m <M> -n <N> -k <K>"
 ```
 or
 ```bash
-cd /vortex/build_test
 MAKEFLAGS=-s make -C tests/regression/sgemm_tcu_tmem run-rtlsim \
   CONFIGS="-DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_NUM_WARPS=<W> -DVX_CFG_ISSUE_WIDTH=<W> -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_TMEM_ENABLE -DUMMA_NRC=<NRC>" \
   OPTS="-m <M> -n <N> -k <K>"
@@ -361,7 +408,7 @@ Swap `rtlsim` for `simx` to use the SimX driver. `<NRC>` ∈
 - **`TMEM_ST`/`TMEM_LD` bounds checking (RTL)**: `VX_tcu_tmem.sv`
   checks, per access, that the lane is physically valid and the column
   falls within *some* live allocation — a `RUNTIME_ASSERT`, so it's
-  simulation-only, mirroring SimX's `validate_tmem_lane_col`. Neither
+  simulation-only, mirroring SimX's `validate_lane_col`. Neither
   confirms the column belongs to the *requesting* CTA's own allocation,
   just that it isn't dead space.
 - **CTA size must equal warpgroup size (`NUM_TCU_BLOCKS`)** — enforced

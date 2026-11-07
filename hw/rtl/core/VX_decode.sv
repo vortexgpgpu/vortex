@@ -737,8 +737,9 @@ module VX_decode import
                                 `USED_IREG (rs1);
                             end
                             default: begin // 3'h7: UMMA
-                                // A/B from SMEM via descriptors (shares WGMMA's
-                                // tbuf/lockstep path), C/D accumulator in TMEM.
+                                // A from SMEM or TMEM, B from SMEM (shares
+                                // WGMMA's tbuf/lockstep path), C/D accumulator
+                                // in TMEM.
                                 // rs2[3:1] carries the NRC encoding (0..4 ->
                                 // 8/16/32/64/128), decoded directly into
                                 // cd_nregs.

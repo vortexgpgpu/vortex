@@ -221,9 +221,9 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
 `endif
 
 `ifdef VX_CFG_TCU_TMEM_ENABLE
-    // UMMA: A/B from SMEM via descriptors (fixed regs x10/x11, same as
-    // WGMMA's smem-A convention), C/D accumulator in TMEM addressed via a
-    // handle carried in a fixed reg (x12)
+    // UMMA: A from SMEM via a descriptor or from TMEM at a column (x10), B
+    // from SMEM via a descriptor (x11), C/D accumulator in TMEM addressed via
+    // a handle carried in a fixed reg (x12)
     wire is_umma = (ibuf_in.op_type == INST_TCU_UMMA);
     wire is_first_uop_umma = (ctr == '0);
 
