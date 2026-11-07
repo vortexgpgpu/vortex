@@ -28,8 +28,9 @@ static inline output_t warp_reduce_max(output_t x, uint32_t warp_size) {
 
 static inline output_t warp_reduce_sum(output_t x, uint32_t warp_size) {
   int clamp = warp_size - 1, segmask = ~clamp & 0x3f;
-  for (uint32_t off = warp_size >> 1; off > 0; off >>= 1)
+  for (uint32_t off = warp_size >> 1; off > 0; off >>= 1) {
     x += from_bits(vx_shfl_bfly(bits_from(x), off, clamp, segmask));
+  }
   return x;
 }
 #endif
@@ -38,10 +39,15 @@ static inline output_t warp_reduce_sum(output_t x, uint32_t warp_size) {
 template <typename T> struct always_false : std::false_type {};
 template <typename It = vt::ITYPE>
 static inline input_t pack_input(output_t v) {
-  if      constexpr (std::is_same_v<It, vt::tf32>) return (input_t)fpcvt::f32_to_tf32(v);
-  else if constexpr (std::is_same_v<It, vt::fp16>) return (input_t)fpcvt::f32_to_fp16(v);
-  else if constexpr (std::is_same_v<It, vt::bf16>) return (input_t)fpcvt::f32_to_bf16(v);
-  else static_assert(always_false<It>::value, "no fpcvt pack for this ITYPE");
+  if constexpr (std::is_same_v<It, vt::tf32>) {
+    return (input_t)fpcvt::f32_to_tf32(v);
+  } else if constexpr (std::is_same_v<It, vt::fp16>) {
+    return (input_t)fpcvt::f32_to_fp16(v);
+  } else if constexpr (std::is_same_v<It, vt::bf16>) {
+    return (input_t)fpcvt::f32_to_bf16(v);
+  } else {
+    static_assert(always_false<It>::value, "no fpcvt pack for this ITYPE");
+  }
 }
 
 // This warp's accumulator tile is TMEM lanes [rank*xtileM, +xtileM) x columns
@@ -59,15 +65,18 @@ static inline void tmem_load_tile(uint32_t handle, uint32_t rank, const output_t
                                   uint32_t ldm, const output_t *w_row) {
   auto lane = threadIdx.x;
   size_t saved_mask;
-  if (!ctx::tmem_lanes_enter(saved_mask))
+  if (!ctx::tmem_lanes_enter(saved_mask)) {
     return;
+  }
   for (uint32_t r = 0; r < ctx::tmem_rows_per_thread; ++r) {
     auto row = r * ctx::tmem_active_lanes + lane;
     auto src = tile + row * ldm;
     auto lane_base = tmem_lane_base(rank, r);
     for (uint32_t c = 0; c < ctx::xtileN; ++c) {
       output_t v = src[c];
-      if constexpr (Scaled) v *= w_row[row];
+      if constexpr (Scaled) {
+        v *= w_row[row];
+      }
       vt::vx_tmem_st(vt::vx_make_tmem_addr(lane_base, handle + c),
                      vt::detail::bit_cast<uint32_t>(v));
     }
@@ -79,15 +88,17 @@ static inline void tmem_load_tile(uint32_t handle, uint32_t rank, const output_t
 static inline void tmem_store_tile(uint32_t handle, uint32_t rank, output_t *tile, uint32_t ldm) {
   auto lane = threadIdx.x;
   size_t saved_mask;
-  if (!ctx::tmem_lanes_enter(saved_mask))
+  if (!ctx::tmem_lanes_enter(saved_mask)) {
     return;
+  }
   for (uint32_t r = 0; r < ctx::tmem_rows_per_thread; ++r) {
     auto row = r * ctx::tmem_active_lanes + lane;
     auto dst = tile + row * ldm;
     auto lane_base = tmem_lane_base(rank, r);
-    for (uint32_t c = 0; c < ctx::xtileN; ++c)
+    for (uint32_t c = 0; c < ctx::xtileN; ++c) {
       dst[c] = vt::detail::bit_cast<output_t>(
           vt::vx_tmem_ld(vt::vx_make_tmem_addr(lane_base, handle + c)));
+    }
   }
   ctx::tmem_lanes_exit(saved_mask);
 }
@@ -105,8 +116,9 @@ static inline void softmax_tmem(uint32_t s_col, uint32_t o_col, uint32_t rank,
   constexpr uint32_t e_bits = 8 * sizeof(input_t);
   auto lane = threadIdx.x;
   size_t saved_mask;
-  if (!ctx::tmem_lanes_enter(saved_mask))
+  if (!ctx::tmem_lanes_enter(saved_mask)) {
     return;
+  }
   for (uint32_t r = 0; r < ctx::tmem_rows_per_thread; ++r) {
     auto row = r * ctx::tmem_active_lanes + lane;
     auto lane_base = tmem_lane_base(rank, r);
@@ -151,15 +163,17 @@ static inline void store_o_tmem(uint32_t o_col, uint32_t rank, uint32_t head_dim
                                 const output_t *l, output_t *O) {
   auto lane = threadIdx.x;
   size_t saved_mask;
-  if (!ctx::tmem_lanes_enter(saved_mask))
+  if (!ctx::tmem_lanes_enter(saved_mask)) {
     return;
+  }
   for (uint32_t r = 0; r < ctx::tmem_rows_per_thread; ++r) {
     auto row = r * ctx::tmem_active_lanes + lane;
     auto lane_base = tmem_lane_base(rank, r);
     auto dst = O + row * head_dim;
-    for (uint32_t c = 0; c < head_dim; ++c)
+    for (uint32_t c = 0; c < head_dim; ++c) {
       dst[c] = vt::detail::bit_cast<output_t>(
           vt::vx_tmem_ld(vt::vx_make_tmem_addr(lane_base, o_col + c))) / l[row];
+    }
   }
   ctx::tmem_lanes_exit(saved_mask);
 }
@@ -238,8 +252,9 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 #endif
   }
 #ifdef UMMA_A_TMEM
-  for (uint32_t n = 0; n < head_dim / ctx::xtileN; ++n)
+  for (uint32_t n = 0; n < head_dim / ctx::xtileN; ++n) {
     ctx::fill_tmem(o_col + n * ctx::xtileN, output_t(0));
+  }
 #endif
   for (uint32_t r = cta_thread; r < Br; r += cta_size) {
     local_m[r] = -INFINITY;
@@ -257,8 +272,9 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   #ifdef UMMA_A_TMEM
     // S stays resident across h-chunks, so it is seeded once per KV block.
     // Seeding is per-warp and unsynchronized.
-    for (uint32_t n = 0; n < s_ntiles; ++n)
+    for (uint32_t n = 0; n < s_ntiles; ++n) {
       ctx::fill_tmem(s_col + n * ctx::xtileN, output_t(0));
+    }
     __syncthreads();
   #endif
     for (uint32_t h = 0; h < head_dim; h += dt) {
@@ -277,9 +293,12 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
       #else
         const auto s_acc = handle;
         // umma_sync accumulates in place, so the tile is seeded
-        if (h == 0) ctx::fill_tmem(handle, output_t(0));
-        else        tmem_load_tile<false>(handle, warp_rank,
-                                          local_S + warp_row * Bc + n * ctx::xtileN, Bc, nullptr);
+        if (h == 0) {
+          ctx::fill_tmem(handle, output_t(0));
+        } else {
+          tmem_load_tile<false>(handle, warp_rank,
+                                local_S + warp_row * Bc + n * ctx::xtileN, Bc, nullptr);
+        }
         // Seeding is per-warp and unsynchronized
         __syncthreads();
       #endif

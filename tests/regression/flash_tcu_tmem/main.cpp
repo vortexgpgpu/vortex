@@ -73,17 +73,29 @@ void parse_args(int argc, char **argv) {
 // ITYPE <-> fp32 on host
 input_t pack_h(float f) {
   uint32_t u; std::memcpy(&u, &f, 4);
-  if      constexpr (std::is_same_v<vt::ITYPE, vt::tf32>) return (input_t)rv_ftotf32_s(u, 0, nullptr);
-  else if constexpr (std::is_same_v<vt::ITYPE, vt::fp16>) return (input_t)rv_ftoh_s(u, 0, nullptr);
-  else if constexpr (std::is_same_v<vt::ITYPE, vt::bf16>) return (input_t)rv_ftob_s(u, 0, nullptr);
-  else { std::cerr << "unsupported ITYPE\n"; std::exit(1); }
+  if constexpr (std::is_same_v<vt::ITYPE, vt::tf32>) {
+    return (input_t)rv_ftotf32_s(u, 0, nullptr);
+  } else if constexpr (std::is_same_v<vt::ITYPE, vt::fp16>) {
+    return (input_t)rv_ftoh_s(u, 0, nullptr);
+  } else if constexpr (std::is_same_v<vt::ITYPE, vt::bf16>) {
+    return (input_t)rv_ftob_s(u, 0, nullptr);
+  } else {
+    std::cerr << "unsupported ITYPE\n";
+    std::exit(1);
+  }
 }
 float unpack_h(input_t v) {
   uint32_t u;
-  if      constexpr (std::is_same_v<vt::ITYPE, vt::tf32>) u = rv_tf32tof_s((uint32_t)v, 0, nullptr);
-  else if constexpr (std::is_same_v<vt::ITYPE, vt::fp16>) u = rv_htof_s((uint16_t)v, 0, nullptr);
-  else if constexpr (std::is_same_v<vt::ITYPE, vt::bf16>) u = rv_btof_s((uint16_t)v, 0, nullptr);
-  else { std::cerr << "unsupported ITYPE\n"; std::exit(1); }
+  if constexpr (std::is_same_v<vt::ITYPE, vt::tf32>) {
+    u = rv_tf32tof_s((uint32_t)v, 0, nullptr);
+  } else if constexpr (std::is_same_v<vt::ITYPE, vt::fp16>) {
+    u = rv_htof_s((uint16_t)v, 0, nullptr);
+  } else if constexpr (std::is_same_v<vt::ITYPE, vt::bf16>) {
+    u = rv_btof_s((uint16_t)v, 0, nullptr);
+  } else {
+    std::cerr << "unsupported ITYPE\n";
+    std::exit(1);
+  }
   float f; std::memcpy(&f, &u, 4); return f;
 }
 
@@ -91,9 +103,13 @@ float unpack_h(input_t v) {
 // the reference.
 bool selftest_fpcvt() {
   auto mine = [](float f) -> uint32_t {
-    if      constexpr (std::is_same_v<vt::ITYPE, vt::tf32>) return fpcvt::f32_to_tf32(f);
-    else if constexpr (std::is_same_v<vt::ITYPE, vt::fp16>) return fpcvt::f32_to_fp16(f);
-    else                                                    return fpcvt::f32_to_bf16(f);
+    if constexpr (std::is_same_v<vt::ITYPE, vt::tf32>) {
+      return fpcvt::f32_to_tf32(f);
+    } else if constexpr (std::is_same_v<vt::ITYPE, vt::fp16>) {
+      return fpcvt::f32_to_fp16(f);
+    } else {
+      return fpcvt::f32_to_bf16(f);
+    }
   };
   long bad = 0, n = 0;
   auto chk = [&](float f) {
@@ -107,13 +123,20 @@ bool selftest_fpcvt() {
     }
   };
   std::srand(7);
-  for (int i = 0; i < 20000; ++i) chk((float)std::rand() / RAND_MAX);
-  for (int e = 0; e < 256; ++e)
-    for (uint32_t m : {0u, 1u, 0x1000u, 0x0FFFu, 0x400000u, 0x7FFFFFu, 0x2AAAAAu})
+  for (int i = 0; i < 20000; ++i) {
+    chk((float)std::rand() / RAND_MAX);
+  }
+  for (int e = 0; e < 256; ++e) {
+    for (uint32_t m : {0u, 1u, 0x1000u, 0x0FFFu, 0x400000u, 0x7FFFFFu, 0x2AAAAAu}) {
       for (uint32_t s : {0u, 1u}) {
         uint32_t u = (s << 31) | ((uint32_t)e << 23) | m; float f; std::memcpy(&f, &u, 4); chk(f);
       }
-  for (int e = -140; e <= 130; ++e) { chk(std::ldexp(1.0f, e)); chk(-std::ldexp(1.0f, e)); }
+    }
+  }
+  for (int e = -140; e <= 130; ++e) {
+    chk(std::ldexp(1.0f, e));
+    chk(-std::ldexp(1.0f, e));
+  }
   std::cout << "fpcvt self-test (" << vt::ITYPE::name << "): " << n << " cases, "
             << bad << " mismatched" << std::endl;
   return bad == 0;
@@ -125,18 +148,25 @@ void flash_attention_ref(float* out, const input_t* Q, const input_t* K, const i
   for (uint32_t i = 0; i < N; ++i) {
     for (uint32_t j = 0; j < N; ++j) {
       float sum = 0.f;
-      for (uint32_t k = 0; k < d; ++k)
+      for (uint32_t k = 0; k < d; ++k) {
         sum += unpack_h(Q[i * d + k]) * unpack_h(K[j * d + k]);
+      }
       scores[j] = sum;
     }
     float mx = scores[0];
-    for (uint32_t j = 1; j < N; ++j) mx = std::max(mx, scores[j]);
+    for (uint32_t j = 1; j < N; ++j) {
+      mx = std::max(mx, scores[j]);
+    }
     float esum = 0.f;
-    for (uint32_t j = 0; j < N; ++j) { probs[j] = std::exp(scores[j] - mx); esum += probs[j]; }
+    for (uint32_t j = 0; j < N; ++j) {
+      probs[j] = std::exp(scores[j] - mx);
+      esum += probs[j];
+    }
     for (uint32_t k = 0; k < d; ++k) {
       float sum = 0.f;
-      for (uint32_t j = 0; j < N; ++j)
+      for (uint32_t j = 0; j < N; ++j) {
         sum += unpack_h(pack_h(probs[j])) * unpack_h(V[j * d + k]);
+      }
       out[i * d + k] = sum / esum;
     }
   }
@@ -162,9 +192,15 @@ int main(int argc, char *argv[]) {
             << "  -> block_size_r step " << kQuantR
             << ", block_size_c/head_dim_tile step " << kQuantC << std::endl;
 
-  if (!selftest_fpcvt()) { std::cout << "FAILED (fpcvt)" << std::endl; return 1; }
+  if (!selftest_fpcvt()) {
+    std::cout << "FAILED (fpcvt)" << std::endl;
+    return 1;
+  }
 
-  if (N == 0 || d == 0) { printf("Error: N and D must be nonzero\n"); return -1; }
+  if (N == 0 || d == 0) {
+    printf("Error: N and D must be nonzero\n");
+    return -1;
+  }
 
   vx_device_h dev = nullptr;
   CHECK(vx_device_open(0, &dev));
@@ -248,9 +284,17 @@ int main(int argc, char *argv[]) {
     uint32_t c = c_override ? c_override : std::max(kQuantC, round_up(num_threads, kQuantC));
     if ((c % kQuantC) == 0 && (N % c) == 0) {
       for (uint32_t cand = d_override ? d_override : d; cand >= kQuantC; cand -= kQuantC) {
-        if (d % cand) continue;
+        if (d % cand) {
+          continue;
+        }
         uint64_t use = lmem_for(r, c, cand);
-        if (use > lmem_size) { if (d_override) break; else continue; }
+        if (use > lmem_size) {
+          if (d_override) {
+            break;
+          } else {
+            continue;
+          }
+        }
         Br = r; Bc = c; dt = cand; local_mem = use;
         occupancy = std::min((uint32_t)std::max<uint64_t>(1, lmem_size / use), num_warps / cta_warps);
         break;
@@ -352,8 +396,9 @@ int main(int argc, char *argv[]) {
     float e = std::fabs(hRef[i] - hO[i]) / std::max(1e-6f, std::fabs(hRef[i]));
     worst = std::max(worst, e);
     if (e > tol) {
-      if (errors < 16)
+      if (errors < 16) {
         std::printf("*** error: [%u] expected=%f, actual=%f (rel %.3g)\n", i, hRef[i], hO[i], e);
+      }
       ++errors;
     }
   }
@@ -364,7 +409,10 @@ int main(int argc, char *argv[]) {
   vx_device_dump_perf(dev, stdout);
   vx_device_release(dev);
 
-  if (errors) { std::cout << "Found " << errors << " errors!\nFAILED!" << std::endl; return errors; }
+  if (errors) {
+    std::cout << "Found " << errors << " errors!\nFAILED!" << std::endl;
+    return errors;
+  }
   std::cout << "PASSED!" << std::endl;
   return 0;
 }
