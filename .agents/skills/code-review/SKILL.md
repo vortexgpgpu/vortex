@@ -58,6 +58,7 @@ it, with the diff and the rule documents; an R3 change always does.
 |---|---|
 | golden data (`ci/baselines/**`, reference images) changed without the update command in the commit message, or re-recorded by an agent or CI | a hand edit absorbs a regression; only a human re-records golden data |
 | a test silenced: `known_issue:`, wider `tolerance:`/threshold, smaller `args:`, a removed case, to make a failure go away | fix the bug instead |
+| an existing test case changed or removed, a golden value moved toward a looser bar (more cycles, lower Fmax, more area), or a gate threshold widened, without the stated, measured reason and the maintainer's approval | these change what CI proves (R3: `test-coverage`, `golden-values`, `gate-thresholds`) |
 | a bug papered over (fallback, clamp, delay, retry, disabled feature) without a `PATCH:`/`WORKAROUND:` label and a follow-up | `docs/bug_fixes.md` §3 |
 | `sw/kernel` or `sw/runtime` references `hw/` or `sim/`, or the reverse | layer isolation; shared ABI goes in `sw/common` |
 | a Verilog interface added to `RTL_PKGS` | `RTL_PKGS` is `VX_*_pkg.sv` only |

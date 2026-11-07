@@ -279,6 +279,7 @@ BASE_TREE = {
     "VX_types.toml": TYPES,
     "ci/testcases/demo.yaml": TESTCASES,
     "ci/baselines/perf/demo.json": '{"demo:sgemm:rtlsim": {"cycles": 1000}}\n',
+    "ci/perf_baseline.py": "TOLERANCE = 0.02  # +-2%\n",
     ".github/workflows/demo.yml": WORKFLOW,
     ".github/workflows/later.yml": WORKFLOW_PUSH_FIRST,
     "VERSION": "VORTEX_VERSION=3.0\nTOOLCHAIN_REV=v3.0.1\nFIRESIM_REV=abc\n",
@@ -322,6 +323,10 @@ def checks(result, severity=None):
 
 def details(result, check):
     return " ".join(e["detail"] for e in result["evidence"] if e["check"] == check)
+
+
+def contract(result, detector):
+    return " ".join(f["detail"] for f in result["contracts"] if f["detector"] == detector)
 
 
 # --------------------------------------------------------------------------- #
@@ -806,8 +811,9 @@ def test_event_text_in_env_is_r2(scratch):
 def test_known_issue_added_warns(scratch):
     r = run(scratch, {"ci/testcases/demo.yaml": TESTCASES.replace(
         "    drivers: [simx, rtlsim]", "    drivers: [simx, rtlsim]\n    known_issue: \"hangs on rtlsim\"")})
-    assert r["class"] == "R2"
+    assert r["class"] == "R3"
     assert "known_issue added" in details(r, "test-silencing")
+    assert "case vecadd: known_issue (none) -> \"hangs on rtlsim\"" in contract(r, "test-coverage")
 
 
 def test_tolerance_widened_warns(scratch):
@@ -815,10 +821,11 @@ def test_tolerance_widened_warns(scratch):
     assert "tolerance widened 0.03 -> 0.08" in details(r, "test-silencing")
 
 
-def test_tolerance_tightened_is_quiet(scratch):
+def test_tolerance_tightened_is_r3_without_silencing(scratch):
     r = run(scratch, {"ci/testcases/demo.yaml": TESTCASES.replace("tolerance: 0.03", "tolerance: 0.02")})
     assert "test-silencing" not in checks(r)
-    assert r["class"] == "R1"
+    assert r["class"] == "R3"
+    assert "case parity-sgemm: tolerance 0.03 -> 0.02" in contract(r, "test-coverage")
 
 
 def test_args_shrunk_warns(scratch):
@@ -848,7 +855,8 @@ def test_case_removed_warns(scratch):
 def test_hand_edited_baseline_warns(scratch):
     r = run(scratch, {"ci/baselines/perf/demo.json": '{"demo:sgemm:rtlsim": {"cycles": 1100}}\n'},
             message="bump the sgemm number")
-    assert r["class"] == "R2"
+    assert r["class"] == "R3"
+    assert contract(r, "golden-values").startswith("1 values raised")
     text = details(r, "golden-provenance")
     assert "no commit message names how it was regenerated" in text
     assert "with no code change" in text
@@ -861,6 +869,81 @@ def test_regenerated_baseline_is_info(scratch):
             message="unit: count by two\n\npytest ci -m perf_gate --update-baselines")
     assert checks(r, "warn") == set()
     assert "golden-provenance" in checks(r, "info")
+
+
+def test_args_changed_is_r3(scratch):
+    r = run(scratch, {"ci/testcases/demo.yaml": TESTCASES.replace('"-n64 -m32"', '"-n64 -m31"')})
+    assert r["class"] == "R3"
+    assert 'case parity-sgemm: args "-n64 -m32" -> "-n64 -m31"' in contract(r, "test-coverage")
+
+
+def test_driver_dropped_is_r3(scratch):
+    r = run(scratch, {"ci/testcases/demo.yaml": TESTCASES.replace("[simx, rtlsim]", "[simx]")})
+    assert r["class"] == "R3"
+    assert "case vecadd: drivers [simx, rtlsim] -> [simx]" in contract(r, "test-coverage")
+
+
+def test_case_removed_is_r3(scratch):
+    r = run(scratch, {"ci/testcases/demo.yaml": TESTCASES.split("  - id: vecadd")[0]})
+    assert r["class"] == "R3"
+    assert "case vecadd removed" in contract(r, "test-coverage")
+
+
+def test_defaults_changed_is_r3(scratch):
+    r = run(scratch, {"ci/testcases/demo.yaml": TESTCASES.replace("  tier: smoke", "  tier: nightly")})
+    assert r["class"] == "R3"
+    assert "file defaults: defaults tier: smoke -> tier: nightly" in contract(r, "test-coverage")
+
+
+def test_case_added_is_r1(scratch):
+    r = run(scratch, {"ci/testcases/demo.yaml": TESTCASES + "\n  - id: saxpy\n    app: saxpy\n"})
+    assert r["class"] == "R1"
+    assert "test-coverage" not in detectors(r)
+
+
+def test_case_moved_between_files_unchanged_is_quiet(scratch):
+    head, tail = TESTCASES.split("  - id: vecadd")
+    r = run(scratch, {"ci/testcases/demo.yaml": head,
+                      "ci/testcases/demo2.yaml": "category: demo2\ntests:\n  - id: vecadd" + tail})
+    assert "test-coverage" not in detectors(r)
+
+
+def test_testcase_comment_is_r0(scratch):
+    r = run(scratch, {"ci/testcases/demo.yaml": TESTCASES.replace("  - id: vecadd", "  # plain add\n  - id: vecadd")})
+    assert r["class"] == "R0"
+
+
+def test_baseline_lowered_is_r3(scratch):
+    r = run(scratch, {"ci/baselines/perf/demo.json": '{"demo:sgemm:rtlsim": {"cycles": 900}}\n'},
+            message="pytest ci -m perf_gate --update-baselines")
+    assert r["class"] == "R3"
+    assert contract(r, "golden-values").startswith("1 values lowered (e.g. demo:sgemm:rtlsim/cycles)")
+
+
+def test_baseline_entry_added_is_r2(scratch):
+    r = run(scratch, {"ci/baselines/perf/demo.json":
+                      '{"demo:sgemm:rtlsim": {"cycles": 1000}, "demo:vecadd:rtlsim": {"cycles": 50}}\n'},
+            message="pytest ci -m perf_gate --update-baselines")
+    assert r["class"] == "R2"
+    assert "golden-values" not in detectors(r)
+
+
+def test_baseline_entry_removed_is_r3(scratch):
+    r = run(scratch, {"ci/baselines/perf/demo.json": '{}\n'},
+            message="pytest ci -m perf_gate --update-baselines")
+    assert "1 entries removed" in contract(r, "golden-values")
+
+
+def test_gate_tolerance_widened_is_r3(scratch):
+    r = run(scratch, {"ci/perf_baseline.py": "TOLERANCE = 0.03  # +-3%\n"})
+    assert r["class"] == "R3"
+    assert contract(r, "gate-thresholds") == "- TOLERANCE = 0.02; + TOLERANCE = 0.03"
+
+
+def test_gate_code_without_threshold_is_r2(scratch):
+    r = run(scratch, {"ci/perf_baseline.py": "TOLERANCE = 0.02  # +-2%\ntotal = 3\n\ndef load(path):\n    return path\n"})
+    assert r["class"] == "R2"
+    assert "gate-thresholds" not in detectors(r)
 
 
 def test_toolchain_pin_is_r3(scratch):

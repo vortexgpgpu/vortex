@@ -16,13 +16,13 @@
 # drift apart.
 
 schema: 1
-policy_version: 2
+policy_version: 3
 
 classes:
   R0: "No effect on what is built, run or enforced: prose, comments, whitespace."
   R1: "Local effect that the change's own tests cover: tests, design docs, local tooling, harnesses."
   R2: "Shared hardware, the SimX timing model, the host and device software stack, the build, toolchain pins, CI enforcement and golden data. Needs a deep review and named evidence."
-  R3: "A detected externally visible change, whether an addition, a change or a removal: an RTL interface, a packet struct, an ISA encoding or decoder, a CSR, DCR or memory-map value, a VX_CFG_* knob, an installed or ABI header, an install rule, toolchain path or ABI flag, a toolchain pin, or a workflow trust boundary. Needs an independent review agent, deterministic evidence and maintainer approval."
+  R3: "A detected externally visible change, whether an addition, a change or a removal: an RTL interface, a packet struct, an ISA encoding or decoder, a CSR, DCR or memory-map value, a VX_CFG_* knob, an installed or ABI header, an install rule, toolchain path or ABI flag, a toolchain pin, or a workflow trust boundary. Also a change to what CI enforces: an existing test case or its defaults changed or removed, golden data changed or removed, or a gate threshold moved. Needs an independent review agent, deterministic evidence and maintainer approval."
 
 # Unmatched paths, and a file whose diff only touches comments or whitespace.
 default_class: R1
@@ -153,6 +153,24 @@ detectors:
     class: R3
     paths: [".github/workflows/*.yml", ".github/workflows/*.yaml", ".github/actions/**"]
     why: "A pull_request_target trigger, a self-hosted runner reachable from a pull request, or event text interpolated into a script lets a fork run code with the repository's credentials or machines."
+
+  - id: test-coverage
+    kind: testcase_coverage
+    class: R3
+    paths: ["ci/testcases/*.yaml"]
+    why: "An existing case's command line, configs, drivers, XLENs, tier, tolerance or known_issue, the file's defaults, or the case itself decide what CI proves; changing or removing one can turn a real failure green. A new case is not a finding."
+
+  - id: golden-values
+    kind: golden_values
+    class: R3
+    paths: ["ci/baselines/**", "tests/**/*_ref*.png", "tests/**/*_ref*.ppm", "hw/scripts/beacon_calibration_*.json"]
+    why: "Every value in golden data is a bar a gate holds the design to; changing or removing one moves the bar, and a re-record absorbs whatever regression the recorded tree carries. New entries are not a finding."
+
+  - id: gate-thresholds
+    kind: gate_thresholds
+    class: R3
+    paths: ["ci/perf_baseline.py", "ci/*_gate.py", "ci/synth_*.py", "ci/testcase.py", "ci/conftest.py", "ci/test_runner.py", "ci/beacon.py"]
+    why: "A gate's tolerance, threshold or margin decides how far a measurement may move before CI fails; widening one hides every regression under the new bound."
 
 # Evidence checks. They never raise above R2.
 evidence:

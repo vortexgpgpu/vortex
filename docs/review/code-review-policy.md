@@ -18,7 +18,7 @@ a property of the diff, computed before review.
 | R0 | no effect on what is built, run or enforced | paths; comment- or whitespace-only diffs |
 | R1 | local effect its own tests cover | paths |
 | R2 | shared RTL, the SimX model, the software stack, the build, CI enforcement, golden data | paths (the ceiling for a path rule), evidence checks |
-| R3 | a detected externally visible change | detectors only |
+| R3 | a detected externally visible change, or a change to what CI enforces | detectors only |
 
 **Every change with external visibility is R3**, whether it adds, changes or
 removes. R3 never comes from a path; it comes from a detector that finds, in
@@ -39,7 +39,14 @@ the diff content:
 - an install rule or list, an exported toolchain path, or an ABI/ISA flag
   (`-march`, `-mabi`, target features) in a non-test Makefile;
 - a toolchain pin in `VERSION`;
-- a new workflow trust exposure.
+- a new workflow trust exposure;
+- an existing test case changed or removed in `ci/testcases/` (its `args:`,
+  `configs:`, drivers, XLENs, tier, tolerance, `known_issue:` or any other
+  key), or a file's defaults changed; a new case is not a finding;
+- golden data changed or removed: a value in `ci/baselines/`, a reference
+  image or the Beacon calibration; new entries are not a finding;
+- a gate tolerance, threshold or margin moved in the gate code
+  (`ci/perf_baseline.py`, `ci/*_gate.py`, `ci/testcase.py`, ...).
 
 A diff that only touches comments or whitespace is never R3.
 `change_impact.py replay` measures the R3 rate; there is no rate target.
@@ -87,6 +94,9 @@ or `failed`, and `not run` never counts toward an obligation.
 | `build-surface` | the installed tree and the toolchain it names are checked from a clean `make install` |
 | `toolchain-pins` | the prebuilt tag exists with matching binaries before the change lands |
 | `workflow-trust` | the exposure is intended and stated; no self-hosted runner is reachable from a fork |
+| `test-coverage` | each changed or removed case states why, with the measurement behind it; a coverage cut or a silenced failure carries the root-cause plan of [bug_fixes.md](../bug_fixes.md) §3 |
+| `golden-values` | the update command that regenerated it, run by a human; the per-entry delta, with every value that moved toward a looser bar (more cycles, lower Fmax, more area) attributed to a commit and fixed or justified |
+| `gate-thresholds` | the measured reason the bound must move; a widened bound is never the fix for a red gate |
 
 ## 4. Evidence checks
 
@@ -96,11 +106,12 @@ These report; they never raise a change above R2.
   PR names the `model_parity` case that shows no cycle moved, or carries the
   matching model change.
 - **Golden-data provenance.** A file under `ci/baselines/` or a reference image
-  changed. The commit message names the update command that regenerated it.
+  changed (also R3 through `golden-values` when an existing value moved). The
+  commit message names the update command that regenerated it.
   Golden data is never hand-edited, and only a human re-records it, never an
   agent or CI.
 - **Silenced tests.** A `known_issue:`, a wider `tolerance:`/threshold, smaller
-  `args:` or a removed case. Each needs the root-cause plan of
+  `args:` or a removed case (also R3 through `test-coverage`). Each needs the root-cause plan of
   [bug_fixes.md](../bug_fixes.md) §3, or is reverted.
 - **Toolchain pin.** `TOOLCHAIN_REV` or another pin in `VERSION` moved (also R3
   through `toolchain-pins`). The prebuilt tag exists before the Vortex change

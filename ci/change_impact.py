@@ -1074,6 +1074,164 @@ def detect_version_pins(diff, rule):
     return found
 
 
+def _yaml_keys(lines, indent):
+    """key -> normalized value of the keys at `indent`; deeper lines fold into
+    the key above them."""
+    out, key = {}, None
+    for line in lines:
+        if not line.strip():
+            continue
+        ind = len(line) - len(line.lstrip())
+        m = re.match(r"^\s*(?:-\s+)?([\w.+-]+)\s*:\s*(.*)$", line)
+        if m and ind == indent:
+            key = m.group(1)
+            out[key] = _ws(m.group(2))
+        elif key is not None and ind > indent:
+            out[key] = _ws(out[key] + " " + line.strip())
+    return out
+
+
+def parse_testcases(text):
+    """(file-level keys, {case id: its keys}) of a ci/testcases file, comments dropped."""
+    if text is None:
+        return {}, {}
+    lines = _strip_hash(text).split("\n")
+    head, cases, current, indent = [], {}, None, None
+    for line in lines:
+        m = _ID_LINE.match(line)
+        if m:
+            current = m.group(1)
+            indent = len(line) - len(line.lstrip()) + 2
+            cases[current] = [line]
+        elif current is not None and (not line.strip() or len(line) - len(line.lstrip()) >= indent):
+            cases[current].append(line)
+        else:
+            current = None
+            head.append(line)
+    top = _yaml_keys(head, 0)
+    top.pop("tests", None)
+    return top, {cid: _yaml_keys(body, len(body[0]) - len(body[0].lstrip()) + 2)
+                 for cid, body in cases.items()}
+
+
+def _changed_keys(old, new):
+    parts = []
+    for key in sorted(set(old) | set(new)):
+        if old.get(key) != new.get(key):
+            parts.append("{} {} -> {}".format(key, old.get(key, "(none)") or "''",
+                                             new.get(key, "(none)") or "''"))
+    return parts
+
+
+@detector("testcase_coverage")
+def detect_testcase_coverage(diff, rule):
+    found, old_all, new_all = [], {}, {}
+    changes = diff.matching(rule["paths"])
+    parsed = {}
+    for c in changes:
+        old_top, old_cases = parse_testcases(diff.old(c))
+        new_top, new_cases = parse_testcases(diff.new(c))
+        parsed[c.path] = (old_top, new_top, old_cases, new_cases)
+        old_all.update(old_cases)
+        new_all.update(new_cases)
+    for c in changes:
+        old_top, new_top, old_cases, new_cases = parsed[c.path]
+        parts = []
+        if old_cases and old_top != new_top:
+            parts.append("file defaults: " + "; ".join(_changed_keys(old_top, new_top)))
+        for cid in sorted(old_cases):
+            if cid not in new_all:
+                parts.append("case {} removed".format(cid))
+            elif cid in new_cases and old_cases[cid] != new_cases[cid]:
+                parts.append("case {}: {}".format(cid, "; ".join(
+                    _changed_keys(old_cases[cid], new_cases[cid]))))
+            elif cid not in new_cases and old_cases[cid] != new_all[cid]:
+                parts.append("case {} moved and changed: {}".format(cid, "; ".join(
+                    _changed_keys(old_cases[cid], new_all[cid]))))
+        if parts:
+            found.append({"path": c.path, "detail": "; ".join(parts)})
+    return found
+
+
+def _json_leaves(value, prefix=""):
+    """path -> scalar for every leaf of a JSON document."""
+    if isinstance(value, dict):
+        out = {}
+        for k, v in value.items():
+            out.update(_json_leaves(v, "{}/{}".format(prefix, k)))
+        return out
+    if isinstance(value, list):
+        out = {}
+        for i, v in enumerate(value):
+            out.update(_json_leaves(v, "{}[{}]".format(prefix, i)))
+        return out
+    return {prefix: value}
+
+
+@detector("golden_values")
+def detect_golden_values(diff, rule):
+    found = []
+    for c in diff.matching(rule["paths"]):
+        if c.status == "A":
+            continue
+        old, new = diff.old(c), diff.new(c)
+        if new is None:
+            found.append({"path": c.path, "detail": "removed" if c.status == "D" else "replaced"})
+            continue
+        if old is None:
+            found.append({"path": c.path, "detail": "replaced"})
+            continue
+        try:
+            before, after = _json_leaves(json.loads(old)), _json_leaves(json.loads(new))
+        except ValueError:
+            if old != new:
+                found.append({"path": c.path, "detail": "changed"})
+            continue
+        up, down, other, gone = [], [], [], []
+        for key in sorted(before):
+            if key not in after:
+                gone.append(key)
+            elif before[key] != after[key]:
+                a, b = before[key], after[key]
+                if isinstance(a, (int, float)) and isinstance(b, (int, float)) \
+                        and not isinstance(a, bool) and not isinstance(b, bool):
+                    (up if b > a else down).append(key)
+                else:
+                    other.append(key)
+        parts = ["{} {}".format(len(v), label) for v, label in
+                 ((up, "values raised"), (down, "values lowered"),
+                  (other, "values changed"), (gone, "entries removed")) if v]
+        if parts:
+            sample = (up + down + other + gone)[:3]
+            found.append({"path": c.path, "detail": "{} (e.g. {})".format(
+                ", ".join(parts), ", ".join(s.lstrip("/") for s in sample))})
+    return found
+
+
+_THRESHOLD_WORD = re.compile(r"(?i)(?<![a-z])(?:tol|tolerances?|thresholds?|margins?)(?![a-z])")
+
+
+def _threshold_lines(text):
+    """Normalized code lines that name a tolerance, threshold or margin and hold a number."""
+    if text is None:
+        return []
+    return [_ws(line) for line in _strip_hash(text).split("\n")
+            if _THRESHOLD_WORD.search(line) and re.search(r"\d", line)]
+
+
+@detector("gate_thresholds")
+def detect_gate_thresholds(diff, rule):
+    found = []
+    for c in diff.matching(rule["paths"]):
+        old, new = _threshold_lines(diff.old(c)), _threshold_lines(diff.new(c))
+        gone = [line for line in old if line not in new]
+        if gone:
+            added = [line for line in new if line not in old]
+            found.append({"path": c.path, "detail": "; ".join(
+                ["- " + line for line in gone[:4]] + ["+ " + line for line in added[:4]])})
+    return found
+
+
 def parse_c_structs(text):
     """name -> normalized body of every struct, union or enum definition."""
     body = strip_comments(text, "c")
