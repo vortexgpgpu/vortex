@@ -27,8 +27,9 @@ static inline output_t warp_reduce_max(output_t x, uint32_t warp_size) {
 
 static inline output_t warp_reduce_sum(output_t x, uint32_t warp_size) {
   int clamp = warp_size - 1, segmask = ~clamp & 0x3f;
-  for (uint32_t off = warp_size >> 1; off > 0; off >>= 1)
+  for (uint32_t off = warp_size >> 1; off > 0; off >>= 1) {
     x += from_bits(vx_shfl_bfly(bits_from(x), off, clamp, segmask));
+  }
   return x;
 }
 
@@ -36,10 +37,15 @@ static inline output_t warp_reduce_sum(output_t x, uint32_t warp_size) {
 template <typename T> struct always_false : std::false_type {};
 template <typename It = vt::ITYPE>
 static inline input_t pack_input(output_t v) {
-  if      constexpr (std::is_same_v<It, vt::tf32>) return (input_t)fpcvt::f32_to_tf32(v);
-  else if constexpr (std::is_same_v<It, vt::fp16>) return (input_t)fpcvt::f32_to_fp16(v);
-  else if constexpr (std::is_same_v<It, vt::bf16>) return (input_t)fpcvt::f32_to_bf16(v);
-  else static_assert(always_false<It>::value, "no fpcvt pack for this ITYPE");
+  if constexpr (std::is_same_v<It, vt::tf32>) {
+    return (input_t)fpcvt::f32_to_tf32(v);
+  } else if constexpr (std::is_same_v<It, vt::fp16>) {
+    return (input_t)fpcvt::f32_to_fp16(v);
+  } else if constexpr (std::is_same_v<It, vt::bf16>) {
+    return (input_t)fpcvt::f32_to_bf16(v);
+  } else {
+    static_assert(always_false<It>::value, "no fpcvt pack for this ITYPE");
+  }
 }
 
 // Inverse of ctx::store_matrix_sync, with per-row scale applied
@@ -54,7 +60,9 @@ static inline void load_acc_scaled(Frag &dst, const output_t *tile, uint32_t ldm
     auto bn  = r / ctx::m_steps;
     auto row = base_row + bm * ctx::tcM;
     output_t v = tile[row * ldm + bn * ctx::tcN + base_col];
-    if constexpr (Scaled) v *= w_row[row];
+    if constexpr (Scaled) {
+      v *= w_row[row];
+    }
     dst.data[r] = v;
   });
 }
@@ -137,8 +145,11 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
         ctx::fragment_acc frag;
         // First h-chunk starts accumulation, later ones resume the partial S
         // already in LMEM
-        if (h == 0) ctx::fill_fragment(frag, output_t(0));
-        else        load_acc_scaled<false>(frag, local_S + warp_row * Bc + n * ctx::xtileN, Bc, nullptr);
+        if (h == 0) {
+          ctx::fill_fragment(frag, output_t(0));
+        } else {
+          load_acc_scaled<false>(frag, local_S + warp_row * Bc + n * ctx::xtileN, Bc, nullptr);
+        }
 
         for (uint32_t k = 0; k < s_ktiles; ++k) {
           auto desc_a = vt::vx_make_smem_desc(

@@ -115,8 +115,12 @@ inline int load_caps(Reader&& cp_mmio_read,
   if (cp_mmio_read(CP_REG_GPU_ISA_CAPS_LO, &lo)) return -1;
   if (cp_mmio_read(CP_REG_GPU_ISA_CAPS_HI, &hi)) return -1;
   *isa_caps = uint64_t(lo) | (uint64_t(hi) << 32);
-  if (cp_mmio_read(CP_REG_GPU_EXT_CAPS_LO, &lo)) return -1;
-  if (cp_mmio_read(CP_REG_GPU_EXT_CAPS_HI, &hi)) return -1;
+  if (cp_mmio_read(CP_REG_GPU_EXT_CAPS_LO, &lo)) {
+    return -1;
+  }
+  if (cp_mmio_read(CP_REG_GPU_EXT_CAPS_HI, &hi)) {
+    return -1;
+  }
   *ext_caps = uint64_t(lo) | (uint64_t(hi) << 32);
   return 0;
 }

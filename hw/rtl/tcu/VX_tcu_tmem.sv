@@ -277,8 +277,11 @@ module VX_tcu_tmem import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     logic [ARB_RD_W-1:0] bank_rd_grant_onehot_d [BLOCK_SIZE];
     always_ff @(posedge clk) begin
         for (integer r = 0; r < BLOCK_SIZE; ++r) begin
-            if (reset) bank_rd_grant_onehot_d[r] <= '0;
-            else       bank_rd_grant_onehot_d[r] <= bank_rd_grant_onehot[r];
+            if (reset) begin
+                bank_rd_grant_onehot_d[r] <= '0;
+            end else begin
+                bank_rd_grant_onehot_d[r] <= bank_rd_grant_onehot[r];
+            end
         end
     end
 
@@ -343,8 +346,11 @@ module VX_tcu_tmem import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             ldst_wr_won_r <= '0;
         end else begin
             for (int b = 0; b < BLOCK_SIZE; ++b) begin
-                if (mgmt_ready[b])       ldst_wr_won_r[b] <= 1'b0;
-                else if (ldst_wr_won[b]) ldst_wr_won_r[b] <= 1'b1;
+                if (mgmt_ready[b]) begin
+                    ldst_wr_won_r[b] <= 1'b0;
+                end else if (ldst_wr_won[b]) begin
+                    ldst_wr_won_r[b] <= 1'b1;
+                end
             end
         end
     end
@@ -601,10 +607,18 @@ module VX_tcu_tmem import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         tmem_reads_this_cycle  = '0;
         tmem_writes_this_cycle = '0;
         for (integer bi = 0; bi < BLOCK_SIZE; ++bi) begin
-            if (rd_grant[bi])    tmem_reads_this_cycle  += PERF_CTR_BITS'(TCU_TC_M * TCU_TC_N);
-            if (ldst_rd_won[bi]) tmem_reads_this_cycle  += PERF_CTR_BITS'($countones(mgmt_data[bi].header.tmask));
-            if (wr_grant[bi])    tmem_writes_this_cycle += PERF_CTR_BITS'(TCU_TC_M * TCU_TC_N);
-            if (ldst_wr_won[bi]) tmem_writes_this_cycle += PERF_CTR_BITS'($countones(mgmt_data[bi].header.tmask));
+            if (rd_grant[bi]) begin
+                tmem_reads_this_cycle += PERF_CTR_BITS'(TCU_TC_M * TCU_TC_N);
+            end
+            if (ldst_rd_won[bi]) begin
+                tmem_reads_this_cycle += PERF_CTR_BITS'($countones(mgmt_data[bi].header.tmask));
+            end
+            if (wr_grant[bi]) begin
+                tmem_writes_this_cycle += PERF_CTR_BITS'(TCU_TC_M * TCU_TC_N);
+            end
+            if (ldst_wr_won[bi]) begin
+                tmem_writes_this_cycle += PERF_CTR_BITS'($countones(mgmt_data[bi].header.tmask));
+            end
         end
     end
 

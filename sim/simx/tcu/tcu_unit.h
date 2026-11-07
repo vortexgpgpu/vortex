@@ -146,7 +146,7 @@ public:
 	void tmem_ld(uint32_t tmem_addr, std::vector<reg_data_t>& rd_data,
 	             const ThreadMask& tmask);
 
-	// UMMA: A/B from SMEM via descriptors, C/D accumulator in TMEM addressed 
+	// UMMA: A/B from SMEM via descriptors, C/D accumulator in TMEM addressed
 	// via `handle`.
 	void umma(uint32_t wid,
 	          uint32_t fmt_s,

@@ -130,12 +130,12 @@ public:
     std::bitset<kBanks> ldst_wr;
   };
 
-  // Arbitration is split so the consumer can close the RTL's combinational
-  // loop: tmem_rd_valid depends on ~umma_rd_won, which depends on the grant
-  // published this cycle. The caller therefore decodes addresses, publishes,
-  // decides validity from the published grants, then arbitrates. The caller
-  // owns the compute-side sticky latches. Only the TMEM_ST latch lives on this
-  // side, and arb_arbitrate() applies it itself.
+  // Arbitration is split because a UMMA read stops requesting once it has
+  // won, so its validity depends on the grant published this cycle. The
+  // caller therefore decodes addresses, publishes, decides validity from the
+  // published grants, then arbitrates. The caller owns the compute-side
+  // sticky latches. Only the TMEM_ST latch lives on this side, and
+  // arb_arbitrate() applies it itself.
   void arb_publish(const CycleReqs& reqs);
   void arb_arbitrate(const CycleReqs& reqs);
 
@@ -179,7 +179,9 @@ private:
 // $clog2 semantics: rounds up
 constexpr uint32_t tmem_clog2(uint32_t x) {
   uint32_t r = 0;
-  while ((1u << r) < x) ++r;
+  while ((1u << r) < x) {
+    ++r;
+  }
   return r;
 }
 

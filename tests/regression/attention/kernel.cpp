@@ -5,9 +5,9 @@
 #include <algorithm>
 
 __kernel void kernel_qk(kernel_arg_t* __UNIFORM__ arg) {
-	auto Q = reinterpret_cast<TYPE*>(arg->Q_addr);
-	auto K = reinterpret_cast<TYPE*>(arg->K_addr);
-	auto S = reinterpret_cast<TYPE*>(arg->S_addr);
+    auto Q = reinterpret_cast<TYPE*>(arg->Q_addr);
+    auto K = reinterpret_cast<TYPE*>(arg->K_addr);
+    auto S = reinterpret_cast<TYPE*>(arg->S_addr);
     auto N = arg->N;
     auto d = arg->d;
 
@@ -18,13 +18,13 @@ __kernel void kernel_qk(kernel_arg_t* __UNIFORM__ arg) {
     for (uint32_t e = 0; e < d; ++e) {
         sum += Q[row * d + e] * K[e * N + col];
     }
-    
+
     S[row * N + col] = sum;
 }
 
 __kernel void kernel_softmax(kernel_arg_t* __UNIFORM__ arg) {
-	auto S = reinterpret_cast<TYPE*>(arg->S_addr);
-	auto P = reinterpret_cast<TYPE*>(arg->P_addr);
+    auto S = reinterpret_cast<TYPE*>(arg->S_addr);
+    auto P = reinterpret_cast<TYPE*>(arg->P_addr);
     auto N = arg->N;
 
     int row = blockIdx.x;
@@ -47,9 +47,9 @@ __kernel void kernel_softmax(kernel_arg_t* __UNIFORM__ arg) {
 }
 
 __kernel void kernel_pv(kernel_arg_t* __UNIFORM__ arg) {
-	auto P = reinterpret_cast<TYPE*>(arg->P_addr);
-	auto V = reinterpret_cast<TYPE*>(arg->V_addr);
-	auto O = reinterpret_cast<TYPE*>(arg->O_addr);
+    auto P = reinterpret_cast<TYPE*>(arg->P_addr);
+    auto V = reinterpret_cast<TYPE*>(arg->V_addr);
+    auto O = reinterpret_cast<TYPE*>(arg->O_addr);
     auto N = arg->N;
     auto d = arg->d;
 

@@ -586,9 +586,10 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 `TRACE(3, ("%t: %s abuf: rd_rsp rsp_ctr=%0d\n",
                     $time, INSTANCE_ID, rsp_ctr_r))
         `ifdef VX_CFG_TCU_TMEM_ENABLE
-            if (afill_take)
+            if (afill_take) begin
                 `TRACE(3, ("%t: %s abuf: tmem word=%0d col=0x%0h\n",
                     $time, INSTANCE_ID, req_ctr_r, afill_col_base))
+            end
         `endif
             if (fetch_done)
                 `TRACE(3, ("%t: %s abuf: stripe READY\n", $time, INSTANCE_ID))

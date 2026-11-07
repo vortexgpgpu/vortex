@@ -323,9 +323,13 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // drops so the next op's request is unsuppressed.
     reg umma_rd_won_r;
     always @(posedge clk) begin
-        if (reset)             umma_rd_won_r <= 1'b0;
-        else if (execute_fire) umma_rd_won_r <= 1'b0;
-        else if (tmem_rd_grant) umma_rd_won_r <= 1'b1;
+        if (reset) begin
+            umma_rd_won_r <= 1'b0;
+        end else if (execute_fire) begin
+            umma_rd_won_r <= 1'b0;
+        end else if (tmem_rd_grant) begin
+            umma_rd_won_r <= 1'b1;
+        end
     end
     wire umma_rd_won = tmem_rd_grant || umma_rd_won_r;
 
@@ -949,9 +953,13 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // second time.
     reg umma_wr_won_r;
     always @(posedge clk) begin
-        if (reset)                 umma_wr_won_r <= 1'b0;
-        else if (fedp_result_fire) umma_wr_won_r <= 1'b0;
-        else if (tmem_wr_grant)    umma_wr_won_r <= 1'b1;
+        if (reset) begin
+            umma_wr_won_r <= 1'b0;
+        end else if (fedp_result_fire) begin
+            umma_wr_won_r <= 1'b0;
+        end else if (tmem_wr_grant) begin
+            umma_wr_won_r <= 1'b1;
+        end
     end
 
     assign tmem_wr_valid     = umma_wr_owed && ~umma_wr_won_r;

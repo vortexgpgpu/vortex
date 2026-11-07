@@ -1348,8 +1348,9 @@ public:
       saved = vx_vote_ballot(1);
       size_t narrowed = saved & tmem_lane_mask;
       // vx_tmc(0) would idle the whole warp, so skip the body instead
-      if (narrowed == 0)
+      if (narrowed == 0) {
         return false;
+      }
       vx_tmc(narrowed);
       return true;
     }
@@ -1379,8 +1380,9 @@ public:
                   "— narrower Ot is not supported");
     uint32_t rank = vx_cta_rank();
     size_t saved_mask;
-    if (!tmem_lanes_enter(saved_mask))
+    if (!tmem_lanes_enter(saved_mask)) {
       return;
+    }
     for (uint32_t r = 0; r < tmem_rows_per_thread; ++r) {
       uint32_t lane_base = rank * xtileM + r * tmem_active_lanes;
       for (uint32_t col = 0; col < xtileN; ++col) {
@@ -1423,8 +1425,9 @@ public:
     uint32_t tid_in_warp = vx_thread_id() % NT;
     uint32_t rank = vx_cta_rank();
     size_t saved_mask;
-    if (!tmem_lanes_enter(saved_mask))
+    if (!tmem_lanes_enter(saved_mask)) {
       return;
+    }
     for (uint32_t r = 0; r < tmem_rows_per_thread; ++r) {
       uint32_t base = rank * xtileM + r * tmem_active_lanes;
       const input_t* src = A_global + size_t(tile_row + base + tid_in_warp) * K + k0;
@@ -1498,8 +1501,9 @@ public:
     uint32_t rank = vx_cta_rank();
     uint32_t tid_in_warp = tid % NT;
     size_t saved_mask;
-    if (!tmem_lanes_enter(saved_mask))
+    if (!tmem_lanes_enter(saved_mask)) {
       return;
+    }
 
     for (uint32_t r = 0; r < tmem_rows_per_thread; ++r) {
       uint32_t base = rank * xtileM + r * tmem_active_lanes;

@@ -121,11 +121,13 @@ module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                  && (is_setup_uop_b_w[bi]
                   || (is_first_uop_b_w[bi] && !needs_setup_b_w[bi]))) begin
                 `ifdef VX_CFG_TCU_TMEM_ENABLE
-                    if ((exec_data[bi].op_type == INST_TCU_UMMA) || exec_data[bi].op_args.tcu.a_from_smem)
+                    if ((exec_data[bi].op_type == INST_TCU_UMMA) || exec_data[bi].op_args.tcu.a_from_smem) begin
                         desc_a_r[bi] <= exec_data[bi].rs1_data[0];
+                    end
                 `else
-                    if (exec_data[bi].op_args.tcu.a_from_smem)
+                    if (exec_data[bi].op_args.tcu.a_from_smem) begin
                         desc_a_r[bi] <= exec_data[bi].rs1_data[0];
+                    end
                 `endif
                     desc_b_r[bi] <= exec_data[bi].rs2_data[0];
                 end

@@ -68,7 +68,7 @@ WGMMA doc §2 for the full list. As the C/D accumulate type (`Ot`), only
 `fp32`/`int32`/`tf32` are correct — the three 32-bit TCU formats,
 matching TMEM's fixed-32-bit-per-cell storage; narrower `Ot` is
 unsupported (a project-wide gap affecting WGMMA/WMMA too, not
-UMMA-specific). 
+UMMA-specific).
 **Block-scaled MX formats are not yet functionally supported for UMMA**,
 even though nothing in decode stops a kernel from encoding one:
 `fmt_s`/`fmt_d` accept any 5-bit format ID including the MX ones, but

@@ -19,7 +19,7 @@
     if (0 == _ret)                                           \
       break;                                                 \
     printf("Error: '%s' returned %d!\n", #_expr, (int)_ret); \
-    cleanup();                                                \
+    cleanup();                                               \
     exit(-1);                                                \
   } while (false)
 
@@ -485,12 +485,24 @@ static void parse_args(int argc, char **argv) {
 
 void cleanup() {
   if (device) {
-    if (A_buffer) vx_buffer_release(A_buffer);
-    if (B_buffer) vx_buffer_release(B_buffer);
-    if (C_buffer) vx_buffer_release(C_buffer);
-    if (kernel)  vx_kernel_release(kernel);
-    if (module_) vx_module_release(module_);
-    if (queue)   vx_queue_release(queue);
+    if (A_buffer) {
+      vx_buffer_release(A_buffer);
+    }
+    if (B_buffer) {
+      vx_buffer_release(B_buffer);
+    }
+    if (C_buffer) {
+      vx_buffer_release(C_buffer);
+    }
+    if (kernel) {
+      vx_kernel_release(kernel);
+    }
+    if (module_) {
+      vx_module_release(module_);
+    }
+    if (queue) {
+      vx_queue_release(queue);
+    }
     vx_device_dump_perf(device, stdout);
     vx_device_release(device);
   }
