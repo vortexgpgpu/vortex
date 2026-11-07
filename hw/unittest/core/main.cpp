@@ -56,6 +56,11 @@ static bool run_seed(int seed) {
   m->dcr_req_rw       = 0;
   m->dcr_req_addr     = 0;
   m->dcr_req_data     = 0;
+  // no kernel launch: the KMU port is idle (VX_core_top drives it from ports)
+  m->kmu_valid        = 0;
+  m->kmu_kind         = 0;
+  m->kmu_eop          = 0;
+  m->kmu_dest         = 0;
 
   m->reset = 1;
   for (int i = 0; i < RESET_DELAY; ++i) cycle(ctx.get(), m.get());
