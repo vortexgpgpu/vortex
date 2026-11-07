@@ -484,6 +484,7 @@ number into a location. They are never gated.
 | `build` | one build tree per XLEN, uploaded as an artifact |
 | `tests` | one job per cell: `pytest ci -m "<expression>"`, JUnit out |
 | `complete` | the single required check |
+| `change-impact` | advisory: classifies the diff R0..R3 with the base revision's `ci/change_impact.py` and policy ([code-review-policy.md](../review/code-review-policy.md)), writes the class to the job summary; read-only, never fails, and no job needs it |
 
 `setup` exists so that a cold cache prepares the toolchain once, not once per
 XLEN.

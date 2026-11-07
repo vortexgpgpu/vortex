@@ -1,0 +1,196 @@
+# Change-impact policy, read by ci/change_impact.py (`lint-policy` validates it).
+# Normative rules: docs/review/code-review-policy.md.
+#
+# The file uses a YAML subset the stdlib loader in ci/change_impact.py parses:
+# block mappings and sequences, `[a, b]` lists, quoted or plain scalars, `#`
+# comments. No anchors, multi-line strings or flow mappings.
+#
+# A change's class is the highest class any rule below gives it:
+#   path_rules  by path; may not exceed R2
+#   detectors   by an externally visible change found in the diff content (added,
+#               changed or removed); the only R3 source
+#   evidence    deterministic checks; they report and may raise to R2, never R3
+#
+# Test selection stays in ci/testcases/*.yaml (`touches:`) and ci/testcase.py
+# (driver escalation). This file never maps paths to tests, so the two cannot
+# drift apart.
+
+schema: 1
+policy_version: 2
+
+classes:
+  R0: "No effect on what is built, run or enforced: prose, comments, whitespace."
+  R1: "Local effect that the change's own tests cover: tests, design docs, local tooling, harnesses."
+  R2: "Shared hardware, the SimX timing model, the host and device software stack, the build, toolchain pins, CI enforcement and golden data. Needs a deep review and named evidence."
+  R3: "A detected externally visible change, whether an addition, a change or a removal: an RTL interface, a packet struct, an ISA encoding or decoder, a CSR, DCR or memory-map value, a VX_CFG_* knob, an installed or ABI header, an install rule, toolchain path or ABI flag, a toolchain pin, or a workflow trust boundary. Needs an independent review agent, deterministic evidence and maintainer approval."
+
+# Unmatched paths, and a file whose diff only touches comments or whitespace.
+default_class: R1
+cosmetic_class: R0
+
+# No usable base (zero SHA, force push, shallow boundary). A push fails closed;
+# a pull request always has a merge base, so there it is a tool error.
+indeterminate:
+  push: R3
+  pull_request: R2
+  replay: R2
+
+# A file takes the highest class of every rule whose paths match it.
+path_rules:
+  - id: prose
+    class: R0
+    paths: ["docs/**", "**/*.md", "LICENSE*", "perf/results/**", "**/.gitignore", "**/*.svg"]
+
+  - id: normative-docs
+    class: R1
+    paths: ["docs/designs/**", "AGENTS.md", "CLAUDE.md", ".agents/**", "docs/review/**", "docs/coding_guidelines_*.md", "docs/bug_fixes.md"]
+
+  - id: tests
+    class: R1
+    paths: ["tests/**", "hw/unittest/**", "ci/test_*.py", "ci/testcases/**", "sim/**/tests/**"]
+
+  - id: rtl
+    class: R2
+    paths: ["hw/rtl/**", "hw/dpi/**", "third_party/cvfpu", "third_party/hardfloat", "third_party/cvfpu/**", "third_party/hardfloat/**"]
+
+  - id: simx-model
+    class: R2
+    paths: ["sim/simx/**", "sim/common/**"]
+
+  - id: sw-stack
+    class: R2
+    paths: ["sw/common/**", "sw/runtime/**", "sw/kernel/**"]
+
+  - id: build-config
+    class: R2
+    paths: ["configure", "Makefile", "**/Makefile", "**/*.mk", "**/*.mk.in", "VX_config.toml", "VX_types.toml", "VERSION", "ci/gen_config.py", "hw/scripts/**", "third_party/*"]
+
+  - id: ci-enforcement
+    class: R2
+    paths: [".github/**", "ci/testcase.py", "ci/conftest.py", "ci/test_runner.py", "ci/*_gate.py", "ci/synth_*.py", "ci/beacon.py", "ci/perf_baseline.py", "ci/toolchain_*", "ci/*_install.sh.in", "ci/check_*.sh", "ci/regression.sh.in", "ci/blackbox.sh", "ci/change_impact.py", "docs/review/change-impact.yaml"]
+
+  - id: golden-data
+    class: R2
+    paths: ["ci/baselines/**", "tests/**/*_ref*.png", "tests/**/*_ref*.ppm", "hw/scripts/beacon_calibration_*.json"]
+
+# Contract detectors. Each names an implementation in ci/change_impact.py
+# (`kind`) and the files it inspects. A finding raises the change to `class`.
+detectors:
+  - id: rtl-interface
+    kind: sv_interface
+    class: R3
+    paths: ["hw/rtl/interfaces/*.sv"]
+    why: "Every master and slave of the interface changes with it; a signal or modport added, changed or removed is a port-list change across units."
+
+  - id: gpu-pkg-types
+    kind: sv_typedefs
+    class: R3
+    paths: ["hw/rtl/VX_gpu_pkg.sv"]
+    why: "The packet structs in VX_gpu_pkg are the layout every pipeline stage, the trace macros and the SimX mirror agree on."
+
+  - id: isa-localparams
+    kind: sv_names
+    class: R3
+    paths: ["hw/rtl/VX_gpu_pkg.sv", "hw/rtl/VX_define.vh"]
+    names: ["INST_*"]
+    why: "The INST_* opcode, funct and op-type encodings are the ISA the decoder, SimX and the LLVM backend must agree on."
+
+  - id: isa-decoder
+    kind: decoder_ops
+    class: R3
+    paths: ["hw/rtl/core/VX_decode.sv", "sim/simx/decode.cpp"]
+    patterns: ['\b(INST_[A-Z0-9_]+)\b(?<!_BITS)', '\b(?:Opcode|[A-Z][A-Za-z0-9]*Type)::[A-Z][A-Z0-9_]*\b', 'return\s*\{\s*"([A-Za-z0-9_.]+)"']
+    why: "A decoder that accepts a new instruction, or stops accepting one, changes the ISA the toolchain targets."
+
+  - id: isa-encoding
+    kind: toml_keys
+    class: R3
+    paths: ["VX_types.toml"]
+    why: "Opcodes, CSR, DCR and memory-map values, added, changed or removed, are shared by the RTL, SimX, the runtime, the kernel library and the LLVM toolchain."
+
+  - id: config-knobs
+    kind: config_knobs
+    class: R3
+    paths: ["VX_config.toml", "configure", "ci/gen_config.py"]
+    engine_paths: ["ci/gen_config.py"]
+    why: "Users' CONFIGS flags, the hardware profiles and the CI catalog name VX_CFG_* knobs; adding, removing or renaming one, or moving its default or derivation, changes what every build means."
+
+  - id: sw-common-abi
+    kind: c_surface
+    class: R3
+    paths: ["sw/common/*abi*.h", "sw/common/rtu_cfg.h", "sw/common/dxa_meta.h", "sw/common/gfx_dcr.h", "sw/common/vm_types.h", "sw/common/gfx_setup.h", "sw/common/tensor_cfg.h", "sw/common/vx_tex_lod.h"]
+    why: "These structs and constants are written by the host and read by the device or the hardware model, and the ones Makefile.in ships (SW_COMMON_PUBLIC) are also built into Mesa and PoCL prebuilts."
+
+  - id: installed-api
+    kind: c_surface
+    class: R3
+    # The sw/common entries are Makefile.in's SW_COMMON_PUBLIC: they install to kernel/include.
+    paths: ["sw/runtime/include/*.h", "sw/kernel/include/*.h", "sw/common/tensor_cfg.h", "sw/common/vx_gfx_abi.h", "sw/common/gfx_frontend_abi.h", "sw/common/gfx_dcr.h", "sw/common/rtu_cfg.h", "sw/common/gfx_sw_abi.h", "sw/common/vx_tex_lod.h"]
+    body_paths: ["sw/kernel/include/vx_intrinsics.h"]
+    why: "Installed headers are the SDK surface PoCL, Mesa, chipStar and applications build against; the intrinsics also encode the ISA the LLVM toolchain must match."
+
+  - id: build-surface
+    kind: make_surface
+    class: R3
+    paths: ["Makefile.in", "config.mk.in", "**/Makefile", "**/Makefile.in", "**/*.mk", "**/*.mk.in"]
+    exclude: ["tests/**", "hw/unittest/**"]
+    groups:
+      # DESTDIR and PREFIX are build-tree outputs in Vortex Makefiles; INSTALLDIR is the SDK.
+      install: '(^|\s)(un)?install\s*:|\$\(INSTALL|\bINSTALLDIR\b|_DST\b|\bSW_COMMON_PUBLIC\b'
+      toolchain: '^\s*export\s+\w*(PATH|DIR|HOME|ROOT|PREFIX|SYSROOT|TOOLCHAIN)\b|\b(LLVM_VORTEX|LLVM_PATH|LLVM_PREFIX|RISCV_TOOLCHAIN_PATH|RISCV_PREFIX|RISCV_SYSROOT|SYSROOT|TOOLDIR|POCL_PATH|MESA_PATH|LIBC_VORTEX|LIBCRT_VORTEX)\s*[?:+]?='
+      abi: '-march=|-mabi=|-mattr|\+xvortex|-target-feature|--target=|-mcmodel|-mcpu=|--sysroot'
+    why: "What installs, where the toolchain is found and the -march/-mabi/feature flags decide the SDK layout and the ABI and ISA every kernel is built for."
+
+  - id: toolchain-pins
+    kind: version_pins
+    class: R3
+    paths: ["VERSION"]
+    keys: ["TOOLCHAIN_REV", "GEM5_REV", "FIRESIM_REV", "VORTEX_VERSION"]
+    why: "The pins select the prebuilt compiler, libraries and simulators every build and CI run uses."
+
+  - id: workflow-trust
+    kind: workflow_trust
+    class: R3
+    paths: [".github/workflows/*.yml", ".github/workflows/*.yaml", ".github/actions/**"]
+    why: "A pull_request_target trigger, a self-hosted runner reachable from a pull request, or event text interpolated into a script lets a fork run code with the repository's credentials or machines."
+
+# Evidence checks. They never raise above R2.
+evidence:
+  - id: simx-rtl-lockstep
+    kind: lockstep
+    min_class: R2
+    rtl: ["hw/rtl/**"]
+    rtl_exclude: ["hw/rtl/afu/**", "hw/rtl/VX_scope.vh", "hw/rtl/VX_trace_pkg.sv", "hw/rtl/**/*_trace*.sv"]
+    simx: ["sim/simx/**"]
+    simx_exclude: ["sim/simx/gem5/**", "sim/simx/sst/**", "sim/simx/main.cpp", "sim/simx/debug.h", "sim/simx/instr_trace.h", "sim/simx/Makefile"]
+    rtl_ignore_macros: ["TRACE", "RUNTIME_ASSERT", "STATIC_ASSERT", "ASSERT", "UNUSED_VAR", "UNUSED_PARAM", "UNUSED_SPARAM", "UNUSED_PIN", "TRACE_ARRAY1D", "TRACE_ARRAY2D"]
+    simx_ignore_macros: ["DT", "DTN", "DTH", "DP", "DPN", "DPH", "assert", "__unused"]
+    why: "SimX is the RTL's timing model. A cycle-moving change on one side without the other is caught only by model_parity, and only for the cases it runs."
+
+  - id: golden-provenance
+    kind: golden
+    min_class: R2
+    paths: ["ci/baselines/**", "tests/**/*_ref*.png", "tests/**/*_ref*.ppm"]
+    regen_markers: ["--update-baselines", "--update-baseline", "update-baseline", "regenerate", "re-record", "rerecord", "refresh"]
+    why: "Golden data is regenerated by the gate's update command and reviewed as a diff, never hand-edited."
+
+  - id: test-silencing
+    kind: testcase_silencing
+    min_class: R2
+    paths: ["ci/testcases/*.yaml"]
+    tolerance_keys: ["tolerance", "threshold", "thresholds", "margin", "fmax_margin"]
+    why: "A known_issue, a wider tolerance, smaller arguments or a removed case can turn a real failure green."
+
+  - id: toolchain-pin
+    kind: toolchain_pin
+    min_class: R2
+    paths: ["VERSION"]
+    keys: ["TOOLCHAIN_REV", "GEM5_REV", "FIRESIM_REV", "VORTEX_VERSION"]
+    prebuilt_repo: "https://github.com/vortexgpgpu/vortex-toolchain-prebuilt"
+    why: "CI downloads the prebuilts at the pinned tag; the tag must exist with matching binaries before the Vortex push lands."
+
+  - id: configure-copied
+    kind: configure_copied
+    min_class: R1
+    paths: ["**/Makefile", "**/*.mk", "**/*.in", "configure"]
+    why: "configure copies Makefiles, *.mk and *.in into the build tree; an edit reaches a build only after re-running configure."
