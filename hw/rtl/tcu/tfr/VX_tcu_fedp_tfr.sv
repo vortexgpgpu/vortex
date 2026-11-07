@@ -135,7 +135,7 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
         .enable(enable),
         .valid_in(vld_pipe[S0_IDX]),
         .req_id(req_pipe[S0_IDX]),
-        .vld_mask(vld_mask | TCU_MAX_INPUTS'(LANE_MASK == 0)),
+        .vld_mask(vld_mask),
         .fmt_s(fmt_s),
         .a_row(a_row),
         .b_col(b_col),

@@ -346,22 +346,23 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
         assign sig_zero[i]   = is_zero_out;
         assign result_exp[i] = (v0 || v1) ? final_exp : '0;
 
-        // Exception merging
-        wire pos_inf_0 = inf_sel[0] && ~sign_sel[0] && lane_valid[0];
-        wire neg_inf_0 = inf_sel[0] &&  sign_sel[0] && lane_valid[0];
-        wire pos_inf_1 = inf_sel[1] && ~sign_sel[1] && lane_valid[1];
-        wire neg_inf_1 = inf_sel[1] &&  sign_sel[1] && lane_valid[1];
+        // Exception merging. Not gated by lane_valid: a lane masked for a zero
+        // operand still has to turn Inf x 0 and NaN x 0 into NaN.
+        wire pos_inf_0 = inf_sel[0] && ~sign_sel[0];
+        wire neg_inf_0 = inf_sel[0] &&  sign_sel[0];
+        wire pos_inf_1 = inf_sel[1] && ~sign_sel[1];
+        wire neg_inf_1 = inf_sel[1] &&  sign_sel[1];
 
         wire add_nan = (pos_inf_0 && neg_inf_1) || (neg_inf_0 && pos_inf_1);
 
     `ifdef VX_CFG_TCU_MX_ENABLE
         // an E8M0 scale of 0xFF is NaN, and so is every element it scales
-        wire sf_nan = fmt_f[3] && ((sf_a == 8'hFF) || (sf_b == 8'hFF)) && (|lane_valid);
+        wire sf_nan = fmt_f[3] && ((sf_a == 8'hFF) || (sf_b == 8'hFF));
     `else
         wire sf_nan = 1'b0;
     `endif
-        wire any_nan = (|(nan_sel & lane_valid)) || add_nan || sf_nan;
-        wire any_inf = (|(inf_sel & lane_valid)) && ~any_nan;
+        wire any_nan = (|nan_sel) || add_nan || sf_nan;
+        wire any_inf = (|inf_sel) && ~any_nan;
 
         wire final_sign_inf = inf_sel[0] ? sign_sel[0] : sign_sel[1];
 
