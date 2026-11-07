@@ -186,7 +186,8 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
         `UNUSED_VAR (diff_1_minus_0[6])
 
         wire term0_ge_term1 = ~diff_0_minus_1[6];
-        wire term0_is_max = (v0 & ~v1) || (v1 & term0_ge_term1);
+        // A zero or masked sub-product never sets the lane exponent.
+        wire term0_is_max = (v0 & ~v1) || (v0 & v1 & term0_ge_term1);
         wire diff_sign = term0_is_max;
 
         wire [5:0] diff_abs = term0_is_max ? diff_0_minus_1[5:0] : diff_1_minus_0[5:0];
