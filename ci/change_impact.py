@@ -28,7 +28,23 @@ import subprocess
 import sys
 import zlib
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+def _source_root():
+    """The source tree. configure copies ci/ into a build tree, whose config.mk
+    records the sources' location (VORTEX_HOME)."""
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    try:
+        with open(os.path.join(here, "config.mk")) as fh:
+            for line in fh:
+                m = re.match(r"\s*VORTEX_HOME\s*[?:]?=\s*(\S+)", line)
+                if m:
+                    return m.group(1)
+    except OSError:
+        pass
+    return here
+
+
+ROOT = _source_root()
 DEFAULT_POLICY = os.path.join(ROOT, "docs", "review", "change-impact.yaml")
 CLASSES = ("R0", "R1", "R2", "R3")
 PATH_RULE_CEILING = "R2"
