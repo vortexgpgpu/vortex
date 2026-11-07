@@ -45,6 +45,14 @@ VX_CFG_EXT_RASTER_ENABLE = false
 VX_CFG_EXT_OM_ENABLE = false
 VX_CFG_EXT_RTU_ENABLE = false
 VX_CFG_EXT_MUFU_ENABLE = false
+# Wide loads and stores (vx_flw.d/.q, vx_fsw.d/.q): 2 or 4 consecutive words
+# to or from an aligned FP register group, one flw/fsw uop per word. Requires
+# F with FLEN 32 (no D).
+VX_CFG_EXT_LDST_WIDE_ENABLE = false
+# Matrix loads and stores (vx_ldm, vx_stm): a warp's matrix fragment, one
+# flw/fsw uop per register, in the fragment register layout the TCU reads.
+# Requires F; does not require the TCU.
+VX_CFG_EXT_LDST_MATRIX_ENABLE = false
 VX_CFG_VLEN = "expr: $VX_CFG_XLEN * 4"
 
 [pipeline]
@@ -57,8 +65,9 @@ VX_CFG_IBUF_SIZE = 4
 VX_CFG_DISPATCH_QUEUE_SIZE = 4
 VX_CFG_ISSUE_WIDTH = "expr: up($VX_CFG_NUM_WARPS / 16)"
 # Fetch slices, each scheduling and fetching its own warps on its own icache
-# port: a power of two that divides ISSUE_WIDTH.
-VX_CFG_FETCH_WIDTH = 1
+# port: a power of two that divides ISSUE_WIDTH. One per issue slice by
+# default (the largest power of two dividing ISSUE_WIDTH).
+VX_CFG_FETCH_WIDTH = "expr: $VX_CFG_ISSUE_WIDTH & -$VX_CFG_ISSUE_WIDTH"
 VX_CFG_SIMD_WIDTH = "expr: $VX_CFG_NUM_THREADS"
 VX_CFG_NUM_OPCS = "expr: up($VX_CFG_NUM_WARPS / (4 * $VX_CFG_ISSUE_WIDTH))"
 VX_CFG_NUM_GPR_BANKS = 4
@@ -96,6 +105,15 @@ VX_CFG_PLATFORM_MEMORY_TYPE = "HBM2"
 VX_CFG_PLATFORM_MEMORY_DATA_RATE = "expr: 2 * $VX_CFG_PLATFORM_CLOCK_RATE"
 VX_CFG_PLATFORM_MEMORY_LATENCY = 0
 VX_CFG_PLATFORM_MEMORY_QUEUE_SIZE = 0
+# Little's law: the bytes the chip keeps in flight to sustain its peak memory
+# bandwidth (MB/s over MHz is bytes per clock) across the memory latency. The
+# miss-tracking depths derive from it and stay at their floors when the
+# latency is zero, as in the default.
+mem_bytes_in_flight = "expr: ($VX_CFG_PLATFORM_MEMORY_PEAK_BW // $VX_CFG_PLATFORM_CLOCK_RATE) * $VX_CFG_PLATFORM_MEMORY_LATENCY"
+# Above the L2 a miss also crosses the link to it, both ways.
+l1_mem_bytes_in_flight = "expr: ($VX_CFG_PLATFORM_MEMORY_PEAK_BW // $VX_CFG_PLATFORM_CLOCK_RATE) * ($VX_CFG_PLATFORM_MEMORY_LATENCY + 2 * $VX_CFG_L2_LINK_LATENCY)"
+# Above the dcache a load also crosses the link to it, both ways.
+lsu_mem_bytes_in_flight = "expr: ($VX_CFG_PLATFORM_MEMORY_PEAK_BW // $VX_CFG_PLATFORM_CLOCK_RATE) * ($VX_CFG_PLATFORM_MEMORY_LATENCY + 2 * $VX_CFG_L2_LINK_LATENCY + 2 * $VX_CFG_L1_LINK_LATENCY)"
 
 [alu]
 VX_CFG_NUM_ALU_LANES = "expr: $VX_CFG_SIMD_WIDTH"
@@ -122,9 +140,13 @@ VX_CFG_LSU_STACK_INTERLEAVE_ENABLE = true
 VX_CFG_LSU_LINE_SIZE = "expr: min($VX_CFG_NUM_LSU_LANES * ($VX_CFG_XLEN / 8), $VX_CFG_L1_LINE_SIZE)"
 VX_CFG_LSU_QUEUE_IN_SIZE = "expr: max(4, 2 * ($VX_CFG_SIMD_WIDTH // $VX_CFG_NUM_LSU_LANES))"
 # Outstanding-load pool (MLP depth): decoupled from the input staging queue and
-# provisioned for miss-latency hiding (~2 in-flight loads per warp), clamped so
-# the slot id stays cheap in the dcache tag.
-VX_CFG_LSU_PENDING_SIZE = "expr: min(32, max(8, 2 * $VX_CFG_NUM_WARPS * ($VX_CFG_SIMD_WIDTH // $VX_CFG_NUM_LSU_LANES)))"
+# provisioned for miss-latency hiding (~2 in-flight loads per warp), bounded by
+# LSU_PENDING_LIMIT.
+VX_CFG_LSU_PENDING_SIZE = "expr: min($VX_CFG_LSU_PENDING_LIMIT, max(8, 2 * $VX_CFG_NUM_WARPS * ($VX_CFG_SIMD_WIDTH // $VX_CFG_NUM_LSU_LANES)))"
+# The pool's bound: an LSU block's share of the memory bytes in flight, in
+# full packets, and at least 32, which keeps the slot id cheap in the dcache tag.
+VX_CFG_LSU_PENDING_LIMIT = "expr: clamp(pow(2, clog2(($lsu_mem_bytes_in_flight + $lsu_inflight_bytes - 1) // $lsu_inflight_bytes)), 32, 256)"
+lsu_inflight_bytes = "expr: $VX_CFG_NUM_CLUSTERS * $VX_CFG_NUM_CORES * $VX_CFG_NUM_LSU_BLOCKS * $VX_CFG_LSU_LINE_SIZE"
 # The mem-side queue depth is not a knob: it sets the dcache-facing tag-id
 # width and must cover the outstanding pool, so each implementation derives
 # it internally from the pool size.
@@ -177,7 +199,12 @@ VX_CFG_FMA_F32_LATENCY  = "expr: $VX_CFG_FMA_LATENCY if $VX_CFG_FPU_TYPE_FPNEW e
 VX_CFG_FDIV_F32_LATENCY = "expr: 16 if $VX_CFG_FPU_TYPE_FPNEW else ((15 if $QUARTUS else (28 if $VIVADO else 17)) if $VX_CFG_FPU_TYPE_DSP else 17)"
 VX_CFG_FSQRT_F32_LATENCY= "expr: 16 if $VX_CFG_FPU_TYPE_FPNEW else ((10 if $QUARTUS else (28 if $VIVADO else 17)) if $VX_CFG_FPU_TYPE_DSP else 17)"
 
+# Lanes per processing element of each FPU class: a class serves its lanes on
+# NUM_FPU_LANES / ratio PEs (at least one), so an instruction holds the FPU's
+# input for that many cycles. FMA64 sets the F64 FMA rate on its own; when it
+# differs from FMA, the F64 FMAs get a separate pool of F64-only PEs.
 VX_CFG_FMA_PE_RATIO  = 1
+VX_CFG_FMA64_PE_RATIO= 1
 VX_CFG_FDIV_PE_RATIO = 1
 VX_CFG_FSQRT_PE_RATIO= 1
 VX_CFG_FCVT_PE_RATIO = 1
@@ -204,6 +231,15 @@ VX_CFG_TLB_SIZE = 32
 VX_CFG_DTLB_SIZE        = 16
 VX_CFG_ITLB_SIZE        = 8
 VX_CFG_L1_TLB_MSHR_SIZE = 4
+
+# Socket unit MMU: one TLB per socket for the socket-resident units' memory
+# ports (TEX tcache misses, RTU rtcache misses, DXA gmem reads), kept apart
+# from the dTLB so texture and BVH traffic cannot evict the cores' translations.
+VX_CFG_UTLB_SIZE        = 8
+
+# Cluster unit MMU: one TLB per cluster for the rcache and ocache memory ports
+# (raster and OM), a client of the cluster TLB like a socket.
+VX_CFG_CTLB_SIZE        = 8
 
 # Shared cluster TLB and page-table walker complex.
 VX_CFG_L2_TLB_SIZE         = 512
@@ -239,7 +275,7 @@ single_cluster = "expr: $VX_CFG_NUM_CLUSTERS == 1"
 # is then the point of coherence for host transfers: they need no cache flush.
 # Only a last-level cache that alone serves every core can take it (an L2 with
 # one cluster, or an L3); VX_CFG_CP_ON_LLC is set where it took effect.
-VX_CFG_CP_LLC_CLIENT = 0
+VX_CFG_CP_LLC_CLIENT = 1
 VX_CFG_CP_ON_LLC = "expr: int($VX_CFG_CP_LLC_CLIENT != 0 and (($l2_is_llc and $single_cluster) or $l3_is_llc))"
 
 [l1cache]
@@ -254,6 +290,9 @@ VX_CFG_ICACHE_CRSQ_SIZE = 0
 VX_CFG_ICACHE_MEM_PORTS = 1
 # banks behind the fetch-slice request ports
 VX_CFG_ICACHE_NUM_BANKS = "expr: pow(2, clog2($VX_CFG_FETCH_WIDTH))"
+# Merge same-line fetches from the core's slices in the same cycle into one
+# bank access; the response goes to every merged slice, each with its word.
+VX_CFG_ICACHE_READ_MERGE = 1
 # bank pipeline depth: with more banks the data array's enables and address
 # spread too far to follow the tag compare in one cycle, so a third stage
 # defers the array
@@ -266,18 +305,19 @@ VX_CFG_DCACHE_NUM_WAYS = 4
 # stays moderate: NT 1/2/4/8/16/32/64 -> word 4/8/8/16/16/32/32, banks 1/1/2/2/4/4/8.
 VX_CFG_DCACHE_WORD_SIZE = "expr: min($VX_CFG_L1_LINE_SIZE, min($VX_CFG_MEM_BLOCK_SIZE, ($VX_CFG_XLEN / 8) * pow(2, (clog2($VX_CFG_NUM_LSU_LANES) + 1) / 2)))"
 VX_CFG_DCACHE_WRITEBACK = "expr: int($dcache_is_llc and $single_core)"
-# LAZY_FETCH (write-back LLC only): a store miss allocates its line without a
-# fill and a later read fetches and merges under the dirty bytes. It needs the
-# per-byte dirty masks, so it turns DIRTYBYTES on; DIRTYBYTES alone keeps
-# fetch-on-write. The same pair exists for L2 and L3.
+# LAZY_FETCH: a store miss allocates its line without a fill and a later read
+# fetches and merges under the dirty bytes (write-validate, as GPU L2s do). It
+# is on wherever the cache is a write-back LLC, the only place it is legal. It
+# needs the per-byte dirty masks, so it turns DIRTYBYTES on; DIRTYBYTES alone
+# keeps fetch-on-write. The same pair exists for L2 and L3.
 VX_CFG_DCACHE_DIRTYBYTES = "expr: $VX_CFG_DCACHE_LAZY_FETCH"
-VX_CFG_DCACHE_LAZY_FETCH = 0
+VX_CFG_DCACHE_LAZY_FETCH = "expr: int($VX_CFG_DCACHE_WRITEBACK and $dcache_is_llc)"
 VX_CFG_DCACHE_REPL_POLICY = "expr: $__cache_repl_fifo"
-VX_CFG_DCACHE_MSHR_SIZE = 16
-# MSHR line entries: distinct {line, sector} misses a bank tracks, each naming
-# the chain of requests merged on it; MSHR_SIZE then sizes the request pool.
-# 0 keeps the address in every request entry (lines = requests).
-VX_CFG_DCACHE_MSHR_LINES = 0
+# Misses per bank: the bank's share of the memory bytes in flight, in sectors,
+# rounded up to a power of two, here and at the L2 and L3. The floor is the
+# depth a platform without a memory latency, or a disabled level, gets.
+VX_CFG_DCACHE_MSHR_SIZE = "expr: clamp(pow(2, clog2(($l1_mem_bytes_in_flight + $dcache_inflight_bytes - 1) // $dcache_inflight_bytes)), 16, 64) if $VX_CFG_DCACHE_ENABLE else 16"
+dcache_inflight_bytes = "expr: $VX_CFG_NUM_CLUSTERS * up($VX_CFG_NUM_CORES // $VX_CFG_SOCKET_SIZE) * up($VX_CFG_NUM_DCACHES) * $VX_CFG_DCACHE_NUM_BANKS * $VX_CFG_DCACHE_SECTOR_SIZE"
 # dcache is unsectored: line = sector = mem transaction granule = L1_LINE (which
 # defaults to MEM_BLOCK but can be configured smaller). Banking comes from the
 # reduced WORD above (>= sector is clamped), not the line. Deriving from L1_LINE
@@ -287,6 +327,14 @@ VX_CFG_DCACHE_LINE_SIZE = "expr: $VX_CFG_L1_LINE_SIZE"
 VX_CFG_DCACHE_SECTOR_SIZE = "expr: $VX_CFG_L1_LINE_SIZE"
 # bank pipeline depth: as the I-cache's
 VX_CFG_DCACHE_LATENCY = "expr: 2 + int($VX_CFG_DCACHE_NUM_BANKS > 8) + max(0, clog2($VX_CFG_DCACHE_SIZE) - clog2(16384))"
+# The link between a core's memory port and the dcache, in cycles each way: a
+# request reaches the dcache, and its response the core, this many cycles
+# later, at full throughput, so every global access (an L1 hit, and every
+# miss) grows by twice it, and shared memory, inside the core, does not. It
+# stands for a GPU whose global loads go through its L1/texture pipeline,
+# which DCACHE_LATENCY (the bank pipeline) is not. The dcache MSHRs do not
+# wait on it; the LSU's pending pool does.
+VX_CFG_L1_LINK_LATENCY = 0
 VX_CFG_DCACHE_MRSQ_SIZE = 4
 VX_CFG_DCACHE_MREQ_SIZE = 0
 VX_CFG_DCACHE_CRSQ_SIZE = 0
@@ -311,11 +359,16 @@ VX_CFG_L2_SIZE = 1048576
 VX_CFG_L2_NUM_WAYS = 8
 VX_CFG_L2_WRITEBACK = "expr: int($l2_is_llc and $single_cluster)"
 VX_CFG_L2_DIRTYBYTES = "expr: $VX_CFG_L2_LAZY_FETCH"
-VX_CFG_L2_LAZY_FETCH = 0
+VX_CFG_L2_LAZY_FETCH = "expr: int($VX_CFG_L2_WRITEBACK and $l2_is_llc)"
 VX_CFG_L2_REPL_POLICY = "expr: $__cache_repl_fifo"
-VX_CFG_L2_MSHR_SIZE = 16
-VX_CFG_L2_MSHR_LINES = 0
+VX_CFG_L2_MSHR_SIZE = "expr: clamp(pow(2, clog2(($mem_bytes_in_flight + $l2_inflight_bytes - 1) // $l2_inflight_bytes)), 16, 256) if $VX_CFG_L2_ENABLE else 16"
+l2_inflight_bytes = "expr: $VX_CFG_NUM_CLUSTERS * $VX_CFG_L2_NUM_BANKS * $VX_CFG_L2_SECTOR_SIZE"
 VX_CFG_L2_LATENCY = "expr: 4 + max(0, clog2($VX_CFG_L2_SIZE) - clog2(1048576))"
+# The link between the sockets and the L2, in cycles each way: a request
+# reaches the L2, and its response the socket, this many cycles later, at full
+# throughput, so an L2 hit's round trip grows by twice it. It stands for a
+# large GPU's SM-to-L2 network, which L2_LATENCY (the bank pipeline) is not.
+VX_CFG_L2_LINK_LATENCY = 0
 VX_CFG_L2_MRSQ_SIZE = 4
 VX_CFG_L2_MREQ_SIZE = 0
 VX_CFG_L2_CRSQ_SIZE = 0
@@ -331,10 +384,10 @@ VX_CFG_L3_SIZE = 2097152
 VX_CFG_L3_NUM_WAYS = 8
 VX_CFG_L3_WRITEBACK = "expr: int($l3_is_llc)"
 VX_CFG_L3_DIRTYBYTES = "expr: $VX_CFG_L3_LAZY_FETCH"
-VX_CFG_L3_LAZY_FETCH = 0
+VX_CFG_L3_LAZY_FETCH = "expr: int($VX_CFG_L3_WRITEBACK and $l3_is_llc)"
 VX_CFG_L3_REPL_POLICY = "expr: $__cache_repl_fifo"
-VX_CFG_L3_MSHR_SIZE = 16
-VX_CFG_L3_MSHR_LINES = 0
+VX_CFG_L3_MSHR_SIZE = "expr: clamp(pow(2, clog2(($mem_bytes_in_flight + $l3_inflight_bytes - 1) // $l3_inflight_bytes)), 16, 256) if $VX_CFG_L3_ENABLE else 16"
+l3_inflight_bytes = "expr: $VX_CFG_L3_NUM_BANKS * $VX_CFG_L3_SECTOR_SIZE"
 VX_CFG_L3_LATENCY = "expr: 4 + max(0, clog2($VX_CFG_L3_SIZE) - clog2(2097152))"
 VX_CFG_L3_MRSQ_SIZE = 4
 VX_CFG_L3_MREQ_SIZE = 0
@@ -353,6 +406,9 @@ lmem_bytes_per_bank = 2048
 lmem_min_bytes = 16384
 VX_CFG_LMEM_NUM_BANKS = "expr: $VX_CFG_NUM_LSU_LANES"
 VX_CFG_LMEM_LOG_SIZE = "expr: clog2(max($lmem_min_bytes, $VX_CFG_LMEM_NUM_BANKS * $lmem_bytes_per_bank))"
+# Capacity in bytes; LMEM_LOG_SIZE is its power-of-two address window, so a
+# capacity like 96 KB or 228 KB sets both (LMEM_LOG_SIZE = clog2(LMEM_SIZE)).
+VX_CFG_LMEM_SIZE = "expr: pow(2, $VX_CFG_LMEM_LOG_SIZE)"
 
 [tcu]
 # string enum: 'DPI'|'DSP'|'BHF'|'TFR'|'FPNEW'; TFR is the universal default. On
@@ -377,6 +433,10 @@ tcu_latency_dpi   = 4
 # each take a second cycle there (8).
 tcu_latency_tfr   = "expr: (5 + 3 * int($tcu_tc_k >= 4)) if ($VIVADO or $QUARTUS) else 4"
 VX_CFG_TCU_LATENCY = "expr: $tcu_latency_dsp if $VX_CFG_TCU_TYPE_DSP else ($tcu_latency_bhf if $VX_CFG_TCU_TYPE_BHF else ($tcu_latency_fpnew if $VX_CFG_TCU_TYPE_FPNEW else ($tcu_latency_dpi if $VX_CFG_TCU_TYPE_DPI else $tcu_latency_tfr)))"
+# Tensor throughput divider: the FEDP array holds TC_M x TC_N / ratio dot
+# products and a micro-op occupies it for `ratio` cycles. A power of two that
+# divides TC_M x TC_N (= NUM_THREADS); VX_tcu_core and SimX reject any other.
+VX_CFG_TCU_PE_RATIO = 1
 VX_CFG_TCU_TF32_ENABLE = false
 VX_CFG_TCU_FP16_ENABLE = true
 VX_CFG_TCU_FP8_ENABLE = false
@@ -525,7 +585,7 @@ VX_CFG_NUM_OCACHES      = "expr: max(1, up($VX_CFG_NUM_OM_CORES / 4))"
 VX_CFG_MISA_STD = "expr: ($VX_CFG_EXT_A_ENABLED << 0) | (0 << 1) | ($VX_CFG_EXT_C_ENABLED << 2) | ($VX_CFG_EXT_D_ENABLED << 3) | (0 << 4) | ($VX_CFG_EXT_F_ENABLED << 5) | (0 << 6) | (0 << 7) | (1 << 8) | (0 << 9) | (0 << 10) | (0 << 11) | ($VX_CFG_EXT_M_ENABLED << 12) | (0 << 13) | (0 << 14) | (0 << 15) | (0 << 16) | (0 << 17) | (0 << 18) | (0 << 19) | (1 << 20) | (0 << 21) | (0 << 22) | (1 << 23) | (0 << 24) | (0 << 25)"
 
 # Custom extensions signature
-VX_CFG_MISA_EXT = "expr: ($VX_CFG_ICACHE_ENABLED << 0) | ($VX_CFG_DCACHE_ENABLED << 1) | ($VX_CFG_L2_ENABLED << 2) | ($VX_CFG_L3_ENABLED << 3) | ($VX_CFG_LMEM_ENABLED << 4) | ($VX_CFG_EXT_ZICOND_ENABLED << 5) | ($VX_CFG_EXT_TCU_ENABLED << 9) | ($VX_CFG_EXT_DXA_ENABLED << 10) | ($VX_CFG_EXT_TEX_ENABLED << 6) | ($VX_CFG_EXT_RASTER_ENABLED << 7) | ($VX_CFG_EXT_OM_ENABLED << 8) | ($VX_CFG_EXT_RTU_ENABLED << 11) | ($VX_CFG_EXT_MUFU_ENABLED << 12) | ($VX_CFG_EXT_ZFHMIN_ENABLED << 13)"
+VX_CFG_MISA_EXT = "expr: ($VX_CFG_ICACHE_ENABLED << 0) | ($VX_CFG_DCACHE_ENABLED << 1) | ($VX_CFG_L2_ENABLED << 2) | ($VX_CFG_L3_ENABLED << 3) | ($VX_CFG_LMEM_ENABLED << 4) | ($VX_CFG_EXT_ZICOND_ENABLED << 5) | ($VX_CFG_EXT_TCU_ENABLED << 9) | ($VX_CFG_EXT_DXA_ENABLED << 10) | ($VX_CFG_EXT_TEX_ENABLED << 6) | ($VX_CFG_EXT_RASTER_ENABLED << 7) | ($VX_CFG_EXT_OM_ENABLED << 8) | ($VX_CFG_EXT_RTU_ENABLED << 11) | ($VX_CFG_EXT_MUFU_ENABLED << 12) | ($VX_CFG_EXT_ZFHMIN_ENABLED << 13) | ($VX_CFG_EXT_LDST_WIDE_ENABLED << 14) | ($VX_CFG_EXT_LDST_MATRIX_ENABLED << 15)"
 
 [toolchain]
 ASIC = false

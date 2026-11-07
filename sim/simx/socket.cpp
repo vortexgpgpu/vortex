@@ -16,7 +16,11 @@
 #include "core.h"
 #include "cluster.h"
 #include "constants.h"
+#include "delay_buffer.h"
 #include "types.h"
+#ifdef SIMX_SOCKET_UNIT_MMU
+#include "mem/mmu.h"
+#endif
 #ifdef VX_CFG_EXT_DXA_ENABLE
 #include "dxa_core.h"
 #include "local_mem.h"
@@ -55,11 +59,11 @@ public:
     snprintf(sname, 100, "%s-icache", name.c_str());
     icaches_ = CacheCluster::Create(sname, cores_per_socket, VX_CFG_NUM_ICACHES, Cache::Config{
       !VX_CFG_ICACHE_ENABLED,
-      log2ceil(VX_CFG_ICACHE_SIZE),  // C
+      VX_CFG_ICACHE_SIZE,            // size
       log2ceil(VX_CFG_L1_LINE_SIZE), // L
       log2ceil(VX_CFG_L1_LINE_SIZE), // S (no sectoring)
       log2ceil(sizeof(uint32_t)), // W
-      log2ceil(VX_CFG_ICACHE_NUM_WAYS),// A
+      VX_CFG_ICACHE_NUM_WAYS,          // ways
       log2ceil(VX_CFG_ICACHE_NUM_BANKS), // B
       VX_CFG_XLEN,                   // address bits
       ICACHE_NUM_REQS,        // number of inputs (one per frontend slice)
@@ -75,17 +79,23 @@ public:
       false,                  // shared_llc
       false,                  // lazy_fetch
       true,                   // core-response register
+      (VX_CFG_ICACHE_READ_MERGE != 0) ? ICACHE_NUM_REQS : 0, // read_merge: the core's fetch slices
+      false,                  // write_around
+      VX_CFG_ICACHE_MRSQ_SIZE != 0, // memory-response queue
+      true,                   // the socket's registered memory port
+      false,                  // acq_forward
+      true,                   // merge_line: slices fetch different words of a line
     });
 
     snprintf(sname, 100, "%s-dcache", name.c_str());
     // L1 dcache is the LLC iff neither L2 nor L3 is enabled.
     dcaches_ = CacheCluster::Create(sname, cores_per_socket, VX_CFG_NUM_DCACHES, Cache::Config{
       !VX_CFG_DCACHE_ENABLED,
-      log2ceil(VX_CFG_DCACHE_SIZE),  // C
+      VX_CFG_DCACHE_SIZE,            // size
       log2ceil(VX_CFG_DCACHE_LINE_SIZE), // L
       log2ceil(VX_CFG_DCACHE_SECTOR_SIZE), // S
       log2ceil(DCACHE_WORD_SIZE), // W
-      log2ceil(VX_CFG_DCACHE_NUM_WAYS),// A
+      VX_CFG_DCACHE_NUM_WAYS,          // ways
       log2ceil(VX_CFG_DCACHE_NUM_BANKS), // B
       VX_CFG_XLEN,                   // address bits
       VX_CFG_DCACHE_NUM_REQS,        // number of inputs
@@ -102,7 +112,10 @@ public:
       VX_CFG_DCACHE_LAZY_FETCH != 0, // lazy_fetch
       true,                          // core-response register
       (VX_CFG_DCACHE_READ_MERGE != 0) ? DCACHE_CHANNELS : 0, // read_merge
-      VX_CFG_DCACHE_MSHR_LINES,      // mshr_lines
+      false,                         // write_around
+      VX_CFG_DCACHE_MRSQ_SIZE != 0,  // memory-response queue
+      true,                          // the socket's registered memory port
+      DCACHE_ACQ_FORWARD,            // acq_forward
     });
 
 #ifdef VX_CFG_EXT_TEX_ENABLE
@@ -115,13 +128,13 @@ public:
     constexpr uint32_t kTcacheWordSize = 4;              // = TCACHE_WORD_SIZE
     constexpr uint32_t kTcacheNumReqs  = VX_CFG_TCACHE_NUM_BANKS;
     constexpr uint32_t kTcacheMemPorts = 1;              // = TCACHE_MEM_PORTS
-    auto tcache = Cache::Create(sname, Cache::Config{
+    Cache::Config tcache_config{
       false,                       // bypass
-      log2ceil(VX_CFG_TCACHE_SIZE),       // C
+      VX_CFG_TCACHE_SIZE,                 // size
       log2ceil(kTcacheLineSize),   // L
       log2ceil(kTcacheLineSize),   // S (no sectoring)
       log2ceil(kTcacheWordSize),   // W
-      log2ceil(VX_CFG_TCACHE_NUM_WAYS),   // A
+      VX_CFG_TCACHE_NUM_WAYS,             // ways
       log2ceil(VX_CFG_TCACHE_NUM_BANKS),  // B
       VX_CFG_XLEN,                        // address bits
       kTcacheNumReqs,              // request size
@@ -132,7 +145,10 @@ public:
       2,                           // pipeline latency
       uint8_t(VX_CFG_L2_REPL_POLICY),     // replacement policy (use L2 policy as default)
       false,                       // is_llc (TCACHE is auxiliary, not LLC)
-    });
+    };
+    tcache_config.mem_rsp_queue = (VX_CFG_TCACHE_MRSQ_SIZE != 0);
+    tcache_config.mem_rsp_slice = true;
+    auto tcache = Cache::Create(sname, tcache_config);
     tcache_ = tcache;
 
     // tex_core ↔ tcache (per-port).
@@ -155,13 +171,13 @@ public:
     // VX_CFG_RTCACHE_NUM_BANKS banks.
     constexpr uint32_t kRtcacheNumInputs = VX_CFG_NUM_RTU_BLOCKS;
     constexpr uint32_t kRtcacheMemPorts  = 1;
-    auto rtcache = Cache::Create(sname, Cache::Config{
+    Cache::Config rtcache_config{
       false,                              // bypass
-      log2ceil(VX_CFG_RTCACHE_SIZE),      // C
+      VX_CFG_RTCACHE_SIZE,                // size
       log2ceil(kRtcacheLineSize),         // L
       log2ceil(kRtcacheLineSize),         // S (no sectoring)
       log2ceil(kRtcacheWordSize),         // W
-      log2ceil(VX_CFG_RTCACHE_NUM_WAYS),  // A
+      VX_CFG_RTCACHE_NUM_WAYS,            // ways
       log2ceil(VX_CFG_RTCACHE_NUM_BANKS), // B
       VX_CFG_XLEN,                        // address bits
       kRtcacheNumInputs,                  // num_inputs (1 per RTU port)
@@ -172,7 +188,10 @@ public:
       2,                                  // pipeline latency
       uint8_t(VX_CFG_L2_REPL_POLICY),     // replacement policy
       false,                              // is_llc
-    });
+    };
+    rtcache_config.mem_rsp_queue = (VX_CFG_RTCACHE_MRSQ_SIZE != 0);
+    rtcache_config.mem_rsp_slice = true;
+    auto rtcache = Cache::Create(sname, rtcache_config);
     rtcache_ = rtcache;
 
     // RtuCore ↔ rtcache (per memory port).
@@ -187,6 +206,17 @@ public:
     // ── Socket-resident DXA engine ──────────────────────────────────────
     snprintf(sname, 100, "%s-dxa-core", name.c_str());
     dxa_core_ = DxaCore::Create(sname, simobject_);
+#endif
+
+#ifdef SIMX_SOCKET_UNIT_MMU
+    // ── Socket unit MMU ─────────────────────────────────────────────────
+    // Translates the unit caches' and DXA's memory ports between them and the
+    // socket memory arbiter, so those caches are virtually tagged. Each
+    // response leaves through a registered stage, and a new miss is held a
+    // cycle in a park stage before it allocates; its clients only read.
+    snprintf(sname, 100, "%s-unit_mmu", name.c_str());
+    unit_mmu_ = Mmu::Create(sname, UMMU_NUM_REQS, VX_CFG_UTLB_SIZE,
+                            simobject_->unit_tlb_client(), false, true, false, true);
 #endif
 
     // find overlap
@@ -229,20 +259,32 @@ public:
     sock_arb->RspOut.at(0).bind(&icaches_->mem_rsp_in.at(0));
     dcaches_->mem_req_out.at(0).bind(&sock_arb->ReqIn.at(1));
     sock_arb->RspOut.at(1).bind(&dcaches_->mem_rsp_in.at(0));
+    // A unit port reaches the arbiter through the unit MMU under VM.
+    auto bind_unit_port = [&](uint32_t arb_idx, uint32_t ummu_idx,
+                              SimChannel<MemReq>& req_src,
+                              SimChannel<MemRsp>& rsp_dst) {
+    #ifdef SIMX_SOCKET_UNIT_MMU
+      req_src.bind(&unit_mmu_->ReqIn.at(ummu_idx));
+      unit_mmu_->RspOut.at(ummu_idx).bind(&rsp_dst);
+      unit_mmu_->ReqOut.at(ummu_idx).bind(&sock_arb->ReqIn.at(arb_idx));
+      sock_arb->RspOut.at(arb_idx).bind(&unit_mmu_->RspIn.at(ummu_idx));
+    #else
+      __unused(ummu_idx);
+      req_src.bind(&sock_arb->ReqIn.at(arb_idx));
+      sock_arb->RspOut.at(arb_idx).bind(&rsp_dst);
+    #endif
+    };
   #ifdef VX_CFG_EXT_TEX_ENABLE
     constexpr uint32_t kTexArbIdx = 2;
-    tcache_->mem_req_out.at(0).bind(&sock_arb->ReqIn.at(kTexArbIdx));
-    sock_arb->RspOut.at(kTexArbIdx).bind(&tcache_->mem_rsp_in.at(0));
+    bind_unit_port(kTexArbIdx, UMMU_TCACHE_IDX, tcache_->mem_req_out.at(0), tcache_->mem_rsp_in.at(0));
   #endif
   #ifdef VX_CFG_EXT_RTU_ENABLE
     constexpr uint32_t kRtuArbIdx = 2 + VX_CFG_EXT_TEX_ENABLED;
-    rtcache_->mem_req_out.at(0).bind(&sock_arb->ReqIn.at(kRtuArbIdx));
-    sock_arb->RspOut.at(kRtuArbIdx).bind(&rtcache_->mem_rsp_in.at(0));
+    bind_unit_port(kRtuArbIdx, UMMU_RTCACHE_IDX, rtcache_->mem_req_out.at(0), rtcache_->mem_rsp_in.at(0));
   #endif
   #ifdef VX_CFG_EXT_DXA_ENABLE
     constexpr uint32_t kDxaArbIdx = 2 + VX_CFG_EXT_TEX_ENABLED + VX_CFG_EXT_RTU_ENABLED;
-    dxa_core_->gmem_req_out.at(0).bind(&sock_arb->ReqIn.at(kDxaArbIdx));
-    sock_arb->RspOut.at(kDxaArbIdx).bind(&dxa_core_->gmem_rsp_in.at(0));
+    bind_unit_port(kDxaArbIdx, UMMU_DXA_IDX, dxa_core_->gmem_req_out.at(0), dxa_core_->gmem_rsp_in.at(0));
   #endif
     bind_mem_port(0, sock_arb->ReqOut.at(0), sock_arb->RspIn.at(0));
 
@@ -254,7 +296,8 @@ public:
     // connect l1 caches to outgoing memory interfaces
     for (uint32_t i = 0; i < VX_CFG_L1_MEM_PORTS; ++i) {
       snprintf(sname, 100, "%s-l1_arb%d", name.c_str(), i);
-      auto l1_arb = MemArbiter::Create(sname, ArbiterType::RoundRobin, 2 * overlap, overlap);
+      // icache first; the arbiter registers both directions
+      auto l1_arb = MemArbiter::Create(sname, ArbiterType::Priority, 2 * overlap, overlap, 1, 1);
 
       if (i < overlap) {
         icaches_->mem_req_out.at(i).bind(&l1_arb->ReqIn.at(i));
@@ -283,6 +326,27 @@ public:
       cores_.at(i) = Core::Create(sname, core_id, simobject_);
     }
 
+    // A core's dcache port reaches the dcache across the link to it,
+    // VX_CFG_L1_LINK_LATENCY cycles each way.
+    auto bind_l1_link = [&](uint32_t core, uint32_t port,
+                            SimChannel<MemReq>& req_src, SimChannel<MemReq>& req_dst,
+                            SimChannel<MemRsp>& rsp_src, SimChannel<MemRsp>& rsp_dst) {
+      if constexpr (VX_CFG_L1_LINK_LATENCY != 0) {
+        snprintf(sname, 100, "%s-l1link%d-req%d", name.c_str(), core, port);
+        auto req_link = DelayBuffer<MemReq>::Create(sname, VX_CFG_L1_LINK_LATENCY);
+        snprintf(sname, 100, "%s-l1link%d-rsp%d", name.c_str(), core, port);
+        auto rsp_link = DelayBuffer<MemRsp>::Create(sname, VX_CFG_L1_LINK_LATENCY);
+        req_src.bind(&req_link->In);
+        req_link->Out.bind(&req_dst);
+        rsp_src.bind(&rsp_link->In);
+        rsp_link->Out.bind(&rsp_dst);
+      } else {
+        __unused(core, port);
+        req_src.bind(&req_dst);
+        rsp_src.bind(&rsp_dst);
+      }
+    };
+
     // connect cores to caches
     for (uint32_t i = 0; i < cores_per_socket; ++i) {
       for (uint32_t j = 0; j < ICACHE_NUM_REQS; ++j) {
@@ -291,8 +355,8 @@ public:
       }
 
       for (uint32_t j = 0; j < VX_CFG_DCACHE_NUM_REQS; ++j) {
-        cores_.at(i)->dcache_req_out.at(j).bind(&dcaches_->core_req_in.at(i).at(j));
-        dcaches_->core_rsp_out.at(i).at(j).bind(&cores_.at(i)->dcache_rsp_in.at(j));
+        bind_l1_link(i, j, cores_.at(i)->dcache_req_out.at(j), dcaches_->core_req_in.at(i).at(j),
+                     dcaches_->core_rsp_out.at(i).at(j), cores_.at(i)->dcache_rsp_in.at(j));
       }
     }
 
@@ -365,6 +429,12 @@ public:
       if (core->running())
         return true;
     }
+  #ifdef SIMX_SOCKET_UNIT_MMU
+    // Parked translations hold no channel packet.
+    if (!unit_mmu_->empty()) {
+      return true;
+    }
+  #endif
     return false;
   }
 
@@ -460,6 +530,22 @@ public:
   RtuCore::Ptr& rtu_core() { return rtu_core_; }
 #endif
 
+#ifdef SIMX_SOCKET_UNIT_MMU
+  SimChannel<TlbReq>& tlb_miss_out() { return unit_mmu_->TlbMissOut; }
+  SimChannel<TlbRsp>& tlb_fill_in() { return unit_mmu_->TlbFillIn; }
+  // The unit caches are virtually tagged: a satp commit flushes the unit
+  // TLB and invalidates them.
+  void set_satp(uint64_t satp) {
+    unit_mmu_->set_satp(satp);
+  #ifdef VX_CFG_EXT_TEX_ENABLE
+    tcache_->invalidate();
+  #endif
+  #ifdef VX_CFG_EXT_RTU_ENABLE
+    rtcache_->invalidate();
+  #endif
+  }
+#endif
+
 private:
   Socket*                 simobject_;
   std::vector<Core::Ptr>  cores_;
@@ -479,6 +565,9 @@ private:
   Cache::Ptr              rtcache_;
   RtuBusArbiter::Ptr      rtu_bus_arb_;
 #endif
+#ifdef SIMX_SOCKET_UNIT_MMU
+  Mmu::Ptr                unit_mmu_;
+#endif
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -486,12 +575,14 @@ private:
 Socket::Socket(const SimContext& ctx,
                 const char* name,
                 uint32_t socket_id,
-                Cluster* cluster)
+                Cluster* cluster,
+                uint32_t unit_tlb_client)
   : SimObject(ctx, name)
   , mem_req_out(VX_CFG_L1_MEM_PORTS, this)
   , mem_rsp_in(VX_CFG_L1_MEM_PORTS, this)
   , socket_id_(socket_id)
   , cluster_(cluster)
+  , unit_tlb_client_(unit_tlb_client)
   , impl_(new Impl(this))
 {}
 
@@ -562,5 +653,19 @@ DxaCore::Ptr& Socket::dxa_core() {
 #ifdef VX_CFG_EXT_RTU_ENABLE
 RtuCore::Ptr& Socket::rtu_core() {
   return impl_->rtu_core();
+}
+#endif
+
+#ifdef SIMX_SOCKET_UNIT_MMU
+SimChannel<TlbReq>& Socket::tlb_miss_out() {
+  return impl_->tlb_miss_out();
+}
+
+SimChannel<TlbRsp>& Socket::tlb_fill_in() {
+  return impl_->tlb_fill_in();
+}
+
+void Socket::set_satp(uint64_t satp) {
+  impl_->set_satp(satp);
 }
 #endif

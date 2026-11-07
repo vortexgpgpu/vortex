@@ -148,6 +148,7 @@ module VX_mmu_top import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         .tlb_bus_if  (tlb_bus_if),
         .flush_if    (flush_if),
         .fault_if    (fault_if),
+        `UNUSED_PIN  (lane_idle),
         .empty       (empty)
     );
 

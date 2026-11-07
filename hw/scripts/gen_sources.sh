@@ -34,6 +34,7 @@ top_module=""
 copy_folder=""
 preprocessor=0
 elaborate=0
+fold=0
 stubs=()
 
 defines_str=""
@@ -50,7 +51,7 @@ add_option() {
 }
 
 # Parse command arguments
-while getopts D:G:T:I:J:O:H:C:X:PEh flag
+while getopts D:G:T:I:J:O:H:C:X:PEFh flag
 do
   case "${flag}" in
     D)  defines+=( ${OPTARG} )
@@ -76,9 +77,11 @@ do
         ;;
     E)  elaborate=1
         ;;
+    F)  fold=1
+        ;;
     X)  stubs+=( "${OPTARG}" )
         ;;
-    h)  echo "Usage: [-D<macro>] [-G<param>=<value>] [-T<top-module>] [-I<include-path>] [-J<external-path>] [-O<output-file>] [-C<dest-folder>: copy to] [-H<define_header>] [-P: macro preprocessing] [-E: elaborate into one netlist] [-X<black-box declarations>] [-h help] [files...]"
+    h)  echo "Usage: [-D<macro>] [-G<param>=<value>] [-T<top-module>] [-I<include-path>] [-J<external-path>] [-O<output-file>] [-C<dest-folder>: copy to] [-H<define_header>] [-P: macro preprocessing] [-F: fold asynchronous RAM reads into block RAM] [-E: elaborate into one netlist] [-X<black-box declarations>] [-h help] [files...]"
         exit 0
         ;;
     \?) echo "Invalid option: -$OPTARG" 1>&2
@@ -190,6 +193,28 @@ if [ -n "$copy_folder" ]; then
       sed -i 's/\.\(master\|slave\)\b//g' "$f"
     done
   fi
+fi
+
+# Optional RAM fold (-F): patch the preprocessed copies so that every
+# block-RAM-sized VX_dp_ram that reads combinationally reads a registered next
+# address instead, which every synthesis tool maps to block RAM. The report
+# and the patch land in the copy folder. RAM_FOLD_PYTHON is a python3 with
+# pyslang 11 or 12.
+if [ "$fold" != 0 ]; then
+    if [ -z "$copy_folder" ] || [ "$preprocessor" = 0 ] || [ -z "$top_module" ]; then
+        echo "gen_sources.sh: error: -F needs preprocessed copies (-P -C) and a top module (-T)" >&2
+        exit 1
+    fi
+    fold_files=()
+    while IFS= read -r f; do
+        fold_files+=( "$f" )
+    done < <(find "$(realpath "$copy_folder")" -maxdepth 1 -type f \( -name "*.v" -o -name "*.sv" \) | sort)
+    if ! "${RAM_FOLD_PYTHON:-python3}" "$SCRIPT_DIR"/ram_fold.py --top "$top_module" $defines_str \
+            --report "$copy_folder/ram_fold.rpt" --diff "$copy_folder/ram_fold.diff" "${fold_files[@]}"; then
+        echo "gen_sources.sh: error: ram_fold.py failed (RAM_FOLD_PYTHON='${RAM_FOLD_PYTHON:-python3}'," \
+             "which needs pyslang 11 or 12)" >&2
+        exit 1
+    fi
 fi
 
 # Optional filelist generation

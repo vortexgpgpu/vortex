@@ -32,7 +32,9 @@ module VX_raster_dcr import VX_gpu_pkg::*, VX_raster_pkg::*;
     output raster_dcrs_t    raster_dcrs
 );
     `UNUSED_SPARAM (INSTANCE_ID)
+`ifndef VX_CFG_RASTER_EARLYZ_ENABLE
     `UNUSED_VAR (reset)
+`endif
 
     // Decode write strobe from the req-style DCR bus
     wire write_valid = dcr_bus_if.req_valid && dcr_bus_if.req_data.rw;
@@ -47,8 +49,16 @@ module VX_raster_dcr import VX_gpu_pkg::*, VX_raster_pkg::*;
     // DCR registers
     raster_dcrs_t dcrs;
 
-    // DCRs write
+    // DCRs write. The early-Z gate resets off: a draw that never programs the
+    // OM depth state must not cull, or read a depth buffer at a power-on
+    // address.
     always @(posedge clk) begin
+    `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
+        if (reset) begin
+            dcrs.earlyz_safe <= 1'b0;
+            dcrs.depth_func  <= OM_DEPTH_FUNC_BITS'(`VX_OM_DEPTH_FUNC_ALWAYS);
+        end else
+    `endif
         if (write_valid) begin
             case (write_addr)
                 `VX_DCR_RASTER_TBUF_ADDR: begin

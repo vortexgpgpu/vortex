@@ -83,9 +83,14 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             assign tcu_mem_if[b].rsp_ready   = block_mem_if[b].rsp_ready;
         end
     end else begin : g_mem_shared
-        // the TCU blocks share LSU block 0's client, tagged by block
+        // the TCU blocks share LSU block 0's client: the block index takes the
+        // tag's low bits and the block's own tag moves above it
         localparam BLOCK_IDX_BITS = `CLOG2(BLOCK_SIZE);
-        `STATIC_ASSERT (LSU_CLIENT_TAG_WIDTH >= BLOCK_IDX_BITS, ("LSU client tag cannot encode TCU block"))
+        localparam BLOCK_TAG_BITS = LSU_CLIENT_TAG_WIDTH - BLOCK_IDX_BITS;
+        `STATIC_ASSERT (BLOCK_IDX_BITS > 0, ("invalid parameter"))
+        `STATIC_ASSERT (BLOCK_TAG_BITS > 0, ("LSU client tag cannot encode TCU block"))
+        // a block's TCU_LD pass number rides in its own tag bits
+        `STATIC_ASSERT (BLOCK_TAG_BITS >= `CLOG2(NUM_LANES / `VX_CFG_NUM_LSU_LANES), ("LSU client tag cannot encode TCU block and TCU_LD pass"))
 
         wire [BLOCK_SIZE-1:0] req_valids;
         wire [`UP(BLOCK_IDX_BITS)-1:0] req_idx;
@@ -114,16 +119,21 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         lsu_req_data_t req_data;
         always_comb begin
             req_data = req_datas[req_idx];
-            req_data.tag[`UP(BLOCK_IDX_BITS)-1:0] = req_idx;
+            req_data.tag = {req_datas[req_idx].tag[BLOCK_TAG_BITS-1:0], req_idx};
         end
         assign tcu_mem_if[0].req_valid = req_valid;
         assign tcu_mem_if[0].req_data  = req_data;
 
         wire [`UP(BLOCK_IDX_BITS)-1:0] rsp_idx = tcu_mem_if[0].rsp_data.tag[`UP(BLOCK_IDX_BITS)-1:0];
+        lsu_rsp_data_t rsp_data;
+        always_comb begin
+            rsp_data     = tcu_mem_if[0].rsp_data;
+            rsp_data.tag = LSU_CLIENT_TAG_WIDTH'(tcu_mem_if[0].rsp_data.tag[LSU_CLIENT_TAG_WIDTH-1:BLOCK_IDX_BITS]);
+        end
         wire [BLOCK_SIZE-1:0] rsp_readys;
         for (genvar b = 0; b < BLOCK_SIZE; ++b) begin : g_rsp
             assign block_mem_if[b].rsp_valid = tcu_mem_if[0].rsp_valid && (rsp_idx == `UP(BLOCK_IDX_BITS)'(b));
-            assign block_mem_if[b].rsp_data  = tcu_mem_if[0].rsp_data;
+            assign block_mem_if[b].rsp_data  = rsp_data;
             assign rsp_readys[b] = block_mem_if[b].rsp_ready;
         end
         assign tcu_mem_if[0].rsp_ready = rsp_readys[rsp_idx];

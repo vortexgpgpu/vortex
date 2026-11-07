@@ -104,13 +104,18 @@ XML_CFLAGS = $(filter-out -DSYNTHESIS -DVIVADO, $(CFLAGS)) $(RTL_PKGS) -I$(DPI_D
 check-axil-blocks:
 	$(if $(filter-out 0,$(PLATFORM_AXIL_BLOCK_BYTES)),@python3 $(SCRIPT_DIR)/check_axil_blocks.py $(RTL_DIR)/cp/VX_cp_axil_regfile.sv)
 
-# The sources are elaborated by CIRCT into the one netlist Vivado reads
-# (gen_sources.sh -E); the Xilinx floating-point cores stay instances, bound to
+# Vivado reads the preprocessed sources (gen_sources.sh -P), so its own
+# inference sees the RTL as written; the Xilinx floating-point cores bind to
 # the cores xilinx_ip_gen.tcl generates.
 gen-sources: $(BUILD_DIR)/sources.txt
-$(BUILD_DIR)/sources.txt:
-	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/gen_sources.sh -P $(CFLAGS) -Csrc -Osources.txt \
-		-Tvortex_afu -E -X$(SCRIPT_DIR)/xilinx_ip_stubs.sv
+$(BUILD_DIR)/sources.txt: $(BUILD_DIR)/afu_mem_ports.stamp
+	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/gen_sources.sh -P -F -Tvortex_afu $(CFLAGS) -Csrc -Osources.txt
+
+# The preprocessed sources bake in the kernel's memory port count (the flow's
+# AFU_MEM_PORTS): regenerate them whenever the configuration changes it.
+$(BUILD_DIR)/afu_mem_ports.stamp: force-afu-mem-ports
+	@mkdir -p $(BUILD_DIR)
+	@if [ "$$(cat $@ 2>/dev/null)" != "$(AFU_MEM_PORTS)" ]; then echo "$(AFU_MEM_PORTS)" > $@; fi
 
 gen-ast: $(BUILD_DIR)/vortex.xml
 $(BUILD_DIR)/vortex.xml:
@@ -120,4 +125,5 @@ scope-json: $(BIN_DIR)/scope.json
 $(BIN_DIR)/scope.json: $(BUILD_DIR)/vortex.xml
 	mkdir -p $(BIN_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/scope.py vortex.xml -o bin/scope.json
 
-.PHONY: check-axil-blocks gen-sources gen-ast scope-json
+.PHONY: check-axil-blocks gen-sources gen-ast scope-json force-afu-mem-ports
+force-afu-mem-ports:

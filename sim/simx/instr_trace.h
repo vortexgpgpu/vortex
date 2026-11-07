@@ -63,6 +63,11 @@ public:
   // out-of-order cache responses from releasing the destination prematurely.
   uint32_t num_pkts;
 
+  // A memory response: the instruction's responses arrive in any order, and
+  // the last one to arrive carries rsp_last.
+  bool rsp_tracked;
+  bool rsp_last;
+
   bool fetch_stall;
 
   // Set by a func-unit when a fetch_stall instruction has resolved; the warp
@@ -94,6 +99,8 @@ public:
     , sop(true)
     , eop(true)
     , num_pkts(1)
+    , rsp_tracked(false)
+    , rsp_last(false)
     , fetch_stall(false)
     , resume_warp(false)
     , ibuf_time(0)
@@ -121,6 +128,8 @@ public:
     , sop(rhs.sop)
     , eop(rhs.eop)
     , num_pkts(rhs.num_pkts)
+    , rsp_tracked(rhs.rsp_tracked)
+    , rsp_last(rhs.rsp_last)
     , fetch_stall(rhs.fetch_stall)
     , resume_warp(rhs.resume_warp)
     , ibuf_time(rhs.ibuf_time)

@@ -10,7 +10,7 @@ match_xsa = ["xilinx_u250_*"]
 [memory]
 banks = 1
 addr_width = 34
-tags = ["DDR[0]"]
+tag = "DDR"
 base = 0x4000000000
 
 [host]

@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 220" role="img" aria-label="Before: each request waits a full 100-cycle round trip before the next is sent. After: four requests overlap and finish in about the time of one round trip plus three cycles.">
+  <title>Before: each request waits a full 100-cycle round trip before the next is sent. After: four requests overlap and finish in about the time of one round trip plus three cycles.</title>
+  <defs><marker id="afuinf_a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1b2733"/></marker><marker id="afuinf_g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1f7a4d"/></marker><marker id="afuinf_b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#b3261e"/></marker></defs>
+  <style>
+    text { font-family: Helvetica, Arial, sans-serif; fill: #1b2733; font-size: 11.5px; }
+    .dh { font-size: 13px; font-weight: bold; }
+    .dm { fill: #5a6772; font-size: 11px; }
+    .ds { font-size: 10.5px; }
+    .db { fill: #fbfcfd; stroke: #5a7184; stroke-width: 1.2; }
+    .dbad { fill: #fbe5e3; stroke: #b3261e; stroke-width: 1.2; }
+    .dgood { fill: #e3f3ea; stroke: #1f7a4d; stroke-width: 1.2; }
+    .didle { fill: #f3f5f8; stroke: #c9d1d9; stroke-width: 1.2; }
+    .dwait { fill: #fbe5e3; stroke: #b3261e; stroke-width: 1.2; stroke-dasharray: 4 3; }
+    .ln { stroke: #1b2733; stroke-width: 1.3; fill: none; }
+    .lb { stroke: #b3261e; stroke-width: 1.5; fill: none; }
+    .lg { stroke: #1f7a4d; stroke-width: 1.5; }
+    .dash { stroke-dasharray: 4 3; }
+    .sep { stroke: #c9d1d9; stroke-width: 1; stroke-dasharray: 2 4; }
+    text.db-t { fill: #b3261e; } text.g-t { fill: #1f7a4d; }
+  </style>
+  <rect width="640" height="220" fill="#ffffff"/>
+<g class="dl">
+          <text x="20" y="22" class="dh">Before: one in flight</text>
+          <rect x="60" y="36" width="120" height="18" class="dbad"/><text x="120" y="49" text-anchor="middle" class="ds">R1 · 100 cyc</text>
+          <rect x="180" y="58" width="120" height="18" class="dbad"/><text x="240" y="71" text-anchor="middle" class="ds">R2</text>
+          <rect x="300" y="80" width="120" height="18" class="dbad"/><text x="360" y="93" text-anchor="middle" class="ds">R3</text>
+          <rect x="420" y="102" width="120" height="18" class="dbad"/><text x="480" y="115" text-anchor="middle" class="ds">R4</text>
+          <text x="550" y="115" class="dm">≈ 400 cyc</text>
+          <text x="20" y="148" class="dh">After: many in flight</text>
+          <rect x="60" y="160" width="120" height="10" class="dgood"/><rect x="64" y="172" width="120" height="10" class="dgood"/><rect x="68" y="184" width="120" height="10" class="dgood"/><rect x="72" y="196" width="120" height="10" class="dgood"/>
+          <text x="196" y="190" class="dm">R1–R4 overlap: ≈ 104 cyc</text>
+          <line x1="60" y1="214" x2="620" y2="214" class="ln"/><text x="620" y="209" text-anchor="end" class="dm">time →</text>
+        </g>
+</svg>

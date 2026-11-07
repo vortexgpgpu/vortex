@@ -40,16 +40,21 @@ namespace vortex {
 inline constexpr uint32_t XLENB           = (VX_CFG_XLEN / 8);
 
 // A last-level cache that alone serves every memory client is the point of
-// coherence between kernels. The texture, ray-tracing and DXA ports join below
-// the dcache and the raster and OM caches beside it, so a dcache with any of
-// them is not one.
+// coherence between kernels. A dcache is one when it is the only dcache,
+// shared by every core of the one socket. The texture, ray-tracing and DXA
+// ports join below the dcache and the raster and OM caches beside it, so a
+// dcache with any of them is not one.
 inline constexpr bool DCACHE_SHARED_LLC = (VX_CFG_DCACHE_ENABLED != 0) && (VX_CFG_L2_ENABLED == 0) && (VX_CFG_L3_ENABLED == 0)
-                                       && (VX_CFG_NUM_CORES == 1) && (VX_CFG_NUM_CLUSTERS == 1)
+                                       && (VX_CFG_NUM_CLUSTERS == 1) && (VX_CFG_NUM_CORES == VX_CFG_SOCKET_SIZE)
+                                       && (VX_CFG_NUM_DCACHES == 1)
                                        && !VX_CFG_EXT_TEX_ENABLED && !VX_CFG_EXT_RTU_ENABLED
                                        && !VX_CFG_EXT_RASTER_ENABLED && !VX_CFG_EXT_OM_ENABLED
                                        && !VX_CFG_EXT_DXA_ENABLED;
 inline constexpr bool L2_SHARED_LLC     = (VX_CFG_L2_ENABLED != 0) && (VX_CFG_L3_ENABLED == 0) && (VX_CFG_NUM_CLUSTERS == 1);
 inline constexpr bool L3_SHARED_LLC     = (VX_CFG_L3_ENABLED != 0);
+// An acquire must also invalidate the cache below the dcache unless that one
+// is the point of coherence (an L3 always is; memory always is).
+inline constexpr bool DCACHE_ACQ_FORWARD = (VX_CFG_L2_ENABLED != 0) && !L2_SHARED_LLC;
 
 // A write-back LLC must be the only instance: replicated ones never make their
 // dirty lines visible to each other.
@@ -81,6 +86,27 @@ inline constexpr uint32_t DCACHE_CHANNELS = __UP((VX_CFG_NUM_LSU_LANES * XLENB) 
 inline constexpr uint32_t VX_CFG_DCACHE_NUM_REQS	= (VX_CFG_NUM_LSU_BLOCKS * DCACHE_CHANNELS);
 
 inline constexpr uint32_t NUM_SOCKETS     = __UP(VX_CFG_NUM_CORES / VX_CFG_SOCKET_SIZE);
+static_assert((VX_CFG_NUM_CORES % VX_CFG_SOCKET_SIZE) == 0,
+              "NUM_CORES must be a multiple of SOCKET_SIZE");
+
+// Under VM, a socket's unit MMU translates the memory ports of its
+// socket-resident units (tcache and rtcache misses, DXA gmem reads), in socket
+// arb order.
+#if defined(VX_CFG_VM_ENABLE) && (defined(VX_CFG_EXT_TEX_ENABLE) || defined(VX_CFG_EXT_RTU_ENABLE) || defined(VX_CFG_EXT_DXA_ENABLE))
+#define SIMX_SOCKET_UNIT_MMU
+#endif
+inline constexpr uint32_t UMMU_TCACHE_IDX  = 0;
+inline constexpr uint32_t UMMU_RTCACHE_IDX = UMMU_TCACHE_IDX + VX_CFG_EXT_TEX_ENABLED;
+inline constexpr uint32_t UMMU_DXA_IDX     = UMMU_RTCACHE_IDX + VX_CFG_EXT_RTU_ENABLED;
+inline constexpr uint32_t UMMU_NUM_REQS    = VX_CFG_EXT_TEX_ENABLED + VX_CFG_EXT_RTU_ENABLED + VX_CFG_EXT_DXA_ENABLED;
+
+// Under VM, the cluster unit MMU translates the rcache and ocache memory ports.
+#if defined(VX_CFG_VM_ENABLE) && (defined(VX_CFG_EXT_RASTER_ENABLE) || defined(VX_CFG_EXT_OM_ENABLE))
+#define SIMX_CLUSTER_UNIT_MMU
+#endif
+inline constexpr uint32_t CMMU_RCACHE_IDX  = 0;
+inline constexpr uint32_t CMMU_OCACHE_IDX  = CMMU_RCACHE_IDX + VX_CFG_EXT_RASTER_ENABLED;
+inline constexpr uint32_t CMMU_NUM_REQS    = VX_CFG_EXT_RASTER_ENABLED + VX_CFG_EXT_OM_ENABLED;
 
 // Demand clients of the cluster L2 (sockets and gfx caches), excluding the
 // walker's PTE-fetch slot.

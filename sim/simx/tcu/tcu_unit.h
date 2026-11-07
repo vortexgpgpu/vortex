@@ -120,9 +120,10 @@ public:
 	           uint32_t is_a_smem,
 	           uint32_t is_setup_uop);
 
-	// Tile-buffer subsystem (owns abuf×Q + bbuf + LMEM arb).
-	// Exposed so that `Core` can bind its single LMEM port pair.
-	TcuTbuf::Ptr& tbuf();
+	// Tile-buffer subsystem (owns abuf×Q + bbuf + LMEM arb); `Core` creates it
+	// and binds its LMEM ports.
+	void set_tbuf(TcuTbuf::Ptr tbuf);
+	const TcuTbuf::Ptr& tbuf() const;
 
 	const PerfStats& perf_stats() const;
 

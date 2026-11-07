@@ -14,6 +14,7 @@
 #pragma once
 
 #include <array>
+#include <deque>
 #include <mempool.h>
 #include <ringqueue.h>
 #include "func_unit.h"
@@ -111,8 +112,8 @@ private:
 	void send_fence_token(uint32_t b);
 
 	// Drain Inputs[b] into req_queue.
-	void ingest_inputs(uint32_t b);
-	void ingest_staged(uint32_t b);
+	void ingest_inputs(uint32_t b, bool queue_room, uint32_t reads_held);
+	void ingest_staged(uint32_t b, bool queue_room, uint32_t reads_held);
 
   struct mem_addr_size_t {
 		uint64_t addr;
@@ -129,6 +130,8 @@ private:
 		std::vector<mem_addr_size_t> lanes;
 		IntrLsuArgs lsu_args;
 		bool        is_load;
+		// The instruction's response-tracking slot.
+		uint32_t    track      = 0;
 		// TCU metadata client entry: response fragments are forwarded to
 		// TcuRspOut with client_tag restored instead of written to registers.
 		bool        is_tcu     = false;
@@ -136,6 +139,8 @@ private:
 		// A fence's flush token: its response only releases the fence.
 		bool        is_flush   = false;
 	};
+
+	static constexpr uint32_t kNoTrack = -1u;
 
 	// Per-block LSU state. Each member is a named hardware sub-block.
 	struct lsu_state_t {
@@ -150,11 +155,24 @@ private:
 		// Reads waiting in req_queue hold a pending_reqs slot from the moment
 		// they enter it, so staged and outstanding reads share the pool.
 		uint32_t                  staged_reads = 0;
+		// TCU metadata requests granted a req_queue slot (a null entry there),
+		// and whether the TCU client took the last queue entry.
+		std::deque<LsuReq>        meta_reqs;
+		bool                      meta_last = false;
 		bool                      head_staged = false;
 		// The address stages between the issue port and req_queue: the AGU's
 		// sum, then its stack interleave, are each registered with the
 		// request (VX_lsu_block agu_buf, swz_buf). [0] is the younger.
 		instr_trace_t*            agu_stage[2] = {nullptr, nullptr};
+		// A load or AMO's requests still awaiting their last response, and
+		// whether its final request has issued, in a slot the instruction
+		// takes with its first request and keeps until its last.
+		struct rsp_track_t {
+			uint32_t outstanding = 0;
+			bool     last_issued = false;
+		};
+		HashTable<rsp_track_t>    rsp_tracks{VX_CFG_LSU_PENDING_SIZE};
+		uint32_t                  open_track = kNoTrack;
 		FenceController           fence;
 		// the engaged fence's flush token is still to be sent
 		bool                      fence_token = false;
@@ -165,6 +183,8 @@ private:
 			this->req_queue.clear();
 			this->pending_reqs.clear();
 			this->staged_reads = 0;
+			this->meta_reqs.clear();
+			this->meta_last = false;
 			this->head_staged = false;
 			this->agu_stage[0] = nullptr;
 			this->agu_stage[1] = nullptr;
@@ -172,6 +192,8 @@ private:
 			this->fence_token = false;
 			this->addr_list.clear();
 			this->remain_addrs = 0;
+			this->rsp_tracks.clear();
+			this->open_track = kNoTrack;
 		}
 	};
 

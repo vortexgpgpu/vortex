@@ -20,6 +20,8 @@
 //
 // For a given (i, j) FEDP cell at row ROW_IDX, this module selects
 // the sparse B-column elements based on the validity metadata mask.
+// A cell that computes ROW_SELS rows in turn (VX_CFG_TCU_PE_RATIO) is at
+// row ROW_IDX + row_sel * ROW_STRIDE.
 //
 // Three parallel gather datapaths (I_RATIO = 2, 4, 8) are always
 // computed; the output mux selects based on fmt_s at runtime.
@@ -32,8 +34,11 @@
 
 module VX_tcu_sp_mux import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
-    parameter ROW_IDX = 0
+    parameter ROW_IDX = 0,
+    parameter ROW_STRIDE = 1,
+    parameter ROW_SELS = 1
 ) (
+    input  wire [`LOG2UP(ROW_SELS)-1:0]    row_sel,
     input  wire [4:0]                      fmt_s,
     input  wire [TCU_TC_K-1:0][31:0]       b_col_in1,
     input  wire [TCU_TC_K-1:0][31:0]       b_col_in2,
@@ -47,20 +52,35 @@ module VX_tcu_sp_mux import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam MRW_R2 = TCU_TC_K * 2 * 2;
     localparam MRW_R4 = TCU_TC_K * 2 * 4;
     localparam MRW_R8 = TCU_TC_K * 2 * 8;
-    localparam USED_LO = MRW_R8 * ROW_IDX;
-    localparam USED_HI = MRW_R8 * (ROW_IDX + 1);
-    if (USED_LO > 0) begin : g_vld_mask_lo_unused
-        `UNUSED_VAR (vld_mask[USED_LO-1:0])
-    end
-    if (USED_HI < TCU_MAX_META_BLOCK_WIDTH) begin : g_vld_mask_hi_unused
-        `UNUSED_VAR (vld_mask[TCU_MAX_META_BLOCK_WIDTH-1:USED_HI])
-    end
 
     // Extract metadata row slices for each I_RATIO variant
-    wire [MRW_R1-1:0] meta_row_r1 = vld_mask[MRW_R1 * ROW_IDX +: MRW_R1];
-    wire [MRW_R2-1:0] meta_row_r2 = vld_mask[MRW_R2 * ROW_IDX +: MRW_R2];
-    wire [MRW_R4-1:0] meta_row_r4 = vld_mask[MRW_R4 * ROW_IDX +: MRW_R4];
-    wire [MRW_R8-1:0] meta_row_r8 = vld_mask[MRW_R8 * ROW_IDX +: MRW_R8];
+    wire [MRW_R1-1:0] meta_row_r1;
+    wire [MRW_R2-1:0] meta_row_r2;
+    wire [MRW_R4-1:0] meta_row_r4;
+    wire [MRW_R8-1:0] meta_row_r8;
+
+    if (ROW_SELS == 1) begin : g_row_fixed
+        localparam USED_LO = MRW_R8 * ROW_IDX;
+        localparam USED_HI = MRW_R8 * (ROW_IDX + 1);
+        if (USED_LO > 0) begin : g_vld_mask_lo_unused
+            `UNUSED_VAR (vld_mask[USED_LO-1:0])
+        end
+        if (USED_HI < TCU_MAX_META_BLOCK_WIDTH) begin : g_vld_mask_hi_unused
+            `UNUSED_VAR (vld_mask[TCU_MAX_META_BLOCK_WIDTH-1:USED_HI])
+        end
+        `UNUSED_VAR (row_sel)
+        assign meta_row_r1 = vld_mask[MRW_R1 * ROW_IDX +: MRW_R1];
+        assign meta_row_r2 = vld_mask[MRW_R2 * ROW_IDX +: MRW_R2];
+        assign meta_row_r4 = vld_mask[MRW_R4 * ROW_IDX +: MRW_R4];
+        assign meta_row_r8 = vld_mask[MRW_R8 * ROW_IDX +: MRW_R8];
+    end else begin : g_row_sel
+        wire [31:0] row = ROW_IDX + 32'(row_sel) * ROW_STRIDE;
+        `UNUSED_VAR (vld_mask)
+        assign meta_row_r1 = vld_mask[MRW_R1 * row +: MRW_R1];
+        assign meta_row_r2 = vld_mask[MRW_R2 * row +: MRW_R2];
+        assign meta_row_r4 = vld_mask[MRW_R4 * row +: MRW_R4];
+        assign meta_row_r8 = vld_mask[MRW_R8 * row +: MRW_R8];
+    end
     // For I_RATIO=1 (tf32), only the lo bits [TCU_TC_K-1:0] are used per k-step;
     // the hi bits are the complement and are not needed by the mux logic.
     `UNUSED_VAR (meta_row_r1[MRW_R1-1:TCU_TC_K])

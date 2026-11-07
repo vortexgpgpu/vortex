@@ -34,8 +34,7 @@ This is the canonical entry point for **both human contributors and AI coding ag
 - [CONTRIBUTING.md](CONTRIBUTING.md) — public fork/PR contribution flow
 - [docs/bug_fixes.md](docs/bug_fixes.md) — bug-fix discipline (root-cause vs patch)
 - [docs/continuous_integration.md](docs/continuous_integration.md) — CI pipeline
-- [docs/proposals/](docs/proposals/) — design and migration proposals (drafts and in-progress)
-- [docs/designs/](docs/designs/) — accepted designs (post-proposal, post-implementation)
+- [docs/designs/](docs/designs/) — accepted designs (implemented)
 
 ---
 
@@ -87,8 +86,8 @@ See [docs/testing.md](docs/testing.md) and [docs/debugging.md](docs/debugging.md
 - **RTL coverage path is `xrt`, not `rtlsim`.** When discussing or planning RTL verification, `xrt` is the canonical path — `rtlsim` bypasses the AFU surface. `rtlsim` remains useful for fast iteration on processor RTL; `xrt` is what proves the full integration.
 - **`ci/regression.sh` is the canonical source of tested configurations.** Use it to discover supported parameter combinations before inventing ad hoc ones.
 - **Perf-regression baselines (`ci/baselines/perf/*.json`) are golden data — never hand-edit them, and never "fix" a red perf gate by bumping the number.** They are regenerated only by `pytest ci -m perf_gate --update-baselines` (a human-run, reviewed step), and CI must never pass that flag. A `perf_gate` failure means real cycles moved: root-cause it, or — if the change is intended — regenerate the baseline so the diff shows the perf delta for review. Same rule as image goldens and `known_issue:`.
-- **Synthesis baselines (`ci/baselines/synthesis/{xilinx,yosys,screen}/*.json`) are golden data under the same rule** — never hand-edited, regenerated only by a human running `ci/fpga_gate.py --update-baseline` / `ci/asic_gate.py --update-baseline` / `ci/logic_gate.py --update-baseline`, never by CI. A red `fpga_gate`/`asic_gate` means real Fmax or area moved; a red `logic_gate` means a unit got deeper, and its reasons name the unit. Note the two gates measure the *same* `hw/unittest/*/VX_*_top.sv` wrappers through different flows, so a divergence between them is a finding, not noise — keep `hw/syn/{xilinx,yosys}/dut/catalog.mk` in step when you add or rename a DUT. See [docs/designs/continuous_integration.md §3.5](docs/designs/continuous_integration.md).
-- **Screen the logic depth of an RTL change before committing it.** A change to a pipeline, arbiter, queue or datapath can add logic levels that only the nightly `fpga_gate` would find. Run `make -C hw/syn/xilinx/dut <dut>-screen`, or `ci/logic_gate.py -b <dut>`, for the DUTs it touches. A unit that gets deeper is fixed or, if intended, re-recorded with the reason in the commit message. See [docs/designs/logic_screen.md](docs/designs/logic_screen.md).
+- **Synthesis baselines (`ci/baselines/synthesis/{xilinx,yosys,beacon}/*.json`) are golden data under the same rule** — never hand-edited, regenerated only by a human running `ci/fpga_gate.py --update-baseline` / `ci/asic_gate.py --update-baseline` / `ci/logic_gate.py --update-baseline`, never by CI. A red `fpga_gate`/`asic_gate` means real Fmax or area moved; a red `logic_gate` means a unit got deeper or the design's area grew past 5 %, and its reasons name the unit or the resource (`beacon_area.txt` has the area by unit and each memory's placement). Note the two gates measure the *same* `hw/unittest/*/VX_*_top.sv` wrappers through different flows, so a divergence between them is a finding, not noise — keep `hw/syn/{xilinx,yosys}/dut/catalog.mk` in step when you add or rename a DUT. See [docs/designs/continuous_integration.md §3.5](docs/designs/continuous_integration.md).
+- **Beacon first for any RTL change that can move timing; synthesis only to confirm.** A change to a pipeline, arbiter, queue, interface or datapath can add logic levels that only the nightly `fpga_gate` would find, hours later. Beacon finds them in minutes, so iterate on it, not on Vivado or Yosys: run `ci/logic_gate.py -b <dut>` on the parent revision once (its own build tree, e.g. `git worktree add ../ref HEAD` and `--build-dir build32_beacon_ref`), then `ci/logic_gate.py -b <dut> --against build32_beacon_ref` after each edit, and fix what `<build>/beacon_diff.txt` reports until nothing fails (`ci/beacon.py paths` shows a deep unit's paths op by op). Run synthesis once per change, on the DUTs whose depth moved, and feed the result back with `ci/beacon.py validate`. A change to the cluster, socket, L2 or anything only the whole GPU assembles also runs the `gpu` group (`ci/logic_gate.py -b gpu -j 1`, ~30 min and ~95 GB per build). A unit that gets deeper is fixed or, if intended, re-recorded with the reason in the commit message. `beacon_diff.txt` also lists each resource of the design (LUT, FF, distributed and block RAM, DSP) and the units whose area moved, so a memory that leaves block RAM shows in minutes. Beacon does not see wires, placement or congestion; a change that moves those still needs synthesis. See [docs/designs/beacon.md §6.3](docs/designs/beacon.md).
 - **SimX is the RTL's timing model — keep them in lockstep.** Any change that moves RTL cycles (pipeline structure, arbitration, queue depths, cache/memory behavior) must land together with the matching SimX timing-model update, and vice-versa. The `model_parity` CI gate enforces this: a `check: model_parity` case (`ci/testcases/core.yaml` + per-extension parity categories) runs the same app/args/configs on simx and rtlsim and asserts exact retired-instruction match plus cycle agreement within the case tolerance (default 5%). Never widen a tolerance to absorb a divergence — model the behavior. When adding a hardware feature, add or extend a parity case that exercises it.
 - **When RTL debugging stalls, switch to the SimX-as-oracle pattern.** For numerical bugs, deep pipeline races, or any failure mode where rtlsim is "close but wrong": (1) build/extend the SimX C++ model so it mirrors the *new* RTL architecture and gets to PASS; (2) add matching trace dumps to both SimX and RTL (cycle, FU events, SRAM addresses+data, hazards) — same CSV format on both sides; (3) diff trace files — the first divergence is the bug. Don't keep guessing from output values; localize via trace diff. See [docs/debugging.md](docs/debugging.md#simx-as-oracle-for-rtl-debug).
 
@@ -161,19 +160,11 @@ See [docs/coding_guidelines_cpp.md](docs/coding_guidelines_cpp.md) and [docs/cod
 
 ---
 
-## 7. Proposals
-
-Design and migration proposals belong in [`docs/proposals/`](docs/proposals/) — never in build dirs or the repo root. A proposal captures the *why* of a non-trivial change before the code lands.
-
-Accepted designs that outlive their proposal phase live in [`docs/designs/`](docs/designs/).
-
----
-
-## 8. Living Document Policy
+## 7. Living Document Policy
 
 This file is versioned alongside the code and evolves with it. Both humans and agents are expected to update it:
 
 - **Add a rule** when you discover a footgun the next contributor will hit. Include the *why*.
 - **Update or remove a rule** that's gone stale. A stale rule is worse than no rule.
 - **Don't duplicate** content from the topic docs in `docs/`. AGENTS.md links; the topic doc explains.
-- **Branch-specific addenda are forbidden.** Branch context goes in a `docs/proposals/<feature>_proposal.md`, not in branch-local `AGENTS.md` variants. If the rule is general, promote it here; if it's a project-tracking detail, keep it in the proposal.
+- **Branch-specific addenda are forbidden.** No branch-local `AGENTS.md` variants: if a rule is general, promote it here; project-tracking details stay out of the repo docs.

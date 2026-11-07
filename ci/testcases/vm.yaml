@@ -258,6 +258,58 @@ tests:
   app: sgemm
   configs: -DVX_CFG_VM_ENABLE -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_NUM_SFU_BLOCKS=2
 
+# Socket unit MMU: the RTU's BVH fetches and the DXA's global reads translate,
+# so a scene or a tile source at a minted VA (!= PA) is read correctly (both
+# apps check their results; dxa_copy does not).
+- id: vm-rtu
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: rt_smoke
+  configs+: -DVX_CFG_EXT_RTU_ENABLE
+  env:
+    VORTEX_RANDOMIZE_VA: 1
+- id: vm-dxa
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm2_dxa
+  configs+: -DVX_CFG_EXT_DXA_ENABLE
+  env:
+    VORTEX_RANDOMIZE_VA: 1
+- id: vm-tex
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: gfx_tex
+  configs+: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i toad.png -r toad_ref_f0.png -f 0 -g 0
+  env:
+    VORTEX_RANDOMIZE_VA: 1
+- id: vm-raster
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: gfx_raster
+  configs+: -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png
+  env:
+    VORTEX_RANDOMIZE_VA: 1
+- id: vm-om
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: gfx_om
+  configs+: -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -d -b -r whitebox_db_128.png
+  env:
+    VORTEX_RANDOMIZE_VA: 1
+
 # ---------------------------------------------------------------------------
 # check: model_parity — same VM-enabled app on both drivers (xlen 32); exact
 # instret + cycles within tolerance. SimX is the timing model of the RTL.
@@ -272,3 +324,63 @@ tests:
   via: blackbox
   app: vecadd
   args: -n16384
+# A Kepler SMX's core (keplertitan profile): 16 warps behind each of four fetch
+# slices and four 8-lane LSU blocks keep the kernel's code and argument pages
+# busy on every MMU lane, so once a page fills its accesses must hit the TLB
+# rather than queue behind the page's miss-station entry.
+- id: parity-vm-vecadd-wide
+  check: model_parity
+  via: blackbox
+  app: vecadd
+  args: -n16384
+  configs+: >-
+    -DVX_CFG_NUM_WARPS=64 -DVX_CFG_NUM_THREADS=32 -DVX_CFG_ISSUE_WIDTH=4
+    -DVX_CFG_FETCH_WIDTH=4 -DVX_CFG_NUM_ALU_LANES=32 -DVX_CFG_NUM_FPU_LANES=32
+    -DVX_CFG_NUM_LSU_LANES=8 -DVX_CFG_L1_LINK_LATENCY=4
+- id: parity-vm-rt_raycast
+  check: model_parity
+  via: blackbox
+  app: rt_raycast
+  configs+: -DVX_CFG_EXT_RTU_ENABLE -DVX_CFG_EXT_DXA_ENABLE
+- id: parity-vm-dxa_copy
+  check: model_parity
+  via: blackbox
+  app: dxa_copy
+  configs+: -DVX_CFG_EXT_RTU_ENABLE -DVX_CFG_EXT_DXA_ENABLE
+  args: -d3
+- id: parity-vm-gfx_tex
+  check: model_parity
+  via: blackbox
+  app: gfx_tex
+  configs+: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i toad.png -r toad_ref_f0.png -f 0 -g 0
+- id: parity-vm-gfx_raster
+  check: model_parity
+  via: blackbox
+  app: gfx_raster
+  configs+: -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png
+- id: parity-vm-gfx_om
+  check: model_parity
+  via: blackbox
+  app: gfx_om
+  configs+: -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -d -b -r whitebox_db_128.png
+# The RTL command processor's DMA walks the page table for every upload and
+# download; only xrt runs it (simx and rtlsim use the C++ command processor).
+- id: cp-dma-walk
+  via: blackbox
+  drivers:
+  - xrt
+  app: vm_test
+  args: -t1 -n16 -p1
+  env:
+    VORTEX_RANDOMIZE_VA: 1
+- id: cp-dma-walk-megapage
+  via: blackbox
+  drivers:
+  - xrt
+  app: sgemm
+  args: -n16
+  env:
+    VORTEX_VM_MEGAPAGE_HEAP: 1

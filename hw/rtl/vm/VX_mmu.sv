@@ -30,6 +30,18 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     parameter MSHR_SIZE    = `VX_CFG_L1_TLB_MSHR_SIZE,
     parameter REPLAY_DEPTH = 2,
     parameter EXEC_SIDE    = 0,
+    // 0: the clients only read (a parked request's write data and byte enables
+    // are don't-care).
+    parameter WRITE_ENABLE = 1,
+    // Response stage per lane toward the client (TO_OUT_BUF encoding). Keeps
+    // the injected-response select off the client's response cone.
+    parameter RSP_OUT_BUF  = 0,
+    // A registered park (the lane arbitration off the miss station's update
+    // cone) and a request skid register: the input stage below already takes
+    // every request into a register with a registered ready and parks from
+    // it, so both are subsumed.
+    parameter PARK_REG     = 0,
+    parameter REQ_SKID     = 0,
     parameter DATA_SIZE    = DCACHE_WORD_SIZE,
     parameter TAG_WIDTH    = DCACHE_TAG_WIDTH_BASE,
     parameter ADDR_WIDTH   = `VX_CFG_MEM_ADDR_WIDTH - `CLOG2(DATA_SIZE),
@@ -51,11 +63,42 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     VX_tlb_flush_if.slave  flush_if,
 
     VX_mmu_fault_if.master fault_if,
+    // Per lane: nothing of the lane's is in the MMU's stages, and the miss
+    // station is idle (conservative: any parked request holds every lane).
+    output wire [NUM_REQS-1:0] lane_idle,
     output wire            empty
 );
     `UNUSED_PARAM (INSTANCE_ID)
+    `UNUSED_PARAM (WRITE_ENABLE)
+    `UNUSED_PARAM (PARK_REG)
+    `UNUSED_PARAM (REQ_SKID)
 
     localparam DATA_WIDTH    = DATA_SIZE * 8;
+
+    // The client's bus as the MMU drives it: responses through an optional
+    // MMU-owned stage (RSP_OUT_BUF); requests straight to the input stage.
+    VX_mem_bus_if #(
+        .DATA_SIZE  (DATA_SIZE),
+        .TAG_WIDTH  (TAG_WIDTH),
+        .ADDR_WIDTH (ADDR_WIDTH),
+        .ATTR_WIDTH (ATTR_WIDTH)
+    ) req_if [NUM_REQS] ();
+
+    for (genvar l = 0; l < NUM_REQS; ++l) begin : g_lane_bus
+        VX_mem_bus_slice #(
+            .DATA_SIZE   (DATA_SIZE),
+            .TAG_WIDTH   (TAG_WIDTH),
+            .ADDR_WIDTH  (ADDR_WIDTH),
+            .ATTR_WIDTH  (ATTR_WIDTH),
+            .REQ_OUT_BUF (0),
+            .RSP_OUT_BUF (RSP_OUT_BUF)
+        ) rsp_buf (
+            .clk        (clk),
+            .reset      (reset),
+            .bus_in_if  (core_bus_if[l]),
+            .bus_out_if (req_if[l])
+        );
+    end
     localparam LANE_W        = `UP(`CLOG2(NUM_REQS));
     localparam PAGE_OFFSET_W = `VX_VM_PAGE_LOG2_SIZE - `CLOG2(DATA_SIZE);
 
@@ -119,14 +162,14 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
 
     for (genvar l = 0; l < NUM_REQS; ++l) begin : g_in
         wire [FIELDS_W-1:0] fields_in = {
-            core_bus_if[l].req_data.rw,
-            core_bus_if[l].req_data.addr,
-            core_bus_if[l].req_data.data,
-            core_bus_if[l].req_data.byteen,
-            core_bus_if[l].req_data.attr[ATTR_WIDTH-1:0],
-            core_bus_if[l].req_data.tag[TAG_WIDTH-1:0]
+            req_if[l].req_data.rw,
+            req_if[l].req_data.addr,
+            req_if[l].req_data.data,
+            req_if[l].req_data.byteen,
+            req_if[l].req_data.attr[ATTR_WIDTH-1:0],
+            req_if[l].req_data.tag[TAG_WIDTH-1:0]
         };
-        assign probe_vpn[l] = core_bus_if[l].req_data.addr[PAGE_OFFSET_W +: TLB_VPN_WIDTH];
+        assign probe_vpn[l] = req_if[l].req_data.addr[PAGE_OFFSET_W +: TLB_VPN_WIDTH];
 
         reg [1:0]                v_r;
         reg [1:0][FIELDS_W-1:0]  d_r;
@@ -134,8 +177,8 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         reg                      rd_r, wr_r;
 
         wire in_ready = ~(& v_r);
-        wire enq = core_bus_if[l].req_valid && in_ready;
-        assign core_bus_if[l].req_ready = in_ready;
+        wire enq = req_if[l].req_valid && in_ready;
+        assign req_if[l].req_ready = in_ready;
 
         always @(posedge clk) begin
             for (integer e = 0; e < 2; ++e) begin
@@ -319,7 +362,11 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
 
     for (genvar l = 0; l < NUM_REQS; ++l) begin : g_cat
         assign cam_acc[l]    = req_acc[l];
-        assign cat_bypass[l] = req_valid[l] && req_bypass[l];
+        // A data-side flush token holds while the miss station holds any
+        // parked request, so it reaches the cache behind its lane's earlier
+        // requests (conservative: behind every lane's).
+        wire flush_hold = (EXEC_SIDE == 0) && req_attr[l][MEM_ATTR_FLUSH_OFFS] && ~tlb_empty;
+        assign cat_bypass[l] = req_valid[l] && req_bypass[l] && !flush_hold;
         assign cat_park[l]   = park_raw[l] && park_elig[l];
         assign cat_hit[l]    = req_valid[l] && !req_bypass[l] && !mshr_match[l] && cam_hit[l] && cam_perm[l];
         assign cat_pfault[l] = req_valid[l] && !req_bypass[l] && !mshr_match[l] && cam_hit[l] && !cam_perm[l];
@@ -481,13 +528,13 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
 
         // Response path wires straight back, except a teardown injects a
         // zeroed response ahead of the cache reply for its lane.
-        assign core_rsp_ready[l] = core_bus_if[l].rsp_ready;
-        assign core_bus_if[l].rsp_valid     = kill_to_lane[l] || pf_rsp || mem_bus_if[l].rsp_valid;
-        assign core_bus_if[l].rsp_data.data = (kill_to_lane[l] || pf_rsp) ? '0 : mem_bus_if[l].rsp_data.data;
-        assign core_bus_if[l].rsp_data.tag  = kill_to_lane[l] ? kill_tag
+        assign core_rsp_ready[l] = req_if[l].rsp_ready;
+        assign req_if[l].rsp_valid     = kill_to_lane[l] || pf_rsp || mem_bus_if[l].rsp_valid;
+        assign req_if[l].rsp_data.data = (kill_to_lane[l] || pf_rsp) ? '0 : mem_bus_if[l].rsp_data.data;
+        assign req_if[l].rsp_data.tag  = kill_to_lane[l] ? kill_tag
                                             : pf_rsp ? req_fields[l][F_TAG_LO +: TAG_WIDTH]
                                             : mem_bus_if[l].rsp_data.tag;
-        assign mem_bus_if[l].rsp_ready      = core_bus_if[l].rsp_ready && ~kill_to_lane[l] && ~pf_rsp;
+        assign mem_bus_if[l].rsp_ready      = req_if[l].rsp_ready && ~kill_to_lane[l] && ~pf_rsp;
     end
 
     assign replay_ready = replay_valid && (replay_perm ? pipe_ready[replay_lane] : kill_ready);
@@ -540,5 +587,6 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         assign pipe_busy[l] = s1_busy[l] || mem_bus_if[l].req_valid;
     end
     assign empty = ~(| pipe_busy) && tlb_empty;
+    assign lane_idle = ~pipe_busy & {NUM_REQS{tlb_empty}};
 
 endmodule

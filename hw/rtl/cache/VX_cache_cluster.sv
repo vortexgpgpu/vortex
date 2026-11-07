@@ -33,7 +33,6 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
 
     parameter CRSQ_SIZE             = 0,      // Core Response Queue Size
     parameter MSHR_SIZE             = 16,     // Miss Reserv Queue Knob
-    parameter MSHR_LINES            = 0,      // MSHR distinct line entries (0 = address per request)
     parameter MRSQ_SIZE             = 4,      // Memory Response Queue Size
     parameter MREQ_SIZE             = 0,      // Memory Request Queue Size (0 = derived minimum)
 
@@ -59,9 +58,11 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
 
     parameter IS_LLC                = 0,      // Indicates this cache cluster is the LLC (handles AMO completion).
     parameter SHARED_LLC            = 0,      // The LLC serves every memory client alone (point of coherence).
+    parameter ACQ_FORWARD           = 0,      // An acquire flush also invalidates the next level.
     parameter FLUSH_FORWARD         = 1,      // A flush also flushes the next level.
     parameter BANK_HASH             = 0,      // Hashed bank select (cache_bank_hash).
     parameter READ_MERGE            = 0,      // Merge same-word reads within groups of this many adjacent ports (0: off).
+    parameter READ_MERGE_LINE       = 0,      // Merge any reads of the same line instead, each port keeping its own tag and word.
 
     parameter AMO_ENABLE            = 0       // Enable atomic memory operations.
  ) (
@@ -172,7 +173,6 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .REPL_POLICY  (REPL_POLICY),
             .CRSQ_SIZE    (CRSQ_SIZE),
             .MSHR_SIZE    (MSHR_SIZE),
-            .MSHR_LINES   (MSHR_LINES),
             .MRSQ_SIZE    (MRSQ_SIZE),
             .MREQ_SIZE    (MREQ_SIZE),
             .LATENCY      (LATENCY),
@@ -184,9 +184,11 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .PASSTHRU     (PASSTHRU),
             .IS_LLC       (IS_LLC),
             .SHARED_LLC   (SHARED_LLC),
+            .ACQ_FORWARD  (ACQ_FORWARD),
             .FLUSH_FORWARD (FLUSH_FORWARD),
             .BANK_HASH    (BANK_HASH),
             .READ_MERGE   (READ_MERGE),
+            .READ_MERGE_LINE (READ_MERGE_LINE),
             .AMO_ENABLE   (AMO_ENABLE)
         ) cache_wrap (
         `ifdef PERF_ENABLE

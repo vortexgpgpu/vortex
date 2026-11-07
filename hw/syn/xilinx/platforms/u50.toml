@@ -9,8 +9,8 @@ match_xsa = ["xilinx_u50_*"]
 [memory]
 banks = 32
 addr_width = 33
-merged = true
-tags = ["HBM[0:31]"]
+# The AFU memory masters split the channels into contiguous groups.
+tag = "HBM"
 
 [host]
 tag = "HOST[0]"

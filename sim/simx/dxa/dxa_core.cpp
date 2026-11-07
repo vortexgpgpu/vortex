@@ -935,7 +935,16 @@ DxaCore::DxaCore(const SimContext& ctx, const char* name, Socket* socket)
   snprintf(sname, 100, "%s-gmem-arb", name);
   gmem_arb_ = MemArbiter::Create(sname, ArbiterType::RoundRobin, VX_CFG_NUM_DXA_CORES, kDxaMemPorts);
   for (uint32_t i = 0; i < kDxaMemPorts; ++i) {
+  #ifdef SIMX_SOCKET_UNIT_MMU
+    // The unit MMU's lookup starts from a registered request: the DXA owns it.
+    snprintf(sname, 100, "%s-gmem-out%d", name, i);
+    auto out_reg = MemReqSlice::Create(sname, 1);
+    gmem_arb_->ReqOut.at(i).bind(&out_reg->In);
+    out_reg->Out.bind(&gmem_req_out.at(i));
+    gmem_out_regs_.push_back(out_reg);
+  #else
     gmem_arb_->ReqOut.at(i).bind(&gmem_req_out.at(i));
+  #endif
     gmem_rsp_in.at(i).bind(&gmem_arb_->RspIn.at(i));
   }
 

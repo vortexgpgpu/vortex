@@ -5,7 +5,7 @@ defaults:
   - 32
   - 64
   tier: smoke
-  touches: [hw/rtl/tcu, sim/simx/tcu, sw/kernel/include/vx_tensor.h]
+  touches: [hw/rtl/tcu, hw/rtl/VX_gpu_pkg.sv, sim/simx/tcu, sim/simx/fragment_layout.h, sw/kernel/include/vx_tensor.h]
 tests:
 - id: sgemm_tcu_sp-1
   via: blackbox
@@ -32,6 +32,15 @@ tests:
   - simx
   app: sgemm_tcu_sp
   configs: -DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TF32_ENABLE -DITYPE=tf32 -DOTYPE=fp32
+# A long K: the fp32 tolerance grows with the accumulation chain.
+- id: sgemm_tcu_sp-k256
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=fp16 -DOTYPE=fp32
+  args: -k256
 - id: sgemm_tcu_sp-5
   via: blackbox
   drivers:
@@ -250,6 +259,28 @@ tests:
   app: sgemm_tcu_sp
   configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_TF32_ENABLE -DITYPE=tf32 -DOTYPE=fp32
 
+# An LSU narrower than the warp: TCU_LD fetches the metadata in several passes,
+# through a shared AGU port in the second case.
+- id: sgemm_tcu_sp-lsu-lanes-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_LSU_LANES=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=fp16 -DOTYPE=fp32
+- id: sgemm_tcu_sp-lsu-lanes-2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_LSU_LANES=4 -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_INT8_ENABLE -DITYPE=int8 -DOTYPE=int32
+- id: model_parity-sparse-lsu-lanes
+  check: model_parity
+  via: blackbox
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_LSU_LANES=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE
+
 # SimX<->rtlsim cycle parity on the native sparse fp16 datapath: same config on
 # both drivers, cycles must agree within tolerance (see core.yaml).
 - id: model_parity-sparse-fp16
@@ -268,3 +299,26 @@ tests:
 
   # Not warp-width swept: the tensor-core fragment layout is defined over a fixed
   # lane count, which the configs pin.
+
+# Sparse fragments moved with vx_ldm (VX_CFG_EXT_LDST_MATRIX_ENABLE).
+- id: sgemm_tcu_sp-ldm-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DVX_CFG_EXT_LDST_MATRIX_ENABLE
+  touches: [hw/rtl/tcu, hw/rtl/core/VX_uop_packld.sv, hw/rtl/core/VX_decode.sv, sim/simx/tcu, sim/simx/fragment_layout.h, sim/simx/lsu_unit.cpp, sim/simx/decode.cpp, hw/rtl/VX_gpu_pkg.sv, sw/kernel/include/vx_tensor.h, sw/kernel/include/vx_intrinsics.h]
+- id: sgemm_tcu_sp-ldm-2
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_INT8_ENABLE -DITYPE=int8 -DOTYPE=int32 -DVX_CFG_EXT_LDST_MATRIX_ENABLE -DKUNROLL=2
+  touches: [hw/rtl/tcu, hw/rtl/core/VX_uop_packld.sv, hw/rtl/core/VX_decode.sv, sim/simx/tcu, sim/simx/fragment_layout.h, sim/simx/lsu_unit.cpp, sim/simx/decode.cpp, hw/rtl/VX_gpu_pkg.sv, sw/kernel/include/vx_tensor.h, sw/kernel/include/vx_intrinsics.h]
+- id: model_parity-sp-ldm
+  check: model_parity
+  via: blackbox
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DVX_CFG_EXT_LDST_MATRIX_ENABLE
+  touches: [hw/rtl/tcu, hw/rtl/core/VX_uop_packld.sv, hw/rtl/core/VX_decode.sv, sim/simx/tcu, sim/simx/fragment_layout.h, sim/simx/lsu_unit.cpp, sim/simx/decode.cpp, hw/rtl/VX_gpu_pkg.sv, sw/kernel/include/vx_tensor.h, sw/kernel/include/vx_intrinsics.h]

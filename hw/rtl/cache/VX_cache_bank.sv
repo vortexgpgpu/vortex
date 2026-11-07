@@ -26,7 +26,6 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     parameter SECTOR_SIZE       = LINE_SIZE,// sector (fill/eviction granule); = LINE_SIZE => 1 sector
     parameter CRSQ_SIZE         = 0,        // extra core-response queue slots over minimum
     parameter MSHR_SIZE         = 1,        // miss reservation queue size
-    parameter MSHR_LINES        = 0,        // MSHR distinct line entries (0 = address per request)
     parameter MRSQ_SIZE         = 1,        // memory response queue size (sized at wrapper)
     parameter MREQ_SIZE         = 0,        // memory request queue size (0 = derived minimum)
     parameter WRITE_ENABLE      = 1,
@@ -41,6 +40,11 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     parameter IS_LLC            = 0,        // last-level cache: AMOs commit locally here
     parameter AMO_ENABLE        = 0,        // synthesize atomic-op logic
     parameter LATENCY           = 2,        // pipeline depth; >2 defers the data array to break the tag->data path
+    // Words per core response. Above 1, response word k is the line's word
+    // whose select rides in the request tag at RSP_WSEL_OFFS + k * RSP_WSEL_STRIDE.
+    parameter RSP_WORDS         = 1,
+    parameter RSP_WSEL_OFFS     = 0,
+    parameter RSP_WSEL_STRIDE   = 0,
     parameter MERGE_GROUP       = 0,        // read-merge group: the tag's low bits mark the merged ports (0: none)
     parameter MSHR_ADDR_WIDTH   = `LOG2UP(MSHR_SIZE),
     parameter MEM_TAG_WIDTH     = UUID_WIDTH + MSHR_ADDR_WIDTH,
@@ -71,7 +75,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
 
     // Core response
     output wire                         core_rsp_valid,
-    output wire [`CS_WORD_WIDTH-1:0]    core_rsp_data,
+    output wire [RSP_WORDS-1:0][`CS_WORD_WIDTH-1:0] core_rsp_data,
     output wire [TAG_WIDTH-1:0]         core_rsp_tag,
     output wire [REQ_SEL_WIDTH-1:0]     core_rsp_idx,
     output wire [NUM_REQS-1:0]          core_rsp_targets, // the ports the response goes to
@@ -120,6 +124,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     `STATIC_ASSERT(LATENCY >= 2, ("invalid parameter: cache bank LATENCY must be >= 2"))
     `STATIC_ASSERT(!LAZY_FETCH || (WRITEBACK && DIRTY_BYTES && IS_LLC), ("invalid parameter: lazy fetch requires a write-back LLC with dirty bytes"))
     `STATIC_ASSERT(!WRITE_AROUND || (WRITEBACK && WRITE_ENABLE), ("invalid parameter: write-around requires a write-back cache"))
+    `STATIC_ASSERT(RSP_WORDS == 1 || (!WRITE_ENABLE && !AMO_ENABLE), ("invalid parameter: multi-word responses are read-only"))
     `UNUSED_PARAM (MRSQ_SIZE)
 
     // ========================================================================
@@ -176,6 +181,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         logic                          is_refetch;  // fill whose root refetches a partial sector
         logic                          is_retry;    // refetch re-issued after its sector was evicted
         logic                          is_park;     // replay parked on a partial sector: issues its refetch
+        logic                          is_loop;     // fill taken from the loopback queue
     } lazy_req_t;
 
     data_t   sel_req, st0, dat_in, stD;   // request + fill line: sel -> S0 -> stD
@@ -186,7 +192,6 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // Shared signals
     // ------------------------------------------------------------------------
     wire crsp_queue_stall, mshr_alm_full;
-    wire mshr_req_full, mshr_line_ready;
     wire mshr_allocate_st0;
     (* max_fanout = 64 *) wire pipe_stall;
     // Authoritative "no entry held", straight off the MSHR's valid mask. The
@@ -203,7 +208,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire [`UP(`CS_SECTOR_SEL_BITS)-1:0] mem_rsp_sector; // sector this fill installs
     wire [MSHR_ADDR_WIDTH-1:0] mshr_alloc_id, mshr_previd;
     wire mshr_fill_refetch, mshr_fill_retry, mshr_dequeue_reads;
-    wire lazyq_empty, lazyq_alm_full;
+    wire lazyq_empty, lazyq_alm_full, lazyq_full;
     wire mshr_pending_raw;
     wire mshr_pending_wr_raw;
     wire mshr_pending_ovl_raw;
@@ -388,6 +393,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // refetches. A refetch merges into its resident sector one stage late, at
     // stC; one whose sector was evicted installs nothing and retries as a
     // plain fill (nothing can dirty an absent sector, so its data is current).
+    // A refetch whose sector is already fully written has nothing to read: it
+    // loops back as a data-less refetch instead of going to memory.
     wire lazyq_valid = ~lazyq_empty;
     wire [MSHR_ADDR_WIDTH-1:0] lazyq_id;
     wire lazy_sel    = ~mem_rsp_valid && lazyq_valid;
@@ -439,8 +446,18 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     assign mem_rsp_ready  = fill_grant && ~fwd_pending && ~replay_link_hold && ~amo_wbq_full && ~refetch_inflight
                          && ~replay_block && ~pipe_stall;
     assign flush_ready    = flush_grant && ~(WRITEBACK && ~mreq_room) && ~pipe_stall;
+    // what starts new memory traffic (a core request, a flush, an LLC AMO
+    // writeback) is admitted against the write-back reservation (g_mreq_rsv)
+    wire   mreq_admit_full = WRITEBACK ? ~mreq_room : mreq_queue_alm_full;
     // a core request may become a write-miss root, which pushes to lazyq.
-    wire   creq_alm_full  = (WRITEBACK ? ~mreq_room : mreq_queue_alm_full) || lazyq_alm_full || replay_block;
+    wire   creq_alm_full  = mreq_admit_full || lazyq_alm_full || replay_block;
+    // A queued AMO result drains through the core-request slot, while a full
+    // AMO writeback queue holds off the fills that drain the lazy queue. So
+    // the writeback is not held to the lazy queue's pipeline reservation when
+    // the pipe is empty: then only the writeback itself can push, and a free
+    // slot is room enough.
+    wire   lazyq_wb_block = lazyq_alm_full && (pipe_inflight || lazyq_full);
+    wire   amo_wb_alm_full = mreq_admit_full || lazyq_wb_block || replay_block;
     assign core_req_ready = creq_grant && ~creq_alm_full && ~mshr_alm_full && ~pipe_stall
                          && ~amo_commit_busy && ~req_input_defer;
 
@@ -453,9 +470,9 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire flush_fire   = flush_valid && flush_ready;
     // amo_wb_path already excludes the cycle a fresh AMO commits at S1, so the
     // writeback never races the chain update.
-    wire amo_wb_fire   = amo_wb_path && creq_grant && ~creq_alm_full && ~mshr_alm_full && ~pipe_stall;
-    wire core_req_fire = (amo_creq_path || amo_wb_path) && creq_grant
-                       && ~creq_alm_full && ~mshr_alm_full && ~pipe_stall;
+    wire amo_wb_fire   = amo_wb_path && creq_grant && ~amo_wb_alm_full && ~mshr_alm_full && ~pipe_stall;
+    wire core_req_fire = ((amo_creq_path && ~creq_alm_full) || (amo_wb_path && ~amo_wb_alm_full))
+                       && creq_grant && ~mshr_alm_full && ~pipe_stall;
 
     wire [MSHR_ADDR_WIDTH-1:0] mem_rsp_id = mem_rsp_tag[MSHR_ADDR_WIDTH-1:0];
     wire [MSHR_ADDR_WIDTH-1:0] fill_id    = lazy_sel ? lazyq_id : mem_rsp_id;
@@ -508,6 +525,17 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // pending wb (chained AMO replays from MSHR after a fill) and must not be
     // cleared by amo_wb_pending; the synthetic writeback carries amo.valid=0 so
     // it never re-commits at S1.
+    // The core-request slot's address: a pending LLC AMO writeback or the core
+    // request. The MSHR takes its allocate match against it a cycle early.
+    wire [`CS_LINE_ADDR_WIDTH-1:0] creq_addr_sel = amo_wb_pending ? amo_wb_addr : core_req_addr;
+    wire [WORD_SEL_WIDTH-1:0]      creq_wsel_sel = amo_wb_pending ? amo_wb_word_idx : core_req_wsel;
+    wire [`UP(`CS_SECTOR_SEL_BITS)-1:0] creq_sector_sel;
+    if (`CS_SECTOR_SEL_BITS != 0) begin : g_creq_sector
+        assign creq_sector_sel = creq_wsel_sel[`CS_WORD_SEL_BITS-1 -: `CS_SECTOR_SEL_BITS];
+    end else begin : g_creq_sector_0
+        assign creq_sector_sel = '0;
+    end
+
     always @(*) begin
         sel_req = '0;
         sel_req.req.valid    = init_fire || replay_fire || fill_fire || flush_fire || core_req_fire;
@@ -521,14 +549,13 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         sel_req.req.attr     = amo_wb_pending ? amo_wb_attr : (core_req_valid ? core_req_attr : '0);
         sel_req.req.way_idx  = flush_way;
         sel_req.req.addr     = (init_valid | flush_valid) ? `CS_LINE_ADDR_WIDTH'(flush_sel)
-                             : (replay_mux ? replay_addr : (fill_mux ? mem_rsp_addr
-                             : (amo_wb_pending ? amo_wb_addr : core_req_addr)));
+                             : (replay_mux ? replay_addr : (fill_mux ? mem_rsp_addr : creq_addr_sel));
         sel_req.req.byteen   = replay_mux ? replay_byteen : (amo_wb_pending ? amo_wb_byteen : core_req_byteen);
         // a fill carries the installed sector in its word_idx high bits so the
         // tag/data stages mark/write the right sector (0 when 1 sector/line).
         sel_req.req.word_idx = replay_mux ? replay_wsel
                              : (fill_mux ? fill_word_idx
-                             : (amo_wb_pending ? amo_wb_word_idx : core_req_wsel));
+                             : creq_wsel_sel);
         sel_req.req.req_idx  = replay_mux ? replay_idx : (amo_wb_pending ? amo_wb_idx : core_req_idx);
         sel_req.req.tag      = (init_valid | flush_valid) ? (flush_valid ? flush_tag : '0)
                              : (replay_mux ? replay_tag : (fill_mux ? (lazy_sel ? '0 : mem_rsp_tag_s)
@@ -540,10 +567,11 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         // tag_matches is computed at S0; left 0 here (overridden at the data bubble).
     end
 
-    assign lz_sel.is_lazy    = fill_enable && lazy_sel;
-    assign lz_sel.is_refetch = fill_enable && ~lazy_sel && mshr_fill_refetch;
+    assign lz_sel.is_lazy    = fill_enable && lazy_sel && ~mshr_fill_refetch;
+    assign lz_sel.is_refetch = fill_enable && mshr_fill_refetch;
     assign lz_sel.is_retry   = fill_enable && ~lazy_sel && mshr_fill_retry;
     assign lz_sel.is_park    = replay_enable && park_sel;
+    assign lz_sel.is_loop    = fill_enable && lazy_sel;
 
     // UUID extraction (debug + MSHR ordering): per stage, from the carried tag.
     wire [`UP(UUID_WIDTH)-1:0] req_uuid_sel, req_uuid_st0, req_uuid_st1, req_uuid_stc;
@@ -626,8 +654,9 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .lookup_hit   (st1.lk.is_hit),
         .lookup_line  (st1.req.addr[`CS_LINE_SEL_BITS-1:0]),
         .lookup_way   (st1.req.way_idx),
-        // a refetch merges into its resident sector and uses no victim
-        .repl_valid   (do_fill_st0 && ~st0.req.is_passthru_fill && ~refetch_first_st0 && ~pipe_stall),
+        // only a new line takes a victim: a refetch merges into its resident
+        // sector and a sector refill joins its resident line
+        .repl_valid   (do_fill_st0 && ~st0.req.is_passthru_fill && ~refetch_first_st0 && ~line_present_any_st0 && ~pipe_stall),
         .repl_line    (line_idx_st0),
         .repl_line_n  (sel_req.req.addr[`CS_LINE_SEL_BITS-1:0]),
         .repl_way     (victim_way)
@@ -713,8 +742,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // disjoint words — the common case in streaming, where the whole warp's
     // beats land on one sector — keep the fast release path, as does
     // read-after-read on the same word.
+    // (the probes carry their own pending test; see VX_cache_mshr)
     assign creq_hit_order_hazard_st0 = st0.req.is_creq && ~st0.req.is_replay
-                                    && mshr_pending_raw
                                     && (mshr_pending_wr_raw || (st0.req.rw && mshr_pending_ovl_raw))
                                     && ~is_amo_fwd_st0
                                     && ~((AMO_ENABLE != 0) && st0.req.amo.amo_valid);
@@ -788,15 +817,30 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .data_out (st1)
     );
 
+    // stP is the stage that feeds stC: the dirty-byte mask is read there, so
+    // stC gets it from a register.
+    commit_t stP;
     VX_pipe_register #(
         .DATAW  ($bits(commit_t)),
         .RESETW (1),
-        .DEPTH  (PIPE_EX)
-    ) reg_cmt (
+        .DEPTH  ((PIPE_EX != 0) ? (PIPE_EX - 1) : 0)
+    ) reg_cmt_p (
         .clk      (clk),
         .reset    (reset),
         .enable   (~pipe_stall),
         .data_in  (st1),
+        .data_out (stP)
+    );
+
+    VX_pipe_register #(
+        .DATAW  ($bits(commit_t)),
+        .RESETW (1),
+        .DEPTH  ((PIPE_EX != 0) ? 1 : 0)
+    ) reg_cmt (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (~pipe_stall),
+        .data_in  (stP),
         .data_out (stC)
     );
 
@@ -804,9 +848,9 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // refetch fill writes no data at stD.
     wire fill_merge_st0  = refetch_first_st0 && fill_resident_st0;
     wire fill_nodata_st0 = lazy_st0 || refetch_first_st0;
-    wire fill_merge_stc, fill_nodata_std, lazy_std;
+    wire fill_merge_stc, fill_nodata_std, loop_std, partial_miss_stc;
     if (LAZY_FETCH != 0) begin : g_lazy_pipe
-        wire fill_merge_st1;
+        wire fill_merge_st1, partial_miss_st1;
         VX_pipe_register #(
             .DATAW  ($bits(lazy_req_t)),
             .RESETW ($bits(lazy_req_t))
@@ -818,25 +862,25 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
             .data_out (lz_st0)
         );
         VX_pipe_register #(
-            .DATAW  ($bits(lazy_req_t) + 1),
-            .RESETW ($bits(lazy_req_t) + 1)
+            .DATAW  ($bits(lazy_req_t) + 2),
+            .RESETW ($bits(lazy_req_t) + 2)
         ) reg_lz_s1 (
             .clk      (clk),
             .reset    (reset),
             .enable   (~pipe_stall),
-            .data_in  ({lz_st0, fill_merge_st0}),
-            .data_out ({lz_st1, fill_merge_st1})
+            .data_in  ({lz_st0, fill_merge_st0, partial_miss_st0}),
+            .data_out ({lz_st1, fill_merge_st1, partial_miss_st1})
         );
         VX_pipe_register #(
-            .DATAW  ($bits(lazy_req_t) + 1),
-            .RESETW ($bits(lazy_req_t) + 1),
+            .DATAW  ($bits(lazy_req_t) + 2),
+            .RESETW ($bits(lazy_req_t) + 2),
             .DEPTH  (PIPE_EX)
         ) reg_lz_cmt (
             .clk      (clk),
             .reset    (reset),
             .enable   (~pipe_stall),
-            .data_in  ({lz_st1, fill_merge_st1}),
-            .data_out ({lz_stc, fill_merge_stc})
+            .data_in  ({lz_st1, fill_merge_st1, partial_miss_st1}),
+            .data_out ({lz_stc, fill_merge_stc, partial_miss_stc})
         );
         VX_pipe_register #(
             .DATAW  (2),
@@ -846,8 +890,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
             .clk      (clk),
             .reset    (reset),
             .enable   (~pipe_stall),
-            .data_in  ({lazy_st0, fill_nodata_st0}),
-            .data_out ({lazy_std, fill_nodata_std})
+            .data_in  ({lz_st0.is_loop, fill_nodata_st0}),
+            .data_out ({loop_std, fill_nodata_std})
         );
     end else begin : g_no_lazy_pipe
         assign lz_st0          = '0;
@@ -855,8 +899,9 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         assign lz_stc          = '0;
         assign fill_merge_stc  = 1'b0;
         assign fill_nodata_std = 1'b0;
-        assign lazy_std        = 1'b0;
-        `UNUSED_VAR ({lz_sel, fill_merge_st0, fill_nodata_st0})
+        assign loop_std        = 1'b0;
+        assign partial_miss_stc = 1'b0;
+        `UNUSED_VAR ({lz_sel, fill_merge_st0, fill_nodata_st0, lz_st0.is_loop, lz_stc.is_loop})
     end
 
     // a passthru-AMO replay carries its result word instead of an installed
@@ -908,7 +953,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .data_in  (fbuf_addr_r),
         .data_out (fill_addr_std)
     );
-    `RUNTIME_ASSERT (~(do_fill_std && ~stD.req.is_passthru_fill && ~lazy_std) || (stD.req.addr == fill_addr_std), ("%t: %s fill sector misaligned with its array write: addr=0x%0h, staged=0x%0h", $time, INSTANCE_ID, `CS_BANK_TO_FULL_ADDR(stD.req.addr, BANK_ID), `CS_BANK_TO_FULL_ADDR(fill_addr_std, BANK_ID)))
+    `RUNTIME_ASSERT (~(do_fill_std && ~stD.req.is_passthru_fill && ~loop_std) || (stD.req.addr == fill_addr_std), ("%t: %s fill sector misaligned with its array write: addr=0x%0h, staged=0x%0h", $time, INSTANCE_ID, `CS_BANK_TO_FULL_ADDR(stD.req.addr, BANK_ID), `CS_BANK_TO_FULL_ADDR(fill_addr_std, BANK_ID)))
 `endif
 
     // The fill sector, replicated across the line so each sector's slices see
@@ -928,6 +973,16 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire mask_clr_line_stc = (mask_fill_stc && ~stC.lk.is_refill) || (stC.req.valid && stC.req.is_flush);
     wire mask_clr_sec_stc  = mask_fill_stc && stC.lk.is_refill;
 
+    // The data slices a read returns: its word's, or under multi-word
+    // responses the whole line, since a merged read may take any word (and
+    // decoding the slots' selects here would sit on the array's enable path).
+    wire [`CS_WORDS_PER_LINE-1:0] read_words_std;
+    if (RSP_WORDS > 1) begin : g_read_words
+        assign read_words_std = '1;
+    end else begin : g_read_word
+        assign read_words_std = `CS_WORDS_PER_LINE'(1) << stD.req.word_idx;
+    end
+
     VX_cache_data #(
         .CACHE_SIZE   (CACHE_SIZE),
         .LINE_SIZE    (LINE_SIZE),
@@ -938,7 +993,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .WRITE_ENABLE (WRITE_ENABLE),
         .WRITEBACK    (WRITEBACK),
         .DIRTY_BYTES  (DIRTY_BYTES),
-        .LAZY_FETCH   (LAZY_FETCH)
+        .LAZY_FETCH   (LAZY_FETCH),
+        .MASK_SYNC    (PIPE_EX != 0)
     ) cache_data (
         .clk          (clk),
         .reset        (reset),
@@ -953,6 +1009,9 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .mask_word    (stC.req.word_idx),
         .mask_byteen  (stC.req.byteen),
         .mask_sector  (sector_idx_stc),
+        .mask_read    (~pipe_stall),
+        .mask_rway    (stP.req.way_idx),
+        .mask_rline   (stP.req.addr[`CS_LINE_SEL_BITS-1:0]),
         .merge_write  (do_merge_stc && ~pipe_stall),
         .flush        (do_flush_std && ~pipe_stall),
         .read         (do_read_std && ~pipe_stall),
@@ -963,6 +1022,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .fill_data    (fbuf_line),
         .write_word   (stD.wdata),
         .word_idx     (stD.req.word_idx),
+        .read_words   (read_words_std),
         .sector_idx   (sector_idx_std),
         .write_byteen (stD.req.byteen),
         .read_data    (read_data_stc),
@@ -1031,12 +1091,10 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .decr  (mshr_dequeue),
         `UNUSED_PIN (empty),
         `UNUSED_PIN (alm_empty),
-        .full  (mshr_req_full),
+        .full  (mshr_alm_full),
         `UNUSED_PIN (alm_full),
         `UNUSED_PIN (size)
     );
-
-    assign mshr_alm_full = mshr_req_full || ~mshr_line_ready;
 
     // The core response queue's ready (driven at the queue below): the MSHR's
     // forwarding lookup reads it.
@@ -1050,8 +1108,6 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .SECTOR_SIZE (SECTOR_SIZE),
         .NUM_BANKS   (NUM_BANKS),
         .MSHR_SIZE   (MSHR_SIZE),
-        .MSHR_LINES  (MSHR_LINES),
-        .WRITEBACK   (WRITEBACK),
         .AMO_ENABLE  (AMO_ENABLE != 0),
         .AMO_PASSTHRU ((AMO_ENABLE != 0) && (IS_LLC == 0)),
         .WORD_SEL_WIDTH (WORD_SEL_WIDTH),
@@ -1084,12 +1140,16 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .dequeue_id          (replay_id),
         .dequeue_ready       (replay_ready || fwd_fire),
         .dequeue_lookup      (replay_ready_lk || (fwd_head_lk && crsp_queue_ready)),
+        .dequeue_fwd_lookup  (fwd_head_lk && crsp_queue_ready),
         .dequeue_park        (park_sel),
         .dequeue_park_retry  (chain_retry),
         .dequeue_block       (replay_block),
         .allocate_valid      (mshr_allocate_st0 && ~pipe_stall),
         .allocate_addr       (st0.req.addr),
         .allocate_sector     (sector_idx_st0),
+        .allocate_addr_n     (creq_addr_sel),
+        .allocate_sector_n   (creq_sector_sel),
+        .allocate_adv        (~pipe_stall),
         .allocate_word_idx   (st0.req.word_idx),
         .allocate_rw         (st0.req.rw),
         // Only non-LLC AMOs must not coalesce; at the LLC same-line AMOs coalesce
@@ -1103,7 +1163,6 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .allocate_pending_ovl (mshr_pending_ovl_raw),
         .allocate_previd     (mshr_previd),
         `UNUSED_PIN (allocate_ready),
-        .allocate_line_ready (mshr_line_ready),
         .finalize_valid      (mshr_finalize_st1 && ~pipe_stall),
         .finalize_lookup     (mshr_finalize_st1),
         .finalize_is_release (mshr_release_st1),
@@ -1336,6 +1395,28 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         assign fwd_word = fbuf_data_r[`CS_WORD_WIDTH-1:0];
     end
 
+    // A multi-word response takes each word its tag selects, from the line at
+    // commit or from the staged sector on a forward.
+    wire [RSP_WORDS-1:0][`CS_WORD_WIDTH-1:0] crsp_words, fwd_words;
+    if (RSP_WORDS > 1) begin : g_rsp_words
+        for (genvar k = 0; k < RSP_WORDS; ++k) begin : g_word
+            wire [WORD_SEL_WIDTH-1:0] wsel_stc = stC.req.tag[RSP_WSEL_OFFS + k * RSP_WSEL_STRIDE +: WORD_SEL_WIDTH];
+            wire [WORD_SEL_WIDTH-1:0] wsel_fwd = replay_tag[RSP_WSEL_OFFS + k * RSP_WSEL_STRIDE +: WORD_SEL_WIDTH];
+            assign crsp_words[k] = read_data_stc[wsel_stc];
+            if (`CS_WORDS_PER_SECTOR > 1) begin : g_fwd
+                wire [`CLOG2(`CS_WORDS_PER_SECTOR)-1:0] fwd_k = wsel_fwd[`CLOG2(`CS_WORDS_PER_SECTOR)-1:0];
+                assign fwd_words[k] = fbuf_data_r[fwd_k * `CS_WORD_WIDTH +: `CS_WORD_WIDTH];
+            end else begin : g_fwd_1
+                assign fwd_words[k] = fbuf_data_r[`CS_WORD_WIDTH-1:0];
+                `UNUSED_VAR (wsel_fwd)
+            end
+        end
+        `UNUSED_VAR ({crsp_queue_data, fwd_word})
+    end else begin : g_rsp_word
+        assign crsp_words = crsp_queue_data;
+        assign fwd_words  = fwd_word;
+    end
+
     `RUNTIME_ASSERT (~fwd_fire || (replay_addr == fbuf_addr_r), ("%t: %s fill-forward address mismatch: addr=0x%0h, staged=0x%0h", $time, INSTANCE_ID, `CS_BANK_TO_FULL_ADDR(replay_addr, BANK_ID), `CS_BANK_TO_FULL_ADDR(fbuf_addr_r, BANK_ID)))
     `RUNTIME_ASSERT (~(flush_fire && fwd_pending), ("%t: %s flush during fill-forward drain", $time, INSTANCE_ID))
 
@@ -1355,7 +1436,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     end
 
     VX_elastic_buffer #(
-        .DATAW   (NUM_REQS + TAG_WIDTH + `CS_WORD_WIDTH + REQ_SEL_WIDTH),
+        .DATAW   (NUM_REQS + TAG_WIDTH + RSP_WORDS * `CS_WORD_WIDTH + REQ_SEL_WIDTH),
         .SIZE    (CRSQ_QUEUE_SIZE),
         .OUT_REG (`TO_OUT_BUF_REG(CORE_OUT_BUF))
     ) core_rsp_queue (
@@ -1363,7 +1444,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .reset     (reset),
         .valid_in  (crsp_queue_valid || fwd_head),
         .ready_in  (crsp_queue_ready),
-        .data_in   ({crsp_in_targets, crsp_in_tag, (crsp_queue_valid ? crsp_queue_data : fwd_word), crsp_in_idx}),
+        .data_in   ({crsp_in_targets, crsp_in_tag, (crsp_queue_valid ? crsp_words : fwd_words), crsp_in_idx}),
         .data_out  ({core_rsp_targets, core_rsp_tag, core_rsp_data, core_rsp_idx}),
         .valid_out (core_rsp_valid),
         .ready_out (core_rsp_ready)
@@ -1396,6 +1477,14 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // a write-miss root under lazy fetch loops its fill back instead.
     wire lazy_alloc_stc = (LAZY_FETCH != 0) && do_write_stc && ~stC.lk.is_hit && ~stC.lk.mshr_pending
                        && ~write_around_stc;
+    // the mask of the request's sector, as of every older store
+    wire [SECTOR_SIZE-1:0] sector_byteen_stc = evict_byteen_stc[sector_idx_stc * SECTOR_SIZE +: SECTOR_SIZE];
+    // a refetch root (a partial-miss read or a parked head) whose sector every
+    // store already covers loops back instead of reading memory, while the
+    // loopback has the room a new request is admitted with: a parked head is
+    // not admitted against it, and memory always has room for the refetch.
+    wire refetch_loop_stc = (LAZY_FETCH != 0) && do_read_stc && ~stC.lk.is_hit && ~stC.lk.mshr_pending
+                         && partial_miss_stc && (& sector_byteen_stc) && ~lazyq_alm_full;
     wire do_fill_or_flush_stc = stC.req.valid && is_fill_or_flush_stc;
     // a sector refill keeps the resident line (no eviction), so never writes back.
     wire do_writeback_stc = do_fill_or_flush_stc && stC.lk.is_dirty && ~stC.lk.is_refill && ~refetch_first_stc;
@@ -1500,7 +1589,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
             // on a dirty eviction. The two are mutually exclusive (a writeback is a
             // fill/flush commit; a fill request is a creq commit).
             wire fill_req_push = (do_read_stc || do_write_stc) && ~stC.lk.is_hit && ~stC.lk.mshr_pending
-                              && ~lazy_alloc_stc && ~write_around_stc && ~pipe_stall;
+                              && ~lazy_alloc_stc && ~refetch_loop_stc && ~write_around_stc && ~pipe_stall;
             wire wa_req_push = write_around_stc && ~pipe_stall;
             assign mreq_queue_push   = fill_req_push || wa_req_push || wb_beat_accept;
             assign mreq_queue_addr   = is_wb_beat ? wb_mreq_addr : rd_mreq_addr;
@@ -1609,12 +1698,14 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         assign mreq_room = ~mreq_queue_alm_full;
     end
 
-    // Lazy-fetch loopback: write-miss roots awaiting their data-less fill.
+    // Lazy-fetch loopback: write-miss roots awaiting their data-less fill, and
+    // refetch roots whose sector needs no data.
     // Sized like the memory request queue's reservation: a core request is
     // admitted only while every request already in the pipe still fits.
     if (LAZY_FETCH != 0) begin : g_lazyq
-        wire lazyq_full;
-        localparam LAZYQ_SIZE = 1 << `CLOG2(PIPELINE_STAGES + 1);
+        // Room for twice the pipe, so a few queued entries leave the
+        // reservation (and the refetch loopback, which needs it) open.
+        localparam LAZYQ_SIZE = 1 << `CLOG2(2 * PIPELINE_STAGES);
         VX_fifo_queue #(
             .DATAW    (MSHR_ADDR_WIDTH),
             .DEPTH    (LAZYQ_SIZE),
@@ -1622,7 +1713,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         ) lazy_queue (
             .clk      (clk),
             .reset    (reset),
-            .push     (lazy_alloc_stc && ~pipe_stall),
+            .push     ((lazy_alloc_stc || refetch_loop_stc) && ~pipe_stall),
             .pop      (lazy_fire),
             .data_in  (stC.req.mshr_id),
             .data_out (lazyq_id),
@@ -1642,7 +1733,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
                 chain_partial_r <= 1'b0;
                 chain_retry_r   <= 1'b0;
             end else if (fill_fire) begin
-                chain_partial_r <= lazy_fire;
+                chain_partial_r <= lazy_fire && ~mshr_fill_refetch;
                 chain_retry_r   <= 1'b0;
             end else if (refetch_hold && ~pipe_stall) begin
                 chain_partial_r <= fill_evicted_st0;
@@ -1659,14 +1750,20 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
                 refetch_inflight_r <= 1'b0;
             end else if (mem_rsp_fire && mshr_fill_refetch) begin
                 refetch_inflight_r <= 1'b1;
-            end else if (stC.req.valid && stC.req.is_fill && refetch_stc && ~pipe_stall) begin
+            end else if (stC.req.valid && stC.req.is_fill && refetch_stc && ~lz_stc.is_loop && ~pipe_stall) begin
                 refetch_inflight_r <= 1'b0;
             end
         end
         assign refetch_inflight = refetch_inflight_r;
+        // A memory refetch keeps its sector staged until its stC merge.
+        `RUNTIME_ASSERT (~(stC.req.valid && stC.req.is_fill && refetch_stc && ~lz_stc.is_loop) || refetch_inflight_r,
+            ("%t: %s memory refetch reached its merge unstaged: addr=0x%0h", $time, INSTANCE_ID, `CS_BANK_TO_FULL_ADDR(addr_stc, BANK_ID)))
 
-        `RUNTIME_ASSERT (~(lazy_alloc_stc && ~pipe_stall && lazyq_full && ~lazy_fire),
+        `RUNTIME_ASSERT (~((lazy_alloc_stc || refetch_loop_stc) && ~pipe_stall && lazyq_full && ~lazy_fire),
             ("%t: %s lazy queue overflow", $time, INSTANCE_ID))
+        // A looped-back refetch carries no data: its merge must find every byte written.
+        `RUNTIME_ASSERT (~(do_merge_stc && lz_stc.is_loop) || (& sector_byteen_stc),
+            ("%t: %s looped-back refetch of an incompletely written sector: addr=0x%0h", $time, INSTANCE_ID, `CS_BANK_TO_FULL_ADDR(addr_stc, BANK_ID)))
         `RUNTIME_ASSERT (~(park_fire && fwd_fire), ("%t: %s park and forward in one cycle", $time, INSTANCE_ID))
         `RUNTIME_ASSERT (~replay_valid || (mshr_dequeue_reads == (~replay_rw || replay_amo.amo_valid)),
             ("%t: %s chain head read flag disagrees with its payload", $time, INSTANCE_ID))
@@ -1681,10 +1778,11 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         assign lazyq_id       = '0;
         assign lazyq_empty    = 1'b1;
         assign lazyq_alm_full = 1'b0;
+        assign lazyq_full     = 1'b0;
         assign chain_partial    = 1'b0;
         assign chain_retry      = 1'b0;
         assign refetch_inflight = 1'b0;
-        `UNUSED_VAR ({lazy_alloc_stc, lazy_fire, refetch_hold, fill_resident_st0, fill_evicted_st0, partial_match_st0})
+        `UNUSED_VAR ({lazy_alloc_stc, refetch_loop_stc, sector_byteen_stc, lazy_fire, refetch_hold, fill_resident_st0, fill_evicted_st0, partial_match_st0})
     end
 
     `UNUSED_VAR (do_lookup_st0)
@@ -1722,8 +1820,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
                 mem_rsp_full_addr, mem_rsp_id, mshr_fill_refetch, mshr_fill_retry, mem_rsp_data, req_uuid_sel))
         end
         if (lazy_fire) begin
-            `TRACE(2, ("%t: %s lazy-fill: addr=0x%0h, mshr_id=%0d\n", $time, INSTANCE_ID,
-                mem_rsp_full_addr, lazyq_id))
+            `TRACE(2, ("%t: %s lazy-fill: addr=0x%0h, mshr_id=%0d, refetch=%b\n", $time, INSTANCE_ID,
+                mem_rsp_full_addr, lazyq_id, mshr_fill_refetch))
         end
         if (park_fire) begin
             `TRACE(2, ("%t: %s mshr-park: addr=0x%0h, tag=0x%0h, req_idx=%0d (#%0d)\n", $time, INSTANCE_ID,

@@ -29,21 +29,31 @@ Dispatcher::Dispatcher(const SimContext& ctx, const char* name, Core* core, uint
   , num_lanes_(num_lanes)
   , num_blocks_(VX_CFG_ISSUE_WIDTH / block_size)
   , num_packets_(VX_CFG_NUM_THREADS / num_lanes)
-  , batch_idx_(0)
+  , batch_idx_(num_blocks_ - 1)
   , out_delay_(out_delay)
   , block_pids_(block_size, 0)
+  , block_free_(block_size, 0)
+  , held_input_(block_size, -1)
+  , iter_out_reg_((num_lanes != VX_CFG_SIMD_WIDTH) && (VX_CFG_SIMD_WIDTH > 12))
 {}
 
 Dispatcher::~Dispatcher() {}
 
 void Dispatcher::on_reset() {
-  batch_idx_ = 0;
+  batch_idx_ = num_blocks_ - 1;
   for (auto& bp : block_pids_) {
     bp = 0;
+  }
+  for (auto& bf : block_free_) {
+    bf = 0;
+  }
+  for (auto& hi : held_input_) {
+    hi = -1;
   }
 }
 
 void Dispatcher::on_tick() {
+  uint64_t now = SimPlatform::instance().cycles();
   // Batches holding an instruction this cycle, sampled before any is popped.
   uint32_t valid_batches = 0;
   if (num_blocks_ != 1) {
@@ -52,6 +62,18 @@ void Dispatcher::on_tick() {
         valid_batches |= 1u << (i / block_size_);
       }
     }
+  }
+
+  // ops whose last packet left the iterator last cycle leave their queue now
+  for (auto& held : held_input_) {
+    if (held < 0)
+      continue;
+    auto& input = Inputs.at(held);
+    if (!release_on_accept_) {
+      ReleaseOut.send(input.peek(), 0);
+    }
+    input.pop();
+    held = -1;
   }
 
   // process inputs
@@ -68,6 +90,8 @@ void Dispatcher::on_tick() {
     // leaves its slot queue only when the unit's input has room.
     auto& output = Outputs.at(b);
     if (output.full())
+      continue;
+    if (now < block_free_.at(b))
       continue;
 
     auto trace = input.peek();
@@ -117,8 +141,19 @@ void Dispatcher::on_tick() {
         block_pids_.at(b) = start + 1;
       } else {
         block_pids_.at(b) = -1; // mark block as processed
-        input.pop();
-        ReleaseOut.send(trace, input_hold_ ? input_hold_(trace) : 0);
+        if (iter_out_reg_) {
+          // The iterator's output register holds the last packet a cycle
+          // more: the op leaves its slot queue then, and the register is
+          // cleared as it does, so the next op's first packet comes a cycle
+          // after that.
+          block_free_.at(b) = now + 2;
+          held_input_.at(b) = i;
+        } else {
+          input.pop();
+          if (!release_on_accept_) {
+            ReleaseOut.send(trace, 0);
+          }
+        }
         ++block_sent;
       }
       ThreadMask tmask(VX_CFG_NUM_THREADS);
@@ -132,18 +167,26 @@ void Dispatcher::on_tick() {
     } else {
       // issue the trace
       input.pop();
-      ReleaseOut.send(trace, input_hold_ ? input_hold_(trace) : 0);
+      if (!release_on_accept_) {
+        ReleaseOut.send(trace, 0);
+      }
       ++block_sent;
     }
     DT(3, this->name() << "-pipeline dispatch: " << *new_trace);
-    output.send(new_trace, out_delay_);
+    // A registered iterator presents each packet a cycle after it takes it.
+    output.send(new_trace, out_delay_ + (iter_out_reg_ ? 1 : 0));
   }
 
   // advance to next batch once all blocks in the current batch have been processed
   if (block_sent == block_size_) {
-    // Priority grant to the lowest batch with an instruction: an empty issue
-    // slot costs no dispatch cycle. With none, the grant rests on the last.
-    batch_idx_ = valid_batches ? __builtin_ctz(valid_batches) : (num_blocks_ - 1);
+    // Round-robin grant from the last granted batch, so no issue slice is
+    // favored. With none, the grant stays.
+    if (valid_batches != 0) {
+      uint32_t n = num_blocks_;
+      uint32_t from = batch_idx_;
+      uint32_t rot = ((valid_batches >> (from + 1)) | (valid_batches << (n - 1 - from))) & ((1u << n) - 1);
+      batch_idx_ = (from + 1 + __builtin_ctz(rot)) % n;
+    }
     for (auto& bp : block_pids_) {
       bp = 0;
     }

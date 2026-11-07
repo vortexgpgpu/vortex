@@ -211,16 +211,28 @@ module VX_vm_top import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
             .TAG_WIDTH (DCACHE_TAG_WIDTH)
         ) dmmu_phys_if [D_LANES] ();   // translated, to L1 dcache
 
+        // A core's requests leave its LSU through a registered output buffer,
+        // so each lane's request reaches the MMU from one here: the lookup's
+        // accept loop is timed as in a GPU, not from unconstrained ports.
         for (genvar i = 0; i < D_LANES; ++i) begin : g_dmmu_bind
             localparam g = s * D_LANES + i;
-            assign dmmu_core_if[i].req_valid       = dmmu_req_valid[g];
-            assign dmmu_core_if[i].req_data.rw     = dmmu_req_rw[g];
-            assign dmmu_core_if[i].req_data.byteen = dmmu_req_byteen[g];
-            assign dmmu_core_if[i].req_data.addr   = dmmu_req_addr[g];
-            assign dmmu_core_if[i].req_data.attr   = dmmu_req_attr[g];
-            assign dmmu_core_if[i].req_data.data   = dmmu_req_data[g];
-            assign dmmu_core_if[i].req_data.tag    = dmmu_req_tag[g];
-            assign dmmu_req_ready[g]               = dmmu_core_if[i].req_ready;
+            wire [1 + DC_ADDR_W + DCACHE_WORD_SIZE * 9 + MEM_ATTR_WIDTH + DCACHE_TAG_WIDTH - 1:0] dmmu_req;
+            VX_elastic_buffer #(
+                .DATAW   ($bits(dmmu_req)),
+                .SIZE    (2),
+                .OUT_REG (1)
+            ) req_out_buf (
+                .clk       (clk),
+                .reset     (reset),
+                .valid_in  (dmmu_req_valid[g]),
+                .ready_in  (dmmu_req_ready[g]),
+                .data_in   ({dmmu_req_rw[g], dmmu_req_addr[g], dmmu_req_data[g], dmmu_req_byteen[g],
+                             dmmu_req_attr[g], dmmu_req_tag[g]}),
+                .data_out  (dmmu_req),
+                .valid_out (dmmu_core_if[i].req_valid),
+                .ready_out (dmmu_core_if[i].req_ready)
+            );
+            assign dmmu_core_if[i].req_data = dmmu_req;
             assign dmmu_rsp_valid[g]               = dmmu_core_if[i].rsp_valid;
             assign dmmu_rsp_data[g]                = dmmu_core_if[i].rsp_data.data;
             assign dmmu_rsp_tag[g]                 = dmmu_core_if[i].rsp_data.tag;
@@ -255,13 +267,14 @@ module VX_vm_top import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
 
         // --- socket miss ports (dTLB, iTLB) into the socket arbiter ---
         VX_tlb_bus_if #(.ID_WIDTH (L1_TLB_ID_WIDTH))
-            socket_tlb_bus_if [2] ();
+            socket_tlb_bus_if [SOCKET_NUM_MMUS] ();
 
         VX_mmu #(
             .INSTANCE_ID ("dmmu"),
             .NUM_REQS    (D_LANES),
             .TLB_SIZE    (`VX_CFG_DTLB_SIZE),
             .EXEC_SIDE   (0),
+            .REQ_SKID    (1),
             .DATA_SIZE   (DCACHE_WORD_SIZE),
             .TAG_WIDTH   (DCACHE_TAG_WIDTH_BASE)
         ) dmmu (
@@ -273,6 +286,7 @@ module VX_vm_top import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
             .tlb_bus_if  (socket_tlb_bus_if[0]),
             .flush_if    (dmmu_flush_if),
             .fault_if    (dmmu_fault_if),
+            `UNUSED_PIN (lane_idle),
             .empty       (dmmu_empty[s])
         );
 
@@ -333,14 +347,29 @@ module VX_vm_top import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
 
             for (genvar i = 0; i < I_LANES; ++i) begin : g_immu_bind
                 localparam g = s * I_LANES + i;
-                assign immu_core_if[i].req_valid       = immu_req_valid[g];
+                // fetch requests leave a registered buffer too (see g_dmmu_bind)
+                wire [IC_ADDR_W-1:0]        immu_addr;
+                wire [ICACHE_TAG_WIDTH-1:0]  immu_tag;
+                VX_elastic_buffer #(
+                    .DATAW   (IC_ADDR_W + ICACHE_TAG_WIDTH),
+                    .SIZE    (2),
+                    .OUT_REG (1)
+                ) req_out_buf (
+                    .clk       (clk),
+                    .reset     (reset),
+                    .valid_in  (immu_req_valid[g]),
+                    .ready_in  (immu_req_ready[g]),
+                    .data_in   ({immu_req_addr[g], immu_req_tag[g]}),
+                    .data_out  ({immu_addr, immu_tag}),
+                    .valid_out (immu_core_if[i].req_valid),
+                    .ready_out (immu_core_if[i].req_ready)
+                );
                 assign immu_core_if[i].req_data.rw     = 1'b0;
                 assign immu_core_if[i].req_data.byteen = '0;
-                assign immu_core_if[i].req_data.addr   = immu_req_addr[g];
+                assign immu_core_if[i].req_data.addr   = immu_addr;
                 assign immu_core_if[i].req_data.attr   = '0;
                 assign immu_core_if[i].req_data.data   = '0;
-                assign immu_core_if[i].req_data.tag    = immu_req_tag[g];
-                assign immu_req_ready[g]               = immu_core_if[i].req_ready;
+                assign immu_core_if[i].req_data.tag    = immu_tag;
                 assign immu_rsp_valid[g]               = immu_core_if[i].rsp_valid;
                 assign immu_rsp_data[g]                = immu_core_if[i].rsp_data.data;
                 assign immu_rsp_tag[g]                 = immu_core_if[i].rsp_data.tag;
@@ -372,6 +401,7 @@ module VX_vm_top import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
                 .NUM_REQS    (I_LANES),
                 .TLB_SIZE    (`VX_CFG_ITLB_SIZE),
                 .EXEC_SIDE   (1),
+                .REQ_SKID    (1),
                 .DATA_SIZE   (ICACHE_WORD_SIZE),
                 .TAG_WIDTH   (ICACHE_TAG_WIDTH)
             ) immu (
@@ -383,6 +413,7 @@ module VX_vm_top import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
                 .tlb_bus_if  (socket_tlb_bus_if[1]),
                 .flush_if    (immu_flush_if),
                 .fault_if    (immu_fault_if),
+                `UNUSED_PIN (lane_idle),
                 .empty       (immu_empty[s])
             );
 
@@ -423,8 +454,8 @@ module VX_vm_top import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
                 `UNUSED_PIN (req_empty)
             );
         end else begin : g_no_immu
-            // Keep the socket arbiter 2-wide (so TLB_SOCKET_ID_WIDTH matches the
-            // package) with the iTLB port idle.
+            // Keep the socket arbiter at the package's width (so
+            // TLB_SOCKET_ID_WIDTH matches) with the iTLB port idle.
             assign socket_tlb_bus_if[1].req_valid = 1'b0;
             assign socket_tlb_bus_if[1].req_data  = '0;
             assign socket_tlb_bus_if[1].rsp_ready = 1'b0;
@@ -453,9 +484,20 @@ module VX_vm_top import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
             `UNUSED_VAR (ic_mem_rsp_tag[s])
         end
 
-        // --- socket TLB arbiter: {dTLB, iTLB} -> cluster fabric ---
+        // A build with socket units adds the unit MMU's port (SOCKET_NUM_MMUS);
+        // this sandbox has no units, so that port idles.
+        for (genvar t = 2; t < SOCKET_NUM_MMUS; ++t) begin : g_unit_tlb_idle
+            assign socket_tlb_bus_if[t].req_valid = 1'b0;
+            assign socket_tlb_bus_if[t].req_data  = '0;
+            assign socket_tlb_bus_if[t].rsp_ready = 1'b0;
+            `UNUSED_VAR (socket_tlb_bus_if[t].req_ready)
+            `UNUSED_VAR (socket_tlb_bus_if[t].rsp_valid)
+            `UNUSED_VAR (socket_tlb_bus_if[t].rsp_data)
+        end
+
+        // --- socket TLB arbiter: {dTLB, iTLB[, unit]} -> cluster fabric ---
         VX_tlb_bus_arb #(
-            .NUM_INPUTS  (2),
+            .NUM_INPUTS  (SOCKET_NUM_MMUS),
             .ID_WIDTH_IN (L1_TLB_ID_WIDTH),
             .OUT_BUF     (3)
         ) tlb_socket_arb (
@@ -621,6 +663,7 @@ module VX_vm_top import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         .REPL_POLICY    (`VX_CFG_L2_REPL_POLICY),
         .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (3),
+        .CORE_REQ_SKID  (1),
         .NC_ENABLE      (1),
         .PASSTHRU       (!`VX_CFG_L2_ENABLED),
         .IS_LLC         (L2_IS_LLC),

@@ -177,7 +177,7 @@ usage() {
 }
 while [[ "$#" -gt 0 ]]; do
     case $1 in
-        --xlen=*) XLEN="${1#*=}" ;;
+        --xlen=*) XLEN="${1#*=}"; XLEN_SET=1 ;;
         --tooldir=*) TOOLDIR="${1#*=}" ;;
         --osversion=*) OSVERSION="${1#*=}" ;;
         --prefix=*|--installdir=*) PREFIX="${1#*=}" ;;
@@ -192,6 +192,19 @@ done
 if [ -n "$PROFILE" ] && [ ! -f "$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/profiles/$PROFILE.json" ]; then
     echo "Error: unknown profile '$PROFILE' (no profiles/$PROFILE.json)"
     exit -1
+fi
+
+# a profile that names an xlen picks it, and an explicit --xlen must agree
+if [ -n "$PROFILE" ]; then
+    PROFILE_XLEN=$(python3 "$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/ci/gen_config.py" \
+        --config="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/VX_config.toml" --profile="$PROFILE" --profile-xlen) || exit -1
+    if [ -n "$PROFILE_XLEN" ]; then
+        if [ -n "$XLEN_SET" ] && [ "$XLEN" != "$PROFILE_XLEN" ]; then
+            echo "Error: profile '$PROFILE' models a $PROFILE_XLEN-bit machine; --xlen=$XLEN disagrees"
+            exit -1
+        fi
+        XLEN=$PROFILE_XLEN
+    fi
 fi
 
 # check OS

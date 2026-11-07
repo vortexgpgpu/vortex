@@ -66,13 +66,20 @@ tests:
   app: sgemm_tcu
   configs: -DVX_CFG_EXT_TCU_ENABLE
   flags: --debug=3 --log=run_simx.log
+# The debug build (44-bit UUID, assertions, traces) must not move RTL timing:
+# the runner reruns this case built release and requires identical cycles. The
+# shape keeps the data cache under pressure, with two channels whose same-word
+# reads merge, so a debug-only tag width reaching the merge shows in cycles.
 - id: sgemm_tcu-2
   via: blackbox
   drivers:
   - rtlsim
   app: sgemm_tcu
-  configs: -DVX_CFG_EXT_TCU_ENABLE
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_DCACHE_SIZE=4096 -DVX_CFG_EXT_TCU_ENABLE
+  shape:
+    l2cache: true
   flags: --debug=3 --log=run_rtlsim.log
+  release_parity: true
 - id: simx_mt-1
   via: blackbox
   drivers:

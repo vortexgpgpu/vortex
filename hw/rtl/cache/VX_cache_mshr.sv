@@ -38,15 +38,6 @@
 // The finalize request is used to persit or release the currently allocated MSHR entry
 // if we had a cache miss or a hit, respectively.
 //
-// With MSHR_LINES != 0 the line address lives in a separate table of
-// MSHR_LINES entries, one per distinct {line, sector} held, and each request
-// entry stores only an index into it. The address CAM then spans the lines
-// rather than the requests, so the request pool can grow (many requests merge
-// on few lines) without growing the wide compare. A line entry is reference
-// counted by the request entries naming it and frees when the count drains.
-// The bank admits a core request only while two line entries are free: the
-// request already past admission may claim one before this one reaches S0.
-//
 // Warning: This MSHR implementation is strongly coupled with the bank pipeline
 // and as such changes to either module requires careful evaluation.
 //
@@ -59,9 +50,7 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     parameter SECTOR_SIZE       = LINE_SIZE,  // Size of a sector in bytes (coalescing/fill granule); = LINE_SIZE => 1 sector
     parameter NUM_BANKS         = 1,          // Number of banks
     parameter MSHR_SIZE         = 4,          // Miss Reserv Queue Knob
-    parameter MSHR_LINES        = 0,          // distinct line entries (0 = address held per request)
     parameter DATA_WIDTH        = 1,          // MSHR parameters
-    parameter WRITEBACK         = 0,          // Enable cache writeback
     parameter AMO_ENABLE        = 0,          // Per-entry AMO tracking (probe outputs)
     parameter AMO_PASSTHRU      = 0,          // Non-LLC passthrough: AMO entries never coalesce
     parameter WORD_SEL_WIDTH    = 1,          // word-in-line select width (order-hazard granularity)
@@ -118,6 +107,9 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     // dequeue_ready as the allocate lookups see it: the bank's stall left out
     // (as finalize_lookup).
     input wire                          dequeue_lookup,
+    // the dequeue this cycle is the bank's fill-forward port, not a replay,
+    // as the allocate lookups see it (the bank's stall left out)
+    input wire                          dequeue_fwd_lookup,
     // park the chain at its head instead of consuming it: the entry stays
     // allocated (it becomes the root of a refetch) and the walk stops.
     input wire                          dequeue_park,
@@ -129,6 +121,10 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     input wire                          allocate_valid,
     input wire [`CS_LINE_ADDR_WIDTH-1:0] allocate_addr,
     input wire [`UP(`CS_SECTOR_SEL_BITS)-1:0] allocate_sector,
+    // the core request entering S0 next cycle, and the S0 advance enable
+    input wire [`CS_LINE_ADDR_WIDTH-1:0] allocate_addr_n,
+    input wire [`UP(`CS_SECTOR_SEL_BITS)-1:0] allocate_sector_n,
+    input wire                          allocate_adv,
     input wire [WORD_SEL_WIDTH-1:0]     allocate_word_idx,
     input wire                          allocate_rw,
     input wire                          allocate_is_amo, // AMO: never coalesce
@@ -140,8 +136,6 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     output wire                         allocate_pending_ovl,
     output wire [MSHR_ADDR_WIDTH-1:0]   allocate_previd,
     output wire                         allocate_ready,
-    // a line entry is free for every request the bank can still admit
-    output wire                         allocate_line_ready,
 
     // finalize
     input wire                          finalize_valid,
@@ -162,8 +156,6 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
 );
     `UNUSED_PARAM (BANK_ID)
     `UNUSED_PARAM (BANK_HASH)
-
-    `STATIC_ASSERT((MSHR_LINES == 0) || ((MSHR_LINES >= 2) && (MSHR_LINES <= MSHR_SIZE)), ("invalid parameter: MSHR_LINES"))
 
     // Per-entry word-in-line select, kept outside the payload RAM so the
     // allocate probe can compare it: the hit-demotion order hazard is
@@ -199,12 +191,10 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     wire dequeue_free = dequeue_fire && ~dequeue_park_fire;
     wire dequeue_free_lk = dequeue_valid && dequeue_lookup && ~((LAZY_FETCH != 0) && dequeue_park);
 
-    // Entry holds the allocate request's {line, sector} / the probe's line.
+    // Entry holds the allocate request's {line, sector}.
     // Coalescing matches on {line, sector} so same-line different-sector misses
     // get independent fills (each replay then hits its own filled sector).
     wire [MSHR_SIZE-1:0] entry_match;
-    wire [MSHR_SIZE-1:0] entry_probe;
-    wire [`CS_LINE_ADDR_WIDTH-1:0] dequeue_addr_n;
 
     wire [MSHR_SIZE-1:0] addr_matches;
     for (genvar i = 0; i < MSHR_SIZE; ++i) begin : g_addr_matches
@@ -247,16 +237,11 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
         `UNUSED_PIN (onehot_out)
     );
 
-    // find matching tail-entry; an entry a finalize links a successor to this
-    // cycle is no longer one (next_table_x, with the lookup's finalize)
-    wire [MSHR_SIZE-1:0] link_lookup;
-    for (genvar i = 0; i < MSHR_SIZE; ++i) begin : g_link_lookup
-        assign link_lookup[i] = finalize_lookup && finalize_is_pending && (finalize_previd == MSHR_ADDR_WIDTH'(i));
-    end
+    // find matching tail-entry
     VX_priority_encoder #(
         .N (MSHR_SIZE)
     ) prev_sel (
-        .data_in (addr_matches & ~next_table & ~link_lookup),
+        .data_in (addr_matches & ~next_table_x),
         .index_out (prev_idx),
         `UNUSED_PIN (valid_out),
         `UNUSED_PIN (onehot_out)
@@ -304,23 +289,6 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
         end
     end
 
-    // The pointer's next entry, as the update above chooses it: a fill opens a
-    // chain, a dequeue walks to the chained successor or to a late joiner
-    // spliced this cycle. The dequeue handshake arrives late, so the address
-    // and the write flag of every candidate are looked up in parallel and the
-    // same choice selects among them, instead of the late pointer indexing the
-    // tables.
-    wire deq_to_next = ~dequeue_park_fire && dequeue_fire && next_table[dequeue_id];
-    wire deq_to_fin  = ~dequeue_park_fire && dequeue_fire && ~next_table[dequeue_id]
-                    && finalize_valid && finalize_is_pending && (finalize_previd == dequeue_id);
-    wire [MSHR_ADDR_WIDTH-1:0] deq_next_id = next_index[dequeue_id];
-    wire [`CS_LINE_ADDR_WIDTH-1:0] deq_addr_cur, deq_addr_next, deq_addr_fin;
-    wire [`CS_LINE_ADDR_WIDTH-1:0] deq_addr_base = fill_valid ? fill_addr : deq_addr_cur;
-    // both entries looked up, the fill (a late grant) selects after
-    wire deq_rw_fill = write_table[fill_id];
-    wire deq_rw_cur  = write_table[dequeue_id];
-    wire deq_rw_base = fill_valid ? deq_rw_fill : deq_rw_cur;
-
     always @(posedge clk) begin
         if (reset) begin
             valid_table  <= '0;
@@ -350,154 +318,48 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
         next_table    <= next_table_n;
     end
 
-    // Per-entry address, for checks and traces only.
-    wire [`CS_LINE_ADDR_WIDTH-1:0] entry_addr [MSHR_SIZE];
+    reg [`CS_LINE_ADDR_WIDTH-1:0]      addr_table   [0:MSHR_SIZE-1];
+    reg [`UP(`CS_SECTOR_SEL_BITS)-1:0] sector_table [0:MSHR_SIZE-1];
 
-    if (MSHR_LINES != 0) begin : g_line_table
-        localparam LINE_ID_W = `LOG2UP(MSHR_LINES);
-        localparam LCNT_W    = `CLOG2(MSHR_SIZE + 1);
-
-        reg [`CS_LINE_ADDR_WIDTH-1:0]      line_addr   [0:MSHR_LINES-1];
-        reg [`UP(`CS_SECTOR_SEL_BITS)-1:0] line_sector [0:MSHR_LINES-1];
-        reg [LCNT_W-1:0]                   line_cnt    [0:MSHR_LINES-1];
-        reg [LINE_ID_W-1:0]                entry_line  [0:MSHR_SIZE-1];
-
-        reg [LINE_ID_W-1:0] line_free_id_r;
-        reg line_free_r, line_ready_r;
-
-        wire [MSHR_LINES-1:0] line_valid, line_hits, line_probes, line_free_n;
-        for (genvar l = 0; l < MSHR_LINES; ++l) begin : g_line_match
-            assign line_valid[l]  = (line_cnt[l] != '0);
-            assign line_hits[l]   = line_valid[l] && (line_addr[l] == allocate_addr) && (line_sector[l] == allocate_sector);
-            assign line_probes[l] = line_valid[l] && (line_addr[l] == probe_addr);
+    always @(posedge clk) begin
+        if (allocate_fire) begin
+            addr_table[allocate_id]   <= allocate_addr;
+            sector_table[allocate_id] <= allocate_sector;
         end
-
-        // a {line, sector} occupies at most one line entry
-        wire line_hit;
-        wire [LINE_ID_W-1:0] line_hit_id;
-        VX_priority_encoder #(
-            .N (MSHR_LINES)
-        ) line_hit_sel (
-            .data_in   (line_hits),
-            .index_out (line_hit_id),
-            .valid_out (line_hit),
-            `UNUSED_PIN (onehot_out)
-        );
-
-        wire [LINE_ID_W-1:0] alloc_line = line_hit ? line_hit_id : line_free_id_r;
-
-        for (genvar i = 0; i < MSHR_SIZE; ++i) begin : g_entry_match
-            assign entry_match[i] = line_hit && (entry_line[i] == line_hit_id);
-            assign entry_probe[i] = line_probes[entry_line[i]];
-            assign entry_addr[i]  = line_addr[entry_line[i]];
-        end
-
-        wire [LINE_ID_W-1:0] dequeue_line  = entry_line[dequeue_id];
-        wire [LINE_ID_W-1:0] finalize_line = entry_line[finalize_id];
-        wire finalize_free = finalize_valid && finalize_is_release;
-
-        for (genvar l = 0; l < MSHR_LINES; ++l) begin : g_line_cnt
-            wire inc   = allocate_fire && (alloc_line == LINE_ID_W'(l));
-            wire dec_d = dequeue_free && (dequeue_line == LINE_ID_W'(l));
-            wire dec_f = finalize_free && (finalize_line == LINE_ID_W'(l));
-            wire [LCNT_W-1:0] cnt_n = line_cnt[l] + LCNT_W'(inc) - LCNT_W'(dec_d) - LCNT_W'(dec_f);
-            assign line_free_n[l] = (cnt_n == '0);
-            always @(posedge clk) begin
-                if (reset) begin
-                    line_cnt[l] <= '0;
-                end else begin
-                    line_cnt[l] <= cnt_n;
-                end
-            end
-        end
-
-        wire [MSHR_LINES-1:0] line_free_oh;
-        wire [LINE_ID_W-1:0] line_free_id_n;
-        wire line_free_any_n;
-        VX_priority_encoder #(
-            .N (MSHR_LINES)
-        ) line_free_sel (
-            .data_in    (line_free_n),
-            .onehot_out (line_free_oh),
-            .index_out  (line_free_id_n),
-            .valid_out  (line_free_any_n)
-        );
-
-        always @(posedge clk) begin
-            if (reset) begin
-                line_free_r  <= 1'b0;
-                line_ready_r <= 1'b0;
-            end else begin
-                line_free_r  <= line_free_any_n;
-                line_ready_r <= line_free_any_n && (| (line_free_n & ~line_free_oh));
-            end
-            line_free_id_r <= line_free_id_n;
-            if (allocate_fire) begin
-                entry_line[allocate_id] <= alloc_line;
-                if (~line_hit) begin
-                    line_addr[line_free_id_r]   <= allocate_addr;
-                    line_sector[line_free_id_r] <= allocate_sector;
-                end
-            end
-        end
-
-        assign fill_addr      = line_addr[entry_line[fill_id]];
-        assign fill_sector    = line_sector[entry_line[fill_id]];
-        assign deq_addr_cur   = line_addr[entry_line[dequeue_id]];
-        assign deq_addr_next  = line_addr[entry_line[deq_next_id]];
-        assign deq_addr_fin   = line_addr[entry_line[finalize_id]];
-        assign allocate_line_ready = line_ready_r;
-
-        `RUNTIME_ASSERT(~(allocate_fire && ~line_hit && ~line_free_r), ("*** %s line table overflow: addr=0x%0h (#%0d)", INSTANCE_ID,
-            `CS_BANK_TO_FULL_ADDR(allocate_addr, BANK_ID), alc_req_uuid))
-
-    `ifdef SIMULATION
-        // Each line count equals the live entries naming the line.
-        for (genvar l = 0; l < MSHR_LINES; ++l) begin : g_line_check
-            integer refs;
-            always @(*) begin
-                refs = 0;
-                for (integer i = 0; i < MSHR_SIZE; ++i) begin
-                    refs += 32'(valid_table[i] && (entry_line[i] == LINE_ID_W'(l)));
-                end
-            end
-            `RUNTIME_ASSERT(refs == 32'(line_cnt[l]), ("*** %s line count mismatch: line=%0d, count=%0d, refs=%0d", INSTANCE_ID,
-                l, line_cnt[l], refs))
-        end
-    `endif
-    end else begin : g_entry_table
-        reg [`CS_LINE_ADDR_WIDTH-1:0]      addr_table   [0:MSHR_SIZE-1];
-        reg [`UP(`CS_SECTOR_SEL_BITS)-1:0] sector_table [0:MSHR_SIZE-1];
-
-        always @(posedge clk) begin
-            if (allocate_fire) begin
-                addr_table[allocate_id]   <= allocate_addr;
-                sector_table[allocate_id] <= allocate_sector;
-            end
-        end
-
-        for (genvar i = 0; i < MSHR_SIZE; ++i) begin : g_entry_match
-            assign entry_match[i] = (addr_table[i] == allocate_addr) && (sector_table[i] == allocate_sector);
-            assign entry_probe[i] = (addr_table[i] == probe_addr);
-            assign entry_addr[i]  = addr_table[i];
-        end
-
-        assign fill_addr      = addr_table[fill_id];
-        assign fill_sector    = sector_table[fill_id];
-        assign deq_addr_cur   = addr_table[dequeue_id];
-        assign deq_addr_next  = addr_table[deq_next_id];
-        assign deq_addr_fin   = addr_table[finalize_id];
-        assign allocate_line_ready = 1'b1;
     end
+
+    // The allocate match is taken a cycle early, against the core request
+    // entering S0 and the table as it stands after this cycle's allocate,
+    // so S0 starts it from flops: it gates the data array's write enable
+    // through the order-hazard probes. A request of another kind entering
+    // S0 does not allocate, so its match is never used. Nothing allocates
+    // while S0 holds.
+    wire alloc_self_match = (allocate_addr == allocate_addr_n) && (allocate_sector == allocate_sector_n);
+    reg [MSHR_SIZE-1:0] entry_match_r;
+    for (genvar i = 0; i < MSHR_SIZE; ++i) begin : g_entry_match
+        wire match_n = (allocate_fire && (allocate_id == MSHR_ADDR_WIDTH'(i))) ? alloc_self_match
+                     : ((addr_table[i] == allocate_addr_n) && (sector_table[i] == allocate_sector_n));
+        always @(posedge clk) begin
+            if (allocate_adv) begin
+                entry_match_r[i] <= match_n;
+            end
+        end
+        assign entry_match[i] = entry_match_r[i];
+        `RUNTIME_ASSERT (~allocate_valid || (entry_match_r[i] == ((addr_table[i] == allocate_addr) && (sector_table[i] == allocate_sector))),
+            ("%t: *** %s allocate match out of sync: id=%0d", $time, INSTANCE_ID, i))
+    end
+
+    assign fill_addr   = addr_table[fill_id];
+    assign fill_sector = sector_table[fill_id];
 
     `RUNTIME_ASSERT(~(allocate_fire && valid_table[allocate_id_r]), ("*** %s inuse allocation: addr=0x%0h, id=%0d (#%0d)", INSTANCE_ID,
         `CS_BANK_TO_FULL_ADDR(allocate_addr, BANK_ID), allocate_id_r, alc_req_uuid))
 
     `RUNTIME_ASSERT(~(finalize_valid && ~valid_table[finalize_id]), ("*** %s invalid release: addr=0x%0h, id=%0d (#%0d)", INSTANCE_ID,
-        `CS_BANK_TO_FULL_ADDR(entry_addr[finalize_id], BANK_ID), finalize_id, fin_req_uuid))
+        `CS_BANK_TO_FULL_ADDR(addr_table[finalize_id], BANK_ID), finalize_id, fin_req_uuid))
 
     `RUNTIME_ASSERT(~(fill_valid && ~valid_table[fill_id]), ("*** %s invalid fill: addr=0x%0h, id=%0d", INSTANCE_ID,
-        `CS_BANK_TO_FULL_ADDR(entry_addr[fill_id], BANK_ID), fill_id))
+        `CS_BANK_TO_FULL_ADDR(addr_table[fill_id], BANK_ID), fill_id))
 
     // A walk confined to its own live chain never lands on an entry that is
     // already invalid. next_table and next_index are cleared only at allocate,
@@ -508,19 +370,6 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
         dequeue_id, next_table[dequeue_id]))
 
 `ifdef SIMULATION
-    // Every entry the dequeue pointer lands on must belong to the line whose
-    // fill opened the chain, whichever way the pointer got there (fill,
-    // next_index walk, or same-cycle late-joiner splice). Checked here rather
-    // than at the bank's forward port because only the MSHR can see all three.
-    reg [`CS_LINE_ADDR_WIDTH-1:0] chain_addr_r;
-    always @(posedge clk) begin
-        if (fill_valid) begin
-            chain_addr_r <= entry_addr[fill_id];
-        end
-    end
-    `RUNTIME_ASSERT(~(dequeue_val && ~fill_valid && (entry_addr[dequeue_id] != chain_addr_r)), ("*** %s chain entry on foreign line: dequeue_id=%0d, entry=0x%0h, chain=0x%0h", INSTANCE_ID,
-        dequeue_id, `CS_BANK_TO_FULL_ADDR(entry_addr[dequeue_id], BANK_ID), `CS_BANK_TO_FULL_ADDR(chain_addr_r, BANK_ID)))
-
     // The slot the dequeue pointer names must not be handed to another line
     // while the pointer still rests on it: a combinational `dequeue_addr` on
     // the entry at `dequeue_id_r` would retarget an in-flight replay.
@@ -614,7 +463,7 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
 
         wire [MSHR_SIZE-1:0] probe_ld, probe_amo;
         for (genvar i = 0; i < MSHR_SIZE; ++i) begin : g_probe_matches
-            wire addr_match = valid_table[i] && persisted_table[i] && entry_probe[i];
+            wire addr_match = valid_table[i] && persisted_table[i] && (addr_table[i] == probe_addr);
             assign probe_ld[i]  = addr_match && ~amo_table[i];
             assign probe_amo[i] = addr_match && amo_table[i];
         end
@@ -650,19 +499,21 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
         assign probe_pending_amo = 1'b0;
         assign {probe_any_ld, probe_any_amo, persist_ld, persist_amo} = '0;
         `UNUSED_PARAM (AMO_PASSTHRU)
-        `UNUSED_VAR ({allocate_is_amo, probe_addr, entry_probe})
+        `UNUSED_VAR ({allocate_is_amo, probe_addr})
     end
 
     assign allocate_ready = allocate_rdy;
     assign allocate_id = allocate_id_r;
     assign allocate_previd = prev_idx;
 
-    // The probes below exclude the entries a replay and a release free this
-    // cycle, but dequeue_free and the release resolve late (they wait on the
-    // bank's input arbitration and stall) and the probes' results gate the
-    // bank's data array. Each reduction is therefore formed from early terms,
-    // without those entries and with each alone, and the late frees select at
-    // the end.
+    // The probes below exclude the entries a replay (or, for the order-hazard
+    // probes, the forward port) and a release free this cycle, but the dequeue
+    // and the release resolve late (they wait on the bank's input arbitration)
+    // and the probes' results gate the bank's data array. Each reduction is
+    // therefore formed from early terms, without those entries and with each
+    // alone, and the late frees select at the end. The frees are taken as the
+    // lookups see them (dequeue_lookup, dequeue_fwd_lookup, finalize_lookup:
+    // the bank's stall left out), since a stall also holds S0.
     wire [MSHR_SIZE-1:0] probe_base;
     wire [MSHR_SIZE-1:0] dequeue_oh;
     wire [MSHR_SIZE-1:0] finalize_oh;
@@ -673,19 +524,20 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     end
     wire fin_free   = finalize_lookup && finalize_is_release;
     wire deq_is_fin = (dequeue_id == finalize_id);
+    wire fwd_free_lk = dequeue_valid && dequeue_fwd_lookup && ~((LAZY_FETCH != 0) && dequeue_park);
     wire [MSHR_SIZE-1:0] probe_rest = probe_base & ~dequeue_oh & ~finalize_oh;
     wire [MSHR_SIZE-1:0] probe_deq  = probe_base &  dequeue_oh & ~finalize_oh;
     wire [MSHR_SIZE-1:0] probe_fin  = probe_base &  finalize_oh;
-    `define MSHR_PROBE(mask) ((| (probe_rest & (mask))) \
-                           || ((| (probe_deq & (mask))) && ~dequeue_free_lk) \
-                           || ((| (probe_fin & (mask))) && ~fin_free && ~(deq_is_fin && dequeue_free_lk)))
+    `define MSHR_PROBE(mask, dfree) ((| (probe_rest & (mask))) \
+                                  || ((| (probe_deq & (mask))) && ~(dfree)) \
+                                  || ((| (probe_fin & (mask))) && ~fin_free && ~(deq_is_fin && (dfree))))
 
-    if (WRITEBACK) begin : g_pending_wb
-        assign allocate_pending = `MSHR_PROBE({MSHR_SIZE{1'b1}});
-    end else begin : g_pending_wt
-        // exclude write requests if writethrough
-        assign allocate_pending = `MSHR_PROBE(~write_table);
-    end
+    // Any undrained entry of the line is pending, writes included. On a
+    // write-through cache a write entry only lives behind a read root, so once
+    // the root has replayed the writes still waiting are a chain mid-drain: a
+    // same-word access must link behind them, not overtake them through the
+    // array. (= |addr_matches)
+    assign allocate_pending = `MSHR_PROBE({MSHR_SIZE{1'b1}}, dequeue_free_lk);
 
     // Word-granular order-hazard probes. A chained entry only constrains a
     // requester that touches the SAME word: the entry's replay reads or
@@ -695,44 +547,64 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     for (genvar i = 0; i < MSHR_SIZE; ++i) begin : g_word_matches
         assign word_matches[i] = (word_table[i] == allocate_word_idx);
     end
+    // These probes gate the data array's write enable at S0, so they leave the
+    // replay dequeue out of their exclusion: a replay that could change them (a
+    // same-word entry, with a write on either side, against an allocating core
+    // request) is held that cycle by the bank's link hold, so the exclusion
+    // never alters them, and dropping it takes the S0 address compare behind
+    // that hold out of the write-enable cone. The forward port is not held, so
+    // its dequeue stays excluded, as does a release (MSHR_PROBE above).
     // The probed word's chain holds a WRITE that has not reached the data array
     // yet. A same-word hit completing ahead of it would read pre-store data (or
     // a write-hit would be overwritten by the older store's replay), inverting
     // arrival order — the bank demotes such a hit to a chained miss.
-    assign allocate_pending_wr  = `MSHR_PROBE(write_table & word_matches);
+    assign allocate_pending_wr  = `MSHR_PROBE(write_table & word_matches, fwd_free_lk);
     // Any undrained same-word entry: an incoming WRITE hit must not land ahead
     // of an older chained read of the same word.
-    assign allocate_pending_ovl = `MSHR_PROBE(word_matches);
+    assign allocate_pending_ovl = `MSHR_PROBE(word_matches, fwd_free_lk);
     `undef MSHR_PROBE
+    // the order hazard the bank derives from the two probes is the one the full
+    // exclusion gives
+    `RUNTIME_ASSERT (~allocate_valid
+                  || ((allocate_pending_wr || (allocate_rw && allocate_pending_ovl))
+                   == (allocate_pending && (|(addr_matches & write_table & word_matches)
+                                        || (allocate_rw && |(addr_matches & word_matches))))),
+        ("%t: *** %s order-hazard probe diverged from the full exclusion", $time, INSTANCE_ID))
 
     assign dequeue_valid = dequeue_val && ~((LAZY_FETCH != 0) && dequeue_block);
-    // Sampled with dequeue_id_n, alongside the payload in mshr_store, rather
-    // than read live at dequeue_id_r a cycle later. The entry's slot can be
-    // freed and reallocated while the pointer still names it -- the free set
-    // offers a slot released by a dequeue or a finalize in the same cycle -- and
-    // a live read then retargets an in-flight replay onto the new occupant's
-    // line. The bank's fill-forward path answers that replay from the staged
-    // sector of the line it was actually issued for, so the requester silently
-    // receives another line's data; the guard for it is a RUNTIME_ASSERT, which
-    // synthesis compiles out.
-    //
-    // Taking the address from the same snapshot as the payload also removes an
-    // inconsistency that was there regardless: the payload was a snapshot and
-    // the address was not, so the two could describe different entries.
-    //
-    // Withholding the slot from the free set instead deadlocks: the pointer can
-    // park on a blocked replay, and if that slot is the last free one the core
-    // stalls and the replay never drains.
+    // Coalescing keys on the line, so every entry a chain walks (the fill's
+    // root, its next_index successors, a late joiner spliced in) holds the
+    // fill's line: the address is captured once, at the fill, and the late
+    // dequeue pointer stays off it. Being a register, it also cannot follow a
+    // slot that is freed and reallocated while the pointer still names it,
+    // which would retarget an in-flight replay onto the new occupant's line.
+    // Withholding that slot from the free set instead deadlocks: the pointer
+    // can park on a blocked replay, and if that slot is the last free one the
+    // core stalls and the replay never drains.
+    // The pointer's next write flag, as the update above chooses the pointer:
+    // a fill opens a chain, a dequeue walks to the chained successor or to a
+    // late joiner spliced this cycle. The dequeue handshake and the fill grant
+    // arrive late, so every candidate's flag is looked up and the same choice
+    // selects among them, instead of the late pointer indexing write_table.
+    wire deq_to_next = ~dequeue_park_fire && dequeue_fire && next_table[dequeue_id];
+    wire deq_to_fin  = ~dequeue_park_fire && dequeue_fire && ~next_table[dequeue_id]
+                    && finalize_valid && finalize_is_pending && (finalize_previd == dequeue_id);
+    wire deq_rw_fill = write_table[fill_id];
+    wire deq_rw_cur  = write_table[dequeue_id];
+    wire deq_rw_base = fill_valid ? deq_rw_fill : deq_rw_cur;
+    wire dequeue_rw_n = deq_to_next ? write_table[next_index[dequeue_id]] : (deq_to_fin ? write_table[finalize_id] : deq_rw_base);
+    `RUNTIME_ASSERT(dequeue_rw_n == write_table[dequeue_id_n], ("%t: *** %s dequeue candidate select out of sync: id=%0d", $time, INSTANCE_ID, dequeue_id_n))
+
     reg [`CS_LINE_ADDR_WIDTH-1:0] dequeue_addr_r;
     reg dequeue_rw_r;
-    assign dequeue_addr_n = deq_to_next ? deq_addr_next : (deq_to_fin ? deq_addr_fin : deq_addr_base);
-    wire dequeue_rw_n = deq_to_next ? write_table[deq_next_id] : (deq_to_fin ? write_table[finalize_id] : deq_rw_base);
-    `RUNTIME_ASSERT((dequeue_addr_n == entry_addr[dequeue_id_n]) && (dequeue_rw_n == write_table[dequeue_id_n]),
-        ("*** %s dequeue candidate select out of sync: id=%0d", INSTANCE_ID, dequeue_id_n))
     always @(posedge clk) begin
-        dequeue_addr_r <= dequeue_addr_n;
-        dequeue_rw_r   <= dequeue_rw_n;
+        if (fill_valid) begin
+            dequeue_addr_r <= fill_addr;
+        end
+        dequeue_rw_r <= dequeue_rw_n;
     end
+    `RUNTIME_ASSERT(~(dequeue_val && ~fill_valid && (addr_table[dequeue_id] != dequeue_addr_r)), ("*** %s chain entry on foreign line: dequeue_id=%0d, entry=0x%0h, chain=0x%0h", INSTANCE_ID,
+        dequeue_id, `CS_BANK_TO_FULL_ADDR(addr_table[dequeue_id], BANK_ID), `CS_BANK_TO_FULL_ADDR(dequeue_addr_r, BANK_ID)))
 
     assign dequeue_addr  = dequeue_addr_r;
     assign dequeue_rw    = dequeue_rw_r;
@@ -768,7 +640,7 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
             `TRACE(3, ("%t: %s table: ", $time, INSTANCE_ID))
             for (integer i = 0; i < MSHR_SIZE; ++i) begin
                 if (valid_table[i]) begin
-                    `TRACE(3, (" %0d=0x%0h", i, `CS_BANK_TO_FULL_ADDR(entry_addr[i], BANK_ID)))
+                    `TRACE(3, (" %0d=0x%0h", i, `CS_BANK_TO_FULL_ADDR(addr_table[i], BANK_ID)))
                     if (write_table[i]) begin
                         `TRACE(3, ("(w)"))
                     end else begin

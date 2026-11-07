@@ -31,12 +31,7 @@ uint32_t OmUopGen::uop_count(const Instr& instr) {
 Instr::Ptr OmUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
   uint64_t parent_uuid = macro_instr.get_uuid();
   uint32_t total = uop_count(macro_instr);
-
-  // Distinct UUID per uop for trace logging, matching LsuUopGen's scheme.
-  uint32_t uuid_hi = (parent_uuid >> 32) & 0xffffffff;
-  uint32_t uuid_lo = parent_uuid & 0xffffffff;
-  uint32_t steps_shift = (total > 1) ? (32 - log2ceil(total)) : 0;
-  uint64_t uop_uuid = (static_cast<uint64_t>(uuid_hi) << 32) | ((uop_index << steps_shift) | uuid_lo);
+  uint64_t uop_uuid = make_uop_uuid(parent_uuid, uop_index);
 
   auto args = std::get<IntrOmArgs>(macro_instr.get_args());
 
@@ -76,13 +71,13 @@ instr_trace_t* OmUnit::process_export(instr_trace_t* trace, uint32_t export_mask
   req.from_aperture = true;
   req.export_mask   = export_mask;
 
-  uint32_t mask_bits = 0;
+  uint64_t mask_bits = 0;
   for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
     if (!trace->tmask.test(t)) continue;
     req.addr[t]  = trace->src_data[0].at(t).u;   // aperture address
     req.color[t] = trace->src_data[1].at(t).u;
     req.depth[t] = trace->src_data[2].at(t).u;
-    mask_bits |= (1u << t);
+    mask_bits |= (uint64_t(1) << t);
   }
   req.tmask_bits = mask_bits;
 

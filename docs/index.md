@@ -47,6 +47,7 @@ Detailed architectural specifications for Vortex subsystems live under
   - [Custom Accelerator ISA Extensions](designs/custom_accelerator_isa_extensions.md)
 - **Memory system**
   - [Cache Subsystem](designs/cache_subsystem.md)
+  - [Memory-Level Parallelism Optimizations](designs/mlp_optimizations.md)
   - [Atomic Memory Operations](designs/atomic_memory_operations.md)
   - [Multi-Cache AMO Coherence](designs/multicache_amo_coherence.md)
   - [Memory Fabric Attributes](designs/memory_fabric_attributes.md)

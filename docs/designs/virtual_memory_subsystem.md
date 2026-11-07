@@ -160,9 +160,13 @@ kernel image once the loader knows its extents. Buffers allocated with
 (`VX_CFG_VM_PINNED_REGION_SIZE`), so a kernel can hold PA-stable pointers
 while paged and identity translations contend in the same TLBs.
 
-The graphics fixed-function masters (RASTER, TEX, OM) and the RTU issue
-physical addresses and never pass through an MMU; see
-[`graphics_hardware_stack.md`](graphics_hardware_stack.md).
+The socket-resident units translate too: the TEX unit's tcache misses, the
+RTU's rtcache misses and the DXA's global reads go through the socket **unit
+MMU** (§3.8), so a texture base, a BVH root, an acceleration-structure pointer
+or a tensor descriptor is a virtual address like any kernel pointer. The
+cluster-resident raster and OM units translate through the cluster **unit
+MMU** (§3.9), so their tile, primitive, color and depth buffers are ordinary
+buffers too; see [`graphics_hardware_stack.md`](graphics_hardware_stack.md).
 
 ---
 
@@ -198,6 +202,12 @@ storage be reused by the cluster TLB's megapage side array.
 
 ### 3.3 The hit path
 
+With `REQ_SKID` (the socket's dMMU and iMMU), each lane takes its requests
+through a zero-latency skid register (`VX_bypass_buffer`): the lane's accept
+follows the lookup of the offered request, and the skid keeps that cone out of
+the client's output register by presenting a registered ready. An empty skid
+passes the request straight to the lookup.
+
 Each lane packs its request once (`req_fields = {rw, addr, data, byteen,
 attr, tag}`), extracts `vpn`, `access` (`EX` on the instruction side, else
 `WR`/`RD` from `rw`) and `amo`, and probes the CAM and the miss station in
@@ -210,13 +220,21 @@ mutually exclusive by priority:
 | category | condition | what happens |
 |---|---|---|
 | `cat_bypass` | `valid ∧ req_bypass` | fields forwarded unchanged |
-| `cat_hit` | `valid ∧ ¬bypass ∧ ¬mshr_match ∧ cam_hit ∧ perm_ok` | `PA = {ppn_spliced, addr[11:0]}` forwarded; MRU bump |
-| `cat_park` | `valid ∧ ¬bypass ∧ (mshr_match ∨ ¬cam_hit)` | lowest parking lane parks; others hold and retry |
-| `cat_pfault` | `valid ∧ ¬bypass ∧ ¬mshr_match ∧ cam_hit ∧ ¬perm_ok` | accepted and dropped; fault sideband pulses |
+| `cat_hit` | `valid ∧ ¬bypass ∧ ¬mshr_join ∧ cam_hit ∧ perm_ok` | `PA = {ppn_spliced, addr[11:0]}` forwarded; MRU bump |
+| `cat_park` | `valid ∧ ¬bypass ∧ (mshr_join ∨ ¬cam_hit)` | lowest parking lane parks; others hold and retry |
+| `cat_pfault` | `valid ∧ ¬bypass ∧ ¬mshr_join ∧ cam_hit ∧ ¬perm_ok` | accepted, never sent to memory; a data-side load or atomic is answered with zeroed data (§3.5); fault sideband pulses |
 
-`mshr_match` outranks `cam_hit` on purpose: a request to a page whose walk is
-still landing must queue behind that page's parked requests, or a same-lane
-access could overtake an older one on the hit path (§3.5). Bypass and hit
+`mshr_join` (the lane's VPN matches a live miss-station entry and the lane
+must keep order behind it) outranks `cam_hit` on purpose: a request to a page
+whose walk is still landing must queue behind that page's parked requests, or
+a same-lane access could overtake an older one on the hit path (§3.5). Only a
+lane with requests of its own in the station needs that order, so a data-side
+lane joins only while its parked count (§3.5) is non-zero; an instruction-side
+lane never joins, since a warp has one fetch in flight. Any other lane takes a
+hit as soon as the fill lands: joining would funnel every access to a hot page
+through the one-token-per-cycle drain, lowest lane first, and starve the
+others. `ummu` and `cmmu` register their park (§3.8, §3.9), so their probe is
+a cycle stale and they always join. Bypass and hit
 requests enter a per-lane `VX_elastic_buffer` (`SIZE=2, OUT_REG=1`) that
 registers the outgoing request and presents a registered `pipe_ready`
 back, so the accept cone stays shallow; a replay landing on the lane takes
@@ -267,33 +285,145 @@ or atomic still owes the pipeline a response, so `VX_mmu` injects a zeroed
 response carrying the parked tag ahead of the cache reply for that lane
 (`kill_needs_rsp = (EXEC_SIDE == 0) ∧ (¬rw ∨ amo)`). A plain store and every
 instruction fetch retire silently — a fabricated instruction word would be
-decoded as real.
+decoded as real. A permission fault caught on
+a hit is answered the same way: the load or atomic waits in a one-entry
+per-lane slot (the lane holds while it is full) and its zeroed response goes
+out behind any kill on that lane.
 
 Ordering follows from the structure. The stage is hit-under-miss, so only
 same-page order is guaranteed: accesses to one VPN share an entry and drain in
 arrival order, and the miss-station probe matches filled-but-not-yet-freed
-entries so a later same-page request cannot slip past on the hit path.
+entries so a later same-page request from a lane with parked requests cannot
+slip past on the hit path.
 `DEDUP_LIVE_EXCLUDES_FAULT = 1` at L1 stops a faulted entry attracting
 joiners: the next same-VPN request re-walks rather than inheriting the kill.
 Allocation is refused during a flush, because every entry clears at that
 edge and an accepted request would vanish with neither replay nor kill.
 
+A cache flush token bypasses translation, so on its own it would overtake its
+lane's parked requests. Each lane counts the requests it has in the miss
+station (up on a park, down on the replay or kill that drains one), and a
+flush token on a lane holds while that count is non-zero: it reaches the cache
+behind every earlier request of its lane, which is the order a
+`FLUSH_FORWARD` cache relies on to forward the token behind that port's
+writes. Only a data-side MMU with writing clients counts (the dMMU and the
+cluster unit MMU): a read or fetch overtaken by a token is still answered
+correctly. The token of one lane does not wait on another lane's parks; the
+core covers that case for the dcache: under VM its flush request also waits
+until its own dMMU lanes are idle (`lane_idle`, which counts the parks), as it
+waits for its stores, and is then latched until the flush request drops, since
+the token's own trip through the MMU makes a lane busy again.
+
 ### 3.6 Flush and drain
 
 `flush_clear = flush_if.req ∧ tlb_empty`: the CAM and the miss station clear
 together, only once no walk is outstanding, and `flush_if.done` reports the
-same condition. `empty` — no request in the incoming or output stage and the
-miss station idle — feeds `socket_mmu_drained = dmmu.empty ∧ immu.empty`,
+same condition. `empty` — no request in the incoming stage, the request skid
+or the output stage, and the miss station idle — feeds `socket_mmu_drained = dmmu.empty ∧ immu.empty`,
 which every core's busy logic waits on. Omitting the incoming stage would let
 `empty` assert a cycle early while a request is still in flight.
 
 ### 3.7 The instruction side
 
 The iMMU is the same module with `EXEC_SIDE = 1`: `access = EX` for every
-request, one lane per core, `ITLB_SIZE` (8) entries. Fetch reaches it through
+request, one lane per fetch slice of each core (`VX_CFG_FETCH_WIDTH`),
+`ITLB_SIZE` (8) entries. Fetch reaches it through
 `VX_dcr_flush`, which injects the DCR-triggered cache-flush request into the
 icache stream; that request carries the FLUSH attribute and bypasses
 translation.
+
+### 3.8 The socket unit MMU
+
+The socket-resident units reach memory through the socket memory arbiter, not
+through the dcache, so the dMMU never sees them. Under VM a third `VX_mmu`
+instance per socket, `ummu`
+([`VX_socket.sv`](../../hw/rtl/VX_socket.sv)), sits **on their memory side**:
+between the tcache's and rtcache's miss ports and the DXA's gmem port on one
+side and the socket arbiter's `TCACHE_MEM_ARB_IDX` / `RTCACHE_MEM_ARB_IDX` /
+`DXA_MEM_ARB_IDX` inputs on the other, one lane per port (`UMMU_TCACHE_IDX`,
+`UMMU_RTCACHE_IDX`, `UMMU_DXA_IDX` in
+[`VX_gpu_pkg.sv`](../../hw/rtl/VX_gpu_pkg.sv)), each lane an L1 line wide with
+the socket arbiter's tag. It is the same module as the dMMU, with five
+differences:
+
+- **Its own TLB**, `VX_CFG_UTLB_SIZE` (8) entries, so texture, BVH and tensor streams
+  cannot evict the cores' translations, and its misses ride a third socket
+  `tlb_bus` into `tlb_socket_arb` (3 inputs), on to the cluster TLB and the
+  walker like any L1 miss.
+- **A registered reply** (`RSP_OUT_BUF = 2`). Each reply leaves through an
+  MMU-owned stage, so the select that injects kill and permission-fault
+  answers stays off the units' response logic. The requests arrive from
+  flops their clients own: the unit caches register their memory requests
+  (`MEM_OUT_BUF`), and the DXA registers its gmem output under VM. The TLB
+  lookup therefore starts at a client flop and its accept ends at the
+  client's registered ready, never deeper inside the unit. A unit access pays
+  the reply stage plus the MMU's own output stage, under VM only.
+- **A registered park** (`PARK_REG = 1`). The lane that wins the park
+  arbitration is first registered in a one-entry stage and allocates in the
+  miss station the next cycle, deduplicating against the staged VPN itself
+  (`ALLOC_PROBE`) since the lane's probe is a cycle old by then. This keeps
+  the lane arbitration off the miss station's update cone. A later request
+  on the staged page holds until the stage drains, so it cannot overtake the
+  staged one. The stage takes a park only while empty, so the lanes park at
+  most every other cycle, and a park (new or joining) pays one more cycle. An
+  entry that filled and freed while the park was staged still matches: it is
+  re-armed as filled and replays from its kept translation (`retired_r`),
+  so the staged park neither walks the page again nor installs it twice.
+- **`WRITE_ENABLE = 0`.** Its clients only read, so a parked request keeps
+  `{rw, addr, attr, tag}` and the replay restores zero data and all byte
+  enables; the miss-station payload is a line's address, not a line.
+- **The unit caches are virtually indexed and tagged**, since translation
+  happens after them. They are invalidated whenever translation changes: the
+  socket snoop's `SATP_HI` flush (§8.2) also flushes the unit MMU's TLB and,
+  from a latch of its own, injects a flush token into the tcache and the
+  rtcache through their `VX_dcr_flush` legs (OR-ed with the core-driven
+  graphics flush), held until both caches report done. The two legs are
+  independent: a cache flush waits for its outstanding misses, which may need
+  a unit-TLB park, and a TLB under flush refuses parks, so holding the TLB
+  flush for a cache's walk could deadlock. Both caches are read-only, so the
+  flush only invalidates.
+  A single address space has no synonyms, so a VIVT read-only cache flushed
+  on every `satp` change is exact.
+
+Without VM, or with none of TEX, RTU and DXA (`SOCKET_UNIT_MMU_ENABLE` undefined),
+none of this exists: the unit ports wire straight into the arbiter as before.
+A unit's DCR base address is a virtual address, which on Sv32 spans the
+whole 32-bit space, so under VM the TEX base field (`TEX_ADDR_BITS`, a
+cache-block index) is 26 bits; without VM, 25 bits cover the physical range.
+
+The unit MMU's `empty` holds the socket `busy`, but not the per-core
+`mmu_drained` barrier gate: that gate orders a core's own loads and stores,
+none of which pass through the unit MMU.
+
+### 3.9 The cluster unit MMU
+
+Raster and OM live in the cluster (`VX_graphics`) and reach the L2 directly
+through the rcache and the ocache, past every socket. Under VM a fourth
+`VX_mmu`, `cmmu` ([`VX_cluster.sv`](../../hw/rtl/VX_cluster.sv)), sits between
+those caches' memory ports and their L2 client slots (`L2_GFX_RASTER_IDX`,
+`L2_GFX_OM_IDX`), one lane each (`CMMU_RCACHE_IDX`, `CMMU_OCACHE_IDX`), with
+the same registered reply (`RSP_OUT_BUF = 2`) and registered park
+(`PARK_REG = 1`) as the socket unit MMU; the rcache and ocache register their
+memory requests (`MEM_OUT_BUF`). Its TLB is
+`VX_CFG_CTLB_SIZE` (8) entries, and its misses enter the cluster TLB arbiter
+as one more client after the sockets (`CLUSTER_NUM_TLB_PORTS`), its slot id
+zero-extended to the socket buses' width. `WRITE_ENABLE` follows OM, since the
+ocache writes (write-through) through it, so its park stage holds a full
+line. `vm_active` comes from the device's
+`satp` mode, fanned to the clusters from [`Vortex.sv`](../../hw/rtl/Vortex.sv).
+
+The rcache and ocache are virtually tagged, so the device's `SATP_HI` flush
+(`mmu_flush_req`, §8.1) also reaches `VX_graphics` as an address-space-change
+requester: the rcache invalidates through its `VX_dcr_flush` leg, and the OM
+flush sequencer takes it as an L1-only round, draining the OM's fragments and
+the ocache's writes into the L2 before invalidating. Only then does the
+cluster flush the `cmmu` TLB those writes went through; the cluster's
+`mmu_flush_done` waits on the L2 TLB and on `cmmu`. `cmmu.empty` joins the
+cluster `busy`. With both units, the raster's early-Z depth reads go through
+the ocache and so through `cmmu` too; its enable (`OM_EARLYZ_SAFE`) and depth
+function reset off, so a draw that never programs the OM depth state reads no
+depth buffer. As for TEX, the raster and OM buffer-base fields
+(`RASTER_ADDR_BITS`, `OM_ADDR_BITS`) widen to 26 bits on Sv32 under VM.
 
 ---
 
@@ -317,11 +447,11 @@ elastic slice (`OUT_BUF = 3`). The id therefore grows deterministically
 
 ```
 L1_TLB_ID_WIDTH      = clog2(L1_TLB_MSHR_SIZE)                 the L1 miss-station slot
-TLB_SOCKET_ID_WIDTH  = L1_TLB_ID_WIDTH + sel(2)                 + {dMMU, iMMU}
-TLB_CLUSTER_ID_WIDTH = TLB_SOCKET_ID_WIDTH + sel(NUM_SOCKETS)   + socket
+TLB_SOCKET_ID_WIDTH  = L1_TLB_ID_WIDTH + sel(SOCKET_NUM_MMUS)   + {dMMU, iMMU[, unit MMU]}
+TLB_CLUSTER_ID_WIDTH = TLB_SOCKET_ID_WIDTH + sel(CLUSTER_NUM_TLB_PORTS) + socket [or cluster unit MMU]
 ```
 
-The socket arbiter merges the dMMU and iMMU ports onto `cluster_tlb_bus_if`,
+The socket arbiter merges the dMMU, iMMU and (when present) unit MMU ports onto `cluster_tlb_bus_if`,
 the cluster arbiter merges every socket onto the cluster TLB's client port.
 A fill routes back to exactly one L1 slot with no table lookups anywhere.
 
@@ -445,8 +575,9 @@ through a `VX_stream_arb` (`OUT_BUF = 2`). `empty = no walker active`;
 1. **Lane 0 misses on page P.** CAM and miss-station probes both miss →
    `cat_park`. Slot `s` is allocated with `{vpn, access, amo}` and the token
    `{lane 0, fields}`; the LSU sees the request accepted.
-2. **Lane 2 misses on P two cycles later.** The miss-station probe matches
-   slot `s` → `cat_park` joins it, queuing behind lane 0's token.
+2. **Lane 2 misses on P two cycles later** → `cat_park`. The allocate's
+   miss-station probe matches slot `s`, so it joins, queuing behind lane 0's
+   token.
 3. **Lane 1 hits on page Q** in the meantime and leaves through its output
    stage: nothing waits on the walk.
 4. **Issue.** `tlb_bus req {id = s, …}` climbs the socket and cluster
@@ -519,7 +650,8 @@ its wait).
 socket's DCR chain, forwarding it to the cores unchanged while snooping the
 satp writes. It derives `vm_active` from the mode field
 (`SATP_LO[31]` on Sv32, `SATP_HI[31:28] ≠ 0` on Sv39) and, on the `SATP_HI`
-write, requests a flush of both L1 MMUs, held until both report done. The
+write, requests a flush of every L1 MMU, held until all report done; with a
+unit MMU the tcache and rtcache invalidation of §3.8 runs as a separate leg. The
 flush is **self-timed**: satp only changes between kernels, once the TLBs are
 already drained, so no completion handshake crosses the socket boundary. This
 is what keeps `satp`, flush, and fault ports off the socket interface — only
@@ -551,7 +683,8 @@ DCRs. Then:
   maps of §2.4.
 - **`vx_mem_alloc`** takes a PA from the global pool, mints a VA
   (identity by default; `VORTEX_RANDOMIZE_VA=1` picks a random page-aligned
-  base seeded by `VORTEX_VA_SEED`, keeping multi-page buffers VA-contiguous)
+  base seeded by `VORTEX_VA_SEED`, keeping multi-page buffers VA-contiguous
+  and outside the OM aperture, which the LSU decodes by address)
   and installs one leaf PTE per page. Re-mapping a VA already covered by a
   leaf is idempotent when the translation matches (identity superpages
   installed at init are legitimately re-covered) and a conflict otherwise.
@@ -566,14 +699,15 @@ DCRs. Then:
 
 ### 8.5 The command processor
 
-The emulation CP ([`cmd_processor.cpp`](../../sim/common/cmd_processor.cpp))
-is MMU-aware: `cp_translate()` performs the same Sv32/Sv39 walk as
+Both command processors are MMU-aware: the emulation CP
+([`cmd_processor.cpp`](../../sim/common/cmd_processor.cpp), `cp_translate()`)
+and the RTL DMA ([`VX_cp_dma.sv`](../../hw/rtl/cp/VX_cp_dma.sv), the
+`S_XLATE_*` states) perform the same Sv32/Sv39 walk as
 `VMManager::page_table_walk` against device memory for every `CMD_MEM_*` VA
-operand, skipped by `F_MEM_PHYSICAL`; its root is `CP_SATP_LO/HI` (regfile
-0x028/0x02C), programmed at open. The RTL CP has **no MMU**: `CP_SATP` reads
-zero, `DEV_CAPS.VM_ENABLED` is 0, and the runtime never mints VAs on FPGA.
-VM is therefore a simulation-only feature today
-([`command_processor.md`](command_processor.md) §8, §10).
+operand, skipped by `F_MEM_PHYSICAL`. Their root is `CP_SATP_LO/HI` (regfile
+0x028/0x02C), programmed at open, and both advertise `DEV_CAPS.VM_ENABLED`
+in a VM build, so VM runs the same on simulators and FPGA
+([`command_processor.md`](command_processor.md) §8).
 
 ---
 
@@ -586,10 +720,16 @@ SimObjects bound through channels:
   `ReqIn/ReqOut` per port, a `Tlb` CAM (`mmu_tlb.cpp`, MRU replacement,
   superpage splice), an `L1_TLB_MSHR_SIZE`-entry miss station with two parked
   requests per entry, per-port replay queues that drain ahead of new input,
-  per-port kill-response queues, and the `TlbMissOut/TlbFillIn` link. Fills
-  install, then re-check each parked request's own permission and either
-  replay it translated or kill it. Responses pass through with no added
-  latency: the stage's cost is charged on the request path.
+  per-port kill-response queues, a one-entry permission-fault slot per port
+  (a port stalls its next fault while it is full), and the
+  `TlbMissOut/TlbFillIn` link. Fills install, then re-check each parked
+  request's own permission and either replay it translated or kill it. With
+  writing data-side clients a flush token holds while its port has requests
+  in the miss station. With a registered reply (the unit MMU) each response
+  leaves a cycle late; otherwise responses pass through. The DXA's gmem
+  output carries its own request register under VM, as in the RTL.
+  The dcache flush needs no MMU wait: SimX flushes the caches from the host
+  after the run has drained, when every MMU is already empty.
 - **`L2Tlb`** ([`tlb_l2.cpp`](../../sim/simx/mem/tlb_l2.cpp)) — one request
   per tick accepted round-robin over clients into a pipe that retires after
   `VX_CFG_L2_TLB_LATENCY` ticks; megapage `Tlb` probed first, then the
@@ -602,7 +742,12 @@ SimObjects bound through channels:
   walker index in the tag, and the first-fault latch.
 
 Wiring ([`cluster.cpp`](../../sim/simx/cluster.cpp)): every core's two `Mmu`
-instances are clients of the cluster `L2Tlb`; the `Ptw` shares L2-cache port 0
+instances are clients of the cluster `L2Tlb`, followed by each socket's unit
+`Mmu` ([`socket.cpp`](../../sim/simx/socket.cpp)) and the cluster's unit `Mmu`
+in front of the rcache / ocache, placed as in the RTL
+between the tcache / rtcache / DXA gmem ports and the socket arbiter; `set_satp`
+flushes its TLB and invalidates the unit caches (`Cache::invalidate`; the
+ocache writes through and holds no write between launches); the `Ptw` shares L2-cache port 0
 with socket 0 through a **priority** arbiter that favours PTE fetches — every
 translated access behind a walk is blocked until it completes, and the
 walkers issue far too little traffic to starve the demand stream (the reverse
@@ -672,6 +817,8 @@ untranslated.
 | `VX_CFG_VM_ENABLE` | false | build the MMU, TLB fabric, cluster TLB and walker at all |
 | `VX_CFG_DTLB_SIZE` | 16 | socket dMMU CAM entries |
 | `VX_CFG_ITLB_SIZE` | 8 | socket iMMU CAM entries |
+| `VX_CFG_UTLB_SIZE` | 8 | socket unit MMU CAM entries (TEX, RTU, DXA) |
+| `VX_CFG_CTLB_SIZE` | 8 | cluster unit MMU CAM entries (RASTER, OM) |
 | `VX_CFG_L1_TLB_MSHR_SIZE` | 4 | L1 miss-station entries (distinct outstanding VPNs); 2 tokens each |
 | `VX_CFG_L2_TLB_SIZE` / `NUM_WAYS` | 512 / 4 | cluster TLB set array |
 | `VX_CFG_L2_TLB_MEGA_SIZE` | 8 | cluster TLB superpage CAM |
@@ -707,6 +854,14 @@ sizes must be powers of two ≥ 2 (static asserts).
 | `tlb-concurrent`, `mc-l2-amo`, `mc-l3` | 2–4 cores, L2 / L3 | shared cluster TLB and walker across cores and cache levels |
 | `vm-fault` | `vm_fault -t0` | unmapped page → device error and first-fault report |
 | `parity-vm-sgemm/vecadd` | `check: model_parity` | exact instret + cycles within tolerance, simx vs rtlsim |
+| `vm-rtu` | `rt_smoke`, `EXT_RTU`, randomized VA | rtcache misses through the socket unit MMU |
+| `vm-dxa` | `sgemm2_dxa`, `EXT_DXA`, randomized VA | DXA gmem reads through the socket unit MMU |
+| `parity-vm-rt_raycast`, `parity-vm-dxa_copy` | `check: model_parity`, RTU + DXA | unit-MMU timing, simx vs rtlsim |
+| `vm-tex` | `gfx_tex`, `EXT_TEX`, randomized VA | tcache misses through the socket unit MMU |
+| `parity-vm-gfx_tex` | `check: model_parity`, TEX | unit-MMU texture timing, simx vs rtlsim |
+| `vm-raster` | `gfx_raster`, `EXT_RASTER` + `EXT_OM`, randomized VA | rcache misses through the cluster unit MMU |
+| `vm-om` | `gfx_om -d -b`, `EXT_RASTER` + `EXT_OM`, randomized VA | ocache reads and write-throughs through the cluster unit MMU |
+| `parity-vm-gfx_raster`, `parity-vm-gfx_om` | `check: model_parity`, RASTER + OM | cluster-unit-MMU timing, simx vs rtlsim |
 
 `vm_fault -t1` (a store to a read-only page) is not in CI: it needs the
 L1 permission-fault *report*, which the RTL does not surface (§9, §13).
@@ -728,6 +883,8 @@ Grades: ✅ done · ⚠️ partial · ❌ pending.
 | area | state | note |
 |---|:--:|---|
 | Socket L1 translation stage, lane-parallel, hit-under-miss | ✅ | RTL + SimX |
+| Socket unit MMU for TEX, RTU and DXA, VIVT tcache/rtcache invalidated on `satp` | ✅ | RTL + SimX |
+| Cluster unit MMU for RASTER and OM, rcache invalidated / ocache drained and invalidated on `satp` | ✅ | RTL + SimX |
 | VPN-dedup miss stations with per-entry requester queues, ordered drain | ✅ | L1 and cluster |
 | Narrow miss/fill fabric with id-prepending arbiters | ✅ | socket + cluster levels |
 | Cluster TLB: pipelined set-associative array + megapage CAM | ✅ | RTL + SimX |
@@ -743,6 +900,18 @@ Grades: ✅ done · ⚠️ partial · ❌ pending.
 | **RTL CP MMU** | ❌ | RTL CP has no walker; `DEV_CAPS.VM_ENABLED = 0` on FPGA, so VM is simulation-only |
 | Chip-wide L3 TLB, TLB inclusion policy, a `VX_dma` block with its own TLB | ❌ | not started |
 | ASIDs, A/D write-back, PMP, Sv48/Sv57 | ❌ | deliberate: single global address space; runtime pre-sets A/D |
+
+**Known limitation.** The `satp` commit's invalidation of the tcache, the
+rtcache and the rcache shares each cache's flush leg with the core-driven
+graphics flush: the two requests are OR-ed onto one `VX_dcr_flush`, so
+whichever is raised second completes on the walk the first one started — a
+core flush raised while the `satp` request is high completes on the `satp`
+flush's done, and the reverse. Both directions are benign for these read-only
+caches: the walk blocks the cache's inputs and invalidates every line, so a
+walk that completes after a request was raised leaves no line the request
+could still see. The runtime also commits `satp` once, before the first
+launch, with no core flush in progress. A writing cache, or a commit that must
+complete strictly after a given core flush, would need its own requester.
 
 **Deliberate simplifications** (recorded so they are not mistaken for
 bugs): there is one global address space and no ASID — `satp` is programmed

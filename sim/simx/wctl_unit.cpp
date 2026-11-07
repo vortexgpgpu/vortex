@@ -20,6 +20,8 @@
 
 using namespace vortex;
 
+static_assert(VX_CFG_NUM_THREADS <= 8 * sizeof(Word), "a thread mask must fit a register");
+
 ThreadMask WctlUnit::next_tmask(const instr_trace_t* trace) const {
   auto wctl_type = std::get<WctlType>(trace->op_type);
   auto& warp = core_->scheduler().warp(trace->wid);
@@ -33,7 +35,7 @@ ThreadMask WctlUnit::next_tmask(const instr_trace_t* trace) const {
   if (wctl_type == WctlType::TMC) {
     ThreadMask tmask(num_threads);
     for (uint32_t t = 0; t < num_threads; ++t) {
-      tmask.set(t, rs1_data.at(thread_last).u & (1 << t));
+      tmask.set(t, rs1_data.at(thread_last).u & (Word(1) << t));
     }
     return tmask;
   }

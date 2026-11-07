@@ -18,6 +18,7 @@
 const char* kernel_file = "kernel.vxbin";
 uint32_t count = 64;
 uint32_t spin_limit = 4096;
+uint32_t mode = MP_FENCE;
 
 vx_device_h device = nullptr;
 vx_buffer_h data_buffer = nullptr;
@@ -30,15 +31,16 @@ kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
    std::cout << "Vortex Test." << std::endl;
-   std::cout << "Usage: [-k: kernel] [-n words] [-s spin limit] [-h: help]" << std::endl;
+   std::cout << "Usage: [-k: kernel] [-n words] [-s spin limit] [-m mode: 0 fences, 1 acquire/release fences, 2 .aq/.rl atomics] [-h: help]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "n:s:k:h")) != -1) {
+  while ((c = getopt(argc, argv, "n:s:m:k:h")) != -1) {
     switch (c) {
     case 'n': count = atoi(optarg); break;
     case 's': spin_limit = atoi(optarg); break;
+    case 'm': mode = atoi(optarg); break;
     case 'k': kernel_file = optarg; break;
     case 'h': show_usage(); exit(0); break;
     default: show_usage(); exit(-1);
@@ -75,19 +77,22 @@ int main(int argc, char *argv[]) {
   kernel_arg.num_tasks  = total_threads;
   kernel_arg.count      = count;
   kernel_arg.spin_limit = spin_limit;
+  kernel_arg.mode       = mode;
 
-  std::vector<uint32_t> zeros(count, 0);
+  std::vector<uint32_t> zeros(mp_data_words(count), 0);
   std::vector<uint32_t> out(4, 0);
-  uint32_t data_size = count * sizeof(uint32_t);
+  uint32_t data_size = mp_data_words(count) * sizeof(uint32_t);
   uint32_t out_size  = out.size() * sizeof(uint32_t);
   RT_CHECK(vx_buffer_create(device, data_size, VX_MEM_READ_WRITE, &data_buffer));
   RT_CHECK(vx_buffer_address(data_buffer, &kernel_arg.data_addr));
-  RT_CHECK(vx_buffer_create(device, sizeof(uint32_t), VX_MEM_READ_WRITE, &flag_buffer));
+  // the flag sits in the buffer's second (odd) line
+  RT_CHECK(vx_buffer_create(device, 2 * MP_LINE_WORDS * sizeof(uint32_t), VX_MEM_READ_WRITE, &flag_buffer));
   RT_CHECK(vx_buffer_address(flag_buffer, &kernel_arg.flag_addr));
+  kernel_arg.flag_addr += MP_LINE_WORDS * sizeof(uint32_t);
   RT_CHECK(vx_buffer_create(device, out_size, VX_MEM_READ_WRITE, &out_buffer));
   RT_CHECK(vx_buffer_address(out_buffer, &kernel_arg.out_addr));
   RT_CHECK(vx_enqueue_write(queue, data_buffer, 0, zeros.data(), data_size, 0, nullptr, nullptr));
-  RT_CHECK(vx_enqueue_write(queue, flag_buffer, 0, zeros.data(), sizeof(uint32_t), 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_write(queue, flag_buffer, MP_LINE_WORDS * sizeof(uint32_t), zeros.data(), sizeof(uint32_t), 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_write(queue, out_buffer, 0, out.data(), out_size, 0, nullptr, nullptr));
 
   RT_CHECK(vx_module_load_file(device, kernel_file, &module_));

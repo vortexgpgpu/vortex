@@ -39,7 +39,6 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     parameter CRSQ_SIZE             = 0,
     // Miss Reserv Queue Knob
     parameter MSHR_SIZE             = 16,
-    parameter MSHR_LINES            = 0,
     // Memory Response Queue Size
     parameter MRSQ_SIZE             = 8,
     parameter MREQ_SIZE             = 0,
@@ -55,6 +54,10 @@ module VX_cache_top import VX_gpu_pkg::*; #(
 
     // Write misses allocate without a fill (write-validate)
     parameter LAZY_FETCH            = `VX_CFG_DCACHE_LAZY_FETCH,
+
+    // Same-word read merge across the ports, as the dcache merges the
+    // channels of one LSU block
+    parameter READ_MERGE            = `VX_CFG_DCACHE_READ_MERGE ? NUM_REQS : 0,
 
     // Bank pipeline depth (capacity-scaled)
     parameter LATENCY               = `VX_CFG_DCACHE_LATENCY,
@@ -180,7 +183,6 @@ module VX_cache_top import VX_gpu_pkg::*; #(
         .MEM_PORTS      (MEM_PORTS),
         .CRSQ_SIZE      (CRSQ_SIZE),
         .MSHR_SIZE      (MSHR_SIZE),
-        .MSHR_LINES     (MSHR_LINES),
         .MRSQ_SIZE      (MRSQ_SIZE),
         .MREQ_SIZE      (MREQ_SIZE),
         .LATENCY        (LATENCY),
@@ -189,6 +191,7 @@ module VX_cache_top import VX_gpu_pkg::*; #(
         .WRITEBACK      (WRITEBACK),
         .DIRTY_BYTES    (DIRTY_BYTES),
         .LAZY_FETCH     (LAZY_FETCH),
+        .READ_MERGE     (READ_MERGE),
         .AMO_ENABLE     (AMO_ENABLE),
         .IS_LLC         (IS_LLC),
         .BANK_HASH      (BANK_HASH),

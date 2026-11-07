@@ -74,8 +74,7 @@ simulate.tcl: $(SRC_DIR)/simulate.tcl
 gen-sources: project_1/sources.txt
 project_1/sources.txt:
 	mkdir -p project_1
-	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -P -Cproject_1/src -Oproject_1/sources.txt \
-		-TVortex_top -E -X$(SCRIPT_DIR)/xilinx_ip_stubs.sv
+	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -P -F -TVortex_top -Cproject_1/src -Oproject_1/sources.txt
 
 build: done.dcp
 done.dcp: project_1/sources.txt kernel.bin.coe project.tcl

@@ -411,7 +411,10 @@ to new requests. This removes the read-after-fill round trip from miss latency.
 
 The window closes on the **first write or AMO head**. That head and every later
 chain entry replay through the pipeline as usual, preserving program order: an
-older store must merge before a younger same-line read responds.
+older store must merge before a younger same-line read responds. Stores still
+waiting in the chain keep its line pending, on a write-through cache too, where
+they have already been written through: a same-word access that arrives while
+they drain links behind them instead of hitting the array ahead of them.
 
 Two details make it correct:
 
@@ -663,8 +666,11 @@ While any token is visible at any input, every input presents `valid=0`
 downstream and `ready=0` upstream, so upstream stalls.
 
 - `STATE_WAIT1` waits for `BANK_SEL_LATENCY × NUM_BANKS` outstanding crossbar
-  requests to drain. When there is no crossbar latency this state is bypassed and
-  IDLE goes straight to FLUSH.
+  requests to drain, and for every bank's core-request skid register
+  (`CORE_REQ_SKID`, behind an unbuffered crossbar) to empty: a request held there
+  has left its input but not reached its bank. When there is no crossbar latency
+  and no skid holds a request, this state is bypassed and IDLE goes straight to
+  FLUSH.
 - `STATE_FLUSH` is one cycle: it pulses `flush_begin` to **all** banks at once.
 - `STATE_WAIT2` accumulates `flush_done |= flush_end` until every bank has
   reported. The tokens visible at that point are the ones this walk answers;
@@ -891,7 +897,7 @@ closely enough to be a parity oracle:
 | AMOs | LLC commits, non-LLC probes and forwards | `amo_unit_` at LLC; `AmoProbe` above it |
 | Flush | per-bank set × way walk | per-bank set × way × sector walk |
 
-`Cache::Config` fields: `bypass, C, L, S, W, A, B, addr_width, num_inputs,
+`Cache::Config` fields: `bypass, size, L, S, W, num_ways, B, addr_width, num_inputs,
 mem_ports, write_back, write_reponse, mshr_size, latency, repl_policy, is_llc`
 (`write_reponse` is misspelled in the source). `bypass` mirrors RTL `PASSTHRU`.
 
@@ -988,17 +994,26 @@ timing.
 conflict misses for strided or power-of-two patterns at a mild area cost. Because
 the tag store packs all ways into one BRAM word, extra ways widen that word rather
 than adding arrays. Diminishing returns past 8 for typical GPU workloads.
+The way count need not be a power of two (3 or 6 ways give 48 KB, 192 KB or
+6 MB with power-of-two sets), but `SIZE / (LINE × WAYS × BANKS)`, the sets per
+bank, must be one (static assert). The replacement state and the write-back
+flush walk skip the unused way codes: FIFO wraps at the last way, and a random
+or PLRU pick past it folds back onto a real way.
 
 **`*_REPL_POLICY`** (`fifo` everywhere) — `0` random, `1` FIFO, `2` PLRU. PLRU
 gives the best hit rate on reuse-heavy workloads but stores per-set tree bits;
 FIFO is a single counter per set and within a few percent on streaming GPU
 workloads; random is cheapest and degrades gracefully.
 
-**`*_MSHR_SIZE`** (16 everywhere) — outstanding **missed requests** per bank (see
+**`*_MSHR_SIZE`** — outstanding **missed requests** per bank (see
 [§4.5](#45-mshr-and-same-line-chaining) — *not* distinct lines). Total MLP per
-cache = `NUM_BANKS × MSHR_SIZE`. Also the tag-id space the next level sees. Raise
-it when the next level's latency is long enough that banks stall with all entries
-pending.
+cache = `NUM_BANKS × MSHR_SIZE`. Also the tag-id space the next level sees. The
+icache keeps 16. The dcache, L2 and L3 derive it from Little's law: the platform
+keeps `PLATFORM_MEMORY_PEAK_BW / PLATFORM_CLOCK_RATE × PLATFORM_MEMORY_LATENCY`
+bytes in flight at peak bandwidth, and each bank needs its share of them in
+sectors (a dcache bank's share is per dcache instance), rounded up to a power of
+two, within 16 to 256 (64 for the dcache). With no platform latency (the default)
+or a disabled level it is 16. A profile may still set it outright.
 
 **`*_MRSQ_SIZE`** (icache 0, others 4) — memory response staging queue depth.
 Elastic buffering between the memory port and the bank fill path; `0` collapses to
@@ -1057,6 +1072,52 @@ The `max(0, …)` floor is load-bearing: shrinking a cache below its base size
 cannot drive latency below 2 (L1) or 4 (L2/L3), because `LATENCY >= 2` is a static
 assert and the classic bank needs both stages. Each base constant equals that
 level's own default size.
+
+**`L2_LINK_LATENCY`** (`0`) — the link between the sockets and the L2, in cycles
+**each way**. `L2_LATENCY` is the bank pipeline, so it cannot stand for a large
+GPU's SM-to-L2 network, whose hundreds of cycles would be register stages in every
+bank. The link sits in `VX_cluster` between each socket memory port and its L2
+input (after the graphics block's peel, when OM is on): a `VX_mem_bus_delay`, one
+`VX_delay_buffer` per direction. A request reaches the L2 `L2_LINK_LATENCY` cycles
+after the socket offers it, and a response its socket as long after the L2 does,
+so an L2 hit, and every miss, gains `2 × L2_LINK_LATENCY` cycles of round trip.
+Each direction is a FIFO of a power of two at least the latency (block RAM at
+size) whose entries a delay line of valid bits releases in order into a stream
+buffer, so a port keeps one transfer per cycle, its outputs are registers, and its
+back-pressure is the FIFO's registered full flag.
+At `0` the ports are wires, the design of a build without the knob. The command
+processor's and the walker's L2 ports are not socket traffic and do not cross it.
+SimX models it with a `DelayBuffer` per direction in `Cluster`. The dcache MSHRs
+and the LSU's pending pool, which wait on both crossings, size from
+`PLATFORM_MEMORY_LATENCY + 2 × L2_LINK_LATENCY`; the L2 and L3 MSHRs from the
+memory latency alone.
+
+**`L1_LINK_LATENCY`** (`0`) — the link between each core's memory ports and the
+dcache, in cycles **each way**. On some GPUs (Fermi, Kepler, Maxwell, Pascal) a
+global load goes through the L1/texture pipeline and an L1 hit takes 35 to 96
+cycles; `DCACHE_LATENCY` is the bank pipeline with its commit logic and cannot
+stand for that. The link sits in `VX_socket` on the dcache side of the dMMU,
+between each core lane (`dcache_phys_bus_if`) and the dcache's core port: the
+same `VX_mem_bus_delay` as the L2 link, so a request reaches the dcache
+`L1_LINK_LATENCY` cycles after the core (or the dMMU) offers it and a response
+its core as long after the dcache does. Every global access, an L1 hit, an L2
+hit or a DRAM access, gains `2 × L1_LINK_LATENCY` cycles of round trip; shared
+memory, inside the core, does not. At `0` the lanes are wires.
+A store past the core is ack-less, so whatever holds one outside the core's own
+drain status must be drained explicitly. Each lane is a FIFO with one fixed
+delay, so it keeps its requests in order, and the order across lanes at the
+dcache is set, as without the link, by the dcache's per-lane back-pressure;
+fence and flush tokens order per lane, so they need nothing more. The dcache
+flush that a DCR request starts does assume the core's stores are in the dcache
+once they leave the core: it waits until the core's lanes on the link are empty
+(and, under VM, its dMMU lanes idle), latching the start since the token
+crosses the link too, and the socket stays busy while any lane holds a request.
+SimX models it with a `DelayBuffer` per direction on each core dcache port in
+`Socket`; its run and flush loops wait for an idle platform, which counts the
+packets on the links. The LSU's pending pool sizes from
+`PLATFORM_MEMORY_LATENCY + 2 × L2_LINK_LATENCY + 2 × L1_LINK_LATENCY`; the
+dcache MSHRs, which a miss holds only below the dcache, do not count the L1
+link.
 
 **Icache exceptions.** The icache has no `NUM_BANKS`, `WRITEBACK`, `DIRTYBYTES`,
 `LINE_SIZE`, `WORD_SIZE`, or `SECTOR_SIZE` knob. Its geometry beyond size and ways

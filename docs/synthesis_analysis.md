@@ -2,6 +2,8 @@
 
 This guide explains how to run synthesis, timing analysis, area analysis, and power analysis for Vortex across all supported back-ends: Xilinx (Vivado), Altera (Quartus), Yosys (open-source), and Synopsys Design Compiler.
 
+**Timing work starts in Beacon, not here.** For an RTL change that can move timing, iterate on [Beacon](designs/beacon.md) (§6.3): it counts the logic levels of every register in minutes, compares them with the parent revision's (`ci/logic_gate.py -b <dut> --against <ref build tree>`), and names the registers a change made deeper. Synthesize once the change passes there, to confirm Fmax and to measure what Beacon does not see: wires, placement, congestion, area and power.
+
 ---
 
 ## Table of Contents
@@ -61,6 +63,23 @@ NUM_CORES=4   # equivalent to -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=4 -DVX_
 NUM_CORES=16  # equivalent to -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=16 -DVX_CFG_L2_ENABLE
 NUM_CORES=32  # equivalent to -DVX_CFG_NUM_CLUSTERS=2 -DVX_CFG_NUM_CORES=16 -DVX_CFG_L2_ENABLE
 ```
+
+### Block RAM for asynchronous reads (the RAM fold)
+
+Every flow reads preprocessed copies of the sources (`gen_sources.sh -P`) that
+the RAM fold has patched first (`-F`, [hw/scripts/ram_fold.py](../hw/scripts/ram_fold.py)):
+a block-RAM-sized `VX_dp_ram` that reads combinationally gets its read address one
+cycle early and a registered read, so it maps to block RAM or an SRAM macro. The
+build's source folder holds `ram_fold.rpt` (each candidate RAM, folded or kept
+with the reason) and `ram_fold.diff` (the patch). The fold needs a python3 with
+pyslang 11 or 12, named by `RAM_FOLD_PYTHON` (default `python3`):
+
+```bash
+pip install "pyslang>=11,<13"
+RAM_FOLD_PYTHON=/path/to/python3 make core     # when python3 has no pyslang
+```
+
+See [Block RAM and asynchronous reads](hardware_library.md#block-ram-and-asynchronous-reads).
 
 ### Using PREFIX for Isolated Builds
 
@@ -451,7 +470,7 @@ make -C build/hw/syn/yosys/dut om CLOCK_FREQ=500    # override the target clock
 
 #### Synthesis-regression gate (`asic_gate`)
 
-`ci/asic_gate.py` runs that catalog against checked-in goldens in `ci/baselines/synthesis/yosys/` and fails on a Fmax or cell-area move beyond ±5%. It is the ASIC sibling of `ci/fpga_gate.py` and shares its implementation (`ci/synth_gate.py`).
+`ci/asic_gate.py` runs that catalog against checked-in goldens in `ci/baselines/synthesis/yosys/` and fails when Fmax falls more than 2% below the build's target clock or cell area grows more than 5% over its `area_budget_um2`; both limits live in the catalog. It is the ASIC sibling of `ci/fpga_gate.py` and shares its implementation (`ci/synth_gate.py`).
 
 ```bash
 ci/asic_gate.py --list             # builds and their recorded baselines

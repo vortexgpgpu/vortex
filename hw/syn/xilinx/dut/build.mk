@@ -32,3 +32,14 @@ RTL_PKGS   += $($(DUT)_PKG)
 ifeq ($($(DUT)_EXT),1)
 include $(VORTEX_HOME)/hw/syn/extensions.mk
 endif
+
+# An AFU build reads the platform tops too, which declare one AXI master per
+# GPU memory port literally: resolve the count from the elaborated
+# configuration, as the xrt flow does.
+ifeq ($($(DUT)_AFU),1)
+AFU_MEM_PORTS := $(shell $(SCRIPT_DIR)/afu_mem_ports.sh -c .afu_mem_ports $(VERILATOR_PATH)/bin/verilator $(filter-out -J% -DSYNTHESIS -DVIVADO,$(CFLAGS)) $(RTL_PKGS))
+ifeq ($(AFU_MEM_PORTS),)
+$(error cannot resolve the AFU memory port count for this configuration)
+endif
+CFLAGS += -DAFU_MEM_PORTS=$(AFU_MEM_PORTS)
+endif

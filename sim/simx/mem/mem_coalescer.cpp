@@ -39,7 +39,6 @@ MemCoalescer::MemCoalescer(
   , sent_mask_(input_size)
   , line_size_(line_size)
   , delay_(delay)
-  , port_delay_(output_size, 0)
 {}
 
 void MemCoalescer::on_reset() {
@@ -50,6 +49,10 @@ void MemCoalescer::on_reset() {
 }
 
 void MemCoalescer::on_tick() {
+  // The tag table's full flag is registered: a tag a response frees this
+  // cycle takes a new request from the next one.
+  const bool tags_full = pending_rd_reqs_.full();
+
   // process outgoing responses: merge same-tag fragments arriving across
   // channels this tick into one uncoalesced response.
   for (uint32_t o = 0; o < output_size_; ++o) {
@@ -108,8 +111,8 @@ void MemCoalescer::on_tick() {
       }
     }
 
-    // the response path is combinational; the cache registers its output
-    RspOut.send(out_rsp, 0);
+    // packed combinationally into the lmem switch's response buffer
+    RspOut.send(out_rsp, 1);
     DT(4, this->name() << " mem-rsp: " << out_rsp);
 
     // track remaining responses
@@ -154,7 +157,7 @@ void MemCoalescer::on_tick() {
   assert(!in_req.mask.none());
 
   // ensure we can allocate a response tag
-  if (pending_rd_reqs_.full()) {
+  if (tags_full) {
     DT(4, this->name() << " queue-full: " << in_req);
     return;
   }
@@ -300,7 +303,7 @@ void MemCoalescer::flush_out_round() {
     if (!out_round_.lanes.test(o)) {
       continue;
     }
-    if (ReqOut.at(o).try_send(out_round_.reqs.at(o), delay_ + port_delay_.at(o))) {
+    if (ReqOut.at(o).try_send(out_round_.reqs.at(o), delay_)) {
       out_round_.lanes.reset(o);
     }
   }

@@ -46,9 +46,6 @@ public:
 
   const PerfStats& perf_stats() const;
 
-  // Extra request-side registers on one output port.
-  void set_port_delay(uint32_t port, uint32_t delay) { port_delay_.at(port) = delay; }
-
 protected:
   void on_reset();
   void on_tick();
@@ -78,7 +75,6 @@ private:
   out_round_t out_round_;
   uint32_t line_size_;
   uint32_t delay_;
-  std::vector<uint32_t> port_delay_;
   PerfStats perf_stats_;
 
   friend class SimObject<MemCoalescer>;

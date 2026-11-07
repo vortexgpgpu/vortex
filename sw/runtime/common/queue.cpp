@@ -413,16 +413,17 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
         // Empty blob → caller pre-programmed the ARG DCRs (legacy path).
         uint64_t args_addr   = 0;
         bool     args_pooled = false;
+        bool     args_clean  = false;
         bool     args_staged = !args_blob.empty();
         if (args_staged) {
             auto r = device_->args_slot_acquire(args_blob.size(),
-                                                &args_addr, &args_pooled);
+                                                &args_addr, &args_pooled, &args_clean);
             if (r != VX_SUCCESS) {
                 if (kernel) kernel->release();
                 *s = *e = now_ns(); return r;
             }
             r = device_->dev_write(args_addr, args_blob.data(),
-                                   args_blob.size());
+                                   args_blob.size(), args_clean);
             if (r != VX_SUCCESS) {
                 device_->args_slot_release(args_addr, args_pooled);
                 if (kernel) kernel->release();
@@ -607,11 +608,12 @@ vx_result_t cmd_stage_qmds(Device* device_, const std::vector<CmdRec>& recs,
 
         // 1) Args blob.
         if (!rec.args.empty()) {
+            bool clean = false;
             r = device_->args_slot_acquire(rec.args.size(),
-                                           &st.args_addr, &st.args_pooled);
+                                           &st.args_addr, &st.args_pooled, &clean);
             if (r != VX_SUCCESS) break;
             st.args_active = true;
-            r = device_->dev_write(st.args_addr, rec.args.data(), rec.args.size());
+            r = device_->dev_write(st.args_addr, rec.args.data(), rec.args.size(), clean);
             if (r != VX_SUCCESS) break;
         }
 
@@ -672,10 +674,11 @@ vx_result_t cmd_stage_qmds(Device* device_, const std::vector<CmdRec>& recs,
         st.qmd_words = std::move(qmd);
         if (device_->cp_supports_qmd()) {
             const uint64_t qmd_bytes = st.qmd_words.size() * sizeof(uint32_t);
-            r = device_->args_slot_acquire(qmd_bytes, &st.qmd_addr, &st.qmd_pooled);
+            bool clean = false;
+            r = device_->args_slot_acquire(qmd_bytes, &st.qmd_addr, &st.qmd_pooled, &clean);
             if (r != VX_SUCCESS) break;
             st.qmd_active = true;
-            r = device_->dev_write(st.qmd_addr, st.qmd_words.data(), qmd_bytes);
+            r = device_->dev_write(st.qmd_addr, st.qmd_words.data(), qmd_bytes, clean);
             if (r != VX_SUCCESS) break;
         }
     }
@@ -841,10 +844,11 @@ vx_result_t Queue::enqueue_draw(const vx_command_t* commands,
                 }
             }
             std::memcpy(desc.data(), &num_steps, sizeof(num_steps));
-            r = device_->args_slot_acquire(desc.size(), &desc_addr, &desc_pooled);
+            bool desc_clean = false;
+            r = device_->args_slot_acquire(desc.size(), &desc_addr, &desc_pooled, &desc_clean);
             if (r == VX_SUCCESS) {
                 desc_active = true;
-                r = device_->dev_write(desc_addr, desc.data(), desc.size());
+                r = device_->dev_write(desc_addr, desc.data(), desc.size(), desc_clean);
             }
         }
 

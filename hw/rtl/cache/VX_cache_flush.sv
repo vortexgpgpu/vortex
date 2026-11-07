@@ -33,8 +33,10 @@ module VX_cache_flush import VX_gpu_pkg::*; #(
     input  wire mshr_empty,
     input  wire bank_empty
 );
-    // way iteration is only needed when eviction is enabled
+    // way iteration is only needed when eviction is enabled; the way sits
+    // above the line, so the walk ends at the last way's last line
     localparam CTR_WIDTH = `CS_LINE_SEL_BITS + (WRITEBACK ? `CS_WAY_SEL_BITS : 0);
+    localparam CTR_LAST  = (WRITEBACK ? NUM_WAYS : 1) * (2 ** `CS_LINE_SEL_BITS) - 1;
 
     localparam STATE_IDLE  = 0;
     localparam STATE_INIT  = 1;
@@ -80,7 +82,7 @@ module VX_cache_flush import VX_gpu_pkg::*; #(
                 end
             end
             STATE_FLUSH: begin
-                if (counter == ((2 ** CTR_WIDTH)-1) && flush_ready) begin
+                if (counter == CTR_WIDTH'(CTR_LAST) && flush_ready) begin
                     state_n = STATE_WAIT2;
                 end
             end

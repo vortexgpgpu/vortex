@@ -77,17 +77,17 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
 
     wire [`VX_CFG_XLEN-1:0] rs1_first;
     if (NUM_LANES > 1) begin : g_rs1_first
-        wire [`LOG2UP(NUM_LANES)-1:0] first_lane;
-        VX_priority_encoder #(
+        // the data's own select tree, not an encoded lane index driving a wide mux
+        VX_find_first #(
             .N       (NUM_LANES),
+            .DATAW   (`VX_CFG_XLEN),
             .REVERSE (0)
         ) first_lane_sel (
-            .data_in    (execute_if.data.header.tmask),
-            .index_out  (first_lane),
-            `UNUSED_PIN (onehot_out),
+            .valid_in   (execute_if.data.header.tmask),
+            .data_in    (rs1_data),
+            .data_out   (rs1_first),
             `UNUSED_PIN (valid_out)
         );
-        assign rs1_first = rs1_data[first_lane];
     end else begin : g_rs1_first_0
         assign rs1_first = rs1_data[0];
     end
@@ -130,8 +130,9 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
 
     // Thread ids are the lane index on top of a per-request base.
     wire [`VX_CFG_XLEN-1:0] wtid_base = (PID_BITS != 0) ? `VX_CFG_XLEN'(execute_if.data.header.pid * NUM_LANES) : '0;
-    wire [`VX_CFG_XLEN-1:0] gtid_base = (`VX_CFG_XLEN'(core_id) << (NW_BITS + NT_BITS))
-                                      + (`VX_CFG_XLEN'(execute_if.data.header.wid) << NT_BITS)
+    // mhartid is dense, (core * NUM_WARPS + wid) * NUM_THREADS + tid, for any NUM_WARPS
+    wire [`VX_CFG_XLEN-1:0] gtid_base = ((`VX_CFG_XLEN'(core_id) * `VX_CFG_XLEN'(`VX_CFG_NUM_WARPS)
+                                       + `VX_CFG_XLEN'(execute_if.data.header.wid)) << NT_BITS)
                                       + wtid_base;
 
     wire is_wtid_w    = (csr_addr == `VX_CSR_THREAD_ID);

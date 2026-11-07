@@ -101,7 +101,7 @@
   <path d="M 420 340 L 420 236 L 620 236 L 620 220" class="whit"/>
   <text x="432" y="230" class="lg">hit · ppn · flags · level</text>
   <path d="M 540 340 L 540 250 L 640 250 L 640 220" class="wmis"/>
-  <text x="546" y="264" class="lb">mshr_match</text>
+  <text x="546" y="264" class="lb">mshr_join</text>
   <path d="M 725 220 L 725 240" class="wmis"/>
   <path d="M 725 276 L 725 340" class="wmis"/>
   <text x="718" y="300" class="lb" text-anchor="end">park {lane, fields}</text>

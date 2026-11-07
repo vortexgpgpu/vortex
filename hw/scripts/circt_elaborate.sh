@@ -14,7 +14,9 @@
 # limitations under the License.
 
 # Elaborates SystemVerilog sources with CIRCT and writes the design as one
-# file, the netlist every synthesis flow reads:
+# file, the netlist Yosys, Beacon and Foldsim read (Vivado reads the sources
+# themselves). Asynchronous RAM reads are made synchronous before this, in the
+# sources (gen_sources.sh -F); here:
 #
 #   - memories are detected, and a RAM that asks for block RAM with its
 #     synthesis attribute (ram_style = "block", ...) reads synchronously, so
@@ -35,7 +37,7 @@
 #     v2005 writes Verilog-2005 for tools with a Verilog frontend (yosys): no
 #     packed arrays or structs, no local variables, no size casts; -f mlir
 #     writes the HW/Comb/Seq netlist itself, for tools built on CIRCT (the
-#     logic screen), and exports nothing.
+#     Beacon), and exports nothing.
 #
 # The sources are a filelist (-l, as gen_sources.sh writes it: +define+,
 # +incdir+ and files in compile order), or include directories whose sources

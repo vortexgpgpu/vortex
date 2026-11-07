@@ -640,4 +640,317 @@ inline float vx_packlh_f(const void* base, size_t stride) {
 }
 #endif
 
+#ifdef __cplusplus
+
+#if defined(VX_CFG_EXT_LDST_WIDE_ENABLE) || defined(VX_CFG_EXT_LDST_MATRIX_ENABLE)
+// FP register lists for the register-pinned operands of the wide and matrix
+// loads and stores; a list expands before the emitter splits it into names.
+#define __VX_FREGS2(a, b)                   "f" #a, "f" #b
+#define __VX_FREGS4(a, b, c, d)             "f" #a, "f" #b, "f" #c, "f" #d
+#define __VX_FREGS8(a, b, c, d, e, f, g, h) "f" #a, "f" #b, "f" #c, "f" #d, \
+                                            "f" #e, "f" #f, "f" #g, "f" #h
+#endif
+
+#ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
+
+//
+// Wide loads and stores
+//
+
+// vx_flw.d/.q fd, OFF(addr) and vx_fsw.d/.q fs2, OFF(addr): 2 or 4 consecutive
+// words, each 4-byte aligned, to or from the FP register group fd = FD (a
+// multiple of 2 or 4); OFF is a multiple of 8 or 16. FD only binds the asm
+// operands: values live at once in the same group stay correct but cost
+// register copies, so they are best given different FD.
+typedef float vx_float2 __attribute__((vector_size(8), aligned(4)));
+typedef float vx_float4 __attribute__((vector_size(16), aligned(4)));
+
+#define __VX_FLW(funct3, ...) __VX_FLW_(funct3, __VA_ARGS__)
+#define __VX_FLW_(funct3, r0, r1, ...) {                                              \
+    register float x0 __asm__(r0); register float x1 __asm__(r1);                     \
+    __asm__ volatile (".insn i %[op], " #funct3 ", %[x0], %[a], %[off]"              \
+      : [x0]"=f"(x0), "=f"(x1)                                                       \
+      : [op]"i"(RISCV_CUSTOM3), [a]"r"(addr), [off]"i"(OFF) : "memory");            \
+    return vx_float2{x0, x1}; }
+#define __VX_FLW4(funct3, ...) __VX_FLW4_(funct3, __VA_ARGS__)
+#define __VX_FLW4_(funct3, r0, r1, r2, r3, ...) {                                     \
+    register float x0 __asm__(r0); register float x1 __asm__(r1);                     \
+    register float x2 __asm__(r2); register float x3 __asm__(r3);                     \
+    __asm__ volatile (".insn i %[op], " #funct3 ", %[x0], %[a], %[off]"              \
+      : [x0]"=f"(x0), "=f"(x1), "=f"(x2), "=f"(x3)                                   \
+      : [op]"i"(RISCV_CUSTOM3), [a]"r"(addr), [off]"i"(OFF) : "memory");            \
+    return vx_float4{x0, x1, x2, x3}; }
+#define __VX_FSW(funct3, ...) __VX_FSW_(funct3, __VA_ARGS__)
+#define __VX_FSW_(funct3, r0, r1, ...) {                                              \
+    register float x0 __asm__(r0) = value[0]; register float x1 __asm__(r1) = value[1]; \
+    __asm__ volatile (".insn s %[op], " #funct3 ", %[x0], %[off](%[a])"             \
+      :: [op]"i"(RISCV_CUSTOM3), [a]"r"(addr), [off]"i"(OFF), [x0]"f"(x0), "f"(x1)  \
+      : "memory"); }
+#define __VX_FSW4(funct3, ...) __VX_FSW4_(funct3, __VA_ARGS__)
+#define __VX_FSW4_(funct3, r0, r1, r2, r3, ...) {                                     \
+    register float x0 __asm__(r0) = value[0]; register float x1 __asm__(r1) = value[1]; \
+    register float x2 __asm__(r2) = value[2]; register float x3 __asm__(r3) = value[3]; \
+    __asm__ volatile (".insn s %[op], " #funct3 ", %[x0], %[off](%[a])"             \
+      :: [op]"i"(RISCV_CUSTOM3), [a]"r"(addr), [off]"i"(OFF), [x0]"f"(x0), "f"(x1),  \
+         "f"(x2), "f"(x3) : "memory"); }
+
+#define __VX_WIDE_Q(EMIT, ...) \
+  if constexpr (FD == 0) { EMIT(__VX_FREGS4(0,1,2,3), __VA_ARGS__) } else \
+  if constexpr (FD == 4) { EMIT(__VX_FREGS4(4,5,6,7), __VA_ARGS__) } else \
+  if constexpr (FD == 8) { EMIT(__VX_FREGS4(8,9,10,11), __VA_ARGS__) } else \
+  if constexpr (FD == 12) { EMIT(__VX_FREGS4(12,13,14,15), __VA_ARGS__) } else \
+  if constexpr (FD == 16) { EMIT(__VX_FREGS4(16,17,18,19), __VA_ARGS__) } else \
+  if constexpr (FD == 20) { EMIT(__VX_FREGS4(20,21,22,23), __VA_ARGS__) } else \
+  if constexpr (FD == 24) { EMIT(__VX_FREGS4(24,25,26,27), __VA_ARGS__) } else \
+  if constexpr (FD == 28) { EMIT(__VX_FREGS4(28,29,30,31), __VA_ARGS__) } else \
+  { static_assert(FD % 4 == 0 && FD < 32, "a quad's fd is a multiple of 4"); }
+
+#define __VX_WIDE_D(EMIT, ...) \
+  if constexpr (FD == 0) { EMIT(__VX_FREGS2(0,1), __VA_ARGS__) } else \
+  if constexpr (FD == 2) { EMIT(__VX_FREGS2(2,3), __VA_ARGS__) } else \
+  if constexpr (FD == 4) { EMIT(__VX_FREGS2(4,5), __VA_ARGS__) } else \
+  if constexpr (FD == 6) { EMIT(__VX_FREGS2(6,7), __VA_ARGS__) } else \
+  if constexpr (FD == 8) { EMIT(__VX_FREGS2(8,9), __VA_ARGS__) } else \
+  if constexpr (FD == 10) { EMIT(__VX_FREGS2(10,11), __VA_ARGS__) } else \
+  if constexpr (FD == 12) { EMIT(__VX_FREGS2(12,13), __VA_ARGS__) } else \
+  if constexpr (FD == 14) { EMIT(__VX_FREGS2(14,15), __VA_ARGS__) } else \
+  if constexpr (FD == 16) { EMIT(__VX_FREGS2(16,17), __VA_ARGS__) } else \
+  if constexpr (FD == 18) { EMIT(__VX_FREGS2(18,19), __VA_ARGS__) } else \
+  if constexpr (FD == 20) { EMIT(__VX_FREGS2(20,21), __VA_ARGS__) } else \
+  if constexpr (FD == 22) { EMIT(__VX_FREGS2(22,23), __VA_ARGS__) } else \
+  if constexpr (FD == 24) { EMIT(__VX_FREGS2(24,25), __VA_ARGS__) } else \
+  if constexpr (FD == 26) { EMIT(__VX_FREGS2(26,27), __VA_ARGS__) } else \
+  if constexpr (FD == 28) { EMIT(__VX_FREGS2(28,29), __VA_ARGS__) } else \
+  if constexpr (FD == 30) { EMIT(__VX_FREGS2(30,31), __VA_ARGS__) } else \
+  { static_assert(FD % 2 == 0 && FD < 32, "a pair's fd is a multiple of 2"); }
+
+#define __VX_EMIT_FLW_D(...)  __VX_FLW(3, __VA_ARGS__)
+#define __VX_EMIT_FLW_Q(...)  __VX_FLW4(4, __VA_ARGS__)
+#define __VX_EMIT_FSW_D(...)  __VX_FSW(5, __VA_ARGS__)
+#define __VX_EMIT_FSW_Q(...)  __VX_FSW4(6, __VA_ARGS__)
+
+template <uint32_t FD = 30, int32_t OFF = 0>
+__attribute__((always_inline)) inline vx_float2 vx_flw_d(const void* addr) {
+  static_assert(OFF % 8 == 0 && OFF >= -2048 && OFF <= 2040, "a pair's offset is a multiple of 8");
+  __VX_WIDE_D(__VX_EMIT_FLW_D, _)
+}
+
+template <uint32_t FD = 28, int32_t OFF = 0>
+__attribute__((always_inline)) inline vx_float4 vx_flw_q(const void* addr) {
+  static_assert(OFF % 16 == 0 && OFF >= -2048 && OFF <= 2032, "a quad's offset is a multiple of 16");
+  __VX_WIDE_Q(__VX_EMIT_FLW_Q, _)
+}
+
+template <uint32_t FD = 30, int32_t OFF = 0>
+__attribute__((always_inline)) inline void vx_fsw_d(void* addr, vx_float2 value) {
+  static_assert(OFF % 8 == 0 && OFF >= -2048 && OFF <= 2040, "a pair's offset is a multiple of 8");
+  __VX_WIDE_D(__VX_EMIT_FSW_D, _)
+}
+
+template <uint32_t FD = 28, int32_t OFF = 0>
+__attribute__((always_inline)) inline void vx_fsw_q(void* addr, vx_float4 value) {
+  static_assert(OFF % 16 == 0 && OFF >= -2048 && OFF <= 2032, "a quad's offset is a multiple of 16");
+  __VX_WIDE_Q(__VX_EMIT_FSW_Q, _)
+}
+
+#undef __VX_FLW
+#undef __VX_FLW_
+#undef __VX_FLW4
+#undef __VX_FLW4_
+#undef __VX_FSW
+#undef __VX_FSW_
+#undef __VX_FSW4
+#undef __VX_FSW4_
+#undef __VX_WIDE_Q
+#undef __VX_WIDE_D
+#undef __VX_EMIT_FLW_D
+#undef __VX_EMIT_FLW_Q
+#undef __VX_EMIT_FSW_D
+#undef __VX_EMIT_FSW_Q
+
+#endif // VX_CFG_EXT_LDST_WIDE_ENABLE
+
+//
+// Matrix loads and stores
+//
+
+// vx_ldm fd, imm(rs1) / vx_stm fs2, imm(rs1) shapes (imm[4:0]): a warp's matrix
+// fragment of NR registers in the fragment register layout, the A/B/C operand
+// layouts of the warp MMA; imm[11:5] is a byte offset.
+enum vx_ldm_shape_t : int32_t {
+  VX_LDM_A    = 0x00, // A, row-major
+  VX_LDM_A_SP = 0x01, // sparse A, row-major
+  VX_LDM_B    = 0x06, // B, col-major
+  VX_LDM_B_SP = 0x07, // symmetric sparse B, col-major
+  VX_LDM_C    = 0x08, // C, row-major
+  VX_LDM_WG_C = 0x18  // warp-group C, row-major, one 8-register chunk
+};
+
+#ifdef VX_CFG_EXT_LDST_MATRIX_ENABLE
+
+// vx_ldm/vx_stm of NR registers from fd/fs2 = FD with immediate IMM (the shape
+// ORed with a byte offset). g holds the lane's address of each of the J row
+// groups: J = 2 rides in an even-aligned register pair, J = 4 is pinned to
+// x[Q]..x[Q+3].
+#if __riscv_xlen == 64
+typedef unsigned __int128 __vx_gpr_pair_t;
+#else
+typedef uint64_t __vx_gpr_pair_t;
+#endif
+
+#define __VX_LDM8(...) __VX_LDM8_(__VA_ARGS__)
+#define __VX_LDM8_(r0, r1, r2, r3, r4, r5, r6, r7, ...)                                  \
+    register float x0 __asm__(r0); register float x1 __asm__(r1);                         \
+    register float x2 __asm__(r2); register float x3 __asm__(r3);                         \
+    register float x4 __asm__(r4); register float x5 __asm__(r5);                         \
+    register float x6 __asm__(r6); register float x7 __asm__(r7);                         \
+    __asm__ volatile (".insn i %[op], 0, %[x0], %[g], %[imm]"                             \
+      : [x0]"=f"(x0), "=f"(x1), "=f"(x2), "=f"(x3), "=f"(x4), "=f"(x5), "=f"(x6), "=f"(x7)\
+      : [op]"i"(RISCV_CUSTOM3), [imm]"i"(IMM), __VA_ARGS__ : "memory");                   \
+    v[0] = x0; v[1] = x1; v[2] = x2; v[3] = x3; v[4] = x4; v[5] = x5; v[6] = x6; v[7] = x7;
+#define __VX_LDM4(...) __VX_LDM4_(__VA_ARGS__)
+#define __VX_LDM4_(r0, r1, r2, r3, ...)                                                  \
+    register float x0 __asm__(r0); register float x1 __asm__(r1);                         \
+    register float x2 __asm__(r2); register float x3 __asm__(r3);                         \
+    __asm__ volatile (".insn i %[op], 0, %[x0], %[g], %[imm]"                             \
+      : [x0]"=f"(x0), "=f"(x1), "=f"(x2), "=f"(x3)                                        \
+      : [op]"i"(RISCV_CUSTOM3), [imm]"i"(IMM), __VA_ARGS__ : "memory");                   \
+    v[0] = x0; v[1] = x1; v[2] = x2; v[3] = x3;
+#define __VX_STM8(...) __VX_STM8_(__VA_ARGS__)
+#define __VX_STM8_(r0, r1, r2, r3, r4, r5, r6, r7, ...)                                  \
+    register float x0 __asm__(r0) = v[0]; register float x1 __asm__(r1) = v[1];           \
+    register float x2 __asm__(r2) = v[2]; register float x3 __asm__(r3) = v[3];           \
+    register float x4 __asm__(r4) = v[4]; register float x5 __asm__(r5) = v[5];           \
+    register float x6 __asm__(r6) = v[6]; register float x7 __asm__(r7) = v[7];           \
+    __asm__ volatile (".insn s %[op], 2, %[x0], %[imm](%[g])"                             \
+      :: [op]"i"(RISCV_CUSTOM3), [imm]"i"(IMM), [x0]"f"(x0), "f"(x1), "f"(x2), "f"(x3),    \
+         "f"(x4), "f"(x5), "f"(x6), "f"(x7), __VA_ARGS__ : "memory");
+#define __VX_STM4(...) __VX_STM4_(__VA_ARGS__)
+#define __VX_STM4_(r0, r1, r2, r3, ...)                                                  \
+    register float x0 __asm__(r0) = v[0]; register float x1 __asm__(r1) = v[1];           \
+    register float x2 __asm__(r2) = v[2]; register float x3 __asm__(r3) = v[3];           \
+    __asm__ volatile (".insn s %[op], 2, %[x0], %[imm](%[g])"                             \
+      :: [op]"i"(RISCV_CUSTOM3), [imm]"i"(IMM), [x0]"f"(x0), "f"(x1), "f"(x2), "f"(x3),    \
+         __VA_ARGS__ : "memory");
+
+#define __VX_MTX8(EMIT, ...) \
+  if constexpr (FD == 0) { EMIT(__VX_FREGS8(0,1,2,3,4,5,6,7), __VA_ARGS__) } else \
+  if constexpr (FD == 1) { EMIT(__VX_FREGS8(1,2,3,4,5,6,7,8), __VA_ARGS__) } else \
+  if constexpr (FD == 2) { EMIT(__VX_FREGS8(2,3,4,5,6,7,8,9), __VA_ARGS__) } else \
+  if constexpr (FD == 3) { EMIT(__VX_FREGS8(3,4,5,6,7,8,9,10), __VA_ARGS__) } else \
+  if constexpr (FD == 4) { EMIT(__VX_FREGS8(4,5,6,7,8,9,10,11), __VA_ARGS__) } else \
+  if constexpr (FD == 5) { EMIT(__VX_FREGS8(5,6,7,8,9,10,11,12), __VA_ARGS__) } else \
+  if constexpr (FD == 6) { EMIT(__VX_FREGS8(6,7,8,9,10,11,12,13), __VA_ARGS__) } else \
+  if constexpr (FD == 7) { EMIT(__VX_FREGS8(7,8,9,10,11,12,13,14), __VA_ARGS__) } else \
+  if constexpr (FD == 8) { EMIT(__VX_FREGS8(8,9,10,11,12,13,14,15), __VA_ARGS__) } else \
+  if constexpr (FD == 9) { EMIT(__VX_FREGS8(9,10,11,12,13,14,15,16), __VA_ARGS__) } else \
+  if constexpr (FD == 10) { EMIT(__VX_FREGS8(10,11,12,13,14,15,16,17), __VA_ARGS__) } else \
+  if constexpr (FD == 11) { EMIT(__VX_FREGS8(11,12,13,14,15,16,17,18), __VA_ARGS__) } else \
+  if constexpr (FD == 12) { EMIT(__VX_FREGS8(12,13,14,15,16,17,18,19), __VA_ARGS__) } else \
+  if constexpr (FD == 13) { EMIT(__VX_FREGS8(13,14,15,16,17,18,19,20), __VA_ARGS__) } else \
+  if constexpr (FD == 14) { EMIT(__VX_FREGS8(14,15,16,17,18,19,20,21), __VA_ARGS__) } else \
+  if constexpr (FD == 15) { EMIT(__VX_FREGS8(15,16,17,18,19,20,21,22), __VA_ARGS__) } else \
+  if constexpr (FD == 16) { EMIT(__VX_FREGS8(16,17,18,19,20,21,22,23), __VA_ARGS__) } else \
+  if constexpr (FD == 17) { EMIT(__VX_FREGS8(17,18,19,20,21,22,23,24), __VA_ARGS__) } else \
+  if constexpr (FD == 18) { EMIT(__VX_FREGS8(18,19,20,21,22,23,24,25), __VA_ARGS__) } else \
+  if constexpr (FD == 19) { EMIT(__VX_FREGS8(19,20,21,22,23,24,25,26), __VA_ARGS__) } else \
+  if constexpr (FD == 20) { EMIT(__VX_FREGS8(20,21,22,23,24,25,26,27), __VA_ARGS__) } else \
+  if constexpr (FD == 21) { EMIT(__VX_FREGS8(21,22,23,24,25,26,27,28), __VA_ARGS__) } else \
+  if constexpr (FD == 22) { EMIT(__VX_FREGS8(22,23,24,25,26,27,28,29), __VA_ARGS__) } else \
+  if constexpr (FD == 23) { EMIT(__VX_FREGS8(23,24,25,26,27,28,29,30), __VA_ARGS__) } else \
+  if constexpr (FD == 24) { EMIT(__VX_FREGS8(24,25,26,27,28,29,30,31), __VA_ARGS__) } else \
+  { static_assert(FD + 8 <= 32, "an 8-register fragment's fd is at most 24"); }
+
+#define __VX_MTX4(EMIT, ...) \
+  if constexpr (FD == 0) { EMIT(__VX_FREGS4(0,1,2,3), __VA_ARGS__) } else \
+  if constexpr (FD == 1) { EMIT(__VX_FREGS4(1,2,3,4), __VA_ARGS__) } else \
+  if constexpr (FD == 2) { EMIT(__VX_FREGS4(2,3,4,5), __VA_ARGS__) } else \
+  if constexpr (FD == 3) { EMIT(__VX_FREGS4(3,4,5,6), __VA_ARGS__) } else \
+  if constexpr (FD == 4) { EMIT(__VX_FREGS4(4,5,6,7), __VA_ARGS__) } else \
+  if constexpr (FD == 5) { EMIT(__VX_FREGS4(5,6,7,8), __VA_ARGS__) } else \
+  if constexpr (FD == 6) { EMIT(__VX_FREGS4(6,7,8,9), __VA_ARGS__) } else \
+  if constexpr (FD == 7) { EMIT(__VX_FREGS4(7,8,9,10), __VA_ARGS__) } else \
+  if constexpr (FD == 8) { EMIT(__VX_FREGS4(8,9,10,11), __VA_ARGS__) } else \
+  if constexpr (FD == 9) { EMIT(__VX_FREGS4(9,10,11,12), __VA_ARGS__) } else \
+  if constexpr (FD == 10) { EMIT(__VX_FREGS4(10,11,12,13), __VA_ARGS__) } else \
+  if constexpr (FD == 11) { EMIT(__VX_FREGS4(11,12,13,14), __VA_ARGS__) } else \
+  if constexpr (FD == 12) { EMIT(__VX_FREGS4(12,13,14,15), __VA_ARGS__) } else \
+  if constexpr (FD == 13) { EMIT(__VX_FREGS4(13,14,15,16), __VA_ARGS__) } else \
+  if constexpr (FD == 14) { EMIT(__VX_FREGS4(14,15,16,17), __VA_ARGS__) } else \
+  if constexpr (FD == 15) { EMIT(__VX_FREGS4(15,16,17,18), __VA_ARGS__) } else \
+  if constexpr (FD == 16) { EMIT(__VX_FREGS4(16,17,18,19), __VA_ARGS__) } else \
+  if constexpr (FD == 17) { EMIT(__VX_FREGS4(17,18,19,20), __VA_ARGS__) } else \
+  if constexpr (FD == 18) { EMIT(__VX_FREGS4(18,19,20,21), __VA_ARGS__) } else \
+  if constexpr (FD == 19) { EMIT(__VX_FREGS4(19,20,21,22), __VA_ARGS__) } else \
+  if constexpr (FD == 20) { EMIT(__VX_FREGS4(20,21,22,23), __VA_ARGS__) } else \
+  if constexpr (FD == 21) { EMIT(__VX_FREGS4(21,22,23,24), __VA_ARGS__) } else \
+  if constexpr (FD == 22) { EMIT(__VX_FREGS4(22,23,24,25), __VA_ARGS__) } else \
+  if constexpr (FD == 23) { EMIT(__VX_FREGS4(23,24,25,26), __VA_ARGS__) } else \
+  if constexpr (FD == 24) { EMIT(__VX_FREGS4(24,25,26,27), __VA_ARGS__) } else \
+  if constexpr (FD == 25) { EMIT(__VX_FREGS4(25,26,27,28), __VA_ARGS__) } else \
+  if constexpr (FD == 26) { EMIT(__VX_FREGS4(26,27,28,29), __VA_ARGS__) } else \
+  if constexpr (FD == 27) { EMIT(__VX_FREGS4(27,28,29,30), __VA_ARGS__) } else \
+  if constexpr (FD == 28) { EMIT(__VX_FREGS4(28,29,30,31), __VA_ARGS__) } else \
+  { static_assert(FD + 4 <= 32, "a 4-register fragment's fd is at most 28"); }
+
+#define __VX_MTX(EMIT8, EMIT4, ...)                                                      \
+    if constexpr (NR == 8) { __VX_MTX8(EMIT8, __VA_ARGS__) }                              \
+    else { static_assert(NR == 4, "a fragment has 4 or 8 registers");                     \
+           __VX_MTX4(EMIT4, __VA_ARGS__) }
+
+#define __VX_GQ(q) "x" #q
+#define __VX_MTX_GROUP(EMIT8, EMIT4)                                                     \
+    static_assert(J == 2 || J == 4, "a fragment has 2 or 4 row groups");                  \
+    if constexpr (J == 2) {                                                               \
+      __vx_gpr_pair_t p = __vx_gpr_pair_t(g[0]) | (__vx_gpr_pair_t(g[1]) << (8 * sizeof(uintptr_t))); \
+      __VX_MTX(EMIT8, EMIT4, [g]"R"(p))                                                   \
+    }                                                                                     \
+    __VX_MTX_GROUP4(EMIT8, EMIT4, 12, 13, 14, 15)                                         \
+    __VX_MTX_GROUP4(EMIT8, EMIT4, 16, 17, 18, 19)                                         \
+    __VX_MTX_GROUP4(EMIT8, EMIT4, 20, 21, 22, 23)                                         \
+    __VX_MTX_GROUP4(EMIT8, EMIT4, 24, 25, 26, 27)                                         \
+    __VX_MTX_GROUP4(EMIT8, EMIT4, 28, 29, 30, 31)                                         \
+    else { static_assert(J == 2, "a 4-register group starts at x12, x16, x20, x24 or x28"); }
+#define __VX_MTX_GROUP4(EMIT8, EMIT4, a, b, c, d)                                        \
+    else if constexpr (Q == a) {                                                          \
+      register uintptr_t q0 __asm__(__VX_GQ(a)) = g[0]; register uintptr_t q1 __asm__(__VX_GQ(b)) = g[1]; \
+      register uintptr_t q2 __asm__(__VX_GQ(c)) = g[2]; register uintptr_t q3 __asm__(__VX_GQ(d)) = g[3]; \
+      __VX_MTX(EMIT8, EMIT4, [g]"r"(q0), "r"(q1), "r"(q2), "r"(q3))                       \
+    }
+
+template <uint32_t FD, uint32_t NR, uint32_t J, uint32_t Q, int32_t IMM>
+__attribute__((always_inline)) inline void vx_ldm(float (&v)[NR], const uintptr_t (&g)[J]) {
+  __VX_MTX_GROUP(__VX_LDM8, __VX_LDM4)
+}
+
+template <uint32_t FD, uint32_t NR, uint32_t J, uint32_t Q, int32_t IMM>
+__attribute__((always_inline)) inline void vx_stm(const float (&v)[NR], const uintptr_t (&g)[J]) {
+  __VX_MTX_GROUP(__VX_STM8, __VX_STM4)
+}
+
+#undef __VX_LDM8
+#undef __VX_LDM8_
+#undef __VX_LDM4
+#undef __VX_LDM4_
+#undef __VX_STM8
+#undef __VX_STM8_
+#undef __VX_STM4
+#undef __VX_STM4_
+#undef __VX_MTX8
+#undef __VX_MTX4
+#undef __VX_MTX
+#undef __VX_GQ
+#undef __VX_MTX_GROUP
+#undef __VX_MTX_GROUP4
+
+#endif // VX_CFG_EXT_LDST_MATRIX_ENABLE
+
+#if defined(VX_CFG_EXT_LDST_WIDE_ENABLE) || defined(VX_CFG_EXT_LDST_MATRIX_ENABLE)
+#undef __VX_FREGS2
+#undef __VX_FREGS4
+#undef __VX_FREGS8
+#endif
+
+#endif // __cplusplus
+
 #endif // __VX_INTRINSICS_H__

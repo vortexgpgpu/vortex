@@ -59,14 +59,14 @@ struct Machine {
 const Machine kMachines[] = {
   {"default",  {DramSim::Type::HBM2, 1, 64, 400, 800, 0, 0}},
   {"default4", {DramSim::Type::HBM2, 4, 64, 400, 800, 0, 0}},
-  {"v100",     {DramSim::Type::HBM2, 1, 64, 1530, 1752, 0, 0}},
-  {"a100",     {DramSim::Type::HBM2, 1, 64, 1410, 3038, 190, 257}},
-  {"a100_lite", {DramSim::Type::HBM2, 1, 64, 1410, 900, 190, 257}},   // and _m4.._m32
-  {"a100_m64",  {DramSim::Type::HBM2, 1, 64, 1410, 1800, 190, 257}},  // a100_lite_m64
-  {"a100_m128", {DramSim::Type::HBM2, 1, 64, 1410, 3600, 190, 257}},  // a100_lite_m128
-  {"h100",     {DramSim::Type::HBM3, 1, 64, 1980, 6545, 0, 0}},
-  {"rtx1080",  {DramSim::Type::GDDR6, 1, 64, 1607, 10000, 0, 0}},
-  {"rtx5080",  {DramSim::Type::GDDR6, 1, 64, 2295, 15000, 339, 0}},
+  {"v100",     {DramSim::Type::HBM2, 1, 64, 1530, 1752, 88, 0}},
+  {"a100",     {DramSim::Type::HBM2, 1, 64, 1410, 3038, 11, 257}},
+  {"a100_lite", {DramSim::Type::HBM2, 1, 64, 1410, 900, 11, 257}},    // and _m4.._m32
+  {"a100_m64",  {DramSim::Type::HBM2, 1, 64, 1410, 1800, 11, 257}},   // a100_lite_m64
+  {"a100_m128", {DramSim::Type::HBM2, 1, 64, 1410, 3600, 11, 257}},   // a100_lite_m128
+  {"h100",     {DramSim::Type::HBM3, 1, 64, 1980, 6545, 304, 0}},
+  {"gtx1080",  {DramSim::Type::GDDR6, 1, 64, 1607, 10000, 0, 0}},
+  {"rtx5080",  {DramSim::Type::GDDR6, 1, 64, 2295, 15000, 367, 0}},
 };
 
 struct Rec {

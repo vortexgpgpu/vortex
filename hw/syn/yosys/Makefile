@@ -189,7 +189,7 @@ CFLAGS += $(RTL_INCLUDE)
 # Build targets
 all: timing
 
-.PHONY: all synthesis techmap timing screen gate-sim gate-saif normalize-saif asap7 asap7-models clean
+.PHONY: all synthesis techmap timing beacon gate-sim gate-saif normalize-saif asap7 asap7-models clean
 
 asap7:
 	$(ASAP7_INSTALL) --install-dir=$(ASAP7_DIR) --vt=$(ASAP7_VT)
@@ -202,7 +202,7 @@ $(BUILD_DIR):
 	mkdir -p $@
 
 $(BUILD_DIR)/src: | $(BUILD_DIR)
-	$(SCRIPT_DIR)/gen_sources.sh -P $(CFLAGS) -C$(BUILD_DIR)/src
+	$(SCRIPT_DIR)/gen_sources.sh -P -F -T$(TOP_LEVEL_ENTITY) $(CFLAGS) -C$(BUILD_DIR)/src
 
 # CIRCT elaborates the design into one Verilog-2005 file; the black-box
 # modules (SRAM macros) stay instances with their parameter values, bound to
@@ -285,19 +285,21 @@ timing: $(SYN_SRC_DEPS) $(SYN_LIB_DEPS) | $(BUILD_DIR)
 	@$(SRC_DIR)/synth_summary.py --reports $(BUILD_DIR)/reports \
 	  --top $(TOP_LEVEL_ENTITY) --clock-mhz $(CLOCK_FREQ)
 
-# The logic screen (foldsim-estimate-timing, family=$(PDK)): the gate stages
-# of every register-to-register path, with the same sources and SRAM black
-# boxes as synthesis, in seconds and without Yosys; report.txt converts the
-# deepest path to a period with the library's delays.
-# docs/designs/logic_screen.md.
-screen: $(BUILD_DIR)/src
-	mkdir -p $(BUILD_DIR)/screen
+# Beacon (foldsim-estimate-timing, foldsim-estimate-area, target=$(PDK)): the
+# gate stages of every register-to-register path and the cells, flip-flops and
+# SRAM macros of the design, with the same sources and SRAM black boxes as
+# synthesis, in seconds and without Yosys; report.txt converts the deepest
+# path to a period with the library's delays. docs/designs/beacon.md.
+beacon: $(BUILD_DIR)/src
+	mkdir -p $(BUILD_DIR)/beacon
 	$(SCRIPT_DIR)/circt_elaborate.sh -f mlir -t$(TOP_LEVEL_ENTITY) -I$(BUILD_DIR)/src -b'$(BB_MODULES)' \
-		-o$(BUILD_DIR)/screen/netlist.mlir
-	$(FOLDSIM_OPT) $(BUILD_DIR)/screen/netlist.mlir --pass-pipeline='builtin.module(foldsim-screen-map-asic)' \
-		--emit-bytecode -o $(BUILD_DIR)/screen/mapped.mlirbc
-	$(FOLDSIM_OPT) $(BUILD_DIR)/screen/mapped.mlirbc -o /dev/null --pass-pipeline='builtin.module(foldsim-estimate-timing{top=$(TOP_LEVEL_ENTITY) family=$(PDK) output=$(BUILD_DIR)/screen/endpoints.csv instances=$(BUILD_DIR)/screen/instances.csv report=$(BUILD_DIR)/screen/report.txt})'
-	@grep "^deepest path" $(BUILD_DIR)/screen/report.txt
+		-o$(BUILD_DIR)/beacon/netlist.mlir
+	$(FOLDSIM_OPT) $(BUILD_DIR)/beacon/netlist.mlir --pass-pipeline='builtin.module(foldsim-beacon-map{target=$(PDK)})' \
+		--emit-bytecode -o $(BUILD_DIR)/beacon/mapped.mlirbc
+	$(FOLDSIM_OPT) $(BUILD_DIR)/beacon/mapped.mlirbc -o /dev/null --pass-pipeline='builtin.module(foldsim-estimate-timing{top=$(TOP_LEVEL_ENTITY) target=$(PDK) output=$(BUILD_DIR)/beacon/endpoints.csv instances=$(BUILD_DIR)/beacon/instances.csv report=$(BUILD_DIR)/beacon/report.txt})'
+	$(FOLDSIM_OPT) $(BUILD_DIR)/beacon/netlist.mlir -o /dev/null --pass-pipeline='builtin.module(foldsim-beacon-map{target=$(PDK) area},foldsim-estimate-area{top=$(TOP_LEVEL_ENTITY) target=$(PDK) output=$(BUILD_DIR)/beacon/area.csv memories=$(BUILD_DIR)/beacon/area_memories.csv report=$(BUILD_DIR)/beacon/area.txt})'
+	@grep "^deepest path" $(BUILD_DIR)/beacon/report.txt
+	@head -1 $(BUILD_DIR)/beacon/area.txt
 
 gate-sim: techmap asap7-models
 	@if [ "$(PDK)" != "asap7" ]; then echo "ERROR: gate-sim requires PDK=asap7 functional models" >&2; exit 1; fi

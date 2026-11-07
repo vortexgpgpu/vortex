@@ -13,12 +13,16 @@
 
 #include "cluster.h"
 #include <algorithm>
+#include "delay_buffer.h"
 #include "socket.h"
 #include "core.h"
 #include "local_mem.h"
 #include "constants.h"
 #include "types.h"
 #include "debug.h"
+#ifdef SIMX_CLUSTER_UNIT_MMU
+#include "mem/mmu.h"
+#endif
 #ifdef VX_CFG_EXT_OM_ENABLE
 #include "om_core.h"
 #include "om_unit.h"
@@ -56,7 +60,9 @@ public:
     for (uint32_t i = 0; i < sockets_per_cluster; ++i) {
       uint32_t socket_id = cluster_id * sockets_per_cluster + i;
       snprintf(sname, 100, "%s-socket%d", name.c_str(), i);
-      sockets_.at(i) = Socket::Create(sname, socket_id, simobject_);
+      // A socket's unit MMU is a cluster-TLB client after every core's two.
+      uint32_t unit_tlb_client = sockets_per_cluster * VX_CFG_SOCKET_SIZE * 2 + i;
+      sockets_.at(i) = Socket::Create(sname, socket_id, simobject_, unit_tlb_client);
     }
 
     // Global-barrier event links: each core's arrive end fans into the
@@ -73,32 +79,41 @@ public:
 
     snprintf(sname, 100, "%s-l2cache", name.c_str());
     // L2 is the LLC iff L2 is enabled and L3 is not.
-    l2cache_ = Cache::Create(sname, Cache::Config{
-      !VX_CFG_L2_ENABLED,
-      log2ceil(VX_CFG_L2_SIZE),// C
-      log2ceil(VX_CFG_L2_LINE_SIZE),// L
-      log2ceil(VX_CFG_L2_SECTOR_SIZE),// S
-      log2ceil(VX_CFG_L1_LINE_SIZE), // W
-      log2ceil(VX_CFG_L2_NUM_WAYS),  // A
-      log2ceil(VX_CFG_L2_NUM_BANKS), // B
-      VX_CFG_XLEN,                   // address bits
-      L2_CACHE_REQS,                 // request size
-      VX_CFG_L2_MEM_PORTS,           // memory ports
-      VX_CFG_L2_WRITEBACK,           // write-back
-      false,                  // write response
-      VX_CFG_L2_MSHR_SIZE,           // mshr size
-      VX_CFG_L2_LATENCY,             // pipeline latency
-      VX_CFG_L2_REPL_POLICY,         // replacement policy
-      (VX_CFG_L2_ENABLED != 0) && (VX_CFG_L3_ENABLED == 0), // is_llc
-      true,                          // non-cacheable bypass
-      (VX_CFG_L2_BANK_HASH != 0) && (VX_CFG_L2_NUM_BANKS > 1), // bank_hash
-      L2_SHARED_LLC,                 // shared_llc
-      VX_CFG_L2_LAZY_FETCH != 0,     // lazy_fetch
-      true,                          // core-response register (behind the bypass layer)
-      0,                             // read_merge
-      VX_CFG_L2_MSHR_LINES,          // mshr_lines
-      CP_ON_L2 != 0,                 // write_around
-    });
+    {
+      // the CP writes into this cache when it is the last level: its state
+      // and a transfer's fills carry across the launch reset
+      SimPlatform::LaunchKeepScope keep(CP_ON_L2 != 0);
+      l2cache_ = Cache::Create(sname, Cache::Config{
+        !VX_CFG_L2_ENABLED,
+        VX_CFG_L2_SIZE,          // size
+        log2ceil(VX_CFG_L2_LINE_SIZE),// L
+        log2ceil(VX_CFG_L2_SECTOR_SIZE),// S
+        log2ceil(VX_CFG_L1_LINE_SIZE), // W
+        VX_CFG_L2_NUM_WAYS,            // ways
+        log2ceil(VX_CFG_L2_NUM_BANKS), // B
+        VX_CFG_XLEN,                   // address bits
+        L2_CACHE_REQS,                 // request size
+        VX_CFG_L2_MEM_PORTS,           // memory ports
+        VX_CFG_L2_WRITEBACK,           // write-back
+        false,                  // write response
+        VX_CFG_L2_MSHR_SIZE,           // mshr size
+        VX_CFG_L2_LATENCY,             // pipeline latency
+        VX_CFG_L2_REPL_POLICY,         // replacement policy
+        (VX_CFG_L2_ENABLED != 0) && (VX_CFG_L3_ENABLED == 0), // is_llc
+        true,                          // non-cacheable bypass
+        (VX_CFG_L2_BANK_HASH != 0) && (VX_CFG_L2_NUM_BANKS > 1), // bank_hash
+        L2_SHARED_LLC,                 // shared_llc
+        VX_CFG_L2_LAZY_FETCH != 0,     // lazy_fetch
+        true,                          // core-response register (behind the bypass layer)
+        0,                             // read_merge
+        CP_ON_L2 != 0,                 // write_around
+        VX_CFG_L2_MRSQ_SIZE != 0,      // memory-response queue
+        false,                         // memory-response slice
+        false,                         // acquire forward
+        false,                         // line merging
+        true,                          // core-request skid
+      });
+    }
 
 
     // connect l2cache memory interface
@@ -106,6 +121,27 @@ public:
       l2cache_->mem_req_out.at(i).bind(&simobject_->mem_req_out.at(i));
       simobject_->mem_rsp_in.at(i).bind(&l2cache_->mem_rsp_in.at(i));
     }
+
+    // A socket memory port reaches its L2 port across the link to the L2,
+    // VX_CFG_L2_LINK_LATENCY cycles each way.
+    auto bind_l2_link = [&](uint32_t port,
+                            SimChannel<MemReq>& req_src, SimChannel<MemReq>& req_dst,
+                            SimChannel<MemRsp>& rsp_src, SimChannel<MemRsp>& rsp_dst) {
+      if constexpr (VX_CFG_L2_LINK_LATENCY != 0) {
+        snprintf(sname, 100, "%s-l2link-req%d", name.c_str(), port);
+        auto req_link = DelayBuffer<MemReq>::Create(sname, VX_CFG_L2_LINK_LATENCY);
+        snprintf(sname, 100, "%s-l2link-rsp%d", name.c_str(), port);
+        auto rsp_link = DelayBuffer<MemRsp>::Create(sname, VX_CFG_L2_LINK_LATENCY);
+        req_src.bind(&req_link->In);
+        req_link->Out.bind(&req_dst);
+        rsp_src.bind(&rsp_link->In);
+        rsp_link->Out.bind(&rsp_dst);
+      } else {
+        __unused(port);
+        req_src.bind(&req_dst);
+        rsp_src.bind(&rsp_dst);
+      }
+    };
 
     // ── L2 fan-in: sockets + cluster-resident gfx caches ────────────────
     // Row 0 = sockets (high priority; TEX/RTU/DXA traffic already merged at
@@ -124,10 +160,26 @@ public:
     for (uint32_t i = 0; i < sockets_per_cluster; ++i) {
       for (uint32_t j = 0; j < VX_CFG_L1_MEM_PORTS; ++j) {
         uint32_t port = i * VX_CFG_L1_MEM_PORTS + j;
-        sockets_.at(i)->mem_req_out.at(j).bind(&l2arb->ReqIn.at(kL2Rows * port + 0));
-        l2arb->RspOut.at(kL2Rows * port + 0).bind(&sockets_.at(i)->mem_rsp_in.at(j));
+        bind_l2_link(port, sockets_.at(i)->mem_req_out.at(j), l2arb->ReqIn.at(kL2Rows * port + 0),
+                     l2arb->RspOut.at(kL2Rows * port + 0), sockets_.at(i)->mem_rsp_in.at(j));
       }
     }
+    // A gfx cache's memory port reaches the L2 arbiter through the cluster
+    // unit MMU under VM.
+    auto bind_gfx_port = [&](uint32_t arb_idx, uint32_t cmmu_idx,
+                             SimChannel<MemReq>& req_src,
+                             SimChannel<MemRsp>& rsp_dst) {
+    #ifdef SIMX_CLUSTER_UNIT_MMU
+      req_src.bind(&gfx_mmu_->ReqIn.at(cmmu_idx));
+      gfx_mmu_->RspOut.at(cmmu_idx).bind(&rsp_dst);
+      gfx_mmu_->ReqOut.at(cmmu_idx).bind(&l2arb->ReqIn.at(arb_idx));
+      l2arb->RspOut.at(arb_idx).bind(&gfx_mmu_->RspIn.at(cmmu_idx));
+    #else
+      __unused(cmmu_idx);
+      req_src.bind(&l2arb->ReqIn.at(arb_idx));
+      l2arb->RspOut.at(arb_idx).bind(&rsp_dst);
+    #endif
+    };
     // L2 arb outputs → l2cache (after all rows are bound).
     for (uint32_t i = 0; i < VX_CFG_L2_DEMAND_REQS; ++i) {
       l2arb->ReqOut.at(i).bind(&l2cache_->core_req_in.at(i));
@@ -137,16 +189,29 @@ public:
     // No cluster-resident gfx caches: direct sockets → L2.
     for (uint32_t i = 0; i < sockets_per_cluster; ++i) {
       for (uint32_t j = 0; j < VX_CFG_L1_MEM_PORTS; ++j) {
-        sockets_.at(i)->mem_req_out.at(j).bind(&l2cache_->core_req_in.at(i * VX_CFG_L1_MEM_PORTS + j));
-        l2cache_->core_rsp_out.at(i * VX_CFG_L1_MEM_PORTS + j).bind(&sockets_.at(i)->mem_rsp_in.at(j));
+        uint32_t port = i * VX_CFG_L1_MEM_PORTS + j;
+        bind_l2_link(port, sockets_.at(i)->mem_req_out.at(j), l2cache_->core_req_in.at(port),
+                     l2cache_->core_rsp_out.at(port), sockets_.at(i)->mem_rsp_in.at(j));
       }
     }
 #endif // cluster-resident gfx caches
 
 #ifdef VX_CFG_VM_ENABLE
-    // Shared cluster L2 TLB. Every core's two L1 TLBs are clients; its
-    // misses export on the walker link the processor binds at the device.
-    uint32_t num_tlb_clients = sockets_per_cluster * VX_CFG_SOCKET_SIZE * 2;
+    // Shared cluster L2 TLB. Every core's two L1 TLBs are clients, then each
+    // socket's unit MMU; its misses export on the walker link the processor
+    // binds at the device.
+    uint32_t num_core_tlb_clients = sockets_per_cluster * VX_CFG_SOCKET_SIZE * 2;
+  #ifdef SIMX_SOCKET_UNIT_MMU
+    uint32_t num_unit_tlb_clients = sockets_per_cluster;
+  #else
+    uint32_t num_unit_tlb_clients = 0;
+  #endif
+  #ifdef SIMX_CLUSTER_UNIT_MMU
+    uint32_t gfx_tlb_client = num_core_tlb_clients + num_unit_tlb_clients;
+    uint32_t num_tlb_clients = gfx_tlb_client + 1;
+  #else
+    uint32_t num_tlb_clients = num_core_tlb_clients + num_unit_tlb_clients;
+  #endif
     snprintf(sname, 100, "%s-l2tlb", name.c_str());
     l2tlb_ = L2Tlb::Create(sname, num_tlb_clients);
 
@@ -160,6 +225,25 @@ public:
         }
       }
     }
+  #ifdef SIMX_SOCKET_UNIT_MMU
+    for (uint32_t s = 0; s < sockets_per_cluster; ++s) {
+      auto& socket = sockets_.at(s);
+      socket->tlb_miss_out().bind(&l2tlb_->ReqIn.at(socket->unit_tlb_client()));
+      l2tlb_->RspOut.at(socket->unit_tlb_client()).bind(&socket->tlb_fill_in());
+    }
+  #endif
+  #ifdef SIMX_CLUSTER_UNIT_MMU
+    // Cluster unit MMU: between the rcache / ocache memory ports and the L2,
+    // so those caches are virtually tagged. Its TLB is the cluster TLB's last
+    // client. Like the socket unit MMU, each response leaves through a
+    // registered stage and a new miss is held a cycle before it allocates;
+    // the ocache writes, so a flush token is ordered behind its parks.
+    snprintf(sname, 100, "%s-gfx_mmu", name.c_str());
+    gfx_mmu_ = Mmu::Create(sname, CMMU_NUM_REQS, VX_CFG_CTLB_SIZE, gfx_tlb_client,
+                           false, true, VX_CFG_EXT_OM_ENABLED != 0, true);
+    gfx_mmu_->TlbMissOut.bind(&l2tlb_->ReqIn.at(gfx_tlb_client));
+    l2tlb_->RspOut.at(gfx_tlb_client).bind(&gfx_mmu_->TlbFillIn);
+  #endif
 
 #endif
 
@@ -176,11 +260,11 @@ public:
     constexpr uint32_t kOcacheMemPorts = 1;
     auto ocache = Cache::Create(sname, Cache::Config{
       false,                        // bypass
-      log2ceil(VX_CFG_OCACHE_SIZE),        // C
+      VX_CFG_OCACHE_SIZE,                  // size
       log2ceil(kOcacheLineSize),    // L
       log2ceil(kOcacheLineSize),    // S (no sectoring)
       log2ceil(kOcacheWordSize),    // W
-      log2ceil(VX_CFG_OCACHE_NUM_WAYS),    // A
+      VX_CFG_OCACHE_NUM_WAYS,              // ways
       log2ceil(VX_CFG_OCACHE_NUM_BANKS),   // B
       VX_CFG_XLEN,                         // address bits
       kOcacheNumReqs,               // request size
@@ -204,8 +288,7 @@ public:
     // ocache memory side → l2arb.
     constexpr uint32_t kOmRow = 1;
     for (uint32_t i = 0; i < kOcacheMemPorts; ++i) {
-      ocache->mem_req_out.at(i).bind(&l2arb->ReqIn.at(kL2Rows * i + kOmRow));
-      l2arb->RspOut.at(kL2Rows * i + kOmRow).bind(&ocache->mem_rsp_in.at(i));
+      bind_gfx_port(kL2Rows * i + kOmRow, CMMU_OCACHE_IDX, ocache->mem_req_out.at(i), ocache->mem_rsp_in.at(i));
     }
 
     // Per-core SFU.om_req_out (OmUnit decodes onto it) → OmCore::om_req_in[cid],
@@ -241,11 +324,11 @@ public:
     constexpr uint32_t kRcacheMemPorts = 1;
     auto rcache = Cache::Create(sname, Cache::Config{
       false,                        // bypass
-      log2ceil(VX_CFG_RCACHE_SIZE),        // C
+      VX_CFG_RCACHE_SIZE,                  // size
       log2ceil(kRcacheLineSize),    // L
       log2ceil(kRcacheLineSize),    // S (no sectoring)
       log2ceil(kRcacheWordSize),    // W
-      log2ceil(VX_CFG_RCACHE_NUM_WAYS),    // A
+      VX_CFG_RCACHE_NUM_WAYS,              // ways
       log2ceil(VX_CFG_RCACHE_NUM_BANKS),   // B
       VX_CFG_XLEN,                         // address bits
       kRcacheNumReqs,               // request size
@@ -268,8 +351,7 @@ public:
     // rcache memory side → l2arb.
     constexpr uint32_t kRasterRow = 1 + VX_CFG_EXT_OM_ENABLED;
     for (uint32_t i = 0; i < kRcacheMemPorts; ++i) {
-      rcache->mem_req_out.at(i).bind(&l2arb->ReqIn.at(kL2Rows * i + kRasterRow));
-      l2arb->RspOut.at(kL2Rows * i + kRasterRow).bind(&rcache->mem_rsp_in.at(i));
+      bind_gfx_port(kL2Rows * i + kRasterRow, CMMU_RCACHE_IDX, rcache->mem_req_out.at(i), rcache->mem_rsp_in.at(i));
     }
 
     // Cluster-level RasterBus arbiter: NUM_CORES_PER_CLUSTER inputs (one per
@@ -326,6 +408,11 @@ public:
     // A parked fill holds no channel packet while it waits, so completion
     // must ask the TLB directly. (The device walker is the processor's.)
     if (l2tlb_->busy()) {
+      return true;
+    }
+  #endif
+  #ifdef SIMX_CLUSTER_UNIT_MMU
+    if (!gfx_mmu_->empty()) {
       return true;
     }
   #endif
@@ -437,7 +524,22 @@ public:
       for (uint32_t c = 0; c < cores_per_socket_; ++c) {
         socket->core(c)->set_satp(value);
       }
+    #ifdef SIMX_SOCKET_UNIT_MMU
+      socket->set_satp(value);
+    #endif
     }
+  #ifdef SIMX_CLUSTER_UNIT_MMU
+    // The rcache and ocache are virtually tagged: a satp commit flushes the
+    // cluster unit TLB and invalidates them. The ocache writes through, and a
+    // commit falls between launches, so it holds no write to drain first.
+    gfx_mmu_->set_satp(value);
+  #ifdef VX_CFG_EXT_RASTER_ENABLE
+    rcache_->invalidate();
+  #endif
+  #ifdef VX_CFG_EXT_OM_ENABLE
+    ocache_->invalidate();
+  #endif
+  #endif
   }
 
   SimChannel<TlbReq>& ptw_req_out() {
@@ -618,6 +720,9 @@ private:
   uint32_t                    cores_per_socket_;
 #ifdef VX_CFG_VM_ENABLE
   L2Tlb::Ptr                  l2tlb_;
+#ifdef SIMX_CLUSTER_UNIT_MMU
+  Mmu::Ptr                    gfx_mmu_;
+#endif
 #endif
 #ifdef VX_CFG_EXT_OM_ENABLE
   OmCore::Ptr                 om_core_;

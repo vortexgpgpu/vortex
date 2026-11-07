@@ -18,6 +18,237 @@ tests:
   - rtlsim
   dir: tests/regression
   target: run-{driver}
+# Local memory: shared-word reads (one lane to the whole warp, and lanes of
+# different LSU blocks), partial masks, bank-conflict replays, sub-word loads
+# and stores, same-word stores, and per-lane order against the lane's own
+# stores and atomics.
+- id: lmem-access-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: lmem_access
+  shape:
+    threads: 16
+# Two LSU blocks: the read engine on the banks' second port.
+- id: lmem-access-2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: lmem_access
+  configs: -DVX_CFG_ISSUE_WIDTH=2
+  shape:
+    threads: 32
+    warps: 8
+# With atomics: a warp's reads around its own atomic adds to the word.
+- id: lmem-access-amo
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: lmem_access
+  configs: -DVX_CFG_EXT_A_ENABLE
+  shape:
+    threads: 16
+# Atomics with two LSU blocks: the read engine drains before an atomic enters
+# the first engine.
+- id: lmem-access-amo-iw2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: lmem_access
+  configs: -DVX_CFG_EXT_A_ENABLE -DVX_CFG_ISSUE_WIDTH=2
+  shape:
+    threads: 16
+# Wide loads and stores (vx_flw.d/.q, vx_fsw.d/.q) on local and global memory:
+# lane patterns, register groups, word alignments and the offset limits.
+- id: ldst-wide-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: ldst_wide
+  configs: -DVX_CFG_EXT_LDST_WIDE_ENABLE
+  xlen:
+  - 32
+  shape:
+    threads: 16
+# Two LSU blocks.
+- id: ldst-wide-2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: ldst_wide
+  configs: -DVX_CFG_EXT_LDST_WIDE_ENABLE -DVX_CFG_ISSUE_WIDTH=2
+  xlen:
+  - 32
+  shape:
+    threads: 32
+    warps: 8
+# Fewer LSU lanes than SIMD lanes: each uop's request goes out in four packets.
+- id: ldst-wide-3
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: ldst_wide
+  configs: -DVX_CFG_EXT_LDST_WIDE_ENABLE -DVX_CFG_NUM_LSU_LANES=4
+  xlen:
+  - 32
+  shape:
+    threads: 16
+# One SIMD lane: the dispatcher splits every warp into single-lane packets.
+- id: ldst-wide-4
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: ldst_wide
+  configs: -DVX_CFG_EXT_LDST_WIDE_ENABLE -DVX_CFG_SIMD_WIDTH=1
+  xlen:
+  - 32
+  shape:
+    threads: 4
+# Half-width ALU, FPU and LSU: each lane gather commits an instruction's two
+# passes in one beat, and the last block of each row runs half masked.
+- id: mixfu-lanes
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: mixfu
+  args: -n40 -i32
+  configs: -DVX_CFG_NUM_WARPS=16 -DVX_CFG_NUM_ALU_LANES=8 -DVX_CFG_NUM_FPU_LANES=8 -DVX_CFG_NUM_LSU_LANES=8
+  shape:
+    threads: 16
+# Matrix fragment loads and stores (vx_ldm, vx_stm): every shape of the
+# geometry, local and global memory, row strides that are not powers of two,
+# zero/positive/negative offsets, aligned and unaligned register bases.
+- id: ldst-matrix-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: ldst_matrix
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_LDST_MATRIX_ENABLE -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI
+# Symmetric sparse geometry (4 lanes).
+- id: ldst-matrix-2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: ldst_matrix
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_LDST_MATRIX_ENABLE -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_SPARSE_ENABLE
+# 16 lanes, with the WGMMA tensor core.
+- id: ldst-matrix-3
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: ldst_matrix
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_LDST_MATRIX_ENABLE -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_WGMMA_ENABLE
+# Each uop split into 4-lane packets, symmetric sparse shapes included.
+- id: ldst-matrix-4
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: ldst_matrix
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_LDST_MATRIX_ENABLE -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_NUM_LSU_LANES=4
+# Without the tensor core: the matrix loads and stores of a core that has
+# only them.
+- id: ldst-matrix-notcu
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: ldst_matrix
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_LDST_MATRIX_ENABLE
+# Both load/store extensions in one core: the fragment and the wide macro-ops
+# share the expander, told apart by the uop count decode carries.
+- id: ldst-matrix-wide
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: ldst_matrix
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_LDST_MATRIX_ENABLE -DVX_CFG_EXT_LDST_WIDE_ENABLE -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI
+  xlen:
+  - 32
+- id: ldst-wide-matrix
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: ldst_wide
+  configs: -DVX_CFG_EXT_LDST_WIDE_ENABLE -DVX_CFG_EXT_LDST_MATRIX_ENABLE
+  xlen:
+  - 32
+  shape:
+    threads: 16
+# The sgemm benchmarks with each thread's consecutive words read and written
+# through the wide forms (VX_CFG_EXT_LDST_WIDE_ENABLE).
+- id: ldst-wide-sgemm
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm
+  configs: -DVX_CFG_EXT_LDST_WIDE_ENABLE
+  xlen:
+  - 32
+- id: ldst-wide-sgemm-v1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm_v1
+  configs: -DVX_CFG_EXT_LDST_WIDE_ENABLE
+  xlen:
+  - 32
+- id: ldst-wide-sgemmx
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemmx
+  configs: -DVX_CFG_EXT_LDST_WIDE_ENABLE
+  xlen:
+  - 32
+- id: ldst-wide-sgemm2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm2
+  args: -n32 -t4
+  configs: -DVX_CFG_EXT_LDST_WIDE_ENABLE
+  xlen:
+  - 32
+- id: ldst-wide-sgemm2-v1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm2_v1
+  configs: -DVX_CFG_EXT_LDST_WIDE_ENABLE
+  xlen:
+  - 32
+# DGEMM: the sgemm kernel in FP64, its FMAs on F64 FMA processing elements
+# serving two lanes each.
+- id: dgemm-fma64
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm
+  args: -n32
+  configs: -DTYPE=double -DVX_CFG_FMA64_PE_RATIO=2
+  xlen:
+  - 64
 - id: occupancy-1
   via: blackbox
   drivers:
@@ -288,6 +519,31 @@ tests:
     cores: 2
     l2cache: true
     l3cache: true
+# A release must drain: bank 0's writes are held back by the debug delay, and
+# the flag, in a bank-1 line, overtakes the data in bank-0 lines unless the
+# release fence (-m1) or the .rl atomic (-m2) waits for them.
+- id: fence_mp-5
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: fence_mp
+  args: -n64 -m1
+  configs: -DVX_CFG_EXT_A_ENABLE -DDBG_MEM_BANK0_WDELAY
+  shape:
+    cores: 2
+    l2cache: true
+- id: fence_mp-6
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: fence_mp
+  args: -n64 -m2
+  configs: -DVX_CFG_EXT_A_ENABLE -DDBG_MEM_BANK0_WDELAY
+  shape:
+    cores: 2
+    l2cache: true
 # Kernel to kernel with no host transfer between (one command batch): the
 # launch flushes are L1-only, so the last-level cache alone carries each
 # round's writes to the next round, and the full flush runs before readback.
@@ -362,7 +618,16 @@ tests:
   via: blackbox
   app: dogfood
   args: -n16 -xbar -xgbar
-  configs: -DVX_CFG_CP_LLC_CLIENT=1
+  shape:
+    cores: 4
+    l2cache: true
+# The same with the DMA off the L2, reaching memory on its own path.
+- id: model_parity-dogfood-cp-direct
+  check: model_parity
+  via: blackbox
+  app: dogfood
+  args: -n16 -xbar -xgbar
+  configs: -DVX_CFG_CP_LLC_CLIENT=0
   shape:
     cores: 4
     l2cache: true
@@ -374,7 +639,7 @@ tests:
   via: blackbox
   app: sgemm
   args: -n32
-  configs: -DVX_CFG_CP_LLC_CLIENT=1 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=8
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=8
   shape:
     cores: 2
     l2cache: true
@@ -384,7 +649,7 @@ tests:
   - simx
   app: sgemm
   args: -n32
-  configs: -DVX_CFG_CP_LLC_CLIENT=1 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=8
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=8
   shape:
     cores: 8
     l2cache: true

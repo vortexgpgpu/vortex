@@ -42,8 +42,8 @@ module VX_operands import VX_gpu_pkg::*; #(
 
     wire [NUM_OPCS_W-1:0] sb_opc, wb_opc;
     if (`VX_CFG_NUM_OPCS != 1) begin : g_wis_opc
-        assign sb_opc = scoreboard_if.data.wis[NUM_OPCS_W-1:0];
-        assign wb_opc = writeback_if.data.wis[NUM_OPCS_W-1:0];
+        assign sb_opc = NUM_OPCS_W'(scoreboard_if.data.wis % `VX_CFG_NUM_OPCS);
+        assign wb_opc = NUM_OPCS_W'(writeback_if.data.wis % `VX_CFG_NUM_OPCS);
     end else begin : g_wis_opc
         assign sb_opc = 0;
         assign wb_opc = 0;

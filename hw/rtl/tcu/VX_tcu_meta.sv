@@ -27,7 +27,7 @@
 //
 // Read latency contract: the read address (rd_wid) is the already-registered
 // execute_if header wid, so the RAM is read combinationally in the issue
-// cycle (OUT_REG=0, RADDR_REG=1). The sparse mux / MX scale extraction in
+// cycle (OUT_REG=0). The sparse mux / MX scale extraction in
 // VX_tcu_core consume the result in that same cycle.
 
 module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
@@ -211,8 +211,7 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .WRENW    (MERGED_COLS),
         .LUTRAM   (0),
         .OUT_REG  (0),
-        .RDW_MODE ("W"),
-        .RADDR_REG(1) // rd_wid is registered!
+        .RDW_MODE ("W")
     ) meta_ram (
         .clk   (clk),
         .reset (reset),

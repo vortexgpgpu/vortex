@@ -8,7 +8,7 @@ defaults:
   - 32
   - 64
   tier: smoke
-  touches: [hw/rtl/mufu, hw/rtl/core/VX_sfu_unit.sv, sim/simx/mufu_unit.cpp, sim/simx/sfu_unit.cpp, sw/common/mufu.cpp, sw/common/mufu_tables.h, sw/kernel/include/vx_mufu.h]
+  touches: [hw/rtl/mufu, hw/rtl/core/VX_sfu_unit.sv, hw/rtl/core/VX_sfu_block.sv, sim/simx/mufu_unit.cpp, sim/simx/sfu_unit.cpp, sw/common/mufu.cpp, sw/common/mufu_tables.h, sw/kernel/include/vx_mufu.h]
 tests:
 - id: mufu-1
   via: blackbox

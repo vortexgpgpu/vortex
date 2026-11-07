@@ -21,6 +21,12 @@ ifneq ($(findstring -DVX_CFG_TCU_WGMMA_ENABLE,$(CONFIGS)),)
 CONFIGS := $(if $(findstring -DWGMMA_RS,$(CONFIGS))$(findstring -DWGMMA_SS,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DWGMMA_RS)
 endif
 
+# config.mk folded the profile in before this app appended its own flags; fold
+# again so an app flag replaces the profile's setting of the same knob.
+ifneq ($(strip $(PROFILE)),)
+CONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --profile=$(PROFILE) --xlen=$(XLEN) --merge-configs --cflags='$(CONFIGS)')
+endif
+
 XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
 
 ifneq (,$(filter -DVX_CFG_EXT_C_ENABLE, $(XCONFIGS)))

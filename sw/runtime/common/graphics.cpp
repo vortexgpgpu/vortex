@@ -310,7 +310,7 @@ vx_result_t FrontEndPool::init(vx_device_h dev, vx_kernel_h setup_k,
     return vx_buffer_address(b, out_addr);
   };
   const uint32_t W = VX_MEM_WRITE;                              // host-write-intent scratch
-  const uint32_t RWP = VX_MEM_READ | VX_MEM_WRITE | VX_MEM_PHYS; // pinned FF-read outputs
+  const uint32_t RW = VX_MEM_READ | VX_MEM_WRITE;                // FF-read outputs
 
   vx_result_t r;
   // No slot_prim/slot_bbox scratch: setup_k counts survivors and EMIT recomputes
@@ -319,9 +319,9 @@ vx_result_t FrontEndPool::init(vx_device_h dev, vx_kernel_h setup_k,
 
   // Two-heap residency split: the device-only shader scratch regions live
   // in ONE pooled slab (collapsing 12 separate allocations into a single resident
-  // buffer), while the FF-pinned-PA outputs the raster unit reads (prim, tilebuf)
-  // keep their own VX_MEM_PHYS buffers — both because they need the pinned heap and
-  // because callers read them back at offset 0 (prim_buffer()/tile_buffer()).
+  // buffer), while the outputs the raster unit reads (prim, tilebuf) keep their
+  // own buffers, because callers read them back at offset 0
+  // (prim_buffer()/tile_buffer()).
   constexpr uint64_t SLAB_ALIGN = 64;  // sub-region alignment (cache line)
   auto align_up = [](uint64_t v, uint64_t a) { return (v + a - 1) / a * a; };
 
@@ -353,9 +353,9 @@ vx_result_t FrontEndPool::init(vx_device_h dev, vx_kernel_h setup_k,
   }
 
   // FF-pinned-PA outputs (read by the raster unit; read back by the host at off 0).
-  if ((r = mk(NT * MS * PRIM_SZ, RWP, &impl_->prim)) != VX_SUCCESS) return r;
+  if ((r = mk(NT * MS * PRIM_SZ, RW, &impl_->prim)) != VX_SUCCESS) return r;
   impl_->prim_buf = impl_->bufs.back();
-  if ((r = mk(B * HDR_SZ + (uint64_t)keys_cap * 4, RWP, &impl_->tilebuf)) != VX_SUCCESS) return r;
+  if ((r = mk(B * HDR_SZ + (uint64_t)keys_cap * 4, RW, &impl_->tilebuf)) != VX_SUCCESS) return r;
   impl_->tile_buf = impl_->bufs.back();
   return VX_SUCCESS;
 }

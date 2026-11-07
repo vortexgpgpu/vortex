@@ -47,6 +47,9 @@ import VX_tcu_pkg::*;
     // virtual addresses, and busy/barrier logic waits on the socket MMU draining.
     input wire              mmu_drained,
 `endif
+    // None of this core's requests is held on its way to the dcache, in its
+    // dMMU lanes or on the link.
+    input wire              dcache_path_drained,
 
 `ifdef VX_CFG_EXT_DXA_ENABLE
     VX_dxa_req_bus_if.master dxa_req_bus_if,
@@ -85,10 +88,11 @@ import VX_tcu_pkg::*;
     wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] lsu_sched_empty;
     wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] lsu_store_empty;
 `ifdef VX_CFG_LMEM_ENABLE
-    VX_mem_bus_if #(
+    VX_lsu_mem_if #(
+        .NUM_LANES (`VX_CFG_NUM_LSU_LANES),
         .DATA_SIZE (LSU_WORD_SIZE),
         .TAG_WIDTH (LSU_TAG_WIDTH)
-    ) lsu_lmem_bus_if[LSU_NUM_REQS]();
+    ) lsu_lmem_if[`VX_CFG_NUM_LSU_BLOCKS]();
 `endif
     VX_mem_bus_if #(
         .DATA_SIZE (DCACHE_WORD_SIZE),
@@ -169,7 +173,26 @@ import VX_tcu_pkg::*;
     // Stores are ack-less and lag warp exit, so the dcache flush waits until every
     // store of this core has reached L1.
     wire store_drained = (&lsu_sched_empty) && mem_unit_empty;
-    assign dcr_flush_dcache_if.req = dcr_flush_if.req && store_drained;
+    // Past the core a store may still be parked on a TLB miss in this core's
+    // dMMU lanes (VM) or crossing the link to the dcache, where a flush token on
+    // another lane would overtake it: the flush also waits for those lanes. The
+    // request is level-held and the token's own trip clears the lanes' idle, so
+    // the start is latched until the flush request drops.
+    if ((`VX_CFG_VM_ENABLED != 0) || (`VX_CFG_L1_LINK_LATENCY != 0)) begin : g_flush_path
+        reg dcache_flush_go_r;
+        always @(posedge clk) begin
+            if (reset || ~dcr_flush_if.req) begin
+                dcache_flush_go_r <= 1'b0;
+            end else if (store_drained && dcache_path_drained) begin
+                dcache_flush_go_r <= 1'b1;
+            end
+        end
+        assign dcr_flush_dcache_if.req = dcr_flush_if.req
+                                      && ((store_drained && dcache_path_drained) || dcache_flush_go_r);
+    end else begin : g_flush_direct
+        `UNUSED_VAR (dcache_path_drained)
+        assign dcr_flush_dcache_if.req = dcr_flush_if.req && store_drained;
+    end
     // Only the dcache flush walks the shared levels (the icache does not
     // forward its flush), so the icache flushes alongside it.
     assign dcr_flush_icache_if.req = dcr_flush_if.req;
@@ -460,7 +483,7 @@ import VX_tcu_pkg::*;
                 .lsu_store_empty      (lsu_store_empty[i]),
                 .lsu_busy             (lsu_busy[i]),
             `ifdef VX_CFG_LMEM_ENABLE
-                .lmem_bus_if          (lsu_lmem_bus_if[i * `VX_CFG_NUM_LSU_LANES +: `VX_CFG_NUM_LSU_LANES]),
+                .lmem_if              (lsu_lmem_if[i]),
             `endif
                 .dcache_bus_if        (lsu_dcache_bus_if[i * DCACHE_CHANNELS +: DCACHE_CHANNELS]),
             `ifdef VX_CFG_EXT_DXA_ENABLE
@@ -680,7 +703,7 @@ import VX_tcu_pkg::*;
                     .lsu_store_empty      (lsu_store_empty[i]),
                     .lsu_busy             (lsu_busy[i]),
                 `ifdef VX_CFG_LMEM_ENABLE
-                    .lmem_bus_if          (lsu_lmem_bus_if[i * `VX_CFG_NUM_LSU_LANES +: `VX_CFG_NUM_LSU_LANES]),
+                    .lmem_if              (lsu_lmem_if[i]),
                 `endif
                     .dcache_bus_if        (lsu_dcache_bus_if[i * DCACHE_CHANNELS +: DCACHE_CHANNELS]),
                 `ifdef VX_CFG_EXT_DXA_ENABLE
@@ -761,7 +784,7 @@ import VX_tcu_pkg::*;
                 .lsu_store_empty      (lsu_store_empty),
                 .lsu_busy             (lsu_busy),
             `ifdef VX_CFG_LMEM_ENABLE
-                .lmem_bus_if          (lsu_lmem_bus_if),
+                .lmem_if              (lsu_lmem_if),
             `endif
                 .dcache_bus_if        (lsu_dcache_bus_if),
 
@@ -830,7 +853,7 @@ import VX_tcu_pkg::*;
         .dxa_txbar_bus_if(dxa_txbar_bus_if),
     `endif
     `ifdef VX_CFG_LMEM_ENABLE
-        .lmem_bus_if     (lsu_lmem_bus_if),
+        .lmem_if         (lsu_lmem_if),
     `endif
         .lsu_dcache_bus_if (lsu_dcache_bus_if),
         .dcr_flush_if    (dcr_flush_dcache_if),

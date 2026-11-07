@@ -65,6 +65,12 @@ module VX_graphics import VX_gpu_pkg::*
     // Cluster-level flush trigger.
     VX_dcr_flush_if.slave   cluster_flush_if,
 
+`ifdef CLUSTER_UNIT_MMU_ENABLE
+    // Address-space change (SATP commit): the rcache and ocache are virtually
+    // tagged, so the ocache drains its writes and both invalidate.
+    VX_dcr_flush_if.slave   mmu_flush_if,
+`endif
+
     // Producer busy — the raster engine signals frame drain out-of-band (it has
     // no in-band `done`); the cluster ORs this into the device busy aggregation.
     output wire             busy
@@ -249,7 +255,11 @@ module VX_graphics import VX_gpu_pkg::*
     ) rcache_flushable_bus_if [`VX_CFG_NUM_RASTER_CORES * RCACHE_NUM_REQS] ();
 
     VX_dcr_flush_if rcache_flush_if();
+`ifdef CLUSTER_UNIT_MMU_ENABLE
+    assign rcache_flush_if.req = cluster_flush_if.req || mmu_flush_if.req;
+`else
     assign rcache_flush_if.req = cluster_flush_if.req;
+`endif
 
     VX_dcr_flush #(
         .WORD_SIZE   (RCACHE_WORD_SIZE),
@@ -502,6 +512,15 @@ module VX_graphics import VX_gpu_pkg::*
     reg                      omf_cluster_done_r;
     reg                      omf_l1_only_r;  // every requester of this round is L1-only
     wire omf_cluster_req = cluster_flush_if.req && ~omf_cluster_done_r;
+    // The address-space change is an L1-only requester: the ocache drains its
+    // writes and invalidates, and the L2 (physically tagged) is left alone.
+`ifdef CLUSTER_UNIT_MMU_ENABLE
+    reg  omf_mmu_r;
+    reg  omf_mmu_done_r;
+    wire omf_mmu_req = mmu_flush_if.req && ~omf_mmu_done_r;
+`else
+    wire omf_mmu_req = 1'b0;
+`endif
 
     // The cluster flush takes its kind from the broadcast write that starts it,
     // which every core receives too. The cores raise the cluster flush request
@@ -516,6 +535,26 @@ module VX_graphics import VX_gpu_pkg::*
         end
     end
     wire omf_drained = ~(| om_busy_w) && ~(| om_ingress_pending) && ~(| steer_om_pending);
+
+`ifndef SYNTHESIS
+    // Each cluster flush round must find the latch written for it, strictly
+    // before the round takes the request.
+    wire cluster_flush_kind_wr = dcr_bus_if.req_valid && dcr_bus_if.req_data.rw
+                              && (dcr_bus_if.req_data.addr == `VX_DCR_BASE_CACHE_FLUSH);
+    wire omf_cluster_take = (omf_state_r == OMF_IDLE) && omf_cluster_req;
+    reg  cluster_flush_kind_new_r;
+    always @(posedge clk) begin
+        if (reset) begin
+            cluster_flush_kind_new_r <= 1'b0;
+        end else if (cluster_flush_kind_wr) begin
+            cluster_flush_kind_new_r <= 1'b1;
+        end else if (omf_cluster_take) begin
+            cluster_flush_kind_new_r <= 1'b0;
+        end
+    end
+    `RUNTIME_ASSERT (~omf_cluster_take || (cluster_flush_kind_new_r && ~cluster_flush_kind_wr),
+        ("%t: cluster flush taken before its kind was latched", $time))
+`endif
 
     always @(posedge clk) begin
         if (reset) begin
@@ -532,7 +571,7 @@ module VX_graphics import VX_gpu_pkg::*
             end
             case (omf_state_r)
             OMF_IDLE: begin
-                if ((| steer_flush_req) || omf_cluster_req) begin
+                if ((| steer_flush_req) || omf_cluster_req || omf_mmu_req) begin
                     omf_steers_r  <= steer_flush_req;
                     omf_cluster_r <= omf_cluster_req;
                     omf_l1_only_r <= (& (~steer_flush_req | steer_flush_l1_only))
@@ -563,6 +602,26 @@ module VX_graphics import VX_gpu_pkg::*
         end
     end
     assign ocache_flush_if.req = (omf_state_r == OMF_FLUSH);
+
+`ifdef CLUSTER_UNIT_MMU_ENABLE
+    // The address-space change joins a round like the cluster flush does.
+    always @(posedge clk) begin
+        if (reset) begin
+            omf_mmu_r      <= 1'b0;
+            omf_mmu_done_r <= 1'b0;
+        end else begin
+            if (~mmu_flush_if.req) begin
+                omf_mmu_done_r <= 1'b0;
+            end
+            if ((omf_state_r == OMF_IDLE) && ((| steer_flush_req) || omf_cluster_req || omf_mmu_req)) begin
+                omf_mmu_r <= omf_mmu_req;
+            end
+            if ((omf_state_r == OMF_FLUSH) && ocache_flush_if.done && omf_mmu_r) begin
+                omf_mmu_done_r <= 1'b1;
+            end
+        end
+    end
+`endif
 
     // OM-core flush chain carries the OM tag + 1 flush bit. When early-Z widens
     // the shared bus tag (a wider early-Z requester), the flushed OM bus is
@@ -667,6 +726,14 @@ module VX_graphics import VX_gpu_pkg::*
     assign ocache_flush_done = 1'b1;
 `endif
     assign cluster_flush_if.done = rcache_flush_done & ocache_flush_done;
+
+`ifdef CLUSTER_UNIT_MMU_ENABLE
+`ifdef VX_CFG_EXT_OM_ENABLE
+    assign mmu_flush_if.done = rcache_flush_done & omf_mmu_done_r;
+`else
+    assign mmu_flush_if.done = rcache_flush_done;
+`endif
+`endif
 
     // Producer busy = a raster engine still draining a frame (out-of-band
     // drain) or an OM core with fragments in flight (vx_om4 is fire-and-forget,

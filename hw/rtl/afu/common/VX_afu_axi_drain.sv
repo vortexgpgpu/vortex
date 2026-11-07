@@ -27,6 +27,10 @@
 // directions, so it stays right when AXI4 allows write data to be presented
 // before its address (which would drive an up/down counter negative).
 //
+// A write burst whose first beats have gone out is in flight too, even when
+// its AW has not: the counters only see last beats, so the burst in progress
+// is tracked separately.
+//
 // COUNT_WIDTH must exceed the port's maximum outstanding transactions; the
 // comparison is exact only while fewer than 2**COUNT_WIDTH are in flight.
 // ============================================================================
@@ -39,6 +43,7 @@ module VX_afu_axi_drain #(
 
     // Handshakes observed on the shell side of the request gate.
     input  wire aw_fire,      // awvalid && awready
+    input  wire w_fire,       // wvalid && wready
     input  wire w_fire_last,  // wvalid && wready && wlast
     input  wire b_fire,       // bvalid && bready
     input  wire ar_fire,      // arvalid && arready
@@ -60,15 +65,20 @@ module VX_afu_axi_drain #(
     reg [COUNT_WIDTH-1:0] b_count;
     reg [COUNT_WIDTH-1:0] ar_count;
     reg [COUNT_WIDTH-1:0] r_count;
+    reg                   w_in_burst;
 
     always @(posedge clk) begin
         if (reset) begin
-            aw_count <= '0;
-            w_count  <= '0;
-            b_count  <= '0;
-            ar_count <= '0;
-            r_count  <= '0;
+            aw_count   <= '0;
+            w_count    <= '0;
+            b_count    <= '0;
+            ar_count   <= '0;
+            r_count    <= '0;
+            w_in_burst <= 1'b0;
         end else begin
+            if (w_fire) begin
+                w_in_burst <= ~w_fire_last;
+            end
             if (aw_fire) begin
                 aw_count <= aw_count + 1'b1;
             end
@@ -94,7 +104,8 @@ module VX_afu_axi_drain #(
     assign dbg_ar_count = ar_count;
     assign dbg_r_count  = r_count;
 
-    assign idle = (aw_count == w_count)
+    assign idle = ~w_in_burst
+               && (aw_count == w_count)
                && (aw_count == b_count)
                && (ar_count == r_count);
 

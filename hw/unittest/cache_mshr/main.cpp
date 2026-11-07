@@ -48,8 +48,11 @@ static int failures = 0;
 static void clear_inputs(VVX_cache_mshr* m) {
   m->fill_valid = 0; m->fill_id = 0;
   m->probe_addr = 0;
-  m->dequeue_ready = 0; m->dequeue_lookup = 0; m->dequeue_park = 0; m->dequeue_park_retry = 0; m->dequeue_block = 0;
+  m->dequeue_ready = 0; m->dequeue_lookup = 0; m->dequeue_fwd_lookup = 0; m->dequeue_park = 0;
+  m->dequeue_park_retry = 0; m->dequeue_block = 0;
   m->allocate_valid = 0; m->allocate_addr = 0; m->allocate_sector = 0; m->allocate_word_idx = 0;
+  // the request entering S0 next cycle, taken every cycle (S0 never holds here)
+  m->allocate_addr_n = 0; m->allocate_sector_n = 0; m->allocate_adv = 1;
   m->allocate_rw = 0; m->allocate_is_amo = 0; m->allocate_refetch = 0; m->allocate_data = 0;
   m->finalize_valid = 0; m->finalize_lookup = 0; m->finalize_is_release = 0; m->finalize_is_pending = 0;
   m->finalize_previd = 0; m->finalize_id = 0;
@@ -83,6 +86,9 @@ static void run_seed(int seed) {
 
   // 2. allocate one miss, fill it, dequeue it
   const uint32_t addr = 0x123u + seed;
+  // the allocate match is taken a cycle early, from the request entering S0
+  m->allocate_addr_n = addr;
+  cycle(ctx.get(), m.get());
   m->allocate_valid = 1; m->allocate_addr = addr; m->allocate_data = 0xBEEF;
   m->eval();
   CHECK(m->allocate_ready, "seed %d: allocate not ready", seed);

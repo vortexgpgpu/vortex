@@ -13,6 +13,7 @@
 
 #pragma once
 
+#include <deque>
 #include "func_unit.h"
 
 namespace vortex {
@@ -35,6 +36,10 @@ public:
   static constexpr uint32_t kFp64Batches = VX_CFG_NUM_FPU_LANES / kFp64Lanes;
   static_assert(VX_CFG_NUM_FPU_LANES % kFp64Lanes == 0, "FP64 lanes must divide the FPU lanes");
 
+  // Full bandwidth: the dispatch queue feeds the unit directly, so an op
+  // returns its issue credit as the unit accepts it.
+  SimChannel<instr_trace_t*> ReleaseOut;
+
 protected:
   void on_reset() override;
   void on_tick() override;
@@ -50,6 +55,31 @@ private:
 
   // Per block: batches of the FP64 operation at the input head still to issue.
   std::array<uint32_t, VX_CFG_NUM_FPU_BLOCKS> fp64_batches_{};
+
+  // Cycles an operation holds its block's input: its class serves the block's
+  // lanes on fewer processing elements, one batch of lanes per cycle.
+  uint32_t batches_of(const instr_trace_t* trace) const;
+
+  std::array<uint32_t, VX_CFG_NUM_FPU_BLOCKS> batch_idx_{};
+
+  // Result pipelines, in the order of the block's response arbiter inputs;
+  // the divider and the square root share one input, the divider first.
+  enum : uint32_t { kPipeFma, kPipeDiv, kPipeCvt, kPipeNcp, kPipeFma64, kPipeSqrt, kNumPipes };
+  // respond() indexes arbiter inputs 0..4 directly as pipes; sqrt shares div's input.
+  static_assert(kPipeFma64 == 4 && kPipeSqrt == kNumPipes - 1, "arbiter input order");
+  uint32_t pipe_of(const instr_trace_t* trace) const;
+
+  // Hands the block one result per cycle, round-robin over the classes whose
+  // result has reached its output buffer.
+  void respond(uint32_t b);
+
+  struct Result {
+    uint64_t       ready; // cycle it reaches the response arbiter
+    instr_trace_t* trace;
+  };
+  std::array<std::array<std::deque<Result>, kNumPipes>, VX_CFG_NUM_FPU_BLOCKS> results_;
+  std::array<uint32_t, VX_CFG_NUM_FPU_BLOCKS> num_results_{};
+  std::array<uint32_t, VX_CFG_NUM_FPU_BLOCKS> rsp_grant_{};
 };
 
 }

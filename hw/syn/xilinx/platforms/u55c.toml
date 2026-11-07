@@ -9,8 +9,8 @@ match_xsa = ["xilinx_u55c_*"]
 [memory]
 banks = 32
 addr_width = 34
-merged = true
-tags = ["HBM[0:31]"]
+# The AFU memory masters split the channels into contiguous groups.
+tag = "HBM"
 
 [host]
 # The CP's m_axi_host reaches host DRAM through the XDMA slave bridge.

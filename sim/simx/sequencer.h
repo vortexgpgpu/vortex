@@ -54,13 +54,6 @@ public:
   // A macro-op's last micro-op is the current one.
   bool last() const { return state_.active && (state_.uop_index + 1) == state_.uop_count; }
 
-  // Drop any cached uop / macro-op state for this sequencer. Used by
-  // Core::flush_warp_pipeline at async-trap entry: when the ibuffer is
-  // flushed, the trace pointer this sequencer cached in state_.current_uop
-  // (for the next issue) becomes dangling, so we have to drop it before
-  // the trap handler issues.
-  void flush() { state_.reset(); }
-
 protected:
   void on_reset();
 

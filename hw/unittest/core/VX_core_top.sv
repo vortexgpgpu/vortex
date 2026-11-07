@@ -72,6 +72,15 @@ module VX_core_top import VX_gpu_pkg::*;
     output wire                             dcr_rsp_valid,
     output wire [VX_DCR_DATA_WIDTH-1:0]     dcr_rsp_data,
 
+    // Kernel launches: without them the CTA dispatcher is constant and
+    // synthesis removes it.
+    input wire                              kmu_valid,
+    input wire                              kmu_kind,
+    input wire                              kmu_eop,
+    input wire [KMU_DEST_W-1:0]             kmu_dest,
+    input wire [KMU_DATAW-1:0]              kmu_data,
+    output wire                             kmu_ready,
+
     // Status
     output wire                             busy
 );
@@ -136,11 +145,12 @@ module VX_core_top import VX_gpu_pkg::*;
 `endif
 
     VX_kmu_bus_if kmu_bus_if();
-    assign kmu_bus_if.valid = 1'b0;
-    assign kmu_bus_if.kind  = KMU_KIND_COMPUTE;
-    assign kmu_bus_if.eop   = 1'b0;
-    assign kmu_bus_if.dest  = '0;
-    assign kmu_bus_if.data  = '0;
+    assign kmu_bus_if.valid = kmu_valid;
+    assign kmu_bus_if.kind  = kmu_kind;
+    assign kmu_bus_if.eop   = kmu_eop;
+    assign kmu_bus_if.dest  = kmu_dest;
+    assign kmu_bus_if.data  = kmu_data;
+    assign kmu_ready        = kmu_bus_if.ready;
 
     VX_dcr_bus_if dcr_bus_if();
 
@@ -228,6 +238,8 @@ module VX_core_top import VX_gpu_pkg::*;
         .dcr_bus_if     (dcr_bus_if),
 
         .dcache_bus_if  (dcache_bus_if),
+        // the dcache ports are this wrapper's own: nothing lies past them
+        .dcache_path_drained (1'b1),
 
         .icache_bus_if  (icache_bus_if),
 

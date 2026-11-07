@@ -26,8 +26,14 @@ XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)
 # configured VX_CFG_TCU_LATENCY.
 LATENCY ?= $(patsubst -DVX_CFG_TCU_LATENCY=%,%,$(filter -DVX_CFG_TCU_LATENCY=%, $(XCONFIGS)))
 
-CXXFLAGS += -DNUM_REGS=$(NUM_REGS) -DLATENCY=$(LATENCY)
+# Block-scale slots of an MX datapath: the lanes split evenly across them.
+SF ?= 1
+
+CXXFLAGS += -DNUM_REGS=$(NUM_REGS) -DLATENCY=$(LATENCY) -DSF=$(SF)
 PARAMS := -GN=$(NUM_REGS) -GLATENCY=$(LATENCY)
+ifneq (,$(filter -DVX_CFG_TCU_MX_ENABLE, $(XCONFIGS)))
+PARAMS += -GSF=$(SF)
+endif
 
 SRCS += $(DPI_DIR)/dpi_util.cpp
 SRCS += $(DPI_DIR)/dpi_float.cpp

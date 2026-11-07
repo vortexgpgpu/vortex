@@ -27,6 +27,7 @@ module VX_cp_dma_top
   input  wire                       grant,
   input  wire [$bits(cmd_t)-1:0]    cmd_packed,
   output wire                       done,
+  input  wire [63:0]                satp,
 
   // ---- Host-memory AXI master (flat) ----
   output wire                       h_awvalid,
@@ -181,6 +182,7 @@ module VX_cp_dma_top
     .grant    (grant),
     .cmd      (cmd_typed),
     .done     (done),
+    .satp     (satp),
     .axi_host (axi_host),
     .axi_dev  (axi_dev)
   );

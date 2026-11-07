@@ -69,7 +69,9 @@ private:
     return (wid << RegOpd::ID_BITS) | reg.id();
   }
 
-  static constexpr uint32_t kReleaseDelay = 1;
+  // A committed result is written back from the commit arbiter's output
+  // register, and the issue stage reads a registered readiness.
+  static constexpr uint32_t kReleaseDelay = 2;
 
   struct pending_release_t {
     uint32_t wid;

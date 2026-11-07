@@ -372,9 +372,13 @@ module VX_decompressor import VX_gpu_pkg::*; #(
     logic                       buf_we;
     logic [WID_W-1:0]           buf_waddr;
     buf_data_t                  buf_wdata;
-    logic [WID_W-1:0]           buf_raddr;
-    buf_data_t                  buf_rdata;       // registered (OUT_REG=1)
+    buf_data_t                  buf_rdata;
     logic                       buf_read;        // gates rdata_r update during stall
+
+    // One read port per requester, so neither read address waits on the
+    // stage-0 case decode; stage 1 picks the port its kind was read from.
+    buf_data_t                  sched_rdata;     // registered (OUT_REG=1)
+    buf_data_t                  rsp_rdata;       // registered (OUT_REG=1)
 
     VX_dp_ram #(
         .DATAW   ($bits(buf_data_t)),
@@ -390,8 +394,26 @@ module VX_decompressor import VX_gpu_pkg::*; #(
         .wren  (1'b1),
         .waddr (buf_waddr),
         .wdata (buf_wdata),
-        .raddr (buf_raddr),
-        .rdata (buf_rdata)
+        .raddr (sched_wid),
+        .rdata (sched_rdata)
+    );
+
+    VX_dp_ram #(
+        .DATAW   ($bits(buf_data_t)),
+        .SIZE    (NUM_WARPS),
+        .OUT_REG (1),
+        .LUTRAM  (1),
+        .RDW_MODE("R")
+    ) rsp_buffer_ram (
+        .clk   (clk),
+        .reset (reset),
+        .read  (buf_read),
+        .write (buf_we),
+        .wren  (1'b1),
+        .waddr (buf_waddr),
+        .wdata (buf_wdata),
+        .raddr (rsp_wid),
+        .rdata (rsp_rdata)
     );
 
     // ------------------------------------------------------------------
@@ -500,11 +522,9 @@ module VX_decompressor import VX_gpu_pkg::*; #(
                        && (state[rsp_wid] == BUF_EMPTY)
                        && !pc_low && !rsp_high_c;
 
-    // BRAM raddr (cycle-N read latches data for cycle-N+1 stage 1 use). Both
-    // scheduler-gated emits (have_C, have_B_emit) read at sched_wid.
-    assign buf_raddr = (have_C || have_B_emit) ? sched_wid : rsp_wid;
-    // Only update raddr_r when stage 0 actually advances; keeps the
-    // registered rdata_r aligned with the registered s1_ctx.
+    // BRAM read (cycle-N read latches data for cycle-N+1 stage 1 use). Only
+    // update rdata_r when stage 0 actually advances; keeps the registered
+    // rdata_r aligned with the registered s1_ctx.
     assign buf_read  = st0_advance;
 
     // ------------------------------------------------------------------
@@ -707,6 +727,10 @@ module VX_decompressor import VX_gpu_pkg::*; #(
     // ------------------------------------------------------------------
     // Stage 1 (combinational): build fsm_data from registered ctx + BRAM
     // ------------------------------------------------------------------
+
+    // Both scheduler-gated emits (S1_C, S1_B) read at sched_wid; the
+    // response-gated straddle (S1_BR) reads at rsp_wid.
+    assign buf_rdata = (s1_kind == S1_BR) ? rsp_rdata : sched_rdata;
 
     // Both RVC and straddle sources are registered 32-bit payloads pre-formed in
     // stage 0; this stage only selects, no decompress16.

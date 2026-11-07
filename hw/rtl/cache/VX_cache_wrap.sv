@@ -31,7 +31,6 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
 
     parameter CRSQ_SIZE             = 0,      // Core Response Queue Size
     parameter MSHR_SIZE             = 16,     // Miss Reserv Queue Knob
-    parameter MSHR_LINES            = 0,      // MSHR distinct line entries (0 = address per request)
     parameter MRSQ_SIZE             = 4,      // Memory Response Queue Size
     parameter MREQ_SIZE             = 0,      // Memory Request Queue Size (0 = derived minimum)
 
@@ -59,11 +58,15 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
 
     parameter MEM_OUT_BUF           = 3,      // Memory request output buffer
 
+    parameter CORE_REQ_SKID         = 0,      // Banks behind an unbuffered request crossbar take requests through a skid register
+
     parameter IS_LLC                = 0,      // Set when this cache is the LLC (enables AMO completion at this level).
     parameter SHARED_LLC            = 0,      // The LLC serves every memory client alone (point of coherence).
+    parameter ACQ_FORWARD           = 0,      // An acquire flush also invalidates the next level.
     parameter FLUSH_FORWARD         = 1,      // A flush also flushes the next level.
     parameter BANK_HASH             = 0,      // Hashed bank select (cache_bank_hash).
     parameter READ_MERGE            = 0,      // Merge same-word reads within groups of this many adjacent ports (0: off).
+    parameter READ_MERGE_LINE       = 0,      // Merge any reads of the same line instead, each port keeping its own tag and word.
 
     parameter AMO_ENABLE            = 0       // Enable atomic operations in cache banks.
  ) (
@@ -156,7 +159,6 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .REPL_POLICY  (REPL_POLICY),
             .CRSQ_SIZE    (CRSQ_SIZE),
             .MSHR_SIZE    (MSHR_SIZE),
-            .MSHR_LINES   (MSHR_LINES),
             .MRSQ_SIZE    (MRSQ_SIZE),
             .MREQ_SIZE    (MREQ_SIZE),
             .LATENCY      (LATENCY),
@@ -169,11 +171,14 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             // sits between the bypass arbiter and the bank queues, so its
             // output takes a registered ready (same latency, one more slot)
             .MEM_OUT_BUF  (BYPASS_ENABLE ? ((NUM_BANKS > 1) ? 2 : 1) : MEM_OUT_BUF),
+            .CORE_REQ_SKID (CORE_REQ_SKID),
             .IS_LLC       (IS_LLC),
             .SHARED_LLC   (SHARED_LLC),
+            .ACQ_FORWARD  (ACQ_FORWARD),
             .FLUSH_FORWARD (FLUSH_FORWARD),
             .BANK_HASH    (BANK_HASH),
             .READ_MERGE   (READ_MERGE),
+            .READ_MERGE_LINE (READ_MERGE_LINE),
             .AMO_ENABLE   (AMO_ENABLE)
         ) cache (
             .clk            (clk),

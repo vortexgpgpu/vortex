@@ -147,6 +147,18 @@ tests:
   via: blackbox
   app: lazy_fetch
   configs: -DVX_CFG_DCACHE_LAZY_FETCH=1
+# Fully written sectors on a lazy-fetch write-back L2 shared by 4 cores:
+# partial-miss loads and parked chain heads refetch them through the loopback.
+- id: parity-lazy-fetch-full
+  check: model_parity
+  via: blackbox
+  app: lazy_fetch
+  args: -f -n1
+  configs: -DVX_CFG_EXT_A_ENABLE -DVX_CFG_SOCKET_SIZE=1 -DVX_CFG_L2_WRITEBACK=1 -DVX_CFG_L2_LAZY_FETCH=1
+  flags: --perf=7
+  shape:
+    cores: 4
+    l2cache: true
 # FPU + LSU locality, multi-warp reuse (~1.29M cycles on the default shape).
 - id: parity-sgemm
   check: model_parity
@@ -176,14 +188,73 @@ tests:
   args: -n128
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8
   shape: {cores: 2, l2cache: true}
+# The same shape at n64: L2 hits on a miss-heavy working set, two operand
+# collectors per issue slice, and the load-response path's exact entry counts.
+- id: parity-sgemm-mc64
+  check: model_parity
+  # Tighter than the default: the shape exercises those entries and the
+  # collectors' output register exactly.
+  tolerance: 0.03
+  via: blackbox
+  app: sgemm
+  args: -n64
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8
+  shape: {cores: 2, l2cache: true}
+# The same shape behind a 20-cycle link to the L2, each way: both cores' L2
+# traffic, its fills and its back-pressure cross the link's delay buffers.
+- id: parity-sgemm-mc64-l2link
+  check: model_parity
+  via: blackbox
+  app: sgemm
+  args: -n64
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_L2_LINK_LATENCY=20
+  shape: {cores: 2, l2cache: true}
+# L2-hit load-to-use latency through the link: a pointer chase that misses the
+# dcache and hits the L2, one dependent load at a time.
+- id: parity-chase-l2link
+  check: model_parity
+  via: blackbox
+  app: chase
+  args: -b262144 -w1 -i512
+  configs: -DVX_CFG_L2_LINK_LATENCY=20
+  shape: {l2cache: true}
+# The same shape behind a 20-cycle link between each core and the dcache, each
+# way: both cores' lanes, their stores and the dcache back-pressure cross the
+# link's delay buffers, and each core's dcache flush waits for its lanes.
+- id: parity-sgemm-mc64-l1link
+  check: model_parity
+  via: blackbox
+  app: sgemm
+  args: -n64
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_L1_LINK_LATENCY=20
+  shape: {cores: 2, l2cache: true}
+# L1-hit load-to-use latency through the link: a pointer chase that hits the
+# dcache, one dependent load at a time.
+- id: parity-chase-l1link
+  check: model_parity
+  via: blackbox
+  app: chase
+  args: -b8192 -w1 -i512
+  configs: -DVX_CFG_L1_LINK_LATENCY=20
 # SGEMM on two frontend slices feeding four issue slices: per-slice fetch on a
 # two-port icache, CTAs as wide as the core, a 16-port dcache.
 - id: parity-sgemm-fw2
   check: model_parity
+  # Tighter than the default: icache port 0, which carries the flush
+  # injection, holds four requests, and the shape exercises all of them.
+  tolerance: 0.03
   via: blackbox
   app: sgemm
   args: -n128
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_FETCH_WIDTH=2
+# Four frontend slices on a four-port icache: every slice but the first fetches
+# through two request entries, the first through four.
+- id: parity-sgemm-fw4
+  check: model_parity
+  via: blackbox
+  app: sgemm
+  args: -n128
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_FETCH_WIDTH=4
 # Device printf: per-character IO ring stores, each published behind a fence
 # that drains, flushes and invalidates the data cache.
 - id: parity-printf
@@ -202,6 +273,16 @@ tests:
   via: blackbox
   app: printf
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_FETCH_WIDTH=2
+# The same fences on a data cache shared by two cores, below an L2: each core's
+# token rides its own flush injection, and every fence walks the data cache.
+- id: parity-printf-ss2
+  check: model_parity
+  via: blackbox
+  app: printf
+  configs: -DVX_CFG_SOCKET_SIZE=2
+  shape:
+    cores: 2
+    l2cache: true
 # Same-word reads from several coalescer channels of one warp, served by one
 # dcache bank access and returned to every channel.
 - id: parity-uniform-ld
@@ -209,6 +290,111 @@ tests:
   via: blackbox
   app: uniform_ld
   configs: -DVX_CFG_NUM_THREADS=16
+# Warp-wide local memory: broadcast reads, bank-conflict replays, sub-word and
+# same-word stores, with one LSU block and with two, where the read engine
+# works the banks' second port.
+- id: parity-lmem-access
+  check: model_parity
+  via: blackbox
+  app: lmem_access
+  configs: -DVX_CFG_NUM_THREADS=16
+- id: parity-lmem-access-iw2
+  check: model_parity
+  via: blackbox
+  app: lmem_access
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_ISSUE_WIDTH=2
+# -s leaves out the LR/SC phase, whose retry count depends on timing; the
+# lmem-access-amo* regression cases run it.
+- id: parity-lmem-access-amo-iw2
+  check: model_parity
+  via: blackbox
+  app: lmem_access
+  args: -n16 -s
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_A_ENABLE -DVX_CFG_ISSUE_WIDTH=2
+# Wide loads and stores: SimX and RTL expand and time them alike.
+- id: parity-ldst-wide
+  check: model_parity
+  via: blackbox
+  app: ldst_wide
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_LDST_WIDE_ENABLE
+- id: parity-ldst-wide-lanes
+  check: model_parity
+  via: blackbox
+  app: ldst_wide
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_LDST_WIDE_ENABLE -DVX_CFG_NUM_LSU_LANES=4
+# Half-width ALU, FPU and LSU on interleaved integer and FMA chains: every
+# instruction takes two passes, and each unit's lane gather commits the two in
+# one writeback beat. Multiplies, minimums and conversions return between the
+# chains' passes.
+- id: parity-mixfu-lanes
+  check: model_parity
+  via: blackbox
+  app: mixfu
+  args: -n32 -i128
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_NUM_ALU_LANES=8 -DVX_CFG_NUM_FPU_LANES=8 -DVX_CFG_NUM_LSU_LANES=8
+# The same with two SIMD slices per warp: each slice commits in its own beat,
+# and the last block of each row runs half masked.
+- id: parity-mixfu-simd
+  check: model_parity
+  via: blackbox
+  app: mixfu
+  args: -n40 -i64
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_SIMD_WIDTH=8 -DVX_CFG_NUM_ALU_LANES=4 -DVX_CFG_NUM_FPU_LANES=4 -DVX_CFG_NUM_LSU_LANES=4
+# FPU lane serialization: each FMA, conversion and minimum holds the FPU
+# block's input for 2, 4 and 8 cycles, and blocks the classes queued behind it.
+- id: parity-mixfu-pe-ratio
+  check: model_parity
+  via: blackbox
+  app: mixfu
+  args: -n32 -i128
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_NUM_ALU_LANES=8 -DVX_CFG_NUM_FPU_LANES=8 -DVX_CFG_NUM_LSU_LANES=8 -DVX_CFG_FMA_PE_RATIO=2 -DVX_CFG_FCVT_PE_RATIO=4 -DVX_CFG_FNCP_PE_RATIO=8
+# Divide and remainder chained through the loop: the cycles follow the order in
+# which the slot's matrix arbiter (past 8 warps) hands issue to its 16 warps.
+- id: parity-mixfu-div
+  check: model_parity
+  via: blackbox
+  app: mixfu
+  args: -n40 -i32
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_NUM_ALU_LANES=8 -DVX_CFG_NUM_FPU_LANES=8 -DVX_CFG_NUM_LSU_LANES=8 -DMIXFU_DIV
+# Division and square root at a quarter rate, as the GPU profiles set them.
+# The F64 FMA rate needs XLEN 64, which the parity gate does not run.
+- id: parity-raycast-fdiv4
+  check: model_parity
+  via: blackbox
+  app: raycast
+  args: -w16 -h12
+  configs: -DVX_CFG_FDIV_PE_RATIO=4 -DVX_CFG_FSQRT_PE_RATIO=4
+# Matrix fragment loads and stores: SimX and RTL expand and time them alike,
+# with the wide loads and stores sharing the expander.
+- id: parity-ldst-matrix
+  check: model_parity
+  via: blackbox
+  app: ldst_matrix
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_LDST_MATRIX_ENABLE -DVX_CFG_EXT_LDST_WIDE_ENABLE -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_SPARSE_ENABLE
+# Without the tensor core.
+- id: parity-ldst-matrix-notcu
+  check: model_parity
+  via: blackbox
+  app: ldst_matrix
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_LDST_MATRIX_ENABLE
+- id: parity-sgemm2-lmem
+  check: model_parity
+  via: blackbox
+  app: sgemm2
+  args: -n32 -t4
+  configs: -DVX_CFG_NUM_THREADS=16
+- id: parity-sgemm2-lmem-iw2
+  check: model_parity
+  via: blackbox
+  app: sgemm2
+  args: -n64 -t16
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_ISSUE_WIDTH=2
+- id: parity-sgemm2-lmem-wide
+  check: model_parity
+  via: blackbox
+  app: sgemm2
+  args: -n32 -t4
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_LDST_WIDE_ENABLE
 # SGEMM with local-memory tiling (kernel-managed shared memory).
 - id: parity-sgemmx
   check: model_parity

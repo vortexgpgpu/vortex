@@ -519,7 +519,7 @@ int main(int argc, char** argv) {
   cleanup();
   if (errors != 0) {
     printf("FAILED! - %d errors\n", errors);
-    return errors;
+    return errors != 0;
   }
   printf("PASSED!\n");
   return 0;

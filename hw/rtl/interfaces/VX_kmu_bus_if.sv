@@ -37,7 +37,7 @@
 // `dest` is the global core index a FRAGMENT launch must land on. Fragment work
 // is bin->core affine — that affinity is what keeps same-pixel blend order
 // correct — so a fragment message cannot be load-balanced the way a compute CTA
-// can. Each fan-out level consumes its own slice of `dest` (KMU_DEST_LSB_*);
+// can. Each fan-out level consumes its own digit of `dest` (KMU_DEST_DIV_*);
 // compute launches ignore it and go to any ready output.
 
 interface VX_kmu_bus_if import VX_gpu_pkg::*; ();

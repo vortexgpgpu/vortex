@@ -78,9 +78,8 @@ class Card:
     match_device: List[str]
     banks: int
     addr_width: int
-    merged: bool
     base: int
-    mem_tags: List[str]
+    mem_tag: str
     host_tag: str
     host_refuse: List[str]
     host_refuse_why: str
@@ -126,9 +125,8 @@ def load_card(path: str) -> Card:
         match_device=list(card.get("match_device", [])),
         banks=int(_require(mem, "banks", path, "memory")),
         addr_width=int(_require(mem, "addr_width", path, "memory")),
-        merged=bool(mem.get("merged", False)),
         base=int(mem.get("base", 0)),
-        mem_tags=list(mem.get("tags", [])),
+        mem_tag=str(mem.get("tag", "")),
         host_tag=str(host.get("tag", "")),
         host_refuse=list(host.get("refuse", [])),
         host_refuse_why=str(host.get("refuse_why", "")),
@@ -138,9 +136,6 @@ def load_card(path: str) -> Card:
     )
     if not 0 <= c.base < (1 << OFFSET_BITS):
         raise DescriptorError(f"{path}: [memory] base 0x{c.base:x} does not fit {OFFSET_BITS} bits")
-    if len(c.mem_tags) > (1 if c.merged else c.banks):
-        raise DescriptorError(f"{path}: {len(c.mem_tags)} memory tags for "
-                              f"{1 if c.merged else c.banks} memory port(s)")
     if c.host_tag and c.host_tag in c.host_refuse:
         raise DescriptorError(f"{path}: host tag '{c.host_tag}' is in its own refuse list")
     return c
@@ -212,8 +207,6 @@ def emit_mk(c: Card) -> str:
 
     lines.append(f"{ov}CONFIGS += -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS={c.banks} "
                  f"-DVX_CFG_PLATFORM_MEMORY_ADDR_WIDTH={c.addr_width}")
-    if c.merged:
-        lines.append(f"{ov}CONFIGS += -DPLATFORM_MERGED_MEMORY_INTERFACE")
     if c.base:
         lines.append(f"{ov}CONFIGS += -DPLATFORM_MEMORY_OFFSET={verilog_offset(c.base)}")
 
@@ -221,12 +214,15 @@ def emit_mk(c: Card) -> str:
         if c.host_tag:
             lines.append(f"HOST_TAG = {c.host_tag}")
             lines.append(f"VPP_FLAGS += --connectivity.sp {inst}.m_axi_host:$(HOST_TAG)")
-        for i, tag in enumerate(c.mem_tags):
-            lines.append(f"VPP_FLAGS += --connectivity.sp {inst}.m_axi_mem_{i}:{tag}")
+        # The flow binds each AFU memory master to a contiguous group of the
+        # card's memory channels.
+        if c.mem_tag:
+            lines.append(f"PLATFORM_MEMORY_TAG := {c.mem_tag}")
+            lines.append(f"PLATFORM_MEMORY_CHANNELS := {c.banks}")
     else:
-        if len(c.mem_tags) != 1:
-            raise DescriptorError(f"{c.path}: the aved flow binds exactly one memory port")
-        lines.append(f"MEM_TAG = {c.mem_tags[0]}")
+        if not c.mem_tag:
+            raise DescriptorError(f"{c.path}: the aved flow binds its memory port to a [memory] tag")
+        lines.append(f"MEM_TAG = {c.mem_tag}")
         lines.append(f"HOST_TAG = {c.host_tag}")
         if c.part:
             lines.append(f"DEVICE ?= {c.part}")
@@ -347,7 +343,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             if a.emit == "mk":
                 out = emit_mk(c)
             elif a.emit == "cfg":
-                out = emit_cfg(c, a.mem_tag or c.mem_tags[0],
+                out = emit_cfg(c, a.mem_tag or c.mem_tag,
                                "" if a.no_host else (a.host_tag or c.host_tag),
                                a.kernel_mhz or c.kernel_mhz, a.kernel, a.mem_ports)
             elif a.emit == "firesim-mk":

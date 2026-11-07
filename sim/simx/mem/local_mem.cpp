@@ -16,9 +16,8 @@
 #include <mem.h>
 #include <bitmanip.h>
 #include <vector>
+#include <deque>
 #include <cstring>
-#include <algorithm>
-#include "types.h"
 #if VX_CFG_EXT_A_ENABLED
 #include "amo_ops.h"
 #include "amo_unit.h"
@@ -26,346 +25,577 @@
 
 using namespace vortex;
 
+// A request's timing, in cycles from the one its engine takes it in:
+//   0  the engine takes the request into its input queue of two; it takes one
+//      only in a cycle that starts with at most one queued
+//   1  the lanes' words are compared and the request moves on to be issued
+//   2  its first pass is issued to the bank registers
+//   3  the banks are accessed
+//   4  each served lane takes its bank's word
+//   5  the response reaches its block's response register
+//   6  the response register goes to the LSU block
+// With several LSU blocks, the block an engine takes from is chosen the cycle
+// before (see arbitrate()), and a second, read-only engine works the banks'
+// second port, so two warps' reads go through each cycle. Stores and atomics
+// take the first engine alone: one enters it only once the read engine has
+// drained, and the read engine takes no read while a store or atomic sits in
+// the first engine, while one waited at an input the cycle before, or in a
+// cycle the first engine may be taking one, so every write keeps its order
+// against every read.
+// The model does a pass's bank accesses when it is issued. Every access keeps
+// its order relative to the others, so this is the order the banks see.
 class LocalMem::Impl {
 protected:
-	LocalMem* simobject_;
-	Config    config_;
-	RAM       ram_;
-	uint32_t 	addr_bits_;
+  // a pass issued at cycle t has its response at the response queue's head
+  // at t + 3, from where the block's response register takes it
+  static constexpr uint32_t RSP_LATENCY = 3;
+  // an engine's response slots, held from the pass until the block takes the
+  // response from its response register
+  static constexpr uint32_t RSP_QUEUE_SIZE = 8;
 #if VX_CFG_EXT_A_ENABLED
-	AmoUnit   amo_unit_;
-	// Per-bank atomic occupancy. A bank has a single port, and the value read out
-	// and the computed update are each registered, so an atomic owns its bank
-	// for four cycles -- read, capture, compute, write back -- and it accepts
-	// nothing else meanwhile.
-	static constexpr uint32_t AMO_BANK_STALL_CYCLES = 3;
-	std::vector<uint32_t> amo_busy_;
-	// The word the atomic now occupying the bank writes back, and whether it
-	// writes at all: a load-reserved never writes and a failed
-	// store-conditional must not, so neither leaves a shadow behind.
-	std::vector<uint64_t> amo_wb_addr_;
-	std::vector<bool>     amo_rdw_pending_;
+  // An atomic reads its word, registers it, then writes the new value back:
+  // the two cycles after its pass the banks take nothing else.
+  static constexpr uint32_t AMO_STALL_CYCLES = 2;
 #endif
-	// A read of a word written the previous cycle (by DMA, a store or an atomic's
-	// write-back) would see the old value, so the bank holds it off one cycle.
-	// rdw_* records this cycle's writes; rdw_cur_* holds last cycle's.
-	std::vector<uint64_t> rdw_addr_;
-	std::vector<bool>     rdw_valid_;
-	std::vector<uint64_t> rdw_cur_addr_;
-	std::vector<bool>     rdw_cur_valid_;
-	MemCrossBar::Ptr mem_xbar_;
-	mutable PerfStats perf_stats_;
-	uint32_t dma_last_grant_ = 0;
 
-	uint64_t to_local_addr(uint64_t addr) {
-		return bit_getw(addr, 0, addr_bits_-1);
-	}
+  struct Request {
+    LsuReq   req;
+    uint32_t block;
+    Request() : req(0), block(0) {}
+  };
 
-	// The word a bank is addressed by. Two byte addresses falling in one word
-	// are the same access as far as the bank is concerned.
-	uint64_t bank_word(uint64_t addr) {
-		return to_local_addr(addr) >> log2ceil(config_.line_size);
-	}
+  struct RspEntry {
+    uint64_t ready;
+    uint32_t block;
+    LsuRsp   rsp;
+  };
+
+  static constexpr uint32_t S0_SIZE = 2;
+
+  struct Engine {
+    std::deque<Request> s0;
+    bool        s1_valid = false;
+    Request     s1;
+    BitVector<> pending;
+    // the next pass's bank winners are known: a pass that leaves lanes
+    // pending is followed by a cycle that finds the next ones
+    bool        ready = false;
+    std::deque<RspEntry> rsp_queue;
+  };
+
+  LocalMem* simobject_;
+  Config    config_;
+  RAM       ram_;
+  uint32_t  addr_bits_;
+  uint32_t  lg2_word_;
+#if VX_CFG_EXT_A_ENABLED
+  AmoUnit   amo_unit_;
+#endif
+  uint32_t  stall_cycles_;
+  std::vector<Engine> engines_;
+  struct RspReg {
+    bool     valid = false;
+    uint32_t engine = 0;
+    LsuRsp   rsp;
+    RspReg() : rsp(0) {}
+  };
+  std::vector<RspReg> rsp_regs_; // per block
+  std::vector<uint32_t> arb_last_; // per engine, its round-robin arbiter's last choice
+  struct Selection {
+    bool     valid = false;
+    uint32_t block = 0;
+    bool     read = false; // the chosen block's request is known to be a plain read
+  };
+  Selection a_sel_;
+  Selection b_sel_;
+  bool      write_waiting_r_;
+  bool      dma_slot_;
+  uint32_t  dma_last_grant_;
+  mutable PerfStats perf_stats_;
+
+  uint64_t to_local_addr(uint64_t addr) const {
+    return bit_getw(addr, 0, addr_bits_ - 1);
+  }
+
+  // A bank serves one word per cycle; byte addresses within one word are the
+  // same access as far as the bank is concerned.
+  uint64_t bank_word(uint64_t addr) const {
+    return to_local_addr(addr) >> lg2_word_;
+  }
+
+  uint32_t bank_of(uint64_t addr) const {
+    return (uint32_t)(bank_word(addr) & ((1u << config_.B) - 1));
+  }
+
+  static bool is_plain_read(const LsuReq& req) {
+    return !req.is_write() && !req.is_amo();
+  }
+
+  static bool holds_write(const Engine& e) {
+    for (auto& r : e.s0) {
+      if (!is_plain_read(r.req)) {
+        return true;
+      }
+    }
+    return e.s1_valid && !is_plain_read(e.s1.req);
+  }
+
+  // The lanes one pass serves: each bank goes to its lowest pending lane, and
+  // a plain read also serves every pending lane reading the same word. A
+  // store or an atomic takes its bank alone, so lanes writing one word land
+  // in lane order and the highest lane's bytes are the ones left.
+  BitVector<> select_pass(const LsuReq& req, const BitVector<>& pending) const {
+    uint32_t num_banks = 1u << config_.B;
+    std::vector<int32_t> winner(num_banks, -1);
+    BitVector<> served(pending.size());
+    bool join = is_plain_read(req);
+    for (uint32_t i = 0; i < pending.size(); ++i) {
+      if (!pending.test(i)) {
+        continue;
+      }
+      uint32_t b = this->bank_of(req.addrs.at(i));
+      if (winner.at(b) == -1) {
+        winner.at(b) = i;
+        served.set(i);
+      } else if (join && this->bank_word(req.addrs.at(i)) == this->bank_word(req.addrs.at(winner.at(b)))) {
+        served.set(i);
+      }
+    }
+    return served;
+  }
+
+  // Do one lane's bank access and return the word the lane gets back, if any.
+  std::shared_ptr<mem_block_t> access(const LsuReq& req, uint32_t i) {
+    uint64_t la = to_local_addr(req.addrs.at(i));
+    uint64_t line_addr = la & ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
+#if VX_CFG_EXT_A_ENABLED
+    uint32_t hart_id = make_hart_id(req.cid, req.wid, req.tids.at(i));
+    if (req.is_amo()) {
+      // Shared-memory atomics read-modify-write in place and return the old
+      // word; LR/SC reservations are kept per hart.
+      const uint32_t bmask    = VX_CFG_MEM_BLOCK_SIZE - 1;
+      const uint32_t byte_off = (uint32_t)(la & bmask);
+      const uint64_t byteen   = req.byteen.at(i);
+      const uint32_t wbytes   = byteen ? (uint32_t)__builtin_popcountll(byteen) : 4u;
+      const uint8_t  width    = (wbytes >= 8) ? 3 : 2;
+      const bool     is_lr    = (req.op == MemOp::AMO_LR);
+      const bool     is_sc    = (req.op == MemOp::AMO_SC);
+      const bool     sc_fail  = is_sc && !amo_unit_.check(hart_id, la);
+      const bool     do_store = !is_lr && !sc_fail;
+
+      uint8_t obuf[8] = {0};
+      ram_.read(obuf, la, wbytes);
+      const uint64_t old_word = amo_load_word(obuf, 0, width);
+      const uint64_t rhs = req.data.at(i)
+        ? amo_load_word(req.data.at(i)->data(), byte_off, width) : 0;
+      auto rmw = amo_compute(req.op, width, old_word, rhs,
+                             req.flags.amo_unsigned, req.amo_cmp.at(i));
+
+      auto rsp_data = make_mem_block();
+      std::memset(rsp_data->data(), 0, rsp_data->size());
+      const uint64_t ret_word = is_sc ? (sc_fail ? 1ull : 0ull) : rmw.ret_word;
+      amo_store_word(rsp_data->data(), byte_off, width, ret_word);
+
+      // An SC gives up its own reservation whether it succeeds or fails; an
+      // LR claims one. A committed store breaks every other hart's
+      // reservation on the word, or a second hart's stale reservation would
+      // survive the first hart's successful SC and one update would be lost.
+      if (is_lr) {
+        amo_unit_.reserve(hart_id, la);
+      } else if (is_sc) {
+        amo_unit_.clear(hart_id, la);
+      }
+      if (do_store) {
+        uint8_t sbuf[8];
+        amo_store_word(sbuf, 0, width, rmw.new_word);
+        ram_.write(sbuf, la, wbytes);
+        amo_unit_.invalidate(la, hart_id);
+      }
+      // an atomic responds, so it counts as a read
+      ++perf_stats_.reads;
+      return rsp_data;
+    }
+#endif
+    if (req.is_write()) {
+      for (uint32_t b = 0; req.data.at(i) && b < VX_CFG_MEM_BLOCK_SIZE; ++b) {
+        if (req.byteen.at(i) & (1ull << b)) {
+          uint8_t value = (*req.data.at(i))[b];
+          ram_.write(&value, line_addr + b, 1);
+        }
+      }
+#if VX_CFG_EXT_A_ENABLED
+      // A plain store breaks a reservation on the word it writes, as an
+      // atomic's commit does, or a store between a hart's load-reserved and
+      // its store-conditional would go unnoticed.
+      amo_unit_.invalidate(la, hart_id);
+#endif
+      ++perf_stats_.writes;
+      return nullptr;
+    }
+    auto rsp_data = make_mem_block();
+    ram_.read(rsp_data->data(), line_addr, VX_CFG_MEM_BLOCK_SIZE);
+    ++perf_stats_.reads;
+    return rsp_data;
+  }
+
+  bool dma_pending() const {
+    for (auto& in : simobject_->DmaInputs) {
+      if (!in.empty()) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Serve one DMA client's row access. Clients are served round-robin,
+  // starting after the last one served.
+  void dma_fire() {
+    for (uint32_t i = 0; i < config_.dma_clients; ++i) {
+      uint32_t c = (dma_last_grant_ + 1 + i) % config_.dma_clients;
+      bool pending = false;
+      bool rsp_ready = true;
+      for (uint32_t p = 0; p < DMA_PORTS; ++p) {
+        auto& in = simobject_->DmaInputs.at(c * DMA_PORTS + p);
+        if (in.empty()) {
+          continue;
+        }
+        pending = true;
+        if (!in.peek().is_write() && simobject_->DmaOutputs.at(c * DMA_PORTS + p).full()) {
+          rsp_ready = false;
+        }
+      }
+      if (!pending) {
+        continue;
+      }
+      if (!rsp_ready) {
+        return;
+      }
+      for (uint32_t p = 0; p < DMA_PORTS; ++p) {
+        auto& in = simobject_->DmaInputs.at(c * DMA_PORTS + p);
+        if (in.empty()) {
+          continue;
+        }
+        auto& req = in.peek();
+        uint64_t line_addr = to_local_addr(req.addr) & ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
+        if (req.is_write()) {
+          for (uint32_t b = 0; req.data && b < VX_CFG_MEM_BLOCK_SIZE; ++b) {
+            if (req.byteen & (1ull << b)) {
+              uint8_t value = (*req.data)[b];
+              ram_.write(&value, line_addr + b, 1);
+            }
+          }
+#if VX_CFG_EXT_A_ENABLED
+          amo_unit_.invalidate(to_local_addr(req.addr), req.hart_id);
+#endif
+        } else {
+          MemRsp rsp{req.tag, req.hart_id, req.uuid};
+          auto rsp_data = make_mem_block();
+          ram_.read(rsp_data->data(), line_addr, VX_CFG_MEM_BLOCK_SIZE);
+          rsp.data = rsp_data;
+          // The request arrived over a registered channel; the read data
+          // returns the cycle after it was issued.
+          simobject_->DmaOutputs.at(c * DMA_PORTS + p).send(rsp, 0);
+        }
+        DT(4, simobject_->name() << "-dma" << c << " req : " << req);
+        in.pop();
+      }
+      dma_last_grant_ = c;
+      return;
+    }
+  }
+
+  // Issue an engine's next pass. Returns true when it was the request's last,
+  // which frees S1 for a new request in the same cycle. The response queue
+  // occupancy is the one from the start of the cycle.
+  bool issue_pass(Engine& e, uint32_t rsp_count) {
+    auto& req = e.s1.req;
+    bool has_rsp = !req.is_write() || req.is_amo();
+    if (has_rsp && rsp_count >= RSP_QUEUE_SIZE) {
+      return false;
+    }
+    auto served = this->select_pass(req, e.pending);
+    LsuRsp rsp(config_.num_lanes);
+    rsp.tag  = req.tag;
+    rsp.cid  = req.cid;
+    rsp.uuid = req.uuid;
+    for (uint32_t i = 0; i < config_.num_lanes; ++i) {
+      if (!served.test(i)) {
+        continue;
+      }
+      auto data = this->access(req, i);
+      if (has_rsp) {
+        rsp.mask.set(i);
+        rsp.data.at(i) = data;
+      }
+      e.pending.reset(i);
+    }
+    DT(4, simobject_->name() << " pass: served=" << served << ", " << req);
+    if (has_rsp) {
+      e.rsp_queue.push_back({SimPlatform::instance().cycles() + RSP_LATENCY, e.s1.block, std::move(rsp)});
+    }
+#if VX_CFG_EXT_A_ENABLED
+    if (req.is_amo()) {
+      stall_cycles_ = AMO_STALL_CYCLES;
+    }
+#endif
+    if (e.pending.none()) {
+      e.s1_valid = false;
+      return true;
+    }
+    ++perf_stats_.bank_stalls;
+    e.ready = false;
+    return false;
+  }
+
+  void take(Engine& e, uint32_t b) {
+    auto& in = simobject_->ReqIn.at(b);
+    Request r;
+    r.req = in.peek();
+    r.block = b;
+    DT(4, simobject_->name() << "-req" << b << ": " << r.req);
+    e.s0.push_back(std::move(r));
+    in.pop();
+  }
+
+  // The lowest eligible block after the last one chosen, round-robin.
+  int32_t pick(const std::vector<bool>& eligible, uint32_t& last) {
+    for (uint32_t i = 0; i < config_.num_blocks; ++i) {
+      uint32_t b = (last + 1 + i) % config_.num_blocks;
+      if (eligible.at(b)) {
+        last = b;
+        return b;
+      }
+    }
+    return -1;
+  }
+
+  // Each engine takes the block chosen for it the cycle before, if its
+  // request is still there, then the choices for the next cycle are made from
+  // the requests waiting at the start of this one. A block served this cycle
+  // may present a new request of either kind next cycle, so a choice of it
+  // counts as a store: the first engine takes a store only while the read
+  // engine is idle, and the read engine takes nothing in that cycle. The read
+  // engine takes a read only while no store or atomic waited at an input the
+  // cycle before or sits in the first engine.
+  void arbitrate(const std::vector<bool>& s0_ready, bool a_write, bool b_busy) {
+    uint32_t n = config_.num_blocks;
+    std::vector<bool> in_valid(n);
+    std::vector<bool> in_read(n);
+    std::vector<bool> fired(n, false);
+    for (uint32_t b = 0; b < n; ++b) {
+      auto& in = simobject_->ReqIn.at(b);
+      in_valid.at(b) = !in.empty();
+      in_read.at(b)  = in_valid.at(b) && is_plain_read(in.peek());
+    }
+    bool a_take = a_sel_.valid && s0_ready.at(0) && (a_sel_.read || !b_busy);
+    bool b_take = b_sel_.valid && s0_ready.at(1) && !a_write && !write_waiting_r_
+               && !(a_take && !a_sel_.read);
+    bool b_fired = false;
+    if (a_take && in_valid.at(a_sel_.block)) {
+      this->take(engines_.at(0), a_sel_.block);
+      fired.at(a_sel_.block) = true;
+    }
+    if (b_take && in_valid.at(b_sel_.block)) {
+      this->take(engines_.at(1), b_sel_.block);
+      fired.at(b_sel_.block) = true;
+      b_fired = true;
+    }
+
+    std::vector<bool> known_read(n);
+    std::vector<bool> a_elig(n);
+    std::vector<bool> b_elig(n);
+    bool b_busy_n = b_busy || b_fired;
+    bool write_waiting = false;
+    for (uint32_t b = 0; b < n; ++b) {
+      known_read.at(b) = in_read.at(b) && !fired.at(b);
+      a_elig.at(b) = known_read.at(b) || (in_valid.at(b) && !b_busy_n);
+      write_waiting = write_waiting || (in_valid.at(b) && !in_read.at(b) && !fired.at(b));
+    }
+    int32_t a_next = this->pick(a_elig, arb_last_.at(0));
+    for (uint32_t b = 0; b < n; ++b) {
+      b_elig.at(b) = known_read.at(b) && ((int32_t)b != a_next);
+    }
+    int32_t b_next = this->pick(b_elig, arb_last_.at(1));
+    a_sel_.valid = (a_next != -1);
+    a_sel_.block = (a_next != -1) ? a_next : 0;
+    a_sel_.read  = (a_next != -1) && known_read.at(a_next);
+    b_sel_.valid = (b_next != -1);
+    b_sel_.block = (b_next != -1) ? b_next : 0;
+    write_waiting_r_ = write_waiting;
+  }
 
 public:
-	Impl(LocalMem* simobject, const Config& config)
-		: simobject_(simobject)
-		, config_(config)
-		, ram_(config.capacity)
-		, addr_bits_(log2ceil(config.capacity))
+  Impl(LocalMem* simobject, const Config& config)
+    : simobject_(simobject)
+    , config_(config)
+    , ram_(1ull << log2ceil(config.capacity))
+    , addr_bits_(log2ceil(config.capacity))
+    , lg2_word_(log2ceil(config.word_size))
 #if VX_CFG_EXT_A_ENABLED
-		, amo_unit_(VX_CFG_AMO_RS_SIZE < 2 ? 2u : (uint32_t)VX_CFG_AMO_RS_SIZE)
-		, amo_busy_(1 << config.B, 0)
-		, amo_wb_addr_(1 << config.B, 0)
-		, amo_rdw_pending_(1 << config.B, false)
+    , amo_unit_(VX_CFG_AMO_RS_SIZE < 2 ? 2u : (uint32_t)VX_CFG_AMO_RS_SIZE)
 #endif
-		, rdw_addr_(1 << config.B, 0)
-		, rdw_valid_(1 << config.B, false)
-		, rdw_cur_addr_(1 << config.B, 0)
-		, rdw_cur_valid_(1 << config.B, false)
-	{
-		char sname[100];
-		snprintf(sname, 100, "%s-xbar", simobject->name().c_str());
-		uint32_t lg2_line_size = log2ceil(config_.line_size);
-		uint32_t num_banks = 1 << config.B;
-		// The crossbar's registered request and response outputs are taken by
-		// the switch and bank stages around it, so its delays here are only the
-		// extra tree level: an arbiter over more than 1.5x the fan-out limit is
-		// split into a buffered tree, one cycle deeper. The request side
-		// arbitrates the lanes at each bank, the response side the banks at
-		// each lane.
-		auto tree_delay = [](uint32_t requesters) -> uint32_t {
-			constexpr uint32_t kMaxFanout = 8;
-			return (requesters > kMaxFanout + kMaxFanout / 2) ? 1 : 0;
-		};
-		mem_xbar_ = MemCrossBar::Create(sname, ArbiterType::Priority, config.num_reqs, num_banks,
-		 [lg2_line_size, num_banks](const MemCrossBar::ReqType& req) {
-    	// Custom logic to calculate the output index using bank interleaving
-			return (uint32_t)((req.addr >> lg2_line_size) & (num_banks-1));
-		}, tree_delay(config.num_reqs), tree_delay(num_banks));
-		for (uint32_t i = 0; i < config.num_reqs; ++i) {
-			simobject->Inputs.at(i).bind(&mem_xbar_->ReqIn.at(i));
-			mem_xbar_->RspOut.at(i).bind(&simobject->Outputs.at(i));
-		}
-	}
+    , stall_cycles_(0)
+    , engines_((config.num_blocks > 1) ? 2 : 1)
+    , rsp_regs_(config.num_blocks)
+    , arb_last_(engines_.size(), 0)
+    , write_waiting_r_(false)
+    , dma_slot_(false)
+    , dma_last_grant_(0)
+  {
+    for (auto& e : engines_) {
+      e.pending = BitVector<>(config.num_lanes);
+    }
+  }
 
-	virtual ~Impl() {}
+  virtual ~Impl() {}
 
-	void reset() {
-		// perf_stats_ survives: the MPM counters run from device reset.
-		dma_last_grant_ = config_.dma_clients ? (config_.dma_clients - 1) : 0;
+  void reset() {
+    // perf_stats_ survives: the MPM counters run from device reset.
 #if VX_CFG_EXT_A_ENABLED
-		amo_unit_.reset();
-		std::fill(amo_busy_.begin(), amo_busy_.end(), 0);
-		std::fill(amo_rdw_pending_.begin(), amo_rdw_pending_.end(), false);
+    amo_unit_.reset();
 #endif
-		std::fill(rdw_valid_.begin(), rdw_valid_.end(), false);
-		std::fill(rdw_cur_valid_.begin(), rdw_cur_valid_.end(), false);
-	}
+    stall_cycles_ = 0;
+    for (auto& e : engines_) {
+      e.s0.clear();
+      e.s1_valid = false;
+      e.pending.reset();
+      e.rsp_queue.clear();
+    }
+    for (auto& r : rsp_regs_) {
+      r.valid = false;
+    }
+    std::fill(arb_last_.begin(), arb_last_.end(), config_.num_blocks - 1);
+    a_sel_ = Selection();
+    b_sel_ = Selection();
+    write_waiting_r_ = false;
+    dma_slot_ = false;
+    dma_last_grant_ = config_.dma_clients ? (config_.dma_clients - 1) : 0;
+  }
 
-	// Serve one DMA client's row access this cycle and return the banks it
-	// occupies. Clients are served round-robin, starting after the last one
-	// served, and DMA wins every bank it touches over the LSU: a read touches
-	// all banks, a write those its byte enables cover.
-	uint64_t dma_tick() {
-		uint32_t num_banks = (1 << config_.B);
-		uint32_t lg2_line_size = log2ceil(config_.line_size);
-		for (uint32_t i = 0; i < config_.dma_clients; ++i) {
-			uint32_t c = (dma_last_grant_ + 1 + i) % config_.dma_clients;
-			bool pending = false;
-			bool rsp_ready = true;
-			for (uint32_t p = 0; p < DMA_PORTS; ++p) {
-				auto& in = simobject_->DmaInputs.at(c * DMA_PORTS + p);
-				if (in.empty()) {
-					continue;
-				}
-				pending = true;
-				if (!in.peek().is_write() && simobject_->DmaOutputs.at(c * DMA_PORTS + p).full()) {
-					rsp_ready = false;
-				}
-			}
-			if (!pending) {
-				continue;
-			}
-			if (!rsp_ready) {
-				return 0;
-			}
-			uint64_t banks = 0;
-			for (uint32_t p = 0; p < DMA_PORTS; ++p) {
-				auto& in = simobject_->DmaInputs.at(c * DMA_PORTS + p);
-				if (in.empty()) {
-					continue;
-				}
-				auto& req = in.peek();
-				uint64_t line_addr = to_local_addr(req.addr) & ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
-				if (req.is_write()) {
-					for (uint32_t b = 0; req.data && b < VX_CFG_MEM_BLOCK_SIZE; ++b) {
-						if (req.byteen & (1ull << b)) {
-							uint8_t value = (*req.data)[b];
-							ram_.write(&value, line_addr + b, 1);
-							uint32_t bank = ((line_addr + b) >> lg2_line_size) & (num_banks - 1);
-							banks |= 1ull << bank;
-							rdw_addr_[bank]  = this->bank_word(line_addr + b);
-							rdw_valid_[bank] = true;
-						}
-					}
-#if VX_CFG_EXT_A_ENABLED
-					amo_unit_.invalidate(to_local_addr(req.addr), req.hart_id);
-#endif
-					++perf_stats_.writes;
-				} else {
-					MemRsp rsp{req.tag, req.hart_id, req.uuid};
-					auto rsp_data = make_mem_block();
-					ram_.read(rsp_data->data(), line_addr, VX_CFG_MEM_BLOCK_SIZE);
-					rsp.data = rsp_data;
-					// The request arrived over a registered channel; the read
-					// data returns the cycle after it was issued.
-					simobject_->DmaOutputs.at(c * DMA_PORTS + p).send(rsp, 0);
-					banks = (num_banks >= 64) ? ~uint64_t(0) : ((uint64_t(1) << num_banks) - 1);
-					++perf_stats_.reads;
-				}
-				DT(4, simobject_->name() << "-dma" << c << " req : " << req);
-				in.pop();
-			}
-			dma_last_grant_ = c;
-			return banks;
-		}
-		return 0;
-	}
+  void tick() {
+    uint32_t num_engines = engines_.size();
+    uint64_t now = SimPlatform::instance().cycles();
 
-	void tick() {
-		rdw_cur_addr_.swap(rdw_addr_);
-		rdw_cur_valid_.swap(rdw_valid_);
-		std::fill(rdw_valid_.begin(), rdw_valid_.end(), false);
+    // Responses. Each block's response register goes to the block; a free
+    // one then takes the first engine's queue head ahead of the read engine's.
+    // An engine's slots count the responses in its queue and in the registers.
+    std::vector<uint32_t> rsp_count(num_engines);
+    for (uint32_t k = 0; k < num_engines; ++k) {
+      rsp_count.at(k) = engines_.at(k).rsp_queue.size();
+    }
+    for (auto& r : rsp_regs_) {
+      rsp_count.at(r.engine) += r.valid;
+    }
+    for (uint32_t b = 0; b < config_.num_blocks; ++b) {
+      auto& r = rsp_regs_.at(b);
+      if (r.valid && simobject_->RspOut.at(b).try_send(r.rsp, 0)) {
+        DT(4, simobject_->name() << "-rsp" << b << ": " << r.rsp);
+        r.valid = false;
+      }
+    }
+    for (uint32_t k = 0; k < num_engines; ++k) {
+      auto& e = engines_.at(k);
+      if (e.rsp_queue.empty() || e.rsp_queue.front().ready > now) {
+        continue;
+      }
+      auto& r = rsp_regs_.at(e.rsp_queue.front().block);
+      if (r.valid) {
+        continue;
+      }
+      r.valid  = true;
+      r.engine = k;
+      r.rsp    = std::move(e.rsp_queue.front().rsp);
+      e.rsp_queue.pop_front();
+    }
 
-		uint64_t dma_banks = this->dma_tick();
+    // the arbiter's view of the engines, as registered at the cycle start
+    bool a_write = holds_write(engines_.at(0));
+    bool b_busy  = (num_engines > 1) && (!engines_.at(1).s0.empty() || engines_.at(1).s1_valid);
+    std::vector<bool> s0_ready(num_engines);
+    for (uint32_t k = 0; k < num_engines; ++k) {
+      s0_ready.at(k) = (engines_.at(k).s0.size() < S0_SIZE);
+    }
 
-		// process bank requets from xbar
-		uint32_t num_banks = (1 << config_.B);
-		for (uint32_t i = 0; i < num_banks; ++i) {
-#if VX_CFG_EXT_A_ENABLED
-			// Cycles an in-flight atomic owns; the bank serves nothing else.
-			if (amo_busy_[i] != 0) {
-				if (0 == --amo_busy_[i] && amo_rdw_pending_[i]) {
-					// write-back just issued
-					rdw_addr_[i]  = amo_wb_addr_[i];
-					rdw_valid_[i] = true;
-				}
-				continue;
-			}
-#endif
-			if ((dma_banks >> i) & 1) {
-				continue;
-			}
-			auto& xbar_req_out = mem_xbar_->ReqOut.at(i);
-			if (xbar_req_out.empty())
-				continue;
+    // S1: a DMA access, or the engines' passes. A DMA request seen in one
+    // cycle takes the banks the next; no pass is issued while one is seen.
+    // An engine whose last pass left lanes pending spends this cycle finding
+    // the next winners.
+    std::vector<bool> s1_ready(num_engines);
+    std::vector<bool> can_pass(num_engines);
+    for (uint32_t k = 0; k < num_engines; ++k) {
+      auto& e = engines_.at(k);
+      s1_ready.at(k) = !e.s1_valid;
+      can_pass.at(k) = e.s1_valid && e.ready;
+      if (e.s1_valid && !e.ready) {
+        e.ready = true;
+      }
+    }
+    if (stall_cycles_ != 0) {
+      --stall_cycles_;
+      dma_slot_ = false;
+    } else {
+      bool dma_valid = this->dma_pending();
+      if (dma_slot_) {
+        this->dma_fire();
+      }
+      dma_slot_ = dma_valid;
+      if (!dma_valid) {
+        for (uint32_t k = 0; k < num_engines; ++k) {
+          if (can_pass.at(k)) {
+            s1_ready.at(k) = this->issue_pass(engines_.at(k), rsp_count.at(k));
+          }
+        }
+      }
+    }
 
-			auto& bank_req = xbar_req_out.peek();
+    // S0 -> S1, with the single-pass check
+    for (uint32_t k = 0; k < num_engines; ++k) {
+      auto& e = engines_.at(k);
+      if (s1_ready.at(k) && !e.s0.empty()) {
+        e.s1 = std::move(e.s0.front());
+        e.s0.pop_front();
+        e.s1_valid = true;
+        e.pending = e.s1.req.mask;
+        e.ready = true;
+      }
+    }
 
-			// A read of the word written last cycle waits a cycle. An atomic
-			// reads the bank for its old value, so it counts as a reader here
-			// even though the request carries a write flag; that is what makes
-			// contending atomics on one word cost four cycles.
-#if VX_CFG_EXT_A_ENABLED
-			const bool reads_bank = !bank_req.is_write() || memop_is_atomic(bank_req.op);
-#else
-			const bool reads_bank = !bank_req.is_write();
-#endif
-			if (rdw_cur_valid_[i]
-			 && reads_bank
-			 && this->bank_word(bank_req.addr) == rdw_cur_addr_[i]) {
-				continue;
-			}
+    if (num_engines == 1) {
+      // one block: its request goes straight to the engine
+      auto& in = simobject_->ReqIn.at(0);
+      if (s0_ready.at(0) && !in.empty()) {
+        this->take(engines_.at(0), 0);
+      }
+    } else {
+      this->arbitrate(s0_ready, a_write, b_busy);
+    }
 
-#if VX_CFG_EXT_A_ENABLED
-			// Shared-memory atomics: read-modify-write in place and ALWAYS
-			// return the old word. An AMO has a destination register, so the
-			// LSU reserved a response slot; a missing response hangs the warp
-			// (this was the prior behaviour — LMEM had no AMO path). LR/SC
-			// reservations are tracked per hart for correct contended
-			// compare-swap, mirroring the dcache AMO path used for global/SSBO.
-			if (memop_is_atomic(bank_req.op)) {
-				const uint32_t bmask   = VX_CFG_MEM_BLOCK_SIZE - 1;
-				const uint64_t la      = to_local_addr(bank_req.addr);
-				const uint32_t byte_off = (uint32_t)(la & bmask);
-				const uint32_t wbytes  = bank_req.byteen
-					? (uint32_t)__builtin_popcountll(bank_req.byteen) : 4u;
-				const uint8_t  width   = (wbytes >= 8) ? 3 : 2;
-				const MemOp    op      = bank_req.op;
-				const bool     is_lr   = (op == MemOp::AMO_LR);
-				const bool     is_sc   = (op == MemOp::AMO_SC);
-				const bool     sc_fail = is_sc && !amo_unit_.check(bank_req.hart_id, la);
-				const bool     do_store = !is_lr && !sc_fail;
+    bool idle = (stall_cycles_ == 0) && !dma_slot_ && !a_sel_.valid && !b_sel_.valid;
+    for (auto& e : engines_) {
+      idle = idle && e.s0.empty() && !e.s1_valid && e.rsp_queue.empty();
+    }
+    for (auto& r : rsp_regs_) {
+      idle = idle && !r.valid;
+    }
+    if (idle && !this->dma_pending()) {
+      simobject_->tick_sleep();
+    }
+  }
 
-				uint8_t obuf[8] = {0};
-				ram_.read(obuf, la, wbytes);
-				const uint64_t old_word = amo_load_word(obuf, 0, width);
-				const uint64_t rhs = bank_req.data
-					? amo_load_word(bank_req.data->data(), byte_off, width) : 0;
-				auto rmw = amo_compute(op, width, old_word, rhs,
-				                       bank_req.flags.amo_unsigned,
-				                       bank_req.amo_cmp);
-
-				// Build the response before mutating any state so a full RspIn
-				// can stall-retry cleanly.
-				MemRsp bank_rsp{bank_req.tag, bank_req.hart_id, bank_req.uuid};
-				auto rsp_data = make_mem_block();
-				std::memset(rsp_data->data(), 0, rsp_data->size());
-				const uint64_t ret_word = is_sc ? (sc_fail ? 1ull : 0ull) : rmw.ret_word;
-				amo_store_word(rsp_data->data(), byte_off, width, ret_word);
-				bank_rsp.data = rsp_data;
-				if (!mem_xbar_->RspIn.at(i).try_send(bank_rsp))
-					continue; // stall; no state mutated yet
-
-				// An SC gives up its own reservation whether it succeeds or
-				// fails; an LR claims one. Everything else is a plain RMW,
-				// whose commit breaks the other harts' reservations below.
-				if (is_lr)      amo_unit_.reserve(bank_req.hart_id, la);
-				else if (is_sc) amo_unit_.clear(bank_req.hart_id, la);
-				if (do_store) {
-					uint8_t sbuf[8];
-					amo_store_word(sbuf, 0, width, rmw.new_word);
-					ram_.write(sbuf, la, wbytes);
-					// Any committed store breaks every other hart's reservation
-					// on the word. Without this a second hart's stale
-					// reservation survives the first hart's successful SC, so
-					// both report success and one update is lost.
-					amo_unit_.invalidate(la, bank_req.hart_id);
-				}
-				perf_stats_.reads  += !do_store;
-				perf_stats_.writes += do_store;
-				DT(4, simobject_->name() << "-bank" << i << " amo : " << bank_req);
-				amo_wb_addr_[i]     = this->bank_word(bank_req.addr);
-				amo_rdw_pending_[i] = do_store;
-				xbar_req_out.pop();
-				amo_busy_[i] = AMO_BANK_STALL_CYCLES;   // capture, compute, then write back
-				continue;
-			}
-#endif
-
-			// Apply byte-enabled writes from TLM payload to local RAM.
-			if (bank_req.is_write() && bank_req.data) {
-				uint64_t line_addr = to_local_addr(bank_req.addr) & ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
-				for (uint32_t b = 0; b < VX_CFG_MEM_BLOCK_SIZE; ++b) {
-					if (bank_req.byteen & (1ull << b)) {
-						uint8_t value = (*bank_req.data)[b];
-						ram_.write(&value, line_addr + b, 1);
-					}
-				}
-				rdw_addr_[i]  = this->bank_word(bank_req.addr);
-				rdw_valid_[i] = true;
-#if VX_CFG_EXT_A_ENABLED
-				// A plain store breaks a reservation on the word it writes, the
-				// same as an atomic's commit does; otherwise a store between a
-				// hart's load-reserved and its store-conditional would go
-				// unnoticed and the conditional would wrongly succeed.
-				amo_unit_.invalidate(to_local_addr(bank_req.addr), bank_req.hart_id);
-#endif
-			}
-
-			// Loads always respond. Stores respond when configured globally OR
-			// the request opts in via MEM_FLAG_STRSP.
-			if (!bank_req.is_write() || config_.write_reponse || bank_req.flags.strsp) {
-				// send xbar response — for reads, capture the line payload.
-				MemRsp bank_rsp{bank_req.tag, bank_req.hart_id, bank_req.uuid};
-				if (!bank_req.is_write()) {
-					auto rsp_data = make_mem_block();
-					uint64_t line_addr = to_local_addr(bank_req.addr) & ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
-					ram_.read(rsp_data->data(), line_addr, VX_CFG_MEM_BLOCK_SIZE);
-					bank_rsp.data = rsp_data;
-				}
-				if (!mem_xbar_->RspIn.at(i).try_send(bank_rsp))
-					continue; // stall
-			}
-
-			DT(4, simobject_->name() << "-bank" << i << " req : " << bank_req);
-
-			// update perf counters
-			perf_stats_.reads += !bank_req.is_write();
-			perf_stats_.writes += bank_req.is_write();
-
-			// remove input
-			xbar_req_out.pop();
-		}
-	}
-
-	const PerfStats& perf_stats() const {
-		perf_stats_.bank_stalls = mem_xbar_->collisions();
-		return perf_stats_;
-	}
-
+  const PerfStats& perf_stats() const {
+    return perf_stats_;
+  }
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
 LocalMem::LocalMem(const SimContext& ctx, const char* name, const Config& config)
-	: SimObject<LocalMem>(ctx, name)
-	, Inputs(config.num_reqs, this)
-	, Outputs(config.num_reqs, this)
-	, DmaInputs(config.dma_clients * DMA_PORTS, this)
-	, DmaOutputs(config.dma_clients * DMA_PORTS, this)
-	, impl_(new Impl(this, config))
+  : SimObject<LocalMem>(ctx, name)
+  , ReqIn(config.num_blocks, this)
+  , RspOut(config.num_blocks, this)
+  , DmaInputs(config.dma_clients * DMA_PORTS, this)
+  , DmaOutputs(config.dma_clients * DMA_PORTS, this)
+  , impl_(new Impl(this, config))
 {}
 
 LocalMem::~LocalMem() {

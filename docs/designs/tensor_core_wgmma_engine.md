@@ -67,6 +67,11 @@ Flags of an MMA instruction:
 | `rs2[2:1]` | `cd_nregs` — accumulator registers: 0 = 8, 1 = 16, 2 = 32 |
 | `rs2[3]` | `a_from_smem` — A comes from shared memory; B always does for WGMMA |
 
+`fmt_d` is fp32 for float and MX inputs and int32 for integer inputs; the
+tensor core has no other output format. The kernel API rejects any other output
+type at compile time (`static_assert` in `vx_tensor.h`). An instruction that
+encodes one anyway trips an assertion in the RTL (`VX_tcu_core`) and in SimX.
+
 | `op_type` | value | operation |
 |---|---|---|
 | `INST_TCU_WMMA` | 0 | warp MMA |
@@ -91,6 +96,16 @@ micro-op arguments do not carry a sparse bit.
 
 An MX format has bit 3 of the id set, which is how decode recognizes that
 the instruction depends on scale metadata.
+
+Scales follow the OCP MX and NVFP4 definitions:
+
+- **mxfp8, mxbf8, mxfp4** take an E8M0 scale per 32 elements, worth
+  2^(e-127). A product of two scales spans 2^-254 to 2^254. 0xFF is NaN.
+- **nvfp4** takes a UE4M3 scale per 16 elements: unsigned, so bit 7 is
+  padding, and 0x7F is NaN (PTX `.ue4m3`). A zero exponent field is read as a
+  normal; subnormal scales are an open question.
+- **Out-of-range products.** A NaN scale makes its block NaN. A product scaled
+  below the datapath's exponent range only reaches the sticky bit.
 
 ### 2.2 Metadata dependencies
 
@@ -239,6 +254,18 @@ d[i,j] = c[i,j] + Σ_k a[i,k] · b[k,j]
 over the FEDP width — `TC_K` words, or `2 × TC_K` for a dense WGMMA with
 `VX_CFG_TCU_FEDP2K`.
 
+`VX_CFG_TCU_PE_RATIO` (`R`, default 1) divides the grid, as the FPU's
+`*_PE_RATIO` knobs divide its lanes: it holds `TC_M × TC_N / R` elements, and
+a micro-op occupies it for `R` cycles, one output slice per cycle. Slices
+split `TC_N` first and `TC_M` only when `R > TC_N`, so up to `R = TC_N` an
+element keeps its A row and its sparse-gather row and only the B column and
+C element move. The micro-op holds the execute interface while its leading
+slices enter, under the same admission conditions as a fire, and fires with
+the last: its result completes `FEDP latency + 1` cycles after the fire, as
+an unsliced one does, and the earlier slices wait in one register each
+(`(R − 1) × TC_M × TC_N / R` words). A block's peak is `1 / R` micro-ops per
+cycle. `R = 1` is the unsliced grid.
+
 ### 5.4 Flow control without an enable
 
 The grid **free-runs**: it has no back-pressure enable. A clock-enable
@@ -273,11 +300,12 @@ WGMMA perf counters.
 
 | bits | field |
 |---|---|
-| `[15:0]` | offset of the slab in shared memory |
-| `[31:16]` | row stride in bytes; **0 selects the block-major layout** |
+| `[17:0]` | byte offset of the slab in shared memory |
+| `[31:18]` | row stride in 4-byte words; **0 selects the block-major layout** |
 
-`x10` carries the A descriptor and `x11` the B descriptor. The 16-bit offset
-is why a shared memory visible to WGMMA cannot exceed 64 KB.
+`x10` carries the A descriptor and `x11` the B descriptor. The 18-bit offset
+is why a shared memory visible to WGMMA cannot exceed 256 KB. A constant row
+stride folds into the packing, so building a descriptor costs one OR.
 
 | layout | slab organization | fetch |
 |---|---|---|
@@ -364,7 +392,10 @@ simulation assertion catches a forgotten mask.
 [`VX_tcu_agu.sv`](../../hw/rtl/tcu/VX_tcu_agu.sv) issues **one warp-wide
 fetch per `TCU_LD`**: lane `T` loads word `T` of the metadata tile at the
 base address in `rs1`. The kernel pre-advances the base per slot, so a
-multi-slot load is several instructions.
+multi-slot load is several instructions. An LSU narrower than the warp
+takes the fetch in `NUM_THREADS / NUM_LSU_LANES` passes of consecutive
+words, as the LSU splits a warp into packets; each request carries its pass
+in its tag, so the responses can return in any order.
 
 The generator is **client 1 of the core's LSU scheduler** on block 0. It
 owns no memory port; it reuses the LSU's staging, outstanding pool and cache
@@ -398,9 +429,10 @@ MMA (§2.2).
 
 ## 8. FEDP backends
 
-`VX_CFG_TCU_TYPE` selects one implementation of the dot product. All compute
-the same function; each asserts the configured latency against its own
-stage structure.
+`VX_CFG_TCU_TYPE` selects one implementation of the dot product. Each asserts
+the configured latency against its own stage structure. They agree up to
+rounding, not bit for bit: `TFR` rounds once over a fixed window, the others
+round each multiply and add.
 
 | backend | implementation | latency |
 |---|---|---|
@@ -412,8 +444,13 @@ stage structure.
 
 `TFR` is the universal default. It is the only backend that does not pay a
 full floating-point rounding per tree level: it aligns every product to one
-exponent and adds them as integers, rounding once. On an FPGA its
-multipliers map onto DSP blocks through `VX_CFG_TCU_USE_DSP`.
+exponent and adds them as integers, rounding once. The alignment keeps a
+25-bit window below the largest product's exponent field, with a sticky bit
+for what falls out of it. A row of subnormals, or products that nearly cancel,
+can therefore round a few ULP away from the exact sum.
+[`sw/common/fedp.h`](../../sw/common/fedp.h) (`TfrFedp`) models it bit for
+bit. On an FPGA its multipliers map onto DSP blocks through
+`VX_CFG_TCU_USE_DSP`.
 
 ---
 
@@ -431,6 +468,18 @@ multipliers map onto DSP blocks through `VX_CFG_TCU_USE_DSP`.
 
 Operand loads go through simulation channels; the tensor path never reads
 memory directly.
+
+Timing: a compute micro-op leaves the input `VX_CFG_TCU_PE_RATIO` admissible
+cycles after it arrives (output space free, tile buffers ready, no result
+waiting on a stalled commit), and its result is due `FEDP latency + 1`
+cycles after it leaves, as in `VX_tcu_core`.
+
+Numerics follow the configured backend for fp32 results from float and
+block-scaled (MX, NVFP4) sources. Under `TFR`, each dot product is the
+`TfrFedp` model, the same one the RTL is checked against bit for bit in
+`hw-tcu-unit`. Otherwise it is a discrete fp32 multiply-add: in the DPI
+backend's order for unscaled formats, and per element for block-scaled ones.
+C and D are fp32 (int32 for integer inputs) in both models; see §2.
 
 Perf: MPM class `TCU` — `TCU_TBUF_STALLS` (0xB03, cycles a WGMMA micro-op
 waited on tile-buffer data), `TCU_TBUF_CACHE_HITS` (0xB04, B rows reused),
@@ -452,6 +501,7 @@ waited on tile-buffer data), `TCU_TBUF_CACHE_HITS` (0xB04, B rows reused),
 | `VX_CFG_TCU_LATENCY` | from the backend | FEDP pipeline depth |
 | `VX_CFG_TCU_WGMMA_ENABLE` | false | WGMMA, the tile buffers, the lockstep gate |
 | `VX_CFG_TCU_FEDP2K` | false | dense WGMMA dot product of `2 × TC_K`, one K step |
+| `VX_CFG_TCU_PE_RATIO` | 1 | cycles per micro-op; the grid holds `TC_M × TC_N / R` FEDPs (§5.3). A power of two dividing `NUM_THREADS` |
 | `VX_CFG_TCU_SPARSE_ENABLE` | false | 2:4 sparsity |
 | `VX_CFG_TCU_DSM_ENABLE` | false | dynamic sparsity mask |
 | `VX_CFG_TCU_MX_ENABLE` | false | block-scaled formats |

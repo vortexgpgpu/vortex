@@ -14,7 +14,8 @@
 `include "VX_define.vh"
 
 // The memory path of one LSU block: its memory scheduler, the global/local
-// switch, the local-memory adapter, the coalescer and the D-cache adapter.
+// switch, the coalescer and the D-cache adapter. Local memory takes the
+// switch's local requests whole.
 // The D-cache port carries one extra tag LSB: requests leave with it clear, and
 // a response with it set is the core's flush token, not this block's.
 module VX_lsu_mem_path import VX_gpu_pkg::*; #(
@@ -41,7 +42,7 @@ module VX_lsu_mem_path import VX_gpu_pkg::*; #(
     output wire             busy,
 
 `ifdef VX_CFG_LMEM_ENABLE
-    VX_mem_bus_if.master    lmem_bus_if [`VX_CFG_NUM_LSU_LANES],
+    VX_lsu_mem_if.master    lmem_if,
 `endif
     VX_mem_bus_if.master    dcache_bus_if [DCACHE_CHANNELS]
 );
@@ -95,10 +96,12 @@ module VX_lsu_mem_path import VX_gpu_pkg::*; #(
     );
 
 `ifdef PERF_ENABLE
+    // The block's own client only: the TCU metadata loads are the TCU's, not
+    // the program's loads.
     for (genvar j = 0; j < `VX_CFG_NUM_LSU_LANES; ++j) begin : g_perf
-        assign perf_rd_req_fire[j] = lsu_mem_if.req_valid && lsu_mem_if.req_data.mask[j] && lsu_mem_if.req_ready && ~lsu_mem_if.req_data.rw;
-        assign perf_wr_req_fire[j] = lsu_mem_if.req_valid && lsu_mem_if.req_data.mask[j] && lsu_mem_if.req_ready && lsu_mem_if.req_data.rw;
-        assign perf_rsp_fire[j]    = lsu_mem_if.rsp_valid && lsu_mem_if.rsp_data.mask[j] && lsu_mem_if.rsp_ready;
+        assign perf_rd_req_fire[j] = client_if.req_valid && client_if.req_data.mask[j] && client_if.req_ready && ~client_if.req_data.rw;
+        assign perf_wr_req_fire[j] = client_if.req_valid && client_if.req_data.mask[j] && client_if.req_ready && client_if.req_data.rw;
+        assign perf_rsp_fire[j]    = client_if.rsp_valid && client_if.rsp_data.mask[j] && client_if.rsp_ready;
     end
 `endif
 
@@ -118,12 +121,6 @@ module VX_lsu_mem_path import VX_gpu_pkg::*; #(
 
 `ifdef VX_CFG_LMEM_ENABLE
 
-    VX_lsu_mem_if #(
-        .NUM_LANES (`VX_CFG_NUM_LSU_LANES),
-        .DATA_SIZE (LSU_WORD_SIZE),
-        .TAG_WIDTH (LSU_TAG_WIDTH)
-    ) lsu_lmem_if();
-
     VX_lmem_switch #(
         .GLOBAL_OUT_BUF(1),
         .LOCAL_OUT_BUF(1),
@@ -134,24 +131,7 @@ module VX_lsu_mem_path import VX_gpu_pkg::*; #(
         .reset        (reset),
         .lsu_in_if    (lsu_mem_if),
         .global_out_if(lsu_dcache_if),
-        .local_out_if (lsu_lmem_if)
-    );
-
-    // A dedicated local-memory adapter per block: sharing one adapter's
-    // unpack/pack buffers between blocks would deadlock.
-    VX_lsu_adapter #(
-        .NUM_LANES    (`VX_CFG_NUM_LSU_LANES),
-        .DATA_SIZE    (LSU_WORD_SIZE),
-        .TAG_WIDTH    (LSU_TAG_WIDTH),
-        .TAG_SEL_BITS (LSU_TAG_WIDTH - UUID_WIDTH),
-        .ARBITER      ("P"),
-        .REQ_OUT_BUF  (3),
-        .RSP_OUT_BUF  (0)
-    ) lmem_adapter (
-        .clk        (clk),
-        .reset      (reset),
-        .lsu_mem_if (lsu_lmem_if),
-        .mem_bus_if (lmem_bus_if)
+        .local_out_if (lmem_if)
     );
 
 `else

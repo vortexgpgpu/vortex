@@ -240,6 +240,18 @@ on the same DRAM bank model (`AXI_BUS=1 AXI_MEM_MODEL=bank`).
 **Never widen a tolerance to absorb a divergence.** Model the behavior, or
 mark the case `known_issue` while it is investigated.
 
+#### `release_parity`
+
+A debug build must not change timing. A debug build widens the RTL UUID to 44
+bits and enables assertions and traces. A blackbox case run with `--debug` can
+set `release_parity: true`. The runner then reruns it built release, at
+xlen 32, and requires identical instructions and cycles; it reads the debug
+run's counts from its `--log` file. This is a case field, not a check, so the
+case stays in its category cell and costs one extra run there, with no new
+cell. `debug:sgemm_tcu-2` carries it. That case is shaped to keep the data
+cache under pressure, with two channels whose same-word reads merge; a
+debug-only tag width reaching the read merge would show there.
+
 ### 3.4 `perf_gate`
 
 rtlsim cycle counts are deterministic and host-independent, so the threshold
@@ -264,18 +276,20 @@ so the parity and perf views of one workload are two cases.
 
 `perf_gate` catches a change that costs cycles. The synthesis gates catch one
 that costs **timing closure or area**: they synthesize a catalog of designs
-and assert the results against golden baselines. `logic_gate` catches one
-that makes a unit **deeper**, in seconds and without synthesis.
+and assert the results against the target clock and area budget each build
+declares, recording every run's metrics in golden baselines. `logic_gate`
+catches one that makes a unit **deeper** or the design **larger**, in seconds
+and without synthesis.
 
 | | `fpga_gate` | `asic_gate` | `logic_gate` |
 |---|---|---|---|
-| flow | Vivado synthesis, place and route | CIRCT → Yosys → ABC → OpenSTA, on ASAP7 | CIRCT → `foldsim-estimate-timing` (logic levels as Vivado counts them on `DEVICE`'s family) |
-| design tree | `hw/syn/xilinx/dut` | `hw/syn/yosys/dut` | `hw/syn/xilinx/dut`, target `screen` |
-| gated against the baseline | `fmax_mhz`, `lut` | `cell_area_um2` (Fmax only against the target clock) | `max_levels`, and the deepest end point of every RTL unit |
+| flow | Vivado synthesis, place and route | CIRCT → Yosys → ABC → OpenSTA, on ASAP7 | CIRCT → `foldsim-estimate-timing` (logic levels as Vivado counts them on `DEVICE`'s family) and `foldsim-estimate-area` (its cells, memories and DSPs) |
+| design tree | `hw/syn/xilinx/dut` | `hw/syn/yosys/dut` | `hw/syn/xilinx/dut`, target `beacon` |
+| gated | `fmax_mhz` against the target clock, `lut` against `lut_budget` | `fmax_mhz` against the target clock, `cell_area_um2` against `area_budget_um2` | `max_levels` against the baseline, the deepest end point of every RTL unit, and `lut`, `ff`, `lutram`, `bram`, `uram`, `dsp` against the baseline |
 | also recorded | `wns_ns`, `lutram`, `ff`, `bram`, `uram`, `dsp`, critical paths, high-fanout nets | `wns_ns`, `tns_ns`, `seq_area_um2`, `sram_area_um2`, `cell_count`, `power_mw` | end point bits at ≥ 12 and ≥ 8 levels, the deepest paths |
 | comparable when | same device, optimization level, xlen | same PDK, VT, corner, xlen | same CIRCT, foldsim, xlen |
-| runner | self-hosted, licensed Vivado | hosted, one job per design | hosted, one job for the catalog |
-| default tolerance | 5 % | 5 % | none: the screen is deterministic |
+| runner | self-hosted, licensed Vivado | hosted, one job per design | hosted, one job for the catalog; the opt-in `gpu` group self-hosted |
+| default tolerance | Fmax 2 %, LUT 5 % | Fmax 2 %, cell area 5 % | depth none: Beacon is deterministic; area 5 % |
 
 None is a pytest cell. A cell is a build tree plus a driver; a gate build is
 neither, and the synthesis gates are hours long. They are standalone scripts
@@ -299,17 +313,26 @@ entry points that pin the tool.
 
 | file | written by | holds |
 |---|---|---|
-| `ci/testcases/{fpga,asic,timing}_gate.yaml` | a person | per build: a design, a target clock, `CONFIGS`, a group, optional `thresholds` and `known_issue` |
-| `ci/baselines/synthesis/{xilinx,yosys,screen}/<group>.json` | the gate | measured metrics, the config hash, the tool versions and environment |
+| `ci/testcases/{fpga,asic,logic}_gate.yaml` | a person | per build: a design, a target clock, an area budget (synthesis gates), `CONFIGS`, a group, optional `thresholds`, `known_issue`, `xlen`, `profile` and `opt_in` |
+| `ci/baselines/synthesis/{xilinx,yosys,beacon}/<group>.json` | the gate | measured metrics, the config hash, the tool versions and environment |
 
-Groups are `core`, `tensor`, `graphics`, `dxa` and `vm`. `asic_gate` uses the
+Groups are `core`, `tensor`, `graphics`, `dxa` and `vm`, plus `logic_gate`'s
+opt-in `gpu`. `asic_gate` uses the
 same group names and gates a subset of the builds (§4.5), so where the two
 gates share a design, a divergence between the tools on the same module is a
-finding, not noise. `logic_gate` screens exactly `fpga_gate`'s builds, so a
-unit it flags can be read against the Fmax gate's critical paths.
+finding, not noise. `logic_gate` measures exactly `fpga_gate`'s builds, so a
+unit it flags can be read against the Fmax gate's critical paths; its `gpu`
+group adds builds no synthesis gate can afford.
+
+A build may pin its own `xlen`, and runs in that width's build tree
+(`build<xlen>_<gate>`); `profile` folds a hardware profile
+(`profiles/<name>.json`) under its `CONFIGS`, which win over it. Both are in
+the config hash. An `opt_in` build runs only when selected by id or group.
 
 The config hash ties the two files together: edit the spec, and the gate
-refuses to compare against numbers recorded for the old one. Its
+refuses to compare against numbers recorded for the old one. It matters only
+for a metric gated against its baseline (`--gate`); the default assertions
+read the target clock and the budget, which are not part of the hash. Its
 tool-specific half is the device and optimization level for Vivado and the
 PDK, VT and corner for Yosys.
 
@@ -321,9 +344,9 @@ developer runs cannot diverge.
 
 | assertion | reason |
 |---|---|
-| each gated metric within tolerance of its baseline | regression detection |
-| an improvement beyond tolerance also fails | the gain must be recorded |
-| Fmax within tolerance of the **target clock**, independent of the baseline | a baseline recorded below target must not let a build pass by matching it |
+| Fmax no more than its tolerance **below the target clock** | the design meets the clock it is built for; a faster result never fails, since placement noise alone moves Fmax by more than 2 % |
+| area no more than its tolerance **over the build's budget** | the budget is fixed in the catalog, so re-recording a baseline cannot creep area upward; raising it is a reviewed edit |
+| any other metric gated with `--gate`: within tolerance of its baseline, both ways | an improvement beyond tolerance must be recorded |
 
 Thresholds resolve most-specific first: a build's own `thresholds`, then a
 global per-metric threshold, then the global default.
@@ -342,24 +365,24 @@ so the flow reports the signed worst slack instead.
 | verdict | meaning | fails the run |
 |---|---|---|
 | `PASS` | within tolerance | no |
-| `REGRESSION` | a gated metric got worse | yes |
-| `IMPROVED` | a gated metric got better; record it | yes |
+| `FAIL` | Fmax below target, area over budget, or a baseline-gated metric worse | yes |
+| `IMPROVED` | a baseline-gated metric got better; record it | yes |
 | `STALE` | the spec or the tool changed since the baseline | yes |
-| `FAIL` | the build produced no metrics | yes |
+| `BUILD-FAIL` | the build produced no metrics | yes |
 | `KNOWN-ISSUE` | a tracked expected failure | no |
 | `XPASS` | a known issue stopped reproducing; clear the flag | no |
 | `RECORDED` | a baseline was written | no |
 
 #### What `logic_gate` asserts
 
-The screen ([logic_screen.md](logic_screen.md)) counts logic levels, not
+Beacon ([beacon.md](beacon.md)) counts logic levels, not
 slack: it does not see wires, so it gates depth, which it predicts (Spearman
 0.50–0.93 against Vivado per register on the V80 gates), and leaves Fmax to
 `fpga_gate`. It counts them for the family of
 the DUT flow's `DEVICE` (the U55C by default), which
 `gen_platform.py --emit=family` reads from `hw/syn/xilinx/platforms`; the
-device is part of the baseline fingerprint, as it is for `fpga_gate`. The
-screen has profiles for the V80 and the U55C only, and fails on any other
+device is part of the baseline fingerprint, as it is for `fpga_gate`.
+Beacon has profiles for the V80 and the U55C only, and fails on any other
 `DEVICE`. A
 **unit** is an end point's instance path with generate indices folded
 (`g_banks_3_bank` → `g_banks_*_bank`).
@@ -369,12 +392,56 @@ screen has profiles for the V80 and the U55C only, and fails on any other
 | no unit deeper than its baseline | the change that adds a level is named, by unit |
 | no new unit at the fix threshold (12 levels at 300 MHz) | a new deep cone is a regression even with no baseline to compare |
 | a shallower unit, or one that drops below the watch threshold (8), reads `IMPROVED` | the gain must be recorded |
+| no output of a build's `interfaces` modules reached combinationally from outside the instance in more bits than its baseline | modules register their outgoing interfaces: a path that runs through a core, socket or cluster boundary is what fails routing across SLRs, and Beacon names it by port |
+| no resource of the design (`lut`, `ff`, `lutram`, `bram`, `uram`, `dsp`) more than 5 % above its baseline | area found in minutes, not in a nightly Vivado run; a memory that moves between distributed and block RAM moves two columns, and `beacon_area.txt` names each memory's placement |
 
-There is no tolerance: the same RTL and tools give the same levels. A new CIRCT
+Beside the assertions, each build reports what levels miss: the learned
+calibration ([beacon.md §7.1](beacon.md)) scores every register from its
+levels, width, fan-out and span, and `beacon_risk.txt` lists the slowest
+predicted, with the design's predicted Fmax and its count of likely failures
+as the `p_fmax` and `risk` columns. They are recorded, not gated: held out,
+the ranking finds Vivado's near-critical registers far better than levels,
+but the Fmax is within about 7 %. A wide enable driven across an instance by
+a same-cycle lookup (the 250 MHz misses of `tensor` and `top`) ranks first
+there and in the hundreds by levels. `fpga_gate` writes every build's end
+point table (`ep.csv`), which retrains it.
+
+`interfaces` lists modules by name; their instances keep their ports through
+Beacon's mapping (`BEACON_INTERFACES` in the DUT flow), and `ports.csv`
+counts, per output port, the bits a combinational path from outside the
+instance reaches.
+
+Depth has no tolerance: the same RTL and tools give the same levels. Area is
+as deterministic, but a feature adds some by design, so it has `fpga_gate`'s
+LUT tolerance; its LUTs are the area mapping's scaled to Vivado's average
+([beacon.md §4.5](beacon.md)), so it gates their change, not a budget. A new CIRCT
 or foldsim can map the same RTL differently, so both versions are in the config
-hash and a tool change reads `STALE`. `make -C hw/syn/xilinx/dut <dut>-screen`
-runs one screen by hand; its `screen_paths.txt` lists every deep path op by op,
+hash and a tool change reads `STALE`. `make -C hw/syn/xilinx/dut <dut>-beacon`
+runs Beacon on one DUT by hand; its `beacon_paths.txt` lists every deep path op by op,
 by unit, with source lines, and a failing build names it.
+
+#### Full-GPU builds
+
+The `gpu` group runs Beacon on the whole processor (`vortex` DUT) with every
+feature on: the 32-bit machine with every extension, tensor format and
+graphics unit, and the `rtx5080` and `h100` profiles at XLEN 64. It catches
+what the per-unit DUTs cannot: the cluster, socket and L2 crossbars at full
+width, the kernel launch path into every core, and every extension at once.
+Vivado needs 48 hours and more on these designs; Beacon needs about 30 minutes.
+
+| cores | time | peak memory | end points |
+|---|---|---|---|
+| 1 | 37 min | 101 GB | 7.1 M |
+| 2 | 24 min | 90 GB | 13.2 M |
+| 4 | 32 min | 94 GB | 25.4 M |
+| 8 | 49 min | 121 GB | 50.1 M |
+
+Measured with the `rtx5080` features at XLEN 64 on a loaded machine. The
+builds use 4 cores: the core count widens only the arbiters and crossbars,
+and the deepest path was the same at every count, while memory grows with it.
+The group is opt-in in the gate (`ci/logic_gate.py -b gpu -j 1`) and its own
+tier, `timing_gpu`, in the catalog, so neither the default run nor
+`--tier timing` sweeps it in.
 
 #### Running a multi-hour sweep
 
@@ -526,13 +593,17 @@ adding it: an over-budget design costs a silent job kill, not a red gate.
 ### 4.6 `logic_gate.yml`
 
 On every pull request and push to master that touches the RTL, the DUT
-wrappers, the screen's scripts, the gate or its baselines; and by manual
-dispatch. One hosted job screens the whole catalog: it restores the toolchain,
+wrappers, Beacon's scripts, the gate or its baselines; and by manual
+dispatch. One hosted job runs Beacon on the whole catalog: it restores the toolchain,
 installs foldsim (`ci/toolchain_install.sh --foldsim`), runs the catalog's
 `run:` command with `--report`, and renders the report with
 [`synth_report.py`](../../ci/synth_report.py) into the workflow summary. The
-artifacts are the report and, per design, the build log, the summary and the
-screen's deepest paths.
+artifacts are the report and, per design, the build log, the summary and
+Beacon's deepest paths.
+
+A manual dispatch with `gpu: true` runs the catalog's `gpu` case instead, on
+the self-hosted machine: one build at a time, up to two hours each, since each
+needs about 95 GB of memory.
 
 ---
 

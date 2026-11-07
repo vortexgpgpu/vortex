@@ -45,7 +45,7 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
     output wire             busy,
 
 `ifdef VX_CFG_LMEM_ENABLE
-    VX_mem_bus_if.master    lmem_bus_if [`VX_CFG_NUM_LSU_LANES],
+    VX_lsu_mem_if.master    lmem_if,
 `endif
     VX_mem_bus_if.master    dcache_bus_if [DCACHE_CHANNELS]
 );
@@ -153,6 +153,10 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
     );
     `UNUSED_VAR (execute_if.data.rs1_data)
     wire req_fence_io = inst_lsu_is_fence_io(execute_if.data.op_type);
+    // a memory fence that orders only later reads (acquire) or only earlier
+    // writes (release)
+    wire req_fence_acq = ~req_fence_io && ~execute_if.data.op_args.lsu.amo_rl;
+    wire req_fence_rel = ~req_fence_io && ~execute_if.data.op_args.lsu.amo_aq;
 
     // The address windows are classified on the address before the stack
     // interleave, which keeps the interleave off the request's attribute
@@ -186,7 +190,8 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
         wire [MEM_ADDRW-1:0] io_addr_start = MEM_ADDRW'(`VX_CFG_XLEN'(`VX_MEM_IO_BASE_ADDR) >> MEM_ASHIFT);
         wire [MEM_ADDRW-1:0] io_addr_end = MEM_ADDRW'(`VX_CFG_XLEN'(`VX_MEM_IO_END_ADDR) >> MEM_ASHIFT);
         assign mem_req_attr_struct[i].is_flush  = req_is_fence;
-        assign mem_req_attr_struct[i].is_noalloc = 1'b0;
+        // a release fence's token: no invalidation owed
+        assign mem_req_attr_struct[i].is_noalloc = req_is_fence && req_fence_rel;
     `ifdef VX_CFG_EXT_OM_ENABLE
         // OM fragment-export aperture.
         //
@@ -206,8 +211,8 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
         assign mem_req_attr_struct[i].is_addr_om = 1'b0;
     `endif
         // a fence's token carries its kind: io for a fence ordering only device
-        // accesses
-        assign mem_req_attr_struct[i].is_addr_io = req_is_fence ? req_fence_io
+        // accesses, and for an acquire fence's (byte enables set: no drain owed)
+        assign mem_req_attr_struct[i].is_addr_io = req_is_fence ? (req_fence_io || req_fence_acq)
                                                  : (((block_addr >= io_addr_start) && (block_addr < io_addr_end))
                                                     || lane_is_om);
     `ifdef VX_CFG_LMEM_ENABLE
@@ -504,7 +509,7 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
         .store_empty      (store_empty),
         .busy             (busy),
     `ifdef VX_CFG_LMEM_ENABLE
-        .lmem_bus_if      (lmem_bus_if),
+        .lmem_if          (lmem_if),
     `endif
         .dcache_bus_if    (dcache_bus_if)
     );

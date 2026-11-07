@@ -41,12 +41,12 @@ between them, so the slave-port `ready` would cross both stages
 combinationally. Where a level needs both, it composes two instances around a
 registered launch link:
 
-| Level | File | Shape | `dest` slice |
+| Level | File | Shape | `dest` digit |
 |---|---|---|---|
-| Device | [`Vortex.sv:185`](../../hw/rtl/Vortex.sv#L185) | 1 → `VX_CFG_NUM_CLUSTERS` | `KMU_DEST_LSB_DEVICE` |
+| Device | [`Vortex.sv:185`](../../hw/rtl/Vortex.sv#L185) | 1 → `VX_CFG_NUM_CLUSTERS` | `KMU_DEST_DIV_DEVICE` |
 | Cluster merge | [`VX_cluster.sv:121`](../../hw/rtl/VX_cluster.sv#L121) | 2 → 1 | — |
-| Cluster distribute | [`VX_cluster.sv:133`](../../hw/rtl/VX_cluster.sv#L133) | 1 → `NUM_SOCKETS` | `KMU_DEST_LSB_CLUSTER` |
-| Socket | [`VX_socket.sv:72`](../../hw/rtl/VX_socket.sv#L72) | 1 → `VX_CFG_SOCKET_SIZE` | `KMU_DEST_LSB_SOCKET` |
+| Cluster distribute | [`VX_cluster.sv:133`](../../hw/rtl/VX_cluster.sv#L133) | 1 → `NUM_SOCKETS` | `KMU_DEST_DIV_CLUSTER` |
+| Socket | [`VX_socket.sv:72`](../../hw/rtl/VX_socket.sv#L72) | 1 → `VX_CFG_SOCKET_SIZE` | `KMU_DEST_DIV_SOCKET` |
 
 `NUM_SOCKETS = UP(VX_CFG_NUM_CORES / VX_CFG_SOCKET_SIZE)`
 ([`VX_gpu_pkg.sv:149`](../../hw/rtl/VX_gpu_pkg.sv#L149)). The cluster merge is
@@ -228,7 +228,7 @@ Two things are worth noticing about what is *not* here:
   placement hint, so the fan-out drops its first member on any ready core and
   the message lock keeps the rest with it. This is what spreads a grid across
   the machine.
-- **FRAGMENT** → routed by this level's slice of `dest`. Fragment work is
+- **FRAGMENT** → routed by this level's digit of `dest`. Fragment work is
   bin→core affine, and that affinity is what keeps same-pixel blend order
   correct; load-balancing it would break the blend order outright.
 

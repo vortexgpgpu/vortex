@@ -124,10 +124,89 @@ static uint32_t check_region(const kernel_arg_t* arg, uint32_t region) {
   return errors;
 }
 
+// The first SECTOR_WORDS threads of a block store one word each of a sector,
+// every warp at once after a barrier, and load it back after a second barrier:
+// every store of the sector is issued before its first load, which reaches the
+// cache while the stores' allocation is still pending. The second store lands
+// while that chain is being refetched.
+static inline uint32_t run_full_chain(const kernel_arg_t* arg, uint32_t gid) {
+  auto base = reinterpret_cast<volatile uint32_t*>(arg->full_addr);
+  auto err = reinterpret_cast<volatile uint32_t*>(arg->err_addr);
+  uint32_t t = threadIdx.x;
+  uint32_t errors = 0;
+  for (uint32_t i = 0; i < arg->full_lines; ++i) {
+    uint32_t line = i * arg->num_blocks + blockIdx.x;
+    for (uint32_t s = 0; s < FULL_LINE_WORDS; s += SECTOR_WORDS) {
+      uint32_t idx = line * FULL_LINE_WORDS + s + t;
+      bool skip = full_skipped(line, s + t, arg);
+      // a skipped word is stored to a scratch word: no branch delays the load
+      volatile uint32_t* dst = skip ? &err[arg->num_threads + gid] : &base[idx];
+      __syncthreads();
+      if (t < SECTOR_WORDS) {
+        *dst = full_value(line, s + t);
+      }
+      __syncthreads();
+      if (t < SECTOR_WORDS) {
+        uint32_t first = base[idx];
+        *dst = full_value2(line, s + t);
+        uint32_t second = base[idx];
+        errors += (first != (skip ? full_pattern(idx) : full_value(line, s + t))) ? 1 : 0;
+        errors += (second != full_expected(idx, arg)) ? 1 : 0;
+      }
+    }
+  }
+  return errors;
+}
+
+// Store this thread's lines, all of each sector or all but one word, then
+// load them all back.
+static inline uint32_t run_full_lines(const kernel_arg_t* arg, uint32_t gid) {
+  auto base = reinterpret_cast<volatile uint32_t*>(arg->full_addr);
+  for (uint32_t i = 0; i < arg->full_lines; ++i) {
+    uint32_t line = i * arg->num_threads + gid;
+    for (uint32_t w = 0; w < FULL_LINE_WORDS; ++w) {
+      if (!full_skipped(line, w, arg)) {
+        base[line * FULL_LINE_WORDS + w] = full_value(line, w);
+      }
+    }
+  }
+  uint32_t errors = 0;
+  for (uint32_t i = 0; i < arg->full_lines; ++i) {
+    uint32_t line = i * arg->num_threads + gid;
+    for (uint32_t w = 0; w < FULL_LINE_WORDS; ++w) {
+      uint32_t idx = line * FULL_LINE_WORDS + w;
+      errors += (base[idx] != full_expected(idx, arg)) ? 1 : 0;
+    }
+  }
+  return errors;
+}
+
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
   uint32_t errors = 0;
   auto err = reinterpret_cast<volatile uint32_t*>(arg->err_addr);
+
+  if (arg->phase == 3) {
+    // Read fresh memory blocks, one word each.
+    auto base = reinterpret_cast<volatile uint32_t*>(arg->full_addr);
+    uint32_t sum = 0;
+    for (uint32_t i = 0; i < arg->full_lines; ++i) {
+      uint32_t block = i * arg->num_threads + gid;
+      sum += base[block * (FLOOD_BLOCK_BYTES / sizeof(uint32_t))];
+    }
+    asm volatile ("" :: "r"(sum));
+    err[gid] = 0;
+    return;
+  }
+
+  if (arg->phase == 2) {
+    // Phase 2 counts its launch's memory reads, so its loops touch no line
+    // but the measured ones: they read the arguments from a copy, which the
+    // volatile stores would otherwise force them to reload.
+    const kernel_arg_t full_arg = *arg;
+    err[gid] = (full_arg.full_mode == FULL_CHAIN) ? run_full_chain(&full_arg, gid) : run_full_lines(&full_arg, gid);
+    return;
+  }
 
   if (arg->phase != 0) {
     // Every region again, from another thread (another core when there are

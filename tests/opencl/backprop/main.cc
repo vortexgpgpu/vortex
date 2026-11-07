@@ -302,7 +302,7 @@ int main(int argc, char** argv) {
 
   if (errors != 0) {
     printf("FAILED! - %d errors\n", errors);
-    return errors;
+    return errors != 0;
   }
   printf("PASSED!\n");
   return 0;

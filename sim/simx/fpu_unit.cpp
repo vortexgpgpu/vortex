@@ -14,6 +14,7 @@
 #include "fpu_unit.h"
 #include <iostream>
 #include <iomanip>
+#include <algorithm>
 #include <string.h>
 #include <assert.h>
 #include <util.h>
@@ -46,7 +47,16 @@ FpuUnit::FpuUnit(const SimContext& ctx, const char* name, Core* core)
 	// until its result is taken off the response port, however deep the
 	// pipelines are.
 	: FuncUnit<VX_CFG_NUM_FPU_BLOCKS>(ctx, name, core, VX_CFG_FPU_QUEUE_SIZE)
-{}
+	, ReleaseOut(this, VX_CFG_ISSUE_WIDTH)
+{
+	if (!kGather) {
+		// No buffer between the dispatch queue and the unit: the input holds
+		// only the queue's head.
+		for (auto& input : Inputs) {
+			input = SimChannel<instr_trace_t*>(this, 1);
+		}
+	}
+}
 
 bool FpuUnit::is_fp64(const instr_trace_t* trace) {
 	auto fpuArgs = std::get<IntrFpuArgs>(trace->instr_ptr->get_args());
@@ -89,10 +99,88 @@ uint32_t FpuUnit::latency_of(const instr_trace_t* trace) const {
 	case FpuType::F2I:
 	case FpuType::I2F:
 	case FpuType::F2F:
-		return VX_CFG_FCVT_LATENCY + f64_in;
+		// A 64-bit build splits the 64-bit negate from the leading-zero count.
+		return VX_CFG_FCVT_LATENCY + f64_in + ((VX_CFG_XLEN == 64) ? 1 : 0);
 	default:
 		std::abort();
 	}
+}
+
+namespace {
+constexpr uint32_t pe_batches(uint32_t pe_ratio) {
+  constexpr uint32_t kLanes = VX_CFG_NUM_FPU_LANES;
+  return kLanes / std::max<uint32_t>(kLanes / pe_ratio, 1);
+}
+// A 64-bit FMA on fewer processing elements than the 32-bit one has its own
+// pipeline and response arbiter input.
+constexpr bool kFma64Split = (VX_CFG_FLEN >= 64)
+                          && (pe_batches(VX_CFG_FMA64_PE_RATIO) != pe_batches(VX_CFG_FMA_PE_RATIO));
+constexpr uint32_t kRspInputs = kFma64Split ? 5 : 4;
+}
+
+uint32_t FpuUnit::pipe_of(const instr_trace_t* trace) const {
+  switch (std::get<FpuType>(trace->op_type)) {
+  case FpuType::FADD:
+  case FpuType::FSUB:
+  case FpuType::FMUL:
+  case FpuType::FMADD:
+  case FpuType::FMSUB:
+  case FpuType::FNMADD:
+  case FpuType::FNMSUB: {
+    const auto& fpu_args = std::get<IntrFpuArgs>(trace->instr_ptr->get_args());
+    return (kFma64Split && fpu_args.is_f64) ? kPipeFma64 : kPipeFma;
+  }
+  case FpuType::FDIV:
+    return kPipeDiv;
+  case FpuType::FSQRT:
+    return kPipeSqrt;
+  case FpuType::F2I:
+  case FpuType::I2F:
+  case FpuType::F2F:
+    return kPipeCvt;
+  case FpuType::FCMP:
+  case FpuType::FSGNJ:
+  case FpuType::FCLASS:
+  case FpuType::FMVXW:
+  case FpuType::FMVWX:
+  case FpuType::FMINMAX:
+    return kPipeNcp;
+  default:
+    std::abort();
+  }
+}
+
+uint32_t FpuUnit::batches_of(const instr_trace_t* trace) const {
+  auto fpu_type = std::get<FpuType>(trace->op_type);
+  switch (fpu_type) {
+  case FpuType::FCMP:
+  case FpuType::FSGNJ:
+  case FpuType::FCLASS:
+  case FpuType::FMVXW:
+  case FpuType::FMVWX:
+  case FpuType::FMINMAX:
+    return pe_batches(VX_CFG_FNCP_PE_RATIO);
+  case FpuType::FADD:
+  case FpuType::FSUB:
+  case FpuType::FMUL:
+  case FpuType::FMADD:
+  case FpuType::FMSUB:
+  case FpuType::FNMADD:
+  case FpuType::FNMSUB: {
+    auto fpuArgs = std::get<IntrFpuArgs>(trace->instr_ptr->get_args());
+    return fpuArgs.is_f64 ? pe_batches(VX_CFG_FMA64_PE_RATIO) : pe_batches(VX_CFG_FMA_PE_RATIO);
+  }
+  case FpuType::FDIV:
+    return pe_batches(VX_CFG_FDIV_PE_RATIO);
+  case FpuType::FSQRT:
+    return pe_batches(VX_CFG_FSQRT_PE_RATIO);
+  case FpuType::F2I:
+  case FpuType::I2F:
+  case FpuType::F2F:
+    return pe_batches(VX_CFG_FCVT_PE_RATIO);
+  default:
+    std::abort();
+  }
 }
 
 void FpuUnit::execute(instr_trace_t* trace) {
@@ -411,11 +499,46 @@ void FpuUnit::execute(instr_trace_t* trace) {
 
 void FpuUnit::on_reset() {
   fp64_batches_.fill(0);
+  batch_idx_.fill(0);
+  for (auto& pipes : results_) {
+    for (auto& pipe : pipes) {
+      pipe.clear();
+    }
+  }
+  num_results_.fill(0);
+  // the arbiter's reset seed gives its first input the first grant
+  rsp_grant_.fill(kRspInputs - 1);
+}
+
+void FpuUnit::respond(uint32_t b) {
+  auto& pipes = results_.at(b);
+  uint64_t now = SimPlatform::instance().cycles();
+  auto ready = [&](uint32_t p) {
+    return !pipes.at(p).empty() && pipes.at(p).front().ready <= now;
+  };
+  for (uint32_t i = 1; i <= kRspInputs; ++i) {
+    uint32_t input = (rsp_grant_.at(b) + i) % kRspInputs;
+    uint32_t p = input;
+    if (input == kPipeDiv && !ready(kPipeDiv)) {
+      p = kPipeSqrt;
+    }
+    if (!ready(p)) {
+      continue;
+    }
+    // the arbiter's output register
+    if (Outputs.at(b).try_send(pipes.at(p).front().trace, 1)) {
+      pipes.at(p).pop_front();
+      --num_results_.at(b);
+      rsp_grant_.at(b) = input;
+    }
+    return;
+  }
 }
 
 void FpuUnit::on_tick() {
   bool idle = true;
   for (uint32_t b = 0; b < VX_CFG_NUM_FPU_BLOCKS; ++b) {
+    this->respond(b);
     auto& input = Inputs.at(b);
     if (!input.empty()) {
       auto& output = Outputs.at(b);
@@ -426,35 +549,54 @@ void FpuUnit::on_tick() {
       if (kFp64Split && is_fp64(trace)) {
         auto& batches = fp64_batches_.at(b);
         if (batches == 0) {
-          if (output.full()) {
+          if (output.full() || output.size() + num_results_.at(b) >= output.capacity()) {
             idle = false;
             continue;
           }
           this->execute(trace);
-          uint32_t delay = (kFp64Batches - 1) + this->latency_of(trace) + (kGather ? 0 : 1);
-          output.send(trace, delay);
+          // the last batch's result crosses the class's output buffer to the
+          // response arbiter, as any other result
+          uint64_t ready = SimPlatform::instance().cycles() + (kFp64Batches - 1) + this->latency_of(trace) + 1;
+          results_.at(b).at(this->pipe_of(trace)).push_back({ready, trace});
+          ++num_results_.at(b);
           batches = kFp64Batches;
         }
         if (--batches == 0) {
           input.pop();
+          if (!kGather && trace->eop) {
+            ReleaseOut.send(trace, 0);
+          }
         }
-        idle &= (input.size() == 0);
+        idle = false;
         continue;
       }
       // A full response port (every tag in use) stalls admission even though
       // the arithmetic pipelines are deeper.
-      if (!output.full()) {
+      if (!output.full() && output.size() + num_results_.at(b) < output.capacity()) {
+        // The operation holds the block's input, whatever its class, until its
+        // last batch of lanes enters the pipeline.
+        if (batch_idx_.at(b) + 1 < this->batches_of(trace)) {
+          ++batch_idx_.at(b);
+          idle = false;
+          continue;
+        }
+        batch_idx_.at(b) = 0;
         this->execute(trace);
-        // Without a lane-gather stage commit reads this port directly, so the
-        // result also takes the registered stage other units cross into commit.
-        uint32_t delay = this->latency_of(trace) + (kGather ? 0 : 1);
-        output.send(trace, delay);
+        // The result crosses its class's registered output buffer to the
+        // response arbiter, and keeps its tag until the lane gather, or
+        // without one the commit arbiter, takes it.
+        uint64_t ready = SimPlatform::instance().cycles() + this->latency_of(trace) + 1;
+        results_.at(b).at(this->pipe_of(trace)).push_back({ready, trace});
+        ++num_results_.at(b);
         input.pop();
+        if (!kGather && trace->eop) {
+          ReleaseOut.send(trace, 0);
+        }
       }
     }
-    idle &= (input.size() == 0);
+    idle &= (input.size() == 0) && (num_results_.at(b) == 0);
   }
-  // no cross-tick state: sleep until a new trace is reserved toward an input.
+  // sleep until a new trace is reserved toward an input.
   if (idle) {
     this->tick_sleep();
   }

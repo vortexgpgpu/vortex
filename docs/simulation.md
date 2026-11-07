@@ -231,12 +231,36 @@ machine from it: SimX, rtlsim, the FPGA and ASIC flows, and the kernels.
 | Profile | Machine |
 |---|---|
 | `tinygpu` | 1 core, 2 warps x 2 threads, shared memory |
-| `rtx1080` | GeForce GTX 1080 (Pascal): 20 cores x 64 warps x 32 threads, 2 MB L2, GDDR5X as 16 GDDR6 channels |
-| `v100` | Tesla V100 (Volta): 80 cores, 4 MB L2, 32 HBM2 channels at 1752 MT/s |
-| `a100` | A100 (Ampere): 108 cores, 32 MB L2, HBM2 at the card's 1555 GB/s |
-| `a100_lite`, `a100_lite_m<n>` | A stripped A100-class SM (RV64IMAFD with FP64 at 8 lanes per block, TCU, MUFU, no graphics) with the A100's divide/sqrt/convert, LD/ST, L1 and shared-memory rates; 1 or n = 4..128 SMs, L2 banks, L2 size and HBM channels/bandwidth scaled to n/108 of the A100's |
-| `h100` | H100 SXM5 (Hopper): 132 cores, 32 MB L2, HBM3 at the card's 3.35 TB/s |
-| `rtx5080` | GeForce RTX 5080 (Blackwell): 84 cores x 48 warps, 64 MB L2, GDDR7 bandwidth on the GDDR6 model |
+| `gtx1080` | GeForce GTX 1080 (Pascal): 20 cores x 64 warps x 32 threads, 96 KB shared memory, 2 MB L2, GDDR5X as 16 GDDR6 channels; no tensor cores |
+| `gtx1060` | GeForce GTX 1060 6 GB (Pascal), on `gtx1080`: 10 cores, 1.5 MB L2, 192 GB/s as 8 GDDR6 channels |
+| `mi300x` | Instinct MI300X (CDNA 3): 8 XCDs x 38 CUs x 32 waves x 64 lanes, 64 KB LDS, 4 MB L2 per XCD, 256 MB Infinity Cache as the L3, HBM3 at 5.3 TB/s; TF32/FP8/INT8 matrix cores with sparsity |
+| `v100` | Tesla V100 (Volta): 80 cores x 64 warps, 96 KB shared memory, 6 MB L2, 32 HBM2 channels at 1752 MT/s; FP16 tensor cores |
+| `a100` | A100 (Ampere): 108 cores x 64 warps, 164 KB shared memory, 192 KB L1, 40 MB L2, HBM2 at 1555 GB/s; FP16/TF32/INT8/INT4 tensor cores with 2:4 sparsity |
+| `h100` | H100 SXM5 (Hopper): 132 cores x 64 warps, 228 KB shared memory, 50 MB L2, HBM3 at 3.35 TB/s; FP16/TF32/FP8/INT8 tensor cores with sparsity and wgmma, TMA as DXA |
+| `rtx5080` | GeForce RTX 5080 (Blackwell): 84 cores x 48 warps, 100 KB shared memory, 64 MB L2, GDDR7 bandwidth on the GDDR6 model; FP16/TF32/FP8/FP4/MX/INT8 tensor cores with sparsity, TMA as DXA, RT cores as RTU |
+| `titanv` | TITAN V (Volta), on `v100`: 4.5 MB L2, HBM2 at 653 GB/s |
+| `qv100` | Quadro GV100 (Volta), on `v100`: HBM2 at 870 GB/s, 1132 MHz |
+| `rtx2060` | GeForce RTX 2060 (Turing TU106): 30 cores x 32 warps, 64 KB shared memory, 96 KB L1, 3 MB L2, GDDR6 at 336 GB/s; FP16/INT8/INT4 tensor cores |
+| `rtx2060s` | GeForce RTX 2060 SUPER (Turing), on `rtx2060`: 34 cores, 4 MB L2, GDDR6 at 448 GB/s |
+| `t4` | Tesla T4 (Turing TU104), on `rtx2060`: 40 cores, 4 MB L2, GDDR6 at 320 GB/s |
+| `h200` | H200 SXM5 (Hopper), on `h100`: HBM3e at 4.8 TB/s |
+| `gtx480` | GeForce GTX 480 (Fermi): 15 cores x 48 warps, 2 schedulers of 32 lanes at the 700 MHz core clock (the hot-clocked 16-lane groups), 48 KB shared memory, 768 KB L2, GDDR5 at 177 GB/s |
+| `keplertitan` | GeForce GTX TITAN (Kepler GK110): 14 cores x 64 warps, 4 schedulers of 32 lanes (no dual issue: 128 of the SMX's 192 cores), 48 KB shared memory, 1.5 MB L2, GDDR5 at 288 GB/s |
+| `gtx980` | GeForce GTX 980 (Maxwell), on `gtx1080`: 16 cores, 24 KB L1, GDDR5 at 224 GB/s |
+| `titanx` | TITAN X (Pascal GP102), on `gtx1080`: 28 cores, 3 MB L2, GDDR5X at 480 GB/s |
+| `gtx1080ti` | GeForce GTX 1080 Ti (Pascal GP102), on `gtx1080`: 28 cores, 2.75 MB L2, GDDR5X at 484 GB/s |
+| `p100` | Tesla P100 PCIe (Pascal GP100): 56 cores x 64 warps, 2 blocks of 32 lanes, FP64 at half rate, 64 KB shared memory, 4 MB L2, HBM2 at 732 GB/s |
+| `mi300a` | Instinct MI300A (CDNA 3), on `mi300x`: 6 XCDs |
+
+Every GPU profile also turns on virtual memory, the A extension with Zacas,
+Zfhmin, MUFU at the part's special-function throughput, the part's INT32,
+FP32 and load/store lanes per processing block (`NUM_ALU_LANES`,
+`NUM_FPU_LANES`, `NUM_LSU_LANES`; a warp instruction takes `NUM_THREADS` /
+lanes cycles, as on the part), and shared memory at the part's 128 B per clock
+(16 banks: a Vortex bank is XLEN wide). The real parts are 64-bit machines, so these profiles set `"xlen": 64`:
+`configure --profile=<name>` picks XLEN from the profile (an explicit,
+conflicting `--xlen` is an error), and a `build32` tree rejects them. A profile
+without an `xlen` field, like `tinygpu`, builds at either width.
 
 Select one per build with `../configure --profile=<name>`, or per run:
 
@@ -252,9 +276,37 @@ unset, and everything else falls back to `VX_config.toml`.
 $ CONFIGS="-DVX_CFG_L2_SIZE=8388608" ./ci/blackbox.sh --driver=simx --profile=a100 --warps=32 --app=sgemm
 ```
 
-The other profiles (20 to 132 cores) are SimX-scale machines for architecture
+The other profiles (10 to 304 cores) are SimX-scale machines for architecture
 studies, not FPGA builds; `tinygpu` is the small one, sized for FPGA
 bring-up and fast simulation.
+
+A profile's `reference` block holds the part's published or measured numbers,
+and `ci/profile_check.py` compares the model against them from a build tree
+of the profile's XLEN:
+
+| Key | Checked against |
+|---|---|
+| `fp32_lanes`, `dram_bandwidth_gbs`, `dram_peak_bytes_per_cycle`, `clock_mhz` | the resolved configuration |
+| `l1_hit_cycles`, `l2_hit_cycles`, `dram_cycles` | `tests/regression/chase` on one core: a random pointer chase at a 128 B stride (DRAM: a cold chain over a buffer never uploaded) |
+| `stream_cycles` (`"<n>MiB"`) | `vecadd` with n MiB per buffer, whole chip |
+| `sgemm_cycles` (`"<n>"`) | `sgemm -n<n>`, whole chip |
+
+```bash
+$ cd build64 && python3 ../ci/profile_check.py --profile=a100 --metrics=peak,latency
+```
+
+It exits 1 when a metric is off by more than `--tolerance` (10% by default),
+and 2 when a run fails.
+
+The three chase latencies are calibrated in that order. `l1_hit_cycles` sets
+`VX_CFG_L1_LINK_LATENCY`, the link between a core and the dcache (cycles each
+way, so every global access gains twice it), for the parts whose global loads
+go through the L1/texture pipeline and take longer than the dcache's own
+pipeline. `l2_hit_cycles` then sets `VX_CFG_L2_LINK_LATENCY`, the link between
+the sockets and the L2: on the parts most of an L2 hit is the SM-to-L2
+network. A DRAM access crosses both links, so
+`VX_CFG_PLATFORM_MEMORY_LATENCY` last takes what `dram_cycles` still needs.
+The memory latency moves the measured ones one for one, each link two for one.
 
 ### Configuring the DRAM Model
 

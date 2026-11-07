@@ -18,8 +18,12 @@
 
 `include "VX_define.vh"
 
+// Buffer bases: cache-block indices. Under VM they are virtual addresses,
+// which span the whole 32-bit space on Sv32.
 `ifdef VX_CFG_XLEN_64
 `define OM_ADDR_BITS 32
+`elsif VX_CFG_VM_ENABLE
+`define OM_ADDR_BITS 26
 `else
 `define OM_ADDR_BITS 25
 `endif

@@ -152,11 +152,11 @@
   <text x="282" y="786" class="ts">streams</text>
   <rect x="520" y="670" width="400" height="204" rx="6" class="mem"/>
   <text x="532" y="692" class="tb">local path</text>
-  <text x="532" y="714" class="ts">VX_lsu_adapter, one per block → VX_local_mem</text>
-  <text x="532" y="738" class="ts">banked SRAM: lanes to different banks are served</text>
-  <text x="532" y="754" class="ts">in the same cycle</text>
-  <text x="532" y="778" class="ts">a second port serves the DXA and tensor</text>
-  <text x="532" y="794" class="ts">direct-memory clients</text>
+  <text x="532" y="714" class="ts">whole warp requests → VX_lmem_unit</text>
+  <text x="532" y="738" class="ts">a pass per cycle: each bank to its lowest lane,</text>
+  <text x="532" y="754" class="ts">same-word reads broadcast, conflicts replay</text>
+  <text x="532" y="778" class="ts">several LSU blocks: a read engine on the second</text>
+  <text x="532" y="794" class="ts">bank port; DXA and tensor DMA take whole rows</text>
   <text x="532" y="862" class="tt">per-core shared memory</text>
   <rect x="940" y="670" width="596" height="204" rx="6" class="unit"/>
   <text x="952" y="692" class="tb">global path</text>

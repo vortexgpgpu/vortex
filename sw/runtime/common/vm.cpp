@@ -34,6 +34,12 @@ uint32_t pte_flags_from_access(uint32_t access_flags) {
   return pte;
 }
 
+// The OM aperture is decoded by address ahead of translation (the LSU steers
+// it to the OM unit), so a randomized VA must never land in it.
+bool overlaps_om_aperture(uint64_t va, uint64_t size) {
+  return va < uint64_t(VX_MEM_OM_END_ADDR) && (va + size) > uint64_t(VX_MEM_OM_BASE_ADDR);
+}
+
 // Ceil-log2 — used for the per-level VPN field width.
 constexpr unsigned vm_clog2(uint64_t n) {
   unsigned r = 0;
@@ -193,7 +199,7 @@ uint64_t VMManager::map_p2v(uint64_t ppn, uint32_t flags) {
       uint64_t random_page_offset = dist(rng_);
       uint64_t candidate_va = va_range_start + (random_page_offset << VX_VM_PAGE_LOG2_SIZE);
 
-      bool in_use = false;
+      bool in_use = overlaps_om_aperture(candidate_va, VX_VM_PAGE_SIZE);
       for (const auto& mapping : addr_mapping) {
         if (mapping.second == (candidate_va >> VX_VM_PAGE_LOG2_SIZE)) {
           in_use = true;
@@ -257,7 +263,8 @@ int VMManager::phy_to_virt_map(uint64_t size, uint64_t* dev_pAddr, uint32_t flag
         uint64_t random_page_offset = dist(rng_);
         uint64_t candidate_va = va_range_start + (random_page_offset << VX_VM_PAGE_LOG2_SIZE);
 
-        bool range_available = true;
+        bool range_available =
+            !overlaps_om_aperture(candidate_va, num_pages << VX_VM_PAGE_LOG2_SIZE);
         for (uint64_t i = 0; i < num_pages && range_available; ++i) {
           uint64_t test_vpn = (candidate_va >> VX_VM_PAGE_LOG2_SIZE) + i;
           for (const auto& mapping : addr_mapping) {

@@ -35,7 +35,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 
     // the LSU blocks' memory paths
 `ifdef VX_CFG_LMEM_ENABLE
-    VX_mem_bus_if.slave     lmem_bus_if [LSU_NUM_REQS],
+    VX_lsu_mem_if.slave     lmem_if [`VX_CFG_NUM_LSU_BLOCKS],
 `endif
     VX_mem_bus_if.slave     lsu_dcache_bus_if [DCACHE_NUM_REQS],
 
@@ -51,16 +51,22 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 `endif
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
     `STATIC_ASSERT(`VX_CFG_LMEM_ENABLED, ("TCU_WGMMA_ENABLE requires LMEM_ENABLE"))
-    // The WGMMA shared-memory descriptor carries the LMEM byte offset in a 16-bit
-    // field, so a WGMMA-visible LMEM cannot exceed 64KB; beyond that the offset
-    // wraps into the adjacent stride field.
-    `STATIC_ASSERT(`VX_CFG_LMEM_LOG_SIZE <= 16, ("LMEM exceeds the 16-bit smem descriptor offset field"))
+    `STATIC_ASSERT(`VX_CFG_LMEM_LOG_SIZE <= VX_tcu_pkg::TCU_SMEM_DESC_OFF_BITS,
+                   ("LMEM exceeds the smem descriptor offset field"))
 `endif
 
 `ifdef VX_CFG_LMEM_ENABLE
 
-    `STATIC_ASSERT(`IS_DIVISBLE((1 << `VX_CFG_LMEM_LOG_SIZE), `VX_CFG_MEM_BLOCK_SIZE), ("invalid parameter"))
-    `STATIC_ASSERT(0 == (`VX_MEM_LMEM_BASE_ADDR % (1 << `VX_CFG_LMEM_LOG_SIZE)), ("invalid parameter"))
+    `STATIC_ASSERT(`IS_DIVISBLE(`VX_CFG_LMEM_SIZE, `VX_CFG_MEM_BLOCK_SIZE * `VX_CFG_LMEM_NUM_BANKS),
+                   ("LMEM_SIZE=%0d is not a whole number of block rows across the banks", `VX_CFG_LMEM_SIZE))
+    // VX_lmem_unit sizes its addresses from the capacity, the window decode
+    // from LMEM_LOG_SIZE; both must agree.
+    `STATIC_ASSERT((`VX_CFG_LMEM_SIZE <= (1 << `VX_CFG_LMEM_LOG_SIZE)) && (2 * `VX_CFG_LMEM_SIZE > (1 << `VX_CFG_LMEM_LOG_SIZE)),
+                   ("LMEM_LOG_SIZE=%0d must be clog2(LMEM_SIZE=%0d)", `VX_CFG_LMEM_LOG_SIZE, `VX_CFG_LMEM_SIZE))
+    // The window ends at the next alignment boundary above its base, so the
+    // base's alignment bounds the capacity.
+    `STATIC_ASSERT(0 == (`VX_MEM_LMEM_BASE_ADDR % (1 << `VX_CFG_LMEM_LOG_SIZE)),
+                   ("LMEM exceeds its address window: LMEM_LOG_SIZE=%0d", `VX_CFG_LMEM_LOG_SIZE))
 
     localparam LMEM_ADDR_WIDTH = `VX_CFG_LMEM_LOG_SIZE - `CLOG2(LSU_WORD_SIZE);
 
@@ -164,26 +170,26 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 
     end
 
-    VX_local_mem #(
-        .INSTANCE_ID (`SFORMATF(("%s-lmem", INSTANCE_ID))),
-        .SIZE        (1 << `VX_CFG_LMEM_LOG_SIZE),
-        .NUM_REQS    (LSU_NUM_REQS),
-        .NUM_BANKS   (`VX_CFG_LMEM_NUM_BANKS),
-        .WORD_SIZE   (LSU_WORD_SIZE),
-        .ADDR_WIDTH  (LMEM_ADDR_WIDTH),
-        .TAG_WIDTH   (LSU_TAG_WIDTH),
-        .DMA_ENABLE  (LMEM_DMA_EN),
+    VX_lmem_unit #(
+        .INSTANCE_ID   (`SFORMATF(("%s-lmem", INSTANCE_ID))),
+        .SIZE          (`VX_CFG_LMEM_SIZE),
+        .NUM_BLOCKS    (`VX_CFG_NUM_LSU_BLOCKS),
+        .NUM_LANES     (`VX_CFG_NUM_LSU_LANES),
+        .NUM_BANKS     (`VX_CFG_LMEM_NUM_BANKS),
+        .WORD_SIZE     (LSU_WORD_SIZE),
+        .ADDR_WIDTH    (LMEM_ADDR_WIDTH),
+        .TAG_WIDTH     (LSU_TAG_WIDTH),
+        .DMA_ENABLE    (LMEM_DMA_EN),
         .DMA_TAG_WIDTH (LMEM_DMA_TAG_WIDTH),
-        .AMO_ENABLE  (`VX_CFG_EXT_A_ENABLED),
-        .OUT_BUF     (3)
-    ) local_mem (
-        .clk         (clk),
-        .reset       (reset),
+        .AMO_ENABLE    (`VX_CFG_EXT_A_ENABLED)
+    ) lmem_unit (
+        .clk           (clk),
+        .reset         (reset),
     `ifdef PERF_ENABLE
-        .lmem_perf   (lmem_perf),
+        .lmem_perf     (lmem_perf),
     `endif
-        .dma_bus_if  (lmem_dma_if),
-        .lsu_bus_if  (lmem_bus_if)
+        .lsu_mem_if    (lmem_if),
+        .dma_bus_if    (lmem_dma_if)
     );
 
 `else
@@ -255,22 +261,22 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
                 .cache_bus_if (dcache_bus_if[i])
             );
         end else begin : g_passthru_lane
-            // the cache sees the select bit as a clear tag MSB
+            // The tag passes unchanged: its clear LSB stands where the flush lane's
+            // select bit does, so every lane encodes one request's tag alike and
+            // the cache's read merge compares like with like.
             assign dcache_bus_if[i].req_valid       = lsu_dcache_bus_if[i].req_valid;
             assign dcache_bus_if[i].req_data.rw     = lsu_dcache_bus_if[i].req_data.rw;
             assign dcache_bus_if[i].req_data.addr   = lsu_dcache_bus_if[i].req_data.addr;
             assign dcache_bus_if[i].req_data.data   = lsu_dcache_bus_if[i].req_data.data;
             assign dcache_bus_if[i].req_data.byteen = lsu_dcache_bus_if[i].req_data.byteen;
             assign dcache_bus_if[i].req_data.attr   = lsu_dcache_bus_if[i].req_data.attr;
-            assign dcache_bus_if[i].req_data.tag    = {1'b0, lsu_dcache_bus_if[i].req_data.tag[DCACHE_TAG_WIDTH-1:1]};
+            assign dcache_bus_if[i].req_data.tag    = lsu_dcache_bus_if[i].req_data.tag;
             assign lsu_dcache_bus_if[i].req_ready   = dcache_bus_if[i].req_ready;
-            `UNUSED_VAR (lsu_dcache_bus_if[i].req_data.tag[0])
 
             assign lsu_dcache_bus_if[i].rsp_valid     = dcache_bus_if[i].rsp_valid;
             assign lsu_dcache_bus_if[i].rsp_data.data = dcache_bus_if[i].rsp_data.data;
-            assign lsu_dcache_bus_if[i].rsp_data.tag  = {dcache_bus_if[i].rsp_data.tag[DCACHE_TAG_WIDTH-2:0], 1'b0};
+            assign lsu_dcache_bus_if[i].rsp_data.tag  = dcache_bus_if[i].rsp_data.tag;
             assign dcache_bus_if[i].rsp_ready         = lsu_dcache_bus_if[i].rsp_ready;
-            `UNUSED_VAR (dcache_bus_if[i].rsp_data.tag[DCACHE_TAG_WIDTH-1])
         end
     end
 

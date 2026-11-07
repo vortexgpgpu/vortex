@@ -154,7 +154,7 @@ all: synthesis
 
 gen-sources: $(BUILD_DIR)/sources.txt
 $(BUILD_DIR)/sources.txt:
-	$(SCRIPT_DIR)/gen_sources.sh -P $(CFLAGS) -C$(BUILD_DIR)/src -O$(BUILD_DIR)/sources.txt
+	$(SCRIPT_DIR)/gen_sources.sh -P -F -T$(TOP_LEVEL_ENTITY) $(CFLAGS) -C$(BUILD_DIR)/src -O$(BUILD_DIR)/sources.txt
 
 synthesis: $(BUILD_DIR)/sources.txt
 	cd $(BUILD_DIR); \

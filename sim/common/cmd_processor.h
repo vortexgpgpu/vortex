@@ -26,6 +26,7 @@
 //     0x000 CP_CTRL       bit0=enable_global, bit1=reset_all
 //     0x004 CP_STATUS     bit0=busy, bit1=error
 //     0x008 CP_DEV_CAPS   {AXI_TID_W:8 | RING_LOG2:8 | NUM_QUEUES:8}
+//     0x00C GPU_DEV_CAPS_EXT device-config caps extension      (RO)
 //     0x010 CP_CYCLE_LO
 //     0x014 CP_CYCLE_HI
 //     0x018 GPU_DEV_CAPS_LO  device-config caps, low 32 bits   (RO)

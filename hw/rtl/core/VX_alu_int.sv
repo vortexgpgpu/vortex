@@ -191,14 +191,24 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] wgather_result;
     if (NUM_LANES > 1) begin : g_wgather
         wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] alu_in3 = execute_if.data.rs3_data;
+        // The fallback lane is shared by all lanes, so its operands are read
+        // once; each lane's own source is then a group-local select.
+        wire [`VX_CFG_XLEN-1:0] last_in1 = alu_in1[last_tid];
+        wire [`VX_CFG_XLEN-1:0] last_in2 = alu_in2[last_tid];
+        wire [`VX_CFG_XLEN-1:0] last_in3 = alu_in3[last_tid];
         for (genvar i = 0; i < NUM_LANES; ++i) begin : g_i
-            wire [LANE_BITS-1:0] nominal  = (LANE_BITS'(i) & ~LANE_BITS'(3)) | LANE_BITS'(wg_src_offset);
-            wire [LANE_BITS-1:0] src_lane = execute_if.data.header.tmask[nominal] ? nominal : last_tid;
-            wire [1:0]           offset   = 2'(i) - wg_src_offset; // (i - src) mod 4
-            assign wgather_result[i] = (offset == 2'd1) ? alu_in1[src_lane]
-                                     : (offset == 2'd2) ? alu_in2[src_lane]
-                                     : (offset == 2'd3) ? alu_in3[src_lane]
-                                     : `VX_CFG_XLEN'(0); // offset 0 = source lane (write-suppressed)
+            wire [LANE_BITS-1:0] nominal = (LANE_BITS'(i) & ~LANE_BITS'(3)) | LANE_BITS'(wg_src_offset);
+            wire [1:0]           offset  = 2'(i) - wg_src_offset; // (i - src) mod 4
+            // offset 0 = source lane (write-suppressed)
+            wire [`VX_CFG_XLEN-1:0] nominal_val = (offset == 2'd1) ? alu_in1[nominal]
+                                                : (offset == 2'd2) ? alu_in2[nominal]
+                                                : (offset == 2'd3) ? alu_in3[nominal]
+                                                : `VX_CFG_XLEN'(0);
+            wire [`VX_CFG_XLEN-1:0] last_val    = (offset == 2'd1) ? last_in1
+                                                : (offset == 2'd2) ? last_in2
+                                                : (offset == 2'd3) ? last_in3
+                                                : `VX_CFG_XLEN'(0);
+            assign wgather_result[i] = execute_if.data.header.tmask[nominal] ? nominal_val : last_val;
         end
     end else begin : g_wgather_0
         assign wgather_result[0] = alu_in1[0];
@@ -220,33 +230,32 @@ module VX_alu_int import VX_gpu_pkg::*; #(
             wire [LANE_BITS-1:0] lane_bfly = LANE_BITS'(i) ^ bval;
             wire [LANE_BITS-1:0] lane_idx  = minLane | (bval & ~mask);
 
+            // The source lane is read before its bound check resolves, which
+            // only picks between that read and the lane's own value.
             reg [LANE_BITS-1:0] lane;
+            reg in_bounds;
             always @(*) begin
-                lane = LANE_BITS'(i);
                 case (alu_op[1:0])
                     INST_SHFL_UP: begin
-                        if ($signed(lane_up) >= $signed({1'b0, minLane})) begin
-                            lane = lane_up[LANE_BITS-1:0];
-                        end
+                        lane      = lane_up[LANE_BITS-1:0];
+                        in_bounds = ($signed(lane_up) >= $signed({1'b0, minLane}));
                     end
                     INST_SHFL_DOWN: begin
-                        if (lane_down <= {1'b0, maxLane}) begin
-                            lane = lane_down[LANE_BITS-1:0];
-                        end
+                        lane      = lane_down[LANE_BITS-1:0];
+                        in_bounds = (lane_down <= {1'b0, maxLane});
                     end
                     INST_SHFL_BFLY: begin
-                        if (lane_bfly <= maxLane) begin
-                            lane = lane_bfly;
-                        end
+                        lane      = lane_bfly;
+                        in_bounds = (lane_bfly <= maxLane);
                     end
-                    INST_SHFL_IDX: begin
-                        if (lane_idx <= maxLane) begin
-                            lane = lane_idx;
-                        end
+                    default: begin // INST_SHFL_IDX
+                        lane      = lane_idx;
+                        in_bounds = (lane_idx <= maxLane);
                     end
                 endcase
             end
-            assign shfl_result[i] = execute_if.data.header.tmask[lane] ? alu_in1[lane] : alu_in1[i];
+            wire take_lane = in_bounds && execute_if.data.header.tmask[lane];
+            assign shfl_result[i] = take_lane ? alu_in1[lane] : alu_in1[i];
         end
     end else begin : g_shfl_0
         assign shfl_result[0] = alu_in1[0];

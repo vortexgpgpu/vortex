@@ -106,13 +106,13 @@ module VX_tcu_unit_top import VX_gpu_pkg::*, VX_tcu_pkg::*; (
 `endif
 
 `ifdef TCU_META_ENABLE
-    VX_lsu_sched_if tcu_mem_if();
-    assign tcu_mem_req_valid    = tcu_mem_if.req_valid;
-    assign tcu_mem_req_data     = tcu_mem_if.req_data;
-    assign tcu_mem_if.req_ready = tcu_mem_req_ready;
-    assign tcu_mem_if.rsp_valid = tcu_mem_rsp_valid;
-    assign tcu_mem_if.rsp_data  = tcu_mem_rsp_data;
-    assign tcu_mem_rsp_ready    = tcu_mem_if.rsp_ready;
+    VX_lsu_sched_if tcu_mem_if [`VX_CFG_NUM_LSU_BLOCKS]();
+    assign tcu_mem_req_valid       = tcu_mem_if[0].req_valid;
+    assign tcu_mem_req_data        = tcu_mem_if[0].req_data;
+    assign tcu_mem_if[0].req_ready = tcu_mem_req_ready;
+    assign tcu_mem_if[0].rsp_valid = tcu_mem_rsp_valid;
+    assign tcu_mem_if[0].rsp_data  = tcu_mem_rsp_data;
+    assign tcu_mem_rsp_ready       = tcu_mem_if[0].rsp_ready;
 `endif
 
     VX_dispatch_if dispatch_if[`VX_CFG_ISSUE_WIDTH]();
@@ -171,16 +171,6 @@ module VX_tcu_unit_top import VX_gpu_pkg::*, VX_tcu_pkg::*; (
     wire [`VX_CFG_NUM_TCU_BLOCKS-1:0][TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0]   tcu_tbuf_rs2_data;
     wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tcu_tbuf_ready;
 `endif
-`ifdef TCU_META_ENABLE
-    wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tcu_agu_ld_valid, tcu_agu_ld_ready;
-    tcu_execute_t                     tcu_agu_ld_data [`VX_CFG_NUM_TCU_BLOCKS];
-    wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tcu_agu_result_valid, tcu_agu_result_ready;
-    tcu_result_t                      tcu_agu_result_data [`VX_CFG_NUM_TCU_BLOCKS];
-    wire                              tcu_meta_wr_en;
-    wire [NW_WIDTH-1:0]               tcu_meta_wr_wid;
-    wire [4:0]                        tcu_meta_wr_idx;
-    wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0] tcu_meta_wr_data;
-`endif
 
     VX_tcu_unit #(
         .INSTANCE_ID ("tcu_unit_top")
@@ -197,22 +187,13 @@ module VX_tcu_unit_top import VX_gpu_pkg::*, VX_tcu_pkg::*; (
         .tbuf_ready       (tcu_tbuf_ready),
     `endif
     `ifdef TCU_META_ENABLE
-        .agu_ld_valid     (tcu_agu_ld_valid),
-        .agu_ld_data      (tcu_agu_ld_data),
-        .agu_ld_ready     (tcu_agu_ld_ready),
-        .agu_result_valid (tcu_agu_result_valid),
-        .agu_result_data  (tcu_agu_result_data),
-        .agu_result_ready (tcu_agu_result_ready),
-        .meta_wr_en       (tcu_meta_wr_en),
-        .meta_wr_wid      (tcu_meta_wr_wid),
-        .meta_wr_idx      (tcu_meta_wr_idx),
-        .meta_wr_data     (tcu_meta_wr_data),
+        .tcu_mem_if       (tcu_mem_if),
     `endif
         .dispatch_if      (dispatch_if),
         .commit_if        (commit_if)
     );
 
-    // the core-wide TCU state the blocks share: WGMMA tile buffers, metadata AGU
+    // the core-wide WGMMA tile buffers the TCU blocks share
     VX_tcu_shared #(
         .INSTANCE_ID ("tcu_unit_top"),
         .BLOCK_SIZE  (`VX_CFG_NUM_TCU_BLOCKS)
@@ -225,19 +206,6 @@ module VX_tcu_unit_top import VX_gpu_pkg::*, VX_tcu_pkg::*; (
         .tbuf_rs2_data    (tcu_tbuf_rs2_data),
         .tbuf_ready_eff   (tcu_tbuf_ready),
         .tcu_lmem_if      (tcu_lmem_if),
-    `endif
-    `ifdef TCU_META_ENABLE
-        .agu_ld_valid     (tcu_agu_ld_valid),
-        .agu_ld_data      (tcu_agu_ld_data),
-        .agu_ld_ready     (tcu_agu_ld_ready),
-        .agu_result_valid (tcu_agu_result_valid),
-        .agu_result_data  (tcu_agu_result_data),
-        .agu_result_ready (tcu_agu_result_ready),
-        .meta_wr_en       (tcu_meta_wr_en),
-        .meta_wr_wid      (tcu_meta_wr_wid),
-        .meta_wr_idx      (tcu_meta_wr_idx),
-        .meta_wr_data     (tcu_meta_wr_data),
-        .tcu_mem_if       (tcu_mem_if),
     `endif
         .clk              (clk),
         .reset            (reset)

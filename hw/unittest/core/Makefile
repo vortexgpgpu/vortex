@@ -8,9 +8,6 @@ DPI_DIR := $(VORTEX_HOME)/hw/dpi
 
 SRC_DIR := $(VORTEX_HOME)/hw/unittest/$(PROJECT)
 
-# A tensor-core format knob with the tensor core itself off: no unit may then
-# hang a client on the core's datapaths.
-CONFIGS += -DVX_CFG_TCU_SPARSE_ENABLE
 
 LDFLAGS += $(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
 

@@ -74,41 +74,22 @@ Vortex has a 6-stage pipeline:
     - Handle warp matrix multiply accumulate operations
 - **Commit**
   - Write result back to the register file and update the Scoreboard.
+  - A unit with fewer lanes than a SIMD slice (`NUM_*_LANES` < `SIMD_WIDTH`)
+    runs each slice of an instruction in several passes; its lane gather holds
+    the earlier passes and commits the slice in one writeback beat, with the
+    pass that completes it.
 
 ### Core partitioning
 
-The core splits its warps into slices, each a constant bit-slice of the warp id:
-`VX_CFG_FETCH_WIDTH` (FW) frontend slices (`wid mod FW`), `VX_CFG_ISSUE_WIDTH` (IW)
-issue slices (`wid mod IW`), and B blocks per execution unit (`wid mod B`), with
-FW and B dividing IW. A slice owns its warps' pipeline state; the core scheduler
-(CTA launch, barriers, wspawn, retirement), the shared SFU/TCU services and the
-memory unit stay core-wide.
-
-The structure follows from the widths:
-
-| Widths | Structure |
-|---|---|
-| every B = IW = FW | IW compute slices (`VX_compute_slice`), no frontend crossbar |
-| every B = IW, FW < IW | FW frontend slices, the frontend crossbar, IW backend slices (`VX_backend_slice`) |
-| some unit has B ≠ IW | FW frontend slices, the frontend crossbar, stage-sliced `VX_issue` / `VX_execute` / `VX_commit` |
-
-- **Frontend slice** (`VX_frontend_slice`): warp scheduler, fetch and decode for
-  `wid mod FW`, on its own icache port.
-- **Backend slice** (`VX_backend_slice`): issue, execute (one block of every
-  unit) and commit for one issue slice.
-- **Compute slice** (`VX_compute_slice`): a frontend slice and its backend slice,
-  joined directly: one end-to-end pipeline for `wid mod IW`. This is the
-  counterpart of an NVIDIA SM processing block.
-- **Frontend crossbar** (`VX_frontend_xbar`): combinational routing between FW
-  frontend slices and the back end whenever the core is not built from
-  compute slices. It sends each instruction to its issue slice, and each
-  branch, warp-control and CSR event to the frontend slice that owns the warp.
-- **Core-wide services**, reached through one port per block in every structure:
-  - `VX_sfu_shared` arbitrates the SFU blocks onto the core's single DXA, TEX
-    and RTU buses.
-  - `VX_tcu_shared` holds the state that spans TCU blocks: the WGMMA tile
-    buffers, whose B operand is common to a warpgroup's blocks, and the sparse
-    metadata AGU.
+The core splits its warps among parallel pipelines by warp id:
+`VX_CFG_FETCH_WIDTH` frontend slices (`wid mod FW`), `VX_CFG_ISSUE_WIDTH` issue
+slices (`wid mod IW`), and B blocks per execution unit (`wid mod B`). The
+widths select the structure: IW compute slices when every width is equal, FW
+frontend slices behind a combinational frontend crossbar otherwise, and a
+stage-sliced issue/execute/commit when some unit has fewer blocks than issue
+slices. CTA launch, barriers, warp retirement, the shared SFU/TCU services and
+the memory system stay core-wide. See
+[core_partitioning.md](core_partitioning.md).
 
 ### Vortex clustering architecture
 - Sockets

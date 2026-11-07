@@ -29,17 +29,15 @@ public:
 	// An op leaving its slot queue, which returns its issue credit.
 	SimChannel<instr_trace_t*> ReleaseOut;
 
-	// out_delay: cycles from leaving the slot queue to the unit taking the op.
+	// out_delay: cycles from the slot queue's head to the unit taking the op,
+	// past the lane-dispatch buffer when the unit has one.
 	Dispatcher(const SimContext& ctx, const char* name, Core* core, uint32_t queue_size, uint32_t block_size, uint32_t num_lanes, uint32_t out_delay);
 
 	virtual ~Dispatcher();
 
-	// Cycles the unit holds an op at its input before taking it, when the
-	// queue feeds the unit directly: the op keeps its queue slot, and so its
-	// issue credit, until the unit takes it.
-	void set_input_hold(std::function<uint32_t(const instr_trace_t*)> hold) {
-		input_hold_ = std::move(hold);
-	}
+	// The unit takes ops straight off the slot queue, so the credit returns as
+	// the unit accepts the op, from the unit itself.
+	void set_release_on_accept() { release_on_accept_ = true; }
 
 protected:
 	virtual void on_reset();
@@ -54,7 +52,14 @@ private:
 	uint32_t batch_idx_;
 	uint32_t out_delay_;
 	std::vector<int> block_pids_;
-	std::function<uint32_t(const instr_trace_t*)> input_hold_;
+	// first cycle a block's lane iterator can present a new op
+	std::vector<uint64_t> block_free_;
+	// the slot queue a block's iterator still holds a last packet of, or -1
+	std::vector<int> held_input_;
+	// A SIMD slice wider than the fanout limit (8 lanes, plus half) splits
+	// into packets through a registered iterator.
+	bool iter_out_reg_;
+	bool release_on_accept_ = false;
 
 	friend class SimObject<Dispatcher>;
 };

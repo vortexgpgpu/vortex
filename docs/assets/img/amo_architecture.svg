@@ -86,8 +86,8 @@
   <text x="908" y="80" class="tb">Commit point 1 — shared (local) memory</text>
 
   <rect x="912" y="96" width="448" height="166" rx="6" class="mem"/>
-  <text x="924" y="118" class="tb">VX_local_mem bank</text>
-  <text x="924" y="140" class="ts">single-ported SRAM: an atomic owns its bank for 3 cycles</text>
+  <text x="924" y="118" class="tb">VX_lmem_unit bank</text>
+  <text x="924" y="140" class="ts">an atomic owns its bank for 3 cycles (first port; nothing else is issued)</text>
   <text x="924" y="160" class="ts">① read the word      ② register it, resolve the reservation</text>
   <text x="924" y="176" class="ts">③ VX_amo_alu result written back under the request byteen</text>
   <text x="924" y="200" class="ts">VX_amo_unit: min(AMO_RS_SIZE, 4) stations, 3-bit hold credit</text>

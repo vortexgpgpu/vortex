@@ -106,8 +106,10 @@ private:
   // within a kernel. The occupancy bound floor(capacity/stride) (capped at
   // NUM_WARPS) replaces the byte ring's free_size accounting, so no wrap or
   // padding arithmetic is needed. Slots are allocated round-robin via a tail
-  // pointer and freed immediately when a CTA's last warp exits.
+  // pointer and freed when the retirement of a CTA's last warp lands.
   std::vector<uint32_t> slot_rem_warps_;  // remaining active warps; slot free when 0
+  // Warp retirements on their way to the slot table: {slot, cycle it lands}.
+  std::vector<std::pair<uint32_t, uint64_t>> retiring_;
   // Reverse lookup: wid → slot index
   std::vector<uint32_t> wid_to_slot_;
   uint32_t  tail_slot_;   // next slot to allocate (round-robin over usable slots)

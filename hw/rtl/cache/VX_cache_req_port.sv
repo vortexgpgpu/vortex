@@ -30,18 +30,15 @@ module VX_cache_req_port import VX_gpu_pkg::*; #(
     parameter MERGE_GROUP     = 1,  // Read-merge group size (1: no read merging)
     parameter BANK_HASH       = 0,  // Hashed bank select (cache_bank_hash)
     parameter SHARED_LLC      = 0,  // The LLC serving every memory client alone (VX_cache_init)
+    parameter SLOTS_WIDTH     = 0,  // Line merging: every group input's {tag, word select} rides the request
     parameter REQ_STAGE       = 0,  // A request stage before the bank arbiters
-    // The banks' ready is their buffers' ready, whatever the request (one
-    // input, no arbitration): the selected bank's ready answers. Otherwise a
-    // bank's arbiter is ready only to a valid request it grants.
-    parameter SEL_READY       = 0,
 
     parameter BANK_SEL_BITS   = `CLOG2(NUM_BANKS),
     parameter BANK_SEL_WIDTH  = `UP(BANK_SEL_BITS),
     parameter WORD_SEL_WIDTH  = `UP(WORD_SEL_BITS),
     parameter LINE_ADDR_WIDTH = ADDR_WIDTH - BANK_SEL_BITS - WORD_SEL_BITS,
     parameter MERGE_WIDTH     = (MERGE_GROUP > 1) ? MERGE_GROUP : 0,
-    parameter BANK_TAG_WIDTH  = TAG_WIDTH + MERGE_WIDTH,
+    parameter BANK_TAG_WIDTH  = TAG_WIDTH + SLOTS_WIDTH + MERGE_WIDTH,
     parameter ATTR_WIDTH      = `UP(MEM_ATTR_WIDTH),
     parameter DATAW           = LINE_ADDR_WIDTH + 1 + WORD_SEL_WIDTH + WORD_SIZE + 8 * WORD_SIZE + BANK_TAG_WIDTH + ATTR_WIDTH
 ) (
@@ -63,6 +60,8 @@ module VX_cache_req_port import VX_gpu_pkg::*; #(
     output wire                     flush_full,
     output wire                     flush_l1,
     output wire                     flush_io,
+    output wire                     flush_acq,
+    output wire                     flush_rel,
     input wire                      flush_hold,   // every input closed for a token
     input wire                      dbg_stall,
     input wire                      pending_load, // the visible tokens become pending
@@ -76,6 +75,7 @@ module VX_cache_req_port import VX_gpu_pkg::*; #(
     input wire                      merge_follower, // served by a lower input's access
     input wire                      merge_ready,    // that access is accepted now
     input wire [`UP(MERGE_WIDTH)-1:0] merge_mask,   // the inputs this one's access serves
+    input wire [`UP(SLOTS_WIDTH)-1:0] merge_slots,  // line merging: the group inputs' {tag, word select}
 
     // the banks
     output wire                     stage_valid,  // a request is held for the banks
@@ -83,14 +83,23 @@ module VX_cache_req_port import VX_gpu_pkg::*; #(
     output wire [DATAW-1:0]         bank_data,
     input wire [NUM_BANKS-1:0]      bank_ready
 );
-    // the flush token's kind
+    // The flush token's kind (VX_cache_init). The L1-only kind splits by what
+    // the fence orders: a release token (noalloc attribute) owes no
+    // invalidation, an acquire token (io attribute with byte enables set) owes
+    // no drain.
     assign flush      = in_valid && in_attr[MEM_ATTR_FLUSH_OFFS];
-    assign flush_io   = flush && in_attr[MEM_ATTR_IO_OFFS];
-    assign flush_l1   = flush && ~flush_io && (| in_byteen);
-    assign flush_full = flush && ~flush_l1 && ~flush_io;
+    wire tok_io  = in_attr[MEM_ATTR_IO_OFFS];
+    wire tok_rel = in_attr[MEM_ATTR_NOALLOC_OFFS];
+    wire tok_l1  = (| in_byteen);
+    assign flush_io   = flush &&  tok_io && ~tok_l1;
+    assign flush_acq  = flush &&  tok_io &&  tok_l1;
+    assign flush_rel  = flush && ~tok_io &&  tok_l1 &&  tok_rel;
+    assign flush_l1   = flush && ~tok_io &&  tok_l1 && ~tok_rel;
+    assign flush_full = flush && ~tok_l1 && ~tok_io;
 
-    // whether the token is still to be answered
-    wire owed = flush_io || ((SHARED_LLC != 0) && flush_l1);
+    // whether the token is still to be answered: a quiesce without a walk
+    // serves only the tokens owing none
+    wire owed = flush_io || flush_rel || ((SHARED_LLC != 0) && (flush_l1 || flush_acq));
     reg pending_r;
     always @(posedge clk) begin
         if (reset) begin
@@ -150,11 +159,15 @@ module VX_cache_req_port import VX_gpu_pkg::*; #(
     end
 
     wire [BANK_TAG_WIDTH-1:0] bank_tag;
-    if (MERGE_WIDTH != 0) begin : g_merge_tag
+    if (SLOTS_WIDTH != 0) begin : g_slots_tag
+        assign bank_tag = {in_tag, merge_slots, merge_mask};
+    end else if (MERGE_WIDTH != 0) begin : g_merge_tag
         assign bank_tag = {in_tag, merge_mask};
+        `UNUSED_VAR (merge_slots)
     end else begin : g_no_merge_tag
         assign bank_tag = in_tag;
         `UNUSED_VAR (merge_mask)
+        `UNUSED_VAR (merge_slots)
     end
 
     wire [DATAW-1:0] req_data = {line_addr, in_rw, wsel, in_byteen, in_data, bank_tag, in_attr};
@@ -195,10 +208,13 @@ module VX_cache_req_port import VX_gpu_pkg::*; #(
         .data_in  (sel_valid),
         .data_out (bank_valid)
     );
-    if (SEL_READY != 0 && NUM_BANKS > 1) begin : g_sel_ready
+    // A bank arbiter may be ready to an input that does not request it (a
+    // single-input fan-in slice passes its buffer's ready through), so the
+    // selected bank's ready answers.
+    if (NUM_BANKS > 1) begin : g_sel_ready
         assign sel_ready = bank_ready[sel_bid];
-    end else begin : g_any_ready
-        assign sel_ready = (| bank_ready);
+    end else begin : g_one_bank
+        assign sel_ready = bank_ready;
     end
 
 endmodule

@@ -5,7 +5,7 @@ defaults:
   - 32
   - 64
   tier: smoke
-  touches: [hw/rtl/tcu, sim/simx/tcu, sw/kernel/include/vx_tensor.h]
+  touches: [hw/rtl/tcu, hw/rtl/VX_gpu_pkg.sv, sim/simx/tcu, sim/simx/fragment_layout.h, sw/kernel/include/vx_tensor.h]
 tests:
 - id: sgemm_tcu_sp_mx-simx-mxfp8-nt4
   via: blackbox

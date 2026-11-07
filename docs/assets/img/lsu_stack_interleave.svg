@@ -92,8 +92,8 @@
 
   <text x="752" y="386" class="ts">The thread index and the word index trade places, so a warp-wide</text>
   <text x="752" y="404" class="ts">access to one slot fills one contiguous block.</text>
-  <text x="752" y="432" class="ts">The slot index is XOR-ed with the group index: without it, the same</text>
-  <text x="752" y="448" class="ts">slot of every warp would still land in one cache set.</text>
+  <text x="752" y="432" class="ts">The slot index is XOR-ed with the group index, in whole lines: without</text>
+  <text x="752" y="448" class="ts">it, the same slot of every warp would land in one cache set.</text>
   <text x="752" y="492" class="tt">address = {group, word ⊕ group, thread, byte}</text>
 
   <path d="M 664 296 L 736 296" class="flow"/>

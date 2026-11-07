@@ -74,7 +74,8 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // ---- Registered state ----
     reg                        active_r;
     reg [`VX_CFG_MEM_ADDR_WIDTH-1:0] gmem_cursor_r;  // Current row's GMEM byte base
-    reg [31:0]                 row_len_r;            // row_len_bytes (constant)
+    reg [CL_OFF_BITS-1:0]      row_len_off_r;        // row_len_bytes within a CL (constant)
+    reg [31:0]                 row_len_ceil_r;       // row_len_bytes + LINE - 1
 
     // Inner-loop counters/flags (advance every beat).
     reg [GMEM_ADDR_WIDTH-1:0]  cl_addr_r;            // Current CL address (GMEM)
@@ -84,7 +85,9 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     // Outer-dim odometer.
     reg [DXA_MAX_OUTER_DIMS-1:0][31:0] dim_count_r;   // Current index per dim
-    reg [DXA_MAX_OUTER_DIMS-1:0][31:0] dim_last_r;    // Last index per dim (tile-1)
+    reg [DXA_MAX_OUTER_DIMS-1:0][31:0] dim_penult_r;  // Index before the last (tile-2)
+    reg [DXA_MAX_OUTER_DIMS-1:0]       dim_single_r;  // tile == 1: index 0 is the last
+    reg [DXA_MAX_OUTER_DIMS-1:0]       dim_at_last_r; // dim_count_r == tile-1
     reg [DXA_MAX_OUTER_DIMS-1:0][31:0] delta_r;       // Wrap delta per dim
     reg [DXA_MAX_OUTER_DIMS-1:0][31:0] oob_limit_r;   // OOB limit per dim
 
@@ -150,14 +153,12 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                || (dim_count_r[3] >= oob_limit_r[3]);
 
     // ---- Last-row detection: all outer dims at their last index ----
-    // An odometer index reaches its bound by equality, not magnitude: with
-    // dim_count in [0, tile-1], (dim_count+1 >= tile) ⟺ (dim_count == tile-1).
-    // Equality is ~2 LUT levels vs a CARRY8 chain, which keeps the once-per-row
-    // step_delta / num_lines wrap path short.
-    wire dim0_last = (dim_count_r[0] == dim_last_r[0]);
-    wire dim1_last = (dim_count_r[1] == dim_last_r[1]);
-    wire dim2_last = (dim_count_r[2] == dim_last_r[2]);
-    wire dim3_last = (dim_count_r[3] == dim_last_r[3]);
+    // Registered alongside the odometer, so the once-per-row step_delta /
+    // num_lines wrap path starts at a flop instead of a 32-bit compare.
+    wire dim0_last = dim_at_last_r[0];
+    wire dim1_last = dim_at_last_r[1];
+    wire dim2_last = dim_at_last_r[2];
+    wire dim3_last = dim_at_last_r[3];
     wire is_last_outer = dim0_last && dim1_last && dim2_last && dim3_last;
 
     // ---- Output ----
@@ -204,7 +205,8 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] next_cursor = gmem_cursor_r + step_delta;
     wire [31:0] start_span = 32'(setup_params.initial_gmem_base[CL_OFF_BITS-1:0])
                            + setup_params.row_len_bytes;
-    wire [31:0] wrap_span  = 32'(next_cursor[CL_OFF_BITS-1:0]) + row_len_r;
+    wire [CL_OFF_BITS-1:0] wrap_end_off = next_cursor[CL_OFF_BITS-1:0] + row_len_off_r;
+    wire [31:0] wrap_lines = (32'(next_cursor[CL_OFF_BITS-1:0]) + row_len_ceil_r) >> CL_OFF_BITS;
 
     function automatic logic [31:0] calc_num_lines(input logic [31:0] span);
         calc_num_lines = (span + GMEM_LINE_SIZE - 1) >> CL_OFF_BITS;
@@ -245,8 +247,9 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         end else if (start) begin
             active_r         <= 1'b1;
             gmem_cursor_r    <= setup_params.initial_gmem_base;
-            row_len_r        <= setup_params.row_len_bytes;
-            cl_addr_r        <= setup_params.initial_gmem_base[`VX_CFG_MEM_ADDR_WIDTH-1:CL_OFF_BITS];
+            row_len_off_r    <= setup_params.row_len_bytes[CL_OFF_BITS-1:0];
+            row_len_ceil_r   <= setup_params.row_len_bytes + GMEM_LINE_SIZE - 1;
+            cl_addr_r       <= setup_params.initial_gmem_base[`VX_CFG_MEM_ADDR_WIDTH-1:CL_OFF_BITS];
             lines_left_r     <= calc_num_lines(start_span);
             is_first_r       <= 1'b1;
             last_vend_r      <= calc_last_vend(start_span[CL_OFF_BITS-1:0]);
@@ -267,8 +270,10 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             n_base_r         <= '0;
             tiled_base_r     <= setup_params.initial_smem_base;
             for (int d = 0; d < DXA_MAX_OUTER_DIMS; d++) begin
-                dim_count_r[d] <= '0;
-                dim_last_r[d]  <= setup_params.dim_tiles[d] - 32'd1;
+                dim_count_r[d]   <= '0;
+                dim_penult_r[d]  <= setup_params.dim_tiles[d] - 32'd2;
+                dim_single_r[d]  <= (setup_params.dim_tiles[d] == 32'd1);
+                dim_at_last_r[d] <= (setup_params.dim_tiles[d] == 32'd1);
                 delta_r[d]     <= setup_params.delta[d];
                 oob_limit_r[d] <= setup_params.oob_limit[d];
             end
@@ -293,9 +298,9 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                 // next beat is the new row's CL0.
                 gmem_cursor_r <= next_cursor;
                 cl_addr_r     <= next_cursor[`VX_CFG_MEM_ADDR_WIDTH-1:CL_OFF_BITS];
-                lines_left_r  <= calc_num_lines(wrap_span);
+                lines_left_r  <= wrap_lines;
                 is_first_r    <= 1'b1;
-                last_vend_r   <= calc_last_vend(wrap_span[CL_OFF_BITS-1:0]);
+                last_vend_r   <= calc_last_vend(wrap_end_off);
                 // K-major: SMEM jumps back to the next row base (initial +
                 // (i1+1) * esize). Maintained via km_row_base_r which we bump
                 // by esize at each row wrap. Row-major path keeps its linear
@@ -308,18 +313,25 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                 // Tiled scatter: each new row restarts at N=0 (tile-relative).
                 n_base_r <= '0;
                 if (dim0_steps) begin
-                    dim_count_r[0] <= dim_count_r[0] + 1;
+                    dim_count_r[0]   <= dim_count_r[0] + 1;
+                    dim_at_last_r[0] <= (dim_count_r[0] == dim_penult_r[0]);
                 end else begin
-                    dim_count_r[0] <= '0;
+                    dim_count_r[0]   <= '0;
+                    dim_at_last_r[0] <= dim_single_r[0];
                     if (dim1_steps) begin
-                        dim_count_r[1] <= dim_count_r[1] + 1;
+                        dim_count_r[1]   <= dim_count_r[1] + 1;
+                        dim_at_last_r[1] <= (dim_count_r[1] == dim_penult_r[1]);
                     end else begin
-                        dim_count_r[1] <= '0;
+                        dim_count_r[1]   <= '0;
+                        dim_at_last_r[1] <= dim_single_r[1];
                         if (dim2_steps) begin
-                            dim_count_r[2] <= dim_count_r[2] + 1;
+                            dim_count_r[2]   <= dim_count_r[2] + 1;
+                            dim_at_last_r[2] <= (dim_count_r[2] == dim_penult_r[2]);
                         end else begin
-                            dim_count_r[2] <= '0;
-                            dim_count_r[3] <= dim_count_r[3] + 1;
+                            dim_count_r[2]   <= '0;
+                            dim_at_last_r[2] <= dim_single_r[2];
+                            dim_count_r[3]   <= dim_count_r[3] + 1;
+                            dim_at_last_r[3] <= (dim_count_r[3] == dim_penult_r[3]);
                         end
                     end
                 end
@@ -336,6 +348,8 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     // km_step is LMEM-bounded; only the low DXA_SMEM_ADDR_W bits feed smem_byte_addr_r.
     `UNUSED_VAR (km_step[31:DXA_SMEM_ADDR_W])
+    // the outermost dim only steps (all-last ends the transfer), never wraps to 0
+    `UNUSED_VAR (dim_single_r[DXA_MAX_OUTER_DIMS-1])
 
 `ifdef DBG_TRACE_DXA
     always @(posedge clk) begin

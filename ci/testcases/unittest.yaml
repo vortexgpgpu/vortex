@@ -37,14 +37,23 @@ tests:
   - id: hw-tcu
     via: script
     run: "make -C hw/unittest run-tcu"
-    touches: [hw/rtl/tcu, hw/unittest/tcu_fedp]
+    touches: [hw/rtl/tcu, hw/unittest/tcu_fedp, sw/common/fedp.h]
+  # VX_tcu_unit end to end (dispatch, uops, operand routing, commit), bit-exact
+  # against each datapath's reference: native TFR against the TfrFedp reference
+  # model, DPI against its discrete mul/add. Then the native FEDP's
+  # fp8 and block-scaled (MX/NVFP4) formats against the same model. The `hw`
+  # lane only builds these.
+  - id: hw-tcu-unit
+    via: script
+    run: "make -C hw/unittest run-tcu-unit"
+    touches: [hw/rtl/tcu, hw/dpi, hw/unittest/tcu_unit, hw/unittest/tcu_fedp, sw/common/fedp.h]
   # Same native-TFR formats with the multipliers mapped onto DSP48 (USE_DSP=1) —
   # the FPGA-synthesis path, off by default in sim. Bit-identical to LUT by
   # contract, so a mismatch is a DSP-packing bug.
   - id: hw-tcu-dsp
     via: script
     run: "make -C hw/unittest run-tcu-dsp"
-    touches: [hw/rtl/tcu, hw/unittest/tcu_fedp]
+    touches: [hw/rtl/tcu, hw/unittest/tcu_fedp, sw/common/fedp.h]
   # VX_alu_muldiv as synthesized (no DPI models): every M opcode against the
   # RISC-V definitions under random input bubbles and output stalls, and the
   # multiplier's passes and latency (multi-pass 64-bit multiply at XLEN 64).
@@ -92,6 +101,14 @@ tests:
     via: script
     run: "make -C hw/unittest/sticky_arb run"
     touches: [hw/rtl/libs/VX_generic_arbiter.sv, hw/rtl/libs/VX_priority_arbiter.sv, hw/rtl/libs/VX_rr_arbiter.sv, hw/rtl/libs/VX_matrix_arbiter.sv, hw/rtl/libs/VX_cyclic_arbiter.sv, hw/rtl/libs/VX_gto_arbiter.sv, hw/unittest/sticky_arb]
+  # The ID-routed AXI arbiter shared by the AFU and the command processor:
+  # write data must reach the slave in address order whichever channel a
+  # master offers first, and a slave that takes data before the address must
+  # not deadlock it. xrtsim's always-ready slave exercises neither.
+  - id: hw-mm-axi-arb
+    via: script
+    run: "make -C hw/unittest/mm_axi_arb run"
+    touches: [hw/rtl/libs/VX_mm_axi_arb.sv, hw/unittest/mm_axi_arb]
   # Texel blend (VX_tex_lerp, both forms the sampler uses) against the C model
   # the SW sampler and SimX share, and the exact Vulkan f/256 blend, over every
   # input.

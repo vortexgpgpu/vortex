@@ -180,6 +180,9 @@ $(SRCS_LIST): $(RTL_SRCS) $(IP_STUBS) $(SCRIPT_DIR)/xilinx_ip_gen.tcl
 		rm -f $(SRCS_DIR)/$$f; \
 		grep -v "/$$f$$" $@.tmp > $@.tmp2 && mv $@.tmp2 $@.tmp; \
 	done
+	@# the RAM fold runs here, not in gen_sources.sh (-F), so it patches the sources as read
+	$(RAM_FOLD_PYTHON) $(SCRIPT_DIR)/ram_fold.py --top $(TARGET_TOP) --report $(SRCS_DIR)/ram_fold.rpt \
+		--diff $(SRCS_DIR)/ram_fold.diff $$(grep -E '\.s?v$$' $@.tmp)
 	@if grep -qE 'localparam +VX_MEM_PORTS *= *0 *;' $(SRCS_DIR)/VX_gpu_pkg.sv; then \
 		echo "ERROR: generated sources resolve VX_MEM_PORTS to 0 (no memory interface)"; exit 1; \
 	fi

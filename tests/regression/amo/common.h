@@ -17,6 +17,9 @@
 // hart-isolation case: LRSC_ISO_MARK + t. The word starts at 0.
 #define LRSC_ISO_MARK 0x5c000000u
 
+// Initial word of the local-memory swap chain in the AMO op sweep.
+#define AMO_OPS_SWAP_INIT 0x5EED5EEDu
+
 // Args shared between host (main.cpp) and the GPU kernel (kernel.cpp).
 // Layout matches dogfood's, with `iters` added for the contention loops.
 typedef struct {

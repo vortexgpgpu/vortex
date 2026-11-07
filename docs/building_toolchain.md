@@ -1130,10 +1130,11 @@ for the backend's architecture and
 
 ## 14. CIRCT
 
-**Purpose**: the SystemVerilog frontend of every synthesis flow. Each flow
-reads the netlist CIRCT elaborates (`hw/scripts/circt_elaborate.sh`,
-`gen_sources.sh -E`; see the hardware library's "Block RAM and asynchronous
-reads"), and Foldsim builds on it.
+**Purpose**: the SystemVerilog frontend of every synthesis flow. Its
+preprocessor writes the sources each flow reads (`gen_sources.sh -P`, then the
+RAM fold, `-F`; see the hardware library's "Block RAM and asynchronous reads");
+Vivado reads them as they are, and Yosys, Beacon and Foldsim read the netlist
+CIRCT elaborates from them (`hw/scripts/circt_elaborate.sh`).
 
 > **Baseline:** Vortex's CIRCT fork, branch `vortex_3.x` of
 > `vortexgpgpu/circt`: upstream CIRCT with the import, lowering and
@@ -1215,8 +1216,11 @@ cmake -G Ninja -S $FOLDSIM_SRC -B $FOLDSIM_SRC/build \
 ### Notes
 
 - `foldsim-opt` links CIRCT statically; the driver finds it next to itself
-  and the CIRCT tools through `--circt-bin`. `hw/syn/common.mk` sets
-  `FOLDSIM_PATH ?= $(TOOLDIR)/foldsim` and `FOLDSIM ?= $(FOLDSIM_PATH)/bin/foldsim`.
+  and the CIRCT tools through `--circt-bin`. `config.mk` sets
+  `FOLDSIM_PATH ?= $(TOOLDIR)/foldsim` and `FOLDSIM_SHELL ?=
+  $(FOLDSIM_PATH)/share/foldsim/shell` (the FPGA shell the simulator runs in);
+  `hw/syn/common.mk` sets `FOLDSIM ?= $(FOLDSIM_PATH)/bin/foldsim` and
+  `FOLDSIM_LIFT_TOOL ?= $(FOLDSIM_PATH)/bin/foldsim-lift`.
 - A CIRCT change Foldsim's passes rely on lands in CIRCT first; both
   prebuilts are refreshed together.
 - The prebuilt is opt-in: `./ci/toolchain_install.sh --foldsim` (or `--all`)

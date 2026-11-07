@@ -9,8 +9,8 @@
 //   - CP_STATUS reflects the harness-driven cp_busy / cp_error inputs.
 //   - CP_DEV_CAPS returns the configured (NUM_QUEUES, RING_SIZE_LOG2_MAX,
 //     AXI_TID_WIDTH) fields.
-//   - GPU_DEV_CAPS / GPU_ISA_CAPS read back non-DECERR, decode to sane
-//     fields, and ignore writes (read-only).
+//   - GPU_DEV_CAPS / GPU_DEV_CAPS_EXT / GPU_ISA_CAPS read back non-DECERR,
+//     decode to sane fields, and ignore writes (read-only).
 //   - CP_CYCLE counter actually advances per clock.
 //   - Atomic Q_TAIL commit: writing Q_TAIL_LO alone does NOT advance
 //     q_state.tail; writing Q_TAIL_HI atomically commits both halves.
@@ -23,6 +23,7 @@
 
 #include "vl_simulator.h"
 #include "VVX_cp_axil_regfile_top.h"
+#include <VX_config.h>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -152,10 +153,13 @@ template <typename T> static uint8_t  q_profile_en(T* t) { return (uint8_t)read_
 static constexpr uint16_t CP_CTRL          = 0x000;
 static constexpr uint16_t CP_STATUS        = 0x004;
 static constexpr uint16_t CP_DEV_CAPS      = 0x008;
+static constexpr uint16_t GPU_DEV_CAPS_EXT = 0x00C;
 static constexpr uint16_t CP_CYCLE_LO      = 0x010;
 static constexpr uint16_t CP_CYCLE_HI      = 0x014;
 static constexpr uint16_t GPU_DEV_CAPS_LO  = 0x018;
 static constexpr uint16_t GPU_DEV_CAPS_HI  = 0x01C;
+static constexpr uint16_t CP_SATP_LO       = 0x028;
+static constexpr uint16_t CP_SATP_HI       = 0x02C;
 static constexpr uint16_t GPU_ISA_CAPS_LO  = 0x020;
 static constexpr uint16_t GPU_ISA_CAPS_HI  = 0x024;
 
@@ -197,6 +201,16 @@ int main(int argc, char** argv) {
         EXPECT((v & 0xff)        == 1,  "T1: NUM_QUEUES low byte");
         EXPECT(((v >> 8)  & 0xff) == 16, "T1: RING_SIZE_LOG2_MAX byte");
         EXPECT(((v >> 16) & 0xff) == 6,  "T1: AXI_TID_WIDTH byte");
+        EXPECT(((v >> 24) & 1) == VX_CFG_VM_ENABLED, "T1: VM_ENABLED bit");
+    }
+
+    // ----- Test 1b: CP_SATP holds the DMA page-table root -----
+    {
+        EXPECT(axil_write(sim, tick, CP_SATP_LO, 0x80012345) == 0, "T1b: SATP_LO write");
+        EXPECT(axil_write(sim, tick, CP_SATP_HI, 0x00000007) == 0, "T1b: SATP_HI write");
+        EXPECT((axil_read(sim, tick, CP_SATP_LO) & 0xffffffffull) == 0x80012345, "T1b: SATP_LO readback");
+        EXPECT((axil_read(sim, tick, CP_SATP_HI) & 0xffffffffull) == 0x00000007, "T1b: SATP_HI readback");
+        EXPECT(sim->satp == 0x0000000780012345ull, "T1b: satp output");
     }
 
     // ----- Test 2: CP_CYCLE counter advances -----
@@ -350,6 +364,12 @@ int main(int argc, char** argv) {
                 }
             }
         }
+        // Exact counts: warps [48:42], clusters [63:57], socket size in the extension word.
+        EXPECT(((dev_caps >> 42) & 0x7F) == VX_CFG_NUM_WARPS, "T11: dev_caps exact warps");
+        EXPECT(((dev_caps >> 57) & 0x7F) == VX_CFG_NUM_CLUSTERS, "T11: dev_caps exact clusters");
+        uint64_t de = axil_read(sim, tick, GPU_DEV_CAPS_EXT);
+        EXPECT((de >> 32) == 0, "T11: GPU_DEV_CAPS_EXT DECERR");
+        EXPECT((uint32_t)de == VX_CFG_SOCKET_SIZE, "T11: GPU_DEV_CAPS_EXT socket size");
         // isa_caps XLEN field [31:30] = clog2(XLEN)-4, so 1 (RV32) or 2 (RV64).
         uint32_t xlen_field = (uint32_t)((isa_caps >> 30) & 0x3);
         EXPECT(xlen_field == 1 || xlen_field == 2, "T11: isa_caps XLEN field");

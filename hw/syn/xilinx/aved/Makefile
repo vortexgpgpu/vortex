@@ -77,6 +77,18 @@ endif
 
 CFLAGS += $(COMPILE_CFLAGS)
 
+# One AXI memory master per GPU memory port. The kernel top must declare its
+# ports literally, so resolve the count from the elaborated configuration.
+AFU_MEM_PORTS := $(shell $(SCRIPT_DIR)/afu_mem_ports.sh -c $(BUILD_DIR)/.afu_mem_ports $(VERILATOR_PATH)/bin/verilator $(filter-out -J%,$(XML_CFLAGS)))
+ifeq ($(AFU_MEM_PORTS),)
+$(error cannot resolve the AFU memory port count for this configuration)
+endif
+# The linker config binds the single device-memory master to MEM_TAG.
+ifneq ($(AFU_MEM_PORTS),1)
+$(error the V80 link binds one device-memory master, but this configuration has AFU_MEM_PORTS=$(AFU_MEM_PORTS))
+endif
+CFLAGS += -DAFU_MEM_PORTS=$(AFU_MEM_PORTS)
+
 .PHONY: all clean package-ip gen-bin FORCE
 
 all: check-axil-blocks $(VBIN_CONTAINER)

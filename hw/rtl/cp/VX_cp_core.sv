@@ -149,6 +149,8 @@ module VX_cp_core
   logic       fetch_idle      [NUM_QUEUES];
   logic       engine_idle     [NUM_QUEUES];
 
+  wire [63:0] cp_satp;
+
   VX_cp_axil_regfile #(
     .NUM_QUEUES     (NUM_QUEUES),
     .ADDR_W         (AXIL_AW),
@@ -164,6 +166,7 @@ module VX_cp_core
     .q_error        (q_error_to_reg),
     .last_dcr_rsp   (dcr_last_rsp_data),
     .q_state        (q_state),
+    .satp           (cp_satp),
     .q_reset_pulse  (q_reset_pulse),
     .q_clear_ack    (q_clear),
     .dbg_host_w_counts (dbg_host_w_counts),
@@ -378,6 +381,7 @@ module VX_cp_core
     .grant    (any_dma_grant),
     .cmd      (granted_dma_cmd),
     .done     (dma_done),
+    .satp     (cp_satp),
     .axi_host (dma_host_axi),
     .axi_dev  (dma_dev_axi)
   );

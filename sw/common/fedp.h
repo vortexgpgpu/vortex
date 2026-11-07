@@ -25,9 +25,9 @@
 #include <utility>
 
 #ifdef FEDP_TRACE
-#define LOG(...) std::fprintf(stderr, __VA_ARGS__);
+#define FEDP_LOG(...) std::fprintf(stderr, __VA_ARGS__);
 #else
-#define LOG(...)
+#define FEDP_LOG(...)
 #endif
 
 #ifdef FEDP_RTL_WATCH
@@ -36,26 +36,42 @@
 #define RTL_WATCH(...)
 #endif
 
-class FEDP {
+class TfrFedp {
 public:
-  explicit FEDP(int exp_bits = 5, int sig_bits = 10, int frm = 0, int W = 25, bool renorm = false, bool no_window = false)
+  explicit TfrFedp(int exp_bits = 5, int sig_bits = 10, int frm = 0, int W = 25, bool renorm = false, bool no_window = false)
       : exp_bits_(exp_bits), sig_bits_(sig_bits), frm_(frm), W_(W), renorm_(renorm), no_window_(no_window) {
-    LOG("[ctor] fmt=e%dm%d, frm=%d, W=%d, renorm_=%s, no_window_=%s\n",
+    FEDP_LOG("[ctor] fmt=e%dm%d, frm=%d, W=%d, renorm_=%s, no_window_=%s\n",
         exp_bits_, sig_bits_, frm_, W_, (renorm_ ? "true" : "false"), (no_window_ ? "true" : "false"));
     assert(exp_bits_ > 0 && exp_bits_ <= 8);
     assert(sig_bits_ > 0 && sig_bits_ <= 10);
     assert(frm_ >= 0 && frm_ <= 4);
   }
 
+  // Block-scaled formats: one scale byte per lane for A and B, two lanes per
+  // 32-bit register (a lane is 16 bits of it: two fp8 or four fp4 elements).
+  //   fp8/bf8 (MXFP8/MXBF8) and fp4 (MXFP4): E8M0 scales;
+  //   fp4 with e4m3_scale (NVFP4): E4M3 scales.
+  float operator()(const uint32_t *a, const uint32_t *b, float c, uint32_t n,
+                   const uint8_t *sf_a, const uint8_t *sf_b, bool e4m3_scale = false) {
+    sf_a_ = sf_a;
+    sf_b_ = sf_b;
+    e4m3_scale_ = e4m3_scale;
+    float d = (*this)(a, b, c, n);
+    sf_a_ = sf_b_ = nullptr;
+    e4m3_scale_ = false;
+    return d;
+  }
+
   float operator()(const uint32_t *a, const uint32_t *b, float c, uint32_t n) {
     const auto c_enc = bitsFromF32(c);
     rtl_watch_s0(a, b, c_enc, n);
 
-    const auto terms = decode_inputs(a, b, n);
     const auto c_dec = decode_input(c_enc, 8, 23);
     const auto c_term = decodeC_to_common(c_dec);
 
-    const auto mul_res = multiply_to_common(terms, c_term);
+    const auto mul_res = (exp_bits_ == 2 && sig_bits_ == 1)
+                       ? multiply_f4(a, b, n, c_term)
+                       : multiply_to_common(decode_inputs(a, b, n), c_term);
 
     rtl_watch_s1(mul_res, c_term, c_enc);
 
@@ -157,7 +173,7 @@ private:
   }
 
   // -------- [RTL-WATCH] helpers --------
-  inline void rtl_watch_s0(const uint32_t* a, const uint32_t* b, uint32_t c_enc, uint32_t n) {
+  inline void rtl_watch_s0([[maybe_unused]] const uint32_t* a, [[maybe_unused]] const uint32_t* b, [[maybe_unused]] uint32_t c_enc, [[maybe_unused]] uint32_t n) {
 #ifdef FEDP_RTL_WATCH
     RTL_WATCH("[RTL_WATCH] FEDP-S0(%lu): a_row=", req_id_);
     RTL_WATCH("{");
@@ -174,7 +190,7 @@ private:
 #endif
   }
 
-  inline void rtl_watch_s1(const mul_res_t& res, const cterm_t& c_term, uint32_t c_enc) {
+  inline void rtl_watch_s1([[maybe_unused]] const mul_res_t& res, [[maybe_unused]] const cterm_t& c_term, [[maybe_unused]] uint32_t c_enc) {
 #ifdef FEDP_RTL_WATCH
     RTL_WATCH("[RTL_WATCH] FEDP-S1(%lu): max_exp=0x%x, shift_amt=", req_id_, res.L);
     RTL_WATCH("{");
@@ -202,7 +218,7 @@ private:
 #endif
   }
 
-  inline void rtl_watch_s2(const align_t& aln, const mul_res_t& res, const cterm_t& c_term, uint32_t c_enc) {
+  inline void rtl_watch_s2([[maybe_unused]] const align_t& aln, [[maybe_unused]] const mul_res_t& res, [[maybe_unused]] const cterm_t& c_term, [[maybe_unused]] uint32_t c_enc) {
 #ifdef FEDP_RTL_WATCH
     RTL_WATCH("[RTL_WATCH] FEDP-S2(%lu): max_exp=0x%x, aln_sig=", req_id_, res.L);
     RTL_WATCH("{");
@@ -228,7 +244,7 @@ private:
 #endif
   }
 
-  inline void rtl_watch_s3(const acc_t& acc, const mul_res_t& res, const cterm_t& c_term, uint32_t c_enc) {
+  inline void rtl_watch_s3([[maybe_unused]] const acc_t& acc, [[maybe_unused]] const mul_res_t& res, [[maybe_unused]] const cterm_t& c_term, [[maybe_unused]] uint32_t c_enc) {
 #ifdef FEDP_RTL_WATCH
     uint32_t sigs_sign = 0;
     for (size_t i = 0; i < res.terms.size() - 1; ++i) {
@@ -239,7 +255,7 @@ private:
 #endif
   }
 
-  inline void rtl_watch_norm(const nrm_t& nrm, int flags, int max_exp) {
+  inline void rtl_watch_norm([[maybe_unused]] const nrm_t& nrm, [[maybe_unused]] int flags, [[maybe_unused]] int max_exp) {
 #ifdef FEDP_RTL_WATCH
     int lsb = nrm.kept & 1;
     RTL_WATCH("[RTL_WATCH] FEDP-NORM(%lu): abs_sum=0x%x, L=%d, G=%d, R=%d, S=%d, Rup=%d\n",
@@ -248,11 +264,18 @@ private:
 #endif
   }
 
-  inline void rtl_watch_s4(uint32_t result) {
+  inline void rtl_watch_s4([[maybe_unused]] uint32_t result) {
 #ifdef FEDP_RTL_WATCH
     RTL_WATCH("[RTL_WATCH] FEDP-S4(%lu): result=0x%08x\n", req_id_, result);
 #endif
   }
+
+  // Exponent of a zero term: it stands for the datapath's exponent 0, which
+  // add_c_term places WA - 1 below this model's exponent origin.
+  static constexpr int kZeroE = -(1 << 20);
+
+  // The datapath's accumulator width over `lanes` product terms and C.
+  int acc_width(uint32_t lanes) const { return W_ + 2 + (32 - lzcN(lanes, 32)); }
 
   // -------- logic --------
   static inline std::pair<uint32_t, uint32_t> csa(uint32_t a, uint32_t b, uint32_t c) {
@@ -303,10 +326,11 @@ private:
     const int sb = sig_bits_, eb = exp_bits_;
     std::vector<pterm_t> out;
     std::vector<int> eps; // per-term *window LSB exponent* (not raw Ep/Ec)
+    std::vector<int> sel_eps;
+    std::vector<bool> nonzero;
     out.reserve(v.size() + 1);
     eps.reserve(v.size() + 1);
 
-    bool c_is_zero = (c_term.cls == 0 && c_term.sp == 0);
 
     uint8_t c_nan  = (c_term.sp == 3) ? FL_NAN  : 0;
     uint8_t c_pinf = (c_term.sp == 1) ? FL_PINF : 0;
@@ -354,8 +378,14 @@ private:
         Ep -= lzc_prod;
       }
 
+      // the fp8 lane pairs its two products by their exponent fields even
+      // when one is zero (a zero field counts as 1, as for a subnormal)
+      sel_eps.push_back((std::max(a.exp, 1) - bias(eb)) + (std::max(b.exp, 1) - bias(eb))
+                        + F32_BIAS + EXP_POS_BIAS + 1 - W_);
+      nonzero.push_back(!p_is_zero);
+
       if (p_is_zero) {
-        Ep = 0;
+        Ep = kZeroE;
         Mp = 0;
       }
 
@@ -372,7 +402,22 @@ private:
 
       for (size_t j = 0; j < out.size(); j += 2) {
         if (j + 1 < out.size()) {
-          auto r = reduce_f8(out[j], eps[j], out[j + 1], eps[j + 1]);
+          auto r = reduce_f8(out[j], sel_eps[j], nonzero[j], out[j + 1], sel_eps[j + 1], nonzero[j + 1]);
+          // MX: the lane's E8M0 scales add to its exponent field, which is
+          // 10 bits wide and sits WA - 1 above this model's exponents
+          if (sf_a_) {
+            // an E8M0 scale of 0xFF is NaN, and so is every element it scales
+            if (sf_a_[j / 2] == 0xff || sf_b_[j / 2] == 0xff) {
+              flags |= FL_NAN;
+            }
+            // a lane scaled below the exponent range sits at exponent 0,
+            // where it only adds to the sticky bit
+            if (r.second != kZeroE) {
+              const int WA = acc_width(uint32_t(out.size() / 2));
+              int lane_exp = r.second + (WA - 1) + int(sf_a_[j / 2]) + int(sf_b_[j / 2]) - 254;
+              r.second = std::max(lane_exp, 0) - (WA - 1);
+            }
+          }
           red_out.push_back(r.first);
           red_eps.push_back(r.second);
         } else {
@@ -385,13 +430,23 @@ private:
       eps.swap(red_eps);
     }
 
+    return add_c_term(std::move(out), std::move(eps), c_term, flags);
+  }
+
+  // Append the C term and take every term's shift to the largest exponent.
+  mul_res_t add_c_term(std::vector<pterm_t> out, std::vector<int> eps, const cterm_t &c_term, uint8_t flags) {
+    bool c_is_zero = (c_term.cls == 0 && c_term.sp == 0);
     int Ec = c_term.Ec + F32_BIAS + EXP_POS_BIAS + 24 - W_;
     if (c_is_zero) {
-      Ec = 0;
+      Ec = kZeroE;
     }
 
     out.push_back({c_term.sign, c_term.Mc});
     eps.push_back(Ec);
+    const int WA = acc_width(uint32_t(out.size() - 1));
+    for (auto &e : eps) {
+      if (e == kZeroE) e = -(WA - 1);
+    }
 
     int L = *std::max_element(eps.begin(), eps.end());
 
@@ -404,12 +459,99 @@ private:
     return {out, L , shifts, flags};
   }
 
-  std::pair<pterm_t, int> reduce_f8(const pterm_t& t1, int e1, const pterm_t& t2, int e2) {
+  // Block-scaled fp4 (E2M1), one lane per 16 bits: its four products are
+  // aligned to their largest exponent in a 6-bit lane field, summed in 27-bit
+  // two's complement, and leave the datapath as one term. E2M1 has no
+  // infinity or NaN. MXFP4 adds the E8M0 scales to the lane exponent; NVFP4
+  // folds the E4M3 scales' exponent fields into the 6-bit field (they fit) and
+  // multiplies each product by the scales' mantissa product.
+  mul_res_t multiply_f4(const uint32_t *a, const uint32_t *b, uint32_t n, const cterm_t &c_term) {
+    assert(sf_a_ && sf_b_ && "fp4 needs block scales");
+    const int SIG_SHIFT = 11;
+    const int EXP_TERM_BIAS = 32;
+    const int exp_comp = e4m3_scale_ ? -(2 * 1 + 2 * (7 + 3)) : -(2 * 1 + 10);
+    const int exp_adj = (EXP_TERM_BIAS + exp_comp) & 63;
+    // the lane exponent the datapath emits is 10 bits wide; this
+    // model's lane exponents sit WA - 1 below it
+    const int WA = acc_width(2 * n);
+    const int bias_base = F32_BIAS + 2 * (23 - 22) - W_ + WA - 1 + EXP_POS_BIAS;
+    auto f4_man = [](uint32_t x) -> uint32_t { return ((x >> 1) & 3) == 0 ? 1u : (2u | (x & 1)); };
+    auto f4_exp = [](uint32_t x) -> uint32_t {
+      uint32_t e2 = (x >> 2) & 1, e1 = (x >> 1) & 1;
+      return (e2 & ~e1 & 1) | ((e2 & e1) << 1);
+    };
+    std::vector<pterm_t> out;
+    std::vector<int> eps;
+    uint8_t flags = 0;
+    if (c_term.sp == 3) flags |= FL_NAN;
+    if (c_term.sp == 1) flags |= FL_PINF;
+    if (c_term.sp == 2) flags |= FL_NINF;
+    for (uint32_t lane = 0; lane < 2 * n; ++lane) {
+      const uint32_t word = lane / 2, off = (lane % 2) * 16;
+      const uint32_t sfa = sf_a_[lane], sfb = sf_b_[lane];
+      // NVFP4 UE4M3 scales (bit 7 is padding): 0x7F is NaN. MXFP4 E8M0
+      // scales join the lane exponent; 0xFF is NaN.
+      uint32_t sf_man_prod = 1;
+      int sf_exp = 0;        // into the 6-bit term exponent (NVFP4)
+      int sf_lane_exp = 0;   // into the lane exponent (MXFP4)
+      if (e4m3_scale_) {
+        sf_man_prod = (8u | (sfa & 7)) * (8u | (sfb & 7));
+        sf_exp = int((sfa >> 3) & 15) + int((sfb >> 3) & 15);
+        if ((sfa & 0x7f) == 0x7f || (sfb & 0x7f) == 0x7f) {
+          flags |= FL_NAN;
+        }
+      } else {
+        sf_lane_exp = int(sfa) + int(sfb) - 254;
+        if (sfa == 0xff || sfb == 0xff) {
+          flags |= FL_NAN;
+        }
+      }
+      uint32_t texp[4], tprod[4], tsign[4];
+      bool tvalid[4];
+      uint32_t max_exp = 0;
+      for (int j = 0; j < 4; ++j) {
+        uint32_t ra = (a[word] >> (off + 4 * j)) & 0xf;
+        uint32_t rb = (b[word] >> (off + 4 * j)) & 0xf;
+        tvalid[j] = (ra & 7) != 0 && (rb & 7) != 0;
+        tsign[j] = ((ra ^ rb) >> 3) & 1;
+        uint32_t prod = f4_man(ra) * f4_man(rb);
+        tprod[j] = e4m3_scale_ ? ((prod * sf_man_prod) & 0x7ff) : prod;
+        texp[j] = tvalid[j] ? (uint32_t(exp_adj + sf_exp + int(f4_exp(ra)) + int(f4_exp(rb))) & 63) : 0;
+        max_exp = std::max(max_exp, texp[j]);
+      }
+      uint32_t sum = 0; // 27-bit two's complement
+      for (int j = 0; j < 4; ++j) {
+        uint32_t shift = (max_exp - texp[j]) & 63;
+        uint32_t mag = tvalid[j] ? ((tprod[j] << SIG_SHIFT) & 0xffffff) : 0;
+        uint32_t aligned = (shift >= 24) ? 0 : (mag >> shift);
+        sum = (sum + (tsign[j] ? (0u - aligned) : aligned)) & 0x7ffffff;
+      }
+      uint32_t sum_sign = (sum >> 26) & 1;
+      uint32_t abs_sum = (sum_sign ? (0u - sum) : sum) & 0x3ffffff;
+      if (abs_sum == 0) {
+        out.push_back({0, 0});
+        eps.push_back(kZeroE);
+        continue;
+      }
+      const int lane_exp = (int(max_exp) + bias_base + exp_comp + sf_lane_exp) & 1023;
+      out.push_back({int(sum_sign), int(abs_sum & 0xffffff)});
+      eps.push_back(lane_exp - (WA - 1));
+    }
+    return add_c_term(std::move(out), std::move(eps), c_term, flags);
+  }
+
+  // One fp8 lane: its two products, aligned to the one the datapath picks as
+  // larger. A zero product still competes by its exponent fields when the
+  // other is nonzero and listed second, as the datapath compares them.
+  std::pair<pterm_t, int> reduce_f8(const pterm_t& t1, int e1, bool v1, const pterm_t& t2, int e2, bool v2) {
     // Pick max exponent term
     int max_E, max_s, min_E, min_s;
     int64_t max_P, min_P;
 
-    if (e1 >= e2) {
+    if (!v1 && !v2) {
+      return {{0, 0}, kZeroE};
+    }
+    if ((v1 && !v2) || (v2 && e1 >= e2)) {
       max_E = e1; max_P = t1.Mp; max_s = t1.sign;
       min_E = e2; min_P = t2.Mp; min_s = t2.sign;
     } else {
@@ -435,7 +577,11 @@ private:
     int64_t val  = val1 + val2;
 
     if (val == 0) {
-      return {{0, 0}, 0};
+      // Only an exact cancellation of two equal-exponent products clears the
+      // lane exponent; a product aligned out of the lane keeps it, so the
+      // empty lane still sets the largest exponent.
+      bool cancel = (max_s != min_s) && (e1 == e2) && (t1.Mp == t2.Mp);
+      return {{0, 0}, cancel ? kZeroE : (max_E + 1)};
     }
 
     int s = (val < 0) ? 1 : 0;
@@ -446,7 +592,7 @@ private:
     P >>= 1;
     E += 1;
 
-    LOG("[reduce_f8 (%ld)] t1=(%d, %d, %d), t2=(%d, %d, %d) | diff=%d max_P=0x%lx min_P=0x%lx aligned=0x%lx val=0x%lx -> s=%d P=0x%lx E=%d\n",
+    FEDP_LOG("[reduce_f8 (%ld)] t1=(%d, %d, %d), t2=(%d, %d, %d) | diff=%d max_P=0x%lx min_P=0x%lx aligned=0x%lx val=0x%lx -> s=%d P=0x%lx E=%d\n",
         req_id_, t1.sign, t1.Mp, e1, t2.sign, t2.Mp, e2, diff, max_P, min_P, aligned, val, s, P, E);
 
     return {{s, (int)P}, E};
@@ -569,6 +715,8 @@ private:
     uint32_t kept_rounded = r.kept + (round_up ? 1 : 0);
     int be = r.e;
     if (kept_rounded & (1u << 24)) { kept_rounded >>= 1; be += 1; }
+    // the datapath's result exponent is a signed 10-bit quantity
+    be = ((be & 1023) ^ 512) - 512;
     if (be >= 255) return s_bit | 0x7f800000u;
     if (be <= 0) return s_bit;
     return s_bit | ((be & 0xff) << 23) | (kept_rounded & 0x7FFFFFu);
@@ -577,5 +725,8 @@ private:
   // members --------
   int exp_bits_, sig_bits_, frm_, W_, HR_;
   bool renorm_, no_window_;
+  const uint8_t *sf_a_ = nullptr; // per-lane block scales, null when unscaled
+  const uint8_t *sf_b_ = nullptr;
+  bool e4m3_scale_ = false;
   uint64_t req_id_ = 0;
 };

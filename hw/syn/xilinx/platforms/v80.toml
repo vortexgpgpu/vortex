@@ -8,17 +8,17 @@ part = "xcv80-lsva4737-2MHP-e-S"
 match_device = ["xcv80-*"]
 
 [memory]
-# One wide master fanned across the HBM: the linker assigns each memory range
-# independently, and per-bank bases are not known at synthesis time.
+# One memory channel caps the AFU at one memory master whatever the GPU's
+# memory port count: the linker assigns each memory range independently, and
+# per-bank bases are not known at synthesis time.
 banks = 1
 addr_width = 34
-merged = true
 # The shell maps m_axi_mem_0 at 0x40_0000_0000 in hardware and simulation, and a
 # 32-bit core cannot emit that base, so the AFU rebases every device access.
 base = 0x4000000000
 # MEM, not HBM0: HBM0 is a 1 GB aperture and the stack sits just under 4 GB. MEM
 # routes through the HBM VNOC at the same base with 32 GB of range.
-tags = ["MEM"]
+tag = "MEM"
 
 [host]
 # HBM8 with runtime staging. HOST is the QDMA slave bridge, whose reads never
