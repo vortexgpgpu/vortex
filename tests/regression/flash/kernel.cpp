@@ -2,16 +2,16 @@
 #include <cmath>
 #include "common.h"
 
-static inline size_t bits_from(TYPE x) { 
-    size_t u = 0; 
-    __builtin_memcpy(&u, &x, sizeof(TYPE)); 
-    return u; 
+static inline size_t bits_from(TYPE x) {
+    size_t u = 0;
+    __builtin_memcpy(&u, &x, sizeof(TYPE));
+    return u;
 }
 
-static inline TYPE from_bits(size_t u) { 
-    TYPE x; 
-    __builtin_memcpy(&x, &u, sizeof(TYPE)); 
-    return x; 
+static inline TYPE from_bits(size_t u) {
+    TYPE x;
+    __builtin_memcpy(&x, &u, sizeof(TYPE));
+    return x;
 }
 
 static inline TYPE warp_reduce_max(TYPE x, uint32_t warp_size) {
@@ -60,8 +60,9 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
     // Load Q tile from global memory
     for (uint32_t i = threadIdx.x; i < head_dim; i += num_threads) {
-        if (g_row < seq_len)
-            local_Q[l_row_offset + i] = Q[g_row_offset + i];
+        if (g_row < seq_len) {
+          local_Q[l_row_offset + i] = Q[g_row_offset + i];
+        }
     }
 
     // Warp's row of Q tile
@@ -69,8 +70,9 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
     // Initialize O tile
     for (uint32_t i = threadIdx.x; i < head_dim; i += num_threads) {
-        if (g_row < seq_len)
-            local_O[l_row_offset + i] = TYPE(0);
+        if (g_row < seq_len) {
+          local_O[l_row_offset + i] = TYPE(0);
+        }
     }
 
     // Per-lane register state
@@ -84,8 +86,9 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
     // KV-block loop
     for (uint32_t j = 0; j < seq_len; j += block_size_c) {
-        for (uint32_t i = 0; i < sp_count; ++i)
-            P_row[threadIdx.x + i * num_threads] = TYPE(0);
+        for (uint32_t i = 0; i < sp_count; ++i) {
+          P_row[threadIdx.x + i * num_threads] = TYPE(0);
+        }
 
         // S = QK^T
         for (uint32_t h = 0; h < head_dim; h += head_dim_tile) {
@@ -93,15 +96,17 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
             // Load K tile
             for (uint32_t i = 0; i < sp_count; ++i) {
                 uint32_t c = threadIdx.x + i * num_threads;
-                for (uint32_t e = 0; e < tile_w; ++e)
-                    local_K[c * head_dim_tile + e] = K[(j + c) * head_dim + h + e];
+                for (uint32_t e = 0; e < tile_w; ++e) {
+                  local_K[c * head_dim_tile + e] = K[(j + c) * head_dim + h + e];
+                }
             }
             __syncthreads();
             for (uint32_t i = 0; i < sp_count; ++i) {
                 uint32_t c = threadIdx.x + i * num_threads;
                 TYPE acc = P_row[c];
-                for (uint32_t e = 0; e < tile_w; ++e)
-                    acc += Q_row[h + e] * local_K[c * head_dim_tile + e];
+                for (uint32_t e = 0; e < tile_w; ++e) {
+                  acc += Q_row[h + e] * local_K[c * head_dim_tile + e];
+                }
                 P_row[c] = acc;
             }
             __syncthreads();
@@ -136,8 +141,9 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
             // Load V tile
             for (uint32_t i = 0; i < sp_count; ++i) {
                 uint32_t c = threadIdx.x + i * num_threads;
-                for (uint32_t e = 0; e < tile_w; ++e)
-                    local_V[e * block_size_c + c] = V[(j + c) * head_dim + h + e];
+                for (uint32_t e = 0; e < tile_w; ++e) {
+                  local_V[e * block_size_c + c] = V[(j + c) * head_dim + h + e];
+                }
             }
             __syncthreads();
             for (uint32_t k = threadIdx.x; k < tile_w; k += num_threads) {
@@ -157,7 +163,8 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     // Normalize O by softmax denominator and write back to global memory
     TYPE inv_l = TYPE(1) / l;
     for (uint32_t i = threadIdx.x; i < head_dim; i += num_threads) {
-        if (g_row < seq_len)
-            O[g_row_offset + i] = local_O[l_row_offset + i] * inv_l;
+        if (g_row < seq_len) {
+          O[g_row_offset + i] = local_O[l_row_offset + i] * inv_l;
+        }
     }
 }

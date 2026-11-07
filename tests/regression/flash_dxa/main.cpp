@@ -42,21 +42,21 @@ uint32_t c_override = 0;
 uint32_t d_override = 0;
 
 static void parse_args(int argc, char **argv) {
-  	int c;
-	while ((c = getopt(argc, argv, "N:D:k:r:c:d:h")) != -1) {
-		switch (c) {
-			case 'N': N 		  = std::atoi(optarg); break;
-			case 'D': d			  = std::atoi(optarg); break;
-			case 'k': kernel_file = optarg; 	 	   break;
-			case 'r': r_override  = std::atoi(optarg); break;
-			case 'c': c_override  = std::atoi(optarg); break;
-			case 'd': d_override  = std::atoi(optarg); break;
-			default:
-				std::cout << "Usage: [-k: kernel] [-N: sequence_length] [-D: head_dim] "
-				             "[-r: block_size_r] [-c: block_size_c] [-d: head_dim_tile] [-h]" << std::endl;
-				std::exit(c == 'h' ? 0 : -1);
-		}
-	}
+    int c;
+    while ((c = getopt(argc, argv, "N:D:k:r:c:d:h")) != -1) {
+        switch (c) {
+            case 'N': N           = std::atoi(optarg); break;
+            case 'D': d           = std::atoi(optarg); break;
+            case 'k': kernel_file = optarg;            break;
+            case 'r': r_override  = std::atoi(optarg); break;
+            case 'c': c_override  = std::atoi(optarg); break;
+            case 'd': d_override  = std::atoi(optarg); break;
+            default:
+                std::cout << "Usage: [-k: kernel] [-N: sequence_length] [-D: head_dim] "
+                             "[-r: block_size_r] [-c: block_size_c] [-d: head_dim_tile] [-h]" << std::endl;
+                std::exit(c == 'h' ? 0 : -1);
+        }
+    }
 }
 
 template <typename Type>
@@ -94,29 +94,33 @@ static void flash_attention_cpu(TYPE* out, const TYPE* Q, const TYPE* K, const T
     // Compute row of scores
     for (uint32_t j = 0; j < N; ++j) {
       TYPE sum = TYPE(0);
-      for (uint32_t k = 0; k < d; ++k)
+      for (uint32_t k = 0; k < d; ++k) {
         sum += Q[i * d + k] * K[j * d + k];
+      }
       scores[j] = sum;
     }
 
     // Compute softmax of row
     auto max = scores[0];
-    for (uint32_t j = 1; j < N; ++j)
+    for (uint32_t j = 1; j < N; ++j) {
       max = std::max(max, scores[j]);
+    }
     TYPE exp_sum = TYPE(0);
     for (uint32_t j = 0; j < N; ++j) {
       auto exp = std::exp(scores[j] - max);
       probs[j] = exp;
       exp_sum += exp;
     }
-    for (uint32_t j = 0; j < N; ++j)
+    for (uint32_t j = 0; j < N; ++j) {
       probs[j] /= exp_sum;
+    }
 
     // Compute row of O
     for (uint32_t k = 0; k < d; ++k) {
       TYPE sum = TYPE(0);
-      for (uint32_t j = 0; j < N; ++j)
+      for (uint32_t j = 0; j < N; ++j) {
         sum += probs[j] * V[j * d + k];
+      }
       out[i * d + k] = sum;
     }
   }
@@ -193,7 +197,9 @@ int main(int argc, char *argv[]) {
                 for (uint32_t target = std::max(1u, num_warps / r); target >= 1; --target) {
                     uint64_t budget = lmem_size / target;
                     if (fixed >= budget) {
-                        if (target == 1) break;
+                        if (target == 1) {
+                          break;
+                        }
                         continue;
                     }
                     uint64_t per_col = sizeof(TYPE) * 4 * static_cast<uint64_t>(c);
@@ -214,7 +220,9 @@ int main(int argc, char *argv[]) {
             occupancy    = occ;
             break;
         }
-        if (r_override || r == 1) break;
+        if (r_override || r == 1) {
+          break;
+        }
     }
 
     if (d_tile == 0) {
