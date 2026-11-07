@@ -223,7 +223,7 @@ the table in the same change.
 |---|---|---|---|---|
 | custom-0 `0x0B` | `funct7` | `0x00` | warp control (`tmc`, `wspawn`, `split`, `join`, `bar`, `pred`, `wsync`) | R |
 | | | `0x01` | vote / shuffle | R |
-| | | `0x02` | tensor core (WMMA/WGMMA) | R |
+| | | `0x02` | tensor core (WMMA/WGMMA; with TMEM, `funct3` 3–7 = `TMEM_ALLOC`, `TMEM_DEALLOC`, `TMEM_ST`, `TMEM_LD`, UMMA) | R |
 | | | `0x03` | DXA async copy | R |
 | | | `0x04` | packed loads (`vx_packl*`) | R |
 | custom-1 `0x2B` | `funct3` | `0` | `vx_wgather` | R4 |
@@ -262,7 +262,7 @@ a priority encoder in the sequencer:
 | slot | expander | macro-ops |
 |---|---|---|
 | `UOP_PACKLD` | [`VX_uop_packld.sv`](../../hw/rtl/core/VX_uop_packld.sv) | packed loads |
-| `UOP_TCU` | [`VX_tcu_uops.sv`](../../hw/rtl/tcu/VX_tcu_uops.sv) | WMMA, WGMMA |
+| `UOP_TCU` | [`VX_tcu_uops.sv`](../../hw/rtl/tcu/VX_tcu_uops.sv) | WMMA, WGMMA, UMMA |
 | `UOP_GFX` | [`VX_gfx_uops.sv`](../../hw/rtl/core/VX_gfx_uops.sv) | ray-trace windows, fragment export |
 
 **A slot is expensive.** Each one is a full instruction-buffer entry on the

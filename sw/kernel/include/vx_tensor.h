@@ -1398,6 +1398,16 @@ public:
   static constexpr uint32_t a_elems_per_word = sizeof(uint32_t) / sizeof(input_t);
   static constexpr uint32_t a_tmem_words     = tileK / a_elems_per_word;
 
+  // An accumulator tile can be reused in place as a later TS A operand, with
+  // the accumulator's column n taken as A's k. D element (row, n) is at
+  // TMEM[cta_rank*xtileM + row][handle + n], one per column, and A element
+  // (row, k) is on the same lane at column handle + k / a_elems_per_word, so
+  // the conversion needs no lane movement: software reads D columns
+  // [j * a_elems_per_word, (j + 1) * a_elems_per_word), converts them to
+  // input_t and stores them packed, low bits first, as A word j. A thread that
+  // reads its row in increasing column order can overwrite as it goes. The
+  // store_a_tmem barrier contract applies.
+
   // Stage this warp's xtileM x tileK A tile into TMEM for the TS path, read
   // row-major from global memory.
   //

@@ -347,6 +347,7 @@ subtracts it first.
 | `0x014` | `CP_CYCLE_HI` | RO | high 32 |
 | `0x018` / `0x01C` | `GPU_DEV_CAPS_LO/HI` | RO | device-config caps (§6) |
 | `0x020` / `0x024` | `GPU_ISA_CAPS_LO/HI` | RO | ISA caps (§6) |
+| `0x038` / `0x03C` | `GPU_EXT_CAPS_LO/HI` | RO | extension caps (§6) |
 
 **Per-queue block** at `0x100 + qid*0x40`:
 
@@ -393,7 +394,7 @@ channels.
 A single source of truth for device/ISA capabilities is exposed through
 the CP and consumed identically by every backend:
 
-- RTL: `GPU_DEV_CAPS` / `GPU_ISA_CAPS` RO regs
+- RTL: `GPU_DEV_CAPS` / `GPU_ISA_CAPS` / `GPU_EXT_CAPS` RO regs
   ([`VX_cp_axil_regfile.sv:117-135`](../../hw/rtl/cp/VX_cp_axil_regfile.sv#L117)).
 - Emulation CP: the same packing
   ([`cmd_processor.cpp:27-46`](../../sim/common/cmd_processor.cpp#L27)).
@@ -439,6 +440,14 @@ encoded here — `decode_caps` returns false and the backend resolves them.
 (`1 << (code + 4)`, produced as `clog2(XLEN) - 4`), `[63:32]` Vortex
 extension bits (ICACHE, DCACHE, L2CACHE, L3CACHE, LMEM, ZICOND, TEX,
 RASTER, OM, TCU, DXA, RTU).
+
+**`GPU_EXT_CAPS`** (`0x038`/`0x03C`) holds extension caps, since
+`GPU_DEV_CAPS` has no free bits:
+
+| Bits | Width | Field | Decoded as |
+|---|---|---|---|
+| `[4:0]` | 5 | log2 TMEM columns per core, 0 without TMEM | `VX_CAPS_TCU_TMEM_COLS` (0 when the field is 0) |
+| `[63:5]` | 59 | reserved, read as zero | |
 
 **Feature bits live in `CP_DEV_CAPS` (`0x008`), not `GPU_DEV_CAPS`** — the
 upper byte of the CP's own caps word is free, and the Emulation CP uses it
