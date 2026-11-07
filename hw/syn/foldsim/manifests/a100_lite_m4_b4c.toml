@@ -14,18 +14,16 @@ max_generate_steps = 4194304
 
 [classes]
 at = [
-  "l2fs@*.l2cache.*.core_req_xbar.*.fanout_slice_arb",
-  "l2req@inner:*.l2cache.*.core_req_xbar.*.xbar_arb",
-  "l2req@inner:*.l2cache.*.core_req_xbar.*.fanout_join_arb",
+  "l2fs@*.l2cache.*.g_core_req_xbar_*.fanout_slice_arb",
+  "l2req@inner:*.l2cache.*.g_core_req_xbar_*.xbar_arb",
+  "l2req@inner:*.l2cache.*.g_core_req_xbar_*.fanout_join_arb",
   "l2sw@*.l2cache.*.g_omega.*.xbar_switch",
   "l2x@*.l2cache.*.xbar_arb",
   "axix@*.axi_adapter.*.xbar_arb",
-  "l2rs@*.l2cache.*.g_core_req_stage.*.req_stage",
+  "l2rs@*.l2cache.*.g_req_ports_*.req_port",
   "l2nb@*.l2cache.*.core_bus_nc_switch.rsp_arb.*.out_buf",
   "l2ab@*.l2cache.*.core_bus_nc_arb.*.fanout_slice_arb.*.out_buf",
-  "lmq@*.local_mem.req_xbar.*.xbar_arb",
-  "lms@*.local_mem.rsp_xbar.*.xbar_arb",
-  "l1req@*.dcache.*.core_req_xbar.*.xbar_arb",
+  "l1req@*.dcache.*.g_core_req_xbar_*.xbar_arb",
   "l1rsp@*.dcache.*.core_rsp_arb",
   "l1sw@*.dcache.*.g_omega.*.xbar_switch",
   "l1x@*.dcache.*.xbar_arb",
@@ -40,7 +38,7 @@ absorb_exclusive = [
   "kmub",
 ]
 nest = true
-copies = { lms = 2, VX_tcu_fedp_tfr = 4, VX_fncp_unit = 2 }
+copies = { VX_tcu_fedp_tfr = 4, VX_fncp_unit = 2 }
 modules = [
   "VX_socket__lift",
   "VX_core__lift",
@@ -53,7 +51,7 @@ modules = [
   "VX_tcu_fedp_tfr",
   "l2req+VX_cache_bank__lift_l2cache",
   "VX_cache_bank__lift_icache",
-  "lmq+VX_local_mem_bank",
+  "VX_lmem_unit",
   "l1req+VX_cache_bank__lift_dcache",
   "VX_opc_unit",
 ]
@@ -79,19 +77,19 @@ link_kinds = [
   "VX_compute_slice__lift_model:VX_fdiv_unit:distributed",
   "VX_compute_slice__lift_model:VX_fncp_unit:distributed",
   "VX_compute_slice__lift_model:VX_fsqrt_unit:distributed",
+  "VX_compute_slice__lift_model:VX_lmem_unit:distributed",
   "VX_compute_slice__lift_model:VX_mufu_pe:distributed",
   "VX_compute_slice__lift_model:VX_opc_unit:distributed",
   "VX_compute_slice__lift_model:VX_tcu_fedp_tfr:distributed",
-  "VX_compute_slice__lift_model:lmq_VX_local_mem_bank:distributed",
-  "VX_compute_slice__lift_model:lms:distributed",
   "VX_core__lift_model:VX_compute_slice__lift_model:distributed",
+  "VX_core__lift_model:VX_lmem_unit:distributed",
   "VX_core__lift_model:VX_socket__lift_model:distributed",
-  "VX_core__lift_model:lmq_VX_local_mem_bank:distributed",
-  "VX_core__lift_model:lms:distributed",
   "VX_fcvt_unit:VX_compute_slice__lift_model:distributed",
   "VX_fdiv_unit:VX_compute_slice__lift_model:distributed",
   "VX_fncp_unit:VX_compute_slice__lift_model:distributed",
   "VX_fsqrt_unit:VX_compute_slice__lift_model:distributed",
+  "VX_lmem_unit:VX_compute_slice__lift_model:distributed",
+  "VX_lmem_unit:VX_core__lift_model:distributed",
   "VX_mufu_pe:VX_compute_slice__lift_model:distributed",
   "VX_opc_unit:VX_compute_slice__lift_model:distributed",
   "VX_socket__lift_model:VX_cache_bank__lift_icache:distributed",
@@ -122,14 +120,10 @@ link_kinds = [
   "l2req_VX_cache_bank__lift_l2cache:l2sw_1:distributed",
   "l2rs:l2fs_0:distributed",
   "l2sw_0:l2req_VX_cache_bank__lift_l2cache:distributed",
-  "l2sw_1:l2sw_1:distributed",
   "l2sw_1:l2nb:distributed",
+  "l2sw_1:l2sw_1:distributed",
   "l2sw_2:l2mo:distributed",
   "l2sw_2:l2req_VX_cache_bank__lift_l2cache:distributed",
-  "lmq_VX_local_mem_bank:VX_core__lift_model:distributed",
-  "lmq_VX_local_mem_bank:lms:distributed",
-  "lms:VX_compute_slice__lift_model:distributed",
-  "lms:VX_core__lift_model:distributed",
 ]
 staged_links = true
 share_links = true
@@ -212,6 +206,10 @@ units = [
 generator = "vortex"             # hw/syn/foldsim `sources` (ci/gen_config.py + gen_sources.sh)
 xlen = 64
 vortex = "fa40cf125"             # a100/timing-int, as built for B4c
+# The classes follow this tree's RTL (11-07, a100/integ-1106): the l2-front instance names (g_core_req_xbar_*,
+# g_req_ports_*) and the local memory as one class, VX_lmem_unit (0b0d7ca4d replaced VX_local_mem's request /
+# response crossbars and banks, the lmq / lms classes). The sources step's RAM fold (ram_fold.py) takes pyslang >= 11:
+# RAM_FOLD_PYTHON (hw/syn/common.mk, default python3) must name a python3 that has it.
 policy = "st32_1031/lk2/calm4a3/policy_cal.json"   # where memory.* came from (gen.sh)
 configs = [
   "-DVX_CFG_DCACHE_MSHR_SIZE=24",

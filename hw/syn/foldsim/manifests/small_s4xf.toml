@@ -11,18 +11,16 @@ max_generate_steps = 4194304
 
 [classes]
 at = [
-  "l2fs@*.l2cache.*.core_req_xbar.*.fanout_slice_arb",
-  "l2req@inner:*.l2cache.*.core_req_xbar.*.xbar_arb",
-  "l2req@inner:*.l2cache.*.core_req_xbar.*.fanout_join_arb",
+  "l2fs@*.l2cache.*.g_core_req_xbar_*.fanout_slice_arb",
+  "l2req@inner:*.l2cache.*.g_core_req_xbar_*.xbar_arb",
+  "l2req@inner:*.l2cache.*.g_core_req_xbar_*.fanout_join_arb",
   "l2sw@*.l2cache.*.g_omega.*.xbar_switch",
   "l2x@*.l2cache.*.xbar_arb",
   "axix@*.axi_adapter.*.xbar_arb",
-  "l2rs@*.l2cache.*.g_core_req_stage.*.req_stage",
+  "l2rs@*.l2cache.*.g_req_ports_*.req_port",
   "l2nb@*.l2cache.*.core_bus_nc_switch.rsp_arb.*.out_buf",
   "l2ab@*.l2cache.*.core_bus_nc_arb.*.fanout_slice_arb.*.out_buf",
-  "lmq@*.local_mem.req_xbar.*.xbar_arb",
-  "lms@*.local_mem.rsp_xbar.*.xbar_arb",
-  "l1req@*.dcache.*.core_req_xbar.*.xbar_arb",
+  "l1req@*.dcache.*.g_core_req_xbar_*.xbar_arb",
   "l1rsp@*.dcache.*.core_rsp_arb",
   "l1sw@*.dcache.*.g_omega.*.xbar_switch",
   "l1x@*.dcache.*.xbar_arb",
@@ -37,12 +35,11 @@ absorb_exclusive = [
   "kmub",
 ]
 nest = true
-copies = { lms = 2 }
 modules = [
   "VX_socket__lift",
   "VX_core__lift",
   "VX_compute_slice__lift",
-  "lmq+VX_local_mem_bank",
+  "VX_lmem_unit",
   "l1req+VX_cache_bank__lift_dcache",
   "l2req+VX_cache_bank__lift_l2cache",
   "VX_opc_unit",
@@ -105,6 +102,9 @@ units = [
 ]
 
 [flow]
+# The classes follow this tree's RTL (11-07, a100/integ-1106): the l2-front instance names and the local memory
+# as one class, VX_lmem_unit (it replaced VX_local_mem's crossbars and banks: the lmq / lms classes). The sources
+# step's RAM fold takes pyslang >= 11 in RAM_FOLD_PYTHON (hw/syn/common.mk).
 generator = "vortex"
 xlen = 64
 configs = [
