@@ -279,7 +279,7 @@ jobs:
         if: contains(matrix.needs, 'foldsim')
         run: |
           (cd build${{ matrix.xlen }} && bash ci/toolchain_install.sh --foldsim)
-          pip install --quiet pyslang==12.0.0
+          pip install --quiet "pyslang>=11,<13"
       - name: Run cell
         run: |
           cd build${{ matrix.xlen }}
