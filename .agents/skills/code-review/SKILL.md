@@ -60,7 +60,7 @@ it, with the diff and the rule documents; an R3 change always does.
 | a test silenced: `known_issue:`, wider `tolerance:`/threshold, smaller `args:`, a removed case, to make a failure go away | fix the bug instead |
 | an existing test case changed or removed, a golden value moved toward a looser bar (more cycles, lower Fmax, more area), or a gate threshold widened, without the stated, measured reason and the maintainer's approval | these change what CI proves (R3: `test-coverage`, `golden-values`, `gate-thresholds`) |
 | a bug papered over (fallback, clamp, delay, retry, disabled feature) without a `PATCH:`/`WORKAROUND:` label and a follow-up | `docs/bug_fixes.md` §3 |
-| a change that claims to fix a perf regression but does not touch the commit that caused it (its code, parameter or default, or a revert), or a baseline re-record that lands without the case → commit → mechanism → class table | `docs/bug_fixes.md` §6: a compensating speed-up elsewhere hides the regression |
+| a change that claims to fix a perf, area or timing regression but does not touch the commit that caused it (its code, parameter or default, or a revert); or a baseline re-record without the case → commit → mechanism → class table; or a justification with no proof that the cost is inherent | `docs/bug_fixes.md` §6: a compensating gain elsewhere hides the regression |
 | `sw/kernel` or `sw/runtime` references `hw/` or `sim/`, or the reverse | layer isolation; shared ABI goes in `sw/common` |
 | a Verilog interface added to `RTL_PKGS` | `RTL_PKGS` is `VX_*_pkg.sv` only |
 | a comment names a task, PR, issue, phase or "the fix", or names the other layer's internals | comments explain why, and rot otherwise |
