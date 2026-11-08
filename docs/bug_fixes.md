@@ -66,7 +66,28 @@ A few footguns we've hit more than once:
 - **Changing default `CONFIGS` to mask a regression.** Defaults are a contract. If the regression test fails at the documented defaults, that's the regression — don't move the defaults.
 - **Patching `ccache` symptoms.** `fmt::v8` link errors and similar stale-object symptoms are not bugs in the code — retry with `CCACHE_DISABLE=1` before changing anything.
 
-## 6. Related rules
+## 6. Performance regressions
+
+A `perf_gate` case that got slower is a bug report against the commit that slowed it. Find that commit first; the cycles come back from that commit's own change, or the slowdown is justified on that commit's terms. Speeding up another part of the system until the number returns is not a fix: it hides the regression, usually adds new ones, and leaves a baseline that mixes the regression with unrelated gains, so the next bisect cannot separate them.
+
+1. **Separate the compiler from the hardware.** Build the same RTL with the old and the new toolchain. A compiler-only delta is fixed in LLVM, never in RTL.
+2. **Check that the case is stable.** Perturb it by one cycle (for example `L1_LINK_LATENCY` ±1). If the count swings past the gate tolerance, the case is bistable: attribute nothing to it and tune nothing on it. Fix the case or the pathology behind it, as its own change.
+3. **Bisect every slower case to one commit** and explain the mechanism in that commit's terms. The result is a table: case, commit, mechanism, class. No fix is written before the table is complete, and the table is reviewed before any fix lands or any baseline is re-recorded.
+4. **Classify each case:**
+
+   | class | meaning | outcome |
+   |---|---|---|
+   | bug | the commit does something it did not intend | fixed inside that commit's change |
+   | trade-off | the commit pays these cycles for a gain measured elsewhere (Fmax, area, DRAM traffic, cycles on other cases) | justified with both numbers; the owner decides |
+   | measurement correction | the simulator now counts cycles the silicon always had | justified and recorded; the old baseline was wrong |
+   | compiler | the toolchain changed the code | fixed in LLVM, or justified there |
+
+5. **A fix touches only the culprit:** its code, its parameter or default, or a revert of it.
+6. **Stop rule.** If a fix fails parity or slows other cases, and making it pass needs a change in another subsystem, stop and reclassify that culprit. Do not follow the fix into the rest of the design.
+7. **Problems found on the way are separate changes.** A defect that already exists on the base (for example an arbiter that starves a unit) gets its own proposal, commit and measurement against the refreshed baseline. It is never folded into the regression fix or the re-record.
+8. **Keep the window small.** Re-record baselines when a feature lands, and treat a gate that is masked or stale as a CI bug. Attribution over hundreds of commits is the failure this rule exists to prevent.
+
+## 7. Related rules
 
 - AGENTS.md §3 — short-form bug-fix rules
 - AGENTS.md §6 — comment rules (no `// fix for #123`-style breadcrumbs in code)

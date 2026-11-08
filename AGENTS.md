@@ -65,6 +65,7 @@ See [docs/bug_fixes.md](docs/bug_fixes.md) for the full rationale and examples. 
 
 - **Fix root causes, not symptoms.** Diagnose before patching.
 - **Don't paper over upstream regressions** or mask bugs with fallback paths and suppressed warnings.
+- **A perf regression is fixed in the commit that caused it,** or justified on that commit's terms; never by speeding up another part of the system. Attribute every slower case to a commit before writing any fix (docs/bug_fixes.md §6).
 - **Don't add legacy API compatibility or fallback code** unless it is explicitly required for the change.
 - **If a patch is genuinely unavoidable** (e.g. blocked by an external dep), label it as a patch explicitly *in the commit message* and pair it with a follow-up to do the proper fix.
 
