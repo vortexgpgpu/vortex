@@ -131,3 +131,14 @@ Each phase kept SimX and RTL in lockstep.
    read in flight and none ahead (K-major B at `KB` = 4: 7 cycles per two
    steps). Prefetching the next B block and the next K-tile's A stripes is
    the remaining lever on MMA time.
+7. Next: scalar `tc.mma` operands. Today the warp gathers all eight words into
+   lanes 0..3 of x31/x30 for every op, so lanes 0..3 must be active, the
+   intrinsic pins registers, and NT must be at least 4. Only `taddr`, the A
+   and B offsets, the metadata column and `acc_init` change per stage, so:
+   - `tc.idesc d, rs1, rs2` loads per-CTA descriptor slot `d` once: rs1 =
+     formats, sparse, A in TMEM, `n_frag`, `k_tiles`; rs2 = {ldb, lda}.
+   - `tc.mma d, rs1, rs2, rs3` (R4): rs1 = {`acc_init`, taddr column}, rs2 =
+     {metadata column, A offset or TMEM column}, rs3 = B offset, read from the
+     lowest active thread like `tcgen05.mma` from one elected thread.
+   `tc.cp` takes the same treatment. Trace the FA-4 MMA warp first to size the
+   gain; the main case is robustness and the `tcgen05` operand shape.
