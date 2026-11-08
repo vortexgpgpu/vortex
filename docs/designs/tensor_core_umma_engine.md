@@ -273,10 +273,14 @@ A free-list + CAM allocator over the column dimension:
 - **First-fit allocation** over the column dimension, with adjacent-
   range coalescing on free.
 - A request that cannot be satisfied right now (not enough free
-  columns) stalls until another CTA deallocates. A single request
-  larger than `VX_CFG_TCU_TMEM_COLS` can never be satisfied; it fails a
-  simulation assertion, so host code checks the column budget before
-  launch (§6).
+  columns) stalls at the head of its TCU block's input queue. Resident
+  CTAs share TCU blocks (a warp's block is its slot within the issue
+  width), so the stalled `TMEM_ALLOC` also blocks the column holder's
+  later TCU ops on that block, and the holder never deallocates: an
+  oversubscribed column budget deadlocks rather than serializing. A
+  single request larger than `VX_CFG_TCU_TMEM_COLS` can never be
+  satisfied and fails a simulation assertion. Host code therefore
+  must check that every concurrently resident CTA fits (§6).
 
 `alloc()` only ever reserves a column range — it does not initialize
 TMEM contents; kernels that need a defined starting value call `fill_tmem`
@@ -356,10 +360,10 @@ vx_device_query(device, VX_CAPS_TCU_TMEM_COLS, &tmem_cols);
 
 `tmem_cols` is 0 if `VX_CFG_TCU_TMEM_ENABLE` is off. A launch whose
 per-CTA columns times the maximum number of concurrently resident CTAs
-exceeds `tmem_cols` structurally cannot fit —
+exceeds `tmem_cols` deadlocks (§4.2) —
 `tests/regression/sgemm_tcu_tmem/main.cpp` checks
-`(UMMA_NRC + UMMA_ACC_OFFSET) × max-concurrently-resident-CTAs` and
-refuses to launch.
+`(UMMA_NRC + UMMA_ACC_OFFSET + a_tmem_words) × max-concurrently-resident-CTAs`,
+where `a_tmem_words` is 0 for the SS form, and refuses to launch.
 
 **Perf counters** (TCU class, per core, summed across blocks;
 `VX_types.toml`): `UMMA_INSTRS` (UMMA micro-ops), `TMEM_READS` and
