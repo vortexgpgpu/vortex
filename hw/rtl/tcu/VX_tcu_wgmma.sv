@@ -252,6 +252,11 @@ module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     end
     assign tcu_perf.wgmma_instrs = wgmma_instrs_ctr_r;
     assign tcu_perf.wgmma_stalls = wgmma_stalls_ctr_r;
+    assign tcu_perf.mma_busy     = '0;
+    assign tcu_perf.opnd_waits   = '0;
+    assign tcu_perf.job_other    = '0;
+    assign tcu_perf.idle         = '0;
+    assign tcu_perf.tmem_xfers   = '0;
 `endif
 
 endmodule

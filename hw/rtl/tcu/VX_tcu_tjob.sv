@@ -37,6 +37,14 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input wire clk,
     input wire reset,
 
+`ifdef PERF_ENABLE
+    output wire [PERF_CTR_BITS-1:0] perf_busy,
+    output wire [PERF_CTR_BITS-1:0] perf_opnd,
+    output wire [PERF_CTR_BITS-1:0] perf_other,
+    output wire [PERF_CTR_BITS-1:0] perf_idle,
+    output wire [PERF_CTR_BITS-1:0] perf_xfers,
+`endif
+
     // TMEM ops and tc ops from each block's dispatch
     input  wire [BLOCK_SIZE-1:0]    op_valid,
     input  tcu_execute_t            op_data [BLOCK_SIZE],
@@ -1265,6 +1273,41 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                || post_w[0][31:16] != 0 || (32'(post_w[0][15:0]) + post_cp_cols > COLS);
     `RUNTIME_ASSERT (~(post && (op_is_cp ? cp_bad : mma_bad)),
         ("%t: %s: unsupported tensor op (cta=%0d)", $time, INSTANCE_ID, op.header.cta_id))
+
+`ifdef PERF_ENABLE
+    // Each cycle counts once: an MMA step, else a running op's operand wait,
+    // else a drain or copy, else idle.
+    logic any_drain;
+    always_comb begin
+        any_drain = 1'b0;
+        for (int i = 0; i < NSLOTS; ++i) begin
+            any_drain |= (state_r[i] == TJ_DRAIN);
+        end
+    end
+    wire perf_is_opnd  = ~job_fire && (run_valid_r || e_valid_r);
+    wire perf_is_other = ~job_fire && ~perf_is_opnd && (any_drain || cp_active_r);
+    logic [PERF_CTR_BITS-1:0] perf_busy_r, perf_opnd_r, perf_other_r, perf_idle_r, perf_xfers_r;
+    always_ff @(posedge clk) begin
+        if (reset) begin
+            perf_busy_r  <= '0;
+            perf_opnd_r  <= '0;
+            perf_other_r <= '0;
+            perf_idle_r  <= '0;
+            perf_xfers_r <= '0;
+        end else begin
+            if (job_fire)           perf_busy_r  <= perf_busy_r + PERF_CTR_BITS'(BLOCK_SIZE);
+            else if (perf_is_opnd)  perf_opnd_r  <= perf_opnd_r + PERF_CTR_BITS'(1);
+            else if (perf_is_other) perf_other_r <= perf_other_r + PERF_CTR_BITS'(1);
+            else                    perf_idle_r  <= perf_idle_r + PERF_CTR_BITS'(1);
+            if (op_fire && (op_is_ld || op_is_st)) perf_xfers_r <= perf_xfers_r + PERF_CTR_BITS'(1);
+        end
+    end
+    assign perf_busy  = perf_busy_r;
+    assign perf_opnd  = perf_opnd_r;
+    assign perf_other = perf_other_r;
+    assign perf_idle  = perf_idle_r;
+    assign perf_xfers = perf_xfers_r;
+`endif
 
 `ifdef DBG_TRACE_TCU
     always @(posedge clk) begin

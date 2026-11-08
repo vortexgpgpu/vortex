@@ -1292,6 +1292,11 @@ package VX_gpu_pkg;
         logic [PERF_CTR_BITS-1:0] wgmma_stalls;      // cycles: WGMMA valid but stalled (tbuf or mdata)
         logic [PERF_CTR_BITS-1:0] wgmma_instrs;      // WGMMA µops executed
         logic [PERF_CTR_BITS-1:0] tbuf_stalls;         // cycles: WGMMA valid but stalled (uop cannot enter TCU core because tbuf data not ready)
+        logic [PERF_CTR_BITS-1:0] mma_busy;          // block-cycles a tensor-op MMA step fired
+        logic [PERF_CTR_BITS-1:0] opnd_waits;        // cycles a running tensor op waits on operands
+        logic [PERF_CTR_BITS-1:0] job_other;         // cycles of op drain or tc.cp only
+        logic [PERF_CTR_BITS-1:0] idle;              // cycles with no tensor-op work
+        logic [PERF_CTR_BITS-1:0] tmem_xfers;        // tmem.ld/st transfers
     } tcu_perf_t;
 `endif
 

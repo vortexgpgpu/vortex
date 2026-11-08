@@ -262,6 +262,20 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [BLOCK_SIZE-1:0][TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0] tbuf_rs2_data;
     wire [BLOCK_SIZE-1:0]                                         tbuf_ready_eff;
 
+`ifdef PERF_ENABLE
+    tcu_perf_t wgmma_perf;
+    always_comb begin
+        tcu_perf = wgmma_perf;
+    `ifdef VX_CFG_TCU_TMEM_ENABLE
+        tcu_perf.mma_busy   = tj_perf_busy;
+        tcu_perf.opnd_waits = tj_perf_opnd;
+        tcu_perf.job_other  = tj_perf_other;
+        tcu_perf.idle       = tj_perf_idle;
+        tcu_perf.tmem_xfers = tj_perf_xfers;
+    `endif
+    end
+`endif
+
     VX_tcu_wgmma #(
         .INSTANCE_ID (`SFORMATF(("%s-wgmma", INSTANCE_ID))),
         .BLOCK_SIZE  (BLOCK_SIZE)
@@ -269,7 +283,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .clk            (clk),
         .reset          (reset),
     `ifdef PERF_ENABLE
-        .tcu_perf       (tcu_perf),
+        .tcu_perf       (wgmma_perf),
     `endif
         .exec_valid     (exec_valid_w),
         .exec_ready     (exec_ready_w),
@@ -295,6 +309,11 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     assign tcu_perf.lmem_reads      = '0;
     assign tcu_perf.wgmma_instrs    = '0;
     assign tcu_perf.wgmma_stalls    = '0;
+    assign tcu_perf.mma_busy        = '0;
+    assign tcu_perf.opnd_waits      = '0;
+    assign tcu_perf.job_other       = '0;
+    assign tcu_perf.idle            = '0;
+    assign tcu_perf.tmem_xfers      = '0;
 `endif
 
 `endif // VX_CFG_TCU_WGMMA_ENABLE
@@ -337,12 +356,22 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
 
 `ifdef VX_CFG_TCU_TMEM_ENABLE
+`ifdef PERF_ENABLE
+    wire [PERF_CTR_BITS-1:0] tj_perf_busy, tj_perf_opnd, tj_perf_other, tj_perf_idle, tj_perf_xfers;
+`endif
     VX_tcu_tjob #(
         .INSTANCE_ID (`SFORMATF(("%s-tjob", INSTANCE_ID))),
         .BLOCK_SIZE  (BLOCK_SIZE)
     ) tjob (
         .clk            (clk),
         .reset          (reset),
+    `ifdef PERF_ENABLE
+        .perf_busy      (tj_perf_busy),
+        .perf_opnd      (tj_perf_opnd),
+        .perf_other     (tj_perf_other),
+        .perf_idle      (tj_perf_idle),
+        .perf_xfers     (tj_perf_xfers),
+    `endif
         .op_valid       (tj_op_valid),
         .op_data        (tj_op_data),
         .op_ready       (tj_op_ready),

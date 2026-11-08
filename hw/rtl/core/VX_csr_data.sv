@@ -525,6 +525,11 @@ import VX_fpu_pkg::*;
                         `CSR_READ_64(`VX_CSR_MPM_TCU_TBUF_STALLS,      dcr_data_w, pipeline_perf.tcu.tbuf_stalls);
                         `CSR_READ_64(`VX_CSR_MPM_TCU_TBUF_CACHE_HITS, dcr_data_w, pipeline_perf.tcu.tbuf_cache_hits);
                         `CSR_READ_64(`VX_CSR_MPM_TCU_LMEM_READS,     dcr_data_w, pipeline_perf.tcu.lmem_reads);
+                        `CSR_READ_64(`VX_CSR_MPM_TCU_MMA_BUSY,       dcr_data_w, pipeline_perf.tcu.mma_busy);
+                        `CSR_READ_64(`VX_CSR_MPM_TCU_OPND_WAITS,     dcr_data_w, pipeline_perf.tcu.opnd_waits);
+                        `CSR_READ_64(`VX_CSR_MPM_TCU_JOB_OTHER,      dcr_data_w, pipeline_perf.tcu.job_other);
+                        `CSR_READ_64(`VX_CSR_MPM_TCU_IDLE,           dcr_data_w, pipeline_perf.tcu.idle);
+                        `CSR_READ_64(`VX_CSR_MPM_TCU_TMEM_XFERS,     dcr_data_w, pipeline_perf.tcu.tmem_xfers);
                         default:;
                         endcase
                     end
