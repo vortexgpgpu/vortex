@@ -129,10 +129,25 @@ Each phase kept SimX and RTL in lockstep.
    fewer tile-buffer reads save on FA-4. Swizzled layouts pay on GPUs because
    each bank is addressed separately; the LMEM DMA port reads one bank row per
    access, and a separate DXA-write path is worth only 0-0.3% (SimX).
-6. Next: the tile buffers, which fetch one operand block at a time with one
-   read in flight and none ahead (K-major B at `KB` = 4: 7 cycles per two
-   steps). Prefetching the next B block and the next K-tile's A stripes is
-   the remaining lever on MMA time.
+6. Done: dense K-major B prefetch. On FA-4 `-b4` (SimX) 12,757 of 18,417
+   operand-wait cycles were B blocks (5-7 cycles per two-step block) and
+   2,275 were A stripes, so B goes first. Once the block in use is resident
+   the bbuf copies it into its second slot (sparse B's, unused by dense B)
+   and fetches the next N block of the K-tile into the first, and a block's
+   row reads stay in flight together. Prefetch stops at a K-tile and at the
+   step engine's 16-block descriptor chunk. rtlsim: FA-4 `-b4` 62,016 ->
+   57,403 (SimX 56,588), chained GEMM 25,169 -> 24,217, the GEMMs unchanged
+   (they wait on stage loads). Giving the TCU the LMEM DMA port ahead of the
+   DXA was also measured and dropped: FA-4 -0.4%, the GEMMs +4.6%. Two core
+   issues surfaced on the way, both for execution units shared by issue slots
+   (here one FPU for four): the RTL granted the shared unit to the lowest
+   busy slot, so `madmax` starved slot 3 into the scoreboard watchdog, and
+   SimX released an FPU tag a cycle before the RTL does behind a lane-gather
+   stage. Compute units now arbitrate slots round-robin (RTL and SimX) and
+   the tag hold is modeled (`madmax` 0.02% apart). The LSU keeps the fixed
+   priority: round-robin there moves every warp through its load phase
+   together instead of overlapping one warp's loads with another's MMA, and
+   cost the WGMMA DXA GEMMs 7-15% on rtlsim.
 7. Done: scalar `tc.mma` operands. The warp used to gather all eight
    descriptor words into lanes 0..3 of x31/x30 for every op, which needed
    lanes 0..3 active, pinned registers and NT >= 4. Now `tc.idesc` loads one of
@@ -142,3 +157,28 @@ Each phase kept SimX and RTL in lockstep.
    62,673 -> 62,016, the GEMM 41,789 -> 41,523, block-major B 43,473 ->
    42,788; the chained GEMM 24,248 -> 25,169, all of it a P-conversion loop
    the compiler now allocates three instructions longer. FA-4 parity 3.9%.
+8. Done: V80 out-of-context synthesis of `VX_tcu_unit` (8 threads, issue
+   width 4, FEDP2K):
+
+   | Build | LUTs | BRAM | Worst period |
+   |---|---|---|---|
+   | WGMMA only | 91,974 | 0 | 5.29 ns |
+   | TMEM, 128 columns | 135,855 | 16 | 6.93 ns |
+   | TMEM, 512 columns | 139,436 | 16 | 7.01 ns |
+   | TMEM, 512 columns, registered op port | 143,705 | 16 | 5.04 ns |
+
+   Every failing path ran from the lane dispatch output register through
+   the sequencer's op-port arbitration and scalar pick, so the sequencer now
+   registers the selected op first (SimX holds a newly arrived op a cycle).
+   The sequencer is ~40.5k LUTs and each `VX_tcu_core` ~22k; TMEM costs
+   ~51.7k LUTs over WGMMA, about 2.3 tensor cores, so an equal-area WGMMA
+   design would get two more cores' MMA rate but not the accumulator reuse
+   that carries the 128-column tiles. Energy: both designs read C and write
+   D on every step, from the RF or from TMEM, so they differ only in the
+   per-access cost, not the access count.
+9. Not pursued:
+   - Per-bank TMEM ports: under 1% on the measured kernels.
+   - A TMEM-only build without the WGMMA operand path: ~5% of the unit for a
+     large reorganization.
+   - Double-buffered A stripes: A waits are 12% of FA-4's operand waits.
+   - XLEN=64 coverage: the TMEM cases run at XLEN=32 only.
