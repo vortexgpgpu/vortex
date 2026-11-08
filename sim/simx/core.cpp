@@ -422,6 +422,11 @@ public:
         // cycle.
         uint32_t capacity = commit_single_hop(fu) ? 2 : 3;
         queues.emplace_back(std::make_unique<SimChannel<instr_trace_t*>>(simobject_, capacity));
+        if (fu == (uint32_t)FUType::LSU) {
+          // the LSU's gather buffer registers its ready, as its result path's
+          // buffers do
+          queues.back()->set_registered_ready(true);
+        }
       }
     }
     gather_holds_.resize(VX_CFG_ISSUE_WIDTH, std::vector<GatherHold>((uint32_t)FUType::Count));

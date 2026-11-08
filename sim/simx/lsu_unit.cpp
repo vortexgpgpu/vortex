@@ -150,17 +150,38 @@ Instr::Ptr LsuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
 }
 
 LsuUnit::LsuUnit(const SimContext& ctx, const char* name, Core* core)
-	// the response buffer and the result arbiter, two entries each
-	: FuncUnit<VX_CFG_NUM_LSU_BLOCKS>(ctx, name, core, 4)
+	// the result arbiter's buffer, two entries
+	: FuncUnit<VX_CFG_NUM_LSU_BLOCKS>(ctx, name, core, 2)
 #ifdef TCU_META_ENABLE
 	, TcuReqIn(TCU_AGU_PORTS, this)
 	, TcuRspOut(TCU_AGU_PORTS, this)
 #endif
+	, rsp_bufs_(VX_CFG_NUM_LSU_BLOCKS, SimChannel<instr_trace_t*>(this, 2))
+	, no_rsp_bufs_(VX_CFG_NUM_LSU_BLOCKS, SimChannel<instr_trace_t*>(this, 2))
 	, pending_loads_(0)
 {
 	// the lane-dispatch skid buffer's ready is registered
 	for (auto& input : Inputs) {
 		input.set_registered_ready(true);
+	}
+	// so are the result path's buffers'
+	for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
+		rsp_bufs_.at(b).set_registered_ready(true);
+		no_rsp_bufs_.at(b).set_registered_ready(true);
+		Outputs.at(b).set_registered_ready(true);
+	}
+}
+
+void LsuUnit::arbitrate_results(uint32_t b) {
+	auto& output = Outputs.at(b);
+	if (output.full())
+		return;
+	for (auto* buf : {&rsp_bufs_.at(b), &no_rsp_bufs_.at(b)}) {
+		if (!buf->empty()) {
+			output.send(buf->peek(), 1);
+			buf->pop();
+			return;
+		}
 	}
 }
 
@@ -329,10 +350,10 @@ void LsuUnit::process_response_step(uint32_t b) {
 	}
 
 	auto trace = entry.trace;
-	auto& output = Outputs.at(b);
+	auto& output = rsp_bufs_.at(b);
 	// Every response fragment retires through its own writeback slot, one
-	// per cycle, so a full output backpressures the whole response stream,
-	// not just the final fragment.
+	// per cycle, so a full response buffer backpressures the whole response
+	// stream, not just the final fragment.
 	if (output.full())
 		return; // stall
 	DT(3, this->name() << " mem-rsp: " << lsu_rsp);
@@ -404,10 +425,9 @@ void LsuUnit::process_response_step(uint32_t b) {
 		}
 	}
 	if (is_final && entry.eop) {
-		// the response buffer, then the result arbiter's register
 		trace->rsp_tracked = true;
 		trace->rsp_last = rsp_last;
-		output.send(trace, 2);
+		output.send(trace, 1);
 	} else {
 		// A non-final fragment still spends a commit-port slot: it drains
 		// as a writeback-less beat that carries no retirement, so a
@@ -419,7 +439,7 @@ void LsuUnit::process_response_step(uint32_t b) {
 		beat->eop = false;
 		beat->rsp_tracked = true;
 		beat->rsp_last = rsp_last;
-		output.send(beat, 2);
+		output.send(beat, 1);
 	}
 	pending_loads_ -= lsu_rsp.mask.count();
 	lsu_rsp_in.pop();
@@ -469,12 +489,11 @@ void LsuUnit::ingest_inputs(uint32_t b, bool queue_room, uint32_t reads_held) {
 		// A store commits as the request queue accepts it, through the
 		// no-response path, and is sent to memory later. The commit stage
 		// retires the trace, so the queue keeps a copy of its own.
-		if (Outputs.at(b).full()) {
+		if (no_rsp_bufs_.at(b).full()) {
 			return;
 		}
 		auto copy = new (core_->trace_pool().allocate(1)) instr_trace_t(*trace);
-		// the no-response buffer, then the result arbiter's register
-		Outputs.at(b).send(trace, 2);
+		no_rsp_bufs_.at(b).send(trace, 1);
 		trace = copy;
 	}
 	state.req_queue.push(trace);
@@ -541,7 +560,7 @@ void LsuUnit::process_request_step(uint32_t b) {
 		this->send_fence_token(b);
 	}
 	if (fence_locked && !state.fence_token) {
-		bool released = state.fence.try_release(Outputs.at(b), state.pending_reqs.empty());
+		bool released = state.fence.try_release(no_rsp_bufs_.at(b), state.pending_reqs.empty());
 		if (released) {
 			DT(3, this->name() << " fence-unlock: " << state.fence.trace());
 		}
@@ -676,12 +695,13 @@ void LsuUnit::process_request_step(uint32_t b) {
 	}
 
 	// Check output backpressure AFTER skipping inactive beats: only the last
-	// active beat commits the trace to Outputs, and leading inactive beats can
-	// make this call that last beat even when the entry remain_addrs exceeded a
-	// single beat. Testing full() against the post-skip remainder ensures the
-	// direct-commit send below never overflows.
+	// active beat commits the trace to the no-response buffer, and leading
+	// inactive beats can make this call that last beat even when the entry
+	// remain_addrs exceeded a single beat. Testing full() against the
+	// post-skip remainder ensures the direct-commit send below never
+	// overflows.
 	if (direct_commit && state.remain_addrs <= VX_CFG_NUM_LSU_LANES) {
-		if (Outputs.at(b).full())
+		if (no_rsp_bufs_.at(b).full())
 			return; // stall
 	}
 
@@ -801,7 +821,7 @@ void LsuUnit::process_request_step(uint32_t b) {
 
 	if (state.remain_addrs == 0) {
 		if (direct_commit) {
-			Outputs.at(b).send(trace);
+			no_rsp_bufs_.at(b).send(trace, 1);
 		}
 		if (state.head_staged) {
 			// a read with no active lane never issues: return its reservation
@@ -829,6 +849,7 @@ void LsuUnit::on_tick() {
 		auto& state = states_.at(b);
 		bool queue_room = !state.req_queue.full();
 		uint32_t reads_held = state.pending_reqs.size() + state.staged_reads;
+		this->arbitrate_results(b);
 		this->process_response_step(b);
 		this->process_request_step(b);
 		this->ingest_inputs(b, queue_room, reads_held);
