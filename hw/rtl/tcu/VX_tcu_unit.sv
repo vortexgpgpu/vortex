@@ -141,6 +141,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                      || (op_type == INST_OP_BITS'(INST_TCU_TC_CP))
                      || (op_type == INST_OP_BITS'(INST_TCU_TMEM_ALLOC))
                      || (op_type == INST_OP_BITS'(INST_TCU_TMEM_DEALLOC))
+                     || (op_type == INST_OP_BITS'(INST_TCU_TC_IDESC))
                      || (op_type == INST_OP_BITS'(INST_TCU_TC_MMA))
                      || (op_type == INST_OP_BITS'(INST_TCU_TC_COMMIT));
         assign tj_op_valid[bi] = per_block_execute_if[bi].valid && is_tj_op;

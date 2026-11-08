@@ -785,8 +785,9 @@ module VX_decode import
                         ex_type = EX_TCU;
                         op_args.tcu = '0;
                         case (funct3)
-                            3'h0: begin // TC_MMA rs1, rs2: descriptor words 0..7
-                                op_type = INST_OP_BITS'(INST_TCU_TC_MMA);
+                            3'h0: begin // TC_IDESC slot (rd field), rs1, rs2: instruction descriptor, leading bytes
+                                op_type = INST_OP_BITS'(INST_TCU_TC_IDESC);
+                                op_args.tcu.fmt_d = 5'(rd[1:0]);
                                 `USED_IREG (rs1);
                                 `USED_IREG (rs2);
                             end
@@ -795,9 +796,20 @@ module VX_decode import
                                 `USED_IREG (rs1);
                                 `USED_IREG (rs2);
                             end
-                            3'h2: begin // TC_CP rs1: taddr, source, stride, columns
+                            3'h2: begin // TC_CP rs1, rs2, rs3 (rd field): {columns, taddr}, source, stride
                                 op_type = INST_OP_BITS'(INST_TCU_TC_CP);
                                 `USED_IREG (rs1);
+                                `USED_IREG (rs2);
+                                reg_ids[RV_RS3]  = make_reg_num(REG_TYPE_I, RV_REGS_BITS'(rd));
+                                use_regs[RV_RS3] = 1'b1;
+                            end
+                            3'h4, 3'h5, 3'h6, 3'h7: begin // TC_MMA slot funct3-4, rs1, rs2, rs3 (rd field)
+                                op_type = INST_OP_BITS'(INST_TCU_TC_MMA);
+                                op_args.tcu.fmt_d = 5'(funct3[1:0]);
+                                `USED_IREG (rs1);
+                                `USED_IREG (rs2);
+                                reg_ids[RV_RS3]  = make_reg_num(REG_TYPE_I, RV_REGS_BITS'(rd));
+                                use_regs[RV_RS3] = 1'b1;
                             end
                             default:;
                         endcase

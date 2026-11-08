@@ -135,21 +135,27 @@ CUSTOM0 (`0x0B`), funct7 `0x05`:
 | 6 | `tmem.alloc rd, rs1` | first column | columns | - |
 | 7 | `tmem.dealloc rs1, rs2` | - | first column | columns |
 
-funct7 `0x06`, the asynchronous ops of one in-order queue per core:
+funct7 `0x06`, the asynchronous ops of one in-order queue per core. The rd
+field of `tc.mma` and `tc.cp` names a third source register (rs3):
 
-| funct3 | Instruction | rs1 | rs2 |
-|---|---|---|---|
-| 0 | `tc.mma` | descriptor words 0..3 (lanes 0..3) | words 4..7 (lanes 0..3) |
-| 1 | `tc.commit` | barrier id | arrival count |
-| 2 | `tc.cp` | `taddr`, source, stride, columns (lanes 0..3) | - |
+| funct3 | Instruction | rs1 | rs2 | rd field |
+|---|---|---|---|---|
+| 0 | `tc.idesc s, rs1, rs2` | `idesc` | leading bytes | slot `s` (0..3) |
+| 1 | `tc.commit` | barrier id | arrival count | - |
+| 2 | `tc.cp` | {columns [31:16], `taddr` [15:0]} | source | rs3: stride |
+| 3 | reserved | | | |
+| 4..7 | `tc.mma` with slot funct3 - 4 | {`acc_init` [31], metadata column [30:16], `taddr` [15:0]} | A | rs3: B |
 
 - `tmem.ld/st` expand into `n` uops in the front-end uop sequencer (register
   `f+i` to/from its columns) and use the normal scoreboard and writeback.
-- Multi-word operands are gathered across lanes 0..3 (`vx_wgather`, as DXA
-  issue does). The ops are single uops with no writeback that reach one
-  in-order TCU input, so their operands need no memory fence. (A shared-memory
-  descriptor read through `tcu_lmem_if` races the warp's own stores: LSU
-  stores are fire-and-forget and `fence` does not wait for them.)
+- `tc.*` operands are scalars read from the warp's lowest active thread, so
+  any one thread may issue them, as `tcgen05.mma` is issued by one elected
+  thread. They are single uops with no writeback that reach one in-order TCU
+  input, so their operands need no memory fence.
+- `tc.idesc` loads one of the CTA's four descriptor slots with the fields
+  fixed across a K loop; a `tc.mma` carries only what changes per stage. A
+  slot written by another warp needs a barrier before the `tc.mma` that uses
+  it.
 - Each CTA has two queue entries; `tc.mma` and `tc.cp` stall at issue while
   they are full. A CTA's ops run in order; `tc.commit` arrives on its barrier
   once the CTA's earlier ops have completed.
@@ -165,28 +171,23 @@ one to one; `wait::ld` is unnecessary because `tmem.ld` goes through the
 in-order scoreboard, and `wait::st` is `tm::wait_st()`; `relinquish`,
 `shift`, `.ws` and `cta_group::2` are not provided.
 
-### Instruction descriptor (`idesc`)
+### Descriptor slot (`tc.idesc`)
 
-| Bits | Field |
-|---|---|
-| [4:0] | `fmt_s` |
-| [9:5] | `fmt_d` |
-| [10] | sparse (2:4 compressed A, metadata in TMEM) |
-| [11] | `acc_init` (first K-tile overwrites D) |
-| [12] | A source: 0 = LMEM, 1 = TMEM |
-| [20:13] | `n_frag` |
-| [31:21] | reserved |
+| Operand | Bits | Field |
+|---|---|---|
+| `idesc` | [4:0] | `fmt_s` |
+| | [9:5] | `fmt_d` |
+| | [10] | sparse (2:4 compressed A, metadata in TMEM) |
+| | [11] | reserved |
+| | [12] | A source: 0 = LMEM, 1 = TMEM |
+| | [20:13] | `n_frag` |
+| | [23:21] | reserved |
+| | [31:24] | `k_tiles` |
+| leading bytes | [15:0] / [31:16] | A / B; B = 0 selects block-major B (dense only) |
 
-### `tc.mma` descriptor (8 words, in registers)
-
-| Word | Field |
-|---|---|
-| 0 | `idesc` |
-| 1 | `k_tiles` [15:0]; [31:16] reserved |
-| 2 | `taddr`: first D column (lane 0) |
-| 3 / 4 / 5 | A: shared-memory offset, or first TMEM column when A is in TMEM / B: shared-memory offset / first metadata TMEM column |
-| 6 | reserved |
-| 7 | leading bytes: A [15:0], B [31:16]; B = 0 selects block-major B (dense only) |
+A `tc.mma`'s `taddr` is its first D column (lane 0), A a shared-memory offset
+or, when A is in TMEM, its first column, B a shared-memory offset, and
+`acc_init` makes the first K-tile overwrite D.
 
 ### Ordering
 

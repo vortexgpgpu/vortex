@@ -793,9 +793,10 @@ enum class TcuType {
   TMEM_ST,    // FP registers -> TMEM, one uop per register.
   TMEM_ALLOC,   // rd = first column of rs1 TMEM columns, or ~0 if none fit.
   TMEM_DEALLOC, // Frees rs2 TMEM columns from column rs1.
-  TC_MMA,       // tcgen05.mma: descriptor words 0..7.
+  TC_IDESC,     // load a CTA tc.mma descriptor slot (fmt_d): idesc rs1, leading bytes rs2.
+  TC_MMA,       // tcgen05.mma with descriptor slot fmt_d: rs1 {acc_init, meta, taddr}, rs2 A, rs3 B.
   TC_COMMIT,    // tcgen05.commit: arrive (count rs2) on barrier rs1 after earlier ops.
-  TC_CP,        // tcgen05.cp: shared memory -> TMEM columns.
+  TC_CP,        // tcgen05.cp: rs1 {columns, taddr}, rs2 source, rs3 stride.
 };
 
 struct IntrTcuArgs {
@@ -845,6 +846,7 @@ inline std::ostream &operator<<(std::ostream &os, const TcuType& type) {
   case TcuType::TMEM_ST:    os << "TMEM_ST"; break;
   case TcuType::TMEM_ALLOC:   os << "TMEM_ALLOC"; break;
   case TcuType::TMEM_DEALLOC: os << "TMEM_DEALLOC"; break;
+  case TcuType::TC_IDESC:     os << "TC_IDESC"; break;
   case TcuType::TC_MMA:       os << "TC_MMA"; break;
   case TcuType::TC_COMMIT:    os << "TC_COMMIT"; break;
   case TcuType::TC_CP:        os << "TC_CP"; break;

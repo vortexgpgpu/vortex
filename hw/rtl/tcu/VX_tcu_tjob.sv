@@ -331,6 +331,28 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire op_is_mma     = (op.op_type == INST_OP_BITS'(INST_TCU_TC_MMA));
     wire op_is_commit  = (op.op_type == INST_OP_BITS'(INST_TCU_TC_COMMIT));
     wire op_is_cp      = (op.op_type == INST_OP_BITS'(INST_TCU_TC_CP));
+    wire op_is_idesc   = (op.op_type == INST_OP_BITS'(INST_TCU_TC_IDESC));
+
+    // tc.* operands are scalars, read from the warp's lowest active thread.
+    wire [`LOG2UP(NT)-1:0] op_st;
+    VX_priority_encoder #(
+        .N (NT)
+    ) scalar_pe (
+        .data_in    (op.header.tmask),
+        `UNUSED_PIN (onehot_out),
+        .index_out  (op_st),
+        `UNUSED_PIN (valid_out)
+    );
+    wire [31:0] op_s1 = op.rs1_data[op_st][31:0];
+    wire [31:0] op_s2 = op.rs2_data[op_st][31:0];
+    wire [31:0] op_s3 = op.rs3_data[op_st][31:0];
+
+    // tc.mma descriptor slots, four per CTA: {leading bytes, idesc}.
+    localparam DSLOTS = 4 * (1 << NCTA_WIDTH);
+    logic [63:0] dslot_r [DSLOTS];
+    wire [`LOG2UP(DSLOTS)-1:0] op_dslot = {op.header.cta_id, op.op_args.tcu.fmt_d[1:0]};
+    wire [31:0] op_idesc = dslot_r[op_dslot][31:0];
+    wire [31:0] op_ld    = dslot_r[op_dslot][63:32];
 
     wire [`CLOG2(JOBS_PER_CTA+NSLOTS+1)-1:0] op_cta_jobs = cta_jobs_r[op.header.cta_id];
 
@@ -432,6 +454,7 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                && (op_is_alloc
                 || ((op_is_mma || op_is_cp) && alloc_valid && (op_cta_jobs < JOBS_PER_CTA))
                 || (op_is_commit && commit_ok)
+                || op_is_idesc
                 || (op_is_ld && ~op_conflict)
                 || (op_is_st && ~op_conflict && ~job_wr[op_blk])
                 || (op_is_dealloc && ~op_conflict));
@@ -449,13 +472,32 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                   || ((32'(op_lane) % XM) == 0 && 32'(op_lane) < LANES),
         ("%t: %s: TMEM lane %0d out of range", $time, INSTANCE_ID, op_lane))
 
-    // tc.mma descriptor words 0..7: rs1 then rs2, lanes 0..3 of each. tc.cp's
-    // rs1 lanes are its taddr, source, stride and column count.
+    // The posted op as descriptor words. tc.mma: idesc (acc_init in bit 11),
+    // k_tiles, taddr, A, B, metadata column, reserved, leading bytes. tc.cp:
+    // taddr, source, stride, columns.
     logic [7:0][31:0] post_w;
     always_comb begin
-        for (int w = 0; w < 4; ++w) begin
-            post_w[w]     = op.rs1_data[w][31:0];
-            post_w[4 + w] = op.rs2_data[w][31:0];
+        post_w = '0;
+        if (op_is_cp) begin
+            post_w[0] = 32'(op_s1[15:0]);
+            post_w[1] = op_s2;
+            post_w[2] = op_s3;
+            post_w[3] = 32'(op_s1[31:16]);
+        end else begin
+            post_w[0] = {11'b0, op_idesc[20:12], op_s1[31], op_idesc[10:0]};
+            post_w[1] = 32'(op_idesc[31:24]);
+            post_w[2] = 32'(op_s1[15:0]);
+            post_w[3] = op_s2;
+            post_w[4] = op_s3;
+            post_w[5] = 32'(op_s1[30:16]);
+            post_w[6] = 32'({op_idesc[23:21], op_idesc[11]});
+            post_w[7] = op_ld;
+        end
+    end
+
+    always_ff @(posedge clk) begin
+        if (op_fire && op_is_idesc) begin
+            dslot_r[op_dslot] <= {op_s2, op_s1};
         end
     end
 
@@ -1058,8 +1100,8 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 j.wid           = op.header.wid;
                 j.uuid          = op.header.uuid;
                 j.ncommit       = 2'd1;
-                j.commit_bar[0] = op.rs1_data[0][31:0];
-                j.commit_cnt[0] = BAR_SIZE_W'(op.rs2_data[0][31:0] - 32'd1);
+                j.commit_bar[0] = op_s1;
+                j.commit_cnt[0] = BAR_SIZE_W'(op_s2 - 32'd1);
                 slot_r[post_slot]     <= j;
                 state_r[post_slot]    <= TJ_DRAIN;
                 inflight_r[post_slot] <= '0;
@@ -1069,8 +1111,8 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 end
             end
             if (commit_add) begin
-                slot_r[young_i].commit_bar[slot_r[young_i].ncommit[0]] <= op.rs1_data[0][31:0];
-                slot_r[young_i].commit_cnt[slot_r[young_i].ncommit[0]] <= BAR_SIZE_W'(op.rs2_data[0][31:0] - 32'd1);
+                slot_r[young_i].commit_bar[slot_r[young_i].ncommit[0]] <= op_s1;
+                slot_r[young_i].commit_cnt[slot_r[young_i].ncommit[0]] <= BAR_SIZE_W'(op_s2 - 32'd1);
                 slot_r[young_i].ncommit <= slot_r[young_i].ncommit + 2'd1;
             end
 
@@ -1217,7 +1259,6 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     || post_w[1][31:16] != 0 || post_k_tiles == 0 || post_w[0][20:13] == 0
                     || post_w[6] != 0 || post_w[7][15:0] == 0
                     || (post_w[7][31:16] == 0 && (post_w[0][10] || TCU_WG_B_SUB_BLOCKS != 1))
-                    || post_w[2][31:16] != 0
                     || (32'(post_w[2][15:0]) + 32'(post_w[0][20:13]) * TC_N > COLS);
     wire cp_bad = (post_cp_cols == 0) || (post_cp_cols % NT != 0)
                || (post_w[1] % (NT * 4) != 0) || (post_w[2] % (NT * 4) != 0)

@@ -220,19 +220,14 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   } else if (warp_rank == 1) {
     // Per stage: wait for it, multiply, and commit it back to the producer;
     // the last commit completes the GEMM.
-    tm::mma_desc_t d = {};
-    d.k_tiles = KB;
-    d.taddr   = taddr;
-    d.ld      = (kAK * sizeof(ctx::input_t)) | (kBLdmBytes << 16);
+    tm::set_idesc<0>(tm::make_idesc(vt::ITYPE::id, vt::OTYPE::id, kTileN / ctx::tcN, KB, kSparse, kATmem),
+                     tm::make_ld(kAK * sizeof(ctx::input_t), kBLdmBytes));
     for (uint32_t i = 0; i < num_steps; ++i) {
       uint32_t s = i % kPipeN;
       int phase = vx_barrier_arrive(full_bar(s), 2);
       vx_barrier_wait(full_bar(s), phase);
-      d.idesc     = tm::make_idesc(vt::ITYPE::id, vt::OTYPE::id, kTileN / ctx::tcN, i == 0, kSparse, kATmem);
-      d.a_base    = kATmem ? (a_col + i * KB * wg_cfg::fedpK) : tm::smem_offset(stage_A(s));
-      d.b_base    = tm::smem_offset(stage_B(s));
-      d.meta_base = kSparse ? (meta_col + i * KB * kMetaCols) : 0;
-      tm::mma(d);
+      tm::mma<0>(taddr, kATmem ? (a_col + i * KB * wg_cfg::fedpK) : tm::smem_offset(stage_A(s)),
+                 tm::smem_offset(stage_B(s)), i == 0, kSparse ? (meta_col + i * KB * kMetaCols) : 0);
       tm::commit(empty_bar(s), 2);
     }
     tm::commit(done_bar, num_warps + 1);

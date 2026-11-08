@@ -71,22 +71,19 @@ static inline uint32_t f32_to_f16_pos(float x) {
 
 // Per stage of K: wait for it, multiply, and commit it back.
 static inline __attribute__((always_inline)) void mma_steps(
-    uint32_t& i, uint32_t K, uint32_t cta_id, uint32_t idesc, bool acc_init, uint32_t taddr,
+    uint32_t& i, uint32_t K, uint32_t cta_id, bool acc_init, uint32_t taddr,
     uint32_t a_col, bool a_tmem, uint32_t smem_base, uint32_t stage_bytes, uint32_t b_off) {
-  constexpr uint32_t kIdescAccInit = 1u << 11;
   for (uint32_t k = 0; k < K; k += kBK, ++i) {
     const uint32_t s = i % kPipeN;
     const uint32_t full = cta_id | (s << 8);
     int phase = vx_barrier_arrive(full, 2);
     vx_barrier_wait(full, phase);
-    tm::mma_desc_t d = {};
-    d.idesc   = idesc | ((acc_init && k == 0) ? kIdescAccInit : 0);
-    d.k_tiles = KB;
-    d.taddr   = taddr;
-    d.a_base  = a_tmem ? (a_col + (k / kBK) * KB * wg_cfg::fedpK) : (smem_base + s * stage_bytes);
-    d.b_base  = smem_base + s * stage_bytes + b_off;
-    d.ld      = (kBK * sizeof(ctx::input_t)) | ((kBK * sizeof(ctx::input_t)) << 16);
-    tm::mma(d);
+    const uint32_t b = smem_base + s * stage_bytes + b_off;
+    if (a_tmem) {
+      tm::mma<1>(taddr, a_col + (k / kBK) * KB * wg_cfg::fedpK, b, acc_init && k == 0);
+    } else {
+      tm::mma<0>(taddr, smem_base + s * stage_bytes, b, acc_init && k == 0);
+    }
     tm::commit(cta_id | ((kPipeN + s) << 8), 2);
   }
 }
@@ -195,19 +192,20 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   }
   if (warp_rank == 1) {
     // A tile's softmax waits on the commit after its S MMA (or its last P.V).
-    const uint32_t s_idesc = tm::make_idesc(vt::ITYPE::id, vt::OTYPE::id, L / ctx::tcN, false);
-    const uint32_t o_idesc = tm::make_idesc(vt::ITYPE::id, vt::OTYPE::id, N / ctx::tcN, false, false, true);
+    constexpr uint32_t kLd = tm::make_ld(kBK * sizeof(ctx::input_t), kBK * sizeof(ctx::input_t));
+    tm::set_idesc<0>(tm::make_idesc(vt::ITYPE::id, vt::OTYPE::id, L / ctx::tcN, KB), kLd);
+    tm::set_idesc<1>(tm::make_idesc(vt::ITYPE::id, vt::OTYPE::id, N / ctx::tcN, KB, false, true), kLd);
     uint32_t i = 0;
     for (uint32_t tile = 0; tile < kTiles; ++tile) {
-      mma_steps(i, D, cta_id, s_idesc, true, s_col(tile), 0, false, smem_base, stage_bytes, q_bytes);
+      mma_steps(i, D, cta_id, true, s_col(tile), 0, false, smem_base, stage_bytes, q_bytes);
       tm::commit(bar(kBarDone + tile), 1 + kGroupWarps);
     }
     for (uint32_t b = 0; b < NB; ++b) {
       for (uint32_t tile = 0; tile < kTiles; ++tile) {
         vx_barrier(bar(kBarSm + tile), 1 + kGroupWarps);
-        mma_steps(i, L, cta_id, o_idesc, b == 0, o_col(tile), p_col(tile), true, smem_base, stage_bytes, 0);
+        mma_steps(i, L, cta_id, b == 0, o_col(tile), p_col(tile), true, smem_base, stage_bytes, 0);
         if (b + 1 < NB) {
-          mma_steps(i, D, cta_id, s_idesc, true, s_col(tile), 0, false, smem_base, stage_bytes, q_bytes);
+          mma_steps(i, D, cta_id, true, s_col(tile), 0, false, smem_base, stage_bytes, q_bytes);
         }
         tm::commit(bar(kBarDone + tile), 1 + kGroupWarps);
       }

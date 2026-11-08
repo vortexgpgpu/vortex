@@ -26,23 +26,25 @@ mainstream model, so the TMEM path adopts it.
 
 ## ISA
 
-`tmem.*` are CUSTOM0, funct7 = 5; `tc.*` are funct7 = 6. Multi-word operands
-use the warp gather DXA issue uses (lanes 0..3 of rs1 and rs2).
+`tmem.*` are CUSTOM0, funct7 = 5; `tc.*` are funct7 = 6. `tc.*` operands are
+scalars from the lowest active thread; `tc.mma` and `tc.cp` read a third
+source register named by the rd field.
 
 | Vortex | tcgen05 | Operands |
 |---|---|---|
-| `tc.mma` | `tcgen05.mma.cta_group::1` | d_taddr, idesc, A (smem descriptor or TMEM column), B smem descriptor, sparse metadata column, enable_input_d |
+| `tc.idesc` | (the `idesc` and smem descriptor templates) | slot, idesc (formats, sparse, A in TMEM, `n_frag`, `k_tiles`), leading bytes |
+| `tc.mma` | `tcgen05.mma.cta_group::1` | slot, d_taddr, A (smem offset or TMEM column), B smem offset, sparse metadata column, enable_input_d |
 | `tc.commit` | `tcgen05.commit.mbarrier::arrive::one` | barrier id |
-| `tc.cp` | `tcgen05.cp` | taddr, smem source, stride, columns (rs1 lanes 0..3) |
+| `tc.cp` | `tcgen05.cp` | taddr, smem source, stride, columns |
 | `tmem.alloc` / `tmem.dealloc` | `tcgen05.alloc` / `dealloc` | columns (power of two, >= 32); first column in rd, ~0 if none fits |
 | `tmem.ld` / `tmem.st` | `tcgen05.ld` / `st` | unchanged |
 | `tm::wait_st()` | `tcgen05.wait::st` | `vx_wsync` |
 
 `tc.mma` computes `k_tiles` consecutive K-tiles (`tileK` each) of a stage for
-all `n_frag` N fragments of the core's M lanes. idesc keeps today's fields
-(formats, sparse, A in TMEM, n_frag). Smem descriptors are today's
-`smem_matrix_desc` (offset, leading bytes); a B leading-bytes field of 0
-selects the block-major layout the DXA `BlockMajor` mode writes.
+all `n_frag` N fragments of the core's M lanes. The fields fixed across a K
+loop (formats, sparse, A in TMEM, `n_frag`, `k_tiles`, leading bytes) live in
+one of four per-CTA descriptor slots loaded by `tc.idesc`; a B leading-bytes
+field of 0 selects the block-major layout the DXA `BlockMajor` mode writes.
 
 ## Semantics
 
@@ -131,14 +133,12 @@ Each phase kept SimX and RTL in lockstep.
    read in flight and none ahead (K-major B at `KB` = 4: 7 cycles per two
    steps). Prefetching the next B block and the next K-tile's A stripes is
    the remaining lever on MMA time.
-7. Next: scalar `tc.mma` operands. Today the warp gathers all eight words into
-   lanes 0..3 of x31/x30 for every op, so lanes 0..3 must be active, the
-   intrinsic pins registers, and NT must be at least 4. Only `taddr`, the A
-   and B offsets, the metadata column and `acc_init` change per stage, so:
-   - `tc.idesc d, rs1, rs2` loads per-CTA descriptor slot `d` once: rs1 =
-     formats, sparse, A in TMEM, `n_frag`, `k_tiles`; rs2 = {ldb, lda}.
-   - `tc.mma d, rs1, rs2, rs3` (R4): rs1 = {`acc_init`, taddr column}, rs2 =
-     {metadata column, A offset or TMEM column}, rs3 = B offset, read from the
-     lowest active thread like `tcgen05.mma` from one elected thread.
-   `tc.cp` takes the same treatment. Trace the FA-4 MMA warp first to size the
-   gain; the main case is robustness and the `tcgen05` operand shape.
+7. Done: scalar `tc.mma` operands. The warp used to gather all eight
+   descriptor words into lanes 0..3 of x31/x30 for every op, which needed
+   lanes 0..3 active, pinned registers and NT >= 4. Now `tc.idesc` loads one of
+   four per-CTA slots with the fields fixed across a K loop, and `tc.mma`
+   carries `taddr`, `acc_init`, the metadata column, A and B as scalars from
+   the lowest active thread; `tc.cp` takes scalars too. rtlsim: FA-4 `-b4`
+   62,673 -> 62,016, the GEMM 41,789 -> 41,523, block-major B 43,473 ->
+   42,788; the chained GEMM 24,248 -> 25,169, all of it a P-conversion loop
+   the compiler now allocates three instructions longer. FA-4 parity 3.9%.

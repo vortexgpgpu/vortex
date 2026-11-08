@@ -426,6 +426,7 @@ public:
     tmem_used_ = 0;
     jobs_.clear();
     tj_last_seq_.clear();
+    tj_desc_.clear();
   #endif
   #ifdef TCU_META_ENABLE
     agu_.fill(agu_state_t{});
@@ -785,6 +786,15 @@ public:
           }
           tj_port_busy_ = true;
         } break;
+        case TcuType::TC_IDESC: {
+          if (tj_port_busy_) {
+            continue;
+          }
+          tj_port_busy_ = true;
+          int32_t cta = (int32_t)core_->scheduler().warp(wid).cta_csrs.cta_id;
+          uint32_t t = scalar_thread(trace);
+          tj_desc_[cta].at(tpuArgs.fmt_d) = {rs1_data.at(t).u, rs2_data.at(t).u};
+        } break;
         case TcuType::TC_MMA:
         case TcuType::TC_CP: {
           int32_t cta = (int32_t)core_->scheduler().warp(wid).cta_csrs.cta_id;
@@ -795,20 +805,18 @@ public:
           tj_t job;
           job.cta = cta;
           job.wid = wid;
+          uint32_t t = scalar_thread(trace);
+          uint32_t w = rs1_data.at(t).u;
           if (tcu_type == TcuType::TC_CP) {
             job.copy    = true;
-            job.taddr   = rs1_data.at(0).u;
-            job.a_base  = rs1_data.at(1).u;
-            job.lda     = rs1_data.at(2).u;
-            job.k_tiles = rs1_data.at(3).u;
+            job.taddr   = w & 0xffff;
+            job.k_tiles = w >> 16;
+            job.a_base  = rs2_data.at(t).u;
+            job.lda     = rs3_data.at(t).u;
             this->copy_check(job);
           } else {
-            tj_words_t words{};
-            for (uint32_t i = 0; i < 4; ++i) {
-              words.at(i)     = rs1_data.at(i).u;
-              words.at(4 + i) = rs2_data.at(i).u;
-            }
-            this->job_decode(job, words);
+            const auto& desc = tj_desc_[cta].at(tpuArgs.fmt_d);
+            this->job_decode(job, desc.first, desc.second, w, rs2_data.at(t).u, rs3_data.at(t).u);
           }
           this->job_span(job);
           job.seq = tj_seq_++;
@@ -832,8 +840,8 @@ public:
               }
             }
           }
-          uint32_t bar = rs1_data.at(0).u;
-          uint32_t cnt = rs2_data.at(0).u;
+          uint32_t bar = rs1_data.at(scalar_thread(trace)).u;
+          uint32_t cnt = rs2_data.at(scalar_thread(trace)).u;
           if (youngest != nullptr) {
             if (youngest->commits == kTcCommits || youngest->seq == tj_done_seq_) {
               continue;
@@ -891,6 +899,7 @@ public:
       case TcuType::TMEM_ST:
       case TcuType::TMEM_ALLOC:
       case TcuType::TMEM_DEALLOC:
+      case TcuType::TC_IDESC:
       case TcuType::TC_MMA:
       case TcuType::TC_COMMIT:
       case TcuType::TC_CP:
@@ -1342,11 +1351,11 @@ public:
   static_assert(kTmemCols % kAllocCols == 0 && kAllocChunks <= 32, "TMEM allocation granularity");
   static constexpr uint32_t kJobQueueSize = 2;       // per CTA
   static constexpr uint32_t kJobSlots = 8;           // all CTAs
-  static constexpr uint32_t kJobDescWords = 8;
   static constexpr uint32_t kJobKeyBase = 0x10000;   // lmem_desc_ key of block 0
 
   enum class tj_state_t { WAIT, RUN, DRAIN };
-  using tj_words_t = std::array<uint32_t, kJobDescWords>;
+  // idesc bit 11 and bits 21..23 are reserved.
+  static constexpr uint32_t kIdescReserved = (1u << 11) | (7u << 21);
 
   reg_data_t& tmem_at(uint32_t lane, uint32_t col) {
     return tmem_.at(lane * kTmemCols + col);
@@ -1440,21 +1449,31 @@ public:
   }
 
 
-  void job_decode(tj_t& job, const tj_words_t& w) {
-    uint32_t idesc   = w[0];
+  // tc.* operands are scalars, read from the warp's lowest active thread.
+  static uint32_t scalar_thread(const instr_trace_t* trace) {
+    for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+      if (trace->tmask.test(t)) {
+        return t;
+      }
+    }
+    return 0;
+  }
+
+  // idesc and ld from the op's descriptor slot; w = {acc_init, meta column, taddr}.
+  void job_decode(tj_t& job, uint32_t idesc, uint32_t ld, uint32_t w, uint32_t a_base, uint32_t b_base) {
     job.fmt_s        = idesc & 0x1f;
     job.fmt_d        = (idesc >> 5) & 0x1f;
     job.sparse       = (idesc >> 10) & 1;
-    job.acc_init     = (idesc >> 11) & 1;
     job.a_tmem       = (idesc >> 12) & 1;
     job.n_frag       = (idesc >> 13) & 0xff;
-    job.k_tiles      = w[1] & 0xffff;
-    job.taddr        = w[2];
-    job.a_base       = w[3];
-    job.b_base       = w[4];
-    job.meta_base    = w[5];
-    job.lda          = w[7] & 0xffff;
-    job.ldb          = w[7] >> 16;
+    job.k_tiles      = idesc >> 24;
+    job.acc_init     = w >> 31;
+    job.taddr        = w & 0xffff;
+    job.meta_base    = (w >> 16) & 0x7fff;
+    job.a_base       = a_base;
+    job.b_base       = b_base;
+    job.lda          = ld & 0xffff;
+    job.ldb          = ld >> 16;
 
     // Columns [base, base + cols) must not overlap D, which the op rewrites.
     auto bad_columns = [&](uint32_t base, uint32_t cols) {
@@ -1471,7 +1490,7 @@ public:
       err = "metadata columns exceed TMEM or overlap D";
     } else if (job.a_tmem && bad_columns(job.a_base, job.k_tiles * kFedpWords)) {
       err = "A columns exceed TMEM or overlap D";
-    } else if ((w[1] >> 16) != 0 || w[6] != 0) {
+    } else if ((idesc & kIdescReserved) != 0) {
       err = "reserved descriptor bits set";
     } else if (job.k_tiles == 0 || job.n_frag == 0) {
       err = "zero k_tiles or n_frag";
@@ -1479,8 +1498,6 @@ public:
       err = "A must be row-major (lda != 0)";
     } else if (job.ldb == 0 && (job.sparse || kBSubBlocks != 1)) {
       err = "block-major B (ldb = 0) needs a dense MMA and one B block per LMEM bank row";
-    } else if ((job.taddr >> 16) != 0) {
-      err = "D must start at lane 0";
     } else if (job.taddr + job.n_frag * wg_cfg::tcN > kTmemCols) {
       err = "D columns exceed TMEM";
     } else if (job.n_frag * wg_cfg::m_steps <= kFedpLatency + kTmemReadLatency) {
@@ -2405,6 +2422,8 @@ private:
   std::deque<uint64_t> job_wr_due_;  // cycles of in-flight steps' D write-backs
   uint64_t tj_seq_ = 0;
   std::unordered_map<int32_t, uint64_t> tj_last_seq_;  // per CTA: its last posted op
+  // per CTA: tc.mma descriptor slots {idesc, leading bytes}
+  std::unordered_map<int32_t, std::array<std::pair<uint32_t, uint32_t>, 4>> tj_desc_;
   uint64_t tj_done_seq_ = ~uint64_t(0);  // job whose completion step ran this cycle
   int32_t  tj_freed_cta_ = -1;           // CTA whose job retired this cycle
   uint32_t tmem_used_ = 0;  // allocated kAllocCols-column chunks, bit per chunk
@@ -2440,6 +2459,8 @@ op_string_t TcuUnit::op_string(TcuType tcu_type, IntrTcuArgs args) {
     return {"TMEM_ALLOC", ""};
   case TcuType::TMEM_DEALLOC:
     return {"TMEM_DEALLOC", ""};
+  case TcuType::TC_IDESC:
+    return {"TC_IDESC", ""};
   case TcuType::TC_MMA:
     return {"TC_MMA", ""};
   case TcuType::TC_COMMIT:

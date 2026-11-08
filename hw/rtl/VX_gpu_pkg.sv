@@ -636,6 +636,7 @@ package VX_gpu_pkg;
     localparam INST_TCU_TMEM_LD    = 4'h6;
     localparam INST_TCU_TMEM_ST    = 4'h7;
     localparam INST_TCU_TC_CP      = 4'h8;
+    localparam INST_TCU_TC_IDESC   = 4'h9;
     localparam INST_TCU_TMEM_ALLOC   = 4'hA;
     localparam INST_TCU_TMEM_DEALLOC = 4'hB;
     localparam INST_TCU_TC_MMA       = 4'hC;

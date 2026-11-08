@@ -64,10 +64,9 @@ static inline __attribute__((always_inline)) void load_stage(
 // O += P.V stages only V_T, as P is in TMEM. A stage is reloaded once the
 // tc.mma that read it commits, while the next tc.mma runs.
 static inline __attribute__((always_inline)) void mma_loop(
-    uint32_t cta_id, uint32_t n, bool pv, uint32_t idesc, bool acc_init, uint32_t taddr,
+    uint32_t cta_id, uint32_t n, bool pv, bool acc_init, uint32_t taddr,
     uint32_t p_col, ctx::input_t* smem, uint32_t stage_elems, uint32_t q_elems,
     uint32_t q_row, uint32_t kv) {
-  constexpr uint32_t kIdescAccInit = 1u << 11;
   const uint32_t smem_base = tm::smem_offset(smem);
   const uint32_t stage_bytes = stage_elems * sizeof(ctx::input_t);
   for (uint32_t j = 0; j < n && j < kPipeN; ++j) {
@@ -76,14 +75,12 @@ static inline __attribute__((always_inline)) void mma_loop(
   for (uint32_t i = 0; i < n; ++i) {
     const uint32_t s = i % kPipeN;
     wait_bar(full_bar(cta_id, s), 1);
-    tm::mma_desc_t d = {};
-    d.idesc   = idesc | ((acc_init && i == 0) ? kIdescAccInit : 0);
-    d.k_tiles = KB;
-    d.taddr   = taddr;
-    d.a_base  = pv ? (p_col + i * KB * wg_cfg::fedpK) : (smem_base + s * stage_bytes);
-    d.b_base  = smem_base + s * stage_bytes + (pv ? 0 : q_elems * sizeof(ctx::input_t));
-    d.ld      = (kBK * sizeof(ctx::input_t)) | ((kBK * sizeof(ctx::input_t)) << 16);
-    tm::mma(d);
+    const uint32_t b = smem_base + s * stage_bytes + (pv ? 0 : q_elems * sizeof(ctx::input_t));
+    if (pv) {
+      tm::mma<1>(taddr, p_col + i * KB * wg_cfg::fedpK, b, acc_init && i == 0);
+    } else {
+      tm::mma<0>(taddr, smem_base + s * stage_bytes, b, acc_init && i == 0);
+    }
     tm::commit(empty_bar(cta_id, s), 2);
     if (i >= 1 && i - 1 + kPipeN < n) {
       wait_bar(empty_bar(cta_id, (i - 1) % kPipeN), 2);
@@ -131,7 +128,10 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
   // S = Q . K^T, into TMEM.
   if (warp_rank == 0) {
-    mma_loop(cta_id, K1 / kBK, false, tm::make_idesc(vt::ITYPE::id, vt::OTYPE::id, L / ctx::tcN, false), true,
+    constexpr uint32_t kLd = tm::make_ld(kBK * sizeof(ctx::input_t), kBK * sizeof(ctx::input_t));
+    tm::set_idesc<0>(tm::make_idesc(vt::ITYPE::id, vt::OTYPE::id, L / ctx::tcN, KB), kLd);
+    tm::set_idesc<1>(tm::make_idesc(vt::ITYPE::id, vt::OTYPE::id, N / ctx::tcN, KB, false, true), kLd);
+    mma_loop(cta_id, K1 / kBK, false, true,
              s_col, p_col, smem, stage_elems, q_elems, 0, 0);
   }
   vx_barrier(done_bar, num_warps);
@@ -163,8 +163,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
   // O = P . V^T: A from TMEM, only V is staged.
   if (warp_rank == 0) {
-    mma_loop(cta_id, L / kBK, true, tm::make_idesc(vt::ITYPE::id, vt::OTYPE::id, N / ctx::tcN, false, false, true),
-             true, o_col, p_col, smem, stage_elems, q_elems, 0, 0);
+    mma_loop(cta_id, L / kBK, true, true, o_col, p_col, smem, stage_elems, q_elems, 0, 0);
   }
   vx_barrier(done_bar, num_warps);
 

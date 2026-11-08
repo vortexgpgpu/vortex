@@ -28,15 +28,23 @@
 namespace vortex {
 namespace tmem {
 
-// sparse: A is 2:4 compressed and meta_base is the first TMEM column of its
-// metadata. One K-tile's metadata is one column per 32 bits: a lane holds, from
-// bit 0, the VX_tcu_sp_mux rows of the K-tile's lower then upper TC_K words.
-// a_tmem: a_base is A's first TMEM column instead of a stage offset; a lane is
-// an M row, and a K-tile is fedpK columns of K-packed words.
-inline constexpr uint32_t make_idesc(uint32_t fmt_s, uint32_t fmt_d, uint32_t n_frag, bool acc_init,
+// Instruction descriptor of a tc.mma slot: formats, n_frag N fragments and
+// k_tiles K-tiles per op.
+// sparse: A is 2:4 compressed and the op's metadata column is the first TMEM
+// column of its metadata. One K-tile's metadata is one column per 32 bits: a
+// lane holds, from bit 0, the VX_tcu_sp_mux rows of the K-tile's lower then
+// upper TC_K words.
+// a_tmem: the op's A operand is A's first TMEM column instead of a stage
+// offset; a lane is an M row, and a K-tile is fedpK columns of K-packed words.
+inline constexpr uint32_t make_idesc(uint32_t fmt_s, uint32_t fmt_d, uint32_t n_frag, uint32_t k_tiles,
                                      bool sparse = false, bool a_tmem = false) {
-  return (fmt_s & 0x1f) | ((fmt_d & 0x1f) << 5) | ((sparse ? 1u : 0u) << 10) | ((acc_init ? 1u : 0u) << 11)
-       | ((a_tmem ? 1u : 0u) << 12) | ((n_frag & 0xff) << 13);
+  return (fmt_s & 0x1f) | ((fmt_d & 0x1f) << 5) | ((sparse ? 1u : 0u) << 10) | ((a_tmem ? 1u : 0u) << 12)
+       | ((n_frag & 0xff) << 13) | ((k_tiles & 0xff) << 24);
+}
+
+// Leading bytes of A and B; ldb = 0 selects block-major B (dense only).
+inline constexpr uint32_t make_ld(uint32_t lda, uint32_t ldb) {
+  return (lda & 0xffff) | (ldb << 16);
 }
 
 // Shared-memory byte offset of a pointer, as the descriptors expect.
@@ -82,29 +90,27 @@ inline void dealloc(uint32_t col, uint32_t ncols) {
     :: "i"(RISCV_CUSTOM0), "r"(col), "r"(ncols) : "memory");
 }
 
-// tcgen05.mma: D (taddr) += A . B over k_tiles K-tiles, A and B at shared-memory
-// byte offsets (or A at a TMEM column with a_tmem in idesc), issued
-// asynchronously. Ops of a CTA complete in order; tc.commit tracks them. The
-// TCU reads each operand register's lanes 0..3, which the warp gathers fill.
-struct mma_desc_t {
-  uint32_t idesc;
-  uint32_t k_tiles;
-  uint32_t taddr;
-  uint32_t a_base;
-  uint32_t b_base;
-  uint32_t meta_base;
-  uint32_t ld;        // leading bytes: A [15:0], B [31:16]
-};
+// Load the CTA's tc.mma descriptor slot Slot (0..3) with an instruction
+// descriptor and leading bytes, for the CTA's later tc.mma ops on the slot. A
+// tc.mma from another warp needs a barrier after it.
+template <uint32_t Slot>
+inline void set_idesc(uint32_t idesc, uint32_t ld) {
+  static_assert(Slot < 4, "four descriptor slots");
+  __asm__ volatile (".insn r %0, 0, 6, x%1, %2, %3"
+    :: "i"(RISCV_CUSTOM0), "i"(Slot), "r"(idesc), "r"(ld) : "memory");
+}
 
-inline void mma(const mma_desc_t& d) {
-  // Gather both operands before binding either register: a register variable
-  // holds its register only at the asm that uses it.
-  size_t a = __VX_WGATHER_IN("x31", 0, d.idesc, d.k_tiles, d.taddr, d.a_base);
-  size_t b = __VX_WGATHER_IN("x30", 0, d.b_base, d.meta_base, 0, d.ld);
-  register size_t rs1 __asm__("x31") = a;
-  register size_t rs2 __asm__("x30") = b;
-  __asm__ volatile (".insn r %0, 0, 6, x0, %1, %2"
-    :: "i"(RISCV_CUSTOM0), "r"(rs1), "r"(rs2) : "memory");
+// tcgen05.mma: D (column taddr) += A . B with descriptor slot Slot, A and B at
+// shared-memory byte offsets (or A at a TMEM column with a_tmem), issued
+// asynchronously from any one thread. acc_init zeroes D first; meta is the
+// first metadata column of a sparse op. Ops of a CTA complete in order;
+// tc.commit tracks them.
+template <uint32_t Slot>
+inline void mma(uint32_t taddr, uint32_t a, uint32_t b, bool acc_init = false, uint32_t meta = 0) {
+  static_assert(Slot < 4, "four descriptor slots");
+  uint32_t w = (taddr & 0xffff) | ((meta & 0x7fff) << 16) | (acc_init ? 0x80000000u : 0u);
+  __asm__ volatile (".insn r %0, %1, 6, %2, %3, %4"
+    :: "i"(RISCV_CUSTOM0), "i"(4 + Slot), "r"(b), "r"(w), "r"(a) : "memory");
 }
 
 // tcgen05.commit: arrive on barrier `bar`, as one of its `count` participants,
@@ -118,9 +124,9 @@ inline void commit(uint32_t bar, uint32_t count) {
 // from `src + l * stride` bytes, in order with the CTA's other ops.
 // src and stride are NT-word aligned; cols is a multiple of NT.
 inline void cp(uint32_t col, const void* src, uint32_t stride, uint32_t cols) {
-  register size_t rs1 __asm__("x31") = __VX_WGATHER_IN("x31", 0, col, smem_offset(src), stride, cols);
-  __asm__ volatile (".insn r %0, 2, 6, x0, %1, x0"
-    :: "i"(RISCV_CUSTOM0), "r"(rs1) : "memory");
+  uint32_t w = (col & 0xffff) | (cols << 16);
+  __asm__ volatile (".insn r %0, 2, 6, %1, %2, %3"
+    :: "i"(RISCV_CUSTOM0), "r"(stride), "r"(w), "r"(smem_offset(src)) : "memory");
 }
 
 // TMEM -> registers f0..f(NR-1). taddr's lane is a multiple of M.

@@ -422,7 +422,8 @@ package VX_tcu_pkg;
             INST_TCU_TC_CP:   begin `TRACE(level, ("TC_CP")); end
             INST_TCU_TMEM_ALLOC:   begin `TRACE(level, ("TMEM_ALLOC")); end
             INST_TCU_TMEM_DEALLOC: begin `TRACE(level, ("TMEM_DEALLOC")); end
-            INST_TCU_TC_MMA:       begin `TRACE(level, ("TC_MMA")); end
+            INST_TCU_TC_IDESC:     begin `TRACE(level, ("TC_IDESC.%0d", op_args.tcu.fmt_d)); end
+            INST_TCU_TC_MMA:       begin `TRACE(level, ("TC_MMA.%0d", op_args.tcu.fmt_d)); end
             INST_TCU_TC_COMMIT:    begin `TRACE(level, ("TC_COMMIT")); end
         `endif
         `ifdef VX_CFG_TCU_SPARSE_ENABLE
