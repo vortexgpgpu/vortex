@@ -224,6 +224,23 @@ tests:
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
     -DVX_CFG_TCU_TMEM_ENABLE -DVX_CFG_TCU_FEDP2K -DITYPE=fp16 -DOTYPE=fp32 -DUMMA_NRC=32 -DUMMA_A_TMEM
 
+# Row-major A in shared memory: the abuf fetch takes a non-zero leading dimension.
+- id: sgemm_tcu_tmem-21
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_tmem
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_TMEM_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DUMMA_NRC=32 -DWGMMA_RMAJOR_A
+
+- id: sgemm_tcu_tmem-22
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_tmem
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_TMEM_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DUMMA_NRC=32 -DWGMMA_RMAJOR_A
+
 # Dense UMMA fp16 datapath, cycles-vs-baseline.
 - id: perf_gate-umma-fp16
   check: perf_gate
