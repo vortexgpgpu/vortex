@@ -1,6 +1,11 @@
 # Tensor Memory and Barrier-Triggered Tensor Jobs
 
-Status: draft
+Status: draft. The job ISA this proposal introduced (`tj.desc`/`tj.post`
+with CONSUME, CLOSED and COPY jobs) has been replaced by `tc.mma`, `tc.commit`
+and `tc.cp` ([tcgen05_alignment_proposal.md](tcgen05_alignment_proposal.md)),
+so the warp is back in the K loop as on Blackwell. TMEM, its allocator, the
+step engine and the copy engine below are current; Results and Findings were
+measured with jobs.
 
 ## Motivation
 
@@ -33,8 +38,8 @@ triggering between an async copy engine and the tensor core of a SIMT GPU.
 |---|---|
 | FEDP | one output, `FEDP_K` of K (16 fp16 / 32 fp8 / 64 fp4) |
 | TCU block, one uop | 8x4 tile (`TC_M x TC_N`), `FEDP_K` of K |
-| Job, one K-tile, one block | 16 x `4*n_frag` (2 M steps x `n_frag` N steps) |
-| Job | `ISSUE_WIDTH*16` x `4*n_frag`, full K |
+| `tc.mma`, one K-tile, one block | 16 x `4*n_frag` (2 M steps x `n_frag` N steps) |
+| `tc.mma` | `ISSUE_WIDTH*16` x `4*n_frag`, `k_tiles` K-tiles |
 
 - The 2D FEDP array is kept: it reuses each A element `TC_N` times and each B
   element `TC_M` times per pass, which the LMEM bandwidth requires.
@@ -60,7 +65,7 @@ for kt in 0..k_tiles-1:              # GEMM K, 16 fp16 at a time; arrives by DXA
   needs ~12x the LMEM bandwidth and the whole K strip resident.
 - M is fixed per block (16 rows); N is the expandable dimension, bounded by
   TMEM columns, as on Blackwell (M = TMEM lanes, N = columns).
-- A job spans all blocks so B can be broadcast.
+- An MMA spans all blocks so B can be broadcast.
 - A D fragment is reused every `2*n_frag` uops, which exceeds the FEDP latency
   (5 on Vivado) plus the TMEM read latency for `n_frag >= 4`.
 
@@ -78,8 +83,8 @@ block (bits per cycle):
 ## TMEM
 
 - One TMEM per core: `NUM_TCU_BLOCKS * M` lanes by `TCU_TMEM_COLS` 32-bit
-  columns, M being the WGMMA tile M (`2 * TC_M`). A lane is an M row of a job
-  and a column is an N element, as on Blackwell (128 lanes = 4 warps x 32
+  columns, M being the WGMMA tile M (`2 * TC_M`). A lane is an M row of an
+  MMA and a column is an N element, as on Blackwell (128 lanes = 4 warps x 32
   threads x one M row each).
 - Banked by lane: block `b` computes and owns lanes `[b*M, (b+1)*M)`, one
   `M x TCU_TMEM_COLS` bank of BRAM/URAM next to its FEDP array. A D fragment
@@ -88,7 +93,7 @@ block (bits per cycle):
   sequencer has priority over `tmem.ld/st`.
 - At NT=8 there are 32 lanes (M = 8 = NT); `TCU_TMEM_COLS = 512` is 64 KB per
   core, one Blackwell sub-partition.
-- Address `{lane [31:16], column [15:0]}`. A job's D address is a column
+- Address `{lane [31:16], column [15:0]}`. An MMA's D address is a column
   (lane 0); it writes the same columns on every lane.
 - `tmem.ld/st` move one bank's `M` lanes; the lane must be a multiple of M.
   Two register layouts, like Blackwell's `tcgen05.ld` shapes:
@@ -99,28 +104,22 @@ block (bits per cycle):
   - lane per register (`tmem.ld.r`): register `r` holds lane `lane + r % M`,
     thread `t` column `col + (r / M) * NT + t`. Each register is NT contiguous
     columns of one row, so the epilogue's global stores are coalesced; with
-    lane per thread each store touches NT rows (SimX, 128^3 CONSUME: 81,943
-    vs 65,697 cycles).
+    lane per thread each store touches NT rows (SimX, 128^3 with jobs:
+    81,943 vs 65,697 cycles).
   Any warp may name
   any bank: the CTA dispatcher assigns a CTA the lowest free warps, so its
   warps are not guaranteed to sit one per TCU block, at the cost of an
   `ISSUE_WIDTH`:1 bank mux (Blackwell instead restricts warp `w` to the lanes
   of sub-partition `w % 4`).
-- Physical column addresses, no allocator. A CTA owns the columns
-  proportional to its shared-memory window, which the CTA dispatcher already
-  keeps disjoint across co-resident CTAs:
-
-  ```
-  bytes_per_col = LMEM_SIZE / TCU_TMEM_COLS
-  tmem_base     = ceil(window_offset / bytes_per_col)
-  cols          >= window_bytes / bytes_per_col - 1
-  ```
-
-  A kernel that needs `n` columns sizes its window to at least
-  `(n + 1) * bytes_per_col` (`vx_tmem.h`: `smem_bytes_for_cols`), so TMEM
-  occupancy is admitted together with shared memory. The CTA slot id cannot
-  be used: slots are allocated round-robin over all LMEM-fitting slots and
-  exceed the number of co-resident CTAs. Contents are undefined at CTA start.
+- Physical column addresses from an allocator, as `tcgen05.alloc/dealloc`:
+  `tmem.alloc rd, rs1` returns the first of rs1 columns (a power of two from
+  32 to `TCU_TMEM_COLS`), the lowest free run aligned to its size in a
+  per-core map of 32-column chunks, or ~0 when none fits; `tm::alloc()`
+  retries. A stalled allocation would hold the one TMEM op port that the
+  freeing CTA's `tmem.dealloc` needs. `tmem.dealloc rs1, rs2` waits for the
+  CTA's ops on the columns, then frees them. One warp allocates and shares
+  the column through shared memory; the CTA frees it before exiting.
+  Contents are undefined after allocation.
 
 ## ISA
 
@@ -130,30 +129,40 @@ CUSTOM0 (`0x0B`), funct7 `0x05`:
 |---|---|---|---|---|
 | 0 | `tmem.ld fd, (taddr), n` | first destination FP reg | `taddr` | immediate `n-1` |
 | 1 | `tmem.st fs, (taddr), n` | first source FP reg | `taddr` | immediate `n-1` |
-| 2 | `tj.desc rs1, rs2` | - | descriptor words 0..3 (lanes 0..3) | x-reg: words 4..7 (lanes 0..3) |
-| 3 | `tj.post rs1, rs2` | - | descriptor words 8..11 | x-reg: words 12..15 |
+| 2-3 | reserved | | | |
 | 4 | `tmem.ld.r fd, (taddr), n` | first destination FP reg | `taddr` | immediate `n-1` |
 | 5 | `tmem.st.r fs, (taddr), n` | first source FP reg | `taddr` | immediate `n-1` |
-| 6-7 | reserved | | | |
+| 6 | `tmem.alloc rd, rs1` | first column | columns | - |
+| 7 | `tmem.dealloc rs1, rs2` | - | first column | columns |
+
+funct7 `0x06`, the asynchronous ops of one in-order queue per core:
+
+| funct3 | Instruction | rs1 | rs2 |
+|---|---|---|---|
+| 0 | `tc.mma` | descriptor words 0..3 (lanes 0..3) | words 4..7 (lanes 0..3) |
+| 1 | `tc.commit` | barrier id | arrival count |
+| 2 | `tc.cp` | `taddr`, source, stride, columns (lanes 0..3) | - |
 
 - `tmem.ld/st` expand into `n` uops in the front-end uop sequencer (register
-  `f+i` to/from its columns) and use the normal scoreboard and writeback. They stall while their CTA has a job in flight.
-- `tj.desc` + `tj.post` carry the 16-word descriptor in registers, gathered
-  across lanes 0..3 (`vx_wgather`, as DXA issue does). Both are single uops
-  with no writeback that reach the same in-order TCU input queue, so the
-  descriptor needs no memory fence. (A shared-memory descriptor read through
-  `tcu_lmem_if` races the warp's own stores: LSU stores are fire-and-forget and
-  `fence` does not wait for them.)
-- `tj.post` enqueues the job on the TCU; it runs on every block. Each CTA has a
-  2-entry job queue and `tj.post` stalls at issue while it is full. Jobs of one
-  CTA run in order.
-- A CONSUME job with `sw_full` and `k_tiles = kb`, posted by a warp after it
-  waits on each stage, reproduces Blackwell's `tcgen05.mma` + `commit` loop.
+  `f+i` to/from its columns) and use the normal scoreboard and writeback.
+- Multi-word operands are gathered across lanes 0..3 (`vx_wgather`, as DXA
+  issue does). The ops are single uops with no writeback that reach one
+  in-order TCU input, so their operands need no memory fence. (A shared-memory
+  descriptor read through `tcu_lmem_if` races the warp's own stores: LSU
+  stores are fire-and-forget and `fence` does not wait for them.)
+- Each CTA has two queue entries; `tc.mma` and `tc.cp` stall at issue while
+  they are full. A CTA's ops run in order; `tc.commit` arrives on its barrier
+  once the CTA's earlier ops have completed.
+- `tc.cp` is `tcgen05.cp`: its column count of every lane from shared memory,
+  lane `l` from `source + l * stride` bytes, written from column `taddr`.
+  Source and stride are NT-word aligned and the column count a multiple of NT.
+  The TCU reads one NT-word chunk per LMEM read on its lowest-priority port,
+  one read in flight; a response is written to TMEM in its cycle unless an MMA
+  result or `tmem.st` holds the bank.
 
-Compared with `tcgen05`: `alloc`/`dealloc`/`relinquish` are replaced by the
-slot-derived base; `mma` and `commit` by `tj.post`; `wait::ld/st` and the
-`fence` variants are unnecessary because `tmem.ld/st` go through the in-order
-scoreboard and `done_bar` is signalled after the last TMEM write; `cp`,
+Compared with `tcgen05`: `alloc`, `dealloc`, `mma`, `commit` and `cp` map
+one to one; `wait::ld` is unnecessary because `tmem.ld` goes through the
+in-order scoreboard, and `wait::st` is `tm::wait_st()`; `relinquish`,
 `shift`, `.ws` and `cta_group::2` are not provided.
 
 ### Instruction descriptor (`idesc`)
@@ -168,59 +177,39 @@ scoreboard and `done_bar` is signalled after the last TMEM write; `cp`,
 | [20:13] | `n_frag` |
 | [31:21] | reserved |
 
-### Job descriptor (16 words, in registers)
+### `tc.mma` descriptor (8 words, in registers)
 
 | Word | Field |
 |---|---|
 | 0 | `idesc` |
-| 1 | `mode` [1:0] (0 = CONSUME, 1 = CLOSED), `sw_full` [2] (software already waited on the full barriers), `nstages` [7:4], `kb` [15:8] (K-tiles per stage), `k_tiles` [31:16] |
+| 1 | `k_tiles` [15:0]; [31:16] reserved |
 | 2 | `taddr`: first D column (lane 0) |
-| 3 / 4 / 5 | A: stage base, or first TMEM column when A is in TMEM / B: stage base / first metadata TMEM column |
-| 6 | stage stride (bytes) |
-| 7 | leading bytes: A [15:0], B [31:16] (0 = block-major B, `kb` must be 1) |
-| 8 / 9 / 10 | `full_bar` base / `empty_bar` base / `done_bar`; stage `s` uses `base \| (s << 8)` |
-| 11 | DXA descriptor slots: A [3:0], B [7:4] (CLOSED) |
-| 12 / 13 | A / B start coordinates {c0 [15:0], c1 [31:16]} (CLOSED) |
-| 14 | K advance per stage [15:0]; K coordinate select for A [16], B [17] (CLOSED) |
-| 15 | first stage [3:0] |
-
-### Modes
-
-- CONSUME: a producer warp issues DXA. The producer and the sequencer are the
-  two participants (count 2) of every `full_bar[s]` and `empty_bar[s]`:
-  - Producer, per fill: on refills, `p = arrive(empty[s], 2); wait(empty[s], p)`;
-    then `expect_tx(full[s], 2)`, the two DXA issues, `arrive(full[s], 2)`.
-    After the last fill it closes the final generation of each used empty
-    barrier the same way.
-  - Sequencer, per stage use: sample the phase, arrive on `full[s]`, and wait
-    for the phase to change. Its arrival is required, so the phase cannot
-    advance before it looks and no phase state is carried in the descriptor.
-    After fetching the stage it arrives on `empty[s]`.
-  Multicast is unchanged because the producer warp owns it.
-- CLOSED: the sequencer also issues DXA and is the full barriers' only
-  participant: per fill it attaches two transactions, issues the A and B loads
-  and arrives with count 1. It keeps `nstages` fills ahead of the K-tile being
-  computed; a stage is refilled once the job has moved past it. No warp runs
-  in the K loop. No multicast in v1.
-- After the last D write on every block, the sequencer counts one transaction
-  on `done_bar` (armed with `vx_barrier_expect_tx(done_bar, 1)`).
+| 3 / 4 / 5 | A: shared-memory offset, or first TMEM column when A is in TMEM / B: shared-memory offset / first metadata TMEM column |
+| 6 | reserved |
+| 7 | leading bytes: A [15:0], B [31:16]; B = 0 selects block-major B (dense only) |
 
 ### Ordering
 
-- A stage is read only after its `full_bar` phase completes.
-- A job writes only TMEM. After waiting on `done_bar`, `tmem.ld` observes all
-  its D writes.
+- Software issues a `tc.mma` only after its operands' stage has landed.
+- An MMA writes only TMEM. After waiting on a later `tc.commit`'s barrier,
+  `tmem.ld` observes all its D writes.
+- A `tmem.ld/st` uop waits while an op of its CTA is pending whose columns
+  (D, plus A and metadata when in TMEM) overlap the uop's columns. Transfers
+  on other columns run alongside the CTA's ops, so one Q tile's softmax can
+  overlap the next tile's MMA within a CTA.
 - Cross-warp reuse of TMEM columns is ordered by software barriers.
+- `tmem.st` is posted: the warp moves on once it issues, and a barrier does
+  not wait for it (a barrier drains only the LSU). A warp whose stores feed an
+  MMA (P for P.V, rescaled O, A in TMEM) calls `tm::wait_st()` before the
+  barrier that hands the columns over, the counterpart of
+  `tcgen05.wait::st`. It is `vx_wsync`, which waits for all of the warp's
+  issued uops to commit; a store commits once written.
 
 ### Scheduling
 
-Jobs of different CTAs share the tensor core at stage granularity. The
-running job keeps it until its stage ends; then the oldest CTA head whose
-next stage is full takes it. Every waiting head keeps its own barrier
-arrivals and (CLOSED) stage loads moving meanwhile: the sequencer issues one
-barrier operation (done release, empty arrival, fill attach, full arrival, in
-that priority) and one DXA load per cycle. Strict FIFO order stalls the
-tensor core on one CTA's next stage while others are ready.
+CTAs share the tensor core at op granularity: the running `tc.mma` keeps it
+until its last K-tile, then the oldest CTA head `tc.mma` takes it. `tc.cp`
+runs on its own engine. One commit arrival is issued per cycle.
 
 A step's A stripes (first step of a K-tile) and B block are fetched through
 the WGMMA `abuf`/`bbuf` when the step is presented; there is no B prefetch
@@ -228,22 +217,19 @@ yet.
 
 ## RTL
 
-- `VX_tcu_tjob` (in `VX_tcu_unit`): TMEM banks, eight job slots (two per
-  CTA), the barrier/DXA request generation, and a one-step issue register
-  that presents each (m, n) step to all four `VX_tcu_core`s with C read from
-  TMEM. Job steps take a core ahead of warp MMAs; a per-block order queue
-  routes the core's job results to TMEM writes and the rest to commit.
+- `VX_tcu_tjob` (in `VX_tcu_unit`): TMEM banks and allocator, eight op slots
+  (two per CTA), the copy engine, commit arrivals, and a one-step issue
+  register that presents each (m, n) step to all four `VX_tcu_core`s with C
+  read from TMEM. MMA steps take a core ahead of warp MMAs; a per-block order
+  queue routes the core's MMA results to TMEM writes and the rest to commit.
 - TMEM bank per block: `NT` 32-bit sub-banks of `(TMEM_COLS / TC_N) * M_STEPS`
   rows, 1R1W, one-cycle read. Cell (lane `m*TC_M+i`, column `c`) is in
   sub-bank `(TC_N*i + c + (NT/M)*m) mod NT`, row `(c/TC_N)*M_STEPS + m`, so a
   C/D fragment and either `tmem.ld/st` layout touch each sub-bank once.
-  `tmem.ld/st` and job ops share one port (one op per cycle); a load has
-  priority over the job's C read, job D writes over `tmem.st`.
-- Barriers: the sequencer's operations enter `VX_wctl_unit` after warp
-  instructions and DXA completions; `VX_bar_unit` reports every local phase
-  completion back (`warp_ctl_if.bar_flip_*`).
-- DXA: a second request port per core (`tcu_dxa_req_bus_if`), socket index
-  `SOCKET_SIZE + core`.
+  `tmem.ld/st` and MMA steps share one port (one op per cycle); a load has
+  priority over the MMA's C read, MMA D writes over `tmem.st`.
+- Barriers: `tc.commit` arrivals enter `VX_wctl_unit` after warp
+  instructions and DXA completions.
 - Requires WGMMA (tile buffers) and FEDP2K; a TMEM build does not accept
   warp WGMMA. XLEN=32, K-major B.
 
@@ -298,11 +284,11 @@ progress.
 
 ## Front-end decoupling
 
-Jobs never touch the register file, so their uop expansion moves from
-`VX_tcu_uops` (issue) into a per-block sequencer in the TCU. The remaining
-front-end coupling is: the per-CTA in-flight count back to issue (for
-`tmem.ld/st`), `VX_bar_unit` phase-complete events into the TCU, completion
-on the existing txbar bus, and job-queue back-pressure on `tj.post`.
+MMAs never touch the register file, so their uop expansion moves from
+`VX_tcu_uops` (issue) into a step engine in the TCU. The remaining front-end
+coupling is: the per-CTA in-flight count back to issue (for `tmem.ld/st`),
+`tc.commit` arrivals into `VX_wctl_unit`, and queue back-pressure on
+`tc.mma`/`tc.cp`.
 
 In a TMEM-only build (WMMA and register-accumulator WGMMA disabled), the TCU
 path in `VX_lane_dispatch` needs one 1024-bit operand (`tmem.st`) instead of
@@ -312,7 +298,7 @@ three (`rs1`/`rs2`/`rs3`), plus the `tmem.ld` result path.
 
 `tbuf` area is layout steering, not storage (V80, 1 core, NT=32: `bbuf` 55k
 LUTs for 2048 FFs; each `abuf` 14.7k LUTs for 4096 FFs), and K-major B costs
-`TC_N` LMEM reads per B block. TMEM jobs accept one TCU-native LMEM layout,
+`TC_N` LMEM reads per B block. TMEM MMAs accept one TCU-native LMEM layout,
 written by a new DXA layout mode:
 
 - One B block (`FEDP_K x TC_N`) is one LMEM bank row, in FEDP lane order.
@@ -322,10 +308,10 @@ written by a new DXA layout mode:
 `bbuf` becomes a double-buffered 1024-bit pipeline register with prefetch;
 `abuf` becomes a 4096-bit stationary register with a 2:1 M-step select.
 
-## A from TMEM and sparse jobs
+## A from TMEM and sparse MMAs
 
-Warps fill TMEM before the post and synchronize on a barrier: a job's reads are
-ordered only behind the posting warp's own transfers. Both regions must be
+Warps fill TMEM before the `tc.mma` and synchronize on a barrier: an MMA's
+reads are ordered only behind the issuing warp's own transfers. Both regions must be
 disjoint from D (descriptor check). A K-tile prologue reads them over the TMEM
 read port, on all blocks in parallel, ahead of the K-tile's first step and once
 the previous K-tile's last step has fired (`tmem.ld` > prologue/C read). A read
@@ -333,20 +319,19 @@ is one `tmem.ld` lane-per-thread access: `NT / M` columns of every lane.
 
 - A: `FEDP_K` columns per K-tile of K-packed words; a lane is an M row.
   `FEDP_K * M / NT` reads (4 at NT=8) fill `abuf`'s storage, against ~39 cycles
-  of serial LMEM stripe load. The fetch FSM stays idle. CLOSED skips A's DXA
-  load and attaches one transaction; CONSUME producers issue B only.
+  of serial LMEM stripe load. The fetch FSM stays idle, and producers stage B
+  only.
 - Sparse: compressed A (from a stage or TMEM) with the FULLK uop shape, so a
   K-tile covers twice the dense K; requires `VX_CFG_TCU_SPARSE_FULLK`. A lane's
   K-tile metadata is its two `VX_tcu_sp_mux` rows, low bits first, over
   `ceil(2 * row_bits / 32)` columns (fp16 and fp8: one, fp4: two at NT=8): one read
   per K-tile, into a per-block register, against a warp TCU_LD per K-tile in
-  WGMMA. No warp is in the K loop, so the metadata cannot desynchronize warps.
-  CLOSED halves the dense `k_advance` for A's coordinates. The kernel loads a
-  CTA's metadata as NVIDIA does (TMA -> smem -> `tcgen05.cp`): one DXA copy
-  into the not-yet-used stages, then unrolled smem loads and `tmem.st`.
+  WGMMA. The kernel loads a CTA's metadata as NVIDIA does (TMA -> smem ->
+  `tcgen05.cp`): one DXA copy into the not-yet-used stages, then `tc.cp`
+  (`TMEM_CP`), or unrolled smem loads and `tmem.st` by the warps.
 
 Warp WGMMA and TMEM are mutually exclusive: warps never issue WGMMA or WGMMA_SP
-in a TMEM build, so VX_tcu_core takes those ops' metadata from the job unit.
+in a TMEM build, so VX_tcu_core takes those ops' metadata from `VX_tcu_tjob`.
 `VX_CFG_TCU_WGMMA_ENABLE` still selects the tile buffers these builds reuse.
 
 ## Unchanged
@@ -355,10 +340,13 @@ WMMA, WGMMA (register accumulator), `TCU_LD`, DXA issue, and barriers.
 
 ## Extensions
 
+- Operand prefetch in the tile buffers: the B buffer fetches a block only
+  after the previous block's steps, one read in flight, so K-major B at four
+  K-tiles per stage takes 7 cycles per two steps; the A stripes of a K-tile
+  are read row by row before its first step. Fetching the next block (and the
+  next K-tile's stripes) during the current steps overlaps the two.
 - Fine-grained firing: start a K-tile as its bank rows land rather than on
   the stage barrier, shortening fill and inter-stage gaps.
-- Readiness scheduling: run whichever queued job (across CTAs) has its next
-  stage ready, hiding one job's DXA latency behind another's compute.
 - Softmax jobs for attention, reusing the existing units: `exp(S - m)` through
   the MUFU `EX2` behind an arbiter (job vs warp), row max by comparators as S
   streams from TMEM, row sum from the tensor core (a ones column appended to
@@ -366,7 +354,6 @@ WMMA, WGMMA (register accumulator), `TCU_LD`, DXA issue, and barriers.
   threshold rule, `1/l` by warps at the end. Worth building only if software
   attention on TMEM is bound by issue and TMEM<->RF traffic rather than MUFU
   throughput; measure that first.
-- Multicast in CLOSED mode.
 - One configurable array per core (`TCU_ARRAY_M x TCU_ARRAY_N`), independent
   of `NUM_THREADS` and `ISSUE_WIDTH`. A 16x8 array of the same 128 FEDPs needs
   ~1.5x less LMEM bandwidth per MAC than 4 blocks of 8x4. Requires dropping
@@ -379,6 +366,9 @@ bound by stage loads; TMEM's main lever is the larger N per CTA that the
 register file cannot hold: more reuse, less DXA traffic per FLOP.
 
 ## Plan
+
+Steps 1-3 were carried out with jobs; the job ISA's removal is tracked in
+[tcgen05_alignment_proposal.md](tcgen05_alignment_proposal.md).
 
 1. SimX
    - Per-core TMEM (lanes x columns); `tmem.ld/st` decode, uops, scoreboard

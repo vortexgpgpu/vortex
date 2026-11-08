@@ -22,7 +22,7 @@
 #define PIPE_N 4
 #endif
 
-// Accumulator chunks per CTA tile: a job covers TMEM_NCHUNK register-file
+// Accumulator chunks per CTA tile: an MMA covers TMEM_NCHUNK register-file
 // tiles along N, drained through the registers one chunk at a time.
 #ifndef TMEM_NCHUNK
   #define TMEM_NCHUNK 1
@@ -33,6 +33,9 @@
 #ifndef KB
   #define KB 1
 #endif
+
+// Shared memory starts with the CTA's TMEM column, padded to keep the stages aligned.
+#define TMEM_SLOT_BYTES 64
 
 typedef struct {
   uint32_t M, N, K;

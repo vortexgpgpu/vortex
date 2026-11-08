@@ -98,9 +98,10 @@ int main(int argc, char* argv[]) {
   const uint32_t M = warps * cfg::xtileM;
   const uint32_t L = xl, N = xn, K1 = xk;
   const uint32_t nr = WGMMA_NRC;
-  if ((L % (2 * nr)) || (N % nr) || (K1 % cfg::tileK) || (L % cfg::tileK)) {
+  const uint32_t stage_k = KB * cfg::tileK;
+  if ((L % (2 * nr)) || (N % nr) || (K1 % stage_k) || (L % stage_k)) {
     std::cout << "Error: L must be a multiple of " << 2 * nr << ", N of " << nr
-              << ", K and L of tileK=" << cfg::tileK << std::endl;
+              << ", K and L of KB*tileK=" << stage_k << std::endl;
     return -1;
   }
 
@@ -110,10 +111,8 @@ int main(int argc, char* argv[]) {
   for (auto& x : h_KT) x = gen_fp16();
   for (auto& x : h_VT) x = gen_fp16();
 
-  const uint32_t stage_k = cfg::tileK;
   uint32_t smem_size = 2 * (M * stage_k + stage_k * std::max(L, N)) * sizeof(uint16_t);
-  const uint32_t tmem_cols = L + L / 2 + N;
-  smem_size = std::max(smem_size, (tmem_cols + 1) * ((1u << VX_CFG_LMEM_LOG_SIZE) / VX_CFG_TCU_TMEM_COLS));
+  smem_size += TMEM_SLOT_BYTES;
 
   kernel_arg.M = M; kernel_arg.L = L; kernel_arg.N = N; kernel_arg.K1 = K1;
   RT_CHECK(vx_buffer_create(device, h_Q.size() * 2, VX_MEM_READ, &buffers[0]));

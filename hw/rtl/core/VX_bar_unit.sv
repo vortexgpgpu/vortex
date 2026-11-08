@@ -33,11 +33,7 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
     // scheduler interface
     input wire [`VX_CFG_NUM_WARPS-1:0] active_warps,
     output wire               unlock_valid, // unlock stalled warps
-    output wire [`VX_CFG_NUM_WARPS-1:0] unlock_mask, // warps to unlock
-
-    // local barrier phase completions
-    output wire               flip_valid,
-    output wire [BAR_ADDR_W-1:0] flip_addr
+    output wire [`VX_CFG_NUM_WARPS-1:0] unlock_mask // warps to unlock
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (CORE_ID)
@@ -279,19 +275,6 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
     assign read_phase   = phase_async;
     assign unlock_valid = unlock_valid_r;
     assign unlock_mask  = unlock_mask_r;
-
-    reg flip_valid_r;
-    reg [BAR_ADDR_W-1:0] flip_addr_r;
-    always @(posedge clk) begin
-        if (reset) begin
-            flip_valid_r <= 0;
-        end else begin
-            flip_valid_r <= req_valid && ~req_data.is_global && (phase_n != phase_r);
-        end
-        flip_addr_r <= store_waddr;
-    end
-    assign flip_valid = flip_valid_r;
-    assign flip_addr  = flip_addr_r;
 
     always @(posedge clk) begin
         if (reset) begin

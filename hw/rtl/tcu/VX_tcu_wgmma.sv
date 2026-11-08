@@ -51,6 +51,7 @@ module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input  wire                                                          job_a_fill_valid,
     input  wire [3:0]                                                    job_a_fill_k,
     input  wire [BLOCK_SIZE-1:0][`VX_CFG_NUM_THREADS-1:0][31:0]          job_a_fill_data,
+    VX_mem_bus_if.slave                                                  job_cp_lmem_if,
 `endif
 
     // Outputs to tcu_core (consumed by the wrapper).
@@ -195,6 +196,7 @@ module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .a_fill_valid   (job_a_fill_valid),
         .a_fill_k       (job_a_fill_k),
         .a_fill_data    (job_a_fill_data),
+        .tcu_cp_lmem_if (job_cp_lmem_if),
     `else
         .req            (req),
     `endif

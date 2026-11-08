@@ -419,8 +419,11 @@ package VX_tcu_pkg;
         `ifdef VX_CFG_TCU_TMEM_ENABLE
             INST_TCU_TMEM_LD: begin `TRACE(level, ("TMEM_LD%s.%0d", op_args.tcu.a_from_smem ? ".R" : "", op_args.tcu.fmt_d)); end
             INST_TCU_TMEM_ST: begin `TRACE(level, ("TMEM_ST%s.%0d", op_args.tcu.a_from_smem ? ".R" : "", op_args.tcu.fmt_d)); end
-            INST_TCU_TJ_DESC: begin `TRACE(level, ("TJ_DESC")); end
-            INST_TCU_TJ_POST: begin `TRACE(level, ("TJ_POST")); end
+            INST_TCU_TC_CP:   begin `TRACE(level, ("TC_CP")); end
+            INST_TCU_TMEM_ALLOC:   begin `TRACE(level, ("TMEM_ALLOC")); end
+            INST_TCU_TMEM_DEALLOC: begin `TRACE(level, ("TMEM_DEALLOC")); end
+            INST_TCU_TC_MMA:       begin `TRACE(level, ("TC_MMA")); end
+            INST_TCU_TC_COMMIT:    begin `TRACE(level, ("TC_COMMIT")); end
         `endif
         `ifdef VX_CFG_TCU_SPARSE_ENABLE
             INST_TCU_WMMA_SP: begin

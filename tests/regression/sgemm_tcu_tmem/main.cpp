@@ -508,19 +508,14 @@ int main(int argc, char *argv[]) {
   // SMEM: A tile [cta_M x tileK] + B tile [tileK x tileN]
   uint32_t smem_size = ((kATmem ? 0 : cta_M * stage_ka) + stage_k * tile_n) * sizeof(itype_t);
   smem_size *= PIPE_N;  // N-stage pipeline (common.h)
-  // The CTA's TMEM columns scale with its shared-memory window
-  // (vx_tmem.h: smem_bytes_for_cols).
-  auto round_store = [](uint32_t cols) { return ((cols + kStoreCols - 1) / kStoreCols) * kStoreCols; };
-  const uint32_t tmem_cols = tile_n
-    + (kATmem ? round_store((K / kTileK) * cfg::fedpK) : 0)
-    + (kSparse ? round_store((K / kTileK) * kMetaCols) : 0);
-  const uint32_t tmem_window = (tmem_cols + 1) * ((1u << VX_CFG_LMEM_LOG_SIZE) / VX_CFG_TCU_TMEM_COLS);
-  smem_size = std::max(smem_size, tmem_window);
-  // kernel.cpp stages the CTA's metadata rows at the window base, and the
+  const uint32_t meta_pitch = ((K / kTileK) * kMetaCols + NT - 1) / NT * NT;
+  // kernel.cpp stages the CTA's metadata rows at the window base, each padded
+  // to NT words (meta_pitch), and the
   // TMEM copy reads up to one store past their end.
   if (kSparse) {
-    smem_size = std::max(smem_size, (cta_M * (K / kTileK) * kMetaCols + kStoreCols) * uint32_t(sizeof(uint32_t)));
+    smem_size = std::max(smem_size, (cta_M * meta_pitch + kStoreCols) * uint32_t(sizeof(uint32_t)));
   }
+  smem_size += TMEM_SLOT_BYTES;
 
   std::cout << "input type: " << vt::ITYPE::name << ", output type: " << vt::OTYPE::name << std::endl;
   std::cout << "warp tile: M=" << cfg::xtileM << ", N=" << tile_n << ", K=" << cfg::tileK << std::endl;
@@ -642,7 +637,7 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vortex::dxa::program_2d(queue, kDescMeta, kernel_arg.meta_addr,
     /*size0=*/(K / kTileK) * kMetaCols, /*size1=*/M,
     /*stride0_bytes=*/(K / kTileK) * kMetaCols * sizeof(uint32_t),
-    /*tile0=*/(K / kTileK) * kMetaCols, /*tile1=*/cta_M,
+    /*tile0=*/meta_pitch, /*tile1=*/cta_M,
     /*elem_bytes=*/sizeof(uint32_t)));
 #endif
 

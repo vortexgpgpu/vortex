@@ -13,8 +13,7 @@
 
 `include "VX_define.vh"
 
-// Tensor-job sequencer <-> barrier unit: barrier operations out, phase
-// completions back.
+// TCU -> barrier unit: tc.commit arrivals.
 interface VX_tcu_bar_if import VX_gpu_pkg::*; ();
 
 `ifdef VX_CFG_TCU_TMEM_ENABLE
@@ -22,23 +21,16 @@ interface VX_tcu_bar_if import VX_gpu_pkg::*; ();
     tcu_bar_t              req_data;
     logic                  req_ready;
 
-    logic                  flip_valid;
-    logic [BAR_ADDR_W-1:0] flip_addr;
-
     modport master (
         output req_valid,
         output req_data,
-        input  req_ready,
-        input  flip_valid,
-        input  flip_addr
+        input  req_ready
     );
 
     modport slave (
         input  req_valid,
         input  req_data,
-        output req_ready,
-        output flip_valid,
-        output flip_addr
+        output req_ready
     );
 `endif
 

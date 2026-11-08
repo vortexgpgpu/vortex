@@ -233,8 +233,11 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [BANK_ADDR_WIDTH-1:0] fetch_addr_a =
         req_is_sparse ? fetch_addr_a_sparse : fetch_addr_dense;
 
+    // A K-tile's first step refetches: a tensor op reloads a stage at the
+    // same address without a setup uop to invalidate the slot.
     wire bank_row_resident_dense =
         slot_a_valid_r && !slot_is_sparse_r
+        && (!req_is_first_uop || refetched_for_first_uop_r)
         && (slot_a_addr_r == fetch_addr_dense)
         && (slot_a_sub_half_r == dense_sub_half);
 

@@ -1029,9 +1029,13 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         instr->set_src_reg(0, rs1, RegType::Integer);
         instr->set_macro_op();
         break;
-      case 2: // TJ_DESC rs1, rs2: descriptor words 0..7, four per register (lanes 0..3)
-      case 3: // TJ_POST rs1, rs2: descriptor words 8..15
-        instr->set_op_type((funct3 == 2) ? TcuType::TJ_DESC : TcuType::TJ_POST);
+      case 6: // TMEM_ALLOC rd, rs1: rs1 columns
+        instr->set_op_type(TcuType::TMEM_ALLOC);
+        instr->set_dest_reg(rd, RegType::Integer);
+        instr->set_src_reg(0, rs1, RegType::Integer);
+        break;
+      case 7: // TMEM_DEALLOC rs1, rs2: rs2 columns from column rs1
+        instr->set_op_type(TcuType::TMEM_DEALLOC);
         instr->set_src_reg(0, rs1, RegType::Integer);
         instr->set_src_reg(1, rs2, RegType::Integer);
         break;
@@ -1039,6 +1043,26 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         std::abort();
       }
       instr->set_args(args);
+    } break;
+    case 6: { // tcgen05-style async tensor ops
+      instr->set_fu_type(FUType::TCU);
+      switch (funct3) {
+      case 0: // TC_MMA rs1, rs2: descriptor words 0..7, four per register (lanes 0..3)
+        instr->set_op_type(TcuType::TC_MMA);
+        instr->set_src_reg(1, rs2, RegType::Integer);
+        break;
+      case 1: // TC_COMMIT rs1, rs2: barrier id, arrival count
+        instr->set_op_type(TcuType::TC_COMMIT);
+        instr->set_src_reg(1, rs2, RegType::Integer);
+        break;
+      case 2: // TC_CP rs1: taddr, source, stride, columns (lanes 0..3)
+        instr->set_op_type(TcuType::TC_CP);
+        break;
+      default:
+        std::abort();
+      }
+      instr->set_src_reg(0, rs1, RegType::Integer);
+      instr->set_args(IntrTcuArgs{});
     } break;
   #endif
     case 4: { // Load/Store Packing extensions — macro-ops, sequencer expands to N single-elem uops

@@ -23,7 +23,8 @@
 //   - 1        × VX_tcu_bbuf   (TB-shared B buffer, 2-slot for sparse)
 //   - 1        × VX_mem_bus_arb    (LMEM masters → 1 LMEM port)
 //
-// LMEM master count: BLOCK_SIZE (abufs) + 1 (bbuf).
+// LMEM master count: BLOCK_SIZE (abufs) + 1 (bbuf), + 1 (tensor-job copy,
+// lowest priority) in TMEM builds.
 //
 // Sparse-metadata note: WGMMA sparse — both RS and SS — preloads metadata
 // into VX_tcu_sp_meta SRAM via TCU_LD ahead of the MMA dispatch; no buffer
@@ -60,6 +61,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input  wire                                                         a_fill_valid,
     input  wire [3:0]                                                   a_fill_k,
     input  wire [BLOCK_SIZE-1:0][`VX_CFG_NUM_THREADS-1:0][31:0]         a_fill_data,
+    VX_mem_bus_if.slave                                                 tcu_cp_lmem_if,
 `endif
 
     // Single LMEM master out (post-arb)
@@ -73,7 +75,8 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     `UNUSED_SPARAM (INSTANCE_ID)
 
     localparam BBUF_IDX         = BLOCK_SIZE;
-    localparam NUM_LMEM_MASTERS = BLOCK_SIZE + 1;
+    localparam CBUF_IDX         = BLOCK_SIZE + 1;
+    localparam NUM_LMEM_MASTERS = BLOCK_SIZE + 1 + `VX_CFG_TCU_TMEM_ENABLED;
 
     // -----------------------------------------------------------------------
     // LMEM master fan-in interface array (BLOCK_SIZE abufs + 1 bbuf)
@@ -277,6 +280,12 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .bbuf_ready       (bbuf_ready_w),
         .bbuf_rs2_data    (bbuf_rs2_data_w)
     );
+
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    `ASSIGN_VX_MEM_BUS_IF (lmem_masters[CBUF_IDX], tcu_cp_lmem_if);
+`else
+    `UNUSED_PARAM (CBUF_IDX)
+`endif
 
     // -----------------------------------------------------------------------
     // LMEM port arbitration (NUM_LMEM_MASTERS → 1)

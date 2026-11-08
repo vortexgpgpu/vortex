@@ -768,11 +768,36 @@ module VX_decode import
                                 reg_ids[RV_RS2]  = make_reg_num(REG_TYPE_F, RV_REGS_BITS'(rd));
                                 use_regs[RV_RS2] = 1'b1;
                             end
-                            3'h2, 3'h3: begin // TJ_DESC / TJ_POST rs1, rs2
-                                op_type = funct3[0] ? INST_OP_BITS'(INST_TCU_TJ_POST)
-                                                    : INST_OP_BITS'(INST_TCU_TJ_DESC);
+                            3'h6: begin // TMEM_ALLOC rd, rs1: rs1 columns
+                                op_type = INST_OP_BITS'(INST_TCU_TMEM_ALLOC);
+                                `USED_IREG (rd);
+                                `USED_IREG (rs1);
+                            end
+                            3'h7: begin // TMEM_DEALLOC rs1, rs2: rs2 columns from column rs1
+                                op_type = INST_OP_BITS'(INST_TCU_TMEM_DEALLOC);
                                 `USED_IREG (rs1);
                                 `USED_IREG (rs2);
+                            end
+                            default:;
+                        endcase
+                    end
+                    7'h06: begin // tcgen05-style async tensor ops
+                        ex_type = EX_TCU;
+                        op_args.tcu = '0;
+                        case (funct3)
+                            3'h0: begin // TC_MMA rs1, rs2: descriptor words 0..7
+                                op_type = INST_OP_BITS'(INST_TCU_TC_MMA);
+                                `USED_IREG (rs1);
+                                `USED_IREG (rs2);
+                            end
+                            3'h1: begin // TC_COMMIT rs1, rs2: barrier id, arrival count
+                                op_type = INST_OP_BITS'(INST_TCU_TC_COMMIT);
+                                `USED_IREG (rs1);
+                                `USED_IREG (rs2);
+                            end
+                            3'h2: begin // TC_CP rs1: taddr, source, stride, columns
+                                op_type = INST_OP_BITS'(INST_TCU_TC_CP);
+                                `USED_IREG (rs1);
                             end
                             default:;
                         endcase

@@ -24,12 +24,18 @@ namespace {
 
 constexpr uint64_t kLineMask = ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
 
-// Q+1 buffers share one LMEM port. Buffer IDs, in priority order:
+// The buffers share one LMEM port. Buffer IDs, in priority order:
 //   0 .. VX_CFG_NUM_TCU_BLOCKS-1   → abuf[b]
 //   VX_CFG_NUM_TCU_BLOCKS          → bbuf
+//   VX_CFG_NUM_TCU_BLOCKS + 1      → cbuf (TMEM builds)
+#ifdef VX_CFG_TCU_TMEM_ENABLE
+constexpr uint32_t kNumBuffers = VX_CFG_NUM_TCU_BLOCKS + 2;
+#else
 constexpr uint32_t kNumBuffers = VX_CFG_NUM_TCU_BLOCKS + 1;
+#endif
 constexpr uint32_t kAOffset    = 0;
 constexpr uint32_t kBOffset    = VX_CFG_NUM_TCU_BLOCKS;
+[[maybe_unused]] constexpr uint32_t kCOffset = VX_CFG_NUM_TCU_BLOCKS + 1;
 
 struct Buffer {
   std::deque<TcuTbuf::LmemRead> pending_;
@@ -193,8 +199,13 @@ private:
   }
 
   std::string buf_name(uint32_t source) const {
-    return (source == kBOffset) ? std::string("bbuf")
-                                : ("abuf" + std::to_string(source - kAOffset));
+    if (source == kBOffset) {
+      return "bbuf";
+    }
+    if (source > kBOffset) {
+      return "cbuf";
+    }
+    return "abuf" + std::to_string(source - kAOffset);
   }
 
   TcuTbuf* simobject_;
@@ -229,6 +240,16 @@ std::shared_ptr<mem_block_t> TcuTbuf::read_a(uint32_t b, uint64_t line_addr) con
 std::shared_ptr<mem_block_t> TcuTbuf::read_b(uint64_t line_addr) const {
   return impl_->buf(kBOffset).read(line_addr);
 }
+
+#ifdef VX_CFG_TCU_TMEM_ENABLE
+void TcuTbuf::fill_c(std::vector<LmemRead> reads) {
+  impl_->buf(kCOffset).fill(std::move(reads));
+}
+bool TcuTbuf::filling_c() const { return impl_->buf(kCOffset).filling(); }
+std::shared_ptr<mem_block_t> TcuTbuf::read_c(uint64_t line_addr) const {
+  return impl_->buf(kCOffset).read(line_addr);
+}
+#endif
 
 void TcuTbuf::invalidate_a(uint32_t b) { impl_->buf(kAOffset + b).invalidate(); }
 void TcuTbuf::invalidate_b()           { impl_->buf(kBOffset).invalidate(); }

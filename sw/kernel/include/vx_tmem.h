@@ -17,41 +17,16 @@
 #include <stdint.h>
 #include <vx_intrinsics.h>
 
-// Tensor memory and tensor jobs (CUSTOM0, funct7 = 5).
+// Tensor memory (CUSTOM0, funct7 = 5) and tcgen05-style async tensor ops
+// (funct7 = 6).
 //
 // TMEM is one per-core array of lanes x 32-bit columns, addressed
-// {lane [31:16], column [15:0]}. A lane is an M row of a tensor job: TCU block b
+// {lane [31:16], column [15:0]}. A lane is an M row of an MMA: TCU block b
 // computes lanes [b*M, (b+1)*M), M being the WGMMA tile M. A column is an N
 // element.
 
 namespace vortex {
 namespace tmem {
-
-// Job descriptor modes.
-enum : uint32_t {
-  TJ_CONSUME = 0,  // a producer warp fills the stages
-  TJ_CLOSED  = 1,  // the TCU issues the stage DXA loads itself
-};
-
-// Job descriptor. tj_post() passes it to the TCU in registers.
-struct tj_desc_t {
-  uint32_t idesc;         // fmt_s [4:0], fmt_d [9:5], sparse [10], acc_init [11], a_tmem [12], n_frag [20:13]
-  uint32_t ctrl;          // mode [1:0], sw_full [2], nstages [7:4], kb [15:8], k_tiles [31:16]
-  uint32_t taddr;         // first D column (lane 0)
-  uint32_t a_base;        // stage-0 A offset in shared memory (bytes), or A's first TMEM column
-  uint32_t b_base;        // stage-0 B offset in shared memory (bytes)
-  uint32_t meta_base;     // first TMEM column of the sparse metadata
-  uint32_t stage_stride;  // bytes between stages
-  uint32_t ld;            // leading bytes: A [15:0], B [31:16] (B 0 = block-major)
-  uint32_t full_bar;      // barrier ids; stage s uses id + (s << 8)
-  uint32_t empty_bar;
-  uint32_t done_bar;
-  uint32_t dxa_slots;     // CLOSED: A [3:0], B [7:4]
-  uint32_t a_coord;       // CLOSED: {c1, c0}
-  uint32_t b_coord;       // CLOSED: {c1, c0}
-  uint32_t k_advance;     // CLOSED: K step per stage [15:0], K coordinate select A [16], B [17]
-  uint32_t stage;         // first stage [3:0]
-};
 
 // sparse: A is 2:4 compressed and meta_base is the first TMEM column of its
 // metadata. One K-tile's metadata is one column per 32 bits: a lane holds, from
@@ -62,14 +37,6 @@ inline constexpr uint32_t make_idesc(uint32_t fmt_s, uint32_t fmt_d, uint32_t n_
                                      bool sparse = false, bool a_tmem = false) {
   return (fmt_s & 0x1f) | ((fmt_d & 0x1f) << 5) | ((sparse ? 1u : 0u) << 10) | ((acc_init ? 1u : 0u) << 11)
        | ((a_tmem ? 1u : 0u) << 12) | ((n_frag & 0xff) << 13);
-}
-
-// sw_full: software has already waited on the stages' full barriers, so the
-// job only consumes them (one tcgen05.mma + commit per stage, Blackwell-style).
-inline constexpr uint32_t make_ctrl(uint32_t mode, uint32_t nstages, uint32_t kb, uint32_t k_tiles,
-                                    bool sw_full = false) {
-  return (mode & 0x3) | ((sw_full ? 1u : 0u) << 2) | ((nstages & 0xf) << 4) | ((kb & 0xff) << 8)
-       | (k_tiles << 16);
 }
 
 // Shared-memory byte offset of a pointer, as the descriptors expect.
@@ -88,39 +55,72 @@ inline constexpr uint32_t make_taddr(uint32_t lane, uint32_t col) {
   return (lane << 16) | col;
 }
 
-// A CTA owns the TMEM columns proportional to its shared-memory window, which
-// the CTA dispatcher keeps disjoint across co-resident CTAs; no allocator is
-// needed. A window of smem_bytes_for_cols(n) bytes holds at least n columns.
-constexpr uint32_t kSmemBytesPerCol = (1u << VX_CFG_LMEM_LOG_SIZE) / VX_CFG_TCU_TMEM_COLS;
-
-inline constexpr uint32_t smem_bytes_for_cols(uint32_t cols) {
-  return (cols + 1) * kSmemBytesPerCol;
+// The smallest allocation holding `cols` columns.
+inline constexpr uint32_t alloc_cols(uint32_t cols) {
+  uint32_t n = 32;
+  while (n < cols) {
+    n <<= 1;
+  }
+  return n;
 }
 
-// First TMEM column of the CTA whose shared-memory window starts at `smem`.
-inline uint32_t cta_col_base(const void* smem) {
-  return (smem_offset(smem) + kSmemBytesPerCol - 1) / kSmemBytesPerCol;
+// tcgen05.alloc: the first of `ncols` TMEM columns (a power of two from 32 to
+// VX_CFG_TCU_TMEM_COLS), retried until another CTA frees enough. One warp of
+// the CTA allocates and shares the column; the CTA frees it with dealloc().
+inline uint32_t alloc(uint32_t ncols) {
+  uint32_t col;
+  do {
+    __asm__ volatile (".insn r %1, 6, 5, %0, %2, x0"
+      : "=r"(col) : "i"(RISCV_CUSTOM0), "r"(ncols) : "memory");
+  } while (col == ~0u);
+  return col;
 }
 
-// The TCU reads each operand's lanes 0..3, which the warp gathers fill.
-#define __VX_TJ_ISSUE(funct3, a, b) do {                               \
-    register size_t __rs1 __asm__("x31") = (a);                         \
-    register size_t __rs2 __asm__("x30") = (b);                         \
-    __asm__ volatile (".insn r %0, %1, 5, x0, %2, %3"                   \
-        : : "i"(RISCV_CUSTOM0), "i"(funct3), "r"(__rs1), "r"(__rs2)     \
-        : "memory");                                                    \
-  } while (0)
+// tcgen05.dealloc: waits for the CTA's ops on the columns, then frees them.
+inline void dealloc(uint32_t col, uint32_t ncols) {
+  __asm__ volatile (".insn r %0, 7, 5, x0, %1, %2"
+    :: "i"(RISCV_CUSTOM0), "r"(col), "r"(ncols) : "memory");
+}
 
-// Enqueue a tensor job. It completes one transaction on its done barrier
-// after its last TMEM write. The descriptor travels in registers, so the
-// TCU sees it in program order with no memory fence.
-inline void tj_post(const tj_desc_t& d) {
-  size_t a = __VX_WGATHER_IN("x31", 0, d.idesc, d.ctrl, d.taddr, d.a_base);
-  size_t b = __VX_WGATHER_IN("x30", 0, d.b_base, d.meta_base, d.stage_stride, d.ld);
-  __VX_TJ_ISSUE(2, a, b);
-  a = __VX_WGATHER_IN("x31", 0, d.full_bar, d.empty_bar, d.done_bar, d.dxa_slots);
-  b = __VX_WGATHER_IN("x30", 0, d.a_coord, d.b_coord, d.k_advance, d.stage);
-  __VX_TJ_ISSUE(3, a, b);
+// tcgen05.mma: D (taddr) += A . B over k_tiles K-tiles, A and B at shared-memory
+// byte offsets (or A at a TMEM column with a_tmem in idesc), issued
+// asynchronously. Ops of a CTA complete in order; tc.commit tracks them. The
+// TCU reads each operand register's lanes 0..3, which the warp gathers fill.
+struct mma_desc_t {
+  uint32_t idesc;
+  uint32_t k_tiles;
+  uint32_t taddr;
+  uint32_t a_base;
+  uint32_t b_base;
+  uint32_t meta_base;
+  uint32_t ld;        // leading bytes: A [15:0], B [31:16]
+};
+
+inline void mma(const mma_desc_t& d) {
+  // Gather both operands before binding either register: a register variable
+  // holds its register only at the asm that uses it.
+  size_t a = __VX_WGATHER_IN("x31", 0, d.idesc, d.k_tiles, d.taddr, d.a_base);
+  size_t b = __VX_WGATHER_IN("x30", 0, d.b_base, d.meta_base, 0, d.ld);
+  register size_t rs1 __asm__("x31") = a;
+  register size_t rs2 __asm__("x30") = b;
+  __asm__ volatile (".insn r %0, 0, 6, x0, %1, %2"
+    :: "i"(RISCV_CUSTOM0), "r"(rs1), "r"(rs2) : "memory");
+}
+
+// tcgen05.commit: arrive on barrier `bar`, as one of its `count` participants,
+// once the CTA's earlier tc.mma and tc.cp ops have completed.
+inline void commit(uint32_t bar, uint32_t count) {
+  __asm__ volatile (".insn r %0, 1, 6, x0, %1, %2"
+    :: "i"(RISCV_CUSTOM0), "r"(bar), "r"(count) : "memory");
+}
+
+// tcgen05.cp: copy `cols` columns of every TMEM lane from shared memory, lane l
+// from `src + l * stride` bytes, in order with the CTA's other ops.
+// src and stride are NT-word aligned; cols is a multiple of NT.
+inline void cp(uint32_t col, const void* src, uint32_t stride, uint32_t cols) {
+  register size_t rs1 __asm__("x31") = __VX_WGATHER_IN("x31", 0, col, smem_offset(src), stride, cols);
+  __asm__ volatile (".insn r %0, 2, 6, x0, %1, x0"
+    :: "i"(RISCV_CUSTOM0), "r"(rs1) : "memory");
 }
 
 // TMEM -> registers f0..f(NR-1). taddr's lane is a multiple of M.
@@ -364,6 +364,12 @@ inline __attribute__((always_inline)) void store(uint32_t taddr, const Frag& fra
         "f"(fs28), "f"(fs29), "f"(fs30), "f"(fs31)
       : "memory");
   }
+}
+
+// tcgen05.wait::st: stores are posted, so a warp waits for its own to land
+// before a barrier hands their columns to a job.
+inline void wait_st() {
+  vx_wsync();
 }
 
 } // namespace tmem

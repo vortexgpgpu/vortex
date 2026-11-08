@@ -659,9 +659,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     ///////////////////////////////////////////////////////////////////////////
 
 `ifdef VX_CFG_EXT_DXA_ENABLE
-    // Tensor jobs issue stage loads on a second request port per core.
-    localparam DXA_NUM_REQS = `VX_CFG_SOCKET_SIZE * (`VX_CFG_TCU_TMEM_ENABLED ? 2 : 1);
-    VX_dxa_req_bus_if per_core_dxa_req_bus_if[DXA_NUM_REQS]();
+    VX_dxa_req_bus_if per_core_dxa_req_bus_if[`VX_CFG_SOCKET_SIZE]();
 
     VX_mem_bus_if #(
         .DATA_SIZE (`VX_CFG_L1_LINE_SIZE),
@@ -686,7 +684,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
 
     VX_dxa_core #(
         .INSTANCE_ID    (`SFORMATF(("%s-dxa", INSTANCE_ID))),
-        .NUM_REQS       (DXA_NUM_REQS),
+        .NUM_REQS       (`VX_CFG_SOCKET_SIZE),
         .GMEM_OUT_PORTS (1)
     ) dxa_core (
         .clk              (clk),
@@ -865,9 +863,6 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
         `ifdef VX_CFG_EXT_DXA_ENABLE
             .dxa_req_bus_if (per_core_dxa_req_bus_if[core_id]),
             .dxa_lmem_bus_if(per_core_dxa_lmem_bus_if[core_id]),
-        `endif
-        `ifdef VX_CFG_TCU_TMEM_ENABLE
-            .tcu_dxa_req_bus_if (per_core_dxa_req_bus_if[`VX_CFG_SOCKET_SIZE + core_id]),
         `endif
 
         `ifdef VX_CFG_EXT_TEX_ENABLE

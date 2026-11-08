@@ -23,21 +23,21 @@
 // (TC_N*i + c + TPL*m) mod NT at row (c / TC_N) * M_STEPS + m, which keeps a
 // job's C/D fragment and both tmem.ld/st layouts to one row per sub-bank.
 //
-// A job runs the K loop over the WGMMA tile buffers and the blocks' FEDP
-// arrays without warp instructions: per K-tile it issues every (m, n) step on
-// all blocks in lockstep with C read from and D written back to TMEM. Stages
-// are gated by barrier phase completions; CLOSED jobs also issue their stage
-// loads to DXA.
+// A tc.mma op runs its K-tiles over the WGMMA tile buffers and the blocks'
+// FEDP arrays without warp instructions: per K-tile it issues every (m, n) step
+// on all blocks in lockstep with C read from and D written back to TMEM. A
+// tc.cp op moves shared-memory rows into TMEM over the TCU's lowest-priority
+// LMEM read port, one NT-word chunk at a time. A CTA's ops run in order, and a
+// tc.commit arrives on its barrier once the CTA's earlier ops have completed.
 
-module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_ENABLE import VX_dxa_pkg::*; `endif #(
+module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
-    parameter CORE_ID    = 0,
     parameter BLOCK_SIZE = `VX_CFG_NUM_TCU_BLOCKS
 ) (
     input wire clk,
     input wire reset,
 
-    // TMEM_LD/ST and TJ_DESC/POST from each block's dispatch
+    // TMEM ops and tc ops from each block's dispatch
     input  wire [BLOCK_SIZE-1:0]    op_valid,
     input  tcu_execute_t            op_data [BLOCK_SIZE],
     output wire [BLOCK_SIZE-1:0]    op_ready,
@@ -71,7 +71,7 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
     input  wire [BLOCK_SIZE-1:0][`VX_CFG_NUM_THREADS-1:0][31:0] jres_data,
 
     VX_tcu_bar_if.master            tcu_bar_if,
-    VX_dxa_req_bus_if.master        dxa_req_bus_if
+    VX_mem_bus_if.master            cp_lmem_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
@@ -92,10 +92,17 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
     localparam NSLOTS   = 8;
     localparam SLOTW    = `LOG2UP(NSLOTS);
     localparam KT_BYTES = TCU_WG_FEDP_K * 4;
+    localparam B_BLK_BYTES = TC_N * KT_BYTES;  // a block-major B (k, n) block
     localparam JOBS_PER_CTA = 2;
+    localparam TC_COMMITS   = 2;  // tc.commit arrivals per op
     localparam WQ_DEPTH = 16;
     localparam INFLW    = 8;
     localparam A_READS  = TCU_WG_FEDP_K / TPL;
+    localparam NBANKS   = `VX_CFG_LMEM_NUM_BANKS;
+    localparam CP_ADDRW = `VX_CFG_LMEM_LOG_SIZE - `CLOG2(NBANKS * 4);
+    localparam LANEW    = `LOG2UP(LANES);
+
+    `STATIC_ASSERT (NBANKS % NT == 0, ("a copy chunk must sit in one LMEM bank row"))
 
     `STATIC_ASSERT (TCU_WG_FEDP_K % TPL == 0, ("A from TMEM reads whole K words per lane"))
 
@@ -223,10 +230,7 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
         logic [4:0]             fmt_d;
         logic [7:0]             n_frag;
         logic                   acc_init;
-        logic                   closed;
-        logic                   sw_full;
-        logic [3:0]             nstages;
-        logic [7:0]             kb;
+        logic                   copy;      // tc.cp: k_tiles columns from a_base, lda bytes per lane
         logic [15:0]            k_tiles;
         logic [COLW-1:0]        taddr;
         logic [15:0]            a_base;
@@ -234,41 +238,23 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
         logic [15:0]            meta_base;
         logic                   sparse;
         logic                   a_tmem;    // a_base is A's first TMEM column
-        logic [15:0]            stride;
         logic [15:0]            lda;
         logic [15:0]            ldb;
-        logic [31:0]            full_bar;
-        logic [31:0]            empty_bar;
-        logic [31:0]            done_bar;
-        logic [3:0]             dxa_slot_a;
-        logic [3:0]             dxa_slot_b;
-        logic [15:0]            a_coord0;
-        logic [15:0]            a_coord1;
-        logic [15:0]            b_coord0;
-        logic [15:0]            b_coord1;
-        logic [15:0]            k_advance;
-        logic                   a_kdim;
-        logic                   b_kdim;
-        // stage use (load side)
+        // TMEM columns [span_lo, span_hi) the job reads or writes
+        logic [COLW-1:0]        span_lo;
+        logic [COLW-1:0]        span_hi;
         logic [15:0]            kt;
-        logic [7:0]             ki;
-        logic [3:0]             use_s;
-        logic [15:0]            use_off;
-        logic [15:0]            use_idx;   // stage fill consumed by the next K-tile
-        // stage readiness
-        logic                   arrived;
-        logic                   stage_ready;
-        // stage release
-        logic [15:0]            consumed;
-        logic                   pend_empty;
-        logic [3:0]             pend_empty_s;
-        // CLOSED stage fills
-        logic [15:0]            fills;
-        logic [15:0]            fills_kt;
-        logic [1:0]             fill_part;
-        logic [3:0]             fill_s;
-        logic [15:0]            fill_off;
-        logic [15:0]            fill_k;
+        logic [COLW-1:0]        a_col;     // K-tile kt's TMEM columns, stepped per K-tile
+        logic [COLW-1:0]        meta_col;
+        logic [15:0]            meta_cols;
+        logic [15:0]            sn_chunk;
+        logic [15:0]            b_kt_off;  // K-tile kt's B offset, stepped per K-tile
+        logic [15:0]            b_kt_stride;
+        // On completion an op (or a bare tc.commit) arrives on its commits,
+        // oldest first, one per cycle.
+        logic [1:0]             ncommit;
+        logic [TC_COMMITS-1:0][31:0]           commit_bar;
+        logic [TC_COMMITS-1:0][BAR_SIZE_W-1:0] commit_cnt;  // arrival count - 1
     } tj_slot_t;
 
     tj_state_e [NSLOTS-1:0] state_r;
@@ -278,10 +264,10 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
     logic [NSLOTS-1:0][NSLOTS-1:0] older_r;
 
     `IGNORE_UNUSED_BEGIN
-    function automatic logic [BAR_ADDR_W-1:0] bar_addr(input logic [31:0] raw, input logic [3:0] stage);
+    function automatic logic [BAR_ADDR_W-1:0] bar_addr(input logic [31:0] raw);
         logic [NB_WIDTH-1:0] id;
         logic [BAR_ADDR_W-1:0] addr;
-        id = NB_WIDTH'(raw[BAR_ID_SHIFT +: NB_WIDTH]) + NB_WIDTH'(stage);
+        id = NB_WIDTH'(raw[BAR_ID_SHIFT +: NB_WIDTH]);
         addr = BAR_ADDR_W'(id);
         if (NW_BITS != 0) begin
             addr = BAR_ADDR_W'({raw[`UP(NW_BITS)-1:0], NB_BITS'(id)});
@@ -303,17 +289,33 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
     end
 
     // -----------------------------------------------------------------------
-    // Warp ops: TMEM_LD/ST, TJ_DESC/POST (one at a time, response next cycle)
+    // Warp ops: TMEM ops and tc ops (one at a time, response next cycle)
     // -----------------------------------------------------------------------
 
     wire [BLOCK_SIZE-1:0] op_sel_oh;
     wire [BLKW-1:0]       op_sel;
     wire                  op_sel_valid;
 
+    // Counted rather than derived from the slots: op_ready depends on it.
+    logic [(1 << NCTA_WIDTH)-1:0][`CLOG2(JOBS_PER_CTA+NSLOTS+1)-1:0] cta_jobs_r;
+
+    wire alloc_valid;
+
+    // An op that needs a slot its CTA cannot have yet lets other blocks' ops by.
+    logic [BLOCK_SIZE-1:0] op_eligible;
+    always_comb begin
+        for (int b = 0; b < BLOCK_SIZE; ++b) begin
+            automatic logic is_job = (op_data[b].op_type == INST_OP_BITS'(INST_TCU_TC_MMA))
+                                  || (op_data[b].op_type == INST_OP_BITS'(INST_TCU_TC_CP));
+            op_eligible[b] = op_valid[b]
+                          && ~(is_job && ~(alloc_valid && (cta_jobs_r[op_data[b].header.cta_id] < JOBS_PER_CTA)));
+        end
+    end
+
     VX_priority_encoder #(
         .N (BLOCK_SIZE)
     ) op_pe (
-        .data_in    (op_valid),
+        .data_in    (op_eligible),
         .onehot_out (op_sel_oh),
         .index_out  (op_sel),
         .valid_out  (op_sel_valid)
@@ -324,11 +326,12 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
     assign op = op_data[op_sel];
     wire op_is_ld   = (op.op_type == INST_OP_BITS'(INST_TCU_TMEM_LD));
     wire op_is_st   = (op.op_type == INST_OP_BITS'(INST_TCU_TMEM_ST));
-    wire op_is_desc = (op.op_type == INST_OP_BITS'(INST_TCU_TJ_DESC));
-    wire op_is_post = (op.op_type == INST_OP_BITS'(INST_TCU_TJ_POST));
+    wire op_is_alloc   = (op.op_type == INST_OP_BITS'(INST_TCU_TMEM_ALLOC));
+    wire op_is_dealloc = (op.op_type == INST_OP_BITS'(INST_TCU_TMEM_DEALLOC));
+    wire op_is_mma     = (op.op_type == INST_OP_BITS'(INST_TCU_TC_MMA));
+    wire op_is_commit  = (op.op_type == INST_OP_BITS'(INST_TCU_TC_COMMIT));
+    wire op_is_cp      = (op.op_type == INST_OP_BITS'(INST_TCU_TC_CP));
 
-    // Counted rather than derived from the slots: op_ready depends on it.
-    logic [(1 << NCTA_WIDTH)-1:0][`CLOG2(JOBS_PER_CTA+NSLOTS+1)-1:0] cta_jobs_r;
     wire [`CLOG2(JOBS_PER_CTA+NSLOTS+1)-1:0] op_cta_jobs = cta_jobs_r[op.header.cta_id];
 
     logic [NSLOTS-1:0] free_slots;
@@ -336,7 +339,6 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
         assign free_slots[i] = (state_r[i] == TJ_FREE);
     end
     wire [SLOTW-1:0] alloc_slot;
-    wire             alloc_valid;
     VX_priority_encoder #(
         .N (NSLOTS)
     ) alloc_pe (
@@ -369,43 +371,91 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
     wire job_rd_any;      // a job C read this cycle
     wire [BLOCK_SIZE-1:0] job_wr;
 
-    wire op_no_jobs = (op_cta_jobs == 0);
+    // TMEM allocation: one bit per ACOLS-column chunk; a request of n columns
+    // (a power of two) takes the lowest free run aligned to n.
+    localparam ACOLS   = 32;
+    localparam ACHUNKS = COLS / ACOLS;
+    localparam ACW     = `UP(`CLOG2(ACHUNKS));
+    logic [ACHUNKS-1:0] amap_r;
+    wire [31:0] op_ncols = op_is_alloc ? op.rs1_data[0][31:0] : op.rs2_data[0][31:0];
+    wire [31:0] op_achunks = op_ncols / ACOLS;
+    wire [ACHUNKS-1:0] op_amask = ACHUNKS'((33'(1) << op_achunks) - 1);
+    logic [ACHUNKS-1:0] afit;
+    always_comb begin
+        for (int i = 0; i < ACHUNKS; ++i) begin
+            afit[i] = ((32'(i) & (op_achunks - 1)) == 0) && (32'(i) + op_achunks <= ACHUNKS)
+                   && ((amap_r & (op_amask << i)) == '0);
+        end
+    end
+    wire [ACW-1:0] afit_idx;
+    wire           afit_valid;
+    VX_priority_encoder #(
+        .N (ACHUNKS)
+    ) afit_pe (
+        .data_in    (afit),
+        `UNUSED_PIN (onehot_out),
+        .index_out  (afit_idx),
+        .valid_out  (afit_valid)
+    );
+    wire [31:0] alloc_col = afit_valid ? (32'(afit_idx) * ACOLS) : '1;
+
+    `RUNTIME_ASSERT (~(op_sel_valid && (op_is_alloc || op_is_dealloc))
+                  || (op_ncols >= ACOLS && op_ncols <= COLS && (op_ncols & (op_ncols - 1)) == 0),
+        ("%t: %s: TMEM allocation of %0d columns", $time, INSTANCE_ID, op_ncols))
+
+    // A transfer or a dealloc waits only for its CTA's jobs that touch its columns.
+    wire             op_row     = op.op_args.tcu.a_from_smem;
+    wire [COLW-1:0]  op_xfer_lo = op_col + (op_row ? COLW'((32'(op_reg) / XM) * NT) : COLW'(32'(op_reg) * TPL));
+    wire [COLW-1:0]  op_xfer_hi = op_is_dealloc ? COLW'(32'(op_col) + op_ncols)
+                                : (op_xfer_lo + (op_row ? COLW'(NT) : COLW'(TPL)));
+    wire [COLW-1:0]  op_span_lo = op_is_dealloc ? op_col : op_xfer_lo;
+    logic op_conflict;
+    always_comb begin
+        op_conflict = 1'b0;
+        for (int i = 0; i < NSLOTS; ++i) begin
+            if (state_r[i] != TJ_FREE && slot_r[i].cta == op.header.cta_id
+             && op_span_lo < slot_r[i].span_hi && slot_r[i].span_lo < op_xfer_hi)
+                op_conflict = 1'b1;
+        end
+    end
+    // tc.commit rides on the CTA's last posted op; once that is done, so is
+    // all of the CTA's earlier tensor work.
+    logic [(1 << NCTA_WIDTH)-1:0][SLOTW-1:0] young_slot_r;
+    logic [(1 << NCTA_WIDTH)-1:0]            young_vld_r;
+    wire [SLOTW-1:0] young_i = young_slot_r[op.header.cta_id];
+    wire             young_v = young_vld_r[op.header.cta_id];
+    wire young_done_fire;  // its completion step runs this cycle
+    wire commit_ok = young_v ? ((slot_r[young_i].ncommit != 2'(TC_COMMITS)) && ~young_done_fire)
+                             : alloc_valid;
+
     wire op_can = op_sel_valid && rsp_free
-               && (op_is_desc
-                || (op_is_post && alloc_valid && (op_cta_jobs < JOBS_PER_CTA))
-                || (op_is_ld && op_no_jobs)
-                || (op_is_st && op_no_jobs && ~job_wr[op_blk]));
+               && (op_is_alloc
+                || ((op_is_mma || op_is_cp) && alloc_valid && (op_cta_jobs < JOBS_PER_CTA))
+                || (op_is_commit && commit_ok)
+                || (op_is_ld && ~op_conflict)
+                || (op_is_st && ~op_conflict && ~job_wr[op_blk])
+                || (op_is_dealloc && ~op_conflict));
     wire op_fire = op_can;
 
     for (genvar b = 0; b < BLOCK_SIZE; ++b) begin : g_op_ready
         assign op_ready[b] = op_fire && (op_sel == BLKW'(b));
     end
 
-    wire ld_read = op_fire && op_is_ld;
-    wire st_write = op_fire && op_is_st;
+    // decoded apart from op_fire to keep other ops' acceptance off the step path
+    wire ld_read  = op_sel_valid && rsp_free && op_is_ld && ~op_conflict;
+    wire st_write = op_sel_valid && rsp_free && op_is_st && ~op_conflict && ~job_wr[op_blk];
 
     `RUNTIME_ASSERT (~(op_fire && (op_is_ld || op_is_st))
                   || ((32'(op_lane) % XM) == 0 && 32'(op_lane) < LANES),
         ("%t: %s: TMEM lane %0d out of range", $time, INSTANCE_ID, op_lane))
 
-    // descriptor words 0..7 of each warp
-    logic [`VX_CFG_NUM_WARPS-1:0][7:0][31:0] desc_buf_r;
-    always_ff @(posedge clk) begin
-        if (op_fire && op_is_desc) begin
-            for (int w = 0; w < 4; ++w) begin
-                desc_buf_r[op.header.wid][w]     <= op.rs1_data[w][31:0];
-                desc_buf_r[op.header.wid][4 + w] <= op.rs2_data[w][31:0];
-            end
-        end
-    end
-
-    // job descriptor of a TJ_POST
-    logic [15:0][31:0] post_w;
+    // tc.mma descriptor words 0..7: rs1 then rs2, lanes 0..3 of each. tc.cp's
+    // rs1 lanes are its taddr, source, stride and column count.
+    logic [7:0][31:0] post_w;
     always_comb begin
-        for (int w = 0; w < 8; ++w) post_w[w] = desc_buf_r[op.header.wid][w];
         for (int w = 0; w < 4; ++w) begin
-            post_w[8 + w]  = op.rs1_data[w][31:0];
-            post_w[12 + w] = op.rs2_data[w][31:0];
+            post_w[w]     = op.rs1_data[w][31:0];
+            post_w[4 + w] = op.rs2_data[w][31:0];
         end
     end
 
@@ -437,7 +487,23 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
     wire [NT-1:0][31:0] rsp_payload = rsp_ld_fresh_r ? ld_data : rsp_hold_r;
     always_ff @(posedge clk) begin
         if (rsp_ld_fresh_r) rsp_hold_r <= ld_data;
+        if (op_fire && op_is_alloc) rsp_hold_r <= {NT{alloc_col}};
     end
+
+    always_ff @(posedge clk) begin
+        if (reset) begin
+            amap_r <= '0;
+        end else if (op_fire && op_is_alloc && afit_valid) begin
+            amap_r <= amap_r | (op_amask << afit_idx);
+        end else if (op_fire && op_is_dealloc) begin
+            amap_r <= amap_r & ~(op_amask << (op_col / ACOLS));
+        end
+    end
+
+    `RUNTIME_ASSERT (~(op_fire && op_is_dealloc)
+                  || ((32'(op_col) % op_ncols) == 0
+                   && (amap_r & (op_amask << (op_col / ACOLS))) == (op_amask << (op_col / ACOLS))),
+        ("%t: %s: TMEM dealloc of %0d columns at column %0d that are not allocated", $time, INSTANCE_ID, op_ncols, op_col))
 
     for (genvar b = 0; b < BLOCK_SIZE; ++b) begin : g_rsp
         assign rsp_valid[b]           = rsp_valid_r && (rsp_blk_r == BLKW'(b));
@@ -462,11 +528,8 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
     logic [SLOTW-1:0] e_slot_r;
     logic             e_m_r;
     logic [3:0]       e_sn_r;
-    logic [3:0]       e_stage_r;
     logic             e_first_r;
     logic             e_zero_r;
-    logic             e_ktile_last_r;
-    logic             e_stage_end_r;
     logic             e_fresh_r;
     logic [BLOCK_SIZE-1:0][NT-1:0][31:0] e_hold_r;
 
@@ -477,7 +540,7 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
     logic [NCTA_WIDTH-1:0] e_cta_r;
     logic [4:0]       e_fmt_s_r, e_fmt_d_r;
     logic [15:0]      e_lda_r, e_ldb_r;
-    logic             e_closed_r, e_a_tmem_r, e_sparse_r;
+    logic             e_a_tmem_r, e_sparse_r;
     logic [COLW-1:0]  e_col0_r;
     logic [NT-1:0][SUBW-1:0] e_sub_r;
     logic [BLOCK_SIZE-1:0][15:0] e_a_off_r;
@@ -485,8 +548,6 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
 
     tj_slot_t rj;
     assign rj = slot_r[run_slot_r];
-    tj_slot_t ej;
-    assign ej = slot_r[e_slot_r];
 
     assign job_fire = e_valid_r && (&core_ready);
     wire e_advance  = ~e_valid_r || job_fire;
@@ -498,9 +559,7 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
     function automatic logic [15:0] meta_row_bits(input logic [4:0] fmt);
         return 16'(TCU_TC_K * 2 * (32 / tcu_fmt_width(fmt)));
     endfunction
-    wire [15:0] rj_meta_bits  = 2 * meta_row_bits(rj.fmt_s);
-    wire [15:0] rj_meta_cols  = (rj_meta_bits + 16'd31) >> 5;
-    wire [3:0]  pro_meta_reads = rj.sparse ? 4'((rj_meta_cols + 16'(TPL) - 16'd1) / 16'(TPL)) : 4'd0;
+    wire [3:0]  pro_meta_reads = rj.sparse ? 4'((rj.meta_cols + 16'(TPL) - 16'd1) / 16'(TPL)) : 4'd0;
     wire [3:0]  pro_a_reads    = rj.a_tmem ? 4'(A_READS) : 4'd0;
     wire [3:0]  pro_total      = pro_meta_reads + pro_a_reads;
     wire        pro_pending    = run_valid_r && (pro_idx_r < pro_total);
@@ -508,8 +567,8 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
     wire        pro_is_meta    = (pro_idx_r < pro_meta_reads);
     wire [3:0]  pro_a_idx      = pro_idx_r - pro_meta_reads;
     wire [COLW-1:0] pro_col0   = pro_is_meta
-        ? (rj.meta_base + COLW'(32'(rj.kt) * 32'(rj_meta_cols)) + COLW'(32'(pro_idx_r) * TPL))
-        : (rj.a_base + COLW'(32'(rj.kt) * TCU_WG_FEDP_K) + COLW'(32'(pro_a_idx) * TPL));
+        ? (rj.meta_col + COLW'(32'(pro_idx_r) * TPL))
+        : (rj.a_col + COLW'(32'(pro_a_idx) * TPL));
     tm_access_t pro_acc;
     assign pro_acc = reg_access(1'b0, 5'd0, pro_col0);
 
@@ -518,7 +577,6 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
     wire load_zero      = (rj.kt == 0) && rj.acc_init;
     wire load_m_last    = (run_m_r == 1'(M_STEPS - 1));
     wire load_ktile_end = load_m_last && (run_n_r == rj.n_frag - 8'd1);
-    wire load_stage_end = (rj.ki == rj.kb - 8'd1) || (rj.kt == rj.k_tiles - 16'd1);
     wire load_job_end   = (rj.kt == rj.k_tiles - 16'd1);
     wire [COLW-1:0] load_col0 = rj.taddr + COLW'(32'(run_n_r) * TC_N);
     tm_access_t load_acc;
@@ -526,10 +584,6 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
 
     assign job_rd_any = load && ~load_zero;
 
-    // Step n of the bbuf/abuf/FEDP is 4 bits and 0 marks a K-tile's first
-    // step, so later steps cycle through 1..15 with the remainder folded into
-    // the B descriptor.
-    wire [15:0] sn_chunk = 16'(TC_N) * rj.ldb * 16'd15;
 
     // C cells of the presented step, per thread
     logic [BLOCK_SIZE-1:0][NT-1:0][31:0] e_c;
@@ -546,9 +600,8 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
     end
 
     // descriptors of the step being loaded
-    wire [15:0] load_a_off = rj.a_base + rj.use_off + 16'(32'(rj.ki) * KT_BYTES);
-    wire [15:0] load_b_off = rj.b_base + rj.use_off + run_choff_r
-                           + ((rj.ldb != 0) ? 16'(32'(rj.ki) * KT_BYTES * (rj.sparse ? 2 : 1)) : 16'd0);
+    wire [15:0] load_a_off = rj.a_base + 16'(32'(rj.kt) * KT_BYTES);
+    wire [15:0] load_b_off = rj.b_base + run_choff_r + rj.b_kt_off;
 
     assign job_valid = e_valid_r;
 
@@ -675,6 +728,133 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
     assign job_wr = jres_valid;
 
     // -----------------------------------------------------------------------
+    // Copy engine: the oldest tc.cp head, one LMEM read in flight. A response
+    // is written in its cycle unless jres/tmem.st hold the bank, else parked.
+    // -----------------------------------------------------------------------
+
+    logic [NSLOTS-1:0] want_copy;
+    always_comb begin
+        for (int i = 0; i < NSLOTS; ++i) begin
+            want_copy[i] = (state_r[i] == TJ_WAIT) && is_head[i] && slot_r[i].copy;
+        end
+    end
+    logic [NSLOTS-1:0] copy_oldest;
+    always_comb begin
+        for (int i = 0; i < NSLOTS; ++i) begin
+            copy_oldest[i] = want_copy[i];
+            for (int j = 0; j < NSLOTS; ++j) begin
+                if (j != i && want_copy[j] && older_r[j][i]) copy_oldest[i] = 1'b0;
+            end
+        end
+    end
+    wire [SLOTW-1:0] cpst_i;
+    wire cpst_v;
+    VX_priority_encoder #(.N (NSLOTS)) pe_copy (.data_in (copy_oldest), `UNUSED_PIN (onehot_out), .index_out (cpst_i), .valid_out (cpst_v));
+
+    logic              cp_active_r;
+    logic [SLOTW-1:0]  cp_slot_r;
+    logic [LANEW-1:0]  cp_lane_r;     // next request
+    logic [15:0]       cp_col_r;
+    logic [15:0]       cp_row_r;      // lane * lda
+    logic              cp_req_done_r;
+    logic              cp_inflight_r;
+    logic [LANEW-1:0]  cp_rlane_r;    // in-flight request
+    logic [15:0]       cp_rcol_r;
+    logic [`LOG2UP(NBANKS)-1:0] cp_rword_r;
+    logic              cp_have_r;     // parked response
+    logic [LANEW-1:0]  cp_hlane_r;
+    logic [15:0]       cp_hcol_r;
+    logic [NT-1:0][31:0] cp_hdata_r;
+
+    tj_slot_t cj;
+    assign cj = slot_r[cp_slot_r];
+    wire cp_start = cpst_v && ~cp_active_r;
+
+    wire [15:0] cp_byte = cj.a_base + cp_row_r + (cp_col_r << 2);
+    wire cp_rsp = cp_lmem_if.rsp_valid;
+    logic [NT-1:0][31:0] cp_rsp_data;
+    always_comb begin
+        for (int t = 0; t < NT; ++t) begin
+            cp_rsp_data[t] = cp_lmem_if.rsp_data.data[(32'(cp_rword_r) + t) * 32 +: 32];
+        end
+    end
+
+    // The write candidate: a parked response first, else the arriving one.
+    wire [LANEW-1:0] cp_wlane = cp_have_r ? cp_hlane_r : cp_rlane_r;
+    wire [15:0]      cp_wcol  = cp_have_r ? cp_hcol_r : cp_rcol_r;
+    wire [NT-1:0][31:0] cp_wdata = cp_have_r ? cp_hdata_r : cp_rsp_data;
+    wire [BLKW-1:0]  cp_wblk  = BLKW'(32'(cp_wlane) / XM);
+    wire cp_wants_wr = cp_have_r || cp_rsp;
+    wire cp_port_free = ~jres_valid[cp_wblk] && ~(st_write && (op_blk == cp_wblk));
+    wire cp_wr = cp_wants_wr && cp_port_free;
+    wire cp_park = cp_rsp && ~(cp_wr && ~cp_have_r);
+    tm_access_t cp_acc;
+    assign cp_acc = reg_access(1'b1, 5'(32'(cp_wlane) % XM), cj.taddr + cp_wcol);
+
+    wire cp_issue = cp_active_r && ~cp_req_done_r && (~cp_inflight_r || cp_rsp)
+                 && ~cp_have_r && ~cp_park;
+    wire cp_fire = cp_issue && cp_lmem_if.req_ready;
+    wire cp_last_chunk = (cp_col_r + 16'(NT) == cj.k_tiles);
+    wire cp_finish = cp_active_r && cp_req_done_r && ~cp_inflight_r && ~cp_have_r;
+
+    assign cp_lmem_if.req_valid        = cp_issue;
+    assign cp_lmem_if.req_data.rw      = 1'b0;
+    assign cp_lmem_if.req_data.addr    = CP_ADDRW'(cp_byte >> `CLOG2(NBANKS * 4));
+    assign cp_lmem_if.req_data.data    = '0;
+    assign cp_lmem_if.req_data.byteen  = '0;
+    assign cp_lmem_if.req_data.attr    = '0;
+    assign cp_lmem_if.req_data.tag.uuid  = cj.uuid;
+    assign cp_lmem_if.req_data.tag.value = '0;
+    assign cp_lmem_if.rsp_ready        = 1'b1;
+    `UNUSED_VAR (cp_lmem_if.rsp_data.tag)
+
+    always_ff @(posedge clk) begin
+        if (reset) begin
+            cp_active_r   <= 1'b0;
+            cp_inflight_r <= 1'b0;
+            cp_have_r     <= 1'b0;
+        end else begin
+            if (cp_start) begin
+                cp_active_r   <= 1'b1;
+                cp_slot_r     <= cpst_i;
+                cp_lane_r     <= '0;
+                cp_col_r      <= '0;
+                cp_row_r      <= '0;
+                cp_req_done_r <= 1'b0;
+            end
+            if (cp_fire) begin
+                cp_rlane_r <= cp_lane_r;
+                cp_rcol_r  <= cp_col_r;
+                cp_rword_r <= `LOG2UP(NBANKS)'(cp_byte >> 2);
+                if (cp_last_chunk) begin
+                    cp_col_r  <= '0;
+                    cp_lane_r <= cp_lane_r + LANEW'(1);
+                    cp_row_r  <= cp_row_r + cj.lda;
+                    if (32'(cp_lane_r) == LANES - 1) cp_req_done_r <= 1'b1;
+                end else begin
+                    cp_col_r <= cp_col_r + 16'(NT);
+                end
+            end
+            if (cp_fire) begin
+                cp_inflight_r <= 1'b1;
+            end else if (cp_rsp) begin
+                cp_inflight_r <= 1'b0;
+            end
+            if (cp_park) begin
+                cp_have_r  <= 1'b1;
+                cp_hlane_r <= cp_rlane_r;
+                cp_hcol_r  <= cp_rcol_r;
+                cp_hdata_r <= cp_rsp_data;
+            end else if (cp_wr && cp_have_r) begin
+                cp_have_r <= 1'b0;
+            end
+            if (cp_finish) begin
+                cp_active_r <= 1'b0;
+            end
+        end
+    end
+
+    // -----------------------------------------------------------------------
     // Bank port control
     // -----------------------------------------------------------------------
 
@@ -714,6 +894,12 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
                     bank_waddr[b][op_acc.sub[t]] = op_acc.addr[t];
                     bank_wdata[b][op_acc.sub[t]] = op.rs2_data[t][31:0];
                 end
+            end else if (cp_wr && (cp_wblk == BLKW'(b))) begin
+                for (int t = 0; t < NT; ++t) begin
+                    bank_write[b][cp_acc.sub[t]] = 1'b1;
+                    bank_waddr[b][cp_acc.sub[t]] = cp_acc.addr[t];
+                    bank_wdata[b][cp_acc.sub[t]] = cp_wdata[t];
+                end
             end
         end
     end
@@ -721,114 +907,48 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
     `UNUSED_VAR (op)
     `UNUSED_VAR (post_w)
     `UNUSED_VAR (rj)
-    `UNUSED_VAR (ej)
-    `UNUSED_VAR (dj)
     `UNUSED_VAR (e_sparse_r)
+    `UNUSED_VAR (cj)
 
     // -----------------------------------------------------------------------
-    // Barrier and DXA requests
+    // tc.commit arrivals
     // -----------------------------------------------------------------------
 
-    // per-slot request candidates
-    logic [NSLOTS-1:0] want_done, want_empty, want_attach, want_arrive, want_dxa;
-    logic [NSLOTS-1:0] e_holds;
-    `IGNORE_UNUSED_BEGIN
+    logic [NSLOTS-1:0] want_done;
     always_comb begin
         for (int i = 0; i < NSLOTS; ++i) begin
-            automatic tj_slot_t j = slot_r[i];
-            automatic logic fill_open = j.closed && is_head[i] && (state_r[i] != TJ_DRAIN)
-                                     && (j.fills_kt < j.k_tiles)
-                                     && (j.fills < j.consumed + 16'(j.nstages));
-            e_holds[i]     = e_valid_r && (e_slot_r == SLOTW'(i));
-            want_done[i]   = (state_r[i] == TJ_DRAIN) && (inflight_r[i] == 0) && ~e_holds[i] && ~j.pend_empty;
-            want_empty[i]  = (state_r[i] != TJ_FREE) && j.pend_empty;
-            want_attach[i] = fill_open && (j.fill_part == 2'd0);
-            want_dxa[i]    = fill_open && (j.fill_part != 2'd0);
-            want_arrive[i] = (state_r[i] == TJ_WAIT) && is_head[i] && ~j.sw_full
-                          && ~j.arrived && ~j.stage_ready
-                          && (~j.closed || (j.fills > j.use_idx));
+            want_done[i] = (state_r[i] == TJ_DRAIN) && (inflight_r[i] == 0)
+                        && ~(e_valid_r && (e_slot_r == SLOTW'(i)));
         end
     end
-    `IGNORE_UNUSED_END
 
-    wire [SLOTW-1:0] done_i, empty_i, attach_i, arrive_i, dxa_i;
-    wire done_v, empty_v, attach_v, arrive_v, dxa_v;
-    VX_priority_encoder #(.N (NSLOTS)) pe_done   (.data_in (want_done),   `UNUSED_PIN (onehot_out), .index_out (done_i),   .valid_out (done_v));
-    VX_priority_encoder #(.N (NSLOTS)) pe_empty  (.data_in (want_empty),  `UNUSED_PIN (onehot_out), .index_out (empty_i),  .valid_out (empty_v));
-    VX_priority_encoder #(.N (NSLOTS)) pe_attach (.data_in (want_attach), `UNUSED_PIN (onehot_out), .index_out (attach_i), .valid_out (attach_v));
-    VX_priority_encoder #(.N (NSLOTS)) pe_arrive (.data_in (want_arrive), `UNUSED_PIN (onehot_out), .index_out (arrive_i), .valid_out (arrive_v));
-    VX_priority_encoder #(.N (NSLOTS)) pe_dxa    (.data_in (want_dxa),    `UNUSED_PIN (onehot_out), .index_out (dxa_i),    .valid_out (dxa_v));
+    wire [SLOTW-1:0] done_i;
+    wire done_v;
+    VX_priority_encoder #(.N (NSLOTS)) pe_done (.data_in (want_done), `UNUSED_PIN (onehot_out), .index_out (done_i), .valid_out (done_v));
 
-    tcu_bar_t        bar_req;
-    logic [1:0]      bar_kind; // 0 done, 1 empty, 2 attach, 3 arrive
-    logic [SLOTW-1:0] bar_slot;
+    tcu_bar_t bar_req;
     always_comb begin
-        bar_req  = '0;
-        bar_kind = '0;
-        bar_slot = '0;
-        if (done_v) begin
-            bar_kind = 2'd0; bar_slot = done_i;
-            bar_req.addr     = bar_addr(slot_r[done_i].done_bar, 4'd0);
-            bar_req.is_event = 1'b1;
-            bar_req.phase    = 1'b0;
-        end else if (empty_v) begin
-            bar_kind = 2'd1; bar_slot = empty_i;
-            bar_req.addr     = bar_addr(slot_r[empty_i].empty_bar, slot_r[empty_i].pend_empty_s);
-            bar_req.size_m1  = BAR_SIZE_W'(1);
-        end else if (attach_v) begin
-            bar_kind = 2'd2; bar_slot = attach_i;
-            bar_req.addr     = bar_addr(slot_r[attach_i].full_bar, slot_r[attach_i].fill_s);
-            bar_req.is_event = 1'b1;
-            bar_req.phase    = 1'b1;
-            bar_req.size_m1  = slot_r[attach_i].a_tmem ? BAR_SIZE_W'(0) : BAR_SIZE_W'(1);
-        end else if (arrive_v) begin
-            bar_kind = 2'd3; bar_slot = arrive_i;
-            bar_req.addr     = bar_addr(slot_r[arrive_i].full_bar, slot_r[arrive_i].use_s);
-            bar_req.size_m1  = slot_r[arrive_i].closed ? BAR_SIZE_W'(0) : BAR_SIZE_W'(1);
-        end
+        bar_req         = '0;
+        bar_req.addr    = bar_addr(slot_r[done_i].commit_bar[0]);
+        bar_req.size_m1 = slot_r[done_i].commit_cnt[0];
     end
-    wire bar_valid = done_v || empty_v || attach_v || arrive_v;
-    wire bar_fire  = bar_valid && tcu_bar_if.req_ready;
-    assign tcu_bar_if.req_valid = bar_valid;
+    // An op with no commits left completes without a barrier request.
+    wire done_silent = done_v && (slot_r[done_i].ncommit == 2'd0);
+    wire done_frees  = (slot_r[done_i].ncommit <= 2'd1);
+    wire bar_fire    = done_v && (done_silent || tcu_bar_if.req_ready);
+    wire op_free     = bar_fire && done_frees;
+    assign tcu_bar_if.req_valid = done_v && ~done_silent;
     assign tcu_bar_if.req_data  = bar_req;
-
-    // DXA stage loads (CLOSED)
-    tj_slot_t dj;
-    assign dj = slot_r[dxa_i];
-    wire dxa_is_b = (dj.fill_part == 2'd2);
-    // k_advance is in dense K; compressed A advances half as far.
-    wire [31:0] dxa_k = (dj.sparse && ~dxa_is_b) ? (32'(dj.fill_k) >> 1) : 32'(dj.fill_k);
-    dxa_req_data_t dxa_req;
-    always_comb begin
-        dxa_req = '0;
-        dxa_req.core_id   = NC_WIDTH'(CORE_ID);
-        dxa_req.uuid      = dj.uuid;
-        dxa_req.wid       = dj.wid;
-        dxa_req.smem_addr = DXA_SMEM_ADDR_W'((dxa_is_b ? dj.b_base : dj.a_base) + dj.fill_off);
-        dxa_req.meta      = ((dj.full_bar + (32'(dj.fill_s) << BAR_ID_SHIFT)) << 4)
-                          | 32'(dxa_is_b ? dj.dxa_slot_b : dj.dxa_slot_a);
-        if (dxa_is_b) begin
-            dxa_req.coords[0] = 32'(dj.b_coord0) + (dj.b_kdim ? 32'd0 : dxa_k);
-            dxa_req.coords[1] = 32'(dj.b_coord1) + (dj.b_kdim ? dxa_k : 32'd0);
-        end else begin
-            dxa_req.coords[0] = 32'(dj.a_coord0) + (dj.a_kdim ? 32'd0 : dxa_k);
-            dxa_req.coords[1] = 32'(dj.a_coord1) + (dj.a_kdim ? dxa_k : 32'd0);
-        end
-    end
-    assign dxa_req_bus_if.req_valid = dxa_v;
-    assign dxa_req_bus_if.req_data  = dxa_req;
-    wire dxa_fire = dxa_v && dxa_req_bus_if.req_ready;
+    assign young_done_fire = bar_fire && (done_i == young_i);
 
     // -----------------------------------------------------------------------
-    // Scheduling: when the datapath is free, the oldest CTA head whose stage
-    // is ready takes it for one stage.
+    // Scheduling: when the datapath is free, the oldest CTA head tc.mma takes it.
     // -----------------------------------------------------------------------
 
     logic [NSLOTS-1:0] can_run;
     always_comb begin
         for (int i = 0; i < NSLOTS; ++i) begin
-            can_run[i] = (state_r[i] == TJ_WAIT) && is_head[i]
-                      && (slot_r[i].sw_full || slot_r[i].stage_ready);
+            can_run[i] = (state_r[i] == TJ_WAIT) && is_head[i] && ~slot_r[i].copy;
         end
     end
     logic [NSLOTS-1:0] run_oldest;
@@ -843,8 +963,8 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
     wire [SLOTW-1:0] start_i;
     wire start_v;
     VX_priority_encoder #(.N (NSLOTS)) pe_start (.data_in (run_oldest), `UNUSED_PIN (onehot_out), .index_out (start_i), .valid_out (start_v));
-    // A job finishing its stage frees the datapath the same cycle.
-    wire run_leaves = load && load_ktile_end && (load_stage_end);
+    // An op finishing its last K-tile frees the datapath the same cycle.
+    wire run_leaves = load && load_ktile_end && load_job_end;
     wire start = start_v && (~run_valid_r || run_leaves);
 
     // -----------------------------------------------------------------------
@@ -852,12 +972,16 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
     // -----------------------------------------------------------------------
 
     wire [SLOTW-1:0] post_slot = alloc_slot;
-    wire post = op_fire && op_is_post;
+    wire post = op_fire && (op_is_mma || op_is_cp);
+    // a tc.commit with no op of its CTA pending gets a slot of its own
+    wire commit_new = op_fire && op_is_commit && ~young_v;
+    wire commit_add = op_fire && op_is_commit && young_v;
 
     always_ff @(posedge clk) begin
         if (reset) begin
             state_r     <= '{default: TJ_FREE};
             cta_jobs_r  <= '0;
+            young_vld_r <= '0;
             inflight_r  <= '0;
             older_r     <= '0;
             run_valid_r <= 1'b0;
@@ -873,40 +997,51 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
                 j.cta        = op.header.cta_id;
                 j.wid        = op.header.wid;
                 j.uuid       = op.header.uuid;
-                j.fmt_s      = post_w[0][4:0];
-                j.fmt_d      = post_w[0][9:5];
-                j.acc_init   = post_w[0][11];
-                j.n_frag     = post_w[0][20:13];
-                j.closed     = (post_w[1][1:0] == 2'd1);
-                j.sw_full    = post_w[1][2];
-                j.nstages    = post_w[1][7:4];
-                j.kb         = post_w[1][15:8];
-                j.k_tiles    = post_w[1][31:16];
-                j.taddr      = post_w[2][COLW-1:0];
-                j.a_base     = post_w[3][15:0];
-                j.b_base     = post_w[4][15:0];
-                j.meta_base  = post_w[5][15:0];
-                j.sparse     = post_w[0][10];
-                j.a_tmem     = post_w[0][12];
-                j.stride     = post_w[6][15:0];
-                j.lda        = post_w[7][15:0];
-                j.ldb        = post_w[7][31:16];
-                j.full_bar   = post_w[8];
-                j.empty_bar  = post_w[9];
-                j.done_bar   = post_w[10];
-                j.dxa_slot_a = post_w[11][3:0];
-                j.dxa_slot_b = post_w[11][7:4];
-                j.a_coord0   = post_w[12][15:0];
-                j.a_coord1   = post_w[12][31:16];
-                j.b_coord0   = post_w[13][15:0];
-                j.b_coord1   = post_w[13][31:16];
-                j.k_advance  = post_w[14][15:0];
-                j.a_kdim     = post_w[14][16];
-                j.b_kdim     = post_w[14][17];
-                j.use_s      = post_w[15][3:0];
-                j.use_off    = 16'(32'(post_w[15][3:0]) * 32'(post_w[6][15:0]));
-                j.fill_s     = post_w[15][3:0];
-                j.fill_off   = 16'(32'(post_w[15][3:0]) * 32'(post_w[6][15:0]));
+                if (op_is_cp) begin
+                    j.copy    = 1'b1;
+                    j.taddr   = post_w[0][COLW-1:0];
+                    j.a_base  = post_w[1][15:0];
+                    j.lda     = post_w[2][15:0];
+                    j.k_tiles = post_w[3][15:0];
+                    j.span_lo = j.taddr;
+                    j.span_hi = j.taddr + COLW'(j.k_tiles);
+                end else begin
+                    j.fmt_s      = post_w[0][4:0];
+                    j.fmt_d      = post_w[0][9:5];
+                    j.sparse     = post_w[0][10];
+                    j.acc_init   = post_w[0][11];
+                    j.a_tmem     = post_w[0][12];
+                    j.n_frag     = post_w[0][20:13];
+                    j.k_tiles    = post_w[1][15:0];
+                    j.taddr      = post_w[2][COLW-1:0];
+                    j.a_base     = post_w[3][15:0];
+                    j.b_base     = post_w[4][15:0];
+                    j.meta_base  = post_w[5][15:0];
+                    j.lda        = post_w[7][15:0];
+                    j.ldb        = post_w[7][31:16];
+                    j.a_col      = COLW'(j.a_base);
+                    j.meta_col   = COLW'(j.meta_base);
+                    j.meta_cols  = 16'((2 * 32'(meta_row_bits(j.fmt_s)) + 31) >> 5);
+                    // Step n of the bbuf/abuf/FEDP is 4 bits and 0 marks a K-tile's
+                    // first step, so later steps cycle through 1..15 with the
+                    // remainder folded into the B descriptor. Block-major B
+                    // (ldb = 0) holds a K-tile's n_frag blocks back to back.
+                    j.sn_chunk   = 16'd15 * ((j.ldb != 0) ? (16'(TC_N) * j.ldb) : 16'(B_BLK_BYTES));
+                    j.b_kt_stride = (j.ldb != 0) ? 16'(KT_BYTES * (j.sparse ? 2 : 1))
+                                                 : 16'(32'(j.n_frag) * B_BLK_BYTES);
+                    j.span_lo    = j.taddr;
+                    j.span_hi    = j.taddr + COLW'(32'(j.n_frag) * TC_N);
+                    if (j.a_tmem) begin
+                        if (COLW'(j.a_base) < j.span_lo) j.span_lo = COLW'(j.a_base);
+                        if (COLW'(32'(j.a_base) + 32'(j.k_tiles) * TCU_WG_FEDP_K) > j.span_hi)
+                            j.span_hi = COLW'(32'(j.a_base) + 32'(j.k_tiles) * TCU_WG_FEDP_K);
+                    end
+                    if (j.sparse) begin
+                        if (COLW'(j.meta_base) < j.span_lo) j.span_lo = COLW'(j.meta_base);
+                        if (COLW'(32'(j.meta_base) + 32'(j.k_tiles) * 32'(j.meta_cols)) > j.span_hi)
+                            j.span_hi = COLW'(32'(j.meta_base) + 32'(j.k_tiles) * 32'(j.meta_cols));
+                    end
+                end
                 slot_r[post_slot] <= j;
                 state_r[post_slot] <= TJ_WAIT;
                 inflight_r[post_slot] <= '0;
@@ -916,60 +1051,54 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
                 end
             end
 
+            if (commit_new) begin
+                tj_slot_t j;
+                j = '0;
+                j.cta           = op.header.cta_id;
+                j.wid           = op.header.wid;
+                j.uuid          = op.header.uuid;
+                j.ncommit       = 2'd1;
+                j.commit_bar[0] = op.rs1_data[0][31:0];
+                j.commit_cnt[0] = BAR_SIZE_W'(op.rs2_data[0][31:0] - 32'd1);
+                slot_r[post_slot]     <= j;
+                state_r[post_slot]    <= TJ_DRAIN;
+                inflight_r[post_slot] <= '0;
+                for (int i = 0; i < NSLOTS; ++i) begin
+                    older_r[post_slot][i] <= 1'b0;
+                    older_r[i][post_slot] <= (state_r[i] != TJ_FREE) && (SLOTW'(i) != post_slot);
+                end
+            end
+            if (commit_add) begin
+                slot_r[young_i].commit_bar[slot_r[young_i].ncommit[0]] <= op.rs1_data[0][31:0];
+                slot_r[young_i].commit_cnt[slot_r[young_i].ncommit[0]] <= BAR_SIZE_W'(op.rs2_data[0][31:0] - 32'd1);
+                slot_r[young_i].ncommit <= slot_r[young_i].ncommit + 2'd1;
+            end
+
             for (int c = 0; c < (1 << NCTA_WIDTH); ++c) begin
                 cta_jobs_r[c] <= cta_jobs_r[c]
-                    + `CLOG2(JOBS_PER_CTA+NSLOTS+1)'(post && op.header.cta_id == NCTA_WIDTH'(c))
-                    - `CLOG2(JOBS_PER_CTA+NSLOTS+1)'(bar_fire && bar_kind == 2'd0 && slot_r[bar_slot].cta == NCTA_WIDTH'(c));
+                    + `CLOG2(JOBS_PER_CTA+NSLOTS+1)'((post || commit_new) && op.header.cta_id == NCTA_WIDTH'(c))
+                    - `CLOG2(JOBS_PER_CTA+NSLOTS+1)'(op_free && slot_r[done_i].cta == NCTA_WIDTH'(c));
+            end
+            if (op_free && young_slot_r[slot_r[done_i].cta] == done_i) begin
+                young_vld_r[slot_r[done_i].cta] <= 1'b0;
+            end
+            if (post || commit_new) begin
+                young_slot_r[op.header.cta_id] <= post_slot;
+                young_vld_r[op.header.cta_id]  <= 1'b1;
             end
 
-            // barrier requests
+            // commit arrivals
             if (bar_fire) begin
-                case (bar_kind)
-                2'd0: state_r[bar_slot] <= TJ_FREE;
-                2'd1: slot_r[bar_slot].pend_empty <= 1'b0;
-                2'd2: slot_r[bar_slot].fill_part <= slot_r[bar_slot].a_tmem ? 2'd2 : 2'd1;
-                default: slot_r[bar_slot].arrived <= 1'b1;
-                endcase
-            end
-
-            // stage loads
-            if (dxa_fire) begin
-                if (dj.fill_part == 2'd2) begin
-                    slot_r[dxa_i].fill_part <= 2'd0;
-                    slot_r[dxa_i].fills     <= dj.fills + 16'd1;
-                    slot_r[dxa_i].fills_kt  <= dj.fills_kt + 16'(dj.kb);
-                    slot_r[dxa_i].fill_k    <= dj.fill_k + dj.k_advance;
-                    if (dj.fill_s == dj.nstages - 4'd1) begin
-                        slot_r[dxa_i].fill_s   <= 4'd0;
-                        slot_r[dxa_i].fill_off <= 16'd0;
-                    end else begin
-                        slot_r[dxa_i].fill_s   <= dj.fill_s + 4'd1;
-                        slot_r[dxa_i].fill_off <= dj.fill_off + dj.stride;
-                    end
+                if (done_frees) begin
+                    state_r[done_i] <= TJ_FREE;
                 end else begin
-                    slot_r[dxa_i].fill_part <= 2'd2;
+                    slot_r[done_i].commit_bar[0] <= slot_r[done_i].commit_bar[1];
+                    slot_r[done_i].commit_cnt[0] <= slot_r[done_i].commit_cnt[1];
+                    slot_r[done_i].ncommit       <= slot_r[done_i].ncommit - 2'd1;
                 end
             end
 
-            // phase completions
-            if (tcu_bar_if.flip_valid) begin
-                for (int i = 0; i < NSLOTS; ++i) begin
-                    if (state_r[i] == TJ_WAIT && slot_r[i].arrived
-                     && tcu_bar_if.flip_addr == bar_addr(slot_r[i].full_bar, slot_r[i].use_s)) begin
-                        slot_r[i].arrived     <= 1'b0;
-                        slot_r[i].stage_ready <= 1'b1;
-                    end
-                end
-            end
-
-            // step fired: count it in flight, release the stage at its end
-            if (job_fire && e_ktile_last_r && e_stage_end_r) begin
-                slot_r[e_slot_r].consumed <= ej.consumed + 16'd1;
-                if (~e_closed_r) begin
-                    slot_r[e_slot_r].pend_empty   <= 1'b1;
-                    slot_r[e_slot_r].pend_empty_s <= e_stage_r;
-                end
-            end
+            // steps in flight
             for (int i = 0; i < NSLOTS; ++i) begin
                 automatic logic [INFLW-1:0] dec = '0;
                 for (int b = 0; b < BLOCK_SIZE; ++b) begin
@@ -998,7 +1127,6 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
                 e_slot_r       <= run_slot_r;
                 e_m_r          <= run_m_r;
                 e_sn_r         <= run_sn_r;
-                e_stage_r      <= rj.use_s;
                 e_uuid_r       <= rj.uuid;
                 e_wid_r        <= rj.wid;
                 e_cta_r        <= rj.cta;
@@ -1006,7 +1134,6 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
                 e_fmt_d_r      <= rj.fmt_d;
                 e_lda_r        <= rj.lda;
                 e_ldb_r        <= rj.ldb;
-                e_closed_r     <= rj.closed;
                 e_a_tmem_r     <= rj.a_tmem;
                 e_sparse_r     <= rj.sparse;
                 e_col0_r       <= load_col0;
@@ -1017,13 +1144,11 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
                 e_b_off_r      <= load_b_off;
                 e_first_r      <= (run_m_r == 1'b0) && (run_n_r == 8'd0);
                 e_zero_r       <= load_zero;
-                e_ktile_last_r <= load_ktile_end;
-                e_stage_end_r  <= load_stage_end;
             end else if (job_fire) begin
                 e_valid_r <= 1'b0;
             end
 
-            // running job: walk m (inner), n, then K-tiles of the stage
+            // running op: walk m (inner), n, then K-tiles
             if (load) begin
                 if (~load_m_last) begin
                     run_m_r <= 1'b1;
@@ -1033,7 +1158,7 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
                         run_n_r <= run_n_r + 8'd1;
                         if (run_sn_r == 4'd15) begin
                             run_sn_r    <= 4'd1;
-                            run_choff_r <= run_choff_r + sn_chunk;
+                            run_choff_r <= run_choff_r + rj.sn_chunk;
                         end else begin
                             run_sn_r <= run_sn_r + 4'd1;
                         end
@@ -1041,29 +1166,20 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
                         run_n_r     <= 8'd0;
                         run_sn_r    <= 4'd0;
                         run_choff_r <= 16'd0;
-                        slot_r[run_slot_r].kt <= rj.kt + 16'd1;
-                        if (rj.ki == rj.kb - 8'd1) begin
-                            slot_r[run_slot_r].ki <= 8'd0;
-                            slot_r[run_slot_r].use_idx <= rj.use_idx + 16'd1;
-                            if (rj.use_s == rj.nstages - 4'd1) begin
-                                slot_r[run_slot_r].use_s   <= 4'd0;
-                                slot_r[run_slot_r].use_off <= 16'd0;
-                            end else begin
-                                slot_r[run_slot_r].use_s   <= rj.use_s + 4'd1;
-                                slot_r[run_slot_r].use_off <= rj.use_off + rj.stride;
-                            end
-                        end else begin
-                            slot_r[run_slot_r].ki <= rj.ki + 8'd1;
-                        end
+                        slot_r[run_slot_r].kt       <= rj.kt + 16'd1;
+                        slot_r[run_slot_r].a_col    <= rj.a_col + COLW'(TCU_WG_FEDP_K);
+                        slot_r[run_slot_r].b_kt_off <= rj.b_kt_off + rj.b_kt_stride;
+                        slot_r[run_slot_r].meta_col <= rj.meta_col + COLW'(rj.meta_cols);
                         if (load_job_end) begin
                             state_r[run_slot_r] <= TJ_DRAIN;
-                            run_valid_r <= 1'b0;
-                        end else if (load_stage_end) begin
-                            state_r[run_slot_r] <= TJ_WAIT;
                             run_valid_r <= 1'b0;
                         end
                     end
                 end
+            end
+
+            if (cp_finish) begin
+                state_r[cp_slot_r] <= TJ_DRAIN;
             end
 
             if (start) begin
@@ -1075,7 +1191,6 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
                 run_choff_r <= 16'd0;
                 pro_idx_r   <= 4'd0;
                 state_r[start_i] <= TJ_RUN;
-                slot_r[start_i].stage_ready <= 1'b0;
             end
         end
     end
@@ -1084,42 +1199,46 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; `ifdef VX_CFG_EXT_DXA_EN
     // Descriptor checks
     // -----------------------------------------------------------------------
 
-    // Columns [base, base + cols) must not overlap D, which the job rewrites.
+    // Columns [base, base + cols) must not overlap D, which the op rewrites.
     function automatic logic bad_columns(input logic [31:0] base, input logic [31:0] cols);
         automatic logic [31:0] d_base = 32'(post_w[2][15:0]);
         automatic logic [31:0] d_end  = d_base + 32'(post_w[0][20:13]) * TC_N;
         return (base + cols > COLS) || (base < d_end && d_base < base + cols);
     endfunction
-    wire [31:0] post_k_tiles  = 32'(post_w[1][31:16]);
+    wire [31:0] post_k_tiles   = 32'(post_w[1][15:0]);
     wire [31:0] post_meta_cols = (2 * 32'(meta_row_bits(post_w[0][4:0])) + 32'd31) >> 5;
-    wire post_bad = post && (
-                       (post_w[0][10] && (TCU_WG_SP_FULLK == 0))
-                    `ifndef VX_CFG_TCU_SPARSE_ENABLE
-                          || post_w[0][10]
-                    `endif
-                          || (post_w[0][10] && bad_columns(32'(post_w[5][15:0]), post_k_tiles * post_meta_cols))
-                          || (post_w[0][12] && bad_columns(32'(post_w[3][15:0]), post_k_tiles * TCU_WG_FEDP_K))
-                          || post_w[1][1]                         // unknown mode
-                          || (post_w[1][2] && post_w[1][1:0] != 2'd0)
-                          || post_w[1][7:4] == 0 || post_w[1][15:8] == 0
-                          || post_w[1][31:16] == 0 || post_w[0][20:13] == 0
-                          || post_w[7][15:0] == 0 || post_w[7][31:16] == 0
-                          || post_w[2][31:16] != 0
-                          || (32'(post_w[2][15:0]) + 32'(post_w[0][20:13]) * TC_N > COLS)
-                          || (post_w[15][3:0] >= post_w[1][7:4]));
-    `RUNTIME_ASSERT (~post_bad, ("%t: %s: unsupported tensor job descriptor (cta=%0d)", $time, INSTANCE_ID, op.header.cta_id))
+    wire [31:0] post_cp_cols   = post_w[3];
+    wire mma_bad = (post_w[0][10] && (TCU_WG_SP_FULLK == 0))
+                `ifndef VX_CFG_TCU_SPARSE_ENABLE
+                    || post_w[0][10]
+                `endif
+                    || (post_w[0][10] && bad_columns(32'(post_w[5][15:0]), post_k_tiles * post_meta_cols))
+                    || (post_w[0][12] && bad_columns(32'(post_w[3][15:0]), post_k_tiles * TCU_WG_FEDP_K))
+                    || post_w[1][31:16] != 0 || post_k_tiles == 0 || post_w[0][20:13] == 0
+                    || post_w[6] != 0 || post_w[7][15:0] == 0
+                    || (post_w[7][31:16] == 0 && (post_w[0][10] || TCU_WG_B_SUB_BLOCKS != 1))
+                    || post_w[2][31:16] != 0
+                    || (32'(post_w[2][15:0]) + 32'(post_w[0][20:13]) * TC_N > COLS);
+    wire cp_bad = (post_cp_cols == 0) || (post_cp_cols % NT != 0)
+               || (post_w[1] % (NT * 4) != 0) || (post_w[2] % (NT * 4) != 0)
+               || post_w[0][31:16] != 0 || (32'(post_w[0][15:0]) + post_cp_cols > COLS);
+    `RUNTIME_ASSERT (~(post && (op_is_cp ? cp_bad : mma_bad)),
+        ("%t: %s: unsupported tensor op (cta=%0d)", $time, INSTANCE_ID, op.header.cta_id))
 
 `ifdef DBG_TRACE_TCU
     always @(posedge clk) begin
-        if (post)
-            `TRACE(3, ("%t: %s tj-post: slot=%0d, cta=%0d, n_frag=%0d, k_tiles=%0d, kb=%0d, nstages=%0d, closed=%0d, taddr=%0d\n",
-                $time, INSTANCE_ID, post_slot, op.header.cta_id, post_w[0][20:13], post_w[1][31:16], post_w[1][15:8], post_w[1][7:4], post_w[1][1:0], post_w[2][15:0]))
-        if (bar_fire)
-            `TRACE(3, ("%t: %s tj-bar: slot=%0d, kind=%0d, addr=%0d\n", $time, INSTANCE_ID, bar_slot, bar_kind, bar_req.addr))
-        if (dxa_fire)
-            `TRACE(3, ("%t: %s tj-fill: slot=%0d, stage=%0d, part=%0d, c0=%0d, c1=%0d\n", $time, INSTANCE_ID, dxa_i, dj.fill_s, dj.fill_part, dxa_req.coords[0], dxa_req.coords[1]))
+        if (post && op_is_mma)
+            `TRACE(3, ("%t: %s tc-mma: slot=%0d, cta=%0d, n_frag=%0d, k_tiles=%0d, taddr=%0d\n",
+                $time, INSTANCE_ID, post_slot, op.header.cta_id, post_w[0][20:13], post_w[1][15:0], post_w[2][15:0]))
+        if (post && op_is_cp)
+            `TRACE(3, ("%t: %s tc-cp: slot=%0d, cta=%0d, cols=%0d, taddr=%0d\n",
+                $time, INSTANCE_ID, post_slot, op.header.cta_id, post_w[3], post_w[0][15:0]))
+        if (bar_fire && ~done_silent)
+            `TRACE(3, ("%t: %s tc-commit: slot=%0d, addr=%0d\n", $time, INSTANCE_ID, done_i, bar_req.addr))
         if (start)
             `TRACE(3, ("%t: %s tj-run: slot=%0d, kt=%0d\n", $time, INSTANCE_ID, start_i, slot_r[start_i].kt))
+        if (cp_start)
+            `TRACE(3, ("%t: %s tc-cp-run: slot=%0d, cols=%0d\n", $time, INSTANCE_ID, cpst_i, slot_r[cpst_i].k_tiles))
     end
 `endif
 

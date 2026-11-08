@@ -14,8 +14,7 @@
 `include "VX_define.vh"
 
 module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
-    parameter `STRING INSTANCE_ID = "",
-    parameter CORE_ID = 0
+    parameter `STRING INSTANCE_ID = ""
 ) (
     `SCOPE_IO_DECL
 
@@ -37,9 +36,8 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
 
 `ifdef VX_CFG_TCU_TMEM_ENABLE
-    // Tensor-job barrier operations and stage loads
+    // tc.commit barrier arrivals
     VX_tcu_bar_if.master    tcu_bar_if,
-    VX_dxa_req_bus_if.master tcu_dxa_req_bus_if,
 `endif
 
     // Inputs
@@ -54,7 +52,6 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     `STATIC_ASSERT (BLOCK_SIZE == `VX_CFG_ISSUE_WIDTH, ("must be full issue execution"));
     `STATIC_ASSERT (NUM_LANES == `VX_CFG_NUM_THREADS, ("must be full warp execution"));
     `SCOPE_IO_SWITCH (BLOCK_SIZE);
-    `UNUSED_PARAM (CORE_ID)
 
     VX_execute_if #(
         .data_t (tcu_execute_t)
@@ -116,6 +113,12 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire                  job_a_fill_valid;
     wire [3:0]            job_a_fill_k;
     wire [BLOCK_SIZE-1:0][`VX_CFG_NUM_THREADS-1:0][31:0] job_a_fill_data;
+    VX_mem_bus_if #(
+        .DATA_SIZE  (`VX_CFG_LMEM_NUM_BANKS * (`VX_CFG_XLEN / 8)),
+        .TAG_WIDTH  (TCU_LMEM_BLK_TAG_W),
+        .ATTR_WIDTH (LMEM_DMA_ATTR_W),
+        .ADDR_WIDTH (`VX_CFG_LMEM_LOG_SIZE - $clog2(`VX_CFG_XLEN / 8) - $clog2(`VX_CFG_LMEM_NUM_BANKS))
+    ) job_cp_lmem_if();
 `ifdef VX_CFG_TCU_SPARSE_ENABLE
     wire [BLOCK_SIZE-1:0][TCU_MAX_META_BLOCK_WIDTH-1:0] job_meta;
     wire [BLOCK_SIZE-1:0][TCU_MAX_META_BLOCK_WIDTH-1:0] job_meta_hi;
@@ -135,8 +138,11 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     `ifdef VX_CFG_TCU_TMEM_ENABLE
         wire is_tj_op = (op_type == INST_OP_BITS'(INST_TCU_TMEM_LD))
                      || (op_type == INST_OP_BITS'(INST_TCU_TMEM_ST))
-                     || (op_type == INST_OP_BITS'(INST_TCU_TJ_DESC))
-                     || (op_type == INST_OP_BITS'(INST_TCU_TJ_POST));
+                     || (op_type == INST_OP_BITS'(INST_TCU_TC_CP))
+                     || (op_type == INST_OP_BITS'(INST_TCU_TMEM_ALLOC))
+                     || (op_type == INST_OP_BITS'(INST_TCU_TMEM_DEALLOC))
+                     || (op_type == INST_OP_BITS'(INST_TCU_TC_MMA))
+                     || (op_type == INST_OP_BITS'(INST_TCU_TC_COMMIT));
         assign tj_op_valid[bi] = per_block_execute_if[bi].valid && is_tj_op;
         assign tj_op_data[bi]  = per_block_execute_if[bi].data;
         wire warp_core_valid = per_block_execute_if[bi].valid && !is_tcu_ld && !is_tj_op;
@@ -273,6 +279,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .job_a_fill_valid (job_a_fill_valid),
         .job_a_fill_k   (job_a_fill_k),
         .job_a_fill_data (job_a_fill_data),
+        .job_cp_lmem_if (job_cp_lmem_if),
     `endif
         .tbuf_rs1_data  (tbuf_rs1_data),
         .tbuf_rs2_data  (tbuf_rs2_data),
@@ -331,7 +338,6 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `ifdef VX_CFG_TCU_TMEM_ENABLE
     VX_tcu_tjob #(
         .INSTANCE_ID (`SFORMATF(("%s-tjob", INSTANCE_ID))),
-        .CORE_ID     (CORE_ID),
         .BLOCK_SIZE  (BLOCK_SIZE)
     ) tjob (
         .clk            (clk),
@@ -357,7 +363,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .jres_valid     (jres_valid),
         .jres_data      (jres_data),
         .tcu_bar_if     (tcu_bar_if),
-        .dxa_req_bus_if (tcu_dxa_req_bus_if)
+        .cp_lmem_if     (job_cp_lmem_if)
     );
 `endif
 

@@ -31,6 +31,7 @@ uint32_t xl = 64;
 uint32_t xn = 32;
 uint32_t xd = 64;
 uint32_t xb = 2;
+uint32_t xc = 1;
 
 // fp16 rounding of P and MUFU's approximations.
 constexpr double kMaxRelError = 0.01;
@@ -66,12 +67,13 @@ static double htod(uint16_t h) {
 
 int main(int argc, char* argv[]) {
   int c;
-  while ((c = getopt(argc, argv, "l:n:d:b:")) != -1) {
+  while ((c = getopt(argc, argv, "l:n:d:b:c:")) != -1) {
     switch (c) {
     case 'l': xl = atoi(optarg); break;
     case 'n': xn = atoi(optarg); break;
     case 'd': xd = atoi(optarg); break;
     case 'b': xb = atoi(optarg); break;
+    case 'c': xc = atoi(optarg); break;
     default: return -1;
     }
   }
@@ -87,24 +89,24 @@ int main(int argc, char* argv[]) {
 
   const uint32_t warps = issue_width;
   const uint32_t M = warps * cfg::xtileM;
+  const uint32_t MT = M * xc;
   const uint32_t L = xl, N = xn, D = xd, NB = xb, LT = L * NB;
   const uint32_t nr = WGMMA_NRC;
-  if ((L % (2 * nr)) || (N % nr) || (D % cfg::tileK) || (L % cfg::tileK)) {
+  const uint32_t stage_k = KB * cfg::tileK;
+  if ((L % (2 * nr)) || (N % nr) || (D % stage_k) || (L % stage_k)) {
     std::cout << "Error: L must be a multiple of " << 2 * nr << ", N of " << nr
-              << ", D and L of tileK=" << cfg::tileK << std::endl;
+              << ", D and L of KB*tileK=" << stage_k << std::endl;
     return -1;
   }
 
   // K_T and V_T are the K-major forms.
-  std::vector<uint16_t> h_Q(size_t(M) * D), h_KT(size_t(LT) * D), h_VT(size_t(N) * LT);
+  std::vector<uint16_t> h_Q(size_t(MT) * D), h_KT(size_t(LT) * D), h_VT(size_t(N) * LT);
   for (auto& x : h_Q) x = gen_fp16();
   for (auto& x : h_KT) x = gen_fp16();
   for (auto& x : h_VT) x = gen_fp16();
 
-  const uint32_t stage_k = cfg::tileK;
   uint32_t smem_size = 2 * (M * stage_k + stage_k * std::max(L, N)) * sizeof(uint16_t);
-  const uint32_t tmem_cols = L + L / 2 + N;
-  smem_size = std::max(smem_size, (tmem_cols + 1) * ((1u << VX_CFG_LMEM_LOG_SIZE) / VX_CFG_TCU_TMEM_COLS));
+  smem_size += TMEM_SLOT_BYTES;
 
   kernel_arg.L = L; kernel_arg.N = N; kernel_arg.D = D; kernel_arg.NB = NB;
   kernel_arg.scale = 1.0f / std::sqrt(float(D));
@@ -112,7 +114,7 @@ int main(int argc, char* argv[]) {
   RT_CHECK(vx_buffer_create(device, h_Q.size() * 2, VX_MEM_READ, &buffers[0]));
   RT_CHECK(vx_buffer_create(device, h_KT.size() * 2, VX_MEM_READ, &buffers[1]));
   RT_CHECK(vx_buffer_create(device, h_VT.size() * 2, VX_MEM_READ, &buffers[2]));
-  RT_CHECK(vx_buffer_create(device, size_t(M) * N * 4, VX_MEM_WRITE, &buffers[3]));
+  RT_CHECK(vx_buffer_create(device, size_t(MT) * N * 4, VX_MEM_WRITE, &buffers[3]));
   RT_CHECK(vx_buffer_address(buffers[0], &q_addr));
   RT_CHECK(vx_buffer_address(buffers[1], &kt_addr));
   RT_CHECK(vx_buffer_address(buffers[2], &vt_addr));
@@ -125,14 +127,14 @@ int main(int argc, char* argv[]) {
     RT_CHECK(vortex::dxa::program_2d(queue, slot, addr, k, rows, k * 2, stage_k, tile_rows, 2));
     RT_CHECK(vortex::dxa::set_layout(queue, slot, vortex::dxa::Layout::RowMajor, 2, 2));
   };
-  program(0, q_addr, D, M, M);
+  program(0, q_addr, D, MT, M);
   program(1, kt_addr, D, LT, L);
   program(2, vt_addr, LT, N, N);
 
   RT_CHECK(vx_module_load_file(device, "kernel.vxbin", &module_));
   RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
 
-  std::vector<float> h_O(size_t(M) * N);
+  std::vector<float> h_O(size_t(MT) * N);
 
   vx_event_h launch_ev = nullptr;
   vx_launch_info_t li = {};
@@ -141,7 +143,7 @@ int main(int argc, char* argv[]) {
   li.args_host    = &kernel_arg;
   li.args_size    = sizeof(kernel_arg);
   li.ndim         = 2;
-  li.grid_dim[0]  = 1;
+  li.grid_dim[0]  = xc;
   li.grid_dim[1]  = 1;
   li.block_dim[0] = warps * uint32_t(NT);
   li.block_dim[1] = 1;
@@ -158,7 +160,7 @@ int main(int argc, char* argv[]) {
   double max_err = 0;
   const double scale = kernel_arg.scale;
   std::vector<double> w(LT);
-  for (uint32_t m = 0; m < M; ++m) {
+  for (uint32_t m = 0; m < MT; ++m) {
     double s_max = -INFINITY;
     for (uint32_t l = 0; l < LT; ++l) {
       double acc = 0;

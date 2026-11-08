@@ -259,9 +259,9 @@ tests:
 
   # Not warp-width swept: the tensor-core fragment layout is defined over a fixed
   # lane count, which the configs pin.
-# Tensor memory: barrier-triggered tensor jobs with the accumulator in TMEM.
-# The producer warp issues the stage loads (CONSUME) or the job does (CLOSED).
-- id: sgemm_tcu_tmem-consume
+# Tensor memory: the accumulator in TMEM. A producer warp stages the K loop
+# for an MMA warp's tc.mma ops.
+- id: sgemm_tcu_tmem
   via: blackbox
   drivers:
   - simx
@@ -272,7 +272,7 @@ tests:
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
     -DVX_CFG_TCU_FEDP2K -DVX_CFG_TCU_TMEM_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
     -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32 -DPIPE_N=2 -DB_KMAJOR
-- id: model_parity-tmem-consume
+- id: model_parity-tmem
   check: model_parity
   via: blackbox
   app: sgemm_tcu_tmem
@@ -281,16 +281,7 @@ tests:
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
     -DVX_CFG_TCU_FEDP2K -DVX_CFG_TCU_TMEM_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
     -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32 -DPIPE_N=2 -DB_KMAJOR
-- id: model_parity-tmem-closed
-  check: model_parity
-  via: blackbox
-  app: sgemm_tcu_tmem
-  xlen: [32]
-  args: -m64 -n64 -k256
-  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
-    -DVX_CFG_TCU_FEDP2K -DVX_CFG_TCU_TMEM_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
-    -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32 -DPIPE_N=2 -DB_KMAJOR -DTMEM_CLOSED
-# Sparse jobs: 2:4 compressed A, K-tile metadata read from TMEM.
+# Sparse MMAs: 2:4 compressed A, K-tile metadata read from TMEM.
 - id: sgemm_tcu_tmem-sparse
   via: blackbox
   drivers:
@@ -301,7 +292,7 @@ tests:
   args: -m64 -n64 -k64
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
     -DVX_CFG_TCU_FEDP2K -DVX_CFG_TCU_TMEM_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
-    -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32 -DPIPE_N=2 -DB_KMAJOR -DTMEM_SPARSE -DTMEM_CLOSED
+    -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32 -DPIPE_N=2 -DB_KMAJOR -DTMEM_SPARSE
 - id: model_parity-tmem-sparse
   check: model_parity
   via: blackbox
@@ -310,8 +301,29 @@ tests:
   args: -m64 -n64 -k256
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
     -DVX_CFG_TCU_FEDP2K -DVX_CFG_TCU_TMEM_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
-    -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32 -DPIPE_N=2 -DB_KMAJOR -DTMEM_SPARSE -DTMEM_CLOSED
-# A from TMEM: the job reads A over the TMEM port instead of loading a stage.
+    -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32 -DPIPE_N=2 -DB_KMAJOR -DTMEM_SPARSE
+# tc.cp (tcgen05.cp): the TCU moves the staged sparse metadata into TMEM.
+- id: sgemm_tcu_tmem-sparse-cp
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm_tcu_tmem
+  xlen: [32]
+  args: -m64 -n64 -k64
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_FEDP2K -DVX_CFG_TCU_TMEM_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
+    -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32 -DPIPE_N=2 -DB_KMAJOR -DTMEM_SPARSE -DTMEM_CP
+- id: model_parity-tmem-sparse-cp
+  check: model_parity
+  via: blackbox
+  app: sgemm_tcu_tmem
+  xlen: [32]
+  args: -m64 -n64 -k256
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_FEDP2K -DVX_CFG_TCU_TMEM_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
+    -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32 -DPIPE_N=2 -DB_KMAJOR -DTMEM_SPARSE -DTMEM_CP
+# A from TMEM: the MMA reads A over the TMEM port instead of loading a stage.
 - id: model_parity-tmem-a
   check: model_parity
   via: blackbox
@@ -320,7 +332,17 @@ tests:
   args: -m64 -n64 -k256
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
     -DVX_CFG_TCU_FEDP2K -DVX_CFG_TCU_TMEM_ENABLE -DVX_CFG_TCU_TMEM_COLS=512 -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
-    -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32 -DPIPE_N=2 -DB_KMAJOR -DTMEM_A -DTMEM_CLOSED
+    -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32 -DPIPE_N=2 -DB_KMAJOR -DTMEM_A
+# Block-major B (ldb = 0): row-major B staged by the DXA BlockMajor layout.
+- id: model_parity-tmem-b-blockmajor
+  check: model_parity
+  via: blackbox
+  app: sgemm_tcu_tmem
+  xlen: [32]
+  args: -m64 -n64 -k256
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_FEDP2K -DVX_CFG_TCU_TMEM_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
+    -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32 -DPIPE_N=2
 # Two chained GEMMs: S = Q.K^T, P = fp16(S) in TMEM, O = P.V^T with A from TMEM.
 - id: sgemm_tcu_tmem_chain
   via: blackbox
@@ -332,4 +354,38 @@ tests:
   args: -l64 -n32 -k64
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
     -DVX_CFG_TCU_FEDP2K -DVX_CFG_TCU_TMEM_ENABLE -DVX_CFG_TCU_TMEM_COLS=512 -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
+    -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32
+# FlashAttention on TMEM: online softmax in warps between S = Q.K^T and O += P.V^T MMAs.
+- id: flashattention_tmem
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: flashattention_tmem
+  xlen: [32]
+  args: -l64 -n32 -d64 -b2 -c2
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_FEDP2K -DVX_CFG_TCU_TMEM_ENABLE -DVX_CFG_TCU_TMEM_COLS=512 -DVX_CFG_EXT_MUFU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
+    -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32
+# FlashAttention-4 schedule: two Q tiles ping-pong between softmax warp groups and
+# the TCU, so TMEM transfers run alongside the CTA's MMAs on other columns.
+- id: flashattention4_tmem
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: flashattention4_tmem
+  xlen: [32]
+  args: -l64 -n32 -d64 -b2 -c1
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_FEDP2K -DVX_CFG_TCU_TMEM_ENABLE -DVX_CFG_TCU_TMEM_COLS=512 -DVX_CFG_EXT_MUFU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
+    -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32
+- id: model_parity-flashattention4-tmem
+  check: model_parity
+  via: blackbox
+  app: flashattention4_tmem
+  xlen: [32]
+  args: -l64 -n32 -d64 -b4 -c1
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_FEDP2K -DVX_CFG_TCU_TMEM_ENABLE -DVX_CFG_TCU_TMEM_COLS=512 -DVX_CFG_EXT_MUFU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
     -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32

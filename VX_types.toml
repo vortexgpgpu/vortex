@@ -787,6 +787,18 @@ VX_CSR_MPM_TCU_TBUF_CACHE_HITS= 0xB04  # B tile reuse hits from tile buffer cach
 VX_CSR_MPM_TCU_TBUF_CACHE_HITS_H = 0xB84
 VX_CSR_MPM_TCU_LMEM_READS     = 0xB05  # tile buffer local memory reads
 VX_CSR_MPM_TCU_LMEM_READS_H   = 0xB85
+# Each cycle falls in one bucket: MMA busy (block-cycles), else operand wait,
+# other op activity, or idle.
+VX_CSR_MPM_TCU_MMA_BUSY       = 0xB06  # block-cycles an MMA step fired
+VX_CSR_MPM_TCU_MMA_BUSY_H     = 0xB86
+VX_CSR_MPM_TCU_OPND_WAITS     = 0xB07  # cycles: MMA waits on A/B operands (tile buffers, TMEM A)
+VX_CSR_MPM_TCU_OPND_WAITS_H   = 0xB87
+VX_CSR_MPM_TCU_JOB_OTHER      = 0xB08  # cycles: op start, drain or tc.cp
+VX_CSR_MPM_TCU_JOB_OTHER_H    = 0xB88
+VX_CSR_MPM_TCU_IDLE           = 0xB09  # cycles: no MMA work
+VX_CSR_MPM_TCU_IDLE_H         = 0xB89
+VX_CSR_MPM_TCU_TMEM_XFERS     = 0xB0A  # tmem.ld/st transfers
+VX_CSR_MPM_TCU_TMEM_XFERS_H   = 0xB8A
 
 [csr_mpm_tex]
 # PERF: texture unit (per-core; summed across blocks)

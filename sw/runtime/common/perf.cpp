@@ -678,6 +678,19 @@ extern "C" vx_result_t vx_device_dump_perf(vx_device_h hdevice, FILE *stream) {
       perf_print_core(stream, core_id,
         "tcu: tbuf_stalls=%" PRIu64 ", tbuf_cache_hits=%" PRIu64 ", lmem_reads=%" PRIu64,
         tbuf_stalls, tbuf_cache_hits, lmem_reads);
+      uint64_t cycles = 0, busy = 0, opnd = 0, other = 0, idle = 0, xfers = 0;
+      CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MCYCLE,              core_id, &cycles), { return err; });
+      CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_TCU_MMA_BUSY,    core_id, &busy),   { return err; });
+      CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_TCU_OPND_WAITS,  core_id, &opnd),   { return err; });
+      CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_TCU_JOB_OTHER,   core_id, &other),  { return err; });
+      CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_TCU_IDLE,        core_id, &idle),   { return err; });
+      CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_TCU_TMEM_XFERS,  core_id, &xfers),  { return err; });
+      // One TCU block per issue slot.
+      uint64_t blocks = issue_width;
+      perf_print_core(stream, core_id,
+        "tcu: mma_util=%d%%, busy_block_cycles=%" PRIu64 ", opnd_waits=%" PRIu64
+        ", job_other=%" PRIu64 ", idle=%" PRIu64 ", tmem_xfers=%" PRIu64,
+        calc_percent(busy, cycles * blocks), busy, opnd, other, idle, xfers);
       tot_tbuf_stalls  += tbuf_stalls;
       tot_tbuf_cache_hits += tbuf_cache_hits;
       tot_lmem_reads   += lmem_reads;

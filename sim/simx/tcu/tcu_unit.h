@@ -21,7 +21,6 @@
 #include "func_unit.h"
 #include "tcu_tbuf.h"
 #ifdef VX_CFG_TCU_TMEM_ENABLE
-#include "dxa/dxa_unit.h"
 #endif
 
 // The TCU metadata SRAM is present when any metadata-consuming mode (MX or
@@ -66,9 +65,16 @@ public:
 		uint64_t tbuf_stalls = 0;      // cycles a WGMMA uop waits on its A stripe or the B row, summed over buffers
 		uint64_t tbuf_cache_hits = 0;  // cycles the resident B row serves the representative block
 		uint64_t lmem_reads = 0;       // bank-row reads issued by the A and B buffers
-		uint64_t tj_mma_uops = 0;      // tensor-job MMA steps (all blocks in lockstep)
-		uint64_t tj_stage_waits = 0;   // cycles a tensor job waits on a stage's full barrier
-		uint64_t tmem_stalls = 0;      // cycles a TMEM transfer waits on its CTA's jobs
+		uint64_t tj_mma_uops = 0;      // tc.mma steps (all blocks in lockstep)
+		uint64_t tmem_stalls = 0;      // cycles a TMEM transfer waits on its CTA's ops
+		uint64_t tmem_xfers = 0;       // tmem.ld/st transfers
+		// Every cycle falls in one bucket: an MMA step fired (block-cycles, so
+		// utilization is busy / (cycles * blocks)), else operands, other op
+		// activity, or idle.
+		uint64_t mma_busy = 0;
+		uint64_t opnd_waits = 0;
+		uint64_t job_other = 0;
+		uint64_t idle = 0;
 
 		PerfStats& operator+=(const PerfStats& rhs) {
 			this->latency          += rhs.latency;
@@ -76,8 +82,12 @@ public:
 			this->tbuf_cache_hits  += rhs.tbuf_cache_hits;
 			this->lmem_reads       += rhs.lmem_reads;
 			this->tj_mma_uops      += rhs.tj_mma_uops;
-			this->tj_stage_waits   += rhs.tj_stage_waits;
 			this->tmem_stalls      += rhs.tmem_stalls;
+			this->tmem_xfers       += rhs.tmem_xfers;
+			this->mma_busy         += rhs.mma_busy;
+			this->opnd_waits       += rhs.opnd_waits;
+			this->job_other        += rhs.job_other;
+			this->idle             += rhs.idle;
 			return *this;
 		}
 	};
@@ -93,10 +103,6 @@ public:
   SimChannel<LsuRsp> agu_rsp_in;
 #endif
 
-#ifdef VX_CFG_TCU_TMEM_ENABLE
-  // CLOSED tensor jobs issue their stage loads to the DXA engine.
-  SimChannel<DxaReq> dxa_req_out;
-#endif
 
 	void wmma(uint32_t wid,
 	          uint32_t fmt_s,

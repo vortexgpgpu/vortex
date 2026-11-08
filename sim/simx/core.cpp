@@ -663,6 +663,11 @@ public:
         if (operands_.at(iw)->Input.try_send(uop_trace)) {
           // capture register operands at issue (Operands owns regfile)
           operands_.at(iw)->fetch_operands(uop_trace);
+          // A macro leaves the pending list once its last micro-op issues, so
+          // its micro-ops are pending until they commit, as in RTL.
+          if (uop_trace != trace) {
+            pending_instrs_.push_back(uop_trace);
+          }
           // spend a dispatch credit for the target FU
           ++fu_credits_.at(iw).at((int)uop_trace->fu_type);
           // An issue candidate is staged from the cycle after both the warp's

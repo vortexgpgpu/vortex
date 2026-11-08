@@ -791,8 +791,11 @@ enum class TcuType {
   TCU_LD,     // Warp-level metadata load. rd[4] selects sparse/MX namespace.
   TMEM_LD,    // TMEM -> FP registers, one uop per register.
   TMEM_ST,    // FP registers -> TMEM, one uop per register.
-  TJ_DESC,    // Tensor-job descriptor words 0..7.
-  TJ_POST,    // Tensor-job descriptor words 8..15; enqueues the job.
+  TMEM_ALLOC,   // rd = first column of rs1 TMEM columns, or ~0 if none fit.
+  TMEM_DEALLOC, // Frees rs2 TMEM columns from column rs1.
+  TC_MMA,       // tcgen05.mma: descriptor words 0..7.
+  TC_COMMIT,    // tcgen05.commit: arrive (count rs2) on barrier rs1 after earlier ops.
+  TC_CP,        // tcgen05.cp: shared memory -> TMEM columns.
 };
 
 struct IntrTcuArgs {
@@ -840,8 +843,11 @@ inline std::ostream &operator<<(std::ostream &os, const TcuType& type) {
   case TcuType::TCU_LD:     os << "TCU_LD"; break;
   case TcuType::TMEM_LD:    os << "TMEM_LD"; break;
   case TcuType::TMEM_ST:    os << "TMEM_ST"; break;
-  case TcuType::TJ_DESC:    os << "TJ_DESC"; break;
-  case TcuType::TJ_POST:    os << "TJ_POST"; break;
+  case TcuType::TMEM_ALLOC:   os << "TMEM_ALLOC"; break;
+  case TcuType::TMEM_DEALLOC: os << "TMEM_DEALLOC"; break;
+  case TcuType::TC_MMA:       os << "TC_MMA"; break;
+  case TcuType::TC_COMMIT:    os << "TC_COMMIT"; break;
+  case TcuType::TC_CP:        os << "TC_CP"; break;
   default:
     assert(false);
   }

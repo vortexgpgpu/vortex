@@ -392,9 +392,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         .active_warps(active_warps),
         .gbar_bus_if(gbar_bus_if),
         .unlock_valid(bar_unlock_valid),
-        .unlock_mask(bar_unlock_mask),
-        .flip_valid (warp_ctl_if.bar_flip_valid),
-        .flip_addr  (warp_ctl_if.bar_flip_addr)
+        .unlock_mask(bar_unlock_mask)
     );
 
     // split/join handling
@@ -578,7 +576,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             if (decode_sched_if.valid && decode_sched_if.unlock) begin
                 timeout_enable <= 1;
             end
-            // Barrier traffic from async units (DXA, tensor jobs) is progress while every warp waits.
+            // Barrier traffic from async units (DXA, tc.commit) is progress while every warp waits.
             if (timeout_enable && active_warps !=0 && active_warps == stalled_warps && !warp_ctl_if.bar_valid) begin
                 timeout_ctr <= timeout_ctr + 1;
             end else if (active_warps == 0 || active_warps != stalled_warps || warp_ctl_if.bar_valid) begin

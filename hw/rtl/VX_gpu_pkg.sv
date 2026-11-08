@@ -630,13 +630,16 @@ package VX_gpu_pkg;
     localparam INST_TCU_LD         = 4'h5;
 `endif
 `ifdef VX_CFG_TCU_TMEM_ENABLE
-    // TMEM transfers (one uop per register) and tensor-job descriptor words.
+    // TMEM transfers (one uop per register), allocation and tcgen05-style ops.
     // op_args.tcu: fmt_s = register count - 1 (macro), fmt_d = register index
     // (uop), a_from_smem = one lane per register.
     localparam INST_TCU_TMEM_LD    = 4'h6;
     localparam INST_TCU_TMEM_ST    = 4'h7;
-    localparam INST_TCU_TJ_DESC    = 4'h8;
-    localparam INST_TCU_TJ_POST    = 4'h9;
+    localparam INST_TCU_TC_CP      = 4'h8;
+    localparam INST_TCU_TMEM_ALLOC   = 4'hA;
+    localparam INST_TCU_TMEM_DEALLOC = 4'hB;
+    localparam INST_TCU_TC_MMA       = 4'hC;
+    localparam INST_TCU_TC_COMMIT    = 4'hD;
 `endif
     localparam INST_TCU_BITS = 4;
 `endif
@@ -690,12 +693,10 @@ package VX_gpu_pkg;
     } txbar_t;
 
 `ifdef VX_CFG_TCU_TMEM_ENABLE
-    // Barrier operation issued by the tensor-job sequencer.
+    // tc.commit arrival.
     typedef struct packed {
         logic [BAR_ADDR_W-1:0] addr;
-        logic                  is_event; // 0 = arrive, 1 = transaction event
-        logic                  phase;    // event: 1 = attach, 0 = release
-        logic [BAR_SIZE_W-1:0] size_m1;  // arrive count - 1, attach count - 1
+        logic [BAR_SIZE_W-1:0] size_m1;  // arrival count - 1
     } tcu_bar_t;
 `endif
 
@@ -1451,12 +1452,11 @@ package VX_gpu_pkg;
     localparam DXA_LMEM_OUT_TAG_W = DXA_LMEM_TAG_W + `ARB_SEL_BITS(`VX_CFG_NUM_DXA_CORES, 1);
 
     // TCU lmem tag and attr widths for DMA arb.
-    // Masters into the TCU LMEM port: BLOCK_SIZE abufs + 1 shared bbuf.
-    // (Sparse metadata does not fetch from LMEM — it preloads into the
-    // VX_tcu_sp_meta SRAM via TCU_LD ahead of the MMA dispatch.)
+    // Masters into the TCU LMEM port: BLOCK_SIZE abufs + 1 shared bbuf, and
+    // the tensor-job copy engine in TMEM builds.
     localparam TCU_LMEM_ATTR_W = 1;
     localparam TCU_LMEM_BLK_TAG_W = UUID_WIDTH + 1;
-    localparam TCU_LMEM_NUM_MASTERS = `VX_CFG_NUM_TCU_BLOCKS + 1;
+    localparam TCU_LMEM_NUM_MASTERS = `VX_CFG_NUM_TCU_BLOCKS + 1 + `VX_CFG_TCU_TMEM_ENABLED;
     localparam TCU_LMEM_TAG_W = TCU_LMEM_BLK_TAG_W + `ARB_SEL_BITS(TCU_LMEM_NUM_MASTERS, 1);
 
     // LMEM DMA port parameters. (The raster FWD needs no LMEM DMA agent —
