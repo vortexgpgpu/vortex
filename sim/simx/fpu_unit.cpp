@@ -538,10 +538,10 @@ void FpuUnit::on_tick() {
         }
         batch_idx_.at(b) = 0;
         this->execute(trace);
-        // The result crosses its class's registered output buffer to the
+        // The result passes its class's zero-latency skid register to the
         // response arbiter, and keeps its tag until the lane gather, or
         // without one the commit arbiter, takes it.
-        uint64_t ready = SimPlatform::instance().cycles() + this->latency_of(trace) + 1;
+        uint64_t ready = SimPlatform::instance().cycles() + this->latency_of(trace);
         results_.at(b).at(this->pipe_of(trace)).push_back({ready, trace});
         ++num_results_.at(b);
         input.pop();

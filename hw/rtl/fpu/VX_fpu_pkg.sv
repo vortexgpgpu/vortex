@@ -40,11 +40,6 @@ package VX_fpu_pkg;
 
     `DECL_EXECUTE_T (fpu, `VX_CFG_NUM_FPU_LANES);
 
-    // Output buffer of every FPU core. Registered, so that each core's clock
-    // enable, which fans out to all of its units, starts from a register and
-    // not from the response arbiter's grant.
-    localparam FPU_CORE_OUT_BUF = 2;
-
 endpackage
 
 `endif // VX_FPU_PKG_VH

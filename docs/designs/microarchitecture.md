@@ -74,6 +74,9 @@ Vortex has a 6-stage pipeline:
     - Handle warp matrix multiply accumulate operations
 - **Commit**
   - Write result back to the register file and update the Scoreboard.
+  - One writeback beat per issue slice per cycle, granted by fixed priority:
+    FPU, ALU, LSU, SFU, TCU. The FPU goes first because each of its results
+    holds one of its few tags until it commits.
   - A unit with fewer lanes than a SIMD slice (`NUM_*_LANES` < `SIMD_WIDTH`)
     runs each slice of an instruction in several passes; its lane gather holds
     the earlier passes and commits the slice in one writeback beat, with the

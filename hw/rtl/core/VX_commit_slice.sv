@@ -38,14 +38,22 @@ module VX_commit_slice import VX_gpu_pkg::*; #(
     wire [NUM_EX_UNITS-1:0][PER_ISSUE_WARPS+OUT_DATAW-1:0] data_in;
     wire [NUM_EX_UNITS-1:0]            ready_in;
 
+    // Fixed priority: the FPU first, then the other units in EX order (ALU,
+    // LSU, SFU, TCU). Without a lane gather an FPU result keeps its tag until
+    // granted, and the FPU has few, so a wait behind ALU or LSU results would
+    // stall its issue. The same tags bound the beats the FPU can take.
+    //
     // Decoded ahead of the output register so each warp's release reads
     // its own flop.
     for (genvar j = 0; j < NUM_EX_UNITS; ++j) begin : g_data_in
+        localparam HAS_FPU = (`VX_CFG_EXT_F_ENABLED != 0);
+        localparam ARB_IDX = (HAS_FPU && j == EX_FPU) ? 0 :
+                             ((HAS_FPU && j < EX_FPU) ? (j + 1) : j);
         wire [PER_ISSUE_WARPS-1:0] eop_wis = PER_ISSUE_WARPS'(commit_if[j].data.eop)
                                           << wid_to_wis(commit_if[j].data.wid);
-        assign valid_in[j] = commit_if[j].valid;
-        assign data_in[j]  = {eop_wis, commit_if[j].data};
-        assign commit_if[j].ready = ready_in[j];
+        assign valid_in[ARB_IDX] = commit_if[j].valid;
+        assign data_in[ARB_IDX]  = {eop_wis, commit_if[j].data};
+        assign commit_if[j].ready = ready_in[ARB_IDX];
     end
 
     VX_stream_arb #(

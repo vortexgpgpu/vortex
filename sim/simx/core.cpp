@@ -1046,8 +1046,10 @@ public:
     }
 
     // process completed instructions: one beat per issue slice per cycle,
-    // granted fixed-priority in EX-unit order (ALU highest, then LSU, SFU,
-    // FPU, TCU) — a busy higher class starves lower ones' writebacks.
+    // granted fixed-priority: the FPU first, then ALU, LSU, SFU and TCU.
+    // Without a lane gather an FPU result keeps its tag until granted, and the
+    // FPU has few, so waiting behind ALU or LSU results would stall its issue.
+    // The same tags bound the beats the FPU can take.
     //
     // A narrow unit's lane gather holds the passes of one SIMD slice of an
     // instruction and commits them in the beat of the pass that completes the
@@ -1055,7 +1057,7 @@ public:
     // result does not continue leaves in a beat of its own, ahead of that
     // result.
     static constexpr FUType kCommitPrio[] = {
-      FUType::ALU, FUType::LSU, FUType::SFU, FUType::FPU,
+      FUType::FPU, FUType::ALU, FUType::LSU, FUType::SFU,
     #ifdef VX_CFG_EXT_TCU_ENABLE
       FUType::TCU,
     #endif

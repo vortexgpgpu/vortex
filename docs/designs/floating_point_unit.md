@@ -203,35 +203,35 @@ In `VX_fpu_std`, division and square root share one unit and serializer, so
 
 ### 5.3 The result path
 
-A result reaches the commit stage two cycles after its core's latency `L`,
+A result reaches the commit stage one cycle after its core's latency `L`,
 counted from the last batch:
 
 | cycle | where the result is |
 |---|---|
-| `L` | the core's last unit stage |
-| `L + 1` | the core's output buffer (`FPU_CORE_OUT_BUF` in `VX_fpu_pkg`): two entries, registered output and ready |
-| `L + 2` | the response arbiter's registered output, read by the commit arbiter or the lane gather |
+| `L` | the core's last unit stage, passing the core's skid register |
+| `L + 1` | the response arbiter's registered output, read by the commit arbiter or the lane gather |
 
-The core output buffer costs a cycle on every operation, and with the default
-tag store of two entries (§10) every cycle of latency is a cycle of FPU
-throughput. It stays because it registers the ready that drives the core's
-clock enable, a net that reaches every unit of the core: the vendor
-operators' clock enables and every pipeline register. Without it the enable
-starts at the response arbiter's round-robin state, and Beacon counts every
-enable two to three levels deeper, on the nets with the highest fanout in the
-FPU, which Beacon does not price.
+Every core ends in a zero-latency skid register (`VX_bypass_buffer`; the
+serializer's `OUT_SKID`). A result passes it in the cycle the core produces
+it, so the register costs no latency; with the default tag store of two
+entries (§10) every cycle of latency is a cycle of FPU throughput. It stays
+because its ready is registered, and that ready drives the core's clock
+enable, a net that reaches every unit of the core: the vendor operators'
+clock enables and every pipeline register. Without it the enable starts at
+the response arbiter's round-robin state, and Beacon counts every enable two
+to three levels deeper, on the nets with the highest fanout in the FPU, which
+Beacon does not price.
 
-The buffer also absorbs collisions: when two cores finish together, the one
-the arbiter defers parks in its buffer and its pipeline keeps going; a core
-stalls only when its buffer holds two results.
+The register also absorbs collisions: when two cores finish together, the one
+the arbiter defers parks its result there, and its pipeline stalls until the
+cycle after the result leaves.
 
-`VX_fpu_dpi` puts the same buffer behind each class's pipeline, and SimX adds
-its cycle (§11), so the simulation backends time as the synthesized ones: on a
-backend-level bench with random traffic and random back-pressure,
-`VX_fpu_dpi` matches `VX_fpu_dsp` cycle for cycle, at ratios of 1 and above.
+`VX_fpu_dpi` puts the same register behind each class's pipeline, and SimX
+counts no cycle for it (§11), so the simulation backends time as the
+synthesized ones.
 
 `VX_fpu_std` differs from `VX_fpu_dsp` in one place. Its division and square
-root share a unit, a serializer and an output buffer, so under back-pressure a
+root share a unit, a serializer and a skid register, so under back-pressure a
 waiting divide stalls the square roots behind it, and the reverse;
 `VX_fpu_dsp` gives each its own buffer and arbitrates between them. Without
 back-pressure, and with the two at the same ratio, they time alike.
@@ -507,11 +507,18 @@ flight, and a result waiting on the commit arbiter keeps its tag:
 
 - At full bandwidth (`NUM_FPU_BLOCKS == ISSUE_WIDTH` and
   `NUM_FPU_LANES == SIMD_WIDTH`) the commit arbiter reads the response port
-  directly and frees the tag when it grants the result. The result crosses
-  its core's output buffer and the response arbiter's register (§5.3), so an
-  FMA commits `VX_CFG_FMA_LATENCY + 2` cycles after it enters.
+  directly and frees the tag when it grants the result. The result passes
+  its core's skid register and crosses the response arbiter's register
+  (§5.3), and the commit arbiter grants the FPU ahead of every other unit,
+  so an FMA commits `VX_CFG_FMA_LATENCY + 1` cycles after it enters.
 - At partial bandwidth the lane-gather stage takes the result off the port and
   frees the tag.
+
+The commit arbiter's fixed priority puts the FPU first, then the ALU, LSU,
+SFU and TCU. A result that waited behind ALU or LSU results would hold its tag
+for the whole wait, and with two tags the FPU's issue stalls behind the most
+plentiful results in the core. Ranking the FPU first costs the other units
+little: the tags bound the FPU's results to two per round trip.
 
 ---
 

@@ -23,7 +23,10 @@ module VX_pe_serializer #(
     parameter SHARED_WIDTH   = 0,
     parameter TAG_WIDTH      = 0,
     parameter PE_REG         = 0,
-    parameter OUT_BUF        = 0
+    parameter OUT_BUF        = 0,
+    // a zero-latency skid register on the output in place of OUT_BUF: the
+    // input ready is registered, the output is not
+    parameter OUT_SKID       = 0
 ) (
     input wire                          clk,
     input wire                          reset,
@@ -165,21 +168,42 @@ module VX_pe_serializer #(
 
     end
 
-    VX_elastic_buffer #(
-        .DATAW   ((NUM_LANES * DATA_OUT_WIDTH) + NUM_LANES + TAG_WIDTH_S),
-        .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
-        .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF))
-    ) out_buf (
-        .clk       (clk),
-        .reset     (reset),
-        .valid_in  (valid_out_u),
-        .ready_in  (ready_out_u),
+    if (OUT_SKID != 0) begin : g_out_skid
 
-        .data_in   ({data_out_u, mask_out_u, tag_out_u}),
-        .data_out  ({data_out, mask_out, tag_out}),
-        .valid_out (valid_out),
-        .ready_out (ready_out)
-    );
+        `UNUSED_PARAM (OUT_BUF)
+
+        VX_bypass_buffer #(
+            .DATAW ((NUM_LANES * DATA_OUT_WIDTH) + NUM_LANES + TAG_WIDTH_S)
+        ) out_buf (
+            .clk       (clk),
+            .reset     (reset),
+            .valid_in  (valid_out_u),
+            .ready_in  (ready_out_u),
+            .data_in   ({data_out_u, mask_out_u, tag_out_u}),
+            .data_out  ({data_out, mask_out, tag_out}),
+            .valid_out (valid_out),
+            .ready_out (ready_out)
+        );
+
+    end else begin : g_out_buf
+
+        VX_elastic_buffer #(
+            .DATAW   ((NUM_LANES * DATA_OUT_WIDTH) + NUM_LANES + TAG_WIDTH_S),
+            .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
+            .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF))
+        ) out_buf (
+            .clk       (clk),
+            .reset     (reset),
+            .valid_in  (valid_out_u),
+            .ready_in  (ready_out_u),
+
+            .data_in   ({data_out_u, mask_out_u, tag_out_u}),
+            .data_out  ({data_out, mask_out, tag_out}),
+            .valid_out (valid_out),
+            .ready_out (ready_out)
+        );
+
+    end
 
 endmodule
 `TRACING_ON
