@@ -282,7 +282,7 @@ public:
       uint32_t fpu_dly = FpuUnit::kGather ? 2 : 1;
       dispatchers_.at((int)FUType::ALU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_ALU_BLOCKS, VX_CFG_NUM_ALU_LANES, alu_dly);
       dispatchers_.at((int)FUType::FPU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_FPU_BLOCKS, VX_CFG_NUM_FPU_LANES, fpu_dly);
-      dispatchers_.at((int)FUType::LSU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_LSU_BLOCKS, VX_CFG_NUM_LSU_LANES, 1);
+      dispatchers_.at((int)FUType::LSU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_LSU_BLOCKS, VX_CFG_NUM_LSU_LANES, 1, false);
       dispatchers_.at((int)FUType::SFU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_SFU_BLOCKS, VX_CFG_NUM_SFU_LANES, 1);
     #ifdef VX_CFG_EXT_TCU_ENABLE
       dispatchers_.at((int)FUType::TCU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_TCU_BLOCKS, VX_CFG_NUM_TCU_LANES, 1);

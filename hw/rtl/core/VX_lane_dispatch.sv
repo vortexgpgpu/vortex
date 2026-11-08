@@ -17,6 +17,8 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
     parameter BLOCK_SIZE = 1,
     parameter NUM_LANES  = 1,
     parameter OUT_BUF    = 0,
+    // "R" by default: a fixed priority can starve the higher issue slots.
+    parameter ARBITER    = "R",
     parameter MAX_FANOUT = `MAX_FANOUT
 ) (
     input  wire             clk,
@@ -86,23 +88,25 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
             assign valid_batches[i] = | dispatch_valid[i * BLOCK_SIZE +: BLOCK_SIZE];
         end
 
+        wire batch_valid_n;
+
         VX_generic_arbiter #(
             .NUM_REQS    (BATCH_COUNT),
-            .TYPE        ("P")
+            .TYPE        (ARBITER)
         ) batch_sel (
             .clk          (clk),
             .reset        (reset),
             .requests     (valid_batches),
             .grant_index  (batch_idx_n),
             `UNUSED_PIN (grant_onehot),
-            `UNUSED_PIN (grant_valid),
+            .grant_valid  (batch_valid_n),
             .grant_ready  (batch_done)
         );
 
         always @(posedge clk) begin
             if (reset) begin
                 batch_idx <= '0;
-            end else if (batch_done) begin
+            end else if (batch_done && (batch_valid_n || ARBITER != "R")) begin
                 batch_idx <= batch_idx_n;
             end
         end
