@@ -31,7 +31,7 @@ MemCoalescer::MemCoalescer(
   , ReqIn(this, 1)
   , RspOut(this)
   , ReqOut(output_size, this)
-  , RspIn(output_size, this)
+  , RspIn(output_size, SimChannel<MemRsp>(this, kRspInSize))
   , input_size_(input_size)
   , output_size_(output_size)
   , output_ratio_(input_size / output_size)

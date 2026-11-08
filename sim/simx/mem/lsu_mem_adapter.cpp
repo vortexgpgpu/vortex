@@ -25,7 +25,7 @@ LsuMemAdapter::LsuMemAdapter(
   , ReqIn(this)
   , RspOut(this)
   , ReqOut(num_inputs, this)
-  , RspIn(num_inputs, this)
+  , RspIn(num_inputs, SimChannel<MemRsp>(this, kRspInSize))
   , delay_(delay)
   , rsp_delay_(rsp_delay)
   , pending_mask_(num_inputs)
