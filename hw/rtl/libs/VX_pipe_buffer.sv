@@ -39,17 +39,19 @@ module VX_pipe_buffer #(
         assign valid_out = valid_in;
         assign data_out  = data_in;
     end else begin : g_register
-        wire [DEPTH:0] valid;
+        // Stage outputs only: the input stays out of these vectors, so an
+        // unsplit vector (Verilator -O0) does not join valid_in to valid_out.
+        wire [DEPTH-1:0] valid_r;
         wire [DEPTH-1:0] ready;
-        wire [DEPTH:0][DATAW-1:0] data;
+        wire [DEPTH-1:0][DATAW-1:0] data_r;
 
-        assign valid[0] = valid_in;
-        assign data[0]  = data_in;
         assign ready_in = ready[0];
 
         for (genvar i = 0; i < DEPTH; ++i) begin : g_pipe_regs
+            wire             stage_valid = (i == 0) ? valid_in : valid_r[`MAX(i, 1)-1];
+            wire [DATAW-1:0] stage_data  = (i == 0) ? data_in  : data_r[`MAX(i, 1)-1];
             // Stage i advances when any later stage has a hole or the output drains.
-            assign ready[i] = ready_out || ~(& valid[DEPTH:i+1]);
+            assign ready[i] = ready_out || ~(& valid_r[DEPTH-1:i]);
             VX_pipe_register #(
                 .DATAW  (1 + DATAW),
                 .RESETW (1 + RESETW)
@@ -57,13 +59,13 @@ module VX_pipe_buffer #(
                 .clk      (clk),
                 .reset    (reset),
                 .enable   (ready[i]),
-                .data_in  ({valid[i], data[i]}),
-                .data_out ({valid[i+1], data[i+1]})
+                .data_in  ({stage_valid, stage_data}),
+                .data_out ({valid_r[i], data_r[i]})
             );
         end
 
-        assign valid_out = valid[DEPTH];
-        assign data_out = data[DEPTH];
+        assign valid_out = valid_r[DEPTH-1];
+        assign data_out = data_r[DEPTH-1];
     end
 
 endmodule
