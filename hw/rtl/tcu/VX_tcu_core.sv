@@ -143,7 +143,8 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     assign rs1_data = execute_if.data.rs1_data;
     assign rs2_data = execute_if.data.rs2_data;
   `ifdef VX_CFG_TCU_SPARSE_ENABLE
-    wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_meta_block = wmma_sp_meta;
+    wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_meta_block    = wmma_sp_meta;
+    wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_meta_block_hi = wmma_sp_meta_hi;
   `endif
     assign exe_ready_extra = 1'b1;
 `endif
