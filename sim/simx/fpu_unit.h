@@ -14,6 +14,8 @@
 #pragma once
 
 #include "func_unit.h"
+#include <array>
+#include <deque>
 
 namespace vortex {
 
@@ -27,6 +29,7 @@ public:
                                || (VX_CFG_NUM_FPU_LANES != VX_CFG_SIMD_WIDTH);
 
 protected:
+  void on_reset() override;
   void on_tick() override;
 
 private:
@@ -34,6 +37,11 @@ private:
   void execute(instr_trace_t* trace);
 
   uint32_t latency_of(const instr_trace_t* trace) const;
+
+  // Cycle each block's tags free: the RTL releases a tag when the result
+  // leaves the FPU core, latency + 2 cycles after acceptance, also when a
+  // lane-gather stage takes it off the response port sooner.
+  std::array<std::deque<uint64_t>, VX_CFG_NUM_FPU_BLOCKS> tag_free_;
 };
 
 }

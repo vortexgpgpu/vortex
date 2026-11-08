@@ -16,6 +16,7 @@
 #include <iomanip>
 #include <string.h>
 #include <assert.h>
+#include <algorithm>
 #include <util.h>
 #include <rvfloats.h>
 #include <nan_box.h>
@@ -393,6 +394,12 @@ void FpuUnit::execute(instr_trace_t* trace) {
 	DT(3, this->name() << " execute: op=" << fpu_type << ", " << *trace);
 }
 
+void FpuUnit::on_reset() {
+  for (auto& tags : tag_free_) {
+    tags.clear();
+  }
+}
+
 void FpuUnit::on_tick() {
   bool idle = true;
   for (uint32_t b = 0; b < VX_CFG_NUM_FPU_BLOCKS; ++b) {
@@ -401,8 +408,15 @@ void FpuUnit::on_tick() {
       auto& output = Outputs.at(b);
       // A full response port (every tag in use) stalls admission even though
       // the arithmetic pipelines are deeper.
-      if (!output.full()) {
+      uint64_t now = SimPlatform::instance().cycles();
+      auto& tags = tag_free_.at(b);
+      while (!tags.empty() && tags.front() <= now) {
+        tags.pop_front();
+      }
+      if (!output.full() && tags.size() < VX_CFG_FPU_QUEUE_SIZE) {
         auto trace = input.peek();
+        tags.push_back(now + this->latency_of(trace) + 2);
+        std::sort(tags.begin(), tags.end());
         this->execute(trace);
         // Without a lane-gather stage commit reads this port directly, so the
         // result also takes the registered stage other units cross into commit.
