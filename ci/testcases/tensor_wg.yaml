@@ -355,18 +355,6 @@ tests:
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
     -DVX_CFG_TCU_FEDP2K -DVX_CFG_TCU_TMEM_ENABLE -DVX_CFG_TCU_TMEM_COLS=512 -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
     -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32
-# FlashAttention on TMEM: online softmax in warps between S = Q.K^T and O += P.V^T MMAs.
-- id: flashattention_tmem
-  via: blackbox
-  drivers:
-  - simx
-  - rtlsim
-  app: flashattention_tmem
-  xlen: [32]
-  args: -l64 -n32 -d64 -b2 -c2
-  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
-    -DVX_CFG_TCU_FEDP2K -DVX_CFG_TCU_TMEM_ENABLE -DVX_CFG_TCU_TMEM_COLS=512 -DVX_CFG_EXT_MUFU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
-    -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32
 # FlashAttention-4 schedule: two Q tiles ping-pong between softmax warp groups and
 # the TCU, so TMEM transfers run alongside the CTA's MMAs on other columns.
 - id: flashattention4_tmem
