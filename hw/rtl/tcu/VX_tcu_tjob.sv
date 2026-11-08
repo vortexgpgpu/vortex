@@ -320,18 +320,43 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         end
     end
 
+    wire [BLKW-1:0] in_sel;
+    wire            in_valid;
     VX_priority_encoder #(
         .N (BLOCK_SIZE)
     ) op_pe (
         .data_in    (op_eligible),
         .onehot_out (op_sel_oh),
-        .index_out  (op_sel),
-        .valid_out  (op_sel_valid)
+        .index_out  (in_sel),
+        .valid_out  (in_valid)
     );
     `UNUSED_VAR (op_sel_oh)
 
+    // The selected op is registered before it is decoded and accepted: the
+    // block select and the TMEM access each get a cycle.
+    wire op_fire;
+    wire q_load = in_valid && (~op_sel_valid || op_fire);
+    logic q_valid_r;
+    logic [BLKW-1:0] q_blk_r;
+    tcu_execute_t q_op_r;
+    always_ff @(posedge clk) begin
+        if (reset) begin
+            q_valid_r <= 1'b0;
+        end else if (q_load) begin
+            q_valid_r <= 1'b1;
+        end else if (op_fire) begin
+            q_valid_r <= 1'b0;
+        end
+        if (q_load) begin
+            q_blk_r <= in_sel;
+            q_op_r  <= op_data[in_sel];
+        end
+    end
+    assign op_sel_valid = q_valid_r;
+    assign op_sel       = q_blk_r;
+
     tcu_execute_t op;
-    assign op = op_data[op_sel];
+    assign op = q_op_r;
     wire op_is_ld   = (op.op_type == INST_OP_BITS'(INST_TCU_TMEM_LD));
     wire op_is_st   = (op.op_type == INST_OP_BITS'(INST_TCU_TMEM_ST));
     wire op_is_alloc   = (op.op_type == INST_OP_BITS'(INST_TCU_TMEM_ALLOC));
@@ -466,10 +491,10 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 || (op_is_ld && ~op_conflict)
                 || (op_is_st && ~op_conflict && ~job_wr[op_blk])
                 || (op_is_dealloc && ~op_conflict));
-    wire op_fire = op_can;
+    assign op_fire = op_can;
 
     for (genvar b = 0; b < BLOCK_SIZE; ++b) begin : g_op_ready
-        assign op_ready[b] = op_fire && (op_sel == BLKW'(b));
+        assign op_ready[b] = q_load && (in_sel == BLKW'(b));
     end
 
     // decoded apart from op_fire to keep other ops' acceptance off the step path
@@ -579,6 +604,7 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     logic             e_m_r;
     logic [3:0]       e_sn_r;
     logic             e_first_r;
+    logic             e_pf_ok_r;
     logic             e_zero_r;
     logic             e_fresh_r;
     logic [BLOCK_SIZE-1:0][NT-1:0][31:0] e_hold_r;
@@ -748,6 +774,7 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             tbuf_req[b].is_sparse    = e_sparse_r;
         `endif
             tbuf_req[b].is_first_uop = e_first_r;
+            tbuf_req[b].pf_ok        = e_pf_ok_r;
         end
     end
 
@@ -835,7 +862,7 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [NT-1:0][31:0] cp_wdata = cp_have_r ? cp_hdata_r : cp_rsp_data;
     wire [BLKW-1:0]  cp_wblk  = BLKW'(32'(cp_wlane) / XM);
     wire cp_wants_wr = cp_have_r || cp_rsp;
-    wire cp_port_free = ~jres_valid[cp_wblk] && ~(st_write && (op_blk == cp_wblk));
+    wire cp_port_free = ~jres_valid[cp_wblk] && ~(op_sel_valid && op_is_st && (op_blk == cp_wblk));
     wire cp_wr = cp_wants_wr && cp_port_free;
     wire cp_park = cp_rsp && ~(cp_wr && ~cp_have_r);
     tm_access_t cp_acc;
@@ -1193,6 +1220,7 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 end
                 e_b_off_r      <= load_b_off;
                 e_first_r      <= (run_m_r == 1'b0) && (run_n_r == 8'd0);
+                e_pf_ok_r      <= (run_n_r != rj.n_frag - 8'd1) && (run_sn_r != 4'd15);
                 e_zero_r       <= load_zero;
             end else if (job_fire) begin
                 e_valid_r <= 1'b0;

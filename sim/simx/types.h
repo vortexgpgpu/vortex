@@ -830,6 +830,13 @@ inline bool tcu_is_tmem(TcuType t) {
   return t == TcuType::TMEM_LD || t == TcuType::TMEM_ST;
 }
 
+// Helper: ops of the tensor-memory port (TMEM transfers, allocation, tc.*).
+inline bool tcu_is_tj_op(TcuType t) {
+  return tcu_is_tmem(t) || t == TcuType::TMEM_ALLOC || t == TcuType::TMEM_DEALLOC
+      || t == TcuType::TC_IDESC || t == TcuType::TC_MMA || t == TcuType::TC_COMMIT
+      || t == TcuType::TC_CP;
+}
+
 // Helper: WMMA family (covers dense + sparse).
 inline bool tcu_is_wmma(TcuType t) {
   return t == TcuType::WMMA || t == TcuType::WMMA_SP;

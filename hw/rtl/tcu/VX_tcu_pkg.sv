@@ -473,6 +473,7 @@ package VX_tcu_pkg;
         logic                       is_first_uop;
         logic                       is_last_uop;
         logic                       setup_fire;
+        logic                       pf_ok;  // the next N block shares this K-tile and descriptor
 `ifdef VX_CFG_TCU_SPARSE_ENABLE
         logic                       is_sparse;
 `endif

@@ -386,6 +386,8 @@ public:
     , perf_stats_()
   {
     exec_done_.fill(false);
+    tj_fresh_.fill(true);
+    tj_hold_until_.fill(0);
     in_wgmma_.fill(false);
     wgmma_desc_.fill({0, 0});
   #ifdef VX_CFG_TCU_TMEM_ENABLE
@@ -603,14 +605,30 @@ public:
       bool completing = std::any_of(due.begin(), due.end(), [now](uint64_t t) { return t == now; });
       bool backed_up = simobject_->Outputs.at(b).size() > due.size();
       auto& input = simobject_->Inputs.at(b);
-      if (input.empty())
+      if (input.empty()) {
+        tj_fresh_.at(b) = true;
         continue;
+      }
       if (completing && backed_up) {
         continue;
       }
       auto trace = input.peek();
       auto tcu_type = std::get<TcuType>(trace->op_type);
       auto tpuArgs = std::get<IntrTcuArgs>(trace->instr_ptr->get_args());
+
+    #ifdef VX_CFG_TCU_TMEM_ENABLE
+      // TMEM and tc ops pass a registered select stage: one reaching an idle
+      // input is taken the cycle after; one queued behind follows back to back.
+      if (tcu_is_tj_op(tcu_type)) {
+        if (tj_fresh_.at(b)) {
+          tj_fresh_.at(b) = false;
+          tj_hold_until_.at(b) = now + 1;
+        }
+        if (now < tj_hold_until_.at(b)) {
+          continue;
+        }
+      }
+    #endif
 
     #ifdef VX_CFG_TCU_WGMMA_ENABLE
       // A WGMMA compute uop fires once its tile-buffer operands are ready.
@@ -1390,6 +1408,8 @@ public:
     bool       b_valid = false;
     bool       b_fetching = false;
     uint32_t   b_n = 0;
+    bool       b1_valid = false;   // the block in use while the next one fills
+    uint32_t   b1_n = 0;
     uint64_t   done_due = 0;
     // tc.cp: k_tiles columns of every lane from a_base, lda bytes per lane
     bool       copy = false;
@@ -1645,6 +1665,18 @@ public:
     }
   }
 
+  // Whether the step engine prefetches block n + 1: dense K-major B, within
+  // the K-tile and the RTL's 16-block descriptor chunk (step_n 15 wraps).
+  static bool job_b_prefetch(const tj_t& job) {
+    return !job.sparse && job.ldb != 0 && job.n + 1 < job.n_frag
+        && !(job.n != 0 && job.n % 15 == 0);
+  }
+
+  // A dense K-major block's row reads stay in flight together.
+  static uint32_t job_b_inflight(const tj_t& job) {
+    return (!job.sparse && job.ldb != 0) ? cfg::tcN : 1;
+  }
+
   tbuf_req_t job_req(const tj_t& job, uint32_t b, uint32_t n = 0) const {
     tbuf_req_t req;
     req.valid     = true;
@@ -1776,21 +1808,34 @@ public:
       }
     }
 
+    // Dense K-major B: once the block in use is resident, it moves to a second
+    // slot while the next N block of the K-tile and descriptor fills.
+    bool b_was_valid = job.b_valid;
     if (job.b_fetching) {
       if (!tbuf->filling_b()) {
         job.b_fetching = false;
         job.b_valid = true;
-        landed = true;
+        landed = (job.b_n == job.n);
       }
-    } else if (!job.b_valid || job.b_n != job.n) {
-      tbuf->fill_b(this->b_refill(this->job_req(job, 0, job.n)));
+    } else if ((!job.b_valid || job.b_n != job.n) && !(job.b1_valid && job.b1_n == job.n)) {
+      tbuf->fill_b(this->b_refill(this->job_req(job, 0, job.n)), this->job_b_inflight(job));
       job.b_fetching = true;
       job.b_valid = false;
       job.b_n = job.n;
+      job.b1_valid = false;
     }
+    if (b_was_valid && job.b_valid && job.b_n == job.n && this->job_b_prefetch(job)) {
+      job.b1_valid = true;
+      job.b1_n = job.n;
+      tbuf->prefetch_b(this->b_refill(this->job_req(job, 0, job.n + 1)), this->job_b_inflight(job));
+      job.b_fetching = true;
+      job.b_valid = false;
+      job.b_n = job.n + 1;
+    }
+    bool b_ready = (job.b_valid && job.b_n == job.n) || (job.b1_valid && job.b1_n == job.n);
 
     // A step presents the cycle after its operands land.
-    if (!job.a_valid || !job.b_valid || job.b_n != job.n || landed) {
+    if (!job.a_valid || !b_ready || landed) {
       ++perf_stats_.tbuf_stalls;
       cyc_.opnd = true;
       return;
@@ -1851,6 +1896,7 @@ public:
     job.pro_done = 0;
     job.a_valid = false;
     job.b_valid = false;
+    job.b1_valid = false;
     if (job.kt == job.k_tiles) {
       job.state = tj_state_t::DRAIN;
       job.done_due = SimPlatform::instance().cycles() + kMmaLatency;
@@ -2396,6 +2442,8 @@ private:
   } cyc_ = {};
   // Per-block guard: execute already happened for this trace; reset on pop().
   std::array<bool, VX_CFG_NUM_TCU_BLOCKS> exec_done_;
+  std::array<bool, VX_CFG_NUM_TCU_BLOCKS> tj_fresh_;
+  std::array<uint64_t, VX_CFG_NUM_TCU_BLOCKS> tj_hold_until_;
   // Cycles at which each block's results sent so far become visible.
   std::array<std::vector<uint64_t>, VX_CFG_NUM_TCU_BLOCKS> result_due_;
   // True while a block is between its first and last WGMMA uop.

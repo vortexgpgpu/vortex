@@ -30,7 +30,7 @@ namespace vortex {
 // refills and hands over the refill as a list of LMEM reads. Each read is
 // one bank-row request on the hardware port and covers one or more
 // mem_block lines here, sent together on parallel ports. A buffer keeps one
-// read in flight; buffers share the port at fixed priority, abuf[0] first
+// read in flight (the B buffer may keep more); buffers share the port at fixed priority, abuf[0] first
 // and cbuf last.
 //
 // Sparse metadata is preloaded into the TcuUnit's per-warp `sparse_meta_`
@@ -55,7 +55,11 @@ public:
   // Drop the buffer's contents and fetch `reads` in order. `b` indexes the
   // per-block A buffer.
   void fill_a(uint32_t b, std::vector<LmemRead> reads);
-  void fill_b(std::vector<LmemRead> reads);
+  // max_inflight: reads the B buffer keeps outstanding (a tensor op's dense
+  // K-major block issues its row reads back to back).
+  void fill_b(std::vector<LmemRead> reads, uint32_t max_inflight = 1);
+  // Fetch `reads` after any in progress, keeping the buffer's contents.
+  void prefetch_b(std::vector<LmemRead> reads, uint32_t max_inflight = 1);
 
   bool filling_a(uint32_t b) const;
   bool filling_b() const;

@@ -55,6 +55,7 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input  wire                     req_valid,
     input  wire                     req_setup,
     input  wire                     req_is_first_uop,
+    input  wire                     req_pf_ok,
     input  wire                     req_is_sparse,
     input  wire [3:0]               req_step_m,
     input  wire [3:0]               req_step_k,
@@ -184,7 +185,8 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // -----------------------------------------------------------------------
     // Resident slots
     //   slot A: holds k_blk=0 bank-row (dense uses this exclusively)
-    //   slot B: holds k_blk=1 bank-row (sparse only)
+    //   slot B: holds k_blk=1 bank-row (sparse), or the dense K-major block
+    //           in use while slot A prefetches the next one
     // -----------------------------------------------------------------------
 
     logic                       slot_a_valid_r;
@@ -268,11 +270,33 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // selects K-major.
     wire req_wants_kmajor = (desc_b_ldm_words != '0);
 
+    // Dense K-major B prefetch: once the block in use is resident, it moves to
+    // slot B (unused by dense B) while slot A fetches the next N block.
+    wire req_dense_km = req_wants_kmajor && !req_is_sparse;
+    logic                       w1_valid_r;
+    logic [3:0]                 w1_step_k_r, w1_step_n_r;
+    logic [NCTA_WIDTH-1:0]      w1_cta_id_r;
+    logic [BANK_ADDR_WIDTH-1:0] w1_row_base_r;
+    logic [BANK_ROW_WORDS_LOG2-1:0] w1_inrow_r;
+    logic [LDM_W-1:0]           w1_ldm_words_r;
+    wire bank_row_resident_w1 =
+        w1_valid_r && req_dense_km && !req_is_first_uop
+        && (w1_cta_id_r    == req_cta_id)
+        && (w1_step_k_r    == req_step_k)
+        && (w1_step_n_r    == req_step_n)
+        && (w1_row_base_r  == desc_b_row_base)
+        && (w1_inrow_r     == desc_b_inrow)
+        && (w1_ldm_words_r == desc_b_ldm_words);
+
     wire bank_row_resident = req_wants_kmajor
-        ? bank_row_resident_kmajor
+        ? (bank_row_resident_kmajor || bank_row_resident_w1)
         : (req_is_sparse ? bank_row_resident_sparse : bank_row_resident_dense);
     wire need_fetch        = req_valid && !bank_row_resident;
     wire alloc_en          = need_fetch && !slot_fetching_r;
+    wire pf_en = req_valid && req_dense_km && req_pf_ok && bank_row_resident_kmajor
+              && !slot_fetching_r && !req_setup && (req_step_n != 4'd15);
+    wire [3:0] fetch_step_n = pf_en ? (req_step_n + 4'd1) : req_step_n;
+    wire rd_w1 = bank_row_resident_w1 && !bank_row_resident_kmajor;
 
     assign bbuf_ready = !req_valid || bank_row_resident;
     wire fire = req_valid && bbuf_ready;
@@ -297,7 +321,7 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [BANK_ROW_WORDS_LOG2-1:0] km_inrow_alloc = desc_b_inrow;
     wire [KM_OFF_W-1:0] km_word_off_init =
         KM_OFF_W'(km_inrow_alloc) +
-        KM_OFF_W'(req_step_n) * KM_OFF_W'(TCU_TC_N) * KM_OFF_W'(km_ldm_words_alloc)
+        KM_OFF_W'(fetch_step_n) * KM_OFF_W'(TCU_TC_N) * KM_OFF_W'(km_ldm_words_alloc)
       + KM_OFF_W'(req_step_k) * KM_OFF_W'(km_k_words_alloc);
 
     logic [KM_OFF_W-1:0] km_word_off_req_r;
@@ -373,7 +397,14 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire km_more_to_request =
         slot_row_major_r ? (km_req_ctr_r < KM_CTR_W'(TCU_TC_N))
                          : (km_req_ctr_r == '0);
-    wire can_issue  = in_fetch && !req_inflight_r && km_more_to_request;
+    // A tensor op's dense K-major block keeps its row reads in flight together
+    // (LMEM responses return in order); other fetches keep one outstanding.
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    wire km_pipelined = slot_row_major_r && !slot_is_sparse_r;
+`else
+    wire km_pipelined = 1'b0;
+`endif
+    wire can_issue  = in_fetch && (!req_inflight_r || km_pipelined) && km_more_to_request;
     wire km_final_rsp = slot_row_major_r
                      && tcu_lmem_if.rsp_valid
                      && km_row_in_rsp[TCU_TC_N - 1];
@@ -396,6 +427,24 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     assign tcu_lmem_if.req_data.tag.value = '0;
     assign tcu_lmem_if.rsp_ready       = 1'b1;
     `UNUSED_VAR (tcu_lmem_if.rsp_data.tag)
+
+    always_ff @(posedge clk) begin
+        if (reset || req_setup) begin
+            w1_valid_r <= 1'b0;
+        end else if (pf_en) begin
+            w1_valid_r <= 1'b1;
+        end else if (req_valid && req_is_first_uop) begin
+            w1_valid_r <= 1'b0;
+        end
+        if (pf_en) begin
+            w1_step_k_r    <= slot_step_k_r;
+            w1_step_n_r    <= slot_step_n_r;
+            w1_cta_id_r    <= slot_cta_id_r;
+            w1_row_base_r  <= slot_desc_b_row_base_r;
+            w1_inrow_r     <= slot_desc_b_inrow_r;
+            w1_ldm_words_r <= slot_ldm_words_r;
+        end
+    end
 
     always_ff @(posedge clk) begin
         if (reset) begin
@@ -445,7 +494,7 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     refetched_for_first_uop_r <= 1'b0;
 
                 // K-major req/rsp counters advance independently of FSM state
-                // (single-outstanding still enforced via req_inflight_r).
+                // (one outstanding via req_inflight_r unless km_pipelined).
                 if (slot_row_major_r && tcu_lmem_if.req_valid && tcu_lmem_if.req_ready) begin
                     km_req_ctr_r      <= km_req_ctr_next;
                     km_word_off_req_r <= km_word_off_req_next;
@@ -457,7 +506,7 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
                 case (fsm_state_r)
                     S_IDLE: begin
-                        if (alloc_en) begin
+                        if (alloc_en || pf_en) begin
                             fsm_state_r         <= S_FETCH_A;
                             slot_fetching_r     <= 1'b1;
                             slot_a_valid_r      <= 1'b0;
@@ -470,7 +519,7 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                             // K-major per-compute slot state for this
                             // (step_k, step_n) block.
                             slot_step_k_r       <= req_step_k;
-                            slot_step_n_r       <= req_step_n;
+                            slot_step_n_r       <= fetch_step_n;
                             slot_cta_id_r       <= req_cta_id;
                             km_req_ctr_r        <= '0;
                             km_rsp_ctr_r        <= '0;
@@ -530,6 +579,7 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     //                 dense B blocks and stores them in the compact rs2 order.
     // -----------------------------------------------------------------------
 
+    wire  [B_BUF_WORDS-1:0][31:0] storage_a_rdata, storage_b_rdata;
     logic [B_BUF_WORDS*32-1:0] storage_a_wdata, storage_b_wdata;
     logic [B_BUF_WORDS-1:0]    storage_a_wren,  storage_b_wren;
 
@@ -545,6 +595,10 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         storage_a_wren  = '0;
         storage_b_wdata = '0;
         storage_b_wren  = '0;
+        if (pf_en) begin
+            storage_b_wren  = '1;
+            storage_b_wdata = storage_a_rdata;
+        end
         if (tcu_lmem_if.rsp_valid) begin
             if (slot_row_major_r && slot_is_sparse_r) begin
                 // K-major sparse: per N-row r (= km_rsp_ctr_r = column j) the
@@ -615,8 +669,6 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         end
     end
 
-    wire [B_BUF_WORDS-1:0][31:0] storage_a_rdata, storage_b_rdata;
-
     VX_dp_ram #(
         .DATAW   (B_BUF_WORDS * 32),
         .SIZE    (1),
@@ -647,7 +699,8 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .clk   (clk),
         .reset (reset),
         .read  (1'b1),
-        .write ((in_fetch_b && tcu_lmem_if.rsp_valid)
+        .write (pf_en
+             || (in_fetch_b && tcu_lmem_if.rsp_valid)
              || (in_fetch_a && tcu_lmem_if.rsp_valid && slot_is_sparse_r
                  && (slot_row_major_r || sparse_b_from_a))),
         .wren  (storage_b_wren),
@@ -692,7 +745,7 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     end
                 end
             end else if (lane < int'(B_BUF_WORDS)) begin
-                rs2_mux[lane] = `VX_CFG_XLEN'(storage_a_rdata[lane]);
+                rs2_mux[lane] = `VX_CFG_XLEN'(rd_w1 ? storage_b_rdata[lane] : storage_a_rdata[lane]);
             end
         end
     end

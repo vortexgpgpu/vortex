@@ -165,6 +165,7 @@ module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         assign req[bi].is_first_uop = exec_data[bi].op_args.tcu.is_first_uop;
         assign req[bi].is_last_uop  = exec_data[bi].op_args.tcu.is_last_uop;
         assign req[bi].setup_fire   = exec_valid[bi] && exec_ready[bi] && is_setup_uop;
+        assign req[bi].pf_ok        = 1'b0;
     `ifdef VX_CFG_TCU_SPARSE_ENABLE
         assign req[bi].is_sparse = (exec_data[bi].op_type == INST_TCU_WGMMA_SP);
     `endif

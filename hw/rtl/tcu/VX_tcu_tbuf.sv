@@ -158,6 +158,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire                          bbuf_req_valid;
     wire                          bbuf_req_setup;
     wire                          bbuf_req_is_first_uop;
+    wire                          bbuf_req_pf_ok;
     wire                          bbuf_req_is_sparse;
     wire [3:0]                    bbuf_req_step_m;
     wire [3:0]                    bbuf_req_step_k;
@@ -172,6 +173,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         assign bbuf_req_valid        = req[0].valid;
         assign bbuf_req_setup        = req[0].setup_fire;
         assign bbuf_req_is_first_uop = req[0].is_first_uop;
+        assign bbuf_req_pf_ok        = req[0].pf_ok;
     `ifdef VX_CFG_TCU_SPARSE_ENABLE
         assign bbuf_req_is_sparse    = req[0].is_sparse;
     `else
@@ -205,6 +207,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         // OR-mux: under lock-step all active inputs match, so OR-ing the
         // masked values is equivalent to selecting via the one-hot index.
         logic              sel_is_first_uop;
+        logic              sel_pf_ok;
         logic              sel_is_sparse;
         logic [3:0]        sel_step_m;
         logic [3:0]        sel_step_k;
@@ -215,6 +218,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         logic [UUID_WIDTH-1:0]    sel_uuid;
         always_comb begin
             sel_is_first_uop = 1'b0;
+            sel_pf_ok        = 1'b0;
             sel_is_sparse    = 1'b0;
             sel_step_m       = '0;
             sel_step_k       = '0;
@@ -226,6 +230,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             for (int b = 0; b < BLOCK_SIZE; ++b) begin
                 if (bbuf_sel_oh[b]) begin
                     sel_is_first_uop = req[b].is_first_uop;
+                    sel_pf_ok        = req[b].pf_ok;
                 `ifdef VX_CFG_TCU_SPARSE_ENABLE
                     sel_is_sparse = req[b].is_sparse;
                 `endif
@@ -244,6 +249,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         assign bbuf_req_valid        = bbuf_sel_valid;
         assign bbuf_req_setup        = |req_setup_v;
         assign bbuf_req_is_first_uop = sel_is_first_uop;
+        assign bbuf_req_pf_ok        = sel_pf_ok;
         assign bbuf_req_is_sparse    = sel_is_sparse;
         assign bbuf_req_step_m       = sel_step_m;
         assign bbuf_req_step_k       = sel_step_k;
@@ -268,6 +274,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .req_valid        (bbuf_req_valid),
         .req_setup        (bbuf_req_setup),
         .req_is_first_uop (bbuf_req_is_first_uop),
+        .req_pf_ok        (bbuf_req_pf_ok),
         .req_is_sparse    (bbuf_req_is_sparse),
         .req_step_m       (bbuf_req_step_m),
         .req_step_k       (bbuf_req_step_k),

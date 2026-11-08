@@ -45,6 +45,7 @@ struct Buffer {
   bool     rsp_seen_ = false;   // a response arrived this cycle
   uint32_t next_tag_ = 0;
   uint64_t reads_ = 0;
+  uint32_t max_inflight_ = 1;
 
   bool filling() const {
     return !pending_.empty() || !inflight_.empty();
@@ -52,6 +53,13 @@ struct Buffer {
 
   void fill(std::vector<TcuTbuf::LmemRead>&& reads) {
     this->invalidate();
+    for (auto& r : reads) {
+      pending_.push_back(std::move(r));
+    }
+    fill_cycle_ = SimPlatform::instance().cycles();
+  }
+
+  void append(std::vector<TcuTbuf::LmemRead>&& reads) {
     for (auto& r : reads) {
       pending_.push_back(std::move(r));
     }
@@ -78,6 +86,7 @@ struct Buffer {
     rsp_seen_ = false;
     next_tag_ = 0;
     reads_ = 0;
+    max_inflight_ = 1;
   }
 };
 
@@ -152,13 +161,13 @@ public:
     uint64_t cycle = SimPlatform::instance().cycles();
     for (uint32_t s = 0; s < kNumBuffers; ++s) {
       auto& b = bufs_.at(s);
-      if (b.pending_.empty() || !b.inflight_.empty()) {
+      if (b.pending_.empty() || b.inflight_.size() >= b.max_inflight_) {
         continue;
       }
       if (cycle <= b.fill_cycle_) {
         continue;
       }
-      if (s == kBOffset && b.rsp_seen_) {
+      if (s == kBOffset && b.rsp_seen_ && b.max_inflight_ == 1) {
         continue;
       }
       this->issue(s, b);
@@ -227,8 +236,15 @@ void TcuTbuf::on_tick()  { impl_->tick(); }
 void TcuTbuf::fill_a(uint32_t b, std::vector<LmemRead> reads) {
   impl_->buf(kAOffset + b).fill(std::move(reads));
 }
-void TcuTbuf::fill_b(std::vector<LmemRead> reads) {
-  impl_->buf(kBOffset).fill(std::move(reads));
+void TcuTbuf::fill_b(std::vector<LmemRead> reads, uint32_t max_inflight) {
+  auto& b = impl_->buf(kBOffset);
+  b.fill(std::move(reads));
+  b.max_inflight_ = max_inflight;
+}
+void TcuTbuf::prefetch_b(std::vector<LmemRead> reads, uint32_t max_inflight) {
+  auto& b = impl_->buf(kBOffset);
+  b.append(std::move(reads));
+  b.max_inflight_ = max_inflight;
 }
 
 bool TcuTbuf::filling_a(uint32_t b) const { return impl_->buf(kAOffset + b).filling(); }
