@@ -105,6 +105,13 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
 
 ### Fixed
 
+- **ASIC core and top at 800 MHz.** On ASAP7 the core reached 655 MHz and top 654 MHz against the 800 MHz catalog clock, held by
+  three datapaths: the FDIV/FSQRT result stage, the FMA's accumulate and rounding stages, and the integer multiplier. Each is
+  retimed with no change in latency, so SimX and every cycle count are unchanged. FDIV/FSQRT decides the subnormal shift and tests
+  overflow for both rounding carries one stage early. The FMA subtracts in both orders, with the borrow as the carry-in, in
+  parallel with the magnitude compare, and its NORM stage precomputes the subnormal shift for both candidate exponents. The
+  multiplier registers its operands in the first of its `LATENCY_IMUL` stages instead of the last. The core now reaches 1020 MHz
+  and top 1029 MHz, with cell area +0.1%.
 - **Stale softfloat archive.** `third_party/Makefile` rebuilds softfloat when `SOFTFLOAT_OPTS` changes. Before this, a tree built
   before `-DTHREAD_LOCAL=_Thread_local` was added kept its non-TLS archive, and the simx runtime failed to link with
   `TLS reference ... mismatches non-TLS definition` for `softfloat_exceptionFlags`.

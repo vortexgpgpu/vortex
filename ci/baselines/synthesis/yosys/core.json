@@ -30,9 +30,9 @@
     "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8",
     "dut": "core",
     "result": {
-      "build_time_s": 914,
-      "cell_area_um2": 75941.84,
-      "cell_count": 732220,
+      "build_time_s": 803,
+      "cell_area_um2": 76015.6,
+      "cell_count": 731009,
       "env": {
         "corner": "tt",
         "pdk": "asap7",
@@ -41,12 +41,12 @@
         "xlen": 32,
         "yosys": "Yosys 0.69"
       },
-      "fmax_mhz": 655.394,
-      "power_mw": 804.0,
-      "seq_area_um2": 25850.632,
+      "fmax_mhz": 1019.992,
+      "power_mw": 832.0,
+      "seq_area_um2": 25929.947,
       "sram_area_um2": 27814.4,
-      "tns_ns": -79.87,
-      "wns_ns": -0.276
+      "tns_ns": 0.0,
+      "wns_ns": 0.27
     }
   },
   "lmem": {
@@ -80,9 +80,9 @@
     "configs": "-DVX_CFG_NUM_THREADS=4 -DVX_CFG_NUM_WARPS=4",
     "dut": "top",
     "result": {
-      "build_time_s": 1381,
-      "cell_area_um2": 172457.664,
-      "cell_count": 1610289,
+      "build_time_s": 1376,
+      "cell_area_um2": 172526.117,
+      "cell_count": 1609348,
       "env": {
         "corner": "tt",
         "pdk": "asap7",
@@ -91,12 +91,12 @@
         "xlen": 32,
         "yosys": "Yosys 0.69"
       },
-      "fmax_mhz": 653.937,
+      "fmax_mhz": 1028.807,
       "power_mw": 247.0,
-      "seq_area_um2": 72420.901,
+      "seq_area_um2": 72499.05,
       "sram_area_um2": 72302.4,
-      "tns_ns": -54.469,
-      "wns_ns": -0.279
+      "tns_ns": 0.0,
+      "wns_ns": 0.278
     }
   }
 }

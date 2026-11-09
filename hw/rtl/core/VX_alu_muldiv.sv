@@ -151,20 +151,36 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
         wire [`VX_CFG_XLEN:0] mul_in1 = {is_signed_mul_a && execute_if.data.rs1_data[i][`VX_CFG_XLEN-1], execute_if.data.rs1_data[i]};
         wire [`VX_CFG_XLEN:0] mul_in2 = {is_signed_mul_b && execute_if.data.rs2_data[i][`VX_CFG_XLEN-1], execute_if.data.rs2_data[i]};
 
+        // The first of the LATENCY_IMUL stages registers the operands, so the
+        // multiply array gets a cycle of its own rather than following the
+        // operand select.
+        wire [`VX_CFG_XLEN:0] mul_in1_r, mul_in2_r;
+        VX_pipe_register #(
+            .DATAW (2 * (`VX_CFG_XLEN+1)),
+            .DEPTH (1)
+        ) mul_in_reg (
+            .clk      (clk),
+            .reset    (1'b0),
+            .enable   (mul_ready_in),
+            .data_in  ({mul_in1,   mul_in2}),
+            .data_out ({mul_in1_r, mul_in2_r})
+        );
+
         VX_multiplier #(
             .A_WIDTH (`VX_CFG_XLEN+1),
             .B_WIDTH (`VX_CFG_XLEN+1),
             .R_WIDTH (2*(`VX_CFG_XLEN+1)),
             .SIGNED  (1),
-            .LATENCY (`LATENCY_IMUL)
+            .LATENCY (`LATENCY_IMUL - 1)
         ) multiplier (
             .clk    (clk),
             .enable (mul_ready_in),
-            .dataa  (mul_in1),
-            .datab  (mul_in2),
+            .dataa  (mul_in1_r),
+            .datab  (mul_in2_r),
             .result (mul_result_tmp[i])
         );
     end
+    `STATIC_ASSERT (`LATENCY_IMUL >= 1, ("invalid parameter"))
 
     VX_shift_register #(
         .DATAW  (1 + TAG_WIDTH + 1 + 1),
