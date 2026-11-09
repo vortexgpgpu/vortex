@@ -1,11 +1,11 @@
 {
   "tcu": {
-    "clock_mhz": 500,
-    "config_hash": "eaf585a09d64ddb3",
+    "clock_mhz": 800,
+    "config_hash": "5110889c4c9985a1",
     "configs": "",
     "dut": "tcu",
     "result": {
-      "build_time_s": 1888,
+      "build_time_s": 2210,
       "cell_area_um2": 74231.737,
       "cell_count": 760362,
       "env": {
@@ -16,21 +16,21 @@
         "xlen": 32,
         "yosys": "Yosys 0.69"
       },
-      "fmax_mhz": 859.328,
-      "power_mw": 224.0,
+      "fmax_mhz": 870.549,
+      "power_mw": 359.0,
       "seq_area_um2": 12099.067,
       "sram_area_um2": 0.0,
       "tns_ns": 0.0,
-      "wns_ns": 0.836
+      "wns_ns": 0.101
     }
   },
   "tensor": {
-    "clock_mhz": 400,
-    "config_hash": "cd19287ddc21dc80",
+    "clock_mhz": 800,
+    "config_hash": "5e33a96e107c9a6b",
     "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8",
     "dut": "tensor",
     "result": {
-      "build_time_s": 788,
+      "build_time_s": 834,
       "cell_area_um2": 96735.909,
       "cell_count": 888126,
       "env": {
@@ -41,12 +41,12 @@
         "xlen": 32,
         "yosys": "Yosys 0.69"
       },
-      "fmax_mhz": 1088.969,
-      "power_mw": 118.0,
+      "fmax_mhz": 1119.445,
+      "power_mw": 236.0,
       "seq_area_um2": 41783.364,
       "sram_area_um2": 52361.6,
       "tns_ns": 0.0,
-      "wns_ns": 1.582
+      "wns_ns": 0.357
     }
   }
 }

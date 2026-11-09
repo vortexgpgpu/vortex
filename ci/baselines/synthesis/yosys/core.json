@@ -25,12 +25,12 @@
     }
   },
   "core": {
-    "clock_mhz": 400,
-    "config_hash": "9292b31b34327363",
+    "clock_mhz": 800,
+    "config_hash": "67eb0ef49175ab38",
     "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8",
     "dut": "core",
     "result": {
-      "build_time_s": 859,
+      "build_time_s": 914,
       "cell_area_um2": 75941.84,
       "cell_count": 732220,
       "env": {
@@ -41,17 +41,17 @@
         "xlen": 32,
         "yosys": "Yosys 0.69"
       },
-      "fmax_mhz": 644.828,
-      "power_mw": 503.0,
+      "fmax_mhz": 655.394,
+      "power_mw": 804.0,
       "seq_area_um2": 25850.632,
       "sram_area_um2": 27814.4,
-      "tns_ns": 0.0,
-      "wns_ns": 0.949
+      "tns_ns": -79.87,
+      "wns_ns": -0.276
     }
   },
   "lmem": {
-    "clock_mhz": 400,
-    "config_hash": "4184a301a13b385c",
+    "clock_mhz": 800,
+    "config_hash": "47081ee86b993ce8",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_A_ENABLE",
     "dut": "lmem",
     "result": {
@@ -66,21 +66,21 @@
         "xlen": 32,
         "yosys": "Yosys 0.69"
       },
-      "fmax_mhz": 1908.033,
-      "power_mw": 21.1,
+      "fmax_mhz": 2003.606,
+      "power_mw": 42.2,
       "seq_area_um2": 6527.758,
       "sram_area_um2": 55628.8,
       "tns_ns": 0.0,
-      "wns_ns": 1.976
+      "wns_ns": 0.751
     }
   },
   "top": {
-    "clock_mhz": 400,
-    "config_hash": "f6377f14d9f7769c",
+    "clock_mhz": 800,
+    "config_hash": "23d795386c3e20c0",
     "configs": "-DVX_CFG_NUM_THREADS=4 -DVX_CFG_NUM_WARPS=4",
     "dut": "top",
     "result": {
-      "build_time_s": 1346,
+      "build_time_s": 1381,
       "cell_area_um2": 172457.664,
       "cell_count": 1610289,
       "env": {
@@ -91,12 +91,12 @@
         "xlen": 32,
         "yosys": "Yosys 0.69"
       },
-      "fmax_mhz": 643.418,
-      "power_mw": 124.0,
+      "fmax_mhz": 653.937,
+      "power_mw": 247.0,
       "seq_area_um2": 72420.901,
       "sram_area_um2": 72302.4,
-      "tns_ns": 0.0,
-      "wns_ns": 0.946
+      "tns_ns": -54.469,
+      "wns_ns": -0.279
     }
   }
 }
