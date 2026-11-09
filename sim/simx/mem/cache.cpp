@@ -2399,6 +2399,7 @@ public:
     for (uint32_t s = 0; s <= levels_.size(); ++s) {
       rr_.at(s).resize(num_banks * this->arb_slices(s));
     }
+    realign_.resize(num_inputs);
   }
 
   // Without a registered tree level the hardware crossbar is combinational
@@ -2510,6 +2511,7 @@ protected:
       offer.held = false;
     }
     held_ = false;
+    std::fill(realign_.begin(), realign_.end(), realign_t());
   }
 
   // Slices of the arbiter level s: level 0 grants the ports, each level above
@@ -2581,18 +2583,19 @@ protected:
     }
     uint32_t n = ReqIn.size();
     const bool hold = this->any_token();
+    this->update_realign();
     // merged ports riding each leader's bank access, by offset in its group
     std::vector<bool> followers(n, false);
     std::vector<uint64_t> merged(n, 0);
     if (merge_group_ > 1 && !hold) {
       for (uint32_t i = 0; i < n; ++i) {
-        if (!this->is_plain_read(i)) {
+        if (!this->is_plain_read(i) || this->realign_hold(i)) {
           continue;
         }
         auto& req_i = ReqIn.at(i).peek();
         uint32_t base = (i / merge_group_) * merge_group_;
         for (uint32_t j = base; j < i; ++j) {
-          if (followers.at(j) || !this->is_plain_read(j)) {
+          if (followers.at(j) || !this->is_plain_read(j) || this->realign_hold(j)) {
             continue;
           }
           auto& req_j = ReqIn.at(j).peek();
@@ -2629,7 +2632,7 @@ protected:
         }
         continue;
       }
-      if (!hold) {
+      if (!hold && !this->realign_hold(i)) {
         uint32_t b = params_.addr_bank_id(req.addr);
         want.at(b * slices + i / slice_ports) |= 1u << (i % slice_ports);
         ++wants.at(b);
@@ -2759,6 +2762,79 @@ protected:
     ReqIn.at(i).pop();
   }
 
+  // A load or store with no flush, IO or local attribute.
+  bool is_regular(uint32_t i) const {
+    if (ReqIn.at(i).empty()) {
+      return false;
+    }
+    auto& req = ReqIn.at(i).peek();
+    return (req.op == MemOp::LD || req.op == MemOp::ST) && !req.flags.flush && !req.flags.io && !req.flags.local;
+  }
+
+  // Whether port j holds a regular request with this tag in this line.
+  bool owes(uint32_t j, uint32_t tag, uint64_t line) const {
+    return this->is_regular(j) && ReqIn.at(j).peek().tag == tag && this->line_of(j) == line;
+  }
+
+  uint64_t line_of(uint32_t i) const {
+    return ReqIn.at(i).peek().addr >> params_.bank_select_addr_start;
+  }
+
+  // The ports of a same-word pair carry the two parts of one request in
+  // order, and a bank serves two parts of one request in one line a cycle
+  // apart. A port that moved past such a part its partner still holds waits
+  // for the partner, so the pair's next same-word reads reach the merge in the
+  // same cycle. The wait is decided from the last cycle's heads. Stores can
+  // share a tag, so the line tells a part from a later store, and a pair that
+  // waited on each other is released.
+  void update_realign() {
+    if (!this->realigns()) {
+      return;
+    }
+    uint32_t n = ReqIn.size();
+    std::vector<bool> start(n), owes_head(n);
+    for (uint32_t i = 0; i < n; ++i) {
+      auto& r = realign_.at(i);
+      auto& in = ReqIn.at(i);
+      uint32_t p = i ^ 1;
+      start.at(i) = r.shared && r.head_valid
+                 && !(!in.empty() && in.peek().tag == r.head_tag && this->line_of(i) == r.head_line);
+      owes_head.at(i) = this->owes(p, r.head_tag, r.head_line);
+      r.waits = (start.at(i) && owes_head.at(i)) || (r.ahead && this->owes(p, r.ahead_tag, r.ahead_line));
+      r.hold = r.waits && !r.mutual;
+    }
+    // the registers, from this cycle's heads
+    for (uint32_t i = 0; i < n; ++i) {
+      auto& r = realign_.at(i);
+      auto& in = ReqIn.at(i);
+      uint32_t p = i ^ 1;
+      if (start.at(i) && owes_head.at(i)) {
+        r.ahead_tag  = r.head_tag;
+        r.ahead_line = r.head_line;
+      }
+      r.ahead  = r.waits;
+      r.mutual = r.waits && realign_.at(p).waits;
+      r.head_valid = !in.empty();
+      if (r.head_valid) {
+        r.head_tag  = in.peek().tag;
+        r.head_line = this->line_of(i);
+      }
+      r.shared = this->is_regular(i) && this->owes(p, r.head_tag, r.head_line);
+    }
+  }
+
+  bool realign_hold(uint32_t i) const {
+    return this->realigns() && realign_.at(i).hold;
+  }
+
+  // A same-word pair of ports carries the two parts of one request; a
+  // line-merge group's ports are independent clients. A wider group waits on
+  // more parts, and the wait costs the overlap of the next request's parts on
+  // other banks more than the merges it restores.
+  bool realigns() const {
+    return (merge_group_ == 2) && !merge_line_;
+  }
+
   // A plain read: no write, flush, IO, local or atomic attribute.
   bool is_plain_read(uint32_t i) const {
     if (ReqIn.at(i).empty()) {
@@ -2781,6 +2857,20 @@ private:
   bool skid_;
   bool held_ = false; // some bank's skid register is occupied this cycle
   uint64_t collisions_ = 0;
+  // pair realignment, per port
+  struct realign_t {
+    bool     head_valid = false; // registered copy of the last cycle's head
+    uint32_t head_tag   = 0;
+    uint64_t head_line  = 0;
+    bool     shared     = false; // the partner held the head's tag with it
+    bool     ahead      = false;
+    uint32_t ahead_tag  = 0;     // the part the partner owes
+    uint64_t ahead_line = 0;
+    bool     mutual     = false;
+    bool     waits      = false;
+    bool     hold       = false;
+  };
+  std::vector<realign_t> realign_;
   struct offer_t {
     SimChannel<MemReq>* bank_in = nullptr;
     bool     valid       = false;

@@ -371,6 +371,8 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [NUM_REQS-1:0]                     core_req_follower;
     wire [NUM_REQS-1:0]                     core_req_xbar_ready;
     wire [NUM_REQS-1:0][BANK_TAG_WIDTH-1:0] core_req_bank_tag;
+    wire [NUM_REQS-1:0]                     core_req_realign;
+    wire [NUM_REQS-1:0]                     core_req_live = core_req_valid & ~core_req_realign;
     if (DO_READ_MERGE) begin : g_read_merge
         // a plain read has no flush, I/O, local, OM or atomic attribute
         localparam [`UP(MEM_ATTR_WIDTH)-1:0] SPECIAL_ATTRS = `UP(MEM_ATTR_WIDTH)'((1 << MEM_ATTR_FLUSH_OFFS)
@@ -380,7 +382,74 @@ module VX_cache import VX_gpu_pkg::*; #(
                                                                                 | (1 << MEM_ATTR_AMO_OFFS));
         wire [NUM_REQS-1:0] plain_read;
         for (genvar i = 0; i < NUM_REQS; ++i) begin : g_plain_read
-            assign plain_read[i] = core_req_valid[i] && ~core_req_rw[i] && ((core_req_attr[i] & SPECIAL_ATTRS) == '0);
+            assign plain_read[i] = core_req_live[i] && ~core_req_rw[i] && ((core_req_attr[i] & SPECIAL_ATTRS) == '0);
+        end
+        // Pair realignment. A same-word pair of ports carries the two parts of one
+        // LSU request in order, and a bank serves two parts of one request in one
+        // line a cycle apart. A port that moved past such a part its partner still
+        // holds waits for the partner, so the pair's next same-word reads reach the
+        // merge in the same cycle. The wait is decided from registered copies of
+        // the heads, off the crossbar's grant path. Stores can share a tag, so the
+        // line tells a part from a later store, and a pair that waited on each
+        // other is released. A line-merge group's ports are independent clients.
+        // A wider group waits on more parts, and the wait costs the overlap of the
+        // next request's parts on other banks more than the merges it restores.
+        if (!MERGE_LINE && (MERGE_GROUP == 2)) begin : g_realign
+            wire [NUM_REQS-1:0] regular_req;
+            wire [NUM_REQS-1:0] waits;
+            for (genvar i = 0; i < NUM_REQS; ++i) begin : g_regular
+                assign regular_req[i] = core_req_valid[i] && ((core_req_attr[i] & SPECIAL_ATTRS) == '0);
+            end
+            for (genvar i = 0; i < NUM_REQS; ++i) begin : g_port
+                localparam PARTNER = i ^ 1;
+                reg                       head_valid_r;
+                reg [TAG_WIDTH-1:0]       head_tag_r;
+                reg [LINE_ADDR_WIDTH-1:0] head_line_r;
+                reg [BANK_SEL_WIDTH-1:0]  head_bid_r;
+                reg                       shared_r;
+                reg                       ahead_r;
+                reg [TAG_WIDTH-1:0]       ahead_tag_r;
+                reg [LINE_ADDR_WIDTH-1:0] ahead_line_r;
+                reg [BANK_SEL_WIDTH-1:0]  ahead_bid_r;
+                reg                       mutual_r;
+                // the port moved past its last cycle's head, whose line the partner's
+                // part of the same request shared
+                wire start = shared_r && head_valid_r && ~(core_req_valid[i] && (core_req_tag[i] == head_tag_r)
+                                                            && (core_req_line_addr[i] == head_line_r) && (core_req_bid[i] == head_bid_r));
+                wire owes_head  = regular_req[PARTNER] && (core_req_tag[PARTNER] == head_tag_r)
+                               && (core_req_line_addr[PARTNER] == head_line_r) && (core_req_bid[PARTNER] == head_bid_r);
+                wire owes_ahead = regular_req[PARTNER] && (core_req_tag[PARTNER] == ahead_tag_r)
+                               && (core_req_line_addr[PARTNER] == ahead_line_r) && (core_req_bid[PARTNER] == ahead_bid_r);
+                assign waits[i] = (start && owes_head) || (ahead_r && owes_ahead);
+                assign core_req_realign[i] = waits[i] && ~mutual_r;
+                always @(posedge clk) begin
+                    if (reset) begin
+                        head_valid_r <= 1'b0;
+                        ahead_r      <= 1'b0;
+                        mutual_r     <= 1'b0;
+                    end else begin
+                        head_valid_r <= core_req_valid[i];
+                        ahead_r      <= waits[i];
+                        mutual_r     <= waits[i] && waits[PARTNER];
+                    end
+                end
+                always @(posedge clk) begin
+                    head_tag_r  <= core_req_tag[i];
+                    head_line_r <= core_req_line_addr[i];
+                    head_bid_r  <= core_req_bid[i];
+                    shared_r    <= regular_req[i] && regular_req[PARTNER]
+                                && (core_req_tag[PARTNER] == core_req_tag[i])
+                                && (core_req_line_addr[PARTNER] == core_req_line_addr[i])
+                                && (core_req_bid[PARTNER] == core_req_bid[i]);
+                    if (start && owes_head) begin
+                        ahead_tag_r  <= head_tag_r;
+                        ahead_line_r <= head_line_r;
+                        ahead_bid_r  <= head_bid_r;
+                    end
+                end
+            end
+        end else begin : g_no_realign
+            assign core_req_realign = '0;
         end
         // same_word[i][j]: port i reads what a lower port j of its group reads
         wire [NUM_REQS-1:0][NUM_REQS-1:0] same_word;
@@ -423,9 +492,10 @@ module VX_cache import VX_gpu_pkg::*; #(
                 assign core_req_bank_tag[i] = {core_req_tag[i], merged_mask};
             end
             assign core_req_follower[i] = (| same_word[i]);
-            assign core_req_ready[i]    = core_req_follower[i] ? (| leader_fire) : core_req_xbar_ready[i];
+            assign core_req_ready[i]    = ~core_req_realign[i] && (core_req_follower[i] ? (| leader_fire) : core_req_xbar_ready[i]);
         end
     end else begin : g_no_read_merge
+        assign core_req_realign  = '0;
         assign core_req_follower = '0;
         assign core_req_bank_tag = core_req_tag;
         assign core_req_ready    = core_req_xbar_ready;
@@ -442,7 +512,7 @@ module VX_cache import VX_gpu_pkg::*; #(
         };
     end
     // a merged read enters the crossbar once, as its leader
-    assign core_req_xbar_fire     = core_req_valid & ~core_req_follower & core_req_xbar_ready;
+    assign core_req_xbar_fire     = core_req_live & ~core_req_follower & core_req_xbar_ready;
     wire [NUM_BANKS-1:0]                     xbar_bank_valid;
     wire [NUM_BANKS-1:0][CORE_REQ_DATAW-1:0] xbar_bank_data;
     wire [NUM_BANKS-1:0][REQ_SEL_WIDTH-1:0]  xbar_bank_idx;
@@ -466,7 +536,7 @@ module VX_cache import VX_gpu_pkg::*; #(
     `else
         `UNUSED_PIN(collisions),
     `endif
-        .valid_in  (core_req_valid & ~core_req_follower),
+        .valid_in  (core_req_live & ~core_req_follower),
         .data_in   (core_req_data_in),
         .sel_in    (core_req_bid),
         .ready_in  (core_req_xbar_ready),
@@ -891,8 +961,8 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [NUM_REQS-1:0]  perf_crsp_stall_per_req;
     wire [MEM_PORTS-1:0] perf_mem_stall_per_port;
     // a merged read counts once, as the bank access that serves it
-    `BUFFER(perf_core_reads_per_req, core_req_valid & core_req_ready & ~core_req_rw & ~core_req_follower);
-    `BUFFER(perf_core_writes_per_req, core_req_valid & core_req_ready & core_req_rw);
+    `BUFFER(perf_core_reads_per_req, core_req_live & core_req_ready & ~core_req_rw & ~core_req_follower);
+    `BUFFER(perf_core_writes_per_req, core_req_live & core_req_ready & core_req_rw);
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_perf_crsp_stall_per_req
         assign perf_crsp_stall_per_req[i] = core_bus_if[i].rsp_valid && ~core_bus_if[i].rsp_ready;
     end
