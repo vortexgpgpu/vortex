@@ -1414,9 +1414,11 @@ public:
     // tc.cp: k_tiles columns of every lane from a_base, lda bytes per lane
     bool       copy = false;
     bool       copying = false;
-    // TMEM columns [span_lo, span_hi) the op reads or writes
-    uint32_t   span_lo = 0;
-    uint32_t   span_hi = 0;
+    // TMEM columns the op touches: D [taddr, d_hi), A [a_base, a_hi) and
+    // metadata [meta_base, m_hi), the last two only when the op reads them
+    uint32_t   d_hi = 0;
+    uint32_t   a_hi = 0;
+    uint32_t   m_hi = 0;
     // On completion an op (or a bare tc.commit) arrives on its commits, oldest
     // first, one per cycle.
     uint64_t   seq = 0;
@@ -1426,26 +1428,23 @@ public:
   };
 
   void job_span(tj_t& job) const {
-    uint32_t lo = job.taddr;
-    uint32_t hi = job.taddr + (job.copy ? job.k_tiles : job.n_frag * wg_cfg::tcN);
-    auto extend = [&](uint32_t base, uint32_t cols) {
-      lo = std::min(lo, base);
-      hi = std::max(hi, base + cols);
-    };
-    if (!job.copy && job.a_tmem) {
-      extend(job.a_base, job.k_tiles * kFedpWords);
+    job.d_hi = job.taddr + (job.copy ? job.k_tiles : job.n_frag * wg_cfg::tcN);
+    if (!job.copy) {
+      job.a_hi = job.a_base + job.k_tiles * kFedpWords;
+      job.m_hi = job.meta_base + job.k_tiles * this->job_meta_cols(job);
     }
-    if (!job.copy && job.sparse) {
-      extend(job.meta_base, job.k_tiles * this->job_meta_cols(job));
-    }
-    job.span_lo = lo;
-    job.span_hi = hi;
   }
 
   // A TMEM transfer waits only for its CTA's ops that touch its columns.
   bool tmem_conflict(int32_t cta, uint32_t col, uint32_t cols) const {
+    uint32_t hi = col + cols;
     for (auto& job : jobs_) {
-      if (job.cta == cta && col < job.span_hi && job.span_lo < col + cols) {
+      if (job.cta != cta) {
+        continue;
+      }
+      if ((col < job.d_hi && job.taddr < hi)
+       || (!job.copy && job.a_tmem && col < job.a_hi && job.a_base < hi)
+       || (!job.copy && job.sparse && col < job.m_hi && job.meta_base < hi)) {
         return true;
       }
     }
@@ -1469,12 +1468,11 @@ public:
   }
 
 
-  // tc.* operands are scalars, read from the warp's lowest active thread.
+  // tc.* operands are scalars, read from thread 0.
   static uint32_t scalar_thread(const instr_trace_t* trace) {
-    for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-      if (trace->tmask.test(t)) {
-        return t;
-      }
+    if (!trace->tmask.test(0)) {
+      std::cout << "Error: tc op without thread 0" << std::endl;
+      std::abort();
     }
     return 0;
   }

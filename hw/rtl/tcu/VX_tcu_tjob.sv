@@ -248,9 +248,10 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         logic                   a_tmem;    // a_base is A's first TMEM column
         logic [15:0]            lda;
         logic [15:0]            ldb;
-        // TMEM columns [span_lo, span_hi) the job reads or writes
-        logic [COLW-1:0]        span_lo;
-        logic [COLW-1:0]        span_hi;
+        // TMEM columns the job touches: D [taddr, d_hi), A [a_base, a_hi), metadata [meta_base, m_hi)
+        logic [COLW-1:0]        d_hi;
+        logic [COLW-1:0]        a_hi;
+        logic [COLW-1:0]        m_hi;
         logic [15:0]            kt;
         logic [COLW-1:0]        a_col;     // K-tile kt's TMEM columns, stepped per K-tile
         logic [COLW-1:0]        meta_col;
@@ -366,26 +367,26 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire op_is_cp      = (op.op_type == INST_OP_BITS'(INST_TCU_TC_CP));
     wire op_is_idesc   = (op.op_type == INST_OP_BITS'(INST_TCU_TC_IDESC));
 
-    // tc.* operands are scalars, read from the warp's lowest active thread.
-    wire [`LOG2UP(NT)-1:0] op_st;
-    VX_priority_encoder #(
-        .N (NT)
-    ) scalar_pe (
-        .data_in    (op.header.tmask),
-        `UNUSED_PIN (onehot_out),
-        .index_out  (op_st),
-        `UNUSED_PIN (valid_out)
-    );
-    wire [31:0] op_s1 = op.rs1_data[op_st][31:0];
-    wire [31:0] op_s2 = op.rs2_data[op_st][31:0];
-    wire [31:0] op_s3 = op.rs3_data[op_st][31:0];
+    // tc.* operands are scalars, read from thread 0.
+    wire [31:0] op_s1 = op.rs1_data[0][31:0];
+    wire [31:0] op_s2 = op.rs2_data[0][31:0];
+    wire [31:0] op_s3 = op.rs3_data[0][31:0];
 
-    // tc.mma descriptor slots, four per CTA: {leading bytes, idesc}.
+    function automatic logic [15:0] meta_row_bits(input logic [4:0] fmt);
+        return 16'(TCU_TC_K * 2 * (32 / tcu_fmt_width(fmt)));
+    endfunction
+
+    // tc.mma descriptor slots, four per CTA: {metadata, A and D column counts,
+    // leading bytes, idesc}; the counts are fixed per slot, so tc.idesc
+    // computes them off the tc.mma path.
     localparam DSLOTS = 4 * (1 << NCTA_WIDTH);
-    logic [63:0] dslot_r [DSLOTS];
+    logic [3*COLW+63:0] dslot_r [DSLOTS];
     wire [`LOG2UP(DSLOTS)-1:0] op_dslot = {op.header.cta_id, op.op_args.tcu.fmt_d[1:0]};
-    wire [31:0] op_idesc = dslot_r[op_dslot][31:0];
-    wire [31:0] op_ld    = dslot_r[op_dslot][63:32];
+    wire [31:0]     op_idesc = dslot_r[op_dslot][31:0];
+    wire [31:0]     op_ld    = dslot_r[op_dslot][63:32];
+    wire [COLW-1:0] op_d_len = dslot_r[op_dslot][64 +: COLW];
+    wire [COLW-1:0] op_a_len = dslot_r[op_dslot][64+COLW +: COLW];
+    wire [COLW-1:0] op_m_len = dslot_r[op_dslot][64+2*COLW +: COLW];
 
     wire [`CLOG2(JOBS_PER_CTA+NSLOTS+1)-1:0] op_cta_jobs = cta_jobs_r[op.header.cta_id];
 
@@ -454,6 +455,9 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     );
     wire [31:0] alloc_col = afit_valid ? (32'(afit_idx) * ACOLS) : '1;
 
+    `RUNTIME_ASSERT (~(op_sel_valid && (op_is_mma || op_is_cp || op_is_commit || op_is_idesc)) || op.header.tmask[0],
+        ("%t: %s: tc op without thread 0", $time, INSTANCE_ID))
+
     `RUNTIME_ASSERT (~(op_sel_valid && (op_is_alloc || op_is_dealloc))
                   || (op_ncols >= ACOLS && op_ncols <= COLS && (op_ncols & (op_ncols - 1)) == 0),
         ("%t: %s: TMEM allocation of %0d columns", $time, INSTANCE_ID, op_ncols))
@@ -469,7 +473,9 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         op_conflict = 1'b0;
         for (int i = 0; i < NSLOTS; ++i) begin
             if (state_r[i] != TJ_FREE && slot_r[i].cta == op.header.cta_id
-             && op_span_lo < slot_r[i].span_hi && slot_r[i].span_lo < op_xfer_hi)
+             && ((op_span_lo < slot_r[i].d_hi && slot_r[i].taddr < op_xfer_hi)
+              || (slot_r[i].a_tmem && op_span_lo < slot_r[i].a_hi && COLW'(slot_r[i].a_base) < op_xfer_hi)
+              || (slot_r[i].sparse && op_span_lo < slot_r[i].m_hi && COLW'(slot_r[i].meta_base) < op_xfer_hi)))
                 op_conflict = 1'b1;
         end
     end
@@ -530,7 +536,10 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     always_ff @(posedge clk) begin
         if (op_fire && op_is_idesc) begin
-            dslot_r[op_dslot] <= {op_s2, op_s1};
+            dslot_r[op_dslot] <= {COLW'(32'(op_s1[31:24]) * ((2 * 32'(meta_row_bits(op_s1[4:0])) + 31) >> 5)),
+                                  COLW'(32'(op_s1[31:24]) * TCU_WG_FEDP_K),
+                                  COLW'(32'(op_s1[20:13]) * TC_N),
+                                  op_s2, op_s1};
         end
     end
 
@@ -632,9 +641,6 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // parallel, once the previous K-tile's last step has left the E register.
     // A lane's K-tile metadata is its two rows, in row order, over `meta_cols`.
     logic [3:0] pro_idx_r;
-    function automatic logic [15:0] meta_row_bits(input logic [4:0] fmt);
-        return 16'(TCU_TC_K * 2 * (32 / tcu_fmt_width(fmt)));
-    endfunction
     wire [3:0]  pro_meta_reads = rj.sparse ? 4'((rj.meta_cols + 16'(TPL) - 16'd1) / 16'(TPL)) : 4'd0;
     wire [3:0]  pro_a_reads    = rj.a_tmem ? 4'(A_READS) : 4'd0;
     wire [3:0]  pro_total      = pro_meta_reads + pro_a_reads;
@@ -1080,8 +1086,7 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     j.a_base  = post_w[1][15:0];
                     j.lda     = post_w[2][15:0];
                     j.k_tiles = post_w[3][15:0];
-                    j.span_lo = j.taddr;
-                    j.span_hi = j.taddr + COLW'(j.k_tiles);
+                    j.d_hi    = j.taddr + COLW'(j.k_tiles);
                 end else begin
                     j.fmt_s      = post_w[0][4:0];
                     j.fmt_d      = post_w[0][9:5];
@@ -1106,18 +1111,9 @@ module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     j.sn_chunk   = 16'd15 * ((j.ldb != 0) ? (16'(TC_N) * j.ldb) : 16'(B_BLK_BYTES));
                     j.b_kt_stride = (j.ldb != 0) ? 16'(KT_BYTES * (j.sparse ? 2 : 1))
                                                  : 16'(32'(j.n_frag) * B_BLK_BYTES);
-                    j.span_lo    = j.taddr;
-                    j.span_hi    = j.taddr + COLW'(32'(j.n_frag) * TC_N);
-                    if (j.a_tmem) begin
-                        if (COLW'(j.a_base) < j.span_lo) j.span_lo = COLW'(j.a_base);
-                        if (COLW'(32'(j.a_base) + 32'(j.k_tiles) * TCU_WG_FEDP_K) > j.span_hi)
-                            j.span_hi = COLW'(32'(j.a_base) + 32'(j.k_tiles) * TCU_WG_FEDP_K);
-                    end
-                    if (j.sparse) begin
-                        if (COLW'(j.meta_base) < j.span_lo) j.span_lo = COLW'(j.meta_base);
-                        if (COLW'(32'(j.meta_base) + 32'(j.k_tiles) * 32'(j.meta_cols)) > j.span_hi)
-                            j.span_hi = COLW'(32'(j.meta_base) + 32'(j.k_tiles) * 32'(j.meta_cols));
-                    end
+                    j.d_hi       = j.taddr + op_d_len;
+                    j.a_hi       = COLW'(j.a_base) + op_a_len;
+                    j.m_hi       = COLW'(j.meta_base) + op_m_len;
                 end
                 slot_r[post_slot] <= j;
                 state_r[post_slot] <= TJ_WAIT;

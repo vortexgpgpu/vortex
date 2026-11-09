@@ -27,7 +27,7 @@ mainstream model, so the TMEM path adopts it.
 ## ISA
 
 `tmem.*` are CUSTOM0, funct7 = 5; `tc.*` are funct7 = 6. `tc.*` operands are
-scalars from the lowest active thread; `tc.mma` and `tc.cp` read a third
+scalars from thread 0, which must be active; `tc.mma` and `tc.cp` read a third
 source register named by the rd field.
 
 | Vortex | tcgen05 | Operands |
@@ -166,10 +166,18 @@ Each phase kept SimX and RTL in lockstep.
    | TMEM, 128 columns | 135,855 | 16 | 6.93 ns |
    | TMEM, 512 columns | 139,436 | 16 | 7.01 ns |
    | TMEM, 512 columns, registered op port | 143,705 | 16 | 5.04 ns |
+   | + per-range interlock, thread-0 scalars | 142,650 | 16 | 4.83 ns |
 
    Every failing path ran from the lane dispatch output register through
    the sequencer's op-port arbitration and scalar pick, so the sequencer now
    registers the selected op first (SimX holds a newly arrived op a cycle).
+   The next path picked the scalar thread, read the descriptor slot and
+   merged the D, A and metadata column ranges with min/max into one span.
+   `tc.idesc` now stores the range lengths, the interlock checks the three
+   ranges apart, and `tc.*` scalars come from thread 0; cycles are
+   unchanged. The worst paths now decode the registered op into its
+   acceptance (`op_fire`) and fan out to the TMEM addresses and job slots,
+   just above the FEDP datapath (4.47 ns).
    The sequencer is ~40.5k LUTs and each `VX_tcu_core` ~22k; TMEM costs
    ~51.7k LUTs over WGMMA, about 2.3 tensor cores, so an equal-area WGMMA
    design would get two more cores' MMA rate but not the accumulator reuse

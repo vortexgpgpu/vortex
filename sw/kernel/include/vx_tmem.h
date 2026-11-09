@@ -102,9 +102,9 @@ inline void set_idesc(uint32_t idesc, uint32_t ld) {
 
 // tcgen05.mma: D (column taddr) += A . B with descriptor slot Slot, A and B at
 // shared-memory byte offsets (or A at a TMEM column with a_tmem), issued
-// asynchronously from any one thread. acc_init zeroes D first; meta is the
-// first metadata column of a sparse op. Ops of a CTA complete in order;
-// tc.commit tracks them.
+// asynchronously. tc.* ops take their scalars from thread 0, which must be
+// active. acc_init zeroes D first; meta is the first metadata column of a
+// sparse op. Ops of a CTA complete in order; tc.commit tracks them.
 template <uint32_t Slot>
 inline void mma(uint32_t taddr, uint32_t a, uint32_t b, bool acc_init = false, uint32_t meta = 0) {
   static_assert(Slot < 4, "four descriptor slots");
