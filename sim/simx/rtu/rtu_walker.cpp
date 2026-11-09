@@ -14,6 +14,7 @@
 #include "rtu_walker.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstring>
 #include <vector>
@@ -124,21 +125,55 @@ inline uint32_t hit_facing_bit(bool back_facing, uint32_t inst_flags) {
   return back_facing ? VX_RT_HIT_BACK_FACING : 0u;
 }
 
+// The hardware's per-ray traversal stack: VX_CFG_RTU_STACK_DEPTH entries shared
+// by the TLAS and every BLAS below it. A walk visits the tree depth first,
+// nearer child first, so every node has a rank path (its child rank at each
+// level, an instance's index within its leaf) and the walk proceeds in
+// ascending rank-path order. A child that does not fit on the stack is dropped;
+// the walk then only descends, so when it would next pop it restarts from the
+// root instead, following the rank path to the nearest dropped child: every
+// node before it has been visited. A tightened best_t only culls a suffix of a
+// node's ordered children, so the recorded ranks stay valid across restarts.
+struct ShortStack {
+  static constexpr uint32_t kLevels = 64;
+  struct Entry {
+    uint32_t lvl;
+    uint32_t rank;
+    uint32_t off;
+  };
+  std::vector<Entry> entries;
+  std::array<uint32_t, kLevels> path{};   // rank taken at each level
+  bool     ovf      = false;   // a child was dropped since the walk (re)started
+  uint32_t nd_lvl   = 0;       // the nearest dropped child
+  uint32_t nd_rank  = 0;
+  bool     follow   = false;   // restarting: descend along the rank path
+  uint32_t trl_lvl  = 0;       // ... down to this dropped child
+  uint32_t trl_rank = 0;
+  bool     restart  = false;   // the walk must unwind and start over
+  uint64_t visits   = 0;
+
+  void set_path(uint32_t lvl, uint32_t rank) {
+    if (lvl < kLevels) path[lvl] = rank;
+  }
+  uint32_t get_path(uint32_t lvl) const {
+    return (lvl < kLevels) ? path[lvl] : 0;
+  }
+};
+
 // Depth-first walker for one BVH sub-tree under the supplied (object-space)
-// ray. Recurses on LeafInst so each instance's BLAS gets walked with its
-// transformed ray. ctx accumulates hits/yields across the whole call tree.
+// ray, rooted at level root_lvl. Recurses on LeafInst so each instance's BLAS
+// gets walked with its transformed ray on the same short stack. ctx accumulates
+// hits/yields across the whole call tree.
 //
-// Returns as soon as sv.miss is raised: the caller discards the partial state
-// and replays the walk once the missing line has arrived.
-//
-// The functional traversal stack is unbounded so the oracle never misses a hit;
-// the HW short-stack (VX_CFG_RTU_STACK_DEPTH) overflow is counted as a
-// trail-based RESTART and charged in the cost model.
+// Returns as soon as sv.miss is raised (the caller discards the partial state
+// and replays the walk once the missing line has arrived) or ss.restart is set
+// (the caller restarts the walk from the scene root).
 void walk_bvh4_subtree(SceneView& sv,
                        const float ro[3], const float rd[3],
-                       uint32_t root_off, uint32_t instance_id,
-                       uint32_t custom_id, uint32_t inst_flags,
-                       WalkCtx& ctx, PerfStats& perf) {
+                       uint32_t root_off, uint32_t root_lvl,
+                       uint32_t instance_id, uint32_t custom_id,
+                       uint32_t inst_flags, WalkCtx& ctx, ShortStack& ss,
+                       PerfStats& perf) {
   // The ray setup's reciprocals, once per (object-space) ray.
   const float inv[3] = { ray_recip(rd[0]), ray_recip(rd[1]), ray_recip(rd[2]) };
 
@@ -263,12 +298,14 @@ void walk_bvh4_subtree(SceneView& sv,
     }
   };
 
-  auto visit_leaf_inst = [&](uint32_t leaf_off, uint32_t count) {
+  auto visit_leaf_inst = [&](uint32_t leaf_off, uint32_t count, uint32_t lvl) {
     uint8_t hdr_buf[kVxBvhLeafHeaderBytes];
     read_scene_bytes(sv, leaf_off, sizeof(hdr_buf), hdr_buf);
     if (sv.miss) return;
     uint32_t insts_off = leaf_off + kVxBvhLeafHeaderBytes;
-    for (uint32_t i = 0; i < count; ++i) {
+    // A restart following its path resumes at the instance it recorded.
+    const uint32_t first = ss.follow ? ss.get_path(lvl + 1) : 0;
+    for (uint32_t i = first; i < count; ++i) {
       uint8_t inst_buf[kVxBvhInstanceStride];
       read_scene_bytes(sv, insts_off + i * kVxBvhInstanceStride,
                        kVxBvhInstanceStride, inst_buf);
@@ -278,41 +315,41 @@ void walk_bvh4_subtree(SceneView& sv,
       // Vulkan instanceCullMask: skip the instance entirely if its mask byte
       // and the ray's cull_mask have no bits in common. Both default to 0xff in
       // the no-culling path.
-      if ((inst->cull_mask & ctx.ray_cull_mask & 0xffu) == 0) continue;
+      if ((inst->cull_mask & ctx.ray_cull_mask & 0xffu) == 0) {
+        ss.follow = false;
+        continue;
+      }
       // VkGeometryInstanceFlagBits packed into cull_mask bits 15..8.
       uint32_t inst_flags2 =
           (inst->cull_mask >> kRtuInstanceFlagsShift) & kRtuInstanceFlagsMask;
       float obj_ro[3], obj_rd[3];
       world_to_object_ray(inst->xform, ro, rd, obj_ro, obj_rd);
       ++perf.bvh_instance_descents;
+      // The BLAS root sits at the instance level, ranked by its index.
+      ss.set_path(lvl + 1, i);
       walk_bvh4_subtree(sv, obj_ro, obj_rd,
-                        inst->blas_root_byte_offset,
+                        inst->blas_root_byte_offset, lvl + 1,
                         inst->instance_id,
                         inst->custom_id, inst_flags2,
-                        ctx, perf);
-      if (sv.miss) return;
+                        ctx, ss, perf);
+      if (sv.miss || ss.restart || ctx.terminated) return;
+      ss.follow = false;
     }
   };
 
-  // SimX is the correctness oracle: keep an UNBOUNDED traversal stack so deep
-  // sub-trees are never dropped. The HW short-stack is only
-  // VX_CFG_RTU_STACK_DEPTH deep and trail-restarts to re-find subtrees it had
-  // to evict — it visits the same leaves, just at extra cost.
-  std::vector<uint32_t> stack;
-  stack.reserve(VX_CFG_RTU_STACK_DEPTH);
-  uint32_t current = root_off;
-  bool have_current = true;
-
   // Safety backstop: a malformed/cyclic acceleration structure (a child offset
-  // pointing back at an ancestor) would otherwise descend forever with the
-  // unbounded stack. The ceiling is far above any well-formed scene's node
-  // count, so it never truncates a legitimate walk.
+  // pointing back at an ancestor) would otherwise descend forever. The ceiling
+  // is far above any well-formed scene's node count, so it never truncates a
+  // legitimate walk.
   constexpr uint64_t kMaxNodeVisits = 1ull << 22;
-  uint64_t node_visits = 0;
 
-  while (have_current) {
-    if (ctx.terminated) break;
-    if (++node_visits > kMaxNodeVisits) break;
+  // The stack depth this sub-tree started from: popping back to it ends a BLAS.
+  const size_t stack_floor = ss.entries.size();
+  uint32_t current = root_off;
+  uint32_t lvl = root_lvl;
+
+  while (!ctx.terminated) {
+    if (++ss.visits > kMaxNodeVisits) return;
     uint8_t kind_buf[4];
     read_scene_bytes(sv, current, sizeof(kind_buf), kind_buf);
     if (sv.miss) return;
@@ -329,8 +366,8 @@ void walk_bvh4_subtree(SceneView& sv,
       }
     } else if (kind == kVxBvhKindLeafInst) {
       ++perf.bvh_leaves_fetched;
-      visit_leaf_inst(current, count);
-      if (sv.miss) return;
+      visit_leaf_inst(current, count, lvl);
+      if (sv.miss || ss.restart) return;
     } else if (kind == kVxBvhKindLeafProc) {
       ++perf.bvh_leaves_fetched;
       // SKIP_AABBS: symmetric gate with SKIP_TRIANGLES. Otherwise ray-test each
@@ -388,27 +425,53 @@ void walk_bvh4_subtree(SceneView& sv,
         }
         hits[j] = h;
       }
-      if (hit_count > 0) {
-        for (uint32_t i = hit_count; i-- > 1; ) {
-          // Each push past the HW short-stack depth is one subtree the HW would
-          // have to re-descend for via restart — count it for the cost model,
-          // but keep it (unbounded) so the functional walk never misses a hit.
-          if (stack.size() >= VX_CFG_RTU_STACK_DEPTH)
-            ++perf.bvh_stack_restarts;
-          stack.push_back(hits[i].offset);
+
+      // A restart descends into the child its path names; nearer children
+      // were visited before. Culled by now, that child and every farther one
+      // are done.
+      uint32_t dsc = 0;
+      bool descend = (hit_count != 0);
+      if (ss.follow) {
+        dsc = (lvl + 1 == ss.trl_lvl) ? ss.trl_rank : ss.get_path(lvl + 1);
+        if (hit_count <= dsc) {
+          ss.follow = false;
+          descend = false;
         }
-        current = hits[0].offset;
-        have_current = true;
+      }
+      if (descend) {
+        // Farther children first, so the last one dropped is the nearest.
+        for (uint32_t i = hit_count; i-- > dsc + 1; ) {
+          if (ss.entries.size() < VX_CFG_RTU_STACK_DEPTH) {
+            ss.entries.push_back({lvl + 1, i, hits[i].offset});
+          } else {
+            ss.ovf     = true;
+            ss.nd_lvl  = lvl + 1;
+            ss.nd_rank = i;
+          }
+        }
+        current = hits[dsc].offset;
+        ++lvl;
+        ss.set_path(lvl, dsc);
+        if (ss.follow && lvl == ss.trl_lvl) {
+          ss.follow = false;
+        }
         continue;
       }
     }
 
-    if (stack.empty()) {
-      have_current = false;
-    } else {
-      current = stack.back();
-      stack.pop_back();
+    if (ctx.terminated) return;
+    if (ss.ovf) {
+      ++perf.bvh_stack_restarts;
+      ss.restart = true;
+      return;
     }
+    if (ss.entries.size() == stack_floor) return;
+    ss.follow = false;
+    const ShortStack::Entry e = ss.entries.back();
+    ss.entries.pop_back();
+    current = e.off;
+    lvl     = e.lvl;
+    ss.set_path(e.lvl, e.rank);
   }
 }
 
@@ -711,8 +774,19 @@ WalkResult Bvh4Walker::walk_lane(const RtuReq& req, uint32_t t, SceneView& sv,
   WalkCtx ctx = init_ctx(req, t, ro, rd, l);
 
   // Top-level (non-instanced) triangles carry no instance flags.
-  walk_bvh4_subtree(sv, ro, rd, root_off, 0, 0, 0, ctx, perf);
-  if (sv.miss) return {true, false};
+  ShortStack ss;
+  ss.entries.reserve(VX_CFG_RTU_STACK_DEPTH);
+  for (;;) {
+    walk_bvh4_subtree(sv, ro, rd, root_off, 0, 0, 0, 0, ctx, ss, perf);
+    if (sv.miss) return {true, false};
+    if (!ss.restart) break;
+    ss.entries.clear();
+    ss.restart  = false;
+    ss.ovf      = false;
+    ss.follow   = true;
+    ss.trl_lvl  = ss.nd_lvl;
+    ss.trl_rank = ss.nd_rank;
+  }
 
   return {false, emit_lane_result(req, l, t, ctx)};
 }

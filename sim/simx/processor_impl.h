@@ -95,10 +95,10 @@ private:
 #endif
   RAM*        ram_ = nullptr;   // functional backing store (set by attach_ram)
   Cache::Ptr l3cache_;
-  uint64_t perf_mem_reads_;
-  uint64_t perf_mem_writes_;
-  uint64_t perf_mem_latency_;
-  uint64_t perf_mem_pending_reads_;
+  uint64_t perf_mem_reads_ = 0;
+  uint64_t perf_mem_writes_ = 0;
+  uint64_t perf_mem_latency_ = 0;
+  uint64_t perf_mem_pending_reads_ = 0;
   // Tracks whether cycle() has done its first-call init (reset +
   // kmu_->start()). reset() clears it so a back-to-back kernel launch
   // via cycle() re-dispatches the KMU.
