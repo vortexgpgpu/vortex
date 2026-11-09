@@ -187,9 +187,7 @@ proc slr_pblocks_run {} {
     # captured by an atom or a cluster cache. If it is not, the atom model is
     # stale (RTL changed) and we must NOT floorplan on a partial view.
     #
-    # A generate-loop instance is g_x[i].inst read from the RTL, and g_x_i_inst
-    # read from the CIRCT netlist, which names generate scopes with `_`.
-    set clusters [cells_re {.*/g_clusters(\[[0-9]+\]\.|_[0-9]+_)cluster}]
+    set clusters [cells_re {.*/g_clusters\[[0-9]+\]\.cluster}]
     if {[llength $clusters] == 0} {
         # Non-clustered top (single cluster inlined): treat vortex as one region.
         set clusters [cells_re {.*/(Vortex|vortex)$}]

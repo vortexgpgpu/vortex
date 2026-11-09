@@ -292,7 +292,7 @@ and without synthesis.
 
 | | `fpga_gate` | `asic_gate` | `logic_gate` |
 |---|---|---|---|
-| flow | Vivado synthesis, place and route | CIRCT → Yosys → ABC → OpenSTA, on ASAP7 | CIRCT → `foldsim-estimate-timing` (logic levels as Vivado counts them on `DEVICE`'s family) and `foldsim-estimate-area` (its cells, memories and DSPs) |
+| flow | Vivado synthesis, place and route | Yosys (slang frontend) → ABC → OpenSTA, on ASAP7 | CIRCT → `foldsim-estimate-timing` (logic levels as Vivado counts them on `DEVICE`'s family) and `foldsim-estimate-area` (its cells, memories and DSPs) |
 | design tree | `hw/syn/xilinx/dut` | `hw/syn/yosys/dut` | `hw/syn/xilinx/dut`, target `beacon` |
 | gated | `fmax_mhz` against the target clock, `lut` against `lut_budget` | `fmax_mhz` against the target clock, `cell_area_um2` against `area_budget_um2` | `max_levels` against the baseline, the deepest end point of every RTL unit, and `lut`, `ff`, `lutram`, `bram`, `uram`, `dsp` against the baseline |
 | also recorded | `wns_ns`, `lutram`, `ff`, `bram`, `uram`, `dsp`, critical paths, high-fanout nets | `wns_ns`, `tns_ns`, `seq_area_um2`, `sram_area_um2`, `cell_count`, `power_mw` | end point bits at ≥ 12 and ≥ 8 levels, the deepest paths |
@@ -463,7 +463,7 @@ tier, `timing_gpu`, in the catalog, so no CI sweep picks it up.
 |---|---|
 | scheduling | longest build first, from the recorded build times, so the longest is in flight from the start; `-j` caps parallel builds and each build's tool threads are derived from it |
 | isolation | every build gets a unique `PREFIX`, hence its own tree and log. On the Yosys flow this is load-bearing: its Makefile caches generated sources and does not regenerate them when the include set changes, so two designs sharing a tree would synthesize the first one's sources |
-| early-failure watch | the runner follows each log and announces the point past which a front-end error can no longer occur — the end of RTL elaboration for Vivado, the end of source generation and CIRCT elaboration for Yosys. A build that fails before it is reported as failed before synthesis, with its error lines quoted |
+| early-failure watch | the runner follows each log and announces the point past which a front-end error can no longer occur — the end of RTL elaboration for Vivado, the end of source generation for Yosys, whose slang frontend elaborates inside synthesis. A build that fails before it is reported as failed before synthesis, with its error lines quoted |
 | resumable sessions | each build directory carries a stamp of config hash, status and metrics. `--resume` reuses a build finished for this config, lets an unfinished one continue from its checkpoint, and rebuilds one whose config changed |
 | progress | phase transitions as they land, with a heartbeat between; `-v` streams the raw log |
 

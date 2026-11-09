@@ -1379,11 +1379,13 @@ address is its address a cycle later; `ci/test_ram_fold.py` runs a folded design
 in lockstep against the original, with a known-bad patch the check must catch.
 
 The fold needs a python3 with pyslang 11 or 12 (`pip install "pyslang>=11,<13"`), named by
-`RAM_FOLD_PYTHON` (default `python3`, `hw/syn/common.mk`). Vivado reads the
-folded preprocessed sources, so its own RAM, FSM and shift-register inference
-sees the RTL as written. The CIRCT elaboration of the same sources feeds Yosys,
-Beacon and Foldsim; its `<netlist>.memories.rpt` lists the RAMs that still read
-combinationally.
+`RAM_FOLD_PYTHON` (default `python3`, `hw/syn/common.mk`). Every synthesis tool
+reads the folded preprocessed sources, never an elaborated netlist, so its own
+RAM, FSM and shift-register inference sees the RTL as written: Vivado, Quartus,
+Design Compiler and Yosys (with its slang frontend, `read_slang`) each elaborate
+them themselves. Only the CIRCT models, Beacon and Foldsim, elaborate them
+with CIRCT; `circt_elaborate.sh` writes a `<netlist>.memories.rpt` listing the
+RAMs that still read combinationally.
 
 ### VX_fifo_queue
 

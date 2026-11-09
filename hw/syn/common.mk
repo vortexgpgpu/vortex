@@ -21,12 +21,13 @@ ifndef TOOLDIR
 $(error TOOLDIR not set — include $$(ROOT_DIR)/config.mk before hw/syn/common.mk)
 endif
 
-# Tool install prefixes (overridable; default under $(TOOLDIR)). CIRCT is the
-# SystemVerilog frontend of every flow: its preprocessor (gen_sources.sh -P)
-# feeds Vivado, and its elaboration into one netlist (circt_elaborate.sh;
-# gen_sources.sh -E) feeds Yosys, Beacon and Foldsim. Before either, the RAM
-# fold (gen_sources.sh -F, hw/scripts/ram_fold.py) patches the preprocessed
-# sources so that asynchronous RAM reads map to block RAM.
+# Tool install prefixes (overridable; default under $(TOOLDIR)). Every synthesis
+# tool reads the sources as written, never an elaborated netlist: CIRCT's
+# preprocessor expands their macros (gen_sources.sh -P), the RAM fold patches
+# them so that asynchronous RAM reads map to block RAM (gen_sources.sh -F,
+# hw/scripts/ram_fold.py), and each tool elaborates them itself (Yosys with its
+# slang frontend, read_slang). Only the CIRCT models elaborate them with CIRCT:
+# Beacon through circt_elaborate.sh, Foldsim in its own flow.
 CIRCT_PATH ?= $(TOOLDIR)/circt
 YOSYS_PATH ?= $(TOOLDIR)/yosys
 STA_PATH   ?= $(TOOLDIR)/sta

@@ -328,7 +328,8 @@ typed-`localparam` configuration package. One was built and reverted:
 
 - **sv2v drops wildcard re-exports.** The Yosys ASIC flow converted through
   sv2v at the time, which discards `export pkg::*` symbols — the flow failed
-  on `L3_CACHE_SIZE` and its siblings. (The flow now elaborates with CIRCT.)
+  on `L3_CACHE_SIZE` and its siblings. (Yosys now reads the sources with its
+  slang frontend.)
 - **Package compile order is tool-divergent.** Verilator is strict, Vivado
   auto-sorts, VCS is order-sensitive.
 

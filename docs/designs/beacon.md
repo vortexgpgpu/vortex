@@ -115,14 +115,14 @@ never builds it. The integration is in Vortex:
 | `ci/beacon.py` | `ci/` | run Beacon on any netlist; read it by unit; compare with Vivado |
 | `xilinx_cone_dump.tcl`, `xilinx_cone_probe.tcl`, `xilinx_wire_probe.tcl` | `hw/scripts` | Vivado probes for what levels cannot show (§8) |
 | target `beacon` | `hw/syn/xilinx/dut/common.mk` | one DUT: sources → netlist → levels and area → summary |
-| `circt_elaborate.sh -f mlir` | `hw/scripts` | the lowered HW/Comb/Seq netlist, no `firtool` |
+| `circt_elaborate.sh` | `hw/scripts` | the lowered HW/Comb/Seq netlist, no `firtool` |
 | `gen_platform.py --emit=family` | `hw/scripts` | the family of `DEVICE`, from `hw/syn/xilinx/platforms` |
 | `beacon_summary.py` | `hw/scripts` | `beacon_summary.csv`, per-unit `beacon_units.json`, `beacon_area.txt` |
 | `Beacon` backend, `logic_gate.py` | `ci/synth_gate.py`, `ci/` | the gate, beside `fpga_gate` and `asic_gate` |
 | `logic_gate.yml` | `.github/workflows` | runs it on pull requests that touch RTL |
 
-Beacon reads the same CIRCT import that foldsim and the Yosys flow
-use (`circt-verilog --ir-hw`), elaborated from the sources and defines
+Beacon reads the same CIRCT import that foldsim
+uses (`circt-verilog --ir-hw`), elaborated from the sources and defines
 `gen_sources.sh` writes for Vivado, with the Xilinx floating-point IPs as
 black boxes (`xilinx_ip_stubs.sv`).
 
@@ -460,7 +460,7 @@ On the full GPU, the 3,283 pairs at ≥ 12 levels fold into 169 paths in
 1. `gen_sources.sh` into `beacon/sources.f`, a filelist of `hw/rtl` with
    the defines (not preprocessed copies, so source lines are the
    repository's);
-2. `circt_elaborate.sh -f mlir` into `beacon/netlist.mlir`, the FP IPs as
+2. `circt_elaborate.sh` into `beacon/netlist.mlir`, the FP IPs as
    black boxes, with every op's source location;
 3. `foldsim-beacon-map`, then `foldsim-estimate-timing`; and
    `foldsim-beacon-map{area}`, then `foldsim-estimate-area`; all with

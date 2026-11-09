@@ -72,12 +72,13 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] alu_in1 = execute_if.data.rs1_data;
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] alu_in2 = execute_if.data.rs2_data;
 
-    wire [1:0] wg_src_offset = execute_if.data.op_args.alu.imm20[1:0]; // group-relative source index
+    wire [19:0] imm20 = execute_if.data.op_args.alu.imm20;
+    wire [1:0] wg_src_offset = imm20[1:0]; // group-relative source index
 
-    wire [31:0] lui_imm32 = {execute_if.data.op_args.alu.imm20, 12'd0};
-    wire [20:0] br_imm21 = {execute_if.data.op_args.alu.imm20, 1'b0};
+    wire [31:0] lui_imm32 = {imm20, 12'd0};
+    wire [20:0] br_imm21 = {imm20, 1'b0};
 
-    wire [`VX_CFG_XLEN-1:0] alu_imm = `SEXT(`VX_CFG_XLEN, execute_if.data.op_args.alu.imm20);
+    wire [`VX_CFG_XLEN-1:0] alu_imm = `SEXT(`VX_CFG_XLEN, imm20);
     wire [`VX_CFG_XLEN-1:0] lui_imm = `SEXT(`VX_CFG_XLEN, lui_imm32);
     wire [`VX_CFG_XLEN-1:0] br_imm  = `SEXT(`VX_CFG_XLEN, br_imm21);
     // The decoder pre-selects the immediate form, so only flops steer this mux.

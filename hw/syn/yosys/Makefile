@@ -90,7 +90,6 @@ else
 BB_MODULES ?= VX_dp_ram_asic,VX_sp_ram_asic
 endif
 
-comma := ,
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
 
@@ -197,30 +196,15 @@ asap7:
 asap7-models: asap7
 	$(ASAP7_INSTALL) --install-dir=$(ASAP7_DIR) --vt=$(ASAP7_VT) --models
 
-gen-sources: $(BUILD_DIR)/src
 $(BUILD_DIR):
 	mkdir -p $@
 
-$(BUILD_DIR)/src: | $(BUILD_DIR)
-	$(SCRIPT_DIR)/gen_sources.sh -P -F -T$(TOP_LEVEL_ENTITY) $(CFLAGS) -C$(BUILD_DIR)/src
-
-# CIRCT elaborates the design into one Verilog-2005 file; the black-box
-# modules (SRAM macros) stay instances with their parameter values, bound to
-# their stubs in the sources.
-verilog: $(BUILD_DIR)/project.v
-$(BUILD_DIR)/project.v: $(BUILD_DIR)/src
-	$(SCRIPT_DIR)/circt_elaborate.sh -fv2005 -t$(TOP_LEVEL_ENTITY) -I$(BUILD_DIR)/src -b'$(BB_MODULES)' \
-		-o$(BUILD_DIR)/project.v
-	# Remove severity/control system-task lines yosys can't synthesize
-	# ($fatal/$error/$warning/$info/$stop are used by the cvfpu sources).
-	sed -ri '/^[[:space:]]*[$$](finish|display|fatal|error|warning|info|stop)/d' $(BUILD_DIR)/project.v
-
+# Yosys reads the preprocessed, RAM-folded sources as written, like every
+# synthesis tool, and elaborates them itself with its slang frontend
+# (read_slang, run_synth.sh).
 gen-sources: $(BUILD_DIR)/sources.txt
-$(BUILD_DIR)/sources.txt: $(BUILD_DIR)/project.v
-	echo $(realpath $(BUILD_DIR)/project.v) > $(BUILD_DIR)/sources.txt
-	for m in $(subst $(comma), ,$(BB_MODULES)); do \
-		grep -lE "^[[:space:]]*module[[:space:]]+$$m\b" $(BUILD_DIR)/src/*.v $(BUILD_DIR)/src/*.sv 2>/dev/null; \
-	done | xargs -r realpath | sort -u >> $(BUILD_DIR)/sources.txt
+$(BUILD_DIR)/sources.txt: | $(BUILD_DIR)
+	$(SCRIPT_DIR)/gen_sources.sh -P -F -T$(TOP_LEVEL_ENTITY) $(CFLAGS) -C$(BUILD_DIR)/src -O$(BUILD_DIR)/sources.txt
 
 ifneq ($(strip $(DUT_FILELIST)),)
 SYN_SRC_FILE := $(abspath $(DUT_FILELIST))
@@ -290,9 +274,9 @@ timing: $(SYN_SRC_DEPS) $(SYN_LIB_DEPS) | $(BUILD_DIR)
 # SRAM macros of the design, with the same sources and SRAM black boxes as
 # synthesis, in seconds and without Yosys; report.txt converts the deepest
 # path to a period with the library's delays. docs/designs/beacon.md.
-beacon: $(BUILD_DIR)/src
+beacon: $(BUILD_DIR)/sources.txt
 	mkdir -p $(BUILD_DIR)/beacon
-	$(SCRIPT_DIR)/circt_elaborate.sh -f mlir -t$(TOP_LEVEL_ENTITY) -I$(BUILD_DIR)/src -b'$(BB_MODULES)' \
+	$(SCRIPT_DIR)/circt_elaborate.sh -t$(TOP_LEVEL_ENTITY) -I$(BUILD_DIR)/src -b'$(BB_MODULES)' \
 		-o$(BUILD_DIR)/beacon/netlist.mlir
 	$(FOLDSIM_OPT) $(BUILD_DIR)/beacon/netlist.mlir --pass-pipeline='builtin.module(foldsim-beacon-map{target=$(PDK)})' \
 		--emit-bytecode -o $(BUILD_DIR)/beacon/mapped.mlirbc

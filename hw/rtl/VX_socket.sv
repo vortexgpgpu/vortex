@@ -331,6 +331,9 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
         socket_tlb_bus_if [SOCKET_NUM_MMUS] ();
 
     wire dmmu_empty, immu_empty;
+    // Per dMMU lane: none of that lane's requests is in the MMU; each core's
+    // dcache flush waits only on its own lanes.
+    wire [`VX_CFG_SOCKET_SIZE * DCACHE_NUM_REQS-1:0] dmmu_lane_idle;
 
 `ifdef PERF_ENABLE
     mmu_perf_t dmmu_perf, immu_perf;
@@ -400,9 +403,6 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     // socket to drain (conservative, always correct). The unit MMU carries no
     // core load or store, so it holds only the socket busy, not the barriers.
     wire socket_mmu_drained = dmmu_empty && immu_empty;
-    // Per dMMU lane: none of that lane's requests is in the MMU; each core's
-    // dcache flush waits only on its own lanes.
-    wire [`VX_CFG_SOCKET_SIZE * DCACHE_NUM_REQS-1:0] dmmu_lane_idle;
 `ifdef SOCKET_UNIT_MMU_ENABLE
     wire ummu_empty;
     wire unit_mmu_drained = ummu_empty;

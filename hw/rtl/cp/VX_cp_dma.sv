@@ -194,6 +194,21 @@ module VX_cp_dma
   // Last beat of the current chunk.
   wire last_beat = (BCNT_W'({1'b0, beat_idx}) == (chunk_beats - BCNT_W'(1)));
 
+  // ---- Logical read channel ----
+  wire               rd_arvalid = (state == S_REQ_AR);
+  wire               rd_rready  = (state == S_READ);
+  wire               rd_arready = rd_from_host ? axi_host.arready : axi_dev.arready;
+  wire               rd_rvalid  = rd_from_host ? axi_host.rvalid  : axi_dev.rvalid;
+  wire [CL_BITS-1:0] rd_rdata   = rd_from_host ? axi_host.rdata   : axi_dev.rdata;
+
+  // ---- Logical write channel ----
+  wire               wr_awvalid = (state == S_REQ_AW);
+  wire               wr_wvalid  = (state == S_WRITE);
+  wire               wr_bready  = (state == S_WAIT_B);
+  wire               wr_awready = wr_to_host ? axi_host.awready : axi_dev.awready;
+  wire               wr_wready  = wr_to_host ? axi_host.wready  : axi_dev.wready;
+  wire               wr_bvalid  = wr_to_host ? axi_host.bvalid  : axi_dev.bvalid;
+
   // ---- FSM ----
   always_ff @(posedge clk) begin
     if (reset) begin
@@ -324,21 +339,6 @@ module VX_cp_dma
       endcase
     end
   end
-
-  // ---- Logical read channel ----
-  wire               rd_arvalid = (state == S_REQ_AR);
-  wire               rd_rready  = (state == S_READ);
-  wire               rd_arready = rd_from_host ? axi_host.arready : axi_dev.arready;
-  wire               rd_rvalid  = rd_from_host ? axi_host.rvalid  : axi_dev.rvalid;
-  wire [CL_BITS-1:0] rd_rdata   = rd_from_host ? axi_host.rdata   : axi_dev.rdata;
-
-  // ---- Logical write channel ----
-  wire               wr_awvalid = (state == S_REQ_AW);
-  wire               wr_wvalid  = (state == S_WRITE);
-  wire               wr_bready  = (state == S_WAIT_B);
-  wire               wr_awready = wr_to_host ? axi_host.awready : axi_dev.awready;
-  wire               wr_wready  = wr_to_host ? axi_host.wready  : axi_dev.wready;
-  wire               wr_bvalid  = wr_to_host ? axi_host.bvalid  : axi_dev.bvalid;
 
   wire [7:0]         burst_len  = 8'({1'b0, chunk_beats - BCNT_W'(1)});
 

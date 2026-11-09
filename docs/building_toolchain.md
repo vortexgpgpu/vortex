@@ -25,7 +25,7 @@ The components covered here are:
 11. [SST](#11-sst) — Structural Simulation Toolkit (sst-core + sst-elements + OpenMPI); consumed by the SST-driven regression configurations
 12. [FireSim](#12-firesim) — FPGA-accelerated host-decoupled simulation on the Alveo U55C or V80; needed only to elaborate a target or build a bitstream (optional)
 13. [SLASH / Alveo V80](#13-slash--alveo-v80-the-aved-backend) — AMD Alveo V80 platform stack for the `aved` backend (optional)
-14. [CIRCT](#14-circt) — the SystemVerilog frontend of every synthesis flow (`circt-verilog`, `circt-opt`, `firtool`)
+14. [CIRCT](#14-circt) — the SystemVerilog preprocessor of the synthesis flows and the frontend of Beacon and Foldsim (`circt-verilog`, `circt-opt`, `firtool`)
 15. [Foldsim](#15-foldsim) — FAME-5 simulator compiler of `hw/syn/foldsim`, built on CIRCT (optional)
 
 ---
@@ -1130,11 +1130,13 @@ for the backend's architecture and
 
 ## 14. CIRCT
 
-**Purpose**: the SystemVerilog frontend of every synthesis flow. Its
-preprocessor writes the sources each flow reads (`gen_sources.sh -P`, then the
-RAM fold, `-F`; see the hardware library's "Block RAM and asynchronous reads");
-Vivado reads them as they are, and Yosys, Beacon and Foldsim read the netlist
-CIRCT elaborates from them (`hw/scripts/circt_elaborate.sh`).
+**Purpose**: the SystemVerilog preprocessor of the synthesis flows and the
+frontend of Beacon and Foldsim. Its preprocessor writes the sources each flow
+reads (`gen_sources.sh -P`, then the RAM fold, `-F`; see the hardware library's
+"Block RAM and asynchronous reads"). Every synthesis tool reads those sources,
+never an elaborated netlist; Yosys reads them with its slang frontend. Only Beacon reads
+the netlist CIRCT elaborates (`hw/scripts/circt_elaborate.sh`); Foldsim imports
+the sources with CIRCT in its own flow.
 
 > **Baseline:** Vortex's CIRCT fork, branch `vortex_3.x` of
 > `vortexgpgpu/circt`: upstream CIRCT with the import, lowering and

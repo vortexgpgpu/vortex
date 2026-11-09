@@ -453,7 +453,7 @@ Output reports are written to `build/hw/syn/yosys/tfr_fedp_VX_tcu_fedp_tfr/repor
 
 Build directory: `<PREFIX>_<TOP_LEVEL_ENTITY>/` (e.g., `test_Vortex/`).
 
-The flow elaborates the SystemVerilog sources with CIRCT ([hw/scripts/circt_elaborate.sh](../hw/scripts/circt_elaborate.sh) `-f v2005`) into one Verilog-2005 file for Yosys: packed arrays and structs become plain vectors, the SRAM macros (`BB_MODULES`) stay instances with their parameter values, bound to their stubs, and a RAM that asks for block RAM reads synchronously, so that it maps to an SRAM macro.
+Yosys reads the same preprocessed, RAM-folded sources as every other synthesis flow, never an elaborated netlist, and elaborates them itself with its built-in slang frontend (`read_slang`, in [hw/syn/yosys/run_synth.sh](../hw/syn/yosys/run_synth.sh)). The SRAM macros (`BB_MODULES`) stay black-box instances with their parameter values (`--blackboxed-module`).
 
 #### Per-DUT synthesis
 
