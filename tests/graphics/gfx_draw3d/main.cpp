@@ -1,15 +1,14 @@
 // 3D rendering regression test: full TEX + RASTER + OM pipeline
 // against a CGLTrace replay.
 //
-// Pinned-buffer contract:
-//   tile_buffer   → RASTER HW (VX_DCR_RASTER_TBUF_ADDR) → pinned
-//   prim_buffer   → RASTER HW (VX_DCR_RASTER_PBUF_ADDR) → pinned
-//   tex_buffer    → TEX    HW (VX_DCR_TEX_ADDR)         → pinned
-//   depth_buffer  → OM     HW (VX_DCR_OM_ZBUF_ADDR)     → pinned
-//   color_buffer  → OM     HW (VX_DCR_OM_CBUF_ADDR)     → pinned
-// All five buffers are accessed by fixed-function HW whose AXI master
-// bypasses the per-core MMU, so under VM they must be
-// identity-mapped (allocated with VX_MEM_PHYS).
+// Buffers read or written by fixed-function HW:
+//   tile_buffer   → RASTER HW (VX_DCR_RASTER_TBUF_ADDR)
+//   prim_buffer   → RASTER HW (VX_DCR_RASTER_PBUF_ADDR)
+//   tex_buffer    → TEX    HW (VX_DCR_TEX_ADDR)
+//   depth_buffer  → OM     HW (VX_DCR_OM_ZBUF_ADDR)
+//   color_buffer  → OM     HW (VX_DCR_OM_CBUF_ADDR)
+// Under VM their caches translate through the socket / cluster unit MMUs,
+// so all five are ordinary buffers at minted virtual addresses.
 
 #include <iostream>
 #include <vector>
@@ -326,10 +325,10 @@ int render(const CGLTrace& trace) {
     if (tile_buffer != nullptr) { vx_buffer_release(tile_buffer); tile_buffer = nullptr; }
     if (prim_buffer != nullptr) { vx_buffer_release(prim_buffer); prim_buffer = nullptr; }
     // With the FF unit present, tile_buffer / prim_buffer are bound to the raster
-    // unit (via VX_DCR_RASTER_T/PBUF_ADDR) which bypasses the per-core MMU.
-    // Software-routed, the shader walks the primitives through the LSU instead
+    // unit (via VX_DCR_RASTER_T/PBUF_ADDR), whose rcache translates through the
+    // cluster unit MMU under VM. Software-routed, the shader walks the primitives through the LSU instead
     // and the tile buffer goes unused (the SW walk is binning-independent).
-    uint32_t rast_flags = VX_MEM_READ | (ff_raster ? (uint32_t)VX_MEM_PHYS : 0u);
+    uint32_t rast_flags = VX_MEM_READ;
     RT_CHECK(vx_buffer_create(device, tilebuf.size(), rast_flags, &tile_buffer));
     RT_CHECK(vx_buffer_address(tile_buffer, &tilebuf_addr));
     RT_CHECK(vx_buffer_create(device, primbuf.size(), rast_flags, &prim_buffer));
@@ -415,7 +414,7 @@ int render(const CGLTrace& trace) {
       auto stencil_fail  = toVXStencilOp(states.stencil_fail);
       OM_DCR_WRITE(VX_DCR_OM_STENCIL_FUNC, stencil_func);
       OM_DCR_WRITE(VX_DCR_OM_STENCIL_ZPASS, stencil_zpass);
-      OM_DCR_WRITE(VX_DCR_OM_STENCIL_ZPASS, stencil_zfail);
+      OM_DCR_WRITE(VX_DCR_OM_STENCIL_ZFAIL, stencil_zfail);
       OM_DCR_WRITE(VX_DCR_OM_STENCIL_FAIL, stencil_fail);
       OM_DCR_WRITE(VX_DCR_OM_STENCIL_REF, states.stencil_ref);
       OM_DCR_WRITE(VX_DCR_OM_STENCIL_MASK, states.stencil_mask);
@@ -423,7 +422,7 @@ int render(const CGLTrace& trace) {
     } else {
       OM_DCR_WRITE(VX_DCR_OM_STENCIL_FUNC, VX_OM_DEPTH_FUNC_ALWAYS);
       OM_DCR_WRITE(VX_DCR_OM_STENCIL_ZPASS, VX_OM_STENCIL_OP_KEEP);
-      OM_DCR_WRITE(VX_DCR_OM_STENCIL_ZPASS, VX_OM_STENCIL_OP_KEEP);
+      OM_DCR_WRITE(VX_DCR_OM_STENCIL_ZFAIL, VX_OM_STENCIL_OP_KEEP);
       OM_DCR_WRITE(VX_DCR_OM_STENCIL_FAIL, VX_OM_STENCIL_OP_KEEP);
       OM_DCR_WRITE(VX_DCR_OM_STENCIL_REF, 0);
       OM_DCR_WRITE(VX_DCR_OM_STENCIL_MASK, OM_STENCIL_MASK);
@@ -474,9 +473,10 @@ int render(const CGLTrace& trace) {
 
       // allocate texture memory
       if (tex_buffer != nullptr) { vx_buffer_release(tex_buffer); tex_buffer = nullptr; }
-      // With the FF unit present, tex_buffer is bound to it (VX_DCR_TEX_ADDR) and
-      // bypasses the MMU; software-routed, the shader loads it through the LSU.
-      uint32_t tex_flags = VX_MEM_READ | (ff_tex ? (uint32_t)VX_MEM_PHYS : 0u);
+      // With the FF unit present, tex_buffer is bound to it (VX_DCR_TEX_ADDR),
+      // whose tcache translates through the socket unit MMU under VM;
+      // software-routed, the shader loads it through the LSU.
+      uint32_t tex_flags = VX_MEM_READ;
       RT_CHECK(vx_buffer_create(device, texbuf.size(), tex_flags, &tex_buffer));
       RT_CHECK(vx_buffer_address(tex_buffer, &texbuf_addr));
       std::cout << "tex_buffer=0x" << std::hex << texbuf_addr << std::dec << std::endl;
@@ -753,9 +753,10 @@ int main(int argc, char *argv[]) {
   cbuf_size   = dst_width * cbuf_pitch;
 
   // With the FF unit present, depth_buffer / color_buffer are bound to the OM
-  // unit (via VX_DCR_OM_Z/CBUF_ADDR) and bypass the MMU; software-routed, the
-  // shader read-modify-writes them through the LSU.
-  uint32_t om_flags = VX_MEM_READ_WRITE | (ff_om ? (uint32_t)VX_MEM_PHYS : 0u);
+  // unit (via VX_DCR_OM_Z/CBUF_ADDR), whose ocache translates through the
+  // cluster unit MMU under VM; software-routed, the shader read-modify-writes
+  // them through the LSU.
+  uint32_t om_flags = VX_MEM_READ_WRITE;
   RT_CHECK(vx_buffer_create(device, zbuf_size, om_flags, &depth_buffer));
   RT_CHECK(vx_buffer_address(depth_buffer, &zbuf_addr));
   RT_CHECK(vx_buffer_create(device, cbuf_size, om_flags, &color_buffer));

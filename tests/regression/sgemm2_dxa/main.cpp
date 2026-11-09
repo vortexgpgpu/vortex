@@ -304,7 +304,7 @@ int main(int argc, char* argv[]) {
   if (errors != 0) {
     std::cout << "Found " << errors << " errors\n";
     std::cout << "FAILED\n";
-    return errors;
+    return errors != 0;
   }
 
   std::cout << "PASSED\n";

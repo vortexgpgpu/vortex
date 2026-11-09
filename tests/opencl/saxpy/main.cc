@@ -257,5 +257,5 @@ int main(int argc, char **argv) {
 
   Cleanup(device_id, context, queue, program, kernel, memObjects);
 
-  return errors;
+  return errors != 0;
 }

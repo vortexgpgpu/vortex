@@ -4,7 +4,7 @@
 
 - [Environment Setup](environment_setup.md): system prerequisites and toolchain setup
 - [Installing Vortex](install_vortex.md): building and installing the Vortex stack
-- [Building the Toolchain from Source](building_toolchain.md): maintainer-facing build recipes for Verilator, RISC-V GNU, LLVM (with X86 + lld + SPIR-V), compiler-rt, musl, POCL, Mesa, chipStar, and gem5
+- [Building the Toolchain from Source](building_toolchain.md): maintainer-facing build recipes for Verilator, RISC-V GNU, LLVM (with X86 + lld + SPIR-V), compiler-rt, musl, POCL, Mesa, chipStar, gem5, CIRCT, and Foldsim
 - [FPGA Setup](fpga_setup.md): running Vortex on Altera and Xilinx FPGA cards
 - [SLASH / Alveo V80 Setup](xilinx_slash_setup.md): building the SLASH platform stack, the prerequisite for the `aved` backend
 
@@ -47,6 +47,7 @@ Detailed architectural specifications for Vortex subsystems live under
   - [Custom Accelerator ISA Extensions](designs/custom_accelerator_isa_extensions.md)
 - **Memory system**
   - [Cache Subsystem](designs/cache_subsystem.md)
+  - [Memory-Level Parallelism Optimizations](designs/mlp_optimizations.md)
   - [Atomic Memory Operations](designs/atomic_memory_operations.md)
   - [Multi-Cache AMO Coherence](designs/multicache_amo_coherence.md)
   - [Memory Fabric Attributes](designs/memory_fabric_attributes.md)
@@ -74,4 +75,5 @@ Detailed architectural specifications for Vortex subsystems live under
   - [SimX Simulator Architecture](designs/simx_simulator_architecture.md)
   - [gem5 Integration](designs/vortex_gem5_integration.md)
   - [FireSim Integration](designs/firesim_integration.md)
+  - [Foldsim: threaded FPGA simulation on CIRCT](designs/foldsim.md)
   - [Continuous Integration Design](designs/continuous_integration.md)

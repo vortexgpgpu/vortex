@@ -131,5 +131,5 @@ int main(int argc, char** argv) {
   } else {
     printf("FAILED! - %d errors\n", errors);
   }
-  return errors;
+  return errors != 0;
 }

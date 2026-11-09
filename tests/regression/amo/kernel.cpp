@@ -336,8 +336,87 @@ void kernel_lrsc_lmem(kernel_arg_t* __UNIFORM__ arg) {
   }
 }
 
+// 15) LMEM AMO op sweep.
+//   Every hart of a group applies swap, and, or, xor, min, max, minu and maxu
+//   to one local-memory word per operation, all harts on the same words, so
+//   the LMEM banks serialize every operation. The leader then rebuilds each
+//   final word from the group's contributions, checks that the swapped-out
+//   values and the final word sum to the initial word plus every value swapped
+//   in, and publishes its mismatch count with the group marker.
+#define AMO_LMEM(op, addr, val) ({                              \
+    uint32_t _old;                                              \
+    asm volatile (op " %0, %2, (%1)"                            \
+                  : "=r"(_old) : "r"(addr), "r"(val) : "memory"); \
+    _old; })
+
+static inline uint32_t amo_ops_value(uint32_t t) {
+  return t * 0x9E3779B1u + 0x01234567u;
+}
+
+void kernel_amo_ops_lmem(kernel_arg_t* __UNIFORM__ arg) {
+  auto lmem     = (uint32_t*)__local_mem();
+  auto per_hart = (uint32_t*)arg->per_hart_addr;
+  const uint32_t hid = hart_id();
+  const uint32_t t   = threadIdx.x;
+  const uint32_t n   = blockDim.x;
+  // 0 swap, 1 and, 2 or, 3 xor, 4 min, 5 max, 6 minu, 7 maxu, then each
+  // hart's swapped-out value
+  auto olds = &lmem[8];
+
+  if (t == 0) {
+    lmem[0] = AMO_OPS_SWAP_INIT;
+    lmem[1] = ~0u;
+    lmem[2] = 0;
+    lmem[3] = 0;
+    lmem[4] = 0x7fffffffu;
+    lmem[5] = 0x80000000u;
+    lmem[6] = ~0u;
+    lmem[7] = 0;
+  }
+  __syncthreads();
+
+  uint32_t v   = amo_ops_value(t);
+  uint32_t bit = 1u << (t % 32);
+  olds[t] = AMO_LMEM("amoswap.w", &lmem[0], v);
+  AMO_LMEM("amoand.w",  &lmem[1], ~bit);
+  AMO_LMEM("amoor.w",   &lmem[2], bit);
+  AMO_LMEM("amoxor.w",  &lmem[3], v);
+  AMO_LMEM("amomin.w",  &lmem[4], v);
+  AMO_LMEM("amomax.w",  &lmem[5], v);
+  AMO_LMEM("amominu.w", &lmem[6], v);
+  AMO_LMEM("amomaxu.w", &lmem[7], v);
+  __syncthreads();
+
+  uint32_t mismatches = 0;
+  if (t == 0) {
+    uint32_t and_e = ~0u, or_e = 0, xor_e = 0, minu_e = ~0u, maxu_e = 0, sum_in = 0, sum_out = 0;
+    int32_t min_e = 0x7fffffff, max_e = (int32_t)0x80000000u;
+    for (uint32_t i = 0; i < n; ++i) {
+      uint32_t vi = amo_ops_value(i);
+      and_e &= ~(1u << (i % 32));
+      or_e  |= 1u << (i % 32);
+      xor_e ^= vi;
+      min_e  = ((int32_t)vi < min_e) ? (int32_t)vi : min_e;
+      max_e  = ((int32_t)vi > max_e) ? (int32_t)vi : max_e;
+      minu_e = (vi < minu_e) ? vi : minu_e;
+      maxu_e = (vi > maxu_e) ? vi : maxu_e;
+      sum_in  += vi;
+      sum_out += olds[i];
+    }
+    mismatches += (sum_out + lmem[0]) != (AMO_OPS_SWAP_INIT + sum_in);
+    mismatches += lmem[1] != and_e;
+    mismatches += lmem[2] != or_e;
+    mismatches += lmem[3] != xor_e;
+    mismatches += (int32_t)lmem[4] != min_e;
+    mismatches += (int32_t)lmem[5] != max_e;
+    mismatches += lmem[6] != minu_e;
+    mismatches += lmem[7] != maxu_e;
+  }
+  per_hart[hid] = mismatches + ((t == 0) ? CAS_LMEM_GROUP_MARK : 0);
+}
+
 #if VX_CFG_EXT_ZACAS_ENABLED
-// 15) Native compare-and-swap contention.
+// 16) Native compare-and-swap contention.
 //   Every hart races to claim each slot of a ladder with its own id, so for
 //   slot i exactly one hart sees the empty value and swaps, and the others see
 //   that winner's id. Each hart records how many slots it won.
@@ -367,7 +446,7 @@ void kernel_cas_ladder(kernel_arg_t* __UNIFORM__ arg) {
   per_hart[hid] = wins;
 }
 
-// 16) LMEM compare-and-swap ladder.
+// 17) LMEM compare-and-swap ladder.
 //   The cas_ladder race moved onto local memory, so the swap and the old word
 //   it returns come from the LMEM banks. Each group races for its own ladder
 //   and exactly one of its harts wins each slot, so the win counts sum to
@@ -417,9 +496,10 @@ static const PFN_Kernel sc_tests[] = {
   kernel_self_consistency,   // 12  issuer self-consistency (load->AMO->load)
   kernel_amoadd_lmem,        // 13  AMOADD on local memory (LMEM banks)
   kernel_lrsc_lmem,          // 14  LR/SC on local memory (LMEM banks)
+  kernel_amo_ops_lmem,       // 15  every other AMO op on local memory (LMEM banks)
 #if VX_CFG_EXT_ZACAS_ENABLED
-  kernel_cas_ladder,         // 15  native compare-and-swap (Zacas amocas)
-  kernel_cas_lmem,           // 16  compare-and-swap on local memory (LMEM banks)
+  kernel_cas_ladder,         // 16  native compare-and-swap (Zacas amocas)
+  kernel_cas_lmem,           // 17  compare-and-swap on local memory (LMEM banks)
 #endif
 };
 

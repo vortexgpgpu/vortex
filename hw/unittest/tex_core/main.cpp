@@ -3,6 +3,7 @@
 #include <iostream>
 #include <cstdlib>
 #include <cstdint>
+#include <type_traits>
 #include "VVX_tex_core_top.h"
 #include "verilated.h"
 #ifdef VCD_OUTPUT
@@ -49,7 +50,7 @@ int main(int argc, char** argv) {
     dut->dcr_write_valid = 0;
     dut->tex_req_valid = 0;
     dut->tex_rsp_ready = 1;
-    dut->cache_req_ready = ~0ULL;
+    dut->cache_req_ready = std::remove_reference_t<decltype(dut->cache_req_ready)>(~0ULL);
     dut->cache_rsp_valid = 0;
 
     for (int i = 0; i < 4; ++i) clock_cycle();

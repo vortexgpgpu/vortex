@@ -17,6 +17,12 @@
 
 // Intra-core multicast variant of sgemm_tcu_wg_dxa. `mc_group_size` CTAs
 // co-resident on one core share the same B tile via DXA multicast.
+
+// K tiles per iteration of the K loop
+#ifndef KUNROLL
+#define KUNROLL 1
+#endif
+
 typedef struct {
   uint32_t M, N, K;
   uint32_t mc_group_size;

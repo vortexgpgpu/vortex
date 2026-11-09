@@ -259,7 +259,7 @@ void oclPrintDevInfo(int iLogMode, cl_device_id device)
 
     // CL_DEVICE_EXTENSIONS: get device extensions, and if any then parse & log the string onto separate lines
     clGetDeviceInfo(device, CL_DEVICE_EXTENSIONS, sizeof(device_string), &device_string, NULL);
-    if (device_string != 0) 
+    if (device_string[0] != '\0')
     {
         shrLogEx(iLogMode, 0, "\n  CL_DEVICE_EXTENSIONS:");
         std::string stdDevString;
@@ -341,13 +341,13 @@ void oclPrintDevInfo(int iLogMode, cl_device_id device)
 //////////////////////////////////////////////////////////////////////////////
 int oclGetDevCap(cl_device_id device)
 {
-    char cDevString[1024];
+    char cDevString[1024] = "";
     bool bDevAttributeQuery = false;
     int iDevArch = -1;
 
     // Get device extensions, and if any then search for cl_nv_device_attribute_query
     clGetDeviceInfo(device, CL_DEVICE_EXTENSIONS, sizeof(cDevString), &cDevString, NULL);
-    if (cDevString != 0) 
+    if (cDevString[0] != '\0')
     {
         std::string stdDevString;
         stdDevString = std::string(cDevString);

@@ -25,6 +25,12 @@ public:
   std::vector<SimChannel<MemReq>> ReqOut;
   std::vector<SimChannel<MemRsp>> RspIn;
 
+  // Past the bank, the cache holds up to three responses per port in its two
+  // output stages (one, then two entries), and each channel stands for both
+  // stages: with fewer slots the responses in flight fill it and the cache
+  // stalls a port that delivers a response every cycle.
+  static constexpr uint32_t kRspInSize = 3;
+
   struct PerfStats {
     uint64_t misses = 0;
 
@@ -46,9 +52,6 @@ public:
 
   const PerfStats& perf_stats() const;
 
-  // Extra request-side registers on one output port.
-  void set_port_delay(uint32_t port, uint32_t delay) { port_delay_.at(port) = delay; }
-
 protected:
   void on_reset();
   void on_tick();
@@ -67,7 +70,6 @@ private:
     bool valid = false;
     BitVector<> lanes;        // output lanes still to send
     std::vector<MemReq> reqs; // per output lane
-    BitVector<> cur_mask;     // input lanes covered by this round
   };
 
   uint32_t input_size_;
@@ -79,7 +81,6 @@ private:
   out_round_t out_round_;
   uint32_t line_size_;
   uint32_t delay_;
-  std::vector<uint32_t> port_delay_;
   PerfStats perf_stats_;
 
   friend class SimObject<MemCoalescer>;

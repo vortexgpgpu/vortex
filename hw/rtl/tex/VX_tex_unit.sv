@@ -32,7 +32,6 @@
 
 module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
-    parameter CORE_ID = 0,
     parameter NUM_LANES = `VX_CFG_NUM_THREADS
 ) (
     input wire clk,
@@ -46,7 +45,6 @@ module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     VX_tex_bus_if.master    tex_bus_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    `UNUSED_PARAM (CORE_ID)
     localparam REQ_QUEUE_BITS = `LOG2UP(`VX_CFG_TEX_REQ_QUEUE_SIZE);
     localparam PID_W       = `LOG2UP(`VX_CFG_NUM_THREADS / NUM_LANES);
 

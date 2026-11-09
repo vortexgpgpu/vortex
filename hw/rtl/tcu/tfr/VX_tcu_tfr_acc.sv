@@ -77,19 +77,32 @@ module VX_tcu_tfr_acc import VX_tcu_pkg::*; #(
         `UNUSED_PIN (cout)
     );
 
-    // -(a+b) = ~a + ~b + 2: cin=1 yields ~(a+b), the +1 completes the negate.
-    wire [WO-1:0] sig_neg_raw;
+    // -(a+b) = ~(a+b-1): compressing the all-ones (-1) operand in first keeps
+    // the negate to one adder, with no increment behind it.
+    wire [WO-1:0] dec_sum, dec_carry;
+    VX_csa_32 #(
+        .N       (WO),
+        .WIDTH_O (WO)
+    ) dec_csa (
+        .a     (sum_vec),
+        .b     (carry_vec),
+        .c     ({WO{1'b1}}),
+        .sum   (dec_sum),
+        .carry (dec_carry)
+    );
+
+    wire [WO-1:0] sig_dec;
     VX_ks_adder #(
         .N (WO),
         .BYPASS (`FORCE_BUILTIN_ADDER(WO))
     ) neg_adder (
-        .cin   (1'b1),
-        .dataa (~sum_vec),
-        .datab (~carry_vec),
-        .sum   (sig_neg_raw),
+        .cin   (1'b0),
+        .dataa (dec_sum),
+        .datab (dec_carry),
+        .sum   (sig_dec),
         `UNUSED_PIN (cout)
     );
-    wire [WO-1:0] sig_neg = sig_neg_raw + WO'(1);
+    wire [WO-1:0] sig_neg = ~sig_dec;
 
     assign sign_out = sig_pos[WO-1];
     assign sig_out  = sign_out ? sig_neg : sig_pos;

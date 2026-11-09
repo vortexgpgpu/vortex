@@ -28,11 +28,50 @@ running orders of magnitude faster than Verilator.
 For scale, `sgemm -n32` takes ~1228 ms on rtlsim and ~8 ms on an Alveo U55C,
 and `sgemm -n1024` — over a billion instructions — completes in ~85 s.
 
+FireSim is driven exactly like the card's native flow; only the driver name
+differs. It takes the same targets as the card's native driver:
+
+| card | targets | image built by |
+|---|---|---|
+| XRT (e.g. U55C) | `xrtsim` (default), `hw_emu`, `hw` | `make -C hw/syn/firesim PLATFORM=<xsa> TARGET=hw_emu\|hw` |
+| aved (V80) | `avedsim` (default), `sim`, `hw` | `make -C hw/syn/firesim TARGET=sim\|hw` |
+
+`xrtsim` and `avedsim` run the FireSim-transformed design in Verilator inside
+the runtime and need no image or Vivado. The image builds take `PREFIX`,
+`XLEN`, `CONFIGS` and `PERF=1` as `hw/syn/xilinx/{xrt,aved}` do, and leave the
+image in `<PREFIX>_<xsa|aved>_<TARGET>/bin` together with `firesim.card`, which
+tells the run which card it is for. From the build directory:
+
 ```bash
-export TARGET=hw
-export FPGA_BIN_DIR=<directory containing firesim.xclbin>
-./ci/blackbox.sh --driver=firesim --app=sgemm --args="-n1024"
+source ci/firesim_env.sh    # after the card's Xilinx tools; see the script
+
+# no image needed
+./ci/blackbox.sh --driver=firesim --target=avedsim --app=demo
+
+# build an image, then run on it
+CONFIGS="-DVX_CFG_NUM_WARPS=4 -DVX_CFG_NUM_THREADS=4" make -C hw/syn/firesim TARGET=hw PERF=1
+FPGA_BIN_DIR=$PWD/hw/syn/firesim/build32_aved_hw/bin \
+  ./ci/blackbox.sh --driver=firesim --target=hw --warps=4 --threads=4 --app=demo
 ```
+
+On the V80, `TARGET=hw` runs `ci/v80_preflight.sh` first: it refuses to
+program a card that is off the bus, unhealthy or still in use, and waits out a
+cool-down since the last programming. A first `Ctrl-C` (or `SIGTERM`) stops a
+FireSim run cleanly — the launch in flight is reported and completed, and the
+application tears down normally — and a second one kills it. A stopped run
+never reads as a pass: FireSim reports it `FAILED` and the process exits 130
+(143 for `SIGTERM`, 124 when `VORTEX_FIRESIM_TIMEOUT_S` gave up).
+
+Debugging knobs, all read from the environment by the runtime:
+
+| variable | effect |
+|---|---|
+| `VORTEX_FIRESIM_TIMEOUT_S` | give up on a launch after this many seconds, with a report |
+| `VORTEX_FIRESIM_STALL_CYCLES` | report (once) after this many busy target cycles; default 500000 |
+| `VORTEX_FIRESIM_REPORT_ON_IDLE` | also report the counters when a launch completes |
+| `VORTEX_FIRESIM_TRACE` | time-stamp every request to the simulator thread |
+| `VORTEX_FIRESIM_EMUL_ARGS` | extra Verilator arguments for `xrtsim`/`avedsim`, e.g. `+verilator+rand+reset+2` |
+| `FIRESIM_MM_REORDER`, `FIRESIM_MM_LATENCY` | `xrtsim`/`avedsim` host memory: reorder (1), also interleave (2) and delay reads |
 
 The architecture, build flow and design invariants are documented in
 [designs/firesim_integration.md](designs/firesim_integration.md); the
@@ -44,6 +83,48 @@ One caveat worth knowing when reading its output: FireSim's
 kernel took, and is quantized by the driver's polling schedule. Use Vortex's
 own `PERF: cycles=` line, which is exact.
 
+### Threaded FPGA Simulation (Foldsim)
+
+Foldsim compiles Vortex into a simulator for the V80 with CIRCT: each class of
+identical units (sockets, issue slices, ALUs, ...) is threaded through one
+physical copy, so a GPU far larger than the card fits on it, still cycle-exact
+against the RTL. Its kernel carries a small control block and a
+latency-bandwidth memory model; the target runs free, and the runtime talks to
+it like the native V80 driver does (AXI4-Lite registers, QDMA for memory).
+
+| target | what runs | built by |
+|---|---|---|
+| `avedsim` (default) | the same kernel in Verilator, in-process | the run itself: the Foldsim compiler, then a Verilator build of the kernel, for the app's `CONFIGS` |
+| `hw` | the image on the V80 | `make -C hw/syn/foldsim` |
+
+```bash
+# the classes to thread, and the units to give plain-port boundaries first
+export FOLDSIM_CLASSES="VX_socket__lift VX_core__lift VX_compute_slice__lift"
+export FOLDSIM_LIFT="VX_socket:drop=INSTANCE_ID VX_core:drop=INSTANCE_ID VX_compute_slice:drop=INSTANCE_ID,SLICE_STR"
+CONFIGS="-DVX_CFG_NUM_CORES=2 -DVX_CFG_NUM_WARPS=4 -DVX_CFG_NUM_THREADS=4 -DVX_CFG_ISSUE_WIDTH=2"
+
+# in Verilator, no image needed
+CONFIGS="$CONFIGS" ./ci/blackbox.sh --driver=foldsim --app=sgemm
+
+# build the image, then run on the V80
+make -C hw/syn/foldsim CONFIGS="$CONFIGS"
+FPGA_BIN_DIR=$PWD/hw/syn/foldsim/build32_foldsim_hw/bin \
+  CONFIGS="$CONFIGS" ./ci/blackbox.sh --driver=foldsim --target=hw --app=sgemm
+```
+
+The flow needs CIRCT (`circt-verilog`, `circt-opt`, `firtool`) and Foldsim
+(the `foldsim` driver and `foldsim-opt`) from the toolchain
+(`./ci/toolchain_install.sh --circt --foldsim`; `CIRCT_BIN=<dir>` and
+`FOLDSIM=<driver>` override them), and pyslang for the boundary lifting
+(`LIFT_PYTHON`). The memory is timed as the configuration's DRAM
+(`VX_CFG_PLATFORM_MEMORY_*`), a channel per memory bank, as `dram_sim` times
+it; `VORTEX_DRAM_REFRESH=bank|all` adds refresh.
+`VORTEX_FOLDSIM_TIMEOUT_S=<s>` fails a launch that runs longer; a command,
+DCR read or reset the target leaves unanswered fails too once the target has
+advanced no cycle for that long, or for 60 s when it is unset. At exit the runtime reports the target and kernel-clock cycles the simulator ran
+and how busy each threaded class was. The design is
+[designs/foldsim.md](designs/foldsim.md).
+
 ### How to Test (using `blackbox.sh`)
 
 Running tests under specific drivers (rtlsim,simx,fpga) is done using the script named `blackbox.sh` located in the `ci` folder. Running command `./ci/blackbox.sh --help` from the Vortex root directory will display the following command line arguments for `blackbox.sh`:
@@ -54,7 +135,7 @@ Running tests under specific drivers (rtlsim,simx,fpga) is done using the script
 - *Threads* - used to specify the number of threads (smallest unit of computation) within a configuration.
 - *L2cache* - used to enable the shared l2cache among the Vortex cores.
 - *L3cache* - used to enable the shared l3cache among the Vortex clusters.
-- *Driver* - used to specify which driver to run the Vortex simulation (either rtlsim, opae, xrt, simx, firesim).
+- *Driver* - used to specify which driver to run the Vortex simulation (either rtlsim, opae, xrt, simx, firesim, foldsim).
 - *Debug* - used to enable debug mode for the Vortex simulation.
 - *Perf* - used to enable the detailed performance counters within the Vortex simulation.
 - *App* - used to specify which test/benchmark to run in the Vortex simulation. The main choices are vecadd, sgemm, basic, demo, and dogfood. Other tests/benchmarks are located in the `/benchmarks/opencl` folder though not all of them work wit the current version of Vortex.
@@ -150,11 +231,36 @@ machine from it: SimX, rtlsim, the FPGA and ASIC flows, and the kernels.
 | Profile | Machine |
 |---|---|
 | `tinygpu` | 1 core, 2 warps x 2 threads, shared memory |
-| `rtx1080` | GeForce GTX 1080 (Pascal): 20 cores x 64 warps x 32 threads, 2 MB L2, GDDR5X as 16 GDDR6 channels |
-| `v100` | Tesla V100 (Volta): 80 cores, 4 MB L2, 32 HBM2 channels at 1752 MT/s |
-| `a100` | A100 (Ampere): 108 cores, 32 MB L2, HBM2 at the card's 1555 GB/s |
-| `h100` | H100 SXM5 (Hopper): 132 cores, 32 MB L2, HBM3 at the card's 3.35 TB/s |
-| `rtx5080` | GeForce RTX 5080 (Blackwell): 84 cores x 48 warps, 64 MB L2, GDDR7 bandwidth on the GDDR6 model |
+| `gtx1080` | GeForce GTX 1080 (Pascal): 20 cores x 64 warps x 32 threads, 96 KB shared memory, 2 MB L2, GDDR5X as 16 GDDR6 channels; no tensor cores |
+| `gtx1060` | GeForce GTX 1060 6 GB (Pascal), on `gtx1080`: 10 cores, 1.5 MB L2, 192 GB/s as 8 GDDR6 channels |
+| `mi300x` | Instinct MI300X (CDNA 3): 8 XCDs x 38 CUs x 32 waves x 64 lanes, 64 KB LDS, 4 MB L2 per XCD, 256 MB Infinity Cache as the L3, HBM3 at 5.3 TB/s; TF32/FP8/INT8 matrix cores with sparsity |
+| `v100` | Tesla V100 (Volta): 80 cores x 64 warps, 96 KB shared memory, 6 MB L2, 32 HBM2 channels at 1752 MT/s; FP16 tensor cores |
+| `a100` | A100 (Ampere): 108 cores x 64 warps, 164 KB shared memory, 192 KB L1, 40 MB L2, HBM2 at 1555 GB/s; FP16/TF32/INT8/INT4 tensor cores with 2:4 sparsity |
+| `h100` | H100 SXM5 (Hopper): 132 cores x 64 warps, 228 KB shared memory, 50 MB L2, HBM3 at 3.35 TB/s; FP16/TF32/FP8/INT8 tensor cores with sparsity and wgmma, TMA as DXA |
+| `rtx5080` | GeForce RTX 5080 (Blackwell): 84 cores x 48 warps, 100 KB shared memory, 64 MB L2, GDDR7 bandwidth on the GDDR6 model; FP16/TF32/FP8/FP4/MX/INT8 tensor cores with sparsity, TMA as DXA, RT cores as RTU |
+| `titanv` | TITAN V (Volta), on `v100`: 4.5 MB L2, HBM2 at 653 GB/s |
+| `qv100` | Quadro GV100 (Volta), on `v100`: HBM2 at 870 GB/s, 1132 MHz |
+| `rtx2060` | GeForce RTX 2060 (Turing TU106): 30 cores x 32 warps, 64 KB shared memory, 96 KB L1, 3 MB L2, GDDR6 at 336 GB/s; FP16/INT8/INT4 tensor cores |
+| `rtx2060s` | GeForce RTX 2060 SUPER (Turing), on `rtx2060`: 34 cores, 4 MB L2, GDDR6 at 448 GB/s |
+| `t4` | Tesla T4 (Turing TU104), on `rtx2060`: 40 cores, 4 MB L2, GDDR6 at 320 GB/s |
+| `h200` | H200 SXM5 (Hopper), on `h100`: HBM3e at 4.8 TB/s |
+| `gtx480` | GeForce GTX 480 (Fermi): 15 cores x 48 warps, 2 schedulers of 32 lanes at the 700 MHz core clock (the hot-clocked 16-lane groups), 48 KB shared memory, 768 KB L2, GDDR5 at 177 GB/s |
+| `keplertitan` | GeForce GTX TITAN (Kepler GK110): 14 cores x 64 warps, 4 schedulers of 32 lanes (no dual issue: 128 of the SMX's 192 cores), 48 KB shared memory, 1.5 MB L2, GDDR5 at 288 GB/s |
+| `gtx980` | GeForce GTX 980 (Maxwell), on `gtx1080`: 16 cores, 24 KB L1, GDDR5 at 224 GB/s |
+| `titanx` | TITAN X (Pascal GP102), on `gtx1080`: 28 cores, 3 MB L2, GDDR5X at 480 GB/s |
+| `gtx1080ti` | GeForce GTX 1080 Ti (Pascal GP102), on `gtx1080`: 28 cores, 2.75 MB L2, GDDR5X at 484 GB/s |
+| `p100` | Tesla P100 PCIe (Pascal GP100): 56 cores x 64 warps, 2 blocks of 32 lanes, FP64 at half rate, 64 KB shared memory, 4 MB L2, HBM2 at 732 GB/s |
+| `mi300a` | Instinct MI300A (CDNA 3), on `mi300x`: 6 XCDs |
+
+Every GPU profile also turns on virtual memory, the A extension with Zacas,
+Zfhmin, MUFU at the part's special-function throughput, the part's INT32,
+FP32 and load/store lanes per processing block (`NUM_ALU_LANES`,
+`NUM_FPU_LANES`, `NUM_LSU_LANES`; a warp instruction takes `NUM_THREADS` /
+lanes cycles, as on the part), and shared memory at the part's 128 B per clock
+(16 banks: a Vortex bank is XLEN wide). The real parts are 64-bit machines, so these profiles set `"xlen": 64`:
+`configure --profile=<name>` picks XLEN from the profile (an explicit,
+conflicting `--xlen` is an error), and a `build32` tree rejects them. A profile
+without an `xlen` field, like `tinygpu`, builds at either width.
 
 Select one per build with `../configure --profile=<name>`, or per run:
 
@@ -170,9 +276,37 @@ unset, and everything else falls back to `VX_config.toml`.
 $ CONFIGS="-DVX_CFG_L2_SIZE=8388608" ./ci/blackbox.sh --driver=simx --profile=a100 --warps=32 --app=sgemm
 ```
 
-The other profiles (20 to 132 cores) are SimX-scale machines for architecture
+The other profiles (10 to 304 cores) are SimX-scale machines for architecture
 studies, not FPGA builds; `tinygpu` is the small one, sized for FPGA
 bring-up and fast simulation.
+
+A profile's `reference` block holds the part's published or measured numbers,
+and `ci/profile_check.py` compares the model against them from a build tree
+of the profile's XLEN:
+
+| Key | Checked against |
+|---|---|
+| `fp32_lanes`, `dram_bandwidth_gbs`, `dram_peak_bytes_per_cycle`, `clock_mhz` | the resolved configuration |
+| `l1_hit_cycles`, `l2_hit_cycles`, `dram_cycles` | `tests/regression/chase` on one core: a random pointer chase at a 128 B stride (DRAM: a cold chain over a buffer never uploaded) |
+| `stream_cycles` (`"<n>MiB"`) | `vecadd` with n MiB per buffer, whole chip |
+| `sgemm_cycles` (`"<n>"`) | `sgemm -n<n>`, whole chip |
+
+```bash
+$ cd build64 && python3 ../ci/profile_check.py --profile=a100 --metrics=peak,latency
+```
+
+It exits 1 when a metric is off by more than `--tolerance` (10% by default),
+and 2 when a run fails.
+
+The three chase latencies are calibrated in that order. `l1_hit_cycles` sets
+`VX_CFG_L1_LINK_LATENCY`, the link between a core and the dcache (cycles each
+way, so every global access gains twice it), for the parts whose global loads
+go through the L1/texture pipeline and take longer than the dcache's own
+pipeline. `l2_hit_cycles` then sets `VX_CFG_L2_LINK_LATENCY`, the link between
+the sockets and the L2: on the parts most of an L2 hit is the SM-to-L2
+network. A DRAM access crosses both links, so
+`VX_CFG_PLATFORM_MEMORY_LATENCY` last takes what `dram_cycles` still needs.
+The memory latency moves the measured ones one for one, each link two for one.
 
 ### Configuring the DRAM Model
 

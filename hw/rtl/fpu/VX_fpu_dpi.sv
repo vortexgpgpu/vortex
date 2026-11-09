@@ -49,14 +49,33 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     input wire  ready_out,
     output wire valid_out
 );
+    // Each class times as the PE serializer of the synthesizable FPUs: a class
+    // with fewer PEs than lanes holds its request for one cycle per batch of
+    // lanes and accepts it with the last, and its result leaves through the
+    // same core output buffer.
+    localparam NUM_PES_FMA   = `UP(NUM_LANES / `VX_CFG_FMA_PE_RATIO);
+    localparam NUM_PES_FMA64 = `UP(NUM_LANES / `VX_CFG_FMA64_PE_RATIO);
+    localparam BATCHES_FMA   = NUM_LANES / NUM_PES_FMA;
+    localparam BATCHES_FMA64 = NUM_LANES / NUM_PES_FMA64;
+    localparam BATCHES_DIV   = NUM_LANES / `UP(NUM_LANES / `VX_CFG_FDIV_PE_RATIO);
+    localparam BATCHES_SQRT  = NUM_LANES / `UP(NUM_LANES / `VX_CFG_FSQRT_PE_RATIO);
+    localparam BATCHES_CVT   = NUM_LANES / `UP(NUM_LANES / `VX_CFG_FCVT_PE_RATIO);
+    localparam BATCHES_NCP   = NUM_LANES / `UP(NUM_LANES / `VX_CFG_FNCP_PE_RATIO);
+    localparam CVT_LATENCY   = (`VX_CFG_XLEN == 64) ? `VX_CFG_FCVT_LATENCY + 1 : `VX_CFG_FCVT_LATENCY;
+
+    localparam FMA64_SPLIT = (`VX_CFG_FLEN >= 64) && (NUM_PES_FMA64 != NUM_PES_FMA);
+
     localparam FPU_FMA     = 0;
     localparam FPU_DIVSQRT = 1;
     localparam FPU_CVT     = 2;
     localparam FPU_NCP     = 3;
-    localparam NUM_FPC     = 4;
+    localparam FPU_FMA64   = 4;
+    localparam NUM_FPC     = FMA64_SPLIT ? 5 : 4;
     localparam FPC_BITS    = `LOG2UP(NUM_FPC);
+    localparam FMA_PIPES   = FMA64_SPLIT ? 2 : 1;
 
     localparam RSP_DATAW = (NUM_LANES * `VX_CFG_XLEN) + 1 + $bits(fflags_t) + TAG_WIDTH;
+    localparam PIPE_DATAW = TAG_WIDTH + NUM_LANES * `VX_CFG_XLEN + $bits(fflags_t);
 
     wire [NUM_FPC-1:0] per_core_ready_in;
     wire [NUM_FPC-1:0][NUM_LANES-1:0][`VX_CFG_XLEN-1:0] per_core_result;
@@ -92,6 +111,8 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire f_fmt = fmt[0]; // S/D format
     wire i_fmt = fmt[1]; // W/L format
 
+    wire [FPC_BITS-1:0] fma_select = (FMA64_SPLIT && f_fmt) ? FPC_BITS'(FPU_FMA64) : FPC_BITS'(FPU_FMA);
+
     always @(*) begin
         is_fadd   = 0;
         is_fsub   = 0;
@@ -110,10 +131,10 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         is_f2h    = 0;
 
         case (op_type)
-            INST_FPU_ADD:   begin core_select = FPU_FMA; is_fadd = ~i_fmt; is_fsub = i_fmt; end
-            INST_FPU_MADD:  begin core_select = FPU_FMA; is_fmadd = ~i_fmt; is_fmsub = i_fmt; end
-            INST_FPU_NMADD: begin core_select = FPU_FMA; is_fnmadd = ~i_fmt; is_fnmsub = i_fmt; end
-            INST_FPU_MUL:   begin core_select = FPU_FMA; is_fmul = 1; end
+            INST_FPU_ADD:   begin core_select = fma_select; is_fadd = ~i_fmt; is_fsub = i_fmt; end
+            INST_FPU_MADD:  begin core_select = fma_select; is_fmadd = ~i_fmt; is_fmsub = i_fmt; end
+            INST_FPU_NMADD: begin core_select = fma_select; is_fnmadd = ~i_fmt; is_fnmsub = i_fmt; end
+            INST_FPU_MUL:   begin core_select = fma_select; is_fmul = 1; end
             INST_FPU_DIV:   begin core_select = FPU_DIVSQRT; is_div = 1; end
             INST_FPU_SQRT:  begin core_select = FPU_DIVSQRT; end
             INST_FPU_CMP:   begin core_select = FPU_NCP; is_fcmp = 1; end
@@ -147,9 +168,8 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         fflags_t [NUM_LANES-1:0] fflags_fnmadd;
         fflags_t [NUM_LANES-1:0] fflags_fnmsub;
 
-        wire fma_valid = (valid_in && core_select == FPU_FMA);
-        wire fma_ready = per_core_ready_out[FPU_FMA] || ~per_core_valid_out[FPU_FMA];
-        wire fma_fire  = fma_valid && fma_ready;
+        wire [FMA_PIPES-1:0] pipe_fire;
+        wire fma_fire = (| pipe_fire);
 
         always @(*) begin
             for (integer i = 0; i < NUM_LANES; ++i) begin
@@ -184,20 +204,60 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         fflags_t fflags_merged;
         `FPU_MERGE_FFLAGS(fflags_merged, fflags_fma, mask_in, NUM_LANES);
 
-        VX_shift_register #(
-            .DATAW  (1 + TAG_WIDTH + NUM_LANES * `VX_CFG_XLEN + $bits(fflags_t)),
-            .DEPTH  (`VX_CFG_FMA_LATENCY),
-            .RESETW (1)
-        ) shift_reg (
-            .clk      (clk),
-            .reset    (reset),
-            .enable   (fma_ready),
-            .data_in  ({fma_valid, tag_in, result_fma, fflags_merged}),
-            .data_out ({per_core_valid_out[FPU_FMA], per_core_tag_out[FPU_FMA], per_core_result[FPU_FMA], per_core_fflags[FPU_FMA]})
-        );
+        for (genvar p = 0; p < FMA_PIPES; ++p) begin : g_pipes
+            localparam CORE    = (p == 0) ? FPU_FMA : FPU_FMA64;
+            localparam BATCHES = (p == 0) ? BATCHES_FMA : BATCHES_FMA64;
 
-        assign per_core_has_fflags[FPU_FMA] = 1;
-        assign per_core_ready_in[FPU_FMA] = fma_ready;
+            wire fma_valid = valid_in && (core_select == FPC_BITS'(CORE));
+            wire pipe_valid_out, pipe_ready_out;
+            wire [PIPE_DATAW-1:0] pipe_data_out;
+            wire fma_ready = pipe_ready_out || ~pipe_valid_out;
+            wire fma_last;
+
+            if (BATCHES > 1) begin : g_batch
+                reg [`LOG2UP(BATCHES)-1:0] batch_idx;
+                always @(posedge clk) begin
+                    if (reset) begin
+                        batch_idx <= '0;
+                    end else if (fma_valid && fma_ready) begin
+                        batch_idx <= fma_last ? '0 : (batch_idx + 1'b1);
+                    end
+                end
+                assign fma_last = (batch_idx == `LOG2UP(BATCHES)'(BATCHES-1));
+            end else begin : g_no_batch
+                assign fma_last = 1'b1;
+            end
+
+            assign pipe_fire[p] = fma_valid && fma_ready && fma_last;
+
+            VX_shift_register #(
+                .DATAW  (1 + PIPE_DATAW),
+                .DEPTH  (`VX_CFG_FMA_LATENCY),
+                .RESETW (1)
+            ) shift_reg (
+                .clk      (clk),
+                .reset    (reset),
+                .enable   (fma_ready),
+                .data_in  ({fma_valid && fma_last, tag_in, result_fma, fflags_merged}),
+                .data_out ({pipe_valid_out, pipe_data_out})
+            );
+
+            VX_bypass_buffer #(
+                .DATAW (PIPE_DATAW)
+            ) out_buf (
+                .clk       (clk),
+                .reset     (reset),
+                .valid_in  (pipe_valid_out),
+                .ready_in  (pipe_ready_out),
+                .data_in   (pipe_data_out),
+                .data_out  ({per_core_tag_out[CORE], per_core_result[CORE], per_core_fflags[CORE]}),
+                .valid_out (per_core_valid_out[CORE]),
+                .ready_out (per_core_ready_out[CORE])
+            );
+
+            assign per_core_has_fflags[CORE] = 1;
+            assign per_core_ready_in[CORE] = fma_ready && fma_last;
+        end
 
     end
 
@@ -208,8 +268,26 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         fflags_t [NUM_LANES-1:0] fflags_fdiv;
 
         wire fdiv_valid = (valid_in && core_select == FPU_DIVSQRT) && is_div;
-        wire fdiv_ready = div_ready_out || ~div_valid_out;
-        wire fdiv_fire  = fdiv_valid && fdiv_ready;
+        wire pipe_valid_out, pipe_ready_out;
+        wire [PIPE_DATAW-1:0] pipe_data_out;
+        wire fdiv_ready = pipe_ready_out || ~pipe_valid_out;
+        wire fdiv_last;
+
+        if (BATCHES_DIV > 1) begin : g_batch
+            reg [`LOG2UP(BATCHES_DIV)-1:0] batch_idx;
+            always @(posedge clk) begin
+                if (reset) begin
+                    batch_idx <= '0;
+                end else if (fdiv_valid && fdiv_ready) begin
+                    batch_idx <= fdiv_last ? '0 : (batch_idx + 1'b1);
+                end
+            end
+            assign fdiv_last = (batch_idx == `LOG2UP(BATCHES_DIV)'(BATCHES_DIV-1));
+        end else begin : g_no_batch
+            assign fdiv_last = 1'b1;
+        end
+
+        wire fdiv_fire = fdiv_valid && fdiv_ready && fdiv_last;
 
         always @(*) begin
             for (integer i = 0; i < NUM_LANES; ++i) begin
@@ -222,19 +300,32 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         `FPU_MERGE_FFLAGS(fflags_merged, fflags_fdiv, mask_in, NUM_LANES);
 
         VX_shift_register #(
-            .DATAW  (1 + TAG_WIDTH + NUM_LANES * `VX_CFG_XLEN + $bits(fflags_t)),
+            .DATAW  (1 + PIPE_DATAW),
             .DEPTH  (`VX_CFG_FDIV_LATENCY),
             .RESETW (1)
         ) shift_reg (
             .clk      (clk),
             .reset    (reset),
             .enable   (fdiv_ready),
-            .data_in  ({fdiv_valid, tag_in, result_fdiv_r, fflags_merged}),
-            .data_out ({div_valid_out, div_tag_out, div_result, div_fflags})
+            .data_in  ({fdiv_valid && fdiv_last, tag_in, result_fdiv_r, fflags_merged}),
+            .data_out ({pipe_valid_out, pipe_data_out})
+        );
+
+        VX_bypass_buffer #(
+            .DATAW (PIPE_DATAW)
+        ) out_buf (
+            .clk       (clk),
+            .reset     (reset),
+            .valid_in  (pipe_valid_out),
+            .ready_in  (pipe_ready_out),
+            .data_in   (pipe_data_out),
+            .data_out  ({div_tag_out, div_result, div_fflags}),
+            .valid_out (div_valid_out),
+            .ready_out (div_ready_out)
         );
 
         assign div_has_fflags = 1;
-        assign div_ready_in = fdiv_ready;
+        assign div_ready_in = fdiv_ready && fdiv_last;
 
     end
 
@@ -245,8 +336,26 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         fflags_t [NUM_LANES-1:0] fflags_fsqrt;
 
         wire fsqrt_valid = (valid_in && core_select == FPU_DIVSQRT) && ~is_div;
-        wire fsqrt_ready = sqrt_ready_out || ~sqrt_valid_out;
-        wire fsqrt_fire  = fsqrt_valid && fsqrt_ready;
+        wire pipe_valid_out, pipe_ready_out;
+        wire [PIPE_DATAW-1:0] pipe_data_out;
+        wire fsqrt_ready = pipe_ready_out || ~pipe_valid_out;
+        wire fsqrt_last;
+
+        if (BATCHES_SQRT > 1) begin : g_batch
+            reg [`LOG2UP(BATCHES_SQRT)-1:0] batch_idx;
+            always @(posedge clk) begin
+                if (reset) begin
+                    batch_idx <= '0;
+                end else if (fsqrt_valid && fsqrt_ready) begin
+                    batch_idx <= fsqrt_last ? '0 : (batch_idx + 1'b1);
+                end
+            end
+            assign fsqrt_last = (batch_idx == `LOG2UP(BATCHES_SQRT)'(BATCHES_SQRT-1));
+        end else begin : g_no_batch
+            assign fsqrt_last = 1'b1;
+        end
+
+        wire fsqrt_fire = fsqrt_valid && fsqrt_ready && fsqrt_last;
 
         always @(*) begin
             for (integer i = 0; i < NUM_LANES; ++i) begin
@@ -259,19 +368,32 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         `FPU_MERGE_FFLAGS(fflags_merged, fflags_fsqrt, mask_in, NUM_LANES);
 
         VX_shift_register #(
-            .DATAW  (1 + TAG_WIDTH + NUM_LANES * `VX_CFG_XLEN + $bits(fflags_t)),
+            .DATAW  (1 + PIPE_DATAW),
             .DEPTH  (`VX_CFG_FSQRT_LATENCY),
             .RESETW (1)
         ) shift_reg (
             .clk      (clk),
             .reset    (reset),
             .enable   (fsqrt_ready),
-            .data_in  ({fsqrt_valid, tag_in, result_fsqrt_r, fflags_merged}),
-            .data_out ({sqrt_valid_out, sqrt_tag_out, sqrt_result, sqrt_fflags})
+            .data_in  ({fsqrt_valid && fsqrt_last, tag_in, result_fsqrt_r, fflags_merged}),
+            .data_out ({pipe_valid_out, pipe_data_out})
+        );
+
+        VX_bypass_buffer #(
+            .DATAW (PIPE_DATAW)
+        ) out_buf (
+            .clk       (clk),
+            .reset     (reset),
+            .valid_in  (pipe_valid_out),
+            .ready_in  (pipe_ready_out),
+            .data_in   (pipe_data_out),
+            .data_out  ({sqrt_tag_out, sqrt_result, sqrt_fflags}),
+            .valid_out (sqrt_valid_out),
+            .ready_out (sqrt_ready_out)
         );
 
         assign sqrt_has_fflags = 1;
-        assign sqrt_ready_in = fsqrt_ready;
+        assign sqrt_ready_in = fsqrt_ready && fsqrt_last;
 
     end
 
@@ -292,8 +414,26 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         fflags_t [NUM_LANES-1:0] fflags_f2f;
 
         wire fcvt_valid = valid_in && (core_select == FPU_CVT);
-        wire fcvt_ready = per_core_ready_out[FPU_CVT] || ~per_core_valid_out[FPU_CVT];
-        wire fcvt_fire  = fcvt_valid && fcvt_ready;
+        wire pipe_valid_out, pipe_ready_out;
+        wire [PIPE_DATAW-1:0] pipe_data_out;
+        wire fcvt_ready = pipe_ready_out || ~pipe_valid_out;
+        wire fcvt_last;
+
+        if (BATCHES_CVT > 1) begin : g_batch
+            reg [`LOG2UP(BATCHES_CVT)-1:0] batch_idx;
+            always @(posedge clk) begin
+                if (reset) begin
+                    batch_idx <= '0;
+                end else if (fcvt_valid && fcvt_ready) begin
+                    batch_idx <= fcvt_last ? '0 : (batch_idx + 1'b1);
+                end
+            end
+            assign fcvt_last = (batch_idx == `LOG2UP(BATCHES_CVT)'(BATCHES_CVT-1));
+        end else begin : g_no_batch
+            assign fcvt_last = 1'b1;
+        end
+
+        wire fcvt_fire = fcvt_valid && fcvt_ready && fcvt_last;
 
         wire [1:0] f2f_dst_fmt = is_f2h ? 2'd2 : {1'b0, f_fmt};
         wire [1:0] f2f_src_fmt = is_f2h ? {1'b0, f_fmt} : (i_fmt ? 2'd2 : {1'b0, ~f_fmt});
@@ -326,19 +466,32 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         `FPU_MERGE_FFLAGS(fflags_merged, fflags_fcvt, mask_in, NUM_LANES);
 
         VX_shift_register #(
-            .DATAW  (1 + TAG_WIDTH + NUM_LANES * `VX_CFG_XLEN + $bits(fflags_t)),
-            .DEPTH  (`VX_CFG_FCVT_LATENCY),
+            .DATAW  (1 + PIPE_DATAW),
+            .DEPTH  (CVT_LATENCY),
             .RESETW (1)
         ) shift_reg (
             .clk      (clk),
             .reset    (reset),
             .enable   (fcvt_ready),
-            .data_in  ({fcvt_valid, tag_in, result_fcvt, fflags_merged}),
-            .data_out ({per_core_valid_out[FPU_CVT], per_core_tag_out[FPU_CVT], per_core_result[FPU_CVT], per_core_fflags[FPU_CVT]})
+            .data_in  ({fcvt_valid && fcvt_last, tag_in, result_fcvt, fflags_merged}),
+            .data_out ({pipe_valid_out, pipe_data_out})
+        );
+
+        VX_bypass_buffer #(
+            .DATAW (PIPE_DATAW)
+        ) out_buf (
+            .clk       (clk),
+            .reset     (reset),
+            .valid_in  (pipe_valid_out),
+            .ready_in  (pipe_ready_out),
+            .data_in   (pipe_data_out),
+            .data_out  ({per_core_tag_out[FPU_CVT], per_core_result[FPU_CVT], per_core_fflags[FPU_CVT]}),
+            .valid_out (per_core_valid_out[FPU_CVT]),
+            .ready_out (per_core_ready_out[FPU_CVT])
         );
 
         assign per_core_has_fflags[FPU_CVT] = 1;
-        assign per_core_ready_in[FPU_CVT] = fcvt_ready;
+        assign per_core_ready_in[FPU_CVT] = fcvt_ready && fcvt_last;
 
     end
 
@@ -365,8 +518,26 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         fflags_t [NUM_LANES-1:0] fflags_fmax;
 
         wire fncp_valid = (valid_in && core_select == FPU_NCP);
-        wire fncp_ready = per_core_ready_out[FPU_NCP] || ~per_core_valid_out[FPU_NCP];
-        wire fncp_fire  = fncp_valid && fncp_ready;
+        wire pipe_valid_out, pipe_ready_out;
+        wire [PIPE_DATAW:0] pipe_data_out;
+        wire fncp_ready = pipe_ready_out || ~pipe_valid_out;
+        wire fncp_last;
+
+        if (BATCHES_NCP > 1) begin : g_batch
+            reg [`LOG2UP(BATCHES_NCP)-1:0] batch_idx;
+            always @(posedge clk) begin
+                if (reset) begin
+                    batch_idx <= '0;
+                end else if (fncp_valid && fncp_ready) begin
+                    batch_idx <= fncp_last ? '0 : (batch_idx + 1'b1);
+                end
+            end
+            assign fncp_last = (batch_idx == `LOG2UP(BATCHES_NCP)'(BATCHES_NCP-1));
+        end else begin : g_no_batch
+            assign fncp_last = 1'b1;
+        end
+
+        wire fncp_fire = fncp_valid && fncp_ready && fncp_last;
 
         always @(*) begin
             for (integer i = 0; i < NUM_LANES; ++i) begin
@@ -413,18 +584,31 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         wire has_fflags_fncp = (frm >= 6) || is_fcmp;
 
         VX_shift_register #(
-            .DATAW  (1 + TAG_WIDTH + 1 + NUM_LANES * `VX_CFG_XLEN + $bits(fflags_t)),
+            .DATAW  (1 + 1 + PIPE_DATAW),
             .DEPTH  (`VX_CFG_FNCP_LATENCY),
             .RESETW (1)
         ) shift_reg (
             .clk      (clk),
             .reset    (reset),
             .enable   (fncp_ready),
-            .data_in  ({fncp_valid, tag_in, has_fflags_fncp, result_fncp, fflags_merged}),
-            .data_out ({per_core_valid_out[FPU_NCP], per_core_tag_out[FPU_NCP], per_core_has_fflags[FPU_NCP], per_core_result[FPU_NCP], per_core_fflags[FPU_NCP]})
+            .data_in  ({fncp_valid && fncp_last, tag_in, has_fflags_fncp, result_fncp, fflags_merged}),
+            .data_out ({pipe_valid_out, pipe_data_out})
         );
 
-        assign per_core_ready_in[FPU_NCP] = fncp_ready;
+        VX_bypass_buffer #(
+            .DATAW (1 + PIPE_DATAW)
+        ) out_buf (
+            .clk       (clk),
+            .reset     (reset),
+            .valid_in  (pipe_valid_out),
+            .ready_in  (pipe_ready_out),
+            .data_in   (pipe_data_out),
+            .data_out  ({per_core_tag_out[FPU_NCP], per_core_has_fflags[FPU_NCP], per_core_result[FPU_NCP], per_core_fflags[FPU_NCP]}),
+            .valid_out (per_core_valid_out[FPU_NCP]),
+            .ready_out (per_core_ready_out[FPU_NCP])
+        );
+
+        assign per_core_ready_in[FPU_NCP] = fncp_ready && fncp_last;
 
     end
 

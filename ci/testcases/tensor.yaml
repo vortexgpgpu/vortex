@@ -5,7 +5,7 @@ defaults:
   - 32
   - 64
   tier: smoke
-  touches: [hw/rtl/tcu, sim/simx/tcu, sw/kernel/include/vx_tensor.h]
+  touches: [hw/rtl/tcu, hw/rtl/VX_gpu_pkg.sv, sim/simx/tcu, sim/simx/fragment_layout.h, sw/kernel/include/vx_tensor.h]
 tests:
 - id: sgemm_tcu-1
   via: blackbox
@@ -31,7 +31,7 @@ tests:
   drivers:
   - simx
   app: sgemm_tcu
-  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=bf16 -DOTYPE=bf16
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=bf16 -DOTYPE=fp32
 - id: sgemm_tcu-5
   via: blackbox
   drivers:
@@ -43,7 +43,7 @@ tests:
   drivers:
   - simx
   app: sgemm_tcu
-  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DITYPE=bf8 -DOTYPE=bf8
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DITYPE=bf8 -DOTYPE=fp32
 - id: sgemm_tcu-7
   via: blackbox
   drivers:
@@ -123,13 +123,13 @@ tests:
   drivers:
   - rtlsim
   app: sgemm_tcu
-  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_ISSUE_WIDTH=2 -DITYPE=fp16 -DOTYPE=fp32
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_ISSUE_WIDTH=2 -DITYPE=fp16 -DOTYPE=fp32 -DVX_CFG_FETCH_WIDTH=2 -DVX_CFG_NUM_SFU_BLOCKS=2
 - id: sgemm_tcu-19
   via: blackbox
   drivers:
   - rtlsim
   app: sgemm_tcu
-  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_ISSUE_WIDTH=4 -DITYPE=fp16 -DOTYPE=fp32
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_ISSUE_WIDTH=4 -DITYPE=fp16 -DOTYPE=fp32 -DVX_CFG_FETCH_WIDTH=2 -DVX_CFG_NUM_SFU_BLOCKS=4
     -DPROFILE_ENABLE
 - id: sgemm_tcu-20
   via: blackbox
@@ -148,7 +148,7 @@ tests:
   drivers:
   - rtlsim
   app: sgemm2_tcu
-  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_FETCH_WIDTH=4 -DVX_CFG_NUM_SFU_BLOCKS=4
     -DITYPE=fp16 -DOTYPE=fp32
   args: -w 4
 
@@ -159,6 +159,17 @@ tests:
   app: sgemm_tcu
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_FEDP2K -DITYPE=fp16 -DOTYPE=fp32
 
+# A 64-thread warp: an 8x8x8 block, with the stack window moved to a 512 KB
+# boundary. A thread mask is a register, so 64 threads need XLEN 64.
+- id: sgemm_tcu-nt64
+  via: blackbox
+  xlen: [64]
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=64 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32
+
 # SimX<->rtlsim cycle parity on the native (non-DPI) fp16 TCU datapath: same
 # config on both drivers, cycles must agree within tolerance (see core.yaml).
 - id: model_parity-fp16
@@ -166,6 +177,24 @@ tests:
   via: blackbox
   app: sgemm_tcu
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32
+
+# A FEDP array of half the block (VX_CFG_TCU_PE_RATIO=2): each micro-op takes
+# two cycles, one output slice per cycle.
+- id: sgemm_tcu-pe-ratio2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_PE_RATIO=2 -DITYPE=fp16 -DOTYPE=fp32
+
+# Parity of the sliced micro-op's occupancy. Ratio 4 at 8 threads slices both
+# block dimensions (4x2 block, 2 elements per slice).
+- id: model_parity-pe-ratio4
+  check: model_parity
+  via: blackbox
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_PE_RATIO=4 -DITYPE=fp16 -DOTYPE=fp32
 
 # Perf-regression twin of the model_parity-fp16 benchmark (same run, cycles-vs-baseline).
 - id: perf_gate-fp16
@@ -193,6 +222,9 @@ tests:
   check: model_parity
   via: blackbox
   app: sgemm_tcu
+  # Sized like its perf_gate twin: at the default 64^3 the grid is four waves of
+  # CTAs, so one CTA running long moves the per-core split and the cycle count.
+  args: -m 128 -n 128 -k 128
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32
   shape: {cores: 2, l2cache: true}
 
@@ -227,3 +259,76 @@ tests:
 
   # Not warp-width swept: the tensor-core fragment layout is defined over a fixed
   # lane count, which the configs pin.
+
+# Fragments moved with vx_ldm/vx_stm (VX_CFG_EXT_LDST_MATRIX_ENABLE), alone and
+# with the K loop unrolled (KUNROLL), whose tile offsets the instructions take as
+# immediates.
+- id: sgemm_tcu-ldm-1
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DVX_CFG_EXT_LDST_MATRIX_ENABLE
+  touches: [hw/rtl/tcu, hw/rtl/core/VX_uop_packld.sv, hw/rtl/core/VX_decode.sv, sim/simx/tcu, sim/simx/fragment_layout.h, sim/simx/lsu_unit.cpp, sim/simx/decode.cpp, hw/rtl/VX_gpu_pkg.sv, sw/kernel/include/vx_tensor.h, sw/kernel/include/vx_intrinsics.h]
+- id: sgemm_tcu-ldm-2
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=bf16 -DOTYPE=fp32 -DVX_CFG_EXT_LDST_MATRIX_ENABLE -DKUNROLL=2
+  touches: [hw/rtl/tcu, hw/rtl/core/VX_uop_packld.sv, hw/rtl/core/VX_decode.sv, sim/simx/tcu, sim/simx/fragment_layout.h, sim/simx/lsu_unit.cpp, sim/simx/decode.cpp, hw/rtl/VX_gpu_pkg.sv, sw/kernel/include/vx_tensor.h, sw/kernel/include/vx_intrinsics.h]
+- id: sgemm_tcu-ldm-3
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu
+  args: -m 64 -n 64 -k 128
+  configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DITYPE=fp8 -DOTYPE=fp32 -DVX_CFG_EXT_LDST_MATRIX_ENABLE -DKUNROLL=4
+  touches: [hw/rtl/tcu, hw/rtl/core/VX_uop_packld.sv, hw/rtl/core/VX_decode.sv, sim/simx/tcu, sim/simx/fragment_layout.h, sim/simx/lsu_unit.cpp, sim/simx/decode.cpp, hw/rtl/VX_gpu_pkg.sv, sw/kernel/include/vx_tensor.h, sw/kernel/include/vx_intrinsics.h]
+- id: sgemm_tcu-ldm-4
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_INT8_ENABLE -DITYPE=int8 -DOTYPE=int32 -DVX_CFG_EXT_LDST_MATRIX_ENABLE
+  touches: [hw/rtl/tcu, hw/rtl/core/VX_uop_packld.sv, hw/rtl/core/VX_decode.sv, sim/simx/tcu, sim/simx/fragment_layout.h, sim/simx/lsu_unit.cpp, sim/simx/decode.cpp, hw/rtl/VX_gpu_pkg.sv, sw/kernel/include/vx_tensor.h, sw/kernel/include/vx_intrinsics.h]
+- id: sgemm_tcu-ldm-5
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu
+  args: -m 32 -n 32 -k 96
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=fp16 -DOTYPE=fp32 -DVX_CFG_EXT_LDST_MATRIX_ENABLE -DKUNROLL=4
+  touches: [hw/rtl/tcu, hw/rtl/core/VX_uop_packld.sv, hw/rtl/core/VX_decode.sv, sim/simx/tcu, sim/simx/fragment_layout.h, sim/simx/lsu_unit.cpp, sim/simx/decode.cpp, hw/rtl/VX_gpu_pkg.sv, sw/kernel/include/vx_tensor.h, sw/kernel/include/vx_intrinsics.h]
+- id: sgemm2_tcu-ldm
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm2_tcu
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_FETCH_WIDTH=4 -DVX_CFG_NUM_SFU_BLOCKS=4
+    -DITYPE=fp16 -DOTYPE=fp32 -DVX_CFG_EXT_LDST_MATRIX_ENABLE
+  args: -w 4
+  touches: [hw/rtl/tcu, hw/rtl/core/VX_uop_packld.sv, hw/rtl/core/VX_decode.sv, sim/simx/tcu, sim/simx/fragment_layout.h, sim/simx/lsu_unit.cpp, sim/simx/decode.cpp, hw/rtl/VX_gpu_pkg.sv, sw/kernel/include/vx_tensor.h, sw/kernel/include/vx_intrinsics.h]
+- id: model_parity-fp16-ldm
+  check: model_parity
+  via: blackbox
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DVX_CFG_EXT_LDST_MATRIX_ENABLE
+  touches: [hw/rtl/tcu, hw/rtl/core/VX_uop_packld.sv, hw/rtl/core/VX_decode.sv, sim/simx/tcu, sim/simx/fragment_layout.h, sim/simx/lsu_unit.cpp, sim/simx/decode.cpp, hw/rtl/VX_gpu_pkg.sv, sw/kernel/include/vx_tensor.h, sw/kernel/include/vx_intrinsics.h]
+- id: model_parity-fp16-ldm-u4
+  check: model_parity
+  via: blackbox
+  app: sgemm_tcu
+  args: -m 64 -n 64 -k 128
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DVX_CFG_EXT_LDST_MATRIX_ENABLE -DKUNROLL=4
+  touches: [hw/rtl/tcu, hw/rtl/core/VX_uop_packld.sv, hw/rtl/core/VX_decode.sv, sim/simx/tcu, sim/simx/fragment_layout.h, sim/simx/lsu_unit.cpp, sim/simx/decode.cpp, hw/rtl/VX_gpu_pkg.sv, sw/kernel/include/vx_tensor.h, sw/kernel/include/vx_intrinsics.h]
+- id: model_parity-sgemm2-fp16-ldm
+  check: model_parity
+  via: blackbox
+  app: sgemm2_tcu
+  args: -m 128 -n 128 -k 64
+  # One execution block per unit: the four-block model ISSUE_WIDTH=4 implies is
+  # several times the size, and a hosted CI runner cannot build it in a job.
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1 -DVX_CFG_EXT_LDST_MATRIX_ENABLE
+  touches: [hw/rtl/tcu, hw/rtl/core/VX_uop_packld.sv, hw/rtl/core/VX_decode.sv, sim/simx/tcu, sim/simx/fragment_layout.h, sim/simx/lsu_unit.cpp, sim/simx/decode.cpp, hw/rtl/VX_gpu_pkg.sv, sw/kernel/include/vx_tensor.h, sw/kernel/include/vx_intrinsics.h]

@@ -298,5 +298,5 @@ int main(int argc, char **argv) {
 
   Cleanup(kernel_bin, device_id, context, queue, program, kernel, memObjects);
 
-  return errors;
+  return errors != 0;
 }

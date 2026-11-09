@@ -18,6 +18,237 @@ tests:
   - rtlsim
   dir: tests/regression
   target: run-{driver}
+# Local memory: shared-word reads (one lane to the whole warp, and lanes of
+# different LSU blocks), partial masks, bank-conflict replays, sub-word loads
+# and stores, same-word stores, and per-lane order against the lane's own
+# stores and atomics.
+- id: lmem-access-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: lmem_access
+  shape:
+    threads: 16
+# Two LSU blocks: the read engine on the banks' second port.
+- id: lmem-access-2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: lmem_access
+  configs: -DVX_CFG_ISSUE_WIDTH=2
+  shape:
+    threads: 32
+    warps: 8
+# With atomics: a warp's reads around its own atomic adds to the word.
+- id: lmem-access-amo
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: lmem_access
+  configs: -DVX_CFG_EXT_A_ENABLE
+  shape:
+    threads: 16
+# Atomics with two LSU blocks: the read engine drains before an atomic enters
+# the first engine.
+- id: lmem-access-amo-iw2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: lmem_access
+  configs: -DVX_CFG_EXT_A_ENABLE -DVX_CFG_ISSUE_WIDTH=2
+  shape:
+    threads: 16
+# Wide loads and stores (vx_flw.d/.q, vx_fsw.d/.q) on local and global memory:
+# lane patterns, register groups, word alignments and the offset limits.
+- id: ldst-wide-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: ldst_wide
+  configs: -DVX_CFG_EXT_LDST_WIDE_ENABLE
+  xlen:
+  - 32
+  shape:
+    threads: 16
+# Two LSU blocks.
+- id: ldst-wide-2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: ldst_wide
+  configs: -DVX_CFG_EXT_LDST_WIDE_ENABLE -DVX_CFG_ISSUE_WIDTH=2
+  xlen:
+  - 32
+  shape:
+    threads: 32
+    warps: 8
+# Fewer LSU lanes than SIMD lanes: each uop's request goes out in four packets.
+- id: ldst-wide-3
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: ldst_wide
+  configs: -DVX_CFG_EXT_LDST_WIDE_ENABLE -DVX_CFG_NUM_LSU_LANES=4
+  xlen:
+  - 32
+  shape:
+    threads: 16
+# One SIMD lane: the dispatcher splits every warp into single-lane packets.
+- id: ldst-wide-4
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: ldst_wide
+  configs: -DVX_CFG_EXT_LDST_WIDE_ENABLE -DVX_CFG_SIMD_WIDTH=1
+  xlen:
+  - 32
+  shape:
+    threads: 4
+# Half-width ALU, FPU and LSU: each lane gather commits an instruction's two
+# passes in one beat, and the last block of each row runs half masked.
+- id: mixfu-lanes
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: mixfu
+  args: -n40 -i32
+  configs: -DVX_CFG_NUM_WARPS=16 -DVX_CFG_NUM_ALU_LANES=8 -DVX_CFG_NUM_FPU_LANES=8 -DVX_CFG_NUM_LSU_LANES=8
+  shape:
+    threads: 16
+# Matrix fragment loads and stores (vx_ldm, vx_stm): every shape of the
+# geometry, local and global memory, row strides that are not powers of two,
+# zero/positive/negative offsets, aligned and unaligned register bases.
+- id: ldst-matrix-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: ldst_matrix
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_LDST_MATRIX_ENABLE -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI
+# Symmetric sparse geometry (4 lanes).
+- id: ldst-matrix-2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: ldst_matrix
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_LDST_MATRIX_ENABLE -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_SPARSE_ENABLE
+# 16 lanes, with the WGMMA tensor core.
+- id: ldst-matrix-3
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: ldst_matrix
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_LDST_MATRIX_ENABLE -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_WGMMA_ENABLE
+# Each uop split into 4-lane packets, symmetric sparse shapes included.
+- id: ldst-matrix-4
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: ldst_matrix
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_LDST_MATRIX_ENABLE -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_NUM_LSU_LANES=4
+# Without the tensor core: the matrix loads and stores of a core that has
+# only them.
+- id: ldst-matrix-notcu
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: ldst_matrix
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_LDST_MATRIX_ENABLE
+# Both load/store extensions in one core: the fragment and the wide macro-ops
+# share the expander, told apart by the uop count decode carries.
+- id: ldst-matrix-wide
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: ldst_matrix
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_LDST_MATRIX_ENABLE -DVX_CFG_EXT_LDST_WIDE_ENABLE -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI
+  xlen:
+  - 32
+- id: ldst-wide-matrix
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: ldst_wide
+  configs: -DVX_CFG_EXT_LDST_WIDE_ENABLE -DVX_CFG_EXT_LDST_MATRIX_ENABLE
+  xlen:
+  - 32
+  shape:
+    threads: 16
+# The sgemm benchmarks with each thread's consecutive words read and written
+# through the wide forms (VX_CFG_EXT_LDST_WIDE_ENABLE).
+- id: ldst-wide-sgemm
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm
+  configs: -DVX_CFG_EXT_LDST_WIDE_ENABLE
+  xlen:
+  - 32
+- id: ldst-wide-sgemm-v1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm_v1
+  configs: -DVX_CFG_EXT_LDST_WIDE_ENABLE
+  xlen:
+  - 32
+- id: ldst-wide-sgemmx
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemmx
+  configs: -DVX_CFG_EXT_LDST_WIDE_ENABLE
+  xlen:
+  - 32
+- id: ldst-wide-sgemm2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm2
+  args: -n32 -t4
+  configs: -DVX_CFG_EXT_LDST_WIDE_ENABLE
+  xlen:
+  - 32
+- id: ldst-wide-sgemm2-v1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm2_v1
+  configs: -DVX_CFG_EXT_LDST_WIDE_ENABLE
+  xlen:
+  - 32
+# DGEMM: the sgemm kernel in FP64, its FMAs on F64 FMA processing elements
+# serving two lanes each.
+- id: dgemm-fma64
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm
+  args: -n32
+  configs: -DTYPE=double -DVX_CFG_FMA64_PE_RATIO=2
+  xlen:
+  - 64
 - id: occupancy-1
   via: blackbox
   drivers:
@@ -90,6 +321,57 @@ tests:
   app: gbar_phase
   shape:
     cores: 2
+# Four cores in one cluster: every core must arrive under its own index.
+- id: gbar-phase-3
+  via: blackbox
+  drivers:
+  - xrt
+  app: gbar_phase
+  shape:
+    cores: 4
+# A global barrier spans clusters: the device-level unit counts every core, so
+# one core per cluster still meets the count and two clusters of two cores do
+# not release on a cluster's own arrivals.
+- id: gbar-phase-cl2-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: gbar_phase
+  shape:
+    clusters: 2
+    cores: 1
+- id: gbar-phase-cl2-2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: gbar_phase
+  shape:
+    clusters: 2
+    cores: 2
+    l2cache: true
+    l3cache: true
+- id: async-gbarrier-cl2-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: async_gbarrier
+  shape:
+    clusters: 2
+    cores: 1
+- id: async-gbarrier-cl2-2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: async_gbarrier
+  shape:
+    clusters: 2
+    cores: 2
+    l2cache: true
+    l3cache: true
 # SimX<->rtlsim cycle parity on the multi-core global barrier. Until this case
 # existed the gate could not observe the gbar path at all: every other parity
 # case is single-core, so USE_GBAR is 0 and the request queue is not built.
@@ -105,6 +387,16 @@ tests:
   app: async_gbarrier
   shape:
     cores: 2
+# Two cores sharing one socket's instruction and data caches: their requests
+# and responses cross each cache's input arbiter.
+- id: model_parity-async-gbarrier-ss2
+  check: model_parity
+  via: blackbox
+  app: async_gbarrier
+  configs: -DVX_CFG_SOCKET_SIZE=2
+  shape:
+    cores: 2
+    l2cache: true
 
 - id: bar-slot-phase-1
   via: blackbox
@@ -155,3 +447,277 @@ tests:
   drivers:
   - simx
   app: module_reload
+# Kernel-boundary flush coherence: back-to-back launches with host rewrites,
+# rotating line ownership across cores and cross-launch read-modify-writes.
+# The shapes cover a write-back L1, a write-back L2 shared by 4 cores, and a
+# write-back L3 shared by two clusters, where every core flushes at once.
+- id: flush_coherence-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: flush_coherence
+# The xrt leg runs the RTL command processor's flush (broadcast write, then
+# per-core reads).
+- id: flush_coherence-2
+  via: blackbox
+  drivers:
+  - simx
+  - xrt
+  app: flush_coherence
+  shape:
+    cores: 4
+    l2cache: true
+- id: flush_coherence-3
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: flush_coherence
+  shape:
+    clusters: 2
+    cores: 2
+    l2cache: true
+    l3cache: true
+# A memory fence carries data from one core to another across the caches they
+# do not share: the producer's token reaches the point of coherence, the
+# consumer's invalidates its copies above it. Two clusters with an L2 each
+# replicate the last level, so the fence must walk both L2s there.
+- id: fence_mp-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: fence_mp
+- id: fence_mp-2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: fence_mp
+  shape:
+    cores: 2
+    l2cache: true
+- id: fence_mp-3
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: fence_mp
+  shape:
+    clusters: 2
+    cores: 1
+    l2cache: true
+- id: fence_mp-4
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: fence_mp
+  shape:
+    clusters: 2
+    cores: 2
+    l2cache: true
+    l3cache: true
+# A release must drain: bank 0's writes are held back by the debug delay, and
+# the flag, in a bank-1 line, overtakes the data in bank-0 lines unless the
+# release fence (-m1) or the .rl atomic (-m2) waits for them.
+- id: fence_mp-5
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: fence_mp
+  args: -n64 -m1
+  configs: -DVX_CFG_EXT_A_ENABLE -DDBG_MEM_BANK0_WDELAY
+  shape:
+    cores: 2
+    l2cache: true
+- id: fence_mp-6
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: fence_mp
+  args: -n64 -m2
+  configs: -DVX_CFG_EXT_A_ENABLE -DDBG_MEM_BANK0_WDELAY
+  shape:
+    cores: 2
+    l2cache: true
+# Kernel to kernel with no host transfer between (one command batch): the
+# launch flushes are L1-only, so the last-level cache alone carries each
+# round's writes to the next round, and the full flush runs before readback.
+- id: flush_coherence-chain-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: flush_coherence
+  args: -n2048 -r16 -c
+- id: flush_coherence-chain-2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: flush_coherence
+  args: -n2048 -r16 -c
+  configs: -DVX_CFG_SOCKET_SIZE=1
+  shape:
+    cores: 4
+    l2cache: true
+- id: flush_coherence-chain-3
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: flush_coherence
+  args: -n2048 -r16 -c
+  shape:
+    clusters: 2
+    cores: 2
+    l2cache: true
+    l3cache: true
+# Replicated last-level caches (per-core dcaches without an L2, per-cluster L2s
+# without an L3) are not a point of coherence, so an L1-only flush must still
+# invalidate them.
+- id: flush_coherence-chain-4
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: flush_coherence
+  args: -n2048 -r16 -c
+  shape:
+    cores: 2
+- id: flush_coherence-chain-5
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: flush_coherence
+  args: -n2048 -r16 -c
+  shape:
+    clusters: 2
+    cores: 2
+    l2cache: true
+# Each round loads its input with a DXA tile copy, which reaches memory beside
+# the single dcache, so that dcache is not a point of coherence and must still
+# be written back on an L1-only flush.
+- id: flush_coherence-chain-6
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: flush_coherence
+  args: -n2048 -r16 -c -x
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+# The command processor's DMA as a client of the shared L2: host transfers
+# are timed through the L2, and each launch waits for the DMA's fence.
+- id: model_parity-dogfood-cp-llc
+  check: model_parity
+  via: blackbox
+  app: dogfood
+  args: -n16 -xbar -xgbar
+  shape:
+    cores: 4
+    l2cache: true
+# The same with the DMA off the L2, reaching memory on its own path.
+- id: model_parity-dogfood-cp-direct
+  check: model_parity
+  via: blackbox
+  app: dogfood
+  args: -n16 -xbar -xgbar
+  configs: -DVX_CFG_CP_LLC_CLIENT=0
+  shape:
+    cores: 4
+    l2cache: true
+# Eight L1 ports per core and the DMA's slot give the shared L2 2^k + 1
+# ports, so each bank's port arbiter is a tree whose last slice has one port:
+# 17 ports on two cores, and 65 on eight, past a 64-bit port mask.
+- id: model_parity-sgemm-cp-llc-17
+  check: model_parity
+  via: blackbox
+  app: sgemm
+  args: -n32
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=8
+  shape:
+    cores: 2
+    l2cache: true
+- id: sgemm-cp-llc-65
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm
+  args: -n32
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=8
+  shape:
+    cores: 8
+    l2cache: true
+# More dcache banks and memory ports than core requests: the uncached path keeps
+# each core request on its own memory port.
+- id: model_parity-sgemm-dcache-16-banks
+  check: model_parity
+  via: blackbox
+  app: sgemm
+  args: -n32
+  configs: -DVX_CFG_DCACHE_NUM_BANKS=16 -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=16
+# The shared L2 keeps its lines across the L1-only launch flushes.
+- id: model_parity-flush-chain
+  check: model_parity
+  via: blackbox
+  app: flush_coherence
+  args: -n2048 -r16 -c
+  configs: -DVX_CFG_SOCKET_SIZE=1
+  shape:
+    cores: 4
+    l2cache: true
+# Flush ordering under random input backpressure (DBG_FLUSH_STALL): each round
+# ends on a store burst, so a core's last writes are often still queued on one
+# memory port or dcache lane while its token on another reaches the next level.
+# Without a token per path these shapes lose those writes.
+- id: flush_coherence-stress-1
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: flush_coherence
+  args: -n2048 -r8 -b16
+  configs: -DDBG_FLUSH_STALL
+  shape:
+    cores: 4
+    l2cache: true
+- id: flush_coherence-stress-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: flush_coherence
+  args: -n2048 -r8 -b16
+  configs: -DDBG_FLUSH_STALL
+  shape:
+    clusters: 2
+    cores: 2
+    l2cache: true
+    l3cache: true
+  tier: full
+# Cores sharing a dcache: a lost lane store is only visible when it belongs to
+# the core answered last, so this shape needs more rounds to expose it.
+- id: flush_coherence-stress-3
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: flush_coherence
+  args: -n2048 -r24 -b16
+  configs: -DDBG_FLUSH_STALL -DVX_CFG_SOCKET_SIZE=2
+  shape:
+    cores: 4
+    l2cache: true
+  tier: full
+- id: flush_coherence-chain-stress-1
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: flush_coherence
+  args: -n2048 -r8 -b16 -c
+  configs: -DDBG_FLUSH_STALL -DVX_CFG_SOCKET_SIZE=1
+  shape:
+    cores: 4
+    l2cache: true

@@ -62,7 +62,10 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     // it instead of doing so on the cycle the result lands
     output wire [TAG_WIDTH-1:0] tag_out_pre,
     output wire        hit,
-    output wire [31:0] t_near
+    output wire [31:0] t_near,
+    // the next result's t_near, one cycle ahead (meaningful when that result
+    // is valid)
+    output wire [31:0] t_near_pre
 );
     localparam F       = LATENCY_FMA;
     localparam LAT_FMA = 3 * F;                 // origin - ro, + corner, * inv_d
@@ -318,12 +321,13 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     // ── stage 7: hit = lo <= hi; t_near = lo ─────────────────────────
     // lo and hi are never NaN; t_near is non-negative for t_min >= 0 and +0 for
     // a zero, so the consumer may order it as an unsigned integer.
+    wire [31:0] t_near_w = (lo_all_r[30:0] == 31'd0) ? 32'd0 : lo_all_r;
     reg         hit_r;
     reg  [31:0] t_near_r;
     always_ff @(posedge clk) begin
         if (enable) begin
             hit_r    <= f32_le(lo_all_r, hi_all_r);
-            t_near_r <= (lo_all_r[30:0] == 31'd0) ? 32'd0 : lo_all_r;
+            t_near_r <= t_near_w;
         end
     end
 
@@ -368,5 +372,6 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     assign tag_out_pre = tag_out_pre_w;
     assign hit         = hit_r;
     assign t_near      = t_near_r;
+    assign t_near_pre  = t_near_w;
 
 endmodule

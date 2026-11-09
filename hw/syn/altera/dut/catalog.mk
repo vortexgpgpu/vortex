@@ -9,7 +9,7 @@
 # Add a DUT: append its name to DUTS and define its variables. No new directory,
 # no dispatcher edit.
 
-DUTS := cache core fpu issue lmem mem_unit scope top unittest vortex
+DUTS := cache core fpu issue lmem mem_unit scope top vortex
 
 # ---------------------------------------------------------------------------
 # shared include fragments
@@ -58,8 +58,8 @@ issue_PRJ := VX_issue_top
 issue_INC  = $(BASE_INC) -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm $(FPU_INC) \
              -I$(IP_CACHE_DIR) -I$(UNITTEST_DIR)/issue
 
-lmem_PRJ := VX_local_mem_top
-lmem_INC  = $(BASE_INC) -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(UNITTEST_DIR)/local_mem
+lmem_PRJ := VX_lmem_unit_top
+lmem_INC  = $(BASE_INC) -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(UNITTEST_DIR)/lmem_unit
 
 mem_unit_PRJ := VX_mem_unit_top
 mem_unit_INC  = $(BASE_INC) -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(RTL_DIR)/core -I$(RTL_DIR)/fpu \
@@ -74,10 +74,6 @@ top_CFG := -DNOPAE -DPLATFORM_PROVIDES_LOCAL_MEMORY
 top_INC  = $(BASE_INC) -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(RTL_DIR)/cache \
            -I$(AFU_DIR) -I$(AFU_DIR)/ccip -I$(IP_CACHE_DIR) $(FPU_INC) $(TCU_INC) $(DXA_INC)
 top_PKG  = $(TCU_PKG) $(DXA_PKG)
-
-unittest_PRJ := Unittest
-unittest_INC  = $(BASE_INC) -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(RTL_DIR)/cache \
-                -I$(IP_CACHE_DIR) $(FPU_INC)
 
 vortex_PRJ := Vortex
 vortex_INC  = $(BASE_INC) -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(RTL_DIR)/cache \

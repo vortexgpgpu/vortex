@@ -41,7 +41,6 @@ struct Buffer {
   std::deque<TcuTbuf::LmemRead> pending_;
   std::unordered_map<uint32_t, uint64_t> inflight_;   // tag → line
   std::unordered_map<uint64_t, std::shared_ptr<mem_block_t>> lines_;
-  uint64_t fill_cycle_ = 0;
   bool     rsp_seen_ = false;   // a response arrived this cycle
   uint32_t next_tag_ = 0;
   uint64_t reads_ = 0;
@@ -56,14 +55,12 @@ struct Buffer {
     for (auto& r : reads) {
       pending_.push_back(std::move(r));
     }
-    fill_cycle_ = SimPlatform::instance().cycles();
   }
 
   void append(std::vector<TcuTbuf::LmemRead>&& reads) {
     for (auto& r : reads) {
       pending_.push_back(std::move(r));
     }
-    fill_cycle_ = SimPlatform::instance().cycles();
   }
 
   std::shared_ptr<mem_block_t> read(uint64_t line_addr) const {
@@ -156,15 +153,19 @@ public:
       rsp.pop();
     }
 
-    // An abuf issues its next read in the cycle its previous one returns;
-    // the bbuf issues it the cycle after.
-    uint64_t cycle = SimPlatform::instance().cycles();
+    // The port arbiter presents one read at a time, and picks it as the
+    // previous one is taken: the highest-priority buffer with reads left. A
+    // fill's first read is sent in the cycle the fill starts, seen by the LMEM
+    // the next. An abuf issues its next read in the cycle its previous one
+    // returns; the bbuf issues it the cycle after.
+    for (uint32_t p = 0; p < LMEM_PORTS; ++p) {
+      if (simobject_->lmem_req_out.at(p).size() != 0) {
+        return;
+      }
+    }
     for (uint32_t s = 0; s < kNumBuffers; ++s) {
       auto& b = bufs_.at(s);
       if (b.pending_.empty() || b.inflight_.size() >= b.max_inflight_) {
-        continue;
-      }
-      if (cycle <= b.fill_cycle_) {
         continue;
       }
       if (s == kBOffset && b.rsp_seen_ && b.max_inflight_ == 1) {

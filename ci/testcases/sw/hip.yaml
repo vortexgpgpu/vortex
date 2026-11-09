@@ -1,0 +1,20 @@
+# Test cases for `hip`, drafted from regression.sh.in (review/collapse).
+category: sw
+defaults:
+  xlen:
+  - 32
+  - 64
+  tier: smoke
+tests:
+- id: hip-1
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/hip
+  target: run-{driver}
+- id: hip-4
+  via: make-run
+  drivers:
+  - xrt
+  dir: tests/hip
+  target: run-{driver}

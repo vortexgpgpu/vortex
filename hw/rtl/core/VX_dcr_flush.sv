@@ -33,6 +33,7 @@ module VX_dcr_flush import VX_gpu_pkg::*; #(
     input wire reset,
 
     VX_dcr_flush_if.slave  dcr_flush_if,
+    input wire             l1_only,       // the last-level cache need not walk
     VX_mem_bus_if.slave    core_bus_if,   // TAG_WIDTH
     VX_mem_bus_if.master   cache_bus_if   // TAG_WIDTH+1
 );
@@ -72,12 +73,13 @@ module VX_dcr_flush import VX_gpu_pkg::*; #(
         rw:      1'b0,
         addr:    '0,
         data:    '0,
-        byteen:  '0,
+        byteen:  WORD_SIZE'(l1_only),
         attr:    MEM_ATTR_WIDTH'(1 << MEM_ATTR_FLUSH_OFFS),
         tag:     '0
     };
-    // The flush request only consumes MEM_ATTR_FLUSH_OFFS downstream; the
-    // remaining req_data fields are tied off and intentionally unused.
+    // The flush request only consumes MEM_ATTR_FLUSH_OFFS and byteen bit 0
+    // (the L1-only kind) downstream; the remaining req_data fields are tied
+    // off and intentionally unused.
     `UNUSED_VAR (flush_bus_if.req_data.rw)
     `UNUSED_VAR (flush_bus_if.req_data.addr)
     `UNUSED_VAR (flush_bus_if.req_data.data)
@@ -87,7 +89,7 @@ module VX_dcr_flush import VX_gpu_pkg::*; #(
     assign dcr_flush_if.done      = flush_done_r;
     assign flush_bus_if.rsp_ready = 1'b1;
 
-    // 2-to-1 arb: input 0 = flush, input 1 = real dcache port 0
+    // 2-to-1 arb: input 0 = cache traffic, input 1 = the flush token
     VX_mem_bus_if #(
         .DATA_SIZE (WORD_SIZE),
         .TAG_WIDTH (TAG_WIDTH)

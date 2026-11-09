@@ -1,0 +1,34 @@
+{
+  "name": "gtx1080ti",
+  "extends": "gtx1080",
+  "description": "NVIDIA GeForce GTX 1080 Ti (GP102, Pascal, sm_61) at its 1480 MHz base clock: one Vortex core per SM; the SM is GP104's (gtx1080).",
+  "chip": {
+    "VX_CFG_NUM_CORES": 28,
+    "VX_CFG_L2_SIZE": 2883584,
+    "VX_CFG_L2_NUM_WAYS": 22,
+    "VX_CFG_L2_LINK_LATENCY": 52
+  },
+  "platform": {
+    "VX_CFG_PLATFORM_CLOCK_RATE": 1480,
+    "VX_CFG_PLATFORM_MEMORY_PEAK_BW": 484000,
+    "VX_CFG_PLATFORM_MEMORY_DATA_RATE": 15125
+  },
+  "reference": {
+    "fp32_lanes": 3584,
+    "dram_bandwidth_gbs": 484
+  },
+  "sources": {
+    "SM (all core knobs)": "Inherited from gtx1080: GP102 uses the same Pascal SM as GP104",
+    "NUM_CORES": "28 SMs, 3584 CUDA cores (GeForce GTX 1080 Ti specifications)",
+    "L2_SIZE, L2_NUM_WAYS": "2.75 MB L2 (11 of GP102's 12 memory controllers and their L2 slices): 22 ways over power-of-two sets",
+    "PLATFORM_MEMORY_TYPE, PLATFORM_MEMORY_NUM_BANKS, PLATFORM_MEMORY_DATA_RATE, PLATFORM_MEMORY_PEAK_BW": "352-bit GDDR5X at 11 Gbps (484 GB/s) modelled as the gtx1080's 16 GDDR6 x16 channels at 15125 MT/s: 16 x 2 B x 15.125 GT/s = 484 GB/s, the card's bandwidth",
+    "PLATFORM_CLOCK_RATE": "1480 MHz base clock (1582 MHz boost), base as in gtx1080",
+    "reference": "fp32_lanes is the vendor FP32 core count (FP32 FMA lanes per chip, clock-free); dram_bandwidth_gbs the vendor peak. Checked by ci/profile_check.py. Latencies inherited from gtx1080 (Jia et al., Dissecting the NVIDIA Turing T4 GPU via Microbenchmarking (arXiv 1903.07486), Table 3.1, Tesla P4: the same Pascal SM, L1 and L2 design). Accel-Sim correlates this card (posted hardware runs: pascal-1080ti)",
+    "L1_LINK_LATENCY": "26 core cycles each way between a core and its dcache, the L1/texture load pipeline, which the dcache bank pipeline (DCACHE_LATENCY) does not model: calibrated with ci/profile_check.py so the SimX pointer chase gives the None-cycle L1 hit latency in 'reference'",
+    "L2_LINK_LATENCY": "52 core cycles each way between an SM and the L2, the SM-to-L2 network: calibrated with ci/profile_check.py (after the L1 link) so the SimX pointer chase gives the None-cycle L2 hit latency in 'reference'",
+    "PLATFORM_MEMORY_LATENCY": "Not set: no DRAM latency is published for this part, so dram_cycles is unchecked"
+  },
+  "core": {
+    "VX_CFG_L1_LINK_LATENCY": 26
+  }
+}

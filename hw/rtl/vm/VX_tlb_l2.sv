@@ -255,10 +255,10 @@ module VX_tlb_l2 import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     // fill-time fault sideband is unused (faults are delivered per requester on
     // the response path).
     wire [0:0][TLB_VPN_WIDTH-1:0] probe_vpn;
-    wire [0:0]                    probe_match;
+    wire [0:0]                    probe_join;
     wire [`UP(`CLOG2(1))-1:0]     alloc_lane = '0;
     assign probe_vpn[0] = t_vpn;
-    `UNUSED_VAR (probe_match)
+    `UNUSED_VAR (probe_join)
     wire                     mshr_fault_valid;
     wire [TLB_VPN_WIDTH-1:0] mshr_fault_vpn;
     tlb_access_e             mshr_fault_access;
@@ -277,7 +277,8 @@ module VX_tlb_l2 import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         .clk           (clk),
         .reset         (reset),
         .probe_vpn     (probe_vpn),
-        .probe_match   (probe_match),
+        .probe_order   (1'b0),
+        .probe_join    (probe_join),
         .alloc_valid   (tail_miss),
         .alloc_vpn     (t_vpn),
         .alloc_access  (t_acc),

@@ -7,7 +7,7 @@
 
 namespace vt = vortex::tensor;
 // WGMMA accumulator; is_sparse=true (A is 2:4 compressed in smem)
-using ctx = vt::wgmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, true, WGMMA_NRC>;
+using ctx = vt::wgmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, true, WGMMA_NRC, vt::ldst_matrix_enabled>;
 
 // Per-warp smem layout: [A_compressed][reserved metadata row], then shared B.
 static constexpr uint32_t smem_a_elems     = ctx::xtileM * (ctx::tileK / 2);
@@ -226,7 +226,14 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   // Transaction barrier for DXA completion + CTA synchronization.
   vortex::barrier bar(0);
 
+#if defined(WGMMA_RS) && (WGMMA_NRC <= 16)
+  size_t a_lane_off = ctx::lane_offset<ctx::fragment_a>(ctx::tileK / 2);
+#endif
+
   // Loop over K tiles
+#if KUNROLL > 1
+#pragma unroll KUNROLL
+#endif
   for (uint32_t k = 0; k < K; k += ctx::tileK) {
     uint32_t k_tile = k / ctx::tileK;
 
@@ -257,7 +264,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
   #if defined(WGMMA_RS) && (WGMMA_NRC <= 16)
     // RS: A from registers, B from smem (NRC <= 16 only)
-    ctx::load_matrix_sync(fragA, A_warp, ctx::tileK / 2);
+    ctx::load_matrix_sync(fragA, A_warp, ctx::tileK / 2, a_lane_off);
     ctx::wgmma_sync(fragC, fragA, desc_b, fragC);
   #else
     // SS: both A and B from smem descriptors

@@ -70,7 +70,7 @@
   <line x1="60" y1="200" x2="60" y2="212" class="tick"/>
   <line x1="593" y1="200" x2="593" y2="212" class="tick"/>
   <line x1="60" y1="206" x2="593" y2="206" class="tick"/>
-  <text x="326" y="226" class="tt" text-anchor="middle">LMEM_SIZE = 1 &lt;&lt; VX_CFG_LMEM_LOG_SIZE</text>
+  <text x="326" y="226" class="tt" text-anchor="middle">LMEM_SIZE = VX_CFG_LMEM_SIZE</text>
 
   <rect x="640" y="196" width="410" height="46" rx="5" class="adm"/>
   <text x="652" y="216" class="cm">cta_csrs.lmem_addr = VX_MEM_LMEM_BASE_ADDR</text>

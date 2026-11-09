@@ -1,0 +1,16 @@
+{
+  "name": "mi300a",
+  "extends": "mi300x",
+  "description": "AMD Instinct MI300A (CDNA 3, gfx942) at its 2100 MHz peak engine clock: one Vortex core per CU, one cluster per XCD; the XCD is the MI300X's (mi300x).",
+  "chip": {
+    "VX_CFG_NUM_CLUSTERS": 6
+  },
+  "reference": {
+    "fp32_lanes": 14592
+  },
+  "sources": {
+    "CU, XCD (all core knobs, NUM_CORES, L2, L3), platform": "Inherited from mi300x: MI300A carries 6 of the MI300X's 8 XCDs (228 CUs), the same 256 MB Infinity Cache and 5.3 TB/s of HBM3, which the CPU dies share (AMD Instinct MI300A data sheet)",
+    "NUM_CLUSTERS": "6 XCDs of 38 CUs",
+    "reference": "fp32_lanes is the vendor FP32 core count (FP32 FMA lanes per chip, clock-free); dram_bandwidth_gbs the vendor peak. Checked by ci/profile_check.py. Latencies inherited from mi300x (MGPUSim's measured MI300X chase: the same XCD, Infinity Cache and HBM3); MGPUSim calibrates against this part too (sarchlab/mgpusim .github/workflows/mi300a_calibration.yml)"
+  }
+}

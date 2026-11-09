@@ -19,6 +19,11 @@
 //      bytes match src bytes byte-for-byte.
 //   2. Second back-to-back COPY (different addrs / pattern) re-arms
 //      cleanly — DMA returns to IDLE and accepts the next grant.
+//   3. With a page-table root in satp, a COPY between two virtual pages
+//      walks the table for both operands and moves the physical lines.
+//   4. A superpage leaf takes the low address bits from the VA.
+//   5. F_MEM_PHYSICAL skips the walk.
+//   6. An unmapped VA passes through untranslated, as in the C++ model.
 // ============================================================================
 
 #include "vl_simulator.h"
@@ -28,6 +33,10 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <array>
+#include <unordered_map>
+#include <VX_config.h>
+#include <VX_types.h>
 
 #ifndef TRACE_START_TIME
 #define TRACE_START_TIME 0ull
@@ -66,11 +75,22 @@ static void pack_cmd(uint32_t out_words[9],
     out_words[8] = (uint32_t)opcode | ((uint32_t)flags << 8);
 }
 
-// ---- AXI4 slave model ----
+// ---- AXI4 slave model (sparse, cache-line granular) ----
 struct AxiSlave {
-    static constexpr uint64_t MEM_BASE = 0x1000;
-    static constexpr int      MEM_SIZE = 4096;
-    uint8_t mem[MEM_SIZE] = {0};
+    std::unordered_map<uint64_t, std::array<uint8_t, 64>> lines;
+
+    uint8_t& byte(uint64_t a) {
+        auto it = lines.find(a >> 6);
+        if (it == lines.end()) it = lines.emplace(a >> 6, std::array<uint8_t, 64>{}).first;
+        return it->second[a & 63];
+    }
+    uint8_t peek(uint64_t a) const {
+        auto it = lines.find(a >> 6);
+        return (it == lines.end()) ? 0 : it->second[a & 63];
+    }
+    void write_word(uint64_t a, uint64_t v, int bytes) {
+        for (int b = 0; b < bytes; ++b) byte(a + b) = uint8_t(v >> (8 * b));
+    }
 
     bool         r_inflight = false;
     uint64_t     r_addr     = 0;
@@ -83,28 +103,18 @@ struct AxiSlave {
     uint8_t      b_id       = 0;
 
     void mem_write_cl(uint64_t addr, const uint8_t* src) {
-        for (int i = 0; i < 64; ++i) {
-            int64_t a = (int64_t)addr - (int64_t)MEM_BASE + i;
-            if (a >= 0 && a < MEM_SIZE) mem[a] = src[i];
-        }
+        for (int i = 0; i < 64; ++i) byte(addr + i) = src[i];
     }
     void mem_read_cl(uint64_t addr, uint32_t* dst) const {
         for (int w = 0; w < 16; ++w) {
             uint32_t v = 0;
-            for (int b = 0; b < 4; ++b) {
-                int64_t a = (int64_t)addr - (int64_t)MEM_BASE + w*4 + b;
-                if (a >= 0 && a < MEM_SIZE) v |= (uint32_t)mem[a] << (8 * b);
-            }
+            for (int b = 0; b < 4; ++b) v |= (uint32_t)peek(addr + w*4 + b) << (8 * b);
             dst[w] = v;
         }
     }
     int mem_cmp_cl(uint64_t addr_a, uint64_t addr_b) const {
         for (int i = 0; i < 64; ++i) {
-            int64_t aa = (int64_t)addr_a - (int64_t)MEM_BASE + i;
-            int64_t ab = (int64_t)addr_b - (int64_t)MEM_BASE + i;
-            uint8_t va = (aa >= 0 && aa < MEM_SIZE) ? mem[aa] : 0;
-            uint8_t vb = (ab >= 0 && ab < MEM_SIZE) ? mem[ab] : 0;
-            if (va != vb) return i;
+            if (peek(addr_a + i) != peek(addr_b + i)) return i;
         }
         return -1;
     }
@@ -146,10 +156,7 @@ struct AxiSlave {
             // Write 64 bytes from wdata[0..15] into memory at aw_addr.
             for (int w = 0; w < 16; ++w) {
                 uint32_t v = top->d_wdata[w];
-                for (int b = 0; b < 4; ++b) {
-                    int64_t a = (int64_t)aw_addr - (int64_t)MEM_BASE + w*4 + b;
-                    if (a >= 0 && a < MEM_SIZE) mem[a] = (uint8_t)(v >> (8 * b));
-                }
+                for (int b = 0; b < 4; ++b) byte(aw_addr + w*4 + b) = (uint8_t)(v >> (8 * b));
             }
             aw_taken  = false;
             b_pending = true;
@@ -172,10 +179,54 @@ static void cycle(vl_simulator<T>& sim, AxiSlave& s, uint64_t& tick) {
     top->eval();
 }
 
+// Page-table builder in the slave's memory: Sv32 at XLEN=32, Sv39 at 64.
+struct PageTable {
+    static constexpr int LEVEL_BITS = __builtin_ctz(VX_VM_PT_SIZE / VX_VM_PTE_SIZE);
+    AxiSlave& mem;
+    uint64_t  root;
+    uint64_t  next_table;
+
+    PageTable(AxiSlave& m, uint64_t root_pa) : mem(m), root(root_pa), next_table(root_pa + VX_VM_PT_SIZE) {}
+
+    uint64_t satp() const {
+#if VX_VM_PT_LEVEL == 2
+        return (1ull << 31) | (root >> VX_VM_PAGE_LOG2_SIZE);
+#else
+        return (8ull << 60) | (root >> VX_VM_PAGE_LOG2_SIZE);
+#endif
+    }
+    uint64_t pte_addr(uint64_t table, uint64_t va, int level) const {
+        uint64_t idx = (va >> (VX_VM_PAGE_LOG2_SIZE + level * LEVEL_BITS)) & ((1ull << LEVEL_BITS) - 1);
+        return table + idx * VX_VM_PTE_SIZE;
+    }
+    uint64_t read_pte(uint64_t a) const {
+        uint64_t v = 0;
+        for (int b = 0; b < VX_VM_PTE_SIZE; ++b) v |= uint64_t(mem.peek(a + b)) << (8 * b);
+        return v;
+    }
+    // Map one page (leaf_level 0) or one superpage (leaf_level > 0).
+    void map(uint64_t va, uint64_t pa, int leaf_level) {
+        uint64_t table = root;
+        for (int level = VX_VM_PT_LEVEL - 1; level > leaf_level; --level) {
+            uint64_t a = pte_addr(table, va, level);
+            uint64_t pte = read_pte(a);
+            if ((pte & 1) == 0) {
+                pte = ((next_table >> VX_VM_PAGE_LOG2_SIZE) << 10) | 0x1;   // V, pointer
+                mem.write_word(a, pte, VX_VM_PTE_SIZE);
+                next_table += VX_VM_PT_SIZE;
+            }
+            table = (pte >> 10) << VX_VM_PAGE_LOG2_SIZE;
+        }
+        uint64_t leaf = ((pa >> VX_VM_PAGE_LOG2_SIZE) << 10) | 0xC7;           // D A W R V
+        mem.write_word(pte_addr(table, va, leaf_level), leaf, VX_VM_PTE_SIZE);
+    }
+};
+
 template <typename T>
 static void run_copy(vl_simulator<T>& sim, AxiSlave& slave, uint64_t& tick,
-                     uint64_t src, uint64_t dst, const uint8_t* pattern) {
-    slave.mem_write_cl(src, pattern);
+                     uint64_t src, uint64_t dst, const uint8_t* pattern,
+                     uint64_t pattern_pa, uint8_t flags = 0) {
+    slave.mem_write_cl(pattern_pa, pattern);
 
     // Drain any leftover state (a previous run_copy returns with the FSM
     // in S_DONE; one idle cycle takes it back to S_IDLE before we drive
@@ -184,7 +235,7 @@ static void run_copy(vl_simulator<T>& sim, AxiSlave& slave, uint64_t& tick,
     for (int i = 0; i < 2; ++i) cycle(sim, slave, tick);
 
     uint32_t c[9];
-    pack_cmd(c, /*opcode=*/0x03 /*MEM_COPY*/, 0, /*arg0=dst*/dst,
+    pack_cmd(c, /*opcode=*/0x03 /*MEM_COPY*/, flags, /*arg0=dst*/dst,
              /*arg1=src*/src, /*arg2=size*/64);
     for (int i = 0; i < 9; ++i) sim->cmd_packed[i] = c[i];
 
@@ -202,11 +253,11 @@ static void run_copy(vl_simulator<T>& sim, AxiSlave& slave, uint64_t& tick,
     EXPECT(latched, "DMA never asserted arvalid (grant capture failed)");
 
     bool got_done = false;
-    for (int g = 0; g < 50 && !got_done; ++g) {
+    for (int g = 0; g < 200 && !got_done; ++g) {
         cycle(sim, slave, tick);
         if (sim->done) got_done = true;
     }
-    EXPECT(got_done, "DMA did not signal done within 50 cycles");
+    EXPECT(got_done, "DMA did not signal done within 200 cycles");
 }
 
 int main(int argc, char** argv) {
@@ -225,7 +276,7 @@ int main(int argc, char** argv) {
     {
         uint8_t pat[64];
         for (int i = 0; i < 64; ++i) pat[i] = (uint8_t)(0xA0 + i);
-        run_copy(sim, slave, tick, /*src=*/0x1000, /*dst=*/0x1100, pat);
+        run_copy(sim, slave, tick, /*src=*/0x1000, /*dst=*/0x1100, pat, 0x1000);
 
         int diff = slave.mem_cmp_cl(0x1000, 0x1100);
         EXPECT(diff < 0, "T1: dst doesn't match src after copy");
@@ -235,12 +286,55 @@ int main(int argc, char** argv) {
     {
         uint8_t pat[64];
         for (int i = 0; i < 64; ++i) pat[i] = (uint8_t)(0x5A ^ (i << 1));
-        run_copy(sim, slave, tick, /*src=*/0x1200, /*dst=*/0x1300, pat);
+        run_copy(sim, slave, tick, /*src=*/0x1200, /*dst=*/0x1300, pat, 0x1200);
 
         int diff = slave.mem_cmp_cl(0x1200, 0x1300);
         EXPECT(diff < 0, "T2: second copy mismatch");
     }
 
-    std::printf("PASSED — 2 scenarios\n");
+#if VX_CFG_VM_ENABLED
+    PageTable pt(slave, 0x100000);
+    pt.map(0x80001000, 0x20000, 0);
+    pt.map(0x80005000, 0x23000, 0);
+    pt.map(0xC0000000, 0x400000, 1);
+    sim->satp = pt.satp();
+
+    // ----- Test 3: both operands walk the table -----
+    {
+        uint8_t pat[64];
+        for (int i = 0; i < 64; ++i) pat[i] = (uint8_t)(0x3C + 7 * i);
+        run_copy(sim, slave, tick, /*src=*/0x80001040, /*dst=*/0x80005080, pat, 0x20040);
+        EXPECT(slave.mem_cmp_cl(0x20040, 0x23080) < 0, "T3: VA copy did not land at the mapped PA");
+        EXPECT(slave.lines.count(0x80005080 >> 6) == 0, "T3: VA copy wrote the untranslated address");
+    }
+
+    // ----- Test 4: superpage leaf keeps the VA's low bits -----
+    {
+        uint8_t pat[64];
+        for (int i = 0; i < 64; ++i) pat[i] = (uint8_t)(0x91 ^ i);
+        run_copy(sim, slave, tick, /*src=*/0xC0012340, /*dst=*/0x80005100, pat, 0x412340);
+        EXPECT(slave.mem_cmp_cl(0x412340, 0x23100) < 0, "T4: superpage copy mismatch");
+    }
+
+    // ----- Test 5: F_MEM_PHYSICAL skips the walk -----
+    {
+        uint8_t pat[64];
+        for (int i = 0; i < 64; ++i) pat[i] = (uint8_t)(0x17 + i);
+        run_copy(sim, slave, tick, /*src=*/0x30000, /*dst=*/0x30400, pat, 0x30000, /*flags=*/0x04);
+        EXPECT(slave.mem_cmp_cl(0x30000, 0x30400) < 0, "T5: physical copy mismatch");
+    }
+
+    // ----- Test 6: an unmapped VA passes through -----
+    {
+        uint8_t pat[64];
+        for (int i = 0; i < 64; ++i) pat[i] = (uint8_t)(0xE1 - i);
+        run_copy(sim, slave, tick, /*src=*/0x00031000, /*dst=*/0x80005140, pat, 0x31000);
+        EXPECT(slave.mem_cmp_cl(0x31000, 0x23140) < 0, "T6: unmapped source did not pass through");
+    }
+
+    std::printf("PASSED — 6 scenarios\n");
+#else
+    std::printf("PASSED — 2 scenarios (VX_CFG_VM_ENABLE off: no page walk)\n");
+#endif
     return 0;
 }

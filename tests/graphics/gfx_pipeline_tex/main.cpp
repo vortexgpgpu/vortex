@@ -164,19 +164,19 @@ int main(int argc, char** argv) {
   RT_CHECK(vx_module_get_kernel(mod, "binning_k", &k_binning));
   RT_CHECK(vx_module_get_kernel(mod, "main", &k_frag));
 
-  // OM color buffer (pinned: OM's AXI master writes it).
+  // OM color buffer (the OM writes it through the ocache).
   const uint32_t cbuf_stride = 4, cbuf_pitch = dst_width * cbuf_stride, cbuf_size = dst_height * cbuf_pitch;
   vx_buffer_h cbuf_b = nullptr; uint64_t cbuf_addr = 0;
-  RT_CHECK(vx_buffer_create(dev, cbuf_size, VX_MEM_READ | VX_MEM_WRITE | VX_MEM_PHYS, &cbuf_b));
+  RT_CHECK(vx_buffer_create(dev, cbuf_size, VX_MEM_READ | VX_MEM_WRITE, &cbuf_b));
   RT_CHECK(vx_buffer_address(cbuf_b, &cbuf_addr));
 
-  // Texture: checkerboard -> mipmaps -> pinned tex buffer (TEX's AXI master).
+  // Texture: checkerboard -> mipmaps -> tex buffer (read through the tcache).
   const uint32_t tw = 64, th = 64;
   std::vector<uint8_t> tex_pixels = gen_texture(tw, th);
   std::vector<uint8_t> texbuf; std::vector<uint32_t> mip_offsets;
   RT_CHECK(GenerateMipmaps(texbuf, mip_offsets, tex_pixels.data(), FORMAT_A8R8G8B8, tw, th, tw * 4));
   vx_buffer_h tex_b = nullptr; uint64_t tex_addr = 0;
-  RT_CHECK(vx_buffer_create(dev, texbuf.size(), VX_MEM_READ | VX_MEM_PHYS, &tex_b));
+  RT_CHECK(vx_buffer_create(dev, texbuf.size(), VX_MEM_READ, &tex_b));
   RT_CHECK(vx_buffer_address(tex_b, &tex_addr));
   RT_CHECK(vx_enqueue_write(q, tex_b, 0, texbuf.data(), texbuf.size(), 0, nullptr, nullptr));
 
@@ -207,6 +207,7 @@ int main(int argc, char** argv) {
   vx_enqueue_dcr_write(q, VX_DCR_OM_DEPTH_WRITEMASK, 0, 0, nullptr, nullptr);
   vx_enqueue_dcr_write(q, VX_DCR_OM_STENCIL_FUNC, VX_OM_DEPTH_FUNC_ALWAYS, 0, nullptr, nullptr);
   vx_enqueue_dcr_write(q, VX_DCR_OM_STENCIL_ZPASS, VX_OM_STENCIL_OP_KEEP, 0, nullptr, nullptr);
+  vx_enqueue_dcr_write(q, VX_DCR_OM_STENCIL_ZFAIL, VX_OM_STENCIL_OP_KEEP, 0, nullptr, nullptr);
   vx_enqueue_dcr_write(q, VX_DCR_OM_STENCIL_FAIL, VX_OM_STENCIL_OP_KEEP, 0, nullptr, nullptr);
   vx_enqueue_dcr_write(q, VX_DCR_OM_STENCIL_REF, 0, 0, nullptr, nullptr);
   vx_enqueue_dcr_write(q, VX_DCR_OM_STENCIL_MASK, OM_STENCIL_MASK, 0, nullptr, nullptr);
@@ -272,8 +273,8 @@ int main(int argc, char** argv) {
   // reads.
   std::vector<uint8_t> a_binbuf = repack_bins(gold);
   vx_buffer_h a_tb = nullptr, a_pb = nullptr; uint64_t a_tb_addr = 0, a_pb_addr = 0;
-  RT_CHECK(vx_buffer_create(dev, a_binbuf.size(), VX_MEM_READ | VX_MEM_PHYS, &a_tb));
-  RT_CHECK(vx_buffer_create(dev, a_primbuf.size(), VX_MEM_READ | VX_MEM_PHYS, &a_pb));
+  RT_CHECK(vx_buffer_create(dev, a_binbuf.size(), VX_MEM_READ, &a_tb));
+  RT_CHECK(vx_buffer_create(dev, a_primbuf.size(), VX_MEM_READ, &a_pb));
   RT_CHECK(vx_buffer_address(a_tb, &a_tb_addr));
   RT_CHECK(vx_buffer_address(a_pb, &a_pb_addr));
   RT_CHECK(vx_enqueue_write(q, a_tb, 0, a_binbuf.data(), a_binbuf.size(), 0, nullptr, nullptr));
@@ -408,7 +409,7 @@ int main(int argc, char** argv) {
 
   const uint32_t zbuf_pitch = dst_width * 4, zbuf_size = dst_height * zbuf_pitch;
   vx_buffer_h zbuf_b = nullptr; uint64_t zbuf_addr = 0;
-  RT_CHECK(vx_buffer_create(dev, zbuf_size, VX_MEM_READ_WRITE | VX_MEM_PHYS, &zbuf_b));
+  RT_CHECK(vx_buffer_create(dev, zbuf_size, VX_MEM_READ_WRITE, &zbuf_b));
   RT_CHECK(vx_buffer_address(zbuf_b, &zbuf_addr));
 
   frag_arg_t fa_d = fa; fa_d.prim_addr = prim_addr; fa_d.depth_enabled = 1;

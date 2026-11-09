@@ -9,22 +9,70 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
 
 ### Added
 
-- **Hardware profiles.** `profiles/<name>.json` names a machine (`tinygpu`, `rtx1080`, `v100`, `a100`, `h100`, `rtx5080`) that every flow
+- **Hardware profiles.** `profiles/<name>.json` names a machine (`tinygpu`, `gtx1080`, `v100`, `a100`, `h100`, `rtx5080`) that every flow
   builds through `configure --profile=<name>` or `blackbox.sh --profile=<name>`; explicit `CONFIGS` win over the profile.
+  The GPU profiles are 64-bit machines with VM, atomics, MUFU, shared memory and the tensor, DXA, ray-tracing and graphics units of
+  the real part; a profile's `xlen` sets `configure`'s XLEN, and a build tree of the other width rejects it.
   See [docs/simulation.md](docs/simulation.md#hardware-profiles).
 - **RHEL 9 toolchain (`rhel/9`).** EL9 hosts (RHEL, Rocky, AlmaLinux, CentOS Stream 9) get native prebuilt bundles: LLVM 20.1.8,
-  Verilator 5.050, Yosys 0.69 and OpenSTA rebuilt against glibc 2.34 / GCC 11 libstdc++, plus the focal riscv-gnu, sv2v, POCL,
+  Verilator 5.050, Yosys 0.69 and OpenSTA rebuilt against glibc 2.34 / GCC 11 libstdc++, plus the focal riscv-gnu, POCL,
   chipStar and Mesa bundles, which already ran there. Before this, EL9 mapped to `centos/7`, which has no LLVM, POCL, chipStar, Mesa,
   Yosys or OpenSTA bundle and whose GCC 13 riscv toolchain no longer links the kernel library. gem5 is not provided for `rhel/9`.
   See [docs/install_vortex.md](docs/install_vortex.md#rhel-9-rocky--almalinux--centos-stream-9).
-
-### Fixed
-
-- **Stale softfloat archive.** `third_party/Makefile` rebuilds softfloat when `SOFTFLOAT_OPTS` changes. Before this, a tree built
-  before `-DTHREAD_LOCAL=_Thread_local` was added kept its non-TLS archive, and the simx runtime failed to link with
-  `TLS reference ... mismatches non-TLS definition` for `softfloat_exceptionFlags`.
+- **Per-partition fetch (`VX_CFG_FETCH_WIDTH`, default 1).** The front end splits into FETCH_WIDTH slices, each with its own warp
+  scheduler, fetch, decode and icache port, serving the warps with `wid % FETCH_WIDTH == f`; CTA dispatch, barriers and warp control
+  stay core-wide. The core takes one of three structures from the fetch width, issue width and per-unit block counts; with one block
+  of every unit per issue slice and FETCH_WIDTH equal to ISSUE_WIDTH, each slice is a self-contained compute slice (the NVIDIA
+  processing-block organization). *Why:* sgemm at 16 warps x 16 threads, ISSUE_WIDTH 4: -31.6% cycles at FETCH_WIDTH 2.
+- **Hashed cache bank select (`VX_CFG_{DCACHE,L2}_BANK_HASH`).** The bank index is the raw bank bits XORed with a hash of the line
+  address above them (IPOLY(5) for 16 banks, IPOLY(37) for 32, an XOR fold otherwise), so power-of-two strides spread over the banks.
+  On by default for the L2 and for a dcache with 4 or more banks. *Why:* rtlsim sgemv 512x512 at 16 threads -32.8%, fp16 TCU SGEMM
+  on 2 cores + L2 at 16 threads -13.8%, WGMMA with DXA -13.5%.
+- **Dcache read merge (`VX_CFG_DCACHE_READ_MERGE`, on by default).** Plain reads of the same word from the ports of one LSU block in
+  the same cycle are served by one bank access, and the response is multicast to every port; each port's order into the bank is
+  unchanged. *Why:* uniform loads (kernel arguments, SGEMM's shared operand) no longer serialize on one bank: rtlsim sgemm -n128 at
+  16 threads -6.5%, -17.2% with an 8-byte dcache word.
+- **Write-allocate without fetch (`VX_CFG_{DCACHE,L2,L3}_LAZY_FETCH`, on where the cache is a write-back LLC).** A store miss in a write-back cache installs
+  the sector with its dirty-byte mask and a partial bit instead of fetching the line; a later load or AMO merges memory data under the
+  unwritten bytes, and evictions write back only dirty bytes. *Why:* streaming writes no longer read every line first: 1-core vecadd
+  DRAM reads -33%.
+- **Command-processor DMA through the shared LLC (`VX_CFG_CP_LLC_CLIENT`, on by default).** When one LLC serves every core, the
+  CP's transfers enter it on their own client slot, so host transfers need only an L1 flush, not a walk of the whole LLC; transfers
+  of at least half the LLC write around it. A launch behind DMA writes waits for an L1-only flush token sent on the slot. The runtime
+  sees the new `DMA_LLC_CLIENT` CP capability. *Why:* rtlsim at 2 clusters + L2 + L3: dogfood -30%, multikernel -42.7%; dogfood
+  -64% with an 8 MB L3.
+- **Foldsim: threaded FPGA simulation of Vortex on the Alveo V80, built on CIRCT.** Every class of identical units (sockets, issue slices, ALUs, FPUs, load-store units) is time-multiplexed through one physical copy, cycle-exact against the RTL, with no Yosys or sv2v: `circt-verilog` imports Vortex, Foldsim's `foldsim-extract-models` / `foldsim-compose` cut it into threaded models joined by one token fabric (Foldsim is its own project on CIRCT, installed by `ci/toolchain_install.sh --foldsim`; [hw/syn/foldsim/](hw/syn/foldsim/)), and the V80's native flow packages it with a latency-bandwidth memory endpoint and a command-queue control block ([hw/rtl/afu/foldsim/](hw/rtl/afu/foldsim/)). `--driver=foldsim` runs it on the card (`TARGET=hw`, VRT + QDMA) or in-process in Verilator (`avedsim`, the default). Vortex's RTL is unchanged: units get plain-port boundaries and instance IDs as ports from a source-to-source pass on the flow's copy ([hw/syn/foldsim/lift_boundaries.py](hw/syn/foldsim/lift_boundaries.py)). See [docs/designs/foldsim.md](docs/designs/foldsim.md).
+  *Why:* the simulated GPU is no longer bounded by the card's size, and the shell around it is ~8k LUTs instead of FireSim's ~93k — s2w4i2 (2 cores, NW=NT=4, IW=2) routes in 138k LUTs vs 219k and runs sgemm n=128 in 196 ms on V80: 50× SimX on the same host, 1.7× the FireSim image, cycle counts identical to Verilator.
+  *Limits:* V80 only; one memory port, single-beat transactions; classes are named (`FOLDSIM_CLASSES`), not found; kernel register offsets 0x40–0xBF are unusable on the V80 shell (its PCIe MSI-X table answers them).
+- **Hashed dcache set index (`VX_CFG_DCACHE_SET_HASH`, on by default).** The set index is the raw set bits XORed with an XOR fold
+  of the tag's low 32 bits, so power-of-two strides walk the sets instead of piling into a few; the tag is stored unchanged, so the
+  same XOR restores the raw set. The L2 and L3 have no set hash: no measured case gains from one. *Why:* rtlsim sgemv 512x512 -20.1%
+  at 4 threads and -23.9% at 16 (read hit rate 29% -> 85%), mxfp8 tensor -4.8%; perf_gate geomean -1.1%. Two TCU tile layouts pay
+  +1.1% and +1.8%.
+- **Logic-depth gate in CI (`logic_gate`).** Beacon maps every DUT of the catalog through CIRCT and foldsim and asserts each RTL
+  unit's deepest path and the design's area against golden baselines in `ci/baselines/synthesis/beacon/`, in minutes and without
+  synthesis. It runs in `ci.yml` together with `perf_gate` (every pull request, every push that touches the RTL or the config);
+  `.github/workflows/logic_gate.yml` is the manual entry point and runs the full-GPU builds. *Why:* a perf regression costs cycles,
+  a logic regression costs Fmax; both are now named on the change that causes them, not by the nightly FPGA gate.
 
 ### Changed
+
+- **Toolchain pinned to v3.0.2** (`TOOLCHAIN_REV`): LLVM f44a6bb2af4c, with PoCL rebuilt on it. Wide loads/stores and 64-bit
+  atomics stay behind `+xvortexldstwide` and `+xvortexamod`, so code built with plain `+xvortex` uses no new instructions.
+- **Dcache read-merge pairs realign.** A pair of same-word merge ports whose parts a bank served a cycle apart waits for its partner,
+  so the pair's later uniform reads merge again; a pair that waited on each other is released. Groups of 4 ports do not realign.
+  *Why:* the drift was lost on every following uniform load: vecadd on 4 LSU blocks -11.3% in rtlsim, and its SimX/RTL gap over 7
+  sizes falls from 3.9% (-0.9% to 7.2%) to 1.8%.
+- **Small CI suites share a cell.** A test category can be a directory of files, each with its own defaults, that runs as one
+  cell per driver and XLEN: `isa` (mufu, zfhmin, rvc, riscv, amo), `sw` (opencl, hip, kernel, runtime), `integration` (gem5, sst,
+  dtm, cupbop, mpi) and `tensor_sp` (sparse, and sparse with MX). Every case keeps its command, configs, drivers and tier; each file
+  stays selectable by its own name (`-m mufu`). *Why:* each of these suites ran in 2-6 minutes, most of it the cell's setup; a pull
+  request now plans 82 cells instead of 108, a push 35 instead of 49.
+- **Foldsim's shell lives in the Foldsim repository.** The control and memory endpoints, the DRAM bank timing model, the register
+  map, the in-process host, the endpoint's unit tests and the boundary lifting (`foldsim-lift`) moved out of `hw/rtl/afu/foldsim`,
+  `sim/foldsim`, `sw/common`, `hw/unittest/foldsim_mem*` and `hw/syn/foldsim`; they come with the Foldsim installation
+  (`FOLDSIM_SHELL`, `$(FOLDSIM_PATH)/share/foldsim/shell`). Vortex keeps the target wrapper, the image flow, the runtime driver and
+  the parity case. *Why:* Foldsim is a general-purpose RTL simulator; nothing in the shell is specific to Vortex.
 
 - **RV64 portability.** Device index math, DXA/OM addresses, pack-load strides, RTU scene/payload pointers and the ray log carry full
   width on RV64 (`size_t`/`uintptr_t`, identical RV32 code); RTU slot reads into FP registers are NaN-boxed.
@@ -34,6 +82,66 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
   (JEDEC HBM2/HBM3/GDDR6 organization and nanosecond timing, 32 B bursts, permuted open-page bank interleave, per-channel
   responses), configured from data-sheet values: `VX_CFG_PLATFORM_MEMORY_{TYPE,DATA_RATE,LATENCY,QUEUE_SIZE}`. The default machine
   keeps its idle read latency (14/26 cycles open-row/conflict, was 13/27) and one-block-per-cycle peak.
+- **Cache flush architecture.** The CP starts every core's flush with one broadcast `CACHE_FLUSH` DCR write, then reads each core's
+  completion, so the flushes overlap; a flush read without a preceding write no longer starts one. A cache walks its banks, sends one
+  flush token down every memory port and answers once all ports have; every independently buffered write path (each dcache lane, each
+  OM input of the ocache) carries its own token. Read-only caches (icache, tcache, rtcache, rcache) no longer forward flushes.
+  `DBG_FLUSH_STALL` adds random input backpressure to the flush path for stress tests.
+- **L1-only flush between launches.** When a single LLC serves every memory client it is the point of coherence, so a launch
+  boundary cleans only the L1s: `CMD_CACHE_FLUSH` gains an L1-only flag, carried as a flush-token kind that a shared LLC answers
+  without a walk. Replicated LLCs and LLCs with peer clients (TEX, RTU, RASTER, OM, DXA) still walk. The runtime posts flushes
+  lazily and flushes fully before any device-memory transfer, and device busy stays high until every core write, uncached IO stores
+  included, is visible in memory. *Why:* per-launch flush cost at 4 cores + L2 drops from 2,750 to 180 cycles.
+- **Targeted fences.** A memory fence sends an L1-only flush token that the shared LLC answers without a walk. A fence that orders
+  only device (I/O) accesses decodes as its own LSU op, and its token makes each level drain to its memory ports without walking.
+  *Why:* printf, which fences after each device write, runs 13.6x faster on rtlsim at 2 cores + L2.
+- **LMEM DMA arbitration.** DXA writes into shared memory and the TCU's WGMMA operand reads now share the local-memory DMA port
+  round-robin. DXA had fixed priority and starved the TCU for about 510 cycles per tiled-scatter transfer. *Why:* rtlsim WGMMA with
+  DXA -10.2%, sparse WGMMA with DXA -11.6%.
+- **SimX timing model follows the RTL's structure.** Buffer capacities and registered ready at every pipeline boundary, per-slice
+  cache arbiter trees and network depths, registered cache core-response ports, flush and fence tokens end to end, and CTA launch onto
+  the nearest ready core with two launch credits per core. SimX's per-core cycle counter (`mcycle`) now advances only while the core
+  has work, as the RTL's does. rtlsim completes DRAM requests in per-bank arrival order, as the AXI platform does.
+
+### Fixed
+
+- **Stale softfloat archive.** `third_party/Makefile` rebuilds softfloat when `SOFTFLOAT_OPTS` changes. Before this, a tree built
+  before `-DTHREAD_LOCAL=_Thread_local` was added kept its non-TLS archive, and the simx runtime failed to link with
+  `TLS reference ... mismatches non-TLS definition` for `softfloat_exceptionFlags`.
+- **fcvt NaN boxing on RV64.** The half-precision operand check covered the register up to XLEN instead of FLEN, so an RV64 build
+  without the D extension read a boxed half as a NaN.
+- **TCU_LD response assertion.** With the LSU narrower than the warp, a TCU_LD goes out in passes and an earlier pass's response
+  can return while a later pass's request is held; the assertion fired on that correct order. It now expects a response from the
+  first request on.
+- **ASAP7 download in CI.** A transient HTTP 504 from GitHub on the Liberty files failed the whole synthesis cell. The synthesis
+  cells now cache the checksummed downloads, keyed on the manifest, and the installer retries six times, 20 s apart.
+- **TCU B-buffer descriptor race.** The B buffer re-latched its descriptor on every first uop, even while a fetch was in flight, so
+  a back-to-back WGMMA could fetch with the next instruction's row base. It now latches at fetch allocation.
+- **Pipe buffer combinational loop at `-O0`.** `VX_pipe_buffer` kept its input in the same vector as its stage registers, which an
+  unoptimized Verilator build reads as a loop through any outer path (the `debug` CI cells).
+- **Global barriers across clusters.** Each cluster ran its own global-barrier unit that saw only its own cores, while
+  `vx_num_cores()`, and so `vortex::gbarrier`, counts the whole device. On SimX every global barrier hung with more than one
+  cluster; on the RTL, 2 clusters x 1 core timed out and 2 clusters x 2 cores released each cluster on its own arrivals, with no
+  ordering between clusters. One device-level unit now counts every core.
+- **Writes left dirty by a flush.** A cache forwarded its flush token on memory port 0 only, so writes queued on another port could
+  reach the next level after that level's walk and stay dirty there.
+- **Dirty sectors dropped on a sector refill.** With dirty-byte tracking and several sectors per line, installing a sector into a
+  resident line cleared the whole line's byte mask, so a dirty sibling sector wrote back with no bytes enabled and its data was lost
+  (mstress at 4 cores with a write-back, sectored L2).
+- **Local-memory LR/SC livelock at 16 threads.** One warp's per-lane LR burst used up a reservation's fixed hold budget of 7 refusals,
+  so contended LR/SC loops on shared memory stopped making progress. The budget now scales with the core's harts.
+- **`VX_stream_arb` trees with a partial last slice.** When the request count was not a whole number of slices, the last slice's
+  select was sized and placed as if it were full: the build failed lint, and with several outputs requests went to the wrong output.
+- **`-DSCOPE` builds.** The scope buses of fetch, issue, LSU, TCU, TEX, RASTER and OM were declared only under their `DBG_SCOPE_*`
+  taps, left unbound, or did not parse, so debug-scope builds failed to elaborate.
+- **mstress checked no data.** Its host reference was always 0, so the test passed with corrupted loads; it now checks every loaded
+  value exactly.
+- **RTL that only lenient front ends accepted.** slang, now the Yosys front end, rejects what Vivado, Verilator and CIRCT let through: wires used before their declaration (`VX_socket`, `VX_decompressor`, `VX_cp_dma`, `VX_tcu_core`), a localparam used in a port width before its declaration (`VX_cp_unpack`), an interface member expanded through `SEXT` (`VX_alu_int`), a negative-width cast (`VX_uuid_gen`, checked uninstantiated when `UUID_WIDTH` is 1) and `$bits` of an interface member as a cast width (`VX_rtu_core`). Each is rewritten with no logic change; Beacon reports identical register depths on core, tcu, rtu and top.
+- **FPGA run instructions.** The docs exported `TARGET=hw`, which `blackbox.sh` ignores, so runs fell back to xrtsim; they now pass
+  `--target=hw`.
+- **Block RAM for asynchronous-read RAMs is a source patch, not a Vivado netlist patch.** `gen_sources.sh -F` runs the RAM fold (`hw/scripts/ram_fold.py`, pyslang): it elaborates the design only to decide which block-RAM-sized `VX_dp_ram` reads combinationally from registered addresses, then patches the preprocessed sources so that the RAM reads the next address. Every synthesis tool (Vivado, Quartus, Design Compiler, Yosys with its slang frontend, FireSim's image) reads those folded sources, never an elaborated netlist. `ASYNC_BRAM_PATCH`, `VX_async_ram_patch`, `VX_placeholder`, `xilinx_async_bram_patch.tcl` and its pre-opt hooks are gone.
+  *Why:* the patch rewired Vivado's synthesized netlist in Tcl, ran in Vivado flows only, failed late on large builds (`DRC INBB-3`), and produced a netlist nothing simulated. A CIRCT-elaborated netlist in its place cost Fmax (core 295 → 286 MHz, cache 300 → 276, TCU 291.5 → 276) and did not build `top`.
+- **CIRCT preprocesses the synthesis sources and Yosys reads them with its slang frontend; sv2v and Verilator's preprocessor are gone.** `gen_sources.sh -P` preprocesses with `circt-verilog -E` (identical code to `verilator -E` over the whole RTL tree; only comments differ). The Yosys flow reads the preprocessed, RAM-folded sources with Yosys's built-in `read_slang` (Yosys 0.67 or later), the SRAM macros (`BB_MODULES`) black-boxed with `--blackboxed-module`, and strips their parameter overrides from the mapped netlist, which OpenSTA's Verilog reader rejects; the SRAM estimate reads port widths from the JSON netlist, written before the strip. CIRCT installs under `$TOOLDIR/circt` (`toolchain_install.sh --circt`; `hw/syn/common.mk` exports `CIRCT_VERILOG`, `CIRCT_OPT`, `FIRTOOL`) and elaborates the design only for Beacon and Foldsim. Verilator remains the simulator (and `--xml-only` scope metadata).
 
 ## [3.0] — 2026-10-07
 

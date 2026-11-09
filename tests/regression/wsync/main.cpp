@@ -157,7 +157,7 @@ int main(int argc, char* argv[]) {
   if (0 != errors) {
     std::cout << "WSYNC timing mismatches: " << errors << std::endl;
     std::cout << "FAILED!" << std::endl;
-    return errors;
+    return errors != 0;
   }
 
   std::cout << "PASSED!" << std::endl;

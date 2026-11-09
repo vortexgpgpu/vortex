@@ -83,6 +83,25 @@
     `define EXT_GFX_CLUSTER_ENABLE
 `endif
 
+// Under VM, the cluster unit MMU translates the rcache and ocache memory ports.
+`ifdef VX_CFG_VM_ENABLE
+`ifdef EXT_GFX_CLUSTER_ENABLE
+    `define CLUSTER_UNIT_MMU_ENABLE
+`endif
+`endif
+
+// Under VM, the socket unit MMU translates the memory ports of the
+// socket-resident units: the tcache and rtcache misses and the DXA gmem reads.
+`ifdef VX_CFG_VM_ENABLE
+`ifdef VX_CFG_EXT_TEX_ENABLE
+    `define SOCKET_UNIT_MMU_ENABLE
+`elsif VX_CFG_EXT_RTU_ENABLE
+    `define SOCKET_UNIT_MMU_ENABLE
+`elsif VX_CFG_EXT_DXA_ENABLE
+    `define SOCKET_UNIT_MMU_ENABLE
+`endif
+`endif
+
 // Early-Z occlusion cull requires BOTH the rasterizer (produces the covered-quad
 // waves + depth plane) and the OM (owns the ocache the depth read is coherent
 // with). It is illegal without them — reading committed depth needs the ocache.
@@ -105,6 +124,52 @@
     `ifndef VX_CFG_EXT_F_ENABLE
         `error "VX_CFG_EXT_ZFHMIN_ENABLE requires VX_CFG_EXT_F_ENABLE"
     `endif
+`endif
+
+`ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
+    `ifndef VX_CFG_EXT_F_ENABLE
+        `error "VX_CFG_EXT_LDST_WIDE_ENABLE requires VX_CFG_EXT_F_ENABLE"
+    `endif
+    `ifdef VX_CFG_FLEN_64
+        `error "VX_CFG_EXT_LDST_WIDE_ENABLE requires FLEN 32"
+    `endif
+`endif
+
+`ifdef VX_CFG_EXT_LDST_MATRIX_ENABLE
+    `ifndef VX_CFG_EXT_F_ENABLE
+        `error "VX_CFG_EXT_LDST_MATRIX_ENABLE requires VX_CFG_EXT_F_ENABLE"
+    `endif
+`endif
+
+// The TCU's structural modes add datapath and ports; its number formats are
+// only selections inside the TCU and are inert without one.
+`ifndef VX_CFG_EXT_TCU_ENABLE
+    `ifdef VX_CFG_TCU_WGMMA_ENABLE
+        `error "VX_CFG_TCU_WGMMA_ENABLE requires VX_CFG_EXT_TCU_ENABLE"
+    `endif
+    `ifdef VX_CFG_TCU_SPARSE_ENABLE
+        `error "VX_CFG_TCU_SPARSE_ENABLE requires VX_CFG_EXT_TCU_ENABLE"
+    `endif
+    `ifdef VX_CFG_TCU_MX_ENABLE
+        `error "VX_CFG_TCU_MX_ENABLE requires VX_CFG_EXT_TCU_ENABLE"
+    `endif
+    `ifdef VX_CFG_TCU_DSM_ENABLE
+        `error "VX_CFG_TCU_DSM_ENABLE requires VX_CFG_EXT_TCU_ENABLE"
+    `endif
+`endif
+
+`ifdef VX_CFG_EXT_DXA_ENABLE
+    `ifndef VX_CFG_LMEM_ENABLE
+        `error "VX_CFG_EXT_DXA_ENABLE requires VX_CFG_LMEM_ENABLE"
+    `endif
+`endif
+
+// Convenience flag: a wide or matrix load/store extension is enabled; both are
+// macro-ops of the packed-load uop expander. Internal derived macro.
+`ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
+    `define EXT_LDST_ANY_ENABLE
+`elsif VX_CFG_EXT_LDST_MATRIX_ENABLE
+    `define EXT_LDST_ANY_ENABLE
 `endif
 
 // Convenience flag: the TCU metadata SRAM is present when any metadata-consuming

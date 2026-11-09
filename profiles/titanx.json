@@ -1,0 +1,36 @@
+{
+  "name": "titanx",
+  "extends": "gtx1080",
+  "description": "NVIDIA TITAN X (Pascal) (GP102, Pascal, sm_61) at its 1417 MHz base clock: one Vortex core per SM; the SM is GP104's (gtx1080).",
+  "chip": {
+    "VX_CFG_NUM_CORES": 28,
+    "VX_CFG_L2_SIZE": 3145728,
+    "VX_CFG_L2_NUM_WAYS": 24,
+    "VX_CFG_L2_NUM_BANKS": 32,
+    "VX_CFG_L2_LINK_LATENCY": 51
+  },
+  "platform": {
+    "VX_CFG_PLATFORM_MEMORY_NUM_BANKS": 32,
+    "VX_CFG_PLATFORM_CLOCK_RATE": 1417,
+    "VX_CFG_PLATFORM_MEMORY_PEAK_BW": 480000,
+    "VX_CFG_PLATFORM_MEMORY_DATA_RATE": 7500
+  },
+  "reference": {
+    "fp32_lanes": 3584,
+    "dram_bandwidth_gbs": 480
+  },
+  "sources": {
+    "SM (all core knobs)": "Inherited from gtx1080: GP102 uses the same Pascal SM as GP104 (128 CUDA cores, 96 KB shared memory, 48 KB L1/texture)",
+    "NUM_CORES": "28 SMs, 3584 CUDA cores (NVIDIA TITAN X (Pascal) specifications)",
+    "L2_SIZE, L2_NUM_WAYS, L2_NUM_BANKS": "3 MB L2 in 24 slices (12 x 32-bit controllers, 2 slices each): 24 ways over power-of-two sets, 32 banks with the 32 modelled channels",
+    "PLATFORM_MEMORY_TYPE, PLATFORM_MEMORY_NUM_BANKS, PLATFORM_MEMORY_DATA_RATE, PLATFORM_MEMORY_PEAK_BW": "384-bit GDDR5X at 10 Gbps (480 GB/s) modelled as 32 GDDR6 x16 channels at 7500 MT/s for a power-of-two interleave: 32 x 2 B x 7.5 GT/s = 480 GB/s, the card's bandwidth",
+    "PLATFORM_CLOCK_RATE": "1417 MHz base clock (1531 MHz boost), the clock of Accel-Sim's SM6_TITANX configuration",
+    "reference": "fp32_lanes is the vendor FP32 core count (FP32 FMA lanes per chip, clock-free); dram_bandwidth_gbs the vendor peak. Checked by ci/profile_check.py. Latencies inherited from gtx1080 (Jia et al., Dissecting the NVIDIA Turing T4 GPU via Microbenchmarking (arXiv 1903.07486), Table 3.1, Tesla P4: the same Pascal SM, L1 and L2 design). Accel-Sim correlates this card: GPGPU-Sim tested-cfg SM6_TITANX and posted hardware runs (pascal-titanx)",
+    "L1_LINK_LATENCY": "26 core cycles each way between a core and its dcache, the L1/texture load pipeline, which the dcache bank pipeline (DCACHE_LATENCY) does not model: calibrated with ci/profile_check.py so the SimX pointer chase gives the None-cycle L1 hit latency in 'reference'",
+    "L2_LINK_LATENCY": "51 core cycles each way between an SM and the L2, the SM-to-L2 network: calibrated with ci/profile_check.py (after the L1 link) so the SimX pointer chase gives the None-cycle L2 hit latency in 'reference'",
+    "PLATFORM_MEMORY_LATENCY": "Not set: no DRAM latency is published for this part, so dram_cycles is unchecked"
+  },
+  "core": {
+    "VX_CFG_L1_LINK_LATENCY": 26
+  }
+}

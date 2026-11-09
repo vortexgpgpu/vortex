@@ -56,12 +56,14 @@ RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
 TOP := VX_tcu_fedp_bhf
 endif
 
+# the native TFR datapath is checked against tcu_fedp's windowed FEDP model
 ifneq (,$(filter -DVX_CFG_TCU_TYPE_TFR, $(XCONFIGS)))
 RTL_INCLUDE += -I$(RTL_DIR)/tcu/tfr
+CXXFLAGS += -DUSE_FEDP
 endif
 
 # default test: fp16
-OPTS ?= --fmt=1
+OPTS ?= --fmt=2
 
 TOP := VX_tcu_unit_top
 

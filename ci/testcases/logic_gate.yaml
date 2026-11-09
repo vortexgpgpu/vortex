@@ -1,0 +1,281 @@
+# Logic-level regression gate (Beacon): the deepest end point of every RTL
+# unit must not get deeper than a checked-in golden result
+# (ci/baselines/synthesis/beacon/<group>.json). See ci/logic_gate.py.
+#
+# Sibling of fpga_gate (fpga_gate.yaml) and asic_gate (asic_gate.yaml): same
+# discipline -- golden baseline, results only ever re-recorded by a human --
+# over foldsim-estimate-timing instead of a synthesis tool. It counts logic
+# levels as Vivado counts them on DEVICE's family (LUTs, CARRY8s, DSP cells,
+# distributed-RAM reads) on the CIRCT netlist the Xilinx flow elaborates, so
+# it gates depth, not Fmax: wires are not in it.
+#
+#   - Per unit. A unit is an end point's instance path with generate indices
+#     folded (g_banks_3_bank -> g_banks_*_bank). Every unit at or above the
+#     watch threshold (8 levels at 300 MHz) is recorded; a unit that gets deeper
+#     fails, and so does a new unit at or above the fix threshold (12).
+#   - No tolerance. Beacon is deterministic, so any change in depth is a
+#     real one; a shallower unit reads IMPROVED, to be locked in by a re-record.
+#   - The tool versions (CIRCT, foldsim) are part of config_hash: a new model
+#     reads STALE, not as a regression.
+#
+# ---------------------------------------------------------------------------
+# Two blocks, two consumers, as in the synthesis gates:
+#
+#   tests:   what pytest/CI sees -- ONE case, whose `run:` is literally the
+#            command CI executes.
+#   builds:  what ci/logic_gate.py reads -- the build list. The pytest loader
+#            ignores this key.
+#
+# The builds are fpga_gate.yaml's, DUT for DUT and config for config (`top` as
+# its Vortex core, see below), so where both gates run a DUT they measure the same RTL, and a unit this gate flags
+# can be read against the Fmax gate's critical paths. clock_mhz is the Fmax
+# gate's target, recorded for that comparison; Beacon's thresholds are
+# 300 MHz ones.
+#
+# The gate runs with perf_gate: a perf_gate regression is cycles, this one is
+# depth and area, and both are asserted on every change to the RTL. Its case
+# is on the rtlsim driver at tier smoke, so ci.yml plans its cell exactly when
+# it plans perf_gate's rtlsim cells (every pull request, every push that
+# touches the RTL or the config). The cell installs foldsim (`needs`).
+#
+# Run one by name:  ci/logic_gate.py -b tcu
+# By hand, no gate: make -C hw/syn/xilinx/dut tcu-beacon
+# Re-record:        ci/logic_gate.py --update-baseline   (human-reviewed, never CI)
+# ---------------------------------------------------------------------------
+category: logic_gate
+defaults:
+  # 32-bit only, as the synthesis gates.
+  xlen:
+  - 32
+  via: script
+  # Any RTL change can move depth.
+  touches:
+  - hw/rtl/
+tests:
+# Seconds to minutes per DUT: the whole catalog runs in one cell.
+- id: gate
+  tier: smoke
+  driver: rtlsim
+  needs:
+  - foldsim
+  run: ci/logic_gate.py -j 2
+
+# The full-GPU builds (group gpu, below): ~30 min and ~95 GB of memory each,
+# so one at a time, on a large self-hosted machine -- never a hosted runner.
+# Its opt-in tier keeps every CI sweep from picking it up.
+- id: gpu
+  tier: timing_gpu
+  run: ci/logic_gate.py -b gpu -j 1 --timeout 7200
+
+# ---------------------------------------------------------------------------
+# builds — read by ci/logic_gate.py, ignored by the pytest catalog loader.
+#
+#   dut         hw/syn/xilinx/dut/catalog.mk target to measure
+#   clock_mhz   the Fmax gate's target for this DUT (recorded, not asserted)
+#   configs     EXTRA defines, appended to the catalog's
+#   group       which golden file the results land in
+#   xlen        ISA width, when not the gate's default (32); the build runs in
+#               that width's own build tree
+#   profile     hardware profile (profiles/<name>.json) under the configs;
+#               configs win over it
+#   opt_in      run only when selected by id or group, never by default
+#   interfaces  modules whose outputs must be registered (space separated):
+#               an output bit a combinational path from outside the
+#               instance reaches is recorded, and one more than the
+#               baseline fails
+#   known_issue tracked expected failure: still measures and reports, does not
+#               fail the run
+# ---------------------------------------------------------------------------
+builds:
+
+# --- core: the base pipeline and its memory system ---------------------------
+
+# L1/LLC datapath with atomics: tag/data pipeline, MSHR, AMO unit.
+- id: cache
+  group: core
+  dut: cache
+  clock_mhz: 300
+  configs: -DVX_CFG_EXT_A_ENABLE
+
+# Wide-SIMD core: issue/operand-collect/LSU/FPU at NT=NW=16, plus the RVC
+# decompressor and atomics.
+- id: core
+  group: core
+  dut: core
+  clock_mhz: 300
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_EXT_C_ENABLE -DVX_CFG_EXT_A_ENABLE
+  interfaces: VX_core
+
+# Warp-wide local memory with two LSU blocks: both pass engines, the
+# dual-port banks the read engine reads through, and the atomic logic.
+- id: lmem
+  group: core
+  dut: lmem
+  clock_mhz: 300
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_A_ENABLE
+
+# fpga_gate's `top` at its config, without the AFU shell: CIRCT's import
+# leaves the command processor's AXI-Lite response ports (VX_cp_core) as LLHD
+# references, which no HW/Comb/Seq tool reads. The Vortex core of it closes the
+# same cross-module paths (socket arbiters, socket MMU, cluster mem network)
+# the per-unit DUTs cut at their ports.
+- id: top_vortex
+  group: core
+  dut: vortex
+  clock_mhz: 250
+  interfaces: VX_core VX_socket VX_cluster
+  configs: >-
+    -DVX_CFG_NUM_THREADS=4 -DVX_CFG_NUM_WARPS=4
+    -DVX_CFG_NUM_CORES=2
+    -DVX_CFG_EXT_A_ENABLE -DVX_CFG_VM_ENABLE
+    -DVX_CFG_DCACHE_LATENCY=3
+
+# --- dxa ---------------------------------------------------------------------
+
+# DXA engine: descriptor queue, address generation, multicast distribution.
+- id: dxa
+  group: dxa
+  dut: dxa
+  clock_mhz: 300
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+
+# --- tensor ------------------------------------------------------------------
+
+# TFR tensor core with every datatype plus sparsity and WGMMA.
+- id: tcu
+  group: tensor
+  dut: tcu
+  clock_mhz: 300
+  configs: >-
+    -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_TCU_TYPE_TFR
+    -DVX_CFG_TCU_FP16_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DVX_CFG_TCU_INT8_ENABLE
+    -DVX_CFG_TCU_INT4_ENABLE -DVX_CFG_TCU_TF32_ENABLE
+    -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+
+# --- graphics ----------------------------------------------------------------
+
+# Ray-tracing unit: CW-BVH4 walker, box/triangle PEs, short stack.
+- id: rtu
+  group: graphics
+  dut: rtu
+  clock_mhz: 300
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+
+# Rasterizer: bin/block/quad walker, edge evaluators, rcache port.
+- id: raster
+  group: graphics
+  dut: raster
+  clock_mhz: 300
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+
+# Output merger: depth/stencil test, blend, ocache port.
+- id: om
+  group: graphics
+  dut: om
+  clock_mhz: 300
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+
+# Texture unit: address generation, LOD, bilinear filter, tcache port.
+- id: tex
+  group: graphics
+  dut: tex
+  clock_mhz: 300
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+
+# --- vm ----------------------------------------------------------------------
+
+# Standalone MMU network: dTLB + iTLB, pooled L1 TLB MSHR, L2 TLB, PTW walker
+# hierarchy, fed by a shared L2. The memory-translation bellwether; the rest of
+# the extension config comes from hw/syn/xilinx/dut/vm/Makefile.
+- id: vm
+  group: vm
+  dut: vm
+  clock_mhz: 250
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_NUM_CORES=2
+
+# --- graphics (combined subsystem) -------------------------------------------
+
+# Full graphics subsystem in one wrapper: raster + om + tex + rtu + dxa behind a
+# shared L2, 2 cores / socket. Closes the graphics cross-unit boundaries that the
+# per-unit DUTs above do not. Subsystem enables come from
+# hw/syn/xilinx/dut/gfx/Makefile.
+- id: gfx
+  group: graphics
+  dut: gfx
+  clock_mhz: 250
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+
+# The same slice under VM: the unit MMUs in front of the graphics caches and the
+# DXA, which neither gfx (VM off) nor vm (no units) builds.
+- id: gfxvm
+  group: graphics
+  dut: gfxvm
+  clock_mhz: 250
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+
+# --- tensor (combined subsystem) ---------------------------------------------
+
+# Full tensor subsystem in one wrapper: TCU (WGMMA + MX) + dxa behind a shared L2,
+# 2 cores / socket. Enables come from hw/syn/xilinx/dut/tensor/Makefile.
+- id: tensor
+  group: tensor
+  dut: tensor
+  clock_mhz: 250
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+
+# --- gpu (opt-in): the whole processor with every feature on ------------------
+#
+# The per-unit DUTs above miss what only the assembled GPU has: the
+# cluster/socket/L2 crossbars at full width, the kernel launch path into every
+# core, and the cross-unit boundaries with every extension on at once. Vivado
+# needs 48 h and more on these; Beacon ~30 min. Four cores, not the products'
+# 84-132: core count widens only the arbiters and crossbars -- the deepest path
+# was the same 43 levels at 1, 2, 4 and 8 cores -- while memory grows with it
+# (~95 GB at 4, 121 GB at 8). Run with `ci/logic_gate.py -b gpu -j 1`.
+
+# Everything the 32-bit machine has: every extension and tensor format, VM,
+# DXA and DMA, the graphics pipeline, ray tracing with TLAS, a 4-wide
+# frontend and issue. (D is 64-bit only.)
+- id: gpu32_full
+  group: gpu
+  opt_in: true
+  dut: vortex
+  clock_mhz: 300
+  interfaces: VX_core VX_socket VX_cluster
+  configs: >-
+    -DVX_CFG_NUM_CORES=4 -DVX_CFG_NUM_CLUSTERS=1
+    -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+    -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_FETCH_WIDTH=4
+    -DVX_CFG_EXT_C_ENABLE -DVX_CFG_EXT_A_ENABLE -DVX_CFG_EXT_ZACAS_ENABLE
+    -DVX_CFG_EXT_ZFHMIN_ENABLE -DVX_CFG_EXT_MUFU_ENABLE -DVX_CFG_VM_ENABLE
+    -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TF32_ENABLE -DVX_CFG_TCU_FP16_ENABLE
+    -DVX_CFG_TCU_FP8_ENABLE -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_INT8_ENABLE
+    -DVX_CFG_TCU_INT4_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_MXFP4_ENABLE
+    -DVX_CFG_TCU_NVFP4_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_DSM_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_EXT_DMA_ENABLE
+    -DVX_CFG_EXT_RTU_ENABLE -DVX_CFG_RTU_TLAS_ENABLE
+    -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
+    -DVX_CFG_L2_ENABLE
+
+# RTX 5080's SM: 48 warps x 32 threads, the graphics pipeline, ray tracing,
+# MX/FP4 tensor formats, a 32-bank L2 -- at XLEN 64 with D.
+- id: gpu_rtx5080
+  group: gpu
+  opt_in: true
+  dut: vortex
+  clock_mhz: 300
+  interfaces: VX_core VX_socket VX_cluster
+  xlen: 64
+  profile: rtx5080
+  configs: -DVX_CFG_NUM_CORES=4 -DVX_CFG_NUM_CLUSTERS=1
+
+# H100's SM: 64 warps and WGMMA, which the RTX 5080 profile does not have.
+- id: gpu_h100
+  group: gpu
+  opt_in: true
+  dut: vortex
+  clock_mhz: 300
+  interfaces: VX_core VX_socket VX_cluster
+  xlen: 64
+  profile: h100
+  configs: -DVX_CFG_NUM_CORES=4 -DVX_CFG_NUM_CLUSTERS=1

@@ -44,7 +44,8 @@ package VX_trace_pkg;
     task trace_ex_op(input int level,
                      input [EX_BITS-1:0] ex_type,
                      input [INST_OP_BITS-1:0] op_type,
-                     input op_args_t op_args
+                     input op_args_t op_args,
+                     input [BYTESEL_BITS-1:0] bytesel = BYTESEL_DEFAULT
     );
         case (ex_type)
         EX_ALU: begin
@@ -176,8 +177,18 @@ package VX_trace_pkg;
                     2'd1: begin
                         `TRACE(level, ("PACKLB.F"))
                     end
-                    default: begin
+                    2'd2: begin
                         `TRACE(level, ("PACKLH.F"))
+                    end
+                    default: begin
+                        // the bytesel offset marks a quad (1) or a matrix fragment (2, 3)
+                        if (bytesel[1]) begin
+                            `TRACE(level, (op_args.lsu.is_store ? "VX_STM" : "VX_LDM"))
+                        end else if (op_args.lsu.is_store) begin
+                            `TRACE(level, ((bytesel != BYTESEL_DEFAULT) ? "VX_FSW.Q" : "VX_FSW.D"))
+                        end else begin
+                            `TRACE(level, ((bytesel != BYTESEL_DEFAULT) ? "VX_FLW.Q" : "VX_FLW.D"))
+                        end
                     end
                 endcase
             end else if (op_args.lsu.is_float) begin
@@ -202,6 +213,7 @@ package VX_trace_pkg;
                     INST_LSU_SW: `TRACE(level, ("SW"))
                     INST_LSU_SD: `TRACE(level, ("SD"))
                     INST_LSU_FENCE:`TRACE(level,("FENCE"))
+                    INST_LSU_FENCE_IO:`TRACE(level,("FENCE.IO"))
                     default:     `TRACE(level, ("?"))
                 endcase
             end

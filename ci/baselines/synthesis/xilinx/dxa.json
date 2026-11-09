@@ -5,108 +5,108 @@
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
     "dut": "dxa",
     "result": {
-      "bram": 10,
-      "build_time_s": 1021,
+      "bram": 0,
+      "build_time_s": 2841,
       "critical_paths": [
         {
-          "endpoint": "dxa_core/g_workers[0].worker/smem_wr/pend_data_r_reg[624]/D",
+          "endpoint": "dxa_core/g_workers[0].worker/smem_wr/defer_data_r_reg[485]/D",
           "group": "core_clock",
-          "levels": 8,
-          "logic_ns": 0.809,
-          "route_ns": 2.477,
-          "route_pct": 75.377,
-          "slack_ns": 0.03,
-          "startpoint": "dxa_core/g_workers[0].worker/gmem_req/oob_pending_r_reg[0]/C"
+          "levels": 7,
+          "logic_ns": 1.006,
+          "route_ns": 2.244,
+          "route_pct": 69.043,
+          "slack_ns": 0.065,
+          "startpoint": "dxa_core/g_workers[0].worker/gmem_req/oob_pending_r_reg[4]/C"
         },
         {
-          "endpoint": "dxa_core/g_workers[0].worker/smem_wr/defer_data_r_reg[130]/D",
+          "endpoint": "dxa_core/g_workers[0].worker/smem_wr/pend_data_r_reg[497]/D",
           "group": "core_clock",
           "levels": 8,
-          "logic_ns": 0.725,
-          "route_ns": 2.559,
-          "route_pct": 77.924,
-          "slack_ns": 0.031,
-          "startpoint": "dxa_core/g_workers[0].worker/gmem_req/oob_pending_r_reg[0]/C"
+          "logic_ns": 1.014,
+          "route_ns": 2.229,
+          "route_pct": 68.728,
+          "slack_ns": 0.071,
+          "startpoint": "dxa_core/g_workers[0].worker/gmem_req/oob_pending_r_reg[4]/C"
         },
         {
-          "endpoint": "dxa_core/g_workers[0].worker/smem_wr/defer_data_r_reg[820]/D",
+          "endpoint": "dxa_core/g_workers[0].worker/smem_wr/defer_data_r_reg[514]/D",
           "group": "core_clock",
-          "levels": 8,
-          "logic_ns": 0.892,
-          "route_ns": 2.389,
-          "route_pct": 72.815,
-          "slack_ns": 0.034,
-          "startpoint": "dxa_core/g_workers[0].worker/gmem_req/oob_pending_r_reg[0]/C"
+          "levels": 9,
+          "logic_ns": 0.976,
+          "route_ns": 2.26,
+          "route_pct": 69.841,
+          "slack_ns": 0.078,
+          "startpoint": "dxa_core/g_workers[0].worker/gmem_req/oob_pending_r_reg[4]/C"
         },
         {
-          "endpoint": "dxa_core/g_workers[0].worker/smem_wr/pend_data_r_reg[86]/D",
+          "endpoint": "dxa_core/g_workers[0].worker/smem_wr/defer_data_r_reg[421]/D",
           "group": "core_clock",
-          "levels": 8,
-          "logic_ns": 0.734,
-          "route_ns": 2.547,
-          "route_pct": 77.629,
-          "slack_ns": 0.035,
-          "startpoint": "dxa_core/g_workers[0].worker/gmem_req/oob_pending_r_reg[0]/C"
-        },
-        {
-          "endpoint": "dxa_core/g_workers[0].worker/smem_wr/defer_data_r_reg[379]/D",
-          "group": "core_clock",
-          "levels": 8,
-          "logic_ns": 0.889,
-          "route_ns": 2.391,
-          "route_pct": 72.897,
-          "slack_ns": 0.036,
-          "startpoint": "dxa_core/g_workers[0].worker/gmem_req/oob_pending_r_reg[0]/C"
-        },
-        {
-          "endpoint": "dxa_core/g_workers[0].worker/smem_wr/pend_data_r_reg[624]/D",
-          "group": "core_clock",
-          "levels": 8,
-          "logic_ns": 0.854,
-          "route_ns": 2.421,
-          "route_pct": 73.925,
-          "slack_ns": 0.039,
+          "levels": 9,
+          "logic_ns": 0.879,
+          "route_ns": 2.357,
+          "route_pct": 72.837,
+          "slack_ns": 0.079,
           "startpoint": "dxa_core/g_workers[0].worker/gmem_req/oob_pending_r_reg[3]/C"
         },
         {
-          "endpoint": "dxa_core/g_workers[0].worker/smem_wr/defer_data_r_reg[130]/D",
+          "endpoint": "dxa_core/g_workers[0].worker/smem_wr/defer_data_r_reg[381]/D",
           "group": "core_clock",
           "levels": 8,
-          "logic_ns": 0.77,
-          "route_ns": 2.504,
-          "route_pct": 76.48,
-          "slack_ns": 0.04,
+          "logic_ns": 0.893,
+          "route_ns": 2.342,
+          "route_pct": 72.392,
+          "slack_ns": 0.08,
+          "startpoint": "dxa_core/g_workers[0].worker/gmem_req/oob_pending_r_reg[4]/C"
+        },
+        {
+          "endpoint": "dxa_core/g_workers[0].worker/smem_wr/defer_data_r_reg[381]/D",
+          "group": "core_clock",
+          "levels": 8,
+          "logic_ns": 0.884,
+          "route_ns": 2.35,
+          "route_pct": 72.665,
+          "slack_ns": 0.081,
+          "startpoint": "dxa_core/g_workers[0].worker/gmem_req/oob_pending_r_reg[4]/C"
+        },
+        {
+          "endpoint": "dxa_core/g_workers[0].worker/smem_wr/defer_data_r_reg[485]/D",
+          "group": "core_clock",
+          "levels": 7,
+          "logic_ns": 0.997,
+          "route_ns": 2.238,
+          "route_pct": 69.179,
+          "slack_ns": 0.081,
+          "startpoint": "dxa_core/g_workers[0].worker/gmem_req/oob_pending_r_reg[5]/C"
+        },
+        {
+          "endpoint": "dxa_core/g_workers[0].worker/smem_wr/defer_data_r_reg[485]/D",
+          "group": "core_clock",
+          "levels": 7,
+          "logic_ns": 0.955,
+          "route_ns": 2.276,
+          "route_pct": 70.442,
+          "slack_ns": 0.083,
+          "startpoint": "dxa_core/g_workers[0].worker/gmem_req/oob_pending_r_reg[6]/C"
+        },
+        {
+          "endpoint": "dxa_core/g_workers[0].worker/smem_wr/pend_data_r_reg[497]/D",
+          "group": "core_clock",
+          "levels": 8,
+          "logic_ns": 1.005,
+          "route_ns": 2.223,
+          "route_pct": 68.863,
+          "slack_ns": 0.087,
+          "startpoint": "dxa_core/g_workers[0].worker/gmem_req/oob_pending_r_reg[5]/C"
+        },
+        {
+          "endpoint": "dxa_core/g_workers[0].worker/smem_wr/pend_data_r_reg[536]/D",
+          "group": "core_clock",
+          "levels": 8,
+          "logic_ns": 0.852,
+          "route_ns": 2.375,
+          "route_pct": 73.594,
+          "slack_ns": 0.087,
           "startpoint": "dxa_core/g_workers[0].worker/gmem_req/oob_pending_r_reg[3]/C"
-        },
-        {
-          "endpoint": "dxa_core/g_workers[0].worker/smem_wr/pend_data_r_reg[901]/D",
-          "group": "core_clock",
-          "levels": 8,
-          "logic_ns": 0.682,
-          "route_ns": 2.592,
-          "route_pct": 79.172,
-          "slack_ns": 0.041,
-          "startpoint": "dxa_core/g_workers[0].worker/gmem_req/oob_pending_r_reg[0]/C"
-        },
-        {
-          "endpoint": "dxa_core/g_workers[0].worker/smem_wr/pend_data_r_reg[477]/D",
-          "group": "core_clock",
-          "levels": 8,
-          "logic_ns": 0.926,
-          "route_ns": 2.348,
-          "route_pct": 71.714,
-          "slack_ns": 0.042,
-          "startpoint": "dxa_core/g_workers[0].worker/gmem_req/oob_pending_r_reg[0]/C"
-        },
-        {
-          "endpoint": "dxa_core/g_workers[0].worker/smem_wr/pend_data_r_reg[624]/D",
-          "group": "core_clock",
-          "levels": 8,
-          "logic_ns": 0.748,
-          "route_ns": 2.526,
-          "route_pct": 77.151,
-          "slack_ns": 0.042,
-          "startpoint": "dxa_core/g_workers[0].worker/gmem_req/oob_pending_r_reg[0]/C"
         }
       ],
       "dsp": 7,
@@ -116,33 +116,38 @@
         "vivado": "2024.2",
         "xlen": 32
       },
-      "ff": 7560,
-      "fmax_mhz": 302.8,
+      "ff": 7132,
+      "fmax_mhz": 306.0,
       "high_fanout_nets": [
         {
           "driver": "LUT3",
-          "fanout": 1090,
+          "fanout": 1091,
           "net": "dxa_core/g_workers[0].worker/gmem_req/E[0]"
         },
         {
           "driver": "LUT3",
-          "fanout": 1089,
-          "net": "dxa_core/g_workers[0].worker/gmem_req/reset_0[0]"
+          "fanout": 1090,
+          "net": "dxa_core/g_workers[0].worker/gmem_req/pipeline_start_r_reg[0]"
         },
         {
           "driver": "LUT5",
-          "fanout": 1024,
+          "fanout": 1025,
           "net": "dxa_core/g_workers[0].worker/smem_wr/fb_word_addr_r"
         },
         {
           "driver": "LUT5",
           "fanout": 1016,
-          "net": "dxa_core/g_workers[0].worker/gmem_req/clk_19"
+          "net": "dxa_core/g_workers[0].worker/gmem_req/clk_13"
         },
         {
           "driver": "LUT5",
           "fanout": 1016,
-          "net": "dxa_core/g_workers[0].worker/gmem_req/clk_20"
+          "net": "dxa_core/g_workers[0].worker/gmem_req/clk_14"
+        },
+        {
+          "driver": "LUT6",
+          "fanout": 1016,
+          "net": "dxa_core/g_workers[0].worker/gmem_req/clk_4"
         },
         {
           "driver": "LUT4",
@@ -156,24 +161,19 @@
         },
         {
           "driver": "LUT3",
-          "fanout": 658,
+          "fanout": 660,
           "net": "dxa_core/g_workers[0].worker/setup/E[0]"
         },
         {
-          "driver": "FDSE",
-          "fanout": 602,
-          "net": "dxa_core/lmem_arb/req_arb/g_passthru.g_out_buf[0].out_buf/g_eb2.stream_buffer/g_buffer.valid_in_r_reg_0"
-        },
-        {
           "driver": "LUT2",
-          "fanout": 592,
-          "net": "dxa_core/g_workers[0].worker/smem_wr/g_buffer.valid_in_r_reg[0]"
+          "fanout": 594,
+          "net": "dxa_core/lmem_arb/req_arb/g_passthru.g_out_buf[0].out_buf/g_eb2.stream_buffer/g_buffer.flow_out"
         }
       ],
-      "lut": 10102,
-      "lutram": 170,
+      "lut": 10304,
+      "lutram": 638,
       "uram": 0,
-      "wns_ns": 0.03
+      "wns_ns": 0.065
     }
   }
 }

@@ -86,6 +86,9 @@ constexpr uint32_t CP_STATUS_BUSY       = 0x1;
 // is physical — the MMU-aware CP DMA skips translation.
 constexpr uint8_t  CP_MEM_FLAG_PHYSICAL = 0x04;
 
+// CMD_CACHE_FLUSH header flag: flush only the levels above the last-level cache.
+constexpr uint8_t  CP_FLUSH_FLAG_L1_ONLY = 0x04;
+
 constexpr uint32_t CP_RING_SIZE_LOG2 = 16;       // 64 KiB
 constexpr uint32_t CP_RING_SIZE      = 1u << CP_RING_SIZE_LOG2;
 constexpr uint8_t  CP_OPCODE_MEM_WRITE  = 0x01;
@@ -197,8 +200,8 @@ Device::~Device() {
     // Drain the kernel-args scratch pool.
     {
         std::lock_guard<std::mutex> g(args_pool_mu_);
-        for (uint64_t addr : args_pool_free_)
-            this->mem_free(addr);
+        for (const auto& slot : args_pool_free_)
+            this->mem_free(slot.addr);
         args_pool_free_.clear();
     }
     // Park the CP before releasing the buffers it masters into. Ordering is
@@ -222,10 +225,13 @@ Device::~Device() {
 // ============================================================================
 
 vx_result_t Device::args_slot_acquire(uint64_t size, uint64_t* out_addr,
-                                      bool* out_pooled) {
+                                      bool* out_pooled, bool* out_llc_clean) {
     if (!out_addr || !out_pooled) return VX_ERR_INVALID_VALUE;
+    bool llc_clean = false;
+    if (out_llc_clean) *out_llc_clean = false;
     if (size > ARGS_SLOT_SIZE) {
-        // Oversized args block — one-off allocation, not pooled.
+        // Oversized args block — one-off allocation, not pooled. The range may
+        // have been another buffer the cache still holds.
         *out_pooled = false;
         return this->mem_alloc(size, /*VX_MEM_READ*/ 0x1, out_addr);
     }
@@ -233,8 +239,18 @@ vx_result_t Device::args_slot_acquire(uint64_t size, uint64_t* out_addr,
     {
         std::lock_guard<std::mutex> g(args_pool_mu_);
         if (!args_pool_free_.empty()) {
-            *out_addr = args_pool_free_.back();
-            args_pool_free_.pop_back();
+            const uint64_t epoch = llc_epoch_.load();
+            size_t pick = args_pool_free_.size() - 1;
+            for (size_t i = 0; i < args_pool_free_.size(); ++i) {
+                if (args_pool_free_[i].clean_epoch <= epoch) {
+                    pick = i;
+                    break;
+                }
+            }
+            *out_addr = args_pool_free_[pick].addr;
+            llc_clean = (args_pool_free_[pick].clean_epoch <= epoch);
+            args_pool_free_.erase(args_pool_free_.begin() + pick);
+            if (out_llc_clean) *out_llc_clean = llc_clean;
             return VX_SUCCESS;
         }
     }
@@ -248,7 +264,7 @@ void Device::args_slot_release(uint64_t addr, bool pooled) {
         return;
     }
     std::lock_guard<std::mutex> g(args_pool_mu_);
-    args_pool_free_.push_back(addr);
+    args_pool_free_.push_back({addr, llc_epoch_.load() + 1});
 }
 
 vx_result_t Device::open(uint32_t index, Device** out) {
@@ -374,16 +390,14 @@ vx_result_t Device::cp_init() {
         uint32_t dev_caps = 0;
         if (p->cp_reg_read(CP_DEV_CAPS, &dev_caps) != VX_SUCCESS)
             return VX_ERR_DEVICE_LOST;
-        // An all-ones read is never a valid capability word: bits [31:24] are
+        // An all-ones read is never a valid capability word: bits [31:29] are
         // hardwired zero by VX_cp_axil_regfile, so 0xFFFFFFFF means the read
         // did not reach the register (AXI DECERR / no response substitutes
         // all-ones on the way back). Decoding it would set every capability
         // bit -- and a spurious VM_ENABLED sends VMManager off to identity-map
         // 65,536 PTEs one CP round-trip at a time, which presents as a hang at
         // 100% CPU rather than as the bus error it actually is.
-        // Treat it as "no optional capabilities", which is also the correct
-        // answer for this CP: it has no SATP register, no OP_DRAW, and no
-        // CMD_LAUNCH_QMD (grep hw/rtl/cp -- all three are absent).
+        // Treat it as "no optional capabilities".
         if (dev_caps == 0xFFFFFFFFu) {
             printf("[VXDRV] Warning: CP_DEV_CAPS read returned all-ones; the "
                    "AXI-Lite read did not reach the register. Assuming no "
@@ -403,10 +417,13 @@ vx_result_t Device::cp_init() {
         // Reading them on a target that does not decode them stalls the DCR
         // bus waiting for a response that never arrives.
         mmu_fault_report_ = (dev_caps & (1u << 27)) != 0;
+        // DMA_LLC_CLIENT (bit 28): the CP DMA is a client of the last-level
+        // cache, which is then the point of coherence for host transfers.
+        cp_dma_llc_client_ = (dev_caps & (1u << 28)) != 0;
     }
 
     // Resolve the core count now, while nothing holds cp_mu_. Deferring it to
-    // the first cp_submit_cache_flush would reach query_caps from inside an
+    // the first cache flush would reach query_caps from inside an
     // open batch, which already owns cp_mu_ -- and it is not recursive.
     {
         auto rc = this->query_caps(VX_CAPS_NUM_CORES, &cp_num_cores_);
@@ -512,6 +529,17 @@ vx_result_t Device::cp_init() {
         }
     }
 
+    // No kernel has run yet, so the last-level cache holds none of these.
+    {
+        std::lock_guard<std::mutex> g(args_pool_mu_);
+        for (uint32_t i = 0; i < ARGS_POOL_CLEAN; ++i) {
+            uint64_t addr = 0;
+            auto r = this->mem_alloc(ARGS_SLOT_SIZE, /*VX_MEM_READ*/ 0x1, &addr);
+            if (r != VX_SUCCESS) return r;
+            args_pool_free_.push_back({addr, 0});
+        }
+    }
+
     return VX_SUCCESS;
 }
 
@@ -556,7 +584,84 @@ const char* cp_opcode_name(uint8_t op) {
 }
 } // namespace
 
-vx_result_t Device::cp_ring_append_(const void* cl) {
+namespace {
+// CMD_CACHE_FLUSH on-wire layout (cmd_size=12):
+//   bytes 0..3   header  { opcode=0x0A, flags=CP_FLUSH_FLAG_L1_ONLY?, reserved=0 }
+//   bytes 4..11  arg0    number of cores to flush
+// The CP sweeps a per-core flush DCR-read across [0, num_cores) and
+// retires the command only when the last core's flush completes.
+void build_cache_flush(uint8_t cl[CP_CL_BYTES], uint64_t num_cores, bool l1_only) {
+    std::memset(cl, 0, CP_CL_BYTES);
+    cl[0] = CP_OPCODE_CACHE_FLUSH;
+    cl[1] = l1_only ? CP_FLUSH_FLAG_L1_ONLY : 0;
+    std::memcpy(cl + 4, &num_cores, sizeof(num_cores));
+}
+
+// True when a CMD_MEM_* transfer reaches device memory outside the IO
+// aperture. IO accesses bypass the caches, so they need no flush.
+bool cp_dma_touches_device_mem(const uint8_t* cl) {
+    uint64_t dst = 0, src = 0, size = 0;
+    std::memcpy(&dst,  cl + 4,  sizeof(dst));
+    std::memcpy(&src,  cl + 12, sizeof(src));
+    std::memcpy(&size, cl + 20, sizeof(size));
+    auto outside_io = [size](uint64_t addr) {
+        return addr < VX_MEM_IO_BASE_ADDR || addr + size > VX_MEM_IO_END_ADDR;
+    };
+    switch (cl[0]) {
+    case CP_OPCODE_MEM_WRITE: return outside_io(dst);
+    case CP_OPCODE_MEM_READ:  return outside_io(src);
+    case CP_OPCODE_MEM_COPY:  return outside_io(dst) || outside_io(src);
+    default:                  return false;
+    }
+}
+} // namespace
+
+vx_result_t Device::cp_ring_append_(const void* cl, bool llc_clean) {
+    // Caller holds cp_mu_. A kernel's results are flushed lazily, by the
+    // next command that needs them: the next launch gets an L1-only flush
+    // (the last-level cache is the point of coherence between kernels), and
+    // the next transfer to or from device memory a full one when the CP DMA
+    // reaches device memory beneath the last-level cache, an L1-only one when
+    // it is a client of that cache. Appending the flush under the same lock
+    // keeps any other command from slipping between.
+    const uint8_t* b = static_cast<const uint8_t*>(cl);
+    // A write into memory the last-level cache holds no line of has nothing
+    // to wait for: the cache cannot serve stale data from it or write a
+    // dirty line back over it.
+    const bool dma = cp_dma_touches_device_mem(b) && !(llc_clean && b[0] == CP_OPCODE_MEM_WRITE);
+    const bool launch = (b[0] == CP_OPCODE_LAUNCH)
+                     || (b[0] == CP_OPCODE_LAUNCH_QMD)
+                     || (b[0] == CP_OPCODE_DRAW);
+    if ((dma && (l1_dirty_ || llc_dirty_)) || (launch && l1_dirty_)) {
+        uint8_t flush[CP_CL_BYTES];
+        const bool full = dma && llc_dirty_;
+        build_cache_flush(flush, cp_num_cores_, /*l1_only=*/!full);
+        auto r = cp_ring_write_(flush);
+        if (r != VX_SUCCESS) return r;
+        l1_dirty_ = false;
+        llc_dirty_ = llc_dirty_ && !full;
+        if (full) {
+            ++llc_epoch_;
+        }
+    }
+    assert(!(dma && (l1_dirty_ || llc_dirty_)));
+    auto r = cp_ring_write_(cl);
+    if (r != VX_SUCCESS) return r;
+    if (launch) {
+        // a draw descriptor ends on its own L1-only flush step
+        l1_dirty_ = (b[0] != CP_OPCODE_DRAW);
+        llc_dirty_ = !cp_dma_llc_client_;
+    } else if (b[0] == CP_OPCODE_CACHE_FLUSH) {
+        l1_dirty_ = false;
+        llc_dirty_ = llc_dirty_ && (b[1] & CP_FLUSH_FLAG_L1_ONLY);
+        if (!(b[1] & CP_FLUSH_FLAG_L1_ONLY)) {
+            ++llc_epoch_;
+        }
+    }
+    return VX_SUCCESS;
+}
+
+vx_result_t Device::cp_ring_write_(const void* cl) {
     // Caller holds cp_mu_. Write one CL into the ring at the current tail —
     // a plain memcpy through the ring's CP-visible host pointer — then bump
     // tail + reserve the seqnum slot. No doorbell, no poll.
@@ -619,20 +724,19 @@ vx_result_t Device::cp_batch_end() {
     if (r != VX_SUCCESS) {
         return r;
     }
-    // The batch's trailing CMD_CACHE_FLUSH(es) have retired, so every kernel's
-    // writes are coherent: drain the console rings once for the whole batch
-    // (deferred from each in-batch cp_submit_launch).
+    // Drain the console rings once for the whole batch (deferred from each
+    // in-batch cp_submit_launch).
     return drain_cout();
 }
 
-vx_result_t Device::cp_submit_cl_(const void* cl) {
+vx_result_t Device::cp_submit_cl_(const void* cl, bool llc_clean) {
     auto* p = platform();
 
     // Batch mode: append only — cp_mu_ is already held for the batch, and
     // the single doorbell + poll happen in cp_batch_end. Only the thread that
     // owns the batch may take this path; anyone else must block on cp_mu_.
     if (tls_batch_owner == this) {
-        auto r = cp_ring_append_(cl);
+        auto r = cp_ring_append_(cl, llc_clean);
         if (r == VX_SUCCESS) cp_batch_target_ = cp_expected_seqnum_;
         return r;
     }
@@ -645,7 +749,7 @@ vx_result_t Device::cp_submit_cl_(const void* cl) {
         std::lock_guard<std::mutex> g(cp_mu_);
 
         // 1) Write the CL into the ring and reserve its seqnum.
-        auto r = cp_ring_append_(cl);
+        auto r = cp_ring_append_(cl, llc_clean);
         if (r != VX_SUCCESS) return r;
         target = cp_expected_seqnum_;
 
@@ -769,37 +873,6 @@ vx_result_t Device::cp_poll_seqnum_(uint64_t target) {
 }
 
 vx_result_t Device::cp_submit_dcr_write(uint32_t addr, uint32_t value) {
-    // VM safety check: when VM is active and the pinned slab is configured,
-    // every HW-addr DCR must reference a buffer in the pinned slab — the HW
-    // master bypasses the per-core MMU and would otherwise dereference a stale VA.
-    //
-    // TEX / RASTER / OM address DCRs encode value as a cache-block index
-    // (pa = value << 6). Split BASE_LO/HI DCR pairs (e.g. DXA) are validated
-    // by the caller, not here.
-    if (vm_enabled_ && pinned_mem_) {
-        switch (addr) {
-        case VX_DCR_TEX_ADDR:
-        case VX_DCR_RASTER_TBUF_ADDR:
-        case VX_DCR_RASTER_PBUF_ADDR:
-        case VX_DCR_OM_CBUF_ADDR:
-        case VX_DCR_OM_ZBUF_ADDR: {
-            const uint64_t pa = uint64_t(value) << 6;
-            if (pa < pinned_base_ ||
-                pa >= pinned_base_ + pinned_size_) {
-                std::cerr << "[VXDRV] dcr 0x" << std::hex << addr
-                          << " value 0x" << value << " (pa 0x" << pa
-                          << ") not in pinned slab [0x" << pinned_base_
-                          << ", 0x" << (pinned_base_ + pinned_size_)
-                          << ") — buffer needs VX_MEM_PHYS"
-                          << std::dec << std::endl;
-                return VX_ERR_INVALID_VALUE;
-            }
-            break;
-        }
-        default:
-            break;
-        }
-    }
     dump_dcr_for_firesim(addr, value);
     // CMD_DCR_WRITE on-wire layout (cmd_size=20):
     //   bytes 0..3   header  { opcode=0x04, flags=0, reserved=0 }
@@ -855,15 +928,13 @@ vx_result_t Device::cp_submit_launch() {
     if (r != VX_SUCCESS) {
         return r;
     }
-    // Cache coherence: post an explicit cache flush right after the launch
-    // (ACQUIRE_MEM model) so the host observes coherent kernel results.
-    r = cp_submit_cache_flush();
-    if (r != VX_SUCCESS) return r;
-    // In a batch the flush has only been appended, not retired — defer the
-    // COUT drain to cp_batch_end (one drain for the whole sequence).
+    // The kernel-boundary cache flush (ACQUIRE_MEM model) is posted by the
+    // next command that needs it (see cp_ring_append_). In a batch the
+    // launch has only been appended, not retired — defer the COUT drain to
+    // cp_batch_end (one drain for the whole sequence).
     if (tls_batch_owner == this) return VX_SUCCESS;
-    // Final COUT drain: the flush has made the kernel's writes coherent, so
-    // the tail-end console output left in the rings is now safe to read.
+    // Final COUT drain: the console rings live in the uncached IO aperture,
+    // and a launch completes only once its stores have left the device.
     return drain_cout();
 }
 
@@ -904,7 +975,7 @@ vx_result_t Device::cp_submit_launch_qmd(uint64_t qmd_addr) {
     // The CP reads the in-memory KMU descriptor (a {count,(addr,value)...}
     // list the caller staged) and replays it before pulsing start — one ring
     // command in place of the ~18 CMD_DCR_WRITEs a plain launch costs. Same
-    // trailing CMD_CACHE_FLUSH / COUT-drain discipline as cp_submit_launch.
+    // COUT-drain discipline as cp_submit_launch.
     uint8_t cl[CP_CL_BYTES] = {0};
     auto r = ensure_mmu_satp();
     if (r != VX_SUCCESS) {
@@ -918,8 +989,6 @@ vx_result_t Device::cp_submit_launch_qmd(uint64_t qmd_addr) {
     if (r != VX_SUCCESS) {
         return r;
     }
-    r = cp_submit_cache_flush();
-    if (r != VX_SUCCESS) return r;
     if (tls_batch_owner == this) return VX_SUCCESS;
     return drain_cout();
 }
@@ -947,19 +1016,6 @@ vx_result_t Device::cp_submit_draw(uint64_t desc_addr) {
     }
     if (tls_batch_owner == this) return VX_SUCCESS;
     return drain_cout();
-}
-
-vx_result_t Device::cp_submit_cache_flush() {
-    // CMD_CACHE_FLUSH on-wire layout (cmd_size=12):
-    //   bytes 0..3   header  { opcode=0x0A, flags=0, reserved=0 }
-    //   bytes 4..11  arg0    number of cores to flush
-    // The CP sweeps a per-core flush DCR-read across [0, num_cores) and
-    // retires the command only when the last core's flush completes.
-    // No-op on write-through cache configs (the Vortex default).
-    uint8_t cl[CP_CL_BYTES] = {0};
-    cl[0] = CP_OPCODE_CACHE_FLUSH;
-    std::memcpy(cl + 4, &cp_num_cores_, sizeof(cp_num_cores_));
-    return cp_submit_cl_(cl);
 }
 
 vx_result_t Device::cp_submit_dcr_read(uint32_t addr, uint32_t tag,
@@ -997,7 +1053,7 @@ vx_result_t Device::cp_submit_dcr_read(uint32_t addr, uint32_t tag,
 
 vx_result_t Device::cp_submit_mem_(uint8_t opcode, uint64_t arg0,
                                    uint64_t arg1, uint64_t arg2,
-                                   bool physical) {
+                                   bool physical, bool llc_clean) {
     // CMD_MEM_* on-wire layout (cmd_size=28):
     //   bytes 0..3   header  { opcode, flags, reserved=0 }
     //   bytes 4..11  arg0    dst address
@@ -1009,7 +1065,7 @@ vx_result_t Device::cp_submit_mem_(uint8_t opcode, uint64_t arg0,
     std::memcpy(cl + 4,  &arg0, sizeof(arg0));
     std::memcpy(cl + 12, &arg1, sizeof(arg1));
     std::memcpy(cl + 20, &arg2, sizeof(arg2));
-    return cp_submit_cl_(cl);
+    return cp_submit_cl_(cl, llc_clean);
 }
 
 vx_result_t Device::cp_submit_mem_copy(uint64_t dst, uint64_t src,
@@ -1019,7 +1075,7 @@ vx_result_t Device::cp_submit_mem_copy(uint64_t dst, uint64_t src,
 }
 
 vx_result_t Device::cp_submit_mem_write(uint64_t dev_dst, const void* host_src,
-                                        uint64_t size, bool physical) {
+                                        uint64_t size, bool physical, bool llc_clean) {
     if (size == 0)  return VX_SUCCESS;
     if (!host_src)  return VX_ERR_INVALID_VALUE;
     dump_upload_for_firesim(dev_dst, host_src, size);
@@ -1043,7 +1099,7 @@ vx_result_t Device::cp_submit_mem_write(uint64_t dev_dst, const void* host_src,
         r = platform()->host_mem_push(staging.cp_addr);
         if (r == VX_SUCCESS)
             r = cp_submit_mem_(CP_OPCODE_MEM_WRITE, dev_dst + off,
-                               staging.cp_addr, n, physical);
+                               staging.cp_addr, n, physical, llc_clean);
     }
     host_free(staging.cp_addr);
     return r;
@@ -1226,7 +1282,7 @@ vx_result_t Device::memory_info(uint64_t* out_free, uint64_t* out_used) {
 
 vx_result_t Device::query_caps(uint32_t caps_id, uint64_t* out_value) {
     if (!out_value) return VX_ERR_INVALID_VALUE;
-    // The two static caps words are read once from the CP regfile caps
+    // The static caps words are read once from the CP regfile caps
     // window; serialize the load against concurrent cp_reg_* traffic.
     if (!caps_loaded_) {
         std::lock_guard<std::mutex> g(cp_mu_);
@@ -1234,12 +1290,12 @@ vx_result_t Device::query_caps(uint32_t caps_id, uint64_t* out_value) {
             auto rd = [this](uint32_t off, uint32_t* v) -> int {
                 return platform_->cp_reg_read(off, v) == VX_SUCCESS ? 0 : -1;
             };
-            if (vortex::load_caps(rd, &dev_caps_, &isa_caps_) != 0)
+            if (vortex::load_caps(rd, &dev_caps_, &dev_caps_ext_, &isa_caps_) != 0)
                 return VX_ERR_DEVICE_LOST;
             caps_loaded_ = true;
         }
     }
-    if (vortex::decode_caps(dev_caps_, isa_caps_, caps_id, out_value))
+    if (vortex::decode_caps(dev_caps_, dev_caps_ext_, isa_caps_, caps_id, out_value))
         return VX_SUCCESS;
     // Caps not encoded in the CP words — platform/runtime constants.
     switch (caps_id) {
@@ -1264,8 +1320,8 @@ vx_result_t Device::query_caps(uint32_t caps_id, uint64_t* out_value) {
 // ============================================================================
 
 vx_result_t Device::dev_write(uint64_t dev_addr, const void* src,
-                              uint64_t size) {
-    return cp_submit_mem_write(dev_addr, src, size);
+                              uint64_t size, bool llc_clean) {
+    return cp_submit_mem_write(dev_addr, src, size, /*physical=*/false, llc_clean);
 }
 
 vx_result_t Device::dev_read(void* dst, uint64_t dev_addr, uint64_t size) {

@@ -41,8 +41,9 @@
 //     until WLAST. B/R route back to the owner. IDs pass through untouched.
 //   * MULTI_OUT == 1: ID-routed, multi-outstanding fan-in. The top
 //     LOG2UP(NUM_INPUTS) bits of the AXI ID carry the source index (masters
-//     must leave them free); reads are fully concurrent, write bursts serialize
-//     on the shared W channel (AW gated until WLAST) while B stays concurrent.
+//     must leave them free); reads are fully concurrent, writes share the W
+//     channel in AW order (a write's W may go with its AW, and later AWs may
+//     run ahead of earlier data) while B stays concurrent.
 //     Requires ID_WIDTH > LOG2UP(NUM_INPUTS) and NUM_OUTPUTS == 1.
 //
 // OUT_REG (0/1): registered AXI stage (VX_mm_axi_slice) on each slave port.
@@ -175,6 +176,20 @@ module VX_mm_axi_arb #(
             assign aw_pick = '0;
             assign aw_any  = s_awvalid[0];
         end else begin : g_aw_arb
+            // Once offered, the AW must stay unchanged until the slave takes it
+            // (AXI stability): only the offering master may compete meanwhile.
+            reg                  aw_held;
+            reg [SEL_WIDTH-1:0]  aw_held_idx;
+            wire [NUM_INPUTS-1:0] aw_reqs = aw_held ? (s_awvalid & (NUM_INPUTS'(1) << aw_held_idx))
+                                                : s_awvalid;
+            always @(posedge clk) begin
+                if (reset) begin
+                    aw_held <= 1'b0;
+                end else begin
+                    aw_held <= c_awvalid && ~c_awready;
+                end
+                aw_held_idx <= aw_pick;
+            end
             VX_generic_arbiter #(
                 .NUM_REQS (NUM_INPUTS),
                 .TYPE     (ARBITER),
@@ -182,7 +197,7 @@ module VX_mm_axi_arb #(
             ) aw_arb (
                 .clk          (clk),
                 .reset        (reset),
-                .requests     (s_awvalid),
+                .requests     (aw_reqs),
                 .grant_index  (aw_pick),
                 `UNUSED_PIN   (grant_onehot),
                 .grant_valid  (aw_any),
@@ -245,6 +260,20 @@ module VX_mm_axi_arb #(
             assign ar_pick = '0;
             assign ar_any  = s_arvalid[0];
         end else begin : g_ar_arb
+            // Once offered, the AR must stay unchanged until the slave takes it
+            // (AXI stability): only the offering master may compete meanwhile.
+            reg                  ar_held;
+            reg [SEL_WIDTH-1:0]  ar_held_idx;
+            wire [NUM_INPUTS-1:0] ar_reqs = ar_held ? (s_arvalid & (NUM_INPUTS'(1) << ar_held_idx))
+                                                : s_arvalid;
+            always @(posedge clk) begin
+                if (reset) begin
+                    ar_held <= 1'b0;
+                end else begin
+                    ar_held <= c_arvalid && ~c_arready;
+                end
+                ar_held_idx <= ar_pick;
+            end
             VX_generic_arbiter #(
                 .NUM_REQS (NUM_INPUTS),
                 .TYPE     (ARBITER),
@@ -252,7 +281,7 @@ module VX_mm_axi_arb #(
             ) ar_arb (
                 .clk          (clk),
                 .reset        (reset),
-                .requests     (s_arvalid),
+                .requests     (ar_reqs),
                 .grant_index  (ar_pick),
                 `UNUSED_PIN   (grant_onehot),
                 .grant_valid  (ar_any),
@@ -296,10 +325,10 @@ module VX_mm_axi_arb #(
 
         // ===== Multi-outstanding, ID-routed (source index in ID high bits) =====
         // The top SEL_WIDTH bits of the AXI ID carry the source index; masters
-        // must leave them free. Reads are fully concurrent; write bursts serialize
-        // on the shared W channel (AW gated until the prior burst's WLAST) while B
-        // responses stay concurrent. Sticky arbitration holds the granted addr/id
-        // stable until the handshake completes (AXI stability requirement).
+        // must leave them free. Reads are fully concurrent; write data shares
+        // the W channel in AW order while B responses stay concurrent. An offer
+        // the slave has not yet taken holds the grant, so its addr/id stay
+        // stable until the handshake.
         localparam LOW_ID = ID_WIDTH - SEL_WIDTH;   // source's own low ID bits
         `STATIC_ASSERT((ID_WIDTH > SEL_WIDTH),
             ("VX_mm_axi_arb MULTI_OUT: ID_WIDTH must exceed LOG2UP(NUM_INPUTS) to carry the source index"))
@@ -312,12 +341,26 @@ module VX_mm_axi_arb #(
             assign ar_any  = s_arvalid[0];
         end else begin : g_ar_arb
             wire ar_fire = c_arvalid && c_arready;
+            // Once offered, the AR must stay unchanged until the slave takes it
+            // (AXI stability): only the offering master may compete meanwhile.
+            reg                  ar_held;
+            reg [SEL_WIDTH-1:0]  ar_held_idx;
+            wire [NUM_INPUTS-1:0] ar_reqs = ar_held ? (s_arvalid & (NUM_INPUTS'(1) << ar_held_idx))
+                                                : s_arvalid;
+            always @(posedge clk) begin
+                if (reset) begin
+                    ar_held <= 1'b0;
+                end else begin
+                    ar_held <= c_arvalid && ~c_arready;
+                end
+                ar_held_idx <= ar_pick;
+            end
             VX_generic_arbiter #(
                 .NUM_REQS (NUM_INPUTS),
                 .TYPE     (ARBITER),
-                .STICKY   (1)   // hold grant stable until AR fires (AXI stability)
+                .STICKY   (1)
             ) ar_arb (
-                .clk (clk), .reset (reset), .requests (s_arvalid),
+                .clk (clk), .reset (reset), .requests (ar_reqs),
                 .grant_index (ar_pick), `UNUSED_PIN (grant_onehot),
                 .grant_valid (ar_any), .grant_ready (ar_fire)
             );
@@ -340,9 +383,19 @@ module VX_mm_axi_arb #(
         end
         assign c_rready = s_rready[r_src];
 
-        // ---- Write: sticky RR grant gated on W-drain, tag awid, demux B by bid ----
-        reg                 w_active;
-        reg [SEL_WIDTH-1:0] w_route;
+        // ---- Write: sticky RR grant, tag awid, W in AW order, demux B by bid ----
+        // An AW is committed the first cycle it is offered; the held grant then
+        // keeps it on the bus until the slave takes it, so AWs reach the slave
+        // in commit order. W bursts follow that order through a small queue of
+        // committed sources, and the burst of the AW being committed this cycle
+        // bypasses an empty queue: a single-beat write moves AW and W in the
+        // same cycle, and W never waits for AWREADY (a slave may accept the
+        // data first). A full queue holds new AWs back.
+        localparam WQ_SIZE  = 4;
+        localparam WQ_ADDRW = `LOG2UP(WQ_SIZE);
+        localparam WQ_CNTW  = WQ_ADDRW + 1;
+
+        reg                  aw_pend;   // offered last cycle, not yet taken
         wire [SEL_WIDTH-1:0] aw_pick;
         wire                 aw_any;
         wire                 aw_fire = c_awvalid && c_awready;
@@ -350,43 +403,72 @@ module VX_mm_axi_arb #(
             assign aw_pick = '0;
             assign aw_any  = s_awvalid[0];
         end else begin : g_aw_arb
+            // Once offered, the AW must stay unchanged until the slave takes it
+            // (AXI stability): only the offering master may compete meanwhile.
+            reg [SEL_WIDTH-1:0]  aw_held_idx;
+            wire [NUM_INPUTS-1:0] aw_reqs = aw_pend ? (s_awvalid & (NUM_INPUTS'(1) << aw_held_idx))
+                                                : s_awvalid;
+            always @(posedge clk) begin
+                aw_held_idx <= aw_pick;
+            end
             VX_generic_arbiter #(
                 .NUM_REQS (NUM_INPUTS),
                 .TYPE     (ARBITER),
                 .STICKY   (1)
             ) aw_arb (
-                .clk (clk), .reset (reset), .requests (s_awvalid),
+                .clk (clk), .reset (reset), .requests (aw_reqs),
                 .grant_index (aw_pick), `UNUSED_PIN (grant_onehot),
                 .grant_valid (aw_any), .grant_ready (aw_fire)
             );
         end
-        // Gate a new AW until the previous write's W burst drains.
-        assign c_awvalid = aw_any && !w_active;
+
+        reg [WQ_SIZE-1:0][SEL_WIDTH-1:0] wq_src;
+        reg [WQ_ADDRW-1:0]               wq_rd_ptr, wq_wr_ptr;
+        reg [WQ_CNTW-1:0]                wq_count;
+        wire wq_empty = (wq_count == '0);
+        wire wq_full  = (wq_count == WQ_CNTW'(WQ_SIZE));
+
+        assign c_awvalid = aw_any && (aw_pend || ~wq_full);
         assign c_awaddr  = s_awaddr[aw_pick];
         assign c_awlen   = s_awlen [aw_pick];
         assign c_awid    = {aw_pick, s_awid[aw_pick][LOW_ID-1:0]};
-        assign s_awready = {NUM_INPUTS{!w_active && c_awready}}
+        assign s_awready = {NUM_INPUTS{(aw_pend || ~wq_full) && c_awready}}
                          & ({{(NUM_INPUTS-1){1'b0}}, aw_any} << aw_pick);
+
+        wire aw_commit = c_awvalid && ~aw_pend;
+
+        wire                 w_route_valid = ~wq_empty || aw_commit;
+        wire [SEL_WIDTH-1:0] w_route       = wq_empty ? aw_pick : wq_src[wq_rd_ptr];
+        wire                 w_last_fire   = c_wvalid && c_wready && c_wlast;
+        wire                 wq_push       = aw_commit && ~(wq_empty && w_last_fire);
+        wire                 wq_pop        = ~wq_empty && w_last_fire;
 
         always @(posedge clk) begin
             if (reset) begin
-                w_active <= 1'b0;
-                w_route  <= '0;
+                aw_pend   <= 1'b0;
+                wq_rd_ptr <= '0;
+                wq_wr_ptr <= '0;
+                wq_count  <= '0;
             end else begin
-                if (aw_fire) begin
-                    w_active <= 1'b1;
-                    w_route  <= aw_pick;
-                end else if (w_active && c_wvalid && c_wready && c_wlast) begin
-                    w_active <= 1'b0;
+                aw_pend <= c_awvalid && ~c_awready;
+                if (wq_push) begin
+                    wq_wr_ptr <= wq_wr_ptr + WQ_ADDRW'(1);
                 end
+                if (wq_pop) begin
+                    wq_rd_ptr <= wq_rd_ptr + WQ_ADDRW'(1);
+                end
+                wq_count <= wq_count + WQ_CNTW'(wq_push) - WQ_CNTW'(wq_pop);
+            end
+            if (wq_push) begin
+                wq_src[wq_wr_ptr] <= aw_pick;
             end
         end
 
-        assign c_wvalid = w_active && s_wvalid[w_route];
+        assign c_wvalid = w_route_valid && s_wvalid[w_route];
         assign c_wdata  = s_wdata[w_route];
         assign c_wstrb  = s_wstrb[w_route];
         assign c_wlast  = s_wlast[w_route];
-        assign s_wready = {NUM_INPUTS{w_active && c_wready}}
+        assign s_wready = {NUM_INPUTS{w_route_valid && c_wready}}
                         & ({{(NUM_INPUTS-1){1'b0}}, 1'b1} << w_route);
 
         wire [SEL_WIDTH-1:0] b_src = c_bid[ID_WIDTH-1 -: SEL_WIDTH];

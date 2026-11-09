@@ -21,6 +21,7 @@
 #include <unordered_map>
 #include <util.h>
 #include "debug.h"
+#include "constants.h"
 #include "types.h"
 #include "decode.h"
 #include "decompressor.h"
@@ -31,8 +32,46 @@
 #include "tensor_cfg.h"
 #include "tcu_unit.h"
 #endif
+#ifdef VX_CFG_EXT_LDST_MATRIX_ENABLE
+#include "fragment_layout.h"
+#endif
+
+#if defined(VX_CFG_EXT_LDST_WIDE_ENABLE) && (!defined(VX_CFG_EXT_F_ENABLE) || defined(VX_CFG_FLEN_64))
+#error "VX_CFG_EXT_LDST_WIDE_ENABLE requires VX_CFG_EXT_F_ENABLE with FLEN 32"
+#endif
+#if defined(VX_CFG_EXT_LDST_MATRIX_ENABLE) && !defined(VX_CFG_EXT_F_ENABLE)
+#error "VX_CFG_EXT_LDST_MATRIX_ENABLE requires VX_CFG_EXT_F_ENABLE"
+#endif
+#if !defined(VX_CFG_EXT_TCU_ENABLE) && (defined(VX_CFG_TCU_WGMMA_ENABLE) || defined(VX_CFG_TCU_SPARSE_ENABLE) \
+                                     || defined(VX_CFG_TCU_MX_ENABLE) || defined(VX_CFG_TCU_DSM_ENABLE))
+#error "VX_CFG_TCU_WGMMA/SPARSE/MX/DSM_ENABLE require VX_CFG_EXT_TCU_ENABLE"
+#endif
+#if defined(VX_CFG_EXT_DXA_ENABLE) && !defined(VX_CFG_LMEM_ENABLE)
+#error "VX_CFG_EXT_DXA_ENABLE requires VX_CFG_LMEM_ENABLE"
+#endif
 
 using namespace vortex;
+
+#ifdef VX_CFG_EXT_TCU_ENABLE
+// The scoreboard's two FCSR bits double as the TCU metadata slots, as in the
+// RTL: a TCU_LD writes the sparse (fflags) or MX (frm) bit, and an MMA that
+// consumes that metadata reads it.
+static uint8_t tcu_meta_reads(uint32_t fmt_s, bool is_sparse) {
+  uint8_t mask = 0;
+  __unused(fmt_s, is_sparse);
+#ifdef VX_CFG_TCU_SPARSE_ENABLE
+  if (is_sparse) {
+    mask |= Instr::FCSR_FFLAGS;
+  }
+#endif
+#ifdef VX_CFG_TCU_MX_ENABLE
+  if (fmt_s & 0x8) {
+    mask |= Instr::FCSR_FRM;
+  }
+#endif
+  return mask;
+}
+#endif
 
 static op_string_t op_string(const Instr &instr) {
   auto op_type = instr.get_op_type();
@@ -266,11 +305,17 @@ static op_string_t op_string(const Instr &instr) {
       case LsuType::LOAD: {
         auto lsuArgs = std::get<IntrLsuArgs>(instrArgs);
         bool dst_float = (instr.get_dest_reg().type == RegType::Float);
+        if (lsuArgs.matrix) {
+          return {"VX_LDM", to_hex_str(lsuArgs.offset)};
+        }
         if (instr.is_macro_op() && dst_float && lsuArgs.width == 0) {
           return {"PACKLB.F", ""};
         }
         if (instr.is_macro_op() && dst_float && lsuArgs.width == 1) {
           return {"PACKLH.F", ""};
+        }
+        if (instr.is_macro_op()) {
+          return {(lsuArgs.width == 4) ? "VX_FLW.Q" : "VX_FLW.D", to_hex_str(lsuArgs.offset)};
         }
         if (dst_float) {
           switch (lsuArgs.width) {
@@ -296,6 +341,12 @@ static op_string_t op_string(const Instr &instr) {
       }
       case LsuType::STORE: {
         auto lsuArgs = std::get<IntrLsuArgs>(instrArgs);
+        if (lsuArgs.matrix) {
+          return {"VX_STM", to_hex_str(lsuArgs.offset)};
+        }
+        if (instr.is_macro_op()) {
+          return {(lsuArgs.width == 4) ? "VX_FSW.Q" : "VX_FSW.D", to_hex_str(lsuArgs.offset)};
+        }
         // For stores, the data source (rs2) carries the type info.
         bool src_float = (instr.get_src_reg(1).type == RegType::Float);
         if (src_float) {
@@ -651,7 +702,24 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
   case Opcode::FENCE: {
     instr->set_fu_type(FUType::LSU);
     instr->set_op_type(LsuType::FENCE);
-    instr->set_args(IntrLsuArgs{0, 0, 0});
+    // pred = code[27:24], succ = code[23:20], IORW. A fence with no memory
+    // read or write in either set orders only device accesses. Otherwise a
+    // later read must see other harts' data (acquire) when the successor set
+    // reads, and earlier writes must be visible (release) when the
+    // predecessor set writes. A fence with neither releases; one with a
+    // device access in its predecessor set, or fence.i, does both.
+    uint32_t pred = (code >> 24) & 0xf;
+    uint32_t succ = (code >> 20) & 0xf;
+    FenceKind kind;
+    if (funct3 == 0 && (pred & 0x3) == 0 && (succ & 0x3) == 0) {
+      kind = FenceKind::IO;
+    } else {
+      bool full = (funct3 != 0) || (pred & 0xc) != 0;
+      bool aq = full || (succ & 0x2) != 0;
+      bool rl = full || (pred & 0x1) != 0 || (succ & 0x2) == 0;
+      kind = (aq && rl) ? FenceKind::FULL : (aq ? FenceKind::ACQUIRE : FenceKind::RELEASE);
+    }
+    instr->set_args(IntrLsuArgs{static_cast<uint32_t>(kind), 0, 0});
   } break;
   case Opcode::AMO: {
     instr->set_fu_type(FUType::LSU);
@@ -674,6 +742,11 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       std::abort();
     }
     instr->set_args(IntrAmoArgs{funct3, aq, rl});
+    // .aq/.rl order the atomic with fences around it (LsuUopGen), unless the
+    // dcache is itself the point of coherence
+    if ((aq || rl) && !DCACHE_SHARED_LLC) {
+      instr->set_macro_op();
+    }
     instr->set_dest_reg(rd, RegType::Integer);
     instr->set_src_reg(0, rs1, RegType::Integer);
     instr->set_src_reg(1, rs2, RegType::Integer);
@@ -968,6 +1041,10 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       instr->set_src_reg(0, rs1, RegType::Integer);
       instr->set_src_reg(1, rs2, RegType::Integer);
     } break;
+#else
+    case 3:
+      std::cout << "Error: DXA instruction on a core built without VX_CFG_EXT_DXA_ENABLE" << std::endl;
+      std::abort();
 #endif
   #ifdef VX_CFG_EXT_TCU_ENABLE
     case 2: {
@@ -978,6 +1055,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         bool is_sparse = (rs2 & 1) != 0;
         instr->set_op_type(is_sparse ? TcuType::WMMA_SP : TcuType::WMMA);
         instr->set_args(IntrTcuArgs{0, 0, fmt_s, fmt_d, 0, 0, 0, 0, 0, 0, 0, 0, 0});
+        instr->set_fcsr_use(tcu_meta_reads(fmt_s, is_sparse), 0);
         instr->set_macro_op();
       } break;
     #ifdef VX_CFG_TCU_WGMMA_ENABLE
@@ -988,6 +1066,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         bool is_a_smem = (rs2 >> 3) & 1;
         instr->set_op_type(is_sparse ? TcuType::WGMMA_SP : TcuType::WGMMA);
         instr->set_args(IntrTcuArgs{is_a_smem ? 1u : 0u, cd_nregs, fmt_s, fmt_d, 0, 0, 0, 0, 0, 0, 0, 0, 0});
+        instr->set_fcsr_use(tcu_meta_reads(fmt_s, is_sparse), 0);
         instr->set_macro_op();
       } break;
     #endif // VX_CFG_TCU_WGMMA_ENABLE
@@ -999,12 +1078,17 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         instr->set_args(IntrTcuArgs{0, 0, fmt_s, slot, 0, 0, 0, 0, 0, 0, 0, 0, 0});
         // rs1 holds the warp-broadcast base address (real I-reg read).
         instr->set_src_reg(0, rs1, RegType::Integer);
+        instr->set_fcsr_use(0, (rd & 0x10) ? Instr::FCSR_FRM : Instr::FCSR_FFLAGS);
       } break;
     #endif // TCU_META_ENABLE
       default:
         std::abort();
       }
     } break;
+  #else
+    case 2:
+      std::cout << "Error: TCU instruction on a core built without VX_CFG_EXT_TCU_ENABLE" << std::endl;
+      std::abort();
   #endif
   #ifdef VX_CFG_TCU_TMEM_ENABLE
     case 5: {
@@ -1258,6 +1342,71 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     // op routed to the SFU must declare a scoreboarded / side-effect-free /
     // known-violation handoff class, checked against its decoded destination.
     gfx_doctrine::check(*instr);
+  } break;
+  case Opcode::EXT4: {
+    // vx_ldm (funct3 0) and vx_stm (funct3 2): a macro-op of one flw/fsw per
+    // register of a matrix fragment; imm[4:0] is the fragment shape.
+    if (funct3 == 0 || funct3 == 2) {
+    #ifdef VX_CFG_EXT_LDST_MATRIX_ENABLE
+      bool is_load = (funct3 == 0);
+      uint32_t imm12 = is_load ? (code >> shift_rs2) : ((funct7 << width_reg) | rd);
+      uint32_t shape = imm12 & 0x1f;
+      if (!frag::ldm_valid(shape)) {
+        std::cout << "Error: " << (is_load ? "vx_ldm" : "vx_stm") << " shape " << shape
+                  << " is not supported by this configuration" << std::endl;
+        std::abort();
+      }
+      instr->set_fu_type(FUType::LSU);
+      instr->set_op_type(is_load ? LsuType::LOAD : LsuType::STORE);
+      instr->set_src_reg(0, rs1, RegType::Integer);
+      if (is_load) {
+        instr->set_dest_reg(rd, RegType::Float);
+      } else {
+        instr->set_src_reg(1, rs2, RegType::Float);
+      }
+      IntrLsuArgs args{/*LW*/ 2, /*stride*/ 0, (int32_t)sext(imm12, width_i_imm)};
+      args.matrix = true;
+      instr->set_args(args);
+      instr->set_macro_op();
+      break;
+    #else
+      std::cout << "Error: matrix load/store on a core built without VX_CFG_EXT_LDST_MATRIX_ENABLE" << std::endl;
+      std::abort();
+    #endif
+    }
+    // vx_flw.d/.q (funct3 3/4) and vx_fsw.d/.q (funct3 5/6): a macro-op of 2
+    // or 4 flw/fsw uops over an aligned FP register group. The width is the
+    // access's log2 bytes, as for fld/flq.
+    bool is_load = (funct3 == 3 || funct3 == 4);
+    if (!is_load && funct3 != 5 && funct3 != 6) {
+      std::abort();
+    }
+  #ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
+    uint32_t width = is_load ? funct3 : (funct3 - 2);
+    uint32_t words = 1u << (width - 2);
+    uint32_t reg   = is_load ? rd : rs2;
+    uint32_t imm12 = is_load ? (code >> shift_rs2) : ((funct7 << width_reg) | rd);
+    auto offset = (int32_t)sext(imm12, width_i_imm);
+    if ((reg % words) != 0 || (offset % int32_t(4 * words)) != 0) {
+      std::cout << "Error: " << (is_load ? "vx_flw." : "vx_fsw.") << ((words == 4) ? "q" : "d")
+                << " needs f" << reg << " aligned to " << words << " registers and offset "
+                << offset << " to " << (4 * words) << " bytes" << std::endl;
+      std::abort();
+    }
+    instr->set_fu_type(FUType::LSU);
+    instr->set_op_type(is_load ? LsuType::LOAD : LsuType::STORE);
+    instr->set_src_reg(0, rs1, RegType::Integer);
+    if (is_load) {
+      instr->set_dest_reg(rd, RegType::Float);
+    } else {
+      instr->set_src_reg(1, rs2, RegType::Float);
+    }
+    instr->set_args(IntrLsuArgs{width, /*stride*/ 0, offset});
+    instr->set_macro_op();
+  #else
+    std::cout << "Error: wide load/store on a core built without VX_CFG_EXT_LDST_WIDE_ENABLE" << std::endl;
+    std::abort();
+  #endif
   } break;
 #ifdef VX_CFG_EXT_MUFU_ENABLE
   case Opcode::EXT3: {

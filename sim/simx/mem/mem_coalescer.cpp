@@ -31,7 +31,7 @@ MemCoalescer::MemCoalescer(
   , ReqIn(this, 1)
   , RspOut(this)
   , ReqOut(output_size, this)
-  , RspIn(output_size, this)
+  , RspIn(output_size, SimChannel<MemRsp>(this, kRspInSize))
   , input_size_(input_size)
   , output_size_(output_size)
   , output_ratio_(input_size / output_size)
@@ -39,7 +39,6 @@ MemCoalescer::MemCoalescer(
   , sent_mask_(input_size)
   , line_size_(line_size)
   , delay_(delay)
-  , port_delay_(output_size, 0)
 {}
 
 void MemCoalescer::on_reset() {
@@ -50,6 +49,10 @@ void MemCoalescer::on_reset() {
 }
 
 void MemCoalescer::on_tick() {
+  // The tag table's full flag is registered: a tag a response frees this
+  // cycle takes a new request from the next one.
+  const bool tags_full = pending_rd_reqs_.full();
+
   // process outgoing responses: merge same-tag fragments arriving across
   // channels this tick into one uncoalesced response.
   for (uint32_t o = 0; o < output_size_; ++o) {
@@ -108,7 +111,7 @@ void MemCoalescer::on_tick() {
       }
     }
 
-    // send memory response
+    // packed combinationally into the lmem switch's response buffer
     RspOut.send(out_rsp, 1);
     DT(4, this->name() << " mem-rsp: " << out_rsp);
 
@@ -154,7 +157,7 @@ void MemCoalescer::on_tick() {
   assert(!in_req.mask.none());
 
   // ensure we can allocate a response tag
-  if (pending_rd_reqs_.full()) {
+  if (tags_full) {
     DT(4, this->name() << " queue-full: " << in_req);
     return;
   }
@@ -256,7 +259,6 @@ void MemCoalescer::on_tick() {
   // build per-channel memory requests
   out_round_.valid = true;
   out_round_.lanes = out_mask;
-  out_round_.cur_mask = cur_mask;
   out_round_.reqs.assign(output_size_, MemReq{});
   for (uint32_t o = 0; o < output_size_; ++o) {
     if (!out_mask.test(o)) {
@@ -273,7 +275,7 @@ void MemCoalescer::on_tick() {
     mr.uuid   = in_req.uuid;
     mr.flags  = in_req.flags;
     auto t = get_addr_type(mr.addr);
-    mr.flags.io    = (t == AddrType::IO);
+    mr.flags.io    = mr.flags.flush ? mr.flags.io : (t == AddrType::IO);
     mr.flags.local = (t == AddrType::Shared);
   }
 
@@ -285,7 +287,13 @@ void MemCoalescer::on_tick() {
   // The built round is presented to the downstream on the next tick, not
   // this one: the coalescer alternates a build tick with a drain tick, so a
   // batch issues at most every other cycle. Draining is handled at the top
-  // of on_tick when out_round_ is valid.
+  // of on_tick when out_round_ is valid. The input is released as its last
+  // batch is built, without waiting for that batch to be accepted.
+  sent_mask_ |= cur_mask;
+  if (sent_mask_ == in_req.mask) {
+    ReqIn.pop();
+    sent_mask_.reset();
+  }
 }
 
 // Issue the pending round's per-channel requests; commit the round once
@@ -295,7 +303,7 @@ void MemCoalescer::flush_out_round() {
     if (!out_round_.lanes.test(o)) {
       continue;
     }
-    if (ReqOut.at(o).try_send(out_round_.reqs.at(o), delay_ + port_delay_.at(o))) {
+    if (ReqOut.at(o).try_send(out_round_.reqs.at(o), delay_)) {
       out_round_.lanes.reset(o);
     }
   }
@@ -304,12 +312,6 @@ void MemCoalescer::flush_out_round() {
   }
 
   out_round_.valid = false;
-  auto& in_req = ReqIn.peek();
-  sent_mask_ |= out_round_.cur_mask;
-  if (sent_mask_ == in_req.mask) {
-    ReqIn.pop();
-    sent_mask_.reset();
-  }
 }
 
 const MemCoalescer::PerfStats& MemCoalescer::perf_stats() const {

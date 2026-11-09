@@ -34,7 +34,7 @@ module VX_tcu_tfr_align import VX_tcu_pkg::*; #(
 
     input  wire [N-1:0][WI-1:0] sigs_in,
     input  wire                 is_int,
-    output logic [TCU_EXP_BITS-1:0] max_exp,
+    output wire [TCU_EXP_BITS-1:0] max_exp,
     output wire [N-1:0][WO-1:0] sigs_out,
     output wire [N-1:0]         sticky_bits,
     output wire [N-1:0]         fp_negs
@@ -44,31 +44,30 @@ module VX_tcu_tfr_align import VX_tcu_pkg::*; #(
 
     localparam MAX_PRE_SHIFT = WI - 23;
     localparam SHIFT_MAG_W   = (WI - 1) + MAX_PRE_SHIFT;
+    localparam SHIFT_W       = `CLOG2(SHIFT_MAG_W + 1);
+    localparam TZ_W          = `LOG2UP(SHIFT_MAG_W);
 
-    wire [TCU_EXP_BITS-1:0] or_red[N:0];
-    wire [N-1:0][7:0] shift_amts;
+    `STATIC_ASSERT (TCU_EXP_BITS > SHIFT_W, ("invalid shift width: %0d", SHIFT_W))
 
-    // Determine maximum exponent via OR-Reduction Tree
-    assign or_red[0] = {TCU_EXP_BITS{1'b0}};
-    for (genvar i = 0; i < N; i++) begin : g_or_red
-        assign or_red[i+1] = or_red[i] | (sel_exp[i] ? exponents[i] : {TCU_EXP_BITS{1'b0}});
-    end
-    assign max_exp = or_red[N];
+    VX_onehot_mux #(
+        .DATAW (TCU_EXP_BITS),
+        .N     (N)
+    ) max_exp_mux (
+        .data_in  (exponents),
+        .sel_in   (sel_exp),
+        .data_out (max_exp)
+    );
 
     // Per-lane right-shift distance from the maximum exponent (max_exp is the
     // largest input, so the difference is non-negative).
-    for (genvar i = 0; i < N; i++) begin : g_shift_amts
-        wire [TCU_EXP_BITS-1:0] shift_full = max_exp - exponents[i];
-        if (TCU_EXP_BITS > 8) begin : g_sat
-            assign shift_amts[i] = (|shift_full[TCU_EXP_BITS-1:8]) ? 8'hFF : shift_full[7:0];
-        end else begin : g_no_sat
-            assign shift_amts[i] = 8'(shift_full);
-        end
+    wire [N-1:0][TCU_EXP_BITS-1:0] shift_amts;
+    for (genvar i = 0; i < N; ++i) begin : g_shift_amts
+        assign shift_amts[i] = max_exp - exponents[i];
     end
 
-    // Align significands and form the accumulator operands
     for (genvar i = 0; i < N; ++i) begin : g_align_lanes
-        wire [7:0] shift_amt = shift_amts[i];
+        wire shift_hi = (| shift_amts[i][TCU_EXP_BITS-1:SHIFT_W]);
+        wire [SHIFT_W-1:0] shift_lo = shift_amts[i][SHIFT_W-1:0];
 
         wire lane_en;
         if (i == N-1) begin : g_c_en
@@ -90,13 +89,24 @@ module VX_tcu_tfr_align import VX_tcu_pkg::*; #(
         end
 
         // 3. Shift adjustment
-        wire is_overshift = (shift_amt >= 8'(SHIFT_MAG_W));
-        wire [SHIFT_MAG_W-1:0] shift_res_full = mag_shifted >> shift_amt;
+        wire is_overshift = shift_hi || (shift_lo >= SHIFT_W'(SHIFT_MAG_W));
+        wire [SHIFT_MAG_W-1:0] shift_res_full = mag_shifted >> shift_lo;
         wire [WI:0] adj_mag = is_overshift ? '0 : shift_res_full[WI:0];
 
-        // 4. Sticky Calculation
-        wire [SHIFT_MAG_W-1:0] sticky_check_shift = mag_shifted << (8'(SHIFT_MAG_W) - shift_amt);
-        assign sticky_bits[i] = lane_en & (is_overshift ? (|mag_shifted) : (|sticky_check_shift));
+        // 4. Sticky: a set bit shifts out iff the shift exceeds the trailing
+        // zero count, which comes straight from the registered magnitude and
+        // so resolves in parallel with the exponent difference.
+        wire [TZ_W-1:0] mag_tz;
+        wire            mag_nz;
+        VX_lzc #(
+            .N       (SHIFT_MAG_W),
+            .REVERSE (1)
+        ) mag_tzc (
+            .data_in   (mag_shifted),
+            .data_out  (mag_tz),
+            .valid_out (mag_nz)
+        );
+        assign sticky_bits[i] = lane_en && mag_nz && (shift_hi || (shift_lo > SHIFT_W'(mag_tz)));
 
         // 5. Operand formation: masked, negated (fp) or sign-extended (int).
         wire fp_neg = in_sign & lane_en & ~is_int;

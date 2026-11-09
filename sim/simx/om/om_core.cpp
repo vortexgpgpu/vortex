@@ -256,7 +256,7 @@ private:
     uint32_t shift = dcrs_.read(VX_DCR_OM_APERTURE_RECORD_SHIFT);
     bool rt_seen = false;
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-      if (!(req.tmask_bits & (1u << t))) continue;
+      if (!(req.tmask_bits & (uint64_t(1) << t))) continue;
       uint64_t off = req.addr[t] - uint64_t(VX_MEM_OM_BASE_ADDR);
       uint64_t rec = off >> shift;
       req.pos_x[t] = uint32_t(rec & ((1ull << xbits) - 1));
@@ -342,7 +342,7 @@ private:
     bool has_depth = (s.req.export_mask & 0x2) != 0;
 
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-      if (!(s.req.tmask_bits & (1u << t))) {
+      if (!(s.req.tmask_bits & (uint64_t(1) << t))) {
         s.lanes[t].active = false;
         continue;
       }

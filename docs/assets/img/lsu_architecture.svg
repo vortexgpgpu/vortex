@@ -30,7 +30,7 @@
   <rect x="24" y="56" width="1512" height="282" class="grp"/>
   <text x="40" y="86" class="tb">VX_lsu_unit</text>
   <text x="40" y="110" class="ts">execute stage</text>
-  <text x="40" y="142" class="ts">one VX_lsu_slice per</text>
+  <text x="40" y="142" class="ts">one VX_lsu_block per</text>
   <text x="40" y="158" class="ts">LSU block (the issue</text>
   <text x="40" y="174" class="ts">width)</text>
   <rect x="270" y="72" width="180" height="250" rx="6" class="core"/>
@@ -42,7 +42,7 @@
   <text x="282" y="188" class="ts">becomes packets:</text>
   <text x="282" y="204" class="ts">pid, sop, eop</text>
   <rect x="470" y="72" width="560" height="250" rx="6" class="unit"/>
-  <text x="482" y="94" class="tb">VX_lsu_slice — request side</text>
+  <text x="482" y="94" class="tb">VX_lsu_block — request side</text>
   <rect x="482" y="106" width="172" height="92" rx="4" class="box"/>
   <text x="494" y="128" class="t">VX_lsu_agu</text>
   <text x="494" y="150" class="ts">base + offset, or</text>
@@ -68,7 +68,7 @@
   <text x="770" y="270" class="ts">tag = header, operation,</text>
   <text x="770" y="286" class="ts">alignment, slot, fence</text>
   <rect x="1050" y="72" width="320" height="250" rx="6" class="unit"/>
-  <text x="1062" y="94" class="tb">VX_lsu_slice — response side</text>
+  <text x="1062" y="94" class="tb">VX_lsu_block — response side</text>
   <rect x="1062" y="106" width="296" height="92" rx="4" class="box"/>
   <text x="1074" y="128" class="t">load formatter</text>
   <text x="1074" y="150" class="ts">sub-word extract by the saved</text>
@@ -152,11 +152,11 @@
   <text x="282" y="786" class="ts">streams</text>
   <rect x="520" y="670" width="400" height="204" rx="6" class="mem"/>
   <text x="532" y="692" class="tb">local path</text>
-  <text x="532" y="714" class="ts">VX_lsu_adapter, one per block → VX_local_mem</text>
-  <text x="532" y="738" class="ts">banked SRAM: lanes to different banks are served</text>
-  <text x="532" y="754" class="ts">in the same cycle</text>
-  <text x="532" y="778" class="ts">a second port serves the DXA and tensor</text>
-  <text x="532" y="794" class="ts">direct-memory clients</text>
+  <text x="532" y="714" class="ts">whole warp requests → VX_lmem_unit</text>
+  <text x="532" y="738" class="ts">a pass per cycle: each bank to its lowest lane,</text>
+  <text x="532" y="754" class="ts">same-word reads broadcast, conflicts replay</text>
+  <text x="532" y="778" class="ts">several LSU blocks: a read engine on the second</text>
+  <text x="532" y="794" class="ts">bank port; DXA and tensor DMA take whole rows</text>
   <text x="532" y="862" class="tt">per-core shared memory</text>
   <rect x="940" y="670" width="596" height="204" rx="6" class="unit"/>
   <text x="952" y="692" class="tb">global path</text>

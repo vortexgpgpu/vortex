@@ -333,7 +333,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     wire [BLOCK_SIZE-1:0] block_key_match;
     for (genvar b = 0; b < BLOCK_SIZE; ++b) begin : g_block_match
-        wire same_desc_b = (req[b].desc_b[15:0] == bbuf_req_desc_b[15:0]);
+        wire same_desc_b = (req[b].desc_b[TCU_SMEM_DESC_OFF_BITS-1:0] == bbuf_req_desc_b[TCU_SMEM_DESC_OFF_BITS-1:0]);
         wire same_step_k = (req[b].step_k       == bbuf_req_step_k);
         wire same_step_n = (req[b].step_n       == bbuf_req_step_n);
         wire same_cd_n   = (req[b].cd_nregs     == bbuf_req_cd_nregs);

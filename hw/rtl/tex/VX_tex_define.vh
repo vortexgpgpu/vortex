@@ -25,8 +25,12 @@
 `define TEX_FXD_HALF        (`TEX_FXD_ONE >> 1)
 `define TEX_FXD_MASK        (`TEX_FXD_ONE - 1)
 
+// Texture base: a cache-block index. Under VM it is a virtual address, which
+// spans the whole 32-bit space on Sv32.
 `ifdef VX_CFG_XLEN_64
 `define TEX_ADDR_BITS       32
+`elsif VX_CFG_VM_ENABLE
+`define TEX_ADDR_BITS       26
 `else
 `define TEX_ADDR_BITS       25
 `endif

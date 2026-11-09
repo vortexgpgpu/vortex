@@ -26,7 +26,7 @@ module VX_tcu_dsm import VX_tcu_pkg::*; #(
     output wire [TCU_MAX_INPUTS-1:0] vld_mask
 );
 
-    logic [N-1:0][7:0] vld_mask_per_k;
+    wire [N-1:0][7:0] vld_mask_per_k;
     wire [TCU_MAX_INPUTS-1:0] vld_mask_w = vld_mask_per_k;
 
     for (genvar k = 0; k < N; ++k) begin : g_k
@@ -56,47 +56,48 @@ module VX_tcu_dsm import VX_tcu_pkg::*; #(
         end
         `UNUSED_VAR({a_tf32_nz, b_tf32_nz, a_f16_nz, b_f16_nz, a_i8_nz, b_i8_nz, a_i4_nz, b_i4_nz})
 
+        logic [7:0] vld_mask_k;
         always_comb begin
-            vld_mask_per_k[k] = '1;
+            vld_mask_k = '1;
             case (fmt_s)
             `ifdef VX_CFG_TCU_TF32_ENABLE
                 TCU_TF32_ID: begin
-                    vld_mask_per_k[k] = {8{a_tf32_nz && b_tf32_nz}};
+                    vld_mask_k = {8{a_tf32_nz && b_tf32_nz}};
                 end
             `endif
             `ifdef VX_CFG_TCU_FP16_ENABLE
                 TCU_FP16_ID,
                 TCU_BF16_ID: begin
-                    vld_mask_per_k[k][0 +: 4] = {4{a_f16_nz[0] && b_f16_nz[0]}};
-                    vld_mask_per_k[k][4 +: 4] = {4{a_f16_nz[1] && b_f16_nz[1]}};
+                    vld_mask_k[0 +: 4] = {4{a_f16_nz[0] && b_f16_nz[0]}};
+                    vld_mask_k[4 +: 4] = {4{a_f16_nz[1] && b_f16_nz[1]}};
                 end
             `endif
             `ifdef VX_CFG_TCU_FP8_ENABLE
                 TCU_FP8_ID,
                 TCU_BF8_ID: begin
                     for (int e = 0; e < 4; ++e) begin
-                        vld_mask_per_k[k][e * 2 +: 2] = {2{a_i8_nz[e] && b_i8_nz[e]}};
+                        vld_mask_k[e * 2 +: 2] = {2{a_i8_nz[e] && b_i8_nz[e]}};
                     end
                 end
             `ifdef VX_CFG_TCU_MX_ENABLE
                 TCU_MXFP8_ID,
                 TCU_MXBF8_ID: begin
                     for (int e = 0; e < 4; ++e) begin
-                        vld_mask_per_k[k][e * 2 +: 2] = {2{a_i8_nz[e] && b_i8_nz[e]}};
+                        vld_mask_k[e * 2 +: 2] = {2{a_i8_nz[e] && b_i8_nz[e]}};
                     end
                 end
             `ifdef VX_CFG_TCU_FP4_ENABLE
             `ifdef VX_CFG_TCU_MXFP4_ENABLE
                 TCU_MXFP4_ID: begin
                     for (int e = 0; e < 8; ++e) begin
-                        vld_mask_per_k[k][e] = a_i4_nz[e] && b_i4_nz[e];
+                        vld_mask_k[e] = a_i4_nz[e] && b_i4_nz[e];
                     end
                 end
             `endif
             `ifdef VX_CFG_TCU_NVFP4_ENABLE
                 TCU_NVFP4_ID: begin
                     for (int e = 0; e < 8; ++e) begin
-                        vld_mask_per_k[k][e] = a_i4_nz[e] && b_i4_nz[e];
+                        vld_mask_k[e] = a_i4_nz[e] && b_i4_nz[e];
                     end
                 end
             `endif
@@ -107,7 +108,7 @@ module VX_tcu_dsm import VX_tcu_pkg::*; #(
                 TCU_I8_ID,
                 TCU_U8_ID: begin
                     for (int e = 0; e < 4; ++e) begin
-                        vld_mask_per_k[k][e * 2 +: 2] = {2{a_i8_nz[e] && b_i8_nz[e]}};
+                        vld_mask_k[e * 2 +: 2] = {2{a_i8_nz[e] && b_i8_nz[e]}};
                     end
                 end
             `endif
@@ -115,15 +116,16 @@ module VX_tcu_dsm import VX_tcu_pkg::*; #(
                 TCU_I4_ID,
                 TCU_U4_ID: begin
                     for (int e = 0; e < 8; ++e) begin
-                        vld_mask_per_k[k][e] = a_i4_nz[e] && b_i4_nz[e];
+                        vld_mask_k[e] = a_i4_nz[e] && b_i4_nz[e];
                     end
                 end
             `endif
                 default: begin
-                    vld_mask_per_k[k] = '1;
+                    vld_mask_k = '1;
                 end
             endcase
         end
+        assign vld_mask_per_k[k] = vld_mask_k;
     end
 
     // Optional output register (aligns vld_mask with the FEDP operand pipe).

@@ -19,6 +19,11 @@
 #define CTA_SIZE VX_CFG_NUM_THREADS
 #endif
 
+// K tiles per iteration of the K loop
+#ifndef KUNROLL
+#define KUNROLL 1
+#endif
+
 typedef struct {
   uint32_t M, N, K;
   uint64_t A_addr;    // compressed A in global memory (M × K/2 elements)

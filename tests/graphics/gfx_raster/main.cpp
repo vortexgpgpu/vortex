@@ -1,12 +1,11 @@
 // Vortex rasterizer regression test.
 //
-// Pinned-buffer layout:
-//   tile_buffer   → RASTER HW (VX_DCR_RASTER_TBUF_ADDR) → pinned
-//   prim_buffer   → RASTER HW (VX_DCR_RASTER_PBUF_ADDR) → pinned
-//   color_buffer  → kernel-only (LSU stores from shaded quads) → not pinned
-// The raster fixed-function block reads tile_buffer + prim_buffer via its
-// own AXI master (no per-core MMU). The kernel writes color_buffer via
-// the LSU, which goes through the MMU — no pinning needed.
+// Buffers:
+//   tile_buffer   → RASTER HW (VX_DCR_RASTER_TBUF_ADDR)
+//   prim_buffer   → RASTER HW (VX_DCR_RASTER_PBUF_ADDR)
+//   color_buffer  → kernel-only (LSU stores from shaded quads)
+// The raster fixed-function block reads tile_buffer + prim_buffer through the
+// rcache, whose misses translate through the cluster unit MMU under VM.
 
 #include <iostream>
 #include <vector>
@@ -212,15 +211,12 @@ int render(const CGLTrace& trace) {
     // allocate tile memory
     if (tile_buffer != nullptr) { vx_buffer_release(tile_buffer); tile_buffer = nullptr; }
     if (prim_buffer != nullptr) { vx_buffer_release(prim_buffer); prim_buffer = nullptr; }
-    // HW path: tile_buffer / prim_buffer are bound to the raster unit (via
-    // VX_DCR_RASTER_T/PBUF_ADDR), which reads them through its own AXI master
-    // bypassing the per-core MMU — both need physical (pinned) addresses. SW path
-    // (-z): the kernel reads prim_buffer through the LSU, so allocate it as a
-    // normal kernel-read buffer (tile_buffer is unused by the SW walk).
-    uint32_t prim_flags = VX_MEM_READ | (use_sw ? 0u : (uint32_t)VX_MEM_PHYS);
-    RT_CHECK(vx_buffer_create(device, tilebuf.size(), VX_MEM_READ | VX_MEM_PHYS, &tile_buffer));
+    // HW path: the raster unit reads them through the rcache (translated by
+    // the cluster unit MMU); SW path (-z): the kernel reads prim_buffer through
+    // the LSU (tile_buffer is unused by the SW walk).
+    RT_CHECK(vx_buffer_create(device, tilebuf.size(), VX_MEM_READ, &tile_buffer));
     RT_CHECK(vx_buffer_address(tile_buffer, &tilebuf_addr));
-    RT_CHECK(vx_buffer_create(device, primbuf.size(), prim_flags, &prim_buffer));
+    RT_CHECK(vx_buffer_create(device, primbuf.size(), VX_MEM_READ, &prim_buffer));
     RT_CHECK(vx_buffer_address(prim_buffer, &primbuf_addr));
     std::cout << "tile_buffer=0x" << std::hex << tilebuf_addr << std::dec << std::endl;
     std::cout << "prim_buffer=0x" << std::hex << primbuf_addr << std::dec << std::endl;

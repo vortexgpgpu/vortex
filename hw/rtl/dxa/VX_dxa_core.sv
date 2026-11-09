@@ -180,13 +180,20 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // ================================================================
     // Output arbitration
     // ================================================================
+`ifdef SOCKET_UNIT_MMU_ENABLE
+    localparam GMEM_OUT_REG = 1;
+`else
+    localparam GMEM_OUT_REG = 0;
+`endif
     VX_mem_bus_arb #(
         .NUM_INPUTS  (`VX_CFG_NUM_DXA_CORES),
         .NUM_OUTPUTS (GMEM_OUT_PORTS),
         .DATA_SIZE   (`VX_CFG_L1_LINE_SIZE),
         .TAG_WIDTH   (WORKER_GMEM_TAG_WIDTH),
         .ARBITER     ("R"),
-        .REQ_OUT_BUF ((`VX_CFG_NUM_DXA_CORES > 1) ? 3 : 0)
+        // Registered whenever its consumer needs a flop to start from: the
+        // arbiter's merge, or the unit MMU's TLB lookup under VM.
+        .REQ_OUT_BUF (((`VX_CFG_NUM_DXA_CORES > 1) || GMEM_OUT_REG) ? 3 : 0)
     ) gmem_arb (
         .clk        (clk),
         .reset      (reset),

@@ -231,6 +231,8 @@ module VX_decode import
                 op_args.alu.is_w = 0;
                 op_args.alu.use_PC = 0;
                 op_args.alu.use_imm = 1;
+                op_args.alu.imm_hi = 0;
+                op_args.alu.imm_x2 = 0;
                 op_args.alu.imm20 = `SEXT(20, i_imm);
                 `USED_IREG (rd);
                 `USED_IREG (rs1);
@@ -240,6 +242,8 @@ module VX_decode import
                 op_args.alu.is_w = 0;
                 op_args.alu.use_PC = 0;
                 op_args.alu.use_imm = 0;
+                op_args.alu.imm_hi = 0;
+                op_args.alu.imm_x2 = 0;
                 `USED_IREG (rd);
                 `USED_IREG (rs1);
                 `USED_IREG (rs2);
@@ -273,6 +277,8 @@ module VX_decode import
                 op_args.alu.is_w = 1;
                 op_args.alu.use_PC = 0;
                 op_args.alu.use_imm = 1;
+                op_args.alu.imm_hi = 0;
+                op_args.alu.imm_x2 = 0;
                 op_args.alu.imm20 = `SEXT(20, iw_imm);
                 `USED_IREG (rd);
                 `USED_IREG (rs1);
@@ -282,6 +288,8 @@ module VX_decode import
                 op_args.alu.is_w = 1;
                 op_args.alu.use_PC = 0;
                 op_args.alu.use_imm = 0;
+                op_args.alu.imm_hi = 0;
+                op_args.alu.imm_x2 = 0;
                 `USED_IREG (rd);
                 `USED_IREG (rs1);
                 `USED_IREG (rs2);
@@ -308,6 +316,8 @@ module VX_decode import
                 op_args.alu.is_w = 0;
                 op_args.alu.use_PC = 0;
                 op_args.alu.use_imm = 1;
+                op_args.alu.imm_hi = 1;
+                op_args.alu.imm_x2 = 0;
                 op_args.alu.imm20 = ui_imm;
                 `USED_IREG (rd);
             end
@@ -318,6 +328,8 @@ module VX_decode import
                 op_args.alu.is_w = 0;
                 op_args.alu.use_PC = 1;
                 op_args.alu.use_imm = 1;
+                op_args.alu.imm_hi = 1;
+                op_args.alu.imm_x2 = 0;
                 op_args.alu.imm20 = ui_imm;
                 `USED_IREG (rd);
             end
@@ -327,6 +339,8 @@ module VX_decode import
                 op_args.br.xtype  = ALU_TYPE_BRANCH;
                 op_args.br.use_PC = 1;
                 op_args.br.use_imm= 1;
+                op_args.br.imm_hi = 0;
+                op_args.br.imm_x2 = 1;
                 op_args.br.imm20  = jal_imm;
                 op_args.br.is_rvc = decode_is_rvc;
                 is_wstall = 1;
@@ -338,6 +352,8 @@ module VX_decode import
                 op_args.br.xtype  = ALU_TYPE_BRANCH;
                 op_args.br.use_PC = 0;
                 op_args.br.use_imm= 1;
+                op_args.br.imm_hi = 0;
+                op_args.br.imm_x2 = 0;
                 op_args.br.imm20  = `SEXT(20, u_12);
                 op_args.br.is_rvc = decode_is_rvc;
                 is_wstall = 1;
@@ -350,6 +366,8 @@ module VX_decode import
                 op_args.br.xtype  = ALU_TYPE_BRANCH;
                 op_args.br.use_PC = 1;
                 op_args.br.use_imm= 1;
+                op_args.br.imm_hi = 0;
+                op_args.br.imm_x2 = 1;
                 op_args.br.imm20  = `SEXT(20, b_imm);
                 op_args.br.is_rvc = decode_is_rvc;
                 is_wstall = 1;
@@ -358,11 +376,21 @@ module VX_decode import
             end
             INST_FENCE: begin
                 ex_type = EX_LSU;
-                op_type = INST_LSU_FENCE;
+                // neither the predecessor nor the successor set holds a memory
+                // read or write (pred = instr[27:24], succ = instr[23:20], IORW)
+                op_type = ((funct3 == 3'b000) && (instr[25:24] == 2'b00) && (instr[21:20] == 2'b00))
+                        ? INST_LSU_FENCE_IO : INST_LSU_FENCE;
                 op_args.lsu.is_store = 0;
                 op_args.lsu.is_float = 0;
                 op_args.lsu.pack     = 0;
                 op_args.lsu.offset   = 0;
+                // A later read must see other harts' data (acquire) when the
+                // successor set reads; earlier writes must be visible (release)
+                // when the predecessor set writes. A fence with neither
+                // releases; one with a device access in its predecessor set,
+                // or fence.i, does both.
+                op_args.lsu.amo_aq = (funct3 != 3'b000) || (instr[27:26] != 2'b00) || instr[21];
+                op_args.lsu.amo_rl = (funct3 != 3'b000) || (instr[27:26] != 2'b00) || instr[24] || ~instr[21];
             end
         `ifdef VX_CFG_EXT_A_ENABLE
             INST_AMO: begin
@@ -417,6 +445,8 @@ module VX_decode import
                     op_type = INST_OP_BITS'(s_type);
                     op_args.br.xtype  = ALU_TYPE_BRANCH;
                     op_args.br.use_imm= 1;
+                    op_args.br.imm_hi = 0;
+                    op_args.br.imm_x2 = 0;
                     op_args.br.use_PC = 1;
                     op_args.br.imm20  = 20'd4;
                     op_args.br.is_rvc = decode_is_rvc;
@@ -458,6 +488,72 @@ module VX_decode import
                 `USED_IREG (rs2);
             `endif
             end
+        `ifdef EXT_LDST_ANY_ENABLE
+            INST_EXT4: begin
+                case (funct3)
+                `ifdef VX_CFG_EXT_LDST_MATRIX_ENABLE
+                    // vx_ldm/vx_stm: a matrix fragment, expanded into one flw/fsw
+                    // per register. imm[4:0] is the fragment shape, replaced by its
+                    // expander code; a bytesel offset of 2 (4 registers) or 3 (8)
+                    // marks the access as a fragment.
+                    3'h0: begin
+                        if (mtx_ldm_valid(u_12[4:0])) begin
+                            ex_type = EX_LSU;
+                            op_type = INST_OP_BITS'(INST_LSU_LW);
+                            op_args.lsu.is_store = 0;
+                            op_args.lsu.is_float = 1;
+                            op_args.lsu.pack     = 2'b11;
+                            op_args.lsu.offset   = {u_12[11:5], mtx_ldm_code(u_12[4:0])};
+                            bytesel = {XLENB_W'(XLENB-1), XLENB_W'({1'b1, mtx_ldm_is8(u_12[4:0])})};
+                            `USED_IREG (rs1);
+                            `USED_FREG (rd);
+                        end
+                    end
+                    3'h2: begin
+                        if (mtx_ldm_valid(rd)) begin
+                            ex_type = EX_LSU;
+                            op_type = INST_OP_BITS'(INST_LSU_SW);
+                            op_args.lsu.is_store = 1;
+                            op_args.lsu.is_float = 1;
+                            op_args.lsu.pack     = 2'b11;
+                            op_args.lsu.offset   = {s_imm[11:5], mtx_ldm_code(rd)};
+                            bytesel = {XLENB_W'(XLENB-1), XLENB_W'({1'b1, mtx_ldm_is8(rd)})};
+                            `USED_IREG (rs1);
+                            `USED_FREG (rs2);
+                        end
+                    end
+                `endif
+                `ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
+                    // vx_flw.d/.q and vx_fsw.d/.q: 2 or 4 words of an aligned FP register
+                    // group, expanded into flw/fsw uops; the bytesel offset carries the
+                    // group size.
+                    3'h3, 3'h4: begin
+                        ex_type = EX_LSU;
+                        op_type = INST_OP_BITS'(INST_LSU_LW);
+                        op_args.lsu.is_store = 0;
+                        op_args.lsu.is_float = 1;
+                        op_args.lsu.pack     = 2'b11;
+                        op_args.lsu.offset   = u_12;
+                        bytesel = {XLENB_W'(XLENB-1), XLENB_W'(!funct3[0])};
+                        `USED_IREG (rs1);
+                        `USED_FREG (rd);
+                    end
+                    3'h5, 3'h6: begin
+                        ex_type = EX_LSU;
+                        op_type = INST_OP_BITS'(INST_LSU_SW);
+                        op_args.lsu.is_store = 1;
+                        op_args.lsu.is_float = 1;
+                        op_args.lsu.pack     = 2'b11;
+                        op_args.lsu.offset   = s_imm;
+                        bytesel = {XLENB_W'(XLENB-1), XLENB_W'(!funct3[0])};
+                        `USED_IREG (rs1);
+                        `USED_FREG (rs2);
+                    end
+                `endif
+                    default:;
+                endcase
+            end
+        `endif
         `ifdef VX_CFG_EXT_F_ENABLE
             INST_FMADD,  // 7'b1000011
             INST_FMSUB,  // 7'b1000111
@@ -834,6 +930,9 @@ module VX_decode import
                                 op_args.lsu.is_float = 1;
                                 op_args.lsu.pack     = 2'b01;
                                 op_args.lsu.offset   = '0;
+                                // the bytesel offset of a pack/wide/fragment access
+                                // carries its uop count: 0 → 2, 1 or 2 → 4, 3 → 8
+                                bytesel = {XLENB_W'(XLENB-1), XLENB_W'(1)};
                                 `USED_FREG (rd);
                                 `USED_IREG (rs1);
                                 `USED_IREG (rs2);
@@ -992,6 +1091,30 @@ module VX_decode import
         endcase
     end
 
+    // Without its extension a TCU, DXA, wide or matrix load/store instruction
+    // decodes to no unit, and its undefined ex/op fields would dispatch an
+    // arbitrary operation.
+`ifndef VX_CFG_EXT_TCU_ENABLE
+    `RUNTIME_ASSERT(~(fetch_if.valid && (opcode == INST_EXT1) && (funct7 == 7'h02)),
+        ("%t: %s TCU instruction on a core built without VX_CFG_EXT_TCU_ENABLE, wid=%0d, PC=0x%0h (#%0d)",
+            $time, INSTANCE_ID, fetch_if.data.wid, to_fullPC(fetch_if.data.PC), fetch_if.data.uuid))
+`endif
+`ifndef VX_CFG_EXT_DXA_ENABLE
+    `RUNTIME_ASSERT(~(fetch_if.valid && (opcode == INST_EXT1) && (funct7 == 7'h03)),
+        ("%t: %s DXA instruction on a core built without VX_CFG_EXT_DXA_ENABLE, wid=%0d, PC=0x%0h (#%0d)",
+            $time, INSTANCE_ID, fetch_if.data.wid, to_fullPC(fetch_if.data.PC), fetch_if.data.uuid))
+`endif
+`ifndef VX_CFG_EXT_LDST_WIDE_ENABLE
+    `RUNTIME_ASSERT(~(fetch_if.valid && (opcode == INST_EXT4) && (funct3 >= 3'h3) && (funct3 <= 3'h6)),
+        ("%t: %s wide load/store on a core built without VX_CFG_EXT_LDST_WIDE_ENABLE, wid=%0d, PC=0x%0h (#%0d)",
+            $time, INSTANCE_ID, fetch_if.data.wid, to_fullPC(fetch_if.data.PC), fetch_if.data.uuid))
+`endif
+`ifndef VX_CFG_EXT_LDST_MATRIX_ENABLE
+    `RUNTIME_ASSERT(~(fetch_if.valid && (opcode == INST_EXT4) && ((funct3 == 3'h0) || (funct3 == 3'h2))),
+        ("%t: %s matrix load/store on a core built without VX_CFG_EXT_LDST_MATRIX_ENABLE, wid=%0d, PC=0x%0h (#%0d)",
+            $time, INSTANCE_ID, fetch_if.data.wid, to_fullPC(fetch_if.data.PC), fetch_if.data.uuid))
+`endif
+
     // disable writes to x0
     wire wb = use_regs[RV_RD] && (reg_ids[RV_RD] != 0);
 
@@ -1049,7 +1172,7 @@ module VX_decode import
             `TRACE(1, ("%t: %s decode: wid=%0d, cta_id=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, decode_if.data.wid, decode_if.data.cta_id, to_fullPC(decode_if.data.PC)))
             VX_trace_pkg::trace_ex_type(1, decode_if.data.ex_type);
             `TRACE(1, (", op="))
-            VX_trace_pkg::trace_ex_op(1, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args);
+            VX_trace_pkg::trace_ex_op(1, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args, decode_if.data.bytesel);
             `TRACE(1, (", tmask=%b, wb=%b, rd_xregs=%b, wr_xregs=%b, used_rs=%b, rd=", decode_if.data.tmask, decode_if.data.wb, decode_if.data.rd_xregs, decode_if.data.wr_xregs, decode_if.data.used_rs))
             VX_trace_pkg::trace_reg_idx(1, decode_if.data.rd);
             `TRACE(1, (", rs1="))

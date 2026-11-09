@@ -1,80 +1,102 @@
 {
   "cache": {
     "clock_mhz": 800,
-    "config_hash": "2a2e389ea6c04b0b",
+    "config_hash": "4fd77575a6f5f52c",
     "configs": "",
     "dut": "cache",
     "result": {
-      "build_time_s": 325,
-      "cell_area_um2": 48726.098,
-      "cell_count": 456296,
+      "build_time_s": 296,
+      "cell_area_um2": 59584.48,
+      "cell_count": 547028,
       "env": {
         "corner": "tt",
         "pdk": "asap7",
         "sta": "3.1.0",
-        "sv2v": "sv2v v0.0.13-13-g493a88f",
         "vt": "rvt",
         "xlen": 32,
         "yosys": "Yosys 0.69"
       },
-      "fmax_mhz": 1228.049,
-      "power_mw": 126.0,
-      "seq_area_um2": 22490.525,
+      "fmax_mhz": 1291.823,
+      "power_mw": 161.0,
+      "seq_area_um2": 28618.499,
       "sram_area_um2": 16307.2,
       "tns_ns": 0.0,
-      "wns_ns": 0.436
+      "wns_ns": 0.476
     }
   },
   "core": {
-    "clock_mhz": 400,
-    "config_hash": "49f5e8ba89630b35",
+    "clock_mhz": 800,
+    "config_hash": "67eb0ef49175ab38",
     "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8",
     "dut": "core",
     "result": {
-      "build_time_s": 1271,
-      "cell_area_um2": 84623.53,
-      "cell_count": 871400,
+      "build_time_s": 914,
+      "cell_area_um2": 75941.84,
+      "cell_count": 732220,
       "env": {
         "corner": "tt",
         "pdk": "asap7",
         "sta": "3.1.0",
-        "sv2v": "sv2v v0.0.13-13-g493a88f",
         "vt": "rvt",
         "xlen": 32,
         "yosys": "Yosys 0.69"
       },
-      "fmax_mhz": 586.717,
-      "power_mw": 352.0,
-      "seq_area_um2": 24513.646,
+      "fmax_mhz": 655.394,
+      "power_mw": 804.0,
+      "seq_area_um2": 25850.632,
       "sram_area_um2": 27814.4,
+      "tns_ns": -79.87,
+      "wns_ns": -0.276
+    }
+  },
+  "lmem": {
+    "clock_mhz": 800,
+    "config_hash": "47081ee86b993ce8",
+    "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_A_ENABLE",
+    "dut": "lmem",
+    "result": {
+      "build_time_s": 110,
+      "cell_area_um2": 17137.142,
+      "cell_count": 166236,
+      "env": {
+        "corner": "tt",
+        "pdk": "asap7",
+        "sta": "3.1.0",
+        "vt": "rvt",
+        "xlen": 32,
+        "yosys": "Yosys 0.69"
+      },
+      "fmax_mhz": 2003.606,
+      "power_mw": 42.2,
+      "seq_area_um2": 6527.758,
+      "sram_area_um2": 55628.8,
       "tns_ns": 0.0,
-      "wns_ns": 0.796
+      "wns_ns": 0.751
     }
   },
   "top": {
-    "clock_mhz": 400,
-    "config_hash": "0aa70ccdf8cec0ef",
+    "clock_mhz": 800,
+    "config_hash": "23d795386c3e20c0",
     "configs": "-DVX_CFG_NUM_THREADS=4 -DVX_CFG_NUM_WARPS=4",
     "dut": "top",
     "result": {
-      "build_time_s": 2192,
-      "cell_area_um2": 187229.507,
-      "cell_count": 1830007,
+      "build_time_s": 1381,
+      "cell_area_um2": 172457.664,
+      "cell_count": 1610289,
       "env": {
         "corner": "tt",
         "pdk": "asap7",
         "sta": "3.1.0",
-        "sv2v": "sv2v v0.0.13-13-g493a88f",
         "vt": "rvt",
         "xlen": 32,
         "yosys": "Yosys 0.69"
       },
-      "fmax_mhz": 620.887,
-      "power_mw": 126.0,
-      "seq_area_um2": 71938.595,
-      "sram_area_um2": 94420.8,
-      "tns_ns": 0.0,
-      "wns_ns": 0.889
+      "fmax_mhz": 653.937,
+      "power_mw": 247.0,
+      "seq_area_um2": 72420.901,
+      "sram_area_um2": 72302.4,
+      "tns_ns": -54.469,
+      "wns_ns": -0.279
     }
   }
 }

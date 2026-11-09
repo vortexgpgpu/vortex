@@ -23,7 +23,10 @@ module VX_pe_serializer #(
     parameter SHARED_WIDTH   = 0,
     parameter TAG_WIDTH      = 0,
     parameter PE_REG         = 0,
-    parameter OUT_BUF        = 0
+    parameter OUT_BUF        = 0,
+    // a zero-latency skid register on the output in place of OUT_BUF: the
+    // input ready is registered, the output is not
+    parameter OUT_SKID       = 0
 ) (
     input wire                          clk,
     input wire                          reset,
@@ -100,9 +103,17 @@ module VX_pe_serializer #(
         reg [BATCH_SIZEW-1:0] batch_in_idx, batch_out_idx;
         reg batch_in_done, batch_out_done;
 
+        // Each PE selects among its BATCH_SIZE lanes only, a BATCH_SIZE:1 mux
+        // rather than one over every lane.
         for (genvar i = 0; i < NUM_PES; ++i) begin : g_pe_data_out_w
-            assign pe_data_out_w[i] = data_in[batch_in_idx * NUM_PES + i];
-            assign pe_mask_out_w[i] = mask_in[batch_in_idx * NUM_PES + i];
+            wire [BATCH_SIZE-1:0][DATA_IN_WIDTH-1:0] batch_data;
+            wire [BATCH_SIZE-1:0] batch_mask;
+            for (genvar b = 0; b < BATCH_SIZE; ++b) begin : g_batch
+                assign batch_data[b] = data_in[b * NUM_PES + i];
+                assign batch_mask[b] = mask_in[b * NUM_PES + i];
+            end
+            assign pe_data_out_w[i] = batch_data[batch_in_idx];
+            assign pe_mask_out_w[i] = batch_mask[batch_in_idx];
         end
 
         always @(posedge clk) begin
@@ -157,21 +168,42 @@ module VX_pe_serializer #(
 
     end
 
-    VX_elastic_buffer #(
-        .DATAW   ((NUM_LANES * DATA_OUT_WIDTH) + NUM_LANES + TAG_WIDTH_S),
-        .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
-        .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF))
-    ) out_buf (
-        .clk       (clk),
-        .reset     (reset),
-        .valid_in  (valid_out_u),
-        .ready_in  (ready_out_u),
+    if (OUT_SKID != 0) begin : g_out_skid
 
-        .data_in   ({data_out_u, mask_out_u, tag_out_u}),
-        .data_out  ({data_out, mask_out, tag_out}),
-        .valid_out (valid_out),
-        .ready_out (ready_out)
-    );
+        `UNUSED_PARAM (OUT_BUF)
+
+        VX_bypass_buffer #(
+            .DATAW ((NUM_LANES * DATA_OUT_WIDTH) + NUM_LANES + TAG_WIDTH_S)
+        ) out_buf (
+            .clk       (clk),
+            .reset     (reset),
+            .valid_in  (valid_out_u),
+            .ready_in  (ready_out_u),
+            .data_in   ({data_out_u, mask_out_u, tag_out_u}),
+            .data_out  ({data_out, mask_out, tag_out}),
+            .valid_out (valid_out),
+            .ready_out (ready_out)
+        );
+
+    end else begin : g_out_buf
+
+        VX_elastic_buffer #(
+            .DATAW   ((NUM_LANES * DATA_OUT_WIDTH) + NUM_LANES + TAG_WIDTH_S),
+            .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
+            .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF))
+        ) out_buf (
+            .clk       (clk),
+            .reset     (reset),
+            .valid_in  (valid_out_u),
+            .ready_in  (ready_out_u),
+
+            .data_in   ({data_out_u, mask_out_u, tag_out_u}),
+            .data_out  ({data_out, mask_out, tag_out}),
+            .valid_out (valid_out),
+            .ready_out (ready_out)
+        );
+
+    end
 
 endmodule
 `TRACING_ON

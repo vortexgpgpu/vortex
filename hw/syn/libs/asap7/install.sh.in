@@ -47,9 +47,9 @@ source_commit=$(awk '$1 == "source_commit" { print $2 }' "$MANIFEST")
 }
 
 if command -v curl >/dev/null 2>&1; then
-  fetch() { curl --fail --location --retry 3 --silent --show-error --output "$2" "$1"; }
+  fetch() { curl --fail --location --retry 6 --retry-delay 20 --silent --show-error --output "$2" "$1"; }
 elif command -v wget >/dev/null 2>&1; then
-  fetch() { wget --tries=3 --output-document="$2" "$1"; }
+  fetch() { wget --tries=7 --waitretry=20 --retry-on-http-error=429,500,502,503,504 --output-document="$2" "$1"; }
 else
   echo "ERROR: curl or wget is required" >&2
   exit 1

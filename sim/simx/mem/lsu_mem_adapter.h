@@ -27,11 +27,18 @@ public:
   std::vector<SimChannel<MemReq>> ReqOut;
   std::vector<SimChannel<MemRsp>> RspIn;
 
+  // Past the bank, the cache holds up to three responses per port in its two
+  // output stages (one, then two entries), and each channel stands for both
+  // stages: with fewer slots the responses in flight fill it and the cache
+  // stalls a port that delivers a response every cycle.
+  static constexpr uint32_t kRspInSize = 3;
+
   LsuMemAdapter(
     const SimContext& ctx,
     const char* name,
     uint32_t num_inputs,
-    uint32_t delay
+    uint32_t delay,
+    uint32_t rsp_delay = 1
   );
 
   LsuMemAdapter(
@@ -41,16 +48,13 @@ public:
   ) : LsuMemAdapter(ctx, name, num_inputs, 0)
   {}
 
-  // Extra request-side registers on one output port.
-  void set_port_delay(uint32_t port, uint32_t delay) { port_delay_.at(port) = delay; }
-
 protected:
   void on_reset();
   void on_tick();
 
 private:
   uint32_t delay_;
-  std::vector<uint32_t> port_delay_;
+  uint32_t rsp_delay_;
   BitVector<uint32_t> pending_mask_;
 
   friend class SimObject<LsuMemAdapter>;

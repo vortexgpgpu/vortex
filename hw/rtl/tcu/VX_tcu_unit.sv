@@ -21,23 +21,24 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input wire              clk,
     input wire              reset,
 
-`ifdef PERF_ENABLE
-    output tcu_perf_t       tcu_perf,
-`endif
-
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
-    // Bank-parallel LMEM read port
-    VX_mem_bus_if.master     tcu_lmem_if,
+    // per-block ports of the core-wide WGMMA tile buffers (VX_tcu_shared)
+    output wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] exec_valid,
+    output wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] exec_ready,
+    output tcu_execute_t    exec_data [`VX_CFG_NUM_TCU_BLOCKS],
+    input wire [`VX_CFG_NUM_TCU_BLOCKS-1:0][TCU_WG_A_DATA_SIZE-1:0][`VX_CFG_XLEN-1:0] tbuf_rs1_data,
+    input wire [`VX_CFG_NUM_TCU_BLOCKS-1:0][TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0]   tbuf_rs2_data,
+    input wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tbuf_ready,
 `endif
 
 `ifdef TCU_META_ENABLE
-    // TCU_LD memory client connection to VX_lsu_scheduler at VX_core.
-    VX_lsu_sched_if.master  tcu_mem_if,
+    // TCU_LD memory clients of the LSU blocks' schedulers
+    VX_lsu_sched_if.master  tcu_mem_if [`VX_CFG_NUM_LSU_BLOCKS],
 `endif
 
 `ifdef VX_CFG_TCU_TMEM_ENABLE
-    // tc.commit barrier arrivals
-    VX_tcu_bar_if.master    tcu_bar_if,
+    // per-block ports of the core's tensor memory (VX_tcu_shared)
+    VX_tcu_job_if.block     job_if [`VX_CFG_NUM_TCU_BLOCKS],
 `endif
 
     // Inputs
@@ -64,6 +65,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     ) lane_dispatch (
         .clk        (clk),
         .reset      (reset),
+        .port_base  ('0),
         .dispatch_if(dispatch_if),
         .execute_if (per_block_execute_if)
     );
@@ -72,361 +74,111 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .data_t (tcu_result_t)
     ) per_block_result_if[BLOCK_SIZE]();
 
-    // -----------------------------------------------------------------------
-    // Split each per_block_execute_if between two consumers:
-    //   - VX_tcu_agu: handles INST_TCU_LD (warp-level memory load).
-    //   - VX_tcu_core: handles every MMA op_type.
-    // The ready signal is muxed by op_type so only one consumer drives at a time.
-    // -----------------------------------------------------------------------
-    VX_execute_if #(
-        .data_t (tcu_execute_t)
-    ) core_execute_if[BLOCK_SIZE]();
-
-    VX_result_if #(
-        .data_t (tcu_result_t)
-    ) core_result_if[BLOCK_SIZE]();
-
 `ifdef TCU_META_ENABLE
-    wire [BLOCK_SIZE-1:0]    agu_ld_valid;
-    wire [BLOCK_SIZE-1:0]    agu_ld_ready;
-    tcu_execute_t            agu_ld_data [BLOCK_SIZE];
+    VX_lsu_sched_if block_mem_if [BLOCK_SIZE]();
 
-    wire [BLOCK_SIZE-1:0]    agu_result_valid;
-    tcu_result_t             agu_result_data [BLOCK_SIZE];
-    wire [BLOCK_SIZE-1:0]    agu_result_ready;
-`endif
-
-`ifdef VX_CFG_TCU_TMEM_ENABLE
-    // TMEM transfers and tensor-job posts go to the job unit; job MMA steps
-    // take a block's tcu_core ahead of warp MMAs.
-    wire [BLOCK_SIZE-1:0] tj_op_valid;
-    wire [BLOCK_SIZE-1:0] tj_op_ready;
-    tcu_execute_t         tj_op_data [BLOCK_SIZE];
-    wire [BLOCK_SIZE-1:0] tj_rsp_valid;
-    tcu_result_t          tj_rsp_data [BLOCK_SIZE];
-    wire [BLOCK_SIZE-1:0] tj_rsp_ready;
-    wire                  job_valid;
-    wire                  job_fire;
-    tcu_execute_t         job_data [BLOCK_SIZE];
-    wire [BLOCK_SIZE-1:0] job_core_ready;
-    tcu_tbuf_req_t [BLOCK_SIZE-1:0] job_tbuf_req;
-    wire                  job_a_fill_valid;
-    wire [3:0]            job_a_fill_k;
-    wire [BLOCK_SIZE-1:0][`VX_CFG_NUM_THREADS-1:0][31:0] job_a_fill_data;
-    VX_mem_bus_if #(
-        .DATA_SIZE  (`VX_CFG_LMEM_NUM_BANKS * (`VX_CFG_XLEN / 8)),
-        .TAG_WIDTH  (TCU_LMEM_BLK_TAG_W),
-        .ATTR_WIDTH (LMEM_DMA_ATTR_W),
-        .ADDR_WIDTH (`VX_CFG_LMEM_LOG_SIZE - $clog2(`VX_CFG_XLEN / 8) - $clog2(`VX_CFG_LMEM_NUM_BANKS))
-    ) job_cp_lmem_if();
-`ifdef VX_CFG_TCU_SPARSE_ENABLE
-    wire [BLOCK_SIZE-1:0][TCU_MAX_META_BLOCK_WIDTH-1:0] job_meta;
-    wire [BLOCK_SIZE-1:0][TCU_MAX_META_BLOCK_WIDTH-1:0] job_meta_hi;
-`endif
-    wire [BLOCK_SIZE-1:0] jres_valid;
-    wire [BLOCK_SIZE-1:0][`VX_CFG_NUM_THREADS-1:0][31:0] jres_data;
-`endif
-
-    for (genvar bi = 0; bi < BLOCK_SIZE; ++bi) begin : g_split
-        wire [INST_OP_BITS-1:0] op_type = per_block_execute_if[bi].data.op_type;
-        `UNUSED_VAR (op_type)
-    `ifdef TCU_META_ENABLE
-        wire is_tcu_ld = (op_type == INST_OP_BITS'(INST_TCU_LD));
-    `else
-        wire is_tcu_ld = 1'b0;
-    `endif
-    `ifdef VX_CFG_TCU_TMEM_ENABLE
-        wire is_tj_op = (op_type == INST_OP_BITS'(INST_TCU_TMEM_LD))
-                     || (op_type == INST_OP_BITS'(INST_TCU_TMEM_ST))
-                     || (op_type == INST_OP_BITS'(INST_TCU_TC_CP))
-                     || (op_type == INST_OP_BITS'(INST_TCU_TMEM_ALLOC))
-                     || (op_type == INST_OP_BITS'(INST_TCU_TMEM_DEALLOC))
-                     || (op_type == INST_OP_BITS'(INST_TCU_TC_IDESC))
-                     || (op_type == INST_OP_BITS'(INST_TCU_TC_MMA))
-                     || (op_type == INST_OP_BITS'(INST_TCU_TC_COMMIT));
-        assign tj_op_valid[bi] = per_block_execute_if[bi].valid && is_tj_op;
-        assign tj_op_data[bi]  = per_block_execute_if[bi].data;
-        wire warp_core_valid = per_block_execute_if[bi].valid && !is_tcu_ld && !is_tj_op;
-        assign core_execute_if[bi].valid = job_valid ? job_fire : warp_core_valid;
-        assign core_execute_if[bi].data  = job_valid ? job_data[bi] : per_block_execute_if[bi].data;
-        assign job_core_ready[bi]        = core_execute_if[bi].ready;
-        wire warp_core_ready = core_execute_if[bi].ready && !job_valid;
-        `RUNTIME_ASSERT (~(warp_core_valid && (op_type == INST_OP_BITS'(INST_TCU_WGMMA)
-                        `ifdef VX_CFG_TCU_SPARSE_ENABLE
-                            || op_type == INST_OP_BITS'(INST_TCU_WGMMA_SP)
-                        `endif
-                        )), ("%t: %s: WGMMA is not supported with tensor memory", $time, INSTANCE_ID))
-    `else
-        wire is_tj_op = 1'b0;
-        assign core_execute_if[bi].valid = per_block_execute_if[bi].valid && !is_tcu_ld;
-        assign core_execute_if[bi].data  = per_block_execute_if[bi].data;
-        wire warp_core_ready = core_execute_if[bi].ready;
-    `endif
-    `ifdef TCU_META_ENABLE
-        assign agu_ld_valid[bi] = per_block_execute_if[bi].valid && is_tcu_ld;
-        assign agu_ld_data[bi]  = per_block_execute_if[bi].data;
-        wire agu_ready = agu_ld_ready[bi];
-    `else
-        wire agu_ready = 1'b0;
-    `endif
-    `ifdef VX_CFG_TCU_TMEM_ENABLE
-        wire tj_ready = tj_op_ready[bi];
-    `else
-        wire tj_ready = 1'b0;
-    `endif
-        assign per_block_execute_if[bi].ready = is_tcu_ld ? agu_ready
-                                              : is_tj_op  ? tj_ready
-                                              : warp_core_ready;
-    end
-
-    // -----------------------------------------------------------------------
-    // Result merge per block: AGU, then the job unit, then tcu_core. Job MMA
-    // results leave tcu_core in issue order and are written to TMEM.
-    // -----------------------------------------------------------------------
-    for (genvar bi = 0; bi < BLOCK_SIZE; ++bi) begin : g_result_merge
-    `ifdef TCU_META_ENABLE
-        wire a_valid = agu_result_valid[bi];
-        tcu_result_t a_data;
-        assign a_data = agu_result_data[bi];
-        assign agu_result_ready[bi] = per_block_result_if[bi].ready;
-    `else
-        wire a_valid = 1'b0;
-        tcu_result_t a_data;
-        assign a_data = 'x;
-    `endif
-    `ifdef VX_CFG_TCU_TMEM_ENABLE
-        wire t_valid = tj_rsp_valid[bi];
-        tcu_result_t t_data;
-        assign t_data = tj_rsp_data[bi];
-        assign tj_rsp_ready[bi] = per_block_result_if[bi].ready && !a_valid;
-
-        // Which tcu_core results belong to jobs, in issue order.
-        wire is_job_head, order_empty, order_full;
-        wire core_in_fire  = core_execute_if[bi].valid && core_execute_if[bi].ready;
-        wire core_out_fire = core_result_if[bi].valid && core_result_if[bi].ready;
-        VX_fifo_queue #(
-            .DATAW  (1),
-            .DEPTH  (32),
-            .LUTRAM (1)
-        ) order_q (
-            .clk     (clk),
-            .reset   (reset),
-            .push    (core_in_fire),
-            .pop     (core_out_fire),
-            .data_in (job_valid),
-            .data_out(is_job_head),
-            .empty   (order_empty),
-            `UNUSED_PIN (alm_empty),
-            .full    (order_full),
-            `UNUSED_PIN (alm_full),
-            `UNUSED_PIN (size)
-        );
-        `UNUSED_VAR (order_empty)
-        `RUNTIME_ASSERT (~(core_in_fire && order_full), ("%t: %s: tcu order queue overflow", $time, INSTANCE_ID))
-        wire job_res = core_result_if[bi].valid && is_job_head;
-        assign jres_valid[bi] = job_res;
-        for (genvar t = 0; t < `VX_CFG_NUM_THREADS; ++t) begin : g_jres
-            assign jres_data[bi][t] = core_result_if[bi].data.data[t][31:0];
+    if (`VX_CFG_NUM_LSU_BLOCKS == BLOCK_SIZE) begin : g_mem_per_block
+        // each TCU block loads through the LSU block serving the same warps
+        for (genvar b = 0; b < BLOCK_SIZE; ++b) begin : g_port
+            assign tcu_mem_if[b].req_valid   = block_mem_if[b].req_valid;
+            assign tcu_mem_if[b].req_data    = block_mem_if[b].req_data;
+            assign block_mem_if[b].req_ready = tcu_mem_if[b].req_ready;
+            assign block_mem_if[b].rsp_valid = tcu_mem_if[b].rsp_valid;
+            assign block_mem_if[b].rsp_data  = tcu_mem_if[b].rsp_data;
+            assign tcu_mem_if[b].rsp_ready   = block_mem_if[b].rsp_ready;
         end
-        wire c_valid = core_result_if[bi].valid && !is_job_head;
-        assign core_result_if[bi].ready = is_job_head
-            || (per_block_result_if[bi].ready && !a_valid && !t_valid);
-    `else
-        wire t_valid = 1'b0;
-        tcu_result_t t_data;
-        assign t_data = 'x;
-        wire c_valid = core_result_if[bi].valid;
-        assign core_result_if[bi].ready = per_block_result_if[bi].ready && !a_valid;
-    `endif
-        assign per_block_result_if[bi].valid = a_valid || t_valid || c_valid;
-        assign per_block_result_if[bi].data  = a_valid ? a_data
-                                             : t_valid ? t_data
-                                             : core_result_if[bi].data;
+    end else begin : g_mem_shared
+        // the TCU blocks share LSU block 0's client: the block index takes the
+        // tag's low bits and the block's own tag moves above it
+        localparam BLOCK_IDX_BITS = `CLOG2(BLOCK_SIZE);
+        localparam BLOCK_TAG_BITS = LSU_CLIENT_TAG_WIDTH - BLOCK_IDX_BITS;
+        `STATIC_ASSERT (BLOCK_IDX_BITS > 0, ("invalid parameter"))
+        `STATIC_ASSERT (BLOCK_TAG_BITS > 0, ("LSU client tag cannot encode TCU block"))
+        // a block's TCU_LD pass number rides in its own tag bits
+        `STATIC_ASSERT (BLOCK_TAG_BITS >= `CLOG2(NUM_LANES / `VX_CFG_NUM_LSU_LANES), ("LSU client tag cannot encode TCU block and TCU_LD pass"))
+
+        wire [BLOCK_SIZE-1:0] req_valids;
+        wire [`UP(BLOCK_IDX_BITS)-1:0] req_idx;
+        wire [BLOCK_SIZE-1:0] req_grant;
+        wire req_valid;
+        lsu_req_data_t req_datas [BLOCK_SIZE];
+        for (genvar b = 0; b < BLOCK_SIZE; ++b) begin : g_req
+            assign req_valids[b] = block_mem_if[b].req_valid;
+            assign req_datas[b]  = block_mem_if[b].req_data;
+            assign block_mem_if[b].req_ready = tcu_mem_if[0].req_ready && req_grant[b];
+        end
+
+        VX_generic_arbiter #(
+            .NUM_REQS (BLOCK_SIZE),
+            .TYPE     ("R")
+        ) req_arb (
+            .clk          (clk),
+            .reset        (reset),
+            .requests     (req_valids),
+            .grant_index  (req_idx),
+            .grant_onehot (req_grant),
+            .grant_valid  (req_valid),
+            .grant_ready  (tcu_mem_if[0].req_ready)
+        );
+
+        lsu_req_data_t req_data;
+        always_comb begin
+            req_data = req_datas[req_idx];
+            req_data.tag = {req_datas[req_idx].tag[BLOCK_TAG_BITS-1:0], req_idx};
+        end
+        assign tcu_mem_if[0].req_valid = req_valid;
+        assign tcu_mem_if[0].req_data  = req_data;
+
+        wire [`UP(BLOCK_IDX_BITS)-1:0] rsp_idx = tcu_mem_if[0].rsp_data.tag[`UP(BLOCK_IDX_BITS)-1:0];
+        lsu_rsp_data_t rsp_data;
+        always_comb begin
+            rsp_data     = tcu_mem_if[0].rsp_data;
+            rsp_data.tag = LSU_CLIENT_TAG_WIDTH'(tcu_mem_if[0].rsp_data.tag[LSU_CLIENT_TAG_WIDTH-1:BLOCK_IDX_BITS]);
+        end
+        wire [BLOCK_SIZE-1:0] rsp_readys;
+        for (genvar b = 0; b < BLOCK_SIZE; ++b) begin : g_rsp
+            assign block_mem_if[b].rsp_valid = tcu_mem_if[0].rsp_valid && (rsp_idx == `UP(BLOCK_IDX_BITS)'(b));
+            assign block_mem_if[b].rsp_data  = rsp_data;
+            assign rsp_readys[b] = block_mem_if[b].rsp_ready;
+        end
+        assign tcu_mem_if[0].rsp_ready = rsp_readys[rsp_idx];
+
+        for (genvar b = 1; b < `VX_CFG_NUM_LSU_BLOCKS; ++b) begin : g_tieoff
+            assign tcu_mem_if[b].req_valid = 1'b0;
+            assign tcu_mem_if[b].req_data  = '0;
+            assign tcu_mem_if[b].rsp_ready = 1'b1;
+            `UNUSED_VAR (tcu_mem_if[b].req_ready)
+            `UNUSED_VAR (tcu_mem_if[b].rsp_valid)
+            `UNUSED_VAR (tcu_mem_if[b].rsp_data)
+        end
     end
-
-    // -----------------------------------------------------------------------
-    // WGMMA feature (orchestrator): VX_tcu_tbuf + VX_tcu_lockstep + perf.
-    // -----------------------------------------------------------------------
-
-`ifdef VX_CFG_TCU_WGMMA_ENABLE
-    wire [BLOCK_SIZE-1:0]                                          exec_valid_w;
-    wire [BLOCK_SIZE-1:0]                                          exec_ready_w;
-    tcu_execute_t                                                  exec_data_w [BLOCK_SIZE];
-    for (genvar bi = 0; bi < BLOCK_SIZE; ++bi) begin : g_obs
-        assign exec_valid_w[bi]    = core_execute_if[bi].valid;
-        assign exec_ready_w[bi]    = core_execute_if[bi].ready;
-        assign exec_data_w[bi]     = core_execute_if[bi].data;
-    end
-
-    wire [BLOCK_SIZE-1:0][TCU_WG_A_DATA_SIZE-1:0][`VX_CFG_XLEN-1:0] tbuf_rs1_data;
-    wire [BLOCK_SIZE-1:0][TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0] tbuf_rs2_data;
-    wire [BLOCK_SIZE-1:0]                                         tbuf_ready_eff;
-
-`ifdef PERF_ENABLE
-    tcu_perf_t wgmma_perf;
-    always_comb begin
-        tcu_perf = wgmma_perf;
-    `ifdef VX_CFG_TCU_TMEM_ENABLE
-        tcu_perf.mma_busy   = tj_perf_busy;
-        tcu_perf.opnd_waits = tj_perf_opnd;
-        tcu_perf.job_other  = tj_perf_other;
-        tcu_perf.idle       = tj_perf_idle;
-        tcu_perf.tmem_xfers = tj_perf_xfers;
-    `endif
-    end
 `endif
-
-    VX_tcu_wgmma #(
-        .INSTANCE_ID (`SFORMATF(("%s-wgmma", INSTANCE_ID))),
-        .BLOCK_SIZE  (BLOCK_SIZE)
-    ) wgmma (
-        .clk            (clk),
-        .reset          (reset),
-    `ifdef PERF_ENABLE
-        .tcu_perf       (wgmma_perf),
-    `endif
-        .exec_valid     (exec_valid_w),
-        .exec_ready     (exec_ready_w),
-        .exec_data      (exec_data_w),
-        .tcu_lmem_if    (tcu_lmem_if),
-    `ifdef VX_CFG_TCU_TMEM_ENABLE
-        .job_req        (job_tbuf_req),
-        .job_a_fill_valid (job_a_fill_valid),
-        .job_a_fill_k   (job_a_fill_k),
-        .job_a_fill_data (job_a_fill_data),
-        .job_cp_lmem_if (job_cp_lmem_if),
-    `endif
-        .tbuf_rs1_data  (tbuf_rs1_data),
-        .tbuf_rs2_data  (tbuf_rs2_data),
-        .tbuf_ready_eff (tbuf_ready_eff)
-    );
-
-`else // !VX_CFG_TCU_WGMMA_ENABLE
-
-`ifdef PERF_ENABLE
-    assign tcu_perf.tbuf_stalls     = '0;
-    assign tcu_perf.tbuf_cache_hits = '0;
-    assign tcu_perf.lmem_reads      = '0;
-    assign tcu_perf.wgmma_instrs    = '0;
-    assign tcu_perf.wgmma_stalls    = '0;
-    assign tcu_perf.mma_busy        = '0;
-    assign tcu_perf.opnd_waits      = '0;
-    assign tcu_perf.job_other       = '0;
-    assign tcu_perf.idle            = '0;
-    assign tcu_perf.tmem_xfers      = '0;
-`endif
-
-`endif // VX_CFG_TCU_WGMMA_ENABLE
-
-    // -----------------------------------------------------------------------
-    // VX_tcu_agu — warp-level AGU for TCU_LD instructions.
-    // Drives meta_wr signals broadcast to every tcu_core so wmma_sp on
-    // any block sees the loaded metadata.
-    // -----------------------------------------------------------------------
-`ifdef TCU_META_ENABLE
-    // The AGU streams NUM_TCU_LANES operands over the LSU memory client, whose
-    // request/response mask and data are sized by NUM_LSU_LANES; the two lane
-    // counts must match for the per-lane completion tracking to be correct.
-    `STATIC_ASSERT (NUM_LANES == `VX_CFG_NUM_LSU_LANES, ("VX_tcu_agu requires NUM_TCU_LANES == NUM_LSU_LANES"));
-
-    wire                                              agu_meta_wr_en;
-    wire [NW_WIDTH-1:0]                               agu_meta_wr_wid;
-    wire [4:0]                                        agu_meta_wr_idx;
-    wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0]        agu_meta_wr_data;
-
-    VX_tcu_agu #(
-        .INSTANCE_ID (`SFORMATF(("%s-agu", INSTANCE_ID))),
-        .BLOCK_SIZE  (BLOCK_SIZE),
-        .NUM_LANES   (NUM_LANES)
-    ) agu (
-        .clk                (clk),
-        .reset              (reset),
-        .per_block_ld_valid (agu_ld_valid),
-        .per_block_ld_data  (agu_ld_data),
-        .per_block_ld_ready (agu_ld_ready),
-        .client_if          (tcu_mem_if),
-        .meta_wr_en         (agu_meta_wr_en),
-        .meta_wr_wid        (agu_meta_wr_wid),
-        .meta_wr_idx        (agu_meta_wr_idx),
-        .meta_wr_data       (agu_meta_wr_data),
-        .result_valid       (agu_result_valid),
-        .result_data        (agu_result_data),
-        .result_ready       (agu_result_ready)
-    );
-`endif
-
-`ifdef VX_CFG_TCU_TMEM_ENABLE
-`ifdef PERF_ENABLE
-    wire [PERF_CTR_BITS-1:0] tj_perf_busy, tj_perf_opnd, tj_perf_other, tj_perf_idle, tj_perf_xfers;
-`endif
-    VX_tcu_tmem #(
-        .INSTANCE_ID (`SFORMATF(("%s-tmem", INSTANCE_ID))),
-        .BLOCK_SIZE  (BLOCK_SIZE)
-    ) tmem (
-        .clk            (clk),
-        .reset          (reset),
-    `ifdef PERF_ENABLE
-        .perf_busy      (tj_perf_busy),
-        .perf_opnd      (tj_perf_opnd),
-        .perf_other     (tj_perf_other),
-        .perf_idle      (tj_perf_idle),
-        .perf_xfers     (tj_perf_xfers),
-    `endif
-        .op_valid       (tj_op_valid),
-        .op_data        (tj_op_data),
-        .op_ready       (tj_op_ready),
-        .rsp_valid      (tj_rsp_valid),
-        .rsp_data       (tj_rsp_data),
-        .rsp_ready      (tj_rsp_ready),
-        .job_valid      (job_valid),
-        .job_data       (job_data),
-        .core_ready     (job_core_ready),
-        .job_fire       (job_fire),
-        .tbuf_req       (job_tbuf_req),
-        .a_fill_valid   (job_a_fill_valid),
-        .a_fill_k       (job_a_fill_k),
-        .a_fill_data    (job_a_fill_data),
-    `ifdef VX_CFG_TCU_SPARSE_ENABLE
-        .job_meta       (job_meta),
-        .job_meta_hi    (job_meta_hi),
-    `endif
-        .jres_valid     (jres_valid),
-        .jres_data      (jres_data),
-        .tcu_bar_if     (tcu_bar_if),
-        .cp_lmem_if     (job_cp_lmem_if)
-    );
-`endif
-
-    // -----------------------------------------------------------------------
-    // TCU core instances
-    // -----------------------------------------------------------------------
 
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_blocks
-        VX_tcu_core #(
-            .INSTANCE_ID (`SFORMATF(("%s-fused%0d", INSTANCE_ID, block_idx)))
-        ) tcu_core (
+
+        VX_tcu_block #(
+            .INSTANCE_ID (INSTANCE_ID),
+            .BLOCK_STR   (`SFORMATF(("%0d", block_idx)))
+        ) tcu_block (
             `SCOPE_IO_BIND (block_idx)
-            .clk        (clk),
-            .reset      (reset),
+            .clk              (clk),
+            .reset            (reset),
         `ifdef VX_CFG_TCU_WGMMA_ENABLE
-            .tbuf_rs1_data (tbuf_rs1_data[block_idx]),
-            .tbuf_rs2_data (tbuf_rs2_data[block_idx]),
-            .tbuf_ready    (tbuf_ready_eff[block_idx]),
+            .exec_valid       (exec_valid[block_idx]),
+            .exec_ready       (exec_ready[block_idx]),
+            .exec_data        (exec_data[block_idx]),
+            .tbuf_rs1_data    (tbuf_rs1_data[block_idx]),
+            .tbuf_rs2_data    (tbuf_rs2_data[block_idx]),
+            .tbuf_ready       (tbuf_ready[block_idx]),
         `endif
         `ifdef TCU_META_ENABLE
-            .ext_meta_wr_en   (agu_meta_wr_en),
-            .ext_meta_wr_wid  (agu_meta_wr_wid),
-            .ext_meta_wr_idx  (agu_meta_wr_idx),
-            .ext_meta_wr_data (agu_meta_wr_data),
+            .tcu_mem_if       (block_mem_if[block_idx]),
         `endif
         `ifdef VX_CFG_TCU_TMEM_ENABLE
-        `ifdef VX_CFG_TCU_SPARSE_ENABLE
-            .job_meta    (job_meta[block_idx]),
-            .job_meta_hi (job_meta_hi[block_idx]),
+            .job_if           (job_if[block_idx]),
         `endif
-        `endif
-            .execute_if (core_execute_if[block_idx]),
-            .result_if  (core_result_if[block_idx])
+            .execute_if       (per_block_execute_if[block_idx]),
+            .result_if        (per_block_result_if[block_idx])
         );
     end
 

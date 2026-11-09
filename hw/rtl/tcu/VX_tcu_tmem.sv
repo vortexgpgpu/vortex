@@ -273,6 +273,11 @@ module VX_tcu_tmem import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     logic [NSLOTS-1:0][NSLOTS-1:0] older_r;
 
     `IGNORE_UNUSED_BEGIN
+    // WGMMA shared-memory descriptor: byte offset below, row stride in words above.
+    function automatic logic [31:0] smem_desc(input logic [15:0] off, input logic [15:0] stride_bytes);
+        smem_desc = {(32 - TCU_SMEM_DESC_OFF_BITS)'(stride_bytes[15:2]), TCU_SMEM_DESC_OFF_BITS'(off)};
+    endfunction
+
     function automatic logic [BAR_ADDR_W-1:0] bar_addr(input logic [31:0] raw);
         logic [NB_WIDTH-1:0] id;
         logic [BAR_ADDR_W-1:0] addr;
@@ -773,8 +778,8 @@ module VX_tcu_tmem import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             tbuf_req[b].step_m       = 4'(e_m_r);
             tbuf_req[b].step_n       = e_sn_r;
             tbuf_req[b].cd_nregs     = 2'd2;
-            tbuf_req[b].desc_a       = `VX_CFG_XLEN'({e_lda_r, e_a_off_r[b]});
-            tbuf_req[b].desc_b       = `VX_CFG_XLEN'({e_ldb_r, e_b_off_r});
+            tbuf_req[b].desc_a       = `VX_CFG_XLEN'(smem_desc(e_a_off_r[b], e_lda_r));
+            tbuf_req[b].desc_b       = `VX_CFG_XLEN'(smem_desc(e_b_off_r, e_ldb_r));
             tbuf_req[b].a_is_smem    = ~e_a_tmem_r;
         `ifdef VX_CFG_TCU_SPARSE_ENABLE
             tbuf_req[b].is_sparse    = e_sparse_r;

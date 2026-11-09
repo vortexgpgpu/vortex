@@ -88,6 +88,7 @@ private:
   std::string name_;
   bool tick_active_ = true;
   uint32_t domain_ = 0;
+  bool launch_kept_ = false; // built under a LaunchKeepScope
   virtual void do_reset() = 0;
   virtual void do_tick()  = 0;
   friend class SimPlatform;
@@ -245,6 +246,10 @@ public:
     return (tl_exec_domain_ == HOST_DOMAIN) ? cycles_ : tl_cycles_;
   }
 
+  // Counts resets: cycle numbers repeat across runs, so per-cycle state is
+  // tagged with the run it belongs to.
+  uint64_t reset_gen() const { return reset_gen_; }
+
   // Sends issued outside any object tick (driver/host calls).
   static constexpr uint32_t HOST_DOMAIN = 0xffffffffu;
 
@@ -261,6 +266,7 @@ public:
   uint32_t alloc_domain() { return num_domains_++; }
   uint32_t num_domains() const { return num_domains_; }
   uint32_t build_domain() const { return build_domain_; }
+  bool build_launch_kept() const { return build_launch_kept_; }
 
   // Cap the parallel thread count (must be called before the first tick).
   // A limit of 1 forces serial execution — required while the configuration
@@ -275,6 +281,25 @@ public:
   void set_num_workers(uint32_t num_workers) {
     req_workers_ = std::max(1u, num_workers);
   }
+
+  // Objects built under a LaunchKeepScope (the last-level cache and the
+  // memory below it, when the command processor writes into that cache)
+  // carry their state and in-flight work across reset_launch().
+  class LaunchKeepScope {
+  public:
+    explicit LaunchKeepScope(bool keep) {
+      auto& p = SimPlatform::instance();
+      saved_ = p.build_launch_kept_;
+      p.build_launch_kept_ = saved_ || keep;
+    }
+    ~LaunchKeepScope() {
+      SimPlatform::instance().build_launch_kept_ = saved_;
+    }
+    LaunchKeepScope(const LaunchKeepScope&) = delete;
+    LaunchKeepScope& operator=(const LaunchKeepScope&) = delete;
+  private:
+    bool saved_;
+  };
 
   class DomainScope {
   public:
@@ -327,6 +352,7 @@ public:
   void schedule(Func&& func, const Pkt& pkt, uint64_t delay, uint32_t domain);
 
   void reset();
+  void reset_launch();
   void tick();
 
 private:
@@ -387,9 +413,11 @@ private:
   std::vector<std::unique_ptr<Domain>> domains_;
 
   uint64_t cycles_;
+  uint64_t reset_gen_ = 0;
 
   uint32_t num_domains_ = 1;
   uint32_t build_domain_ = 0;
+  bool build_launch_kept_ = false;
   static inline thread_local uint32_t tl_exec_domain_ = HOST_DOMAIN;
   static inline thread_local SimObjectBase* tl_exec_object_ = nullptr;
   static inline thread_local uint64_t tl_cross_seq_ = 0;
@@ -651,6 +679,7 @@ public:
     : SimChannelBase(other.module_)
     , storage_(other.storage_.capacity())
     , pending_count_(0)
+    , reg_ready_(other.reg_ready_)
     , convert_fn_(other.convert_fn_)
     , tx_cb_(other.tx_cb_) {
     sink_ = nullptr;
@@ -666,6 +695,9 @@ public:
       pop_cb_ = {};
       storage_ = RingQueue<Pkt>(other.storage_.capacity());
       pending_count_ = 0;
+      reg_ready_ = other.reg_ready_;
+      freed_cycle_ = ~uint64_t(0);
+      freed_count_ = 0;
       convert_fn_ = other.convert_fn_;
       tx_cb_ = other.tx_cb_;
     }
@@ -704,8 +736,13 @@ public:
       return sink_->full();
     }
     assert(!SimPlatform::instance().mt_cross_access(module_));
-    return this->occupancy() >= storage_.capacity();
+    return this->occupancy() + this->freed_now() >= storage_.capacity();
   }
+
+  // A registered ready: a slot freed by a pop is offered to producers from the
+  // next cycle, as a buffer whose full flag is a register does, whatever order
+  // the producer and the consumer tick in.
+  void set_registered_ready(bool enable) { reg_ready_ = enable; }
 
   void send(const Pkt& pkt, uint64_t delay = 1) {
     auto& platform = SimPlatform::instance();
@@ -849,7 +886,21 @@ private:
   bool queue_empty() const { return storage_.empty(); }
   uint32_t queue_size() const { return storage_.size(); }
   const Pkt& queue_front() const { return storage_.front(); }
+  uint32_t freed_now() const {
+    auto& platform = SimPlatform::instance();
+    return (reg_ready_ && freed_cycle_ == platform.cycles() && freed_gen_ == platform.reset_gen())
+         ? freed_count_ : 0;
+  }
   void queue_pop() {
+    if (reg_ready_) {
+      auto& platform = SimPlatform::instance();
+      if (freed_cycle_ != platform.cycles() || freed_gen_ != platform.reset_gen()) {
+        freed_cycle_ = platform.cycles();
+        freed_gen_ = platform.reset_gen();
+        freed_count_ = 0;
+      }
+      ++freed_count_;
+    }
     storage_.pop();
     --SimChannelBase::inflight_count();
     if (pop_cb_) {
@@ -860,6 +911,10 @@ private:
 
   RingQueue<Pkt> storage_;
   uint32_t pending_count_;
+  bool reg_ready_ = false;
+  uint64_t freed_cycle_ = ~uint64_t(0);
+  uint64_t freed_gen_ = 0;
+  uint32_t freed_count_ = 0;
   SmallFunction<void(const Pkt&), 48> convert_fn_;
   TxCallback tx_cb_;
 
@@ -1151,6 +1206,22 @@ inline void SimPlatform::validate_topology() {
   }
 }
 
+// A kernel launch resets every object but those built under a
+// LaunchKeepScope: the hardware does not reset between a transfer and the
+// launch that follows it, so the transfer's line fills may still be in
+// flight in the kept memory side when the kernel starts. Their events stay
+// scheduled and time keeps counting; the rest of the model is quiescent.
+inline void SimPlatform::reset_launch() {
+  for (auto* object : active_reset_) {
+    if (!object->launch_kept_) {
+      object->do_reset();
+    }
+  }
+  for (auto& object : objects_) {
+    object->tick_active_ = true;
+  }
+}
+
 inline void SimPlatform::reset() {
   this->validate_topology();
 
@@ -1198,6 +1269,7 @@ inline void SimPlatform::reset() {
 
   // Reset timing
   cycles_ = 0;
+  ++reset_gen_;
 }
 
 inline void SimPlatform::tick() {
@@ -1328,7 +1400,8 @@ void SimChannelEvent<Pkt>::fire() {
 
 inline SimObjectBase::SimObjectBase(const SimContext&, const std::string& name)
     : name_(name)
-    , domain_(SimPlatform::instance().build_domain()) {}
+    , domain_(SimPlatform::instance().build_domain())
+    , launch_kept_(SimPlatform::instance().build_launch_kept()) {}
 
 inline SimChannelBase::SimChannelBase(SimObjectBase* module)
     : module_(module)

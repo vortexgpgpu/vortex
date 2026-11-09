@@ -84,6 +84,14 @@ int main(int argc, char* argv[]) {
   vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
   RT_CHECK(vx_queue_create(device, &qi, &queue));
 
+  uint64_t isa_flags = 0;
+  RT_CHECK(vx_device_query(device, VX_CAPS_ISA_FLAGS, &isa_flags));
+  if ((isa_flags & VX_ISA_EXT_DXA) == 0) {
+    std::cerr << "Error: DXA ISA extension is disabled in runtime CONFIGS.\n";
+    cleanup();
+    return -1;
+  }
+
   RT_CHECK(vx_buffer_create(device, srcA_bytes, VX_MEM_READ,  &srcA_buffer));
   RT_CHECK(vx_buffer_create(device, srcB_bytes, VX_MEM_READ,  &srcB_buffer));
   RT_CHECK(vx_buffer_create(device, dst_bytes,  VX_MEM_WRITE, &dst_buffer));

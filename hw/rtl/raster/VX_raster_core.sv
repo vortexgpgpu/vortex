@@ -17,7 +17,6 @@
 
 module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
-    parameter INSTANCE_IDX    = 0,
     parameter NUM_INSTANCES   = 1,
     parameter NUM_SLICES      = 1, // number of slices
     parameter TILE_LOGSIZE    = 5, // tile log size
@@ -31,6 +30,8 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     // Clock
     input wire clk,
     input wire reset,
+
+    input wire [`LOG2UP(NUM_INSTANCES)-1:0] instance_idx,
 
     // PERF
 `ifdef PERF_ENABLE
@@ -79,7 +80,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     raster_dcrs_t raster_dcrs;
 
     VX_raster_dcr #(
-        .INSTANCE_ID ($sformatf("%s-dcr", INSTANCE_ID))
+        .INSTANCE_ID (`SFORMATF(("%s-dcr", INSTANCE_ID)))
     ) raster_dcr (
         .clk        (clk),
         .reset      (reset),
@@ -134,14 +135,14 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
 
     // Memory unit
     VX_raster_mem #(
-        .INSTANCE_ID   ($sformatf("%s-mem", INSTANCE_ID)),
-        .INSTANCE_IDX  (INSTANCE_IDX),
+        .INSTANCE_ID   (`SFORMATF(("%s-mem", INSTANCE_ID))),
         .NUM_INSTANCES (NUM_INSTANCES),
         .TILE_LOGSIZE  (TILE_LOGSIZE),
         .QUEUE_SIZE    (MEM_FIFO_DEPTH)
     ) raster_mem (
         .clk          (clk),
         .reset        (reset),
+        .instance_idx (instance_idx),
 
         .start        (mem_unit_start),
         .busy         (mem_unit_busy),
@@ -330,7 +331,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     `endif
 
         VX_raster_slice #(
-            .INSTANCE_ID     ($sformatf("%s-slice%d", INSTANCE_ID, slice_id)),
+            .INSTANCE_ID     (`SFORMATF(("%s-slice%d", INSTANCE_ID, slice_id))),
             .TILE_LOGSIZE    (TILE_LOGSIZE),
             .BLOCK_LOGSIZE   (BLOCK_LOGSIZE),
             .OUTPUT_QUADS    (OUTPUT_QUADS),
@@ -372,7 +373,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         // depth read from the ocache (elastic, variable-latency). Pass-through
         // when the per-draw earlyz_safe DCR is clear.
         VX_raster_earlyz #(
-            .INSTANCE_ID  ($sformatf("%s-earlyz%d", INSTANCE_ID, slice_id)),
+            .INSTANCE_ID  (`SFORMATF(("%s-earlyz%d", INSTANCE_ID, slice_id))),
             .OUTPUT_QUADS (OUTPUT_QUADS)
         ) raster_earlyz (
             .clk        (clk),
@@ -529,7 +530,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     // no-work case so such an engine drains immediately.
     localparam LOG2_NUM_INSTANCES = `CLOG2(NUM_INSTANCES);
     wire [`RASTER_TILE_BITS-1:0] my_tile_count =
-        (raster_dcrs.tile_count + `RASTER_TILE_BITS'(NUM_INSTANCES - 1 - INSTANCE_IDX)) >> LOG2_NUM_INSTANCES;
+        (raster_dcrs.tile_count + (`RASTER_TILE_BITS'(NUM_INSTANCES - 1) - `RASTER_TILE_BITS'(instance_idx))) >> LOG2_NUM_INSTANCES;
     wire has_no_tiles = (my_tile_count == '0);
 
     always @(posedge clk) begin
@@ -559,8 +560,8 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     assign busy = armed_r | frame_kick;
 
 `ifdef SCOPE
-`ifdef DBG_SCOPE_RASTER
     `SCOPE_IO_SWITCH (1);
+`ifdef DBG_SCOPE_RASTER
     wire cache_bus_req_fire_0 = cache_bus_if[0].req_valid && cache_bus_if[0].req_ready;
     wire cache_bus_rsp_fire_0 = cache_bus_if[0].rsp_valid && cache_bus_if[0].rsp_ready;
     wire raster_bus_fire = raster_bus_tmp_if[0].req_valid && raster_bus_tmp_if[0].req_ready;
@@ -614,7 +615,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         reset_negedge, 1'b0, 4096
     );
 `else
-    `SCOPE_IO_UNUSED()
+    `SCOPE_IO_UNUSED(0)
 `endif
 `endif
 `ifdef CHIPSCOPE

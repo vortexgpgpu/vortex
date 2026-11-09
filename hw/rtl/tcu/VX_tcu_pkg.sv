@@ -44,39 +44,25 @@ package VX_tcu_pkg;
     localparam TCU_FMT_WIDTH= 5;
 
     // Set configuration parameters
-    localparam TCU_NT = `VX_CFG_NUM_THREADS;
+    localparam TCU_NT = MTX_NT;
 
     localparam TCU_WG_NRA = 4;  // A registers per warp (fixed)
     localparam TCU_WG_NR = 32;  // max NRC (C/D registers, variable via cd_nregs)
 
-    localparam TCU_NR = 8;
-    localparam TCU_DK = 0;
-    localparam TCU_DP = 0;
+    // Tile and block dimensions: the warp's matrix fragment geometry
+    localparam TCU_TILE_M = MTX_TILE_M;
+    localparam TCU_TILE_N = MTX_TILE_N;
+    localparam TCU_TILE_K = MTX_TILE_K;
 
-    // Tile dimensions
-    localparam TCU_TILE_CAP = TCU_NT * TCU_NR;
-    localparam TCU_LG_TILE_CAP = $clog2(TCU_TILE_CAP);
-    localparam TCU_TILE_EN = TCU_LG_TILE_CAP / 2;
-    localparam TCU_TILE_EM = TCU_LG_TILE_CAP - TCU_TILE_EN;
-
-    localparam TCU_TILE_M = 1 << TCU_TILE_EM;
-    localparam TCU_TILE_N = 1 << TCU_TILE_EN;
-    localparam TCU_TILE_K = (TCU_DK != 0) ? TCU_DK : (TCU_DP != 0) ? TCU_DP : (TCU_TILE_CAP / ((TCU_TILE_M > TCU_TILE_N) ? TCU_TILE_M : TCU_TILE_N));
-
-    // Block dimensions
-    localparam TCU_BLOCK_CAP = TCU_NT;
-    localparam TCU_LG_BLOCK_CAP = $clog2(TCU_BLOCK_CAP);
-    localparam TCU_BLOCK_EN = TCU_LG_BLOCK_CAP / 2;
-    localparam TCU_BLOCK_EM = TCU_LG_BLOCK_CAP - TCU_BLOCK_EN;
-
-    localparam TCU_TC_M = 1 << TCU_BLOCK_EM;
-    localparam TCU_TC_N = 1 << TCU_BLOCK_EN;
-    localparam TCU_TC_K = (TCU_DP != 0) ? TCU_DP : (TCU_BLOCK_CAP / ((TCU_TC_M > TCU_TC_N) ? TCU_TC_M : TCU_TC_N));
+    localparam TCU_BLOCK_CAP = MTX_BLOCK_CAP;
+    localparam TCU_TC_M = MTX_TC_M;
+    localparam TCU_TC_N = MTX_TC_N;
+    localparam TCU_TC_K = MTX_TC_K;
 
     // Step counts
-    localparam TCU_M_STEPS = TCU_TILE_M / TCU_TC_M;
-    localparam TCU_N_STEPS = TCU_TILE_N / TCU_TC_N;
-    localparam TCU_K_STEPS = TCU_TILE_K / TCU_TC_K;
+    localparam TCU_M_STEPS = MTX_M_STEPS;
+    localparam TCU_N_STEPS = MTX_N_STEPS;
+    localparam TCU_K_STEPS = MTX_K_STEPS;
 
     // A micro-tiling
     localparam TCU_A_BLOCK_SIZE = TCU_TC_M * TCU_TC_K;
@@ -84,7 +70,7 @@ package VX_tcu_pkg;
 
     // B micro-tiling (dense)
     localparam TCU_B_BLOCK_SIZE = TCU_TC_K * TCU_TC_N;
-    localparam TCU_B_SUB_BLOCKS = TCU_BLOCK_CAP / TCU_B_BLOCK_SIZE;
+    localparam TCU_B_SUB_BLOCKS = MTX_B_SUB_BLOCKS;
 
     // WGMMA per-warp tile dimensions (NRA=4 fixed, NRC=NR variable).
     // Derived from block geometry: xtileM = 2*tcM, xtileK = 2*tcK.
@@ -113,9 +99,13 @@ package VX_tcu_pkg;
     localparam TCU_WG_B_BLOCK_SIZE = TCU_WG_FEDP_K * TCU_TC_N;
     localparam TCU_WG_B_SUB_BLOCKS = TCU_BLOCK_CAP / TCU_WG_B_BLOCK_SIZE;
 
-    // Symmetric sparse flag (NT=4, NT=16: block_em == block_en)
-    // WGMMA always uses full interleaved layout, so SYM_SPARSE is forced off.
-    localparam SYM_SPARSE = `VX_CFG_TCU_WGMMA_ENABLED ? 0 : (TCU_BLOCK_EM == TCU_BLOCK_EN);
+    // WGMMA shared-memory descriptor: the slab's local-memory byte offset,
+    // and above it the row stride in 32-bit words.
+    localparam TCU_SMEM_DESC_OFF_BITS = 18;
+
+    // Symmetric sparse flag (NT=4, NT=16: block_em == block_en). It selects the
+    // WMMA_SP layout only: WGMMA_SP always reads the full interleaved layout.
+    localparam SYM_SPARSE = MTX_SYM_SPARSE;
 
     // B micro-tiling (sparse 2:4)
     // NT=8/32: standard interleaved layout (tcK × tcN × 2 = NT lanes per block)
@@ -168,7 +158,7 @@ package VX_tcu_pkg;
 
     // Register counts
     localparam TCU_NRA = (TCU_TILE_M * TCU_TILE_K) / TCU_NT;
-    localparam TCU_NRB = (TCU_TILE_N * TCU_TILE_K) / TCU_NT;
+    localparam TCU_NRB = MTX_NRB;
     localparam TCU_NRC = (TCU_TILE_M * TCU_TILE_N) / TCU_NT;
 
     // Register base addresses
@@ -181,6 +171,11 @@ package VX_tcu_pkg;
     localparam TCU_UOPS = TCU_M_STEPS * TCU_N_STEPS * TCU_K_STEPS;
 
     localparam TCU_MAX_INPUTS = TCU_WG_FEDP_K * TCU_MAX_ELT_RATIO;
+
+    localparam TCU_LG_M    = MTX_LG_M;
+    localparam TCU_LG_N    = MTX_LG_N;
+    localparam TCU_LG_K    = MTX_LG_K;
+    localparam TCU_LG_B_SB = MTX_LG_B_SB;
 
     function automatic int unsigned mx_fedp_sf_count(
         input int unsigned data_bits,
@@ -226,9 +221,12 @@ package VX_tcu_pkg;
     localparam TCU_MX_MAX_SF = `MAX(`MAX(TCU_MX_SF_FP8, TCU_MX_SF_MXFP4),
                                     TCU_MX_SF_NVFP4);
 
+    // MX block scales span 2^-254 .. 2^256 on top of the elements' own range.
     `ifdef VX_CFG_TCU_TF32_ENABLE
         localparam TCU_EXP_BITS = 10;
     `elsif VX_CFG_TCU_FP16_ENABLE
+        localparam TCU_EXP_BITS = 10;
+    `elsif VX_CFG_TCU_MX_ENABLE
         localparam TCU_EXP_BITS = 10;
     `else
         localparam TCU_EXP_BITS = 9;

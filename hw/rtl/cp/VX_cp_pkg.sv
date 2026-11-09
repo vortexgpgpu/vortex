@@ -80,6 +80,10 @@ package VX_cp_pkg;
 
   localparam int F_PROFILE   = 0;
   localparam int F_FENCE_PRE = 1;
+  // CMD_CACHE_FLUSH: flush only the levels above the last-level cache
+  localparam int F_FLUSH_L1_ONLY = 2;
+  // CMD_MEM_*: the device operands are physical addresses (no page walk).
+  localparam int F_MEM_PHYSICAL  = 2;
 
   typedef struct packed {
     logic [15:0] reserved;

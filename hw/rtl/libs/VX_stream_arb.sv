@@ -50,24 +50,29 @@ module VX_stream_arb #(
             localparam LOG_NUM_REQS2 = `CLOG2(MAX_FANOUT);
             localparam LOG_NUM_REQS3 = `CLOG2(NUM_SLICES);
             localparam DATAW2 = DATAW + LOG_NUM_REQS2;
+            localparam SLICE_STRIDE  = MAX_FANOUT * NUM_OUTPUTS;
+            // a last slice with fewer inputs than outputs feeds only the outputs of its inputs
+            localparam LAST_OUTPUTS  = `MIN(NUM_INPUTS - (NUM_SLICES - 1) * SLICE_STRIDE, NUM_OUTPUTS);
+            localparam JOIN_INPUTS   = (NUM_SLICES - 1) * NUM_OUTPUTS + LAST_OUTPUTS;
 
-            wire [NUM_SLICES-1:0][NUM_OUTPUTS-1:0] valid_tmp;
-            wire [NUM_SLICES-1:0][NUM_OUTPUTS-1:0][DATAW2-1:0] data_tmp;
-            wire [NUM_SLICES-1:0][NUM_OUTPUTS-1:0] ready_tmp;
+            wire [JOIN_INPUTS-1:0] valid_tmp;
+            wire [JOIN_INPUTS-1:0][DATAW2-1:0] data_tmp;
+            wire [JOIN_INPUTS-1:0] ready_tmp;
 
             for (genvar s = 0; s < NUM_SLICES; ++s) begin : g_slice_arbs
 
-                localparam SLICE_STRIDE= MAX_FANOUT * NUM_OUTPUTS;
                 localparam SLICE_BEGIN = s * SLICE_STRIDE;
                 localparam SLICE_END   = `MIN(SLICE_BEGIN + SLICE_STRIDE, NUM_INPUTS);
                 localparam SLICE_SIZE  = SLICE_END - SLICE_BEGIN;
+                localparam SLICE_OUTPUTS = `MIN(SLICE_SIZE, NUM_OUTPUTS);
+                localparam SLICE_SEL_W = `UP(`CLOG2(`CDIV(SLICE_SIZE, SLICE_OUTPUTS)));
 
-                wire [NUM_OUTPUTS-1:0][DATAW-1:0] data_tmp_u;
-                wire [NUM_OUTPUTS-1:0][LOG_NUM_REQS2-1:0] sel_tmp_u;
+                wire [SLICE_OUTPUTS-1:0][DATAW-1:0] data_tmp_u;
+                wire [SLICE_OUTPUTS-1:0][SLICE_SEL_W-1:0] sel_tmp_u;
 
                 VX_stream_arb #(
                     .NUM_INPUTS  (SLICE_SIZE),
-                    .NUM_OUTPUTS (NUM_OUTPUTS),
+                    .NUM_OUTPUTS (SLICE_OUTPUTS),
                     .DATAW       (DATAW),
                     .ARBITER     (ARBITER),
                     .STICKY      (STICKY),
@@ -79,14 +84,14 @@ module VX_stream_arb #(
                     .valid_in  (valid_in[SLICE_END-1: SLICE_BEGIN]),
                     .data_in   (data_in[SLICE_END-1: SLICE_BEGIN]),
                     .ready_in  (ready_in[SLICE_END-1: SLICE_BEGIN]),
-                    .valid_out (valid_tmp[s]),
+                    .valid_out (valid_tmp[s * NUM_OUTPUTS +: SLICE_OUTPUTS]),
                     .data_out  (data_tmp_u),
-                    .ready_out (ready_tmp[s]),
+                    .ready_out (ready_tmp[s * NUM_OUTPUTS +: SLICE_OUTPUTS]),
                     .sel_out   (sel_tmp_u)
                 );
 
-                for (genvar o = 0; o < NUM_OUTPUTS; ++o) begin : g_data_tmp
-                    assign data_tmp[s][o] = {data_tmp_u[o], sel_tmp_u[o]};
+                for (genvar o = 0; o < SLICE_OUTPUTS; ++o) begin : g_data_tmp
+                    assign data_tmp[s * NUM_OUTPUTS + o] = {data_tmp_u[o], LOG_NUM_REQS2'(sel_tmp_u[o])};
                 end
             end
 
@@ -94,7 +99,7 @@ module VX_stream_arb #(
             wire [NUM_OUTPUTS-1:0][LOG_NUM_REQS3-1:0] sel_out_u;
 
             VX_stream_arb #(
-                .NUM_INPUTS  (NUM_SLICES * NUM_OUTPUTS),
+                .NUM_INPUTS  (JOIN_INPUTS),
                 .NUM_OUTPUTS (NUM_OUTPUTS),
                 .DATAW       (DATAW2),
                 .ARBITER     (ARBITER),
@@ -210,15 +215,19 @@ module VX_stream_arb #(
             localparam NUM_SLICES    = `CDIV(NUM_REQS, MAX_FANOUT);
             localparam LOG_NUM_REQS2 = `CLOG2(MAX_FANOUT);
             localparam LOG_NUM_REQS3 = `CLOG2(NUM_SLICES);
+            localparam SLICE_STRIDE  = MAX_FANOUT * NUM_INPUTS;
+            // a last slice with fewer outputs than inputs takes only the inputs of its outputs
+            localparam LAST_INPUTS   = `MIN(NUM_OUTPUTS - (NUM_SLICES - 1) * SLICE_STRIDE, NUM_INPUTS);
+            localparam FORK_OUTPUTS  = (NUM_SLICES - 1) * NUM_INPUTS + LAST_INPUTS;
 
-            wire [NUM_SLICES-1:0][NUM_INPUTS-1:0] valid_tmp;
-            wire [NUM_SLICES-1:0][NUM_INPUTS-1:0][DATAW-1:0] data_tmp;
-            wire [NUM_SLICES-1:0][NUM_INPUTS-1:0] ready_tmp;
+            wire [FORK_OUTPUTS-1:0] valid_tmp;
+            wire [FORK_OUTPUTS-1:0][DATAW-1:0] data_tmp;
+            wire [FORK_OUTPUTS-1:0] ready_tmp;
             wire [NUM_INPUTS-1:0][LOG_NUM_REQS3-1:0] sel_tmp;
 
             VX_stream_arb #(
                 .NUM_INPUTS  (NUM_INPUTS),
-                .NUM_OUTPUTS (NUM_SLICES * NUM_INPUTS),
+                .NUM_OUTPUTS (FORK_OUTPUTS),
                 .DATAW       (DATAW),
                 .ARBITER     (ARBITER),
                 .STICKY      (STICKY),
@@ -240,15 +249,16 @@ module VX_stream_arb #(
 
             for (genvar s = 0; s < NUM_SLICES; ++s) begin : g_slice_arbs
 
-                localparam SLICE_STRIDE= MAX_FANOUT * NUM_INPUTS;
                 localparam SLICE_BEGIN = s * SLICE_STRIDE;
                 localparam SLICE_END   = `MIN(SLICE_BEGIN + SLICE_STRIDE, NUM_OUTPUTS);
                 localparam SLICE_SIZE  = SLICE_END - SLICE_BEGIN;
+                localparam SLICE_INPUTS= `MIN(SLICE_SIZE, NUM_INPUTS);
+                localparam SLICE_SEL_W = `UP(`CLOG2(`CDIV(SLICE_SIZE, SLICE_INPUTS)));
 
-                wire [NUM_INPUTS-1:0][LOG_NUM_REQS2-1:0] sel_out_u;
+                wire [SLICE_INPUTS-1:0][SLICE_SEL_W-1:0] sel_out_u;
 
                 VX_stream_arb #(
-                    .NUM_INPUTS  (NUM_INPUTS),
+                    .NUM_INPUTS  (SLICE_INPUTS),
                     .NUM_OUTPUTS (SLICE_SIZE),
                     .DATAW       (DATAW),
                     .ARBITER     (ARBITER),
@@ -258,14 +268,23 @@ module VX_stream_arb #(
                 ) fanout_slice_arb (
                     .clk       (clk),
                     .reset     (reset),
-                    .valid_in  (valid_tmp[s]),
-                    .ready_in  (ready_tmp[s]),
-                    .data_in   (data_tmp[s]),
+                    .valid_in  (valid_tmp[s * NUM_INPUTS +: SLICE_INPUTS]),
+                    .ready_in  (ready_tmp[s * NUM_INPUTS +: SLICE_INPUTS]),
+                    .data_in   (data_tmp[s * NUM_INPUTS +: SLICE_INPUTS]),
                     .data_out  (data_out[SLICE_END-1: SLICE_BEGIN]),
                     .valid_out (valid_out[SLICE_END-1: SLICE_BEGIN]),
                     .ready_out (ready_out[SLICE_END-1: SLICE_BEGIN]),
-                    .sel_out   (sel_out_w[s])
+                    .sel_out   (sel_out_u)
                 );
+
+                // inputs past a narrow last slice are never forked to it
+                for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_sel_out_w
+                    if (i < SLICE_INPUTS) begin : g_sel
+                        assign sel_out_w[s][i] = LOG_NUM_REQS2'(sel_out_u[i]);
+                    end else begin : g_pad
+                        assign sel_out_w[s][i] = '0;
+                    end
+                end
             end
 
             for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_sel_out
@@ -284,7 +303,11 @@ module VX_stream_arb #(
                 wire [NUM_INPUTS-1:0] requests;
                 for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_i
                     localparam o = r * NUM_INPUTS + i;
-                    assign requests[i] = ready_out[o];
+                    if (o < NUM_OUTPUTS) begin : g_req_ready
+                        assign requests[i] = ready_out[o];
+                    end else begin : g_req_pad
+                        assign requests[i] = 1'b0;
+                    end
                 end
                 assign arb_requests[r] = (| requests);
             end
@@ -318,7 +341,11 @@ module VX_stream_arb #(
                 wire [NUM_REQS-1:0] ready_out_s;
                 for (genvar r = 0; r < NUM_REQS; ++r) begin : g_r
                     localparam o = r * NUM_INPUTS + i;
-                    assign ready_out_s[r] = ready_out_w[o];
+                    if (o < NUM_OUTPUTS) begin : g_ready
+                        assign ready_out_s[r] = ready_out_w[o];
+                    end else begin : g_padding
+                        assign ready_out_s[r] = 1'b0;
+                    end
                 end
                 assign ready_in[i] = (NUM_INPUTS == 1) ? arb_valid : (| (ready_out_s & arb_onehot));
             end

@@ -26,8 +26,12 @@ show_help()
 {
     show_usage
     echo "  where"
-    echo "--driver: gpu, simx, rtlsim, opae, xrt, aved"
-    echo "--target: aved driver only -- avedsim (default), sim, hw"
+    echo "--driver: gpu, simx, rtlsim, opae, xrt, aved, firesim, foldsim"
+    echo "--target: xrt: xrtsim (default), hw_emu, hw -- aved: avedsim (default), sim, hw"
+    echo "          firesim: the targets of the card's native driver; xrtsim (default) or"
+    echo "          avedsim need no image, the others run FPGA_BIN_DIR's (hw/syn/firesim)"
+    echo "          foldsim: avedsim (default) simulates the kernel in Verilator, built"
+    echo "          by the run; hw runs FPGA_BIN_DIR's foldsim.vbin (hw/syn/foldsim)"
     echo "--app: any subfolder test under regression, graphics, mpi, opencl, or hip"
     echo "--perf: 0=disable, 1=core, 3=icache, 4=dcache, 5=l2cache, 6=l3cache, 7=mem,"
     echo "        11=tcu, 12=raster, 13=tex, 14=om, 15=rtu, 16=dxa"
@@ -96,7 +100,7 @@ parse_args() {
 set_driver_path() {
     case $DRIVER in
         gpu) DRIVER_PATH="" ;;
-        simx|rtlsim|opae|xrt|aved|firesim) DRIVER_PATH="$ROOT_DIR/sw/runtime/$DRIVER" ;;
+        simx|rtlsim|opae|xrt|aved|firesim|foldsim) DRIVER_PATH="$ROOT_DIR/sw/runtime/$DRIVER" ;;
         *) echo "Invalid driver: $DRIVER"; exit 1 ;;
     esac
 }
