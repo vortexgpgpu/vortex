@@ -281,15 +281,15 @@ void MemCoalescer::on_tick() {
 
   DT(4, this->name() << " mem-req: coalesced=" << cur_mask.count() << ", lanes=" << out_mask.count() << " (#" << in_req.uuid << ")");
 
-  // track partial responses
-  perf_stats_.misses += (cur_mask.count() != in_req.mask.count());
+  // A request split into N rounds counts N-1 misses: every round but its last.
+  sent_mask_ |= cur_mask;
+  perf_stats_.misses += (sent_mask_ != in_req.mask);
 
   // The built round is presented to the downstream on the next tick, not
   // this one: the coalescer alternates a build tick with a drain tick, so a
   // batch issues at most every other cycle. Draining is handled at the top
   // of on_tick when out_round_ is valid. The input is released as its last
   // batch is built, without waiting for that batch to be accepted.
-  sent_mask_ |= cur_mask;
   if (sent_mask_ == in_req.mask) {
     ReqIn.pop();
     sent_mask_.reset();
