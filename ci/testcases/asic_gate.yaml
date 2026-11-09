@@ -16,11 +16,11 @@
 #   builds:  what ci/asic_gate.py reads — the build list, with its per-build
 #            `known_issue` and `thresholds`. The pytest loader ignores this key.
 #
-# UNLIKE fpga_gate, THIS ONE RUNS ON A HOSTED RUNNER. Yosys, sv2v and OpenSTA
-# ship in the prebuilt toolchain (ci/toolchain_install.sh installs all three by
-# default) and ASAP7 is a 59 MB content-addressed fetch, so there is no licence
-# and no dedicated machine in the way — which is the whole point of having an
-# open-source flow.
+# UNLIKE fpga_gate, THIS ONE RUNS ON A HOSTED RUNNER. Yosys (with its slang
+# SystemVerilog frontend) and OpenSTA ship in the prebuilt toolchain
+# (ci/toolchain_install.sh installs both by default) and ASAP7 is a 59 MB
+# content-addressed fetch, so there is no licence and no dedicated machine in
+# the way — which is the whole point of having an open-source flow.
 #
 # It is still nightly, not a PR gate: a DUT takes 1-2 hours. Tier `asic` is
 # OPT-IN (OPT_IN_TIERS in testcase.py), so ci.yml's hosted matrix never emits a
@@ -119,7 +119,7 @@ builds:
 - id: core
   group: core
   dut: core
-  clock_mhz: 400
+  clock_mhz: 800
   area_budget_um2: 84624
   configs: "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8"
 
@@ -128,7 +128,7 @@ builds:
 - id: lmem
   group: core
   dut: lmem
-  clock_mhz: 400
+  clock_mhz: 800
   area_budget_um2: 15867
   configs: "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_A_ENABLE"
 
@@ -138,7 +138,7 @@ builds:
 - id: top
   group: core
   dut: top
-  clock_mhz: 400
+  clock_mhz: 800
   area_budget_um2: 187230
   # 11.2 GB Yosys peak at NT=NW=4 (8/8: 18.6 GB).
   configs: "-DVX_CFG_NUM_THREADS=4 -DVX_CFG_NUM_WARPS=4"
@@ -171,7 +171,7 @@ builds:
 - id: tcu
   group: tensor
   dut: tcu
-  clock_mhz: 500
+  clock_mhz: 800
   area_budget_um2: 74407
   configs: ""
 
@@ -180,7 +180,7 @@ builds:
 - id: tensor
   group: tensor
   dut: tensor
-  clock_mhz: 400
+  clock_mhz: 800
   area_budget_um2: 104438
   configs: "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8"
 
@@ -215,7 +215,7 @@ builds:
 - id: rtu
   group: graphics
   dut: rtu
-  clock_mhz: 400
+  clock_mhz: 800
   area_budget_um2: 98965
   configs: ""
 
@@ -224,7 +224,7 @@ builds:
 - id: gfx
   group: graphics
   dut: gfx
-  clock_mhz: 400
+  clock_mhz: 800
   area_budget_um2: 242203
   # 14.6 GB Yosys peak at NT=NW=4 (8/8: 19.5 GB).
   configs: "-DVX_CFG_NUM_THREADS=4 -DVX_CFG_NUM_WARPS=4"
@@ -236,6 +236,6 @@ builds:
 - id: vm
   group: vm
   dut: vm
-  clock_mhz: 400
+  clock_mhz: 800
   area_budget_um2: 146445
   configs: "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8"
