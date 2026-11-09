@@ -105,6 +105,8 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
 - **TCU_LD response assertion.** With the LSU narrower than the warp, a TCU_LD goes out in passes and an earlier pass's response
   can return while a later pass's request is held; the assertion fired on that correct order. It now expects a response from the
   first request on.
+- **ASAP7 download in CI.** A transient HTTP 504 from GitHub on the Liberty files failed the whole synthesis cell. The synthesis
+  cells now cache the checksummed downloads, keyed on the manifest, and the installer retries six times, 20 s apart.
 - **TCU B-buffer descriptor race.** The B buffer re-latched its descriptor on every first uop, even while a fetch was in flight, so
   a back-to-back WGMMA could fetch with the next instruction's row base. It now latches at fetch allocation.
 - **Pipe buffer combinational loop at `-O0`.** `VX_pipe_buffer` kept its input in the same vector as its stage registers, which an

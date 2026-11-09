@@ -278,6 +278,15 @@ jobs:
         run: |
           ${{ contains(matrix.needs, 'mpi') && 'sudo bash ./ci/install_dependencies.sh --mpi' || 'true' }}
           ${{ contains(matrix.needs, 'gem5') && 'sudo bash ./ci/install_dependencies.sh --gem5' || 'true' }}
+      # ASAP7's downloads are content-addressed by its manifest, so the
+      # manifest's hash is the cache key. A hit skips the fetch from GitHub,
+      # which can fail a whole cell on a transient 5xx.
+      - name: Cache ASAP7 downloads
+        if: contains(matrix.needs, 'asap7')
+        uses: actions/cache@v4
+        with:
+          path: build${{ matrix.xlen }}/hw/syn/libs/asap7/downloads
+          key: asap7-downloads-${{ hashFiles('hw/syn/libs/asap7/manifest.txt') }}
       - name: Per-case tools
         if: contains(matrix.needs, 'foldsim')
         run: |
