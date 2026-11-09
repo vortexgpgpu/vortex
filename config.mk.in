@@ -74,8 +74,10 @@ ifneq ($(.SHELLSTATUS),0)
 $(error invalid hardware profile '$(PROFILE)')
 endif
 # A Makefile that includes this one appends its own -D flags to CONFIGS, and an
-# override would silently drop them; only a command-line CONFIGS needs one.
-ifeq ($(origin CONFIGS),command line)
+# override would silently drop them. A command-line CONFIGS, or one the
+# including Makefile already overrode, ignores a plain assignment, so those take
+# the override.
+ifneq ($(filter command line override,$(origin CONFIGS)),)
 override CONFIGS := $(PROFILE_CONFIGS)
 else
 CONFIGS := $(PROFILE_CONFIGS)
