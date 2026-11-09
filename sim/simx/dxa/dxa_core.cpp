@@ -79,8 +79,7 @@ public:
     uint32_t cfill;            // OOB fill value (lane-replicated)
     bool     oob;              // skip GMEM read; use cfill
     bool     last;             // last work item of the transfer
-    bool     scatter;          // K-major/tiled: one element written per beat,
-                               // unless the elements are gathered per LMEM word
+    bool     scatter;          // K-major/tiled: one element written per beat
     uint32_t km_num_elems;     // K-major scatter fan-out (1 = contiguous write)
     uint32_t km_lane_stride;   // SMEM byte stride between scattered elements
     uint8_t  dest_layout;      // DestLayout (Flat/BlockMajor use tiled_dest_elem)
@@ -422,10 +421,6 @@ private:
 
     // K-major SMEM per-lane stride = tile1 * elem_bytes.
     uint32_t per_lane_stride_bytes = tiles[1] * elem_bytes;
-    // Tiled destinations and power-of-two K-major strides gather every element
-    // of a beat's LMEM word into one write.
-    bool gather = dest_tiled || (dest_kmajor && per_lane_stride_bytes != 0
-                                 && (per_lane_stride_bytes & (per_lane_stride_bytes - 1)) == 0);
 
     // Tiled (Flat/BlockMajor) geometry: ratio = 32-bit-word / elem, tcN from
     // ESTRIDE2, n_steps = row_elems(=xtileN) / tcN.
@@ -518,7 +513,7 @@ private:
         lw.cfill            = cfill;
         lw.oob              = elem_oob;
         lw.last             = false;
-        lw.scatter          = scatter && !gather;
+        lw.scatter          = scatter;
         lw.km_num_elems     = scatter ? num_elems : 1;
         lw.km_lane_stride   = dest_kmajor ? per_lane_stride_bytes : 0;
         lw.dest_layout      = uint8_t(layout);
