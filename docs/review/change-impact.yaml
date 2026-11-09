@@ -157,7 +157,7 @@ detectors:
   - id: test-coverage
     kind: testcase_coverage
     class: R3
-    paths: ["ci/testcases/*.yaml"]
+    paths: ["ci/testcases/*.yaml", "ci/testcases/*/*.yaml"]
     why: "An existing case's command line, configs, drivers, XLENs, tier, tolerance or known_issue, the file's defaults, or the case itself decide what CI proves; changing or removing one can turn a real failure green. A new case is not a finding."
 
   - id: golden-values
@@ -195,7 +195,7 @@ evidence:
   - id: test-silencing
     kind: testcase_silencing
     min_class: R2
-    paths: ["ci/testcases/*.yaml"]
+    paths: ["ci/testcases/*.yaml", "ci/testcases/*/*.yaml"]
     tolerance_keys: ["tolerance", "threshold", "thresholds", "margin", "fmax_margin"]
     why: "A known_issue, a wider tolerance, smaller arguments or a removed case can turn a real failure green."
 

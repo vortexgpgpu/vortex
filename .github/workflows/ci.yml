@@ -143,8 +143,8 @@ jobs:
           cells=$(python3 ci/testcase.py matrix $F)
           echo "cells=$cells" >> "$GITHUB_OUTPUT"
           [ "$cells" = "[]" ] && echo "run=false" >> "$GITHUB_OUTPUT" || echo "run=true" >> "$GITHUB_OUTPUT"
-          # full toolchain (SST build + gem5) only when sst/gem5 are selected
-          if echo "$cells" | grep -qE '"(sst|gem5)"'; then echo "profile=full" >> "$GITHUB_OUTPUT"; else echo "profile=lite" >> "$GITHUB_OUTPUT"; fi
+          # full toolchain (SST build + gem5) only when a cell needs sst or gem5
+          if echo "$cells" | grep -qE '"needs": \[[^]]*"(sst|gem5)"'; then echo "profile=full" >> "$GITHUB_OUTPUT"; else echo "profile=lite" >> "$GITHUB_OUTPUT"; fi
           python3 ci/testcase.py lint
 
   # ---------------------------------------------------------------------------
@@ -270,11 +270,14 @@ jobs:
         run: |
           case "${{ matrix.category }}" in
             vulkan) sudo bash ./ci/install_dependencies.sh --vulkan ;;
-            mpi)    sudo bash ./ci/install_dependencies.sh --mpi ;;
-            gem5)   sudo bash ./ci/install_dependencies.sh --gem5 ;;
           esac
       # A check's cell gathers cases from every category, so per-case tools are
       # keyed on the cell's needs, not its name.
+      - name: Per-case deps
+        if: contains(matrix.needs, 'mpi') || contains(matrix.needs, 'gem5')
+        run: |
+          ${{ contains(matrix.needs, 'mpi') && 'sudo bash ./ci/install_dependencies.sh --mpi' || 'true' }}
+          ${{ contains(matrix.needs, 'gem5') && 'sudo bash ./ci/install_dependencies.sh --gem5' || 'true' }}
       - name: Per-case tools
         if: contains(matrix.needs, 'foldsim')
         run: |

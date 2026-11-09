@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """Vortex test cases — the model and the CLI.
 
-Loads ci/testcases/*.yaml into concrete test cases, and exposes the planner CLI
+Loads ci/testcases/ into concrete test cases, and exposes the planner CLI
 (`lint` / `matrix` / `select`) the CI workflow uses. Pure logic with no pytest
 dependency (only PyYAML), so the lightweight ci.yml plan job and the pytest
 harness (ci/test_runner.py) both build on it. See docs/designs/continuous_integration.md.
 
-A *case* (class Spec) is one declarative test. A testcases file lists entries per
-category; an entry with `drivers: [...]` expands to one case per driver. `xlen` is
+A *case* (class Spec) is one declarative test. A category is one file,
+ci/testcases/<category>.yaml, or a directory of files,
+ci/testcases/<category>/*.yaml, each with its own defaults; a directory runs as
+one cell. An entry with `drivers: [...]` expands to one case per driver. `xlen` is
 an outer dimension — cases are filtered against the ambient build tree's XLEN,
 never expanded here (build32/ and build64/ are separate trees).
 
@@ -80,8 +82,10 @@ def driver_marker(driver):
 class Spec:
     """One concrete test case: a single (category, driver, configs, shape) point."""
 
-    def __init__(self, category, entry, driver, defaults):
+    def __init__(self, category, entry, driver, defaults, suite=None):
         self.category = category
+        # the file a case comes from, when its category is a directory of files
+        self.suite = suite if suite != category else None
         self.driver = driver
         self.via = entry.get("via", defaults.get("via", "blackbox"))
         self.app = entry.get("app", "")
@@ -178,6 +182,8 @@ class Spec:
     def markers(self):
         """pytest marker names for `-m` selection (one per value)."""
         m = [self.category, self.tier]
+        if self.suite:
+            m.append(self.suite)
         if self.marker_driver:
             m.append(self.marker_driver)
         if self.check:
@@ -272,6 +278,7 @@ def load_category(path):
         doc = yaml.safe_load(fh)
     category = doc["category"]
     defaults = doc.get("defaults", {})
+    suite = os.path.basename(path)[:-len(".yaml")]
     cases = []
     for raw in doc.get("tests", []):
         for entry in _expand_threads(raw):
@@ -283,7 +290,7 @@ def load_category(path):
             else:
                 drivers = entry.get("drivers") or ([entry["driver"]] if "driver" in entry else [None])
             for driver in drivers:
-                cases.append(Spec(category, entry, driver, defaults))
+                cases.append(Spec(category, entry, driver, defaults, suite))
     return cases
 
 
@@ -308,10 +315,20 @@ def _reject_rtl_xrt_duplicates(cases):
                 "point; keep only the xrt leg".format(other.id, c.id))
 
 
+def testcase_files(testcases_dir=TESTCASES_DIR):
+    """(path, category its location names) of every testcases file: a file at the
+    top names its own category, a file in a subdirectory names the directory's."""
+    files = [(p, os.path.basename(p)[:-len(".yaml")])
+             for p in glob.glob(os.path.join(testcases_dir, "*.yaml"))]
+    files += [(p, os.path.basename(os.path.dirname(p)))
+              for p in glob.glob(os.path.join(testcases_dir, "*", "*.yaml"))]
+    return sorted(files)
+
+
 def load_all(testcases_dir=TESTCASES_DIR):
-    """Load every ci/testcases/*.yaml into a flat list of concrete cases."""
+    """Load every testcases file into a flat list of concrete cases."""
     cases = []
-    for path in sorted(glob.glob(os.path.join(testcases_dir, "*.yaml"))):
+    for path, _ in testcase_files(testcases_dir):
         cases.extend(load_category(path))
     _reject_rtl_xrt_duplicates(cases)
     return cases
@@ -561,21 +578,33 @@ def cmd_lint(args):
     cases = load_all()
     errors, seen = [], {}
 
-    # A file is named after the SUITE it holds. A check (`perf_gate`,
-    # `model_parity`) is a marker carried by cases across many suites, never a
-    # file or a category: a name collision would let a category rename decide
-    # whether a gate runs at all.
-    for path in sorted(glob.glob(os.path.join(TESTCASES_DIR, "*.yaml"))):
-        stem = os.path.basename(path)[:-len(".yaml")]
+    # A file, or a directory of files, is named after the SUITE it holds. A
+    # check (`perf_gate`, `model_parity`) is a marker carried by cases across
+    # many suites, never a file or a category: a name collision would let a
+    # category rename decide whether a gate runs at all. A driver or tier name
+    # is a marker too, so `-m "<category> and <driver>"` must not repeat one.
+    reserved = VALID_CHECK | set(DRIVER_MARKERS) | {"host"} | {c.tier for c in cases}
+    files = testcase_files()
+    tops = {name for path, name in files if os.path.dirname(path) == TESTCASES_DIR}
+    for path, name in files:
+        rel = os.path.relpath(path, TESTCASES_DIR)
         with open(path) as fh:
             category = (yaml.safe_load(fh) or {}).get("category")
-        if category != stem:
-            errors.append("{}: category {!r} must match the file name {!r}"
-                          .format(os.path.basename(path), category, stem))
-        if stem in VALID_CHECK:
-            errors.append("{}: named after the check {!r} -- a check is a marker "
-                          "on cases across suites, not a suite".format(
-                              os.path.basename(path), stem))
+        if category != name:
+            errors.append("{}: category {!r} must match its file or directory "
+                          "name {!r}".format(rel, category, name))
+        if name in reserved:
+            errors.append("{}: named after the marker {!r} -- a check, driver "
+                          "or tier, not a suite".format(rel, name))
+        if os.path.dirname(path) != TESTCASES_DIR and name in tops:
+            errors.append("{}: category {!r} is both a file and a directory"
+                          .format(rel, name))
+        # a file in a directory is also selectable by its own name (a suite)
+        suite = os.path.basename(path)[:-len(".yaml")]
+        if os.path.dirname(path) != TESTCASES_DIR and suite != name and (
+                suite in reserved or suite in {n for _, n in files}):
+            errors.append("{}: suite {!r} collides with a category or a marker"
+                          .format(rel, suite))
 
     # Every check must own at least one case, or `-m <check>` selects nothing and
     # the gate is silently a no-op.

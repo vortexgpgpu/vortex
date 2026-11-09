@@ -241,6 +241,12 @@ copy_files "$SOURCE_DIR" "$CURRENT_DIR"
 if [ "$(realpath "$SOURCE_DIR")" != "$(realpath "$CURRENT_DIR")" ]; then
     mkdir -p "$CURRENT_DIR/ci/testcases"
     cp -p "$SOURCE_DIR"/ci/testcases/*.yaml "$CURRENT_DIR/ci/testcases/" 2>/dev/null || true
+    # a category directory holds several files that run as one cell
+    for dir in "$SOURCE_DIR"/ci/testcases/*/; do
+        [ -d "$dir" ] || continue
+        mkdir -p "$CURRENT_DIR/ci/testcases/$(basename "$dir")"
+        cp -p "$dir"*.yaml "$CURRENT_DIR/ci/testcases/$(basename "$dir")/" 2>/dev/null || true
+    done
 fi
 
 # generate header files from toml configs:

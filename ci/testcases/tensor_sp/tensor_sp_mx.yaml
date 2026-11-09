@@ -1,5 +1,5 @@
 # Sparse + MX (microscaling) tensor-core sgemm. Seed coverage (no legacy bash existed).
-category: tensor_sp_mx
+category: tensor_sp
 defaults:
   xlen:
   - 32

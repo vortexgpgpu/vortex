@@ -58,6 +58,11 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
   so the pair's later uniform reads merge again; a pair that waited on each other is released. Groups of 4 ports do not realign.
   *Why:* the drift was lost on every following uniform load: vecadd on 4 LSU blocks -11.3% in rtlsim, and its SimX/RTL gap over 7
   sizes falls from 3.9% (-0.9% to 7.2%) to 1.8%.
+- **Small CI suites share a cell.** A test category can be a directory of files, each with its own defaults, that runs as one
+  cell per driver and XLEN: `isa` (mufu, zfhmin, rvc, riscv, amo), `sw` (opencl, hip, kernel, runtime), `integration` (gem5, sst,
+  dtm, cupbop, mpi) and `tensor_sp` (sparse, and sparse with MX). Every case keeps its command, configs, drivers and tier; each file
+  stays selectable by its own name (`-m mufu`). *Why:* each of these suites ran in 2-6 minutes, most of it the cell's setup; a pull
+  request now plans 82 cells instead of 108, a push 35 instead of 49.
 - **Foldsim's shell lives in the Foldsim repository.** The control and memory endpoints, the DRAM bank timing model, the register
   map, the in-process host, the endpoint's unit tests and the boundary lifting (`foldsim-lift`) moved out of `hw/rtl/afu/foldsim`,
   `sim/foldsim`, `sw/common`, `hw/unittest/foldsim_mem*` and `hw/syn/foldsim`; they come with the Foldsim installation
@@ -97,6 +102,9 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
 
 - **fcvt NaN boxing on RV64.** The half-precision operand check covered the register up to XLEN instead of FLEN, so an RV64 build
   without the D extension read a boxed half as a NaN.
+- **TCU_LD response assertion.** With the LSU narrower than the warp, a TCU_LD goes out in passes and an earlier pass's response
+  can return while a later pass's request is held; the assertion fired on that correct order. It now expects a response from the
+  first request on.
 - **TCU B-buffer descriptor race.** The B buffer re-latched its descriptor on every first uop, even while a fetch was in flight, so
   a back-to-back WGMMA could fetch with the next instruction's row base. It now latches at fetch allocation.
 - **Pipe buffer combinational loop at `-O0`.** `VX_pipe_buffer` kept its input in the same vector as its stage registers, which an
