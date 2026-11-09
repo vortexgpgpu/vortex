@@ -16,7 +16,7 @@
 
 using namespace vortex;
 
-Dispatcher::Dispatcher(const SimContext& ctx, const char* name, Core* core, uint32_t queue_size, uint32_t block_size, uint32_t num_lanes, uint32_t out_delay, bool round_robin)
+Dispatcher::Dispatcher(const SimContext& ctx, const char* name, Core* core, uint32_t queue_size, uint32_t block_size, uint32_t num_lanes, uint32_t out_delay)
   : SimObject<Dispatcher>(ctx, name)
   // One dispatch queue per issue slot. The extra entry holds the op still in
   // the collector's output register, which the channel counts as occupancy.
@@ -30,7 +30,6 @@ Dispatcher::Dispatcher(const SimContext& ctx, const char* name, Core* core, uint
   , num_blocks_(VX_CFG_ISSUE_WIDTH / block_size)
   , num_packets_(VX_CFG_NUM_THREADS / num_lanes)
   , batch_idx_(0)
-  , round_robin_(round_robin)
   , out_delay_(out_delay)
   , block_pids_(block_size, 0)
 {}
@@ -142,20 +141,9 @@ void Dispatcher::on_tick() {
 
   // advance to next batch once all blocks in the current batch have been processed
   if (block_sent == block_size_) {
-    // Grant the next batch with an instruction (round-robin after the current
-    // one, or the lowest): an empty issue slot costs no dispatch cycle. With
-    // none, a round-robin grant stays and a priority grant rests on the last.
-    if (!round_robin_) {
-      batch_idx_ = valid_batches ? __builtin_ctz(valid_batches) : (num_blocks_ - 1);
-    } else {
-      for (uint32_t k = 1; k <= num_blocks_; ++k) {
-        uint32_t i = (batch_idx_ + k) % num_blocks_;
-        if ((valid_batches >> i) & 1) {
-          batch_idx_ = i;
-          break;
-        }
-      }
-    }
+    // Priority grant to the lowest batch with an instruction: an empty issue
+    // slot costs no dispatch cycle. With none, the grant rests on the last.
+    batch_idx_ = valid_batches ? __builtin_ctz(valid_batches) : (num_blocks_ - 1);
     for (auto& bp : block_pids_) {
       bp = 0;
     }

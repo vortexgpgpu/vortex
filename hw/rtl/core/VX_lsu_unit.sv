@@ -43,10 +43,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     VX_lane_dispatch #(
         .BLOCK_SIZE (BLOCK_SIZE),
         .NUM_LANES  (NUM_LANES),
-        .OUT_BUF    (3),
-        // Fixed priority staggers warps so one's memory phase overlaps
-        // another's compute; memory stalls bound the starvation.
-        .ARBITER    ("P")
+        .OUT_BUF    (3)
     ) lane_dispatch (
         .clk        (clk),
         .reset      (reset),

@@ -29,7 +29,7 @@ public:
 	SimChannel<instr_trace_t*> ReleaseOut;
 
 	// out_delay: cycles from leaving the slot queue to the unit taking the op.
-	Dispatcher(const SimContext& ctx, const char* name, Core* core, uint32_t queue_size, uint32_t block_size, uint32_t num_lanes, uint32_t out_delay, bool round_robin = true);
+	Dispatcher(const SimContext& ctx, const char* name, Core* core, uint32_t queue_size, uint32_t block_size, uint32_t num_lanes, uint32_t out_delay);
 
 	virtual ~Dispatcher();
 
@@ -44,7 +44,6 @@ private:
 	uint32_t num_blocks_;
 	uint32_t num_packets_;
 	uint32_t batch_idx_;
-	bool round_robin_;
 	uint32_t out_delay_;
 	std::vector<int> block_pids_;
 

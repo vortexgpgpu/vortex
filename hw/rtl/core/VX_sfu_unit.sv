@@ -106,10 +106,7 @@ import VX_raster_pkg::*;
     VX_lane_dispatch #(
         .BLOCK_SIZE (BLOCK_SIZE),
         .NUM_LANES  (NUM_LANES),
-        .OUT_BUF    (3),
-        // Fixed priority, as on the LSU: barrier and DXA traffic stall warps
-        // apart, which a round-robin realigns.
-        .ARBITER    ("P")
+        .OUT_BUF    (3)
     ) lane_dispatch (
         .clk        (clk),
         .reset      (reset),
