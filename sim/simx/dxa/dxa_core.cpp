@@ -79,6 +79,7 @@ public:
     uint32_t cfill;            // OOB fill value (lane-replicated)
     bool     oob;              // skip GMEM read; use cfill
     bool     last;             // last work item of the transfer
+    bool     scatter;          // K-major/tiled: one element written per beat
     uint32_t km_num_elems;     // K-major scatter fan-out (1 = contiguous write)
     uint32_t km_lane_stride;   // SMEM byte stride between scattered elements
     uint8_t  dest_layout;      // DestLayout (Flat/BlockMajor use tiled_dest_elem)
@@ -296,10 +297,6 @@ private:
                                   uint32_t ratio, uint32_t tcN, uint32_t n_steps,
                                   uint32_t bkK) {
     if (lay == DestLayout::Flat) {
-      // NOTE: sparse Flat under FEDP2K is unresolved — the candidate-block
-      // layout is not a simple K-block scale of tcK*2 (x1 gives wrong values,
-      // x2 overshoots the tile). Left at base; must co-change with the read in
-      // tcu_unit.cpp gather_word sparse_b path + vx_tensor.h b_sp_flat_idx.
       uint32_t b_tcK_words = tcN * 2;
       uint32_t blk_words   = tcN * b_tcK_words;
       uint32_t k_word = k / ratio;
@@ -516,6 +513,7 @@ private:
         lw.cfill            = cfill;
         lw.oob              = elem_oob;
         lw.last             = false;
+        lw.scatter          = scatter;
         lw.km_num_elems     = scatter ? num_elems : 1;
         lw.km_lane_stride   = dest_kmajor ? per_lane_stride_bytes : 0;
         lw.dest_layout      = uint8_t(layout);
@@ -660,14 +658,11 @@ private:
 
       const LineWork& lw = s.work;
 
-      // One cache-line read fans out to its scattered writes. The K-major
-      // elements landing in the same SMEM block are written TOGETHER in one
-      // byte-masked block write: the per-core LMEM port accepts a full
-      // VX_CFG_MEM_BLOCK_SIZE word per cycle (banked), exactly like the warp
-      // array's transpose — so the engine drains at SMEM bandwidth, not one
-      // element per cycle (TMA-style full-bandwidth scatter). Cursors:
-      // km_elem_idx advances one block per beat; mc_cta_idx replays the whole
-      // group to each multicast receiver.
+      // One cache-line read fans out to its scattered writes, one element per
+      // beat: the scatter destinations are not contiguous, so each element is
+      // its own byte-masked write. Cursors: km_elem_idx advances one element
+      // per beat; mc_cta_idx replays the whole group to each multicast
+      // receiver.
       const uint32_t num_elems = lw.km_num_elems ? lw.km_num_elems : 1;
       const uint32_t e0        = w.km_elem_idx;
       const uint32_t wlen      = lw.valid_length;
@@ -710,7 +705,7 @@ private:
         break; // next block lands in a different row — next cycle's beat
       }
 
-      // Route this row half to its own LocalMem input port.
+      // Route this row half to its own LMEM DMA channel.
       uint32_t half = (DxaCore::LMEM_PORTS_PER_CORE > 1)
           ? uint32_t((dword / kLmemWordSize) & (DxaCore::LMEM_PORTS_PER_CORE - 1))
           : 0u;
@@ -731,10 +726,11 @@ private:
       auto blk = make_mem_block();
       const uint32_t pat = lw.cfill;
 
-      // Gather every scatter element that falls in this block (and, for rows
-      // narrower than a block, this row) into one write.
+      // A contiguous span is one write; a scatter span writes element e0.
+      const bool     beat_scatter = lw.scatter;
+      const uint32_t e_end = beat_scatter ? (e0 + 1) : num_elems;
       uint32_t ee = e0;
-      for (; ee < num_elems; ++ee) {
+      for (; ee < e_end; ++ee) {
         uint64_t dest_byte = dest_byte_of(ee);
         if ((dest_byte & ~uint64_t(kLmemWordSize - 1)) != dword) break;
         if ((dest_byte & kRowMask) != row) {
@@ -755,7 +751,7 @@ private:
       req.byteen = byteen;
       req.data = blk;
 
-      // notify_done on the LAST block write of the transfer — when the gather
+      // notify_done on the LAST block write of the transfer — when the write
       // reached the last scatter element of the last work item, per receiver.
       bool is_last_elem   = (ee == num_elems);
       bool is_last_work   = lw.last;
@@ -774,7 +770,7 @@ private:
         ++perf_stats_.lmem_writes;
       }
 
-      // Advance scatter cursor (to first ungathered element); then multicast
+      // Advance scatter cursor (to the next unwritten element); then multicast
       // cursor; then release the slot.
       if (!is_last_elem) {
         w.km_elem_idx = ee;
@@ -792,6 +788,9 @@ private:
           if (it != w.issued_order.end()) w.issued_order.erase(it);
           w.drain_slot = UINT32_MAX;
         }
+      }
+      if (beat_scatter) {
+        break; // a scatter beat writes one element
       }
     } // per-tick row-beat emission loop
   }
