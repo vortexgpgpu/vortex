@@ -247,7 +247,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     // Thread t holds one M row; a store writes NT rows.
     constexpr uint32_t kThreadsPerLane = VX_CFG_NUM_THREADS / ctx::xtileM;
     tm::load<tm::LANE_PER_THREAD>(fragC, tm::make_taddr(lane, col));
-    auto pRowC = pChunkC + (t % ctx::xtileM) * N + t / ctx::xtileM;
+    auto pRowC = reinterpret_cast<float*>(pChunkC + (t % ctx::xtileM) * N + t / ctx::xtileM);
     for (uint32_t r = 0; r < ctx::fragment_acc::NR; ++r) {
       pRowC[r * kThreadsPerLane] = fragC.data[r];
     }
@@ -256,7 +256,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     tm::load<tm::LANE_PER_REG>(fragC, tm::make_taddr(lane, col));
     #pragma unroll
     for (uint32_t g = 0; g < ctx::fragment_acc::NR / ctx::xtileM; ++g) {
-      auto p = pChunkC + g * VX_CFG_NUM_THREADS + t;
+      auto p = reinterpret_cast<float*>(pChunkC + g * VX_CFG_NUM_THREADS + t);
       #pragma unroll
       for (uint32_t i = 0; i < ctx::xtileM; ++i) {
         *p = fragC.data[g * ctx::xtileM + i];
