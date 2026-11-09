@@ -60,6 +60,7 @@ module VX_cache import VX_gpu_pkg::*; #(
     parameter FLUSH_FORWARD         = 1,      // a flush also flushes the next level
 
     parameter BANK_HASH             = 0,      // hashed bank select (cache_bank_hash)
+    parameter SET_HASH              = 0,      // hashed set index (cache_set_hash)
 
     parameter READ_MERGE            = 0,      // merge same-word reads within groups of this many adjacent ports (0: off)
     parameter READ_MERGE_LINE       = 0,      // merge any reads of the same line instead, each port keeping its own tag and word
@@ -431,7 +432,7 @@ module VX_cache import VX_gpu_pkg::*; #(
     end
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_req_data_in
         assign core_req_data_in[i] = {
-            core_req_line_addr[i],
+            `CS_LINE_SET_HASH(core_req_line_addr[i]),
             core_req_rw[i],
             core_req_wsel[i],
             core_req_byteen[i],
@@ -510,6 +511,7 @@ module VX_cache import VX_gpu_pkg::*; #(
         VX_cache_bank #(
             .BANK_ID      (bank_id),
             .BANK_HASH    (BANK_HASH),
+            .SET_HASH     (SET_HASH),
             .INSTANCE_ID  (`SFORMATF(("%s-bank%0d", INSTANCE_ID, bank_id))),
             .CACHE_SIZE   (CACHE_SIZE),
             .LINE_SIZE    (LINE_SIZE),
@@ -708,17 +710,25 @@ module VX_cache import VX_gpu_pkg::*; #(
     end
     wire [NUM_BANKS-1:0][MEM_REQ_DATAW-1:0] per_bank_mem_req_pdata;
     for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_per_bank_mem_req_pdata
-        // the raw bank bits of the memory address, formed while the bank id is a constant
+        // the raw line address and bank bits of the memory address, formed
+        // while the bank id is a constant
+        wire [`CS_LINE_ADDR_WIDTH-1:0] bank_line = per_bank_mem_req_addr[i][`CS_LINE_SECTOR_ADDR_WIDTH-1 -: `CS_LINE_ADDR_WIDTH];
+        wire [`CS_LINE_ADDR_WIDTH-1:0] raw_line  = `CS_LINE_SET_HASH(bank_line);
+        wire [`CS_LINE_SECTOR_ADDR_WIDTH-1:0] raw_addr;
+        if (`CS_SECTOR_SEL_BITS != 0) begin : g_sector
+            assign raw_addr = {raw_line, per_bank_mem_req_addr[i][`CS_SECTOR_SEL_BITS-1:0]};
+        end else begin : g_line
+            assign raw_addr = raw_line;
+        end
         wire [`UP(BANK_SEL_BITS)-1:0] raw_bid;
         if (NUM_BANKS > 1 && BANK_HASH != 0) begin : g_hash
-            assign raw_bid = BANK_SEL_BITS'(i) ^ BANK_SEL_BITS'(cache_bank_hash(
-                32'(per_bank_mem_req_addr[i][`CS_LINE_SECTOR_ADDR_WIDTH-1 -: `CS_LINE_ADDR_WIDTH]), BANK_SEL_BITS));
+            assign raw_bid = BANK_SEL_BITS'(i) ^ BANK_SEL_BITS'(cache_bank_hash(32'(raw_line), BANK_SEL_BITS));
         end else begin : g_raw
             assign raw_bid = `UP(BANK_SEL_BITS)'(i);
         end
         assign per_bank_mem_req_pdata[i] = {
             raw_bid,
-            per_bank_mem_req_addr[i],
+            raw_addr,
             per_bank_mem_req_rw[i],
             per_bank_mem_req_byteen[i],
             per_bank_mem_req_data[i],

@@ -17,6 +17,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID= "",
     parameter BANK_ID           = 0,
     parameter BANK_HASH         = 0,        // hashed bank select (cache_bank_hash)
+    parameter SET_HASH          = 0,        // hashed set index (cache_set_hash)
     parameter NUM_REQS          = 1,
     parameter CACHE_SIZE        = 1024,     // cache size in bytes
     parameter LINE_SIZE         = 16,       // line size in bytes
@@ -1082,6 +1083,9 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .INSTANCE_ID (`SFORMATF(("%s-mshr", INSTANCE_ID))),
         .BANK_ID     (BANK_ID),
         .BANK_HASH   (BANK_HASH),
+        .SET_HASH    (SET_HASH),
+        .CACHE_SIZE  (CACHE_SIZE),
+        .NUM_WAYS    (NUM_WAYS),
         .LINE_SIZE   (LINE_SIZE),
         .SECTOR_SIZE (SECTOR_SIZE),
         .NUM_BANKS   (NUM_BANKS),

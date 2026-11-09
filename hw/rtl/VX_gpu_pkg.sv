@@ -264,6 +264,23 @@ package VX_gpu_pkg;
         return f;
     endfunction
 
+    // Cache set-index hash: XORed into the raw set bits, an XOR fold of the
+    // line's tag, so a power-of-two stride that keeps the raw set fixed walks
+    // the sets instead. The tag is stored unchanged, so XORing the same fold
+    // again restores the raw set bits.
+    function automatic logic [15:0] cache_set_hash(input logic [31:0] tag, input integer bits);
+        logic [15:0] f;
+        f = '0;
+        if (bits > 0 && bits <= 16) begin
+            for (integer i = 0; i < 32; ++i) begin
+                if ((i % bits) == 0) begin
+                    f = f ^ (16'(tag >> i) & 16'((1 << bits) - 1));
+                end
+            end
+        end
+        return f;
+    endfunction
+
     localparam VX_DCR_ADDR_WIDTH = `VX_DCR_ADDR_BITS;
     localparam VX_DCR_DATA_WIDTH = `VX_DCR_DATA_BITS;
 

@@ -54,6 +54,7 @@ Every MLP feature of Phase 1 and Phase 2, plus the earlier features this design 
 | P2 | [Lane-gather writeback merge](#lane-gather-writeback-merge) | An instruction's partial lane passes write back as one beat | `c69145562` | none | on | N | sgemm −9.7% (16T) / −20.6% (32T); mixfu −8.7% / −9.1% | −2,428 LUT per gather |
 | P2 | [Miss tracking from bandwidth × latency](#miss-tracking-sized-by-littles-law) | MSHRs and the LSU pending pool sized by Little's law from the platform | `7d2883ca0` | `VX_CFG_{DCACHE,L2,L3}_MSHR_SIZE` (derived), `VX_CFG_LSU_PENDING_LIMIT` | derived (stock shapes unchanged) | N | not measured (a100 L2 MSHR 16 → 64) | grows only where the platform needs it |
 | P2 | [Victim advance on a new line only](#victim-advance-on-a-new-line-only) | FIFO and random replacement step only when a line is new | `3032f6471` | none | on | N | 8 same-set lines: memory reads 25 → 9 | 0 LUT |
+| P2 | [Hashed set index](#hashed-set-index) | Set = raw set bits XOR an XOR fold of the tag | — | `VX_CFG_DCACHE_SET_HASH` | dcache on | N | sgemv 512–2048 −20% to −24%, mxfp8 −4.8%, fp16-isw4 −3.5% | +8 LUT per dcache, no deeper register |
 | P2 | [Non-power-of-two way count](#non-power-of-two-way-count) | Exact cache capacities of the profiled parts | `c9c82b7a0` | `VX_CFG_*_NUM_WAYS` | — | N | capacity fidelity | default unchanged |
 | P2 | [Stack interleave by whole lines](#stack-interleave-by-whole-lines) | The per-warp stack skew steps by dcache lines | `8b4e6e8d9` | `VX_CFG_LSU_STACK_INTERLEAVE_ENABLE` | on | N | raycast −0.3% | one narrow XOR |
 | P2 | [TCU_LD in LSU-lane passes](#tcu-loads-in-lsu-lane-passes) | TCU loads issue in LSU-width passes when the LSU is narrower than the warp | `d47fead9c` | none | on | N | enables narrow-LSU TCU shapes | default unchanged |
@@ -68,6 +69,7 @@ Some of these features can be set with a `VX_CFG_*` knob (see [Build Configurati
 | Feature | Knob | Default |
 |---|---|---|
 | Hashed bank select | `VX_CFG_DCACHE_BANK_HASH`, `VX_CFG_L2_BANK_HASH` | dcache: on with 4 or more banks; L2: on. The L3 has no bank hash. |
+| Hashed set index | `VX_CFG_DCACHE_SET_HASH` | On. The L2 and L3 have no set hash: no measured case gains from one. |
 | Write-allocate without fetch | `VX_CFG_{DCACHE,L2,L3}_LAZY_FETCH` | On where the cache is a write-back LLC (the dcache with no L2, the L2 with no L3, or the L3), off elsewhere. It also enables the dirty-byte masks (`*_DIRTYBYTES`). |
 | Full-sector refetch skip | Part of lazy fetch | Follows `*_LAZY_FETCH` |
 | Dcache read merge | `VX_CFG_DCACHE_READ_MERGE` | 1 (on) |
@@ -141,6 +143,22 @@ Some of these features can be set with a `VX_CFG_*` knob (see [Build Configurati
 - WGMMA with DXA: −13.5%
 - multi-core sgemm: −8.2%
 - SimX, rtx5080, N=256: −34%
+
+### Hashed set index
+
+**Problem.** A cache takes its set index from the address bits above the bank field. A power-of-two stride of `NUM_BANKS × LINE × 2^k` or more keeps the low set bits fixed, so the stream piles into `NUM_SETS / 2^k` sets while the rest of the cache sits empty. The default dcache (16 KB, 4-way, 2 banks of 32 sets) maps the 16 rows that sgemv 512×512 keeps live, 2 KB apart, into 2 sets. The run then flips between a thrashing and an escaping state on a one-cycle timing change. The bank hash does not help: it moves only the bank bit.
+
+**How it works.** The set index is the raw set bits XORed with an XOR fold of the tag's low 32 bits, in chunks of the set-index width (`cache_set_hash` in `VX_gpu_pkg.sv`). The tag is stored unchanged, so the same XOR restores the raw set: tags, MSHR, sectors, replacement and the flush walk are untouched. It is applied once where the request's line address enters the bank and once where a bank's memory address is rebuilt. SimX applies the same function. Each set bit is a 5-input XOR at the default geometry.
+
+High associativity is how current NVIDIA L1s avoid these conflicts (Accel-Sim models the Volta L1 as 64-way with a linear index). Fermi's L1 hashed its set index instead. For a 4-way cache, the hash is the cheap stand-in for associativity it cannot afford.
+
+**Gain (rtlsim):**
+- sgemv 512×512: −20.1% at 4 threads, −23.9% at 16; read hit rate 29% → 85%, and the two-state behaviour is gone (2.1% spread over L1 latency +0..+3, against 29% without the hash)
+- sgemv 512×1024 and 512×2048: −23.2% and −23.8%; hit rate 22% → 84%
+- mxfp8 tensor: −4.8%; fp16 tensor at issue width 4: −3.5% (dcache misses −6% to −7%)
+- perf_gate geomean over 49 cases: −1.1%
+
+**Cost.** Any hash moves which lines conflict. Two TCU tile layouts lose a little, averaged over L1 latency +0..+3: fp16 on 2 cores at 16 threads +1.8% (misses +39%), sgemm2 fp16 +1.1% (misses +21%). XORing only the low tag bits is no better (+3.4% on the first), so the cost belongs to set hashing for those layouts, not to the fold. The L2 and L3 get no set hash: in every measured case their working sets fit without conflicts, so the hash changed nothing.
 
 ### Non-power-of-two way count
 

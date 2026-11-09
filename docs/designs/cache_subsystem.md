@@ -240,6 +240,21 @@ default is on from 4 banks, because with two banks the hash can only swap lines 
 parity and the extra parallel misses cost more in memory queuing than the
 spreading saves.
 
+**Hashed set index (`SET_HASH`).** With the set taken straight from the
+address bits, a power-of-two stride of `NUM_BANKS × LINE × 2^k` or more keeps the
+low set bits fixed and piles into a fraction of the sets. With `SET_HASH=1` a
+bank's line address carries the raw set bits XORed with `cache_set_hash` of the
+tag ([VX_gpu_pkg.sv](../../hw/rtl/VX_gpu_pkg.sv)): an XOR fold of the tag's low 32
+bits in chunks of `CS_LINE_SEL_BITS`. The tag is stored unchanged, so the same XOR
+maps the bank's line address back (`CS_LINE_SET_HASH`). `VX_cache` applies it to
+the request's line address ahead of the request crossbar, and undoes it on each
+bank's memory request before the raw bank bits are formed; `CS_BANK_TO_FULL_ADDR`
+undoes it too, so trace and assert addresses stay real. The read-merge compare,
+tags, MSHR, sectors, replacement and the flush walk see no difference, and flush
+tokens use line 0, which hashes to 0. `VX_CFG_DCACHE_SET_HASH` sets it for the
+dcache, on by default; SimX's `params_t::set_xor` is the same function. The L2 and
+L3 do not use it.
+
 The memory side transacts in sectors, so the memory address carries
 `CS_SECTOR_SEL_BITS` below the line address (`CS_MEM_SECTOR_ADDR_WIDTH`,
 `CS_LINE_SECTOR_ADDR_WIDTH`). With one sector per line these collapse back to the
