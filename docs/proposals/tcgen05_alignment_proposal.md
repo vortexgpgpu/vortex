@@ -4,7 +4,7 @@
 
 The TMEM path ([tmem_dataflow_proposal.md](tmem_dataflow_proposal.md)) drives
 the tensor core through jobs: a 16-word descriptor posted with two
-instructions and run by a per-core sequencer (`VX_tcu_tjob`) that can also
+instructions and run by a per-core sequencer (`VX_tcu_tmem`) that can also
 issue the stage DXA loads itself (CLOSED). Measured:
 
 - CLOSED beats warp-issued per-stage jobs (PERSTAGE) by only 1.06-1.10x.

@@ -218,7 +218,7 @@ yet.
 
 ## RTL
 
-- `VX_tcu_tjob` (in `VX_tcu_unit`): TMEM banks and allocator, eight op slots
+- `VX_tcu_tmem` (in `VX_tcu_unit`): TMEM banks and allocator, eight op slots
   (two per CTA), the copy engine, commit arrivals, and a one-step issue
   register that presents each (m, n) step to all four `VX_tcu_core`s with C
   read from TMEM. MMA steps take a core ahead of warp MMAs; a per-block order
@@ -332,7 +332,7 @@ is one `tmem.ld` lane-per-thread access: `NT / M` columns of every lane.
   (`TMEM_CP`), or unrolled smem loads and `tmem.st` by the warps.
 
 Warp WGMMA and TMEM are mutually exclusive: warps never issue WGMMA or WGMMA_SP
-in a TMEM build, so VX_tcu_core takes those ops' metadata from `VX_tcu_tjob`.
+in a TMEM build, so VX_tcu_core takes those ops' metadata from `VX_tcu_tmem`.
 `VX_CFG_TCU_WGMMA_ENABLE` still selects the tile buffers these builds reuse.
 
 ## Unchanged

@@ -359,10 +359,10 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `ifdef PERF_ENABLE
     wire [PERF_CTR_BITS-1:0] tj_perf_busy, tj_perf_opnd, tj_perf_other, tj_perf_idle, tj_perf_xfers;
 `endif
-    VX_tcu_tjob #(
-        .INSTANCE_ID (`SFORMATF(("%s-tjob", INSTANCE_ID))),
+    VX_tcu_tmem #(
+        .INSTANCE_ID (`SFORMATF(("%s-tmem", INSTANCE_ID))),
         .BLOCK_SIZE  (BLOCK_SIZE)
-    ) tjob (
+    ) tmem (
         .clk            (clk),
         .reset          (reset),
     `ifdef PERF_ENABLE

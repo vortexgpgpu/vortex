@@ -30,7 +30,7 @@
 // LMEM read port, one NT-word chunk at a time. A CTA's ops run in order, and a
 // tc.commit arrives on its barrier once the CTA's earlier ops have completed.
 
-module VX_tcu_tjob import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
+module VX_tcu_tmem import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter BLOCK_SIZE = `VX_CFG_NUM_TCU_BLOCKS
 ) (
