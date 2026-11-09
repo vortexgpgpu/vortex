@@ -1367,6 +1367,7 @@ public:
   static constexpr uint32_t kTmemThreadsPerLane = VX_CFG_NUM_THREADS / wg_cfg::xtileM;
   static_assert(VX_CFG_NUM_THREADS % wg_cfg::xtileM == 0, "TMEM needs NUM_THREADS to be a multiple of WGMMA M");
   static_assert(wg_cfg::tcM * wg_cfg::tcN == VX_CFG_NUM_THREADS, "C fragment must span the warp");
+  static_assert(kPeRatio == 1, "TMEM requires VX_CFG_TCU_PE_RATIO=1");
   static constexpr uint32_t kTmemReadLatency = 1;
   static constexpr uint32_t kTcCommits = 2;          // tc.commit arrivals per op
   static constexpr uint32_t kAllocCols = 32;

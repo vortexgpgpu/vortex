@@ -115,6 +115,9 @@ module VX_tcu_tmem import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     `STATIC_ASSERT (TCU_WG_FEDP_K % TPL == 0, ("A from TMEM reads whole K words per lane"))
 
     `STATIC_ASSERT (TC_M * TC_N == NT, ("C fragment must span the warp"))
+    // MMA steps issue to every block's core in one cycle; a time-multiplexed
+    // FEDP array takes a micro-op over several.
+    `STATIC_ASSERT (`VX_CFG_TCU_PE_RATIO == 1, ("TMEM requires VX_CFG_TCU_PE_RATIO=1"))
     `STATIC_ASSERT (NT % XM == 0, ("TMEM needs NUM_THREADS to be a multiple of WGMMA M"))
     `STATIC_ASSERT (`VX_CFG_XLEN == 32, ("TMEM supports XLEN=32"))
 
