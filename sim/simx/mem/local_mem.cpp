@@ -108,17 +108,11 @@ public:
 #endif
 	}
 
-	// Bank ports a DMA access took this cycle. The bank SRAM is 1R1W: a DMA
-	// read takes the read port of every bank, a DMA write the write port of the
-	// banks its byte enables cover, and the LSU keeps the other port.
-	struct DmaBanks {
-		uint64_t rd = 0;
-		uint64_t wr = 0;
-	};
-
-	// Serve one DMA client's row access this cycle; clients are served at
-	// fixed priority.
-	DmaBanks dma_tick() {
+	// Serve one DMA client's row access this cycle and return the banks it
+	// occupies. Clients are served at fixed priority, and DMA wins every bank
+	// it touches over the LSU: a read touches all banks, a write those its
+	// byte enables cover.
+	uint64_t dma_tick() {
 		uint32_t num_banks = (1 << config_.B);
 		uint32_t lg2_line_size = log2ceil(config_.line_size);
 		for (uint32_t c = 0; c < config_.dma_clients; ++c) {
@@ -138,9 +132,9 @@ public:
 				continue;
 			}
 			if (!rsp_ready) {
-				return {};
+				return 0;
 			}
-			DmaBanks banks;
+			uint64_t banks = 0;
 			for (uint32_t p = 0; p < DMA_PORTS; ++p) {
 				auto& in = simobject_->DmaInputs.at(c * DMA_PORTS + p);
 				if (in.empty()) {
@@ -153,7 +147,7 @@ public:
 						if (req.byteen & (1ull << b)) {
 							uint8_t value = (*req.data)[b];
 							ram_.write(&value, line_addr + b, 1);
-							banks.wr |= 1ull << (((line_addr + b) >> lg2_line_size) & (num_banks - 1));
+							banks |= 1ull << (((line_addr + b) >> lg2_line_size) & (num_banks - 1));
 						}
 					}
 #if VX_CFG_EXT_A_ENABLED
@@ -168,7 +162,7 @@ public:
 					// The request arrived over a registered channel; the read
 					// data returns the cycle after it was issued.
 					simobject_->DmaOutputs.at(c * DMA_PORTS + p).send(rsp, 0);
-					banks.rd = (num_banks >= 64) ? ~uint64_t(0) : ((uint64_t(1) << num_banks) - 1);
+					banks = (num_banks >= 64) ? ~uint64_t(0) : ((uint64_t(1) << num_banks) - 1);
 					++perf_stats_.reads;
 				}
 				DT(4, simobject_->name() << "-dma" << c << " req : " << req);
@@ -176,11 +170,11 @@ public:
 			}
 			return banks;
 		}
-		return {};
+		return 0;
 	}
 
 	void tick() {
-		DmaBanks dma_banks = this->dma_tick();
+		uint64_t dma_banks = this->dma_tick();
 
 		// process bank requets from xbar
 		uint32_t num_banks = (1 << config_.B);
@@ -199,20 +193,14 @@ public:
 			const uint64_t rdw_addr   = amo_rdw_addr_[i];
 			amo_rdw_valid_[i] = false;
 #endif
+			if ((dma_banks >> i) & 1) {
+				continue;
+			}
 			auto& xbar_req_out = mem_xbar_->ReqOut.at(i);
 			if (xbar_req_out.empty())
 				continue;
 
 			auto& bank_req = xbar_req_out.peek();
-
-			// An LSU request waits only for the port the DMA side took; an
-			// atomic reads and writes, so either one blocks it.
-			const bool dma_rd = (dma_banks.rd >> i) & 1;
-			const bool dma_wr = (dma_banks.wr >> i) & 1;
-			if (memop_is_atomic(bank_req.op) ? (dma_rd || dma_wr)
-			                                 : (bank_req.is_write() ? dma_wr : dma_rd)) {
-				continue;
-			}
 
 #if VX_CFG_EXT_A_ENABLED
 			// A read of the word the write-back just stored waits a cycle. An
