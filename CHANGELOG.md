@@ -112,6 +112,12 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
   parallel with the magnitude compare, and its NORM stage precomputes the subnormal shift for both candidate exponents. The
   multiplier registers its operands in the first of its `LATENCY_IMUL` stages instead of the last. The core now reaches 1020 MHz
   and top 1029 MHz, with cell area +0.1%.
+- **Exact square roots on the FLEN-64 divide/sqrt unit.** `VX_fdivsqrt_unit` took the sign of the final square-root remainder
+  from bit 58, but at FLEN 64 the remainder needs the full 60-bit carry-save width: an exact square left −2^58 − 2, read as
+  positive, so the final correction was skipped. Exact squares of an unscaled radicand (sqrt(1.0), sqrt(4.0), sqrt(100), F32 or
+  F64) then raised NX and rounded up one ULP under RUP. The unit test now covers F64 operands and exact squares, and `run-fpu`
+  also runs the FLEN-64 unit. New ISA lanes (`isa-32f-std`, `isa-64f-std`, `isa-64d-std`) run the F and D suites on
+  `VX_fpu_std`, the FPU the ASIC flow builds; the existing RTL-FPU lanes use `VX_fpu_dsp`, which never reaches this unit.
 - **Stale softfloat archive.** `third_party/Makefile` rebuilds softfloat when `SOFTFLOAT_OPTS` changes. Before this, a tree built
   before `-DTHREAD_LOCAL=_Thread_local` was added kept its non-TLS archive, and the simx runtime failed to link with
   `TLS reference ... mismatches non-TLS definition` for `softfloat_exceptionFlags`.

@@ -433,8 +433,9 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire                     isd_cv = srt_stage[NR_STAGES][ISD_LO];
 
     wire signed [CS_BITS:0] W_cv_sum = $signed(Ws_cv) + $signed(Wc_cv);
-    wire [W_BITS-1:0] W_cv = W_cv_sum[W_BITS-1:0];
-    `UNUSED_VAR (W_cv_sum[CS_BITS:W_BITS])
+    wire [CS_BITS-1:0] W_cv_cs = W_cv_sum[CS_BITS-1:0];
+    wire [W_BITS-1:0] W_cv = W_cv_cs[W_BITS-1:0];
+    `UNUSED_VAR (W_cv_sum[CS_BITS])
 
     // ---- DIV CONV ----
     wire [NR_BITS:0] Q_frac = {qb_cv, 1'b0} - {1'b0, {NR_BITS{1'b1}}};
@@ -463,16 +464,16 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire        sticky_div_s = (|Q_rnd[NR_BITS - 26 : 0]) | sticky_div_r;
 
     // ---- SQRT CONV ----
-    wire              W_neg_sq  = W_cv[W_BITS-1];
+    // The final SQRT remainder spans the full carry-save width: with SCALE_SQRT
+    // equal to SCALE_DIV (F64 super format) it reaches -(2^(W_BITS-1)) - 2.
+    wire              W_neg_sq  = W_cv_cs[CS_BITS-1];
     wire [W_BITS-1:0] ulp_last  = nro_cv ? W_BITS'(1) : W_BITS'(2);
     wire [W_BITS-1:0] S_corr    = W_neg_sq ? (DS_cv - ulp_last) : DS_cv;
 
-    wire [W_BITS:0]   W_cv_sx   = {W_cv[W_BITS-1], W_cv};
-    wire [W_BITS:0]   W_D_sq    = nro_cv ? ({1'b0, DS_cv} - {1'b0, ulp_last})
-                                         : ({DS_cv, 1'b0}  - {1'b0, ulp_last});
-    wire [W_BITS:0]   W_corr_sq31 = W_neg_sq ? (W_cv_sx + W_D_sq) : W_cv_sx;
-    `UNUSED_VAR (W_corr_sq31[W_BITS])
-    wire sticky_sq_w  = (W_corr_sq31[W_BITS-1:0] != '0);
+    wire [CS_BITS-1:0] W_D_sq    = nro_cv ? ({1'b0, DS_cv} - {1'b0, ulp_last})
+                                          : ({DS_cv, 1'b0}  - {1'b0, ulp_last});
+    wire [CS_BITS-1:0] W_corr_sq = W_neg_sq ? (W_cv_cs + W_D_sq) : W_cv_cs;
+    wire sticky_sq_w  = (W_corr_sq != '0);
 
     // S_corr leading bit at SQRT_LEAD; man=[LEAD -: act_sig], guard=[LEAD-act_sig], etc.
     wire [SUPER_SIG-1:0] man_sq_d   = S_corr[SQRT_LEAD -: SUPER_SIG];
