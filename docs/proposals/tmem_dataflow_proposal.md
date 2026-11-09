@@ -218,21 +218,25 @@ yet.
 
 ## RTL
 
-- `VX_tcu_tmem` (in `VX_tcu_unit`): TMEM banks and allocator, eight op slots
-  (two per CTA), the copy engine, commit arrivals, and a one-step issue
-  register that presents each (m, n) step to all four `VX_tcu_core`s with C
-  read from TMEM. MMA steps take a core ahead of warp MMAs; a per-block order
-  queue routes the core's MMA results to TMEM writes and the rest to commit.
+- `VX_tcu_tmem` (in the core-level `VX_tcu_shared`, beside the WGMMA tile
+  buffers): TMEM banks and allocator, eight op slots (two per CTA), the copy
+  engine, commit arrivals, and a one-step issue register that presents each
+  (m, n) step to all four `VX_tcu_core`s with C read from TMEM. Each
+  `VX_tcu_block` reaches it through a `VX_tcu_job_if`: the block sends its
+  TMEM and tc ops there, MMA steps take its core ahead of warp MMAs, and a
+  per-block order queue routes the core's MMA results to TMEM writes and the
+  rest to commit.
 - TMEM bank per block: `NT` 32-bit sub-banks of `(TMEM_COLS / TC_N) * M_STEPS`
   rows, 1R1W, one-cycle read. Cell (lane `m*TC_M+i`, column `c`) is in
   sub-bank `(TC_N*i + c + (NT/M)*m) mod NT`, row `(c/TC_N)*M_STEPS + m`, so a
   C/D fragment and either `tmem.ld/st` layout touch each sub-bank once.
   `tmem.ld/st` and MMA steps share one port (one op per cycle); a load has
   priority over the MMA's C read, MMA D writes over `tmem.st`.
-- Barriers: `tc.commit` arrivals enter `VX_wctl_unit` after warp
-  instructions and DXA completions.
+- Barriers: `tc.commit` arrivals enter the barrier unit in
+  `VX_warp_shared_unit` after warp requests and DXA completions.
 - Requires WGMMA (tile buffers) and FEDP2K; a TMEM build does not accept
-  warp WGMMA. XLEN=32, K-major B.
+  warp WGMMA. XLEN=32, K-major B, `VX_CFG_TCU_PE_RATIO=1` (an MMA step issues
+  to every core in one cycle).
 
 ## Results (RTL vs SimX)
 
@@ -288,7 +292,7 @@ progress.
 MMAs never touch the register file, so their uop expansion moves from
 `VX_tcu_uops` (issue) into a step engine in the TCU. The remaining front-end
 coupling is: the per-CTA in-flight count back to issue (for `tmem.ld/st`),
-`tc.commit` arrivals into `VX_wctl_unit`, and queue back-pressure on
+`tc.commit` arrivals into the barrier unit, and queue back-pressure on
 `tc.mma`/`tc.cp`.
 
 In a TMEM-only build (WMMA and register-accumulator WGMMA disabled), the TCU
