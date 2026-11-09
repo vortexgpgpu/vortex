@@ -185,7 +185,9 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     assign client_if.rsp_ready = 1'b1;
     `UNUSED_VAR (client_if.rsp_data.sop)
 
-    `RUNTIME_ASSERT(~client_if.rsp_valid || (issued_r && ~done_r),
+    // A pass's response can return before a later pass is requested, so a
+    // response is expected from the first request on.
+    `RUNTIME_ASSERT(~client_if.rsp_valid || ((issued_r || (req_pass != '0)) && ~done_r),
         ("%t: *** %s unexpected TCU_LD response", $time, INSTANCE_ID))
 
 `ifdef VX_CFG_LSU_STACK_INTERLEAVE_ENABLE
