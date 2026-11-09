@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Vortex hardware IP library (`hw/rtl/libs/`) provides a comprehensive collection of 77 reusable, parameterized SystemVerilog IP modules used throughout the Vortex GPGPU processor. These modules cover arbitration, buffering, arithmetic, memory, interconnect, and debug infrastructure, forming the foundational building blocks of the Vortex microarchitecture.
+The Vortex hardware IP library (`hw/rtl/libs/`) provides a comprehensive collection of reusable, parameterized SystemVerilog IP modules used throughout the Vortex GPGPU processor. These modules cover arbitration, buffering, arithmetic, memory, interconnect, and debug infrastructure, forming the foundational building blocks of the Vortex microarchitecture.
 
 All modules are parameterized for data width, depth, and implementation strategy, with support for both FPGA (Xilinx/Intel) and ASIC synthesis flows.
 
