@@ -6,7 +6,7 @@
     },
     "app": "rt_raycast",
     "args": "",
-    "config_hash": "4c67d1e0d4869f15",
+    "config_hash": "0017684a0e388166",
     "configs": "-DVX_CFG_EXT_RTU_ENABLE -DVX_CFG_NUM_CORES=2 -DVX_CFG_NUM_THREADS=4 -DVX_CFG_L2_ENABLE",
     "driver": "rtlsim"
   },
@@ -17,7 +17,7 @@
     },
     "app": "rt_raycast",
     "args": "",
-    "config_hash": "6cd1c7a8f5b85563",
+    "config_hash": "2b6003c842c224c2",
     "configs": "-DVX_CFG_EXT_RTU_ENABLE -DVX_CFG_NUM_THREADS=16",
     "driver": "rtlsim"
   },
@@ -28,7 +28,7 @@
     },
     "app": "rt_raycast",
     "args": "",
-    "config_hash": "4c8d2b198220f653",
+    "config_hash": "979b8c96ca3251dd",
     "configs": "-DVX_CFG_EXT_RTU_ENABLE -DVX_CFG_NUM_THREADS=4",
     "driver": "rtlsim"
   }
