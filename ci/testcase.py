@@ -48,11 +48,10 @@ VALID_CHECK = {"model_parity", "perf_gate"}
 # nightly), and everything is what ci.yml's matrix can run as a CELL -- these
 # cannot be. `fpga` needs a licensed Vivado and hours of a whole machine;
 # `asic` needs 1-2 hours PER DUT, which is a fan-out of standalone jobs, not one
-# cell; `timing` needs foldsim, which the base toolchain does not install, and
-# `timing_gpu` also ~95 GB per build. Each has its own workflow
-# (.github/workflows/{fpga,asic,logic}_gate.yml). Opting in is explicit, never
-# implied.
-OPT_IN_TIERS = {"fpga", "asic", "timing", "timing_gpu"}
+# cell; `timing_gpu` (Beacon on the whole GPU) needs ~95 GB per build. Each has
+# its own workflow (.github/workflows/{fpga,asic,logic}_gate.yml). Opting in is
+# explicit, never implied.
+OPT_IN_TIERS = {"fpga", "asic", "timing_gpu"}
 
 # simx<->rtlsim cycle-parity default: both timing models must agree within 5%.
 DEFAULT_PARITY_TOLERANCE = 0.05

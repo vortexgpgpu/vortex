@@ -8,38 +8,16 @@
 # golden results in ci/baselines/synthesis/beacon/, so an RTL change that makes
 # a unit deeper is named on the change that does it, not the next night.
 #
-# Why its own workflow rather than a cell in ci.yml: it needs foldsim, which the
-# base toolchain does not install (ci/toolchain_install.sh --foldsim), and it
-# reads the synthesis gates' DUT flow rather than a pytest build tree. Unlike
-# the synthesis gates it is cheap -- seconds to minutes per DUT, no licence --
-# so it runs on every pull request and push that touches the RTL, in one job.
+# The gate itself runs in ci.yml, as the logic_gate cell planned with
+# perf_gate's rtlsim cells. This workflow is the manual entry point: a subset of
+# the catalog on a hosted runner, or the full-GPU builds (group gpu), which need
+# ~95 GB per build and run only on the self-hosted machine.
 #
-# See docs/designs/continuous_integration.md §3.5.
+# See docs/designs/continuous_integration.md §4.6.
 
 name: Timing Gate
 
 on:
-  pull_request:
-    paths:
-      - 'hw/rtl/**'
-      - 'hw/unittest/**'
-      - 'hw/scripts/**'
-      - 'hw/syn/xilinx/dut/**'
-      - 'ci/synth_gate.py'
-      - 'ci/logic_gate.py'
-      - 'ci/testcases/logic_gate.yaml'
-      - 'ci/baselines/synthesis/beacon/**'
-  push:
-    branches: [master]
-    paths:
-      - 'hw/rtl/**'
-      - 'hw/unittest/**'
-      - 'hw/scripts/**'
-      - 'hw/syn/xilinx/dut/**'
-      - 'ci/synth_gate.py'
-      - 'ci/logic_gate.py'
-      - 'ci/testcases/logic_gate.yaml'
-      - 'ci/baselines/synthesis/beacon/**'
   workflow_dispatch:
     inputs:
       builds:

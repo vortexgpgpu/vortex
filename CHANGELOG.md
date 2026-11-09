@@ -39,9 +39,25 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
 - **Foldsim: threaded FPGA simulation of Vortex on the Alveo V80, built on CIRCT.** Every class of identical units (sockets, issue slices, ALUs, FPUs, load-store units) is time-multiplexed through one physical copy, cycle-exact against the RTL, with no Yosys or sv2v: `circt-verilog` imports Vortex, Foldsim's `foldsim-extract-models` / `foldsim-compose` cut it into threaded models joined by one token fabric (Foldsim is its own project on CIRCT, installed by `ci/toolchain_install.sh --foldsim`; [hw/syn/foldsim/](hw/syn/foldsim/)), and the V80's native flow packages it with a latency-bandwidth memory endpoint and a command-queue control block ([hw/rtl/afu/foldsim/](hw/rtl/afu/foldsim/)). `--driver=foldsim` runs it on the card (`TARGET=hw`, VRT + QDMA) or in-process in Verilator (`avedsim`, the default). Vortex's RTL is unchanged: units get plain-port boundaries and instance IDs as ports from a source-to-source pass on the flow's copy ([hw/syn/foldsim/lift_boundaries.py](hw/syn/foldsim/lift_boundaries.py)). See [docs/designs/foldsim.md](docs/designs/foldsim.md).
   *Why:* the simulated GPU is no longer bounded by the card's size, and the shell around it is ~8k LUTs instead of FireSim's ~93k — s2w4i2 (2 cores, NW=NT=4, IW=2) routes in 138k LUTs vs 219k and runs sgemm n=128 in 196 ms on V80: 50× SimX on the same host, 1.7× the FireSim image, cycle counts identical to Verilator.
   *Limits:* V80 only; one memory port, single-beat transactions; classes are named (`FOLDSIM_CLASSES`), not found; kernel register offsets 0x40–0xBF are unusable on the V80 shell (its PCIe MSI-X table answers them).
+- **Hashed dcache set index (`VX_CFG_DCACHE_SET_HASH`, on by default).** The set index is the raw set bits XORed with an XOR fold
+  of the tag's low 32 bits, so power-of-two strides walk the sets instead of piling into a few; the tag is stored unchanged, so the
+  same XOR restores the raw set. The L2 and L3 have no set hash: no measured case gains from one. *Why:* rtlsim sgemv 512x512 -20.1%
+  at 4 threads and -23.9% at 16 (read hit rate 29% -> 85%), mxfp8 tensor -4.8%; perf_gate geomean -1.1%. Two TCU tile layouts pay
+  +1.1% and +1.8%.
+- **Logic-depth gate in CI (`logic_gate`).** Beacon maps every DUT of the catalog through CIRCT and foldsim and asserts each RTL
+  unit's deepest path and the design's area against golden baselines in `ci/baselines/synthesis/beacon/`, in minutes and without
+  synthesis. It runs in `ci.yml` together with `perf_gate` (every pull request, every push that touches the RTL or the config);
+  `.github/workflows/logic_gate.yml` is the manual entry point and runs the full-GPU builds. *Why:* a perf regression costs cycles,
+  a logic regression costs Fmax; both are now named on the change that causes them, not by the nightly FPGA gate.
 
 ### Changed
 
+- **Toolchain pinned to v3.0.2** (`TOOLCHAIN_REV`): LLVM f44a6bb2af4c, with PoCL rebuilt on it. Wide loads/stores and 64-bit
+  atomics stay behind `+xvortexldstwide` and `+xvortexamod`, so code built with plain `+xvortex` uses no new instructions.
+- **Dcache read-merge pairs realign.** A pair of same-word merge ports whose parts a bank served a cycle apart waits for its partner,
+  so the pair's later uniform reads merge again; a pair that waited on each other is released. Groups of 4 ports do not realign.
+  *Why:* the drift was lost on every following uniform load: vecadd on 4 LSU blocks -11.3% in rtlsim, and its SimX/RTL gap over 7
+  sizes falls from 3.9% (-0.9% to 7.2%) to 1.8%.
 - **Foldsim's shell lives in the Foldsim repository.** The control and memory endpoints, the DRAM bank timing model, the register
   map, the in-process host, the endpoint's unit tests and the boundary lifting (`foldsim-lift`) moved out of `hw/rtl/afu/foldsim`,
   `sim/foldsim`, `sw/common`, `hw/unittest/foldsim_mem*` and `hw/syn/foldsim`; they come with the Foldsim installation
@@ -79,6 +95,12 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
 
 ### Fixed
 
+- **fcvt NaN boxing on RV64.** The half-precision operand check covered the register up to XLEN instead of FLEN, so an RV64 build
+  without the D extension read a boxed half as a NaN.
+- **TCU B-buffer descriptor race.** The B buffer re-latched its descriptor on every first uop, even while a fetch was in flight, so
+  a back-to-back WGMMA could fetch with the next instruction's row base. It now latches at fetch allocation.
+- **Pipe buffer combinational loop at `-O0`.** `VX_pipe_buffer` kept its input in the same vector as its stage registers, which an
+  unoptimized Verilator build reads as a loop through any outer path (the `debug` CI cells).
 - **Global barriers across clusters.** Each cluster ran its own global-barrier unit that saw only its own cores, while
   `vx_num_cores()`, and so `vortex::gbarrier`, counts the whole device. On SimX every global barrier hung with more than one
   cluster; on the RTL, 2 clusters x 1 core timed out and 2 clusters x 2 cores released each cluster on its own arrivals, with no

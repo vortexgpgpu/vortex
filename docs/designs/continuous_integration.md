@@ -288,15 +288,21 @@ and without synthesis.
 | gated | `fmax_mhz` against the target clock, `lut` against `lut_budget` | `fmax_mhz` against the target clock, `cell_area_um2` against `area_budget_um2` | `max_levels` against the baseline, the deepest end point of every RTL unit, and `lut`, `ff`, `lutram`, `bram`, `uram`, `dsp` against the baseline |
 | also recorded | `wns_ns`, `lutram`, `ff`, `bram`, `uram`, `dsp`, critical paths, high-fanout nets | `wns_ns`, `tns_ns`, `seq_area_um2`, `sram_area_um2`, `cell_count`, `power_mw` | end point bits at ≥ 12 and ≥ 8 levels, the deepest paths |
 | comparable when | same device, optimization level, xlen | same PDK, VT, corner, xlen | same CIRCT, foldsim, xlen |
-| runner | self-hosted, licensed Vivado | hosted, one job per design | hosted, one job for the catalog; the opt-in `gpu` group self-hosted |
+| runner | self-hosted, licensed Vivado | hosted, one job per design | hosted, one `ci.yml` cell for the catalog, planned with `perf_gate`; the opt-in `gpu` group self-hosted |
 | default tolerance | Fmax 2 %, LUT 5 % | Fmax 2 %, cell area 5 % | depth none: Beacon is deterministic; area 5 % |
 
-None is a pytest cell. A cell is a build tree plus a driver; a gate build is
-neither, and the synthesis gates are hours long. They are standalone scripts
+The synthesis gates are not pytest cells. A cell is a build tree plus a driver;
+a synthesis build is neither, and it is hours long. They are standalone scripts
 driven by their own workflows, and their tiers are **opt-in**: an empty tier
-selection means "everything a cell can run", which excludes them. The timing
-gate's tier is opt-in because it needs foldsim, which the base toolchain does
-not install.
+selection means "everything a cell can run", which excludes them.
+
+`logic_gate` is a cell, because it guards what `perf_gate` guards from the
+other side: perf_gate catches a change that costs cycles, logic_gate one that
+costs depth or area. Its `gate` case is a script case on the rtlsim driver at
+tier smoke, so the planner schedules its cell exactly when it schedules
+perf_gate's rtlsim cells: every pull request, and every push whose diff forces
+rtlsim in (the RTL or the config). The cell installs foldsim and pyslang
+(`needs: foldsim`). Only its `gpu` case stays opt-in, in tier `timing_gpu`.
 
 #### One implementation, two adapters
 
@@ -440,8 +446,7 @@ Measured with the `rtx5080` features at XLEN 64 on a loaded machine. The
 builds use 4 cores: the core count widens only the arbiters and crossbars,
 and the deepest path was the same at every count, while memory grows with it.
 The group is opt-in in the gate (`ci/logic_gate.py -b gpu -j 1`) and its own
-tier, `timing_gpu`, in the catalog, so neither the default run nor
-`--tier timing` sweeps it in.
+tier, `timing_gpu`, in the catalog, so no CI sweep picks it up.
 
 #### Running a multi-hour sweep
 
@@ -593,11 +598,11 @@ adding it: an over-budget design costs a silent job kill, not a red gate.
 
 ### 4.6 `logic_gate.yml`
 
-On every pull request and push to master that touches the RTL, the DUT
-wrappers, Beacon's scripts, the gate or its baselines; and by manual
-dispatch. One hosted job runs Beacon on the whole catalog: it restores the toolchain,
-installs foldsim (`ci/toolchain_install.sh --foldsim`), runs the catalog's
-`run:` command with `--report`, and renders the report with
+Manual dispatch only: the gate itself runs in `ci.yml` as the `logic_gate`
+cell (§3.5). A dispatch runs Beacon on the catalog, or on the builds it names,
+in one hosted job: it restores the toolchain, installs foldsim
+(`ci/toolchain_install.sh --foldsim`), runs the catalog's `run:` command with
+`--report`, and renders the report with
 [`synth_report.py`](../../ci/synth_report.py) into the workflow summary. The
 artifacts are the report and, per design, the build log, the summary and
 Beacon's deepest paths.
