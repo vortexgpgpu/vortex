@@ -98,7 +98,7 @@ See [docs/testing.md](docs/testing.md) and [docs/debugging.md](docs/debugging.md
 
 ```bash
 ./ci/blackbox.sh --driver=simx --app=demo
-./ci/blackbox.sh --driver=simx --app=sgemm --args="-n10"
+./ci/blackbox.sh --driver=simx --app=sgemm --args="-n16"
 ```
 
 ### Regression suites

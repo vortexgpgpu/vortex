@@ -14,6 +14,11 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
   The GPU profiles are 64-bit machines with VM, atomics, MUFU, shared memory and the tensor, DXA, ray-tracing and graphics units of
   the real part; a profile's `xlen` sets `configure`'s XLEN, and a build tree of the other width rejects it.
   See [docs/simulation.md](docs/simulation.md#hardware-profiles).
+- **RHEL 9 toolchain (`rhel/9`).** EL9 hosts (RHEL, Rocky, AlmaLinux, CentOS Stream 9) get native prebuilt bundles: LLVM 20.1.8,
+  Verilator 5.050, Yosys 0.69 and OpenSTA rebuilt against glibc 2.34 / GCC 11 libstdc++, plus the focal riscv-gnu, POCL,
+  chipStar and Mesa bundles, which already ran there. Before this, EL9 mapped to `centos/7`, which has no LLVM, POCL, chipStar, Mesa,
+  Yosys or OpenSTA bundle and whose GCC 13 riscv toolchain no longer links the kernel library. gem5 is not provided for `rhel/9`.
+  See [docs/install_vortex.md](docs/install_vortex.md#rhel-9-rocky--almalinux--centos-stream-9).
 - **Per-partition fetch (`VX_CFG_FETCH_WIDTH`, default 1).** The front end splits into FETCH_WIDTH slices, each with its own warp
   scheduler, fetch, decode and icache port, serving the warps with `wid % FETCH_WIDTH == f`; CTA dispatch, barriers and warp control
   stay core-wide. The core takes one of three structures from the fetch width, issue width and per-unit block counts; with one block
@@ -100,6 +105,9 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
 
 ### Fixed
 
+- **Stale softfloat archive.** `third_party/Makefile` rebuilds softfloat when `SOFTFLOAT_OPTS` changes. Before this, a tree built
+  before `-DTHREAD_LOCAL=_Thread_local` was added kept its non-TLS archive, and the simx runtime failed to link with
+  `TLS reference ... mismatches non-TLS definition` for `softfloat_exceptionFlags`.
 - **fcvt NaN boxing on RV64.** The half-precision operand check covered the register up to XLEN instead of FLEN, so an RV64 build
   without the D extension read a boxed half as a NaN.
 - **TCU_LD response assertion.** With the LSU narrower than the warp, a TCU_LD goes out in passes and an earlier pass's response

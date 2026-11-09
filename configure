@@ -31,18 +31,13 @@ detect_osversion() {
                     # Add new versions as needed
                 esac
                 ;;
-            centos)
+            centos|rhel|redhat|rocky|almalinux)
+                # The ubuntu/focal bundles need glibc 2.35 / GLIBCXX_3.4.30,
+                # which EL9 (glibc 2.34, GCC 11 libstdc++) does not provide.
                 case "${VERSION_ID%%.*}" in
-                    7|8|9) osversion="centos/7";;
+                    7|8) osversion="centos/7";;
+                    9) osversion="rhel/9";;
                     # Add new versions as needed
-                esac
-                ;;
-            rhel|redhat|rocky|almalinux)
-                # RHEL family (incl. CRNCH/Rogues-Gallery FPGA nodes): the
-                # CentOS 7 prebuilt bundle (glibc 2.17) runs on these newer
-                # glibc releases.
-                case "${VERSION_ID%%.*}" in
-                    7|8|9) osversion="centos/7";;
                 esac
                 ;;
         esac

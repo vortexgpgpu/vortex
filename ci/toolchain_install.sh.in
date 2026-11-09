@@ -24,15 +24,19 @@ REPOSITORY=https://github.com/vortexgpgpu/vortex-toolchain-prebuilt/raw/${TOOLCH
 
 riscv32()
 {
+    # The focal build only needs glibc 2.14, so EL9 reuses it (the centos/7
+    # bundle is GCC 13, whose newlib no longer defines HAVE_INITFINI_ARRAY).
+    osdir=$OSVERSION
     case $OSVERSION in
     "centos/7") parts=$(eval echo {a..l}) ;;
     "ubuntu/bionic") parts=$(eval echo {a..j}) ;;
+    "rhel/9")   osdir=ubuntu/focal; parts=$(eval echo {a..k}) ;;
     *)          parts=$(eval echo {a..k}) ;;
     esac
     rm -f riscv32-gnu-toolchain.tar.bz2.parta*
     for x in $parts
     do
-        wget $REPOSITORY/riscv32-gnu-toolchain/$OSVERSION/riscv32-gnu-toolchain.tar.bz2.parta$x
+        wget $REPOSITORY/riscv32-gnu-toolchain/$osdir/riscv32-gnu-toolchain.tar.bz2.parta$x
     done
     cat riscv32-gnu-toolchain.tar.bz2.parta* > riscv32-gnu-toolchain.tar.bz2
     tar -xvf riscv32-gnu-toolchain.tar.bz2
@@ -42,14 +46,17 @@ riscv32()
 
 riscv64()
 {
+    # See riscv32: EL9 reuses the focal build.
+    osdir=$OSVERSION
     case $OSVERSION in
     "centos/7") parts=$(eval echo {a..l}) ;;
+    "rhel/9")   osdir=ubuntu/focal; parts=$(eval echo {a..j}) ;;
     *)          parts=$(eval echo {a..j}) ;;
     esac
     rm -f riscv64-gnu-toolchain.tar.bz2.parta*
     for x in $parts
     do
-        wget $REPOSITORY/riscv64-gnu-toolchain/$OSVERSION/riscv64-gnu-toolchain.tar.bz2.parta$x
+        wget $REPOSITORY/riscv64-gnu-toolchain/$osdir/riscv64-gnu-toolchain.tar.bz2.parta$x
     done
     cat riscv64-gnu-toolchain.tar.bz2.parta* > riscv64-gnu-toolchain.tar.bz2
     tar -xvf riscv64-gnu-toolchain.tar.bz2
@@ -149,8 +156,8 @@ verilator()
     # `cat parta*` rebuilds. This count and the published parts move together --
     # re-check it whenever the verilator prebuilt is refreshed.
     case $OSVERSION in
-    "ubuntu/focal") parts=$(eval echo {a..c}) ;;
-    *)              parts=$(eval echo {a..a}) ;;
+    "ubuntu/focal"|"rhel/9") parts=$(eval echo {a..c}) ;;
+    *)                       parts=$(eval echo {a..a}) ;;
     esac
     echo $parts
     rm -f verilator.tar.bz2.parta*
