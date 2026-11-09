@@ -237,5 +237,5 @@ int main(int argc, char *argv[]) {
   std::cout << "cleanup" << std::endl;
   cleanup();
 
-  return errors;
+  return errors != 0;
 }

@@ -7,9 +7,7 @@
 
 typedef struct {
   uint32_t size;
-  uint32_t tile_size;
-  uint32_t chunk_k;
-  uint32_t pad_;
+  uint32_t block_size;
   uint64_t A_addr;
   uint64_t B_addr;
   uint64_t C_addr;

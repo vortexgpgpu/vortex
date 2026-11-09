@@ -108,7 +108,6 @@ module VX_raster_core_top import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
 
     VX_raster_core #(
         .INSTANCE_ID     (INSTANCE_ID),
-        .INSTANCE_IDX    (INSTANCE_IDX),
         .NUM_INSTANCES   (NUM_INSTANCES),
         .NUM_SLICES      (NUM_SLICES),
         .TILE_LOGSIZE    (TILE_LOGSIZE),
@@ -120,6 +119,7 @@ module VX_raster_core_top import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         `SCOPE_IO_BIND (0)
         .clk           (clk),
         .reset         (reset),
+        .instance_idx  (`LOG2UP(NUM_INSTANCES)'(INSTANCE_IDX)),
     `ifdef PERF_ENABLE
         .perf_raster_if(perf_raster_if),
     `endif

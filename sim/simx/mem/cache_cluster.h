@@ -33,7 +33,7 @@ public:
 
 	Cache::PerfStats perf_stats() const;
 
-	void flush_begin();
+	void flush_begin(bool l1_only = false);
 	bool flush_done() const;
 
 private:

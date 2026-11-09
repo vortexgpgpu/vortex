@@ -28,7 +28,7 @@ module VX_tex_core_top import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     input  wire                             tex_req_valid,
     input  wire [NUM_LANES-1:0]             tex_req_mask,
     input  wire [1:0][NUM_LANES-1:0][31:0]  tex_req_coords,
-    input  wire [NUM_LANES-1:0][TEX_LOD_BITS-1:0] tex_req_lod,
+    input  wire [NUM_LANES-1:0][TEX_LODF_BITS-1:0] tex_req_lod,
     input  wire [TEX_STAGE_BITS-1:0]    tex_req_stage,
     input  wire [TAG_WIDTH-1:0]             tex_req_tag,
     output wire                             tex_req_ready,

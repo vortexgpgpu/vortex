@@ -105,7 +105,7 @@ Apptainer> pwd
 
 Apptainer> make -C runtime/ clean
 
-Apptainer> FPGA_BIN_DIR=/home/vortex/build/hw/syn/xilinx/xrt/test1_xilinx_u50_gen3x16_xdma_5_202210_1_hw/bin  TARGET=hw PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1  ./ci/blackbox.sh --driver=xrt --app=demo
+Apptainer> FPGA_BIN_DIR=/home/vortex/build/hw/syn/xilinx/xrt/test1_xilinx_u50_gen3x16_xdma_5_202210_1_hw/bin ./ci/blackbox.sh --driver=xrt --target=hw --app=demo
 
 Verify following line being printed:
 info: device name=xilinx_u50_gen3x16_xdma_base_5, memory_capacity=0x200000000 bytes, memory_banks=32.

@@ -23,8 +23,10 @@ The components covered here are:
 9. [Mesa for Vortex](#9-mesa-for-vortex-vulkan) — Vulkan software stack (lavapipe) the Vortex Vulkan driver builds on (optional)
 10. [gem5](#10-gem5) — cycle-level CPU simulator hosting the Vortex SimObject (X86 + ARM); consumed by `ci/regression.sh --gem5`
 11. [SST](#11-sst) — Structural Simulation Toolkit (sst-core + sst-elements + OpenMPI); consumed by the SST-driven regression configurations
-12. [FireSim](#12-firesim) — FPGA-accelerated host-decoupled simulation on the Alveo U55C; needed only to elaborate a target or build a bitstream (optional)
+12. [FireSim](#12-firesim) — FPGA-accelerated host-decoupled simulation on the Alveo U55C or V80; needed only to elaborate a target or build a bitstream (optional)
 13. [SLASH / Alveo V80](#13-slash--alveo-v80-the-aved-backend) — AMD Alveo V80 platform stack for the `aved` backend (optional)
+14. [CIRCT](#14-circt) — the SystemVerilog preprocessor of the synthesis flows and the frontend of Beacon and Foldsim (`circt-verilog`, `circt-opt`, `firtool`)
+15. [Foldsim](#15-foldsim) — FAME-5 simulator compiler of `hw/syn/foldsim`, built on CIRCT (optional)
 
 ---
 
@@ -880,15 +882,17 @@ rm -rf "$SST_CORE_HOME/include" "$SST_ELEMENTS_HOME/include" \
 ## 12. FireSim
 
 **Purpose**: FPGA-accelerated, host-decoupled simulation of Vortex on a
-Xilinx Alveo U55C. Consumed by the `firesim` driver
+Xilinx Alveo U55C (the `vitis` platform, XRT) or an AMD Alveo V80 (the `aved`
+platform, SLASH/VRT). Consumed by the `firesim` driver
 (`./ci/blackbox.sh --driver=firesim`) and by the bitstream build under
 `hw/syn/firesim`. See
 [`designs/firesim_integration.md`](designs/firesim_integration.md) for the
 architecture.
 
-**Only needed to build.** Running an existing `.xclbin` requires XRT and the
-Vortex runtime and nothing from `$TOOLDIR/firesim` — the transport links
-against XRT directly. Install this component if you intend to elaborate a
+**Only needed to build.** Running an existing image — a `.xclbin` with XRT,
+a `.vbin` with VRT — requires the card's runtime and the Vortex runtime and
+nothing from `$TOOLDIR/firesim`: the transport links against XRT or VRT
+directly. Install this component if you intend to elaborate a
 target or build a bitstream.
 
 ### Installing
@@ -899,9 +903,35 @@ it, and only an FPGA flow can use it. Install it by hand:
 
 ```bash
 git clone --branch vortex_3.x https://github.com/vortexgpgpu/firesim.git ~/dev/firesim
-cd ~/dev/firesim && ./build-setup.sh --skip-validate
+cd ~/dev/firesim && ./build-setup.sh      # needs `conda` on PATH (e.g. Miniforge)
 ln -s ~/dev/firesim $TOOLDIR/firesim
 ```
+
+The checkout must contain the fork commit pinned as `FIRESIM_REV` in `VERSION`;
+`make -C hw/syn/firesim stage` checks it.
+
+**From the prebuilt (faster).** `vortex-toolchain-prebuilt` carries the same
+tree for ubuntu/focal with its conda environment already resolved — the part
+of a setup that takes time — conda-packed, plus a shallow `.git` of the
+`FIRESIM_REV` commit so `check-firesim` passes and `git fetch` works:
+
+```bash
+REPO=https://github.com/vortexgpgpu/vortex-toolchain-prebuilt/raw/v3.0.1/firesim/ubuntu/focal
+for x in a b c d e f g h i j k l m n o p q r s t u v; do
+    wget $REPO/firesim.tar.bz2.parta$x
+done
+cat firesim.tar.bz2.parta* | tar -C ~/dev -xjf - && rm firesim.tar.bz2.parta*
+cd ~/dev/firesim/.conda-env
+tar -xf firesim-conda-env.tar && rm firesim-conda-env.tar
+python3 bin/conda-unpack                 # rewrite the packed prefixes for this location
+ln -s ~/dev/firesim $TOOLDIR/firesim
+```
+
+The v3.0.1 bundle is 22 parts (`partaa`..`partav`). `env.sh` locates its own
+directory, so the tree works wherever it is unpacked; `conda` must still be on
+`PATH` for `ci/firesim_env.sh`. The first elaboration downloads sbt's own
+compiler jars into `~/.cache/coursier` and `~/.sbt`, so it needs network
+access once.
 
 `vortex_3.x` is based on upstream tag 1.21.0. Clone it wherever you keep
 sources; `$TOOLDIR/firesim` only has to resolve to the checkout.
@@ -947,8 +977,10 @@ make -C hw/syn/firesim check-firesim
   host with `libgmp-dev` installed, building the transport works without
   activating conda at all.
 - **Vortex's changes to FireSim live on the branch, not as patches.**
-  `git diff 1.21.0..vortex_3.x` is the authoritative delta — 8 files, mostly
-  Vitis platform fixes and cycle-counter accounting, all upstreamable.
+  `git diff 1.21.0..$FIRESIM_REV` is the authoritative delta: Vitis platform
+  fixes, the AVED platform for the V80 (shim, fabric clock gates, kernel
+  clock, partitioned synthesis of large models), the host-memory base as a
+  config field, driver build and teardown, and cycle-counter accounting.
 
 ## 13. SLASH / Alveo V80 (the `aved` backend)
 
@@ -1096,6 +1128,109 @@ for the backend's architecture and
 
 ---
 
+## 14. CIRCT
+
+**Purpose**: the SystemVerilog preprocessor of the synthesis flows and the
+frontend of Beacon and Foldsim. Its preprocessor writes the sources each flow
+reads (`gen_sources.sh -P`, then the RAM fold, `-F`; see the hardware library's
+"Block RAM and asynchronous reads"). Every synthesis tool reads those sources,
+never an elaborated netlist; Yosys reads them with its slang frontend. Only Beacon reads
+the netlist CIRCT elaborates (`hw/scripts/circt_elaborate.sh`); Foldsim imports
+the sources with CIRCT in its own flow.
+
+> **Baseline:** Vortex's CIRCT fork, branch `vortex_3.x` of
+> `vortexgpgpu/circt`: upstream CIRCT with the import, lowering and
+> memory fixes the Vortex flows need. It pins its own LLVM (a submodule),
+> separate from `llvm-vortex`: CIRCT tracks LLVM main.
+
+### Build
+
+`ci/circt_install.sh` builds LLVM, MLIR and CIRCT in one build and installs
+the whole of it (tools, libraries, headers, CMake packages) into
+`$TOOLDIR/circt`:
+
+```bash
+./ci/circt_install.sh       # CIRCT_REPO, CIRCT_REV, JOBS, CMAKE override the defaults
+```
+
+It needs cmake >= 3.28 (slang, CIRCT's SystemVerilog frontend, requires it)
+and a C++20 compiler (GCC >= 11). Ubuntu 22.04 ships cmake 3.22: install a
+newer one (`pip install cmake`) and point `CMAKE` at it if it is not first on
+`PATH`.
+
+It configures with:
+
+```bash
+cmake -G Ninja -S $CIRCT_SRC/llvm/llvm -B $CIRCT_SRC/build \
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$TOOLDIR/circt \
+    -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_EXTERNAL_PROJECTS=circt \
+    -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=$CIRCT_SRC -DLLVM_TARGETS_TO_BUILD=host \
+    -DLLVM_ENABLE_ASSERTIONS=OFF -DLLVM_STATIC_LINK_CXX_STDLIB=ON \
+    -DLLVM_ENABLE_ZLIB=OFF -DLLVM_ENABLE_ZSTD=OFF -DLLVM_ENABLE_LIBXML2=OFF \
+    -DLLVM_INSTALL_UTILS=ON -DCIRCT_SLANG_FRONTEND_ENABLED=ON \
+    -DCIRCT_SLANG_BUILD_FROM_SOURCE=ON
+```
+
+### Notes
+
+- For a prebuilt, build once per `OSVERSION` in that OS's container
+  (`ubuntu/focal`, `centos/7`): assertions off and libstdc++ linked
+  statically, so the tools run on any machine of that OS.
+- The prebuilt ships only `circt-verilog`, `circt-opt` and `firtool`. Building
+  Foldsim needs the full installation this script leaves behind.
+- To develop CIRCT itself, build it in its own checkout with assertions on
+  and point the flows at it: `CIRCT_PATH=<build>` (the build directory has
+  the same `bin/` layout).
+
+---
+
+## 15. Foldsim
+
+**Purpose**: the compiler of the FAME-5 FPGA simulators (`hw/syn/foldsim`,
+[designs/foldsim.md](designs/foldsim.md)): the `foldsim` driver and
+`foldsim-opt`. Foldsim is its own project and builds on CIRCT, as POCL builds
+on LLVM.
+
+> **Baseline:** branch `vortex_3.x` of `vortexgpgpu/foldsim`.
+
+### Build
+
+Build CIRCT first (§14), then:
+
+```bash
+./ci/foldsim_install.sh     # FOLDSIM_REPO, FOLDSIM_REV, CIRCT_PREFIX override the defaults
+```
+
+which configures Foldsim against `$TOOLDIR/circt`, builds it, runs its lit
+tests (`check-foldsim`) and installs `bin/foldsim` and `bin/foldsim-opt` into
+`$TOOLDIR/foldsim`:
+
+```bash
+cmake -G Ninja -S $FOLDSIM_SRC -B $FOLDSIM_SRC/build \
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$TOOLDIR/foldsim \
+    -DCIRCT_DIR=$TOOLDIR/circt/lib/cmake/circt \
+    -DMLIR_DIR=$TOOLDIR/circt/lib/cmake/mlir \
+    -DLLVM_DIR=$TOOLDIR/circt/lib/cmake/llvm \
+    -DLLVM_EXTERNAL_LIT=$TOOLDIR/circt/bin/llvm-lit \
+    -DLLVM_STATIC_LINK_CXX_STDLIB=ON
+```
+
+### Notes
+
+- `foldsim-opt` links CIRCT statically; the driver finds it next to itself
+  and the CIRCT tools through `--circt-bin`. `config.mk` sets
+  `FOLDSIM_PATH ?= $(TOOLDIR)/foldsim` and `FOLDSIM_SHELL ?=
+  $(FOLDSIM_PATH)/share/foldsim/shell` (the FPGA shell the simulator runs in);
+  `hw/syn/common.mk` sets `FOLDSIM ?= $(FOLDSIM_PATH)/bin/foldsim` and
+  `FOLDSIM_LIFT_TOOL ?= $(FOLDSIM_PATH)/bin/foldsim-lift`.
+- A CIRCT change Foldsim's passes rely on lands in CIRCT first; both
+  prebuilts are refreshed together.
+- The prebuilt is opt-in: `./ci/toolchain_install.sh --foldsim` (or `--all`)
+  installs it; the default install leaves it out, since only the Foldsim
+  flow needs it.
+
+---
+
 ## Verifying an installed toolchain
 
 Once components are installed under `$TOOLDIR`, confirm the
@@ -1115,6 +1250,8 @@ $TOOLDIR/
 │   ├── bin/ etc/ lib/libOpenCL.so* share/pocl/
 │   └── include/CL/*.h          (REQUIRED — see §6; absence breaks tests/opencl)
 ├── chipstar/                   (bin/hipcc, lib/libCHIP.so, include/hip/)
+├── circt/bin/                  (circt-verilog, circt-opt, firtool)
+├── foldsim/bin/                (foldsim, foldsim-opt; optional)
 ├── sta/                        (OpenSTA, optional)
 ├── mesa-vortex/                (lavapipe Vulkan ICD; share/vulkan/icd.d/, optional)
 ├── gem5/                       (slim runtime — build/{X86,ARM}/gem5.opt + configs/)
@@ -1136,6 +1273,8 @@ $LLVM_PREFIX/bin/llvm-spirv --version       # if SPIRV-LLVM-Translator installed
 $TOOLDIR/riscv32-gnu-toolchain/bin/riscv32-unknown-elf-gcc --version
 $TOOLDIR/verilator/bin/verilator --version
 $TOOLDIR/chipstar/bin/hipcc --version       # if chipStar installed
+$TOOLDIR/circt/bin/circt-verilog --version
+$TOOLDIR/foldsim/bin/foldsim-opt --version  # if foldsim installed
 test -f $TOOLDIR/pocl/include/CL/opencl.h && echo "POCL host headers OK"
 
 # if gem5 installed — both ISAs are built by default
@@ -1167,10 +1306,13 @@ Both accept the same per-component flags:
 
 ```
 --pocl  --chipstar  --verilator  --riscv32  --riscv64  --llvm --mesa
---libcrt32  --libcrt64  --libc32  --libc64  --sv2v  --yosys  --sta
+--libcrt32  --libcrt64  --libc32  --libc64  --circt  --foldsim  --yosys  --sta
 --gem5     (slim runtime — see §10)
 --all      (every component above; SST is NOT included — see §11)
 ```
+
+With no flag, `ci/toolchain_install.sh` installs every component but the
+opt-in `foldsim` and `gem5`; `--all` adds them.
 
 > **Note**: `--all` covers every component in this list except SST.
 > SST is intentionally not packaged as a prebuilt (autoconf bakes
@@ -1184,7 +1326,7 @@ Both accept the same per-component flags:
 Run this **after** building the components above (or after rebuilding
 just one — e.g. POCL). For each selected component it `tar`s the
 component directory out of `$TOOLDIR`, bzip2-compresses it, and — for
-the large ones (`riscv32`, `riscv64`, `llvm`, `verilator`, `yosys`) —
+the large ones (`riscv32`, `riscv64`, `llvm`, `verilator`, `circt`, `yosys`) —
 `split`s the archive into 50 MB parts to stay under GitHub's per-file
 limit. The bundles are written **relative to the current directory**,
 into `./<component>/$OSVERSION/` (`libc*` / `libcrt*` go straight into
@@ -1213,8 +1355,8 @@ Stream) → `rhel/9`. The `ubuntu/focal` bundles are built on Ubuntu 22.04 and
 need glibc 2.35 / `GLIBCXX_3.4.30`, so they do not load on EL9.
 
 `rhel/9` holds only the components whose host binaries had to be rebuilt.
-`toolchain_install.sh` reuses the `ubuntu/focal` riscv32/riscv64 and sv2v
-bundles there, because they need only glibc 2.14. The `centos/7` riscv bundle
+`toolchain_install.sh` reuses the `ubuntu/focal` riscv32/riscv64 bundles
+there, because they need only glibc 2.14. The `centos/7` riscv bundle
 is GCC 13, and its newlib no longer defines `HAVE_INITFINI_ARRAY`, which the
 kernel library depends on.
 
@@ -1245,7 +1387,7 @@ split parts) from the `vortex-toolchain-prebuilt` repo at the
 directory:
 
 ```bash
-# install the full toolchain:
+# install the toolchain (all but the opt-in foldsim and gem5):
 ./ci/toolchain_install.sh
 
 # or refresh a single component (e.g. after a new POCL release):

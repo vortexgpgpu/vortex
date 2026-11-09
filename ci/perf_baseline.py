@@ -64,6 +64,9 @@ _FILTERED_CONFIG_FILES = (
 )
 _ADDRESS_MAP_DEFINE = re.compile(
     rb"^\s*(?:`define|#define)\s+VX_(?:CSR|DCR)_", re.M)
+# gen_config.py writes a comment per toml section, so adding a section with
+# nothing but filtered keys must not move the fingerprint either.
+_NOT_CONFIG = re.compile(rb"^\s*(?://.*)?$")
 
 _resolved_cache = []
 
@@ -89,11 +92,11 @@ def resolved_config_hash():
     if _resolved_cache:
         return _resolved_cache[0]
     h = hashlib.sha256()
-    for rel in _WHOLE_CONFIG_FILES:
-        h.update(_read_config(rel))
-    for rel in _FILTERED_CONFIG_FILES:
+    for rel in _WHOLE_CONFIG_FILES + _FILTERED_CONFIG_FILES:
+        filtered = rel in _FILTERED_CONFIG_FILES
         kept = [ln for ln in _read_config(rel).splitlines()
-                if not _ADDRESS_MAP_DEFINE.match(ln)]
+                if not _NOT_CONFIG.match(ln)
+                and not (filtered and _ADDRESS_MAP_DEFINE.match(ln))]
         h.update(b"\n".join(kept))
     _resolved_cache.append(h.hexdigest())
     return _resolved_cache[0]

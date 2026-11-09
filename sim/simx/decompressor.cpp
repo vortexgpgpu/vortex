@@ -444,6 +444,10 @@ void Decompressor::commit_request(bool from_refetch) {
     }
 }
 
+void Decompressor::on_emit(const instr_trace_t* trace) {
+    state_.at(trace->wid) = RvcSlot{};
+}
+
 Word Decompressor::fetch_addr(const instr_trace_t* trace) const {
     const auto& rvc = state_.at(trace->wid);
     if (rvc.needs_second) {
@@ -466,7 +470,6 @@ bool Decompressor::on_icache_rsp(instr_trace_t* trace, const mem_block_t& line) 
         // Combine: low half from buffer, high half = low16 of new word.
         uint16_t high = word & 0xFFFFu;
         trace->code = (uint32_t(high) << 16) | rvc.low_half;
-        rvc = RvcSlot{};
         return true;
     }
 

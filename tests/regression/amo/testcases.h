@@ -404,7 +404,37 @@ public:
   }
 };
 
-// 15) Native compare-and-swap ladder: every hart races for each slot, so each
+// 15) LMEM AMO op sweep: swap, and, or, xor, min, max, minu and maxu on local
+//     memory. Each group's leader checks its group's final words in the kernel
+//     and publishes the mismatch count with the group marker.
+class Test_AMO_OPS_LMEM : public ITestCase {
+public:
+  Test_AMO_OPS_LMEM(TestSuite* s) : ITestCase(s, "amo_ops_lmem") {}
+  void setup(uint32_t n, uint32_t* /*shared*/, uint32_t* per_hart) override {
+    for (uint32_t h = 0; h < n; ++h) per_hart[h] = 0;
+  }
+  int verify(uint32_t n, uint32_t /*iters*/,
+             const uint32_t* /*shared*/, const uint32_t* per_hart) override {
+    uint32_t groups = 0, mismatches = 0;
+    for (uint32_t h = 0; h < n; ++h) {
+      uint32_t v = per_hart[h];
+      if (v >= CAS_LMEM_GROUP_MARK) { ++groups; v -= CAS_LMEM_GROUP_MARK; }
+      mismatches += v;
+    }
+    if (groups == 0) {
+      std::cout << "  no group published -- the kernel did not run" << std::endl;
+      return 1;
+    }
+    if (mismatches != 0) {
+      std::cout << "  " << mismatches << " wrong final word(s) across "
+                << groups << " group(s)" << std::endl;
+      return 1;
+    }
+    return 0;
+  }
+};
+
+// 16) Native compare-and-swap ladder: every hart races for each slot, so each
 //     slot has exactly one winner. Summing the per-hart win counts checks the
 //     per-lane return value, which a compare-and-swap that returned the wrong
 //     old word would get wrong even while leaving the ladder itself plausible.
@@ -438,7 +468,7 @@ public:
   }
 };
 
-// 16) LMEM compare-and-swap ladder: the cas_ladder race on local memory, so
+// 17) LMEM compare-and-swap ladder: the cas_ladder race on local memory, so
 //     the LMEM banks resolve the swap and the returned old word. Each group
 //     has its own ladder with exactly one winner per slot; the leaders' publish
 //     marker carries the group count, so the win counts must sum to
@@ -495,6 +525,7 @@ inline TestSuite::TestSuite(vx_device_h device) : device_(device) {
   add_test(new Test_SELF_CONSISTENCY(this));
   add_test(new Test_AMOADD_LMEM(this));
   add_test(new Test_LRSC_LMEM(this));
+  add_test(new Test_AMO_OPS_LMEM(this));
 #if VX_CFG_EXT_ZACAS_ENABLED
   // Native compare-and-swap only exists when Zacas is built in. Without it a
   // compare-exchange lowers to an LR/SC retry loop, which is the construct

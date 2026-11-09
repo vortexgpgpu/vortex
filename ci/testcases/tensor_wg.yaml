@@ -5,7 +5,7 @@ defaults:
   - 32
   - 64
   tier: smoke
-  touches: [hw/rtl/tcu, sim/simx/tcu, sw/kernel/include/vx_tensor.h]
+  touches: [hw/rtl/tcu, hw/rtl/VX_gpu_pkg.sv, sim/simx/tcu, sim/simx/fragment_layout.h, sw/kernel/include/vx_tensor.h]
 # Every case with ISSUE_WIDTH > 1 pins one execution block per unit: the default
 # (one block per issue slot) multiplies the model size, and a hosted CI runner
 # cannot build it in a job. simx and rtlsim legs carry the same pin so both
@@ -44,14 +44,14 @@ tests:
   drivers:
   - rtlsim
   app: sgemm_tcu_wg
-  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_FETCH_WIDTH=2
     -DVX_CFG_TCU_INT8_ENABLE -DITYPE=int8 -DOTYPE=int32 -DWGMMA_NRC=32 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
 - id: sgemm_tcu_wg-6
   via: blackbox
   drivers:
   - rtlsim
   app: sgemm_tcu_wg
-  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_FETCH_WIDTH=4
     -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
 - id: sgemm_tcu_wg-7
   via: blackbox
@@ -72,7 +72,7 @@ tests:
   drivers:
   - rtlsim
   app: sgemm_tcu_wg
-  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_FETCH_WIDTH=2
     -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8 -DWGMMA_SS -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
 - id: sgemm_tcu_wg-10
   via: blackbox
@@ -116,7 +116,7 @@ tests:
   drivers:
   - rtlsim
   app: sgemm_tcu_wg_sp
-  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_FETCH_WIDTH=4
     -DVX_CFG_TCU_SPARSE_ENABLE -DWGMMA_NRC=8 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
 - id: sgemm_tcu_wg_sp-5
   via: blackbox
@@ -130,8 +130,25 @@ tests:
   drivers:
   - rtlsim
   app: sgemm_tcu_wg_sp
-  configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+  configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_FETCH_WIDTH=2
     -DVX_CFG_TCU_SPARSE_ENABLE -DWGMMA_NRC=8 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
+# WMMA_SP in a WGMMA build: at NT 4 and 16 it keeps the symmetric layout.
+- id: sgemm_tcu_sp-wgmma-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
+- id: sgemm_tcu_sp-wgmma-2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_INT8_ENABLE -DITYPE=int8 -DOTYPE=int32 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
 - id: sgemm_tcu_wg_sp-7
   via: blackbox
   drivers:
@@ -204,6 +221,16 @@ tests:
   # several times the size, and a hosted CI runner cannot build it in a job.
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
     -DVX_CFG_TCU_INT8_ENABLE -DITYPE=int8 -DOTYPE=int32 -DWGMMA_NRC=32
+# The same at 64x64x64: the four issue slots share the ALU block through a
+# long address loop, and each CTA's four warps start every WGMMA together once
+# the tile buffers fill, or a late one waits for the other CTA's WGMMA.
+- id: model_parity-wgmma-int8-m64
+  check: model_parity
+  via: blackbox
+  app: sgemm_tcu_wg
+  args: -m64 -n64 -k64
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
+    -DVX_CFG_TCU_INT8_ENABLE -DITYPE=int8 -DOTYPE=int32 -DWGMMA_NRC=32
 
 # Dense WGMMA fp16 SS datapath, cycles-vs-baseline.
 - id: perf_gate-wgmma-fp16-ss
@@ -232,8 +259,9 @@ tests:
   args: -m64 -n64 -k64
   # One execution block per unit: the four-block model ISSUE_WIDTH=4 implies is
   # several times the size, and a hosted CI runner cannot build it in a job.
+  # Two frontend slices: covers the frontend crossbar on both models.
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
-    -DVX_CFG_TCU_FEDP2K -DVX_CFG_TCU_TYPE_DPI -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8 -DWGMMA_RS
+    -DVX_CFG_TCU_FEDP2K -DVX_CFG_TCU_TYPE_DPI -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8 -DWGMMA_RS -DVX_CFG_FETCH_WIDTH=2
 
 # Cooperative sparse WGMMA (default fp16 operands, 2:4 structured sparsity).
   # Not warp-width swept: the tensor-core fragment layout is defined over a fixed
@@ -249,3 +277,43 @@ tests:
 
   # Not warp-width swept: the tensor-core fragment layout is defined over a fixed
   # lane count, which the configs pin.
+
+# The WGMMA accumulator stored with vx_stm in 8-register chunks
+# (VX_CFG_EXT_LDST_MATRIX_ENABLE).
+- id: sgemm_tcu_wg-ldm-1
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_wg
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1 -DVX_CFG_EXT_LDST_MATRIX_ENABLE
+  touches: [hw/rtl/tcu, hw/rtl/core/VX_uop_packld.sv, hw/rtl/core/VX_decode.sv, sim/simx/tcu, sim/simx/fragment_layout.h, sim/simx/lsu_unit.cpp, sim/simx/decode.cpp, hw/rtl/VX_gpu_pkg.sv, sw/kernel/include/vx_tensor.h, sw/kernel/include/vx_intrinsics.h]
+- id: sgemm_tcu_wg-ldm-2
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_wg
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_FEDP2K -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8 -DWGMMA_RS -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1 -DVX_CFG_EXT_LDST_MATRIX_ENABLE -DKUNROLL=2
+  touches: [hw/rtl/tcu, hw/rtl/core/VX_uop_packld.sv, hw/rtl/core/VX_decode.sv, sim/simx/tcu, sim/simx/fragment_layout.h, sim/simx/lsu_unit.cpp, sim/simx/decode.cpp, hw/rtl/VX_gpu_pkg.sv, sw/kernel/include/vx_tensor.h, sw/kernel/include/vx_intrinsics.h]
+- id: model_parity-wgmma-ldm
+  check: model_parity
+  via: blackbox
+  app: sgemm_tcu_wg
+  args: -m64 -n64 -k64
+  # One execution block per unit: the four-block model ISSUE_WIDTH=4 implies is
+  # several times the size, and a hosted CI runner cannot build it in a job.
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1 -DVX_CFG_TCU_TYPE_DPI -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=16 -DVX_CFG_EXT_LDST_MATRIX_ENABLE
+  touches: [hw/rtl/tcu, hw/rtl/core/VX_uop_packld.sv, hw/rtl/core/VX_decode.sv, sim/simx/tcu, sim/simx/fragment_layout.h, sim/simx/lsu_unit.cpp, sim/simx/decode.cpp, hw/rtl/VX_gpu_pkg.sv, sw/kernel/include/vx_tensor.h, sw/kernel/include/vx_intrinsics.h]
+- id: sgemm_tcu_wg_mx-ldm
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_wg_mx
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32 -DWGMMA_NRC=8 -DWGMMA_RS -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1 -DVX_CFG_EXT_LDST_MATRIX_ENABLE
+  touches: [hw/rtl/tcu, hw/rtl/core/VX_uop_packld.sv, hw/rtl/core/VX_decode.sv, sim/simx/tcu, sim/simx/fragment_layout.h, sim/simx/lsu_unit.cpp, sim/simx/decode.cpp, hw/rtl/VX_gpu_pkg.sv, sw/kernel/include/vx_tensor.h, sw/kernel/include/vx_intrinsics.h]
+- id: sgemm_tcu_wg_sp-ldm
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_wg_sp
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DWGMMA_NRC=32 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1 -DVX_CFG_EXT_LDST_MATRIX_ENABLE
+  touches: [hw/rtl/tcu, hw/rtl/core/VX_uop_packld.sv, hw/rtl/core/VX_decode.sv, sim/simx/tcu, sim/simx/fragment_layout.h, sim/simx/lsu_unit.cpp, sim/simx/decode.cpp, hw/rtl/VX_gpu_pkg.sv, sw/kernel/include/vx_tensor.h, sw/kernel/include/vx_intrinsics.h]

@@ -19,7 +19,13 @@ VX_ISA_IMPL_ID   = 0
 [memmap]
 VX_MEM_USER_BASE_ADDR       = "expr: 0x0000000000010000 if ($XLEN == 64) else 0x00010000"
 VX_MEM_STACK_LOG2_SIZE      = 13
-VX_MEM_STACK_BASE_ADDR      = "expr: 0x00000001FFFF0000 if ($XLEN == 64) else 0xFFFF0000"
+# The stack window's top is aligned to max(256 KB, NUM_THREADS stacks): the
+# 256 KB-aligned top, rounded down to a whole group of NUM_THREADS stacks. The
+# window then lies on whole groups and the stack interleave is a pure bit
+# permutation. The local memory window starts at the same address and runs to
+# the next such boundary, which bounds its capacity.
+stack_window_top            = "expr: 0x00000001FFFC0000 if ($XLEN == 64) else 0xFFFC0000"
+VX_MEM_STACK_BASE_ADDR      = "expr: $stack_window_top - ($stack_window_top % ($VX_CFG_NUM_THREADS << $VX_MEM_STACK_LOG2_SIZE))"
 VX_MEM_LMEM_BASE_ADDR       = "expr: $VX_MEM_STACK_BASE_ADDR"
 VX_MEM_IO_BASE_ADDR         = "expr: 0x0000000000000040 if ($XLEN == 64) else 0x00000040"
 VX_MEM_PAGE_TABLE_BASE_ADDR = "expr: 0x00000000F0000000 if ($XLEN == 64) else 0xF0000000"
@@ -75,6 +81,11 @@ VX_DCR_BASE_STATE_BEGIN = 0x000
 VX_DCR_BASE_CACHE_FLUSH = 0x000
 VX_DCR_BASE_MPM_VALUE   = 0x001
 VX_DCR_BASE_STATE_END   = 0x002
+
+[cache_flush]
+# VX_DCR_BASE_CACHE_FLUSH write value: flush only the levels above the
+# last-level cache, which stays the point of coherence for the next kernel.
+VX_CACHE_FLUSH_L1_ONLY  = 0x10000
 
 [dcr_mmu]
 VX_DCR_MMU_STATE_BEGIN  = 0x004
@@ -876,6 +887,12 @@ VX_CSR_MPM_RTCACHE_MISS_R_H = 0xB8A
 # the bare `XLEN` while VX_config sees `VX_CFG_XLEN`. Keep the two in lockstep.
 [[builtin]]
 XLEN = "int"
+
+# Build-configuration knobs a contract value depends on. The consumer defines
+# them (VX_config's header or the build's -D flags), so a key that references
+# one is emitted as an expression over its macro instead of a constant.
+[[extern]]
+VX_CFG_NUM_THREADS = "int"
 
 [[enum]]
 VX_VM_ADDR_MODE = ["BARE", "SV32", "SV39", "SV48", "SV57"]

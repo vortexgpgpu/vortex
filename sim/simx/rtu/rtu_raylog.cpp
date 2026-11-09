@@ -79,7 +79,7 @@ public:
   void accept(const void* owner, uint32_t slot, const RtuReq& req) {
     cb_[{owner, slot}].fill(0);
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-      if (req.tmask_bits & (1u << t)) snapshot_scene(req.scene_root[t]);
+      if (req.tmask_bits & (uint64_t(1) << t)) snapshot_scene(req.scene_root[t]);
     }
   }
 

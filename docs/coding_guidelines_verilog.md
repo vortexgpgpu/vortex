@@ -165,6 +165,12 @@ Vortex uses explicit warning management i.e. we directly resolve the warning ins
   wire [DEPTH:0][TOP_N-1:0][WN-1:0] tree_sig;
   ```
 
+  The split is an optimization pass, so the `-O0` builds (the `debug` CI category) do not
+  split anything. Never put a module's combinational input and its registered outputs in one
+  vector (`valid[0] = valid_in`, `valid[1..]` registers): through any outer path from
+  `valid_out` back to `valid_in` the unsplit vector reads as a loop. Give the input and the
+  registers separate variables.
+
 ## 6. Assertions
 - runtime macro will include always block
   ```verilog
@@ -248,6 +254,9 @@ Strive for moderate combinatorial logic depths that balance latency with synthes
 ## 11. Reuse the Hardware IP Library
 
 Before writing new RTL, consult the hardware IP library in [hw/rtl/libs/](../hw/rtl/libs/) — the [hardware_library.md](hardware_library.md) reference catalogs the reusable, parameterized modules it provides: elastic buffers and flow control, arbiters, mux/demux, stream fork/join/pack/dispatch, crossbars and interconnect, encoders/decoders, arithmetic (multipliers, dividers, adders, CSA trees), RAM/FIFO primitives, memory adapters, and bit-manipulation utilities. Prefer instantiating an existing library module over hand-rolling equivalent logic: the library modules carry consistent valid/ready handshake semantics, inherit the FPGA/ASIC synthesis support, and are already verified, so reuse avoids duplicating tested logic and the subtle handshake/timing bugs that re-implementation invites. If a needed primitive is genuinely missing, add it to the library rather than embedding a one-off in a block.
+
+**Memories go through `VX_dp_ram` / `VX_sp_ram`.** Never hand-write a RAM array. Choose the read form the design needs; a combinational read (`OUT_REG=0`) of a block-RAM-sized `VX_dp_ram` becomes block RAM through the synthesis flows' RAM fold, which computes its address one cycle early from the registers that feed it, wherever they are. Keep that address computable: drive it from registers on the RAM's clock through assigns, ports, interfaces and functions, not from a top-level input or an `always_comb` block; connect the modules on its path by name; and give a RAM whose read form is a parameter one instantiation per form, since the fold edits the instantiation every instance shares. `<src>/ram_fold.rpt` names every RAM the fold kept and why. See [Block RAM and asynchronous reads](hardware_library.md#block-ram-and-asynchronous-reads).
+
 ## 12. Module & Interface Declarations & Instantiations
 
 Declare and instantiate modules **and parameterized interfaces** with one

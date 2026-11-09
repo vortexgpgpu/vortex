@@ -77,6 +77,11 @@ public:
   SimEventLink<GbarArrive> gbar_arrive_in;
   std::vector<SimEventLink<GbarResume>> gbar_resume_out;
 
+  // With more than one cluster the barrier spans clusters: arrivals go up to
+  // the device-level GbarUnit and its resume comes back down here.
+  SimEventLink<GbarArrive> gbar_fwd_out;
+  SimEventLink<GbarResume> gbar_fwd_resume_in;
+
   Cluster(const SimContext& ctx,
           const char* name,
           uint32_t cluster_id,
@@ -117,7 +122,7 @@ public:
   // → L2 → L3) to avoid downstream evictions racing the next-level walk.
   // L1 fanout: dcache + icache + socket-local {tcache, rtcache} (forwarded
   // to the sockets) + cluster-local {rcache, ocache}.
-  void dcache_flush_begin();
+  void dcache_flush_begin(bool l1_only);
   bool dcache_flush_done() const;
   void icache_flush_begin();
   bool icache_flush_done() const;
@@ -137,7 +142,14 @@ public:
   void rtcache_flush_begin();
   bool rtcache_flush_done() const;
 #endif
-  void l2_flush_begin();
+  void l2_flush_begin(bool l1_only);
+  // The L2, when it is the shared last-level cache, keeps its lines into the
+  // next launch.
+  void l2_keep_lines();
+  // The command processor DMA's client slot on this cluster's L2, valid only
+  // under CP_ON_L2 (the L2 is the LLC).
+  SimChannel<MemReq>& cp_mem_req_in();
+  SimChannel<MemRsp>& cp_mem_rsp_out();
   bool l2_flush_done() const;
 
 #ifdef VX_CFG_EXT_RASTER_ENABLE
@@ -151,6 +163,7 @@ protected:
 
 private:
   void on_gbar_arrive(const GbarArrive& msg);
+  void on_gbar_fwd_resume(const GbarResume& msg);
 
   uint32_t       cluster_id_;
   ProcessorImpl* processor_;

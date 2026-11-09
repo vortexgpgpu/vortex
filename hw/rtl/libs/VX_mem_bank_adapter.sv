@@ -71,8 +71,8 @@ module VX_mem_bank_adapter #(
     localparam TAG_BUFFER_ADDRW = `CLOG2(TAG_BUFFER_SIZE);
     localparam NEEDED_TAG_WIDTH = TAG_WIDTH_IN + NUM_PORTS_IN_BITS;
     localparam READ_TAG_WIDTH = (NEEDED_TAG_WIDTH > TAG_WIDTH_OUT) ? TAG_BUFFER_ADDRW : TAG_WIDTH_IN;
-    localparam WRITE_TAG_WIDTH = TAG_WIDTH_IN;
-    localparam XBAR_TAG_WIDTH = `MAX(READ_TAG_WIDTH, WRITE_TAG_WIDTH);
+    // Writes are posted and get no response, so their tag goes no wider than a read's.
+    localparam XBAR_TAG_WIDTH = READ_TAG_WIDTH;
     localparam DST_TAG_WIDTH  = XBAR_TAG_WIDTH + NUM_PORTS_IN_BITS;
     localparam REQ_XBAR_DATAW = 1 + BANK_ADDR_WIDTH + DATA_SIZE + DATA_WIDTH + XBAR_TAG_WIDTH;
     localparam RSP_XBAR_DATAW = DATA_WIDTH + READ_TAG_WIDTH;

@@ -22,7 +22,7 @@
 #     workflow enabled first (`gh workflow enable asic_gate.yml`).
 #
 # It always gates master, whatever branch the schedule happens to fire on. No
-# licence and no dedicated machine: yosys/sv2v/OpenSTA ship in the prebuilt
+# licence and no dedicated machine: yosys/OpenSTA ship in the prebuilt
 # toolchain and ASAP7 is a 59 MB content-addressed fetch.
 #
 # See docs/designs/continuous_integration.md §3.5.
@@ -152,8 +152,8 @@ jobs:
           ref: ${{ needs.plan.outputs.sha }}
           submodules: recursive
 
-      # Restores the prebuilt toolchain cache, which already carries yosys, sv2v
-      # and OpenSTA (ci/toolchain_install.sh installs all three by default).
+      # Restores the prebuilt toolchain cache, which carries yosys (with its
+      # slang SystemVerilog frontend) and OpenSTA.
       - name: Setup Vortex
         uses: ./.github/actions/setup-vortex
 

@@ -27,6 +27,7 @@ module VX_tlb_l1 import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     parameter MSHR_SIZE    = `VX_CFG_L1_TLB_MSHR_SIZE,
     parameter REPLAY_DEPTH = 2,
     parameter PAYLOAD_W    = 1,
+    parameter ALLOC_PROBE  = 0,
     parameter ID_WIDTH     = `CLOG2(MSHR_SIZE)
 ) (
     input wire clk,
@@ -44,7 +45,8 @@ module VX_tlb_l1 import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     input  wire [NUM_REQS-1:0]                       lookup_amo,
     output wire [NUM_REQS-1:0]                       lookup_perm,
     input  wire [NUM_REQS-1:0]                       access_hit,
-    output wire [NUM_REQS-1:0]                       mshr_match,
+    input  wire [NUM_REQS-1:0]                       mshr_order,
+    output wire [NUM_REQS-1:0]                       mshr_join,
 
     // Park a miss (payload is opaque; the parent splices on replay).
     input  wire                      park_valid,
@@ -140,12 +142,14 @@ module VX_tlb_l1 import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         .QDATA_W   (PAYLOAD_W),
         .QDEPTH    (REPLAY_DEPTH),
         .DEDUP_LIVE_EXCLUDES_FAULT (1),
+        .ALLOC_PROBE (ALLOC_PROBE),
         .ID_WIDTH  (ID_WIDTH)
     ) mshr (
         .clk           (clk),
         .reset         (reset),
         .probe_vpn     (lookup_vpn),
-        .probe_match   (mshr_match),
+        .probe_order   (mshr_order),
+        .probe_join    (mshr_join),
         .alloc_valid   (park_valid),
         .alloc_vpn     (park_vpn),
         .alloc_access  (park_access),

@@ -300,17 +300,14 @@ kernel), never by the host.
 
 ---
 
-## 8. VM / pinned-buffer tie-in
+## 8. Virtual memory
 
-Under `VX_CFG_VM_ENABLE` the per-core MMU translates VA→PA for kernel LSU
-traffic, but the RASTER/TEX/OM AXI masters **bypass** the MMU and use the
-physical addresses written into their DCRs. `VX_MEM_PHYS` buffers are
-identity-mapped and carved from a dedicated pinned slab so VA == PA. DCR
-writes targeting graphics buffer-address registers are validated against
-the pinned slab on the CP submit path (returning `VX_ERR_INVALID_VALUE`
-for a PA outside the slab). The slab size is `VX_CFG_VM_PINNED_REGION_SIZE`
-(overridable via `VORTEX_VM_PINNED_SIZE`). Tests allocate every HW-bound
-buffer with `VX_MEM_PHYS` and omit it for write-only LSU buffers. The
+Under `VX_CFG_VM_ENABLE` every graphics master translates: TEX through the
+socket unit MMU, RASTER and OM through the cluster unit MMU in front of the
+rcache and ocache (see
+[`virtual_memory_subsystem.md`](virtual_memory_subsystem.md) §3.8-3.9), so the
+addresses in the TEX/RASTER/OM DCRs are ordinary device virtual addresses and
+a texture, tile, primitive, color or depth buffer needs no `VX_MEM_PHYS`. The
 VM/MMU subsystem is documented in
 [`virtual_memory_subsystem.md`](virtual_memory_subsystem.md).
 

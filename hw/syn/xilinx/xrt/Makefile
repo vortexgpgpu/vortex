@@ -1,8 +1,8 @@
 ROOT_DIR := $(realpath ../../../..)
 include $(ROOT_DIR)/config.mk
-# Exports VERILATOR/VERILATOR_PATH as absolute paths. gen_sources.sh resolves
-# verilator from the environment, so without this the flow silently depends on
-# verilator being on PATH and fails with "verilator: command not found".
+# Exports CIRCT_VERILOG as an absolute path. gen_sources.sh resolves its
+# preprocessor from the environment, so without this the flow silently depends
+# on circt-verilog being on PATH.
 include $(VORTEX_HOME)/hw/syn/common.mk
 
 ifneq ($(findstring Makefile, $(MAKEFILE_LIST)), Makefile)
@@ -23,7 +23,6 @@ PREFIX ?= build$(XLEN)
 
 SAIF_FILE ?=
 SAIF_INST ?=
-MAX_JOBS ?= 8
 
 # Synthesis optimization level (standardized across hw/syn):
 #   0 -- fastest compile, no optimization (Vitis --optimize 0)
@@ -32,28 +31,14 @@ MAX_JOBS ?= 8
 OPT_LEVEL ?= 3
 
 SRC_DIR := $(VORTEX_HOME)/hw/syn/xilinx/xrt
+AFU_DIR := $(VORTEX_HOME)/hw/rtl/afu/xrt
 
-RTL_DIR := $(VORTEX_HOME)/hw/rtl
-DPI_DIR := $(VORTEX_HOME)/hw/dpi
-AFU_DIR := $(RTL_DIR)/afu/xrt
-AFU_COMMON_DIR := $(RTL_DIR)/afu/common
-SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
-
-VIVADO := $(XILINX_VIVADO)/bin/vivado
 VPP := $(XILINX_VITIS)/bin/v++
-
-CP = cp -rf
-RMDIR = rm -rf
-ECHO = @echo
-
-NCPUS := $(shell lscpu | grep "^Core(s) per socket:" | awk '{print $$4}')
-JOBS ?= $(shell echo $$(( $(NCPUS) > $(MAX_JOBS) ? $(MAX_JOBS) : $(NCPUS) )))
 
 PLATFORM_TO_XSA = $(strip $(patsubst %.xpfm, % , $(shell basename $(PLATFORM))))
 XSA := $(call PLATFORM_TO_XSA, $(PLATFORM))
 
 DEV_ARCH := $(shell platforminfo -p $(PLATFORM) | grep 'FPGA Family' | sed 's/.*://' | sed '/ai_engine/d' | sed 's/^[[:space:]]*//')
-CPU_TYPE := $(shell platforminfo -p $(PLATFORM) | grep 'CPU Type' | sed 's/.*://' | sed '/ai_engine/d' | sed 's/^[[:space:]]*//')
 
 BUILD_DIR := $(PREFIX)_$(XSA)_$(TARGET)
 BIN_DIR := $(BUILD_DIR)/bin
@@ -61,66 +46,16 @@ BIN_DIR := $(BUILD_DIR)/bin
 XO_CONTAINER := $(BIN_DIR)/vortex_afu.xo
 XCLBIN_CONTAINER := $(BIN_DIR)/vortex_afu.xclbin
 
-# Control RTL debug tracing states
-DBG_TRACE_FLAGS += -DDBG_TRACE_PIPELINE
-DBG_TRACE_FLAGS += -DDBG_TRACE_MEM
-DBG_TRACE_FLAGS += -DDBG_TRACE_CACHE
-DBG_TRACE_FLAGS += -DDBG_TRACE_AFU
-DBG_TRACE_FLAGS += -DDBG_TRACE_TEX
-DBG_TRACE_FLAGS += -DDBG_TRACE_RASTER
-DBG_TRACE_FLAGS += -DDBG_TRACE_OM
-DBG_TRACE_FLAGS += -DDBG_TRACE_GBAR
-DBG_TRACE_FLAGS += -DDBG_TRACE_TCU
-
-# Control logic analyzer monitors
-DBG_SCOPE_FLAGS += -DDBG_SCOPE_AFU
-DBG_SCOPE_FLAGS += -DDBG_SCOPE_ISSUE
-DBG_SCOPE_FLAGS += -DDBG_SCOPE_FETCH
-DBG_SCOPE_FLAGS += -DDBG_SCOPE_LSU
-
-ifdef NUM_CORES
-# cluster configuration
-CONFIGS_1c  := -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=1
-CONFIGS_2c  := -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=2
-CONFIGS_4c  := -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=4
-CONFIGS_8c	:= -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=8
-CONFIGS_16c	:= -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=16
-CONFIGS_32c := -DVX_CFG_NUM_CLUSTERS=2 -DVX_CFG_NUM_CORES=16
-CONFIGS_64c := -DVX_CFG_NUM_CLUSTERS=4 -DVX_CFG_NUM_CORES=16
-CONFIGS += $(CONFIGS_$(NUM_CORES)c)
-endif
-
-CONFIGS += -DSYNTHESIS -DVIVADO
-
 ifeq ($(TARGET), hw_emu)
-	CONFIGS += -DSIMULATION
+	override CONFIGS += -DSIMULATION
 endif
 
-XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
+.DEFAULT_GOAL := all
+include $(VORTEX_HOME)/hw/syn/xilinx/common.mk
 
-# include sources
-RTL_PKGS = $(RTL_DIR)/VX_gpu_pkg.sv $(RTL_DIR)/fpu/VX_fpu_pkg.sv
-FPU_INCLUDE = -I$(RTL_DIR)/fpu
-ifneq (,$(filter -DVX_CFG_FPU_TYPE_FPNEW, $(XCONFIGS)))
-	RTL_PKGS += $(THIRD_PARTY_DIR)/cvfpu/src/fpnew_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src/cf_math_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl/defs_div_sqrt_mvp.sv
-	FPU_INCLUDE += -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src -J$(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl -J$(THIRD_PARTY_DIR)/cvfpu/src
-endif
-RTL_INCLUDE = -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(RTL_DIR)/cache -I$(AFU_DIR) -I$(AFU_COMMON_DIR)
-RTL_INCLUDE += $(FPU_INCLUDE)
-
-# Command Processor sources. RTL_PKGS holds packages only; the CP
-# interface files are auto-discovered via the -I path below.
-RTL_PKGS += $(RTL_DIR)/cp/VX_cp_pkg.sv
-RTL_INCLUDE += -I$(RTL_DIR)/cp
-
-# Per-extension RTL sources (TCU/DXA/V/RTU/TEX/RASTER/OM) —
-# single source of truth, appended based on the resolved XCONFIGS.
-include $(VORTEX_HOME)/hw/syn/extensions.mk
-
-# Kernel clock target frequency (MHz). Defaults to the U55C platform native
-# 300 MHz. Override on the command line (e.g. KERNEL_FREQ=250) for extra
+# Kernel clock target frequency (MHz). The card descriptor supplies the
+# default; override on the command line (e.g. KERNEL_FREQ=250) for extra
 # timing-closure margin.
-KERNEL_FREQ ?= 300
 
 # Timing-miss policy. Default (1): a design that misses KERNEL_FREQ is
 # auto-scaled down to the achieved frequency and the build succeeds with
@@ -146,16 +81,14 @@ ifdef IMPL_STRATEGY
 VPP_FLAGS += --xp "vivado_prop:run.impl_1.STRATEGY=$(IMPL_STRATEGY)"
 endif
 
-# load platform settings
-include $(SRC_DIR)/platforms.mk
+# Card settings, resolved from the platform's XSA and FPGA family.
+ifneq ($(PLATFORM),)
+PLATFORM_GEN_ARGS := --flow=xrt --xsa=$(XSA) --family='$(DEV_ARCH)'
+include $(VORTEX_HOME)/hw/syn/xilinx/platform.mk
+endif
 
 VPP_FLAGS += --report_level 2
 VPP_FLAGS += --config $(SRC_DIR)/vitis.ini
-
-# Enable perf counters
-ifdef PERF
-	CFLAGS += -DPERF_ENABLE
-endif
 
 # Generates profile summary report
 ifdef PROFILE
@@ -178,42 +111,36 @@ else
 	CFLAGS += -DNDEBUG
 endif
 
-# Enable scope analyzer
-ifdef SCOPE
-	CFLAGS += -DSCOPE $(DBG_SCOPE_FLAGS)
-	SCOPE_JSON += $(BIN_DIR)/scope.json
+CFLAGS += $(COMPILE_CFLAGS)
+
+# One AXI memory master per GPU memory port. The kernel top must declare its
+# ports literally, so resolve the count from the elaborated configuration.
+AFU_MEM_PORTS := $(shell $(SCRIPT_DIR)/afu_mem_ports.sh -c $(BUILD_DIR)/.afu_mem_ports $(VERILATOR_PATH)/bin/verilator $(filter-out -J%,$(XML_CFLAGS)))
+ifeq ($(AFU_MEM_PORTS),)
+$(error cannot resolve the AFU memory port count for this configuration)
 endif
+CFLAGS += -DAFU_MEM_PORTS=$(AFU_MEM_PORTS)
 
-# compilation flags
-CFLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
-# raw CONFIGS carries only an enum *value* (e.g. VX_CFG_TCU_TYPE=TFR); append the
-# resolved type selectors so an enum override selects its RTL implementation.
-CFLAGS += $(CONFIGS) $(filter -DVX_CFG_TCU_TYPE_% -DVX_CFG_FPU_TYPE_%,$(XCONFIGS))
-CFLAGS += $(RTL_INCLUDE)
-
-# ast dump flags
-XML_CFLAGS = $(filter-out -DSYNTHESIS -DVIVADO, $(CFLAGS)) $(RTL_PKGS) -I$(DPI_DIR) -DSV_DPI
+# Port i owns the i-th contiguous 1/N of device memory (VX_afu_wrap). Bind it
+# to the matching contiguous group of the platform's memory channels, so each
+# port reaches only its own channels and no two ports share one.
+ifdef PLATFORM_MEMORY_TAG
+VPP_FLAGS += $(shell n=$(AFU_MEM_PORTS); g=$$(($(PLATFORM_MEMORY_CHANNELS) / n)); \
+	for i in $$(seq 0 $$((n - 1))); do \
+		lo=$$((i * g)); hi=$$((lo + g - 1)); \
+		if [ $$g -eq 1 ]; then r=$$lo; else r=$$lo:$$hi; fi; \
+		echo "--connectivity.sp vortex_afu_1.m_axi_mem_$$i:$(PLATFORM_MEMORY_TAG)[$$r]"; \
+	done)
+endif
 
 # RTL Kernel only supports Hardware and Hardware Emulation.
 ifneq ($(TARGET),$(findstring $(TARGET), hw hw_emu))
 	$(warning WARNING:Application supports only hw hw_emu TARGET. Please use the target for running the application)
 endif
 
-.PHONY: all clean gen-sources gen-ast emconfig check-devices power
+.PHONY: all clean emconfig check-devices power
 
-all: check-devices emconfig $(XCLBIN_CONTAINER) report
-
-gen-sources: $(BUILD_DIR)/sources.txt
-$(BUILD_DIR)/sources.txt:
-	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/gen_sources.sh -P $(CFLAGS) -Csrc -Osources.txt
-
-gen-ast: $(BUILD_DIR)/vortex.xml
-$(BUILD_DIR)/vortex.xml:
-	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(VERILATOR_PATH)/bin/verilator --xml-only -O0 $(XML_CFLAGS) vortex_afu.v --xml-output vortex.xml
-
-scope-json: $(BIN_DIR)/scope.json
-$(BIN_DIR)/scope.json: $(BUILD_DIR)/vortex.xml
-	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/scope.py vortex.xml -o bin/scope.json
+all: check-devices check-axil-blocks emconfig $(XCLBIN_CONTAINER) report
 
 gen-xo: $(XO_CONTAINER)
 $(XO_CONTAINER): $(BUILD_DIR)/sources.txt

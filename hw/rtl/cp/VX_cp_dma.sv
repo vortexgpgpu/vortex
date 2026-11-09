@@ -27,7 +27,11 @@
 // not pipelined.
 //
 // FSM:
-//   S_IDLE   : grant -> latch op/dst/src/size                 -> S_SETUP
+//   S_IDLE   : grant -> latch op/dst/src/size                 -> S_XLATE_AR
+//              (no device operand to translate)               -> S_SETUP
+//   S_XLATE_AR/S_XLATE_R : page-table walk of each device operand, one PTE
+//              read per level on the device port; the leaf rewrites the
+//              operand with its physical address              -> S_SETUP
 //   S_SETUP  : size 0 -> S_DONE; else size the chunk          -> S_REQ_AR
 //   S_REQ_AR : drive AR on the read port; arready             -> S_READ
 //   S_READ   : capture rdata beats into buf_r; last beat      -> S_REQ_AW
@@ -56,6 +60,12 @@
 // host polls, and the completion line that follows it) fire.
 // Device-direction writes don't need this: nothing reads them through a
 // foreign port on the strength of Q_SEQNUM alone.
+//
+// VIRTUAL MEMORY. With a page-table root in CP_SATP, a device operand is a
+// virtual address, as on a GPU copy engine. Every allocation maps to one
+// contiguous physical range, so translating the operand's base covers the
+// whole transfer. Commands flagged F_MEM_PHYSICAL (the page tables
+// themselves) skip the walk.
 // ============================================================================
 
 module VX_cp_dma
@@ -71,6 +81,9 @@ module VX_cp_dma
   input  cmd_t                      cmd,
   output logic                      done,
 
+  // CP_SATP: page-table root for the device operands (0 or bare: physical).
+  input  wire [63:0]                satp,
+
   // Host-memory AXI master (command-ring side / upload source / download dst).
   VX_mem_axi_if.master             axi_host,
   // Device-memory AXI master.
@@ -82,9 +95,19 @@ module VX_cp_dma
   localparam int BCNT_W    = 7;           // chunk length 1..64
 
   typedef enum logic [3:0] {
-    S_IDLE, S_SETUP, S_REQ_AR, S_READ, S_REQ_AW, S_WRITE, S_WAIT_B,
-    S_FLUSH_AR, S_FLUSH_R, S_DONE
+    S_IDLE, S_XLATE_AR, S_XLATE_R, S_SETUP, S_REQ_AR, S_READ, S_REQ_AW,
+    S_WRITE, S_WAIT_B, S_FLUSH_AR, S_FLUSH_R, S_DONE
   } state_e;
+
+  // Page-table geometry: Sv32 at XLEN=32, Sv39 at XLEN=64.
+  localparam int PAGE_LOG2  = `VX_VM_PAGE_LOG2_SIZE;
+  localparam int PT_LEVELS  = `VX_VM_PT_LEVEL;
+  localparam int LEVEL_BITS = `CLOG2(`VX_VM_PT_SIZE / `VX_VM_PTE_SIZE);
+  localparam int PTE_BITS   = `VX_VM_PTE_SIZE * 8;
+  localparam int PTE_SHIFT  = `CLOG2(`VX_VM_PTE_SIZE);
+  localparam int PTE_SEL_W  = 6 - PTE_SHIFT;
+  localparam int PPN_W      = (PTE_BITS == 32) ? 22 : 44;
+  localparam int LVL_W      = `UP(`CLOG2(PT_LEVELS));
 
   state_e               state;
   logic [7:0]           op_r;             // latched opcode (host/dev routing)
@@ -124,8 +147,67 @@ module VX_cp_dma
   wire rd_from_host = (cp_opcode_e'(op_r) == CMD_MEM_WRITE);  // upload: read host
   wire wr_to_host   = (cp_opcode_e'(op_r) == CMD_MEM_READ);   // download: write host
 
+  // ---- Page-table walk of the device operands ----
+`ifdef VX_VM_ADDR_MODE_SV32
+  wire             satp_on  = satp[31];
+  wire [PPN_W-1:0] satp_ppn = satp[PPN_W-1:0];
+  `UNUSED_VAR (satp[63:32])
+  `UNUSED_VAR (satp[30:PPN_W])
+`else
+  wire             satp_on  = (satp[63:60] != '0);
+  wire [PPN_W-1:0] satp_ppn = satp[PPN_W-1:0];
+  `UNUSED_VAR (satp[59:PPN_W])
+`endif
+
+  wire cmd_is_mem   = (cp_opcode_e'(cmd.hdr.opcode) == CMD_MEM_WRITE)
+                   || (cp_opcode_e'(cmd.hdr.opcode) == CMD_MEM_READ)
+                   || (cp_opcode_e'(cmd.hdr.opcode) == CMD_MEM_COPY);
+  wire cmd_xlate    = (`VX_CFG_VM_ENABLED != 0) && satp_on && cmd_is_mem
+                   && ~cmd.hdr.flags[F_MEM_PHYSICAL];
+  wire cmd_xl_dst   = cmd_xlate && (cp_opcode_e'(cmd.hdr.opcode) != CMD_MEM_READ);
+  wire cmd_xl_src   = cmd_xlate && (cp_opcode_e'(cmd.hdr.opcode) != CMD_MEM_WRITE);
+
+  logic             xl_dst_r, xl_src_r;   // operands still to translate (dst first)
+  logic [LVL_W-1:0] xl_level_r;
+  logic [PPN_W-1:0] xl_ppn_r;             // table base at the current level
+
+  wire [63:0]           xl_va     = xl_dst_r ? dst_r : src_r;
+  wire [LEVEL_BITS-1:0] xl_vpn    = xl_va[PAGE_LOG2 + xl_level_r * LEVEL_BITS +: LEVEL_BITS];
+  wire [63:0]           pte_addr  = (64'(xl_ppn_r) << PAGE_LOG2) | (64'(xl_vpn) << PTE_SHIFT);
+  wire [PTE_SEL_W-1:0]  pte_sel   = pte_addr[5:PTE_SHIFT];
+  wire [PTE_BITS-1:0]   pte       = axi_dev.rdata[pte_sel * PTE_BITS +: PTE_BITS];
+  wire [PPN_W-1:0]      pte_ppn   = pte[10 +: PPN_W];
+  wire                  pte_v     = pte[0];
+  wire                  pte_leaf  = pte[1] | pte[2] | pte[3];   // R | W | X
+  // A leaf above level 0 is a superpage: the VA supplies its low bits.
+  wire [63:0]           off_mask  = (64'(1) << (PAGE_LOG2 + xl_level_r * LEVEL_BITS)) - 64'(1);
+  wire [63:0]           leaf_pa   = ((64'(pte_ppn) << PAGE_LOG2) & ~off_mask) | (xl_va & off_mask);
+  // An unmapped or leafless walk leaves the address as it is, as the
+  // functional model does.
+  wire                  xl_last   = ~pte_v || pte_leaf || (xl_level_r == '0);
+  wire [63:0]           xl_result = (pte_v && pte_leaf) ? leaf_pa : xl_va;
+  if (PTE_BITS > 10 + PPN_W) begin : g_pte_unused
+    `UNUSED_VAR (pte[PTE_BITS-1:10+PPN_W])
+  end
+  `UNUSED_VAR (pte[9:4])
+
   // Last beat of the current chunk.
   wire last_beat = (BCNT_W'({1'b0, beat_idx}) == (chunk_beats - BCNT_W'(1)));
+
+  // ---- Logical read channel ----
+  wire               rd_arvalid = (state == S_REQ_AR);
+  wire               rd_rready  = (state == S_READ);
+  wire               rd_arready = rd_from_host ? axi_host.arready : axi_dev.arready;
+  wire               rd_rvalid  = rd_from_host ? axi_host.rvalid  : axi_dev.rvalid;
+  wire [CL_BITS-1:0] rd_rdata   = rd_from_host ? axi_host.rdata   : axi_dev.rdata;
+
+  // ---- Logical write channel ----
+  wire               wr_awvalid = (state == S_REQ_AW);
+  wire               wr_wvalid  = (state == S_WRITE);
+  wire               wr_bready  = (state == S_WAIT_B);
+  wire               wr_awready = wr_to_host ? axi_host.awready : axi_dev.awready;
+  wire               wr_wready  = wr_to_host ? axi_host.wready  : axi_dev.wready;
+  wire               wr_bvalid  = wr_to_host ? axi_host.bvalid  : axi_dev.bvalid;
 
   // ---- FSM ----
   always_ff @(posedge clk) begin
@@ -137,16 +219,49 @@ module VX_cp_dma
       rem_beats   <= '0;
       chunk_beats <= '0;
       beat_idx    <= '0;
+      xl_dst_r    <= 1'b0;
+      xl_src_r    <= 1'b0;
+      xl_level_r  <= '0;
+      xl_ppn_r    <= '0;
     end else begin
       case (state)
         S_IDLE: begin
           if (grant) begin
-            op_r      <= cmd.hdr.opcode;
-            dst_r     <= cmd.arg0;
-            src_r     <= cmd.arg1;
+            op_r       <= cmd.hdr.opcode;
+            dst_r      <= cmd.arg0;
+            src_r      <= cmd.arg1;
             // Round the byte count up to a whole cache line.
-            rem_beats <= (cmd.arg2 + 64'd63) >> 6;
-            state     <= S_SETUP;
+            rem_beats  <= (cmd.arg2 + 64'd63) >> 6;
+            xl_dst_r   <= cmd_xl_dst;
+            xl_src_r   <= cmd_xl_src;
+            xl_level_r <= LVL_W'(PT_LEVELS - 1);
+            xl_ppn_r   <= satp_ppn;
+            state      <= (cmd_xl_dst || cmd_xl_src) ? S_XLATE_AR : S_SETUP;
+          end
+        end
+        S_XLATE_AR: begin
+          if (axi_dev.arvalid && axi_dev.arready) begin
+            state <= S_XLATE_R;
+          end
+        end
+        S_XLATE_R: begin
+          if (axi_dev.rvalid && axi_dev.rready) begin
+            if (xl_last) begin
+              if (xl_dst_r) begin
+                dst_r    <= xl_result;
+                xl_dst_r <= 1'b0;
+              end else begin
+                src_r    <= xl_result;
+                xl_src_r <= 1'b0;
+              end
+              xl_level_r <= LVL_W'(PT_LEVELS - 1);
+              xl_ppn_r   <= satp_ppn;
+              state      <= (xl_dst_r && xl_src_r) ? S_XLATE_AR : S_SETUP;
+            end else begin
+              xl_level_r <= xl_level_r - LVL_W'(1);
+              xl_ppn_r   <= pte_ppn;
+              state      <= S_XLATE_AR;
+            end
           end
         end
         S_SETUP: begin
@@ -225,21 +340,6 @@ module VX_cp_dma
     end
   end
 
-  // ---- Logical read channel ----
-  wire               rd_arvalid = (state == S_REQ_AR);
-  wire               rd_rready  = (state == S_READ);
-  wire               rd_arready = rd_from_host ? axi_host.arready : axi_dev.arready;
-  wire               rd_rvalid  = rd_from_host ? axi_host.rvalid  : axi_dev.rvalid;
-  wire [CL_BITS-1:0] rd_rdata   = rd_from_host ? axi_host.rdata   : axi_dev.rdata;
-
-  // ---- Logical write channel ----
-  wire               wr_awvalid = (state == S_REQ_AW);
-  wire               wr_wvalid  = (state == S_WRITE);
-  wire               wr_bready  = (state == S_WAIT_B);
-  wire               wr_awready = wr_to_host ? axi_host.awready : axi_dev.awready;
-  wire               wr_wready  = wr_to_host ? axi_host.wready  : axi_dev.wready;
-  wire               wr_bvalid  = wr_to_host ? axi_host.bvalid  : axi_dev.bvalid;
-
   wire [7:0]         burst_len  = 8'({1'b0, chunk_beats - BCNT_W'(1)});
 
   // The read-ready decode drives the clock enable of every bit of the stream
@@ -249,7 +349,7 @@ module VX_cp_dma
   // Replicating the decode lets each copy enable a nearby group. Logically
   // identical to inlining these expressions; affects implementation only.
   (* MAX_FANOUT = 32 *) wire host_rready = (rd_rready & rd_from_host) || (state == S_FLUSH_R);
-  (* MAX_FANOUT = 32 *) wire dev_rready  = rd_rready & ~rd_from_host;
+  (* MAX_FANOUT = 32 *) wire dev_rready  = (rd_rready & ~rd_from_host) || (state == S_XLATE_R);
 
   // ---- Drive both AXI masters; only the routed port asserts valid ----
   always_comb begin
@@ -275,10 +375,10 @@ module VX_cp_dma
     axi_host.bready  = wr_bready  &  wr_to_host;
 
     // ----- axi_dev -----
-    axi_dev.arvalid  = rd_arvalid & ~rd_from_host;
-    axi_dev.araddr   = src_r;
+    axi_dev.arvalid  = (rd_arvalid & ~rd_from_host) || (state == S_XLATE_AR);
+    axi_dev.araddr   = (state == S_XLATE_AR) ? {pte_addr[63:6], 6'd0} : src_r;
     axi_dev.arid     = TID_PREFIX;
-    axi_dev.arlen    = burst_len;
+    axi_dev.arlen    = (state == S_XLATE_AR) ? 8'd0 : burst_len;
     axi_dev.arsize   = 3'd6;
     axi_dev.arburst  = 2'b01;
     axi_dev.rready   = dev_rready;
@@ -300,6 +400,7 @@ module VX_cp_dma
 
   // Sanity / unused.
   `UNUSED_VAR (cmd.hdr.flags)
+  `UNUSED_VAR (pte_addr[5:0])
   `UNUSED_VAR (cmd.hdr.reserved)
   `UNUSED_VAR (cmd.profile_slot)
   `UNUSED_VAR (axi_host.bid)

@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 260" role="img" aria-label="Stores fill the sector&#x27;s byte mask without a DRAM read. When a load arrives on a fully written sector, the old design reads DRAM anyway; design G loops back inside the bank with no DRAM read.">
+  <title>Stores fill the sector&#x27;s byte mask without a DRAM read. When a load arrives on a fully written sector, the old design reads DRAM anyway; design G loops back inside the bank with no DRAM read.</title>
+  <defs><marker id="lazyfe_a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1b2733"/></marker><marker id="lazyfe_g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1f7a4d"/></marker><marker id="lazyfe_b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#b3261e"/></marker></defs>
+  <style>
+    text { font-family: Helvetica, Arial, sans-serif; fill: #1b2733; font-size: 11.5px; }
+    .dh { font-size: 13px; font-weight: bold; }
+    .dm { fill: #5a6772; font-size: 11px; }
+    .ds { font-size: 10.5px; }
+    .db { fill: #fbfcfd; stroke: #5a7184; stroke-width: 1.2; }
+    .dbad { fill: #fbe5e3; stroke: #b3261e; stroke-width: 1.2; }
+    .dgood { fill: #e3f3ea; stroke: #1f7a4d; stroke-width: 1.2; }
+    .didle { fill: #f3f5f8; stroke: #c9d1d9; stroke-width: 1.2; }
+    .dwait { fill: #fbe5e3; stroke: #b3261e; stroke-width: 1.2; stroke-dasharray: 4 3; }
+    .ln { stroke: #1b2733; stroke-width: 1.3; fill: none; }
+    .lb { stroke: #b3261e; stroke-width: 1.5; fill: none; }
+    .lg { stroke: #1f7a4d; stroke-width: 1.5; }
+    .dash { stroke-dasharray: 4 3; }
+    .sep { stroke: #c9d1d9; stroke-width: 1; stroke-dasharray: 2 4; }
+    text.db-t { fill: #b3261e; } text.g-t { fill: #1f7a4d; }
+  </style>
+  <rect width="640" height="260" fill="#ffffff"/>
+<g class="dl">
+          <text x="20" y="22" class="dh">1 · store miss</text>
+          <text x="230" y="22" class="dh">2 · more stores</text>
+          <text x="440" y="22" class="dh">3 · load arrives</text>
+          <g><rect x="20" y="36" width="20" height="20" class="dgood"/><rect x="42" y="36" width="20" height="20" class="dgood"/><rect x="64" y="36" width="20" height="20" class="didle"/><rect x="86" y="36" width="20" height="20" class="didle"/><rect x="108" y="36" width="20" height="20" class="didle"/><rect x="130" y="36" width="20" height="20" class="didle"/><rect x="152" y="36" width="20" height="20" class="didle"/><rect x="174" y="36" width="20" height="20" class="didle"/></g>
+          <text x="20" y="74" class="dm">sector installed, partial = 1</text>
+          <text x="20" y="90" class="dm">no DRAM read</text>
+          <g><rect x="230" y="36" width="20" height="20" class="dgood"/><rect x="252" y="36" width="20" height="20" class="dgood"/><rect x="274" y="36" width="20" height="20" class="dgood"/><rect x="296" y="36" width="20" height="20" class="dgood"/><rect x="318" y="36" width="20" height="20" class="dgood"/><rect x="340" y="36" width="20" height="20" class="dgood"/><rect x="362" y="36" width="20" height="20" class="dgood"/><rect x="384" y="36" width="20" height="20" class="dgood"/></g>
+          <text x="230" y="74" class="dm">byte mask full</text>
+          <text x="230" y="90" class="dm">partial still = 1</text>
+          <rect x="440" y="36" width="180" height="26" class="db"/><text x="530" y="53" text-anchor="middle">ld → partial line</text>
+          <line x1="200" y1="46" x2="226" y2="46" class="ln" marker-end="url(#lazyfe_a)"/>
+          <line x1="410" y1="46" x2="436" y2="46" class="ln" marker-end="url(#lazyfe_a)"/>
+          <line x1="530" y1="62" x2="530" y2="100" class="ln"/>
+          <line x1="300" y1="100" x2="560" y2="100" class="ln"/>
+          <line x1="300" y1="100" x2="300" y2="128" class="ln" marker-end="url(#lazyfe_a)"/>
+          <line x1="560" y1="100" x2="560" y2="128" class="ln" marker-end="url(#lazyfe_a)"/>
+          <text x="300" y="146" text-anchor="middle" class="dh">Without the mask check</text>
+          <text x="560" y="146" text-anchor="middle" class="dh">With the mask check</text>
+          <rect x="220" y="158" width="160" height="28" class="dbad"/><text x="300" y="177" text-anchor="middle">refetch from DRAM</text>
+          <rect x="230" y="214" width="140" height="28" class="dbad"/><text x="300" y="233" text-anchor="middle">merge under 0 bytes</text>
+          <line x1="300" y1="186" x2="300" y2="212" class="lb" marker-end="url(#lazyfe_b)"/>
+          <rect x="480" y="158" width="160" height="28" class="dgood"/><text x="560" y="177" text-anchor="middle">mask full → loop back</text>
+          <rect x="490" y="214" width="140" height="28" class="dgood"/><text x="560" y="233" text-anchor="middle">clear partial, no DRAM</text>
+          <line x1="560" y1="186" x2="560" y2="212" class="lg" marker-end="url(#lazyfe_g)"/>
+        </g>
+</svg>

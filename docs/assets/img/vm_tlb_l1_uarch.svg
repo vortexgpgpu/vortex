@@ -146,7 +146,7 @@
   <path d="M 380 420 L 430 420" class="wmis"/>
   <text x="384" y="413" class="lb">match · slot</text>
   <path d="M 300 380 L 300 310 L 60 310" class="wmis"/>
-  <text x="60" y="326" class="li">mshr_match[l]</text>
+  <text x="60" y="326" class="li">mshr_join[l]</text>
   <path d="M 60 480 L 400 480 L 400 440 L 430 440" class="wmis"/>
   <text x="60" y="500" class="li">park</text>
   <text x="60" y="514" class="lb">vpn · access · amo · {lane, fields}</text>

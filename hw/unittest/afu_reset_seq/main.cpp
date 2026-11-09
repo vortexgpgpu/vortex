@@ -35,9 +35,11 @@ void tick() {
 }
 
 void clear_fires() {
-  dut->aw_fire = 0; dut->w_fire_last = 0; dut->b_fire = 0;
+  dut->aw_fire = 0; dut->w_fire = 0; dut->w_fire_last = 0; dut->b_fire = 0;
   dut->ar_fire = 0; dut->r_fire_last = 0;
   dut->gate_in_valid = 0; dut->gate_out_ready = 0;
+  dut->wg_in_awvalid = 0; dut->wg_out_awready = 0;
+  dut->wg_in_wvalid = 0; dut->wg_in_wlast = 0; dut->wg_out_wready = 0;
 }
 
 void do_reset() {
@@ -202,6 +204,154 @@ int main(int argc, char** argv) {
   dut->gate_in_valid = 0;
   run(8);
   check(!dut->stop_req, "gate reopens after the sequence");
+
+  // ------------------------------------------------------------------
+  // AXI4 lets write data precede its address. Quiescing must neither strand
+  // data whose AW it then withholds nor withhold the AW of data the shell
+  // already took: the shell must see whole writes only.
+  printf("8. quiescing never splits a write\n");
+  do_reset();
+  dut->ar_fire = 1; tick(); dut->ar_fire = 0;   // keep QUIESCE long enough to observe
+
+  // (a) data first: a single-beat W is taken before its AW is presented.
+  dut->wg_in_wvalid = 1; dut->wg_in_wlast = 1; dut->wg_out_wready = 1;
+  tick();
+  dut->wg_in_wvalid = 0; dut->wg_in_wlast = 0;
+  pulse_request();
+  run(4);
+  check(dut->stop_req, "sequencer is quiescing");
+  dut->wg_in_awvalid = 1; dut->wg_out_awready = 0;
+  dut->eval();
+  check(dut->wg_out_awvalid, "the AW owed to accepted data still goes out");
+  tick();
+  dut->wg_out_awready = 1;
+  dut->eval();
+  check(dut->wg_out_awvalid && dut->wg_in_awready, "and is accepted");
+  tick();
+  dut->wg_out_awready = 0;
+  dut->eval();
+  check(!dut->wg_out_awvalid, "the next AW is withheld");
+  dut->wg_out_awready = 1;
+  dut->eval();
+  check(!dut->wg_in_awready, "and not reported accepted");
+  dut->wg_in_wvalid = 1; dut->wg_in_wlast = 1;
+  dut->eval();
+  check(!dut->wg_out_wvalid, "its data is withheld too");
+  check(!dut->wg_in_wready, "and not reported accepted");
+  run(4);
+  check(!dut->wg_out_awvalid && !dut->wg_out_wvalid, "and both stay withheld");
+  clear_fires();
+  dut->r_fire_last = 1; tick(); dut->r_fire_last = 0;
+  run(16);
+  check(saw_assert, "reset proceeds");
+  run(8);
+
+  // (b) address first, then a two-beat burst: the data owed to an accepted AW
+  // goes out in full, and nothing after it.
+  do_reset();
+  dut->ar_fire = 1; tick(); dut->ar_fire = 0;
+  dut->wg_in_awvalid = 1; dut->wg_out_awready = 1;
+  tick();
+  dut->wg_in_awvalid = 0;
+  pulse_request();
+  run(4);
+  dut->wg_in_wvalid = 1; dut->wg_in_wlast = 0; dut->wg_out_wready = 1;
+  dut->eval();
+  check(dut->wg_out_wvalid, "the first beat owed to the AW goes out");
+  tick();
+  dut->wg_in_wlast = 1;
+  dut->eval();
+  check(dut->wg_out_wvalid, "the burst runs to its last beat");
+  tick();
+  dut->wg_in_wlast = 0;
+  dut->eval();
+  check(!dut->wg_out_wvalid, "data with no accepted AW is withheld");
+  dut->wg_in_awvalid = 1;
+  dut->eval();
+  check(!dut->wg_out_awvalid, "a new AW is withheld");
+  clear_fires();
+  dut->r_fire_last = 1; tick(); dut->r_fire_last = 0;
+  run(16);
+  check(saw_assert, "reset proceeds");
+  run(8);
+  check(!dut->stop_req, "gate reopens after the sequence");
+  dut->wg_in_awvalid = 1; dut->wg_in_wvalid = 1; dut->wg_in_wlast = 1;
+  dut->wg_out_awready = 1; dut->wg_out_wready = 1;
+  dut->eval();
+  check(dut->wg_out_awvalid && dut->wg_out_wvalid, "writes flow again once reopened");
+  clear_fires();
+
+  // (c) a slave may hold AWREADY until it has seen the data: an address
+  // already offered when quiescing begins obliges its data.
+  do_reset();
+  dut->ar_fire = 1; tick(); dut->ar_fire = 0;
+  dut->wg_in_awvalid = 1; dut->wg_out_awready = 0;
+  tick();
+  pulse_request();
+  run(4);
+  check(dut->stop_req, "sequencer is quiescing");
+  dut->wg_in_wvalid = 1; dut->wg_in_wlast = 1; dut->wg_out_wready = 1;
+  dut->eval();
+  check(dut->wg_out_wvalid, "data owed to an offered AW goes out");
+  tick();
+  dut->wg_in_wvalid = 0; dut->wg_in_wlast = 0;
+  dut->wg_out_awready = 1;
+  dut->eval();
+  check(dut->wg_out_awvalid, "and the slave then takes the AW");
+  tick();
+  dut->wg_in_wvalid = 1; dut->wg_in_wlast = 1;
+  dut->eval();
+  check(!dut->wg_out_wvalid && !dut->wg_out_awvalid, "nothing further goes out");
+  clear_fires();
+  dut->r_fire_last = 1; tick(); dut->r_fire_last = 0;
+  run(16);
+  check(saw_assert, "reset proceeds");
+  run(8);
+
+  // (d) a slave may hold WREADY until it has seen the address: data already
+  // offered when quiescing begins obliges its AW.
+  do_reset();
+  dut->ar_fire = 1; tick(); dut->ar_fire = 0;
+  dut->wg_in_wvalid = 1; dut->wg_in_wlast = 1; dut->wg_out_wready = 0;
+  tick();
+  pulse_request();
+  run(4);
+  dut->wg_in_awvalid = 1; dut->wg_out_awready = 1;
+  dut->eval();
+  check(dut->wg_out_awvalid, "the AW owed to offered data goes out");
+  tick();
+  dut->wg_in_awvalid = 0;
+  dut->wg_out_wready = 1;
+  dut->eval();
+  check(dut->wg_out_wvalid, "and the slave then takes the data");
+  tick();
+  dut->wg_in_awvalid = 1;
+  dut->eval();
+  check(!dut->wg_out_wvalid && !dut->wg_out_awvalid, "nothing further goes out");
+  clear_fires();
+  dut->r_fire_last = 1; tick(); dut->r_fire_last = 0;
+  run(16);
+  check(saw_assert, "reset proceeds");
+  run(8);
+
+  // ------------------------------------------------------------------
+  // The drain counters see last beats only. A burst whose first beats went
+  // out ahead of its AW still owes the interconnect the rest of the burst
+  // and the AW, so the port is not idle and reset must wait.
+  printf("9. a write burst in progress keeps the port busy\n");
+  do_reset();
+  dut->w_fire = 1; tick(); dut->w_fire = 0;     // beat 1 of 2, no AW yet
+  tick();
+  check(!dut->masters_idle, "not idle with a burst under way");
+  pulse_request();
+  run(16);
+  check(!saw_assert, "rst_assert withheld mid-burst");
+  dut->w_fire = 1; dut->w_fire_last = 1; tick(); dut->w_fire = 0; dut->w_fire_last = 0;
+  dut->aw_fire = 1; tick(); dut->aw_fire = 0;
+  dut->b_fire = 1; tick(); dut->b_fire = 0;
+  run(8);
+  check(dut->masters_idle, "idle once the write completes");
+  check(saw_assert, "reset proceeds");
 
   printf("\n%s (%d failure%s)\n", failures ? "FAILED" : "PASSED",
          failures, failures == 1 ? "" : "s");

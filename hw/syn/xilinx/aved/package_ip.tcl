@@ -14,9 +14,9 @@
 # Package the AFU as an IP-XACT component. The V80 linker consumes the
 # component.xml directly, so there is no intermediate object container.
 
-if { $::argc != 4 } {
-    puts "ERROR: Program \"$::argv0\" requires 4 arguments!\n"
-    puts "Usage: $::argv0 <krnl_name> <vcs_file> <build_dir> <part>\n"
+if { $::argc < 4 || $::argc > 6 } {
+    puts "ERROR: Program \"$::argv0\" requires 4 to 6 arguments!\n"
+    puts "Usage: $::argv0 <krnl_name> <vcs_file> <build_dir> <part> \[no-vendor-ip\] \[ooc-xdc=<file>\]\n"
     exit 1
 }
 
@@ -24,6 +24,18 @@ set krnl_name [lindex $::argv 0]
 set vcs_file  [lindex $::argv 1]
 set build_dir [lindex $::argv 2]
 set part      [lindex $::argv 3]
+# A kernel whose RTL instantiates no vendor floating-point core (a foldsim
+# simulator of a soft FPU) is packaged without them.
+set options [lrange $::argv 4 end]
+set vendor_ip [expr {[lsearch -exact $options no-vendor-ip] < 0}]
+# The kernel's clock for its out-of-context synthesis, so that synthesis
+# times and retimes it: without one the IP is synthesized unconstrained.
+set ooc_xdc ""
+foreach option $options {
+    if {[string match "ooc-xdc=*" $option]} {
+        set ooc_xdc [file normalize [string range $option 8 end]]
+    }
+}
 
 set tool_dir $::env(TOOL_DIR)
 
@@ -36,9 +48,11 @@ set path_to_packaged     "${build_dir}/${krnl_name}_ip"
 # and RTL elaboration fails at link time, after the IP looks fine.
 # xilinx_ip_gen.tcl opens and closes its own in-memory project, so it has to
 # run before the packaging project below.
-set argv [list ${build_dir}/ip $part]
-set argc 2
-source ${tool_dir}/xilinx_ip_gen.tcl
+if {$vendor_ip} {
+    set argv [list ${build_dir}/ip $part]
+    set argc 2
+    source ${tool_dir}/xilinx_ip_gen.tcl
+}
 
 create_project -force kernel_pack $path_to_tmp_project -part $part
 
@@ -63,13 +77,20 @@ foreach line [split $data "\n"] {
     }
 }
 
+if {$ooc_xdc ne ""} {
+    add_files -norecurse -fileset constrs_1 $ooc_xdc
+    set_property USED_IN {synthesis out_of_context} [get_files $ooc_xdc]
+}
+
 # Pull in the floating-point cores generated above so they are packaged
 # alongside the RTL. The set matches the XRT flow's package_kernel.tcl.
-set ip_files [list]
-foreach ip {xil_fdiv xil_fma xil_fsqrt xil_fmul xil_fadd} {
-    lappend ip_files [file normalize "${build_dir}/ip/${ip}/${ip}.xci"]
+if {$vendor_ip} {
+    set ip_files [list]
+    foreach ip {xil_fdiv xil_fma xil_fsqrt xil_fmul xil_fadd} {
+        lappend ip_files [file normalize "${build_dir}/ip/${ip}/${ip}.xci"]
+    }
+    add_files -verbose -norecurse -fileset [get_filesets sources_1] $ip_files
 }
-add_files -verbose -norecurse -fileset [get_filesets sources_1] $ip_files
 
 set_property top $krnl_name [current_fileset]
 update_compile_order -fileset sources_1

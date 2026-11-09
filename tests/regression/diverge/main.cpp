@@ -277,7 +277,7 @@ int main(int argc, char *argv[]) {
 
   if (errors != 0) {
     std::cout << "Found " << std::dec << errors << " errors!\nFAILED!\n";
-    return errors;
+    return errors != 0;
   }
 
   std::cout << "PASSED!\n";

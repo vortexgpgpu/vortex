@@ -968,7 +968,7 @@ private:
       uint32_t local = req.core_id - base_core_;
       auto& q = quad_queues_[local];
       for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-        if (!(req.tmask_bits & (1u << t))) continue;
+        if (!(req.tmask_bits & (uint64_t(1) << t))) continue;
         if (q.empty()) continue;
         rsp.stamps[t] = q.front();
         q.pop();

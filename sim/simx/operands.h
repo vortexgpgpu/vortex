@@ -54,6 +54,10 @@ private:
   Core* core_;
   std::vector<OpcUnit::Ptr> opc_units_;
   TraceArbiter::Ptr rsp_arb_;
+  bool head_offered_ = false;
+
+  void offer_head(instr_trace_t* trace, uint64_t delay);
+  void on_head_consumed();
 
   friend class SimObject<Operands>;
 };

@@ -19,6 +19,7 @@
 #include <random>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 #include <mem_alloc.h>
 #include <vm_types.h>
@@ -129,6 +130,9 @@ private:
 
   // Heap mapped once with superpages (VORTEX_VM_MEGAPAGE_HEAP).
   bool megapage_heap_;
+
+  // Identity-mapped ranges [start, end) whose VAs are reserved.
+  std::vector<std::pair<uint64_t, uint64_t>> identity_ranges_;
 };
 
 } // namespace vortex

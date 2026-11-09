@@ -68,7 +68,7 @@ int main(int argc, char *argv[]) {
     printf("Passed!\n");
   }
   
-  return errors;
+  return errors != 0;
 }
 
 float *OpenClFindNearestNeighbors(cl_context context, int numRecords,

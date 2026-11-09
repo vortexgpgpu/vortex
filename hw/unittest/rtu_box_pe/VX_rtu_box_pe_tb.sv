@@ -105,7 +105,8 @@ module VX_rtu_box_pe_tb import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .tag_out     (tag_out),
         `UNUSED_PIN  (tag_out_pre),
         .hit         (hit),
-        .t_near      (t_near)
+        .t_near      (t_near),
+        `UNUSED_PIN  (t_near_pre)
     );
 
 endmodule

@@ -1,0 +1,41 @@
+{
+  "name": "gtx980",
+  "extends": "gtx1080",
+  "description": "NVIDIA GeForce GTX 980 (GM204, Maxwell, sm_52) at its 1126 MHz base clock: one Vortex core per SM; the SM layout is the GTX 1080's (gtx1080).",
+  "core": {
+    "VX_CFG_DCACHE_SIZE": 24576,
+    "VX_CFG_L1_LINK_LATENCY": 27
+  },
+  "chip": {
+    "VX_CFG_NUM_CORES": 16,
+    "VX_CFG_L2_LINK_LATENCY": 51,
+    "VX_CFG_L2_MSHR_SIZE": 64
+  },
+  "platform": {
+    "VX_CFG_PLATFORM_CLOCK_RATE": 1126,
+    "VX_CFG_PLATFORM_MEMORY_PEAK_BW": 224000,
+    "VX_CFG_PLATFORM_MEMORY_DATA_RATE": 7000,
+    "VX_CFG_PLATFORM_MEMORY_LATENCY": 104
+  },
+  "reference": {
+    "fp32_lanes": 2048,
+    "dram_bandwidth_gbs": 224,
+    "l1_hit_cycles": 82,
+    "l2_hit_cycles": 214,
+    "dram_cycles": 383
+  },
+  "sources": {
+    "SM (core knobs other than DCACHE_SIZE)": "Inherited from gtx1080: Pascal's GP104 SM keeps Maxwell's GM204 layout (4 processing blocks of 32 CUDA cores, 8 LD/ST units and 8 SFUs, 4 FP64 units per SM, 96 KB shared memory, 64 resident warps) (NVIDIA GeForce GTX 980 whitepaper)",
+    "DCACHE_SIZE": "24 KB L1/texture per SM (Jia et al., Table 3.1, M60: the same GM204): 6 ways over power-of-two sets",
+    "NUM_CORES": "16 SMs, 2048 CUDA cores (GTX 980 whitepaper)",
+    "L2_SIZE": "Inherited from gtx1080: 2 MB L2 (GTX 980 whitepaper)",
+    "PLATFORM_MEMORY_TYPE, PLATFORM_MEMORY_NUM_BANKS, PLATFORM_MEMORY_DATA_RATE, PLATFORM_MEMORY_PEAK_BW": "256-bit GDDR5 at 7 Gbps modelled as the gtx1080's 16 GDDR6 x16 channels at 7000 MT/s: 16 x 2 B x 7 GT/s = 224 GB/s (whitepaper)",
+    "PLATFORM_CLOCK_RATE": "1126 MHz base clock (1216 MHz boost), base as in gtx1080",
+    "VM_ENABLE": "Maxwell has an MMU with a unified virtual address space (demand paging came with Pascal)",
+    "reference": "fp32_lanes is the vendor FP32 core count; dram_bandwidth_gbs the vendor peak. Checked by ci/profile_check.py. Latencies: L1 hit 82, L2 hit 214 and global memory 383 cycles on the GTX 980 itself (Mei and Chu, Dissecting GPU Memory Hierarchy through Microbenchmarking (IEEE TPDS 2017, arXiv 1509.02308), Figure 14, L1 on for the L1 hit, off for the L2 hit); Jia et al. (Table 3.1) measure 82 and ~207 on the M60's GM204",
+    "L1_LINK_LATENCY": "27 core cycles each way between a core and its dcache, the L1/texture load pipeline, which the dcache bank pipeline (DCACHE_LATENCY) does not model: calibrated with ci/profile_check.py so the SimX pointer chase gives the 82-cycle L1 hit latency in 'reference'",
+    "L2_LINK_LATENCY": "51 core cycles each way between an SM and the L2, the SM-to-L2 network: calibrated with ci/profile_check.py (after the L1 link) so the SimX pointer chase gives the 214-cycle L2 hit latency in 'reference'",
+    "PLATFORM_MEMORY_LATENCY": "104 core cycles of PHY/NoC latency beyond the links, calibrated with ci/profile_check.py so the SimX cold pointer chase gives the 383-cycle global memory latency in 'reference'",
+    "L2_MSHR_SIZE": "64 per bank: Little's law on the L2-miss round trip (DRAM 383 - L2 hit 214 = 169 cycles) x 199 B/cycle (224 GB/s / 1126 MHz) / (16 banks x 64 B) = 32.8, rounded up to a power of two. The derived default counts only PLATFORM_MEMORY_LATENCY, which the links mostly replace"
+  }
+}

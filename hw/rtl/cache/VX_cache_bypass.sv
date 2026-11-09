@@ -39,7 +39,10 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
     VX_mem_bus_if.slave     core_bus_in_if [NUM_REQS],
     VX_mem_bus_if.master    core_bus_out_if [NUM_REQS],
     VX_mem_bus_if.slave     mem_bus_in_if [MEM_PORTS],
-    VX_mem_bus_if.master    mem_bus_out_if [MEM_PORTS]
+    VX_mem_bus_if.master    mem_bus_out_if [MEM_PORTS],
+
+    // no uncached or outgoing request held short of the memory side
+    output wire             req_empty
 );
     localparam DIRECT_PASSTHRU   = !CACHE_ENABLE && (`CS_WORD_SEL_BITS == 0) && (NUM_REQS == MEM_PORTS);
     localparam CORE_DATA_WIDTH   = WORD_SIZE * 8;
@@ -50,6 +53,10 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
     localparam MEM_TAG_NC1_WIDTH = UUID_WIDTH + MEM_TAG_ID_WIDTH;
     localparam MEM_TAG_NC2_WIDTH = MEM_TAG_NC1_WIDTH + WSEL_BITS;
     localparam MEM_TAG_OUT_WIDTH = CACHE_ENABLE ? `MAX(MEM_TAG_IN_WIDTH, MEM_TAG_NC2_WIDTH) : MEM_TAG_NC2_WIDTH;
+    // Beside a cache, the memory-side arbiter grants on valid, so spreading
+    // uncached requests over more memory ports by their ready would close a
+    // valid-ready loop: with fewer core ports, core port i keeps memory port i.
+    localparam NC_PORTS          = CACHE_ENABLE ? `MIN(NUM_REQS, MEM_PORTS) : MEM_PORTS;
     `STATIC_ASSERT(0 == (`VX_MEM_IO_BASE_ADDR % `VX_CFG_MEM_BLOCK_SIZE), ("invalid parameter"))
     VX_mem_bus_if #(
         .DATA_SIZE (WORD_SIZE),
@@ -58,7 +65,9 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
     wire [NUM_REQS-1:0] core_req_nc_sel;
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_req_is_nc
         if (CACHE_ENABLE) begin : g_cache
-            assign core_req_nc_sel[i] = ~core_bus_in_if[i].req_data.attr[MEM_ATTR_IO_OFFS];
+            // a flush token always reaches the cache, whatever its io kind bit
+            assign core_req_nc_sel[i] = ~core_bus_in_if[i].req_data.attr[MEM_ATTR_IO_OFFS]
+                                      | core_bus_in_if[i].req_data.attr[MEM_ATTR_FLUSH_OFFS];
         end else begin : g_no_cache
             assign core_req_nc_sel[i] = 1'b0;
         end
@@ -103,10 +112,10 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
     VX_mem_bus_if #(
         .DATA_SIZE (WORD_SIZE),
         .TAG_WIDTH (MEM_TAG_NC1_WIDTH)
-    ) core_bus_nc_arb_if[MEM_PORTS]();
+    ) core_bus_nc_arb_if[NC_PORTS]();
     VX_mem_bus_arb #(
         .NUM_INPUTS (NUM_REQS),
-        .NUM_OUTPUTS(MEM_PORTS),
+        .NUM_OUTPUTS(NC_PORTS),
         .DATA_SIZE  (WORD_SIZE),
         .TAG_WIDTH  (CORE_TAG_WIDTH),
         .TAG_SEL_IDX(TAG_SEL_IDX),
@@ -123,7 +132,7 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
         .DATA_SIZE (LINE_SIZE),
         .TAG_WIDTH (MEM_TAG_NC2_WIDTH)
     ) mem_bus_out_nc_if[MEM_PORTS]();
-    for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_bus_out_nc
+    for (genvar i = 0; i < NC_PORTS; ++i) begin : g_mem_bus_out_nc
         wire                        core_req_nc_arb_rw;
         wire [WORD_SIZE-1:0]        core_req_nc_arb_byteen;
         wire [CORE_ADDR_WIDTH-1:0]  core_req_nc_arb_addr;
@@ -198,6 +207,9 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
         };
         assign mem_bus_out_nc_if[i].rsp_ready = core_bus_nc_arb_if[i].rsp_ready;
     end
+    for (genvar i = NC_PORTS; i < MEM_PORTS; ++i) begin : g_mem_bus_out_nc_idle
+        `INIT_VX_MEM_BUS_IF (mem_bus_out_nc_if[i])
+    end
     VX_mem_bus_if #(
         .DATA_SIZE (LINE_SIZE),
         .TAG_WIDTH (MEM_TAG_OUT_WIDTH)
@@ -224,4 +236,33 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
         .bus_in_if  (mem_bus_out_src_if),
         .bus_out_if (mem_bus_out_if)
     );
+
+    if (!DIRECT_PASSTHRU) begin : g_req_pending
+        localparam NUM_SRCS = NUM_REQS + (CACHE_ENABLE ? MEM_PORTS : 0);
+        wire [NUM_SRCS-1:0]  src_fire;
+        wire [MEM_PORTS-1:0] dst_fire;
+        for (genvar i = 0; i < NUM_REQS; ++i) begin : g_nc_fire
+            assign src_fire[i] = core_bus_in_nc_if[i].req_valid && core_bus_in_nc_if[i].req_ready;
+        end
+        if (CACHE_ENABLE) begin : g_cache_fire
+            for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_in_fire
+                assign src_fire[NUM_REQS + i] = mem_bus_in_if[i].req_valid && mem_bus_in_if[i].req_ready;
+            end
+        end
+        for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_dst_fire
+            assign dst_fire[i] = mem_bus_out_if[i].req_valid && mem_bus_out_if[i].req_ready;
+        end
+        VX_mem_req_pending #(
+            .NUM_INPUTS  (NUM_SRCS),
+            .NUM_OUTPUTS (MEM_PORTS)
+        ) req_pending (
+            .clk      (clk),
+            .reset    (reset),
+            .in_fire  (src_fire),
+            .out_fire (dst_fire),
+            .empty    (req_empty)
+        );
+    end else begin : g_no_req_pending
+        assign req_empty = 1'b1;
+    end
 endmodule

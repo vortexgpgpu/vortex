@@ -1,0 +1,13 @@
+# Zynq UltraScale+ XRT platforms (embedded; no PCIe host).
+[card]
+name = "zynquplus"
+flow = "xrt"
+family = "zynquplus"
+match_family = ["zynquplus"]
+
+[memory]
+banks = 1
+addr_width = 32
+
+[clock]
+kernel_mhz = 300

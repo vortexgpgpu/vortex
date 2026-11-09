@@ -101,21 +101,18 @@ module VX_cta_dispatch_top import VX_gpu_pkg::*;
     wire                    cta_init;
     wire                    busy;
 
-    // CTA-CSR read-back / schedule lookup ports are unexercised by this bench
-    // (it only checks warp dispatch via cta_fire/cta_wid), so the read indices
-    // are tied off and the read-back outputs are left unused.
-    cta_csrs_t              cta_rd_csrs;
-    cta_lane_t [`VX_CFG_NUM_THREADS-1:0] cta_rd_lane;
-    wire [NCTA_WIDTH-1:0]   schedule_cta_id;
+    // The CTA-CSR broadcast is unexercised by this bench (it only checks warp
+    // dispatch via cta_fire/cta_wid).
+    cta_bcast_t             cta_bcast;
+    cta_lane_bcast_t        cta_lane_bcast;
 
     `UNUSED_VAR (cta_PC)
     `UNUSED_VAR (cta_tmask)
     `UNUSED_VAR (cta_param)
     `UNUSED_VAR (cta_init)
     `UNUSED_VAR (busy)
-    `UNUSED_VAR (cta_rd_csrs)
-    `UNUSED_VAR (cta_rd_lane)
-    `UNUSED_VAR (schedule_cta_id)
+    `UNUSED_VAR (cta_bcast)
+    `UNUSED_VAR (cta_lane_bcast)
 
     VX_cta_dispatch cta_dispatch (
         .clk           (clk),
@@ -130,12 +127,8 @@ module VX_cta_dispatch_top import VX_gpu_pkg::*;
         .cta_tmask     (cta_tmask),
         .cta_param     (cta_param),
         .cta_init      (cta_init),
-        .csr_rd_wid    ('0),
-        .csr_rd_cta_id ('0),
-        .cta_rd_csrs   (cta_rd_csrs),
-        .cta_rd_lane   (cta_rd_lane),
-        .schedule_wid  ('0),
-        .schedule_cta_id (schedule_cta_id),
+        .cta_bcast     (cta_bcast),
+        .cta_lane_bcast(cta_lane_bcast),
         .busy          (busy)
     );
 

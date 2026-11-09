@@ -14,6 +14,8 @@
 #pragma once
 
 #include <stdint.h>
+#include <string>
+#include <vector>
 
 namespace vortex {
 
@@ -32,9 +34,10 @@ public:
   virtual ~firesim_sim();
 
   // Starts the simulator thread and holds the target in reset until it is
-  // ready to accept requests. `bitstream` selects the FPGA image and is
-  // ignored by a metasimulation.
-  int init(const char* bitstream);
+  // ready to accept requests. `plusargs` go to the platform layer as given:
+  // the image (+binary_file=...) and whatever else the platform needs to find
+  // its card; a metasimulation takes none.
+  int init(const std::vector<std::string>& plusargs);
 
   int mem_write(uint64_t addr, uint64_t size, const void* value);
 
@@ -81,6 +84,29 @@ private:
   // been reported. Both reset when the target goes idle.
   uint64_t busy_cycles_;
   bool stall_reported_;
+
+  // A launch waits for `busy` to rise and then to fall, and nothing bounds
+  // either wait. These track the launch in flight so a target that never
+  // starts is reported instead of polled forever in silence.
+  bool awaiting_busy_;
+  uint64_t idle_cycles_;
+
+  // Set when the launch watchdog (VORTEX_FIRESIM_TIMEOUT_S) or a stop signal
+  // gives up on a launch. The launch is then completed -- busy once, then idle
+  // -- so the application finishes through its own teardown rather than being
+  // killed mid-run.
+  int abort_phase_;
+  double launch_started_s_;
+
+  // Set once the run is being stopped -- by a signal or by the watchdog -- and
+  // never cleared: from then on nothing more is sent to the target.
+  bool stopped_;
+  bool stopped();
+
+  // True while a report reads counters, which must reach the target even as
+  // the run stops.
+  bool reporting_;
+  static void install_stop_handlers();
 };
 
 }

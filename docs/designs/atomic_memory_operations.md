@@ -8,7 +8,7 @@ cache bank and the local-memory bank), the reservation stations, and the
 SimX model. RTL: [`VX_amo_alu.sv`](../../hw/rtl/cache/VX_amo_alu.sv),
 [`VX_amo_unit.sv`](../../hw/rtl/cache/VX_amo_unit.sv),
 [`VX_cache_amo.sv`](../../hw/rtl/cache/VX_cache_amo.sv),
-[`VX_local_mem.sv`](../../hw/rtl/mem/VX_local_mem.sv). SimX:
+[`VX_lmem_unit.sv`](../../hw/rtl/mem/VX_lmem_unit.sv). SimX:
 [`sim/simx/amo/`](../../sim/simx/amo/),
 [`sim/simx/mem/cache.cpp`](../../sim/simx/mem/cache.cpp),
 [`sim/simx/mem/local_mem.cpp`](../../sim/simx/mem/local_mem.cpp).
@@ -90,7 +90,7 @@ LSU as `rs3_data` with no new operand path.
 
 ## 3. The LSU sideband
 
-[`VX_lsu_slice.sv`](../../hw/rtl/core/VX_lsu_slice.sv) packs one `amo_req_t`
+[`VX_lsu_block.sv`](../../hw/rtl/core/VX_lsu_block.sv) packs one `amo_req_t`
 per lane into the lane's memory attribute
 ([`VX_gpu_pkg.sv`](../../hw/rtl/VX_gpu_pkg.sv)):
 
@@ -321,7 +321,7 @@ deferring, at most, one cycle longer than strictly needed.
 ## 7. Commit at the local-memory bank
 
 Shared (local) memory is a per-core SRAM, not a cache, so there is no line
-to fetch and no level below: [`VX_local_mem.sv`](../../hw/rtl/mem/VX_local_mem.sv)
+to fetch and no level below: [`VX_lmem_unit.sv`](../../hw/rtl/mem/VX_lmem_unit.sv)
 commits in place. [`VX_lmem_switch.sv`](../../hw/rtl/mem/VX_lmem_switch.sv)
 passes the attribute through unchanged on the local path.
 

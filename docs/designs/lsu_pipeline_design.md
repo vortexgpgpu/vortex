@@ -6,7 +6,7 @@ interleave, per-lane classification and formatting, fence ordering,
 multi-packet tracking, the shared memory scheduler and its outstanding pool,
 address-class steering, coalescing, and the response path. Covers the RTL
 ([`VX_lsu_unit.sv`](../../hw/rtl/core/VX_lsu_unit.sv),
-[`VX_lsu_slice.sv`](../../hw/rtl/core/VX_lsu_slice.sv),
+[`VX_lsu_block.sv`](../../hw/rtl/core/VX_lsu_block.sv),
 [`VX_lsu_agu.sv`](../../hw/rtl/core/VX_lsu_agu.sv),
 [`VX_lsu_scheduler.sv`](../../hw/rtl/core/VX_lsu_scheduler.sv),
 [`VX_mem_scheduler.sv`](../../hw/rtl/libs/VX_mem_scheduler.sv),
@@ -76,7 +76,7 @@ separate cache lines with the same set index, all in one dcache bank.
 With `VX_CFG_LSU_STACK_INTERLEAVE_ENABLE` (on by default) the AGU remaps
 every address inside the stack window so that, within each group of
 `NUM_THREADS` stacks, offset `{thread, word, byte}` is stored as
-`{word ⊕ group, thread, byte}`. A warp-wide spill fills one contiguous
+`{word ⊕ (group × S), thread, byte}`. A warp-wide spill fills one contiguous
 block — the layout NVIDIA local memory and AMD scratch use.
 
 Load-bearing properties:
@@ -86,13 +86,19 @@ Load-bearing properties:
   Software, `sp`, and frame offsets are unchanged.
 - **The XOR with the group index is what spreads warps across sets.** A
   group spans a power of two larger than a cache way; without the skew, the
-  same frame slot of every warp would share a set.
-- **It costs two narrow operations, not three wide ones.** Written naively
-  the map subtracts the window base, permutes, and adds the base back. The
-  permutation moves bits only inside the group field and the group index
-  keeps its position, so the subtract and add cancel on every bit above the
-  field; the window base has trailing zeros, so the field itself needs
-  arithmetic only on the bits above them.
+  same frame slot of every warp would share a set. The skew moves in whole
+  dcache lines: one slot row is `NUM_THREADS` words, and when that is
+  narrower than a line (16 B against 64 B at 4 threads), `S` is the rows per
+  line, otherwise 1. A skew of one row would keep up to `S` warps in one line's
+  set.
+- **It is a bit permutation plus one narrow XOR, with no arithmetic.** The
+  window top `VX_MEM_STACK_BASE_ADDR` is a multiple of the group size
+  (`NUM_THREADS` stacks), so groups start on absolute group boundaries and
+  the map needs no subtract or add of the window base: it rewires the
+  thread and word fields and XORs the word field with the low bits of the
+  group index shifted left by log2(`S`). The base is aligned to the larger of 256 KB and a group, so
+  any thread count keeps it a group multiple; above 32 threads it moves down,
+  and the local memory window, which starts there, moves with it.
 - **Window membership is a narrow compare.** Both window bounds are asserted
   to be multiples of the stack size, so the test uses only the bits above it.
 
@@ -104,7 +110,7 @@ that is provably equivalent.
 
 ## 3. The slice — request side
 
-[`VX_lsu_slice.sv`](../../hw/rtl/core/VX_lsu_slice.sv).
+[`VX_lsu_block.sv`](../../hw/rtl/core/VX_lsu_block.sv).
 
 ### 3.1 Classification
 
@@ -148,7 +154,9 @@ A fence is a **total barrier on its slice**. The slice sets `fence_lock` when
 a fence's last packet is accepted and clears it when that fence's response
 returns. While locked, the slice accepts nothing.
 
-The fence itself travels to memory as a request with `is_flush`, behind every
+The fence itself travels to memory as a request with `is_flush` (an IO token,
+the `io` attribute set, for a fence ordering only device accesses; otherwise an
+L1-only token, byte enables set), behind every
 request the slice issued before it, so its response proves they have drained.
 Only the last packet of a multi-packet fence is sent; the earlier packets
 complete immediately.
@@ -208,7 +216,7 @@ library block also used by the caches' other clients.
 
 | client | source | present |
 |---|---|---|
-| 0 | the block's `VX_lsu_slice` | always |
+| 0 | the block's `VX_lsu_block` | always |
 | 1 | the tensor unit's warp-level address generator | on block 0, when the tensor metadata path is enabled |
 
 Arbitration is round-robin, and the granted client's index is prepended to
@@ -250,13 +258,21 @@ thread mask on acquire and cleared lane by lane as responses arrive.
 | structure | knob | default | holds | sized for |
 |---|---|---|---|---|
 | staging queue | `VX_CFG_LSU_QUEUE_IN_SIZE` | `max(4, 2 × SIMD / lanes)` | whole requests, every lane's address and data | back-pressure |
-| outstanding pool | `VX_CFG_LSU_PENDING_SIZE` | `min(32, max(8, 2 × warps × SIMD / lanes))` | a tag and a lane mask | miss latency |
+| outstanding pool | `VX_CFG_LSU_PENDING_SIZE` | `min(LSU_PENDING_LIMIT, max(8, 2 × warps × SIMD / lanes))` | a tag and a lane mask | miss latency |
 | memory-side queue | derived | `max(pool, LSU_LINE_SIZE / word)` | the coalescer's in-flight entries | covering the pool |
 
 The staging queue and the pool are deliberately decoupled. A staging entry is
 `lanes ×` (address + data + byte-enable + attribute) wide and is expensive to
 deepen; a pool entry is a tag. Decoupling them lets the pool be provisioned
 for about two loads in flight per warp without widening the staging queue.
+
+The pool's bound, `VX_CFG_LSU_PENDING_LIMIT`, is the block's share of the bytes
+the platform keeps in flight to reach its peak memory bandwidth (Little's law:
+`PLATFORM_MEMORY_PEAK_BW / PLATFORM_CLOCK_RATE × PLATFORM_MEMORY_LATENCY`),
+counted in `LSU_LINE_SIZE` packets and rounded up to a power of two, within
+32 to 256. With no platform latency it is 32. Every width that depends on the
+pool (the tag id, the packet slots, the dcache tag) derives from its size, so
+a profile may raise the bound.
 
 The memory-side depth is **not** a knob. It sets the width of the tag's
 index field facing the data cache and must cover the pool, so it is derived
@@ -303,14 +319,29 @@ The attribute passes through untouched on both paths.
 
 ### 5.2 Local path
 
-Each LSU block has its **own** adapter into
-[`VX_local_mem`](../../hw/rtl/mem/VX_local_mem.sv). A shared adapter would
-close a loop through its pack and unpack buffers and deadlock with more than
-one block.
+Each LSU block hands its local requests whole to
+[`VX_lmem_unit`](../../hw/rtl/mem/VX_lmem_unit.sv), the warp-wide local
+memory. A block arbiter takes one request at a time into a pass engine
+([`VX_lmem_engine`](../../hw/rtl/mem/VX_lmem_engine.sv)), which compares the
+lanes' words once and then serves the request in bank-conflict-free passes:
+every bank goes to its lowest pending lane, every pending lane reading that
+lane's word rides along (a broadcast), and the remaining lanes replay. A
+request retires before the next one starts, so every lane's accesses reach the
+banks in program order. A request without bank conflicts takes the banks for a
+single cycle, so one such request issues every cycle; the response
+carries every lane the pass served.
 
-Local memory is a banked SRAM, so lanes addressing different banks are served
-in the same cycle. Its second port is shared by the direct-memory clients —
-the DXA writes and the tensor unit's reads.
+With several LSU blocks, a second engine for plain reads only works the banks'
+second port, so two warps' reads go through in a cycle. Stores and atomics use
+the first engine alone and wait for the read engine to drain; the read engine
+takes no read while a store or atomic sits in the first engine, while one
+waited at an input the cycle before, or in a cycle the first engine may be
+taking one. Each engine's block is chosen a cycle ahead, so the ready a block
+sees comes from registers.
+
+The direct-memory clients (the DXA writes and the tensor unit's reads) take
+whole bank rows on the first port: a DMA request seen in one cycle stops the
+passes and gets the banks the next.
 
 ### 5.3 Global path
 
@@ -318,7 +349,7 @@ the DXA writes and the tensor unit's reads.
 |---|---|
 | `VX_mem_coalescer` | merges word-sized lanes onto data-cache-word channels; lanes addressing the same cache word become one request |
 | `VX_lsu_adapter` | turns the lane bundle into one memory bus per channel; registers the request boundary |
-| `VX_dcr_flush` | injects the host's cache-flush request, on channel 0 of block 0 |
+| `VX_dcr_flush` | injects the host's cache-flush token on lane 0 of a private dcache, and on every lane otherwise (a shared dcache's socket arbiter, or a disabled dcache's passthrough, buffers each lane on its own) |
 
 The coalescer exists when there is more than one lane and the data-cache
 word is wider than an LSU word; otherwise the path is a pass-through that
@@ -390,9 +421,11 @@ pool does.
 | `VX_CFG_LSU_LINE_SIZE` | `min(lanes × XLEN/8, L1_LINE_SIZE)` | the coalescer's default output granule |
 | `VX_CFG_LSU_QUEUE_IN_SIZE` | §4.3 | staging depth |
 | `VX_CFG_LSU_PENDING_SIZE` | §4.3 | outstanding-pool depth |
+| `VX_CFG_LSU_PENDING_LIMIT` | §4.3 | bound on the outstanding pool |
 
-`NUM_THREADS` must be a power of two for the stack interleave, and a stack
-access must fit a word (`FLEN ≤ XLEN`).
+`NUM_THREADS` must be a power of two for the stack interleave, the stack
+window top must be a multiple of `NUM_THREADS` stacks, and a stack access
+must fit a word (`FLEN ≤ XLEN`).
 
 ---
 

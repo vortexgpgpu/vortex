@@ -147,6 +147,7 @@ public:
     , has_tmask_(false)
     , fu_lock_(true)
     , fu_unlock_(true)
+    , issue_yield_(false)
   {}
 
   void set_fu_type(FUType fu_type) {
@@ -227,6 +228,9 @@ public:
   void set_fu_unlock(bool value) { fu_unlock_ = value; }
   bool get_fu_unlock() const { return fu_unlock_; }
 
+  void set_issue_yield(bool value) { issue_yield_ = value; }
+  bool get_issue_yield() const { return issue_yield_; }
+
   void set_dst_bytesel(uint8_t value) { dst_bytesel_ = value; }
   uint8_t get_dst_bytesel() const { return dst_bytesel_; }
 
@@ -262,8 +266,19 @@ private:
   bool     has_tmask_;
   bool     fu_lock_;
   bool     fu_unlock_;
+  bool     issue_yield_;
 
   friend std::ostream &operator<<(std::ostream &, const Instr &);
 };
+
+// A micro-op's uuid puts its index in the top byte of the low word, over the
+// parent's low 24 bits. The index wraps past 255 micro-ops (trace naming only).
+inline uint64_t make_uop_uuid(uint64_t parent_uuid, uint32_t uop_index) {
+  constexpr uint32_t kIndexShift = 24;
+  constexpr uint32_t kIndexMask = (1u << (32 - kIndexShift)) - 1;
+  uint64_t lo = (uint64_t(uop_index & kIndexMask) << kIndexShift)
+              | (parent_uuid & ((1u << kIndexShift) - 1));
+  return (parent_uuid & ~uint64_t(0xffffffff)) | lo;
+}
 
 }

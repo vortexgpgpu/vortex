@@ -1,0 +1,18 @@
+{
+  "name": "h200",
+  "extends": "h100",
+  "description": "NVIDIA H200 SXM5 (GH100, Hopper, sm_90) at its 1980 MHz boost clock: one Vortex core per SM; the chip is the H100's (h100) with HBM3e.",
+  "platform": {
+    "VX_CFG_PLATFORM_MEMORY_PEAK_BW": 4800000,
+    "VX_CFG_PLATFORM_MEMORY_DATA_RATE": 9375
+  },
+  "reference": {
+    "dram_bandwidth_gbs": 4800
+  },
+  "sources": {
+    "SM (all core knobs), NUM_CORES, L2, PLATFORM_CLOCK_RATE": "Inherited from h100: H200 is the H100 SXM5's GH100 (132 SMs, 50 MB L2, 1980 MHz boost) with 141 GB of HBM3e (NVIDIA H200 data sheet)",
+    "PLATFORM_MEMORY_DATA_RATE, PLATFORM_MEMORY_PEAK_BW": "6 HBM3e stacks at 4.8 TB/s, modelled as the H100's 32 HBM3 channels at 9375 MT/s: 32 x 16 B x 9375 MT/s = 4.8 TB/s, the card's bandwidth",
+    "L2_LINK_LATENCY, PLATFORM_MEMORY_LATENCY, L2_MSHR_SIZE": "Inherited from h100 (same die and SM-to-L2 network), calibrated there against the measured H100 pointer chase. Little's law at this bandwidth (386 cycles x 2424 B/cycle / (64 banks x 64 B) = 228) keeps the 256-entry L2 MSHR",
+    "reference": "fp32_lanes is the vendor FP32 core count (FP32 FMA lanes per chip, clock-free); dram_bandwidth_gbs the vendor peak. Checked by ci/profile_check.py. Latencies inherited from h100 (same GH100 die and L2; the HBM3e array timing is HBM3's). Accel-Sim models this card: GPGPU-Sim tested-cfg SM90_H200"
+  }
+}

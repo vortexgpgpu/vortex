@@ -69,7 +69,9 @@ private:
 // register file. Plain (non-SimObject) helper owned by SfuUnit.
 class RtuUnit {
 public:
-  RtuUnit(Core* core, SimChannel<RtuReq>& req_out, RtuWindow& window);
+  // bus_delay: extra cycles a request spends merging with other SFU blocks'
+  // requests onto the core's RTU bus.
+  RtuUnit(Core* core, SimChannel<RtuReq>& req_out, RtuWindow& window, uint32_t bus_delay = 0);
 
   // Async ray pool. process_wait either:
   //   - returns the trace with the per-lane status word written
@@ -187,6 +189,7 @@ private:
 
   Core*               core_;
   SimChannel<RtuReq>& req_out_;
+  uint32_t            bus_delay_;
   // Async ray pool. Borrowed from the Socket via set_rtu_core();
   // null until the Socket has wired it (TRACE/WAIT paths must NEVER
   // dereference rtu_core_ before that — but in practice the Socket
@@ -212,7 +215,7 @@ private:
   // CONTINUE also carries lanes that are merely PENDING (still traversing), and
   // those may have a candidate queued for a later batch, so their garbage action
   // must not be allowed to resolve it.
-  std::array<uint32_t, VX_CFG_NUM_WARPS>  last_cand_mask_{};
+  std::array<uint64_t, VX_CFG_NUM_WARPS>  last_cand_mask_{};
 
   // Per-warp cross-uop TRACE state. The ray NEVER enters the window: the burst
   // stages it here and hands it to RtuCore at the arm. The window is result

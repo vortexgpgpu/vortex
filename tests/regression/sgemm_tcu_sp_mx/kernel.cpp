@@ -4,7 +4,7 @@
 #include <vx_intrinsics.h>
 
 namespace vt = vortex::tensor;
-using ctx = vt::wmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, true>;
+using ctx = vt::wmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, true, 8, 0, vt::ldst_matrix_enabled>;
 
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   auto pA = reinterpret_cast<ctx::input_t *>(arg->A_addr);
@@ -31,6 +31,37 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
   ctx::fill_fragment(fragC, 0);
 
+  size_t a_lane_off = ctx::lane_offset<ctx::fragment_a>(K / 2);
+  size_t b_lane_off = ctx::lane_offset<ctx::fragment_b, vt::col_major>(K);
+
+#if KUNROLL > 1
+  // KUNROLL tiles per iteration: each tile's load takes its K offset as a
+  // constant, which a vx_ldm folds into its immediate.
+  auto k_tiles = [&](uint32_t i, auto count) {
+    uint32_t k_tile = i / ctx::tileK;
+    auto pTileA = pA + tile_row * (K / 2) + i / 2;
+    auto pTileB = pB + tile_col * K + i;
+    auto pTileMxA = pMxA + (blockIdx.y * num_k_tiles + k_tile) * VX_CFG_NUM_THREADS;
+    auto pTileMxB = pMxB + (blockIdx.x * num_k_tiles + k_tile) * VX_CFG_NUM_THREADS;
+    auto pTileMetaSp = pMetaSp + (blockIdx.y * num_k_tiles + k_tile) * ctx::meta_stride;
+    vt::unroll_for<decltype(count)::value>([&](auto u) {
+      constexpr uint32_t t = decltype(u)::value;
+      ctx::load_sp_metadata(fragA, pTileMetaSp + t * ctx::meta_stride);
+      ctx::load_mx_metadata(fragA, pTileMxA + t * VX_CFG_NUM_THREADS);
+      ctx::load_mx_metadata(fragB, pTileMxB + t * VX_CFG_NUM_THREADS);
+      ctx::load_matrix_sync<vt::row_major, t * ctx::tileK / 2>(fragA, pTileA, K / 2, a_lane_off);
+      ctx::load_matrix_sync<vt::col_major, t * ctx::tileK>(fragB, pTileB, K, b_lane_off);
+      ctx::mma_sync(fragC, fragA, fragB, fragC);
+    });
+  };
+  uint32_t i = 0;
+  for (; i + KUNROLL * ctx::tileK <= K; i += KUNROLL * ctx::tileK) {
+    k_tiles(i, std::integral_constant<uint32_t, KUNROLL>{});
+  }
+  for (; i < K; i += ctx::tileK) {
+    k_tiles(i, std::integral_constant<uint32_t, 1>{});
+  }
+#else
   for (uint32_t i = 0; i < K; i += ctx::tileK) {
     uint32_t k_tile = i / ctx::tileK;
     auto pTileA = pA + tile_row * (K / 2) + i / 2;
@@ -42,10 +73,11 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     ctx::load_sp_metadata(fragA, pTileMetaSp);
     ctx::load_mx_metadata(fragA, pTileMxA);
     ctx::load_mx_metadata(fragB, pTileMxB);
-    ctx::load_matrix_sync<vt::row_major>(fragA, pTileA, K / 2);
-    ctx::load_matrix_sync<vt::col_major>(fragB, pTileB, K);
+    ctx::load_matrix_sync<vt::row_major>(fragA, pTileA, K / 2, a_lane_off);
+    ctx::load_matrix_sync<vt::col_major>(fragB, pTileB, K, b_lane_off);
     ctx::mma_sync(fragC, fragA, fragB, fragC);
   }
+#endif
 
 #ifdef TCU_MX_TLS
   if constexpr (std::is_same<vt::ITYPE, vt::nvfp4>::value) {

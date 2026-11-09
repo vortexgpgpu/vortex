@@ -30,7 +30,7 @@ struct TexReq {
   uint64_t                                uuid       = 0;
   uint32_t                                tag        = 0;     // {core_local, queue_slot} routing tag
   uint32_t                                stage      = 0;
-  uint32_t                                tmask_bits = 0;     // active-thread bitmask (VX_CFG_NUM_THREADS lsbs)
+  uint64_t                                tmask_bits = 0;     // active-thread bitmask (VX_CFG_NUM_THREADS lsbs)
   std::array<int32_t,  VX_CFG_NUM_THREADS>       u          = {};    // s32 fixed-point coord (TEX_FXD_FRAC bits)
   std::array<int32_t,  VX_CFG_NUM_THREADS>       v          = {};
   std::array<uint32_t, VX_CFG_NUM_THREADS>       lod        = {};
@@ -84,8 +84,10 @@ class TexCore;
 // backpressure (SfuUnit retries idempotently next cycle).
 class TexUnit {
 public:
-  TexUnit(Core* core, SimChannel<TexReq>& req_out)
-    : core_(core), req_out_(req_out) {}
+  // bus_delay: extra cycles a request spends merging with other SFU blocks'
+  // requests onto the core's texture bus.
+  TexUnit(Core* core, SimChannel<TexReq>& req_out, uint32_t bus_delay = 0)
+    : core_(core), req_out_(req_out), bus_delay_(bus_delay) {}
 
   // Submit one sample request: u/v/lod ride src_data[0..2], the texel returns in
   // rd. Returns the trace if accepted, or nullptr on full output channel.
@@ -94,6 +96,7 @@ public:
 private:
   Core*               core_;
   SimChannel<TexReq>& req_out_;
+  uint32_t            bus_delay_;
 };
 
 } // namespace vortex

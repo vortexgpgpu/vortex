@@ -19,8 +19,9 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 # every stage of a pipeline.
 set -eo pipefail
 
-# Resolve verilator path at runtime, allowing it to be overridden by environment variable.
-VERILATOR="${VERILATOR:-verilator}"
+# The preprocessor is CIRCT's SystemVerilog frontend; hw/syn/common.mk exports
+# its absolute path.
+CIRCT_VERILOG="${CIRCT_VERILOG:-circt-verilog}"
 
 defines=()
 includes=()
@@ -32,6 +33,7 @@ define_header=""
 top_module=""
 copy_folder=""
 preprocessor=0
+fold=0
 
 defines_str=""
 params_str=""
@@ -47,7 +49,7 @@ add_option() {
 }
 
 # Parse command arguments
-while getopts D:G:T:I:J:O:H:C:Ph flag
+while getopts D:G:T:I:J:O:H:C:PFh flag
 do
   case "${flag}" in
     D)  defines+=( ${OPTARG} )
@@ -71,7 +73,9 @@ do
         ;;
     P)  preprocessor=1
         ;;
-    h)  echo "Usage: [-D<macro>] [-G<param>=<value>] [-T<top-module>] [-I<include-path>] [-J<external-path>] [-O<output-file>] [-C<dest-folder>: copy to] [-H<define_header>] [-P: macro preprocessing] [-h help] [files...]"
+    F)  fold=1
+        ;;
+    h)  echo "Usage: [-D<macro>] [-G<param>=<value>] [-T<top-module>] [-I<include-path>] [-J<external-path>] [-O<output-file>] [-C<dest-folder>: copy to] [-H<define_header>] [-P: macro preprocessing] [-F: fold asynchronous RAM reads into block RAM] [-h help] [files...]"
         exit 0
         ;;
     \?) echo "Invalid option: -$OPTARG" 1>&2
@@ -121,17 +125,16 @@ copy_one_file() {
       "$SCRIPT_DIR"/repl_params.py $params_str -T"$top_module" "$file" > "$temp_file"
       input="$temp_file"
     fi
-    # Trust verilator's exit status, not the output size: a missing tool,
-    # unresolved include, or preprocessor error returns non-zero and is caught
-    # here (this is the failure that otherwise resurfaced far downstream as
-    # sv2v "Could not find top module"). An *empty but successful* output is
-    # legitimate — config-gated modules (e.g. VX_decompressor.sv when RVC is
+    # Trust the preprocessor's exit status, not the output size: a missing
+    # tool, unresolved include, or preprocessor error returns non-zero and is
+    # caught here rather than far downstream. An *empty but successful* output
+    # is legitimate — config-gated modules (e.g. VX_decompressor.sv when RVC is
     # disabled) preprocess to nothing — so emptiness alone must not fail.
-    if ! "$VERILATOR" $defines_str $includes_str -E -P "$input" > "$dest"; then
+    if ! "$CIRCT_VERILOG" -E $defines_str $includes_str "$input" -o "$dest"; then
       if [ -n "$temp_file" ]; then rm -f "$temp_file"; fi
-      echo "gen_sources.sh: error: verilator failed to preprocess '$file'" >&2
-      echo "  using VERILATOR='$VERILATOR' — ensure it is reachable" \
-           "(set VERILATOR / VERILATOR_PATH, see hw/syn/common.mk) and that" \
+      echo "gen_sources.sh: error: circt-verilog failed to preprocess '$file'" >&2
+      echo "  using CIRCT_VERILOG='$CIRCT_VERILOG' — ensure it is reachable" \
+           "(set CIRCT_VERILOG / CIRCT_PATH, see hw/syn/common.mk) and that" \
            "the include paths and defines resolve." >&2
       exit 1
     fi
@@ -184,6 +187,28 @@ if [ -n "$copy_folder" ]; then
       sed -i 's/\.\(master\|slave\)\b//g' "$f"
     done
   fi
+fi
+
+# Optional RAM fold (-F): patch the preprocessed copies so that every
+# block-RAM-sized VX_dp_ram that reads combinationally reads a registered next
+# address instead, which every synthesis tool maps to block RAM. The report
+# and the patch land in the copy folder. RAM_FOLD_PYTHON is a python3 with
+# pyslang 11 or 12.
+if [ "$fold" != 0 ]; then
+    if [ -z "$copy_folder" ] || [ "$preprocessor" = 0 ] || [ -z "$top_module" ]; then
+        echo "gen_sources.sh: error: -F needs preprocessed copies (-P -C) and a top module (-T)" >&2
+        exit 1
+    fi
+    fold_files=()
+    while IFS= read -r f; do
+        fold_files+=( "$f" )
+    done < <(find "$(realpath "$copy_folder")" -maxdepth 1 -type f \( -name "*.v" -o -name "*.sv" \) | sort)
+    if ! "${RAM_FOLD_PYTHON:-python3}" "$SCRIPT_DIR"/ram_fold.py --top "$top_module" $defines_str \
+            --report "$copy_folder/ram_fold.rpt" --diff "$copy_folder/ram_fold.diff" "${fold_files[@]}"; then
+        echo "gen_sources.sh: error: ram_fold.py failed (RAM_FOLD_PYTHON='${RAM_FOLD_PYTHON:-python3}'," \
+             "which needs pyslang 11 or 12)" >&2
+        exit 1
+    fi
 fi
 
 # Optional filelist generation

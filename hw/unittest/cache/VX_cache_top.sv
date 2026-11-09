@@ -52,6 +52,13 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     // Enable dirty bytes on writeback
     parameter DIRTY_BYTES           = `VX_CFG_DCACHE_DIRTYBYTES,
 
+    // Write misses allocate without a fill (write-validate)
+    parameter LAZY_FETCH            = `VX_CFG_DCACHE_LAZY_FETCH,
+
+    // Same-word read merge across the ports, as the dcache merges the
+    // channels of one LSU block
+    parameter READ_MERGE            = `VX_CFG_DCACHE_READ_MERGE ? NUM_REQS : 0,
+
     // Bank pipeline depth (capacity-scaled)
     parameter LATENCY               = `VX_CFG_DCACHE_LATENCY,
 
@@ -70,6 +77,11 @@ module VX_cache_top import VX_gpu_pkg::*; #(
 
     // Memory request output buffer
     parameter MEM_OUT_BUF           = 3,
+
+    // Hashed bank select
+    parameter BANK_HASH             = (NUM_BANKS >= 4),
+    // Hashed set index
+    parameter SET_HASH              = `VX_CFG_DCACHE_SET_HASH,
 
     parameter MEM_TAG_WIDTH         = `CACHE_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, MEM_PORTS, UUID_WIDTH)
  ) (
@@ -180,8 +192,12 @@ module VX_cache_top import VX_gpu_pkg::*; #(
         .WRITE_ENABLE   (WRITE_ENABLE),
         .WRITEBACK      (WRITEBACK),
         .DIRTY_BYTES    (DIRTY_BYTES),
+        .LAZY_FETCH     (LAZY_FETCH),
+        .READ_MERGE     (READ_MERGE),
         .AMO_ENABLE     (AMO_ENABLE),
         .IS_LLC         (IS_LLC),
+        .BANK_HASH      (BANK_HASH),
+        .SET_HASH       (SET_HASH),
         .CORE_OUT_BUF   (CORE_OUT_BUF),
         .MEM_OUT_BUF    (MEM_OUT_BUF)
     ) cache (
@@ -191,7 +207,8 @@ module VX_cache_top import VX_gpu_pkg::*; #(
         .clk            (clk),
         .reset          (reset),
         .core_bus_if    (core_bus_if),
-        .mem_bus_if     (mem_bus_if)
+        .mem_bus_if     (mem_bus_if),
+        `UNUSED_PIN (req_empty)
     );
 
 endmodule

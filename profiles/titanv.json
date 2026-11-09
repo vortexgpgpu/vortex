@@ -1,0 +1,25 @@
+{
+  "name": "titanv",
+  "extends": "v100",
+  "description": "NVIDIA TITAN V (GV100, Volta, sm_70) at its 1200 MHz base clock: one Vortex core per SM; the SM and L2 slices are the V100's (v100).",
+  "chip": {
+    "VX_CFG_L2_SIZE": 4718592,
+    "VX_CFG_L2_NUM_WAYS": 18
+  },
+  "platform": {
+    "VX_CFG_PLATFORM_CLOCK_RATE": 1200,
+    "VX_CFG_PLATFORM_MEMORY_PEAK_BW": 652800,
+    "VX_CFG_PLATFORM_MEMORY_DATA_RATE": 1275
+  },
+  "reference": {
+    "dram_bandwidth_gbs": 652.8
+  },
+  "sources": {
+    "SM (all core knobs), NUM_CORES": "Inherited from v100: TITAN V is a GV100 with all 80 SMs enabled (5120 CUDA cores, 640 tensor cores) and the V100's SM",
+    "L2_SIZE, L2_NUM_WAYS": "4.5 MB L2, three quarters of GV100's six (three of the four HBM2 stacks and their L2 slices): 18 ways over the V100's power-of-two sets",
+    "PLATFORM_MEMORY_DATA_RATE, PLATFORM_MEMORY_PEAK_BW": "3 HBM2 stacks x 8 128-bit channels = 24 channels at 1700 MT/s (652.8 GB/s), modelled as the V100's 32 channels at 1275 MT/s for a power-of-two interleave: 32 x 16 B x 1275 MT/s = 652.8 GB/s, the card's bandwidth",
+    "PLATFORM_CLOCK_RATE": "1200 MHz base clock (1455 MHz boost), the clock of Accel-Sim's SM7_TITANV configuration",
+    "L2_LINK_LATENCY, PLATFORM_MEMORY_LATENCY, L2_MSHR_SIZE": "Inherited from v100 (same die, SM-to-L2 network and HBM2): calibrated there against Jia et al.'s V100 pointer chase. Little's law at this bandwidth (182 cycles x 544 B/cycle / (32 banks x 64 B) = 48.3) keeps the 64-entry L2 MSHR",
+    "reference": "fp32_lanes is the vendor FP32 core count (FP32 FMA lanes per chip, clock-free); dram_bandwidth_gbs the vendor peak. Checked by ci/profile_check.py. Latencies inherited from v100 (Jia et al., V100: same GV100 die, SM and L2 design). Accel-Sim (accel-sim-framework) correlates this card: GPGPU-Sim tested-cfg SM7_TITANV and posted hardware runs (volta-titanv)"
+  }
+}

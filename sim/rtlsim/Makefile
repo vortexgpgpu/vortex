@@ -133,11 +133,27 @@ SRCS = $(SW_COMMON_DIR)/util.cpp $(SIM_COMMON_DIR)/mem.cpp $(SW_COMMON_DIR)/soft
 SRCS += $(DPI_DIR)/dpi_util.cpp $(DPI_DIR)/dpi_float.cpp
 SRCS += $(SRC_DIR)/processor.cpp
 
+# AXI_BUS=1 simulates Vortex behind its AXI4 adapter, as the FPGA platforms
+# instantiate it, against a latency-bandwidth-pipe memory model, or with
+# AXI_MEM_MODEL=bank the DRAM bank model (sim/common/dram_bank_model.h).
+ifdef AXI_BUS
+TOP = rtlsim_axi_shim
+CXXFLAGS += -DAXI_BUS
+ifeq ($(AXI_MEM_MODEL), bank)
+CXXFLAGS += -DAXI_MEM_BANK
+else ifneq ($(filter-out pipe,$(AXI_MEM_MODEL)),)
+$(error AXI_MEM_MODEL must be pipe or bank (got '$(AXI_MEM_MODEL)'))
+endif
+else
 TOP = rtlsim_shim
+endif
 
 VL_FLAGS = --exe
 VL_FLAGS += --language 1800-2012 --assert -Wall -Wpedantic
 VL_FLAGS += -Wno-DECLFILENAME -Wno-REDEFMACRO
+# Verilator counts a zero fill of a warp-wide datapath as a replication, and a
+# 64-thread warp at XLEN 64 passes its default limit of 8192 bits.
+VL_FLAGS += --replication-limit 65536
 VL_FLAGS += --x-initial unique --x-assign unique
 VL_FLAGS += verilator.vlt
 VL_FLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)

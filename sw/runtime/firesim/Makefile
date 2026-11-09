@@ -15,6 +15,21 @@ CXXFLAGS += -fPIC
 # Add external configuration
 CXXFLAGS += $(CONFIGS)
 
+# The card, and its FireSim platform, which decides the variables that name
+# the image and the card (those of the card's native driver).
+include $(SRC_DIR)/card.mk
+ifeq ($(FIRESIM_PLATFORM), aved)
+CXXFLAGS += -DFIRESIM_PLATFORM_AVED
+endif
+
+# TARGET=xrtsim or avedsim runs the metasimulator in-process in place of the
+# card: the same FireSim-transformed target in Verilator, reached through the
+# emulated host interface, with no image, no XRT and no VRT -- the counterpart
+# of the native drivers' xrtsim and avedsim.
+ifneq ($(filter $(TARGET),xrtsim avedsim),)
+CXXFLAGS += -DFIRESIM_EMUL
+endif
+
 LDFLAGS += -shared -pthread
 # Find libfiresim.so siblings at runtime in the same dir libvortex-firesim.so lives in.
 LDFLAGS += -Wl,-rpath,'$$ORIGIN'
@@ -39,14 +54,24 @@ all: $(DESTDIR)/$(PROJECT)
 driver: $(DESTDIR)/libfiresim.so
 
 $(DESTDIR)/libfiresim.so: force
-	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/firesim lib
+	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/firesim lib FIRESIM_CARD=$(FIRESIM_CARD) TARGET=$(TARGET) \
+		CONFIGS='$(CONFIGS)' $(if $(PERF),PERF=$(PERF))
 
 $(DESTDIR)/$(PROJECT): $(SRCS) $(DESTDIR)/libfiresim.so $(CONFIG_FILE)
 	$(CXX) $(CXXFLAGS) $(SRCS) $(LDFLAGS) -o $@
 
-$(CONFIG_FILE):
-	echo "$(CXXFLAGS)" > $@.tmp
-	@if ! cmp -s $@.tmp $@; then mv $@.tmp $@; else rm $@.tmp; fi
+# Forced, as in every other runtime: without a prerequisite the stamp is written
+# once and never compared again, so a changed CONFIGS keeps linking the runtime
+# built for the previous one.
+$(CONFIG_FILE): force
+	@mkdir -p $(@D)
+	@TMP=$@.tmp.$$$$ ; \
+	 printf '%s\n' "$(CXXFLAGS)" > $$TMP ; \
+	 if ! cmp -s $$TMP $@ 2>/dev/null; then \
+	   mv -f $$TMP $@ ; \
+	 else \
+	   rm -f $$TMP ; \
+	 fi
 
 clean-driver:
 	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/firesim clean

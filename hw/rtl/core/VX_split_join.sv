@@ -15,20 +15,22 @@
 
 module VX_split_join import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
-    parameter OUT_REG = 0
+    parameter NUM_WARPS = `VX_CFG_NUM_WARPS,
+    parameter WID_W     = `LOG2UP(NUM_WARPS),
+    parameter OUT_REG   = 0
 ) (
     input  wire                     clk,
     input  wire                     reset,
     input  wire                     split_valid,
     input  wire                     sjoin_valid,
-    input  wire [NW_WIDTH-1:0]      wid,
+    input  wire [WID_W-1:0]         wid,
     input  split_t                  split,
     input  join_t                   sjoin,
-    input  wire [NW_WIDTH-1:0]      stack_wid,
+    input  wire [WID_W-1:0]         stack_wid,
     output wire                     join_valid,
     output wire                     join_is_dvg,
     output wire                     join_is_else,
-    output wire [NW_WIDTH-1:0]      join_wid,
+    output wire [WID_W-1:0]         join_wid,
     output wire [`VX_CFG_NUM_THREADS-1:0]  join_tmask,
     output wire [PC_BITS-1:0]       join_pc,
     output wire [DV_STACK_SIZEW-1:0] stack_ptr
@@ -36,7 +38,7 @@ module VX_split_join import VX_gpu_pkg::*; #(
     `UNUSED_SPARAM (INSTANCE_ID)
 
     if (NT_BITS != 0) begin : g_enable
-        wire [`VX_CFG_NUM_WARPS-1:0][DV_STACK_SIZEW-1:0] ipdom_wr_ptr;
+        wire [NUM_WARPS-1:0][DV_STACK_SIZEW-1:0] ipdom_wr_ptr;
         wire [`VX_CFG_NUM_THREADS-1:0] orig_tmask;
         wire [PC_BITS-1:0] next_pc;
         wire ipdom_idx;
@@ -46,8 +48,10 @@ module VX_split_join import VX_gpu_pkg::*; #(
         wire sjoin_is_dvg = (sjoin.stack_ptr != ipdom_wr_ptr[wid]);
 
         VX_ipdom_stack #(
-            .WIDTH (`VX_CFG_NUM_THREADS + PC_BITS),
-            .DEPTH (DV_STACK_SIZE)
+            .WIDTH     (`VX_CFG_NUM_THREADS + PC_BITS),
+            .DEPTH     (DV_STACK_SIZE),
+            .NUM_WARPS (NUM_WARPS),
+            .WID_W     (WID_W)
         ) ipdom_stack (
             .clk   (clk),
             .reset (reset),
@@ -66,7 +70,7 @@ module VX_split_join import VX_gpu_pkg::*; #(
         wire [`VX_CFG_NUM_THREADS-1:0] join_tmask_n = ipdom_idx ? orig_tmask : (~sjoin.tmask & orig_tmask);
 
         VX_pipe_register #(
-            .DATAW  (1 + NW_WIDTH + 1 +  1 + `VX_CFG_NUM_THREADS + PC_BITS),
+            .DATAW  (1 + WID_W + 1 +  1 + `VX_CFG_NUM_THREADS + PC_BITS),
             .RESETW (1),
             .DEPTH  (OUT_REG)
         ) pipe_reg (
