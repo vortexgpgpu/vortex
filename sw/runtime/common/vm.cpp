@@ -56,11 +56,48 @@ bool range_within(const std::map<uint64_t, uint64_t>& ranges, uint64_t lo, uint6
 }
 } // namespace
 
+int vortex::plan_sys_layout(uint64_t num_stacks, bool vm, SysLayout* out, std::string* why) {
+  auto fail = [&](const std::string& m) { if (why) *why = m; return -1; };
+  const uint64_t page  = RAM_PAGE_SIZE;
+  const uint64_t top   = uint64_t(VX_MEM_STACK_BASE_ADDR);
+  const uint64_t ssize = uint64_t(1) << VX_MEM_STACK_LOG2_SIZE;
+  if (num_stacks == 0)
+    return fail("no hardware threads reported");
+  if (num_stacks > (top - ALLOC_BASE_ADDR) / ssize)
+    return fail("stack span " + std::to_string(num_stacks) + " x " + std::to_string(ssize) +
+                " B exceeds the space below VX_MEM_STACK_BASE_ADDR");
+  const uint64_t span = num_stacks * ssize;
+  SysLayout l;
+  l.stack_hi = top;
+  l.stack_lo = (top - span) & ~(page - 1);
+  if (vm) {
+    const uint64_t pt = uint64_t(VX_MEM_PAGE_TABLE_BASE_ADDR);
+    l.pt_base = pt;
+    l.pt_size = VX_VM_PT_SIZE_LIMIT;
+    if (l.stack_lo < pt + VX_VM_PT_SIZE && l.stack_hi > pt)
+      return fail("stack span " + std::to_string(span) + " B reaches the page-table root at VX_MEM_PAGE_TABLE_BASE_ADDR (the stacks fit "
+                  + std::to_string((top - pt - VX_VM_PT_SIZE) / ssize) + " hardware threads at "
+                  + std::to_string(ssize) + " B; lower VX_MEM_STACK_LOG2_SIZE or move the memory map)");
+    if (l.stack_lo < pt + l.pt_size && l.stack_lo > pt) {
+      // The pool ends where the stacks begin; it must still hold the tables
+      // of an identity map of the whole address space (root + one table per
+      // top-level entry).
+      const uint64_t need = VX_VM_PT_SIZE * (1 + (VX_VM_PT_SIZE / VX_VM_PTE_SIZE));
+      l.pt_size = (l.stack_lo - pt) & ~(page - 1);
+      if (l.pt_size < need)
+        return fail("the stacks leave the page tables " + std::to_string(l.pt_size) + " B (need " + std::to_string(need) + ")");
+    }
+  }
+  *out = l;
+  return 0;
+}
+
 VMManager::VMManager(DeviceMemIO* dev_io)
     : dev_io_(dev_io),
       satp_(nullptr),
       page_table_mem_(nullptr),
-      virtual_mem_(nullptr) {
+      virtual_mem_(nullptr),
+      pt_pool_size_(VX_VM_PT_SIZE_LIMIT) {
   const char* randomize_env = std::getenv("VORTEX_RANDOMIZE_VA");
   randomize_va_ = (randomize_env != nullptr && std::atoi(randomize_env) != 0);
 
@@ -101,7 +138,7 @@ int VMManager::virtual_mem_reserve(uint64_t dev_addr, uint64_t size, int /*flags
 int VMManager::init() {
   uint64_t pt_addr = 0;
   std::cout << "VMManager Initialization..." << std::endl;
-  page_table_mem_ = new MemoryAllocator(VX_MEM_PAGE_TABLE_BASE_ADDR, VX_VM_PT_SIZE_LIMIT, VX_VM_PAGE_SIZE, CACHE_BLOCK_SIZE);
+  page_table_mem_ = new MemoryAllocator(VX_MEM_PAGE_TABLE_BASE_ADDR, pt_pool_size_, VX_VM_PAGE_SIZE, CACHE_BLOCK_SIZE);
   if (page_table_mem_ == nullptr)
     return 1;
 

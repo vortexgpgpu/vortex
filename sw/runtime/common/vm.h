@@ -18,6 +18,7 @@
 #include <map>
 #include <memory>
 #include <random>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -72,10 +73,36 @@ public:
 // SATP is maintained locally so need_trans / page_table_walk can use
 // it; the hardware MMU separately receives SATP via the kernel's
 // csrw at boot (no push from host needed).
+// The device's fixed system regions at the top of its address space, sized
+// from the configuration the device reports instead of assumed:
+//   stacks       [stack_lo, stack_hi): one VX_MEM_STACK_LOG2_SIZE stack per
+//                hardware thread (cores x warps x threads), growing down
+//                from VX_MEM_STACK_BASE_ADDR (vx_start.S: sp = base -
+//                (hartid << VX_MEM_STACK_LOG2_SIZE); SimX / RTL stack window);
+//   page tables  [pt_base, pt_base + pt_size) (VM only): the root page sits
+//                at VX_MEM_PAGE_TABLE_BASE_ADDR (vx_start.S programs SATP
+//                with it); the pool is VX_VM_PT_SIZE_LIMIT, shortened to end
+//                at stack_lo when the stacks reach down into it.
+// plan_sys_layout() refuses (returns non-zero, *why says which limit) a span
+// that does not fit: stacks below the heap base, stacks over the page-table
+// root, or a pool shortened below what an identity map of the whole address
+// space needs. Before this, the runtime assumed every stack lies above
+// VX_MEM_PAGE_TABLE_BASE_ADDR + the pool: a larger span silently shared
+// pages with the page tables or ran past the identity map (page fault).
+struct SysLayout {
+  uint64_t stack_lo = 0, stack_hi = 0;
+  uint64_t pt_base = 0, pt_size = 0;
+};
+int plan_sys_layout(uint64_t num_stacks, bool vm, SysLayout* out, std::string* why);
+
 class VMManager {
 public:
   explicit VMManager(DeviceMemIO* dev_io);
   ~VMManager();
+
+  // The page-table pool size of the plan (default VX_VM_PT_SIZE_LIMIT);
+  // call before init().
+  void set_pt_pool_size(uint64_t size) { pt_pool_size_ = size; }
 
   int init();
   int phy_to_virt_map(uint64_t size, uint64_t* dev_pAddr, uint32_t flags);
@@ -123,6 +150,7 @@ private:
 
   MemoryAllocator* page_table_mem_;
   MemoryAllocator* virtual_mem_;
+  uint64_t pt_pool_size_;
   std::unordered_map<uint64_t, uint64_t> addr_mapping;
   // Identity-mapped VA ranges, start -> end, disjoint and merged.
   std::map<uint64_t, uint64_t> identity_ranges_;

@@ -661,6 +661,16 @@ def _make_guard_macro(output_path: Optional[str], fallback: str) -> str:
 # Builtin helpers in unresolved mode
 # -----------------------------
 
+def _call_name(node: ast.Call) -> Optional[str]:
+  """The function a call names: a name, or the builtin it was bound to when the
+  expression was partly resolved (a key over an [[extern]] keeps its calls)."""
+  if isinstance(node.func, ast.Name):
+    return node.func.id
+  if isinstance(node.func, ast.Constant) and callable(node.func.value):
+    return getattr(node.func.value, "__name__", None)
+  return None
+
+
 class HelperSpec:
   fn: str
   macro: str
@@ -977,8 +987,8 @@ class MacroExprTranslator:
         return f"(({a}) % ({b}))"
       raise ValueError(f"Unsupported BinOp: {type(op).__name__}")
 
-    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
-      fn = node.func.id
+    if isinstance(node, ast.Call) and _call_name(node):
+      fn = _call_name(node)
       args = [self._emit(a, current_key, enums) for a in node.args]
       h = HELPERS.get(fn)
       if h is not None:
@@ -1602,8 +1612,8 @@ def emit_resolved_header(cfg: Dict[str, Any], layout: Layout, enums: Dict[str, E
   helpers: Set[str] = set()
   for node in deferred.values():
     for n in ast.walk(node):
-      if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in HELPERS:
-        helpers.add(n.func.id)
+      if isinstance(n, ast.Call) and _call_name(n) in HELPERS:
+        helpers.add(_call_name(n))
   for fn in sorted(helpers):
     lines.extend(HELPERS[fn].emit(d))
 
