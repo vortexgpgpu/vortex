@@ -191,30 +191,40 @@ module VX_cache_data import VX_gpu_pkg::*; #(
         assign evict_byteen = mask_rdata;
 
         if (LAZY_FETCH != 0) begin : g_sec_full
-            // Which sectors are wholly dirty, kept beside the mask and updated
-            // with it: the commit's memory-request decision reads it from a
-            // register-addressed distributed RAM, rather than reducing the
-            // whole sector of the block-RAM read.
+            // Which sectors are wholly dirty, kept beside the mask, written and
+            // read with it, so the commit's memory-request decision takes one
+            // registered bit rather than reducing a whole sector of the mask.
             wire [`CS_SECTORS_PER_LINE-1:0] sec_full_wdata;
             for (genvar i = 0; i < `CS_SECTORS_PER_LINE; ++i) begin : g_sec_full_wdata
                 assign sec_full_wdata[i] = (& mask_wdata[i * SECTOR_SIZE +: SECTOR_SIZE]);
             end
-            VX_sp_ram #(
+
+            wire [`CS_SECTORS_PER_LINE-1:0] sec_full_rdata;
+            VX_dp_ram #(
                 .DATAW    (`CS_SECTORS_PER_LINE),
                 .SIZE     (DATA_RAM_DEPTH),
-                .OUT_REG  (0),
+                .OUT_REG  (1),
                 .LUTRAM   (1),
-                .RDW_MODE ("W")
+                .RDW_MODE ("R")
             ) sec_full_store (
                 .clk   (clk),
                 .reset (reset),
-                .read  (1'b1),
+                .read  (mask_read),
                 .write (mask_write),
                 .wren  (1'b1),
-                .addr  (mask_addr),
+                .waddr (mask_addr),
                 .wdata (sec_full_wdata),
-                .rdata (evict_sec_full)
+                .raddr (mask_raddr),
+                .rdata (sec_full_rdata)
             );
+
+            reg [`CS_SECTORS_PER_LINE-1:0] sec_full_fwd_r;
+            always @(posedge clk) begin
+                if (mask_read) begin
+                    sec_full_fwd_r <= sec_full_wdata;
+                end
+            end
+            assign evict_sec_full = mask_fwd_r ? sec_full_fwd_r : sec_full_rdata;
         end else begin : g_no_sec_full
             assign evict_sec_full = '0;
         end
