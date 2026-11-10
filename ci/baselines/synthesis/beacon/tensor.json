@@ -6,7 +6,7 @@
     "dut": "tcu",
     "result": {
       "bram": 0.0,
-      "build_time_s": 55,
+      "build_time_s": 35,
       "deep_endpoints": 2422,
       "deepest_paths": [
         "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[6]",
@@ -66,7 +66,7 @@
     "dut": "tensor",
     "result": {
       "bram": 114.5,
-      "build_time_s": 115,
+      "build_time_s": 86,
       "deep_endpoints": 4737,
       "deepest_paths": [
         "25  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[14]",
@@ -81,21 +81,21 @@
         "25  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_1.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_1.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[18]"
       ],
       "dsp": 267,
-      "endpoints": 170596,
+      "endpoints": 170624,
       "env": {
         "circt": "CIRCT 892a65a01",
         "device": "xcu55c-fsvh2892-2L-e",
         "foldsim": "foldsim d8350bc0f",
         "xlen": 32
       },
-      "ff": 161521,
+      "ff": 161523,
       "fix_levels": 12,
       "interfaces": {},
-      "lut": 260094,
-      "lutram": 12599,
+      "lut": 260189,
+      "lutram": 12672,
       "max_levels": 25,
       "pred_fmax_mhz": 253.4,
-      "risk_endpoints": 417,
+      "risk_endpoints": 411,
       "units": {
         "dcache/g_cache_wrap_*_cache_wrap/g_cache_cache/g_banks_*_bank/cache_data/g_data_slice_*_data_store": 9,
         "dcache/g_cache_wrap_*_cache_wrap/g_cache_cache/g_banks_*_bank/cache_mshr": 9,
@@ -152,8 +152,9 @@
         "l2cache/g_cache_cache/g_banks_*_bank/g_amo_amo": 15,
         "l2cache/g_cache_cache/g_banks_*_bank/g_lazy_pipe_reg_lz_s0": 9,
         "l2cache/g_cache_cache/g_banks_*_bank/g_lazyq_lazy_queue": 9,
-        "l2cache/g_cache_cache/g_banks_*_bank/g_lazyq_lazy_queue/pending_size": 10,
-        "l2cache/g_cache_cache/g_banks_*_bank/mem_req_queue/pending_size": 10,
+        "l2cache/g_cache_cache/g_banks_*_bank/g_lazyq_lazy_queue/pending_size": 9,
+        "l2cache/g_cache_cache/g_banks_*_bank/mem_req_queue": 8,
+        "l2cache/g_cache_cache/g_banks_*_bank/mem_req_queue/pending_size": 9,
         "l2cache/g_cache_cache/g_banks_*_bank/mshr_pending_size": 10,
         "l2cache/g_cache_cache/g_banks_*_bank/reg_dat": 9,
         "l2cache/g_cache_cache/g_banks_*_bank/reg_s0": 9,
@@ -161,7 +162,7 @@
         "l2cache/g_cache_cache/g_core_req_skid_*_req_skid": 9
       },
       "uram": 0,
-      "watch_endpoints": 26223,
+      "watch_endpoints": 26226,
       "watch_levels": 8
     }
   }
