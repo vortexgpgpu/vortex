@@ -106,11 +106,11 @@ module VX_tcu_tmem import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam WQ_DEPTH = 16;
     localparam INFLW    = 8;
     localparam A_READS  = TCU_WG_FEDP_K / TPL;
-    localparam NBANKS   = `VX_CFG_LMEM_NUM_BANKS;
-    localparam CP_ADDRW = `VX_CFG_LMEM_LOG_SIZE - `CLOG2(NBANKS * 4);
+    localparam CP_ROW_WORDS = `VX_CFG_LMEM_NUM_BANKS * (`VX_CFG_XLEN / 32);
+    localparam CP_ADDRW = `VX_CFG_LMEM_LOG_SIZE - `CLOG2(CP_ROW_WORDS * 4);
     localparam LANEW    = `LOG2UP(LANES);
 
-    `STATIC_ASSERT (NBANKS % NT == 0, ("a copy chunk must sit in one LMEM bank row"))
+    `STATIC_ASSERT (CP_ROW_WORDS % NT == 0, ("a copy chunk must sit in one LMEM bank row"))
 
     `STATIC_ASSERT (TCU_WG_FEDP_K % TPL == 0, ("A from TMEM reads whole K words per lane"))
 
@@ -119,7 +119,6 @@ module VX_tcu_tmem import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // FEDP array takes a micro-op over several.
     `STATIC_ASSERT (`VX_CFG_TCU_PE_RATIO == 1, ("TMEM requires VX_CFG_TCU_PE_RATIO=1"))
     `STATIC_ASSERT (NT % XM == 0, ("TMEM needs NUM_THREADS to be a multiple of WGMMA M"))
-    `STATIC_ASSERT (`VX_CFG_XLEN == 32, ("TMEM supports XLEN=32"))
 
     // -----------------------------------------------------------------------
     // TMEM cell map
@@ -604,7 +603,11 @@ module VX_tcu_tmem import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         assign rsp_valid[b]           = rsp_valid_r && (rsp_blk_r == BLKW'(b));
         assign rsp_data[b].header     = rsp_header_r;
         for (genvar t = 0; t < NT; ++t) begin : g_t
-            assign rsp_data[b].data[t] = `VX_CFG_XLEN'(rsp_payload[t]);
+            if (`VX_CFG_XLEN > 32) begin : g_nanbox
+                assign rsp_data[b].data[t] = {32'hffffffff, rsp_payload[t]};
+            end else begin : g_passthrough
+                assign rsp_data[b].data[t] = rsp_payload[t];
+            end
         end
     end
 
@@ -856,7 +859,7 @@ module VX_tcu_tmem import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     logic              cp_inflight_r;
     logic [LANEW-1:0]  cp_rlane_r;    // in-flight request
     logic [15:0]       cp_rcol_r;
-    logic [`LOG2UP(NBANKS)-1:0] cp_rword_r;
+    logic [`LOG2UP(CP_ROW_WORDS)-1:0] cp_rword_r;
     logic              cp_have_r;     // parked response
     logic [LANEW-1:0]  cp_hlane_r;
     logic [15:0]       cp_hcol_r;
@@ -895,7 +898,7 @@ module VX_tcu_tmem import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     assign cp_lmem_if.req_valid        = cp_issue;
     assign cp_lmem_if.req_data.rw      = 1'b0;
-    assign cp_lmem_if.req_data.addr    = CP_ADDRW'(cp_byte >> `CLOG2(NBANKS * 4));
+    assign cp_lmem_if.req_data.addr    = CP_ADDRW'(cp_byte >> `CLOG2(CP_ROW_WORDS * 4));
     assign cp_lmem_if.req_data.data    = '0;
     assign cp_lmem_if.req_data.byteen  = '0;
     assign cp_lmem_if.req_data.attr    = '0;
@@ -921,7 +924,7 @@ module VX_tcu_tmem import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             if (cp_fire) begin
                 cp_rlane_r <= cp_lane_r;
                 cp_rcol_r  <= cp_col_r;
-                cp_rword_r <= `LOG2UP(NBANKS)'(cp_byte >> 2);
+                cp_rword_r <= `LOG2UP(CP_ROW_WORDS)'(cp_byte >> 2);
                 if (cp_last_chunk) begin
                     cp_col_r  <= '0;
                     cp_lane_r <= cp_lane_r + LANEW'(1);

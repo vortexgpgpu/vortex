@@ -789,9 +789,9 @@ public:
                        ? this->tmem_at(lane0, col0 + t)
                        : this->tmem_at(lane0 + t % wg_cfg::xtileM, col0 + t / wg_cfg::xtileM);
             if (tcu_type == TcuType::TMEM_LD) {
-              rd_data.at(t) = cell;
+              rd_data.at(t).u64 = nan_box(cell.u32);
             } else {
-              cell = rs2_data.at(t);
+              cell.u64 = nan_box(rs2_data.at(t).u32);
             }
           }
         } break;
@@ -1584,7 +1584,7 @@ public:
           uint32_t off = addr & (VX_CFG_MEM_BLOCK_SIZE - 1);
           std::memcpy(&word, line->data() + off, 4);
         }
-        this->tmem_at(lane, job.taddr + c).u32 = word;
+        this->tmem_at(lane, job.taddr + c).u64 = nan_box(word);
       }
     }
   }
