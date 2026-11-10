@@ -1298,6 +1298,10 @@ def gate(result, env, args, gated, tool):
                                % (tool.area, cur, budget, 100 * excess, 100 * tol))
 
     base = build.get("baseline") or {}
+    if vs_base and build.get("ungated"):
+        # --configs: the catalog baseline was recorded without these flags, so
+        # there is nothing to compare with (the --against diff gates instead).
+        vs_base = []
     if vs_base and not any(base.get(m) is not None for m in vs_base):
         return verdict("NO-BASELINE",
                        ["no recorded baseline (run --update-baseline)"])
@@ -1314,7 +1318,12 @@ def gate(result, env, args, gated, tool):
             reasons.append("%s: not measured by this run" % m)
             continue
         tol = threshold(build, m, args)
-        delta = (cur - ref) / ref if ref else 0.0
+        if ref:
+            delta = (cur - ref) / ref
+        else:
+            # A zero baseline has no relative tolerance: any amount is a change
+            # (20 block RAMs where there were none must not read as 0 %).
+            delta = 0.0 if cur == ref else (float("inf") if cur > ref else float("-inf"))
         if abs(delta) <= tol:
             continue
         better = (delta > 0) == (m in HIGHER_IS_BETTER)
@@ -1442,7 +1451,11 @@ def compare_against(results, ref_dir, tool):
         ref = os.path.join(build_work(b, ref_dir, tool), "beacon")
         cur = os.path.join(work, "beacon")
         if not os.path.exists(os.path.join(ref, "endpoints.csv")):
+            # A mistyped --against, or a reference tree of another XLEN, must
+            # not pass as a clean comparison.
             print("\n%s: no reference run in %s" % (b["id"], ref))
+            failures.append((b["id"], "NO-REFERENCE",
+                             ["--against has no Beacon run of this build: %s" % ref]))
             continue
         out = os.path.join(work, "beacon_diff.txt")
         with open(out, "w") as fh:
@@ -1615,6 +1628,7 @@ def main(argv=None, default_tool="xilinx"):
         for b in selected:
             b["configs"] = (b["configs"] + " " + args.configs).strip()
             b["baseline"] = {}
+            b["ungated"] = True
     for b in selected:
         warning = tool.env_warning(b, env)
         if warning:

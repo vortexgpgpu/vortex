@@ -103,7 +103,7 @@ jobs:
         run: |
           case "${{ steps.run.outputs.rc }}" in
             0) echo "logic_gate passed" ;;
-            1) echo "::error::logic_gate FAILED — a unit got deeper than its baseline"; exit 1 ;;
+            1) echo "::error::logic_gate FAILED — a unit got deeper, an area grew, or a baseline is stale or missing (see the summary)"; exit 1 ;;
             *) echo "::error::logic_gate build error (see logs)"; exit 1 ;;
           esac
 
@@ -141,6 +141,9 @@ jobs:
           CMD=$(python3 -c "import yaml; print(next(t['run'] for t in yaml.safe_load(open('ci/testcases/logic_gate.yaml'))['tests'] if t['id'] == 'gpu'))")
           ARGS=()
           for b in ${IN_BUILDS:-}; do ARGS+=(-b "$b"); done
+          # -b selections add up, so the dispatched builds replace the
+          # catalog's `-b gpu` instead of joining it.
+          [ ${#ARGS[@]} -gt 0 ] && CMD=$(echo "$CMD" | sed -E 's/(^| )-b gpu( |$)/ /')
           rc=0
           $CMD "${ARGS[@]}" --report logic_gate_gpu.json || rc=$?
           echo "rc=$rc" >> "$GITHUB_OUTPUT"
@@ -170,6 +173,6 @@ jobs:
         run: |
           case "${{ steps.run.outputs.rc }}" in
             0) echo "logic_gate gpu passed" ;;
-            1) echo "::error::logic_gate gpu FAILED — a unit got deeper than its baseline"; exit 1 ;;
+            1) echo "::error::logic_gate gpu FAILED — a unit got deeper, an area grew, or a baseline is stale or missing (see the summary)"; exit 1 ;;
             *) echo "::error::logic_gate gpu build error (see logs)"; exit 1 ;;
           esac
