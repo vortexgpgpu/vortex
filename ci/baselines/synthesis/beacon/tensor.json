@@ -6,7 +6,7 @@
     "dut": "tcu",
     "result": {
       "bram": 0.0,
-      "build_time_s": 55,
+      "build_time_s": 36,
       "deep_endpoints": 2422,
       "deepest_paths": [
         "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[6]",
@@ -21,17 +21,17 @@
         "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[17]"
       ],
       "dsp": 769,
-      "endpoints": 44118,
+      "endpoints": 44126,
       "env": {
         "circt": "CIRCT 892a65a01",
         "device": "xcu55c-fsvh2892-2L-e",
         "foldsim": "foldsim d8350bc0f",
         "xlen": 32
       },
-      "ff": 47095,
+      "ff": 47126,
       "fix_levels": 12,
       "interfaces": {},
-      "lut": 119887,
+      "lut": 108940,
       "lutram": 2083,
       "max_levels": 25,
       "pred_fmax_mhz": 277.7,
@@ -55,7 +55,7 @@
         "tcu_unit/lane_dispatch/g_blocks_*_buf_out/g_eb2_stream_buffer": 10
       },
       "uram": 0,
-      "watch_endpoints": 13538,
+      "watch_endpoints": 13546,
       "watch_levels": 8
     }
   },
@@ -66,8 +66,8 @@
     "dut": "tensor",
     "result": {
       "bram": 114.5,
-      "build_time_s": 115,
-      "deep_endpoints": 4737,
+      "build_time_s": 85,
+      "deep_endpoints": 4753,
       "deepest_paths": [
         "25  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[14]",
         "25  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[17]",
@@ -81,21 +81,21 @@
         "25  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_1.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_1.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[18]"
       ],
       "dsp": 267,
-      "endpoints": 170596,
+      "endpoints": 170612,
       "env": {
         "circt": "CIRCT 892a65a01",
         "device": "xcu55c-fsvh2892-2L-e",
         "foldsim": "foldsim d8350bc0f",
         "xlen": 32
       },
-      "ff": 161521,
+      "ff": 161583,
       "fix_levels": 12,
       "interfaces": {},
-      "lut": 260094,
+      "lut": 238200,
       "lutram": 12599,
       "max_levels": 25,
       "pred_fmax_mhz": 253.4,
-      "risk_endpoints": 417,
+      "risk_endpoints": 419,
       "units": {
         "dcache/g_cache_wrap_*_cache_wrap/g_cache_cache/g_banks_*_bank/cache_data/g_data_slice_*_data_store": 9,
         "dcache/g_cache_wrap_*_cache_wrap/g_cache_cache/g_banks_*_bank/cache_mshr": 9,
@@ -120,7 +120,6 @@
         "g_cores_*_mem_unit/lmem_unit/g_data_store_*_g_single_port_lmem_store": 9,
         "g_cores_*_tcu_shared/wgmma": 12,
         "g_cores_*_tcu_shared/wgmma/tbuf/bbuf": 16,
-        "g_cores_*_tcu_shared/wgmma/tbuf/bbuf/storage_a_ram": 10,
         "g_cores_*_tcu_shared/wgmma/tbuf/g_abufs_*_abuf": 15,
         "g_cores_*_tcu_unit/g_blocks_*_tcu_block/tcu_core": 11,
         "g_cores_*_tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_fedp/pipe_acc": 15,
@@ -161,7 +160,7 @@
         "l2cache/g_cache_cache/g_core_req_skid_*_req_skid": 9
       },
       "uram": 0,
-      "watch_endpoints": 26223,
+      "watch_endpoints": 25181,
       "watch_levels": 8
     }
   }

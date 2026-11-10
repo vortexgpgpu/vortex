@@ -1291,6 +1291,10 @@ public:
 
     uint32_t num_reads = (req.is_sparse && kBSparseTwoFetch) ? 2 : 1;
     if (kmajor) {
+      num_reads = cfg::tcN;
+    }
+#ifdef VX_CFG_TCU_TMEM_ENABLE
+    if (kmajor) {
       // The bbuf reads consecutive N-rows that share an LMEM bank row at once.
       constexpr uint64_t kBankRowBytes = uint64_t(kLmemBanks) * (VX_CFG_XLEN / 8);
       uint32_t k_elem = req.step_k * k_words * ratio * (req.is_sparse ? 2 : 1);
@@ -1304,6 +1308,7 @@ public:
         prev_row = row;
       }
     }
+#endif
     return split_reads(std::move(lines), num_reads);
   }
 

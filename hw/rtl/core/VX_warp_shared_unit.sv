@@ -197,8 +197,19 @@ module VX_warp_shared_unit import VX_gpu_pkg::*; #(
 `endif
     `UNUSED_VAR (tcu_valid)
 
-    wire [BAR_ADDR_W-1:0] bar_read_addr = is_bar ? req.bar_addr
-                                        : (txbar_valid ? txbar_addr : tcu_addr);
+    wire [BAR_ADDR_W-1:0] bar_read_addr;
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    assign bar_read_addr = is_bar ? req.bar_addr : (txbar_valid ? txbar_addr : tcu_addr);
+`elsif VX_CFG_EXT_DXA_ENABLE
+    assign bar_read_addr = is_bar ? req.bar_addr : txbar_addr;
+    `UNUSED_VAR (txbar_valid)
+    `UNUSED_VAR (tcu_addr)
+`else
+    assign bar_read_addr = req.bar_addr;
+    `UNUSED_VAR (txbar_valid)
+    `UNUSED_VAR (txbar_addr)
+    `UNUSED_VAR (tcu_addr)
+`endif
 
     // the barrier request applies the cycle after its phase is read, as the
     // read must see the barrier before this arrival
