@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// foldsim's virtual-memory controller (hw/rtl/afu/foldsim/foldsim_vmem.sv),
+// foldsim's virtual-memory controller (Foldsim shell/rtl/foldsim_vmem.sv),
 // driven as a folded simulator drives it -- an instance issues only when its
 // read has been answered, and only as much as `free` allowed L host cycles
 // earlier -- against a model of HBM that answers with random latency and

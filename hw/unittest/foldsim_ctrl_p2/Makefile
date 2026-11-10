@@ -7,11 +7,11 @@ include $(ROOT_DIR)/config.mk
 PROJECT := foldsim_ctrl
 
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
-FOLDSIM_RTL_DIR := $(RTL_DIR)/afu/foldsim
+FOLDSIM_RTL_DIR := $(FOLDSIM_SHELL)/rtl
 
 SRC_DIR := $(VORTEX_HOME)/hw/unittest/foldsim_ctrl
 
-CXXFLAGS := -I$(SRC_DIR) -I$(VORTEX_HOME)/hw/unittest/common -I$(SW_COMMON_DIR)
+CXXFLAGS := -I$(SRC_DIR) -I$(VORTEX_HOME)/hw/unittest/common -I$(SW_COMMON_DIR) -I$(FOLDSIM_SHELL)/include
 CXXFLAGS += -DMEM_PORTS=2 -DNUM_CLASSES=3 -DBUBBLES=1 -DVMEM_BYTES=262144
 
 SRCS := $(SRC_DIR)/main.cpp

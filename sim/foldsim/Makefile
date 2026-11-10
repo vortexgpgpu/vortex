@@ -1,13 +1,15 @@
 include ../common.mk
 
 # The foldsim kernel in Verilator, as a library the runtime's avedsim target
-# links: the same simulator hw/syn/foldsim generates for the image, so a run
-# here is the image's run, cycle for cycle, but for device memory's timing.
+# links: the same simulator hw/syn/foldsim generates for the image, in
+# Foldsim's shell and its in-process host (FOLDSIM_SHELL), so a run here is
+# the image's run, cycle for cycle, but for device memory's timing. Vortex adds
+# only the Xilinx floating-point cores' models its FPU may instantiate.
 
 DESTDIR ?= $(CURDIR)
 
 SRC_DIR := $(VORTEX_HOME)/sim/foldsim
-FOLDSIM_RTL_DIR := $(RTL_DIR)/afu/foldsim
+FOLDSIM_RTL_DIR := $(FOLDSIM_SHELL)/rtl
 WORK_DIR := $(DESTDIR)/foldsim_emul
 GEN_SV := $(WORK_DIR)/gen/foldsim_sim.sv
 # The kernel's memory ports, as the image's flow derived them, and the
@@ -17,7 +19,7 @@ SIM_VH := $(WORK_DIR)/gen/foldsim_sim.vh
 
 CONFIG_FILE := $(DESTDIR)/foldsim_emul_config.stamp
 
-CXXFLAGS += -std=c++17 -fPIC -O2 -DNDEBUG -I$(SRC_DIR)
+CXXFLAGS += -std=c++17 -fPIC -O2 -DNDEBUG -I$(FOLDSIM_SHELL)/include
 LDFLAGS += -shared -pthread
 # The Xilinx floating-point cores' simulation models compute with Vortex's DPI
 # floating point.
@@ -40,18 +42,12 @@ VL_FLAGS += -j $(THREADS)
 TOP := foldsim_afu
 # The simulation models of the Xilinx floating-point cores the simulator may
 # instantiate (its FPU of type DSP): Verilator cannot run their netlists.
-RTL_SRCS := $(SRC_DIR)/xilinx_fp_models.sv $(GEN_SV) $(FOLDSIM_RTL_DIR)/foldsim_token.sv \
-            $(FOLDSIM_RTL_DIR)/foldsim_mem_bmap.sv $(FOLDSIM_RTL_DIR)/foldsim_mem_bank.sv \
-            $(FOLDSIM_RTL_DIR)/foldsim_mem.sv $(FOLDSIM_RTL_DIR)/foldsim_vmem.sv $(FOLDSIM_RTL_DIR)/foldsim_vmem_share.sv \
-            $(FOLDSIM_RTL_DIR)/foldsim_vmem_group.sv \
-            $(FOLDSIM_RTL_DIR)/foldsim_ctrl.sv \
-            $(FOLDSIM_RTL_DIR)/foldsim_afu.sv
-# Folded memory ports (FOLDSIM_PORTS in the generated foldsim_sim.vh): the folded
-# endpoint around the memory endpoint threaded by portfold_gen.sh, from the
-# kernel sources (hw/syn/foldsim's FOLD_SRCS).
-FOLD_SRCS = $(if $(shell grep -s '^.define FOLDSIM_PORTS ' $(SIM_VH)),\
-                 $(FOLDSIM_RTL_DIR)/foldsim_mem_threaded.sv $(FOLDSIM_RTL_DIR)/foldsim_mem_fold.sv)
-SRCS := $(SRC_DIR)/foldsim_emul.cpp $(DPI_DIR)/dpi_float.cpp $(DPI_DIR)/dpi_util.cpp \
+# The kernel is the image's: Foldsim's shell, the simulator and the top the
+# flow generates for the manifest (hw/syn/foldsim's kernel_srcs.f, folded
+# memory ports' threaded endpoint included).
+KERNEL_SRCS := $(WORK_DIR)/kernel_srcs.f
+RTL_SRCS := $(SRC_DIR)/xilinx_fp_models.sv -f $(KERNEL_SRCS)
+SRCS := $(FOLDSIM_SHELL)/emul/foldsim_emul.cpp $(DPI_DIR)/dpi_float.cpp $(DPI_DIR)/dpi_util.cpp \
         $(SW_COMMON_DIR)/softfloat_ext.cpp $(SW_COMMON_DIR)/rvfloats.cpp
 
 PROJECT := libfoldsim_emul.so
@@ -63,16 +59,18 @@ lib: $(DESTDIR)/$(PROJECT)
 
 # The simulator, generated for these CONFIGS by the image's own flow.
 $(GEN_SV): force
-	$(MAKE) -C $(ROOT_DIR)/hw/syn/foldsim generate TARGET=hw FOLDSIM_WORK_DIR=$(WORK_DIR) CONFIGS='$(CONFIGS)' \
+	$(MAKE) -C $(ROOT_DIR)/hw/syn/foldsim generate kernel-srcs TARGET=hw $(if $(FOLDSIM_MANIFEST),FOLDSIM_MANIFEST=$(FOLDSIM_MANIFEST)) FOLDSIM_WORK_DIR=$(WORK_DIR) CONFIGS='$(CONFIGS)' \
 		$(if $(PERF),PERF=$(PERF)) $(if $(FOLDSIM_CLASSES),FOLDSIM_CLASSES='$(FOLDSIM_CLASSES)') \
 		$(if $(FOLDSIM_LIFT),FOLDSIM_LIFT='$(FOLDSIM_LIFT)') $(if $(CIRCT_BIN),CIRCT_BIN=$(CIRCT_BIN)) \
 		$(if $(FOLDSIM_FLAGS),FOLDSIM_FLAGS='$(FOLDSIM_FLAGS)') \
 		$(if $(LIFT_PYTHON),LIFT_PYTHON=$(LIFT_PYTHON)) $(if $(FOLDSIM),FOLDSIM=$(FOLDSIM)) \
 		$(if $(FOLDSIM_VMEM_CACHE_ROWS),FOLDSIM_VMEM_CACHE_ROWS=$(FOLDSIM_VMEM_CACHE_ROWS)) \
-		$(if $(FOLDSIM_VMEM_MASTERS),FOLDSIM_VMEM_MASTERS=$(FOLDSIM_VMEM_MASTERS))
+		$(if $(FOLDSIM_VMEM_MASTERS),FOLDSIM_VMEM_MASTERS=$(FOLDSIM_VMEM_MASTERS)) \
+		$(if $(FOLDSIM_THREADED),FOLDSIM_THREADED=$(FOLDSIM_THREADED))
 
-$(DESTDIR)/$(PROJECT): $(GEN_SV) $(SRCS) $(SRC_DIR)/xilinx_fp_models.sv $(wildcard $(FOLDSIM_RTL_DIR)/*) $(CONFIG_FILE)
-	$(VERILATOR_PATH)/bin/verilator --build --exe $(VL_FLAGS) --cc $(RTL_SRCS) $(FOLD_SRCS) --top-module $(TOP) \
+$(DESTDIR)/$(PROJECT): $(GEN_SV) $(SRCS) $(SRC_DIR)/xilinx_fp_models.sv $(wildcard $(FOLDSIM_RTL_DIR)/*) \
+		$(FOLDSIM_SHELL)/include/foldsim_emul.h $(CONFIG_FILE)
+	$(VERILATOR_PATH)/bin/verilator --build --exe $(VL_FLAGS) --cc $(RTL_SRCS) --top-module $(TOP) \
 		$(SRCS) -CFLAGS '$(CXXFLAGS) -DFOLDSIM_MEM_MASTERS='$$(sed -n 's/^`define FOLDSIM_MEM_MASTERS //p' $(KERNEL_VH)) \
 		-CFLAGS -DFOLDSIM_VMEM_COUNT=$$(sed -n -e 's/^`define FOLDSIM_VMEM_GROUPS //p' -e 's/^`define FOLDSIM_VMEM_COUNT //p' $(SIM_VH) | sort -n | head -1 | grep . || echo 0) \
 		$$(sed -n -e 's/^`define FOLDSIM_VMEM_MASTERS \(.*\)/-CFLAGS -DFOLDSIM_VMEM_MASTERS=\1/p' \

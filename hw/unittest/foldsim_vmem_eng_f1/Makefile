@@ -5,14 +5,14 @@ include $(ROOT_DIR)/config.mk
 PROJECT := foldsim_vmem_eng_f1
 
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
-FOLDSIM_RTL_DIR := $(RTL_DIR)/afu/foldsim
+FOLDSIM_RTL_DIR := $(FOLDSIM_SHELL)/rtl
 
 SRC_DIR := $(VORTEX_HOME)/hw/unittest/foldsim_vmem
 
 # The controller's parameters, to the RTL and the test alike.
 VMEM := IW=1 INSTANCES=1 AW=12 KNOWN_ZERO=0 AXI_ID_W=1 OUTSTANDING=128
 
-CXXFLAGS := -I$(SRC_DIR) -I$(VORTEX_HOME)/hw/unittest/common
+CXXFLAGS := -I$(SRC_DIR) -I$(VORTEX_HOME)/hw/unittest/common -I$(FOLDSIM_SHELL)/include
 CXXFLAGS += $(foreach p,$(VMEM),-DVM_$(p))
 
 SRCS := $(SRC_DIR)/main.cpp

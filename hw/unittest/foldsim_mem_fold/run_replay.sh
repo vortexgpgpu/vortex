@@ -3,7 +3,7 @@
 # (foldsim_mem_ser + foldsim_mem_fold of this tree, the snapshot's threaded endpoint) and replays a recorded gate run.
 set -e
 O=$1; S=$2; TR=$3; CF=$4; N=${5:-2000000}
-T=$(cd "$(dirname "$0")/../../.." && pwd); R=$T/hw/rtl/afu/foldsim
+T=$(cd "$(dirname "$0")/../../.." && pwd); R=${FOLDSIM_SHELL:?the Foldsim shell (share/foldsim/shell)}/rtl
 mkdir -p $O
 ${VERILATOR:-verilator} --binary --timing -O2 -Wno-fatal -Wno-lint -Wno-style -I$R --top-module tb -Mdir $O/obj \
   $R/foldsim_mem_ser.sv ${FOLD_SV:-$R/foldsim_mem_fold.sv} $S/foldsim_mem_threaded.sv \

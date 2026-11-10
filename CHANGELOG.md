@@ -57,13 +57,14 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
 
 ### Changed
 
-- **`ci/beacon.py screen` maps a fold with its module boundaries timed.** Beside upstream's `run` (`foldsim-beacon-map`, levels and
-  area), `screen` keeps the arrival-aware mapper (`foldsim-screen-map`) and, for a design that keeps several modules after inlining
-  (a fold's models), maps it again with the arrival times found at the modules' ports (`--boundary-passes`, default 2): the 4-SM
-  fold's end point bits at >= 12 levels go 66 -> 1. `family=` is accepted for `target=`. The pre-rename copies (`ci/logic_screen.py`,
+- **One Beacon command, `ci/beacon.py run`; `screen` is its fold preset.** `foldsim-beacon-map` takes `carry-block-size` (adders
+  timed by carry block with their inputs' arrival times) and `arrivals` (a fold's module boundaries timed with the arrival times the
+  previous count found at their ports); `run` takes `--carry-block-size`, `--boundary-passes` and `--no-area`, with the defaults the
+  DUT flow and the gate use; `screen` = `run --carry-block-size 8 --boundary-passes 2 --no-area`: the 4-SM fold's end point bits at
+  >= 12 levels go 66 -> 1. `family=` is accepted for `target=`. The pre-rename copies (`ci/logic_screen.py`,
   `hw/scripts/screen_summary.py`, `ci/baselines/synthesis/screen/`, `docs/designs/logic_screen.md`) are removed.
 
-- **Toolchain pinned to v3.0.2** (`TOOLCHAIN_REV`): LLVM f44a6bb2af4c, with PoCL rebuilt on it. Wide loads/stores and 64-bit
+- **Toolchain** (`TOOLCHAIN_REV` stays v3.0.1; the tag's prebuilt is refreshed in place): LLVM f44a6bb2af4c, with PoCL rebuilt on it. Wide loads/stores and 64-bit
   atomics stay behind `+xvortexldstwide` and `+xvortexamod`, so code built with plain `+xvortex` uses no new instructions.
 - **Small CI suites share a cell.** A test category can be a directory of files, each with its own defaults, that runs as one
   cell per driver and XLEN: `isa` (mufu, zfhmin, rvc, riscv, amo), `sw` (opencl, hip, kernel, runtime), `integration` (gem5, sst,

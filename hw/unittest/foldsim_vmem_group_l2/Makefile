@@ -5,14 +5,14 @@ include $(ROOT_DIR)/config.mk
 PROJECT := foldsim_vmem_group_l2
 
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
-FOLDSIM_RTL_DIR := $(RTL_DIR)/afu/foldsim
+FOLDSIM_RTL_DIR := $(FOLDSIM_SHELL)/rtl
 
 SRC_DIR := $(VORTEX_HOME)/hw/unittest/foldsim_vmem_group
 
 # The setup (foldsim_vmem_group_tb.sv and main.cpp's table), to both sides.
 CFG := 4
 
-CXXFLAGS := -I$(SRC_DIR) -I$(VORTEX_HOME)/hw/unittest/common -DVG_CFG=$(CFG)
+CXXFLAGS := -I$(SRC_DIR) -I$(VORTEX_HOME)/hw/unittest/common -DVG_CFG=$(CFG) -I$(FOLDSIM_SHELL)/include
 
 SRCS := $(SRC_DIR)/main.cpp
 

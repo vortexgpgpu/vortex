@@ -11,8 +11,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// foldsim's control endpoint (hw/rtl/afu/foldsim/foldsim_ctrl.sv) as the
-// runtime sees it, through sw/common/foldsim_regs.h over AXI4-Lite: the id and
+// foldsim's control endpoint (Foldsim shell/rtl/foldsim_ctrl.sv) as the
+// runtime sees it, through the shell's include/foldsim_regs.h over AXI4-Lite: the id and
 // version, the DRAM timings read back, every memory port's counters at its
 // place in the stats window, every class's finishes, zero past the end of each
 // window, the idle-slot rate: kept with BUBBLES, 0 without; and the virtual

@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// foldsim's memory endpoint (hw/rtl/afu/foldsim/foldsim_mem.sv), driven as the
+// foldsim's memory endpoint (Foldsim shell/rtl/foldsim_mem.sv), driven as the
 // simulator and the control endpoint drive it -- one token per channel per
 // target cycle -- by a model of an AXI4 master, against a model of HBM with
 // random ready and latency that checks the AXI4 protocol on the device side.

@@ -13,6 +13,8 @@ SRC_DIR := $(VORTEX_HOME)/sw/runtime/foldsim
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Werror
 CXXFLAGS += -I$(INC_DIR) -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SIM_COMMON_DIR) -I$(SW_COMMON_DIR) -I$(RT_COMMON_DIR)
+# The shell's register map and in-process host, from the Foldsim installation.
+CXXFLAGS += -I$(FOLDSIM_SHELL)/include
 CXXFLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
 CXXFLAGS += -fPIC
 CXXFLAGS += $(CONFIGS)
@@ -22,7 +24,7 @@ LDFLAGS += -shared -pthread -Wl,-rpath,'$$ORIGIN'
 SRCS := $(SRC_DIR)/vortex.cpp $(RT_COMMON_DIR)/utils.cpp $(SIM_COMMON_DIR)/cmd_processor.cpp
 
 ifeq ($(TARGET), avedsim)
-CXXFLAGS += -DFOLDSIM_EMUL -I$(SIM_DIR)/foldsim
+CXXFLAGS += -DFOLDSIM_EMUL
 LDFLAGS += -L$(DESTDIR) -lfoldsim_emul
 EMUL := $(DESTDIR)/libfoldsim_emul.so
 else ifeq ($(TARGET), hw)

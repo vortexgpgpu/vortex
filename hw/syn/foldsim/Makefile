@@ -6,9 +6,11 @@
 #
 # foldsim compiles Vortex into a simulator, on CIRCT: each class threaded
 # through one physical copy (FAME-5), the rest of the target a model of its
-# own, and every channel between them in one token fabric. The kernel
-# (hw/rtl/afu/foldsim) adds the memory and control endpoints around it. The
-# image lands in $(BUILD_DIR)/bin/foldsim.vbin; run it with
+# own, and every channel between them in one token fabric. Foldsim's shell
+# (FOLDSIM_SHELL, part of the Foldsim installation) adds the memory and
+# control endpoints around it; Vortex supplies only the target wrapper
+# (hw/rtl/afu/foldsim/target) and this flow. The image lands in
+# $(BUILD_DIR)/bin/foldsim.vbin; run it with
 #   FPGA_BIN_DIR=<that bin> ./ci/blackbox.sh --driver=foldsim --target=hw ...
 # The runtime's avedsim target simulates the same generated design in-process.
 
@@ -30,7 +32,9 @@ include $(VORTEX_HOME)/hw/syn/common.mk
 SRC_DIR := $(VORTEX_HOME)/hw/syn/foldsim
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
-FOLDSIM_RTL_DIR := $(RTL_DIR)/afu/foldsim
+# The shell's RTL, and the wrapper that gives Vortex the shell's target ports.
+FOLDSIM_RTL_DIR := $(FOLDSIM_SHELL)/rtl
+FOLDSIM_TARGET_DIR := $(RTL_DIR)/afu/foldsim/target
 VIVADO := $(XILINX_VIVADO)/bin/vivado
 SLASHKIT ?= slashkit
 # Parallel link runs; each Vivado of a large simulator needs tens of GB.
@@ -55,7 +59,7 @@ BIN_DIR := $(BUILD_DIR)/bin
 GEN_DIR := $(BUILD_DIR)/gen
 
 # The classes threaded by FAME-5, and the units given plain-port boundaries
-# first so they can be classes (lift_boundaries.py; <unit>[:drop=P,...][;port=P,...]).
+# first so they can be classes (Foldsim's foldsim-lift; <unit>[:drop=P,...][;port=P,...]).
 ifneq ($(FOLDSIM_MANIFEST),)
 FOLDSIM_CLASSES ?=
 FOLDSIM_LIFT ?= $(call manifest_get,lift.units)
@@ -91,7 +95,7 @@ TARGET_TOP := foldsim_target
 CONFIGS ?=
 RTL_INCLUDE := -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(RTL_DIR)/libs \
                -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm \
-               -I$(RTL_DIR)/cache -I$(RTL_DIR)/fpu -I$(RTL_DIR)/afu/common -I$(FOLDSIM_RTL_DIR)/target
+               -I$(RTL_DIR)/cache -I$(RTL_DIR)/fpu -I$(RTL_DIR)/afu/common -I$(FOLDSIM_TARGET_DIR)
 SYNTH_DEFINES := -DSYNTHESIS -DVIVADO -DNDEBUG
 ifdef PERF
 PLATFORM_DEFINES := -DPERF_ENABLE
@@ -117,11 +121,6 @@ $(error the foldsim kernel has 1, 2, 4, 8, 16 or 32 memory ports (VX_CFG_PLATFOR
 endif
 MEM_ID_W := $(shell python3 -c 'print(4 + ($(MEM_PORTS) - 1).bit_length())')
 PLATFORM_DEFINES += -DPLATFORM_MEMORY_ID_WIDTH=$(MEM_ID_W)
-# The shift that takes an address to its memory port's channel: the ports
-# interleave by block, or (INTERLEAVE=0) split the space, where every port's
-# channel holds the address as it is.
-MEM_CH_SHIFT := $(if $(filter 1,$(call cfg_value,VX_CFG_PLATFORM_MEMORY_INTERLEAVE)), \
-                $(shell python3 -c 'print(($(MEM_PORTS) - 1).bit_length())'),0)
 # The extensions' packages and include paths, as every synthesis flow finds
 # them.
 include $(VORTEX_HOME)/hw/syn/extensions.mk
@@ -150,17 +149,14 @@ IP_DIR := $(BUILD_DIR)/foldsim_afu_ip
 CFG := $(BUILD_DIR)/config.cfg
 VBIN := $(BIN_DIR)/foldsim.vbin
 
-# The kernel's own sources are not the target's: they are read only when the
-# kernel is packaged or emulated.
-KERNEL_RTL := $(wildcard $(FOLDSIM_RTL_DIR)/*.sv $(FOLDSIM_RTL_DIR)/*.vh)
-RTL_SRCS := $(filter-out $(KERNEL_RTL),$(shell find $(RTL_DIR) -name '*.sv' -o -name '*.v' -o -name '*.vh')) \
+RTL_SRCS := $(shell find $(RTL_DIR) -name '*.sv' -o -name '*.v' -o -name '*.vh') \
             $(wildcard $(ROOT_DIR)/hw/VX_config.vh) $(wildcard $(ROOT_DIR)/hw/VX_types.vh) \
             $(firstword $(MAKEFILE_LIST)) $(CONFIG_STAMP)
-# The AFU shells of the native flows are second tops, and the foldsim kernel is
-# compiled apart from the target.
-SHELL_MODULES := $(notdir $(wildcard $(RTL_DIR)/afu/common/*.sv) $(wildcard $(FOLDSIM_RTL_DIR)/*.sv))
+# The AFU shells of the native flows are second tops.
+SHELL_MODULES := $(notdir $(wildcard $(RTL_DIR)/afu/common/*.sv))
 
-.PHONY: all sources generate package-ip ooc clean FORCE
+.PHONY: all sources generate kernel-srcs package-ip ooc clean FORCE
+kernel-srcs: $(KERNEL_SRCS)
 
 all: $(VBIN)
 
@@ -188,9 +184,9 @@ $(SRCS_LIST): $(RTL_SRCS) $(IP_STUBS) $(SCRIPT_DIR)/xilinx_ip_gen.tcl
 	fi
 	mv $@.tmp $@
 
-$(LIFT_LIST): $(SRCS_LIST) $(SRC_DIR)/lift_boundaries.py $(CLASSES_STAMP)
+$(LIFT_LIST): $(SRCS_LIST) $(FOLDSIM_LIFT_TOOL) $(CLASSES_STAMP)
 	rm -rf $(BUILD_DIR)/lift
-	$(LIFT_PYTHON) $(SRC_DIR)/lift_boundaries.py --srcs $(SRCS_LIST) --top $(TARGET_TOP) \
+	$(LIFT_PYTHON) $(FOLDSIM_LIFT_TOOL) --srcs $(SRCS_LIST) --top $(TARGET_TOP) \
 		--out $(BUILD_DIR)/lift $(foreach u,$(FOLDSIM_LIFT),--unit '$(u)') \
 		$(if $(FOLDSIM_MAX_GENERATE_STEPS),--max-generate-steps $(FOLDSIM_MAX_GENERATE_STEPS))
 
@@ -205,81 +201,29 @@ $(GEN_SV): $(TARGET_SRCS) $(FOLDSIM_TOOLS) $(CLASSES_STAMP)
 		$(if $(CIRCT_BIN),--circt-bin $(CIRCT_BIN)) \
 		$(if $(FOLDSIM_MAX_GENERATE_STEPS),--max-generate-steps $(FOLDSIM_MAX_GENERATE_STEPS)) $(FOLDSIM_FLAGS) $(FOLDSIM_CLASSES)
 
-# What the kernel's top needs of the configuration: its memory ports, their id
-# width, their device-memory masters (FOLDSIM_MEM_MASTERS: one per port, or one
-# where the simulator folds the ports, vmem_ports.py), and
-# FOLDSIM_MEM_REPEAT0..3(f,s), which list those masters, whose names carry
-# their index: `f(p) for each master p joined by `s, masters 8q to 8q + 7 in part q,
-# a part after the first led by `s unless it is empty. The kernel writes each
-# part on a line of its own: Verilator takes at most 40000 tokens on a line, and
-# the simulator's connections of 32 ports take more. Spelled out here: Vivado's
-# IP packager does not paste a macro's expanded argument into a macro name.
-mem_repeat = $(shell python3 -c 'q = ["`f(%d)" % p for p in range(8 * $(1), min(8 * $(1) + 8, $(2)))]; \
-                                 print(("`s " if $(1) and q else "") + " `s ".join(q))')
-# A simulator with virtual memories (foldsim --virtual-memories) has a master
-# per memory after these, or as many as fit, shared (vmem_ports.py);
-# FOLDSIM_VMEM_MASTERS: fewer, shared; FOLDSIM_VMEM_CACHE_ROWS: the rows of
-# each controller's host cache (0, the default: none).
-VMEM_PORTS = python3 $(SRC_DIR)/vmem_ports.py --sim-vh $(GEN_DIR)/foldsim_sim.vh --mem-ports $(MEM_PORTS) \
-             $(if $(FOLDSIM_VMEM_CACHE_ROWS),--cache-rows $(FOLDSIM_VMEM_CACHE_ROWS)) \
-             $(if $(FOLDSIM_VMEM_MASTERS),--vmem-masters $(FOLDSIM_VMEM_MASTERS))
-# foldsim's design-independent kernel flow: given FOLDSIM_HOME (a foldsim tree)
-# and FOLDSIM_MANIFEST, the kernel header, the kernel's top (the control
-# endpoint bound by the manifest's [platform.control]), its source list (the
-# shell in foldsim's rtl/kernel; the threaded endpoint of folded memory ports
-# from FOLDSIM_THREADED, else FOLDSIM_RTL_DIR, a portfold_gen.sh snapshot) and
-# the linker config come from foldsim_flow.py. Vortex
-# keeps its sources, its manifest and its target wrapper (target/foldsim_target.sv).
-FOLDSIM_HOME ?=
-ifneq ($(FOLDSIM_HOME),)
-ifeq ($(FOLDSIM_MANIFEST),)
-$(error FOLDSIM_HOME takes FOLDSIM_MANIFEST: the kernel binding is the manifest's [platform])
-endif
-FOLDSIM_FLOW = python3 $(FOLDSIM_HOME)/tools/foldsim/foldsim_flow.py --manifest $(FOLDSIM_MANIFEST) \
-               --var FOLDSIM_WORK_DIR=$(BUILD_DIR)
-endif
-# The memory endpoint's AXI4 speculation depth (foldsim --axi-spec): the
-# flags', else the manifest's.
-AXI_SPEC := $(if $(findstring --axi-spec,$(FOLDSIM_FLAGS)),$(if $(findstring --axi-spec=2,$(FOLDSIM_FLAGS)),2,1),$(if $(FOLDSIM_MANIFEST),$(call manifest_get,platform.axi_spec)))
-ifeq ($(FOLDSIM_HOME),)
+# The kernel around the simulator comes from Foldsim's design-independent
+# flow (foldsim_flow.py, in the Foldsim installation) and FOLDSIM_MANIFEST: the
+# kernel header (memory ports, their masters, the virtual memories' masters:
+# FOLDSIM_VMEM_MASTERS fewer, shared; FOLDSIM_VMEM_CACHE_ROWS the rows of each
+# controller's host cache), the kernel's top (the control endpoint bound by the
+# manifest's [platform.control]), its source list (the shell, FOLDSIM_RTL_DIR;
+# the threaded endpoint of folded memory ports from FOLDSIM_THREADED, a
+# snapshot of the flow's flow/v80/portfold_gen.sh) and the linker config. Vortex keeps its sources,
+# its manifests and its target wrapper (target/foldsim_target.sv).
+FOLDSIM_FLOW = python3 $(FOLDSIM_PATH)/bin/foldsim_flow.py --manifest $(FOLDSIM_MANIFEST) \
+               --var FOLDSIM_WORK_DIR=$(BUILD_DIR) --rtl-dir $(FOLDSIM_RTL_DIR)
+need_manifest = $(if $(FOLDSIM_MANIFEST),,$(error $(1) takes FOLDSIM_MANIFEST: the kernel binding is the manifest's [platform]))
 $(KERNEL_VH): $(GEN_SV) FORCE
-	@mkdir -p $(@D)
-	$(eval PORT_MASTERS := $(shell $(VMEM_PORTS) --port-masters))
-	@printf '%s\n' '// Generated by hw/syn/foldsim. Do not edit.' \
-		'`define FOLDSIM_MEM_PORTS $(MEM_PORTS)' '`define FOLDSIM_MEM_CH_SHIFT $(strip $(MEM_CH_SHIFT))' \
-		'`define FOLDSIM_MEM_ID_W $(MEM_ID_W)' '`define FOLDSIM_MEM_MASTERS $(PORT_MASTERS)' \
-		$(foreach q,0 1 2 3,'`define FOLDSIM_MEM_REPEAT$(q)(f,s) $(call mem_repeat,$(q),$(PORT_MASTERS))') \
-		$(if $(AXI_SPEC),'`define FOLDSIM_MEM_SPEC $(AXI_SPEC)') > $@.tmp
-	@$(VMEM_PORTS) >> $@.tmp
-	@cmp -s $@.tmp $@ && rm -f $@.tmp || mv -f $@.tmp $@
-else
-$(KERNEL_VH): $(GEN_SV) FORCE
+	$(call need_manifest,the kernel header)
 	@mkdir -p $(@D)
 	@$(FOLDSIM_FLOW) kernel-vh --gen $(GEN_DIR) $(if $(FOLDSIM_VMEM_CACHE_ROWS),--cache-rows $(FOLDSIM_VMEM_CACHE_ROWS)) \
 		$(if $(FOLDSIM_VMEM_MASTERS),--vmem-masters $(FOLDSIM_VMEM_MASTERS)) -o $@.tmp
 	@cmp -s $@.tmp $@ && rm -f $@.tmp || mv -f $@.tmp $@
-endif
 
-# Folded memory ports (foldsim --fold-ports) take the folded endpoint
-# (foldsim_mem_fold) around the memory endpoint threaded once per port count:
-# foldsim_mem_threaded.sv, made by portfold_gen.sh into the kernel's frozen
-# sources (FOLDSIM_RTL_DIR); the build never runs that compiler.
-FOLD_SRCS := foldsim_mem_threaded.sv foldsim_mem_fold.sv
-ifeq ($(FOLDSIM_HOME),)
 $(KERNEL_SRCS): $(GEN_SV) $(KERNEL_VH)
-	@if grep -q '^`define FOLDSIM_PORTS ' $(GEN_DIR)/foldsim_sim.vh && [ ! -f $(FOLDSIM_RTL_DIR)/foldsim_mem_threaded.sv ]; then \
-		echo "ERROR: the simulator folds its memory ports, and $(FOLDSIM_RTL_DIR) has no foldsim_mem_threaded.sv (portfold_gen.sh)"; exit 1; fi
-	@{ echo "+incdir+$(FOLDSIM_RTL_DIR)"; echo "+incdir+$(GEN_DIR)"; \
-	   echo "$(GEN_SV)"; \
-	   for f in foldsim_token.sv foldsim_mem_bmap.sv foldsim_mem_bank.sv foldsim_mem.sv foldsim_vmem.sv foldsim_vmem_share.sv foldsim_vmem_group.sv \
-	            $$(grep -q '^`define FOLDSIM_PORTS ' $(GEN_DIR)/foldsim_sim.vh && echo $(FOLD_SRCS)) \
-	            foldsim_ctrl.sv foldsim_afu.sv; do echo "$(FOLDSIM_RTL_DIR)/$$f"; done; \
-	 } > $@
-else
-$(KERNEL_SRCS): $(GEN_SV) $(KERNEL_VH)
+	$(call need_manifest,the kernel sources)
 	@$(FOLDSIM_FLOW) afu --gen $(GEN_DIR) -o $(GEN_DIR)/foldsim_afu.sv
-	@$(FOLDSIM_FLOW) kernel-srcs --gen $(GEN_DIR) --threaded $(or $(FOLDSIM_THREADED),$(FOLDSIM_RTL_DIR)) -o $@
-endif
+	@$(FOLDSIM_FLOW) kernel-srcs --gen $(GEN_DIR) $(if $(FOLDSIM_THREADED),--threaded $(FOLDSIM_THREADED)) -o $@
 
 # The kernel's clock at FOLDSIM_FREQ, for its out-of-context synthesis.
 OOC_XDC := $(BUILD_DIR)/foldsim_afu_ooc.xdc
@@ -317,16 +261,10 @@ ooc: $(KERNEL_SRCS)
 		$$(grep -qE '^ *xil_f(ma|div|sqrt|mul|add)(64)? ' $(GEN_SV) || echo no-vendor-ip)
 	@grep -A2 'WNS(ns)' $(OOC_DIR)/routed_timing_summary.rpt | tail -1
 
-ifeq ($(FOLDSIM_HOME),)
 $(CFG): $(GEN_SV) FORCE
-	@python3 $(SCRIPT_DIR)/gen_platform.py --flow=aved --device=$(DEVICE) --emit=cfg --kernel=foldsim_afu \
-		--no-host --mem-ports=$$($(VMEM_PORTS) --masters) --kernel-mhz=$(FOLDSIM_FREQ) -o $@.tmp
-	@cmp -s $@.tmp $@ && rm -f $@.tmp || mv -f $@.tmp $@
-else
-$(CFG): $(GEN_SV) FORCE
+	$(call need_manifest,the linker config)
 	@$(FOLDSIM_FLOW) cfg --gen $(GEN_DIR) --freq $(FOLDSIM_FREQ) $(if $(FOLDSIM_VMEM_MASTERS),--vmem-masters $(FOLDSIM_VMEM_MASTERS)) -o $@.tmp
 	@cmp -s $@.tmp $@ && rm -f $@.tmp || mv -f $@.tmp $@
-endif
 
 FORCE:
 

@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// foldsim_vmem_share (hw/rtl/afu/foldsim/foldsim_vmem_share.sv): NC virtual-
+// foldsim_vmem_share (Foldsim shell/rtl/foldsim_vmem_share.sv): NC virtual-
 // memory controllers on one AXI4 master, each driven as a folded simulator
 // drives its controller (an instance issues only once its read is answered,
 // and only as much as `free` allowed L host cycles earlier), each in a region
