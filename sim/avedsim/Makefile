@@ -16,6 +16,10 @@ CXXFLAGS += -fPIC
 # inlines it with aligned 16-byte stores, faulting on a destination that is only
 # 8-byte aligned in the root class (NUM_THREADS=16 + RTU crashes in reset).
 CXXFLAGS += -fno-tree-loop-distribute-patterns
+# GCC 13.3 crashes (ICE in backward_pass, tree-vect-slp.cc:5201) in the SLP
+# vectorizer on the generated sequential blocks of a large model (A100-32,
+# 4 SMs); basic-block vectorization buys the generated code next to nothing.
+CXXFLAGS += -fno-tree-slp-vectorize
 CXXFLAGS += -I$(SRC_DIR) -I$(XRTSIM_DIR) -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SIM_COMMON_DIR) -I$(SW_COMMON_DIR) -I$(DESTDIR)
 CXXFLAGS += -I/$(THIRD_PARTY_DIR)/softfloat/source/include
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/ramulator/ext/spdlog/include
