@@ -303,14 +303,14 @@ package VX_trace_pkg;
         EX_FPU: begin
             case (INST_FPU_BITS'(op_type))
                 INST_FPU_ADD: begin
-                    if (op_args.fpu.fmt[1]) begin
-                        if (op_args.fpu.fmt[0]) begin
+                    if (op_args.fpu.op_mod) begin
+                        if ((op_args.fpu.dst_fmt == INST_FMT_D)) begin
                             `TRACE(level, ("FSUB.D"))
                         end else begin
                             `TRACE(level, ("FSUB.S"))
                         end
                     end else begin
-                        if (op_args.fpu.fmt[0]) begin
+                        if ((op_args.fpu.dst_fmt == INST_FMT_D)) begin
                             `TRACE(level, ("FADD.D"))
                         end else begin
                             `TRACE(level, ("FADD.S"))
@@ -318,14 +318,14 @@ package VX_trace_pkg;
                     end
                 end
                 INST_FPU_MADD: begin
-                    if (op_args.fpu.fmt[1]) begin
-                        if (op_args.fpu.fmt[0]) begin
+                    if (op_args.fpu.op_mod) begin
+                        if ((op_args.fpu.dst_fmt == INST_FMT_D)) begin
                             `TRACE(level, ("FMSUB.D"))
                         end else begin
                             `TRACE(level, ("FMSUB.S"))
                         end
                     end else begin
-                        if (op_args.fpu.fmt[0]) begin
+                        if ((op_args.fpu.dst_fmt == INST_FMT_D)) begin
                             `TRACE(level, ("FMADD.D"))
                         end else begin
                             `TRACE(level, ("FMADD.S"))
@@ -333,14 +333,14 @@ package VX_trace_pkg;
                     end
                 end
                 INST_FPU_NMADD: begin
-                    if (op_args.fpu.fmt[1]) begin
-                        if (op_args.fpu.fmt[0]) begin
+                    if (op_args.fpu.op_mod) begin
+                        if ((op_args.fpu.dst_fmt == INST_FMT_D)) begin
                             `TRACE(level, ("FNMSUB.D"))
                         end else begin
                             `TRACE(level, ("FNMSUB.S"))
                         end
                     end else begin
-                        if (op_args.fpu.fmt[0]) begin
+                        if ((op_args.fpu.dst_fmt == INST_FMT_D)) begin
                             `TRACE(level, ("FNMADD.D"))
                         end else begin
                             `TRACE(level, ("FNMADD.S"))
@@ -348,28 +348,28 @@ package VX_trace_pkg;
                     end
                 end
                 INST_FPU_MUL: begin
-                    if (op_args.fpu.fmt[0]) begin
+                    if ((op_args.fpu.dst_fmt == INST_FMT_D)) begin
                         `TRACE(level, ("FMUL.D"))
                     end else begin
                         `TRACE(level, ("FMUL.S"))
                         end
                 end
                 INST_FPU_DIV: begin
-                    if (op_args.fpu.fmt[0]) begin
+                    if ((op_args.fpu.dst_fmt == INST_FMT_D)) begin
                         `TRACE(level, ("FDIV.D"))
                     end else begin
                         `TRACE(level, ("FDIV.S"))
                         end
                 end
                 INST_FPU_SQRT: begin
-                    if (op_args.fpu.fmt[0]) begin
+                    if ((op_args.fpu.dst_fmt == INST_FMT_D)) begin
                         `TRACE(level, ("FSQRT.D"))
                     end else begin
                         `TRACE(level, ("FSQRT.S"))
                     end
                 end
                 INST_FPU_CMP: begin
-                    if (op_args.fpu.fmt[0]) begin
+                    if ((op_args.fpu.dst_fmt == INST_FMT_D)) begin
                         case (op_args.fpu.frm[1:0])
                         0:       `TRACE(level, ("FLE.D"))
                         1:       `TRACE(level, ("FLT.D"))
@@ -386,54 +386,54 @@ package VX_trace_pkg;
                     end
                 end
                 INST_FPU_F2F: begin
-                    case (op_args.fpu.fmt)
-                    2'b00: `TRACE(level, ("FCVT.S.D"))
-                    2'b01: `TRACE(level, ("FCVT.D.S"))
-                    2'b10: `TRACE(level, ("FCVT.S.H"))
-                    2'b11: `TRACE(level, ("FCVT.D.H"))
+                    case ({op_args.fpu.dst_fmt, op_args.fpu.src_fmt})
+                    {INST_FMT_S, INST_FMT_D}: `TRACE(level, ("FCVT.S.D"))
+                    {INST_FMT_D, INST_FMT_S}: `TRACE(level, ("FCVT.D.S"))
+                    {INST_FMT_S, INST_FMT_H}: `TRACE(level, ("FCVT.S.H"))
+                    {INST_FMT_D, INST_FMT_H}: `TRACE(level, ("FCVT.D.H"))
+                    {INST_FMT_H, INST_FMT_S}: `TRACE(level, ("FCVT.H.S"))
+                    {INST_FMT_H, INST_FMT_D}: `TRACE(level, ("FCVT.H.D"))
+                    default: `TRACE(level, ("FCVT.?"))
                     endcase
                 end
-                INST_FPU_F2H: begin
-                    if (op_args.fpu.fmt[0]) begin
-                        `TRACE(level, ("FCVT.H.D"))
-                    end else begin
-                        `TRACE(level, ("FCVT.H.S"))
-                    end
-                end
                 INST_FPU_F2I: begin
-                    case (op_args.fpu.fmt)
-                    2'b00: `TRACE(level, ("FCVT.W.S"))
-                    2'b01: `TRACE(level, ("FCVT.W.D"))
-                    2'b10: `TRACE(level, ("FCVT.L.S"))
-                    2'b11: `TRACE(level, ("FCVT.L.D"))
+                    case ({op_args.fpu.dst_fmt, op_args.fpu.src_fmt})
+                    {INST_FMT_W, INST_FMT_S}: `TRACE(level, ("FCVT.W.S"))
+                    {INST_FMT_W, INST_FMT_D}: `TRACE(level, ("FCVT.W.D"))
+                    {INST_FMT_L, INST_FMT_S}: `TRACE(level, ("FCVT.L.S"))
+                    {INST_FMT_L, INST_FMT_D}: `TRACE(level, ("FCVT.L.D"))
+                    default: `TRACE(level, ("FCVT.?"))
                     endcase
                 end
                 INST_FPU_F2U: begin
-                    case (op_args.fpu.fmt)
-                    2'b00: `TRACE(level, ("FCVT.WU.S"))
-                    2'b01: `TRACE(level, ("FCVT.WU.D"))
-                    2'b10: `TRACE(level, ("FCVT.LU.S"))
-                    2'b11: `TRACE(level, ("FCVT.LU.D"))
+                    case ({op_args.fpu.dst_fmt, op_args.fpu.src_fmt})
+                    {INST_FMT_W, INST_FMT_S}: `TRACE(level, ("FCVT.WU.S"))
+                    {INST_FMT_W, INST_FMT_D}: `TRACE(level, ("FCVT.WU.D"))
+                    {INST_FMT_L, INST_FMT_S}: `TRACE(level, ("FCVT.LU.S"))
+                    {INST_FMT_L, INST_FMT_D}: `TRACE(level, ("FCVT.LU.D"))
+                    default: `TRACE(level, ("FCVT.?"))
                     endcase
                 end
                 INST_FPU_I2F: begin
-                    case (op_args.fpu.fmt)
-                    2'b00: `TRACE(level, ("FCVT.S.W"))
-                    2'b01: `TRACE(level, ("FCVT.D.W"))
-                    2'b10: `TRACE(level, ("FCVT.S.L"))
-                    2'b11: `TRACE(level, ("FCVT.D.L"))
+                    case ({op_args.fpu.dst_fmt, op_args.fpu.src_fmt})
+                    {INST_FMT_S, INST_FMT_W}: `TRACE(level, ("FCVT.S.W"))
+                    {INST_FMT_D, INST_FMT_W}: `TRACE(level, ("FCVT.D.W"))
+                    {INST_FMT_S, INST_FMT_L}: `TRACE(level, ("FCVT.S.L"))
+                    {INST_FMT_D, INST_FMT_L}: `TRACE(level, ("FCVT.D.L"))
+                    default: `TRACE(level, ("FCVT.?"))
                     endcase
                 end
                 INST_FPU_U2F: begin
-                    case (op_args.fpu.fmt)
-                    2'b00: `TRACE(level, ("FCVT.S.WU"))
-                    2'b01: `TRACE(level, ("FCVT.D.WU"))
-                    2'b10: `TRACE(level, ("FCVT.S.LU"))
-                    2'b11: `TRACE(level, ("FCVT.D.LU"))
+                    case ({op_args.fpu.dst_fmt, op_args.fpu.src_fmt})
+                    {INST_FMT_S, INST_FMT_W}: `TRACE(level, ("FCVT.S.WU"))
+                    {INST_FMT_D, INST_FMT_W}: `TRACE(level, ("FCVT.D.WU"))
+                    {INST_FMT_S, INST_FMT_L}: `TRACE(level, ("FCVT.S.LU"))
+                    {INST_FMT_D, INST_FMT_L}: `TRACE(level, ("FCVT.D.LU"))
+                    default: `TRACE(level, ("FCVT.?"))
                     endcase
                 end
                 INST_FPU_MISC: begin
-                    if (op_args.fpu.fmt[0]) begin
+                    if ((op_args.fpu.dst_fmt == INST_FMT_D)) begin
                         case (op_args.fpu.frm)
                             0: `TRACE(level, ("FSGNJ.D"))
                             1: `TRACE(level, ("FSGNJN.D"))
@@ -450,8 +450,8 @@ package VX_trace_pkg;
                             1: `TRACE(level, ("FSGNJN.S"))
                             2: `TRACE(level, ("FSGNJX.S"))
                             3: `TRACE(level, ("FCLASS.S"))
-                            4: `TRACE(level, (op_args.fpu.fmt[1] ? "FMV.X.H" : "FMV.X.S"))
-                            5: `TRACE(level, (op_args.fpu.fmt[1] ? "FMV.H.X" : "FMV.S.X"))
+                            4: `TRACE(level, ((op_args.fpu.dst_fmt == INST_FMT_H) ? "FMV.X.H" : "FMV.X.S"))
+                            5: `TRACE(level, ((op_args.fpu.dst_fmt == INST_FMT_H) ? "FMV.H.X" : "FMV.S.X"))
                             6: `TRACE(level, ("FMIN.S"))
                             7: `TRACE(level, ("FMAX.S"))
                         endcase
@@ -489,7 +489,7 @@ package VX_trace_pkg;
         end
     `ifdef VX_CFG_EXT_F_ENABLE
         EX_FPU: begin
-            `TRACE(level, (", fmt=0x%0h, frm=0x%0h", op_args.fpu.fmt, op_args.fpu.frm))
+            `TRACE(level, (", dst_fmt=0x%0h, src_fmt=0x%0h, op_mod=%b, frm=0x%0h", op_args.fpu.dst_fmt, op_args.fpu.src_fmt, op_args.fpu.op_mod, op_args.fpu.frm))
         end
     `endif
         default:;

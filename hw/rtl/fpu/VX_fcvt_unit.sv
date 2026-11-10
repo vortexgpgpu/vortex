@@ -14,10 +14,11 @@
 `include "VX_fpu_define.vh"
 
 // Merged conversion unit (I2F, F2I, F2F). XLEN-wide integers (I32/I64).
-// FLEN=32 handles F32 only; FLEN=64 adds F64 and F2F (FCVT.S.D / FCVT.D.S),
-// selected at runtime by src_fmt/dst_fmt (0=F32, 1=F64). The canonical
-// datapath is sized to the widest enabled float format (SUPER_*); narrower
-// formats occupy the low bits. FLEN=32 elaborates to the original F32 logic.
+// FLEN=32 handles F32 only; FLEN=64 adds F64 and HALF_ENABLE adds F16, with
+// F2F between any two enabled formats. src_fmt/dst_fmt name each side's
+// format: a float side uses INST_FMT_S/D/H, an integer side INST_FMT_W/L.
+// The canonical datapath is sized to the widest enabled float format
+// (SUPER_*); narrower formats occupy the low bits.
 // LATENCY: 5 for XLEN=32, 6 for XLEN=64 (separates S0 negate from S1 LZC).
 module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
 #(
@@ -39,15 +40,12 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
 
     input wire [INST_FRM_BITS-1:0] frm,
 
-    input wire is_itof,    // Integer → Float
-    input wire is_ftoi,    // Float → Integer
-    input wire is_f2f,     // Float → Float (FLEN=64 only)
-    input wire is_signed,  // signed integer conversion
-    input wire is_int64,   // integer operand width: 1=I64, 0=I32
-    input wire src_fmt,    // source float format: 1=F64, 0=F32
-    input wire dst_fmt,    // dest   float format: 1=F64, 0=F32
-    input wire src_h,
-    input wire dst_h,
+    input wire is_itof,
+    input wire is_ftoi,
+    input wire is_f2f,
+    input wire is_signed,
+    input wire [INST_FMT_BITS-1:0] src_fmt,
+    input wire [INST_FMT_BITS-1:0] dst_fmt,
 
     input wire [`VX_CFG_XLEN-1:0]  dataa,
     output wire [`VX_CFG_XLEN-1:0] result,
@@ -69,16 +67,42 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
     localparam S_EXP_WIDTH      = `MAX(`CLOG2(`VX_CFG_XLEN), SUPER_EXP + 2) + 2;
     localparam LZC_RESULT_WIDTH = `CLOG2(S_MAN_WIDTH);
 
-    `UNUSED_VAR (src_fmt)
-    `UNUSED_VAR (dst_fmt)
-    `UNUSED_VAR (is_f2f)
-    `UNUSED_VAR (src_h)
-    `UNUSED_VAR (dst_h)
-    wire src_is_h = HAS_H & src_h;
-    wire dst_is_h = HAS_H & dst_h;
-    wire src_is_d = HAS_D & src_fmt & ~src_is_h;
-    wire dst_is_d = HAS_D & dst_fmt & ~dst_is_h;
-    wire f2f      = (HAS_D | HAS_H) & is_f2f;
+    localparam HAS_I64  = (`VX_CFG_XLEN == 64);
+
+    // A float side not decoded as F64 or F16 is F32. The integer side's code
+    // shares values with the float codes, so the direction masks it out of the
+    // float decode; the integer width is read only on the integer paths.
+    wire src_is_d, dst_is_d, src_is_h, dst_is_h, src_is_l, dst_is_l, f2f;
+    if (HAS_D) begin : g_fmt_d
+        assign src_is_d = ~is_itof & (src_fmt == INST_FMT_D);
+        assign dst_is_d = ~is_ftoi & (dst_fmt == INST_FMT_D);
+    end else begin : g_fmt_no_d
+        assign src_is_d = 1'b0;
+        assign dst_is_d = 1'b0;
+    end
+    if (HAS_H) begin : g_fmt_h
+        assign src_is_h = ~is_itof & (src_fmt == INST_FMT_H);
+        assign dst_is_h = ~is_ftoi & (dst_fmt == INST_FMT_H);
+    end else begin : g_fmt_no_h
+        assign src_is_h = 1'b0;
+        assign dst_is_h = 1'b0;
+    end
+    if (HAS_I64) begin : g_fmt_i64
+        assign src_is_l = (src_fmt == INST_FMT_L);
+        assign dst_is_l = (dst_fmt == INST_FMT_L);
+    end else begin : g_fmt_no_i64
+        assign src_is_l = 1'b0;
+        assign dst_is_l = 1'b0;
+    end
+    if (HAS_D || HAS_H) begin : g_f2f
+        assign f2f = is_f2f;
+    end else begin : g_no_f2f
+        assign f2f = 1'b0;
+        `UNUSED_VAR (is_f2f)
+    end
+    if (!(HAS_D || HAS_H || HAS_I64)) begin : g_fmt_unused
+        `UNUSED_VAR ({src_fmt, dst_fmt})
+    end
 
     reg [LATENCY-1:0] mask_pipe;
     always @(posedge clk) begin
@@ -174,9 +198,9 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
     end
     wire [SUPER_EXP-1:0] src_exp_raw = src_is_h ? SUPER_EXP'(h_op[F16_MAN +: F16_EXP]) : src_exp_sd;
 
-    wire i_sign = safe_dataa[is_int64 ? (`VX_CFG_XLEN-1) : 31] && is_signed;
+    wire i_sign = safe_dataa[src_is_l ? (`VX_CFG_XLEN-1) : 31] && is_signed;
     wire [`VX_CFG_XLEN-1:0] i_mag_raw = i_sign ? (-dataa) : dataa;
-    wire [`VX_CFG_XLEN-1:0] i_mag = is_int64 ? i_mag_raw : `VX_CFG_XLEN'(i_mag_raw[31:0]);
+    wire [`VX_CFG_XLEN-1:0] i_mag = src_is_l ? i_mag_raw : `VX_CFG_XLEN'(i_mag_raw[31:0]);
 
     logic [S_MAN_WIDTH-1:0]        unpacked_mant_s0;
     logic signed [S_EXP_WIDTH-1:0] unpacked_exp_s0;
@@ -194,7 +218,7 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
     end
 
     // Stage 0 -> Stage 1
-    wire is_itof_s1, is_ftoi_s1, is_f2f_s1, is_signed_s1, is_int64_s1, input_sign_s1, src_d_s1, dst_d_s1, src_h_s1, dst_h_s1;
+    wire is_itof_s1, is_ftoi_s1, is_f2f_s1, is_signed_s1, dst_l_s1, input_sign_s1, src_d_s1, dst_d_s1, src_h_s1, dst_h_s1;
     wire [INST_FRM_BITS-1:0] frm_s1;
     fclass_t fclass_s1;
     wire [S_MAN_WIDTH-1:0]        unpacked_mant_s1;
@@ -207,8 +231,8 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
         .clk      (clk),
         .reset    (reset),
         .enable   (enable && mask),
-        .data_in  ({is_itof,    is_ftoi,    f2f,       is_signed,    is_int64,    src_is_d, dst_is_d, src_is_h, dst_is_h, input_sign_s0, frm,    fclass,    unpacked_mant_s0, unpacked_exp_s0}),
-        .data_out ({is_itof_s1, is_ftoi_s1, is_f2f_s1, is_signed_s1, is_int64_s1, src_d_s1, dst_d_s1, src_h_s1, dst_h_s1, input_sign_s1, frm_s1, fclass_s1, unpacked_mant_s1, unpacked_exp_s1})
+        .data_in  ({is_itof,    is_ftoi,    f2f,       is_signed,    dst_is_l,    src_is_d, dst_is_d, src_is_h, dst_is_h, input_sign_s0, frm,    fclass,    unpacked_mant_s0, unpacked_exp_s0}),
+        .data_out ({is_itof_s1, is_ftoi_s1, is_f2f_s1, is_signed_s1, dst_l_s1, src_d_s1, dst_d_s1, src_h_s1, dst_h_s1, input_sign_s1, frm_s1, fclass_s1, unpacked_mant_s1, unpacked_exp_s1})
     );
 
     // ======================================================================
@@ -232,7 +256,7 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
         // below its leading one (zero included), where |x| leads one place
         // higher.
         wire [`VX_CFG_XLEN-1:0] i_inv_raw = dataa ^ {`VX_CFG_XLEN{i_sign}};
-        wire [`VX_CFG_XLEN-1:0] i_inv     = is_int64 ? i_inv_raw : `VX_CFG_XLEN'(i_inv_raw[31:0]);
+        wire [`VX_CFG_XLEN-1:0] i_inv     = src_is_l ? i_inv_raw : `VX_CFG_XLEN'(i_inv_raw[31:0]);
         assign lzc_in_s1      = is_itof ? S_MAN_WIDTH'(i_inv) : fp_unpacked_mant;
         assign lzc_neg_s1     = is_itof && i_sign;
         assign lzc_lowmask_s1 = ~(| ((i_inv >> 1) & ~i_inv));
@@ -271,7 +295,7 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
     wire mant_is_zero_s1 = ~mant_is_nonzero_s1;
 
     // Stage 1 -> Stage 2
-    wire is_itof_s2, is_ftoi_s2, is_f2f_s2, is_signed_s2, is_int64_s2, input_sign_s2, mant_is_zero_s2, src_d_s2, dst_d_s2, src_h_s2, dst_h_s2;
+    wire is_itof_s2, is_ftoi_s2, is_f2f_s2, is_signed_s2, dst_l_s2, input_sign_s2, mant_is_zero_s2, src_d_s2, dst_d_s2, src_h_s2, dst_h_s2;
     wire [INST_FRM_BITS-1:0] frm_s2;
     fclass_t fclass_s2;
     wire [S_MAN_WIDTH-1:0]        unpacked_mant_s2;
@@ -285,8 +309,8 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
         .clk      (clk),
         .reset    (reset),
         .enable   (enable && stg2_mask),
-        .data_in  ({is_itof_s1, is_ftoi_s1, is_f2f_s1, is_signed_s1, is_int64_s1, input_sign_s1, mant_is_zero_s1, src_d_s1, dst_d_s1, src_h_s1, dst_h_s1, frm_s1, fclass_s1, unpacked_mant_s1, unpacked_exp_s1, renorm_shamt_s1}),
-        .data_out ({is_itof_s2, is_ftoi_s2, is_f2f_s2, is_signed_s2, is_int64_s2, input_sign_s2, mant_is_zero_s2, src_d_s2, dst_d_s2, src_h_s2, dst_h_s2, frm_s2, fclass_s2, unpacked_mant_s2, unpacked_exp_s2, renorm_shamt_s2})
+        .data_in  ({is_itof_s1, is_ftoi_s1, is_f2f_s1, is_signed_s1, dst_l_s1, input_sign_s1, mant_is_zero_s1, src_d_s1, dst_d_s1, src_h_s1, dst_h_s1, frm_s1, fclass_s1, unpacked_mant_s1, unpacked_exp_s1, renorm_shamt_s1}),
+        .data_out ({is_itof_s2, is_ftoi_s2, is_f2f_s2, is_signed_s2, dst_l_s2, input_sign_s2, mant_is_zero_s2, src_d_s2, dst_d_s2, src_h_s2, dst_h_s2, frm_s2, fclass_s2, unpacked_mant_s2, unpacked_exp_s2, renorm_shamt_s2})
     );
 
     // ======================================================================
@@ -298,14 +322,13 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
     // for float inputs, using the source format's mantissa width.
     wire [S_EXP_WIDTH-1:0] fp_mant_offset_s2 = S_EXP_WIDTH'(S_MAN_WIDTH - 1)
         - (src_h_s2 ? S_EXP_WIDTH'(F16_MAN) : src_d_s2 ? S_EXP_WIDTH'(F64_MAN) : S_EXP_WIDTH'(F32_MAN));
-    `UNUSED_VAR (src_d_s2)
 
     wire [S_MAN_WIDTH-1:0]        norm_mant_s2 = unpacked_mant_s2 << renorm_shamt_s2;
     wire signed [S_EXP_WIDTH-1:0] norm_exp_s2  = unpacked_exp_s2 - S_EXP_WIDTH'({1'b0, renorm_shamt_s2})
         + (is_itof_s2 ? S_EXP_WIDTH'(0) : fp_mant_offset_s2);
 
     // Stage 2 -> Stage 3
-    wire is_itof_s3, is_ftoi_s3, is_f2f_s3, is_signed_s3, is_int64_s3, input_sign_s3, mant_is_zero_s3, src_d_s3, dst_d_s3, dst_h_s3;
+    wire is_itof_s3, is_ftoi_s3, is_f2f_s3, is_signed_s3, dst_l_s3, input_sign_s3, mant_is_zero_s3, src_d_s3, dst_d_s3, dst_h_s3;
     wire [INST_FRM_BITS-1:0] frm_s3;
     fclass_t fclass_s3;
     wire [S_MAN_WIDTH-1:0]        norm_mant_s3;
@@ -319,8 +342,8 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
         .clk      (clk),
         .reset    (reset),
         .enable   (enable && mask_pipe[LATENCY-5]),
-        .data_in  ({is_itof_s2, is_ftoi_s2, is_f2f_s2, is_signed_s2, is_int64_s2, input_sign_s2, mant_is_zero_s2, src_d_s2, dst_d_s2, dst_h_s2, frm_s2, fclass_s2, norm_mant_s2, norm_exp_s2,  unpacked_exp_s2}),
-        .data_out ({is_itof_s3, is_ftoi_s3, is_f2f_s3, is_signed_s3, is_int64_s3, input_sign_s3, mant_is_zero_s3, src_d_s3, dst_d_s3, dst_h_s3, frm_s3, fclass_s3, norm_mant_s3, norm_exp_s3,  unpacked_exp_s3})
+        .data_in  ({is_itof_s2, is_ftoi_s2, is_f2f_s2, is_signed_s2, dst_l_s2, input_sign_s2, mant_is_zero_s2, src_d_s2, dst_d_s2, dst_h_s2, frm_s2, fclass_s2, norm_mant_s2, norm_exp_s2,  unpacked_exp_s2}),
+        .data_out ({is_itof_s3, is_ftoi_s3, is_f2f_s3, is_signed_s3, dst_l_s3, input_sign_s3, mant_is_zero_s3, src_d_s3, dst_d_s3, dst_h_s3, frm_s3, fclass_s3, norm_mant_s3, norm_exp_s3,  unpacked_exp_s3})
     );
 
     // ======================================================================
@@ -361,7 +384,7 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
     wire [SUPER_EXP-1:0] final_exp_s3 = SUPER_EXP'(dst_exp_s3);
 
     // Stage 3 -> Stage 4
-    wire is_itof_s4, is_ftoi_s4, is_f2f_s4, is_signed_s4, is_int64_s4, input_sign_s4, mant_is_zero_s4, src_d_s4, dst_d_s4, dst_h_s4;
+    wire is_itof_s4, is_ftoi_s4, is_f2f_s4, is_signed_s4, dst_l_s4, input_sign_s4, mant_is_zero_s4, src_d_s4, dst_d_s4, dst_h_s4;
     wire f2f_uf_s4, f2f_of_s4, f2f_tiny0_s4;
     wire [INST_FRM_BITS-1:0] frm_s4;
     fclass_t fclass_s4;
@@ -377,8 +400,8 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
         .clk      (clk),
         .reset    (reset),
         .enable   (enable && mask_pipe[LATENCY-4]),
-        .data_in  ({is_itof_s3, is_ftoi_s3, is_f2f_s3, is_signed_s3, is_int64_s3, input_sign_s3, mant_is_zero_s3, src_d_s3, dst_d_s3, dst_h_s3, f2f_uf_s3, f2f_of_s3, f2f_tiny0_s3, frm_s3, fclass_s3, norm_mant_s3, align_shamt_s3, final_exp_s3, unpacked_exp_s3}),
-        .data_out ({is_itof_s4, is_ftoi_s4, is_f2f_s4, is_signed_s4, is_int64_s4, input_sign_s4, mant_is_zero_s4, src_d_s4, dst_d_s4, dst_h_s4, f2f_uf_s4, f2f_of_s4, f2f_tiny0_s4, frm_s4, fclass_s4, norm_mant_s4, align_shamt_s4, final_exp_s4, unpacked_exp_s4})
+        .data_in  ({is_itof_s3, is_ftoi_s3, is_f2f_s3, is_signed_s3, dst_l_s3, input_sign_s3, mant_is_zero_s3, src_d_s3, dst_d_s3, dst_h_s3, f2f_uf_s3, f2f_of_s3, f2f_tiny0_s3, frm_s3, fclass_s3, norm_mant_s3, align_shamt_s3, final_exp_s3, unpacked_exp_s3}),
+        .data_out ({is_itof_s4, is_ftoi_s4, is_f2f_s4, is_signed_s4, dst_l_s4, input_sign_s4, mant_is_zero_s4, src_d_s4, dst_d_s4, dst_h_s4, f2f_uf_s4, f2f_of_s4, f2f_tiny0_s4, frm_s4, fclass_s4, norm_mant_s4, align_shamt_s4, final_exp_s4, unpacked_exp_s4})
     );
 
     // ======================================================================
@@ -426,7 +449,7 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
     end
 
     // Stage 4 -> Stage 5
-    wire is_itof_s5, is_ftoi_s5, is_f2f_s5, is_signed_s5, is_int64_s5, input_sign_s5, mant_is_zero_s5, src_d_s5, dst_d_s5, dst_h_s5;
+    wire is_itof_s5, is_ftoi_s5, is_f2f_s5, is_signed_s5, dst_l_s5, input_sign_s5, mant_is_zero_s5, src_d_s5, dst_d_s5, dst_h_s5;
     wire f2f_uf_s5, f2f_of_s5, f2f_tiny0_s5;
     wire [2:0] fine_round_s5;
     wire [INST_FRM_BITS-1:0] frm_s5;
@@ -443,8 +466,8 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
         .clk      (clk),
         .reset    (reset),
         .enable   (enable && mask_pipe[LATENCY-3]),
-        .data_in  ({is_itof_s4, is_ftoi_s4, is_f2f_s4, is_signed_s4, is_int64_s4, input_sign_s4, mant_is_zero_s4, src_d_s4, dst_d_s4, dst_h_s4, f2f_uf_s4, f2f_of_s4, f2f_tiny0_s4, fine_round_s4, frm_s4, fclass_s4, round_sticky_bits_s4, pre_round_abs_s4, final_exp_s4, unpacked_exp_s4}),
-        .data_out ({is_itof_s5, is_ftoi_s5, is_f2f_s5, is_signed_s5, is_int64_s5, input_sign_s5, mant_is_zero_s5, src_d_s5, dst_d_s5, dst_h_s5, f2f_uf_s5, f2f_of_s5, f2f_tiny0_s5, fine_round_s5, frm_s5, fclass_s5, round_sticky_bits_s5, pre_round_abs_s5, final_exp_s5, unpacked_exp_s5})
+        .data_in  ({is_itof_s4, is_ftoi_s4, is_f2f_s4, is_signed_s4, dst_l_s4, input_sign_s4, mant_is_zero_s4, src_d_s4, dst_d_s4, dst_h_s4, f2f_uf_s4, f2f_of_s4, f2f_tiny0_s4, fine_round_s4, frm_s4, fclass_s4, round_sticky_bits_s4, pre_round_abs_s4, final_exp_s4, unpacked_exp_s4}),
+        .data_out ({is_itof_s5, is_ftoi_s5, is_f2f_s5, is_signed_s5, dst_l_s5, input_sign_s5, mant_is_zero_s5, src_d_s5, dst_d_s5, dst_h_s5, f2f_uf_s5, f2f_of_s5, f2f_tiny0_s5, fine_round_s5, frm_s5, fclass_s5, round_sticky_bits_s5, pre_round_abs_s5, final_exp_s5, unpacked_exp_s5})
     );
 
     // ======================================================================
@@ -598,20 +621,20 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
                                              : (is_signed_s5 ? 64'h7FFFFFFFFFFFFFFF : 64'hFFFFFFFFFFFFFFFF);
 
     // F2I overflow detection (I32 target)
-    wire f2i_s32_pos_ovf = is_signed_s5 && !is_int64_s5 && !input_sign_s5 && (|rounded_abs_s5[S_MAN_WIDTH-1:31]);
-    wire f2i_s32_neg_ovf = is_signed_s5 && !is_int64_s5 &&  input_sign_s5 && (rounded_abs_s5 > S_MAN_WIDTH'(32'h80000000));
-    wire f2i_u32_neg_ovf = !is_signed_s5 && !is_int64_s5 && rounded_sign_s5 && (|rounded_abs_s5);
+    wire f2i_s32_pos_ovf = is_signed_s5 && !dst_l_s5 && !input_sign_s5 && (|rounded_abs_s5[S_MAN_WIDTH-1:31]);
+    wire f2i_s32_neg_ovf = is_signed_s5 && !dst_l_s5 &&  input_sign_s5 && (rounded_abs_s5 > S_MAN_WIDTH'(32'h80000000));
+    wire f2i_u32_neg_ovf = !is_signed_s5 && !dst_l_s5 && rounded_sign_s5 && (|rounded_abs_s5);
 
     // Unsigned positive overflow: magnitude >= 2^TW (TW=32/64). When S_MAN_WIDTH
     // equals the target width the high bits aren't representable in rounded_abs,
     // so detect from the true exponent; also catch a round-up carry out of the
     // all-ones magnitude (e.g. 2^32-1 rounding up to 2^32).
     wire round_carry_out_s5 = (rounded_abs_s5 == '0) && (|pre_round_abs_s5);
-    wire f2i_u32_pos_ovf = !is_signed_s5 && !is_int64_s5 && !input_sign_s5
+    wire f2i_u32_pos_ovf = !is_signed_s5 && !dst_l_s5 && !input_sign_s5
                          && ((unpacked_exp_s5 >= S_EXP_WIDTH'(32)) || round_carry_out_s5);
     wire f2i_u64_pos_ovf;
     if (`VX_CFG_XLEN == 64) begin : g_f2i_u64pos
-        assign f2i_u64_pos_ovf = !is_signed_s5 && is_int64_s5 && !input_sign_s5
+        assign f2i_u64_pos_ovf = !is_signed_s5 && dst_l_s5 && !input_sign_s5
                                && ((unpacked_exp_s5 >= S_EXP_WIDTH'(64)) || round_carry_out_s5);
     end else begin : g_f2i_no_u64pos
         assign f2i_u64_pos_ovf = 1'b0;
@@ -620,9 +643,9 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
     // F2I overflow detection (I64 target, XLEN=64 only)
     wire f2i_s64_pos_ovf, f2i_s64_neg_ovf, f2i_u64_neg_ovf;
     if (`VX_CFG_XLEN == 64) begin : g_f2i_64ovf
-        assign f2i_s64_pos_ovf = is_signed_s5 && is_int64_s5 && !input_sign_s5 && (|rounded_abs_s5[S_MAN_WIDTH-1:63]);
-        assign f2i_s64_neg_ovf = is_signed_s5 && is_int64_s5 &&  input_sign_s5 && (rounded_abs_s5 > S_MAN_WIDTH'(64'h8000000000000000));
-        assign f2i_u64_neg_ovf = !is_signed_s5 && is_int64_s5 && rounded_sign_s5 && (|rounded_abs_s5);
+        assign f2i_s64_pos_ovf = is_signed_s5 && dst_l_s5 && !input_sign_s5 && (|rounded_abs_s5[S_MAN_WIDTH-1:63]);
+        assign f2i_s64_neg_ovf = is_signed_s5 && dst_l_s5 &&  input_sign_s5 && (rounded_abs_s5 > S_MAN_WIDTH'(64'h8000000000000000));
+        assign f2i_u64_neg_ovf = !is_signed_s5 && dst_l_s5 && rounded_sign_s5 && (|rounded_abs_s5);
     end else begin : g_f2i_no64ovf
         assign f2i_s64_pos_ovf = 1'b0;
         assign f2i_s64_neg_ovf = 1'b0;
@@ -642,7 +665,7 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
             // F2I: Float → I32/I64
             if (fclass_s5.is_nan || fclass_s5.is_inf) begin
                 final_fflags_s5.NV = 1'b1;
-                res_val_64 = is_int64_s5 ? nan_inf_64 : {{32{nan_inf_32[31]}}, nan_inf_32};
+                res_val_64 = dst_l_s5 ? nan_inf_64 : {{32{nan_inf_32[31]}}, nan_inf_32};
                 res_val_32 = nan_inf_32;
             end else if (f2i_s32_pos_ovf) begin
                 final_fflags_s5.NV = 1'b1;
@@ -677,7 +700,7 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
                 res_val_64 = '0;
                 res_val_32 = '0;
             end else begin
-                res_val_64 = is_int64_s5 ? int_64_res : {{32{int_32_res[31]}}, int_32_res};
+                res_val_64 = dst_l_s5 ? int_64_res : {{32{int_32_res[31]}}, int_32_res};
                 res_val_32 = int_32_res;
                 final_fflags_s5.NX = (|round_sticky_bits_s5);
             end

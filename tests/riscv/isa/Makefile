@@ -8,25 +8,29 @@ include ../common.mk
 # mtvec) lets the test's own trap_vector run, and the HTIF `tohost`
 # watcher in the simulators harvests pass/fail.
 
-# Skip atomic ISA tests when the build is configured without EXT_A_ENABLE.
-# Without atomics support, AMO instructions trap and the test fails. Resolve
-# the post-preprocessor value of EXT_A_ENABLED rather than grepping (the
-# header always lists both 0 and 1 branches inside an #ifdef block).
-HAS_EXT_A := $(shell echo 'VX_CFG_EXT_A_ENABLED' | gcc -E -P $(CONFIGS) -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -include VX_config.h - 2>/dev/null | tr -d ' \t\n')
-HAS_EXT_C := $(shell echo 'VX_CFG_EXT_C_ENABLED' | gcc -E -P $(CONFIGS) -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -include VX_config.h - 2>/dev/null | tr -d ' \t\n')
+# Skip an extension's ISA tests when the build is configured without it:
+# AMO and double-precision instructions are illegal there. Resolve the
+# post-preprocessor value of EXT_<X>_ENABLED rather than grepping (the header
+# always lists both 0 and 1 branches inside an #ifdef block). The header also
+# defines functions, so the value is the last line of the output, and D
+# defaults on with XLEN, so XLEN is defined too.
+cfg_value = $(shell echo '$(1)' | gcc -E -P -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN) $(CONFIGS) -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -include VX_config.h - 2>/dev/null | tail -n 1 | tr -d ' \t\n')
+HAS_EXT_A := $(call cfg_value,VX_CFG_EXT_A_ENABLED)
+HAS_EXT_C := $(call cfg_value,VX_CFG_EXT_C_ENABLED)
+HAS_EXT_D := $(call cfg_value,VX_CFG_EXT_D_ENABLED)
 
-# Test-suite prefixes (extension-gated). A/C are only run when the build
+# Test-suite prefixes (extension-gated). A/C/D are only run when the build
 # was configured with the corresponding extension.
 P_32I := rv32ui-p
 P_32M := rv32um-p
 P_32F := rv32uf-p
-P_32D := rv32ud-p
+P_32D :=
 P_32A :=
 P_32C :=
 P_64I := rv64ui-p
 P_64M := rv64um-p
 P_64F := rv64uf-p
-P_64D := rv64ud-p
+P_64D :=
 P_64A :=
 P_64C :=
 ifneq ($(HAS_EXT_A),0)
@@ -36,6 +40,10 @@ endif
 ifneq ($(HAS_EXT_C),0)
 P_32C := rv32uc-p
 P_64C := rv64uc-p
+endif
+ifneq ($(HAS_EXT_D),0)
+P_32D := rv32ud-p
+P_64D := rv64ud-p
 endif
 
 # Run one or more test-suite prefixes against a simulator.

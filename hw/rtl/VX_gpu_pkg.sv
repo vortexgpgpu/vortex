@@ -363,6 +363,14 @@ package VX_gpu_pkg;
     localparam INST_OP_BITS =    4;
     localparam INST_FMT_BITS =   2;
 
+    // Float formats (RISC-V fmt encoding).
+    localparam INST_FMT_S =      2'b00;
+    localparam INST_FMT_D =      2'b01;
+    localparam INST_FMT_H =      2'b10;
+    // Integer side of a conversion: RISC-V rs2 width bit; signedness is in the opcode.
+    localparam INST_FMT_W =      2'b00;
+    localparam INST_FMT_L =      2'b10;
+
     ///////////////////////////////////////////////////////////////////////////
 
     localparam INST_ALU_ADD =    4'b0000;
@@ -538,20 +546,19 @@ package VX_gpu_pkg;
 
     ///////////////////////////////////////////////////////////////////////////
 
-    localparam INST_FPU_ADD =    4'b0000; // SUB=fmt[1]
+    localparam INST_FPU_ADD =    4'b0000; // SUB=op_mod
     localparam INST_FPU_MUL =    4'b0001;
-    localparam INST_FPU_MADD =   4'b0010; // SUB=fmt[1]
-    localparam INST_FPU_NMADD =  4'b0011; // SUB=fmt[1]
+    localparam INST_FPU_MADD =   4'b0010; // MSUB=op_mod
+    localparam INST_FPU_NMADD =  4'b0011; // NMSUB=op_mod
     localparam INST_FPU_DIV =    4'b0100;
     localparam INST_FPU_SQRT =   4'b0101;
-    localparam INST_FPU_F2I =    4'b1000; // fmt[0]: F32=0, F64=1, fmt[1]: I32=0, I64=1
-    localparam INST_FPU_F2U =    4'b1001; // fmt[0]: F32=0, F64=1, fmt[1]: I32=0, I64=1
-    localparam INST_FPU_I2F =    4'b1010; // fmt[0]: F32=0, F64=1, fmt[1]: I32=0, I64=1
-    localparam INST_FPU_U2F =    4'b1011; // fmt[0]: F32=0, F64=1, fmt[1]: I32=0, I64=1
+    localparam INST_FPU_F2I =    4'b1000; // src_fmt: float, dst_fmt: integer
+    localparam INST_FPU_F2U =    4'b1001; // src_fmt: float, dst_fmt: integer
+    localparam INST_FPU_I2F =    4'b1010; // src_fmt: integer, dst_fmt: float
+    localparam INST_FPU_U2F =    4'b1011; // src_fmt: integer, dst_fmt: float
     localparam INST_FPU_CMP =    4'b1100; // frm: LE=0, LT=1, EQ=2
-    localparam INST_FPU_F2F =    4'b1101; // fmt[0]: F32=0, F64=1
+    localparam INST_FPU_F2F =    4'b1101; // src_fmt: float, dst_fmt: float
     localparam INST_FPU_MISC =   4'b1110; // frm: SGNJ=0, SGNJN=1, SGNJX=2, CLASS=3, MVXW=4, MVWX=5, FMIN=6, FMAX=7
-    localparam INST_FPU_F2H =    4'b1111;
     localparam INST_FPU_BITS =   4;
 
     function automatic logic inst_fpu_is_class(input logic [INST_FPU_BITS-1:0] op, input logic [INST_FRM_BITS-1:0] frm);
@@ -1410,10 +1417,14 @@ package VX_gpu_pkg;
     `PACKAGE_ASSERT($bits(br_args_t) == $bits(alu_args_t))
     `PACKAGE_ASSERT($bits(br_args_t) == INST_ARGS_BITS)
 
+    // src_fmt/dst_fmt: operand and result formats, equal except for a conversion.
+    // op_mod: negates the addend of ADD, MADD and NMADD (SUB, MSUB, NMSUB).
     typedef struct packed {
-        logic [(INST_ARGS_BITS-INST_FRM_BITS-INST_FMT_BITS)-1:0] __padding;
+        logic [(INST_ARGS_BITS-INST_FRM_BITS-2*INST_FMT_BITS-1)-1:0] __padding;
+        logic                     op_mod;
+        logic [INST_FMT_BITS-1:0] src_fmt;
         logic [INST_FRM_BITS-1:0] frm;
-        logic [INST_FMT_BITS-1:0] fmt;
+        logic [INST_FMT_BITS-1:0] dst_fmt;
     } fpu_args_t;
     `PACKAGE_ASSERT($bits(fpu_args_t) == INST_ARGS_BITS)
 

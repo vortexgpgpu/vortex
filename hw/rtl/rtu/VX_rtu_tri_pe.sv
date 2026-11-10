@@ -75,8 +75,8 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
 
     `STATIC_ASSERT(V >= F, ("tri PE: FDIV latency must cover the r subtract and T"))
 
-    localparam [INST_FMT_BITS-1:0] FMT_ADD = 2'b00;
-    localparam [INST_FMT_BITS-1:0] FMT_SUB = 2'b10;
+    localparam MOD_ADD = 1'b0;
+    localparam MOD_SUB = 1'b1;
     localparam [31:0] F32_ONE = 32'h3F800000;
 
     // IEEE ordering on F32 (+0 == -0); NaN compares false
@@ -138,7 +138,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .reset   (reset),
         .enable  (enable),
         .mask    (1'b1),
-        .fmt     ('0),
+        .fmt     (INST_FMT_S),
         .frm     (INST_FRM_RNE),
         .dataa   (F32_ONE),
         .datab   (d_a[2]),
@@ -160,7 +160,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 .enable  (enable),
                 .mask    (1'b1),
                 .op_type (INST_FPU_ADD),
-                .fmt     (FMT_SUB),
+                .op_mod  (MOD_SUB),
                 .frm     (INST_FRM_RNE),
                 .dataa   (q_a[i][a]),
                 .datab   (o_a[a]),
@@ -210,7 +210,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             .enable  (enable),
             .mask    (1'b1),
             .op_type (INST_FPU_MUL),
-            .fmt     (FMT_ADD),
+            .op_mod  (MOD_ADD),
             .frm     (INST_FRM_RNE),
             .dataa   (dxy_c[a]),
             .datab   (sz_c),
@@ -248,7 +248,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 .enable  (enable),
                 .mask    (1'b1),
                 .op_type (INST_FPU_MADD),
-                .fmt     (FMT_ADD),
+                .op_mod  (MOD_ADD),
                 .frm     (INST_FRM_RNE),
                 .dataa   ({~sxy_d[a][31], sxy_d[a][30:0]}),
                 .datab   (r_d[i][2]),
@@ -268,7 +268,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             .enable  (enable),
             .mask    (1'b1),
             .op_type (INST_FPU_MUL),
-            .fmt     (FMT_ADD),
+            .op_mod  (MOD_ADD),
             .frm     (INST_FRM_RNE),
             .dataa   (sz_d),
             .datab   (r_d[i][2]),
@@ -297,7 +297,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 .enable  (enable),
                 .mask    (1'b1),
                 .op_type (INST_FPU_MUL),
-                .fmt     (FMT_ADD),
+                .op_mod  (MOD_ADD),
                 .frm     (INST_FRM_RNE),
                 .dataa   (p_e[IA][k]),
                 .datab   (p_e[IB][1-k]),
@@ -317,7 +317,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             .enable  (enable),
             .mask    (1'b1),
             .op_type (INST_FPU_ADD),
-            .fmt     (FMT_SUB),
+            .op_mod  (MOD_SUB),
             .frm     (INST_FRM_RNE),
             .dataa   (cp_e[i][0]),
             .datab   (cp_e[i][1]),
@@ -368,31 +368,31 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     wire [31:0] det01, det_g, tp0, tp01, t_num;
     VX_fma_unit #(.LATENCY (F), .USE_DSP (`VX_CFG_RTU_USE_DSP), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (1)) fadd_det01 (
         .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
-        .op_type (INST_FPU_ADD), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
+        .op_type (INST_FPU_ADD), .op_mod (MOD_ADD), .frm (INST_FRM_RNE),
         .dataa (w_f[0]), .datab (w_f[1]), .datac ('0),
         .result (det01), `UNUSED_PIN (fflags)
     );
     VX_fma_unit #(.LATENCY (F), .USE_DSP (`VX_CFG_RTU_USE_DSP), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (1)) fadd_det (
         .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
-        .op_type (INST_FPU_ADD), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
+        .op_type (INST_FPU_ADD), .op_mod (MOD_ADD), .frm (INST_FRM_RNE),
         .dataa (det01), .datab (w_f1[2]), .datac ('0),
         .result (det_g), `UNUSED_PIN (fflags)
     );
     VX_fma_unit #(.LATENCY (F), .USE_DSP (`VX_CFG_RTU_USE_DSP), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (1)) fmul_tp0 (
         .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
-        .op_type (INST_FPU_MUL), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
+        .op_type (INST_FPU_MUL), .op_mod (MOD_ADD), .frm (INST_FRM_RNE),
         .dataa (w_f[0]), .datab (pz_f[0]), .datac ('0),
         .result (tp0), `UNUSED_PIN (fflags)
     );
     VX_fma_unit #(.LATENCY (F), .USE_DSP (`VX_CFG_RTU_USE_DSP), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (1)) fma_tp01 (
         .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
-        .op_type (INST_FPU_MADD), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
+        .op_type (INST_FPU_MADD), .op_mod (MOD_ADD), .frm (INST_FRM_RNE),
         .dataa (w_f1[1]), .datab (pz_f1[1]), .datac (tp0),
         .result (tp01), `UNUSED_PIN (fflags)
     );
     VX_fma_unit #(.LATENCY (F), .USE_DSP (`VX_CFG_RTU_USE_DSP), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (1)) fma_t (
         .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
-        .op_type (INST_FPU_MADD), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
+        .op_type (INST_FPU_MADD), .op_mod (MOD_ADD), .frm (INST_FRM_RNE),
         .dataa (w2_f2), .datab (pz2_f2), .datac (tp01),
         .result (t_num), `UNUSED_PIN (fflags)
     );
@@ -410,7 +410,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .reset   (reset),
         .enable  (enable),
         .mask    (1'b1),
-        .fmt     ('0),
+        .fmt     (INST_FMT_S),
         .frm     (INST_FRM_RNE),
         .dataa   (F32_ONE),
         .datab   (det_g),
@@ -457,7 +457,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             .enable  (enable),
             .mask    (1'b1),
             .op_type (INST_FPU_MUL),
-            .fmt     (FMT_ADD),
+            .op_mod  (MOD_ADD),
             .frm     (INST_FRM_RNE),
             .dataa   (tuv_num[k]),
             .datab   (rcp_g),

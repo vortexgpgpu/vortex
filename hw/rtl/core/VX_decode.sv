@@ -62,13 +62,53 @@ module VX_decode import
 
     `UNUSED_VAR (funct2)
 
-`ifdef VX_CFG_EXT_ZFHMIN_ENABLE
+`ifdef VX_CFG_EXT_F_ENABLE
+    // FCVT between float formats: rs2[1:0] is the source format, funct2 the destination.
     wire fcvt_fmt_valid = (rs2[4:2] == 3'b000) && (rs2[1:0] != 2'b11) && (funct2 != 2'b11) && (rs2[1:0] != funct2);
 `ifdef VX_CFG_FLEN_64
-    wire fcvt_fmt_supported = fcvt_fmt_valid;
+    wire fcvt_has_d = 1'b1;
 `else
-    wire fcvt_fmt_supported = fcvt_fmt_valid && (rs2[1:0] != 2'b01) && (funct2 != 2'b01);
+    wire fcvt_has_d = (rs2[1:0] != INST_FMT_D) && (funct2 != INST_FMT_D);
 `endif
+`ifdef VX_CFG_EXT_ZFHMIN_ENABLE
+    wire fcvt_has_h = 1'b1;
+`else
+    wire fcvt_has_h = (rs2[1:0] != INST_FMT_H) && (funct2 != INST_FMT_H);
+`endif
+    wire fcvt_fmt_supported = fcvt_fmt_valid && fcvt_has_d && fcvt_has_h;
+    // Arithmetic and integer conversions: funct2 is S, or D with FLEN 64.
+    // Zfhmin gives H only loads, stores, moves and float conversions.
+`ifdef VX_CFG_FLEN_64
+    wire fmt_supported = (funct2 == INST_FMT_S) || (funct2 == INST_FMT_D);
+`else
+    wire fmt_supported = (funct2 == INST_FMT_S);
+`endif
+`ifdef VX_CFG_EXT_ZFHMIN_ENABLE
+    wire mv_fmt_supported = fmt_supported || (funct2 == INST_FMT_H);
+`else
+    wire mv_fmt_supported = fmt_supported;
+`endif
+`ifdef VX_CFG_XLEN_64
+    wire icvt_int_supported = 1'b1;
+`else
+    wire icvt_int_supported = ~rs2[1];
+`endif
+    // FCI: funct3 000 is FMV.X, 001 FCLASS; the other funct3 are reserved.
+    reg fci_legal;
+    always @(*) begin
+        case (funct5)
+            5'b00000, 5'b00001, 5'b00010, 5'b00011,
+            5'b00100, 5'b00101, 5'b01011, 5'b10100:
+                      fci_legal = fmt_supported;
+            5'b01000: fci_legal = fcvt_fmt_supported;
+            5'b11000,
+            5'b11010: fci_legal = fmt_supported && icvt_int_supported;
+            5'b11100: fci_legal = (funct3 == 3'b000) ? mv_fmt_supported : ((funct3 == 3'b001) && fmt_supported);
+            5'b11110: fci_legal = (funct3 == 3'b000) && mv_fmt_supported;
+            default:  fci_legal = 1'b0;
+        endcase
+    end
+    wire fp_legal = (opcode == INST_FCI) ? fci_legal : fmt_supported;
 `endif
 `ifndef VX_CFG_EXT_A_ENABLE
     `UNUSED_VAR (funct5)
@@ -558,148 +598,129 @@ module VX_decode import
             INST_FMADD,  // 7'b1000011
             INST_FMSUB,  // 7'b1000111
             INST_FNMSUB, // 7'b1001011
-            INST_FNMADD: // 7'b1001111
+            INST_FNMADD, // 7'b1001111
+            INST_FCI:
             begin
                 ex_type = EX_FPU;
-                op_type = INST_OP_BITS'({2'b00, 1'b1, opcode[3]});
-                op_args.fpu.frm = funct3;
-                op_args.fpu.fmt[0] = funct2[0]; // float/double
-                op_args.fpu.fmt[1] = opcode[3] ^ opcode[2]; // SUB
+                op_args.fpu.frm     = funct3;
+                op_args.fpu.dst_fmt = funct2;
+                op_args.fpu.src_fmt = funct2;
+                op_args.fpu.op_mod  = 1'b0;
+                if (~fp_legal) begin
+                    // A sign injection with no destination writes neither rd nor fflags.
+                    op_type = INST_OP_BITS'(INST_FPU_MISC);
+                    op_args.fpu.frm     = INST_FRM_BITS'(0);
+                    op_args.fpu.dst_fmt = INST_FMT_S;
+                    op_args.fpu.src_fmt = INST_FMT_S;
+                end else if (opcode != INST_FCI) begin
+                    op_type = INST_OP_BITS'({2'b00, 1'b1, opcode[3]});
+                    op_args.fpu.op_mod = opcode[3] ^ opcode[2]; // MSUB, NMSUB
 
-                // track FCSR dependencies
-                rd_xregs[XREG_1] = frm_is_dyn;
-                wr_xregs[XREG_0] = 1'b1;
+                    // track FCSR dependencies
+                    rd_xregs[XREG_1] = frm_is_dyn;
+                    wr_xregs[XREG_0] = 1'b1;
 
-                `USED_FREG (rd);
-                `USED_FREG (rs1);
-                `USED_FREG (rs2);
-                `USED_FREG (rs3);
-            end
-            INST_FCI: begin
-                ex_type = EX_FPU;
-                op_args.fpu.frm = funct3;
-                op_args.fpu.fmt[0] = funct2[0]; // float/double
-                op_args.fpu.fmt[1] = rs2[1]; // CVT W/L
-                // Most FP operations may set exception flags
-                wr_xregs[XREG_0] = 1'b1;
-                case (funct5)
-                    5'b00000, // FADD
-                    5'b00001, // FSUB
-                    5'b00010: // FMUL
-                    begin
-                        op_type = INST_OP_BITS'({2'b00, 1'b0, funct5[1]});
-                        op_args.fpu.fmt[1] = funct5[0]; // SUB
-                        rd_xregs[XREG_1] = frm_is_dyn;
-                        `USED_FREG (rd);
-                        `USED_FREG (rs1);
-                        `USED_FREG (rs2);
-                    end
-                    5'b00100: begin
-                        // NCP: FSGNJ=0, FSGNJN=1, FSGNJX=2
-                        op_type = INST_OP_BITS'(INST_FPU_MISC);
-                        op_args.fpu.frm = INST_FRM_BITS'(funct3[1:0]);
-                        wr_xregs[XREG_0] = 1'b0;
-                        `USED_FREG (rd);
-                        `USED_FREG (rs1);
-                        `USED_FREG (rs2);
-                    end
-                    5'b00101: begin
-                        // NCP: FMIN=6, FMAX=7
-                        op_type = INST_OP_BITS'(INST_FPU_MISC);
-                        op_args.fpu.frm = INST_FRM_BITS'(funct3[0] ? 7 : 6);
-                        `USED_FREG (rd);
-                        `USED_FREG (rs1);
-                        `USED_FREG (rs2);
-                    end
-                `ifdef VX_CFG_EXT_ZFHMIN_ENABLE
-                    5'b01000: begin
-                        if (fcvt_fmt_supported) begin
-                            if (funct2 == 2'b10) begin
-                                op_type = INST_OP_BITS'(INST_FPU_F2H);
-                                op_args.fpu.fmt[0] = rs2[0];
-                            end else begin
-                                op_type = INST_OP_BITS'(INST_FPU_F2F);
-                            end
+                    `USED_FREG (rd);
+                    `USED_FREG (rs1);
+                    `USED_FREG (rs2);
+                    `USED_FREG (rs3);
+                end else begin
+                    // Most FP operations may set exception flags
+                    wr_xregs[XREG_0] = 1'b1;
+                    case (funct5)
+                        5'b00000, // FADD
+                        5'b00001, // FSUB
+                        5'b00010: // FMUL
+                        begin
+                            op_type = INST_OP_BITS'({2'b00, 1'b0, funct5[1]});
+                            op_args.fpu.op_mod = funct5[0]; // SUB
+                            rd_xregs[XREG_1] = frm_is_dyn;
+                            `USED_FREG (rd);
+                            `USED_FREG (rs1);
+                            `USED_FREG (rs2);
+                        end
+                        5'b00100: begin
+                            // NCP: FSGNJ=0, FSGNJN=1, FSGNJX=2
+                            op_type = INST_OP_BITS'(INST_FPU_MISC);
+                            op_args.fpu.frm = INST_FRM_BITS'(funct3[1:0]);
+                            wr_xregs[XREG_0] = 1'b0;
+                            `USED_FREG (rd);
+                            `USED_FREG (rs1);
+                            `USED_FREG (rs2);
+                        end
+                        5'b00101: begin
+                            // NCP: FMIN=6, FMAX=7
+                            op_type = INST_OP_BITS'(INST_FPU_MISC);
+                            op_args.fpu.frm = INST_FRM_BITS'(funct3[0] ? 7 : 6);
+                            `USED_FREG (rd);
+                            `USED_FREG (rs1);
+                            `USED_FREG (rs2);
+                        end
+                        5'b01000: begin
+                            // FCVT between float formats
+                            op_type = INST_OP_BITS'(INST_FPU_F2F);
+                            op_args.fpu.src_fmt = rs2[1:0];
                             rd_xregs[XREG_1] = frm_is_dyn;
                             `USED_FREG (rd);
                             `USED_FREG (rs1);
                         end
-                    end
-                `elsif VX_CFG_FLEN_64
-                    5'b01000: begin
-                        // FCVT.S.D, FCVT.D.S
-                        op_type = INST_OP_BITS'(INST_FPU_F2F);
-                        rd_xregs[XREG_1] = frm_is_dyn;
-                        `USED_FREG (rd);
-                        `USED_FREG (rs1);
-                    end
-                `endif
-                    5'b00011: begin
-                        // FDIV
-                        op_type = INST_OP_BITS'(INST_FPU_DIV);
-                        rd_xregs[XREG_1] = frm_is_dyn;
-                        `USED_FREG (rd);
-                        `USED_FREG (rs1);
-                        `USED_FREG (rs2);
-                    end
-                    5'b01011: begin
-                        // FSQRT
-                        op_type = INST_OP_BITS'(INST_FPU_SQRT);
-                        rd_xregs[XREG_1] = frm_is_dyn;
-                        `USED_FREG (rd);
-                        `USED_FREG (rs1);
-                    end
-                    5'b10100: begin
-                        // FCMP
-                        op_type = INST_OP_BITS'(INST_FPU_CMP);
-                        `USED_IREG (rd);
-                        `USED_FREG (rs1);
-                        `USED_FREG (rs2);
-                    end
-                    5'b11000: begin
-                        // FCVT.W.X, FCVT.WU.X
-                        op_type = (rs2[0]) ? INST_OP_BITS'(INST_FPU_F2U) : INST_OP_BITS'(INST_FPU_F2I);
-                        rd_xregs[XREG_1] = frm_is_dyn;
-                        `USED_IREG (rd);
-                        `USED_FREG (rs1);
-                    end
-                    5'b11010: begin
-                        // FCVT.X.W, FCVT.X.WU
-                        op_type = (rs2[0]) ? INST_OP_BITS'(INST_FPU_U2F) : INST_OP_BITS'(INST_FPU_I2F);
-                        rd_xregs[XREG_1] = frm_is_dyn;
-                        `USED_FREG (rd);
-                        `USED_IREG (rs1);
-                    end
-                    5'b11100: begin
-                        if (funct3[0]) begin
-                            // NCP: FCLASS=3
-                            op_type = INST_OP_BITS'(INST_FPU_MISC);
-                            op_args.fpu.frm = INST_FRM_BITS'(3);
-                        end else begin
-                            // NCP: FMV.X.W=4
-                            op_type = INST_OP_BITS'(INST_FPU_MISC);
-                            op_args.fpu.frm = INST_FRM_BITS'(4);
-                        `ifdef VX_CFG_EXT_ZFHMIN_ENABLE
-                            op_args.fpu.fmt[1] = funct2[1];
-                        `endif
+                        5'b00011: begin
+                            // FDIV
+                            op_type = INST_OP_BITS'(INST_FPU_DIV);
+                            rd_xregs[XREG_1] = frm_is_dyn;
+                            `USED_FREG (rd);
+                            `USED_FREG (rs1);
+                            `USED_FREG (rs2);
                         end
-                        wr_xregs[XREG_0] = 1'b0;
-                        `USED_IREG (rd);
-                        `USED_FREG (rs1);
-                    end
-                    5'b11110: begin
-                        // NCP: FMV.W.X=5
-                        op_type = INST_OP_BITS'(INST_FPU_MISC);
-                        op_args.fpu.frm = INST_FRM_BITS'(5);
-                    `ifdef VX_CFG_EXT_ZFHMIN_ENABLE
-                        op_args.fpu.fmt[1] = funct2[1];
-                    `endif
-                        wr_xregs[XREG_0] = 1'b0;
-                        `USED_FREG (rd);
-                        `USED_IREG (rs1);
-                    end
-                default:;
-                endcase
+                        5'b01011: begin
+                            // FSQRT
+                            op_type = INST_OP_BITS'(INST_FPU_SQRT);
+                            rd_xregs[XREG_1] = frm_is_dyn;
+                            `USED_FREG (rd);
+                            `USED_FREG (rs1);
+                        end
+                        5'b10100: begin
+                            // FCMP
+                            op_type = INST_OP_BITS'(INST_FPU_CMP);
+                            `USED_IREG (rd);
+                            `USED_FREG (rs1);
+                            `USED_FREG (rs2);
+                        end
+                        5'b11000: begin
+                            // FCVT.W.X, FCVT.WU.X
+                            op_type = (rs2[0]) ? INST_OP_BITS'(INST_FPU_F2U) : INST_OP_BITS'(INST_FPU_F2I);
+                            op_args.fpu.dst_fmt = rs2[1] ? INST_FMT_L : INST_FMT_W;
+                            rd_xregs[XREG_1] = frm_is_dyn;
+                            `USED_IREG (rd);
+                            `USED_FREG (rs1);
+                        end
+                        5'b11010: begin
+                            // FCVT.X.W, FCVT.X.WU
+                            op_type = (rs2[0]) ? INST_OP_BITS'(INST_FPU_U2F) : INST_OP_BITS'(INST_FPU_I2F);
+                            op_args.fpu.src_fmt = rs2[1] ? INST_FMT_L : INST_FMT_W;
+                            rd_xregs[XREG_1] = frm_is_dyn;
+                            `USED_FREG (rd);
+                            `USED_IREG (rs1);
+                        end
+                        5'b11100: begin
+                            // NCP: FCLASS=3, FMV.X.W=4
+                            op_type = INST_OP_BITS'(INST_FPU_MISC);
+                            op_args.fpu.frm = funct3[0] ? INST_FRM_BITS'(3) : INST_FRM_BITS'(4);
+                            wr_xregs[XREG_0] = 1'b0;
+                            `USED_IREG (rd);
+                            `USED_FREG (rs1);
+                        end
+                        5'b11110: begin
+                            // NCP: FMV.W.X=5
+                            op_type = INST_OP_BITS'(INST_FPU_MISC);
+                            op_args.fpu.frm = INST_FRM_BITS'(5);
+                            wr_xregs[XREG_0] = 1'b0;
+                            `USED_FREG (rd);
+                            `USED_IREG (rs1);
+                        end
+                        default:;
+                    endcase
+                end
             end
         `endif
             INST_EXT1: begin
@@ -1045,6 +1066,13 @@ module VX_decode import
 `ifndef VX_CFG_EXT_LDST_MATRIX_ENABLE
     `RUNTIME_ASSERT(~(fetch_if.valid && (opcode == INST_EXT4) && ((funct3 == 3'h0) || (funct3 == 3'h2))),
         ("%t: %s matrix load/store on a core built without VX_CFG_EXT_LDST_MATRIX_ENABLE, wid=%0d, PC=0x%0h (#%0d)",
+            $time, INSTANCE_ID, fetch_if.data.wid, to_fullPC(fetch_if.data.PC), fetch_if.data.uuid))
+`endif
+
+`ifdef VX_CFG_EXT_F_ENABLE
+    `RUNTIME_ASSERT(~(fetch_if.valid && ~fp_legal && ((opcode == INST_FCI) || (opcode == INST_FMADD) || (opcode == INST_FMSUB)
+                                                    || (opcode == INST_FNMSUB) || (opcode == INST_FNMADD))),
+        ("%t: %s FP instruction with an unsupported format or a reserved encoding, wid=%0d, PC=0x%0h (#%0d)",
             $time, INSTANCE_ID, fetch_if.data.wid, to_fullPC(fetch_if.data.PC), fetch_if.data.uuid))
 `endif
 

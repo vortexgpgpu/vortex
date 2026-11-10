@@ -95,7 +95,7 @@
   <text x="216" y="542" class="ts">MAN 52, EXP 11</text>
   <text x="216" y="560" class="ts">FLEN ≥ 64 only</text>
   <rect x="52" y="606" width="292" height="56" rx="4" class="box"/>
-  <text x="62" y="626" class="ts">result mux on fmt[0], delayed by</text>
+  <text x="62" y="626" class="ts">result mux on dst_fmt, delayed by</text>
   <text x="62" y="642" class="ts">FMA_LATENCY; F32 result NaN-boxed</text>
   <text x="52" y="690" class="tt">separate datapaths: F32 is the hot path</text>
   <text x="52" y="708" class="tt">latency 8 (F32 build) / 12 (F64 build)</text>
@@ -145,7 +145,7 @@
   <text x="1070" y="483" class="tt">lanes ÷ FNCP_PE_RATIO units</text>
   <rect x="1060" y="502" width="288" height="92" rx="4" class="pe"/>
   <text x="1070" y="522" class="t">VX_fncp_unit</text>
-  <text x="1070" y="542" class="ts">FLEN wide, format from fmt[0]</text>
+  <text x="1070" y="542" class="ts">FLEN wide, format from dst_fmt</text>
   <text x="1070" y="560" class="ts">an F32 operand that is not NaN-boxed</text>
   <text x="1070" y="576" class="ts">reads as the canonical quiet NaN</text>
   <rect x="1060" y="606" width="288" height="56" rx="4" class="box"/>

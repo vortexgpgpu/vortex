@@ -39,7 +39,7 @@ module VX_fma_unit_rtl import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     input  wire mask,
 
     input  wire [INST_FPU_BITS-1:0] op_type,
-    input  wire [INST_FMT_BITS-1:0] fmt,
+    input  wire                     op_mod,
     input  wire [INST_FRM_BITS-1:0] frm,
 
     input  wire [MAN_BITS+EXP_BITS:0] dataa,
@@ -104,14 +104,12 @@ module VX_fma_unit_rtl import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     //   the normalization LZC in the NORM stage; exponents compensate.
     // =========================================================================
 
-    `UNUSED_VAR (fmt[0])
-    wire is_sub   = fmt[1];
     wire is_nmadd = (op_type == INST_FPU_NMADD);
     wire is_mul   = (op_type == INST_FPU_MUL);
     wire is_add   = (op_type == INST_FPU_ADD);
 
     wire s_prod_neg = is_nmadd;
-    wire s_c_neg    = is_sub ^ is_nmadd;
+    wire s_c_neg    = op_mod ^ is_nmadd;
 
     // DAZ: flush a subnormal operand to signed zero when subnormals are disabled.
     localparam DAZ = (SUBNORM_ENABLE == 0);

@@ -76,19 +76,18 @@ uint32_t golden(int op, uint32_t a, uint32_t frm, uint32_t* ff) {
     return 0;
 }
 
+// Format codes: float sides use the RISC-V fmt encoding, integer sides the
+// width (XLEN=32 here, so always W).
+enum { FMT_S = 0, FMT_H = 2, FMT_W = 0 };
+
 void drive(Device& dut, int op, uint32_t a, uint32_t frm) {
     dut.frm      = frm;
     dut.is_itof  = (op == I2F_S || op == I2F_U);
     dut.is_ftoi  = (op == F2I_S || op == F2I_U);
     dut.is_f2f   = (op == F2H || op == H2F);
     dut.is_signed = (op == I2F_S || op == F2I_S);
-    dut.is_int64 = 0;     // XLEN=32
-    dut.src_fmt  = 0;     // F32
-    dut.dst_fmt  = 0;     // F32
-#ifdef HALF
-    dut.src_h    = (op == H2F);
-    dut.dst_h    = (op == F2H);
-#endif
+    dut.src_fmt  = (op == H2F) ? FMT_H : dut.is_itof ? FMT_W : FMT_S;
+    dut.dst_fmt  = (op == F2H) ? FMT_H : dut.is_ftoi ? FMT_W : FMT_S;
     dut.dataa    = a;
     dut.mask     = 1;
 }
@@ -128,7 +127,7 @@ int main(int argc, char** argv) {
     uint64_t ticks = 0;
     sim->enable = 1; sim->mask = 0;
     sim->frm = 0; sim->is_itof = 0; sim->is_ftoi = 0; sim->is_f2f = 0;
-    sim->is_signed = 0; sim->is_int64 = 0; sim->src_fmt = 0; sim->dst_fmt = 0;
+    sim->is_signed = 0; sim->src_fmt = FMT_S; sim->dst_fmt = FMT_S;
     sim->dataa = 0;
     ticks = sim.reset(ticks);
 
