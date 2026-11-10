@@ -99,6 +99,11 @@ module VX_uop_packld import VX_gpu_pkg::*; (
     // adds its register offset, through the same adder the wide uops use.
 `ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
     wire [1:0] wide_idx = is_wide ? idx2 : 2'b00;
+`ifdef VX_CFG_EXT_LDST_MATRIX_ENABLE
+    wire is_wide_word = is_wide && ~ibuf_in.bytesel[1];
+`else
+    wire is_wide_word = is_wide;
+`endif
 `else
     wire [1:0] wide_idx = 2'b00;
 `endif
@@ -126,6 +131,11 @@ module VX_uop_packld import VX_gpu_pkg::*; (
         ibuf_r.rs2 = ibuf_in.rs2 | NUM_REGS_BITS'(wide_idx);
     `endif
         ibuf_r.bytesel = {byte_size, byte_off};
+    `ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
+        // every uop of a wide access but its last may yield the next issue
+        // cycle, so several warps' accesses interleave as their scalar loads do
+        ibuf_r.issue_yield = is_wide_word && (~idx2[0] || (ibuf_in.bytesel[0] && ~idx2[1]));
+    `endif
     end
     assign ibuf_out = ibuf_r;
 `else

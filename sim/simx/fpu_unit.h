@@ -70,7 +70,7 @@ private:
   uint32_t pipe_of(const instr_trace_t* trace) const;
 
   // Hands the block one result per cycle, round-robin over the classes whose
-  // result has reached its output buffer.
+  // result has left its pipeline.
   void respond(uint32_t b);
 
   struct Result {

@@ -111,7 +111,7 @@ BEACON_PORTS  = $(if $(beacon_keep),ports=beacon/ports.csv port-modules=$(beacon
 beacon:
 	mkdir -p beacon
 	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -T$(TOP_LEVEL_ENTITY) -P -F -Cbeacon/src -Obeacon/sources.f $(RTL_PKGS)
-	$(SCRIPT_DIR)/circt_elaborate.sh -f mlir -t $(TOP_LEVEL_ENTITY) -l beacon/sources.f \
+	$(SCRIPT_DIR)/circt_elaborate.sh -t $(TOP_LEVEL_ENTITY) -l beacon/sources.f \
 		-x $(SCRIPT_DIR)/xilinx_ip_stubs.sv -r beacon/memories.rpt -o beacon/netlist.mlir
 	$(FOLDSIM_OPT) beacon/netlist.mlir --pass-pipeline='builtin.module($(BEACON_MAP))' \
 		--emit-bytecode -o beacon/mapped.mlirbc

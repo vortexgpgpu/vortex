@@ -1,18 +1,18 @@
 # Test cases for `kernel`, drafted from regression.sh.in (review/collapse).
-category: kernel
+category: sw
 defaults:
   xlen:
   - 32
   - 64
   tier: smoke
 tests:
-- id: isa-1
+- id: kernel-1
   via: make-run
   drivers:
   - simx
   dir: tests/kernel
   target: run-{driver}
-- id: isa-2
+- id: kernel-2
   via: make-run
   drivers:
   - rtlsim

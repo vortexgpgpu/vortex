@@ -38,7 +38,7 @@ module VX_cp_unpack
   localparam int OFF_W = CL_OFF_W;
 
   // Read byte `idx` straight out of the packed cache line via a dynamic
-  // part-select (synthesizes cleanly under sv2v/yosys, unlike a dynamically
+  // part-select (synthesizes cleanly under yosys, unlike a dynamically
   // indexed unpacked array).
   function automatic logic [7:0] cl_byte(input int idx);
     return cl_data[idx*8 +: 8];

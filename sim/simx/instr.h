@@ -147,6 +147,7 @@ public:
     , has_tmask_(false)
     , fu_lock_(true)
     , fu_unlock_(true)
+    , issue_yield_(false)
   {}
 
   void set_fu_type(FUType fu_type) {
@@ -227,6 +228,9 @@ public:
   void set_fu_unlock(bool value) { fu_unlock_ = value; }
   bool get_fu_unlock() const { return fu_unlock_; }
 
+  void set_issue_yield(bool value) { issue_yield_ = value; }
+  bool get_issue_yield() const { return issue_yield_; }
+
   void set_dst_bytesel(uint8_t value) { dst_bytesel_ = value; }
   uint8_t get_dst_bytesel() const { return dst_bytesel_; }
 
@@ -262,6 +266,7 @@ private:
   bool     has_tmask_;
   bool     fu_lock_;
   bool     fu_unlock_;
+  bool     issue_yield_;
 
   friend std::ostream &operator<<(std::ostream &, const Instr &);
 };

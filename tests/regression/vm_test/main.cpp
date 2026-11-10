@@ -1,4 +1,5 @@
 #include <iostream>
+#include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
 #include <algorithm>
@@ -36,7 +37,7 @@ kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
   std::cout << "Usage: [-t mode] [-n tasks] [-p pages/task] [-h]" << std::endl;
-  std::cout << "  modes: 0=stride 1=fence 2=drain 3=amo 4=superpage" << std::endl;
+  std::cout << "  modes: 0=stride 1=fence 2=drain 3=amo 4=superpage 5=sp_order" << std::endl;
 }
 
 static void parse_args(int argc, char** argv) {
@@ -81,6 +82,18 @@ int main(int argc, char* argv[]) {
   parse_args(argc, argv);
 
   uint64_t buf_size = (uint64_t)num_tasks * pages_per_task * PAGE_SIZE;
+  if (test_mode == VM_MODE_SP_ORDER) {
+    // One superpage per round, each warp on its own page of it, plus the
+    // slack to align the first one.
+    constexpr uint64_t sp_size = uint64_t(PAGE_SIZE) * (VX_VM_PT_SIZE / VX_VM_PTE_SIZE);
+    if ((uint64_t)num_tasks * PAGE_SIZE > sp_size) {
+      std::cout << "Error: too many tasks for one superpage" << std::endl;
+      return -1;
+    }
+    buf_size = (pages_per_task + 1) * sp_size;
+    // The heap must be mapped with superpages for the rounds to share them.
+    setenv("VORTEX_VM_MEGAPAGE_HEAP", "1", 1);
+  }
   uint64_t dst_size = num_tasks * sizeof(uint32_t);
   uint64_t aux_size = pages_per_task * PAGE_SIZE;
 
@@ -106,7 +119,7 @@ int main(int argc, char* argv[]) {
   // Host staging kept alive until the enqueued writes complete (the
   // queue worker reads them asynchronously).
   std::vector<uint8_t> zeros(aux_size, 0);
-  std::vector<uint32_t> poison(buf_size / sizeof(uint32_t), 0xCAFED00Du);
+  std::vector<uint32_t> poison;
 
   if (test_mode == VM_MODE_SUPERPAGE) {
     // Walk the page table through its own identity superpage mapping.
@@ -115,8 +128,12 @@ int main(int argc, char* argv[]) {
     RT_CHECK(vx_enqueue_write(queue, aux_buffer, 0, zeros.data(), aux_size, 0, nullptr, nullptr));
   }
 
-  // Poison the working buffer so untouched pages are detectable.
-  RT_CHECK(vx_enqueue_write(queue, buf_buffer, 0, poison.data(), buf_size, 0, nullptr, nullptr));
+  // Poison the working buffer so untouched pages are detectable. The
+  // superpage rounds read back only what they wrote.
+  if (test_mode != VM_MODE_SP_ORDER) {
+    poison.assign(buf_size / sizeof(uint32_t), 0xCAFED00Du);
+    RT_CHECK(vx_enqueue_write(queue, buf_buffer, 0, poison.data(), buf_size, 0, nullptr, nullptr));
+  }
 
   RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
   RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
@@ -222,6 +239,17 @@ int main(int argc, char* argv[]) {
       if (dst[g] != 1u) {
         if (errors < 16) {
           printf("*** error: [%u] superpage probe failed (0x%x)\n", g, dst[g]);
+        }
+        ++errors;
+      }
+    }
+    break;
+  }
+  case VM_MODE_SP_ORDER: {
+    for (uint32_t g = 0; g < num_tasks; ++g) {
+      if (dst[g] != 0u) {
+        if (errors < 16) {
+          printf("*** error: [%u] %u stale readbacks\n", g, dst[g]);
         }
         ++errors;
       }

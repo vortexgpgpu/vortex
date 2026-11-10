@@ -33,9 +33,7 @@ define_header=""
 top_module=""
 copy_folder=""
 preprocessor=0
-elaborate=0
 fold=0
-stubs=()
 
 defines_str=""
 params_str=""
@@ -51,7 +49,7 @@ add_option() {
 }
 
 # Parse command arguments
-while getopts D:G:T:I:J:O:H:C:X:PEFh flag
+while getopts D:G:T:I:J:O:H:C:PFh flag
 do
   case "${flag}" in
     D)  defines+=( ${OPTARG} )
@@ -75,13 +73,9 @@ do
         ;;
     P)  preprocessor=1
         ;;
-    E)  elaborate=1
-        ;;
     F)  fold=1
         ;;
-    X)  stubs+=( "${OPTARG}" )
-        ;;
-    h)  echo "Usage: [-D<macro>] [-G<param>=<value>] [-T<top-module>] [-I<include-path>] [-J<external-path>] [-O<output-file>] [-C<dest-folder>: copy to] [-H<define_header>] [-P: macro preprocessing] [-F: fold asynchronous RAM reads into block RAM] [-E: elaborate into one netlist] [-X<black-box declarations>] [-h help] [files...]"
+    h)  echo "Usage: [-D<macro>] [-G<param>=<value>] [-T<top-module>] [-I<include-path>] [-J<external-path>] [-O<output-file>] [-C<dest-folder>: copy to] [-H<define_header>] [-P: macro preprocessing] [-F: fold asynchronous RAM reads into block RAM] [-h help] [files...]"
         exit 0
         ;;
     \?) echo "Invalid option: -$OPTARG" 1>&2
@@ -299,25 +293,4 @@ if [ "$output_file" != "" ]; then
             done
         fi
     } > "$output_file"
-fi
-
-# Optional elaboration (-E): CIRCT elaborates the listed sources into the one
-# netlist synthesis reads (circt_elaborate.sh), and the filelist names it. The
-# RTL filelist stays next to it as <output>.rtl.f; the memory report as
-# <output>.memories.rpt. -X files declare the black boxes (vendor IP) the
-# synthesis tool binds.
-if [ "$elaborate" != 0 ]; then
-    if [ -z "$top_module" ] || [ -z "$output_file" ]; then
-        echo "gen_sources.sh: error: -E needs a top module (-T) and a filelist (-O)" >&2
-        exit 1
-    fi
-    stem="${output_file%.*}"
-    mv "$output_file" "$stem.rtl.f"
-    stub_args=()
-    for stub in "${stubs[@]}"; do
-        stub_args+=( -x "$(realpath "$stub")" )
-    done
-    "$SCRIPT_DIR"/circt_elaborate.sh -t "$top_module" -l "$stem.rtl.f" "${stub_args[@]}" \
-        -r "$stem.memories.rpt" -o "$stem.elab.sv"
-    realpath "$stem.elab.sv" > "$output_file"
 fi

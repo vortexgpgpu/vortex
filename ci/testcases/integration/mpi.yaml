@@ -1,12 +1,13 @@
 # Test cases for `mpi`, drafted from regression.sh.in (review/collapse).
-category: mpi
+category: integration
 defaults:
   xlen:
   - 32
   - 64
   tier: nightly
+  needs: [mpi]
 tests:
-- id: isa-1
+- id: mpi-1
   via: make-run
   drivers:
   - simx
@@ -15,7 +16,7 @@ tests:
   vars:
     MPI: '1'
     NP: '4'
-- id: isa-2
+- id: mpi-2
   via: make-run
   drivers:
   - simx
@@ -24,7 +25,7 @@ tests:
   vars:
     MPI: '1'
     NP: '4'
-- id: isa-3
+- id: mpi-3
   via: make-run
   drivers:
   - simx
@@ -33,7 +34,7 @@ tests:
   vars:
     MPI: '1'
     NP: '4'
-- id: isa-4
+- id: mpi-4
   via: make-run
   drivers:
   - simx
@@ -42,7 +43,7 @@ tests:
   vars:
     MPI: '1'
     NP: '4'
-- id: isa-5
+- id: mpi-5
   via: make-run
   drivers:
   - simx
@@ -51,7 +52,7 @@ tests:
   vars:
     MPI: '1'
     NP: '4'
-- id: isa-6
+- id: mpi-6
   via: make-run
   drivers:
   - simx
@@ -60,7 +61,7 @@ tests:
   vars:
     MPI: '1'
     NP: '4'
-- id: isa-7
+- id: mpi-7
   via: make-run
   drivers:
   - simx
@@ -69,7 +70,7 @@ tests:
   vars:
     MPI: '1'
     NP: '4'
-- id: isa-8
+- id: mpi-8
   via: make-run
   drivers:
   - simx

@@ -32,9 +32,11 @@
 # gate's target, recorded for that comparison; Beacon's thresholds are
 # 300 MHz ones.
 #
-# Tier `timing` is OPT-IN (OPT_IN_TIERS in testcase.py): it needs foldsim,
-# which the base toolchain does not install. .github/workflows/logic_gate.yml
-# installs it and runs the gate.
+# The gate runs with perf_gate: a perf_gate regression is cycles, this one is
+# depth and area, and both are asserted on every change to the RTL. Its case
+# is on the rtlsim driver at tier smoke, so ci.yml plans its cell exactly when
+# it plans perf_gate's rtlsim cells (every pull request, every push that
+# touches the RTL or the config). The cell installs foldsim (`needs`).
 #
 # Run one by name:  ci/logic_gate.py -b tcu
 # By hand, no gate: make -C hw/syn/xilinx/dut tcu-beacon
@@ -45,19 +47,22 @@ defaults:
   # 32-bit only, as the synthesis gates.
   xlen:
   - 32
-  tier: timing
   via: script
   # Any RTL change can move depth.
   touches:
   - hw/rtl/
 tests:
-# Seconds to minutes per DUT: the whole catalog runs in one job.
+# Seconds to minutes per DUT: the whole catalog runs in one cell.
 - id: gate
+  tier: smoke
+  driver: rtlsim
+  needs:
+  - foldsim
   run: ci/logic_gate.py -j 2
 
 # The full-GPU builds (group gpu, below): ~30 min and ~95 GB of memory each,
 # so one at a time, on a large self-hosted machine -- never a hosted runner.
-# Its own opt-in tier keeps `--tier timing` from sweeping it in.
+# Its opt-in tier keeps every CI sweep from picking it up.
 - id: gpu
   tier: timing_gpu
   run: ci/logic_gate.py -b gpu -j 1 --timeout 7200

@@ -446,19 +446,9 @@ module VX_decompressor import VX_gpu_pkg::*; #(
     wire        st0_advance = s1_can_accept;
 
     // ------------------------------------------------------------------
-    // sched_buffered_match — flop-only PC compare, no BRAM dep.
-    // Gated by st0_advance so the scheduler isn't acked while stage 0 is
-    // stalled.
+    // sched_buffered — fetch suppression for a warp with buffered state.
     // ------------------------------------------------------------------
 
-    // Ack the scheduler ONLY when the buffered word is actually emitted this
-    // cycle (BUF_RVC -> have_C, BUF_32RDY -> have_B_emit). The scheduler stalls
-    // an acked warp until decode returns, so acking a BUF_32HI warp (follow
-    // still in flight, nothing emitted) would stall it forever. Leaving BUF_32HI
-    // un-acked keeps the scheduler presenting buf_pc — fetch suppressed via
-    // sched_buffered below — until the follow lands and it turns BUF_32RDY, at
-    // which point have_B_emit fires and acks.
-    assign sched_buffered_match = (have_C || have_B_emit) && st0_advance;
     // Suppress the scheduler icache fetch for ANY buffered warp (non-EMPTY),
     // regardless of buf_pc match. A warp with buffered state must not have a
     // fresh fetch outstanding: on a redirect (buf_pc != sched_PC) the buffered
@@ -499,6 +489,16 @@ module VX_decompressor import VX_gpu_pkg::*; #(
     wire have_B_emit = sched_valid
                     && (buf_pc[sched_wid] == sched_PC)
                     && (state[sched_wid] == BUF_32RDY);
+    // sched_buffered_match: a flop-only PC compare, no BRAM dependency, gated
+    // by st0_advance so the scheduler isn't acked while stage 0 is stalled.
+    // Ack the scheduler ONLY when the buffered word is actually emitted this
+    // cycle (BUF_RVC -> have_C, BUF_32RDY -> have_B_emit). The scheduler stalls
+    // an acked warp until decode returns, so acking a BUF_32HI warp (follow
+    // still in flight, nothing emitted) would stall it forever. Leaving BUF_32HI
+    // un-acked keeps the scheduler presenting buf_pc — fetch suppressed via
+    // sched_buffered above — until the follow lands and it turns BUF_32RDY, at
+    // which point have_B_emit fires and acks.
+    assign sched_buffered_match = (have_C || have_B_emit) && st0_advance;
     // Redirect detector: a BUF_32HI warp re-presented at a PC that DIFFERS from
     // its stashed straddle PC is a genuine branch redirect (buf_pc == sched_PC is
     // normal straddler continuation after an RVC-then-straddler word).

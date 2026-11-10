@@ -3,7 +3,7 @@
 # fflags, across all rounding modes, exhaustively for the widening direction,
 # plus flh/fsh/fmv NaN-boxing. The converter datapath is also covered by
 # unittest:hw-fpu (fcvt_unit).
-category: zfhmin
+category: isa
 defaults:
   xlen:
   - 32

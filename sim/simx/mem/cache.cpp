@@ -93,8 +93,9 @@ struct params_t {
   int32_t tag_select_addr_end;
 
   bool bank_hash;
+  bool set_hash;
 
-  params_t(const Cache::Config &config) : bank_hash(config.bank_hash) {
+  params_t(const Cache::Config &config) : bank_hash(config.bank_hash), set_hash(config.set_hash) {
     int32_t offset_bits = config.L - config.W;
     // Any number of ways, but a power-of-two number of sets filling the size.
     uint32_t way_bytes = config.num_ways << (config.L + config.B);
@@ -134,6 +135,7 @@ struct params_t {
     this->tag_select_addr_start = (1 + this->set_select_addr_end);
     this->tag_select_addr_end = (config.addr_width - 1);
     assert(!bank_hash || (config.B != 0 && config.B <= 8));
+    assert(!set_hash || index_bits <= 16);
   }
 
   // The bank is the raw bank bits XORed with a function of the bits above
@@ -164,9 +166,24 @@ struct params_t {
     return bank_hash ? bank_xor(addr, raw) : raw;
   }
 
+  // The set is the raw set bits XORed with an XOR fold of the tag's low 32
+  // bits, so power-of-two strides walk the sets; the tag is stored unchanged,
+  // so the same XOR restores the raw set bits.
+  uint32_t set_xor(uint64_t tag) const {
+    if (!set_hash || set_select_addr_end < set_select_addr_start) {
+      return 0;
+    }
+    uint32_t bits = set_select_addr_end - set_select_addr_start + 1;
+    uint32_t mask = (1u << bits) - 1, f = 0;
+    for (uint32_t i = 0; i < 32; i += bits) {
+      f ^= uint32_t(uint32_t(tag) >> i) & mask;
+    }
+    return f;
+  }
+
   uint32_t addr_set_id(uint64_t addr) const {
     if (set_select_addr_end >= set_select_addr_start)
-      return (uint32_t)bit_getw(addr, set_select_addr_start, set_select_addr_end);
+      return (uint32_t)bit_getw(addr, set_select_addr_start, set_select_addr_end) ^ set_xor(addr_tag(addr));
     else
       return 0;
   }
@@ -190,7 +207,7 @@ struct params_t {
     if (bank_select_addr_end >= bank_select_addr_start)
       addr = bit_setw(addr, bank_select_addr_start, bank_select_addr_end, bank_id);
     if (set_select_addr_end >= set_select_addr_start)
-      addr = bit_setw(addr, set_select_addr_start, set_select_addr_end, set_id);
+      addr = bit_setw(addr, set_select_addr_start, set_select_addr_end, set_id ^ set_xor(tag));
     if (tag_select_addr_end >= tag_select_addr_start)
       addr = bit_setw(addr, tag_select_addr_start, tag_select_addr_end, tag);
     if (bank_hash && bank_select_addr_end >= bank_select_addr_start) {

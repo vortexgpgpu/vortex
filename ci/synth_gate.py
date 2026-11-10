@@ -354,15 +354,14 @@ class Yosys(Tool):
     fallback_weight = 900
     job_label = "make"
 
-    # CIRCT is the parser: a bad define, a missing include or a hierarchy error
-    # dies in circt_elaborate.sh, before Yosys ever reads a line. run_synth.sh stamps
-    # `gen-ys` immediately after source generation and conversion have both
-    # succeeded, so that stamp is this flow's "past the typo risk" marker.
+    # gen_sources.sh fails on a bad define or a missing include while it writes
+    # the sources; run_synth.sh stamps `gen-ys` once they are written. The design
+    # is elaborated later, by read_slang inside Yosys, so a hierarchy error still
+    # surfaces during the synthesis phase.
     elab_done = "TIME gen-ys"
-    elab_label = "source conversion"
+    elab_label = "source generation"
     phases = (
         ("gen_sources.sh", "sources"),
-        ("circt_elaborate.sh", "verilog"),
         (elab_done, "synthesis"),
         ("TIME yosys", "sram"),
         ("run_sta.tcl", "timing"),
@@ -376,8 +375,6 @@ class Yosys(Tool):
                 "corner": os.environ.get("CORNER", "tt"),
                 "yosys": tool_version("yosys", "-V"),
                 "sta": tool_version("sta", "-version"),
-                "circt": tool_version("circt-verilog", "--version",
-                                      package="circt", line_prefix="CIRCT"),
                 "xlen": args.xlen}
 
     def hash_key(self, env):
@@ -389,16 +386,15 @@ class Yosys(Tool):
         # than Vivado's do, and often by more than the 5% gate tolerance. A
         # toolchain bump must therefore read as STALE ("re-record"), not as a
         # regression -- the alternative is a red gate that blames the RTL for a
-        # tool change. All three ship in one tarball pinned by TOOLCHAIN_REV, so
+        # tool change. Both ship in one tarball pinned by TOOLCHAIN_REV, so
         # this makes that pin part of the baseline contract.
         return [env["pdk"], env["vt"], env["corner"], str(env["xlen"]),
-                env["yosys"], env["sta"], env["circt"]]
+                env["yosys"], env["sta"]]
 
     def env_warning(self, build, env):
         # Area and Fmax move with the Yosys/ABC version far more than Vivado's
         # do, so a version change is worth saying out loud on every build.
-        for key, label in (("yosys", "Yosys"), ("sta", "OpenSTA"),
-                           ("circt", "CIRCT")):
+        for key, label in (("yosys", "Yosys"), ("sta", "OpenSTA")):
             ref = build.get("baseline_env", {}).get(key)
             if ref and env.get(key) and ref != env[key]:
                 # The version is in config_hash, so this build is already going

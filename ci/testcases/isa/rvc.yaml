@@ -2,7 +2,7 @@
 # with the C decoder and compiles the kernels with `c` (compressed) -march.
 # The compiler-generated regression kernels below exercise word-straddling
 # 32-bit instructions and pass on both simx and rtlsim.
-category: rvc
+category: isa
 defaults:
   configs: "-DVX_CFG_EXT_C_ENABLE"
   xlen:
@@ -41,49 +41,49 @@ tests:
   xlen: [64]
 # --- real compiler-generated programs, compressed (exercise word-straddling
 #     32-bit instrs). Pass on both simx and rtlsim. ---
-- id: isa-1
+- id: rvc-1
   via: make-run
   drivers:
   - simx
   dir: tests/regression/sgemm
   target: run-{driver}
-- id: isa-2
+- id: rvc-2
   via: make-run
   drivers:
   - rtlsim
   dir: tests/regression/sgemm
   target: run-{driver}
-- id: isa-3
+- id: rvc-3
   via: make-run
   drivers:
   - simx
   dir: tests/regression/diverge
   target: run-{driver}
-- id: isa-4
+- id: rvc-4
   via: make-run
   drivers:
   - rtlsim
   dir: tests/regression/diverge
   target: run-{driver}
-- id: isa-5
+- id: rvc-5
   via: make-run
   drivers:
   - simx
   dir: tests/regression/dogfood
   target: run-{driver}
-- id: isa-6
+- id: rvc-6
   via: make-run
   drivers:
   - rtlsim
   dir: tests/regression/dogfood
   target: run-{driver}
-- id: isa-7
+- id: rvc-7
   via: make-run
   drivers:
   - simx
   dir: tests/regression/raycast
   target: run-{driver}
-- id: isa-8
+- id: rvc-8
   via: make-run
   drivers:
   - rtlsim

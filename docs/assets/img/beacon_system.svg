@@ -40,7 +40,7 @@
   <rect x="40" y="200" width="390" height="92" class="unit"/>
   <text x="55" y="224" class="t">hw/syn/xilinx/dut — target beacon</text>
   <text x="55" y="246" class="mono">gen_sources.sh      (hw/rtl, toml defines)</text>
-  <text x="55" y="264" class="mono">circt_elaborate.sh -f mlir -x xilinx_ip_stubs.sv</text>
+  <text x="55" y="264" class="mono">circt_elaborate.sh -x xilinx_ip_stubs.sv</text>
   <text x="55" y="282" class="mono">gen_platform.py --device=$(DEVICE) --emit=family</text>
 
   <rect x="40" y="420" width="390" height="90" class="unit"/>

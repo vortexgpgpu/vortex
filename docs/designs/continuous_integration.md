@@ -84,11 +84,20 @@ ambient build tree and is never expanded inside a run: `build32/` and
 
 ### 3.1 The catalog
 
-One file per category, [`ci/testcases/<category>.yaml`](../../ci/testcases/).
-Fields map one to one onto `blackbox.sh` flags.
+A category is one file, [`ci/testcases/<category>.yaml`](../../ci/testcases/),
+or a directory of files, `ci/testcases/<category>/*.yaml`. Each file has its own
+defaults, and a directory runs as one cell per driver and XLEN. Small suites
+share a directory so that each does not pay a cell's setup alone: `isa` (mufu,
+zfhmin, rvc, riscv, amo), `sw` (opencl, hip, kernel, runtime), `integration`
+(gem5, sst, dtm, cupbop, mpi) and `tensor_sp` (sparse, and sparse with MX). A
+cell runs every case of its category on its driver, whatever the case's tier,
+so a directory holds only suites of the same tier. A file in a directory is
+also a marker named after the file, so `-m mufu` or `--test gem5` still selects
+one suite. A case id is unique within its category. Fields map one to one onto
+`blackbox.sh` flags.
 
 ```yaml
-category: amo
+category: isa                               # ci/testcases/isa/amo.yaml
 defaults:
   configs: "-DVX_CFG_EXT_A_ENABLE"
   xlen: [32, 64]
@@ -283,20 +292,26 @@ and without synthesis.
 
 | | `fpga_gate` | `asic_gate` | `logic_gate` |
 |---|---|---|---|
-| flow | Vivado synthesis, place and route | CIRCT → Yosys → ABC → OpenSTA, on ASAP7 | CIRCT → `foldsim-estimate-timing` (logic levels as Vivado counts them on `DEVICE`'s family) and `foldsim-estimate-area` (its cells, memories and DSPs) |
+| flow | Vivado synthesis, place and route | Yosys (slang frontend) → ABC → OpenSTA, on ASAP7 | CIRCT → `foldsim-estimate-timing` (logic levels as Vivado counts them on `DEVICE`'s family) and `foldsim-estimate-area` (its cells, memories and DSPs) |
 | design tree | `hw/syn/xilinx/dut` | `hw/syn/yosys/dut` | `hw/syn/xilinx/dut`, target `beacon` |
 | gated | `fmax_mhz` against the target clock, `lut` against `lut_budget` | `fmax_mhz` against the target clock, `cell_area_um2` against `area_budget_um2` | `max_levels` against the baseline, the deepest end point of every RTL unit, and `lut`, `ff`, `lutram`, `bram`, `uram`, `dsp` against the baseline |
 | also recorded | `wns_ns`, `lutram`, `ff`, `bram`, `uram`, `dsp`, critical paths, high-fanout nets | `wns_ns`, `tns_ns`, `seq_area_um2`, `sram_area_um2`, `cell_count`, `power_mw` | end point bits at ≥ 12 and ≥ 8 levels, the deepest paths |
 | comparable when | same device, optimization level, xlen | same PDK, VT, corner, xlen | same CIRCT, foldsim, xlen |
-| runner | self-hosted, licensed Vivado | hosted, one job per design | hosted, one job for the catalog; the opt-in `gpu` group self-hosted |
+| runner | self-hosted, licensed Vivado | hosted, one job per design | hosted, one `ci.yml` cell for the catalog, planned with `perf_gate`; the opt-in `gpu` group self-hosted |
 | default tolerance | Fmax 2 %, LUT 5 % | Fmax 2 %, cell area 5 % | depth none: Beacon is deterministic; area 5 % |
 
-None is a pytest cell. A cell is a build tree plus a driver; a gate build is
-neither, and the synthesis gates are hours long. They are standalone scripts
+The synthesis gates are not pytest cells. A cell is a build tree plus a driver;
+a synthesis build is neither, and it is hours long. They are standalone scripts
 driven by their own workflows, and their tiers are **opt-in**: an empty tier
-selection means "everything a cell can run", which excludes them. The timing
-gate's tier is opt-in because it needs foldsim, which the base toolchain does
-not install.
+selection means "everything a cell can run", which excludes them.
+
+`logic_gate` is a cell, because it guards what `perf_gate` guards from the
+other side: perf_gate catches a change that costs cycles, logic_gate one that
+costs depth or area. Its `gate` case is a script case on the rtlsim driver at
+tier smoke, so the planner schedules its cell exactly when it schedules
+perf_gate's rtlsim cells: every pull request, and every push whose diff forces
+rtlsim in (the RTL or the config). The cell installs foldsim and pyslang
+(`needs: foldsim`). Only its `gpu` case stays opt-in, in tier `timing_gpu`.
 
 #### One implementation, two adapters
 
@@ -440,8 +455,7 @@ Measured with the `rtx5080` features at XLEN 64 on a loaded machine. The
 builds use 4 cores: the core count widens only the arbiters and crossbars,
 and the deepest path was the same at every count, while memory grows with it.
 The group is opt-in in the gate (`ci/logic_gate.py -b gpu -j 1`) and its own
-tier, `timing_gpu`, in the catalog, so neither the default run nor
-`--tier timing` sweeps it in.
+tier, `timing_gpu`, in the catalog, so no CI sweep picks it up.
 
 #### Running a multi-hour sweep
 
@@ -449,7 +463,7 @@ tier, `timing_gpu`, in the catalog, so neither the default run nor
 |---|---|
 | scheduling | longest build first, from the recorded build times, so the longest is in flight from the start; `-j` caps parallel builds and each build's tool threads are derived from it |
 | isolation | every build gets a unique `PREFIX`, hence its own tree and log. On the Yosys flow this is load-bearing: its Makefile caches generated sources and does not regenerate them when the include set changes, so two designs sharing a tree would synthesize the first one's sources |
-| early-failure watch | the runner follows each log and announces the point past which a front-end error can no longer occur — the end of RTL elaboration for Vivado, the end of source generation and CIRCT elaboration for Yosys. A build that fails before it is reported as failed before synthesis, with its error lines quoted |
+| early-failure watch | the runner follows each log and announces the point past which a front-end error can no longer occur — the end of RTL elaboration for Vivado, the end of source generation for Yosys, whose slang frontend elaborates inside synthesis. A build that fails before it is reported as failed before synthesis, with its error lines quoted |
 | resumable sessions | each build directory carries a stamp of config hash, status and metrics. `--resume` reuses a build finished for this config, lets an unfinished one continue from its checkpoint, and rebuilds one whose config changed |
 | progress | phase transitions as they land, with a heartbeat between; `-v` streams the raw log |
 
@@ -484,6 +498,7 @@ number into a location. They are never gated.
 | `build` | one build tree per XLEN, uploaded as an artifact |
 | `tests` | one job per cell: `pytest ci -m "<expression>"`, JUnit out |
 | `complete` | the single required check |
+| `change-impact` | advisory: classifies the diff R0..R3 with the base revision's `ci/change_impact.py` and policy ([code-review-policy.md](../review/code-review-policy.md)), writes the class to the job summary; read-only, never fails, and no job needs it |
 
 `setup` exists so that a cold cache prepares the toolchain once, not once per
 XLEN.
@@ -592,11 +607,11 @@ adding it: an over-budget design costs a silent job kill, not a red gate.
 
 ### 4.6 `logic_gate.yml`
 
-On every pull request and push to master that touches the RTL, the DUT
-wrappers, Beacon's scripts, the gate or its baselines; and by manual
-dispatch. One hosted job runs Beacon on the whole catalog: it restores the toolchain,
-installs foldsim (`ci/toolchain_install.sh --foldsim`), runs the catalog's
-`run:` command with `--report`, and renders the report with
+Manual dispatch only: the gate itself runs in `ci.yml` as the `logic_gate`
+cell (§3.5). A dispatch runs Beacon on the catalog, or on the builds it names,
+in one hosted job: it restores the toolchain, installs foldsim
+(`ci/toolchain_install.sh --foldsim`), runs the catalog's `run:` command with
+`--report`, and renders the report with
 [`synth_report.py`](../../ci/synth_report.py) into the workflow summary. The
 artifacts are the report and, per design, the build log, the summary and
 Beacon's deepest paths.

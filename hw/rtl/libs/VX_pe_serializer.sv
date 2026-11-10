@@ -23,7 +23,12 @@ module VX_pe_serializer #(
     parameter SHARED_WIDTH   = 0,
     parameter TAG_WIDTH      = 0,
     parameter PE_REG         = 0,
-    parameter OUT_BUF        = 0
+    parameter OUT_BUF        = 0,
+    // a zero-latency skid register on the output in place of OUT_BUF: the
+    // input ready is registered, the output is not
+    parameter OUT_SKID       = 0,
+    // copies of the PE clock enable, each its own net
+    parameter PE_ENABLES     = 1
 ) (
     input wire                          clk,
     input wire                          reset,
@@ -37,7 +42,7 @@ module VX_pe_serializer #(
     output wire                         ready_in,
 
     // PE
-    output wire                         pe_enable,
+    output wire [PE_ENABLES-1:0]        pe_enable,
     output wire [NUM_PES-1:0]           pe_mask_out,
     output wire [NUM_PES-1:0][DATA_IN_WIDTH-1:0] pe_data_out,
     output wire [`UP(SHARED_WIDTH)-1:0] pe_shared_out,
@@ -65,18 +70,32 @@ module VX_pe_serializer #(
     wire [NUM_PES-1:0]      pe_mask_in_w;
     wire [TAG_WIDTH_S-1:0]  pe_tag_in;
     wire enable;
+    // the last stage's valid as it would load when enabled
+    wire                    valid_out_n;
+
+    localparam DEPTH = PE_REG + LATENCY;
+    // The skid's registered enable also reads the stage before the last.
+    localparam NUM_TAPS = (OUT_SKID != 0 && DEPTH > 1 && NUM_LANES == NUM_PES) ? 2 : 1;
+
+    `STATIC_ASSERT (OUT_SKID == 0 || DEPTH != 0, ("invalid parameter"))
+
+    wire [NUM_TAPS-1:0][1 + NUM_PES + TAG_WIDTH_S-1:0] shift_out;
 
     VX_shift_register #(
-        .DATAW  (1 + NUM_PES + TAG_WIDTH_S),
-        .DEPTH  (PE_REG + LATENCY),
-        .RESETW (1)
+        .DATAW     (1 + NUM_PES + TAG_WIDTH_S),
+        .DEPTH     (DEPTH),
+        .RESETW    (1),
+        .NUM_TAPS  (NUM_TAPS),
+        .TAP_START (DEPTH - NUM_TAPS)
     ) shift_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (enable),
-        .data_in  ({valid_in,    pe_mask_out_w, tag_in}),
-        .data_out ({pe_valid_in, pe_mask_in_w, pe_tag_in})
+        .data_in  ({valid_in, pe_mask_out_w, tag_in}),
+        .data_out (shift_out)
     );
+
+    assign {pe_valid_in, pe_mask_in_w, pe_tag_in} = shift_out[NUM_TAPS-1];
 
     VX_pipe_register #(
         .DATAW  (NUM_PES * DATA_IN_WIDTH + SHARED_WIDTH_S),
@@ -89,7 +108,6 @@ module VX_pe_serializer #(
         .data_out ({pe_data_out,   pe_shared_out})
     );
 
-    assign pe_enable = enable;
     assign pe_mask_out = pe_mask_out_w;
 
     if (NUM_LANES != NUM_PES) begin : g_serialize
@@ -116,9 +134,11 @@ module VX_pe_serializer #(
                 batch_in_idx   <= batch_in_idx + BATCH_SIZEW'(valid_in);
                 batch_out_idx  <= batch_out_idx + BATCH_SIZEW'(pe_valid_in);
                 batch_in_done  <= valid_in && (batch_in_idx == BATCH_SIZEW'(BATCH_SIZE-2));
-                batch_out_done <= pe_valid_in && (batch_out_idx == BATCH_SIZEW'(BATCH_SIZE-2));
+                batch_out_done <= valid_out_n;
             end
         end
+
+        assign valid_out_n = pe_valid_in && (batch_out_idx == BATCH_SIZEW'(BATCH_SIZE-2));
 
         reg [BATCH_SIZE-1:0][(NUM_PES * DATA_OUT_WIDTH)-1:0] data_out_r, data_out_n;
         reg [BATCH_SIZE-1:0][NUM_PES-1:0] mask_out_r, mask_out_n;
@@ -137,7 +157,6 @@ module VX_pe_serializer #(
             mask_out_r <= mask_out_n;
         end
 
-        assign enable      = ready_out_u || ~valid_out_u;
         assign ready_in    = enable && batch_in_done;
 
         assign valid_out_u = batch_out_done;
@@ -149,30 +168,99 @@ module VX_pe_serializer #(
 
         assign pe_data_out_w = data_in;
         assign pe_mask_out_w = mask_in;
-        assign enable      = ready_out_u || ~pe_valid_in;
         assign ready_in    = enable;
         assign valid_out_u = pe_valid_in;
         assign data_out_u  = pe_data_in;
         assign mask_out_u  = pe_mask_in_w;
         assign tag_out_u   = pe_tag_in;
 
+        if (NUM_TAPS > 1) begin : g_valid_tap
+            assign valid_out_n = shift_out[0][NUM_PES + TAG_WIDTH_S];
+        end else begin : g_valid_in
+            assign valid_out_n = valid_in;
+        end
+
     end
 
-    VX_elastic_buffer #(
-        .DATAW   ((NUM_LANES * DATA_OUT_WIDTH) + NUM_LANES + TAG_WIDTH_S),
-        .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
-        .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF))
-    ) out_buf (
-        .clk       (clk),
-        .reset     (reset),
-        .valid_in  (valid_out_u),
-        .ready_in  (ready_out_u),
+    if (OUT_SKID != 0) begin : g_enable_r
 
-        .data_in   ({data_out_u, mask_out_u, tag_out_u}),
-        .data_out  ({data_out, mask_out, tag_out}),
-        .valid_out (valid_out),
-        .ready_out (ready_out)
-    );
+        // The core's clock enable, ready_out_u || ~valid_out_u, computed a
+        // cycle ahead from the skid's and the last stage's next state, so the
+        // net that reaches every unit of the core starts at a flop.
+        wire has_data   = ~ready_out_u;
+        wire has_data_n = ~ready_out && (has_data || valid_out_u);
+        wire valid_n    = enable ? valid_out_n : valid_out_u;
+
+        wire enable_n = ~has_data_n || ~valid_n;
+
+        reg enable_r;
+        always @(posedge clk) begin
+            if (reset) begin
+                enable_r <= 1'b1;
+            end else begin
+                enable_r <= enable_n;
+            end
+        end
+
+        // one flop per copy, so no single net carries every unit's enable
+        `PRESERVE_NET reg [PE_ENABLES-1:0] pe_enable_r;
+        always @(posedge clk) begin
+            if (reset) begin
+                pe_enable_r <= '1;
+            end else begin
+                pe_enable_r <= {PE_ENABLES{enable_n}};
+            end
+        end
+
+        assign enable    = enable_r;
+        assign pe_enable = pe_enable_r;
+
+        `RUNTIME_ASSERT (enable_r == (ready_out_u || ~valid_out_u), ("%t: pe_serializer enable diverged", $time))
+
+    end else begin : g_enable
+
+        `UNUSED_VAR (valid_out_n)
+        assign enable    = ready_out_u || ~valid_out_u;
+        assign pe_enable = {PE_ENABLES{enable}};
+
+    end
+
+    if (OUT_SKID != 0) begin : g_out_skid
+
+        `UNUSED_PARAM (OUT_BUF)
+
+        VX_bypass_buffer #(
+            .DATAW ((NUM_LANES * DATA_OUT_WIDTH) + NUM_LANES + TAG_WIDTH_S)
+        ) out_buf (
+            .clk       (clk),
+            .reset     (reset),
+            .valid_in  (valid_out_u),
+            .ready_in  (ready_out_u),
+            .data_in   ({data_out_u, mask_out_u, tag_out_u}),
+            .data_out  ({data_out, mask_out, tag_out}),
+            .valid_out (valid_out),
+            .ready_out (ready_out)
+        );
+
+    end else begin : g_out_buf
+
+        VX_elastic_buffer #(
+            .DATAW   ((NUM_LANES * DATA_OUT_WIDTH) + NUM_LANES + TAG_WIDTH_S),
+            .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
+            .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF))
+        ) out_buf (
+            .clk       (clk),
+            .reset     (reset),
+            .valid_in  (valid_out_u),
+            .ready_in  (ready_out_u),
+
+            .data_in   ({data_out_u, mask_out_u, tag_out_u}),
+            .data_out  ({data_out, mask_out, tag_out}),
+            .valid_out (valid_out),
+            .ready_out (ready_out)
+        );
+
+    end
 
 endmodule
 `TRACING_ON

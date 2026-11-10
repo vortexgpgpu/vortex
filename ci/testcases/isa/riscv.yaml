@@ -1,5 +1,5 @@
 # Test cases for `riscv`, drafted from regression.sh.in (review/collapse).
-category: riscv
+category: isa
 defaults:
   # The ISA suite covers atomics (rv32ua/rv64ua) and compressed (rv32uc/rv64uc),
   # so the sim must be built with those extensions — matching legacy regression
@@ -11,13 +11,13 @@ defaults:
   - 64
   tier: smoke
 tests:
-- id: isa-1
+- id: riscv-1
   via: make-run
   drivers:
   - simx
   dir: tests/riscv
   target: run-{driver}
-- id: isa-2
+- id: riscv-2
   via: make-run
   drivers:
   - rtlsim
@@ -81,6 +81,35 @@ tests:
   dir: tests/riscv/isa
   target: run-{driver}-64d
   configs+: "-DVX_CFG_FPU_TYPE_DSP -DVX_CFG_FMA64_PE_RATIO=2"
+  xlen:
+  - 64
+# The F32 and F64 ISA suites on VX_fpu_std, the FPU the ASIC flow builds: its
+# merged VX_fdivsqrt_unit and VX_fma_unit_rtl are not reached by the DSP lanes.
+- id: isa-32f-std
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/riscv/isa
+  target: run-{driver}-32f
+  configs+: "-DVX_CFG_FPU_TYPE_STD"
+  xlen:
+  - 32
+- id: isa-64f-std
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/riscv/isa
+  target: run-{driver}-64f
+  configs+: "-DVX_CFG_FPU_TYPE_STD"
+  xlen:
+  - 64
+- id: isa-64d-std
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/riscv/isa
+  target: run-{driver}-64d
+  configs+: "-DVX_CFG_FPU_TYPE_STD"
   xlen:
   - 64
 - id: isa-64d-1

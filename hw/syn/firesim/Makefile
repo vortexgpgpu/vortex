@@ -117,12 +117,10 @@ FIRESIM_TARGET_ARGS := PLATFORM=$(FIRESIM_PLATFORM) TARGET_PROJECT=midasexamples
                        DESIGN=VortexTarget TARGET_CONFIG=$(VORTEX_TARGET_CONFIG) PLATFORM_CONFIG=$(PLATFORM_CONFIG)
 QUINTUPLET := $(FIRESIM_PLATFORM)-midasexamples-VortexTarget-$(VORTEX_TARGET_CONFIG)-$(PLATFORM_CONFIG)
 
-# Vortex for the BlackBox. Golden Gate takes a file list, not include paths, so
-# the tree is copied into one directory with the macros already inlined (-P) and
-# emitted in elaboration order: packages, interfaces, modules. CIRCT then
-# elaborates it into the one netlist the image reads, as every synthesis flow
-# does (circt_elaborate.sh); the list names that netlist, and the RTL list stays
-# next to it as $(VIVADO_SRCS_NAME).rtl.f.
+# Flattened Vortex sources for the BlackBox. Golden Gate takes a file list, not
+# include paths, so the tree is copied into one directory with the macros already
+# inlined (-P), RAM-folded, and emitted in elaboration order: packages,
+# interfaces, modules. Vivado reads these sources, as in every synthesis flow.
 #
 # A simulation image (TARGET=sim or hw_emu) gets its own flattening, under
 # -DSIMULATION, as the native xrt flow does for hw_emu.
@@ -388,11 +386,7 @@ $(VIVADO_SRCS_LIST): $(RTL_SRCS)
 		echo "       pass only XLEN and the TCU/FPU selectors; VX_config.vh computes the rest"; \
 		exit 1; \
 	fi
-	mv $(VIVADO_SRCS_LIST) $(BUILD_DIR)/$(VIVADO_SRCS_NAME).rtl.f
-	$(SCRIPT_DIR)/circt_elaborate.sh -tVX_firesim_wrap -l$(BUILD_DIR)/$(VIVADO_SRCS_NAME).rtl.f \
-		-x$(SCRIPT_DIR)/xilinx_ip_stubs.sv -o$(BUILD_DIR)/$(VIVADO_SRCS_NAME).elab.sv
-	realpath $(BUILD_DIR)/$(VIVADO_SRCS_NAME).elab.sv > $(VIVADO_SRCS_LIST)
-	@echo "wrote $(VIVADO_SRCS_LIST): $(VIVADO_SRCS_NAME).elab.sv, elaborated from $$(grep -cv '^+' $(BUILD_DIR)/$(VIVADO_SRCS_NAME).rtl.f) files"
+	@echo "wrote $(VIVADO_SRCS_LIST): $$(grep -cv '^+' $(VIVADO_SRCS_LIST)) files"
 
 # The same flattening under the simulation defines. Verilator finds the modules
 # by library search over this directory, so only the tree has to be complete --
@@ -443,8 +437,8 @@ $(XILINX_IP_STAMP): $(SCRIPT_DIR)/xilinx_ip_gen.tcl
 	@test -n "$$(find $(XILINX_IP_DIR) -name '*.xci')" || { echo "ERROR: no .xci generated under $(XILINX_IP_DIR)"; exit 1; }
 	touch $@
 
-# The environment the FireSim Vitis kernel build reads: the netlist and vendor
-# cores package_kernel.tcl attaches.
+# The environment the FireSim Vitis kernel build reads: the source list and
+# vendor cores package_kernel.tcl attaches.
 kernel-env:
 	@echo 'export VORTEX_VIVADO_SRCS=$(VIVADO_SRCS_LIST)'
 	@echo 'export VORTEX_XILINX_IP_DIR=$(XILINX_IP_DIR)'

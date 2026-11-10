@@ -150,6 +150,8 @@ inline constexpr uint32_t ISSUE_WIS_BITS  = log2ceil(PER_ISSUE_WARPS);
 // own warp scheduler, fetch unit, decoder and icache request port.
 inline constexpr uint32_t PER_FETCH_WARPS = VX_CFG_NUM_WARPS / VX_CFG_FETCH_WIDTH;
 inline constexpr uint32_t ICACHE_NUM_REQS = VX_CFG_FETCH_WIDTH;
+static_assert(VX_CFG_ISSUE_WIDTH != 0 && (VX_CFG_ISSUE_WIDTH & (VX_CFG_ISSUE_WIDTH - 1)) == 0,
+              "ISSUE_WIDTH must be a power of two: the RTL takes a warp's issue slice from the low bits of its id");
 static_assert(VX_CFG_FETCH_WIDTH != 0 && (VX_CFG_FETCH_WIDTH & (VX_CFG_FETCH_WIDTH - 1)) == 0
               && VX_CFG_FETCH_WIDTH <= VX_CFG_NUM_WARPS
               && (VX_CFG_ISSUE_WIDTH % VX_CFG_FETCH_WIDTH) == 0,

@@ -44,13 +44,22 @@ void kernel_body(kernel_arg_t *arg) {
     for (; j + 4 <= chunk_k; j += 4) {
 #ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
       static_assert(__is_same(TYPE, float), "the wide loads read float words");
-      // B0 and B1 before the quad, B2 and B3 after: the order the compiler gives
-      // the scalar loads, which it cannot reach across the quad's asm volatile
+      // The compiler cannot move a load across the quad's asm volatile, so the
+      // order is written out. With 4 threads the quad conflicts 4 ways on the
+      // local-memory banks and B1 goes ahead of it too, so the second FMA does
+      // not wait on its uops; with 8 or more its uops are cheap and only B0
+      // goes first, so the FMA chain starts sooner.
       TYPE b0 = local_B[j * tile_size + l_col];
+#if VX_CFG_NUM_THREADS < 8
       TYPE b1 = local_B[(j + 1) * tile_size + l_col];
+#endif
       vx_float4 a = vx_flw_q(&a_row[j]);
       sum += a[0] * b0;
+#if VX_CFG_NUM_THREADS < 8
       sum += a[1] * b1;
+#else
+      sum += a[1] * local_B[(j + 1) * tile_size + l_col];
+#endif
       sum += a[2] * local_B[(j + 2) * tile_size + l_col];
       sum += a[3] * local_B[(j + 3) * tile_size + l_col];
 #else

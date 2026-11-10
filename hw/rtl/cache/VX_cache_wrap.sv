@@ -65,6 +65,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     parameter ACQ_FORWARD           = 0,      // An acquire flush also invalidates the next level.
     parameter FLUSH_FORWARD         = 1,      // A flush also flushes the next level.
     parameter BANK_HASH             = 0,      // Hashed bank select (cache_bank_hash).
+    parameter SET_HASH              = 0,      // Hashed set index (cache_set_hash).
     parameter READ_MERGE            = 0,      // Merge same-word reads within groups of this many adjacent ports (0: off).
     parameter READ_MERGE_LINE       = 0,      // Merge any reads of the same line instead, each port keeping its own tag and word.
 
@@ -177,6 +178,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .ACQ_FORWARD  (ACQ_FORWARD),
             .FLUSH_FORWARD (FLUSH_FORWARD),
             .BANK_HASH    (BANK_HASH),
+            .SET_HASH     (SET_HASH),
             .READ_MERGE   (READ_MERGE),
             .READ_MERGE_LINE (READ_MERGE_LINE),
             .AMO_ENABLE   (AMO_ENABLE)

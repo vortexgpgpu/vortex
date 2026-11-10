@@ -124,3 +124,40 @@ Note: depending on the system, some of the toolchain may need to be recompiled f
    ```
 
    See the Ubuntu section above for the install-tree layout.
+
+## RHEL 9 (Rocky / AlmaLinux / CentOS Stream 9)
+
+`configure` detects EL9 and selects the `rhel/9` prebuilt bundles, built natively
+on RHEL 9.8 (glibc 2.34, system GCC 11). The `ubuntu/focal` bundles do not run on
+EL9: they need glibc 2.35 / `GLIBCXX_3.4.30`. No toolchain component has to be
+compiled locally.
+
+1. Install the build dependencies:
+
+   ```
+   sudo dnf install gcc gcc-c++ make cmake ccache zlib-devel ncurses-devel
+   ```
+
+   The graphics library (`third_party/cocogfx`, built by a plain `make`) also needs
+   `libpng-devel` and `boost-devel`. OpenCL and HIP tests need the `ocl-icd` loader.
+
+2. Configure and install the toolchain as in the Ubuntu section:
+
+   ```
+   $ mkdir -p build && cd build
+   $ ../configure --xlen=32 --tooldir=$HOME/tools
+   $ ./ci/toolchain_install.sh
+   ```
+
+   Limits of the `rhel/9` bundle set: gem5 is not provided (`--gem5` / `--all`
+   fail), and `riscv*-unknown-elf-gdb` does not start (it links `libpython2.7`).
+   Neither is used by the build or the simulators.
+
+3. Build with `make -s`. Without `libpng-devel` / `boost-devel`, build only what
+   simx and rtlsim need:
+
+   ```
+   $ make -C ../third_party softfloat ramulator
+   $ make -C sw/kernel && make -C sw/runtime/stub
+   $ ./ci/blackbox.sh --driver=simx --app=sgemm --args="-n16"
+   ```

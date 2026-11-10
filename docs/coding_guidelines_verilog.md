@@ -165,6 +165,12 @@ Vortex uses explicit warning management i.e. we directly resolve the warning ins
   wire [DEPTH:0][TOP_N-1:0][WN-1:0] tree_sig;
   ```
 
+  The split is an optimization pass, so the `-O0` builds (the `debug` CI category) do not
+  split anything. Never put a module's combinational input and its registered outputs in one
+  vector (`valid[0] = valid_in`, `valid[1..]` registers): through any outer path from
+  `valid_out` back to `valid_in` the unsplit vector reads as a loop. Give the input and the
+  registers separate variables.
+
 ## 6. Assertions
 - runtime macro will include always block
   ```verilog

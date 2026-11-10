@@ -168,7 +168,8 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .SHARED_WIDTH   (INST_FPU_BITS+INST_FMT_BITS+INST_FRM_BITS),
             .TAG_WIDTH      (TAG_WIDTH),
             .PE_REG         (0),
-            .OUT_BUF        (FPU_CORE_OUT_BUF)
+            .OUT_BUF        (0),
+            .OUT_SKID       (1)
         ) pe_ser (
             .clk           (clk),
             .reset         (reset),
@@ -312,7 +313,8 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .SHARED_WIDTH   (INST_FPU_BITS+INST_FMT_BITS+INST_FRM_BITS),
             .TAG_WIDTH      (TAG_WIDTH),
             .PE_REG         (0),
-            .OUT_BUF        (FPU_CORE_OUT_BUF)
+            .OUT_BUF        (0),
+            .OUT_SKID       (1)
         ) pe_ser (
             .clk           (clk),
             .reset         (reset),
@@ -402,7 +404,8 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .SHARED_WIDTH   (1+INST_FMT_BITS+INST_FRM_BITS),
             .TAG_WIDTH      (TAG_WIDTH),
             .PE_REG         (0),
-            .OUT_BUF        (FPU_CORE_OUT_BUF)
+            .OUT_BUF        (0),
+            .OUT_SKID       (1)
         ) pe_ser (
             .clk           (clk),
             .reset         (reset),
@@ -487,7 +490,8 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .SHARED_WIDTH   (INST_FPU_BITS+INST_FMT_BITS+INST_FRM_BITS),
             .TAG_WIDTH      (TAG_WIDTH),
             .PE_REG         (0),
-            .OUT_BUF        (FPU_CORE_OUT_BUF)
+            .OUT_BUF        (0),
+            .OUT_SKID       (1)
         ) pe_ser (
             .clk           (clk),
             .reset         (reset),
@@ -596,7 +600,8 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .SHARED_WIDTH   (INST_FPU_BITS+INST_FMT_BITS+INST_FRM_BITS),
             .TAG_WIDTH      (TAG_WIDTH),
             .PE_REG         (0),
-            .OUT_BUF        (FPU_CORE_OUT_BUF)
+            .OUT_BUF        (0),
+            .OUT_SKID       (1)
         ) pe_ser (
             .clk           (clk),
             .reset         (reset),

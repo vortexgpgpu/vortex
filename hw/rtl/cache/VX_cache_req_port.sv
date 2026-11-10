@@ -29,6 +29,8 @@ module VX_cache_req_port import VX_gpu_pkg::*; #(
     parameter TAG_WIDTH       = 1,  // Request tag width
     parameter MERGE_GROUP     = 1,  // Read-merge group size (1: no read merging)
     parameter BANK_HASH       = 0,  // Hashed bank select (cache_bank_hash)
+    parameter SET_HASH        = 0,  // Hashed set index (cache_set_hash)
+    parameter LINE_SEL_BITS   = 0,  // Set select bits of the bank's line address
     parameter SHARED_LLC      = 0,  // The LLC serving every memory client alone (VX_cache_init)
     parameter SLOTS_WIDTH     = 0,  // Line merging: every group input's {tag, word select} rides the request
     parameter REQ_STAGE       = 0,  // A request stage before the bank arbiters
@@ -170,7 +172,17 @@ module VX_cache_req_port import VX_gpu_pkg::*; #(
         `UNUSED_VAR (merge_slots)
     end
 
-    wire [DATAW-1:0] req_data = {line_addr, in_rw, wsel, in_byteen, in_data, bank_tag, in_attr};
+    // With SET_HASH the bank sees the set bits XOR the fold of the tag bits
+    // above them (`CS_LINE_SET_HASH); the bank select stays on the raw line,
+    // as the memory side recovers it.
+    wire [LINE_ADDR_WIDTH-1:0] bank_line;
+    if (SET_HASH != 0 && LINE_SEL_BITS != 0) begin : g_set_hash
+        assign bank_line = line_addr ^ LINE_ADDR_WIDTH'(cache_set_hash(32'(line_addr >> LINE_SEL_BITS), LINE_SEL_BITS));
+    end else begin : g_no_set_hash
+        assign bank_line = line_addr;
+    end
+
+    wire [DATAW-1:0] req_data = {bank_line, in_rw, wsel, in_byteen, in_data, bank_tag, in_attr};
 
     // the request stage
     wire                      sel_valid;

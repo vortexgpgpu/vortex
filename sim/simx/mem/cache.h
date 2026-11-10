@@ -55,6 +55,7 @@ public:
 		bool    acq_forward = false;   // an acquire flush also invalidates the next level
 		bool    merge_line = false;    // read merging takes any read of the same line, each merged port keeping its own tag and word
 		bool    core_req_skid = false; // banks behind a combinational request crossbar take requests through a skid register
+		bool    set_hash = false;      // hashed set index
 	};
 
 	struct PerfStats {

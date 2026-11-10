@@ -143,9 +143,50 @@ jobs:
           cells=$(python3 ci/testcase.py matrix $F)
           echo "cells=$cells" >> "$GITHUB_OUTPUT"
           [ "$cells" = "[]" ] && echo "run=false" >> "$GITHUB_OUTPUT" || echo "run=true" >> "$GITHUB_OUTPUT"
-          # full toolchain (SST build + gem5) only when sst/gem5 are selected
-          if echo "$cells" | grep -qE '"(sst|gem5)"'; then echo "profile=full" >> "$GITHUB_OUTPUT"; else echo "profile=lite" >> "$GITHUB_OUTPUT"; fi
+          # full toolchain (SST build + gem5) only when a cell needs sst or gem5
+          if echo "$cells" | grep -qE '"needs": \[[^]]*"(sst|gem5)"'; then echo "profile=full" >> "$GITHUB_OUTPUT"; else echo "profile=lite" >> "$GITHUB_OUTPUT"; fi
           python3 ci/testcase.py lint
+
+  # ---------------------------------------------------------------------------
+  # change-impact — advisory R0..R3 class of the diff
+  # (docs/review/code-review-policy.md). The classifier and its policy come from
+  # the base revision, or from the default branch without a usable base. It
+  # writes only to the job summary, never fails, and no job needs it.
+  # ---------------------------------------------------------------------------
+  change-impact:
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/'))
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    timeout-minutes: 5
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Change impact (advisory)
+        env:
+          EVENT: ${{ github.event_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -uo pipefail
+          BASE="$PUSH_BEFORE"; [ "$EVENT" = "pull_request" ] && BASE="$PR_BASE"
+          REF="$BASE"
+          git cat-file -e "${REF}^{commit}" 2>/dev/null || REF="origin/$DEFAULT_BRANCH"
+          POL="$RUNNER_TEMP/change_impact"
+          mkdir -p "$POL"
+          if ! git show "$REF:ci/change_impact.py" > "$POL/change_impact.py" 2>/dev/null \
+             || ! git show "$REF:docs/review/change-impact.yaml" > "$POL/change-impact.yaml" 2>/dev/null; then
+            echo "no change-impact policy at $REF; skipped"
+            exit 0
+          fi
+          python3 -I "$POL/change_impact.py" --repo "$PWD" --policy "$POL/change-impact.yaml" \
+            classify --base "$BASE" --head HEAD --event "$EVENT" --format markdown \
+            --policy-note " from $(git rev-parse --short "$REF")" >> "$GITHUB_STEP_SUMMARY" \
+            || echo "::warning::change-impact classification failed (advisory)"
+          exit 0
 
   # ---------------------------------------------------------------------------
   # setup — warm the shared toolchain + third_party caches ONCE (prepare=true),
@@ -229,16 +270,28 @@ jobs:
         run: |
           case "${{ matrix.category }}" in
             vulkan) sudo bash ./ci/install_dependencies.sh --vulkan ;;
-            mpi)    sudo bash ./ci/install_dependencies.sh --mpi ;;
-            gem5)   sudo bash ./ci/install_dependencies.sh --gem5 ;;
           esac
       # A check's cell gathers cases from every category, so per-case tools are
       # keyed on the cell's needs, not its name.
+      - name: Per-case deps
+        if: contains(matrix.needs, 'mpi') || contains(matrix.needs, 'gem5')
+        run: |
+          ${{ contains(matrix.needs, 'mpi') && 'sudo bash ./ci/install_dependencies.sh --mpi' || 'true' }}
+          ${{ contains(matrix.needs, 'gem5') && 'sudo bash ./ci/install_dependencies.sh --gem5' || 'true' }}
+      # ASAP7's downloads are content-addressed by its manifest, so the
+      # manifest's hash is the cache key. A hit skips the fetch from GitHub,
+      # which can fail a whole cell on a transient 5xx.
+      - name: Cache ASAP7 downloads
+        if: contains(matrix.needs, 'asap7')
+        uses: actions/cache@v4
+        with:
+          path: build${{ matrix.xlen }}/hw/syn/libs/asap7/downloads
+          key: asap7-downloads-${{ hashFiles('hw/syn/libs/asap7/manifest.txt') }}
       - name: Per-case tools
         if: contains(matrix.needs, 'foldsim')
         run: |
           (cd build${{ matrix.xlen }} && bash ci/toolchain_install.sh --foldsim)
-          pip install --quiet pyslang==12.0.0
+          pip install --quiet "pyslang>=11,<13"
       - name: Run cell
         run: |
           cd build${{ matrix.xlen }}

@@ -249,10 +249,8 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 .data_out ({pipe_valid_out, pipe_data_out})
             );
 
-            VX_elastic_buffer #(
-                .DATAW   (PIPE_DATAW),
-                .SIZE    (`TO_OUT_BUF_SIZE(FPU_CORE_OUT_BUF)),
-                .OUT_REG (`TO_OUT_BUF_REG(FPU_CORE_OUT_BUF))
+            VX_bypass_buffer #(
+                .DATAW (PIPE_DATAW)
             ) out_buf (
                 .clk       (clk),
                 .reset     (reset),
@@ -320,10 +318,8 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .data_out ({pipe_valid_out, pipe_data_out})
         );
 
-        VX_elastic_buffer #(
-            .DATAW   (PIPE_DATAW),
-            .SIZE    (`TO_OUT_BUF_SIZE(FPU_CORE_OUT_BUF)),
-            .OUT_REG (`TO_OUT_BUF_REG(FPU_CORE_OUT_BUF))
+        VX_bypass_buffer #(
+            .DATAW (PIPE_DATAW)
         ) out_buf (
             .clk       (clk),
             .reset     (reset),
@@ -390,10 +386,8 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .data_out ({pipe_valid_out, pipe_data_out})
         );
 
-        VX_elastic_buffer #(
-            .DATAW   (PIPE_DATAW),
-            .SIZE    (`TO_OUT_BUF_SIZE(FPU_CORE_OUT_BUF)),
-            .OUT_REG (`TO_OUT_BUF_REG(FPU_CORE_OUT_BUF))
+        VX_bypass_buffer #(
+            .DATAW (PIPE_DATAW)
         ) out_buf (
             .clk       (clk),
             .reset     (reset),
@@ -490,10 +484,8 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .data_out ({pipe_valid_out, pipe_data_out})
         );
 
-        VX_elastic_buffer #(
-            .DATAW   (PIPE_DATAW),
-            .SIZE    (`TO_OUT_BUF_SIZE(FPU_CORE_OUT_BUF)),
-            .OUT_REG (`TO_OUT_BUF_REG(FPU_CORE_OUT_BUF))
+        VX_bypass_buffer #(
+            .DATAW (PIPE_DATAW)
         ) out_buf (
             .clk       (clk),
             .reset     (reset),
@@ -610,10 +602,8 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .data_out ({pipe_valid_out, pipe_data_out})
         );
 
-        VX_elastic_buffer #(
-            .DATAW   (1 + PIPE_DATAW),
-            .SIZE    (`TO_OUT_BUF_SIZE(FPU_CORE_OUT_BUF)),
-            .OUT_REG (`TO_OUT_BUF_REG(FPU_CORE_OUT_BUF))
+        VX_bypass_buffer #(
+            .DATAW (1 + PIPE_DATAW)
         ) out_buf (
             .clk       (clk),
             .reset     (reset),

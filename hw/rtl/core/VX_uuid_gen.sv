@@ -51,7 +51,13 @@ module VX_uuid_gen import VX_gpu_pkg::*; #(
         end
     end
 
-    wire [GNW_WIDTH-1:0] g_wid = (GNW_WIDTH'(core_id) << NW_BITS) + GNW_WIDTH'(wid);
-    assign uuid = {g_wid, (has_uuid_cntrs[lid] ? uuid_cntrs[lid] : 0)};
+    wire [31:0] uuid_cntr = has_uuid_cntrs[lid] ? uuid_cntrs[lid] : 0;
+    if (GNW_WIDTH > 0) begin : g_gwid
+        wire [GNW_WIDTH-1:0] g_wid = (GNW_WIDTH'(core_id) << NW_BITS) + GNW_WIDTH'(wid);
+        assign uuid = {g_wid, uuid_cntr};
+    end else begin : g_no_gwid
+        `UNUSED_VAR (core_id)
+        assign uuid = UUID_WIDTH'(uuid_cntr);
+    end
 
 endmodule

@@ -63,7 +63,8 @@ VX_CFG_MAX_BAR_EVENTS = 32
 
 VX_CFG_IBUF_SIZE = 4
 VX_CFG_DISPATCH_QUEUE_SIZE = 4
-VX_CFG_ISSUE_WIDTH = "expr: up($VX_CFG_NUM_WARPS / 16)"
+# A power of two: a warp's issue slice is the low bits of its id.
+VX_CFG_ISSUE_WIDTH = "expr: pow(2, clog2(up($VX_CFG_NUM_WARPS / 16)))"
 # Fetch slices, each scheduling and fetching its own warps on its own icache
 # port: a power of two that divides ISSUE_WIDTH. One per issue slice by
 # default (the largest power of two dividing ISSUE_WIDTH).
@@ -347,6 +348,9 @@ VX_CFG_DCACHE_NUM_BANKS = "expr: pow(2, clog2(min($VX_CFG_DCACHE_NUM_REQS, 16)))
 # With two banks it can only swap a line on parity, and the extra parallel
 # misses cost more in memory queuing than the spreading saves.
 VX_CFG_DCACHE_BANK_HASH = "expr: int($VX_CFG_DCACHE_NUM_BANKS >= 4)"
+# XOR-fold set-index hash, so power-of-two strides walk the sets instead of
+# piling into the few sets their raw index bits select.
+VX_CFG_DCACHE_SET_HASH = 1
 # One bank access serves a warp's same-word reads arriving together on its
 # coalescer channels (uniform loads), and the response returns to all of
 # them in the same cycle.

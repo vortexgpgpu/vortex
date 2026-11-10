@@ -184,6 +184,17 @@ tests:
   target: run-{driver}
   vars:
     OPTS: -t4 -n4 -p1
+# A hit through a superpage another warp's walk installed must not overtake
+# the warp's own store still parked on the page's walk.
+- id: vm-sp-order
+  via: make-run
+  drivers:
+  - simx
+  - rtlsim
+  dir: tests/regression/vm_test
+  target: run-{driver}
+  vars:
+    OPTS: -t5 -n16 -p8
 # The heap mapped once with superpages (VORTEX_VM_MEGAPAGE_HEAP): every buffer
 # translates through the TLBs' megapage path at its identity VA.
 - id: vm-megapage-heap

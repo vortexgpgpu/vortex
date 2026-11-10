@@ -116,6 +116,9 @@ public:
       VX_CFG_DCACHE_MRSQ_SIZE != 0,  // memory-response queue
       true,                          // the socket's registered memory port
       DCACHE_ACQ_FORWARD,            // acq_forward
+      false,                         // line merging
+      false,                         // core-request skid
+      VX_CFG_DCACHE_SET_HASH != 0,   // set_hash
     });
 
 #ifdef VX_CFG_EXT_TEX_ENABLE

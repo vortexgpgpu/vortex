@@ -198,6 +198,17 @@ private:
 	};
 
 	std::array<lsu_state_t, VX_CFG_NUM_LSU_BLOCKS> states_;
+
+	// The result path's two input buffers, two entries each, ahead of the
+	// result arbiter, whose own two-entry buffer is Outputs: responses, and the
+	// instructions that commit without one (stores, skipped requests, fences).
+	// Each registers its ready.
+	std::vector<SimChannel<instr_trace_t*>> rsp_bufs_;
+	std::vector<SimChannel<instr_trace_t*>> no_rsp_bufs_;
+
+	// Moves one result into the arbiter's buffer, a response first.
+	void arbitrate_results(uint32_t b);
+
 	uint64_t pending_loads_;
 };
 

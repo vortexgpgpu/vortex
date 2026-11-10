@@ -539,9 +539,12 @@ private:
     size_t lane_bytes = lane_off * sizeof(frag_elem_t<Frag>) + (fold ? 0 : off_bytes);
     size_t row_bytes = geom::row_step * ldm * sizeof(frag_elem_t<Frag>);
     uintptr_t base = reinterpret_cast<uintptr_t>(src) + lane_bytes;
-    if constexpr (geom::J == 4) {
-      // opaque, so a K loop steps one induction variable and derives the other
-      // three registers by adds instead of stepping one per register; volatile,
+    // A dense A pair is cheaper hoisted; every other group is not: the sparse
+    // metadata and MX scale loads, and a second shared-memory stage, leave too
+    // few registers to keep each row group's address live across the K loop.
+    if constexpr (geom::J == 4 || (geom::J > 1 && (!geom::is_a || is_sparse || input_is_mx))) {
+      // opaque, so a K loop keeps one base live and derives the other row
+      // groups by adds instead of keeping one register per group; volatile,
       // so those adds stay behind the tile's metadata loads instead of delaying them
       __asm__ volatile("" : "+r"(base));
     }

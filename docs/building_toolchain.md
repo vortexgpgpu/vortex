@@ -25,7 +25,7 @@ The components covered here are:
 11. [SST](#11-sst) — Structural Simulation Toolkit (sst-core + sst-elements + OpenMPI); consumed by the SST-driven regression configurations
 12. [FireSim](#12-firesim) — FPGA-accelerated host-decoupled simulation on the Alveo U55C or V80; needed only to elaborate a target or build a bitstream (optional)
 13. [SLASH / Alveo V80](#13-slash--alveo-v80-the-aved-backend) — AMD Alveo V80 platform stack for the `aved` backend (optional)
-14. [CIRCT](#14-circt) — the SystemVerilog frontend of every synthesis flow (`circt-verilog`, `circt-opt`, `firtool`)
+14. [CIRCT](#14-circt) — the SystemVerilog preprocessor of the synthesis flows and the frontend of Beacon and Foldsim (`circt-verilog`, `circt-opt`, `firtool`)
 15. [Foldsim](#15-foldsim) — FAME-5 simulator compiler of `hw/syn/foldsim`, built on CIRCT (optional)
 
 ---
@@ -1130,11 +1130,13 @@ for the backend's architecture and
 
 ## 14. CIRCT
 
-**Purpose**: the SystemVerilog frontend of every synthesis flow. Its
-preprocessor writes the sources each flow reads (`gen_sources.sh -P`, then the
-RAM fold, `-F`; see the hardware library's "Block RAM and asynchronous reads");
-Vivado reads them as they are, and Yosys, Beacon and Foldsim read the netlist
-CIRCT elaborates from them (`hw/scripts/circt_elaborate.sh`).
+**Purpose**: the SystemVerilog preprocessor of the synthesis flows and the
+frontend of Beacon and Foldsim. Its preprocessor writes the sources each flow
+reads (`gen_sources.sh -P`, then the RAM fold, `-F`; see the hardware library's
+"Block RAM and asynchronous reads"). Every synthesis tool reads those sources,
+never an elaborated netlist; Yosys reads them with its slang frontend. Only Beacon reads
+the netlist CIRCT elaborates (`hw/scripts/circt_elaborate.sh`); Foldsim imports
+the sources with CIRCT in its own flow.
 
 > **Baseline:** Vortex's CIRCT fork, branch `vortex_3.x` of
 > `vortexgpgpu/circt`: upstream CIRCT with the import, lowering and
@@ -1344,6 +1346,36 @@ cd vortex-toolchain-prebuilt
 
 Then `git add` / `git commit` the regenerated bundles in that repo and
 push, moving the release tag that `$TOOLCHAIN_REV` pins.
+
+### Per-OS bundles
+
+`configure` picks `$OSVERSION` from `/etc/os-release`: Ubuntu 20.04+ →
+`ubuntu/focal`, EL7/EL8 → `centos/7`, EL9 (RHEL, Rocky, AlmaLinux, CentOS
+Stream) → `rhel/9`. The `ubuntu/focal` bundles are built on Ubuntu 22.04 and
+need glibc 2.35 / `GLIBCXX_3.4.30`, so they do not load on EL9.
+
+`rhel/9` holds only the components whose host binaries had to be rebuilt.
+`toolchain_install.sh` reuses the `ubuntu/focal` riscv32/riscv64 bundles
+there, because they need only glibc 2.14. The `centos/7` riscv bundle
+is GCC 13, and its newlib no longer defines `HAVE_INITFINI_ARRAY`, which the
+kernel library depends on.
+
+| Component | `rhel/9` build |
+|---|---|
+| llvm-vortex | §3 at the focal bundle's commit, system GCC 11, Ninja; `LLVM_ENABLE_LIBXML2=OFF` (EL9 has no `libxml2-devel` by default; only `llvm-mt` uses it) |
+| verilator | §1 at the focal version, `--disable-tcmalloc` (so no gperftools runtime dependency) |
+| yosys | CMake, `BUILD_SHARED_LIBS=OFF`, `YOSYS_ENABLE_UNIT_TESTS=OFF`, libffi linked statically |
+| sta | §8 at the focal commit; CUDD, SWIG and Eigen built into a private prefix |
+| pocl, chipstar, mesa-vortex | the focal binaries, copied unchanged (glibc ≤ 2.34, `GLIBCXX` ≤ 3.4.29); they link the `rhel/9` LLVM, which has the same sonames and ABI |
+
+Keep the two OS slots in lockstep. When llvm, verilator, yosys or sta is
+refreshed for `ubuntu/focal`, rebuild it on EL9 and package it with
+`OSVERSION=rhel/9 ./ci/toolchain_prebuilt.sh --<component>`. When pocl, chipstar
+or mesa is refreshed, copy the new tarball into `<component>/rhel/9/`. After any
+`rhel/9` refresh, confirm the binaries still load on a stock EL9 host (no
+`GLIBC_2.35` / `GLIBCXX_3.4.30` references in `objdump -T`). gem5 has no
+`rhel/9` bundle: its focal build needs Python 3.10, HDF5 and protobuf runtimes
+that EL9 does not provide.
 
 ### `ci/toolchain_install.sh` — install the prebuilt toolchain
 

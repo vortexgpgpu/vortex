@@ -67,6 +67,9 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
                 decode_if.data.rs3,
                 1'b1, // fu_lock
                 1'b1  // fu_unlock
+            `ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
+                , 1'b0 // issue_yield
+            `endif
             }),
             .ready_in (ibuf_ready_in[w]),
             .valid_out(ibuffer_tmp_if.valid),

@@ -2,7 +2,7 @@
 # The `mufu` app self-enables VX_CFG_EXT_MUFU_ENABLE and checks every result
 # bit-exactly against the shared golden model (sw/common/mufu.cpp) plus libm
 # accuracy bounds; the datapath itself is covered by unittest:hw-mufu.
-category: mufu
+category: isa
 defaults:
   xlen:
   - 32

@@ -46,6 +46,9 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID= "",
     parameter BANK_ID           = 0,
     parameter BANK_HASH         = 0,          // hashed bank select (cache_bank_hash)
+    parameter SET_HASH          = 0,          // hashed set index (cache_set_hash)
+    parameter CACHE_SIZE        = 1024,       // cache size in bytes (set-index width)
+    parameter NUM_WAYS          = 1,          // associativity (set-index width)
     parameter LINE_SIZE         = 16,         // Size of line inside a bank in bytes
     parameter SECTOR_SIZE       = LINE_SIZE,  // Size of a sector in bytes (coalescing/fill granule); = LINE_SIZE => 1 sector
     parameter NUM_BANKS         = 1,          // Number of banks
@@ -156,6 +159,9 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
 );
     `UNUSED_PARAM (BANK_ID)
     `UNUSED_PARAM (BANK_HASH)
+    `UNUSED_PARAM (SET_HASH)
+    `UNUSED_PARAM (CACHE_SIZE)
+    `UNUSED_PARAM (NUM_WAYS)
 
     // Per-entry word-in-line select, kept outside the payload RAM so the
     // allocate probe can compare it: the hit-demotion order hazard is

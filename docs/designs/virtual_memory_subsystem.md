@@ -226,10 +226,12 @@ mutually exclusive by priority:
 
 `mshr_join` (the lane's VPN matches a live miss-station entry and the lane
 must keep order behind it) outranks `cam_hit` on purpose: a request to a page
-whose walk is still landing must queue behind that page's parked requests, or
-a same-lane access could overtake an older one on the hit path (§3.5). Only a
-lane with requests of its own in the station needs that order, so a data-side
-lane joins only while its parked count (§3.5) is non-zero; an instruction-side
+whose walk is still landing (or still out, when a superpage installed by
+another page's walk already covers it) must queue behind that page's parked
+requests, or a same-lane access could overtake an older one on the hit path
+(§3.5). Only a lane with requests of its own in the station needs that order,
+so a data-side lane joins only while its parked count (§3.5) is non-zero; an
+instruction-side
 lane never joins, since a warp has one fetch in flight. Any other lane takes a
 hit as soon as the fill lands: joining would funnel every access to a hot page
 through the one-token-per-cycle drain, lowest lane first, and starve the

@@ -196,8 +196,8 @@ changed, since FireSim's make judges elaboration by these timestamps),
 `replace-rtl` (Golden Gate), and the platform's own build (`v++` on vitis,
 slashkit on aved), handed:
 
-- `VORTEX_VIVADO_SRCS` — the netlist CIRCT elaborates from the flattened
-  tree, packaged into the kernel;
+- `VORTEX_VIVADO_SRCS` — the file list of the flattened, RAM-folded tree,
+  packaged into the kernel;
 - `VORTEX_XILINX_IP_DIR` — the vendor cores, copied in fresh directories
   (Tcl's `file copy` onto an existing directory nests instead of replacing,
   which silently reuses the previous run's cores);

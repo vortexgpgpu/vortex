@@ -2,7 +2,7 @@
 # The two standalone `make -C sim/{simx,rtlsim}` builds in the legacy function are
 # not specs here — the sim build is derived per (driver, configs) build-key by the
 # pytest sim_build fixture and shared across every spec that needs it.
-category: amo
+category: isa
 defaults:
   configs: "-DVX_CFG_EXT_A_ENABLE"
   xlen: [32, 64]

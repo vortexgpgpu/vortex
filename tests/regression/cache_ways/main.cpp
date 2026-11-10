@@ -41,8 +41,33 @@ static const uint32_t llc_sector = VX_CFG_L1_LINE_SIZE;
 static const uint32_t llc_policy = VX_CFG_DCACHE_REPL_POLICY;
 #endif
 
-// Lines a set-index apart: same set, same bank (without a bank hash).
+// Lines a set-index apart: same raw set, same bank (without a bank hash).
 static const uint32_t set_stride = llc_size / llc_ways;
+
+static constexpr uint32_t ilog2(uint32_t x) { return (x > 1) ? 1 + ilog2(x >> 1) : 0; }
+
+// With VX_CFG_DCACHE_SET_HASH the dcache XORs a fold of the line's tag (its address
+// over set_stride) into the raw set, in chunks of the set-index width.
+#if !VX_CFG_L3_ENABLED && !VX_CFG_L2_ENABLED && VX_CFG_DCACHE_SET_HASH
+// The dcache's banks follow its request count, which the host config does not
+// carry: LSU blocks x channels, as sim/simx/constants.h derives it.
+static constexpr uint32_t pow2_ceil(uint32_t x) { return (x > 1) ? 2 * pow2_ceil((x + 1) / 2) : 1; }
+static const uint32_t dcache_channels = ((VX_CFG_NUM_LSU_LANES * (VX_CFG_XLEN / 8)) / VX_CFG_DCACHE_WORD_SIZE > 1)
+                                      ? (VX_CFG_NUM_LSU_LANES * (VX_CFG_XLEN / 8)) / VX_CFG_DCACHE_WORD_SIZE : 1;
+static const uint32_t dcache_reqs     = VX_CFG_NUM_LSU_BLOCKS * dcache_channels;
+static const uint32_t dcache_banks    = pow2_ceil(dcache_reqs < 16 ? dcache_reqs : 16);
+static const uint32_t set_bits = ilog2(llc_size / (llc_ways * llc_line * dcache_banks));
+#else
+static const uint32_t set_bits = 0;
+#endif
+
+static uint32_t set_fold(uint64_t tag) {
+  uint32_t f = 0;
+  for (uint32_t i = 0; set_bits != 0 && i < 32; i += set_bits) {
+    f ^= (uint32_t(tag) >> i) & ((1u << set_bits) - 1);
+  }
+  return f;
+}
 static const uint32_t span_lines = set_stride / llc_line;
 static const uint32_t sectors    = llc_line / llc_sector;
 
@@ -130,6 +155,33 @@ static kernel_arg_t lines_at(uint32_t first_line, uint32_t lines, uint32_t strid
   return arg;
 }
 
+// `lines` lines in one set, the first at LLC line `first_line` of the set span: whole
+// set strides apart, starting `j` strides in with a step of `k`, the smallest that keep
+// every line's tag fold equal to the first's (j = 0, k = 1 without a set hash).
+static kernel_arg_t same_set_lines(uint32_t first_line, uint32_t lines) {
+  if (set_bits == 0)
+    return lines_at(first_line, lines, set_stride);
+  const uint32_t max_j = 1u << set_bits, max_k = 2u << set_bits;
+  kernel_arg_t arg = lines_at(first_line, 0, (max_j + lines * max_k) * set_stride);
+  uint64_t tag0 = arg.addr / set_stride;
+  for (uint32_t k = 1; k <= max_k; ++k) {
+    for (uint32_t j = 0; j < max_j; ++j) {
+      uint32_t i = 1;
+      while (i < lines && set_fold(tag0 + j + i * k) == set_fold(tag0 + j))
+        ++i;
+      if (i == lines) {
+        arg.addr += (uint64_t)j * set_stride;
+        arg.lines = lines;
+        arg.line_stride = k * set_stride;
+        return arg;
+      }
+    }
+  }
+  std::cout << "error: no same-set placement found" << std::endl;
+  cleanup();
+  exit(1);
+}
+
 // Memory reads of a second pass over lines the first pass left in the cache.
 static int64_t second_pass_reads(const kernel_arg_t& arg) {
   launch(arg);
@@ -175,9 +227,9 @@ int main(int argc, char *argv[]) {
   // The same accesses spread over distinct sets: every line stays resident.
   int64_t control = second_pass_reads(lines_at((target + span_lines / 2) % span_lines, llc_ways, llc_line));
   // One set filled to its ways, every sector of each line read.
-  int64_t fit = second_pass_reads(lines_at(target, llc_ways, set_stride));
+  int64_t fit = second_pass_reads(same_set_lines(target, llc_ways));
   // One line more than the set holds.
-  int64_t over = second_pass_reads(lines_at(target, llc_ways + 1, set_stride));
+  int64_t over = second_pass_reads(same_set_lines(target, llc_ways + 1));
 
   std::cout << "second-pass memory reads: control " << control << ", " << llc_ways << " lines in one set " << fit
             << ", " << (llc_ways + 1) << " lines in one set " << over << std::endl;
