@@ -180,13 +180,10 @@
     `define TCU_META_ENABLE
 `endif
 
-// Tensor jobs drive the WGMMA tile buffers and the doubled-K FEDP array.
+// Tensor jobs drive the WGMMA tile buffers.
 `ifdef VX_CFG_TCU_TMEM_ENABLE
     `ifndef VX_CFG_TCU_WGMMA_ENABLE
         `error "VX_CFG_TCU_TMEM_ENABLE requires VX_CFG_TCU_WGMMA_ENABLE"
-    `endif
-    `ifndef VX_CFG_TCU_FEDP2K
-        `error "VX_CFG_TCU_TMEM_ENABLE requires VX_CFG_TCU_FEDP2K"
     `endif
     `ifndef VX_CFG_EXT_DXA_ENABLE
         `error "VX_CFG_TCU_TMEM_ENABLE requires VX_CFG_EXT_DXA_ENABLE"

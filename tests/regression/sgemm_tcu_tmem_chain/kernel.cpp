@@ -77,7 +77,7 @@ static inline __attribute__((always_inline)) void mma_loop(
     wait_bar(full_bar(cta_id, s), 1);
     const uint32_t b = smem_base + s * stage_bytes + (pv ? 0 : q_elems * sizeof(ctx::input_t));
     if (pv) {
-      tm::mma<1>(taddr, p_col + i * KB * wg_cfg::fedpK, b, acc_init && i == 0);
+      tm::mma<1>(taddr, p_col + i * KB * wg_cfg::k_steps * wg_cfg::fedpK, b, acc_init && i == 0);
     } else {
       tm::mma<0>(taddr, smem_base + s * stage_bytes, b, acc_init && i == 0);
     }
@@ -129,8 +129,8 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   // S = Q . K^T, into TMEM.
   if (warp_rank == 0) {
     constexpr uint32_t kLd = tm::make_ld(kBK * sizeof(ctx::input_t), kBK * sizeof(ctx::input_t));
-    tm::set_idesc<0>(tm::make_idesc(vt::ITYPE::id, vt::OTYPE::id, L / ctx::tcN, KB), kLd);
-    tm::set_idesc<1>(tm::make_idesc(vt::ITYPE::id, vt::OTYPE::id, N / ctx::tcN, KB, false, true), kLd);
+    tm::set_idesc<0>(tm::make_idesc(vt::ITYPE::id, vt::OTYPE::id, L / ctx::tcN, KB * wg_cfg::k_steps), kLd);
+    tm::set_idesc<1>(tm::make_idesc(vt::ITYPE::id, vt::OTYPE::id, N / ctx::tcN, KB * wg_cfg::k_steps, false, true), kLd);
     mma_loop(cta_id, K1 / kBK, false, true,
              s_col, p_col, smem, stage_elems, q_elems, 0, 0);
   }

@@ -380,6 +380,9 @@ module VX_tcu_tmem import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [31:0] op_s2 = op.rs2_data[0][31:0];
     wire [31:0] op_s3 = op.rs3_data[0][31:0];
 
+    // Metadata rows per K-tile: one per TC_K words of compressed A.
+    localparam SP_ROWS = TCU_WG_FEDP_K / TCU_TC_K;
+
     function automatic logic [15:0] meta_row_bits(input logic [4:0] fmt);
         return 16'(TCU_TC_K * 2 * (32 / tcu_fmt_width(fmt)));
     endfunction
@@ -544,7 +547,7 @@ module VX_tcu_tmem import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     always_ff @(posedge clk) begin
         if (op_fire && op_is_idesc) begin
-            dslot_r[op_dslot] <= {COLW'(32'(op_s1[31:24]) * ((2 * 32'(meta_row_bits(op_s1[4:0])) + 31) >> 5)),
+            dslot_r[op_dslot] <= {COLW'(32'(op_s1[31:24]) * ((SP_ROWS * 32'(meta_row_bits(op_s1[4:0])) + 31) >> 5)),
                                   COLW'(32'(op_s1[31:24]) * TCU_WG_FEDP_K),
                                   COLW'(32'(op_s1[20:13]) * TC_N),
                                   op_s2, op_s1};
@@ -736,7 +739,9 @@ module VX_tcu_tmem import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     for (int i = 0; i < TC_M; ++i) begin
                         for (int j = 0; j < w; ++j) begin
                             job_meta_lo_c[b][i * w + j] = meta_r[b][32'(e_m_r) * TC_M + i][j / 32][j % 32];
-                            job_meta_hi_c[b][i * w + j] = meta_r[b][32'(e_m_r) * TC_M + i][(w + j) / 32][(w + j) % 32];
+                            if (SP_ROWS > 1) begin
+                                job_meta_hi_c[b][i * w + j] = meta_r[b][32'(e_m_r) * TC_M + i][(w + j) / 32][(w + j) % 32];
+                            end
                         end
                     end
                 end
@@ -1111,7 +1116,7 @@ module VX_tcu_tmem import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     j.ldb        = post_w[7][31:16];
                     j.a_col      = COLW'(j.a_base);
                     j.meta_col   = COLW'(j.meta_base);
-                    j.meta_cols  = 16'((2 * 32'(meta_row_bits(j.fmt_s)) + 31) >> 5);
+                    j.meta_cols  = 16'((SP_ROWS * 32'(meta_row_bits(j.fmt_s)) + 31) >> 5);
                     // Step n of the bbuf/abuf/FEDP is 4 bits and 0 marks a K-tile's
                     // first step, so later steps cycle through 1..15 with the
                     // remainder folded into the B descriptor. Block-major B
@@ -1288,9 +1293,9 @@ module VX_tcu_tmem import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         return (base + cols > COLS) || (base < d_end && d_base < base + cols);
     endfunction
     wire [31:0] post_k_tiles   = 32'(post_w[1][15:0]);
-    wire [31:0] post_meta_cols = (2 * 32'(meta_row_bits(post_w[0][4:0])) + 32'd31) >> 5;
+    wire [31:0] post_meta_cols = (SP_ROWS * 32'(meta_row_bits(post_w[0][4:0])) + 32'd31) >> 5;
     wire [31:0] post_cp_cols   = post_w[3];
-    wire mma_bad = (post_w[0][10] && (TCU_WG_SP_FULLK == 0))
+    wire mma_bad = 1'b0
                 `ifndef VX_CFG_TCU_SPARSE_ENABLE
                     || post_w[0][10]
                 `endif

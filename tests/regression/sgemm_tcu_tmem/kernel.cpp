@@ -59,6 +59,9 @@ static_assert(sizeof(ctx::output_t) == sizeof(float), "the TMEM epilogue stores 
 constexpr uint32_t kPipeN = PIPE_N;
 constexpr uint32_t kTileN = ctx::xtileN * TMEM_NCHUNK;  // CTA tile N
 constexpr uint32_t kBK    = KB * kTileK;  // K per pipeline stage
+// tc.mma K-tiles (one FEDP width of A each) per kTileK: a dense tile spans
+// k_steps of them, a sparse one exactly one.
+constexpr uint32_t kKtPerTile = kSparse ? 1 : wg_cfg::k_steps;
 constexpr uint32_t kAK    = kSparse ? (kBK / 2) : kBK;  // A is compressed along K
 #ifdef B_KMAJOR
 constexpr uint32_t kBLdmBytes = kBK * sizeof(ctx::input_t);
@@ -143,7 +146,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
   // TMEM: D, then A (a_tmem), then the metadata (sparse).
   auto round_store = [](uint32_t cols) { return ((cols + kStoreCols - 1) / kStoreCols) * kStoreCols; };
-  const uint32_t a_cols     = k_tiles * wg_cfg::fedpK;
+  const uint32_t a_cols     = k_tiles * kKtPerTile * wg_cfg::fedpK;
   const uint32_t meta_words = k_tiles * kMetaCols;
   const uint32_t tmem_cols  = tm::alloc_cols(kTileN + (kATmem ? round_store(a_cols) : 0)
                                                     + (kSparse ? round_store(meta_words) : 0));
@@ -220,13 +223,13 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   } else if (warp_rank == 1) {
     // Per stage: wait for it, multiply, and commit it back to the producer;
     // the last commit completes the GEMM.
-    tm::set_idesc<0>(tm::make_idesc(vt::ITYPE::id, vt::OTYPE::id, kTileN / ctx::tcN, KB, kSparse, kATmem),
+    tm::set_idesc<0>(tm::make_idesc(vt::ITYPE::id, vt::OTYPE::id, kTileN / ctx::tcN, KB * kKtPerTile, kSparse, kATmem),
                      tm::make_ld(kAK * sizeof(ctx::input_t), kBLdmBytes));
     for (uint32_t i = 0; i < num_steps; ++i) {
       uint32_t s = i % kPipeN;
       int phase = vx_barrier_arrive(full_bar(s), 2);
       vx_barrier_wait(full_bar(s), phase);
-      tm::mma<0>(taddr, kATmem ? (a_col + i * KB * wg_cfg::fedpK) : tm::smem_offset(stage_A(s)),
+      tm::mma<0>(taddr, kATmem ? (a_col + i * KB * kKtPerTile * wg_cfg::fedpK) : tm::smem_offset(stage_A(s)),
                  tm::smem_offset(stage_B(s)), i == 0, kSparse ? (meta_col + i * KB * kMetaCols) : 0);
       tm::commit(empty_bar(s), 2);
     }

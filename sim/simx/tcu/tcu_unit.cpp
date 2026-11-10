@@ -51,8 +51,8 @@ static constexpr bool wgmma_needs_setup(bool is_a_smem, bool is_sparse) {
   return kFedp2K && !is_a_smem && (!is_sparse || kSpFullK);
 }
 
-#if defined(VX_CFG_TCU_TMEM_ENABLE) && (!defined(VX_CFG_TCU_WGMMA_ENABLE) || !defined(VX_CFG_TCU_FEDP2K))
-#error "VX_CFG_TCU_TMEM_ENABLE requires VX_CFG_TCU_WGMMA_ENABLE and VX_CFG_TCU_FEDP2K"
+#if defined(VX_CFG_TCU_TMEM_ENABLE) && !defined(VX_CFG_TCU_WGMMA_ENABLE)
+#error "VX_CFG_TCU_TMEM_ENABLE requires VX_CFG_TCU_WGMMA_ENABLE"
 #endif
 
 // Dot-product pipeline depth of the configured tensor-PE type.
@@ -1506,9 +1506,7 @@ public:
     };
 
     const char* err = nullptr;
-    if (job.sparse && !kSpFullK) {
-      err = "sparse MMAs require VX_CFG_TCU_SPARSE_FULLK";
-    } else if (job.sparse && !vt::sparse_format_supported(job.fmt_s)) {
+    if (job.sparse && !vt::sparse_format_supported(job.fmt_s)) {
       err = "sparse MMA with an unsupported input format";
     } else if (job.sparse && bad_columns(job.meta_base, job.k_tiles * this->job_meta_cols(job))) {
       err = "metadata columns exceed TMEM or overlap D";
@@ -1612,7 +1610,7 @@ public:
   }
 
   // TMEM columns of one K-tile's metadata: a lane holds, per column, the
-  // K-tile's two metadata rows (the two TC_K halves of a sparse uop) in order.
+  // K-tile's metadata rows (one per TC_K words of a sparse uop) in order.
   uint32_t job_meta_cols(const tj_t& job) const {
     return std::max(1u, kFedpWords * 2 * elem_ratio(job.fmt_s) / 32);
   }
@@ -1638,7 +1636,7 @@ public:
       for (uint32_t lane = 0; lane < wg_cfg::xtileM; ++lane) {
         uint32_t m = lane / cfg::tcM;
         uint32_t i = lane % cfg::tcM;
-        for (uint32_t h = 0; h < 2; ++h) {
+        for (uint32_t h = 0; h < kFedpWords / cfg::tcK; ++h) {
           for (uint32_t bit = 0; bit < row_w; ++bit) {
             uint32_t src = h * row_w + bit;
             uint32_t word = this->tmem_at(b * wg_cfg::xtileM + lane, col0 + src / 32).u32;

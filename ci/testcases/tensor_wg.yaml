@@ -381,6 +381,37 @@ tests:
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
     -DVX_CFG_TCU_FEDP2K -DVX_CFG_TCU_TMEM_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
     -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32 -DPIPE_N=2
+# Tensor memory without FEDP2K: a tile spans two FEDP-width K-tiles, and a
+# sparse K-tile carries one metadata row. NT=16 is where FEDP2K cannot build.
+- id: model_parity-tmem-nofedp2k
+  check: model_parity
+  via: blackbox
+  app: sgemm_tcu_tmem
+  xlen: [32]
+  args: -m64 -n64 -k256
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_TMEM_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
+    -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32 -DPIPE_N=2 -DB_KMAJOR
+# 512 columns keep every resident CTA's allocation from waiting on another's,
+# so the retired-instruction count does not depend on timing.
+- id: model_parity-tmem-sparse-nofedp2k
+  check: model_parity
+  via: blackbox
+  app: sgemm_tcu_tmem
+  xlen: [32]
+  args: -m64 -n64 -k256
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_TMEM_ENABLE -DVX_CFG_TCU_TMEM_COLS=512 -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
+    -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32 -DPIPE_N=2 -DB_KMAJOR -DTMEM_SPARSE
+- id: model_parity-tmem-nofedp2k-nt16
+  check: model_parity
+  via: blackbox
+  app: sgemm_tcu_tmem
+  xlen: [32]
+  args: -m64 -n64 -k256
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_TMEM_ENABLE -DVX_CFG_TCU_TMEM_COLS=512 -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
+    -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32 -DPIPE_N=2 -DB_KMAJOR -DTMEM_SPARSE
 # Two chained GEMMs: S = Q.K^T, P = fp16(S) in TMEM, O = P.V^T with A from TMEM.
 - id: sgemm_tcu_tmem_chain
   via: blackbox

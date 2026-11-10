@@ -301,7 +301,7 @@ constexpr bool kATmem = false;
 #endif
 static constexpr uint32_t kIRatio   = 32 / vt::ITYPE::bits;
 static constexpr uint32_t kMetaRow  = cfg::tcK * 2 * kIRatio;
-static constexpr uint32_t kMetaCols = (2 * kMetaRow + 31) / 32;
+static constexpr uint32_t kMetaCols = ((cfg::fedpK / cfg::tcK) * kMetaRow + 31) / 32;
 static constexpr uint32_t kStoreCols = WGMMA_NRC * (VX_CFG_NUM_THREADS / cfg::xtileM);
 
 #ifdef TMEM_SPARSE

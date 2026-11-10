@@ -80,7 +80,7 @@ static inline __attribute__((always_inline)) void mma_steps(
     vx_barrier_wait(full, phase);
     const uint32_t b = smem_base + s * stage_bytes + b_off;
     if (a_tmem) {
-      tm::mma<1>(taddr, a_col + (k / kBK) * KB * wg_cfg::fedpK, b, acc_init && k == 0);
+      tm::mma<1>(taddr, a_col + (k / kBK) * KB * wg_cfg::k_steps * wg_cfg::fedpK, b, acc_init && k == 0);
     } else {
       tm::mma<0>(taddr, smem_base + s * stage_bytes, b, acc_init && k == 0);
     }
@@ -193,8 +193,8 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   if (warp_rank == 1) {
     // A tile's softmax waits on the commit after its S MMA (or its last P.V).
     constexpr uint32_t kLd = tm::make_ld(kBK * sizeof(ctx::input_t), kBK * sizeof(ctx::input_t));
-    tm::set_idesc<0>(tm::make_idesc(vt::ITYPE::id, vt::OTYPE::id, L / ctx::tcN, KB), kLd);
-    tm::set_idesc<1>(tm::make_idesc(vt::ITYPE::id, vt::OTYPE::id, N / ctx::tcN, KB, false, true), kLd);
+    tm::set_idesc<0>(tm::make_idesc(vt::ITYPE::id, vt::OTYPE::id, L / ctx::tcN, KB * wg_cfg::k_steps), kLd);
+    tm::set_idesc<1>(tm::make_idesc(vt::ITYPE::id, vt::OTYPE::id, N / ctx::tcN, KB * wg_cfg::k_steps, false, true), kLd);
     uint32_t i = 0;
     for (uint32_t tile = 0; tile < kTiles; ++tile) {
       mma_steps(i, D, cta_id, true, s_col(tile), 0, false, smem_base, stage_bytes, q_bytes);

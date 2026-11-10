@@ -234,9 +234,12 @@ yet.
   priority over the MMA's C read, MMA D writes over `tmem.st`.
 - Barriers: `tc.commit` arrivals enter the barrier unit in
   `VX_warp_shared_unit` after warp requests and DXA completions.
-- Requires WGMMA (tile buffers) and FEDP2K; a TMEM build does not accept
-  warp WGMMA. XLEN=32, K-major B, `VX_CFG_TCU_PE_RATIO=1` (an MMA step issues
-  to every core in one cycle).
+- Requires WGMMA (tile buffers); a TMEM build does not accept warp WGMMA.
+  XLEN=32, `VX_CFG_TCU_PE_RATIO=1` (an MMA step issues to every core in one
+  cycle). FEDP2K is optional: a `tc.mma` K-tile is one FEDP width of A, so
+  without it a tile spans two K-tiles, and a sparse K-tile carries one
+  metadata row instead of two. Block-major B needs one B block per LMEM bank
+  row (FEDP2K at NT=8); K-major B has no such limit.
 
 ## Results (RTL vs SimX)
 
