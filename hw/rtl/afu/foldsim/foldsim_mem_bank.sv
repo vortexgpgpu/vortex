@@ -455,8 +455,10 @@ module foldsim_mem_bank #(
 
     reg  [15:0]      e;                              // the first clock a reservation may take: d + 1
     wire [HLOG2-1:0] base  = HLOG2'(e);              // its place on the ring
-    function automatic signed [15:0] rel(input [15:0] t);
-        rel = $signed(t - e);
+    // The reference clock is an argument: some calls are continuous
+    // assignments, which re-evaluate on their arguments only (foldsim 6d1a32d).
+    function automatic signed [15:0] rel(input [15:0] t, input [15:0] from);
+        rel = $signed(t - from);
     endfunction
 
     // ---- Calendars ----
@@ -676,12 +678,12 @@ module foldsim_mem_bank #(
     // The bounds a command's search starts from that do not depend on the
     // clock found for the one before, ahead of it; then less the time from
     // that command, for the test of which bound wins.
-    reg signed [15:0] r_abf;          // rel(ab_floor)
+    reg signed [15:0] r_abf;          // rel(ab_floor, e)
     reg signed [15:0] t_act, t_c0;    // smax(r_actrc, r_abf), smax(0, r_floor)
     reg signed [15:0] t_act_m, t_ref_m, t_c0_m;
     wire signed [15:0] k_rcd = op_w ? k_rcdwr : k_rcdrd;
     always @(posedge clk) begin : bounds_
-        r_abf   <= rel(ab_floor);
+        r_abf   <= rel(ab_floor, e);
         t_act   <= smax(r_actrc, r_abf);
         t_c0    <= smax(16'sd0, r_floor);
         t_act_m <= smax(r_actrc, r_abf) - k_rp;
@@ -872,18 +874,19 @@ module foldsim_mem_bank #(
             ok_w  <= 9'(cfg_wq);
         end
     end
-    function automatic room_ok(input w);
-        room_ok = w ? (wb_after <= ok_w) : (rb_after <= ok_r);
-    endfunction
-    function automatic room_none(input w);
-        room_none = w ? (wb_after > lim_w) : (rb_after > lim_r);
-    endfunction
+    // Wires, not functions of the queue: a continuous assignment of a function
+    // call is sensitive to its arguments only, so a simulator would not see
+    // the buffers fill (foldsim 6d1a32d).
+    wire               room_r = (rb_after <= ok_r);
+    wire               room_w = (wb_after <= ok_w);
+    wire               none_r = (rb_after > lim_r);
+    wire               none_w = (wb_after > lim_w);
     // da - ingress_ready: the head enters no earlier than ingress_ready.
     reg  [15:0]        ig;
     wire               ih_time = ($signed(ig) >= 0);
-    wire               ih_room = room_ok(ih_w);
+    wire               ih_room = (ih_w ? room_w : room_r);
     wire               move    = (iq_count != 0) & ih_time & ih_room;
-    wire               a_wait_room = (iq_count != 0) & ih_time & ~ih_room & ~caught & ~room_none(ih_w);
+    wire               a_wait_room = (iq_count != 0) & ih_time & ~ih_room & ~caught & ~(ih_w ? none_w : none_r);
 
     // The fast path: the cycle's requests join the ingress queue behind its
     // head and its one DRAM clock runs, all in the host cycle after the
@@ -894,9 +897,9 @@ module foldsim_mem_bank #(
     wire [TAG_W-1:0]   fh_tag  = fv_q ? iq_tag[iq_head] : (st_w_valid ? TAG_W'(st_w_id) : TAG_W'(st_r_slot));
     wire [BKW-1:0]     fh_bank = fv_q ? iq_bank[iq_head] : (st_w_valid ? st_w_bank : st_r_bank);
     wire [ROW_W-1:0]   fh_row  = fv_q ? iq_row[iq_head] : (st_w_valid ? st_w_row : st_r_row);
-    wire               fh_room = room_ok(fh_w);
+    wire               fh_room = (fh_w ? room_w : room_r);
     wire               f_move  = fv_any & ih_time & fh_room;
-    wire               f_wait_room = fv_any & ih_time & ~fh_room & ~caught & ~room_none(fh_w);
+    wire               f_wait_room = fv_any & ih_time & ~fh_room & ~caught & ~(fh_w ? none_w : none_r);
     // The DRAM clocks' credit less one clock's, and less two.
     reg  signed [33:0] cr1, cr2;
     wire               f_clock = ~cr1[33] & cr2[33] & ~a_wait_lag & ~f_wait_room;
@@ -907,8 +910,8 @@ module foldsim_mem_bank #(
     reg  [23:0]        f_dcyc;           // tcyc1 + cfg_latency
     wire               lat0    = (cfg_latency == 16'd0);
     wire [SW:0]        f_unw   = rf_count - rf_ready;
-    function automatic due(input [23:0] cyc);
-        due = ($signed(cyc - tcyc1[23:0]) <= 0);
+    function automatic due(input [23:0] cyc, input [23:0] now);
+        due = ($signed(cyc - now) <= 0);
     endfunction
     wire               f_w1    = (f_unw != 0) ? dv0 : (f_dep & lat0);
     wire               f_w2    = (f_unw > 1) ? dv1
@@ -980,9 +983,9 @@ module foldsim_mem_bank #(
     wire             tk_fr_up    = ($signed(frontier - d) > 0);
     wire [15:0]      tk_bfloor   = tk_fr_up ? frontier + 16'd1 : e;
     wire signed [15:0] tk_rbf    = tk_fr_up ? $signed(frontier - d) : 16'sd0;
-    wire signed [15:0] tk_rbfl   = rel(batch_floor);
+    wire signed [15:0] tk_rbfl   = rel(batch_floor, e);
     wire signed [15:0] tk_rbl    = $signed(batch_last - d);
-    wire signed [15:0] tk_rrf    = rel(read_floor);
+    wire signed [15:0] tk_rrf    = rel(read_floor, e);
 
     // As a clock ends, whether the next is already due (S_IDLE's test, a host
     // cycle early): the reservations then go straight on to it.
@@ -1094,7 +1097,7 @@ module foldsim_mem_bank #(
     wire [1:0]       sc_due1;
     for (genvar k = 0; k < 3; ++k) begin : g_scan
         wire [SW-1:0] i = rf_scan + SW'(k);
-        assign sc_due[k]  = due(rf_cyc[i]);
+        assign sc_due[k]  = due(rf_cyc[i], tcyc1[23:0]);
         if (k < 2) begin : g_due1
             assign sc_due1[k] = ($signed(rf_cyc[i] - (tcyc1[23:0] + 24'd1)) <= 0);
         end
@@ -1452,9 +1455,9 @@ module foldsim_mem_bank #(
             op_pg   <= 3'((32'(op_bank) & ((32'd1 << (32'(g_lpcs) + 32'(g_lbgs))) - 32'd1)));
             op_hit  <= hit;
             op_conf <= open & ~hit;
-            r_actrc <= (bt_fresh[op_bank] ? -16'sd16384 : rel(bt_act_op)) + k_rc;
-            r_colr  <= bt_fresh[op_bank] ? -16'sd1 : rel(bt_colr_op);
-            r_prer  <= bt_fresh[op_bank] ? -16'sd1 : rel(bt_prer_op);
+            r_actrc <= (bt_fresh[op_bank] ? -16'sd16384 : rel(bt_act_op, e)) + k_rc;
+            r_colr  <= bt_fresh[op_bank] ? -16'sd1 : rel(bt_colr_op, e);
+            r_prer  <= bt_fresh[op_bank] ? -16'sd1 : rel(bt_prer_op, e);
             kind    <= hit ? K_C0 : (open ? K_PRE : K_ACT);
             state   <= S_SETUP;
         end
@@ -1612,13 +1615,13 @@ module foldsim_mem_bank #(
             op_hit <= 1'b0;
             if (cfg_refresh[1]) begin
                 op_conf <= ab_open;
-                r_prer  <= rel(ab_prer);
-                r_actrc <= rel(ab_actrc);
+                r_prer  <= rel(ab_prer, e);
+                r_actrc <= rel(ab_actrc, e);
                 kind    <= ab_open ? K_PRE : K_REF;
             end else begin
                 op_conf <= bt_open[op_bank];
-                r_prer  <= bt_fresh[op_bank] ? -16'sd1 : rel(bt_prer_op);
-                r_actrc <= (bt_fresh[op_bank] ? -16'sd16384 : rel(bt_act_op)) + k_rc;
+                r_prer  <= bt_fresh[op_bank] ? -16'sd1 : rel(bt_prer_op, e);
+                r_actrc <= (bt_fresh[op_bank] ? -16'sd16384 : rel(bt_act_op, e)) + k_rc;
                 kind    <= bt_open[op_bank] ? K_PRE : K_REF;
             end
             state <= S_SETUP;
