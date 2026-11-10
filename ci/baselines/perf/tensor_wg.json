@@ -6,29 +6,29 @@
     },
     "app": "sgemm_tcu_wg",
     "args": "-m64 -n64 -k64",
-    "config_hash": "3d024b251f848ad8",
+    "config_hash": "a8693f0ac5309369",
     "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1 -DVX_CFG_TCU_FEDP2K -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8 -DWGMMA_RS",
     "driver": "rtlsim"
   },
   "tensor_wg:perf_gate-wgmma-fp16-ss:rtlsim": {
     "32": {
-      "cycles": 645252,
+      "cycles": 645253,
       "instrs": 525344
     },
     "app": "sgemm_tcu_wg",
     "args": "-m 128 -n 128 -k 128",
-    "config_hash": "7e575fa7d5f048ec",
+    "config_hash": "2e32b952dbea1ab1",
     "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32 -DWGMMA_SS -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1",
     "driver": "rtlsim"
   },
   "tensor_wg:perf_gate-wgmma-sparse:rtlsim": {
     "32": {
-      "cycles": 369817,
+      "cycles": 360312,
       "instrs": 258912
     },
     "app": "sgemm_tcu_wg_sp",
     "args": "-m 128 -n 128 -k 128",
-    "config_hash": "5b7090a9fa837fa6",
+    "config_hash": "95a35e215a6564ec",
     "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DWGMMA_NRC=32 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1",
     "driver": "rtlsim"
   }
