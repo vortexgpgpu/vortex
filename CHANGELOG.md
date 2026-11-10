@@ -112,6 +112,12 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
   parallel with the magnitude compare, and its NORM stage precomputes the subnormal shift for both candidate exponents. The
   multiplier registers its operands in the first of its `LATENCY_IMUL` stages instead of the last. The core now reaches 1020 MHz
   and top 1029 MHz, with cell area +0.1%.
+- **FPU clock enable on the U55C core.** Each FPU core's skid register drove one clock-enable net to every unit of the core, and
+  the FPGA core build reached 286 MHz against 300. `VX_pe_serializer` now computes the enable a cycle ahead and registers one copy
+  per unit (`PE_ENABLES`), so each unit's enable starts at its own flop; the core reaches 296.6 MHz with no cycle change.
+- **ASIC cache area.** The 2-stage cache bank kept its dirty-byte mask in an asynchronously read RAM, which the ASIC flow builds
+  from flops, and the cache was 16% over its area budget. Every bank now reads the mask one stage ahead from block RAM, and the
+  lazy-fetch loopback reads a per-sector "every byte dirty" bit kept beside it instead of reducing a sector of the mask.
 - **Exact square roots on the FLEN-64 divide/sqrt unit.** `VX_fdivsqrt_unit` took the sign of the final square-root remainder
   from bit 58, but at FLEN 64 the remainder needs the full 60-bit carry-save width: an exact square left −2^58 − 2, read as
   positive, so the final correction was skipped. Exact squares of an unscaled radicand (sqrt(1.0), sqrt(4.0), sqrt(100), F32 or
