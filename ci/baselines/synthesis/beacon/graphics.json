@@ -6,7 +6,7 @@
     "dut": "gfx",
     "result": {
       "bram": 183.5,
-      "build_time_s": 186,
+      "build_time_s": 166,
       "deep_endpoints": 1824,
       "deepest_paths": [
         "20  g_rtu_core_0.rtu_core/scheduler/g_recip_pe.recip_tags/g_shift.g_partial_reset.pipe_free[219] -> g_rtu_core_0.rtu_core/scheduler/ctx_arbiter/g_model1.reqs_mask.d[0]",
@@ -21,21 +21,21 @@
         "20  g_rtu_core_0.rtu_core/scheduler/g_recip_pe.recip_tags/g_shift.g_partial_reset.pipe_free[219] -> g_rtu_core_0.rtu_core/scheduler/ctx_arbiter/g_model1.reqs_mask.d[9]"
       ],
       "dsp": 1140,
-      "endpoints": 314015,
+      "endpoints": 314111,
       "env": {
         "circt": "CIRCT 892a65a01",
         "device": "xcu55c-fsvh2892-2L-e",
         "foldsim": "foldsim d8350bc0f",
         "xlen": 32
       },
-      "ff": 400286,
+      "ff": 400294,
       "fix_levels": 12,
       "interfaces": {},
-      "lut": 319527,
-      "lutram": 14046,
+      "lut": 319621,
+      "lutram": 14119,
       "max_levels": 20,
       "pred_fmax_mhz": 264.7,
-      "risk_endpoints": 480,
+      "risk_endpoints": 474,
       "units": {
         "g_rtu_core_*_rtu_core": 10,
         "g_rtu_core_*_rtu_core/cache_bus_reg/req_buf/g_eb2_stream_buffer": 10,
@@ -109,7 +109,7 @@
         "l2cache/g_cache_cache/g_banks_*_bank/cache_tags/tag_store": 9,
         "l2cache/g_cache_cache/g_banks_*_bank/cache_tags/valid_store": 9,
         "l2cache/g_cache_cache/g_banks_*_bank/g_lazy_pipe_reg_lz_s0": 8,
-        "l2cache/g_cache_cache/g_banks_*_bank/g_lazyq_lazy_queue/pending_size": 9,
+        "l2cache/g_cache_cache/g_banks_*_bank/g_lazyq_lazy_queue/pending_size": 8,
         "l2cache/g_cache_cache/g_banks_*_bank/mem_req_queue": 8,
         "l2cache/g_cache_cache/g_banks_*_bank/mem_req_queue/pending_size": 10,
         "l2cache/g_cache_cache/g_banks_*_bank/mshr_pending_size": 8,
@@ -129,7 +129,7 @@
         "tcache/g_cache_wrap_*_cache_wrap/g_cache_cache/g_banks_*_bank/reg_s1": 10
       },
       "uram": 0,
-      "watch_endpoints": 17975,
+      "watch_endpoints": 17383,
       "watch_levels": 8
     }
   },
@@ -140,7 +140,7 @@
     "dut": "gfxvm",
     "result": {
       "bram": 183.5,
-      "build_time_s": 191,
+      "build_time_s": 160,
       "deep_endpoints": 2841,
       "deepest_paths": [
         "20  g_rtu_core_0.rtu_core/scheduler/g_recip_pe.recip_tags/g_shift.g_partial_reset.pipe_free[219] -> g_rtu_core_0.rtu_core/scheduler/ctx_arbiter/g_model1.reqs_mask.d[0]",
@@ -155,21 +155,21 @@
         "20  g_rtu_core_0.rtu_core/scheduler/g_recip_pe.recip_tags/g_shift.g_partial_reset.pipe_free[219] -> g_rtu_core_0.rtu_core/scheduler/ctx_arbiter/g_model1.reqs_mask.d[9]"
       ],
       "dsp": 1140,
-      "endpoints": 328672,
+      "endpoints": 328768,
       "env": {
         "circt": "CIRCT 892a65a01",
         "device": "xcu55c-fsvh2892-2L-e",
         "foldsim": "foldsim d8350bc0f",
         "xlen": 32
       },
-      "ff": 415135,
+      "ff": 415143,
       "fix_levels": 12,
       "interfaces": {},
-      "lut": 330875,
-      "lutram": 14484,
+      "lut": 330969,
+      "lutram": 14557,
       "max_levels": 20,
       "pred_fmax_mhz": 263.0,
-      "risk_endpoints": 492,
+      "risk_endpoints": 480,
       "units": {
         "<top>": 11,
         "cmmu": 11,
@@ -250,8 +250,8 @@
         "l2cache/g_cache_cache/g_banks_*_bank/cache_tags/tag_store": 9,
         "l2cache/g_cache_cache/g_banks_*_bank/cache_tags/valid_store": 9,
         "l2cache/g_cache_cache/g_banks_*_bank/g_lazy_pipe_reg_lz_s0": 8,
-        "l2cache/g_cache_cache/g_banks_*_bank/g_lazyq_lazy_queue/pending_size": 9,
-        "l2cache/g_cache_cache/g_banks_*_bank/mem_req_queue": 9,
+        "l2cache/g_cache_cache/g_banks_*_bank/g_lazyq_lazy_queue/pending_size": 8,
+        "l2cache/g_cache_cache/g_banks_*_bank/mem_req_queue": 8,
         "l2cache/g_cache_cache/g_banks_*_bank/mem_req_queue/g_depth_n_dp_ram": 8,
         "l2cache/g_cache_cache/g_banks_*_bank/mem_req_queue/pending_size": 10,
         "l2cache/g_cache_cache/g_banks_*_bank/mshr_pending_size": 8,
@@ -278,7 +278,7 @@
         "ummu/tlb/mshr/reqpool": 10
       },
       "uram": 0,
-      "watch_endpoints": 19380,
+      "watch_endpoints": 18775,
       "watch_levels": 8
     }
   },
@@ -447,7 +447,7 @@
     "dut": "tex",
     "result": {
       "bram": 0.0,
-      "build_time_s": 65,
+      "build_time_s": 60,
       "deep_endpoints": 0,
       "deepest_paths": [
         "11  tex_core/tex_addr/pipe_reg0/g_pipe.g_partial_reset.pipe_free[4197] -> tex_core/tex_addr/pipe_reg1/g_pipe.g_partial_reset.pipe_free.d[831]",

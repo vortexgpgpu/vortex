@@ -5,9 +5,9 @@
     "configs": "-DVX_CFG_EXT_A_ENABLE",
     "dut": "cache",
     "result": {
-      "bram": 32.0,
+      "bram": 36.0,
       "build_time_s": 25,
-      "deep_endpoints": 1444,
+      "deep_endpoints": 1380,
       "deepest_paths": [
         "16  cache/g_cache.cache/g_banks_0.bank/cache_tags/g_way_decode_3.__buffer_ex187/g_pipe.g_full_reset.pipe[3] -> cache/g_cache.cache/g_banks_0.bank/mshr_pending_size/g_size_gt1.full_r.d[0]",
         "16  cache/g_cache.cache/g_banks_0.bank/cache_tags/g_way_decode_3.__buffer_ex187/g_pipe.g_full_reset.pipe[3] -> cache/g_cache.cache/g_banks_0.bank/mshr_pending_size/g_size_gt1.g_select_step.size_r.d[0]",
@@ -21,26 +21,27 @@
         "16  cache/g_cache.cache/g_banks_1.bank/cache_tags/g_way_decode_3.__buffer_ex187/g_pipe.g_full_reset.pipe[3] -> cache/g_cache.cache/g_banks_1.bank/mshr_pending_size/g_size_gt1.g_select_step.size_r.d[2]"
       ],
       "dsp": 0,
-      "endpoints": 32282,
+      "endpoints": 32634,
       "env": {
         "circt": "CIRCT 892a65a01",
         "device": "xcu55c-fsvh2892-2L-e",
         "foldsim": "foldsim d8350bc0f",
         "xlen": 32
       },
-      "ff": 33270,
+      "ff": 33558,
       "fix_levels": 12,
       "interfaces": {},
-      "lut": 37144,
-      "lutram": 3620,
+      "lut": 37104,
+      "lutram": 3333,
       "max_levels": 16,
-      "pred_fmax_mhz": 296.8,
-      "risk_endpoints": 0,
+      "pred_fmax_mhz": 291.3,
+      "risk_endpoints": 4,
       "units": {
         "<top>": 11,
         "cache/g_cache_cache/core_req_xbar/g_multi_inputs_g_multiple_outputs_g_xbar_arbs_*_xbar_arb/g_input_select_g_arbiter_arbiter/g_round_robin_rr_arbiter": 9,
         "cache/g_cache_cache/core_req_xbar/g_multi_inputs_g_multiple_outputs_g_xbar_arbs_*_xbar_arb/g_input_select_g_arbiter_g_out_buf_*_out_buf/g_eb2_stream_buffer": 15,
         "cache/g_cache_cache/g_banks_*_bank": 8,
+        "cache/g_cache_cache/g_banks_*_bank/cache_data": 8,
         "cache/g_cache_cache/g_banks_*_bank/cache_data/g_data_slice_*_data_store": 12,
         "cache/g_cache_cache/g_banks_*_bank/cache_flush": 15,
         "cache/g_cache_cache/g_banks_*_bank/cache_mshr": 11,
@@ -61,13 +62,14 @@
         "cache/g_cache_cache/g_banks_*_bank/g_lazy_pipe_reg_lz_s0": 9,
         "cache/g_cache_cache/g_banks_*_bank/g_lazyq_lazy_queue": 9,
         "cache/g_cache_cache/g_banks_*_bank/g_lazyq_lazy_queue/pending_size": 9,
-        "cache/g_cache_cache/g_banks_*_bank/mem_req_queue/pending_size": 10,
+        "cache/g_cache_cache/g_banks_*_bank/mem_req_queue": 8,
+        "cache/g_cache_cache/g_banks_*_bank/mem_req_queue/pending_size": 9,
         "cache/g_cache_cache/g_banks_*_bank/mshr_pending_size": 16,
         "cache/g_cache_cache/g_banks_*_bank/reg_s0": 14,
         "cache/g_cache_cache/g_banks_*_bank/reg_s1": 11
       },
       "uram": 0,
-      "watch_endpoints": 5623,
+      "watch_endpoints": 5647,
       "watch_levels": 8
     }
   },
@@ -78,7 +80,7 @@
     "dut": "core",
     "result": {
       "bram": 129.0,
-      "build_time_s": 70,
+      "build_time_s": 75,
       "deep_endpoints": 1536,
       "deepest_paths": [
         "15  core/g_compute_slices.g_slices_0.compute_slice/frontend_slice/fetch/inflight[2] -> core/g_compute_slices.g_slices_0.compute_slice/frontend_slice/fetch/req_buf/g_eb2.stream_buffer/g_buffer.data_out_r.d[28]",
@@ -93,14 +95,14 @@
         "15  core/g_compute_slices.g_slices_0.compute_slice/backend_slice/execute_slice/lsu_dispatch/g_blocks_0.buf_out/g_eb2.stream_buffer/g_buffer.data_out_r[1551] -> core/g_compute_slices.g_slices_0.compute_slice/backend_slice/execute_slice/lsu_block/mem_path/lsu_scheduler/mem_scheduler/g_req_queue_rw.req_queue/g_ebN.fifo_queue/g_depth_n.g_out_reg.data_out_r.d[824]"
       ],
       "dsp": 97,
-      "endpoints": 122297,
+      "endpoints": 122350,
       "env": {
         "circt": "CIRCT 892a65a01",
         "device": "xcu55c-fsvh2892-2L-e",
         "foldsim": "foldsim d8350bc0f",
         "xlen": 32
       },
-      "ff": 163800,
+      "ff": 163885,
       "fix_levels": 12,
       "interfaces": {
         "core.dcache_bus_if_0_rsp_ready": 1,
@@ -117,6 +119,7 @@
       "risk_endpoints": 11,
       "units": {
         "core/g_compute_slices_g_slices_*_compute_slice/backend_slice/execute_slice/alu_block/alu_int/rsp_buf/g_eb1_pipe_buffer/g_register_g_pipe_regs_*_pipe_register": 13,
+        "core/g_compute_slices_g_slices_*_compute_slice/backend_slice/execute_slice/alu_block/muldiv_unit/g_multiplier_*_multiplier/pipe_reg": 8,
         "core/g_compute_slices_g_slices_*_compute_slice/backend_slice/execute_slice/alu_block/muldiv_unit/serial_div": 8,
         "core/g_compute_slices_g_slices_*_compute_slice/backend_slice/execute_slice/alu_block/pe_switch/rsp_arb/g_input_select_g_arbiter_g_out_buf_*_out_buf/g_eb2_stream_buffer": 8,
         "core/g_compute_slices_g_slices_*_compute_slice/backend_slice/execute_slice/fpu_block/fpu_dsp/g_cvt_g_units_*_fcvt_unit/pipe_reg2": 9,
@@ -152,7 +155,7 @@
         "core/scheduler/warp_shared_unit/bar_unit": 9
       },
       "uram": 0,
-      "watch_endpoints": 7258,
+      "watch_endpoints": 8282,
       "watch_levels": 8
     }
   },
@@ -163,7 +166,7 @@
     "dut": "lmem",
     "result": {
       "bram": 16.0,
-      "build_time_s": 25,
+      "build_time_s": 20,
       "deep_endpoints": 0,
       "deepest_paths": [
         "9  lmem_unit/g_data_store_0.g_amo.amo_old_r[0] -> lmem_unit/g_data_store_0.g_dual_port.lmem_store/g_bram.g_wren.ram.wd[0]",
@@ -223,14 +226,14 @@
         "23  dev_ptw/rsp_arb/g_input_select.g_arbiter.g_out_buf_0.out_buf/g_eb2.stream_buffer/g_buffer.buffer_r[30] -> g_clusters_0.cluster/l2tlb/set_mru_r.d[19]"
       ],
       "dsp": 50,
-      "endpoints": 128249,
+      "endpoints": 128283,
       "env": {
         "circt": "CIRCT 892a65a01",
         "device": "xcu55c-fsvh2892-2L-e",
         "foldsim": "foldsim d8350bc0f",
         "xlen": 32
       },
-      "ff": 144655,
+      "ff": 144705,
       "fix_levels": 12,
       "interfaces": {
         "g_clusters_*_cluster.busy": 1,
@@ -280,6 +283,7 @@
         "g_clusters_*_cluster/g_sockets_*_socket/dmmu/tlb/mshr": 14,
         "g_clusters_*_cluster/g_sockets_*_socket/dmmu/tlb/mshr/reqpool": 12,
         "g_clusters_*_cluster/g_sockets_*_socket/g_cores_*_core/g_compute_slices_g_slices_*_compute_slice/backend_slice/execute_slice/alu_block/alu_int/rsp_buf/g_eb1_pipe_buffer/g_register_g_pipe_regs_*_pipe_register": 11,
+        "g_clusters_*_cluster/g_sockets_*_socket/g_cores_*_core/g_compute_slices_g_slices_*_compute_slice/backend_slice/execute_slice/alu_block/muldiv_unit/g_multiplier_*_multiplier/pipe_reg": 8,
         "g_clusters_*_cluster/g_sockets_*_socket/g_cores_*_core/g_compute_slices_g_slices_*_compute_slice/backend_slice/execute_slice/alu_block/muldiv_unit/serial_div": 8,
         "g_clusters_*_cluster/g_sockets_*_socket/g_cores_*_core/g_compute_slices_g_slices_*_compute_slice/backend_slice/execute_slice/fpu_block/fpu_dsp/g_cvt_g_units_*_fcvt_unit/pipe_reg2": 9,
         "g_clusters_*_cluster/g_sockets_*_socket/g_cores_*_core/g_compute_slices_g_slices_*_compute_slice/backend_slice/execute_slice/fpu_block/fpu_dsp/g_cvt_g_units_*_fcvt_unit/pipe_reg4": 10,
@@ -330,7 +334,7 @@
         "kmu": 9
       },
       "uram": 0,
-      "watch_endpoints": 11283,
+      "watch_endpoints": 11795,
       "watch_levels": 8
     }
   }

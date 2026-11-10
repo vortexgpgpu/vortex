@@ -6,8 +6,8 @@
     "dut": "vm",
     "result": {
       "bram": 159.0,
-      "build_time_s": 65,
-      "deep_endpoints": 3918,
+      "build_time_s": 50,
+      "deep_endpoints": 3910,
       "deepest_paths": [
         "23  ptw/rsp_arb/g_input_select.g_arbiter.g_out_buf_0.out_buf/g_eb2.stream_buffer/g_buffer.buffer_r[30] -> l2tlb/set_mru_r.d[2]",
         "23  ptw/rsp_arb/g_input_select.g_arbiter.g_out_buf_0.out_buf/g_eb2.stream_buffer/g_buffer.buffer_r[30] -> l2tlb/set_mru_r.d[3]",
@@ -21,21 +21,21 @@
         "23  ptw/rsp_arb/g_input_select.g_arbiter.g_out_buf_0.out_buf/g_eb2.stream_buffer/g_buffer.buffer_r[30] -> l2tlb/set_mru_r.d[19]"
       ],
       "dsp": 0,
-      "endpoints": 156636,
+      "endpoints": 156732,
       "env": {
         "circt": "CIRCT 892a65a01",
         "device": "xcu55c-fsvh2892-2L-e",
         "foldsim": "foldsim d8350bc0f",
         "xlen": 32
       },
-      "ff": 150714,
+      "ff": 150722,
       "fix_levels": 12,
       "interfaces": {},
-      "lut": 195664,
-      "lutram": 13923,
+      "lut": 195756,
+      "lutram": 13996,
       "max_levels": 23,
       "pred_fmax_mhz": 251.5,
-      "risk_endpoints": 603,
+      "risk_endpoints": 575,
       "units": {
         "g_sockets_*_dcache/g_cache_wrap_*_cache_wrap/g_bypass_cache_bypass/mem_bus_out_arb/req_arb/g_input_select_g_arbiter_g_out_buf_*_out_buf/g_eb2_stream_buffer": 8,
         "g_sockets_*_dcache/g_cache_wrap_*_cache_wrap/g_cache_cache/cache_init": 10,
@@ -89,10 +89,10 @@
         "l2cache/g_cache_cache/g_banks_*_bank/g_amo_amo/g_commit_reg_wb_self": 9,
         "l2cache/g_cache_cache/g_banks_*_bank/g_lazy_pipe_reg_lz_s0": 8,
         "l2cache/g_cache_cache/g_banks_*_bank/g_lazyq_lazy_queue": 9,
-        "l2cache/g_cache_cache/g_banks_*_bank/g_lazyq_lazy_queue/pending_size": 11,
+        "l2cache/g_cache_cache/g_banks_*_bank/g_lazyq_lazy_queue/pending_size": 10,
         "l2cache/g_cache_cache/g_banks_*_bank/mem_req_queue": 11,
         "l2cache/g_cache_cache/g_banks_*_bank/mem_req_queue/g_depth_n_dp_ram": 10,
-        "l2cache/g_cache_cache/g_banks_*_bank/mem_req_queue/pending_size": 15,
+        "l2cache/g_cache_cache/g_banks_*_bank/mem_req_queue/pending_size": 13,
         "l2cache/g_cache_cache/g_banks_*_bank/mshr_pending_size": 17,
         "l2cache/g_cache_cache/g_banks_*_bank/reg_dat": 10,
         "l2cache/g_cache_cache/g_banks_*_bank/reg_s0": 16,
@@ -111,7 +111,7 @@
         "tlb_cluster_arb/g_arb_req_arb/g_input_select_g_arbiter_g_out_buf_*_out_buf/g_eb2_stream_buffer": 10
       },
       "uram": 0,
-      "watch_endpoints": 24850,
+      "watch_endpoints": 24826,
       "watch_levels": 8
     }
   }
