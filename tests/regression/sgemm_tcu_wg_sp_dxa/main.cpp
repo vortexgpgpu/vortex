@@ -420,7 +420,7 @@ int main(int argc, char *argv[]) {
   const uint32_t descA_tile1 = tileM;
   const uint32_t descA_tile0 = tileK_elem / 2;
 #endif
-  RT_CHECK(vortex::dxa::program_2d(queue, kDescA, kernel_arg.A_addr,
+  RT_CHECK(vortex::dxa::program_2d(device, kDescA, kernel_arg.A_addr,
     /*size0=*/K / 2, /*size1=*/M,
     /*stride0_bytes=*/(K / 2) * sizeof(itype_t),
     /*tile0=*/descA_tile0, /*tile1=*/descA_tile1,
@@ -436,20 +436,20 @@ int main(int argc, char *argv[]) {
   // B_KMAJOR: B^T[N][K] in memory; plain row-major copy of a
   // [tileN][tileK] tile (dim0 = K, dim1 = N). No scatter -- the bbuf's
   // K-major sparse path permutes each N-row into candidate-pair order.
-  RT_CHECK(vortex::dxa::program_2d(queue, kDescB, kernel_arg.B_addr,
+  RT_CHECK(vortex::dxa::program_2d(device, kDescB, kernel_arg.B_addr,
     /*size0=*/K, /*size1=*/N,
     /*stride0_bytes=*/K * sizeof(itype_t),
     /*tile0=*/KB * tileK_elem, /*tile1=*/tileN,
     /*elem_bytes=*/sizeof(itype_t)));
-  RT_CHECK(vortex::dxa::set_layout(queue, kDescB,
+  RT_CHECK(vortex::dxa::set_layout(device, kDescB,
     vortex::dxa::Layout::RowMajor, /*rank=*/2, /*elem_bytes=*/sizeof(itype_t)));
 #else
-  RT_CHECK(vortex::dxa::program_2d(queue, kDescB, kernel_arg.B_addr,
+  RT_CHECK(vortex::dxa::program_2d(device, kDescB, kernel_arg.B_addr,
     /*size0=*/N, /*size1=*/K,
     /*stride0_bytes=*/N * sizeof(itype_t),
     /*tile0=*/tileN, /*tile1=*/tileK_elem,
     /*elem_bytes=*/sizeof(itype_t)));
-  RT_CHECK(vortex::dxa::set_layout(queue, kDescB,
+  RT_CHECK(vortex::dxa::set_layout(device, kDescB,
     vortex::dxa::Layout::Flat, /*rank=*/2, /*elem_bytes=*/sizeof(itype_t)));
   RT_CHECK(vortex::dxa::set_tile_geometry(device, kDescB, /*tcN=*/wg_cfg_t::tcN, /*blk_k=*/wg_cfg_t::b_blk_k));
 #endif
@@ -467,7 +467,7 @@ int main(int argc, char *argv[]) {
   const uint32_t descMeta_tile0 = kWordsPerTile;
   const uint32_t descMeta_tile1 = 1;
 #endif
-  RT_CHECK(vortex::dxa::program_2d(queue, kDescMeta, kernel_arg.meta_sp_addr,
+  RT_CHECK(vortex::dxa::program_2d(device, kDescMeta, kernel_arg.meta_sp_addr,
     /*size0=*/num_k_tiles * kWordsPerTile, /*size1=*/num_tile_rows,
     /*stride0_bytes=*/num_k_tiles * kWordsPerTile * sizeof(uint32_t),
     /*tile0=*/descMeta_tile0, /*tile1=*/descMeta_tile1,

@@ -130,8 +130,8 @@ int main(int argc, char* argv[]) {
   RT_CHECK(vx_enqueue_write(queue, buffers[2], 0, h_VT.data(), h_VT.size() * 2, 0, nullptr, nullptr));
 
   auto program = [&](uint32_t slot, uint64_t addr, uint32_t k, uint32_t rows, uint32_t tile_rows) {
-    RT_CHECK(vortex::dxa::program_2d(queue, slot, addr, k, rows, k * 2, stage_k, tile_rows, 2));
-    RT_CHECK(vortex::dxa::set_layout(queue, slot, vortex::dxa::Layout::RowMajor, 2, 2));
+    RT_CHECK(vortex::dxa::program_2d(device, slot, addr, k, rows, k * 2, stage_k, tile_rows, 2));
+    RT_CHECK(vortex::dxa::set_layout(device, slot, vortex::dxa::Layout::RowMajor, 2, 2));
   };
   program(0, kernel_arg.Q_addr, K1, M, M);
   program(1, kernel_arg.KT_addr, K1, L, L);

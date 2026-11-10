@@ -516,7 +516,7 @@ int main(int argc, char *argv[]) {
   // Descriptor A: fetches tileK columns x cta_M rows from A[row, k].
   //   dim0 = K-axis (tile0 = tileK), dim1 = M-axis (tile1 = cta_M)
   //   stride0_bytes = row stride of A = K * sizeof(itype_t)
-  RT_CHECK(vortex::dxa::program_2d(queue, kDescA, kernel_arg.A_addr,
+  RT_CHECK(vortex::dxa::program_2d(device, kDescA, kernel_arg.A_addr,
     /*size0=*/K, /*size1=*/M,
     /*stride0_bytes=*/K * sizeof(itype_t),
     /*tile0=*/stage_k, /*tile1=*/cta_M,
@@ -532,20 +532,20 @@ int main(int argc, char *argv[]) {
 #ifdef B_KMAJOR
   // B_KMAJOR: B^T[N][K] in memory; plain row-major copy of a
   // [tileN][tileK] tile (dim0 = K, dim1 = N). No scatter.
-  RT_CHECK(vortex::dxa::program_2d(queue, kDescB, kernel_arg.B_addr,
+  RT_CHECK(vortex::dxa::program_2d(device, kDescB, kernel_arg.B_addr,
     /*size0=*/K, /*size1=*/N,
     /*stride0_bytes=*/K * sizeof(itype_t),
     /*tile0=*/stage_k, /*tile1=*/cfg::xtileN,
     /*elem_bytes=*/sizeof(itype_t)));
-  RT_CHECK(vortex::dxa::set_layout(queue, kDescB,
+  RT_CHECK(vortex::dxa::set_layout(device, kDescB,
     vortex::dxa::Layout::RowMajor, /*rank=*/2, /*elem_bytes=*/sizeof(itype_t)));
 #else
-  RT_CHECK(vortex::dxa::program_2d(queue, kDescB, kernel_arg.B_addr,
+  RT_CHECK(vortex::dxa::program_2d(device, kDescB, kernel_arg.B_addr,
     /*size0=*/N, /*size1=*/K,
     /*stride0_bytes=*/N * sizeof(itype_t),
     /*tile0=*/cfg::xtileN, /*tile1=*/cfg::tileK,
     /*elem_bytes=*/sizeof(itype_t)));
-  RT_CHECK(vortex::dxa::set_layout(queue, kDescB,
+  RT_CHECK(vortex::dxa::set_layout(device, kDescB,
     vortex::dxa::Layout::BlockMajor, /*rank=*/2, /*elem_bytes=*/sizeof(itype_t)));
   RT_CHECK(vortex::dxa::set_tile_geometry(device, kDescB, /*tcN=*/cfg::tcN, /*blk_k=*/cfg::b_blk_k));
 #endif
