@@ -1719,10 +1719,15 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         // Room for twice the pipe, so a few queued entries leave the
         // reservation (and the refetch loopback, which needs it) open.
         localparam LAZYQ_SIZE = 1 << `CLOG2(2 * PIPELINE_STAGES);
+        // The head is registered (OUT_REG; same cycles as the asynchronous
+        // read): it indexes the MSHR's address table, whose line address
+        // selects the tag and dirty sets, so the queue's LUTRAM read must not
+        // sit in front of them.
         VX_fifo_queue #(
             .DATAW    (MSHR_ADDR_WIDTH),
             .DEPTH    (LAZYQ_SIZE),
-            .ALM_FULL (LAZYQ_SIZE - PIPELINE_STAGES)
+            .ALM_FULL (LAZYQ_SIZE - PIPELINE_STAGES),
+            .OUT_REG  (1)
         ) lazy_queue (
             .clk      (clk),
             .reset    (reset),

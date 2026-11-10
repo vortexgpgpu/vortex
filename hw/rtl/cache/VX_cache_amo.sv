@@ -827,6 +827,7 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         // shift of do_store_st0 fills the gap (continuous S0..stC hold).
         wire amo_inflight;
         if (PIPE_EX == 0) begin : g_no_bridge
+            `UNUSED_VAR (do_store_st0)
             assign amo_inflight = 1'b0;
         end else begin : g_bridge
             reg [PIPE_EX-1:0] store_inflight;
@@ -847,7 +848,13 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         // prediction through the deferred bubble, the compute stage and the
         // writeback. Replays are NOT blocked (the MSHR streams coalesced same-
         // line AMOs back to back); those are paced instead by chain_stall.
-        assign commit_busy = do_store_st0 || amo_inflight || do_store_st1 || cmp_valid || wb_pending_r;
+        // The S0 term is any store-bearing AMO core request at S0, hit or not:
+        // admission then waits on S0's registered request alone, not on its
+        // tag compare. A miss is held off one cycle more than it needs (it
+        // leaves for the MSHR at S1, where do_store_st1 drops).
+        wire amo_store_st0 = amo_st0.amo_valid && valid_st0 && is_creq_st0
+                          && (amo_st0.amo_op != AMO_OP_LR);
+        assign commit_busy = amo_store_st0 || amo_inflight || do_store_st1 || cmp_valid || wb_pending_r;
         // Pace any same-line request sitting behind an in-flight compute by one
         // cycle, so the result lands in wb_data_r and forwards cleanly, and any
         // AMO, which needs the compute stage free. Gated on
