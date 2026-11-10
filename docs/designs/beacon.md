@@ -50,7 +50,7 @@ ci/logic_gate.py -j 2
 ci/logic_gate.py -b om --update-baseline
 ```
 
-Any CIRCT netlist, with `ci/beacon.py` (subcommands `run`,
+Any CIRCT netlist, with `ci/beacon.py` (subcommands `run`, `screen`,
 `summarize`, `paths`, `validate`, `retime-split`, `ports`, `buffers`,
 `calibrate`, `score`;
 `foldsim-opt` from the `PATH` or `FOLDSIM_OPT`):
@@ -62,7 +62,18 @@ ci/beacon.py run runs/full/mapped.mlirbc runs/socket \
 ci/beacon.py summarize runs/full --min-levels 12           # deep end points by RTL unit
 ci/beacon.py paths runs/full --unit lsu_unit               # its paths, op by op (§5)
 ci/beacon.py validate runs/socket ep.csv --native VX_socket__lift=dut
+ci/beacon.py screen fold/netlist.mlir runs/fold top=foldsim_target   # a fold: module boundaries timed
 ```
+
+`screen` maps with `foldsim-screen-map` instead of `foldsim-beacon-map`: its
+LUT mapper times adders and comparators by carry block with their inputs'
+arrival times, and a design that keeps several modules after inlining (a
+fold's models, each mapped on its own) is mapped a second time with the
+arrival times the first count found at the modules' ports
+(`foldsim-screen-map{arrivals=}`, `--boundary-passes`, 2 by default), so a
+late signal crossing a model boundary is timed as Vivado times the flattened
+design. On the 4-SM fold the end point bits at 12 levels or more went from 66
+to 1. It counts no area; `family=` is accepted for `target=`.
 
 Or the passes directly:
 

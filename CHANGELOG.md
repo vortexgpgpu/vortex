@@ -20,6 +20,12 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
 
 ### Changed
 
+- **`ci/beacon.py screen` maps a fold with its module boundaries timed.** Beside upstream's `run` (`foldsim-beacon-map`, levels and
+  area), `screen` keeps the arrival-aware mapper (`foldsim-screen-map`) and, for a design that keeps several modules after inlining
+  (a fold's models), maps it again with the arrival times found at the modules' ports (`--boundary-passes`, default 2): the 4-SM
+  fold's end point bits at >= 12 levels go 66 -> 1. `family=` is accepted for `target=`. The pre-rename copies (`ci/logic_screen.py`,
+  `hw/scripts/screen_summary.py`, `ci/baselines/synthesis/screen/`, `docs/designs/logic_screen.md`) are removed.
+
 - **Foldsim's shell lives in the Foldsim repository.** The control and memory endpoints, the DRAM bank timing model, the register
   map, the in-process host, the endpoint's unit tests and the boundary lifting (`foldsim-lift`) moved out of `hw/rtl/afu/foldsim`,
   `sim/foldsim`, `sw/common`, `hw/unittest/foldsim_mem*` and `hw/syn/foldsim`; they come with the Foldsim installation
