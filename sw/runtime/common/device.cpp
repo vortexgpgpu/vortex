@@ -376,6 +376,26 @@ vx_result_t Device::cp_init() {
         if (rc != VX_SUCCESS) return rc;
     }
 
+    // The system regions, sized from the configuration the device reports:
+    // one stack per hardware thread below VX_MEM_STACK_BASE_ADDR and, under
+    // VM, the page tables (vortex::plan_sys_layout). A configuration whose
+    // stacks do not fit is refused here with the limit it hit, instead of
+    // faulting or sharing pages with the page tables at run time.
+    vortex::SysLayout sys;
+    {
+        uint64_t nw = 0, nt = 0;
+        auto rc = this->query_caps(VX_CAPS_NUM_WARPS, &nw);
+        if (rc == VX_SUCCESS) rc = this->query_caps(VX_CAPS_NUM_THREADS, &nt);
+        if (rc != VX_SUCCESS) return rc;
+        std::string why;
+        if (vortex::plan_sys_layout(cp_num_cores_ * nw * nt, vm_enabled_, &sys, &why) != 0) {
+            fprintf(stderr, "[VXDRV] Error: %llu cores x %llu warps x %llu threads: %s\n",
+                    (unsigned long long)cp_num_cores_, (unsigned long long)nw,
+                    (unsigned long long)nt, why.c_str());
+            return VX_ERR_OUT_OF_DEVICE_MEMORY;
+        }
+    }
+
     if (vm_enabled_) {
         // Virtual memory: build the page tables and program the CP DMA's MMU
         // with the page-table root. After this, mem_alloc mints VAs and the
@@ -386,13 +406,13 @@ vx_result_t Device::cp_init() {
         // tables. Done before any mem_alloc is reachable (still in open()).
         {
             std::lock_guard<std::mutex> g(mu_);
-            if (global_mem_.reserve(VX_MEM_PAGE_TABLE_BASE_ADDR,
-                                    VX_VM_PT_SIZE_LIMIT) != 0)
+            if (global_mem_.reserve(sys.pt_base, sys.pt_size) != 0)
                 return VX_ERR_DEVICE_LOST;
         }
         vm_io_  = std::unique_ptr<CpMemIO>(new CpMemIO(this));
         vm_mgr_ = std::unique_ptr<vortex::VMManager>(
                       new vortex::VMManager(vm_io_.get()));
+        vm_mgr_->set_pt_pool_size(sys.pt_size);
         if (vm_mgr_->init() != 0)
             return VX_ERR_DEVICE_LOST;
         if (pinned_size_ > 0
@@ -403,6 +423,13 @@ vx_result_t Device::cp_init() {
         CP_WR(CP_SATP_HI, uint32_t(satp >> 32));
     }
     #undef CP_WR
+
+    // The stacks are device memory too: keep every buffer out of them.
+    {
+        std::lock_guard<std::mutex> g(mu_);
+        if (global_mem_.reserve(sys.stack_lo, sys.stack_hi - sys.stack_lo) != 0)
+            return VX_ERR_DEVICE_LOST;
+    }
 
     // Zero the COUT stream-ring metadata (wr[]/rd[]/lost[]) so the first
     // drain sees empty rings and a zero overflow baseline. data[] is
