@@ -75,8 +75,8 @@ uint32_t src_value(uint32_t i, uint32_t round) {
 }
 
 #ifdef VX_CFG_EXT_DXA_ENABLE
-void program_dxa(vx_device_h dev, uint32_t slot, uint64_t addr, uint32_t tile) {
-  if (vortex::dxa::program_1d(dev, slot, addr, count, tile, sizeof(uint32_t)) != 0) {
+void program_dxa(vx_queue_h q, uint32_t slot, uint64_t addr, uint32_t tile) {
+  if (vortex::dxa::program_1d(q, slot, addr, count, tile, sizeof(uint32_t)) != 0) {
     std::fprintf(stderr, "FAIL: DXA descriptor %u\n", slot);
     std::exit(1);
   }
@@ -151,8 +151,8 @@ int main(int argc, char** argv) {
       return -1;
     }
     lmem_size = block[0] * sizeof(uint32_t);
-    program_dxa(dev, 0, arg.src_addr, block[0]);
-    program_dxa(dev, 1, arg.dst_addr, block[0]);
+    program_dxa(q, 0, arg.src_addr, block[0]);
+    program_dxa(q, 1, arg.dst_addr, block[0]);
 #else
     std::printf("Error: -x needs a build with VX_CFG_EXT_DXA_ENABLE\n");
     return -1;
@@ -178,7 +178,7 @@ int main(int argc, char** argv) {
     CHECK(vx_buffer_address(mid_buf, &pp_addr[1]));
 #ifdef VX_CFG_EXT_DXA_ENABLE
     if (use_dxa) {
-      program_dxa(dev, 2, pp_addr[1], block[0]);
+      program_dxa(q, 2, pp_addr[1], block[0]);
     }
 #endif
     auto& src = h_src[0];
