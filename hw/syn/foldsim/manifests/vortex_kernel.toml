@@ -1,0 +1,18 @@
+# The kernel binding of Vortex's foldsim target (target/foldsim_target.sv), for a
+# build without a design manifest (FOLDSIM_MANIFEST): Foldsim's kernel flow
+# (foldsim_flow.py) takes the memory ports, their AXI id width and channel shift
+# from the build's configuration (hw/syn/foldsim passes them with --set), and the
+# control endpoint's roles from here. A design manifest carries the same binding.
+[platform]
+kernel = "foldsim_afu"
+adapter = "axi4"
+
+[platform.control]
+# The control endpoint's roles bound to Vortex's ports: the endpoint's own names.
+reset = "reset"
+start = "start"
+busy = "busy"
+csr_addr_width = 12
+csr_data_width = 32
+csr_req = { valid = "dcr_req_valid", rw = "dcr_req_rw", addr = "dcr_req_addr", data = "dcr_req_data" }
+csr_rsp = { valid = "dcr_rsp_valid", data = "dcr_rsp_data" }

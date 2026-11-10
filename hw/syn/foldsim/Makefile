@@ -121,6 +121,11 @@ $(error the foldsim kernel has 1, 2, 4, 8, 16 or 32 memory ports (VX_CFG_PLATFOR
 endif
 MEM_ID_W := $(shell python3 -c 'print(4 + ($(MEM_PORTS) - 1).bit_length())')
 PLATFORM_DEFINES += -DPLATFORM_MEMORY_ID_WIDTH=$(MEM_ID_W)
+# The shift that takes an address to its memory port's channel: the ports
+# interleave by block, or (INTERLEAVE=0) split the space, where every port's
+# channel holds the address as it is.
+MEM_CH_SHIFT := $(strip $(if $(filter 1,$(call cfg_value,VX_CFG_PLATFORM_MEMORY_INTERLEAVE)), \
+                $(shell python3 -c 'print(($(MEM_PORTS) - 1).bit_length())'),0))
 # The extensions' packages and include paths, as every synthesis flow finds
 # them.
 include $(VORTEX_HOME)/hw/syn/extensions.mk
@@ -210,18 +215,23 @@ $(GEN_SV): $(TARGET_SRCS) $(FOLDSIM_TOOLS) $(CLASSES_STAMP)
 # the threaded endpoint of folded memory ports from FOLDSIM_THREADED, a
 # snapshot of the flow's flow/v80/portfold_gen.sh) and the linker config. Vortex keeps its sources,
 # its manifests and its target wrapper (target/foldsim_target.sv).
-FOLDSIM_FLOW = python3 $(FOLDSIM_PATH)/bin/foldsim_flow.py --manifest $(FOLDSIM_MANIFEST) \
-               --var FOLDSIM_WORK_DIR=$(BUILD_DIR) --rtl-dir $(FOLDSIM_RTL_DIR)
-need_manifest = $(if $(FOLDSIM_MANIFEST),,$(error $(1) takes FOLDSIM_MANIFEST: the kernel binding is the manifest's [platform]))
+# The memory ports' count, AXI id width and channel shift are this build's
+# (its CONFIGS), whatever the manifest says; the control binding is the
+# manifest's, else vortex_kernel.toml's (Vortex's target, the endpoint's names).
+# --axi-spec in FOLDSIM_FLAGS sets the endpoint's AXI4 speculation depth.
+KERNEL_MANIFEST := $(or $(FOLDSIM_MANIFEST),$(SRC_DIR)/manifests/vortex_kernel.toml)
+AXI_SPEC := $(if $(findstring --axi-spec,$(FOLDSIM_FLAGS)),$(if $(findstring --axi-spec=2,$(FOLDSIM_FLAGS)),2,1))
+FOLDSIM_FLOW = python3 $(FOLDSIM_PATH)/bin/foldsim_flow.py --manifest $(KERNEL_MANIFEST) \
+               --var FOLDSIM_WORK_DIR=$(BUILD_DIR) --rtl-dir $(FOLDSIM_RTL_DIR) \
+               --set platform.mem_ports=$(MEM_PORTS) --set platform.mem_id_width=$(MEM_ID_W) \
+               --set platform.mem_channel_shift=$(MEM_CH_SHIFT) $(if $(AXI_SPEC),--set platform.axi_spec=$(AXI_SPEC))
 $(KERNEL_VH): $(GEN_SV) FORCE
-	$(call need_manifest,the kernel header)
 	@mkdir -p $(@D)
 	@$(FOLDSIM_FLOW) kernel-vh --gen $(GEN_DIR) $(if $(FOLDSIM_VMEM_CACHE_ROWS),--cache-rows $(FOLDSIM_VMEM_CACHE_ROWS)) \
 		$(if $(FOLDSIM_VMEM_MASTERS),--vmem-masters $(FOLDSIM_VMEM_MASTERS)) -o $@.tmp
 	@cmp -s $@.tmp $@ && rm -f $@.tmp || mv -f $@.tmp $@
 
 $(KERNEL_SRCS): $(GEN_SV) $(KERNEL_VH)
-	$(call need_manifest,the kernel sources)
 	@$(FOLDSIM_FLOW) afu --gen $(GEN_DIR) -o $(GEN_DIR)/foldsim_afu.sv
 	@$(FOLDSIM_FLOW) kernel-srcs --gen $(GEN_DIR) $(if $(FOLDSIM_THREADED),--threaded $(FOLDSIM_THREADED)) -o $@
 
@@ -262,7 +272,6 @@ ooc: $(KERNEL_SRCS)
 	@grep -A2 'WNS(ns)' $(OOC_DIR)/routed_timing_summary.rpt | tail -1
 
 $(CFG): $(GEN_SV) FORCE
-	$(call need_manifest,the linker config)
 	@$(FOLDSIM_FLOW) cfg --gen $(GEN_DIR) --freq $(FOLDSIM_FREQ) $(if $(FOLDSIM_VMEM_MASTERS),--vmem-masters $(FOLDSIM_VMEM_MASTERS)) -o $@.tmp
 	@cmp -s $@.tmp $@ && rm -f $@.tmp || mv -f $@.tmp $@
 
