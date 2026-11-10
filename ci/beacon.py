@@ -18,10 +18,10 @@ netlist, and read its results by RTL unit or against Vivado.
   run           map an elaborated CIRCT netlist and count the logic levels of
                 every end point (foldsim-estimate-timing) and its LUTs,
                 flip-flops, memories and DSPs (foldsim-estimate-area)
-  screen        map with the arrival-aware LUT mapper (foldsim-screen-map)
-                and count the logic levels of every end point; a design of
-                several modules (a fold's models) is mapped again with the
-                arrival times found at the modules' ports
+  screen        `run` preset for a fold: adders timed by carry block with
+                their inputs' arrival times, and a design of several modules
+                (a fold's models) mapped again with the arrival times found
+                at the modules' ports; no area
   summarize     the deep end points grouped by RTL unit, optionally beside
                 Vivado's failing ones
   paths         every deep path op by op, by RTL unit (one per pair of
@@ -42,6 +42,7 @@ netlist, and read its results by RTL unit or against Vivado.
   ci/beacon.py run runs/full/mapped.mlirbc runs/socket \\
       top=VX_socket__lift black-boxes=VX_core__lift
   ci/beacon.py screen fold/netlist.mlir runs/fold top=foldsim_target target=versal
+      (= run --carry-block-size 8 --boundary-passes 2 --no-area)
   ci/beacon.py summarize runs/full --min-levels 12
   ci/beacon.py paths runs/full --unit lsu_unit
   ci/beacon.py diff runs/parent runs/change --min-levels 8
@@ -198,111 +199,35 @@ def unit(key):
 
 def cmd_run(args):
     """Map (unless the input is already mapped bytecode), then count levels;
-    from a netlist, also map for area and count it."""
+    from a netlist, also map for area and count it (unless --no-area).
+
+    One mapper, foldsim-beacon-map{target=}. --carry-block-size times adders
+    and comparators by carry block with the arrival times of their inputs.
+    --boundary-passes N > 1 maps a design that keeps several modules after
+    inlining (a fold's models, cache banks) again, each time with the arrival
+    times the previous count found at the modules' ports, as Vivado maps the
+    flattened design; with one pass the ports arrive at level 0."""
     opt = os.environ.get("FOLDSIM_OPT") or "foldsim-opt"
     os.makedirs(args.out, exist_ok=True)
-    # Map to the cells of the target the levels are counted on.
-    target = next((o for o in args.options if o.startswith("target=")),
+    # family= is the device option's earlier name.
+    options = [re.sub(r"^family=", "target=", o) for o in args.options]
+    target = next((o for o in options if o.startswith("target=")),
                   "target=versal")
-    mapped = args.design
-    steps = []
-    # MLIR maps modules in parallel: the full GPU maps in 53 s and 18 GB, or
-    # 107 s and 9 GB on one thread.
-    threads = ["--mlir-disable-threading"] if args.no_threads else []
-    if not args.design.endswith(".mlirbc"):
-        mapped = os.path.join(args.out, "mapped.mlirbc")
-        pipeline = "foldsim-beacon-map{%s}" % target
-        if args.keep:
-            # Keep these modules' instances through inlining, so their ports
-            # can be reported (ports=, port-modules=).
-            pipeline = "foldsim-keep-modules{modules=%s},%s" % (
-                ",".join(args.keep), pipeline)
-        steps.append(("map", [opt, args.design, "--emit-bytecode", "-o", mapped,
-                              "--pass-pipeline=builtin.module(%s)" % pipeline]
-                      + threads))
-    files = ["output=%s/endpoints.csv" % args.out,
-             "instances=%s/instances.csv" % args.out,
-             "report=%s/report.txt" % args.out,
-             "paths=%s/paths.jsonl" % args.out]
-    if any(o.startswith("port-modules=") for o in args.options):
-        files.append("ports=%s/ports.csv" % args.out)
-    opts = " ".join(files + args.options)
-    steps.append(("levels", [opt, mapped, "-o", os.devnull,
-                             "--pass-pipeline=builtin.module("
-                             "foldsim-estimate-timing{%s})" % opts]))
-    if not args.design.endswith(".mlirbc"):
-        # Area reads the netlist mapped again, for area.
-        top = [o for o in args.options if o.startswith(("top=", "black-boxes="))]
-        area = " ".join([target, "output=%s/area.csv" % args.out,
-                         "memories=%s/area_memories.csv" % args.out,
-                         "report=%s/area.txt" % args.out] + top)
-        steps.append(("area", [opt, args.design, "-o", os.devnull,
-                               "--pass-pipeline=builtin.module("
-                               "foldsim-beacon-map{%s area},"
-                               "foldsim-estimate-area{%s})" % (target, area)]
-                      + threads))
-    for name, cmd in steps:
-        start = time.time()
-        rc = subprocess.call(cmd)
-        peak = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss / 1e6
-        print("%-7s %6.1f s  peak %.1f GB" % (name, time.time() - start, peak))
-        if rc:
-            return rc
-    return 0
-
-
-
-def timing_target_option(opt):
-    """The name foldsim-estimate-timing gives the device option: `target`
-    (Beacon targets), or `family` before them."""
-    try:
-        out = subprocess.run([opt, "--help"], capture_output=True, text=True).stdout
-    except OSError:
-        return "target"
-    block = out.partition("--foldsim-estimate-timing")[2].partition("\n      --foldsim-")[0]
-    return "target" if "--target=" in block or "--family=" not in block else "family"
-
-
-def supports_arrivals(opt):
-    """Whether foldsim-opt maps with boundary arrival times (foldsim-screen-map
-    {arrivals=}, foldsim bcc0fc6 on)."""
-    try:
-        out = subprocess.run([opt, "--help"], capture_output=True, text=True).stdout
-    except OSError:
-        return False
-    return "foldsim-boundary-arrivals" in out
-
-
-def cmd_screen(args):
-    """Map with foldsim-screen-map (unless the input is already mapped
-    bytecode), then count levels. Unlike `run`, the mapper times adders and
-    comparators by carry block with the arrival times of their inputs, and a
-    design of several modules is mapped again with the arrival times found at
-    its modules' ports; no area. family= and target= name the device alike."""
-    opt = os.environ.get("FOLDSIM_OPT") or "foldsim-opt"
-    os.makedirs(args.out, exist_ok=True)
-    name = timing_target_option(opt)
-    options = [re.sub(r"^(family|target)=", name + "=", o) for o in args.options]
-    asic = any(o == name + "=asap7" for o in options)
-    mapped = args.design
-    # MLIR maps modules in parallel: the full GPU maps in 53 s and 18 GB, or
-    # 107 s and 9 GB on one thread.
-    threads = ["--mlir-disable-threading"] if args.no_threads else []
-    # The modules left after inlining (a fold's models) are mapped one at a
-    # time, each taking its input ports and its instances' outputs to arrive
-    # at level 0. A further mapping with the arrival times the screen found
-    # at those ports times them as the whole hierarchy delivers them, as
-    # Vivado maps the flattened design (foldsim-screen-map{arrivals=}).
-    if not args.design.endswith(".mlirbc"):
-        mapped = os.path.join(args.out, "mapped.mlirbc")
+    netlist = not args.design.endswith(".mlirbc")
+    mapped = os.path.join(args.out, "mapped.mlirbc") if netlist else args.design
     arrivals = os.path.join(args.out, "arrivals.json")
-    boundary = (not asic and not args.design.endswith(".mlirbc")
-                and args.boundary_passes > 1 and supports_arrivals(opt))
+    boundary = netlist and args.boundary_passes > 1
+    # MLIR maps modules in parallel: the full GPU maps in 53 s and 18 GB, or
+    # 107 s and 9 GB on one thread.
+    threads = ["--mlir-disable-threading"] if args.no_threads else []
 
     def map_step(given):
-        pipeline = "foldsim-screen-map-asic" if asic else "foldsim-screen-map"
+        mapopts = [target]
+        if args.carry_block_size:
+            mapopts.append("carry-block-size=%d" % args.carry_block_size)
         if given:
-            pipeline += "{arrivals=%s}" % given
+            mapopts.append("arrivals=%s" % given)
+        pipeline = "foldsim-beacon-map{%s}" % " ".join(mapopts)
         if args.keep:
             # Keep these modules' instances through inlining, so their ports
             # can be reported (ports=, port-modules=).
@@ -320,34 +245,45 @@ def cmd_screen(args):
         files.append("ports=%s/ports.csv" % args.out)
     if boundary:
         files.append("arrivals=%s" % arrivals)
-    opts = " ".join(files + options)
-    screen_step = ("screen", [opt, mapped, "-o", os.devnull,
+    levels_step = ("levels", [opt, mapped, "-o", os.devnull,
                               "--pass-pipeline=builtin.module("
-                              "foldsim-estimate-timing{%s})" % opts])
+                              "foldsim-estimate-timing{%s})"
+                              % " ".join(files + options)])
 
     def run(steps):
-        for step, cmd in steps:
+        for name, cmd in steps:
             start = time.time()
             rc = subprocess.call(cmd)
             peak = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss / 1e6
-            print("%-7s %6.1f s  peak %.1f GB" % (step, time.time() - start, peak))
+            print("%-7s %6.1f s  peak %.1f GB" % (name, time.time() - start, peak))
             if rc:
                 return rc
         return 0
 
-    steps = [] if args.design.endswith(".mlirbc") else [map_step(None)]
-    rc = run(steps + [screen_step])
+    rc = run(([map_step(None)] if netlist else []) + [levels_step])
     for n in range(2, args.boundary_passes + 1 if boundary else 0):
         if rc:
-            break
+            return rc
         with open(os.path.join(args.out, "instances.csv")) as f:
             if sum(1 for _ in f) <= 2:
                 break  # one module: no boundary to time
         given = os.path.join(args.out, "arrivals.%d.json" % (n - 1))
         os.replace(arrivals, given)
         print("boundary pass %d, from %s" % (n, given))
-        rc = run([map_step(given), screen_step])
-    return rc
+        rc = run([map_step(given), levels_step])
+    if rc or not netlist or args.no_area:
+        return rc
+    # Area reads the netlist mapped again, for area.
+    top = [o for o in options if o.startswith(("top=", "black-boxes="))]
+    area = " ".join([target, "output=%s/area.csv" % args.out,
+                     "memories=%s/area_memories.csv" % args.out,
+                     "report=%s/area.txt" % args.out] + top)
+    return run([("area", [opt, args.design, "-o", os.devnull,
+                          "--pass-pipeline=builtin.module("
+                          "foldsim-beacon-map{%s area},"
+                          "foldsim-estimate-area{%s})" % (target, area)]
+                 + threads)])
+
 
 def cmd_validate(args):
     np = numpy()
@@ -1241,38 +1177,37 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    p = sub.add_parser("run", help="map a netlist and count its levels")
-    p.add_argument("design", help="elaborated netlist (.mlir), or mapped bytecode (.mlirbc)")
-    p.add_argument("out", help="output directory")
-    p.add_argument("options", nargs="*",
-                   help="foldsim-estimate-timing options (top=, target=, black-boxes=, "
-                   "trace=, retime-levels=, ...); the design is mapped to the "
-                   "cells of target= (versal by default)")
-    p.add_argument("--no-threads", action="store_true",
-                   help="map on one thread: half the peak memory, twice the time")
-    p.add_argument("--keep", action="append", default=[], metavar="MODULE",
-                   help="keep MODULE's instances through inlining, to report "
-                   "their ports with port-modules=MODULE (repeatable)")
-    p.set_defaults(fn=cmd_run)
+    def add_run_args(p, carry, passes, no_area):
+        p.add_argument("design", help="elaborated netlist (.mlir), or mapped bytecode (.mlirbc)")
+        p.add_argument("out", help="output directory")
+        p.add_argument("options", nargs="*",
+                       help="foldsim-estimate-timing options (top=, target=, black-boxes=, "
+                       "trace=, retime-levels=, ...); the design is mapped to the "
+                       "cells of target= (versal by default; family= is accepted)")
+        p.add_argument("--no-threads", action="store_true",
+                       help="map on one thread: half the peak memory, twice the time")
+        p.add_argument("--keep", action="append", default=[], metavar="MODULE",
+                       help="keep MODULE's instances through inlining, to report "
+                       "their ports with port-modules=MODULE (repeatable)")
+        p.add_argument("--carry-block-size", type=int, default=carry, metavar="B",
+                       help="time adders and comparators by carry blocks of B bits "
+                       "with their inputs' arrival times (0: every input bit "
+                       "arrives at 0; default %d)" % carry)
+        p.add_argument("--boundary-passes", type=int, default=passes, metavar="N",
+                       help="mappings of a design of several modules, each with the "
+                       "arrival times the previous count found at the modules' "
+                       "ports (1: the ports arrive at 0; default %d)" % passes)
+        p.add_argument("--no-area", action="store_true", default=no_area,
+                       help="count levels only" + (" (default)" if no_area else ""))
+        p.set_defaults(fn=cmd_run)
 
-    p = sub.add_parser("screen", help="map with the arrival-aware mapper and "
-                       "count levels, a fold's module boundaries timed")
-    p.add_argument("design", help="elaborated netlist (.mlir), or mapped bytecode (.mlirbc)")
-    p.add_argument("out", help="output directory")
-    p.add_argument("options", nargs="*",
-                   help="foldsim-estimate-timing options (top=, target= or family=, "
-                   "black-boxes=, trace=, retime-levels=, ...); target=asap7 maps "
-                   "for the ASIC library")
-    p.add_argument("--no-threads", action="store_true",
-                   help="map on one thread: half the peak memory, twice the time")
-    p.add_argument("--keep", action="append", default=[], metavar="MODULE",
-                   help="keep MODULE's instances through inlining, to report "
-                   "their ports with port-modules=MODULE (repeatable)")
-    p.add_argument("--boundary-passes", type=int, default=2, metavar="N",
-                   help="mappings of a design of several modules, each with the "
-                   "arrival times the previous one's screen found at the "
-                   "modules' ports (1: the ports arrive at 0; default 2)")
-    p.set_defaults(fn=cmd_screen)
+    p = sub.add_parser("run", help="map a netlist and count its levels")
+    add_run_args(p, carry=0, passes=1, no_area=False)
+    # The same command, preset for a fold: arrival-aware mapping, its module
+    # boundaries timed, no area.
+    p = sub.add_parser("screen", help="`run` preset for a fold: --carry-block-size 8 "
+                       "--boundary-passes 2 --no-area")
+    add_run_args(p, carry=8, passes=2, no_area=True)
 
     p = sub.add_parser("summarize", help="deep end points by RTL unit")
     p.add_argument('run_dir')

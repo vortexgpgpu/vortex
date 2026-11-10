@@ -65,15 +65,18 @@ ci/beacon.py validate runs/socket ep.csv --native VX_socket__lift=dut
 ci/beacon.py screen fold/netlist.mlir runs/fold top=foldsim_target   # a fold: module boundaries timed
 ```
 
-`screen` maps with `foldsim-screen-map` instead of `foldsim-beacon-map`: its
-LUT mapper times adders and comparators by carry block with their inputs'
-arrival times, and a design that keeps several modules after inlining (a
-fold's models, each mapped on its own) is mapped a second time with the
-arrival times the first count found at the modules' ports
-(`foldsim-screen-map{arrivals=}`, `--boundary-passes`, 2 by default), so a
-late signal crossing a model boundary is timed as Vivado times the flattened
-design. On the 4-SM fold the end point bits at 12 levels or more went from 66
-to 1. It counts no area; `family=` is accepted for `target=`.
+`run` has one mapper, `foldsim-beacon-map{target=}`, and two options for
+designs whose depth crosses module boundaries. `--carry-block-size B`
+(`carry-block-size=` of the mapper) times adders and comparators by carry
+block with their inputs' arrival times. `--boundary-passes N` maps a design
+that keeps several modules after inlining (a fold's models, each mapped on its
+own) again with the arrival times the previous count found at the modules'
+ports (`arrivals=` of the mapper), so a late signal crossing a model boundary
+is timed as Vivado times the flattened design. On the 4-SM fold the end point
+bits at 12 levels or more went from 66 to 1. `screen` is `run` preset for a
+fold (`--carry-block-size 8 --boundary-passes 2 --no-area`); `run`'s defaults
+(0, 1, area) are what the DUT flow, the gate thresholds and the calibration
+use. `family=` is accepted for `target=`.
 
 Or the passes directly:
 
