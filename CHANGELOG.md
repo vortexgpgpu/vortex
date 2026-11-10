@@ -110,8 +110,9 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
   retimed with no change in latency, so SimX and every cycle count are unchanged. FDIV/FSQRT decides the subnormal shift and tests
   overflow for both rounding carries one stage early. The FMA subtracts in both orders, with the borrow as the carry-in, in
   parallel with the magnitude compare, and its NORM stage precomputes the subnormal shift for both candidate exponents. The
-  multiplier registers its operands in the first of its `LATENCY_IMUL` stages instead of the last. The core now reaches 1020 MHz
-  and top 1029 MHz, with cell area +0.1%.
+  multiplier registers its operands in the first of its `LATENCY_IMUL` stages instead of the last, where the target has no
+  pipelined multiplier blocks (`IMUL_IN_REG` in `VX_platform.vh`); on FPGAs the DSP blocks pipeline the product themselves, and the
+  operand register cost the U55C core 3.6 MHz. The core now reaches 1020 MHz and top 1029 MHz, with cell area +0.1%.
 - **FPU clock enable on the U55C core.** Each FPU core's skid register drove one clock-enable net to every unit of the core, and
   the FPGA core build reached 286 MHz against 300. `VX_pe_serializer` now computes the enable a cycle ahead and registers one copy
   per unit (`PE_ENABLES`), so each unit's enable starts at its own flop; the core reaches 296.6 MHz with no cycle change.
