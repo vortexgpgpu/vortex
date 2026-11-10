@@ -22,7 +22,13 @@ VX_MEM_STACK_LOG2_SIZE      = 13
 VX_MEM_STACK_BASE_ADDR      = "expr: 0x00000001FFFF0000 if ($XLEN == 64) else 0xFFFF0000"
 VX_MEM_LMEM_BASE_ADDR       = "expr: $VX_MEM_STACK_BASE_ADDR"
 VX_MEM_IO_BASE_ADDR         = "expr: 0x0000000000000040 if ($XLEN == 64) else 0x00000040"
-VX_MEM_PAGE_TABLE_BASE_ADDR = "expr: 0x00000000F0000000 if ($XLEN == 64) else 0xF0000000"
+# Page tables: directly below the stacks, which are one 1 << VX_MEM_STACK_LOG2_SIZE block per hardware thread
+# (clusters x cores x warps x threads, the RTL / SimX stack window) under VX_MEM_STACK_BASE_ADDR, minus the
+# page-table pool, aligned down to the pool size. The stack count comes from the build's configuration, so this
+# key (and the OM aperture's ends below it) stays an expression of the VX_CFG_* macros ([[extern]] at the end):
+# the memory map follows the machine, as a GPU sizes its local memory from the launch. Computed in stack units
+# ((top >> log2) - stacks) << log2 so the C evaluation never overflows an int.
+VX_MEM_PAGE_TABLE_BASE_ADDR = "expr: (((($VX_MEM_STACK_BASE_ADDR >> $VX_MEM_STACK_LOG2_SIZE) - $VX_CFG_NUM_CLUSTERS * $VX_CFG_NUM_CORES * $VX_CFG_NUM_WARPS * $VX_CFG_NUM_THREADS) << $VX_MEM_STACK_LOG2_SIZE) - $VX_VM_PT_SIZE_LIMIT) / $VX_VM_PT_SIZE_LIMIT * $VX_VM_PT_SIZE_LIMIT"
 VX_MEM_IO_COUT_ADDR         = "expr: $VX_MEM_IO_BASE_ADDR"
 # Console buffer — lossy per-hart stream rings.
 # Layout: wr[SLOTS] u32, rd[SLOTS] u32, data[SLOTS][RING], lost[SLOTS] u32.
@@ -53,8 +59,12 @@ VX_MEM_IO_END_ADDR          = "expr: $VX_MEM_USER_BASE_ADDR"
 # granularity, and the coalescer merges lanes at a finer granularity than that,
 # so a merged request's attr is only coherent if the aperture edge falls on a
 # block boundary (cf. the VX_MEM_IO_BASE_ADDR assert in VX_cache_bypass).
-VX_MEM_OM_BASE_ADDR         = "expr: 0x00000000E0000000 if ($XLEN == 64) else 0xE0000000"
-VX_MEM_OM_END_ADDR          = "expr: $VX_MEM_PAGE_TABLE_BASE_ADDR"
+# Its ends: at most [0xE0000000, 0xF0000000) as before; it ends at the page tables when they come lower (large
+# stack windows), and is empty when they come below its base. It never grows past the old 256 MB.
+VX_MEM_OM_BASE_LIMIT        = "expr: 0x00000000E0000000 if ($XLEN == 64) else 0xE0000000"
+VX_MEM_OM_END_LIMIT         = "expr: 0x00000000F0000000 if ($XLEN == 64) else 0xF0000000"
+VX_MEM_OM_BASE_ADDR         = "expr: min($VX_MEM_OM_BASE_LIMIT, $VX_MEM_OM_END_ADDR)"
+VX_MEM_OM_END_ADDR          = "expr: min($VX_MEM_OM_END_LIMIT, $VX_MEM_PAGE_TABLE_BASE_ADDR)"
 
 [mufu]
 VX_MUFU_LATENCY = 9
@@ -884,3 +894,11 @@ XLEN = "int"
 
 [[enum]]
 VX_VM_ADDR_MODE = ["BARE", "SV32", "SV39", "SV48", "SV57"]
+
+# Symbols the compiling unit defines (VX_config.toml's, through the build's CONFIGS / VX_config.vh): keys that
+# read them are emitted as expressions, also in resolved headers.
+[[extern]]
+VX_CFG_NUM_CLUSTERS = "int"
+VX_CFG_NUM_CORES    = "int"
+VX_CFG_NUM_WARPS    = "int"
+VX_CFG_NUM_THREADS  = "int"
