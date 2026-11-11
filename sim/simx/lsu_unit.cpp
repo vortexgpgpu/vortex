@@ -233,7 +233,6 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 	bool is_write;
 	int64_t  offset;
 	uint32_t stride;
-	bool     data_src2 = false;
 	// A uniform access is made once per warp, by its first active lane.
 	const bool uniform = (trace->instr_ptr->get_umode() == Instr::UMODE_UNIFORM);
 	uint32_t uniform_tid = 0;
@@ -252,7 +251,6 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 		is_write   = (lsu_tag && *lsu_tag == LsuType::STORE);
 		offset     = lsu_args.offset;
 		stride     = lsu_args.stride;
-		data_src2  = lsu_args.indexed;
 		if (is_write && lsu_args.width > 3)
 			std::abort();
 	}
@@ -299,7 +297,7 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 			if (is_write || is_amo) {
 				// Stores carry rs2 as data; AMOs carry rs2 as the RMW operand
 				// (LR encodes rs2 = x0, so the captured value is 0).
-				e.data = data_src2 ? trace->src_data[2][t].u64 : rs2_data[t].u64;
+				e.data = rs2_data[t].u64;
 			}
 			if (is_cas) {
 				e.amo_cmp = trace->src_data[2][t].u64;

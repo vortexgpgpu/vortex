@@ -55,7 +55,14 @@ package VX_gpu_pkg;
     localparam REG_TYPE_I = 0;
     localparam REG_TYPE_F = 1;
 
-    localparam REG_TYPES = 1 + `VX_CFG_EXT_F_ENABLED;
+    // The register files a warp's set holds in the GPR banks: x, and f with F.
+    localparam GPR_TYPES = 1 + `VX_CFG_EXT_F_ENABLED;
+    localparam GPR_SET_REGS = (GPR_TYPES * RV_REGS);
+
+    // Register ids: x, f with F, and the uniform registers with U, which live
+    // in the operand collectors outside the GPR banks.
+    localparam REG_TYPE_U = GPR_TYPES;
+    localparam REG_TYPES = GPR_TYPES + `VX_CFG_EXT_U_ENABLED;
 
     localparam NUM_REGS = (REG_TYPES * RV_REGS);
 
@@ -66,7 +73,7 @@ package VX_gpu_pkg;
     // Register-file layout of the running kernel: a warp's set is size4 * 4
     // rows, integer registers first, FP registers fp_off4 * 4 rows in
     // (VX_DCR_KMU_NUM_REGS).
-    localparam GPR_SET_W = `CLOG2(NUM_REGS / 4 + 1);
+    localparam GPR_SET_W = `CLOG2(GPR_SET_REGS / 4 + 1);
     typedef struct packed {
         logic [GPR_SET_W-1:0] size4;
         logic [GPR_SET_W-1:0] fp_off4;

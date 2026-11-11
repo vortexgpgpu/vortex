@@ -165,8 +165,6 @@ def decode_uniform(w, mode):
         return [('rd', X), ('rs1', U)], ()
     if op in (OP_B, OP_S):
         return [('rs1', X), ('rs2', U)], ()
-    if op == OP_AMO and (f7 >> 2) in (0x1e, 0x1f):
-        return [('rd', X), ('rs1', U), ('rs2', X)], ()
     raise DecodeError("reserved uniform-operand encoding")
 
 

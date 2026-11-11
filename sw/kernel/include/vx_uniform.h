@@ -40,7 +40,6 @@
 #define VX_UO_OP      0x31
 #define VX_UO_OP_IMM  0x11
 #define VX_UO_STORE   0x21
-#define VX_UO_AMO     0x2d
 
 // funct7/funct3 of the integer operations
 #define VX_U_ADD    0x00, 0
@@ -141,15 +140,5 @@
 #define vx_xu_store(width, us2, xs1, off) \
   __asm__ volatile (".insn s %0, %1, " __VX_U(us2) ", %2(%3)" \
                     :: "i"(VX_UO_STORE), "i"(width), "i"(off), "r"(xs1) : "memory")
-
-// per thread, global indexed: mem[us1 + xidx]
-#define vx_u_gload(width, us1, xidx) ({ \
-  size_t __x; \
-  __asm__ volatile (".insn r %1, %2, 0x78, %0, " __VX_U(us1) ", %3" \
-                    : "=r"(__x) : "i"(VX_UO_AMO), "i"(width), "r"(xidx) : "memory"); \
-  __x; })
-#define vx_u_gstore(width, us1, xidx, xdata) \
-  __asm__ volatile (".insn r %0, %1, 0x7c, %2, " __VX_U(us1) ", %3" \
-                    :: "i"(VX_UO_AMO), "i"(width), "r"(xdata), "r"(xidx) : "memory")
 
 #endif // __VX_UNIFORM_H__

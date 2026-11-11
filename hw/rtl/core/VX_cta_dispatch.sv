@@ -274,10 +274,10 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // -------------------------------------------------------------------------
     localparam GPR_NC   = `VX_CFG_ISSUE_WIDTH * `VX_CFG_NUM_OPCS;
     localparam GPR_ROWS = `VX_CFG_GPR_ROWS;
-    `STATIC_ASSERT ((GPR_ROWS >= NUM_REGS) && ((GPR_ROWS % 4) == 0), ("invalid VX_CFG_GPR_ROWS"))
+    `STATIC_ASSERT ((GPR_ROWS >= GPR_SET_REGS) && ((GPR_ROWS % 4) == 0), ("invalid VX_CFG_GPR_ROWS"))
     wire       kreq_all_regs = (kmu_req.num_regs == '0);
     wire [8:0] kreq_rx = kreq_all_regs ? 9'(RV_REGS) : 9'(kmu_req.num_regs[7:0]);
-    wire [8:0] kreq_r  = kreq_all_regs ? 9'(NUM_REGS) : (9'(kmu_req.num_regs[7:0]) + 9'(kmu_req.num_regs[15:8]));
+    wire [8:0] kreq_r  = kreq_all_regs ? 9'(GPR_SET_REGS) : (9'(kmu_req.num_regs[7:0]) + 9'(kmu_req.num_regs[15:8]));
     wire [`VX_CFG_NUM_WARPS-1:0] warp_fits;
     for (genvar w = 0; w < `VX_CFG_NUM_WARPS; ++w) begin : g_warp_fits
         assign warp_fits[w] = (32'(kreq_r) <= 32'(GPR_ROWS / (w / GPR_NC + 1)))
@@ -288,7 +288,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     always_ff @(posedge clk) begin
         if (reset) begin
             warp_fits_r          <= '1;
-            gpr_layout_r.size4   <= GPR_SET_W'(NUM_REGS / 4);
+            gpr_layout_r.size4   <= GPR_SET_W'(GPR_SET_REGS / 4);
             gpr_layout_r.fp_off4 <= GPR_SET_W'(RV_REGS / 4);
         end else if ((state == IDLE) && kmu_bus_if_fire) begin
             warp_fits_r          <= warp_fits;

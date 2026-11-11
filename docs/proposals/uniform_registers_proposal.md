@@ -55,7 +55,6 @@ The second source is uniform, as RVV's `vop.vx vd, vs2, rs1` computes
 | OP-IMM; OP-IMM-32 at XLEN=64 | `xd = us1 op imm` (the only source is uniform); `addi xd, us1, 0` is a broadcast |
 | BRANCH | `xs1 cmp us2`: `blt i, n` |
 | STORE | `mem[xs1 + imm] = us2` |
-| AMO | **global indexed access** at `us1 + xs2`, width in funct3 as LOAD/STORE: funct5 `11110` loads into `xd`; funct5 `11111` stores the register in the `rd` field; atomics at the same address are reserved |
 | Vortex custom (TCU, TMEM, DXA, warp control) | per instruction, the operand that is warp-invariant (descriptor, TMEM address, barrier id) from `u`; defined in a later phase |
 
 A uniform first operand of a non-commutative op (`u - x`, `u << x`, `u < x`)
@@ -96,13 +95,13 @@ the first-lane writeback are the new parts.
 | Fetch | `VX_warp_sched.sv` | 4-byte PC steps whatever `[1:0]` is, without C |
 | Uniform register file | `VX_opc_unit.sv` | per-warp 32 x XLEN bits, its own read port, broadcast to the lanes |
 | Scoreboard | `VX_scoreboard.sv` | the uniform registers' busy bits |
-| LSU | `VX_lsu_block.sv` | mode-`10` access by the first active lane; global indexed `us1 + xs2` loads and stores |
+| LSU | decode | a mode-`10` access narrowed to the first active lane |
 | Writeback | `VX_opc_unit.sv` | `u` destination from the first active lane |
 
 ### SimX
 
 `decode.cpp` (modes), `types.h` (`RegType::Uniform`), the `u` file in
-`opc_unit.cpp`, the single-lane and indexed accesses in `lsu_unit.cpp`, and the
+`opc_unit.cpp`, the single-lane access in `lsu_unit.cpp`, and the
 4-byte PC step in `core.cpp`.
 
 ### Toolchain
@@ -113,6 +112,14 @@ the first-lane writeback are the new parts.
 - `sw/kernel/include/vx_uniform.h`: inline-assembly intrinsics on `.insn`, so
   they build with the current toolchain.
 
+## Later: a 64-bit base at XLEN=32
+
+An even-aligned pair of uniform registers holds a 64-bit base, and a
+per-thread register adds its offset: `addr = {u[n+1], u[n]} + zext(xs2)` on a
+reserved mode-`01` encoding (the AMO opcode). The per-thread datapath stays
+XLEN wide; the address path below the add, the caches and the memory bus carry
+the wider physical address. It lands with that wider address path.
+
 ## Phases
 
 Built with dynamic warp allocation; see the combined phases in
@@ -122,5 +129,3 @@ Built with dynamic warp allocation; see the combined phases in
 
 - 32 or 16 `u` registers.
 - Whether the `u` file is also allocated per kernel, as the `x`/`f` file is.
-- Global indexed stores use `rd` as a source; LLVM models that as a tied
-  operand.

@@ -15,12 +15,12 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
   uint32_t n = vx_x_mvu(2);
   if (idx < n) {
-    // dst[i] = src[i] * scale + n, through uniform bases
+    // dst[i] = src[i] * scale + n, addressed from uniform bases
     size_t off = idx * 4;
-    uint32_t v = vx_u_gload(VX_U_W, 3, off);
-    uint32_t r = vx_xu_op(VX_U_MUL, v, 5);
-    r = vx_xu_op(VX_U_ADD, r, 2);
-    vx_u_gstore(VX_U_W, 4, off, r);
+    auto src = reinterpret_cast<const uint32_t*>(vx_xu_op(VX_U_ADD, off, 3));
+    auto dst = reinterpret_cast<uint32_t*>(vx_xu_op(VX_U_ADD, off, 4));
+    uint32_t r = vx_xu_op(VX_U_MUL, *src, 5);
+    *dst = vx_xu_op(VX_U_ADD, r, 2);
   }
 
   vx_u_li(6, 1);

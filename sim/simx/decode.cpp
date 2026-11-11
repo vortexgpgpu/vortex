@@ -554,7 +554,6 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
 Instr::Ptr Decoder::decode_uniform(uint32_t code, uint64_t uuid, uint8_t umode) {
   auto op     = Opcode((code >> shift_opcode) & mask_opcode);
   auto funct3 = (code >> shift_funct3) & mask_funct3;
-  auto funct5 = (code >> shift_funct5) & mask_funct5;
   auto funct7 = (code >> shift_funct7) & mask_funct7;
   auto rd  = (code >> shift_rd)  & mask_reg;
   auto rs1 = (code >> shift_rs1) & mask_reg;
@@ -573,26 +572,6 @@ Instr::Ptr Decoder::decode_uniform(uint32_t code, uint64_t uuid, uint8_t umode) 
     instr->set_dest_reg(rd, to_u ? RegType::Uniform : RegType::Integer);
     instr->set_src_reg(0, rs1, to_u ? RegType::Integer : RegType::Uniform);
     instr->set_umode(Instr::UMODE_OPERAND);
-    return instr;
-  }
-
-  // Global indexed accesses on the AMO opcode, at us1 + xs2: funct5 0x1e
-  // loads into xd, 0x1f stores the register in the rd field.
-  if (!uniform && op == Opcode::AMO && (funct5 == 0x1e || funct5 == 0x1f)) {
-    auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::LSU);
-    bool is_load = (funct5 == 0x1e);
-    instr->set_op_type(is_load ? LsuType::LOAD : LsuType::STORE);
-    instr->set_src_reg(0, rs1, RegType::Uniform);
-    instr->set_src_reg(1, rs2, RegType::Integer);
-    if (is_load) {
-      instr->set_dest_reg(rd, RegType::Integer);
-    } else {
-      instr->set_src_reg(2, rd, RegType::Integer);
-    }
-    IntrLsuArgs args{funct3, /*stride*/ 1, /*offset*/ 0};
-    args.indexed = true;
-    instr->set_args(args);
-    instr->set_umode(umode);
     return instr;
   }
 
