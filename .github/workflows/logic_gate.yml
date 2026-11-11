@@ -10,7 +10,8 @@
 #
 # The gate itself runs in ci.yml, as the logic_gate cell planned with
 # perf_gate's rtlsim cells. This workflow is the manual entry point: a subset of
-# the catalog on a hosted runner, or the full-GPU builds (group gpu), which need
+# the catalog on a hosted runner, on the FPGA or the ASIC flow, optionally
+# against another revision; or the full-GPU builds (group gpu), which need
 # ~95 GB per build and run only on the self-hosted machine.
 #
 # See docs/designs/continuous_integration.md §4.6.
@@ -22,6 +23,13 @@ on:
     inputs:
       builds:
         description: "build ids/groups, space separated (blank = all)"
+        default: ""
+      asic:
+        description: "measure asic_gate.yaml's builds on the ASIC flow (case gate_asic) instead"
+        type: boolean
+        default: false
+      against:
+        description: "also compare each build with the same build on this revision's RTL (blank = none)"
         default: ""
       gpu:
         description: "run the full-GPU builds (group gpu) on the self-hosted machine instead"
@@ -40,10 +48,14 @@ jobs:
     if: ${{ !inputs.gpu }}
     runs-on: ubuntu-22.04
     timeout-minutes: 90
+    env:
+      CASE: ${{ inputs.asic && 'gate_asic' || 'gate' }}
+      REPORT: ${{ inputs.asic && 'logic_gate_asic.json' || 'logic_gate.json' }}
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+          fetch-depth: ${{ inputs.against && '0' || '1' }}
 
       # Restores the prebuilt toolchain (CIRCT among it) and exports TOOLDIR;
       # prepare=true installs it on a cache miss.
@@ -60,22 +72,24 @@ jobs:
           ../configure --tooldir=$TOOLDIR
           ci/toolchain_install.sh --foldsim
 
-      # The command is the one the catalog declares (the `gate` case of
-      # ci/testcases/logic_gate.yaml), so what CI runs and what the catalog
-      # says cannot drift apart.
+      # The command is the one the catalog declares (the `gate` or `gate_asic`
+      # case of ci/testcases/logic_gate.yaml), so what CI runs and what the
+      # catalog says cannot drift apart.
       - name: Gate
         id: run
         env:
           IN_BUILDS: ${{ github.event.inputs.builds }}
+          IN_AGAINST: ${{ github.event.inputs.against }}
         run: |
           set -uo pipefail
-          CMD=$(python3 -c "import yaml; print(next(t['run'] for t in yaml.safe_load(open('ci/testcases/logic_gate.yaml'))['tests'] if t['id'] == 'gate'))")
+          CMD=$(python3 -c "import os, yaml; print(next(t['run'] for t in yaml.safe_load(open('ci/testcases/logic_gate.yaml'))['tests'] if t['id'] == os.environ['CASE']))")
           # Dispatch inputs reach the shell through an env var, never
           # interpolated into the script.
           ARGS=()
           for b in ${IN_BUILDS:-}; do ARGS+=(-b "$b"); done
+          [ -n "${IN_AGAINST:-}" ] && ARGS+=(--against-rev "$IN_AGAINST")
           rc=0
-          $CMD "${ARGS[@]}" --timeout 3600 --report logic_gate.json || rc=$?
+          $CMD "${ARGS[@]}" --timeout 3600 || rc=$?
           echo "rc=$rc" >> "$GITHUB_OUTPUT"
           exit 0
 
@@ -83,27 +97,31 @@ jobs:
         if: always()
         run: |
           set -uo pipefail
-          python3 ci/synth_report.py --annotate error logic_gate.json \
+          python3 ci/synth_report.py --annotate error "$REPORT" \
             > logic_gate_report.md || true
           cat logic_gate_report.md >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: logic-gate
+          name: logic-gate${{ inputs.asic && '-asic' || '' }}
           path: |
-            logic_gate.json
+            logic_gate*.json
             logic_gate_report.md
             build32_logic_gate/hw/syn/xilinx/dut/logic_gate_*/build.log
             build32_logic_gate/hw/syn/xilinx/dut/logic_gate_*/beacon_*
             build32_logic_gate/hw/syn/xilinx/dut/logic_gate_*/beacon/report.txt
+            build32_logic_gate_asic/hw/syn/yosys/logic_gate_asic_*/build.log
+            build32_logic_gate_asic/hw/syn/yosys/logic_gate_asic_*/beacon_*
+            build32_logic_gate_asic/hw/syn/yosys/logic_gate_asic_*/beacon/report.txt
+            build32_logic_gate_asic/hw/syn/yosys/logic_gate_asic_*/beacon/area.txt
           if-no-files-found: warn
 
       - name: Verdict
         run: |
           case "${{ steps.run.outputs.rc }}" in
             0) echo "logic_gate passed" ;;
-            1) echo "::error::logic_gate FAILED — a unit got deeper than its baseline"; exit 1 ;;
+            1) echo "::error::logic_gate FAILED — a unit got deeper or the design grew (see the summary)"; exit 1 ;;
             *) echo "::error::logic_gate build error (see logs)"; exit 1 ;;
           esac
 

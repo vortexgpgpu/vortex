@@ -49,6 +49,10 @@
 # `VX_cache_wrap #(.PASSTHRU(!`VX_CFG_L2_ENABLED))`, and the Yosys catalog was
 # missing L2_ENABLE. It now carries the real 256 KB L2, as `gfx` and `tensor` do.
 #
+# logic_gate's `gate_asic` case (ci/logic_gate.py --tool beacon_asic) measures
+# these same builds with Beacon on every pull request, in minutes: it takes
+# their designs and clock_mhz, not their known_issue or thresholds.
+#
 # See docs/designs/continuous_integration.md §3.5.
 category: asic_gate
 defaults:

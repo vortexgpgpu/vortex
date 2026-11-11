@@ -1,0 +1,28 @@
+{
+  "mufu": {
+    "clock_mhz": 800,
+    "config_hash": "0994b5e5a07a94ab",
+    "configs": "",
+    "dut": "mufu",
+    "result": {
+      "build_time_s": 15,
+      "cells": 15143,
+      "endpoints": 2332,
+      "env": {
+        "circt": "CIRCT 892a65a01",
+        "foldsim": "foldsim d8350bc0f",
+        "pdk": "asap7",
+        "xlen": 32
+      },
+      "ff": 1806,
+      "fmax_mhz": 913.2,
+      "macros": 0,
+      "max_stages": 36,
+      "overhead_ps": 231,
+      "period_ps": 1095,
+      "stage_ps": 24,
+      "tied_bits": 0,
+      "tied_ports": []
+    }
+  }
+}

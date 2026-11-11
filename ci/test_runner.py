@@ -189,5 +189,10 @@ def test_case(case, sim_build, request):
         _release_parity(case, xlen)
         return
     argv, env = case.run_command(xlen)
-    rc = tc.execute(argv, env)
+    capture = request.config.pluginmanager.getplugin("capturemanager")
+    if case.stream and capture is not None:
+        with capture.global_and_fixture_disabled():
+            rc = tc.execute(argv, env)
+    else:
+        rc = tc.execute(argv, env)
     assert rc == 0, "{} failed (exit {}): {}".format(case.id, rc, " ".join(argv))

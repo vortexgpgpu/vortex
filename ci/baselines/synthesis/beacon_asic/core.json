@@ -1,0 +1,174 @@
+{
+  "cache": {
+    "clock_mhz": 800,
+    "config_hash": "77b79d6c7d9a6fdf",
+    "configs": "",
+    "dut": "cache",
+    "result": {
+      "build_time_s": 30,
+      "cells": 282062,
+      "endpoints": 32478,
+      "env": {
+        "circt": "CIRCT 892a65a01",
+        "foldsim": "foldsim d8350bc0f",
+        "pdk": "asap7",
+        "xlen": 32
+      },
+      "ff": 93166,
+      "fmax_mhz": 1107.4,
+      "macros": 36,
+      "max_stages": 28,
+      "overhead_ps": 231,
+      "period_ps": 903,
+      "stage_ps": 24,
+      "tied_bits": 0,
+      "tied_ports": []
+    }
+  },
+  "core": {
+    "clock_mhz": 800,
+    "config_hash": "847ad31605be03dd",
+    "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8",
+    "dut": "core",
+    "result": {
+      "build_time_s": 50,
+      "cells": 769936,
+      "endpoints": 73708,
+      "env": {
+        "circt": "CIRCT 892a65a01",
+        "foldsim": "foldsim d8350bc0f",
+        "pdk": "asap7",
+        "xlen": 32
+      },
+      "ff": 102791,
+      "fmax_mhz": 1051.5,
+      "macros": 16,
+      "max_stages": 30,
+      "overhead_ps": 231,
+      "period_ps": 951,
+      "stage_ps": 24,
+      "tied_bits": 2,
+      "tied_ports": [
+        {
+          "bits": 1,
+          "port": "core.core_id",
+          "width": 1
+        },
+        {
+          "bits": 1,
+          "port": "core.dcache_path_drained",
+          "width": 1
+        }
+      ]
+    }
+  },
+  "lmem": {
+    "clock_mhz": 800,
+    "config_hash": "8190e614d4e4d3b6",
+    "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_A_ENABLE",
+    "dut": "lmem",
+    "result": {
+      "build_time_s": 25,
+      "cells": 120110,
+      "endpoints": 18134,
+      "env": {
+        "circt": "CIRCT 892a65a01",
+        "foldsim": "foldsim d8350bc0f",
+        "pdk": "asap7",
+        "xlen": 32
+      },
+      "ff": 23721,
+      "fmax_mhz": 1564.9,
+      "macros": 32,
+      "max_stages": 17,
+      "overhead_ps": 231,
+      "period_ps": 639,
+      "stage_ps": 24,
+      "tied_bits": 17,
+      "tied_ports": [
+        {
+          "bits": 17,
+          "port": "dma_req_buf.data_in",
+          "width": 607
+        }
+      ]
+    }
+  },
+  "top": {
+    "clock_mhz": 800,
+    "config_hash": "ce21223ae8e4d63c",
+    "configs": "-DVX_CFG_NUM_THREADS=4 -DVX_CFG_NUM_WARPS=4",
+    "dut": "top",
+    "result": {
+      "build_time_s": 75,
+      "cells": 1438152,
+      "endpoints": 169931,
+      "env": {
+        "circt": "CIRCT 892a65a01",
+        "foldsim": "foldsim d8350bc0f",
+        "pdk": "asap7",
+        "xlen": 32
+      },
+      "ff": 305204,
+      "fmax_mhz": 749.1,
+      "macros": 82,
+      "max_stages": 46,
+      "overhead_ps": 231,
+      "period_ps": 1335,
+      "stage_ps": 24,
+      "tied_bits": 630,
+      "tied_ports": [
+        {
+          "bits": 512,
+          "port": "g_multi_port.vortex.cp_mem_req_data",
+          "width": 512
+        },
+        {
+          "bits": 64,
+          "port": "g_multi_port.vortex.cp_mem_req_byteen",
+          "width": 64
+        },
+        {
+          "bits": 26,
+          "port": "g_multi_port.vortex.cp_mem_req_addr",
+          "width": 26
+        },
+        {
+          "bits": 12,
+          "port": "cp_core.dbg_host_r_counts",
+          "width": 32
+        },
+        {
+          "bits": 9,
+          "port": "g_multi_port.vortex.cp_mem_req_tag",
+          "width": 9
+        },
+        {
+          "bits": 2,
+          "port": "cp_core.dbg_host_w_counts",
+          "width": 32
+        },
+        {
+          "bits": 1,
+          "port": "cp_core.gpu_if_dcr_req_ready",
+          "width": 1
+        },
+        {
+          "bits": 1,
+          "port": "g_multi_port.vortex.cp_mem_req_noalloc",
+          "width": 1
+        },
+        {
+          "bits": 1,
+          "port": "g_multi_port.vortex.cp_mem_req_rw",
+          "width": 1
+        },
+        {
+          "bits": 1,
+          "port": "g_multi_port.vortex.cp_mem_req_valid",
+          "width": 1
+        }
+      ]
+    }
+  }
+}

@@ -583,18 +583,22 @@ def cmd_diff(args):
         return sum(depths) / len(depths) if depths else 0.0
 
     area_before, area_after = load_area(args.before), load_area(args.after)
+    unit_name = 'stages' if _asic_area(args.after) else 'levels'
     area_head = ''
     if bool(area_before) != bool(area_after):
         print('area: only the %s run counted it; not compared'
               % ('reference' if area_before else 'changed'))
     if area_before and area_after:
         tb, ta = area_before[''], area_after['']
+        keys = area_keys(tb)
         area_head = '; ' + ', '.join(
-            f'{k} {tb[k]:g} -> {ta[k]:g}' for k in ('lut', 'bram', 'dsp'))
-    print(f'deepest path {deepest(before)} -> {deepest(after)} levels; '
-          f'mean of the 50 deepest {top_mean(before):.1f} -> {top_mean(after):.1f}; '
-          f'registers at or above {args.min_levels} levels '
-          f'{watched(before)} -> {watched(after)}{area_head}')
+            f'{area_label(k, tb)} {tb[k]:g} -> {ta[k]:g}'
+            for k in (keys if 'macros' in tb else ('lut', 'bram', 'dsp')))
+    head = (f'deepest path {deepest(before)} -> {deepest(after)} {unit_name}; '
+            f'mean of the 50 deepest {top_mean(before):.1f} -> {top_mean(after):.1f}; '
+            f'registers at or above {args.min_levels} {unit_name} '
+            f'{watched(before)} -> {watched(after)}{area_head}')
+    print(head)
 
     deeper, shallower, new, gone = [], [], [], []
     for key, (lv, start) in after.items():
@@ -655,18 +659,44 @@ def cmd_diff(args):
         for b, a, (cls, u) in moved[:args.top]:
             print(f'{b:4d} -> {a:<4d} {cls + ": " if cls else ""}{u}')
 
-    area_regress = False
+    area_regress = []
     if area_before and area_after:
         area_regress = show_area(area_before, area_after, args)
 
     # A register the reference lacks may be a renamed one, so it fails only at
     # the fix threshold, as a new unit does in logic_gate.
-    if regress or any(r[0] >= args.fix_levels for r in new):
+    new_regress = [r for r in new if r[0] >= args.fix_levels]
+    if args.json:
+        with open(args.json, 'w') as fh:
+            json.dump({'headline': head,
+                       'deeper': [{'register': name(k), 'before': old, 'after': lv}
+                                  for lv, old, k, _ in regress],
+                       'new': [{'register': name(k), 'after': lv}
+                               for lv, k, _ in new_regress],
+                       'area': [{'resource': k, 'before': b, 'after': a}
+                                for k, b, a in area_regress]},
+                      fh, indent=2)
+            fh.write('\n')
+    if regress or new_regress:
         return 1
     return 3 if area_regress else 0
 
 
 AREA_KEYS = ('lut', 'ff', 'lutram', 'bram', 'uram', 'dsp')
+# An ASIC run (target=asap7) counts standard cells in the `lut` column,
+# flip-flops, and SRAM macros; it has no distributed or block RAM or DSPs.
+# Its macros are shown, not held to the tolerance: a memory that moves into
+# a macro adds one and takes its flip-flops out.
+ASIC_AREA_KEYS = ('lut', 'ff', 'macros')
+ASIC_GATED = ('lut', 'ff')
+
+
+def area_keys(res):
+    return ASIC_AREA_KEYS if 'macros' in res else AREA_KEYS
+
+
+def area_label(key, res):
+    return 'cells' if key == 'lut' and 'macros' in res else key
 
 
 def load_area(run_dir):
@@ -679,49 +709,66 @@ def load_area(run_dir):
         return None
     units = {}
     with open(path) as fh:
+        keys = AREA_KEYS + (('macros',) if _asic_area(run_dir) else ())
         for row in csv.DictReader(fh):
             prefix = 'total_' if not row['path'] else ''
-            res = {k: float(row[prefix + k]) for k in AREA_KEYS}
+            res = {k: float(row[prefix + k]) for k in keys}
             res['lut'] += res['lutram']
             key = unit(norm(row['path']) + '/x') if row['path'] else ''
             if key in units:
-                for k in AREA_KEYS:
+                for k in keys:
                     units[key][k] += res[k]
             else:
                 units[key] = res
     return units if '' in units else None
 
 
+def _asic_area(run_dir):
+    """Whether the run's area count is an ASIC one: area.txt's first line
+    reads `<top> on <pdk>: N cells, ...` there, and LUTs on an FPGA."""
+    try:
+        with open(f'{run_dir}/area.txt') as fh:
+            return ASIC_AREA_RE.search(fh.readline()) is not None
+    except OSError:
+        return False
+
+
 def show_area(before, after, args):
-    """The design's resources before and after, and the units whose own LUTs,
-    memories or DSPs moved most; True if a resource of the design grew more
-    than --area-tolerance."""
+    """The design's resources before and after, and the units whose own LUTs
+    (cells), memories or DSPs moved most; the resources of the design that
+    grew more than --area-tolerance, as (resource, before, after)."""
     tb, ta = before[''], after['']
+    keys = area_keys(tb)
     print('\narea (design)')
-    regress = False
-    for k in AREA_KEYS:
-        b, a = tb[k], ta[k]
+    regress = []
+    for k in keys:
+        b, a = tb[k], ta.get(k, 0.0)
         pct = (a - b) / b * 100 if b else (100.0 if a else 0.0)
         flag = ''
-        if pct > 100 * args.area_tolerance:
-            flag, regress = '  REGRESSION', True
-        print(f'  {k:7s} {b:10g} -> {a:<10g} {pct:+6.1f}%{flag}')
+        if pct > 100 * args.area_tolerance and \
+                ('macros' not in tb or k in ASIC_GATED):
+            flag = '  REGRESSION'
+            regress.append((area_label(k, tb), b, a))
+        print(f'  {area_label(k, tb):7s} {b:10g} -> {a:<10g} {pct:+6.1f}%{flag}')
+    # Units rank by LUTs (cells) moved, a memory or DSP counting as 100, and
+    # on an ASIC by flip-flops too: a memory there is either a macro or flops.
+    weight = {'lut': 1, 'bram': 100, 'uram': 100, 'dsp': 100, 'macros': 100,
+              'ff': 1 if 'macros' in tb else 0}
     moved = []
+    zero = dict.fromkeys(keys, 0.0)
     for key in set(before) | set(after):
         if not key:
             continue
-        b = before.get(key, dict.fromkeys(AREA_KEYS, 0.0))
-        a = after.get(key, dict.fromkeys(AREA_KEYS, 0.0))
-        if any(abs(a[k] - b[k]) >= 0.5 for k in AREA_KEYS):
-            moved.append((abs(a['lut'] - b['lut']) + 100 * (
-                abs(a['bram'] - b['bram']) + abs(a['uram'] - b['uram'])
-                + abs(a['dsp'] - b['dsp'])), key, b, a))
+        b, a = before.get(key, zero), after.get(key, zero)
+        if any(abs(a.get(k, 0.0) - b.get(k, 0.0)) >= 0.5 for k in keys):
+            moved.append((sum(abs(a.get(k, 0.0) - b.get(k, 0.0)) * weight.get(k, 0)
+                              for k in keys), key, b, a))
     if moved:
         moved.sort(key=lambda r: -r[0])
         print(f'\nunits whose own area moved ({len(moved)}), all copies')
         for _, key, b, a in moved[:args.top]:
-            parts = [f'{k} {b[k]:g} -> {a[k]:g}' for k in AREA_KEYS
-                     if abs(a[k] - b[k]) >= 0.5]
+            parts = [f'{area_label(k, tb)} {b.get(k, 0.0):g} -> {a.get(k, 0.0):g}'
+                     for k in keys if abs(a.get(k, 0.0) - b.get(k, 0.0)) >= 0.5]
             print(f'  {key}: ' + ', '.join(parts))
     return regress
 
@@ -1133,6 +1180,165 @@ def cmd_score(args):
 
 
 
+# report.txt of an ASIC run: `deepest path N stages: clk2q + path + N x cell
+# + setup = P ps (F MHz)`.
+PERIOD_RE = re.compile(r'^deepest path (\d+) stages: (\d+) \+ (\d+) \+ \d+ x (\d+) '
+                       r'\+ (\d+) = (\d+) ps')
+ASIC_AREA_RE = re.compile(r' on \S+: (\d+) cells, (\d+) flip-flops, (\d+) macros')
+
+
+def cmd_asic_summary(args):
+    """One CSV row for an ASIC run (target=$(PDK)): the deepest path's stages,
+    the period report.txt converts them to and its Fmax, the per-stage and
+    fixed delays of that conversion, and the cells, flip-flops and SRAM
+    macros of area.txt."""
+    row = {}
+    with open(f'{args.run_dir}/report.txt') as fh:
+        for line in fh:
+            m = PERIOD_RE.match(line)
+            if m:
+                row.update(max_stages=m[1], period_ps=m[6],
+                           fmax_mhz=f'{1e6 / int(m[6]):.1f}',
+                           stage_ps=m[4],
+                           overhead_ps=int(m[2]) + int(m[3]) + int(m[5]))
+                break
+    with open(f'{args.run_dir}/area.txt') as fh:
+        m = ASIC_AREA_RE.search(fh.readline())
+        if m:
+            row.update(cells=m[1], ff=m[2], macros=m[3])
+    if 'period_ps' not in row or 'ff' not in row:
+        sys.exit(f'{args.run_dir}: no period in report.txt or no area in area.txt')
+    row['endpoints'] = sum(1 for _ in endpoints(args.run_dir))
+    with open(args.out, 'w', newline='') as fh:
+        w = csv.DictWriter(fh, fieldnames=list(row))
+        w.writeheader()
+        w.writerow(row)
+
+
+# --- harness constant ties ---------------------------------------------------
+
+INT_TYPE = re.compile(r'^i(\d+)$')
+SSA = r'%[\w.]+'
+
+
+def _split_top(text, sep=','):
+    """`text` split at `sep` outside <> and ()."""
+    out, depth, cur = [], 0, ''
+    for ch in text:
+        if ch in '<(':
+            depth += 1
+        elif ch in '>)':
+            depth -= 1
+        if ch == sep and depth == 0:
+            out.append(cur.strip())
+            cur = ''
+        else:
+            cur += ch
+    if cur.strip():
+        out.append(cur.strip())
+    return out
+
+
+def _type_bits(t):
+    t = t.strip()
+    m = INT_TYPE.match(t)
+    if m:
+        return int(m[1])
+    if t.startswith('!hw.array<'):
+        n, elem = t[len('!hw.array<'):-1].split('x', 1)
+        return int(n) * _type_bits(elem)
+    if t.startswith('!hw.struct<'):
+        return sum(_type_bits(f.split(':', 1)[1])
+                   for f in _split_top(t[len('!hw.struct<'):-1]))
+    return 1 if t == '!seq.clock' else 0
+
+
+def netlist_top(run_dir):
+    """The run's top module: the design row of area.csv, else the netlist's
+    last module."""
+    try:
+        with open(f'{run_dir}/area.csv') as fh:
+            for row in csv.DictReader(fh):
+                if not row['path']:
+                    return row['module']
+    except (OSError, KeyError):
+        pass
+    return None
+
+
+def const_ties(netlist, top=None):
+    """The instance-input bits `top` ties to constants, as (bits, width, port)
+    rows, most first. Constants are followed through concatenation, bitcast
+    and struct and array creation, which is how a harness zero-extends or
+    ties off a port.
+
+    A harness that ties an input lets Vivado and Yosys fold the logic behind
+    it, while Beacon maps module by module and keeps it, so the synthesis
+    gates and Beacon then measure different designs. The count moves when
+    the harness ties more or fewer bits, and when the RTL widens or narrows
+    a port the harness ties: either way the synthesis gates now fold a
+    different amount of logic."""
+    mods, cur = {}, None
+    with open(netlist) as fh:
+        for line in fh:
+            m = re.match(r'\s*hw\.module (?:private )?@(\S+)\(', line)
+            if m:
+                cur = m[1]
+                mods[cur] = []
+            elif cur and re.match(r'\s*} loc', line):
+                cur = None
+            elif cur:
+                mods[cur].append(line)
+    if not mods:
+        raise ValueError(f'{netlist}: no hw.module')
+    top = top or list(mods)[-1]
+    if top not in mods:
+        raise ValueError(f'{netlist}: no module {top}')
+
+    const, rows = {}, []
+    for line in mods[top]:
+        line = re.sub(r' loc\(#loc\d*\)\s*$', '', line.strip())
+        m = re.match(rf'({SSA}) = hw\.constant (?:true|false)\b', line)
+        if m:
+            const[m[1]] = 1
+            continue
+        m = re.match(rf'({SSA}) = hw\.constant \S+ : (\S+)', line)
+        if m:
+            const[m[1]] = _type_bits(m[2])
+            continue
+        m = re.match(rf'({SSA}) = comb\.concat (.*) : ', line)
+        if m:
+            const[m[1]] = sum(const.get(o.strip(), 0) for o in m[2].split(','))
+            continue
+        m = re.match(rf'({SSA}) = hw\.bitcast ({SSA})', line)
+        if m:
+            const[m[1]] = const.get(m[2], 0)
+            continue
+        m = re.match(rf'({SSA}) = hw\.(?:struct|array)_create \((.*)\) :', line)
+        if m:
+            const[m[1]] = sum(const.get(o.strip(), 0) for o in m[2].split(','))
+            continue
+        m = re.search(r'hw\.instance "(\S+)" @(\S+)\((.*)\) -> ', line)
+        if m:
+            for arg in _split_top(m[3]):
+                port, rest = arg.split(':', 1)
+                val, ty = rest.split(':', 1)
+                bits = const.get(val.strip(), 0)
+                if bits:
+                    rows.append((bits, _type_bits(ty), f'{m[1]}.{port.strip()}'))
+    rows.sort(key=lambda r: (-r[0], r[2]))
+    return rows
+
+
+def cmd_ties(args):
+    """Instance-input bits the DUT top ties to constants, per port."""
+    rows = const_ties(f'{args.run_dir}/netlist.mlir',
+                      args.top or netlist_top(args.run_dir))
+    for bits, width, port in rows:
+        print(f'{bits:8d} of {width:6d}  {port}')
+    print(f'{sum(r[0] for r in rows)} instance input bits tied to constants')
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -1207,6 +1413,9 @@ def main():
     p.add_argument('--area-tolerance', type=float, default=0.05,
                    help="a resource of the design that grows by more than this "
                    "fraction fails (exit 3)")
+    p.add_argument('--json', metavar='FILE',
+                   help="also write the headline and the failing registers "
+                   "and resources here")
     p.set_defaults(fn=cmd_diff)
 
     p = sub.add_parser("buffers", help="elastic buffers that pass deep paths")
@@ -1241,6 +1450,17 @@ def main():
     p.add_argument('--top', type=int, default=40)
     p.add_argument('--csv', help="also write every register's prediction here")
     p.set_defaults(fn=cmd_score)
+
+    p = sub.add_parser("asic-summary", help="period and area of an ASIC run, as CSV")
+    p.add_argument('run_dir')
+    p.add_argument('out')
+    p.set_defaults(fn=cmd_asic_summary)
+
+    p = sub.add_parser("ties", help="instance-input bits the DUT top ties to "
+                       "constants")
+    p.add_argument('run_dir')
+    p.add_argument('--top', help="top module (default: the run's design)")
+    p.set_defaults(fn=cmd_ties)
 
     args = ap.parse_args()
     return args.fn(args) or 0

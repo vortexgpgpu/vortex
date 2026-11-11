@@ -43,16 +43,19 @@ make -C hw/syn/xilinx/dut tcu-beacon
 # build_tcu/beacon_area.txt      LUTs, FFs, memories and DSPs, by unit; each memory's placement
 ```
 
-The whole catalog as a gate, and a baseline update (a human step):
+The whole catalog as a gate, on the FPGA and the ASIC flow, against the
+merge base as a pull request is judged, and a baseline update (a human step):
 
 ```bash
 ci/logic_gate.py -j 2
+ci/logic_gate.py --tool beacon_asic -j 2
+ci/logic_gate.py -j 2 --against-rev $(git merge-base HEAD origin/master)
 ci/logic_gate.py -b om --update-baseline
 ```
 
 Any CIRCT netlist, with `ci/beacon.py` (subcommands `run`,
 `summarize`, `paths`, `validate`, `retime-split`, `ports`, `buffers`,
-`calibrate`, `score`;
+`calibrate`, `score`, `diff`, `asic-summary`, `ties`;
 `foldsim-opt` from the `PATH` or `FOLDSIM_OPT`):
 
 ```bash
@@ -497,12 +500,26 @@ four minutes, and checks each against `ci/baselines/synthesis/beacon/`:
   5 % below is an improvement to lock in. A memory that moves between
   distributed and block RAM shows as both columns moving.
 
+- the **harness**: the instance-input bits the DUT top ties to constants
+  (`ci/beacon.py ties`, column `tied`) must not change from the baseline.
+  Vivado and Yosys fold the logic behind a tied input; Beacon maps module
+  by module and does not, so a harness edit makes the synthesis gates
+  measure a different design while Beacon's numbers stay put. A tied count
+  that moves needs a reviewed look at the synthesis budgets, then a
+  re-record. (A tex wrapper that zero-extended 128 LOD bits read 129 tied
+  bits, the corrected one 1; Vivado's LUTs moved 28 % and Beacon's not at
+  all.)
+
 A failing build names its `beacon_paths.txt`, where the failing unit is a
 heading with its paths op by op, its `beacon_area.txt`, and its
 `beacon_risk.txt`, the registers the learned calibration (§7.1) predicts
 slowest; CI uploads them with the build's logs. The calibration's Fmax and
 count of likely failures are columns of the report (`p_fmax`, `risk`), not
-gated: a wire-dominated path that levels rank low shows there first.
+gated: a wire-dominated path that levels rank low shows there first. A
+`p_fmax` below the build's clock is printed as an advisory line, never a
+verdict: held to the clock (2 % below), it failed 7 builds Vivado closed
+against 3 it did not, among them the known-good core, at 285.6 MHz on both
+sides of a fix that took Vivado from 286 to 298 MHz.
 
 Depth is deterministic, so the tolerance is zero. Area is as
 deterministic, but a feature adds some by design, so it has the Fmax gate's
@@ -511,26 +528,104 @@ is the CIRCT and foldsim versions, `DEVICE` and `XLEN`: a new foldsim reads
 as STALE, not as a regression. Baselines are golden data, re-recorded only
 by a human (`--update-baseline`), as for the other gates.
 
+**ASIC (`--tool beacon_asic`).** The same gate on `asic_gate.yaml`'s builds,
+through the ASIC flow's `beacon` target (§6.1, ASAP7, §4.3), with its own
+baselines (`ci/baselines/synthesis/beacon_asic/`). The FPGA builds use the
+DSP FPU and a DSP multiplier, so the STD FPU and the ASIC multiplier tree,
+where `asic_gate` misses timing, are only elaborated here. The 14 builds take
+7 minutes at `-j 2` (the FPGA catalog 9), with at most 5.4 GB per process.
+
+- **flip-flops and cells** within 5 % of the baseline, both ways, as the FPGA
+  area. A memory without a macro is priced as flip-flops (Yosys builds it
+  so): an asynchronous read that left an SRAM macro read +17 % flip-flops on
+  the cache, named `g_mask_async.byteen_store`, where `asic_gate` measured
+  +22 % area the next night. SRAM macros are reported, not gated: a memory
+  that moves into a macro adds one and removes its flip-flops (the fix of
+  that cache took it from 32 to 36).
+- **predicted Fmax** no more than 32 % below `clock_mhz`. Beacon's period
+  runs 0.59–1.05 × OpenSTA's (it prices vm's L2 TLB MRU update at 46 stages,
+  749 MHz, where STA closes at 1266 MHz), so the band is a backstop for a
+  path no model error explains, not a timing verdict. Over every validated
+  pair of a design and a target, the lowest prediction of a design STA
+  closes is 0.749 of its target (vm, and top after the FPU fix, at 1 GHz),
+  the highest of one that misses badly 0.615 (core and top before it, 492 MHz
+  at 800); 32 % sits between them with about 10 % margin each side, at both
+  the 800 MHz and the 1 GHz target. A prediction below the target but inside
+  the band is printed as an advisory line.
+- **the harness's constant ties**, as above.
+
+`clock_mhz` is not in the ASIC fingerprint: Beacon reads no clock, so a new
+target moves the band and the stage thresholds, not the measurements. The
+borrowed builds bring their designs and targets, not `asic_gate`'s
+`known_issue` or `thresholds`, which describe Yosys's numbers.
+
+**Against the merge base (`--against-rev REV`).** A baseline recorded on a
+change's own head cannot see that change: when Beacon arrived together with
+the RTL it should have flagged, its baselines were recorded on that RTL and
+the gate compared the head with itself (+0 % by construction). So a pull
+request is also judged against its merge base. The reference is REV's
+design (`hw/rtl`, `hw/unittest`, `hw/dpi`, `hw/syn/libs/no_mem`, the
+configuration TOMLs, and the submodules at the commits REV pins) under this
+checkout's flow (CI, scripts, catalog), so both sides are measured by the
+same Beacon. It is staged and built in `<cache>/<sha>/` (`--ref-cache`,
+default `.beacon_ref/`, the four most recently used kept), under a lock on
+`<sha>.lock`, and reused while the flow is unchanged. Each build is then
+compared with the same build there by `beacon.py diff` (§6.3), and its
+tied bits with the reference's. Only registers at or above the watch
+threshold in either run count (8 levels; on the ASIC flow the stages that
+fit 90 % of the period, 38 at 800 MHz and 28 at 1 GHz):
+
+| verdict | meaning | fails |
+|---|---|---|
+| `DEEPER` | a watched register 4 or more levels (stages) deeper, or newly at the fix threshold | yes |
+| `AREA` | a resource of the design past the 5 % tolerance (on the ASIC flow cells and flip-flops) | yes |
+| `HARNESS` | the tied bits changed | yes |
+| `REF-FAIL` | the reference did not measure the build: it failed, timed out, or ran under another configuration; the run exits 2, as for a build error | yes |
+| `ACCEPTED` | every regression is one the baseline's re-record accepted | no |
+| `NO-REFERENCE` | REV has no such DUT, neither in its catalog nor its top module: a DUT the change adds, judged against its baseline alone. A DUT REV has under another top (a renamed harness) is `REF-FAIL` | no |
+
+A change to the flow itself (source generation, include lists, a pyslang
+rule) can leave the merge base's RTL unable to elaborate under it, and then
+every build reads `REF-FAIL`. The way out is a pull-request label,
+`beacon-skip-reference`, which only a maintainer grants, as a reviewed
+decision: `ci.yml` then leaves the merge base unset, and the cell says so in
+its log and job summary; the verdict is against the baselines alone.
+
+On the ASIC flow the thresholds come from the clock: the fix threshold is
+the stages that fit the target period with the run's own delays (43 at
+800 MHz, 33 at 1 GHz), the watch threshold those that fit 90 % of it.
+
+**A baseline re-record in a pull request ships its `beacon_diff` against
+the merge base.** Re-record with `--update-baseline --against-rev <merge
+base>`: the regressions against it are written into each baseline entry
+(`accepted`), so the baseline diff under review lists, register by register
+and resource by resource, what the change accepts, and CI reads them as
+`ACCEPTED`. A later regression the re-record did not see still fails, and
+a re-record without `--against-rev` accepts nothing. An acceptance holds
+until it lands: once the reference revision's own baseline carries the
+same `accepted` entry, the change it accepted is part of the reference, and
+it is ignored.
+
 ### 6.3 RTL timing work: Beacon first
 
 Beacon is the inner loop of any RTL change that can move timing. A DUT takes
 minutes in Beacon and hours in Vivado or Yosys, so a deeper path is found and
 fixed while the change is still open, and synthesis runs once, to confirm.
 
-1. **Reference.** Beacon on the parent revision, once per base, in a build
-   tree of its own:
+1. **Reference and change.** Beacon on the parent revision, built once per
+   base under `.beacon_ref/<sha>/`, and the same builds on the working tree,
+   each compared with the reference register by register:
 
    ```bash
-   git worktree add ../ref HEAD
-   ../ref/ci/logic_gate.py -b core -b lmem --build-dir $PWD/build32_beacon_ref
+   ci/logic_gate.py -b core -b lmem --against-rev HEAD
+   ci/logic_gate.py --tool beacon_asic -b core --against-rev HEAD   # the ASIC flow
    ```
 
-2. **Change.** The same builds on the working tree, each compared with the
-   reference register by register:
+   `--against <build tree>` compares with a reference run anywhere else
+   (e.g. `git worktree add ../ref HEAD` and
+   `../ref/ci/logic_gate.py -b core --build-dir $PWD/build32_beacon_ref`).
 
-   ```bash
-   ci/logic_gate.py -b core -b lmem --against build32_beacon_ref
-   ```
+2. **Iterate.** Edit and rerun the same command: the reference is reused.
 
    A change behind a non-default knob is compared at that setting: give
    both runs the same `--configs="-D..."`, which appends the flags to every
@@ -543,7 +638,8 @@ fixed while the change is still open, and synthesis runs once, to confirm.
    threshold, before and after; then it lists the registers that got deeper,
    new deep registers, and the ones that got shallower, then the units whose
    deepest register moved. With area, the headline adds the LUTs, block RAMs
-   and DSPs before and after, and a section lists each resource of the
+   and DSPs (cells, flip-flops and SRAM macros on the ASIC flow) before and
+   after, and a section lists each resource of the
    design and the units whose own area moved, all copies; a resource more
    than 5 % larger fails the run (`AREA`). The run fails (`DEEPER`) on a register 4 or more
    levels deeper, one that reaches the fix threshold (12) from below, or a new
@@ -875,9 +971,18 @@ Beacon cannot answer, run on a checkpoint
   Vivado's inference rules, and what Vivado packs into DSP, block RAM and
   SRL cells Beacon counts as fabric. Logic that nothing observable reads is
   counted; Vivado removes it.
-- **Devices.** The V80 and the U55C (Vivado), and ASAP7 RVT TT (the Yosys
-  flow). The ASAP7 numbers are Beacon's period estimate, a sizing
-  guide, not a sign-off: they come within about 10–30 % of OpenSTA.
+- **Devices.** Every Xilinx family of §4.2 (the gate runs the U55C's, and the
+  learned calibration exists for it only), and ASAP7 RVT TT (the Yosys
+  flow). The ASAP7 numbers are Beacon's period estimate, a sizing guide,
+  not a sign-off: 0.59–1.05 × OpenSTA's Fmax on the 14 `asic_gate` DUTs. Two
+  known gaps: the 32 × 32 multiplier fed from dispatch reads 28–29 stages
+  (~900 ps) where OpenSTA has 1318 ps, since the partial-product generator
+  and the operand fan-out are not priced; and vm's L2 TLB `set_mru` update
+  reads 46 stages where STA closes it under 800 ps.
+- **Harnesses.** A constant on an instance input does not reach the logic
+  behind it (each module is mapped once), so Beacon measures a unit whole
+  where Vivado and Yosys fold what a harness ties off. The `ties` count
+  makes such a harness visible; it does not model the folding.
 - **Toolchain.** The catalog maps only with three CIRCT Synth fixes
   (zero-width mux, constant SOP cut, a failing longest-path query), which
   reach CI through the foldsim prebuilt.

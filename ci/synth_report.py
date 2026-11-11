@@ -26,7 +26,8 @@ import traceback
 
 # Same contract as synth_gate.PASSING: a tracked known issue and an unexpected
 # pass are reported, not failed.
-PASSING = ("PASS", "RECORDED", "KNOWN-ISSUE", "XPASS")
+PASSING = ("PASS", "RECORDED", "KNOWN-ISSUE", "XPASS", "ACCEPTED",
+           "NO-REFERENCE")
 
 # Every metric any tool records, shown in this order when a build reports it.
 COLUMNS = (("Fmax (MHz)", "fmax_mhz", "%.1f"),
@@ -45,7 +46,12 @@ COLUMNS = (("Fmax (MHz)", "fmax_mhz", "%.1f"),
            ("DSP", "dsp", "%d"),
            ("Max levels", "max_levels", "%d"),
            ("End points >= 12", "deep_endpoints", "%d"),
-           ("End points >= 8", "watch_endpoints", "%d"))
+           ("End points >= 8", "watch_endpoints", "%d"),
+           ("p_fmax (MHz)", "pred_fmax_mhz", "%.1f"),
+           ("Stages", "max_stages", "%d"),
+           ("Cells (Beacon)", "cells", "%d"),
+           ("Macros", "macros", "%d"),
+           ("Tied bits", "tied_bits", "%d"))
 
 # Slack sits near zero by design, so a relative change of it says nothing.
 NO_DELTA = ("wns_ns", "tns_ns")

@@ -33,14 +33,28 @@
 # 300 MHz ones.
 #
 # The gate runs with perf_gate: a perf_gate regression is cycles, this one is
-# depth and area, and both are asserted on every change to the RTL. Its case
-# is on the rtlsim driver at tier smoke, so ci.yml plans its cell exactly when
+# depth and area, and both are asserted on every change to the RTL. Its cases
+# are on the rtlsim driver at tier smoke, so ci.yml plans its cell exactly when
 # it plans perf_gate's rtlsim cells (every pull request, every push that
 # touches the RTL or the config). The cell installs foldsim (`needs`).
 #
+# Two cases, one cell: `gate` measures the builds below on the FPGA flow, and
+# `gate_asic` measures asic_gate.yaml's builds on the ASIC flow
+# (--tool beacon_asic, ASAP7 cell stages, flip-flops and SRAM macros; its
+# baselines are ci/baselines/synthesis/beacon_asic/). On a pull request ci.yml
+# also passes the merge base (BEACON_AGAINST_REV, the default of
+# --against-rev): each build is compared register by register with the same
+# build on the merge base's RTL, so a baseline the pull request re-records
+# cannot hide its own deltas. Both stream their output, so the verdict table
+# is in the CI log.
+#
 # Run one by name:  ci/logic_gate.py -b tcu
+# Against master:   ci/logic_gate.py -b tcu --against-rev $(git merge-base HEAD origin/master)
 # By hand, no gate: make -C hw/syn/xilinx/dut tcu-beacon
 # Re-record:        ci/logic_gate.py --update-baseline   (human-reviewed, never CI)
+#                   In a pull request, add --against-rev <merge base>: the
+#                   regressions against it are recorded as accepted, and the
+#                   baseline diff is their review.
 # ---------------------------------------------------------------------------
 category: logic_gate
 defaults:
@@ -58,7 +72,19 @@ tests:
   driver: rtlsim
   needs:
   - foldsim
-  run: ci/logic_gate.py -j 2
+  stream: true
+  run: ci/logic_gate.py -j 2 --report logic_gate.json
+
+# asic_gate.yaml's 14 builds: 7 minutes at -j 2, 5.4 GB peak per build. Its
+# predicted Fmax is held to their clock_mhz with a wide band, as a backstop;
+# flip-flops and cells to the baseline.
+- id: gate_asic
+  tier: smoke
+  driver: rtlsim
+  needs:
+  - foldsim
+  stream: true
+  run: ci/logic_gate.py --tool beacon_asic -j 2 --report logic_gate_asic.json
 
 # The full-GPU builds (group gpu, below): ~30 min and ~95 GB of memory each,
 # so one at a time, on a large self-hosted machine -- never a hosted runner.

@@ -258,6 +258,9 @@ jobs:
       CELL: ${{ matrix.category }}-${{ matrix.driver }}-${{ matrix.xlen }}${{ matrix.shards && format('-{0}of{1}', matrix.shard, matrix.shards) || '' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # logic_gate builds its pull request's merge base, so it needs history.
+          fetch-depth: ${{ matrix.category == 'logic_gate' && github.event_name == 'pull_request' && '0' || '1' }}
       - name: Setup Vortex
         uses: ./.github/actions/setup-vortex
         with:
@@ -292,6 +295,51 @@ jobs:
         run: |
           (cd build${{ matrix.xlen }} && bash ci/toolchain_install.sh --foldsim)
           pip install --quiet "pyslang>=11,<13"
+      # logic_gate on a pull request: every build is also compared with the
+      # same build on the merge base's RTL (ci/logic_gate.py --against-rev,
+      # through BEACON_AGAINST_REV). The checkout is the merge of the pull
+      # request into its target, so the merge base is the target's head this
+      # run merged into, and the diff is exactly what the pull request adds.
+      # The reference's builds are cached by that SHA and the flow it was
+      # measured under, so the pull request's next push reuses them.
+      #
+      # A maintainer may grant the label `beacon-skip-reference` (a reviewed
+      # decision) when a flow change cannot elaborate the merge base's RTL,
+      # which would otherwise read REF-FAIL on every push. The label is read
+      # from the event's payload, so it takes effect on the next push.
+      - name: Merge base
+        id: mb
+        if: matrix.category == 'logic_gate' && github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'beacon-skip-reference')
+        env:
+          TARGET: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "+refs/heads/$TARGET:refs/remotes/origin/$TARGET"
+          base=$(git merge-base HEAD "origin/$TARGET")
+          flow=$(python3 -c "import sys; sys.path.insert(0, 'ci'); import synth_gate; print(synth_gate.flow_fingerprint('.'))")
+          echo "merge base: $base (origin/$TARGET), flow $flow"
+          echo "BEACON_AGAINST_REV=$base" >> "$GITHUB_ENV"
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+          echo "flow=$flow" >> "$GITHUB_OUTPUT"
+      - name: Merge base skipped
+        if: matrix.category == 'logic_gate' && github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'beacon-skip-reference')
+        run: |
+          msg="beacon-skip-reference: the merge-base comparison is SKIPPED by a maintainer's label; logic_gate's verdict is against the baselines only"
+          echo "::warning title=logic_gate::$msg"
+          printf '> [!WARNING]\n> %s\n\n' "$msg" >> "$GITHUB_STEP_SUMMARY"
+      # The newest entry for this merge base and flow; a later save only ever
+      # adds one with more finished reference builds (see the save below).
+      - name: Restore the merge base's Beacon builds
+        id: refcache
+        if: steps.mb.outputs.base
+        uses: actions/cache/restore@v4
+        with:
+          path: .beacon_ref
+          key: beacon-ref-${{ steps.mb.outputs.base }}-${{ steps.mb.outputs.flow }}-
+          restore-keys: beacon-ref-${{ steps.mb.outputs.base }}-${{ steps.mb.outputs.flow }}-
+      - name: List the restored reference builds
+        if: steps.mb.outputs.base
+        run: python3 -c "import sys; sys.path.insert(0, 'ci'); import synth_gate; print('\n'.join(synth_gate.reference_cache_done('.beacon_ref')))" > "$RUNNER_TEMP/beacon_ref_done"
       - name: Run cell
         run: |
           cd build${{ matrix.xlen }}
@@ -309,6 +357,60 @@ jobs:
         with:
           name: junit-${{ env.CELL }}
           path: junit-*.xml
+      # The gate's verdicts in the job summary, and per build the evidence a
+      # verdict names: the diff against the merge base, the area by unit, the
+      # calibrated risk, the deepest paths.
+      - name: Summarize logic_gate
+        if: always() && matrix.category == 'logic_gate'
+        run: |
+          for r in build${{ matrix.xlen }}/logic_gate.json build${{ matrix.xlen }}/logic_gate_asic.json; do
+            [ -f "$r" ] && python3 ci/synth_report.py "$r" >> "$GITHUB_STEP_SUMMARY" || true
+          done
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.category == 'logic_gate'
+        with:
+          name: logic-gate-${{ env.CELL }}
+          path: |
+            build${{ matrix.xlen }}/logic_gate*.json
+            build${{ matrix.xlen }}_logic_gate/hw/syn/xilinx/dut/logic_gate_*/build.log
+            build${{ matrix.xlen }}_logic_gate/hw/syn/xilinx/dut/logic_gate_*/beacon_*.txt
+            build${{ matrix.xlen }}_logic_gate/hw/syn/xilinx/dut/logic_gate_*/beacon_*.json
+            build${{ matrix.xlen }}_logic_gate_asic/hw/syn/yosys/logic_gate_asic_*/build.log
+            build${{ matrix.xlen }}_logic_gate_asic/hw/syn/yosys/logic_gate_asic_*/beacon_diff.*
+            build${{ matrix.xlen }}_logic_gate_asic/hw/syn/yosys/logic_gate_asic_*/beacon/report.txt
+            build${{ matrix.xlen }}_logic_gate_asic/hw/syn/yosys/logic_gate_asic_*/beacon/area.txt
+          if-no-files-found: ignore
+      # Saved even when the cell fails, so a pull request's next push reuses
+      # every reference build that finished. The cache keeps what a later
+      # comparison reads (end points, instances, area, the stamps); a build
+      # that did not finish is dropped whole, so it reruns clean. A new entry
+      # is saved only when the finished set grew past what was restored, keyed
+      # by that set: cache entries are immutable, and none with fewer builds
+      # than the one restored is added after it.
+      - name: Trim the merge base's Beacon builds
+        id: refsave
+        if: always() && steps.mb.outputs.base
+        run: |
+          python3 - <<'PY'
+          import os, sys
+          sys.path.insert(0, "ci")
+          import synth_gate
+          synth_gate.trim_reference_cache(".beacon_ref")
+          with open(os.path.join(os.environ["RUNNER_TEMP"], "beacon_ref_done")) as fh:
+              before = {line for line in fh.read().splitlines() if line}
+          after = synth_gate.reference_cache_done(".beacon_ref")
+          grew = set(after) > before
+          print("reference builds: %d restored, %d finished%s"
+                % (len(before), len(after), "" if grew else "; nothing new to save"))
+          with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
+              fh.write("id=%s\n" % (synth_gate.reference_cache_id(after) if grew else ""))
+          PY
+      - name: Save the merge base's Beacon builds
+        if: always() && steps.refsave.outputs.id
+        uses: actions/cache/save@v4
+        with:
+          path: .beacon_ref
+          key: beacon-ref-${{ steps.mb.outputs.base }}-${{ steps.mb.outputs.flow }}-${{ steps.refsave.outputs.id }}
 
   complete:
     runs-on: ubuntu-22.04

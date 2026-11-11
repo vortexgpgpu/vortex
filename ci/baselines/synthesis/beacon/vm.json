@@ -36,6 +36,39 @@
       "max_levels": 23,
       "pred_fmax_mhz": 251.5,
       "risk_endpoints": 573,
+      "tied_bits": 118,
+      "tied_ports": [
+        {
+          "bits": 57,
+          "port": "g_sockets_0.g_immu.immu.core_bus_if_0_req_data",
+          "width": 93
+        },
+        {
+          "bits": 57,
+          "port": "g_sockets_1.g_immu.immu.core_bus_if_0_req_data",
+          "width": 93
+        },
+        {
+          "bits": 1,
+          "port": "g_sockets_0.mmu_snoop.dcr_bus_out_if_rsp_valid",
+          "width": 1
+        },
+        {
+          "bits": 1,
+          "port": "g_sockets_1.mmu_snoop.dcr_bus_out_if_rsp_valid",
+          "width": 1
+        },
+        {
+          "bits": 1,
+          "port": "l2cache.core_bus_if_2_req_valid",
+          "width": 1
+        },
+        {
+          "bits": 1,
+          "port": "l2cache.core_bus_if_2_rsp_ready",
+          "width": 1
+        }
+      ],
       "units": {
         "g_sockets_*_dcache/g_cache_wrap_*_cache_wrap/g_bypass_cache_bypass/mem_bus_out_arb/req_arb/g_input_select_g_arbiter_g_out_buf_*_out_buf/g_eb2_stream_buffer": 8,
         "g_sockets_*_dcache/g_cache_wrap_*_cache_wrap/g_cache_cache/cache_init": 10,

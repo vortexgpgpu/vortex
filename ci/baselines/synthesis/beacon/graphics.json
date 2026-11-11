@@ -6,7 +6,7 @@
     "dut": "gfx",
     "result": {
       "bram": 183.5,
-      "build_time_s": 166,
+      "build_time_s": 181,
       "deep_endpoints": 1818,
       "deepest_paths": [
         "19  g_rtu_core_0.rtu_core/scheduler/g_recip_pe.recip_tags/g_shift.g_partial_reset.pipe_free[219] -> g_rtu_core_0.rtu_core/scheduler/g1_idx.d[4]",
@@ -36,6 +36,54 @@
       "max_levels": 19,
       "pred_fmax_mhz": 264.7,
       "risk_endpoints": 471,
+      "tied_bits": 1073,
+      "tied_ports": [
+        {
+          "bits": 533,
+          "port": "g_mem_bus_if_0.g_i0.mem_arb.bus_in_if_0_req_data",
+          "width": 636
+        },
+        {
+          "bits": 533,
+          "port": "g_mem_bus_if_0.g_i0.mem_arb.bus_in_if_4_req_data",
+          "width": 636
+        },
+        {
+          "bits": 1,
+          "port": "graphics.cluster_id",
+          "width": 1
+        },
+        {
+          "bits": 1,
+          "port": "rtcache_dcr_flush.l1_only",
+          "width": 1
+        },
+        {
+          "bits": 1,
+          "port": "rtu_socket_arb.bus_in_if_0_arm_data",
+          "width": 120
+        },
+        {
+          "bits": 1,
+          "port": "rtu_socket_arb.bus_in_if_0_req_data",
+          "width": 550
+        },
+        {
+          "bits": 1,
+          "port": "rtu_socket_arb.bus_in_if_1_arm_data",
+          "width": 120
+        },
+        {
+          "bits": 1,
+          "port": "rtu_socket_arb.bus_in_if_1_req_data",
+          "width": 550
+        },
+        {
+          "bits": 1,
+          "port": "tcache_dcr_flush.l1_only",
+          "width": 1
+        }
+      ],
       "units": {
         "g_rtu_core_*_rtu_core": 10,
         "g_rtu_core_*_rtu_core/cache_bus_reg/req_buf/g_eb2_stream_buffer": 10,
@@ -140,7 +188,7 @@
     "dut": "gfxvm",
     "result": {
       "bram": 183.5,
-      "build_time_s": 196,
+      "build_time_s": 186,
       "deep_endpoints": 1969,
       "deepest_paths": [
         "19  g_rtu_core_0.rtu_core/scheduler/g_recip_pe.recip_tags/g_shift.g_partial_reset.pipe_free[219] -> g_rtu_core_0.rtu_core/scheduler/g1_idx.d[4]",
@@ -170,6 +218,59 @@
       "max_levels": 19,
       "pred_fmax_mhz": 256.3,
       "risk_endpoints": 475,
+      "tied_bits": 1075,
+      "tied_ports": [
+        {
+          "bits": 533,
+          "port": "g_mem_bus_if_0.g_i0.mem_arb.bus_in_if_0_req_data",
+          "width": 636
+        },
+        {
+          "bits": 533,
+          "port": "ummu.core_bus_if_2_req_data",
+          "width": 636
+        },
+        {
+          "bits": 1,
+          "port": "graphics.cluster_id",
+          "width": 1
+        },
+        {
+          "bits": 1,
+          "port": "l2cache.core_bus_if_3_req_valid",
+          "width": 1
+        },
+        {
+          "bits": 1,
+          "port": "l2cache.core_bus_if_3_rsp_ready",
+          "width": 1
+        },
+        {
+          "bits": 1,
+          "port": "rtcache_dcr_flush.l1_only",
+          "width": 1
+        },
+        {
+          "bits": 1,
+          "port": "rtu_socket_arb.bus_in_if_0_arm_data",
+          "width": 120
+        },
+        {
+          "bits": 1,
+          "port": "rtu_socket_arb.bus_in_if_0_req_data",
+          "width": 550
+        },
+        {
+          "bits": 1,
+          "port": "rtu_socket_arb.bus_in_if_1_arm_data",
+          "width": 120
+        },
+        {
+          "bits": 1,
+          "port": "rtu_socket_arb.bus_in_if_1_req_data",
+          "width": 550
+        }
+      ],
       "units": {
         "<top>": 8,
         "cmmu": 9,
@@ -319,6 +420,19 @@
       "max_levels": 13,
       "pred_fmax_mhz": 364.6,
       "risk_endpoints": 0,
+      "tied_bits": 3,
+      "tied_ports": [
+        {
+          "bits": 2,
+          "port": "om_core.om_bus_if_req_data",
+          "width": 59
+        },
+        {
+          "bits": 1,
+          "port": "om_core.dcr_bus_if_req_data",
+          "width": 45
+        }
+      ],
       "units": {
         "om_core": 8,
         "om_core/mem_req_buf/g_ebN_fifo_queue/pending_size": 8,
@@ -370,6 +484,19 @@
       "max_levels": 14,
       "pred_fmax_mhz": 332.9,
       "risk_endpoints": 0,
+      "tied_bits": 2,
+      "tied_ports": [
+        {
+          "bits": 1,
+          "port": "raster_core.dcr_bus_if_req_data",
+          "width": 45
+        },
+        {
+          "bits": 1,
+          "port": "raster_core.instance_idx",
+          "width": 1
+        }
+      ],
       "units": {
         "raster_core/packer": 8,
         "raster_core/raster_mem": 14,
@@ -390,7 +517,7 @@
     "dut": "rtu",
     "result": {
       "bram": 16.5,
-      "build_time_s": 45,
+      "build_time_s": 40,
       "deep_endpoints": 848,
       "deepest_paths": [
         "15  rtu_core/scheduler/ray_q[128] -> rtu_core/scheduler/tri_pe/q_a.d[32]",
@@ -420,6 +547,8 @@
       "max_levels": 15,
       "pred_fmax_mhz": 304.5,
       "risk_endpoints": 0,
+      "tied_bits": 0,
+      "tied_ports": [],
       "units": {
         "rtu_core": 10,
         "rtu_core/cache_bus_reg/req_buf/g_eb2_stream_buffer": 9,
@@ -477,6 +606,14 @@
       "max_levels": 11,
       "pred_fmax_mhz": 292.6,
       "risk_endpoints": 2,
+      "tied_bits": 1,
+      "tied_ports": [
+        {
+          "bits": 1,
+          "port": "tex_core.dcr_bus_if_req_data",
+          "width": 45
+        }
+      ],
       "units": {
         "tex_core/tex_addr/pipe_reg0": 10,
         "tex_core/tex_addr/pipe_reg1": 11,

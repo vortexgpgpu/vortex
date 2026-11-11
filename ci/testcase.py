@@ -143,6 +143,10 @@ class Spec:
         # VORTEX_RANDOMIZE_VA). Merged over the CONFIGS env; values are
         # strings passed through verbatim.
         self.env = {k: str(v) for k, v in dict(entry.get("env", {})).items()}
+        # A script case whose output is its report (a gate's verdict table)
+        # streams it into the CI log; pytest otherwise shows a passing case's
+        # output nowhere.
+        self.stream = bool(entry.get("stream", defaults.get("stream", False)))
         # Stable, unique id: <category>:<authored-id>:<marker-driver>
         self.id = "{}:{}:{}".format(category, entry["id"], self.marker_driver)
 
@@ -626,6 +630,8 @@ def cmd_lint(args):
             errors.append("{}: make-run case needs 'dir' and 'target'".format(c.id))
         if c.via == "script" and not c.run:
             errors.append("{}: script case missing 'run'".format(c.id))
+        if c.stream and c.via != "script":
+            errors.append("{}: stream applies to script cases only".format(c.id))
         if any(int(x) not in (32, 64) for x in c.xlens):
             errors.append("{}: xlen must be 32 and/or 64".format(c.id))
         if c.release_parity:

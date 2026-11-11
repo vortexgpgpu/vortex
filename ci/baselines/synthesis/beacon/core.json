@@ -36,6 +36,8 @@
       "max_levels": 16,
       "pred_fmax_mhz": 291.3,
       "risk_endpoints": 4,
+      "tied_bits": 0,
+      "tied_ports": [],
       "units": {
         "<top>": 11,
         "cache/g_cache_cache/core_req_xbar/g_multi_inputs_g_multiple_outputs_g_xbar_arbs_*_xbar_arb/g_input_select_g_arbiter_arbiter/g_round_robin_rr_arbiter": 9,
@@ -80,7 +82,7 @@
     "dut": "core",
     "result": {
       "bram": 129.0,
-      "build_time_s": 90,
+      "build_time_s": 85,
       "deep_endpoints": 1536,
       "deepest_paths": [
         "15  core/g_compute_slices.g_slices_0.compute_slice/frontend_slice/fetch/inflight[2] -> core/g_compute_slices.g_slices_0.compute_slice/frontend_slice/fetch/req_buf/g_eb2.stream_buffer/g_buffer.data_out_r.d[28]",
@@ -117,6 +119,19 @@
       "max_levels": 15,
       "pred_fmax_mhz": 285.6,
       "risk_endpoints": 11,
+      "tied_bits": 2,
+      "tied_ports": [
+        {
+          "bits": 1,
+          "port": "core.core_id",
+          "width": 1
+        },
+        {
+          "bits": 1,
+          "port": "core.dcache_path_drained",
+          "width": 1
+        }
+      ],
       "units": {
         "core/g_compute_slices_g_slices_*_compute_slice/backend_slice/execute_slice/alu_block/alu_int/rsp_buf/g_eb1_pipe_buffer/g_register_g_pipe_regs_*_pipe_register": 13,
         "core/g_compute_slices_g_slices_*_compute_slice/backend_slice/execute_slice/alu_block/muldiv_unit/g_multiplier_*_multiplier/pipe_reg": 8,
@@ -196,6 +211,14 @@
       "max_levels": 9,
       "pred_fmax_mhz": 324.3,
       "risk_endpoints": 0,
+      "tied_bits": 17,
+      "tied_ports": [
+        {
+          "bits": 17,
+          "port": "dma_req_buf.data_in",
+          "width": 607
+        }
+      ],
       "units": {
         "lmem_unit/g_data_store_*_g_dual_port_lmem_store": 9
       },
@@ -211,7 +234,7 @@
     "dut": "vortex",
     "result": {
       "bram": 81.0,
-      "build_time_s": 40,
+      "build_time_s": 45,
       "deep_endpoints": 3253,
       "deepest_paths": [
         "23  dev_ptw/rsp_arb/g_input_select.g_arbiter.g_out_buf_0.out_buf/g_eb2.stream_buffer/g_buffer.buffer_r[30] -> g_clusters_0.cluster/l2tlb/set_mru_r.d[2]",
@@ -254,6 +277,39 @@
       "max_levels": 23,
       "pred_fmax_mhz": 268.8,
       "risk_endpoints": 187,
+      "tied_bits": 6,
+      "tied_ports": [
+        {
+          "bits": 1,
+          "port": "__buffer_ex496.enable",
+          "width": 1
+        },
+        {
+          "bits": 1,
+          "port": "g_clusters_0.cluster.cluster_id",
+          "width": 1
+        },
+        {
+          "bits": 1,
+          "port": "g_clusters_0.cluster.cp_mem_if_req_valid",
+          "width": 1
+        },
+        {
+          "bits": 1,
+          "port": "g_clusters_0.cluster.cp_mem_if_rsp_ready",
+          "width": 1
+        },
+        {
+          "bits": 1,
+          "port": "g_clusters_0.cluster.dev_ptw_mem_if_req_valid",
+          "width": 1
+        },
+        {
+          "bits": 1,
+          "port": "g_clusters_0.cluster.dev_ptw_mem_if_rsp_ready",
+          "width": 1
+        }
+      ],
       "units": {
         "dev_ptw/walk_cache": 8,
         "g_clusters_*_cluster/__buffer_ex645": 8,

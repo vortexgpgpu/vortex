@@ -1,0 +1,59 @@
+{
+  "vm": {
+    "clock_mhz": 800,
+    "config_hash": "d06ba9a368334b96",
+    "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8",
+    "dut": "vm",
+    "result": {
+      "build_time_s": 65,
+      "cells": 1156412,
+      "endpoints": 115494,
+      "env": {
+        "circt": "CIRCT 892a65a01",
+        "foldsim": "foldsim d8350bc0f",
+        "pdk": "asap7",
+        "xlen": 32
+      },
+      "ff": 297476,
+      "fmax_mhz": 749.1,
+      "macros": 66,
+      "max_stages": 46,
+      "overhead_ps": 231,
+      "period_ps": 1335,
+      "stage_ps": 24,
+      "tied_bits": 114,
+      "tied_ports": [
+        {
+          "bits": 55,
+          "port": "g_sockets_0.g_immu.immu.core_bus_if_0_req_data",
+          "width": 90
+        },
+        {
+          "bits": 55,
+          "port": "g_sockets_1.g_immu.immu.core_bus_if_0_req_data",
+          "width": 90
+        },
+        {
+          "bits": 1,
+          "port": "g_sockets_0.mmu_snoop.dcr_bus_out_if_rsp_valid",
+          "width": 1
+        },
+        {
+          "bits": 1,
+          "port": "g_sockets_1.mmu_snoop.dcr_bus_out_if_rsp_valid",
+          "width": 1
+        },
+        {
+          "bits": 1,
+          "port": "l2cache.core_bus_if_2_req_valid",
+          "width": 1
+        },
+        {
+          "bits": 1,
+          "port": "l2cache.core_bus_if_2_rsp_ready",
+          "width": 1
+        }
+      ]
+    }
+  }
+}

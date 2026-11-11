@@ -7,12 +7,13 @@ assertion differs: instead of rtlsim cycles it compares THIS commit's
 post-synthesis timing and area against the recorded numbers, so an RTL change
 that quietly costs timing closure or area cannot land green.
 
-Three backends, one gate. Everything that is not "how do I drive the tool and
+Four backends, one gate. Everything that is not "how do I drive the tool and
 what does it call its numbers" is shared:
 
-  --tool=xilinx  Vivado synthesis + place-and-route      -> ci/fpga_gate.py
-  --tool=yosys   Yosys + OpenSTA on an ASIC PDK          -> ci/asic_gate.py
-  --tool=beacon  logic levels per RTL unit, no synthesis -> ci/logic_gate.py
+  --tool=xilinx       Vivado synthesis + place-and-route   -> ci/fpga_gate.py
+  --tool=yosys        Yosys + OpenSTA on an ASIC PDK       -> ci/asic_gate.py
+  --tool=beacon       logic levels per RTL unit, no synthesis -> ci/logic_gate.py
+  --tool=beacon_asic  Beacon's cell stages on asic_gate's builds (ASAP7)
 
   Spec      : ci/testcases/<gate>.yaml                  (what to build)
   Baselines : ci/baselines/synthesis/<tool>/<group>.json (last accepted metrics)
@@ -30,10 +31,13 @@ See docs/designs/continuous_integration.md 3.5.
 import argparse
 import concurrent.futures
 import csv
+import fcntl
+import glob
 import hashlib
 import json
 import os
 import re
+import shlex
 import shutil
 import signal
 import subprocess
@@ -63,7 +67,11 @@ HIGHER_IS_BETTER = ("fmax_mhz",)
 # Verdicts that do not fail the run. KNOWN-ISSUE is a tracked expected failure
 # (see gate()); XPASS is one that stopped reproducing -- reported loudly, but a
 # gate that hard-failed on an unexpected PASS would be the wrong incentive.
-PASSING = ("PASS", "RECORDED", "KNOWN-ISSUE", "XPASS")
+# Against a reference (--against-rev), ACCEPTED is a regression the baseline's
+# re-record accepted, and NO-REFERENCE a build the reference revision does not
+# have at all (a DUT the change adds), judged against its baseline alone. REF-FAIL, a reference that failed to measure the build, fails.
+PASSING = ("PASS", "RECORDED", "KNOWN-ISSUE", "XPASS", "ACCEPTED",
+           "NO-REFERENCE")
 
 POLL_INTERVAL = 5
 HEARTBEAT = 300  # seconds between "still alive, here is where it is" lines
@@ -90,6 +98,7 @@ class Tool:
 
     name = ""          # --tool value, and ci/baselines/synthesis/<name>/
     gate = ""          # ci/testcases/<gate>.yaml, and the build-dir/prefix/stamp name
+    spec = ""          # another gate's ci/testcases/<spec>.yaml, if not the gate's own
     flow = ""          # DUT entry point, relative to a configured build tree
 
     metrics = ()       # recorded, in report order; build_time_s is bookkeeping
@@ -107,6 +116,14 @@ class Tool:
     metric_tolerance = {}
     integral = ()      # recorded as ints; every other metric is a rounded float
     columns = ()       # (header, metric, format, width) for the report table
+    # Whether the build's clock_mhz is part of config_hash: it is an input of
+    # a synthesis run, but only a gate threshold for an estimate that does not
+    # read it, where raising the target must not invalidate the measurements.
+    clock_in_hash = True
+    # What a register's depth is counted in, for the reasons --against gives.
+    depth_unit = "levels"
+    # The dut/catalog.mk variable naming a DUT's top module (<dut><top_var>).
+    top_var = "_PRJ"
 
     # Scheduling weights (seconds) for a build with no recorded build_time_s yet.
     # Only ever used to ORDER the queue, so a rough magnitude is enough.
@@ -169,6 +186,18 @@ class Tool:
         """Files of a finished build that explain its reasons."""
         return []
 
+    def notes(self, build, metrics, args):
+        """Advisory lines printed under the report table; never a verdict."""
+        return []
+
+    def top_module(self, dut_root, dut):
+        """The DUT's top module, from dut/catalog.mk ("" if not declared)."""
+        return _make_var(_catalog(dut_root), dut + self.top_var)
+
+    def diff_levels(self, build, metrics):
+        """(watch, fix) thresholds for `beacon.py diff` against a reference."""
+        return metrics.get("watch_levels") or 8, metrics.get("fix_levels") or 12
+
     def incomplete(self, metrics):
         """Whether a cached result predates something this tool now records.
 
@@ -206,6 +235,41 @@ def _make_var(text, name):
 def dut_names(dut_root):
     """DUT ids declared by dut/catalog.mk."""
     return set(_make_var(_catalog(dut_root), "DUTS").split())
+
+
+# --- Beacon, both targets ----------------------------------------------------
+
+def harness_ties(work):
+    """The instance-input bits the DUT top ties to constants, from the Beacon
+    run's netlist (ci/beacon.py ties): the count and the ports that carry
+    the most. A finished run always has its netlist, so a missing or
+    unreadable one is a build error, never a count of zero."""
+    run = os.path.join(work, "beacon")
+    netlist = os.path.join(run, "netlist.mlir")
+    if not os.path.exists(netlist):
+        raise BuildError("no %s to count the harness's constant ties in" % netlist)
+    import beacon
+    try:
+        rows = beacon.const_ties(netlist, beacon.netlist_top(run))
+    except ValueError as e:
+        raise BuildError("counting the harness's constant ties: %s" % e)
+    return {"tied_bits": sum(r[0] for r in rows),
+            "tied_ports": [{"port": p, "bits": n, "width": w}
+                           for n, w, p in rows[:10]]}
+
+
+def ties_reasons(metrics, base):
+    """A harness whose constant ties changed: the synthesis gates fold the
+    logic behind a tied input and Beacon does not, so they now measure a
+    different design than the one their budgets were set on. Either way it
+    needs a reviewed re-record; a baseline without the count is not gated."""
+    now, was = metrics.get("tied_bits"), base.get("tied_bits")
+    if now is None or was is None or now == was:
+        return []
+    return ["harness: %d -> %d instance-input bits tied to constants -- "
+            "CHANGED: the synthesis gates now fold %s of the logic Beacon "
+            "counts; review the fpga_gate/asic_gate budget, then re-record"
+            % (was, now, "more" if now > was else "less")]
 
 
 class Xilinx(Tool):
@@ -330,6 +394,7 @@ class Yosys(Tool):
     name = "yosys"
     gate = "asic_gate"
     flow = "hw/syn/yosys/dut"
+    top_var = "_TOP"
 
     metrics = ("fmax_mhz", "wns_ns", "tns_ns", "cell_area_um2", "seq_area_um2",
                "sram_area_um2", "cell_count", "power_mw", "build_time_s")
@@ -502,7 +567,8 @@ class Beacon(Tool):
                ("lutram", "lutram", "%d", 9), ("bram", "bram", "%g", 8),
                ("uram", "uram", "%d", 6), ("dsp", "dsp", "%d", 6),
                ("p_fmax", "pred_fmax_mhz", "%.1f", 8),
-               ("risk", "risk_endpoints", "%d", 6))
+               ("risk", "risk_endpoints", "%d", 6),
+               ("tied", "tied_bits", "%d", 6))
 
     # Elaboration and mapping of the widest DUTs; the level count itself is
     # seconds.
@@ -584,6 +650,7 @@ class Beacon(Tool):
                "fix_levels": doc.get("fix_levels"),
                "watch_levels": doc.get("watch_levels")}
         out.update(self.risk(work))
+        out.update(harness_ties(work))
         return out
 
     def risk(self, work):
@@ -624,19 +691,29 @@ class Beacon(Tool):
         return {"pred_fmax_mhz": round(fmax, 1), "risk_endpoints": risky}
 
     def incomplete(self, metrics):
-        return metrics.get("units") is None
+        return metrics.get("units") is None or "tied_bits" not in metrics
+
+    def notes(self, build, metrics, args):
+        # The calibrated Fmax against the clock is a pointer, not a verdict:
+        # held to it, it failed known-good builds as often as bad ones.
+        pfmax, clock = metrics.get("pred_fmax_mhz"), build.get("clock_mhz")
+        if pfmax is None or not clock or pfmax >= clock:
+            return []
+        return ["p_fmax %.1f MHz is %.1f%% below the %g MHz clock; slowest "
+                "registers in %s (advisory, not gated)"
+                % (pfmax, 100.0 * (clock - pfmax) / clock, clock, self.RISK)]
 
     def compare(self, metrics, base):
         """Per unit: deeper than its baseline fails; a new unit at the fix
         threshold fails; shallower, or gone from the watch list, is an
         improvement to lock in. Per interface output: more bits reached
         combinationally from outside its instance fails, fewer is an
-        improvement."""
+        improvement. A harness whose constant ties changed fails."""
+        reasons = ties_reasons(metrics, base)
         cur, ref = metrics.get("units"), base.get("units")
         if cur is None or ref is None:
-            return []
+            return reasons
         fix = metrics.get("fix_levels") or 0
-        reasons = []
         for unit in sorted(set(cur) | set(ref)):
             now, was = cur.get(unit), ref.get(unit)
             if was is None:
@@ -684,7 +761,159 @@ class Beacon(Tool):
         return "max %d levels" % base["max_levels"]
 
 
-TOOLS = {t.name: t for t in (Xilinx(), Yosys(), Beacon())}
+class BeaconAsic(Tool):
+    """Beacon on the ASIC flow (hw/syn/yosys/dut, target `beacon`,
+    target=$(PDK)): asic_gate's builds, DUT for DUT and config for config, in
+    minutes instead of hours.
+
+    foldsim-estimate-timing counts cell stages (docs/designs/beacon.md 4.3)
+    and converts the deepest path to a period with the library's delays;
+    foldsim-estimate-area counts cells, flip-flops and SRAM macros, a memory
+    without a macro as flip-flops. Flip-flops and cells are held to the
+    baseline (5 %), so a memory that leaves its SRAM macro, or one Yosys must
+    build from flip-flops, fails here before the nightly synthesis. The
+    predicted Fmax is held to the build's clock_mhz with a wide band (see
+    FMAX_BAND): a backstop for a path far too deep to close, not a timing
+    verdict. The sensitive timing check is register by register against a
+    reference (--against-rev), where a path that got deeper fails by name.
+    """
+
+    name = "beacon_asic"
+    gate = "logic_gate_asic"
+    spec = "asic_gate"
+    flow = "hw/syn/yosys/dut"
+    top_var = "_TOP"
+
+    metrics = ("fmax_mhz", "period_ps", "max_stages", "cells", "ff", "macros",
+               "endpoints", "stage_ps", "overhead_ps", "build_time_s")
+    gated = ("ff", "cells")
+    integral = ("period_ps", "max_stages", "cells", "ff", "macros",
+                "endpoints", "stage_ps", "overhead_ps", "build_time_s")
+    key_metric = "period_ps"
+    summary = "beacon_asic_summary.csv"
+    # The predicted Fmax fails only more than FMAX_BAND below clock_mhz.
+    # Beacon's period runs 0.59-1.05x OpenSTA's on the 14 DUTs (it prices
+    # vm's L2 TLB MRU update at 46 stages where STA closes it at 1266 MHz),
+    # so a tight band fails designs that close. Over every validated (design,
+    # target) pair, the lowest prediction of a design STA closes is 0.749 of
+    # its target (vm and the fixed top, 749 MHz at 1 GHz), and the highest of
+    # one that misses badly is 0.615 (core and top before their FPU fixes,
+    # 492 MHz at 800). 0.32 splits that gap evenly in ratio (about 10 % margin
+    # each side) and holds at both the 800 MHz and the 1 GHz target.
+    FMAX_BAND = 0.32
+    metric_tolerance = {"fmax_mhz": FMAX_BAND}
+    # Beacon reads no clock: the target only sets the band and the stage
+    # thresholds, so a new target must not invalidate the measurements.
+    clock_in_hash = False
+    depth_unit = "stages"
+    columns = (("fmax", "fmax_mhz", "%.0f", 7),
+               ("stages", "max_stages", "%d", 7),
+               ("cells", "cells", "%d", 9),
+               ("ff", "ff", "%d", 8),
+               ("macros", "macros", "%d", 7),
+               ("tied", "tied_bits", "%d", 6))
+    weights = {"top": 600, "gfx": 600, "core": 300, "tensor": 300, "vm": 300}
+    fallback_weight = 120
+    job_label = "make"
+    elab_done = "foldsim-beacon-map"
+    phases = (
+        ("gen_sources.sh", "sources"),
+        ("circt_elaborate.sh", "elaboration"),
+        (elab_done, "mapping"),
+        ("foldsim-estimate-timing", "stages"),
+        ("foldsim-estimate-area", "area"),
+        ("asic-summary", "reporting"),
+    )
+    error_re = re.compile(r"^(?:ERROR|FATAL|Error)\b|: error:|^\S+: \*\*\* ")
+
+    REPORT = os.path.join("beacon", "report.txt")
+    AREA = os.path.join("beacon", "area.txt")
+
+    def env(self, args):
+        return {"circt": tool_version("circt-verilog", "--version",
+                                      package="circt", line_prefix="CIRCT"),
+                "foldsim": tool_version("foldsim-opt", "--version",
+                                        package="foldsim",
+                                        line_prefix="foldsim"),
+                "pdk": os.environ.get("PDK", "asap7"),
+                "xlen": args.xlen}
+
+    def hash_key(self, env):
+        return [env["circt"], env["foldsim"], env["pdk"], str(env["xlen"])]
+
+    def env_warning(self, build, env):
+        return Beacon.env_warning(self, build, env)
+
+    tops = Yosys.tops
+    work_dir = Yosys.work_dir
+
+    def diff_levels(self, build, metrics):
+        """(watch, fix) stages for `beacon.py diff`: the most that fit 90 %
+        and 100 % of the target period, plus one, with the run's own delays
+        (period = overhead + stages x stage)."""
+        period = 1e6 / float(build["clock_mhz"])
+        stage = metrics.get("stage_ps") or 24
+        over = metrics.get("overhead_ps") or 231
+        return (int((0.9 * period - over) // stage) + 1,
+                int((period - over) // stage) + 1)
+
+    def _make(self, dut_root, build, target):
+        return ["make", "-C", dut_root, build["dut"], "TARGET=" + target,
+                "PREFIX=%s_%s" % (self.gate, build["id"]),
+                "CONFIGS=" + build["configs"]]
+
+    def clean(self, dut_root, work, build, benv):
+        shutil.rmtree(work, ignore_errors=True)
+        os.makedirs(work, exist_ok=True)
+
+    def build_command(self, dut_root, work, build, env, args):
+        os.makedirs(work, exist_ok=True)
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "beacon.py")
+        make = " ".join(shlex.quote(a) for a in self._make(dut_root, build, "beacon"))
+        return ["sh", "-c", "%s && echo asic-summary && %s %s asic-summary %s %s"
+                % (make, shlex.quote(sys.executable), shlex.quote(script),
+                   shlex.quote(os.path.join(work, "beacon")),
+                   shlex.quote(os.path.join(work, self.summary)))], {}
+
+    def extras(self, work):
+        return harness_ties(work)
+
+    def incomplete(self, metrics):
+        return "tied_bits" not in metrics
+
+    def compare(self, metrics, base):
+        return ties_reasons(metrics, base)
+
+    def notes(self, build, metrics, args):
+        # Below the target but inside the band: worth a look, not a verdict.
+        # Beyond the band, gate() already failed it.
+        fmax, clock = metrics.get("fmax_mhz"), build.get("clock_mhz")
+        if fmax is None or not clock or fmax >= clock:
+            return []
+        band = threshold(build, "fmax_mhz", args)
+        shortfall = (clock - fmax) / float(clock)
+        if shortfall > band:
+            return []
+        return ["predicted Fmax %.0f MHz is %.1f%% below the %g MHz target, "
+                "inside the %.0f%% band; deepest path in %s (advisory)"
+                % (fmax, 100 * shortfall, clock, 100 * band, self.REPORT)]
+
+    def evidence(self, work):
+        return [p for p in (os.path.join(work, self.REPORT),
+                            os.path.join(work, self.AREA))
+                if os.path.exists(p)]
+
+    def describe(self, m):
+        return "Fmax=%.0f MHz (%d stages)  %d cells, %d FFs" % (
+            m.get("fmax_mhz") or 0, m.get("max_stages") or 0,
+            m.get("cells") or 0, m.get("ff") or 0)
+
+    def describe_baseline(self, base):
+        return "Fmax=%.0f MHz %d FFs" % (base.get("fmax_mhz") or 0, base.get("ff") or 0)
+
+
+TOOLS = {t.name: t for t in (Xilinx(), Yosys(), Beacon(), BeaconAsic())}
 
 
 def tool_version(name, flag, package=None, line_prefix=None):
@@ -742,15 +971,18 @@ def spec_path(root, gate):
     return os.path.join(root, "ci", "testcases", gate + ".yaml")
 
 
-def baseline_dir(root, tool):
-    return os.path.join(root, "ci", "baselines", "synthesis", tool)
+def baseline_dir(root, tool, override=None):
+    """ci/baselines/synthesis/<tool>, or <override>/<tool> to read and write
+    proposed baselines outside the tree."""
+    return os.path.join(override or os.path.join(root, "ci", "baselines",
+                                                 "synthesis"), tool)
 
 
-def baseline_path(root, tool, group):
-    return os.path.join(baseline_dir(root, tool), group + ".json")
+def baseline_path(root, tool, group, override=None):
+    return os.path.join(baseline_dir(root, tool, override), group + ".json")
 
 
-def load_catalog(root, tool, xlen=32):
+def load_catalog(root, tool, xlen=32, baselines_from=None):
     """Builds keyed by id: the SPEC from ci/testcases/<gate>.yaml, joined to its
     recorded metrics from ci/baselines/synthesis/<tool>/<group>.json.
 
@@ -758,8 +990,12 @@ def load_catalog(root, tool, xlen=32):
     (and is hand-authored, commented, reviewed), the baseline says what the last
     accepted answer was (and is machine-written). Neither file can be mistaken
     for the other's job.
+
+    A tool that measures another gate's builds (`spec`) takes their designs
+    and targets, not their verdict policy: that gate's `known_issue` and
+    `thresholds` describe its own tool's numbers.
     """
-    with open(spec_path(root, tool.gate)) as fh:
+    with open(spec_path(root, tool.spec or tool.gate)) as fh:
         doc = yaml.safe_load(fh)
     defaults = doc.get("defaults") or {}
     # `builds:`, not `tests:` -- a synthesis build is not a pytest case (no
@@ -768,11 +1004,11 @@ def load_catalog(root, tool, xlen=32):
     # is ours.
     spec = doc.get("builds")
     if not spec:
-        sys.exit("ERROR: no `builds:` block in %s" % spec_path(root, tool.gate))
+        sys.exit("ERROR: no `builds:` block in %s" % spec_path(root, tool.spec or tool.gate))
 
     baselines = {}
     for group in {e.get("group", "default") for e in spec}:
-        path = baseline_path(root, tool.name, group)
+        path = baseline_path(root, tool.name, group, baselines_from)
         if os.path.exists(path):
             with open(path) as fh:
                 baselines[group] = json.load(fh)
@@ -782,7 +1018,7 @@ def load_catalog(root, tool, xlen=32):
         bid = entry["id"]
         if bid in builds:
             sys.exit("ERROR: duplicate build id '%s' in %s"
-                     % (bid, spec_path(root, tool.gate)))
+                     % (bid, spec_path(root, tool.spec or tool.gate)))
         required = {"dut", "clock_mhz", "configs"} | ({tool.budget_key} if tool.budget_key else set())
         missing = required - set(entry)
         if missing:
@@ -797,10 +1033,11 @@ def load_catalog(root, tool, xlen=32):
         build["xlen"] = entry.get("xlen", xlen)
         build["profile"] = entry.get("profile", "")
         build["opt_in"] = bool(entry.get("opt_in", False))
-        build["known_issue"] = entry.get("known_issue",
-                                         defaults.get("known_issue", ""))
-        build["thresholds"] = entry.get("thresholds",
-                                        defaults.get("thresholds", {}))
+        borrowed = bool(tool.spec)
+        build["known_issue"] = "" if borrowed else entry.get(
+            "known_issue", defaults.get("known_issue", ""))
+        build["thresholds"] = {} if borrowed else entry.get(
+            "thresholds", defaults.get("thresholds", {}))
         recorded = baselines.get(group, {}).get(bid, {})
         result = recorded.get("result") or {}
         # An all-null skeleton means "never recorded" -- the file ships with the
@@ -809,6 +1046,9 @@ def load_catalog(root, tool, xlen=32):
             else None
         build["baseline_env"] = result.get("env") or {}
         build["config_hash"] = recorded.get("config_hash")
+        # Regressions against a reference that the last re-record accepted
+        # (--update-baseline with --against-rev); see compare_against().
+        build["accepted"] = recorded.get("accepted") or {}
         builds[bid] = build
     return builds
 
@@ -833,7 +1073,8 @@ def select(builds, selectors):
 
 def config_hash(build, env, tool):
     """Fingerprint the synthesis inputs; a change invalidates the stored metrics."""
-    key = "|".join([build["dut"], str(build["clock_mhz"]), build["configs"]]
+    clock = [str(build["clock_mhz"])] if tool.clock_in_hash else []
+    key = "|".join([build["dut"]] + clock + [build["configs"]]
                    + tool.hash_key(dict(env, xlen=build["xlen"])))
     # Appended only when set, so builds without a strategy override or a
     # profile keep the hash their baselines were recorded under.
@@ -846,7 +1087,7 @@ def config_hash(build, env, tool):
     return hashlib.sha256(key.encode()).hexdigest()[:16]
 
 
-def save_baselines(root, tool, results, env):
+def save_baselines(root, tool, results, env, override=None):
     """Write measured metrics to the golden baselines (never done by CI).
 
     Each entry records the GPU configuration it represents -- dut, target clock,
@@ -855,13 +1096,17 @@ def save_baselines(root, tool, results, env):
     source of truth for what to build; config_hash fingerprints that spec and
     invalidates the metrics if it drifts, so the recorded config cannot be
     hand-edited to disagree with the numbers next to it without failing the gate.
+
+    Recorded against a revision (--against-rev), an entry also lists the
+    regressions against it as `accepted`: what the re-record decided, in the
+    diff a reviewer reads, and what compare_against() lets pass.
     """
     by_group = {}
     for r in results:
         by_group.setdefault(r["build"]["group"], []).append(r)
-    os.makedirs(baseline_dir(root, tool.name), exist_ok=True)
+    os.makedirs(baseline_dir(root, tool.name, override), exist_ok=True)
     for group, rs in by_group.items():
-        path = baseline_path(root, tool.name, group)
+        path = baseline_path(root, tool.name, group, override)
         entries = {}
         if os.path.exists(path):
             with open(path) as fh:
@@ -879,6 +1124,11 @@ def save_baselines(root, tool, results, env):
                 entries[b["id"]]["impl_strategy"] = b["impl_strategy"]
             if b.get("profile"):
                 entries[b["id"]]["profile"] = b["profile"]
+            against = r.get("against") or {}
+            if against.get("rev") and against.get("regressions"):
+                entries[b["id"]]["accepted"] = {
+                    "against": against["rev"],
+                    "regressions": against["regressions"]}
         with open(path, "w") as fh:
             json.dump(entries, fh, indent=2, sort_keys=True)
             fh.write("\n")
@@ -1142,6 +1392,17 @@ def run_build(build, build_dir, env, args, tool):
             if not tool.incomplete(stamp["metrics"]):
                 say(build, "cache", "already built for this config -- reusing")
                 return stamp["metrics"]
+            # The diagnostics are read from the finished build's own files,
+            # so they can usually be brought up to date without the tool.
+            try:
+                metrics = dict(stamp["metrics"], **tool.extras(work))
+            except BuildError:
+                metrics = stamp["metrics"]
+            if not tool.incomplete(metrics):
+                save_stamp(work, chash, "done", stamp_file, metrics)
+                say(build, "cache", "already built for this config -- reusing, "
+                                    "diagnostics re-read")
+                return metrics
             say(build, "resum", "built, but its diagnostics predate this gate -- "
                                 "re-reporting from checkpoint")
             resume = True
@@ -1369,15 +1630,18 @@ def report_entry(r, env, tool):
     entry["xlen"] = b["xlen"]
     if b.get("profile"):
         entry["profile"] = b["profile"]
+    if r.get("against"):
+        entry["against"] = r["against"]
     return entry
 
 
-def report(results, env, args, gated, tool, record=False):
+def report(results, env, args, gated, tool, mode="gate"):
     """Print the metric table; return the list of failing verdicts.
 
     In record mode the table is the review artifact for the baseline update, so
     the per-metric deltas are still shown (that is the diff a human signs off on)
-    but they are not verdicts -- recording IS the intent.
+    but they are not verdicts -- recording IS the intent. In measure mode (a
+    reference run for --against-rev) nothing is judged at all.
     """
     head = "%-10s %-8s" + "".join(" %%%ds" % c[3] for c in tool.columns)
     title = head % (("build", "dut") + tuple(c[0] for c in tool.columns)) \
@@ -1389,9 +1653,10 @@ def report(results, env, args, gated, tool, record=False):
     failures = []
     for r in results:
         b = r["build"]
-        if record:
-            verdict, reasons = ("RECORDED", []) if r["metrics"] \
-                else ("BUILD-FAIL", [r["error"]])
+        if mode != "gate":
+            verdict, reasons = (("RECORDED" if mode == "record" else "MEASURED",
+                                 []) if r["metrics"]
+                                else ("BUILD-FAIL", [r["error"]]))
         else:
             verdict, reasons = gate(r, env, args, gated, tool)
         r["verdict"] = verdict
@@ -1425,47 +1690,487 @@ def report(results, env, args, gated, tool, record=False):
                                               "NO-BASELINE"):
             for path in tool.evidence(works[bid]):
                 print("  see %s" % path)
+    notes = [(r["build"]["id"], n) for r in results if r["metrics"]
+             for n in tool.notes(r["build"], r["metrics"], args)]
+    if notes:
+        print("\nadvisory (not gated):")
+        for bid, note in notes:
+            print("  %-10s %s" % (bid, note))
     return failures
 
 
-def compare_against(results, ref_dir, tool):
-    """Each finished build's Beacon run against the same build in ref_dir:
-    end points register by register, and area by unit; return the builds a
-    register got deeper in, or whose area grew past the tolerance, as failing
-    verdicts."""
+
+
+# ---------------------------------------------------------------------------
+# reference runs (--against, --against-rev)
+# ---------------------------------------------------------------------------
+
+# Where --against-rev's reference takes REV's files: the RTL, the harnesses,
+# the RTL the flows add (DPI headers, the ASIC RAM stubs) and the
+# configuration; submodules are taken at the commit REV pins. Every other
+# file is this checkout's, so both sides are measured by the same flow and
+# the same tools.
+REF_PATHS = ("hw/rtl", "hw/unittest", "hw/dpi", "hw/syn/libs/no_mem",
+             "VX_config.toml", "VX_types.toml")
+# Tracked paths no Beacon run reads: the reference stays valid across them.
+FLOW_EXCLUDE = ("docs", "sim", "tests", "**/*.md")
+# The default of --against-rev: how CI passes a pull request's merge base.
+AGAINST_REV_ENV = "BEACON_AGAINST_REV"
+# The default of --ref-cache.
+REF_CACHE_ENV = "BEACON_REF_CACHE"
+# Reference trees kept in the cache, the one in use among them.
+REF_KEEP = 4
+# Regressions listed per build against a reference; beacon_diff.txt has all.
+REASONS_SHOWN = 10
+
+
+class RefError(Exception):
+    """The reference cannot be staged; the run is not gated (exit 2)."""
+
+
+def git(root, *argv):
+    return subprocess.check_output(["git", "-C", root] + list(argv))
+
+
+def submodules(root):
+    """Paths of this checkout's submodules (gitlinks)."""
+    return [line.split(b"\t", 1)[1].decode()
+            for line in git(root, "ls-files", "-s", "-z").split(b"\0")
+            if line.startswith(b"160000 ")]
+
+
+def paths_at(root, rev, paths):
+    """The ones of `paths` that exist at REV."""
+    return [p for p in paths if git(root, "ls-tree", "--name-only", rev, "--", p)]
+
+
+def flow_fingerprint(root):
+    """This checkout's flow, as staged and as edited: every tracked file but
+    REF_PATHS, the submodules and FLOW_EXCLUDE. A reference measured under
+    another flow is rebuilt; under this one it is reused whatever the RTL
+    here does, which is what an RTL iteration loop wants."""
+    spec = ["--", "."] + [":(exclude,glob)%s" % p if "*" in p else ":(exclude)%s" % p
+                          for p in REF_PATHS + tuple(submodules(root)) + FLOW_EXCLUDE]
+    h = hashlib.sha256()
+    h.update(git(root, "ls-files", "-s", *spec))
+    h.update(git(root, "diff", "--binary", *spec))
+    return h.hexdigest()[:16]
+
+
+def _extract(argv, dst):
+    """`argv` (a git archive) unpacked into dst; False if it failed."""
+    os.makedirs(dst, exist_ok=True)
+    archive = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    tar = subprocess.run(["tar", "-C", dst, "-xf", "-"], stdin=archive.stdout,
+                         stderr=subprocess.DEVNULL)
+    archive.stdout.close()
+    return archive.wait() == 0 and tar.returncode == 0
+
+
+def stage_reference(root, rev, src):
+    """A source tree of this checkout's tracked files with REV's REF_PATHS and
+    REV's submodule commits: REV's design under this checkout's flow."""
+    shutil.rmtree(src, ignore_errors=True)
+    os.makedirs(src)
+    subs = submodules(root)
+    skip = tuple(p + "/" for p in REF_PATHS)
+    for line in git(root, "ls-files", "-s", "-z").split(b"\0"):
+        if not line:
+            continue
+        path = line.decode().split("\t", 1)[1]
+        if path in REF_PATHS or path.startswith(skip) or path in subs:
+            continue
+        dst = os.path.join(src, path)
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        if os.path.isfile(os.path.join(root, path)):
+            shutil.copy2(os.path.join(root, path), dst)
+    paths = paths_at(root, rev, REF_PATHS)
+    if not paths:
+        raise RefError("%s has none of %s: not a revision of this design"
+                       % (rev, ", ".join(REF_PATHS)))
+    if not _extract(["git", "-C", root, "archive", rev] + paths, src):
+        raise RefError("git archive %s %s failed" % (rev, " ".join(paths)))
+    for path in subs:
+        dst = os.path.join(src, path)
+        pinned = git(root, "ls-tree", rev, "--", path).split()
+        if len(pinned) < 3 or pinned[1] != b"commit":
+            # REV does not pin it: the flow finds this checkout's copy there.
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            os.symlink(os.path.join(root, path), dst)
+            continue
+        stage_submodule(os.path.join(root, path), pinned[2].decode(), dst, rev)
+    open(os.path.join(src, ".ready"), "w").close()
+
+
+def stage_submodule(repo, sha, dst, rev):
+    """The submodule checked out at `repo`, at commit `sha`, into dst, with
+    its own submodules at the commits it pins. One not checked out here is
+    left empty, as it is in this checkout."""
+    os.makedirs(dst, exist_ok=True)
+    if not os.path.exists(os.path.join(repo, ".git")):
+        return
+    if not _extract(["git", "-C", repo, "archive", sha], dst):
+        raise RefError("%s does not have %s, the commit %s pins (git -C %s fetch)"
+                       % (repo, sha[:12], rev, repo))
+    for line in git(repo, "ls-tree", "-r", "-z", sha).split(b"\0"):
+        meta, _, path = line.decode().partition("\t")
+        if meta.split()[:2] == ["160000", "commit"]:
+            stage_submodule(os.path.join(repo, path), meta.split()[2],
+                            os.path.join(dst, path), rev)
+
+
+def defines_module(root, module, rev=None):
+    """Whether REF_PATHS define `module`, at REV or in this checkout."""
+    pattern = r"^[[:space:]]*module[[:space:]]+%s([^A-Za-z0-9_$]|$)" % re.escape(module)
+    where = ([rev, "--"] + paths_at(root, rev, REF_PATHS) if rev
+             else ["--"] + list(REF_PATHS))
+    rc = subprocess.run(["git", "-C", root, "grep", "-q", "-E", pattern] + where,
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
+    if rc not in (0, 1):
+        raise RefError("git grep %s failed (exit %d)" % (rev or "", rc))
+    return rc == 0
+
+
+def absent_at(root, rev, tool, dut):
+    """Whether REV has no such DUT at all: neither the DUT in its catalog nor
+    its top module. Conclusive only for a top this checkout's REF_PATHS
+    define; a top generated or kept elsewhere, or one the catalog names by
+    configuration, counts as present. A DUT REV has under another top (a
+    renamed harness) is present, so its failed reference reads REF-FAIL."""
+    catalog = os.path.join(root, *tool.flow.split("/"))
+    top = tool.top_module(catalog, dut)
+    if not top or "$" in top or not defines_module(root, top):
+        return False
+    try:
+        text = git(root, "show", "%s:%s/catalog.mk" % (rev, tool.flow)).decode()
+    except subprocess.CalledProcessError:
+        return False
+    if dut in _make_var(text, "DUTS").split():
+        return False
+    return not defines_module(root, top, rev)
+
+
+def prune_references(cache, keep):
+    """Remove the cache's reference trees beyond the REF_KEEP most recently
+    used; `keep` is always kept, and one another run holds is skipped."""
+    trees = []
+    for d in os.listdir(cache):
+        try:
+            if re.fullmatch(r"[0-9a-f]{12}", d) and d != keep:
+                trees.append((os.path.getmtime(os.path.join(cache, d)), d))
+        except OSError:
+            continue    # removed by another run since the listing
+    for _, d in sorted(trees, reverse=True)[REF_KEEP - 1:]:
+        with open(os.path.join(cache, d + ".lock"), "a") as fh:
+            try:
+                fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError:
+                continue
+            shutil.rmtree(os.path.join(cache, d), ignore_errors=True)
+
+
+def reference_tree(root, rev, args, tool, builds, xlen):
+    """Measure `builds` on REV's design under this checkout's flow; return
+    (the build tree to compare against, REV's SHA, the ids of the builds
+    REV does not have (absent_at), the reference run's exit code, the held
+    lock).
+
+    The reference lives in <cache>/<sha>/: `src/` is the staged source tree
+    and `build<xlen>_<gate>/` its builds, resumable like any gate session, so
+    a second run against the same REV reuses every finished build. CI keeps
+    the build trees in its cache keyed by the merge base's SHA. A change of
+    this checkout's flow (flow_fingerprint) discards both. <sha>.lock is held
+    exclusively while the tree is checked, staged and built, and shared
+    while it is read, so runs on one cache (the FPGA and the ASIC flow, or
+    worktrees sharing BEACON_REF_CACHE) never remove each other's files."""
+    try:
+        sha = subprocess.check_output(
+            ["git", "-C", root, "rev-parse", "--verify", "%s^{commit}" % rev],
+            stderr=subprocess.DEVNULL).decode().strip()
+    except subprocess.CalledProcessError:
+        raise RefError("--against-rev %s is not a commit in %s (fetch it first)"
+                       % (rev, root))
+    cache = os.path.abspath(args.ref_cache or os.environ.get(REF_CACHE_ENV) or
+                            os.path.join(root, ".beacon_ref"))
+    os.makedirs(cache, exist_ok=True)
+    ref = os.path.join(cache, sha[:12])
+    lock = open(ref + ".lock", "a")
+    fcntl.flock(lock, fcntl.LOCK_EX)
+    src = os.path.join(ref, "src")
+    build_dir = os.path.join(ref, "build%d_%s" % (xlen, tool.gate))
+    stamp = os.path.join(ref, "flow")
+    flow = flow_fingerprint(root)
+    try:
+        with open(stamp) as fh:
+            same = fh.read().strip() == flow
+    except OSError:
+        same = False
+    if not same:
+        shutil.rmtree(ref, ignore_errors=True)
+    os.makedirs(ref, exist_ok=True)
+    os.utime(ref)
+    prune_references(cache, sha[:12])
+    if not os.path.exists(os.path.join(src, ".ready")):
+        print("reference: staging %s (%s) in %s" % (rev, sha[:12], src), flush=True)
+        stage_reference(root, sha, src)
+    with open(stamp, "w") as fh:
+        fh.write(flow + "\n")
+
+    absent = {b["id"] for b in builds if absent_at(root, sha, tool, b["dut"])}
+    for bid in sorted(absent):
+        print("reference: %s has no DUT for %s" % (sha[:12], bid), flush=True)
+    present = [b["id"] for b in builds if b["id"] not in absent]
+    rc = 0
+    if present:
+        argv = [sys.executable, os.path.join(src, "ci", "logic_gate.py"),
+                "--tool", tool.name, "--build-dir", build_dir, "--resume",
+                "--measure-only", "--xlen", str(xlen), "-j", str(args.jobs),
+                "--timeout", str(args.timeout)]
+        if args.tool_jobs:
+            argv += ["--tool-jobs", str(args.tool_jobs)]
+        if args.configs:
+            argv.append("--configs=" + args.configs)
+        for bid in present:
+            argv += ["-b", bid]
+        env = dict(os.environ)
+        env.pop(AGAINST_REV_ENV, None)
+        print("reference: %s (%s) in %s" % (rev, sha[:12], build_dir), flush=True)
+        rc = subprocess.run(argv, env=env).returncode
+        if rc:
+            print("ERROR: the reference run failed (exit %d)" % rc, flush=True)
+    fcntl.flock(lock, fcntl.LOCK_SH)
+    return build_dir, sha, absent, rc, lock
+
+
+def live_acceptance(build, root, rev, tool):
+    """The baseline's accepted regressions, unless the reference already has
+    them: a re-record's acceptance holds until it lands, and once the
+    reference revision's baseline carries the same entry the change it
+    accepted is part of the reference and the acceptance has done its job."""
+    accepted = build.get("accepted") or {}
+    if not accepted or not rev:
+        return accepted
+    path = "ci/baselines/synthesis/%s/%s.json" % (tool.name, build["group"])
+    try:
+        landed = json.loads(git(root, "show", "%s:%s" % (rev, path)))
+    except (subprocess.CalledProcessError, ValueError):
+        return accepted
+    return {} if (landed.get(build["id"]) or {}).get("accepted") == accepted \
+        else accepted
+
+
+def accepted_by(accepted, reg):
+    """Whether the baseline's last re-record accepted this regression: the
+    same register, resource or harness, and no worse than then."""
+    for a in (accepted or {}).get("regressions", ()):
+        if a.get("kind") == reg["kind"] and a.get("name") == reg["name"]:
+            if reg["kind"] == "ties":
+                return a.get("after") == reg["after"]
+            return reg["after"] <= a.get("after", float("-inf"))
+    return False
+
+
+def regression_reason(reg, tool, fix):
+    kind, name, unit = reg["kind"], reg["name"], tool.depth_unit
+    if kind == "deeper":
+        return ("%s: %d -> %d %s -- DEEPER than the reference"
+                % (name, reg["before"], reg["after"], unit))
+    if kind == "new":
+        return ("%s: new at %d %s (fix threshold %d) -- DEEPER than the "
+                "reference" % (name, reg["after"], unit, fix))
+    if kind == "area":
+        return ("%s: %g -> %g (%+.1f%%) -- AREA grown past the tolerance "
+                "against the reference"
+                % (name, reg["before"], reg["after"],
+                   100.0 * (reg["after"] - reg["before"]) / reg["before"]
+                   if reg["before"] else 100.0))
+    return ties_reasons({"tied_bits": reg["after"]},
+                        {"tied_bits": reg["before"]})[0]
+
+
+def compare_against(results, ref_dir, tool, env, root, rev=None, absent=()):
+    """Each finished build's Beacon run against the same build in ref_dir
+    (ci/beacon.py diff): register by register, area by resource, and the
+    harness's constant ties. Sets each result's `against`: its verdict,
+    the regressions, and the reasons.
+
+    A build the reference revision does not have (a DUT the change adds,
+    absent_at) reads NO-REFERENCE and is judged against its baseline alone. Any
+    other build without a finished reference of the same config is REF-FAIL:
+    a reference that timed out or crashed must not pass for one that agrees.
+
+    A regression the baseline's re-record accepted (--update-baseline with
+    --against-rev, stored in the baseline entry) reads ACCEPTED until that
+    acceptance reaches the reference (live_acceptance). One the re-record
+    did not see fails."""
     script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "beacon.py")
-    failures = []
+    label = rev[:12] if rev else ref_dir
+    rows = []
     for r in results:
         b, work = r["build"], r.get("work")
         if not r["metrics"] or not work:
             continue
-        ref = os.path.join(build_work(b, ref_dir, tool), "beacon")
-        cur = os.path.join(work, "beacon")
-        if not os.path.exists(os.path.join(ref, "endpoints.csv")):
-            print("\n%s: no reference run in %s" % (b["id"], ref))
+        against = {"reference": label, "rev": rev, "regressions": []}
+        r["against"] = against
+        if b["id"] in absent:
+            against.update(verdict="NO-REFERENCE", reasons=[
+                "%s has no %s DUT (neither in its catalog nor its top module): "
+                "judged against its baseline only" % (label, b["dut"])])
+            rows.append((b["id"], "NO-REFERENCE", "-"))
             continue
+        ref_work = build_work(b, ref_dir, tool)
+        ref = os.path.join(ref_work, "beacon")
+        try:
+            with open(os.path.join(ref_work, tool.gate + ".json")) as fh:
+                stamp = json.load(fh)
+        except (OSError, ValueError):
+            stamp = {}
+        problem = (None if stamp.get("status") == "done" and stamp.get("metrics")
+                   and os.path.exists(os.path.join(ref, "endpoints.csv"))
+                   else "no finished reference build in %s (see its build.log)"
+                   % ref_work)
+        if not problem and stamp.get("config_hash") != config_hash(b, env, tool):
+            problem = ("the reference in %s was measured under another "
+                       "configuration (config hash %s, this build %s)"
+                       % (ref_work, stamp.get("config_hash"),
+                          config_hash(b, env, tool)))
+        if problem:
+            against.update(verdict="REF-FAIL", reasons=[problem])
+            rows.append((b["id"], "REF-FAIL", "-"))
+            continue
+        ref_metrics = stamp["metrics"]
         out = os.path.join(work, "beacon_diff.txt")
+        doc_path = os.path.join(work, "beacon_diff.json")
+        if os.path.exists(doc_path):
+            os.remove(doc_path)
+        watch, fix = tool.diff_levels(b, r["metrics"])
         with open(out, "w") as fh:
-            m = r["metrics"]
-            rc = subprocess.run([sys.executable, script, "diff", ref, cur,
-                                 "--min-levels", str(m.get("watch_levels") or 8),
-                                 "--fix-levels", str(m.get("fix_levels") or 12)],
+            rc = subprocess.run([sys.executable, script, "diff", ref,
+                                 os.path.join(work, "beacon"),
+                                 "--min-levels", str(watch),
+                                 "--fix-levels", str(fix),
+                                 "--json", doc_path],
                                 stdout=fh, stderr=subprocess.STDOUT).returncode
-        with open(out) as fh:
-            head = fh.readline().strip()
-        print("\n%s against %s: %s%s\n  see %s"
-              % (b["id"], ref_dir, head, " -- REGRESSION" if rc in (1, 3) else "",
-                 out))
-        if rc == 1:
-            failures.append((b["id"], "DEEPER", ["a register got deeper than in "
-                                                 "the reference: %s" % out]))
-        elif rc == 3:
-            failures.append((b["id"], "AREA", ["the design's area grew past the "
-                                               "tolerance against the "
-                                               "reference: %s" % out]))
-        elif rc:
-            failures.append((b["id"], "BUILD-FAIL", ["beacon.py diff failed: %s" % out]))
-    return failures
+        against["diff"] = out
+        try:
+            with open(doc_path) as fh:
+                doc = json.load(fh)
+        except (OSError, ValueError):
+            doc = None
+        if rc not in (0, 1, 3) or doc is None:
+            against.update(verdict="BUILD-FAIL",
+                           reasons=["beacon.py diff failed (exit %d): %s" % (rc, out)])
+            rows.append((b["id"], "BUILD-FAIL", "-"))
+            continue
+        regs = [dict(kind="deeper", name=d["register"], before=d["before"],
+                     after=d["after"]) for d in doc["deeper"]]
+        regs += [dict(kind="new", name=d["register"], before=None,
+                      after=d["after"]) for d in doc["new"]]
+        regs += [dict(kind="area", name=d["resource"], before=d["before"],
+                      after=d["after"]) for d in doc["area"]]
+        was, now = ref_metrics.get("tied_bits"), r["metrics"].get("tied_bits")
+        if was is not None and now is not None and was != now:
+            regs.append(dict(kind="ties", name="tied_bits", before=was, after=now))
+        accepted = live_acceptance(b, root, rev, tool)
+        open_regs = [g for g in regs if not accepted_by(accepted, g)]
+        kinds = {g["kind"] for g in open_regs}
+        verdict = ("DEEPER" if kinds & {"deeper", "new"} else
+                   "AREA" if "area" in kinds else
+                   "HARNESS" if "ties" in kinds else
+                   "ACCEPTED" if regs else "PASS")
+        # Generate copies of one register repeat its line; the diff has them all.
+        shown = open_regs[:REASONS_SHOWN]
+        reasons = [regression_reason(g, tool, fix) for g in shown]
+        covered = [g for g in regs if g not in open_regs]
+        reasons += ["accepted by the baseline's re-record against %s: %s"
+                    % (accepted.get("against", "?")[:12],
+                       regression_reason(g, tool, fix))
+                    for g in covered[:max(0, REASONS_SHOWN - len(shown))]]
+        hidden = len(regs) - len(reasons)
+        if hidden > 0:
+            reasons.append("... and %d more" % hidden)
+        if reasons:
+            reasons.append("see %s" % out)
+        against.update(verdict=verdict, regressions=regs, reasons=reasons,
+                       headline=doc.get("headline", ""))
+        rows.append((b["id"], verdict, doc.get("headline", "")))
+
+    if rows:
+        print("\nagainst %s (%s):" % (label, ref_dir))
+        for bid, verdict, head in rows:
+            print("  %-10s %-12s %s" % (bid, verdict, head))
+        for r in results:
+            a = r.get("against") or {}
+            if a.get("verdict") not in (None, "PASS"):
+                print("\n%s against %s: %s" % (r["build"]["id"], label, a["verdict"]))
+                for reason in a["reasons"]:
+                    print("  - %s" % reason)
+
+
+def trim_reference_cache(cache):
+    """Shrink a reference cache to what a later comparison reads (stamps, end
+    points, instances, area) before CI saves it. A build that did not finish
+    is removed whole, so the next run under the same key rebuilds it clean
+    instead of resuming from a tree whose generated sources are gone."""
+    for ref in glob.glob(os.path.join(cache, "[0-9a-f]" * 12)):
+        shutil.rmtree(os.path.join(ref, "src"), ignore_errors=True)
+        works = glob.glob(os.path.join(ref, "build*", "hw", "syn", "*", "logic_gate*_*")) \
+            + glob.glob(os.path.join(ref, "build*", "hw", "syn", "*", "dut", "logic_gate*_*"))
+        for work in [w for w in works if os.path.isdir(w)]:
+            stamps = glob.glob(os.path.join(work, "logic_gate*.json"))
+            try:
+                with open(stamps[0]) as fh:
+                    done = json.load(fh).get("status") == "done"
+            except (IndexError, OSError, ValueError):
+                done = False
+            if not done:
+                shutil.rmtree(work)
+                continue
+            for top, dirs, files in os.walk(work):
+                for d in [d for d in dirs if d == "src"]:
+                    shutil.rmtree(os.path.join(top, d))
+                    dirs.remove(d)
+                for f in files:
+                    if f.endswith((".mlir", ".mlirbc")) or \
+                            f in ("paths.jsonl", "sources.txt", "sources.f"):
+                        os.remove(os.path.join(top, f))
+
+
+def reference_cache_done(cache):
+    """The finished reference builds in a cache, one line each: the stamp's
+    path and the config hash it was measured under."""
+    done = []
+    for stamp in glob.glob(os.path.join(cache, "*", "build*", "hw", "syn", "**",
+                                        "logic_gate*.json"), recursive=True):
+        try:
+            with open(stamp) as fh:
+                doc = json.load(fh)
+        except (OSError, ValueError):
+            continue
+        if doc.get("status") == "done":
+            done.append("%s %s" % (os.path.relpath(stamp, cache), doc.get("config_hash")))
+    return sorted(done)
+
+
+def reference_cache_id(done):
+    """A digest of reference_cache_done()'s lines: CI saves a cache under it
+    once the set has grown, so a later push can save the builds an earlier
+    one did not finish, under a new key."""
+    return hashlib.sha256("\n".join(done).encode()).hexdigest()[:16]
+
+
+def merge_against(results):
+    """Fold each build's verdict against the reference into its verdict: a
+    failing one replaces a passing baseline verdict, and every reason is
+    kept."""
+    for r in results:
+        a = r.get("against")
+        if not a or a["verdict"] == "PASS":
+            continue
+        if a["verdict"] not in PASSING and r["verdict"] in PASSING:
+            r["verdict"] = a["verdict"]
+        r["reasons"] = r["reasons"] + ["against %s: %s" % (a["reference"], x)
+                                       for x in a["reasons"]]
 
 
 # ---------------------------------------------------------------------------
@@ -1505,17 +2210,38 @@ def main(argv=None, default_tool="xilinx"):
                          % (",".join(tool.gated), default_tool))
     ap.add_argument("--update-baseline", action="store_true",
                     help="record this run's metrics as the new golden baseline. "
-                         "Human-reviewed; CI must never pass this.")
+                         "Human-reviewed; CI must never pass this. With "
+                         "--against-rev, the regressions against that revision "
+                         "are recorded as accepted")
+    ap.add_argument("--baseline-dir", metavar="DIR",
+                    help="read and write the baselines under DIR/<tool>/ "
+                         "instead of ci/baselines/synthesis/<tool>/, e.g. to "
+                         "propose baselines for review outside the tree")
     ap.add_argument("--build-dir", metavar="DIR",
                     help="build tree to synthesize in (default: "
                          "<source>/build<xlen>_<gate>, configured on demand)")
     ap.add_argument("--against", metavar="DIR",
                     help="Beacon only: the build tree of a reference run, "
                          "typically the parent revision's; each build's end "
-                         "points are compared register by register, and its "
-                         "area by unit, with the same build there "
-                         "(ci/beacon.py diff); a register that got deeper, or "
-                         "area grown past the tolerance, fails the run")
+                         "points are compared register by register, its "
+                         "area by resource and unit (ci/beacon.py diff), and "
+                         "its harness's constant ties, with the same build "
+                         "there; a register that got deeper, area grown past "
+                         "the tolerance, or changed ties fail the run")
+    ap.add_argument("--against-rev", metavar="REV",
+                    default=os.environ.get(AGAINST_REV_ENV) or None,
+                    help="Beacon only: as --against, with the reference built "
+                         "here first from REV's RTL (%s) under this "
+                         "checkout's flow, so a change is judged against its "
+                         "merge base and not only against a baseline it may "
+                         "have re-recorded itself (default: $%s)"
+                         % (", ".join(REF_PATHS), AGAINST_REV_ENV))
+    ap.add_argument("--ref-cache", metavar="DIR",
+                    help="where --against-rev keeps its reference trees, one "
+                         "per revision (default: $%s, else <source>/.beacon_ref)"
+                         % REF_CACHE_ENV)
+    ap.add_argument("--measure-only", action="store_true",
+                    help=argparse.SUPPRESS)
     ap.add_argument("--configs", metavar="FLAGS", default="",
                     help="extra -D flags appended to every selected build's "
                          "configs, for a non-default configuration: run the "
@@ -1566,7 +2292,7 @@ def main(argv=None, default_tool="xilinx"):
     args.metric_threshold = overrides
 
     root = source_root()
-    builds = load_catalog(root, tool, args.xlen)
+    builds = load_catalog(root, tool, args.xlen, args.baseline_dir)
 
     if args.matrix:
         # Ordered longest-first so the slowest DUT is dispatched into the fan-out
@@ -1596,8 +2322,11 @@ def main(argv=None, default_tool="xilinx"):
         return 0
 
     tool.check_env()
-    if args.against and tool.name != "beacon":
-        sys.exit("ERROR: --against compares Beacon runs; use it with --tool=beacon")
+    if args.measure_only:
+        args.against = args.against_rev = None
+    if (args.against or args.against_rev) and not tool.name.startswith("beacon"):
+        sys.exit("ERROR: --against compares Beacon runs; use it with --tool=beacon "
+                 "or --tool=beacon_asic")
     if args.configs and args.update_baseline:
         sys.exit("ERROR: --configs cannot record a baseline: the catalog "
                  "baselines are the catalog configurations")
@@ -1623,10 +2352,22 @@ def main(argv=None, default_tool="xilinx"):
     # One configured build tree per ISA width: a build that pins its own xlen
     # runs in that width's tree.
     xlens = sorted({b["xlen"] for b in selected})
-    if len(xlens) > 1 and (args.build_dir or args.against):
+    if len(xlens) > 1 and (args.build_dir or args.against or args.against_rev):
         sys.exit("ERROR: --build-dir/--against name one build tree, and the "
                  "selected builds span xlen %s; select one width"
                  % "/".join(map(str, xlens)))
+    if args.against and not os.path.isdir(args.against):
+        print("ERROR: --against %s is not a build tree" % args.against)
+        return 2
+    # ref_lock stays held (shared) until the run ends, while the reference is read.
+    against_sha, absent, ref_rc, ref_lock = None, set(), 0, None
+    if args.against_rev and not args.dry_run:
+        try:
+            args.against, against_sha, absent, ref_rc, ref_lock = reference_tree(
+                root, args.against_rev, args, tool, selected, xlens[0])
+        except (RefError, subprocess.CalledProcessError) as e:
+            print("ERROR: reference %s: %s" % (args.against_rev, e))
+            return 2
     results = []
     for xlen in xlens:
         build_dir = args.build_dir or os.path.join(
@@ -1640,14 +2381,18 @@ def main(argv=None, default_tool="xilinx"):
     results.sort(key=lambda r: r["build"]["id"])
 
     gated = tuple(m for m in (args.gate.split(",") if args.gate else tool.gated) if m)
-    outcomes = report(results, env, args, gated, tool, args.update_baseline)
-    failures = [o for o in outcomes if o[1] not in PASSING]
+    mode = ("measure" if args.measure_only else
+            "record" if args.update_baseline else "gate")
+    report(results, env, args, gated, tool, mode)
     if args.against:
-        failures += compare_against(results, args.against, tool)
+        compare_against(results, args.against, tool, env, root, against_sha,
+                        absent)
+        if mode == "gate":
+            merge_against(results)
 
     ok = [r for r in results if r["metrics"]]
     if args.update_baseline and ok:
-        save_baselines(root, tool, ok, env)
+        save_baselines(root, tool, ok, env, args.baseline_dir)
 
     if args.report:
         with open(args.report, "w") as fh:
@@ -1655,21 +2400,32 @@ def main(argv=None, default_tool="xilinx"):
                        "tolerance": args.threshold,
                        "metric_thresholds": args.metric_threshold,
                        "gated": list(gated),
+                       "against": against_sha or args.against,
                        "builds": [report_entry(r, env, tool)
                                   for r in results]}, fh, indent=2)
             fh.write("\n")
         print("\nwrote %s" % args.report)
 
-
-    if args.update_baseline:
+    if mode != "gate":
         # Recording IS the intent; a delta is what we just wrote down. A build
         # that never produced metrics is still a failure, `known_issue` or not:
         # there is nothing to record, so excusing it would end the run claiming
         # a baseline it did not write. Same reasoning as the BUILD-FAIL verdict
         # in gate().
         broken = [r for r in results if not r["metrics"]]
-        return 2 if broken else 0
-    if any(v == "BUILD-FAIL" for _, v, _ in failures):
+        return 2 if broken or ref_rc else 0
+
+    counts = {}
+    for r in results:
+        counts[r["verdict"]] = counts.get(r["verdict"], 0) + 1
+    failures = [r for r in results if r["verdict"] not in PASSING]
+    print("\n%s: %d builds%s%s -- %s"
+          % (tool.gate, len(results),
+             "".join(", %d %s" % (n, v) for v, n in sorted(counts.items())),
+             ", the reference run failed (exit %d)" % ref_rc if ref_rc else "",
+             "FAILED" if failures or ref_rc else "passed"))
+    # A build error on either side means the change was not gated.
+    if ref_rc or any(r["verdict"] in ("BUILD-FAIL", "REF-FAIL") for r in failures):
         return 2
     return 1 if failures else 0
 

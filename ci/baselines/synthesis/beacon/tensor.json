@@ -6,7 +6,7 @@
     "dut": "tcu",
     "result": {
       "bram": 0.0,
-      "build_time_s": 55,
+      "build_time_s": 50,
       "deep_endpoints": 2422,
       "deepest_paths": [
         "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[6]",
@@ -36,6 +36,8 @@
       "max_levels": 25,
       "pred_fmax_mhz": 277.7,
       "risk_endpoints": 17,
+      "tied_bits": 0,
+      "tied_ports": [],
       "units": {
         "tcu_shared/wgmma": 10,
         "tcu_shared/wgmma/tbuf/bbuf": 10,
@@ -66,7 +68,7 @@
     "dut": "tensor",
     "result": {
       "bram": 114.5,
-      "build_time_s": 110,
+      "build_time_s": 106,
       "deep_endpoints": 4737,
       "deepest_paths": [
         "25  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[14]",
@@ -96,6 +98,39 @@
       "max_levels": 25,
       "pred_fmax_mhz": 253.4,
       "risk_endpoints": 411,
+      "tied_bits": 6,
+      "tied_ports": [
+        {
+          "bits": 1,
+          "port": "g_cores_0.mem_unit.dcr_flush_if_req",
+          "width": 1
+        },
+        {
+          "bits": 1,
+          "port": "g_cores_0.mem_unit.flush_l1_only",
+          "width": 1
+        },
+        {
+          "bits": 1,
+          "port": "g_cores_1.mem_unit.dcr_flush_if_req",
+          "width": 1
+        },
+        {
+          "bits": 1,
+          "port": "g_cores_1.mem_unit.flush_l1_only",
+          "width": 1
+        },
+        {
+          "bits": 1,
+          "port": "g_mem_bus_if_0.g_i0.mem_arb.bus_in_if_0_req_valid",
+          "width": 1
+        },
+        {
+          "bits": 1,
+          "port": "g_mem_bus_if_0.g_i0.mem_arb.bus_in_if_0_rsp_ready",
+          "width": 1
+        }
+      ],
       "units": {
         "dcache/g_cache_wrap_*_cache_wrap/g_cache_cache/g_banks_*_bank/cache_data/g_data_slice_*_data_store": 9,
         "dcache/g_cache_wrap_*_cache_wrap/g_cache_cache/g_banks_*_bank/cache_mshr": 9,
