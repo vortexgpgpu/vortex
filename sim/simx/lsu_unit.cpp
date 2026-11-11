@@ -233,12 +233,6 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 	bool is_write;
 	int64_t  offset;
 	uint32_t stride;
-	// A uniform access is made once per warp, by its first active lane.
-	const bool uniform = (trace->instr_ptr->get_umode() == Instr::UMODE_UNIFORM);
-	uint32_t uniform_tid = 0;
-	while (uniform && uniform_tid + 1 < num_threads && !tmask.test(uniform_tid)) {
-		++uniform_tid;
-	}
 	if (is_amo) {
 		auto amo_args = std::get<IntrAmoArgs>(trace->instr_ptr->get_args());
 		data_bytes = 1u << (amo_args.width & 0x3);
@@ -268,7 +262,7 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 		e.tid  = t;
 		e.data = 0;
 		e.amo_cmp = 0;
-		if (tmask.test(t) && (!uniform || t == uniform_tid)) {
+		if (tmask.test(t)) {
 			// AGU result is VX_CFG_XLEN-bit wide.
 			// Cast through Word so 32-bit VX_CFG_XLEN doesn't carry sign-extended
 			// upper bits into the 64-bit address field.

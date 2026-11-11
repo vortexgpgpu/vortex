@@ -712,7 +712,17 @@ public:
     // reserve a scoreboard slot — the unit's writeback skips x0 too.
     auto dst = instr->get_dest_reg();
     trace->wb = (dst.type != RegType::None)
-             && !(dst.type == RegType::Integer && dst.idx == 0);
+             && !((dst.type == RegType::Integer || dst.type == RegType::Uniform) && dst.idx == 0);
+    // A uniform load or store is made once per warp, by its first active lane.
+    if (instr->get_umode() == Instr::UMODE_UNIFORM && instr->get_fu_type() == FUType::LSU) {
+      for (uint32_t t = 0; t < trace->tmask.size(); ++t) {
+        if (trace->tmask.test(t)) {
+          trace->tmask.reset();
+          trace->tmask.set(t);
+          break;
+        }
+      }
+    }
     trace->fetch_stall = instr->is_wstall();
     // A warp blocked on a stalling instruction is released when that
     // instruction commits. Default to releasing every stalling instruction;

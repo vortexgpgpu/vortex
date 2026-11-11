@@ -107,7 +107,8 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     end
 
     for (genvar i = 0; i < NUM_SRC_OPDS; ++i) begin : g_src_valid
-        assign src_valid[i] = scoreboard_if.data.used_rs[i] && (src_regs[i] != 0) && ~opd_fetched_st1[i];
+        assign src_valid[i] = scoreboard_if.data.used_rs[i] && (src_regs[i] != 0) && ~opd_fetched_st1[i]
+                           && (get_reg_type(src_regs[i]) != REG_TYPE_U);
     end
 
     assign req_valid_in = {NUM_SRC_OPDS{scoreboard_if.valid}} & src_valid;
@@ -187,16 +188,23 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     wire pipe_fire_st1 = pipe_valid_st1 && pipe_ready_st1;
     wire pipe_fire_st2 = pipe_valid_st2 && pipe_ready_st2;
 
+    // Uniform sources: the register index rides stage 1, where the uniform file is
+    // read as the GPR banks are, and the value rides stage 2.
+    localparam USRC_W = `VX_CFG_EXT_U_ENABLED ? (NUM_SRC_OPDS * (1 + RV_REGS_BITS)) : 1;
+    localparam UDAT_W = `VX_CFG_EXT_U_ENABLED ? (NUM_SRC_OPDS * (1 + `VX_CFG_XLEN)) : 1;
+    wire [USRC_W-1:0] usrc_st0, usrc_st1;
+    wire [UDAT_W-1:0] udat_st1, udat_st2;
+
     VX_pipe_buffer #(
-        .DATAW  (NUM_BANKS + META_DATAW + 1 + NUM_BANKS * (REG_REM_BITS + REQ_SEL_WIDTH)),
+        .DATAW  (NUM_BANKS + META_DATAW + 1 + NUM_BANKS * (REG_REM_BITS + REQ_SEL_WIDTH) + USRC_W),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
         .valid_in (scoreboard_if.valid),
         .ready_in (pipe_ready_in),
-        .data_in  ({gpr_rd_valid,     pipe_mdata,     has_collision,     gpr_rd_reg,     gpr_rd_opd}),
-        .data_out ({gpr_rd_valid_st1, pipe_mdata_st1, has_collision_st1, gpr_rd_reg_st1, gpr_rd_opd_st1}),
+        .data_in  ({gpr_rd_valid,     pipe_mdata,     has_collision,     gpr_rd_reg,     gpr_rd_opd,     usrc_st0}),
+        .data_out ({gpr_rd_valid_st1, pipe_mdata_st1, has_collision_st1, gpr_rd_reg_st1, gpr_rd_opd_st1, usrc_st1}),
         .valid_out(pipe_valid_st1),
         .ready_out(pipe_ready_st1)
     );
@@ -214,15 +222,15 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     wire pipe_valid2_st1 = pipe_valid_st1 && ~has_collision_st1;
 
     VX_pipe_buffer #(
-        .DATAW  (NUM_BANKS * (1 + REQ_SEL_WIDTH) + META_DATAW),
+        .DATAW  (NUM_BANKS * (1 + REQ_SEL_WIDTH) + META_DATAW + UDAT_W),
         .RESETW (1)
     ) pipe_reg2 (
         .clk      (clk),
         .reset    (reset),
         .valid_in (pipe_valid2_st1),
         .ready_in (pipe_ready_st1),
-        .data_in  ({gpr_rd_valid_st1, gpr_rd_opd_st1, pipe_mdata_st1}),
-        .data_out ({gpr_rd_valid_st2, gpr_rd_opd_st2, pipe_mdata_st2}),
+        .data_in  ({gpr_rd_valid_st1, gpr_rd_opd_st1, pipe_mdata_st1, udat_st1}),
+        .data_out ({gpr_rd_valid_st2, gpr_rd_opd_st2, pipe_mdata_st2, udat_st2}),
         .valid_out(pipe_valid_st2),
         .ready_out(pipe_ready_st2)
     );
@@ -234,6 +242,14 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
                 opd_buffer_n_st2[gpr_rd_opd_st2[b]] = gpr_rd_data_st2[b];
             end
         end
+    `ifdef VX_CFG_EXT_U_ENABLE
+        // a uniform source, broadcast to every lane
+        for (integer i = 0; i < NUM_SRC_OPDS; ++i) begin
+            if (pipe_valid_st2 && udat_st2[i * (1 + `VX_CFG_XLEN) + `VX_CFG_XLEN]) begin
+                opd_buffer_n_st2[i] = {`VX_CFG_SIMD_WIDTH{udat_st2[i * (1 + `VX_CFG_XLEN) +: `VX_CFG_XLEN]}};
+            end
+        end
+    `endif
     end
 
     always @(posedge clk) begin
@@ -251,6 +267,54 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
         `UNUSED_VAR ({wr_slot, rd_slot})
     end
 
+    wire wb_is_ureg = (get_reg_type(writeback_if.data.rd) == REG_TYPE_U);
+
+`ifdef VX_CFG_EXT_U_ENABLE
+    // Uniform registers u1..u31 of each warp slot (u0 reads zero).
+    reg [PER_OPC_WARPS-1:0][RV_REGS-1:1][`VX_CFG_XLEN-1:0] ureg_r;
+
+    for (genvar i = 0; i < NUM_SRC_OPDS; ++i) begin : g_usrc
+        assign usrc_st0[i * (1 + RV_REGS_BITS) +: (1 + RV_REGS_BITS)] =
+            {scoreboard_if.data.used_rs[i] && (get_reg_type(src_regs[i]) == REG_TYPE_U), get_reg_idx(src_regs[i])};
+        wire                    uvalid = usrc_st1[i * (1 + RV_REGS_BITS) + RV_REGS_BITS];
+        wire [RV_REGS_BITS-1:0] uidx   = usrc_st1[i * (1 + RV_REGS_BITS) +: RV_REGS_BITS];
+        assign udat_st1[i * (1 + `VX_CFG_XLEN) +: (1 + `VX_CFG_XLEN)] =
+            {uvalid, (uidx == '0) ? `VX_CFG_XLEN'(0) : ureg_r[rd_slot][uidx]};
+    end
+
+    // A uniform destination takes the first active lane of the instruction:
+    // the lowest lane of the first writeback beat with one.
+    reg [`VX_CFG_XLEN-1:0] wb_first_data;
+    reg wb_any;
+    always @(*) begin
+        wb_first_data = '0;
+        wb_any = 1'b0;
+        for (integer t = `VX_CFG_SIMD_WIDTH-1; t >= 0; --t) begin
+            if (writeback_if.data.tmask[t]) begin
+                wb_first_data = writeback_if.data.data[t];
+                wb_any = 1'b1;
+            end
+        end
+    end
+    reg  ureg_seek_r;
+    wire ureg_seek = writeback_if.data.sop || ureg_seek_r;
+    wire [RV_REGS_BITS-1:0] wb_uidx = get_reg_idx(writeback_if.data.rd);
+    always @(posedge clk) begin
+        if (reset) begin
+            ureg_seek_r <= 1'b1;
+        end else if (writeback_if.valid) begin
+            ureg_seek_r <= writeback_if.data.eop || (ureg_seek && ~wb_any);
+        end
+        if (writeback_if.valid && wb_is_ureg && ureg_seek && wb_any && (wb_uidx != '0)) begin
+            ureg_r[wr_slot][wb_uidx] <= wb_first_data;
+        end
+    end
+`else
+    assign usrc_st0 = '0;
+    assign udat_st1 = '0;
+    `UNUSED_VAR ({usrc_st1, udat_st2})
+`endif
+
     // register-set bases per warp slot, in registers: integer and FP
     reg [PER_OPC_WARPS-1:0][GPR_W-1:0] slot_xbase_r, slot_fbase_r;
     always_ff @(posedge clk) begin
@@ -267,7 +331,8 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
                                                  input logic [REG_REM_BITS-1:0] reg_rem);
         logic is_fp;
         logic [GPR_W-1:0] base;
-        is_fp = (REG_TYPES > 1) && reg_rem[REG_REM_BITS-1];
+        is_fp = (GPR_TYPES > 1)
+             && ((reg_rem >> (RV_REGS_BITS - BANK_SEL_BITS)) == REG_REM_BITS'(REG_TYPE_F));
         base  = is_fp ? slot_fbase_r[slot] : slot_xbase_r[slot];
         return ROW_W'(base >> BANK_SEL_BITS) + ROW_W'(reg_rem[RV_REGS_BITS-BANK_SEL_BITS-1:0]);
     endfunction
@@ -296,9 +361,9 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     for (genvar b = 0; b < NUM_BANKS; ++b) begin : g_gpr_rams
         wire gpr_wr_enabled;
         if (BANK_SEL_BITS != 0) begin : g_gpr_wr_enabled_bn
-            assign gpr_wr_enabled = writeback_if.valid && (gpr_wr_bank_idx == BANK_SEL_BITS'(b));
+            assign gpr_wr_enabled = writeback_if.valid && ~wb_is_ureg && (gpr_wr_bank_idx == BANK_SEL_BITS'(b));
         end else begin : g_gpr_wr_enabled_b1
-            assign gpr_wr_enabled = writeback_if.valid;
+            assign gpr_wr_enabled = writeback_if.valid && ~wb_is_ureg;
         end
 
         wire [ROW_W-1:0] gpr_rd_row = gpr_row(rd_slot, gpr_rd_reg_st1[b]);

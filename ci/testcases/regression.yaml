@@ -22,6 +22,25 @@ tests:
 # different LSU blocks), partial masks, bank-conflict replays, sub-word loads
 # and stores, same-word stores, and per-lane order against the lane's own
 # stores and atomics.
+# Uniform registers (VX_CFG_EXT_U_ENABLE): uniform ALU, branch, CSR, load and
+# store, moves both ways, and uniform operands of per-thread instructions.
+- id: uniform-regs
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: uniform_regs
+  configs: -DVX_CFG_EXT_U_ENABLE
+- id: uniform-regs-simd
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: uniform_regs
+  configs: -DVX_CFG_EXT_U_ENABLE -DVX_CFG_SIMD_WIDTH=4
+  shape:
+    threads: 8
+    warps: 8
 - id: lmem-access-1
   via: blackbox
   drivers:
