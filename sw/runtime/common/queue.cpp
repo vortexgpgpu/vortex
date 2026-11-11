@@ -384,6 +384,7 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
         // paired *_ADDR0/1 / *_ENTRY0/1 DCRs below.
         const bool     has_kernel = (kernel != nullptr);
         const uint64_t kernel_pc  = has_kernel ? kernel->pc() : 0;
+        const uint32_t kernel_regs = has_kernel ? kernel->num_regs() : 0;
         const uint64_t program_pc = has_kernel ? kernel->module()->base_address() : 0;
         // ---- Compute the full KMU descriptor (block_size, warp_step).
         uint64_t num_threads = 0, num_warps = 0;
@@ -457,6 +458,7 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
                 WR(VX_DCR_KMU_STARTUP_ADDR1, program_pc >> 32);
                 WR(VX_DCR_KMU_KERNEL_ENTRY0, kernel_pc & 0xffffffffu);
                 WR(VX_DCR_KMU_KERNEL_ENTRY1, kernel_pc >> 32);
+                WR(VX_DCR_KMU_NUM_REGS,      kernel_regs);
             }
             if (args_staged) {
                 WR(VX_DCR_KMU_STARTUP_ARG0, args_addr & 0xffffffffu);
@@ -623,6 +625,7 @@ vx_result_t cmd_stage_qmds(Device* device_, const std::vector<CmdRec>& recs,
         // 2) KMU descriptor values (same derivation as vx_enqueue_launch).
         const bool     has_kernel = (rec.kernel != nullptr);
         const uint64_t kernel_pc  = has_kernel ? rec.kernel->pc() : 0;
+        const uint32_t kernel_regs = has_kernel ? rec.kernel->num_regs() : 0;
         const uint64_t program_pc = has_kernel
                                   ? rec.kernel->module()->base_address() : 0;
         uint32_t eff_block[3] = {1, 1, 1};
@@ -648,6 +651,7 @@ vx_result_t cmd_stage_qmds(Device* device_, const std::vector<CmdRec>& recs,
             put(VX_DCR_KMU_STARTUP_ADDR1, uint32_t(program_pc >> 32));
             put(VX_DCR_KMU_KERNEL_ENTRY0, uint32_t(kernel_pc & 0xffffffffu));
             put(VX_DCR_KMU_KERNEL_ENTRY1, uint32_t(kernel_pc >> 32));
+            put(VX_DCR_KMU_NUM_REGS,      kernel_regs);
         }
         if (st.args_active) {
             put(VX_DCR_KMU_STARTUP_ARG0, uint32_t(st.args_addr & 0xffffffffu));

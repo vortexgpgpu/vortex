@@ -20,6 +20,9 @@ import struct
 import sys
 import re
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import vx_regpack
+
 def get_vma_size(elf_file):
     try:
         cmd = ['readelf', '-l', '-W', elf_file]
@@ -91,7 +94,18 @@ def get_kernel_entries(elf_file):
         entries.append((name, value))
     return entries
 
-def build_symtab_footer(entries):
+def get_reg_counts(elf_file):
+    # {Rx, Rf} for the entry's pad field, 0 when the image runs with every
+    # register (vx_regpack.py).
+    with open(elf_file, 'rb') as f:
+        data = f.read()
+    try:
+        r = vx_regpack.counts(data)
+    except vx_regpack.DecodeError:
+        return 0
+    return 0 if r is None else (r[1] << 8) | r[0]
+
+def build_symtab_footer(entries, reg_counts):
     # VXSYMTAB footer layout consumed by vx_module.cpp Module::load_bytes:
     #   [string blob: names back-to-back]
     #   [entries: N x { name_off:u32, name_len:u16, _pad:u16, pc:u64 }]
@@ -104,7 +118,7 @@ def build_symtab_footer(entries):
         string_blob += name.encode('utf-8')
     footer = bytearray(string_blob)
     for (name, pc), off in zip(entries, offsets):
-        footer += struct.pack('<IHHQ', off, len(name.encode('utf-8')), 0, pc)
+        footer += struct.pack('<IHHQ', off, len(name.encode('utf-8')), reg_counts, pc)
     footer += struct.pack('<I', len(entries))
     footer += b'VXSYMTAB'
     return bytes(footer)
@@ -136,7 +150,7 @@ def create_vxbin_binary(input_elf, output_bin, objcopy_path):
     footer = b''
     entries = get_kernel_entries(input_elf)
     if entries:
-        footer = build_symtab_footer(entries)
+        footer = build_symtab_footer(entries, get_reg_counts(input_elf))
 
     with open(output_bin, 'wb') as bin_file:
         bin_file.write(min_vma_bytes)

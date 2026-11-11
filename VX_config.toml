@@ -72,6 +72,11 @@ VX_CFG_FETCH_WIDTH = "expr: $VX_CFG_ISSUE_WIDTH & -$VX_CFG_ISSUE_WIDTH"
 VX_CFG_SIMD_WIDTH = "expr: $VX_CFG_NUM_THREADS"
 VX_CFG_NUM_OPCS = "expr: up($VX_CFG_NUM_WARPS / (4 * $VX_CFG_ISSUE_WIDTH))"
 VX_CFG_NUM_GPR_BANKS = 4
+# Registers per operand collector: by default a full integer + FP set for each
+# of its warps. A smaller file holds fewer warps of a kernel that uses every
+# register and more of one that uses few (VX_DCR_KMU_NUM_REGS); it must hold
+# at least one full set.
+VX_CFG_GPR_ROWS = "expr: (32 << $VX_CFG_EXT_F_ENABLED) * (($VX_CFG_NUM_WARPS // $VX_CFG_ISSUE_WIDTH + $VX_CFG_NUM_OPCS - 1) // $VX_CFG_NUM_OPCS)"
 VX_CFG_NUM_VGPR_BANKS = 2
 
 [memory]

@@ -611,6 +611,8 @@ public:
     Device*  device()      { return device_; }
     Buffer*  image()       { return image_; }
     uint64_t base_address() const { return base_addr_; }
+    // {Rf, Rx} of the image (VX_DCR_KMU_NUM_REGS); 0 = every register.
+    uint32_t num_regs()     const { return num_regs_; }
 
     // Look up a named kernel entry point. Returns a new ref (caller releases).
     // Subsequent lookups of the same name return the same cached Kernel.
@@ -635,6 +637,7 @@ private:
     Device*                              device_;
     Buffer*                              image_;       // refcounted
     uint64_t                             base_addr_;
+    uint32_t                             num_regs_ = 0;
     std::vector<Symbol>                  symbols_;
     std::mutex                           kcache_mu_;
     std::map<std::string, Kernel*>       kernel_cache_;   // weak refs (no retain)
@@ -646,6 +649,7 @@ public:
 
     Module*  module()      { return module_; }
     uint64_t pc()    const { return pc_; }
+    uint32_t num_regs() const { return module_->num_regs(); }
 
     // Per-kernel max-block hints. Returns the device default (full warp width);
     // per-kernel introspection from compiler metadata is not yet implemented.

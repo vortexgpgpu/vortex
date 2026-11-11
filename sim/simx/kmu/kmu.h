@@ -29,6 +29,7 @@ struct kmu_req_t {
   uint32_t block_dim[3];
   uint32_t grid_dim[3];
   uint32_t lmem_size;
+  uint32_t num_regs;
   uint32_t block_size;
   uint32_t warp_step[3];
   uint32_t cluster_dim[3];
@@ -95,6 +96,7 @@ private:
   uint32_t block_dim_[3];
   uint32_t grid_dim_[3];
   uint32_t lmem_size_;
+  uint32_t num_regs_;
   uint32_t block_size_;
   uint32_t warp_step_[3];
   uint32_t cluster_dim_[3];

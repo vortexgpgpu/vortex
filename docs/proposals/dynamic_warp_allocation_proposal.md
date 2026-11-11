@@ -95,8 +95,10 @@ on both the read path and the writeback path, with the thread-group select
 (`sid`) as today when `NUM_THREADS > SIMD_WIDTH`. `x0` keeps its slot and is
 never written, as today.
 
-An access to a register at or above its class count reads zero and does not
-write, so a malformed binary cannot touch another warp's registers.
+A register at or above its class count is outside the warp's set and aliases
+another warp's registers of the same kernel, like an out-of-bounds shared
+memory access; the packing pass derives `R` from the image, so a built kernel
+never names one.
 
 ### CTA dispatch
 
@@ -115,8 +117,13 @@ fixed-stride allocator):
   running sum when the kernel starts, before the first CTA is admitted. The
   table has one entry per warp, not per slot, so per-rank counts can be added
   without changing the register file.
-- A CTA is admitted only when it fits both the LMEM bound and the register
-  bound. Both stay registered, so the ready path does not grow.
+- A CTA is admitted only when it fits the LMEM bound; its warps launch into
+  free warp slots below the register bound, one CTA at a time, as today. A CTA
+  with more warps than the bound could never finish launching: the dispatcher
+  grants it its warps with a warning (as it does an LMEM overrun), and the
+  runtime is to reject such a launch once the register file size is a device
+  capability.
+- Fragment waves take free warp slots below the same bound.
 
 `VX_CFG_NUM_WARPS` becomes the maximum number of resident warps.
 
@@ -136,7 +143,7 @@ fixed-stride allocator):
 | Runtime | `sw/runtime/common/` | read `R`, write the DCR |
 | KMU | `VX_kmu.sv`, `sim/simx/kmu/` | DCR, `kmu_req_t` field |
 | Dispatch | `VX_cta_dispatch.sv`, `sim/simx/cta_dispatcher.cpp` | register bound, warp mask, base table |
-| Register file | `VX_opc_unit.sv`, `sim/simx/opc_unit.cpp` | physical size, `base + offset + reg` on read and write, out-of-range read as zero |
+| Register file | `VX_opc_unit.sv` | physical size, `base + offset + reg` on read and write (SimX keeps its per-warp arrays: the bank of a register is unchanged) |
 | Perf counters | `VX_types.toml`, SimX and RTL perf | resident-warp limit per launch |
 
 ## Uniform registers

@@ -416,7 +416,7 @@ void Scheduler::fwd_try_inject() {
   while (!fwd_waves_.empty()) {
     // Find any free warp slot — there is no driver warp to skip in the push model.
     int wid = -1;
-    for (uint32_t w = 0; w < VX_CFG_NUM_WARPS; ++w) {
+    for (uint32_t w = 0; w < cta_dispatcher_->usable_warps(); ++w) {
       bool firing = false;
       for (uint32_t i = 0; i < cta_fire_cnt_; ++i) {
         firing = firing || (cta_fire_wids_[i] == w);

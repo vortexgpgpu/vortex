@@ -30,6 +30,8 @@ CtaDispatcher::CtaDispatcher(const SimContext& ctx, const char* name, Core* core
   , lmem_base_(VX_MEM_LMEM_BASE_ADDR)
   , lmem_capacity_(VX_CFG_LMEM_SIZE)
   , lmem_overrun_reported_(false)
+  , regs_overrun_reported_(false)
+  , usable_warps_(num_warps_)
   , slot_rem_warps_(num_warps_, 0)
   , wid_to_slot_(num_warps_, num_warps_)  // num_warps_ = invalid/unassigned
   , tail_slot_(0)
@@ -103,6 +105,29 @@ uint32_t CtaDispatcher::usable_slots(uint32_t stride) const {
   return fit;
 }
 
+uint32_t CtaDispatcher::fitting_warps(uint32_t num_regs, uint32_t cta_warps) const {
+  uint32_t regs = (num_regs == 0) ? (VX_CFG_EXT_F_ENABLED ? 2 : 1) * MAX_NUM_REGS
+                                  : (num_regs & 0xff) + ((num_regs >> 8) & 0xff);
+  uint32_t fit = (VX_CFG_GPR_ROWS / regs) * (VX_CFG_ISSUE_WIDTH * VX_CFG_NUM_OPCS);
+  if (fit > num_warps_) {
+    fit = num_warps_;
+  }
+  if (fit < cta_warps) {
+    // A CTA whose warps do not all fit could never finish launching. It is
+    // given its warps so the launch makes progress, and the warps beyond the
+    // fit overlap others' registers.
+    if (!regs_overrun_reported_) {
+      regs_overrun_reported_ = true;
+      std::cerr << "Warning: a CTA of " << cta_warps << " warps using " << regs
+                << " registers each exceeds the " << fit
+                << " warps the register file holds; its registers overlap."
+                << std::endl;
+    }
+    fit = cta_warps;
+  }
+  return fit;
+}
+
 uint32_t CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wids, cta_warp_record_t* recs) {
   // A retirement is registered, reads its slot's count from the table and
   // writes it back: it updates the slot in its fourth cycle, and the write
@@ -143,6 +168,8 @@ uint32_t CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wids, cta_w
     uint32_t stride = (next.lmem_size + VX_CFG_MEM_BLOCK_SIZE - 1u)
                       & ~uint32_t(VX_CFG_MEM_BLOCK_SIZE - 1u);
     uint32_t max_slots = usable_slots(stride);
+    usable_warps_ = fitting_warps(next.num_regs,
+                                  (next.block_size + num_threads_ - 1) / num_threads_);
 
     // Round-robin slot allocation over the usable range. Normalize the tail in
     // case a kernel transition shrank the usable count.
@@ -235,7 +262,7 @@ uint32_t CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wids, cta_w
   for (uint32_t o = 0; o < VX_CFG_FETCH_WIDTH && !cta_done_; ++o) {
     uint32_t lane = (lane_rr_ + o) % VX_CFG_FETCH_WIDTH;
     int free_wid = -1;
-    for (uint32_t wid = lane; wid < num_warps_; wid += VX_CFG_FETCH_WIDTH) {
+    for (uint32_t wid = lane; wid < usable_warps_; wid += VX_CFG_FETCH_WIDTH) {
       if (!active_warps.test(wid) && !cta_wids_.test(wid)) {
         free_wid = int(wid);
         break;
