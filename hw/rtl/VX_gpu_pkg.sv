@@ -63,6 +63,15 @@ package VX_gpu_pkg;
 
     localparam NUM_REGS_BITS = `CLOG2(NUM_REGS);
 
+    // Register-file layout of the running kernel: a warp's set is size4 * 4
+    // rows, integer registers first, FP registers fp_off4 * 4 rows in
+    // (VX_DCR_KMU_NUM_REGS).
+    localparam GPR_SET_W = `CLOG2(NUM_REGS / 4 + 1);
+    typedef struct packed {
+        logic [GPR_SET_W-1:0] size4;
+        logic [GPR_SET_W-1:0] fp_off4;
+    } gpr_layout_t;
+
     // Generic shadow-register namespace. Each bit is a slot that any
     // instruction class may claim for RAW/WAR hazard tracking via the
     // scoreboard's wr_xregs / rd_xregs masks. The decoder maps specific
@@ -1244,6 +1253,7 @@ package VX_gpu_pkg;
         logic [`VX_CFG_MEM_ADDR_WIDTH-1:0] param;
         logic [7:0]                        ctx_id;
         logic [`VX_CFG_LMEM_LOG_SIZE:0]    aligned_lmem_size;
+        logic [15:0]                       num_regs;  // VX_DCR_KMU_NUM_REGS: {Rf, Rx}, 0 = every register
         kmu_args_t                         args;   // .compute | .fragment
     } kmu_req_t;
 

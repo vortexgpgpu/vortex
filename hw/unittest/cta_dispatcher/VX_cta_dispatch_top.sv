@@ -105,6 +105,7 @@ module VX_cta_dispatch_top import VX_gpu_pkg::*;
     // dispatch via cta_fire/cta_wid).
     cta_bcast_t             cta_bcast;
     cta_lane_bcast_t        cta_lane_bcast;
+    gpr_layout_t            gpr_layout;
 
     `UNUSED_VAR (cta_PC)
     `UNUSED_VAR (cta_tmask)
@@ -113,6 +114,7 @@ module VX_cta_dispatch_top import VX_gpu_pkg::*;
     `UNUSED_VAR (busy)
     `UNUSED_VAR (cta_bcast)
     `UNUSED_VAR (cta_lane_bcast)
+    `UNUSED_VAR (gpr_layout)
 
     VX_cta_dispatch cta_dispatch (
         .clk           (clk),
@@ -129,6 +131,7 @@ module VX_cta_dispatch_top import VX_gpu_pkg::*;
         .cta_init      (cta_init),
         .cta_bcast     (cta_bcast),
         .cta_lane_bcast(cta_lane_bcast),
+        .gpr_layout    (gpr_layout),
         .busy          (busy)
     );
 

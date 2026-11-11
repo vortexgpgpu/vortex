@@ -65,6 +65,7 @@ module VX_raster_launch import VX_gpu_pkg::*, VX_raster_pkg::*; #(
 
     // ── DCR-snooped launch descriptor ────────────────────────────────────
     reg [`VX_CFG_XLEN-1:0] startup_pc_r;
+    reg [15:0]             num_regs_r;
     reg [`VX_CFG_XLEN-1:0] frag_entry_r;
     reg [`VX_CFG_XLEN-1:0] frag_param_r;
     `UNUSED_VAR (dcr_write_data[31])
@@ -78,6 +79,7 @@ module VX_raster_launch import VX_gpu_pkg::*, VX_raster_pkg::*; #(
     always @(posedge clk) begin
         if (reset) begin
             startup_pc_r <= '0;
+            num_regs_r   <= '0;
             frag_entry_r <= '0;
             frag_param_r <= '0;
         end else if (dcr_write_valid) begin
@@ -86,6 +88,9 @@ module VX_raster_launch import VX_gpu_pkg::*, VX_raster_pkg::*; #(
                 // so an injected fragment warp starts exactly where a KMU-launched
                 // CTA does.
                 `VX_DCR_KMU_STARTUP_ADDR0:    startup_pc_r[31:0] <= dcr_write_data;
+                // The fragment shader is in the same image, so it has the
+                // image's register counts.
+                `VX_DCR_KMU_NUM_REGS:         num_regs_r <= dcr_write_data[15:0];
             `ifdef VX_CFG_XLEN_64
                 `VX_DCR_KMU_STARTUP_ADDR1:    startup_pc_r[63:32] <= dcr_write_data;
             `endif
@@ -130,6 +135,7 @@ module VX_raster_launch import VX_gpu_pkg::*, VX_raster_pkg::*; #(
         frag_req.param             = `VX_CFG_MEM_ADDR_WIDTH'(frag_param_r);
         frag_req.ctx_id            = '0;
         frag_req.aligned_lmem_size = '0;                          // FS declares no LMEM
+        frag_req.num_regs          = num_regs_r;
         frag_req.args.fragment.stamps = lane_slice;
         frag_req.args.fragment.count  = count_r;
     end

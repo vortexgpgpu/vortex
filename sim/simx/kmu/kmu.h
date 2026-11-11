@@ -79,6 +79,7 @@ public:
   // executing (__vx_cta_entry). Persists across reset; the Fragment Work
   // Distributor reuses it as the launch PC for injected fragment warps.
   uint64_t startup_pc() const { return PC_; }
+  uint32_t num_regs() const { return num_regs_; }
 
 protected:
   void on_reset();

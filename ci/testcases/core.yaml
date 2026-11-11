@@ -165,6 +165,18 @@ tests:
   via: blackbox
   app: sgemm
   args: -n64
+# A register file holding 4 of 16 full register sets: conv3 (one warp per CTA)
+# keeps as many warps resident as its register count fits, and its warps'
+# registers sit at non-power-of-two set bases.
+- id: parity-gpr-rows
+  check: model_parity
+  via: blackbox
+  app: conv3
+  args: -n64
+  configs: -DVX_CFG_GPR_ROWS=64
+  shape:
+    warps: 16
+    threads: 8
 # Softmax: elementwise exp + reduction (FPU + reduction traffic).
 - id: parity-softmax
   check: model_parity

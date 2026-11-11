@@ -18,6 +18,7 @@ module VX_operands import VX_gpu_pkg::*; #(
 ) (
     input wire              clk,
     input wire              reset,
+    input gpr_layout_t     gpr_layout,
 
 `ifdef PERF_ENABLE
     output wire [PERF_CTR_BITS-1:0] perf_stalls,
@@ -71,6 +72,7 @@ module VX_operands import VX_gpu_pkg::*; #(
         ) opc_unit (
             .clk          (clk),
             .reset        (reset),
+            .gpr_layout (gpr_layout),
         `ifdef PERF_ENABLE
             .perf_stalls  (per_opc_perf_stalls[i]),
         `endif

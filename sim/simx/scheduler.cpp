@@ -416,7 +416,11 @@ void Scheduler::fwd_try_inject() {
   while (!fwd_waves_.empty()) {
     // Find any free warp slot — there is no driver warp to skip in the push model.
     int wid = -1;
-    for (uint32_t w = 0; w < cta_dispatcher_->usable_warps(); ++w) {
+    // A fragment wave is one warp of the image the KMU launches, so it has the
+    // image's register counts.
+    const uint32_t fit = cta_dispatcher_->fitting_warps(
+      core_->socket()->cluster()->processor()->kmu().num_regs(), 1);
+    for (uint32_t w = 0; w < fit; ++w) {
       bool firing = false;
       for (uint32_t i = 0; i < cta_fire_cnt_; ++i) {
         firing = firing || (cta_fire_wids_[i] == w);

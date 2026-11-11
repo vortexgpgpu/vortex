@@ -40,6 +40,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 
     // CTA context writes, to every SFU block's copy
     output cta_bcast_t      cta_bcast,
+    output gpr_layout_t     gpr_layout,
 
     VX_kmu_bus_if.slave     kmu_bus_if,
 
@@ -106,6 +107,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         .cta_init     (cta_init),
         .cta_bcast    (cta_bcast),
         .cta_lane_bcast(cta_lane_bcast),
+        .gpr_layout   (gpr_layout),
         .busy         (cta_dispatcher_busy)
     );
 

@@ -297,6 +297,7 @@ import VX_tcu_pkg::*;
 `endif
 
     cta_bcast_t cta_bcast;
+    gpr_layout_t gpr_layout;
 
     VX_scheduler #(
         .INSTANCE_ID (`SFORMATF(("%s-scheduler", INSTANCE_ID)))
@@ -317,6 +318,7 @@ import VX_tcu_pkg::*;
     `endif
         .committed_warps(committed_warps),
         .cta_bcast      (cta_bcast),
+        .gpr_layout     (gpr_layout),
         .kmu_bus_if     (kmu_bus_if),
         .gbar_bus_if    (gbar_bus_if),
         .cycles         (sched_cycles),
@@ -454,6 +456,7 @@ import VX_tcu_pkg::*;
             `endif
                 .clk                  (clk),
                 .reset                (reset),
+                .gpr_layout (gpr_layout),
                 .core_id              (core_id),
                 .slice_id             (ISSUE_ISW_W'(i)),
             `ifdef PERF_ENABLE
@@ -681,6 +684,7 @@ import VX_tcu_pkg::*;
                 `endif
                     .clk                  (clk),
                     .reset                (reset),
+                    .gpr_layout (gpr_layout),
                     .core_id              (core_id),
                     .slice_id             (ISSUE_ISW_W'(i)),
                 `ifdef PERF_ENABLE
@@ -755,6 +759,7 @@ import VX_tcu_pkg::*;
 
                 .clk            (clk),
                 .reset          (reset),
+                .gpr_layout (gpr_layout),
 
             `ifdef PERF_ENABLE
                 .issue_perf     (pipeline_perf.issue),

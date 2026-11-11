@@ -82,9 +82,10 @@ public:
   // (which run the same kernel as the host-launched driver warp).
   Word kernel_pc() const { return cur_kernel_pc_; }
 
-  // Warp slots the current kernel may occupy: those whose register sets fit
-  // the operand collectors' files. Slots at or above it stay idle.
-  uint32_t usable_warps() const { return usable_warps_; }
+  // Warp slots whose register sets fit: num_regs is VX_DCR_KMU_NUM_REGS
+  // ({Rf, Rx}, 0 for every register); warps interleave across the operand
+  // collectors, so each collector holds GPR_ROWS / R of them.
+  uint32_t fitting_warps(uint32_t num_regs, uint32_t cta_warps) const;
 
 protected:
   void on_reset();
@@ -97,10 +98,6 @@ private:
   // replaces the byte ring's free_size — slots at index >= this never fit.
   uint32_t usable_slots(uint32_t stride) const;
 
-  // Warp slots whose register sets fit: num_regs is VX_DCR_KMU_NUM_REGS
-  // ({Rf, Rx}, 0 for every register); warps interleave across the operand
-  // collectors, so each collector holds GPR_ROWS / R of them.
-  uint32_t fitting_warps(uint32_t num_regs, uint32_t cta_warps) const;
 
   Core*     core_;
   uint32_t  num_threads_;

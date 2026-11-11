@@ -20,6 +20,7 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
 
     input wire              clk,
     input wire              reset,
+    input gpr_layout_t     gpr_layout,
 
     input wire [ISSUE_ISW_W-1:0] slice_id,
 
@@ -70,6 +71,7 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     ) operands (
         .clk            (clk),
         .reset          (reset),
+        .gpr_layout (gpr_layout),
      `ifdef PERF_ENABLE
         .perf_stalls    (issue_perf.opd_stalls),
      `endif

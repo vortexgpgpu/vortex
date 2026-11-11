@@ -20,6 +20,7 @@ module VX_issue import VX_gpu_pkg::*; #(
 
     input wire              clk,
     input wire              reset,
+    input gpr_layout_t     gpr_layout,
 
 `ifdef PERF_ENABLE
     output issue_perf_t     issue_perf,
@@ -58,6 +59,7 @@ module VX_issue import VX_gpu_pkg::*; #(
             `SCOPE_IO_BIND(issue_id)
             .clk          (clk),
             .reset        (reset),
+            .gpr_layout (gpr_layout),
             .slice_id     (ISSUE_ISW_W'(issue_id)),
         `ifdef PERF_ENABLE
             .issue_perf   (per_issue_perf[issue_id]),

@@ -44,6 +44,9 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     output cta_bcast_t              cta_bcast,
     output cta_lane_bcast_t [NUM_LANES-1:0] cta_lane_bcast,
 
+    // register-file layout of the running kernel, to the operand collectors
+    output gpr_layout_t             gpr_layout,
+
     output wire                     busy
 );
     `UNUSED_SPARAM (INSTANCE_ID)
@@ -157,7 +160,8 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // Free-warp selection: one candidate per lane
     // -------------------------------------------------------------------------
     reg  [`VX_CFG_NUM_WARPS-1:0] dispatched_warps;
-    wire [`VX_CFG_NUM_WARPS-1:0] free_warps = ~(active_warps | dispatched_warps);
+    reg  [`VX_CFG_NUM_WARPS-1:0] warp_fits_r;
+    wire [`VX_CFG_NUM_WARPS-1:0] free_warps = ~(active_warps | dispatched_warps) & warp_fits_r;
     wire [NUM_LANES-1:0]               lane_ready;
     wire [NUM_LANES-1:0][NW_WIDTH-1:0] lane_wid;
     for (genvar l = 0; l < NUM_LANES; ++l) begin : g_lane_select
@@ -259,6 +263,40 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
         assign partial_tmask = `VX_CFG_NUM_THREADS'(0);
         assign part_warp_r = 1'b0;
     end
+
+    // -------------------------------------------------------------------------
+    // Register-file occupancy. Warps interleave across the GPR_NC operand
+    // collectors, so warp w takes register set w / GPR_NC of its collector and
+    // fits iff (w / GPR_NC + 1) * R <= GPR_ROWS, tested against a constant per w.
+    // A CTA's own warps are always granted, as a CTA that cannot launch all of
+    // them would never finish. Latched at accept: it holds while the CTA's warps
+    // launch, whatever the bus carries then.
+    // -------------------------------------------------------------------------
+    localparam GPR_NC   = `VX_CFG_ISSUE_WIDTH * `VX_CFG_NUM_OPCS;
+    localparam GPR_ROWS = `VX_CFG_GPR_ROWS;
+    `STATIC_ASSERT ((GPR_ROWS >= NUM_REGS) && ((GPR_ROWS % 4) == 0), ("invalid VX_CFG_GPR_ROWS"))
+    wire       kreq_all_regs = (kmu_req.num_regs == '0);
+    wire [8:0] kreq_rx = kreq_all_regs ? 9'(RV_REGS) : 9'(kmu_req.num_regs[7:0]);
+    wire [8:0] kreq_r  = kreq_all_regs ? 9'(NUM_REGS) : (9'(kmu_req.num_regs[7:0]) + 9'(kmu_req.num_regs[15:8]));
+    wire [`VX_CFG_NUM_WARPS-1:0] warp_fits;
+    for (genvar w = 0; w < `VX_CFG_NUM_WARPS; ++w) begin : g_warp_fits
+        assign warp_fits[w] = (32'(kreq_r) <= 32'(GPR_ROWS / (w / GPR_NC + 1)))
+                           || ((NW_WIDTH+1)'(w) < kmu_num_warps);
+    end
+
+    gpr_layout_t gpr_layout_r;
+    always_ff @(posedge clk) begin
+        if (reset) begin
+            warp_fits_r          <= '1;
+            gpr_layout_r.size4   <= GPR_SET_W'(NUM_REGS / 4);
+            gpr_layout_r.fp_off4 <= GPR_SET_W'(RV_REGS / 4);
+        end else if ((state == IDLE) && kmu_bus_if_fire) begin
+            warp_fits_r          <= warp_fits;
+            gpr_layout_r.size4   <= GPR_SET_W'(kreq_r >> 2);
+            gpr_layout_r.fp_off4 <= GPR_SET_W'(kreq_rx >> 2);
+        end
+    end
+    assign gpr_layout = gpr_layout_r;
 
     // Warps still to launch, after those latched last cycle, compared with each
     // launch position k as thermometers: block_size_r retires the warps latched

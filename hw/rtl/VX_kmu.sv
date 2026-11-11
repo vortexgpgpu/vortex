@@ -46,6 +46,7 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     reg [`VX_CFG_XLEN-1:0] dcr_param;
     reg [CTA_TID_WIDTH:0] dcr_block_size;
     reg [`VX_CFG_LMEM_LOG_SIZE:0] dcr_lmem_size;
+    reg [15:0] dcr_num_regs;
     reg [2:0][CTA_TID_WIDTH-1:0] dcr_warp_step;
     // Cluster shape: CTAs in the same cluster are guaranteed
     // co-resident on the same core. Default (1,1,1) reproduces the
@@ -117,6 +118,7 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
             dcr_param       <= '0;
             dcr_block_size  <= '0;
             dcr_lmem_size   <= '0;
+            dcr_num_regs    <= '0;
             dcr_warp_step   <= '0;
         end else if (dcr_req_valid && dcr_req_rw) begin
             case(dcr_req_addr)
@@ -143,6 +145,7 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
                 `VX_DCR_KMU_BLOCK_DIM_Z: dcr_block_dim[2] <= dcr_req_data[CTA_TID_WIDTH:0];
                 // Local memory size
                 `VX_DCR_KMU_LMEM_SIZE:   dcr_lmem_size  <= dcr_req_data[`VX_CFG_LMEM_LOG_SIZE:0];
+                `VX_DCR_KMU_NUM_REGS:    dcr_num_regs   <= dcr_req_data[15:0];
                 // Block size (total threads per CTA)
                 `VX_DCR_KMU_BLOCK_SIZE:  dcr_block_size <= dcr_req_data[CTA_TID_WIDTH:0];
                 // Warp steps
@@ -363,6 +366,7 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     assign kmu_req.param     = `VX_CFG_MEM_ADDR_WIDTH'(dcr_param);
     assign kmu_req.ctx_id    = ctx_id_r;
     assign kmu_req.aligned_lmem_size = aligned_lmem_size_r;
+    assign kmu_req.num_regs  = dcr_num_regs;
     assign kmu_req.args.compute = kmu_comp;
 
     // A compute message is one CLUSTER and carries no placement hint: the fan-out

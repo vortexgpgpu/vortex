@@ -29,6 +29,7 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
 ) (
     input wire              clk,
     input wire              reset,
+    input gpr_layout_t     gpr_layout,
 
 `ifdef PERF_ENABLE
     output wire [PERF_CTR_BITS-1:0] perf_stalls,
@@ -46,7 +47,14 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     localparam BANK_DATA_WIDTH  = `VX_CFG_XLEN * `VX_CFG_SIMD_WIDTH;
     localparam BANK_DATA_SIZE   = BANK_DATA_WIDTH / 8;
 
-    localparam BANK_SIZE        = (NUM_REGS * SIMD_COUNT * PER_OPC_WARPS) / NUM_BANKS;
+    // A warp slot's register set starts at slot * R rows, its FP registers Rx
+    // rows further (gpr_layout). R and Rx are multiples of 4, so a register's
+    // bank is still its number's low bits.
+    localparam GPR_W            = `CLOG2(`VX_CFG_GPR_ROWS);
+    localparam BANK_ROWS        = `VX_CFG_GPR_ROWS / NUM_BANKS;
+    localparam ROW_W            = `CLOG2(BANK_ROWS);
+    localparam BANK_SIZE        = (SIMD_COUNT == 1) ? BANK_ROWS : (SIMD_COUNT << ROW_W);
+    `STATIC_ASSERT (NUM_BANKS <= 4, ("register sets are 4-register aligned"))
     localparam BANK_ADDR_WIDTH  = `CLOG2(BANK_SIZE);
 
     localparam REG_REM_BITS     = NUM_REGS_BITS - BANK_SEL_BITS;
@@ -243,15 +251,33 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
         `UNUSED_VAR ({wr_slot, rd_slot})
     end
 
+    // register-set bases per warp slot, in registers: integer and FP
+    reg [PER_OPC_WARPS-1:0][GPR_W-1:0] slot_xbase_r, slot_fbase_r;
+    always_ff @(posedge clk) begin
+        for (integer i = 0; i < PER_OPC_WARPS; ++i) begin
+            slot_xbase_r[i] <= GPR_W'(i * gpr_layout.size4 * 4);
+            slot_fbase_r[i] <= GPR_W'(i * gpr_layout.size4 * 4 + gpr_layout.fp_off4 * 4);
+        end
+    end
+
+    // bank row of register {type, num} in a slot: the bank holds every
+    // NUM_BANKS-th register, so the row is the set base over NUM_BANKS plus the
+    // number's upper bits.
+    function automatic logic [ROW_W-1:0] gpr_row(input logic [PER_OPC_NW_W-1:0] slot,
+                                                 input logic [REG_REM_BITS-1:0] reg_rem);
+        logic is_fp;
+        logic [GPR_W-1:0] base;
+        is_fp = (REG_TYPES > 1) && reg_rem[REG_REM_BITS-1];
+        base  = is_fp ? slot_fbase_r[slot] : slot_xbase_r[slot];
+        return ROW_W'(base >> BANK_SEL_BITS) + ROW_W'(reg_rem[RV_REGS_BITS-BANK_SEL_BITS-1:0]);
+    endfunction
+
+    wire [ROW_W-1:0] gpr_wr_row = gpr_row(wr_slot, writeback_if.data.rd[NUM_REGS_BITS-1 -: REG_REM_BITS]);
     wire [BANK_ADDR_WIDTH-1:0] gpr_wr_addr;
     if (SIMD_COUNT != 1) begin : g_gpr_wr_addr_sid
-        wire [PER_OPC_NW_BITS + REG_REM_BITS-1:0] tmp;
-        `CONCAT(tmp, wr_slot,
-              writeback_if.data.rd[NUM_REGS_BITS-1 -: REG_REM_BITS], PER_OPC_NW_BITS, REG_REM_BITS)
-        assign gpr_wr_addr = {writeback_if.data.sid, tmp};
+        assign gpr_wr_addr = {writeback_if.data.sid, gpr_wr_row};
     end else begin : g_gpr_wr_addr
-        `CONCAT(gpr_wr_addr, wr_slot,
-              writeback_if.data.rd[NUM_REGS_BITS-1 -: REG_REM_BITS], PER_OPC_NW_BITS, REG_REM_BITS)
+        assign gpr_wr_addr = gpr_wr_row;
     end
 
     wire [BANK_SEL_WIDTH-1:0] gpr_wr_bank_idx;
@@ -275,17 +301,14 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
             assign gpr_wr_enabled = writeback_if.valid;
         end
 
+        wire [ROW_W-1:0] gpr_rd_row = gpr_row(rd_slot, gpr_rd_reg_st1[b]);
         wire [BANK_ADDR_WIDTH-1:0] gpr_rd_addr;
         if (SIMD_COUNT != 1) begin : g_gpr_rd_addr_sid
-            wire [PER_OPC_NW_BITS + REG_REM_BITS-1:0] tmp;
-            `CONCAT(tmp, rd_slot,
-                gpr_rd_reg_st1[b], PER_OPC_NW_BITS, REG_REM_BITS)
             // pipe_mdata packs {uuid, wis, cta_id, simd_pid, ...}; skip uuid+wis+cta_id
             // to extract simd_pid, which must match writeback_if.data.sid on the write path.
-            assign gpr_rd_addr = {pipe_mdata_st1[META_DATAW-UUID_WIDTH-ISSUE_WIS_W-NCTA_WIDTH-1 -: SIMD_IDX_W], tmp};
+            assign gpr_rd_addr = {pipe_mdata_st1[META_DATAW-UUID_WIDTH-ISSUE_WIS_W-NCTA_WIDTH-1 -: SIMD_IDX_W], gpr_rd_row};
         end else begin : g_gpr_rd_addr
-            `CONCAT(gpr_rd_addr, rd_slot,
-                gpr_rd_reg_st1[b], PER_OPC_NW_BITS, REG_REM_BITS)
+            assign gpr_rd_addr = gpr_rd_row;
         end
 
         VX_dp_ram #(

@@ -31,6 +31,7 @@ import VX_tcu_pkg::*;
 
     input wire              clk,
     input wire              reset,
+    input gpr_layout_t     gpr_layout,
 
     input wire [CORE_ID_WIDTH-1:0] core_id,
     input wire [ISSUE_ISW_W-1:0]   slice_id,
@@ -117,6 +118,7 @@ import VX_tcu_pkg::*;
         `SCOPE_IO_BIND  (0)
         .clk             (clk),
         .reset           (reset),
+        .gpr_layout (gpr_layout),
         .slice_id        (slice_id),
     `ifdef PERF_ENABLE
         .issue_perf      (issue_perf),
