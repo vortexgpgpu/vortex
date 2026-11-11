@@ -148,7 +148,17 @@ public:
     , fu_lock_(true)
     , fu_unlock_(true)
     , issue_yield_(false)
+    , umode_(UMODE_STD)
   {}
+
+  // Instruction bits [1:0] with XVortexU: which operands are uniform.
+  enum : uint8_t {
+    UMODE_OPERAND = 0b01,  // a uniform second operand of a per-thread instruction
+    UMODE_UNIFORM = 0b10,  // every operand uniform: runs once per warp, RV64 semantics
+    UMODE_STD     = 0b11,
+  };
+  void set_umode(uint8_t value) { umode_ = value; }
+  uint8_t get_umode() const { return umode_; }
 
   void set_fu_type(FUType fu_type) {
     fu_type_ = fu_type;
@@ -267,6 +277,7 @@ private:
   bool     fu_lock_;
   bool     fu_unlock_;
   bool     issue_yield_;
+  uint8_t  umode_;
 
   friend std::ostream &operator<<(std::ostream &, const Instr &);
 };

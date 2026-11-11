@@ -40,9 +40,12 @@ class DecodeError(Exception):
 
 
 def decode(w):
-    """(register fields as [(field, 'x'|'f')], image properties) of one instruction."""
-    if (w & 0x3) != 0x3:
-        raise DecodeError("compressed instruction")
+    """(register fields as [(field, 'x'|'f'|'u')], image properties) of one instruction."""
+    mode = w & 0x3
+    if mode == 0x0:
+        raise DecodeError("compressed or reserved encoding")
+    if mode != 0x3:
+        return decode_uniform(w | 0x3, mode)
     op = w & 0x7F
     f3 = (w >> 12) & 0x7
     f7 = (w >> 25) & 0x7F
@@ -139,6 +142,32 @@ def decode(w):
             return [('rs1', X)], (FP_FIXED,)            # fragment / wide FP stores: rs2 starts a run
         raise DecodeError("unknown EXT4 instruction")
     raise DecodeError("unknown opcode")
+
+
+def decode_uniform(w, mode):
+    """Fields of an XVortexU instruction (bits 1:0 = mode, w with them set to 11).
+    Uniform registers ('u') are not renamed."""
+    op = w & 0x7F
+    f3 = (w >> 12) & 0x7
+    f7 = (w >> 25) & 0x7F
+    X, U = 'x', 'u'
+    if mode == 0b10:
+        if op == OP_FCI and f3 == 0 and f7 in (0x79, 0x71):
+            return ([('rd', U), ('rs1', X)] if f7 == 0x79 else [('rd', X), ('rs1', U)]), ()
+        if op in (OP_R, OP_R_W, OP_I, OP_I_W, OP_LUI, OP_AUIPC, OP_B, OP_JALR, OP_L, OP_S) \
+           or (op == OP_SYS and f3 != 0):
+            fields, _ = decode(w)
+            return [(name, U) for name, _k in fields], ()
+        raise DecodeError("reserved uniform encoding")
+    if op in (OP_R, OP_R_W):
+        return [('rd', X), ('rs1', X), ('rs2', U)], ()
+    if op in (OP_I, OP_I_W):
+        return [('rd', X), ('rs1', U)], ()
+    if op in (OP_B, OP_S):
+        return [('rs1', X), ('rs2', U)], ()
+    if op == OP_AMO and (f7 >> 2) in (0x1e, 0x1f):
+        return [('rd', X), ('rs1', U), ('rs2', X)], ()
+    raise DecodeError("reserved uniform-operand encoding")
 
 
 def code_ranges(data):

@@ -69,16 +69,20 @@ common, mode `00` is the reserved place for reversed forms.
 - `u0`–`u31` per warp, 64 bits at either XLEN; `u0` reads zero.
 - A uniform operand of a per-thread instruction is broadcast to every lane;
   at XLEN=32 its low 32 bits are used, except as a global base.
-- `u.mvx` takes the first active lane, the rule Vortex already uses for CSR
-  writes and branch direction.
+- `u.mvx` takes the first active lane, zero-extended at XLEN=32, the rule
+  Vortex already uses for CSR writes and branch direction. A uniform
+  destination of any instruction takes the first active lane's result.
 - Global indexed addresses are 64-bit, truncated to the physical address
   width, and are never decoded as LMEM/stack/IO/OM apertures. Ordinary
   loads and stores keep 32-bit addresses (low 4 GB, apertures unchanged).
 
 ## ABI
 
-- At warp spawn the KMU sets `u1` to the kernel argument block and `u2` to a
-  per-warp scratch area for `u` spills; the others are zero.
+- Nothing is preset at warp launch: a kernel reads its argument block with a
+  uniform CSR read (`csrr u1, mscratch` in mode `10`) or moves it from `a0`
+  (`u.mvx`), so the hardware has no launch-time write port into the file. A
+  per-warp spill area for `u` registers is an ABI question for the compiler
+  phase.
 - `u3`–`u15` caller-saved, `u16`–`u31` callee-saved.
 - With the extension, device pointers in kernel arguments are 64-bit at
   XLEN=32; a kernel loads them with `ld ud, off(u1)` (mode `10`).
@@ -98,7 +102,6 @@ common, mode `00` is the reserved place for reversed forms.
 | LSU | `VX_lsu_agu.sv`, `VX_lsu_block.sv`, `VX_lsu_mem_path.sv`, `VX_uop_amo.sv` | single-lane mode-`10` access with `u` writeback; 64-bit `us1 + zext(xs2)` global indexed loads, stores and atomics |
 | Writeback | `VX_commit*.sv` | `u` destination, first-active-lane select |
 | CSR | `VX_csr_unit.sv` | `u` source and destination |
-| KMU | `VX_kmu.sv` | `u1`/`u2` preload |
 | Memory path | `VX_gpu_pkg.sv`, `hw/rtl/cache`, `hw/rtl/mem`, `hw/rtl/afu`, `hw/rtl/dxa` | physical width below the LSU; DXA descriptor base at full width |
 
 ### SimX

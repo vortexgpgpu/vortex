@@ -29,9 +29,18 @@ public:
   // 32-bit RV32I encoding (low2 == 0b11) or a 16-bit RVC in the low half
   // (low2 != 0b11); the decoder detects RVC, calls rvc_decompress, and
   // stamps IntrBrArgs.is_rvc accordingly.
+  // With VX_CFG_EXT_U_ENABLE, low2 of 0b10 and 0b01 are 32-bit instructions
+  // with uniform operands instead.
   Instr::Ptr decode(uint32_t code, uint64_t uuid);
 
 private:
+  // Decodes a 32-bit encoding; umode is the instruction's uniform mode
+  // (Instr::UMODE_*), which widens the integer operations to RV64 ones.
+  Instr::Ptr decode_code(uint32_t code, uint64_t uuid, uint8_t umode);
+#ifdef VX_CFG_EXT_U_ENABLE
+  Instr::Ptr decode_uniform(uint32_t code, uint64_t uuid, uint8_t umode);
+#endif
+
   PoolAllocator<Instr, 64>& instr_pool_;
 };
 

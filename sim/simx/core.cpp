@@ -724,7 +724,8 @@ public:
     // 4 bytes otherwise). Branch/JAL/JALR commit later overrides warp.PC
     // with the resolved target.
     {
-      bool is_rvc = (trace->code & 0x3u) != 0x3u;
+      // Without C, every instruction is 4 bytes, uniform ones included.
+      bool is_rvc = VX_CFG_EXT_C_ENABLED && ((trace->code & 0x3u) != 0x3u);
       scheduler_->advance_pc(trace, is_rvc ? 2 : 4);
     }
 

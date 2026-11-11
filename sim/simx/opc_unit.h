@@ -64,9 +64,11 @@ private:
   struct warp_regs_t {
     std::vector<std::vector<Word>>     ireg_file;   // [reg][thread]
     std::vector<std::vector<uint64_t>> freg_file;   // [reg][thread]
+    std::vector<uint64_t>              ureg_file;   // [reg], one per warp
     warp_regs_t(uint32_t num_threads)
       : ireg_file(MAX_NUM_REGS, std::vector<Word>(num_threads, 0))
       , freg_file(MAX_NUM_REGS, std::vector<uint64_t>(num_threads, 0))
+      , ureg_file(MAX_NUM_REGS, 0)
     {}
   };
 

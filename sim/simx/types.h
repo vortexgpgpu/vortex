@@ -149,6 +149,7 @@ enum class RegType {
   None,
   Integer,
   Float,
+  Uniform,
   Count
 };
 
@@ -157,6 +158,7 @@ inline std::ostream &operator<<(std::ostream &os, const RegType& type) {
   case RegType::None: break;
   case RegType::Integer: os << "x"; break;
   case RegType::Float:   os << "f"; break;
+  case RegType::Uniform: os << "u"; break;
   default: assert(false);
   }
   return os;
@@ -386,6 +388,7 @@ struct IntrLsuArgs {
   uint32_t stride : 4;  // per-uop multiplier: 0 = regular LD/ST; 0..N-1 = packLD uop_idx
   int32_t  offset;      // immediate addr offset (signed); 0 for packLD uops
   bool     matrix = false; // vx_ldm/vx_stm: offset[4:0] is the fragment shape
+  bool     indexed = false; // global indexed: addr = rs1 + zext(rs2), store data in src 2
 };
 
 // A fence carries no access width; its width field says what it orders.

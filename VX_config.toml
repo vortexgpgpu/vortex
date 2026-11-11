@@ -53,6 +53,11 @@ VX_CFG_EXT_LDST_WIDE_ENABLE = false
 # flw/fsw uop per register, in the fragment register layout the TCU reads.
 # Requires F; does not require the TCU.
 VX_CFG_EXT_LDST_MATRIX_ENABLE = false
+# Uniform registers: a per-warp file u0-u31 of 64-bit registers. Instruction
+# bits [1:0] select it: 0b10 every operand uniform, 0b01 a uniform second
+# operand (docs/proposals/uniform_registers_proposal.md). They are the
+# compressed encodings, so it requires C disabled.
+VX_CFG_EXT_U_ENABLE = false
 VX_CFG_VLEN = "expr: $VX_CFG_XLEN * 4"
 
 [pipeline]

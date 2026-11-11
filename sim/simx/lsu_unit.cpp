@@ -233,6 +233,13 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 	bool is_write;
 	int64_t  offset;
 	uint32_t stride;
+	bool     data_src2 = false;
+	// A uniform access is made once per warp, by its first active lane.
+	const bool uniform = (trace->instr_ptr->get_umode() == Instr::UMODE_UNIFORM);
+	uint32_t uniform_tid = 0;
+	while (uniform && uniform_tid + 1 < num_threads && !tmask.test(uniform_tid)) {
+		++uniform_tid;
+	}
 	if (is_amo) {
 		auto amo_args = std::get<IntrAmoArgs>(trace->instr_ptr->get_args());
 		data_bytes = 1u << (amo_args.width & 0x3);
@@ -245,6 +252,7 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 		is_write   = (lsu_tag && *lsu_tag == LsuType::STORE);
 		offset     = lsu_args.offset;
 		stride     = lsu_args.stride;
+		data_src2  = lsu_args.indexed;
 		if (is_write && lsu_args.width > 3)
 			std::abort();
 	}
@@ -262,7 +270,7 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 		e.tid  = t;
 		e.data = 0;
 		e.amo_cmp = 0;
-		if (tmask.test(t)) {
+		if (tmask.test(t) && (!uniform || t == uniform_tid)) {
 			// AGU result is VX_CFG_XLEN-bit wide.
 			// Cast through Word so 32-bit VX_CFG_XLEN doesn't carry sign-extended
 			// upper bits into the 64-bit address field.
@@ -291,7 +299,7 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 			if (is_write || is_amo) {
 				// Stores carry rs2 as data; AMOs carry rs2 as the RMW operand
 				// (LR encodes rs2 = x0, so the captured value is 0).
-				e.data = rs2_data[t].u64;
+				e.data = data_src2 ? trace->src_data[2][t].u64 : rs2_data[t].u64;
 			}
 			if (is_cas) {
 				e.amo_cmp = trace->src_data[2][t].u64;
@@ -361,6 +369,7 @@ void LsuUnit::process_response_step(uint32_t b) {
 
 	if (entry.is_load) {
 		bool dst_float = (trace->dst_reg.type == RegType::Float);
+		bool dst_uniform = (trace->dst_reg.type == RegType::Uniform);
 		uint32_t data_bytes = 1u << (entry.lsu_args.width & 0x3);
 		uint32_t data_width = 8 * data_bytes;
 		uint8_t  data_bs    = trace->dst_bytesel & 0x0F;
@@ -399,6 +408,12 @@ void LsuUnit::process_response_step(uint32_t b) {
 				break;
 			default:
 				std::abort();
+			}
+			// A uniform register is 64 bits at either XLEN: the signed loads
+			// extend to it.
+			if (dst_uniform && entry.lsu_args.width < 3) {
+				uint32_t sh = 64 - data_width;
+				formatted = uint64_t(int64_t(read_data << sh) >> sh);
 			}
 			// Place at bytesel-specified position; OR-in NaN-box for Float dest.
 			auto& dst = entry.trace->dst_data.at(lane_info.tid);

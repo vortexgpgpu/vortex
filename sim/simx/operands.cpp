@@ -61,6 +61,10 @@ inline void log_src_operand(uint32_t src_index,
     }
     DPN(2, "} (#" << std::dec << uuid << ")" << std::endl);
   } break;
+  case RegType::Uniform: {
+    DPH(2, "Src" << src_index << " Reg: " << reg << "=0x" << std::hex << values[0].u64
+        << std::dec << " (#" << std::dec << uuid << ")" << std::endl);
+  } break;
   case RegType::Float: {
     DPH(2, "Src" << src_index << " Reg: " << reg << "={");
     for (uint32_t t = 0; t < tmask.size(); ++t) {

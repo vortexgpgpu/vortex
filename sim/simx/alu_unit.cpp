@@ -105,6 +105,66 @@ uint32_t AluUnit::latency_of(const instr_trace_t* trace) const {
 	std::abort();
 }
 
+// A uniform-mode integer operation: once per warp, with RV64 semantics at
+// either XLEN (the W forms take 32-bit operands and sign-extend the result).
+static uint64_t uniform_op(const OpType& op_type, const IntrArgs& args,
+                           uint64_t a, uint64_t b, uint64_t pc) {
+	using u128 = unsigned __int128;
+	using i128 = __int128;
+	auto sx32 = [](uint64_t v) { return uint64_t(int64_t(int32_t(uint32_t(v)))); };
+	if (auto alu = std::get_if<AluType>(&op_type)) {
+		auto aluArgs = std::get<IntrAluArgs>(args);
+		uint64_t imm = uint64_t(int64_t(int32_t(aluArgs.imm)));
+		uint64_t c = aluArgs.is_imm ? imm : b;
+		bool w = aluArgs.is_w;
+		uint32_t sh = uint32_t(c) & (w ? 31 : 63);
+		uint64_t r;
+		switch (*alu) {
+		case AluType::LUI:   return imm;
+		case AluType::AUIPC: return pc + imm;
+		case AluType::ADD:   r = a + c; break;
+		case AluType::SUB:   r = a - c; break;
+		case AluType::SLL:   r = w ? uint64_t(uint32_t(a) << sh) : (a << sh); break;
+		case AluType::SRL:   r = w ? uint64_t(uint32_t(a) >> sh) : (a >> sh); break;
+		case AluType::SRA:   r = w ? uint64_t(int32_t(uint32_t(a)) >> sh) : uint64_t(int64_t(a) >> sh); break;
+		case AluType::SLT:   return int64_t(a) < int64_t(c);
+		case AluType::SLTU:  return a < c;
+		case AluType::XOR:   return a ^ c;
+		case AluType::OR:    return a | c;
+		case AluType::AND:   return a & c;
+		case AluType::CZERO: return ((aluArgs.imm == 0) == (b == 0)) ? 0 : a;
+		default: std::abort();
+		}
+		return w ? sx32(r) : r;
+	}
+	auto mdv = std::get<MdvType>(op_type);
+	bool w = std::get<IntrMdvArgs>(args).is_w;
+	if (w) {
+		int32_t sa = int32_t(uint32_t(a)), sb = int32_t(uint32_t(b));
+		uint32_t ua = uint32_t(a), ub = uint32_t(b);
+		switch (mdv) {
+		case MdvType::MUL:  return sx32(uint64_t(ua) * ub);
+		case MdvType::DIV:  return sx32(sb == 0 ? -1 : (sa == INT32_MIN && sb == -1) ? sa : sa / sb);
+		case MdvType::DIVU: return sx32(ub == 0 ? ~0u : ua / ub);
+		case MdvType::REM:  return sx32(sb == 0 ? sa : (sa == INT32_MIN && sb == -1) ? 0 : sa % sb);
+		case MdvType::REMU: return sx32(ub == 0 ? ua : ua % ub);
+		default: std::abort();
+		}
+	}
+	int64_t sa = int64_t(a), sb = int64_t(b);
+	switch (mdv) {
+	case MdvType::MUL:    return a * b;
+	case MdvType::MULH:   return uint64_t((i128(sa) * i128(sb)) >> 64);
+	case MdvType::MULHSU: return uint64_t((i128(sa) * i128(u128(b))) >> 64);
+	case MdvType::MULHU:  return uint64_t((u128(a) * u128(b)) >> 64);
+	case MdvType::DIV:    return b == 0 ? ~0ull : (sa == INT64_MIN && sb == -1) ? a : uint64_t(sa / sb);
+	case MdvType::DIVU:   return b == 0 ? ~0ull : a / b;
+	case MdvType::REM:    return b == 0 ? a : (sa == INT64_MIN && sb == -1) ? 0 : uint64_t(sa % sb);
+	case MdvType::REMU:   return b == 0 ? a : a % b;
+	default: std::abort();
+	}
+}
+
 void AluUnit::execute(instr_trace_t* trace) {
 	auto& sched = core_->scheduler();
 	auto& warp = sched.warp(trace->wid);
@@ -143,7 +203,14 @@ void AluUnit::execute(instr_trace_t* trace) {
 	trace->dst_data.assign(num_threads, reg_data_t{});
 	auto& rd_data = trace->dst_data;
 
-	if (std::get_if<AluType>(&trace->op_type)) {
+	const bool uniform = (instr.get_umode() == Instr::UMODE_UNIFORM);
+	if (uniform && (std::get_if<AluType>(&trace->op_type) || std::get_if<MdvType>(&trace->op_type))) {
+		uint32_t t = thread_start;
+		uint64_t r = uniform_op(trace->op_type, instrArgs, rs1_data[t].u64, rs2_data[t].u64, trace->PC);
+		for (; t < num_threads; ++t) {
+			if (tmask.test(t)) rd_data[t].u64 = r;
+		}
+	} else if (std::get_if<AluType>(&trace->op_type)) {
 		auto alu_type = std::get<AluType>(trace->op_type);
 		auto aluArgs = std::get<IntrAluArgs>(instrArgs);
 		Word imm = sext<Word>(aluArgs.imm, 32);
@@ -385,6 +452,19 @@ void AluUnit::execute(instr_trace_t* trace) {
 		case BrType::BR: {
 			bool curr_taken = false;
 			uint32_t t = static_cast<uint32_t>(thread_last);
+			if (uniform) {
+				// 64-bit uniform operands
+				uint64_t a = rs1_data[t].u64, b = rs2_data[t].u64;
+				switch (brArgs.cmp) {
+				case 0: curr_taken = (a == b); break;
+				case 1: curr_taken = (a != b); break;
+				case 4: curr_taken = (int64_t(a) <  int64_t(b)); break;
+				case 5: curr_taken = (int64_t(a) >= int64_t(b)); break;
+				case 6: curr_taken = (a <  b); break;
+				case 7: curr_taken = (a >= b); break;
+				default: std::abort();
+				}
+			} else
 			switch (brArgs.cmp) {
 			case 0: curr_taken = (rs1_data[t].i == rs2_data[t].i); break;
 			case 1: curr_taken = (rs1_data[t].i != rs2_data[t].i); break;

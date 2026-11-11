@@ -67,6 +67,9 @@ static uint32_t compute_bank_conflicts(const instr_trace_t* trace) {
     if (reg.type == RegType::Integer && reg.id() == 0) {
       continue; // skip x0
     }
+    if (reg.type == RegType::Uniform) {
+      continue; // the uniform file has its own read port
+    }
     most = std::max(most, ++per_bank[reg.idx % VX_CFG_NUM_GPR_BANKS]);
   }
   return most ? (most - 1) : 0;
@@ -117,6 +120,13 @@ void OpcUnit::read_src(std::vector<reg_data_t>& out,
     const auto& src = slot.freg_file[reg.idx];
     for (uint32_t t = 0; t < num_threads_; ++t) {
       out[t].u64 = src[t];
+    }
+  } break;
+  case RegType::Uniform: {
+    // broadcast to every lane
+    uint64_t value = slot.ureg_file[reg.idx];
+    for (uint32_t t = 0; t < num_threads_; ++t) {
+      out[t].u64 = value;
     }
   } break;
   case RegType::None:
@@ -183,6 +193,19 @@ void OpcUnit::writeback(instr_trace_t* trace, uint32_t wid) {
       }
     }
     DPN(2, "} (#" << std::dec << trace->uuid << ")" << std::endl);
+  } break;
+  case RegType::Uniform: {
+    // the first active lane's result; u0 reads zero
+    if (rdest.idx == 0)
+      break;
+    for (uint32_t t = 0; t < num_threads; ++t) {
+      if (trace->tmask.test(t)) {
+        regs_.at(warp_slot).ureg_file.at(rdest.idx) = trace->dst_data[t].u64;
+        DPH(2, "Dest Reg: " << rdest << "=0x" << std::hex << trace->dst_data[t].u64
+            << std::dec << " (#" << trace->uuid << ")" << std::endl);
+        break;
+      }
+    }
   } break;
   default:
     std::cout << "Unrecognized register write back type: " << rdest.type << std::endl;
