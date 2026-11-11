@@ -6,7 +6,7 @@
     "dut": "tcu",
     "result": {
       "bram": 0.0,
-      "build_time_s": 35,
+      "build_time_s": 55,
       "deep_endpoints": 2422,
       "deepest_paths": [
         "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[6]",
@@ -66,7 +66,7 @@
     "dut": "tensor",
     "result": {
       "bram": 114.5,
-      "build_time_s": 86,
+      "build_time_s": 110,
       "deep_endpoints": 4737,
       "deepest_paths": [
         "25  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[14]",

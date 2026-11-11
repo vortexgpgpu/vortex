@@ -80,7 +80,7 @@
     "dut": "core",
     "result": {
       "bram": 129.0,
-      "build_time_s": 75,
+      "build_time_s": 90,
       "deep_endpoints": 1536,
       "deepest_paths": [
         "15  core/g_compute_slices.g_slices_0.compute_slice/frontend_slice/fetch/inflight[2] -> core/g_compute_slices.g_slices_0.compute_slice/frontend_slice/fetch/req_buf/g_eb2.stream_buffer/g_buffer.data_out_r.d[28]",
@@ -166,7 +166,7 @@
     "dut": "lmem",
     "result": {
       "bram": 16.0,
-      "build_time_s": 20,
+      "build_time_s": 25,
       "deep_endpoints": 0,
       "deepest_paths": [
         "9  lmem_unit/g_data_store_0.g_amo.amo_old_r[0] -> lmem_unit/g_data_store_0.g_dual_port.lmem_store/g_bram.g_wren.ram.wd[0]",
@@ -211,8 +211,8 @@
     "dut": "vortex",
     "result": {
       "bram": 81.0,
-      "build_time_s": 35,
-      "deep_endpoints": 3368,
+      "build_time_s": 40,
+      "deep_endpoints": 3253,
       "deepest_paths": [
         "23  dev_ptw/rsp_arb/g_input_select.g_arbiter.g_out_buf_0.out_buf/g_eb2.stream_buffer/g_buffer.buffer_r[30] -> g_clusters_0.cluster/l2tlb/set_mru_r.d[2]",
         "23  dev_ptw/rsp_arb/g_input_select.g_arbiter.g_out_buf_0.out_buf/g_eb2.stream_buffer/g_buffer.buffer_r[30] -> g_clusters_0.cluster/l2tlb/set_mru_r.d[3]",
@@ -249,10 +249,10 @@
         "g_clusters_*_cluster/g_sockets_*_socket/g_cores_*_core.icache_bus_if_0_rsp_ready": 1,
         "g_clusters_*_cluster/g_sockets_*_socket/g_cores_*_core.kmu_bus_if_ready": 1
       },
-      "lut": 131595,
+      "lut": 131616,
       "lutram": 10082,
       "max_levels": 23,
-      "pred_fmax_mhz": 273.4,
+      "pred_fmax_mhz": 268.8,
       "risk_endpoints": 187,
       "units": {
         "dev_ptw/walk_cache": 8,
@@ -277,9 +277,9 @@
         "g_clusters_*_cluster/g_sockets_*_socket/dcache/g_cache_wrap_*_cache_wrap/g_cache_cache/g_banks_*_bank/reg_s0": 12,
         "g_clusters_*_cluster/g_sockets_*_socket/dcache/g_cache_wrap_*_cache_wrap/g_cache_cache/g_banks_*_bank/reg_s1": 11,
         "g_clusters_*_cluster/g_sockets_*_socket/dmmu": 13,
-        "g_clusters_*_cluster/g_sockets_*_socket/dmmu/g_lane_bus_*_req_skid": 15,
-        "g_clusters_*_cluster/g_sockets_*_socket/dmmu/g_pipe_*_out_pipe/g_eb2_stream_buffer": 18,
-        "g_clusters_*_cluster/g_sockets_*_socket/dmmu/tlb/cam": 15,
+        "g_clusters_*_cluster/g_sockets_*_socket/dmmu/g_lane_bus_*_req_skid": 14,
+        "g_clusters_*_cluster/g_sockets_*_socket/dmmu/g_pipe_*_out_pipe/g_eb2_stream_buffer": 16,
+        "g_clusters_*_cluster/g_sockets_*_socket/dmmu/tlb/cam": 14,
         "g_clusters_*_cluster/g_sockets_*_socket/dmmu/tlb/mshr": 14,
         "g_clusters_*_cluster/g_sockets_*_socket/dmmu/tlb/mshr/reqpool": 12,
         "g_clusters_*_cluster/g_sockets_*_socket/g_cores_*_core/g_compute_slices_g_slices_*_compute_slice/backend_slice/execute_slice/alu_block/alu_int/rsp_buf/g_eb1_pipe_buffer/g_register_g_pipe_regs_*_pipe_register": 11,
@@ -302,7 +302,6 @@
         "g_clusters_*_cluster/g_sockets_*_socket/g_cores_*_core/g_compute_slices_g_slices_*_compute_slice/backend_slice/issue_slice/scoreboard": 11,
         "g_clusters_*_cluster/g_sockets_*_socket/g_cores_*_core/g_compute_slices_g_slices_*_compute_slice/backend_slice/issue_slice/scoreboard/g_fu_goingfull_*_fu_pending": 11,
         "g_clusters_*_cluster/g_sockets_*_socket/g_cores_*_core/g_compute_slices_g_slices_*_compute_slice/backend_slice/issue_slice/scoreboard/g_stanging_bufs_*_stanging_buf/g_register_g_pipe_regs_*_pipe_register": 8,
-        "g_clusters_*_cluster/g_sockets_*_socket/g_cores_*_core/g_compute_slices_g_slices_*_compute_slice/backend_slice/issue_slice/scoreboard/out_arb/g_round_robin_rr_arbiter": 8,
         "g_clusters_*_cluster/g_sockets_*_socket/g_cores_*_core/g_compute_slices_g_slices_*_compute_slice/backend_slice/issue_slice/scoreboard/out_buf/g_eb2_stream_buffer": 9,
         "g_clusters_*_cluster/g_sockets_*_socket/g_cores_*_core/g_compute_slices_g_slices_*_compute_slice/frontend_slice/warp_sched": 9,
         "g_clusters_*_cluster/g_sockets_*_socket/g_cores_*_core/mem_unit/lmem_unit/engine_a/rsp_queue/pending_size": 8,
@@ -316,9 +315,9 @@
         "g_clusters_*_cluster/g_sockets_*_socket/icache/g_cache_wrap_*_cache_wrap/g_cache_cache/g_banks_*_bank/cache_tags/g_way_decode_*___buffer_ex228": 8,
         "g_clusters_*_cluster/g_sockets_*_socket/icache/g_cache_wrap_*_cache_wrap/g_cache_cache/g_banks_*_bank/mshr_pending_size": 8,
         "g_clusters_*_cluster/g_sockets_*_socket/icache/g_cache_wrap_*_cache_wrap/g_cache_cache/g_banks_*_bank/reg_s1": 10,
-        "g_clusters_*_cluster/g_sockets_*_socket/immu/g_lane_bus_*_req_skid": 14,
-        "g_clusters_*_cluster/g_sockets_*_socket/immu/g_pipe_*_out_pipe/g_eb2_stream_buffer": 16,
-        "g_clusters_*_cluster/g_sockets_*_socket/immu/tlb/cam": 17,
+        "g_clusters_*_cluster/g_sockets_*_socket/immu/g_lane_bus_*_req_skid": 11,
+        "g_clusters_*_cluster/g_sockets_*_socket/immu/g_pipe_*_out_pipe/g_eb2_stream_buffer": 12,
+        "g_clusters_*_cluster/g_sockets_*_socket/immu/tlb/cam": 14,
         "g_clusters_*_cluster/g_sockets_*_socket/immu/tlb/mshr": 11,
         "g_clusters_*_cluster/g_sockets_*_socket/immu/tlb/mshr/reqpool": 9,
         "g_clusters_*_cluster/l2tlb": 23,
@@ -328,13 +327,13 @@
         "g_clusters_*_cluster/l2tlb/mshr/payload_store": 8,
         "g_clusters_*_cluster/l2tlb/mshr/reqpool": 12,
         "g_clusters_*_cluster/l2tlb/rsp_arb/g_input_select_g_arbiter_arbiter/g_round_robin_rr_arbiter": 9,
-        "g_clusters_*_cluster/l2tlb/rsp_arb/g_input_select_g_arbiter_g_out_buf_*_out_buf/g_eb2_stream_buffer": 13,
+        "g_clusters_*_cluster/l2tlb/rsp_arb/g_input_select_g_arbiter_g_out_buf_*_out_buf/g_eb2_stream_buffer": 10,
         "g_clusters_*_cluster/l2tlb/set_ram": 12,
         "g_clusters_*_cluster/tlb_cluster_arb/g_arb_req_arb/g_input_select_g_arbiter_g_out_buf_*_out_buf/g_eb2_stream_buffer": 10,
         "kmu": 9
       },
       "uram": 0,
-      "watch_endpoints": 11795,
+      "watch_endpoints": 11791,
       "watch_levels": 8
     }
   }
