@@ -124,9 +124,9 @@ void OpcUnit::read_src(std::vector<reg_data_t>& out,
   } break;
   case RegType::Uniform: {
     // broadcast to every lane
-    uint64_t value = slot.ureg_file[reg.idx];
+    Word value = slot.ureg_file[reg.idx];
     for (uint32_t t = 0; t < num_threads_; ++t) {
-      out[t].u64 = value;
+      out[t].u = value;
     }
   } break;
   case RegType::None:
@@ -200,8 +200,8 @@ void OpcUnit::writeback(instr_trace_t* trace, uint32_t wid) {
       break;
     for (uint32_t t = 0; t < num_threads; ++t) {
       if (trace->tmask.test(t)) {
-        regs_.at(warp_slot).ureg_file.at(rdest.idx) = trace->dst_data[t].u64;
-        DPH(2, "Dest Reg: " << rdest << "=0x" << std::hex << trace->dst_data[t].u64
+        regs_.at(warp_slot).ureg_file.at(rdest.idx) = trace->dst_data[t].u;
+        DPH(2, "Dest Reg: " << rdest << "=0x" << std::hex << trace->dst_data[t].u
             << std::dec << " (#" << trace->uuid << ")" << std::endl);
         break;
       }

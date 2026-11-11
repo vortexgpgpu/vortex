@@ -34,9 +34,7 @@ public:
   Instr::Ptr decode(uint32_t code, uint64_t uuid);
 
 private:
-  // Decodes a 32-bit encoding; umode is the instruction's uniform mode
-  // (Instr::UMODE_*), which widens the integer operations to RV64 ones.
-  Instr::Ptr decode_code(uint32_t code, uint64_t uuid, uint8_t umode);
+  Instr::Ptr decode_code(uint32_t code, uint64_t uuid);
 #ifdef VX_CFG_EXT_U_ENABLE
   Instr::Ptr decode_uniform(uint32_t code, uint64_t uuid, uint8_t umode);
 #endif

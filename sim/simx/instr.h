@@ -154,7 +154,7 @@ public:
   // Instruction bits [1:0] with XVortexU: which operands are uniform.
   enum : uint8_t {
     UMODE_OPERAND = 0b01,  // a uniform second operand of a per-thread instruction
-    UMODE_UNIFORM = 0b10,  // every operand uniform: runs once per warp, RV64 semantics
+    UMODE_UNIFORM = 0b10,  // every operand uniform: one value per warp
     UMODE_STD     = 0b11,
   };
   void set_umode(uint8_t value) { umode_ = value; }

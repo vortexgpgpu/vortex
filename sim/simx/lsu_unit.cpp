@@ -369,7 +369,6 @@ void LsuUnit::process_response_step(uint32_t b) {
 
 	if (entry.is_load) {
 		bool dst_float = (trace->dst_reg.type == RegType::Float);
-		bool dst_uniform = (trace->dst_reg.type == RegType::Uniform);
 		uint32_t data_bytes = 1u << (entry.lsu_args.width & 0x3);
 		uint32_t data_width = 8 * data_bytes;
 		uint8_t  data_bs    = trace->dst_bytesel & 0x0F;
@@ -408,12 +407,6 @@ void LsuUnit::process_response_step(uint32_t b) {
 				break;
 			default:
 				std::abort();
-			}
-			// A uniform register is 64 bits at either XLEN: the signed loads
-			// extend to it.
-			if (dst_uniform && entry.lsu_args.width < 3) {
-				uint32_t sh = 64 - data_width;
-				formatted = uint64_t(int64_t(read_data << sh) >> sh);
 			}
 			// Place at bytesel-specified position; OR-in NaN-box for Float dest.
 			auto& dst = entry.trace->dst_data.at(lane_info.tid);

@@ -14,11 +14,11 @@
 #ifndef __VX_UNIFORM_H__
 #define __VX_UNIFORM_H__
 
-// Uniform registers (VX_CFG_EXT_U_ENABLE): a per-warp file u0-u31 of 64-bit
+// Uniform registers (VX_CFG_EXT_U_ENABLE): a per-warp file u0-u31 of XLEN-bit
 // registers, named here by number (ud, us1, us2: 1-31, 0 reads zero). An
-// instruction's bits [1:0] select the file of its standard encoding:
-//   0b10: every register is uniform; integer operations have RV64 semantics
-//         at either XLEN, loads and stores are made once per warp.
+// instruction's bits [1:0] select the file of its standard encoding, whose
+// semantics it keeps (the W forms, ld/sd and lwu at XLEN=64 only):
+//   0b10: every register is uniform; loads and stores are made once per warp.
 //   0b01: a per-thread instruction whose second source (the only source of an
 //         immediate form, a store's data) is uniform, broadcast to every lane.
 // The compiler does not see the uniform registers, so these are volatile and
@@ -66,6 +66,11 @@
 #define VX_U_H  1
 #define VX_U_W  2
 #define VX_U_D  3
+#if __riscv_xlen == 64
+#define VX_U_XL VX_U_D
+#else
+#define VX_U_XL VX_U_W
+#endif
 #define VX_U_BU 4
 #define VX_U_HU 5
 #define VX_U_WU 6
@@ -74,7 +79,7 @@
   __asm__ volatile (".insn r %0, %1, %2, " rd ", " rs1 ", " rs2 \
                     :: "i"(opc), "i"(f3), "i"(f7))
 
-// ud = us1 op us2 (64-bit), and the 32-bit W forms
+// ud = us1 op us2, and the W forms (XLEN=64)
 #define vx_u_op(op, ud, us1, us2)  __VX_U_R(VX_U_OP, op, __VX_U(ud), __VX_U(us1), __VX_U(us2))
 #define vx_u_opw(op, ud, us1, us2) __VX_U_R(VX_U_OP_32, op, __VX_U(ud), __VX_U(us1), __VX_U(us2))
 
@@ -105,7 +110,7 @@
   __asm__ volatile (".insn i %0, 2, " __VX_U(ud) ", x0, %1" \
                     :: "i"(VX_U_SYSTEM), "i"(((csr) & 0x800) ? (csr) - 0x1000 : (csr)))
 
-// ud = x of the first active lane, zero-extended
+// ud = x of the first active lane
 #define vx_u_mvx(ud, x) \
   __asm__ volatile (".insn r %0, 0, 0x79, " __VX_U(ud) ", %1, x0" \
                     :: "i"(VX_U_OP_FP), "r"(x))
@@ -137,7 +142,7 @@
   __asm__ volatile (".insn s %0, %1, " __VX_U(us2) ", %2(%3)" \
                     :: "i"(VX_UO_STORE), "i"(width), "i"(off), "r"(xs1) : "memory")
 
-// per thread, global indexed: mem[us1 + zext(xidx)] (64-bit base)
+// per thread, global indexed: mem[us1 + xidx]
 #define vx_u_gload(width, us1, xidx) ({ \
   size_t __x; \
   __asm__ volatile (".insn r %1, %2, 0x78, %0, " __VX_U(us1) ", %3" \

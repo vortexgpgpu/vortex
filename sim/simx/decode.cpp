@@ -547,7 +547,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     return decode_uniform(code | 0x3u, uuid, code & 0x3u);
   }
 #endif
-  return decode_code(code, uuid, Instr::UMODE_STD);
+  return decode_code(code, uuid);
 }
 
 #ifdef VX_CFG_EXT_U_ENABLE
@@ -576,8 +576,8 @@ Instr::Ptr Decoder::decode_uniform(uint32_t code, uint64_t uuid, uint8_t umode) 
     return instr;
   }
 
-  // Global indexed accesses on the AMO opcode, at us1 + zext(xs2): funct5
-  // 0x1e loads into xd, 0x1f stores the register in the rd field.
+  // Global indexed accesses on the AMO opcode, at us1 + xs2: funct5 0x1e
+  // loads into xd, 0x1f stores the register in the rd field.
   if (!uniform && op == Opcode::AMO && (funct5 == 0x1e || funct5 == 0x1f)) {
     auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::LSU);
     bool is_load = (funct5 == 0x1e);
@@ -601,18 +601,23 @@ Instr::Ptr Decoder::decode_uniform(uint32_t code, uint64_t uuid, uint8_t umode) 
   case Opcode::R:
   case Opcode::I:
   case Opcode::B:
-  case Opcode::S:
     legal = true;
+    break;
+  case Opcode::S:
+    legal = (VX_CFG_XLEN == 64 || funct3 != 3);
     break;
   case Opcode::R_W:
   case Opcode::I_W:
-    legal = uniform || (VX_CFG_XLEN == 64);
+    legal = (VX_CFG_XLEN == 64);
     break;
   case Opcode::LUI:
   case Opcode::AUIPC:
   case Opcode::JALR:
-  case Opcode::L:
     legal = uniform;
+    break;
+  case Opcode::L:
+    // ld and lwu are RV64 only, as in the base ISA
+    legal = uniform && (VX_CFG_XLEN == 64 || (funct3 != 3 && funct3 != 6));
     break;
   case Opcode::SYS:
     legal = uniform && (funct3 != 0);
@@ -627,7 +632,7 @@ Instr::Ptr Decoder::decode_uniform(uint32_t code, uint64_t uuid, uint8_t umode) 
     std::abort();
   }
 
-  auto instr = decode_code(code, uuid, umode);
+  auto instr = decode_code(code, uuid);
   if (uniform) {
     auto rd_reg = instr->get_dest_reg();
     if (rd_reg.type == RegType::Integer) {
@@ -650,9 +655,7 @@ Instr::Ptr Decoder::decode_uniform(uint32_t code, uint64_t uuid, uint8_t umode) 
 }
 #endif
 
-Instr::Ptr Decoder::decode_code(uint32_t code, uint64_t uuid, uint8_t umode) {
-  const bool uniform = (umode == Instr::UMODE_UNIFORM);
-  __unused(uniform);
+Instr::Ptr Decoder::decode_code(uint32_t code, uint64_t uuid) {
   // Detect RVC from the raw bits and expand to a 32-bit instruction.
   const bool is_rvc = (code & 0x3u) != 0x3u;
   if (is_rvc) {
@@ -683,19 +686,13 @@ Instr::Ptr Decoder::decode_code(uint32_t code, uint64_t uuid, uint8_t umode) {
     instr->set_args(IntrAluArgs{1, 0, imm20});
     instr->set_dest_reg(rd, RegType::Integer);
   } break;
-#if defined(VX_CFG_XLEN_64) || defined(VX_CFG_EXT_U_ENABLE)
+#ifdef VX_CFG_XLEN_64
   case Opcode::R_W:
   case Opcode::I_W:
 #endif
   case Opcode::R:
   case Opcode::I: {
     bool is_w = (op == Opcode::R_W) || (op == Opcode::I_W);
-  #ifndef VX_CFG_XLEN_64
-    // Uniform operations are RV64 ones at either XLEN.
-    if (is_w && !uniform) {
-      std::abort();
-    }
-  #endif
     bool is_imm = (op == Opcode::I) || (op == Opcode::I_W);
     if (op == Opcode::R && funct7 == 0x7) {
       uint32_t imm;
@@ -729,9 +726,9 @@ Instr::Ptr Decoder::decode_code(uint32_t code, uint64_t uuid, uint8_t umode) {
       if (funct3 == 0x1 || funct3 == 0x5) {
         // Shift instructions
         imm = rs2; // uint5
-        if (VX_CFG_XLEN == 64 || uniform) {
-          imm |= ((funct7 & 0x1) << 5);
-        }
+      #ifdef VX_CFG_XLEN_64
+        imm |= ((funct7 & 0x1) << 5);
+      #endif
       } else {
         auto imm12 = code >> shift_rs2;
         imm = sext(imm12, width_i_imm);

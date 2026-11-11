@@ -103,17 +103,16 @@ int main(int argc, char** argv) {
         }
     }
     const uint32_t expect[RES_COUNT] = {
-        0, 1u << 8,          // 1 << 40
-        4,                   // (1 << 40) >> 38
+        4,                   // (1 << (XLEN-1)) >> (XLEN-3)
         n,                   // (n * scale) / scale
         n,                   // the loop
-        0xffffffffu,         // lui 0x80000, upper word
-        0xffffffffu,         // addw 0x7fffffff + 1, upper word
+        0xffffffffu,         // lui 0x80000, srai XLEN-1
+        n - scale,           // sub
         uint32_t(nt),        // NUM_THREADS
         n,                   // per-thread store of a uniform value
     };
     static const char* names[RES_COUNT] = {
-        "shl40.lo", "shl40.hi", "srl", "div", "loop", "lui.hi", "addw.hi", "csr", "xstore"};
+        "shift", "div", "loop", "lui", "sub", "csr", "xstore"};
     for (uint32_t i = 0; i < RES_COUNT; ++i) {
         if (h_res[i] != expect[i]) {
             std::printf("*** %s expected=0x%x actual=0x%x\n", names[i], expect[i], h_res[i]);

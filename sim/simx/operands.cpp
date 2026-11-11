@@ -62,7 +62,7 @@ inline void log_src_operand(uint32_t src_index,
     DPN(2, "} (#" << std::dec << uuid << ")" << std::endl);
   } break;
   case RegType::Uniform: {
-    DPH(2, "Src" << src_index << " Reg: " << reg << "=0x" << std::hex << values[0].u64
+    DPH(2, "Src" << src_index << " Reg: " << reg << "=0x" << std::hex << values[0].u
         << std::dec << " (#" << std::dec << uuid << ")" << std::endl);
   } break;
   case RegType::Float: {

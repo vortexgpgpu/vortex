@@ -151,9 +151,9 @@ fixed-stride allocator):
 Designed in [uniform_registers_proposal.md](uniform_registers_proposal.md) and
 built with this proposal: warp-invariant integer values (kernel arguments,
 bases, strides, bounds, descriptors) move to a per-warp `u` file, which lowers
-`Rx` and so raises the warps that fit. The `u` file is one fixed 32 x 64-bit
-set per warp context, not dynamically allocated: at 8 threads it is an eighth
-of a full `x`+`f` set, and the KMU presets `u1`/`u2` at warp launch.
+`Rx` and so raises the warps that fit. The `u` file is one fixed 32 x XLEN-bit
+set per warp context, not dynamically allocated: at 8 threads it is a
+sixteenth of a full `x`+`f` set.
 
 The packing pass decodes the `[1:0]` mode of each instruction to tell `x`
 fields from `u` fields; `u` registers are not renamed.
@@ -210,7 +210,7 @@ first and the hardware work runs alongside it.
    against `GPR_ROWS` at both latencies, area and Fmax. A V80 build with
    approval.
 7. **Later**: `u` operands on Vortex custom instructions (TMEM, DXA, barriers);
-   64-bit global addressing through a `u` base; x0 storage removed by zeroing
+   x0 storage removed by zeroing
    the read register; WGMMA and RTU images packed once their implicit operands
    are encoded; per-rank register counts fixed at launch for warp-specialized
    kernels (FA4's control warps against its softmax warps), with each rank's

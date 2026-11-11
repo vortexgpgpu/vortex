@@ -5,13 +5,11 @@
 
 // results[] written by the uniform instructions, checked by the host
 enum {
-  RES_SHL40,     // 64-bit: 1 << 40 (two words)
-  RES_SHL40_HI,
-  RES_SRL,       // (1 << 40) >> 38
+  RES_SHIFT,     // (1 << (XLEN-1)) >> (XLEN-3) = 4
   RES_DIV,       // (n * scale) / scale
   RES_LOOP,      // a uniform loop counting to n
-  RES_LUI_HI,    // lui 0x80000 sign-extends to 64 bits: upper word
-  RES_ADDW,      // addw wraps at 32 bits and sign-extends
+  RES_LUI,       // lui 0x80000, then srai XLEN-1: all ones
+  RES_SUB,       // n - scale
   RES_NT,        // csrr NUM_THREADS
   RES_XSTORE,    // n stored per thread through a uniform store operand
   RES_COUNT
