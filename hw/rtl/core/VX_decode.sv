@@ -49,6 +49,7 @@ module VX_decode import
 
     wire [31:0] instr = fetch_if.data.instr;
 `ifdef VX_CFG_EXT_U_ENABLE
+    `STATIC_ASSERT (!`VX_CFG_EXT_C_ENABLED, ("uniform registers take the compressed encodings"))
     // Bits [1:0] select the register file of an otherwise standard encoding:
     // 2'b10 every operand uniform, 2'b01 a uniform second operand.
     wire [1:0] umode = instr[1:0];
