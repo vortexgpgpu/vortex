@@ -101,7 +101,9 @@ def get_reg_counts(elf_file):
         data = f.read()
     try:
         r = vx_regpack.counts(data)
-    except vx_regpack.DecodeError:
+    except vx_regpack.DecodeError as e:
+        print("vxbin: warning: {}: {}; the kernel runs with every register".format(elf_file, e),
+              file=sys.stderr)
         return 0
     if r is None:
         return 0
