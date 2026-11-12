@@ -51,6 +51,18 @@ extern "C" {
 	__r;							            \
 })
 
+// A CSR every lane of the warp reads alike (CTA identity and dimensions): with
+// uniform registers (+xvortexu) it is read straight into one.
+#if defined(__riscv_xvortexu)
+#define csr_read_uniform(csr) ({                \
+	size_t __r;	               		            \
+	__asm__ ("csrrs %0, %1, u0" : "=vu" (__r) : "i" (csr)); \
+	__r;							            \
+})
+#else
+#define csr_read_uniform(csr) csr_read_nv(csr)
+#endif
+
 #define csr_write(csr, val)	({                  \
 	size_t __v = (size_t)(val);                 \
 	if (__builtin_constant_p(val) && __v < 32)  \
