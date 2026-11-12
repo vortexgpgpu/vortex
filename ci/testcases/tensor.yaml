@@ -143,6 +143,16 @@ tests:
   - rtlsim
   app: sgemm_tcu
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_TFR -DVX_CFG_TCU_FP8_ENABLE -DITYPE=bf8 -DOTYPE=fp32
+# bf8 zeros next to small values in a K pair (-z): the zero product must not
+# set the pair's exponent in the TFR fp8 multiplier.
+- id: sgemm_tcu-bf8-zero-pairs
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_TFR -DVX_CFG_TCU_FP8_ENABLE -DITYPE=bf8 -DOTYPE=fp32
+  args: -z
 - id: sgemm2_tcu-2
   via: blackbox
   drivers:
