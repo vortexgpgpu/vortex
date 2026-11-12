@@ -42,8 +42,6 @@ class DecodeError(Exception):
 def decode(w):
     """(register fields as [(field, 'x'|'f'|'u')], image properties) of one instruction."""
     mode = w & 0x3
-    if mode == 0x0:
-        raise DecodeError("compressed or reserved encoding")
     if mode != 0x3:
         return decode_uniform(w | 0x3, mode)
     op = w & 0x7F
@@ -150,22 +148,36 @@ def decode_uniform(w, mode):
     op = w & 0x7F
     f3 = (w >> 12) & 0x7
     f7 = (w >> 25) & 0x7F
-    X, U = 'x', 'u'
+    X, F, U = 'x', 'f', 'u'
     if mode == 0b10:
         if op == OP_FCI and f3 == 0 and f7 in (0x79, 0x71):
             return ([('rd', U), ('rs1', X)] if f7 == 0x79 else [('rd', X), ('rs1', U)]), ()
+        # custom instructions whose integer operands are all warp-invariant:
+        # tmc, wspawn, bar, arrive/wait; tcu_ld; TMEM; tensor jobs
+        ext1 = op == OP_EXT1 and ((f7 == 0x00 and f3 in (0, 1, 4, 6)) or
+                                  (f7 == 0x02 and f3 == 2) or f7 in (0x05, 0x06))
         if op in (OP_R, OP_R_W, OP_I, OP_I_W, OP_LUI, OP_AUIPC, OP_B, OP_JALR, OP_L, OP_S) \
-           or (op == OP_SYS and f3 != 0):
-            fields, _ = decode(w)
-            return [(name, U) for name, _k in fields], ()
+           or (op == OP_SYS and f3 != 0) or ext1:
+            fields, props = decode(w)
+            return [(name, U if k == X else k) for name, k in fields], props
         raise DecodeError("reserved uniform encoding")
+    if mode == 0b01:
+        if op in (OP_R, OP_R_W):
+            return [('rd', X), ('rs1', X), ('rs2', U)], ()
+        if op in (OP_I, OP_I_W, OP_L):
+            return [('rd', X), ('rs1', U)], ()
+        if op == OP_FL:
+            return [('rd', F), ('rs1', U)], ()
+        if op in (OP_B, OP_S):
+            return [('rs1', X), ('rs2', U)], ()
+        raise DecodeError("reserved uniform-operand encoding")
     if op in (OP_R, OP_R_W):
-        return [('rd', X), ('rs1', X), ('rs2', U)], ()
-    if op in (OP_I, OP_I_W):
-        return [('rd', X), ('rs1', U)], ()
+        return [('rd', X), ('rs1', U), ('rs2', X)], ()
     if op in (OP_B, OP_S):
-        return [('rs1', X), ('rs2', U)], ()
-    raise DecodeError("reserved uniform-operand encoding")
+        return [('rs1', U), ('rs2', X)], ()
+    if op == OP_FS:
+        return [('rs1', U), ('rs2', F)], ()
+    raise DecodeError("reserved uniform-first-operand encoding")
 
 
 def code_ranges(data):
@@ -245,6 +257,8 @@ def pack(data):
     for off, w, fields in insts:
         nw = w
         for name, k in fields:
+            if k == 'u':
+                continue
             m = xmap if k == 'x' else fmap
             sh = FIELD_SHIFT[name]
             r = (w >> sh) & 0x1F
