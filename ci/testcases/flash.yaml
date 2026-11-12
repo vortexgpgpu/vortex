@@ -1,90 +1,60 @@
-# Test cases for `flash` (FlashAttention: scalar, DXA and WGMMA tiers, plus the
-# unfused attention reference).
+# Test cases for `flash` (FlashAttention: SIMT and WGMMA tiers).
 category: flash
 defaults:
   xlen:
   - 32
   - 64
   tier: smoke
-  touches: [tests/regression/flash, tests/regression/attention, hw/rtl/tcu, sim/simx/tcu, hw/rtl/dxa, sim/simx/dxa,
+  touches: [tests/regression/flash_attn, hw/rtl/tcu, sim/simx/tcu, hw/rtl/dxa, sim/simx/dxa,
     sw/kernel/include/vx_tensor.h]
 # The plain rtlsim cases run at XLEN=64 only: RV32 emulates the fp
 # conversions, so the same problem retires 4-8x the instructions there.
 tests:
-- id: attention-1
+- id: flash_attn-1
   via: blackbox
   drivers:
   - simx
-  app: attention
-
-- id: flash-1
-  via: blackbox
-  drivers:
-  - simx
-  app: flash
+  app: flash_attn
 
 # LMEM-bound tiling: 16 KB of local memory forces small row/column tiles.
-- id: flash-2
+- id: flash_attn-2
   via: blackbox
   drivers:
   - simx
-  app: flash
+  app: flash_attn
   configs: -DVX_CFG_LMEM_LOG_SIZE=14
   shape:
     warps: 4
     threads: 4
   args: -N64 -D32
 
-- id: flash-3
+- id: flash_attn-3
   via: blackbox
   drivers:
   - rtlsim
   xlen:
   - 64
-  app: flash
+  app: flash_attn
   args: -N16 -D8
 
-- id: flash_dxa-1
+- id: flash_attn_tcu_wg-1
   via: blackbox
   drivers:
   - simx
-  app: flash_dxa
+  app: flash_attn_tcu_wg
 
-# Ragged tiles: neither N nor the forced column tile divides evenly.
-- id: flash_dxa-2
+- id: flash_attn_tcu_wg-2
   via: blackbox
   drivers:
   - simx
-  app: flash_dxa
-  args: -N63 -D64 -d23
-
-- id: flash_dxa-3
-  via: blackbox
-  drivers:
-  - rtlsim
-  xlen:
-  - 64
-  app: flash_dxa
-  args: -N16 -D8
-
-- id: flash_tcu_wg-1
-  via: blackbox
-  drivers:
-  - simx
-  app: flash_tcu_wg
-
-- id: flash_tcu_wg-2
-  via: blackbox
-  drivers:
-  - simx
-  app: flash_tcu_wg
+  app: flash_attn_tcu_wg
   configs: -DITYPE=fp16
 
-- id: flash_tcu_wg-3
+- id: flash_attn_tcu_wg-3
   via: blackbox
   drivers:
   - simx
-  app: flash_tcu_wg
+  app: flash_attn_tcu_wg
   configs: -DITYPE=bf16
 
 # No model_parity case: the gate runs at XLEN=32 and needs equal retired
@@ -93,12 +63,12 @@ tests:
 # differ in the last bits of the tensor results. One execution block per unit:
 # the four-block model ISSUE_WIDTH=4 implies is several times the size, and a
 # hosted CI runner cannot build it in a job.
-- id: flash_tcu_wg-4
+- id: flash_attn_tcu_wg-4
   via: blackbox
   drivers:
   - rtlsim
   xlen:
   - 64
-  app: flash_tcu_wg
+  app: flash_attn_tcu_wg
   configs: -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
   args: -N 32 -D 16 -c 8 -d 8

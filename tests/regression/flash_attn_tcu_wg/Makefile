@@ -3,7 +3,7 @@ include $(ROOT_DIR)/config.mk
 
 CONFIGS := $(if $(findstring -DVX_CFG_EXT_TCU_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_EXT_TCU_ENABLE)
 
-PROJECT := flash_tcu_wg
+PROJECT := flash_attn_tcu_wg
 
 SRC_DIR := $(VORTEX_HOME)/tests/regression/$(PROJECT)
 
