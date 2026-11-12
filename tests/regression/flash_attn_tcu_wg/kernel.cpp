@@ -5,6 +5,7 @@
 #include <type_traits>
 #include "common.h"
 #include "fpcvt.h"
+#include <flash_attn_device.h>
 
 namespace vt = vortex::tensor;
 using ctx = vt::wgmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, false, WGMMA_NRC>;
@@ -13,25 +14,8 @@ using output_t = ctx::output_t;
 
 static_assert(std::is_same_v<output_t, float>, "OTYPE must be fp32");
 
-static inline size_t bits_from(output_t x) { size_t u = 0; __builtin_memcpy(&u, &x, sizeof(x)); return u; }
-static inline output_t from_bits(size_t u) { output_t x; __builtin_memcpy(&x, &u, sizeof(x)); return x; }
-
-static inline output_t warp_reduce_max(output_t x, uint32_t warp_size) {
-  int clamp = warp_size - 1, segmask = ~clamp & 0x3f;
-  for (uint32_t off = warp_size >> 1; off > 0; off >>= 1) {
-    output_t y = from_bits(vx_shfl_bfly(bits_from(x), off, clamp, segmask));
-    x = (y > x) ? y : x;
-  }
-  return x;
-}
-
-static inline output_t warp_reduce_sum(output_t x, uint32_t warp_size) {
-  int clamp = warp_size - 1, segmask = ~clamp & 0x3f;
-  for (uint32_t off = warp_size >> 1; off > 0; off >>= 1) {
-    x += from_bits(vx_shfl_bfly(bits_from(x), off, clamp, segmask));
-  }
-  return x;
-}
+using flash_attn::warp_reduce_max;
+using flash_attn::warp_reduce_sum;
 
 // fp32 -> ITYPE pack
 template <typename T> struct always_false : std::false_type {};

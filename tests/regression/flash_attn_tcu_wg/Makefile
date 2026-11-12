@@ -11,6 +11,11 @@ SRCS := $(SRC_DIR)/main.cpp $(SW_COMMON_DIR)/rvfloats.cpp $(SW_COMMON_DIR)/softf
 
 VX_SRCS := $(SRC_DIR)/kernel.cpp
 
+# flash_attn owns the headers both tests share
+SHARED_DIR := $(VORTEX_HOME)/tests/regression/flash_attn
+CXXFLAGS  += -I$(SHARED_DIR)
+VX_CFLAGS += -I$(SHARED_DIR)
+
 CONFIGS := $(if $(findstring -DVX_CFG_NUM_WARPS=,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_NUM_WARPS=4)
 CONFIGS := $(if $(findstring -DVX_CFG_ISSUE_WIDTH=,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_ISSUE_WIDTH=4)
 CONFIGS += -DVX_CFG_TCU_WGMMA_ENABLE

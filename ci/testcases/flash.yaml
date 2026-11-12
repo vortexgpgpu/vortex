@@ -71,4 +71,4 @@ tests:
   - 64
   app: flash_attn_tcu_wg
   configs: -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
-  args: -N 32 -D 16 -c 8 -d 8
+  args: -N 32 -D 16 -c 8 -t 8
