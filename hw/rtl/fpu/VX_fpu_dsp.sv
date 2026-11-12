@@ -47,19 +47,26 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     input wire  ready_out,
     output wire valid_out
 );
+    localparam NUM_PES_FMA   = `UP(NUM_LANES / `VX_CFG_FMA_PE_RATIO);
+    localparam NUM_PES_FMA64 = `UP(NUM_LANES / `VX_CFG_FMA64_PE_RATIO);
+    localparam NUM_PES_DIV   = `UP(NUM_LANES / `VX_CFG_FDIV_PE_RATIO);
+    localparam NUM_PES_SQRT  = `UP(NUM_LANES / `VX_CFG_FSQRT_PE_RATIO);
+    localparam NUM_PES_CVT   = `UP(NUM_LANES / `VX_CFG_FCVT_PE_RATIO);
+    localparam NUM_PES_NCP   = `UP(NUM_LANES / `VX_CFG_FNCP_PE_RATIO);
+    localparam CVT_LATENCY   = (`VX_CFG_XLEN == 64) ? `VX_CFG_FCVT_LATENCY + 1 : `VX_CFG_FCVT_LATENCY;
+
+    // A narrower F64 FMA rate gets its own pool of F64-only PEs, and the F32
+    // pool then drops its F64 units.
+    localparam FMA64_SPLIT = (`VX_CFG_FLEN >= 64) && (NUM_PES_FMA64 != NUM_PES_FMA);
+    localparam FMA_HAS_F64 = (`VX_CFG_FLEN >= 64) && !FMA64_SPLIT;
+
     localparam FPU_FMA     = 0;
     localparam FPU_DIVSQRT = 1;
     localparam FPU_CVT     = 2;
     localparam FPU_NCP     = 3;
-    localparam NUM_FPCORES = 4;
+    localparam FPU_FMA64   = 4;
+    localparam NUM_FPCORES = FMA64_SPLIT ? 5 : 4;
     localparam FPCORES_BITS = `LOG2UP(NUM_FPCORES);
-
-    localparam NUM_PES_FMA  = `UP(NUM_LANES / `VX_CFG_FMA_PE_RATIO);
-    localparam NUM_PES_DIV  = `UP(NUM_LANES / `VX_CFG_FDIV_PE_RATIO);
-    localparam NUM_PES_SQRT = `UP(NUM_LANES / `VX_CFG_FSQRT_PE_RATIO);
-    localparam NUM_PES_CVT  = `UP(NUM_LANES / `VX_CFG_FCVT_PE_RATIO);
-    localparam NUM_PES_NCP  = `UP(NUM_LANES / `VX_CFG_FNCP_PE_RATIO);
-    localparam CVT_LATENCY  = (`VX_CFG_XLEN == 64) ? `VX_CFG_FCVT_LATENCY + 1 : `VX_CFG_FCVT_LATENCY;
 
     // The vendor FP IP (Xilinx/Altera) is flush-to-zero, so on those FPGA flows the
     // FMA/DIV/SQRT units run FTZ to select it; every other flow (ASIC, simulation)
@@ -96,8 +103,9 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire [NUM_FPCORES-1:0] per_core_ready_out;
 
     // Decode fpu core type
+    wire is_fma64 = FMA64_SPLIT && (op_type[3:2] == 2'(FPU_FMA)) && fmt[0];
     wire [FPCORES_BITS-1:0] core_select = (op_type == INST_FPU_F2F || op_type == INST_FPU_F2H) ? FPCORES_BITS'(FPU_CVT)
-                                                                    : FPCORES_BITS'(op_type[3:2]);
+                                        : (is_fma64 ? FPCORES_BITS'(FPU_FMA64) : FPCORES_BITS'(op_type[3:2]));
 
     VX_stream_switch #(
         .DATAW       (REQ_DATAW),
@@ -134,7 +142,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
         wire [NUM_LANES-1:0] mask_out;
         wire [NUM_LANES-1:0][(`FP_FLAGS_BITS+`VX_CFG_XLEN)-1:0] data_out;
-        wire pe_enable;
+        wire [NUM_PES_FMA-1:0] pe_enable;
         wire [NUM_PES_FMA-1:0] pe_mask_out;
         wire [NUM_PES_FMA-1:0][(3*`VX_CFG_XLEN)-1:0] pe_data_in;
         wire [INST_FPU_BITS+INST_FMT_BITS+INST_FRM_BITS-1:0] pe_shared;
@@ -154,7 +162,9 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .SHARED_WIDTH   (INST_FPU_BITS+INST_FMT_BITS+INST_FRM_BITS),
             .TAG_WIDTH      (TAG_WIDTH),
             .PE_REG         (0),
-            .OUT_BUF        (2)
+            .OUT_BUF        (0),
+            .OUT_SKID       (1),
+            .PE_ENABLES     (NUM_PES_FMA)
         ) pe_ser (
             .clk           (clk),
             .reset         (reset),
@@ -189,14 +199,14 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         // Per-IP enable copies so each backend IP's clock-enable fanout stays
         // local routing instead of merging into one global buffer.
         wire [NUM_PES_FMA-1:0] fma_pe_ce;
-        `FANOUT_BUFFER (fma_pe_ce, pe_enable);
+        assign fma_pe_ce = pe_enable;
 
         // Separate F32 / F64 FMA cores (pure-RTL, mantissa multiply mapped to DSP
         // via USE_DSP). fmt[0] selects the result; pe_shared is input-aligned, so
         // delay the selector by FMA latency to line it up with the unit output.
-        wire is_d_in = (`VX_CFG_FLEN >= 64) & pe_shared[INST_FRM_BITS+0];
+        wire is_d_in = FMA_HAS_F64 & pe_shared[INST_FRM_BITS+0];
         wire is_d_fma;
-        if (`VX_CFG_FLEN >= 64) begin : g_isd_pipe
+        if (FMA_HAS_F64) begin : g_isd_pipe
             VX_shift_register #(
                 .DATAW  (1),
                 .RESETW (1),
@@ -204,7 +214,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             ) is_d_pipe (
                 .clk      (clk),
                 .reset    (reset),
-                .enable   (pe_enable),
+                .enable   (pe_enable[0]),
                 .data_in  (is_d_in),
                 .data_out (is_d_fma)
             );
@@ -236,7 +246,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 .result  (res32),
                 .fflags  (ff32)
             );
-            if (`VX_CFG_FLEN >= 64) begin : g_fma_d
+            if (FMA_HAS_F64) begin : g_fma_d
                 wire [63:0]               res64;
                 wire [`FP_FLAGS_BITS-1:0] ff64;
                 VX_fma_unit #(
@@ -277,6 +287,97 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         fflags_t merged_fflags;
         `FPU_MERGE_FFLAGS(merged_fflags, fflags_lanes, mask_out, NUM_LANES);
         assign per_core_fflags[FPU_FMA] = merged_fflags;
+
+    end
+
+    // F64 FMA core ///////////////////////////////////////////////////////////
+
+    if (FMA64_SPLIT) begin : g_fma64
+
+        wire [NUM_LANES-1:0] mask_out;
+        wire [NUM_LANES-1:0][(`FP_FLAGS_BITS+`VX_CFG_XLEN)-1:0] data_out;
+        wire [NUM_PES_FMA64-1:0] pe_enable;
+        wire [NUM_PES_FMA64-1:0] pe_mask_out;
+        wire [NUM_PES_FMA64-1:0][(3*`VX_CFG_XLEN)-1:0] pe_data_in;
+        wire [INST_FPU_BITS+INST_FMT_BITS+INST_FRM_BITS-1:0] pe_shared;
+        wire [NUM_PES_FMA64-1:0][(`FP_FLAGS_BITS+`VX_CFG_XLEN)-1:0] pe_data_out;
+        wire [NUM_LANES-1:0][(3*`VX_CFG_XLEN)-1:0] lane_data;
+
+        for (genvar i = 0; i < NUM_LANES; ++i) begin : g_lane_data
+            assign lane_data[i] = {per_core_datac[FPU_FMA64][i], per_core_datab[FPU_FMA64][i], per_core_dataa[FPU_FMA64][i]};
+        end
+
+        VX_pe_serializer #(
+            .NUM_LANES      (NUM_LANES),
+            .NUM_PES        (NUM_PES_FMA64),
+            .LATENCY        (`VX_CFG_FMA_LATENCY),
+            .DATA_IN_WIDTH  (3*`VX_CFG_XLEN),
+            .DATA_OUT_WIDTH (`FP_FLAGS_BITS+`VX_CFG_XLEN),
+            .SHARED_WIDTH   (INST_FPU_BITS+INST_FMT_BITS+INST_FRM_BITS),
+            .TAG_WIDTH      (TAG_WIDTH),
+            .PE_REG         (0),
+            .OUT_BUF        (0),
+            .OUT_SKID       (1),
+            .PE_ENABLES     (NUM_PES_FMA64)
+        ) pe_ser (
+            .clk           (clk),
+            .reset         (reset),
+            .valid_in      (per_core_valid_in[FPU_FMA64]),
+            .mask_in       (per_core_mask_in[FPU_FMA64]),
+            .data_in       (lane_data),
+            .shared_in     ({per_core_op_type[FPU_FMA64], per_core_fmt[FPU_FMA64], per_core_frm[FPU_FMA64]}),
+            .tag_in        (per_core_tag_in[FPU_FMA64]),
+            .ready_in      (per_core_ready_in[FPU_FMA64]),
+            .pe_enable     (pe_enable),
+            .pe_mask_out   (pe_mask_out),
+            .pe_data_out   (pe_data_in),
+            .pe_shared_out (pe_shared),
+            .pe_data_in    (pe_data_out),
+            .valid_out     (per_core_valid_out[FPU_FMA64]),
+            .mask_out      (mask_out),
+            .data_out      (data_out),
+            .tag_out       (per_core_tag_out[FPU_FMA64]),
+            .ready_out     (per_core_ready_out[FPU_FMA64])
+        );
+
+        fflags_t [NUM_LANES-1:0] fflags_lanes;
+
+        for (genvar i = 0; i < NUM_LANES; ++i) begin : g_result
+            assign per_core_result[FPU_FMA64][i] = data_out[i][0+:`VX_CFG_XLEN];
+            assign fflags_lanes[i] = data_out[i][`VX_CFG_XLEN+:`FP_FLAGS_BITS];
+        end
+
+        wire [NUM_PES_FMA64-1:0] fma_pe_ce;
+        assign fma_pe_ce = pe_enable;
+
+        for (genvar i = 0; i < NUM_PES_FMA64; ++i) begin : g_units
+            VX_fma_unit #(
+                .LATENCY  (`VX_CFG_FMA_LATENCY),
+                .MAN_BITS (52),
+                .EXP_BITS (11),
+                .USE_DSP  (1),
+                .SUBNORM_ENABLE (FPU_SNORM)
+            ) fma64 (
+                .clk     (clk),
+                .reset   (reset),
+                .enable  (fma_pe_ce[i]),
+                .mask    (pe_mask_out[i]),
+                .op_type (pe_shared[INST_FRM_BITS+INST_FMT_BITS+:INST_FPU_BITS]),
+                .fmt     (pe_shared[INST_FRM_BITS+:INST_FMT_BITS]),
+                .frm     (pe_shared[0+:INST_FRM_BITS]),
+                .dataa   (pe_data_in[i][0+:64]),
+                .datab   (pe_data_in[i][`VX_CFG_XLEN+:64]),
+                .datac   (pe_data_in[i][2*`VX_CFG_XLEN+:64]),
+                .result  (pe_data_out[i][0+:`VX_CFG_XLEN]),
+                .fflags  (pe_data_out[i][`VX_CFG_XLEN+:`FP_FLAGS_BITS])
+            );
+        end
+
+        assign per_core_has_fflags[FPU_FMA64] = 1;
+
+        fflags_t merged_fflags;
+        `FPU_MERGE_FFLAGS(merged_fflags, fflags_lanes, mask_out, NUM_LANES);
+        assign per_core_fflags[FPU_FMA64] = merged_fflags;
 
     end
 
@@ -340,7 +441,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         wire [TAG_WIDTH-1:0] div_tag_out;
         wire [NUM_LANES-1:0] div_mask_out;
         wire [NUM_LANES-1:0][(`FP_FLAGS_BITS+`VX_CFG_XLEN)-1:0] div_data_out;
-        wire div_pe_enable;
+        wire [NUM_PES_DIV-1:0] div_pe_enable;
         wire [NUM_PES_DIV-1:0] div_pe_mask_out;
         wire [NUM_PES_DIV-1:0][(2*`VX_CFG_XLEN)-1:0] div_pe_data_in;
         wire [INST_FMT_BITS+INST_FRM_BITS-1:0] div_pe_shared;
@@ -360,7 +461,9 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .SHARED_WIDTH   (INST_FMT_BITS+INST_FRM_BITS),
             .TAG_WIDTH      (TAG_WIDTH),
             .PE_REG         (0),
-            .OUT_BUF        (2)
+            .OUT_BUF        (0),
+            .OUT_SKID       (1),
+            .PE_ENABLES     (NUM_PES_DIV)
         ) div_pe_ser (
             .clk           (clk),
             .reset         (reset),
@@ -397,7 +500,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         // Per-IP enable copies so each backend IP's clock-enable fanout stays
         // local routing instead of merging into one global buffer.
         wire [NUM_PES_DIV-1:0] div_pe_ce;
-        `FANOUT_BUFFER (div_pe_ce, div_pe_enable);
+        assign div_pe_ce = div_pe_enable;
 
         for (genvar i = 0; i < NUM_PES_DIV; ++i) begin : g_div_units
             if (`VX_CFG_XLEN > `VX_CFG_FLEN) begin : g_pad
@@ -433,7 +536,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         wire [TAG_WIDTH-1:0] sqrt_tag_out;
         wire [NUM_LANES-1:0] sqrt_mask_out;
         wire [NUM_LANES-1:0][(`FP_FLAGS_BITS+`VX_CFG_XLEN)-1:0] sqrt_data_out;
-        wire sqrt_pe_enable;
+        wire [NUM_PES_SQRT-1:0] sqrt_pe_enable;
         wire [NUM_PES_SQRT-1:0] sqrt_pe_mask_out;
         wire [NUM_PES_SQRT-1:0][`VX_CFG_XLEN-1:0] sqrt_pe_data_in;
         wire [INST_FMT_BITS+INST_FRM_BITS-1:0] sqrt_pe_shared;
@@ -448,7 +551,9 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .SHARED_WIDTH   (INST_FMT_BITS+INST_FRM_BITS),
             .TAG_WIDTH      (TAG_WIDTH),
             .PE_REG         (0),
-            .OUT_BUF        (2)
+            .OUT_BUF        (0),
+            .OUT_SKID       (1),
+            .PE_ENABLES     (NUM_PES_SQRT)
         ) sqrt_pe_ser (
             .clk           (clk),
             .reset         (reset),
@@ -484,7 +589,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         // Per-IP enable copies so each backend IP's clock-enable fanout stays
         // local routing instead of merging into one global buffer.
         wire [NUM_PES_SQRT-1:0] sqrt_pe_ce;
-        `FANOUT_BUFFER (sqrt_pe_ce, sqrt_pe_enable);
+        assign sqrt_pe_ce = sqrt_pe_enable;
 
         for (genvar i = 0; i < NUM_PES_SQRT; ++i) begin : g_sqrt_units
             if (`VX_CFG_XLEN > `VX_CFG_FLEN) begin : g_pad
@@ -539,7 +644,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
         wire [NUM_LANES-1:0] mask_out;
         wire [NUM_LANES-1:0][(`FP_FLAGS_BITS+`VX_CFG_XLEN)-1:0] data_out;
-        wire pe_enable;
+        wire [NUM_PES_CVT-1:0] pe_enable;
         wire [NUM_PES_CVT-1:0] pe_mask_out;
         wire [NUM_PES_CVT-1:0][`VX_CFG_XLEN-1:0] pe_data_in;
         wire [INST_FPU_BITS+INST_FMT_BITS+INST_FRM_BITS-1:0] pe_shared;
@@ -556,7 +661,9 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .SHARED_WIDTH   (INST_FPU_BITS+INST_FMT_BITS+INST_FRM_BITS),
             .TAG_WIDTH      (TAG_WIDTH),
             .PE_REG         (0),
-            .OUT_BUF        (2)
+            .OUT_BUF        (0),
+            .OUT_SKID       (1),
+            .PE_ENABLES     (NUM_PES_CVT)
         ) pe_ser (
             .clk           (clk),
             .reset         (reset),
@@ -609,7 +716,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             ) fcvt_unit (
                 .clk        (clk),
                 .reset      (reset),
-                .enable     (pe_enable),
+                .enable     (pe_enable[i]),
                 .mask       (pe_mask_out[i]),
                 .frm        (pe_frm),
                 .is_itof    (is_itof),
@@ -640,7 +747,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
         wire [NUM_LANES-1:0] mask_out;
         wire [NUM_LANES-1:0][(`FP_FLAGS_BITS+`VX_CFG_XLEN)-1:0] data_out;
-        wire pe_enable;
+        wire [NUM_PES_NCP-1:0] pe_enable;
         wire [NUM_PES_NCP-1:0] pe_mask_out;
         wire [NUM_PES_NCP-1:0][(2*`VX_CFG_XLEN)-1:0] pe_data_in;
         wire [INST_FPU_BITS+INST_FMT_BITS+INST_FRM_BITS-1:0] pe_shared;
@@ -662,7 +769,9 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .SHARED_WIDTH   (INST_FPU_BITS+INST_FMT_BITS+INST_FRM_BITS),
             .TAG_WIDTH      (TAG_WIDTH),
             .PE_REG         (0),
-            .OUT_BUF        (2)
+            .OUT_BUF        (0),
+            .OUT_SKID       (1),
+            .PE_ENABLES     (NUM_PES_NCP)
         ) pe_ser (
             .clk           (clk),
             .reset         (reset),
@@ -699,7 +808,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             ) fncp_unit (
                 .clk     (clk),
                 .reset   (reset),
-                .enable  (pe_enable),
+                .enable  (pe_enable[i]),
                 .mask    (pe_mask_out[i]),
                 .frm     (pe_shared[0+:INST_FRM_BITS]),
                 .fmt     (pe_shared[INST_FRM_BITS+:INST_FMT_BITS]),

@@ -16,11 +16,11 @@
 #   builds:  what ci/asic_gate.py reads — the build list, with its per-build
 #            `known_issue` and `thresholds`. The pytest loader ignores this key.
 #
-# UNLIKE fpga_gate, THIS ONE RUNS ON A HOSTED RUNNER. Yosys, sv2v and OpenSTA
-# ship in the prebuilt toolchain (ci/toolchain_install.sh installs all three by
-# default) and ASAP7 is a 59 MB content-addressed fetch, so there is no licence
-# and no dedicated machine in the way — which is the whole point of having an
-# open-source flow.
+# UNLIKE fpga_gate, THIS ONE RUNS ON A HOSTED RUNNER. Yosys (with its slang
+# SystemVerilog frontend) and OpenSTA ship in the prebuilt toolchain
+# (ci/toolchain_install.sh installs both by default) and ASAP7 is a 59 MB
+# content-addressed fetch, so there is no licence and no dedicated machine in
+# the way — which is the whole point of having an open-source flow.
 #
 # It is still nightly, not a PR gate: a DUT takes 1-2 hours. Tier `asic` is
 # OPT-IN (OPT_IN_TIERS in testcase.py), so ci.yml's hosted matrix never emits a
@@ -78,6 +78,10 @@ tests:
 #   clock_mhz   target clock the design is constrained to, via CLOCK_FREQ. Fmax
 #               is derived from it and the worst slack, and the gate also asserts
 #               the design MEETS it — so this is a commitment, not a hint.
+#   area_budget_um2  cell-area ceiling: the gate fails when cell area grows
+#               more than 5% over it. Fixed here rather than taken from the
+#               baseline, so re-recording cannot creep it upward; raising it
+#               is a reviewed edit.
 #   configs     EXTRA defines, appended to the catalog's. Usually empty: the DUT
 #               configuration belongs in one place, and that place is catalog.mk.
 #   group       which golden file the results land in (mirrors the Xilinx groups)
@@ -103,6 +107,7 @@ builds:
   group: core
   dut: cache
   clock_mhz: 800
+  area_budget_um2: 48726
   configs: ""
 
 # Wide-SIMD core: issue/operand-collect/LSU/FPU at NT=NW=16, plus the RVC
@@ -114,8 +119,18 @@ builds:
 - id: core
   group: core
   dut: core
-  clock_mhz: 400
+  clock_mhz: 800
+  area_budget_um2: 84624
   configs: "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8"
+
+# Warp-wide local memory with two LSU blocks: both pass engines, the
+# dual-port banks the read engine reads through, and the atomic logic.
+- id: lmem
+  group: core
+  dut: lmem
+  clock_mhz: 800
+  area_budget_um2: 17137
+  configs: "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_A_ENABLE"
 
 # Multi-core system top: 2 cores with atomics and virtual memory behind the AFU
 # wrapper. Closes the cross-module boundaries (socket arbiters, socket MMU,
@@ -123,7 +138,8 @@ builds:
 - id: top
   group: core
   dut: top
-  clock_mhz: 400
+  clock_mhz: 800
+  area_budget_um2: 187230
   # 11.2 GB Yosys peak at NT=NW=4 (8/8: 18.6 GB).
   configs: "-DVX_CFG_NUM_THREADS=4 -DVX_CFG_NUM_WARPS=4"
 
@@ -134,6 +150,7 @@ builds:
   group: dxa
   dut: dxa
   clock_mhz: 800
+  area_budget_um2: 12449
   configs: ""
 
 # --- mufu --------------------------------------------------------------------
@@ -144,6 +161,7 @@ builds:
   group: mufu
   dut: mufu
   clock_mhz: 800
+  area_budget_um2: 2073
   configs: ""
 
 # --- tensor ------------------------------------------------------------------
@@ -153,7 +171,8 @@ builds:
 - id: tcu
   group: tensor
   dut: tcu
-  clock_mhz: 500
+  clock_mhz: 800
+  area_budget_um2: 74407
   configs: ""
 
 # Full tensor subsystem: TCU (WGMMA + MX) + dxa behind a shared L2, 2 cores per
@@ -161,7 +180,8 @@ builds:
 - id: tensor
   group: tensor
   dut: tensor
-  clock_mhz: 400
+  clock_mhz: 800
+  area_budget_um2: 104438
   configs: "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8"
 
 # --- graphics ----------------------------------------------------------------
@@ -171,6 +191,7 @@ builds:
   group: graphics
   dut: raster
   clock_mhz: 800
+  area_budget_um2: 10527
   configs: ""
 
 # Output merger: depth/stencil test, blend, ocache port.
@@ -178,6 +199,7 @@ builds:
   group: graphics
   dut: om
   clock_mhz: 800
+  area_budget_um2: 5926
   configs: ""
 
 # Texture unit: address generation, LOD, bilinear filter, tcache port.
@@ -186,13 +208,15 @@ builds:
   group: graphics
   dut: tex
   clock_mhz: 800
+  area_budget_um2: 61159
   configs: "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8"
 
 # Ray-tracing unit: CW-BVH4 walker, box/triangle PEs, short stack.
 - id: rtu
   group: graphics
   dut: rtu
-  clock_mhz: 400
+  clock_mhz: 800
+  area_budget_um2: 98965
   configs: ""
 
 # Full graphics subsystem: raster + om + tex + rtu + dxa behind a shared L2,
@@ -200,7 +224,8 @@ builds:
 - id: gfx
   group: graphics
   dut: gfx
-  clock_mhz: 400
+  clock_mhz: 800
+  area_budget_um2: 242203
   # 14.6 GB Yosys peak at NT=NW=4 (8/8: 19.5 GB).
   configs: "-DVX_CFG_NUM_THREADS=4 -DVX_CFG_NUM_WARPS=4"
 
@@ -211,5 +236,6 @@ builds:
 - id: vm
   group: vm
   dut: vm
-  clock_mhz: 400
+  clock_mhz: 800
+  area_budget_um2: 146445
   configs: "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8"

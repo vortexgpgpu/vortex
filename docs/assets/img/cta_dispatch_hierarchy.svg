@@ -56,7 +56,7 @@
   <rect x="320" y="112" width="230" height="68" rx="6" class="arb"/>
   <text x="332" y="132" class="th">kmu_arb — Vortex.sv:186</text>
   <text x="332" y="150" class="cm">1 -&gt; NUM_CLUSTERS</text>
-  <text x="332" y="168" class="cm">DEST_LSB_DEVICE</text>
+  <text x="332" y="168" class="cm">DEST_DIV_DEVICE</text>
 
   <path d="M 435 180 L 435 246" class="req"/>
 
@@ -64,7 +64,7 @@
   <rect x="320" y="246" width="230" height="82" rx="6" class="arb"/>
   <text x="332" y="266" class="th">kmu_arb — VX_cluster.sv:105</text>
   <text x="332" y="284" class="cm">2 -&gt; NUM_SOCKETS,  ARBITER "R"</text>
-  <text x="332" y="300" class="cm">DEST_LSB_CLUSTER</text>
+  <text x="332" y="300" class="cm">DEST_DIV_CLUSTER</text>
   <text x="332" y="319" class="tt">the only level with 2 inputs</text>
 
   <rect x="56" y="246" width="196" height="82" rx="6" class="gfx"/>
@@ -83,7 +83,7 @@
   <rect x="86" y="458" width="228" height="68" rx="6" class="arb"/>
   <text x="98" y="478" class="th">kmu_arb — VX_socket.sv:69</text>
   <text x="98" y="496" class="cm">1 -&gt; VX_CFG_SOCKET_SIZE</text>
-  <text x="98" y="514" class="cm">DEST_LSB_SOCKET</text>
+  <text x="98" y="514" class="cm">DEST_DIV_SOCKET</text>
 
   <rect x="556" y="458" width="160" height="68" rx="6" class="box"/>
   <text x="568" y="480" class="th">socket 1..N</text>

@@ -13,8 +13,30 @@ constexpr uint32_t kDescB = 1;
 // shB layout: [chunk_k × tile_size], row-major (row = k, col = l_col)
 static inline void gemm_accumulate(TYPE& sum, const TYPE* shA, const TYPE* shB, size_t tile_size,
                                    size_t chunk_k, size_t l_row, size_t l_col) {
-  for (size_t k = 0; k < chunk_k; ++k) {
-    sum += shA[l_row * chunk_k + k] * shB[k * tile_size + l_col];
+  const TYPE* a_row = &shA[l_row * chunk_k];
+  size_t k = 0;
+  for (; k + 4 <= chunk_k; k += 4) {
+#ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
+    static_assert(__is_same(TYPE, float), "the wide loads read float words");
+    // B0 and B1 before the quad, B2 and B3 after: the order the compiler gives
+    // the scalar loads, which it cannot reach across the quad's asm volatile
+    TYPE b0 = shB[k * tile_size + l_col];
+    TYPE b1 = shB[(k + 1) * tile_size + l_col];
+    vx_float4 a = vx_flw_q(&a_row[k]);
+    sum += a[0] * b0;
+    sum += a[1] * b1;
+    sum += a[2] * shB[(k + 2) * tile_size + l_col];
+    sum += a[3] * shB[(k + 3) * tile_size + l_col];
+#else
+    TYPE a[4] = {a_row[k], a_row[k + 1], a_row[k + 2], a_row[k + 3]};
+    sum += a[0] * shB[k * tile_size + l_col];
+    sum += a[1] * shB[(k + 1) * tile_size + l_col];
+    sum += a[2] * shB[(k + 2) * tile_size + l_col];
+    sum += a[3] * shB[(k + 3) * tile_size + l_col];
+#endif
+  }
+  for (; k < chunk_k; ++k) {
+    sum += a_row[k] * shB[k * tile_size + l_col];
   }
 }
 

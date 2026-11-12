@@ -1,0 +1,51 @@
+{
+  "dxa": {
+    "clock_mhz": 300,
+    "config_hash": "0eaf10f31ff7d9ff",
+    "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
+    "dut": "dxa",
+    "result": {
+      "bram": 0.0,
+      "build_time_s": 20,
+      "deep_endpoints": 2081,
+      "deepest_paths": [
+        "15  dxa_core/g_workers_0.worker/addr_gen/gmem_cursor_r[0] -> dxa_core/g_workers_0.worker/addr_gen/smem_byte_addr_r.d[8]",
+        "15  dxa_core/g_workers_0.worker/addr_gen/gmem_cursor_r[0] -> dxa_core/g_workers_0.worker/addr_gen/smem_byte_addr_r.d[9]",
+        "15  dxa_core/g_workers_0.worker/addr_gen/gmem_cursor_r[0] -> dxa_core/g_workers_0.worker/addr_gen/smem_byte_addr_r.d[10]",
+        "15  dxa_core/g_workers_0.worker/addr_gen/gmem_cursor_r[0] -> dxa_core/g_workers_0.worker/addr_gen/smem_byte_addr_r.d[11]",
+        "15  dxa_core/g_workers_0.worker/addr_gen/gmem_cursor_r[0] -> dxa_core/g_workers_0.worker/addr_gen/smem_byte_addr_r.d[12]",
+        "15  dxa_core/g_workers_0.worker/addr_gen/gmem_cursor_r[0] -> dxa_core/g_workers_0.worker/addr_gen/smem_byte_addr_r.d[13]",
+        "15  dxa_core/g_workers_0.worker/addr_gen/gmem_cursor_r[0] -> dxa_core/g_workers_0.worker/addr_gen/smem_byte_addr_r.d[14]",
+        "15  dxa_core/g_workers_0.worker/gmem_req/oob_pending_r[0] -> dxa_core/g_workers_0.worker/smem_wr/pend_data_r.d[64]",
+        "15  dxa_core/g_workers_0.worker/gmem_req/oob_pending_r[0] -> dxa_core/g_workers_0.worker/smem_wr/pend_data_r.d[65]",
+        "15  dxa_core/g_workers_0.worker/gmem_req/oob_pending_r[0] -> dxa_core/g_workers_0.worker/smem_wr/pend_data_r.d[66]"
+      ],
+      "dsp": 9,
+      "endpoints": 11408,
+      "env": {
+        "circt": "CIRCT 892a65a01",
+        "device": "xcu55c-fsvh2892-2L-e",
+        "foldsim": "foldsim d8350bc0f",
+        "xlen": 32
+      },
+      "ff": 9328,
+      "fix_levels": 12,
+      "interfaces": {},
+      "lut": 10675,
+      "lutram": 568,
+      "max_levels": 15,
+      "pred_fmax_mhz": 298.6,
+      "risk_endpoints": 0,
+      "units": {
+        "dxa_core/desc_table/desc_store": 8,
+        "dxa_core/g_workers_*_worker/addr_gen": 15,
+        "dxa_core/g_workers_*_worker/gmem_req": 9,
+        "dxa_core/g_workers_*_worker/setup": 12,
+        "dxa_core/g_workers_*_worker/smem_wr": 15
+      },
+      "uram": 0,
+      "watch_endpoints": 4353,
+      "watch_levels": 8
+    }
+  }
+}

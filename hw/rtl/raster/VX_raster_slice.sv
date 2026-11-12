@@ -79,7 +79,7 @@ module VX_raster_slice import VX_raster_pkg::*; #(
 `endif
 
     VX_raster_te #(
-        .INSTANCE_ID   ($sformatf("%s-te", INSTANCE_ID)),
+        .INSTANCE_ID   (`SFORMATF(("%s-te", INSTANCE_ID))),
         .TILE_LOGSIZE  (TILE_LOGSIZE),
         .BLOCK_LOGSIZE (BLOCK_LOGSIZE)
     ) tile_evaluator (
@@ -147,7 +147,7 @@ module VX_raster_slice import VX_raster_pkg::*; #(
 `endif
 
     VX_raster_be #(
-        .INSTANCE_ID     ($sformatf("%s-be", INSTANCE_ID)),
+        .INSTANCE_ID     (`SFORMATF(("%s-be", INSTANCE_ID))),
         .BLOCK_LOGSIZE   (BLOCK_LOGSIZE),
         .OUTPUT_QUADS    (OUTPUT_QUADS),
         .QUAD_FIFO_DEPTH (QUAD_FIFO_DEPTH)

@@ -28,7 +28,7 @@ class Core;
 struct OmReq {
   uint64_t                                   uuid       = 0;
   uint32_t                                   tag        = 0;     // routing tag (set by submitter; arb prepends input idx)
-  uint32_t                                   tmask_bits = 0;     // active-thread bitmask (VX_CFG_NUM_THREADS lsbs)
+  uint64_t                                   tmask_bits = 0;     // active-thread bitmask (VX_CFG_NUM_THREADS lsbs)
   std::array<uint32_t, VX_CFG_NUM_THREADS>          pos_x      = {};    // VX_OM_DIM_BITS
   std::array<uint32_t, VX_CFG_NUM_THREADS>          pos_y      = {};
   std::array<uint8_t,  VX_CFG_NUM_THREADS>          face       = {};    // 1-bit back-face flag

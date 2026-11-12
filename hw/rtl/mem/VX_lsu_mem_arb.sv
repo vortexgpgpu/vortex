@@ -37,6 +37,8 @@ module VX_lsu_mem_arb import VX_gpu_pkg::*; #(
 );
     localparam DATA_WIDTH   = (8 * DATA_SIZE);
     localparam LOG_NUM_REQS = `ARB_SEL_BITS(NUM_INPUTS, NUM_OUTPUTS);
+    localparam SEL_COUNT    = `MIN(NUM_INPUTS, NUM_OUTPUTS);
+    localparam SEL_W        = `UP(`CLOG2(`CDIV(`MAX(NUM_INPUTS, NUM_OUTPUTS), SEL_COUNT)));
     localparam REQ_DATAW    = 1 + NUM_LANES * (1 + ADDR_WIDTH + DATA_WIDTH + DATA_SIZE + `UP(USER_WIDTH)) + TAG_WIDTH;
     localparam RSP_DATAW    = NUM_LANES * (1 + DATA_WIDTH) + TAG_WIDTH;
 
@@ -45,7 +47,7 @@ module VX_lsu_mem_arb import VX_gpu_pkg::*; #(
     wire [NUM_OUTPUTS-1:0]                req_valid_out;
     wire [NUM_OUTPUTS-1:0][REQ_DATAW-1:0] req_data_out;
     wire [NUM_OUTPUTS-1:0]                req_ready_out;
-    wire [NUM_OUTPUTS-1:0][`UP(LOG_NUM_REQS)-1:0] req_sel_out;
+    wire [SEL_COUNT-1:0][SEL_W-1:0] req_sel_out;
 
     wire [NUM_INPUTS-1:0]                 req_valid_in;
     wire [NUM_INPUTS-1:0][REQ_DATAW-1:0]  req_data_in;

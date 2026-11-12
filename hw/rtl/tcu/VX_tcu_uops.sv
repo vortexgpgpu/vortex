@@ -75,7 +75,6 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
 `ifdef VX_CFG_TCU_SPARSE_ENABLE
     localparam LG_A_SB = $clog2(TCU_A_SUB_BLOCKS);
 `endif
-    localparam LG_B_SB = $clog2(TCU_B_SUB_BLOCKS);
 
     `UNUSED_VAR ({clk, reset, start, advance, uop_idx})
 
@@ -277,21 +276,11 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     logic [`UP(CTR_W)-1:0] rs2_offset;
     logic [`UP(CTR_W)-1:0] rs3_offset;
 
-    // Bank-conflict-free register offset formulas.
-    // Permutes A, B, C offsets so all three operands always land in
-    // different GPR banks, eliminating all RF read-port stalls.
-    // - Pattern A (LG_B_SB==0): A={m[0],~m[hi],k}, B={n^k,~k}, C={m[0],~m[hi],XNOR(m[hi],n)}
-    // - Pattern B (LG_B_SB>0): A={k[0],~m,m^k[hi]}, B={k[0],k[hi]^np,~np}, C={n[0],~m,n[hi]}
-    wire [`UP(CTR_W)-1:0] ra_off, rb_off, rc_off;
-    if (LG_B_SB == 0) begin : g_bcfree_bsub1
-        assign ra_off = `UP(CTR_W)'({m_index[0], ~m_index[`UP(LG_M)-1], k_index[0]});
-        assign rb_off = `UP(CTR_W)'({n_index[0] ^ k_index[0], ~k_index[0]});
-        assign rc_off = `UP(CTR_W)'({m_index[0], ~m_index[`UP(LG_M)-1], ~(m_index[`UP(LG_M)-1] ^ n_index[0])});
-    end else begin : g_bcfree_bsub2
-        assign ra_off = `UP(CTR_W)'({k_index[0], ~m_index[0], m_index[0] ^ k_index[`UP(LG_K)-1]});
-        assign rb_off = `UP(CTR_W)'({k_index[0], k_index[`UP(LG_K)-1] ^ n_index[`UP(LG_N)-1], ~n_index[`UP(LG_N)-1]});
-        assign rc_off = `UP(CTR_W)'({n_index[0], ~m_index[0], n_index[`UP(LG_N)-1]});
-    end
+    // Bank-conflict-free register offsets: all three operands of a step land
+    // in different GPR banks, so the RF read ports never stall.
+    wire [`UP(CTR_W)-1:0] ra_off = `UP(CTR_W)'(mtx_ra_off(m_index, k_index));
+    wire [`UP(CTR_W)-1:0] rb_off = `UP(CTR_W)'(mtx_rb_off(n_index, k_index));
+    wire [`UP(CTR_W)-1:0] rc_off = `UP(CTR_W)'(mtx_rc_off(m_index, n_index));
 
 `ifdef VX_CFG_TCU_SPARSE_ENABLE
     if (SYM_SPARSE) begin : g_sym_off
@@ -301,12 +290,9 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
         assign rs2_offset = is_sparse ? `UP(CTR_W)'(n_sp) : rb_off;
         assign rs3_offset = is_sparse ? (`UP(CTR_W)'(eff_ctr) >> 1) : rc_off;
     end else begin : g_def_off
-        // Bank-conflict-free sparse register offsets (non-sym sparse).
-        // A stays identity; B and C are permuted for 0 stalls.
-        // B_off_sp = {n[hi], ~(n[0]^k[0]), ~k[0]}
-        // C_off_sp = {n[hi], m[0], ~(m[0]^n[0])}
-        wire [`UP(CTR_W)-1:0] rb_off_sp = `UP(CTR_W)'({n_index[`UP(LG_N)-1], ~(n_index[0] ^ k_index[0]), ~k_index[0]});
-        wire [`UP(CTR_W)-1:0] rc_off_sp = `UP(CTR_W)'({n_index[`UP(LG_N)-1], m_index[0], ~(m_index[0] ^ n_index[0])});
+        // Non-symmetric sparse: A stays identity; B and C are permuted.
+        wire [`UP(CTR_W)-1:0] rb_off_sp = `UP(CTR_W)'(mtx_rb_off_sp(n_index, k_index));
+        wire [`UP(CTR_W)-1:0] rc_off_sp = `UP(CTR_W)'(mtx_rc_off_sp(m_index, n_index));
         assign rs1_offset = is_sparse
             ? ((`UP(CTR_W)'(m_index) >> LG_A_SB) << (LG_K / 2)) | `UP(CTR_W)'(k_index)
             : ra_off;

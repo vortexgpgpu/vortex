@@ -42,6 +42,10 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
 
     parameter DIRTY_BYTES           = 0,      // Enable dirty bytes on writeback
 
+    parameter LAZY_FETCH            = 0,      // Write misses allocate without a fill (write-validate)
+
+    parameter WRITE_AROUND          = 0,      // Write misses flagged no-allocate go to memory (write-back only)
+
     parameter REPL_POLICY           = `CS_REPL_FIFO, // Replacement policy
 
     parameter TAG_WIDTH             = UUID_WIDTH + 1, // core request tag size
@@ -54,7 +58,16 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
 
     parameter MEM_OUT_BUF           = 3,      // Memory request output buffer
 
+    parameter CORE_REQ_SKID         = 0,      // Banks behind an unbuffered request crossbar take requests through a skid register
+
     parameter IS_LLC                = 0,      // Set when this cache is the LLC (enables AMO completion at this level).
+    parameter SHARED_LLC            = 0,      // The LLC serves every memory client alone (point of coherence).
+    parameter ACQ_FORWARD           = 0,      // An acquire flush also invalidates the next level.
+    parameter FLUSH_FORWARD         = 1,      // A flush also flushes the next level.
+    parameter BANK_HASH             = 0,      // Hashed bank select (cache_bank_hash).
+    parameter SET_HASH              = 0,      // Hashed set index (cache_set_hash).
+    parameter READ_MERGE            = 0,      // Merge same-word reads within groups of this many adjacent ports (0: off).
+    parameter READ_MERGE_LINE       = 0,      // Merge any reads of the same line instead, each port keeping its own tag and word.
 
     parameter AMO_ENABLE            = 0       // Enable atomic operations in cache banks.
  ) (
@@ -66,7 +79,10 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     output cache_perf_t     cache_perf,
 `endif
     VX_mem_bus_if.slave     core_bus_if [NUM_REQS],
-    VX_mem_bus_if.master    mem_bus_if [MEM_PORTS]
+    VX_mem_bus_if.master    mem_bus_if [MEM_PORTS],
+
+    // no uncached or outgoing request waiting in the bypass path
+    output wire             req_empty
 );
     `STATIC_ASSERT(NUM_BANKS == (1 << `CLOG2(NUM_BANKS)), ("invalid parameter"))
     localparam CACHE_MEM_TAG_WIDTH = `CACHE_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, MEM_PORTS, UUID_WIDTH);
@@ -106,9 +122,11 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .core_bus_in_if (core_bus_if),
             .core_bus_out_if(core_bus_cache_if),
             .mem_bus_in_if  (mem_bus_cache_if),
-            .mem_bus_out_if (mem_bus_tmp_if)
+            .mem_bus_out_if (mem_bus_tmp_if),
+            .req_empty      (req_empty)
         );
     end else begin : g_no_bypass
+        assign req_empty = 1'b1;
         for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_bus_cache_if
             `ASSIGN_VX_MEM_BUS_IF (core_bus_cache_if[i], core_bus_if[i]);
         end
@@ -137,6 +155,8 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .WRITE_ENABLE (WRITE_ENABLE),
             .WRITEBACK    (WRITEBACK),
             .DIRTY_BYTES  (DIRTY_BYTES),
+            .LAZY_FETCH   (LAZY_FETCH),
+            .WRITE_AROUND (WRITE_AROUND),
             .REPL_POLICY  (REPL_POLICY),
             .CRSQ_SIZE    (CRSQ_SIZE),
             .MSHR_SIZE    (MSHR_SIZE),
@@ -146,7 +166,15 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .TAG_WIDTH    (TAG_WIDTH),
             .CORE_OUT_BUF (BYPASS_ENABLE ? 1 : CORE_OUT_BUF),
             .MEM_OUT_BUF  (BYPASS_ENABLE ? 1 : MEM_OUT_BUF),
+            .CORE_REQ_SKID (CORE_REQ_SKID),
             .IS_LLC       (IS_LLC),
+            .SHARED_LLC   (SHARED_LLC),
+            .ACQ_FORWARD  (ACQ_FORWARD),
+            .FLUSH_FORWARD (FLUSH_FORWARD),
+            .BANK_HASH    (BANK_HASH),
+            .SET_HASH     (SET_HASH),
+            .READ_MERGE   (READ_MERGE),
+            .READ_MERGE_LINE (READ_MERGE_LINE),
             .AMO_ENABLE   (AMO_ENABLE)
         ) cache (
             .clk            (clk),
@@ -155,7 +183,8 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .cache_perf     (cache_perf),
         `endif
             .core_bus_if    (core_bus_cache_if),
-            .mem_bus_if     (mem_bus_cache_if)
+            .mem_bus_if     (mem_bus_cache_if),
+            .nc_req_empty   (req_empty)
         );
     end else begin : g_passthru
         for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_bus_cache_if

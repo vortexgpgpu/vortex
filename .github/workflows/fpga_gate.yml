@@ -53,6 +53,11 @@ jobs:
           echo "state=$HOME/.cache/vortex/fpga_gate.$(echo '${{ github.repository }}' | tr / _).sha" >> "$GITHUB_OUTPUT"
           echo "gating $SHA"
 
+      # The synthesis flows fold asynchronous RAM reads into block RAM with
+      # pyslang (hw/scripts/ram_fold.py); a no-op once installed.
+      - name: Install pyslang
+        run: python3 -m pip install --quiet --user "pyslang>=11,<13"
+
       # The command is the one the catalog declares (ci/testcases/fpga_gate.yaml's
       # single `run:` case), so what CI runs and what the catalog says cannot
       # drift apart. Dispatch inputs only narrow it, and reach the shell through
@@ -125,6 +130,7 @@ jobs:
             build32_fpga_gate/hw/syn/xilinx/dut/fpga_gate_*/build.log
             build32_fpga_gate/hw/syn/xilinx/dut/fpga_gate_*/*.rpt
             build32_fpga_gate/hw/syn/xilinx/dut/fpga_gate_*/synth_summary.csv
+            build32_fpga_gate/hw/syn/xilinx/dut/fpga_gate_*/ep.csv
           # A build that dies in elaboration leaves only its build.log, so a
           # path matching nothing turns a red gate into a red X with no evidence.
           if-no-files-found: error

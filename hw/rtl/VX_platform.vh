@@ -167,6 +167,7 @@
 `ifdef QUARTUS
 `define MAX_FANOUT      8
 `define LATENCY_IMUL    3
+`define IMUL_IN_REG     0
 `define FORCE_BRAM(d,w) (((d) >= 64) && (((d) * (w)) >= 2048))
 `define FORCE_BUILTIN_ADDER(w)  ((w) <= 27)
 `define USE_BLOCK_BRAM  (* ramstyle = "block" *)
@@ -181,6 +182,7 @@
 `elsif VIVADO
 `define MAX_FANOUT      8
 `define LATENCY_IMUL    3
+`define IMUL_IN_REG     0
 `define FORCE_BRAM(d,w) (((d) >= 64) && (((d) * (w)) >= 2048))
 `define FORCE_BUILTIN_ADDER(w)  ((w) <= 27)
 `define USE_BLOCK_BRAM  (* ram_style = "block" *)
@@ -192,12 +194,10 @@
 `define PRESERVE_NET    (* keep = "true" *)
 `define BLACKBOX_CELL   (* black_box *)
 `define STRING
-`ifndef SIMULATION
-    `define ASYNC_BRAM_PATCH
-`endif
 `elsif ASIC
 `define MAX_FANOUT      8
 `define LATENCY_IMUL    3
+`define IMUL_IN_REG     1
 `define FORCE_BRAM(d,w) (((d) >= 64) && (((d) * (w)) >= 2048))
 `define FORCE_BUILTIN_ADDER(w)  0
 `define USE_BLOCK_BRAM
@@ -212,6 +212,7 @@
 `else
 `define MAX_FANOUT      8
 `define LATENCY_IMUL    3
+`define IMUL_IN_REG     1
 `define FORCE_BRAM(d,w) (((d) >= 64) && (((d) * (w)) >= 2048))
 `define FORCE_BUILTIN_ADDER(w)  ((w) <= 27)
 `define USE_BLOCK_BRAM

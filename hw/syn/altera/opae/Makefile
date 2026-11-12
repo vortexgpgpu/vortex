@@ -142,9 +142,21 @@ $(BUILD_DIR)/vortex_afu.qsf:
 $(BUILD_DIR)/vortex_afu.json:
 	mkdir -p $(BUILD_DIR); cp $(SRC_DIR)/vortex_afu.json $(BUILD_DIR)/vortex_afu.json
 
+# Quartus reads the preprocessed, RAM-folded sources, as every synthesis flow
+# does (gen_sources.sh -P -F). Preprocessing inlines the AFU's includes, so its
+# headers must exist first: the AFU's JSON header, which afu_synth_setup only
+# generates later, and the OPAE platform's headers. Only the headers are copied:
+# gen_sources.sh lists every source in an include directory, and the platform's
+# modules are added by afu_synth_setup.
+$(BUILD_DIR)/gen/afu_json_info.vh: $(SRC_DIR)/vortex_afu.json
+	mkdir -p $(BUILD_DIR)/gen
+	cp $(OPAE_PLATFORM_ROOT)/hw/lib/build/platform/*.vh $(BUILD_DIR)/gen/
+	afu_json_mgr json-info --afu-json=$^ --verilog-hdr=$@
+
 gen-sources: $(BUILD_DIR)/sources.txt
-$(BUILD_DIR)/sources.txt:
-	mkdir -p $(BUILD_DIR); $(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -C$(BUILD_DIR)/src -O$(BUILD_DIR)/sources.txt
+$(BUILD_DIR)/sources.txt: $(BUILD_DIR)/gen/afu_json_info.vh
+	$(SCRIPT_DIR)/gen_sources.sh -P -F -Tvortex_afu $(CFLAGS) -I$(BUILD_DIR)/gen \
+		-C$(BUILD_DIR)/src -O$(BUILD_DIR)/sources.txt
 
 setup: $(BUILD_DIR)/synth
 $(BUILD_DIR)/synth: $(BUILD_DIR)/sources.txt $(BUILD_DIR)/setup.cfg $(BUILD_DIR)/vortex_afu.qsf $(BUILD_DIR)/vortex_afu.json

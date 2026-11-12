@@ -39,8 +39,39 @@ void kernel_body(kernel_arg_t *arg) {
 
     __syncthreads();
 
-    for (size_t j = 0; j < chunk_k; ++j) {
-      sum += local_A[l_row * chunk_k + j] * local_B[j * tile_size + l_col];
+    const TYPE* a_row = &local_A[l_row * chunk_k];
+    size_t j = 0;
+    for (; j + 4 <= chunk_k; j += 4) {
+#ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
+      static_assert(__is_same(TYPE, float), "the wide loads read float words");
+      // The compiler cannot move a load across the quad's asm volatile, so the
+      // order is written out. With 4 threads the quad conflicts 4 ways on the
+      // local-memory banks and B1 goes ahead of it too, so the second FMA does
+      // not wait on its uops; with 8 or more its uops are cheap and only B0
+      // goes first, so the FMA chain starts sooner.
+      TYPE b0 = local_B[j * tile_size + l_col];
+#if VX_CFG_NUM_THREADS < 8
+      TYPE b1 = local_B[(j + 1) * tile_size + l_col];
+#endif
+      vx_float4 a = vx_flw_q(&a_row[j]);
+      sum += a[0] * b0;
+#if VX_CFG_NUM_THREADS < 8
+      sum += a[1] * b1;
+#else
+      sum += a[1] * local_B[(j + 1) * tile_size + l_col];
+#endif
+      sum += a[2] * local_B[(j + 2) * tile_size + l_col];
+      sum += a[3] * local_B[(j + 3) * tile_size + l_col];
+#else
+      TYPE a[4] = {a_row[j], a_row[j + 1], a_row[j + 2], a_row[j + 3]};
+      sum += a[0] * local_B[j * tile_size + l_col];
+      sum += a[1] * local_B[(j + 1) * tile_size + l_col];
+      sum += a[2] * local_B[(j + 2) * tile_size + l_col];
+      sum += a[3] * local_B[(j + 3) * tile_size + l_col];
+#endif
+    }
+    for (; j < chunk_k; ++j) {
+      sum += a_row[j] * local_B[j * tile_size + l_col];
     }
 
     __syncthreads();

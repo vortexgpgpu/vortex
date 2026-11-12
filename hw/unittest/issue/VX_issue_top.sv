@@ -90,7 +90,21 @@ module VX_issue_top import VX_gpu_pkg::*; #(
     assign decode_if.data.rs1 = decode_rs1;
     assign decode_if.data.rs2 = decode_rs2;
     assign decode_if.data.rs3 = decode_rs3;
-    assign decode_ready = decode_if.ready;
+
+    // issue slice i takes the warps with wid mod ISSUE_WIDTH == i
+    VX_decode_if    slice_decode_if[`VX_CFG_ISSUE_WIDTH]();
+    wire [ISSUE_ISW_W-1:0] decode_isw = wid_to_isw(decode_wid);
+    wire [`VX_CFG_ISSUE_WIDTH-1:0] slice_decode_ready;
+    for (genvar i = 0; i < `VX_CFG_ISSUE_WIDTH; ++i) begin : g_decode_if
+        assign slice_decode_if[i].valid = decode_if.valid && (decode_isw == ISSUE_ISW_W'(i));
+        assign slice_decode_if[i].data  = decode_if.data;
+        assign slice_decode_ready[i]    = slice_decode_if[i].ready;
+        `UNUSED_VAR (slice_decode_if[i].ibuf_pop)
+    end
+    assign decode_if.ready    = slice_decode_ready[decode_isw];
+    assign decode_if.ibuf_pop = '0;
+    assign decode_ready       = decode_if.ready;
+    `UNUSED_VAR (decode_if.ibuf_pop)
 
     for (genvar i = 0; i < `VX_CFG_ISSUE_WIDTH; ++i) begin : g_writeback_if
         assign writeback_if[i].valid = writeback_valid[i];
@@ -157,7 +171,7 @@ module VX_issue_top import VX_gpu_pkg::*; #(
         .issue_perf     (issue_perf),
     `endif
 
-        .decode_if      (decode_if),
+        .decode_if      (slice_decode_if),
         .writeback_if   (writeback_if),
         .dispatch_if    (dispatch_if),
         .issue_sched_if (issue_sched_if)

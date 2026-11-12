@@ -74,7 +74,13 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define CS_BANK_TO_FULL_ADDR(x, b) {x, (`VX_CFG_XLEN-$bits(x))'(b << (`VX_CFG_XLEN-$bits(x)-`CS_BANK_SEL_BITS))}
+// With SET_HASH a bank's line address carries the raw set bits XOR the fold of
+// its tag; the same XOR maps a raw line address to the bank's and back.
+`define CS_LINE_SET_HASH(x)     ($bits(x))'((x) ^ ((SET_HASH != 0 && `CS_LINE_SEL_BITS != 0) ? ($bits(x))'(cache_set_hash(32'((x) >> `CS_LINE_SEL_BITS), `CS_LINE_SEL_BITS)) : ($bits(x))'(0)))
+
+// x is a bank's line address, b the bank id; with BANK_HASH the raw bank bits
+// are b XOR the raw line's hash
+`define CS_BANK_TO_FULL_ADDR(x, b) {`CS_LINE_SET_HASH(x), (`VX_CFG_XLEN-$bits(x))'(((b) ^ (BANK_HASH ? int'(cache_bank_hash(32'(`CS_LINE_SET_HASH(x)), `CS_BANK_SEL_BITS)) : 0)) << (`VX_CFG_XLEN-$bits(x)-`CS_BANK_SEL_BITS))}
 `define CS_MEM_TO_FULL_ADDR(x)     {x, (`VX_CFG_XLEN-$bits(x))'(0)}
 
 ///////////////////////////////////////////////////////////////////////////////

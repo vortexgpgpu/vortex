@@ -4,6 +4,7 @@ category: synthesis
 defaults:
   xlen: [32, 64]
   tier: nightly
+  needs: [asap7]
 tests:
   - id: base
     via: script

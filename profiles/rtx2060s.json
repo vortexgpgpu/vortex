@@ -1,0 +1,30 @@
+{
+  "name": "rtx2060s",
+  "extends": "rtx2060",
+  "description": "NVIDIA GeForce RTX 2060 SUPER (TU106, Turing, sm_75) at its 1470 MHz base clock: one Vortex core per SM; the SM is the RTX 2060's (rtx2060).",
+  "chip": {
+    "VX_CFG_NUM_CORES": 34,
+    "VX_CFG_L2_SIZE": 4194304,
+    "VX_CFG_L2_NUM_WAYS": 16,
+    "VX_CFG_L2_MSHR_SIZE": 64
+  },
+  "platform": {
+    "VX_CFG_PLATFORM_CLOCK_RATE": 1470,
+    "VX_CFG_PLATFORM_MEMORY_PEAK_BW": 448000,
+    "VX_CFG_PLATFORM_MEMORY_DATA_RATE": 14000
+  },
+  "reference": {
+    "fp32_lanes": 2176,
+    "dram_bandwidth_gbs": 448
+  },
+  "sources": {
+    "SM (all core knobs)": "Inherited from rtx2060: the same TU106 SM",
+    "NUM_CORES": "34 SMs, 2176 CUDA cores (GeForce RTX 2060 SUPER specifications)",
+    "L2_SIZE, L2_NUM_WAYS": "4 MB L2 (TU106 with all eight 32-bit memory controllers): 16 ways over power-of-two sets",
+    "PLATFORM_MEMORY_DATA_RATE, PLATFORM_MEMORY_PEAK_BW": "256-bit GDDR6 at 14 Gbps: 16 x16 channels at 14000 MT/s, 16 x 2 B x 14 GT/s = 448 GB/s",
+    "PLATFORM_CLOCK_RATE": "1470 MHz base clock (1650 MHz boost); Accel-Sim's SM75_RTX2060_S configuration runs it at 1905 MHz",
+    "reference": "fp32_lanes is the vendor FP32 core count (FP32 FMA lanes per chip, clock-free); dram_bandwidth_gbs the vendor peak. Checked by ci/profile_check.py. Latencies inherited from rtx2060 (Jia et al.'s T4, the same Turing SM, L1 and L2 design); Accel-Sim's SM75_RTX2060_S configuration is tuned to 20 (L1) and 160 (L2) cycles",
+    "L2_LINK_LATENCY, PLATFORM_MEMORY_LATENCY": "Inherited from rtx2060 (calibrated to the T4's measured 188 and 296 cycles: the same Turing SM-to-L2 network and GDDR6)",
+    "L2_MSHR_SIZE": "64 per bank: Little's law on the 108-cycle L2-miss round trip x 305 B/cycle (448 GB/s / 1470 MHz) / (16 banks x 64 B) = 32.1, rounded up to a power of two"
+  }
+}

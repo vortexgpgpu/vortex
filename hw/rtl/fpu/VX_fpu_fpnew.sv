@@ -53,6 +53,12 @@ module VX_fpu_fpnew
     input wire  ready_out,
     output wire valid_out
 );
+    // FPnew instantiates a full lane of every unit; it has no PE serializer.
+    `STATIC_ASSERT((`VX_CFG_FMA_PE_RATIO == 1) && (`VX_CFG_FMA64_PE_RATIO == 1)
+                && (`VX_CFG_FDIV_PE_RATIO == 1) && (`VX_CFG_FSQRT_PE_RATIO == 1)
+                && (`VX_CFG_FCVT_PE_RATIO == 1) && (`VX_CFG_FNCP_PE_RATIO == 1),
+        ("FPU_TYPE_FPNEW does not support FPU PE ratios other than 1"))
+
     localparam LATENCY_FDIVSQRT = `MAX(`VX_CFG_FDIV_LATENCY, `VX_CFG_FSQRT_LATENCY);
     localparam RSP_DATAW = (NUM_LANES * `VX_CFG_XLEN) + 1 + $bits(fflags_t) + TAG_WIDTH;
 

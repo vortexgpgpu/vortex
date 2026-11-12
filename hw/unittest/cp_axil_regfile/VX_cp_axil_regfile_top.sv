@@ -23,6 +23,8 @@ module VX_cp_axil_regfile_top
   input  wire                            clk,
   input  wire                            reset,
 
+  output wire [63:0]                     satp,
+
   // AXI-Lite W/AW/B
   input  wire                            awvalid,
   output wire                            awready,
@@ -114,6 +116,7 @@ module VX_cp_axil_regfile_top
     .q_error        (q_error_arr),
     .last_dcr_rsp   (32'd0),
     .q_state        (q_state_arr),
+    .satp           (satp),
     .q_reset_pulse  (q_reset_arr),
     .dbg_host_w_counts (32'd0),
     .dbg_host_r_counts (32'd0),

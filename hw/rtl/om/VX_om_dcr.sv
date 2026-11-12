@@ -29,7 +29,6 @@ module VX_om_dcr import VX_gpu_pkg::*, VX_om_pkg::*; #(
     output om_rt_dcrs_t     om_rt_dcrs [`VX_OM_MAX_RT]
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    `UNUSED_VAR (reset)
 
     // Decode write strobe and extract addr/data from the req-style DCR bus
     wire write_valid                    = dcr_bus_if.req_valid && dcr_bus_if.req_data.rw;
@@ -76,8 +75,29 @@ module VX_om_dcr import VX_gpu_pkg::*, VX_om_pkg::*; #(
         end
     end
 
+    // The state that decides whether the OM touches memory resets to the
+    // all-zero state SimX starts from (tests ALWAYS, ops KEEP, write masks off),
+    // so a register the driver never programs cannot enable a depth, stencil
+    // or colour access to a buffer it never bound.
     always @(posedge clk) begin
-        if (write_valid) begin
+        if (reset) begin
+            dcrs.depth_func        <= '0;
+            dcrs.depth_writemask   <= '0;
+            dcrs.stencil_func      <= '0;
+            dcrs.stencil_zpass     <= '0;
+            dcrs.stencil_zfail     <= '0;
+            dcrs.stencil_fail      <= '0;
+            dcrs.stencil_writemask <= '0;
+            for (integer i = 0; i < `VX_OM_MAX_RT; ++i) begin
+                rt_dcrs[i].cbuf_writemask <= '0;
+                rt_dcrs[i].blend_mode_rgb <= '0;
+                rt_dcrs[i].blend_mode_a   <= '0;
+                rt_dcrs[i].blend_src_rgb  <= '0;
+                rt_dcrs[i].blend_src_a    <= '0;
+                rt_dcrs[i].blend_dst_rgb  <= '0;
+                rt_dcrs[i].blend_dst_a    <= '0;
+            end
+        end else if (write_valid) begin
             case (write_addr)
                 `VX_DCR_OM_CBUF_ADDR: begin
                     rt_dcrs[rt_sel].cbuf_addr <= write_data[`OM_ADDR_BITS-1:0];

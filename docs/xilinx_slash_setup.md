@@ -97,12 +97,15 @@ Artifacts land in `deb/`.
 
 ```bash
 cd deb
-sudo apt install --no-install-recommends \
-  $(ls -1 *.deb | grep -v '^ami_' | sed 's|^|./|')
+sudo apt install --no-install-recommends $(ls -1 *.deb | sed 's|^|./|')
 ```
 
-`ami` is built but deliberately left out: nothing in the `slash` dependency
-chain needs it, and it is the component that heartbeats the AMC over GCQ.
+**Install `ami` too.** Nothing in the `slash` dependency chain pulls it in, but
+the card is not fully usable without it: `ami.ko` binds PF0, and the AMC behind
+PF0 is how the static shell is written to flash (§5) and how the board is
+recovered. Skipping it leaves PF0 unbound at every boot and the board reporting
+`NOT READY`. Its package registers the module with DKMS, so — like `slash` — it
+rebuilds on kernel updates and loads automatically.
 
 If a previous **source** install exists, remove its leftovers first or they
 win: files under `/etc/systemd/system/` override the packaged units, and
@@ -146,8 +149,18 @@ systemctl is-active vrtd
 v80-smi list
 ```
 
-`v80-smi list` reports **PF0 NOT READY** when `ami` is absent. That is a
-readiness *report*, not a requirement: PF1, PF2 and VRTD are what matter.
+All three functions should bind: PF0 to `ami`, PF1 to `slash_qdma`, PF2 to
+`slash_ctl`.
+
+```bash
+lsmod | grep -E '^ami|^slash'
+for f in 0 1 2; do basename "$(readlink /sys/bus/pci/devices/0000:01:00.$f/driver)"; done
+```
+
+`v80-smi list` reporting **PF0 NOT READY** means `ami` is missing. Running
+kernels does work in that state — PF1, PF2 and VRTD carry the data and control
+paths — but flashing the shell and recovering the board do not, so treat it as
+an incomplete install rather than a cosmetic warning.
 
 ---
 
@@ -289,6 +302,69 @@ like XRT's `load_xclbin()`; there is no never-program switch.
 from the static shell in flash. On a board that has never had it programmed,
 PF0-only is expected — complete §5 first. `slash.ko` binds *only* PF1/PF2, so
 until they appear the driver has nothing to attach to.
+
+**The whole host resets when the card is touched.** The machine reboots with
+no panic and no log; the next boot prints a fatal ACPI **BERT** record naming a
+processor cache error (`Check Information 0x602001f`), often on a different
+core each time. It is not a CPU fault.
+
+```
+x86/amd: Previous system reset reason [0x80000800]: a software sync flood event occurred
+GHES: APEI firmware first mode is enabled by APEI bit
+```
+
+The chain is: a driver reads the card's BAR while the link is down -> that read
+is an unsupported request or completion timeout, an uncorrectable PCIe error ->
+firmware owns error handling (APEI firmware-first) and answers with a **sync
+flood**, resetting the host before Linux can log anything. Firmware then
+records it in the only vocabulary BERT gives it, which is why it masquerades as
+a CPU defect.
+
+The reader is usually AMI's logging thread: `dump_amc_log()` reads every 500 ms
+and, before the fix, did so unconditionally -- so it covered every bus reset,
+every reconfiguration and every wedged card. Symptoms line up with a card event
+0-80 s earlier, and the giveaway in the log is:
+
+```
+ami 0000:01:00.0: ERROR : Logging thread error - invalid PCI data read!
+eqdma_cpm5_hw_error_process: Global Err Reg(0x248) = 0xffffffff
+```
+
+Three things fix it, and all three are worth doing:
+
+1. **Patched drivers.** `dump_amc_log()` must return when the service is halted
+   or `pci_device_is_present()` is false, and `ami` must implement
+   `reset_prepare`/`reset_done` so a reset quiesces its threads. The reset path
+   must use `pci_reset_bus()`, not a bare `pci_bridge_secondary_bus_reset()`,
+   or those callbacks are never delivered.
+2. **BIOS: `NBIO SyncFlood Generation` = Disabled** (Advanced -> AMD CBS ->
+   NBIO Common Options), with `Enable AER Cap` and EDPC/DPC enabled. This stops
+   *any* unanswered access from resetting the host, and is the only way to see
+   the real PCIe error -- with firmware-first the evidence is destroyed by the
+   reset.
+3. **Both flash partitions written (§5).** `Shell: unknown` makes the daemon
+   reset the board on every image load: one boot logged 115 of them. Each is a
+   window for the failure above.
+
+**No V80 on the bus at all, and no root port.** `lspci -d 10ee:` prints
+nothing and `ls /sys/bus/pci/devices/0000:00:01.1` does not exist. AMD firmware
+only instantiates a root port whose link is up at POST, so a card that was
+wedged — mid-program, or by a host crash — disappears entirely and the bus
+numbers shift down. **No rescan can bring it back**: there is no parent bridge
+to scan behind, and `v80-smi --jtag` cannot help either, because it resolves the
+device through VRTD, which only knows cards that are on PCIe.
+
+Recover over JTAG, which needs no root and reads no flash:
+
+```bash
+bash hw/syn/xilinx/aved/tools/jtag_load_shell.sh   # loads the _nofpt PDI
+sudo reboot                                        # POST now sees a trained link
+```
+
+Check `0000:00:01.1` before attempting anything rescan-based. Unload `slash`
+and `ami` first if they are loaded — a link transition under a live driver is
+what turns this into a host reset. A card whose **both** flash partitions hold
+a good shell (§5) boots on its own and does not need this.
 
 **BARs unassigned / `enable=0` / config space reads `0xff`.** The Versal can
 finish booting from OSPI *after* the host has enumerated PCIe, leaving the

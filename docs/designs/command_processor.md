@@ -108,7 +108,7 @@ architecturally defined; FENCE reads only `arg0[1:0]`, which is inside its
 |---|---|---|
 | 0 | `F_PROFILE` | Appends an 8 B `profile_slot` trailer; every size below grows by 8. |
 | 1 | `F_FENCE_PRE` | Declared in the package; not acted on by any consumer. |
-| 2 | `F_MEM_PHYSICAL` | `CMD_MEM_*` device operand is a physical address — the MMU-aware DMA skips translation (§8). Emulation CP only ([`cmd_processor.h:160`](../../sim/common/cmd_processor.h#L160)). |
+| 2 | `F_MEM_PHYSICAL` | `CMD_MEM_*` device operand is a physical address — the MMU-aware DMA skips translation (§8). |
 
 ### 2.2 Opcode map
 
@@ -129,7 +129,7 @@ come from `cmd_size_bytes`
 | `CMD_FENCE` | 0x07 | 8 | — | yes | yes | Ordering barrier (retires as a NOP today, §10) |
 | `CMD_EVENT_SIGNAL` | 0x08 | 20 | EVENT | yes | yes | Write a counter slot |
 | `CMD_EVENT_WAIT` | 0x09 | 28 | EVENT | yes | yes | Spin until a counter satisfies a compare |
-| `CMD_CACHE_FLUSH` | 0x0A | 12 | DCR | yes | yes | Per-core cache flush sweep |
+| `CMD_CACHE_FLUSH` | 0x0A | 12 | DCR | yes | yes | Cache flush: broadcast start, per-core completion |
 | `CMD_LAUNCH_QMD` | 0x0B | 12 | KMU | **no** | yes | Atomic launch: KMU descriptor read from memory (§2.3) |
 | `CMD_DRAW` | 0x0C | 12 | KMU | **no** | yes | Device-orchestrated graphics draw (§8.1) |
 
@@ -168,7 +168,13 @@ come from `cmd_size_bytes`
   (`WAIT_OP_EQ/GE/GT/NE`, [`VX_cp_pkg.sv:109-114`](../../hw/rtl/cp/VX_cp_pkg.sv#L109)).
 - **`CMD_CACHE_FLUSH`** — `arg0` = number of cores. Provides AMD
   `ACQUIRE_MEM`-style cache maintenance; the host fills `arg0` from
-  `VX_CAPS_NUM_CORES`.
+  `VX_CAPS_NUM_CORES`. Header flag bit 2 (`F_FLUSH_L1_ONLY`) asks for an
+  L1-only flush: the START write carries `VX_CACHE_FLUSH_L1_ONLY`, and the
+  last-level cache answers without its walk
+  ([cache_subsystem.md §6.4](cache_subsystem.md#64-vx_cache_init--the-flush-sequencer)).
+  The runtime flushes lazily: an L1-only flush ahead of the next launch, a
+  full flush ahead of the next device-memory transfer (see the launch
+  encoding in §9).
 
 ---
 
@@ -317,10 +323,10 @@ is a single-engine CP. Three things gate raising it:
 3. **The host serializes anyway.** All host queues funnel into one ring
    behind one mutex (§9).
 
-The **host-side** scaling limit is the launch path, not the ring: 22
+The **host-side** scaling limit is the launch path, not the ring: 21
 commands per launch, unbatched, each with its own doorbell and its own
 busy-poll loop (§9). `CMD_LAUNCH_QMD` collapses the 20 DCR writes to one
-command; batching collapses 22 doorbells to one. Both are implemented in
+command; batching collapses 21 doorbells to one. Both are implemented in
 the Emulation CP and the runtime; the RTL CP needs the QMD mirror.
 
 ### 4.5 The submit handshake end to end
@@ -343,6 +349,7 @@ subtracts it first.
 | `0x000` | `CP_CTRL` | RW | bit0 = enable_global, bit1 = reset_all |
 | `0x004` | `CP_STATUS` | RO | bit0 = busy, bit1 = error |
 | `0x008` | `CP_DEV_CAPS` | RO | `[7:0]` NUM_QUEUES, `[15:8]` RING_SIZE_LOG2_MAX, `[23:16]` AXI_TID_WIDTH — plus feature bits 24-26 on the Emulation CP (§6) |
+| `0x00C` | `GPU_DEV_CAPS_EXT` | RO | device-config caps extension (§6) |
 | `0x010` | `CP_CYCLE_LO` | RO | free-running cycle counter, low 32 |
 | `0x014` | `CP_CYCLE_HI` | RO | high 32 |
 | `0x018` / `0x01C` | `GPU_DEV_CAPS_LO/HI` | RO | device-config caps (§6) |
@@ -381,10 +388,8 @@ Reads are registered (AR latches, R returns the decoded value the next
 cycle). Undecoded addresses return `0xDEADBEEF` with DECERR on both
 channels.
 
-> **FPGA/sim divergence:** the RTL regfile has **no** `CP_SATP_LO/HI`
-> registers. The Emulation CP *does* (`0x028/0x02C`,
-> [`cmd_processor.cpp:72-73`](../../sim/common/cmd_processor.cpp#L72)),
-> and the runtime writes them only when VM is advertised. See §8.
+`CP_SATP_LO/HI` (`0x028/0x02C`) hold the DMA's page-table root; the runtime
+writes them only when `VM_ENABLED` is advertised. See §8.
 
 ---
 
@@ -416,7 +421,7 @@ CP regfile is the only producer on every target.
 | `[19:17]` | 3 | log2 cluster_size | (only via `NUM_CORES`) |
 | `[22:20]` | 3 | log2 num_clusters | `VX_CAPS_NUM_CLUSTERS` |
 | `[25:23]` | 3 | log2 issue_width | `VX_CAPS_ISSUE_WIDTH` |
-| `[33:26]` | 8 | log2 local_mem_size | `VX_CAPS_LOCAL_MEM_SIZE` |
+| `[33:26]` | 8 | local_mem_size in 4 KB units | `VX_CAPS_LOCAL_MEM_SIZE` |
 | `[36:34]` | 3 | log2 num_mem_banks | `VX_CAPS_NUM_MEM_BANKS` |
 | `[41:37]` | 5 | mem_bank_size, biased by 20 | `VX_CAPS_MEM_BANK_SIZE` |
 | `[48:42]` | 7 | warps/core | `VX_CAPS_NUM_WARPS` |
@@ -427,6 +432,11 @@ The exact counts in `[63:42]` let a machine that is not a power of two
 (e.g. 48 warps, 84 cores) report its true shape; the decoder prefers them and
 falls back to the log2 fields only when they read zero, as on devices built
 before they existed.
+
+**`GPU_DEV_CAPS_EXT`** (`0x00C`) carries the exact counts that no longer fit
+in `GPU_DEV_CAPS`: `[7:0]` socket_size (`VX_CAPS_SOCKET_SIZE`), the rest zero.
+It reads zero on devices built before it existed, so the decoder falls back to
+the log2 socket_size field `[16:14]`.
 
 `VX_CAPS_NUM_CORES` is derived, not a field:
 `num_clusters × cluster_size × socket_size`, from the exact counts. `CACHE_LINE_SIZE`,
@@ -450,11 +460,9 @@ upper byte of the CP's own caps word is free, and the Emulation CP uses it
 | 25 | `SUPPORTS_DRAW` | The CP decodes `CMD_DRAW` / `OP_DRAW` (§8.1) |
 | 26 | `SUPPORTS_QMD` | The CP decodes `CMD_LAUNCH_QMD` (§2.3) |
 
-**The RTL CP hardwires all three to zero.** Its `CP_DEV_CAPS` read returns
-`{8'd0, AXI_TID_W, RING_SIZE_LOG2_MAX, NUM_QUEUES}`
-([`VX_cp_axil_regfile.sv:177-180`](../../hw/rtl/cp/VX_cp_axil_regfile.sv#L177)),
-so on FPGA every launch takes the 20-DCR fallback, SATP is never
-programmed, and draws stream as a ring batch. The runtime consumes the
+**The RTL CP sets `VM_ENABLED` from `VX_CFG_VM_ENABLE` and hardwires
+`SUPPORTS_DRAW` / `SUPPORTS_QMD` to zero**, so on FPGA every launch takes the
+20-DCR fallback and draws stream as a ring batch. The runtime consumes the
 bits at open ([`device.cpp:274-282`](../../sw/runtime/common/device.cpp#L274))
 and branches accordingly, so the graphics driver calls `vx_enqueue_draw`
 unconditionally on every backend.
@@ -470,10 +478,18 @@ unconditionally on every backend.
   barrier** — the property §8.1 depends on.
 - **DCR proxy** ([`VX_cp_dcr_proxy.sv`](../../hw/rtl/cp/VX_cp_dcr_proxy.sv)) —
   `IDLE→REQ→(WAIT_RSP)→DONE`. Writes complete at `REQ`; reads wait for
-  `dcr_rsp_valid`. `CMD_CACHE_FLUSH` re-enters `REQ` once per core,
-  sweeping a DCR *read* of `VX_DCR_BASE_CACHE_FLUSH` with the target core
-  index in `dcr_req_data[15:0]`, and retires only once the last core's
-  flush completes ([`:105-134`](../../hw/rtl/cp/VX_cp_dcr_proxy.sv#L105)).
+  `dcr_rsp_valid`. `CMD_CACHE_FLUSH` first passes through `START`: one DCR
+  *write* of `VX_DCR_BASE_CACHE_FLUSH`, which reaches every core and starts
+  all their flushes at once. It then re-enters `REQ` once per core, sweeping
+  a DCR *read* of the same address with the target core index in
+  `dcr_req_data[15:0]`; each read is answered when that core's flush has
+  completed, and the command retires after the last one; a full flush then
+  holds `DONE` until Vortex `busy` drops, which covers every write until its
+  AXI B response, so a DMA after the flush cannot overtake the last-level
+  cache's write-backs on bank 0. The DCR response
+  bus has no back-pressure, so the reads stay one at a time; the flushes
+  themselves overlap and share one walk of the shared caches
+  ([cache_subsystem.md §6](cache_subsystem.md#6-flush-architecture)).
 - **DMA** ([`VX_cp_dma.sv`](../../hw/rtl/cp/VX_cp_dma.sv)) — dual-port
   multi-beat bursts in ≤4 KB INCR chunks (`MAX_BURST` = 64 × 64 B beats),
   each chunk clipped so no burst crosses a 4 KB boundary on either
@@ -537,19 +553,17 @@ a divergence — with one queue the RTL's arbiters are degenerate too.
 
 The Emulation CP's MMIO map matches the RTL regfile **plus**:
 
-- `CP_SATP_LO/HI` at `0x028/0x02C`
-  ([`cmd_processor.cpp:72-73`](../../sim/common/cmd_processor.cpp#L72)),
-- the `CP_DEV_CAPS` feature bits 24-26 (§6),
-- a software page-table walk `cp_translate` (Sv32/Sv39, megapage-aware,
-  [`:157-201`](../../sim/common/cmd_processor.cpp#L157)) honoring the
-  `MEM_FLAG_PHYSICAL` flag ([`:519-520`](../../sim/common/cmd_processor.cpp#L519)),
+- the `CP_DEV_CAPS` feature bits 25-26 (§6),
 - byte-exact `CMD_MEM_*` copies, staged through a 64 KiB bounce buffer
   ([`:531-541`](../../sim/common/cmd_processor.cpp#L531)),
 - the two extra opcodes, `CMD_LAUNCH_QMD` (§2.3) and `CMD_DRAW` (§8.1).
 
-This means **CP DMA is MMU-aware in simulation but not on FPGA** — a
-deliberate phased rollout (runtime + emulation first, RTL walker later;
-see §10). Two smaller divergences: `CP_STATUS` returns only the busy bit
+Both CPs are MMU-aware: with a root in `CP_SATP`, each `CMD_MEM_*` walks
+the Sv32/Sv39 table (megapage-aware) for its device operands, once per
+command, since an allocation is one contiguous physical range, and
+`F_MEM_PHYSICAL` skips the walk (`cp_translate` in the emulation CP; the
+`S_XLATE_*` states of `VX_cp_dma`, which read the PTEs on the device port).
+Two smaller divergences: `CP_STATUS` returns only the busy bit
 (no error bit), and unknown MMIO offsets are silently ignored on write
 rather than raising DECERR.
 
@@ -622,8 +636,7 @@ is written **last**, after the per-queue enable. It then reads
 `CP_DEV_CAPS` once and latches the VM / DRAW / QMD feature bits
 ([`:274-282`](../../sw/runtime/common/device.cpp#L274)); `CP_SATP_LO/HI` is
 written only inside the `if (vm_enabled_)` branch
-([`:305-306`](../../sw/runtime/common/device.cpp#L305)) — so on every RTL
-CP today (§6) SATP is never programmed.
+([`:305-306`](../../sw/runtime/common/device.cpp#L305)).
 
 **Submit path.** Each `vx_enqueue_*` pushes a `Command` lambda onto a
 per-queue worker FIFO ([`queue.cpp:28`](../../sw/runtime/common/queue.cpp#L28)
@@ -644,13 +657,24 @@ whole run costs one doorbell and one poll.
 **Launch encoding.** A kernel launch emits **20** `CMD_DCR_WRITE`s
 ([`queue.cpp:401-427`](../../sw/runtime/common/queue.cpp#L401)) — 4 for the
 startup/entry PCs, 2 for the args pointer, and 14 for block/grid/cluster
-dims, lmem size, block size and warp steps — then `CMD_LAUNCH`, then
-`CMD_CACHE_FLUSH` with `arg0 = num_cores`, then a COUT drain
+dims, lmem size, block size and warp steps — then `CMD_LAUNCH`, then a COUT drain
 ([`device.cpp:502-520`](../../sw/runtime/common/device.cpp#L502)). Each
 group is independently skippable through the legacy escape hatches (no
 kernel, empty args, `ndim == 0`), so the real count ranges from 20 down to
-0. This path does **not** batch: all 22 lines take the non-batch
-`cp_submit_cl_`, so one launch costs 22 doorbells and 22 poll loops. Only
+0. The kernel-boundary `CMD_CACHE_FLUSH` (`arg0 = num_cores`) is posted lazily
+by `cp_ring_append_`, under the same ring lock, from two flags: `l1_dirty_` (a
+kernel ran since the last flush) puts an L1-only flush ahead of the next
+launch; `l1_dirty_` or `llc_dirty_` (a kernel ran since the last full flush)
+puts a full flush ahead of the next `CMD_MEM_*` that touches device memory
+outside the IO aperture, because the CP DMA reaches device memory beneath
+the last-level cache. A launch followed by a transfer therefore costs one
+full flush, and back-to-back launches one L1-only flush each. The COUT drain
+needs no flush: the console rings are uncached, and the device `busy` the
+launch retires on stays high until memory has completed every write the cores
+issued ([cache_subsystem.md §4.9](cache_subsystem.md#49-requests-in-flight-and-device-busy)). The drain's
+own transfers stay in the IO aperture and never trigger a flush.
+This path does **not** batch: all 21 lines take the non-batch
+`cp_submit_cl_`, so one launch costs 21 doorbells and 21 poll loops. Only
 `enqueue_commands` and the `enqueue_draw` fallback batch.
 
 **Queues and serialization.** `vx_queue_create` makes an unbounded number
@@ -674,7 +698,8 @@ host-side instead. They become usable once queues get independent rings.
 
 ### 9.1 FPGA backends
 
-- **XRT** ([`hw/rtl/afu/xrt/VX_afu_wrap.sv`](../../hw/rtl/afu/xrt/VX_afu_wrap.sv)) —
+- **XRT and AVED** ([`hw/rtl/afu/common/VX_afu_wrap.sv`](../../hw/rtl/afu/common/VX_afu_wrap.sv),
+  wrapped by `afu/xrt/vortex_afu.v` and `afu/aved/vortex_afu.v`) —
   AXI-Lite is split on bit 12: `0x000–0x0FFF` → a minimal `VX_afu_ctrl`
   ap_ctrl stub + SCOPE; `0x1000–0x1FFF` → the CP regfile. The legacy
   launch FSM, DCR path, and dev-caps were **removed**; CP is the sole
@@ -715,50 +740,46 @@ The following gaps remain **open**.
    ([`cmd_processor.cpp:531-541`](../../sim/common/cmd_processor.cpp#L531)).
    Non-cache-line-aligned transfers can over-write on FPGA. Needs tail
    `wstrb` on the last beat.
-2. **VM in RTL.** Add `CP_SATP_LO/HI` regfile decode + a hardware
-   page-table walker + TLB in `VX_cp_dma`, and route `F_MEM_PHYSICAL`, so
-   FPGA matches the simulator's MMU-aware DMA. Today VM works on
-   simx/rtlsim/gem5 and silently no-ops on FPGA.
-3. **Real `CMD_FENCE` semantics.** The engine retires FENCE as a NOP
+2. **Real `CMD_FENCE` semantics.** The engine retires FENCE as a NOP
    ([`VX_cp_engine.sv:109-112`](../../hw/rtl/cp/VX_cp_engine.sv#L109));
    it should honor `FENCE_DMA_BIT` / `FENCE_GPU_BIT` ordering.
-4. **`dcr_req_ready` backpressure.** `VX_cp_dcr_proxy` assumes the DCR bus
+3. **`dcr_req_ready` backpressure.** `VX_cp_dcr_proxy` assumes the DCR bus
    accepts every request in one cycle
    ([`:115-122`](../../hw/rtl/cp/VX_cp_dcr_proxy.sv#L115)); `VX_cp_core`
    discards `dcr_req_ready` outright
    ([`:340`](../../hw/rtl/cp/VX_cp_core.sv#L340)) even though
    `VX_cp_gpu_slice` now carries a real elastic buffer that can stall.
-5. **Resource re-entry under multi-queue** (§4.4, item 2). A grant landing
+4. **Resource re-entry under multi-queue** (§4.4, item 2). A grant landing
    on a busy resource unit is silently dropped while the granted CPE still
    retires on the previous command's `done`. Latent at `NUM_QUEUES=1`;
    blocking for anything more.
 
 **Performance / feature gaps:**
 
-6. **QMD `CMD_LAUNCH_QMD` in the RTL CP.** The atomic-launch opcode, the
+5. **QMD `CMD_LAUNCH_QMD` in the RTL CP.** The atomic-launch opcode, the
    in-memory descriptor format, the runtime encoder, and the
    `SUPPORTS_QMD` gate all exist and are validated on the Emulation CP
    (§2.3); the RTL CP does not decode 0x0B and advertises 0. Until it does,
    every FPGA launch pays the 20-`CMD_DCR_WRITE` dance, and per-queue
    launch concurrency stays blocked on item 5.
-7. **`CMD_DRAW` in the RTL CP** (§8.1) — same shape: shipped in emulation,
+6. **`CMD_DRAW` in the RTL CP** (§8.1) — same shape: shipped in emulation,
    cap bit cleared in RTL.
-8. **Multi-queue everywhere.** RTL is parameterized on `NUM_QUEUES` but
+7. **Multi-queue everywhere.** RTL is parameterized on `NUM_QUEUES` but
    defaults to 1; the Emulation CP models only `q0_`; the runtime programs
    only queue 0 and funnels every host queue through one ring lock (§9).
    Real concurrency depends on items 5 and 6.
-9. **Batch the launch path.** `enqueue_launch` submits its 22 commands
-   unbatched — 22 doorbells, 22 busy-polls — while `cp_batch_begin/end`
+8. **Batch the launch path.** `enqueue_launch` submits its 21 commands
+   unbatched — 21 doorbells, 21 busy-polls — while `cp_batch_begin/end`
    already exists and is used by `enqueue_commands`. Cheap win independent
    of item 6.
-10. **EVENT_WAIT fairness + backoff.** `EVENT_WAIT` holds its arbiter
+9. **EVENT_WAIT fairness + backoff.** `EVENT_WAIT` holds its arbiter
     grant for the whole wait
     ([`VX_cp_event_unit.sv:124-129`](../../hw/rtl/cp/VX_cp_event_unit.sv#L124));
     it should release between polls and back off.
-11. **Priority arbitration.** `VX_cp_engine` already drives `bid_priority`
+10. **Priority arbitration.** `VX_cp_engine` already drives `bid_priority`
     from `q_state.prio`; `VX_cp_arbiter` ties it off
     ([`:41`](../../hw/rtl/cp/VX_cp_arbiter.sv#L41)). Wire it through.
-12. **Profiling writeback.** [`VX_cp_profiling.sv`](../../hw/rtl/cp/VX_cp_profiling.sv)
+11. **Profiling writeback.** [`VX_cp_profiling.sv`](../../hw/rtl/cp/VX_cp_profiling.sv)
     is **not instantiated by anything** — `VX_cp_axil_regfile` carries its
     own free-running counter for `CP_CYCLE_LO/HI` at `0x010/0x014` (the
     profiling module's header comment claiming `0x040/0x044` is stale).
@@ -767,19 +788,19 @@ The following gaps remain **open**.
     To give `vx_event_get_profiling` hardware backing: instantiate the
     module, emit the 32 B `{queued,submit,start,end}` record, and add a
     `CP_CYCLE_FREQ_HZ` register.
-13. **Interrupt path.** Add IP_ISR/IER/GIER in the AFU and
+12. **Interrupt path.** Add IP_ISR/IER/GIER in the AFU and
     `xrt::ip::interrupt` so the runtime sleeps instead of busy-polling
     `Q_SEQNUM` (the `irq` pulse already exists,
     [`VX_cp_core.sv:505`](../../hw/rtl/cp/VX_cp_core.sv#L505)).
-14. **Host-coherent completion mailbox / `head_addr` writeback.** The CP
+13. **Host-coherent completion mailbox / `head_addr` writeback.** The CP
     tracks `head` internally and never DMAs it to `head_addr`; the runtime
     likewise ignores the cmpl slot it programs (§9). A cacheable host
     mailbox would let both replace the per-poll MMIO read.
-15. **A CP DCR range.** `command_processor` has no DCR block of its own for
+14. **A CP DCR range.** `command_processor` has no DCR block of its own for
     CP↔GPU coordination / multi-context KMU. The range once earmarked for
     it (`0x080–0x0BF`) is now occupied by `[dcr_om]` in `VX_types.toml`, so
     this needs a fresh allocation rather than the old reservation.
-16. **Opcode-constant duplication.** The command opcodes are re-declared in
+15. **Opcode-constant duplication.** The command opcodes are re-declared in
     `VX_cp_pkg.sv`, `cmd_processor.h`, `device.cpp` **and** `queue.cpp`,
     with no shared header — four copies of one ABI, and a standing drift
     hazard.

@@ -1,0 +1,31 @@
+{
+  "name": "t4",
+  "extends": "rtx2060",
+  "description": "NVIDIA Tesla T4 (TU104, Turing, sm_75) at its 1590 MHz boost clock: one Vortex core per SM; the SM is the RTX 2060's (rtx2060).",
+  "chip": {
+    "VX_CFG_NUM_CORES": 40,
+    "VX_CFG_L2_SIZE": 4194304,
+    "VX_CFG_L2_NUM_WAYS": 16
+  },
+  "platform": {
+    "VX_CFG_PLATFORM_CLOCK_RATE": 1590,
+    "VX_CFG_PLATFORM_MEMORY_PEAK_BW": 320000,
+    "VX_CFG_PLATFORM_MEMORY_DATA_RATE": 10000,
+    "VX_CFG_PLATFORM_MEMORY_LATENCY": 33
+  },
+  "reference": {
+    "fp32_lanes": 2560,
+    "dram_bandwidth_gbs": 320
+  },
+  "sources": {
+    "SM (all core knobs)": "Inherited from rtx2060: TU104 uses the same Turing SM",
+    "NUM_CORES": "40 SMs, 2560 CUDA cores, 320 tensor cores (NVIDIA T4 data sheet; Jia et al., Table 3.1)",
+    "L2_SIZE, L2_NUM_WAYS": "4 MB L2 (Jia et al., Table 3.1): 16 ways over power-of-two sets",
+    "PLATFORM_MEMORY_DATA_RATE, PLATFORM_MEMORY_PEAK_BW": "256-bit GDDR6 at 10 Gbps: 16 x16 channels at 10000 MT/s, 16 x 2 B x 10 GT/s = 320 GB/s (T4 data sheet)",
+    "PLATFORM_CLOCK_RATE": "1590 MHz maximum graphics clock, the clock Jia et al. measured at (Table 3.1)",
+    "EXT_RASTER_ENABLE, EXT_OM_ENABLE": "Inherited on: the datacenter T4 keeps Turing's graphics pipeline for virtual workstations",
+    "reference": "fp32_lanes is the vendor FP32 core count (FP32 FMA lanes per chip, clock-free); dram_bandwidth_gbs the vendor peak. Checked by ci/profile_check.py. Latencies: Jia et al., Dissecting the NVIDIA Turing T4 GPU via Microbenchmarking (arXiv 1903.07486), Table 3.1 and Figure 3.5: L1 hit 32, L2 hit 188, L2 miss with a TLB hit 296 cycles on the T4 (TU104)",
+    "L2_LINK_LATENCY, L2_MSHR_SIZE": "Inherited from rtx2060 (64 each way, 32 MSHRs), which the T4's measured 188-cycle L2 hit calibrates. Little's law here: 108 cycles x 201 B/cycle (320 GB/s / 1590 MHz) / (16 x 64 B) = 21.2, within the 32",
+    "PLATFORM_MEMORY_LATENCY": "33 core cycles beyond the L2 link, calibrated with ci/profile_check.py so the SimX cold pointer chase gives the T4's 296-cycle global memory latency"
+  }
+}

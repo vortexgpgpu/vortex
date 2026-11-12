@@ -18,6 +18,8 @@
 #include "constants.h"
 #include "cluster.h"
 #include "kmu.h"
+#include "gbar_unit.h"
+#include "cp_llc_port.h"
 
 namespace vortex {
 
@@ -72,7 +74,13 @@ public:
   // Drain dirty data from caches (write-back path) all the way to DRAM.
   // Walks L1 dcaches → L2 → L3, ticking the simulator between phases so
   // each level's evictions reach the next before that level itself flushes.
-  void flush_caches();
+  void flush_caches(bool l1_only);
+
+  // Device-memory access through the command processor's port into the
+  // last-level cache (CP_ON_L2 / CP_ON_L3). A write returns once every
+  // request entered the port, a read once its data returned.
+  void cp_mem_write(uint64_t addr, const void* src, uint64_t size, bool noalloc);
+  void cp_mem_read(uint64_t addr, void* dst, uint64_t size);
 
 private:
 
@@ -80,11 +88,22 @@ private:
   // the frame kick is forwarded to every cluster's raster engine instead.
   void forward_delegated_launch();
 
+  // Queue a transfer on the CP port and tick until it has entered, or for a
+  // read returned; the last-level cache keeps what it took into the next launch.
+  void cp_mem_transfer(uint64_t addr, const uint8_t* src, uint8_t* dst, uint64_t size, bool noalloc);
+
+  // Reset the model for a launch. After DMA writes it waits for the port's
+  // fence and keeps the memory side, whose line fills may still be in flight.
+  void launch_reset();
+
+  void llc_keep_lines();
+
   // True once the device walker has latched a page fault.
   bool mmu_fault_pending() const;
 
   Kmu::Ptr    kmu_;
   std::vector<Cluster::Ptr> clusters_;
+  GbarUnit::Ptr gbar_unit_;     // device-level global barrier (multi-cluster)
   Memory::Ptr memsim_;
 #ifdef VX_CFG_VM_ENABLE
   uint64_t    mmu_satp_ = 0;    // assembled from the two DCR halves
@@ -95,6 +114,8 @@ private:
 #endif
   RAM*        ram_ = nullptr;   // functional backing store (set by attach_ram)
   Cache::Ptr l3cache_;
+  CpLlcPort::Ptr cp_llc_port_;  // CP DMA client of the last-level cache
+  bool platform_reset_ = false;
   uint64_t perf_mem_reads_ = 0;
   uint64_t perf_mem_writes_ = 0;
   uint64_t perf_mem_latency_ = 0;
@@ -103,6 +124,7 @@ private:
   // kmu_->start()). reset() clears it so a back-to-back kernel launch
   // via cycle() re-dispatches the KMU.
   bool is_cycle_initialized_;
+  bool flush_l1_only_ = false;  // kind of the flush the last start write opened
 };
 
 }

@@ -66,7 +66,35 @@ A few footguns we've hit more than once:
 - **Changing default `CONFIGS` to mask a regression.** Defaults are a contract. If the regression test fails at the documented defaults, that's the regression — don't move the defaults.
 - **Patching `ccache` symptoms.** `fmt::v8` link errors and similar stale-object symptoms are not bugs in the code — retry with `CCACHE_DISABLE=1` before changing anything.
 
-## 6. Related rules
+## 6. Performance and area regressions
+
+A gated metric that got worse is a bug report against the commit that moved it. The metrics are cycles and instruction counts (`perf_gate`), area (LUT, FF, BRAM, DSP), timing (Fmax, WNS, Beacon register depth), and power where a gate measures it. Find that commit first; the loss is recovered inside that commit's own change, or it is justified on that commit's terms. Improving another part of the system until the number returns is not a fix: it hides the regression, usually adds new ones, and leaves a baseline that mixes the regression with unrelated gains, so the next bisect cannot separate them.
+
+1. **Separate the toolchain from the design.** For cycles, build the same RTL with the old and the new compiler. For area and timing, run the same RTL through the old and the new synthesis flow, tool version and constraints. A toolchain-only delta is fixed in the toolchain, never in RTL.
+2. **Check that the case is stable.** Perturb it minimally: one cycle of latency for perf (for example `L1_LINK_LATENCY` ±1), a placement seed or directive for synthesis. If the metric swings past the gate tolerance, the case is bistable: attribute nothing to it and tune nothing on it. Fix the case or the pathology behind it, as its own change.
+3. **Bisect every slower case to one commit** and explain the mechanism in that commit's terms. The result is a table: case, commit, mechanism, class. No fix is written before the table is complete, and the table is reviewed before any fix lands or any baseline is re-recorded.
+4. **Classify each case:**
+
+   | class | meaning | outcome |
+   |---|---|---|
+   | bug | the commit does something it did not intend, or pays more than its goal requires | fixed inside that commit's change |
+   | trade-off | the commit pays this cost for a gain measured elsewhere (Fmax, area, DRAM traffic, cycles on other cases) | justified with both numbers; the owner decides |
+   | measurement correction | the model now counts what the silicon always had (cycles in rtlsim or SimX, area in an estimator) | justified and recorded; the old baseline was wrong |
+   | toolchain | the compiler or synthesis flow changed its output | classified again, inside the toolchain, with the same four classes |
+
+5. **Prove each justification; a plausible story is not enough.** "Trade-off", "measurement correction" and "correctness fix" are claims, and each one must pass all of these:
+   - **Goal.** State what the commit set out to do, in its own terms.
+   - **Prediction.** From the mechanism, predict the direction and rough size of the cost before looking at the gate. A cost that the mechanism does not predict is not explained yet.
+   - **Inherent, not avoidable.** Show that the commit's goal cannot be met at a lower cost: name the cheapest correct alternative and show that it is worse or not available. A correctness fix is justified only for the cost that correctness itself requires; extra cost the fix leaves behind (an avoidable reload, an extra pipeline stage, a register the design did not need) is a bug in the fix.
+   - **Ownership.** If the cost appears only through another, pre-existing bottleneck, prove it: remove that bottleneck experimentally and show that the commit's cost disappears. The cost then belongs to the bottleneck, which gets its own proposal (step 8).
+   - **Measurement correction.** Show the silicon already had the cost: the commit's diff leaves the synthesized logic unchanged, and the model now matches the hardware cycle for cycle on a bench.
+   - **Evidence by experiment.** Attribute by building or simulating with only the suspect change present or absent, never by reading code alone.
+6. **A fix touches only the culprit:** its code, its parameter or default, or a revert of it.
+7. **Stop rule.** If a fix fails parity or worsens other cases or metrics, and making it pass needs a change in another subsystem, stop and reclassify that culprit. Do not follow the fix into the rest of the design.
+8. **Problems found on the way are separate changes.** A defect that already exists on the base (for example an arbiter that starves a unit) gets its own proposal, commit and measurement against the refreshed baseline. It is never folded into the regression fix or the re-record.
+9. **Keep the window small.** Re-record baselines when a feature lands, and treat a gate that is masked or stale as a CI bug. Attribution over hundreds of commits is the failure this rule exists to prevent.
+
+## 7. Related rules
 
 - AGENTS.md §3 — short-form bug-fix rules
 - AGENTS.md §6 — comment rules (no `// fix for #123`-style breadcrumbs in code)

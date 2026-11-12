@@ -19,6 +19,11 @@
 // (interface-free) so it can sit directly at a platform pin boundary; the
 // optional AXI sideband (lock/cache/prot/qos/region) is driven to constants.
 // The inverse of VX_membus_from_axi.
+//
+// The M masters share one ADDR_WIDTH_OUT byte address space, and each request
+// leaves on its bank's master with its own address unchanged. INTERLEAVE
+// selects the bank from the low line-address bits; otherwise from the top
+// bits, so bank i serves the i-th contiguous 1/M of the space.
 // ============================================================================
 
 `TRACING_OFF
@@ -108,7 +113,7 @@ module VX_mem_to_axi #(
     localparam LOG2_DATA_SIZE = `CLOG2(DATA_SIZE);
     localparam BANK_SEL_BITS  = `CLOG2(NUM_BANKS_OUT);
     localparam BANK_SEL_WIDTH = `UP(BANK_SEL_BITS);
-    localparam DST_ADDR_WDITH = (ADDR_WIDTH_OUT - LOG2_DATA_SIZE) + BANK_SEL_BITS; // convert byte-addressable output addresss to block-addressable input space
+    localparam DST_ADDR_WDITH = ADDR_WIDTH_OUT - LOG2_DATA_SIZE; // line address width of the output space
     localparam BANK_ADDR_WIDTH = DST_ADDR_WDITH - BANK_SEL_BITS;
     localparam NUM_PORTS_IN_BITS = `CLOG2(NUM_PORTS_IN);
     localparam NUM_PORTS_IN_WIDTH = `UP(NUM_PORTS_IN_BITS);
@@ -116,14 +121,12 @@ module VX_mem_to_axi #(
     localparam NEEDED_TAG_WIDTH = TAG_WIDTH_IN + NUM_PORTS_IN_BITS;
     localparam READ_TAG_WIDTH = (NEEDED_TAG_WIDTH > TAG_WIDTH_OUT) ? TAG_BUFFER_ADDRW : TAG_WIDTH_IN;
     localparam READ_FULL_TAG_WIDTH = READ_TAG_WIDTH + NUM_PORTS_IN_BITS;
-    localparam WRITE_TAG_WIDTH = `MIN(TAG_WIDTH_IN, TAG_WIDTH_OUT);
-    localparam DST_TAG_WIDTH  = `MAX(READ_FULL_TAG_WIDTH, WRITE_TAG_WIDTH);
-    localparam XBAR_TAG_WIDTH = `MAX(READ_TAG_WIDTH, WRITE_TAG_WIDTH);
-    localparam REQ_XBAR_DATAW = 1 + BANK_ADDR_WIDTH + DATA_SIZE + DATA_WIDTH + XBAR_TAG_WIDTH;
+    // Writes carry no tag: every write leaves with AXI id 0 (the write tracker).
+    localparam REQ_XBAR_DATAW = 1 + BANK_ADDR_WIDTH + DATA_SIZE + DATA_WIDTH + READ_TAG_WIDTH;
     localparam RSP_XBAR_DATAW = DATA_WIDTH + READ_TAG_WIDTH;
 
     `STATIC_ASSERT ((DST_ADDR_WDITH >= ADDR_WIDTH_IN), ("invalid address width: current=%0d, expected=%0d", DST_ADDR_WDITH, ADDR_WIDTH_IN))
-    `STATIC_ASSERT ((TAG_WIDTH_OUT >= DST_TAG_WIDTH), ("invalid output tag width: current=%0d, expected=%0d", TAG_WIDTH_OUT, DST_TAG_WIDTH))
+    `STATIC_ASSERT ((TAG_WIDTH_OUT >= READ_FULL_TAG_WIDTH), ("invalid output tag width: current=%0d, expected=%0d", TAG_WIDTH_OUT, READ_FULL_TAG_WIDTH))
     `STATIC_ASSERT ((WRITE_TRACK_DEPTH >= 2) && `IS_POW2(WRITE_TRACK_DEPTH), ("WRITE_TRACK_DEPTH must be a power of 2 >= 2: current=%0d", WRITE_TRACK_DEPTH))
 
     // Bank selection
@@ -197,7 +200,7 @@ module VX_mem_to_axi #(
 
     for (genvar i = 0; i < NUM_PORTS_IN; ++i) begin : g_req_xbar_data_in
         wire tag_ready = mem_req_rw[i] || mem_rd_req_tag_ready[i];
-        wire [XBAR_TAG_WIDTH-1:0] tag_value = mem_req_rw[i] ? XBAR_TAG_WIDTH'(mem_req_tag[i]) : XBAR_TAG_WIDTH'(mem_rd_req_tag[i]);
+        wire [READ_TAG_WIDTH-1:0] tag_value = mem_req_rw[i] ? '0 : mem_rd_req_tag[i];
         assign req_xbar_valid_in[i] = mem_req_valid[i] && tag_ready;
         assign req_xbar_data_in[i]  = {mem_req_rw[i], req_bank_addr[i], mem_req_byteen[i], mem_req_data[i], tag_value};
         assign mem_req_ready[i]  = req_xbar_ready_in[i] && tag_ready;
@@ -227,7 +230,7 @@ module VX_mem_to_axi #(
 
         wire xbar_rw_out;
         wire [BANK_ADDR_WIDTH-1:0] xbar_addr_out;
-        wire [XBAR_TAG_WIDTH-1:0] xbar_tag_out;
+        wire [READ_TAG_WIDTH-1:0] xbar_tag_out;
         wire [DATA_WIDTH-1:0] xbar_data_out;
         wire [DATA_SIZE-1:0] xbar_byteen_out;
 
@@ -347,7 +350,7 @@ module VX_mem_to_axi #(
             assign xbar_tag_r_out = READ_FULL_TAG_WIDTH'({xbar_tag_out, req_xbar_sel_out[i]});
         end else begin : g_no_input_sel
             `UNUSED_VAR (req_xbar_sel_out)
-            assign xbar_tag_r_out = READ_TAG_WIDTH'(xbar_tag_out);
+            assign xbar_tag_r_out = xbar_tag_out;
         end
 
         assign m_axi_arvalid[i] = req_xbar_valid_out[i] && ~xbar_rw_out && ~rd_hazard;
@@ -407,14 +410,36 @@ module VX_mem_to_axi #(
                 in_burst_r <= ~m_axi_rlast[i];
             end
         end
-        assign rsp_xbar_valid_in[i] = m_axi_rvalid[i] && ~in_burst_r;
-        assign rsp_xbar_data_in[i] = {m_axi_rdata[i], m_axi_rid[i][NUM_PORTS_IN_BITS +: READ_TAG_WIDTH]};
+
+        // The response crossbar's ready depends on every bank's rvalid and
+        // rid, so a skid buffer keeps it off the AXI R handshake: rready
+        // comes from registers only.
+        wire rsp_buf_ready_in;
+        wire [DATA_WIDTH-1:0] rsp_buf_data;
+        wire [READ_FULL_TAG_WIDTH-1:0] rsp_buf_id;
+
+        VX_elastic_buffer #(
+            .DATAW   (DATA_WIDTH + READ_FULL_TAG_WIDTH),
+            .SIZE    (`TO_OUT_BUF_SIZE(3)),
+            .OUT_REG (`TO_OUT_BUF_REG(3))
+        ) rsp_buf (
+            .clk       (clk),
+            .reset     (reset),
+            .valid_in  (m_axi_rvalid[i] && ~in_burst_r),
+            .ready_in  (rsp_buf_ready_in),
+            .data_in   ({m_axi_rdata[i], m_axi_rid[i][READ_FULL_TAG_WIDTH-1:0]}),
+            .data_out  ({rsp_buf_data, rsp_buf_id}),
+            .valid_out (rsp_xbar_valid_in[i]),
+            .ready_out (rsp_xbar_ready_in[i])
+        );
+
+        assign rsp_xbar_data_in[i] = {rsp_buf_data, rsp_buf_id[NUM_PORTS_IN_BITS +: READ_TAG_WIDTH]};
         if (NUM_PORTS_IN > 1) begin : g_input_sel
-            assign rsp_xbar_sel_in[i] = m_axi_rid[i][0 +: NUM_PORTS_IN_BITS];
+            assign rsp_xbar_sel_in[i] = rsp_buf_id[0 +: NUM_PORTS_IN_BITS];
         end else begin : g_no_input_sel
             assign rsp_xbar_sel_in[i] = 0;
         end
-        assign m_axi_rready[i] = in_burst_r ? 1'b1 : rsp_xbar_ready_in[i];
+        assign m_axi_rready[i] = in_burst_r || rsp_buf_ready_in;
         `RUNTIME_ASSERT(~(m_axi_rvalid[i] && m_axi_rlast[i] == 0), ("*** AXI response error"))
         `RUNTIME_ASSERT(~(m_axi_rvalid[i] && m_axi_rresp[i] != 0), ("*** AXI response error"))
     end

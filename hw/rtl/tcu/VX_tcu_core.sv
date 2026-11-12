@@ -27,12 +27,13 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input wire          tbuf_ready,
 `endif
 
-    // External metadata write port from the shared VX_tcu_agu.
+    // Metadata write port from the block's VX_tcu_agu.
 `ifdef TCU_META_ENABLE
     input wire                     ext_meta_wr_en,
     input wire [NW_WIDTH-1:0]      ext_meta_wr_wid,
     input wire [4:0]               ext_meta_wr_idx,
-    input wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0] ext_meta_wr_data,
+    input wire [TCU_BLOCK_CAP-1:0] ext_meta_wr_mask,
+    input wire [TCU_BLOCK_CAP-1:0][31:0] ext_meta_wr_data,
 `endif
 
     // Inputs
@@ -41,6 +42,11 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // Outputs
     VX_result_if.master result_if
 );
+
+`ifdef SCOPE
+    `SCOPE_IO_SWITCH (1);
+    `SCOPE_IO_UNUSED (0)
+`endif
     `UNUSED_SPARAM (INSTANCE_ID);
 
     // FEDP dot-product width in 32-bit words (doubles under FEDP2K).
@@ -82,6 +88,30 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     `UNUSED_PARAM (FEDP_SF)
 `endif
 
+    // The FEDP array holds TC_M x TC_N / PE_RATIO dot products, PE_M x PE_N.
+    // A micro-op occupies it for PE_RATIO cycles, one output slice per cycle:
+    // column slices first, so a PE keeps its A row while PE_RATIO <= TC_N.
+    localparam PE_RATIO   = `VX_CFG_TCU_PE_RATIO;
+    localparam PE_RATIO_N = `MIN(PE_RATIO, TCU_TC_N);
+    localparam PE_RATIO_M = PE_RATIO / PE_RATIO_N;
+    localparam PE_M       = TCU_TC_M / PE_RATIO_M;
+    localparam PE_N       = TCU_TC_N / PE_RATIO_N;
+    localparam SLICE_W    = `LOG2UP(PE_RATIO);
+    localparam SLICE_M_W  = `LOG2UP(PE_RATIO_M);
+    localparam SLICE_N_W  = `LOG2UP(PE_RATIO_N);
+    localparam ROW_W      = `LOG2UP(TCU_TC_M);
+    localparam COL_W      = `LOG2UP(TCU_TC_N);
+
+    `STATIC_ASSERT (`IS_POW2(PE_RATIO) && `IS_DIVISBLE(TCU_TC_M * TCU_TC_N, PE_RATIO),
+        ("invalid parameter: VX_CFG_TCU_PE_RATIO=%0d must be a power of two that divides TC_M x TC_N = %0d", PE_RATIO, TCU_TC_M * TCU_TC_N))
+
+    // the output slice entering the array this cycle
+    wire [SLICE_W-1:0] slice_idx;
+    wire array_issue;
+    `UNUSED_VAR (array_issue)
+    wire [SLICE_M_W-1:0] slice_m = SLICE_M_W'(32'(slice_idx) / PE_RATIO_N);
+    wire [SLICE_N_W-1:0] slice_n = SLICE_N_W'(32'(slice_idx) % PE_RATIO_N);
+
     // -----------------------------------------------------------------------
     // WGMMA / WMMA abstraction layer
     // -----------------------------------------------------------------------
@@ -96,6 +126,9 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0] rs2_data;
 `endif
     wire exe_ready_extra; // additional ready gating (tbuf_ready)
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
+    wire [TCU_MAX_META_BLOCK_WIDTH-1:0] wmma_sp_meta;
+`endif
 
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
     wire is_wgmma = (execute_if.data.op_type == INST_TCU_WGMMA)
@@ -146,6 +179,10 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
     wire setup_enqueue = execute_fire && is_wgmma_setup;
     wire fedp_enqueue  = execute_fire && !is_wgmma_setup;
+
+    // The accumulator is fp32 (int32 for integer inputs); no other fmt_d exists.
+    `RUNTIME_ASSERT (~fedp_enqueue || (fmt_d == (tcu_fmt_is_int(fmt_s) ? TCU_FMT_WIDTH'(TCU_I32_ID) : TCU_FMT_WIDTH'(TCU_FP32_ID))),
+        ("%t: *** %s unsupported TCU output format: fmt_s=%0d, fmt_d=%0d (fp32 only)", $time, INSTANCE_ID, fmt_s, fmt_d))
 
     // -----------------------------------------------------------------------
     // Sparse metadata: VX_tcu_sp_meta (for WMMA_SP) + optional tile-buffer mux
@@ -249,10 +286,11 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // overflow guarantee for the free-running array.
     // A setup uop needs no FEDP slot but must not overwrite a setup result
     // still waiting on the consumer.
-    assign execute_if.ready = ~mdata_queue_full && ~landq_credits_full
-                           && (~fedp_done || result_if.ready)
-                           && (~is_wgmma_setup || ~setup_valid_r || result_if.ready)
-                           && exe_ready_extra;
+    wire admit_ready = ~mdata_queue_full && ~landq_credits_full
+                    && (~fedp_done || result_if.ready)
+                    && exe_ready_extra;
+
+    wire setup_ready = ~is_wgmma_setup || ~setup_valid_r || result_if.ready;
 
     wire mdata_push = fedp_enqueue;
 
@@ -294,23 +332,23 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         (WG_B_OFF_W'(step_n) & WG_B_OFF_W'(TCU_WG_B_SUB_BLOCKS-1)) << LG_WG_B_BS;
 `endif
 
-`ifdef VX_CFG_TCU_SPARSE_ENABLE
-    wire [TCU_MAX_META_BLOCK_WIDTH-1:0] wmma_sp_meta;
-`endif
 `ifdef VX_CFG_TCU_MX_ENABLE
     wire [TCU_BLOCK_CAP-1:0][31:0] mx_meta_a;
     wire [TCU_BLOCK_CAP-1:0][31:0] mx_meta_b;
 `endif
 
 `ifdef TCU_META_ENABLE
+    // a TCU block only executes one residue class of warps modulo NUM_TCU_BLOCKS
     VX_tcu_meta #(
-        .INSTANCE_ID (INSTANCE_ID)
+        .INSTANCE_ID (INSTANCE_ID),
+        .WID_STRIDE  (`VX_CFG_NUM_TCU_BLOCKS)
     ) tcu_meta (
         .clk    (clk),
         .reset  (reset),
         .wr_en  (ext_meta_wr_en),
         .wr_wid (ext_meta_wr_wid),
         .wr_idx (ext_meta_wr_idx),
+        .wr_mask(ext_meta_wr_mask),
         .wr_data(ext_meta_wr_data),
         .rd_wid (execute_if.data.header.wid)
     `ifdef VX_CFG_TCU_SPARSE_ENABLE
@@ -327,7 +365,11 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
 `ifdef VX_CFG_TCU_MX_ENABLE
 
-    localparam MX_MAX_MN = TCU_TILE_M > TCU_TILE_N ? TCU_TILE_M : TCU_TILE_N;
+`ifdef VX_CFG_TCU_WGMMA_ENABLE
+    localparam MX_MAX_MN = `MAX(`MAX(TCU_TILE_M, TCU_TILE_N), `MAX(TCU_WG_TILE_M, TCU_WG_TILE_N));
+`else
+    localparam MX_MAX_MN = `MAX(TCU_TILE_M, TCU_TILE_N);
+`endif
     localparam MX_IDX_W = $clog2(MX_MAX_MN);
     localparam MX_TILE_K_MAX = `MAX(TCU_TILE_K, TCU_WG_K_STEPS * TCU_WG_FEDP_K);
     localparam MX_K_IDX_W = `LOG2UP(MX_TILE_K_MAX * TCU_MAX_ELT_RATIO);
@@ -396,13 +438,18 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
 
     // -----------------------------------------------------------------------
-    // FEDP grid: TCU_TC_M × TCU_TC_N compute elements
+    // FEDP grid: PE_M × PE_N compute elements
     // -----------------------------------------------------------------------
 
     wire [TCU_TC_M-1:0][TCU_TC_N-1:0][31:0] d_val;
+    wire [PE_M-1:0][PE_N-1:0][31:0] d_pe;
 
-    for (genvar i = 0; i < TCU_TC_M; ++i) begin : g_i
-        for (genvar j = 0; j < TCU_TC_N; ++j) begin : g_j
+    for (genvar i = 0; i < PE_M; ++i) begin : g_i
+        for (genvar j = 0; j < PE_N; ++j) begin : g_j
+            // the output element (row_i, col_j) this PE computes this cycle
+            wire [ROW_W-1:0] row_i = ROW_W'(i) + ROW_W'(PE_M) * ROW_W'(slice_m);
+            wire [COL_W-1:0] col_j = COL_W'(j) + COL_W'(PE_N) * COL_W'(slice_n);
+            `UNUSED_VAR ({row_i, col_j})
         `ifdef VX_CFG_TCU_SPARSE_ENABLE
             wire [FEDP_K-1:0][31:0] a_row, b_col, b_col_dense;
             wire [TCU_TC_K-1:0][31:0] b_col_sparse, b_col_1, b_col_2;
@@ -410,45 +457,45 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             wire [FEDP_K-1:0][31:0] a_row, b_col;
         `endif
         `ifdef VX_CFG_TCU_MX_ENABLE
-            wire [FEDP_SF-1:0][7:0] sf_a = mx_sf_a[i];
-            wire [FEDP_SF-1:0][7:0] sf_b = mx_sf_b[j];
+            wire [FEDP_SF-1:0][7:0] sf_a = mx_sf_a[row_i];
+            wire [FEDP_SF-1:0][7:0] sf_b = mx_sf_b[col_j];
         `endif
             for (genvar k_idx = 0; k_idx < FEDP_K; ++k_idx) begin : g_slice_assign
             `ifdef VX_CFG_TCU_WGMMA_ENABLE
-                localparam int WG_B_IDX = j * TCU_WG_FEDP_K + k_idx;
+                wire [31:0] wg_b_idx = 32'(col_j) * TCU_WG_FEDP_K + k_idx;
             `endif
                 if (k_idx < TCU_TC_K) begin : g_lo
                 `ifdef VX_CFG_TCU_WGMMA_ENABLE
-                    wire [31:0] a_wgmma_smem = 32'(rs1_data[i * TCU_WG_FEDP_K + k_idx]);
-                    wire [31:0] a_wgmma_reg  = 32'(execute_if.data.rs1_data[i * TCU_TC_K + k_idx]);
+                    wire [31:0] a_wgmma_smem = 32'(rs1_data[row_i * TCU_WG_FEDP_K + k_idx]);
+                    wire [31:0] a_wgmma_reg  = 32'(execute_if.data.rs1_data[row_i * TCU_TC_K + k_idx]);
                     assign a_row[k_idx] = is_wgmma
                         ? (wg_a_smem ? a_wgmma_smem : a_wgmma_reg)
-                        : 32'(execute_if.data.rs1_data[a_off + i * TCU_TC_K + k_idx]);
+                        : 32'(execute_if.data.rs1_data[a_off + row_i * TCU_TC_K + k_idx]);
                 `else
-                    assign a_row[k_idx] = 32'(rs1_data[a_off + i * TCU_TC_K + k_idx]);
+                    assign a_row[k_idx] = 32'(rs1_data[a_off + row_i * TCU_TC_K + k_idx]);
                 `endif
                 `ifdef VX_CFG_TCU_SPARSE_ENABLE
                     assign b_col_dense[k_idx] =
                     `ifdef VX_CFG_TCU_WGMMA_ENABLE
-                        is_wgmma ? 32'(rs2_data[int'(b_off_wg) + WG_B_IDX]) :
+                        is_wgmma ? 32'(rs2_data[int'(b_off_wg) + wg_b_idx]) :
                     `endif
-                        32'(rs2_data[b_off_wm + j * TCU_TC_K + k_idx]);
+                        32'(rs2_data[b_off_wm + col_j * TCU_TC_K + k_idx]);
                 `else
                     assign b_col[k_idx] =
                     `ifdef VX_CFG_TCU_WGMMA_ENABLE
-                        is_wgmma ? 32'(rs2_data[int'(b_off_wg) + WG_B_IDX]) :
+                        is_wgmma ? 32'(rs2_data[int'(b_off_wg) + wg_b_idx]) :
                     `endif
-                        32'(rs2_data[b_off_wm + j * TCU_TC_K + k_idx]);
+                        32'(rs2_data[b_off_wm + col_j * TCU_TC_K + k_idx]);
                 `endif
                 end else begin : g_hi
                 `ifdef VX_CFG_TCU_WGMMA_ENABLE
-                    wire [31:0] a_wgmma_smem = 32'(rs1_data[i * TCU_WG_FEDP_K + k_idx]);
+                    wire [31:0] a_wgmma_smem = 32'(rs1_data[row_i * TCU_WG_FEDP_K + k_idx]);
                     wire [31:0] a_wgmma_reg =
                     `ifdef VX_CFG_TCU_FEDP2K
                         `ifdef VX_CFG_TCU_SPARSE_ENABLE
                             is_sparse ? 32'b0 :
                         `endif
-                        32'(execute_if.data.rs2_data[i * TCU_TC_K + (k_idx - TCU_TC_K)]);
+                        32'(execute_if.data.rs2_data[row_i * TCU_TC_K + (k_idx - TCU_TC_K)]);
                     `else
                         32'b0;
                     `endif
@@ -463,13 +510,13 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 `ifdef VX_CFG_TCU_SPARSE_ENABLE
                     assign b_col_dense[k_idx] =
                     `ifdef VX_CFG_TCU_WGMMA_ENABLE
-                        (is_wgmma && !is_sparse) ? 32'(rs2_data[int'(b_off_wg) + WG_B_IDX]) :
+                        (is_wgmma && !is_sparse) ? 32'(rs2_data[int'(b_off_wg) + wg_b_idx]) :
                     `endif
                         32'b0;
                 `else
                     assign b_col[k_idx] =
                     `ifdef VX_CFG_TCU_WGMMA_ENABLE
-                        is_wgmma ? 32'(rs2_data[int'(b_off_wg) + WG_B_IDX]) :
+                        is_wgmma ? 32'(rs2_data[int'(b_off_wg) + wg_b_idx]) :
                     `endif
                         32'b0;
                 `endif
@@ -478,34 +525,38 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
         `ifdef VX_CFG_TCU_SPARSE_ENABLE
             for (genvar k_idx = 0; k_idx < TCU_TC_K; ++k_idx) begin : g_sparse_slice_assign
-                localparam J_SP = SYM_SPARSE ? (j % (TCU_TC_N / 2)) : j;
+                wire [COL_W-1:0] col_j_sp = SYM_SPARSE ? (col_j % COL_W'(`MAX(TCU_TC_N / 2, 1))) : col_j;
                 // rs2_data sparse-pair layout differs by op:
-                //   WGMMA_SP: source is tbuf (shared mem), K-major →
-                //     idx = k_idx*(TC_N*2) + J_SP*2 + lane
-                //   WMMA_SP : source is the register file, J-major →
-                //     idx = J_SP*(TC_K*2) + k_idx*2 + lane
+                //   WGMMA_SP: source is tbuf (shared mem), K-major, all columns →
+                //     idx = k_idx*(TC_N*2) + j*2 + lane
+                //   WMMA_SP : source is the register file, J-major, folded to
+                //     column pairs when SYM_SPARSE →
+                //     idx = col_j_sp*(TC_K*2) + k_idx*2 + lane
                 // The two layouts are incompatible; separate formulas are required.
             `ifdef VX_CFG_TCU_WGMMA_ENABLE
-                wire [31:0] b_col_1_wg = 32'(rs2_data[k_idx * TCU_TC_N * 2 + J_SP * 2]);
-                wire [31:0] b_col_2_wg = 32'(rs2_data[k_idx * TCU_TC_N * 2 + J_SP * 2 + 1]);
-                wire [31:0] b_col_1_wm = 32'(rs2_data[b_off_wm + J_SP * TCU_TC_K * 2 + k_idx * 2]);
-                wire [31:0] b_col_2_wm = 32'(rs2_data[b_off_wm + J_SP * TCU_TC_K * 2 + k_idx * 2 + 1]);
+                wire [31:0] b_col_1_wg = 32'(rs2_data[k_idx * TCU_TC_N * 2 + col_j * 2]);
+                wire [31:0] b_col_2_wg = 32'(rs2_data[k_idx * TCU_TC_N * 2 + col_j * 2 + 1]);
+                wire [31:0] b_col_1_wm = 32'(rs2_data[b_off_wm + col_j_sp * TCU_TC_K * 2 + k_idx * 2]);
+                wire [31:0] b_col_2_wm = 32'(rs2_data[b_off_wm + col_j_sp * TCU_TC_K * 2 + k_idx * 2 + 1]);
                 assign b_col_1[k_idx] = is_wgmma ? b_col_1_wg : b_col_1_wm;
                 assign b_col_2[k_idx] = is_wgmma ? b_col_2_wg : b_col_2_wm;
             `else
-                assign b_col_1[k_idx] = 32'(rs2_data[b_off_wm + J_SP * TCU_TC_K * 2 + k_idx * 2]);
-                assign b_col_2[k_idx] = 32'(rs2_data[b_off_wm + J_SP * TCU_TC_K * 2 + k_idx * 2 + 1]);
+                assign b_col_1[k_idx] = 32'(rs2_data[b_off_wm + col_j_sp * TCU_TC_K * 2 + k_idx * 2]);
+                assign b_col_2[k_idx] = 32'(rs2_data[b_off_wm + col_j_sp * TCU_TC_K * 2 + k_idx * 2 + 1]);
             `endif
             end
         `endif
 
-            wire [31:0] c_val = 32'(execute_if.data.rs3_data[i * TCU_TC_N + j]);
+            wire [31:0] c_val = 32'(execute_if.data.rs3_data[row_i * TCU_TC_N + col_j]);
 
         `ifdef VX_CFG_TCU_SPARSE_ENABLE
             VX_tcu_sp_mux #(
                 .INSTANCE_ID (INSTANCE_ID),
-                .ROW_IDX     (i)
+                .ROW_IDX     (i),
+                .ROW_STRIDE  (PE_M),
+                .ROW_SELS    (PE_RATIO_M)
             ) tcu_sp_mux (
+                .row_sel   (slice_m),
                 .fmt_s     (fmt_s),
                 .b_col_in1 (b_col_1),
                 .b_col_in2 (b_col_2),
@@ -524,11 +575,11 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             // GATHER trace: GATHER,wid,step_m,step_n,i,k,bword0,bword1,lo,hi,gathered
             // One line per (i, j, k_idx); emitted only for sparse ops.
             always @(posedge clk) begin
-                if (execute_fire && is_sparse) begin
+                if (array_issue && is_sparse) begin
                     for (int kk = 0; kk < TCU_TC_K; ++kk) begin
                         $write("GATHER,%0d,%0d,%0d,%0d,%0d,0x%08h,0x%08h,?,?,0x%08h\n",
                             execute_if.data.header.wid, step_m, step_n,
-                            i, j*TCU_TC_K + kk,
+                            row_i, int'(col_j)*TCU_TC_K + kk,
                             b_col_1[kk], b_col_2[kk], b_col_sparse[kk]);
                     end
                 end
@@ -614,7 +665,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .sf_b  (sf_b_r),
             `endif
                 .c_val (c_val_r),
-                .d_val (d_val[i][j])
+                .d_val (d_pe[i][j])
             );
         `elsif VX_CFG_TCU_TYPE_BHF
             VX_tcu_fedp_bhf #(
@@ -630,7 +681,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .a_row(a_row_r),
                 .b_col(b_col_r),
                 .c_val (c_val_r),
-                .d_val (d_val[i][j])
+                .d_val (d_pe[i][j])
             );
         `elsif VX_CFG_TCU_TYPE_FPNEW
             VX_tcu_fedp_fpnew #(
@@ -646,7 +697,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .a_row (a_row_r),
                 .b_col (b_col_r),
                 .c_val (c_val_r),
-                .d_val (d_val[i][j])
+                .d_val (d_pe[i][j])
             );
         `elsif VX_CFG_TCU_TYPE_TFR
             VX_tcu_fedp_tfr #(
@@ -669,7 +720,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .sf_b  (sf_b_r),
             `endif
                 .c_val (c_val_r),
-                .d_val (d_val[i][j])
+                .d_val (d_pe[i][j])
             );
         `elsif VX_CFG_TCU_TYPE_DSP
             VX_tcu_fedp_dsp #(
@@ -685,7 +736,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .a_row(a_row_r),
                 .b_col(b_col_r),
                 .c_val (c_val_r),
-                .d_val (d_val[i][j])
+                .d_val (d_pe[i][j])
             );
         `else
             VX_tcu_fedp_no_implementation_selected fedp ();
@@ -693,19 +744,122 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
         `ifdef DBG_TRACE_TCU
             always @(posedge clk) begin
-                if (execute_if.valid && execute_if.ready) begin
-                    `TRACE(3, ("%t: %s FEDP-enq: wid=%0d, cta_id=%0d, i=%0d, j=%0d, m=%0d, n=%0d, a_row=", $time, INSTANCE_ID, execute_if.data.header.wid, execute_if.data.header.cta_id, i, j, step_m, step_n))
+                if (array_issue) begin
+                    `TRACE(3, ("%t: %s FEDP-enq: wid=%0d, cta_id=%0d, i=%0d, j=%0d, m=%0d, n=%0d, a_row=", $time, INSTANCE_ID, execute_if.data.header.wid, execute_if.data.header.cta_id, row_i, col_j, step_m, step_n))
                     `TRACE_ARRAY1D(2, "0x%0h", a_row, FEDP_K)
                     `TRACE(3, (", b_col="));
                     `TRACE_ARRAY1D(2, "0x%0h", b_col, FEDP_K)
                     `TRACE(3, (", c_val=0x%0h (#%0d)\n", c_val, execute_if.data.header.uuid));
                 end
                 if (result_if.valid && result_if.ready) begin
-                    `TRACE(3, ("%t: %s FEDP-deq: wid=%0d, cta_id=%0d, i=%0d, j=%0d, d_val=0x%0h (#%0d)\n", $time, INSTANCE_ID, result_if.data.header.wid, result_if.data.header.cta_id, i, j, result_if.data.data[i * TCU_TC_N + j][31:0], result_if.data.header.uuid));
+                    for (int s = 0; s < PE_RATIO; ++s) begin
+                        automatic int ri = i + PE_M * (s / PE_RATIO_N);
+                        automatic int cj = j + PE_N * (s % PE_RATIO_N);
+                        `TRACE(3, ("%t: %s FEDP-deq: wid=%0d, cta_id=%0d, i=%0d, j=%0d, d_val=0x%0h (#%0d)\n", $time, INSTANCE_ID, result_if.data.header.wid, result_if.data.header.cta_id, ri, cj, result_if.data.data[ri * TCU_TC_N + cj][31:0], result_if.data.header.uuid));
+                    end
                 end
             end
         `endif // DBG_TRACE_TCU
         end
+    end
+
+    // -----------------------------------------------------------------------
+    // Output slices
+    // -----------------------------------------------------------------------
+
+    if (PE_RATIO > 1) begin : g_slices
+        // A micro-op holds the execute interface while its slices enter the
+        // array and fires with the last one, so its result completes with that
+        // slice, PIPE_LATENCY after the fire, as an unsliced micro-op's does.
+        // The earlier slices complete first and wait here; the next
+        // micro-op's first slice completes a cycle after this one's result
+        // retires or lands, so one register per slice suffices.
+        reg [SLICE_W-1:0] slice_in_r, slice_out_r;
+        reg [PIPE_LATENCY-1:0] slice_delay_pipe;
+        reg [PE_RATIO-2:0][PE_M-1:0][PE_N-1:0][31:0] d_slices_r;
+        wire slice_last;
+
+        // A compute micro-op is taken with its last output slice. The tile
+        // buffer's ready, the deepest input, meets the other terms last, as
+        // without slices, so the slice term replaces one there: a full header
+        // queue implies full landing credits, which also count a pending setup
+        // result, and only a setup micro-op has no writeback.
+        `RUNTIME_ASSERT (~mdata_queue_full || landq_credits_full,
+            ("%t: %s: header queue full with landing credits left", $time, INSTANCE_ID))
+        `RUNTIME_ASSERT (~execute_if.valid || execute_if.data.header.wb || is_wgmma_setup,
+            ("%t: %s: a compute micro-op without a writeback", $time, INSTANCE_ID))
+        `UNUSED_VAR (admit_ready)
+        wire slice_blocked = landq_credits_full || (fedp_done && ~result_if.ready)
+                          || (execute_if.data.header.wb && ~slice_last);
+        assign execute_if.ready = ~slice_blocked && exe_ready_extra && setup_ready;
+        wire slice_issue = execute_if.valid && ~is_wgmma_setup && ~landq_credits_full
+                        && (~fedp_done || result_if.ready) && exe_ready_extra;
+        wire slice_done  = slice_delay_pipe[0];
+
+        always @(posedge clk) begin
+            if (reset) begin
+                slice_in_r       <= '0;
+                slice_out_r      <= '0;
+                slice_delay_pipe <= '0;
+            end else begin
+                if (slice_issue) begin
+                    slice_in_r <= slice_in_r + SLICE_W'(1);
+                end
+                if (slice_done) begin
+                    slice_out_r <= slice_out_r + SLICE_W'(1);
+                end
+                slice_delay_pipe <= {slice_issue, slice_delay_pipe[PIPE_LATENCY-1:1]};
+            end
+        end
+
+        for (genvar s = 0; s < PE_RATIO; ++s) begin : g_slice
+            localparam ROW_BASE = PE_M * (s / PE_RATIO_N);
+            localparam COL_BASE = PE_N * (s % PE_RATIO_N);
+            if (s < PE_RATIO - 1) begin : g_held
+                always @(posedge clk) begin
+                    if (slice_done && slice_out_r == SLICE_W'(s)) begin
+                        d_slices_r[s] <= d_pe;
+                    end
+                end
+            end
+            for (genvar i = 0; i < PE_M; ++i) begin : g_i
+                for (genvar j = 0; j < PE_N; ++j) begin : g_j
+                    if (s < PE_RATIO - 1) begin : g_held
+                        assign d_val[ROW_BASE + i][COL_BASE + j] = d_slices_r[s][i][j];
+                    end else begin : g_live
+                        assign d_val[ROW_BASE + i][COL_BASE + j] = d_pe[i][j];
+                    end
+                end
+            end
+        end
+
+        assign slice_idx   = slice_in_r;
+        if (PE_RATIO > 2) begin : g_last_flag
+            // the last slice as a flag, set as the one before it enters
+            reg slice_last_r;
+            always @(posedge clk) begin
+                if (reset) begin
+                    slice_last_r <= 1'b0;
+                end else if (slice_issue) begin
+                    slice_last_r <= (slice_in_r == SLICE_W'(PE_RATIO - 2));
+                end
+            end
+            assign slice_last = slice_last_r;
+            `RUNTIME_ASSERT (slice_last_r == (slice_in_r == SLICE_W'(PE_RATIO - 1)),
+                ("%t: %s: last-slice flag out of step with the slice counter", $time, INSTANCE_ID))
+        end else begin : g_last_bit
+            assign slice_last = slice_in_r[0];
+        end
+        assign array_issue = slice_issue;
+
+        `RUNTIME_ASSERT (fedp_done == (slice_done && slice_out_r == SLICE_W'(PE_RATIO - 1)),
+            ("%t: %s: output slices out of step with their micro-op: fedp_done=%b, slice_done=%b, slice=%0d", $time, INSTANCE_ID, fedp_done, slice_done, slice_out_r))
+
+    end else begin : g_no_slices
+        assign execute_if.ready = admit_ready && setup_ready;
+        assign slice_idx   = '0;
+        assign array_issue = fedp_enqueue;
+        assign d_val       = d_pe;
     end
 
     // -----------------------------------------------------------------------

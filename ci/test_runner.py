@@ -11,11 +11,12 @@ catalog, which conftest turns into a tracked xfail: it still builds and runs, bu
 its failure is expected and does not fail CI (and an unexpected pass shows as
 XPASS). Use it only for triaged, documented breakage.
 
-A `check: model_parity` case runs the same app/args/configs on simx and rtlsim
-and compares the runtime's final `PERF: instrs=…, cycles=…` summary: retired
-instructions must match exactly (both are deterministic ISA-level executions,
-so any delta is functional divergence) and cycles must agree within the case's
-`tolerance` (SimX is the timing model of the RTL, not just a functional oracle).
+A `check: model_parity` case runs the same app/args/configs on its two `legs`
+(simx and rtlsim by default) and compares the runtime's final `PERF: instrs=…,
+cycles=…` summary: retired instructions must match exactly (both are
+deterministic ISA-level executions, so any delta is functional divergence) and
+cycles must agree within the case's `tolerance` (SimX is the timing model of the
+RTL, not just a functional oracle; Foldsim is cycle-exact, so its tolerance is 0).
 A case with `parity_counters` also compares that MPM class's counters.
 """
 
@@ -92,22 +93,57 @@ def _compare_counters(case, simx_out, rtl_out, simx_cycles, rtl_cycles):
     assert not fails, "{}: {} counter mismatch: {}".format(case.id, prefix, "; ".join(fails))
 
 
+def _perf_of(text, what):
+    perf = _PERF_RE.findall(text)
+    assert perf, "{}: no 'PERF: instrs=…, cycles=…' summary " \
+                 "(app must call vx_device_dump_perf)".format(what)
+    instrs, cycles = perf[-1]
+    return int(instrs), int(cycles)
+
+
+def _release_parity(case, xlen):
+    """Run the debug case, then (xlen 32) the same run built release; both
+    must report identical instructions and cycles."""
+    argv, env = case.run_command(xlen)
+    rc = tc.execute(argv, env)
+    assert rc == 0, "{} failed (exit {}): {}".format(case.id, rc, " ".join(argv))
+    if xlen != 32:
+        return
+    # a debug run sends its output to the --log file (blackbox.sh)
+    log = next((a.split("=", 1)[1] for a in argv if a.startswith("--log=")), "run.log")
+    with open(log, errors="replace") as fh:
+        dbg_instrs, dbg_cycles = _perf_of(fh.read(), case.id + " [debug]")
+    rel_argv = [a for a in argv if not a.startswith(("--debug", "--log="))]
+    rc, out = tc.execute_capture(rel_argv, env)
+    assert rc == 0, "{} [release] failed (exit {}): {}".format(
+        case.id, rc, " ".join(rel_argv))
+    rel_instrs, rel_cycles = _perf_of(out, case.id + " [release]")
+    print("RELEASE-PARITY: {}: instrs debug={} release={}, cycles debug={} "
+          "release={}".format(case.id, dbg_instrs, rel_instrs, dbg_cycles, rel_cycles))
+    assert (dbg_instrs, dbg_cycles) == (rel_instrs, rel_cycles), \
+        "{}: the debug build changes the run (instrs {} vs {}, cycles {} vs {}) " \
+        "-- debug-only state must not reach timing".format(
+            case.id, dbg_instrs, rel_instrs, dbg_cycles, rel_cycles)
+
+
 def _model_parity(case, xlen):
-    simx_instrs, simx_cycles, simx_out = _run_one(case, xlen, "simx")
-    rtl_instrs, rtl_cycles, rtl_out = _run_one(case, xlen, "rtlsim")
-    gap = abs(rtl_cycles - simx_cycles) / float(rtl_cycles)
-    print("PARITY: {}: instrs simx={} rtlsim={}, cycles simx={} rtlsim={}, "
+    model, ref = case.legs
+    model_instrs, model_cycles, model_out = _run_one(case, xlen, model)
+    ref_instrs, ref_cycles, ref_out = _run_one(case, xlen, ref)
+    gap = abs(ref_cycles - model_cycles) / float(ref_cycles)
+    print("PARITY: {}: instrs {m}={} {r}={}, cycles {m}={} {r}={}, "
           "gap={:.2%} (tolerance {:.0%})".format(
-              case.id, simx_instrs, rtl_instrs, simx_cycles, rtl_cycles,
-              gap, case.tolerance))
-    assert simx_instrs == rtl_instrs, \
-        "{}: retired-instruction mismatch (simx={}, rtlsim={}) — functional " \
-        "divergence, not a timing gap".format(case.id, simx_instrs, rtl_instrs)
+              case.id, model_instrs, ref_instrs, model_cycles, ref_cycles,
+              gap, case.tolerance, m=model, r=ref))
+    assert model_instrs == ref_instrs, \
+        "{}: retired-instruction mismatch ({m}={}, {r}={}) — functional " \
+        "divergence, not a timing gap".format(case.id, model_instrs, ref_instrs,
+                                              m=model, r=ref)
     assert gap <= case.tolerance, \
-        "{}: cycle gap {:.2%} exceeds tolerance {:.0%} (simx={}, rtlsim={})".format(
-            case.id, gap, case.tolerance, simx_cycles, rtl_cycles)
+        "{}: cycle gap {:.2%} exceeds tolerance {:.0%} ({m}={}, {r}={})".format(
+            case.id, gap, case.tolerance, model_cycles, ref_cycles, m=model, r=ref)
     if case.parity_counters:
-        _compare_counters(case, simx_out, rtl_out, simx_cycles, rtl_cycles)
+        _compare_counters(case, model_out, ref_out, model_cycles, ref_cycles)
 
 
 def _perf_gate(case, xlen, update):
@@ -148,6 +184,9 @@ def test_case(case, sim_build, request):
         return
     if case.check == "perf_gate":
         _perf_gate(case, xlen, request.config.getoption("--update-baselines"))
+        return
+    if case.release_parity:
+        _release_parity(case, xlen)
         return
     argv, env = case.run_command(xlen)
     rc = tc.execute(argv, env)

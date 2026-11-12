@@ -1,28 +1,27 @@
 {
   "dxa": {
     "clock_mhz": 800,
-    "config_hash": "ba508379d23e694b",
+    "config_hash": "1333820f22e64ab6",
     "configs": "",
     "dut": "dxa",
     "result": {
-      "build_time_s": 170,
-      "cell_area_um2": 12448.856,
-      "cell_count": 118381,
+      "build_time_s": 90,
+      "cell_area_um2": 12868.366,
+      "cell_count": 121130,
       "env": {
         "corner": "tt",
         "pdk": "asap7",
         "sta": "3.1.0",
-        "sv2v": "sv2v v0.0.13-13-g493a88f",
         "vt": "rvt",
         "xlen": 32,
         "yosys": "Yosys 0.69"
       },
-      "fmax_mhz": 1068.604,
-      "power_mw": 33.6,
-      "seq_area_um2": 5289.624,
+      "fmax_mhz": 1128.668,
+      "power_mw": 36.4,
+      "seq_area_um2": 5658.206,
       "sram_area_um2": 0.0,
       "tns_ns": 0.0,
-      "wns_ns": 0.314
+      "wns_ns": 0.364
     }
   }
 }

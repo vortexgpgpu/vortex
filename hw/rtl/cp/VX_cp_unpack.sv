@@ -27,18 +27,18 @@
 module VX_cp_unpack
   import VX_cp_pkg::*;
 (
-  input  wire  [CL_BITS-1:0]   cl_data,
-  input  wire  [OFF_W-1:0]     offset,      // byte offset to decode at
-  output logic                 has_cmd,     // 1 = a valid command at offset
-  output cmd_t                  cmd,
-  output logic [OFF_W-1:0]      cmd_size     // bytes consumed (for offset advance)
+  input  wire  [CL_BITS-1:0]                cl_data,
+  input  wire  [$clog2(CL_BYTES + 1)-1:0]   offset,    // byte offset to decode at
+  output logic                              has_cmd,   // 1 = a valid command at offset
+  output cmd_t                              cmd,
+  output logic [$clog2(CL_BYTES + 1)-1:0]   cmd_size   // bytes consumed (for offset advance)
 );
 
   // Offset/size domain: 0 .. CL_BYTES (need to represent CL_BYTES itself).
   localparam int OFF_W = $clog2(CL_BYTES + 1);
 
   // Read byte `idx` straight out of the packed cache line via a dynamic
-  // part-select (synthesizes cleanly under sv2v/yosys, unlike a dynamically
+  // part-select (synthesizes cleanly under yosys, unlike a dynamically
   // indexed unpacked array).
   function automatic logic [7:0] cl_byte(input int idx);
     return cl_data[idx*8 +: 8];

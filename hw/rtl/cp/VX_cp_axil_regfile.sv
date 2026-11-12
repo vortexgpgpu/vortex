@@ -15,7 +15,9 @@
 //     0x000 CP_CTRL     RW   bit0=enable_global, bit1=reset_all
 //     0x004 CP_STATUS   RO   bit0=busy, bit1=error
 //     0x008 CP_DEV_CAPS RO   [7:0]NUM_QUEUES | [15:8]RING_SIZE_LOG2_MAX
-//                            [23:16]AXI_TID_WIDTH
+//                            [23:16]AXI_TID_WIDTH | [24]VM_ENABLED
+//                            [28]DMA_LLC_CLIENT
+//     0x00C GPU_DEV_CAPS_EXT RO  device-config caps extension: [7:0]SOCKET_SIZE
 //     0x010 CP_CYCLE_LO RO   free-running cycle counter low 32 bits
 //     0x014 CP_CYCLE_HI RO   high 32 bits
 //     0x018 GPU_DEV_CAPS_LO RO  device-config caps, low 32 bits
@@ -51,7 +53,9 @@ module VX_cp_axil_regfile
   parameter int ADDR_W     = 16,
   // Static device-caps fields (set at synthesis time from VX_cp_pkg).
   parameter int RING_SIZE_LOG2_MAX = VX_CP_RING_SIZE_LOG2_C,
-  parameter int AXI_TID_W          = VX_CP_AXI_TID_WIDTH_C
+  parameter int AXI_TID_W          = VX_CP_AXI_TID_WIDTH_C,
+  // The device-side DMA reaches memory through the last-level cache.
+  parameter int DMA_LLC_CLIENT     = 0
 )(
   input  wire                       clk,
   input  wire                       reset,
@@ -74,6 +78,9 @@ module VX_cp_axil_regfile
 
   // Programmed state out to every CPE.
   output cpe_state_t                q_state   [NUM_QUEUES],
+
+  // CP_SATP: page-table root of the DMA's device operands.
+  output wire [63:0]                satp,
 
   // One-cycle reset pulse per queue when the host writes Q_CONTROL.reset.
   output logic                      q_reset_pulse [NUM_QUEUES],
@@ -114,6 +121,8 @@ module VX_cp_axil_regfile
 
   // ---- Global registers ----
   logic [31:0] r_cp_ctrl;
+  logic [63:0] r_satp;
+  assign satp = r_satp;
   logic [63:0] r_cycle_count;
 
   always_ff @(posedge clk) begin
@@ -128,8 +137,11 @@ module VX_cp_axil_regfile
   localparam int GPU_BANK_ADDR_W  = `VX_CFG_PLATFORM_MEMORY_ADDR_WIDTH
                                   - `CLOG2(`VX_CFG_PLATFORM_MEMORY_NUM_BANKS);
 
-  `STATIC_ASSERT(`VX_CFG_NUM_WARPS < 128 && `VX_CFG_NUM_CLUSTERS < 128 && GPU_CLUSTER_SIZE < 256,
+  `STATIC_ASSERT(`VX_CFG_NUM_WARPS < 128 && `VX_CFG_NUM_CLUSTERS < 128 && GPU_CLUSTER_SIZE < 256
+                 && `VX_CFG_SOCKET_SIZE < 256,
                  ("GPU_DEV_CAPS exact-count fields overflow"))
+  `STATIC_ASSERT((`VX_CFG_LMEM_SIZE % 4096) == 0 && (`VX_CFG_LMEM_SIZE / 4096) < 256,
+                 ("GPU_DEV_CAPS carries LMEM_SIZE in 4 KB units: %0d does not fit", `VX_CFG_LMEM_SIZE))
 
   wire [63:0] gpu_dev_caps = {
     7'(`VX_CFG_NUM_CLUSTERS),
@@ -137,7 +149,7 @@ module VX_cp_axil_regfile
     7'(`VX_CFG_NUM_WARPS),
     5'(GPU_BANK_ADDR_W - 20),
     3'($clog2(`VX_CFG_PLATFORM_MEMORY_NUM_BANKS)),
-    8'(`VX_CFG_LMEM_ENABLED ? `VX_CFG_LMEM_LOG_SIZE : 0),
+    8'(`VX_CFG_LMEM_ENABLED ? (`VX_CFG_LMEM_SIZE / 4096) : 0),
     3'($clog2(`VX_CFG_ISSUE_WIDTH)),
     3'($clog2(`VX_CFG_NUM_CLUSTERS)),
     3'($clog2(GPU_CLUSTER_SIZE)),
@@ -145,6 +157,11 @@ module VX_cp_axil_regfile
     3'($clog2(`VX_CFG_NUM_WARPS)),
     3'($clog2(`VX_CFG_NUM_THREADS)),
     8'(`VX_ISA_IMPL_ID)
+  };
+
+  wire [31:0] gpu_dev_caps_ext = {
+    24'd0,
+    8'(`VX_CFG_SOCKET_SIZE)
   };
 
   wire [63:0] gpu_isa_caps = {
@@ -204,25 +221,22 @@ module VX_cp_axil_regfile
       case (addr[5:0])
         6'h00: return r_cp_ctrl;
         6'h04: return {30'd0, cp_error, cp_busy};
-        6'h08: return {8'd0,
+        6'h08: return {3'd0,
+                       1'(DMA_LLC_CLIENT),
+                       3'd0,
+                       1'(`VX_CFG_VM_ENABLED),
                        8'(AXI_TID_W),
                        8'(RING_SIZE_LOG2_MAX),
                        8'(NUM_QUEUES)};
+        6'h0C: return gpu_dev_caps_ext;
         6'h10: return r_cycle_count[31:0];
         6'h14: return r_cycle_count[63:32];
         6'h18: return gpu_dev_caps[31:0];
         6'h1C: return gpu_dev_caps[63:32];
         6'h20: return gpu_isa_caps[31:0];
         6'h24: return gpu_isa_caps[63:32];
-        // Block padding -- see the 16-byte block note on is_decoded(). Read
-        // as zero; they exist so their enclosing block is fully populated.
-        // 0x28/0x2C are CP_SATP_LO/HI in the software ABI (sw/runtime/common/
-        // device.cpp), i.e. the CP DMA MMU page-table root. This CP has no
-        // MMU -- there is no satp anywhere in hw/rtl/cp -- so it correctly
-        // reports VM_ENABLED=0 in CP_DEV_CAPS and the runtime never writes
-        // them. Reading zero is the honest answer; implement them for real if
-        // an MMU is added.
-        6'h0C, 6'h28, 6'h2C: return 32'd0;
+        6'h28: return r_satp[31:0];
+        6'h2C: return r_satp[63:32];
         // AFU host-port drain counters (debug, read-only).
         6'h30: return dbg_host_w_counts;
         6'h34: return dbg_host_r_counts;
@@ -347,6 +361,7 @@ module VX_cp_axil_regfile
     automatic logic [5:0]       off;
     if (reset) begin
       r_cp_ctrl <= '0;
+      r_satp    <= '0;
       for (int i = 0; i < NUM_QUEUES; ++i) begin
         r_ring_base[i]       <= '0;
         r_head_addr[i]       <= '0;
@@ -378,6 +393,10 @@ module VX_cp_axil_regfile
           if (wr_data_buf[1]) begin
             for (int i = 0; i < NUM_QUEUES; ++i) q_reset_pulse[i] <= 1'b1;
           end
+        end else if (is_global(wr_addr_buf, 8'h28)) begin
+          r_satp[31:0] <= wr_data_buf;
+        end else if (is_global(wr_addr_buf, 8'h2C)) begin
+          r_satp[63:32] <= wr_data_buf;
         end else if (decode_queue(wr_addr_buf, qid, off)) begin
           case (off)
             6'h00: r_ring_base[qid][31:0]  <= wr_data_buf;

@@ -55,6 +55,7 @@ module VX_tcu_tfr_mul_i4 import VX_tcu_pkg::*; #(
     for (genvar i = 0; i < TCK; ++i) begin : g_lane
 
         wire signed [3:0][9:0] y_prod_i4;
+        wire [9:0] y_corr;
 
         // Shared per-element extraction.
         wire [3:0][3:0] raw_a, raw_b;
@@ -127,11 +128,16 @@ module VX_tcu_tfr_mul_i4 import VX_tcu_pkg::*; #(
                 .data_in  (psign),
                 .data_out (psign_r)
             );
+            // -m = ~m + 1: the negated products enter the tree as ones'
+            // complements and their +1s as one count operand, so no negate
+            // sits between the DSP and the tree.
+            wire [3:0] pneg = psign_r & pvalid_r;
             for (genvar j = 0; j < 4; ++j) begin : g_sign
-                wire signed [9:0] pf = psign_r[j] ? -$signed({2'b0, magp[j]})
-                                                  :  $signed({2'b0, magp[j]});
-                assign y_prod_i4[j] = pf & {10{pvalid_r[j]}};
+                wire [9:0] pm = {2'b0, magp[j]} & {10{pvalid_r[j]}};
+                assign y_prod_i4[j] = pneg[j] ? ~pm : pm;
             end
+            wire [2:0] pneg_cnt = 3'(pneg[0]) + 3'(pneg[1]) + 3'(pneg[2]) + 3'(pneg[3]);
+            assign y_corr = 10'(pneg_cnt);
         end else begin : g_lut
             for (genvar j = 0; j < 4; ++j) begin : g_mul
                 wire signed [4:0] s_a = is_signed_int ? $signed({raw_a[j][3], raw_a[j]}) : $signed({1'b0, raw_a[j]});
@@ -150,15 +156,16 @@ module VX_tcu_tfr_mul_i4 import VX_tcu_pkg::*; #(
                 );
                 assign y_prod_i4[j] = prod_r & {10{pvalid_r[j]}};
             end
+            assign y_corr = '0;
         end
 
         wire [9:0] y_i4_sum, y_i4_carry;
         VX_csa_tree #(
-            .N (4),
+            .N (5),
             .W (10),
             .S (10)
         ) i4_csa (
-            .operands (y_prod_i4),
+            .operands ({y_corr, y_prod_i4}),
             .sum      (y_i4_sum),
             .carry    (y_i4_carry)
         );

@@ -150,7 +150,7 @@ int main(int nArgs, char *arg[]) {
   pb_SwitchToTimer(&timers, pb_TimerID_NONE);
   pb_PrintTimerSet(&timers);
   pb_FreeParameters(params);
-  return errors;
+  return errors != 0;
 }
 
 /*############################################################################*/

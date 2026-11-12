@@ -93,9 +93,9 @@ enum class Layout : uint32_t {
 //   5D: 21 DCR writes
 //
 // `base_addr` is written to VX_DCR_DXA_DESC_BASE_{LO,HI} and is
-// consumed by the DXA worker's AXI master, which bypasses the
-// per-core MMU. The backing buffer must be allocated with
-// VX_MEM_PHYS (see vortex2.h).
+// consumed by the DXA worker's memory port, which the socket unit
+// MMU translates under VM: it is a device virtual address like any
+// buffer address (vx_buffer_address).
 
 // Program a 1D DXA descriptor (7 DCR writes).
 //   size0: dimension size (elements)

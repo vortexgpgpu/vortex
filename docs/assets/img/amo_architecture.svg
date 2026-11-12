@@ -44,7 +44,7 @@
   <text x="52" y="250" class="tt">aq / rl are captured and carry no behavior</text>
 
   <rect x="40" y="296" width="388" height="214" rx="6" class="core"/>
-  <text x="52" y="318" class="tb">VX_lsu_slice — per-lane sideband</text>
+  <text x="52" y="318" class="tb">VX_lsu_block — per-lane sideband</text>
   <text x="52" y="340" class="ts">packs amo_req_t into each lane's mem_bus_attr_t:</text>
   <text x="64" y="360" class="mono">hart_id       {core, warp, thread}</text>
   <text x="64" y="376" class="mono">amo_cmp       comparand (Zacas only)</text>
@@ -86,8 +86,8 @@
   <text x="908" y="80" class="tb">Commit point 1 — shared (local) memory</text>
 
   <rect x="912" y="96" width="448" height="166" rx="6" class="mem"/>
-  <text x="924" y="118" class="tb">VX_local_mem bank</text>
-  <text x="924" y="140" class="ts">single-ported SRAM: an atomic owns its bank for 3 cycles</text>
+  <text x="924" y="118" class="tb">VX_lmem_unit bank</text>
+  <text x="924" y="140" class="ts">an atomic owns its bank for 3 cycles (first port; nothing else is issued)</text>
   <text x="924" y="160" class="ts">① read the word      ② register it, resolve the reservation</text>
   <text x="924" y="176" class="ts">③ VX_amo_alu result written back under the request byteen</text>
   <text x="924" y="200" class="ts">VX_amo_unit: min(AMO_RS_SIZE, 4) stations, 3-bit hold credit</text>

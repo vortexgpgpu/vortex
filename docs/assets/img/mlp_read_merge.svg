@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 230" role="img" aria-label="Before: four ports load word A and the bank serves them in four cycles. After: one access at cycle 1, with the reply multicast to all four ports.">
+  <title>Before: four ports load word A and the bank serves them in four cycles. After: one access at cycle 1, with the reply multicast to all four ports.</title>
+  <defs><marker id="readme_a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1b2733"/></marker><marker id="readme_g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1f7a4d"/></marker><marker id="readme_b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#b3261e"/></marker></defs>
+  <style>
+    text { font-family: Helvetica, Arial, sans-serif; fill: #1b2733; font-size: 11.5px; }
+    .dh { font-size: 13px; font-weight: bold; }
+    .dm { fill: #5a6772; font-size: 11px; }
+    .ds { font-size: 10.5px; }
+    .db { fill: #fbfcfd; stroke: #5a7184; stroke-width: 1.2; }
+    .dbad { fill: #fbe5e3; stroke: #b3261e; stroke-width: 1.2; }
+    .dgood { fill: #e3f3ea; stroke: #1f7a4d; stroke-width: 1.2; }
+    .didle { fill: #f3f5f8; stroke: #c9d1d9; stroke-width: 1.2; }
+    .dwait { fill: #fbe5e3; stroke: #b3261e; stroke-width: 1.2; stroke-dasharray: 4 3; }
+    .ln { stroke: #1b2733; stroke-width: 1.3; fill: none; }
+    .lb { stroke: #b3261e; stroke-width: 1.5; fill: none; }
+    .lg { stroke: #1f7a4d; stroke-width: 1.5; }
+    .dash { stroke-dasharray: 4 3; }
+    .sep { stroke: #c9d1d9; stroke-width: 1; stroke-dasharray: 2 4; }
+    text.db-t { fill: #b3261e; } text.g-t { fill: #1f7a4d; }
+  </style>
+  <rect width="640" height="230" fill="#ffffff"/>
+<text x="160" y="20" class="dh" text-anchor="middle">Before: one access per port</text>
+        <text x="480" y="20" class="dh" text-anchor="middle">After: one access, multicast</text>
+        <g class="dl">
+          <rect x="20" y="40" width="80" height="26" class="db"/><text x="60" y="57" text-anchor="middle">port 0: ld A</text>
+          <rect x="20" y="80" width="80" height="26" class="db"/><text x="60" y="97" text-anchor="middle">port 1: ld A</text>
+          <rect x="20" y="120" width="80" height="26" class="db"/><text x="60" y="137" text-anchor="middle">port 2: ld A</text>
+          <rect x="20" y="160" width="80" height="26" class="db"/><text x="60" y="177" text-anchor="middle">port 3: ld A</text>
+          <rect x="150" y="96" width="60" height="34" class="dbad"/><text x="180" y="117" text-anchor="middle">bank</text>
+          <line x1="100" y1="53" x2="148" y2="104" class="lb" marker-end="url(#readme_b)"/>
+          <line x1="100" y1="93" x2="148" y2="110" class="lb" marker-end="url(#readme_b)"/>
+          <line x1="100" y1="133" x2="148" y2="116" class="lb" marker-end="url(#readme_b)"/>
+          <line x1="100" y1="173" x2="148" y2="122" class="lb" marker-end="url(#readme_b)"/>
+          <rect x="222" y="100" width="20" height="26" class="dbad"/><text x="232" y="117" text-anchor="middle" class="ds">P0</text>
+          <rect x="244" y="100" width="20" height="26" class="dbad"/><text x="254" y="117" text-anchor="middle" class="ds">P1</text>
+          <rect x="266" y="100" width="20" height="26" class="dbad"/><text x="276" y="117" text-anchor="middle" class="ds">P2</text>
+          <rect x="288" y="100" width="20" height="26" class="dbad"/><text x="298" y="117" text-anchor="middle" class="ds">P3</text>
+          <text x="265" y="146" text-anchor="middle" class="dm">4 cycles</text>
+          <line x1="320" y1="30" x2="320" y2="215" class="sep"/>
+          <rect x="340" y="40" width="80" height="26" class="db"/><text x="380" y="57" text-anchor="middle">port 0: ld A</text>
+          <rect x="340" y="80" width="80" height="26" class="db"/><text x="380" y="97" text-anchor="middle">port 1: ld A</text>
+          <rect x="340" y="120" width="80" height="26" class="db"/><text x="380" y="137" text-anchor="middle">port 2: ld A</text>
+          <rect x="340" y="160" width="80" height="26" class="db"/><text x="380" y="177" text-anchor="middle">port 3: ld A</text>
+          <rect x="490" y="96" width="60" height="34" class="dgood"/><text x="520" y="117" text-anchor="middle">bank</text>
+          <line x1="420" y1="53" x2="488" y2="108" class="ln" marker-end="url(#readme_a)"/>
+          <path d="M490,124 C460,150 450,170 422,173" class="lg dash" fill="none" marker-end="url(#readme_g)"/>
+          <path d="M490,121 C460,135 450,135 422,133" class="lg dash" fill="none" marker-end="url(#readme_g)"/>
+          <path d="M490,118 C465,105 450,95 422,93" class="lg dash" fill="none" marker-end="url(#readme_g)"/>
+          <path d="M490,115 C470,80 450,60 422,56" class="lg dash" fill="none" marker-end="url(#readme_g)"/>
+          <rect x="562" y="100" width="40" height="26" class="dgood"/><text x="582" y="117" text-anchor="middle" class="ds">P0–3</text>
+          <text x="582" y="146" text-anchor="middle" class="dm">1 cycle</text>
+          <text x="455" y="205" text-anchor="middle" class="dm">dashed: one reply to every port</text>
+        </g>
+</svg>

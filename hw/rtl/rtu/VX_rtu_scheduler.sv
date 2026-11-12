@@ -322,14 +322,22 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     reg [CTX_TAG_W-1:0]      sel_q;
     reg                      fresh_q;
     reg                      rewalk_q;
-    // candidate key order, precomputed at ALIGN off the store row: the key of
-    // the record under test ({instance, record offset}) against the floor and
-    // the staged candidate, so EXEC only adds the t compares
-    reg                      key_gt_floor_q;
-    reg                      key_lt_yld_q;
+    // EXEC's compares, precomputed at ALIGN off the sources its operands are
+    // captured from. Only states a fresh or re-walk pass never enters read
+    // them, so word_x is word_q there. *_before_q leaves out yld_q, which
+    // EXEC reads live.
+    reg                      t0_lt_best_q;   // procedural t below the committed hit
+    reg                      t0_above_q;     // ... above the resume floor
+    reg                      t0_before_q;    // ... ahead of the staged candidate
+    reg                      tri_above_q;
+    reg                      tri_before_q;
+    reg                      tri_occl_q;     // a hit at trit occludes the staged candidate
+    reg                      tri_more_q;     // a further triangle in the loop
+    reg                      inst_last_q;    // the last instance of the leaf
+    reg [31:0]               inst_next_off_q; // the next instance's record offset
     ctx_state_t              word_q;
     lane_ray_t               ray_q;
-    reg [BUF_BITS-1:0]       fbuf_q;
+    reg [BUF_BITS-1:0]       f_aligned_q;   // fetched lines, byte-aligned to the structure
     reg [STK_ENTW-1:0]       stacktop_q;
     reg [PATHW-1:0]          pathv_q;   // rank path entry below the current node
     reg [ADDRW-1:0]          structaddr_q;
@@ -526,6 +534,24 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     reg [COLL_SIZE-1:0]                     coll_prochit;
 
     wire [31:0] cand_ki_al = cs_word.in_blas ? cs_word.inst_id : 32'd0;
+    wire        key_gt_floor_al = {cand_ki_al, cs_word.cur_off} > {cs_word.floor_ki, cs_word.floor_ko};
+    wire        key_lt_yld_al   = {cand_ki_al, cs_word.cur_off} < {cs_word.yld_ki, cs_word.yld_ko};
+    wire [31:0] coll_t0_al      = coll_ordt[cs_word.coll_id][0];
+    wire [31:0] trit_al         = trires_rdata[95:64];
+    wire [31:0] inst_next_al    = cs_word.inst_idx + 32'd1;
+    function automatic logic above_floor_al(input logic [31:0] t);
+        above_floor_al = !cs_word.has_floor
+                      || (t > cs_word.floor_t)
+                      || ((t == cs_word.floor_t) && key_gt_floor_al);
+    endfunction
+    function automatic logic before_yld_al(input logic [31:0] t);
+        before_yld_al = (t < cs_word.yld_t)
+                     || ((t == cs_word.yld_t) && key_lt_yld_al);
+    endfunction
+    // the structure's byte offset in its line: the low bits of structaddr_q,
+    // which only the low bits of its two addends reach
+    wire [RTU_LINE_SEL_BITS-1:0] f_off_al = slot_scene[s1_slot][RTU_LINE_SEL_BITS-1:0]
+        + ((s1_fresh || s1_rewalk) ? RTU_LINE_SEL_BITS'(0) : cs_word.cur_off[RTU_LINE_SEL_BITS-1:0]);
 
     // ═══════════════════════ stage advance ════════════════════════════
     always_ff @(posedge clk) begin
@@ -547,11 +573,18 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 sel_q        <= s1_sel;
                 fresh_q      <= s1_fresh;
                 rewalk_q     <= s1_rewalk;
-                key_gt_floor_q <= {cand_ki_al, cs_word.cur_off} > {cs_word.floor_ki, cs_word.floor_ko};
-                key_lt_yld_q   <= {cand_ki_al, cs_word.cur_off} < {cs_word.yld_ki, cs_word.yld_ko};
+                t0_lt_best_q <= (coll_t0_al < cs_word.best_t);
+                t0_above_q   <= above_floor_al(coll_t0_al);
+                t0_before_q  <= before_yld_al(coll_t0_al);
+                tri_above_q  <= above_floor_al(trit_al);
+                tri_before_q <= before_yld_al(trit_al);
+                tri_occl_q   <= (cs_word.yld_t >= trit_al);
+                tri_more_q   <= ((cs_word.tri_i + 32'd1) < cs_word.tri_n);
+                inst_last_q  <= (inst_next_al == cs_word.inst_cnt);
+                inst_next_off_q <= cs_word.inst_base + (inst_next_al * 32'(RTU_INST_STRIDE));
                 word_q       <= cs_word;
                 ray_q        <= lane_ray_t'(ray_rdata);
-                fbuf_q       <= fbuf;
+                f_aligned_q  <= fbuf >> {f_off_al, 3'b000};
                 stacktop_q   <= stk_rdata;
                 pathv_q      <= path_rdata;
                 // a fresh context's store row is stale and a re-walk restarts:
@@ -572,9 +605,8 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     end
 
     // ═══════════════════════ EXEC decode ══════════════════════════════
-    wire [RTU_LINE_SEL_BITS-1:0] f_off   = structaddr_q[RTU_LINE_SEL_BITS-1:0];
-    wire [RTU_LINE_SEL_BITS+2:0] f_shift = {f_off, 3'b000};
-    wire [BUF_BITS-1:0] f_aligned = fbuf_q >> f_shift;
+    wire [RTU_LINE_SEL_BITS-1:0] f_off = structaddr_q[RTU_LINE_SEL_BITS-1:0];
+    wire [BUF_BITS-1:0] f_aligned = f_aligned_q;
 
     wire [31:0] f_off32 = 32'(f_off);
     wire [LB-1:0] tri_rec_lines =
@@ -702,6 +734,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     wire        box_feed, box_feed_raw;
     wire        box_valid_out, box_hit;
     wire [31:0] box_t_near;
+    wire [31:0] box_t_near_pre;
     wire [COLL_IDW+32-1:0] box_tag_out;
     wire [COLL_IDW+32-1:0] box_tag_pre;
     wire [COLL_IDW-1:0]    box_coll     = box_tag_out[COLL_IDW+32-1 : 32];
@@ -733,12 +766,14 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             .tag_out   (box_tag_out),
             .tag_out_pre (box_tag_pre),
             .hit       (box_hit),
-            .t_near    (box_t_near)
+            .t_near    (box_t_near),
+            .t_near_pre (box_t_near_pre)
         );
     end else begin : g_no_box_pe
         assign box_valid_out = 1'b0;
         assign box_hit       = 1'b0;
         assign box_t_near    = '0;
+        assign box_t_near_pre = '0;
         assign box_tag_out   = '0;
         assign box_tag_pre   = '0;
         `UNUSED_VAR ({box_feed, box_feed_raw, feed_ci, walk_inv_d})
@@ -746,10 +781,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         `UNUSED_VAR ({node, node_kind, node_lines, leaf_lines, stacktop_q, pathv_q})
     end
 
-    // Row select for the insertion read. It depends only on the tag, which the
-    // box PE delivers a cycle ahead of its result, so the decode is registered
-    // here rather than repeated on the result cycle -- where it fans out across
-    // every row and lands on the path that ends at the ordering registers.
+    // Row decode for the collector write, registered off the early tag.
     wire [COLL_IDW-1:0] box_coll_pre = box_tag_pre[COLL_IDW+32-1 : 32];
     `UNUSED_VAR (box_tag_pre[31:0])
     reg [COLL_SIZE-1:0] box_coll_hot;
@@ -761,43 +793,59 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         end
     end
 
-    wire [COLL_SIZE-1:0][NODE_W*32+RTU_CHILD_BITS-1:0] coll_row_in;
-    for (genvar c = 0; c < COLL_SIZE; ++c) begin : g_coll_row_in
-        assign coll_row_in[c] = {coll_ordt[c], coll_ordcnt[c]};
-    end
-
-    wire [NODE_W-1:0][31:0]   coll_ordt_sel;
-    wire [RTU_CHILD_BITS-1:0] coll_ordcnt_sel;
-    VX_onehot_mux #(
-        .DATAW (NODE_W * 32 + RTU_CHILD_BITS),
-        .N     (COLL_SIZE)
-    ) coll_row_mux (
-        .data_in  (coll_row_in),
-        .sel_in   (box_coll_hot),
-        .data_out ({coll_ordt_sel, coll_ordcnt_sel})
-    );
-
-    // Insertion decisions off the admit thermometer: the collected list is
-    // sorted ascending and the count mask is a prefix, so the admit bits are a
-    // prefix of ones and the insertion slot is the first zero. Neighbouring-bit
-    // decode -- no popcount and no index compare on the ordering-write path.
-    wire [NODE_W-1:0] ins_le, ins_here, ins_shift;
-    if (RTU_BVH_WIDTH != 0) begin : g_ins_slots
-        for (genvar oc = 0; oc < RTU_BVH_WIDTH; ++oc) begin : g_le
-            assign ins_le[oc] = (RTU_CHILD_BITS'(oc) < coll_ordcnt_sel)
-                             && (coll_ordt_sel[oc] <= box_t_near);
-        end
-        assign ins_here[0]  = ~ins_le[0];
-        assign ins_shift[0] = 1'b0;
-        for (genvar oc = 1; oc < RTU_BVH_WIDTH; ++oc) begin : g_slot
-            assign ins_here[oc]  = ~ins_le[oc] && ins_le[oc-1];
-            assign ins_shift[oc] = ~ins_le[oc-1];
-        end
-    end else begin : g_no_ins_slots
-        `UNUSED_VAR ({coll_ordt_sel, coll_ordcnt_sel})
-        assign {ins_le, ins_here, ins_shift} = '0;
-    end
     wire coll_pushable = box_hit && (box_childoff != 32'd0);
+
+    // Insertion t-compares, taken a cycle ahead off the PE's early row and
+    // t_near: each entry of that row, and the result landing now, against the
+    // next result's t. If the result landing now inserts into the same row, the
+    // registered select picks the compare of the entry each slot shifts to.
+    wire [NODE_W-1:0] ins_t_le;
+    if (RTU_BVH_WIDTH != 0) begin : g_ins_pre
+        reg [NODE_W-1:0] pre_le_q;
+        reg              new_le_q;
+        reg [NODE_W-1:0] take_new_q;
+        reg [NODE_W-1:0] take_prev_q;
+
+        for (genvar oc = 0; oc < NODE_W; ++oc) begin : g_le_sel
+            localparam PREV = (oc != 0) ? (oc - 1) : 0;
+            assign ins_t_le[oc] = take_new_q[oc]  ? new_le_q
+                                : take_prev_q[oc] ? pre_le_q[PREV]
+                                                  : pre_le_q[oc];
+        end
+
+        wire [NODE_W-1:0][31:0]   pre_ordt   = coll_ordt[box_coll_pre];
+        wire [RTU_CHILD_BITS-1:0] pre_ordcnt = coll_ordcnt[box_coll_pre];
+        wire pre_fwd  = box_valid_out && (box_coll == box_coll_pre);
+        wire pre_proc = coll_proc[box_coll_pre];
+        wire fwd_proc = pre_fwd && pre_proc;
+        wire fwd_ins  = pre_fwd && ~pre_proc && coll_pushable;
+
+        // this cycle's insertion into the forwarded row
+        wire [NODE_W-1:0] cur_le;
+        for (genvar oc = 0; oc < NODE_W; ++oc) begin : g_cur_le
+            assign cur_le[oc] = (RTU_CHILD_BITS'(oc) < pre_ordcnt) && ins_t_le[oc];
+        end
+
+        wire [NODE_W-1:0] pre_le, take_new, take_prev;
+        for (genvar oc = 0; oc < NODE_W; ++oc) begin : g_pre_le
+            localparam PREV = (oc != 0) ? (oc - 1) : 0;
+            wire cur_here  = ~cur_le[oc] && ((oc == 0) || cur_le[PREV]);
+            wire cur_shift = (oc != 0) && ~cur_le[PREV];
+            assign take_new[oc]  = ((oc == 0) && fwd_proc) || (fwd_ins && cur_here);
+            assign take_prev[oc] = fwd_ins && cur_shift;
+            assign pre_le[oc]    = (pre_ordt[oc] <= box_t_near_pre);
+        end
+
+        always @(posedge clk) begin
+            pre_le_q    <= pre_le;
+            new_le_q    <= (box_t_near <= box_t_near_pre);
+            take_new_q  <= take_new;
+            take_prev_q <= take_prev;
+        end
+    end else begin : g_no_ins_pre
+        assign ins_t_le = '0;
+        `UNUSED_VAR ({box_t_near_pre, box_coll_pre})
+    end
 
     // ── tri PE ────────────────────────────────────────────────────────
     wire tri_feed;
@@ -1259,16 +1307,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     // Candidate order: ascending (t, key), key = {instance id, record offset}.
     // A candidate is staged only above the floor and ahead of the staged one.
     wire [31:0] cand_ki = word_q.in_blas ? word_q.inst_id : 32'd0;
-    function automatic logic above_floor(input logic [31:0] t);
-        above_floor = !word_q.has_floor
-                   || (t > word_q.floor_t)
-                   || ((t == word_q.floor_t) && key_gt_floor_q);
-    endfunction
-    function automatic logic before_yld(input logic [31:0] t);
-        before_yld = !yld_q[sel_q]
-                  || (t < word_q.yld_t)
-                  || ((t == word_q.yld_t) && key_lt_yld_q);
-    endfunction
+    wire yld_sel = yld_q[sel_q];
 
     // EXEC outcome (combinational)
     ctx_state_t word_n;
@@ -1573,9 +1612,9 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         CS_PROC_WAIT: begin
             // woken by the collector: the raw AABB result landed
             if (coll_hit_q
-             && (coll_t0_q < word_x.best_t)
-             && above_floor(coll_t0_q)
-             && before_yld(coll_t0_q)) begin
+             && t0_lt_best_q
+             && t0_above_q
+             && (!yld_sel || t0_before_q)) begin
                 cf_din_r.kind = CK_YLDP;
                 cf_din_r.t    = coll_t0_q;
                 cf_din_r.prim = word_x.prim_base;
@@ -1662,13 +1701,13 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                     exec_hit_set  = 1'b1;
                     word_n.best_t  = trit_q;
                     // a closer opaque hit occludes a farther candidate
-                    if (yld_q[sel_q] && (word_x.yld_t >= trit_q)) begin
+                    if (yld_sel && tri_occl_q) begin
                         exec_yld_clr = 1'b1;
                     end
                     if (term_first) begin
                         word_n.cstate = CS_DONE;
                         exec_done     = 1'b1;
-                    end else if ((word_x.tri_i + 32'd1) < word_x.tri_n) begin
+                    end else if (tri_more_q) begin
                         word_n.tri_i   = word_x.tri_i + 32'd1;
                         word_n.cur_off = word_x.cur_off + 32'(RTU_TRI_STRIDE);
                         word_n.cstate  = CS_LTRI_REQ0;
@@ -1679,8 +1718,8 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                     end
                 end
             end else if (tri_pass
-                      && above_floor(trit_q)
-                      && before_yld(trit_q)) begin
+                      && tri_above_q
+                      && (!yld_sel || tri_before_q)) begin
                 cf_din_r.kind = CK_YLDA;
                 cf_din_r.t    = trit_q;
                 cf_din_r.u    = triu_q;
@@ -1702,7 +1741,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                     word_n.yld_t  = trit_q;
                     word_n.yld_ki = cand_ki;
                     word_n.yld_ko = word_x.cur_off;
-                    if ((word_x.tri_i + 32'd1) < word_x.tri_n) begin
+                    if (tri_more_q) begin
                         word_n.tri_i   = word_x.tri_i + 32'd1;
                         word_n.cur_off = word_x.cur_off + 32'(RTU_TRI_STRIDE);
                         word_n.cstate  = CS_LTRI_REQ0;
@@ -1712,7 +1751,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                     wake_self = 1'b1;
                 end
             end else begin
-                if ((word_x.tri_i + 32'd1) < word_x.tri_n) begin
+                if (tri_more_q) begin
                     word_n.tri_i   = word_x.tri_i + 32'd1;
                     word_n.cur_off = word_x.cur_off + 32'(RTU_TRI_STRIDE);
                     word_n.cstate  = CS_LTRI_REQ0;
@@ -1851,7 +1890,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             // path ends at the instance it resumed.
             word_n.in_blas = 1'b0;
             word_n.follow  = 1'b0;
-            if ((word_x.inst_idx + 32'd1) == word_x.inst_cnt) begin
+            if (inst_last_q) begin
                 if (FLAT) begin
                     word_n.cstate = CS_DONE;
                     exec_done     = 1'b1;
@@ -1861,8 +1900,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 end
             end else begin
                 word_n.inst_idx = word_x.inst_idx + 32'd1;
-                word_n.cur_off  = word_x.inst_base
-                                + ((word_x.inst_idx + 32'd1) * 32'(RTU_INST_STRIDE));
+                word_n.cur_off  = inst_next_off_q;
                 word_n.cstate   = CS_INST_REQ;
                 wake_self       = 1'b1;
             end
@@ -1970,8 +2008,6 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             done_q      <= '0;
             mask_q      <= '0;
             hit_q       <= '0;
-            yld_q       <= '0;
-            objv_q      <= '0;
             attr_q      <= '0;
             running     <= '0;
             finalised   <= '0;
@@ -1994,7 +2030,6 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                     mask_q[32'(slot_start_slot)*NUM_LANES + k] <= slot_start_mask[k];
                     done_q[32'(slot_start_slot)*NUM_LANES + k] <= ~slot_start_mask[k];
                     hit_q[32'(slot_start_slot)*NUM_LANES + k]  <= 1'b0;
-                    yld_q[32'(slot_start_slot)*NUM_LANES + k]  <= 1'b0;
                     attr_q[32'(slot_start_slot)*NUM_LANES + k] <= 1'b0;
                     live_q[32'(slot_start_slot)*NUM_LANES + k] <= slot_start_mask[k];
                     seed_v_q[32'(slot_start_slot)*NUM_LANES + k] <= 1'b0;
@@ -2018,14 +2053,6 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 end
                 if (exec_hit_set) begin
                     hit_q[sel_q] <= 1'b1;
-                end
-                if (exec_yld_set) begin
-                    yld_q[sel_q]    <= 1'b1;
-                    cbtype_q[sel_q] <= exec_cbtype;
-                    objv_q[sel_q]   <= exec_objv;
-                end
-                if (exec_yld_clr) begin
-                    yld_q[sel_q] <= 1'b0;
                 end
                 lvl_q_arr[sel_q] <= word_n.lvl;
                 if (fresh_q || rewalk_q || sp_clr) begin
@@ -2064,7 +2091,6 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                             attr_q[32'(bw_slot)*NUM_LANES + k]   <= 1'b1;
                             seed_v_q[32'(bw_slot)*NUM_LANES + k] <= 1'b1;
                         end
-                        yld_q[32'(bw_slot)*NUM_LANES + k]  <= 1'b0;
                         live_q[32'(bw_slot)*NUM_LANES + k] <= res_rewalk[k];
                         if (res_rewalk[k]) begin
                             done_q[32'(bw_slot)*NUM_LANES + k]     <= 1'b0;
@@ -2076,18 +2102,6 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                         finalised[bw_slot] <= 1'b0;
                     end
                 end else begin
-                    for (k = 0; k < NUM_LANES; k = k + 1) begin
-                        if (bw_copy_mask[k]) begin
-                            yld_q[32'(bw_slot)*NUM_LANES + k]    <= 1'b1;
-                            cbtype_q[32'(bw_slot)*NUM_LANES + k] <= RTU_CB_TYPE_BITS'(`VX_RT_CB_TYPE_CHS);
-                            objv_q[32'(bw_slot)*NUM_LANES + k]   <= 1'b0;
-                        end
-                        if (bw_miss_mask[k]) begin
-                            yld_q[32'(bw_slot)*NUM_LANES + k]    <= 1'b1;
-                            cbtype_q[32'(bw_slot)*NUM_LANES + k] <= RTU_CB_TYPE_BITS'(`VX_RT_CB_TYPE_MISS);
-                            objv_q[32'(bw_slot)*NUM_LANES + k]   <= 1'b0;
-                        end
-                    end
                     finalised[bw_slot] <= 1'b1;
                 end
             end
@@ -2098,6 +2112,49 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                  && ce_idle && bw_idle && !pend_resume[k]) begin
                     running[k] <= 1'b0;
                     done_r[k]  <= 1'b1;
+                end
+            end
+        end
+    end
+
+    // Yield flags, per context: the barrier walker's per-lane writes decode to
+    // each context instead of chaining behind the EXEC write.
+    for (genvar i = 0; i < NUM_CTX; ++i) begin : g_yld_upd
+        localparam SLOT = i / NUM_LANES;
+        localparam LANE = i % NUM_LANES;
+        wire start_i = slot_start_valid && (slot_start_slot == SLOT_W'(SLOT));
+        wire exec_i  = x_valid && (sel_q == CTX_TAG_W'(i));
+        wire bw_i    = bw_job_done && (bw_slot == SLOT_W'(SLOT));
+        wire res_i   = bw_i && bw_is_res;
+        wire chs_i   = bw_i && ~bw_is_res && bw_copy_mask[LANE];
+        wire miss_i  = bw_i && ~bw_is_res && bw_miss_mask[LANE];
+        always_ff @(posedge clk) begin
+            if (reset) begin
+                yld_q[i]  <= 1'b0;
+                objv_q[i] <= 1'b0;
+            end else begin
+                if (res_i) begin
+                    yld_q[i] <= 1'b0;
+                end else if (chs_i || miss_i) begin
+                    yld_q[i] <= 1'b1;
+                end else if (exec_i && exec_yld_clr) begin
+                    yld_q[i] <= 1'b0;
+                end else if (exec_i && exec_yld_set) begin
+                    yld_q[i] <= 1'b1;
+                end else if (start_i) begin
+                    yld_q[i] <= 1'b0;
+                end
+                if (miss_i) begin
+                    cbtype_q[i] <= RTU_CB_TYPE_BITS'(`VX_RT_CB_TYPE_MISS);
+                end else if (chs_i) begin
+                    cbtype_q[i] <= RTU_CB_TYPE_BITS'(`VX_RT_CB_TYPE_CHS);
+                end else if (exec_i && exec_yld_set) begin
+                    cbtype_q[i] <= exec_cbtype;
+                end
+                if (chs_i || miss_i) begin
+                    objv_q[i] <= 1'b0;
+                end else if (exec_i && exec_yld_set) begin
+                    objv_q[i] <= exec_objv;
                 end
             end
         end
@@ -2127,37 +2184,76 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
 
     // ── collector update ──────────────────────────────────────────────
     always_ff @(posedge clk) begin
-        if (reset) begin
-            coll_busy <= '0;
-        end else begin
-            if (x_valid && coll_alloc_r) begin
-                coll_busy[coll_alloc_idx]   <= 1'b1;
-                coll_proc[coll_alloc_idx]   <= box_raw_r;
-                coll_ctx[coll_alloc_idx]    <= sel_q;
-                coll_cnt[coll_alloc_idx]    <= '0;
-                coll_last[coll_alloc_idx]   <= box_raw_r ? RTU_CHILD_BITS'(0) : last_child;
-                coll_ordcnt[coll_alloc_idx] <= '0;
+        if (~reset && x_valid && coll_alloc_r) begin
+            coll_ctx[coll_alloc_idx]  <= sel_q;
+            coll_last[coll_alloc_idx] <= box_raw_r ? RTU_CHILD_BITS'(0) : last_child;
+        end
+    end
+
+    // Each row decodes its own write enables and insertion slot, so the
+    // ordering write is one mux per entry. The admit bits are a prefix of ones
+    // (the list is sorted ascending and the count mask is a prefix), so the
+    // insertion slot is the first zero: a neighbouring-bit decode.
+    for (genvar c = 0; c < COLL_SIZE; ++c) begin : g_coll_upd
+        wire alloc_c = x_valid && coll_alloc_r && (coll_alloc_idx == COLL_IDW'(c));
+        wire free_c  = x_valid && coll_free_r && (word_x.coll_id == COLL_IDW'(c));
+        wire box_c   = box_valid_out && box_coll_hot[c];
+        wire proc_c  = box_c && coll_proc[c];
+        wire tree_c  = box_c && ~coll_proc[c];
+        wire ins_c   = tree_c && coll_pushable;
+
+        always_ff @(posedge clk) begin
+            if (reset) begin
+                coll_busy[c] <= 1'b0;
+            end else begin
+                if (free_c) begin
+                    coll_busy[c] <= 1'b0;
+                end else if (alloc_c) begin
+                    coll_busy[c] <= 1'b1;
+                end
+                if (alloc_c) begin
+                    coll_proc[c] <= box_raw_r;
+                end
+                if (tree_c) begin
+                    coll_cnt[c] <= coll_cnt[c] + RTU_CHILD_BITS'(1);
+                end else if (alloc_c) begin
+                    coll_cnt[c] <= '0;
+                end
+                if (ins_c) begin
+                    coll_ordcnt[c] <= coll_ordcnt[c] + RTU_CHILD_BITS'(1);
+                end else if (alloc_c) begin
+                    coll_ordcnt[c] <= '0;
+                end
+                if (proc_c) begin
+                    coll_prochit[c] <= box_hit;
+                end
             end
-            if (x_valid && coll_free_r) begin
-                coll_busy[word_x.coll_id] <= 1'b0;
-            end
-            if (box_valid_out) begin
-                if (coll_proc[box_coll]) begin
-                    coll_prochit[box_coll] <= box_hit;
-                    coll_ordt[box_coll][0] <= box_t_near;
-                end else begin
-                    coll_cnt[box_coll] <= coll_cnt[box_coll] + RTU_CHILD_BITS'(1);
-                    if (coll_pushable) begin
-                        for (integer oc = 0; oc < RTU_BVH_WIDTH; oc = oc + 1) begin
-                            if (ins_here[oc]) begin
-                                coll_ordoff[box_coll][oc[IDXW-1:0]] <= box_childoff;
-                                coll_ordt[box_coll][oc[IDXW-1:0]]   <= box_t_near;
-                            end else if (ins_shift[oc]) begin
-                                coll_ordoff[box_coll][oc[IDXW-1:0]] <= coll_ordoff[box_coll][oc[IDXW-1:0]-1];
-                                coll_ordt[box_coll][oc[IDXW-1:0]]   <= coll_ordt[box_coll][oc[IDXW-1:0]-1];
-                            end
-                        end
-                        coll_ordcnt[box_coll] <= coll_ordcnt[box_coll] + RTU_CHILD_BITS'(1);
+        end
+
+        wire [NODE_W-1:0] ins_le;
+        for (genvar oc = 0; oc < NODE_W; ++oc) begin : g_le
+            assign ins_le[oc] = (RTU_CHILD_BITS'(oc) < coll_ordcnt[c]) && ins_t_le[oc];
+        end
+
+        // a procedural box stores its t in slot 0
+        for (genvar oc = 0; oc < NODE_W; ++oc) begin : g_slot
+            localparam PREV = (oc != 0) ? (oc - 1) : 0;
+            wire ins_here  = ~ins_le[oc] && ((oc == 0) || ins_le[PREV]);
+            wire ins_shift = (oc != 0) && ~ins_le[PREV];
+            wire set_t   = ((oc == 0) && proc_c) || (ins_c && ins_here);
+            wire set_off = ins_c && ins_here;
+            wire shift_c = ins_c && ins_shift;
+            always_ff @(posedge clk) begin
+                if (~reset) begin
+                    if (set_t) begin
+                        coll_ordt[c][oc] <= box_t_near;
+                    end else if (shift_c) begin
+                        coll_ordt[c][oc] <= coll_ordt[c][PREV];
+                    end
+                    if (set_off) begin
+                        coll_ordoff[c][oc] <= box_childoff;
+                    end else if (shift_c) begin
+                        coll_ordoff[c][oc] <= coll_ordoff[c][PREV];
                     end
                 end
             end
@@ -2290,7 +2386,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     assign obj_vld  = objv_q;
     assign attr_vld = attr_q;
 
-    `UNUSED_VAR ({f_aligned, s1_fresh, ray_q, ins_le, ins_here, ins_shift})
+    `UNUSED_VAR ({f_aligned, s1_fresh, ray_q})
 
 `ifdef DBG_TRACE_RTU
     always_ff @(posedge clk) begin
