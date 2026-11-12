@@ -66,11 +66,12 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
         // S = QK^T
         for (uint32_t h = 0; h < head_dim; h += head_dim_tile) {
             uint32_t tile_w = std::min(head_dim_tile, head_dim - h);
-            // Load K tile
+            // Load K tile; rows past seq_len load as zero
             for (uint32_t i = 0; i < sp_count; ++i) {
                 uint32_t c = threadIdx.x + i * num_threads;
+                bool in_seq = (j + c) < seq_len;
                 for (uint32_t e = 0; e < tile_w; ++e) {
-                  local_K[c * head_dim_tile + e] = K[(j + c) * head_dim + h + e];
+                  local_K[c * head_dim_tile + e] = in_seq ? K[(j + c) * head_dim + h + e] : 0.0f;
                 }
             }
             __syncthreads();
@@ -83,6 +84,14 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
                 P_row[c] = acc;
             }
             __syncthreads();
+        }
+
+        // Columns past seq_len take no part in the softmax.
+        for (uint32_t i = 0; i < sp_count; ++i) {
+            uint32_t c = threadIdx.x + i * num_threads;
+            if ((j + c) >= seq_len) {
+                P_row[c] = -INFINITY;
+            }
         }
 
         // Softmax: reduce over this warp's row, then rewrite S as P in place.
@@ -111,11 +120,12 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
         // Update O
         for (uint32_t h = 0; h < head_dim; h += head_dim_tile) {
             uint32_t tile_w = std::min(head_dim_tile, head_dim - h);
-            // Load V tile
+            // Load V tile; rows past seq_len load as zero
             for (uint32_t i = 0; i < sp_count; ++i) {
                 uint32_t c = threadIdx.x + i * num_threads;
+                bool in_seq = (j + c) < seq_len;
                 for (uint32_t e = 0; e < tile_w; ++e) {
-                  local_V[e * block_size_c + c] = V[(j + c) * head_dim + h + e];
+                  local_V[e * block_size_c + c] = in_seq ? V[(j + c) * head_dim + h + e] : 0.0f;
                 }
             }
             __syncthreads();
