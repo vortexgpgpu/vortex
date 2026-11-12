@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 300" role="img" aria-label="A broadcast flush overlaps every core&#x27;s flush, and a flush token on every memory port makes sure no write arrives after the next level has finished its walk.">
+  <title>A broadcast flush overlaps every core&#x27;s flush, and a flush token on every memory port makes sure no write arrives after the next level has finished its walk.</title>
+  <defs><marker id="flusht_a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1b2733"/></marker><marker id="flusht_g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1f7a4d"/></marker><marker id="flusht_b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#b3261e"/></marker></defs>
+  <style>
+    text { font-family: Helvetica, Arial, sans-serif; fill: #1b2733; font-size: 11.5px; }
+    .dh { font-size: 13px; font-weight: bold; }
+    .dm { fill: #5a6772; font-size: 11px; }
+    .ds { font-size: 10.5px; }
+    .db { fill: #fbfcfd; stroke: #5a7184; stroke-width: 1.2; }
+    .dbad { fill: #fbe5e3; stroke: #b3261e; stroke-width: 1.2; }
+    .dgood { fill: #e3f3ea; stroke: #1f7a4d; stroke-width: 1.2; }
+    .didle { fill: #f3f5f8; stroke: #c9d1d9; stroke-width: 1.2; }
+    .dwait { fill: #fbe5e3; stroke: #b3261e; stroke-width: 1.2; stroke-dasharray: 4 3; }
+    .ln { stroke: #1b2733; stroke-width: 1.3; fill: none; }
+    .lb { stroke: #b3261e; stroke-width: 1.5; fill: none; }
+    .lg { stroke: #1f7a4d; stroke-width: 1.5; }
+    .dash { stroke-dasharray: 4 3; }
+    .sep { stroke: #c9d1d9; stroke-width: 1; stroke-dasharray: 2 4; }
+    text.db-t { fill: #b3261e; } text.g-t { fill: #1f7a4d; }
+  </style>
+  <rect width="640" height="300" fill="#ffffff"/>
+<text x="160" y="20" class="dh" text-anchor="middle">Before: cores flush in turn</text>
+<text x="480" y="20" class="dh" text-anchor="middle">After: one broadcast, all overlap</text>
+<g class="dl">
+<text x="20" y="46" class="dm">core 0</text><rect x="70" y="36" width="55" height="12" class="dbad"/>
+<text x="20" y="64" class="dm">core 1</text><rect x="125" y="54" width="55" height="12" class="dbad"/>
+<text x="20" y="82" class="dm">core 2</text><rect x="180" y="72" width="55" height="12" class="dbad"/>
+<text x="20" y="100" class="dm">core 3</text><rect x="235" y="90" width="55" height="12" class="dbad"/>
+<line x1="320" y1="30" x2="320" y2="285" class="sep"/>
+<text x="340" y="46" class="dm">core 0</text><rect x="390" y="36" width="55" height="12" class="dgood"/>
+<text x="340" y="64" class="dm">core 1</text><rect x="390" y="54" width="55" height="12" class="dgood"/>
+<text x="340" y="82" class="dm">core 2</text><rect x="390" y="72" width="55" height="12" class="dgood"/>
+<text x="340" y="100" class="dm">core 3</text><rect x="390" y="90" width="55" height="12" class="dgood"/>
+<text x="160" y="140" class="dh" text-anchor="middle">Before: token on port 0 only</text>
+<text x="480" y="140" class="dh" text-anchor="middle">After: a token on every port</text>
+<rect x="60" y="156" width="200" height="28" class="db"/><text x="160" y="175" text-anchor="middle">L1 (2 memory ports)</text>
+<rect x="60" y="246" width="200" height="28" class="dbad"/><text x="160" y="265" text-anchor="middle">next level: line left dirty</text>
+<line x1="110" y1="184" x2="110" y2="244" class="ln" marker-end="url(#flusht_a)"/><text x="104" y="218" class="dm" text-anchor="end">token</text>
+<line x1="210" y1="184" x2="210" y2="244" class="lb dash" marker-end="url(#flusht_b)"/><text x="216" y="212" class="dm">write,</text><text x="216" y="226" class="dm">late</text>
+<rect x="380" y="156" width="200" height="28" class="db"/><text x="480" y="175" text-anchor="middle">L1 (2 memory ports)</text>
+<rect x="380" y="246" width="200" height="28" class="dgood"/><text x="480" y="265" text-anchor="middle">next level: answers after both</text>
+<line x1="430" y1="184" x2="430" y2="244" class="lg" marker-end="url(#flusht_g)"/><text x="424" y="218" class="dm" text-anchor="end">token</text>
+<line x1="530" y1="184" x2="530" y2="244" class="lg" marker-end="url(#flusht_g)"/><text x="536" y="218" class="dm">token</text>
+</g>
+</svg>

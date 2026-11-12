@@ -35,10 +35,11 @@ inline uint32_t float_to_bits(float f) {
 }
 } // namespace
 
-RtuUnit::RtuUnit(Core* core, SimChannel<RtuReq>& req_out, RtuWindow& window)
+RtuUnit::RtuUnit(Core* core, SimChannel<RtuReq>& req_out, RtuWindow& window, uint32_t bus_delay)
   : window_(window)
   , core_(core)
   , req_out_(req_out)
+  , bus_delay_(bus_delay)
 {
   trace_slot_.fill(-1);
   for (auto& s : trace_scene_) s.fill(0);
@@ -231,15 +232,15 @@ instr_trace_t* RtuUnit::process_cb_ret(instr_trace_t* trace, uint32_t block_id) 
   req.trace    = trace;
   req.block_id = block_id;
   req.warp_id  = trace->wid;
-  uint32_t cand_mask = last_cand_mask_.at(trace->wid);
-  uint32_t bits = 0;
+  uint64_t cand_mask = last_cand_mask_.at(trace->wid);
+  uint64_t bits = 0;
   for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
     if (!trace->tmask.test(t)) continue;
     if (((cand_mask >> t) & 1u) == 0) {
       trace->dst_data[t].u = 0;  // still traversing: no action this iteration
       continue;
     }
-    bits |= (1u << t);
+    bits |= (uint64_t(1) << t);
     // rs1 holds the action (ACCEPT/IGNORE/TERMINATE).
     req.cb_action[t] = static_cast<uint32_t>(trace->src_data[0].at(t).u);
     req.cb_handle[t] = cb_handle_.at(trace->wid)[t];
@@ -252,7 +253,7 @@ instr_trace_t* RtuUnit::process_cb_ret(instr_trace_t* trace, uint32_t block_id) 
     trace->dst_data[t].u = 0;  // no writeback
   }
   req.tmask_bits = bits;
-  req_out_.send(req);
+  req_out_.send(req, 1 + bus_delay_);
   DT(3, "rtu-cb_ret submit: core=" << core_->id() << ", wid=" << trace->wid
        << ", tmask=0x" << std::hex << bits << std::dec);
   return trace;
@@ -509,10 +510,10 @@ instr_trace_t* RtuUnit::process_trace_uop(instr_trace_t* trace, uint32_t block_i
     req.trace    = trace;
     req.block_id = block_id;
     req.warp_id  = wid;
-    uint32_t bits = 0;
+    uint64_t bits = 0;
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       if (!trace->tmask.test(t)) continue;
-      bits |= (1u << t);
+      bits |= (uint64_t(1) << t);
       const auto& ray = trace_ray_.at(wid)[t];
       req.scene_root[t] = trace_scene_.at(wid)[t];
       req.origin_x[t]   = bits_to_float(ray.origin[0]);
@@ -527,7 +528,7 @@ instr_trace_t* RtuUnit::process_trace_uop(instr_trace_t* trace, uint32_t block_i
       req.cull_mask[t]  = trace_cull_.at(wid);
     }
     req.tmask_bits = bits;
-    req_out_.send(req);
+    req_out_.send(req, 1 + bus_delay_);
     trace_slot_.at(wid) = -1;
     DT(3, "rtu-trace arm: core=" << core_->id() << ", wid=" << wid
          << ", slot=" << slot << ", tmask=0x" << std::hex << bits << std::dec);

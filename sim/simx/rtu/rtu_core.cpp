@@ -140,20 +140,20 @@ public:
       rsp.warp_id  = anchor_warp;
       rsp.block_id = 0;        // CB_YIELD doesn't carry a parked trace;
       rsp.trace    = nullptr;  // SfuUnit drain only reads warp_id.
-      uint32_t cb_mask = 0;
+      uint64_t cb_mask = 0;
       auto it = queue_.begin();
       while (it != queue_.end()) {
         if (it->warp_id != anchor_warp || it->sbt_idx != anchor_sbt) {
           ++it; continue;
         }
         uint8_t t = it->lane;
-        if (cb_mask & (1u << t)) {
+        if (cb_mask & (uint64_t(1) << t)) {
           // Lane already grouped for this CB_YIELD — defer the second candidate
           // to a future reformation pass so the kernel doesn't see two
           // conflicting payloads in one trap.
           ++it; continue;
         }
-        cb_mask |= (1u << t);
+        cb_mask |= (uint64_t(1) << t);
         rsp.cb_type[t]            = it->cb_type;
         // Per-lane yield status returned to the warp's WAIT: ANYHIT candidate
         // -> YIELD_ANYHIT, procedural -> YIELD_PROC.
@@ -185,7 +185,7 @@ public:
       warp_cb_inflight_[anchor_warp] = true;
       ++perf_.reformation_yields;
       for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-        if (!(cb_mask & (1u << t))) continue;
+        if (!(cb_mask & (uint64_t(1) << t))) continue;
         switch (rsp.cb_type[t]) {
           case VX_RT_CB_TYPE_ANYHIT: ++perf_.ahs_callbacks;  break;
           case VX_RT_CB_TYPE_PROC:   ++perf_.is_callbacks;   break;
@@ -342,7 +342,7 @@ public:
       uint32_t first_active = uint32_t(-1);
       s.lanes = {};
       for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-        if (s.req.tmask_bits & (1u << t)) {
+        if (s.req.tmask_bits & (uint64_t(1) << t)) {
           s.lanes[t].active = true;
           s.lanes[t].walk_needed = true;
           if (first_active == uint32_t(-1)) first_active = t;

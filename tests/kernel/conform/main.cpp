@@ -41,5 +41,5 @@ int main() {
 		PRINTF("Failed!\n");
 	}
 
-	return errors;
+	return errors != 0;
 }

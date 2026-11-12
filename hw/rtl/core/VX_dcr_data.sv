@@ -14,11 +14,12 @@
 `include "VX_define.vh"
 
 module VX_dcr_data import VX_gpu_pkg::*; #(
-    parameter `STRING INSTANCE_ID = "",
-    parameter CORE_ID = 0
+    parameter `STRING INSTANCE_ID = ""
 ) (
     input wire              clk,
     input wire              reset,
+
+    input wire [CORE_ID_WIDTH-1:0] core_id,
 
     // Inputs
     VX_dcr_bus_if.slave     dcr_bus_if,
@@ -27,7 +28,8 @@ module VX_dcr_data import VX_gpu_pkg::*; #(
     VX_dcr_csr_if.master    dcr_csr_if,
 
     // DCR-triggered cache flush
-    VX_dcr_flush_if.master  dcr_flush_if
+    VX_dcr_flush_if.master  dcr_flush_if,
+    output wire             flush_l1_only
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
@@ -49,7 +51,7 @@ module VX_dcr_data import VX_gpu_pkg::*; #(
     wire is_mpm_read = dcr_bus_if.req_valid
                     && ~dcr_bus_if.req_data.rw
                     && (dcr_bus_if.req_data.addr == `VX_DCR_BASE_MPM_VALUE)
-                    && (mpm_target_cid == 16'(CORE_ID))
+                    && (mpm_target_cid == 16'(core_id))
                     && ~dcr_csr_pending_r;
 
     always @(posedge clk) begin
@@ -74,27 +76,45 @@ module VX_dcr_data import VX_gpu_pkg::*; #(
 
     // Cache flush via DCR interface /////////////////////////////////////////
 
-    reg flush_pending_r;
+    // A flush starts on a DCR write to CACHE_FLUSH, which reaches every core,
+    // and this core's flush read is answered once its flush has completed. The
+    // DCR response bus has no back-pressure, so the command processor starts
+    // all cores with one write and then reads them one at a time: the flushes
+    // overlap and the responses never collide.
+    reg flush_pending_r;  // flush running
+    reg flush_complete_r; // flush finished, not yet reported
+    reg flush_read_r;     // flush read waiting for completion
+    reg flush_l1_only_r;  // the last-level cache keeps its lines
 
-    wire is_flush_read = dcr_bus_if.req_valid
-                      && ~dcr_bus_if.req_data.rw
-                      && (dcr_bus_if.req_data.addr == `VX_DCR_BASE_CACHE_FLUSH)
-                      && (mpm_target_cid == 16'(CORE_ID))
-                      && ~flush_pending_r;
+    wire is_flush_req   = dcr_bus_if.req_valid
+                       && (dcr_bus_if.req_data.addr == `VX_DCR_BASE_CACHE_FLUSH);
+    wire is_flush_write = is_flush_req && dcr_bus_if.req_data.rw;
+    wire is_flush_read  = is_flush_req && ~dcr_bus_if.req_data.rw
+                       && (mpm_target_cid == 16'(core_id));
+
+    wire flush_done  = flush_pending_r && dcr_flush_if.done;
+    wire flush_start = ~flush_pending_r && is_flush_write;
+    wire flush_rsp   = flush_read_r && (flush_complete_r || flush_done);
 
     always @(posedge clk) begin
         if (reset) begin
-            flush_pending_r <= 1'b0;
-        end else if (is_flush_read) begin
-            flush_pending_r <= 1'b1;
-        end else if (dcr_flush_if.done) begin
-            flush_pending_r <= 1'b0;
+            flush_pending_r  <= 1'b0;
+            flush_complete_r <= 1'b0;
+            flush_read_r     <= 1'b0;
+            flush_l1_only_r  <= 1'b0;
+        end else begin
+            flush_pending_r  <= flush_start || (flush_pending_r && ~flush_done);
+            // a write opens a new flush, so an older completion cannot answer it
+            flush_complete_r <= ~is_flush_write && ~flush_rsp && (flush_complete_r || flush_done);
+            flush_read_r     <= ~flush_rsp && (flush_read_r || is_flush_read);
+            if (flush_start) begin
+                flush_l1_only_r <= (dcr_bus_if.req_data.data & VX_DCR_DATA_WIDTH'(`VX_CACHE_FLUSH_L1_ONLY)) != 0;
+            end
         end
     end
 
     assign dcr_flush_if.req = flush_pending_r;
-
-    wire flush_done = flush_pending_r && dcr_flush_if.done;
+    assign flush_l1_only    = flush_l1_only_r;
 
     // Return CSR data or flush-done on DCR response bus
     // Use intermediate registers — Vivado (Synth 8-453) forbids procedural
@@ -107,10 +127,10 @@ module VX_dcr_data import VX_gpu_pkg::*; #(
             rsp_valid_r <= 1'b0;
             rsp_data_r  <= '0;
         end else begin
-            rsp_valid_r <= dcr_csr_if_fire || flush_done;
+            rsp_valid_r <= dcr_csr_if_fire || flush_rsp;
             if (dcr_csr_if_fire) begin
                 rsp_data_r <= dcr_csr_if.value;
-            end else if (flush_done) begin
+            end else if (flush_rsp) begin
                 rsp_data_r <= '0;
             end
         end
@@ -118,6 +138,12 @@ module VX_dcr_data import VX_gpu_pkg::*; #(
 
     assign dcr_bus_if.rsp_valid = rsp_valid_r;
     assign dcr_bus_if.rsp_data  = rsp_data_r;
+
+    // the requester issues one read at a time, so the two answers never meet
+    `RUNTIME_ASSERT (~(dcr_csr_if_fire && flush_rsp), ("%t: %s CSR read and flush answered in the same cycle", $time, INSTANCE_ID))
+    // a new flush starts only after every core reported the previous one
+    `RUNTIME_ASSERT (~(is_flush_write && flush_pending_r), ("%t: %s flush started while one is running", $time, INSTANCE_ID))
+    `RUNTIME_ASSERT (~(is_flush_read && ~flush_pending_r && ~flush_complete_r), ("%t: %s flush read with no flush started", $time, INSTANCE_ID))
 
 `ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin

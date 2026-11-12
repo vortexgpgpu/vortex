@@ -75,7 +75,7 @@ runs:
 
     - name: Install test-harness Python deps
       shell: bash
-      run: pip install --quiet pytest pyyaml
+      run: pip install --quiet pytest pyyaml "pyslang>=11,<13"
 
     # Re-export the SST / gem5 / openmpi tool env. ci/{sst,toolchain}_install.sh
     # emit these to $GITHUB_ENV, but that is per-job — the setup job that built

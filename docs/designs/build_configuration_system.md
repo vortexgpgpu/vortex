@@ -163,6 +163,7 @@ a generator error rather than a silent fallback.
 | private local | lowercase (`fpu_dsp_vivado`, `dpi_is_enabled`) | a helper consumed only by other `expr:` keys; inlined where used |
 | `[[builtin]]` | declared with a type (`XLEN = "int"`) | read from the environment; typed and defaulted |
 | `[[param]]` | declared with a type (`VX_CFG_DCACHE_NUM_REQS = "int"`) | a name the *consumer* defines in its own scope — the unresolved header passes it through as `DCACHE_NUM_REQS`, an RTL `localparam` |
+| `[[extern]]` | declared with a type (`VX_CFG_NUM_THREADS = "int"`) | a configuration macro a resolved header depends on — every key that references it is emitted as an expression over the macro, the rest of it folded to constants |
 
 Builtins and params are read-only: assigning one in a config table, or
 overriding one with `-D`, is a generator error.
@@ -190,7 +191,10 @@ for each <name>.toml:
 ```
 
 `VX_types` is generated `--resolved`; `XLEN` is exported first so its
-`[memmap]` and `[vm]` expressions resolve for the tree's address width.
+`[memmap]` and `[vm]` expressions resolve for the tree's address width. The
+stack and local memory bases also depend on the thread count, which a build's
+`CONFIGS` may override, so they stay expressions over `VX_CFG_NUM_THREADS`
+(an `[[extern]]`); every consumer has it from `VX_config` or its `-D` flags.
 
 A header is regenerated only when it is **older than** its TOML, the
 generator, or the configure stamp. The stamp (`<build>/.config.stamp`) holds
@@ -322,14 +326,15 @@ mix of knobs and computed results.
 RTL reads `` `VX_CFG_* `` and `` `VX_MEM_* `` macros directly; there is no
 typed-`localparam` configuration package. One was built and reverted:
 
-- **sv2v drops wildcard re-exports.** The Yosys ASIC flow converts through
-  sv2v, which discards `export pkg::*` symbols — the flow failed on
-  `L3_CACHE_SIZE` and its siblings.
+- **sv2v drops wildcard re-exports.** The Yosys ASIC flow converted through
+  sv2v at the time, which discards `export pkg::*` symbols — the flow failed
+  on `L3_CACHE_SIZE` and its siblings. (Yosys now reads the sources with its
+  slang frontend.)
 - **Package compile order is tool-divergent.** Verilator is strict, Vivado
   auto-sorts, VCS is order-sensitive.
 
 Backtick macros are the one representation every tool handles identically.
-Do not re-attempt a package without first solving sv2v re-export.
+Do not re-attempt a package without first checking re-exports in every flow.
 
 ### 9.2 Superseded directions
 

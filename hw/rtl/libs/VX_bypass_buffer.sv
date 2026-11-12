@@ -11,13 +11,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// A bypass elastic buffer operates at full bandwidth where pop can happen if the buffer is empty but is going full
+// A bypass (skid) buffer: an input passes straight through while the buffer is
+// empty, and the one register catches it when the output stalls.
 // It has the following benefits:
-// + Full-bandwidth throughput
+// + zero latency and full-bandwidth throughput
+// + ready_in is registered: the output's ready never reaches the input
 // + use only one register for storage
 // It has the following limitations:
-// + data_out is not registered
-// + ready_in and ready_out are coupled
+// + data_out and valid_out are not registered
+// + the input takes nothing in the cycle a held entry leaves
 
 `include "VX_platform.vh"
 
@@ -63,7 +65,7 @@ module VX_bypass_buffer #(
             end
         end
 
-        assign ready_in  = ready_out || ~has_data;
+        assign ready_in  = ~has_data;
         assign data_out  = has_data ? buffer : data_in;
         assign valid_out = valid_in || has_data;
 

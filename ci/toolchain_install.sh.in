@@ -24,15 +24,19 @@ REPOSITORY=https://github.com/vortexgpgpu/vortex-toolchain-prebuilt/raw/${TOOLCH
 
 riscv32()
 {
+    # The focal build only needs glibc 2.14, so EL9 reuses it (the centos/7
+    # bundle is GCC 13, whose newlib no longer defines HAVE_INITFINI_ARRAY).
+    osdir=$OSVERSION
     case $OSVERSION in
     "centos/7") parts=$(eval echo {a..l}) ;;
     "ubuntu/bionic") parts=$(eval echo {a..j}) ;;
+    "rhel/9")   osdir=ubuntu/focal; parts=$(eval echo {a..k}) ;;
     *)          parts=$(eval echo {a..k}) ;;
     esac
     rm -f riscv32-gnu-toolchain.tar.bz2.parta*
     for x in $parts
     do
-        wget $REPOSITORY/riscv32-gnu-toolchain/$OSVERSION/riscv32-gnu-toolchain.tar.bz2.parta$x
+        wget $REPOSITORY/riscv32-gnu-toolchain/$osdir/riscv32-gnu-toolchain.tar.bz2.parta$x
     done
     cat riscv32-gnu-toolchain.tar.bz2.parta* > riscv32-gnu-toolchain.tar.bz2
     tar -xvf riscv32-gnu-toolchain.tar.bz2
@@ -42,14 +46,17 @@ riscv32()
 
 riscv64()
 {
+    # See riscv32: EL9 reuses the focal build.
+    osdir=$OSVERSION
     case $OSVERSION in
     "centos/7") parts=$(eval echo {a..l}) ;;
+    "rhel/9")   osdir=ubuntu/focal; parts=$(eval echo {a..j}) ;;
     *)          parts=$(eval echo {a..j}) ;;
     esac
     rm -f riscv64-gnu-toolchain.tar.bz2.parta*
     for x in $parts
     do
-        wget $REPOSITORY/riscv64-gnu-toolchain/$OSVERSION/riscv64-gnu-toolchain.tar.bz2.parta$x
+        wget $REPOSITORY/riscv64-gnu-toolchain/$osdir/riscv64-gnu-toolchain.tar.bz2.parta$x
     done
     cat riscv64-gnu-toolchain.tar.bz2.parta* > riscv64-gnu-toolchain.tar.bz2
     tar -xvf riscv64-gnu-toolchain.tar.bz2
@@ -149,8 +156,8 @@ verilator()
     # `cat parta*` rebuilds. This count and the published parts move together --
     # re-check it whenever the verilator prebuilt is refreshed.
     case $OSVERSION in
-    "ubuntu/focal") parts=$(eval echo {a..c}) ;;
-    *)              parts=$(eval echo {a..a}) ;;
+    "ubuntu/focal"|"rhel/9") parts=$(eval echo {a..c}) ;;
+    *)                       parts=$(eval echo {a..a}) ;;
     esac
     echo $parts
     rm -f verilator.tar.bz2.parta*
@@ -163,12 +170,36 @@ verilator()
     mkdir -p $TOOLDIR && rm -rf $TOOLDIR/verilator && mv verilator $TOOLDIR
     rm -rf verilator verilator.tar.bz2*
 }
-sv2v()
+# CIRCT: the SystemVerilog frontend of the synthesis flows (circt-verilog,
+# circt-opt, firtool), packaged in parts as verilator is.
+circt()
 {
-    wget $REPOSITORY/sv2v/$OSVERSION/sv2v.tar.bz2
-    tar -xvf sv2v.tar.bz2
-    mkdir -p $TOOLDIR && rm -rf $TOOLDIR/sv2v && mv sv2v $TOOLDIR
-    rm -rf sv2v sv2v.tar.bz2
+    # The count of what ci/toolchain_prebuilt.sh's `split -b 50M` produced for
+    # this release, as for verilator: re-check it whenever the circt prebuilt
+    # is refreshed. v3.0.1's bundle is 51.2 MB, one part.
+    case $OSVERSION in
+    *)  parts=$(eval echo {a..a}) ;;
+    esac
+    echo $parts
+    rm -f circt.tar.bz2.parta*
+    for x in $parts
+    do
+        wget $REPOSITORY/circt/$OSVERSION/circt.tar.bz2.parta$x
+    done
+    cat circt.tar.bz2.parta* > circt.tar.bz2
+    tar -xvf circt.tar.bz2
+    mkdir -p $TOOLDIR && rm -rf $TOOLDIR/circt && mv circt $TOOLDIR
+    rm -rf circt circt.tar.bz2*
+}
+# Foldsim: the FAME-5 simulator compiler of hw/syn/foldsim (the Foldsim
+# driver and foldsim-opt), built on CIRCT.
+foldsim()
+{
+    rm -f foldsim.tar.bz2
+    wget $REPOSITORY/foldsim/$OSVERSION/foldsim.tar.bz2
+    tar -xvf foldsim.tar.bz2
+    mkdir -p $TOOLDIR && rm -rf $TOOLDIR/foldsim && mv foldsim $TOOLDIR
+    rm -rf foldsim foldsim.tar.bz2
 }
 
 yosys()
@@ -218,8 +249,8 @@ gem5()
     rm -rf gem5 gem5.tar.bz2
 }
 
-# Every component except gem5 — the default when the script is run with no
-# arguments, and the shared body of --all.
+# Every component but the optional ones, Foldsim and gem5 — the default when
+# the script is run with no arguments, and the shared body of --all.
 install_base()
 {
     pocl
@@ -232,7 +263,7 @@ install_base()
     libc64
     riscv32
     riscv64
-    sv2v
+    circt
     yosys
     sta
     mesa
@@ -244,13 +275,13 @@ install_base()
 show_usage()
 {
     echo "Install Pre-built Vortex Toolchain"
-    echo "Usage: $0 [--pocl] [--chipstar] [--mesa] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--sv2v] [--yosys] [--sta] [--gem5] [--all] [-h|--help]"
-    echo "  (no arguments: install all components except gem5)"
-    echo "  gem5 is opt-in: it is a large source build."
+    echo "Usage: $0 [--pocl] [--chipstar] [--mesa] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--circt] [--foldsim] [--yosys] [--sta] [--gem5] [--all] [-h|--help]"
+    echo "  (no arguments: install all components except Foldsim and gem5)"
+    echo "  Foldsim and gem5 are opt-in: Foldsim serves only the Foldsim flow, and"
+    echo "  gem5 is a large source build. --all installs them too."
 }
 
-# Default with no arguments: install every component except gem5, which is
-# opt-in because it is large.
+# Default with no arguments: install every component except the opt-in ones.
 if [ "$#" -eq 0 ]; then
     install_base
     exit 0
@@ -280,7 +311,9 @@ while [ "$1" != "" ]; do
                 ;;
         --libc64 ) libc64
                 ;;
-        --sv2v ) sv2v
+        --circt ) circt
+                ;;
+        --foldsim ) foldsim
                 ;;
         --yosys ) yosys
                 ;;
@@ -289,6 +322,7 @@ while [ "$1" != "" ]; do
         --gem5 ) gem5
                 ;;
         --all ) install_base
+                foldsim
                 gem5
                 ;;
         -h | --help ) show_usage

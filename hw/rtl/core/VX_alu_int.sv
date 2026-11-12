@@ -15,11 +15,12 @@
 
 module VX_alu_int import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
-    parameter BLOCK_IDX = 0,
     parameter NUM_LANES = 1
 ) (
     input wire              clk,
     input wire              reset,
+
+    input wire [`LOG2UP(`VX_CFG_NUM_ALU_BLOCKS)-1:0] block_idx,
 
     // Inputs
     VX_execute_if.slave     execute_if,
@@ -47,7 +48,7 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     reg  [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] vote_result;
     wire  [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] shfl_result;
 
-    reg [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] alu_result;
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] alu_result;
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] alu_result_r;
 
 `ifdef VX_CFG_XLEN_64
@@ -64,7 +65,6 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     wire [INST_ALU_BITS-1:0] alu_op = INST_ALU_BITS'(execute_if.data.op_type);
     wire [INST_BR_BITS-1:0]   br_op = INST_BR_BITS'(execute_if.data.op_type);
     wire                   is_br_op = (execute_if.data.op_args.alu.xtype == ALU_TYPE_BRANCH);
-    wire                  is_alu_op = (execute_if.data.op_args.alu.xtype == ALU_TYPE_ARITH);
     wire                  is_sub_op = inst_alu_is_sub(alu_op);
     wire                  is_signed = inst_alu_signed(alu_op);
     wire [1:0]             op_class = is_br_op ? inst_br_class(alu_op) : inst_alu_class(alu_op);
@@ -72,18 +72,18 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] alu_in1 = execute_if.data.rs1_data;
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] alu_in2 = execute_if.data.rs2_data;
 
-    wire [1:0] wg_src_offset = execute_if.data.op_args.alu.imm20[1:0]; // group-relative source index
+    wire [19:0] imm20 = execute_if.data.op_args.alu.imm20;
+    wire [1:0] wg_src_offset = imm20[1:0]; // group-relative source index
 
-    wire is_br_jal_op = is_br_op && (br_op <= INST_BR_JAL);
-    wire is_lui_op = is_alu_op && (alu_op == INST_ALU_LUI || alu_op == INST_ALU_AUIPC);
+    wire [31:0] lui_imm32 = {imm20, 12'd0};
+    wire [20:0] br_imm21 = {imm20, 1'b0};
 
-    wire [31:0] lui_imm32 = {execute_if.data.op_args.alu.imm20, 12'd0};
-    wire [20:0] br_imm21 = {execute_if.data.op_args.alu.imm20, 1'b0};
-
-    wire [`VX_CFG_XLEN-1:0] alu_imm = `SEXT(`VX_CFG_XLEN, execute_if.data.op_args.alu.imm20);
+    wire [`VX_CFG_XLEN-1:0] alu_imm = `SEXT(`VX_CFG_XLEN, imm20);
     wire [`VX_CFG_XLEN-1:0] lui_imm = `SEXT(`VX_CFG_XLEN, lui_imm32);
     wire [`VX_CFG_XLEN-1:0] br_imm  = `SEXT(`VX_CFG_XLEN, br_imm21);
-    wire [`VX_CFG_XLEN-1:0] add_imm = is_lui_op ? lui_imm : (is_br_jal_op ? br_imm : alu_imm);
+    // The decoder pre-selects the immediate form, so only flops steer this mux.
+    wire [`VX_CFG_XLEN-1:0] add_imm = execute_if.data.op_args.alu.imm_hi ? lui_imm
+                                    : (execute_if.data.op_args.alu.imm_x2 ? br_imm : alu_imm);
 
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] add_in1_PC  = execute_if.data.op_args.alu.use_PC ? {NUM_LANES{to_fullPC(execute_if.data.header.PC)}} : alu_in1;
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] add_in2_imm = execute_if.data.op_args.alu.use_imm ? {NUM_LANES{add_imm}} : alu_in2;
@@ -165,14 +165,24 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] wgather_result;
     if (NUM_LANES > 1) begin : g_wgather
         wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] alu_in3 = execute_if.data.rs3_data;
+        // The fallback lane is shared by all lanes, so its operands are read
+        // once; each lane's own source is then a group-local select.
+        wire [`VX_CFG_XLEN-1:0] last_in1 = alu_in1[last_tid];
+        wire [`VX_CFG_XLEN-1:0] last_in2 = alu_in2[last_tid];
+        wire [`VX_CFG_XLEN-1:0] last_in3 = alu_in3[last_tid];
         for (genvar i = 0; i < NUM_LANES; ++i) begin : g_i
-            wire [LANE_BITS-1:0] nominal  = (LANE_BITS'(i) & ~LANE_BITS'(3)) | LANE_BITS'(wg_src_offset);
-            wire [LANE_BITS-1:0] src_lane = execute_if.data.header.tmask[nominal] ? nominal : last_tid;
-            wire [1:0]           offset   = 2'(i) - wg_src_offset; // (i - src) mod 4
-            assign wgather_result[i] = (offset == 2'd1) ? alu_in1[src_lane]
-                                     : (offset == 2'd2) ? alu_in2[src_lane]
-                                     : (offset == 2'd3) ? alu_in3[src_lane]
-                                     : `VX_CFG_XLEN'(0); // offset 0 = source lane (write-suppressed)
+            wire [LANE_BITS-1:0] nominal = (LANE_BITS'(i) & ~LANE_BITS'(3)) | LANE_BITS'(wg_src_offset);
+            wire [1:0]           offset  = 2'(i) - wg_src_offset; // (i - src) mod 4
+            // offset 0 = source lane (write-suppressed)
+            wire [`VX_CFG_XLEN-1:0] nominal_val = (offset == 2'd1) ? alu_in1[nominal]
+                                                : (offset == 2'd2) ? alu_in2[nominal]
+                                                : (offset == 2'd3) ? alu_in3[nominal]
+                                                : `VX_CFG_XLEN'(0);
+            wire [`VX_CFG_XLEN-1:0] last_val    = (offset == 2'd1) ? last_in1
+                                                : (offset == 2'd2) ? last_in2
+                                                : (offset == 2'd3) ? last_in3
+                                                : `VX_CFG_XLEN'(0);
+            assign wgather_result[i] = execute_if.data.header.tmask[nominal] ? nominal_val : last_val;
         end
     end else begin : g_wgather_0
         assign wgather_result[0] = alu_in1[0];
@@ -194,62 +204,70 @@ module VX_alu_int import VX_gpu_pkg::*; #(
             wire [LANE_BITS-1:0] lane_bfly = LANE_BITS'(i) ^ bval;
             wire [LANE_BITS-1:0] lane_idx  = minLane | (bval & ~mask);
 
+            // The source lane is read before its bound check resolves, which
+            // only picks between that read and the lane's own value.
             reg [LANE_BITS-1:0] lane;
+            reg in_bounds;
             always @(*) begin
-                lane = LANE_BITS'(i);
                 case (alu_op[1:0])
                     INST_SHFL_UP: begin
-                        if ($signed(lane_up) >= $signed({1'b0, minLane})) begin
-                            lane = lane_up[LANE_BITS-1:0];
-                        end
+                        lane      = lane_up[LANE_BITS-1:0];
+                        in_bounds = ($signed(lane_up) >= $signed({1'b0, minLane}));
                     end
                     INST_SHFL_DOWN: begin
-                        if (lane_down <= {1'b0, maxLane}) begin
-                            lane = lane_down[LANE_BITS-1:0];
-                        end
+                        lane      = lane_down[LANE_BITS-1:0];
+                        in_bounds = (lane_down <= {1'b0, maxLane});
                     end
                     INST_SHFL_BFLY: begin
-                        if (lane_bfly <= maxLane) begin
-                            lane = lane_bfly;
-                        end
+                        lane      = lane_bfly;
+                        in_bounds = (lane_bfly <= maxLane);
                     end
-                    INST_SHFL_IDX: begin
-                        if (lane_idx <= maxLane) begin
-                            lane = lane_idx;
-                        end
+                    default: begin // INST_SHFL_IDX
+                        lane      = lane_idx;
+                        in_bounds = (lane_idx <= maxLane);
                     end
                 endcase
             end
-            assign shfl_result[i] = execute_if.data.header.tmask[lane] ? alu_in1[lane] : alu_in1[i];
+            wire take_lane = in_bounds && execute_if.data.header.tmask[lane];
+            assign shfl_result[i] = take_lane ? alu_in1[lane] : alu_in1[i];
         end
     end else begin : g_shfl_0
         assign shfl_result[0] = alu_in1[0];
     end
 
+    // The adder settles last, so its select is decoded from the op alone and
+    // it enters the result mux at the final level.
+    wire is_add_result = (execute_if.data.op_args.alu.xtype != ALU_TYPE_OTHER)
+                      && ({is_alu_w, op_class} == 3'b000);
+
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_alu_result
-        wire [`VX_CFG_XLEN-1:0] slt_br_result = `VX_CFG_XLEN'({is_br_op && ~(| sub_result[i][`VX_CFG_XLEN-1:0]), sub_result[i][`VX_CFG_XLEN]});
+        // the difference's low XLEN bits are zero exactly when the operands match
+        wire is_equal = (alu_in1[i] == sub_in2_imm[i]);
+        wire [`VX_CFG_XLEN-1:0] slt_br_result = `VX_CFG_XLEN'({is_br_op && is_equal, sub_result[i][`VX_CFG_XLEN]});
         wire [`VX_CFG_XLEN-1:0] sub_slt_br_result = (is_sub_op && ~is_br_op) ? sub_result[i][`VX_CFG_XLEN-1:0] : slt_br_result;
+        reg [`VX_CFG_XLEN-1:0] other_result;
         always @(*) begin
             if (execute_if.data.op_args.alu.xtype == ALU_TYPE_OTHER) begin
                 case (alu_op[3:2])
-                    2'b00: alu_result[i] = vote_result[i];
-                    2'b01: alu_result[i] = shfl_result[i];
-                    2'b10: alu_result[i] = wgather_result[i];
-                    default: alu_result[i] = vote_result[i];
+                    2'b00: other_result = vote_result[i];
+                    2'b01: other_result = shfl_result[i];
+                    2'b10: other_result = wgather_result[i];
+                    default: other_result = vote_result[i];
                 endcase
             end else begin
                 case ({is_alu_w, op_class})
-                    3'b000: alu_result[i] = add_result[i];      // ADD, LUI, AUIPC
-                    3'b001: alu_result[i] = sub_slt_br_result;  // SUB, SLTU, SLTI, BR*
-                    3'b010: alu_result[i] = shr_zic_result[i];  // SRL, SRA, SRLI, SRAI, CZERO*
-                    3'b011: alu_result[i] = msc_result[i];      // AND, OR, XOR, SLL, SLLI
-                    3'b100: alu_result[i] = add_result_w[i];    // ADDIW, ADDW
-                    3'b101: alu_result[i] = sub_result_w[i];    // SUBW
-                    3'b110: alu_result[i] = shr_result_w[i];    // SRLW, SRAW, SRLIW, SRAIW
-                    3'b111: alu_result[i] = msc_result_w[i];    // SLLW
+                    3'b001: other_result = sub_slt_br_result;  // SUB, SLTU, SLTI, BR*
+                    3'b010: other_result = shr_zic_result[i];  // SRL, SRA, SRLI, SRAI, CZERO*
+                    3'b011: other_result = msc_result[i];      // AND, OR, XOR, SLL, SLLI
+                    3'b100: other_result = add_result_w[i];    // ADDIW, ADDW
+                    3'b101: other_result = sub_result_w[i];    // SUBW
+                    3'b110: other_result = shr_result_w[i];    // SRLW, SRAW, SRLIW, SRAIW
+                    3'b111: other_result = msc_result_w[i];    // SLLW
+                    default: other_result = 'x;                // ADD, LUI, AUIPC: is_add_result
                 endcase
             end
         end
+        assign alu_result[i] = is_add_result ? add_result[i] : other_result;
     end
 
     // branch
@@ -339,7 +357,10 @@ module VX_alu_int import VX_gpu_pkg::*; #(
                                : is_br_static  ? from_fullPC(br_result)
                                : cbr_dest_r;
     wire [NW_WIDTH-1:0] br_wid;
-    `ASSIGN_BLOCKED_WID (br_wid, result_if.data.header.wid, BLOCK_IDX, `VX_CFG_NUM_ALU_BLOCKS)
+    `ASSIGN_BLOCKED_WID (br_wid, result_if.data.header.wid, block_idx, `VX_CFG_NUM_ALU_BLOCKS)
+    if (`VX_CFG_NUM_ALU_BLOCKS == 1) begin : g_block_idx_unused
+        `UNUSED_VAR (block_idx)
+    end
 
     VX_pipe_register #(
         .DATAW  (1 + NW_WIDTH + 1 + PC_BITS + 1 + 1 + 4),

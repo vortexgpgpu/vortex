@@ -106,7 +106,7 @@
   <text x="282" y="600" class="ts">comparable when: same device, opt level, xlen</text>
   <rect x="916" y="508" width="620" height="118" rx="6" class="box"/>
   <text x="928" y="530" class="t">yosys — asic_gate</text>
-  <text x="928" y="552" class="ts">sv2v → Yosys → ABC → OpenSTA on ASAP7 · hw/syn/yosys/dut</text>
+  <text x="928" y="552" class="ts">Yosys (slang) → ABC → OpenSTA on ASAP7 · hw/syn/yosys/dut</text>
   <text x="928" y="568" class="ts">gated: fmax_mhz, cell_area_um2</text>
   <text x="928" y="584" class="ts">recorded: wns, tns, sequential and SRAM area, cell count, power</text>
   <text x="928" y="600" class="ts">comparable when: same PDK, VT, corner, xlen</text>

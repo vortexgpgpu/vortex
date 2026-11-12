@@ -158,6 +158,19 @@ void init_default_fp_format(uint32_t fmt, int *exp_bits, int *sig_bits) {
       *exp_bits = 5;
       *sig_bits = 2;
       break;
+    case 8: // mxfp8 (E4M3, E8M0 block scale)
+      *exp_bits = 4;
+      *sig_bits = 3;
+      break;
+    case 9: // mxbf8 (E5M2, E8M0 block scale)
+      *exp_bits = 5;
+      *sig_bits = 2;
+      break;
+    case 10: // mxfp4 (E2M1, E8M0 block scale)
+    case 11: // nvfp4 (E2M1, E4M3 block scale)
+      *exp_bits = 2;
+      *sig_bits = 1;
+      break;
     default:
       break;
   }
@@ -187,6 +200,7 @@ struct TestConfig {
   int ulp = 1; // float precision error bits
   int sparsity = 0; // % of zero inputs
   int32_t test_id = -1; // Specific test ID to run (for debugging)
+  int sf_a = -1, sf_b = -1; // fixed block scales (debugging), random when negative
 };
 
 std::ostream &operator<<(std::ostream &os, const TestConfig &config) {
@@ -255,8 +269,16 @@ static void print_format(const std::string& prefix, std::vector<uint32_t>& value
 
 static int float_fmt_width(int exp_bits, int sig_bits) {
   int element_bits = 1 + exp_bits + sig_bits;
+  if (element_bits <= 4) return 4; // fp4 packs eight to a register
   return 8 * ((element_bits + 7) / 8);
 }
+
+// Block-scaled (MX/NV) formats carry the 2nd MSB of the format code.
+static bool is_mx_fmt(uint32_t fmt) { return (fmt & 0x18) == 0x8; }
+
+#ifndef SF
+#define SF 1
+#endif
 
 static int int_fmt_width(int fmt) {
   switch (fmt) {
@@ -484,6 +506,20 @@ private:
       value = vortex::sext<int32_t>(value, element_bits);
     }
     return value;
+  }
+
+  // A block scale: E8M0 (MX) or UE4M3 (NVFP4, NaN at 0x7F). Half the draws
+  // stay within 2^+-8 of one, the rest span the whole encoding.
+  uint8_t generate_scale(uint32_t fmt) {
+    std::uniform_int_distribution<int> coin(0, 1);
+    if (fmt == 11) {
+      std::uniform_int_distribution<int> any(0, 0x7f);
+      std::uniform_int_distribution<int> near(0x30, 0x48);
+      return uint8_t(coin(rng_) ? near(rng_) : any(rng_));
+    }
+    std::uniform_int_distribution<int> any(0, 255);
+    std::uniform_int_distribution<int> near(127 - 8, 127 + 8);
+    return uint8_t(coin(rng_) ? near(rng_) : any(rng_));
   }
 
   uint32_t generate_fp_value(const std::string &feature, uint32_t exp_bits, uint32_t sig_bits, uint32_t test_id) {
@@ -739,7 +775,7 @@ public:
     const uint32_t tests_per_feature = (NT + NF - 1) / NF;
 
   #ifdef USE_FEDP
-    FEDP fedp(config_.exp_bits, config_.sig_bits, (int)config_.frm, config_.W, config_.renorm);
+    TfrFedp fedp(config_.exp_bits, config_.sig_bits, (int)config_.frm, config_.W, config_.renorm);
   #endif
 
     uint32_t skipped = 0;
@@ -780,6 +816,24 @@ public:
       uint32_t c_value_hex;
       std::memcpy(&c_value_hex, &c_value_float, sizeof(float));
 
+      // Block scales, one per scale slot; lane l (two per register) takes
+      // slot l * SF / lanes, as the datapath maps them.
+      const bool mx = is_mx_fmt(config_.fmt_s);
+      const int lanes = 2 * NUM_REGS;
+      uint8_t sf_slot_a[SF] = {}, sf_slot_b[SF] = {};
+      std::vector<uint8_t> sf_lane_a(lanes), sf_lane_b(lanes);
+      if (mx) {
+        for (int k = 0; k < SF; ++k) {
+          sf_slot_a[k] = generate_scale(config_.fmt_s);
+          sf_slot_b[k] = generate_scale(config_.fmt_s);
+          if (config_.sf_a >= 0) sf_slot_a[k] = uint8_t(config_.sf_a);
+          if (config_.sf_b >= 0) sf_slot_b[k] = uint8_t(config_.sf_b);
+        }
+        for (int l = 0; l < lanes; ++l) {
+          sf_lane_a[l] = sf_slot_a[(l * SF) / lanes];
+          sf_lane_b[l] = sf_slot_b[(l * SF) / lanes];
+        }
+      }
       // skip if not in selected test id
       if (config_.test_id >= 0 && test_id != config_.test_id)
         continue;
@@ -792,6 +846,11 @@ public:
       std::vector<uint32_t> a_packed(NUM_REGS), b_packed(NUM_REGS);
       pack_elements(a_value_hex, element_bits, NUM_REGS, a_packed.data());
       pack_elements(b_value_hex, element_bits, NUM_REGS, b_packed.data());
+
+    #ifdef VX_CFG_TCU_MX_ENABLE
+      std::memcpy(&dut_->sf_a, sf_slot_a, SF);
+      std::memcpy(&dut_->sf_b, sf_slot_b, SF);
+    #endif
 
       // Apply to DUT
       for (int i = 0; i < NUM_REGS; i++) {
@@ -821,7 +880,9 @@ public:
       std::memcpy(&dut_result, &dut_result_bits, sizeof(float));
 
     #ifdef USE_FEDP
-      float expected = fedp(a_packed.data(), b_packed.data(), c_value_float, NUM_REGS);
+      float expected = mx ? fedp(a_packed.data(), b_packed.data(), c_value_float, NUM_REGS,
+                                 sf_lane_a.data(), sf_lane_b.data(), config_.fmt_s == 11)
+                          : fedp(a_packed.data(), b_packed.data(), c_value_float, NUM_REGS);
     #else
       float expected = dot_product(a_value_hex.data(), b_value_hex.data(),
         c_value_hex, total_elements, config_.exp_bits, config_.sig_bits, config_.fused);
@@ -848,6 +909,13 @@ public:
         print_float("  bf_values=", b_values_float, true);
         print_format("  bx_values=", b_value_hex, true);
         print_float("  c_value=", c_value_float, true);
+        if (mx) {
+          std::cout << "  sf_a=" << std::hex;
+          for (int k = 0; k < SF; ++k) std::cout << " 0x" << int(sf_slot_a[k]);
+          std::cout << ", sf_b=";
+          for (int k = 0; k < SF; ++k) std::cout << " 0x" << int(sf_slot_b[k]);
+          std::cout << std::dec << std::endl;
+        }
         print_float("  expected=", expected, true);
         print_float("  actual=", dut_result, true);
         std::cout << "  delta=" << delta << std::endl;
@@ -927,6 +995,10 @@ TestConfig parse_args(int argc, char **argv) {
       config_.num_tests = std::stoi(arg.substr(8));
     } else if (arg.substr(0, 7) == "--test=") {
       config_.test_id = std::stoi(arg.substr(7));
+    } else if (arg.substr(0, 6) == "--sfa=") {
+      config_.sf_a = std::stoi(arg.substr(6), nullptr, 0);
+    } else if (arg.substr(0, 6) == "--sfb=") {
+      config_.sf_b = std::stoi(arg.substr(6), nullptr, 0);
     } else if (arg.substr(0, 7) == "--seed=") {
       config_.random_seed = std::stoi(arg.substr(7));
     } else {

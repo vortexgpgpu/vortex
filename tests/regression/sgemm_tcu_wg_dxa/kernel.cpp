@@ -6,7 +6,7 @@
 #include <vx_barrier.h>
 
 namespace vt = vortex::tensor;
-using ctx = vt::wgmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, false, WGMMA_NRC>;
+using ctx = vt::wgmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, false, WGMMA_NRC, vt::ldst_matrix_enabled>;
 
 // DXA descriptor slots (programmed by host in main.cpp).
 [[maybe_unused]] constexpr uint32_t kDescA = 0;
@@ -52,7 +52,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   // within caller-saved registers and the stack is never touched.
   //   buffer: A [cta_M x tileK] then B [tileK x xtileN]
   uint32_t a_elems   = cta_M * ctx::tileK;
-  auto smem = reinterpret_cast<ctx::input_t *>(__local_mem());
+  auto smem = reinterpret_cast<ctx::input_t *>(reinterpret_cast<uint8_t *>(__local_mem()) + LMEM_PAD);
   ctx::input_t* A_cur = smem;
   ctx::input_t* B_cur = smem + a_elems;
 
@@ -119,6 +119,10 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     (void)A_smem; (void)B_smem; (void)bar; (void)k;
   };
 
+#if defined(WGMMA_RS) && (WGMMA_NRC <= 16)
+  size_t a_lane_off = ctx::lane_offset<ctx::fragment_a>(ctx::tileK);
+#endif
+
   // One WGMMA accumulation step out of the given buffer pair.
   auto compute_tile = [&](ctx::input_t* A_smem, ctx::input_t* B_smem) {
     auto A_warp = A_smem + warp_rank * ctx::xtileM * ctx::tileK;
@@ -127,7 +131,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   #if defined(WGMMA_RS) && (WGMMA_NRC <= 16)
     // RS: A from registers, B from smem (NRC <= 16 only)
     ctx::fragment_a fragA;
-    ctx::load_matrix_sync(fragA, A_warp, ctx::tileK);
+    ctx::load_matrix_sync(fragA, A_warp, ctx::tileK, a_lane_off);
     ctx::wgmma_sync(fragC, fragA, desc_b, fragC);
   #else
     // SS: both from smem
@@ -146,6 +150,9 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   // the buffer may be re-staged. Loop-carried state is {A_cur, B_cur,
   // bar_cur} mutated by XOR — no arrays, no unrolling, no object reloads.
   load_tile(A_cur, B_cur, bar_cur, 0);
+#if KUNROLL > 1
+#pragma unroll KUNROLL
+#endif
   for (uint32_t i = 0; i < num_k_tiles; ++i) {
     if (i + 1 < num_k_tiles) {
       // Prefetch tile i+1 into the other buffer while tile i is computed.
@@ -171,6 +178,9 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 #else
   // Serial single-buffer schedule: stage and compute alternately in buf0.
   load_tile(A_cur, B_cur, bar_cur, 0);
+#if KUNROLL > 1
+#pragma unroll KUNROLL
+#endif
   for (uint32_t i = 0; i < num_k_tiles; ++i) {
     if (i != 0) {
       load_tile(A_cur, B_cur, bar_cur, i * ctx::tileK);

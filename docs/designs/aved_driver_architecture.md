@@ -258,7 +258,7 @@ refused with `CTL_RESET_ERROR`, correctly, because that read really is still
 outstanding; it reads like a reset bug and is not one.
 
 This happened on 2026-08-27 and cost a bitstream and three reboots. The cause
-was `platforms.mk` pinning `MEM_TAG` but not `HOST_TAG`, leaving the Makefile's
+was the card description pinning `MEM_TAG` but not `HOST_TAG`, leaving the Makefile's
 `HOST_TAG ?= HOST` to win. Both are pinned now, and `HOST_TAG=HOST` is refused
 at Makefile parse time rather than after two and a half hours of Vivado. Before
 blaming a hardware symptom on RTL, diff the build's generated `config.cfg`
@@ -391,15 +391,11 @@ threads. `xrt` and `aved` both guard it.
 
 ## 8. Open directions
 
-1. **A software reset for the CP.** `q_reset_pulse` is decoded in the regfile
-   and discarded in `VX_cp_core`. Wiring it would remove the §3.5 workaround
-   and make a hung kernel recoverable without reconfiguring the partition —
-   today a kernel that never completes leaves the CP unusable.
-2. **Unify the two sync engines** (§4.3) behind one publish/refresh interface
+1. **Unify the two sync engines** (§4.3) behind one publish/refresh interface
    with a pluggable transport.
-3. **Drop the VRT-internal reach** once VRT exposes the simulated memory
+2. **Drop the VRT-internal reach** once VRT exposes the simulated memory
    windows and the ZMQ server through public API.
-4. **Gate the build on timing closure.** The V80 flow packages a bitstream
+3. **Gate the build on timing closure.** The V80 flow packages a bitstream
    that does not meet timing without saying so.
 
 ---
@@ -425,5 +421,6 @@ loopback (`minimal -l`) remains the sim-side check of the CP DMA path.
 
 Simulated host buffers are drawn from VRT's DDR window, not its HBM window,
 so they cannot collide with device memory. The authoritative settings and
-their rationale are in
-[`platforms.mk`](../../hw/syn/xilinx/aved/platforms.mk).
+their rationale are in the card descriptor
+[`v80.toml`](../../hw/syn/xilinx/platforms/v80.toml), which both the `aved` and
+`xrt` flows read through [`gen_platform.py`](../../hw/scripts/gen_platform.py).

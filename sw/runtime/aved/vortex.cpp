@@ -58,6 +58,7 @@
 #include <stdio.h>
 #include <string>
 #include <util.h>
+#include <v80_pcie.h>
 
 using namespace vortex;
 
@@ -196,46 +197,13 @@ public:
   #endif
   }
 
-  // Auto-discover the card the way XRT enumerates by index: scan sysfs for
-  // the SLASH control function (10ee:50c1) and derive its BDF. Makes
-  // VRT_DEVICE_BDF optional -- the hardcoded default below is only the last
-  // resort when no card is on the bus (e.g. a sim run with no env set).
-  static std::string discover_bdf() {
-    DIR* d = opendir("/sys/bus/pci/devices");
-    if (d == nullptr) {
-      return "";
-    }
-    std::string found;
-    while (struct dirent* e = readdir(d)) {
-      const std::string name = e->d_name;              // "0000:01:00.1"
-      if (name.size() < 12 || name[0] == '.') {
-        continue;
-      }
-      auto read_hex = [&](const char* leaf) -> unsigned {
-        std::ifstream f("/sys/bus/pci/devices/" + name + "/" + leaf);
-        unsigned v = 0;
-        f >> std::hex >> v;
-        return v;
-      };
-      if (read_hex("vendor") == 0x10ee && read_hex("device") == 0x50c1) {
-        found = name.substr(0, name.rfind('.'));       // drop the function
-        if (found.rfind("0000:", 0) == 0) {
-          found = found.substr(5);                     // "01:00" form
-        }
-        break;
-      }
-    }
-    closedir(d);
-    return found;
-  }
-
   int init() {
     // An empty value is treated as unset: the test harness exports these
     // unconditionally, so they arrive empty rather than absent.
     const char* bdf = getenv("VRT_DEVICE_BDF");
     std::string bdf_storage;
     if (bdf == nullptr || bdf[0] == '\0') {
-      bdf_storage = discover_bdf();
+      bdf_storage = discover_v80_bdf();
       if (!bdf_storage.empty()) {
         fprintf(stderr, "[VXDRV] auto-discovered V80 at %s (set "
                 "VRT_DEVICE_BDF to override)\n", bdf_storage.c_str());
@@ -272,18 +240,35 @@ public:
       // previous image set, which can be far above or below this one's.
       if (!sim_mode_) {
         const uint64_t timed_hz = vrtDevice_.getMaxFrequency();
-        vrtDevice_.setFrequency(timed_hz);
-        const uint64_t clk_hz = vrtDevice_.getFrequency();
-        if (clk_hz == 0 || clk_hz > timed_hz + timed_hz / 200) {
+        // The wizard settles on the nearest rate its dividers reach, which can
+        // be a step above the request: lower the request below that step.
+        uint64_t want_hz = timed_hz, clk_hz = 0;
+        for (int i = 0; i < 8; ++i) {
+          vrtDevice_.setFrequency(want_hz);
+          clk_hz = vrtDevice_.getFrequency();
+          if (clk_hz == 0 || clk_hz <= timed_hz)
+            break;
+          want_hz -= (clk_hz - want_hz) + timed_hz / 100;
+        }
+        if (clk_hz == 0 || clk_hz > timed_hz) {
           fprintf(stderr, "[VXDRV] Error: user clock reads %lu Hz, image is timed for %lu Hz\n",
                   (unsigned long)clk_hz, (unsigned long)timed_hz);
+          park_clock();
           return -1;
         }
         printf("[VXDRV] kernel clock %lu Hz (image timed for %lu Hz)\n",
                (unsigned long)clk_hz, (unsigned long)timed_hz);
       }
       vrtKernel_ = vrt::Kernel(vrtDevice_, KERNEL_NAME);
-    VRT_CATCH(-1)
+    } catch (const std::exception& e) {
+      fprintf(stderr, "[VXDRV] VRT exception: %s\n", e.what());
+      park_clock();
+      return -1;
+    } catch (...) {
+      fprintf(stderr, "[VXDRV] VRT exception (unknown)\n");
+      park_clock();
+      return -1;
+    }
 
     // Must follow vrtKernel_: the connection map comes from the vbin's
     // system_map.xml, which the kernel handle parses.
@@ -850,6 +835,20 @@ public:
 private:
 
 #ifdef CPP_API
+  // A design that fails to come up stays loaded: leave it clocked below any
+  // image's timing so it cannot disturb the shell before the next load.
+  void park_clock() noexcept {
+    constexpr uint64_t kSafeHz = 50000000;
+    if (sim_mode_)
+      return;
+    try {
+      vrtDevice_.setFrequency(kSafeHz);
+      fprintf(stderr, "[VXDRV] kernel clock parked at %lu Hz\n",
+              (unsigned long)vrtDevice_.getFrequency());
+    } catch (...) {
+    }
+  }
+
   // ----- Staged CP memory (m_axi_host wired to device memory) -----
   //
   // WHY THIS EXISTS

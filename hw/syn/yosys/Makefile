@@ -1,6 +1,6 @@
 ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
-include $(ROOT_DIR)/hw/syn/common.mk    # SV2V_PATH/YOSYS_PATH/STA_PATH + exported SV2V/YOSYS/STA
+include $(ROOT_DIR)/hw/syn/common.mk    # CIRCT/YOSYS/STA paths + exported tools
 
 DELAY_UNC 	?= 0.02
 DELAY_IO  	?= 0.05
@@ -188,7 +188,7 @@ CFLAGS += $(RTL_INCLUDE)
 # Build targets
 all: timing
 
-.PHONY: all synthesis techmap timing gate-sim gate-saif normalize-saif asap7 asap7-models clean
+.PHONY: all synthesis techmap timing beacon gate-sim gate-saif normalize-saif asap7 asap7-models clean
 
 asap7:
 	$(ASAP7_INSTALL) --install-dir=$(ASAP7_DIR) --vt=$(ASAP7_VT)
@@ -196,23 +196,15 @@ asap7:
 asap7-models: asap7
 	$(ASAP7_INSTALL) --install-dir=$(ASAP7_DIR) --vt=$(ASAP7_VT) --models
 
-gen-sources: $(BUILD_DIR)/src
 $(BUILD_DIR):
 	mkdir -p $@
 
-$(BUILD_DIR)/src: | $(BUILD_DIR)
-	$(SCRIPT_DIR)/gen_sources.sh -P $(CFLAGS) -C$(BUILD_DIR)/src
-
-sv2v: $(BUILD_DIR)/project.v
-$(BUILD_DIR)/project.v: $(BUILD_DIR)/src
-	$(SCRIPT_DIR)/sv2v.sh -t$(TOP_LEVEL_ENTITY) -I$(BUILD_DIR)/src -o$(BUILD_DIR)/project.v
-	# Remove severity/control system-task lines yosys can't synthesize
-	# ($fatal/$error/$warning/$info/$stop are used by the cvfpu sources).
-	sed -ri '/^[[:space:]]*[$$](finish|display|fatal|error|warning|info|stop)/d' $(BUILD_DIR)/project.v
-
+# Yosys reads the preprocessed, RAM-folded sources as written, like every
+# synthesis tool, and elaborates them itself with its slang frontend
+# (read_slang, run_synth.sh).
 gen-sources: $(BUILD_DIR)/sources.txt
-$(BUILD_DIR)/sources.txt: $(BUILD_DIR)/project.v
-	echo $(realpath $(BUILD_DIR)/project.v) > $(BUILD_DIR)/sources.txt
+$(BUILD_DIR)/sources.txt: | $(BUILD_DIR)
+	$(SCRIPT_DIR)/gen_sources.sh -P -F -T$(TOP_LEVEL_ENTITY) $(CFLAGS) -C$(BUILD_DIR)/src -O$(BUILD_DIR)/sources.txt
 
 ifneq ($(strip $(DUT_FILELIST)),)
 SYN_SRC_FILE := $(abspath $(DUT_FILELIST))
@@ -276,6 +268,22 @@ timing: $(SYN_SRC_DEPS) $(SYN_LIB_DEPS) | $(BUILD_DIR)
 	$(SRC_DIR)/run_synth.sh
 	@$(SRC_DIR)/synth_summary.py --reports $(BUILD_DIR)/reports \
 	  --top $(TOP_LEVEL_ENTITY) --clock-mhz $(CLOCK_FREQ)
+
+# Beacon (foldsim-estimate-timing, foldsim-estimate-area, target=$(PDK)): the
+# gate stages of every register-to-register path and the cells, flip-flops and
+# SRAM macros of the design, with the same sources and SRAM black boxes as
+# synthesis, in seconds and without Yosys; report.txt converts the deepest
+# path to a period with the library's delays. docs/designs/beacon.md.
+beacon: $(BUILD_DIR)/sources.txt
+	mkdir -p $(BUILD_DIR)/beacon
+	$(SCRIPT_DIR)/circt_elaborate.sh -t$(TOP_LEVEL_ENTITY) -I$(BUILD_DIR)/src -b'$(BB_MODULES)' \
+		-o$(BUILD_DIR)/beacon/netlist.mlir
+	$(FOLDSIM_OPT) $(BUILD_DIR)/beacon/netlist.mlir --pass-pipeline='builtin.module(foldsim-beacon-map{target=$(PDK)})' \
+		--emit-bytecode -o $(BUILD_DIR)/beacon/mapped.mlirbc
+	$(FOLDSIM_OPT) $(BUILD_DIR)/beacon/mapped.mlirbc -o /dev/null --pass-pipeline='builtin.module(foldsim-estimate-timing{top=$(TOP_LEVEL_ENTITY) target=$(PDK) output=$(BUILD_DIR)/beacon/endpoints.csv instances=$(BUILD_DIR)/beacon/instances.csv report=$(BUILD_DIR)/beacon/report.txt})'
+	$(FOLDSIM_OPT) $(BUILD_DIR)/beacon/netlist.mlir -o /dev/null --pass-pipeline='builtin.module(foldsim-beacon-map{target=$(PDK) area},foldsim-estimate-area{top=$(TOP_LEVEL_ENTITY) target=$(PDK) output=$(BUILD_DIR)/beacon/area.csv memories=$(BUILD_DIR)/beacon/area_memories.csv report=$(BUILD_DIR)/beacon/area.txt})'
+	@grep "^deepest path" $(BUILD_DIR)/beacon/report.txt
+	@head -1 $(BUILD_DIR)/beacon/area.txt
 
 gate-sim: techmap asap7-models
 	@if [ "$(PDK)" != "asap7" ]; then echo "ERROR: gate-sim requires PDK=asap7 functional models" >&2; exit 1; fi

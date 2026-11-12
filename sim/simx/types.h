@@ -14,6 +14,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <algorithm>
 #include <array>
 #include <bitset>
 #include <memory>
@@ -384,7 +385,17 @@ struct IntrLsuArgs {
   uint32_t width : 3;
   uint32_t stride : 4;  // per-uop multiplier: 0 = regular LD/ST; 0..N-1 = packLD uop_idx
   int32_t  offset;      // immediate addr offset (signed); 0 for packLD uops
+  bool     matrix = false; // vx_ldm/vx_stm: offset[4:0] is the fragment shape
 };
+
+// A fence carries no access width; its width field says what it orders.
+enum class FenceKind : uint32_t {
+  FULL    = 0, // earlier writes visible and later reads see others' writes
+  IO      = 1, // only device (IO) accesses
+  ACQUIRE = 2, // only later reads see others' writes
+  RELEASE = 3  // only earlier writes visible
+};
+inline FenceKind lsu_fence_kind(const IntrLsuArgs& args) { return static_cast<FenceKind>(args.width); }
 
 inline std::ostream &operator<<(std::ostream &os, const LsuType& type) {
   switch (type) {
@@ -444,6 +455,9 @@ struct MemFlags {
       uint32_t io           : 1;  // bit 1: uncacheable I/O
       uint32_t local        : 1;  // bit 2: LMEM port
       uint32_t amo_unsigned : 1;  // bit 3: MIN/MAX signedness (1=unsigned)
+      uint32_t flush        : 1;  // bit 4: flush token (a fence)
+      uint32_t flush_l1     : 1;  // bit 5: L1-only flush token: stops at the shared LLC
+      uint32_t noalloc      : 1;  // bit 6: a write that misses a write-around cache goes to memory
     #ifdef VX_CFG_EXT_DXA_ENABLE
       // DXA completion sideband — populated only on DXA's LMEM-DMA writes.
       // notify_bar_id carries the RAW (kernel-encoded) bar handle:
@@ -453,8 +467,8 @@ struct MemFlags {
       // be wide enough to hold (bar_no << 8) | (MAX_CTAS_per_core - 1).
       // For NUM_BARRIERS = 8 and NUM_WARPS ≤ 16, that's at most 11 bits;
       // 16 bits leaves headroom for larger configs.
-      uint32_t dxa_notify_done   : 1;   // bit 4
-      uint32_t dxa_notify_bar_id : 16;  // bits 5..20
+      uint32_t dxa_notify_done   : 1;   // bit 7
+      uint32_t dxa_notify_bar_id : 16;  // bits 8..23
     #endif
     };
   };
@@ -906,7 +920,7 @@ inline AddrType get_addr_type(uint64_t addr) {
      return AddrType::IO;
   }
   if (VX_CFG_LMEM_ENABLED) {
-    if (addr >= VX_MEM_LMEM_BASE_ADDR && (addr-VX_MEM_LMEM_BASE_ADDR) < (1 << VX_CFG_LMEM_LOG_SIZE)) {
+    if (addr >= VX_MEM_LMEM_BASE_ADDR && (addr-VX_MEM_LMEM_BASE_ADDR) < uint64_t(VX_CFG_LMEM_SIZE)) {
         return AddrType::Shared;
     }
   }
@@ -929,7 +943,8 @@ enum class ArbiterType {
   Priority,
   RoundRobin,
   Matrix,
-  GreedyRR
+  GreedyRR,
+  GreedyMatrix
 };
 
 inline std::ostream &operator<<(std::ostream &os, const ArbiterType& type) {
@@ -938,16 +953,21 @@ inline std::ostream &operator<<(std::ostream &os, const ArbiterType& type) {
   case ArbiterType::RoundRobin: os << "RoundRobin"; break;
   case ArbiterType::Matrix:     os << "Matrix"; break;
   case ArbiterType::GreedyRR:   os << "GreedyRR"; break;
+  case ArbiterType::GreedyMatrix: os << "GreedyMatrix"; break;
   default: assert(false);
   }
   return os;
 }
 
+// select() names the requester an arbiter would grant without changing its
+// state; commit() records that grant, so a grant the receiver refuses leaves
+// the order as it was.
 class IArbiterImpl {
 public:
   IArbiterImpl() {}
   virtual ~IArbiterImpl() {}
-  virtual uint32_t grant(const BitVector<>& requests) = 0;
+  virtual uint32_t select(const BitVector<>& requests) const = 0;
+  virtual void commit(uint32_t idx) = 0;
   virtual void reset() = 0;
 };
 
@@ -957,7 +977,7 @@ public:
     this->reset();
   }
 
-  uint32_t grant(const BitVector<>& requests) override {
+  uint32_t select(const BitVector<>& requests) const override {
     assert(requests.size() == size_);
     for (uint32_t i = 0; i < size_; ++i) {
       if (requests.test(i)) {
@@ -966,6 +986,8 @@ public:
     }
     return -1;
   }
+
+  void commit(uint32_t) override {}
 
   void reset() override {
     //--
@@ -980,17 +1002,20 @@ public:
     this->reset();
   }
 
-  uint32_t grant(const BitVector<>& requests) override {
+  uint32_t select(const BitVector<>& requests) const override {
     assert(requests.size() == size_);
     uint32_t start = (last_grant_ + 1) % size_;
     for (uint32_t i = 0; i < size_; ++i) {
       uint32_t idx = (start + i) % size_;
       if (requests.test(idx)) {
-        last_grant_ = idx;
         return idx;
       }
     }
     return -1;
+  }
+
+  void commit(uint32_t idx) override {
+    last_grant_ = idx;
   }
 
   void reset() override {
@@ -1002,53 +1027,51 @@ private:
   uint32_t last_grant_;
 };
 
+// Least-recently-granted, as VX_matrix_arbiter: a grant drops its requester
+// to the lowest priority; from reset the highest index ranks first. A greedy
+// one keeps granting its owner while it requests, without updating the order.
 class MatrixArbiter : public IArbiterImpl {
 public:
-  MatrixArbiter(uint32_t size)
-    : size_(size)
-    , priority_matrix_(size, std::vector<bool>(size)) {
+  MatrixArbiter(uint32_t size, bool greedy = false)
+    : size_(size), greedy_(greedy) {
     this->reset();
   }
 
-  uint32_t grant(const BitVector<>& requests) override {
+  uint32_t select(const BitVector<>& requests) const override {
     assert(requests.size() == size_);
-    for (uint32_t i = 0; i < size_; ++i) {
-      if (requests[i]) {
-        // Check if this request has the highest priority by comparing it
-        bool highest_priority = true;
-        for (uint32_t j = 0; j < size_; ++j) {
-          if (requests[j] && priority_matrix_[i][j]) {
-            highest_priority = false;
-            break;
-          }
-        }
-
-        if (highest_priority) {
-          for (uint32_t j = 0; j < size_; ++j) {
-            if (i != j) {
-              priority_matrix_[i][j] = false;
-              priority_matrix_[j][i] = true;
-            }
-          }
-          return i;
-        }
+    if (greedy_ && last_grant_ < size_ && requests.test(last_grant_)) {
+      return last_grant_;
+    }
+    for (uint32_t idx : order_) {
+      if (requests.test(idx)) {
+        return idx;
       }
     }
-    return -1;
+    return -1u;
+  }
+
+  void commit(uint32_t idx) override {
+    if (greedy_ && idx == last_grant_) {
+      return;
+    }
+    order_.erase(std::find(order_.begin(), order_.end(), idx));
+    order_.push_back(idx);
+    last_grant_ = idx;
   }
 
   void reset() override {
-    for (uint32_t i = 0; i < size_; ++i) {
-      priority_matrix_[i].resize(size_);
-      for (uint32_t j = i + 1; j < size_; ++j) {
-        priority_matrix_[i][j] = true;
-      }
+    order_.clear();
+    for (uint32_t i = size_; i-- > 0;) {
+      order_.push_back(i);
     }
+    last_grant_ = -1u;
   }
 
 private:
   uint32_t size_;
-  std::vector<std::vector<bool>> priority_matrix_;
+  bool greedy_;
+  std::vector<uint32_t> order_;
+  uint32_t last_grant_;
 };
 
 // Greedy round-robin: keeps granting the current owner while it requests,
@@ -1059,7 +1082,7 @@ public:
     this->reset();
   }
 
-  uint32_t grant(const BitVector<>& requests) override {
+  uint32_t select(const BitVector<>& requests) const override {
     assert(requests.size() == size_);
     if (last_grant_ < size_ && requests.test(last_grant_)) {
       return last_grant_;
@@ -1068,11 +1091,14 @@ public:
     for (uint32_t i = 0; i < size_; ++i) {
       uint32_t idx = (start + i) % size_;
       if (requests.test(idx)) {
-        last_grant_ = idx;
         return idx;
       }
     }
     return -1u;
+  }
+
+  void commit(uint32_t idx) override {
+    last_grant_ = idx;
   }
 
   void reset() override {
@@ -1086,7 +1112,8 @@ private:
 
 class Arbiter {
 public:
-  Arbiter(ArbiterType type = ArbiterType::Priority, uint32_t size = 0) {
+  Arbiter(ArbiterType type = ArbiterType::Priority, uint32_t size = 0)
+    : type_(type), size_(size) {
     switch (type) {
     case ArbiterType::Priority:
       impl_ = std::make_shared<PriorityArbiter>(size);
@@ -1100,15 +1127,36 @@ public:
     case ArbiterType::GreedyRR:
       impl_ = std::make_shared<GreedyRRArbiter>(size);
       break;
+    case ArbiterType::GreedyMatrix:
+      impl_ = std::make_shared<MatrixArbiter>(size, true);
+      break;
     default:
       assert(false);
     }
   }
 
+  // A copy is a separate arbiter with its own grant state, so a vector of
+  // arbiters built from one prototype does not share a single state.
+  Arbiter(const Arbiter& other) : Arbiter(other.type_, other.size_) {}
+
+  Arbiter& operator=(const Arbiter& other) {
+    if (this != &other) {
+      *this = Arbiter(other.type_, other.size_);
+    }
+    return *this;
+  }
+
+  Arbiter(Arbiter&&) = default;
+  Arbiter& operator=(Arbiter&&) = default;
+
   virtual ~Arbiter() {}
 
-  uint32_t grant(const BitVector<>& requests) {
-    return impl_->grant(requests);
+  uint32_t select(const BitVector<>& requests) const {
+    return impl_->select(requests);
+  }
+
+  void commit(uint32_t idx) {
+    impl_->commit(idx);
   }
 
   void reset() {
@@ -1116,6 +1164,8 @@ public:
   }
 
 private:
+  ArbiterType type_;
+  uint32_t size_;
   std::shared_ptr<IArbiterImpl> impl_;
 };
 
@@ -1250,6 +1300,10 @@ struct MemReq {
   uint32_t hart_id;
   uint64_t uuid;
   MemFlags flags;
+  // Under cache line merging: the tags of the ports merged into this read, by
+  // offset in the leader's merge group. They ride the bank access and its
+  // response, as in the hardware's bank tag.
+  std::shared_ptr<const std::vector<uint32_t>> merged_tags;
 
   MemReq(MemOp _op = MemOp::LD,
          uint64_t _addr = 0,
@@ -1289,6 +1343,7 @@ struct MemRsp {
   uint32_t hart_id;
   uint64_t uuid;
   std::shared_ptr<mem_block_t> data;
+  std::shared_ptr<const std::vector<uint32_t>> merged_tags; // see MemReq
 
   MemRsp(uint64_t _tag = 0,
          uint32_t _hart_id = 0,
@@ -1438,6 +1493,39 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
+// A registered elastic buffer: In holds its entries, and the head moves on
+// through Out one register later, one per cycle.
+template <typename Type>
+class TxBuffer : public SimObject<TxBuffer<Type>> {
+public:
+  using Ptr = std::shared_ptr<TxBuffer<Type>>;
+
+  SimChannel<Type> In;
+  SimChannel<Type> Out;
+
+  TxBuffer(const SimContext& ctx, const char* name, uint32_t size)
+    : SimObject<TxBuffer<Type>>(ctx, name)
+    , In(this, size)
+    , Out(this)
+  {}
+
+protected:
+  void on_reset() {}
+
+  void on_tick() {
+    if (!In.empty() && Out.try_send(In.peek(), 1)) {
+      In.pop();
+    }
+    if (In.size() == 0) {
+      this->tick_sleep();
+    }
+  }
+
+  friend class SimObject<TxBuffer<Type>>;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
 template <typename Type>
 class TxArbiter : public SimObject<TxArbiter<Type>> {
 public:
@@ -1538,13 +1626,14 @@ void TxArbiter<Type>::on_tick() {
       requests.set(r, !Inputs.at(i).empty());
     }
     if (requests.any()) {
-      uint32_t g = arbiters_.at(o).grant(requests);
+      uint32_t g = arbiters_.at(o).select(requests);
       uint32_t i = o * R + g;
       auto& req_in = Inputs.at(i);
       auto& req = req_in.peek();
       if (Outputs.at(o).try_send(RspType(req, i), delay_)) {
         DT(4, this->name() << " req" << i << "_" << o << ": " << req);
         req_in.pop();
+        arbiters_.at(o).commit(g);
       }
     }
   }
@@ -1604,7 +1693,7 @@ public:
     , lg2_outputs_(log2ceil(num_outputs))
     , output_sel_(output_sel)
     , collisions_(0) {
-    assert(num_inputs <= 64);
+    // per-output round-robin pointers only: no bound on the input count
     assert(num_outputs <= 64);
     assert(ispow2(num_outputs));
     assert(output_sel != nullptr);
@@ -1945,7 +2034,7 @@ void TxRxCrossBar<Req, Rsp>::on_tick() {
       requests.set(o);
     }
     if (requests.any()) {
-      uint32_t g = arbiter_.grant(requests);
+      uint32_t g = arbiter_.select(requests);
       auto& rsp_in = RspIn.at(g);
       auto& rsp = rsp_in.peek();
       Rsp out_rsp(rsp);
@@ -1955,6 +2044,7 @@ void TxRxCrossBar<Req, Rsp>::on_tick() {
       if (RspOut.at(i).try_send(out_rsp, rsp_delay_)) {
         DT(4, this->name() << " rsp" << g << "_" << i << ": " << out_rsp);
         rsp_in.pop();
+        arbiter_.commit(g);
       }
     }
   }

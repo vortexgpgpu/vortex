@@ -224,6 +224,37 @@ rather than being a field of its own. Two consequences are worth internalizing:
    pipeline carrying only `word_idx` and still tell the tag and data stages which
    sector to mark and write.
 
+**Hashed bank select (`BANK_HASH`).** With the bank taken straight from the
+address bits, any power-of-two stride that is a multiple of `NUM_BANKS × LINE`
+lands every access in one or two banks. With `BANK_HASH=1` the bank is the raw
+bank bits XORed with `cache_bank_hash` of the line address above them
+([VX_gpu_pkg.sv](../../hw/rtl/VX_gpu_pkg.sv)): IPOLY for 16 and 32 banks, which
+spreads every power-of-two stride evenly, and an XOR fold of the higher bits for
+other bank counts. The same mask XORed again restores the raw bits, so it is
+applied once on the request side (`core_req_bid`) and once where the memory
+address is rebuilt from `{line, bank}`. The banks keep storing the line address
+without the bank field, so tags, MSHR, the flush walk and sectoring are
+unchanged. `VX_CFG_DCACHE_BANK_HASH` and `VX_CFG_L2_BANK_HASH` set it for the
+dcache and the L2; SimX uses the same functions. The L2 default is on; the dcache
+default is on from 4 banks, because with two banks the hash can only swap lines on
+parity and the extra parallel misses cost more in memory queuing than the
+spreading saves.
+
+**Hashed set index (`SET_HASH`).** With the set taken straight from the
+address bits, a power-of-two stride of `NUM_BANKS × LINE × 2^k` or more keeps the
+low set bits fixed and piles into a fraction of the sets. With `SET_HASH=1` a
+bank's line address carries the raw set bits XORed with `cache_set_hash` of the
+tag ([VX_gpu_pkg.sv](../../hw/rtl/VX_gpu_pkg.sv)): an XOR fold of the tag's low 32
+bits in chunks of `CS_LINE_SEL_BITS`. The tag is stored unchanged, so the same XOR
+maps the bank's line address back (`CS_LINE_SET_HASH`). `VX_cache` applies it to
+the request's line address ahead of the request crossbar, and undoes it on each
+bank's memory request before the raw bank bits are formed; `CS_BANK_TO_FULL_ADDR`
+undoes it too, so trace and assert addresses stay real. The read-merge compare,
+tags, MSHR, sectors, replacement and the flush walk see no difference, and flush
+tokens use line 0, which hashes to 0. `VX_CFG_DCACHE_SET_HASH` sets it for the
+dcache, on by default; SimX's `params_t::set_xor` is the same function. The L2 and
+L3 do not use it.
+
 The memory side transacts in sectors, so the memory address carries
 `CS_SECTOR_SEL_BITS` below the line address (`CS_MEM_SECTOR_ADDR_WIDTH`,
 `CS_LINE_SECTOR_ADDR_WIDTH`). With one sector per line these collapse back to the
@@ -395,7 +426,10 @@ to new requests. This removes the read-after-fill round trip from miss latency.
 
 The window closes on the **first write or AMO head**. That head and every later
 chain entry replay through the pipeline as usual, preserving program order: an
-older store must merge before a younger same-line read responds.
+older store must merge before a younger same-line read responds. Stores still
+waiting in the chain keep its line pending, on a write-through cache too, where
+they have already been written through: a same-word access that arrives while
+they drain links behind them instead of hitting the array ahead of them.
 
 Two details make it correct:
 
@@ -448,6 +482,35 @@ write-through bank emits no writebacks, so there is nothing to reserve for.
 Replay is the mirror image: it gates only when **not** `WRITEBACK` and the
 replayed request is a write (`replay_rw`), because a write-through bank forwards
 every write downstream and so does need a slot for it.
+
+### 4.9 Requests in flight and device `busy`
+
+Stores are ack-less, so a core goes idle while its last requests are still
+on their way out, and the console rings (`VX_MEM_IO_COUT`) are read right
+after a launch retires, with no flush in between. Device `busy` therefore
+covers every request the cores issued until memory has completed it, the way
+a GPU's outstanding-write counters do:
+
+- the core stays busy while a request waits at its dcache port, past the flush
+  injector's buffer;
+- every place outside the banks where a request can wait reports it through
+  `req_empty`: `VX_cache_bypass` counts from its uncached inputs and the
+  cache's memory side to its memory ports, `VX_cache_cluster` adds its
+  core-side and memory-side arbiters, and the socket memory arbiter and the OM
+  steers do the same. Each counter is a `VX_mem_req_pending` over the
+  section's input and output handshakes, which holds because these sections
+  neither create nor drop requests; the socket, cluster and device fold them
+  into `busy`;
+- the platform wrapper extends `busy` past the device's memory ports to the
+  point where a write is visible to the host's DMA: acceptance by the bank in
+  `rtlsim_shim`, the AXI B response in `Vortex_axi`. The OPAE AFU needs
+  neither, since its DMA queues behind Vortex's writes on the same in-order
+  Avalon path.
+
+Cacheable requests left in the banks are covered by the next flush instead
+(§6). A request's next holding point reaches `busy` through no more registers
+than the one it leaves, so the coverage handed from one counter to the next has
+no gap.
 
 ---
 
@@ -511,11 +574,22 @@ The same machinery is reused for reset-time tag initialization.
 
 ![Flush fan-out tree](../assets/img/cache_flush_tree.svg)
 
-The flush is triggered by a DCR **read** of `VX_DCR_BASE_CACHE_FLUSH` — a read,
-not a write, because the read's *response* is what acknowledges completion.
-[VX_dcr_data.sv](../../hw/rtl/core/VX_dcr_data.sv) latches `flush_pending_r`,
-holds `dcr_flush_if.req` high, and returns the DCR response only once `done`
-comes back.
+The command processor flushes in two phases, because the DCR response bus has
+no back-pressure and two cores answering in the same cycle would lose one:
+
+1. one DCR **write** to `VX_DCR_BASE_CACHE_FLUSH`. Writes reach every core, so
+   all cores start flushing together; a write has no response;
+2. a DCR **read** of the same address per core, one at a time. The read's
+   *response* acknowledges that core's completion, at once if it has already
+   finished.
+
+[VX_dcr_data.sv](../../hw/rtl/core/VX_dcr_data.sv) keeps three bits per core:
+`flush_pending_r` (running; holds `dcr_flush_if.req` high), `flush_complete_r`
+(finished, not yet reported) and `flush_read_r` (a read waiting). A write opens
+a new flush and clears `flush_complete_r`, so an older completion cannot answer
+it. A read with no write before it starts the flush itself, so a requester that
+only reads still works. All cores' tokens reach the shared levels together,
+where one walk serves them all.
 
 From `VX_core` the request fans out to six possible destinations through six
 `VX_dcr_flush` instances — dcache, icache, tcache, rtcache, rcache, ocache —
@@ -532,17 +606,16 @@ holding every `done` high until `req` drops is what lets each parent simply AND
 them together race-free. A pulse would need a latch at every junction and would
 drop legs that finished early.
 
-**The icache flush is sequenced behind the dcache flush:**
+**The icache flush stays local** (`FLUSH_FORWARD=0`): it holds no dirty data,
+and the dcache's flush already walks and invalidates every shared level the
+icache reads through. So the two L1s flush concurrently, and only the dcache's
+tokens reach the next level.
+
+The dcache flush waits for the core's stores to leave the LSU:
 
 ```systemverilog
-assign dcr_flush_icache_if.req = dcr_flush_if.req && dcr_flush_dcache_if.done;
+assign dcr_flush_dcache_if.req = dcr_flush_if.req && store_drained;
 ```
-
-Both L1s forward their flush to the shared next level, and a cache that is
-flushing locks out incoming core requests for its whole sweep. The icache carries
-no dirty data and so retires almost immediately; if it ran concurrently, its
-forward would arrive at the next level while the dcache is still evicting, and
-that level's lock would strand the dcache's writebacks upstream of memory.
 
 The icache is flushed at all because a kernel re-loaded to the same virtual
 address after a `CACHE_FLUSH` would otherwise execute stale lines from the
@@ -552,8 +625,20 @@ previous launch. The host issues `CMD_CACHE_FLUSH` after every kernel launch —
 ### 6.2 VX_dcr_flush — injecting the request
 
 `VX_dcr_flush` synthesizes a degenerate `MemReq` (`rw=0, addr=0, data=0,
-byteen=0, attr = 1 << MEM_ATTR_FLUSH_OFFS`) and merges it into the cache's port 0
-stream through a 2:1 `VX_mem_bus_arb`.
+byteen=l1_only, attr = 1 << MEM_ATTR_FLUSH_OFFS`), a **flush token**, and merges it
+into one cache input stream through a 2:1 `VX_mem_bus_arb`. Byteen bit 0
+marks an **L1-only** token (§6.4; a receiving cache tests for any byteen bit,
+since a level with wider words sees the bit at the token's line offset); `VX_dcr_data` latches it from the START
+write's `VX_CACHE_FLUSH_L1_ONLY` bit, and the dcache and icache injectors carry
+it. The ocache, whose tokens reach the L2, sends an L1-only token only when
+every requester of its flush round is L1-only: the cluster flush (kind latched
+from the same broadcast write) and the dcache tokens held at the OM steers.
+The other graphics caches do not forward and send full tokens. A memory fence
+sends an L1-only token. A fence ordering only device accesses sends an **IO**
+token (the `io` attribute): no level walks, each quiesces its banks, waits
+until nothing is held on its uncached path either, and forwards an IO token
+down every memory port, so the answer proves the earlier IO writes reached
+memory. Kinds visible together combine to the weakest that serves them all.
 
 **Core traffic sits on the priority input, not the flush.** The flush waits until
 upstream is quiescent — which it reliably is, because the host only issues
@@ -567,41 +652,111 @@ the first completion until the initiator drops `req`. Without that latch, a shar
 `req` across several instances would make the fast ones re-flush forever while
 waiting on the slow one.
 
-Only **port 0** of the dcache is routed through `VX_dcr_flush`
-([VX_mem_unit.sv:381](../../hw/rtl/core/VX_mem_unit.sv#L381), `i==0 && j==0`). The
-input lock inside `VX_cache_init` is what propagates the freeze to every other
-port.
+**Every buffered write path gets its own token.** A token only orders the
+requests ahead of it on its own path. A private dcache takes the lanes straight
+from the LSU adapter, whose drain `store_drained` already waits for, so one
+token on lane 0 suffices. Otherwise the lanes are buffered independently (a
+shared dcache's socket arbiter, or a disabled dcache's passthrough), so each
+lane gets its own `VX_dcr_flush` ([VX_mem_unit.sv](../../hw/rtl/core/VX_mem_unit.sv))
+and their level-held dones AND together. Each OM input of the ocache likewise has its own token
+([VX_graphics.sv](../../hw/rtl/VX_graphics.sv)). The read-only rcache keeps a
+single token.
 
 ### 6.3 End-to-end sequence
 
 ![Flush sequence](../assets/img/cache_flush_sequence.svg)
 
-### 6.4 VX_cache_init — the input lock
+### 6.4 VX_cache_init — the flush sequencer
 
-`VX_cache_init` is a 5-state FSM (`IDLE → WAIT1 → FLUSH → WAIT2 → DONE`) sitting
-between the cache's input ports and the request crossbar.
+`VX_cache_init` sits between the cache's input ports and the request crossbar.
+Its FSM is `IDLE → WAIT1 → FLUSH → WAIT2 → FORWARD → RESPOND`.
 
 ```systemverilog
-wire input_enable = ~flush_req_enable || lock_released[i];
+wire input_enable = ~flush_req_enable;
 assign core_bus_out_if[i].req_valid = core_bus_in_if[i].req_valid && input_enable;
-assign core_bus_in_if[i].req_ready  = core_bus_out_if[i].req_ready && input_enable;
+assign core_bus_in_if[i].req_ready  = take_token || (core_bus_out_if[i].req_ready && input_enable);
 ```
 
-While a flush is in flight every input port presents `valid=0` downstream and
-`ready=0` upstream, so upstream stalls. Only the port that originated the flush is
-unlocked (`lock_released_n = flush_req_mask`), so its `MemReq` enters the cache and
-generates the acknowledging response; the rest unlock on the return to IDLE.
+While any token is visible at any input, every input presents `valid=0`
+downstream and `ready=0` upstream, so upstream stalls.
 
 - `STATE_WAIT1` waits for `BANK_SEL_LATENCY × NUM_BANKS` outstanding crossbar
-  requests to drain. When there is no crossbar latency this state is bypassed and
-  IDLE goes straight to FLUSH.
+  requests to drain, and for every bank's core-request skid register
+  (`CORE_REQ_SKID`, behind an unbuffered crossbar) to empty: a request held there
+  has left its input but not reached its bank. When there is no crossbar latency
+  and no skid holds a request, this state is bypassed and IDLE goes straight to
+  FLUSH.
 - `STATE_FLUSH` is one cycle: it pulses `flush_begin` to **all** banks at once.
 - `STATE_WAIT2` accumulates `flush_done |= flush_end` until every bank has
-  reported.
+  reported. The tokens visible at that point are the ones this walk answers;
+  a token that arrives later starts the next walk.
+- `STATE_FORWARD` (only with `FLUSH_FORWARD=1`) flushes the next level: once
+  the memory-request crossbar has drained (`mem_req_empty`), the cache sends
+  **one token on every memory port** and waits for every port's response. The
+  token for port *i* takes bank *i*'s lane into the request crossbar (bank *i*
+  maps to port *i*), so it leaves through the same registered outputs as the
+  write-backs ahead of it.
+- `STATE_RESPOND` answers the tokens one per cycle. Each answer carries the
+  token's own tag, so upstream arbiters route it back, and takes bank 0's lane
+  into the response crossbar whenever bank 0 has no response of its own; the
+  token is consumed at its input as its answer is sent. Then the inputs reopen.
 
-That lock is the load-bearing piece for correctness. Once engaged, no core request
-can reach any bank pipeline — which is what lets the per-bank walk assume the only
-in-flight entries are its own.
+**L1-only tokens.** Between kernels nothing outside the GPU reads memory, so
+the last-level cache, the point of coherence, need not be written back. A
+token with a byteen bit set asks only the levels above the LLC to flush:
+
+- a non-LLC level walks as usual (write-back levels write back, write-through
+  levels invalidate, so the next kernel sees other cores' and clusters'
+  updates) and forwards the token on every port **with the same kind**
+  (`mem_flush_l1_only`, byteen bit 0 of the forwarded token). Forwarding is what
+  lands a write-through level's last stores in the next level before the
+  token is answered;
+- a last-level cache that alone serves every memory client (`SHARED_LLC`:
+  the L3; the L2 of a single cluster; the dcache of a single core with no
+  texture, ray-tracing, DXA, raster or OM unit, since those reach memory below
+  or beside it) goes from IDLE (or WAIT1) straight to RESPOND, with no walk and
+  no forward: once the token is visible, its input's earlier requests are
+  inside the cache, ahead of anything the next kernel sends. Any other LLC
+  (per-core dcaches without an L2, per-cluster L2s without an L3, a dcache
+  beside fixed-function or DXA ports) walks like any other level: its lines
+  may be stale copies of another instance's writes, or dirty data a client
+  beside it must read from memory. `Vortex.sv` asserts that a write-back LLC
+  has a single instance.
+
+The kind of a walk is L1-only only if every token it answers is, so a full
+token is never answered by an L1-only walk. A token without the bit behaves
+exactly as before. The runtime issues a full flush before any transfer to or
+from device memory, because the host DMA path bypasses the LLC.
+
+**Why a token per memory port.** Each port is a separate, separately buffered
+path to the next level, and nothing orders one port's data against another
+port's token. A token sent on one port only could reach the next level while
+another port's last writes are still queued in front of it; that level's walk
+would release the token, and the writes would enter after the walk and stay
+dirty. With one token per port, each token sits behind its own port's data in
+that port's FIFO path, so the next level answers it only once that data is in.
+
+**Why a late token is safe.** A token becomes visible only at the head of its
+input. Once any token is visible, every input is blocked, so a token that
+appears during the walk had all of its input's earlier requests accepted before
+the walk started.
+
+**Recognizing the token responses.** During `STATE_FORWARD` the cache is
+quiescent: inputs blocked, MSHRs empty, no misses outstanding, and writes get no
+responses. So every response on a memory port is a token response; they are
+recognized by phase, with no extra tag bit. Non-cacheable requests are steered
+around the cache by `VX_cache_bypass` and never reach this interface.
+
+**IO ordering.** `VX_cache_bypass` merges the cache's memory requests with
+non-cacheable (IO) requests in a round-robin per-port arbiter, and the IO path
+is unbuffered up to it. An IO request waiting there holds its own input, so the
+token behind it on that input is not yet visible: a later walk answers it, and
+that walk's tokens follow the IO request. A private dcache's lanes 1+ carry no
+token, and `store_drained` waits for them before the core injects its token.
+
+**Passthrough levels** (a disabled cache) need nothing: `VX_mem_bus_arb` maps
+input *i* to output *i* mod `MEM_PORTS`, so each port's stream, token included,
+stays in order on one output.
 
 ### 6.5 VX_cache_flush — the per-bank walk
 
@@ -613,7 +768,7 @@ A 6-state FSM per bank, about 14 flip-flops:
 | `STATE_IDLE` | wait for `flush_begin` |
 | `STATE_WAIT1` | wait for `mshr_empty` **and** `bank_empty` |
 | `STATE_FLUSH` | counter walk; drives `flush_valid`, `flush_line`, `flush_way`; increments on `flush_ready` |
-| `STATE_WAIT2` | **every bank except bank 0** waits for `bank_empty` |
+| `STATE_WAIT2` | wait for `bank_empty`: the write-backs must leave the bank before the tokens go out |
 | `STATE_DONE` | one-cycle `flush_end` pulse |
 
 **The counter width depends on the write policy:**
@@ -626,18 +781,6 @@ Write-through walks each line once — `VX_cache_tags` clears all ways in parall
 since `do_flush = flush && (!WRITEBACK || way_en)` drops the way gate. Write-back
 walks each `(way, line)` separately because each dirty line emits its own memory
 request.
-
-**`STATE_WAIT2` is every bank *except* bank 0.** Bank 0 goes straight to DONE:
-
-```systemverilog
-state_n = (BANK_ID == 0) ? STATE_DONE : STATE_WAIT2;
-```
-
-Bank 0 is the canonical egress that propagates the flush downstream to lower
-levels, and that request must be issued **last**. The other banks therefore hold
-their `flush_end` until their own writebacks have drained; since `VX_cache_init`
-waits for the AND of all `flush_end`, bank 0's downstream forward cannot be
-overtaken.
 
 `flush_ready = flush_grant && ~(WRITEBACK && mreq_queue_alm_full) && ~pipe_stall`
 gates the counter, so under write-back with a near-full egress queue the walk
@@ -676,8 +819,9 @@ tag/data write ports and the existing memory-request queue.
 | Component | Storage |
 |---|---|
 | `VX_cache_flush` | 3 bits state, 1 bit pending, ~10 bits counter — ~14 FF/bank |
-| `VX_cache_init` | 3 bits state, `NUM_BANKS`-bit `flush_done`, `NUM_REQS`-bit `lock_released`, UUID register |
-| `VX_dcr_flush` | 2 bits (`flush_inflight_r`, `flush_done_r`) + a 2:1 arbiter |
+| `VX_cache_init` | 3 bits state, `NUM_BANKS`-bit `flush_done`, 2 × `MEM_PORTS`-bit token tracking, `NUM_REQS`-bit answer tracking, UUID register |
+| `VX_dcr_flush` | 2 bits (`flush_inflight_r`, `flush_done_r`) + a 2:1 arbiter, per write path |
+| `VX_cache` | a request-crossbar in-flight counter (forwarding caches only) and 2:1 muxes on bank 0's response lane and on the first `MEM_PORTS` request lanes |
 | tag / data RAM | **no extra storage** |
 | mreq queue | **no extra entries** |
 
@@ -704,18 +848,20 @@ primitive.
 
 ### 6.8 Correctness invariants
 
-1. **Atomicity against normal traffic.** Once a flush is in flight no core request
-   reaches a bank pipeline — enforced by the `VX_cache_init` input lock.
+1. **Atomicity against normal traffic.** While any token is visible no core
+   request reaches a bank pipeline — enforced by the `VX_cache_init` input block.
 2. **The bank is fully quiesced before the walk starts.** `STATE_WAIT1` waits for
    `mshr_empty && bank_empty` — both, not just the MSHR. Otherwise a fill could
    install a fresh line behind the walk pointer and survive the flush.
 3. **Reset-time valid bits are zero** without async reset on the tag SRAM, via the
    `STATE_INIT` walk. This is what lets the tag array map cleanly to BRAM. The
    bank's highest-priority `init_valid` masks every other source while it runs.
-4. **All banks finish before the cache acks** — `VX_cache_init` waits for the AND
-   of `flush_end` across all banks before unlocking the originating input.
-5. **Bank 0's downstream forward goes out last** — banks 1..N−1 hold `flush_end`
-   until `bank_empty`.
+4. **All banks finish before the next level is flushed** — `VX_cache_init`
+   waits for the AND of `flush_end` across all banks, and every bank holds
+   `flush_end` until `bank_empty`.
+5. **A token is answered only after the next level has each port's data** —
+   with `FLUSH_FORWARD`, one token per memory port goes out once the request
+   crossbar has drained, and every port must answer before `STATE_RESPOND`.
 6. **The init walk is one-shot per reset.** `flush_pending_r` only records a
    `flush_begin` arriving *during* init; it never re-enters `STATE_INIT`.
 
@@ -724,14 +870,15 @@ Edge cases:
 - **Flush during init** → `flush_pending_r` records it, and `STATE_DONE` fires as
   soon as init completes. The init walk stands in for the flush walk, which is
   correct because init invalidated everything anyway.
-- **Multiple ports racing the flush flag** → the loop in `STATE_IDLE` counts down,
-  so the last write wins and it latches the lowest-indexed one's UUID; all flagged
-  ports unlock together at the end.
+- **Tokens on several inputs** → the loop in `STATE_IDLE` counts down, so it
+  latches the lowest-indexed one's UUID. Every token visible at the end of the
+  walk is answered, one per cycle through bank 0's response lane (behind any
+  bank response); a token that arrives later starts the next walk.
 - **Flush during a fill-forward drain** is asserted impossible
   (`RUNTIME_ASSERT(~(flush_fire && fwd_pending))`) — `STATE_WAIT1`'s `mshr_empty`
   precondition already excludes it.
 - **`STATE_WAIT2`'s `bank_empty` does not re-check `mshr_empty`.** It does not need
-  to: WAIT1 established it and the input lock guarantees nothing can refill.
+  to: WAIT1 established it and the input block guarantees nothing can refill.
 
 ### 6.9 Why flush is not the substrate for line-granular invalidation
 
@@ -765,7 +912,7 @@ closely enough to be a parity oracle:
 | AMOs | LLC commits, non-LLC probes and forwards | `amo_unit_` at LLC; `AmoProbe` above it |
 | Flush | per-bank set × way walk | per-bank set × way × sector walk |
 
-`Cache::Config` fields: `bypass, C, L, S, W, A, B, addr_width, num_inputs,
+`Cache::Config` fields: `bypass, size, L, S, W, num_ways, B, addr_width, num_inputs,
 mem_ports, write_back, write_reponse, mshr_size, latency, repl_policy, is_llc`
 (`write_reponse` is misspelled in the source). `bypass` mirrors RTL `PASSTHRU`.
 
@@ -862,17 +1009,26 @@ timing.
 conflict misses for strided or power-of-two patterns at a mild area cost. Because
 the tag store packs all ways into one BRAM word, extra ways widen that word rather
 than adding arrays. Diminishing returns past 8 for typical GPU workloads.
+The way count need not be a power of two (3 or 6 ways give 48 KB, 192 KB or
+6 MB with power-of-two sets), but `SIZE / (LINE × WAYS × BANKS)`, the sets per
+bank, must be one (static assert). The replacement state and the write-back
+flush walk skip the unused way codes: FIFO wraps at the last way, and a random
+or PLRU pick past it folds back onto a real way.
 
 **`*_REPL_POLICY`** (`fifo` everywhere) — `0` random, `1` FIFO, `2` PLRU. PLRU
 gives the best hit rate on reuse-heavy workloads but stores per-set tree bits;
 FIFO is a single counter per set and within a few percent on streaming GPU
 workloads; random is cheapest and degrades gracefully.
 
-**`*_MSHR_SIZE`** (16 everywhere) — outstanding **missed requests** per bank (see
+**`*_MSHR_SIZE`** — outstanding **missed requests** per bank (see
 [§4.5](#45-mshr-and-same-line-chaining) — *not* distinct lines). Total MLP per
-cache = `NUM_BANKS × MSHR_SIZE`. Also the tag-id space the next level sees. Raise
-it when the next level's latency is long enough that banks stall with all entries
-pending.
+cache = `NUM_BANKS × MSHR_SIZE`. Also the tag-id space the next level sees. The
+icache keeps 16. The dcache, L2 and L3 derive it from Little's law: the platform
+keeps `PLATFORM_MEMORY_PEAK_BW / PLATFORM_CLOCK_RATE × PLATFORM_MEMORY_LATENCY`
+bytes in flight at peak bandwidth, and each bank needs its share of them in
+sectors (a dcache bank's share is per dcache instance), rounded up to a power of
+two, within 16 to 256 (64 for the dcache). With no platform latency (the default)
+or a disabled level it is 16. A profile may still set it outright.
 
 **`*_MRSQ_SIZE`** (icache 0, others 4) — memory response staging queue depth.
 Elastic buffering between the memory port and the bank fill path; `0` collapses to
@@ -932,6 +1088,52 @@ cannot drive latency below 2 (L1) or 4 (L2/L3), because `LATENCY >= 2` is a stat
 assert and the classic bank needs both stages. Each base constant equals that
 level's own default size.
 
+**`L2_LINK_LATENCY`** (`0`) — the link between the sockets and the L2, in cycles
+**each way**. `L2_LATENCY` is the bank pipeline, so it cannot stand for a large
+GPU's SM-to-L2 network, whose hundreds of cycles would be register stages in every
+bank. The link sits in `VX_cluster` between each socket memory port and its L2
+input (after the graphics block's peel, when OM is on): a `VX_mem_bus_delay`, one
+`VX_delay_buffer` per direction. A request reaches the L2 `L2_LINK_LATENCY` cycles
+after the socket offers it, and a response its socket as long after the L2 does,
+so an L2 hit, and every miss, gains `2 × L2_LINK_LATENCY` cycles of round trip.
+Each direction is a FIFO of a power of two at least the latency (block RAM at
+size) whose entries a delay line of valid bits releases in order into a stream
+buffer, so a port keeps one transfer per cycle, its outputs are registers, and its
+back-pressure is the FIFO's registered full flag.
+At `0` the ports are wires, the design of a build without the knob. The command
+processor's and the walker's L2 ports are not socket traffic and do not cross it.
+SimX models it with a `DelayBuffer` per direction in `Cluster`. The dcache MSHRs
+and the LSU's pending pool, which wait on both crossings, size from
+`PLATFORM_MEMORY_LATENCY + 2 × L2_LINK_LATENCY`; the L2 and L3 MSHRs from the
+memory latency alone.
+
+**`L1_LINK_LATENCY`** (`0`) — the link between each core's memory ports and the
+dcache, in cycles **each way**. On some GPUs (Fermi, Kepler, Maxwell, Pascal) a
+global load goes through the L1/texture pipeline and an L1 hit takes 35 to 96
+cycles; `DCACHE_LATENCY` is the bank pipeline with its commit logic and cannot
+stand for that. The link sits in `VX_socket` on the dcache side of the dMMU,
+between each core lane (`dcache_phys_bus_if`) and the dcache's core port: the
+same `VX_mem_bus_delay` as the L2 link, so a request reaches the dcache
+`L1_LINK_LATENCY` cycles after the core (or the dMMU) offers it and a response
+its core as long after the dcache does. Every global access, an L1 hit, an L2
+hit or a DRAM access, gains `2 × L1_LINK_LATENCY` cycles of round trip; shared
+memory, inside the core, does not. At `0` the lanes are wires.
+A store past the core is ack-less, so whatever holds one outside the core's own
+drain status must be drained explicitly. Each lane is a FIFO with one fixed
+delay, so it keeps its requests in order, and the order across lanes at the
+dcache is set, as without the link, by the dcache's per-lane back-pressure;
+fence and flush tokens order per lane, so they need nothing more. The dcache
+flush that a DCR request starts does assume the core's stores are in the dcache
+once they leave the core: it waits until the core's lanes on the link are empty
+(and, under VM, its dMMU lanes idle), latching the start since the token
+crosses the link too, and the socket stays busy while any lane holds a request.
+SimX models it with a `DelayBuffer` per direction on each core dcache port in
+`Socket`; its run and flush loops wait for an idle platform, which counts the
+packets on the links. The LSU's pending pool sizes from
+`PLATFORM_MEMORY_LATENCY + 2 × L2_LINK_LATENCY + 2 × L1_LINK_LATENCY`; the
+dcache MSHRs, which a miss holds only below the dcache, do not count the L1
+link.
+
 **Icache exceptions.** The icache has no `NUM_BANKS`, `WRITEBACK`, `DIRTYBYTES`,
 `LINE_SIZE`, `WORD_SIZE`, or `SECTOR_SIZE` knob. Its geometry beyond size and ways
 is fixed in `VX_gpu_pkg.sv` and at its instantiation (`NUM_BANKS=1`, `NUM_REQS=1`,
@@ -959,8 +1161,8 @@ identically at all three levels — the dcache is not special.
 - **Miss latency hiding** insufficient (banks idle while misses pend) → raise
   `*_MSHR_SIZE` and check the LSU pending pool upstream; verify `MEM_PORTS` is not
   serializing the drain.
-- **Bank conflicts** (hit-path stalls) → more banks via a smaller
-  `DCACHE_WORD_SIZE`; check address strides against the line-interleaved mapping.
+- **Bank conflicts** (hit-path stalls) → check that the bank hash is on for that
+  level, then more banks via a smaller `DCACHE_WORD_SIZE`.
 - **Store bandwidth** bound → enable a shared level so `WRITEBACK` derives to 1
   where legal; add `*_DIRTYBYTES` for partial-line store patterns.
 - **BRAM / timing** pressure → cut `*_NUM_WAYS` or `*_SIZE` before cutting banks;

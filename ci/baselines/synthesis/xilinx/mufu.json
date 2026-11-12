@@ -6,7 +6,7 @@
     "dut": "mufu",
     "result": {
       "bram": 1,
-      "build_time_s": 712,
+      "build_time_s": 2418,
       "critical_paths": [
         {
           "endpoint": "mufu_unit/g_pes[0].pe/s1_reg/g_pipe.g_no_reset.pipe_reg[0][16]/D",

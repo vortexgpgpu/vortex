@@ -5,6 +5,14 @@
 # not apply to tracked files), so a NEW workflow or action would be silently
 # dropped from a commit with nothing to notice.
 !/.github/
+# The shared agent skills, and the .claude/skills link to them; the rest of
+# .agents/ and .claude/ is per-user settings and credentials.
+!/.agents/
+/.agents/*
+!/.agents/skills/
+!/.claude/
+/.claude/*
+!/.claude/skills
 # Archived/superseded docs — kept on disk, never tracked
 docs/archives/
 
@@ -22,3 +30,4 @@ hw/syn/libs/asap7/install.sh
 # Built by third_party/Makefile
 third_party/ramulator_ext/*.o
 third_party/ramulator_ext/*.so
+third_party/softfloat.opts

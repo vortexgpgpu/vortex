@@ -66,7 +66,7 @@
   <path d="M 124 232 L 366 232" class="mp"/>
   <text x="140" y="224" class="lbp">load B — lane 2, same page P</text>
   <rect x="350" y="240" width="40" height="56" class="act"/>
-  <text x="396" y="254" class="ts">CAM probe: still no entry; MSHR probe: slot s live → mshr_match → cat_park</text>
+  <text x="396" y="254" class="ts">CAM probe: still no entry → cat_park; the allocate's MSHR probe finds slot s live</text>
   <text x="396" y="270" class="ts">join slot s: token {lane 2, fields B} queued behind A (QDEPTH=2, so this fills the queue)</text>
   <text x="396" y="286" class="tt">a third same-page lane would hold (alloc_ready=0) until a token drains</text>
 

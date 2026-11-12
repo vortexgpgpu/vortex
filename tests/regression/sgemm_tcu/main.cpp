@@ -369,33 +369,11 @@ struct muladd_t<vt::fp16, vt::fp32> {
 };
 
 template <>
-struct muladd_t<vt::fp16, vt::fp16> {
-  static uint16_t eval(uint16_t a, uint16_t b, uint16_t c) {
-    auto fa = bit_cast<float>(rv_htof_s(a, 0, nullptr));
-    auto fb = bit_cast<float>(rv_htof_s(b, 0, nullptr));
-    auto fc = bit_cast<float>(rv_htof_s(c, 0, nullptr));
-    auto fd = fa * fb + fc;
-    return rv_ftoh_s(bit_cast<uint32_t>(fd), 0, nullptr);
-  }
-};
-
-template <>
 struct muladd_t<vt::bf16, vt::fp32> {
   static float eval(uint16_t a, uint16_t b, float c) {
     auto fa = bit_cast<float>(rv_btof_s(a, 0, nullptr));
     auto fb = bit_cast<float>(rv_btof_s(b, 0, nullptr));
     return fa * fb + c;
-  }
-};
-
-template <>
-struct muladd_t<vt::bf16, vt::bf16> {
-  static uint16_t eval(uint16_t a, uint16_t b, uint16_t c) {
-    auto fa = bit_cast<float>(rv_btof_s(a, 0, nullptr));
-    auto fb = bit_cast<float>(rv_btof_s(b, 0, nullptr));
-    auto fc = bit_cast<float>(rv_btof_s(c, 0, nullptr));
-    auto fd = fa * fb + fc;
-    return rv_ftob_s(bit_cast<uint32_t>(fd), 0, nullptr);
   }
 };
 
@@ -409,17 +387,6 @@ struct muladd_t<vt::fp8, vt::fp32> {
 };
 
 template <>
-struct muladd_t<vt::fp8, vt::fp8> {
-  static uint8_t eval(uint8_t a, uint8_t b, uint8_t c) {
-    auto fa = bit_cast<float>(rv_e4m3tof_s(a, 0, nullptr));
-    auto fb = bit_cast<float>(rv_e4m3tof_s(b, 0, nullptr));
-    auto fc = bit_cast<float>(rv_e4m3tof_s(c, 0, nullptr));
-    auto fd = fa * fb + fc;
-    return rv_ftoe4m3_s(bit_cast<uint32_t>(fd), 0, nullptr);
-  }
-};
-
-template <>
 struct muladd_t<vt::bf8, vt::fp32> {
   static float eval(uint8_t a, uint8_t b, float c) {
     auto fa = bit_cast<float>(rv_e5m2tof_s(a, 0, nullptr));
@@ -429,33 +396,11 @@ struct muladd_t<vt::bf8, vt::fp32> {
 };
 
 template <>
-struct muladd_t<vt::bf8, vt::bf8> {
-  static uint8_t eval(uint8_t a, uint8_t b, uint8_t c) {
-    auto fa = bit_cast<float>(rv_e5m2tof_s(a, 0, nullptr));
-    auto fb = bit_cast<float>(rv_e5m2tof_s(b, 0, nullptr));
-    auto fc = bit_cast<float>(rv_e5m2tof_s(c, 0, nullptr));
-    auto fd = fa * fb + fc;
-    return rv_ftoe5m2_s(bit_cast<uint32_t>(fd), 0, nullptr);
-  }
-};
-
-template <>
 struct muladd_t<vt::tf32, vt::fp32> {
   static float eval(uint32_t a, uint32_t b, float c) {
     auto fa = bit_cast<float>(rv_tf32tof_s(a, 0, nullptr));
     auto fb = bit_cast<float>(rv_tf32tof_s(b, 0, nullptr));
     return fa * fb + c;
-  }
-};
-
-template <>
-struct muladd_t<vt::tf32, vt::tf32> {
-  static uint32_t eval(uint32_t a, uint32_t b, uint32_t c) {
-    auto fa = bit_cast<float>(rv_tf32tof_s(a, 0, nullptr));
-    auto fb = bit_cast<float>(rv_tf32tof_s(b, 0, nullptr));
-    auto fc = bit_cast<float>(rv_tf32tof_s(c, 0, nullptr));
-    auto fd = fa * fb + fc;
-    return rv_ftotf32_s(bit_cast<uint32_t>(fd), 0, nullptr);
   }
 };
 
@@ -495,6 +440,9 @@ inline typename T::dtype generate_B_value() {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+static_assert(vt::tcu_output_valid(vt::ITYPE::id, vt::OTYPE::id),
+              "TCU output type must be fp32 (int32 for integer inputs)");
+
 using cfg = vt::wmma_config_t<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE>;
 
 using itype_t = typename vt::ITYPE::dtype;
@@ -507,10 +455,10 @@ static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B, uint32_t 
   for (uint32_t m = 0; m < M; ++m) {
     for (uint32_t n = 0; n < N; ++n) {
       if constexpr (std::is_same<vt::OTYPE, vt::fp32>::value) {
-        // fp32 output: the tensor core accumulates the K products in a wide
-        // accumulator and rounds to fp32 once; a per-step-rounded reference
-        // drifts by several ULP over K. Each product is exact in fp32, so a
-        // double accumulation reproduces the single-rounding dot product.
+        // The tensor core accumulates the K products in a wide accumulator
+        // and rounds to fp32 once; a per-step-rounded reference drifts by
+        // several ULP over K. Each product is exact in fp32, so a double
+        // accumulation reproduces the single-rounding dot product.
         double acc = 0.0;
         for (uint32_t k = 0; k < KS; ++k) {
           auto a = data_accessor_t<vt::ITYPE>::read(A, m * KS + k);
@@ -519,8 +467,7 @@ static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B, uint32_t 
         }
         data_accessor_t<vt::OTYPE>::write(C, m * N + n, static_cast<otype_t>(acc));
       } else {
-        // Narrow outputs re-round the accumulator to the output type every
-        // step, matching the hardware chain exactly.
+        // int32 output (integer inputs): exact accumulation.
         otype_t sum(0);
         for (uint32_t k = 0; k < KS; ++k) {
           auto a = data_accessor_t<vt::ITYPE>::read(A, m * KS + k);
@@ -541,6 +488,7 @@ uint32_t xm = 64;
 uint32_t xn = 64;
 uint32_t xk = 64;
 uint32_t xr = 1; // repeat count: relaunch the same kernel N times on one device session
+bool xz = false;  // bf8: zeros next to small values in K pairs of A row 0
 
 vx_device_h device = nullptr;
 vx_buffer_h A_buffer = nullptr;
@@ -556,12 +504,12 @@ kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
   std::cout << "Vortex Sgemm TCU Test." << std::endl;
-  std::cout << "Usage: [-m: m] [-n N] [-k: K] [-r: repeat] [-h: help]" << std::endl;
+  std::cout << "Usage: [-m: m] [-n N] [-k: K] [-r: repeat] [-z: bf8 zero pairs] [-h: help]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "m:n:k:r:i:o:hs")) != -1) {
+  while ((c = getopt(argc, argv, "m:n:k:r:i:o:hsz")) != -1) {
     switch (c) {
     case 'm':
       xm = atoi(optarg);
@@ -574,6 +522,9 @@ static void parse_args(int argc, char **argv) {
       break;
     case 'r':
       xr = atoi(optarg);
+      break;
+    case 'z':
+      xz = true;
       break;
     case 'h':
       show_usage();
@@ -604,6 +555,10 @@ void cleanup() {
 
 int main(int argc, char *argv[]) {
   parse_args(argc, argv);
+  if (xz && !std::is_same<vt::ITYPE, vt::bf8>::value) {
+    std::cout << "Error: -z requires ITYPE=bf8!" << std::endl;
+    return -1;
+  }
 
   std::srand(50);
 
@@ -694,6 +649,17 @@ int main(int argc, char *argv[]) {
   }
   for (uint32_t i = 0; i < sizeB; ++i) {
     h_B[i] = generate_B_value<vt::ITYPE>();
+  }
+  if constexpr (std::is_same<vt::ITYPE, vt::bf8>::value) {
+    if (xz) {
+      // Row 0 of A is 0 at even k and 1.75 * 2^-11 at odd k; B is 57344 in
+      // even rows and 1.75 * 2^-11 in odd rows. The zero products must not
+      // set the exponent of their K pair.
+      for (uint32_t k = 0; k < K; ++k)
+        h_A[k] = (k & 1) ? 0x13 : 0x00;
+      for (uint32_t i = 0; i < sizeB; ++i)
+        h_B[i] = ((i / N) & 1) ? 0x13 : 0x7b;
+    }
   }
 
   // h_B_col must outlive the async write below — declared at function scope
@@ -817,7 +783,7 @@ int main(int argc, char *argv[]) {
   if (errors != 0) {
     std::cout << "Found " << std::dec << errors << " / " << sizeC << " errors!" << std::endl;
     std::cout << "FAILED!" << std::endl;
-    return errors;
+    return errors != 0;
   }
 
   std::cout << "PASSED!" << std::endl;

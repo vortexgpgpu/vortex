@@ -7,6 +7,7 @@
 #define VM_MODE_DRAIN      2  // trailing cold-page store burst at kernel end
 #define VM_MODE_AMO        3  // atomics contended on cold pages
 #define VM_MODE_SUPERPAGE  4  // repeated reads through a superpage-mapped region
+#define VM_MODE_SP_ORDER   5  // cold-page store, delayed readback, per superpage
 
 typedef struct {
   uint32_t mode;

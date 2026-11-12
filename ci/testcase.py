@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """Vortex test cases — the model and the CLI.
 
-Loads ci/testcases/*.yaml into concrete test cases, and exposes the planner CLI
+Loads ci/testcases/ into concrete test cases, and exposes the planner CLI
 (`lint` / `matrix` / `select`) the CI workflow uses. Pure logic with no pytest
 dependency (only PyYAML), so the lightweight ci.yml plan job and the pytest
 harness (ci/test_runner.py) both build on it. See docs/designs/continuous_integration.md.
 
-A *case* (class Spec) is one declarative test. A testcases file lists entries per
-category; an entry with `drivers: [...]` expands to one case per driver. `xlen` is
+A *case* (class Spec) is one declarative test. A category is one file,
+ci/testcases/<category>.yaml, or a directory of files,
+ci/testcases/<category>/*.yaml, each with its own defaults; a directory runs as
+one cell. An entry with `drivers: [...]` expands to one case per driver. `xlen` is
 an outer dimension — cases are filtered against the ambient build tree's XLEN,
 never expanded here (build32/ and build64/ are separate trees).
 
@@ -48,12 +50,17 @@ VALID_CHECK = {"model_parity", "perf_gate"}
 # nightly), and everything is what ci.yml's matrix can run as a CELL -- these
 # cannot be. `fpga` needs a licensed Vivado and hours of a whole machine;
 # `asic` needs 1-2 hours PER DUT, which is a fan-out of standalone jobs, not one
-# cell. Each has its own workflow (.github/workflows/{fpga,asic}_gate.yml).
-# Opting in is explicit, never implied.
-OPT_IN_TIERS = {"fpga", "asic"}
+# cell; `timing_gpu` (Beacon on the whole GPU) needs ~95 GB per build. Each has
+# its own workflow (.github/workflows/{fpga,asic,logic}_gate.yml). Opting in is
+# explicit, never implied.
+OPT_IN_TIERS = {"fpga", "asic", "timing_gpu"}
 
 # simx<->rtlsim cycle-parity default: both timing models must agree within 5%.
 DEFAULT_PARITY_TOLERANCE = 0.05
+DEFAULT_PARITY_LEGS = ["simx", "rtlsim"]
+# A parity leg runs through blackbox. foldsim is a leg but not a cell driver: it
+# generates and builds its simulator inside the run, so there is no sim build.
+PARITY_DRIVERS = VALID_DRIVERS | {"foldsim"}
 
 # Per-case wall times (seconds, per xlen) measured by a CI run, recorded by
 # ci/record_runtimes.py from the run's junit reports. A cell whose recorded total
@@ -61,6 +68,8 @@ DEFAULT_PARITY_TOLERANCE = 0.05
 # into the tests job's timeout.
 RUNTIMES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "runtimes.json")
 SHARD_BUDGET_S = 150 * 60
+# Cells of long rtlsim runs split finer: each shard of these stays near an hour.
+CELL_SHARD_BUDGET_S = {"model_parity": 60 * 60, "perf_gate": 60 * 60}
 # Weight of a case with no recorded time (new, or not yet run on that xlen).
 DEFAULT_CASE_S = 120
 
@@ -73,8 +82,10 @@ def driver_marker(driver):
 class Spec:
     """One concrete test case: a single (category, driver, configs, shape) point."""
 
-    def __init__(self, category, entry, driver, defaults):
+    def __init__(self, category, entry, driver, defaults, suite=None):
         self.category = category
+        # the file a case comes from, when its category is a directory of files
+        self.suite = suite if suite != category else None
         self.driver = driver
         self.via = entry.get("via", defaults.get("via", "blackbox"))
         self.app = entry.get("app", "")
@@ -106,6 +117,12 @@ class Spec:
         # coverage can't creep back in per-file.
         if self.check in ("model_parity", "perf_gate"):
             self.xlens = [32]
+        # release_parity: a debug run (its flags carry --debug) must report
+        # exactly the cycles of the same run built release. A debug build widens
+        # the RTL UUID to 44 bits and enables assertions and traces; none of that
+        # may move timing. The runner adds the release leg itself, at xlen 32
+        # only like the cycle gates; other xlens run the debug leg alone.
+        self.release_parity = bool(entry.get("release_parity", False))
         self.tolerance = float(entry.get("tolerance",
                                          defaults.get("tolerance", DEFAULT_PARITY_TOLERANCE)))
         # model_parity can also compare an MPM class's counters, read from the
@@ -113,6 +130,9 @@ class Spec:
         # must pass the class with --perf=N): `exact` counters must match, and
         # `tolerance` counters must agree within the case tolerance.
         self.parity_counters = dict(entry.get("parity_counters", {}))
+        # The two drivers a model_parity case runs: the model, then the RTL it
+        # is checked against.
+        self.legs = list(entry.get("legs", defaults.get("legs", DEFAULT_PARITY_LEGS)))
         self.authored_drivers = ("driver" in entry) or ("drivers" in entry)
         # make-run / script fields
         self.dir = entry.get("dir", "")
@@ -162,6 +182,8 @@ class Spec:
     def markers(self):
         """pytest marker names for `-m` selection (one per value)."""
         m = [self.category, self.tier]
+        if self.suite:
+            m.append(self.suite)
         if self.marker_driver:
             m.append(self.marker_driver)
         if self.check:
@@ -256,6 +278,7 @@ def load_category(path):
         doc = yaml.safe_load(fh)
     category = doc["category"]
     defaults = doc.get("defaults", {})
+    suite = os.path.basename(path)[:-len(".yaml")]
     cases = []
     for raw in doc.get("tests", []):
         for entry in _expand_threads(raw):
@@ -267,7 +290,7 @@ def load_category(path):
             else:
                 drivers = entry.get("drivers") or ([entry["driver"]] if "driver" in entry else [None])
             for driver in drivers:
-                cases.append(Spec(category, entry, driver, defaults))
+                cases.append(Spec(category, entry, driver, defaults, suite))
     return cases
 
 
@@ -292,10 +315,20 @@ def _reject_rtl_xrt_duplicates(cases):
                 "point; keep only the xrt leg".format(other.id, c.id))
 
 
+def testcase_files(testcases_dir=TESTCASES_DIR):
+    """(path, category its location names) of every testcases file: a file at the
+    top names its own category, a file in a subdirectory names the directory's."""
+    files = [(p, os.path.basename(p)[:-len(".yaml")])
+             for p in glob.glob(os.path.join(testcases_dir, "*.yaml"))]
+    files += [(p, os.path.basename(os.path.dirname(p)))
+              for p in glob.glob(os.path.join(testcases_dir, "*", "*.yaml"))]
+    return sorted(files)
+
+
 def load_all(testcases_dir=TESTCASES_DIR):
-    """Load every ci/testcases/*.yaml into a flat list of concrete cases."""
+    """Load every testcases file into a flat list of concrete cases."""
     cases = []
-    for path in sorted(glob.glob(os.path.join(testcases_dir, "*.yaml"))):
+    for path, _ in testcase_files(testcases_dir):
         cases.extend(load_category(path))
     _reject_rtl_xrt_duplicates(cases)
     return cases
@@ -415,19 +448,19 @@ def cell_name(case):
     return case.check or case.category
 
 
-def shard_plan(case_ids, xlen, shards=None):
+def shard_plan(case_ids, xlen, shards=None, budget=SHARD_BUDGET_S):
     """Split a cell's cases into shards balanced on their recorded runtimes.
 
     Longest case first onto the least-loaded shard, with ties broken on case id
     and shard index, so the planner and every shard derive the same split from
     the same ids. Unless `shards` is given, the count is the fewest that keep
-    the cell's recorded total within SHARD_BUDGET_S per shard.
+    the cell's recorded total within `budget` per shard.
     Returns (shards, {case id: 0-based shard}).
     """
     runtimes = load_runtimes(xlen)
     weight = {i: runtimes.get(i, DEFAULT_CASE_S) for i in case_ids}
     if shards is None:
-        shards = max(1, math.ceil(sum(weight.values()) / SHARD_BUDGET_S))
+        shards = max(1, math.ceil(sum(weight.values()) / budget))
     load = [0.0] * shards
     plan = {}
     for i in sorted(weight, key=lambda i: (-weight[i], i)):
@@ -466,7 +499,7 @@ def cmd_matrix(args):
     # the CHECK, not on a category that happens to share its name -- a check is a
     # marker across suites, and no category name may control whether it runs.
     #
-    # A cell whose recorded runtime exceeds SHARD_BUDGET_S is emitted as `shards`
+    # A cell whose recorded runtime exceeds its budget is emitted as `shards`
     # cells, each running shard `shard` of the split (shard_plan). The split is
     # over every case the cell's -m expression selects, not only those this
     # event's filters planned the cell for, because that is what the cell runs.
@@ -479,21 +512,24 @@ def cmd_matrix(args):
             if xfilter and xlen not in xfilter:
                 continue
             name = cell_name(c)
-            key = (name, drv, xlen)
-            cell = cells.setdefault(key, {
-                "category": name, "driver": drv, "xlen": xlen, "needs": set(),
+            cells.setdefault((name, drv, xlen), {
+                "category": name, "driver": drv, "xlen": xlen,
             })
-            cell["needs"].update(c.needs)
-    members = {}
+    # A cell's needs are those of every case its -m expression runs, not only of
+    # the cases this event's filters planned it for.
+    members, needs = {}, {}
     for c in cases:
         if c.tier in OPT_IN_TIERS:
             continue
         for xlen in c.xlens:
-            members.setdefault((cell_name(c), c.marker_driver or "host", xlen), []).append(c.id)
+            key = (cell_name(c), c.marker_driver or "host", xlen)
+            members.setdefault(key, []).append(c.id)
+            needs.setdefault(key, set()).update(c.needs)
     out = []
     for key, cell in cells.items():
-        cell["needs"] = sorted(cell["needs"])
-        shards, _ = shard_plan(members.get(key, []), key[2])
+        cell["needs"] = sorted(needs.get(key, ()))
+        shards, _ = shard_plan(members.get(key, []), key[2],
+                               budget=CELL_SHARD_BUDGET_S.get(key[0], SHARD_BUDGET_S))
         if shards == 1:
             out.append(cell)
             continue
@@ -542,21 +578,33 @@ def cmd_lint(args):
     cases = load_all()
     errors, seen = [], {}
 
-    # A file is named after the SUITE it holds. A check (`perf_gate`,
-    # `model_parity`) is a marker carried by cases across many suites, never a
-    # file or a category: a name collision would let a category rename decide
-    # whether a gate runs at all.
-    for path in sorted(glob.glob(os.path.join(TESTCASES_DIR, "*.yaml"))):
-        stem = os.path.basename(path)[:-len(".yaml")]
+    # A file, or a directory of files, is named after the SUITE it holds. A
+    # check (`perf_gate`, `model_parity`) is a marker carried by cases across
+    # many suites, never a file or a category: a name collision would let a
+    # category rename decide whether a gate runs at all. A driver or tier name
+    # is a marker too, so `-m "<category> and <driver>"` must not repeat one.
+    reserved = VALID_CHECK | set(DRIVER_MARKERS) | {"host"} | {c.tier for c in cases}
+    files = testcase_files()
+    tops = {name for path, name in files if os.path.dirname(path) == TESTCASES_DIR}
+    for path, name in files:
+        rel = os.path.relpath(path, TESTCASES_DIR)
         with open(path) as fh:
             category = (yaml.safe_load(fh) or {}).get("category")
-        if category != stem:
-            errors.append("{}: category {!r} must match the file name {!r}"
-                          .format(os.path.basename(path), category, stem))
-        if stem in VALID_CHECK:
-            errors.append("{}: named after the check {!r} -- a check is a marker "
-                          "on cases across suites, not a suite".format(
-                              os.path.basename(path), stem))
+        if category != name:
+            errors.append("{}: category {!r} must match its file or directory "
+                          "name {!r}".format(rel, category, name))
+        if name in reserved:
+            errors.append("{}: named after the marker {!r} -- a check, driver "
+                          "or tier, not a suite".format(rel, name))
+        if os.path.dirname(path) != TESTCASES_DIR and name in tops:
+            errors.append("{}: category {!r} is both a file and a directory"
+                          .format(rel, name))
+        # a file in a directory is also selectable by its own name (a suite)
+        suite = os.path.basename(path)[:-len(".yaml")]
+        if os.path.dirname(path) != TESTCASES_DIR and suite != name and (
+                suite in reserved or suite in {n for _, n in files}):
+            errors.append("{}: suite {!r} collides with a category or a marker"
+                          .format(rel, suite))
 
     # Every check must own at least one case, or `-m <check>` selects nothing and
     # the gate is silently a no-op.
@@ -580,6 +628,13 @@ def cmd_lint(args):
             errors.append("{}: script case missing 'run'".format(c.id))
         if any(int(x) not in (32, 64) for x in c.xlens):
             errors.append("{}: xlen must be 32 and/or 64".format(c.id))
+        if c.release_parity:
+            if c.via != "blackbox" or "--debug" not in c.flags:
+                errors.append("{}: release_parity needs a blackbox case run "
+                              "with --debug".format(c.id))
+            if c.check:
+                errors.append("{}: release_parity cannot combine with a "
+                              "check".format(c.id))
         if c.check:
             if c.check not in VALID_CHECK:
                 errors.append("{}: invalid check {!r}".format(c.id, c.check))
@@ -587,9 +642,15 @@ def cmd_lint(args):
                 errors.append("{}: check cases must be via blackbox".format(c.id))
             if c.authored_drivers:
                 errors.append("{}: check cases must not set driver/drivers "
-                              "(the runner drives simx and rtlsim)".format(c.id))
-            if not (0.0 < c.tolerance < 1.0):
-                errors.append("{}: tolerance must be in (0, 1)".format(c.id))
+                              "(the runner drives the legs itself)".format(c.id))
+            if len(c.legs) != 2 or len(set(c.legs)) != 2 or \
+                    not set(c.legs) <= PARITY_DRIVERS:
+                errors.append("{}: legs must be two distinct drivers of {}".format(
+                    c.id, sorted(PARITY_DRIVERS)))
+            # 0 asks for exact cycles, from a model that is cycle-exact by
+            # construction.
+            if not (0.0 <= c.tolerance < 1.0):
+                errors.append("{}: tolerance must be in [0, 1)".format(c.id))
         if c.parity_counters:
             pc = c.parity_counters
             if c.check != "model_parity":

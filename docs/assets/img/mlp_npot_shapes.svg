@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 250" role="img" aria-label="With 12 warps per issue slice and 3 operand collectors, a bit-slice collector index sends warps 3, 7 and 11 to a collector that does not exist. Indexing by wis % 3 and wis / 3 gives every warp a collector and a slot.">
+  <title>With 12 warps per issue slice and 3 operand collectors, a bit-slice collector index sends warps 3, 7 and 11 to a collector that does not exist. Indexing by wis % 3 and wis / 3 gives every warp a collector and a slot.</title>
+  <defs><marker id="npotsh_a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1b2733"/></marker><marker id="npotsh_g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1f7a4d"/></marker><marker id="npotsh_b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#b3261e"/></marker></defs>
+  <style>
+    text { font-family: Helvetica, Arial, sans-serif; fill: #1b2733; font-size: 11.5px; }
+    .dh { font-size: 13px; font-weight: bold; }
+    .dm { fill: #5a6772; font-size: 11px; }
+    .ds { font-size: 10.5px; }
+    .db { fill: #fbfcfd; stroke: #5a7184; stroke-width: 1.2; }
+    .dbad { fill: #fbe5e3; stroke: #b3261e; stroke-width: 1.2; }
+    .dgood { fill: #e3f3ea; stroke: #1f7a4d; stroke-width: 1.2; }
+    .didle { fill: #f3f5f8; stroke: #c9d1d9; stroke-width: 1.2; }
+    .dwait { fill: #fbe5e3; stroke: #b3261e; stroke-width: 1.2; stroke-dasharray: 4 3; }
+    .ln { stroke: #1b2733; stroke-width: 1.3; fill: none; }
+    .lb { stroke: #b3261e; stroke-width: 1.5; fill: none; }
+    .lg { stroke: #1f7a4d; stroke-width: 1.5; }
+    .dash { stroke-dasharray: 4 3; }
+    .sep { stroke: #c9d1d9; stroke-width: 1; stroke-dasharray: 2 4; }
+    text.db-t { fill: #b3261e; } text.g-t { fill: #1f7a4d; }
+  </style>
+  <rect width="640" height="250" fill="#ffffff"/>
+<g class="dl">
+<text x="160" y="20" text-anchor="middle" class="dh">OPC = wis[1:0]: bit slice</text>
+<text x="480" y="20" text-anchor="middle" class="dh">OPC = wis % 3, slot = wis / 3</text>
+<text x="20" y="40" class="dm">12 warps per issue slice, 3 operand collectors</text>
+<text x="340" y="40" class="dm">12 warps per issue slice, 3 operand collectors</text>
+<text x="20" y="70" class="ds">OPC 0</text><rect x="82" y="54" width="40" height="22" class="db"/><text x="102" y="69" text-anchor="middle" class="ds">w0</text><rect x="128" y="54" width="40" height="22" class="db"/><text x="148" y="69" text-anchor="middle" class="ds">w4</text><rect x="174" y="54" width="40" height="22" class="db"/><text x="194" y="69" text-anchor="middle" class="ds">w8</text>
+<text x="20" y="100" class="ds">OPC 1</text><rect x="82" y="84" width="40" height="22" class="db"/><text x="102" y="99" text-anchor="middle" class="ds">w1</text><rect x="128" y="84" width="40" height="22" class="db"/><text x="148" y="99" text-anchor="middle" class="ds">w5</text><rect x="174" y="84" width="40" height="22" class="db"/><text x="194" y="99" text-anchor="middle" class="ds">w9</text>
+<text x="20" y="130" class="ds">OPC 2</text><rect x="82" y="114" width="40" height="22" class="db"/><text x="102" y="129" text-anchor="middle" class="ds">w2</text><rect x="128" y="114" width="40" height="22" class="db"/><text x="148" y="129" text-anchor="middle" class="ds">w6</text><rect x="174" y="114" width="40" height="22" class="db"/><text x="194" y="129" text-anchor="middle" class="ds">w10</text>
+<text x="20" y="160" class="ds">OPC 3</text><rect x="82" y="144" width="40" height="22" class="dwait"/><text x="102" y="159" text-anchor="middle" class="ds">w3</text><rect x="128" y="144" width="40" height="22" class="dwait"/><text x="148" y="159" text-anchor="middle" class="ds">w7</text><rect x="174" y="144" width="40" height="22" class="dwait"/><text x="194" y="159" text-anchor="middle" class="ds">w11</text>
+<text x="20" y="190" class="dm">OPC 3 does not exist: warps 3, 7, 11</text>
+<text x="20" y="206" class="dm">never leave the scoreboard (deadlock)</text>
+<line x1="320" y1="30" x2="320" y2="235" class="sep"/>
+<text x="340" y="70" class="ds">OPC 0</text><rect x="402" y="54" width="40" height="22" class="dgood"/><text x="422" y="69" text-anchor="middle" class="ds">w0</text><rect x="448" y="54" width="40" height="22" class="dgood"/><text x="468" y="69" text-anchor="middle" class="ds">w3</text><rect x="494" y="54" width="40" height="22" class="dgood"/><text x="514" y="69" text-anchor="middle" class="ds">w6</text><rect x="540" y="54" width="40" height="22" class="dgood"/><text x="560" y="69" text-anchor="middle" class="ds">w9</text>
+<text x="340" y="100" class="ds">OPC 1</text><rect x="402" y="84" width="40" height="22" class="dgood"/><text x="422" y="99" text-anchor="middle" class="ds">w1</text><rect x="448" y="84" width="40" height="22" class="dgood"/><text x="468" y="99" text-anchor="middle" class="ds">w4</text><rect x="494" y="84" width="40" height="22" class="dgood"/><text x="514" y="99" text-anchor="middle" class="ds">w7</text><rect x="540" y="84" width="40" height="22" class="dgood"/><text x="560" y="99" text-anchor="middle" class="ds">w10</text>
+<text x="340" y="130" class="ds">OPC 2</text><rect x="402" y="114" width="40" height="22" class="dgood"/><text x="422" y="129" text-anchor="middle" class="ds">w2</text><rect x="448" y="114" width="40" height="22" class="dgood"/><text x="468" y="129" text-anchor="middle" class="ds">w5</text><rect x="494" y="114" width="40" height="22" class="dgood"/><text x="514" y="129" text-anchor="middle" class="ds">w8</text><rect x="540" y="114" width="40" height="22" class="dgood"/><text x="560" y="129" text-anchor="middle" class="ds">w11</text>
+<text x="340" y="158" class="dm">every warp has a collector and a slot</text>
+<text x="340" y="190" class="dm">same arithmetic for the IPDOM entry</text>
+<text x="340" y="206" class="dm">(ptr × NUM_WARPS + wid), mhartid, and</text>
+<text x="340" y="222" class="dm">core, socket and cluster ids</text>
+<text x="340" y="238" class="dm">power-of-two counts: the same bit selects</text>
+</g>
+</svg>

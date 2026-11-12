@@ -1,8 +1,8 @@
 ROOT_DIR := $(realpath ../../../../..)
 include $(ROOT_DIR)/config.mk
-# Exports VERILATOR/VERILATOR_PATH as absolute paths. gen_sources.sh resolves
-# verilator from the environment, so without this the flow silently depends on
-# verilator being on PATH and fails with "verilator: command not found".
+# Exports CIRCT_VERILOG as an absolute path. gen_sources.sh resolves its
+# preprocessor from the environment, so without this the flow silently depends
+# on circt-verilog being on PATH.
 include $(VORTEX_HOME)/hw/syn/common.mk
 
 DEVICE ?= xcu55c-fsvh2892-2L-e
@@ -60,7 +60,7 @@ all: $(PROJECT).xpr
 gen-sources: project_1/sources.txt
 project_1/sources.txt:
 	mkdir -p project_1
-	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -T$(TOP_LEVEL_ENTITY) -P -Cproject_1/src -Oproject_1/sources.txt $(RTL_PKGS)
+	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -T$(TOP_LEVEL_ENTITY) -P -F -Cproject_1/src -Oproject_1/sources.txt $(RTL_PKGS)
 
 build: $(PROJECT).xpr
 $(PROJECT).xpr: project_1/sources.txt
@@ -83,9 +83,45 @@ power:
 	TOOL_DIR=$(SCRIPT_DIR) SAIF_FILE=$(SAIF_FILE) SAIF_INST=$(SAIF_INST) \
 	  $(VIVADO) -mode batch -source $(SCRIPT_DIR)/xilinx_power_analysis.tcl
 
+# Beacon (foldsim-estimate-timing, foldsim-estimate-area): the logic levels of
+# every register-to-register path of the design, counted as Vivado counts them
+# on DEVICE's family (hw/syn/xilinx/platforms), by RTL unit, and its LUTs,
+# flip-flops, distributed and block RAM and DSPs, in seconds and without
+# Vivado. It elaborates the same sources and defines as gen-sources into a
+# CIRCT netlist of its own, with the Xilinx floating-point cores as black
+# boxes, mapped once for depth and once for area. ci/logic_gate.py gates
+# beacon_summary.csv and beacon_units.json; beacon_paths.txt has every path
+# of at least BEACON_PATH_LEVELS (beacon_summary.py's watch threshold), op by
+# op, by unit, and beacon_area.txt the area by unit and where each memory
+# goes.
+BEACON_PATH_LEVELS ?= 8
+# The Beacon target: the family of the device, as hw/syn/xilinx/platforms names it.
+BEACON_TARGET = $(shell python3 $(SCRIPT_DIR)/gen_platform.py --device=$(DEVICE) --emit=family)
+# Modules whose interfaces must be registered (space separated): their
+# instances keep their ports through mapping, and beacon/ports.csv counts, per
+# output port, the bits a combinational path from outside the instance
+# reaches (`through`). beacon_summary.py records them for logic_gate.
+BEACON_INTERFACES ?=
+beacon_comma := ,
+beacon_empty :=
+beacon_space := $(beacon_empty) $(beacon_empty)
+beacon_keep   = $(subst $(beacon_space),$(beacon_comma),$(strip $(BEACON_INTERFACES)))
+BEACON_MAP    = $(if $(beacon_keep),foldsim-keep-modules{modules=$(beacon_keep)}$(beacon_comma))foldsim-beacon-map{target=$(BEACON_TARGET)}
+BEACON_PORTS  = $(if $(beacon_keep),ports=beacon/ports.csv port-modules=$(beacon_keep))
+beacon:
+	mkdir -p beacon
+	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -T$(TOP_LEVEL_ENTITY) -P -F -Cbeacon/src -Obeacon/sources.f $(RTL_PKGS)
+	$(SCRIPT_DIR)/circt_elaborate.sh -t $(TOP_LEVEL_ENTITY) -l beacon/sources.f \
+		-x $(SCRIPT_DIR)/xilinx_ip_stubs.sv -r beacon/memories.rpt -o beacon/netlist.mlir
+	$(FOLDSIM_OPT) beacon/netlist.mlir --pass-pipeline='builtin.module($(BEACON_MAP))' \
+		--emit-bytecode -o beacon/mapped.mlirbc
+	$(FOLDSIM_OPT) beacon/mapped.mlirbc -o /dev/null --pass-pipeline="builtin.module(foldsim-estimate-timing{top=$(TOP_LEVEL_ENTITY) target=$(BEACON_TARGET) output=beacon/endpoints.csv instances=beacon/instances.csv report=beacon/report.txt paths=beacon/paths.jsonl path-levels=$(BEACON_PATH_LEVELS) $(BEACON_PORTS)})"
+	$(FOLDSIM_OPT) beacon/netlist.mlir -o /dev/null --pass-pipeline="builtin.module(foldsim-beacon-map{target=$(BEACON_TARGET) area},foldsim-estimate-area{top=$(TOP_LEVEL_ENTITY) target=$(BEACON_TARGET) output=beacon/area.csv memories=beacon/area_memories.csv report=beacon/area.txt})"
+	python3 $(SCRIPT_DIR)/beacon_summary.py beacon --top $(TOP_LEVEL_ENTITY)
+
 clean:
 ifndef RESUME
-	rm -rf project_1
+	rm -rf project_1 beacon beacon_summary.csv beacon_units.json beacon_paths.txt beacon_area.txt
 	rm -rf .Xil
 	rm -f *.rpt
 	rm -f *.log
@@ -95,4 +131,4 @@ else
 	@echo "RESUME is defined, skipping clean."
 endif
 
-.PHONY: all gen-sources build clean power
+.PHONY: all gen-sources build beacon clean power

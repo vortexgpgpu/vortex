@@ -433,8 +433,9 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire                     isd_cv = srt_stage[NR_STAGES][ISD_LO];
 
     wire signed [CS_BITS:0] W_cv_sum = $signed(Ws_cv) + $signed(Wc_cv);
-    wire [W_BITS-1:0] W_cv = W_cv_sum[W_BITS-1:0];
-    `UNUSED_VAR (W_cv_sum[CS_BITS:W_BITS])
+    wire [CS_BITS-1:0] W_cv_cs = W_cv_sum[CS_BITS-1:0];
+    wire [W_BITS-1:0] W_cv = W_cv_cs[W_BITS-1:0];
+    `UNUSED_VAR (W_cv_sum[CS_BITS])
 
     // ---- DIV CONV ----
     wire [NR_BITS:0] Q_frac = {qb_cv, 1'b0} - {1'b0, {NR_BITS{1'b1}}};
@@ -463,16 +464,16 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire        sticky_div_s = (|Q_rnd[NR_BITS - 26 : 0]) | sticky_div_r;
 
     // ---- SQRT CONV ----
-    wire              W_neg_sq  = W_cv[W_BITS-1];
+    // The final SQRT remainder spans the full carry-save width: with SCALE_SQRT
+    // equal to SCALE_DIV (F64 super format) it reaches -(2^(W_BITS-1)) - 2.
+    wire              W_neg_sq  = W_cv_cs[CS_BITS-1];
     wire [W_BITS-1:0] ulp_last  = nro_cv ? W_BITS'(1) : W_BITS'(2);
     wire [W_BITS-1:0] S_corr    = W_neg_sq ? (DS_cv - ulp_last) : DS_cv;
 
-    wire [W_BITS:0]   W_cv_sx   = {W_cv[W_BITS-1], W_cv};
-    wire [W_BITS:0]   W_D_sq    = nro_cv ? ({1'b0, DS_cv} - {1'b0, ulp_last})
-                                         : ({DS_cv, 1'b0}  - {1'b0, ulp_last});
-    wire [W_BITS:0]   W_corr_sq31 = W_neg_sq ? (W_cv_sx + W_D_sq) : W_cv_sx;
-    `UNUSED_VAR (W_corr_sq31[W_BITS])
-    wire sticky_sq_w  = (W_corr_sq31[W_BITS-1:0] != '0);
+    wire [CS_BITS-1:0] W_D_sq    = nro_cv ? ({1'b0, DS_cv} - {1'b0, ulp_last})
+                                          : ({DS_cv, 1'b0}  - {1'b0, ulp_last});
+    wire [CS_BITS-1:0] W_corr_sq = W_neg_sq ? (W_cv_cs + W_D_sq) : W_cv_cs;
+    wire sticky_sq_w  = (W_corr_sq != '0);
 
     // S_corr leading bit at SQRT_LEAD; man=[LEAD -: act_sig], guard=[LEAD-act_sig], etc.
     wire [SUPER_SIG-1:0] man_sq_d   = S_corr[SQRT_LEAD -: SUPER_SIG];
@@ -505,13 +506,32 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire                 sticky_cv_out= sq_cv ? sticky_sq : sticky_div;
     wire signed [EXP_W-1:0] exp_res   = sq_cv ? exp_res_sq : exp_res_div;
 
+    // NRM decisions that depend on the exponent alone are made here, so the NRM
+    // stage starts at the shifter. Subnormal: when the biased exponent is <= 0,
+    // the significand is shifted right by 1-exp and rounded once at the
+    // subnormal LSB (dsh=0 is the normal path). Overflow is tested for both
+    // values of the rounding carry, and NRM picks one.
+    localparam SH_W = `CLOG2(SUPER_SIG + 2) + 1;
+    wire cv_special    = exc_cv[4] | exc_cv[3] | exc_cv[2];  // NaN, inf, zero
+    wire result_sub_cv = ($signed(exp_res) <= 0) & ~cv_special;
+    wire signed [EXP_W-1:0] denorm_amt = result_sub_cv ? (EXP_W'(1) - exp_res) : '0;
+    wire huge_denorm_cv = result_sub_cv & ($signed(denorm_amt) >= $signed(EXP_W'(SUPER_SIG + 1)));
+    wire [SH_W-1:0] dsh_cv = huge_denorm_cv ? SH_W'(SUPER_SIG) : SH_W'(denorm_amt);
+    wire signed [EXP_W-1:0] exp_res_p1 = exp_res + EXP_W'(1);
+    wire [EXP_W-1:0] cv_allones = (HAS_D && isd_cv) ? EXP_W'(2047) : EXP_W'(255);
+    wire of_nocarry_cv = ($signed(exp_res)    >= $signed(cv_allones));
+    wire of_carry_cv   = ($signed(exp_res_p1) >= $signed(cv_allones));
+
     // =========================================================================
     // CONV pipeline register
     // =========================================================================
-    localparam CONV_W = SUPER_SIG + 1 + 1 + 1 + EXP_W + 1 + INST_FRM_BITS + 5 + 1;
+    localparam CONV_W = SUPER_SIG + 1 + 1 + 1 + EXP_W + 1 + INST_FRM_BITS + 5 + 1
+                      + SH_W + 1 + 1 + EXP_W + 1 + 1;
 
     wire [CONV_W-1:0] conv_in = {man_cv_out, guard_cv_out, round_cv_out, sticky_cv_out,
-                                  exp_res, sgn_cv, frm_cv, exc_cv, isd_cv};
+                                  exp_res, sgn_cv, frm_cv, exc_cv, isd_cv,
+                                  dsh_cv, result_sub_cv, huge_denorm_cv, exp_res_p1,
+                                  of_nocarry_cv, of_carry_cv};
     wire [CONV_W-1:0] conv_out;
     VX_pipe_register #(.DATAW (CONV_W), .DEPTH (1)) conv_reg (
         .clk (clk), .reset (reset), .enable (enable && valid_conv),
@@ -528,9 +548,13 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire [INST_FRM_BITS-1:0] s_frm;
     wire [4:0]               s_exc;
     wire                     s_isd;
+    wire [SH_W-1:0]          dsh;
+    wire                     result_sub, huge_denorm;
+    wire [EXP_W-1:0]         s_exp_p1;
+    wire                     of_nocarry, of_carry;
 
-    assign {s_man, s_guard, s_round, s_sticky, s_exp_bits, s_sign, s_frm, s_exc, s_isd} = conv_out;
-    wire signed [EXP_W-1:0] s_exp = $signed(s_exp_bits);
+    assign {s_man, s_guard, s_round, s_sticky, s_exp_bits, s_sign, s_frm, s_exc, s_isd,
+            dsh, result_sub, huge_denorm, s_exp_p1, of_nocarry, of_carry} = conv_out;
 
     wire act_d = HAS_D ? s_isd : 1'b0;   // double result
 
@@ -540,15 +564,11 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire dz_flag = s_exc[1];
     wire nv_flag = s_exc[0];
 
-    // Subnormal handling: when the biased result exponent <= 0, denormalize the
-    // significand (right-shift by 1-s_exp) and round ONCE at the subnormal LSB
-    // (full IEEE subnormal output). dsh=0 is the normal path.
-    localparam SH_W = `CLOG2(SUPER_SIG + 2) + 1;
-    wire result_sub = ($signed(s_exp) <= 0) & ~is_nan & ~is_inf & ~is_zero;
-    wire signed [EXP_W-1:0] denorm_amt = result_sub ? (EXP_W'(1) - s_exp) : '0;
-    wire huge_denorm = result_sub & ($signed(denorm_amt) >= $signed(EXP_W'(SUPER_SIG + 1)));
-    wire [SH_W-1:0] dsh = huge_denorm ? SH_W'(SUPER_SIG) : SH_W'(denorm_amt);
-    wire [SUPER_SIG-1:0] below_gmsk = (dsh <= 1) ? '0 : ((SUPER_SIG'(1) << (dsh - 1)) - SUPER_SIG'(1));
+    // Bits below the guard position: [dsh-2:0], none when dsh <= 1.
+    wire [SUPER_SIG-1:0] below_gmsk;
+    for (genvar i = 0; i < SUPER_SIG; ++i) begin : g_below_gmsk
+        assign below_gmsk[i] = (SH_W'(i + 1) < dsh);
+    end
     wire [SUPER_SIG-1:0] sub_man = s_man >> dsh;
     wire sub_guard  = (dsh == 0) ? s_guard : huge_denorm ? 1'b0 : s_man[dsh - 1];
     wire sub_sticky = (dsh == 0) ? (s_round | s_sticky)
@@ -576,14 +596,16 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     end else begin : g_rcarry_s
         assign norm_carry = (abs_rounded == '0) & (sub_man != '0); // 24-bit wrap
     end
-    wire signed [EXP_W-1:0] fin_exp = result_sub ? (sub_carry ? EXP_W'(1) : '0)
-                                                 : (s_exp + (norm_carry ? EXP_W'(1) : '0));
+    wire [EXP_W-1:0] fin_exp = result_sub ? (sub_carry ? EXP_W'(1) : '0)
+                                          : (norm_carry ? s_exp_p1 : s_exp_bits);
+    `UNUSED_VAR (fin_exp)
+    `UNUSED_VAR (act_d)
 
     wire [SUPER_MAN-1:0] fin_man_d = abs_rounded[SUPER_MAN-1:0];
     wire [22:0]          fin_man_s = abs_rounded[22:0];
 
-    wire [EXP_W-1:0] act_allones = act_d ? EXP_W'(2047) : EXP_W'(255);
-    wire of_flag = ($signed(fin_exp) >= $signed(act_allones)) & ~is_nan & ~is_inf;
+    // A subnormal result's exponent is 0 or 1, never an overflow.
+    wire of_flag = ~result_sub & (norm_carry ? of_carry : of_nocarry) & ~is_nan & ~is_inf;
     wire nx_flag = (sub_guard | sub_sticky) & ~is_nan & ~is_inf & ~is_zero;
     wire uf_flag = result_sub & nx_flag;
     // Overflow result: max-normal vs inf per rounding mode/sign (IEEE).

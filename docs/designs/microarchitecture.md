@@ -74,6 +74,25 @@ Vortex has a 6-stage pipeline:
     - Handle warp matrix multiply accumulate operations
 - **Commit**
   - Write result back to the register file and update the Scoreboard.
+  - One writeback beat per issue slice per cycle, granted by fixed priority:
+    FPU, ALU, LSU, SFU, TCU. The FPU goes first because each of its results
+    holds one of its few tags until it commits.
+  - A unit with fewer lanes than a SIMD slice (`NUM_*_LANES` < `SIMD_WIDTH`)
+    runs each slice of an instruction in several passes; its lane gather holds
+    the earlier passes and commits the slice in one writeback beat, with the
+    pass that completes it.
+
+### Core partitioning
+
+The core splits its warps among parallel pipelines by warp id:
+`VX_CFG_FETCH_WIDTH` frontend slices (`wid mod FW`), `VX_CFG_ISSUE_WIDTH` issue
+slices (`wid mod IW`), and B blocks per execution unit (`wid mod B`). The
+widths select the structure: IW compute slices when every width is equal, FW
+frontend slices behind a combinational frontend crossbar otherwise, and a
+stage-sliced issue/execute/commit when some unit has fewer blocks than issue
+slices. CTA launch, barriers, warp retirement, the shared SFU/TCU services and
+the memory system stay core-wide. See
+[core_partitioning.md](core_partitioning.md).
 
 ### Vortex clustering architecture
 - Sockets

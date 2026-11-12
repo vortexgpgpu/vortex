@@ -21,8 +21,18 @@
 
 using namespace vortex;
 
+// Cycles from an SFU barrier op to its effect in the barrier store: the store
+// is read a cycle before an arrival applies, and with several SFU blocks the
+// request is also registered out of its block. A transaction-barrier
+// completion crosses the completion queue and a register before it applies; a
+// global-barrier release applies as it arrives. A release then reaches the
+// warp scheduler registered.
+static constexpr uint32_t kOpApplyLag    = (VX_CFG_NUM_SFU_BLOCKS > 1) ? 2 : 1;
+static constexpr uint32_t kEventApplyLag = 2;
+
 BarrierUnit::BarrierUnit(const SimContext& ctx, const char* name, Core* core, Scheduler* scheduler)
   : SimObject<BarrierUnit>(ctx, name)
+  , unlock_out(this, VX_CFG_NUM_WARPS)
   , gbar_send_next_(0)
   , core_(core)
   , scheduler_(scheduler)
@@ -34,11 +44,15 @@ BarrierUnit::~BarrierUnit() {}
 // One request leaves the queue per cycle, so a completion that lands while the
 // queue is still draining is delivered on the next free cycle rather than
 // immediately. Mirrors the RTL request FIFO's drain rate.
-void BarrierUnit::gbar_send(uint32_t bar_id, uint32_t count) {
+void BarrierUnit::gbar_send(uint32_t bar_id, uint32_t count, uint32_t lag) {
   uint64_t now = SimPlatform::instance().cycles();
-  uint64_t due = std::max(now + 1, gbar_send_next_);
+  uint64_t due = std::max(now + lag + 1, gbar_send_next_);
   gbar_send_next_ = due + 1;
   core_->gbar_arrive_out.send({bar_id, count, core_->id()}, due - now);
+}
+
+void BarrierUnit::release(uint32_t wid, uint32_t lag) {
+  unlock_out.send(wid, lag + 1);
 }
 
 void BarrierUnit::on_reset() {
@@ -74,7 +88,7 @@ void BarrierUnit::arrive(uint32_t bar_id, uint32_t count, uint32_t wid, bool is_
     if (barrier.arrival_mask.count() == active_warps.count() && barrier.events == 0) {
       // wait_mask is preserved across the async hop (holds warps resumed by
       // global_resume) and cleared there. arrival_mask is local-only and reset here.
-      this->gbar_send(bar_id, count);
+      this->gbar_send(bar_id, count, kOpApplyLag);
       barrier.arrival_mask.reset();
       barrier.count  = 0;
       barrier.events = 0;
@@ -90,7 +104,7 @@ void BarrierUnit::arrive(uint32_t bar_id, uint32_t count, uint32_t wid, bool is_
       for (uint32_t i = 0; i < VX_CFG_NUM_WARPS; ++i) {
         if (barrier.wait_mask.test(i)) {
           DP(3, "*** Resume core #" << core_->id() << ", warp #" << i << " at barrier #" << bar_id);
-          scheduler_->resume(i);
+          this->release(i, kOpApplyLag);
         }
       }
       // reset barrier and advance phase
@@ -106,7 +120,7 @@ void BarrierUnit::arrive(uint32_t bar_id, uint32_t count, uint32_t wid, bool is_
   }
 }
 
-bool BarrierUnit::wait(uint32_t bar_id, uint32_t phase, uint32_t wid) {
+void BarrierUnit::wait(uint32_t bar_id, uint32_t phase, uint32_t wid) {
   auto bar_index = bar_id & 0x7fffffff;
 
   auto& barrier = barriers_.at(bar_index);
@@ -118,9 +132,9 @@ bool BarrierUnit::wait(uint32_t bar_id, uint32_t phase, uint32_t wid) {
     // add warp to wait list
     barrier.wait_mask.set(wid);
     DP(3, "*** Suspend core #" << core_->id() << ", warp #" << wid << " at barrier #" << bar_id);
+  } else {
+    this->release(wid, kOpApplyLag);
   }
-
-  return wait;
 }
 
 void BarrierUnit::global_resume(uint32_t bar_id) {
@@ -132,7 +146,7 @@ void BarrierUnit::global_resume(uint32_t bar_id) {
   for (uint32_t i = 0; i < VX_CFG_NUM_WARPS; ++i) {
     if (barrier.wait_mask.test(i)) {
       DP(3, "*** Resume core #" << core_->id() << ", warp #" << i << " at barrier #" << bar_id);
-      scheduler_->resume(i);
+      this->release(i, 0);
     }
   }
   barrier.wait_mask.reset();
@@ -156,7 +170,7 @@ void BarrierUnit::event_release(uint32_t bar_id) {
     if (is_global) {
       if (barrier.arrival_mask.count() == active_warps.count()) {
         uint32_t num_cores = barrier.count;
-        this->gbar_send(bar_id, num_cores);
+        this->gbar_send(bar_id, num_cores, kEventApplyLag);
         barrier.arrival_mask.reset();
         barrier.count  = 0;
         barrier.events = 0;
@@ -167,7 +181,7 @@ void BarrierUnit::event_release(uint32_t bar_id) {
         for (uint32_t i = 0; i < VX_CFG_NUM_WARPS; ++i) {
           if (barrier.wait_mask.test(i)) {
             DP(3, "*** Resume core #" << core_->id() << ", warp #" << i << " at barrier #" << bar_id);
-            scheduler_->resume(i);
+            this->release(i, kEventApplyLag);
           }
         }
         // reset barrier and advance phase

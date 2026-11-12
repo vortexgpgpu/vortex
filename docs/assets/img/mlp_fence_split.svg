@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 230" role="img" aria-label="An acquire only invalidates afterward, a release only drains beforehand, and only a full fence does both.">
+  <title>An acquire only invalidates afterward, a release only drains beforehand, and only a full fence does both.</title>
+  <defs><marker id="fences_a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1b2733"/></marker><marker id="fences_g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1f7a4d"/></marker><marker id="fences_b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#b3261e"/></marker></defs>
+  <style>
+    text { font-family: Helvetica, Arial, sans-serif; fill: #1b2733; font-size: 11.5px; }
+    .dh { font-size: 13px; font-weight: bold; }
+    .dm { fill: #5a6772; font-size: 11px; }
+    .ds { font-size: 10.5px; }
+    .db { fill: #fbfcfd; stroke: #5a7184; stroke-width: 1.2; }
+    .dbad { fill: #fbe5e3; stroke: #b3261e; stroke-width: 1.2; }
+    .dgood { fill: #e3f3ea; stroke: #1f7a4d; stroke-width: 1.2; }
+    .didle { fill: #f3f5f8; stroke: #c9d1d9; stroke-width: 1.2; }
+    .dwait { fill: #fbe5e3; stroke: #b3261e; stroke-width: 1.2; stroke-dasharray: 4 3; }
+    .ln { stroke: #1b2733; stroke-width: 1.3; fill: none; }
+    .lb { stroke: #b3261e; stroke-width: 1.5; fill: none; }
+    .lg { stroke: #1f7a4d; stroke-width: 1.5; }
+    .dash { stroke-dasharray: 4 3; }
+    .sep { stroke: #c9d1d9; stroke-width: 1; stroke-dasharray: 2 4; }
+    text.db-t { fill: #b3261e; } text.g-t { fill: #1f7a4d; }
+  </style>
+  <rect width="640" height="230" fill="#ffffff"/>
+<g class="dl">
+<text x="110" y="22" class="dh" text-anchor="middle">Acquire</text>
+<text x="320" y="22" class="dh" text-anchor="middle">Release</text>
+<text x="530" y="22" class="dh" text-anchor="middle">Full</text>
+<rect x="20" y="34" width="180" height="26" class="db"/><text x="110" y="51" text-anchor="middle" class="ds">fence r,rw · amo.aq</text>
+<rect x="230" y="34" width="180" height="26" class="db"/><text x="320" y="51" text-anchor="middle" class="ds">fence rw,w · amo.rl</text>
+<rect x="440" y="34" width="180" height="26" class="db"/><text x="530" y="51" text-anchor="middle" class="ds">fence rw,rw · amo.aqrl</text>
+<text x="10" y="92" class="dm">before</text>
+<rect x="60" y="78" width="140" height="26" class="didle"/><text x="130" y="95" text-anchor="middle" class="ds">nothing</text>
+<rect x="250" y="78" width="160" height="26" class="dgood"/><text x="330" y="95" text-anchor="middle" class="ds">drain writes, no walk</text>
+<rect x="460" y="78" width="160" height="26" class="dgood"/><text x="540" y="95" text-anchor="middle" class="ds">drain writes, no walk</text>
+<text x="10" y="138" class="dm">after</text>
+<rect x="60" y="124" width="140" height="26" class="dgood"/><text x="130" y="141" text-anchor="middle" class="ds">invalidate L1</text>
+<rect x="250" y="124" width="160" height="26" class="didle"/><text x="330" y="141" text-anchor="middle" class="ds">nothing</text>
+<rect x="460" y="124" width="160" height="26" class="dgood"/><text x="540" y="141" text-anchor="middle" class="ds">invalidate L1</text>
+<text x="320" y="188" class="dm" text-anchor="middle">No L1 action at all where the dcache is itself the coherence point</text>
+<text x="320" y="206" class="dm" text-anchor="middle">(one socket, one dcache, no other memory client)</text>
+</g>
+</svg>

@@ -21,6 +21,12 @@ ifneq ($(findstring -DVX_CFG_TCU_WGMMA_ENABLE,$(CONFIGS)),)
 CONFIGS := $(if $(findstring -DWGMMA_RS,$(CONFIGS))$(findstring -DWGMMA_SS,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DWGMMA_RS)
 endif
 
+# config.mk folded the profile in before this app appended its own flags; fold
+# again so an app flag replaces the profile's setting of the same knob.
+ifneq ($(strip $(PROFILE)),)
+CONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --profile=$(PROFILE) --xlen=$(XLEN) --merge-configs --cflags='$(CONFIGS)')
+endif
+
 XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
 
 ifneq (,$(filter -DVX_CFG_EXT_C_ENABLE, $(XCONFIGS)))
@@ -242,12 +248,42 @@ run-rtlsim: $(PROJECT) kernel.vxbin
 	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/rtlsim DESTDIR=$(VORTEX_RT_LIB)
 	LD_LIBRARY_PATH=$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=rtlsim ./$(PROJECT) $(OPTS)
 
+# FireSim takes the same targets as the card's native driver: xrtsim, hw_emu
+# and hw on an XRT card; avedsim, sim and hw on an aved card. An image target
+# runs FPGA_BIN_DIR's firesim.xclbin or firesim.vbin; the card is decided in
+# sw/runtime/firesim/card.mk, and named to the run with its native driver's
+# variables. With no TARGET given it runs the in-process metasimulator.
+ifneq ($(filter run-firesim,$(MAKECMDGOALS)),)
+ifeq ($(origin TARGET),file)
+override TARGET :=
+endif
+include $(VORTEX_HOME)/sw/runtime/firesim/card.mk
+endif
+
 run-firesim: $(PROJECT) kernel.vxbin
-	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/firesim DESTDIR=$(VORTEX_RT_LIB)
+	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/firesim DESTDIR=$(VORTEX_RT_LIB) FIRESIM_CARD=$(FIRESIM_CARD) TARGET=$(TARGET)
+ifneq ($(filter $(TARGET),xrtsim avedsim),)
+	LD_LIBRARY_PATH=$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=firesim ./$(PROJECT) $(OPTS)
+else ifeq ($(FIRESIM_PLATFORM), aved)
 ifeq ($(TARGET), hw)
+	$(VORTEX_HOME)/ci/v80_preflight.sh
+endif
+	VRT_DEVICE_BDF=$(VRT_DEVICE_BDF) VRT_VBIN_PATH=$(FPGA_BIN_DIR)/firesim.vbin LD_LIBRARY_PATH=$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=firesim ./$(PROJECT) $(OPTS)
+else ifeq ($(TARGET), hw)
 	XCLBIN_PATH=$(FPGA_BIN_DIR)/firesim.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=firesim ./$(PROJECT) $(OPTS)
 else
-	XCL_EMULATION_MODE=$(TARGET) EMCONFIG_PATH=$(FPGA_BIN_DIR) XCLBIN_PATH=$(FPGA_BIN_DIR)/firesim.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=firesim ./$(PROJECT) $(OPTS)
+	XCL_EMULATION_MODE=$(TARGET) XRT_INI_PATH=$(VORTEX_RT_SRC)/firesim/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XCLBIN_PATH=$(FPGA_BIN_DIR)/firesim.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=firesim ./$(PROJECT) $(OPTS)
+endif
+
+# foldsim: TARGET=hw runs FPGA_BIN_DIR's foldsim.vbin (hw/syn/foldsim) on the V80;
+# TARGET=avedsim, the default, simulates the same kernel in-process.
+run-foldsim: $(PROJECT) kernel.vxbin
+	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/foldsim DESTDIR=$(VORTEX_RT_LIB) TARGET=$(if $(filter hw,$(TARGET)),hw,avedsim)
+ifeq ($(TARGET), hw)
+	$(VORTEX_HOME)/ci/v80_preflight.sh
+	VRT_DEVICE_BDF=$(VRT_DEVICE_BDF) VRT_VBIN_PATH=$(FPGA_BIN_DIR)/foldsim.vbin LD_LIBRARY_PATH=$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=foldsim ./$(PROJECT) $(OPTS)
+else
+	LD_LIBRARY_PATH=$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=foldsim ./$(PROJECT) $(OPTS)
 endif
 
 run-opae: $(PROJECT) kernel.vxbin

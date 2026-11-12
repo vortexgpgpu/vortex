@@ -7,15 +7,17 @@ assertion differs: instead of rtlsim cycles it compares THIS commit's
 post-synthesis timing and area against the recorded numbers, so an RTL change
 that quietly costs timing closure or area cannot land green.
 
-Two backends, one gate. Everything that is not "how do I drive the tool and what
-does it call its numbers" is shared:
+Three backends, one gate. Everything that is not "how do I drive the tool and
+what does it call its numbers" is shared:
 
   --tool=xilinx  Vivado synthesis + place-and-route      -> ci/fpga_gate.py
   --tool=yosys   Yosys + OpenSTA on an ASIC PDK          -> ci/asic_gate.py
+  --tool=beacon  logic levels per RTL unit, no synthesis -> ci/logic_gate.py
 
   Spec      : ci/testcases/<gate>.yaml                  (what to build)
   Baselines : ci/baselines/synthesis/<tool>/<group>.json (last accepted metrics)
-  Metrics   : <build>/synth_summary.csv, written by the flow itself
+  Metrics   : <build>/synth_summary.csv (beacon_summary.csv for Beacon),
+              written by the flow itself
 
 Same division as every other check in the catalog: the yaml is hand-authored,
 commented and reviewed; the baseline is machine-written and never hand-edited.
@@ -40,16 +42,20 @@ import time
 
 import yaml
 
-# Gated metrics must stay within +/-5% of baseline. The regression side is the
-# gate; the improvement side is the ratchet -- a win beyond it must be recorded
-# so the gain is locked in and a later silent slide back to the old number still
-# fails.
+# Fmax is held to the build's target clock and area to its fixed budget, both
+# from the catalog and both one-sided: Fmax may not fall more than 2% below the
+# target, area may not grow more than 5% over the budget, and doing better never
+# fails. Neither is measured against the last recorded baseline, so re-recording
+# cannot ratchet the limit; raising a budget is a reviewed catalog edit. Any
+# other metric gated with --gate is compared with its baseline both ways: the
+# improvement side is the ratchet, so a win must be recorded to lock it in.
 #
-# This is the GLOBAL default. It is overridden per-metric on the command line
-# (--metric-threshold lut=0.10) and per-build in the catalog ("thresholds":
+# These are the GLOBAL defaults. They are overridden per-metric on the command
+# line (--metric-threshold lut=0.10) and per-build in the catalog ("thresholds":
 # {"fmax_mhz": 0.03}) -- most specific wins. Same shape as model_parity's
 # `tolerance` (per-case entry > category defaults > DEFAULT_PARITY_TOLERANCE).
 TOLERANCE = 0.05
+METRIC_TOLERANCE = {"fmax_mhz": 0.02}
 
 # Higher-is-better metrics. Everything else is lower-is-better.
 HIGHER_IS_BETTER = ("fmax_mhz",)
@@ -88,6 +94,17 @@ class Tool:
 
     metrics = ()       # recorded, in report order; build_time_s is bookkeeping
     gated = ()         # asserted by default (--gate overrides)
+    area = ""          # the gated area metric, held to the catalog's budget
+    budget_key = ""    # the catalog field holding that budget
+    # The metric whose presence in a baseline entry means "recorded".
+    key_metric = "fmax_mhz"
+    # The flow's one-row metric file, in the build's work directory.
+    summary = "synth_summary.csv"
+    # Default gate tolerance, overridden by --threshold and the catalog.
+    tolerance = TOLERANCE
+    # Per-metric defaults over `tolerance`, overridden by --metric-threshold
+    # and the catalog.
+    metric_tolerance = {}
     integral = ()      # recorded as ints; every other metric is a rounded float
     columns = ()       # (header, metric, format, width) for the report table
 
@@ -142,6 +159,16 @@ class Tool:
         """Diagnostics recorded next to the metrics, never gated."""
         return {}
 
+    def compare(self, metrics, base):
+        """Reasons beyond the per-metric tolerance check, as gate() words them:
+        a reason containing "improvement" asks for a re-record, any other
+        fails."""
+        return []
+
+    def evidence(self, work):
+        """Files of a finished build that explain its reasons."""
+        return []
+
     def incomplete(self, metrics):
         """Whether a cached result predates something this tool now records.
 
@@ -190,7 +217,10 @@ class Xilinx(Tool):
 
     metrics = ("fmax_mhz", "wns_ns", "lut", "lutram", "ff", "bram", "uram",
                "dsp", "build_time_s")
-    gated = ("fmax_mhz", "lut")
+    # Fmax is held to the build's clock target (gate()'s BELOW TARGET check).
+    gated = ("lut",)
+    area = "lut"
+    budget_key = "lut_budget"
     integral = ("lut", "lutram", "ff", "bram", "uram", "dsp", "build_time_s")
     columns = (("fmax", "fmax_mhz", "%.0f", 9), ("lut", "lut", "%d", 9),
                ("ff", "ff", "%d", 9), ("lutram", "lutram", "%d", 9),
@@ -309,6 +339,8 @@ class Yosys(Tool):
     # whatever else the design contains: #424 left the RTU's worst path in an
     # unchanged FMA stage yet moved it 957 -> 903 MHz.
     gated = ("cell_area_um2",)
+    area = "cell_area_um2"
+    budget_key = "area_budget_um2"
     integral = ("cell_count", "build_time_s")
     columns = (("fmax", "fmax_mhz", "%.0f", 9),
                ("area_um2", "cell_area_um2", "%.0f", 11),
@@ -322,15 +354,14 @@ class Yosys(Tool):
     fallback_weight = 900
     job_label = "make"
 
-    # sv2v is the parser: a bad define, a missing include or a hierarchy error
-    # dies there, before Yosys ever reads a line. run_synth.sh stamps `gen-ys`
-    # immediately after source generation and conversion have both succeeded, so
-    # that stamp is this flow's "past the typo risk" marker.
+    # gen_sources.sh fails on a bad define or a missing include while it writes
+    # the sources; run_synth.sh stamps `gen-ys` once they are written. The design
+    # is elaborated later, by read_slang inside Yosys, so a hierarchy error still
+    # surfaces during the synthesis phase.
     elab_done = "TIME gen-ys"
-    elab_label = "source conversion"
+    elab_label = "source generation"
     phases = (
         ("gen_sources.sh", "sources"),
-        ("sv2v.sh", "sv2v"),
         (elab_done, "synthesis"),
         ("TIME yosys", "sram"),
         ("run_sta.tcl", "timing"),
@@ -344,7 +375,6 @@ class Yosys(Tool):
                 "corner": os.environ.get("CORNER", "tt"),
                 "yosys": tool_version("yosys", "-V"),
                 "sta": tool_version("sta", "-version"),
-                "sv2v": tool_version("sv2v", "--version"),
                 "xlen": args.xlen}
 
     def hash_key(self, env):
@@ -356,16 +386,15 @@ class Yosys(Tool):
         # than Vivado's do, and often by more than the 5% gate tolerance. A
         # toolchain bump must therefore read as STALE ("re-record"), not as a
         # regression -- the alternative is a red gate that blames the RTL for a
-        # tool change. All three ship in one tarball pinned by TOOLCHAIN_REV, so
+        # tool change. Both ship in one tarball pinned by TOOLCHAIN_REV, so
         # this makes that pin part of the baseline contract.
         return [env["pdk"], env["vt"], env["corner"], str(env["xlen"]),
-                env["yosys"], env["sta"], env["sv2v"]]
+                env["yosys"], env["sta"]]
 
     def env_warning(self, build, env):
         # Area and Fmax move with the Yosys/ABC version far more than Vivado's
         # do, so a version change is worth saying out loud on every build.
-        for key, label in (("yosys", "Yosys"), ("sta", "OpenSTA"),
-                           ("sv2v", "sv2v")):
+        for key, label in (("yosys", "Yosys"), ("sta", "OpenSTA")):
             ref = build.get("baseline_env", {}).get(key)
             if ref and env.get(key) and ref != env[key]:
                 # The version is in config_hash, so this build is already going
@@ -427,10 +456,238 @@ class Yosys(Tool):
                                                  base.get("cell_area_um2") or 0)
 
 
-TOOLS = {t.name: t for t in (Xilinx(), Yosys())}
+class Beacon(Tool):
+    """Beacon: logic levels per RTL unit and the design's area
+    (hw/syn/xilinx/dut, target `beacon`).
+
+    foldsim-estimate-timing ranks every register-to-register path of the CIRCT
+    netlist the Xilinx flow elaborates by its logic levels, counted as Vivado
+    counts them on DEVICE's family; foldsim-estimate-area counts its LUTs,
+    flip-flops, distributed and block RAM, UltraRAM and DSPs, placing each
+    memory as Vivado infers it. It needs no Vivado and no licence and takes
+    seconds per DUT, so it can run on every change where the Fmax gate runs
+    nightly.
+
+    Depth is deterministic -- the same RTL and tools give the same levels -- so
+    the gate has no tolerance: a unit that gets deeper fails, by name, until it
+    is fixed or a human re-records it. Area is as deterministic, but a feature
+    adds some by design, so a resource of the design fails past its baseline
+    by more than fpga_gate's LUT tolerance (metric_tolerance), and a memory
+    that moves between distributed and block RAM shows as both columns
+    moving. What it gates is depth and cells, not Fmax or placement: Beacon
+    does not see wires (docs/designs/continuous_integration.md 3.5).
+    """
+
+    name = "beacon"
+    gate = "logic_gate"
+    flow = "hw/syn/xilinx/dut"
+
+    area_metrics = ("lut", "ff", "lutram", "bram", "uram", "dsp")
+    metrics = ("max_levels", "deep_endpoints", "watch_endpoints",
+               "endpoints") + area_metrics + ("pred_fmax_mhz", "risk_endpoints",
+                                              "build_time_s")
+    gated = ("max_levels",) + area_metrics
+    integral = ("max_levels", "deep_endpoints", "watch_endpoints",
+                "endpoints", "lut", "ff", "lutram", "uram", "dsp",
+                "risk_endpoints", "build_time_s")
+    key_metric = "max_levels"
+    summary = "beacon_summary.csv"
+    tolerance = 0.0
+    metric_tolerance = dict.fromkeys(area_metrics, 0.05)
+    columns = (("max_lv", "max_levels", "%d", 7),
+               ("deep", "deep_endpoints", "%d", 9),
+               ("watch", "watch_endpoints", "%d", 9),
+               ("ends", "endpoints", "%d", 9),
+               ("lut", "lut", "%d", 9), ("ff", "ff", "%d", 9),
+               ("lutram", "lutram", "%d", 9), ("bram", "bram", "%g", 8),
+               ("uram", "uram", "%d", 6), ("dsp", "dsp", "%d", 6),
+               ("p_fmax", "pred_fmax_mhz", "%.1f", 8),
+               ("risk", "risk_endpoints", "%d", 6))
+
+    # Elaboration and mapping of the widest DUTs; the level count itself is
+    # seconds.
+    weights = {"top": 600, "vortex": 600, "gfx": 600, "core": 300,
+               "tensor": 300, "tcu": 300}
+    fallback_weight = 120
+    job_label = "make"
+
+    # The netlist exists once foldsim-opt starts mapping it; a typo in a define
+    # or an include dies in gen_sources.sh or circt_elaborate.sh before that.
+    elab_done = "foldsim-beacon-map"
+    elab_label = "elaboration"
+    phases = (
+        ("gen_sources.sh", "sources"),
+        ("circt_elaborate.sh", "elaboration"),
+        (elab_done, "mapping"),
+        ("foldsim-estimate-timing", "levels"),
+        ("foldsim-estimate-area", "area"),
+        ("beacon_summary.py", "reporting"),
+    )
+    error_re = re.compile(r"^(?:ERROR|FATAL|Error)\b|: error:|^\S+: \*\*\* ")
+
+    UNITS = "beacon_units.json"
+    PATHS = "beacon_paths.txt"
+    AREA = "beacon_area.txt"
+    RISK = "beacon_risk.txt"
+    # The learned calibration per device family (docs/designs/beacon.md 7.1).
+    CALIBRATIONS = {"xcu55c": "beacon_calibration_u55c.json"}
+    RISK_ROWS = 40
+
+    def env(self, args):
+        return {"circt": tool_version("circt-verilog", "--version",
+                                      package="circt", line_prefix="CIRCT"),
+                "foldsim": tool_version("foldsim-opt", "--version",
+                                        package="foldsim",
+                                        line_prefix="foldsim"),
+                "device": os.environ.get("DEVICE", "xcu55c-fsvh2892-2L-e"),
+                "xlen": args.xlen}
+
+    def hash_key(self, env):
+        # The levels are the model's: a new foldsim or CIRCT can map the same
+        # RTL to other levels, and another device's family counts them
+        # differently; either must read as STALE, not as a regression.
+        return [env["circt"], env["foldsim"], env["device"], str(env["xlen"])]
+
+    def env_warning(self, build, env):
+        for key, label in (("foldsim", "foldsim"), ("circt", "CIRCT")):
+            ref = build.get("baseline_env", {}).get(key)
+            if ref and env.get(key) and ref != env[key]:
+                return ("baseline was recorded on %s %s, running %s -- this "
+                        "reads as STALE until re-recorded" % (label, ref, env[key]))
+        return None
+
+    def work_dir(self, dut_root, prefix, build):
+        return os.path.join(dut_root, "%s_%s" % (prefix, build["dut"]))
+
+    def clean(self, dut_root, work, build, benv):
+        subprocess.run(["make", "-C", work, "clean"], env=benv,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT,
+                       check=True)
+
+    def build_command(self, dut_root, work, build, env, args):
+        os.makedirs(work, exist_ok=True)
+        shutil.copy2(os.path.join(dut_root, "build.mk"),
+                     os.path.join(work, "Makefile"))
+        return ["make", "-C", work, "beacon"], dict(
+            DUT=build["dut"], CONFIGS=build["configs"],
+            BEACON_INTERFACES=build.get("interfaces", ""))
+
+    def extras(self, work):
+        try:
+            with open(os.path.join(work, self.UNITS)) as fh:
+                doc = json.load(fh)
+        except (OSError, ValueError):
+            return {}
+        out = {"units": doc.get("units", {}),
+               "interfaces": doc.get("interfaces", {}),
+               "deepest_paths": doc.get("deepest_paths", []),
+               "fix_levels": doc.get("fix_levels"),
+               "watch_levels": doc.get("watch_levels")}
+        out.update(self.risk(work))
+        return out
+
+    def risk(self, work):
+        """The learned calibration's Fmax for the design, the slowest register's,
+        and its registers likely to fail, written to beacon_risk.txt. Levels
+        miss what wires decide (a wide enable driven across instances); the
+        calibration reads width, fan-out and span as well, and ranks a design's
+        registers far better than levels do. Advisory: its Fmax is not gated."""
+        device = os.environ.get("DEVICE", "xcu55c-fsvh2892-2L-e")
+        cal = next((f for d, f in self.CALIBRATIONS.items()
+                    if device.startswith(d)), None)
+        run = os.path.join(work, "beacon")
+        if cal is None or not os.path.isdir(run):
+            return {}
+        import beacon
+        with open(os.path.join(source_root(), "hw", "scripts", cal)) as fh:
+            model = json.load(fh)
+        rows, pathless = beacon.score_run(run, model)
+        if not rows:
+            return {}
+        period = model.get("period_ns", beacon.CAL_PERIOD)
+        rows.sort(key=lambda r: r[1])
+        fmax = 1000.0 / (period - rows[0][1])
+        risky = sum(1 for r in rows if r[2] >= 0.5)
+        with open(os.path.join(work, self.RISK), "w") as fh:
+            fh.write("predicted Fmax %.1f MHz (slowest register, advisory); %d of %d "
+                     "registers P(fail) >= 0.5 at %.3f ns; model %s\n"
+                     % (fmax, risky, len(rows), period, cal))
+            if pathless:
+                fh.write("warning: registers at %d levels or more lack a path; "
+                         "the scores of those are partial\n"
+                         % model["path_levels"])
+            fh.write("\n%8s %7s %7s %4s  register\n"
+                     % ("fmax", "slack", "P(fail)", "lv"))
+            for p_near, slack, p_fail, lv, reg in rows[:self.RISK_ROWS]:
+                fh.write("%8.1f %+7.3f %7.2f %4d  %s\n"
+                         % (1000.0 / (period - slack), slack, p_fail, lv, reg))
+        return {"pred_fmax_mhz": round(fmax, 1), "risk_endpoints": risky}
+
+    def incomplete(self, metrics):
+        return metrics.get("units") is None
+
+    def compare(self, metrics, base):
+        """Per unit: deeper than its baseline fails; a new unit at the fix
+        threshold fails; shallower, or gone from the watch list, is an
+        improvement to lock in. Per interface output: more bits reached
+        combinationally from outside its instance fails, fewer is an
+        improvement."""
+        cur, ref = metrics.get("units"), base.get("units")
+        if cur is None or ref is None:
+            return []
+        fix = metrics.get("fix_levels") or 0
+        reasons = []
+        for unit in sorted(set(cur) | set(ref)):
+            now, was = cur.get(unit), ref.get(unit)
+            if was is None:
+                if now >= fix:
+                    reasons.append("unit %s: new at %d levels (fix threshold "
+                                   "%d) -- REGRESSION" % (unit, now, fix))
+            elif now is None:
+                reasons.append("unit %s: %d levels -> below the watch threshold "
+                               "-- improvement, update the baseline to lock it "
+                               "in" % (unit, was))
+            elif now != was:
+                reasons.append("unit %s: %d -> %d levels -- %s"
+                               % (unit, was, now,
+                                  "REGRESSION" if now > was else
+                                  "improvement, update the baseline to lock "
+                                  "it in"))
+        cur, ref = metrics.get("interfaces") or {}, base.get("interfaces") or {}
+        for port in sorted(set(cur) | set(ref)):
+            now, was = cur.get(port, 0), ref.get(port, 0)
+            if now != was:
+                reasons.append("interface %s: %d -> %d bits reached "
+                               "combinationally from outside -- %s"
+                               % (port, was, now,
+                                  "REGRESSION, register it" if now > was else
+                                  "improvement, update the baseline to lock "
+                                  "it in"))
+        return reasons
+
+    def evidence(self, work):
+        # Every unit at or above the watch threshold, its paths op by op: a
+        # failing unit is a heading there; the area by unit and each memory's
+        # placement.
+        return [p for p in (os.path.join(work, self.PATHS),
+                            os.path.join(work, self.AREA),
+                            os.path.join(work, self.RISK))
+                if os.path.exists(p)]
+
+    def describe(self, m):
+        area = (", %d LUTs, %g BRAM, %d DSP" % (m["lut"], m["bram"], m["dsp"])
+                if m.get("lut") is not None else "")
+        return "max %d levels, %d end points >= %s%s" % (
+            m["max_levels"], m["deep_endpoints"], m.get("fix_levels"), area)
+
+    def describe_baseline(self, base):
+        return "max %d levels" % base["max_levels"]
 
 
-def tool_version(name, flag):
+TOOLS = {t.name: t for t in (Xilinx(), Yosys(), Beacon())}
+
+
+def tool_version(name, flag, package=None, line_prefix=None):
     """First line of `<tool> <flag>`, or "" if it cannot be asked.
 
     Resolved out of $TOOLDIR the way hw/syn/common.mk does, with a PATH fallback:
@@ -438,7 +695,11 @@ def tool_version(name, flag):
     copy of yosys would make the baseline's tool env a lie.
     """
     tooldir = os.environ.get("TOOLDIR") or os.path.expanduser("~/tools")
-    binary = os.path.join(tooldir, name, "bin", name)
+    package = package or name
+    # <PACKAGE>_PATH overrides the toolchain copy, as in hw/syn/common.mk.
+    root = os.environ.get(package.upper() + "_PATH") or \
+        os.path.join(tooldir, package)
+    binary = os.path.join(root, "bin", name)
     if not os.path.exists(binary):
         binary = name
     try:
@@ -449,6 +710,12 @@ def tool_version(name, flag):
     text = out.stdout.decode(errors="replace").strip()
     if not text:
         return ""
+    # A tool that prints several components' versions names the one that
+    # matters on a line of its own (circt-verilog: "CIRCT <sha>").
+    if line_prefix:
+        lines = [l.strip() for l in text.splitlines()
+                 if l.strip().startswith(line_prefix)]
+        return lines[0] if lines else ""
     # Up to the build details: yosys reports its git sha AND the g++ that built
     # it ("Yosys 0.57+157 (git sha1 ..., g++ 11.4 ...)"). Those identify the
     # binary, not the tool, and this string is part of the baseline fingerprint
@@ -483,7 +750,7 @@ def baseline_path(root, tool, group):
     return os.path.join(baseline_dir(root, tool), group + ".json")
 
 
-def load_catalog(root, tool):
+def load_catalog(root, tool, xlen=32):
     """Builds keyed by id: the SPEC from ci/testcases/<gate>.yaml, joined to its
     recorded metrics from ci/baselines/synthesis/<tool>/<group>.json.
 
@@ -516,13 +783,20 @@ def load_catalog(root, tool):
         if bid in builds:
             sys.exit("ERROR: duplicate build id '%s' in %s"
                      % (bid, spec_path(root, tool.gate)))
-        missing = {"dut", "clock_mhz", "configs"} - set(entry)
+        required = {"dut", "clock_mhz", "configs"} | ({tool.budget_key} if tool.budget_key else set())
+        missing = required - set(entry)
         if missing:
             sys.exit("ERROR: %s: missing %s" % (bid, ", ".join(sorted(missing))))
         group = entry.get("group", "default")
         build = dict(entry)
         build["group"] = group
         build["configs"] = entry["configs"] or ""
+        # A build may pin its own ISA width and hardware profile
+        # (profiles/<name>.json, folded under its configs by config.mk); a
+        # profile that models a 64-bit machine needs xlen: 64.
+        build["xlen"] = entry.get("xlen", xlen)
+        build["profile"] = entry.get("profile", "")
+        build["opt_in"] = bool(entry.get("opt_in", False))
         build["known_issue"] = entry.get("known_issue",
                                          defaults.get("known_issue", ""))
         build["thresholds"] = entry.get("thresholds",
@@ -531,7 +805,8 @@ def load_catalog(root, tool):
         result = recorded.get("result") or {}
         # An all-null skeleton means "never recorded" -- the file ships with the
         # shape visible, not with numbers.
-        build["baseline"] = result if result.get("fmax_mhz") is not None else None
+        build["baseline"] = result if result.get(tool.key_metric) is not None \
+            else None
         build["baseline_env"] = result.get("env") or {}
         build["config_hash"] = recorded.get("config_hash")
         builds[bid] = build
@@ -540,9 +815,10 @@ def load_catalog(root, tool):
 
 def select(builds, selectors):
     """Resolve --build selectors: an exact build id wins over a group of the
-    same name; otherwise a group selects all its builds."""
+    same name; otherwise a group selects all its builds. With no selector, every
+    build but the opt-in ones, which run only when named."""
     if not selectors:
-        return [builds[b] for b in sorted(builds)]
+        return [builds[b] for b in sorted(builds) if not builds[b]["opt_in"]]
     picked = {}
     for sel in selectors:
         hits = [b for b in builds.values() if b["id"] == sel]
@@ -558,11 +834,15 @@ def select(builds, selectors):
 def config_hash(build, env, tool):
     """Fingerprint the synthesis inputs; a change invalidates the stored metrics."""
     key = "|".join([build["dut"], str(build["clock_mhz"]), build["configs"]]
-                   + tool.hash_key(env))
-    # Appended only when set, so builds without a strategy override keep the
-    # hash their baselines were recorded under.
+                   + tool.hash_key(dict(env, xlen=build["xlen"])))
+    # Appended only when set, so builds without a strategy override or a
+    # profile keep the hash their baselines were recorded under.
     if build.get("impl_strategy"):
         key += "|" + build["impl_strategy"]
+    if build.get("profile"):
+        key += "|profile=" + build["profile"]
+    if build.get("interfaces"):
+        key += "|interfaces=" + build["interfaces"]
     return hashlib.sha256(key.encode()).hexdigest()[:16]
 
 
@@ -593,10 +873,12 @@ def save_baselines(root, tool, results, env):
                 "clock_mhz": b["clock_mhz"],
                 "configs": b["configs"],
                 "config_hash": config_hash(b, env, tool),
-                "result": dict(r["metrics"], env=dict(env)),
+                "result": dict(r["metrics"], env=dict(env, xlen=b["xlen"])),
             }
             if b.get("impl_strategy"):
                 entries[b["id"]]["impl_strategy"] = b["impl_strategy"]
+            if b.get("profile"):
+                entries[b["id"]]["profile"] = b["profile"]
         with open(path, "w") as fh:
             json.dump(entries, fh, indent=2, sort_keys=True)
             fh.write("\n")
@@ -826,6 +1108,18 @@ def save_stamp(work, chash, status, stamp_file, metrics=None):
         fh.write("\n")
 
 
+def build_work(build, build_dir, tool):
+    """A build's work directory.
+
+    Unique PREFIX per build id: its own build tree and its own log, so parallel
+    builds (and other synthesis runs on this machine) cannot collide. It is
+    also what keeps the Yosys flow's cached $(BUILD_DIR)/src from serving one
+    DUT's sources to the next.
+    """
+    return tool.work_dir(tool.dut_root(build_dir), tool.gate + "_" + build["id"],
+                         build)
+
+
 def run_build(build, build_dir, env, args, tool):
     """Synthesize one DUT; return its metrics. Raises BuildError on failure."""
     dut_root = tool.dut_root(build_dir)
@@ -833,12 +1127,7 @@ def run_build(build, build_dir, env, args, tool):
         raise BuildError("no DUT target '%s' in %s/catalog.mk"
                          % (build["dut"], dut_root))
 
-    # Unique PREFIX per build id: its own build tree and its own log, so parallel
-    # builds (and other synthesis runs on this machine) cannot collide. It is
-    # also what keeps the Yosys flow's cached $(BUILD_DIR)/src from serving one
-    # DUT's sources to the next.
-    prefix = tool.gate + "_" + build["id"]
-    work = tool.work_dir(dut_root, prefix, build)
+    work = build_work(build, build_dir, tool)
     stamp_file = tool.gate + ".json"
     chash = config_hash(build, env, tool)
 
@@ -863,6 +1152,9 @@ def run_build(build, build_dir, env, args, tool):
     benv = dict(os.environ)
     argv, extra = tool.build_command(dut_root, work, build, env, args)
     benv.update(extra)
+    # Set even when empty, so a PROFILE in the caller's environment cannot
+    # leak into a build that names none.
+    benv["PROFILE"] = build["profile"]
     if resume:
         benv["RESUME"] = "1"   # make clean is a no-op; keeps project_1 + *.dcp
 
@@ -900,10 +1192,10 @@ def run_build(build, build_dir, env, args, tool):
                             rc, elapsed // 60,
                             "".join("\n      | " + e for e in errors), log))
 
-    summary = os.path.join(work, "synth_summary.csv")
+    summary = os.path.join(work, tool.summary)
     if not os.path.exists(summary):
-        raise BuildError("no synth_summary.csv (the flow did not reach report), "
-                         "see %s" % log)
+        raise BuildError("no %s (the flow did not reach report), see %s"
+                         % (tool.summary, log))
     metrics = read_summary(summary, tool)
     metrics["build_time_s"] = elapsed
     metrics.update(tool.extras(work))
@@ -942,14 +1234,17 @@ def run_all(builds, build_dir, env, args, tool):
                    for b in order}
         for fut in concurrent.futures.as_completed(futures):
             b = futures[fut]
+            work = build_work(b, build_dir, tool)
             try:
                 metrics = fut.result()
                 say(b, "done", "%s  (%dm)" % (tool.describe(metrics),
                                               metrics["build_time_s"] // 60))
-                results.append({"build": b, "metrics": metrics, "error": None})
+                results.append({"build": b, "metrics": metrics, "error": None,
+                                "work": work})
             except (BuildError, subprocess.CalledProcessError) as e:
                 say(b, "FAIL", str(e))
-                results.append({"build": b, "metrics": None, "error": str(e)})
+                results.append({"build": b, "metrics": None, "error": str(e),
+                                "work": work})
     return sorted(results, key=lambda r: r["build"]["id"])
 
 
@@ -986,16 +1281,31 @@ def gate(result, env, args, gated, tool):
     if result["error"]:
         return "BUILD-FAIL", [result["error"]]
 
+    reasons = []
+    vs_base = [m for m in gated if m != tool.area]
+
+    if tool.area in gated:
+        budget = float(build[tool.budget_key])
+        cur = result["metrics"].get(tool.area)
+        if cur is None:
+            reasons.append("%s: not measured by this run" % tool.area)
+        else:
+            tol = threshold(build, tool.area, args)
+            excess = (cur - budget) / budget
+            if excess > tol:
+                reasons.append("%s: %g vs %g budget (%+.1f%%, tolerance %.0f%%) "
+                               "-- OVER BUDGET"
+                               % (tool.area, cur, budget, 100 * excess, 100 * tol))
+
     base = build.get("baseline") or {}
-    if not any(base.get(m) is not None for m in gated):
+    if vs_base and not any(base.get(m) is not None for m in vs_base):
         return verdict("NO-BASELINE",
                        ["no recorded baseline (run --update-baseline)"])
-    if build.get("config_hash") != config_hash(build, env, tool):
+    if vs_base and build.get("config_hash") != config_hash(build, env, tool):
         return verdict("STALE", ["config changed since the baseline was recorded "
                                  "(re-record with --update-baseline)"])
 
-    reasons = []
-    for m in gated:
+    for m in vs_base:
         cur, ref = result["metrics"].get(m), base.get(m)
         if ref is None:
             reasons.append("%s: missing from baseline" % m)
@@ -1013,11 +1323,11 @@ def gate(result, env, args, gated, tool):
                           "improvement, update the baseline to lock it in"
                           if better else "REGRESSION"))
 
+    reasons += tool.compare(result["metrics"], base)
+
     # Target-frequency gate: Fmax must be within tolerance of the clock the design
-    # was BUILT for, independent of the baseline. A baseline recorded below target
-    # (a design that never met its clock) must not let a build pass just by matching
-    # that number -- the gate answers "does it meet the frequency it targets?", not
-    # only "did it get worse than last time?".
+    # was BUILT for, never of the last recording. One-sided: a faster build passes,
+    # since placement noise alone moves Fmax by more than the tolerance.
     target = build.get("clock_mhz")
     fmax = result["metrics"].get("fmax_mhz")
     if target and fmax is not None:
@@ -1056,6 +1366,9 @@ def report_entry(r, env, tool):
              "reasons": r["reasons"]}
     if b.get("impl_strategy"):
         entry["impl_strategy"] = b["impl_strategy"]
+    entry["xlen"] = b["xlen"]
+    if b.get("profile"):
+        entry["profile"] = b["profile"]
     return entry
 
 
@@ -1103,10 +1416,55 @@ def report(results, env, args, gated, tool, record=False):
                       + tuple(cell(c[1], c[2]) for c in tool.columns))
               + " %5dm  %s" % (m["build_time_s"] // 60, verdict))
 
+    works = {r["build"]["id"]: r.get("work") for r in results}
     for bid, verdict, reasons in failures:
         print("\n%s: %s" % (bid, verdict))
         for reason in reasons:
             print("  - %s" % reason)
+        if works.get(bid) and verdict not in ("BUILD-FAIL", "STALE",
+                                              "NO-BASELINE"):
+            for path in tool.evidence(works[bid]):
+                print("  see %s" % path)
+    return failures
+
+
+def compare_against(results, ref_dir, tool):
+    """Each finished build's Beacon run against the same build in ref_dir:
+    end points register by register, and area by unit; return the builds a
+    register got deeper in, or whose area grew past the tolerance, as failing
+    verdicts."""
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "beacon.py")
+    failures = []
+    for r in results:
+        b, work = r["build"], r.get("work")
+        if not r["metrics"] or not work:
+            continue
+        ref = os.path.join(build_work(b, ref_dir, tool), "beacon")
+        cur = os.path.join(work, "beacon")
+        if not os.path.exists(os.path.join(ref, "endpoints.csv")):
+            print("\n%s: no reference run in %s" % (b["id"], ref))
+            continue
+        out = os.path.join(work, "beacon_diff.txt")
+        with open(out, "w") as fh:
+            m = r["metrics"]
+            rc = subprocess.run([sys.executable, script, "diff", ref, cur,
+                                 "--min-levels", str(m.get("watch_levels") or 8),
+                                 "--fix-levels", str(m.get("fix_levels") or 12)],
+                                stdout=fh, stderr=subprocess.STDOUT).returncode
+        with open(out) as fh:
+            head = fh.readline().strip()
+        print("\n%s against %s: %s%s\n  see %s"
+              % (b["id"], ref_dir, head, " -- REGRESSION" if rc in (1, 3) else "",
+                 out))
+        if rc == 1:
+            failures.append((b["id"], "DEEPER", ["a register got deeper than in "
+                                                 "the reference: %s" % out]))
+        elif rc == 3:
+            failures.append((b["id"], "AREA", ["the design's area grew past the "
+                                               "tolerance against the "
+                                               "reference: %s" % out]))
+        elif rc:
+            failures.append((b["id"], "BUILD-FAIL", ["beacon.py diff failed: %s" % out]))
     return failures
 
 
@@ -1115,7 +1473,7 @@ def report(results, env, args, gated, tool, record=False):
 def main(argv=None, default_tool="xilinx"):
     tool = TOOLS[default_tool]
     ap = argparse.ArgumentParser(
-        description="Synthesis-regression gate (Fmax/area vs golden baseline)")
+        description="Synthesis-regression gate (Fmax vs target clock, area vs budget)")
     ap.add_argument("-b", "--build", action="append", default=[], metavar="ID",
                     help="build id or group to run (repeatable; default: all)")
     ap.add_argument("-j", "--jobs", type=int, default=2, metavar="N",
@@ -1129,15 +1487,18 @@ def main(argv=None, default_tool="xilinx"):
                          "ci/testcases/<gate>.yaml and the golden file tree "
                          "ci/baselines/synthesis/<tool>/ (default: %s)"
                          % default_tool)
-    ap.add_argument("--threshold", type=float, default=TOLERANCE, metavar="F",
-                    help="global gate tolerance, fraction (default: %.2f). "
+    ap.add_argument("--threshold", type=float, default=None, metavar="F",
+                    help="global gate tolerance, fraction (default: the "
+                         "tool's, %.2f for synthesis, 0 for Beacon). "
                          "Overridden per-metric by --metric-threshold and "
                          "per-build by the catalog's \"thresholds\"."
                          % TOLERANCE)
     ap.add_argument("--metric-threshold", action="append", default=[],
                     metavar="M=F",
                     help="global tolerance for one metric, e.g. lut=0.10 "
-                         "(repeatable); still overridden per-build")
+                         "(repeatable; default: %s); still overridden "
+                         "per-build" % ", ".join("%s=%g" % kv for kv in
+                                                 METRIC_TOLERANCE.items()))
     ap.add_argument("--gate", metavar="M,M",
                     help="metrics to assert on (default: the tool's, %s for %s); "
                          "all metrics are always recorded and reported"
@@ -1148,8 +1509,23 @@ def main(argv=None, default_tool="xilinx"):
     ap.add_argument("--build-dir", metavar="DIR",
                     help="build tree to synthesize in (default: "
                          "<source>/build<xlen>_<gate>, configured on demand)")
+    ap.add_argument("--against", metavar="DIR",
+                    help="Beacon only: the build tree of a reference run, "
+                         "typically the parent revision's; each build's end "
+                         "points are compared register by register, and its "
+                         "area by unit, with the same build there "
+                         "(ci/beacon.py diff); a register that got deeper, or "
+                         "area grown past the tolerance, fails the run")
+    ap.add_argument("--configs", metavar="FLAGS", default="",
+                    help="extra -D flags appended to every selected build's "
+                         "configs, for a non-default configuration: run the "
+                         "reference and the change (--against) with the same "
+                         "flags. The catalog baselines were recorded without "
+                         "them, so they are not gated, and none is recorded. "
+                         "Pass as --configs=\"-D...\" (the value starts with -)")
     ap.add_argument("--xlen", type=int, default=32, choices=(32, 64),
-                    help="ISA width (default: 32)")
+                    help="ISA width of the builds that do not pin their own "
+                         "(default: 32)")
     ap.add_argument("--opt-level", type=int, default=3, metavar="N",
                     help="Vivado optimization level, 0=fastest 3=default")
     ap.add_argument("--timeout", type=int, default=8 * 3600, metavar="SEC",
@@ -1172,13 +1548,15 @@ def main(argv=None, default_tool="xilinx"):
                     help="print the schedule without running the tool")
     args = ap.parse_args(argv)
     tool = TOOLS[args.tool]
+    if args.threshold is None:
+        args.threshold = tool.tolerance
 
     # Line-buffer stdout: progress is the point of the elaboration watch, and it
     # is worthless if it sits in a block buffer until the run ends (which is what
     # happens whenever this is piped -- CI, nohup, a log file).
     sys.stdout.reconfigure(line_buffering=True)
 
-    overrides = {}
+    overrides = dict(METRIC_TOLERANCE, **tool.metric_tolerance)
     for spec in args.metric_threshold:
         metric, _, value = spec.partition("=")
         if metric not in tool.metrics or not value:
@@ -1188,7 +1566,7 @@ def main(argv=None, default_tool="xilinx"):
     args.metric_threshold = overrides
 
     root = source_root()
-    builds = load_catalog(root, tool)
+    builds = load_catalog(root, tool, args.xlen)
 
     if args.matrix:
         # Ordered longest-first so the slowest DUT is dispatched into the fan-out
@@ -1196,7 +1574,7 @@ def main(argv=None, default_tool="xilinx"):
         # argument run_all() makes for its thread pool.
         print(json.dumps(sorted(
             [{"id": b["id"], "group": b["group"], "dut": b["dut"],
-              "clock_mhz": b["clock_mhz"],
+              "clock_mhz": b["clock_mhz"], "xlen": b["xlen"],
               "known_issue": bool(b.get("known_issue"))}
              for b in select(builds, args.build)],
             key=lambda b: (-weight(builds[b["id"]], tool), b["id"]))))
@@ -1205,16 +1583,24 @@ def main(argv=None, default_tool="xilinx"):
     if args.list:
         for b in select(builds, args.build):
             base = b.get("baseline") or {}
-            print("%-10s [%s] dut=%-8s %4d MHz  %s%s"
-                  % (b["id"], b["group"], b["dut"], b["clock_mhz"],
+            print("%-10s [%s] dut=%-8s %4d MHz  xlen %d%s%s  %s%s"
+                  % (b["id"], b["group"], b["dut"], b["clock_mhz"], b["xlen"],
+                     "  profile " + b["profile"] if b["profile"] else "",
+                     "  (opt-in)" if b["opt_in"] else "",
                      "baseline: " + tool.describe_baseline(base)
-                     if base.get("fmax_mhz") else "no baseline",
+                     if base.get(tool.key_metric) is not None
+                     else "no baseline",
                      "  KNOWN ISSUE: " + b["known_issue"]
                      if b.get("known_issue") else ""))
             print("    %s" % b["configs"])
         return 0
 
     tool.check_env()
+    if args.against and tool.name != "beacon":
+        sys.exit("ERROR: --against compares Beacon runs; use it with --tool=beacon")
+    if args.configs and args.update_baseline:
+        sys.exit("ERROR: --configs cannot record a baseline: the catalog "
+                 "baselines are the catalog configurations")
 
     if args.jobs < 1:
         sys.exit("ERROR: --jobs must be >= 1")
@@ -1222,25 +1608,42 @@ def main(argv=None, default_tool="xilinx"):
         args.tool_jobs = max(MIN_TOOL_JOBS,
                              min(MAX_TOOL_JOBS, os.cpu_count() // args.jobs))
 
-    build_dir = args.build_dir or os.path.join(
-        root, "build%d_%s" % (args.xlen, tool.gate))
     env = tool.env(args)
 
     selected = select(builds, args.build)
+    if args.configs:
+        for b in selected:
+            b["configs"] = (b["configs"] + " " + args.configs).strip()
+            b["baseline"] = {}
     for b in selected:
         warning = tool.env_warning(b, env)
         if warning:
             print("WARNING: %s %s" % (b["id"], warning))
 
-    if not args.dry_run:
-        prepare_build_tree(root, build_dir, args.xlen)
-    results = run_all(selected, build_dir, env, args, tool)
+    # One configured build tree per ISA width: a build that pins its own xlen
+    # runs in that width's tree.
+    xlens = sorted({b["xlen"] for b in selected})
+    if len(xlens) > 1 and (args.build_dir or args.against):
+        sys.exit("ERROR: --build-dir/--against name one build tree, and the "
+                 "selected builds span xlen %s; select one width"
+                 % "/".join(map(str, xlens)))
+    results = []
+    for xlen in xlens:
+        build_dir = args.build_dir or os.path.join(
+            root, "build%d_%s" % (xlen, tool.gate))
+        if not args.dry_run:
+            prepare_build_tree(root, build_dir, xlen)
+        results += run_all([b for b in selected if b["xlen"] == xlen],
+                           build_dir, env, args, tool)
     if args.dry_run:
         return 0
+    results.sort(key=lambda r: r["build"]["id"])
 
     gated = tuple(m for m in (args.gate.split(",") if args.gate else tool.gated) if m)
     outcomes = report(results, env, args, gated, tool, args.update_baseline)
     failures = [o for o in outcomes if o[1] not in PASSING]
+    if args.against:
+        failures += compare_against(results, args.against, tool)
 
     ok = [r for r in results if r["metrics"]]
     if args.update_baseline and ok:

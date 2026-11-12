@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 960" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#44525f"/>
+    </marker>
+  </defs>
+  <style>
+    .t    { fill:#1b2733; font-size:19px; font-weight:bold; }
+    .gt   { fill:#33404c; font-size:14px; font-weight:bold; }
+    .th   { fill:#1b2733; font-size:12.5px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:11px; }
+    .tt   { fill:#5a6772; font-size:10.5px; font-style:italic; }
+    .mono { font-family:"DejaVu Sans Mono", monospace; font-size:10.5px; fill:#1b2733; }
+    .monos{ font-family:"DejaVu Sans Mono", monospace; font-size:10px; fill:#44525f; }
+    .src  { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.4; }
+    .step { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.4; }
+    .gg   { fill:#dde9f3; stroke:#2e5e82; stroke-width:1.6; }
+    .out  { fill:#f4faf4; stroke:#3a7d44; stroke-width:1.6; }
+    .f5   { fill:#fdf6e9; stroke:#a8781f; stroke-width:1.4; }
+    .grp  { fill:#fbfcfd; stroke:#5a7184; stroke-width:1.5; }
+    .w    { stroke:#44525f; stroke-width:1.4; fill:none; marker-end:url(#arr); }
+  </style>
+
+  <rect x="0" y="0" width="760" height="960" fill="#ffffff"/>
+  <text x="24" y="34" class="t">Build flow — how Vortex RTL becomes a FireSim image</text>
+  <text x="24" y="56" class="tt">Vortex stays Verilog: Golden Gate never sees inside it. Runs from hw/syn/firesim/Makefile with the native flows' tokens.</text>
+  <text x="24" y="72" class="tt">Threaded images (FAME-5) are the Foldsim flow, compiled by CIRCT: see foldsim.md.</text>
+
+  <!-- front end -->
+  <rect x="60" y="92" width="640" height="128" class="src"/>
+  <text x="76" y="113" class="th">Front end — the configured tree, flattened</text>
+  <text x="76" y="130" class="mono">make -C hw/syn/firesim [PLATFORM=&lt;xsa&gt; | DEVICE=&lt;part&gt;] TARGET=hw|sim|hw_emu</text>
+  <text x="76" y="146" class="ts">gen_sources.sh -P preprocesses hw/rtl into one self-contained directory, top VX_firesim_wrap:</text>
+  <text x="76" y="162" class="monos">vivado_srcs/ + .f    ← -DSYNTHESIS -DVIVADO -DNDEBUG (+ -DSIMULATION for TARGET=sim/hw_emu)</text>
+  <text x="76" y="178" class="monos">vortex_srcs/ (metasim) ← -DNDEBUG only: behavioural RAMs, soft FPU</text>
+  <text x="76" y="198" class="ts">Platform defines: VX_CFG_PLATFORM_MEMORY_NUM_BANKS=1 · PLATFORM_MEMORY_ID_WIDTH=4</text>
+  <text x="76" y="212" class="ts">(paired with idBits) · [PERF_ENABLE]</text>
+
+  <rect x="60" y="248" width="640" height="608" class="grp"/>
+  <text x="78" y="272" class="gt">FAME-1: Vortex as a Verilog BlackBox</text>
+  <rect x="90" y="288" width="580" height="86" class="step"/>
+  <text x="106" y="309" class="th">stage → replace-rtl — Golden Gate on the harness only</text>
+  <text x="106" y="326" class="ts">VortexTarget.scala elaborates: VortexDUT holds VX_firesim_wrap as an opaque BlackBox;</text>
+  <text x="106" y="342" class="ts">Golden Gate applies FAME-1 at its boundary, inserts bridges and token channels.</text>
+  <text x="106" y="358" class="mono">→ FireSim-generated.sv (harness; Vortex NOT inside)</text>
+
+  <rect x="90" y="390" width="580" height="64" class="step"/>
+  <text x="106" y="411" class="th">xilinx-ips — vendor floating-point cores</text>
+  <text x="106" y="428" class="ts">xil_fma, xil_fdiv, … generated for FPGA_PART; the flattened tree only instantiates them.</text>
+  <text x="106" y="444" class="ts">(On aved the RTU keeps the soft FMA/divider: the clock-enable conversion cannot enter an OOC core.)</text>
+
+  <rect x="90" y="470" width="580" height="128" class="step"/>
+  <text x="106" y="491" class="th">Platform build — the card's own flow</text>
+  <text x="106" y="508" class="ts">vitis: v++ link · aved: slashkit. The kernel is packaged from three inputs:</text>
+  <text x="118" y="525" class="monos">VORTEX_VIVADO_SRCS = the folded sources     VORTEX_XILINX_IP_DIR = the vendor cores</text>
+  <text x="118" y="541" class="monos">FireSim-generated.sv = the harness</text>
+  <text x="106" y="559" class="ts">Vivado synthesis + place-and-route at FREQUENCY (default 60 MHz), STRATEGY=TIMING;</text>
+  <text x="106" y="575" class="ts">on aved, FireSim's clock gates become clock enables (no BUFGCE in the partition).</text>
+
+  <rect x="90" y="614" width="580" height="56" class="out"/>
+  <text x="106" y="635" class="th">Image — build32_&lt;aved|xsa&gt;_&lt;hw|sim|hw_emu&gt;/bin/</text>
+  <text x="106" y="652" class="mono">firesim.vbin | firesim.xclbin  +  firesim.card</text>
+
+  <rect x="90" y="690" width="580" height="146" class="step"/>
+  <text x="106" y="711" class="th">Metasimulator (no image) — TARGET=xrtsim / avedsim</text>
+  <text x="106" y="728" class="ts">`elaborate` runs Golden Gate alone; sim/firesim/Makefile Verilates</text>
+  <text x="106" y="744" class="ts">FireSim-generated.sv + the vortex_srcs tree (library search) into libfiresim.so,</text>
+  <text x="106" y="760" class="ts">with simif_emul as the host interface — the design itself is the simulator.</text>
+  <text x="106" y="785" class="monos">EMUL_DEBUG=1 adds --trace +define+DEBUG → +waveformfile=… writes a VCD</text>
+  <text x="106" y="820" class="tt">Same target, same tokens as the card: the step before silicon.</text>
+
+  <!-- wires -->
+  <line x1="380" y1="220" x2="380" y2="288" class="w"/>
+  <line x1="380" y1="374" x2="380" y2="390" class="w"/>
+  <line x1="380" y1="454" x2="380" y2="470" class="w"/>
+  <line x1="380" y1="598" x2="380" y2="614" class="w"/>
+  <line x1="380" y1="670" x2="380" y2="690" class="w"/>
+
+  <text x="24" y="890" class="tt">Run the image: FPGA_BIN_DIR=&lt;bin&gt; ./ci/blackbox.sh --driver=firesim --target=hw --app=…</text>
+  <text x="24" y="908" class="tt">The Makefile guards the classic failure modes: SYNTHESIS missing from the flattened tree (every RAM</text>
+  <text x="24" y="924" class="tt">lands in LUTRAM), VX_MEM_PORTS resolving to 0, a changed CONFIGS reusing a stale flatten.</text>
+</svg>

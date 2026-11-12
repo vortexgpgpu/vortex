@@ -255,7 +255,8 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     localparam RTU_LINE_ADDRW = `VX_CFG_MEM_ADDR_WIDTH - `CLOG2(RTU_LINE_SIZE);
     `UNUSED_VAR (m_req_addr[`CLOG2(RTU_LINE_SIZE)-1:0])
 
-    `STATIC_ASSERT(CTX_TAG_W <= $bits(cache_bus_w.req_data.tag.value),
+    localparam CACHE_TAG_VALUE_W = CACHE_TAG_WIDTH - UUID_WIDTH;
+    `STATIC_ASSERT(CTX_TAG_W <= CACHE_TAG_VALUE_W,
         ("rtu fetch tag (%0d bits) does not fit the rtcache tag field", CTX_TAG_W))
 
     assign cache_bus_w.req_valid        = m_req_valid;
@@ -264,7 +265,7 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     assign cache_bus_w.req_data.data    = '0;
     assign cache_bus_w.req_data.byteen  = {RTU_LINE_SIZE{1'b1}};
     assign cache_bus_w.req_data.tag.uuid  = '0;
-    assign cache_bus_w.req_data.tag.value = $bits(cache_bus_w.req_data.tag.value)'(m_req_tag);
+    assign cache_bus_w.req_data.tag.value = CACHE_TAG_VALUE_W'(m_req_tag);
     assign cache_bus_w.req_data.attr    = '0;
     assign m_req_ready = cache_bus_w.req_ready;
 

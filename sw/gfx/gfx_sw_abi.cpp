@@ -20,6 +20,7 @@
 #include "gfx_sw.h"      // gfx_sw::TexState / om_state_t / tex_sample_sw / om_fragment
 #include "gfx_frag_rast.h"     // gfx_rast::rast_walk_primitive — SW fine-rasterizer
 #include "vx_gfx_abi.h"  // vortex::graphics::rast_prim_t
+#include <cstddef>
 #include <cstring>
 #include <type_traits>
 
@@ -34,6 +35,83 @@ static_assert(sizeof(gfx_sw_omcolor_t) == sizeof(gfx_sw::om_color_t),
 static_assert(std::is_trivially_copyable<gfx_sw::TexState>::value &&
               std::is_trivially_copyable<gfx_sw::om_state_t>::value,
               "SW state structs must be POD for the C ABI");
+
+// Field by field as well: a reorder of two fields of the same size keeps sizeof
+// and would read the wrong field on the side built against the other layout.
+#define GFX_SW_ABI_FIELD(c, cpp, f)                                        \
+  static_assert(offsetof(c, f) == offsetof(cpp, f) &&                      \
+                sizeof(c::f) == sizeof(cpp::f), #c "." #f " must mirror " #cpp)
+
+GFX_SW_ABI_FIELD(gfx_sw_texstate_t, gfx_sw::TexState, base);
+GFX_SW_ABI_FIELD(gfx_sw_texstate_t, gfx_sw::TexState, mip_off);
+GFX_SW_ABI_FIELD(gfx_sw_texstate_t, gfx_sw::TexState, logdim);
+GFX_SW_ABI_FIELD(gfx_sw_texstate_t, gfx_sw::TexState, format);
+GFX_SW_ABI_FIELD(gfx_sw_texstate_t, gfx_sw::TexState, filter);
+GFX_SW_ABI_FIELD(gfx_sw_texstate_t, gfx_sw::TexState, wrap);
+GFX_SW_ABI_FIELD(gfx_sw_texstate_t, gfx_sw::TexState, width);
+GFX_SW_ABI_FIELD(gfx_sw_texstate_t, gfx_sw::TexState, height);
+GFX_SW_ABI_FIELD(gfx_sw_texstate_t, gfx_sw::TexState, border);
+GFX_SW_ABI_FIELD(gfx_sw_texstate_t, gfx_sw::TexState, layer_stride);
+GFX_SW_ABI_FIELD(gfx_sw_texstate_t, gfx_sw::TexState, compare_func);
+GFX_SW_ABI_FIELD(gfx_sw_texstate_t, gfx_sw::TexState, swizzle);
+GFX_SW_ABI_FIELD(gfx_sw_texstate_t, gfx_sw::TexState, min_lod);
+GFX_SW_ABI_FIELD(gfx_sw_texstate_t, gfx_sw::TexState, max_lod);
+GFX_SW_ABI_FIELD(gfx_sw_texstate_t, gfx_sw::TexState, lod_bias);
+GFX_SW_ABI_FIELD(gfx_sw_texstate_t, gfx_sw::TexState, depth);
+GFX_SW_ABI_FIELD(gfx_sw_texstate_t, gfx_sw::TexState, wrap_w);
+
+GFX_SW_ABI_FIELD(gfx_sw_omstate_t, gfx_sw::om_state_t, depth_func);
+GFX_SW_ABI_FIELD(gfx_sw_omstate_t, gfx_sw::om_state_t, stencil_func);
+GFX_SW_ABI_FIELD(gfx_sw_omstate_t, gfx_sw::om_state_t, stencil_zpass);
+GFX_SW_ABI_FIELD(gfx_sw_omstate_t, gfx_sw::om_state_t, stencil_zfail);
+GFX_SW_ABI_FIELD(gfx_sw_omstate_t, gfx_sw::om_state_t, stencil_fail);
+GFX_SW_ABI_FIELD(gfx_sw_omstate_t, gfx_sw::om_state_t, stencil_ref);
+GFX_SW_ABI_FIELD(gfx_sw_omstate_t, gfx_sw::om_state_t, stencil_mask);
+GFX_SW_ABI_FIELD(gfx_sw_omstate_t, gfx_sw::om_state_t, stencil_writemask);
+GFX_SW_ABI_FIELD(gfx_sw_omstate_t, gfx_sw::om_state_t, depth_writemask);
+GFX_SW_ABI_FIELD(gfx_sw_omstate_t, gfx_sw::om_state_t, blend_mode_rgb);
+GFX_SW_ABI_FIELD(gfx_sw_omstate_t, gfx_sw::om_state_t, blend_mode_a);
+GFX_SW_ABI_FIELD(gfx_sw_omstate_t, gfx_sw::om_state_t, blend_src_rgb);
+GFX_SW_ABI_FIELD(gfx_sw_omstate_t, gfx_sw::om_state_t, blend_src_a);
+GFX_SW_ABI_FIELD(gfx_sw_omstate_t, gfx_sw::om_state_t, blend_dst_rgb);
+GFX_SW_ABI_FIELD(gfx_sw_omstate_t, gfx_sw::om_state_t, blend_dst_a);
+GFX_SW_ABI_FIELD(gfx_sw_omstate_t, gfx_sw::om_state_t, blend_const);
+GFX_SW_ABI_FIELD(gfx_sw_omstate_t, gfx_sw::om_state_t, logic_op);
+GFX_SW_ABI_FIELD(gfx_sw_omstate_t, gfx_sw::om_state_t, zbuf_base);
+GFX_SW_ABI_FIELD(gfx_sw_omstate_t, gfx_sw::om_state_t, cbuf_base);
+GFX_SW_ABI_FIELD(gfx_sw_omstate_t, gfx_sw::om_state_t, zbuf_pitch);
+GFX_SW_ABI_FIELD(gfx_sw_omstate_t, gfx_sw::om_state_t, cbuf_pitch);
+GFX_SW_ABI_FIELD(gfx_sw_omstate_t, gfx_sw::om_state_t, cbuf_writemask4);
+GFX_SW_ABI_FIELD(gfx_sw_omstate_t, gfx_sw::om_state_t, color_format);
+GFX_SW_ABI_FIELD(gfx_sw_omstate_t, gfx_sw::om_state_t, depth_format);
+GFX_SW_ABI_FIELD(gfx_sw_omstate_t, gfx_sw::om_state_t, depth_enabled);
+GFX_SW_ABI_FIELD(gfx_sw_omstate_t, gfx_sw::om_state_t, stencil_enabled);
+GFX_SW_ABI_FIELD(gfx_sw_omstate_t, gfx_sw::om_state_t, blend_enabled);
+GFX_SW_ABI_FIELD(gfx_sw_omstate_t, gfx_sw::om_state_t, cbuf_writemask);
+GFX_SW_ABI_FIELD(gfx_sw_omstate_t, gfx_sw::om_state_t, color_read);
+GFX_SW_ABI_FIELD(gfx_sw_omstate_t, gfx_sw::om_state_t, color_write);
+GFX_SW_ABI_FIELD(gfx_sw_omstate_t, gfx_sw::om_state_t, depth_bounds_enable);
+GFX_SW_ABI_FIELD(gfx_sw_omstate_t, gfx_sw::om_state_t, depth_bounds_min);
+GFX_SW_ABI_FIELD(gfx_sw_omstate_t, gfx_sw::om_state_t, depth_bounds_max);
+
+GFX_SW_ABI_FIELD(gfx_sw_omcolor_t, gfx_sw::om_color_t, cbuf_base);
+GFX_SW_ABI_FIELD(gfx_sw_omcolor_t, gfx_sw::om_color_t, cbuf_pitch);
+GFX_SW_ABI_FIELD(gfx_sw_omcolor_t, gfx_sw::om_color_t, blend_mode_rgb);
+GFX_SW_ABI_FIELD(gfx_sw_omcolor_t, gfx_sw::om_color_t, blend_mode_a);
+GFX_SW_ABI_FIELD(gfx_sw_omcolor_t, gfx_sw::om_color_t, blend_src_rgb);
+GFX_SW_ABI_FIELD(gfx_sw_omcolor_t, gfx_sw::om_color_t, blend_src_a);
+GFX_SW_ABI_FIELD(gfx_sw_omcolor_t, gfx_sw::om_color_t, blend_dst_rgb);
+GFX_SW_ABI_FIELD(gfx_sw_omcolor_t, gfx_sw::om_color_t, blend_dst_a);
+GFX_SW_ABI_FIELD(gfx_sw_omcolor_t, gfx_sw::om_color_t, blend_const);
+GFX_SW_ABI_FIELD(gfx_sw_omcolor_t, gfx_sw::om_color_t, logic_op);
+GFX_SW_ABI_FIELD(gfx_sw_omcolor_t, gfx_sw::om_color_t, cbuf_writemask4);
+GFX_SW_ABI_FIELD(gfx_sw_omcolor_t, gfx_sw::om_color_t, color_format);
+GFX_SW_ABI_FIELD(gfx_sw_omcolor_t, gfx_sw::om_color_t, blend_enabled);
+GFX_SW_ABI_FIELD(gfx_sw_omcolor_t, gfx_sw::om_color_t, cbuf_writemask);
+GFX_SW_ABI_FIELD(gfx_sw_omcolor_t, gfx_sw::om_color_t, color_read);
+GFX_SW_ABI_FIELD(gfx_sw_omcolor_t, gfx_sw::om_color_t, color_write);
+
+#undef GFX_SW_ABI_FIELD
 
 extern "C" uint32_t gfx_tex_sample_sw(const gfx_sw_texstate_t* st,
                                       int32_t u, int32_t v, uint32_t lod,

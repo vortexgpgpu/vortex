@@ -97,7 +97,8 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
 
     wire [63:0] safe_dataa = 64'(dataa);
 
-    wire [15:0] h_op = (&dataa[`VX_CFG_XLEN-1:16]) ? dataa[15:0] : 16'h7E00;
+    // A narrower format is NaN-boxed to FLEN; operand bits above FLEN are not part of the FP register.
+    wire [15:0] h_op = (&dataa[FLEN-1:16]) ? dataa[15:0] : 16'h7E00;
 
     wire [31:0] s_op;
     if (HAS_D) begin : g_s_unbox

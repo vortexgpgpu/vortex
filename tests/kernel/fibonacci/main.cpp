@@ -24,7 +24,7 @@ int main() {
 		errors = 1;
 	}
 
-	return errors;
+	return errors != 0;
 }
 
 

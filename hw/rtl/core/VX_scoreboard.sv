@@ -14,8 +14,7 @@
 `include "VX_define.vh"
 
 module VX_scoreboard import VX_gpu_pkg::*; #(
-    parameter `STRING INSTANCE_ID = "",
-    parameter ISSUE_ID = 0
+    parameter `STRING INSTANCE_ID = ""
 ) (
     input wire              clk,
     input wire              reset,
@@ -30,7 +29,6 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     VX_scoreboard_if.master scoreboard_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    `UNUSED_PARAM (ISSUE_ID)
     `UNUSED_VAR ({writeback_if.data.sop, writeback_if.data.eop, writeback_if.data.wis})
 
     localparam NUM_OPDS  = NUM_SRC_OPDS + 1;
@@ -126,8 +124,8 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             end
         end
 
-        // Writeback release feeds wb_inuse_regs, which the busy check reads; the
-        // staging reserve is added on top to form the next state, inuse_regs_n.
+        // Writeback release feeds wb_inuse_regs; the staging reserve is added on
+        // top to form the next state, inuse_regs_n.
         reg [NUM_REGS-1:0]  wb_inuse_regs;
         reg [NUM_XREGS-1:0] wb_inuse_xregs;
         always @(*) begin
@@ -164,12 +162,23 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         //   fire: staging hands off, its rd is reserved, the ibuffer instr moves in
         // Either way the flop gets the value a post-grant evaluation would.
         //
-        // Either outcome checks one of only two instrs, so each is reduced
-        // against the released in-use set once and the outcomes select bits.
+        // Either outcome checks one of only two instrs, so each is checked
+        // once and the outcomes select bits.
         wire [NUM_REGS-1:0] ibf_regs_mask = ibf_opd_mask[0] | ibf_opd_mask[1] | ibf_opd_mask[2] | ibf_opd_mask[3];
         wire [NUM_REGS-1:0] stg_regs_mask = stg_opd_mask[0] | stg_opd_mask[1] | stg_opd_mask[2] | stg_opd_mask[3];
-        wire ibf_busy  = | (wb_inuse_regs & ibf_regs_mask);
-        wire stg_busy  = | (wb_inuse_regs & stg_regs_mask);
+        // Each operand reads its in-use bit by index and compares its index with
+        // this cycle's release, which is shallower than reducing the operand
+        // masks against the whole released set.
+        wire wb_release = writeback_fire && writeback_if.data.wb;
+        wire [NUM_OPDS-1:0] ibf_opd_busy, stg_opd_busy;
+        for (genvar i = 0; i < NUM_OPDS; ++i) begin : g_opd_busy
+            assign ibf_opd_busy[i] = ibf_used_rs[i] && inuse_regs[ibf_opds[i]]
+                                  && ~(wb_release && (writeback_if.data.rd == ibf_opds[i]));
+            assign stg_opd_busy[i] = stg_used_rs[i] && inuse_regs[stg_opds[i]]
+                                  && ~(wb_release && (writeback_if.data.rd == stg_opds[i]));
+        end
+        wire ibf_busy  = | ibf_opd_busy;
+        wire stg_busy  = | stg_opd_busy;
         wire ibf_xbusy = | (wb_inuse_xregs & ibf_xregs_mask);
         wire stg_xbusy = | (wb_inuse_xregs & stg_xregs_mask);
 
@@ -216,6 +225,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         `UNUSED_VAR (xregs_busy)
     `else
         `UNUSED_VAR (ibuffer_fire)
+        `UNUSED_VAR ({ibf_regs_mask, stg_regs_mask})
     `endif
 
         always @(posedge clk) begin
@@ -276,10 +286,33 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     // holder is requested while it holds the lock.
     reg [PER_ISSUE_WARPS-1:0] fu_locked;
 
+`ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
+    // A warp that issues a yielding uop while another warp also requests with
+    // one sits out the next cycle, so the greedy arbiter moves on as it does
+    // between scalar instructions that arrive one per fetch.
+    reg [PER_ISSUE_WARPS-1:0] yield_r;
+    wire [PER_ISSUE_WARPS-1:0] staging_yield_vec;
+    for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_staging_yield
+        assign staging_yield_vec[w] = staging_if[w].data.issue_yield;
+    end
+    wire [PER_ISSUE_WARPS-1:0] yield_reqs = arb_valid_in & staging_yield_vec;
+    wire [PER_ISSUE_WARPS-1:0] req_below;
+    for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_req_below
+        if (w == 0) begin : g_first
+            assign req_below[w] = 1'b0;
+        end else begin : g_next
+            assign req_below[w] = req_below[w-1] || yield_reqs[w-1];
+        end
+    end
+    wire multi_req = | (yield_reqs & req_below);
+`else
+    wire [PER_ISSUE_WARPS-1:0] yield_r = '0;
+`endif
+
     for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_arb_data_in
         // operands_ready carries data-hazard + FU-congestion; fu_locked adds the
         // FU-lock gate so only the lock holder is requested during a sequence.
-        assign arb_valid_in[w] = staging_if[w].valid && operands_ready[w] && fu_locked[w];
+        assign arb_valid_in[w] = staging_if[w].valid && operands_ready[w] && fu_locked[w] && ~yield_r[w];
 
         assign arb_data_in[w] = {
             staging_if[w].data.uuid,
@@ -372,6 +405,16 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             end
         end
     end
+
+`ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
+    always @(posedge clk) begin
+        if (reset) begin
+            yield_r <= '0;
+        end else begin
+            yield_r <= arb_onehot & staging_yield_vec & {PER_ISSUE_WARPS{issue_fire && multi_req}};
+        end
+    end
+`endif
 
     VX_elastic_buffer #(
         .DATAW   (LOG_NUM_REQS + OUT_DATAW),

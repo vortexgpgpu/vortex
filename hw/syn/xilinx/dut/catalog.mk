@@ -10,8 +10,8 @@
 # Add a DUT: append its name to DUTS and define the five variables. No new
 # directory, no dispatcher edit.
 
-DUTS := cache core cp dxa fpu gfx issue lmem mem_unit mufu om raster rtu \
-        scope tcu tensor tex top unittest vm vortex
+DUTS := cache core cp dxa fpu gfx gfxvm issue lmem mem_unit mufu om raster rtu \
+        scope tcu tensor tex top vm vortex
 
 # ---------------------------------------------------------------------------
 # shared include fragments
@@ -82,13 +82,21 @@ gfx_INC  = $(BASE_INC) -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache -I$
 gfx_PKG  = $(RTL_DIR)/fpu/VX_fpu_pkg.sv $(RTL_DIR)/dxa/VX_dxa_pkg.sv $(RTL_DIR)/tex/VX_tex_pkg.sv \
            $(RTL_DIR)/rtu/VX_rtu_pkg.sv $(RTL_DIR)/raster/VX_raster_pkg.sv $(RTL_DIR)/om/VX_om_pkg.sv
 
+# The graphics slice under VM: the unit MMUs between the graphics caches / DXA
+# and memory, which the gfx DUT (VM off) and the vm DUT (no units) never build.
+gfxvm_PRJ := VX_gfx_top
+gfxvm_IP  := 1
+gfxvm_CFG := $(gfx_CFG) -DVX_CFG_VM_ENABLE
+gfxvm_INC  = $(gfx_INC)
+gfxvm_PKG  = $(gfx_PKG) $(RTL_DIR)/vm/VX_tlb_pkg.sv
+
 # NOTE: the original issue/Makefile listed $(FPU_INCLUDE) twice; a duplicate -I
 # is a no-op, so it is listed once here.
 issue_PRJ := VX_issue_top
 issue_INC  = $(BASE_INC) -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm $(FPU_INC) -I$(UNITTEST_DIR)/issue
 
-lmem_PRJ := VX_local_mem_top
-lmem_INC  = $(BASE_INC) -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(RTL_DIR)/cache -I$(UNITTEST_DIR)/local_mem
+lmem_PRJ := VX_lmem_unit_top
+lmem_INC  = $(BASE_INC) -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(RTL_DIR)/cache -I$(UNITTEST_DIR)/lmem_unit
 
 mem_unit_PRJ := VX_mem_unit_top
 mem_unit_INC  = $(BASE_INC) -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(RTL_DIR)/core -I$(RTL_DIR)/fpu -I$(UNITTEST_DIR)/mem_unit
@@ -138,11 +146,9 @@ tex_PKG  = $(RTL_DIR)/tex/VX_tex_pkg.sv
 top_PRJ := VX_afu_wrap
 top_IP  := 1
 top_EXT := 1
+top_AFU := 1
 top_INC  = $(BASE_INC) -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(RTL_DIR)/cache \
            -I$(RTL_DIR)/cp -I$(AFU_DIR) -I$(AFU_COMMON_DIR) $(FPU_INC)
-
-unittest_PRJ := Unittest
-unittest_INC  = $(BASE_INC) -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(RTL_DIR)/cache $(FPU_INC)
 
 vm_PRJ := VX_vm_top
 vm_CFG := -DVX_CFG_VM_ENABLE -DVX_CFG_EXT_A_ENABLE -DVX_CFG_NUM_CORES=2 \

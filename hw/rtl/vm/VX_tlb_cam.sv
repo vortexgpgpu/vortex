@@ -63,10 +63,19 @@ module VX_tlb_cam import VX_tlb_pkg::*; #(
 
     // Selectable fields packed once so each lane picks the winning entry with a
     // one-hot mux rather than encoding a hit index and re-indexing entries_r.
-    localparam SEL_W = TLB_PPN_WIDTH + TLB_FLAGS_WIDTH + TLB_LEVEL_WIDTH;
+    // Each entry also carries its superpage splice mask, decoded from its level
+    // ahead of the mux, so a hit only ANDs it in rather than decoding the
+    // selected level after the select.
+    localparam LOW_W = `UP((TLB_PT_LEVELS - 1) * TLB_LEVEL_BITS);
+    localparam SEL_W = TLB_PPN_WIDTH + TLB_FLAGS_WIDTH + TLB_LEVEL_WIDTH + LOW_W;
     wire [TLB_SIZE-1:0][SEL_W-1:0] entry_sel;
     for (genvar i = 0; i < TLB_SIZE; ++i) begin : g_entry_sel
-        assign entry_sel[i] = {entries_r[i].ppn, entries_r[i].flags, entries_r[i].level};
+        wire [TLB_VPN_WIDTH-1:0] low_mask = ~tlb_vpn_mask(entries_r[i].level);
+        assign entry_sel[i] = {entries_r[i].ppn, entries_r[i].flags, entries_r[i].level,
+                               low_mask[LOW_W-1:0]};
+        if (TLB_VPN_WIDTH > LOW_W) begin : g_hi
+            `UNUSED_VAR (low_mask[TLB_VPN_WIDTH-1:LOW_W])   // a leaf is below the root level
+        end
     end
 
     for (genvar l = 0; l < NUM_REQS; ++l) begin : g_lookup
@@ -79,10 +88,13 @@ module VX_tlb_cam import VX_tlb_pkg::*; #(
 
         // Lowest matching index wins: the encoder yields the hit flag, the
         // winning one-hot, and its index (for the MRU bump) without a mux tree.
+        // The one-hot is a prefix OR (MODEL 2), not a carry chain: it feeds the
+        // permission check and, through it, every lane's accept.
         wire [TLB_SIZE-1:0] hit_onehot;
         VX_priority_encoder #(
             .N       (TLB_SIZE),
-            .REVERSE (0)
+            .REVERSE (0),
+            .MODEL   (2)
         ) hit_enc (
             .data_in    (hit_vec),
             .onehot_out (hit_onehot),
@@ -106,11 +118,12 @@ module VX_tlb_cam import VX_tlb_pkg::*; #(
         end
         assign lookup_perm[l] = (| (hit_onehot & perm_vec));
 
-        wire [TLB_PPN_WIDTH-1:0]   sel_ppn   = sel[TLB_LEVEL_WIDTH+TLB_FLAGS_WIDTH +: TLB_PPN_WIDTH];
-        wire [TLB_FLAGS_WIDTH-1:0] sel_flags = sel[TLB_LEVEL_WIDTH +: TLB_FLAGS_WIDTH];
-        wire [TLB_LEVEL_WIDTH-1:0] sel_level = sel[0 +: TLB_LEVEL_WIDTH];
+        wire [TLB_PPN_WIDTH-1:0]   sel_ppn   = sel[LOW_W+TLB_LEVEL_WIDTH+TLB_FLAGS_WIDTH +: TLB_PPN_WIDTH];
+        wire [TLB_FLAGS_WIDTH-1:0] sel_flags = sel[LOW_W+TLB_LEVEL_WIDTH +: TLB_FLAGS_WIDTH];
+        wire [TLB_LEVEL_WIDTH-1:0] sel_level = sel[LOW_W +: TLB_LEVEL_WIDTH];
+        wire [LOW_W-1:0]           sel_low   = sel[0 +: LOW_W];
 
-        wire [TLB_VPN_WIDTH-1:0]   low = lookup_vpn[l] & ~tlb_vpn_mask(sel_level);
+        wire [TLB_VPN_WIDTH-1:0]   low = TLB_VPN_WIDTH'(lookup_vpn[l][LOW_W-1:0] & sel_low);
         // Splice the superpage's intra-page index from the VPN into the PPN.
         assign lookup_ppn[l]     = sel_ppn | TLB_PPN_WIDTH'(low);
         assign lookup_flags[l]   = sel_flags;

@@ -354,5 +354,5 @@ int main(int argc, char** argv) {
 	pb_PrintTimerSet(&timers);
 	pb_FreeParameters(parameters);
 
-	return errors;
+	return errors != 0;
 }

@@ -13,6 +13,7 @@
 
 #include "opc_unit.h"
 #include "core.h"
+#include <algorithm>
 #include <iostream>
 #include <iomanip>
 #include "types.h"
@@ -30,6 +31,9 @@ OpcUnit::OpcUnit(const SimContext &ctx, const char* name,
   , Input(this)
   , Output(this)
   , num_threads_(num_threads) {
+  // The scoreboard's output skid buffer: two entries, the one being collected
+  // among them, with a registered ready.
+  Input.set_registered_ready(true);
   regs_.reserve(num_warp_slots);
   for (uint32_t i = 0; i < num_warp_slots; ++i) {
     regs_.emplace_back(num_threads);
@@ -43,29 +47,29 @@ void OpcUnit::on_reset() {
   total_stalls_ = 0;
   cur_trace_ = nullptr;
   release_cycle_ = 0;
+  consume_cycle_ = 0;
+  consumed_ = false;
   // The register files are excluded: they are storage, not pipeline state, and
   // a launch is not a device reset. A slot that skips its startup relies on the
   // stack pointer that startup left behind, so clearing them here would strand
   // it at zero. They are zero-initialized at construction.
 }
 
+// Each bank serves one operand per cycle.
 static uint32_t compute_bank_conflicts(const instr_trace_t* trace) {
-  uint32_t stalls = 0;
+  uint32_t per_bank[VX_CFG_NUM_GPR_BANKS] = {};
+  uint32_t most = 0;
   for (uint32_t i = 0; i < NUM_SRC_REGS; ++i) {
-    for (uint32_t j = i + 1; j < NUM_SRC_REGS; ++j) {
-      if ((trace->src_regs[i].type == RegType::None)
-       || (trace->src_regs[j].type == RegType::None))
-        continue;
-      if ((trace->src_regs[i].type == RegType::Integer && trace->src_regs[i].id() == 0)
-       || (trace->src_regs[j].type == RegType::Integer && trace->src_regs[j].id() == 0))
-        continue; // skip x0
-      uint32_t bank_i = trace->src_regs[i].idx % VX_CFG_NUM_GPR_BANKS;
-      uint32_t bank_j = trace->src_regs[j].idx % VX_CFG_NUM_GPR_BANKS;
-      if (bank_i == bank_j)
-        ++stalls;
+    auto& reg = trace->src_regs[i];
+    if (reg.type == RegType::None) {
+      continue;
     }
+    if (reg.type == RegType::Integer && reg.id() == 0) {
+      continue; // skip x0
+    }
+    most = std::max(most, ++per_bank[reg.idx % VX_CFG_NUM_GPR_BANKS]);
   }
-  return stalls;
+  return most ? (most - 1) : 0;
 }
 
 void OpcUnit::on_tick() {
@@ -79,14 +83,20 @@ void OpcUnit::on_tick() {
     cur_trace_ = nullptr;
   }
 
-  // accept next uop into the holding slot
+  // accept next uop into the holding slot; it stays in the input buffer
+  // until its last operand read
   if (cur_trace_ == nullptr && !Input.empty()) {
     auto trace = Input.peek();
     uint32_t stalls = compute_bank_conflicts(trace);
     total_stalls_ += stalls;
     cur_trace_ = trace;
+    consume_cycle_ = cur_cycle + stalls;
     release_cycle_ = cur_cycle + 1 + stalls;
+    consumed_ = false;
+  }
+  if (cur_trace_ != nullptr && !consumed_ && cur_cycle >= consume_cycle_) {
     Input.pop();
+    consumed_ = true;
   }
 }
 

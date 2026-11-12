@@ -13,6 +13,11 @@
 #define OTYPE fp32
 #endif
 
+// K tiles per iteration of the K loop
+#ifndef KUNROLL
+#define KUNROLL 1
+#endif
+
 typedef struct {
   uint32_t M, N, K;
   uint64_t A_addr, B_addr, C_addr;

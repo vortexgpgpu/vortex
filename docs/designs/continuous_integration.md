@@ -84,11 +84,20 @@ ambient build tree and is never expanded inside a run: `build32/` and
 
 ### 3.1 The catalog
 
-One file per category, [`ci/testcases/<category>.yaml`](../../ci/testcases/).
-Fields map one to one onto `blackbox.sh` flags.
+A category is one file, [`ci/testcases/<category>.yaml`](../../ci/testcases/),
+or a directory of files, `ci/testcases/<category>/*.yaml`. Each file has its own
+defaults, and a directory runs as one cell per driver and XLEN. Small suites
+share a directory so that each does not pay a cell's setup alone: `isa` (mufu,
+zfhmin, rvc, riscv, amo), `sw` (opencl, hip, kernel, runtime), `integration`
+(gem5, sst, dtm, cupbop, mpi) and `tensor_sp` (sparse, and sparse with MX). A
+cell runs every case of its category on its driver, whatever the case's tier,
+so a directory holds only suites of the same tier. A file in a directory is
+also a marker named after the file, so `-m mufu` or `--test gem5` still selects
+one suite. A case id is unique within its category. Fields map one to one onto
+`blackbox.sh` flags.
 
 ```yaml
-category: amo
+category: isa                               # ci/testcases/isa/amo.yaml
 defaults:
   configs: "-DVX_CFG_EXT_A_ENABLE"
   xlen: [32, 64]
@@ -133,7 +142,10 @@ A case with `known_issue:` still builds and runs. `conftest.py` marks it
 `xfail`, so its failure does not fail the run; if it starts passing it
 surfaces as `XPASS`. Reserve it for triaged, documented breakage.
 `needs:` does not skip either — it records what a cell must provision, and a
-missing dependency is a real failure.
+missing dependency is a real failure. A cell's `needs` cover every case its
+`-m` expression selects, and the workflow provisions per-case tools (the
+foldsim prebuilt) from them rather than from the cell's name, because a
+check's cell gathers cases from every category.
 
 #### Lint rules
 
@@ -195,9 +207,9 @@ A check is an assertion across runs rather than a clean exit.
 
 | | `model_parity` | `perf_gate` |
 |---|---|---|
-| compares | SimX against rtlsim, same case | rtlsim against a checked-in baseline |
+| compares | a model against rtlsim, same case (SimX by default; Foldsim) | rtlsim against a checked-in baseline |
 | asserts | instructions equal; cycles within tolerance | cycles within tolerance; instructions equal |
-| tolerance | 5 %, overridable per case or per category | 2 %, one constant |
+| tolerance | 5 %, overridable per case or per category (0 for Foldsim) | 2 %, one constant |
 | golden data | none | `ci/baselines/perf/<category>.json` |
 | tier | `full` | `full` |
 | pinned to | the rtlsim driver, which elaborates the RTL | the rtlsim driver |
@@ -227,8 +239,27 @@ its own parity case with only that extension enabled, so a regression is
 attributable. Workloads are sized so that steady state dominates — a tiny
 kernel is all boot and dispatch skew, and its gap ratio is noise.
 
+A case's `legs:` names its two drivers, the model and then the reference;
+the default is `[simx, rtlsim]`. `ci/testcases/foldsim.yaml` runs
+`[foldsim, rtlsim]` at tolerance 0: Foldsim is compiled from the RTL and is
+cycle-exact by construction, so any cycle difference is a defect. A tiny
+configuration is enough there. Its reference is rtlsim behind the AXI4 adapter
+on the same DRAM bank model (`AXI_BUS=1 AXI_MEM_MODEL=bank`).
+
 **Never widen a tolerance to absorb a divergence.** Model the behavior, or
 mark the case `known_issue` while it is investigated.
+
+#### `release_parity`
+
+A debug build must not change timing. A debug build widens the RTL UUID to 44
+bits and enables assertions and traces. A blackbox case run with `--debug` can
+set `release_parity: true`. The runner then reruns it built release, at
+xlen 32, and requires identical instructions and cycles; it reads the debug
+run's counts from its `--log` file. This is a case field, not a check, so the
+case stays in its category cell and costs one extra run there, with no new
+cell. `debug:sgemm_tcu-2` carries it. That case is shaped to keep the data
+cache under pressure, with two channels whose same-word reads merge; a
+debug-only tag width reaching the read merge would show there.
 
 ### 3.4 `perf_gate`
 
@@ -254,22 +285,33 @@ so the parity and perf views of one workload are two cases.
 
 `perf_gate` catches a change that costs cycles. The synthesis gates catch one
 that costs **timing closure or area**: they synthesize a catalog of designs
-and assert the results against golden baselines.
+and assert the results against the target clock and area budget each build
+declares, recording every run's metrics in golden baselines. `logic_gate`
+catches one that makes a unit **deeper** or the design **larger**, in seconds
+and without synthesis.
 
-| | `fpga_gate` | `asic_gate` |
-|---|---|---|
-| flow | Vivado synthesis, place and route | sv2v → Yosys → ABC → OpenSTA, on ASAP7 |
-| design tree | `hw/syn/xilinx/dut` | `hw/syn/yosys/dut` |
-| gated against the baseline | `fmax_mhz`, `lut` | `cell_area_um2` (Fmax only against the target clock) |
-| also recorded | `wns_ns`, `lutram`, `ff`, `bram`, `uram`, `dsp`, critical paths, high-fanout nets | `wns_ns`, `tns_ns`, `seq_area_um2`, `sram_area_um2`, `cell_count`, `power_mw` |
-| comparable when | same device, optimization level, xlen | same PDK, VT, corner, xlen |
-| runner | self-hosted, licensed Vivado | hosted, one job per design |
-| default tolerance | 5 % | 5 % |
+| | `fpga_gate` | `asic_gate` | `logic_gate` |
+|---|---|---|---|
+| flow | Vivado synthesis, place and route | Yosys (slang frontend) → ABC → OpenSTA, on ASAP7 | CIRCT → `foldsim-estimate-timing` (logic levels as Vivado counts them on `DEVICE`'s family) and `foldsim-estimate-area` (its cells, memories and DSPs) |
+| design tree | `hw/syn/xilinx/dut` | `hw/syn/yosys/dut` | `hw/syn/xilinx/dut`, target `beacon` |
+| gated | `fmax_mhz` against the target clock, `lut` against `lut_budget` | `fmax_mhz` against the target clock, `cell_area_um2` against `area_budget_um2` | `max_levels` against the baseline, the deepest end point of every RTL unit, and `lut`, `ff`, `lutram`, `bram`, `uram`, `dsp` against the baseline |
+| also recorded | `wns_ns`, `lutram`, `ff`, `bram`, `uram`, `dsp`, critical paths, high-fanout nets | `wns_ns`, `tns_ns`, `seq_area_um2`, `sram_area_um2`, `cell_count`, `power_mw` | end point bits at ≥ 12 and ≥ 8 levels, the deepest paths |
+| comparable when | same device, optimization level, xlen | same PDK, VT, corner, xlen | same CIRCT, foldsim, xlen |
+| runner | self-hosted, licensed Vivado | hosted, one job per design | hosted, one `ci.yml` cell for the catalog, planned with `perf_gate`; the opt-in `gpu` group self-hosted |
+| default tolerance | Fmax 2 %, LUT 5 % | Fmax 2 %, cell area 5 % | depth none: Beacon is deterministic; area 5 % |
 
-Neither is a pytest cell. A cell is a build tree plus a driver; a synthesis
-build is neither, and both gates are hours long. They are standalone scripts
+The synthesis gates are not pytest cells. A cell is a build tree plus a driver;
+a synthesis build is neither, and it is hours long. They are standalone scripts
 driven by their own workflows, and their tiers are **opt-in**: an empty tier
 selection means "everything a cell can run", which excludes them.
+
+`logic_gate` is a cell, because it guards what `perf_gate` guards from the
+other side: perf_gate catches a change that costs cycles, logic_gate one that
+costs depth or area. Its `gate` case is a script case on the rtlsim driver at
+tier smoke, so the planner schedules its cell exactly when it schedules
+perf_gate's rtlsim cells: every pull request, and every push whose diff forces
+rtlsim in (the RTL or the config). The cell installs foldsim and pyslang
+(`needs: foldsim`). Only its `gpu` case stays opt-in, in tier `timing_gpu`.
 
 #### One implementation, two adapters
 
@@ -277,24 +319,35 @@ selection means "everything a cell can run", which excludes them.
 tool-specific — catalog loading, the config hash, threshold resolution,
 `known_issue`, the resumable session, the scheduler, the gate and the report.
 A tool adapter supplies only what differs: metric names, how the flow is
-invoked, what its log looks like, and which environment fields make two runs
-comparable. `fpga_gate.py` and `asic_gate.py` are entry points that pin the
-tool.
+invoked, what its log looks like, which environment fields make two runs
+comparable, and any assertion beyond the per-metric check (`logic_gate`'s
+per-unit depths). `fpga_gate.py`, `asic_gate.py` and `logic_gate.py` are
+entry points that pin the tool.
 
 #### Spec and baseline
 
 | file | written by | holds |
 |---|---|---|
-| `ci/testcases/{fpga,asic}_gate.yaml` | a person | per build: a design, a target clock, `CONFIGS`, a group, optional `thresholds` and `known_issue` |
-| `ci/baselines/synthesis/{xilinx,yosys}/<group>.json` | the gate | measured metrics, the config hash, the tool versions and environment |
+| `ci/testcases/{fpga,asic,logic}_gate.yaml` | a person | per build: a design, a target clock, an area budget (synthesis gates), `CONFIGS`, a group, optional `thresholds`, `known_issue`, `xlen`, `profile` and `opt_in` |
+| `ci/baselines/synthesis/{xilinx,yosys,beacon}/<group>.json` | the gate | measured metrics, the config hash, the tool versions and environment |
 
-Groups are `core`, `tensor`, `graphics`, `dxa` and `vm`. `asic_gate` uses the
+Groups are `core`, `tensor`, `graphics`, `dxa` and `vm`, plus `logic_gate`'s
+opt-in `gpu`. `asic_gate` uses the
 same group names and gates a subset of the builds (§4.5), so where the two
 gates share a design, a divergence between the tools on the same module is a
-finding, not noise.
+finding, not noise. `logic_gate` measures exactly `fpga_gate`'s builds, so a
+unit it flags can be read against the Fmax gate's critical paths; its `gpu`
+group adds builds no synthesis gate can afford.
+
+A build may pin its own `xlen`, and runs in that width's build tree
+(`build<xlen>_<gate>`); `profile` folds a hardware profile
+(`profiles/<name>.json`) under its `CONFIGS`, which win over it. Both are in
+the config hash. An `opt_in` build runs only when selected by id or group.
 
 The config hash ties the two files together: edit the spec, and the gate
-refuses to compare against numbers recorded for the old one. Its
+refuses to compare against numbers recorded for the old one. It matters only
+for a metric gated against its baseline (`--gate`); the default assertions
+read the target clock and the budget, which are not part of the hash. Its
 tool-specific half is the device and optimization level for Vivado and the
 PDK, VT and corner for Yosys.
 
@@ -306,9 +359,9 @@ developer runs cannot diverge.
 
 | assertion | reason |
 |---|---|
-| each gated metric within tolerance of its baseline | regression detection |
-| an improvement beyond tolerance also fails | the gain must be recorded |
-| Fmax within tolerance of the **target clock**, independent of the baseline | a baseline recorded below target must not let a build pass by matching it |
+| Fmax no more than its tolerance **below the target clock** | the design meets the clock it is built for; a faster result never fails, since placement noise alone moves Fmax by more than 2 % |
+| area no more than its tolerance **over the build's budget** | the budget is fixed in the catalog, so re-recording a baseline cannot creep area upward; raising it is a reviewed edit |
+| any other metric gated with `--gate`: within tolerance of its baseline, both ways | an improvement beyond tolerance must be recorded |
 
 Thresholds resolve most-specific first: a build's own `thresholds`, then a
 global per-metric threshold, then the global default.
@@ -327,13 +380,82 @@ so the flow reports the signed worst slack instead.
 | verdict | meaning | fails the run |
 |---|---|---|
 | `PASS` | within tolerance | no |
-| `REGRESSION` | a gated metric got worse | yes |
-| `IMPROVED` | a gated metric got better; record it | yes |
+| `FAIL` | Fmax below target, area over budget, or a baseline-gated metric worse | yes |
+| `IMPROVED` | a baseline-gated metric got better; record it | yes |
 | `STALE` | the spec or the tool changed since the baseline | yes |
-| `FAIL` | the build produced no metrics | yes |
+| `BUILD-FAIL` | the build produced no metrics | yes |
 | `KNOWN-ISSUE` | a tracked expected failure | no |
 | `XPASS` | a known issue stopped reproducing; clear the flag | no |
 | `RECORDED` | a baseline was written | no |
+
+#### What `logic_gate` asserts
+
+Beacon ([beacon.md](beacon.md)) counts logic levels, not
+slack: it does not see wires, so it gates depth, which it predicts (Spearman
+0.50–0.93 against Vivado per register on the V80 gates), and leaves Fmax to
+`fpga_gate`. It counts them for the family of
+the DUT flow's `DEVICE` (the U55C by default), which
+`gen_platform.py --emit=family` reads from `hw/syn/xilinx/platforms`; the
+device is part of the baseline fingerprint, as it is for `fpga_gate`.
+Beacon has profiles for the V80 and the U55C only, and fails on any other
+`DEVICE`. A
+**unit** is an end point's instance path with generate indices folded
+(`g_banks_3_bank` → `g_banks_*_bank`).
+
+| assertion | reason |
+|---|---|
+| no unit deeper than its baseline | the change that adds a level is named, by unit |
+| no new unit at the fix threshold (12 levels at 300 MHz) | a new deep cone is a regression even with no baseline to compare |
+| a shallower unit, or one that drops below the watch threshold (8), reads `IMPROVED` | the gain must be recorded |
+| no output of a build's `interfaces` modules reached combinationally from outside the instance in more bits than its baseline | modules register their outgoing interfaces: a path that runs through a core, socket or cluster boundary is what fails routing across SLRs, and Beacon names it by port |
+| no resource of the design (`lut`, `ff`, `lutram`, `bram`, `uram`, `dsp`) more than 5 % above its baseline | area found in minutes, not in a nightly Vivado run; a memory that moves between distributed and block RAM moves two columns, and `beacon_area.txt` names each memory's placement |
+
+Beside the assertions, each build reports what levels miss: the learned
+calibration ([beacon.md §7.1](beacon.md)) scores every register from its
+levels, width, fan-out and span, and `beacon_risk.txt` lists the slowest
+predicted, with the design's predicted Fmax and its count of likely failures
+as the `p_fmax` and `risk` columns. They are recorded, not gated: held out,
+the ranking finds Vivado's near-critical registers far better than levels,
+but the Fmax is within about 7 %. A wide enable driven across an instance by
+a same-cycle lookup (the 250 MHz misses of `tensor` and `top`) ranks first
+there and in the hundreds by levels. `fpga_gate` writes every build's end
+point table (`ep.csv`), which retrains it.
+
+`interfaces` lists modules by name; their instances keep their ports through
+Beacon's mapping (`BEACON_INTERFACES` in the DUT flow), and `ports.csv`
+counts, per output port, the bits a combinational path from outside the
+instance reaches.
+
+Depth has no tolerance: the same RTL and tools give the same levels. Area is
+as deterministic, but a feature adds some by design, so it has `fpga_gate`'s
+LUT tolerance; its LUTs are the area mapping's scaled to Vivado's average
+([beacon.md §4.5](beacon.md)), so it gates their change, not a budget. A new CIRCT
+or foldsim can map the same RTL differently, so both versions are in the config
+hash and a tool change reads `STALE`. `make -C hw/syn/xilinx/dut <dut>-beacon`
+runs Beacon on one DUT by hand; its `beacon_paths.txt` lists every deep path op by op,
+by unit, with source lines, and a failing build names it.
+
+#### Full-GPU builds
+
+The `gpu` group runs Beacon on the whole processor (`vortex` DUT) with every
+feature on: the 32-bit machine with every extension, tensor format and
+graphics unit, and the `rtx5080` and `h100` profiles at XLEN 64. It catches
+what the per-unit DUTs cannot: the cluster, socket and L2 crossbars at full
+width, the kernel launch path into every core, and every extension at once.
+Vivado needs 48 hours and more on these designs; Beacon needs about 30 minutes.
+
+| cores | time | peak memory | end points |
+|---|---|---|---|
+| 1 | 37 min | 101 GB | 7.1 M |
+| 2 | 24 min | 90 GB | 13.2 M |
+| 4 | 32 min | 94 GB | 25.4 M |
+| 8 | 49 min | 121 GB | 50.1 M |
+
+Measured with the `rtx5080` features at XLEN 64 on a loaded machine. The
+builds use 4 cores: the core count widens only the arbiters and crossbars,
+and the deepest path was the same at every count, while memory grows with it.
+The group is opt-in in the gate (`ci/logic_gate.py -b gpu -j 1`) and its own
+tier, `timing_gpu`, in the catalog, so no CI sweep picks it up.
 
 #### Running a multi-hour sweep
 
@@ -341,7 +463,7 @@ so the flow reports the signed worst slack instead.
 |---|---|
 | scheduling | longest build first, from the recorded build times, so the longest is in flight from the start; `-j` caps parallel builds and each build's tool threads are derived from it |
 | isolation | every build gets a unique `PREFIX`, hence its own tree and log. On the Yosys flow this is load-bearing: its Makefile caches generated sources and does not regenerate them when the include set changes, so two designs sharing a tree would synthesize the first one's sources |
-| early-failure watch | the runner follows each log and announces the point past which a front-end error can no longer occur — the end of RTL elaboration for Vivado, the end of source generation and sv2v conversion for Yosys. A build that fails before it is reported as failed before synthesis, with its error lines quoted |
+| early-failure watch | the runner follows each log and announces the point past which a front-end error can no longer occur — the end of RTL elaboration for Vivado, the end of source generation for Yosys, whose slang frontend elaborates inside synthesis. A build that fails before it is reported as failed before synthesis, with its error lines quoted |
 | resumable sessions | each build directory carries a stamp of config hash, status and metrics. `--resume` reuses a build finished for this config, lets an unfinished one continue from its checkpoint, and rebuilds one whose config changed |
 | progress | phase transitions as they land, with a heartbeat between; `-v` streams the raw log |
 
@@ -376,6 +498,7 @@ number into a location. They are never gated.
 | `build` | one build tree per XLEN, uploaded as an artifact |
 | `tests` | one job per cell: `pytest ci -m "<expression>"`, JUnit out |
 | `complete` | the single required check |
+| `change-impact` | advisory: classifies the diff R0..R3 with the base revision's `ci/change_impact.py` and policy ([code-review-policy.md](../review/code-review-policy.md)), writes the class to the job summary; read-only, never fails, and no job needs it |
 
 `setup` exists so that a cold cache prepares the toolchain once, not once per
 XLEN.
@@ -481,6 +604,21 @@ job ends with no report, indistinguishable from an infrastructure outage.
 The largest designs — `top`, `gfx`, `tensor`, `vm` — are therefore gated on
 `fpga_gate` only, and `core` and `tex` are gated at a reduced width. Measure a design's peak memory before
 adding it: an over-budget design costs a silent job kill, not a red gate.
+
+### 4.6 `logic_gate.yml`
+
+Manual dispatch only: the gate itself runs in `ci.yml` as the `logic_gate`
+cell (§3.5). A dispatch runs Beacon on the catalog, or on the builds it names,
+in one hosted job: it restores the toolchain, installs foldsim
+(`ci/toolchain_install.sh --foldsim`), runs the catalog's `run:` command with
+`--report`, and renders the report with
+[`synth_report.py`](../../ci/synth_report.py) into the workflow summary. The
+artifacts are the report and, per design, the build log, the summary and
+Beacon's deepest paths.
+
+A manual dispatch with `gpu: true` runs the catalog's `gpu` case instead, on
+the self-hosted machine: one build at a time, up to two hours each, since each
+needs about 95 GB of memory.
 
 ---
 
