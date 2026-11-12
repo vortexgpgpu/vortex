@@ -51,7 +51,8 @@ module VX_decode import
 `ifdef VX_CFG_EXT_U_ENABLE
     `STATIC_ASSERT (!`VX_CFG_EXT_C_ENABLED, ("uniform registers take the compressed encodings"))
     // Bits [1:0] select the register file of an otherwise standard encoding:
-    // 2'b10 every operand uniform, 2'b01 a uniform second operand.
+    // 2'b10 every operand uniform, 2'b01 a uniform second operand, 2'b00 a
+    // uniform first operand.
     wire [1:0] umode = instr[1:0];
     wire [6:0] opcode = {instr[6:2], 2'b11};
 `else
@@ -1123,12 +1124,15 @@ module VX_decode import
             end
         end else if (umode == 2'b01) begin
             // the uniform operand: the second source, or the only one of an
-            // immediate form
-            if (opcode == INST_I || opcode == INST_I_W) begin
+            // immediate form or a load
+            if (opcode == INST_I || opcode == INST_I_W || opcode == INST_L || opcode == INST_FL) begin
                 reg_ids[RV_RS1] = make_reg_num(REG_TYPE_U, rs1);
             end else begin
                 reg_ids[RV_RS2] = make_reg_num(REG_TYPE_U, rs2);
             end
+        end else if (umode == 2'b00) begin
+            // the uniform operand: the first source
+            reg_ids[RV_RS1] = make_reg_num(REG_TYPE_U, rs1);
         end
     `endif
     end

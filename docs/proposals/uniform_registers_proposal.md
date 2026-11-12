@@ -22,8 +22,8 @@ three unused values:
 |---|---|---|
 | `11` | standard | |
 | `10` | **uniform**: the instruction runs once per warp on `u` registers | RVV's scalar instructions |
-| `01` | **uniform operand**: a per-thread instruction with one `u` source | RVV `.vx` / indexed loads |
-| `00` | reserved | |
+| `01` | **uniform operand**: a per-thread instruction whose second source (or only source) is a `u` register | RVV `.vx` |
+| `00` | **uniform first operand**: a per-thread instruction whose first source is a `u` register, the other per-thread | |
 
 Bits `[31:2]` keep their standard fields, funct values and immediates; the
 mode only changes which register file an operand names. A combination not
@@ -54,12 +54,22 @@ The second source is uniform, as RVV's `vop.vx vd, vs2, rs1` computes
 | OP (incl. M, Zicond); OP-32 at XLEN=64 | `xd = xs1 op us2`: `i * stride`, `x << shift`, `x - base`, `i < n` |
 | OP-IMM; OP-IMM-32 at XLEN=64 | `xd = us1 op imm` (the only source is uniform); `addi xd, us1, 0` is a broadcast |
 | BRANCH | `xs1 cmp us2`: `blt i, n` |
+| LOAD, LOAD-FP (`flw`, `fld`) | `xd = mem[us1 + imm]`, `fd = mem[us1 + imm]`: every lane reads the same address |
 | STORE | `mem[xs1 + imm] = us2` |
 | Vortex custom (TCU, TMEM, DXA, warp control) | per instruction, the operand that is warp-invariant (descriptor, TMEM address, barrier id) from `u`; defined in a later phase |
 
-A uniform first operand of a non-commutative op (`u - x`, `u << x`, `u < x`)
-takes a broadcast (`addi xt, us, 0` in mode `01`) first. If that proves
-common, mode `00` is the reserved place for reversed forms.
+### Mode `00`: uniform first operand
+
+The first source is uniform, for the operations that do not commute
+(`u - x`, `u << x`, `u < x`) and for a uniform base address.
+
+| Opcode | Meaning |
+|---|---|
+| OP (incl. M, Zicond); OP-32 at XLEN=64 | `xd = us1 op xs2` |
+| BRANCH | `us1 cmp xs2` |
+| STORE, STORE-FP (`fsw`, `fsd`) | `mem[us1 + imm] = xs2`, `mem[us1 + imm] = fs2` |
+
+LOAD stays reserved in mode `00`, so the all-zero word is still illegal.
 
 ## Semantics
 
@@ -71,12 +81,13 @@ common, mode `00` is the reserved place for reversed forms.
 
 ## ABI
 
-- Nothing is preset at warp launch: a kernel reads its argument block with a
-  uniform CSR read (`csrr u1, mscratch` in mode `10`) or moves it from `a0`
-  (`u.mvx`), so the hardware has no launch-time write port into the file. A
-  per-warp spill area for `u` registers is an ABI question for the compiler
-  phase.
-- `u3`–`u15` caller-saved, `u16`–`u31` callee-saved.
+- Nothing is preset at warp launch, so the hardware has no launch-time write
+  port into the file. The CTA trampoline reads the argument block with a
+  uniform CSR read (`csrrs u10, mscratch, u0`), and a `__kernel` entry takes it
+  in `u10`.
+- `u1`–`u15` caller-saved, `u16`–`u31` callee-saved. A `u` register spills to
+  the thread's stack with a mode-`01` store and reloads with a load and
+  `u.mvx`.
 
 ## Implementation
 

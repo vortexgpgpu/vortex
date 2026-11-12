@@ -575,19 +575,24 @@ Instr::Ptr Decoder::decode_uniform(uint32_t code, uint64_t uuid, uint8_t umode) 
     return instr;
   }
 
+  const bool first = (umode == Instr::UMODE_FIRST);
   bool legal;
   switch (op) {
   case Opcode::R:
-  case Opcode::I:
   case Opcode::B:
     legal = true;
+    break;
+  case Opcode::I:
+    legal = !first;
     break;
   case Opcode::S:
     legal = (VX_CFG_XLEN == 64 || funct3 != 3);
     break;
   case Opcode::R_W:
-  case Opcode::I_W:
     legal = (VX_CFG_XLEN == 64);
+    break;
+  case Opcode::I_W:
+    legal = !first && (VX_CFG_XLEN == 64);
     break;
   case Opcode::LUI:
   case Opcode::AUIPC:
@@ -596,7 +601,13 @@ Instr::Ptr Decoder::decode_uniform(uint32_t code, uint64_t uuid, uint8_t umode) 
     break;
   case Opcode::L:
     // ld and lwu are RV64 only, as in the base ISA
-    legal = uniform && (VX_CFG_XLEN == 64 || (funct3 != 3 && funct3 != 6));
+    legal = !first && (VX_CFG_XLEN == 64 || (funct3 != 3 && funct3 != 6));
+    break;
+  case Opcode::FL:
+    legal = (umode == Instr::UMODE_OPERAND) && (funct3 == 2 || funct3 == 3);
+    break;
+  case Opcode::FS:
+    legal = first && (funct3 == 2 || funct3 == 3);
     break;
   case Opcode::SYS:
     legal = uniform && (funct3 != 0);
@@ -624,9 +635,10 @@ Instr::Ptr Decoder::decode_uniform(uint32_t code, uint64_t uuid, uint8_t umode) 
       }
     }
   } else {
-    // the uniform operand: the second source, or the only one of an
-    // immediate form
-    uint32_t i = (op == Opcode::I || op == Opcode::I_W) ? 0 : 1;
+    // the uniform operand: the first source in mode 00; otherwise the second,
+    // or the only one of an immediate form or a load
+    bool only = (op == Opcode::I || op == Opcode::I_W || op == Opcode::L || op == Opcode::FL);
+    uint32_t i = (first || only) ? 0 : 1;
     instr->set_src_reg(i, instr->get_src_reg(i).idx, RegType::Uniform);
   }
   instr->set_umode(umode);

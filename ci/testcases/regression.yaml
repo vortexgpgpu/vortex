@@ -23,7 +23,8 @@ tests:
 # and stores, same-word stores, and per-lane order against the lane's own
 # stores and atomics.
 # Uniform registers (VX_CFG_EXT_U_ENABLE): uniform ALU, branch, CSR, load and
-# store, moves both ways, and uniform operands of per-thread instructions.
+# store, moves both ways, and uniform first or second operands of per-thread
+# instructions, including load and store bases.
 - id: uniform-regs
   via: blackbox
   drivers:

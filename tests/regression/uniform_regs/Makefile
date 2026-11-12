@@ -13,4 +13,7 @@ OPTS ?= -n64
 
 KERNEL_LIB := vortex2
 
+# The kernel names its uniform registers by hand.
+XVORTEXU_CODEGEN := 0
+
 include ../common.mk

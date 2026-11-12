@@ -165,7 +165,8 @@ tests:
   via: blackbox
   app: sgemm
   args: -n64
-# Uniform registers: the per-warp file and its single-lane accesses.
+# Uniform registers: the per-warp file, its single-lane accesses, and uniform
+# operands and addresses of per-thread instructions.
 - id: parity-uniform-regs
   check: model_parity
   via: blackbox

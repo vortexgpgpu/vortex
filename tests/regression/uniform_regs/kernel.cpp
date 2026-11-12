@@ -49,4 +49,22 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
   size_t res = vx_x_mvu(12);
   vx_xu_store(VX_U_W, 2, res, RES_XSTORE * 4);
+
+  size_t xn = vx_xu_load(VX_U_W, 1, ARG_N);
+  vx_ux_store(VX_U_W, xn, 12, RES_XLOAD * 4);
+  float fs = vx_xu_flw(1, ARG_SCALE);
+  vx_ux_fsw(fs, 12, RES_FLOAD * 4);
+  vx_ux_store(VX_U_W, vx_ux_op(VX_U_SUB, 2, size_t(1)), 12, RES_SUBF * 4);
+  vx_ux_store(VX_U_W, vx_ux_op(VX_U_SLTU, 5, xn), 12, RES_SLTF * 4);
+
+  // bltu u5 (scale), n: taken; bltu u2 (n), scale: not taken
+  size_t xs = vx_x_mvu(5), br = 0;
+  __asm__ volatile (
+    ".insn b %3, 6, x5, %1, 1f\n\t"
+    "ori %0, %0, 4\n"
+    "1: .insn b %3, 6, x2, %2, 2f\n\t"
+    "ori %0, %0, 1\n"
+    "2:"
+    : "+r"(br) : "r"(xn), "r"(xs), "i"(VX_UF_BRANCH));
+  vx_ux_store(VX_U_W, br, 12, RES_BRF * 4);
 }

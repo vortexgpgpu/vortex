@@ -20,9 +20,13 @@
 // semantics it keeps (the W forms, ld/sd and lwu at XLEN=64 only):
 //   0b10: every register is uniform; loads and stores are made once per warp.
 //   0b01: a per-thread instruction whose second source (the only source of an
-//         immediate form, a store's data) is uniform, broadcast to every lane.
-// The compiler does not see the uniform registers, so these are volatile and
-// keep their order.
+//         immediate form or a load, a store's data) is uniform, broadcast to
+//         every lane.
+//   0b00: a per-thread instruction whose first source (a store's base) is
+//         uniform.
+// These name the registers by hand, so they suit code built without +xvortexu,
+// where the compiler does not allocate the uniform registers; they are volatile
+// and keep their order.
 
 #define __VX_U_STR(x) #x
 #define __VX_U(n) "x" __VX_U_STR(n)
@@ -40,6 +44,13 @@
 #define VX_UO_OP      0x31
 #define VX_UO_OP_IMM  0x11
 #define VX_UO_STORE   0x21
+#define VX_UO_LOAD    0x01
+#define VX_UO_LOAD_FP 0x05
+#define VX_UF_OP      0x30
+#define VX_UF_OP_32   0x38
+#define VX_UF_BRANCH  0x60
+#define VX_UF_STORE   0x20
+#define VX_UF_STORE_FP 0x24
 
 // funct7/funct3 of the integer operations
 #define VX_U_ADD    0x00, 0
@@ -140,5 +151,34 @@
 #define vx_xu_store(width, us2, xs1, off) \
   __asm__ volatile (".insn s %0, %1, " __VX_U(us2) ", %2(%3)" \
                     :: "i"(VX_UO_STORE), "i"(width), "i"(off), "r"(xs1) : "memory")
+
+// per thread: x = mem[us1 + off], f = mem[us1 + off] (every lane reads the
+// same address)
+#define vx_xu_load(width, us1, off) ({ \
+  size_t __x; \
+  __asm__ volatile (".insn i %1, %2, %0, %3(" __VX_U(us1) ")" \
+                    : "=r"(__x) : "i"(VX_UO_LOAD), "i"(width), "i"(off) : "memory"); \
+  __x; })
+#define vx_xu_flw(us1, off) ({ \
+  float __f; \
+  __asm__ volatile (".insn i %1, 2, %0, %2(" __VX_U(us1) ")" \
+                    : "=f"(__f) : "i"(VX_UO_LOAD_FP), "i"(off) : "memory"); \
+  __f; })
+
+// per thread: us1 op xs2
+#define vx_ux_op(op, us1, xs2) __VX_UX_R(op, us1, xs2)
+#define __VX_UX_R(f7, f3, us1, xs2) ({ \
+  size_t __x; \
+  __asm__ volatile (".insn r %1, %2, %3, %0, " __VX_U(us1) ", %4" \
+                    : "=r"(__x) : "i"(VX_UF_OP), "i"(f3), "i"(f7), "r"(xs2)); \
+  __x; })
+
+// per thread: mem[us1 + off] = xs2, mem[us1 + off] = fs2
+#define vx_ux_store(width, xs2, us1, off) \
+  __asm__ volatile (".insn s %0, %1, %2, %3(" __VX_U(us1) ")" \
+                    :: "i"(VX_UF_STORE), "i"(width), "r"(xs2), "i"(off) : "memory")
+#define vx_ux_fsw(fs2, us1, off) \
+  __asm__ volatile (".insn s %0, 2, %1, %2(" __VX_U(us1) ")" \
+                    :: "i"(VX_UF_STORE_FP), "f"(fs2), "i"(off) : "memory")
 
 #endif // __VX_UNIFORM_H__

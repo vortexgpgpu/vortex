@@ -12,6 +12,11 @@ enum {
   RES_SUB,       // n - scale
   RES_NT,        // csrr NUM_THREADS
   RES_XSTORE,    // n stored per thread through a uniform store operand
+  RES_XLOAD,     // n loaded per thread from a uniform address
+  RES_FLOAD,     // scale's bits through flw/fsw at uniform addresses
+  RES_SUBF,      // n - 1, the uniform value first
+  RES_SLTF,      // scale < n, the uniform value first
+  RES_BRF,       // branches on a uniform first operand
   RES_COUNT
 };
 
