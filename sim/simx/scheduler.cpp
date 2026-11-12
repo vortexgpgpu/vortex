@@ -107,6 +107,8 @@ Scheduler::Scheduler(const SimContext& ctx, const char* name, Core* core)
     }
     scs_enabled_ = std::string(mode) == "scs";
   }
+#endif
+#if defined(VX_CFG_DIVERGE_TYPE_SCS) || defined(VX_CFG_DIVERGE_TYPE_ITS)
   eval_metrics_ = std::getenv("VORTEX_EVAL_METRICS") != nullptr;
 #endif
 
@@ -133,6 +135,12 @@ Scheduler::~Scheduler() {
               << " switches=" << eval_switches_
               << " watchdog_switches=" << eval_watchdog_switches_
               << " peak_contexts=" << eval_peak_contexts_ << std::endl;
+  }
+#elif defined(VX_CFG_DIVERGE_TYPE_ITS)
+  if (eval_metrics_) {
+    std::cout << "EVAL: core=" << core_->id()
+              << " issued=" << eval_issued_
+              << " active_lanes=" << eval_active_lanes_ << std::endl;
   }
 #endif
 }
@@ -525,11 +533,13 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
     trace->cta_id = warp.cta_csrs.cta_id;
     trace->PC     = warp.PC;
     trace->tmask  = warp.tmask;
-#ifdef VX_CFG_DIVERGE_TYPE_SCS
+#if defined(VX_CFG_DIVERGE_TYPE_SCS) || defined(VX_CFG_DIVERGE_TYPE_ITS)
     if (eval_metrics_) {
       ++eval_issued_;
       eval_active_lanes_ += warp.tmask.count();
+#ifdef VX_CFG_DIVERGE_TYPE_SCS
       observe_split_contexts(warp);
+#endif
     }
 #endif
 

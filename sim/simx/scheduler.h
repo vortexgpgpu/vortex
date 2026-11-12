@@ -315,9 +315,13 @@ private:
   // SCS: pull the next runnable subgroup with live (non-exited) lanes into the
   // running slot; drops stale all-exited entries. Returns true on success.
   bool scs_resume_next(warp_t& warp);
+#endif // VX_CFG_DIVERGE_TYPE_SCS
 
-  // ThreadSplit evaluation: A/B toggle + metric accumulators (SCS arm only).
+  // ThreadSplit evaluation counters.
+#ifdef VX_CFG_DIVERGE_TYPE_SCS
   bool scs_enabled_ = true;
+#endif
+#if defined(VX_CFG_DIVERGE_TYPE_SCS) || defined(VX_CFG_DIVERGE_TYPE_ITS)
   bool eval_metrics_ = false;
   uint64_t eval_issued_ = 0;
   uint64_t eval_active_lanes_ = 0;
@@ -325,7 +329,7 @@ private:
   uint64_t eval_switches_ = 0;
   uint64_t eval_watchdog_switches_ = 0;
   uint64_t eval_peak_contexts_ = 0;
-#endif // VX_CFG_DIVERGE_TYPE_SCS
+#endif
 
   Core* core_;
 

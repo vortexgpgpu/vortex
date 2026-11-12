@@ -1800,4 +1800,23 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     end
 `endif // THREADSPLIT_EVAL
 `endif // VX_CFG_DIVERGE_TYPE_SCS
+`ifdef VX_CFG_DIVERGE_TYPE_ITS
+`ifdef THREADSPLIT_EVAL
+    longint unsigned eval_issued;
+    longint unsigned eval_lanes;
+    initial begin
+        eval_issued = 0;
+        eval_lanes = 0;
+    end
+    always @(posedge clk) begin
+        if (!reset && schedule_if_fire) begin
+            eval_issued <= eval_issued + 1;
+            eval_lanes <= eval_lanes + 64'($countones(schedule_if.data.tmask));
+        end
+    end
+    final begin
+        $display("EVAL: core=%0d issued=%0d active_lanes=%0d", CORE_ID, eval_issued, eval_lanes);
+    end
+`endif // THREADSPLIT_EVAL
+`endif // VX_CFG_DIVERGE_TYPE_ITS
 endmodule
