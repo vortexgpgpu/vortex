@@ -154,13 +154,14 @@ vx_result_t Module::load_bytes(Device* dev, const void* bytes_, size_t size,
             const uint64_t pc       = *reinterpret_cast<const uint64_t*>(e + 8);
             // {Ru, Rf, Rx} in units of 4 registers, to VX_DCR_KMU_NUM_REGS's
             // bytes; 0 runs with every register
-            m->num_regs_ = (uint32_t(regs & 0xf) * 4)
-                         | (uint32_t((regs >> 4) & 0xf) * 4) << 8
-                         | (uint32_t((regs >> 8) & 0xf) * 4) << 16;
+            const uint32_t num_regs = (uint32_t(regs & 0xf) * 4)
+                                    | (uint32_t((regs >> 4) & 0xf) * 4) << 8
+                                    | (uint32_t((regs >> 8) & 0xf) * 4) << 16;
             m->symbols_.push_back({
                 std::string(reinterpret_cast<const char*>(strings_start + name_off),
                             name_len),
-                pc
+                pc,
+                num_regs
             });
         }
         // A single-kernel vxbin (the regression tests) carries exactly one
@@ -170,10 +171,10 @@ vx_result_t Module::load_bytes(Device* dev, const void* bytes_, size_t size,
         // emitted a per-kernel entry stub. Multi-kernel images keep their
         // explicit names.
         if (m->symbols_.size() == 1 && m->symbols_[0].name != "main") {
-            m->symbols_.push_back({"main", min_vma});
+            m->symbols_.push_back({"main", min_vma, m->symbols_[0].num_regs});
         }
     } else {
-        m->symbols_.push_back({"main", min_vma});
+        m->symbols_.push_back({"main", min_vma, 0});
     }
 
     *out = m;
@@ -192,7 +193,7 @@ vx_result_t Module::get_kernel(const char* name, Kernel** out) {
     for (const auto& s : symbols_) {
         if (s.name == name) {
             Kernel* k = nullptr;
-            auto r = Kernel::create(this, s.pc, &k);
+            auto r = Kernel::create(this, s.pc, s.num_regs, &k);
             if (r != VX_SUCCESS) return r;
             // Cache holds a non-owning reference — Kernel's destructor
             // removes itself from the cache.
@@ -210,8 +211,8 @@ vx_result_t Module::get_kernel(const char* name, Kernel** out) {
 // Kernel
 // ----------------------------------------------------------------------------
 
-Kernel::Kernel(Module* mod, uint64_t pc)
-    : module_(mod), pc_(pc) {
+Kernel::Kernel(Module* mod, uint64_t pc, uint32_t num_regs)
+    : module_(mod), pc_(pc), num_regs_(num_regs) {
     module_->retain();
 }
 
@@ -233,23 +234,101 @@ Kernel::~Kernel() {
     }
 }
 
-vx_result_t Kernel::create(Module* mod, uint64_t pc, Kernel** out) {
+vx_result_t Kernel::create(Module* mod, uint64_t pc, uint32_t num_regs, Kernel** out) {
     if (!mod || !out) return VX_ERR_INVALID_VALUE;
-    *out = new Kernel(mod, pc);
+    *out = new Kernel(mod, pc, num_regs);
+    return VX_SUCCESS;
+}
+
+// Mirrors the CTA dispatcher: warp w fits iff (w / parts + 1) * R <= rows, for
+// the general and the uniform register files alike.
+vx_result_t Kernel::max_resident_warps(uint32_t* out) {
+    if (!out) return VX_ERR_INVALID_VALUE;
+    auto* dev = module_->device();
+    uint64_t nw = 0, rows = 0, parts = 0, urows = 0, isa = 0;
+    vx_result_t r;
+    if ((r = dev->query_caps(VX_CAPS_NUM_WARPS, &nw)) != VX_SUCCESS) return r;
+    if ((r = dev->query_caps(VX_CAPS_REG_FILE_ROWS, &rows)) != VX_SUCCESS) return r;
+    if ((r = dev->query_caps(VX_CAPS_REG_FILE_PARTS, &parts)) != VX_SUCCESS) return r;
+    if ((r = dev->query_caps(VX_CAPS_UREG_FILE_ROWS, &urows)) != VX_SUCCESS) return r;
+    if ((r = dev->query_caps(VX_CAPS_ISA_FLAGS, &isa)) != VX_SUCCESS) return r;
+    uint64_t fit = nw;
+    if (rows != 0 && parts != 0) {
+        const uint64_t all = (isa & VX_ISA_STD_F) ? 64 : 32;
+        const uint64_t regs = (num_regs_ == 0) ? all
+                            : (num_regs_ & 0xff) + ((num_regs_ >> 8) & 0xff);
+        fit = std::min(fit, (rows / regs) * parts);
+        const uint64_t uregs = (num_regs_ == 0) ? 32 : (num_regs_ >> 16) & 0xff;
+        if (urows != 0 && uregs != 0) {
+            fit = std::min(fit, (urows / uregs) * parts);
+        }
+    }
+    *out = (uint32_t)fit;
+    return VX_SUCCESS;
+}
+
+vx_result_t Kernel::max_active_ctas(uint32_t block_size, uint32_t lmem_size, uint32_t* out) {
+    if (!out || block_size == 0) return VX_ERR_INVALID_VALUE;
+    auto* dev = module_->device();
+    uint64_t nt = 0, nw = 0, lmem_cap = 0;
+    vx_result_t r;
+    if ((r = dev->query_caps(VX_CAPS_NUM_THREADS, &nt)) != VX_SUCCESS) return r;
+    if ((r = dev->query_caps(VX_CAPS_NUM_WARPS, &nw)) != VX_SUCCESS) return r;
+    if ((r = dev->query_caps(VX_CAPS_LOCAL_MEM_SIZE, &lmem_cap)) != VX_SUCCESS) return r;
+    uint32_t fit = 0;
+    if ((r = this->max_resident_warps(&fit)) != VX_SUCCESS) return r;
+    const uint64_t cta_warps = (block_size + nt - 1) / nt;
+    uint64_t ctas = (cta_warps <= fit) ? fit / cta_warps : 0;
+    // The dispatcher gives each CTA a fixed local-memory slot of this stride.
+    const uint64_t stride = (uint64_t(lmem_size) + VX_CFG_MEM_BLOCK_SIZE - 1)
+                          & ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
+    const uint64_t slots = (stride != 0) ? std::min<uint64_t>(nw, lmem_cap / stride) : nw;
+    *out = (uint32_t)std::min(ctas, slots);
+    return VX_SUCCESS;
+}
+
+// Like cudaOccupancyMaxPotentialBlockSize: the largest power-of-two block that
+// keeps the most warps resident.
+vx_result_t Kernel::max_occupancy_grid(uint32_t ndim, const uint32_t* global_dim,
+                                       uint32_t lmem_size, uint32_t* grid_out,
+                                       uint32_t* block_out) {
+    if (ndim == 0 || ndim > 3 || !global_dim || !grid_out || !block_out)
+        return VX_ERR_INVALID_VALUE;
+    uint64_t nt = 0;
+    vx_result_t r;
+    if ((r = module_->device()->query_caps(VX_CAPS_NUM_THREADS, &nt)) != VX_SUCCESS) return r;
+    uint32_t fit = 0;
+    if ((r = this->max_resident_warps(&fit)) != VX_SUCCESS) return r;
+    uint32_t best_occ = 0, warps = 0;
+    for (uint32_t w = 1; w <= fit; w *= 2) {
+        uint32_t ctas = 0;
+        if ((r = this->max_active_ctas(w * (uint32_t)nt, lmem_size, &ctas)) != VX_SUCCESS)
+            return r;
+        if (ctas * w >= best_occ && ctas != 0) { best_occ = ctas * w; warps = w; }
+    }
+    if (warps == 0) return VX_ERR_INVALID_VALUE;
+    uint32_t block[3];
+    if (ndim == 1) {
+        block[0] = warps * (uint32_t)nt; block[1] = 1; block[2] = 1;
+    } else {
+        block[0] = (uint32_t)nt; block[1] = warps; block[2] = 1;
+    }
+    for (uint32_t i = 0; i < ndim; ++i) {
+        block_out[i] = block[i];
+        grid_out[i]  = (global_dim[i] + block[i] - 1) / block[i];
+    }
     return VX_SUCCESS;
 }
 
 vx_result_t Kernel::get_max_block_size(uint32_t* x, uint32_t* y, uint32_t* z) {
     if (!x || !y || !z) return VX_ERR_INVALID_VALUE;
-    // Default block size: full warp width × num_warps × 1.
-    uint64_t nt = 0, nw = 0;
-    auto* dev = module_->device();
-    auto r = dev->query_caps(VX_CAPS_NUM_THREADS, &nt);
+    uint64_t nt = 0;
+    auto r = module_->device()->query_caps(VX_CAPS_NUM_THREADS, &nt);
     if (r != VX_SUCCESS) return r;
-    r = dev->query_caps(VX_CAPS_NUM_WARPS, &nw);
-    if (r != VX_SUCCESS) return r;
+    uint32_t fit = 0;
+    if ((r = this->max_resident_warps(&fit)) != VX_SUCCESS) return r;
     *x = (uint32_t)nt;
-    *y = (uint32_t)nw;
+    *y = fit;
     *z = 1;
     return VX_SUCCESS;
 }
@@ -335,4 +414,19 @@ extern "C" vx_result_t vx_kernel_get_max_block_size(vx_kernel_h k,
                                                     uint32_t* z) {
     if (!k) return VX_ERR_INVALID_HANDLE;
     return to_kernel(k)->get_max_block_size(x, y, z);
+}
+
+extern "C" vx_result_t vx_kernel_max_active_ctas(vx_kernel_h k, uint32_t block_size,
+                                                 uint32_t lmem_size, uint32_t* out) {
+    if (!k) return VX_ERR_INVALID_HANDLE;
+    return to_kernel(k)->max_active_ctas(block_size, lmem_size, out);
+}
+
+extern "C" vx_result_t vx_kernel_max_occupancy_grid(vx_kernel_h k, uint32_t ndim,
+                                                    const uint32_t* global_dim,
+                                                    uint32_t lmem_size,
+                                                    uint32_t* grid_out,
+                                                    uint32_t* block_out) {
+    if (!k) return VX_ERR_INVALID_HANDLE;
+    return to_kernel(k)->max_occupancy_grid(ndim, global_dim, lmem_size, grid_out, block_out);
 }

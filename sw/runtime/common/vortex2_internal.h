@@ -445,6 +445,7 @@ private:
     // Lazily-loaded device/ISA caps words (read once from the CP regfile).
     uint64_t                       dev_caps_     = 0;
     uint32_t                       dev_caps_ext_ = 0;
+    uint32_t                       rf_caps_ = 0;
     uint64_t                       isa_caps_     = 0;
     bool                           caps_loaded_ = false;
 
@@ -611,8 +612,6 @@ public:
     Device*  device()      { return device_; }
     Buffer*  image()       { return image_; }
     uint64_t base_address() const { return base_addr_; }
-    // {Ru, Rf, Rx} of the image (VX_DCR_KMU_NUM_REGS); 0 = every register.
-    uint32_t num_regs()     const { return num_regs_; }
 
     // Look up a named kernel entry point. Returns a new ref (caller releases).
     // Subsequent lookups of the same name return the same cached Kernel.
@@ -632,12 +631,12 @@ private:
     struct Symbol {
         std::string name;
         uint64_t    pc;
+        uint32_t    num_regs;
     };
 
     Device*                              device_;
     Buffer*                              image_;       // refcounted
     uint64_t                             base_addr_;
-    uint32_t                             num_regs_ = 0;
     std::vector<Symbol>                  symbols_;
     std::mutex                           kcache_mu_;
     std::map<std::string, Kernel*>       kernel_cache_;   // weak refs (no retain)
@@ -645,23 +644,29 @@ private:
 
 class Kernel : public RefCounted<Kernel> {
 public:
-    static vx_result_t create(Module* mod, uint64_t pc, Kernel** out);
+    static vx_result_t create(Module* mod, uint64_t pc, uint32_t num_regs, Kernel** out);
 
     Module*  module()      { return module_; }
     uint64_t pc()    const { return pc_; }
-    uint32_t num_regs() const { return module_->num_regs(); }
+    // {Ru, Rf, Rx} (VX_DCR_KMU_NUM_REGS); 0 = every register.
+    uint32_t num_regs() const { return num_regs_; }
 
-    // Per-kernel max-block hints. Returns the device default (full warp width);
-    // per-kernel introspection from compiler metadata is not yet implemented.
+    // Warps of this kernel that fit in a core's register file at once.
+    vx_result_t max_resident_warps(uint32_t* out);
+    vx_result_t max_active_ctas(uint32_t block_size, uint32_t lmem_size, uint32_t* out);
+    vx_result_t max_occupancy_grid(uint32_t ndim, const uint32_t* global_dim,
+                                   uint32_t lmem_size, uint32_t* grid_out,
+                                   uint32_t* block_out);
     vx_result_t get_max_block_size(uint32_t* x, uint32_t* y, uint32_t* z);
 
 private:
     friend class RefCounted<Kernel>;
-    Kernel(Module* mod, uint64_t pc);
+    Kernel(Module* mod, uint64_t pc, uint32_t num_regs);
     ~Kernel();
 
     Module*  module_;
     uint64_t pc_;
+    uint32_t num_regs_;
 };
 
 // ============================================================================

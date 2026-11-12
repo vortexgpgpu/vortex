@@ -94,21 +94,19 @@ def get_kernel_entries(elf_file):
         entries.append((name, value))
     return entries
 
-def get_reg_counts(elf_file):
-    # {Ru, Rf, Rx} in units of 4 registers for the entry's pad field, 0 when
-    # the image runs with every register (vx_regpack.py).
+def get_reg_counts(elf_file, pcs):
+    # Each entry's {Ru, Rf, Rx} in units of 4 registers for its pad field, 0
+    # when the kernel runs with every register (vx_regpack.py).
     with open(elf_file, 'rb') as f:
         data = f.read()
     try:
-        r = vx_regpack.counts(data)
+        counts = vx_regpack.kernel_counts(data, pcs)
     except vx_regpack.DecodeError as e:
         print("vxbin: warning: {}: {}; the kernel runs with every register".format(elf_file, e),
               file=sys.stderr)
-        return 0
-    if r is None:
-        return 0
-    rx, rf, ru = r
-    return (ru // 4) << 8 | (rf // 4) << 4 | (rx // 4)
+        return [0] * len(pcs)
+    return [0 if r is None else (r[2] // 4) << 8 | (r[1] // 4) << 4 | (r[0] // 4)
+            for r in counts]
 
 def build_symtab_footer(entries, reg_counts):
     # VXSYMTAB footer layout consumed by vx_module.cpp Module::load_bytes:
@@ -122,8 +120,8 @@ def build_symtab_footer(entries, reg_counts):
         offsets.append(len(string_blob))
         string_blob += name.encode('utf-8')
     footer = bytearray(string_blob)
-    for (name, pc), off in zip(entries, offsets):
-        footer += struct.pack('<IHHQ', off, len(name.encode('utf-8')), reg_counts, pc)
+    for (name, pc), off, regs in zip(entries, offsets, reg_counts):
+        footer += struct.pack('<IHHQ', off, len(name.encode('utf-8')), regs, pc)
     footer += struct.pack('<I', len(entries))
     footer += b'VXSYMTAB'
     return bytes(footer)
@@ -155,7 +153,7 @@ def create_vxbin_binary(input_elf, output_bin, objcopy_path):
     footer = b''
     entries = get_kernel_entries(input_elf)
     if entries:
-        footer = build_symtab_footer(entries, get_reg_counts(input_elf))
+        footer = build_symtab_footer(entries, get_reg_counts(input_elf, [pc for _, pc in entries]))
 
     with open(output_bin, 'wb') as bin_file:
         bin_file.write(min_vma_bytes)

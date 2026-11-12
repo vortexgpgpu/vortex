@@ -98,6 +98,14 @@ VX_CP  = $(LLVM_PATH)/bin/llvm-objcopy
 
 VX_CFLAGS += -Wall -Wextra -Wfatal-errors -Werror -Wno-unused-command-line-argument
 VX_CFLAGS += -O3 -mcmodel=medany -fno-rtti -fno-exceptions -nostartfiles -nostdlib -fdata-sections -ffunction-sections
+
+# Compact registers: allocate the lowest free register first and rename the
+# linked image densely, so a kernel's register count (and thus the warps that
+# fit in a register file) reflects the registers it really uses.
+VX_REG_COMPACT ?= 0
+ifeq ($(VX_REG_COMPACT),1)
+VX_CFLAGS += -mllvm -riscv-vortex-compact-regs
+endif
 VX_CFLAGS += -I$(VORTEX_HOME)/sw/kernel/include -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SW_COMMON_DIR)
 VX_CFLAGS += -DNDEBUG -D__VORTEX__
 VX_CFLAGS += $(CONFIGS)
@@ -197,6 +205,9 @@ kernel.dump: kernel.elf
 	$(VX_DP) -D $< > $@
 
 kernel.vxbin: kernel.elf
+ifeq ($(VX_REG_COMPACT),1)
+	python3 $(VORTEX_HOME)/sw/kernel/scripts/vx_regpack.py $<
+endif
 	OBJCOPY=$(VX_CP) $(VORTEX_HOME)/sw/kernel/scripts/vxbin.py $< $@
 
 $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a:

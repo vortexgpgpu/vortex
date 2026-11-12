@@ -368,6 +368,19 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
             if (kernel) kernel->release();
             return VX_ERR_INVALID_VALUE;
         }
+        // Every warp of a CTA holds its registers at once, so a CTA with more
+        // warps than the kernel's register fit can never be admitted whole.
+        if (kernel) {
+            uint32_t fit = 0;
+            r = kernel->max_resident_warps(&fit);
+            if (r == VX_SUCCESS && (block_size + nt - 1) / nt > fit) {
+                r = VX_ERR_INVALID_VALUE;
+            }
+            if (r != VX_SUCCESS) {
+                kernel->release();
+                return r;
+            }
+        }
     }
 
     Command cmd;

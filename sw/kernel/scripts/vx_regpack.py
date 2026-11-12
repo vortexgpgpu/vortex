@@ -31,8 +31,10 @@ OP_EXT3, OP_B, OP_JALR, OP_JAL, OP_SYS, OP_EXT4 = 0x5B, 0x63, 0x67, 0x6F, 0x73, 
 FIELD_SHIFT = {'rd': 7, 'rs1': 15, 'rs2': 20, 'rs3': 27}
 
 # Image properties a decoded instruction can set.
-FP_FIXED = 'fp_fixed'   # names FP registers implicitly or as a run: FP numbering kept
+FP_FIXED = 'fp_fixed'   # names FP registers implicitly: FP numbering kept, every FP register counted
+FP_KEPT  = 'fp_kept'    # names a run of FP registers: FP numbering kept, the run counted
 UNPACKED = 'unpacked'   # names integer registers implicitly: image left as is
+FP_HI    = 'fp_hi'      # (FP_HI, n): the instruction names FP registers up to fn
 
 
 class DecodeError(Exception):
@@ -107,10 +109,8 @@ def decode(w):
         if f7 == 0x04 and f3 in (1, 2):
             return [('rd', F), ('rs1', X), ('rs2', X)], ()
         if f7 == 0x05:
-            if f3 in (0, 4):
-                return [('rs1', X)], (FP_FIXED,)        # TMEM_LD: rd starts a run, rs2 field is a count
-            if f3 in (1, 5):
-                return [('rs1', X)], (FP_FIXED,)        # TMEM_ST: rd starts a run, rs2 field is a format
+            if f3 in (0, 1, 4, 5):                      # TMEM_LD/ST: rd starts a run of rs2 + 1 registers
+                return [('rs1', X)], (FP_KEPT, (FP_HI, ((w >> 7) & 0x1F) + rs2))
             if f3 == 6:
                 return [('rd', X), ('rs1', X)], ()
             if f3 == 7:
@@ -234,19 +234,147 @@ def round_up(n):
     return (n + REG_GRANULE - 1) // REG_GRANULE * REG_GRANULE
 
 
-def counts(data):
-    """(Rx, Rf, Ru) of an image, or None when it must run with every register.
-    Ru counts u1 up: u0 reads zero and takes no row."""
-    insts, props = scan(data)
+def counts_of(insts, props):
+    """(Rx, Rf, Ru) of these instructions, or None when they must run with every
+    register. Ru counts u1 up: u0 reads zero and takes no row."""
     if UNPACKED in props:
         return None
     xs = regs_used(insts, 'x') | {0}
-    fs = regs_used(insts, 'f')
+    fs = regs_used(insts, 'f') | {p[1] for p in props if isinstance(p, tuple) and p[0] == FP_HI}
     us = regs_used(insts, 'u') | {0}
     rx = round_up(max(xs) + 1)
     rf = 32 if FP_FIXED in props else (round_up(max(fs) + 1) if fs else 0)
     ru = round_up(max(us))
     return rx, rf, ru
+
+
+def counts(data):
+    """(Rx, Rf, Ru) of an image, or None when it must run with every register."""
+    return counts_of(*scan(data))
+
+
+def elf_header(data):
+    is64 = data[4] == 2
+    entry, = struct.unpack_from('<Q' if is64 else '<I', data, 0x18)
+    return is64, entry
+
+
+def func_starts(data):
+    """Start addresses of the image's FUNC symbols."""
+    is64, _ = elf_header(data)
+    if is64:
+        e_shoff, = struct.unpack_from('<Q', data, 0x28)
+        e_shentsize, e_shnum = struct.unpack_from('<HH', data, 0x3A)
+    else:
+        e_shoff, = struct.unpack_from('<I', data, 0x20)
+        e_shentsize, e_shnum = struct.unpack_from('<HH', data, 0x2E)
+    starts = set()
+    for i in range(e_shnum):
+        sh = e_shoff + i * e_shentsize
+        if is64:
+            sh_type, = struct.unpack_from('<I', data, sh + 4)
+            sh_offset, sh_size = struct.unpack_from('<QQ', data, sh + 0x18)
+            sh_entsize, = struct.unpack_from('<Q', data, sh + 0x38)
+        else:
+            sh_type, = struct.unpack_from('<I', data, sh + 4)
+            sh_offset, sh_size = struct.unpack_from('<II', data, sh + 0x10)
+            sh_entsize, = struct.unpack_from('<I', data, sh + 0x24)
+        SHT_SYMTAB, STT_FUNC = 2, 2
+        if sh_type != SHT_SYMTAB or not sh_entsize:
+            continue
+        for j in range(sh_size // sh_entsize):
+            e = sh_offset + j * sh_entsize
+            if is64:
+                info, = struct.unpack_from('<B', data, e + 4)
+                value, = struct.unpack_from('<Q', data, e + 8)
+            else:
+                value, = struct.unpack_from('<I', data, e + 4)
+                info, = struct.unpack_from('<B', data, e + 12)
+            if info & 0xF == STT_FUNC:
+                starts.add(value)
+    return starts
+
+
+def sext(v, bits):
+    return v - (1 << bits) if v & (1 << (bits - 1)) else v
+
+
+def kernel_counts(data, pcs):
+    """(Rx, Rf, Ru) of each kernel entry in `pcs`: the registers of the code a warp
+    can run for that kernel, i.e. the startup code and what the kernel reaches by
+    direct calls and jumps. A kernel that makes any other indirect call or jump
+    gets the whole image's counts."""
+    insts, props = scan(data)
+    image = counts_of(insts, props)
+    by_addr = {}
+    regions = []
+    for off, size, addr in code_ranges(data):
+        regions.append((addr, addr + size - size % 4))
+        base = off - addr
+        for inst in insts:
+            if off <= inst[0] < off + size:
+                by_addr[inst[0] - base] = inst
+    starts = sorted(set(a for lo, hi in regions for a in (lo,)) |
+                    {a for a in func_starts(data) if any(lo <= a < hi for lo, hi in regions)})
+
+    def extent(a):
+        """[lo, hi) of the function holding address a: up to the next function start."""
+        i = max(k for k, st in enumerate(starts) if st <= a)
+        end = next(hi for lo, hi in regions if lo <= a < hi)
+        nxt = starts[i + 1] if i + 1 < len(starts) and starts[i + 1] < end else end
+        return starts[i], nxt
+
+    def closure(entry, allow_indirect):
+        seen, work, code, indirect = set(), [entry], [], False
+        while work:
+            lo, hi = extent(work.pop())
+            if lo in seen:
+                continue
+            seen.add(lo)
+            for a in range(lo, hi, 4):
+                inst = by_addr.get(a)
+                if inst is None:
+                    continue
+                code.append(inst)
+                w = inst[1]
+                op, mode = w & 0x7F, w & 0x3
+                if mode != 0x3:
+                    if (w | 0x3) & 0x7F == OP_JALR:
+                        indirect = True
+                    continue
+                if op == OP_JAL:
+                    imm = sext(((w >> 31) << 20) | (((w >> 12) & 0xFF) << 12) |
+                               (((w >> 20) & 1) << 11) | (((w >> 21) & 0x3FF) << 1), 21)
+                    t = a + imm
+                    if (w >> 7) & 0x1F or not lo <= t < hi:
+                        work.append(t)
+                elif op == OP_JALR:
+                    rd, rs1, imm = (w >> 7) & 0x1F, (w >> 15) & 0x1F, sext(w >> 20, 12)
+                    prev = by_addr.get(a - 4)
+                    if rd == 0 and rs1 == 1 and imm == 0:
+                        continue                         # return
+                    if prev and prev[1] & 0x7F == OP_AUIPC and (prev[1] >> 7) & 0x1F == rs1:
+                        work.append(a - 4 + sext(prev[1] & 0xFFFFF000, 32) + imm)
+                    else:
+                        indirect = True
+        if indirect and not allow_indirect:
+            return None
+        return code
+
+    _, entry = elf_header(data)
+    startup = closure(entry, True) if any(lo <= entry < hi for lo, hi in regions) else []
+    result = []
+    for pc in pcs:
+        code = closure(pc, False)
+        if code is None:
+            result.append(image)
+            continue
+        sub = {i[0]: i for i in startup + code}
+        sub_props = set()
+        for _, w, _ in sub.values():
+            sub_props.update(decode(w)[1])
+        result.append(counts_of(list(sub.values()), sub_props))
+    return result
 
 
 def pack(data):
@@ -256,7 +384,8 @@ def pack(data):
         return data
     maps = {
         'x': {r: i for i, r in enumerate(sorted(regs_used(insts, 'x') | {0}))},
-        'f': {} if FP_FIXED in props else {r: i for i, r in enumerate(sorted(regs_used(insts, 'f')))},
+        'f': {} if FP_FIXED in props or FP_KEPT in props
+             else {r: i for i, r in enumerate(sorted(regs_used(insts, 'f')))},
         'u': {r: i for i, r in enumerate(sorted(regs_used(insts, 'u') | {0}))},
     }
     out = bytearray(data)

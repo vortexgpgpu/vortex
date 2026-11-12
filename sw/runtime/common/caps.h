@@ -37,6 +37,7 @@ static constexpr uint32_t CP_REG_GPU_DEV_CAPS_LO = 0x018;
 static constexpr uint32_t CP_REG_GPU_DEV_CAPS_HI = 0x01C;
 static constexpr uint32_t CP_REG_GPU_ISA_CAPS_LO = 0x020;
 static constexpr uint32_t CP_REG_GPU_ISA_CAPS_HI = 0x024;
+static constexpr uint32_t CP_REG_GPU_RF_CAPS     = 0x038;
 
 // Warps, sockets per cluster, clusters and the socket size carry an exact
 // count, so a machine that is not a power of two reports truly; the field is
@@ -55,7 +56,7 @@ inline uint64_t exact_or_log2(uint64_t dev_caps, uint32_t exact_lsb, uint64_t ex
 // for ids the caller must resolve itself (CACHE_LINE_SIZE,
 // GLOBAL_MEM_SIZE, CLOCK_RATE, PEAK_MEM_BW).
 inline bool decode_caps(uint64_t dev_caps, uint32_t dev_caps_ext, uint64_t isa_caps,
-                        uint32_t caps_id, uint64_t* out) {
+                        uint32_t rf_caps, uint32_t caps_id, uint64_t* out) {
   // A CP without the extension word answers zero, a DECERR sentinel or all
   // ones; any reserved bit set means the word is absent.
   const uint32_t caps_ext = (dev_caps_ext >> 8) ? 0 : dev_caps_ext;
@@ -97,18 +98,30 @@ inline bool decode_caps(uint64_t dev_caps, uint32_t dev_caps_ext, uint64_t isa_c
   case VX_CAPS_MEM_BANK_SIZE:
     *out = 1ull << (20 + ((dev_caps >> 37) & 0x1f));
     return true;
+  // A device built before GPU_RF_CAPS reads zero there (RTL) or the DECERR
+  // sentinel (bit 31 set); both report 0, an unknown register file.
+  case VX_CAPS_REG_FILE_ROWS:
+    *out = (rf_caps >> 31) ? 0 : (rf_caps & 0x7FF) * 4ull;
+    return true;
+  case VX_CAPS_REG_FILE_PARTS:
+    *out = (rf_caps >> 31) ? 0 : (rf_caps >> 11) & 0x7F;
+    return true;
+  case VX_CAPS_UREG_FILE_ROWS:
+    *out = (rf_caps >> 31) ? 0 : ((rf_caps >> 18) & 0x3FF) * 4ull;
+    return true;
   default:
     return false;
   }
 }
 
-// Read GPU_DEV_CAPS / GPU_DEV_CAPS_EXT / GPU_ISA_CAPS from the CP regfile
+// Read GPU_DEV_CAPS / GPU_DEV_CAPS_EXT / GPU_ISA_CAPS / GPU_RF_CAPS from the CP regfile
 // through a backend's cp_mmio_read primitive. `Reader` is any callable
 // matching int(uint32_t off, uint32_t* out) — returns non-zero on failure.
 // Returns 0 on success.
 template <typename Reader>
 inline int load_caps(Reader&& cp_mmio_read,
-                     uint64_t* dev_caps, uint32_t* dev_caps_ext, uint64_t* isa_caps) {
+                     uint64_t* dev_caps, uint32_t* dev_caps_ext, uint64_t* isa_caps,
+                     uint32_t* rf_caps) {
   uint32_t lo = 0, hi = 0;
   if (cp_mmio_read(CP_REG_GPU_DEV_CAPS_EXT, dev_caps_ext)) return -1;
   if (cp_mmio_read(CP_REG_GPU_DEV_CAPS_LO, &lo)) return -1;
@@ -117,6 +130,7 @@ inline int load_caps(Reader&& cp_mmio_read,
   if (cp_mmio_read(CP_REG_GPU_ISA_CAPS_LO, &lo)) return -1;
   if (cp_mmio_read(CP_REG_GPU_ISA_CAPS_HI, &hi)) return -1;
   *isa_caps = uint64_t(lo) | (uint64_t(hi) << 32);
+  if (cp_mmio_read(CP_REG_GPU_RF_CAPS, rf_caps)) return -1;
   return 0;
 }
 

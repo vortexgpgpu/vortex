@@ -74,6 +74,9 @@ typedef struct vx_kernel* vx_kernel_h;
 #define VX_CAPS_VM_SUPPORT          0xF   // 1 if the device has an MMU (VM), else 0
 #define VX_CAPS_VM_PINNED_SIZE      0x10  // pinned-region total size (bytes); 0 if disabled
 #define VX_CAPS_VM_PINNED_FREE      0x11  // pinned-region free  size (bytes); 0 if disabled
+#define VX_CAPS_REG_FILE_ROWS       0x12  // registers per register-file partition (one per warp-register); 0 if unknown
+#define VX_CAPS_REG_FILE_PARTS      0x13  // register-file partitions per core; warps are spread round-robin; 0 if unknown
+#define VX_CAPS_UREG_FILE_ROWS      0x14  // uniform registers per partition; 0 without the U extension
 
 // ============================================================================
 // Device ISA flags  (decode a VX_CAPS_ISA_FLAGS query result)
@@ -320,12 +323,25 @@ vx_result_t vx_kernel_release    (vx_kernel_h k);
 // fragment grid.
 vx_result_t vx_kernel_address    (vx_kernel_h k, uint64_t* out_addr);
 
-// Returns the device's natural block dims as a starting point.
-// Per-kernel compiler metadata in the .vxbin symbol footer will refine
-// this when available.
+// Largest block for this kernel: the warp width by the warps whose registers
+// fit in a core at once.
 vx_result_t vx_kernel_get_max_block_size (vx_kernel_h k,
                                           uint32_t* x, uint32_t* y,
                                           uint32_t* z);
+
+// CTAs of `block_size` threads using `lmem_size` bytes of local memory that can
+// be resident on one core at once (cudaOccupancyMaxActiveBlocksPerMultiprocessor).
+vx_result_t vx_kernel_max_active_ctas    (vx_kernel_h k, uint32_t block_size,
+                                          uint32_t lmem_size, uint32_t* out);
+
+// The largest block, and its grid for `global_dim` work items, that keeps the most of this
+// kernel's warps resident, given its register count and `lmem_size` bytes of
+// local memory per CTA. Same shape as vx_device_max_occupancy_grid.
+vx_result_t vx_kernel_max_occupancy_grid (vx_kernel_h k, uint32_t ndim,
+                                          const uint32_t* global_dim,
+                                          uint32_t lmem_size,
+                                          uint32_t* grid_out,
+                                          uint32_t* block_out);
 
 // ============================================================================
 // Queue

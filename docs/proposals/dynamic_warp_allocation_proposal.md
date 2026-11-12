@@ -54,11 +54,11 @@ preserves its meaning, including the calling convention, so no ABI change or
 library rebuild is needed.
 
 FP registers are packed only in images with no tensor instructions. An image
-containing WMMA, WGMMA or TMEM_LD/TMEM_ST keeps its FP numbering and takes
-`Rf = 32`: those instructions name FP registers implicitly (WMMA's `TCU_RC`,
-`TCU_RA`, `TCU_RB` in `VX_tcu_pkg.sv`; WGMMA's accumulators and register-sourced
-A; TMEM's ranges that follow an encoded first register), and a TMEM kernel's
-fragments use the whole FP file anyway.
+containing WMMA, WGMMA or TMEM_LD/TMEM_ST keeps its FP numbering. WMMA and
+WGMMA name FP registers implicitly (WMMA's `TCU_RC`, `TCU_RA`, `TCU_RB` in
+`VX_tcu_pkg.sv`; WGMMA's accumulators and register-sourced A), so such an image
+takes `Rf = 32`. TMEM_LD/TMEM_ST name a run of `n` registers from an encoded
+first register, so `Rf` counts up to the end of the longest run.
 
 Integer registers are always packed; only `x0` stays fixed. TMEM tensor-job
 instructions encode their integer operands, and registers pinned only to pick
@@ -71,7 +71,17 @@ The pass decodes every Vortex custom encoding, so `.insn` and `.word` forms are
 rewritten too; an instruction it cannot decode fails the build rather than
 passing through.
 
-`R` is recorded in the kernel image; the runtime reads it at launch.
+`R` is recorded per kernel in the image footer: the registers of the startup
+code and of everything the kernel reaches through direct calls and jumps. A
+kernel that makes any other indirect call or jump takes the whole image's
+counts. The runtime reads its kernel's counts at launch.
+
+The pass runs when a kernel is built with `VX_REG_COMPACT=1`, which also builds
+it with `-mllvm -riscv-vortex-compact-regs`: LLVM then takes the lowest free
+register first, so a kernel's highest register tracks how many it keeps live
+rather than LLVM's default order (which reaches `t3`-`t6`, `x28`-`x31`, in
+small functions). Without the flag a kernel's counts are the highest register
+numbers it names.
 
 ### Physical register file
 
@@ -133,7 +143,21 @@ fixed-stride allocator):
   the other KMU DCRs; reset value gives `R = 64` (and 32 uniform registers).
   The image's footer holds the three counts in units of 4.
 - `kmu_req_t` carries the counts to the dispatcher with `aligned_lmem_size`.
-- Runtime: reads `R` from the kernel image. Additive; no API change.
+- Runtime: reads each kernel's counts from the image footer.
+- `GPU_RF_CAPS` (command processor, `0x038`): rows and collectors of the
+  general and uniform register files, exposed as `VX_CAPS_REG_FILE_ROWS`,
+  `VX_CAPS_REG_FILE_PARTS` and `VX_CAPS_UREG_FILE_ROWS`. A device built before
+  it reports 0, an unknown register file, and every warp is taken to fit.
+- `vx_kernel_max_occupancy_grid(kernel, ndim, global, lmem_size, grid, block)`
+  picks the largest power-of-two block of warps that keeps the most of the
+  kernel's warps resident (`cudaOccupancyMaxPotentialBlockSize`). Preferring
+  smaller CTAs at equal occupancy cost sgemm 6% on two cores (more CTAs, less
+  locality). `vx_kernel_max_active_ctas` is
+  the matching occupancy query (`cudaOccupancyMaxActiveBlocksPerMultiprocessor`),
+  and `vx_kernel_get_max_block_size` caps its warps at the register fit.
+- A launch whose CTA has more warps than the kernel's register fit is rejected
+  (`VX_ERR_INVALID_VALUE`), as an oversized block is: the dispatcher could only
+  admit it with warps sharing registers.
 
 ## Implementation
 

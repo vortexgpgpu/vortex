@@ -1290,12 +1290,12 @@ vx_result_t Device::query_caps(uint32_t caps_id, uint64_t* out_value) {
             auto rd = [this](uint32_t off, uint32_t* v) -> int {
                 return platform_->cp_reg_read(off, v) == VX_SUCCESS ? 0 : -1;
             };
-            if (vortex::load_caps(rd, &dev_caps_, &dev_caps_ext_, &isa_caps_) != 0)
+            if (vortex::load_caps(rd, &dev_caps_, &dev_caps_ext_, &isa_caps_, &rf_caps_) != 0)
                 return VX_ERR_DEVICE_LOST;
             caps_loaded_ = true;
         }
     }
-    if (vortex::decode_caps(dev_caps_, dev_caps_ext_, isa_caps_, caps_id, out_value))
+    if (vortex::decode_caps(dev_caps_, dev_caps_ext_, isa_caps_, rf_caps_, caps_id, out_value))
         return VX_SUCCESS;
     // Caps not encoded in the CP words — platform/runtime constants.
     switch (caps_id) {

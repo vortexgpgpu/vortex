@@ -52,6 +52,14 @@ uint32_t gpu_dev_caps_ext() {
     static_assert(VX_CFG_SOCKET_SIZE < 256, "GPU_DEV_CAPS_EXT socket size overflows");
     return uint32_t(VX_CFG_SOCKET_SIZE);
 }
+uint32_t gpu_rf_caps() {
+    constexpr uint32_t collectors = VX_CFG_ISSUE_WIDTH * VX_CFG_NUM_OPCS;
+    static_assert(VX_CFG_GPR_ROWS / 4 < 2048 && collectors < 128 && VX_CFG_UREG_ROWS / 4 < 1024,
+                  "GPU_RF_CAPS fields overflow");
+    return  (uint32_t(VX_CFG_GPR_ROWS / 4) & 0x7FF)
+         | ((collectors & 0x7F) << 11)
+         | ((uint32_t(VX_CFG_EXT_U_ENABLED ? VX_CFG_UREG_ROWS / 4 : 0) & 0x3FF) << 18);
+}
 uint64_t gpu_isa_caps() {
     return  (uint64_t(VX_CFG_MISA_EXT) << 32)
          | ((uint64_t(cp_clog2(VX_CFG_XLEN) - 4) & 0x3) << 30)
@@ -86,7 +94,7 @@ void CommandProcessor::mmio_write(uint32_t off, uint32_t value) {
         case 0x02C: satp_ = (satp_ & 0x00000000FFFFFFFFULL) | (uint64_t(value) << 32);  return;
         // STATUS / DEV_CAPS / CYCLE / GPU caps are RO; ignore writes.
         case 0x004: case 0x008: case 0x00C: case 0x010: case 0x014:
-        case 0x018: case 0x01C: case 0x020: case 0x024: return;
+        case 0x018: case 0x01C: case 0x020: case 0x024: case 0x038: return;
     }
     // Queue 0 (offsets 0x100..0x12F)
     if (off >= 0x100 && off < 0x140) {
@@ -146,6 +154,7 @@ uint32_t CommandProcessor::mmio_read(uint32_t off) const {
         case 0x024: return uint32_t(gpu_isa_caps() >> 32);
         case 0x028: return uint32_t(satp_ & 0xFFFFFFFF);
         case 0x02C: return uint32_t(satp_ >> 32);
+        case 0x038: return gpu_rf_caps();
     }
     if (off >= 0x100 && off < 0x140) {
         switch (off - 0x100) {

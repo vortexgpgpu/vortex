@@ -24,6 +24,8 @@
 //     0x01C GPU_DEV_CAPS_HI RO  device-config caps, high 32 bits
 //     0x020 GPU_ISA_CAPS_LO RO  ISA caps, low 32 bits
 //     0x024 GPU_ISA_CAPS_HI RO  ISA caps, high 32 bits
+//     0x038 GPU_RF_CAPS RO      register file: [10:0]GPR_ROWS/4 | [17:11]collectors
+//                               | [27:18]UREG_ROWS/4 (0 without the U extension)
 //
 //   Per-queue, base = 0x100 + qid * 0x40
 //     +0x00 Q_RING_BASE_LO  RW
@@ -164,6 +166,16 @@ module VX_cp_axil_regfile
     8'(`VX_CFG_SOCKET_SIZE)
   };
 
+  localparam GPR_COLLECTORS = `VX_CFG_ISSUE_WIDTH * `VX_CFG_NUM_OPCS;
+  `STATIC_ASSERT((`VX_CFG_GPR_ROWS / 4) < 2048 && GPR_COLLECTORS < 128 && (`VX_CFG_UREG_ROWS / 4) < 1024,
+                 ("GPU_RF_CAPS fields overflow"))
+  wire [31:0] gpu_rf_caps = {
+    4'd0,
+    10'(`VX_CFG_EXT_U_ENABLED ? (`VX_CFG_UREG_ROWS / 4) : 0),
+    7'(GPR_COLLECTORS),
+    11'(`VX_CFG_GPR_ROWS / 4)
+  };
+
   wire [63:0] gpu_isa_caps = {
     32'(`VX_CFG_MISA_EXT),
     2'(`CLOG2(`VX_CFG_XLEN)-4),
@@ -240,7 +252,8 @@ module VX_cp_axil_regfile
         // AFU host-port drain counters (debug, read-only).
         6'h30: return dbg_host_w_counts;
         6'h34: return dbg_host_r_counts;
-        6'h38, 6'h3C: return 32'd0;   // pad: completes block 0x30
+        6'h38: return gpu_rf_caps;
+        6'h3C: return 32'd0;   // pad: completes block 0x30
         default: return 32'hDEAD_BEEF;   // unaligned: DECERR
       endcase
     end
