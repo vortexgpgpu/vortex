@@ -49,7 +49,7 @@ inline constexpr uint32_t make_ld(uint32_t lda, uint32_t ldb) {
 
 // Shared-memory byte offset of a pointer, as the descriptors expect.
 inline uint32_t smem_offset(const void* ptr) {
-  size_t lmem_base = csr_read_nv(VX_CSR_LOCAL_MEM_BASE);
+  size_t lmem_base = csr_read_uniform(VX_CSR_LOCAL_MEM_BASE);
   return static_cast<uint32_t>(reinterpret_cast<uintptr_t>(ptr) - lmem_base);
 }
 
