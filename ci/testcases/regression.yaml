@@ -721,3 +721,37 @@ tests:
   shape:
     cores: 4
     l2cache: true
+# FlashAttention-2 on SIMT cores. rtlsim runs at XLEN=64 only: RV32 emulates
+# the fp conversions, so the same problem retires 4-8x the instructions there.
+- id: flash_attn-1
+  via: blackbox
+  drivers:
+  - simx
+  app: flash_attn
+# seq_len is not a multiple of the KV tile: the last block's extra columns
+# must take no part in the softmax.
+- id: flash_attn-ragged
+  via: blackbox
+  drivers:
+  - simx
+  app: flash_attn
+  args: -N63 -D8
+# 16 KB of LMEM forces small row and column tiles.
+- id: flash_attn-lmem16k
+  via: blackbox
+  drivers:
+  - simx
+  app: flash_attn
+  configs: -DVX_CFG_LMEM_LOG_SIZE=14
+  shape:
+    warps: 4
+    threads: 4
+  args: -N64 -D32
+- id: flash_attn-rtlsim
+  via: blackbox
+  drivers:
+  - rtlsim
+  xlen:
+  - 64
+  app: flash_attn
+  args: -N16 -D8
