@@ -70,6 +70,10 @@ LLVM_CFLAGS += --sysroot=$(RISCV_SYSROOT)
 LLVM_CFLAGS += --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH)
 LLVM_CFLAGS += -Xclang -target-feature -Xclang +xvortex
 LLVM_CFLAGS += -Xclang -target-feature -Xclang +zicond
+# Uniform registers: the compiler keeps warp-uniform values in them.
+ifneq (,$(filter -DVX_CFG_EXT_U_ENABLE, $(XCONFIGS)))
+LLVM_CFLAGS += -Xclang -target-feature -Xclang +xvortexu
+endif
 LLVM_CFLAGS += -mllvm -disable-loop-idiom-all # disable memset/memcpy loop idiom
 LLVM_CFLAGS += -Wno-unused-command-line-argument
 #LLVM_CFLAGS += -mllvm -vortex-branch-divergence=0
