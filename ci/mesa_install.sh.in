@@ -42,11 +42,22 @@ set -e
 
 TOOLDIR=${TOOLDIR:=@TOOLDIR@}
 # VORTEX_PATH is the vortex install root produced by `make install`
-# inside the vortex build dir (default $BUILDDIR/install). Mesa
-# consumes the vortex SDK exclusively through it — never through
-# $VORTEX_HOME (source) or $VORTEX_BUILD_DIR. vortex.pc, vortex-kernel.pc
-# under $VORTEX_PATH/lib/pkgconfig drive discovery.
+# inside the vortex build dir (default $BUILDDIR/install). The driver
+# consumes the vortex SDK through it: vortex.pc, vortex-kernel.pc under
+# $VORTEX_PATH/lib/pkgconfig drive discovery.
 VORTEX_PATH=${VORTEX_PATH:=@INSTALLDIR@}
+# vortexpipe also builds its on-device front-end kernel from the source
+# tree (sw/gfx, sw/common) against both a 32-bit and a 64-bit build tree,
+# and embeds both images. This build tree is one of them; the other
+# defaults to the sibling build32/build64 directory.
+VORTEX_HOME=${VORTEX_HOME:=@VORTEX_HOME@}
+if [ "@XLEN@" = "64" ]; then
+    VORTEX_BUILD64=${VORTEX_BUILD64:=@BUILDDIR@}
+    VORTEX_BUILD32=${VORTEX_BUILD32:=$VORTEX_HOME/build32}
+else
+    VORTEX_BUILD32=${VORTEX_BUILD32:=@BUILDDIR@}
+    VORTEX_BUILD64=${VORTEX_BUILD64:=$VORTEX_HOME/build64}
+fi
 
 # Pinned source: the Vortex Mesa fork carrying the vortexpipe driver.
 MESA_REPO=${MESA_REPO:=https://github.com/vortexgpgpu/mesa.git}
@@ -162,6 +173,14 @@ if [[ ",$GALLIUM_DRIVERS," == *,vortexpipe,* ]]; then
         echo "       set VORTEX_PATH to the existing install root."
         exit 1
     fi
+    for b in "$VORTEX_BUILD32" "$VORTEX_BUILD64"; do
+        if [ ! -f "$b/config.mk" ]; then
+            echo "error: vortex build tree not found at $b."
+            echo "       vortexpipe needs a configured 32-bit and 64-bit build tree;"
+            echo "       set VORTEX_BUILD32 / VORTEX_BUILD64 to them."
+            exit 1
+        fi
+    done
     export PKG_CONFIG_PATH="$VORTEX_PATH/lib/pkgconfig:$PKG_CONFIG_PATH"
 fi
 
@@ -183,7 +202,10 @@ else
         -D gallium-extra-hud=false \
         -D video-codecs= \
         -D vortex-path="$VORTEX_PATH" \
-        -D vortex-tooldir="$TOOLDIR"
+        -D vortex-tooldir="$TOOLDIR" \
+        -D vortex-home="$VORTEX_HOME" \
+        -D vortex-build="$VORTEX_BUILD32" \
+        -D vortex-build64="$VORTEX_BUILD64"
 
     meson compile -C "$MESA_BUILD" -j"$JOBS"
     meson install -C "$MESA_BUILD"

@@ -662,11 +662,19 @@ meson setup build \
     -D video-codecs= \
     -D gallium-extra-hud=false \
     -D vortex-path=$VORTEX_PATH \
-    -D vortex-tooldir=$TOOLDIR
+    -D vortex-tooldir=$TOOLDIR \
+    -D vortex-home=$VORTEX_HOME \
+    -D vortex-build=$VORTEX_HOME/build32 \
+    -D vortex-build64=$VORTEX_HOME/build64
 
 meson compile -C build
 meson install -C build
 ```
+
+`vortexpipe` builds its on-device front-end kernel from the source tree
+against a configured 32-bit and 64-bit build tree and embeds both images, so
+both `-D vortex-build` (XLEN 32) and `-D vortex-build64` must point at
+configured build trees.
 
 `vortexpipe` resolves `libvortex.so` at meson-configure time, so
 build the Vortex runtime stub first: `make -C $VORTEX_HOME/build/sw/runtime/stub`.
