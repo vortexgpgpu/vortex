@@ -198,6 +198,13 @@ public:
     static_assert(uint64_t(VX_CFG_LMEM_SIZE) <= (uint64_t(1) << VX_CFG_LMEM_LOG_SIZE)
                && 2 * uint64_t(VX_CFG_LMEM_SIZE) > (uint64_t(1) << VX_CFG_LMEM_LOG_SIZE),
                   "LMEM_LOG_SIZE must be clog2(LMEM_SIZE)");
+  #ifdef VX_CFG_LMEM_ENABLE
+    static_assert(0 == (uint64_t(VX_CFG_LMEM_SIZE) % (VX_CFG_MEM_BLOCK_SIZE * VX_CFG_LMEM_NUM_BANKS)),
+                  "LMEM_SIZE must be a whole number of block rows across the banks");
+    // The window ends at the next alignment boundary above its base.
+    static_assert(0 == (uint64_t(VX_MEM_LMEM_BASE_ADDR) % (uint64_t(1) << VX_CFG_LMEM_LOG_SIZE)),
+                  "LMEM exceeds its address window");
+  #endif
     snprintf(sname, 100, "%s-lmem", name.c_str());
     local_mem_ = LocalMem::Create(sname, LocalMem::Config{
       VX_CFG_LMEM_SIZE,
