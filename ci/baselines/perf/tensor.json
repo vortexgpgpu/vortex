@@ -6,7 +6,7 @@
     },
     "app": "sgemm_tcu",
     "args": "-m 128 -n 128 -k 128",
-    "config_hash": "934f6e167740a245",
+    "config_hash": "66d5e1ae7e7e6f6a",
     "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1",
     "driver": "rtlsim"
   },
@@ -17,7 +17,7 @@
     },
     "app": "sgemm_tcu",
     "args": "-m 128 -n 128 -k 128",
-    "config_hash": "d31f06556002012f",
+    "config_hash": "1447fc89c2d6e49f",
     "configs": "-DVX_CFG_NUM_WARPS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DVX_CFG_NUM_CORES=2 -DVX_CFG_NUM_THREADS=16 -DVX_CFG_L2_ENABLE",
     "driver": "rtlsim"
   },
@@ -28,7 +28,7 @@
     },
     "app": "sgemm_tcu",
     "args": "-m 128 -n 128 -k 128",
-    "config_hash": "f843ed58764bdaa0",
+    "config_hash": "3ac4e0a8bfd14bc5",
     "configs": "-DVX_CFG_NUM_WARPS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DVX_CFG_NUM_CORES=2 -DVX_CFG_NUM_THREADS=4 -DVX_CFG_L2_ENABLE",
     "driver": "rtlsim"
   },
@@ -39,7 +39,7 @@
     },
     "app": "sgemm_tcu",
     "args": "-m 128 -n 128 -k 128",
-    "config_hash": "c1e8556b28454372",
+    "config_hash": "ef81b2731d2a22dd",
     "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32",
     "driver": "rtlsim"
   },
@@ -50,7 +50,7 @@
     },
     "app": "sgemm2_tcu",
     "args": "-m 128 -n 128 -k 64",
-    "config_hash": "26766ba7739323b9",
+    "config_hash": "79ab565a70070b41",
     "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1",
     "driver": "rtlsim"
   }

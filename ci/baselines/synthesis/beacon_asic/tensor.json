@@ -1,46 +1,57 @@
 {
   "tcu": {
-    "clock_mhz": 800,
+    "accepted": {
+      "against": "28fc2c581262d2d7d4e1dc432d50cc303e3dea2e",
+      "regressions": [
+        {
+          "after": 66855.0,
+          "before": 47446.0,
+          "kind": "area",
+          "name": "ff"
+        }
+      ]
+    },
+    "clock_mhz": 1000,
     "config_hash": "1d6c72424d1a993d",
     "configs": "",
     "dut": "tcu",
     "result": {
-      "build_time_s": 100,
-      "cells": 1299379,
-      "endpoints": 25749,
+      "build_time_s": 120,
+      "cells": 1320372,
+      "endpoints": 44630,
       "env": {
         "circt": "CIRCT 892a65a01",
         "foldsim": "foldsim d8350bc0f",
         "pdk": "asap7",
         "xlen": 32
       },
-      "ff": 47446,
-      "fmax_mhz": 791.8,
+      "ff": 66855,
+      "fmax_mhz": 893.7,
       "macros": 0,
-      "max_stages": 43,
+      "max_stages": 37,
       "overhead_ps": 231,
-      "period_ps": 1263,
+      "period_ps": 1119,
       "stage_ps": 24,
       "tied_bits": 0,
       "tied_ports": []
     }
   },
   "tensor": {
-    "clock_mhz": 800,
+    "clock_mhz": 1000,
     "config_hash": "2992cc36d736afff",
     "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8",
     "dut": "tensor",
     "result": {
-      "build_time_s": 90,
-      "cells": 854302,
-      "endpoints": 86553,
+      "build_time_s": 85,
+      "cells": 859424,
+      "endpoints": 89451,
       "env": {
         "circt": "CIRCT 892a65a01",
         "foldsim": "foldsim d8350bc0f",
         "pdk": "asap7",
         "xlen": 32
       },
-      "ff": 184699,
+      "ff": 188237,
       "fmax_mhz": 977.5,
       "macros": 28,
       "max_stages": 33,

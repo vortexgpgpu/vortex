@@ -1,6 +1,6 @@
 {
   "mufu": {
-    "clock_mhz": 800,
+    "clock_mhz": 1000,
     "config_hash": "0994b5e5a07a94ab",
     "configs": "",
     "dut": "mufu",

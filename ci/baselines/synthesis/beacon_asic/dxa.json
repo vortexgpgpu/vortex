@@ -1,11 +1,11 @@
 {
   "dxa": {
-    "clock_mhz": 800,
+    "clock_mhz": 1000,
     "config_hash": "878aaaf618bd3f3c",
     "configs": "",
     "dut": "dxa",
     "result": {
-      "build_time_s": 25,
+      "build_time_s": 20,
       "cells": 84969,
       "endpoints": 11408,
       "env": {
