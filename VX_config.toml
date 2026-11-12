@@ -82,6 +82,10 @@ VX_CFG_NUM_GPR_BANKS = 4
 # register and more of one that uses few (VX_DCR_KMU_NUM_REGS); it must hold
 # at least one full set.
 VX_CFG_GPR_ROWS = "expr: (32 << $VX_CFG_EXT_F_ENABLED) * (($VX_CFG_NUM_WARPS // $VX_CFG_ISSUE_WIDTH + $VX_CFG_NUM_OPCS - 1) // $VX_CFG_NUM_OPCS)"
+# Uniform registers per operand collector (VX_CFG_EXT_U_ENABLE): by default 32
+# for each of its warps. A kernel takes them in multiples of 4, u1 up, so a
+# smaller file holds more warps of a kernel that uses few.
+VX_CFG_UREG_ROWS = "expr: 32 * (($VX_CFG_NUM_WARPS // $VX_CFG_ISSUE_WIDTH + $VX_CFG_NUM_OPCS - 1) // $VX_CFG_NUM_OPCS)"
 VX_CFG_NUM_VGPR_BANKS = 2
 
 [memory]

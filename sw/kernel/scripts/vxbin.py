@@ -95,15 +95,18 @@ def get_kernel_entries(elf_file):
     return entries
 
 def get_reg_counts(elf_file):
-    # {Rx, Rf} for the entry's pad field, 0 when the image runs with every
-    # register (vx_regpack.py).
+    # {Ru, Rf, Rx} in units of 4 registers for the entry's pad field, 0 when
+    # the image runs with every register (vx_regpack.py).
     with open(elf_file, 'rb') as f:
         data = f.read()
     try:
         r = vx_regpack.counts(data)
     except vx_regpack.DecodeError:
         return 0
-    return 0 if r is None else (r[1] << 8) | r[0]
+    if r is None:
+        return 0
+    rx, rf, ru = r
+    return (ru // 4) << 8 | (rf // 4) << 4 | (rx // 4)
 
 def build_symtab_footer(entries, reg_counts):
     # VXSYMTAB footer layout consumed by vx_module.cpp Module::load_bytes:

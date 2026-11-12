@@ -18,7 +18,7 @@
 //   --- optional symbol-table footer ---
 //   [string blob (variable, all symbol names back-to-back, NUL-separated)]
 //   [entries: N × { name_off:4, name_len:2, regs:2, pc:8 }  = 16 bytes each ]
-//     regs: {Rf, Rx} bytes, the image's register counts; 0 = every register
+//     regs: {Ru, Rf, Rx} 4-bit counts in units of 4 registers; 0 = every register
 //   [n_symbols : 4 bytes LE]
 //   [magic     : 8 bytes 'VXSYMTAB']                       <- end of file
 //
@@ -152,7 +152,11 @@ vx_result_t Module::load_bytes(Device* dev, const void* bytes_, size_t size,
             const uint16_t name_len = *reinterpret_cast<const uint16_t*>(e + 4);
             const uint16_t regs     = *reinterpret_cast<const uint16_t*>(e + 6);
             const uint64_t pc       = *reinterpret_cast<const uint64_t*>(e + 8);
-            m->num_regs_ = regs;
+            // {Ru, Rf, Rx} in units of 4 registers, to VX_DCR_KMU_NUM_REGS's
+            // bytes; 0 runs with every register
+            m->num_regs_ = (uint32_t(regs & 0xf) * 4)
+                         | (uint32_t((regs >> 4) & 0xf) * 4) << 8
+                         | (uint32_t((regs >> 8) & 0xf) * 4) << 16;
             m->symbols_.push_back({
                 std::string(reinterpret_cast<const char*>(strings_start + name_off),
                             name_len),

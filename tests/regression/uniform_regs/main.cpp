@@ -76,8 +76,9 @@ int main(int argc, char** argv) {
     CHECK(vx_enqueue_write(q, src_buf, 0, h_src.data(), buf_size, 0, nullptr, nullptr));
     CHECK(vx_enqueue_write(q, res_buf, 0, h_res.data(), RES_COUNT * sizeof(uint32_t), 0, nullptr, nullptr));
 
-    uint32_t grid[1], block[1];
-    CHECK(vx_device_max_occupancy_grid(dev, 1, &n, grid, block));
+    // one warp per CTA, so as many CTAs are resident as the register files hold
+    uint32_t block[1] = {uint32_t(nt)};
+    uint32_t grid[1]  = {(n + block[0] - 1) / block[0]};
     vx_launch_info_t li{};
     li.struct_size = sizeof(li);
     li.kernel      = kern;

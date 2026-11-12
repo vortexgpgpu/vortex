@@ -83,8 +83,8 @@ public:
   Word kernel_pc() const { return cur_kernel_pc_; }
 
   // Warp slots whose register sets fit: num_regs is VX_DCR_KMU_NUM_REGS
-  // ({Rf, Rx}, 0 for every register); warps interleave across the operand
-  // collectors, so each collector holds GPR_ROWS / R of them.
+  // ({Ru, Rf, Rx}, 0 for every register); warps interleave across the operand
+  // collectors, so each collector holds GPR_ROWS / R and UREG_ROWS / Ru of them.
   uint32_t fitting_warps(uint32_t num_regs, uint32_t cta_warps) const;
 
 protected:

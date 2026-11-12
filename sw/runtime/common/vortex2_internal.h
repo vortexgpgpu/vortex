@@ -611,7 +611,7 @@ public:
     Device*  device()      { return device_; }
     Buffer*  image()       { return image_; }
     uint64_t base_address() const { return base_addr_; }
-    // {Rf, Rx} of the image (VX_DCR_KMU_NUM_REGS); 0 = every register.
+    // {Ru, Rf, Rx} of the image (VX_DCR_KMU_NUM_REGS); 0 = every register.
     uint32_t num_regs()     const { return num_regs_; }
 
     // Look up a named kernel entry point. Returns a new ref (caller releases).

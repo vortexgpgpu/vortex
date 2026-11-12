@@ -65,7 +65,7 @@ module VX_raster_launch import VX_gpu_pkg::*, VX_raster_pkg::*; #(
 
     // ── DCR-snooped launch descriptor ────────────────────────────────────
     reg [`VX_CFG_XLEN-1:0] startup_pc_r;
-    reg [15:0]             num_regs_r;
+    reg [23:0]             num_regs_r;
     reg [`VX_CFG_XLEN-1:0] frag_entry_r;
     reg [`VX_CFG_XLEN-1:0] frag_param_r;
     `UNUSED_VAR (dcr_write_data[31])
@@ -90,7 +90,7 @@ module VX_raster_launch import VX_gpu_pkg::*, VX_raster_pkg::*; #(
                 `VX_DCR_KMU_STARTUP_ADDR0:    startup_pc_r[31:0] <= dcr_write_data;
                 // The fragment shader is in the same image, so it has the
                 // image's register counts.
-                `VX_DCR_KMU_NUM_REGS:         num_regs_r <= dcr_write_data[15:0];
+                `VX_DCR_KMU_NUM_REGS:         num_regs_r <= dcr_write_data[23:0];
             `ifdef VX_CFG_XLEN_64
                 `VX_DCR_KMU_STARTUP_ADDR1:    startup_pc_r[63:32] <= dcr_write_data;
             `endif

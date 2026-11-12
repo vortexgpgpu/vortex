@@ -13,8 +13,8 @@
 # limitations under the License.
 
 # Register packing for dynamic warp allocation: renames the registers of a
-# statically linked kernel image so the ones in use are x1..x(Rx-1) and
-# f0..f(Rf-1), and reports the image's register counts. A consistent renaming
+# statically linked kernel image so the ones in use are x1..x(Rx-1),
+# f0..f(Rf-1) and u1..u(Ru), and reports the image's register counts. A consistent renaming
 # of a closed image keeps its meaning, calling convention included. The field
 # rules follow hw/rtl/core/VX_decode.sv.
 
@@ -144,7 +144,7 @@ def decode(w):
 
 def decode_uniform(w, mode):
     """Fields of an XVortexU instruction (bits 1:0 = mode, w with them set to 11).
-    Uniform registers ('u') are not renamed."""
+    Uniform registers are 'u'."""
     op = w & 0x7F
     f3 = (w >> 12) & 0x7
     f7 = (w >> 25) & 0x7F
@@ -235,15 +235,18 @@ def round_up(n):
 
 
 def counts(data):
-    """(Rx, Rf) of an image, or None when it must run with every register."""
+    """(Rx, Rf, Ru) of an image, or None when it must run with every register.
+    Ru counts u1 up: u0 reads zero and takes no row."""
     insts, props = scan(data)
     if UNPACKED in props:
         return None
     xs = regs_used(insts, 'x') | {0}
     fs = regs_used(insts, 'f')
+    us = regs_used(insts, 'u') | {0}
     rx = round_up(max(xs) + 1)
     rf = 32 if FP_FIXED in props else (round_up(max(fs) + 1) if fs else 0)
-    return rx, rf
+    ru = round_up(max(us))
+    return rx, rf, ru
 
 
 def pack(data):
@@ -251,15 +254,16 @@ def pack(data):
     insts, props = scan(data)
     if UNPACKED in props:
         return data
-    xmap = {r: i for i, r in enumerate(sorted(regs_used(insts, 'x') | {0}))}
-    fmap = {} if FP_FIXED in props else {r: i for i, r in enumerate(sorted(regs_used(insts, 'f')))}
+    maps = {
+        'x': {r: i for i, r in enumerate(sorted(regs_used(insts, 'x') | {0}))},
+        'f': {} if FP_FIXED in props else {r: i for i, r in enumerate(sorted(regs_used(insts, 'f')))},
+        'u': {r: i for i, r in enumerate(sorted(regs_used(insts, 'u') | {0}))},
+    }
     out = bytearray(data)
     for off, w, fields in insts:
         nw = w
         for name, k in fields:
-            if k == 'u':
-                continue
-            m = xmap if k == 'x' else fmap
+            m = maps[k]
             sh = FIELD_SHIFT[name]
             r = (w >> sh) & 0x1F
             nw = (nw & ~(0x1F << sh)) | (m.get(r, r) << sh)
@@ -283,7 +287,7 @@ def main(argv):
     if packed != data:
         with open(argv[1], 'wb') as f:
             f.write(packed)
-    print("vx_regpack: {}: {}".format(argv[1], "unpacked" if r is None else "Rx={} Rf={}".format(*r)))
+    print("vx_regpack: {}: {}".format(argv[1], "unpacked" if r is None else "Rx={} Rf={} Ru={}".format(*r)))
     return 0
 
 

@@ -270,8 +270,23 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     wire wb_is_ureg = (get_reg_type(writeback_if.data.rd) == REG_TYPE_U);
 
 `ifdef VX_CFG_EXT_U_ENABLE
-    // Uniform registers u1..u31 of each warp slot (u0 reads zero).
-    reg [PER_OPC_WARPS-1:0][RV_REGS-1:1][`VX_CFG_XLEN-1:0] ureg_r;
+    // Uniform registers: a warp slot's u1..u(Ru) are the Ru rows from its base
+    // (u0 reads zero and takes no row).
+    localparam UREG_ROWS = `VX_CFG_UREG_ROWS;
+    localparam UREG_W    = `CLOG2(UREG_ROWS);
+    reg [UREG_ROWS-1:0][`VX_CFG_XLEN-1:0] ureg_r;
+
+    reg [PER_OPC_WARPS-1:0][UREG_W-1:0] slot_ubase_r;
+    always_ff @(posedge clk) begin
+        for (integer i = 0; i < PER_OPC_WARPS; ++i) begin
+            slot_ubase_r[i] <= UREG_W'(i * gpr_layout.usize4 * 4);
+        end
+    end
+
+    function automatic logic [UREG_W-1:0] ureg_row(input logic [PER_OPC_NW_W-1:0] slot,
+                                                   input logic [RV_REGS_BITS-1:0] idx);
+        return slot_ubase_r[slot] + UREG_W'(idx) - UREG_W'(1);
+    endfunction
 
     for (genvar i = 0; i < NUM_SRC_OPDS; ++i) begin : g_usrc
         assign usrc_st0[i * (1 + RV_REGS_BITS) +: (1 + RV_REGS_BITS)] =
@@ -279,7 +294,7 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
         wire                    uvalid = usrc_st1[i * (1 + RV_REGS_BITS) + RV_REGS_BITS];
         wire [RV_REGS_BITS-1:0] uidx   = usrc_st1[i * (1 + RV_REGS_BITS) +: RV_REGS_BITS];
         assign udat_st1[i * (1 + `VX_CFG_XLEN) +: (1 + `VX_CFG_XLEN)] =
-            {uvalid, (uidx == '0) ? `VX_CFG_XLEN'(0) : ureg_r[rd_slot][uidx]};
+            {uvalid, (uidx == '0) ? `VX_CFG_XLEN'(0) : ureg_r[ureg_row(rd_slot, uidx)]};
     end
 
     // A uniform destination takes the first active lane of the instruction:
@@ -306,7 +321,7 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
             ureg_seek_r <= writeback_if.data.eop || (ureg_seek && ~wb_any);
         end
         if (writeback_if.valid && wb_is_ureg && ureg_seek && wb_any && (wb_uidx != '0)) begin
-            ureg_r[wr_slot][wb_uidx] <= wb_first_data;
+            ureg_r[ureg_row(wr_slot, wb_uidx)] <= wb_first_data;
         end
     end
 `else

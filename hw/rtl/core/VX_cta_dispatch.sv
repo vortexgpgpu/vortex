@@ -278,10 +278,23 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     wire       kreq_all_regs = (kmu_req.num_regs == '0);
     wire [8:0] kreq_rx = kreq_all_regs ? 9'(RV_REGS) : 9'(kmu_req.num_regs[7:0]);
     wire [8:0] kreq_r  = kreq_all_regs ? 9'(GPR_SET_REGS) : (9'(kmu_req.num_regs[7:0]) + 9'(kmu_req.num_regs[15:8]));
+`ifdef VX_CFG_EXT_U_ENABLE
+    // Its uniform registers fit iff (w / GPR_NC + 1) * Ru <= UREG_ROWS.
+    localparam UREG_ROWS = `VX_CFG_UREG_ROWS;
+    `STATIC_ASSERT ((UREG_ROWS >= RV_REGS) && ((UREG_ROWS % 4) == 0), ("invalid VX_CFG_UREG_ROWS"))
+    wire [8:0] kreq_ru = kreq_all_regs ? 9'(RV_REGS) : 9'(kmu_req.num_regs[23:16]);
+`else
+    `UNUSED_VAR (kmu_req.num_regs[23:16])
+`endif
     wire [`VX_CFG_NUM_WARPS-1:0] warp_fits;
     for (genvar w = 0; w < `VX_CFG_NUM_WARPS; ++w) begin : g_warp_fits
-        assign warp_fits[w] = (32'(kreq_r) <= 32'(GPR_ROWS / (w / GPR_NC + 1)))
-                           || ((NW_WIDTH+1)'(w) < kmu_num_warps);
+        wire gpr_fits = (32'(kreq_r) <= 32'(GPR_ROWS / (w / GPR_NC + 1)));
+    `ifdef VX_CFG_EXT_U_ENABLE
+        wire ureg_fits = (32'(kreq_ru) <= 32'(UREG_ROWS / (w / GPR_NC + 1)));
+    `else
+        wire ureg_fits = 1'b1;
+    `endif
+        assign warp_fits[w] = (gpr_fits && ureg_fits) || ((NW_WIDTH+1)'(w) < kmu_num_warps);
     end
 
     gpr_layout_t gpr_layout_r;
@@ -290,10 +303,16 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
             warp_fits_r          <= '1;
             gpr_layout_r.size4   <= GPR_SET_W'(GPR_SET_REGS / 4);
             gpr_layout_r.fp_off4 <= GPR_SET_W'(RV_REGS / 4);
+        `ifdef VX_CFG_EXT_U_ENABLE
+            gpr_layout_r.usize4  <= UREG_SET_W'(RV_REGS / 4);
+        `endif
         end else if ((state == IDLE) && kmu_bus_if_fire) begin
             warp_fits_r          <= warp_fits;
             gpr_layout_r.size4   <= GPR_SET_W'(kreq_r >> 2);
             gpr_layout_r.fp_off4 <= GPR_SET_W'(kreq_rx >> 2);
+        `ifdef VX_CFG_EXT_U_ENABLE
+            gpr_layout_r.usize4  <= UREG_SET_W'(kreq_ru >> 2);
+        `endif
         end
     end
     assign gpr_layout = gpr_layout_r;

@@ -46,7 +46,7 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     reg [`VX_CFG_XLEN-1:0] dcr_param;
     reg [CTA_TID_WIDTH:0] dcr_block_size;
     reg [`VX_CFG_LMEM_LOG_SIZE:0] dcr_lmem_size;
-    reg [15:0] dcr_num_regs;
+    reg [23:0] dcr_num_regs;
     reg [2:0][CTA_TID_WIDTH-1:0] dcr_warp_step;
     // Cluster shape: CTAs in the same cluster are guaranteed
     // co-resident on the same core. Default (1,1,1) reproduces the
@@ -145,7 +145,7 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
                 `VX_DCR_KMU_BLOCK_DIM_Z: dcr_block_dim[2] <= dcr_req_data[CTA_TID_WIDTH:0];
                 // Local memory size
                 `VX_DCR_KMU_LMEM_SIZE:   dcr_lmem_size  <= dcr_req_data[`VX_CFG_LMEM_LOG_SIZE:0];
-                `VX_DCR_KMU_NUM_REGS:    dcr_num_regs   <= dcr_req_data[15:0];
+                `VX_DCR_KMU_NUM_REGS:    dcr_num_regs   <= dcr_req_data[23:0];
                 // Block size (total threads per CTA)
                 `VX_DCR_KMU_BLOCK_SIZE:  dcr_block_size <= dcr_req_data[CTA_TID_WIDTH:0];
                 // Warp steps

@@ -129,8 +129,9 @@ fixed-stride allocator):
 
 ### Launch interface
 
-- `VX_DCR_KMU_NUM_REGS`: `{Rf, Rx}`, set by the runtime with the other KMU DCRs;
-  reset value gives `R = 64`.
+- `VX_DCR_KMU_NUM_REGS`: `{Ru, Rf, Rx}`, a byte each, set by the runtime with
+  the other KMU DCRs; reset value gives `R = 64` (and 32 uniform registers).
+  The image's footer holds the three counts in units of 4.
 - `kmu_req_t` carries the counts to the dispatcher with `aligned_lmem_size`.
 - Runtime: reads `R` from the kernel image. Additive; no API change.
 

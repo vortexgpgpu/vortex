@@ -173,6 +173,15 @@ tests:
   app: uniform_regs
   args: -n256
   configs: -DVX_CFG_EXT_U_ENABLE
+# A uniform register file holding 2 warps' 20 uniform registers per collector:
+# warps beyond it wait, and the resident ones' registers sit at their slots'
+# bases.
+- id: parity-ureg-rows
+  check: model_parity
+  via: blackbox
+  app: uniform_regs
+  args: -n256
+  configs: -DVX_CFG_EXT_U_ENABLE -DVX_CFG_UREG_ROWS=40
 # A register file holding 4 of 16 full register sets: conv3 (one warp per CTA)
 # keeps as many warps resident as its register count fits, and its warps'
 # registers sit at non-power-of-two set bases.

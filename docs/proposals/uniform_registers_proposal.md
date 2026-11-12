@@ -104,7 +104,7 @@ the first-lane writeback are the new parts.
 | Register classes | `VX_gpu_pkg.sv` | `REG_TYPE_U`, a third register type in the register id |
 | Decode | `VX_decode.sv` | mode from `[1:0]`; operand classes per the tables |
 | Fetch | `VX_warp_sched.sv` | 4-byte PC steps whatever `[1:0]` is, without C |
-| Uniform register file | `VX_opc_unit.sv` | per-warp 32 x XLEN bits, its own read port, broadcast to the lanes |
+| Uniform register file | `VX_opc_unit.sv` | `VX_CFG_UREG_ROWS` x XLEN bits per collector, a warp slot's `Ru` rows from its base; its own read port, broadcast to the lanes |
 | Scoreboard | `VX_scoreboard.sv` | the uniform registers' busy bits |
 | LSU | decode | a mode-`10` access narrowed to the first active lane |
 | Writeback | `VX_opc_unit.sv` | `u` destination from the first active lane |
@@ -136,7 +136,11 @@ the wider physical address. It lands with that wider address path.
 Built with dynamic warp allocation; see the combined phases in
 [dynamic_warp_allocation_proposal.md](dynamic_warp_allocation_proposal.md#phases).
 
-## Open questions
+## Allocation
 
-- 32 or 16 `u` registers.
-- Whether the `u` file is also allocated per kernel, as the `x`/`f` file is.
+The `u` file is allocated per kernel as the `x`/`f` file is: a kernel takes
+`Ru` uniform registers, `u1` up, in multiples of 4 (`u0` reads zero and takes
+no row). Each operand collector holds `VX_CFG_UREG_ROWS` of them, by default 32
+per warp slot, and a warp is resident only when both its `R` registers and its
+`Ru` uniform registers fit. Register packing renames the image's `u` registers
+from `u1` up, as it does `x` and `f`.
