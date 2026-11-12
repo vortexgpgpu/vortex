@@ -17,6 +17,7 @@ enum {
   RES_SUBF,      // n - 1, the uniform value first
   RES_SLTF,      // scale < n, the uniform value first
   RES_BRF,       // branches on a uniform first operand
+  RES_WCTL,      // tmc, bar and arrive/wait on uniform operands passed
   RES_COUNT
 };
 

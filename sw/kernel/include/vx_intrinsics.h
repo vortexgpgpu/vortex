@@ -32,6 +32,19 @@ extern "C" {
 #endif
 
 #define RISCV_CUSTOM0   0x0B
+
+// With uniform registers (+xvortexu), the operands of a Vortex instruction that
+// are the same in every thread come from u registers: its uniform form
+// (bits [1:0] = 0b10) and the vu constraint.
+#if defined(__riscv_xvortexu)
+#define RISCV_CUSTOM0_U (RISCV_CUSTOM0 & ~1)
+#define VX_UREG     "vu"
+#define VX_UREG_OUT "=vu"
+#else
+#define RISCV_CUSTOM0_U RISCV_CUSTOM0
+#define VX_UREG     "r"
+#define VX_UREG_OUT "=r"
+#endif
 #define RISCV_CUSTOM1   0x2B
 #define RISCV_CUSTOM2   0x5B
 #define RISCV_CUSTOM3   0x7B
@@ -124,7 +137,7 @@ extern "C" {
 
 // Set thread mask
 inline void vx_tmc(int thread_mask) {
-    __asm__ volatile (".insn r %0, 0, 0, x0, %1, x0" :: "i"(RISCV_CUSTOM0), "r"(thread_mask) : "memory");
+    __asm__ volatile (".insn r %0, 0, 0, x0, %1, x0" :: "i"(RISCV_CUSTOM0_U), VX_UREG(thread_mask) : "memory");
 }
 
 // Disable all threads in the current warp.
@@ -153,7 +166,7 @@ inline void vx_pred_n(int condition, int thread_mask) {
 // Spawn warps
 typedef void (*vx_wspawn_pfn)();
 inline void vx_wspawn(int num_warps, vx_wspawn_pfn func_ptr) {
-    __asm__ volatile (".insn r %0, 1, 0, x0, %1, %2" :: "i"(RISCV_CUSTOM0), "r"(num_warps), "r"(func_ptr) : "memory");
+    __asm__ volatile (".insn r %0, 1, 0, x0, %1, %2" :: "i"(RISCV_CUSTOM0_U), VX_UREG(num_warps), VX_UREG(func_ptr) : "memory");
 }
 
 // Split on a predicate
@@ -177,7 +190,7 @@ inline void vx_join(int stack_ptr) {
 
 // Warp Barrier
 inline void vx_barrier(int barried_id, int num_warps) {
-    __asm__ volatile (".insn r %0, 4, 0, x0, %1, %2" :: "i"(RISCV_CUSTOM0), "r"(barried_id), "r"(num_warps) : "memory");
+    __asm__ volatile (".insn r %0, 4, 0, x0, %1, %2" :: "i"(RISCV_CUSTOM0_U), VX_UREG(barried_id), VX_UREG(num_warps) : "memory");
 }
 
 // Return current thread identifier (constant for the thread's lifetime: const +
@@ -580,7 +593,7 @@ vx_wgather(size_t self_val, size_t v1, size_t v2, size_t v3) {
 inline int vx_barrier_arrive(int barrier_id, int num_warps) {
     int phase;
     __asm__ volatile (
-        ".insn r %1, 6, 0, %0, %2, %3" : "=r"(phase) : "i"(RISCV_CUSTOM0), "r"(barrier_id), "r"(num_warps) : "memory"
+        ".insn r %1, 6, 0, %0, %2, %3" : VX_UREG_OUT(phase) : "i"(RISCV_CUSTOM0_U), VX_UREG(barrier_id), VX_UREG(num_warps) : "memory"
     );
     return phase;
 }
@@ -590,7 +603,7 @@ inline int vx_barrier_arrive(int barrier_id, int num_warps) {
 // phase: the phase returned by vx_barrier_arrive
 inline void vx_barrier_wait(int barrier_id, int phase) {
     __asm__ volatile (
-        ".insn r %0, 6, 0, x0, %1, %2" :: "i"(RISCV_CUSTOM0), "r"(barrier_id), "r"(phase) : "memory"
+        ".insn r %0, 6, 0, x0, %1, %2" :: "i"(RISCV_CUSTOM0_U), VX_UREG(barrier_id), VX_UREG(phase) : "memory"
     );
 }
 
@@ -609,7 +622,7 @@ inline void vx_barrier_expect_tx(int barrier_id, int count) {
     int discard;
     int rs2 = count | 0x80000000;
     __asm__ volatile (
-        ".insn r %1, 6, 0, %0, %2, %3" : "=r"(discard) : "i"(RISCV_CUSTOM0), "r"(barrier_id), "r"(rs2) : "memory"
+        ".insn r %1, 6, 0, %0, %2, %3" : VX_UREG_OUT(discard) : "i"(RISCV_CUSTOM0_U), VX_UREG(barrier_id), VX_UREG(rs2) : "memory"
     );
     (void)discard;
 }

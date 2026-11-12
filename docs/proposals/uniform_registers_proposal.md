@@ -43,6 +43,7 @@ and binaries carry an ELF attribute so other tools refuse them.
 | LOAD / STORE | `ud = mem[us1 + imm]`, `mem[us1 + imm] = us2`: one access per warp (kernel arguments, spills); `ld`, `sd`, `lwu` at XLEN=64 |
 | SYSTEM (Zicsr) | `csrr* ud, csr, us1` |
 | OP-FP `fmv.d.x` / `fmv.x.d` encodings | `u.mvx ud, xs1` (first active lane) / `x.mvu xd, us1` (broadcast): the `f` field names a `u` register, the `x` field stays `x` |
+| custom-0: `tmc`, `wspawn`, `bar`, `bar.arrive`/`bar.wait`; `tcu.ld`; TMEM `ld`/`st`/`alloc`/`dealloc`; `tc.idesc`/`tc.commit`/`tc.cp`/`tc.mma` | every integer operand (and an integer destination) is a `u` register; FP operands stay `f`. These read one value per warp already, so the `u` form only changes where it comes from. The others (`split`, `pred`, `vote`, DXA issue, which reads each lane's operands) stay per-thread |
 
 ### Mode `01`: uniform operand
 
@@ -56,7 +57,6 @@ The second source is uniform, as RVV's `vop.vx vd, vs2, rs1` computes
 | BRANCH | `xs1 cmp us2`: `blt i, n` |
 | LOAD, LOAD-FP (`flw`, `fld`) | `xd = mem[us1 + imm]`, `fd = mem[us1 + imm]`: every lane reads the same address |
 | STORE | `mem[xs1 + imm] = us2` |
-| Vortex custom (TCU, TMEM, DXA, warp control) | per instruction, the operand that is warp-invariant (descriptor, TMEM address, barrier id) from `u`; defined in a later phase |
 
 ### Mode `00`: uniform first operand
 

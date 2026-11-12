@@ -2636,7 +2636,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
     uop_args.tmem_idx = uop_index;
     uop_instr->set_op_type(tcu_type);
     uop_instr->set_args(uop_args);
-    uop_instr->set_src_reg(0, macro_instr.get_src_reg(0).idx, RegType::Integer);
+    uop_instr->set_src_reg(0, macro_instr.get_src_reg(0).idx, macro_instr.get_src_reg(0).type);
     if (tcu_type == TcuType::TMEM_LD) {
       uop_instr->set_dest_reg(freg + uop_index, RegType::Float);
     } else {

@@ -67,4 +67,17 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     "2:"
     : "+r"(br) : "r"(xn), "r"(xs), "i"(VX_UF_BRANCH));
   vx_ux_store(VX_U_W, br, 12, RES_BRF * 4);
+
+  // warp control on uniform operands: tmc to the active mask, a barrier of
+  // one warp, then arrive (the phase in u20) and wait on the warp's own id
+  vx_u_csrr(17, VX_CSR_ACTIVE_THREADS);
+  vx_u_csrr(18, VX_CSR_WARP_ID);
+  vx_u_li(19, 1);
+  __asm__ volatile (
+    ".insn r %0, 0, 0, x0, x17, x0\n\t"
+    ".insn r %0, 4, 0, x0, x18, x19\n\t"
+    ".insn r %0, 6, 0, x20, x18, x19\n\t"
+    ".insn r %0, 6, 0, x0, x18, x20"
+    :: "i"(RISCV_CUSTOM0 & ~1) : "memory");
+  vx_u_store(VX_U_W, 19, 12, RES_WCTL * 4);
 }

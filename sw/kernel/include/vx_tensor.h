@@ -273,8 +273,8 @@ public:
     uintptr_t addr = reinterpret_cast<uintptr_t>(meta_sp_ptr);
     __asm__ volatile (".insn r %[insn], 2, 2, x0, %[base], x%[fmt]"
       :
-      : [insn]"i"(RISCV_CUSTOM0),
-        [base]"r"(addr),
+      : [insn]"i"(RISCV_CUSTOM0_U),
+        [base]VX_UREG(addr),
         [fmt]"i"(It::id)
       : "memory"
     );
@@ -282,8 +282,8 @@ public:
       uintptr_t addr2 = addr + (NT * sizeof(float));
       __asm__ volatile (".insn r %[insn], 2, 2, x1, %[base], x%[fmt]"
         :
-        : [insn]"i"(RISCV_CUSTOM0),
-          [base]"r"(addr2),
+        : [insn]"i"(RISCV_CUSTOM0_U),
+          [base]VX_UREG(addr2),
           [fmt]"i"(It::id)
         : "memory"
       );
@@ -302,13 +302,13 @@ public:
     if constexpr (Frag::Use == frag_use_t::matrix_a) {
       __asm__ volatile (".insn r %[insn], 2, 2, x16, %[base], x%[fmt]"
         :
-        : [insn]"i"(RISCV_CUSTOM0), [base]"r"(addr), [fmt]"i"(It::id)
+        : [insn]"i"(RISCV_CUSTOM0_U), [base]VX_UREG(addr), [fmt]"i"(It::id)
         : "memory"
       );
     } else {
       __asm__ volatile (".insn r %[insn], 2, 2, x17, %[base], x%[fmt]"
         :
-        : [insn]"i"(RISCV_CUSTOM0), [base]"r"(addr), [fmt]"i"(It::id)
+        : [insn]"i"(RISCV_CUSTOM0_U), [base]VX_UREG(addr), [fmt]"i"(It::id)
         : "memory"
       );
     }
@@ -1144,8 +1144,8 @@ public:
     //   rd[3:0]  = slot selector — immediate-style, no GPR writeback.
     __asm__ volatile (".insn r %[insn], 2, 2, x0, %[base], x%[fmt]"
       :
-      : [insn]"i"(RISCV_CUSTOM0),
-        [base]"r"(addr),
+      : [insn]"i"(RISCV_CUSTOM0_U),
+        [base]VX_UREG(addr),
         [fmt]"i"(It::id)
       : "memory"
     );

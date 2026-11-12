@@ -115,10 +115,11 @@ int main(int argc, char** argv) {
         n - 1,               // u - x
         uint32_t(scale < n), // u < x
         1,                   // branches on a uniform first operand
+        1,                   // warp control on uniform operands
     };
     static const char* names[RES_COUNT] = {
         "shift", "div", "loop", "lui", "sub", "csr", "xstore",
-        "xload", "fload", "subf", "sltf", "brf"};
+        "xload", "fload", "subf", "sltf", "brf", "wctl"};
     for (uint32_t i = 0; i < RES_COUNT; ++i) {
         if (h_res[i] != expect[i]) {
             std::printf("*** %s expected=0x%x actual=0x%x\n", names[i], expect[i], h_res[i]);

@@ -612,6 +612,16 @@ Instr::Ptr Decoder::decode_uniform(uint32_t code, uint64_t uuid, uint8_t umode) 
   case Opcode::SYS:
     legal = uniform && (funct3 != 0);
     break;
+  case Opcode::EXT1:
+    // custom instructions whose integer operands are all warp-invariant
+    switch (funct7) {
+    case 0: legal = uniform && (funct3 == 0 || funct3 == 1 || funct3 == 4 || funct3 == 6); break; // tmc, wspawn, bar, arrive/wait
+    case 2: legal = uniform && (funct3 == 2); break; // tcu_ld
+    case 5: // tmem
+    case 6: legal = uniform; break; // tensor jobs
+    default: legal = false; break;
+    }
+    break;
   default:
     legal = false;
     break;

@@ -79,7 +79,7 @@ inline uint32_t alloc(uint32_t ncols) {
   uint32_t col;
   do {
     __asm__ volatile (".insn r %1, 6, 5, %0, %2, x0"
-      : "=r"(col) : "i"(RISCV_CUSTOM0), "r"(ncols) : "memory");
+      : VX_UREG_OUT(col) : "i"(RISCV_CUSTOM0_U), VX_UREG(ncols) : "memory");
   } while (col == ~0u);
   return col;
 }
@@ -87,7 +87,7 @@ inline uint32_t alloc(uint32_t ncols) {
 // tcgen05.dealloc: waits for the CTA's ops on the columns, then frees them.
 inline void dealloc(uint32_t col, uint32_t ncols) {
   __asm__ volatile (".insn r %0, 7, 5, x0, %1, %2"
-    :: "i"(RISCV_CUSTOM0), "r"(col), "r"(ncols) : "memory");
+    :: "i"(RISCV_CUSTOM0_U), VX_UREG(col), VX_UREG(ncols) : "memory");
 }
 
 // Load the CTA's tc.mma descriptor slot Slot (0..3) with an instruction
@@ -97,7 +97,7 @@ template <uint32_t Slot>
 inline void set_idesc(uint32_t idesc, uint32_t ld) {
   static_assert(Slot < 4, "four descriptor slots");
   __asm__ volatile (".insn r %0, 0, 6, x%1, %2, %3"
-    :: "i"(RISCV_CUSTOM0), "i"(Slot), "r"(idesc), "r"(ld) : "memory");
+    :: "i"(RISCV_CUSTOM0_U), "i"(Slot), VX_UREG(idesc), VX_UREG(ld) : "memory");
 }
 
 // tcgen05.mma: D (column taddr) += A . B with descriptor slot Slot, A and B at
@@ -110,14 +110,14 @@ inline void mma(uint32_t taddr, uint32_t a, uint32_t b, bool acc_init = false, u
   static_assert(Slot < 4, "four descriptor slots");
   uint32_t w = (taddr & 0xffff) | ((meta & 0x7fff) << 16) | (acc_init ? 0x80000000u : 0u);
   __asm__ volatile (".insn r %0, %1, 6, %2, %3, %4"
-    :: "i"(RISCV_CUSTOM0), "i"(4 + Slot), "r"(b), "r"(w), "r"(a) : "memory");
+    :: "i"(RISCV_CUSTOM0_U), "i"(4 + Slot), VX_UREG(b), VX_UREG(w), VX_UREG(a) : "memory");
 }
 
 // tcgen05.commit: arrive on barrier `bar`, as one of its `count` participants,
 // once the CTA's earlier tc.mma and tc.cp ops have completed.
 inline void commit(uint32_t bar, uint32_t count) {
   __asm__ volatile (".insn r %0, 1, 6, x0, %1, %2"
-    :: "i"(RISCV_CUSTOM0), "r"(bar), "r"(count) : "memory");
+    :: "i"(RISCV_CUSTOM0_U), VX_UREG(bar), VX_UREG(count) : "memory");
 }
 
 // tcgen05.cp: copy `cols` columns of every TMEM lane from shared memory, lane l
@@ -126,7 +126,7 @@ inline void commit(uint32_t bar, uint32_t count) {
 inline void cp(uint32_t col, const void* src, uint32_t stride, uint32_t cols) {
   uint32_t w = (col & 0xffff) | (cols << 16);
   __asm__ volatile (".insn r %0, 2, 6, %1, %2, %3"
-    :: "i"(RISCV_CUSTOM0), "r"(stride), "r"(w), "r"(smem_offset(src)) : "memory");
+    :: "i"(RISCV_CUSTOM0_U), VX_UREG(stride), VX_UREG(w), VX_UREG(smem_offset(src)) : "memory");
 }
 
 // TMEM -> registers f0..f(NR-1). taddr's lane is a multiple of M.
@@ -150,7 +150,7 @@ inline __attribute__((always_inline)) void load(Frag& frag, uint32_t taddr) {
     __asm__ volatile (".insn r %[insn], %[f3], 5, x0, %[taddr], x7"
       : "=f"(fd0), "=f"(fd1), "=f"(fd2), "=f"(fd3),
       "=f"(fd4), "=f"(fd5), "=f"(fd6), "=f"(fd7)
-      : [insn]"i"(RISCV_CUSTOM0), [f3]"i"(F3), [taddr]"r"(taddr)
+      : [insn]"i"(RISCV_CUSTOM0_U), [f3]"i"(F3), [taddr]VX_UREG(taddr)
       : "memory");
     frag.data[0] = fd0;
     frag.data[1] = fd1;
@@ -182,7 +182,7 @@ inline __attribute__((always_inline)) void load(Frag& frag, uint32_t taddr) {
       "=f"(fd4), "=f"(fd5), "=f"(fd6), "=f"(fd7),
       "=f"(fd8), "=f"(fd9), "=f"(fd10), "=f"(fd11),
       "=f"(fd12), "=f"(fd13), "=f"(fd14), "=f"(fd15)
-      : [insn]"i"(RISCV_CUSTOM0), [f3]"i"(F3), [taddr]"r"(taddr)
+      : [insn]"i"(RISCV_CUSTOM0_U), [f3]"i"(F3), [taddr]VX_UREG(taddr)
       : "memory");
     frag.data[0] = fd0;
     frag.data[1] = fd1;
@@ -242,7 +242,7 @@ inline __attribute__((always_inline)) void load(Frag& frag, uint32_t taddr) {
       "=f"(fd20), "=f"(fd21), "=f"(fd22), "=f"(fd23),
       "=f"(fd24), "=f"(fd25), "=f"(fd26), "=f"(fd27),
       "=f"(fd28), "=f"(fd29), "=f"(fd30), "=f"(fd31)
-      : [insn]"i"(RISCV_CUSTOM0), [f3]"i"(F3), [taddr]"r"(taddr)
+      : [insn]"i"(RISCV_CUSTOM0_U), [f3]"i"(F3), [taddr]VX_UREG(taddr)
       : "memory");
     frag.data[0] = fd0;
     frag.data[1] = fd1;
@@ -295,7 +295,7 @@ inline __attribute__((always_inline)) void store(uint32_t taddr, const Frag& fra
     register float fs7 __asm__("f7") = frag.data[7];
     __asm__ volatile (".insn r %[insn], %[f3], 5, x0, %[taddr], x7"
       :
-      : [insn]"i"(RISCV_CUSTOM0), [f3]"i"(F3), [taddr]"r"(taddr),
+      : [insn]"i"(RISCV_CUSTOM0_U), [f3]"i"(F3), [taddr]VX_UREG(taddr),
         "f"(fs0), "f"(fs1), "f"(fs2), "f"(fs3),
         "f"(fs4), "f"(fs5), "f"(fs6), "f"(fs7)
       : "memory");
@@ -318,7 +318,7 @@ inline __attribute__((always_inline)) void store(uint32_t taddr, const Frag& fra
     register float fs15 __asm__("f15") = frag.data[15];
     __asm__ volatile (".insn r %[insn], %[f3], 5, x0, %[taddr], x15"
       :
-      : [insn]"i"(RISCV_CUSTOM0), [f3]"i"(F3), [taddr]"r"(taddr),
+      : [insn]"i"(RISCV_CUSTOM0_U), [f3]"i"(F3), [taddr]VX_UREG(taddr),
         "f"(fs0), "f"(fs1), "f"(fs2), "f"(fs3),
         "f"(fs4), "f"(fs5), "f"(fs6), "f"(fs7),
         "f"(fs8), "f"(fs9), "f"(fs10), "f"(fs11),
@@ -359,7 +359,7 @@ inline __attribute__((always_inline)) void store(uint32_t taddr, const Frag& fra
     register float fs31 __asm__("f31") = frag.data[31];
     __asm__ volatile (".insn r %[insn], %[f3], 5, x0, %[taddr], x31"
       :
-      : [insn]"i"(RISCV_CUSTOM0), [f3]"i"(F3), [taddr]"r"(taddr),
+      : [insn]"i"(RISCV_CUSTOM0_U), [f3]"i"(F3), [taddr]VX_UREG(taddr),
         "f"(fs0), "f"(fs1), "f"(fs2), "f"(fs3),
         "f"(fs4), "f"(fs5), "f"(fs6), "f"(fs7),
         "f"(fs8), "f"(fs9), "f"(fs10), "f"(fs11),
