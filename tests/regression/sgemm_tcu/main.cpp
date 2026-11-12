@@ -555,6 +555,10 @@ void cleanup() {
 
 int main(int argc, char *argv[]) {
   parse_args(argc, argv);
+  if (xz && !std::is_same<vt::ITYPE, vt::bf8>::value) {
+    std::cout << "Error: -z requires ITYPE=bf8!" << std::endl;
+    return -1;
+  }
 
   std::srand(50);
 

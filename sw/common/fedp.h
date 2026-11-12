@@ -541,8 +541,7 @@ private:
   }
 
   // One fp8 lane: its two products, aligned to the one the datapath picks as
-  // larger. A zero product still competes by its exponent fields when the
-  // other is nonzero and listed second, as the datapath compares them.
+  // larger. A zero product never sets the lane exponent.
   std::pair<pterm_t, int> reduce_f8(const pterm_t& t1, int e1, bool v1, const pterm_t& t2, int e2, bool v2) {
     // Pick max exponent term
     int max_E, max_s, min_E, min_s;
@@ -551,7 +550,7 @@ private:
     if (!v1 && !v2) {
       return {{0, 0}, kZeroE};
     }
-    if ((v1 && !v2) || (v2 && e1 >= e2)) {
+    if (v1 && (!v2 || e1 >= e2)) {
       max_E = e1; max_P = t1.Mp; max_s = t1.sign;
       min_E = e2; min_P = t2.Mp; min_s = t2.sign;
     } else {
