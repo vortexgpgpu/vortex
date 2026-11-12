@@ -140,7 +140,7 @@ int main(int argc, char** argv) {
   arg.burst = burst;
 
   uint32_t grid[1], block[1];
-  CHECK(vx_device_max_occupancy_grid(dev, 1, &count, grid, block));
+  CHECK(vx_kernel_max_occupancy_grid(kern, 1, &count, 0, grid, block));
 
   // DXA descriptor slot 0 covers src, 1 dst and 2 the chain's middle buffer.
   uint32_t lmem_size = 0;

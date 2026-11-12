@@ -145,8 +145,10 @@ int main(int argc, char *argv[]) {
     vx_event_h launch_ev = nullptr, read_ev0 = nullptr, read_ev1 = nullptr;
     {
       uint32_t n = num_harts;
+      // The lmem tests use at most 8 words plus one per hart of a block.
+      const uint32_t lmem_size = (8 + (uint32_t)(num_warps * num_threads)) * sizeof(uint32_t);
       uint32_t grid_dim[1], block_dim[1];
-      RT_CHECK(vx_device_max_occupancy_grid(device, 1, &n, grid_dim, block_dim));
+      RT_CHECK(vx_kernel_max_occupancy_grid(kernel, 1, &n, lmem_size, grid_dim, block_dim));
       vx_launch_info_t li = {};
       li.struct_size  = sizeof(li);
       li.kernel       = kernel;
@@ -155,6 +157,7 @@ int main(int argc, char *argv[]) {
       li.ndim         = 1;
       li.grid_dim[0]  = grid_dim[0];
       li.block_dim[0] = block_dim[0];
+      li.lmem_size    = lmem_size;
       RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
     }
 

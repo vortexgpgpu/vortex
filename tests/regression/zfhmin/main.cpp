@@ -72,7 +72,7 @@ void run(uint32_t mode, uint32_t count, Buf& src, Buf& dst, Buf* aux, void* out,
   arg.dst_addr = dst.addr;
   arg.aux_addr = aux ? aux->addr : 0;
   uint32_t grid[1], block[1];
-  CHECK(vx_device_max_occupancy_grid(dev, 1, &count, grid, block));
+  CHECK(vx_kernel_max_occupancy_grid(kern, 1, &count, 0, grid, block));
   vx_launch_info_t li{};
   li.struct_size = sizeof(li);
   li.kernel      = kern;

@@ -235,7 +235,7 @@ int main(int argc, char *argv[]) {
   uint64_t iteration = 1;
 
   uint32_t grid_dim[1], block_dim[1];
-  RT_CHECK(vx_device_max_occupancy_grid(device, 1, &size, grid_dim, block_dim));
+  RT_CHECK(vx_kernel_max_occupancy_grid(kernel, 1, &size, 0, grid_dim, block_dim));
 
   for(uint32_t k = 0; k < iteration; k++){
 

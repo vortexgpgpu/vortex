@@ -80,15 +80,6 @@ int main(int argc, char** argv) {
     vx_queue_h q = nullptr;
     CHECK(vx_queue_create(dev, &qi, &q));
 
-    const uint32_t global_dim[2] = {size, size};
-    uint32_t grid[2], block[2];
-    CHECK(vx_device_max_occupancy_grid(dev, 2, global_dim, grid, block));
-    if ((size % block[0]) || (size % block[1])) {
-        std::cerr << "matrix size " << size << " must divide block "
-                  << block[0] << "x" << block[1] << std::endl;
-        return -1;
-    }
-
     vx_buffer_h A_buf=nullptr, B_buf=nullptr, C_buf=nullptr;
     CHECK(vx_buffer_create(dev, buf_size, VX_MEM_READ,  &A_buf));
     CHECK(vx_buffer_create(dev, buf_size, VX_MEM_READ,  &B_buf));
@@ -98,6 +89,15 @@ int main(int argc, char** argv) {
     vx_kernel_h kern = nullptr;
     CHECK(vx_module_load_file(dev, kernel_file, &mod));
     CHECK(vx_module_get_kernel(mod, "main", &kern));
+
+    const uint32_t global_dim[2] = {size, size};
+    uint32_t grid[2], block[2];
+    CHECK(vx_kernel_max_occupancy_grid(kern, 2, global_dim, 0, grid, block));
+    if ((size % block[0]) || (size % block[1])) {
+        std::cerr << "matrix size " << size << " must divide block "
+                  << block[0] << "x" << block[1] << std::endl;
+        return -1;
+    }
 
     kernel_arg_t kernel_arg{};
     kernel_arg.size = size;

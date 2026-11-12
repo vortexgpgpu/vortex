@@ -272,7 +272,7 @@ int main(int argc, char *argv[]) {
     vx_event_h launch_ev = nullptr, read_ev0 = nullptr, read_ev1 = nullptr;
     {
       uint32_t grid_dim[1], block_dim[1];
-      RT_CHECK(vx_device_max_occupancy_grid(device, 1, &frontier_size, grid_dim, block_dim));
+      RT_CHECK(vx_kernel_max_occupancy_grid(kernel, 1, &frontier_size, 0, grid_dim, block_dim));
       vx_launch_info_t li = {};
       li.struct_size  = sizeof(li);
       li.kernel       = kernel;

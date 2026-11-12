@@ -103,7 +103,7 @@ int main(int argc, char** argv) {
     CHECK(vx_enqueue_write(q, scatter_buf, 0, h_scatter.data(), scatter_words * sizeof(uint32_t), 0, nullptr, nullptr));
 
     uint32_t grid[1], block[1];
-    CHECK(vx_device_max_occupancy_grid(dev, 1, &num_threads, grid, block));
+    CHECK(vx_kernel_max_occupancy_grid(kern, 1, &num_threads, 0, grid, block));
 
     vx_launch_info_t li{};
     li.struct_size = sizeof(li);

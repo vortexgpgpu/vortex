@@ -102,7 +102,7 @@ int main(int argc, char *argv[]) {
   {
     uint32_t n = total_threads;
     uint32_t grid_dim[1], block_dim[1];
-    RT_CHECK(vx_device_max_occupancy_grid(device, 1, &n, grid_dim, block_dim));
+    RT_CHECK(vx_kernel_max_occupancy_grid(kernel, 1, &n, 0, grid_dim, block_dim));
     vx_launch_info_t li = {};
     li.struct_size  = sizeof(li);
     li.kernel       = kernel;

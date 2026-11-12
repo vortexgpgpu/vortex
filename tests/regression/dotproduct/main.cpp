@@ -142,8 +142,10 @@ int main(int argc, char *argv[]) {
 
   kernel_arg.num_points = num_points;
 
+  RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
+  RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
   uint32_t grid_dim[1], block_dim[1];
-  RT_CHECK(vx_device_max_occupancy_grid(device, 1, &num_points, grid_dim, block_dim));
+  RT_CHECK(vx_kernel_max_occupancy_grid(kernel, 1, &num_points, 0, grid_dim, block_dim));
   uint32_t blocksPerGrid = grid_dim[0];
   uint32_t threadsPerBlock = block_dim[0];
 
@@ -185,8 +187,6 @@ int main(int argc, char *argv[]) {
 
   // load kernel module
   std::cout << "load kernel module" << std::endl;
-  RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
-  RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
 
   // launch kernel — args passed as a host blob (UVA), no args device buffer
   std::cout << "launch kernel" << std::endl;

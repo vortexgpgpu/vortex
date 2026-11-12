@@ -124,8 +124,12 @@ int main(int argc, char** argv) {
 
   // One CTA: query a valid device CTA size (T threads) before sizing the
   // per-thread scratch (thist is T×B).
+  vx_module_h mod = nullptr;
+  vx_kernel_h kern = nullptr;
+  CHECK(vx_module_load_file(dev, g_kernel_file, &mod));
+  CHECK(vx_module_get_kernel(mod, "main", &kern));
   uint32_t one = 1, grid[1], block[1];
-  CHECK(vx_device_max_occupancy_grid(dev, 1, &one, grid, block));
+  CHECK(vx_kernel_max_occupancy_grid(kern, 1, &one, 0, grid, block));
   const uint32_t T = block[0];
   const uint32_t Pcap = ref.P ? ref.P : 1;
 
@@ -144,10 +148,6 @@ int main(int argc, char** argv) {
   CHECK(vx_buffer_create(dev, Pcap * sizeof(uint32_t),      VX_MEM_WRITE, &pids_buf));
   CHECK(vx_buffer_create(dev, 2 * sizeof(uint32_t),         VX_MEM_WRITE, &meta_buf));
 
-  vx_module_h mod = nullptr;
-  vx_kernel_h kern = nullptr;
-  CHECK(vx_module_load_file(dev, g_kernel_file, &mod));
-  CHECK(vx_module_get_kernel(mod, "main", &kern));
 
   kernel_arg_t karg{};
   karg.num_prims = n;

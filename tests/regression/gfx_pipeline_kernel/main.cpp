@@ -159,8 +159,19 @@ int main(int argc, char** argv) {
   vx_queue_h q = nullptr;
   CHECK(vx_queue_create(dev, &qi, &q));
 
-  uint32_t one = 1, grid[1], block[1];
-  CHECK(vx_device_max_occupancy_grid(dev, 1, &one, grid, block));
+  vx_module_h mod = nullptr;
+  vx_kernel_h k_setup = nullptr, k_binning = nullptr;
+  CHECK(vx_module_load_file(dev, g_kernel_file, &mod));
+  CHECK(vx_module_get_kernel(mod, "setup_k", &k_setup));
+  CHECK(vx_module_get_kernel(mod, "binning_k", &k_binning));
+  // Both kernels share T: the smaller block of the two.
+  uint32_t one = 1, grid[1], block[1], grid_b[1], block_b[1];
+  CHECK(vx_kernel_max_occupancy_grid(k_setup, 1, &one, 0, grid, block));
+  CHECK(vx_kernel_max_occupancy_grid(k_binning, 1, &one, 0, grid_b, block_b));
+  if (block_b[0] < block[0]) {
+    grid[0] = grid_b[0];
+    block[0] = block_b[0];
+  }
   const uint32_t T = block[0];
   const uint32_t G = grid[0];
   const uint32_t B = PIPE_NUM_BINS;
@@ -191,12 +202,6 @@ int main(int argc, char** argv) {
   CHECK(vx_buffer_create(dev, B * sizeof(uint32_t),           VX_MEM_WRITE, &binbase_buf));
   CHECK(vx_buffer_create(dev, TILEBUF_SZ,                     VX_MEM_WRITE, &tilebuf_buf));
   CHECK(vx_buffer_create(dev, 3 * sizeof(uint32_t),           VX_MEM_WRITE, &meta_buf));
-
-  vx_module_h mod = nullptr;
-  vx_kernel_h k_setup = nullptr, k_binning = nullptr;
-  CHECK(vx_module_load_file(dev, g_kernel_file, &mod));
-  CHECK(vx_module_get_kernel(mod, "setup_k", &k_setup));
-  CHECK(vx_module_get_kernel(mod, "binning_k", &k_binning));
 
   kernel_arg_t karg{};
   karg.num_tris = n;

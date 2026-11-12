@@ -194,6 +194,17 @@ tests:
   shape:
     warps: 16
     threads: 8
+# A register file holding 4 of 8 warps of the occupancy kernel: the runtime
+# reports that fit from the command processor's register-file caps, sizes the
+# active CTAs by it, and rejects a CTA one warp larger.
+- id: parity-gpr-fit
+  check: model_parity
+  via: blackbox
+  app: occupancy
+  configs: -DVX_CFG_GPR_ROWS=64
+  shape:
+    warps: 8
+    threads: 4
 # Softmax: elementwise exp + reduction (FPU + reduction traffic).
 - id: parity-softmax
   check: model_parity

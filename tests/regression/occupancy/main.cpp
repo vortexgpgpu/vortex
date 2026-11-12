@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <iostream>
 #include <unistd.h>
 #include <vector>
@@ -92,6 +93,39 @@ int main(int argc, char** argv) {
 
   RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
   RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
+
+  // The warps whose registers fit at once bound a CTA: the occupancy query
+  // reports them, and a CTA one warp larger is rejected at launch.
+  {
+    uint32_t bx, fit, bz, ctas;
+    RT_CHECK(vx_kernel_get_max_block_size(kernel, &bx, &fit, &bz));
+    RT_CHECK(vx_kernel_max_active_ctas(kernel, (uint32_t)num_threads, lmem_size, &ctas));
+    std::cout << "register fit=" << fit << " warps, active CTAs=" << ctas << "\n";
+    uint32_t expected = std::min<uint32_t>(fit, max_concurrent);
+    if (fit == 0 || fit > num_warps || ctas != expected) {
+      std::cout << "*** error: active CTAs " << ctas << ", expected " << expected << "\n";
+      cleanup();
+      std::cout << "FAILED\n";
+      return 1;
+    }
+    if (fit < num_warps) {
+      vx_launch_info_t li = {};
+      li.struct_size  = sizeof(li);
+      li.kernel       = kernel;
+      li.args_host    = &kernel_arg;
+      li.args_size    = sizeof(kernel_arg);
+      li.ndim         = 1;
+      li.grid_dim[0]  = 1;
+      li.block_dim[0] = (fit + 1) * (uint32_t)num_threads;
+      vx_event_h ev = nullptr;
+      if (vx_enqueue_launch(queue, &li, 0, nullptr, &ev) != VX_ERR_INVALID_VALUE) {
+        std::cout << "*** error: a CTA of " << fit + 1 << " warps was not rejected\n";
+        cleanup();
+        std::cout << "FAILED\n";
+        return 1;
+      }
+    }
+  }
 
   std::cout << "start device\n";
   vx_event_h launch_ev = nullptr, read_ev = nullptr;

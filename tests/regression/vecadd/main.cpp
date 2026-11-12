@@ -99,7 +99,7 @@ int main(int argc, char** argv) {
     CHECK(vx_enqueue_write(q, src1_buf, 0, h_src1.data(), buf_size, 0,nullptr,nullptr));
 
     uint32_t grid[1], block[1];
-    CHECK(vx_device_max_occupancy_grid(dev, 1, &num_points, grid, block));
+    CHECK(vx_kernel_max_occupancy_grid(kern, 1, &num_points, 0, grid, block));
 
     vx_launch_info_t li{};
     li.struct_size = sizeof(li);

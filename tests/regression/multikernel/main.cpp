@@ -108,7 +108,15 @@ int main(int argc, char** argv) {
 
   uint32_t grid[1] = {1}, block[1] = {1};
   const uint32_t global_dim[1] = { size };
-  CHECK(vx_device_max_occupancy_grid(dev, 1, global_dim, grid, block));
+  // One block for every kernel: the smallest whose warps all fit.
+  for (vx_kernel_h k : {k_add, k_mul, k_acc}) {
+    uint32_t kg[1], kb[1];
+    CHECK(vx_kernel_max_occupancy_grid(k, 1, global_dim, 0, kg, kb));
+    if (k == k_add || kb[0] < block[0]) {
+      grid[0] = kg[0];
+      block[0] = kb[0];
+    }
+  }
 
   kernel_arg_t arg_add = {}, arg_mul = {}, arg_acc = {};
   arg_add.count = size;
