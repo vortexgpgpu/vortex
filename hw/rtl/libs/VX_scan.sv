@@ -45,17 +45,15 @@ module VX_scan #(
 	    assign t[LOGN] = {t[0][3], &t[0][3:2], &t[0][3:1], &t[0][3:0]};
     end else begin : g_scan
         // general case
-        wire [N-1:0] fill;
+        // The bits shifted in: the operator's identity.
+        wire [N-1:0] fill = (OP == "&") ? {N{1'b1}} : {N{1'b0}};
 	    for (genvar i = 0; i < LOGN; ++i) begin : g_i
             wire [N-1:0] shifted = N'({fill, t[i]} >> (1<<i));
             if (OP == "^") begin : g_xor
-		        assign fill = {N{1'b0}};
 		        assign t[i+1] = t[i] ^ shifted;
             end else if (OP == "&") begin : g_and
-		        assign fill = {N{1'b1}};
 		        assign t[i+1] = t[i] & shifted;
             end else if (OP == "|") begin : g_or
-		        assign fill = {N{1'b0}};
 		        assign t[i+1] = t[i] | shifted;
             end
 	    end

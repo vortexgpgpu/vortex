@@ -88,10 +88,13 @@ module VX_tlb_cam import VX_tlb_pkg::*; #(
 
         // Lowest matching index wins: the encoder yields the hit flag, the
         // winning one-hot, and its index (for the MRU bump) without a mux tree.
+        // The one-hot is a prefix OR (MODEL 2), not a carry chain: it feeds the
+        // permission check and, through it, every lane's accept.
         wire [TLB_SIZE-1:0] hit_onehot;
         VX_priority_encoder #(
             .N       (TLB_SIZE),
-            .REVERSE (0)
+            .REVERSE (0),
+            .MODEL   (2)
         ) hit_enc (
             .data_in    (hit_vec),
             .onehot_out (hit_onehot),
