@@ -53,6 +53,11 @@ static constexpr uint32_t kPeRatio = VX_CFG_TCU_PE_RATIO;
 static_assert(kPeRatio != 0 && (kPeRatio & (kPeRatio - 1)) == 0
            && ((cfg::tcM * cfg::tcN) % kPeRatio) == 0,
               "VX_CFG_TCU_PE_RATIO must be a power of two that divides tcM x tcN");
+#ifdef VX_CFG_TCU_WGMMA_ENABLE
+static_assert(VX_CFG_LMEM_ENABLED, "TCU_WGMMA_ENABLE requires LMEM_ENABLE");
+static_assert(VX_CFG_LMEM_LOG_SIZE <= vt::smem_desc_offset_bits,
+              "LMEM exceeds the smem descriptor offset field");
+#endif
 
 static constexpr uint64_t kLineMask = ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
 
