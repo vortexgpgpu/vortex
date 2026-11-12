@@ -40,7 +40,8 @@ _start:
 // (SATP / gp / sp / tp+TLS / global ctors), then dispatches to the kernel
 // whose address the caller left in s11. s11 is callee-saved, so it
 // survives the prologue's __init_tls / __libc_init_array calls. The
-// kernel-arguments pointer is handed to the kernel in a0 (MSCRATCH).
+// kernel-arguments pointer is handed to the kernel in a0 (MSCRATCH), or in
+// u10 with uniform registers.
 //
 // Two ways the KMU reaches __vx_cta_entry:
 //
@@ -121,7 +122,15 @@ __vx_cta_entry:
   # block. Read the kernel entry and kargs pointer from their CSRs (both
   # re-supplied per CTA by the KMU), then call.
   csrr  s11, VX_CSR_CTA_ENTRY
+#ifdef __riscv_xvortexu
+  # a kernel takes its argument block in u10 (a uniform CSR read)
+  .option push
+  .option arch, +xvortexu
+  csrrs u10, VX_CSR_MSCRATCH, u0
+  .option pop
+#else
   csrr  a0, VX_CSR_MSCRATCH
+#endif
   # temporarily disable RVC to force a 4-byte call — the only compressible
   # instruction in the window; the csrr/wsync/tmc are always 4 bytes.
   .option push
