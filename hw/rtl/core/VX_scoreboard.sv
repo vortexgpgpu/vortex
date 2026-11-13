@@ -170,11 +170,15 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         // this cycle's release, which is shallower than reducing the operand
         // masks against the whole released set.
         wire wb_release = writeback_fire && writeback_if.data.wb;
+        // The staged instr's operands are looked up once, on entry, and then only
+        // a release can clear them: no one else reserves this warp's registers
+        // while it waits (its own reservation happens when it leaves).
+        reg  [NUM_OPDS-1:0] stg_pend_r;
         wire [NUM_OPDS-1:0] ibf_opd_busy, stg_opd_busy;
         for (genvar i = 0; i < NUM_OPDS; ++i) begin : g_opd_busy
             assign ibf_opd_busy[i] = ibf_used_rs[i] && inuse_regs[ibf_opds[i]]
                                   && ~(wb_release && (writeback_if.data.rd == ibf_opds[i]));
-            assign stg_opd_busy[i] = stg_used_rs[i] && inuse_regs[stg_opds[i]]
+            assign stg_opd_busy[i] = stg_pend_r[i]
                                   && ~(wb_release && (writeback_if.data.rd == stg_opds[i]));
         end
         wire ibf_busy  = | ibf_opd_busy;
@@ -237,6 +241,9 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
                 inuse_xregs <= inuse_xregs_n;
             end
             operands_ready_r <= operands_ready_n;
+            // entering: the lookup, plus the leaving instr's rd reservation
+            stg_pend_r <= ibuffer_fire ? (ibf_opd_busy | (ibf_reads_rd & {NUM_OPDS{staging_fire && stg_rsv_rd}}))
+                                       : stg_opd_busy;
         end
 
         assign operands_ready[w] = operands_ready_r;
