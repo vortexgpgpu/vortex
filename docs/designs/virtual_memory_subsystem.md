@@ -417,7 +417,7 @@ line. `vm_active` comes from the device's
 The rcache and ocache are virtually tagged, so the device's `SATP_HI` flush
 (`mmu_flush_req`, §8.1) also reaches `VX_graphics` as an address-space-change
 requester: the rcache invalidates through its `VX_dcr_flush` leg, and the OM
-flush sequencer takes it as an L1-only round, draining the OM's fragments and
+flush sequencer takes it as a device-scope round, draining the OM's fragments and
 the ocache's writes into the L2 before invalidating. Only then does the
 cluster flush the `cmmu` TLB those writes went through; the cluster's
 `mmu_flush_done` waits on the L2 TLB and on `cmmu`. `cmmu.empty` joins the

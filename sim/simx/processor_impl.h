@@ -74,7 +74,7 @@ public:
   // Drain dirty data from caches (write-back path) all the way to DRAM.
   // Walks L1 dcaches → L2 → L3, ticking the simulator between phases so
   // each level's evictions reach the next before that level itself flushes.
-  void flush_caches(bool l1_only);
+  void flush_caches(uint32_t fence_op);
 
   // Device-memory access through the command processor's port into the
   // last-level cache (CP_ON_L2 / CP_ON_L3). A write returns once every
@@ -124,7 +124,7 @@ private:
   // kmu_->start()). reset() clears it so a back-to-back kernel launch
   // via cycle() re-dispatches the KMU.
   bool is_cycle_initialized_;
-  bool flush_l1_only_ = false;  // kind of the flush the last start write opened
+  uint32_t flush_op_ = 0;  // fence operation of the flush the last start write opened
 };
 
 }

@@ -238,6 +238,8 @@ module VX_decode import
     wire decode_is_rvc = 1'b0;
 `endif
 
+    fence_op_t fence_op;
+
     always @(*) begin
 
         ex_type   = 'x;
@@ -249,6 +251,7 @@ module VX_decode import
         wr_xregs  = '0;
         bytesel   = BYTESEL_DEFAULT;
         is_wstall = 0;
+        fence_op  = 'x;
 
     `ifdef VX_CFG_EXT_A_ENABLE
         // Default the LSU amo sideband to "not an AMO" so plain
@@ -416,21 +419,26 @@ module VX_decode import
             end
             INST_FENCE: begin
                 ex_type = EX_LSU;
-                // neither the predecessor nor the successor set holds a memory
-                // read or write (pred = instr[27:24], succ = instr[23:20], IORW)
-                op_type = ((funct3 == 3'b000) && (instr[25:24] == 2'b00) && (instr[21:20] == 2'b00))
-                        ? INST_LSU_FENCE_IO : INST_LSU_FENCE;
+                op_type = INST_LSU_FENCE;
                 op_args.lsu.is_store = 0;
                 op_args.lsu.is_float = 0;
                 op_args.lsu.pack     = 0;
                 op_args.lsu.offset   = 0;
-                // A later read must see other harts' data (acquire) when the
-                // successor set reads; earlier writes must be visible (release)
-                // when the predecessor set writes. A fence with neither
-                // releases; one with a device access in its predecessor set,
-                // or fence.i, does both.
-                op_args.lsu.amo_aq = (funct3 != 3'b000) || (instr[27:26] != 2'b00) || instr[21];
-                op_args.lsu.amo_rl = (funct3 != 3'b000) || (instr[27:26] != 2'b00) || instr[24] || ~instr[21];
+                // A fence whose predecessor and successor sets (pred =
+                // instr[27:24], succ = instr[23:20], IORW) hold no memory read
+                // or write orders only the IO path. Otherwise a later read must
+                // see other harts' data (acquire) when the successor set reads;
+                // earlier writes must be visible (release) when the predecessor
+                // set writes. A fence with neither releases; one with a device
+                // access in its predecessor set, or fence.i, does both.
+                fence_op = '0;
+                if ((funct3 == 3'b000) && (instr[25:24] == 2'b00) && (instr[21:20] == 2'b00)) begin
+                    fence_op.io = 1'b1;
+                end else begin
+                    fence_op.acq = (funct3 != 3'b000) || (instr[27:26] != 2'b00) || instr[21];
+                    fence_op.rel = (funct3 != 3'b000) || (instr[27:26] != 2'b00) || instr[24] || ~instr[21];
+                end
+                op_args.lsu.amo_op = amo_op_e'(fence_op);
             end
         `ifdef VX_CFG_EXT_A_ENABLE
             INST_AMO: begin

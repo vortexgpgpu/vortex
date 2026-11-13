@@ -236,6 +236,35 @@ package VX_gpu_pkg;
     // wire/reg sizing for any per-cache plumbing.
     localparam MEM_ATTR_WIDTH = $bits(mem_bus_attr_t);
 
+    // Fence operation (VX_FENCE_*): what a fence orders and how far.
+    typedef struct packed {
+        logic io;   // VX_FENCE_IO
+        logic sys;  // VX_FENCE_SYS
+        logic rel;  // VX_FENCE_REL
+        logic acq;  // VX_FENCE_ACQ
+    } fence_op_t;
+    `PACKAGE_ASSERT($bits(fence_op_t) == `VX_FENCE_OP_BITS)
+    `PACKAGE_ASSERT((`VX_FENCE_ACQ == 1) && (`VX_FENCE_REL == 2) && (`VX_FENCE_SYS == 4) && (`VX_FENCE_IO == 8))
+
+    // a flush of every level, down to memory
+    localparam fence_op_t FENCE_OP_FULL = '{io: 1'b0, sys: 1'b1, rel: 1'b1, acq: 1'b1};
+
+    // A flush token never carries an atomic, so its fence operation rides in
+    // the atomic's operation field, with amo_valid clear.
+    `PACKAGE_ASSERT($bits(fence_op_t) == $bits(amo_op_e))
+
+    function automatic mem_bus_attr_t mem_flush_attr(input fence_op_t op);
+        mem_bus_attr_t attr;
+        attr = '0;
+        attr.is_flush   = 1'b1;
+        attr.amo.amo_op = amo_op_e'(op);
+        return attr;
+    endfunction
+
+    function automatic fence_op_t mem_attr_fence_op(input mem_bus_attr_t attr);
+        return fence_op_t'(attr.amo.amo_op);
+    endfunction
+
     // Cache bank-select hash: XORed into the raw bank bits, a function of the
     // line address above them, so XORing it again restores the raw bits. IPOLY
     // for 16 and 32 banks (Rau, ISCA 1991: conflict-free for power-of-two
@@ -520,7 +549,6 @@ package VX_gpu_pkg;
     localparam INST_LSU_SH =     4'b1001;
     localparam INST_LSU_SW =     4'b1010;
     localparam INST_LSU_SD =     4'b1011; // new for RV64I SD
-    localparam INST_LSU_FENCE_IO = 4'b1110; // a fence ordering only device (IO) accesses
     localparam INST_LSU_FENCE =  4'b1111;
     localparam INST_LSU_BITS =   4;
 
@@ -538,10 +566,6 @@ package VX_gpu_pkg;
 
     function automatic logic inst_lsu_is_fence(input logic [INST_LSU_BITS-1:0] op);
         return (op[3:1] == 3'b111);
-    endfunction
-
-    function automatic logic inst_lsu_is_fence_io(input logic [INST_LSU_BITS-1:0] op);
-        return (op == INST_LSU_FENCE_IO);
     endfunction
 
     ///////////////////////////////////////////////////////////////////////////
@@ -1444,10 +1468,9 @@ package VX_gpu_pkg;
     // lsu_args_t carries AMO sideband when EXT_A_ENABLE.
     // amo_valid / amo_op are inspected only when amo_valid==1; for plain
     // loads/stores they're zero. aq/rl order the AMO with the hart's other
-    // accesses (fence uops around it); on a memory fence they say what it
-    // orders: aq = later reads see others' writes (acquire: invalidate),
-    // rl = earlier writes are visible (release: drain). amo_unsigned
-    // distinguishes the U-variants of MIN/MAX.
+    // accesses (fence uops around it). A fence carries its fence_op_t in
+    // amo_op, with amo_valid clear. amo_unsigned distinguishes the
+    // U-variants of MIN/MAX.
     // export_mask marks a vx_om_export (OM fragment export) and says which
     // words of the aperture record the shader is writing:
     //   bit 0 = colour (record + 0), bit 1 = depth (record + 4)
@@ -2383,9 +2406,10 @@ package VX_gpu_pkg;
     localparam L2_IS_LLC            = `VX_CFG_L2_ENABLED && !`VX_CFG_L3_ENABLED;
     // Every memory client of a cluster reaches memory through its L2.
     localparam L2_SHARED_LLC        = L2_IS_LLC && (`VX_CFG_NUM_CLUSTERS == 1);
-    // An acquire must also invalidate the cache below the dcache unless that
-    // one is the point of coherence (an L3 always is; memory always is).
-    localparam DCACHE_ACQ_FORWARD   = `VX_CFG_L2_ENABLED && !L2_SHARED_LLC;
+    // The level below the dcache is the point of coherence unless it is an L2
+    // that is not the shared LLC: replicated, or above an L3 (an L3 always is;
+    // memory always is).
+    localparam DCACHE_NEXT_IS_POC   = !`VX_CFG_L2_ENABLED || L2_SHARED_LLC;
 
     /////////////////////////////// L3 Parameters /////////////////////////////
 

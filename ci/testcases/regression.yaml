@@ -545,8 +545,9 @@ tests:
     cores: 2
     l2cache: true
 # Kernel to kernel with no host transfer between (one command batch): the
-# launch flushes are L1-only, so the last-level cache alone carries each
-# round's writes to the next round, and the full flush runs before readback.
+# launch flushes are device-scope, so the last-level cache alone carries each
+# round's writes to the next round, and the system-scope flush runs before
+# readback.
 - id: flush_coherence-chain-1
   via: blackbox
   drivers:
@@ -578,7 +579,7 @@ tests:
     l2cache: true
     l3cache: true
 # Replicated last-level caches (per-core dcaches without an L2, per-cluster L2s
-# without an L3) are not a point of coherence, so an L1-only flush must still
+# without an L3) are not a point of coherence, so a device-scope flush must still
 # invalidate them.
 - id: flush_coherence-chain-4
   via: blackbox
@@ -602,7 +603,7 @@ tests:
     l2cache: true
 # Each round loads its input with a DXA tile copy, which reaches memory beside
 # the single dcache, so that dcache is not a point of coherence and must still
-# be written back on an L1-only flush.
+# be written back on a device-scope flush.
 - id: flush_coherence-chain-6
   via: blackbox
   drivers:
@@ -661,7 +662,7 @@ tests:
   app: sgemm
   args: -n32
   configs: -DVX_CFG_DCACHE_NUM_BANKS=16 -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=16
-# The shared L2 keeps its lines across the L1-only launch flushes.
+# The shared L2 keeps its lines across the device-scope launch flushes.
 - id: model_parity-flush-chain
   check: model_parity
   via: blackbox

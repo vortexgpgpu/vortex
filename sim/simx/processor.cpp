@@ -240,7 +240,7 @@ void ProcessorImpl::attach_ram(RAM* ram) {
 #endif
 }
 
-void ProcessorImpl::flush_caches(bool l1_only) {
+void ProcessorImpl::flush_caches(uint32_t fence_op) {
   // Cache hierarchy is drained inside-out: issue all L1 flush_begin() calls
   // up-front so icache, dcache, and graphics caches flush in parallel, then
   // tick until all surfaces report flush_done().
@@ -248,7 +248,7 @@ void ProcessorImpl::flush_caches(bool l1_only) {
   // L1 surfaces: dcache + icache + graphics caches.
   // Write-through surfaces early-exit in Cache::flush_begin().
   for (auto& cluster : clusters_) {
-    cluster->dcache_flush_begin(l1_only);
+    cluster->dcache_flush_begin(fence_op);
     cluster->icache_flush_begin();
 #ifdef VX_CFG_EXT_TEX_ENABLE
     cluster->tcache_flush_begin();
@@ -288,7 +288,7 @@ void ProcessorImpl::flush_caches(bool l1_only) {
 
   // L2 caches.
   for (auto& cluster : clusters_) {
-    cluster->l2_flush_begin(l1_only);
+    cluster->l2_flush_begin(fence_op);
   }
   while (true) {
     bool all_done = true;
@@ -301,7 +301,7 @@ void ProcessorImpl::flush_caches(bool l1_only) {
   }
 
   // L3 cache (single instance at processor level).
-  l3cache_->flush_begin(l1_only);
+  l3cache_->flush_begin(fence_op);
   while (!l3cache_->flush_done() || !SimPlatform::instance().idle()) {
     SimPlatform::instance().tick();
   }
@@ -459,7 +459,9 @@ int ProcessorImpl::dcr_write(uint32_t addr, uint32_t value) {
   }
   if (addr == VX_DCR_BASE_CACHE_FLUSH) {
     // The flush itself runs on the per-core reads.
-    flush_l1_only_ = (value & VX_CACHE_FLUSH_L1_ONLY) != 0;
+    flush_op_ = value & ((1u << VX_FENCE_OP_BITS) - 1);
+    // a cache flush is ACQ|REL at device or system scope
+    assert((flush_op_ | VX_FENCE_SYS) == (VX_FENCE_ACQ | VX_FENCE_REL | VX_FENCE_SYS));
     return 0;
   }
 #ifdef VX_CFG_VM_ENABLE
@@ -495,9 +497,9 @@ int ProcessorImpl::dcr_write(uint32_t addr, uint32_t value) {
 int ProcessorImpl::dcr_read(uint32_t addr, uint32_t tag, uint32_t* value) {
   if (addr == VX_DCR_BASE_CACHE_FLUSH) {
     // After flush_caches() returns every dirty line of the flushed levels has
-    // reached memsim_'s backing RAM; an L1-only flush leaves the shared
+    // reached memsim_'s backing RAM; a device-scope flush leaves the shared
     // last-level cache in place.
-    this->flush_caches(flush_l1_only_);
+    this->flush_caches(flush_op_);
     *value = 0;
     return 0;
   }

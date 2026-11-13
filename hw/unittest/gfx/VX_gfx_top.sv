@@ -339,7 +339,7 @@ module VX_gfx_top import VX_gpu_pkg::*
         .clk          (clk),
         .reset        (reset),
         .dcr_flush_if (tcache_flush_if),
-        .l1_only      (1'b0),
+        .flush_op     (FENCE_OP_FULL),
         .core_bus_if  (tcache_bus_if[0]),
         .cache_bus_if (tcache_flushable_bus_if[0])
     );
@@ -493,7 +493,7 @@ module VX_gfx_top import VX_gpu_pkg::*
         .clk          (clk),
         .reset        (reset),
         .dcr_flush_if (rtcache_flush_if),
-        .l1_only      (1'b0),
+        .flush_op     (FENCE_OP_FULL),
         .core_bus_if  (rtcache_bus_if[0]),
         .cache_bus_if (rtcache_flushable_bus_if[0])
     );

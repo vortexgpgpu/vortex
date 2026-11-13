@@ -728,16 +728,18 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     // device access in its predecessor set, or fence.i, does both.
     uint32_t pred = (code >> 24) & 0xf;
     uint32_t succ = (code >> 20) & 0xf;
-    FenceKind kind;
+    uint8_t fence_op;
     if (funct3 == 0 && (pred & 0x3) == 0 && (succ & 0x3) == 0) {
-      kind = FenceKind::IO;
+      fence_op = VX_FENCE_IO;
     } else {
-      bool full = (funct3 != 0) || (pred & 0xc) != 0;
-      bool aq = full || (succ & 0x2) != 0;
-      bool rl = full || (pred & 0x1) != 0 || (succ & 0x2) == 0;
-      kind = (aq && rl) ? FenceKind::FULL : (aq ? FenceKind::ACQUIRE : FenceKind::RELEASE);
+      bool both = (funct3 != 0) || (pred & 0xc) != 0;
+      bool aq = both || (succ & 0x2) != 0;
+      bool rl = both || (pred & 0x1) != 0 || (succ & 0x2) == 0;
+      fence_op = (aq ? VX_FENCE_ACQ : 0) | (rl ? VX_FENCE_REL : 0);
     }
-    instr->set_args(IntrLsuArgs{static_cast<uint32_t>(kind), 0, 0});
+    IntrLsuArgs args{0, 0, 0};
+    args.fence_op = fence_op;
+    instr->set_args(args);
   } break;
   case Opcode::AMO: {
     instr->set_fu_type(FUType::LSU);

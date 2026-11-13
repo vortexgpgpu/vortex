@@ -76,9 +76,10 @@ Instr::Ptr LsuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
         uop_instr->set_src_reg(i, rs.idx, rs.type);
       }
     } else {
-      auto kind = (uop_index < amo_index) ? FenceKind::RELEASE : FenceKind::ACQUIRE;
+      IntrLsuArgs fence_args{0, 0, 0};
+      fence_args.fence_op = (uop_index < amo_index) ? VX_FENCE_REL : VX_FENCE_ACQ;
       uop_instr->set_op_type(LsuType::FENCE);
-      uop_instr->set_args(IntrLsuArgs{static_cast<uint32_t>(kind), 0, 0});
+      uop_instr->set_args(fence_args);
     }
     return uop_instr;
   }
@@ -518,12 +519,7 @@ void LsuUnit::send_fence_token(uint32_t b) {
 	LsuReq lsu_req(VX_CFG_NUM_LSU_LANES);
 	lsu_req.op = MemOp::LD;
 	lsu_req.flags.flush = 1;
-	// an IO fence's token walks nowhere; a memory fence's stops at the shared
-	// LLC, an acquire one owing no drain and a release one no invalidation
-	auto kind = lsu_fence_kind(std::get<IntrLsuArgs>(trace->instr_ptr->get_args()));
-	lsu_req.flags.io       = (kind == FenceKind::IO) || (kind == FenceKind::ACQUIRE);
-	lsu_req.flags.flush_l1 = (kind != FenceKind::IO);
-	lsu_req.flags.noalloc  = (kind == FenceKind::RELEASE);
+	lsu_req.flags.fence_op = std::get<IntrLsuArgs>(trace->instr_ptr->get_args()).fence_op;
 	std::vector<mem_addr_size_t> lane_entries(VX_CFG_NUM_LSU_LANES);
 	for (uint32_t t = base; t < VX_CFG_NUM_THREADS; ++t) {
 		if (trace->tmask.test(t)) {

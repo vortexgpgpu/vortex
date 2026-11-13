@@ -40,7 +40,7 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
   DRAM reads -33%.
 - **Command-processor DMA through the shared LLC (`VX_CFG_CP_LLC_CLIENT`, on by default).** When one LLC serves every core, the
   CP's transfers enter it on their own client slot, so host transfers need only an L1 flush, not a walk of the whole LLC; transfers
-  of at least half the LLC write around it. A launch behind DMA writes waits for an L1-only flush token sent on the slot. The runtime
+  of at least half the LLC write around it. A launch behind DMA writes waits for a device-scope flush token sent on the slot. The runtime
   sees the new `DMA_LLC_CLIENT` CP capability. *Why:* rtlsim at 2 clusters + L2 + L3: dogfood -30%, multikernel -42.7%; dogfood
   -64% with an 8 MB L3.
 - **Foldsim: threaded FPGA simulation of Vortex on the Alveo V80, built on CIRCT.** Every class of identical units (sockets, issue slices, ALUs, FPUs, load-store units) is time-multiplexed through one physical copy, cycle-exact against the RTL, with no Yosys or sv2v: `circt-verilog` imports Vortex, Foldsim's `foldsim-extract-models` / `foldsim-compose` cut it into threaded models joined by one token fabric (Foldsim is its own project on CIRCT, installed by `ci/toolchain_install.sh --foldsim`; [hw/syn/foldsim/](hw/syn/foldsim/)), and the V80's native flow packages it with a latency-bandwidth memory endpoint and a command-queue control block ([hw/rtl/afu/foldsim/](hw/rtl/afu/foldsim/)). `--driver=foldsim` runs it on the card (`TARGET=hw`, VRT + QDMA) or in-process in Verilator (`avedsim`, the default). Vortex's RTL is unchanged: units get plain-port boundaries and instance IDs as ports from a source-to-source pass on the flow's copy ([hw/syn/foldsim/lift_boundaries.py](hw/syn/foldsim/lift_boundaries.py)). See [docs/designs/foldsim.md](docs/designs/foldsim.md).
@@ -89,13 +89,15 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
   flush token down every memory port and answers once all ports have; every independently buffered write path (each dcache lane, each
   OM input of the ocache) carries its own token. Read-only caches (icache, tcache, rtcache, rcache) no longer forward flushes.
   `DBG_FLUSH_STALL` adds random input backpressure to the flush path for stress tests.
-- **L1-only flush between launches.** When a single LLC serves every memory client it is the point of coherence, so a launch
-  boundary cleans only the L1s: `CMD_CACHE_FLUSH` gains an L1-only flag, carried as a flush-token kind that a shared LLC answers
-  without a walk. Replicated LLCs and LLCs with peer clients (TEX, RTU, RASTER, OM, DXA) still walk. The runtime posts flushes
+- **Device-scope flush between launches.** When a single LLC serves every memory client it is the point of coherence, so a launch
+  boundary cleans only the levels above it. One typed fence operation (`VX_FENCE_ACQ`/`REL`/`SYS`/`IO` in `VX_types.toml`) carries
+  the cache work from the `CMD_CACHE_FLUSH` header through the `CACHE_FLUSH` DCR write to every flush token, and a shared LLC
+  answers a device-scope (`ACQ|REL`) token without a walk. Replicated LLCs and LLCs with peer clients (TEX, RTU, RASTER, OM, DXA) still walk. The runtime posts flushes
   lazily and flushes fully before any device-memory transfer, and device busy stays high until every core write, uncached IO stores
   included, is visible in memory. *Why:* per-launch flush cost at 4 cores + L2 drops from 2,750 to 180 cycles.
-- **Targeted fences.** A memory fence sends an L1-only flush token that the shared LLC answers without a walk. A fence that orders
-  only device (I/O) accesses decodes as its own LSU op, and its token makes each level drain to its memory ports without walking.
+- **Targeted fences.** A memory fence sends its fence operation (acquire, release or both) in a flush token that the shared LLC
+  answers without a walk. A fence that orders only device (I/O) accesses sends an `IO` token, which makes each level drain to its
+  memory ports without walking.
   *Why:* printf, which fences after each device write, runs 13.6x faster on rtlsim at 2 cores + L2.
 - **LMEM DMA arbitration.** DXA writes into shared memory and the TCU's WGMMA operand reads now share the local-memory DMA port
   round-robin. DXA had fixed priority and starved the TCU for about 510 cycles per tiled-scatter transfer. *Why:* rtlsim WGMMA with

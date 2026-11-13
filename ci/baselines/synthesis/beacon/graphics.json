@@ -1,13 +1,19 @@
 {
   "gfx": {
     "accepted": {
-      "against": "28fc2c581262d2d7d4e1dc432d50cc303e3dea2e",
+      "against": "26d2bc4b5409a35a111e8316ac3a87d07b15fc80",
       "regressions": [
         {
           "after": 14,
           "before": null,
           "kind": "new",
           "name": "graphics/g_raster_core_0.raster_core/raster_slices_0.raster_earlyz/quad_zprod.d"
+        },
+        {
+          "after": 1071,
+          "before": 1073,
+          "kind": "ties",
+          "name": "tied_bits"
         }
       ]
     },
@@ -17,7 +23,7 @@
     "dut": "gfx",
     "result": {
       "bram": 183.5,
-      "build_time_s": 171,
+      "build_time_s": 155,
       "deep_endpoints": 1738,
       "deepest_paths": [
         "19  g_rtu_core_0.rtu_core/scheduler/g_recip_pe.recip_tags/g_shift.g_partial_reset.pipe_free[219] -> g_rtu_core_0.rtu_core/scheduler/g1_idx.d[4]",
@@ -32,22 +38,22 @@
         "18  g_rtu_core_0.rtu_core/scheduler/g_recip_pe.recip_tags/g_shift.g_partial_reset.pipe_free[219] -> g_rtu_core_0.rtu_core/scheduler/ctx_arbiter/g_model1.reqs_mask.d[29]"
       ],
       "dsp": 1140,
-      "endpoints": 314239,
+      "endpoints": 314280,
       "env": {
         "circt": "CIRCT 892a65a01",
         "device": "xcu55c-fsvh2892-2L-e",
         "foldsim": "foldsim d8350bc0f",
         "xlen": 32
       },
-      "ff": 400422,
+      "ff": 400445,
       "fix_levels": 12,
       "interfaces": {},
-      "lut": 319847,
+      "lut": 319803,
       "lutram": 14119,
       "max_levels": 19,
       "pred_fmax_mhz": 264.7,
       "risk_endpoints": 471,
-      "tied_bits": 1073,
+      "tied_bits": 1071,
       "tied_ports": [
         {
           "bits": 533,
@@ -62,11 +68,6 @@
         {
           "bits": 1,
           "port": "graphics.cluster_id",
-          "width": 1
-        },
-        {
-          "bits": 1,
-          "port": "rtcache_dcr_flush.l1_only",
           "width": 1
         },
         {
@@ -88,11 +89,6 @@
           "bits": 1,
           "port": "rtu_socket_arb.bus_in_if_1_req_data",
           "width": 550
-        },
-        {
-          "bits": 1,
-          "port": "tcache_dcr_flush.l1_only",
-          "width": 1
         }
       ],
       "units": {
@@ -194,13 +190,19 @@
   },
   "gfxvm": {
     "accepted": {
-      "against": "28fc2c581262d2d7d4e1dc432d50cc303e3dea2e",
+      "against": "26d2bc4b5409a35a111e8316ac3a87d07b15fc80",
       "regressions": [
         {
           "after": 14,
           "before": null,
           "kind": "new",
           "name": "graphics/g_raster_core_0.raster_core/raster_slices_0.raster_earlyz/quad_zprod.d"
+        },
+        {
+          "after": 1073,
+          "before": 1075,
+          "kind": "ties",
+          "name": "tied_bits"
         }
       ]
     },
@@ -210,7 +212,7 @@
     "dut": "gfxvm",
     "result": {
       "bram": 183.5,
-      "build_time_s": 181,
+      "build_time_s": 160,
       "deep_endpoints": 1889,
       "deepest_paths": [
         "19  g_rtu_core_0.rtu_core/scheduler/g_recip_pe.recip_tags/g_shift.g_partial_reset.pipe_free[219] -> g_rtu_core_0.rtu_core/scheduler/g1_idx.d[4]",
@@ -225,22 +227,22 @@
         "18  g_rtu_core_0.rtu_core/scheduler/g_recip_pe.recip_tags/g_shift.g_partial_reset.pipe_free[219] -> g_rtu_core_0.rtu_core/scheduler/ctx_arbiter/g_model1.reqs_mask.d[29]"
       ],
       "dsp": 1140,
-      "endpoints": 328896,
+      "endpoints": 328937,
       "env": {
         "circt": "CIRCT 892a65a01",
         "device": "xcu55c-fsvh2892-2L-e",
         "foldsim": "foldsim d8350bc0f",
         "xlen": 32
       },
-      "ff": 415271,
+      "ff": 415294,
       "fix_levels": 12,
       "interfaces": {},
-      "lut": 331197,
+      "lut": 331144,
       "lutram": 14557,
       "max_levels": 19,
       "pred_fmax_mhz": 256.3,
       "risk_endpoints": 475,
-      "tied_bits": 1075,
+      "tied_bits": 1073,
       "tied_ports": [
         {
           "bits": 533,
@@ -265,11 +267,6 @@
         {
           "bits": 1,
           "port": "l2cache.core_bus_if_3_rsp_ready",
-          "width": 1
-        },
-        {
-          "bits": 1,
-          "port": "rtcache_dcr_flush.l1_only",
           "width": 1
         },
         {

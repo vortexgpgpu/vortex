@@ -1,27 +1,38 @@
 {
   "gfx": {
+    "accepted": {
+      "against": "26d2bc4b5409a35a111e8316ac3a87d07b15fc80",
+      "regressions": [
+        {
+          "after": 1063,
+          "before": 1065,
+          "kind": "ties",
+          "name": "tied_bits"
+        }
+      ]
+    },
     "clock_mhz": 1000,
     "config_hash": "f49712b842f2f234",
     "configs": "-DVX_CFG_NUM_THREADS=4 -DVX_CFG_NUM_WARPS=4",
     "dut": "gfx",
     "result": {
-      "build_time_s": 175,
-      "cells": 1875629,
-      "endpoints": 239282,
+      "build_time_s": 100,
+      "cells": 1875217,
+      "endpoints": 239287,
       "env": {
         "circt": "CIRCT 892a65a01",
         "foldsim": "foldsim d8350bc0f",
         "pdk": "asap7",
         "xlen": 32
       },
-      "ff": 420725,
+      "ff": 420724,
       "fmax_mhz": 874.9,
       "macros": 76,
       "max_stages": 38,
       "overhead_ps": 231,
       "period_ps": 1143,
       "stage_ps": 24,
-      "tied_bits": 1065,
+      "tied_bits": 1063,
       "tied_ports": [
         {
           "bits": 529,
@@ -36,11 +47,6 @@
         {
           "bits": 1,
           "port": "graphics.cluster_id",
-          "width": 1
-        },
-        {
-          "bits": 1,
-          "port": "rtcache_dcr_flush.l1_only",
           "width": 1
         },
         {
@@ -62,11 +68,6 @@
           "bits": 1,
           "port": "rtu_socket_arb.bus_in_if_1_req_data",
           "width": 140
-        },
-        {
-          "bits": 1,
-          "port": "tcache_dcr_flush.l1_only",
-          "width": 1
         }
       ]
     }
