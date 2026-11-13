@@ -465,6 +465,25 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
             end else if (rsp_free) begin
                 rsp_valid_r <= a_hit || b_hit;
             end
+        end
+
+        // The response is read only with rsp_valid_r, so on ASIC it loads only
+        // when one is captured.
+        wire rsp_load = rsp_free && (a_hit || b_hit);
+    `ifdef ASIC
+        wire rsp_clk;
+        VX_clockgate rsp_cg (.clk_in (clk), .en (rsp_load), .clk_out (rsp_clk));
+        always @(posedge rsp_clk) begin
+            if (rsp_load) begin
+                rsp_from_b_r <= ~a_hit;
+                rsp_mask_r   <= a_hit ? a_rsp_mask : b_rsp_mask;
+                rsp_data_r   <= a_hit ? a_rsp_data : b_rsp_data;
+                rsp_tag_r    <= a_hit ? a_rsp_tag  : b_rsp_tag;
+            end
+        end
+    `else
+        `UNUSED_VAR (rsp_load)
+        always @(posedge clk) begin
             if (rsp_free) begin
                 rsp_from_b_r <= ~a_hit;
                 rsp_mask_r   <= a_hit ? a_rsp_mask : b_rsp_mask;
@@ -472,6 +491,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
                 rsp_tag_r    <= a_hit ? a_rsp_tag  : b_rsp_tag;
             end
         end
+    `endif
 
         assign lsu_mem_if[k].rsp_valid     = rsp_valid_r;
         assign lsu_mem_if[k].rsp_data.mask = rsp_mask_r;
