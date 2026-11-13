@@ -11,15 +11,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// MUFU special-function instructions (custom-2, requires VX_CFG_EXT_MUFU_ENABLE).
+// TFU special-function instructions (custom-2, requires VX_CFG_EXT_TFU_ENABLE).
 // Results are approximate: subnormals
 // flush to zero, frm is ignored and fflags are never raised.
 //
 // Encoding: .insn r CUSTOM2, fmt=funct3, 0=funct7, fd, fs1, x<fn>
 // The function select rides the rs2 field, so it is written as a literal xN.
 
-#ifndef __VX_MUFU_H__
-#define __VX_MUFU_H__
+#ifndef __VX_TFU_H__
+#define __VX_TFU_H__
 
 #include <vx_intrinsics.h>
 
@@ -27,7 +27,7 @@
 extern "C" {
 #endif
 
-#define __VX_MUFU_S(name, fn)                               \
+#define __VX_TFU_S(name, fn)                                \
 __attribute__((always_inline))                              \
 inline float name(float x) {                                \
   float r;                                                  \
@@ -36,17 +36,17 @@ inline float name(float x) {                                \
   return r;                                                 \
 }
 
-__VX_MUFU_S(vx_rcpf,   0)  // 1/x
-__VX_MUFU_S(vx_rsqrtf, 1)  // 1/sqrt(x)
-__VX_MUFU_S(vx_ex2f,   2)  // 2^x
-__VX_MUFU_S(vx_lg2f,   3)  // log2(x)
-__VX_MUFU_S(vx_sinpif, 4)  // sin(pi*x)
-__VX_MUFU_S(vx_cospif, 5)  // cos(pi*x)
-__VX_MUFU_S(vx_tanhf,  6)  // tanh(x)
+__VX_TFU_S(vx_rcpf,   0)  // 1/x
+__VX_TFU_S(vx_rsqrtf, 1)  // 1/sqrt(x)
+__VX_TFU_S(vx_ex2f,   2)  // 2^x
+__VX_TFU_S(vx_lg2f,   3)  // log2(x)
+__VX_TFU_S(vx_sinpif, 4)  // sin(pi*x)
+__VX_TFU_S(vx_cospif, 5)  // cos(pi*x)
+__VX_TFU_S(vx_tanhf,  6)  // tanh(x)
 
-#undef __VX_MUFU_S
+#undef __VX_TFU_S
 
-// Fast-math compositions, as CUDA's __expf/__logf/__sinf/__cosf build on MUFU.
+// Fast-math compositions, as CUDA's __expf/__logf/__sinf/__cosf build on its special-function unit.
 
 __attribute__((always_inline))
 inline float vx_expf_fast(float x) {
@@ -70,7 +70,7 @@ inline float vx_cosf_fast(float x) {
 
 __attribute__((always_inline))
 inline float vx_sqrtf_fast(float x) {
-  // x * rsqrt(x) is 0 * inf at both ends, and MUFU flushes subnormal x to zero.
+  // x * rsqrt(x) is 0 * inf at both ends, and TFU flushes subnormal x to zero.
   // The fixups use integer selects: a float select lowers to a branch, which
   // is not divergence-safe.
   float r = x * vx_rsqrtf(x);
@@ -111,4 +111,4 @@ inline float vx_geluf_fast(float x) {
 }
 #endif
 
-#endif // __VX_MUFU_H__
+#endif // __VX_TFU_H__

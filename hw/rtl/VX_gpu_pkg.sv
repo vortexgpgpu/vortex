@@ -589,8 +589,8 @@ package VX_gpu_pkg;
 `ifdef EXT_GFX_ANY_ENABLE
     localparam INST_SFU_RTUW =   4'hE;  // RTU hit window (GETW/GETWF) + trace ops
 `endif
-`ifdef VX_CFG_EXT_MUFU_ENABLE
-    localparam INST_SFU_MUFU =   4'hF;
+`ifdef VX_CFG_EXT_TFU_ENABLE
+    localparam INST_SFU_TFU =    4'hF;
 `endif
     localparam INST_SFU_BITS =   4;
 
@@ -612,15 +612,15 @@ package VX_gpu_pkg;
         return (op >= 6 && op <= 8);
     endfunction
 
-`ifdef VX_CFG_EXT_MUFU_ENABLE
-    localparam INST_MUFU_RCP =   3'h0;
-    localparam INST_MUFU_RSQRT = 3'h1;
-    localparam INST_MUFU_EX2 =   3'h2;
-    localparam INST_MUFU_LG2 =   3'h3;
-    localparam INST_MUFU_SINPI = 3'h4;
-    localparam INST_MUFU_COSPI = 3'h5;
-    localparam INST_MUFU_TANH =  3'h6;
-    localparam INST_MUFU_BITS =  3;
+`ifdef VX_CFG_EXT_TFU_ENABLE
+    localparam INST_TFU_RCP =   3'h0;
+    localparam INST_TFU_RSQRT = 3'h1;
+    localparam INST_TFU_EX2 =   3'h2;
+    localparam INST_TFU_LG2 =   3'h3;
+    localparam INST_TFU_SINPI = 3'h4;
+    localparam INST_TFU_COSPI = 3'h5;
+    localparam INST_TFU_TANH =  3'h6;
+    localparam INST_TFU_BITS =  3;
 `endif
 
     /////////////////////////////// Issue parameters //////////////////////////
@@ -1488,12 +1488,12 @@ package VX_gpu_pkg;
     `PACKAGE_ASSERT($bits(tcu_args_t) == INST_ARGS_BITS)
 `endif
 
-`ifdef VX_CFG_EXT_MUFU_ENABLE
+`ifdef VX_CFG_EXT_TFU_ENABLE
     typedef struct packed {
-        logic [INST_ARGS_BITS-INST_MUFU_BITS-1:0] __padding;
-        logic [INST_MUFU_BITS-1:0]                fn;
-    } mufu_args_t;
-    `PACKAGE_ASSERT($bits(mufu_args_t) == INST_ARGS_BITS)
+        logic [INST_ARGS_BITS-INST_TFU_BITS-1:0] __padding;
+        logic [INST_TFU_BITS-1:0]                fn;
+    } tfu_args_t;
+    `PACKAGE_ASSERT($bits(tfu_args_t) == INST_ARGS_BITS)
 `endif
 
 `ifdef VX_CFG_EXT_TEX_ENABLE
@@ -1555,8 +1555,8 @@ package VX_gpu_pkg;
     `ifdef VX_CFG_EXT_TCU_ENABLE
         tcu_args_t  tcu;
     `endif
-    `ifdef VX_CFG_EXT_MUFU_ENABLE
-        mufu_args_t mufu;
+    `ifdef VX_CFG_EXT_TFU_ENABLE
+        tfu_args_t tfu;
     `endif
     `ifdef VX_CFG_EXT_TEX_ENABLE
         tex_args_t  tex;

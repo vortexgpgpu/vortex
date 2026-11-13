@@ -282,17 +282,17 @@ package VX_trace_pkg;
             `ifdef VX_CFG_EXT_RASTER_ENABLE
                 INST_SFU_RASTER: `TRACE(level, ("RAST.FETCH"))
             `endif
-            `ifdef VX_CFG_EXT_MUFU_ENABLE
-                INST_SFU_MUFU: begin
-                    case (op_args.mufu.fn)
-                        INST_MUFU_RCP:   `TRACE(level, ("MUFU.RCP"))
-                        INST_MUFU_RSQRT: `TRACE(level, ("MUFU.RSQRT"))
-                        INST_MUFU_EX2:   `TRACE(level, ("MUFU.EX2"))
-                        INST_MUFU_LG2:   `TRACE(level, ("MUFU.LG2"))
-                        INST_MUFU_SINPI: `TRACE(level, ("MUFU.SINPI"))
-                        INST_MUFU_COSPI: `TRACE(level, ("MUFU.COSPI"))
-                        INST_MUFU_TANH:  `TRACE(level, ("MUFU.TANH"))
-                        default:         `TRACE(level, ("MUFU.?"))
+            `ifdef VX_CFG_EXT_TFU_ENABLE
+                INST_SFU_TFU: begin
+                    case (op_args.tfu.fn)
+                        INST_TFU_RCP:   `TRACE(level, ("TFU.RCP"))
+                        INST_TFU_RSQRT: `TRACE(level, ("TFU.RSQRT"))
+                        INST_TFU_EX2:   `TRACE(level, ("TFU.EX2"))
+                        INST_TFU_LG2:   `TRACE(level, ("TFU.LG2"))
+                        INST_TFU_SINPI: `TRACE(level, ("TFU.SINPI"))
+                        INST_TFU_COSPI: `TRACE(level, ("TFU.COSPI"))
+                        INST_TFU_TANH:  `TRACE(level, ("TFU.TANH"))
+                        default:         `TRACE(level, ("TFU.?"))
                     endcase
                 end
             `endif

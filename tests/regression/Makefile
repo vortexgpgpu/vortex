@@ -8,7 +8,7 @@ TESTS := \
     arith printf diverge diverge_large sort fence fence_mp ldst_order \
     vecadd vecadd_v1 sgemm sgemmx sgemm_v1 conv3 relu sgemv           \
     sgemm2 sgemm2_v1 madmax mixfu stencil3d raycast bfs jacobi pathfinder   \
-    softmax uniform_ld lmem_access ldst_wide ldst_matrix mufu zfhmin              \
+    softmax uniform_ld lmem_access ldst_wide ldst_matrix tfu zfhmin              \
     flash_attn flash_attn_tcu_wg                                      \
     sgemm_tcu sgemm_tcu_mx sgemm_tcu_sp_mx sgemm_tcu_wg sgemm_tcu_wg_mx sgemm_tcu_sp sgemm_tcu_wg_sp  \
     sgemm2_dxa sgemm2_tcu sgemm_tcu_wg_dxa sgemm_tcu_wg_sp_dxa        \

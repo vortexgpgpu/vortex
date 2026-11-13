@@ -1,6 +1,6 @@
 `include "VX_platform.vh"
 
-module VX_mufu_rom (
+module VX_tfu_rom (
     input  wire clk,
     input  wire enable,
     input  wire [2:0] tbl,

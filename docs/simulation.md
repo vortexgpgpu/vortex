@@ -253,7 +253,7 @@ machine from it: SimX, rtlsim, the FPGA and ASIC flows, and the kernels.
 | `mi300a` | Instinct MI300A (CDNA 3), on `mi300x`: 6 XCDs |
 
 Every GPU profile also turns on virtual memory, the A extension with Zacas,
-Zfhmin, MUFU at the part's special-function throughput, the part's INT32,
+Zfhmin, TFU at the part's special-function throughput, the part's INT32,
 FP32 and load/store lanes per processing block (`NUM_ALU_LANES`,
 `NUM_FPU_LANES`, `NUM_LSU_LANES`; a warp instruction takes `NUM_THREADS` /
 lanes cycles, as on the part), and shared memory at the part's 128 B per clock

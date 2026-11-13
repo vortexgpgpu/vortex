@@ -55,10 +55,10 @@ ifneq ($(filter -DVX_CFG_EXT_TCU_ENABLE, $(XCONFIGS)),)
 	SRCS += $(SRC_DIR)/tcu/tcu_tbuf.cpp
 endif
 
-# Add MUFU extension sources
-ifneq ($(filter -DVX_CFG_EXT_MUFU_ENABLE, $(XCONFIGS)),)
-	SRCS += $(SRC_DIR)/mufu_unit.cpp
-	SRCS += $(SW_COMMON_DIR)/mufu.cpp
+# Add TFU extension sources
+ifneq ($(filter -DVX_CFG_EXT_TFU_ENABLE, $(XCONFIGS)),)
+	SRCS += $(SRC_DIR)/tfu_unit.cpp
+	SRCS += $(SW_COMMON_DIR)/tfu.cpp
 endif
 
 # Add VM sources

@@ -1,9 +1,9 @@
 {
-  "mufu": {
+  "tfu": {
     "clock_mhz": 800,
     "config_hash": "e22492d24465c10d",
     "configs": "",
-    "dut": "mufu",
+    "dut": "tfu",
     "result": {
       "build_time_s": 30,
       "cell_area_um2": 2008.322,

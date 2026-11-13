@@ -468,10 +468,10 @@ static op_string_t op_string(const Instr &instr) {
       return TcuUnit::op_string(tcu_type, tpuArgs);
     }
   #endif // VX_CFG_EXT_TCU_ENABLE
-  #ifdef VX_CFG_EXT_MUFU_ENABLE
-    ,[&](MufuType mufu_type)-> op_string_t {
+  #ifdef VX_CFG_EXT_TFU_ENABLE
+    ,[&](TfuType tfu_type)-> op_string_t {
       std::ostringstream os;
-      os << mufu_type;
+      os << tfu_type;
       return {os.str(), ""};
     }
   #endif
@@ -1339,13 +1339,13 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     std::abort();
   #endif
   } break;
-#ifdef VX_CFG_EXT_MUFU_ENABLE
+#ifdef VX_CFG_EXT_TFU_ENABLE
   case Opcode::EXT3: {
-    if (funct7 != 0 || funct3 != 0 || rs2 > uint32_t(MufuType::TANH)) {
+    if (funct7 != 0 || funct3 != 0 || rs2 > uint32_t(TfuType::TANH)) {
       std::abort();
     }
     instr->set_fu_type(FUType::SFU);
-    instr->set_op_type(MufuType(rs2));
+    instr->set_op_type(TfuType(rs2));
     instr->set_dest_reg(rd, RegType::Float);
     instr->set_src_reg(0, rs1, RegType::Float);
   } break;

@@ -11,15 +11,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Bit-exact check of the VX_mufu_pe pipeline against the shared golden model
-// (sw/common/mufu.cpp) for every function: special values, a strided sweep of
+// Bit-exact check of the VX_tfu_pe pipeline against the shared golden model
+// (sw/common/tfu.cpp) for every function: special values, a strided sweep of
 // the whole FP32 space, and random inputs.
 //
-// usage: mufu_unit [stride] [num_random]
+// usage: tfu_unit [stride] [num_random]
 
-#include "VVX_mufu_pe.h"
+#include "VVX_tfu_pe.h"
 #include "vl_simulator.h"
-#include "mufu.h"
+#include "tfu.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -28,8 +28,8 @@
 #include <random>
 #include <vector>
 
-using Device = VVX_mufu_pe;
-using namespace vortex::mufu;
+using Device = VVX_tfu_pe;
+using namespace vortex::tfu;
 
 namespace {
 
@@ -114,7 +114,7 @@ int main(int argc, char** argv) {
     }
   }
 
-  printf("mufu_unit: checked=%zu errors=%zu [", checked, total_errors);
+  printf("tfu_unit: checked=%zu errors=%zu [", checked, total_errors);
   for (uint32_t fn = 0; fn < FN_COUNT; ++fn) {
     printf("%s%s=%zu", fn ? " " : "", fn_name(fn), errors[fn]);
   }

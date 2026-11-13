@@ -495,16 +495,16 @@ void SfuUnit::on_tick() {
 				continue;
 			}
 		}
-#ifdef VX_CFG_EXT_MUFU_ENABLE
-		if (std::get_if<MufuType>(&trace->op_type)) {
+#ifdef VX_CFG_EXT_TFU_ENABLE
+		if (std::get_if<TfuType>(&trace->op_type)) {
 			if (output.full()) {
 				continue;
 			}
-			if (!mufu_unit_.process(trace)) {
+			if (!tfu_unit_.process(trace)) {
 				continue;
 			}
 			trace->resume_warp = trace->fetch_stall;
-			this->send_out(b, trace, this->latency_of(trace) + MufuUnit::kLatency, PE_OTHER);
+			this->send_out(b, trace, this->latency_of(trace) + TfuUnit::kLatency, PE_OTHER);
 			input.pop();
 			continue;
 		}

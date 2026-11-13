@@ -114,9 +114,9 @@
     `endif
 `endif
 
-`ifdef VX_CFG_EXT_MUFU_ENABLE
+`ifdef VX_CFG_EXT_TFU_ENABLE
     `ifndef VX_CFG_EXT_F_ENABLE
-        `error "VX_CFG_EXT_MUFU_ENABLE requires VX_CFG_EXT_F_ENABLE"
+        `error "VX_CFG_EXT_TFU_ENABLE requires VX_CFG_EXT_F_ENABLE"
     `endif
 `endif
 

@@ -10,7 +10,7 @@
 # Add a DUT: append its name to DUTS and define the five variables. No new
 # directory, no dispatcher edit.
 
-DUTS := cache core cp dxa fpu gfx gfxvm issue lmem mem_unit mufu om raster rtu \
+DUTS := cache core cp dxa fpu gfx gfxvm issue lmem mem_unit tfu om raster rtu \
         scope tcu tensor tex top vm vortex
 
 # ---------------------------------------------------------------------------
@@ -64,10 +64,10 @@ fpu_INC  = $(BASE_INC) $(FPU_INC)
 # BASE_INC pulls in hw/rtl/VX_cluster.sv, which imports VX_tlb_pkg.
 fpu_PKG  = $(RTL_DIR)/vm/VX_tlb_pkg.sv
 
-mufu_PRJ := VX_mufu_unit_top
-mufu_CFG := -DVX_CFG_EXT_MUFU_ENABLE
-mufu_INC  = $(BASE_INC) -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm $(FPU_INC) -I$(RTL_DIR)/mufu -I$(UNITTEST_DIR)/mufu_unit
-mufu_PKG  = $(RTL_DIR)/vm/VX_tlb_pkg.sv
+tfu_PRJ := VX_tfu_unit_top
+tfu_CFG := -DVX_CFG_EXT_TFU_ENABLE
+tfu_INC  = $(BASE_INC) -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm $(FPU_INC) -I$(RTL_DIR)/tfu -I$(UNITTEST_DIR)/tfu_unit
+tfu_PKG  = $(RTL_DIR)/vm/VX_tlb_pkg.sv
 
 gfx_PRJ := VX_gfx_top
 gfx_IP  := 1
