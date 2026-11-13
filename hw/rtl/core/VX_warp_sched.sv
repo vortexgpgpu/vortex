@@ -158,6 +158,39 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
         wire br_hit   = branch[QA].valid && (br_lid[QA] == LID);
         wire join_hit = join_valid[QS] && (join_k[QS] == K);
 
+        // Every event that can change this warp's state: without one, the next
+        // state is the current one, so on ASIC the registers take no clock edge.
+        wire state_upd = (sched_if.cta_fire && (sched_if.cta_lid == LID))
+                      || (decode_sched_if.valid && decode_sched_if.unlock && (dec_lid == LID))
+                      || sched_if.wspawn_apply
+                      || ((wctl[QS].tmc_valid || wctl[QS].split_valid || wctl[QS].wsync_valid) && ctl_hit)
+                      || join_hit
+                      || (sched_if.bar_unlock_valid && sched_if.bar_unlock_mask[l])
+                      || (sched_if.retire_valid && (sched_if.retire_lid == LID))
+                      || br_hit
+                      || (sched_fire && cand_onehot[l])
+                  `ifdef VX_CFG_EXT_C_ENABLE
+                      || (decode_sched_if.valid && (dec_lid == LID))
+                  `endif
+                  `ifdef VX_CFG_EXT_RTU_ENABLE
+                      || (rtu_unlock_valid[QS] && (rtu_lid[QS] == LID))
+                  `endif
+                      ;
+
+        // Every write of this warp's trap CSRs.
+        wire csr_upd = (sched_if.wspawn_apply && sched_if.wspawn_wmask[l])
+                    || (sched_if.cta_fire && (sched_if.cta_lid == LID))
+                    || ((csr_wr_lid[QS] == LID) && (csr_wr[QS].valid || (| csr_wr[QS].trap_valid)))
+                    || (br_hit && branch[QA].is_trap);
+
+    `ifdef ASIC
+        wire state_clk, csr_clk;
+        VX_clockgate state_cg (.clk_in (clk), .en (reset || state_upd), .clk_out (state_clk));
+        VX_clockgate csr_cg (.clk_in (clk), .en (reset || csr_upd), .clk_out (csr_clk));
+    `else
+        `UNUSED_VAR (csr_upd)
+    `endif
+
         always @(*) begin
             active_n  = active_r;
             stalled_n = stalled_r;
@@ -267,12 +300,25 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
         `endif
         end
 
-        always @(posedge clk) begin
+        `RUNTIME_ASSERT (state_upd || ({active_n, stalled_n, tmask_n, pc_n} == {active_r, stalled_r, tmask_r, pc_r}),
+            ("%t: warp %0d state changed without an update event", $time, l))
+
+        always @(posedge `GATED_CLK(clk, state_clk)) begin
             if (reset) begin
-                active_r      <= 0;
-                stalled_r     <= 0;
-                tmask_r       <= '0;
-                pc_r          <= '0;
+                active_r  <= 0;
+                stalled_r <= 0;
+                tmask_r   <= '0;
+                pc_r      <= '0;
+            end else begin
+                active_r  <= active_n;
+                stalled_r <= stalled_n;
+                tmask_r   <= tmask_n;
+                pc_r      <= pc_n;
+            end
+        end
+
+        always @(posedge `GATED_CLK(clk, csr_clk)) begin
+            if (reset) begin
                 mscratch_r[l] <= '0;
                 mstatus_r[l]  <= '0;
                 mtvec_r[l]    <= '0;
@@ -280,11 +326,6 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
                 mcause_r[l]   <= '0;
                 mtval_r[l]    <= '0;
             end else begin
-                active_r  <= active_n;
-                stalled_r <= stalled_n;
-                tmask_r   <= tmask_n;
-                pc_r      <= pc_n;
-
                 // spawned warps inherit the spawning warp's mscratch
                 if (sched_if.wspawn_apply && sched_if.wspawn_wmask[l]
                  && !(sched_if.wspawn_src && (sched_if.wspawn_src_lid == LID))) begin

@@ -228,7 +228,17 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         `UNUSED_VAR ({ibf_regs_mask, stg_regs_mask})
     `endif
 
-        always @(posedge clk) begin
+        // The in-use bits change only on this warp's writeback or issue; on
+        // ASIC they take no clock edge otherwise.
+        wire inuse_upd = writeback_fire || staging_fire;
+        `RUNTIME_ASSERT (inuse_upd || ({inuse_regs_n, inuse_xregs_n} == {inuse_regs, inuse_xregs}),
+            ("%t: scoreboard %0d in-use bits changed without writeback or issue", $time, w))
+    `ifdef ASIC
+        wire inuse_clk;
+        VX_clockgate inuse_cg (.clk_in (clk), .en (reset || inuse_upd), .clk_out (inuse_clk));
+    `endif
+
+        always @(posedge `GATED_CLK(clk, inuse_clk)) begin
             if (reset) begin
                 inuse_regs  <= '0;
                 inuse_xregs <= '0;
@@ -236,6 +246,9 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
                 inuse_regs  <= inuse_regs_n;
                 inuse_xregs <= inuse_xregs_n;
             end
+        end
+
+        always @(posedge clk) begin
             operands_ready_r <= operands_ready_n;
         end
 

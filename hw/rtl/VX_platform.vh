@@ -285,6 +285,14 @@
     end                                         \
     `TRACE(lvl, ("}"))
 
+// Clock of a register behind a VX_clockgate: the gated net on ASIC, where the
+// gate exists, and the free clock everywhere else.
+`ifdef ASIC
+`define GATED_CLK(clk, gclk) gclk
+`else
+`define GATED_CLK(clk, gclk) clk
+`endif
+
 `define RESET_RELAY_EX(dst, src, size, fanout)  \
     wire [size-1:0] dst;                        \
     VX_reset_relay #(.N(size), .MAX_FANOUT(fanout)) __``dst ( \
