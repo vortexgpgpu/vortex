@@ -86,6 +86,9 @@ VX_CFG_GPR_ROWS = "expr: (32 << $VX_CFG_EXT_F_ENABLED) * (($VX_CFG_NUM_WARPS // 
 # for each of its warps. A kernel takes them in multiples of 4, u1 up, so a
 # smaller file holds more warps of a kernel that uses few.
 VX_CFG_UREG_ROWS = "expr: 32 * (($VX_CFG_NUM_WARPS // $VX_CFG_ISSUE_WIDTH + $VX_CFG_NUM_OPCS - 1) // $VX_CFG_NUM_OPCS)"
+# Uniform-register writes in flight per warp (VX_CFG_EXT_U_ENABLE): the
+# scoreboard tracks them in this many tags, and a uniform write waits for one.
+VX_CFG_UREG_TAGS = 4
 VX_CFG_NUM_VGPR_BANKS = 2
 
 [memory]

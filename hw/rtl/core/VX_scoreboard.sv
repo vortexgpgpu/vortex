@@ -35,6 +35,10 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     localparam IN_DATAW  = $bits(ibuffer_t);
     localparam OUT_DATAW = $bits(scoreboard_t) - ISSUE_WIS_W;
     localparam OUT_BUF   = 3; // Use skid buffer (SIZE=2, OUT_REG=1)
+    // x and f registers have an in-use bit each; uniform registers share a few tags
+    localparam NUM_GPRS  = GPR_TYPES * RV_REGS;
+    localparam GPR_BITS  = `CLOG2(NUM_GPRS);
+    localparam UTAGS     = `VX_CFG_EXT_U_ENABLED ? `VX_CFG_UREG_TAGS : 0;
 
     // Per-FU dispatch credits: spent at issue, reclaimed on FU accept, so a
     // credit covers ops still in operand collection (not yet at the queue).
@@ -96,7 +100,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     end
 
     for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_scoreboard
-        reg [NUM_REGS-1:0] inuse_regs, inuse_regs_n;
+        reg [NUM_GPRS-1:0] inuse_regs, inuse_regs_n;
         reg [NUM_XREGS-1:0] inuse_xregs, inuse_xregs_n;
 
         wire ibuffer_fire = ibuffer_if[w].valid && ibuffer_if[w].ready;
@@ -124,16 +128,20 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             end
         end
 
+        wire wb_is_u  = (get_reg_type(writeback_if.data.rd) == REG_TYPE_U);
+        wire ibf_rd_u = ibuffer_if[w].data.wb && (get_reg_type(ibuffer_if[w].data.rd) == REG_TYPE_U);
+        wire stg_rd_u = staging_if[w].data.wb && (get_reg_type(staging_if[w].data.rd) == REG_TYPE_U);
+
         // Writeback release feeds wb_inuse_regs; the staging reserve is added on
         // top to form the next state, inuse_regs_n.
-        reg [NUM_REGS-1:0]  wb_inuse_regs;
+        reg [NUM_GPRS-1:0]  wb_inuse_regs;
         reg [NUM_XREGS-1:0] wb_inuse_xregs;
         always @(*) begin
             wb_inuse_regs  = inuse_regs;
             wb_inuse_xregs = inuse_xregs;
             if (writeback_fire) begin
-                if (writeback_if.data.wb) begin
-                    wb_inuse_regs[writeback_if.data.rd] = 0; // release rd
+                if (writeback_if.data.wb && ~wb_is_u) begin
+                    wb_inuse_regs[writeback_if.data.rd[GPR_BITS-1:0]] = 0; // release rd
                 end
                 wb_inuse_xregs &= ~writeback_if.data.wr_xregs; // release special regs
             end
@@ -144,10 +152,70 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             inuse_xregs_n = wb_inuse_xregs;
             if (staging_fire) begin
                 if (staging_if[w].data.wb) begin
-                    inuse_regs_n |= stg_opd_mask[0]; // reserve rd
+                    inuse_regs_n |= NUM_GPRS'(stg_opd_mask[0]); // reserve rd
                 end
                 inuse_xregs_n |= staging_if[w].data.wr_xregs; // reserve special regs
             end
+        end
+
+        // Uniform tags: one per uniform write in flight, freed by its writeback.
+        // A uniform write waits for a free tag; on fire the staging instr takes
+        // one, so the ibuffer instr behind it needs a second.
+        wire [NUM_OPDS-1:0] ibf_u_inuse;
+        wire wb_u_hit, ufree1, ufree2;
+        if (UTAGS != 0) begin : g_utags
+            reg [UTAGS-1:0] utag_valid;
+            reg [UTAGS-1:0][RV_REGS_BITS-1:0] utag_idx;
+            wire [UTAGS-1:0] utag_rel;
+            for (genvar t = 0; t < UTAGS; ++t) begin : g_rel
+                assign utag_rel[t] = writeback_fire && writeback_if.data.wb && wb_is_u && utag_valid[t]
+                                  && (utag_idx[t] == get_reg_idx(writeback_if.data.rd));
+            end
+            wire [UTAGS-1:0] wb_utag_valid = utag_valid & ~utag_rel;
+            for (genvar i = 0; i < NUM_OPDS; ++i) begin : g_lookup
+                wire [UTAGS-1:0] hit;
+                for (genvar t = 0; t < UTAGS; ++t) begin : g_t
+                    assign hit[t] = utag_valid[t] && (utag_idx[t] == get_reg_idx(ibf_opds[i]));
+                end
+                assign ibf_u_inuse[i] = | hit;
+            end
+
+            reg [UTAGS-1:0] alloc;
+            reg free2;
+            always @(*) begin
+                alloc = '0;
+                free2 = 1'b0;
+                for (integer t = UTAGS-1; t >= 0; --t) begin
+                    if (~wb_utag_valid[t]) begin
+                        alloc = UTAGS'(1) << t;
+                    end
+                    for (integer t2 = 0; t2 < t; ++t2) begin
+                        free2 |= ~wb_utag_valid[t] && ~wb_utag_valid[t2];
+                    end
+                end
+            end
+            assign wb_u_hit = | utag_rel;
+            assign ufree1 = ~(& wb_utag_valid);
+            assign ufree2 = free2;
+
+            wire take = staging_fire && stg_rd_u;
+            always @(posedge clk) begin
+                if (reset) begin
+                    utag_valid <= '0;
+                end else begin
+                    utag_valid <= wb_utag_valid | (alloc & {UTAGS{take}});
+                end
+                for (integer t = 0; t < UTAGS; ++t) begin
+                    if (take && alloc[t]) begin
+                        utag_idx[t] <= get_reg_idx(staging_if[w].data.rd);
+                    end
+                end
+            end
+        end else begin : g_no_utags
+            assign ibf_u_inuse = '0;
+            assign wb_u_hit = 1'b0;
+            assign ufree1 = 1'b1;
+            assign ufree2 = 1'b1;
         end
 
         // Readiness folds data hazards and FU-congestion into one flop; FU-lock
@@ -176,7 +244,9 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         reg  [NUM_OPDS-1:0] stg_pend_r;
         wire [NUM_OPDS-1:0] ibf_opd_busy, stg_opd_busy;
         for (genvar i = 0; i < NUM_OPDS; ++i) begin : g_opd_busy
-            assign ibf_opd_busy[i] = ibf_used_rs[i] && inuse_regs[ibf_opds[i]]
+            wire ibf_inuse = (get_reg_type(ibf_opds[i]) == REG_TYPE_U) ? ibf_u_inuse[i]
+                                                                       : inuse_regs[ibf_opds[i][GPR_BITS-1:0]];
+            assign ibf_opd_busy[i] = ibf_used_rs[i] && ibf_inuse
                                   && ~(wb_release && (writeback_if.data.rd == ibf_opds[i]));
             assign stg_opd_busy[i] = stg_pend_r[i]
                                   && ~(wb_release && (writeback_if.data.rd == stg_opds[i]));
@@ -202,9 +272,9 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         wire hold_ibf = ibuffer_if[w].valid && ~staging_if[w].valid;
         wire fire_ibf = ibuffer_if[w].valid;
 
-        wire hold_busy = hold_ibf ? (ibf_busy || ibf_xbusy)
-                                  : (stg_busy || stg_xbusy);
-        wire fire_busy = fire_ibf ? (ibf_busy || ibf_xbusy || ibf_rsv)
+        wire hold_busy = hold_ibf ? (ibf_busy || ibf_xbusy || (ibf_rd_u && ~ufree1))
+                                  : (stg_busy || stg_xbusy || (stg_rd_u && ~ufree1));
+        wire fire_busy = fire_ibf ? (ibf_busy || ibf_xbusy || ibf_rsv || (ibf_rd_u && ~(stg_rd_u ? ufree2 : ufree1)))
                                   : (stg_busy || stg_xbusy || stg_rsv);
 
         wire ibf_goingfull = fu_goingfull[ibuffer_if[w].data.ex_type];
@@ -219,7 +289,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     `ifdef SIMULATION
         // Per-operand busy view of the selected outcome, for the stall trace.
         wire [NUM_REGS-1:0] regs_mask = ibuffer_fire ? ibf_regs_mask : stg_regs_mask;
-        wire [REG_TYPES-1:0][RV_REGS-1:0] in_use_mask = inuse_regs_n & regs_mask;
+        wire [REG_TYPES-1:0][RV_REGS-1:0] in_use_mask = NUM_REGS'(inuse_regs_n) & regs_mask;
         wire [NUM_OPDS-1:0] operands_busy;
         for (genvar i = 0; i < NUM_OPDS; ++i) begin : g_operands_busy
             wire [REG_TYPE_BITS-1:0] rtype = get_reg_type(stg_opds[i]);
@@ -273,7 +343,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
                 w, to_fullPC(staging_if[w].data.PC), staging_if[w].data.tmask, timeout_ctr,
                 operands_busy, staging_if[w].data.uuid))
 
-        `RUNTIME_ASSERT(~(writeback_fire && writeback_if.data.wb) || inuse_regs[writeback_if.data.rd] != 0,
+        `RUNTIME_ASSERT(~(writeback_fire && writeback_if.data.wb) || (wb_is_u ? wb_u_hit : inuse_regs[writeback_if.data.rd[GPR_BITS-1:0]]),
             ("invalid writeback register: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d (#%0d)",
                 w, to_fullPC(writeback_if.data.PC), writeback_if.data.tmask, writeback_if.data.rd, writeback_if.data.uuid))
 
