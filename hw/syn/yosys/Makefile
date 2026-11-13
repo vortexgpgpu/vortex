@@ -90,6 +90,10 @@ else
 BB_MODULES ?= VX_dp_ram_asic,VX_sp_ram_asic
 endif
 
+# VX_clockgate_asic stays a black box through elaboration and is then mapped to
+# the PDK's integrated clock-gating cell, so STA checks the gates.
+ICG_MAP ?= $(LIB_DIR)/icg/$(PDK).v
+
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
 
@@ -223,6 +227,7 @@ synthesis: $(SYN_SRC_DEPS) $(SYN_LIB_DEPS) | $(BUILD_DIR)
 	SRC_FILE=$(SYN_SRC_FILE) \
 	SDC_FILE=$(SDC_FILE) \
 	BB_MODULES="$(BB_MODULES)" \
+	ICG_MAP="$(ICG_MAP)" \
 	PDK=$(PDK) \
 	$(SYN_LIB_ENV) \
 	TOOL_DIR=$(SCRIPT_DIR) \
@@ -234,6 +239,7 @@ techmap: $(SYN_SRC_DEPS) $(SYN_LIB_DEPS) | $(BUILD_DIR)
 	SRC_FILE=$(SYN_SRC_FILE) \
 	SDC_FILE=$(SDC_FILE) \
 	BB_MODULES="$(BB_MODULES)" \
+	ICG_MAP="$(ICG_MAP)" \
 	CLOCK_FREQ=$(CLOCK_FREQ) \
 	DFF_DONT_USE="$(DFF_DONT_USE)" \
 	ABC_DRIVER_CELL=$(ABC_DRIVER_CELL) \
@@ -251,6 +257,7 @@ timing: $(SYN_SRC_DEPS) $(SYN_LIB_DEPS) | $(BUILD_DIR)
 	SRC_FILE=$(SYN_SRC_FILE) \
 	SDC_FILE=$(SDC_FILE) \
 	BB_MODULES="$(BB_MODULES)" \
+	ICG_MAP="$(ICG_MAP)" \
 	CLOCK_FREQ=$(CLOCK_FREQ) \
 	DELAY_UNC=$(DELAY_UNC) \
 	DELAY_IO=$(DELAY_IO) \
@@ -276,7 +283,7 @@ timing: $(SYN_SRC_DEPS) $(SYN_LIB_DEPS) | $(BUILD_DIR)
 # path to a period with the library's delays. docs/designs/beacon.md.
 beacon: $(BUILD_DIR)/sources.txt
 	mkdir -p $(BUILD_DIR)/beacon
-	$(SCRIPT_DIR)/circt_elaborate.sh -t$(TOP_LEVEL_ENTITY) -I$(BUILD_DIR)/src -b'$(BB_MODULES)' \
+	$(SCRIPT_DIR)/circt_elaborate.sh -t$(TOP_LEVEL_ENTITY) -I$(BUILD_DIR)/src -b'$(BB_MODULES),VX_clockgate_asic' \
 		-o$(BUILD_DIR)/beacon/netlist.mlir
 	$(FOLDSIM_OPT) $(BUILD_DIR)/beacon/netlist.mlir --pass-pipeline='builtin.module(foldsim-beacon-map{target=$(PDK)})' \
 		--emit-bytecode -o $(BUILD_DIR)/beacon/mapped.mlirbc

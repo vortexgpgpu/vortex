@@ -56,6 +56,7 @@ SK = ast.SymbolKind
 EK = ast.ExpressionKind
 
 RAM_MODULES = ("VX_dp_ram",)
+CLOCK_GATE = "VX_clockgate"
 
 CONST_KINDS = {SK.Parameter, SK.TypeParameter, SK.EnumValue, SK.Genvar, SK.Specparam}
 
@@ -191,6 +192,10 @@ class Design:
         self.iface_users = {}   # interface instance path -> [(instance, port)]
         self.rams = []
         self.arrayed = set()   # instances that are elements of an instance array
+        # A gated clock is the gate's input clock: every register on one keeps
+        # its load enable, so it loads exactly when it would on the free clock.
+        self.gated_clk = {}    # net path driven by a VX_clockgate -> its clk_in expression
+        self.clk_alias = {}    # net path -> right-hand side of `assign net = value;`
         for top in self.root.topInstances:
             self.parent[top.hierarchicalPath] = None
             self.insts[top.hierarchicalPath] = top
@@ -218,7 +223,13 @@ class Design:
                 self._ifaces(m)
                 if m.definition.name in RAM_MODULES:
                     self.rams.append(m)
+                if m.definition.name == CLOCK_GATE:
+                    self._index_clock_gate(m)
                 self._index(m.body, m)
+            elif k == SK.ContinuousAssign:
+                a = m.assignment
+                if a.kind == EK.Assignment and a.left.kind == EK.NamedValue:
+                    self.clk_alias[a.left.symbol.hierarchicalPath] = a.right
             elif k in (SK.GenerateBlock, SK.GenerateBlockArray):
                 if k == SK.GenerateBlock and m.isUninstantiated:
                     continue
@@ -228,6 +239,14 @@ class Design:
                 self.by_path[m.hierarchicalPath] = m
             elif k == SK.InstanceArray:
                 self._index_array(m, inst)
+
+    def _index_clock_gate(self, inst):
+        conns = {c.port.name: c.expression for c in inst.portConnections if c.port.kind == SK.Port}
+        out, src = conns.get("clk_out"), conns.get("clk_in")
+        if out is not None and out.kind == EK.Assignment:
+            out = out.left
+        if out is not None and src is not None and out.kind == EK.NamedValue:
+            self.gated_clk[out.symbol.hierarchicalPath] = src
 
     def _ifaces(self, inst):
         for p in inst.body.portList:
@@ -461,7 +480,13 @@ class Fold:
             port = self.d.port_of(inst, sym) if inst is not None else None
             if port is None or port.direction != ast.ArgumentDirection.In or \
                     self.d.parent.get(inst.hierarchicalPath) is None:
-                return sym.hierarchicalPath
+                nxt = self.d.gated_clk.get(sym.hierarchicalPath)
+                if nxt is None:
+                    nxt = self.d.clk_alias.get(sym.hierarchicalPath)
+                if nxt is None:
+                    return sym.hierarchicalPath
+                expr = nxt
+                continue
             conn = inst.getPortConnection(port)
             if conn is None or conn.expression is None:
                 return None
