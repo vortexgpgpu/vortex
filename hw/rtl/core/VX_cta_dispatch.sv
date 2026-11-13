@@ -407,7 +407,15 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // launches while the window is built, so the three writes are exclusive and
     // the shift, the deepest input, takes the last select.
     `RUNTIME_ASSERT(reset || ~(init_busy && fire_any_r), ("%t: %s window shifted while being built", $time, INSTANCE_ID))
-    always @(posedge clk) begin
+`ifdef ASIC
+    wire window_clk;
+    VX_clockgate window_cg (
+        .clk_in  (clk),
+        .en      (((state == DISPATCH) && (fire_any_r || init_busy)) || ((state == IDLE) && kmu_bus_if_fire)),
+        .clk_out (window_clk)
+    );
+`endif
+    always @(posedge `GATED_CLK(clk, window_clk)) begin
         if (~reset) begin
             for (integer k = 0; k < NUM_LANES; ++k) begin
                 if ((state == DISPATCH) && fire_any_r) begin
@@ -565,6 +573,80 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     assign rem_warps_waddr = (kmu_bus_if_fire && state == IDLE) ? base_slot : rem_warps_waddr_r;
     assign rem_warps_wdata = (kmu_bus_if_fire && state == IDLE) ? (NW_WIDTH+1)'(kmu_num_warps) : rem_warps_wdata_r;
 
+    // The wide registers below load on a few events each; on ASIC each group
+    // is clocked only on its own.
+    wire launch_load    = (state == IDLE) && kmu_bus_if_fire;
+    wire slot_load      = (| lane_sel);
+    wire init_lanes_clr = launch_load && (kmu_req.ctx_id != cur_ctx_id_r);
+    wire init_lanes_upd = (state == DISPATCH) && fire_any_r;
+    wire init_write     = (state == DISPATCH) && init_busy && (int'(init_cnt_r) < NUM_LANES);
+`ifdef ASIC
+    wire launch_clk, slot_clk, init_lanes_clk, init_write_clk;
+    VX_clockgate launch_cg (.clk_in (clk), .en (launch_load), .clk_out (launch_clk));
+    VX_clockgate slot_cg (.clk_in (clk), .en (reset || slot_load), .clk_out (slot_clk));
+    VX_clockgate init_lanes_cg (.clk_in (clk), .en (reset || init_lanes_clr || init_lanes_upd), .clk_out (init_lanes_clk));
+    VX_clockgate init_write_cg (.clk_in (clk), .en (reset || init_write), .clk_out (init_write_clk));
+`else
+    `UNUSED_VAR (slot_load)
+`endif
+
+    // launch descriptor
+    always @(posedge `GATED_CLK(clk, launch_clk)) begin
+        if (launch_load) begin
+            warp_PC     <= kmu_req.PC;
+            entry_r     <= kmu_req.entry;
+            block_idx_r <= kmu_block_idx;
+            block_dim_r <= kmu_req.args.compute.block_dim;
+            for (integer d = 0; d < 2; ++d) begin
+                block_last_r[d] <= CTA_TID_WIDTH'(kmu_req.args.compute.block_dim[d] - (CTA_TID_WIDTH+1)'(1));
+            end
+            grid_dim_r  <= kmu_grid_dim;
+            param_r     <= kmu_req.param;
+            warp_step_r <= kmu_req.args.compute.warp_step;
+        end
+    end
+
+    always @(posedge `GATED_CLK(clk, slot_clk)) begin
+        if (reset) begin
+            cta_slot_per_warp_r <= '0;
+        end else begin
+            for (integer l = 0; l < NUM_LANES; ++l) begin
+                if (lane_sel[l]) begin
+                    cta_slot_per_warp_r[lane_wid[l]] <= cur_slot_r;
+                end
+            end
+        end
+    end
+
+    always @(posedge `GATED_CLK(clk, init_lanes_clk)) begin
+        if (reset) begin
+            warp_init_lanes_r <= '0;
+        end else begin
+            if (init_lanes_clr) begin
+                warp_init_lanes_r <= '0;
+            end
+            if (init_lanes_upd) begin
+                for (integer l = 0; l < NUM_LANES; ++l) begin
+                    if (warp_fire_r[l]) begin
+                        warp_init_lanes_r[warp_id_r[l]] <= warp_init_lanes_r[warp_id_r[l]] | warp_tmask_r[l];
+                    end
+                end
+            end
+        end
+    end
+
+    always @(posedge `GATED_CLK(clk, init_write_clk)) begin
+        if (reset) begin
+            thread_idx_init_r <= '0;
+        end else if (init_write) begin
+            for (integer k = 0; k < NUM_LANES; ++k) begin
+                if (int'(init_cnt_r) == k) begin
+                    thread_idx_init_r[k] <= init_next;
+                end
+            end
+        end
+    end
+
     // -------------------------------------------------------------------------
     // Sequential
     // -------------------------------------------------------------------------
@@ -580,13 +662,11 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
             init_cnt_r      <= '0;
             shape_step_r    <= '0;
             shape_dim_r     <= '0;
-            thread_idx_init_r <= '0;
             group_step_r    <= '0;
             init_acc_r      <= '0;
             cur_ctx_id_r    <= '0;
-            warp_init_lanes_r <= '0;
-            warp_skip_init_r <= '0;
             tail_r          <= '0;
+            warp_skip_init_r <= '0;
             cur_stride_r    <= '0;
             slot_valid_r    <= '0;
             dispatched_warps<= '0;
@@ -602,7 +682,6 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
             rem_warps_waddr_rr <= '0;
             rem_warps_wdata_rr <= '0;
             rem_warps_write_rr <= 0;
-            cta_slot_per_warp_r <= '0;
 
         end else begin
 
@@ -616,12 +695,6 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
             // ---- wid → cta-slot map: latch on warp dispatch ----------------
             // (Used internally by the retirement path to recover the slot
             // index of a finishing warp; no longer exposed externally.)
-            for (integer l = 0; l < NUM_LANES; ++l) begin
-                if (lane_sel[l]) begin
-                    cta_slot_per_warp_r[lane_wid[l]] <= cur_slot_r;
-                end
-            end
-
             // ---- Warp retirement -------------------------------------------
             // Snapshot _r into _rr so 2-cycle forwarding can cover the
             // window where the rem_warps_ram read started concurrently with
@@ -646,19 +719,8 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                     if (kmu_bus_if_fire) begin
                         if (kmu_req.ctx_id != cur_ctx_id_r) begin
                             cur_ctx_id_r <= kmu_req.ctx_id;
-                            warp_init_lanes_r <= '0;
                         end
-                        warp_PC      <= kmu_req.PC;
-                        entry_r      <= kmu_req.entry;
-                        block_idx_r  <= kmu_block_idx;
-                        block_dim_r  <= kmu_req.args.compute.block_dim;
-                        for (integer d = 0; d < 2; ++d) begin
-                            block_last_r[d] <= CTA_TID_WIDTH'(kmu_req.args.compute.block_dim[d] - (CTA_TID_WIDTH+1)'(1));
-                        end
-                        grid_dim_r   <= kmu_grid_dim;
-                        param_r      <= kmu_req.param;
                         block_size_r <= eff_block_size;
-                        warp_step_r  <= kmu_req.args.compute.warp_step;
                         cluster_size_r <= eff_cluster_size;
                         cta_rank_r   <= '0;
                         group_step_r <= (NUM_LANES == 1) ? kmu_req.args.compute.warp_step : group_step_r;
@@ -703,11 +765,6 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                     if (fire_any_r) begin
                         cta_rank_r   <= cta_rank_r + NW_WIDTH'(nfired_r);
                         block_size_r <= block_size_next;
-                        for (integer l = 0; l < NUM_LANES; ++l) begin
-                            if (warp_fire_r[l]) begin
-                                warp_init_lanes_r[warp_id_r[l]] <= warp_init_lanes_r[warp_id_r[l]] | warp_tmask_r[l];
-                            end
-                        end
                         if (~rem_gt[0]) begin
                             state <= IDLE;
                         end
@@ -716,11 +773,6 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                     // window constants: step warp_step_r once per cycle
                     if (init_busy) begin
                         if (int'(init_cnt_r) < NUM_LANES) begin
-                            for (integer k = 0; k < NUM_LANES; ++k) begin
-                                if (int'(init_cnt_r) == k) begin
-                                    thread_idx_init_r[k] <= init_next;
-                                end
-                            end
                             init_cnt_r <= init_cnt_r + LCNT_WIDTH'(1);
                         end else begin
                             group_step_r <= init_next;
