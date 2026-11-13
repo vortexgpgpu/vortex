@@ -18,7 +18,9 @@ module VX_elastic_buffer #(
     parameter DATAW   = 1,
     parameter SIZE    = 1,
     parameter OUT_REG = 0,
-    parameter LUTRAM  = 0
+    parameter LUTRAM  = 0,
+    // ASIC: see VX_pipe_buffer / VX_stream_buffer
+    parameter DATA_GATE = 1
 ) (
     input  wire             clk,
     input  wire             reset,
@@ -35,6 +37,7 @@ module VX_elastic_buffer #(
 
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
+        `UNUSED_PARAM (DATA_GATE)
 
         assign valid_out = valid_in;
         assign data_out  = data_in;
@@ -44,6 +47,7 @@ module VX_elastic_buffer #(
 
         VX_pipe_buffer #(
             .DATAW (DATAW),
+            .DATA_GATE (DATA_GATE),
             .DEPTH (`MAX(OUT_REG, 1))
         ) pipe_buffer (
             .clk       (clk),
@@ -64,6 +68,7 @@ module VX_elastic_buffer #(
 
         VX_stream_buffer #(
             .DATAW   (DATAW),
+            .DATA_GATE (DATA_GATE),
             .OUT_REG (OUT_REG == 1)
         ) stream_buffer (
             .clk       (clk),
@@ -78,6 +83,7 @@ module VX_elastic_buffer #(
 
         VX_pipe_buffer #(
             .DATAW (DATAW),
+            .DATA_GATE (DATA_GATE),
             .DEPTH ((OUT_REG > 1) ? (OUT_REG-1) : 0)
         ) out_buf (
             .clk       (clk),
@@ -125,6 +131,7 @@ module VX_elastic_buffer #(
 
         VX_pipe_buffer #(
             .DATAW (DATAW),
+            .DATA_GATE (DATA_GATE),
             .DEPTH ((OUT_REG > 1) ? (OUT_REG-1) : 0)
         ) out_buf (
             .clk       (clk),
