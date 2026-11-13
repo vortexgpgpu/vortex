@@ -56,10 +56,10 @@ void OpcUnit::on_reset() {
 }
 
 // Each bank serves one operand per cycle. The uniform file has its own banks;
-// u0 takes no row, so u(n) sits in bank (n-1) % banks.
+// u0 takes no row, so u(n) sits in bank (n-1) % VX_CFG_NUM_UREG_BANKS.
 static uint32_t compute_bank_conflicts(const instr_trace_t* trace) {
   uint32_t per_bank[VX_CFG_NUM_GPR_BANKS] = {};
-  uint32_t per_ubank[VX_CFG_NUM_GPR_BANKS] = {};
+  uint32_t per_ubank[VX_CFG_NUM_UREG_BANKS] = {};
   uint32_t most = 0;
   for (uint32_t i = 0; i < NUM_SRC_REGS; ++i) {
     auto& reg = trace->src_regs[i];
@@ -71,7 +71,7 @@ static uint32_t compute_bank_conflicts(const instr_trace_t* trace) {
     }
     if (reg.type == RegType::Uniform) {
       if (reg.idx != 0) {
-        most = std::max(most, ++per_ubank[(reg.idx - 1) % VX_CFG_NUM_GPR_BANKS]);
+        most = std::max(most, ++per_ubank[(reg.idx - 1) % VX_CFG_NUM_UREG_BANKS]);
       }
       continue;
     }

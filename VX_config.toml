@@ -89,6 +89,9 @@ VX_CFG_UREG_ROWS = "expr: 32 * (($VX_CFG_NUM_WARPS // $VX_CFG_ISSUE_WIDTH + $VX_
 # Uniform-register writes in flight per warp (VX_CFG_EXT_U_ENABLE): the
 # scoreboard tracks them in this many tags, and a uniform write waits for one.
 VX_CFG_UREG_TAGS = 4
+# Banks of the uniform register file (VX_CFG_EXT_U_ENABLE): u(n) is in bank
+# (n-1) % banks. At most 4, as a warp's uniform set is 4-register aligned.
+VX_CFG_NUM_UREG_BANKS = 2
 VX_CFG_NUM_VGPR_BANKS = 2
 
 [memory]

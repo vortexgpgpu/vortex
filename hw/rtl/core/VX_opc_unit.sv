@@ -58,7 +58,10 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     localparam BANK_ADDR_WIDTH  = `CLOG2(BANK_SIZE);
 
     // read ports: the GPR banks, then the uniform file's banks
-    localparam NUM_UBANKS       = `VX_CFG_EXT_U_ENABLED ? NUM_BANKS : 0;
+    localparam NUM_UBANKS       = `VX_CFG_EXT_U_ENABLED ? `VX_CFG_NUM_UREG_BANKS : 0;
+    localparam UBANK_SEL_BITS   = `CLOG2(`VX_CFG_NUM_UREG_BANKS);
+    localparam UBANK_SEL_WIDTH  = `UP(UBANK_SEL_BITS);
+    `STATIC_ASSERT (`VX_CFG_NUM_UREG_BANKS <= 4, ("uniform register sets are 4-register aligned"))
     localparam NUM_RBANKS       = NUM_BANKS + NUM_UBANKS;
     localparam RBANK_SEL_WIDTH  = `UP(`CLOG2(NUM_RBANKS));
 
@@ -101,20 +104,24 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     assign src_regs = {scoreboard_if.data.rs3, scoreboard_if.data.rs2, scoreboard_if.data.rs1};
 
     // u0 reads zero and takes no row, so u(n) sits at row n-1 of its warp's
-    // uniform set, whose base is 4-aligned: its bank is (n-1)'s low bits.
+    // uniform set, whose base is 4-aligned: its uniform bank is (n-1)'s low bits.
     for (genvar i = 0; i < NUM_SRC_OPDS; ++i) begin : g_req
         wire                    is_u = `VX_CFG_EXT_U_ENABLED && (get_reg_type(src_regs[i]) == REG_TYPE_U);
         wire [RV_REGS_BITS-1:0] uoff = get_reg_idx(src_regs[i]) - RV_REGS_BITS'(1);
-        wire [BANK_SEL_WIDTH-1:0] gbank, ubank;
+        wire [BANK_SEL_WIDTH-1:0] gbank;
+        wire [UBANK_SEL_WIDTH-1:0] ubank;
         if (NUM_BANKS != 1) begin : g_bn
             assign gbank = src_regs[i][BANK_SEL_BITS-1:0];
-            assign ubank = uoff[BANK_SEL_BITS-1:0];
         end else begin : g_b1
             assign gbank = '0;
+        end
+        if (UBANK_SEL_BITS != 0) begin : g_ubn
+            assign ubank = uoff[UBANK_SEL_WIDTH-1:0];
+        end else begin : g_ub1
             assign ubank = '0;
         end
         assign req_bank_idx[i] = is_u ? RBANK_SEL_WIDTH'(NUM_BANKS + ubank) : RBANK_SEL_WIDTH'(gbank);
-        assign req_addr_in[i]  = is_u ? REG_REM_BITS'(uoff >> BANK_SEL_BITS)
+        assign req_addr_in[i]  = is_u ? REG_REM_BITS'(uoff >> UBANK_SEL_BITS)
                                       : src_regs[i][NUM_REGS_BITS-1 -: REG_REM_BITS];
         assign src_valid[i] = scoreboard_if.data.used_rs[i] && ~opd_fetched_st1[i]
                            && (is_u ? (get_reg_idx(src_regs[i]) != 0) : (src_regs[i] != 0));
@@ -312,14 +319,14 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
 
     wire ureg_wr_en = writeback_if.valid && wb_is_ureg && ureg_seek && wb_any && (wb_uidx != '0);
     wire [UREG_W-1:0] ureg_wr_flat = slot_ubase_r[wr_slot] + UREG_W'(wb_uidx) - UREG_W'(1);
-    wire [UROW_W-1:0] ureg_wr_row  = UROW_W'(ureg_wr_flat >> BANK_SEL_BITS);
-    wire [BANK_SEL_WIDTH-1:0] ureg_wr_bank;
-    if (NUM_BANKS != 1) begin : g_ureg_wr_bank_bn
-        assign ureg_wr_bank = ureg_wr_flat[BANK_SEL_BITS-1:0];
+    wire [UROW_W-1:0] ureg_wr_row  = UROW_W'(ureg_wr_flat >> UBANK_SEL_BITS);
+    wire [UBANK_SEL_WIDTH-1:0] ureg_wr_bank;
+    if (UBANK_SEL_BITS != 0) begin : g_ureg_wr_bank_bn
+        assign ureg_wr_bank = ureg_wr_flat[UBANK_SEL_WIDTH-1:0];
     end else begin : g_ureg_wr_bank_b1
         assign ureg_wr_bank = '0;
     end
-    wire [UROW_W-1:0] ureg_rd_base = UROW_W'(slot_ubase_r[rd_slot] >> BANK_SEL_BITS);
+    wire [UROW_W-1:0] ureg_rd_base = UROW_W'(slot_ubase_r[rd_slot] >> UBANK_SEL_BITS);
 
     for (genvar b = 0; b < NUM_UBANKS; ++b) begin : g_ureg_rams
         VX_dp_ram #(
@@ -335,7 +342,7 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
             .reset (reset),
             .read  (pipe_fire_st1 && gpr_rd_valid_st1[NUM_BANKS + b]),
             .wren  (1'b1),
-            .write (ureg_wr_en && (ureg_wr_bank == BANK_SEL_WIDTH'(b))),
+            .write (ureg_wr_en && (ureg_wr_bank == UBANK_SEL_WIDTH'(b))),
             .waddr (ureg_wr_row),
             .wdata (wb_first_data),
             .raddr (ureg_rd_base + UROW_W'(gpr_rd_reg_st1[NUM_BANKS + b])),
