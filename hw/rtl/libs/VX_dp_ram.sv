@@ -155,6 +155,29 @@ module VX_dp_ram #(
         end else begin : g_read_first
             assign rdata = macro_rdata;
         end
+    end else if (INIT_FILE == "" && DATAW >= 4) begin : g_cg
+        // Flip-flop rows, each behind its own clock gate; rows under 4 bits
+        // cost more in gates than they save.
+        VX_cg_ram #(
+            .DATAW    (DATAW),
+            .SIZE     (SIZE),
+            .WRENW    (WRENW),
+            .OUT_REG  (OUT_REG),
+            .RDW_MODE (RDW_MODE)
+        ) cg_ram (
+            .clk   (clk),
+            .read  (read),
+            .write (write),
+            .wren  (wren),
+            .waddr (waddr),
+            .wdata (wdata),
+            .raddr (raddr),
+            .rdata (rdata)
+        );
+        `UNUSED_VAR (reset)
+        `UNUSED_PARAM (RESET_RAM)
+        `UNUSED_PARAM (INIT_ENABLE)
+        `UNUSED_PARAM (INIT_VALUE)
     end else begin : g_no_asic
 `else
     if (1) begin : g_no_asic
