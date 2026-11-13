@@ -234,7 +234,16 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
         end
     end
 
-    always @(posedge clk) begin
+    // The operand buffer changes only when a bank read arrives or stage 2 fires.
+    wire opd_buffer_upd = reset || pipe_fire_st2 || (| gpr_rd_valid_st2);
+    `RUNTIME_ASSERT (opd_buffer_upd || (opd_buffer_n_st2 == opd_buffer_st2),
+        ("%t: operand buffer changed without a bank read", $time))
+`ifdef ASIC
+    wire opd_buffer_clk;
+    VX_clockgate opd_buffer_cg (.clk_in (clk), .en (opd_buffer_upd), .clk_out (opd_buffer_clk));
+`endif
+
+    always @(posedge `GATED_CLK(clk, opd_buffer_clk)) begin
         if (reset || pipe_fire_st2) begin
             opd_buffer_st2 <= '0;
         end else begin
