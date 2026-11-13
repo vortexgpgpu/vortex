@@ -143,6 +143,11 @@ import VX_tcu_pkg::*;
     // One DCR flush request invalidates both L1s: a kernel re-loaded at the same
     // address must not execute stale icache lines.
     VX_dcr_flush_if dcr_flush_if();
+
+`ifdef ASIC
+    // the whole core runs on core_clk, gated off while it is idle
+    wire core_clk;
+`endif
     VX_dcr_flush_if dcr_flush_dcache_if();
     VX_dcr_flush_if dcr_flush_icache_if();
     wire dcr_flush_l1_only;
@@ -173,7 +178,7 @@ import VX_tcu_pkg::*;
     // the start is latched until the flush request drops.
     if ((`VX_CFG_VM_ENABLED != 0) || (`VX_CFG_L1_LINK_LATENCY != 0)) begin : g_flush_path
         reg dcache_flush_go_r;
-        always @(posedge clk) begin
+        always @(posedge `GATED_CLK(clk, core_clk)) begin
             if (reset || ~dcr_flush_if.req) begin
                 dcache_flush_go_r <= 1'b0;
             end else if (store_drained && dcache_path_drained) begin
@@ -201,7 +206,7 @@ import VX_tcu_pkg::*;
     VX_dcr_data #(
         .INSTANCE_ID (`SFORMATF(("%s-dcr_data", INSTANCE_ID)))
     ) dcr_data (
-        .clk        (clk),
+        .clk        (`GATED_CLK(clk, core_clk)),
         .reset      (reset),
         .core_id    (core_id),
         .dcr_bus_if (dcr_bus_if),
@@ -259,7 +264,7 @@ import VX_tcu_pkg::*;
         .TAG_WIDTH   (ICACHE_FETCH_TAG_WIDTH),
         .REQ_OUT_BUF (3)
     ) icache_dcr_flush (
-        .clk          (clk),
+        .clk          (`GATED_CLK(clk, core_clk)),
         .reset        (reset),
         .dcr_flush_if (dcr_flush_icache_if),
         .l1_only      (dcr_flush_l1_only),
@@ -301,7 +306,7 @@ import VX_tcu_pkg::*;
     VX_scheduler #(
         .INSTANCE_ID (`SFORMATF(("%s-scheduler", INSTANCE_ID)))
     ) scheduler (
-        .clk            (clk),
+        .clk            (`GATED_CLK(clk, core_clk)),
         .reset          (reset),
         .core_id        (core_id),
     `ifdef PERF_ENABLE
@@ -372,7 +377,7 @@ import VX_tcu_pkg::*;
         .block_rtu_bus_if     (block_rtu_bus_if),
         .rtu_bus_if           (rtu_bus_if),
     `endif
-        .clk                  (clk),
+        .clk                  (`GATED_CLK(clk, core_clk)),
         .reset                (reset)
     );
 
@@ -393,7 +398,7 @@ import VX_tcu_pkg::*;
         .tbuf_ready_eff   (tcu_tbuf_ready),
         .tcu_lmem_if      (tcu_lmem_if),
     `endif
-        .clk              (clk),
+        .clk              (`GATED_CLK(clk, core_clk)),
         .reset            (reset)
     );
 `endif
@@ -418,7 +423,7 @@ import VX_tcu_pkg::*;
         VX_scope_switch #(
             .N (`VX_CFG_ISSUE_WIDTH)
         ) slice_scope_switch (
-            .clk     (clk),
+            .clk     (`GATED_CLK(clk, core_clk)),
             .reset   (scope_reset_w[1]),
             .req_in  (scope_bus_in_w[1]),
             .rsp_out (scope_bus_out_w[1]),
@@ -441,7 +446,7 @@ import VX_tcu_pkg::*;
                 .scope_bus_in         (slice_scope_bus_in[i]),
                 .scope_bus_out        (slice_scope_bus_out[i]),
             `endif
-                .clk                  (clk),
+                .clk                  (`GATED_CLK(clk, core_clk)),
                 .reset                (reset),
                 .core_id              (core_id),
                 .slice_id             (ISSUE_ISW_W'(i)),
@@ -578,7 +583,7 @@ import VX_tcu_pkg::*;
         VX_scope_switch #(
             .N (FW)
         ) frontend_scope_switch (
-            .clk     (clk),
+            .clk     (`GATED_CLK(clk, core_clk)),
             .reset   (scope_reset_w[0]),
             .req_in  (scope_bus_in_w[0]),
             .rsp_out (scope_bus_out_w[0]),
@@ -597,7 +602,7 @@ import VX_tcu_pkg::*;
                 .scope_bus_in      (frontend_scope_bus_in[f]),
                 .scope_bus_out     (frontend_scope_bus_out[f]),
             `endif
-                .clk               (clk),
+                .clk               (`GATED_CLK(clk, core_clk)),
                 .reset             (reset),
                 .core_id           (core_id),
                 .slice_id          (FETCH_FSW_W'(f)),
@@ -643,7 +648,7 @@ import VX_tcu_pkg::*;
             VX_scope_switch #(
                 .N (`VX_CFG_ISSUE_WIDTH)
             ) slice_scope_switch (
-                .clk     (clk),
+                .clk     (`GATED_CLK(clk, core_clk)),
                 .reset   (scope_reset_w[1]),
                 .req_in  (scope_bus_in_w[1]),
                 .rsp_out (scope_bus_out_w[1]),
@@ -665,7 +670,7 @@ import VX_tcu_pkg::*;
                     .scope_bus_in         (slice_scope_bus_in[i]),
                     .scope_bus_out        (slice_scope_bus_out[i]),
                 `endif
-                    .clk                  (clk),
+                    .clk                  (`GATED_CLK(clk, core_clk)),
                     .reset                (reset),
                     .core_id              (core_id),
                     .slice_id             (ISSUE_ISW_W'(i)),
@@ -736,7 +741,7 @@ import VX_tcu_pkg::*;
             ) issue (
                 `SCOPE_IO_BIND  (1)
 
-                .clk            (clk),
+                .clk            (`GATED_CLK(clk, core_clk)),
                 .reset          (reset),
 
             `ifdef PERF_ENABLE
@@ -759,7 +764,7 @@ import VX_tcu_pkg::*;
             ) execute (
                 `SCOPE_IO_BIND  (2)
 
-                .clk                  (clk),
+                .clk                  (`GATED_CLK(clk, core_clk)),
                 .reset                (reset),
                 .core_id              (core_id),
 
@@ -811,7 +816,7 @@ import VX_tcu_pkg::*;
             VX_commit #(
                 .INSTANCE_ID (`SFORMATF(("%s-commit", INSTANCE_ID)))
             ) commit (
-                .clk            (clk),
+                .clk            (`GATED_CLK(clk, core_clk)),
                 .reset          (reset),
 
                 .commit_if      (commit_if),
@@ -829,7 +834,7 @@ import VX_tcu_pkg::*;
     VX_mem_unit #(
         .INSTANCE_ID (INSTANCE_ID)
     ) mem_unit (
-        .clk             (clk),
+        .clk             (`GATED_CLK(clk, core_clk)),
         .reset           (reset),
     `ifdef PERF_ENABLE
         .lmem_perf       (lmem_perf),
@@ -859,6 +864,57 @@ import VX_tcu_pkg::*;
     // busy depends on no input: the socket covers the launches it sends and its
     // MMU's translations.
     assign busy = sched_busy || mem_unit_busy;
+
+`ifdef ASIC
+    // Whole-core clock gate. The core is clocked while it is busy or has a store
+    // in flight, while a request or response is on any of its interfaces (in
+    // either direction, so a waiting handshake completes), during a cache flush,
+    // and for CORE_CG_LINGER cycles after the last of these, which covers the
+    // short internal tails that show on no interface.
+    localparam CORE_CG_LINGER = 16;
+    // The extension buses are not watched, so a core with one is never gated.
+    localparam CORE_CG_EXT = 0
+    `ifdef VX_CFG_EXT_DXA_ENABLE
+        + 1
+    `endif
+    `ifdef VX_CFG_EXT_TEX_ENABLE
+        + 1
+    `endif
+    `ifdef VX_CFG_EXT_RTU_ENABLE
+        + 1
+    `endif
+    `ifdef EXT_GFX_ANY_ENABLE
+        + 1
+    `endif
+        ;
+    wire [ICACHE_NUM_REQS-1:0] icache_act;
+    wire [DCACHE_NUM_REQS-1:0] dcache_act;
+    for (genvar i = 0; i < ICACHE_NUM_REQS; ++i) begin : g_icache_act
+        assign icache_act[i] = icache_bus_if[i].req_valid || icache_bus_if[i].rsp_valid;
+    end
+    for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin : g_dcache_act
+        assign dcache_act[i] = dcache_bus_if[i].req_valid || dcache_bus_if[i].rsp_valid;
+    end
+    wire core_act = busy || (| lsu_busy)
+                 || dcr_bus_if.req_valid || dcr_bus_if.rsp_valid || dcr_flush_if.req
+                 || (| icache_act) || (| dcache_act)
+                 || kmu_bus_if.valid
+                 || gbar_bus_if.req_valid || gbar_bus_if.rsp_valid
+                 || (CORE_CG_EXT != 0);
+    reg [`CLOG2(CORE_CG_LINGER+1)-1:0] core_linger_r;
+    always @(posedge clk) begin
+        if (reset || core_act) begin
+            core_linger_r <= CORE_CG_LINGER;
+        end else if (core_linger_r != 0) begin
+            core_linger_r <= core_linger_r - 1;
+        end
+    end
+    VX_clockgate core_cg (
+        .clk_in  (clk),
+        .en      (reset || core_act || (core_linger_r != 0)),
+        .clk_out (core_clk)
+    );
+`endif
 
 `ifdef PERF_ENABLE
 
@@ -916,7 +972,7 @@ import VX_tcu_pkg::*;
     assign perf_icache_pending_read_cycle = perf_icache_req_per_cycle - perf_icache_rsp_per_cycle;
     assign perf_dcache_pending_read_cycle = perf_dcache_rd_req_per_cycle - perf_dcache_rsp_per_cycle;
 
-    always @(posedge clk) begin
+    always @(posedge `GATED_CLK(clk, core_clk)) begin
         if (reset) begin
             perf_icache_pending_reads <= '0;
             perf_dcache_pending_reads <= '0;
@@ -929,7 +985,7 @@ import VX_tcu_pkg::*;
     reg [PERF_CTR_BITS-1:0] perf_icache_lat;
     reg [PERF_CTR_BITS-1:0] perf_dcache_lat;
 
-    always @(posedge clk) begin
+    always @(posedge `GATED_CLK(clk, core_clk)) begin
         if (reset) begin
             perf_ifetches   <= '0;
             perf_loads      <= '0;
