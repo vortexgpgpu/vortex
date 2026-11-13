@@ -19,10 +19,12 @@ module VX_clockgate_asic (
     input  wire en,
     output wire clk_out
 );
+    /* verilator lint_off LATCH */
     reg en_latched;
     always @(*) begin
         if (~clk_in)
             en_latched = en;
     end
+    /* verilator lint_on LATCH */
     assign clk_out = clk_in & en_latched;
 endmodule
