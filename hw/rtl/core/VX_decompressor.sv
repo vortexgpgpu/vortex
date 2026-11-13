@@ -806,6 +806,71 @@ module VX_decompressor import VX_gpu_pkg::*; #(
     // Sequential state
     // ------------------------------------------------------------------
 
+    // A warp's buffer changes only when stage 0 advances on it, as the
+    // scheduler's or the response's warp.
+    for (genvar w = 0; w < NUM_WARPS; ++w) begin : g_warp_upd
+        wire warp_upd = st0_advance && ((sched_wid == WID_W'(w)) || (rsp_wid == WID_W'(w)));
+        `RUNTIME_ASSERT (warp_upd || ({state_n[w], buf_pc_n[w], hi_uuid_n[w], hi_tmask_n[w], hi_hw_n[w]}
+                                   == {state[w], buf_pc[w], hi_uuid[w], hi_tmask[w], hi_hw[w]}),
+            ("%t: decompressor warp %0d buffer changed without an update", $time, w))
+    `ifdef ASIC
+        buf_state_e         state_r;
+        logic [PC_BITS-1:0] buf_pc_r;
+        logic [UUID_WIDTH-1:0]          hi_uuid_r;
+        logic [`VX_CFG_NUM_THREADS-1:0] hi_tmask_r;
+        logic [15:0]                    hi_hw_r;
+        wire warp_clk;
+        VX_clockgate warp_cg (.clk_in (clk), .en (reset || warp_upd), .clk_out (warp_clk));
+        always @(posedge warp_clk) begin
+            if (reset) begin
+                state_r    <= BUF_EMPTY;
+                buf_pc_r   <= '0;
+                hi_uuid_r  <= '0;
+                hi_tmask_r <= '0;
+                hi_hw_r    <= '0;
+            end else begin
+                state_r    <= state_n[w];
+                buf_pc_r   <= buf_pc_n[w];
+                hi_uuid_r  <= hi_uuid_n[w];
+                hi_tmask_r <= hi_tmask_n[w];
+                hi_hw_r    <= hi_hw_n[w];
+            end
+        end
+        assign state[w]    = state_r;
+        assign buf_pc[w]   = buf_pc_r;
+        assign hi_uuid[w]  = hi_uuid_r;
+        assign hi_tmask[w] = hi_tmask_r;
+        assign hi_hw[w]    = hi_hw_r;
+    `endif
+    end
+
+`ifdef ASIC
+    // Stage 1's context is read only while s1_valid, so it loads only with an emit.
+    wire s1_ctx_load = s1_can_accept && (s1_kind_in != S1_NONE);
+    wire s1_ctx_clk;
+    VX_clockgate s1_ctx_cg (.clk_in (clk), .en (reset || s1_ctx_load), .clk_out (s1_ctx_clk));
+    always_ff @(posedge s1_ctx_clk) begin
+        if (reset) begin
+            s1_ctx <= '0;
+        end else if (s1_ctx_load) begin
+            s1_ctx <= s1_ctx_in;
+        end
+    end
+
+    always_ff @(posedge clk) begin
+        if (reset) begin
+            drain   <= '0;
+            spec    <= '0;
+            s1_kind <= S1_NONE;
+        end else begin
+            drain <= drain_n;
+            spec  <= spec_n;
+            if (s1_can_accept) begin
+                s1_kind <= s1_kind_in;
+            end
+        end
+    end
+`else
     always_ff @(posedge clk) begin
         if (reset) begin
             for (int w = 0; w < NUM_WARPS; ++w) begin
@@ -838,6 +903,7 @@ module VX_decompressor import VX_gpu_pkg::*; #(
             // s1_kind_in would be S1_NONE anyway.)
         end
     end
+`endif
 
 endmodule
 
