@@ -57,6 +57,11 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     `STATIC_ASSERT (NUM_BANKS <= 4, ("register sets are 4-register aligned"))
     localparam BANK_ADDR_WIDTH  = `CLOG2(BANK_SIZE);
 
+    // read ports: the GPR banks, then the uniform file's banks
+    localparam NUM_UBANKS       = `VX_CFG_EXT_U_ENABLED ? NUM_BANKS : 0;
+    localparam NUM_RBANKS       = NUM_BANKS + NUM_UBANKS;
+    localparam RBANK_SEL_WIDTH  = `UP(`CLOG2(NUM_RBANKS));
+
     localparam REG_REM_BITS     = NUM_REGS_BITS - BANK_SEL_BITS;
 
     localparam META_DATAW       = UUID_WIDTH + ISSUE_WIS_W + NCTA_WIDTH + SIMD_IDX_W + `VX_CFG_SIMD_WIDTH + PC_BITS + EX_BITS + INST_OP_BITS + INST_ARGS_BITS + 1 + NUM_XREGS + NUM_REGS_BITS + BYTESEL_BITS + 1 + 1;
@@ -67,13 +72,14 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     wire [NUM_SRC_OPDS-1:0] src_valid;
     wire [NUM_SRC_OPDS-1:0] req_valid_in, req_ready_in;
     wire [NUM_SRC_OPDS-1:0][REG_REM_BITS-1:0] req_addr_in;
-    wire [NUM_SRC_OPDS-1:0][BANK_SEL_WIDTH-1:0] req_bank_idx;
+    wire [NUM_SRC_OPDS-1:0][RBANK_SEL_WIDTH-1:0] req_bank_idx;
 
-    wire [NUM_BANKS-1:0] gpr_rd_valid, gpr_rd_ready;
-    wire [NUM_BANKS-1:0] gpr_rd_valid_st1, gpr_rd_valid_st2;
-    wire [NUM_BANKS-1:0][REG_REM_BITS-1:0] gpr_rd_reg, gpr_rd_reg_st1;
+    wire [NUM_RBANKS-1:0] gpr_rd_valid, gpr_rd_ready;
+    wire [NUM_RBANKS-1:0] gpr_rd_valid_st1, gpr_rd_valid_st2;
+    wire [NUM_RBANKS-1:0][REG_REM_BITS-1:0] gpr_rd_reg, gpr_rd_reg_st1;
     wire [NUM_BANKS-1:0][`VX_CFG_SIMD_WIDTH-1:0][`VX_CFG_XLEN-1:0] gpr_rd_data_st2;
-    wire [NUM_BANKS-1:0][REQ_SEL_WIDTH-1:0] gpr_rd_opd, gpr_rd_opd_st1, gpr_rd_opd_st2;
+    wire [`UP(NUM_UBANKS)-1:0][`VX_CFG_XLEN-1:0] ureg_rd_data_st2;
+    wire [NUM_RBANKS-1:0][REQ_SEL_WIDTH-1:0] gpr_rd_opd, gpr_rd_opd_st1, gpr_rd_opd_st2;
 
     wire [`VX_CFG_SIMD_WIDTH-1:0] simd_out;
     wire [SIMD_IDX_W-1:0] simd_pid;
@@ -94,28 +100,31 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     wire [NUM_SRC_OPDS-1:0][NUM_REGS_BITS-1:0] src_regs;
     assign src_regs = {scoreboard_if.data.rs3, scoreboard_if.data.rs2, scoreboard_if.data.rs1};
 
-    for (genvar i = 0; i < NUM_SRC_OPDS; ++i) begin : g_gpr_rd_reg
-        assign req_addr_in[i] = src_regs[i][NUM_REGS_BITS-1 -: REG_REM_BITS];
-    end
-
-    for (genvar i = 0; i < NUM_SRC_OPDS; ++i) begin : g_req_bank_idx
+    // u0 reads zero and takes no row, so u(n) sits at row n-1 of its warp's
+    // uniform set, whose base is 4-aligned: its bank is (n-1)'s low bits.
+    for (genvar i = 0; i < NUM_SRC_OPDS; ++i) begin : g_req
+        wire                    is_u = `VX_CFG_EXT_U_ENABLED && (get_reg_type(src_regs[i]) == REG_TYPE_U);
+        wire [RV_REGS_BITS-1:0] uoff = get_reg_idx(src_regs[i]) - RV_REGS_BITS'(1);
+        wire [BANK_SEL_WIDTH-1:0] gbank, ubank;
         if (NUM_BANKS != 1) begin : g_bn
-            assign req_bank_idx[i] = src_regs[i][BANK_SEL_BITS-1:0];
+            assign gbank = src_regs[i][BANK_SEL_BITS-1:0];
+            assign ubank = uoff[BANK_SEL_BITS-1:0];
         end else begin : g_b1
-            assign req_bank_idx[i] = '0;
+            assign gbank = '0;
+            assign ubank = '0;
         end
-    end
-
-    for (genvar i = 0; i < NUM_SRC_OPDS; ++i) begin : g_src_valid
-        assign src_valid[i] = scoreboard_if.data.used_rs[i] && (src_regs[i] != 0) && ~opd_fetched_st1[i]
-                           && (get_reg_type(src_regs[i]) != REG_TYPE_U);
+        assign req_bank_idx[i] = is_u ? RBANK_SEL_WIDTH'(NUM_BANKS + ubank) : RBANK_SEL_WIDTH'(gbank);
+        assign req_addr_in[i]  = is_u ? REG_REM_BITS'(uoff >> BANK_SEL_BITS)
+                                      : src_regs[i][NUM_REGS_BITS-1 -: REG_REM_BITS];
+        assign src_valid[i] = scoreboard_if.data.used_rs[i] && ~opd_fetched_st1[i]
+                           && (is_u ? (get_reg_idx(src_regs[i]) != 0) : (src_regs[i] != 0));
     end
 
     assign req_valid_in = {NUM_SRC_OPDS{scoreboard_if.valid}} & src_valid;
 
     VX_stream_xbar #(
         .NUM_INPUTS  (NUM_SRC_OPDS),
-        .NUM_OUTPUTS (NUM_BANKS),
+        .NUM_OUTPUTS (NUM_RBANKS),
         .DATAW       (REG_REM_BITS),
         .ARBITER     ("P"), // use priority arbiter
         .OUT_BUF     (0)    // no output buffering
@@ -133,7 +142,7 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
         .ready_out (gpr_rd_ready)
     );
 
-    assign gpr_rd_ready = {NUM_BANKS{pipe_ready_in}};
+    assign gpr_rd_ready = {NUM_RBANKS{pipe_ready_in}};
 
     always @(*) begin
         has_collision = 0;
@@ -188,23 +197,16 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     wire pipe_fire_st1 = pipe_valid_st1 && pipe_ready_st1;
     wire pipe_fire_st2 = pipe_valid_st2 && pipe_ready_st2;
 
-    // Uniform sources: the register index rides stage 1, where the uniform file is
-    // read as the GPR banks are, and the value rides stage 2.
-    localparam USRC_W = `VX_CFG_EXT_U_ENABLED ? (NUM_SRC_OPDS * (1 + RV_REGS_BITS)) : 1;
-    localparam UDAT_W = `VX_CFG_EXT_U_ENABLED ? (NUM_SRC_OPDS * (1 + `VX_CFG_XLEN)) : 1;
-    wire [USRC_W-1:0] usrc_st0, usrc_st1;
-    wire [UDAT_W-1:0] udat_st1, udat_st2;
-
     VX_pipe_buffer #(
-        .DATAW  (NUM_BANKS + META_DATAW + 1 + NUM_BANKS * (REG_REM_BITS + REQ_SEL_WIDTH) + USRC_W),
+        .DATAW  (NUM_RBANKS + META_DATAW + 1 + NUM_RBANKS * (REG_REM_BITS + REQ_SEL_WIDTH)),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
         .valid_in (scoreboard_if.valid),
         .ready_in (pipe_ready_in),
-        .data_in  ({gpr_rd_valid,     pipe_mdata,     has_collision,     gpr_rd_reg,     gpr_rd_opd,     usrc_st0}),
-        .data_out ({gpr_rd_valid_st1, pipe_mdata_st1, has_collision_st1, gpr_rd_reg_st1, gpr_rd_opd_st1, usrc_st1}),
+        .data_in  ({gpr_rd_valid,     pipe_mdata,     has_collision,     gpr_rd_reg,     gpr_rd_opd}),
+        .data_out ({gpr_rd_valid_st1, pipe_mdata_st1, has_collision_st1, gpr_rd_reg_st1, gpr_rd_opd_st1}),
         .valid_out(pipe_valid_st1),
         .ready_out(pipe_ready_st1)
     );
@@ -222,15 +224,15 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     wire pipe_valid2_st1 = pipe_valid_st1 && ~has_collision_st1;
 
     VX_pipe_buffer #(
-        .DATAW  (NUM_BANKS * (1 + REQ_SEL_WIDTH) + META_DATAW + UDAT_W),
+        .DATAW  (NUM_RBANKS * (1 + REQ_SEL_WIDTH) + META_DATAW),
         .RESETW (1)
     ) pipe_reg2 (
         .clk      (clk),
         .reset    (reset),
         .valid_in (pipe_valid2_st1),
         .ready_in (pipe_ready_st1),
-        .data_in  ({gpr_rd_valid_st1, gpr_rd_opd_st1, pipe_mdata_st1, udat_st1}),
-        .data_out ({gpr_rd_valid_st2, gpr_rd_opd_st2, pipe_mdata_st2, udat_st2}),
+        .data_in  ({gpr_rd_valid_st1, gpr_rd_opd_st1, pipe_mdata_st1}),
+        .data_out ({gpr_rd_valid_st2, gpr_rd_opd_st2, pipe_mdata_st2}),
         .valid_out(pipe_valid_st2),
         .ready_out(pipe_ready_st2)
     );
@@ -242,14 +244,12 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
                 opd_buffer_n_st2[gpr_rd_opd_st2[b]] = gpr_rd_data_st2[b];
             end
         end
-    `ifdef VX_CFG_EXT_U_ENABLE
         // a uniform source, broadcast to every lane
-        for (integer i = 0; i < NUM_SRC_OPDS; ++i) begin
-            if (pipe_valid_st2 && udat_st2[i * (1 + `VX_CFG_XLEN) + `VX_CFG_XLEN]) begin
-                opd_buffer_n_st2[i] = {`VX_CFG_SIMD_WIDTH{udat_st2[i * (1 + `VX_CFG_XLEN) +: `VX_CFG_XLEN]}};
+        for (integer b = 0; b < NUM_UBANKS; ++b) begin
+            if (gpr_rd_valid_st2[NUM_BANKS + b]) begin
+                opd_buffer_n_st2[gpr_rd_opd_st2[NUM_BANKS + b]] = {`VX_CFG_SIMD_WIDTH{ureg_rd_data_st2[b]}};
             end
         end
-    `endif
     end
 
     always @(posedge clk) begin
@@ -271,30 +271,18 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
 
 `ifdef VX_CFG_EXT_U_ENABLE
     // Uniform registers: a warp slot's u1..u(Ru) are the Ru rows from its base
-    // (u0 reads zero and takes no row).
-    localparam UREG_ROWS = `VX_CFG_UREG_ROWS;
-    localparam UREG_W    = `CLOG2(UREG_ROWS);
-    reg [UREG_ROWS-1:0][`VX_CFG_XLEN-1:0] ureg_r;
+    // (u0 reads zero and takes no row), dealt across the banks like the GPRs.
+    localparam UREG_ROWS  = `VX_CFG_UREG_ROWS;
+    localparam UREG_W     = `CLOG2(UREG_ROWS);
+    localparam UBANK_ROWS = UREG_ROWS / NUM_UBANKS;
+    localparam UROW_W     = `UP(`CLOG2(UBANK_ROWS));
+    `STATIC_ASSERT ((UREG_ROWS % NUM_UBANKS) == 0, ("uniform rows must fill the banks"))
 
     reg [PER_OPC_WARPS-1:0][UREG_W-1:0] slot_ubase_r;
     always_ff @(posedge clk) begin
         for (integer i = 0; i < PER_OPC_WARPS; ++i) begin
             slot_ubase_r[i] <= UREG_W'(i * gpr_layout.usize4 * 4);
         end
-    end
-
-    function automatic logic [UREG_W-1:0] ureg_row(input logic [PER_OPC_NW_W-1:0] slot,
-                                                   input logic [RV_REGS_BITS-1:0] idx);
-        return slot_ubase_r[slot] + UREG_W'(idx) - UREG_W'(1);
-    endfunction
-
-    for (genvar i = 0; i < NUM_SRC_OPDS; ++i) begin : g_usrc
-        assign usrc_st0[i * (1 + RV_REGS_BITS) +: (1 + RV_REGS_BITS)] =
-            {scoreboard_if.data.used_rs[i] && (get_reg_type(src_regs[i]) == REG_TYPE_U), get_reg_idx(src_regs[i])};
-        wire                    uvalid = usrc_st1[i * (1 + RV_REGS_BITS) + RV_REGS_BITS];
-        wire [RV_REGS_BITS-1:0] uidx   = usrc_st1[i * (1 + RV_REGS_BITS) +: RV_REGS_BITS];
-        assign udat_st1[i * (1 + `VX_CFG_XLEN) +: (1 + `VX_CFG_XLEN)] =
-            {uvalid, (uidx == '0) ? `VX_CFG_XLEN'(0) : ureg_r[ureg_row(rd_slot, uidx)]};
     end
 
     // A uniform destination takes the first active lane of the instruction:
@@ -320,14 +308,43 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
         end else if (writeback_if.valid) begin
             ureg_seek_r <= writeback_if.data.eop || (ureg_seek && ~wb_any);
         end
-        if (writeback_if.valid && wb_is_ureg && ureg_seek && wb_any && (wb_uidx != '0)) begin
-            ureg_r[ureg_row(wr_slot, wb_uidx)] <= wb_first_data;
-        end
+    end
+
+    wire ureg_wr_en = writeback_if.valid && wb_is_ureg && ureg_seek && wb_any && (wb_uidx != '0);
+    wire [UREG_W-1:0] ureg_wr_flat = slot_ubase_r[wr_slot] + UREG_W'(wb_uidx) - UREG_W'(1);
+    wire [UROW_W-1:0] ureg_wr_row  = UROW_W'(ureg_wr_flat >> BANK_SEL_BITS);
+    wire [BANK_SEL_WIDTH-1:0] ureg_wr_bank;
+    if (NUM_BANKS != 1) begin : g_ureg_wr_bank_bn
+        assign ureg_wr_bank = ureg_wr_flat[BANK_SEL_BITS-1:0];
+    end else begin : g_ureg_wr_bank_b1
+        assign ureg_wr_bank = '0;
+    end
+    wire [UROW_W-1:0] ureg_rd_base = UROW_W'(slot_ubase_r[rd_slot] >> BANK_SEL_BITS);
+
+    for (genvar b = 0; b < NUM_UBANKS; ++b) begin : g_ureg_rams
+        VX_dp_ram #(
+            .DATAW (`VX_CFG_XLEN),
+            .SIZE  (UBANK_ROWS),
+         `ifdef GPR_RESET
+            .RESET_RAM (1),
+         `endif
+            .OUT_REG (1),
+            .RDW_MODE ("R")
+        ) ureg_ram (
+            .clk   (clk),
+            .reset (reset),
+            .read  (pipe_fire_st1 && gpr_rd_valid_st1[NUM_BANKS + b]),
+            .wren  (1'b1),
+            .write (ureg_wr_en && (ureg_wr_bank == BANK_SEL_WIDTH'(b))),
+            .waddr (ureg_wr_row),
+            .wdata (wb_first_data),
+            .raddr (ureg_rd_base + UROW_W'(gpr_rd_reg_st1[NUM_BANKS + b])),
+            .rdata (ureg_rd_data_st2[b])
+        );
     end
 `else
-    assign usrc_st0 = '0;
-    assign udat_st1 = '0;
-    `UNUSED_VAR ({usrc_st1, udat_st2})
+    assign ureg_rd_data_st2 = '0;
+    `UNUSED_VAR (ureg_rd_data_st2)
 `endif
 
     // register-set bases per warp slot, in registers: integer and FP
