@@ -298,7 +298,12 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     end
 
     gpr_layout_t gpr_layout_r;
-    always_ff @(posedge clk) begin
+    wire layout_load = (state == IDLE) && kmu_bus_if_fire;
+`ifdef ASIC
+    wire layout_clk;
+    VX_clockgate layout_cg (.clk_in (clk), .en (reset || layout_load), .clk_out (layout_clk));
+`endif
+    always_ff @(posedge `GATED_CLK(clk, layout_clk)) begin
         if (reset) begin
             warp_fits_r          <= '1;
             gpr_layout_r.size4   <= GPR_SET_W'(GPR_SET_REGS / 4);
@@ -306,7 +311,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
         `ifdef VX_CFG_EXT_U_ENABLE
             gpr_layout_r.usize4  <= UREG_SET_W'(RV_REGS / 4);
         `endif
-        end else if ((state == IDLE) && kmu_bus_if_fire) begin
+        end else if (layout_load) begin
             warp_fits_r          <= warp_fits;
             gpr_layout_r.size4   <= GPR_SET_W'(kreq_r >> 2);
             gpr_layout_r.fp_off4 <= GPR_SET_W'(kreq_rx >> 2);

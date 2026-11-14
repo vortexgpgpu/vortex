@@ -291,6 +291,17 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
 
     wire wb_is_ureg = (get_reg_type(writeback_if.data.rd) == REG_TYPE_U);
 
+    // The slot bases follow gpr_layout, which changes only when a kernel launches:
+    // on ASIC they take a clock edge only when it differs from last cycle's.
+`ifdef ASIC
+    gpr_layout_t gpr_layout_q;
+    always @(posedge clk) begin
+        gpr_layout_q <= reset ? '0 : gpr_layout;
+    end
+    wire slot_base_clk;
+    VX_clockgate slot_base_cg (.clk_in (clk), .en (reset || (gpr_layout != gpr_layout_q)), .clk_out (slot_base_clk));
+`endif
+
 `ifdef VX_CFG_EXT_U_ENABLE
     // Uniform registers: a warp slot's u1..u(Ru) are the Ru rows from its base
     // (u0 reads zero and takes no row), dealt across the banks like the GPRs.
@@ -301,7 +312,7 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     `STATIC_ASSERT ((UREG_ROWS % NUM_UBANKS) == 0, ("uniform rows must fill the banks"))
 
     reg [PER_OPC_WARPS-1:0][UREG_W-1:0] slot_ubase_r;
-    always_ff @(posedge clk) begin
+    always_ff @(posedge `GATED_CLK(clk, slot_base_clk)) begin
         for (integer i = 0; i < PER_OPC_WARPS; ++i) begin
             slot_ubase_r[i] <= UREG_W'(i * gpr_layout.usize4 * 4);
         end
@@ -371,7 +382,7 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
 
     // register-set bases per warp slot, in registers: integer and FP
     reg [PER_OPC_WARPS-1:0][GPR_W-1:0] slot_xbase_r, slot_fbase_r;
-    always_ff @(posedge clk) begin
+    always_ff @(posedge `GATED_CLK(clk, slot_base_clk)) begin
         for (integer i = 0; i < PER_OPC_WARPS; ++i) begin
             slot_xbase_r[i] <= GPR_W'(i * gpr_layout.size4 * 4);
             slot_fbase_r[i] <= GPR_W'(i * gpr_layout.size4 * 4 + gpr_layout.fp_off4 * 4);

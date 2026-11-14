@@ -199,7 +199,12 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             assign ufree2 = free2;
 
             wire take = staging_fire && stg_rd_u;
-            always @(posedge clk) begin
+            // the tags change only on a uniform issue or a uniform writeback
+        `ifdef ASIC
+            wire utag_clk;
+            VX_clockgate utag_cg (.clk_in (clk), .en (reset || take || (| utag_rel)), .clk_out (utag_clk));
+        `endif
+            always @(posedge `GATED_CLK(clk, utag_clk)) begin
                 if (reset) begin
                     utag_valid <= '0;
                 end else begin
@@ -324,6 +329,15 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
         always @(posedge clk) begin
             operands_ready_r <= operands_ready_n;
+        end
+
+        // The staged pending bits change only when an instruction enters staging
+        // or a writeback reaches this warp.
+    `ifdef ASIC
+        wire stg_pend_clk;
+        VX_clockgate stg_pend_cg (.clk_in (clk), .en (ibuffer_fire || writeback_fire), .clk_out (stg_pend_clk));
+    `endif
+        always @(posedge `GATED_CLK(clk, stg_pend_clk)) begin
             // entering: the lookup, plus the leaving instr's rd reservation
             stg_pend_r <= ibuffer_fire ? (ibf_opd_busy | (ibf_reads_rd & {NUM_OPDS{staging_fire && stg_rsv_rd}}))
                                        : stg_opd_busy;
