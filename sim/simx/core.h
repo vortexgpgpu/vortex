@@ -109,6 +109,12 @@ public:
   bool has_pending_instrs(uint32_t wid) const;
   bool lsu_drained() const;
 
+  // Asynchronous WGMMA (TCU engine) support.
+  uint32_t wg_groups_pending(uint32_t wid) const;
+  void wg_fetch_operands(instr_trace_t* trace);
+  bool wg_d_inflight(uint32_t wid, uint32_t freg) const;
+  void wg_step_issued(instr_trace_t* trace);
+
   void barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid, bool is_sync_bar);
 
   void barrier_wait(uint32_t bar_id, uint32_t phase, uint32_t wid);

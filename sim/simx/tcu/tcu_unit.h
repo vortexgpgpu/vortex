@@ -55,6 +55,11 @@ public:
   // Generate micro-op Instr at uop_index for the given macro instruction.
   Instr::Ptr get(const Instr& macro_instr, uint32_t uop_index);
 
+  // Float registers a WGMMA's steps write (D) and read as register A, as
+  // get() assigns them.
+  static void wg_regs(const Instr& instr, std::vector<uint32_t>& d_regs,
+                      std::vector<uint32_t>& a_regs);
+
 private:
   PoolAllocator<Instr, 64>& pool_;
 };

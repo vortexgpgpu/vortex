@@ -709,6 +709,9 @@ int main(int argc, char *argv[]) {
 
   std::cout << "start device" << std::endl;
   uint32_t smem_size = (cta_M * wg_cfg::tileK + wg_cfg::tileK * per_warp_N) * sizeof(itype_t);
+#ifdef WGMMA_PIPE
+  smem_size *= 2; // two stages
+#endif
   vx_event_h launch_ev = nullptr;
   {
     vx_launch_info_t li = {};

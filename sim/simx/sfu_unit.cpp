@@ -528,6 +528,10 @@ void SfuUnit::on_tick() {
 				if (*wctl_p == WctlType::WSYNC) {
 					if (core_->has_pending_instrs(trace->wid))
 						continue; // wait for the warp's prior instrs to retire
+				} else if (*wctl_p == WctlType::WGWAIT) {
+					auto args = std::get<IntrWctlArgs>(trace->instr_ptr->get_args());
+					if (core_->wg_groups_pending(trace->wid) > args.wg_n)
+						continue; // wait for the warp's older WGMMA groups
 				} else if (*wctl_p == WctlType::BAR && !bar_arrive) {
 					if (!core_->lsu_drained())
 						continue; // drain LSU before the barrier

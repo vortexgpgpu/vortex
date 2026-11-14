@@ -60,6 +60,12 @@ public:
   void reserve_fcsr(instr_trace_t* trace);
   void release_fcsr(instr_trace_t* trace);
 
+  // Asynchronous WGMMA range reservation: a float register an issued WGMMA
+  // will read or write, counted per WGMMA. Other instructions wait on it; a
+  // later WGMMA of the warp chains over it, the TCU engine ordering the two.
+  void wg_reserve(uint32_t wid, uint32_t freg);
+  void wg_release(uint32_t wid, uint32_t freg);
+
 protected:
   void on_reset();
   void on_tick();
@@ -77,11 +83,16 @@ private:
     uint32_t wid;
     RegOpd   reg;
     uint8_t  fcsr;
+    bool     wg;
     uint64_t due;
   };
 
+  static bool is_async_wgmma(const instr_trace_t* trace);
+  bool wg_busy(const instr_trace_t* trace) const;
+
   std::vector<std::vector<RegMask>> in_use_regs_;
   std::vector<uint8_t> in_use_fcsr_;
+  std::vector<std::vector<uint16_t>> wg_cnt_;
   std::deque<pending_release_t> pending_releases_;
   std::unordered_map<uint32_t, instr_trace_t*> owners_;
   std::unordered_map<uint32_t, uint32_t> commit_counts_;

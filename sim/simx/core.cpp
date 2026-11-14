@@ -453,6 +453,8 @@ public:
 
     pending_instrs_.clear();
     pending_ifetches_ = 0;
+    std::fill(wg_.begin(), wg_.end(), wg_warp_t{});
+    wg_total_ = 0;
 
     for (auto& holds : gather_holds_) {
       std::fill(holds.begin(), holds.end(), GatherHold());
@@ -483,7 +485,7 @@ public:
     // launching, a warp active, or an instruction in flight -- so cycles it
     // spends idle before its first CTA, after its last warp, or while the host
     // moves data are not charged to it.
-    if (scheduler_->running() || !pending_instrs_.empty()) {
+    if (scheduler_->running() || !pending_instrs_.empty() || wg_total_ != 0) {
       ++perf_stats_.cycles;
     }
     DPN(2, std::flush);
@@ -896,6 +898,9 @@ public:
           if (uop_trace->instr_ptr->fcsr_writes()) {
             scoreboard_->reserve_fcsr(uop_trace);
           }
+        #ifdef VX_CFG_TCU_WG_ASYNC_ENABLE
+          this->wg_issue(uop_trace);
+        #endif
           // Issue lock: a sequence's first uop (lock without unlock) takes it
           // for its warp, the last (unlock) reopens the slot from the next cycle.
           {
@@ -1150,6 +1155,15 @@ public:
     DT(3, simobject_->name() << "-pipeline commit: " << *trace);
     assert(trace->cid == simobject_->id());
 
+  #ifdef VX_CFG_TCU_WG_ASYNC_ENABLE
+    if (trace->wg_step) {
+      this->wg_step_commit(trace, iw);
+      trace->~instr_trace_t();
+      trace_pool_.deallocate(trace, 1);
+      return;
+    }
+  #endif
+
     // Per-pid writeback: dispatcher splits multi-pid traces into copies
     // each carrying its own lane-subset tmask + dst_data; every pid pass
     // writes back independently. Scoreboard release counts COMMITS via
@@ -1196,7 +1210,7 @@ public:
 
   bool running() const {
     // committed stores wait in the LSU request queue until sent to memory
-    if (scheduler_->running() || !pending_instrs_.empty() || !this->lsu_drained()) {
+    if (scheduler_->running() || !pending_instrs_.empty() || wg_total_ != 0 || !this->lsu_drained()) {
       return true;
     }
   #ifdef VX_CFG_VM_ENABLE
@@ -1209,7 +1223,89 @@ public:
     return false;
   }
 
+#ifdef VX_CFG_TCU_WG_ASYNC_ENABLE
+  // A WGMMA reserves its accumulator and register A at issue; a commit_group
+  // closes the warp's open group.
+  void wg_issue(instr_trace_t* trace) {
+    auto& w = wg_.at(trace->wid);
+    if (auto wctl = std::get_if<WctlType>(&trace->op_type)) {
+      if (*wctl == WctlType::WGCOMMIT) {
+        if (w.open != 0) {
+          w.closed.push_back(w.open);
+        }
+        w.open = 0;
+      }
+      return;
+    }
+    auto tcu_type = std::get_if<TcuType>(&trace->op_type);
+    if (!tcu_type || (*tcu_type != TcuType::WGMMA && *tcu_type != TcuType::WGMMA_SP)) {
+      return;
+    }
+    std::vector<uint32_t> d_regs, a_regs;
+    TcuUopGen::wg_regs(*trace->instr_ptr, d_regs, a_regs);
+    for (auto r : d_regs) {
+      scoreboard_->wg_reserve(trace->wid, r);
+    }
+    for (auto r : a_regs) {
+      scoreboard_->wg_reserve(trace->wid, r);
+    }
+    w.a_regs.push_back(std::move(a_regs));
+    ++w.open;
+    ++w.pending;
+    ++wg_total_;
+  }
+
+  void wg_step_commit(instr_trace_t* trace, uint32_t iw) {
+    auto& w = wg_.at(trace->wid);
+    if (trace->wb) {
+      operands_.at(iw)->writeback(trace);
+      assert(w.d_inflight.at(trace->dst_reg.idx) > 0);
+      --w.d_inflight.at(trace->dst_reg.idx);
+      if (trace->wg_rel_d) {
+        scoreboard_->wg_release(trace->wid, trace->dst_reg.idx);
+      }
+    }
+    if (trace->wg_done) {
+      for (auto r : w.a_regs.front()) {
+        scoreboard_->wg_release(trace->wid, r);
+      }
+      w.a_regs.pop_front();
+      if (!w.closed.empty()) {
+        if (--w.closed.front() == 0) {
+          w.closed.pop_front();
+        }
+      } else {
+        assert(w.open > 0);
+        --w.open;
+      }
+      --w.pending;
+      --wg_total_;
+    }
+  }
+
+  void wg_step_issued(instr_trace_t* trace) {
+    if (trace->wb) {
+      ++wg_.at(trace->wid).d_inflight.at(trace->dst_reg.idx);
+    }
+  }
+
+  void wg_fetch_operands(instr_trace_t* trace) {
+    operands_.at(trace->wid % VX_CFG_ISSUE_WIDTH)->fetch_operands(trace);
+  }
+#endif
+
+  uint32_t wg_groups_pending(uint32_t wid) const {
+    return wg_.at(wid).closed.size();
+  }
+
+  bool wg_d_inflight(uint32_t wid, uint32_t freg) const {
+    return wg_.at(wid).d_inflight.at(freg) != 0;
+  }
+
   bool has_pending_instrs(uint32_t wid) const {
+    if (wg_.at(wid).pending != 0) {
+      return true;
+    }
     uint32_t count = 0;
     for (auto trace : pending_instrs_) {
       if (trace->wid == wid)
@@ -1373,6 +1469,18 @@ private:
 
   uint64_t pending_ifetches_;
 
+  // Asynchronous WGMMA. A warp's WGMMAs complete in issue order (one TCU
+  // block, an in-order engine queue), so its groups close and drain in order.
+  struct wg_warp_t {
+    uint32_t pending = 0;                       // issued, not yet completed
+    uint32_t open = 0;                          // WGMMAs in the open group
+    std::deque<uint32_t> closed;                // WGMMAs left per closed group
+    std::deque<std::vector<uint32_t>> a_regs;   // register A per WGMMA, in order
+    std::array<uint16_t, MAX_NUM_REGS> d_inflight{};
+  };
+  std::vector<wg_warp_t> wg_ = std::vector<wg_warp_t>(VX_CFG_NUM_WARPS);
+  uint32_t wg_total_ = 0;
+
   mutable PerfStats perf_stats_;
 
   // [iw][fu] commit staging: FU outputs land here one registered stage
@@ -1492,6 +1600,32 @@ bool Core::running() const {
 
 bool Core::has_pending_instrs(uint32_t wid) const {
   return impl_->has_pending_instrs(wid);
+}
+
+uint32_t Core::wg_groups_pending(uint32_t wid) const {
+  return impl_->wg_groups_pending(wid);
+}
+
+bool Core::wg_d_inflight(uint32_t wid, uint32_t freg) const {
+  return impl_->wg_d_inflight(wid, freg);
+}
+
+void Core::wg_fetch_operands(instr_trace_t* trace) {
+#ifdef VX_CFG_TCU_WG_ASYNC_ENABLE
+  impl_->wg_fetch_operands(trace);
+#else
+  __unused (trace);
+  std::abort();
+#endif
+}
+
+void Core::wg_step_issued(instr_trace_t* trace) {
+#ifdef VX_CFG_TCU_WG_ASYNC_ENABLE
+  impl_->wg_step_issued(trace);
+#else
+  __unused (trace);
+  std::abort();
+#endif
 }
 
 bool Core::lsu_drained() const {

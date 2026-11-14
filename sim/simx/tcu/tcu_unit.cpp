@@ -340,6 +340,28 @@ static inline uint32_t meta_row_width(uint32_t elem_bits) {
 class TcuUnit::Impl {
 public:
 
+#ifdef VX_CFG_TCU_WG_ASYNC_ENABLE
+  // Asynchronous WGMMA engine: an issued WGMMA, and the walk over its steps.
+  static constexpr uint32_t kWgQueueSize = 4;
+  struct wg_op_t {
+    Instr::Ptr instr;
+    uint32_t   cid;
+    uint32_t   wid;
+    int32_t    cta;
+    Word       PC;
+    ThreadMask tmask;
+    std::vector<reg_data_t> desc_a;   // x10 at issue
+    std::vector<reg_data_t> desc_b;   // x11 at issue
+  };
+  // A block's walk over its head WGMMA's steps.
+  struct wg_walk_t {
+    bool     active = false;
+    uint32_t idx    = 0;
+    uint32_t count  = 0;
+    std::array<int32_t, MAX_NUM_REGS> last_write{}; // last step writing each D register
+  };
+#endif
+
   struct lmem_desc_t {
     uint64_t base = 0;
     uint32_t ldm = 0;
@@ -371,6 +393,13 @@ public:
 
   void reset() {
     // perf_stats_ survives: the MPM counters run from device reset.
+  #ifdef VX_CFG_TCU_WG_ASYNC_ENABLE
+    for (auto& q : wgq_) {
+      q.clear();
+    }
+    wg_walk_.fill(wg_walk_t{});
+    eng_slot_.fill(nullptr);
+  #endif
     for (auto& sparse_meta : sparse_meta_) {
       std::fill(sparse_meta.begin(), sparse_meta.end(), 0);
     }
@@ -588,10 +617,150 @@ public:
   }
 #endif // TCU_META_ENABLE
 
+  // A block's head: its engine step, else its input's head.
+  instr_trace_t* head(uint32_t b) {
+  #ifdef VX_CFG_TCU_WG_ASYNC_ENABLE
+    if (eng_slot_.at(b)) {
+      return eng_slot_.at(b);
+    }
+  #endif
+    auto& input = simobject_->Inputs.at(b);
+    return input.empty() ? nullptr : input.peek();
+  }
+
+  void pop_head(uint32_t b) {
+  #ifdef VX_CFG_TCU_WG_ASYNC_ENABLE
+    if (eng_slot_.at(b)) {
+      eng_slot_.at(b) = nullptr;
+      return;
+    }
+  #endif
+    simobject_->Inputs.at(b).pop();
+  }
+
+  static bool is_async_wgmma(const instr_trace_t* trace) {
+  #ifdef VX_CFG_TCU_WG_ASYNC_ENABLE
+    auto tcu_type = std::get<TcuType>(trace->op_type);
+    return tcu_is_wgmma(tcu_type) && !trace->wg_step;
+  #else
+    __unused (trace);
+    return false;
+  #endif
+  }
+
+#ifdef VX_CFG_TCU_WG_ASYNC_ENABLE
+  // An issued WGMMA enters its block's queue and retires as an instruction;
+  // the engine owns its steps from here.
+  void wg_accept(uint64_t now) {
+    for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
+      auto& input = simobject_->Inputs.at(b);
+      if (input.empty() || !is_async_wgmma(input.peek())) {
+        continue;
+      }
+      if (wgq_.at(b).size() >= kWgQueueSize || simobject_->Outputs.at(b).full()) {
+        continue;
+      }
+      auto trace = input.peek();
+      wg_op_t op;
+      op.instr  = trace->instr_ptr;
+      op.cid    = trace->cid;
+      op.wid    = trace->wid;
+      op.cta    = (int32_t)core_->scheduler().warp(trace->wid).cta_csrs.cta_id;
+      op.PC     = trace->PC;
+      op.tmask  = trace->tmask;
+      op.desc_a = trace->src_data.at(0);
+      op.desc_b = trace->src_data.at(1);
+      if (!simobject_->Outputs.at(b).try_send(trace, 1)) {
+        continue;
+      }
+      result_due_.at(b).push_back(now + 1);
+      wgq_.at(b).push_back(std::move(op));
+      input.pop();
+    }
+  }
+
+  instr_trace_t* wg_make_step(const wg_op_t& op, Instr::Ptr uop) {
+    auto step = core_->trace_pool().allocate(1);
+    new (step) instr_trace_t(uop->get_uuid());
+    step->cid        = op.cid;
+    step->wid        = op.wid;
+    step->PC         = op.PC;
+    step->tmask      = uop->get_tmask().any() ? uop->get_tmask() : op.tmask;
+    step->instr_ptr  = uop;
+    step->fu_type    = uop->get_fu_type();
+    step->op_type    = uop->get_op_type();
+    step->dst_reg    = uop->get_dest_reg();
+    step->dst_bytesel= uop->get_dst_bytesel();
+    for (uint32_t i = 0; i < NUM_SRC_REGS; ++i) {
+      step->src_regs[i] = uop->get_src_reg(i);
+    }
+    step->wb = (uop->get_dest_reg().type != RegType::None);
+    step->wg_step = true;
+    // C and register A are read as the step runs; the descriptors are the
+    // ones read at issue.
+    core_->wg_fetch_operands(step);
+    for (uint32_t i = 0; i < NUM_SRC_REGS; ++i) {
+      auto& src = step->src_regs[i];
+      if (src.type == RegType::Integer && src.idx == 10) {
+        step->src_data.at(i) = op.desc_a;
+      } else if (src.type == RegType::Integer && src.idx == 11) {
+        step->src_data.at(i) = op.desc_b;
+      }
+    }
+    return step;
+  }
+
+  // Each block steps its head WGMMA one uop per cycle, in uop order. A step
+  // whose accumulator still has a write in flight waits (the row hazard).
+  void wg_walk() {
+    for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
+      auto& w = wg_walk_.at(b);
+      auto& q = wgq_.at(b);
+      if (eng_slot_.at(b) || q.empty()) {
+        continue;
+      }
+      auto& op = q.front();
+      if (!w.active) {
+        w = wg_walk_t{};
+        w.active = true;
+        w.count = TcuUopGen::uop_count(*op.instr);
+        w.last_write.fill(-1);
+        for (uint32_t i = 0; i < w.count; ++i) {
+          auto dst = wg_gen_.get(*op.instr, i)->get_dest_reg();
+          if (dst.type == RegType::Float) {
+            w.last_write.at(dst.idx) = (int32_t)i;
+          }
+        }
+      }
+      auto uop = wg_gen_.get(*op.instr, w.idx);
+      auto dst = uop->get_dest_reg();
+      if (dst.type == RegType::Float && core_->wg_d_inflight(op.wid, dst.idx)) {
+        cyc_.opnd = true;
+        continue;
+      }
+      auto step = this->wg_make_step(op, uop);
+      if (step->wb) {
+        step->wg_rel_d = (w.last_write.at(step->dst_reg.idx) == (int32_t)w.idx);
+      }
+      step->wg_done = (w.idx + 1 == w.count);
+      core_->wg_step_issued(step);
+      eng_slot_.at(b) = step;
+      if (++w.idx == w.count) {
+        q.pop_front();
+        w.active = false;
+      }
+    }
+  }
+#endif
+
   void tick() {
     cyc_ = {};
   #ifdef TCU_META_ENABLE
     this->agu_step();
+  #endif
+  #ifdef VX_CFG_TCU_WG_ASYNC_ENABLE
+    this->wg_accept(SimPlatform::instance().cycles());
+    this->wg_walk();
   #endif
   #ifdef VX_CFG_TCU_WGMMA_ENABLE
     uint32_t wgmma_ready = this->tbuf_step();
@@ -613,14 +782,16 @@ public:
       due.erase(std::remove_if(due.begin(), due.end(), [now](uint64_t t) { return t < now; }), due.end());
       bool completing = std::any_of(due.begin(), due.end(), [now](uint64_t t) { return t == now; });
       bool backed_up = simobject_->Outputs.at(b).size() > due.size();
-      auto& input = simobject_->Inputs.at(b);
-      if (input.empty()) {
+      auto trace = this->head(b);
+      if (!trace) {
       #ifdef VX_CFG_TCU_TMEM_ENABLE
         tj_fresh_.at(b) = true;
       #endif
         continue;
       }
-      auto trace = input.peek();
+      if (is_async_wgmma(trace)) {
+        continue; // waits for a free engine queue entry
+      }
       auto tcu_type = std::get<TcuType>(trace->op_type);
       auto tpuArgs = std::get<IntrTcuArgs>(trace->instr_ptr->get_args());
 
@@ -633,7 +804,7 @@ public:
           auto& rs1_data = trace->src_data[0];
           uint64_t base_addr = rs1_data.empty() ? 0 : rs1_data.at(0).u64;
           this->agu_start(b, trace->wid, tpuArgs.fmt_d, base_addr, trace);
-          input.pop();
+          this->pop_head(b);
         }
         continue;
       }
@@ -954,7 +1125,7 @@ public:
         exec_done_.at(b) = false;
         slices_.at(b) = 0;
         DT(3, simobject_->name() << " execute: op=" << tcu_type << ", " << *trace);
-        input.pop();
+        this->pop_head(b);
       }
     }
 
@@ -1057,13 +1228,12 @@ public:
     std::array<tbuf_req_t, VX_CFG_NUM_TCU_BLOCKS> reqs;
     int32_t rep = -1;
     for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
-      auto& input = simobject_->Inputs.at(b);
       // A uop requests its tiles for as long as it holds the block's input,
       // through its last output slice and any wait for the result side.
-      if (input.empty()) {
+      auto trace = this->head(b);
+      if (!trace || is_async_wgmma(trace)) {
         continue;
       }
-      auto trace = input.peek();
       auto tcu_type = std::get<TcuType>(trace->op_type);
       if (!tcu_is_wgmma(tcu_type)) {
         continue;
@@ -2495,6 +2665,18 @@ private:
   std::array<uint32_t, VX_CFG_NUM_TCU_BLOCKS> slices_;
   // Cycles at which each block's results sent so far become visible.
   std::array<std::vector<uint64_t>, VX_CFG_NUM_TCU_BLOCKS> result_due_;
+
+#ifdef VX_CFG_TCU_WG_ASYNC_ENABLE
+  // Asynchronous WGMMA engine: a per-block in-order queue of issued WGMMAs,
+  // each walked one step per cycle. Blocks share B and keep CTA lockstep
+  // through the tile buffers, step by step, as issued uops do.
+  std::array<std::deque<wg_op_t>, VX_CFG_NUM_TCU_BLOCKS> wgq_;
+  std::array<wg_walk_t, VX_CFG_NUM_TCU_BLOCKS> wg_walk_;
+  // A block's next engine step; it heads the block ahead of its input.
+  std::array<instr_trace_t*, VX_CFG_NUM_TCU_BLOCKS> eng_slot_{};
+  PoolAllocator<Instr, 64> wg_instr_pool_;
+  TcuUopGen wg_gen_{wg_instr_pool_};
+#endif
   // True while a block is between its first and last WGMMA uop.
   std::array<bool, VX_CFG_NUM_TCU_BLOCKS> in_wgmma_;
   // Current block index, set before delegating to wgmma().
@@ -2784,6 +2966,43 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
 #endif
 
   return uop_instr;
+}
+
+void TcuUopGen::wg_regs(const Instr& instr, std::vector<uint32_t>& d_regs,
+                        std::vector<uint32_t>& a_regs) {
+  d_regs.clear();
+  a_regs.clear();
+#ifdef VX_CFG_TCU_WGMMA_ENABLE
+  auto tcu_type = std::get<TcuType>(instr.get_op_type());
+  auto args = std::get<IntrTcuArgs>(instr.get_args());
+  bool is_sparse = tcu_is_sparse(tcu_type);
+  bool needs_setup = wgmma_needs_setup(args.is_a_smem, is_sparse);
+  uint32_t nrc = (args.cd_nregs == 0) ? 8 : (args.cd_nregs == 1) ? 16 : 32;
+  for (uint32_t r = 0; r < nrc; ++r) {
+    d_regs.push_back(r);
+  }
+  if (!args.is_a_smem) {
+    constexpr uint32_t ra_base = 24, a_reg_k_steps = 2;
+    uint32_t k_count = is_sparse ? std::max(1u, wg_cfg::k_steps / 2) : wg_cfg::k_steps;
+    std::bitset<MAX_NUM_REGS> mask;
+    for (uint32_t k = 0; k < k_count; ++k) {
+      for (uint32_t m = 0; m < wg_cfg::m_steps; ++m) {
+        uint32_t off = (is_sparse && !kSpFullK) ? m : (m * a_reg_k_steps + k);
+        mask.set(ra_base + off);
+        if (needs_setup) {
+          mask.set(ra_base + off + 1);
+        }
+      }
+    }
+    for (uint32_t r = 0; r < MAX_NUM_REGS; ++r) {
+      if (mask.test(r)) {
+        a_regs.push_back(r);
+      }
+    }
+  }
+#else
+  __unused (instr);
+#endif
 }
 
 ///////////////////////////////////////////////////////////////////////////////

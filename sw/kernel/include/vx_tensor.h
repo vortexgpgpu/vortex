@@ -1200,12 +1200,50 @@ public:
     });
   }
 
+  // ---- WGMMA groups (asynchronous WGMMA) ----
+  // wgmma_async issues a WGMMA; under VX_CFG_TCU_WG_ASYNC_ENABLE the TCU runs
+  // it in the background. commit_group closes the warp's WGMMAs issued since
+  // the last commit into a group; wait_group<N> waits until at most N groups
+  // are pending, after which their shared-memory operands may be overwritten.
+  // The accumulator registers are scoreboard-protected meanwhile. Without the
+  // engine a WGMMA completes before the next instruction issues, so both are
+  // empty.
+  static __attribute__((always_inline)) void commit_group() {
+  #ifdef VX_CFG_TCU_WG_ASYNC_ENABLE
+    __asm__ volatile (".insn r %0, 3, 2, x0, x0, x0" :: "i"(RISCV_CUSTOM0) : "memory");
+  #endif
+  }
+
+  template <uint32_t N>
+  static __attribute__((always_inline)) void wait_group() {
+    static_assert(N < 32, "wait_group supports N < 32");
+  #ifdef VX_CFG_TCU_WG_ASYNC_ENABLE
+    __asm__ volatile (".insn r %0, 3, 2, x%1, x0, x1" :: "i"(RISCV_CUSTOM0), "i"(N) : "memory");
+  #endif
+  }
+
+  // Orders the warp's earlier shared-memory writes before its next WGMMAs'
+  // reads; the block's barrier already drains them (as fence.proxy.async).
+  static __attribute__((always_inline)) void wgmma_fence() {
+    __asm__ volatile ("" ::: "memory");
+  }
+
   // ---- WGMMA sync intrinsic ----
   // SS: wgmma_sync(fragD, desc_a, desc_b, fragC) — any NRC
   // RS: wgmma_sync(fragD, fragA,  desc_b, fragC) — NRC <= 16
-
+  // wgmma_async + commit_group + wait_group<0>.
   template <typename OpA, typename OpB, typename FragD, typename FragC>
   static __attribute__((always_inline)) void wgmma_sync(FragD &frag_d,
+                                                         const OpA &op_a,
+                                                         const OpB &op_b,
+                                                         const FragC &frag_c) {
+    wgmma_async(frag_d, op_a, op_b, frag_c);
+    commit_group();
+    wait_group<0>();
+  }
+
+  template <typename OpA, typename OpB, typename FragD, typename FragC>
+  static __attribute__((always_inline)) void wgmma_async(FragD &frag_d,
                                                          const OpA &op_a,
                                                          const OpB &op_b,
                                                          const FragC &frag_c) {

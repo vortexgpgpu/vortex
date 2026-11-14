@@ -27,8 +27,9 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
   // Shared memory layout: A [cta_M × tileK] then B [tileK × per_warp_N]
   auto smem   = reinterpret_cast<ctx::input_t *>(__local_mem());
-  auto A_smem = smem;
-  auto B_smem = smem + cta_M * ctx::tileK;
+  // WGMMA_PIPE: two such stages; a stage's MMA overlaps the next stage's loads.
+  uint32_t stage_elems = cta_M * ctx::tileK + ctx::tileK * ctx::xtileN;
+  (void)stage_elems;
 
   ctx::fragment_acc fragC;
   ctx::fill_fragment(fragC, 0);
@@ -46,6 +47,12 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 #pragma unroll KUNROLL
 #endif
   for (uint32_t k = 0; k < K; k += ctx::tileK) {
+  #ifdef WGMMA_PIPE
+    auto A_smem = smem + ((k / ctx::tileK) & 1) * stage_elems;
+  #else
+    auto A_smem = smem;
+  #endif
+    auto B_smem = A_smem + cta_M * ctx::tileK;
     // Cooperatively load A [cta_M × tileK] into smem.
     //   Default (block-major):  A_smem[a_blockmajor_idx(r, c)].
     //   WGMMA_RMAJOR_A:         A_smem[r * tileK + c] — row-major M-outer
@@ -90,15 +97,32 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     // RS: A from registers, B from smem (NRC <= 16 only).
     ctx::fragment_a fragA;
     ctx::load_matrix_sync(fragA, A_warp, a_ldm, a_lane_off);
+  #ifdef WGMMA_PIPE
+    ctx::wgmma_async(fragC, fragA, desc_b, fragC);
+  #else
     ctx::wgmma_sync(fragC, fragA, desc_b, fragC);
+  #endif
   #else
     // SS: both from smem
     auto desc_a = vt::vx_make_smem_desc(A_warp, a_ldm * sizeof(ctx::input_t));
+  #ifdef WGMMA_PIPE
+    ctx::wgmma_async(fragC, desc_a, desc_b, fragC);
+  #else
     ctx::wgmma_sync(fragC, desc_a, desc_b, fragC);
+  #endif
+  #endif
+  #ifdef WGMMA_PIPE
+    // The previous stage's MMA is done in every warp after the barrier, so
+    // the next iteration may overwrite that stage.
+    ctx::commit_group();
+    ctx::wait_group<1>();
   #endif
 
     __syncthreads();
   }
+#ifdef WGMMA_PIPE
+  ctx::wait_group<0>();
+#endif
 
   // Store C tile using wgmma_context's n-major store
   auto out = pC + (tile_row + warp_rank * ctx::xtileM) * N + tile_col;

@@ -79,6 +79,13 @@ public:
   // Cycle the instruction entered its warp's instruction buffer.
   uint64_t ibuf_time;
 
+  // An asynchronous WGMMA step from the TCU engine: it commits a result but
+  // is not an instruction. wg_rel_d ends the destination's WGMMA reservation
+  // (its last K step); wg_done is the WGMMA's last step.
+  bool wg_step;
+  bool wg_rel_d;
+  bool wg_done;
+
   instr_trace_t(uint64_t uuid)
     : uuid(uuid)
     , cid(0)
@@ -104,6 +111,9 @@ public:
     , fetch_stall(false)
     , resume_warp(false)
     , ibuf_time(0)
+    , wg_step(false)
+    , wg_rel_d(false)
+    , wg_done(false)
     , log_once_(false)
   {}
 
@@ -133,6 +143,9 @@ public:
     , fetch_stall(rhs.fetch_stall)
     , resume_warp(rhs.resume_warp)
     , ibuf_time(rhs.ibuf_time)
+    , wg_step(rhs.wg_step)
+    , wg_rel_d(rhs.wg_rel_d)
+    , wg_done(rhs.wg_done)
     , log_once_(false)
   {}
 

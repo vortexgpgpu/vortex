@@ -180,6 +180,10 @@
     `define TCU_META_ENABLE
 `endif
 
+`ifdef VX_CFG_TCU_WG_ASYNC_ENABLE
+    `error "VX_CFG_TCU_WG_ASYNC_ENABLE is a SimX-only prototype: the RTL has no asynchronous WGMMA engine"
+`endif
+
 // Tensor jobs drive the WGMMA tile buffers.
 `ifdef VX_CFG_TCU_TMEM_ENABLE
     `ifndef VX_CFG_TCU_WGMMA_ENABLE

@@ -453,6 +453,8 @@ static op_string_t op_string(const Instr &instr) {
       }
       case WctlType::PRED:   return {wctlArgs.is_cond_neg ? "PRED.N":"PRED", ""};
       case WctlType::WSYNC:  return {"WSYNC", ""};
+      case WctlType::WGCOMMIT: return {"WGMMA.COMMIT", ""};
+      case WctlType::WGWAIT: return {"WGMMA.WAIT", std::to_string(wctlArgs.wg_n)};
       default:
         std::abort();
       }
@@ -1067,8 +1069,31 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         instr->set_op_type(is_sparse ? TcuType::WGMMA_SP : TcuType::WGMMA);
         instr->set_args(IntrTcuArgs{is_a_smem ? 1u : 0u, cd_nregs, fmt_s, fmt_d, 0, 0, 0, 0, 0, 0, 0, 0, 0});
         instr->set_fcsr_use(tcu_meta_reads(fmt_s, is_sparse), 0);
+      #ifdef VX_CFG_TCU_WG_ASYNC_ENABLE
+        // One issue: the TCU engine walks the steps. The descriptors are read
+        // at issue; the accumulator and register A are reserved by range.
+        if (is_a_smem) {
+          instr->set_src_reg(0, 10, RegType::Integer);
+        }
+        instr->set_src_reg(1, 11, RegType::Integer);
+      #else
         instr->set_macro_op();
+      #endif
       } break;
+    #ifdef VX_CFG_TCU_WG_ASYNC_ENABLE
+      case 3: { // WGMMA group control: rs2=0 commit_group, rs2=1 wait_group rd
+        IntrWctlArgs wctlArgs{};
+        instr->set_fu_type(FUType::SFU);
+        if (rs2 == 0) {
+          instr->set_op_type(WctlType::WGCOMMIT);
+        } else {
+          instr->set_op_type(WctlType::WGWAIT);
+          wctlArgs.wg_n = rd;
+          instr->set_wstall(true);
+        }
+        instr->set_args(wctlArgs);
+      } break;
+    #endif
     #endif // VX_CFG_TCU_WGMMA_ENABLE
     #ifdef TCU_META_ENABLE
       case 2: { // TCU_LD — rd[4] selects sparse/MX metadata namespace.

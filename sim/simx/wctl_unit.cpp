@@ -197,6 +197,12 @@ bool WctlUnit::process(instr_trace_t* trace, bool* exit) {
   case WctlType::WSYNC:
     release_warp = true;
     break;
+  case WctlType::WGCOMMIT:
+    // The group closed at issue, in program order with the warp's WGMMAs.
+    break;
+  case WctlType::WGWAIT:
+    release_warp = true;
+    break;
   default:
     std::abort();
   }

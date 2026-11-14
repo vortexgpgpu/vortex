@@ -644,13 +644,16 @@ enum class WctlType {
   JOIN,
   BAR,
   PRED,
-  WSYNC
+  WSYNC,
+  WGCOMMIT, // close the warp's open WGMMA group
+  WGWAIT    // wait until at most N of the warp's WGMMA groups are pending
 };
 
 struct IntrWctlArgs {
   uint32_t is_cond_neg : 1;
   uint32_t is_sync_bar : 1;
   uint32_t is_bar_arrive : 1;
+  uint32_t wg_n : 5;        // WGWAIT: groups allowed to stay pending
 };
 
 inline std::ostream &operator<<(std::ostream &os, const WctlType& type) {

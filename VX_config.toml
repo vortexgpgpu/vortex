@@ -419,6 +419,10 @@ VX_CFG_TCU_NVFP4_ENABLE = false
 VX_CFG_TCU_SPARSE_ENABLE = false
 VX_CFG_TCU_DSM_ENABLE = false
 VX_CFG_TCU_WGMMA_ENABLE = false
+# Asynchronous WGMMA (Phase A prototype, SimX only): a WGMMA issues once and a
+# TCU-side engine walks its steps; commit_group / wait_group order the warp
+# with its MMAs. The RTL rejects it until the engine exists there.
+VX_CFG_TCU_WG_ASYNC_ENABLE = false
 VX_CFG_TCU_FEDP2K = false
 # A sparse WGMMA uop fills the doubled-K FEDP with compressed A (wgmma.sp k32
 # vs dense k16); without it the FEDP's upper half idles on every sparse uop.
