@@ -278,8 +278,10 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
 
         assign result_sig[i] = sig_en_r ? {sign_sel_r, man_prod, 2'b0} : '0;
 
-        assign exceptions[i].is_nan = nan_sel && lane_valid;
-        assign exceptions[i].is_inf = inf_sel && lane_valid;
+        // Not gated by lane_valid: a lane masked for a zero operand still
+        // has to turn Inf x 0 and NaN x 0 into NaN.
+        assign exceptions[i].is_nan = nan_sel;
+        assign exceptions[i].is_inf = inf_sel;
         assign exceptions[i].sign   = sign_sel;
     end
 

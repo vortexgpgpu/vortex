@@ -303,7 +303,9 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
 
     // Park arbitration: at most one lane parks a miss per cycle (lowest lane).
     // The parked fields are taken with a one-hot select straight off the lane
-    // categories; the encoded lane only rides in the payload.
+    // categories; the encoded lane only rides in the payload. The one-hot comes
+    // from a prefix OR (MODEL 2), so a lane's park grant, and with it the lane's
+    // accept, depends only on the lanes below it.
     localparam PARK_W = TLB_VPN_WIDTH + $bits(tlb_access_e) + 1 + FIELDS_W;
 
     wire [NUM_REQS-1:0] park_sel;
@@ -311,7 +313,8 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     wire                sel_ready;
     wire [LANE_W-1:0]   sel_lane;
     VX_priority_encoder #(
-        .N (NUM_REQS)
+        .N     (NUM_REQS),
+        .MODEL (2)
     ) park_enc (
         .data_in    (cat_park),
         .onehot_out (park_sel),
@@ -323,6 +326,18 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     for (genvar l = 0; l < NUM_REQS; ++l) begin : g_park_src
         assign park_src[l] = {req_vpn[l], req_acc[l], req_amo[l], req_fields[l]};
     end
+    // park_sel[l] is cat_park[l] && park_first[l]. A lane's accept reads
+    // park_first under its own cat_park, so its translation result enters the
+    // accept only once, at the category select.
+    wire [NUM_REQS-1:0] park_first;
+    for (genvar l = 0; l < NUM_REQS; ++l) begin : g_park_first
+        if (l == 0) begin : g_first
+            assign park_first[l] = 1'b1;
+        end else begin : g_rest
+            assign park_first[l] = ~(| cat_park[l-1:0]);
+        end
+    end
+
     wire [PARK_W-1:0] park_out;
     VX_onehot_mux #(
         .DATAW (PARK_W),
@@ -538,7 +553,7 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         assign req_if[l].req_ready =
               cat_bypass[l] ? (!replay_to_lane[l] && pipe_ready[l])
             : cat_hit[l]    ? (!replay_to_lane[l] && pipe_ready[l])
-            : cat_park[l]   ? (park_sel[l] && sel_ready)
+            : cat_park[l]   ? (park_first[l] && sel_ready)
             : cat_pfault[l] ? pf_accept[l]
             : 1'b0;
 

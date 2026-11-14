@@ -73,8 +73,14 @@ module VX_uop_sequencer import
     // downstream accepted a uop this cycle.
     wire uop_next = uop_active && output_if.ready;
 
+`ifdef ASIC
+    // The burst state loads only on a start or an accepted uop.
+    wire seq_clk;
+    VX_clockgate seq_cg (.clk_in (clk), .en (reset || uop_start || uop_next), .clk_out (seq_clk));
+`endif
+
     // Sequential state machine: track the active burst and uop index.
-    always_ff @(posedge clk) begin
+    always_ff @(posedge `GATED_CLK(clk, seq_clk)) begin
         if (reset) begin
             uop_ctr    <= '0;
             sel_idx_r  <= '0;

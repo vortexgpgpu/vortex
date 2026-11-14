@@ -226,11 +226,14 @@ module VX_kmu_bus_arb import VX_gpu_pkg::*; #(
     for (genvar o = 0; o < NUM_OUTPUTS; ++o) begin : g_out
         wire [PW-1:0] buf_data;
 
+        // VX_cta_dispatch registers its LMEM occupancy bound from the launch
+        // data on every cycle, valid or not, so the data must keep loading.
         VX_elastic_buffer #(
-            .DATAW   (PW),
-            .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
-            .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF)),
-            .LUTRAM  (`TO_OUT_BUF_LUTRAM(OUT_BUF))
+            .DATAW     (PW),
+            .SIZE      (`TO_OUT_BUF_SIZE(OUT_BUF)),
+            .OUT_REG   (`TO_OUT_BUF_REG(OUT_BUF)),
+            .LUTRAM    (`TO_OUT_BUF_LUTRAM(OUT_BUF)),
+            .DATA_GATE (0)
         ) out_buf (
             .clk       (clk),
             .reset     (reset),

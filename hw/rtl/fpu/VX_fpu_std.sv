@@ -182,6 +182,18 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .ready_out     (per_core_ready_out[FPU_FMA])
         );
 
+        // The units are clocked only while a request is in flight.
+        wire unit_clk;
+        VX_pipe_clockgate #(
+            .DEPTH (`VX_CFG_FMA_LATENCY)
+        ) unit_cg (
+            .clk_in   (clk),
+            .reset    (reset),
+            .enable   (pe_enable),
+            .valid_in (per_core_valid_in[FPU_FMA]),
+            .clk_out  (unit_clk)
+        );
+
         fflags_t [NUM_LANES-1:0] fflags_lanes;
 
         // PE writes the full XLEN-wide (format-boxed) result; pass through here.
@@ -221,7 +233,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 .EXP_BITS (8),
                 .USE_DSP  (`VX_CFG_FPU_USE_DSP)
             ) fma32 (
-                .clk     (clk),
+                .clk     (unit_clk),
                 .reset   (reset),
                 .enable  (pe_enable),
                 .mask    (pe_mask_out[i]),
@@ -243,7 +255,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                     .EXP_BITS (11),
                     .USE_DSP  (`VX_CFG_FPU_USE_DSP)
                 ) fma64 (
-                    .clk     (clk),
+                    .clk     (unit_clk),
                     .reset   (reset),
                     .enable  (pe_enable),
                     .mask    (pe_mask_out[i]),
@@ -327,6 +339,18 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .ready_out     (per_core_ready_out[FPU_FMA64])
         );
 
+        // The units are clocked only while a request is in flight.
+        wire unit_clk;
+        VX_pipe_clockgate #(
+            .DEPTH (`VX_CFG_FMA_LATENCY)
+        ) unit_cg (
+            .clk_in   (clk),
+            .reset    (reset),
+            .enable   (pe_enable),
+            .valid_in (per_core_valid_in[FPU_FMA64]),
+            .clk_out  (unit_clk)
+        );
+
         fflags_t [NUM_LANES-1:0] fflags_lanes;
 
         for (genvar i = 0; i < NUM_LANES; ++i) begin : g_result
@@ -341,7 +365,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 .EXP_BITS (11),
                 .USE_DSP  (`VX_CFG_FPU_USE_DSP)
             ) fma64 (
-                .clk     (clk),
+                .clk     (unit_clk),
                 .reset   (reset),
                 .enable  (pe_enable),
                 .mask    (pe_mask_out[i]),
@@ -418,6 +442,18 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .ready_out     (per_core_ready_out[FPU_DIVSQRT])
         );
 
+        // The units are clocked only while a request is in flight.
+        wire unit_clk;
+        VX_pipe_clockgate #(
+            .DEPTH (`VX_CFG_FDIV_LATENCY)
+        ) unit_cg (
+            .clk_in   (clk),
+            .reset    (reset),
+            .enable   (pe_enable),
+            .valid_in (per_core_valid_in[FPU_DIVSQRT]),
+            .clk_out  (unit_clk)
+        );
+
         fflags_t [NUM_LANES-1:0] fflags_lanes;
 
         // The merged unit already packs/NaN-boxes the result at the active format.
@@ -434,7 +470,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 .LATENCY (`VX_CFG_FDIV_LATENCY),
                 .FLEN    (`VX_CFG_FLEN)
             ) fdiv_sqrt_unit (
-                .clk     (clk),
+                .clk     (unit_clk),
                 .reset   (reset),
                 .enable  (pe_enable),
                 .mask    (pe_mask_out[i]),
@@ -503,6 +539,18 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .ready_out     (per_core_ready_out[FPU_CVT])
         );
 
+        // The units are clocked only while a request is in flight.
+        wire unit_clk;
+        VX_pipe_clockgate #(
+            .DEPTH (CVT_LATENCY)
+        ) unit_cg (
+            .clk_in   (clk),
+            .reset    (reset),
+            .enable   (pe_enable),
+            .valid_in (per_core_valid_in[FPU_CVT]),
+            .clk_out  (unit_clk)
+        );
+
         fflags_t [NUM_LANES-1:0] fflags_lanes;
 
         for (genvar i = 0; i < NUM_LANES; ++i) begin : g_result
@@ -532,7 +580,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             `endif
                 .OUT_REG (1)
             ) fcvt_unit (
-                .clk        (clk),
+                .clk        (unit_clk),
                 .reset      (reset),
                 .enable     (pe_enable),
                 .mask       (pe_mask_out[i]),
@@ -612,6 +660,18 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .ready_out     (per_core_ready_out[FPU_NCP])
         );
 
+        // The units are clocked only while a request is in flight.
+        wire unit_clk;
+        VX_pipe_clockgate #(
+            .DEPTH (`VX_CFG_FNCP_LATENCY)
+        ) unit_cg (
+            .clk_in   (clk),
+            .reset    (reset),
+            .enable   (pe_enable),
+            .valid_in (per_core_valid_in[FPU_NCP]),
+            .clk_out  (unit_clk)
+        );
+
         fflags_t [NUM_LANES-1:0] fflags_lanes;
 
         for (genvar i = 0; i < NUM_LANES; ++i) begin : g_result
@@ -625,7 +685,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 .FLEN    (`VX_CFG_FLEN),
                 .OUT_REG (1)
             ) fncp_unit (
-                .clk     (clk),
+                .clk     (unit_clk),
                 .reset   (reset),
                 .enable  (pe_enable),
                 .mask    (pe_mask_out[i]),

@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 220" role="img" aria-label="The L2 bank&#x27;s ready follows its tag lookup and reaches the sender&#x27;s output register in the same cycle. A skid register in front of the bank answers with a registered ready and passes requests through with no added cycle.">
+  <title>The L2 bank&#x27;s ready follows its tag lookup and reaches the sender&#x27;s output register in the same cycle. A skid register in front of the bank answers with a registered ready and passes requests through with no added cycle.</title>
+  <defs><marker id="reqski_a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1b2733"/></marker><marker id="reqski_g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1f7a4d"/></marker><marker id="reqski_b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#b3261e"/></marker></defs>
+  <style>
+    text { font-family: Helvetica, Arial, sans-serif; fill: #1b2733; font-size: 11.5px; }
+    .dh { font-size: 13px; font-weight: bold; }
+    .dm { fill: #5a6772; font-size: 11px; }
+    .ds { font-size: 10.5px; }
+    .db { fill: #fbfcfd; stroke: #5a7184; stroke-width: 1.2; }
+    .dbad { fill: #fbe5e3; stroke: #b3261e; stroke-width: 1.2; }
+    .dgood { fill: #e3f3ea; stroke: #1f7a4d; stroke-width: 1.2; }
+    .didle { fill: #f3f5f8; stroke: #c9d1d9; stroke-width: 1.2; }
+    .dwait { fill: #fbe5e3; stroke: #b3261e; stroke-width: 1.2; stroke-dasharray: 4 3; }
+    .ln { stroke: #1b2733; stroke-width: 1.3; fill: none; }
+    .lb { stroke: #b3261e; stroke-width: 1.5; fill: none; }
+    .lg { stroke: #1f7a4d; stroke-width: 1.5; }
+    .dash { stroke-dasharray: 4 3; }
+    .sep { stroke: #c9d1d9; stroke-width: 1; stroke-dasharray: 2 4; }
+    text.db-t { fill: #b3261e; } text.g-t { fill: #1f7a4d; }
+  </style>
+  <rect width="640" height="220" fill="#ffffff"/>
+<text x="160" y="20" text-anchor="middle" class="dh">Ready follows the lookup</text>
+<text x="480" y="20" text-anchor="middle" class="dh">Skid register, registered ready</text>
+<g class="dl">
+<rect x="20" y="60" width="90" height="44" class="db"/><text x="65.0" y="79.0" text-anchor="middle">sender</text><text x="65.0" y="94.0" text-anchor="middle" class="ds">output register</text>
+<rect x="210" y="60" width="90" height="44" class="dbad"/><text x="255.0" y="79.0" text-anchor="middle">L2 bank</text><text x="255.0" y="94.0" text-anchor="middle" class="ds">tag lookup</text>
+<line x1="110" y1="72" x2="208" y2="72" class="ln" marker-end="url(#reqski_a)"/>
+<text x="160" y="66" text-anchor="middle" class="ds">request</text>
+<line x1="210" y1="94" x2="112" y2="94" class="lb" marker-end="url(#reqski_b)"/>
+<text x="160" y="116" text-anchor="middle" class="db-t">ready, same cycle</text>
+<text x="20" y="146" class="dm">lookup → stall → ready → the sender's</text>
+<text x="20" y="162" class="dm">register enable: one loop across modules</text>
+<text x="20" y="186" class="db-t">tensor 240.6 MHz, full GPU 243.0 MHz</text>
+<rect x="340" y="60" width="80" height="44" class="db"/><text x="380.0" y="79.0" text-anchor="middle">sender</text><text x="380.0" y="94.0" text-anchor="middle" class="ds">output reg.</text>
+<rect x="460" y="66" width="50" height="32" class="dgood"/><text x="485.0" y="86.0" text-anchor="middle" class="ds">skid</text>
+<rect x="550" y="60" width="70" height="44" class="db"/><text x="585.0" y="79.0" text-anchor="middle">L2 bank</text><text x="585.0" y="94.0" text-anchor="middle" class="ds">tag lookup</text>
+<line x1="420" y1="72" x2="458" y2="72" class="ln" marker-end="url(#reqski_a)"/>
+<line x1="510" y1="72" x2="548" y2="72" class="ln" marker-end="url(#reqski_a)"/>
+<line x1="460" y1="94" x2="422" y2="94" class="lg" marker-end="url(#reqski_g)"/>
+<line x1="550" y1="94" x2="512" y2="94" class="ln" marker-end="url(#reqski_a)"/>
+<text x="440" y="116" text-anchor="middle" class="g-t">ready = skid empty</text>
+<text x="340" y="146" class="dm">an empty skid passes the request straight</text>
+<text x="340" y="162" class="dm">through; a refused one waits in it</text>
+<text x="340" y="186" class="g-t">tensor 251.6 MHz, full GPU 256.1 MHz</text>
+<text x="340" y="206" class="dm">a flush waits until every skid is empty</text>
+<line x1="320" y1="30" x2="320" y2="205" class="sep"/>
+</g>
+</svg>

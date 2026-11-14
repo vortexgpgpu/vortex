@@ -21,7 +21,10 @@
 module VX_pipe_buffer #(
     parameter DATAW  = 1,
     parameter RESETW = 0,
-    parameter DEPTH  = 1
+    parameter DEPTH  = 1,
+    // ASIC: data holds while no valid enters (see VX_pipe_register); 0 for a
+    // consumer that reads data_out without valid_out.
+    parameter DATA_GATE = 1
 ) (
     input  wire             clk,
     input  wire             reset,
@@ -35,6 +38,7 @@ module VX_pipe_buffer #(
     if (DEPTH == 0) begin : g_passthru
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
+        `UNUSED_PARAM (DATA_GATE)
         assign ready_in  = ready_out;
         assign valid_out = valid_in;
         assign data_out  = data_in;
@@ -53,8 +57,9 @@ module VX_pipe_buffer #(
             // Stage i advances when any later stage has a hole or the output drains.
             assign ready[i] = ready_out || ~(& valid_r[DEPTH-1:i]);
             VX_pipe_register #(
-                .DATAW  (1 + DATAW),
-                .RESETW (1 + RESETW)
+                .DATAW     (1 + DATAW),
+                .RESETW    (1 + RESETW),
+                .DATA_GATE (DATA_GATE)
             ) pipe_register (
                 .clk      (clk),
                 .reset    (reset),

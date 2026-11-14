@@ -75,6 +75,9 @@ run-fpu:
 	$(MAKE) -C fsqrt_unit run
 	$(MAKE) -C fcvt_unit run
 	$(MAKE) -C fdivsqrt_unit run
+	$(MAKE) -C fdivsqrt_unit clean
+	$(MAKE) -C fdivsqrt_unit run FLEN=64 LATENCY=32
+	$(MAKE) -C fdivsqrt_unit clean
 
 # MUFU datapath, bit-exact against the sw/common golden model.
 run-mufu:

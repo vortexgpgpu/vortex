@@ -466,29 +466,26 @@ module VX_rr_arbiter #(
 
         assign grant_onehot = grant_w;
 
+        // A grant exists exactly when a request does (the lowest set bit of a
+        // non-zero vector is non-zero), so the valid and the mask's enable come
+        // off the requests, not off the grant's priority logic.
         always @(posedge clk) begin
-		    if (reset) begin
-				reqs_mask <= {NUM_REQS{1'b1}};
-			end else if (grant_valid && grant_ready && ~retain_grant) begin
-				if (has_masked_reqs) begin
-                    reqs_mask <= masked_pri_reqs;
-                end else if (has_unmasked_reqs) begin
-                    reqs_mask <= unmasked_pri_reqs;
-                end
-			end
-	    end
-
-        wire grant_valid_w;
+            if (reset) begin
+                reqs_mask <= {NUM_REQS{1'b1}};
+            end else if (has_unmasked_reqs && grant_ready && ~retain_grant) begin
+                reqs_mask <= has_masked_reqs ? masked_pri_reqs : unmasked_pri_reqs;
+            end
+        end
 
         VX_onehot_encoder #(
             .N (NUM_REQS)
         ) onehot_encoder (
             .data_in  (grant_w),
             .data_out (grant_index),
-            .valid_out(grant_valid_w)
+            `UNUSED_PIN (valid_out)
         );
 
-        assign grant_valid = (STICKY != 0) ? (| requests) : grant_valid_w;
+        assign grant_valid = has_unmasked_reqs;
 
     end else if (MODEL == 2) begin : g_model2
 

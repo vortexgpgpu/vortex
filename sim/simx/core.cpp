@@ -198,6 +198,13 @@ public:
     static_assert(uint64_t(VX_CFG_LMEM_SIZE) <= (uint64_t(1) << VX_CFG_LMEM_LOG_SIZE)
                && 2 * uint64_t(VX_CFG_LMEM_SIZE) > (uint64_t(1) << VX_CFG_LMEM_LOG_SIZE),
                   "LMEM_LOG_SIZE must be clog2(LMEM_SIZE)");
+  #ifdef VX_CFG_LMEM_ENABLE
+    static_assert(0 == (uint64_t(VX_CFG_LMEM_SIZE) % (VX_CFG_MEM_BLOCK_SIZE * VX_CFG_LMEM_NUM_BANKS)),
+                  "LMEM_SIZE must be a whole number of block rows across the banks");
+    // The window ends at the next alignment boundary above its base.
+    static_assert(0 == (uint64_t(VX_MEM_LMEM_BASE_ADDR) % (uint64_t(1) << VX_CFG_LMEM_LOG_SIZE)),
+                  "LMEM exceeds its address window");
+  #endif
     snprintf(sname, 100, "%s-lmem", name.c_str());
     local_mem_ = LocalMem::Create(sname, LocalMem::Config{
       VX_CFG_LMEM_SIZE,
@@ -490,6 +497,29 @@ public:
   }
 
   // ----- Pipeline stages (private) -----
+
+  // Abort when a warp's staged instruction has not issued for STALL_TIMEOUT
+  // cycles, naming the registers it still waits on.
+  void check_issue_timeout(uint32_t iw, uint32_t wid, instr_trace_t* trace, instr_trace_t* uop_trace) {
+    uint64_t staged = std::max(last_issue_.at(wid), trace->ibuf_time);
+    uint64_t stall_cycles = SimPlatform::instance().cycles() - staged;
+    if (stall_cycles < VX_DBG_STALL_TIMEOUT) {
+      return;
+    }
+    std::cerr << "*** " << simobject_->name() << " issue timeout: wid=" << wid
+              << " (issue" << iw << "), PC=0x" << std::hex << uop_trace->PC << std::dec
+              << ", tmask=" << uop_trace->tmask << " (lane 0 first), cycles=" << stall_cycles
+              << ", inuse={";
+    if (scoreboard_->in_use(uop_trace)) {
+      auto uses = scoreboard_->get_uses(uop_trace);
+      for (uint32_t j = 0; j < uses.size(); ++j) {
+        auto& use = uses.at(j);
+        std::cerr << (j ? ", " : "") << use.reg_type << use.reg_id << " (#" << use.uuid << ")";
+      }
+    }
+    std::cerr << "}, " << *uop_trace << std::endl;
+    std::abort();
+  }
 
   void schedule() {
     // profiling
@@ -817,6 +847,8 @@ public:
           uint64_t ready = std::max(staged_since_.at(wid), trace->ibuf_time) + 2;
           seq_starting = (SimPlatform::instance().cycles() < ready);
         }
+
+        this->check_issue_timeout(iw, wid, trace, uop_trace);
 
         if (scoreboard_->in_use(uop_trace)) {
           auto uses = scoreboard_->get_uses(uop_trace);

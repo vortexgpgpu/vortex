@@ -58,6 +58,24 @@ module VX_tcu_fedp_bhf import VX_tcu_pkg::*; #(
         assign b_col16[2*i+1] = b_col[i][31:16];
     end
 
+    // HardFloat decodes an all-ones exponent as Inf/NaN, but OCP E4M3 has no Inf
+    // and only S.1111.111 is NaN, so E4M3 is re-encoded as E5M3 (bias 15) first.
+    function automatic logic [8:0] e4m3_to_e5m3(input logic [7:0] x);
+        if (x[6:0] == 7'h7F) begin
+            return {x[7], 5'h1F, 3'b100};
+        end else if (x[6:3] != 4'h0) begin
+            return {x[7], 5'(x[6:3]) + 5'd8, x[2:0]};
+        end else if (x[2]) begin
+            return {x[7], 5'd8, x[1:0], 1'b0};
+        end else if (x[1]) begin
+            return {x[7], 5'd7, x[0], 2'b00};
+        end else if (x[0]) begin
+            return {x[7], 5'd6, 3'b000};
+        end else begin
+            return {x[7], 8'h00};
+        end
+    endfunction
+
     // Transprecision Multiply
 
     wire [2:0] fmt_s_delayed;
@@ -84,7 +102,7 @@ module VX_tcu_fedp_bhf import VX_tcu_pkg::*; #(
         wire [32:0] mult_result_bf8;
 
         VX_tcu_bhf_fp8mul #(
-            .IN_EXPW (4),
+            .IN_EXPW (5), // E4M3 operands re-encoded as E5M3
             .IN_SIGW (3+1),
             .OUT_EXPW(8),
             .OUT_SIGW(24),
@@ -97,10 +115,10 @@ module VX_tcu_fedp_bhf import VX_tcu_pkg::*; #(
             .reset  (reset),
             .enable (enable),
             .frm    (frm),
-            .a0     (a_row16[i][0 +: 8]),
-            .b0     (b_col16[i][0 +: 8]),
-            .a1     (a_row16[i][8 +: 8]),
-            .b1     (b_col16[i][8 +: 8]),
+            .a0     (e4m3_to_e5m3(a_row16[i][0 +: 8])),
+            .b0     (e4m3_to_e5m3(b_col16[i][0 +: 8])),
+            .a1     (e4m3_to_e5m3(a_row16[i][8 +: 8])),
+            .b1     (e4m3_to_e5m3(b_col16[i][8 +: 8])),
             .y      (mult_result_fp8),
             `UNUSED_PIN(fflags)
         );

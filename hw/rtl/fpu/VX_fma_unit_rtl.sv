@@ -445,11 +445,6 @@ module VX_fma_unit_rtl import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     // Magnitude comparison
     wire prod_gte_c = (s2_aln_prod >= s2_aln_c);
 
-    // Addition and subtraction paths
-    wire [ACC_BITS-1:0] add_result = {1'b0, s2_aln_prod} + {1'b0, s2_aln_c};
-    wire [ACC_BITS-1:0] sub_ab     = {1'b0, s2_aln_prod} - {1'b0, s2_aln_c};
-    wire [ACC_BITS-1:0] sub_mag    = prod_gte_c ? sub_ab : (~sub_ab + ACC_BITS'(1));
-
     // Effective subtraction: bits shifted out of the smaller operand (s2_sticky)
     // lie below the kept window and must BORROW from the magnitude; the residual
     // (1 ULP - tail) keeps sticky set. Without this borrow the rounder sees the
@@ -457,11 +452,18 @@ module VX_fma_unit_rtl import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     // wrongly round the result up — even to infinity (e.g. 1.0 + (-3.4e38), RDN).
     wire sub_borrow = s2_eff_sub & s2_sticky;
 
-    // For subtraction with |C| > |prod|: negate (serial, OK — LZA is slower)
+    // Addition, and both subtraction orders with the borrow folded into the
+    // carry-in (x - y - b = x + ~y + ~b), computed in parallel with the
+    // magnitude compare that picks one: |prod - C| - borrow in one adder delay.
+    wire                sub_cin    = ~sub_borrow;
+    wire [ACC_BITS-1:0] add_result = {1'b0, s2_aln_prod} + {1'b0, s2_aln_c};
+    wire [ACC_BITS-1:0] sub_pc     = {1'b0, s2_aln_prod} + {1'b1, ~s2_aln_c}    + ACC_BITS'(sub_cin);
+    wire [ACC_BITS-1:0] sub_cp     = {1'b0, s2_aln_c}    + {1'b1, ~s2_aln_prod} + ACC_BITS'(sub_cin);
+
     wire [ACC_BITS-1:0] acc_sum;
     wire                acc_sign;
 
-    assign acc_sum  = s2_eff_sub ? (sub_mag - ACC_BITS'(sub_borrow)) : add_result;
+    assign acc_sum  = s2_eff_sub ? (prod_gte_c ? sub_pc : sub_cp) : add_result;
     assign acc_sign = s2_eff_sub ? (prod_gte_c ? s2_s_prod : s2_s_c) : s2_s_prod;
 
     // Leading zero count on accumulated result; provides shift count for normalization.
@@ -530,6 +532,19 @@ module VX_fma_unit_rtl import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire signed [EXP_IWIDTH-1:0] nrm_exp_plus1 = nrm_exp_base + $signed(EXP_IWIDTH'(1));
     wire signed [EXP_IWIDTH-1:0] nrm_exp_plus2 = nrm_exp_base + $signed(EXP_IWIDTH'(2));
 
+    // Subnormal denormalize amount for either exponent ROUND1 can pick
+    // (overshift selects), so ROUND1 starts at the shifter: when the exponent
+    // is <= 0 the significand shifts right by 1-exp, capped at SIG_BITS.
+    localparam SH_W = `CLOG2(SIG_BITS + 2) + 1;
+    wire signed [EXP_IWIDTH-1:0] sub_amt_b  = EXP_IWIDTH'(1) - nrm_exp_base;
+    wire signed [EXP_IWIDTH-1:0] sub_amt_p1 = EXP_IWIDTH'(1) - nrm_exp_plus1;
+    wire sub_le0_b   = ($signed(nrm_exp_base)  <= 0);
+    wire sub_le0_p1  = ($signed(nrm_exp_plus1) <= 0);
+    wire sub_huge_b  = ($signed(sub_amt_b)  >= $signed(EXP_IWIDTH'(SIG_BITS + 1)));
+    wire sub_huge_p1 = ($signed(sub_amt_p1) >= $signed(EXP_IWIDTH'(SIG_BITS + 1)));
+    wire [SH_W-1:0] sub_sh_b  = sub_huge_b  ? SH_W'(SIG_BITS) : SH_W'(sub_amt_b);
+    wire [SH_W-1:0] sub_sh_p1 = sub_huge_p1 ? SH_W'(SIG_BITS) : SH_W'(sub_amt_p1);
+
     // Sticky bits below the normalization window
     localparam STICK_IDX = MAN_BITS + 2;
     wire sticky_below = overshift ? (|shifted_raw[STICK_IDX:0])
@@ -539,7 +554,7 @@ module VX_fma_unit_rtl import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     // NORM → ROUND register
     // =========================================================================
     localparam NRM_DATAW = NORM_WIN_BITS + 1 + 1 + 1 + 1 + 1 + 1
-                         + 3*EXP_IWIDTH + INST_FRM_BITS + 4;
+                         + 3*EXP_IWIDTH + INST_FRM_BITS + 4 + 2 * (SH_W + 2);
 
     wire [NRM_DATAW-1:0] s4_data;
     VX_pipe_register #(
@@ -550,7 +565,8 @@ module VX_fma_unit_rtl import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         .reset   (reset),
         .enable  (enable && valid_nrm),
         .data_in ({norm_window, overshift, sticky_below, s3_sticky, s3_sign, s3_eff_sub, zero_sum,
-                   nrm_exp_base, nrm_exp_plus1, nrm_exp_plus2, s3_frm, s3_exc}),
+                   nrm_exp_base, nrm_exp_plus1, nrm_exp_plus2, s3_frm, s3_exc,
+                   sub_le0_b, sub_huge_b, sub_sh_b, sub_le0_p1, sub_huge_p1, sub_sh_p1}),
         .data_out(s4_data)
     );
 
@@ -564,8 +580,11 @@ module VX_fma_unit_rtl import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire signed [EXP_IWIDTH-1:0]  r5_exp_base, r5_exp_plus1, r5_exp_plus2;
     wire [INST_FRM_BITS-1:0]      r5_frm;
     wire [3:0]                    r5_exc;
+    wire                          r5_le0_b, r5_huge_b, r5_le0_p1, r5_huge_p1;
+    wire [SH_W-1:0]               r5_sh_b, r5_sh_p1;
     assign {r5_window, r5_overshift, r5_sticky_below, r5_sticky_acc, r5_sign, r5_eff_sub, r5_zero_sum,
-            r5_exp_base, r5_exp_plus1, r5_exp_plus2, r5_frm, r5_exc} = s4_data;
+            r5_exp_base, r5_exp_plus1, r5_exp_plus2, r5_frm, r5_exc,
+            r5_le0_b, r5_huge_b, r5_sh_b, r5_le0_p1, r5_huge_p1, r5_sh_p1} = s4_data;
 
     // =========================================================================
     // ROUND1: select-add rounding (normal path) + IEEE subnormal denormalize-shift.
@@ -639,16 +658,18 @@ module VX_fma_unit_rtl import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire of_flag = (final_exp_s >= $signed(EXP_IWIDTH'(EXP_MAX))) & ~is_nan_result & ~is_inf_result;
 
     // --- Subnormal denormalize-shift (round-add deferred to ROUND2) ---
-    wire signed [EXP_IWIDTH-1:0] exp_norm = r5_overshift ? r5_exp_plus1 : r5_exp_base;
-    wire result_sub = ($signed(exp_norm) <= 0) & ~is_nan_result & ~is_inf_result & ~r5_zero_sum & ~exact_zero;
+    wire exp_le0    = r5_overshift ? r5_le0_p1 : r5_le0_b;
+    wire result_sub = exp_le0 & ~is_nan_result & ~is_inf_result & ~r5_zero_sum & ~exact_zero;
     wire gen_sub    = (SUBNORM_ENABLE != 0) & result_sub;
 
-    localparam SH_W = `CLOG2(SIG_BITS + 2) + 1;
-    wire signed [EXP_IWIDTH-1:0] sub_amt = gen_sub ? (EXP_IWIDTH'(1) - exp_norm) : '0;
-    wire huge_sub = gen_sub & ($signed(sub_amt) >= $signed(EXP_IWIDTH'(SIG_BITS + 1)));
-    wire [SH_W-1:0] sdsh = huge_sub ? SH_W'(SIG_BITS) : SH_W'(sub_amt);
+    wire huge_sub = gen_sub & (r5_overshift ? r5_huge_p1 : r5_huge_b);
+    wire [SH_W-1:0] sdsh = gen_sub ? (r5_overshift ? r5_sh_p1 : r5_sh_b) : '0;
 
-    wire [SIG_BITS-1:0] sbelow = (sdsh <= 1) ? '0 : ((SIG_BITS'(1) << (sdsh - 1)) - SIG_BITS'(1));
+    // Bits below the guard position: [sdsh-2:0], none when sdsh <= 1.
+    wire [SIG_BITS-1:0] sbelow;
+    for (genvar i = 0; i < SIG_BITS; ++i) begin : g_sbelow
+        assign sbelow[i] = (SH_W'(i + 1) < sdsh);
+    end
     wire [SIG_BITS-1:0] sub_man = rnd_man >> sdsh;
     wire sub_g = (sdsh == 0) ? guard_bit : huge_sub ? 1'b0 : rnd_man[sdsh - 1];
     wire sub_s = (sdsh == 0) ? (round_bit | sticky_sum)

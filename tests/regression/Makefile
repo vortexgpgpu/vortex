@@ -9,6 +9,7 @@ TESTS := \
     vecadd vecadd_v1 sgemm sgemmx sgemm_v1 conv3 relu sgemv           \
     sgemm2 sgemm2_v1 madmax mixfu stencil3d raycast bfs jacobi pathfinder   \
     softmax uniform_ld lmem_access ldst_wide ldst_matrix mufu zfhmin              \
+    flash_attn flash_attn_tcu_wg                                      \
     sgemm_tcu sgemm_tcu_mx sgemm_tcu_sp_mx sgemm_tcu_wg sgemm_tcu_wg_mx sgemm_tcu_sp sgemm_tcu_wg_sp  \
     sgemm2_dxa sgemm2_tcu sgemm_tcu_wg_dxa sgemm_tcu_wg_sp_dxa        \
     sgemm2_dxa_mcast sgemm_tcu_wg_dxa_mcast                           \
@@ -23,7 +24,9 @@ EXCLUDE :=
 
 # --- per-backend exclude lists ---------------------------------------
 EXCLUDE_simx   :=
-EXCLUDE_rtlsim :=
+# The flash_attn tests' default sizes run tens of millions of cycles; their
+# rtlsim coverage is the small cases in ci/testcases.
+EXCLUDE_rtlsim := flash_attn flash_attn_tcu_wg
 EXCLUDE_opae   :=
 EXCLUDE_xrt    :=
 

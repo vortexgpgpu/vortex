@@ -325,16 +325,46 @@ module VX_lmem_engine import VX_gpu_pkg::*; #(
             end else begin
                 bank_valid_r[b] <= pass_fire && (| sel);
             end
+        end
+
+        // The bank's address and payload are read only with its valid, so on
+        // ASIC they load only when the bank is used.
+        wire bank_load = pass_fire && (| sel);
+    `ifdef ASIC
+        wire bank_clk;
+        VX_clockgate bank_cg (.clk_in (clk), .en (bank_load), .clk_out (bank_clk));
+        always @(posedge bank_clk) begin
+            if (bank_load) begin
+                bank_addr_r[b]    <= sel_addr;
+                bank_payload_r[b] <= sel_payload;
+            end
+        end
+    `else
+        `UNUSED_VAR (bank_load)
+        always @(posedge clk) begin
             bank_addr_r[b]    <= sel_addr;
             bank_payload_r[b] <= sel_payload;
         end
+    `endif
     end
 
+`ifdef ASIC
+    wire pass_clk;
+    VX_clockgate pass_cg (.clk_in (clk), .en (pass_fire), .clk_out (pass_clk));
+    always @(posedge pass_clk) begin
+        if (pass_fire) begin
+            bank_rw_r   <= s1_rw;
+            bank_amo_r  <= s1_amo;
+            bank_attr_r <= s1_attr;
+        end
+    end
+`else
     always @(posedge clk) begin
         bank_rw_r   <= s1_rw;
         bank_amo_r  <= s1_amo;
         bank_attr_r <= s1_attr;
     end
+`endif
 
     assign bank_valid   = bank_valid_r;
     assign bank_rw      = bank_rw_r;
@@ -354,6 +384,7 @@ module VX_lmem_engine import VX_gpu_pkg::*; #(
     VX_pipe_register #(
         .DATAW  (1 + BLOCK_WIDTH + NUM_LANES + NUM_LANES * BANK_SEL_WIDTH + TAG_WIDTH),
         .RESETW (1),
+        .DATA_GATE (1),
         .DEPTH  (2)
     ) rsp_meta_pipe (
         .clk      (clk),
@@ -378,7 +409,8 @@ module VX_lmem_engine import VX_gpu_pkg::*; #(
 
     VX_pipe_register #(
         .DATAW  (RSP_DATAW + 1),
-        .RESETW (1)
+        .RESETW (1),
+        .DATA_GATE (1)
     ) rsp_data_reg (
         .clk      (clk),
         .reset    (reset),

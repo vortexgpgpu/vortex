@@ -220,7 +220,10 @@ enable, a net that reaches every unit of the core: the vendor operators'
 clock enables and every pipeline register. Without it the enable starts at
 the response arbiter's round-robin state, and Beacon counts every enable two
 to three levels deeper, on the nets with the highest fanout in the FPU, which
-Beacon does not price.
+Beacon does not price. The serializer computes that enable a cycle ahead, from
+the skid's and the last stage's next state, and registers one copy per unit
+(`PE_ENABLES`): every unit's enable starts at its own flop, so no single net
+reaches the whole core, which on the U55C otherwise sets the core's Fmax.
 
 The register also absorbs collisions: when two cores finish together, the one
 the arbiter defers parks its result there, and its pipeline stalls until the

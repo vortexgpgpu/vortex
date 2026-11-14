@@ -60,10 +60,29 @@ module VX_bypass_buffer #(
                     has_data <= valid_in;
                 end
             end
+        `ifndef ASIC
             if (~has_data) begin
                 buffer <= data_in;
             end
+        `endif
         end
+
+    `ifdef ASIC
+        // The buffer is read only while has_data, so it loads only the entry it
+        // catches; data_out is the same on every cycle.
+        wire buffer_load = ~has_data && valid_in && ~ready_out;
+        wire buffer_clk;
+        if (DATAW >= 4) begin : g_cg
+            VX_clockgate cg (.clk_in (clk), .en (buffer_load), .clk_out (buffer_clk));
+        end else begin : g_clk
+            assign buffer_clk = clk;
+        end
+        always @(posedge buffer_clk) begin
+            if (buffer_load) begin
+                buffer <= data_in;
+            end
+        end
+    `endif
 
         assign ready_in  = ~has_data;
         assign data_out  = has_data ? buffer : data_in;

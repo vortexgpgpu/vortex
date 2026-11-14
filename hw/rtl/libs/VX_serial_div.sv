@@ -57,7 +57,14 @@ module VX_serial_div #(
         assign sub_result[i] = working[i][WIDTHN + MIN_ND : WIDTHN] - denom_r[i];
     end
 
-    always @(posedge clk) begin
+`ifdef ASIC
+    // The divider is clocked only while it divides; the counter it would
+    // otherwise run down is read only then and reloads on strobe.
+    wire div_clk;
+    VX_clockgate div_cg (.clk_in (clk), .en (reset || strobe || busy_r), .clk_out (div_clk));
+`endif
+
+    always @(posedge `GATED_CLK(clk, div_clk)) begin
         if (reset) begin
             busy_r <= 0;
         end else begin
@@ -75,7 +82,7 @@ module VX_serial_div #(
     end
 
     for (genvar i = 0; i < LANES; ++i) begin : g_div
-        always @(posedge clk) begin
+        always @(posedge `GATED_CLK(clk, div_clk)) begin
             if (strobe) begin
                 working[i]  <= {{WIDTHD{1'b0}}, numer_qual[i], 1'b0};
                 denom_r[i]  <= denom_qual[i];

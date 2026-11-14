@@ -129,7 +129,7 @@ builds:
   group: core
   dut: lmem
   clock_mhz: 800
-  area_budget_um2: 15867
+  area_budget_um2: 17137
   configs: "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_A_ENABLE"
 
 # Multi-core system top: 2 cores with atomics and virtual memory behind the AFU

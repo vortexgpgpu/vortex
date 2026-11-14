@@ -204,9 +204,12 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     wire pipe_fire_st1 = pipe_valid_st1 && pipe_ready_st1;
     wire pipe_fire_st2 = pipe_valid_st2 && pipe_ready_st2;
 
+    // An invalid slot must carry this cycle's gpr_rd_valid (all clear), not a
+    // held one: pipe_reg2 loads every pass and stage 2 merges what it carries.
     VX_pipe_buffer #(
-        .DATAW  (NUM_RBANKS + META_DATAW + 1 + NUM_RBANKS * (REG_REM_BITS + REQ_SEL_WIDTH)),
-        .RESETW (1)
+        .DATAW     (NUM_RBANKS + META_DATAW + 1 + NUM_RBANKS * (REG_REM_BITS + REQ_SEL_WIDTH)),
+        .RESETW    (1),
+        .DATA_GATE (0)
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
@@ -230,9 +233,12 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
 
     wire pipe_valid2_st1 = pipe_valid_st1 && ~has_collision_st1;
 
+    // Collision passes enter with valid_in low and still deliver their bank
+    // reads to opd_buffer_n_st2, so the data must load on every pass.
     VX_pipe_buffer #(
-        .DATAW  (NUM_RBANKS * (1 + REQ_SEL_WIDTH) + META_DATAW),
-        .RESETW (1)
+        .DATAW     (NUM_RBANKS * (1 + REQ_SEL_WIDTH) + META_DATAW),
+        .RESETW    (1),
+        .DATA_GATE (0)
     ) pipe_reg2 (
         .clk      (clk),
         .reset    (reset),
@@ -259,7 +265,16 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
         end
     end
 
-    always @(posedge clk) begin
+    // The operand buffer changes only when a bank read arrives or stage 2 fires.
+    wire opd_buffer_upd = reset || pipe_fire_st2 || (| gpr_rd_valid_st2);
+    `RUNTIME_ASSERT (opd_buffer_upd || (opd_buffer_n_st2 == opd_buffer_st2),
+        ("%t: operand buffer changed without a bank read", $time))
+`ifdef ASIC
+    wire opd_buffer_clk;
+    VX_clockgate opd_buffer_cg (.clk_in (clk), .en (opd_buffer_upd), .clk_out (opd_buffer_clk));
+`endif
+
+    always @(posedge `GATED_CLK(clk, opd_buffer_clk)) begin
         if (reset || pipe_fire_st2) begin
             opd_buffer_st2 <= '0;
         end else begin

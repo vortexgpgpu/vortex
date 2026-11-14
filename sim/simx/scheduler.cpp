@@ -90,6 +90,8 @@ void Scheduler::on_reset() {
   active_warps_.reset();
   cta_active_view_.reset();
   cta_fire_cnt_ = 0;
+  timeout_ctr_ = 0;
+  timeout_enable_ = false;
   // Sequencers live on Core now; Core::on_reset() resets them.
   wspawn_.valid = false;
 
@@ -254,6 +256,37 @@ void Scheduler::schedule_end() {
   for (uint32_t i = 0; i < cta_fire_cnt_; ++i) {
     cta_active_view_.set(cta_fire_wids_[i]);
   }
+  this->check_stall_timeout();
+}
+
+void Scheduler::check_stall_timeout() {
+#ifdef EXT_SCHED_STALL_TIMEOUT
+  constexpr uint64_t kTimeout = EXT_SCHED_STALL_TIMEOUT;
+#else
+  constexpr uint64_t kTimeout = VX_DBG_STALL_TIMEOUT;
+#endif
+  if (cta_fire_cnt_ != 0) {
+    timeout_enable_ = true;
+  }
+  bool all_stalled = active_warps_.any() && (active_warps_ == stalled_warps_);
+  if (!timeout_enable_ || !all_stalled) {
+    timeout_ctr_ = 0;
+    return;
+  }
+  if (++timeout_ctr_ < kTimeout) {
+    return;
+  }
+  std::cerr << "*** " << this->name() << " timeout: cycles=" << timeout_ctr_
+            << ", every active warp stalled:" << std::endl;
+  for (uint32_t w = 0; w < VX_CFG_NUM_WARPS; ++w) {
+    if (!active_warps_.test(w)) {
+      continue;
+    }
+    auto& warp = warps_.at(w);
+    std::cerr << "    wid=" << w << ", PC=0x" << std::hex << warp.PC << std::dec
+              << ", tmask=" << warp.tmask << " (lane 0 first)" << std::endl;
+  }
+  std::abort();
 }
 
 bool Scheduler::running() const {

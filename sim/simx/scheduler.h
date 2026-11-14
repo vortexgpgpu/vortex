@@ -206,6 +206,7 @@ private:
   };
 
   void activate_warp(uint32_t wid, const cta_warp_record_t& rec);
+  void check_stall_timeout();
 
 #ifdef VX_CFG_EXT_RASTER_ENABLE
   // Inject as many ready fragment waves as there are free warp slots (called
@@ -228,6 +229,10 @@ private:
   uint32_t cta_fire_cnt_ = 0;
   std::array<uint32_t, VX_CFG_FETCH_WIDTH> cta_fire_wids_;
   std::array<cta_warp_record_t, VX_CFG_FETCH_WIDTH> cta_fire_recs_;
+  // Stall watchdog: consecutive cycles with every active warp stalled, armed
+  // by the first CTA launch.
+  uint64_t timeout_ctr_ = 0;
+  bool     timeout_enable_ = false;
   uint32_t ipdom_size_;
   wspawn_t wspawn_;
   uint32_t mpm_class_;

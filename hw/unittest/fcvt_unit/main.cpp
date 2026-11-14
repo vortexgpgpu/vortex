@@ -11,15 +11,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Functional test for VX_fcvt_unit (XLEN=32 / F32): exercises I2F and F2I in
-// both signed and unsigned forms, plus F32<->F16 with HALF, and checks
-// bit-exact result/fflags against the softfloat (rvfloats) RISC-V golden across
-// all rounding modes. Strict check.
+// Functional test for VX_fcvt_unit: exercises I2F and F2I in both signed and
+// unsigned forms, F32<->F16 with HALF, and F64->F32 overflow at XLEN=64, and
+// checks bit-exact result/fflags against the softfloat (rvfloats) RISC-V golden
+// across all rounding modes. Strict check.
 
 #include "VVX_fcvt_unit.h"
 #include "vl_simulator.h"
 #include "rvfloats.h"
 
+#include <cinttypes>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -82,7 +83,7 @@ void drive(Device& dut, int op, uint32_t a, uint32_t frm) {
     dut.is_ftoi  = (op == F2I_S || op == F2I_U);
     dut.is_f2f   = (op == F2H || op == H2F);
     dut.is_signed = (op == I2F_S || op == F2I_S);
-    dut.is_int64 = 0;     // XLEN=32
+    dut.is_int64 = 0;     // I32
     dut.src_fmt  = 0;     // F32
     dut.dst_fmt  = 0;     // F32
 #ifdef HALF
@@ -90,6 +91,12 @@ void drive(Device& dut, int op, uint32_t a, uint32_t frm) {
     dut.dst_h    = (op == F2H);
 #endif
     dut.dataa    = a;
+#if VX_CFG_XLEN == 64
+    // FLEN=64: a narrower float source must be NaN-boxed.
+    if (!dut.is_itof) {
+        dut.dataa = 0xffffffff00000000ull | a;
+    }
+#endif
     dut.mask     = 1;
 }
 
@@ -174,6 +181,45 @@ int main(int argc, char** argv) {
             ++checked;
         }
     }
+
+#if VX_CFG_XLEN == 64
+    const uint64_t f2f_cases[] = {
+        0x47f0000000000000, // 2^128 overflows F32
+        0x47efffffe0000000, // largest finite F32, exactly representable
+        0x7ff0000000000000, // infinity must stay infinity in every mode
+        0x7ff8000000000000, // quiet NaN
+        0x0000000000000000, // zero
+    };
+    size_t f2f_checked = 0, f2f_errors = 0;
+    for (uint64_t magnitude : f2f_cases) {
+        for (uint64_t sign = 0; sign < 2; ++sign) {
+            for (uint32_t frm = 0; frm < 5; ++frm) {
+                uint64_t a = magnitude | (sign << 63);
+                uint32_t ff = 0;
+                uint64_t expected = 0xffffffff00000000ull | rv_dtof(a, frm, &ff);
+#ifdef LEAN
+                ff = 0;
+#endif
+                sim->dataa = a; sim->frm = frm; sim->mask = 1;
+                sim->is_itof = 0; sim->is_ftoi = 0; sim->is_f2f = 1;
+                sim->src_fmt = 1; sim->dst_fmt = 0;
+#ifdef HALF
+                sim->src_h = 0; sim->dst_h = 0;
+#endif
+                ticks = sim.step(ticks, 2 * LATENCY);
+                uint64_t got = sim->result;
+                if (got != expected || sim->fflags != ff) {
+                    printf("MISMATCH f2f a=%016" PRIx64 " frm=%u : got res=%016" PRIx64 " ff=%02x  exp res=%016" PRIx64 " ff=%02x\n",
+                           a, frm, got, unsigned(sim->fflags), expected, ff);
+                    ++f2f_errors;
+                }
+                ++f2f_checked;
+            }
+        }
+    }
+    errors += f2f_errors;
+    printf("fcvt_unit f2f: checked=%zu errors=%zu\n", f2f_checked, f2f_errors);
+#endif
 
     printf("fcvt_unit: checked=%zu errors=%zu  per-op:", checked, errors);
     for (int op = 0; op < (int)NUM_OPS; ++op) {

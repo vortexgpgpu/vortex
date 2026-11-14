@@ -64,11 +64,25 @@ module VX_fifo_queue #(
 
         reg [DATAW-1:0] head_r;
 
+    `ifdef ASIC
+        wire head_clk;
+        if (DATAW >= 4) begin : g_cg
+            VX_clockgate cg (.clk_in (clk), .en (push), .clk_out (head_clk));
+        end else begin : g_clk
+            assign head_clk = clk;
+        end
+        always @(posedge head_clk) begin
+            if (push) begin
+                head_r <= data_in;
+            end
+        end
+    `else
         always @(posedge clk) begin
             if (push) begin
                 head_r <= data_in;
             end
         end
+    `endif
 
         assign data_out = head_r;
 
@@ -132,6 +146,21 @@ module VX_fifo_queue #(
             reg [DATAW-1:0] data_out_r;
             wire going_empty = (ALM_EMPTY == 1) ? alm_empty : (size[ADDRW-1:0] == ADDRW'(1));
             wire bypass = push && (empty || (going_empty && pop));
+        `ifdef ASIC
+            wire out_clk;
+            if (DATAW >= 4) begin : g_cg
+                VX_clockgate cg (.clk_in (clk), .en (bypass || pop), .clk_out (out_clk));
+            end else begin : g_clk
+                assign out_clk = clk;
+            end
+            always @(posedge out_clk) begin
+                if (bypass) begin
+                    data_out_r <= data_in;
+                end else if (pop) begin
+                    data_out_r <= data_out_w;
+                end
+            end
+        `else
             always @(posedge clk) begin
                 if (bypass) begin
                     data_out_r <= data_in;
@@ -139,6 +168,7 @@ module VX_fifo_queue #(
                     data_out_r <= data_out_w;
                 end
             end
+        `endif
             assign data_out = data_out_r;
         end else begin : g_no_out_reg
             assign data_out = data_out_w;

@@ -35,6 +35,7 @@
 #   [SAIF_FILE=<activity.saif>]
 #   [SAIF_INST=<tb.dut>]
 #   [BB_MODULES="modA,modB"]
+#   [ICG_MAP=<techmap: VX_clockgate_asic -> PDK ICG cell>]
 #   [PDK=asap7]
 #   [SRAM_BIT_AREA=0.1]
 #   [SRAM_OVERHEAD=100.0]
@@ -85,6 +86,7 @@ YOSYS_SHARE="${YOSYS_SHARE:-1}"
 SAIF_FILE="${SAIF_FILE:-}"
 SAIF_INST="${SAIF_INST:-}"
 BB_MODULES="${BB_MODULES:-}"
+ICG_MAP="${ICG_MAP:-}"
 
 # Area Estimation Defaults
 SRAM_BIT_AREA="${SRAM_BIT_AREA:-0.1}"
@@ -236,10 +238,12 @@ log "Writing $YS"
     IFS=',' read -r -a bbmods <<< "$BB_MODULES"
     for m in "${bbmods[@]}"; do printf " --blackboxed-module %q" "$m"; done
   fi
+  if [[ -n "$ICG_MAP" ]]; then printf " --blackboxed-module VX_clockgate_asic"; fi
   for s in "${SRC_FILES[@]}"; do printf " %q" "$s"; done
   echo
 
   printf "hierarchy -check -top %q\n" "$TOP"
+  if [[ -n "$ICG_MAP" ]]; then printf "techmap -map %q\n" "$ICG_MAP"; fi
   if [[ "$RUN_SYNTH" == "1" ]]; then
     echo "proc; opt"
     echo "fsm; opt"

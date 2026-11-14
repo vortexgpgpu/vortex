@@ -801,7 +801,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     );
 
     // stP is the stage that feeds stC: the dirty-byte mask is read there, so
-    // stC gets it from a register.
+    // stC gets it from a register. In the 2-stage bank that stage is S0.
     commit_t stP;
     VX_pipe_register #(
         .DATAW  ($bits(commit_t)),
@@ -814,6 +814,12 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .data_in  (st1),
         .data_out (stP)
     );
+
+    // The {way, line} the dirty-byte mask is read at: stP's, or S0's when stP
+    // is stC itself.
+    wire [`CS_WAY_SEL_WIDTH-1:0] mask_rway_stp  = (PIPE_EX != 0) ? stP.req.way_idx : cmt_in.req.way_idx;
+    wire [`CS_LINE_SEL_BITS-1:0] mask_rline_stp = (PIPE_EX != 0) ? stP.req.addr[`CS_LINE_SEL_BITS-1:0]
+                                                                 : cmt_in.req.addr[`CS_LINE_SEL_BITS-1:0];
 
     VX_pipe_register #(
         .DATAW  ($bits(commit_t)),
@@ -899,6 +905,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // ========================================================================
     wire[`CS_WORDS_PER_LINE-1:0][`CS_WORD_WIDTH-1:0] read_data_stc;
     wire [LINE_SIZE-1:0] evict_byteen_stc;
+    wire [`CS_SECTORS_PER_LINE-1:0] evict_sec_full_stc;
     wire [`CS_WORD_WIDTH-1:0] read_word_stc = read_data_stc[stC.req.word_idx];
 
     // Sector being accessed at the data-array stage = top bits of word_idx.
@@ -976,8 +983,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .WRITE_ENABLE (WRITE_ENABLE),
         .WRITEBACK    (WRITEBACK),
         .DIRTY_BYTES  (DIRTY_BYTES),
-        .LAZY_FETCH   (LAZY_FETCH),
-        .MASK_SYNC    (PIPE_EX != 0)
+        .LAZY_FETCH   (LAZY_FETCH)
     ) cache_data (
         .clk          (clk),
         .reset        (reset),
@@ -993,8 +999,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .mask_byteen  (stC.req.byteen),
         .mask_sector  (sector_idx_stc),
         .mask_read    (~pipe_stall),
-        .mask_rway    (stP.req.way_idx),
-        .mask_rline   (stP.req.addr[`CS_LINE_SEL_BITS-1:0]),
+        .mask_rway    (mask_rway_stp),
+        .mask_rline   (mask_rline_stp),
         .merge_write  (do_merge_stc && ~pipe_stall),
         .flush        (do_flush_std && ~pipe_stall),
         .read         (do_read_std && ~pipe_stall),
@@ -1009,7 +1015,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .sector_idx   (sector_idx_std),
         .write_byteen (stD.req.byteen),
         .read_data    (read_data_stc),
-        .evict_byteen (evict_byteen_stc)
+        .evict_byteen (evict_byteen_stc),
+        .evict_sec_full (evict_sec_full_stc)
     );
 
     // stD write word delayed to stC for its consumers there (the AMO RMW
@@ -1456,14 +1463,16 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // a write-miss root under lazy fetch loops its fill back instead.
     wire lazy_alloc_stc = (LAZY_FETCH != 0) && do_write_stc && ~stC.lk.is_hit && ~stC.lk.mshr_pending
                        && ~write_around_stc;
-    // the mask of the request's sector, as of every older store
-    wire [SECTOR_SIZE-1:0] sector_byteen_stc = evict_byteen_stc[sector_idx_stc * SECTOR_SIZE +: SECTOR_SIZE];
     // a refetch root (a partial-miss read or a parked head) whose sector every
     // store already covers loops back instead of reading memory, while the
     // loopback has the room a new request is admitted with: a parked head is
     // not admitted against it, and memory always has room for the refetch.
-    wire refetch_loop_stc = (LAZY_FETCH != 0) && do_read_stc && ~stC.lk.is_hit && ~stC.lk.mshr_pending
-                         && partial_miss_stc && (& sector_byteen_stc) && ~lazyq_alm_full;
+    wire refetch_root_stc = (LAZY_FETCH != 0) && do_read_stc && ~stC.lk.is_hit && ~stC.lk.mshr_pending
+                         && partial_miss_stc;
+    wire refetch_loop_stc = refetch_root_stc && evict_sec_full_stc[sector_idx_stc] && ~lazyq_alm_full;
+    // the mask of the request's sector, as of every older store
+    wire [SECTOR_SIZE-1:0] sector_byteen_stc = evict_byteen_stc[sector_idx_stc * SECTOR_SIZE +: SECTOR_SIZE];
+    `RUNTIME_ASSERT (~refetch_root_stc || (evict_sec_full_stc[sector_idx_stc] == (& sector_byteen_stc)), ("%t: %s sector-full flag disagrees with the dirty-byte mask: addr=0x%0h, full=%b, mask=0x%0h", $time, INSTANCE_ID, `CS_BANK_TO_FULL_ADDR(addr_stc, BANK_ID), evict_sec_full_stc[sector_idx_stc], sector_byteen_stc))
     wire do_fill_or_flush_stc = stC.req.valid && is_fill_or_flush_stc;
     // a sector refill keeps the resident line (no eviction), so never writes back.
     wire do_writeback_stc = do_fill_or_flush_stc && stC.lk.is_dirty && ~stC.lk.is_refill && ~refetch_first_stc;

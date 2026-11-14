@@ -18,7 +18,10 @@ module VX_pipe_register #(
     parameter DATAW  = 1,
     parameter RESETW = 0,
     parameter DEPTH  = 1,
-    parameter [`UP(RESETW)-1:0] INIT_VALUE = {`UP(RESETW){1'b0}}
+    parameter [`UP(RESETW)-1:0] INIT_VALUE = {`UP(RESETW){1'b0}},
+    // ASIC: the non-reset bits of a stage load only when its input's MSB (a
+    // valid bit, within the reset bits) is set, so they hold in invalid slots.
+    parameter DATA_GATE = 0
 ) (
     input wire              clk,
     input wire              reset,
@@ -27,12 +30,88 @@ module VX_pipe_register #(
     output wire [DATAW-1:0] data_out
 );
     `STATIC_ASSERT (RESETW <= DATAW, ("invalid parameter"))
+    `STATIC_ASSERT (DATA_GATE == 0 || RESETW != 0, ("invalid parameter"))
     if (DEPTH == 0) begin : g_passthru
         `UNUSED_VAR ({clk, reset, enable})
         `UNUSED_PARAM (RESETW)
         `UNUSED_PARAM (INIT_VALUE)
+        `UNUSED_PARAM (DATA_GATE)
         assign data_out = data_in;
+`ifdef ASIC
+    end else begin : g_pipe_cg
+        // Each bank of flops is clocked only when it loads; banks under 4
+        // bits cost more in gates than they save.
+        localparam FREEW = DATAW - RESETW;
+
+        wire [DEPTH-1:0][DATAW-1:0] pipe_out;
+        wire [DEPTH-1:0][DATAW-1:0] stage_in;
+        for (genvar i = 0; i < DEPTH; ++i) begin : g_stage_in
+            if (i == 0) begin : g_first
+                assign stage_in[i] = data_in;
+            end else begin : g_next
+                assign stage_in[i] = pipe_out[i-1];
+            end
+        end
+
+        if (RESETW != 0) begin : g_rst
+            wire rst_en = enable || reset;
+            wire rst_clk;
+            if (RESETW * DEPTH >= 4) begin : g_cg
+                VX_clockgate cg (.clk_in (clk), .en (rst_en), .clk_out (rst_clk));
+            end else begin : g_clk
+                assign rst_clk = clk;
+            end
+            reg [DEPTH-1:0][RESETW-1:0] pipe_rst;
+            always_ff @(posedge rst_clk) begin
+                if (reset) begin
+                    for (int i = 0; i < DEPTH; ++i) begin
+                        pipe_rst[i] <= INIT_VALUE;
+                    end
+                end else if (enable) begin
+                    for (int i = 0; i < DEPTH; ++i) begin
+                        pipe_rst[i] <= stage_in[i][DATAW-1 : FREEW];
+                    end
+                end
+            end
+            for (genvar i = 0; i < DEPTH; ++i) begin : g_out
+                assign pipe_out[i][DATAW-1 : FREEW] = pipe_rst[i];
+            end
+        end else begin : g_no_rst
+            `UNUSED_VAR (reset)
+            `UNUSED_PARAM (INIT_VALUE)
+        end
+
+        if (FREEW != 0) begin : g_free
+            // Without DATA_GATE every stage shares the one enable, and one gate.
+            wire shared_clk;
+            if (DATA_GATE == 0 && FREEW * DEPTH >= 4) begin : g_shared_cg
+                VX_clockgate cg (.clk_in (clk), .en (enable), .clk_out (shared_clk));
+            end else begin : g_shared_clk
+                assign shared_clk = clk;
+            end
+            for (genvar i = 0; i < DEPTH; ++i) begin : g_stages
+                wire stage_en = enable && ((DATA_GATE == 0) || stage_in[i][DATAW-1]);
+                wire stage_clk;
+                if (DATA_GATE != 0 && FREEW >= 4) begin : g_cg
+                    VX_clockgate cg (.clk_in (clk), .en (stage_en), .clk_out (stage_clk));
+                end else begin : g_clk
+                    assign stage_clk = shared_clk;
+                end
+                reg [FREEW-1:0] pipe_free;
+                always_ff @(posedge stage_clk) begin
+                    if (stage_en) begin
+                        pipe_free <= stage_in[i][FREEW-1 : 0];
+                    end
+                end
+                assign pipe_out[i][FREEW-1 : 0] = pipe_free;
+            end
+        end
+
+        assign data_out = pipe_out[DEPTH-1];
+    end
+`else
     end else begin : g_pipe
+        `UNUSED_PARAM (DATA_GATE)
     
         wire [DEPTH-1:0][DATAW-1:0] pipe_out;
 
@@ -97,6 +176,7 @@ module VX_pipe_register #(
 
         assign data_out = pipe_out[DEPTH-1];
     end
+`endif
 
 endmodule
 `TRACING_ON

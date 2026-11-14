@@ -33,8 +33,8 @@ Every MLP feature of Phase 1 and Phase 2, plus the earlier features this design 
 | P1 | [Hashed bank select](#hashed-bank-select) | Bank = low line bits XOR an IPOLY fold of the upper bits | `ef75f8e62` | `VX_CFG_DCACHE_BANK_HASH`, `VX_CFG_L2_BANK_HASH` | L2 on; dcache on at ≥ 4 banks | N | sgemv −32.8%, fp16 tensor −13.8%, WGMMA+DXA −13.5% | cache DUT 281.4 vs 278.8 MHz; LUT n/m |
 | P1 | [Back-to-back fills](#back-to-back-fills) | Fills enter a bank on consecutive cycles, each with its own staged sector | `f9dfa6a13` | none | on | N | rtx5080 stream −6.2% | cache DUT 300.4 → 309.6 MHz |
 | P1 | [L1-only launch flush](#l1-only-flush-between-launches) | The shared LLC answers a launch's L1-only token without a walk | `7ce8a7483`, `9473f26e9` | none (from topology) | on | N | flush 2,750 → 180 cycles; chained launches −11% | n/m |
-| P1 | [Write-allocate without fetch (lazy fetch)](#write-allocate-without-fetch-lazy-fetch) | A store miss installs the sector with a dirty-byte mask, no fill | `4f173e313`, `bdf39536d`, `1de9126e6`, default `a99c1be47` | `VX_CFG_{DCACHE,L2,L3}_LAZY_FETCH` | on where the cache is a write-back LLC | N | DRAM reads −33% (cycles flat) | cache DUT +2,629 LUT |
-| P1 | [Per-slice fetch and core partitioning](#per-slice-fetch) | FW fetch slices, each with scheduler, fetch, decode and icache port | `e58720478`, `8705e2b7b` | `VX_CFG_FETCH_WIDTH` | = issue width | N | sgemm IW4 −31.6%; SimX profiles −29.7% / −40.7% | +0.33% LUT at FW2 |
+| P1 | [Write-allocate without fetch (lazy fetch)](#write-allocate-without-fetch-lazy-fetch) | A store miss installs the sector with a dirty-byte mask, no fill | `4f173e313`, `bdf39536d`, `1de9126e6`, default `a99c1be47` | `VX_CFG_{DCACHE,L2,L3}_LAZY_FETCH` | on where the cache is a write-back LLC | N | DRAM reads −33% (cycles flat) | cache DUT 1.4k LUT below the earlier dirty-byte RAMs, 288.3 vs 276.9 MHz |
+| P1 | [Per-slice fetch and core partitioning](#per-slice-fetch) | FW fetch slices, each with scheduler, fetch, decode and icache port | `e58720478`, `8705e2b7b` | `VX_CFG_FETCH_WIDTH` | = issue width | N | sgemm IW4 −31.6%; SimX profiles −29.7% / −40.7% | n/m |
 | P1 | [Device-wide global barrier](#device-wide-global-barrier) | One gbar unit counts every core across clusters | `5f1ef4fad`, `c1516d3e1` | none | on | N | correctness at > 1 cluster | n/m |
 | P1 | [Targeted fences](#targeted-fences) | L1-only token for memory fences; I/O fences drain without a walk | `3f27ba402`, `18b6fe521` | none | on | N | printf 13.6×, fence −55% | n/m |
 | P1 | [CP DMA through the LLC](#command-processor-dma-through-the-llc) | The command processor's DMA is a client of the shared LLC | `1d3db49b6`, `cc7bb17cc`, `bbad636e3`, `f93df327f`, default `60d79470a` | `VX_CFG_CP_LLC_CLIENT` | on (acts only with one shared LLC) | N | multikernel −42.7%, dogfood −30% | est. +2–3k LUT (not synthesized) |
@@ -50,15 +50,15 @@ Every MLP feature of Phase 1 and Phase 2, plus the earlier features this design 
 | P2 | [Acquire/release fences](#acquire-and-release-fences) | Fence pred/succ picks invalidate, drain or both; .aq/.rl AMOs ordered | `03e8304a2`, `a010af42d` | none | on | N | correctness (seq-cst AMOs pay +95%) | n/m |
 | P2 | [Icache same-line merge](#icache-same-line-merge) | Same-line fetches of different slices share one bank access | `c9b78161c` | `VX_CFG_ICACHE_READ_MERGE` | on (no effect at FW 1) | N | IW4 sgemm −12.1%; rtx5080 sgemm −25.8% | n/m |
 | P2 | [Write-through ordering](#write-through-ordering) | A draining write-through store stays a hazard for same-word loads | `1babe84fb` | none | on | N | correctness | n/m |
-| P2 | [Warp-wide local-memory unit](#warp-wide-local-memory-unit) | Whole-warp LMEM requests served in bank passes, same-word reads ride along; a second read engine on the banks' second port | `b95dd2b4d` (read merge), `0b0d7ca4d` (unit) | none | on | N | SimX sgemm2 16×16 −0.4% / −0.5% (mainly timing) | LMEM deepest path 18 → 9 levels; lmem DUT 26,822 LUT |
+| P2 | [Warp-wide local-memory unit](#warp-wide-local-memory-unit) | Whole-warp LMEM requests served in bank passes, same-word reads ride along; a second read engine on the banks' second port | `b95dd2b4d` (read merge), `0b0d7ca4d` (unit) | none | on | N | read merge: SimX rtx5080 sgemm2 1.93×; unit: SimX sgemm2 16×16 −0.4% / −0.5% (mainly timing) | LMEM deepest path 18 → 9 levels; lmem DUT 26,822 LUT |
 | P2 | [Lane-gather writeback merge](#lane-gather-writeback-merge) | An instruction's partial lane passes write back as one beat | `c69145562` | none | on | N | sgemm −9.7% (16T) / −20.6% (32T); mixfu −8.7% / −9.1% | −2,428 LUT per gather |
 | P2 | [Miss tracking from bandwidth × latency](#miss-tracking-sized-by-littles-law) | MSHRs and the LSU pending pool sized by Little's law from the platform | `7d2883ca0` | `VX_CFG_{DCACHE,L2,L3}_MSHR_SIZE` (derived), `VX_CFG_LSU_PENDING_LIMIT` | derived (stock shapes unchanged) | N | not measured (a100 L2 MSHR 16 → 64) | grows only where the platform needs it |
 | P2 | [Victim advance on a new line only](#victim-advance-on-a-new-line-only) | FIFO and random replacement step only when a line is new | `3032f6471` | none | on | N | 8 same-set lines: memory reads 25 → 9 | 0 LUT |
 | P2 | [Hashed set index](#hashed-set-index) | Set = raw set bits XOR an XOR fold of the tag | `7b8febada` | `VX_CFG_DCACHE_SET_HASH` | dcache on | N | sgemv 512–2048 −20% to −24%, mxfp8 −4.8%, fp16-isw4 −3.5% | +8 LUT per dcache, no deeper register |
-| P2 | [Non-power-of-two way count](#non-power-of-two-way-count) | Exact cache capacities of the profiled parts | `c9c82b7a0` | `VX_CFG_*_NUM_WAYS` | — | N | capacity fidelity | default unchanged |
+| P2 | [Non-power-of-two way count](#non-power-of-two-way-count) | Exact cache capacities of the profiled parts | `c9c82b7a0` | `VX_CFG_*_NUM_WAYS` | 4 (L1s), 8 (L2, L3) | N | capacity fidelity | default unchanged |
 | P2 | [Stack interleave by whole lines](#stack-interleave-by-whole-lines) | The per-warp stack skew steps by dcache lines | `8b4e6e8d9` | `VX_CFG_LSU_STACK_INTERLEAVE_ENABLE` | on | N | raycast −0.3% | one narrow XOR |
-| P2 | [TCU_LD in LSU-lane passes](#tcu-loads-in-lsu-lane-passes) | TCU loads issue in LSU-width passes when the LSU is narrower than the warp | `d47fead9c` | none | on | N | enables narrow-LSU TCU shapes | default unchanged |
-| P2 | [Wide loads and stores](#wide-loads-and-stores) | `vx_flw.d/.q`, `vx_fsw.d/.q`: 2 or 4 words to an aligned FP register group, one fetched instruction | `9f116ff7a`, knob and intrinsics `5ad62a09d` | `VX_CFG_EXT_LDST_WIDE_ENABLE` | **off** | N (intrinsics; LLVM `+xvortexldstwide` optional, off by default) | knob on vs off (unrolled scalar): sgemm_v1 −9.5% / −7.5%, sgemm2 −7.2% / −8.3%, sgemm2_dxa_mcast −5.7% / −8.0%, sgemm2_dxa −2.6% / −3.8%, sgemm −2.5% to −6.2%, sgemmx −2.1% | decode +33 LUT, expander +3 LUT per warp; knobs off: core −89 LUT |
+| P2 | [TCU_LD in LSU-lane passes](#tcu-loads-in-lsu-lane-passes) | TCU loads issue in LSU-width passes when the LSU is narrower than the warp | `d47fead9c` | none | on | N | enables narrow-LSU sparse and MX shapes | default unchanged |
+| P2 | [Wide loads and stores](#wide-loads-and-stores) | `vx_flw.d/.q`, `vx_fsw.d/.q`: 2 or 4 words to an aligned FP register group, one fetched instruction | `9f116ff7a`, knob and intrinsics `5ad62a09d` | `VX_CFG_EXT_LDST_WIDE_ENABLE` | **off** | N (intrinsics; LLVM `+xvortexldstwide` optional, off by default) | knob on vs off (unrolled scalar): sgemm_v1 −9.5% / −7.5%, sgemm2 −7.2% / −8.3%, sgemm2_dxa_mcast −5.7% / −8.0%, sgemm2_dxa −4.5% / −6.2%, sgemm −2.5% to −6.2%, sgemmx −2.1% | decode +33 LUT, expander +3 LUT per warp; knobs off: core −89 LUT |
 | P2 | [Matrix fragment loads and stores](#matrix-fragment-loads-and-stores) | `vx_ldm`, `vx_stm`: a fragment in one macro-op, expanded per register | `d72b25c0a`, knob and TCU decoupling `5ad62a09d` | `VX_CFG_EXT_LDST_MATRIX_ENABLE` | **off** | N (intrinsics) | dense, mx and sparse TCU kernels −3.4% to −10.1% | +169 LUT with TCU, +157 LUT without |
 | P2 | [Zero-latency request skids](#request-skids-at-the-l2-and-mmu-inputs) | Registered ready at the L2 core-request and MMU inputs; flushes wait for held requests | `ddd4ea511` | none | on | N | 0 cycles (perf_gate identical); tensor 240.6 → 251.6 MHz, top 243.0 → 256.1 MHz | +0.03% to +0.2% LUT |
 
@@ -75,8 +75,9 @@ Some of these features can be set with a `VX_CFG_*` knob (see [Build Configurati
 | Dcache read merge | `VX_CFG_DCACHE_READ_MERGE` | 1 (on) |
 | Icache same-line merge | `VX_CFG_ICACHE_READ_MERGE` | 1 (on). No effect with one fetch slice. |
 | CP DMA through the LLC | `VX_CFG_CP_LLC_CLIENT` | 1 (on). Takes effect only when one LLC serves every core. |
-| Per-slice fetch | `VX_CFG_FETCH_WIDTH` | The issue width's lowest set bit, so equal to a power-of-two issue width |
-| Miss tracking | `VX_CFG_{DCACHE,L2,L3}_MSHR_SIZE`, `VX_CFG_LSU_PENDING_LIMIT` | Derived from the platform's bandwidth × latency; the stock shapes resolve to the earlier values |
+| Per-slice fetch | `VX_CFG_FETCH_WIDTH` | Equal to the issue width (a power of two) |
+| Miss tracking | `VX_CFG_{DCACHE,L2,L3}_MSHR_SIZE`, `VX_CFG_LSU_PENDING_LIMIT` | Derived from the platform's bandwidth × latency (`VX_CFG_PLATFORM_MEMORY_PEAK_BW`, `VX_CFG_PLATFORM_CLOCK_RATE`, `VX_CFG_PLATFORM_MEMORY_LATENCY`, `VX_CFG_{L1,L2}_LINK_LATENCY`). The stock shapes set no memory latency and resolve to the floors: 16 MSHR entries, an LSU limit of 32 |
+| Non-power-of-two way count | `VX_CFG_{ICACHE,DCACHE,L2,L3}_NUM_WAYS` | 4, 4, 8, 8. Any count; the sets per bank stay a power of two |
 | Stack interleave | `VX_CFG_LSU_STACK_INTERLEAVE_ENABLE` | On |
 | Wide loads and stores | `VX_CFG_EXT_LDST_WIDE_ENABLE` | **Off.** Needs F with 32-bit FP registers. |
 | Matrix fragment loads and stores | `VX_CFG_EXT_LDST_MATRIX_ENABLE` | **Off.** Independent of the TCU. |
@@ -97,15 +98,25 @@ Some of these features can be set with a `VX_CFG_*` knob (see [Build Configurati
 
 ### Per-slice fetch
 
-**Problem.** With an issue width above one, the issue slices were fed by a single fetch and decode path, one instruction per cycle. Warps on different slices waited for the front end, not for their operands, so a wider core issued little more than a narrow one.
+![Per-slice fetch](../assets/img/mlp_fetch_slices.svg)
 
-**How it works.** The front end is split into `FETCH_WIDTH` slices. Each has its own warp scheduler, fetch, decode and icache port, and serves its share of the warps. The core's structure (issue slices, execution blocks, icache banks) is derived from the fetch width, the issue width and the block counts. The slices share the icache; the [icache same-line merge](#icache-same-line-merge) keeps them from queuing on the same line. Controlled by `VX_CFG_FETCH_WIDTH`, which defaults to the issue width (its lowest set bit), so a one-wide core is unchanged.
+**Problem.** With an issue width above one, every issue slice was fed by one warp scheduler, one fetch and decode path and one icache port: one instruction per cycle for the whole core. Warps on different slices waited for the front end, not for their operands, so a wider core issued little more than a narrow one.
+
+**How it works:**
+- The front end is split into `VX_CFG_FETCH_WIDTH` (FW) slices (`VX_frontend_slice`). Each has its own warp scheduler, fetch, decode and icache port, and serves the warps with `wid % FW == f`.
+- CTA dispatch (one launch lane per slice), barriers, wspawn and warp retirement stay core-wide in `VX_scheduler`.
+- The core takes one of three structures from FW, the issue width and the per-unit block counts, with no switch of its own:
+  - some unit has fewer blocks than issue slices: the front-end slices feed stage-sliced issue, execute and commit through the `VX_frontend_xbar` crossbar;
+  - one block of every unit per issue slice, FW below the issue width: the crossbar feeds one `VX_backend_slice` (issue, one block of every unit, commit) per issue slice;
+  - FW equal to the issue width as well: each `VX_compute_slice` joins a front-end slice directly to its back-end slice, with no crossbar. This is the processing-block organization of NVIDIA SMs.
+- The icache has one bank per fetch slice (`VX_CFG_ICACHE_NUM_BANKS`), and the [icache same-line merge](#icache-same-line-merge) keeps the slices from queuing on the same line.
+- FW is a power of two that divides the issue width. It defaults to the issue width, so a one-wide core keeps one slice.
+- SimX has the same structure: per-slice fetch and decode latches, icache ports and banks, and CTA launch lanes.
 
 **Gain:**
-- rtlsim, issue width 4: sgemm 103,793 → 70,957 cycles (−31.6%) at two fetch slices; raycast −2.7%.
-- SimX GPU profiles at four fetch slices: −29.7% and −40.7%.
-- The one-wide default moves by at most 132 cycles.
-- Area: +0.33% LUT at two fetch slices.
+- rtlsim, issue width 4, 16 warps × 16 threads, FW 1 → 2: sgemm 103,793 → 70,957 cycles (−31.6%), raycast 307,307 → 299,006 (−2.7%).
+- SimX, 4 cores, FW 4 against FW 1: sgemm −29.7% on the rtx5080 profile (-n192) and −40.7% on the a100 profile (-n128).
+- At issue width 1 the split structure moves rtlsim by at most +132 cycles (printf).
 
 ---
 
@@ -146,27 +157,38 @@ Some of these features can be set with a `VX_CFG_*` knob (see [Build Configurati
 
 ### Hashed set index
 
+![Hashed set index](../assets/img/mlp_set_hash.svg)
+
 **Problem.** A cache takes its set index from the address bits above the bank field. A power-of-two stride of `NUM_BANKS × LINE × 2^k` or more keeps the low set bits fixed, so the stream piles into `NUM_SETS / 2^k` sets while the rest of the cache sits empty. The default dcache (16 KB, 4-way, 2 banks of 32 sets) maps the 16 rows that sgemv 512×512 keeps live, 2 KB apart, into 2 sets. The run then flips between a thrashing and an escaping state on a one-cycle timing change. The bank hash does not help: it moves only the bank bit.
 
-**How it works.** The set index is the raw set bits XORed with an XOR fold of the tag's low 32 bits, in chunks of the set-index width (`cache_set_hash` in `VX_gpu_pkg.sv`). The tag is stored unchanged, so the same XOR restores the raw set: tags, MSHR, sectors, replacement and the flush walk are untouched. It is applied once where the request's line address enters the bank and once where a bank's memory address is rebuilt. SimX applies the same function. Each set bit is a 5-input XOR at the default geometry.
+**How it works.** The set index is the raw set bits XORed with an XOR fold of the tag's low 32 bits, in chunks of the set-index width (`cache_set_hash` in `VX_gpu_pkg.sv`). In the figure, the 16 rows differ only in set bit 4 and in the tag's low bits, so the fold spreads them over 16 sets. The tag is stored unchanged, so the same XOR restores the raw set: tags, MSHR, sectors, replacement and the flush walk are untouched. `VX_cache` applies it to the request's line address ahead of the request crossbar, and undoes it where a bank's memory address is rebuilt. SimX applies the same function (`set_xor` in the cache model). Each set bit is a 5-input XOR at the default geometry. Controlled by `VX_CFG_DCACHE_SET_HASH`, on by default.
 
 High associativity is how current NVIDIA L1s avoid these conflicts (Accel-Sim models the Volta L1 as 64-way with a linear index). Fermi's L1 hashed its set index instead. For a 4-way cache, the hash is the cheap stand-in for associativity it cannot afford.
 
 **Gain (rtlsim):**
 - sgemv 512×512: −20.1% at 4 threads, −23.9% at 16; read hit rate 29% → 85%, and the two-state behaviour is gone (2.1% spread over L1 latency +0..+3, against 29% without the hash)
-- sgemv 512×1024 and 512×2048: −23.2% and −23.8%; hit rate 22% → 84%
-- mxfp8 tensor: −4.8%; fp16 tensor at issue width 4: −3.5% (dcache misses −6% to −7%)
+- sgemv 512×1024 and 512×2048: −23.2% and −23.8%
+- mxfp8 tensor: −4.8%; fp16 tensor: −3.7%; fp16 tensor at issue width 4: −3.5%
 - perf_gate geomean over 49 cases: −1.1%
+- Area: +8 LUT per dcache, no deeper register (Beacon)
 
 **Cost.** Any hash moves which lines conflict. Two TCU tile layouts lose a little, averaged over L1 latency +0..+3: fp16 on 2 cores at 16 threads +1.8% (misses +39%), sgemm2 fp16 +1.1% (misses +21%). XORing only the low tag bits is no better (+3.4% on the first), so the cost belongs to set hashing for those layouts, not to the fold. The L2 and L3 get no set hash: in every measured case their working sets fit without conflicts, so the hash changed nothing.
 
 ### Non-power-of-two way count
 
-**Problem.** The profiled GPUs have caches with 6, 12, 20 or 24 ways. With power-of-two ways only, a profile had to round its capacity, which changes hit rates.
+![Non-power-of-two way count](../assets/img/mlp_way_count.svg)
 
-**How it works.** The way select, the replacement state and the victim choice use the exact way count instead of a bit slice. Power-of-two way counts produce the same logic as before.
+**Problem.** The profiled GPUs have caches with 6 to 25 ways: a 6-way L1 on the a100, a 20-way L2 on the a100, a 25-way L2 on the h100. With power-of-two ways over power-of-two sets, a profile had to round its capacity down (the a100's 40 MB L2 to 32 MB, its 192 KB L1 to 128 KB), which changes hit rates.
 
-**Gain:** the profiles get their parts' exact cache capacities. Beacon shows the default cache unchanged in depth and area.
+**How it works.** The way count is any number; the sets per bank stay a power of two and fill the size (`VX_cache` asserts both). The way code keeps its power-of-two width, and the codes past the last way are never used:
+- FIFO wraps from the last way to way 0.
+- Random folds a pick past the last way back onto a real way (pick − `NUM_WAYS`).
+- PLRU keeps a tree over the next power of two of ways, and folds a leaf past the last way down by the number of unused leaves.
+- The flush walk stops at the last real way.
+
+These are in `VX_cache_repl` and `VX_cache_flush`. SimX's cache model takes the size in bytes and the way count instead of their log2. Power-of-two way counts produce the same logic as before. The way count is set per cache with `VX_CFG_*_NUM_WAYS`.
+
+**Gain:** the profiles get their parts' exact cache capacities, for example a100 L2 40 MB (20 ways) and L1 192 KB (6 ways), h100 L2 50 MB (25 ways), v100 L2 6 MB (24 ways). Beacon shows the default cache unchanged in depth (16 levels) and area. No cycle measurement is recorded.
 
 ---
 
@@ -197,11 +219,23 @@ High associativity is how current NVIDIA L1s avoid these conflicts (Accel-Sim mo
 
 ### Write-allocate without fetch (lazy fetch)
 
+![Write-allocate without fetch](../assets/img/mlp_write_validate.svg)
+
 **Problem.** A write-back cache that misses on a store normally reads the whole line from memory, then overwrites part or all of it. Streaming writes therefore cost a read for every line they write.
 
-**How it works.** A store miss installs the sector at once, with a per-byte dirty mask and a *partial* bit, without reading memory. A later load or atomic on a partial sector refetches it and merges memory data only under the bytes that were never written. An eviction writes back only the dirty bytes. A refill of one sector keeps the dirty bytes of the line's other sectors. Controlled by `VX_CFG_{DCACHE,L2,L3}_LAZY_FETCH`.
+**How it works:**
+- A store miss allocates its MSHR entry as usual, but instead of a memory request it pushes the entry into a small loopback queue. The data-less fill from that queue installs the sector with a cleared dirty-byte mask and a *partial* bit, and the store writes its bytes. Memory is not read.
+- Stores may hit a partial sector. A load or atomic misses on it: its fill refetches the sector and merges memory data only under the bytes that were never written. A chain of waiting requests that meets a partial sector parks at its head, issues the refetch, and retries.
+- An eviction or flush writes back only the dirty bytes. A refill of one sector keeps the dirty bytes of the line's other sectors.
+- The dirty-byte mask is one way-folded RAM, read and written only at the bank's commit stage as a whole-line read-modify-write.
+- SimX models the same partial sectors, data-less fills and parked chains.
 
-**Gain:** 1-core vecadd DRAM reads −33% and memory requests −25%. Cycles are unchanged because that kernel is latency-bound. On where the cache is a write-back LLC, the same write-validate policy NVIDIA's L2 uses: the DRAM traffic it removes counts even where cycles are flat.
+Controlled by `VX_CFG_{DCACHE,L2,L3}_LAZY_FETCH`. It is on in whichever cache is a write-back LLC (the dcache with no L2, the L2 with no L3, or the L3), the only place it is legal, and it turns on that cache's dirty-byte masks (`VX_CFG_*_DIRTYBYTES`). This is the write-validate policy NVIDIA's L2 uses for partial writes. A sector that the stores write in full skips its refetch: see the [full-sector refetch skip](#full-sector-refetch-skip).
+
+**Gain:**
+- 1-core vecadd: DRAM reads −33% and memory requests −25%. Cycles are unchanged because that kernel is latency-bound; the DRAM traffic it removes counts even where cycles are flat.
+- The 49 rtlsim perf cases, on against off: five run 2% to 9% faster (wgmma-dxa, wgmma-sp-dxa, wgmma-dxa-mcast-nt16, fp16-isw4, fp16-mc-nt16), the rest within 2%.
+- Cache DUT on the U55C at a 300 MHz target: 288.3 MHz with the feature on, against 276.9 MHz with per-way dual-port dirty-byte RAMs, and 1.4k fewer LUTs.
 
 ### Full-sector refetch skip
 
@@ -213,31 +247,47 @@ High associativity is how current NVIDIA L1s avoid these conflicts (Accel-Sim mo
 
 **Gain:**
 - DRAM reads: 145 → 17 at the dcache and 539 → 27 at the L2, on a fully written stream.
-- SimX, rtx5080 profile, 4 cores, sgemm -n192 with L2 lazy fetch: 285,006 → 161,121 cycles (−43.5%). Lazy fetch is now slightly faster than having it off.
+- SimX, rtx5080 profile, 4 cores, sgemm -n192 with L2 lazy fetch: 285,006 → 161,121 cycles (−43.5%). With the skip, lazy fetch is slightly faster than having it off.
 
 ### Miss tracking sized by Little's law
 
-**Problem.** To reach a memory system's peak bandwidth, bandwidth × latency bytes must be in flight. The dcache, L2 and L3 MSHRs had 16 entries and the LSU's pending pool was capped at 32, on every platform. A high-bandwidth, high-latency platform could not keep enough misses outstanding.
+![Miss tracking sized by Little's law](../assets/img/mlp_mshr_sizing.svg)
 
-**How it works.** The configuration computes the bytes in flight the platform needs: peak bandwidth ÷ clock rate × memory latency. Each cache level sizes its MSHR from its bank's share of that, in sectors: a power of two, at least 16, at most 256 (64 for the dcache). `VX_CFG_LSU_PENDING_LIMIT` (32 to 256) bounds the LSU's pending pool per block the same way. Every RTL width derived from these sizes follows them, and SimX uses the same capacities.
+**Problem.** To reach a memory system's peak bandwidth, bandwidth × latency bytes must be in flight. A fixed miss-tracking depth (16 MSHR entries per dcache, L2 and L3 bank, and an LSU pending pool capped at 32) holds the same number of misses on every platform. A high-bandwidth, high-latency platform cannot keep enough misses outstanding, and its bandwidth idles while new misses wait for an entry.
 
-**Gain:** the stock shapes resolve to the same sizes as before. The a100 profile gets a 64-entry L2 MSHR; a profile that pins a value keeps it. Not measured separately.
+**How it works.** The configuration (`VX_config.toml`) computes the bytes the platform must keep in flight: peak bandwidth ÷ clock rate × latency, from `VX_CFG_PLATFORM_MEMORY_PEAK_BW`, `VX_CFG_PLATFORM_CLOCK_RATE` and `VX_CFG_PLATFORM_MEMORY_LATENCY`. For the dcache the latency adds the round trip of the link to the L2 (`VX_CFG_L2_LINK_LATENCY`), and for the LSU also that of the link to the dcache (`VX_CFG_L1_LINK_LATENCY`).
+- Each cache level divides that by its bank count across the device and its sector size, and rounds up to a power of two: `VX_CFG_{DCACHE,L2,L3}_MSHR_SIZE`, at least 16, at most 256 (64 for the dcache).
+- `VX_CFG_LSU_PENDING_LIMIT` is an LSU block's share in full LSU packets, a power of two from 32 to 256. It bounds the LSU's pending pool (`VX_CFG_LSU_PENDING_SIZE`), which is otherwise sized from the warp count.
+- Every RTL width derived from these sizes follows them (the LSU tag, the packet slots, the MSHR index), and SimX uses the same capacities.
+- A profile that sets a value keeps it.
+
+**Gain:** the default platform has no memory latency set, so the stock shapes resolve to the floors: 16 MSHR entries and an LSU limit of 32. The a100 profile gets a 64-entry L2 MSHR. No cycle measurement is recorded.
 
 ### Victim advance on a new line only
 
-**Problem.** The bank updated the replacement state on every fill, including a sector refill into a line already present. A stream reading both sectors of each line moved the FIFO pointer twice per line, so only every other way was ever chosen as a victim. The random policy stepped its generator on refills too.
+![Victim advance on a new line only](../assets/img/mlp_victim_advance.svg)
 
-**How it works.** The replacement state advances only when a fill brings in a new line. PLRU, which updates on hits, is unaffected.
+**Problem.** With sectored lines, a line arrives in several fills: the first installs the line, the others are sector refills into a line already present. A replacement state that steps on every fill moves the FIFO pointer once per sector. A stream reading both sectors of each 2-sector line then steps twice per line, so only every other way is ever chosen as a victim, and a new line is evicted while older lines in the skipped ways stay. The random policy steps its generator on refills too.
 
-**Gain:** one thread filling a set to its way count, re-reading it and adding one more line: 25 memory reads before, 9 after (the spread-out control is 9). No area change.
+**How it works.** `VX_cache_bank` drives the replacement update (`VX_cache_repl`) only on a fill that brings in a new line: not on a sector refill, a refetch, or a pass-through fill. FIFO then steps once per line, and every way takes its turn. PLRU, which updates on hits, is unaffected. SimX's cache model applies the same rule.
+
+**Gain:** one thread filling a set to its way count, re-reading it and adding one more line: 8 same-set lines cost 25 memory reads with the update on every fill and 9 with it on new lines only, the same as a spread-out control (simx and rtlsim). No area change: the cache DUT stays at 28,750 LUT, the sectored one goes from 31,604 to 31,607 LUT, and nothing is deeper (Beacon).
 
 ### Request skids at the L2 and MMU inputs
 
-**Problem.** The L2 decided whether to accept a request in the same cycle as its tag lookup, and the MMUs in the same cycle as their TLB lookup. That ready signal fed back into the sender's output register across a module boundary, so the lookup and the sender's register enable formed one long loop. It was the slowest path on the tensor and full-GPU builds.
+![Request skids at the L2 and MMU inputs](../assets/img/mlp_request_skid.svg)
 
-**How it works.** A zero-latency skid register sits at each L2 bank's core-request input and at each MMU request lane. The sender sees a registered ready: the skid accepts whenever it is empty, and a request passes straight through when the bank accepts it at once, so no cycle is added. A flush waits until no request is held in a skid, so it can't overtake one. SimX models the held requests the same way.
+**Problem.** An L2 bank decides whether to accept a request in the same cycle as its tag lookup, and an MMU lane in the same cycle as its TLB lookup. That ready signal feeds back into the sender's output register, across a module boundary and over a wide data path: lookup → pipeline stall → ready → the sender's register enable. The two loops were the slowest paths of the tensor build (the L2 input, 240.6 MHz) and the full-GPU build (the socket MMU lanes, 243.0 MHz).
 
-**Gain:** cycles unchanged (perf_gate identical). FPGA: tensor 240.6 → 251.6 MHz and full GPU 243.0 → 256.1 MHz, for +0.03% to +0.2% LUT.
+**How it works.**
+- A zero-latency skid register (`VX_bypass_buffer`) sits at each L2 bank's core-request input, behind an unbuffered request crossbar (`VX_cache` `CORE_REQ_SKID`), and at each request lane of the socket's dMMU and iMMU (`VX_mmu` `REQ_SKID`).
+- The sender sees a registered ready: the skid accepts whenever it is empty. An empty skid passes the request straight through, so a request the bank accepts at once loses no cycle. A refused request waits in the skid, and the skid refuses the next one until it drains.
+- A request held in a skid has left the cache's input but not reached the bank, so a flush (`VX_cache_init`) waits until every skid is empty; a write held there cannot land after the walk that should cover it. The MMU's drain status counts its skids too.
+- SimX models both: the cache's port arbiter catches a refused offer in the bank's skid and offers that bank nothing while it holds a request, and the flush drains a held request first. The MMU input takes the skid as one more registered-ready slot.
+
+There is no knob; a crossbar with an output buffer already registers the ready, and gets no skid.
+
+**Gain:** cycles unchanged (perf_gate identical). Vivado, U55C: tensor 240.6 → 251.6 MHz (+0.2% LUT) and full GPU 243.0 → 256.1 MHz (+0.03% LUT). The skid's bypass multiplexer adds one logic level on paths inside the MMU.
 
 ---
 
@@ -295,7 +345,7 @@ With the merge, 16 icache banks are no longer slower than 4.
 - One broadcast `CACHE_FLUSH` write starts every core's flush at once. The command processor then collects the completions, so the flushes overlap.
 - A cache walks its banks and sends a flush token down **every** memory port. It answers only once all ports have answered.
 - Every independently buffered write path carries its own token.
-- Read-only caches (icache, texture, ray-tracing caches) no longer forward flushes at all.
+- Read-only caches (icache, texture, ray-tracing caches) do not forward flushes at all.
 
 **Gain:** flush cost per launch dropped from 2.76M to 16.5k cycles on the measured shape. It also fixed the lost-write case above.
 
@@ -354,7 +404,11 @@ Atomics with `.aq`/`.rl` get these steps around them. All of it is skipped when 
 
 ![Atomics at the LLC](../assets/img/mlp_llc_atomics.svg)
 
-**How it works.** RISC-V `A`-extension atomics run once, as a read-modify-write at the last-level cache. Each private L1 they pass through drops its copy of the line, so the next load of that word from any core misses and sees the new value. `LR`/`SC` use a reservation table. This keeps atomics correct across L1, L2 and L3 without a coherence protocol between the L1s. Controlled by `VX_CFG_EXT_A_ENABLE`.
+**Problem.** The private L1s have no coherence protocol: they stay consistent only through write-through and flushes. A read-modify-write performed in an L1 would update that core's copy alone. Two cores' atomics on one word would each read the old value, and one update would be lost.
+
+**How it works.** RISC-V `A`-extension atomics run once, as a read-modify-write at the last-level cache: the dcache with no L2, the L2 with no L3, or the L3. Only that level executes them (`VX_cache_amo`, `VX_amo_unit`) and holds the `LR`/`SC` reservation table. Each private L1 an atomic passes through forwards it and drops its own copy of the line, so the next load of that word from any core misses and sees the new value. Above the LLC an atomic never joins another request's MSHR chain: each needs its own round trip. At the LLC, atomics chain in arrival order like any other request. SimX executes atomics at the same level. Controlled by `VX_CFG_EXT_A_ENABLE`, off by default.
+
+**Gain:** correctness. Atomics from every core and cluster act on one copy of each word, with no coherence traffic between the L1s. The cost is one LLC round trip per atomic; no measurement is recorded.
 
 ### Write-through ordering
 
@@ -368,11 +422,17 @@ Atomics with `.aq`/`.rl` get these steps around them. All of it is skipped when 
 
 ### Device-wide global barrier
 
-**Problem.** Each cluster had its own global-barrier unit. A barrier across clusters counted each cluster's cores separately, so SimX hung and the RTL timed out or released early with more than one cluster.
+![Device-wide global barrier](../assets/img/mlp_gbar.svg)
 
-**How it works.** One device-level unit counts the arrivals of every core and releases them together.
+**Problem.** A global barrier waits for every core of the device (`vx_num_cores()` counts cores × clusters), but each cluster had its own barrier unit that saw only its own cores, with core ids and counts one cluster wide. With more than one cluster, SimX's count never reached the total and the kernel hung. The RTL either did not build the global path (2 clusters × 1 core: scheduler timeout) or released each cluster after its own arrivals, so the barrier gave no ordering between clusters.
 
-**Gain:** correct global barriers at any cluster count.
+**How it works:**
+- One `VX_gbar_unit` in `Vortex.sv` serves the device. Arrivals cross the socket's and the cluster's `VX_gbar_arb`, then a device-level arbiter, which has an output buffer when there are several clusters.
+- The unit keeps one arrival counter per barrier, compared at full width with the barrier's size. A core arrives once per barrier generation, so the count alone identifies the release. The release goes back through the arbiters' response forks to every core.
+- The request carries the device-global core id, and the global path is built whenever the device has more than one core.
+- SimX has the matching device-level `GbarUnit`. A single cluster's arrivals take the same arbiter lags as in the RTL.
+
+**Gain:** correct global barriers at any cluster count. async_gbarrier and gbar_phase pass on rtlsim and SimX at 2 clusters × 1 core, 2 clusters × 2 cores with L2 and L3, 2 clusters with L2, and 4 clusters with L3; every one of these hung on SimX without the device unit. One-cluster sgemm, raycast and gbar_phase are cycle-identical.
 
 ---
 
@@ -380,18 +440,23 @@ Atomics with `.aq`/`.rl` get these steps around them. All of it is skipped when 
 
 ### Warp-wide local-memory unit
 
-**Problem.** Local memory served LSU requests lane by lane through a request crossbar. Same-word reads, such as a tile row every thread of a warp reads, each took their own bank access, and the crossbar was an 18-level path that limited the core's clock.
+![Warp-wide local-memory unit](../assets/img/mlp_lmem_unit.svg)
+
+**Problem.** Local memory served LSU requests lane by lane through a request crossbar. Lanes that read the same word, such as a tile row every thread of a warp reads, each took their own bank access, so a warp-uniform read was serialized at its bank. The crossbar was also an 18-level logic path that limited the core's clock.
 
 **How it works:**
-- The unit takes a whole warp's request per cycle and serves it in passes. In each pass every bank goes to the lowest pending lane that maps to it, and every pending read lane of the same word rides along. Lanes left over replay in the next pass.
+- `VX_lmem_unit` takes a whole warp request per cycle and serves it in passes (`VX_lmem_engine`). In each pass every bank goes to the lowest pending lane that maps to it, and every pending read lane of the same word rides along. Lanes left over replay in the next pass.
 - A request retires before the next one starts, so the banks see every lane in program order.
-- With several LSU blocks, a second, read-only engine uses the banks' second port, so two warps' reads go through each cycle. Stores and atomics use the first engine and are ordered against every read.
-- Each block's response leaves from its own register, with no added latency.
-- DXA writes and TCU reads take whole bank rows.
+- With several LSU blocks, a second, read-only engine uses the banks' second port (`VX_1rw1r_ram`), so two warps' reads go through each cycle. Stores and atomics use the first engine alone and are ordered against every read.
+- Each block's response leaves from its own register; the response queue is bypassed when it is empty, so no latency is added.
+- The DMA port (DXA writes, TCU reads) takes whole bank rows, in the cycle after its request is seen.
+- SimX (`LocalMem`) models the same passes, engines and response registers.
 
 **Gain:**
+- Same-word ride-along, SimX, rtx5080 profile (4 cores × 32 warps × 32 threads), on vs off: sgemm2 -t16 -n128 352,650 → 182,847 cycles (1.93×); geomean over 8 local-memory kernels 2.72×; a kernel without local memory is unchanged.
+- Warp-wide unit against the per-lane crossbar with the same ride-along, SimX, sgemm2 at 16 threads × 16 warps, -t16: −0.4% at -n128 (1,065,573 → 1,060,979) and −0.5% at -n256.
 - Timing: the local memory's deepest path goes from 18 to 9 logic levels (Beacon), and registers at 8 or more levels from 789 to 337.
-- Cycles: SimX, sgemm2 at 16 threads × 16 warps, -t16: −0.4% at -n128 (1,065,573 → 1,060,979) and −0.5% at -n256. The same-word ride-along already existed as the earlier LSU-side read merge, which this unit replaces.
+- Area: the lmem DUT is 26,822 LUT (Vivado).
 
 ---
 
@@ -447,44 +512,59 @@ Atomics with `.aq`/`.rl` get these steps around them. All of it is skipped when 
 
 ### Lane-gather writeback merge
 
-**Problem.** When the ALU or FPU has fewer lanes than the warp has threads, an instruction executes in several partial passes. Each pass wrote back on its own, so a 32-thread instruction on 8 lanes took 4 writeback beats and held the commit port for all of them.
+![Lane-gather writeback merge](../assets/img/mlp_lane_gather.svg)
 
-**How it works.** The lane gather collects an instruction's partial passes and writes them back as one beat. The per-lane demultiplexer that routed each pass is gone.
+**Problem.** When the ALU or FPU has fewer lanes than the warp has threads, an instruction executes in several partial passes. Each pass took a whole beat of the issue slice's single writeback port, so a 32-thread instruction on 8 lanes took 4 beats. A narrow-lane core (16 ALU/FPU lanes for 32 threads, the V100/A100 mix) was writeback-bound on mixed integer and FP code.
+
+**How it works:**
+- `VX_lane_gather` tags each pass entering its output buffer as completing the instruction (end of packet, or the last lane position) and as continuing the held instruction (same warp, PC, destination and byte select).
+- A pass that does not complete parks in a hold of (SIMD width − lanes) × XLEN bits plus mask and header, without using the port. The completing pass commits with the hold in one beat.
+- A hold that the head of the buffer does not continue commits alone first, and the head takes its place in the same cycle, so results stay in order with no bubble.
+- The scoreboard still releases the destination on the last pass only. Units as wide as the issue slice keep the plain path.
+- SimX models the same hold per issue slice.
 
 **Gain (rtlsim):**
 - 16 threads, 8 ALU/FPU lanes: mixfu −8.7%, sgemm −9.7%.
 - 32 threads, 16 ALU/FPU lanes, 8 LSU lanes: mixfu −9.1%, sgemm −20.6%.
-- Area: −2,428 LUT per gather.
+- Units as wide as the issue slice: unchanged.
+- Area (Beacon): −2,428 LUT and +366 FF per narrow gather, from the per-lane demultiplexer the hold replaces; no unit deeper.
 
 ### Stack interleave by whole lines
 
-**Problem.** The stack interleave XORs a frame slot's word index with the warp index, so the same slot of different warps lands in different cache sets. When a slot row (one word per thread) is narrower than a dcache line, a one-row skew moved the slot within the same line, and several warps still shared a set.
+![Stack interleave by whole lines](../assets/img/mlp_stack_interleave.svg)
 
-**How it works.** The warp index is shifted by log2(line ÷ row) before the XOR, so the skew steps by whole lines. It stays a bit permutation plus one narrow XOR, and nothing changes when a row is a line or wider. Controlled by `VX_CFG_LSU_STACK_INTERLEAVE_ENABLE`.
+**Problem.** Each thread's stack is laid out so that one frame slot across a warp's threads is contiguous: a slot row of one word per thread. The stack interleave XORs a slot's word index with the warp index, so the same slot of different warps lands in different cache sets. When a slot row is narrower than a dcache line (16 B against a 64 B line at 4 threads and XLEN 32), a skew of one row moved the slot within the same line, so up to line ÷ row warps still shared one set.
 
-**Gain:** raycast −0.3% (SimX and rtlsim), instructions identical.
+**How it works.** The warp index is shifted left by log2(line ÷ row) before the XOR, so the skew steps by whole lines. It stays a bit permutation plus one narrow XOR, and nothing changes when a row is a line or wider (16 or more threads at XLEN 32). The mapping depends on the address alone, so any thread can dereference another thread's stack pointer. `VX_lsu_agu` applies it in the RTL, and SimX uses the same map (`StackInterleave`). The I/O, local-memory and OM windows are decoded from the address before the interleave, which maps the stack window onto itself, so the interleave stays off the request-attribute path. Controlled by `VX_CFG_LSU_STACK_INTERLEAVE_ENABLE`, on by default.
+
+**Gain:** raycast at the default configuration, instructions identical: SimX 21,168,900 → 21,101,531 cycles (−0.32%), rtlsim 21,166,952 → 21,109,296 (−0.27%). Decoding the windows before the interleave shortens the LSU request path from 20 to 15 logic levels (Beacon).
 
 ### TCU loads in LSU-lane passes
 
-**Problem.** The TCU's operand loads assumed an LSU as wide as the warp. A shape with fewer LSU lanes than threads could not run tensor kernels.
+![TCU loads in LSU-lane passes](../assets/img/mlp_tcu_ld_passes.svg)
 
-**How it works.** A TCU load issues in LSU-width passes when the LSU is narrower than the warp, like any other load.
+**Problem.** A sparse or MX tensor core loads its metadata (sparsity masks, MX scales) with `TCU_LD`. The TCU's address unit sent it as one request as wide as the warp, and assumed the LSU had as many lanes as the TCU. A sparse or MX shape with fewer LSU lanes than threads could not be built, so it could not run tensor kernels.
 
-**Gain:** narrow-LSU shapes run tensor kernels. Beacon shows the default configuration unchanged.
+**How it works.** `VX_tcu_agu` issues a `TCU_LD` in TCU lanes ÷ LSU lanes passes of consecutive words, one per cycle, like the LSU's own packets. The address advances by one LSU width per pass, and each request carries its pass number in its tag, so responses may return in any order. Each response writes only its pass's lanes into the block's metadata RAM, and the load completes on the last pass's response. With one pass none of this logic is generated. Where several issue slices share one LSU block, the shared port puts the block index in the tag's low bits and the pass number above it. SimX splits the load into the same passes.
+
+**Gain:** sparse and MX shapes with a narrower LSU build and run tensor kernels (CI: 8 threads on 4 LSU lanes, and 16 threads on 4 lanes with two issue slices sharing one LSU block). The default configuration is unchanged: Beacon shows identical depth, LUT, FF, BRAM and DSP on the tcu and tensor DUTs, and the sparse fp16, mxfp8 and sparse WGMMA perf_gate cases give the same cycles.
 
 ### Wide loads and stores
+
+![Wide loads and stores](../assets/img/mlp_ldst_wide.svg)
 
 **Problem.** A thread that reads consecutive words, such as a row of a matrix tile, fetches and decodes one load per word. At one fetched instruction per cycle, those loads take front-end slots the arithmetic needs.
 
 **How it works:**
 - `vx_flw.d` and `vx_flw.q` load 2 or 4 consecutive words into an aligned group of FP registers; `vx_fsw.d` and `vx_fsw.q` store them. Each is exactly its sequence of `flw`/`fsw`: word k goes between address + 4k and register + k, with 4-byte alignment, in any memory space.
-- The register must be even (`.d`) or a multiple of 4 (`.q`), and the immediate a multiple of 8 or 16, so the hardware expands the instruction without an adder.
-- Decode marks it as a macro-op, and the micro-op sequencer expands it into its 2 or 4 `flw`/`fsw` micro-ops. They issue like scalar loads, each with its own register in the scoreboard. SimX expands it the same way.
-- Controlled by `VX_CFG_EXT_LDST_WIDE_ENABLE`, **off by default**. Without it the encodings are not decoded.
-- Kernels use it explicitly through the `vx_flw_d/q<FD, OFF>()` and `vx_fsw_d/q<FD, OFF>()` intrinsics in `vx_intrinsics.h`, defined only when the knob is set. The FP register group is a template argument, so two groups can be live at once. They are `.insn` encodings and need no compiler support. LLVM can also emit the instructions itself under its `xvortexldstwide` extension, which is off unless passed.
+- The register must be even (`.d`) or a multiple of 4 (`.q`), and the immediate a multiple of 8 or 16, so uop k ORs k into the register and into the offset's word bits, with no adder.
+- Decode marks the instruction as a macro-op, and the micro-op sequencer (`VX_uop_packld` in `VX_uop_sequencer`) expands it into its 2 or 4 `flw`/`fsw` micro-ops. They issue like scalar loads, each with its own register in the scoreboard, so dispatch, the LSU, memory and commit see nothing new. SimX expands it the same way (`LsuUopGen`).
+- Every uop of a wide access but its last carries an issue-yield bit. When a warp issues one while another requesting warp also holds one, the scoreboard leaves it out of the next cycle's arbitration, so the warps' wide accesses interleave as their scalar loads do instead of reaching the LSU as one burst per warp.
+- Controlled by `VX_CFG_EXT_LDST_WIDE_ENABLE`, **off by default**; it needs F with 32-bit FP registers. Without it the encodings are not decoded.
+- Kernels use it through the `vx_flw_d/q<FD, OFF>()` and `vx_fsw_d/q<FD, OFF>()` intrinsics in `vx_intrinsics.h`, defined only when the knob is set. The FP register group is a template argument, so two groups can be live at once. They are `.insn` encodings and need no compiler support. LLVM can also emit the instructions under its `xvortexldstwide` extension, which is off unless passed.
 - The device reports the extension in its ISA flags (`VX_ISA_EXT_LDST_WIDE`).
 
-**Gain:** the comparison is against a scalar loop unrolled the same way, so it measures only the instruction. SimX cycles, default core (one fetch per cycle), knob off → on; rtlsim agrees within 0.1%:
+**Gain:** the comparison is against a scalar loop unrolled the same way (both step their K loop by 4), so it measures only the instruction. SimX cycles, default core (one fetch per cycle), knob off → on; rtlsim agrees within 0.1%:
 
 | Kernel | Args | Off | On | Change |
 |---|---|---|---|---|
@@ -496,25 +576,31 @@ Atomics with `.aq`/`.rl` get these steps around them. All of it is skipped when 
 | sgemmx | -n128 | 4,251,851 | 4,164,415 | −2.1% |
 | sgemm2_v1 | default (-n16) / -n32 / -n64 | 100,333 / 655,576 / 4,800,667 | 98,093 / 637,326 / 4,635,080 | −2.2% / −2.8% / −3.4% |
 
-Retired instructions barely change; the gain comes from fetch. Order matters where the loads conflict on banks. In sgemm2_dxa and sgemm2_v1 the threads of a warp read different local-memory rows, and with 4 banks each A load conflicts 4 ways. The quad's 4 uops issue back to back, so they reach the LSU as a burst, where scalar loads from the warps interleave. Issued before the B loads, the quad holds the cheap B loads and the first FMA behind its slow uops: sgemm2_dxa was +1.2% to +4.6% and sgemm2_v1 +0.1% to +0.6% slower than scalar. The compiler orders the scalar loads B0, B1, then A, but it cannot move a load across the intrinsic's `asm volatile`, so these kernels write that order out: B0 and B1, then the quad, then B2 and B3. That gives the gains above; issuing all four B loads first is slower, since the FMA chain then starts later. The best order depends on the warp shape: from 8 threads up the local memory has enough banks that the quad does not conflict, and sgemm2_v1 issues only B0 ahead of it (at 16 threads -n16 the B0, B1 order was +1.7% slower than the scalar loads; B0 alone is −0.5%). No load order fixes sgemm2_dxa's full-K mode (-m1) at -n16: all warps leave the barrier together, and the greedy issue arbiter grants one warp its whole quad back to back, so the last warp's quad waits behind the other three (+0.5% on rtlsim). So every uop of a wide access but its last carries an issue-yield bit (`VX_uop_packld`, SimX `LsuUopGen`). When the warp issues one while another requesting warp also holds one, the scoreboard leaves it out of the next cycle's arbitration, and the warps' wide accesses interleave as their scalar loads do. With it, every sgemm2, sgemm2_v1 and sgemm2_dxa point is faster with the knob on rtlsim (sgemm2_dxa -m1 -n16 −0.64%); the yield costs up to 0.66 points of gain elsewhere. Area: +81 LUT and +64 FF in the core with the knob, nothing deeper; the knob-off core is unchanged.
+Retired instructions barely change; the gain comes from fetch. With the issue yield, every sgemm2, sgemm2_v1 and sgemm2_dxa point is faster with the knob on rtlsim, including sgemm2_dxa -m1 -n16 (−0.64%), where all warps leave a barrier together; the yield costs up to 0.66 points of gain elsewhere.
 
-Area: +33 LUT in decode and +3 LUT per warp in the expander, with no path deeper. With both load/store knobs off, the core is 89 LUT smaller than when the extensions were always built.
+Load order matters where a warp's lanes conflict on local-memory banks. In sgemm2_dxa and sgemm2_v1 at 4 threads each thread reads a different local-memory row, so each A load conflicts 4 ways. The compiler cannot move a load across the intrinsic's `asm volatile`, so these kernels write out the order it gives the scalar loads: B0 and B1, then the quad, then B2 and B3. From 8 threads up the local memory has enough banks that the quad does not conflict, and sgemm2_v1 issues only B0 ahead of it.
 
-Stepping these kernels' K loop by 4 is worth more than the instruction on any hardware: −16% to −35% against stepping by 1 (the original loops). The kernels now step by 4.
+Area: +33 LUT in decode and +3 LUT per warp in the expander; the issue yield adds +81 LUT and +64 FF in the core. Nothing is deeper. With both load/store knobs off, the core is 89 LUT smaller than with the extensions always built.
 
 ### Matrix fragment loads and stores
 
-**Problem.** A tensor kernel loads each matrix fragment with one `flw` per register and per K step, plus the per-lane address arithmetic. In the K loop that is 21 to 24 fetched instructions per tile for the fragment loads alone.
+![Matrix fragment loads and stores](../assets/img/mlp_ldst_matrix.svg)
+
+**Problem.** A tensor kernel loads each matrix fragment with one `flw` per register, plus the per-lane address arithmetic: 4 or 8 fetched loads per fragment and K step. In the K loop those loads take front-end slots the tensor instructions need.
 
 **How it works:**
-- `vx_ldm` and `vx_stm` move a whole fragment. The immediate's low 5 bits name the fragment shape (A, B, C, sparse A, symmetric sparse B, WGMMA C), and the micro-op sequencer expands the instruction into one `flw` or `fsw` per register, with each register's row and column computed from the micro-op counter.
-- Any kernel can use it: it does not depend on the TCU. The fragment geometry and shape table live in `VX_gpu_pkg`, and SimX's `fragment_layout.h` is shared by the LSU and the TCU model. Every shape is valid whenever the knob is on; the symmetric sparse B shape needs 4 or 16 threads.
-- Controlled by `VX_CFG_EXT_LDST_MATRIX_ENABLE`, **off by default**. Kernels use it through the `vx_ldm`/`vx_stm` intrinsics in `vx_intrinsics.h` (`.insn` encodings, no compiler support needed); `vx_tensor.h` calls them when a context is built with `ldst_matrix`. The device reports it in its ISA flags (`VX_ISA_EXT_LDST_MATRIX`).
-- Two shapes that lost to scalar loads on rtlsim were removed: asymmetric sparse B, and sparse MX, which keeps scalar loads.
-- A macro-op issues one uop per cycle and is fetched once for the whole fragment. In SimX traces of the kernels that were slower with the knob, the fragment loads and stores themselves were never slower than the scalar ones; the slowdowns came from what that changed downstream. A fragment store at the end of a CTA, for one, changes the order in which the CTA's warps exit, and with it which warp takes the next CTA's serial role (the warp that issues the DXA copies). With the issue batches granted by a fixed priority, a warp's dispatch latency depended on its issue slice (an idle grant rested on the last slice, so every other slice paid a cycle), so that reordering cost `sgemm_tcu_wg_dxa` +1.3% to +2.0% at every size. The batches are now granted round-robin (see [core partitioning](core_partitioning.md)); `sgemm_tcu_wg_dxa` is −0.2% to −0.8% with the knob. Without the knob, the TCU configurations with fewer blocks than issue slices move by −23% (`perf_gate-fp16-isw4`) and −16% (`sgemm_tcu_wg` 64³) to +0.7% (`perf_gate-wgmma-dxa`) in SimX; the default one-wide core is unchanged.
-- `vx_ldm` takes one address register per fragment row group. With all of them hoisted out of the K loop, `sgemm2_tcu` (two shared-memory stages) spilled five and was +0.36% slower with the knob. The B fragment, and the A fragment of sparse and MX kernels, now derive their groups from one live base (`ldm_group` in `vx_tensor.h`); a dense A pair stays hoisted, which is cheaper. Every `sgemm*_tcu` kernel is now faster with the knob at every size, including `sgemm_tcu_mx` at its CI shape (−5.4%). Five WGMMA points stay within +0.18% (`sgemm_tcu_wg` 64³ and 256³, `sgemm_tcu_wg_mx` 128³, `sgemm_tcu_wg_sp` 64³, `sgemm_tcu_wg_sp_dxa` 256³), from CTA composition and code layout that shift with the epilogue.
+- `vx_ldm` and `vx_stm` move a whole fragment. The immediate's low 5 bits name the fragment shape (A, B, C, sparse A, symmetric sparse B, WGMMA C), and its upper bits are a byte offset.
+- The micro-op sequencer (`VX_uop_packld`) expands the instruction into one `flw` or `fsw` per register, 4 or 8 per fragment, in closed form: each uop's row group and column come from the micro-op counter. A uop takes its address from register rs1 | its row group and ORs its column into the immediate, so it reaches the element the fragment layout puts in that register. The uops issue like scalar loads, each with its own register in the scoreboard.
+- Any kernel can use it: it does not depend on the TCU. The fragment geometry and shape table live in `VX_gpu_pkg`, and SimX's `fragment_layout.h` is shared by the LSU and the TCU model. A simulation check in `VX_uop_packld` walks every shape and uop through the TCU's register permutation and asserts each uop lands on its own register.
+- Every shape is valid whenever the knob is on, except that the symmetric sparse B shape needs a square TCU block (a thread count that is an even power of two, such as 4 or 16). Asymmetric sparse B and sparse MX fragments have no shape and use scalar loads.
+- Kernels pass one address register per fragment row group. `ldm_group` in `vx_tensor.h` derives the B fragment's groups, and the A fragment's in sparse and MX kernels, from one live base, so the K loop does not run out of registers; a dense A pair stays hoisted.
+- Controlled by `VX_CFG_EXT_LDST_MATRIX_ENABLE`, **off by default**; it needs F. Kernels use it through the `vx_ldm`/`vx_stm` intrinsics in `vx_intrinsics.h` (`.insn` encodings, no compiler support needed); `vx_tensor.h` calls them when a context is built with `ldst_matrix`. The device reports it in its ISA flags (`VX_ISA_EXT_LDST_MATRIX`).
 
-**Gain (rtlsim):** dense, MX and sparse TCU kernels −3.4% to −10.1%, with bit-identical results. Fetched instructions per K tile: 21–24 → 9 (NT 8). Area: core with TCU +169 LUT; core without the TCU +157 LUT; nothing deeper.
+**Gain:**
+- rtlsim: dense, MX and sparse TCU kernels −3.4% to −10.1%, with bit-identical results.
+- SimX, knob off → on: sgemm_tcu 64³ / 128³ / 256³ −9.4% / −1.0% / −11.6%; sgemm_tcu_mx 32³ / 64³ / 128³ −8.1% / −7.2% / −5.8%, and −5.4% at its CI shape; sgemm_tcu_sp −6.5% / −5.2% / −4.8%; sgemm2_tcu 64³ / 128³ / 256³ −0.01% / −0.51% / −0.42%; sgemm_tcu_wg_dxa −0.2% to −0.8%.
+- Five WGMMA points stay within +0.18% of the scalar loads (`sgemm_tcu_wg` 64³ and 256³, `sgemm_tcu_wg_mx` 128³, `sgemm_tcu_wg_sp` 64³, `sgemm_tcu_wg_sp_dxa` 256³), from CTA composition and code layout that shift with the epilogue.
+- Area: core with TCU +169 LUT; core without the TCU +157 LUT; nothing deeper.
 
 ---
 
@@ -522,11 +608,19 @@ Stepping these kernels' K loop by 4 is worth more than the instruction on any ha
 
 ### Non-power-of-two GPU shapes
 
-**Problem.** Warp, core, socket and cluster counts had to be powers of two, because indices were bit slices. The profiled GPUs are not: 48 warps per SM (RTX 5080), 84, 108 or 132 SMs.
+![Non-power-of-two GPU shapes](../assets/img/mlp_npot_shapes.svg)
 
-**How it works.** The warp control, IPDOM stack and hart IDs, and the core, socket and cluster indexing use %, / and * instead of bit slices. The command processor reports the exact socket size in a capability word. Power-of-two shapes produce the same netlists as before.
+**Problem.** Warp, core, socket and cluster counts had to be powers of two, because indices were bit slices. The profiled GPUs are not: an RTX 5080 SM holds 48 warps (12 per issue slice), and the parts have 84, 108 or 132 SMs. At 12 warps per slice, warps 3, 7 and 11 selected an operand collector that does not exist and the slice deadlocked, and the IPDOM stack addressed past the end of its store. `Vortex.sv` asserted power-of-two cluster, core and socket counts.
 
-**Gain:** the profiles run at their real shapes (this fixed a 48-warp deadlock). A non-power-of-two shape runs within 1.08% of SimX on rtlsim.
+**How it works.** Every index that was a bit slice is constant arithmetic (%, / and *), which reduces to the same bit selects for powers of two:
+- Operand collector `wis % NUM_OPCS`, register slot `wis / NUM_OPCS` (`VX_operands`, `VX_opc_unit`).
+- IPDOM stack entry `ptr * NUM_WARPS + wid` (`VX_ipdom_stack`).
+- A dense `mhartid`: `(core * NUM_WARPS + wid) * NUM_THREADS + tid`. The active-warps CSR holds warps 0 to XLEN − 1.
+- KMU fragment routing picks each hop with `(dest / DEST_DIV) % N`; the DXA local-memory core select takes `% SOCKET_SIZE`; the atomics' hart id carries the global core id, so cores of different clusters don't alias in the reservation table.
+- `NUM_CORES` needs only to be a multiple of `SOCKET_SIZE`. The command processor reports the exact socket size in a capability word (`GPU_DEV_CAPS_EXT`, offset `0x00C`).
+- SimX computes the same indices.
+
+**Gain:** the profiles run at their real shapes. sgemm, vecadd, async_gbarrier, dogfood and printf pass at 3 cores, 6 cores and 3 clusters × 2 cores on rtlsim and SimX with matching instruction counts; sgemm at 3 cores + L2 takes 1,951,807 cycles on rtlsim and 1,972,907 on SimX (+1.08%). Power-of-two shapes are unchanged: default sgemm stays at 5,943,507 cycles.
 
 ---
 
@@ -560,7 +654,7 @@ Stepping these kernels' K loop by 4 is worth more than the instruction on any ha
 **How it works.**
 - The shell gets one AXI port per GPU memory port, rounded up to a power of two.
 - Each port owns a contiguous part of memory, mapped to its own HBM channel group, and the board connectivity is generated from the port count.
-- A write's data now leaves in the same cycle as its address. Data stays in address order through a small queue.
+- A write's data leaves in the same cycle as its address. Data stays in address order through a small queue.
 - Reset waits for any write already in progress, so it never splits a burst.
 
 **Gain:**

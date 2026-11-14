@@ -182,7 +182,7 @@ builds:
   group: graphics
   dut: tex
   clock_mhz: 300
-  lut_budget: 61245
+  lut_budget: 78155
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
 
 # --- vm ----------------------------------------------------------------------
@@ -194,7 +194,7 @@ builds:
   group: vm
   dut: vm
   clock_mhz: 250
-  lut_budget: 119695
+  lut_budget: 125964
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_NUM_CORES=2
 
 # --- graphics (combined subsystem) -------------------------------------------
@@ -207,7 +207,7 @@ builds:
   group: graphics
   dut: gfx
   clock_mhz: 250
-  lut_budget: 204871
+  lut_budget: 229638
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
 
 # --- tensor (combined subsystem) ---------------------------------------------

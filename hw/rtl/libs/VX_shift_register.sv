@@ -40,6 +40,61 @@ module VX_shift_register #(
         `UNUSED_PARAM (TAP_START)
         `UNUSED_PARAM (TAP_STRIDE)
         assign data_out = data_in;
+`ifdef ASIC
+    end else begin : g_shift_cg
+        // All stages shift together, so one gate clocks them, on a shift or
+        // a reset; registers under 4 bits cost more in gates than they save.
+        localparam FREEW = DATAW - RESETW;
+        wire shift_clk;
+        if (DATAW * DEPTH >= 4) begin : g_cg
+            VX_clockgate cg (.clk_in (clk), .en (enable || reset), .clk_out (shift_clk));
+        end else begin : g_clk
+            assign shift_clk = clk;
+        end
+
+        wire [DEPTH-1:0][DATAW-1:0] pipe_out;
+
+        if (RESETW != 0) begin : g_rst
+            reg [DEPTH-1:0][RESETW-1:0] pipe_rst;
+            always_ff @(posedge shift_clk) begin
+                if (reset) begin
+                    for (int i = 0; i < DEPTH; ++i) begin
+                        pipe_rst[i] <= INIT_VALUE;
+                    end
+                end else if (enable) begin
+                    pipe_rst[0] <= data_in[DATAW-1 : FREEW];
+                    for (int i = 1; i < DEPTH; ++i) begin
+                        pipe_rst[i] <= pipe_rst[i-1];
+                    end
+                end
+            end
+            for (genvar i = 0; i < DEPTH; ++i) begin : g_out
+                assign pipe_out[i][DATAW-1 : FREEW] = pipe_rst[i];
+            end
+        end else begin : g_no_rst
+            `UNUSED_VAR (reset)
+            `UNUSED_PARAM (INIT_VALUE)
+        end
+
+        if (FREEW != 0) begin : g_free
+            reg [DEPTH-1:0][FREEW-1:0] pipe_free;
+            always_ff @(posedge shift_clk) begin
+                if (enable) begin
+                    pipe_free[0] <= data_in[FREEW-1 : 0];
+                    for (int i = 1; i < DEPTH; ++i) begin
+                        pipe_free[i] <= pipe_free[i-1];
+                    end
+                end
+            end
+            for (genvar i = 0; i < DEPTH; ++i) begin : g_out
+                assign pipe_out[i][FREEW-1 : 0] = pipe_free[i];
+            end
+        end
+
+        for (genvar i = 0; i < NUM_TAPS; ++i) begin : g_taps
+            assign data_out[i] = pipe_out[i * TAP_STRIDE + TAP_START];
+        end
+`else
     end else begin : g_shift
 
         wire [DEPTH-1:0][DATAW-1:0] pipe_out;
@@ -106,6 +161,7 @@ module VX_shift_register #(
         for (genvar i = 0; i < NUM_TAPS; ++i) begin : g_taps
             assign data_out[i] = pipe_out[i * TAP_STRIDE + TAP_START];
         end
+`endif
     end
 
 endmodule

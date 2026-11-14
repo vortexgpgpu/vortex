@@ -167,6 +167,7 @@
 `ifdef QUARTUS
 `define MAX_FANOUT      8
 `define LATENCY_IMUL    3
+`define IMUL_IN_REG     0
 `define FORCE_BRAM(d,w) (((d) >= 64) && (((d) * (w)) >= 2048))
 `define FORCE_BUILTIN_ADDER(w)  ((w) <= 27)
 `define USE_BLOCK_BRAM  (* ramstyle = "block" *)
@@ -181,6 +182,7 @@
 `elsif VIVADO
 `define MAX_FANOUT      8
 `define LATENCY_IMUL    3
+`define IMUL_IN_REG     0
 `define FORCE_BRAM(d,w) (((d) >= 64) && (((d) * (w)) >= 2048))
 `define FORCE_BUILTIN_ADDER(w)  ((w) <= 27)
 `define USE_BLOCK_BRAM  (* ram_style = "block" *)
@@ -195,6 +197,7 @@
 `elsif ASIC
 `define MAX_FANOUT      8
 `define LATENCY_IMUL    3
+`define IMUL_IN_REG     1
 `define FORCE_BRAM(d,w) (((d) >= 64) && (((d) * (w)) >= 2048))
 `define FORCE_BUILTIN_ADDER(w)  0
 `define USE_BLOCK_BRAM
@@ -209,6 +212,7 @@
 `else
 `define MAX_FANOUT      8
 `define LATENCY_IMUL    3
+`define IMUL_IN_REG     1
 `define FORCE_BRAM(d,w) (((d) >= 64) && (((d) * (w)) >= 2048))
 `define FORCE_BUILTIN_ADDER(w)  ((w) <= 27)
 `define USE_BLOCK_BRAM
@@ -280,6 +284,14 @@
         `TRACE(lvl, ("}"))                     \
     end                                         \
     `TRACE(lvl, ("}"))
+
+// Clock of a register behind a VX_clockgate: the gated net on ASIC, where the
+// gate exists, and the free clock everywhere else.
+`ifdef ASIC
+`define GATED_CLK(clk, gclk) gclk
+`else
+`define GATED_CLK(clk, gclk) clk
+`endif
 
 `define RESET_RELAY_EX(dst, src, size, fanout)  \
     wire [size-1:0] dst;                        \
