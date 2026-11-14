@@ -607,9 +607,9 @@ inline std::ostream &operator<<(std::ostream &os, const FpuType& type) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifdef VX_CFG_EXT_MUFU_ENABLE
-// Values match the instruction's fn field and vortex::mufu::fn_t.
-enum class MufuType {
+#ifdef VX_CFG_EXT_TFU_ENABLE
+// Values match the instruction's fn field and vortex::tfu::fn_t.
+enum class TfuType {
   RCP   = 0,
   RSQRT = 1,
   EX2   = 2,
@@ -619,15 +619,15 @@ enum class MufuType {
   TANH  = 6,
 };
 
-inline std::ostream &operator<<(std::ostream &os, const MufuType& type) {
+inline std::ostream &operator<<(std::ostream &os, const TfuType& type) {
   switch (type) {
-  case MufuType::RCP:   os << "MUFU.RCP"; break;
-  case MufuType::RSQRT: os << "MUFU.RSQRT"; break;
-  case MufuType::EX2:   os << "MUFU.EX2"; break;
-  case MufuType::LG2:   os << "MUFU.LG2"; break;
-  case MufuType::SINPI: os << "MUFU.SINPI"; break;
-  case MufuType::COSPI: os << "MUFU.COSPI"; break;
-  case MufuType::TANH:  os << "MUFU.TANH"; break;
+  case TfuType::RCP:   os << "TFU.RCP"; break;
+  case TfuType::RSQRT: os << "TFU.RSQRT"; break;
+  case TfuType::EX2:   os << "TFU.EX2"; break;
+  case TfuType::LG2:   os << "TFU.LG2"; break;
+  case TfuType::SINPI: os << "TFU.SINPI"; break;
+  case TfuType::COSPI: os << "TFU.COSPI"; break;
+  case TfuType::TANH:  os << "TFU.TANH"; break;
   default:
     assert(false);
   }
@@ -866,8 +866,8 @@ using OpType = std::variant<
 #ifdef VX_CFG_EXT_TCU_ENABLE
 , TcuType
 #endif
-#ifdef VX_CFG_EXT_MUFU_ENABLE
-, MufuType
+#ifdef VX_CFG_EXT_TFU_ENABLE
+, TfuType
 #endif
 #ifdef VX_CFG_EXT_TEX_ENABLE
 , TexType

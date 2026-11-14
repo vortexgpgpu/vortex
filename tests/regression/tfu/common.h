@@ -3,8 +3,8 @@
 
 #include <stdint.h>
 
-// Ops 0..6 are the raw MUFU functions (same numbering as the instruction's fn
-// field); the rest are the fast-math compositions from vx_mufu.h.
+// Ops 0..6 are the raw TFU functions (same numbering as the instruction's fn
+// field); the rest are the fast-math compositions from vx_tfu.h.
 enum {
   OP_RCP = 0,
   OP_RSQRT,

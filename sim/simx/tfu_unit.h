@@ -20,12 +20,12 @@
 
 namespace vortex {
 
-// MUFU sub-unit of the SFU. The SFU's lanes are serialized onto the MUFU
+// TFU sub-unit of the SFU. The SFU's lanes are serialized onto the TFU
 // datapath lanes, one batch per cycle, and a warp is accepted on its last batch.
-class MufuUnit {
+class TfuUnit {
 public:
   // Cycles a result spends in the datapath after the warp is accepted.
-  static constexpr uint32_t kLatency = VX_MUFU_LATENCY;
+  static constexpr uint32_t kLatency = VX_TFU_LATENCY;
 
   // Returns false while the warp's batches are still being issued; on the
   // accepting cycle computes the results and returns true.

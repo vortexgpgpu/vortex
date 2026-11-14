@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 #include <vortex2.h>
-#include <mufu.h>
+#include <tfu.h>
 #include "common.h"
 
 #define RT_CHECK(_expr)                                         \
@@ -51,7 +51,7 @@ vx_module_h module_ = nullptr;
 vx_kernel_h kernel  = nullptr;
 
 static void show_usage() {
-  std::cout << "Vortex MUFU Test." << std::endl;
+  std::cout << "Vortex TFU Test." << std::endl;
   std::cout << "Usage: [-k: kernel] [-n points] [-r repeat] [-t op] [-h: help]" << std::endl;
   std::cout << "  ops:";
   for (auto name : kOpNames) {
@@ -166,7 +166,7 @@ static float gen_input(int op, std::mt19937& rng) {
   }
 }
 
-// Raw-op accuracy against libm, with the bounds the MUFU spec guarantees.
+// Raw-op accuracy against libm, with the bounds the TFU spec guarantees.
 static bool raw_accurate(int op, float x, float y) {
   double r;
   switch (op) {
@@ -273,7 +273,7 @@ static int run_op(int op, std::mt19937& rng, uint64_t src_addr, uint64_t dst_add
     float x = h_src[i], y = h_dst[i];
     bool ok;
     if (op <= OP_TANH) {
-      uint32_t ref = vortex::mufu::eval(op, as_bits(x));
+      uint32_t ref = vortex::tfu::eval(op, as_bits(x));
       ok = (as_bits(y) == ref) && raw_accurate(op, x, y);
       if (!ok && errors < 20) {
         printf("*** error: %s[%u] x=%a (0x%08x): actual=0x%08x expected=0x%08x\n",
@@ -303,8 +303,8 @@ int main(int argc, char *argv[]) {
 
   uint64_t isa_flags;
   RT_CHECK(vx_device_query(device, VX_CAPS_ISA_FLAGS, &isa_flags));
-  if ((isa_flags & VX_ISA_EXT_MUFU) == 0) {
-    std::cout << "MUFU extension not supported!" << std::endl;
+  if ((isa_flags & VX_ISA_EXT_TFU) == 0) {
+    std::cout << "TFU extension not supported!" << std::endl;
     cleanup();
     return -1;
   }

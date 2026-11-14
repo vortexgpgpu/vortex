@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-module VX_mufu_pe import VX_gpu_pkg::*; (
+module VX_tfu_pe import VX_gpu_pkg::*; (
     input wire          clk,
     input wire          reset,
     input wire          enable,
@@ -8,7 +8,7 @@ module VX_mufu_pe import VX_gpu_pkg::*; (
     input wire [31:0]   dataa,
     output wire [31:0]  result
 );
-    `STATIC_ASSERT (`VX_MUFU_LATENCY == 7, ("VX_mufu_pe: the datapath is 7 stages, VX_MUFU_LATENCY=%0d", `VX_MUFU_LATENCY))
+    `STATIC_ASSERT (`VX_TFU_LATENCY == 7, ("VX_tfu_pe: the datapath is 7 stages, VX_TFU_LATENCY=%0d", `VX_TFU_LATENCY))
 
     localparam TBL_RCP   = 3'd0;
     localparam TBL_RSQRT = 3'd1;
@@ -41,7 +41,7 @@ module VX_mufu_pe import VX_gpu_pkg::*; (
 
     wire [7:0] trig_lsh = x_e - 8'd119;
     wire [7:0] trig_rsh = 8'd119 - x_e;
-    wire is_sin = (fn == 3'(INST_MUFU_SINPI));
+    wire is_sin = (fn == 3'(INST_TFU_SINPI));
     wire [31:0] trig_u0 = (x_e >= 8'd119) ? ((trig_lsh < 8'd32) ? (32'(x_sig) << trig_lsh[4:0]) : 32'd0)
                         : ((trig_rsh < 8'd24) ? 32'(x_sig >> trig_rsh[4:0]) : 32'd0);
     wire [31:0] trig_u = is_sin ? trig_u0 : (trig_u0 + 32'h40000000);
@@ -72,7 +72,7 @@ module VX_mufu_pe import VX_gpu_pkg::*; (
         r_zsign   = 1'b0;
         r_lg2     = 1'b0;
         case (fn)
-        3'(INST_MUFU_RCP): begin
+        3'(INST_TFU_RCP): begin
             r_neg = x_s;
             r_exp = 10'sd127 - 10'($signed({2'b00, x_e}));
             if (x_inf) begin
@@ -83,7 +83,7 @@ module VX_mufu_pe import VX_gpu_pkg::*; (
                 r_sval = x_s ? F32_NEG_INF : F32_POS_INF;
             end
         end
-        3'(INST_MUFU_RSQRT): begin
+        3'(INST_TFU_RSQRT): begin
             r_tbl = TBL_RSQRT;
             r_idx = {x_k[0], x_m[22:17]};
             r_xl  = {x_m[16:0], 1'b0};
@@ -99,7 +99,7 @@ module VX_mufu_pe import VX_gpu_pkg::*; (
                 r_sval = 32'd0;
             end
         end
-        3'(INST_MUFU_EX2): begin
+        3'(INST_TFU_EX2): begin
             r_tbl = TBL_EX2;
             r_idx = {1'b0, ex2_x[29:24]};
             r_xl  = ex2_x[23:6];
@@ -115,7 +115,7 @@ module VX_mufu_pe import VX_gpu_pkg::*; (
                 r_sval = x_s ? 32'd0 : F32_POS_INF;
             end
         end
-        3'(INST_MUFU_LG2): begin
+        3'(INST_TFU_LG2): begin
             r_tbl = TBL_LG2;
             r_idx = {1'b0, x_m[22:17]};
             r_xl  = {x_m[16:0], 1'b0};
@@ -131,8 +131,8 @@ module VX_mufu_pe import VX_gpu_pkg::*; (
                 r_sval = F32_POS_INF;
             end
         end
-        3'(INST_MUFU_SINPI),
-        3'(INST_MUFU_COSPI): begin
+        3'(INST_TFU_SINPI),
+        3'(INST_TFU_COSPI): begin
             r_tbl   = TBL_SIN;
             r_idx   = {1'b0, trig_t[29:24]};
             r_xl    = trig_t[23:6];
@@ -149,7 +149,7 @@ module VX_mufu_pe import VX_gpu_pkg::*; (
                 r_sval = {trig_neg, F32_ONE[30:0]};
             end
         end
-        3'(INST_MUFU_TANH): begin
+        3'(INST_TFU_TANH): begin
             r_tbl = TBL_TANH;
             r_idx = {1'b0, 3'(x_e - 8'd122), x_m[22:20]};
             r_xl  = x_m[19:2];
@@ -198,7 +198,7 @@ module VX_mufu_pe import VX_gpu_pkg::*; (
     wire signed [26:0] rom_a1;
     wire signed [19:0] rom_a2;
 
-    VX_mufu_rom rom (
+    VX_tfu_rom rom (
         .clk    (clk),
         .enable (enable),
         .tbl    (s1_tbl),

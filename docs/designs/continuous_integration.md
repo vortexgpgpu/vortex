@@ -87,12 +87,12 @@ ambient build tree and is never expanded inside a run: `build32/` and
 A category is one file, [`ci/testcases/<category>.yaml`](../../ci/testcases/),
 or a directory of files, `ci/testcases/<category>/*.yaml`. Each file has its own
 defaults, and a directory runs as one cell per driver and XLEN. Small suites
-share a directory so that each does not pay a cell's setup alone: `isa` (mufu,
+share a directory so that each does not pay a cell's setup alone: `isa` (tfu,
 zfhmin, rvc, riscv, amo), `sw` (opencl, hip, kernel, runtime), `integration`
 (gem5, sst, dtm, cupbop, mpi) and `tensor_sp` (sparse, and sparse with MX). A
 cell runs every case of its category on its driver, whatever the case's tier,
 so a directory holds only suites of the same tier. A file in a directory is
-also a marker named after the file, so `-m mufu` or `--test gem5` still selects
+also a marker named after the file, so `-m tfu` or `--test gem5` still selects
 one suite. A case id is unique within its category. Fields map one to one onto
 `blackbox.sh` flags.
 

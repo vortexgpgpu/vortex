@@ -232,7 +232,7 @@ the table in the same change.
 | | | `6` | RTU hit window / callback return | R4 |
 | | | `7` | `vx_rt_trace`, `vx_rt_wait` | R4 |
 | | | `1`, `2`, `4` | free | |
-| custom-2 `0x5B` | `funct7` | `0x00` | MUFU special functions; `fn` in `rs2`, `fmt` in `funct3` | R |
+| custom-2 `0x5B` | `funct7` | `0x00` | TFU special functions; `fn` in `rs2`, `fmt` in `funct3` | R |
 | custom-3 `0x7B` | `funct3` | `0` | `vx_ldm fd, off(rs1), shape`: a matrix fragment ← memory | I |
 | | | `2` | `vx_stm fs2, off(rs1), shape`: memory ← a matrix fragment | S |
 | | | `3` | `vx_flw.d fd, imm(rs1)`: `fd`, `fd+1` ← two words | I |
