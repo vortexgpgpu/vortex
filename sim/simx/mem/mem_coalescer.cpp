@@ -39,7 +39,12 @@ MemCoalescer::MemCoalescer(
   , sent_mask_(input_size)
   , line_size_(line_size)
   , delay_(delay)
-{}
+{
+  // the cache's last output stage is a skid buffer, whose ready is a register
+  for (auto& in : RspIn) {
+    in.set_registered_ready(true);
+  }
+}
 
 void MemCoalescer::on_reset() {
   sent_mask_.reset();

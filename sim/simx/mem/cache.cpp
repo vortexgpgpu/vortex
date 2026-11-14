@@ -928,21 +928,26 @@ protected:
     // release frees this tick admit a new request only from the next one.
     mshr_occupancy_ = mshr_.size() + pending_mshr_size_;
 
-    // Process next request at the head of the pipeline.
+    // Process next request at the head of the pipeline. A head that cannot
+    // retire stalls the whole pipeline, its input stage included: a bubble
+    // behind the head stays a bubble, and nothing enters or forwards.
+    bool pipe_stall = false;
     if (!pipe_req_->empty()) {
+        uint32_t pipe_size = pipe_req_->size();
         this->processRequests();
+        pipe_stall = (pipe_req_->size() == pipe_size);
     }
 
     // Fill-forward drain: complete the read-prefix of a fill's pending chain
     // directly (one per tick), leaving the input slot free for new requests.
     // On response backpressure the head falls back to the replay path.
     bool fwd_consumed = false;
-    if (fwd_active_) {
+    if (fwd_active_ && !pipe_stall) {
         fwd_consumed = this->processForward();
     }
 
     // Accept one new input if there's room.
-    if (!pipe_req_->full()) {
+    if (!pipe_req_->full() && !pipe_stall) {
         this->processInputs(fwd_consumed);
     }
 
@@ -2874,6 +2879,9 @@ private:
 // takes it when its arbiter grants that lane, and the lane is released once
 // all of them have. Over many banks a port's arbiter is a tree: each slice of
 // lanes grants into its own buffer, and a join picks among the slices.
+// A port's arbiter grants straight into the cache's response port, whose
+// registered stages out_delay stands for: no buffer sits between a bank's
+// response queue and the arbiter's output register.
 class CacheRspMcast : public SimObject<CacheRspMcast> {
 public:
   using Ptr = std::shared_ptr<CacheRspMcast>;
@@ -2882,13 +2890,15 @@ public:
   std::vector<SimChannel<MemRsp>> RspOut; // core ports
 
   CacheRspMcast(const SimContext& ctx, const char* name, uint32_t num_banks,
-                uint32_t num_outputs, uint32_t merge_group, bool merge_line)
+                uint32_t num_outputs, uint32_t merge_group, bool merge_line,
+                uint32_t out_delay)
     : SimObject<CacheRspMcast>(ctx, name)
     , RspIn(num_banks, this)
     , RspOut(num_outputs, this)
     , lg2_outputs_(log2ceil(num_outputs))
     , merge_group_(merge_group)
     , merge_line_(merge_line)
+    , out_delay_(out_delay)
     , slices_(arb_tree_slices(num_banks))
     , sent_(num_banks, 0)
     , last_grant_(num_outputs * slices_, num_banks - 1)
@@ -2897,6 +2907,14 @@ public:
   {
     __assert(num_outputs <= 64 && merge_group < 64, "the read-merge response network takes at most 64 ports");
     __assert(arb_tree_levels(num_banks).size() <= 1, "the read-merge response network takes one tree level");
+    // A bank's response queue and each tree slice are skid buffers: a slot
+    // the arbiter frees takes a new response from the next cycle.
+    for (auto& in : RspIn) {
+      in.set_registered_ready(true);
+    }
+    for (auto& stage : tree_stage_) {
+      stage.set_registered_ready(true);
+    }
   }
 
 protected:
@@ -2918,7 +2936,8 @@ protected:
         if (stage.empty()) {
           continue;
         }
-        if (RspOut.at(o).try_send(stage.peek(), 0)) {
+        if (RspOut.at(o).try_send(stage.peek(), out_delay_)) {
+          DT(3, this->name() << " core-rsp" << o << ": " << stage.peek());
           stage.pop();
           join_rr_.at(o) = sl;
         }
@@ -2962,8 +2981,11 @@ protected:
             __assert(rsp.merged_tags, "a line-merged response lost its merged tags");
             rsp.tag = rsp.merged_tags->at(o % merge_group_);
           }
-          if (out.try_send(rsp, (slices_ > 1) ? 1 : 0)) {
+          if (out.try_send(rsp, (slices_ > 1) ? 1 : out_delay_)) {
             DT(4, this->name() << " rsp" << b << "_" << o << ": " << rsp);
+            if (slices_ == 1) {
+              DT(3, this->name() << " core-rsp" << o << ": " << rsp);
+            }
             sent_.at(b) |= 1ull << o;
             rr = b;
           }
@@ -2983,6 +3005,7 @@ private:
   uint32_t lg2_outputs_;
   uint32_t merge_group_;
   bool merge_line_;
+  uint32_t out_delay_;
   uint32_t slices_;
   std::vector<uint64_t> sent_;       // [bank] ports that took the lane's response
   std::vector<uint32_t> last_grant_; // [port][slice] round-robin pointer
@@ -3156,7 +3179,6 @@ public:
     if (port_arb_->merge_bits() != 0) {
       // one buffered arbiter per core port over the bank lanes
       __assert(config_.core_out_buf, "read merging needs a registered core-response port");
-      rsp_mcast_ = CacheRspMcast::Create(sname, num_banks, config_.num_inputs, port_arb_->merge_bits(), merge_line);
       core_rsp_delay_ = 1;
     } else if (config_.core_out_buf) {
       bank_core_xbar_ = MemCrossBar::Create(sname, ArbiterType::RoundRobin, config_.num_inputs, num_banks, bank_sel, 0, 0);
@@ -3166,6 +3188,13 @@ public:
     }
     if (config_.nc_enable) {
       ++core_rsp_delay_;
+    }
+    if (port_arb_->merge_bits() != 0) {
+      rsp_mcast_ = CacheRspMcast::Create(sname, num_banks, config_.num_inputs, port_arb_->merge_bits(), merge_line,
+                                         core_rsp_delay_);
+      for (uint32_t i = 0; i < config_.num_inputs; ++i) {
+        rsp_mcast_->RspOut.at(i).bind(&simobject->core_rsp_out.at(i));
+      }
     }
 
     // Create cache banks
@@ -3228,8 +3257,8 @@ public:
     }
 
     // schedule core responses
-    for (uint32_t req_id = 0, n = config_.num_inputs; req_id < n; ++req_id) {
-      auto &bank_rsp = rsp_mcast_ ? rsp_mcast_->RspOut.at(req_id) : bank_core_xbar_->RspOut.at(req_id);
+    for (uint32_t req_id = 0, n = rsp_mcast_ ? 0 : config_.num_inputs; req_id < n; ++req_id) {
+      auto &bank_rsp = bank_core_xbar_->RspOut.at(req_id);
       if (bank_rsp.empty())
         continue;
       auto &core_rsp = bank_rsp.peek();
