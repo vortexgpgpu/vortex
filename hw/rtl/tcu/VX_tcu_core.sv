@@ -376,20 +376,27 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam MX_SCALE_BLOCKS_MAX = mx_scale_blocks_k_words(TCU_NVFP4_ID, MX_TILE_K_MAX);
     localparam MX_SCALE_IDX_W = $clog2(MX_MAX_MN * MX_SCALE_BLOCKS_MAX);
 
+    localparam MX_SCALE_LG2_W = `LOG2UP(MX_SCALE_IDX_W);
+
+    // The per-row block count is a power of two, so the row offset is a shift:
+    // a multiply here maps to a DSP slice per scale lookup.
     function automatic [7:0] mx_scale_at(
         input logic [TCU_BLOCK_CAP-1:0][31:0] meta,
         input logic [4:0] fmt,
-        input logic [MX_SCALE_IDX_W-1:0] scale_blocks_k,
+        input logic [MX_SCALE_LG2_W-1:0] scale_blocks_k_lg2,
+        input logic scale_blocks_k_nz,
         input logic [MX_IDX_W-1:0] mn_idx,
         input logic [MX_K_IDX_W-1:0] k_base_idx
     );
         logic [MX_SCALE_IDX_W-1:0] scale_k;
+        logic [MX_SCALE_IDX_W-1:0] scale_row;
         logic [MX_SCALE_IDX_W-1:0] scale_idx;
         logic [`LOG2UP(TCU_BLOCK_CAP)-1:0] word_idx;
         logic [1:0] byte_idx;
         begin
             scale_k = MX_SCALE_IDX_W'(k_base_idx / mx_scale_block_size(fmt));
-            scale_idx = MX_SCALE_IDX_W'(mn_idx) * scale_blocks_k + scale_k;
+            scale_row = scale_blocks_k_nz ? (MX_SCALE_IDX_W'(mn_idx) << scale_blocks_k_lg2) : '0;
+            scale_idx = scale_row + scale_k;
             word_idx = `LOG2UP(TCU_BLOCK_CAP)'(scale_idx >> 2);
             byte_idx = scale_idx[1:0];
             mx_scale_at = meta[word_idx][byte_idx * 8 +: 8];
@@ -399,13 +406,18 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [TCU_TC_M-1:0][FEDP_SF-1:0][7:0] mx_sf_a;
     wire [TCU_TC_N-1:0][FEDP_SF-1:0][7:0] mx_sf_b;
     wire [3:0] mx_elems_per_word = 4'(32 / tcu_fmt_width(fmt_s));
-    wire [MX_SCALE_IDX_W-1:0] mx_scale_blocks_k_eff =
+    `STATIC_ASSERT ((TCU_TILE_K & (TCU_TILE_K - 1)) == 0, ("the MX scale row shift needs a power-of-two TCU_TILE_K"))
+`ifdef VX_CFG_TCU_WGMMA_ENABLE
+    `STATIC_ASSERT ((TCU_WG_K_STEPS * TCU_WG_FEDP_K & (TCU_WG_K_STEPS * TCU_WG_FEDP_K - 1)) == 0, ("the MX scale row shift needs a power-of-two WGMMA K"))
+`endif
+    wire [MX_SCALE_LG2_W-1:0] mx_blocks_k_lg2 =
     `ifdef VX_CFG_TCU_WGMMA_ENABLE
-        is_wgmma ? MX_SCALE_IDX_W'(mx_scale_blocks_k_words(fmt_s, TCU_WG_K_STEPS * TCU_WG_FEDP_K))
-                 : MX_SCALE_IDX_W'(mx_scale_blocks_k_words(fmt_s, TCU_TILE_K));
+        is_wgmma ? MX_SCALE_LG2_W'(mx_scale_blocks_k_lg2(fmt_s, TCU_WG_K_STEPS * TCU_WG_FEDP_K))
+                 : MX_SCALE_LG2_W'(mx_scale_blocks_k_lg2(fmt_s, TCU_TILE_K));
     `else
-        MX_SCALE_IDX_W'(mx_scale_blocks_k_words(fmt_s, TCU_TILE_K));
+        MX_SCALE_LG2_W'(mx_scale_blocks_k_lg2(fmt_s, TCU_TILE_K));
     `endif
+    wire mx_blocks_k_nz = (tcu_fmt_width(fmt_s) != 0);
     wire [MX_K_IDX_W:0] mx_uop_k_words =
     `ifdef VX_CFG_TCU_WGMMA_ENABLE
         is_wgmma ? (MX_K_IDX_W+1)'(TCU_WG_FEDP_K) : (MX_K_IDX_W+1)'(TCU_TC_K);
@@ -424,7 +436,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         wire [MX_IDX_W-1:0] mx_a_idx = MX_IDX_W'(step_m) * MX_IDX_W'(TCU_TC_M) + MX_IDX_W'(i);
         for (genvar s = 0; s < FEDP_SF; ++s) begin : g_s
             wire [MX_K_IDX_W-1:0] mx_k_idx = mx_k_base_idx + MX_K_IDX_W'((s * mx_fedp_k_elems) / FEDP_SF);
-            assign mx_sf_a[i][s] = mx_scale_at(mx_meta_a, fmt_s, mx_scale_blocks_k_eff, mx_a_idx, mx_k_idx);
+            assign mx_sf_a[i][s] = mx_scale_at(mx_meta_a, fmt_s, mx_blocks_k_lg2, mx_blocks_k_nz, mx_a_idx, mx_k_idx);
         end
     end
 
@@ -432,7 +444,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         wire [MX_IDX_W-1:0] mx_b_idx = MX_IDX_W'(step_n) * MX_IDX_W'(TCU_TC_N) + MX_IDX_W'(j);
         for (genvar s = 0; s < FEDP_SF; ++s) begin : g_s
             wire [MX_K_IDX_W-1:0] mx_k_idx = mx_k_base_idx + MX_K_IDX_W'((s * mx_fedp_k_elems) / FEDP_SF);
-            assign mx_sf_b[j][s] = mx_scale_at(mx_meta_b, fmt_s, mx_scale_blocks_k_eff, mx_b_idx, mx_k_idx);
+            assign mx_sf_b[j][s] = mx_scale_at(mx_meta_b, fmt_s, mx_blocks_k_lg2, mx_blocks_k_nz, mx_b_idx, mx_k_idx);
         end
     end
 `endif

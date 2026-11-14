@@ -6,8 +6,8 @@
     "dut": "tcu",
     "result": {
       "bram": 0.0,
-      "build_time_s": 55,
-      "deep_endpoints": 2422,
+      "build_time_s": 35,
+      "deep_endpoints": 2294,
       "deepest_paths": [
         "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[6]",
         "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[9]",
@@ -20,18 +20,18 @@
         "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[16]",
         "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[17]"
       ],
-      "dsp": 769,
-      "endpoints": 44118,
+      "dsp": 513,
+      "endpoints": 41750,
       "env": {
         "circt": "CIRCT 892a65a01",
         "device": "xcu55c-fsvh2892-2L-e",
         "foldsim": "foldsim d8350bc0f",
         "xlen": 32
       },
-      "ff": 47095,
+      "ff": 44471,
       "fix_levels": 12,
       "interfaces": {},
-      "lut": 119887,
+      "lut": 120216,
       "lutram": 2083,
       "max_levels": 25,
       "pred_fmax_mhz": 277.7,
@@ -43,7 +43,7 @@
         "tcu_unit/g_blocks_*_tcu_block/tcu_core": 10,
         "tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_fedp/pipe_acc": 15,
         "tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_fedp/pipe_aln/g_merged_pipe_merged": 9,
-        "tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_fedp/pipe_mul/g_merged_pipe_merged": 12,
+        "tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_fedp/pipe_mul/g_merged_pipe_merged": 11,
         "tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_fedp/pipe_norm_round": 25,
         "tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_fedp/shared_mul/g_mul_f8_sf_*_mul_f8/g_lane_*_pipe_ctrl": 8,
         "tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_fedp/shared_mul/pipe_seam": 13,
@@ -55,7 +55,7 @@
         "tcu_unit/lane_dispatch/g_blocks_*_buf_out/g_eb2_stream_buffer": 10
       },
       "uram": 0,
-      "watch_endpoints": 13538,
+      "watch_endpoints": 13618,
       "watch_levels": 8
     }
   },

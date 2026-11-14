@@ -107,6 +107,14 @@ define tcu_int_pair
 	$(MAKE) -C tcu_fedp run USE_DSP=$(USE_DSP) CONFIGS="$(TCU_BASE) -DVX_CFG_TCU_TYPE_$(1) -DVX_CFG_TCU_$(2)_ENABLE" OPTS="--fmt=$(3)"
 	$(MAKE) -C tcu_fedp run USE_DSP=$(USE_DSP) CONFIGS="$(TCU_BASE) -DVX_CFG_TCU_TYPE_$(1) -DVX_CFG_TCU_$(2)_ENABLE" OPTS="--fmt=$(4)"
 endef
+# Native-TFR int8 and int4 on one build with the 2-stage multiply: with USE_DSP
+# each byte's DSP48 serves both formats.
+TCU_INT_ALL := $(TCU_BASE) -DVX_CFG_TCU_TYPE_TFR -DVX_CFG_TCU_INT8_ENABLE -DVX_CFG_TCU_INT4_ENABLE -DVX_CFG_TCU_LATENCY=5
+define tcu_int_all
+	$(MAKE) -C tcu_fedp clean
+	$(MAKE) -C tcu_fedp USE_DSP=$(USE_DSP) CONFIGS="$(TCU_INT_ALL)"
+	$(foreach f,17 18 19 20,$(MAKE) -C tcu_fedp run USE_DSP=$(USE_DSP) CONFIGS="$(TCU_INT_ALL)" OPTS="--fmt=$(f)" &&) true
+endef
 # Native-TFR float + integer formats; USE_DSP comes from the caller.
 # The testbench latency derives from the configured VX_CFG_TCU_LATENCY; the
 # last case pins the 2-stage multiply used for FPGA synthesis
@@ -120,6 +128,7 @@ define tcu_tfr_suite
 	$(call tcu_case,2,-DVX_CFG_TCU_TYPE_TFR -DUSE_FEDP -DVX_CFG_TCU_LATENCY=5,--fmt=2 --W=25)
 	$(call tcu_int_pair,TFR,INT8,17,18)
 	$(call tcu_int_pair,TFR,INT4,19,20)
+	$(call tcu_int_all)
 endef
 run-tcu:
 	# native TFR — LUT/Wallace multipliers (USE_DSP=0)
