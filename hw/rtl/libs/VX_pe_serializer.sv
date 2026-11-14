@@ -108,7 +108,9 @@ module VX_pe_serializer #(
         .data_out ({pe_data_out,   pe_shared_out})
     );
 
-    assign pe_mask_out = pe_mask_out_w;
+    // a unit sees lanes only with a request: otherwise its stages would load and
+    // compute on every other unit's operands
+    assign pe_mask_out = pe_mask_out_w & {NUM_PES{valid_in}};
 
     if (NUM_LANES != NUM_PES) begin : g_serialize
 
