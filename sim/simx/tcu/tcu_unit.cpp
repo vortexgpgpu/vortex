@@ -470,7 +470,10 @@ public:
     }
   }
 
-  void agu_step() {
+  // A load's first request goes out in the cycle the AGU takes the load: the
+  // channel's one-cycle delay is the AGU's busy register, whose output drives
+  // the LSU scheduler's request queue directly.
+  void agu_issue() {
     if (TCU_AGU_PORTS == 1) {
       // every block shares one port: round-robin one request per cycle
       if (!simobject_->agu_req_out.at(0).full()) {
@@ -496,7 +499,9 @@ public:
         simobject_->agu_req_out.at(block).send(this->agu_make_req(block, agu));
       }
     }
+  }
 
+  void agu_collect() {
     for (uint32_t p = 0; p < TCU_AGU_PORTS; ++p) {
       auto& rsp_in = simobject_->agu_rsp_in.at(p);
       if (rsp_in.empty()) {
@@ -570,7 +575,7 @@ public:
 
   void tick() {
   #ifdef TCU_META_ENABLE
-    this->agu_step();
+    this->agu_collect();
   #endif
   #ifdef VX_CFG_TCU_WGMMA_ENABLE
     uint32_t wgmma_ready = this->tbuf_step();
@@ -717,6 +722,7 @@ public:
     }
 
   #ifdef TCU_META_ENABLE
+    this->agu_issue();
     this->agu_retire(now);
   #endif
 
