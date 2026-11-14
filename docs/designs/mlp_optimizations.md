@@ -589,18 +589,19 @@ Area: +33 LUT in decode and +3 LUT per warp in the expander; the issue yield add
 **Problem.** A tensor kernel loads each matrix fragment with one `flw` per register, plus the per-lane address arithmetic: 4 or 8 fetched loads per fragment and K step. In the K loop those loads take front-end slots the tensor instructions need.
 
 **How it works:**
-- `vx_ldm` and `vx_stm` move a whole fragment. The immediate's low 5 bits name the fragment shape (A, B, C, sparse A, symmetric sparse B, WGMMA C), and its upper bits are a byte offset.
-- The micro-op sequencer (`VX_uop_packld`) expands the instruction into one `flw` or `fsw` per register, 4 or 8 per fragment, in closed form: each uop's row group and column come from the micro-op counter. A uop takes its address from register rs1 | its row group and ORs its column into the immediate, so it reaches the element the fragment layout puts in that register. The uops issue like scalar loads, each with its own register in the scoreboard.
-- Any kernel can use it: it does not depend on the TCU. The fragment geometry and shape table live in `VX_gpu_pkg`, and SimX's `fragment_layout.h` is shared by the LSU and the TCU model. A simulation check in `VX_uop_packld` walks every shape and uop through the TCU's register permutation and asserts each uop lands on its own register.
+- `vx_ldm` and `vx_stm` move a whole fragment. The immediate's low 3 bits name the fragment shape (A, B, C, sparse A, symmetric sparse B, WGMMA C), and its upper bits are a byte offset in 8-byte steps, so every K tile of an unrolled loop folds into it.
+- The micro-op sequencer (`VX_uop_packld`) expands the instruction into one `flw` or `fsw` per register, 4 or 8 per fragment, in closed form: each uop's row group and column come from the micro-op counter, column by column, the order the MMA's K-outer steps read them, and its register from the TCU's register permutation. A uop takes its address from register rs1 | its row group and ORs its column into the immediate. The uops issue like scalar loads, each with its own register in the scoreboard; every uop but the last may yield the next issue cycle to another warp holding one, so the warps' fragment accesses interleave as their scalar loads do.
+- Any kernel can use it: it does not depend on the TCU. The fragment geometry and shape table live in `VX_gpu_pkg`, and SimX's `fragment_layout.h` is shared by the LSU and the TCU model. An elaboration check in `VX_uop_packld` walks every shape and uop through the TCU's register permutation and asserts each uop lands on the register of its element, a distinct one per uop.
 - Every shape is valid whenever the knob is on, except that the symmetric sparse B shape needs a square TCU block (a thread count that is an even power of two, such as 4 or 16). Asymmetric sparse B and sparse MX fragments have no shape and use scalar loads.
-- Kernels pass one address register per fragment row group. `ldm_group` in `vx_tensor.h` derives the B fragment's groups, and the A fragment's in sparse and MX kernels, from one live base, so the K loop does not run out of registers; a dense A pair stays hoisted.
+- Kernels pass one address register per fragment row group. `ldm_group` in `vx_tensor.h` derives the B fragment's groups, and the A fragment's in sparse and MX kernels, from one live base with adds the compiler cannot turn into induction variables, so the K loop does not run out of registers; the base goes into the group uncopied, and unrolled K tiles share the adds. A dense A pair stays hoisted.
 - Controlled by `VX_CFG_EXT_LDST_MATRIX_ENABLE`, **off by default**; it needs F. Kernels use it through the `vx_ldm`/`vx_stm` intrinsics in `vx_intrinsics.h` (`.insn` encodings, no compiler support needed); `vx_tensor.h` calls them when a context is built with `ldst_matrix`. The device reports it in its ISA flags (`VX_ISA_EXT_LDST_MATRIX`).
 
 **Gain:**
 - rtlsim: dense, MX and sparse TCU kernels −3.4% to −10.1%, with bit-identical results.
 - SimX, knob off → on: sgemm_tcu 64³ / 128³ / 256³ −9.4% / −1.0% / −11.6%; sgemm_tcu_mx 32³ / 64³ / 128³ −8.1% / −7.2% / −5.8%, and −5.4% at its CI shape; sgemm_tcu_sp −6.5% / −5.2% / −4.8%; sgemm2_tcu 64³ / 128³ / 256³ −0.01% / −0.51% / −0.42%; sgemm_tcu_wg_dxa −0.2% to −0.8%.
 - Five WGMMA points stay within +0.18% of the scalar loads (`sgemm_tcu_wg` 64³ and 256³, `sgemm_tcu_wg_mx` 128³, `sgemm_tcu_wg_sp` 64³, `sgemm_tcu_wg_sp_dxa` 256³), from CTA composition and code layout that shift with the epilogue.
-- Area: core with TCU +169 LUT; core without the TCU +157 LUT; nothing deeper.
+- The rtlsim and SimX points above were measured before the column-major uop order and the issue yield. With both, the SimX A/B over 114 knob-off/knob-on pairs has a geomean of −1.3% (−0.3% before), with 57 pairs still slower with the knob on (87 before).
+- Area (Beacon, core with TCU, knob off → on): +407 LUT, nothing deeper.
 
 ---
 

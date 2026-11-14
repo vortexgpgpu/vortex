@@ -1324,12 +1324,12 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
   } break;
   case Opcode::EXT4: {
     // vx_ldm (funct3 0) and vx_stm (funct3 2): a macro-op of one flw/fsw per
-    // register of a matrix fragment; imm[4:0] is the fragment shape.
+    // register of a matrix fragment; imm[2:0] is the fragment shape.
     if (funct3 == 0 || funct3 == 2) {
     #ifdef VX_CFG_EXT_LDST_MATRIX_ENABLE
       bool is_load = (funct3 == 0);
       uint32_t imm12 = is_load ? (code >> shift_rs2) : ((funct7 << width_reg) | rd);
-      uint32_t shape = imm12 & 0x1f;
+      uint32_t shape = imm12 & frag::kLdmMask;
       if (!frag::ldm_valid(shape)) {
         std::cout << "Error: " << (is_load ? "vx_ldm" : "vx_stm") << " shape " << shape
                   << " is not supported by this configuration" << std::endl;

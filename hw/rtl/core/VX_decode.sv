@@ -541,31 +541,30 @@ module VX_decode import
                 case (funct3)
                 `ifdef VX_CFG_EXT_LDST_MATRIX_ENABLE
                     // vx_ldm/vx_stm: a matrix fragment, expanded into one flw/fsw
-                    // per register. imm[4:0] is the fragment shape, replaced by its
-                    // expander code; a bytesel offset of 2 (4 registers) or 3 (8)
-                    // marks the access as a fragment.
+                    // per register. imm[2:0] is the fragment shape; a bytesel
+                    // offset of 2 (4 registers) or 3 (8) marks the access as a fragment.
                     3'h0: begin
-                        if (mtx_ldm_valid(u_12[4:0])) begin
+                        if (mtx_ldm_valid(u_12[2:0])) begin
                             ex_type = EX_LSU;
                             op_type = INST_OP_BITS'(INST_LSU_LW);
                             op_args.lsu.is_store = 0;
                             op_args.lsu.is_float = 1;
                             op_args.lsu.pack     = 2'b11;
-                            op_args.lsu.offset   = {u_12[11:5], mtx_ldm_code(u_12[4:0])};
-                            bytesel = {XLENB_W'(XLENB-1), XLENB_W'({1'b1, mtx_ldm_is8(u_12[4:0])})};
+                            op_args.lsu.offset   = u_12;
+                            bytesel = {XLENB_W'(XLENB-1), XLENB_W'({1'b1, mtx_ldm_is8(u_12[2:0])})};
                             `USED_IREG (rs1);
                             `USED_FREG (rd);
                         end
                     end
                     3'h2: begin
-                        if (mtx_ldm_valid(rd)) begin
+                        if (mtx_ldm_valid(rd[2:0])) begin
                             ex_type = EX_LSU;
                             op_type = INST_OP_BITS'(INST_LSU_SW);
                             op_args.lsu.is_store = 1;
                             op_args.lsu.is_float = 1;
                             op_args.lsu.pack     = 2'b11;
-                            op_args.lsu.offset   = {s_imm[11:5], mtx_ldm_code(rd)};
-                            bytesel = {XLENB_W'(XLENB-1), XLENB_W'({1'b1, mtx_ldm_is8(rd)})};
+                            op_args.lsu.offset   = s_imm;
+                            bytesel = {XLENB_W'(XLENB-1), XLENB_W'({1'b1, mtx_ldm_is8(rd[2:0])})};
                             `USED_IREG (rs1);
                             `USED_FREG (rs2);
                         end
@@ -1074,6 +1073,11 @@ module VX_decode import
 `ifndef VX_CFG_EXT_LDST_MATRIX_ENABLE
     `RUNTIME_ASSERT(~(fetch_if.valid && (opcode == INST_EXT4) && ((funct3 == 3'h0) || (funct3 == 3'h2))),
         ("%t: %s matrix load/store on a core built without VX_CFG_EXT_LDST_MATRIX_ENABLE, wid=%0d, PC=0x%0h (#%0d)",
+            $time, INSTANCE_ID, fetch_if.data.wid, to_fullPC(fetch_if.data.PC), fetch_if.data.uuid))
+`else
+    `RUNTIME_ASSERT(~(fetch_if.valid && (opcode == INST_EXT4)
+                      && (((funct3 == 3'h0) && ~mtx_ldm_valid(u_12[2:0])) || ((funct3 == 3'h2) && ~mtx_ldm_valid(rd[2:0])))),
+        ("%t: %s matrix load/store with a reserved fragment shape, wid=%0d, PC=0x%0h (#%0d)",
             $time, INSTANCE_ID, fetch_if.data.wid, to_fullPC(fetch_if.data.PC), fetch_if.data.uuid))
 `endif
 

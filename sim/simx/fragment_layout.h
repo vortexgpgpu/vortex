@@ -75,13 +75,14 @@ inline uint32_t rc_off_sp(uint32_t m, uint32_t n) {
   return (hi_bit(n, kLgN) << 2) | ((m & 1) << 1) | (1 - ((m ^ n) & 1));
 }
 
-// vx_ldm/vx_stm shapes, {ctx, role[1:0], trans, sparse}
-constexpr uint32_t kLdmA   = 0x00; // A, row-major
-constexpr uint32_t kLdmASp = 0x01; // sparse A, row-major
-constexpr uint32_t kLdmB   = 0x06; // B, col-major
-constexpr uint32_t kLdmBSp = 0x07; // symmetric sparse B, col-major
-constexpr uint32_t kLdmC   = 0x08; // C, row-major
-constexpr uint32_t kLdmWgC = 0x18; // warp-group C, row-major, one 8-register chunk
+// vx_ldm/vx_stm shapes, imm[2:0]; imm[11:3] is a byte offset
+constexpr uint32_t kLdmA    = 0; // A, row-major
+constexpr uint32_t kLdmASp  = 1; // sparse A, row-major
+constexpr uint32_t kLdmB    = 2; // B, col-major
+constexpr uint32_t kLdmBSp  = 3; // symmetric sparse B, col-major
+constexpr uint32_t kLdmC    = 4; // C, row-major
+constexpr uint32_t kLdmWgC  = 5; // warp-group C, row-major, one 8-register chunk
+constexpr uint32_t kLdmMask = 0x7;
 
 // Byte strides between the words a lane holds along a fragment row
 constexpr uint32_t kLdmLgCsK = clog2(cfg::tcK * 4);
@@ -123,34 +124,41 @@ inline uint32_t ldm_count(uint32_t shape) {
   }
 }
 
-// Element e of a fragment: its register offset, row group and column
-inline LdmUop ldm_elem(uint32_t shape, uint32_t e) {
+// Uop e moves element e of the fragment, column by column, the order the
+// MMA's K-outer steps read them, so its first steps find their operands loaded
+// first; its register is the one the fragment register layout puts the
+// element in.
+inline LdmUop ldm_uop(uint32_t shape, uint32_t e) {
   LdmUop u{0, 0, 0};
   switch (shape) {
-  case kLdmA: // e = {m, k}: row group m, word column k
-    u.grp     = e >> kLgK;
-    u.col     = (e & ((1u << kLgK) - 1)) << kLdmLgCsK;
-    u.reg_off = ra_off(e >> kLgK, e);
-    break;
-  case kLdmASp: // e = {m, k} over half the K steps; registers in order
-    u.grp     = e >> kLdmLgKSp;
-    u.col     = (e & ((1u << kLdmLgKSp) - 1)) << kLdmLgCsK;
-    u.reg_off = e;
-    break;
-  case kLdmB: // e = {k, n}: a col-major B row is one of its columns (a pair with two sub-blocks)
-    u.grp     = e & ((1u << kLdmLgBRows) - 1);
-    u.col     = (e >> kLdmLgBRows) << kLdmLgCsK;
-    u.reg_off = rb_off(u.grp << kLgBSb, e >> kLdmLgBRows);
-    break;
+  case kLdmA: { // e = {k, m}: row group m, word column k
+    uint32_t m = e & ((1u << kLgM) - 1), k = e >> kLgM;
+    u.grp     = m;
+    u.col     = k << kLdmLgCsK;
+    u.reg_off = ra_off(m, k);
+  } break;
+  case kLdmASp: { // e = {k, m} over half the K steps; registers in element order {m, k}
+    uint32_t m = e & ((1u << kLgM) - 1), k = e >> kLgM;
+    u.grp     = m;
+    u.col     = k << kLdmLgCsK;
+    u.reg_off = (m << kLdmLgKSp) | k;
+  } break;
+  case kLdmB: { // e = {k, n}: a col-major B row is one of its columns (a pair with two sub-blocks)
+    uint32_t n = e & ((1u << kLdmLgBRows) - 1), k = e >> kLdmLgBRows;
+    u.grp     = n;
+    u.col     = k << kLdmLgCsK;
+    u.reg_off = rb_off(n << kLgBSb, k);
+  } break;
   case kLdmBSp: // symmetric sparse: one row per register
     u.grp     = e;
     u.reg_off = e;
     break;
-  case kLdmC: // e = {m, n}
-    u.grp     = e >> kLgN;
-    u.col     = (e & ((1u << kLgN) - 1)) << kLdmLgCsN;
-    u.reg_off = rc_off(e >> kLgN, e);
-    break;
+  case kLdmC: { // e = {n, m}
+    uint32_t m = e & ((1u << kLgM) - 1), n = e >> kLgM;
+    u.grp     = m;
+    u.col     = n << kLdmLgCsN;
+    u.reg_off = rc_off(m, n);
+  } break;
   default: // warp-group C, e = {n, m}: n-major registers, two row groups
     u.grp     = e & 1;
     u.col     = (e >> 1) << kLdmLgCsN;
@@ -158,18 +166,6 @@ inline LdmUop ldm_elem(uint32_t shape, uint32_t e) {
     break;
   }
   return u;
-}
-
-// Uop e moves register fd/fs2 + e, holding the element whose register offset is e
-inline LdmUop ldm_uop(uint32_t shape, uint32_t e) {
-  uint32_t count = ldm_count(shape);
-  for (uint32_t r = 0; r < count; ++r) {
-    auto u = ldm_elem(shape, r);
-    if (u.reg_off == e) {
-      return u;
-    }
-  }
-  std::abort();
 }
 
 } // namespace frag

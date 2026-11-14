@@ -260,33 +260,37 @@ built with `VX_CFG_EXT_LDST_MATRIX_ENABLE`, which requires F but not the tensor
 core, so any kernel can move its data in that layout; the device reports them
 in `VX_ISA_EXT_LDST_MATRIX`. A core built without one of the two extensions
 does not decode its encodings: the RTL asserts and SimX stops on them, as for
-the other extensions. `imm[4:0]` is the fragment **shape**, `imm[11:5]` a byte offset
-`off` (a multiple of 32), and `rs1` the first of a **base group** of J integer
+the other extensions. `imm[2:0]` is the fragment **shape**, `imm[11:3]` a byte offset
+`off` (a multiple of 8), and `rs1` the first of a **base group** of J integer
 registers, a multiple of J, where register `rs1 + j` holds the lane's address
 of the fragment's row group *j*. Each is a macro-op of one plain `flw`/`fsw` per
-fragment register: uop *e* moves register `fd + e` (`fs2 + e`) to or from the
-word at `x[rs1 | j(r)] + (off | c(r)·CS)`, where *r* = π⁻¹(*e*) is the fragment
-element that register holds (π is the fragment's bank-conflict-free register
-order, the one the WMMA/WGMMA expansion reads), `(j, c)` a bit split of *r*, and CS the byte
-stride between a lane's words in a row. The register add takes the uop counter
-directly; the shape only selects the row group and column. So neither the LSU
+fragment register: uop *e* moves fragment element *e* to or from the word at
+`x[rs1 | j(e)] + (off | c(e)·CS)` and register `fd + π(e)` (`fs2 + π(e)`), where
+`(j, c)` is a bit split of *e*, column-major (the row group in the low bits, so
+the uops walk the fragment column by column, the order the MMA's K-outer steps
+read it), π the fragment's bank-conflict-free register order (the one the
+WMMA/WGMMA expansion reads), and CS the byte stride between a lane's words in a
+row. Every uop but the last may yield the next issue cycle to another warp
+holding one, as a wide access's do. So neither the LSU
 nor the address path does anything new: the
 row step and the lane's own offset live in the base group, computed by
 software once per tile, and the column offsets are bit selects. `off` must be
 zero in the bits the column offsets use, which makes the OR an add; unrolled K
-tiles then share one base group and differ only in `off`. The shapes are
-`{ctx, role[1:0], trans, sparse}`. The fragment geometry follows from the warp
+tiles then share one base group and differ only in `off`; the 8-byte step
+reaches the narrowest K tile, a sparse A's at NT=2 and 4, so every unrolled
+tile folds. The shapes are an enumeration; codes 6 and 7, and `funct3` rows 1
+and 7, stay reserved. The fragment geometry follows from the warp
 width alone (a tile of 8 words per lane, computed in blocks of one word per
 lane), so every core with the extension has
 
 | shape | fragment | J | per row group | registers |
 |---|---|---|---|---|
-| `0x00` | A, row-major | M steps | K steps, `4·tcK` B apart | 8 |
-| `0x01` | sparse A, row-major | M steps | K/2 steps, `4·tcK` B apart | 4 |
-| `0x06` | B, col-major | N steps per register | K steps, `4·tcK` B apart | 4 or 8 |
-| `0x07` | symmetric sparse B, col-major | one N step per register | 1 word | 4 or 8 |
-| `0x08` | C, row-major | M steps | N steps, `4·tcN` B apart | 8 |
-| `0x18` | warp-group C, row-major, one 8-register chunk | 2 | 4 columns, `4·tcN` B apart | 8 |
+| 0 | A, row-major | M steps | K steps, `4·tcK` B apart | 8 |
+| 1 | sparse A, row-major | M steps | K/2 steps, `4·tcK` B apart | 4 |
+| 2 | B, col-major | N steps per register | K steps, `4·tcK` B apart | 4 or 8 |
+| 3 | symmetric sparse B, col-major | one N step per register | 1 word | 4 or 8 |
+| 4 | C, row-major | M steps | N steps, `4·tcN` B apart | 8 |
+| 5 | warp-group C, row-major, one 8-register chunk | 2 | 4 columns, `4·tcN` B apart | 8 |
 
 with the symmetric sparse B only in the symmetric layouts (NT=4 and NT=16);
 every other shape is reserved (SimX stops on it). In the RTL,
@@ -294,10 +298,10 @@ every other shape is reserved (SimX stops on it). In the RTL,
 (`MTX_*`), the bank-conflict-free register permutations (`mtx_ra/rb/rc_off`)
 and the shapes' closed-form uop order (`mtx_ldm_uop`); the tensor core takes
 its tile geometry and operand permutations from it, and `VX_uop_packld`
-asserts in simulation that every uop of every shape maps back through the
-permutations to its own register. SimX keeps the permutations in `fragment_layout.h`, shared by the
-tensor core and the LSU, and derives the uop order from them by search. So the
-layouts cannot drift apart. The words of a fragment register span its element type,
+asserts at elaboration that every uop of every shape lands on the register the
+permutations give its element, a distinct one per uop. SimX keeps the
+permutations and the same closed form in `fragment_layout.h`, shared by the
+tensor core and the LSU. So the layouts cannot drift apart. The words of a fragment register span its element type,
 so one shape serves every ITYPE. A layout whose register gathers words from
 several rows (a sub-word B row-major, A col-major) has no shape: software stages
 such a tile transposed. A 16- or 32-register WGMMA accumulator takes 2 or 4
