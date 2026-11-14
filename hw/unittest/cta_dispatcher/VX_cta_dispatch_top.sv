@@ -53,6 +53,7 @@ module VX_cta_dispatch_top import VX_gpu_pkg::*;
     // The KMU is not instantiated in this unit test, so the bench supplies the
     // values the dispatcher expects precomputed on the bus:
     //   aligned_lmem_size  — in_lmem_size rounded up to MEM_BLOCK_SIZE.
+    //   lmem_slots         — the slots that footprint fits.
     //   cluster_size = 1 — degenerate (1,1,1) cluster, so every block is its own
     //   cluster and always first-of-cluster.
     wire [`VX_CFG_LMEM_LOG_SIZE:0] aligned_lmem_size_w =
@@ -70,6 +71,7 @@ module VX_cta_dispatch_top import VX_gpu_pkg::*;
         kmu_req.param             = in_param;
         kmu_req.ctx_id            = '0;
         kmu_req.aligned_lmem_size = aligned_lmem_size_w;
+        kmu_req.lmem_slots        = lmem_slots_fit(aligned_lmem_size_w);
         kmu_req.args.compute.grid_dim[0]  = in_grid_dim_x;
         kmu_req.args.compute.grid_dim[1]  = in_grid_dim_y;
         kmu_req.args.compute.grid_dim[2]  = in_grid_dim_z;

@@ -80,7 +80,7 @@
     "dut": "core",
     "result": {
       "bram": 129.0,
-      "build_time_s": 90,
+      "build_time_s": 75,
       "deep_endpoints": 1536,
       "deepest_paths": [
         "15  core/g_compute_slices.g_slices_0.compute_slice/frontend_slice/fetch/inflight[2] -> core/g_compute_slices.g_slices_0.compute_slice/frontend_slice/fetch/req_buf/g_eb2.stream_buffer/g_buffer.data_out_r.d[28]",
@@ -95,14 +95,14 @@
         "15  core/g_compute_slices.g_slices_0.compute_slice/backend_slice/execute_slice/lsu_dispatch/g_blocks_0.buf_out/g_eb2.stream_buffer/g_buffer.data_out_r[1551] -> core/g_compute_slices.g_slices_0.compute_slice/backend_slice/execute_slice/lsu_block/mem_path/lsu_scheduler/mem_scheduler/g_req_queue_rw.req_queue/g_ebN.fifo_queue/g_depth_n.g_out_reg.data_out_r.d[824]"
       ],
       "dsp": 97,
-      "endpoints": 122350,
+      "endpoints": 122340,
       "env": {
         "circt": "CIRCT 892a65a01",
         "device": "xcu55c-fsvh2892-2L-e",
         "foldsim": "foldsim d8350bc0f",
         "xlen": 32
       },
-      "ff": 163885,
+      "ff": 163874,
       "fix_levels": 12,
       "interfaces": {
         "core.dcache_bus_if_0_rsp_ready": 1,
@@ -112,7 +112,7 @@
         "core.icache_bus_if_0_rsp_ready": 1,
         "core.kmu_bus_if_ready": 1
       },
-      "lut": 143793,
+      "lut": 143741,
       "lutram": 6838,
       "max_levels": 15,
       "pred_fmax_mhz": 285.6,
@@ -150,12 +150,11 @@
         "core/mem_unit/lmem_unit/g_data_store_*_g_single_port_lmem_store": 9,
         "core/scheduler": 10,
         "core/scheduler/cta_dispatcher": 11,
-        "core/scheduler/cta_dispatcher/rem_warps_ram": 9,
         "core/scheduler/warp_shared_unit": 11,
         "core/scheduler/warp_shared_unit/bar_unit": 9
       },
       "uram": 0,
-      "watch_endpoints": 8282,
+      "watch_endpoints": 8283,
       "watch_levels": 8
     }
   },
@@ -211,7 +210,7 @@
     "dut": "vortex",
     "result": {
       "bram": 81.0,
-      "build_time_s": 40,
+      "build_time_s": 35,
       "deep_endpoints": 3253,
       "deepest_paths": [
         "23  dev_ptw/rsp_arb/g_input_select.g_arbiter.g_out_buf_0.out_buf/g_eb2.stream_buffer/g_buffer.buffer_r[30] -> g_clusters_0.cluster/l2tlb/set_mru_r.d[2]",
@@ -226,14 +225,14 @@
         "23  dev_ptw/rsp_arb/g_input_select.g_arbiter.g_out_buf_0.out_buf/g_eb2.stream_buffer/g_buffer.buffer_r[30] -> g_clusters_0.cluster/l2tlb/set_mru_r.d[19]"
       ],
       "dsp": 50,
-      "endpoints": 128283,
+      "endpoints": 128297,
       "env": {
         "circt": "CIRCT 892a65a01",
         "device": "xcu55c-fsvh2892-2L-e",
         "foldsim": "foldsim d8350bc0f",
         "xlen": 32
       },
-      "ff": 144705,
+      "ff": 144723,
       "fix_levels": 12,
       "interfaces": {
         "g_clusters_*_cluster.busy": 1,
@@ -249,7 +248,7 @@
         "g_clusters_*_cluster/g_sockets_*_socket/g_cores_*_core.icache_bus_if_0_rsp_ready": 1,
         "g_clusters_*_cluster/g_sockets_*_socket/g_cores_*_core.kmu_bus_if_ready": 1
       },
-      "lut": 131616,
+      "lut": 131626,
       "lutram": 10082,
       "max_levels": 23,
       "pred_fmax_mhz": 268.8,
@@ -308,7 +307,6 @@
         "g_clusters_*_cluster/g_sockets_*_socket/g_cores_*_core/mem_unit/lmem_unit/g_data_store_*_g_single_port_lmem_store": 9,
         "g_clusters_*_cluster/g_sockets_*_socket/g_cores_*_core/scheduler": 9,
         "g_clusters_*_cluster/g_sockets_*_socket/g_cores_*_core/scheduler/cta_dispatcher": 8,
-        "g_clusters_*_cluster/g_sockets_*_socket/g_cores_*_core/scheduler/cta_dispatcher/rem_warps_ram": 8,
         "g_clusters_*_cluster/g_sockets_*_socket/icache/g_cache_wrap_*_cache_wrap/g_cache_cache/g_banks_*_bank/cache_data/g_data_slice_*_data_store": 10,
         "g_clusters_*_cluster/g_sockets_*_socket/icache/g_cache_wrap_*_cache_wrap/g_cache_cache/g_banks_*_bank/cache_mshr": 10,
         "g_clusters_*_cluster/g_sockets_*_socket/icache/g_cache_wrap_*_cache_wrap/g_cache_cache/g_banks_*_bank/cache_mshr/mshr_store": 8,
@@ -333,7 +331,7 @@
         "kmu": 9
       },
       "uram": 0,
-      "watch_endpoints": 11791,
+      "watch_endpoints": 11795,
       "watch_levels": 8
     }
   }
