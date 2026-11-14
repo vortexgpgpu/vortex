@@ -1,7 +1,7 @@
 {
   "core:raycast-nt16:rtlsim": {
     "32": {
-      "cycles": 11130596,
+      "cycles": 7506695,
       "instrs": 2234919
     },
     "app": "raycast",
@@ -12,7 +12,7 @@
   },
   "core:raycast-nt4:rtlsim": {
     "32": {
-      "cycles": 20929742,
+      "cycles": 18395107,
       "instrs": 5636759
     },
     "app": "raycast",
@@ -67,7 +67,7 @@
   },
   "core:sgemmx-nt16:rtlsim": {
     "32": {
-      "cycles": 1023552,
+      "cycles": 1019849,
       "instrs": 266832
     },
     "app": "sgemmx",
@@ -133,7 +133,7 @@
   },
   "core:stencil3d-nt16:rtlsim": {
     "32": {
-      "cycles": 2092014,
+      "cycles": 2091224,
       "instrs": 888848
     },
     "app": "stencil3d",

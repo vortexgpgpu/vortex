@@ -279,6 +279,10 @@ public:
   uint32_t build_domain() const { return build_domain_; }
   bool build_launch_kept() const { return build_launch_kept_; }
 
+  // True while reset_launch() runs: an object resets its launch state but keeps
+  // what only a device reset clears.
+  bool launch_resetting() const { return launch_resetting_; }
+
   // Cap the parallel thread count (must be called before the first tick).
   // A limit of 1 forces serial execution — required while the configuration
   // contains a cross-domain channel edge that is not registered.
@@ -431,6 +435,7 @@ private:
   uint32_t num_domains_ = 1;
   uint32_t build_domain_ = 0;
   bool build_launch_kept_ = false;
+  bool launch_resetting_ = false;
   static inline thread_local uint32_t tl_exec_domain_ = HOST_DOMAIN;
   static inline thread_local SimObjectBase* tl_exec_object_ = nullptr;
   static inline thread_local uint64_t tl_cross_seq_ = 0;
@@ -1200,11 +1205,13 @@ inline void SimPlatform::validate_topology() {
 // flight in the kept memory side when the kernel starts. Their events stay
 // scheduled and time keeps counting; the rest of the model is quiescent.
 inline void SimPlatform::reset_launch() {
+  launch_resetting_ = true;
   for (auto* object : active_reset_) {
     if (!object->launch_kept_) {
       object->do_reset();
     }
   }
+  launch_resetting_ = false;
   for (auto& object : objects_) {
     object->tick_active_ = true;
   }

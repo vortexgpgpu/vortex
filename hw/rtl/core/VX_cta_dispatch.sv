@@ -58,8 +58,9 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // -------------------------------------------------------------------------
     // CTA table — fixed-stride slots (no in-order reclaim).
     // Per-slot remaining-warp counts live in rem_warps_ram; occupancy is mirrored
-    // in slot_valid_r to keep it off the table read path. Slots are allocated
-    // round-robin and freed immediately (out of order) when a CTA's last warp
+    // in slot_valid_r to keep it off the table read path. A CTA takes the lowest
+    // free slot, a cluster a window of consecutive slots from a round-robin
+    // pointer; slots free immediately (out of order) when a CTA's last warp
     // retires.
     // -------------------------------------------------------------------------
 
@@ -88,7 +89,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     );
 
     reg [NUM_CTA_SLOTS-1:0] slot_valid_r;          // per-slot occupancy mirror
-    reg [CS_BITS-1:0]       tail_r;                // round-robin slot pointer
+    reg [CS_BITS-1:0]       tail_r;                // round-robin cluster window pointer
     reg [NW_WIDTH:0]        win_k_r;               // last window's size, 0 if it was clamped
 
     // Fixed-stride LMEM partition: resident CTA in slot i gets LMEM base
@@ -462,11 +463,16 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // so the per-CTA admission/ready path sees only a free-slot test, never the
     // divide/encode.
     //
+    // A CTA alone in its cluster has no placement constraint: it takes the lowest
+    // free usable slot, so it waits only for capacity, never for one particular
+    // CTA to retire.
+    //
     // Cluster co-residency: the first CTA of a cluster (is_first_of_cluster)
-    // reserves K = cluster_size CONSECUTIVE usable slots, pre-wrapping the slot
-    // window to 0 if it would overrun the usable range. Members 2..K then take the
-    // following slots, so member r lands at issuer_base + r*stride — exactly what
-    // DXA multicast resolves. Slots free immediately (out of order) on retire.
+    // reserves K = cluster_size CONSECUTIVE usable slots at the round-robin
+    // pointer, pre-wrapping the slot window to 0 if it would overrun the usable
+    // range. Members 2..K then take the following slots, so member r lands at
+    // issuer_base + r*stride — exactly what DXA multicast resolves. Slots free
+    // immediately (out of order) on retire.
 
     localparam LMEM_LOG = `VX_CFG_LMEM_LOG_SIZE;
 
@@ -490,9 +496,9 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     `RUNTIME_ASSERT(~kmu_bus_if.valid || (usable_therm == lmem_slots_fit(stride)),
         ("%t: %s slot map %b does not match the %0d-byte CTA footprint", $time, INSTANCE_ID, usable_therm, stride))
 
-    // The slot base is either the round-robin tail or slot 0: the tail is
-    // normalized to 0 when a kernel transition shrank the usable range below it,
-    // and a cluster window that would overrun the usable range pre-wraps to 0.
+    // A cluster member's slot base is either the round-robin tail or slot 0: the
+    // tail is normalized to 0 when a kernel transition shrank the usable range
+    // below it, and a window that would overrun the usable range pre-wraps to 0.
     // Every test is a bit of the registered maps shifted by the tail:
     // tail_room[j] is set iff slot tail+j is usable.
     wire [NUM_CTA_SLOTS:0]   usable_room = {1'b0, usable_therm};
@@ -511,39 +517,66 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
         assign cluster_therm[j] = (j == 0) || (eff_cluster_size > (NW_WIDTH+1)'(j));
     end
     wire [NUM_CTA_SLOTS-1:0] window_ones = cluster_therm & usable_therm;
+    wire window_fits_tail = ((cluster_therm & ~tail_room[NUM_CTA_SLOTS-1:0]) == '0);
     wire window_free_tail = ((tail_busy & window_ones) == '0);
     wire window_free_zero = ((slot_valid_r & window_ones) == '0);
 
     // The tail is a multiple of the last window's size, so a window of another
-    // size, or one after a clamped window, does not fit at the tail and
-    // restarts at slot 0: every window stays aligned to its size across
-    // launches. A single CTA is aligned at any slot and keeps the tail.
-    wire win_k_new   = (eff_cluster_size > (NW_WIDTH+1)'(1)) && (eff_cluster_size != win_k_r);
-    wire window_fits_tail = ((cluster_therm & ~tail_room[NUM_CTA_SLOTS-1:0]) == '0) && !win_k_new;
+    // size, or one after a clamped window, restarts at slot 0: every window
+    // stays aligned to its size across launches.
+    wire win_k_new   = (eff_cluster_size != win_k_r);
     wire win_clamped = ((cluster_therm & ~usable_therm) != '0)
                     || (eff_cluster_size > (NW_WIDTH+1)'(NUM_CTA_SLOTS));
     wire tail_usable = tail_room[0];
-    wire base_zero   = is_first_of_cluster ? ~window_fits_tail : ~tail_usable;
-    wire [CS_BITS-1:0] base_slot = base_zero ? CS_BITS'(0) : tail_r;
+    wire base_zero   = is_first_of_cluster ? (~window_fits_tail | win_k_new) : ~tail_usable;
+
+    // Lowest free usable slot, from registered maps only.
+    wire [NUM_CTA_SLOTS-1:0] slot_free = usable_therm & ~slot_valid_r;
+    wire [NUM_CTA_SLOTS-1:0] free_onehot;
+    wire [CS_BITS-1:0]       free_slot;
+    wire                     free_any;
+    VX_priority_encoder #(
+        .N (NUM_CTA_SLOTS)
+    ) free_slot_enc (
+        .data_in   (slot_free),
+        .onehot_out(free_onehot),
+        .index_out (free_slot),
+        .valid_out (free_any)
+    );
+
+    wire is_single = (eff_cluster_size <= (NW_WIDTH+1)'(1));
+    wire [CS_BITS-1:0] base_slot = is_single ? free_slot
+                                 : (base_zero ? CS_BITS'(0) : tail_r);
+
+    // The same slot as a mask for slot_valid_r. The tail is decoded from its
+    // register, so the late base_zero only selects between decoded masks.
+    wire [NUM_CTA_SLOTS-1:0] tail_onehot = NUM_CTA_SLOTS'(1) << tail_r;
+    wire [NUM_CTA_SLOTS-1:0] base_onehot = is_single ? free_onehot
+                                         : (base_zero ? NUM_CTA_SLOTS'(1) : tail_onehot);
+
+    // Occupancy updates: an admitted CTA sets its slot, a finished one clears
+    // its own; the two never meet, as an admitted slot was free.
+    wire [NUM_CTA_SLOTS-1:0] slot_set   = kmu_bus_if_fire ? base_onehot : '0;
+    wire [NUM_CTA_SLOTS-1:0] slot_clear = NUM_CTA_SLOTS'(cta_done) << done_slot_r_dly;
 
     // Round-robin advance: next slot wraps to 0 at the usable count.
     wire [CS_BITS-1:0] tail_inc = tail_r + CS_BITS'(1);
     wire [CS_BITS-1:0] next_tail = base_zero ? CS_BITS'(usable_room[1])
                                  : (tail_room[1] ? tail_inc : CS_BITS'(0));
 
-    // Admission: a standalone CTA / following cluster member needs its single
-    // slot free; a first-of-cluster needs all K window slots free. The window
-    // [base_slot, base_slot+K) never overruns the usable range, so the mask is
-    // built at NUM_CTA_SLOTS width directly.
-    wire cluster_window_free = window_fits_tail ? window_free_tail : window_free_zero;
+    // Admission: a single CTA needs any free slot; a following cluster member
+    // needs its slot free; a first-of-cluster needs all K window slots free. The
+    // window [base_slot, base_slot+K) never overruns the usable range, so the
+    // mask is built at NUM_CTA_SLOTS width directly.
+    wire cluster_window_free = (window_fits_tail && !win_k_new) ? window_free_tail : window_free_zero;
     wire single_slot_free = tail_usable ? ~tail_busy[0] : ~slot_valid_r[0];
-    wire admit_ok = is_first_of_cluster ? cluster_window_free : single_slot_free;
+    wire admit_ok = is_single ? free_any
+                  : (is_first_of_cluster ? cluster_window_free : single_slot_free);
 
     // A member's cluster rank is its slot modulo the cluster size, so a window
     // starts at a multiple of it; and an admitted slot lies within the current
     // kernel's capacity (slot 0 is always granted).
-    `RUNTIME_ASSERT(~(kmu_bus_if_fire && (state == IDLE) && is_first_of_cluster
-                   && (eff_cluster_size > (NW_WIDTH+1)'(1)))
+    `RUNTIME_ASSERT(~(kmu_bus_if_fire && (state == IDLE) && !is_single && is_first_of_cluster)
                  || ((32'(base_slot) % 32'(eff_cluster_size)) == 0),
         ("%t: %s cluster window at slot %0d is not aligned to its size %0d", $time, INSTANCE_ID, base_slot, eff_cluster_size))
     `RUNTIME_ASSERT(~(kmu_bus_if_fire && (state == IDLE)) || (base_slot == '0) || (stride == 0)
@@ -644,12 +677,11 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                 rem_warps_waddr_r <= done_slot_r_dly;
                 rem_warps_wdata_r <= rem_warps_rdata_fwd - 1;
                 rem_warps_write_r <= 1;
-                if (cta_done) begin
-                    slot_valid_r[done_slot_r_dly] <= 1'b0;
-                end
             end else begin
                 rem_warps_write_r <= 0;
             end
+
+            slot_valid_r <= (slot_valid_r & ~slot_clear) | slot_set;
 
             // ---- FSM -------------------------------------------------------
             case (state)
@@ -682,17 +714,17 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                         end
 
                         // Fixed-stride placement: this CTA lands in slot base_slot
-                        // (the round-robin tail, pre-wrapped for a cluster window)
-                        // at LMEM base base_slot * stride. The round-robin pointer
-                        // advances to next_tail (wraps at the usable count). Slots
-                        // free out of order on retirement, so a cluster's window is
-                        // checked free up front (admit_ok) rather than reclaimed
-                        // in order.
+                        // at LMEM base base_slot * stride. Only a cluster member
+                        // advances the round-robin pointer, to next_tail (wraps at
+                        // the usable count). Slots free out of order on retirement,
+                        // so a cluster's window is checked free up front (admit_ok)
+                        // rather than reclaimed in order.
                         cur_stride_r <= stride;
-                        slot_valid_r[base_slot] <= 1'b1;
-                        tail_r     <= (`VX_CFG_NUM_WARPS > 1) ? next_tail : CS_BITS'(0);
-                        if (is_first_of_cluster) begin
-                            win_k_r <= win_clamped ? '0 : eff_cluster_size;
+                        if (!is_single) begin
+                            tail_r <= (`VX_CFG_NUM_WARPS > 1) ? next_tail : CS_BITS'(0);
+                            if (is_first_of_cluster) begin
+                                win_k_r <= win_clamped ? '0 : eff_cluster_size;
+                            end
                         end
                         cur_slot_r <= base_slot;
                         dispatched_warps <= '0;

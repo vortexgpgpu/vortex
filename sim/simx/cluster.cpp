@@ -683,10 +683,6 @@ public:
     l2cache_->flush_begin(fence_op);
   }
 
-  void l2_keep_lines() {
-    l2cache_->keep_lines();
-  }
-
   SimChannel<MemReq>& cp_mem_req_in() {
     return l2cache_->core_req_in.at(L2_CP_IDX);
   }
@@ -859,10 +855,6 @@ bool Cluster::rtcache_flush_done() const { return impl_->rtcache_flush_done(); }
 
 void Cluster::l2_flush_begin(uint32_t fence_op) {
   impl_->l2_flush_begin(fence_op);
-}
-
-void Cluster::l2_keep_lines() {
-  impl_->l2_keep_lines();
 }
 
 SimChannel<MemReq>& Cluster::cp_mem_req_in() {

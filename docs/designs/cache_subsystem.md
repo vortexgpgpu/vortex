@@ -937,16 +937,25 @@ closely enough to be a parity oracle:
 mem_ports, write_back, write_reponse, mshr_size, latency, repl_policy, is_llc`
 (`write_reponse` is misspelled in the source). `bypass` mirrors RTL `PASSTHRU`.
 
-**SimX's flush is not a shortcut.** `flush_begin()` only *arms* the walk — and
-no-ops entirely for a write-through cache, since there is no dirty state to evict.
-The real work is `processFlush()`, called every tick, which:
+**SimX's flush is not a shortcut.** `flush_begin(fence_op)` only *arms* the
+walk, under the flush token's rule (`owes_walk`): every level above the point
+of coherence walks, and the shared last-level cache, the point of coherence of
+a device-scope flush, no-ops and keeps its lines. The real work is
+`processFlush()`, called every tick, which:
 
 1. refuses to start while `pending_fill_reqs_ != 0 || !pipe_req_->empty() ||
    !mshr_.empty()` — the same drain barrier as the RTL's `STATE_WAIT1`, and for the
    same reason;
 2. emits one writeback per dirty **sector** with `byteen = sec.dirty_mask`,
    stalling and resuming at the same sector when `mem_req_out` is full;
-3. clears `flushing_` when the walk terminates.
+3. drops every line, as the RTL walk clears each way's valid bits, and clears
+   `flushing_`.
+
+A kernel launch is not a device reset in SimX either: the launch reset keeps
+every cache's lines and skips the init walk, which runs after the device reset
+only, while the host configures the device. Lines from one kernel reach the next
+unless a flush drops them, and the runtime flushes at device scope ahead of
+every launch that follows a kernel.
 
 `Impl::flush_begin()` fans out to every bank and `Impl::flush_done()` ANDs them —
 structurally the same shape as `VX_cache_init`.

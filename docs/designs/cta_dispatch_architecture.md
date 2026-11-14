@@ -326,8 +326,11 @@ owns bytes `[i·stride, (i+1)·stride)` **for the whole kernel**.
   CTA is admitted against its own kernel's map, from a flop-driven field.
   `m·stride` is constant-times-variable, so there is no divider. `stride == 0`
   ⇒ all slots usable; a stride exceeding LMEM clamps to 1 rather than 0.
-- **Standalone admission.** Round-robin `tail_r` over `[0, usable_slots)`;
-  admit when `slot_valid_r[base_slot] == 0`.
+- **Standalone admission.** A CTA alone in its cluster (`cluster_size <= 1`)
+  takes the lowest free usable slot, a priority encode of
+  `lmem_slots & ~slot_valid_r`, and is admitted while any is free. It waits
+  for capacity, never for one particular earlier CTA to retire — the way a GPU
+  places a CTA wherever an SM has room. It leaves `tail_r` alone.
 - **Slot LMEM base** = `base_slot · stride`, a small multiply latched at
   accept into `cur_lmem_base_r` — off the ready path — and exposed as
   `cta_csrs.lmem_addr = VX_MEM_LMEM_BASE_ADDR | cur_lmem_base_r`.
@@ -338,19 +341,19 @@ owns bytes `[i·stride, (i+1)·stride)` **for the whole kernel**.
 
 ![cluster admission](../assets/img/cta_cluster_sequence.svg)
 
-A first-of-cluster beat reserves K = `cluster_size` **consecutive** usable
-slots at `tail_r`. A window of K > 1 restarts at slot 0 when it would overrun
-the usable range (`lmem_slots`), or when K differs from the last window's size
-(`win_k_r`):
+A first-of-cluster beat (K = `cluster_size` > 1) reserves K **consecutive**
+usable slots at the round-robin `tail_r`. It restarts at slot 0 when the window
+would overrun the usable range (`lmem_slots`), or when K differs from the last
+window's size (`win_k_r`):
 
 ```systemverilog
-window_ones      = cluster_therm(K) & lmem_slots; // K slots, clamped to the usable count
-win_k_new        = (K > 1) && (K != win_k_r);
-window_fits_tail = ((cluster_therm(K) & ~tail_room) == 0) && !win_k_new;
-base_zero        = is_first_of_cluster ? ~window_fits_tail : ~tail_usable;
-base_slot        = base_zero ? 0 : tail_r;
-admit_ok         = is_first_of_cluster ? ((slot_valid_r & (window_ones << base_slot)) == 0)
-                                       : ~slot_valid_r[base_slot];
+window_ones = cluster_therm(K) & lmem_slots;      // K slots, clamped to the usable count
+win_k_new   = (K != win_k_r);
+base_zero   = is_first_of_cluster ? (~window_fits_tail | win_k_new) : ~tail_usable;
+base_slot   = is_single ? lowest_free_slot : (base_zero ? 0 : tail_r);
+admit_ok    = is_single           ? any_free_slot
+            : is_first_of_cluster ? ((slot_valid_r & (window_ones << base_slot)) == 0)
+            :                       ~slot_valid_r[base_slot];
 ```
 
 All K must be free **up front**, so the following members never stall
@@ -364,8 +367,8 @@ The window is a **test, not a claim** — nothing marks the other K−1 slots
 reserved. They stay free in `slot_valid_r`, and what protects them is only
 that no other CTA reaches this dispatcher before the followers do.
 
-Members 2..K are admitted by the ordinary standalone path (`is_first = 0`),
-so member *r* lands at `issuer_base + r·stride`. That is the entire
+Members 2..K (`is_first = 0`) each take the slot at `tail_r` once it is
+free, so member *r* lands at `issuer_base + r·stride`. That is the entire
 contiguity contract, and it is what DXA multicast resolves against: the
 issuer emits its own LMEM-relative address and the SMEM writer resolves each
 receiver as `base + r·smem_stride` — no per-slot base table, no
@@ -499,7 +502,7 @@ without the message lock and passes with it, on both SimX and rtlsim. §11.
 
 Two states ([`:122-123`](../../hw/rtl/core/VX_cta_dispatch.sv#L122)). `IDLE`
 accepts one CTA (latching the descriptor, claiming `base_slot`, advancing
-`tail_r`); `DISPATCH` emits one warp per cycle until `is_last_warp`. Because
+`tail_r` for a cluster member); `DISPATCH` emits one warp per cycle until `is_last_warp`. Because
 `ready` is gated on `state == IDLE`, admission and expansion never overlap:
 the KMU sees back-pressure for the whole expansion and holds the next CTA on
 the wire with `valid` still high — which is exactly why the arb lock must key
@@ -735,9 +738,9 @@ SimX is the structural reference this design mirrors: a single
 context (no separate storage object), `step()` returns the full
 `cta_warp_record_t`, and the scheduler owns it as a child, copying the record
 into per-warp state via `activate_warp(wid, rec)`. The fixed-stride allocator
-mirrors line for line (`usable_slots()` + round-robin `tail_slot_`), and RTL
-is cycle-for-cycle identical to it on `vecadd` / `sgemm` / `sgemm_tcu_wg` /
-`sgemm_tcu_wg_dxa_mcast`.
+mirrors line for line (`usable_slots()`, the lowest free slot for a single
+CTA, the round-robin `tail_slot_` and `win_k_` for a cluster), and the
+`model_parity` cases hold the two models' cycle counts within their tolerance.
 
 The KMU→core transport is modelled as per-core **launch lanes**: each lane is
 a registered boundary stage feeding the dispatcher's endpoint, and the KMU
@@ -764,7 +767,6 @@ The differences are deliberate, not drift:
 | CTA/warp context | BRAM (`cta_ctx_ram`, `cta_warp_ram`) | plain struct fields |
 | `usable_slots` | `lmem_slots` thermometer from the KMU | `lmem_capacity_ / stride` |
 | Bus payload | `cluster_size` (scalar), `aligned_lmem_size`, `lmem_slots` | `cluster_dim[3]`, raw `lmem_size` |
-| Slot pointer across launches | kept (`tail_r`, `win_k_r`) | reset with the dispatcher at each launch |
 | `cta_id` on the bus | absent | present (model-only, unused as identity) |
 | Stride rounding | in the KMU | in the dispatcher |
 | Launch pacing | elastic-skid back-pressure | explicit credits (`LAUNCH_CREDITS = 2`) |

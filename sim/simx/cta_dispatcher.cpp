@@ -33,6 +33,7 @@ CtaDispatcher::CtaDispatcher(const SimContext& ctx, const char* name, Core* core
   , slot_rem_warps_(num_warps_, 0)
   , wid_to_slot_(num_warps_, num_warps_)  // num_warps_ = invalid/unassigned
   , tail_slot_(0)
+  , win_k_(0)
   , has_cta_(false)
   , cta_done_(false)
   , cur_slot_(0)
@@ -62,7 +63,6 @@ void CtaDispatcher::on_reset() {
   has_cta_    = false;
   cta_done_   = false;
   cta_wids_.reset();
-  tail_slot_  = 0;
   init_wait_  = 0;
   retiring_.clear();
   for (uint32_t i = 0; i < num_warps_; ++i) {
@@ -70,13 +70,21 @@ void CtaDispatcher::on_reset() {
     wid_to_slot_[i]    = num_warps_;  // invalid
   }
   cur_kernel_pc_ = 0;
-  // lane_rr_ and the cached block shape are device state, like warp_init_lanes_.
-  // warp_init_lanes_ and cur_ctx_id_ are excluded: which lanes of a slot have
-  // already run the startup is keyed on the context, and a launch is not a
-  // device reset. Clearing them here would make the context check dead and
-  // re-run the startup on every launch, including one that dispatches no CTAs
-  // of its own. A context change in step() remains the only invalidator, and
-  // both are zero-initialized at construction.
+  // lane_rr_ and the cluster window pointer are device state: a device reset
+  // clears them, as the RTL reset clears its tail and window registers, and a
+  // launch keeps them.
+  if (!SimPlatform::instance().launch_resetting()) {
+    tail_slot_ = 0;
+    win_k_     = 0;
+    lane_rr_   = 0;
+  }
+  // The cached block shape is device state, like warp_init_lanes_.
+  // warp_init_lanes_ and cur_ctx_id_ are excluded:
+  // which lanes of a slot have already run the startup is keyed on the context,
+  // and a launch is not a device reset. Clearing them here would make the
+  // context check dead and re-run the startup on every launch, including one
+  // that dispatches no CTAs of its own. A context change in step() remains the
+  // only invalidator, and all are initialized at construction.
 }
 
 uint32_t CtaDispatcher::usable_slots(uint32_t stride) const {
@@ -144,36 +152,57 @@ uint32_t CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wids, cta_w
                       & ~uint32_t(VX_CFG_MEM_BLOCK_SIZE - 1u);
     uint32_t max_slots = usable_slots(stride);
 
-    // Round-robin slot allocation over the usable range. Normalize the tail in
-    // case a kernel transition shrank the usable count.
-    if (tail_slot_ >= max_slots)
-      tail_slot_ = 0;
-    uint32_t base = tail_slot_;
-
-    // Cluster start: reserve K consecutive usable slots. Pre-wrap to 0 if the
-    // window would overrun the usable range so the cluster stays contiguous
-    // (members must occupy consecutive slots for multicast). All K must be free
-    // up front so the following members never stall mid-cluster.
-    uint32_t k = 1;
-    if (next.is_first_of_cluster) {
-      k = next.cluster_dim[0]
-        * next.cluster_dim[1]
-        * next.cluster_dim[2];
-      if (k == 0) k = 1;
-      if (base + k > max_slots)
-        base = 0;
-      if (k > max_slots)
-        k = max_slots;  // cluster larger than co-residency: clamp (degenerate)
-      for (uint32_t i = 0; i < k; ++i) {
-        if (slot_rem_warps_[base + i] != 0)
-          return 0;  // window not free yet — wait
+    uint32_t k = next.cluster_dim[0]
+               * next.cluster_dim[1]
+               * next.cluster_dim[2];
+    uint32_t k_full = k;
+    bool is_single = (k <= 1);
+    uint32_t base = 0;
+    if (is_single) {
+      // A CTA alone in its cluster takes the lowest free usable slot.
+      while (base < max_slots && slot_rem_warps_[base] != 0) {
+        ++base;
+      }
+      if (base == max_slots) {
+        return 0;
       }
     } else {
-      // Standalone CTA, or a following cluster member (its slot was reserved by
-      // the first-of-cluster window above and is guaranteed free).
-      if (slot_rem_warps_[base] != 0)
+      // Round-robin cluster windows over the usable range. Normalize the tail
+      // in case a kernel transition shrank the usable count.
+      if (tail_slot_ >= max_slots) {
+        tail_slot_ = 0;
+      }
+      base = tail_slot_;
+      if (next.is_first_of_cluster) {
+        // Cluster start: reserve K consecutive usable slots. Pre-wrap to 0 if
+        // the window would overrun the usable range so the cluster stays
+        // contiguous (members must occupy consecutive slots for multicast). All
+        // K must be free up front so the following members never stall
+        // mid-cluster. The pointer is a multiple of the last window's size;
+        // a window of another size, or after a clamped one, restarts at 0.
+        if (base + k > max_slots || k != win_k_) {
+          base = 0;
+        }
+        if (k > max_slots) {
+          k = max_slots;  // cluster larger than co-residency: clamp (degenerate)
+        }
+        for (uint32_t i = 0; i < k; ++i) {
+          if (slot_rem_warps_[base + i] != 0) {
+            return 0;  // window not free yet — wait
+          }
+        }
+      } else if (slot_rem_warps_[base] != 0) {
+        // A following member's slot was reserved by the first-of-cluster window
+        // above and is guaranteed free.
         return 0;
+      }
     }
+    // A member's cluster rank is its slot modulo the cluster size, and slot 0
+    // is the only one granted beyond the kernel's capacity.
+    __assert(is_single || !next.is_first_of_cluster || (base % k) == 0,
+             "cluster window at slot " << base << " is not aligned to its size " << k);
+    __assert(base == 0 || stride == 0 || (uint64_t(base) + 1) * stride <= lmem_capacity_,
+             "slot " << base << " is outside the capacity for a " << stride << "-byte CTA");
 
     // A new launch is a new context: every slot owes the startup again. Keyed on
     // the launch id, not the PC, so relaunching the same kernel still re-inits.
@@ -201,7 +230,12 @@ uint32_t CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wids, cta_w
     cur_slot_  = base;
     lmem_addr_ = lmem_base_ + uint64_t(base) * stride;
     slot_rem_warps_[base] = cta_size_;
-    tail_slot_ = (base + 1) % max_slots;
+    if (!is_single) {
+      tail_slot_ = (base + 1) % max_slots;
+      if (cta_.is_first_of_cluster) {
+        win_k_ = (k_full > max_slots) ? 0 : k_full;
+      }
+    }
 
     has_cta_ = true;
 

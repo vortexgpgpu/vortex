@@ -246,7 +246,7 @@ void ProcessorImpl::flush_caches(uint32_t fence_op) {
   // tick until all surfaces report flush_done().
 
   // L1 surfaces: dcache + icache + graphics caches.
-  // Write-through surfaces early-exit in Cache::flush_begin().
+  // Each walks, writing back and dropping its lines, under the fence rule.
   for (auto& cluster : clusters_) {
     cluster->dcache_flush_begin(fence_op);
     cluster->icache_flush_begin();
@@ -376,36 +376,29 @@ void ProcessorImpl::cp_mem_transfer(uint64_t addr, const uint8_t* src, uint8_t* 
   while (!cp_llc_port_->idle()) {
     SimPlatform::instance().tick();
   }
-  this->llc_keep_lines();
 }
 
 void ProcessorImpl::launch_reset() {
-  if (!cp_llc_port_) {
+  // The device resets once; a launch is not a device reset, so the caches keep
+  // their lines and only the command processor's flushes drop them.
+  if (!platform_reset_) {
     this->reset();
-    return;
   }
-  // The launch fence follows the CP's DMA writes, and the kernel starts once
-  // the last-level cache has taken them. A write that missed still has its
-  // line fill in flight, as on the hardware, so the memory side keeps its
-  // state across the reset and the kernel meets those fills.
-  if (cp_llc_port_->writes_pending()) {
-    cp_llc_port_->fence();
-  }
-  while (!cp_llc_port_->idle()) {
-    SimPlatform::instance().tick();
+  if (cp_llc_port_) {
+    // The launch fence follows the CP's DMA writes, and the kernel starts once
+    // the last-level cache has taken them. A write that missed still has its
+    // line fill in flight, as on the hardware, so the memory side keeps its
+    // state across the reset and the kernel meets those fills.
+    if (cp_llc_port_->writes_pending()) {
+      cp_llc_port_->fence();
+    }
+    while (!cp_llc_port_->idle()) {
+      SimPlatform::instance().tick();
+    }
   }
   SimPlatform::instance().reset_launch();
-  platform_reset_ = true;
   // The perf_mem_* counters survive: the MPM counters run from device reset.
   is_cycle_initialized_ = false;
-}
-
-void ProcessorImpl::llc_keep_lines() {
-  if constexpr (CP_ON_L2 != 0) {
-    clusters_.at(0)->l2_keep_lines();
-  } else {
-    l3cache_->keep_lines();
-  }
 }
 
 bool ProcessorImpl::mmu_fault_pending() const {

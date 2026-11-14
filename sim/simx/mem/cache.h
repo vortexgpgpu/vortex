@@ -91,16 +91,13 @@ public:
 
 	PerfStats perf_stats() const;
 
-	// Flush API: arm a write-back walk that emits dirty lines via mem_req_out.
-	// flush_done() returns true once the walk completes; the caller is expected
-	// to tick the simulator until then. Write-through caches no-op. On a
-	// device-scope flush (fence_op without VX_FENCE_SYS) the shared last-level
-	// cache skips the walk and keeps its lines across the next launch reset.
+	// Flush API: arm a walk that emits dirty lines via mem_req_out, then drops
+	// every line. flush_done() returns true once the walk completes; the caller
+	// is expected to tick the simulator until then. On a device-scope flush
+	// (fence_op without VX_FENCE_SYS) the shared last-level cache, the point of
+	// coherence, skips the walk and keeps its lines.
 	void flush_begin(uint32_t fence_op = VX_FENCE_ACQ | VX_FENCE_REL | VX_FENCE_SYS);
 	bool flush_done() const;
-
-	// A shared last-level cache keeps its lines into the next launch.
-	void keep_lines();
 
 	// Drop every line (a read-only, virtually tagged cache on an
 	// address-space change). Called between launches.

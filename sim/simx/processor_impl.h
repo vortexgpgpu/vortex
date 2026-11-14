@@ -92,11 +92,10 @@ private:
   // read returned; the last-level cache keeps what it took into the next launch.
   void cp_mem_transfer(uint64_t addr, const uint8_t* src, uint8_t* dst, uint64_t size, bool noalloc);
 
-  // Reset the model for a launch. After DMA writes it waits for the port's
-  // fence and keeps the memory side, whose line fills may still be in flight.
+  // Reset the model for a launch, after the device reset on first use. After
+  // DMA writes it waits for the port's fence and keeps the memory side, whose
+  // line fills may still be in flight.
   void launch_reset();
-
-  void llc_keep_lines();
 
   // True once the device walker has latched a page fault.
   bool mmu_fault_pending() const;

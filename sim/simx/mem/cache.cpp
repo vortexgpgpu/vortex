@@ -818,10 +818,10 @@ public:
   }
 
   // Flush API.
-  // flush_begin() arms the bank; subsequent ticks scan all sets/ways and emit
-  // a writeback request for every dirty line via mem_req_out (write-back only;
-  // write-through caches have nothing to evict). flush_done() reports when the
-  // walk finishes AND the cache is otherwise idle.
+  // flush_begin() arms the bank; subsequent ticks scan all sets/ways, emit a
+  // writeback request for every dirty line via mem_req_out (write-back only;
+  // write-through caches have nothing to evict), then drop every line.
+  // flush_done() reports when the walk finishes AND the cache is otherwise idle.
   // Drop every line, as an address-space change does to a read-only
   // virtually tagged cache. Called between launches, with no line in flight.
   void invalidate() {
@@ -830,9 +830,8 @@ public:
     }
   }
 
-  void flush_begin(bool keep_lines) {
-    keep_lines_ = keep_lines;
-    if (!config_.write_back || keep_lines) {
+  void flush_begin(bool walk) {
+    if (!walk) {
       flushing_ = false;
       flush_set_idx_ = 0;
       flush_way_idx_ = 0;
@@ -884,12 +883,10 @@ protected:
   #ifdef DBG_MEM_BANK0_WDELAY
     dbg_mem_req_free_ = 0;
   #endif
-    if (!keep_lines_) {
-      for (auto &set : sets_) {
-        set.reset();
-      }
+    // Lines persist across a launch: only a device reset or a flush drops them.
+    if (!SimPlatform::instance().launch_resetting()) {
+      this->invalidate();
     }
-    keep_lines_ = false;
     mshr_.reset();
     fwd_active_ = false;
     fwd_set_    = 0;
@@ -2182,6 +2179,7 @@ private:
       ++flush_set_idx_;
       flush_way_idx_ = 0;
     }
+    this->invalidate();
     flushing_ = false;
     DT(3, this->name() << " flush-done");
   }
@@ -2321,7 +2319,6 @@ private:
 
   // Flush walk state.
   bool     flushing_;
-  bool     keep_lines_ = false; // the next launch reset keeps the lines
   uint32_t flush_set_idx_;
   uint32_t flush_way_idx_;
   uint32_t flush_sector_idx_;
@@ -3190,10 +3187,11 @@ public:
   void reset() {
     if (config_.bypass)
       return;
-    // calculate cache initialization cycles
-    init_cycles_ = keep_lines_ ? 0 : params_.sets_per_bank;
+    // The line initialization runs after a device reset only. A launch reset
+    // keeps the lines, which the runtime's flush ahead of each launch keeps
+    // coherent, so it does not walk them again.
+    init_cycles_ = SimPlatform::instance().launch_resetting() ? 0 : params_.sets_per_bank;
     port_arb_->set_init_cycles(init_cycles_);
-    keep_lines_ = false;
   }
 
   void tick() {
@@ -3457,19 +3455,12 @@ public:
 
   void flush_begin(uint32_t fence_op) {
     if (config_.bypass) return;
-    // The shared last-level cache stays the point of coherence across a
-    // device-scope flush and keeps its lines into the next launch.
-    keep_lines_ = !(fence_op & VX_FENCE_SYS) && config_.shared_llc;
+    // The same rule as a flush token's: a level above the point of coherence
+    // walks, writing back and dropping its lines; the shared last-level cache,
+    // the point of coherence of a device-scope flush, keeps them.
+    bool walk = this->owes_walk(fence_op);
     for (auto &bank : banks_) {
-      bank->flush_begin(keep_lines_);
-    }
-  }
-
-  void keep_lines() {
-    if (config_.bypass || !config_.shared_llc) return;
-    keep_lines_ = true;
-    for (auto &bank : banks_) {
-      bank->flush_begin(true);
+      bank->flush_begin(walk);
     }
   }
 
@@ -3539,7 +3530,6 @@ private:
     return (bank_id % config_.mem_ports) * banks_per_port + bank_id / config_.mem_ports;
   }
   uint32_t init_cycles_;
-  bool     keep_lines_ = false;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -3573,8 +3563,4 @@ bool Cache::flush_done() const {
 
 void Cache::invalidate() {
   impl_->invalidate();
-}
-
-void Cache::keep_lines() {
-  impl_->keep_lines();
 }

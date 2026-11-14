@@ -143,9 +143,6 @@ public:
   bool rtcache_flush_done() const;
 #endif
   void l2_flush_begin(uint32_t fence_op);
-  // The L2, when it is the shared last-level cache, keeps its lines into the
-  // next launch.
-  void l2_keep_lines();
   // The command processor DMA's client slot on this cluster's L2, valid only
   // under CP_ON_L2 (the L2 is the LLC).
   SimChannel<MemReq>& cp_mem_req_in();
