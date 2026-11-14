@@ -37,7 +37,9 @@ module VX_fpu_fpnew
     input wire [TAG_WIDTH-1:0] tag_in,
 
     input wire [INST_FPU_BITS-1:0] op_type,
-    input wire [INST_FMT_BITS-1:0] fmt,
+    input wire [INST_FMT_BITS-1:0] dst_fmt,
+    input wire [INST_FMT_BITS-1:0] src_fmt,
+    input wire                     op_mod,
     input wire [INST_FRM_BITS-1:0] frm,
 
     input wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0]  dataa,
@@ -115,7 +117,17 @@ module VX_fpu_fpnew
     fpnew_pkg::fp_format_e fpu_src_fmt, fpu_dst_fmt;
     fpnew_pkg::int_format_e fpu_int_fmt;
 
-    `UNUSED_VAR (fmt)
+    function automatic fpnew_pkg::fp_format_e to_fpnew_fmt(input logic [INST_FMT_BITS-1:0] f);
+        case (f)
+        `ifdef VX_CFG_FLEN_64
+            INST_FMT_D: to_fpnew_fmt = fpnew_pkg::FP64;
+        `endif
+        `ifdef VX_CFG_EXT_ZFHMIN_ENABLE
+            INST_FMT_H: to_fpnew_fmt = fpnew_pkg::FP16;
+        `endif
+            default:    to_fpnew_fmt = fpnew_pkg::FP32;
+        endcase
+    endfunction
 
     always @(*) begin
         fpu_op          = fpnew_pkg::operation_e'('x);
@@ -125,74 +137,54 @@ module VX_fpu_fpnew
         fpu_operands[0] = dataa;
         fpu_operands[1] = datab;
         fpu_operands[2] = datac;
-        fpu_dst_fmt     = fpnew_pkg::FP32;
+        fpu_dst_fmt     = to_fpnew_fmt(dst_fmt);
+        fpu_src_fmt     = fpu_dst_fmt;
         fpu_int_fmt     = fpnew_pkg::INT32;
-
-    `ifdef VX_CFG_FLEN_64
-        if (fmt[0]) begin
-            fpu_dst_fmt = fpnew_pkg::FP64;
-        end
-    `endif
-
-    `ifdef VX_CFG_XLEN_64
-        if (fmt[1]) begin
-            fpu_int_fmt = fpnew_pkg::INT64;
-        end
-    `endif
-
-        fpu_src_fmt = fpu_dst_fmt;
 
         case (op_type)
             INST_FPU_ADD: begin
                 fpu_op = fpnew_pkg::ADD;
                 fpu_operands[1] = dataa;
                 fpu_operands[2] = datab;
-                fpu_op_mod = fmt[1]; // FADD or FSUB
+                fpu_op_mod = op_mod; // FADD or FSUB
             end
             INST_FPU_MUL:   begin fpu_op = fpnew_pkg::MUL; end
-            INST_FPU_MADD:  begin fpu_op = fpnew_pkg::FMADD; fpu_op_mod = fmt[1]; end
-            INST_FPU_NMADD: begin fpu_op = fpnew_pkg::FNMSUB; fpu_op_mod = ~fmt[1]; end
+            INST_FPU_MADD:  begin fpu_op = fpnew_pkg::FMADD; fpu_op_mod = op_mod; end
+            INST_FPU_NMADD: begin fpu_op = fpnew_pkg::FNMSUB; fpu_op_mod = ~op_mod; end
             INST_FPU_DIV:   begin fpu_op = fpnew_pkg::DIV; end
             INST_FPU_SQRT:  begin fpu_op = fpnew_pkg::SQRT; end
-        `ifdef VX_CFG_EXT_ZFHMIN_ENABLE
             INST_FPU_F2F: begin
-                fpu_op = fpnew_pkg::F2F;
-            `ifdef VX_CFG_FLEN_64
-                fpu_src_fmt = fmt[1] ? fpnew_pkg::FP16 : (fmt[0] ? fpnew_pkg::FP32 : fpnew_pkg::FP64);
-            `else
-                fpu_src_fmt = fpnew_pkg::FP16;
-            `endif
+                fpu_op      = fpnew_pkg::F2F;
+                fpu_src_fmt = to_fpnew_fmt(src_fmt);
             end
-            INST_FPU_F2H: begin
-                fpu_op = fpnew_pkg::F2F;
-                fpu_dst_fmt = fpnew_pkg::FP16;
-            `ifdef VX_CFG_FLEN_64
-                fpu_src_fmt = fmt[0] ? fpnew_pkg::FP64 : fpnew_pkg::FP32;
-            `else
-                fpu_src_fmt = fpnew_pkg::FP32;
-            `endif
-            end
-        `elsif VX_CFG_FLEN_64
-            INST_FPU_F2F: begin fpu_op = fpnew_pkg::F2F; fpu_src_fmt = fmt[0] ? fpnew_pkg::FP32 : fpnew_pkg::FP64; end
-        `endif
             INST_FPU_F2I,
-            INST_FPU_F2U: begin fpu_op = fpnew_pkg::F2I; fpu_op_mod = op_type[0]; end
+            INST_FPU_F2U: begin
+                fpu_op      = fpnew_pkg::F2I;
+                fpu_op_mod  = op_type[0];
+                fpu_src_fmt = to_fpnew_fmt(src_fmt);
+                fpu_dst_fmt = fpu_src_fmt;
+            `ifdef VX_CFG_XLEN_64
+                if (dst_fmt == INST_FMT_L) begin
+                    fpu_int_fmt = fpnew_pkg::INT64;
+                end
+            `endif
+            end
             INST_FPU_I2F,
-            INST_FPU_U2F: begin fpu_op = fpnew_pkg::I2F; fpu_op_mod = op_type[0]; end
+            INST_FPU_U2F: begin
+                fpu_op      = fpnew_pkg::I2F;
+                fpu_op_mod  = op_type[0];
+            `ifdef VX_CFG_XLEN_64
+                if (src_fmt == INST_FMT_L) begin
+                    fpu_int_fmt = fpnew_pkg::INT64;
+                end
+            `endif
+            end
             INST_FPU_CMP: begin fpu_op = fpnew_pkg::CMP; end
             INST_FPU_MISC:begin
                 case (frm)
                     0,1,2: begin fpu_op = fpnew_pkg::SGNJ; fpu_rnd = {1'b0, frm[1:0]}; fpu_has_fflags = 0; end // FSGNJ
                     3:     begin fpu_op = fpnew_pkg::CLASSIFY; fpu_has_fflags = 0; end // CLASS
-                    4,5:   begin
-                        fpu_op = fpnew_pkg::SGNJ; fpu_rnd = 3'b011; fpu_op_mod = ~frm[0]; fpu_has_fflags = 0;
-                    `ifdef VX_CFG_EXT_ZFHMIN_ENABLE
-                        if (fmt[1]) begin
-                            fpu_src_fmt = fpnew_pkg::FP16;
-                            fpu_dst_fmt = fpnew_pkg::FP16;
-                        end
-                    `endif
-                    end
+                    4,5:   begin fpu_op = fpnew_pkg::SGNJ; fpu_rnd = 3'b011; fpu_op_mod = ~frm[0]; fpu_has_fflags = 0; end // MVXW, MVWX
                     6,7:   begin fpu_op = fpnew_pkg::MINMAX; fpu_rnd = {2'b00, frm[0]}; end // MIN, MAX
                 endcase
             end

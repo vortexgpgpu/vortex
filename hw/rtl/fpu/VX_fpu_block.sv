@@ -55,8 +55,10 @@ module VX_fpu_block import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire [TAG_WIDTH-1:0] fpu_req_tag, fpu_rsp_tag;
     wire mdata_full;
 
-    wire [INST_FMT_BITS-1:0] fpu_fmt = execute_if.data.op_args.fpu.fmt;
-    wire [INST_FRM_BITS-1:0] fpu_frm = execute_if.data.op_args.fpu.frm;
+    wire [INST_FMT_BITS-1:0] fpu_dst_fmt = execute_if.data.op_args.fpu.dst_fmt;
+    wire [INST_FMT_BITS-1:0] fpu_src_fmt = execute_if.data.op_args.fpu.src_fmt;
+    wire                     fpu_op_mod  = execute_if.data.op_args.fpu.op_mod;
+    wire [INST_FRM_BITS-1:0] fpu_frm     = execute_if.data.op_args.fpu.frm;
 
     wire execute_fire = execute_if.valid && execute_if.ready;
     wire fpu_rsp_fire = fpu_rsp_valid && fpu_rsp_ready;
@@ -104,7 +106,9 @@ module VX_fpu_block import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         .valid_in   (fpu_req_valid),
         .mask_in    (execute_if.data.header.tmask),
         .op_type    (execute_if.data.op_type),
-        .fmt        (fpu_fmt),
+        .dst_fmt    (fpu_dst_fmt),
+        .src_fmt    (fpu_src_fmt),
+        .op_mod     (fpu_op_mod),
         .frm        (fpu_req_frm),
         .dataa      (execute_if.data.rs1_data),
         .datab      (execute_if.data.rs2_data),
@@ -133,7 +137,9 @@ module VX_fpu_block import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         .valid_in   (fpu_req_valid),
         .mask_in    (execute_if.data.header.tmask),
         .op_type    (execute_if.data.op_type),
-        .fmt        (fpu_fmt),
+        .dst_fmt    (fpu_dst_fmt),
+        .src_fmt    (fpu_src_fmt),
+        .op_mod     (fpu_op_mod),
         .frm        (fpu_req_frm),
         .dataa      (execute_if.data.rs1_data),
         .datab      (execute_if.data.rs2_data),
@@ -162,7 +168,9 @@ module VX_fpu_block import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         .valid_in   (fpu_req_valid),
         .mask_in    (execute_if.data.header.tmask),
         .op_type    (execute_if.data.op_type),
-        .fmt        (fpu_fmt),
+        .dst_fmt    (fpu_dst_fmt),
+        .src_fmt    (fpu_src_fmt),
+        .op_mod     (fpu_op_mod),
         .frm        (fpu_req_frm),
         .dataa      (execute_if.data.rs1_data),
         .datab      (execute_if.data.rs2_data),
@@ -191,7 +199,9 @@ module VX_fpu_block import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         .valid_in   (fpu_req_valid),
         .mask_in    (execute_if.data.header.tmask),
         .op_type    (execute_if.data.op_type),
-        .fmt        (fpu_fmt),
+        .dst_fmt    (fpu_dst_fmt),
+        .src_fmt    (fpu_src_fmt),
+        .op_mod     (fpu_op_mod),
         .frm        (fpu_req_frm),
         .dataa      (execute_if.data.rs1_data),
         .datab      (execute_if.data.rs2_data),

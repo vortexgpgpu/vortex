@@ -71,8 +71,8 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     localparam LAT_FMA = 3 * F;                 // origin - ro, + corner, * inv_d
     localparam LATENCY = LAT_FMA + 4;           // + per-axis, 2 reduce, verdict
 
-    localparam [INST_FMT_BITS-1:0] FMT_ADD = 2'b00;   // F32, a*b + c
-    localparam [INST_FMT_BITS-1:0] FMT_SUB = 2'b10;   // F32, a*b - c
+    localparam MOD_ADD = 1'b0;                        // a*b + c
+    localparam MOD_SUB = 1'b1;                        // a*b - c
     localparam [31:0] F32_NEG0 = 32'h80000000;        // x + -0 == x, signs kept
     localparam [31:0] F32_PINF = 32'h7F800000;
     localparam [31:0] F32_NINF = 32'hFF800000;
@@ -159,7 +159,7 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             .enable  (enable),
             .mask    (1'b1),
             .op_type (INST_FPU_ADD),
-            .fmt     (FMT_SUB),
+            .op_mod  (MOD_SUB),
             .frm     (INST_FRM_RNE),
             .dataa   (base_a[a]),
             .datab   (ro[a]),
@@ -195,7 +195,7 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             .enable  (enable),
             .mask    (1'b1),
             .op_type (INST_FPU_ADD),
-            .fmt     (FMT_ADD),
+            .op_mod  (MOD_ADD),
             .frm     (INST_FRM_RNE),
             .dataa   (mn_b[a]),
             .datab   (c_b[a]),
@@ -214,7 +214,7 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             .enable  (enable),
             .mask    (1'b1),
             .op_type (INST_FPU_ADD),
-            .fmt     (FMT_ADD),
+            .op_mod  (MOD_ADD),
             .frm     (INST_FRM_RNE),
             .dataa   (mx_b[a]),
             .datab   (c_b[a]),
@@ -251,7 +251,7 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             .enable  (enable),
             .mask    (1'b1),
             .op_type (INST_FPU_MADD),
-            .fmt     (FMT_ADD),
+            .op_mod  (MOD_ADD),
             .frm     (INST_FRM_RNE),
             .dataa   (dmn[a]),
             .datab   (inv_d_q[a]),
@@ -270,7 +270,7 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             .enable  (enable),
             .mask    (1'b1),
             .op_type (INST_FPU_MADD),
-            .fmt     (FMT_ADD),
+            .op_mod  (MOD_ADD),
             .frm     (INST_FRM_RNE),
             .dataa   (dmx[a]),
             .datab   (inv_d_q[a]),

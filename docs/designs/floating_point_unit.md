@@ -71,32 +71,49 @@ Operands reach the backend as three `XLEN`-wide values per lane — `rs1`,
 
 ## 3. Operation encoding
 
-Decode emits a 4-bit operation, a 2-bit `fmt`, and a 3-bit `frm`
-([`VX_gpu_pkg.sv`](../../hw/rtl/VX_gpu_pkg.sv)). The top two operation bits
-**are** the core index.
+Decode emits a 4-bit operation, a 2-bit `dst_fmt`, a 2-bit `src_fmt`, a
+1-bit `op_mod`, and a 3-bit `frm` ([`VX_gpu_pkg.sv`](../../hw/rtl/VX_gpu_pkg.sv)),
+as FPnew does. The top two operation bits **are** the core index.
 
-| `op_type` | operation | core | `fmt` | `frm` |
-|---|---|---|---|---|
-| `0000` | `ADD` | FMA | `[0]` double, `[1]` subtract | rounding mode |
-| `0001` | `MUL` | FMA | `[0]` double | rounding mode |
-| `0010` | `MADD` | FMA | `[0]` double, `[1]` subtract | rounding mode |
-| `0011` | `NMADD` | FMA | `[0]` double, `[1]` subtract | rounding mode |
-| `0100` | `DIV` | DIV/SQRT | `[0]` double | rounding mode |
-| `0101` | `SQRT` | DIV/SQRT | `[0]` double | rounding mode |
-| `1000` / `1001` | `F2I` / `F2U` | CVT | `[0]` float is double, `[1]` integer is 64-bit | rounding mode |
-| `1010` / `1011` | `I2F` / `U2F` | CVT | `[0]` float is double, `[1]` integer is 64-bit | rounding mode |
-| `1100` | `CMP` | NCP | `[0]` double | `LE` = 0, `LT` = 1, `EQ` = 2 |
-| `1101` | `F2F` | **CVT** | `[0]` destination is double, `[1]` source is half (Zfhmin) | rounding mode |
-| `1110` | `MISC` | NCP | `[0]` double, `[1]` half for `MVXW`/`MVWX` (Zfhmin) | `SGNJ`, `SGNJN`, `SGNJX`, `CLASS`, `MVXW`, `MVWX`, `FMIN`, `FMAX` = 0–7 |
-| `1111` | `F2H` | **CVT** | `[0]` source is double | rounding mode |
+The two format fields name the result and the operands. A float format uses
+the RISC-V `fmt` code (`INST_FMT_S` = 0, `INST_FMT_D` = 1, `INST_FMT_H` = 2)
+and the integer side of a conversion its width (`INST_FMT_W` = 0,
+`INST_FMT_L` = 2, the width bit of the instruction's `rs2`); signedness is in
+the operation. Every operation other than a conversion carries the
+instruction's `fmt` field in both, so a unit reads its precision from either;
+the backends read `dst_fmt`. A conversion takes its float side from `funct2`
+and its other side from `rs2`, and every backend passes both codes to its
+converter unchanged. A format field never carries an operation bit: the
+variant of an operation is `op_mod`.
 
-`F2F` and `F2H` are the exceptions to the index rule: their top bits say NCP,
-and the request switch steers them to CVT. `F2H` (`FCVT.H.S`, `FCVT.H.D`) and
-the half forms of `F2F` and the moves exist only with
-`VX_CFG_EXT_ZFHMIN_ENABLE`.
+| `op_type` | operation | core | `dst_fmt` / `src_fmt` | `op_mod` | `frm` |
+|---|---|---|---|---|---|
+| `0000` | `ADD` | FMA | float | subtract | rounding mode |
+| `0001` | `MUL` | FMA | float | 0 | rounding mode |
+| `0010` | `MADD` | FMA | float | subtract the addend | rounding mode |
+| `0011` | `NMADD` | FMA | float | subtract the addend | rounding mode |
+| `0100` | `DIV` | DIV/SQRT | float | 0 | rounding mode |
+| `0101` | `SQRT` | DIV/SQRT | float | 0 | rounding mode |
+| `1000` / `1001` | `F2I` / `F2U` | CVT | integer width / float | 0 | rounding mode |
+| `1010` / `1011` | `I2F` / `U2F` | CVT | float / integer width | 0 | rounding mode |
+| `1100` | `CMP` | NCP | float | 0 | `LE` = 0, `LT` = 1, `EQ` = 2 |
+| `1101` | `F2F` | **CVT** | destination float / source float | 0 | rounding mode |
+| `1110` | `MISC` | NCP | float (half for `MVXW`/`MVWX` with Zfhmin) | 0 | `SGNJ`, `SGNJN`, `SGNJX`, `CLASS`, `MVXW`, `MVWX`, `FMIN`, `FMAX` = 0–7 |
+
+`F2F` is the exception to the index rule: its top bits say NCP, and the
+request switch steers it to CVT. It covers every pair of distinct enabled
+formats; decode accepts a pair only when both formats are enabled (F64 with
+`VX_CFG_FLEN` = 64, F16 with `VX_CFG_EXT_ZFHMIN_ENABLE`), and the half moves
+exist only with Zfhmin. Opcode `1111` is free.
+
+Half-precision arithmetic, including the `FMADD` family in `.h`, is illegal
+even with Zfhmin, and double-precision arithmetic and moves need `VX_CFG_FLEN`
+= 64. Decode issues an illegal FP encoding as a sign injection with no
+destination, which writes neither a register nor `fflags`, and asserts in
+simulation.
 
 Subtraction is not an operation. `SUB`, `MSUB` and `NMSUB` are `ADD`, `MADD`
-and `NMADD` with `fmt[1]` set, and the FMA core folds the sign into its
+and `NMADD` with `op_mod` set, and the FMA core folds the sign into its
 operands.
 
 ---
@@ -113,7 +130,7 @@ which derive the per-format exponent and mantissa widths; every
 double-precision block sits under a `FLEN >= 64` generate, so an `FLEN = 32`
 build elaborates the F32-only RTL and carries **no** 64-bit datapath.
 
-The active format is selected **per instruction from `fmt[0]`**, never from
+The active format is selected **per instruction from `dst_fmt`**, never from
 the operand width. A single-precision value in a 64-bit lane is NaN-boxed —
 upper 32 bits all ones. Every unit boxes its F32 results on the way out. The
 arithmetic cores read the low 32 bits of an F32 operand; the
@@ -160,8 +177,8 @@ NUM_PES = max(1, NUM_LANES / VX_CFG_<core>_PE_RATIO)
 At a ratio of 1 — the default for every core — each lane has its own unit and
 a request takes one pass. A higher ratio trades latency for area: the
 serializer feeds the lanes through the units in groups and reassembles the
-result. The per-request fields that every lane shares — operation, `fmt`,
-`frm` — travel once, beside the lanes.
+result. The per-request fields that every lane shares — operation, formats,
+`op_mod`, `frm` — travel once, beside the lanes.
 
 The units are **fixed-latency pipelines with a clock enable**, not
 handshaking blocks. The serializer owns the enable, so back-pressure stalls
@@ -191,7 +208,7 @@ only ratios of 1.
 `VX_CFG_FMA64_PE_RATIO` sets the F64 FMA rate on its own. When it gives as
 many processing elements as `VX_CFG_FMA_PE_RATIO`, the FMA core keeps one pool
 of elements that each hold `fma32` and `fma64` (the default). When it differs,
-the backend adds an F64 FMA core: `fmt[0]` routes F64 FMA-class requests to a
+the backend adds an F64 FMA core: `dst_fmt` routes F64 FMA-class requests to a
 pool of `fma64`-only elements behind their own serializer, and the F32 pool
 drops its `fma64` units. A GPU with a narrow FP64 rate then pays for the F64
 multipliers it has, not one per lane. F64 division, square root and
@@ -249,7 +266,9 @@ back-pressure, and with the two at the same ratio, they time alike.
 [`VX_fma_unit_rtl.sv`](../../hw/rtl/fpu/VX_fma_unit_rtl.sv) is one parametric
 core (`MAN_BITS`, `EXP_BITS`, `LATENCY`). The backend instantiates it as
 `fma32` (23, 8) and, with `FLEN >= 64`, as `fma64` (52, 11), and selects the
-result on `fmt[0]` delayed by the latency. With a separate F64 FMA core
+result on `dst_fmt` delayed by the latency. Each unit has one format, so it
+takes no format port; `op_mod` is its only operation input besides the
+operation. With a separate F64 FMA core
 (§5.2), each pool holds one of the two.
 
 ### 6.1 Operation remap
@@ -258,7 +277,7 @@ Every FMA-class operation is computed as `a × b + c`:
 
 | operation | `a × b` | `c` |
 |---|---|---|
-| `MADD`, `NMADD` | `a × b`, negated for `NMADD` | `c`, sign adjusted by `fmt[1]` and `NMADD` |
+| `MADD`, `NMADD` | `a × b`, negated for `NMADD` | `c`, sign adjusted by `op_mod` and `NMADD` |
 | `ADD` | `a × 1.0` | `b` |
 | `MUL` | `a × b` | zero, given the **product's** sign |
 
@@ -379,6 +398,9 @@ value sized to the widest enabled format.
 - **Half** (`HALF_ENABLE`, set by `VX_CFG_EXT_ZFHMIN_ENABLE`) adds an F16
   source and destination; a half source that is not NaN-boxed reads as the
   canonical NaN.
+- **Formats** arrive as the operation's `src_fmt` and `dst_fmt` codes (§3) on
+  the unit's ports of the same names, and the unit decodes them itself.
+  Formats the configuration does not enable are not elaborated.
 - The integer side is `XLEN` wide: I32, I64, U32, U64.
 
 Latency is `VX_CFG_FCVT_LATENCY` on a 32-bit build and **one more on a
@@ -390,7 +412,7 @@ count.
 [`VX_fncp_unit.sv`](../../hw/rtl/fpu/VX_fncp_unit.sv) handles sign
 injection, minimum and maximum, the three comparisons, classify, and the
 moves between float and integer registers, in one `FLEN`-wide unit that
-selects field positions from `fmt[0]`. Latency is `VX_CFG_FNCP_LATENCY`.
+selects field positions from the format. Latency is `VX_CFG_FNCP_LATENCY`.
 
 Its result is `XLEN` wide, because comparisons and classify write an integer
 register. [`VX_fp_classifier`](../../hw/rtl/fpu/VX_fp_classifier.sv) and

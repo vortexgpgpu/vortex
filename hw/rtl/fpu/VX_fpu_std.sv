@@ -31,7 +31,9 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     input wire [TAG_WIDTH-1:0] tag_in,
 
     input wire [INST_FPU_BITS-1:0] op_type,
-    input wire [INST_FMT_BITS-1:0] fmt,
+    input wire [INST_FMT_BITS-1:0] dst_fmt,
+    input wire [INST_FMT_BITS-1:0] src_fmt,
+    input wire                     op_mod,
     input wire [INST_FRM_BITS-1:0] frm,
 
     input wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0]  dataa,
@@ -72,7 +74,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
     localparam CVT_LATENCY = (`VX_CFG_XLEN == 64) ? `VX_CFG_FCVT_LATENCY + 1 : `VX_CFG_FCVT_LATENCY;
 
-    localparam REQ_DATAW = NUM_LANES + TAG_WIDTH + INST_FPU_BITS + INST_FMT_BITS + INST_FRM_BITS + 3 * (NUM_LANES * `VX_CFG_XLEN);
+    localparam REQ_DATAW = NUM_LANES + TAG_WIDTH + INST_FPU_BITS + 2 * INST_FMT_BITS + 1 + INST_FRM_BITS + 3 * (NUM_LANES * `VX_CFG_XLEN);
     localparam RSP_DATAW = (NUM_LANES * `VX_CFG_XLEN) + 1 + $bits(fflags_t) + TAG_WIDTH;
 
     // Per-core request signals
@@ -83,7 +85,9 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire [NUM_FPCORES-1:0][NUM_LANES-1:0] per_core_mask;
     wire [NUM_FPCORES-1:0][TAG_WIDTH-1:0] per_core_tag;
     wire [NUM_FPCORES-1:0][INST_FPU_BITS-1:0] per_core_op;
-    wire [NUM_FPCORES-1:0][INST_FMT_BITS-1:0] per_core_fmt;
+    wire [NUM_FPCORES-1:0][INST_FMT_BITS-1:0] per_core_dst_fmt;
+    wire [NUM_FPCORES-1:0][INST_FMT_BITS-1:0] per_core_src_fmt;
+    wire [NUM_FPCORES-1:0]                    per_core_op_mod;
     wire [NUM_FPCORES-1:0][INST_FRM_BITS-1:0] per_core_frm;
     wire [NUM_FPCORES-1:0][NUM_LANES-1:0][`VX_CFG_XLEN-1:0] per_core_dataa;
     wire [NUM_FPCORES-1:0][NUM_LANES-1:0][`VX_CFG_XLEN-1:0] per_core_datab;
@@ -98,8 +102,8 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire [NUM_FPCORES-1:0] per_core_ready_out;
 
     // Decode FPU core selector
-    wire is_fma64 = FMA64_SPLIT && (op_type[3:2] == 2'(FPU_FMA)) && fmt[0];
-    wire [FPCORES_BITS-1:0] core_select = (op_type == INST_FPU_F2F || op_type == INST_FPU_F2H) ? FPCORES_BITS'(FPU_CVT)
+    wire is_fma64 = FMA64_SPLIT && (op_type[3:2] == 2'(FPU_FMA)) && (dst_fmt == INST_FMT_D);
+    wire [FPCORES_BITS-1:0] core_select = (op_type == INST_FPU_F2F) ? FPCORES_BITS'(FPU_CVT)
                                         : (is_fma64 ? FPCORES_BITS'(FPU_FMA64) : FPCORES_BITS'(op_type[3:2]));
 
     VX_stream_switch #(
@@ -112,7 +116,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         .sel_in    (core_select),
         .valid_in  (valid_in),
         .ready_in  (ready_in),
-        .data_in   ({mask_in, tag_in, fmt, frm, dataa, datab, datac, op_type}),
+        .data_in   ({mask_in, tag_in, dst_fmt, src_fmt, op_mod, frm, dataa, datab, datac, op_type}),
         .data_out  (per_core_data_in),
         .valid_out (per_core_valid_in),
         .ready_out (per_core_ready_in)
@@ -122,7 +126,9 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         assign {
             per_core_mask[i],
             per_core_tag[i],
-            per_core_fmt[i],
+            per_core_dst_fmt[i],
+            per_core_src_fmt[i],
+            per_core_op_mod[i],
             per_core_frm[i],
             per_core_dataa[i],
             per_core_datab[i],
@@ -142,7 +148,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         wire pe_enable;
         wire [NUM_PES_FMA-1:0] pe_mask_out;
         wire [NUM_PES_FMA-1:0][(3*`VX_CFG_XLEN)-1:0] pe_data_in;
-        wire [INST_FPU_BITS+INST_FMT_BITS+INST_FRM_BITS-1:0] pe_shared;
+        wire [INST_FPU_BITS+1+INST_FMT_BITS+INST_FRM_BITS-1:0] pe_shared;
         wire [NUM_PES_FMA-1:0][(`FP_FLAGS_BITS+`VX_CFG_XLEN)-1:0] pe_data_out;
         wire [NUM_LANES-1:0][(3*`VX_CFG_XLEN)-1:0] lane_data;
 
@@ -156,7 +162,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .LATENCY        (`VX_CFG_FMA_LATENCY),
             .DATA_IN_WIDTH  (3*`VX_CFG_XLEN),
             .DATA_OUT_WIDTH (`FP_FLAGS_BITS+`VX_CFG_XLEN),
-            .SHARED_WIDTH   (INST_FPU_BITS+INST_FMT_BITS+INST_FRM_BITS),
+            .SHARED_WIDTH   (INST_FPU_BITS+1+INST_FMT_BITS+INST_FRM_BITS),
             .TAG_WIDTH      (TAG_WIDTH),
             .PE_REG         (0),
             .OUT_BUF        (0),
@@ -167,7 +173,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .valid_in      (per_core_valid_in[FPU_FMA]),
             .mask_in       (per_core_mask[FPU_FMA]),
             .data_in       (lane_data),
-            .shared_in     ({per_core_op[FPU_FMA], per_core_fmt[FPU_FMA], per_core_frm[FPU_FMA]}),
+            .shared_in     ({per_core_op[FPU_FMA], per_core_op_mod[FPU_FMA], per_core_dst_fmt[FPU_FMA], per_core_frm[FPU_FMA]}),
             .tag_in        (per_core_tag[FPU_FMA]),
             .ready_in      (per_core_ready_in[FPU_FMA]),
             .pe_enable     (pe_enable),
@@ -190,10 +196,15 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             assign fflags_lanes[i] = data_out[i][`VX_CFG_XLEN+:`FP_FLAGS_BITS];
         end
 
-        // Separate F32 / F64 FMA cores; fmt[0] selects the result.
+        wire [INST_FRM_BITS-1:0] pe_frm    = pe_shared[0+:INST_FRM_BITS];
+        wire [INST_FMT_BITS-1:0] pe_fmt    = pe_shared[INST_FRM_BITS+:INST_FMT_BITS];
+        wire                     pe_op_mod = pe_shared[INST_FRM_BITS+INST_FMT_BITS];
+        wire [INST_FPU_BITS-1:0] pe_op     = pe_shared[INST_FRM_BITS+INST_FMT_BITS+1+:INST_FPU_BITS];
+
+        // Separate F32 / F64 FMA cores; the format selects the result.
         // pe_shared is input-aligned; delay the selector by FMA latency so it
         // lines up with the result emerging from the units.
-        wire is_d_in = FMA_HAS_F64 & pe_shared[INST_FRM_BITS+0];
+        wire is_d_in = FMA_HAS_F64 && (pe_fmt == INST_FMT_D);
         wire is_d_fma;
         if (FMA_HAS_F64) begin : g_isd_pipe
             VX_shift_register #(
@@ -225,9 +236,9 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 .reset   (reset),
                 .enable  (pe_enable),
                 .mask    (pe_mask_out[i]),
-                .op_type (pe_shared[INST_FRM_BITS+INST_FMT_BITS+:INST_FPU_BITS]),
-                .fmt     (pe_shared[INST_FRM_BITS+:INST_FMT_BITS]),
-                .frm     (pe_shared[0+:INST_FRM_BITS]),
+                .op_type (pe_op),
+                .op_mod  (pe_op_mod),
+                .frm     (pe_frm),
                 .dataa   (pe_data_in[i][0+:32]),
                 .datab   (pe_data_in[i][`VX_CFG_XLEN+:32]),
                 .datac   (pe_data_in[i][2*`VX_CFG_XLEN+:32]),
@@ -247,9 +258,9 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                     .reset   (reset),
                     .enable  (pe_enable),
                     .mask    (pe_mask_out[i]),
-                    .op_type (pe_shared[INST_FRM_BITS+INST_FMT_BITS+:INST_FPU_BITS]),
-                    .fmt     (pe_shared[INST_FRM_BITS+:INST_FMT_BITS]),
-                    .frm     (pe_shared[0+:INST_FRM_BITS]),
+                    .op_type (pe_op),
+                    .op_mod  (pe_op_mod),
+                    .frm     (pe_frm),
                     .dataa   (pe_data_in[i][0+:64]),
                     .datab   (pe_data_in[i][`VX_CFG_XLEN+:64]),
                     .datac   (pe_data_in[i][2*`VX_CFG_XLEN+:64]),
@@ -287,7 +298,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         wire pe_enable;
         wire [NUM_PES_FMA64-1:0] pe_mask_out;
         wire [NUM_PES_FMA64-1:0][(3*`VX_CFG_XLEN)-1:0] pe_data_in;
-        wire [INST_FPU_BITS+INST_FMT_BITS+INST_FRM_BITS-1:0] pe_shared;
+        wire [INST_FPU_BITS+1+INST_FRM_BITS-1:0] pe_shared;
         wire [NUM_PES_FMA64-1:0][(`FP_FLAGS_BITS+`VX_CFG_XLEN)-1:0] pe_data_out;
         wire [NUM_LANES-1:0][(3*`VX_CFG_XLEN)-1:0] lane_data;
 
@@ -301,7 +312,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .LATENCY        (`VX_CFG_FMA_LATENCY),
             .DATA_IN_WIDTH  (3*`VX_CFG_XLEN),
             .DATA_OUT_WIDTH (`FP_FLAGS_BITS+`VX_CFG_XLEN),
-            .SHARED_WIDTH   (INST_FPU_BITS+INST_FMT_BITS+INST_FRM_BITS),
+            .SHARED_WIDTH   (INST_FPU_BITS+1+INST_FRM_BITS),
             .TAG_WIDTH      (TAG_WIDTH),
             .PE_REG         (0),
             .OUT_BUF        (0),
@@ -312,7 +323,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .valid_in      (per_core_valid_in[FPU_FMA64]),
             .mask_in       (per_core_mask[FPU_FMA64]),
             .data_in       (lane_data),
-            .shared_in     ({per_core_op[FPU_FMA64], per_core_fmt[FPU_FMA64], per_core_frm[FPU_FMA64]}),
+            .shared_in     ({per_core_op[FPU_FMA64], per_core_op_mod[FPU_FMA64], per_core_frm[FPU_FMA64]}),
             .tag_in        (per_core_tag[FPU_FMA64]),
             .ready_in      (per_core_ready_in[FPU_FMA64]),
             .pe_enable     (pe_enable),
@@ -345,8 +356,8 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 .reset   (reset),
                 .enable  (pe_enable),
                 .mask    (pe_mask_out[i]),
-                .op_type (pe_shared[INST_FRM_BITS+INST_FMT_BITS+:INST_FPU_BITS]),
-                .fmt     (pe_shared[INST_FRM_BITS+:INST_FMT_BITS]),
+                .op_type (pe_shared[INST_FRM_BITS+1+:INST_FPU_BITS]),
+                .op_mod  (pe_shared[INST_FRM_BITS]),
                 .frm     (pe_shared[0+:INST_FRM_BITS]),
                 .dataa   (pe_data_in[i][0+:64]),
                 .datab   (pe_data_in[i][`VX_CFG_XLEN+:64]),
@@ -403,7 +414,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .valid_in      (per_core_valid_in[FPU_DIVSQRT]),
             .mask_in       (per_core_mask[FPU_DIVSQRT]),
             .data_in       (lane_data),
-            .shared_in     ({is_sqrt, per_core_fmt[FPU_DIVSQRT], per_core_frm[FPU_DIVSQRT]}),
+            .shared_in     ({is_sqrt, per_core_dst_fmt[FPU_DIVSQRT], per_core_frm[FPU_DIVSQRT]}),
             .tag_in        (per_core_tag[FPU_DIVSQRT]),
             .ready_in      (per_core_ready_in[FPU_DIVSQRT]),
             .pe_enable     (pe_enable),
@@ -466,7 +477,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         wire pe_enable;
         wire [NUM_PES_CVT-1:0] pe_mask_out;
         wire [NUM_PES_CVT-1:0][`VX_CFG_XLEN-1:0] pe_data_in;
-        wire [INST_FPU_BITS+INST_FMT_BITS+INST_FRM_BITS-1:0] pe_shared;
+        wire [INST_FPU_BITS+2*INST_FMT_BITS+INST_FRM_BITS-1:0] pe_shared;
         wire [NUM_PES_CVT-1:0][(`FP_FLAGS_BITS+`VX_CFG_XLEN)-1:0] pe_data_out;
 
         `UNUSED_VAR ({per_core_datab[FPU_CVT], per_core_datac[FPU_CVT]})
@@ -477,7 +488,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .LATENCY        (CVT_LATENCY),
             .DATA_IN_WIDTH  (`VX_CFG_XLEN),
             .DATA_OUT_WIDTH (`FP_FLAGS_BITS+`VX_CFG_XLEN),
-            .SHARED_WIDTH   (INST_FPU_BITS+INST_FMT_BITS+INST_FRM_BITS),
+            .SHARED_WIDTH   (INST_FPU_BITS+2*INST_FMT_BITS+INST_FRM_BITS),
             .TAG_WIDTH      (TAG_WIDTH),
             .PE_REG         (0),
             .OUT_BUF        (0),
@@ -488,7 +499,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .valid_in      (per_core_valid_in[FPU_CVT]),
             .mask_in       (per_core_mask[FPU_CVT]),
             .data_in       (per_core_dataa[FPU_CVT]),
-            .shared_in     ({per_core_op[FPU_CVT], per_core_fmt[FPU_CVT], per_core_frm[FPU_CVT]}),
+            .shared_in     ({per_core_op[FPU_CVT], per_core_dst_fmt[FPU_CVT], per_core_src_fmt[FPU_CVT], per_core_frm[FPU_CVT]}),
             .tag_in        (per_core_tag[FPU_CVT]),
             .ready_in      (per_core_ready_in[FPU_CVT]),
             .pe_enable     (pe_enable),
@@ -511,18 +522,15 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         end
 
         for (genvar i = 0; i < NUM_PES_CVT; ++i) begin : g_units
-            wire [INST_FRM_BITS-1:0] pe_frm = pe_shared[0+:INST_FRM_BITS];
-            wire [INST_FMT_BITS-1:0] pe_fmt = pe_shared[INST_FRM_BITS+:INST_FMT_BITS];
-            wire [INST_FPU_BITS-1:0] pe_op  = pe_shared[INST_FRM_BITS+INST_FMT_BITS+:INST_FPU_BITS];
+            wire [INST_FRM_BITS-1:0] pe_frm     = pe_shared[0+:INST_FRM_BITS];
+            wire [INST_FMT_BITS-1:0] pe_src_fmt = pe_shared[INST_FRM_BITS+:INST_FMT_BITS];
+            wire [INST_FMT_BITS-1:0] pe_dst_fmt = pe_shared[INST_FRM_BITS+INST_FMT_BITS+:INST_FMT_BITS];
+            wire [INST_FPU_BITS-1:0] pe_op      = pe_shared[INST_FRM_BITS+2*INST_FMT_BITS+:INST_FPU_BITS];
 
-            wire is_f2h    = (pe_op == INST_FPU_F2H);
-            wire is_f2f    = (pe_op == INST_FPU_F2F) || is_f2h;
+            wire is_f2f    = (pe_op == INST_FPU_F2F);
             wire is_itof   = pe_op[1] & ~is_f2f;
             wire is_ftoi   = ~pe_op[1] & ~is_f2f;
             wire is_signed = ~pe_op[0];
-            wire is_int64  = pe_fmt[1];
-            wire src_fmt   = (is_f2f && !is_f2h) ? ~pe_fmt[0] : pe_fmt[0]; // F2F: src is the other format
-            wire dst_fmt   = pe_fmt[0];
 
             VX_fcvt_unit #(
                 .LATENCY (CVT_LATENCY),
@@ -541,11 +549,8 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 .is_ftoi    (is_ftoi),
                 .is_f2f     (is_f2f),
                 .is_signed  (is_signed),
-                .is_int64   (is_int64),
-                .src_fmt    (src_fmt),
-                .dst_fmt    (dst_fmt),
-                .src_h      (is_f2f && !is_f2h && pe_fmt[1]),
-                .dst_h      (is_f2h),
+                .src_fmt    (pe_src_fmt),
+                .dst_fmt    (pe_dst_fmt),
                 .dataa      (pe_data_in[i][0+:`VX_CFG_XLEN]),
                 .result     (pe_data_out[i][0+:`VX_CFG_XLEN]),
                 .fflags     (pe_data_out[i][`VX_CFG_XLEN+:`FP_FLAGS_BITS])
@@ -597,7 +602,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .valid_in      (per_core_valid_in[FPU_NCP]),
             .mask_in       (per_core_mask[FPU_NCP]),
             .data_in       (lane_data),
-            .shared_in     ({per_core_op[FPU_NCP], per_core_fmt[FPU_NCP], per_core_frm[FPU_NCP]}),
+            .shared_in     ({per_core_op[FPU_NCP], per_core_dst_fmt[FPU_NCP], per_core_frm[FPU_NCP]}),
             .tag_in        (per_core_tag[FPU_NCP]),
             .ready_in      (per_core_ready_in[FPU_NCP]),
             .pe_enable     (pe_enable),
