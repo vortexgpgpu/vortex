@@ -96,6 +96,35 @@ module VX_tcu_block import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     assign result_if.data        = agu_result_valid ? agu_result_data : core_result_if.data;
     assign agu_result_ready      = result_if.ready;
     assign core_result_if.ready  = result_if.ready && !agu_result_valid;
+
+    // A TCU_LD writes its response fragments straight into the metadata RAM,
+    // which an MMA reads while it is presented to the core. That is safe only
+    // if no MMA of the loading warp that reads the region being loaded is
+    // presented while the load is in flight: an older one has left the
+    // in-order execute stream before the TCU_LD enters the AGU, and a younger
+    // one waits at issue on the scoreboard until the TCU_LD retires.
+`ifndef SYNTHESIS
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
+    wire mma_reads_sp = (execute_if.data.op_type == INST_TCU_WMMA_SP)
+                    `ifdef VX_CFG_TCU_WGMMA_ENABLE
+                     || (execute_if.data.op_type == INST_TCU_WGMMA_SP)
+                    `endif
+                     ;
+`else
+    wire mma_reads_sp = 1'b0;
+`endif
+`ifdef VX_CFG_TCU_MX_ENABLE
+    wire mma_reads_mx = tcu_fmt_is_mx(execute_if.data.op_args.tcu.fmt_s);
+`else
+    wire mma_reads_mx = 1'b0;
+`endif
+    // ~ld_ready: the AGU holds a TCU_LD, so its wid and slot are registered
+    wire mma_reads_ld_region = meta_wr_idx[4] ? mma_reads_mx : mma_reads_sp;
+    `RUNTIME_ASSERT(~(core_execute_if.valid && ~agu_ld_ready
+                   && (execute_if.data.header.wid == meta_wr_wid) && mma_reads_ld_region),
+        ("%t: *** %s MMA reads metadata a TCU_LD is loading: wid=%0d, slot=%0d, op_type=%0d (#%0d)",
+            $time, INSTANCE_ID, meta_wr_wid, meta_wr_idx, execute_if.data.op_type, execute_if.data.header.uuid))
+`endif
 `else
     assign core_execute_if.valid = execute_if.valid;
     assign core_execute_if.data  = execute_if.data;
