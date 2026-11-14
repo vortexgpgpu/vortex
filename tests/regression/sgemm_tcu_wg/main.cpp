@@ -708,7 +708,14 @@ int main(int argc, char *argv[]) {
   auto time_start = std::chrono::high_resolution_clock::now();
 
   std::cout << "start device" << std::endl;
-  uint32_t smem_size = (cta_M * wg_cfg::tileK + wg_cfg::tileK * per_warp_N) * sizeof(itype_t);
+  // A rows (and K-major B rows) are padded by *_PAD_K K-slices; see common.h.
+  uint32_t a_smem = cta_M * wg_cfg::tileK * (1 + A_PAD_K);
+#ifdef WGMMA_KMAJOR_B
+  uint32_t b_smem = per_warp_N * wg_cfg::tileK * (1 + B_PAD_K);
+#else
+  uint32_t b_smem = wg_cfg::tileK * per_warp_N;
+#endif
+  uint32_t smem_size = (a_smem + b_smem) * sizeof(itype_t);
   vx_event_h launch_ev = nullptr;
   {
     vx_launch_info_t li = {};

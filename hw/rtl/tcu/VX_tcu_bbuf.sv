@@ -173,6 +173,9 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // desc_b's upper bits encode the per-row word stride (WGMMA
     // SS-descriptor `ldm`). Non-zero stride selects the K-major fetch path.
     wire [LDM_W-1:0] desc_b_ldm_words = req_desc_b[31:TCU_SMEM_DESC_OFF_BITS];
+    // The base's 32-bit-word offset inside its bank row; K-major row offsets
+    // start from it, as SimX reads B from the exact base.
+    wire [BANK_ROW_WORDS_LOG2-1:0] desc_b_inrow = BANK_ROW_WORDS_LOG2'(req_desc_b[TCU_SMEM_DESC_OFF_BITS-1:0] >> 2);
     if (`VX_CFG_XLEN > 32) begin : g_desc_b_upper_unused
         `UNUSED_VAR (req_desc_b[`VX_CFG_XLEN-1:32])
     end
@@ -271,7 +274,7 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // K-major address generation
     // -----------------------------------------------------------------------
     // For row r (= km_req_ctr_r) of the current (step_k, step_n) block:
-    //   word_off = (step_n × TCU_TC_N + r) × ldm_words + step_k × k_words
+    //   word_off = inrow + (step_n × TCU_TC_N + r) × ldm_words + step_k × k_words
     //   bank_row = base + (word_off >> log2(BANK_ROW_WORDS))
     //   lane     = word_off & (BANK_ROW_WORDS - 1)
     // k_words is fedpK for dense and tcK for sparse
@@ -285,7 +288,8 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     wire [KM_OFF_W-1:0] km_word_off_init =
         KM_OFF_W'(req_step_n) * KM_OFF_W'(TCU_TC_N) * KM_OFF_W'(desc_b_ldm_words)
-      + KM_OFF_W'(req_step_k) * KM_OFF_W'(km_k_words_alloc);
+      + KM_OFF_W'(req_step_k) * KM_OFF_W'(km_k_words_alloc)
+      + KM_OFF_W'(desc_b_inrow);
 
     logic [KM_OFF_W-1:0] km_word_off_req_r;
     logic [KM_OFF_W-1:0] km_word_off_rsp_r;
