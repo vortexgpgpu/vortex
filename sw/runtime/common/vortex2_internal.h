@@ -676,7 +676,7 @@ private:
 class Queue : public RefCounted<Queue> {
 public:
     static vx_result_t create(Device* dev, const vx_queue_info_t* info,
-                              Queue** out);
+                              Queue** out, bool device_ref = true);
 
     Device*  device()                  { return device_; }
     uint32_t flags()              const{ return flags_; }
@@ -757,7 +757,7 @@ public:
 
 private:
     friend class RefCounted<Queue>;
-    Queue(Device* dev, const vx_queue_info_t& info);
+    Queue(Device* dev, const vx_queue_info_t& info, bool device_ref);
     ~Queue();
 
     // ------------------------------------------------------------------
@@ -795,6 +795,7 @@ private:
     Device*                  device_;
     uint32_t                 priority_;
     uint32_t                 flags_;
+    bool                     device_ref_;
 
     // Serializes per-command platform calls when multiple queues share
     // one backend (one Platform per device today).

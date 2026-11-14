@@ -19,11 +19,12 @@ namespace vx {
 // Construction / destruction
 // ============================================================================
 
-Queue::Queue(Device* dev, const vx_queue_info_t& info)
+Queue::Queue(Device* dev, const vx_queue_info_t& info, bool device_ref)
     : device_(dev),
       priority_(static_cast<uint32_t>(info.priority)),
-      flags_(info.flags) {
-    device_->retain();
+      flags_(info.flags),
+      device_ref_(device_ref) {
+    if (device_ref_) device_->retain();
     device_->register_queue(this);
     worker_ = std::thread([this]{ this->worker_loop(); });
 }
@@ -40,12 +41,12 @@ Queue::~Queue() {
 
     if (device_) {
         device_->unregister_queue(this);
-        device_->release();
+        if (device_ref_) device_->release();
     }
 }
 
 vx_result_t Queue::create(Device* dev, const vx_queue_info_t* info,
-                          Queue** out) {
+                          Queue** out, bool device_ref) {
     if (!dev || !out) return VX_ERR_INVALID_VALUE;
     vx_queue_info_t default_info = {};
     default_info.struct_size = sizeof(default_info);
@@ -53,7 +54,7 @@ vx_result_t Queue::create(Device* dev, const vx_queue_info_t* info,
     default_info.flags       = 0;
     if (!info) info = &default_info;
     if (info->struct_size < sizeof(vx_queue_info_t)) return VX_ERR_INVALID_INFO;
-    *out = new Queue(dev, *info);
+    *out = new Queue(dev, *info, device_ref);
     return VX_SUCCESS;
 }
 

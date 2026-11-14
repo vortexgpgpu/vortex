@@ -1427,7 +1427,9 @@ Queue* Device::legacy_default_queue() {
     info.priority    = VX_QUEUE_PRIORITY_NORMAL;
     info.flags       = 0;
     Queue* q = nullptr;
-    if (Queue::create(this, &info, &q) != VX_SUCCESS) return nullptr;
+    // The device owns this queue and releases it in ~Device, so the queue must
+    // not hold a reference back: that cycle would keep the device alive forever.
+    if (Queue::create(this, &info, &q, /*device_ref=*/false) != VX_SUCCESS) return nullptr;
     // Publish (and handle race where two threads created queues
     // concurrently — keep one, release the other).
     {
