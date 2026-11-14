@@ -303,6 +303,9 @@ import VX_tcu_pkg::*;
 
     cta_bcast_t cta_bcast;
     gpr_layout_t gpr_layout;
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    VX_tcu_bar_if tcu_bar_if();
+`endif
 
     VX_scheduler #(
         .INSTANCE_ID (`SFORMATF(("%s-scheduler", INSTANCE_ID)))
@@ -368,7 +371,6 @@ import VX_tcu_pkg::*;
 `endif
 `ifdef VX_CFG_TCU_TMEM_ENABLE
     VX_tcu_job_if       tcu_job_if [`VX_CFG_NUM_TCU_BLOCKS]();
-    VX_tcu_bar_if       tcu_bar_if();
 `endif
 
     VX_sfu_shared #(
