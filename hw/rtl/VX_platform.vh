@@ -320,6 +320,12 @@
 // lut(x): (x & 8) != 0
 `define TO_OUT_BUF_LUTRAM(s)  ((s & 8) != 0)
 
+// bypass(x): (x & 16) != 0, a one-entry VX_bypass_buffer: zero latency, the
+// input ready registered, the output not. A module without that buffer reads
+// the low bits and falls back to one registered entry.
+`define TO_OUT_BUF_BYPASS(s)  ((s & 16) != 0)
+`define OUT_BUF_BYPASS        (16 | 1)
+
 `define MP_REPEAT(n,f,s)   `_MP_REPEAT_``n(f,s)
 `define _MP_REPEAT_0(f,s)
 `define _MP_REPEAT_1(f,s)  `f(0)

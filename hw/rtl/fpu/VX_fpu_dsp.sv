@@ -168,8 +168,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .SHARED_WIDTH   (INST_FPU_BITS+1+INST_FMT_BITS+INST_FRM_BITS),
             .TAG_WIDTH      (TAG_WIDTH),
             .PE_REG         (0),
-            .OUT_BUF        (0),
-            .OUT_SKID       (1),
+            .OUT_BUF        (`OUT_BUF_BYPASS),
             .PE_ENABLES     (NUM_PES_FMA)
         ) pe_ser (
             .clk           (clk),
@@ -327,8 +326,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .SHARED_WIDTH   (INST_FPU_BITS+1+INST_FRM_BITS),
             .TAG_WIDTH      (TAG_WIDTH),
             .PE_REG         (0),
-            .OUT_BUF        (0),
-            .OUT_SKID       (1),
+            .OUT_BUF        (`OUT_BUF_BYPASS),
             .PE_ENABLES     (NUM_PES_FMA64)
         ) pe_ser (
             .clk           (clk),
@@ -472,8 +470,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .SHARED_WIDTH   (INST_FMT_BITS+INST_FRM_BITS),
             .TAG_WIDTH      (TAG_WIDTH),
             .PE_REG         (0),
-            .OUT_BUF        (0),
-            .OUT_SKID       (1),
+            .OUT_BUF        (`OUT_BUF_BYPASS),
             .PE_ENABLES     (NUM_PES_DIV)
         ) div_pe_ser (
             .clk           (clk),
@@ -562,8 +559,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .SHARED_WIDTH   (INST_FMT_BITS+INST_FRM_BITS),
             .TAG_WIDTH      (TAG_WIDTH),
             .PE_REG         (0),
-            .OUT_BUF        (0),
-            .OUT_SKID       (1),
+            .OUT_BUF        (`OUT_BUF_BYPASS),
             .PE_ENABLES     (NUM_PES_SQRT)
         ) sqrt_pe_ser (
             .clk           (clk),
@@ -672,8 +668,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .SHARED_WIDTH   (INST_FPU_BITS+2*INST_FMT_BITS+INST_FRM_BITS),
             .TAG_WIDTH      (TAG_WIDTH),
             .PE_REG         (0),
-            .OUT_BUF        (0),
-            .OUT_SKID       (1),
+            .OUT_BUF        (`OUT_BUF_BYPASS),
             .PE_ENABLES     (NUM_PES_CVT)
         ) pe_ser (
             .clk           (clk),
@@ -774,8 +769,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .SHARED_WIDTH   (INST_FPU_BITS+INST_FMT_BITS+INST_FRM_BITS),
             .TAG_WIDTH      (TAG_WIDTH),
             .PE_REG         (0),
-            .OUT_BUF        (0),
-            .OUT_SKID       (1),
+            .OUT_BUF        (`OUT_BUF_BYPASS),
             .PE_ENABLES     (NUM_PES_NCP)
         ) pe_ser (
             .clk           (clk),

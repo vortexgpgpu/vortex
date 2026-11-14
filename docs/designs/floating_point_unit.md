@@ -229,7 +229,7 @@ counted from the last batch:
 | `L + 1` | the response arbiter's registered output, read by the commit arbiter or the lane gather |
 
 Every core ends in a zero-latency skid register (`VX_bypass_buffer`; the
-serializer's `OUT_SKID`). A result passes it in the cycle the core produces
+serializer's `OUT_BUF` bypass code, `` `OUT_BUF_BYPASS ``). A result passes it in the cycle the core produces
 it, so the register costs no latency; with the default tag store of two
 entries (§10) every cycle of latency is a cycle of FPU throughput. It stays
 because its ready is registered, and that ready drives the core's clock
