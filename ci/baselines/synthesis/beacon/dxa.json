@@ -36,6 +36,14 @@
       "max_levels": 15,
       "pred_fmax_mhz": 298.6,
       "risk_endpoints": 0,
+      "tied_bits": 1,
+      "tied_ports": [
+        {
+          "bits": 1,
+          "port": "dxa_core.smem_bus_if_0_rsp_valid",
+          "width": 1
+        }
+      ],
       "units": {
         "dxa_core/desc_table/desc_store": 8,
         "dxa_core/g_workers_*_worker/addr_gen": 15,

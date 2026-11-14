@@ -1,0 +1,206 @@
+{
+  "gfx": {
+    "clock_mhz": 800,
+    "config_hash": "f49712b842f2f234",
+    "configs": "-DVX_CFG_NUM_THREADS=4 -DVX_CFG_NUM_WARPS=4",
+    "dut": "gfx",
+    "result": {
+      "build_time_s": 175,
+      "cells": 1873933,
+      "endpoints": 239154,
+      "env": {
+        "circt": "CIRCT 892a65a01",
+        "foldsim": "foldsim d8350bc0f",
+        "pdk": "asap7",
+        "xlen": 32
+      },
+      "ff": 420597,
+      "fmax_mhz": 874.9,
+      "macros": 76,
+      "max_stages": 38,
+      "overhead_ps": 231,
+      "period_ps": 1143,
+      "stage_ps": 24,
+      "tied_bits": 1065,
+      "tied_ports": [
+        {
+          "bits": 529,
+          "port": "g_mem_bus_if_0.g_i0.mem_arb.bus_in_if_0_req_data",
+          "width": 630
+        },
+        {
+          "bits": 529,
+          "port": "g_mem_bus_if_0.g_i0.mem_arb.bus_in_if_4_req_data",
+          "width": 630
+        },
+        {
+          "bits": 1,
+          "port": "graphics.cluster_id",
+          "width": 1
+        },
+        {
+          "bits": 1,
+          "port": "rtcache_dcr_flush.l1_only",
+          "width": 1
+        },
+        {
+          "bits": 1,
+          "port": "rtu_socket_arb.bus_in_if_0_arm_data",
+          "width": 106
+        },
+        {
+          "bits": 1,
+          "port": "rtu_socket_arb.bus_in_if_0_req_data",
+          "width": 140
+        },
+        {
+          "bits": 1,
+          "port": "rtu_socket_arb.bus_in_if_1_arm_data",
+          "width": 106
+        },
+        {
+          "bits": 1,
+          "port": "rtu_socket_arb.bus_in_if_1_req_data",
+          "width": 140
+        },
+        {
+          "bits": 1,
+          "port": "tcache_dcr_flush.l1_only",
+          "width": 1
+        }
+      ]
+    }
+  },
+  "om": {
+    "clock_mhz": 800,
+    "config_hash": "3ff478591f29ccf9",
+    "configs": "",
+    "dut": "om",
+    "result": {
+      "build_time_s": 15,
+      "cells": 35595,
+      "endpoints": 5135,
+      "env": {
+        "circt": "CIRCT 892a65a01",
+        "foldsim": "foldsim d8350bc0f",
+        "pdk": "asap7",
+        "xlen": 32
+      },
+      "ff": 8692,
+      "fmax_mhz": 1169.6,
+      "macros": 0,
+      "max_stages": 26,
+      "overhead_ps": 231,
+      "period_ps": 855,
+      "stage_ps": 24,
+      "tied_bits": 3,
+      "tied_ports": [
+        {
+          "bits": 2,
+          "port": "om_core.om_bus_if_req_data",
+          "width": 59
+        },
+        {
+          "bits": 1,
+          "port": "om_core.dcr_bus_if_req_data",
+          "width": 45
+        }
+      ]
+    }
+  },
+  "raster": {
+    "clock_mhz": 800,
+    "config_hash": "f0a4c760f765a429",
+    "configs": "",
+    "dut": "raster",
+    "result": {
+      "build_time_s": 15,
+      "cells": 76084,
+      "endpoints": 12792,
+      "env": {
+        "circt": "CIRCT 892a65a01",
+        "foldsim": "foldsim d8350bc0f",
+        "pdk": "asap7",
+        "xlen": 32
+      },
+      "ff": 18195,
+      "fmax_mhz": 1277.1,
+      "macros": 4,
+      "max_stages": 23,
+      "overhead_ps": 231,
+      "period_ps": 783,
+      "stage_ps": 24,
+      "tied_bits": 2,
+      "tied_ports": [
+        {
+          "bits": 1,
+          "port": "raster_core.dcr_bus_if_req_data",
+          "width": 45
+        },
+        {
+          "bits": 1,
+          "port": "raster_core.instance_idx",
+          "width": 1
+        }
+      ]
+    }
+  },
+  "rtu": {
+    "clock_mhz": 800,
+    "config_hash": "473d8b33a18f36fd",
+    "configs": "",
+    "dut": "rtu",
+    "result": {
+      "build_time_s": 100,
+      "cells": 1060729,
+      "endpoints": 105631,
+      "env": {
+        "circt": "CIRCT 892a65a01",
+        "foldsim": "foldsim d8350bc0f",
+        "pdk": "asap7",
+        "xlen": 32
+      },
+      "ff": 152086,
+      "fmax_mhz": 874.9,
+      "macros": 4,
+      "max_stages": 38,
+      "overhead_ps": 231,
+      "period_ps": 1143,
+      "stage_ps": 24,
+      "tied_bits": 0,
+      "tied_ports": []
+    }
+  },
+  "tex": {
+    "clock_mhz": 800,
+    "config_hash": "4d47fbece8804eb8",
+    "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8",
+    "dut": "tex",
+    "result": {
+      "build_time_s": 40,
+      "cells": 376164,
+      "endpoints": 49445,
+      "env": {
+        "circt": "CIRCT 892a65a01",
+        "foldsim": "foldsim d8350bc0f",
+        "pdk": "asap7",
+        "xlen": 32
+      },
+      "ff": 72266,
+      "fmax_mhz": 1239.2,
+      "macros": 0,
+      "max_stages": 24,
+      "overhead_ps": 231,
+      "period_ps": 807,
+      "stage_ps": 24,
+      "tied_bits": 1,
+      "tied_ports": [
+        {
+          "bits": 1,
+          "port": "tex_core.dcr_bus_if_req_data",
+          "width": 45
+        }
+      ]
+    }
+  }
+}

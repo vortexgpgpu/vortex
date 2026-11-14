@@ -20,6 +20,13 @@ ci/synth_gate.py; this entry point only pins the tool.
               beacon_risk.txt: the learned calibration's slowest registers
               and its Fmax, reported, not gated
 
+With --tool beacon_asic it measures ci/testcases/asic_gate.yaml's builds on
+the ASIC flow instead (hw/syn/yosys/dut, ASAP7 cell stages, flip-flops and
+SRAM macros; baselines in ci/baselines/synthesis/beacon_asic/). With
+--against-rev REV, each build is also compared register by register with the
+same build on REV's RTL, measured under this checkout's flow: CI passes a
+pull request's merge base (BEACON_AGAINST_REV).
+
 It needs CIRCT and foldsim (ci/toolchain_install.sh --circt --foldsim); the
 Xilinx environment is not used.
 
@@ -27,6 +34,8 @@ Usage (from a source checkout):
   ci/logic_gate.py --list
   ci/logic_gate.py                       # all builds, gate against baselines
   ci/logic_gate.py -b cache -b tcu       # explicit builds
+  ci/logic_gate.py --tool beacon_asic    # asic_gate's builds, ASIC flow
+  ci/logic_gate.py --against-rev $(git merge-base HEAD origin/master)
   ci/logic_gate.py --update-baseline     # re-record (human-reviewed, never in CI)
 
 Beacon runs by hand through the flow's own entry point --

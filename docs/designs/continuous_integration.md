@@ -292,13 +292,13 @@ and without synthesis.
 
 | | `fpga_gate` | `asic_gate` | `logic_gate` |
 |---|---|---|---|
-| flow | Vivado synthesis, place and route | Yosys (slang frontend) → ABC → OpenSTA, on ASAP7 | CIRCT → `foldsim-estimate-timing` (logic levels as Vivado counts them on `DEVICE`'s family) and `foldsim-estimate-area` (its cells, memories and DSPs) |
-| design tree | `hw/syn/xilinx/dut` | `hw/syn/yosys/dut` | `hw/syn/xilinx/dut`, target `beacon` |
-| gated | `fmax_mhz` against the target clock, `lut` against `lut_budget` | `fmax_mhz` against the target clock, `cell_area_um2` against `area_budget_um2` | `max_levels` against the baseline, the deepest end point of every RTL unit, and `lut`, `ff`, `lutram`, `bram`, `uram`, `dsp` against the baseline |
-| also recorded | `wns_ns`, `lutram`, `ff`, `bram`, `uram`, `dsp`, critical paths, high-fanout nets | `wns_ns`, `tns_ns`, `seq_area_um2`, `sram_area_um2`, `cell_count`, `power_mw` | end point bits at ≥ 12 and ≥ 8 levels, the deepest paths |
-| comparable when | same device, optimization level, xlen | same PDK, VT, corner, xlen | same CIRCT, foldsim, xlen |
-| runner | self-hosted, licensed Vivado | hosted, one job per design | hosted, one `ci.yml` cell for the catalog, planned with `perf_gate`; the opt-in `gpu` group self-hosted |
-| default tolerance | Fmax 2 %, LUT 5 % | Fmax 2 %, cell area 5 % | depth none: Beacon is deterministic; area 5 % |
+| flow | Vivado synthesis, place and route | Yosys (slang frontend) → ABC → OpenSTA, on ASAP7 | CIRCT → `foldsim-estimate-timing` (logic levels as Vivado counts them on `DEVICE`'s family; ASAP7 cell stages with `--tool beacon_asic`) and `foldsim-estimate-area` (its cells, memories and DSPs) |
+| design tree | `hw/syn/xilinx/dut` | `hw/syn/yosys/dut` | `hw/syn/xilinx/dut` (`fpga_gate`'s builds) and `hw/syn/yosys/dut` (`asic_gate`'s), target `beacon` |
+| gated | `fmax_mhz` against the target clock, `lut` against `lut_budget` | `fmax_mhz` against the target clock, `cell_area_um2` against `area_budget_um2` | FPGA: `max_levels` against the baseline, the deepest end point of every RTL unit, and `lut`, `ff`, `lutram`, `bram`, `uram`, `dsp` against the baseline. ASIC: `ff` and `cells` against the baseline, predicted `fmax_mhz` against the target clock (wide band). Both: the harness's tied bits against the baseline, and on a pull request every register and resource against the merge base |
+| also recorded | `wns_ns`, `lutram`, `ff`, `bram`, `uram`, `dsp`, critical paths, high-fanout nets | `wns_ns`, `tns_ns`, `seq_area_um2`, `sram_area_um2`, `cell_count`, `power_mw` | end point bits at ≥ 12 and ≥ 8 levels, the deepest paths, the calibrated `p_fmax`; ASIC: stages, period, SRAM macros |
+| comparable when | same device, optimization level, xlen | same PDK, VT, corner, xlen | same CIRCT, foldsim, device or PDK, xlen |
+| runner | self-hosted, licensed Vivado | hosted, one job per design | hosted, one `ci.yml` cell for both catalogs, planned with `perf_gate`; the opt-in `gpu` group self-hosted |
+| default tolerance | Fmax 2 %, LUT 5 % | Fmax 2 %, cell area 5 % | depth none: Beacon is deterministic; area 5 %; ASIC predicted Fmax 32 % |
 
 The synthesis gates are not pytest cells. A cell is a build tree plus a driver;
 a synthesis build is neither, and it is hours long. They are standalone scripts
@@ -307,11 +307,14 @@ selection means "everything a cell can run", which excludes them.
 
 `logic_gate` is a cell, because it guards what `perf_gate` guards from the
 other side: perf_gate catches a change that costs cycles, logic_gate one that
-costs depth or area. Its `gate` case is a script case on the rtlsim driver at
-tier smoke, so the planner schedules its cell exactly when it schedules
-perf_gate's rtlsim cells: every pull request, and every push whose diff forces
-rtlsim in (the RTL or the config). The cell installs foldsim and pyslang
-(`needs: foldsim`). Only its `gpu` case stays opt-in, in tier `timing_gpu`.
+costs depth or area. Its `gate` (FPGA flow) and `gate_asic` (ASIC flow)
+cases are script cases on the rtlsim driver at tier smoke, so the planner
+schedules its cell exactly when it schedules perf_gate's rtlsim cells: every
+pull request, and every push whose diff forces rtlsim in (the RTL or the
+config). The cell installs foldsim and pyslang (`needs: foldsim`). Only its
+`gpu` case stays opt-in, in tier `timing_gpu`. Both cases set `stream`, so
+their output, the verdict table among it, is in the job log rather than in
+pytest's capture, which shows a passing case's output nowhere.
 
 #### One implementation, two adapters
 
@@ -329,7 +332,7 @@ entry points that pin the tool.
 | file | written by | holds |
 |---|---|---|
 | `ci/testcases/{fpga,asic,logic}_gate.yaml` | a person | per build: a design, a target clock, an area budget (synthesis gates), `CONFIGS`, a group, optional `thresholds`, `known_issue`, `xlen`, `profile` and `opt_in` |
-| `ci/baselines/synthesis/{xilinx,yosys,beacon}/<group>.json` | the gate | measured metrics, the config hash, the tool versions and environment |
+| `ci/baselines/synthesis/{xilinx,yosys,beacon,beacon_asic}/<group>.json` | the gate | measured metrics, the config hash, the tool versions and environment |
 
 Groups are `core`, `tensor`, `graphics`, `dxa` and `vm`, plus `logic_gate`'s
 opt-in `gpu`. `asic_gate` uses the
@@ -397,8 +400,9 @@ slack: it does not see wires, so it gates depth, which it predicts (Spearman
 the DUT flow's `DEVICE` (the U55C by default), which
 `gen_platform.py --emit=family` reads from `hw/syn/xilinx/platforms`; the
 device is part of the baseline fingerprint, as it is for `fpga_gate`.
-Beacon has profiles for the V80 and the U55C only, and fails on any other
-`DEVICE`. A
+Beacon has a profile for every Xilinx family (Versal and the UltraScale+
+families) and for ASAP7, and fails on any other target; the learned
+calibration exists for the U55C only. A
 **unit** is an end point's instance path with generate indices folded
 (`g_banks_3_bank` → `g_banks_*_bank`).
 
@@ -409,6 +413,10 @@ Beacon has profiles for the V80 and the U55C only, and fails on any other
 | a shallower unit, or one that drops below the watch threshold (8), reads `IMPROVED` | the gain must be recorded |
 | no output of a build's `interfaces` modules reached combinationally from outside the instance in more bits than its baseline | modules register their outgoing interfaces: a path that runs through a core, socket or cluster boundary is what fails routing across SLRs, and Beacon names it by port |
 | no resource of the design (`lut`, `ff`, `lutram`, `bram`, `uram`, `dsp`) more than 5 % above its baseline | area found in minutes, not in a nightly Vivado run; a memory that moves between distributed and block RAM moves two columns, and `beacon_area.txt` names each memory's placement |
+| the harness ties as many instance-input bits to constants as at its baseline (`tied`) | synthesis folds the logic behind a tied input and Beacon does not, so a harness edit makes `fpga_gate`/`asic_gate` measure a different design while Beacon's numbers stay put; the change needs a reviewed budget, then a re-record |
+| ASIC (`gate_asic`): flip-flops and cells within 5 % of the baseline | a memory that leaves its SRAM macro, or one Yosys must build from flip-flops, found before the nightly `asic_gate` |
+| ASIC: predicted Fmax no more than 32 % below `clock_mhz` | a backstop for a path far too deep to close; Beacon's period runs 0.59–1.05 × OpenSTA's, so a tighter band fails designs that close ([beacon.md §6.2](beacon.md)) |
+| on a pull request: no register at or above the watch threshold (8 levels; ASIC: the stages that fit 90 % of the period, 28 at 1 GHz) 4 or more levels (stages) deeper than on the merge base, none newly at the fix threshold, no resource past 5 %, the same tied bits; a reference that failed fails (`REF-FAIL`) | a baseline the pull request re-records cannot hide the pull request's own deltas |
 
 Beside the assertions, each build reports what levels miss: the learned
 calibration ([beacon.md §7.1](beacon.md)) scores every register from its
@@ -425,6 +433,51 @@ point table (`ep.csv`), which retrains it.
 Beacon's mapping (`BEACON_INTERFACES` in the DUT flow), and `ports.csv`
 counts, per output port, the bits a combinational path from outside the
 instance reaches.
+
+#### Against the merge base
+
+On a pull request, `ci.yml` computes `git merge-base HEAD origin/<target>`
+(the checkout is the merge commit, so that is the target's head it merged
+into) and passes it as `BEACON_AGAINST_REV`, the default of
+`ci/logic_gate.py --against-rev`. The gate then stages the merge base's
+design (`hw/rtl`, `hw/unittest`, `hw/dpi`, `hw/syn/libs/no_mem`, the
+configuration TOMLs, the submodules it pins) under the pull request's own
+flow, measures the same builds there, and compares each build register by
+register (`beacon_diff.txt`). A DUT the merge base does not have, neither
+in its catalog nor as a top module, reads `NO-REFERENCE` and is judged
+against its baseline alone; any other
+build the reference could not measure is `REF-FAIL`, and the cell fails
+as on a build error.
+
+A flow change the merge base's RTL cannot elaborate under (a new source
+generation step, an include list, a pyslang rule) reads `REF-FAIL` on every
+push. For that case a maintainer may grant the pull-request label
+`beacon-skip-reference`; granting it is a reviewed maintainer action, like
+a `known_issue`. `ci.yml` reads it from the event's payload, so it takes
+effect on the next push: the merge base is not passed, and the cell prints
+a warning in its log and job summary that its verdict is against the
+baselines alone. Without it the gate compares a head with
+baselines the same head may have recorded; that is how Beacon passed the
+RTL it arrived with at +0 %. The reference's builds are cached by the merge
+base's SHA and a fingerprint of the flow, so the pull request's next push
+reuses them; the first run of a pull request costs about twice the cell.
+The cache is saved even when the cell fails, without the builds that did
+not finish, which rerun clean.
+
+The rule: **a baseline re-record in a pull request ships its `beacon_diff`
+against the merge base.** `--update-baseline --against-rev <merge base>`
+writes the regressions against it into each baseline entry (`accepted`), so
+the reviewed baseline diff names every register and resource it accepts,
+and the cell reads them as `ACCEPTED`. Anything the re-record did not see
+still fails; a re-record without `--against-rev` accepts nothing. The
+acceptance lapses once it lands: when the merge base's own baseline carries
+it, the regression is part of the merge base.
+
+The cell writes `logic_gate.json` and `logic_gate_asic.json`, renders them
+into the job summary, and uploads per build its log, `beacon_diff.txt`,
+`beacon_area.txt`, `beacon_risk.txt` and `beacon_paths.txt` (the ASIC
+flow's `beacon/report.txt` and `beacon/area.txt`) as the
+`logic-gate-<cell>` artifact.
 
 Depth has no tolerance: the same RTL and tools give the same levels. Area is
 as deterministic, but a feature adds some by design, so it has `fpga_gate`'s
@@ -610,11 +663,12 @@ adding it: an over-budget design costs a silent job kill, not a red gate.
 Manual dispatch only: the gate itself runs in `ci.yml` as the `logic_gate`
 cell (§3.5). A dispatch runs Beacon on the catalog, or on the builds it names,
 in one hosted job: it restores the toolchain, installs foldsim
-(`ci/toolchain_install.sh --foldsim`), runs the catalog's `run:` command with
-`--report`, and renders the report with
+(`ci/toolchain_install.sh --foldsim`), runs the catalog's `run:` command
+(`gate`, or `gate_asic` with `asic: true`; `against` adds `--against-rev`),
+and renders its report with
 [`synth_report.py`](../../ci/synth_report.py) into the workflow summary. The
-artifacts are the report and, per design, the build log, the summary and
-Beacon's deepest paths.
+artifacts are the report and, per design, the build log, the summary,
+Beacon's deepest paths and the diff against the reference.
 
 A manual dispatch with `gpu: true` runs the catalog's `gpu` case instead, on
 the self-hosted machine: one build at a time, up to two hours each, since each

@@ -1,0 +1,85 @@
+{
+  "tcu": {
+    "clock_mhz": 800,
+    "config_hash": "1d6c72424d1a993d",
+    "configs": "",
+    "dut": "tcu",
+    "result": {
+      "build_time_s": 100,
+      "cells": 1299379,
+      "endpoints": 25749,
+      "env": {
+        "circt": "CIRCT 892a65a01",
+        "foldsim": "foldsim d8350bc0f",
+        "pdk": "asap7",
+        "xlen": 32
+      },
+      "ff": 47446,
+      "fmax_mhz": 791.8,
+      "macros": 0,
+      "max_stages": 43,
+      "overhead_ps": 231,
+      "period_ps": 1263,
+      "stage_ps": 24,
+      "tied_bits": 0,
+      "tied_ports": []
+    }
+  },
+  "tensor": {
+    "clock_mhz": 800,
+    "config_hash": "2992cc36d736afff",
+    "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8",
+    "dut": "tensor",
+    "result": {
+      "build_time_s": 90,
+      "cells": 854302,
+      "endpoints": 86553,
+      "env": {
+        "circt": "CIRCT 892a65a01",
+        "foldsim": "foldsim d8350bc0f",
+        "pdk": "asap7",
+        "xlen": 32
+      },
+      "ff": 184699,
+      "fmax_mhz": 977.5,
+      "macros": 28,
+      "max_stages": 33,
+      "overhead_ps": 231,
+      "period_ps": 1023,
+      "stage_ps": 24,
+      "tied_bits": 6,
+      "tied_ports": [
+        {
+          "bits": 1,
+          "port": "g_cores_0.mem_unit.dcr_flush_if_req",
+          "width": 1
+        },
+        {
+          "bits": 1,
+          "port": "g_cores_0.mem_unit.flush_l1_only",
+          "width": 1
+        },
+        {
+          "bits": 1,
+          "port": "g_cores_1.mem_unit.dcr_flush_if_req",
+          "width": 1
+        },
+        {
+          "bits": 1,
+          "port": "g_cores_1.mem_unit.flush_l1_only",
+          "width": 1
+        },
+        {
+          "bits": 1,
+          "port": "g_mem_bus_if_0.g_i0.mem_arb.bus_in_if_0_req_valid",
+          "width": 1
+        },
+        {
+          "bits": 1,
+          "port": "g_mem_bus_if_0.g_i0.mem_arb.bus_in_if_0_rsp_ready",
+          "width": 1
+        }
+      ]
+    }
+  }
+}
