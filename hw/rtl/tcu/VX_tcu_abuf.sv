@@ -68,7 +68,7 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input  wire [3:0]               req_step_k,
     input  wire [`VX_CFG_XLEN-1:0]  req_desc_a,
     input  wire                     req_a_is_smem,
-    input  wire                     req_is_sparse,
+    input  wire                     req_is_sparse_in,
     input  wire [UUID_WIDTH-1:0]    req_uuid,
 
     // LMEM bank-parallel read port
@@ -79,6 +79,9 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     output wire [TCU_WG_A_DATA_SIZE-1:0][`VX_CFG_XLEN-1:0] abuf_rs1_data
 );
     `UNUSED_SPARAM (INSTANCE_ID)
+
+    // Sparse FULLK compressed A has the dense per-uop shape (fedpK words).
+    wire req_is_sparse = req_is_sparse_in && (TCU_WG_SP_FULLK == 0);
     `UNUSED_VAR (req_wid)
 
     // -----------------------------------------------------------------------

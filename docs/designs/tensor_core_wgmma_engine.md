@@ -503,6 +503,7 @@ waited on tile-buffer data), `TCU_TBUF_CACHE_HITS` (0xB04, B rows reused),
 | `VX_CFG_TCU_FEDP2K` | false | dense WGMMA dot product of `2 × TC_K`, one K step |
 | `VX_CFG_TCU_PE_RATIO` | 1 | cycles per micro-op; the grid holds `TC_M × TC_N / R` FEDPs (§5.3). A power of two dividing `NUM_THREADS` |
 | `VX_CFG_TCU_SPARSE_ENABLE` | false | 2:4 sparsity |
+| `VX_CFG_TCU_SPARSE_FULLK_ENABLE` | sparse, WGMMA and FEDP2K | a sparse uop fills the doubled-K FEDP with compressed A (`2 × TC_K` words, Hopper's `wgmma.sp` k32): a sparse context's `tileK` doubles and its B must be K-major. Applies where an m-step has two half-K metadata banks (`TC_M = 2 × TC_K`: NT 8, 32); `-DVX_CFG_TCU_SPARSE_FULLK_DISABLE` keeps the half-FEDP path |
 | `VX_CFG_TCU_DSM_ENABLE` | false | dynamic sparsity mask |
 | `VX_CFG_TCU_MX_ENABLE` | false | block-scaled formats |
 | `VX_CFG_TCU_{FP16,TF32,FP8,FP4,INT8,INT4,MXFP4,NVFP4}_ENABLE` | fp16 only | per-format datapaths |

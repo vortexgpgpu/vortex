@@ -934,7 +934,20 @@ public:
   static constexpr uint32_t a_reg_k_steps = 2;
   static constexpr uint32_t xtileM  = m_steps * tcM;
   static constexpr uint32_t xtileN  = (NRC_ * NT) / xtileM;
-  static constexpr uint32_t tileK   = k_steps * fedpK * i_ratio;
+  // tileK is the K one WGMMA of this context covers: size K loops and staging
+  // by it. Under sparse FULLK (sp_fullk, VX_CFG_TCU_SPARSE_FULLK_ENABLE) a
+  // sparse uop fills the doubled-K FEDP with compressed A, so a sparse
+  // context's tileK is sp_k_mult (2) times a dense one's, and its B must be
+  // K-major (see tensor_cfg.h wgmma_config_t::sp_k_mult).
+#ifdef VX_CFG_TCU_SPARSE_FULLK_ENABLE
+  // Two half-K metadata banks per m-step exist when tcM = 2 * tcK (NT 8, 32).
+  static constexpr uint32_t sp_k_mult =
+      (is_sparse && tcM == 2 * tcK) ? (fedpK / tcK) : 1;
+#else
+  static constexpr uint32_t sp_k_mult = 1;
+#endif
+  static constexpr bool     sp_fullk = (sp_k_mult > 1);
+  static constexpr uint32_t tileK   = k_steps * fedpK * i_ratio * sp_k_mult;
   static constexpr uint32_t n_steps = xtileN / tcN;
 
   // Block-major SMEM constants.
@@ -982,6 +995,7 @@ public:
   // r = K element [0, tileK), c = N [0, xtileN). A sparse block spans tcK*2
   // candidate words along K.
   static __attribute__((always_inline)) uint32_t b_sp_flat_idx(uint32_t r, uint32_t c) {
+    static_assert(sp_k_mult == 1, "sparse FULLK WGMMA requires K-major B, not the Flat layout");
     // The DXA Flat producer conveys only tcN (via set_tile_geometry) and
     // derives the K-word block span as tcN*2; that matches this formula only
     // when tcK == tcN. Guard so a future tcK!=tcN config fails loudly here
@@ -1061,8 +1075,9 @@ public:
   //                 A_warp[(m_blk*tcM + i_in)*ldm
   //                        + (k_blk*(tcK*i_ratio) + k_in_elem)]
   // Sparse: K is compressed by 2x → only sparse_k_steps = k_steps/2 K-blocks
-  // exist; m_steps * sparse_k_steps registers carry A data, the remaining
-  // ctx_a::sparse_regs slot is reserved for the metadata word.
+  // exist; m_steps * sparse_k_steps registers carry A data. Under sparse FULLK
+  // a uop consumes sp_k_mult K-blocks per m, so register m*sp_k_mult + h holds
+  // half h of that uop's compressed A (the TCU reads it as rs1/rs2).
   template <mem_layout src_layout = row_major, typename Frag>
   static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm) {
     load_matrix_sync<src_layout>(dst, src, ldm, lane_offset<Frag, src_layout>(ldm));
@@ -1092,7 +1107,7 @@ public:
     };
 
     if constexpr (is_sparse) {
-      constexpr uint32_t sp_k_steps_local = sparse_k_steps;
+      constexpr uint32_t sp_k_steps_local = sparse_k_steps * sp_k_mult;
       constexpr uint32_t a_regs           = m_steps * sp_k_steps_local;
       detail::unroll_for<a_regs>([&](auto r) {
         uint32_t m_blk = r / sp_k_steps_local;

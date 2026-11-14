@@ -113,9 +113,9 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             .req_desc_a     (req[b].desc_a),
             .req_a_is_smem  (req[b].a_is_smem),
         `ifdef VX_CFG_TCU_SPARSE_ENABLE
-            .req_is_sparse  (req[b].is_sparse),
+            .req_is_sparse_in (req[b].is_sparse),
         `else
-            .req_is_sparse  (1'b0),
+            .req_is_sparse_in (1'b0),
         `endif
             .req_uuid       (req[b].uuid),
             .tcu_lmem_if    (lmem_masters[b]),

@@ -420,6 +420,12 @@ VX_CFG_TCU_SPARSE_ENABLE = false
 VX_CFG_TCU_DSM_ENABLE = false
 VX_CFG_TCU_WGMMA_ENABLE = false
 VX_CFG_TCU_FEDP2K = false
+# A sparse WGMMA uop fills the doubled-K FEDP with compressed A (wgmma.sp k32
+# vs dense k16), so a sparse WGMMA covers twice the dense tile K; without it
+# the FEDP's upper half idles on every sparse uop. It applies where a uop can
+# read two half-K metadata banks per m-step (WMMA k_steps >= 4: NT 8 and 32);
+# elsewhere sparse uops keep the dense tile K.
+VX_CFG_TCU_SPARSE_FULLK_ENABLE = "expr: $VX_CFG_TCU_SPARSE_ENABLE and $VX_CFG_TCU_WGMMA_ENABLE and $VX_CFG_TCU_FEDP2K"
 
 [dxa]
 # Cluster-level DXA engine count, decoupled from cores/socket size.

@@ -385,7 +385,24 @@ public:
   static constexpr uint32_t k_steps = xtileK / fedpK;
   static constexpr uint32_t b_blk_k = fedpK * i_ratio; // K elements per dense B block
   static constexpr uint32_t NRC = NRC_;
+  // Sparse (2:4) WGMMA K coverage. Under VX_CFG_TCU_SPARSE_FULLK_ENABLE a
+  // sparse uop drives every FEDP lane with compressed A (fedpK words), so it
+  // covers twice the logical K of a dense uop -- Hopper's wgmma.sp is k32
+  // against dense k16. Otherwise sparse fills only tcK lanes and covers the
+  // dense tile K.
+  // It needs two half-K metadata banks per m-step (WMMA k_steps >= 4).
+#ifdef VX_CFG_TCU_SPARSE_FULLK_ENABLE
+  static constexpr uint32_t sp_k_mult = (wmma_config_t<NT>::k_steps / 2 >= 2) ? (fedpK / tcK) : 1;
+#else
+  static constexpr uint32_t sp_k_mult = 1;
+#endif
+  static constexpr uint32_t tileK_sp  = tileK * sp_k_mult;
+  static constexpr uint32_t sp_k_words = tcK * sp_k_mult; // compressed A words per sparse uop
 };
+
+#if defined(VX_CFG_TCU_SPARSE_FULLK_ENABLE) && !defined(VX_CFG_TCU_FEDP2K)
+#error "VX_CFG_TCU_SPARSE_FULLK_ENABLE requires VX_CFG_TCU_FEDP2K"
+#endif
 
 } // namespace tensor
 } // namespace vortex

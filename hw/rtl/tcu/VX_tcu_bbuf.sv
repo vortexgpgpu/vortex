@@ -80,7 +80,9 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam BANK_SEL_BITS      = $clog2(NUM_BANKS);
     localparam WORD_SIZE_LOG2     = $clog2(`VX_CFG_XLEN / 8);
     localparam B_BLOCK_WORDS      = TCU_WG_FEDP_K * TCU_TC_N;
-    localparam B_BLOCK_WORDS_SP   = TCU_TC_K * TCU_TC_N;
+    // K-major sparse: the two storage slots split at a K-word group boundary,
+    // which sparse FULLK moves to fedpK words.
+    localparam B_KMAJ_SPLIT_SP    = TCU_WG_SP_K_WORDS * TCU_TC_N;
     localparam B_BUF_WORDS        = NUM_BANKS;             // storage per slot
                                                            // (= 1 logical 32-bit bank-row)
     localparam LG_B_SUB_BLOCKS    = $clog2(TCU_WG_B_SUB_BLOCKS);
@@ -506,21 +508,21 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 // two sparse candidates adjacent — word (z*2 + cand) holds the
                 // FEDP's bword{cand} for K-step z.
                 // The FEDP reads rs2[k_idx*(TC_N*2) + j*2 + cand] with k_idx=z;
-                // slot_a||slot_b splits at B_BLOCK_WORDS_SP (= TC_K*TC_N).
+                // slot_a||slot_b splits at B_KMAJ_SPLIT_SP (= SP_K_WORDS*TC_N).
                 // Drive each (z,cand) word to its exact flat target and route by slot.
-                for (int z = 0; z < TCU_TC_K; ++z) begin
+                for (int z = 0; z < TCU_WG_SP_K_WORDS; ++z) begin
                     for (int c = 0; c < 2; ++c) begin
                         automatic int src = int'(km_lane_rsp) + z * 2 + c;
                         automatic int tgt = z * (TCU_TC_N * 2) + int'(km_rsp_ctr_r) * 2 + c;
                         if (src < (NUM_BANKS * XLEN_RATIO) && in_fetch_a) begin
-                            if (tgt < int'(B_BLOCK_WORDS_SP)) begin
+                            if (tgt < int'(B_KMAJ_SPLIT_SP)) begin
                                 if (tgt < B_BUF_WORDS) begin
                                     storage_a_wren[tgt]             = 1'b1;
                                     storage_a_wdata[tgt * 32 +: 32] =
                                         tcu_lmem_if.rsp_data.data[src * 32 +: 32];
                                 end
                             end else begin
-                                automatic int tgt_b = tgt - int'(B_BLOCK_WORDS_SP);
+                                automatic int tgt_b = tgt - int'(B_KMAJ_SPLIT_SP);
                                 if (tgt_b < B_BUF_WORDS) begin
                                     storage_b_wren[tgt_b]             = 1'b1;
                                     storage_b_wdata[tgt_b * 32 +: 32] =
@@ -623,11 +625,11 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         for (int lane = 0; lane < TCU_WG_RS2_WIDTH; ++lane) begin
             if (slot_is_sparse_r) begin
                 if (slot_row_major_r) begin
-                    if (lane < int'(B_BLOCK_WORDS_SP)) begin
+                    if (lane < int'(B_KMAJ_SPLIT_SP)) begin
                         rs2_mux[lane] = `VX_CFG_XLEN'(storage_a_rdata[lane]);
-                    end else if (lane < int'(2 * B_BLOCK_WORDS_SP)) begin
+                    end else if (lane < int'(2 * B_KMAJ_SPLIT_SP)) begin
                         rs2_mux[lane] = `VX_CFG_XLEN'(
-                            storage_b_rdata[lane - int'(B_BLOCK_WORDS_SP)]);
+                            storage_b_rdata[lane - int'(B_KMAJ_SPLIT_SP)]);
                     end
                 end else begin
                     automatic int unsigned k_idx_l = lane / (TCU_TC_N * 2);
@@ -649,6 +651,13 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         end
     end
     assign bbuf_rs2_data = rs2_mux;
+
+    `STATIC_ASSERT (B_KMAJ_SPLIT_SP <= B_BUF_WORDS,
+                    ("K-major sparse candidate lanes exceed the two B storage slots"))
+    // Sparse FULLK B has only the K-major layout: a block-major sparse block
+    // holds tcK K words.
+    `RUNTIME_ASSERT (~(req_valid && req_is_sparse && (TCU_WG_SP_FULLK != 0) && !req_wants_kmajor),
+        ("%s sparse FULLK WGMMA requires a K-major B descriptor (ldm != 0)", INSTANCE_ID))
 
     // -----------------------------------------------------------------------
     // Performance counters

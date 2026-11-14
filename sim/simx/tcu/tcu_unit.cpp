@@ -41,6 +41,13 @@ static constexpr bool kFedp2K = true;
 #else
 static constexpr bool kFedp2K = false;
 #endif
+// Sparse FULLK: a sparse WGMMA uop covers fedpK compressed A words. RS modes
+// whose uops read A from both rs1 and rs2 (dense FEDP2K, sparse FULLK) carry
+// the B descriptor in a leading setup uop.
+static constexpr bool kSpFullK = (wg_cfg::sp_k_mult > 1);
+static constexpr bool wgmma_needs_setup(bool is_a_smem, bool is_sparse) {
+  return kFedp2K && !is_a_smem && (!is_sparse || kSpFullK);
+}
 
 // Dot-product pipeline depth of the configured tensor-PE type.
 static constexpr uint32_t kFedpLatency = VX_CFG_TCU_LATENCY;
@@ -834,7 +841,7 @@ public:
       }
 
       bool is_sparse = (tcu_type == TcuType::WGMMA_SP);
-      bool needs_setup = kFedp2K && !tpuArgs.is_a_smem && !is_sparse;
+      bool needs_setup = wgmma_needs_setup(tpuArgs.is_a_smem, is_sparse);
       if (tpuArgs.is_first_uop && !needs_setup) {
         // The first compute uop carries the live descriptors.
         if (tpuArgs.is_a_smem) {
@@ -1002,7 +1009,7 @@ public:
     uint32_t ratio   = 32 / e_bits;
     uint32_t xtile_n = xtile_n_of(req.cd_nregs);
     uint32_t n_steps = xtile_n / cfg::tcN;
-    uint32_t k_words = req.is_sparse ? cfg::tcK : kFedpWords;
+    uint32_t k_words = req.is_sparse ? wg_cfg::sp_k_words : kFedpWords;
     bool kmajor = (sd_b.ldm != 0);
 
     // (step_k, step_n) blocks this refill brings in.
@@ -1040,7 +1047,9 @@ public:
     uint32_t e_bits  = elem_bits(req.fmt_s);
     uint32_t ratio   = 32 / e_bits;
     uint32_t xtile_n = xtile_n_of(req.cd_nregs);
-    uint32_t k_words = req.is_sparse ? cfg::tcK : kFedpWords;
+    // Sparse FULLK compressed A has the dense per-uop shape (fedpK words).
+    bool sparse_a    = req.is_sparse && !kSpFullK;
+    uint32_t k_words = sparse_a ? cfg::tcK : kFedpWords;
 
     std::vector<uint64_t> lines;
     for (uint32_t row = 0; row < wg_cfg::m_steps * cfg::tcM; ++row) {
@@ -1048,14 +1057,14 @@ public:
         uint32_t k_elem = (req.step_k * k_words + z) * ratio;
         for (uint32_t e = 0; e < ratio; ++e) {
           uint64_t off = elem_offset(sd_a, row, k_elem + e, e_bits, xtile_n,
-                                     false, false, req.is_sparse);
+                                     false, false, sparse_a);
           lines.push_back((sd_a.base + off * e_bits / 8) & kLineMask);
         }
       }
     }
 
     uint32_t num_reads = (sd_a.ldm != 0) ? (wg_cfg::m_steps * cfg::tcM)
-                       : req.is_sparse ? kAStripeReadsSp : kAStripeReads;
+                       : sparse_a ? kAStripeReadsSp : kAStripeReads;
     return split_reads(std::move(lines), num_reads);
   }
 
@@ -1183,7 +1192,7 @@ public:
     }
 
     uint32_t ratio   = elem_ratio(fmt_s);
-    uint32_t k_words = is_sparse ? cfg::tcK : kFedpWords;
+    uint32_t k_words = is_sparse ? wg_cfg::sp_k_words : kFedpWords;
     uint32_t e_bits = elem_bits(fmt_s);
 
     // Decode smem descriptors (B always from smem, A optionally).
@@ -1201,6 +1210,12 @@ public:
 
     lmem_desc_t sd_a = lmem_desc_[wid][0];
     lmem_desc_t sd_b = lmem_desc_[wid][1];
+    if (is_sparse && kSpFullK && sd_b.ldm == 0) {
+      // A block-major sparse B block holds tcK K words, not the fedpK a
+      // FULLK uop consumes.
+      std::cout << "Error: sparse FULLK WGMMA requires a K-major B descriptor (ldm != 0)" << std::endl;
+      std::abort();
+    }
     // load_lmem_word distinguishes A from B by descriptor base.
     cur_a_desc_base_ = is_a_smem ? sd_a.base : ~uint64_t(0);
     cur_is_sparse_ = is_sparse;
@@ -1232,9 +1247,11 @@ public:
     if (is_sparse) {
       uint32_t ebits       = elem_bits(fmt_s);
       uint32_t rtl_i_ratio = 32 / ebits;
-      uint32_t meta_row_w  = k_words * 2 * rtl_i_ratio;
-      // Bank encoding {step_m, step_k_half}: m=1 → bank (cfg::k_steps/2).
-      uint32_t wg_bank = step_m * (cfg::k_steps / 2) + step_k;
+      // One metadata bank per tcK compressed words: bank {step_m,
+      // step_k_half}, m=1 -> bank (cfg::k_steps/2). A sparse FULLK uop spans
+      // two banks (its upper FEDP half reads {step_m, 1}).
+      uint32_t meta_row_w  = cfg::tcK * 2 * rtl_i_ratio;
+      uint32_t wg_bank = 0;
       // Metadata is preloaded into sparse_meta_ via TCU_LD before dispatch.
       auto meta_bit_wg = [&](uint32_t bit_idx) -> uint32_t {
         uint32_t word_idx = wg_bank * kMaxMetaCols + bit_idx / 32;
@@ -1253,10 +1270,12 @@ public:
         for (uint32_t j = 0; j < cfg::tcN; ++j) {
           uint32_t b_col_idx = step_n * cfg::tcN + j;
           for (uint32_t z = 0; z < k_words; ++z) {
+            uint32_t zz = z % cfg::tcK;
+            wg_bank = step_m * (cfg::k_steps / 2) + step_k + z / cfg::tcK;
             uint32_t lo = 0, hi = 0;
             for (uint32_t b = 0; b < rtl_i_ratio; ++b) {
-              lo |= meta_bit_wg(row_base + rtl_i_ratio * z              + b) << b;
-              hi |= meta_bit_wg(row_base + rtl_i_ratio * (k_words + z) + b) << b;
+              lo |= meta_bit_wg(row_base + rtl_i_ratio * zz              + b) << b;
+              hi |= meta_bit_wg(row_base + rtl_i_ratio * (cfg::tcK + zz) + b) << b;
             }
             constexpr uint32_t kCompression = 2;
             uint32_t k_elem_b0 = (step_k * k_words + z) * ratio * kCompression;
@@ -1554,7 +1573,8 @@ private:
     if (desc.base == cur_a_desc_base_) {
       uint32_t b = cur_block_;
       return gather_word([&](uint64_t addr) { return tbuf->read_a(b, addr); },
-                         desc, row, col, fmt_s, pack_along_row, false, cur_is_sparse_);
+                         desc, row, col, fmt_s, pack_along_row, false,
+                         cur_is_sparse_ && !kSpFullK);
     }
     return gather_word([&](uint64_t addr) { return tbuf->read_b(addr); },
                        desc, row, col, fmt_s, pack_along_row, sparse_b, false);
@@ -1689,7 +1709,7 @@ uint32_t TcuUopGen::uop_count(const Instr& instr) {
 #ifdef VX_CFG_TCU_WGMMA_ENABLE
   if (tcu_is_wgmma(tcu_type)) {
     bool is_sparse = tcu_is_sparse(tcu_type);
-    bool needs_setup = kFedp2K && !args.is_a_smem && !is_sparse;
+    bool needs_setup = wgmma_needs_setup(args.is_a_smem, is_sparse);
     uint32_t nrc = (args.cd_nregs == 0) ? 8 : (args.cd_nregs == 1) ? 16 : 32;
     uint32_t k_count = is_sparse ? std::max(1u, wg_cfg::k_steps / 2) : wg_cfg::k_steps;
     uint32_t mma_uops = k_count * nrc;
@@ -1791,7 +1811,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
     uint32_t fmt_d = args.fmt_d;
     bool is_sparse = tcu_is_sparse(tcu_type);
     bool is_a_smem = args.is_a_smem;
-    bool needs_setup = kFedp2K && !is_a_smem && !is_sparse;
+    bool needs_setup = wgmma_needs_setup(is_a_smem, is_sparse);
     uint32_t cd_nregs = args.cd_nregs;
     uint32_t k_count = is_sparse ? std::max(1u, k_steps / 2) : k_steps;
     uint32_t total = uop_count(macro_instr);
@@ -1832,7 +1852,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
                                      fmt_s, fmt_d, m, n, k, first ? 1u : 0u, last ? 1u : 0u, 0});
       uop_instr->set_dest_reg(r, RegType::Float);
       if (!is_a_smem) {
-        uint32_t rs1_off = is_sparse ? m : (m * a_reg_k_steps + k);
+        uint32_t rs1_off = (is_sparse && !kSpFullK) ? m : (m * a_reg_k_steps + k);
         uop_instr->set_src_reg(0, ra_base + rs1_off, RegType::Float);
         if (needs_setup)
           uop_instr->set_src_reg(1, ra_base + rs1_off + 1, RegType::Float);
