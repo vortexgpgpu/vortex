@@ -584,13 +584,22 @@ public:
 
     uint64_t now = SimPlatform::instance().cycles();
     for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
-      // A result completing while an earlier one still waits for the commit
-      // side holds admission for the cycle. Results already visible but not
-      // taken are the output occupancy beyond those still in flight.
+      // A result completing in a cycle the result port refuses it holds
+      // admission for the cycle. The port refuses while the lane-gather
+      // buffer is full and, in VX_tcu_block, while the AGU's TCU_LD result
+      // takes it.
       auto& due = result_due_.at(b);
       due.erase(std::remove_if(due.begin(), due.end(), [now](uint64_t t) { return t < now; }), due.end());
       bool completing = std::any_of(due.begin(), due.end(), [now](uint64_t t) { return t == now; });
-      bool backed_up = simobject_->Outputs.at(b).size() > due.size();
+      bool result_ready = true;
+      auto& stall_in = simobject_->result_stall_in.at(b);
+      while (!stall_in.empty()) {
+        result_ready &= (stall_in.peek() != now);
+        stall_in.pop();
+      }
+    #ifdef TCU_META_ENABLE
+      result_ready &= !agu_.at(b).complete;
+    #endif
       auto& input = simobject_->Inputs.at(b);
       if (input.empty())
         continue;
@@ -613,7 +622,7 @@ public:
       }
     #endif
 
-      if (completing && backed_up) {
+      if (completing && !result_ready) {
         continue;
       }
 
@@ -1866,6 +1875,7 @@ TcuUnit::TcuUnit(const SimContext &ctx, const char* name, Core* core)
 	, agu_req_out(TCU_AGU_PORTS, this)
 	, agu_rsp_in(TCU_AGU_PORTS, this)
 #endif
+	, result_stall_in(VX_CFG_NUM_TCU_BLOCKS, this)
 	, impl_(new Impl(this, core))
 {}
 
