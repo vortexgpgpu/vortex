@@ -332,6 +332,23 @@ package VX_tcu_pkg;
         return (tile_elems + block_elems - 1) / block_elems;
     endfunction
 
+    // log2 of mx_scale_blocks_k_words: elements per word, block sizes and a
+    // power-of-two tile K make the block count a power of two (or 0 for a
+    // format without elements), so it scales an index by a shift.
+    function automatic int unsigned mx_scale_blocks_k_lg2(
+        input logic [TCU_FMT_WIDTH-1:0] fmt,
+        input int unsigned tile_k_words
+    );
+        automatic int unsigned blocks = mx_scale_blocks_k_words(fmt, tile_k_words);
+        automatic int unsigned lg2 = 0;
+        for (int unsigned i = 1; i < 32; ++i) begin
+            if (blocks == (1 << i)) begin
+                lg2 = i;
+            end
+        end
+        return lg2;
+    endfunction
+
     function automatic int unsigned mx_scale_blocks_k(input logic [TCU_FMT_WIDTH-1:0] fmt);
         return mx_scale_blocks_k_words(fmt, TCU_TILE_K);
     endfunction
