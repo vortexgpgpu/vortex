@@ -755,8 +755,8 @@ module VX_tcu_tmem import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     assign job_meta_hi = job_meta_hi_c;
 `endif
 
-    for (genvar b = 0; b < BLOCK_SIZE; ++b) begin : g_job
-        always_comb begin
+    always_comb begin
+        for (int b = 0; b < BLOCK_SIZE; ++b) begin
             job_data[b] = '0;
             job_data[b].header.uuid   = e_uuid_r;
             job_data[b].header.wid    = e_wid_r;
