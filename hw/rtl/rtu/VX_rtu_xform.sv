@@ -47,7 +47,7 @@ module VX_rtu_xform import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     localparam F       = LATENCY_FMA;
     localparam LATENCY = 3 * F;            // three dependent FMAs
 
-    localparam [INST_FMT_BITS-1:0] FMT_ADD = 2'b00;
+    localparam MOD_ADD = 1'b0;
 
     // column j of the matrix and the ray's j component, held until step j
     wire [2:0][2:0][31:0] col;             // [j][row]
@@ -87,20 +87,20 @@ module VX_rtu_xform import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             // (so the product keeps its own zero sign)
             VX_fma_unit #(.USE_DSP (`VX_CFG_RTU_USE_DSP), .LATENCY (F), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (1)) fma_s0 (
                 .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
-                .op_type (INST_FPU_MADD), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
+                .op_type (INST_FPU_MADD), .op_mod (MOD_ADD), .frm (INST_FRM_RNE),
                 .dataa ((k == 0) ? ro[0] : rd[0]), .datab (col[0][i]),
                 .datac ((k == 0) ? xform[4*i + 3] : 32'h80000000),
                 .result (acc0[i][k]), `UNUSED_PIN (fflags)
             );
             VX_fma_unit #(.USE_DSP (`VX_CFG_RTU_USE_DSP), .LATENCY (F), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (1)) fma_s1 (
                 .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
-                .op_type (INST_FPU_MADD), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
+                .op_type (INST_FPU_MADD), .op_mod (MOD_ADD), .frm (INST_FRM_RNE),
                 .dataa (ray1_d[k]), .datab (col1_d[i]), .datac (acc0[i][k]),
                 .result (acc1[i][k]), `UNUSED_PIN (fflags)
             );
             VX_fma_unit #(.USE_DSP (`VX_CFG_RTU_USE_DSP), .LATENCY (F), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (1)) fma_s2 (
                 .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
-                .op_type (INST_FPU_MADD), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
+                .op_type (INST_FPU_MADD), .op_mod (MOD_ADD), .frm (INST_FRM_RNE),
                 .dataa (ray2_d[k]), .datab (col2_d[i]), .datac (acc1[i][k]),
                 .result (acc2[i][k]), `UNUSED_PIN (fflags)
             );
