@@ -1230,8 +1230,21 @@ package VX_gpu_pkg;
         logic [`VX_CFG_MEM_ADDR_WIDTH-1:0] param;
         logic [7:0]                        ctx_id;
         logic [`VX_CFG_LMEM_LOG_SIZE:0]    aligned_lmem_size;
+        logic [`VX_CFG_NUM_WARPS-1:0]      lmem_slots; // see lmem_slots_fit
         kmu_args_t                         args;   // .compute | .fragment
     } kmu_req_t;
+
+    // The CTA slots whose LMEM partition fits, as a thermometer: bit m-1 is set
+    // iff m CTAs of `stride` bytes fit, tested as stride <= floor(LMEM_SIZE/m),
+    // a constant per m. All fit when stride is 0, and slot 0 always does: a CTA
+    // larger than the capacity still makes progress, at the cost of writing
+    // past its slot.
+    function automatic logic [`VX_CFG_NUM_WARPS-1:0] lmem_slots_fit(input logic [`VX_CFG_LMEM_LOG_SIZE:0] stride);
+        for (integer m = 1; m <= `VX_CFG_NUM_WARPS; ++m) begin
+            lmem_slots_fit[m-1] = (m == 1) || (stride == '0)
+                || ((`VX_CFG_LMEM_LOG_SIZE+NW_WIDTH+2)'(stride) <= (`VX_CFG_LMEM_LOG_SIZE+NW_WIDTH+2)'(`VX_CFG_LMEM_SIZE / m));
+        end
+    endfunction
 
     // ── KMU launch messages ──────────────────────────────────────────────
     // Every beat is a self-contained kmu_req_t -- a fragment carries its stamps in

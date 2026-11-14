@@ -204,6 +204,18 @@ tests:
     clusters: 2
     cores: 2
     l2cache: true
+# Back-to-back cluster launches: windows stay aligned to each launch's K, and
+# each CTA is admitted against its own kernel's slot capacity.
+- id: cta_cluster-relaunch
+  touches: [hw/rtl/VX_kmu.sv, hw/rtl/core/VX_cta_dispatch.sv,
+            sim/simx/kmu/, sim/simx/cta_dispatcher.cpp]
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: cta_cluster
+  args: -l2,1,64 -l4,2,64 -l2,1,8192
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_WARPS=8
 - id: sgemm2_dxa-1
   via: blackbox
   drivers:

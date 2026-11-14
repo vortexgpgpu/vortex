@@ -130,6 +130,7 @@ module VX_raster_launch import VX_gpu_pkg::*, VX_raster_pkg::*; #(
         frag_req.param             = `VX_CFG_MEM_ADDR_WIDTH'(frag_param_r);
         frag_req.ctx_id            = '0;
         frag_req.aligned_lmem_size = '0;                          // FS declares no LMEM
+        frag_req.lmem_slots        = '1;
         frag_req.args.fragment.stamps = lane_slice;
         frag_req.args.fragment.count  = count_r;
     end

@@ -85,20 +85,26 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     //                  members are co-resident on one core), so NW_WIDTH+1 bits
     //                  suffice; each dim is sliced to that width.
     //   aligned_lmem_size : per-CTA LMEM footprint rounded up to MEM_BLOCK_SIZE.
-    // Registered so the broadcast path is flop-driven; DCRs are written before
-    // `start`, so both values are settled before the first CTA is dispatched.
+    //   lmem_slots        : the CTA slots that footprint fits (lmem_slots_fit).
+    // Registered so the broadcast path is flop-driven. All three settle one
+    // cycle after their DCR write, the same cycle, and DCRs are written before
+    // `start`, so all are settled before the first CTA is dispatched.
+    wire [`VX_CFG_LMEM_LOG_SIZE:0] aligned_lmem_size_w =
+        ((`VX_CFG_LMEM_LOG_SIZE+1)'(dcr_lmem_size) + (`VX_CFG_LMEM_LOG_SIZE+1)'(`VX_CFG_MEM_BLOCK_SIZE - 1))
+        & ~((`VX_CFG_LMEM_LOG_SIZE+1)'(`VX_CFG_MEM_BLOCK_SIZE - 1));
     reg [NW_WIDTH:0]                 cluster_size_r;
     reg [`VX_CFG_LMEM_LOG_SIZE:0]    aligned_lmem_size_r;
+    reg [`VX_CFG_NUM_WARPS-1:0]      lmem_slots_r;
     always_ff @(posedge clk) begin
         if (reset) begin
             cluster_size_r      <= (NW_WIDTH+1)'(1);
             aligned_lmem_size_r <= '0;
+            lmem_slots_r        <= '1;
         end else begin
             cluster_size_r <= (NW_WIDTH+1)'(dcr_cluster_dim[0] * dcr_cluster_dim[1]
                                           * dcr_cluster_dim[2]);
-            aligned_lmem_size_r <=
-                ((`VX_CFG_LMEM_LOG_SIZE+1)'(dcr_lmem_size) + (`VX_CFG_LMEM_LOG_SIZE+1)'(`VX_CFG_MEM_BLOCK_SIZE - 1))
-                & ~((`VX_CFG_LMEM_LOG_SIZE+1)'(`VX_CFG_MEM_BLOCK_SIZE - 1));
+            aligned_lmem_size_r <= aligned_lmem_size_w;
+            lmem_slots_r        <= lmem_slots_fit(aligned_lmem_size_w);
         end
     end
 
@@ -355,6 +361,7 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     assign kmu_req.param     = `VX_CFG_MEM_ADDR_WIDTH'(dcr_param);
     assign kmu_req.ctx_id    = ctx_id_r;
     assign kmu_req.aligned_lmem_size = aligned_lmem_size_r;
+    assign kmu_req.lmem_slots = lmem_slots_r;
     assign kmu_req.args.compute = kmu_comp;
 
     // A compute message is one CLUSTER and carries no placement hint: the fan-out

@@ -319,12 +319,14 @@ Within one kernel every CTA has the same aligned footprint, so LMEM is
 partitioned into equal slots of pitch `stride = aligned_lmem_size`. Slot *i*
 owns bytes `[i·stride, (i+1)·stride)` **for the whole kernel**.
 
-- **Occupancy bound.** `usable_slots_r` = the largest *m* in `[1, NUM_WARPS]`
-  with `m·stride ≤ LMEM_SIZE`, computed by a `NUM_WARPS`-wide comparator tree
-  and **registered** ([`:330-345`](../../hw/rtl/core/VX_cta_dispatch.sv#L330)).
+- **Occupancy bound.** `usable_slots` = the largest *m* in `[1, NUM_WARPS]`
+  with `m·stride ≤ LMEM_SIZE`, as a thermometer (`lmem_slots_fit` in
+  `VX_gpu_pkg`). It is a kernel constant: the KMU computes it once, beside
+  `aligned_lmem_size`, and every launch beat carries it as `lmem_slots`, so each
+  CTA is admitted against its own kernel's map, from a flop-driven field.
   `m·stride` is constant-times-variable, so there is no divider. `stride == 0`
   ⇒ all slots usable; a stride exceeding LMEM clamps to 1 rather than 0.
-- **Standalone admission.** Round-robin `tail_r` over `[0, usable_slots_r)`;
+- **Standalone admission.** Round-robin `tail_r` over `[0, usable_slots)`;
   admit when `slot_valid_r[base_slot] == 0`.
 - **Slot LMEM base** = `base_slot · stride`, a small multiply latched at
   accept into `cur_lmem_base_r` — off the ready path — and exposed as
@@ -337,20 +339,26 @@ owns bytes `[i·stride, (i+1)·stride)` **for the whole kernel**.
 ![cluster admission](../assets/img/cta_cluster_sequence.svg)
 
 A first-of-cluster beat reserves K = `cluster_size` **consecutive** usable
-slots, pre-wrapping to 0 if the window would overrun `usable_slots_r`:
+slots at `tail_r`. A window of K > 1 restarts at slot 0 when it would overrun
+the usable range (`lmem_slots`), or when K differs from the last window's size
+(`win_k_r`):
 
 ```systemverilog
-cluster_k       = clamp(eff_cluster_size, 1, usable_slots_r);
-cluster_prewrap = is_first_of_cluster && ((base_tail + cluster_k) > usable_ext);
-base_slot       = cluster_prewrap ? 0 : base_tail;
-cluster_window  = ((1 << cluster_k) - 1) << base_slot;
-admit_ok        = is_first_of_cluster ? ((slot_valid_r & cluster_window) == 0)
-                                      : ~slot_valid_r[base_slot];
+window_ones      = cluster_therm(K) & lmem_slots; // K slots, clamped to the usable count
+win_k_new        = (K > 1) && (K != win_k_r);
+window_fits_tail = ((cluster_therm(K) & ~tail_room) == 0) && !win_k_new;
+base_zero        = is_first_of_cluster ? ~window_fits_tail : ~tail_usable;
+base_slot        = base_zero ? 0 : tail_r;
+admit_ok         = is_first_of_cluster ? ((slot_valid_r & (window_ones << base_slot)) == 0)
+                                       : ~slot_valid_r[base_slot];
 ```
 
 All K must be free **up front**, so the following members never stall
-mid-cluster. K is clamped, never rejected: a cluster larger than co-residency
-degenerates rather than deadlocking.
+mid-cluster. `tail_r` survives launches and is a multiple of `win_k_r`, so
+every window is aligned to its own size and `CTA_ID % CTA_CLUSTER_SIZE` is the
+member's rank. A window clamped to the usable count stores `win_k_r = 0`, so
+the next window restarts at 0. K is clamped, never rejected: a cluster larger
+than co-residency degenerates rather than deadlocking.
 
 The window is a **test, not a claim** — nothing marks the other K−1 slots
 reserved. They stay free in `slot_valid_r`, and what protects them is only
@@ -703,7 +711,7 @@ Host-side, `cluster_dim[3]` is a field of `vx_launch_info_t`
 | Warps per CTA | `ceil(block_size / NUM_THREADS)` | expansion cost in cycles |
 | Launch rate | 1 CTA per `ceil(block_size/NT)` cycles per core | dispatcher-limited, not KMU-limited |
 | Cores fed | `NUM_CLUSTERS × NUM_CORES` | one KMU, a single-stage router per hierarchy level |
-| Cluster size K | ≤ `usable_slots_r` | clamped, not rejected |
+| Cluster size K | ≤ the usable slot count (`lmem_slots`) | clamped, not rejected |
 
 The KMU is a **single serial walker** for the whole device: one CTA per
 cycle, maximum. With enough cores that is the launch bottleneck for
@@ -754,8 +762,9 @@ The differences are deliberate, not drift:
 |---|---|---|
 | Per-lane thread index | precomputed at launch by the TID ripple | divided at CSR-read time |
 | CTA/warp context | BRAM (`cta_ctx_ram`, `cta_warp_ram`) | plain struct fields |
-| `usable_slots` | comparator tree | `lmem_capacity_ / stride` |
-| Bus payload | `cluster_size` (scalar), `aligned_lmem_size` | `cluster_dim[3]`, raw `lmem_size` |
+| `usable_slots` | `lmem_slots` thermometer from the KMU | `lmem_capacity_ / stride` |
+| Bus payload | `cluster_size` (scalar), `aligned_lmem_size`, `lmem_slots` | `cluster_dim[3]`, raw `lmem_size` |
+| Slot pointer across launches | kept (`tail_r`, `win_k_r`) | reset with the dispatcher at each launch |
 | `cta_id` on the bus | absent | present (model-only, unused as identity) |
 | Stride rounding | in the KMU | in the dispatcher |
 | Launch pacing | elastic-skid back-pressure | explicit credits (`LAUNCH_CREDITS = 2`) |
@@ -790,7 +799,7 @@ a benign one — SimX computes the product where RTL receives it
    is more area for a case that does not exist yet.
 
 2. **Cluster larger than co-residency degenerates.** `cluster_k` is clamped to
-   `usable_slots_r` (§4.2), so the window test reserves fewer slots than the
+   the usable slot count, `lmem_slots` (§4.2), so the window test reserves fewer slots than the
    message has members. The extra members still land on the same core (the
    lock holds) but serialise into slots as they free, and are not
    co-resident — so a `group_barrier` rendezvous over the full K would
