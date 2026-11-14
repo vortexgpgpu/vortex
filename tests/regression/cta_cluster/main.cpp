@@ -20,6 +20,13 @@
 // This is the same intra-core multicast pattern sgemm2_dxa_mcast uses
 // for its B-tile, reduced to the minimum that still demonstrates the
 // API — no matmul tile arithmetic to wade through.
+//
+// Back-to-back launches: each `-l K,G,L` runs one launch with cluster
+// size K, G clusters and L bytes of shared memory per CTA, in order on one
+// device. The CTA dispatcher keeps its slot pointer across launches, so
+// K=2 then K=4 checks that every cluster window stays aligned to its own
+// size (CTA_ID % K is the member's rank), and a larger L checks that each
+// CTA is admitted against its own kernel's slot capacity.
 
 #include <algorithm>
 #include <cstdlib>
@@ -50,9 +57,12 @@ static bool fp_close(TYPE a, TYPE b) {
     return std::abs(fa.i - fb.i) <= 6;
 }
 
+struct launch_spec_t { uint32_t K, G, L; };
+
 static const char* kernel_file = "kernel.vxbin";
 static uint32_t num_clusters = 4;   // G
 static uint32_t verify       = 1;
+static std::vector<launch_spec_t> launch_specs;
 
 static vx_device_h device  = nullptr;
 static vx_queue_h  queue   = nullptr;
@@ -66,15 +76,28 @@ static vx_buffer_h scale_buffer = nullptr;
 constexpr uint32_t kDescScale = 0;
 
 static void show_usage() {
-    std::cout << "Usage: [-k kernel] [-g num_clusters] [-q skip_verify] [-h]\n";
+    std::cout << "Usage: [-k kernel] [-g num_clusters] [-l K,G,L]... [-q skip_verify] [-h]\n"
+              << "  -l K,G,L  one launch of G clusters of K CTAs with L bytes of shared\n"
+              << "            memory each; repeat for back-to-back launches. Default: one\n"
+              << "            launch with K = warps per core and L = one memory block.\n";
+}
+
+static launch_spec_t parse_launch_spec(const char* s) {
+    launch_spec_t r{};
+    if (sscanf(s, "%u,%u,%u", &r.K, &r.G, &r.L) != 3 || r.K == 0 || r.G == 0) {
+        std::cerr << "Error: bad launch spec '" << s << "', expected K,G,L\n";
+        exit(-1);
+    }
+    return r;
 }
 
 static void parse_args(int argc, char** argv) {
     int c;
-    while ((c = getopt(argc, argv, "k:g:qh")) != -1) {
+    while ((c = getopt(argc, argv, "k:g:l:qh")) != -1) {
         switch (c) {
             case 'k': kernel_file  = optarg; break;
             case 'g': num_clusters = atoi(optarg); break;
+            case 'l': launch_specs.push_back(parse_launch_spec(optarg)); break;
             case 'q': verify       = 0; break;
             case 'h': show_usage(); exit(0);
             default:  show_usage(); exit(-1);
@@ -82,12 +105,17 @@ static void parse_args(int argc, char** argv) {
     }
 }
 
+static void release_buffers() {
+    if (X_buffer)     vx_buffer_release(X_buffer);
+    if (Y_buffer)     vx_buffer_release(Y_buffer);
+    if (out_buffer)   vx_buffer_release(out_buffer);
+    if (scale_buffer) vx_buffer_release(scale_buffer);
+    X_buffer = Y_buffer = out_buffer = scale_buffer = nullptr;
+}
+
 static void cleanup() {
     if (device) {
-        if (X_buffer)     vx_buffer_release(X_buffer);
-        if (Y_buffer)     vx_buffer_release(Y_buffer);
-        if (out_buffer)   vx_buffer_release(out_buffer);
-        if (scale_buffer) vx_buffer_release(scale_buffer);
+        release_buffers();
         if (kernel)  vx_kernel_release(kernel);
         if (module_) vx_module_release(module_);
         if (queue)   vx_queue_release(queue);
@@ -95,51 +123,19 @@ static void cleanup() {
     }
 }
 
-int main(int argc, char* argv[]) {
-    parse_args(argc, argv);
-    std::srand(50);
+// One launch of G clusters of K single-warp CTAs, each with lmem_size bytes of
+// shared memory; returns the number of mismatched outputs.
+static int run_launch(uint32_t K, uint32_t G, uint32_t lmem_size,
+                      uint32_t elems_per_cta, int tag) {
+    const uint32_t num_ctas    = G * K;
+    const uint32_t num_elems   = num_ctas * elems_per_cta;
+    const uint32_t buf_bytes   = num_elems * sizeof(TYPE);
+    const uint32_t scale_bytes = G * sizeof(TYPE);
 
-    RT_CHECK(vx_device_open(0, &device));
-    vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
-    RT_CHECK(vx_queue_create(device, &qi, &queue));
+    std::cout << "launch " << tag << ": N elements = " << num_elems
+              << ", K (cluster) = " << K << ", clusters = " << G
+              << ", lmem/CTA = " << lmem_size << " bytes\n";
 
-    uint64_t isa_flags = 0;
-    RT_CHECK(vx_device_query(device, VX_CAPS_ISA_FLAGS, &isa_flags));
-    if ((isa_flags & VX_ISA_EXT_DXA) == 0) {
-        std::cerr << "Error: DXA ISA extension is disabled in runtime CONFIGS.\n";
-        cleanup();
-        return -1;
-    }
-
-    uint64_t num_threads = 0, num_warps = 0;
-    RT_CHECK(vx_device_query(device, VX_CAPS_NUM_THREADS, &num_threads));
-    RT_CHECK(vx_device_query(device, VX_CAPS_NUM_WARPS,   &num_warps));
-
-    // One cluster fills one core (= num_warps single-warp CTAs).
-    const uint32_t K              = (uint32_t)num_warps;
-    const uint32_t elems_per_cta  = (uint32_t)num_threads;
-    const uint32_t num_ctas       = num_clusters * K;
-    const uint32_t num_elems      = num_ctas * elems_per_cta;
-    const uint32_t buf_bytes      = num_elems * sizeof(TYPE);
-    const uint32_t scale_bytes    = num_clusters * sizeof(TYPE);
-    // cta_dispatcher rounds each CTA's LMEM up to VX_CFG_MEM_BLOCK_SIZE so
-    // consecutive CTAs land at block-aligned offsets; the DXA multicast
-    // descriptor's smem_stride must match that, else peer CTAs receive the
-    // scale at the wrong SMEM offset.
-    const uint32_t lmem_size      = VX_CFG_MEM_BLOCK_SIZE;
-
-    std::cout << "cta_cluster — broadcast SAXPY: out[i] = scale[i/K] * x[i] + y[i]\n"
-              << "  N elements  = " << num_elems << "\n"
-              << "  K (cluster) = " << K  << "  (each cluster fills one core)\n"
-              << "  clusters    = " << num_clusters << "\n";
-    std::cout << "  scale stream bandwidth:\n"
-              << "    without cluster_dim : " << num_ctas
-              << " loads (each CTA fetches its own copy)\n"
-              << "    with    cluster_dim : " << num_clusters
-              << " loads (rank-0 fetches, multicasts to K-1 peers)\n"
-              << "    saving              : " << (K - 1) << "x on scale[]\n";
-
-    // Buffers.
     RT_CHECK(vx_buffer_create(device, buf_bytes,   VX_MEM_READ,  &X_buffer));
     RT_CHECK(vx_buffer_create(device, buf_bytes,   VX_MEM_READ,  &Y_buffer));
     RT_CHECK(vx_buffer_create(device, buf_bytes,   VX_MEM_WRITE, &out_buffer));
@@ -154,12 +150,12 @@ int main(int argc, char* argv[]) {
     kargs.elems_per_cta = elems_per_cta;
 
     std::vector<TYPE> hX(num_elems), hY(num_elems);
-    std::vector<TYPE> hScale(num_clusters);
+    std::vector<TYPE> hScale(G);
     for (uint32_t i = 0; i < num_elems; ++i) {
         hX[i] = (TYPE)std::rand() / RAND_MAX;
         hY[i] = (TYPE)std::rand() / RAND_MAX;
     }
-    for (uint32_t c = 0; c < num_clusters; ++c) {
+    for (uint32_t c = 0; c < G; ++c) {
         hScale[c] = (TYPE)std::rand() / RAND_MAX;
     }
 
@@ -172,14 +168,10 @@ int main(int argc, char* argv[]) {
     // members receive scale[cluster_id] in lockstep at the same SMEM
     // slot 0.
     RT_CHECK(vortex::dxa::program_1d(device, kDescScale, kargs.scale_addr,
-        /*size0=*/num_clusters, /*tile0=*/1, /*elem_bytes=*/sizeof(TYPE)));
+        /*size0=*/G, /*tile0=*/1, /*elem_bytes=*/sizeof(TYPE)));
     // Multicast attribute: the engine writes into the same SMEM offset on
-    // each receiver's LMEM page (a single TYPE-sized slot, declared
-    // lmem_size at launch).
+    // each receiver's LMEM page, one lmem_size stride apart.
     RT_CHECK(vortex::dxa::set_multicast(device, kDescScale, lmem_size));
-
-    RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
-    RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
 
     vx_event_h launch_ev = nullptr;
     {
@@ -217,11 +209,69 @@ int main(int argc, char* argv[]) {
             TYPE ref = hScale[c] * hX[i] + hY[i];
             if (!fp_close(hOut[i], ref)) {
                 if (errors < 16)
-                    printf("*** error: [%u] expected=%f, actual=%f\n",
-                           i, ref, hOut[i]);
+                    printf("*** launch %d error: [%u] expected=%f, actual=%f\n",
+                           tag, i, ref, hOut[i]);
                 ++errors;
             }
         }
+    }
+
+    release_buffers();
+    return errors;
+}
+
+int main(int argc, char* argv[]) {
+    parse_args(argc, argv);
+    std::srand(50);
+
+    RT_CHECK(vx_device_open(0, &device));
+    vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
+    RT_CHECK(vx_queue_create(device, &qi, &queue));
+
+    uint64_t isa_flags = 0;
+    RT_CHECK(vx_device_query(device, VX_CAPS_ISA_FLAGS, &isa_flags));
+    if ((isa_flags & VX_ISA_EXT_DXA) == 0) {
+        std::cerr << "Error: DXA ISA extension is disabled in runtime CONFIGS.\n";
+        cleanup();
+        return -1;
+    }
+
+    uint64_t num_threads = 0, num_warps = 0;
+    RT_CHECK(vx_device_query(device, VX_CAPS_NUM_THREADS, &num_threads));
+    RT_CHECK(vx_device_query(device, VX_CAPS_NUM_WARPS,   &num_warps));
+
+    // Default: one launch where one cluster fills one core (= num_warps
+    // single-warp CTAs). The cta_dispatcher rounds each CTA's LMEM up to
+    // VX_CFG_MEM_BLOCK_SIZE so consecutive CTAs land at block-aligned
+    // offsets; the DXA multicast descriptor's smem_stride must match that,
+    // else peer CTAs receive the scale at the wrong SMEM offset.
+    if (launch_specs.empty()) {
+        const uint32_t K = (uint32_t)num_warps;
+        launch_specs.push_back({K, num_clusters, VX_CFG_MEM_BLOCK_SIZE});
+        std::cout << "cta_cluster — broadcast SAXPY: out[i] = scale[i/K] * x[i] + y[i]\n"
+                  << "  scale stream bandwidth:\n"
+                  << "    without cluster_dim : " << num_clusters * K
+                  << " loads (each CTA fetches its own copy)\n"
+                  << "    with    cluster_dim : " << num_clusters
+                  << " loads (rank-0 fetches, multicasts to K-1 peers)\n"
+                  << "    saving              : " << (K - 1) << "x on scale[]\n";
+    }
+    for (const auto& sp : launch_specs) {
+        if (sp.K > num_warps) {
+            std::cerr << "Error: cluster size " << sp.K << " exceeds the "
+                      << num_warps << " warps of a core\n";
+            cleanup();
+            return -1;
+        }
+    }
+
+    RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
+    RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
+
+    int errors = 0;
+    for (size_t i = 0; i < launch_specs.size(); ++i) {
+        const auto& sp = launch_specs[i];
+        errors += run_launch(sp.K, sp.G, sp.L, (uint32_t)num_threads, (int)i);
     }
 
     cleanup();
