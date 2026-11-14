@@ -17,11 +17,13 @@ ramulator/libramulator.so:
 
 # The GDDR6 device model Ramulator ships but does not build. It registers with
 # Ramulator's factory when the library loads, built as Ramulator builds itself.
+# Ramulator's cmake fetches spdlog and yaml-cpp into ramulator/ext, so the
+# model compiles after it; otherwise the host's spdlog/fmt headers are used.
 RAMULATOR_EXT_DIR := ramulator_ext
 RAMULATOR_EXT_INCS := -isystem ramulator/src -isystem ramulator/ext/spdlog/include -isystem ramulator/ext/yaml-cpp/include
 RAMULATOR_EXT_CXXFLAGS := -std=c++20 -O3 -DNDEBUG -fPIC $(RAMULATOR_EXT_INCS)
 
-$(RAMULATOR_EXT_DIR)/gddr6.o: ramulator/src/dram/impl/GDDR6.cpp
+$(RAMULATOR_EXT_DIR)/gddr6.o: ramulator/src/dram/impl/GDDR6.cpp | ramulator/libramulator.so
 	mkdir -p $(RAMULATOR_EXT_DIR)
 	$(CXX) $(RAMULATOR_EXT_CXXFLAGS) -c $< -o $@
 
