@@ -1,20 +1,20 @@
 {
   "gfx": {
-    "clock_mhz": 800,
+    "clock_mhz": 1000,
     "config_hash": "f49712b842f2f234",
     "configs": "-DVX_CFG_NUM_THREADS=4 -DVX_CFG_NUM_WARPS=4",
     "dut": "gfx",
     "result": {
       "build_time_s": 175,
-      "cells": 1873933,
-      "endpoints": 239154,
+      "cells": 1875629,
+      "endpoints": 239282,
       "env": {
         "circt": "CIRCT 892a65a01",
         "foldsim": "foldsim d8350bc0f",
         "pdk": "asap7",
         "xlen": 32
       },
-      "ff": 420597,
+      "ff": 420725,
       "fmax_mhz": 874.9,
       "macros": 76,
       "max_stages": 38,
@@ -72,7 +72,7 @@
     }
   },
   "om": {
-    "clock_mhz": 800,
+    "clock_mhz": 1000,
     "config_hash": "3ff478591f29ccf9",
     "configs": "",
     "dut": "om",
@@ -109,7 +109,7 @@
     }
   },
   "raster": {
-    "clock_mhz": 800,
+    "clock_mhz": 1000,
     "config_hash": "f0a4c760f765a429",
     "configs": "",
     "dut": "raster",
@@ -146,12 +146,12 @@
     }
   },
   "rtu": {
-    "clock_mhz": 800,
+    "clock_mhz": 1000,
     "config_hash": "473d8b33a18f36fd",
     "configs": "",
     "dut": "rtu",
     "result": {
-      "build_time_s": 100,
+      "build_time_s": 130,
       "cells": 1060729,
       "endpoints": 105631,
       "env": {
@@ -172,12 +172,12 @@
     }
   },
   "tex": {
-    "clock_mhz": 800,
+    "clock_mhz": 1000,
     "config_hash": "4d47fbece8804eb8",
     "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8",
     "dut": "tex",
     "result": {
-      "build_time_s": 40,
+      "build_time_s": 45,
       "cells": 376164,
       "endpoints": 49445,
       "env": {

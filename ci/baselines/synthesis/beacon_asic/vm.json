@@ -1,6 +1,6 @@
 {
   "vm": {
-    "clock_mhz": 800,
+    "clock_mhz": 1000,
     "config_hash": "d06ba9a368334b96",
     "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8",
     "dut": "vm",

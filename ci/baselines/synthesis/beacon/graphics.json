@@ -1,13 +1,24 @@
 {
   "gfx": {
+    "accepted": {
+      "against": "28fc2c581262d2d7d4e1dc432d50cc303e3dea2e",
+      "regressions": [
+        {
+          "after": 14,
+          "before": null,
+          "kind": "new",
+          "name": "graphics/g_raster_core_0.raster_core/raster_slices_0.raster_earlyz/quad_zprod.d"
+        }
+      ]
+    },
     "clock_mhz": 250,
     "config_hash": "d39e5baadbeea03c",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
     "dut": "gfx",
     "result": {
       "bram": 183.5,
-      "build_time_s": 181,
-      "deep_endpoints": 1818,
+      "build_time_s": 171,
+      "deep_endpoints": 1738,
       "deepest_paths": [
         "19  g_rtu_core_0.rtu_core/scheduler/g_recip_pe.recip_tags/g_shift.g_partial_reset.pipe_free[219] -> g_rtu_core_0.rtu_core/scheduler/g1_idx.d[4]",
         "19  g_rtu_core_0.rtu_core/scheduler/g_recip_pe.recip_tags/g_shift.g_partial_reset.pipe_free[219] -> g_rtu_core_0.rtu_core/scheduler/lvl_q_arr.ra[4]",
@@ -21,17 +32,17 @@
         "18  g_rtu_core_0.rtu_core/scheduler/g_recip_pe.recip_tags/g_shift.g_partial_reset.pipe_free[219] -> g_rtu_core_0.rtu_core/scheduler/ctx_arbiter/g_model1.reqs_mask.d[29]"
       ],
       "dsp": 1140,
-      "endpoints": 314111,
+      "endpoints": 314239,
       "env": {
         "circt": "CIRCT 892a65a01",
         "device": "xcu55c-fsvh2892-2L-e",
         "foldsim": "foldsim d8350bc0f",
         "xlen": 32
       },
-      "ff": 400294,
+      "ff": 400422,
       "fix_levels": 12,
       "interfaces": {},
-      "lut": 319599,
+      "lut": 319847,
       "lutram": 14119,
       "max_levels": 19,
       "pred_fmax_mhz": 264.7,
@@ -120,7 +131,7 @@
         "graphics/g_om_steer_*_steer_pending": 9,
         "graphics/g_raster_core_*_raster_core/packer": 8,
         "graphics/g_raster_core_*_raster_core/raster_mem": 14,
-        "graphics/g_raster_core_*_raster_core/raster_slices_*_raster_earlyz": 16,
+        "graphics/g_raster_core_*_raster_core/raster_slices_*_raster_earlyz": 14,
         "graphics/g_raster_core_*_raster_core/raster_slices_*_raster_slice/block_evaluator/pipe_reg": 9,
         "graphics/g_raster_core_*_raster_core/raster_slices_*_raster_slice/block_evaluator/quad_evaluator/pipe_reg": 12,
         "graphics/g_raster_core_*_raster_core/raster_slices_*_raster_slice/tile_evaluator/g_fifo_queue_*_fifo_queue/g_ebN_fifo_queue/g_depth_n_dp_ram": 8,
@@ -177,19 +188,30 @@
         "tcache/g_cache_wrap_*_cache_wrap/g_cache_cache/g_banks_*_bank/reg_s1": 10
       },
       "uram": 0,
-      "watch_endpoints": 17383,
+      "watch_endpoints": 17007,
       "watch_levels": 8
     }
   },
   "gfxvm": {
+    "accepted": {
+      "against": "28fc2c581262d2d7d4e1dc432d50cc303e3dea2e",
+      "regressions": [
+        {
+          "after": 14,
+          "before": null,
+          "kind": "new",
+          "name": "graphics/g_raster_core_0.raster_core/raster_slices_0.raster_earlyz/quad_zprod.d"
+        }
+      ]
+    },
     "clock_mhz": 250,
     "config_hash": "dda6e15b71ddde55",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
     "dut": "gfxvm",
     "result": {
       "bram": 183.5,
-      "build_time_s": 186,
-      "deep_endpoints": 1969,
+      "build_time_s": 181,
+      "deep_endpoints": 1889,
       "deepest_paths": [
         "19  g_rtu_core_0.rtu_core/scheduler/g_recip_pe.recip_tags/g_shift.g_partial_reset.pipe_free[219] -> g_rtu_core_0.rtu_core/scheduler/g1_idx.d[4]",
         "19  g_rtu_core_0.rtu_core/scheduler/g_recip_pe.recip_tags/g_shift.g_partial_reset.pipe_free[219] -> g_rtu_core_0.rtu_core/scheduler/lvl_q_arr.ra[4]",
@@ -203,17 +225,17 @@
         "18  g_rtu_core_0.rtu_core/scheduler/g_recip_pe.recip_tags/g_shift.g_partial_reset.pipe_free[219] -> g_rtu_core_0.rtu_core/scheduler/ctx_arbiter/g_model1.reqs_mask.d[29]"
       ],
       "dsp": 1140,
-      "endpoints": 328768,
+      "endpoints": 328896,
       "env": {
         "circt": "CIRCT 892a65a01",
         "device": "xcu55c-fsvh2892-2L-e",
         "foldsim": "foldsim d8350bc0f",
         "xlen": 32
       },
-      "ff": 415143,
+      "ff": 415271,
       "fix_levels": 12,
       "interfaces": {},
-      "lut": 330949,
+      "lut": 331197,
       "lutram": 14557,
       "max_levels": 19,
       "pred_fmax_mhz": 256.3,
@@ -313,7 +335,7 @@
         "graphics/g_om_steer_*_steer_pending": 9,
         "graphics/g_raster_core_*_raster_core/packer": 8,
         "graphics/g_raster_core_*_raster_core/raster_mem": 14,
-        "graphics/g_raster_core_*_raster_core/raster_slices_*_raster_earlyz": 16,
+        "graphics/g_raster_core_*_raster_core/raster_slices_*_raster_earlyz": 14,
         "graphics/g_raster_core_*_raster_core/raster_slices_*_raster_slice/block_evaluator/pipe_reg": 9,
         "graphics/g_raster_core_*_raster_core/raster_slices_*_raster_slice/block_evaluator/quad_evaluator/pipe_reg": 12,
         "graphics/g_raster_core_*_raster_core/raster_slices_*_raster_slice/tile_evaluator/g_fifo_queue_*_fifo_queue/g_ebN_fifo_queue/g_depth_n_dp_ram": 8,
@@ -379,7 +401,7 @@
         "ummu/tlb/mshr/reqpool": 10
       },
       "uram": 0,
-      "watch_endpoints": 18681,
+      "watch_endpoints": 18305,
       "watch_levels": 8
     }
   },
@@ -517,7 +539,7 @@
     "dut": "rtu",
     "result": {
       "bram": 16.5,
-      "build_time_s": 40,
+      "build_time_s": 45,
       "deep_endpoints": 848,
       "deepest_paths": [
         "15  rtu_core/scheduler/ray_q[128] -> rtu_core/scheduler/tri_pe/q_a.d[32]",
@@ -576,7 +598,7 @@
     "dut": "tex",
     "result": {
       "bram": 0.0,
-      "build_time_s": 60,
+      "build_time_s": 70,
       "deep_endpoints": 0,
       "deepest_paths": [
         "11  tex_core/tex_addr/pipe_reg0/g_pipe.g_partial_reset.pipe_free[4197] -> tex_core/tex_addr/pipe_reg1/g_pipe.g_partial_reset.pipe_free.d[831]",

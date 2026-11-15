@@ -1,11 +1,11 @@
 {
   "cache": {
-    "clock_mhz": 800,
+    "clock_mhz": 1000,
     "config_hash": "77b79d6c7d9a6fdf",
     "configs": "",
     "dut": "cache",
     "result": {
-      "build_time_s": 30,
+      "build_time_s": 25,
       "cells": 282062,
       "endpoints": 32478,
       "env": {
@@ -26,12 +26,12 @@
     }
   },
   "core": {
-    "clock_mhz": 800,
+    "clock_mhz": 1000,
     "config_hash": "847ad31605be03dd",
     "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8",
     "dut": "core",
     "result": {
-      "build_time_s": 50,
+      "build_time_s": 60,
       "cells": 769936,
       "endpoints": 73708,
       "env": {
@@ -63,7 +63,7 @@
     }
   },
   "lmem": {
-    "clock_mhz": 800,
+    "clock_mhz": 1000,
     "config_hash": "8190e614d4e4d3b6",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_A_ENABLE",
     "dut": "lmem",
@@ -95,12 +95,12 @@
     }
   },
   "top": {
-    "clock_mhz": 800,
+    "clock_mhz": 1000,
     "config_hash": "ce21223ae8e4d63c",
     "configs": "-DVX_CFG_NUM_THREADS=4 -DVX_CFG_NUM_WARPS=4",
     "dut": "top",
     "result": {
-      "build_time_s": 75,
+      "build_time_s": 80,
       "cells": 1438152,
       "endpoints": 169931,
       "env": {
