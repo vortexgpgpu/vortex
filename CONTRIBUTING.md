@@ -34,7 +34,31 @@ correctness issues, attach both the failing run and a known-good run
 External contributions go through GitHub pull requests against
 `master`:
 
-1. Fork the repo and branch from `master`.
+1. Fork the repo and branch from `master`. Name the branch
+   `<type>/<name>`, with one of the types below:
+
+   | type | the branch | example |
+   |---|---|---|
+   | `feature/` | adds a capability: hardware, simulator, runtime or API | `feature/mlp-phase3` |
+   | `fix/` | corrects wrong behavior: a wrong result, hang, crash or regression | `fix/cta-dispatch-relaunch` |
+   | `perf/` | improves cycles, Fmax or area without changing results or capabilities | `perf/sgemv-issue-order` |
+   | `refactor/` | restructures code without changing results, capabilities, cycles or area | `refactor/out-buf-encoding` |
+   | `ci/` | changes CI, gates, baselines, build scripts or tests only | `ci/beacon-merge-base` |
+   | `docs/` | changes documentation only | `docs/fpga-setup-u55c` |
+
+   - When a branch fits more than one type, use the first that applies in
+     the table's order: a fix that ships with its regression test is
+     `fix/`, while a test added on its own is `ci/`.
+   - `<name>` says what changes in two to five words: lowercase letters,
+     digits and hyphens, with no further `/`. Leave out names, dates and
+     issue numbers.
+   - Bare names such as `vk-parity` and other types are not used. If your
+     local branch is named differently, push it under the right name with
+     `git push origin <local>:<type>/<name>`.
+   - The same names apply to branches pushed to this repository.
+   - Maintainers also keep two long-lived types: `release/<version>` for
+     a release line and `archive/<name>` for retired work kept for
+     reference. `master` and `gh-pages` keep their names.
 2. Build out-of-tree and run the regression suite for the area you
    touched before submitting. See [docs/testing.md](docs/testing.md)
    for the full test catalog and
