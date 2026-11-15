@@ -458,7 +458,8 @@ public:
     std::fill(staged_since_.begin(), staged_since_.end(), 0);
     std::fill(head_staged_.begin(), head_staged_.end(), false);
 
-    pending_instrs_.clear();
+    std::fill(pending_instrs_.begin(), pending_instrs_.end(), 0);
+    pending_total_ = 0;
     pending_ifetches_ = 0;
 
     for (auto& holds : gather_holds_) {
@@ -490,7 +491,7 @@ public:
     // launching, a warp active, or an instruction in flight -- so cycles it
     // spends idle before its first CTA, after its last warp, or while the host
     // moves data are not charged to it.
-    if (scheduler_->running() || !pending_instrs_.empty()) {
+    if (scheduler_->running() || pending_total_ != 0) {
       ++perf_stats_.cycles;
     }
     DPN(2, std::flush);
@@ -560,7 +561,7 @@ public:
 
       fetch_latch->push(trace);
       DT(3, simobject_->name() << "-pipeline schedule: " << *trace);
-      pending_instrs_.push_back(trace);
+      this->pending_add(trace->wid);
       ++ibuf_inflight_.at(trace->wid);
       perf_stats_.issued_warps += 1;
       perf_stats_.issued_threads += trace->tmask.count();
@@ -909,6 +910,11 @@ public:
           ibuffer_arbs_.at(iw).commit(w);
           // capture register operands at issue (Operands owns regfile)
           operands_.at(iw)->fetch_operands(uop_trace);
+          // A macro leaves the pending count once its last micro-op issues, so
+          // its micro-ops are pending until they commit, as in RTL.
+          if (uop_trace != trace) {
+            this->pending_add(uop_trace->wid);
+          }
           // spend a dispatch credit for the target FU
           ++fu_credits_.at(iw).at((int)uop_trace->fu_type);
           // An issue candidate is staged from the cycle after both the warp's
@@ -949,7 +955,7 @@ public:
               }
               // Macro trace never reaches commit (only micro-ops do),
               // so remove it from pending tracking and deallocate here.
-              pending_instrs_.remove(trace);
+              this->pending_remove(trace->wid);
               trace->~instr_trace_t();
               trace_pool_.deallocate(trace, 1);
             }
@@ -1212,7 +1218,7 @@ public:
       perf_stats_.instrs += 1;
 
       // instruction completed
-      pending_instrs_.remove(trace);
+      this->pending_remove(trace->wid);
     }
 
     trace->~instr_trace_t();
@@ -1223,7 +1229,7 @@ public:
 
   bool running() const {
     // committed stores wait in the LSU request queue until sent to memory
-    if (scheduler_->running() || !pending_instrs_.empty() || !this->lsu_drained()) {
+    if (scheduler_->running() || pending_total_ != 0 || !this->lsu_drained()) {
       return true;
     }
   #ifdef VX_CFG_VM_ENABLE
@@ -1237,12 +1243,18 @@ public:
   }
 
   bool has_pending_instrs(uint32_t wid) const {
-    uint32_t count = 0;
-    for (auto trace : pending_instrs_) {
-      if (trace->wid == wid)
-        ++count;
-    }
-    return count > 1; // more than 1 because the current instruction is also counted
+    return pending_instrs_.at(wid) > 1; // the asking instruction counts itself
+  }
+
+  void pending_add(uint32_t wid) {
+    ++pending_instrs_.at(wid);
+    ++pending_total_;
+  }
+
+  void pending_remove(uint32_t wid) {
+    assert(pending_instrs_.at(wid) > 0 && pending_total_ > 0);
+    --pending_instrs_.at(wid);
+    --pending_total_;
   }
 
   bool lsu_drained() const {
@@ -1396,7 +1408,10 @@ private:
   std::vector<std::unique_ptr<TFifo<instr_trace_t*>>> decode_latch_;
 
   std::vector<HashTable<instr_trace_t*>> pending_icache_;
-  std::list<instr_trace_t*, PoolAllocator<instr_trace_t*, 64>> pending_instrs_;
+  // Scheduled, not yet committed: a macro until its last micro-op issues, then
+  // each micro-op until it commits.
+  std::vector<uint32_t> pending_instrs_ = std::vector<uint32_t>(VX_CFG_NUM_WARPS, 0);
+  uint32_t pending_total_ = 0;
 
   uint64_t pending_ifetches_;
 
