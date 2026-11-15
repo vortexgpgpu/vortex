@@ -9,6 +9,8 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
 
 ### Added
 
+- **Branch naming types.** Branches are named `<type>/<name>` with one of six types (`feature/`, `fix/`, `perf/`, `refactor/`,
+  `ci/`, `docs/`), plus the maintainers' `release/` and `archive/`. See [CONTRIBUTING.md](CONTRIBUTING.md#submitting-changes).
 - **Hardware profiles.** `profiles/<name>.json` names a machine (`tinygpu`, `gtx1080`, `v100`, `a100`, `h100`, `rtx5080`) that every flow
   builds through `configure --profile=<name>` or `blackbox.sh --profile=<name>`; explicit `CONFIGS` win over the profile.
   The GPU profiles are 64-bit machines with VM, atomics, TFU, shared memory and the tensor, DXA, ray-tracing and graphics units of
