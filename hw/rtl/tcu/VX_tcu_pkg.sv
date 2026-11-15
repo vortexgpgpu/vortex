@@ -160,7 +160,7 @@ package VX_tcu_pkg;
 
     localparam TCU_UOPS = TCU_M_STEPS * TCU_N_STEPS * TCU_K_STEPS;
 
-    localparam TCU_MAX_INPUTS = TCU_TC_K * TCU_MAX_ELT_RATIO;
+    localparam TCU_MAX_INPUTS = TCU_WG_FEDP_K * TCU_MAX_ELT_RATIO;
 
     localparam TCU_LG_M    = MTX_LG_M;
     localparam TCU_LG_N    = MTX_LG_N;
