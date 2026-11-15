@@ -129,6 +129,7 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // alongside fetch_base_r and slot_step_k_r.
     logic                       slot_row_major_r;
     logic [LDM_W-1:0]           slot_ldm_words_r;
+    logic [BANK_ROW_WORDS_LOG2-1:0] slot_desc_a_inrow_r;
     logic                       slot_is_sparse_r;
 
     wire [`UP(K_STEPS_W)-1:0]   req_step_k_trunc = `UP(K_STEPS_W)'(req_step_k);
@@ -177,6 +178,9 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // per-row word stride (matches WGMMA SS descriptor). Stride=0 keeps
     // the canonical block-major layout; non-zero selects the row-major path.
     wire [LDM_W-1:0] desc_a_ldm_words = req_desc_a[31:TCU_SMEM_DESC_OFF_BITS];
+    // The base's 32-bit-word offset inside its bank row; the row-major row
+    // offsets start from it, as SimX reads A from the exact base.
+    wire [BANK_ROW_WORDS_LOG2-1:0] desc_a_inrow = BANK_ROW_WORDS_LOG2'(req_desc_a[TCU_SMEM_DESC_OFF_BITS-1:0] >> 2);
     if (`VX_CFG_XLEN > 32) begin : g_desc_a_upper_unused
         `UNUSED_VAR (req_desc_a[`VX_CFG_XLEN-1:32])
     end
@@ -190,6 +194,8 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [LDM_W-1:0]            effective_ldm_words =
         is_first_compute_uop ? desc_a_ldm_words : slot_ldm_words_r;
     wire                        effective_row_major = (effective_ldm_words != '0);
+    wire [BANK_ROW_WORDS_LOG2-1:0] effective_inrow =
+        is_first_compute_uop ? desc_a_inrow : slot_desc_a_inrow_r;
 
     // Block-major stripe base (unchanged): one fetch covers M_STEPS A-blocks.
     wire [BANK_ADDR_WIDTH-1:0]  stripe_base =
@@ -240,7 +246,8 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [3:0] row_k_words_alloc = req_is_sparse ? 4'(TCU_TC_K) : 4'(TCU_WG_FEDP_K);
 
     wire [ROW_OFF_W-1:0] row_word_off_init =
-        ROW_OFF_W'(req_step_k_trunc) * ROW_OFF_W'(row_k_words_alloc);
+        ROW_OFF_W'(req_step_k_trunc) * ROW_OFF_W'(row_k_words_alloc)
+      + ROW_OFF_W'(effective_inrow);
 
     logic [ROW_OFF_W-1:0] row_word_off_req_r;
     logic [ROW_OFF_W-1:0] row_word_off_rsp_r;
@@ -277,6 +284,7 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             fetch_base_r           <= '0;
             slot_row_major_r       <= 1'b0;
             slot_ldm_words_r       <= '0;
+            slot_desc_a_inrow_r    <= '0;
             slot_is_sparse_r       <= 1'b0;
             refetched_for_first_compute_r <= 1'b0;
         end else begin
@@ -299,6 +307,7 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 if (req_valid && is_first_compute_uop) begin
                     slot_desc_a_row_base_r <= desc_a_row_base;
                     slot_ldm_words_r       <= desc_a_ldm_words;
+                    slot_desc_a_inrow_r    <= desc_a_inrow;
                     slot_row_major_r       <= (desc_a_ldm_words != '0);
                 end
 
