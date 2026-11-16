@@ -120,3 +120,29 @@ Resolution notes:
 
 Smoke check after the merge: sgemm `-n16`, default config, SimX 18,369 vs
 rtlsim 18,319 cycles, both pass.
+
+Known issue in the merged `267533fed` (reported by the warp-scaling work):
+macro-ops (TRACE, WMMA, packld, AMO fences) expand at the instruction-buffer
+input and block decode for the whole issue slice; with IBUF_SIZE=2 and 16 or
+more warps per slice, ray tracing deadlocks on SimX and RTL. The fix (buffer
+macro-ops whole, expand at issue) is not pushed yet.
+
+### 64 warps after the merge (logic area, um2)
+
+Dynamic warps, 1024-row register file (`ws/run_d64.sh`):
+
+| Structure | S16 (pre-merge) | D32 (pre-merge) | D64 (merged) |
+|---|---|---|---|
+| Instruction buffer | 7,773 | 16,298 | 12,681 |
+| Warp scheduler | 5,556 | 11,423 | 9,160 |
+| Scoreboard | 3,135 | 6,299 | 5,768 |
+| CTA context table (SFU) | 3,425 | 6,779 | 0 (RAM macro) |
+| Barrier table | 2,231 | 6,979 | 23,879 |
+| **Core logic** | **84,933** | **112,325** | **118,177** |
+| Estimated SRAM | 41,121 | 41,620 | 46,511 |
+
+The barrier table grows with warps squared (an entry per CTA x barrier, each
+with a warp mask, and resident CTAs = warps). Without it, 64 warps cost about
++14% over 16; with it, +39%. A count-based barrier table is in progress on the
+warp-scaling work. The S16/D32 baselines predate the merge, which also changes
+non-warp logic (execute units -2,600).
