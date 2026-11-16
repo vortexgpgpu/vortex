@@ -148,6 +148,15 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
     // this slice's copy of the core-wide trap CSRs (TRAP_CSR_SHARED)
     reg [`VX_CFG_XLEN-1:0] mstatus_r, mtvec_r;
 
+    // PC targets are computed once, where a cycle has at most one of each, and
+    // offered to every warp: a warp's PC register selects among them rather
+    // than holding its own adders and trap/return muxes.
+    wire [PC_BITS-1:0]           cta_pc;
+    wire [NPA-1:0][PC_BITS-1:0]  br_pc;
+    wire                         seq_valid;
+    wire [LW-1:0]                seq_lid;
+    wire [PC_BITS-1:0]           seq_pc;
+
     for (genvar l = 0; l < SW; ++l) begin : g_warps
         localparam [LW-1:0] LID = LW'(l);
         localparam QA = l % NPA;
@@ -174,7 +183,7 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
                 // Reusing a warp for the next CTA skips the one-time prologue and rewinds to the
                 // kernel's per-CTA dispatch window: a fixed 20-byte (5-instruction) sequence that
                 // reloads the entry pointer and kargs before re-calling.
-                pc_n    = sched_if.cta_init ? sched_if.cta_PC : (pc_r - from_fullPC(`VX_CFG_XLEN'(20)));
+                pc_n    = cta_pc;
                 tmask_n = sched_if.cta_tmask;
             end
 
@@ -236,14 +245,8 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
             end
 
             if (br_hit) begin
-                if (branch[QA].is_trap) begin
-                    // ECALL/EBREAK: redirect to trap vector (mtvec[1:0] = MODE field; mask off to get base address).
-                    pc_n = from_fullPC(mtvec_r & ~`VX_CFG_XLEN'(3));
-                end else if (branch[QA].is_mret) begin
-                    // MRET/SRET/URET: restore the saved PC from mepc.
-                    pc_n = from_fullPC(mepc_r[l]);
-                end else if (branch[QA].taken) begin
-                    pc_n = branch[QA].dest;
+                if (branch[QA].is_trap || branch[QA].is_mret || branch[QA].taken) begin
+                    pc_n = br_pc[QA];
                 end
                 stalled_n = 0;
             end
@@ -251,18 +254,13 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
             // stall the warp until decode stage
             if (sched_fire && cand_onehot[l]) begin
                 stalled_n = 1;
-            `ifndef VX_CFG_EXT_C_ENABLE
-                pc_n = pc_r + from_fullPC(`VX_CFG_XLEN'(4));
-            `endif
             end
 
-        `ifdef VX_CFG_EXT_C_ENABLE
             // Every redirect source stalls its warp from schedule until it resolves, so
-            // no redirect writes a warp's PC on the cycle that warp decode-advances.
-            if (decode_sched_if.valid && (dec_lid == LID)) begin
-                pc_n = pc_r + from_fullPC(decode_sched_if.is_rvc ? `VX_CFG_XLEN'(2) : `VX_CFG_XLEN'(4));
+            // no redirect writes a warp's PC on the cycle its advance lands.
+            if (seq_valid && (seq_lid == LID)) begin
+                pc_n = seq_pc;
             end
-        `endif
 
         `ifdef VX_CFG_EXT_RTU_ENABLE
             // A wstall'd TRACE retires: resume the warp so it proceeds to WAIT.
@@ -321,6 +319,14 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
         assign stalled_warps[l] = stalled_r;
         assign thread_masks[l]  = tmask_r;
         assign warp_pcs[l]      = pc_r;
+
+    `ifndef VX_CFG_EXT_C_ENABLE
+        `RUNTIME_ASSERT(~(seq_valid && (seq_lid == LID)) || ~((sched_if.cta_fire && (sched_if.cta_lid == LID))
+                         || (sched_if.wspawn_apply && sched_if.wspawn_wmask[l])
+                         || (join_hit && join_is_dvg[QS] && join_is_else[QS])
+                         || (br_hit && (branch[QA].is_trap || branch[QA].is_mret || branch[QA].taken))),
+            ("%t: *** %s wid=%0d: a redirect hit the cycle its PC advance lands", $time, INSTANCE_ID, wfs_to_wid(LID, slice_id)))
+    `endif
 
         // ibuffer occupancy: registered full keeps arbitration off the critical path
         logic [IBUF_CW-1:0] ibuf_size_r, ibuf_size_n;
@@ -389,6 +395,43 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
         .onehot_out(cand_onehot)
     );
     wire [LW-1:0] cand_lid = LW'(cand_index);
+
+    assign cta_pc = sched_if.cta_init ? sched_if.cta_PC
+                  : (warp_pcs[sched_if.cta_lid] - from_fullPC(`VX_CFG_XLEN'(20)));
+
+    for (genvar q = 0; q < NPA; ++q) begin : g_br_pc
+        // ECALL/EBREAK: the trap vector (mtvec[1:0] = MODE field; mask off to get base address).
+        // MRET/SRET/URET: the saved PC in mepc.
+        assign br_pc[q] = branch[q].is_trap ? from_fullPC(mtvec_r & ~`VX_CFG_XLEN'(3))
+                        : branch[q].is_mret ? from_fullPC(mepc_r[br_lid[q]])
+                        : branch[q].dest;
+    end
+
+`ifdef VX_CFG_EXT_C_ENABLE
+    // decode advances the warp it unlocks, which may be scheduled the next cycle
+    assign seq_valid = decode_sched_if.valid;
+    assign seq_lid   = dec_lid;
+    assign seq_pc    = warp_pcs[dec_lid] + from_fullPC(decode_sched_if.is_rvc ? `VX_CFG_XLEN'(2) : `VX_CFG_XLEN'(4));
+`else
+    // The scheduled warp's next PC lands a cycle late, off the selection path:
+    // the warp stalls until its instruction decodes, so nothing reads or
+    // redirects its PC before then.
+    reg               seq_valid_r;
+    reg [LW-1:0]      seq_lid_r;
+    reg [PC_BITS-1:0] seq_pc_r;
+    always @(posedge clk) begin
+        if (reset) begin
+            seq_valid_r <= 1'b0;
+        end else begin
+            seq_valid_r <= sched_fire;
+        end
+        seq_lid_r <= cand_lid;
+        seq_pc_r  <= warp_pcs[cand_lid] + from_fullPC(`VX_CFG_XLEN'(4));
+    end
+    assign seq_valid = seq_valid_r;
+    assign seq_lid   = seq_lid_r;
+    assign seq_pc    = seq_pc_r;
+`endif
 
     // CTA CSRs and CTA ids, one store per SFU port over the port's warps
     wire [NPS-1:0][NCTA_WIDTH-1:0] port_cta_id;
