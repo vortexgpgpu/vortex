@@ -64,7 +64,9 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
     localparam NPS_BITS = `CLOG2(NPS);
     localparam PSW     = SW / NPS;           // warps per SFU port
     localparam KW      = `LOG2UP(PSW);
-    localparam IBUF_CW = $clog2(`VX_CFG_IBUF_SIZE + 1);
+    // A warp fetches one instruction at a time, and once every buffer is full
+    // a ready warp may still fetch: the count reaches IBUF_SIZE + 1.
+    localparam IBUF_CW = $clog2(`VX_CFG_IBUF_SIZE + 2);
 
     `UNUSED_VAR (schedule_if.ibuf_pop)
 
@@ -334,7 +336,7 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
                 ibuf_full_r <= ibuf_full_n[l];
             end
         end
-        assign ibuf_full_n[l] = (ibuf_size_n == IBUF_CW'(`VX_CFG_IBUF_SIZE));
+        assign ibuf_full_n[l] = (ibuf_size_n >= IBUF_CW'(`VX_CFG_IBUF_SIZE));
         assign ibuf_full[l]   = ibuf_full_r;
 
         VX_pending_size #(

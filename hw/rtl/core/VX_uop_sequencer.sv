@@ -21,16 +21,16 @@ module VX_uop_sequencer import
     VX_rtu_pkg::*,
 `endif
     VX_gpu_pkg::*; #(
-    parameter `STRING INSTANCE_ID = "",
-    parameter WARP_ID = 0
+    parameter `STRING INSTANCE_ID = ""
 ) (
     input clk,
     input reset,
 
     VX_ibuffer_if.slave  input_if,
-    VX_ibuffer_if.master output_if
+    VX_ibuffer_if.master output_if,
+    // the output is the last (or only) entry of its instruction
+    output wire          output_last
 );
-    `UNUSED_PARAM (WARP_ID)
     `UNUSED_SPARAM (INSTANCE_ID)
 
     localparam UOP_SEL_W = `LOG2UP(UOP_MAX);
@@ -47,6 +47,9 @@ module VX_uop_sequencer import
     reg [UOP_SEL_W-1:0] sel_idx_r;
     reg [UOP_CTR_W-1:0] last_ctr_r;
     ibuffer_t           uop_data;
+    // The macro-op is taken from the input when its burst starts, so decode
+    // moves on while the burst drains.
+    ibuffer_t           macro_r;
 
     logic [UOP_SEL_W-1:0] sel_idx_n;
     wire is_uop_input;
@@ -61,10 +64,12 @@ module VX_uop_sequencer import
     );
 
     // prepare the input data for the uop expanders
+    ibuffer_t uop_src;
     ibuffer_t uop_in_data;
     always_comb begin
-        uop_in_data = input_if.data;
-        uop_in_data.uuid = get_uop_uuid(input_if.data.uuid, uop_ctr);
+        uop_src = uop_active ? macro_r : input_if.data;
+        uop_in_data = uop_src;
+        uop_in_data.uuid = get_uop_uuid(uop_src.uuid, uop_ctr);
     end
 
     // uop_start fires for exactly one cycle at the beginning of a new burst.
@@ -83,6 +88,7 @@ module VX_uop_sequencer import
             uop_done   <= 1'b0;
         end else begin
             if (uop_start) begin
+                macro_r    <= input_if.data;
                 uop_active <= 1'b1;
                 uop_ctr    <= UOP_CTR_W'(1);
                 sel_idx_r  <= sel_idx_n;
@@ -215,9 +221,7 @@ module VX_uop_sequencer import
     );
 `endif
 
-    wire uop_hold = is_uop_input && ~uop_active;
-
-    assign output_if.valid = uop_active || (input_if.valid && ~uop_hold);
+    assign output_if.valid = uop_active || (input_if.valid && ~is_uop_input);
     always_comb begin
         if (uop_active) begin
             output_if.data     = uop_data;
@@ -226,12 +230,13 @@ module VX_uop_sequencer import
             output_if.data = input_if.data;
         end
     end
-    assign input_if.ready  = output_if.ready && (uop_active ? uop_done : ~uop_hold);
+    assign input_if.ready = ~uop_active && (is_uop_input || output_if.ready);
+    assign output_last    = ~uop_active || uop_done;
 
 `ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin
         if (output_if.valid && output_if.ready && uop_active) begin
-            `TRACE(1, ("%t: %s decode: wid=%0d, cta_id=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, WARP_ID, output_if.data.cta_id, to_fullPC(output_if.data.PC)))
+            `TRACE(1, ("%t: %s decode: wid=%0d, cta_id=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, output_if.data.wid, output_if.data.cta_id, to_fullPC(output_if.data.PC)))
             VX_trace_pkg::trace_ex_type(1, output_if.data.ex_type);
             `TRACE(1, (", op="))
             VX_trace_pkg::trace_ex_op(1, output_if.data.ex_type, output_if.data.op_type, output_if.data.op_args);
@@ -244,7 +249,7 @@ module VX_uop_sequencer import
             `TRACE(1, (", rs3="))
             VX_trace_pkg::trace_reg_idx(1, output_if.data.rs3);
             VX_trace_pkg::trace_op_args(1, output_if.data.ex_type, output_if.data.op_type, output_if.data.op_args);
-            `TRACE(1, (", parent=#%0d", input_if.data.uuid))
+            `TRACE(1, (", parent=#%0d", macro_r.uuid))
             `TRACE(1, (" (#%0d)\n", output_if.data.uuid))
         end
     end

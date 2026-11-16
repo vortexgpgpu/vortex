@@ -1668,6 +1668,56 @@ package VX_gpu_pkg;
     `endif
     } ibuffer_t;
 
+    // What the scoreboard checks for a buffered instruction, kept per warp
+    // beside each buffer entry; the instruction itself sits in the issue
+    // slice's shared buffer storage.
+    typedef struct packed {
+        logic [EX_BITS-1:0]         ex_type;
+        logic                       wb;
+        logic [NUM_XREGS-1:0]       rd_xregs;
+        logic [NUM_XREGS-1:0]       wr_xregs;
+        logic [NUM_SRC_OPDS-1:0]    used_rs;
+        logic [NUM_REGS_BITS-1:0]   rd;
+        logic [NUM_REGS_BITS-1:0]   rs1;
+        logic [NUM_REGS_BITS-1:0]   rs2;
+        logic [NUM_REGS_BITS-1:0]   rs3;
+        logic                       fu_lock;
+        logic                       fu_unlock;
+    `ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
+        logic                       issue_yield;
+    `endif
+    `ifdef SIMULATION
+        // names a stalled head in the scoreboard's trace and timeout
+        logic [UUID_WIDTH-1:0]      uuid;
+        logic [PC_BITS-1:0]         PC;
+        logic [`VX_CFG_NUM_THREADS-1:0] tmask;
+    `endif
+    } ibuf_hz_t;
+
+    function automatic ibuf_hz_t to_ibuf_hz(input ibuffer_t ibf);
+        ibuf_hz_t hz;
+        hz.ex_type   = ibf.ex_type;
+        hz.wb        = ibf.wb;
+        hz.rd_xregs  = ibf.rd_xregs;
+        hz.wr_xregs  = ibf.wr_xregs;
+        hz.used_rs   = ibf.used_rs;
+        hz.rd        = ibf.rd;
+        hz.rs1       = ibf.rs1;
+        hz.rs2       = ibf.rs2;
+        hz.rs3       = ibf.rs3;
+        hz.fu_lock   = ibf.fu_lock;
+        hz.fu_unlock = ibf.fu_unlock;
+    `ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
+        hz.issue_yield = ibf.issue_yield;
+    `endif
+    `ifdef SIMULATION
+        hz.uuid  = ibf.uuid;
+        hz.PC    = ibf.PC;
+        hz.tmask = ibf.tmask;
+    `endif
+        return hz;
+    endfunction
+
     typedef struct packed {
         logic [UUID_WIDTH-1:0]      uuid;
         logic [ISSUE_WIS_W-1:0]     wis;

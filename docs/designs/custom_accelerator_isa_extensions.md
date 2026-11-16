@@ -327,7 +327,7 @@ mechanisms the core already has.
 
 | mechanism | role |
 |---|---|
-| sequencer | a per-warp expander. It takes the macro-op and emits a run of ordinary micro-ops, one per cycle, each naming its own source and destination registers. It back-pressures the instruction buffer until the run drains. The macro-op itself never commits; its micro-ops do. |
+| sequencer | an expander at the input of each issue slice's instruction buffer. It takes the macro-op from decode and writes a run of ordinary micro-ops into the warp's buffer, one per cycle while the buffer has room, each naming its own source and destination registers. Decode feeds the slice nothing else until the run is written. The macro-op itself never commits; its micro-ops do. |
 | operand collector | reads each micro-op's registers from the banked register file and assembles them for the functional unit. Its port count is why a group read takes several cycles. |
 
 The sequencer decides **how many micro-ops and which registers**; the
