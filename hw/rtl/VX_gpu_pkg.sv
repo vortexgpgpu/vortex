@@ -328,6 +328,13 @@ package VX_gpu_pkg;
     localparam EX_TCU = (EX_FPU + `VX_CFG_EXT_TCU_ENABLED);
 
     localparam NUM_EX_UNITS = EX_TCU + 1;
+
+    // An ALU or FPU with fewer lanes than SIMD_WIDTH issues an instruction in
+    // lane batches through a registered lane-dispatch buffer; LSU, SFU and TCU
+    // always have one.
+    localparam ALU_PARTIAL_BW = (`VX_CFG_NUM_ALU_LANES != `VX_CFG_SIMD_WIDTH);
+    localparam FPU_PARTIAL_BW = (`VX_CFG_NUM_FPU_LANES != `VX_CFG_SIMD_WIDTH);
+
     localparam EX_BITS = `CLOG2(NUM_EX_UNITS);
     localparam EX_WIDTH = `UP(EX_BITS);
 
