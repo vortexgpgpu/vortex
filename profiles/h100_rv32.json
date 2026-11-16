@@ -1,0 +1,9 @@
+{
+  "name": "h100_rv32",
+  "extends": "h100",
+  "description": "The h100 machine on a 32-bit ISA: the same SM, caches, clock and memory latencies, for studies that must build with XLEN=32.",
+  "xlen": 32,
+  "sources": {
+    "xlen": "32-bit ISA for RV32 studies; everything else is inherited from h100. FP64 (D) follows XLEN, so FP64 work is absent"
+  }
+}

@@ -244,6 +244,7 @@ machine from it: SimX, rtlsim, the FPGA and ASIC flows, and the kernels.
 | `rtx2060s` | GeForce RTX 2060 SUPER (Turing), on `rtx2060`: 34 cores, 4 MB L2, GDDR6 at 448 GB/s |
 | `t4` | Tesla T4 (Turing TU104), on `rtx2060`: 40 cores, 4 MB L2, GDDR6 at 320 GB/s |
 | `h200` | H200 SXM5 (Hopper), on `h100`: HBM3e at 4.8 TB/s |
+| `h100_rv32` | `h100` on a 32-bit ISA (XLEN=32), for RV32 studies; no FP64 |
 | `gtx480` | GeForce GTX 480 (Fermi): 15 cores x 48 warps, 2 schedulers of 32 lanes at the 700 MHz core clock (the hot-clocked 16-lane groups), 48 KB shared memory, 768 KB L2, GDDR5 at 177 GB/s |
 | `keplertitan` | GeForce GTX TITAN (Kepler GK110): 14 cores x 64 warps, 4 schedulers of 32 lanes (no dual issue: 128 of the SMX's 192 cores), 48 KB shared memory, 1.5 MB L2, GDDR5 at 288 GB/s |
 | `gtx980` | GeForce GTX 980 (Maxwell), on `gtx1080`: 16 cores, 24 KB L1, GDDR5 at 224 GB/s |
