@@ -234,11 +234,13 @@ public:
   void set_dst_bytesel(uint8_t value) { dst_bytesel_ = value; }
   uint8_t get_dst_bytesel() const { return dst_bytesel_; }
 
-  // Floating-point CSR fields the scoreboard orders like GPRs: an instruction
-  // naming one, read or written, waits for an older writer to commit.
+  // CSR fields the scoreboard orders like GPRs: an instruction naming one,
+  // read or written, waits for an older writer to commit. TRAP_CSRS stands for
+  // mstatus/mtvec/mepc, which ECALL/EBREAK/MRET read outside the CSR unit.
   enum : uint8_t {
     FCSR_FFLAGS = 1u << 0,
     FCSR_FRM    = 1u << 1,
+    TRAP_CSRS   = 1u << 2,
   };
   void set_fcsr_use(uint8_t rd_mask, uint8_t wr_mask) {
     fcsr_rd_ = rd_mask;
