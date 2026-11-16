@@ -141,7 +141,10 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
     wire          sched_fire;
 
     reg [SW-1:0][`VX_CFG_MEM_ADDR_WIDTH-1:0] mscratch_r;
-    reg [SW-1:0][`VX_CFG_XLEN-1:0] mstatus_r, mtvec_r, mepc_r, mcause_r, mtval_r;
+    reg [SW-1:0][`VX_CFG_XLEN-1:0] mepc_r;
+    reg [SW-1:0][TRAP_CAUSE_BITS-1:0] mcause_r;
+    // this slice's copy of the core-wide trap CSRs (TRAP_CSR_SHARED)
+    reg [`VX_CFG_XLEN-1:0] mstatus_r, mtvec_r;
 
     for (genvar l = 0; l < SW; ++l) begin : g_warps
         localparam [LW-1:0] LID = LW'(l);
@@ -233,7 +236,7 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
             if (br_hit) begin
                 if (branch[QA].is_trap) begin
                     // ECALL/EBREAK: redirect to trap vector (mtvec[1:0] = MODE field; mask off to get base address).
-                    pc_n = from_fullPC(mtvec_r[l] & ~`VX_CFG_XLEN'(3));
+                    pc_n = from_fullPC(mtvec_r & ~`VX_CFG_XLEN'(3));
                 end else if (branch[QA].is_mret) begin
                     // MRET/SRET/URET: restore the saved PC from mepc.
                     pc_n = from_fullPC(mepc_r[l]);
@@ -274,11 +277,8 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
                 tmask_r       <= '0;
                 pc_r          <= '0;
                 mscratch_r[l] <= '0;
-                mstatus_r[l]  <= '0;
-                mtvec_r[l]    <= '0;
                 mepc_r[l]     <= '0;
                 mcause_r[l]   <= '0;
-                mtval_r[l]    <= '0;
             end else begin
                 active_r  <= active_n;
                 stalled_r <= stalled_n;
@@ -299,28 +299,18 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
                 end
 
                 if (csr_wr_lid[QS] == LID) begin
-                    if (csr_wr[QS].trap_valid[0]) begin
-                        mstatus_r[l] <= csr_wr[QS].trap_data;
-                    end
-                    if (csr_wr[QS].trap_valid[1]) begin
-                        mtvec_r[l] <= csr_wr[QS].trap_data;
-                    end
-                    if (csr_wr[QS].trap_valid[2]) begin
+                    if (csr_wr[QS].trap_valid[TRAP_CSR_MEPC]) begin
                         mepc_r[l] <= csr_wr[QS].trap_data;
                     end
-                    if (csr_wr[QS].trap_valid[3]) begin
-                        mcause_r[l] <= csr_wr[QS].trap_data;
-                    end
-                    if (csr_wr[QS].trap_valid[4]) begin
-                        mtval_r[l] <= csr_wr[QS].trap_data;
+                    if (csr_wr[QS].trap_valid[TRAP_CSR_MCAUSE]) begin
+                        mcause_r[l] <= TRAP_CAUSE_BITS'(csr_wr[QS].trap_data);
                     end
                 end
 
                 // Hardware trap entry (ECALL/EBREAK) wins a same-cycle software write.
                 if (br_hit && branch[QA].is_trap) begin
                     mepc_r[l]   <= to_fullPC(branch[QA].dest);
-                    mcause_r[l] <= `VX_CFG_XLEN'(branch[QA].trap_cause);
-                    mtval_r[l]  <= '0;
+                    mcause_r[l] <= branch[QA].trap_cause;
                 end
             end
         end
@@ -425,13 +415,29 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
 
         assign csr_rd[q].thread_mask = thread_masks[csr_rd_lid[q]];
         assign csr_rd[q].mscratch    = mscratch_r[csr_rd_lid[q]];
-        assign csr_rd[q].mstatus     = mstatus_r[csr_rd_lid[q]];
-        assign csr_rd[q].mtvec       = mtvec_r[csr_rd_lid[q]];
+        assign csr_rd[q].mstatus     = mstatus_r;
+        assign csr_rd[q].mtvec       = mtvec_r;
         assign csr_rd[q].mepc        = mepc_r[csr_rd_lid[q]];
-        assign csr_rd[q].mcause      = mcause_r[csr_rd_lid[q]];
-        assign csr_rd[q].mtval       = mtval_r[csr_rd_lid[q]];
+        assign csr_rd[q].mcause      = `VX_CFG_XLEN'(mcause_r[csr_rd_lid[q]]);
 
         assign dvstack_mscratch[q]   = mscratch_r[wid_to_wfs(dvstack_wid[q])];
+    end
+
+    // Core-wide trap CSRs, written by a software write from any SFU port.
+    always @(posedge clk) begin
+        if (reset) begin
+            mstatus_r <= '0;
+            mtvec_r   <= '0;
+        end else begin
+            for (int q = 0; q < NPS; ++q) begin
+                if (csr_wr[q].trap_valid[TRAP_CSR_MSTATUS]) begin
+                    mstatus_r <= csr_wr[q].trap_data;
+                end
+                if (csr_wr[q].trap_valid[TRAP_CSR_MTVEC]) begin
+                    mtvec_r <= csr_wr[q].trap_data;
+                end
+            end
+        end
     end
 
     wire [NCTA_WIDTH-1:0] cand_cta_id = port_cta_id[32'(cand_lid) % NPS];

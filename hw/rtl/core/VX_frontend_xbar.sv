@@ -170,7 +170,7 @@ module VX_frontend_xbar import VX_gpu_pkg::*; (
             assign fs_csr_wr[f][q].valid      = sched_csr_if[B].csr_wr_valid && own_wr;
             assign fs_csr_wr[f][q].wid        = sched_csr_if[B].csr_wr_wid;
             assign fs_csr_wr[f][q].data       = sched_csr_if[B].csr_wr_data;
-            assign fs_csr_wr[f][q].trap_valid = sched_csr_if[B].trap_csr_wr_valid & {NUM_TRAP_CSRS{own_wr}};
+            assign fs_csr_wr[f][q].trap_valid = sched_csr_if[B].trap_csr_wr_valid & ({NUM_TRAP_CSRS{own_wr}} | TRAP_CSR_SHARED);
             assign fs_csr_wr[f][q].trap_data  = sched_csr_if[B].trap_csr_wr_data;
 
         `ifdef VX_CFG_EXT_RTU_ENABLE
@@ -209,7 +209,6 @@ module VX_frontend_xbar import VX_gpu_pkg::*; (
         assign sched_csr_if[b].csr_mtvec    = csr_rd.mtvec;
         assign sched_csr_if[b].csr_mepc     = csr_rd.mepc;
         assign sched_csr_if[b].csr_mcause   = csr_rd.mcause;
-        assign sched_csr_if[b].csr_mtval    = csr_rd.mtval;
         assign sched_csr_if[b].cta_rank     = csr_rd.cta_rank;
         assign sched_csr_if[b].cta_lane     = csr_rd.cta_lane;
     `ifdef VX_CFG_VM_ENABLE

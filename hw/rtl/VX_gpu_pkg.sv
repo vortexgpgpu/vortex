@@ -640,8 +640,19 @@ package VX_gpu_pkg;
     localparam ISSUE_WIS_BITS = `CLOG2(PER_ISSUE_WARPS);
     localparam ISSUE_WIS_W = `UP(ISSUE_WIS_BITS);
 
-    // Machine-mode trap CSRs stored per warp in the scheduler: mstatus, mtvec, mepc, mcause, mtval.
-    localparam NUM_TRAP_CSRS = 5;
+    // Machine-mode trap CSRs held by the scheduler: mstatus, mtvec, mepc, mcause.
+    localparam NUM_TRAP_CSRS = 4;
+    localparam TRAP_CSR_MSTATUS = 0;
+    localparam TRAP_CSR_MTVEC   = 1;
+    localparam TRAP_CSR_MEPC    = 2;
+    localparam TRAP_CSR_MCAUSE  = 3;
+    // Every warp runs the same kernel and trap handler, so mstatus and mtvec are
+    // one per core and a write by any warp updates them for all; only the return
+    // PC and cause, which concurrent traps in different warps need, stay per warp.
+    localparam [NUM_TRAP_CSRS-1:0] TRAP_CSR_SHARED = NUM_TRAP_CSRS'((1 << TRAP_CSR_MSTATUS)
+                                                                  | (1 << TRAP_CSR_MTVEC));
+    // mcause holds only the exception codes the core raises (ECALL, EBREAK).
+    localparam TRAP_CAUSE_BITS = 4;
 
     localparam DISPATCH_QSIZE = `VX_CFG_DISPATCH_QUEUE_SIZE;
 
@@ -1363,7 +1374,7 @@ package VX_gpu_pkg;
         logic [PC_BITS-1:0]     dest;
         logic                   is_trap;
         logic                   is_mret;
-        logic [3:0]             trap_cause;
+        logic [TRAP_CAUSE_BITS-1:0] trap_cause;
     } sched_branch_t;
 
     // SFU warp control
@@ -1395,7 +1406,6 @@ package VX_gpu_pkg;
         logic [`VX_CFG_XLEN-1:0] mtvec;
         logic [`VX_CFG_XLEN-1:0] mepc;
         logic [`VX_CFG_XLEN-1:0] mcause;
-        logic [`VX_CFG_XLEN-1:0] mtval;
         logic [NW_WIDTH-1:0]    cta_rank;
         cta_lane_t [`VX_CFG_NUM_THREADS-1:0] cta_lane;
     } sched_csr_rd_t;

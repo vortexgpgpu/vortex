@@ -170,7 +170,8 @@ import VX_fpu_pkg::*;
             `VX_CSR_MTVEC   : begin stable_w = sched_csr_if.csr_mtvec;   wr_sel_w[WR_TRAP + 1] = 1; end
             `VX_CSR_MEPC    : begin stable_w = sched_csr_if.csr_mepc;    wr_sel_w[WR_TRAP + 2] = 1; end
             `VX_CSR_MCAUSE  : begin stable_w = sched_csr_if.csr_mcause;  wr_sel_w[WR_TRAP + 3] = 1; end
-            `VX_CSR_MTVAL   : begin stable_w = sched_csr_if.csr_mtval;   wr_sel_w[WR_TRAP + 4] = 1; end
+            // mtval is read-only zero: no exception the core raises carries a trap value.
+            `VX_CSR_MTVAL   : begin stable_w = '0; end
 
             // The MPM counters are only reachable from the host; everything
             // else reads as zero.

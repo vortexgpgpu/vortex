@@ -85,14 +85,11 @@ struct warp_t {
   // Per-warp MSCRATCH (holds kernel arg pointer, set at CTA dispatch)
   Word                              mscratch;
 
-  // Per-warp machine-mode trap CSRs. Synchronous ECALL/EBREAK traps
-  // redirect the warp PC to mtvec and snapshot the faulting PC/cause
-  // here; MRET restores the PC from mepc. See Scheduler::raise_trap.
-  Word                              mstatus = 0;
-  Word                              mtvec   = 0;
+  // Per-warp trap return PC and cause: synchronous ECALL/EBREAK traps snapshot
+  // the faulting PC/cause here and MRET restores the PC from mepc. mstatus and
+  // mtvec are core-wide (Scheduler); see Scheduler::raise_trap.
   Word                              mepc    = 0;
   Word                              mcause  = 0;
-  Word                              mtval   = 0;
 
   // CTA CSR values set at dispatch time
   cta_csrs_t                        cta_csrs;
@@ -189,6 +186,14 @@ public:
   void trigger_ecall(uint32_t wid, Word trap_pc);
   void trigger_ebreak(uint32_t wid, Word trap_pc);
 
+  // ----- Core-wide trap CSRs -----
+  // Every warp runs the same kernel and trap handler, so mstatus and mtvec are
+  // one per core: a write by any warp updates them for all.
+  Word mstatus() const { return mstatus_; }
+  Word mtvec() const { return mtvec_; }
+  void set_mstatus(Word value) { mstatus_ = value; }
+  void set_mtvec(Word value) { mtvec_ = value; }
+
   // ----- Accessors -----
   warp_t& warp(uint32_t wid) { return warps_.at(wid); }
   uint32_t ipdom_size() const { return ipdom_size_; }
@@ -199,6 +204,9 @@ protected:
   void on_reset();
 
 private:
+  Word mstatus_ = 0;
+  Word mtvec_   = 0;
+
   struct wspawn_t {
     bool      valid;
     uint32_t  num_warps;

@@ -259,7 +259,6 @@ import VX_tcu_pkg::*;
     assign sched_csr_if.csr_mtvec    = csr_rd[0].mtvec;
     assign sched_csr_if.csr_mepc     = csr_rd[0].mepc;
     assign sched_csr_if.csr_mcause   = csr_rd[0].mcause;
-    assign sched_csr_if.csr_mtval    = csr_rd[0].mtval;
     assign sched_csr_if.cta_rank     = csr_rd[0].cta_rank;
     assign sched_csr_if.cta_lane     = csr_rd[0].cta_lane;
 `ifdef VX_CFG_VM_ENABLE
