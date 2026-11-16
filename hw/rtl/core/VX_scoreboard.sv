@@ -301,19 +301,36 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     wire                    arb_ready;
 
     // Matrix arbiter scales better past 8 requesters; RR is cheaper below that.
-    VX_generic_arbiter #(
-        .NUM_REQS (PER_ISSUE_WARPS),
-        .TYPE     ((PER_ISSUE_WARPS > 8) ? "M" : "R"),
-        .STICKY   (1) // Greedy
-    ) out_arb (
-        .clk          (clk),
-        .reset        (reset),
-        .requests     (arb_valid_in),
-        .grant_valid  (arb_valid),
-        .grant_index  (arb_index),
-        .grant_onehot (arb_onehot),
-        .grant_ready  (arb_ready)
-    );
+    // Past 16 the matrix goes two-level: its state would grow with the square
+    // of the warps.
+    if (PER_ISSUE_WARPS > 16) begin : g_out_arb2
+        VX_matrix2_arbiter #(
+            .NUM_REQS (PER_ISSUE_WARPS),
+            .STICKY   (1) // Greedy
+        ) out_arb (
+            .clk          (clk),
+            .reset        (reset),
+            .requests     (arb_valid_in),
+            .grant_valid  (arb_valid),
+            .grant_index  (arb_index),
+            .grant_onehot (arb_onehot),
+            .grant_ready  (arb_ready)
+        );
+    end else begin : g_out_arb
+        VX_generic_arbiter #(
+            .NUM_REQS (PER_ISSUE_WARPS),
+            .TYPE     ((PER_ISSUE_WARPS > 8) ? "M" : "R"),
+            .STICKY   (1) // Greedy
+        ) out_arb (
+            .clk          (clk),
+            .reset        (reset),
+            .requests     (arb_valid_in),
+            .grant_valid  (arb_valid),
+            .grant_index  (arb_index),
+            .grant_onehot (arb_onehot),
+            .grant_ready  (arb_ready)
+        );
+    end
 
     wire valid_out_w;
     wire [OUT_DATAW-1:0] data_out_w;
