@@ -153,13 +153,13 @@ builds:
   area_budget_um2: 12449
   configs: ""
 
-# --- mufu --------------------------------------------------------------------
+# --- tfu --------------------------------------------------------------------
 
 # Special-function datapath at its default single lane, serialized from a
 # 16-lane SFU: the 7-stage table+polynomial pipeline and the 512x72 table ROM.
-- id: mufu
-  group: mufu
-  dut: mufu
+- id: tfu
+  group: tfu
+  dut: tfu
   clock_mhz: 800
   area_budget_um2: 2073
   configs: ""

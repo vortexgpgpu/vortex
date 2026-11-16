@@ -39,7 +39,7 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     input  wire mask,
 
     input  wire [INST_FPU_BITS-1:0] op_type,
-    input  wire [INST_FMT_BITS-1:0] fmt,
+    input  wire                     op_mod,
     input  wire [INST_FRM_BITS-1:0] frm,
 
     input  wire [MAN_BITS+EXP_BITS:0] dataa,
@@ -77,7 +77,7 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         // The vendor IP rounds round-to-nearest-even only (frm is ignored).
         wire is_madd = op_type[1];
         wire is_neg  = op_type[0];
-        wire is_sub  = fmt[1];
+        wire is_sub  = op_mod;
 
         reg [31:0] a32, b32, c32;
         always @(*) begin
@@ -144,7 +144,7 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .enable  (enable),
             .mask    (mask),
             .op_type (op_type),
-            .fmt     (fmt),
+            .op_mod  (op_mod),
             .frm     (frm),
             .dataa   (dataa),
             .datab   (datab),

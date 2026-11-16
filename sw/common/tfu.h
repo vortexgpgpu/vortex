@@ -15,8 +15,8 @@
 
 #include <cstdint>
 
-// Bit-exact reference for the MUFU special functions.
-namespace vortex::mufu {
+// Bit-exact reference for the TFU special functions.
+namespace vortex::tfu {
 
 enum fn_t : uint32_t {
   FN_RCP   = 0,
@@ -35,4 +35,4 @@ uint32_t eval(uint32_t fn, uint32_t x);
 
 const char* fn_name(uint32_t fn);
 
-} // namespace vortex::mufu
+} // namespace vortex::tfu

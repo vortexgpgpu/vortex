@@ -54,7 +54,9 @@ Vortex has a 6-stage pipeline:
   - Notify warp scheduler on control instructions
 - **Issue**
   - IBuffer
-    - Store decoded instructions in separate per-warp queues
+    - Store decoded instructions, `IBUF_SIZE` per warp in order, in one RAM per
+      issue slice; per warp only the fields the scoreboard checks are registers
+    - Expand macro-ops into micro-ops, one sequencer per issue slice
   - Scoreboard
     - Track in-use registers
     - Check register use for decoded instructions

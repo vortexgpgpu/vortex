@@ -2,6 +2,7 @@
 #include <chrono>
 #include <climits>
 #include <cmath>
+#include <fedp.h>
 #include <iostream>
 #include <rvfloats.h>
 #include <tensor_sp.h>
@@ -26,9 +27,6 @@
 
 using namespace vortex;
 namespace vt = tensor;
-
-// fp32 result tolerance in ULPs; it grows with K (see fp32_ulp_bound).
-static uint32_t fp32_max_ulp = 0;
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -307,37 +305,16 @@ public:
   static float generate() {
     return static_cast<float>(rand()) / RAND_MAX;
   }
+  // The reference applies the device's own arithmetic: the bits must match.
   static bool compare(float a, float b, int index, int errors) {
-    if constexpr (std::is_same<vt::ITYPE, vt::fp8>::value || std::is_same<vt::ITYPE, vt::bf8>::value) {
-      if (a == 0.0f && b == 0.0f) {
-        return true;
-      }
-      //relative error tolerance
-      auto diff = std::abs((a - b)/b);
-      if (diff < 0.01f) {
-        return true;
-      }
+    if (bit_cast<uint32_t>(a) != bit_cast<uint32_t>(b)) {
       if (errors < MAX_ERRORS) {
-        printf("*** error: [%d] expected=%f, actual=%f\n", index, b, a);
+        printf("*** error: [%d] expected=%f (0x%08x), actual=%f (0x%08x)\n",
+               index, b, bit_cast<uint32_t>(b), a, bit_cast<uint32_t>(a));
       }
       return false;
-    } else {
-      union fi_t {
-        float f;
-        int32_t i;
-      };
-      fi_t fa, fb;
-      fa.f = a;
-      fb.f = b;
-      auto d = std::abs(fa.i - fb.i);
-      if (uint32_t(d) > fp32_max_ulp) {
-        if (errors < MAX_ERRORS) {
-          printf("*** error: [%d] expected=%f, actual=%f\n", index, fb.f, fa.f);
-        }
-        return false;
-      }
-      return true;
     }
+    return true;
   }
 };
 
@@ -441,41 +418,107 @@ using otype_t = typename vt::OTYPE::dtype;
 static_assert(vt::tcu_output_valid(vt::ITYPE::id, vt::OTYPE::id),
               "TCU output type must be fp32 (int32 for integer inputs)");
 
-// Error bound of the device's fp32 result against the exact dot product. Each
-// output accumulates through a chain of uops; a uop folds its products into
-// the fp32 accumulator, rounding or truncating each of those terms and the sum
-// once, every time by less than half an ulp of the uop's result. The inputs are
-// non-negative, so no partial sum exceeds the final one: a uop of P products
-// costs at most (P + 1) / 2 ulp of the result, and the chain adds them up. The
-// reference's own rounding adds one more.
-static uint32_t fp32_ulp_bound(uint32_t K) {
-  constexpr uint32_t products = cfg::tcK * cfg::i_ratio;
-  uint32_t uops = (K / cfg::tileK) * (cfg::k_steps / 2);
-  return (uops * (products + 1) + 1) / 2 + 1;
+// Exponent and mantissa widths of the float inputs on the TFR datapath.
+template <typename It> struct tfr_format;
+template <> struct tfr_format<vt::fp16> { static constexpr int eb = 5, sb = 10; };
+template <> struct tfr_format<vt::bf16> { static constexpr int eb = 8, sb = 7; };
+template <> struct tfr_format<vt::fp8>  { static constexpr int eb = 4, sb = 3; };
+template <> struct tfr_format<vt::bf8>  { static constexpr int eb = 5, sb = 2; };
+template <> struct tfr_format<vt::tf32> { static constexpr int eb = 8, sb = 10; };
+
+template <typename It>
+static uint32_t to_fp32(typename It::dtype x) {
+  if constexpr (std::is_same_v<It, vt::fp16>) {
+    return rv_htof_s(x, 0, nullptr);
+  } else if constexpr (std::is_same_v<It, vt::bf16>) {
+    return rv_btof_s(x, 0, nullptr);
+  } else if constexpr (std::is_same_v<It, vt::fp8>) {
+    return rv_e4m3tof_s(x, 0, nullptr);
+  } else if constexpr (std::is_same_v<It, vt::bf8>) {
+    return rv_e5m2tof_s(x, 0, nullptr);
+  } else {
+    static_assert(std::is_same_v<It, vt::tf32>, "unsupported float input");
+    return rv_tf32tof_s(x, 0, nullptr);
+  }
 }
 
-// Dense CPU reference matmul (pruned A has zeros at masked positions)
-static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B, uint32_t M, uint32_t N, uint32_t K) {
-  uint32_t subbytes = (vt::ITYPE::bits < 8) ? (8 / vt::ITYPE::bits) : 0;
-  uint32_t KS = subbytes ? (K * subbytes) : K;
-  for (uint32_t m = 0; m < M; ++m) {
-    for (uint32_t n = 0; n < N; ++n) {
-      if constexpr (std::is_same<vt::OTYPE, vt::fp32>::value) {
-        // fp32 output: the exact dot product, rounded once. Each product is
-        // exact in fp32 and their double sum is exact to far below an fp32
-        // ulp; fp32_ulp_bound covers the device's per-uop rounding.
-        double acc = 0.0;
-        for (uint32_t k = 0; k < KS; ++k) {
-          auto a = data_accessor_t<vt::ITYPE>::read(A, m * KS + k);
-          auto b = data_accessor_t<vt::ITYPE>::read(B, k * N + n);
-          acc += static_cast<double>(muladd_t<vt::ITYPE, vt::OTYPE>::eval(a, b, otype_t(0)));
+// One FEDP uop: d = c + sum(a[z] . b[z]) over `words` packed input words.
+// The TFR datapath aligns the products to the largest exponent in a fixed
+// window, sums them as integers, and rounds once (TfrFedp, which the RTL is
+// checked against); bits below the window are dropped, so each uop truncates.
+// The other datapaths add each word's products in fp32, then the words, then c.
+template <typename It>
+static uint32_t fedp_uop(const uint32_t *a, const uint32_t *b, uint32_t c, uint32_t words) {
+#ifdef VX_CFG_TCU_TYPE_TFR
+  TfrFedp fedp(tfr_format<It>::eb, tfr_format<It>::sb);
+  return bit_cast<uint32_t>(fedp(a, b, bit_cast<float>(c), words));
+#else
+  constexpr uint32_t ebits = It::bits;
+  constexpr uint32_t emask = (ebits < 32) ? ((1u << (ebits % 32)) - 1) : ~0u;
+  uint32_t acc = 0;
+  for (uint32_t z = 0; z < words; ++z) {
+    uint32_t prod = 0;
+    for (uint32_t e = 0; e < cfg::i_ratio; ++e) {
+      auto av = static_cast<typename It::dtype>((a[z] >> (e * ebits)) & emask);
+      auto bv = static_cast<typename It::dtype>((b[z] >> (e * ebits)) & emask);
+      auto p = rv_fmul_s(to_fp32<It>(av), to_fp32<It>(bv), 0, nullptr);
+      prod = rv_fadd_s(p, prod, 0, nullptr);
+    }
+    acc = rv_fadd_s(prod, acc, 0, nullptr);
+  }
+  return rv_fadd_s(c, acc, 0, nullptr);
+#endif
+}
+
+// CPU reference.
+//   * fp32 output: the device's arithmetic, uop by uop. A uop reduces tcK words
+//     of compressed A against the B elements the 2:4 masks select, in a FEDP
+//     fedpK words wide (the unused words are zero), and adds the running C;
+//     the uops chain over K in order. The result drifts from the exact dot
+//     product as K grows, so only the device's own arithmetic is exact.
+//   * int32 output (integer inputs): exact accumulation over the pruned A.
+// A template so the fp32 branch, which only float inputs support, is compiled
+// only for them.
+template <typename It = vt::ITYPE, typename Ot = vt::OTYPE>
+static void matmul_cpu(otype_t *C, const itype_t *A_pruned, const itype_t *A_comp,
+                       const std::vector<uint8_t> &masks, const itype_t *B,
+                       uint32_t M, uint32_t N, uint32_t K) {
+  if constexpr (std::is_same<Ot, vt::fp32>::value) {
+    using wg_cfg = vt::wgmma_config_t<VX_CFG_NUM_THREADS, vt::fp32, vt::fp32>;
+    constexpr uint32_t fedp_words = wg_cfg::fedpK;
+    constexpr uint32_t uop_elems = cfg::tcK * cfg::i_ratio;
+    static_assert(fedp_words >= cfg::tcK, "FEDP narrower than a uop");
+    uint32_t KC = K / 2;
+    uint32_t groups = K / 4;
+    for (uint32_t m = 0; m < M; ++m) {
+      for (uint32_t n = 0; n < N; ++n) {
+        uint32_t c = 0;
+        for (uint32_t u = 0; u < KC; u += uop_elems) {
+          uint32_t a[fedp_words] = {};
+          uint32_t b[fedp_words] = {};
+          for (uint32_t t = 0; t < uop_elems; ++t) {
+            uint32_t idx = u + t;
+            uint32_t mask = masks[m * groups + idx / 2];
+            uint32_t pos = (idx % 2) ? (31 - __builtin_clz(mask)) : __builtin_ctz(mask);
+            uint32_t k = (idx / 2) * 4 + pos;
+            uint32_t shift = (t % cfg::i_ratio) * vt::ITYPE::bits;
+            a[t / cfg::i_ratio] |= uint32_t(data_accessor_t<vt::ITYPE>::read(A_comp, m * KC + idx)) << shift;
+            b[t / cfg::i_ratio] |= uint32_t(data_accessor_t<vt::ITYPE>::read(B, k * N + n)) << shift;
+          }
+          c = fedp_uop<It>(a, b, c, fedp_words);
         }
-        data_accessor_t<vt::OTYPE>::write(C, m * N + n, static_cast<otype_t>(acc));
-      } else {
-        // int32 output (integer inputs): exact accumulation.
+        data_accessor_t<vt::OTYPE>::write(C, m * N + n, bit_cast<float>(c));
+      }
+    }
+  } else {
+    __unused(A_comp, masks);
+    uint32_t subbytes = (vt::ITYPE::bits < 8) ? (8 / vt::ITYPE::bits) : 0;
+    uint32_t KS = subbytes ? (K * subbytes) : K;
+    for (uint32_t m = 0; m < M; ++m) {
+      for (uint32_t n = 0; n < N; ++n) {
         otype_t sum(0);
         for (uint32_t k = 0; k < KS; ++k) {
-          auto a = data_accessor_t<vt::ITYPE>::read(A, m * KS + k);
+          auto a = data_accessor_t<vt::ITYPE>::read(A_pruned, m * KS + k);
           auto b = data_accessor_t<vt::ITYPE>::read(B, k * N + n);
           sum = muladd_t<vt::ITYPE, vt::OTYPE>::eval(a, b, sum);
         }
@@ -685,8 +728,6 @@ int main(int argc, char *argv[]) {
     std::cout << "Error: K must be a multiple of tensor tileK=" << cfg::tileK << "!" << std::endl;
     return -1;
   }
-
-  fp32_max_ulp = fp32_ulp_bound(K);
 
   size_t sizeA_full = M * K;
   size_t sizeA = (M * K) / 2;
@@ -940,84 +981,12 @@ int main(int argc, char *argv[]) {
   int errors = 0;
   {
     std::vector<otype_t> h_ref(sizeC);
-    matmul_cpu(h_ref.data(), h_A_full.data(), h_B.data(), M, N, K);
+    matmul_cpu(h_ref.data(), h_A_full.data(), h_A.data(), masks, h_B.data(), M, N, K);
 
-    // Sparse reference: compute using compressed A and mask-selected B columns.
-    uint32_t subbytes_v = (vt::ITYPE::bits < 8) ? (8 / vt::ITYPE::bits) : 0;
-    uint32_t KS_v = subbytes_v ? (K * subbytes_v) : K;
-    uint32_t stride_comp_v = KS_v / 2;
-    uint32_t num_groups_v = KS_v / 4;
-    std::vector<otype_t> h_sparse_ref(sizeC);
-    for (uint32_t m = 0; m < M; ++m) {
-      for (uint32_t n = 0; n < N; ++n) {
-        otype_t sum(0);
-        uint32_t comp_idx = 0;
-        for (uint32_t g = 0; g < num_groups_v; ++g) {
-          uint8_t mask = masks[m * num_groups_v + g];
-          // Extract first set and last set positions (matching VX_tcu_sel)
-          int first_set = -1, last_set = -1;
-          for (int p = 0; p < 4; ++p) {
-            if (mask & (1 << p)) {
-              if (first_set < 0) first_set = p;
-              last_set = p;
-            }
-          }
-          uint32_t k_base = g * 4;
-          // compressed A stores in ascending order: first_set then last_set
-          auto a_first = data_accessor_t<vt::ITYPE>::read(h_A.data(), m * stride_comp_v + comp_idx);
-          auto a_last  = data_accessor_t<vt::ITYPE>::read(h_A.data(), m * stride_comp_v + comp_idx + 1);
-          auto b_first = data_accessor_t<vt::ITYPE>::read(h_B.data(), (k_base + first_set) * N + n);
-          auto b_last  = data_accessor_t<vt::ITYPE>::read(h_B.data(), (k_base + last_set) * N + n);
-          sum = muladd_t<vt::ITYPE, vt::OTYPE>::eval(a_first, b_first, sum);
-          sum = muladd_t<vt::ITYPE, vt::OTYPE>::eval(a_last, b_last, sum);
-          comp_idx += 2;
-        }
-        data_accessor_t<vt::OTYPE>::write(h_sparse_ref.data(), m * N + n, sum);
-      }
-    }
-
-    // Compare sparse ref with dense ref (should match)
-    int sparse_ref_errors = 0;
-    for (uint32_t i = 0; i < sizeC; ++i) {
-      if (!Comparator<vt::OTYPE>::compare(h_sparse_ref[i], h_ref[i], i, sparse_ref_errors)) {
-        if (sparse_ref_errors <= 5) {
-          printf("  sparse_ref[%u]=%f vs cpu_ref[%u]=%f\n", i,
-            static_cast<float>(h_sparse_ref[i]), i,
-            static_cast<float>(h_ref[i]));
-        }
-        ++sparse_ref_errors;
-      }
-    }
-    if (sparse_ref_errors > 0) {
-      printf("WARNING: sparse_ref vs cpu_ref: %d / %zu mismatches!\n", sparse_ref_errors, sizeC);
-    } else {
-      printf("sparse_ref vs cpu_ref: ALL MATCH\n");
-    }
-
-    // Compare GPU output with sparse ref
-    int gpu_vs_sparse = 0;
-    for (uint32_t i = 0; i < sizeC; ++i) {
-      if (!Comparator<vt::OTYPE>::compare(h_C[i], h_sparse_ref[i], i, gpu_vs_sparse)) {
-        if (gpu_vs_sparse <= 5) {
-          printf("  gpu[%u]=%f vs sparse_ref[%u]=%f\n", i,
-            static_cast<float>(h_C[i]), i,
-            static_cast<float>(h_sparse_ref[i]));
-        }
-        ++gpu_vs_sparse;
-      }
-    }
-    if (gpu_vs_sparse > 0) {
-      printf("GPU vs sparse_ref: %d / %zu mismatches\n", gpu_vs_sparse, sizeC);
-    } else {
-      printf("GPU vs sparse_ref: ALL MATCH\n");
-    }
-
-    // Print first few entries for manual inspection
-    printf("First 8 entries: cpu_ref / sparse_ref / gpu\n");
+    printf("First 8 entries: cpu_ref / gpu\n");
     for (uint32_t i = 0; i < 8 && i < sizeC; ++i) {
-      printf("  [%u] %f / %f / %f\n", i,
+      printf("  [%u] %f / %f\n", i,
         static_cast<float>(h_ref[i]),
-        static_cast<float>(h_sparse_ref[i]),
         static_cast<float>(h_C[i]));
     }
 

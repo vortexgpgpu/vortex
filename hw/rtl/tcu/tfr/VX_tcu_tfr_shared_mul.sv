@@ -199,35 +199,20 @@ module VX_tcu_tfr_shared_mul import VX_tcu_pkg::*;  #(
 `endif
 
 `ifdef VX_CFG_TCU_INT8_ENABLE
-    // I8 / U8
-    wire [TCK-1:0][24:0] mul_int8_sig;
-    VX_tcu_tfr_mul_i8 #(
-        .N(N),
-        .TCK(TCK),
-        .USE_DSP(USE_DSP),
-        .PROD_REG(PROD_REG)
-    ) mul_int8 (
-        .clk        (clk),
-        .enable     (enable),
-        .valid_in   (valid_in),
-        .req_id     (req_id),
-        .vld_mask   (vld_mask),
-        .fmt_i      (fmt_s[3:0]),
-        .a_row      (a_row),
-        .b_col      (b_col),
-        .result     (mul_int8_sig)
-    );
+`define TFR_MUL_INT_ENABLE
+`elsif VX_CFG_TCU_INT4_ENABLE
+`define TFR_MUL_INT_ENABLE
 `endif
 
-`ifdef VX_CFG_TCU_INT4_ENABLE
-    // I4 / U4
-    wire [TCK-1:0][24:0] mul_int4_sig;
-    VX_tcu_tfr_mul_i4 #(
+`ifdef TFR_MUL_INT_ENABLE
+    // I8 / U8 / I4 / U4
+    wire [TCK-1:0][24:0] mul_int_sig;
+    VX_tcu_tfr_mul_int #(
         .N(N),
         .TCK(TCK),
         .USE_DSP(USE_DSP),
         .PROD_REG(PROD_REG)
-    ) mul_int4 (
+    ) mul_int (
         .clk        (clk),
         .enable     (enable),
         .valid_in   (valid_in),
@@ -236,7 +221,7 @@ module VX_tcu_tfr_shared_mul import VX_tcu_pkg::*;  #(
         .fmt_i      (fmt_s[3:0]),
         .a_row      (a_row),
         .b_col      (b_col),
-        .result     (mul_int4_sig)
+        .result     (mul_int_sig)
     );
 `endif
 
@@ -374,13 +359,13 @@ module VX_tcu_tfr_shared_mul import VX_tcu_pkg::*;  #(
 
         `ifdef VX_CFG_TCU_INT8_ENABLE
             TCU_I8_ID, TCU_U8_ID: begin
-                sig_sel  = mul_int8_sig;
+                sig_sel  = mul_int_sig;
                 sig_zero = '0;
             end
         `endif
         `ifdef VX_CFG_TCU_INT4_ENABLE
             TCU_I4_ID, TCU_U4_ID: begin
-                sig_sel  = mul_int4_sig;
+                sig_sel  = mul_int_sig;
                 sig_zero = '0;
             end
         `endif
@@ -415,4 +400,8 @@ endmodule
 
 `ifdef TFR_MUL_F16_ENABLE
 `undef TFR_MUL_F16_ENABLE
+`endif
+
+`ifdef TFR_MUL_INT_ENABLE
+`undef TFR_MUL_INT_ENABLE
 `endif

@@ -9,9 +9,11 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
 
 ### Added
 
+- **Branch naming types.** Branches are named `<type>/<name>` with one of six types (`feature/`, `fix/`, `perf/`, `refactor/`,
+  `ci/`, `docs/`), plus the maintainers' `release/` and `archive/`. See [CONTRIBUTING.md](CONTRIBUTING.md#submitting-changes).
 - **Hardware profiles.** `profiles/<name>.json` names a machine (`tinygpu`, `gtx1080`, `v100`, `a100`, `h100`, `rtx5080`) that every flow
   builds through `configure --profile=<name>` or `blackbox.sh --profile=<name>`; explicit `CONFIGS` win over the profile.
-  The GPU profiles are 64-bit machines with VM, atomics, MUFU, shared memory and the tensor, DXA, ray-tracing and graphics units of
+  The GPU profiles are 64-bit machines with VM, atomics, TFU, shared memory and the tensor, DXA, ray-tracing and graphics units of
   the real part; a profile's `xlen` sets `configure`'s XLEN, and a build tree of the other width rejects it.
   See [docs/simulation.md](docs/simulation.md#hardware-profiles).
 - **RHEL 9 toolchain (`rhel/9`).** EL9 hosts (RHEL, Rocky, AlmaLinux, CentOS Stream 9) get native prebuilt bundles: LLVM 20.1.8,
@@ -64,9 +66,9 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
   *Why:* the drift was lost on every following uniform load: vecadd on 4 LSU blocks -11.3% in rtlsim, and its SimX/RTL gap over 7
   sizes falls from 3.9% (-0.9% to 7.2%) to 1.8%.
 - **Small CI suites share a cell.** A test category can be a directory of files, each with its own defaults, that runs as one
-  cell per driver and XLEN: `isa` (mufu, zfhmin, rvc, riscv, amo), `sw` (opencl, hip, kernel, runtime), `integration` (gem5, sst,
+  cell per driver and XLEN: `isa` (tfu, zfhmin, rvc, riscv, amo), `sw` (opencl, hip, kernel, runtime), `integration` (gem5, sst,
   dtm, cupbop, mpi) and `tensor_sp` (sparse, and sparse with MX). Every case keeps its command, configs, drivers and tier; each file
-  stays selectable by its own name (`-m mufu`). *Why:* each of these suites ran in 2-6 minutes, most of it the cell's setup; a pull
+  stays selectable by its own name (`-m tfu`). *Why:* each of these suites ran in 2-6 minutes, most of it the cell's setup; a pull
   request now plans 82 cells instead of 108, a push 35 instead of 49.
 - **Foldsim's shell lives in the Foldsim repository.** The control and memory endpoints, the DRAM bank timing model, the register
   map, the in-process host, the endpoint's unit tests and the boundary lifting (`foldsim-lift`) moved out of `hw/rtl/afu/foldsim`,

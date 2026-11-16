@@ -318,7 +318,7 @@ out of LUTs:
   every bit. Each select narrows to the runs where its arms differ.
 - **Styled ROMs** (`foldsim-styled-roms`). A constant table on a wire with
   `rom_style` `block` or `distributed` becomes a memory of its shape, placed
-  as below (`VX_mufu`'s table: one block RAM, as Vivado places it, instead
+  as below (`VX_tfu`'s table: one block RAM, as Vivado places it, instead
   of 12,321 mapped LUTs of logic).
 
 Then, per op:
@@ -761,7 +761,7 @@ elaborates it with LLHD signals Beacon does not read.
 | dxa | 1.05 | 8,170 / 9,666 (0.85) | 9,215 / 7,132 (1.29) | 568 / 638 | 0 / 0 | 9 / 7 |
 | gfx | 1.45 | 241,768 / 210,879 (1.15) | 379,837 / 236,308 (1.61) | 11,906 / 12,834 | 191.5 / 172.5 | 1,140 / 992 |
 | lmem | 0.68 | 14,766 / 26,322 (0.56) | 14,361 / 13,623 (1.05) | 726 / 740 | 16 / 16 | 0 / 0 |
-| mufu | 2.92 | 1,387 / 1,966 (0.71) | 1,806 / 1,105 (1.63) | 0 / 0 | 1 / 1 | 5 / 3 |
+| tfu | 2.92 | 1,387 / 1,966 (0.71) | 1,806 / 1,105 (1.63) | 0 / 0 | 1 / 1 | 5 / 3 |
 | om | 2.37 | 4,730 / 2,298 (2.06) | 4,456 / 3,496 (1.27) | 367 / 408 | 0 / 0 | 10 / 22 |
 | raster | 1.00 | 5,044 / 7,981 (0.63) | 12,069 / 8,974 (1.34) | 496 / 606 | 8 / 8 | 14 / 14 |
 | rtu | 2.01 | 99,325 / 63,721 (1.56) | 146,917 / 94,885 (1.55) | 1,904 / 1,840 | 16.5 / 18.5 | 140 / 140 |

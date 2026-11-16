@@ -121,13 +121,13 @@ builds:
   lut_budget: 10102
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
 
-# --- mufu --------------------------------------------------------------------
+# --- tfu --------------------------------------------------------------------
 
 # Special-function datapath at its default single lane, serialized from a
 # 16-lane SFU: the 7-stage table+polynomial pipeline and the 512x72 table ROM.
-- id: mufu
-  group: mufu
-  dut: mufu
+- id: tfu
+  group: tfu
+  dut: tfu
   clock_mhz: 300
   lut_budget: 2030
   configs: "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16"

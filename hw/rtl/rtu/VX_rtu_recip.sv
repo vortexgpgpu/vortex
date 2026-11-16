@@ -161,7 +161,7 @@ module VX_rtu_recip import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .reset   (reset),
             .enable  (enable),
             .mask    (mask),
-            .fmt     ('0),
+            .fmt     (INST_FMT_S),
             .frm     (INST_FRM_RNE),
             .dataa   (32'h3F800000 /*1.0*/),
             .datab   (x),

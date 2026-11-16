@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-module VX_mufu_unit_top import VX_gpu_pkg::*; (
+module VX_tfu_unit_top import VX_gpu_pkg::*; (
     input  wire                            clk,
     input  wire                            reset,
 
@@ -28,10 +28,10 @@ module VX_mufu_unit_top import VX_gpu_pkg::*; (
     assign result_data      = result_if.data;
     assign result_if.ready  = result_ready;
 
-    VX_mufu_unit #(
-        .INSTANCE_ID ("mufu_unit_top"),
+    VX_tfu_unit #(
+        .INSTANCE_ID ("tfu_unit_top"),
         .NUM_LANES   (`VX_CFG_NUM_SFU_LANES)
-    ) mufu_unit (
+    ) tfu_unit (
         .clk        (clk),
         .reset      (reset),
         .execute_if (execute_if),

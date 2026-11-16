@@ -55,7 +55,7 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     output wire [`FP_FLAGS_BITS-1:0] fflags
 );
     localparam HAS_D     = (FLEN >= 64);
-    wire is_d = HAS_D ? fmt[0] : 1'b0;
+    wire is_d = HAS_D && (fmt == INST_FMT_D);
     `UNUSED_VAR (fmt)
 
     // ---- SUPER (widest) format the datapath is built for ----

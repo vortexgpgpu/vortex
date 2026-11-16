@@ -79,6 +79,13 @@ public:
   // Cycle the instruction entered its warp's instruction buffer.
   uint64_t ibuf_time;
 
+  // The macro-op a micro-op was expanded from, or null.
+  instr_trace_t* macro;
+
+  // Issuing this buffer entry returns the warp's fetch credit: every
+  // instruction but a macro-op's micro-ops before its last.
+  bool ibuf_last;
+
   instr_trace_t(uint64_t uuid)
     : uuid(uuid)
     , cid(0)
@@ -104,6 +111,8 @@ public:
     , fetch_stall(false)
     , resume_warp(false)
     , ibuf_time(0)
+    , macro(nullptr)
+    , ibuf_last(true)
     , log_once_(false)
   {}
 
@@ -133,6 +142,8 @@ public:
     , fetch_stall(rhs.fetch_stall)
     , resume_warp(rhs.resume_warp)
     , ibuf_time(rhs.ibuf_time)
+    , macro(rhs.macro)
+    , ibuf_last(rhs.ibuf_last)
     , log_once_(false)
   {}
 

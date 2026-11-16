@@ -52,6 +52,24 @@
 
 using namespace vortex;
 
+// FP format codes: 0 = S, 1 = D, 2 = H. Arithmetic and integer conversions
+// take S, or D with FLEN 64; Zfhmin adds H to moves and float conversions.
+static bool fmt_supported(uint32_t fmt) {
+#ifdef VX_CFG_FLEN_64
+  return (fmt == 0) || (fmt == 1);
+#else
+  return (fmt == 0);
+#endif
+}
+
+static bool mv_fmt_supported(uint32_t fmt) {
+#ifdef VX_CFG_EXT_ZFHMIN_ENABLE
+  return fmt_supported(fmt) || (fmt == 2);
+#else
+  return fmt_supported(fmt);
+#endif
+}
+
 #ifdef VX_CFG_EXT_TCU_ENABLE
 // The scoreboard's two FCSR bits double as the TCU metadata slots, as in the
 // RTL: a TCU_LD writes the sparse (fflags) or MX (frm) bit, and an MMA that
@@ -468,10 +486,10 @@ static op_string_t op_string(const Instr &instr) {
       return TcuUnit::op_string(tcu_type, tpuArgs);
     }
   #endif // VX_CFG_EXT_TCU_ENABLE
-  #ifdef VX_CFG_EXT_MUFU_ENABLE
-    ,[&](MufuType mufu_type)-> op_string_t {
+  #ifdef VX_CFG_EXT_TFU_ENABLE
+    ,[&](TfuType tfu_type)-> op_string_t {
       std::ostringstream os;
-      os << mufu_type;
+      os << tfu_type;
       return {os.str(), ""};
     }
   #endif
@@ -895,6 +913,9 @@ Instr::Ptr Decoder::decode_code(uint32_t code, uint64_t uuid) {
         if (imm12 == VX_CSR_FRM || imm12 == VX_CSR_FCSR) {
           fcsr_regs |= Instr::FCSR_FRM;
         }
+        if (imm12 == VX_CSR_MSTATUS || imm12 == VX_CSR_MTVEC || imm12 == VX_CSR_MEPC) {
+          fcsr_regs |= Instr::TRAP_CSRS;
+        }
         instr->set_fcsr_use(fcsr_regs, csr_write ? fcsr_regs : 0);
       }
       if (funct3 < 5) {
@@ -908,6 +929,7 @@ Instr::Ptr Decoder::decode_code(uint32_t code, uint64_t uuid) {
       instr->set_op_type(BrType::SYS);
       instr->set_args(IntrBrArgs{0, 0, imm12});
       instr->set_wstall(true);
+      instr->set_fcsr_use(Instr::TRAP_CSRS, 0);
     }
   } break;
   case Opcode::FCI: {
@@ -915,6 +937,15 @@ Instr::Ptr Decoder::decode_code(uint32_t code, uint64_t uuid) {
     instr->set_args(IntrFpuArgs{funct3, rs2, (funct7 & 0x1), ((funct7 & 0x3) == 0x2)});
     // Most FP ops raise exception flags; a dynamic rounding mode reads frm.
     uint8_t frm_rd = (funct3 == 0x7) ? Instr::FCSR_FRM : 0;
+    {
+      uint32_t fmt = funct7 & 0x3;
+      uint32_t group = funct7 >> 2;
+      bool is_f2f = (group == 0x08);
+      bool is_mv = (group == 0x1e) || (group == 0x1c && funct3 == 0);
+      if (!is_f2f && !(is_mv ? mv_fmt_supported(fmt) : fmt_supported(fmt))) {
+        std::abort();
+      }
+    }
     switch (funct7) {
     case 0x00: // RV32F: FADD.S
     case 0x01: // RV32D: FADD.D
@@ -969,10 +1000,7 @@ Instr::Ptr Decoder::decode_code(uint32_t code, uint64_t uuid) {
       // fmt codes: 0 = S, 1 = D, 2 = H
       uint32_t dst_fmt = funct7 & 0x3;
       uint32_t src_fmt = rs2;
-      bool supported = (src_fmt <= 2) && (src_fmt != dst_fmt);
-#ifndef VX_CFG_EXT_ZFHMIN_ENABLE
-      supported = supported && (dst_fmt != 2) && (src_fmt != 2);
-#endif
+      bool supported = (src_fmt != dst_fmt) && mv_fmt_supported(src_fmt) && mv_fmt_supported(dst_fmt);
       if (!supported) {
         std::abort();
       }
@@ -991,6 +1019,9 @@ Instr::Ptr Decoder::decode_code(uint32_t code, uint64_t uuid) {
       instr->set_src_reg(0, rs1, RegType::Float);
       break;
     case 0x7a: // FMV.H.X
+      if (funct3 != 0) {
+        std::abort();
+      }
       instr->set_op_type(FpuType::FMVWX);
       instr->set_dest_reg(rd, RegType::Float);
       instr->set_src_reg(0, rs1, RegType::Integer);
@@ -1011,8 +1042,13 @@ Instr::Ptr Decoder::decode_code(uint32_t code, uint64_t uuid) {
       instr->set_src_reg(1, rs2, RegType::Float);
       instr->set_fcsr_use(0, Instr::FCSR_FFLAGS);
       break;
-    case 0x60: // FCVT.W.D, FCVT.WU.D, FCVT.L.D, FCVT.LU.D
-    case 0x61: // FCVT.W.S, FCVT.WU.S, FCVT.L.S, FCVT.LU.S
+    case 0x60: // FCVT.W.S, FCVT.WU.S, FCVT.L.S, FCVT.LU.S
+    case 0x61: // FCVT.W.D, FCVT.WU.D, FCVT.L.D, FCVT.LU.D
+#ifndef VX_CFG_XLEN_64
+      if (rs2 & 0x2) { // FCVT.L[U] needs RV64
+        std::abort();
+      }
+#endif
       instr->set_op_type(FpuType::F2I);
       instr->set_dest_reg(rd, RegType::Integer);
       instr->set_src_reg(0, rs1, RegType::Float);
@@ -1021,6 +1057,11 @@ Instr::Ptr Decoder::decode_code(uint32_t code, uint64_t uuid) {
       break;
     case 0x68: // FCVT.S.W, FCVT.S.WU, FCVT.S.L, FCVT.S.LU
     case 0x69: // FCVT.D.W, FCVT.D.WU, FCVT.D.L, FCVT.D.LU
+#ifndef VX_CFG_XLEN_64
+      if (rs2 & 0x2) { // FCVT.*.L[U] needs RV64
+        std::abort();
+      }
+#endif
       instr->set_op_type(FpuType::I2F);
       instr->set_dest_reg(rd, RegType::Float);
       instr->set_src_reg(0, rs1, RegType::Integer);
@@ -1029,12 +1070,18 @@ Instr::Ptr Decoder::decode_code(uint32_t code, uint64_t uuid) {
       break;
     case 0x70: // FCLASS.S, FMV.X.S
     case 0x71: // FCLASS.D, FMV.X.D
+      if (funct3 > 1) { // reserved
+        std::abort();
+      }
       instr->set_op_type((funct3 != 0) ? FpuType::FCLASS : FpuType::FMVXW);
       instr->set_dest_reg(rd, RegType::Integer);
       instr->set_src_reg(0, rs1, RegType::Float);
       break;
     case 0x78: // FMV.S.X
     case 0x79: // FMV.D.X
+      if (funct3 != 0) {
+        std::abort();
+      }
       instr->set_op_type(FpuType::FMVWX);
       instr->set_dest_reg(rd, RegType::Float);
       instr->set_src_reg(0, rs1, RegType::Integer);
@@ -1047,6 +1094,9 @@ Instr::Ptr Decoder::decode_code(uint32_t code, uint64_t uuid) {
   case Opcode::FMSUB:
   case Opcode::FNMADD:
   case Opcode::FNMSUB: {
+    if (!fmt_supported(funct2)) {
+      std::abort();
+    }
     instr->set_fu_type(FUType::FPU);
     instr->set_op_type((op == Opcode::FMADD) ? FpuType::FMADD :
                      (op == Opcode::FMSUB) ? FpuType::FMSUB :
@@ -1524,13 +1574,13 @@ Instr::Ptr Decoder::decode_code(uint32_t code, uint64_t uuid) {
     std::abort();
   #endif
   } break;
-#ifdef VX_CFG_EXT_MUFU_ENABLE
+#ifdef VX_CFG_EXT_TFU_ENABLE
   case Opcode::EXT3: {
-    if (funct7 != 0 || funct3 != 0 || rs2 > uint32_t(MufuType::TANH)) {
+    if (funct7 != 0 || funct3 != 0 || rs2 > uint32_t(TfuType::TANH)) {
       std::abort();
     }
     instr->set_fu_type(FUType::SFU);
-    instr->set_op_type(MufuType(rs2));
+    instr->set_op_type(TfuType(rs2));
     instr->set_dest_reg(rd, RegType::Float);
     instr->set_src_reg(0, rs1, RegType::Float);
   } break;

@@ -48,12 +48,6 @@ public:
   // Advance to next micro-op. Returns true when all micro-ops have been issued.
   bool advance();
 
-  // A macro-op's first micro-op is the current one.
-  bool starting() const { return state_.active && state_.uop_index == 0; }
-
-  // A macro-op's last micro-op is the current one.
-  bool last() const { return state_.active && (state_.uop_index + 1) == state_.uop_count; }
-
 protected:
   void on_reset();
 

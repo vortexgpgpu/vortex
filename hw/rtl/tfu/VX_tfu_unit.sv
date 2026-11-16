@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-module VX_mufu_unit import VX_gpu_pkg::*; #(
+module VX_tfu_unit import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter NUM_LANES           = 1
 ) (
@@ -11,11 +11,11 @@ module VX_mufu_unit import VX_gpu_pkg::*; #(
     VX_result_if.master result_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    localparam NUM_PES   = `VX_CFG_NUM_MUFU_LANES;
-    localparam LATENCY   = `VX_MUFU_LATENCY;
+    localparam NUM_PES   = `VX_CFG_NUM_TFU_LANES;
+    localparam LATENCY   = `VX_TFU_LATENCY;
     localparam HDR_WIDTH = $bits(sfu_header_t);
 
-    `STATIC_ASSERT ((NUM_LANES % NUM_PES) == 0, ("invalid parameter: NUM_LANES=%0d, NUM_MUFU_LANES=%0d", NUM_LANES, NUM_PES))
+    `STATIC_ASSERT ((NUM_LANES % NUM_PES) == 0, ("invalid parameter: NUM_LANES=%0d, NUM_TFU_LANES=%0d", NUM_LANES, NUM_PES))
 
     `UNUSED_VAR (execute_if.data.op_type)
     `UNUSED_VAR (execute_if.data.op_args)
@@ -26,7 +26,7 @@ module VX_mufu_unit import VX_gpu_pkg::*; #(
     wire [NUM_LANES-1:0][31:0] rsp_data;
     wire [NUM_PES-1:0][31:0]   pe_data_in;
     wire [NUM_PES-1:0][31:0]   pe_data_out;
-    wire [INST_MUFU_BITS-1:0]  pe_fn;
+    wire [INST_TFU_BITS-1:0]   pe_fn;
     wire                       pe_enable;
     sfu_header_t               rsp_hdr;
 
@@ -45,7 +45,7 @@ module VX_mufu_unit import VX_gpu_pkg::*; #(
         .LATENCY        (LATENCY),
         .DATA_IN_WIDTH  (32),
         .DATA_OUT_WIDTH (32),
-        .SHARED_WIDTH   (INST_MUFU_BITS),
+        .SHARED_WIDTH   (INST_TFU_BITS),
         .TAG_WIDTH      (HDR_WIDTH),
         .PE_REG         (0),
         .OUT_BUF        (0)
@@ -55,7 +55,7 @@ module VX_mufu_unit import VX_gpu_pkg::*; #(
         .valid_in      (execute_if.valid),
         .mask_in       (execute_if.data.header.tmask),
         .data_in       (req_data),
-        .shared_in     (execute_if.data.op_args.mufu.fn),
+        .shared_in     (execute_if.data.op_args.tfu.fn),
         .tag_in        (execute_if.data.header),
         .ready_in      (execute_if.ready),
         .pe_enable     (pe_enable),
@@ -71,7 +71,7 @@ module VX_mufu_unit import VX_gpu_pkg::*; #(
     );
 
     for (genvar i = 0; i < NUM_PES; ++i) begin : g_pes
-        VX_mufu_pe pe (
+        VX_tfu_pe pe (
             .clk    (clk),
             .reset  (reset),
             .enable (pe_enable),

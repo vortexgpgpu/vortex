@@ -47,7 +47,7 @@
   <text x="900" y="164" class="mono" text-anchor="middle">mantissa 23</text>
 
   <text x="1064" y="106" class="ts">The format comes from the instruction's</text>
-  <text x="1064" y="122" class="ts">fmt[0], never from the operand's width.</text>
+  <text x="1064" y="122" class="ts">dst_fmt, never from the operand's width.</text>
   <text x="1064" y="146" class="ts">An F32 result is boxed on the way out.</text>
   <text x="1064" y="162" class="ts">The arithmetic cores read the low half</text>
   <text x="1064" y="178" class="ts">of an F32 operand and ignore the rest.</text>
@@ -73,7 +73,7 @@
   <text x="264" y="450" class="tt" text-anchor="middle">lane [63:0]</text>
 
   <rect x="44" y="496" width="288" height="44" rx="6" class="box"/>
-  <text x="188" y="523" class="ts" text-anchor="middle">select on fmt[0], delayed by the latency</text>
+  <text x="188" y="523" class="ts" text-anchor="middle">select on dst_fmt, delayed by the latency</text>
   <path d="M 109 468 L 109 496" class="flow"/>
   <path d="M 264 468 L 264 496" class="flow"/>
 
@@ -155,7 +155,7 @@
   <text x="1082" y="408" class="ts">compare         EQ, LT, LE</text>
   <text x="1082" y="428" class="ts">classify</text>
   <text x="1082" y="448" class="ts">move            float ↔ integer register</text>
-  <text x="1082" y="480" class="ts">field positions are selected by fmt[0];</text>
+  <text x="1082" y="480" class="ts">field positions are selected by dst_fmt;</text>
   <text x="1082" y="496" class="ts">canonical NaNs and boxing are generated</text>
   <text x="1082" y="512" class="ts">per format</text>
 

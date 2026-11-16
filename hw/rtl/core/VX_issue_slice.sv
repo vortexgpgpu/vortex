@@ -34,7 +34,10 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     output wire             warp_issued,
     output wire [ISSUE_WIS_W-1:0] warp_issued_wis
 );
-    VX_ibuffer_if ibuffer_if [PER_ISSUE_WARPS]();
+    wire [PER_ISSUE_WARPS-1:0]      ibf_head_valid, ibf_next_valid, ibf_head_pop;
+    ibuf_hz_t [PER_ISSUE_WARPS-1:0] ibf_head_hz, ibf_next_hz;
+    wire [ISSUE_WIS_W-1:0]          ibf_read_wis;
+    ibuffer_t                       ibf_read_data;
     VX_scoreboard_if scoreboard_if();
     VX_operands_if operands_if();
 
@@ -49,7 +52,13 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
         .perf_stalls    (issue_perf.ibf_stalls),
      `endif
         .decode_if      (decode_if),
-        .ibuffer_if     (ibuffer_if)
+        .head_valid     (ibf_head_valid),
+        .head_hz        (ibf_head_hz),
+        .next_valid     (ibf_next_valid),
+        .next_hz        (ibf_next_hz),
+        .read_wis       (ibf_read_wis),
+        .read_data      (ibf_read_data),
+        .head_pop       (ibf_head_pop)
     );
 
     VX_scoreboard #(
@@ -62,7 +71,13 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     `endif
         .fu_release     (fu_release),
         .writeback_if   (writeback_if),
-        .ibuffer_if     (ibuffer_if),
+        .head_valid     (ibf_head_valid),
+        .head_hz        (ibf_head_hz),
+        .next_valid     (ibf_next_valid),
+        .next_hz        (ibf_next_hz),
+        .read_wis       (ibf_read_wis),
+        .read_data      (ibf_read_data),
+        .head_pop       (ibf_head_pop),
         .scoreboard_if  (scoreboard_if)
     );
 

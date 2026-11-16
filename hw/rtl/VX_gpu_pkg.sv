@@ -90,7 +90,8 @@ package VX_gpu_pkg;
     // these bits.
     localparam XREG_0      = 0;
     localparam XREG_1      = 1;
-    localparam NUM_XREGS   = 2;
+    localparam XREG_2      = 2;
+    localparam NUM_XREGS   = 3;
 
     localparam DV_STACK_SIZE = `UP(`VX_CFG_NUM_THREADS-1);
     localparam DV_STACK_SIZEW = `LOG2UP(DV_STACK_SIZE);
@@ -383,6 +384,14 @@ package VX_gpu_pkg;
     localparam INST_OP_BITS =    4;
     localparam INST_FMT_BITS =   2;
 
+    // Float formats (RISC-V fmt encoding).
+    localparam INST_FMT_S =      2'b00;
+    localparam INST_FMT_D =      2'b01;
+    localparam INST_FMT_H =      2'b10;
+    // Integer side of a conversion: RISC-V rs2 width bit; signedness is in the opcode.
+    localparam INST_FMT_W =      2'b00;
+    localparam INST_FMT_L =      2'b10;
+
     ///////////////////////////////////////////////////////////////////////////
 
     localparam INST_ALU_ADD =    4'b0000;
@@ -558,20 +567,19 @@ package VX_gpu_pkg;
 
     ///////////////////////////////////////////////////////////////////////////
 
-    localparam INST_FPU_ADD =    4'b0000; // SUB=fmt[1]
+    localparam INST_FPU_ADD =    4'b0000; // SUB=op_mod
     localparam INST_FPU_MUL =    4'b0001;
-    localparam INST_FPU_MADD =   4'b0010; // SUB=fmt[1]
-    localparam INST_FPU_NMADD =  4'b0011; // SUB=fmt[1]
+    localparam INST_FPU_MADD =   4'b0010; // MSUB=op_mod
+    localparam INST_FPU_NMADD =  4'b0011; // NMSUB=op_mod
     localparam INST_FPU_DIV =    4'b0100;
     localparam INST_FPU_SQRT =   4'b0101;
-    localparam INST_FPU_F2I =    4'b1000; // fmt[0]: F32=0, F64=1, fmt[1]: I32=0, I64=1
-    localparam INST_FPU_F2U =    4'b1001; // fmt[0]: F32=0, F64=1, fmt[1]: I32=0, I64=1
-    localparam INST_FPU_I2F =    4'b1010; // fmt[0]: F32=0, F64=1, fmt[1]: I32=0, I64=1
-    localparam INST_FPU_U2F =    4'b1011; // fmt[0]: F32=0, F64=1, fmt[1]: I32=0, I64=1
+    localparam INST_FPU_F2I =    4'b1000; // src_fmt: float, dst_fmt: integer
+    localparam INST_FPU_F2U =    4'b1001; // src_fmt: float, dst_fmt: integer
+    localparam INST_FPU_I2F =    4'b1010; // src_fmt: integer, dst_fmt: float
+    localparam INST_FPU_U2F =    4'b1011; // src_fmt: integer, dst_fmt: float
     localparam INST_FPU_CMP =    4'b1100; // frm: LE=0, LT=1, EQ=2
-    localparam INST_FPU_F2F =    4'b1101; // fmt[0]: F32=0, F64=1
+    localparam INST_FPU_F2F =    4'b1101; // src_fmt: float, dst_fmt: float
     localparam INST_FPU_MISC =   4'b1110; // frm: SGNJ=0, SGNJN=1, SGNJX=2, CLASS=3, MVXW=4, MVWX=5, FMIN=6, FMAX=7
-    localparam INST_FPU_F2H =    4'b1111;
     localparam INST_FPU_BITS =   4;
 
     function automatic logic inst_fpu_is_class(input logic [INST_FPU_BITS-1:0] op, input logic [INST_FRM_BITS-1:0] frm);
@@ -609,8 +617,8 @@ package VX_gpu_pkg;
 `ifdef EXT_GFX_ANY_ENABLE
     localparam INST_SFU_RTUW =   4'hE;  // RTU hit window (GETW/GETWF) + trace ops
 `endif
-`ifdef VX_CFG_EXT_MUFU_ENABLE
-    localparam INST_SFU_MUFU =   4'hF;
+`ifdef VX_CFG_EXT_TFU_ENABLE
+    localparam INST_SFU_TFU =    4'hF;
 `endif
     localparam INST_SFU_BITS =   4;
 
@@ -632,15 +640,15 @@ package VX_gpu_pkg;
         return (op >= 6 && op <= 8);
     endfunction
 
-`ifdef VX_CFG_EXT_MUFU_ENABLE
-    localparam INST_MUFU_RCP =   3'h0;
-    localparam INST_MUFU_RSQRT = 3'h1;
-    localparam INST_MUFU_EX2 =   3'h2;
-    localparam INST_MUFU_LG2 =   3'h3;
-    localparam INST_MUFU_SINPI = 3'h4;
-    localparam INST_MUFU_COSPI = 3'h5;
-    localparam INST_MUFU_TANH =  3'h6;
-    localparam INST_MUFU_BITS =  3;
+`ifdef VX_CFG_EXT_TFU_ENABLE
+    localparam INST_TFU_RCP =   3'h0;
+    localparam INST_TFU_RSQRT = 3'h1;
+    localparam INST_TFU_EX2 =   3'h2;
+    localparam INST_TFU_LG2 =   3'h3;
+    localparam INST_TFU_SINPI = 3'h4;
+    localparam INST_TFU_COSPI = 3'h5;
+    localparam INST_TFU_TANH =  3'h6;
+    localparam INST_TFU_BITS =  3;
 `endif
 
     /////////////////////////////// Issue parameters //////////////////////////
@@ -649,11 +657,26 @@ package VX_gpu_pkg;
     localparam ISSUE_ISW_SIZEW = `CLOG2(`VX_CFG_ISSUE_WIDTH + 1);
     localparam ISSUE_ISW_W = `UP(ISSUE_ISW_BITS);
     localparam PER_ISSUE_WARPS = `VX_CFG_NUM_WARPS / `VX_CFG_ISSUE_WIDTH;
+    // With this many warps per issue slice another warp fills the cycle after a
+    // warp issues, so the scoreboard does not check the entry behind the head
+    // ahead of time: a warp issues at most every other cycle.
+    localparam ISSUE_LOOKAHEAD = (PER_ISSUE_WARPS < 32);
     localparam ISSUE_WIS_BITS = `CLOG2(PER_ISSUE_WARPS);
     localparam ISSUE_WIS_W = `UP(ISSUE_WIS_BITS);
 
-    // Machine-mode trap CSRs stored per warp in the scheduler: mstatus, mtvec, mepc, mcause, mtval.
-    localparam NUM_TRAP_CSRS = 5;
+    // Machine-mode trap CSRs held by the scheduler: mstatus, mtvec, mepc, mcause.
+    localparam NUM_TRAP_CSRS = 4;
+    localparam TRAP_CSR_MSTATUS = 0;
+    localparam TRAP_CSR_MTVEC   = 1;
+    localparam TRAP_CSR_MEPC    = 2;
+    localparam TRAP_CSR_MCAUSE  = 3;
+    // Every warp runs the same kernel and trap handler, so mstatus and mtvec are
+    // one per core and a write by any warp updates them for all; only the return
+    // PC and cause, which concurrent traps in different warps need, stay per warp.
+    localparam [NUM_TRAP_CSRS-1:0] TRAP_CSR_SHARED = NUM_TRAP_CSRS'((1 << TRAP_CSR_MSTATUS)
+                                                                  | (1 << TRAP_CSR_MTVEC));
+    // mcause holds only the exception codes the core raises (ECALL, EBREAK).
+    localparam TRAP_CAUSE_BITS = 4;
 
     localparam DISPATCH_QSIZE = `VX_CFG_DISPATCH_QUEUE_SIZE;
 
@@ -1265,8 +1288,21 @@ package VX_gpu_pkg;
         logic [7:0]                        ctx_id;
         logic [`VX_CFG_LMEM_LOG_SIZE:0]    aligned_lmem_size;
         logic [23:0]                       num_regs;  // VX_DCR_KMU_NUM_REGS: {Ru, Rf, Rx}, 0 = every register
+        logic [`VX_CFG_NUM_WARPS-1:0]      lmem_slots; // see lmem_slots_fit
         kmu_args_t                         args;   // .compute | .fragment
     } kmu_req_t;
+
+    // The CTA slots whose LMEM partition fits, as a thermometer: bit m-1 is set
+    // iff m CTAs of `stride` bytes fit, tested as stride <= floor(LMEM_SIZE/m),
+    // a constant per m. All fit when stride is 0, and slot 0 always does: a CTA
+    // larger than the capacity still makes progress, at the cost of writing
+    // past its slot.
+    function automatic logic [`VX_CFG_NUM_WARPS-1:0] lmem_slots_fit(input logic [`VX_CFG_LMEM_LOG_SIZE:0] stride);
+        for (integer m = 1; m <= `VX_CFG_NUM_WARPS; ++m) begin
+            lmem_slots_fit[m-1] = (m == 1) || (stride == '0)
+                || ((`VX_CFG_LMEM_LOG_SIZE+NW_WIDTH+2)'(stride) <= (`VX_CFG_LMEM_LOG_SIZE+NW_WIDTH+2)'(`VX_CFG_LMEM_SIZE / m));
+        end
+    endfunction
 
     // ── KMU launch messages ──────────────────────────────────────────────
     // Every beat is a self-contained kmu_req_t -- a fragment carries its stamps in
@@ -1384,7 +1420,7 @@ package VX_gpu_pkg;
         logic [PC_BITS-1:0]     dest;
         logic                   is_trap;
         logic                   is_mret;
-        logic [3:0]             trap_cause;
+        logic [TRAP_CAUSE_BITS-1:0] trap_cause;
     } sched_branch_t;
 
     // SFU warp control
@@ -1416,7 +1452,6 @@ package VX_gpu_pkg;
         logic [`VX_CFG_XLEN-1:0] mtvec;
         logic [`VX_CFG_XLEN-1:0] mepc;
         logic [`VX_CFG_XLEN-1:0] mcause;
-        logic [`VX_CFG_XLEN-1:0] mtval;
         logic [NW_WIDTH-1:0]    cta_rank;
         cta_lane_t [`VX_CFG_NUM_THREADS-1:0] cta_lane;
     } sched_csr_rd_t;
@@ -1452,10 +1487,14 @@ package VX_gpu_pkg;
     `PACKAGE_ASSERT($bits(br_args_t) == $bits(alu_args_t))
     `PACKAGE_ASSERT($bits(br_args_t) == INST_ARGS_BITS)
 
+    // src_fmt/dst_fmt: operand and result formats, equal except for a conversion.
+    // op_mod: negates the addend of ADD, MADD and NMADD (SUB, MSUB, NMSUB).
     typedef struct packed {
-        logic [(INST_ARGS_BITS-INST_FRM_BITS-INST_FMT_BITS)-1:0] __padding;
+        logic [(INST_ARGS_BITS-INST_FRM_BITS-2*INST_FMT_BITS-1)-1:0] __padding;
+        logic                     op_mod;
+        logic [INST_FMT_BITS-1:0] src_fmt;
         logic [INST_FRM_BITS-1:0] frm;
-        logic [INST_FMT_BITS-1:0] fmt;
+        logic [INST_FMT_BITS-1:0] dst_fmt;
     } fpu_args_t;
     `PACKAGE_ASSERT($bits(fpu_args_t) == INST_ARGS_BITS)
 
@@ -1530,12 +1569,12 @@ package VX_gpu_pkg;
     `PACKAGE_ASSERT($bits(tcu_args_t) == INST_ARGS_BITS)
 `endif
 
-`ifdef VX_CFG_EXT_MUFU_ENABLE
+`ifdef VX_CFG_EXT_TFU_ENABLE
     typedef struct packed {
-        logic [INST_ARGS_BITS-INST_MUFU_BITS-1:0] __padding;
-        logic [INST_MUFU_BITS-1:0]                fn;
-    } mufu_args_t;
-    `PACKAGE_ASSERT($bits(mufu_args_t) == INST_ARGS_BITS)
+        logic [INST_ARGS_BITS-INST_TFU_BITS-1:0] __padding;
+        logic [INST_TFU_BITS-1:0]                fn;
+    } tfu_args_t;
+    `PACKAGE_ASSERT($bits(tfu_args_t) == INST_ARGS_BITS)
 `endif
 
 `ifdef VX_CFG_EXT_TEX_ENABLE
@@ -1597,8 +1636,8 @@ package VX_gpu_pkg;
     `ifdef VX_CFG_EXT_TCU_ENABLE
         tcu_args_t  tcu;
     `endif
-    `ifdef VX_CFG_EXT_MUFU_ENABLE
-        mufu_args_t mufu;
+    `ifdef VX_CFG_EXT_TFU_ENABLE
+        tfu_args_t tfu;
     `endif
     `ifdef VX_CFG_EXT_TEX_ENABLE
         tex_args_t  tex;
@@ -1674,6 +1713,56 @@ package VX_gpu_pkg;
         logic                       issue_yield;
     `endif
     } ibuffer_t;
+
+    // What the scoreboard checks for a buffered instruction, kept per warp
+    // beside each buffer entry; the instruction itself sits in the issue
+    // slice's shared buffer storage.
+    typedef struct packed {
+        logic [EX_BITS-1:0]         ex_type;
+        logic                       wb;
+        logic [NUM_XREGS-1:0]       rd_xregs;
+        logic [NUM_XREGS-1:0]       wr_xregs;
+        logic [NUM_SRC_OPDS-1:0]    used_rs;
+        logic [NUM_REGS_BITS-1:0]   rd;
+        logic [NUM_REGS_BITS-1:0]   rs1;
+        logic [NUM_REGS_BITS-1:0]   rs2;
+        logic [NUM_REGS_BITS-1:0]   rs3;
+        logic                       fu_lock;
+        logic                       fu_unlock;
+    `ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
+        logic                       issue_yield;
+    `endif
+    `ifdef SIMULATION
+        // names a stalled head in the scoreboard's trace and timeout
+        logic [UUID_WIDTH-1:0]      uuid;
+        logic [PC_BITS-1:0]         PC;
+        logic [`VX_CFG_NUM_THREADS-1:0] tmask;
+    `endif
+    } ibuf_hz_t;
+
+    function automatic ibuf_hz_t to_ibuf_hz(input ibuffer_t ibf);
+        ibuf_hz_t hz;
+        hz.ex_type   = ibf.ex_type;
+        hz.wb        = ibf.wb;
+        hz.rd_xregs  = ibf.rd_xregs;
+        hz.wr_xregs  = ibf.wr_xregs;
+        hz.used_rs   = ibf.used_rs;
+        hz.rd        = ibf.rd;
+        hz.rs1       = ibf.rs1;
+        hz.rs2       = ibf.rs2;
+        hz.rs3       = ibf.rs3;
+        hz.fu_lock   = ibf.fu_lock;
+        hz.fu_unlock = ibf.fu_unlock;
+    `ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
+        hz.issue_yield = ibf.issue_yield;
+    `endif
+    `ifdef SIMULATION
+        hz.uuid  = ibf.uuid;
+        hz.PC    = ibf.PC;
+        hz.tmask = ibf.tmask;
+    `endif
+        return hz;
+    endfunction
 
     typedef struct packed {
         logic [UUID_WIDTH-1:0]      uuid;

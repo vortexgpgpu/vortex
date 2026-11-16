@@ -61,19 +61,19 @@ uint32_t tame(std::mt19937& rng) {
     return sign | (exp << 23) | man;
 }
 
-// Map (op, a, b, c) to RTL op_type/fmt and the rvfloats golden.
+// Map (op, a, b, c) to RTL op_type/op_mod and the rvfloats golden.
 void encode(int op, uint32_t a, uint32_t b, uint32_t c,
-            uint32_t& op_type, uint32_t& fmt,
+            uint32_t& op_type, uint32_t& op_mod,
             uint32_t& da, uint32_t& db, uint32_t& dc) {
-    fmt = 0; da = a; db = b; dc = c;
+    op_mod = 0; da = a; db = b; dc = c;
     switch (op) {
-    case FADD:   op_type = OP_ADD;   fmt = 0; db = b; dc = 0; break; // a*1 + b (b->op_c)
-    case FSUB:   op_type = OP_ADD;   fmt = 2; db = b; dc = 0; break; // a*1 - b
-    case FMUL:   op_type = OP_MUL;   fmt = 0; dc = 0;         break; // a*b + 0
-    case FMADD:  op_type = OP_MADD;  fmt = 0;                 break; // a*b + c
-    case FMSUB:  op_type = OP_MADD;  fmt = 2;                 break; // a*b - c
-    case FNMADD: op_type = OP_NMADD; fmt = 0;                 break; // -(a*b) - c
-    case FNMSUB: op_type = OP_NMADD; fmt = 2;                 break; // -(a*b) + c
+    case FADD:   op_type = OP_ADD;   op_mod = 0; db = b; dc = 0; break; // a*1 + b (b->op_c)
+    case FSUB:   op_type = OP_ADD;   op_mod = 1; db = b; dc = 0; break; // a*1 - b
+    case FMUL:   op_type = OP_MUL;   op_mod = 0; dc = 0;         break; // a*b + 0
+    case FMADD:  op_type = OP_MADD;  op_mod = 0;                 break; // a*b + c
+    case FMSUB:  op_type = OP_MADD;  op_mod = 1;                 break; // a*b - c
+    case FNMADD: op_type = OP_NMADD; op_mod = 0;                 break; // -(a*b) - c
+    case FNMSUB: op_type = OP_NMADD; op_mod = 1;                 break; // -(a*b) + c
     default:
         std::fprintf(stderr, "encode: unknown op %d\n", op);
         std::abort();
@@ -141,7 +141,7 @@ int main(int argc, char** argv) {
 
     vl_simulator<Device> sim;
     uint64_t ticks = 0;
-    sim->enable = 1; sim->mask = 0; sim->op_type = 0; sim->fmt = 0; sim->frm = 0;
+    sim->enable = 1; sim->mask = 0; sim->op_type = 0; sim->op_mod = 0; sim->frm = 0;
     sim->dataa = 0; sim->datab = 0; sim->datac = 0;
     ticks = sim.reset(ticks);
 
@@ -160,9 +160,9 @@ int main(int argc, char** argv) {
     for (size_t c = 0; c < N + LATENCY; ++c) {
         if (feed < N) {
             const TV& t = tests[feed];
-            uint32_t op_type, fmt, da, db, dc;
-            encode(t.op, t.a, t.b, t.c, op_type, fmt, da, db, dc);
-            sim->op_type = op_type; sim->fmt = fmt; sim->frm = t.frm;
+            uint32_t op_type, op_mod, da, db, dc;
+            encode(t.op, t.a, t.b, t.c, op_type, op_mod, da, db, dc);
+            sim->op_type = op_type; sim->op_mod = op_mod; sim->frm = t.frm;
             sim->dataa = da; sim->datab = db; sim->datac = dc; sim->mask = 1;
             uint32_t ff = 0;
             uint32_t r  = golden(t.op, t.a, t.b, t.c, t.frm, &ff);

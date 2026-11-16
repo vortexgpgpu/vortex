@@ -92,7 +92,7 @@ class Core::Impl {
 public:
   Impl(const SimContext& ctx, Core* simobject)
     : simobject_(simobject)
-    , sequencers_(VX_CFG_NUM_WARPS)
+    , sequencers_(VX_CFG_ISSUE_WIDTH)
     , mpm_class_(0)
     , ibuffers_(VX_CFG_NUM_WARPS)
     , operands_(VX_CFG_ISSUE_WIDTH)
@@ -101,7 +101,7 @@ public:
     , lmem_switch_(VX_CFG_NUM_LSU_BLOCKS)
     , mem_coalescers_(VX_CFG_NUM_LSU_BLOCKS)
     // As the scoreboard's out_arb: a matrix arbiter past 8 warps per slot.
-    , ibuffer_arbs_(VX_CFG_ISSUE_WIDTH, {(PER_ISSUE_WARPS > 8) ? ArbiterType::GreedyMatrix : ArbiterType::GreedyRR, PER_ISSUE_WARPS})
+    , ibuffer_arbs_(VX_CFG_ISSUE_WIDTH, {(PER_ISSUE_WARPS > 16) ? ArbiterType::GreedyMatrix2 : (PER_ISSUE_WARPS > 8) ? ArbiterType::GreedyMatrix : ArbiterType::GreedyRR, PER_ISSUE_WARPS})
     , issue_lock_owner_(VX_CFG_ISSUE_WIDTH, kLockOpen)
     , issue_yield_(VX_CFG_ISSUE_WIDTH, kNoYield)
     , fu_credits_(VX_CFG_ISSUE_WIDTH, std::vector<uint32_t>((uint32_t)FUType::Count, 0))
@@ -109,11 +109,13 @@ public:
     , fu_full_seen_(VX_CFG_ISSUE_WIDTH, BitVector<>((uint32_t)FUType::Count, 0))
     , ibuf_inflight_(VX_CFG_NUM_WARPS, 0)
     , ibuf_full_r_(VX_CFG_NUM_WARPS, false)
-    , ibuf_queued_(VX_CFG_NUM_WARPS, 0)
-    , ibuf_queue_full_r_(VX_CFG_NUM_WARPS, false)
+    , ibuf_count_(VX_CFG_NUM_WARPS, 0)
+    , ibuf_count_r_(VX_CFG_NUM_WARPS, 0)
+    , ibuf_pops_(VX_CFG_NUM_WARPS, 0)
+    , ibuf_pops_r_(VX_CFG_NUM_WARPS, 0)
+    , seq_macro_(VX_CFG_ISSUE_WIDTH, nullptr)
+    , seq_busy_(VX_CFG_ISSUE_WIDTH, false)
     , last_issue_(VX_CFG_NUM_WARPS, 0)
-    , staged_since_(VX_CFG_NUM_WARPS, 0)
-    , head_staged_(VX_CFG_NUM_WARPS, false)
   {
     const std::string& name = simobject_->name();
     char sname[100];
@@ -149,10 +151,10 @@ public:
     snprintf(sname, 100, "%s-scoreboard", name.c_str());
     scoreboard_ = SimPlatform::instance().create_object<Scoreboard>(sname);
 
-    // create per-warp sequencers (SimObject)
-    for (uint32_t w = 0; w < VX_CFG_NUM_WARPS; ++w) {
-      snprintf(sname, 100, "%s-sequencer%d", name.c_str(), w);
-      sequencers_.at(w) = SimPlatform::instance().create_object<Sequencer>(sname, simobject_, instr_pool_);
+    // one uop sequencer per issue slice, at its instruction buffers' input
+    for (uint32_t iw = 0; iw < VX_CFG_ISSUE_WIDTH; ++iw) {
+      snprintf(sname, 100, "%s-sequencer%d", name.c_str(), iw);
+      sequencers_.at(iw) = SimPlatform::instance().create_object<Sequencer>(sname, simobject_, instr_pool_);
     }
 
     // create operands
@@ -164,9 +166,7 @@ public:
     // create ibuffers
     for (uint32_t i = 0; i < ibuffers_.size(); ++i) {
       snprintf(sname, 100, "%s-ibuffer%d", name.c_str(), i);
-      // IBUF_SIZE entries plus the head, which stands for the warp's staging
-      // register once it has moved there
-      ibuffers_.at(i) = TFifo<instr_trace_t*>::Create(sname, 1, VX_CFG_IBUF_SIZE + 1);
+      ibuffers_.at(i) = TFifo<instr_trace_t*>::Create(sname, 1, VX_CFG_IBUF_SIZE);
     }
 
     // The LSU ticks ahead of the coalescer, the lane adapters and the lmem
@@ -455,10 +455,9 @@ public:
     std::fill(issue_lock_owner_.begin(), issue_lock_owner_.end(), kLockOpen);
     std::fill(issue_yield_.begin(), issue_yield_.end(), kNoYield);
     std::fill(last_issue_.begin(), last_issue_.end(), 0);
-    std::fill(staged_since_.begin(), staged_since_.end(), 0);
-    std::fill(head_staged_.begin(), head_staged_.end(), false);
 
-    pending_instrs_.clear();
+    std::fill(pending_instrs_.begin(), pending_instrs_.end(), 0);
+    pending_total_ = 0;
     pending_ifetches_ = 0;
 
     for (auto& holds : gather_holds_) {
@@ -467,8 +466,12 @@ public:
 
     std::fill(ibuf_inflight_.begin(), ibuf_inflight_.end(), 0);
     std::fill(ibuf_full_r_.begin(), ibuf_full_r_.end(), false);
-    std::fill(ibuf_queued_.begin(), ibuf_queued_.end(), 0);
-    std::fill(ibuf_queue_full_r_.begin(), ibuf_queue_full_r_.end(), false);
+    std::fill(ibuf_count_.begin(), ibuf_count_.end(), 0);
+    std::fill(ibuf_count_r_.begin(), ibuf_count_r_.end(), 0);
+    std::fill(ibuf_pops_.begin(), ibuf_pops_.end(), 0);
+    std::fill(ibuf_pops_r_.begin(), ibuf_pops_r_.end(), 0);
+    std::fill(seq_macro_.begin(), seq_macro_.end(), nullptr);
+    std::fill(seq_busy_.begin(), seq_busy_.end(), false);
 
     // perf_stats_ deliberately survives: these are the MPM counters, which
     // accumulate from device reset. A kernel launch re-enters reset() here but
@@ -490,7 +493,7 @@ public:
     // launching, a warp active, or an instruction in flight -- so cycles it
     // spends idle before its first CTA, after its last warp, or while the host
     // moves data are not charged to it.
-    if (scheduler_->running() || !pending_instrs_.empty()) {
+    if (scheduler_->running() || pending_total_ != 0) {
       ++perf_stats_.cycles;
     }
     DPN(2, std::flush);
@@ -500,24 +503,24 @@ public:
 
   // Abort when a warp's staged instruction has not issued for STALL_TIMEOUT
   // cycles, naming the registers it still waits on.
-  void check_issue_timeout(uint32_t iw, uint32_t wid, instr_trace_t* trace, instr_trace_t* uop_trace) {
+  void check_issue_timeout(uint32_t iw, uint32_t wid, instr_trace_t* trace) {
     uint64_t staged = std::max(last_issue_.at(wid), trace->ibuf_time);
     uint64_t stall_cycles = SimPlatform::instance().cycles() - staged;
     if (stall_cycles < VX_DBG_STALL_TIMEOUT) {
       return;
     }
     std::cerr << "*** " << simobject_->name() << " issue timeout: wid=" << wid
-              << " (issue" << iw << "), PC=0x" << std::hex << uop_trace->PC << std::dec
-              << ", tmask=" << uop_trace->tmask << " (lane 0 first), cycles=" << stall_cycles
+              << " (issue" << iw << "), PC=0x" << std::hex << trace->PC << std::dec
+              << ", tmask=" << trace->tmask << " (lane 0 first), cycles=" << stall_cycles
               << ", inuse={";
-    if (scoreboard_->in_use(uop_trace)) {
-      auto uses = scoreboard_->get_uses(uop_trace);
+    if (scoreboard_->in_use(trace)) {
+      auto uses = scoreboard_->get_uses(trace);
       for (uint32_t j = 0; j < uses.size(); ++j) {
         auto& use = uses.at(j);
         std::cerr << (j ? ", " : "") << use.reg_type << use.reg_id << " (#" << use.uuid << ")";
       }
     }
-    std::cerr << "}, " << *uop_trace << std::endl;
+    std::cerr << "}, " << *trace << std::endl;
     std::abort();
   }
 
@@ -560,7 +563,7 @@ public:
 
       fetch_latch->push(trace);
       DT(3, simobject_->name() << "-pipeline schedule: " << *trace);
-      pending_instrs_.push_back(trace);
+      this->pending_add(trace->wid);
       ++ibuf_inflight_.at(trace->wid);
       perf_stats_.issued_warps += 1;
       perf_stats_.issued_threads += trace->tmask.count();
@@ -569,8 +572,10 @@ public:
       ++perf_stats_.sched_idle;
     }
     for (uint32_t w = 0; w < VX_CFG_NUM_WARPS; ++w) {
-      ibuf_full_r_.at(w) = (ibuf_inflight_.at(w) == VX_CFG_IBUF_SIZE);
-      ibuf_queue_full_r_.at(w) = (ibuf_queued_.at(w) >= VX_CFG_IBUF_SIZE);
+      ibuf_full_r_.at(w) = (ibuf_inflight_.at(w) >= VX_CFG_IBUF_SIZE);
+      ibuf_count_r_.at(w) = ibuf_count_.at(w);
+      ibuf_pops_r_.at(w) = ibuf_pops_.at(w);
+      ibuf_pops_.at(w) = 0;
     }
 
     scheduler_->schedule_end();
@@ -611,38 +616,28 @@ public:
       auto trace = pending_icache.at(mem_rsp.tag);
       assert(mem_rsp.data && "icache response must carry line payload");
 
-      // Decode passes the response straight into its warp's buffer, so a full
-      // buffer holds it at the icache output, in front of the responses behind
-      // it. The buffer's full flag is registered: a slot it frees this cycle
-      // takes an instruction from the next.
-      bool ibuf_room = !ibuf_queue_full_r_.at(trace->wid);
+      // The decode latch stands for the decoder's input: an instruction its
+      // warp's buffer cannot take waits there, in front of the responses
+      // behind it.
     #ifdef VX_CFG_EXT_C_ENABLE
       // Decompressor classifies the rsp: emit-ready (sets trace->code) or
       // queues a refetch internally for cross-word 32-bit completion.
       bool emit = decompressor->on_icache_rsp(trace, *mem_rsp.data);
-      bool progressed = !emit || (ibuf_room && decode_latch.try_push(trace));
+      bool progressed = !emit || decode_latch.try_push(trace);
       if (emit && progressed) {
         decompressor->on_emit(trace);
       }
     #else
       bool emit = true;
       bool progressed = false;
-      if (ibuf_room && decode_latch.try_push(trace)) {
+      if (decode_latch.try_push(trace)) {
         uint32_t offset = trace->PC & (VX_CFG_MEM_BLOCK_SIZE - 1);
         std::memcpy(&trace->code, mem_rsp.data->data() + offset, sizeof(uint32_t));
         progressed = true;
       }
     #endif
-      if (emit && !ibuf_room) {
-        if (!trace->log_once(true)) {
-          DT(4, simobject_->name() << " ibuffer-stall: " << *trace);
-        }
-        ++perf_stats_.ibuf_stalls;
-      }
       if (progressed) {
         if (emit) {
-          trace->log_once(false);
-          ++ibuf_queued_.at(trace->wid);
           DP(1, "Fetch: code=0x" << std::hex << trace->code << std::dec << ", cid=" << trace->cid
                  << ", wid=" << trace->wid << ", tmask=" << trace->tmask
                  << ", PC=0x" << std::hex << trace->PC << " (#" << std::dec << trace->uuid << ")");
@@ -708,57 +703,97 @@ public:
   }
 
   void decode() {
+    for (uint32_t iw = 0; iw < VX_CFG_ISSUE_WIDTH; ++iw) {
+      this->sequence_slice(iw);
+    }
     for (uint32_t f = 0; f < VX_CFG_FETCH_WIDTH; ++f) {
       this->decode_slice(*decode_latch_.at(f));
     }
   }
 
-  // One frontend slice's decoder: it feeds the issue slice of each decoded warp.
+  // Issue slice iw's uop sequencer: it takes a macro-op from decode and, from
+  // the next cycle, writes one micro-op a cycle into the warp's buffer while
+  // the buffer has room. Decode feeds the slice nothing until the last one.
+  void sequence_slice(uint32_t iw) {
+    auto macro = seq_macro_.at(iw);
+    seq_busy_.at(iw) = (macro != nullptr);
+    if (macro == nullptr)
+      return;
+    uint32_t wid = macro->wid;
+    if (!this->ibuf_room(wid))
+      return;
+    auto seq = sequencers_.at(iw);
+    auto uop = seq->get(macro);
+    uop->macro = macro;
+    uop->ibuf_time = SimPlatform::instance().cycles();
+    uop->ibuf_last = seq->advance();
+    DT(3, simobject_->name() << "-pipeline uop: " << *uop);
+    ibuffers_.at(wid)->push(uop);
+    ++ibuf_count_.at(wid);
+    if (uop->ibuf_last) {
+      seq_macro_.at(iw) = nullptr;
+    }
+  }
+
+  // One frontend slice's decoder. It is combinational: an instruction leaves
+  // the latch in the cycle its warp's buffer, or the issue slice's sequencer,
+  // takes it, and only then does the scheduler hear of it.
   void decode_slice(TFifo<instr_trace_t*>& decode_latch) {
     if (decode_latch.empty()) {
       return;
     }
 
     auto trace = decode_latch.peek();
-
-    // the icache response took the buffer slot this instruction lands in
-    auto& ibuffer = ibuffers_.at(trace->wid);
-    assert(!ibuffer->full());
+    uint32_t iw = trace->wid % VX_CFG_ISSUE_WIDTH;
 
     // Decode: fill trace metadata from instruction bits. The decoder
     // recognises RVC encoding (low 2 bits != 11), expands internally, and
     // stamps IntrBrArgs.is_rvc.
-    auto instr = decoder_->decode(trace->code, trace->uuid);
-    DP(1, "Instr: " << *instr << " (#" << trace->uuid << ")");
-    trace->instr_ptr   = instr;
-    trace->fu_type     = instr->get_fu_type();
-    trace->op_type     = instr->get_op_type();
-    trace->dst_reg     = instr->get_dest_reg();
-    trace->dst_bytesel = instr->get_dst_bytesel();
-    for (uint32_t i = 0; i < NUM_SRC_REGS; ++i) {
-      trace->src_regs[i] = instr->get_src_reg(i);
-    }
-    // Filter x0 for integer dest: writes to x0 are silent in RISC-V, so don't
-    // reserve a scoreboard slot — the unit's writeback skips x0 too.
-    auto dst = instr->get_dest_reg();
-    trace->wb = (dst.type != RegType::None)
-             && !((dst.type == RegType::Integer || dst.type == RegType::Uniform) && dst.idx == 0);
-    // A uniform load or store is made once per warp, by its first active lane.
-    if (instr->get_umode() == Instr::UMODE_UNIFORM && instr->get_fu_type() == FUType::LSU) {
-      for (uint32_t t = 0; t < trace->tmask.size(); ++t) {
-        if (trace->tmask.test(t)) {
-          trace->tmask.reset();
-          trace->tmask.set(t);
-          break;
+    if (!trace->instr_ptr) {
+      auto instr = decoder_->decode(trace->code, trace->uuid);
+      DP(1, "Instr: " << *instr << " (#" << trace->uuid << ")");
+      trace->instr_ptr   = instr;
+      trace->fu_type     = instr->get_fu_type();
+      trace->op_type     = instr->get_op_type();
+      trace->dst_reg     = instr->get_dest_reg();
+      trace->dst_bytesel = instr->get_dst_bytesel();
+      for (uint32_t i = 0; i < NUM_SRC_REGS; ++i) {
+        trace->src_regs[i] = instr->get_src_reg(i);
+      }
+      // Filter x0 for integer dest: writes to x0 are silent in RISC-V, so don't
+      // reserve a scoreboard slot — the unit's writeback skips x0 too.
+      auto dst = instr->get_dest_reg();
+      trace->wb = (dst.type != RegType::None)
+               && !((dst.type == RegType::Integer || dst.type == RegType::Uniform) && dst.idx == 0);
+      // A uniform load or store is made once per warp, by its first active lane.
+      if (instr->get_umode() == Instr::UMODE_UNIFORM && instr->get_fu_type() == FUType::LSU) {
+        for (uint32_t t = 0; t < trace->tmask.size(); ++t) {
+          if (trace->tmask.test(t)) {
+            trace->tmask.reset();
+            trace->tmask.set(t);
+            break;
+          }
         }
       }
+      trace->fetch_stall = instr->is_wstall();
+      // A warp blocked on a stalling instruction is released when that
+      // instruction commits. Default to releasing every stalling instruction;
+      // warp-control (SFU) refines this for ops whose warp is instead released by
+      // the barrier/spawn machinery (see SfuUnit::on_tick).
+      trace->resume_warp = trace->fetch_stall;
     }
-    trace->fetch_stall = instr->is_wstall();
-    // A warp blocked on a stalling instruction is released when that
-    // instruction commits. Default to releasing every stalling instruction;
-    // warp-control (SFU) refines this for ops whose warp is instead released by
-    // the barrier/spawn machinery (see SfuUnit::on_tick).
-    trace->resume_warp = trace->fetch_stall;
+
+    // A macro-op goes to the sequencer, which holds it; anything else needs a
+    // free slot in its warp's buffer.
+    bool is_macro = trace->instr_ptr->is_macro_op();
+    if (seq_busy_.at(iw) || (!is_macro && !this->ibuf_room(trace->wid))) {
+      if (!trace->log_once(true)) {
+        DT(4, simobject_->name() << " ibuffer-stall: " << *trace);
+      }
+      ++perf_stats_.ibuf_stalls;
+      return;
+    }
+    trace->log_once(false);
 
     // Advance the warp's PC by the instruction's true size (2 bytes for RVC,
     // 4 bytes otherwise). Branch/JAL/JALR commit later overrides warp.PC
@@ -777,9 +812,13 @@ public:
 
     DT(3, simobject_->name() << "-pipeline decode: " << *trace);
 
-    // insert to ibuffer
-    trace->ibuf_time = SimPlatform::instance().cycles();
-    ibuffer->push(trace);
+    if (is_macro) {
+      seq_macro_.at(iw) = trace;
+    } else {
+      trace->ibuf_time = SimPlatform::instance().cycles();
+      ibuffers_.at(trace->wid)->push(trace);
+      ++ibuf_count_.at(trace->wid);
+    }
 
     decode_latch.pop();
   }
@@ -821,38 +860,18 @@ public:
         if (ibuffer->empty())
           continue;
 
-        // check scoreboard against sequencer micro-op (handles uop WAW/RAW)
+        // The decoder's latch puts decode a cycle after the RTL's, which
+        // writes the buffer as it decodes and has a written entry ready to
+        // issue two cycles later: here the buffer's one-cycle delay is that.
         auto trace = ibuffer->peek();
+        if (!ISSUE_LOOKAHEAD && SimPlatform::instance().cycles() < last_issue_.at(wid) + 2)
+          continue;
 
-        auto seq = sequencers_.at(wid);
-        auto uop_trace = seq->get(trace);  // returns cached uop or generates next
+        this->check_issue_timeout(iw, wid, trace);
 
-        // The head moves into the warp's staging register, freeing its buffer
-        // slot, once it has arrived and the warp's previous instruction has
-        // issued; a macro-op leaves the buffer with its last micro-op. The
-        // scheduler sees the freed slot the cycle after.
-        if (!head_staged_.at(wid)
-         && (!trace->instr_ptr->is_macro_op() || seq->last())
-         && SimPlatform::instance().cycles() > std::max(last_issue_.at(wid), trace->ibuf_time)) {
-          head_staged_.at(wid) = true;
-          this->ibuf_release(wid);
-        }
-
-        // The uop sequencer starts a macro-op once it reaches the front of the
-        // buffer behind the staged instruction, and offers its first uop the
-        // cycle after. A macro that arrives in an empty buffer, or behind an
-        // instruction that issues at once, waits that extra cycle.
-        bool seq_starting = false;
-        if (seq->starting()) {
-          uint64_t ready = std::max(staged_since_.at(wid), trace->ibuf_time) + 2;
-          seq_starting = (SimPlatform::instance().cycles() < ready);
-        }
-
-        this->check_issue_timeout(iw, wid, trace, uop_trace);
-
-        if (scoreboard_->in_use(uop_trace)) {
-          auto uses = scoreboard_->get_uses(uop_trace);
-          if (!uop_trace->log_once(true)) {
+        if (scoreboard_->in_use(trace)) {
+          auto uses = scoreboard_->get_uses(trace);
+          if (!trace->log_once(true)) {
             DTH(4, "*** scoreboard-stall: dependents={");
             for (uint32_t j = 0, n = uses.size(); j < n; ++j) {
               auto& use = uses.at(j);
@@ -860,16 +879,13 @@ public:
               if (j) DTN(4, ", ");
               DTN(4, use.reg_type << use.reg_id << " (#" << use.uuid << ")");
             }
-            DTN(4, "}, " << *uop_trace << std::endl);
+            DTN(4, "}, " << *trace << std::endl);
           }
           // Count once per cycle per issue slice regardless of how many
           // warps are blocked.
           any_scrb_blocked = true;
         } else {
-          uop_trace->log_once(false);
-          if (seq_starting) {
-            continue;
-          }
+          trace->log_once(false);
           // While a warp holds the issue lock, no other warp of the slot issues,
           // whatever its unit.
           auto lock_owner = issue_lock_owner_.at(iw);
@@ -879,7 +895,7 @@ public:
           if (yielded == w) {
             continue;
           }
-          auto fu = (int)uop_trace->fu_type;
+          auto fu = (int)trace->fu_type;
           // FU dispatch queue near full: the warp does not request. Credits also
           // count ops still in operand collection. The flag reaches issue through
           // two registers, so a warp sees the count as of two cycles back.
@@ -892,12 +908,12 @@ public:
           // the WAIT that would release one. Claiming it here, rather than
           // testing for a free one, also keeps another core from taking the
           // last slot between issue and execute.
-          if (!this->rtu_trace_reserve(uop_trace)) {
+          if (!this->rtu_trace_reserve(trace)) {
             continue; // ray pool full
           }
         #endif
           ready_set.set(w); // mark instruction as ready
-          if (uop_trace->instr_ptr->get_issue_yield()) {
+          if (trace->instr_ptr->get_issue_yield()) {
             yield_set.set(w);
           }
         }
@@ -911,39 +927,33 @@ public:
         auto& ibuffer = ibuffers_.at(wid);
         auto trace = ibuffer->peek();
 
-        // Retrieve the (already-generated) micro-op from the sequencer
-        auto seq = sequencers_.at(wid);
-        auto uop_trace = seq->get(trace);
-
         // to operand stage
-        if (operands_.at(iw)->Input.try_send(uop_trace)) {
+        if (operands_.at(iw)->Input.try_send(trace)) {
           ibuffer_arbs_.at(iw).commit(w);
           // capture register operands at issue (Operands owns regfile)
-          operands_.at(iw)->fetch_operands(uop_trace);
-          // A macro leaves the pending list once its last micro-op issues, so
+          operands_.at(iw)->fetch_operands(trace);
+          // A macro leaves the pending count once its last micro-op issues, so
           // its micro-ops are pending until they commit, as in RTL.
-          if (uop_trace != trace) {
-            pending_instrs_.push_back(uop_trace);
+          auto macro = trace->macro;
+          if (macro) {
+            this->pending_add(trace->wid);
           }
           // spend a dispatch credit for the target FU
-          ++fu_credits_.at(iw).at((int)uop_trace->fu_type);
-          // An issue candidate is staged from the cycle after both the warp's
-          // previous issue and its own arrival in the buffer.
-          staged_since_.at(wid) = std::max(last_issue_.at(wid), trace->ibuf_time) + 1;
+          ++fu_credits_.at(iw).at((int)trace->fu_type);
           last_issue_.at(wid) = SimPlatform::instance().cycles();
-          DT(3, simobject_->name() << "-pipeline issue: " << *uop_trace);
-          if (uop_trace->wb) {
+          DT(3, simobject_->name() << "-pipeline issue: " << *trace);
+          if (trace->wb) {
             // update scoreboard
-            scoreboard_->reserve(uop_trace);
+            scoreboard_->reserve(trace);
           }
-          if (uop_trace->instr_ptr->fcsr_writes()) {
-            scoreboard_->reserve_fcsr(uop_trace);
+          if (trace->instr_ptr->fcsr_writes()) {
+            scoreboard_->reserve_fcsr(trace);
           }
           // Issue lock: a sequence's first uop (lock without unlock) takes it
           // for its warp, the last (unlock) reopens the slot from the next cycle.
           {
-            bool fl = uop_trace->instr_ptr->get_fu_lock();
-            bool ful = uop_trace->instr_ptr->get_fu_unlock();
+            bool fl = trace->instr_ptr->get_fu_lock();
+            bool ful = trace->instr_ptr->get_fu_unlock();
             if (fl && !ful) {
               issue_lock_owner_.at(iw) = w;
             } else if (ful) {
@@ -952,43 +962,26 @@ public:
           }
           // A yielding uop issued while another warp also requested with one
           // masks its own warp for the next cycle, so the greedy grant moves on.
-          if (uop_trace->instr_ptr->get_issue_yield() && (ready_set & yield_set).count() >= 2) {
+          if (trace->instr_ptr->get_issue_yield() && (ready_set & yield_set).count() >= 2) {
             issue_yield_.at(iw) = w;
           }
-          // Advance sequencer; pop ibuffer only when all micro-ops issued
-          if (seq->advance()) {
-            if (trace->instr_ptr->is_macro_op()) {
+          ibuffer->pop();
+          --ibuf_count_.at(wid);
+          ++ibuf_pops_.at(wid);
+          if (trace->ibuf_last) {
+            this->ibuf_release(wid);
+            if (macro) {
               // A macro that stalled fetch at decode releases its warp once
               // its last micro-op issues.
-              if (trace->instr_ptr->is_wstall()) {
-                scheduler_->resume(trace->wid);
+              if (macro->instr_ptr->is_wstall()) {
+                scheduler_->resume(macro->wid);
               }
               // Macro trace never reaches commit (only micro-ops do),
               // so remove it from pending tracking and deallocate here.
-              pending_instrs_.remove(trace);
-              trace->~instr_trace_t();
-              trace_pool_.deallocate(trace, 1);
+              this->pending_remove(macro->wid);
+              macro->~instr_trace_t();
+              trace_pool_.deallocate(macro, 1);
             }
-            ibuffer->pop();
-            if (!head_staged_.at(wid)) {
-              this->ibuf_release(wid);
-            }
-            head_staged_.at(wid) = false;
-            // The staging register takes the next instruction in the cycle it
-            // hands this one off, so its buffer slot frees now.
-            if (!ibuffer->empty()) {
-              auto next = ibuffer->peek();
-              if (!next->instr_ptr->is_macro_op()
-               && SimPlatform::instance().cycles() > next->ibuf_time) {
-                head_staged_.at(wid) = true;
-                this->ibuf_release(wid);
-              }
-            }
-          } else if (seq->last() && !head_staged_.at(wid)) {
-            // The macro's last micro-op takes the staging register as this one
-            // leaves it, and the macro leaves the buffer with it.
-            head_staged_.at(wid) = true;
-            this->ibuf_release(wid);
           }
         }
       }
@@ -1000,11 +993,16 @@ public:
     }
   }
 
+  // Room for a write at decode. Decode here runs a cycle behind the RTL's,
+  // whose buffer count is a register, so a slot freed by an issue is free for
+  // decode two cycles on.
+  bool ibuf_room(uint32_t wid) const {
+    return (ibuf_count_r_.at(wid) + ibuf_pops_r_.at(wid)) < VX_CFG_IBUF_SIZE;
+  }
+
   void ibuf_release(uint32_t wid) {
     assert(ibuf_inflight_.at(wid) > 0);
     --ibuf_inflight_.at(wid);
-    assert(ibuf_queued_.at(wid) > 0);
-    --ibuf_queued_.at(wid);
   }
 
   void update_queue_full() {
@@ -1228,7 +1226,7 @@ public:
       perf_stats_.instrs += 1;
 
       // instruction completed
-      pending_instrs_.remove(trace);
+      this->pending_remove(trace->wid);
     }
 
     trace->~instr_trace_t();
@@ -1239,7 +1237,7 @@ public:
 
   bool running() const {
     // committed stores wait in the LSU request queue until sent to memory
-    if (scheduler_->running() || !pending_instrs_.empty() || !this->lsu_drained()) {
+    if (scheduler_->running() || pending_total_ != 0 || !this->lsu_drained()) {
       return true;
     }
   #ifdef VX_CFG_VM_ENABLE
@@ -1253,12 +1251,18 @@ public:
   }
 
   bool has_pending_instrs(uint32_t wid) const {
-    uint32_t count = 0;
-    for (auto trace : pending_instrs_) {
-      if (trace->wid == wid)
-        ++count;
-    }
-    return count > 1; // more than 1 because the current instruction is also counted
+    return pending_instrs_.at(wid) > 1; // the asking instruction counts itself
+  }
+
+  void pending_add(uint32_t wid) {
+    ++pending_instrs_.at(wid);
+    ++pending_total_;
+  }
+
+  void pending_remove(uint32_t wid) {
+    assert(pending_instrs_.at(wid) > 0 && pending_total_ > 0);
+    --pending_instrs_.at(wid);
+    --pending_total_;
   }
 
   bool lsu_drained() const {
@@ -1412,7 +1416,10 @@ private:
   std::vector<std::unique_ptr<TFifo<instr_trace_t*>>> decode_latch_;
 
   std::vector<HashTable<instr_trace_t*>> pending_icache_;
-  std::list<instr_trace_t*, PoolAllocator<instr_trace_t*, 64>> pending_instrs_;
+  // Scheduled, not yet committed: a macro until its last micro-op issues, then
+  // each micro-op until it commits.
+  std::vector<uint32_t> pending_instrs_ = std::vector<uint32_t>(VX_CFG_NUM_WARPS, 0);
+  uint32_t pending_total_ = 0;
 
   uint64_t pending_ifetches_;
 
@@ -1461,13 +1468,15 @@ private:
   std::vector<BitVector<>> fu_full_;      // [iw] credits at or past the near-full mark
   std::vector<BitVector<>> fu_full_seen_; // [iw] that flag one cycle later, as issue sees it
 
-  std::vector<uint32_t> ibuf_inflight_;
+  std::vector<uint32_t> ibuf_inflight_; // [wid] fetched instructions whose last buffer entry has not issued
   std::vector<bool> ibuf_full_r_;
-  std::vector<uint32_t> ibuf_queued_;      // [wid] instructions past the icache, not yet staged
-  std::vector<bool>     ibuf_queue_full_r_; // [wid] full flag from ibuf_queued_, registered
+  std::vector<uint32_t> ibuf_count_;    // [wid] buffer entries
+  std::vector<uint32_t> ibuf_count_r_;  // [wid] ibuf_count_ as of the end of the last cycle
+  std::vector<uint32_t> ibuf_pops_;     // [wid] entries issued this cycle
+  std::vector<uint32_t> ibuf_pops_r_;   // [wid] entries issued the cycle before
+  std::vector<instr_trace_t*> seq_macro_; // [iw] macro-op the slice's sequencer is expanding
+  std::vector<bool> seq_busy_;          // [iw] the sequencer held a macro-op at the start of the cycle
   std::vector<uint64_t> last_issue_;   // [wid] cycle of the warp's last issue
-  std::vector<uint64_t> staged_since_; // [wid] cycle the last issued candidate was staged
-  std::vector<bool>     head_staged_;  // [wid] the buffer head has left for staging
 
   PoolAllocator<instr_trace_t, 64> trace_pool_;
 

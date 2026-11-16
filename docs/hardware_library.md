@@ -1319,7 +1319,7 @@ Parameterized memory primitives with support for FPGA (LUTRAM/BRAM) and ASIC syn
 **Features:**
 - Contents are elaborated as constants, so they survive the ASIC flow, where `VX_sp_ram`'s `INIT_FILE` loading is compiled out
 - Under synthesis, a registered ROM that passes `FORCE_BRAM` is tagged for block ROM (`rom_style`/`romstyle`); otherwise it maps to logic
-- Generated tables (e.g. `hw/rtl/mufu/VX_mufu_rom.sv`) instantiate it directly
+- Generated tables (e.g. `hw/rtl/tfu/VX_tfu_rom.sv`) instantiate it directly
 
 ---
 

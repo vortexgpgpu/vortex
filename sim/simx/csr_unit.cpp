@@ -59,12 +59,14 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
   case VX_CSR_MNSTATUS:
     return 0;
 
-  // Per-warp machine-mode trap CSRs (see warp_t).
-  case VX_CSR_MSTATUS: return warp.mstatus;
-  case VX_CSR_MTVEC:   return warp.mtvec;
+  // Machine-mode trap CSRs: mstatus/mtvec core-wide, mepc/mcause per warp
+  // (see warp_t). mtval is read-only zero: no exception the core raises
+  // carries a trap value.
+  case VX_CSR_MSTATUS: return sched.mstatus();
+  case VX_CSR_MTVEC:   return sched.mtvec();
   case VX_CSR_MEPC:    return warp.mepc;
   case VX_CSR_MCAUSE:  return warp.mcause;
-  case VX_CSR_MTVAL:   return warp.mtval;
+  case VX_CSR_MTVAL:   return 0;
   case VX_CSR_SATP:
 #ifdef VX_CFG_VM_ENABLE
     return (Word)satp_;
@@ -341,7 +343,8 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
 
 void CsrUnit::set_csr(uint32_t addr, Word value, uint32_t wid, uint32_t tid) {
   __unused(tid);
-  auto& warp = core_->scheduler().warp(wid);
+  auto& sched = core_->scheduler();
+  auto& warp  = sched.warp(wid);
   switch (addr) {
   case VX_CSR_FFLAGS:
     warp.fcsr = (warp.fcsr & ~0x1F) | (value & 0x1F);
@@ -364,21 +367,20 @@ void CsrUnit::set_csr(uint32_t addr, Word value, uint32_t wid, uint32_t tid) {
     satp_ = value;
 #endif
     break;
-  // Per-warp machine-mode trap CSRs (see warp_t).
+  // Machine-mode trap CSRs: mstatus/mtvec core-wide, mepc/mcause per warp.
   case VX_CSR_MSTATUS:
-    warp.mstatus = value;
+    sched.set_mstatus(value);
     break;
   case VX_CSR_MTVEC:
-    warp.mtvec = value;
+    sched.set_mtvec(value);
     break;
   case VX_CSR_MEPC:
     warp.mepc = value;
     break;
   case VX_CSR_MCAUSE:
-    warp.mcause = value;
+    warp.mcause = value & 0xF;
     break;
   case VX_CSR_MTVAL:
-    warp.mtval = value;
     break;
   case VX_CSR_MEDELEG:
   case VX_CSR_MIDELEG:

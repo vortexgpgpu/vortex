@@ -37,8 +37,8 @@
 #ifdef VX_CFG_EXT_RTU_ENABLE
 #include "rtu/rtu_unit.h"
 #endif
-#ifdef VX_CFG_EXT_MUFU_ENABLE
-#include "mufu_unit.h"
+#ifdef VX_CFG_EXT_TFU_ENABLE
+#include "tfu_unit.h"
 #endif
 
 namespace vortex {
@@ -200,8 +200,8 @@ private:
 #ifdef VX_CFG_EXT_RTU_ENABLE
 	std::unique_ptr<RtuUnit>    rtu_unit_;
 #endif
-#ifdef VX_CFG_EXT_MUFU_ENABLE
-	MufuUnit mufu_unit_;
+#ifdef VX_CFG_EXT_TFU_ENABLE
+	TfuUnit tfu_unit_;
 #endif
 };
 

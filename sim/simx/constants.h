@@ -144,6 +144,9 @@ inline constexpr uint32_t L3_CACHE_REQS    = VX_CFG_L3_NUM_REQS + CP_ON_L3;
 inline constexpr uint32_t CP_MEM_DATA_SIZE = (CP_ON_L2 != 0) ? VX_CFG_L1_LINE_SIZE : VX_CFG_L2_SECTOR_SIZE;
 
 inline constexpr uint32_t PER_ISSUE_WARPS = VX_CFG_NUM_WARPS / VX_CFG_ISSUE_WIDTH;
+// As the RTL's ISSUE_LOOKAHEAD: past 32 warps per slice a warp issues at most
+// every other cycle.
+inline constexpr bool ISSUE_LOOKAHEAD = (PER_ISSUE_WARPS < 32);
 inline constexpr uint32_t ISSUE_WIS_BITS  = log2ceil(PER_ISSUE_WARPS);
 
 // Frontend slice f owns the warps with wid % VX_CFG_FETCH_WIDTH == f; each has its

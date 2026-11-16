@@ -232,7 +232,7 @@ the table in the same change.
 | | | `6` | RTU hit window / callback return | R4 |
 | | | `7` | `vx_rt_trace`, `vx_rt_wait` | R4 |
 | | | `1`, `2`, `4` | free | |
-| custom-2 `0x5B` | `funct7` | `0x00` | MUFU special functions; `fn` in `rs2`, `fmt` in `funct3` | R |
+| custom-2 `0x5B` | `funct7` | `0x00` | TFU special functions; `fn` in `rs2`, `fmt` in `funct3` | R |
 | custom-3 `0x7B` | `funct3` | `0` | `vx_ldm fd, off(rs1), shape`: a matrix fragment ← memory | I |
 | | | `2` | `vx_stm fs2, off(rs1), shape`: memory ← a matrix fragment | S |
 | | | `3` | `vx_flw.d fd, imm(rs1)`: `fd`, `fd+1` ← two words | I |
@@ -327,7 +327,7 @@ mechanisms the core already has.
 
 | mechanism | role |
 |---|---|
-| sequencer | a per-warp expander. It takes the macro-op and emits a run of ordinary micro-ops, one per cycle, each naming its own source and destination registers. It back-pressures the instruction buffer until the run drains. The macro-op itself never commits; its micro-ops do. |
+| sequencer | an expander at the input of each issue slice's instruction buffer. It takes the macro-op from decode and writes a run of ordinary micro-ops into the warp's buffer, one per cycle while the buffer has room, each naming its own source and destination registers. Decode feeds the slice nothing else until the run is written. The macro-op itself never commits; its micro-ops do. |
 | operand collector | reads each micro-op's registers from the banked register file and assembles them for the functional unit. Its port count is why a group read takes several cycles. |
 
 The sequencer decides **how many micro-ops and which registers**; the

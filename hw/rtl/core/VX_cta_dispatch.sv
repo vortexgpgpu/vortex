@@ -92,6 +92,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
 
     reg [NUM_CTA_SLOTS-1:0] slot_valid_r;          // per-slot occupancy mirror
     reg [CS_BITS-1:0]       tail_r;                // round-robin slot pointer
+    reg [NW_WIDTH:0]        win_k_r;               // last window's size, 0 if it was clamped
 
     // Fixed-stride LMEM partition: resident CTA in slot i gets LMEM base
     // i * stride, where stride = aligned_lmem_size (uniform within a kernel).
@@ -527,8 +528,9 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // is partitioned into equal slots of pitch `stride = aligned_lmem_size`.
     // Resident CTA in slot i owns LMEM bytes [i*stride, (i+1)*stride). The
     // occupancy bound `usable = min(NUM_WARPS, floor(LMEM/stride))` is a
-    // kernel constant and is registered so the per-CTA admission/ready path sees
-    // only a free-slot test, never the divide/encode.
+    // kernel constant that arrives with each CTA as a flop-driven thermometer,
+    // so the per-CTA admission/ready path sees only a free-slot test, never the
+    // divide/encode.
     //
     // Cluster co-residency: the first CTA of a cluster (is_first_of_cluster)
     // reserves K = cluster_size CONSECUTIVE usable slots, pre-wrapping the slot
@@ -544,38 +546,26 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     wire [LMEM_LOG:0] stride = kmu_req.aligned_lmem_size;
     wire is_first_of_cluster = eff_is_first;
 
-    // Occupancy bound as a thermometer, registered (off the ready path):
-    // usable_therm_r[m-1] is set iff m slots fit, i.e. m*stride <= LMEM_SIZE,
-    // tested as stride <= floor(LMEM_SIZE/m), a constant per m, so there is
-    // neither a multiplier nor a divider. All slots fit when stride == 0, and
-    // slot 0 always does.
+    // Occupancy bound as a thermometer, a kernel constant the KMU computes once
+    // and every launch beat carries: usable_therm[m-1] is set iff m slots fit.
+    // Each CTA is admitted against its own kernel's map, from a flop-driven bus
+    // field, so the ready path sees only a free-slot test.
     localparam PROD_W = LMEM_LOG + NW_WIDTH + 2;
-    reg [NUM_CTA_SLOTS-1:0] usable_therm_r;
-    always_ff @(posedge clk) begin
-        if (reset) begin
-            usable_therm_r <= '1;
-        end else begin
-            for (integer m = 1; m <= NUM_CTA_SLOTS; m = m + 1) begin
-                // Granting one slot to a CTA that exceeds capacity keeps the
-                // launch making forward progress, at the cost of letting it
-                // write past its slot.
-                usable_therm_r[m-1] <= (m == 1) || (stride == 0)
-                                    || (PROD_W'(stride) <= PROD_W'(LMEM_SIZE / m));
-            end
-        end
-    end
+    wire [NUM_CTA_SLOTS-1:0] usable_therm = kmu_req.lmem_slots;
 
     // `data` is a launch descriptor only while `valid` is high: the launch buffers
     // reset the valid bit alone, so an idle beat carries arbitrary bits.
     `RUNTIME_ASSERT(~kmu_bus_if.valid || (stride == 0) || (PROD_W'(stride) <= PROD_W'(LMEM_SIZE)),
         ("%t: %s CTA shared-memory footprint %0d exceeds the %0d-byte capacity; the CTA overruns its slot", $time, INSTANCE_ID, stride, LMEM_SIZE))
+    `RUNTIME_ASSERT(~kmu_bus_if.valid || (usable_therm == lmem_slots_fit(stride)),
+        ("%t: %s slot map %b does not match the %0d-byte CTA footprint", $time, INSTANCE_ID, usable_therm, stride))
 
     // The slot base is either the round-robin tail or slot 0: the tail is
     // normalized to 0 when a kernel transition shrank the usable range below it,
     // and a cluster window that would overrun the usable range pre-wraps to 0.
     // Every test is a bit of the registered maps shifted by the tail:
     // tail_room[j] is set iff slot tail+j is usable.
-    wire [NUM_CTA_SLOTS:0]   usable_room = {1'b0, usable_therm_r};
+    wire [NUM_CTA_SLOTS:0]   usable_room = {1'b0, usable_therm};
     wire [NUM_CTA_SLOTS:0]   tail_room = usable_room >> tail_r;
     wire [NUM_CTA_SLOTS-1:0] tail_busy = slot_valid_r >> tail_r;
     if (NUM_CTA_SLOTS > 1) begin : g_room_top
@@ -590,11 +580,18 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     for (genvar j = 0; j < NUM_CTA_SLOTS; ++j) begin : g_cluster_therm
         assign cluster_therm[j] = (j == 0) || (eff_cluster_size > (NW_WIDTH+1)'(j));
     end
-    wire [NUM_CTA_SLOTS-1:0] window_ones = cluster_therm & usable_therm_r;
-    wire window_fits_tail = ((cluster_therm & ~tail_room[NUM_CTA_SLOTS-1:0]) == '0);
+    wire [NUM_CTA_SLOTS-1:0] window_ones = cluster_therm & usable_therm;
     wire window_free_tail = ((tail_busy & window_ones) == '0);
     wire window_free_zero = ((slot_valid_r & window_ones) == '0);
 
+    // The tail is a multiple of the last window's size, so a window of another
+    // size, or one after a clamped window, does not fit at the tail and
+    // restarts at slot 0: every window stays aligned to its size across
+    // launches. A single CTA is aligned at any slot and keeps the tail.
+    wire win_k_new   = (eff_cluster_size > (NW_WIDTH+1)'(1)) && (eff_cluster_size != win_k_r);
+    wire window_fits_tail = ((cluster_therm & ~tail_room[NUM_CTA_SLOTS-1:0]) == '0) && !win_k_new;
+    wire win_clamped = ((cluster_therm & ~usable_therm) != '0)
+                    || (eff_cluster_size > (NW_WIDTH+1)'(NUM_CTA_SLOTS));
     wire tail_usable = tail_room[0];
     wire base_zero   = is_first_of_cluster ? ~window_fits_tail : ~tail_usable;
     wire [CS_BITS-1:0] base_slot = base_zero ? CS_BITS'(0) : tail_r;
@@ -611,6 +608,17 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     wire cluster_window_free = window_fits_tail ? window_free_tail : window_free_zero;
     wire single_slot_free = tail_usable ? ~tail_busy[0] : ~slot_valid_r[0];
     wire admit_ok = is_first_of_cluster ? cluster_window_free : single_slot_free;
+
+    // A member's cluster rank is its slot modulo the cluster size, so a window
+    // starts at a multiple of it; and an admitted slot lies within the current
+    // kernel's capacity (slot 0 is always granted).
+    `RUNTIME_ASSERT(~(kmu_bus_if_fire && (state == IDLE) && is_first_of_cluster
+                   && (eff_cluster_size > (NW_WIDTH+1)'(1)))
+                 || ((32'(base_slot) % 32'(eff_cluster_size)) == 0),
+        ("%t: %s cluster window at slot %0d is not aligned to its size %0d", $time, INSTANCE_ID, base_slot, eff_cluster_size))
+    `RUNTIME_ASSERT(~(kmu_bus_if_fire && (state == IDLE)) || (base_slot == '0) || (stride == 0)
+                 || ((32'(base_slot) + 32'd1) * 32'(stride) <= 32'(LMEM_SIZE)),
+        ("%t: %s slot %0d is outside the capacity for a %0d-byte CTA", $time, INSTANCE_ID, base_slot, stride))
     // A fragment launch's stamps land in the warp record TID_STAGES cycles after the
     // warp fires (the thread-index ripple), but frag_stamps_r is a single bank. So a
     // new launch must not overwrite it while an earlier fragment warp is still in that
@@ -631,9 +639,11 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     assign rem_warps_read  = warp_done_r;
     assign rem_warps_raddr = done_slot_r;
 
+    // A pending retirement write holds admission off, so the two writers never
+    // meet and the address and data select on it alone, off the ready path.
     assign rem_warps_write = (kmu_bus_if_fire && state == IDLE) || rem_warps_write_r;
-    assign rem_warps_waddr = (kmu_bus_if_fire && state == IDLE) ? base_slot : rem_warps_waddr_r;
-    assign rem_warps_wdata = (kmu_bus_if_fire && state == IDLE) ? (NW_WIDTH+1)'(kmu_num_warps) : rem_warps_wdata_r;
+    assign rem_warps_waddr = rem_warps_write_r ? rem_warps_waddr_r : base_slot;
+    assign rem_warps_wdata = rem_warps_write_r ? rem_warps_wdata_r : (NW_WIDTH+1)'(kmu_num_warps);
 
     // The wide registers below load on a few events each; on ASIC each group
     // is clocked only on its own.
@@ -729,6 +739,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
             cur_ctx_id_r    <= '0;
             tail_r          <= '0;
             warp_skip_init_r <= '0;
+            win_k_r         <= '0;
             cur_stride_r    <= '0;
             slot_valid_r    <= '0;
             dispatched_warps<= '0;
@@ -804,6 +815,9 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                         cur_stride_r <= stride;
                         slot_valid_r[base_slot] <= 1'b1;
                         tail_r     <= (`VX_CFG_NUM_WARPS > 1) ? next_tail : CS_BITS'(0);
+                        if (is_first_of_cluster) begin
+                            win_k_r <= win_clamped ? '0 : eff_cluster_size;
+                        end
                         cur_slot_r <= base_slot;
                         dispatched_warps <= '0;
                         state <= DISPATCH;
@@ -1107,7 +1121,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
             `TRACE(1, ("%t: %s kmu-accept: cta_id=%0d, PC=0x%0h, param=0x%0h, stride=%0d, num_warps=%0d, usable_slots=%0d\n",
                 $time, INSTANCE_ID, base_slot, to_fullPC(kmu_req.PC),
                 kmu_req.param,
-                stride, kmu_num_warps, $countones(usable_therm_r)))
+                stride, kmu_num_warps, $countones(usable_therm)))
         end
         // Warps dispatched to the schedulers
         for (integer l = 0; l < NUM_LANES; ++l) begin
@@ -1128,7 +1142,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
         // Admission gate status when KMU presents a CTA but is stalled
         if (kmu_bus_if.valid && !kmu_bus_if.ready && state == IDLE) begin
             `TRACE(4, ("%t: %s stall: admit_ok=%b, base_slot=%0d, stride=%0d, usable_slots=%0d\n",
-                $time, INSTANCE_ID, admit_ok, base_slot, stride, $countones(usable_therm_r)))
+                $time, INSTANCE_ID, admit_ok, base_slot, stride, $countones(usable_therm)))
         end
     end
 `endif

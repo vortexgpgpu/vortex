@@ -1,64 +1,64 @@
-# MUFU special-function unit (custom-2: rcp/rsqrt/ex2/lg2/sinpi/cospi/tanh).
-# The `mufu` app self-enables VX_CFG_EXT_MUFU_ENABLE and checks every result
-# bit-exactly against the shared golden model (sw/common/mufu.cpp) plus libm
-# accuracy bounds; the datapath itself is covered by unittest:hw-mufu.
+# TFU special-function unit (custom-2: rcp/rsqrt/ex2/lg2/sinpi/cospi/tanh).
+# The `tfu` app self-enables VX_CFG_EXT_TFU_ENABLE and checks every result
+# bit-exactly against the shared golden model (sw/common/tfu.cpp) plus libm
+# accuracy bounds; the datapath itself is covered by unittest:hw-tfu.
 category: isa
 defaults:
   xlen:
   - 32
   - 64
   tier: smoke
-  touches: [hw/rtl/mufu, hw/rtl/core/VX_sfu_unit.sv, hw/rtl/core/VX_sfu_block.sv, sim/simx/mufu_unit.cpp, sim/simx/sfu_unit.cpp, sw/common/mufu.cpp, sw/common/mufu_tables.h, sw/kernel/include/vx_mufu.h]
+  touches: [hw/rtl/tfu, hw/rtl/core/VX_sfu_unit.sv, hw/rtl/core/VX_sfu_block.sv, sim/simx/tfu_unit.cpp, sim/simx/sfu_unit.cpp, sw/common/tfu.cpp, sw/common/tfu_tables.h, sw/kernel/include/vx_tfu.h]
 tests:
-- id: mufu-1
+- id: tfu-1
   via: blackbox
   drivers:
   - simx
-  app: mufu
-# Wide warp: 16 threads serialized onto 1 MUFU lane, 16 issue cycles per warp.
-- id: mufu-nt16
+  app: tfu
+# Wide warp: 16 threads serialized onto 1 TFU lane, 16 issue cycles per warp.
+- id: tfu-nt16
   via: blackbox
   drivers:
   - simx
   - rtlsim
-  app: mufu
+  app: tfu
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
-# One MUFU lane per SFU lane (non-default): nothing is serialized.
-- id: mufu-full-lanes
+# One TFU lane per SFU lane (non-default): nothing is serialized.
+- id: tfu-full-lanes
   via: blackbox
   drivers:
   - simx
   - rtlsim
-  app: mufu
-  configs: -DVX_CFG_NUM_MUFU_LANES=4
-- id: mufu-xrt
+  app: tfu
+  configs: -DVX_CFG_NUM_TFU_LANES=4
+- id: tfu-xrt
   via: blackbox
   drivers:
   - xrt
-  app: mufu
+  app: tfu
 
 # ---------------------------------------------------------------------------
 # check: model_parity — SimX vs rtlsim (see core.yaml). Each run is sized to
-# >=~300k cycles so steady-state MUFU throughput dominates.
+# >=~300k cycles so steady-state TFU throughput dominates.
 # ---------------------------------------------------------------------------
 
 # Default shape: 4 threads over the 1 lane, repeated ex2 (~620k cycles).
-- id: parity-mufu
+- id: parity-tfu
   check: model_parity
   via: blackbox
-  app: mufu
+  app: tfu
   args: -n1024 -r256 -tex2
 # 8 threads serialized onto the 1 lane, repeated sinpi (~547k cycles).
-- id: parity-mufu-nt8
+- id: parity-tfu-nt8
   check: model_parity
   via: blackbox
-  app: mufu
+  app: tfu
   args: -n2048 -r256 -tsinpi
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8
 # 16 threads serialized onto the 1 lane, the fpga_gate shape (~532k cycles).
-- id: parity-mufu-nt16
+- id: parity-tfu-nt16
   check: model_parity
   via: blackbox
-  app: mufu
+  app: tfu
   args: -n2048 -r256 -tsinpi
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16

@@ -609,9 +609,9 @@ inline std::ostream &operator<<(std::ostream &os, const FpuType& type) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifdef VX_CFG_EXT_MUFU_ENABLE
-// Values match the instruction's fn field and vortex::mufu::fn_t.
-enum class MufuType {
+#ifdef VX_CFG_EXT_TFU_ENABLE
+// Values match the instruction's fn field and vortex::tfu::fn_t.
+enum class TfuType {
   RCP   = 0,
   RSQRT = 1,
   EX2   = 2,
@@ -621,15 +621,15 @@ enum class MufuType {
   TANH  = 6,
 };
 
-inline std::ostream &operator<<(std::ostream &os, const MufuType& type) {
+inline std::ostream &operator<<(std::ostream &os, const TfuType& type) {
   switch (type) {
-  case MufuType::RCP:   os << "MUFU.RCP"; break;
-  case MufuType::RSQRT: os << "MUFU.RSQRT"; break;
-  case MufuType::EX2:   os << "MUFU.EX2"; break;
-  case MufuType::LG2:   os << "MUFU.LG2"; break;
-  case MufuType::SINPI: os << "MUFU.SINPI"; break;
-  case MufuType::COSPI: os << "MUFU.COSPI"; break;
-  case MufuType::TANH:  os << "MUFU.TANH"; break;
+  case TfuType::RCP:   os << "TFU.RCP"; break;
+  case TfuType::RSQRT: os << "TFU.RSQRT"; break;
+  case TfuType::EX2:   os << "TFU.EX2"; break;
+  case TfuType::LG2:   os << "TFU.LG2"; break;
+  case TfuType::SINPI: os << "TFU.SINPI"; break;
+  case TfuType::COSPI: os << "TFU.COSPI"; break;
+  case TfuType::TANH:  os << "TFU.TANH"; break;
   default:
     assert(false);
   }
@@ -899,8 +899,8 @@ using OpType = std::variant<
 #ifdef VX_CFG_EXT_TCU_ENABLE
 , TcuType
 #endif
-#ifdef VX_CFG_EXT_MUFU_ENABLE
-, MufuType
+#ifdef VX_CFG_EXT_TFU_ENABLE
+, TfuType
 #endif
 #ifdef VX_CFG_EXT_TEX_ENABLE
 , TexType
@@ -977,7 +977,8 @@ enum class ArbiterType {
   RoundRobin,
   Matrix,
   GreedyRR,
-  GreedyMatrix
+  GreedyMatrix,
+  GreedyMatrix2
 };
 
 inline std::ostream &operator<<(std::ostream &os, const ArbiterType& type) {
@@ -987,6 +988,7 @@ inline std::ostream &operator<<(std::ostream &os, const ArbiterType& type) {
   case ArbiterType::Matrix:     os << "Matrix"; break;
   case ArbiterType::GreedyRR:   os << "GreedyRR"; break;
   case ArbiterType::GreedyMatrix: os << "GreedyMatrix"; break;
+  case ArbiterType::GreedyMatrix2: os << "GreedyMatrix2"; break;
   default: assert(false);
   }
   return os;
@@ -1107,6 +1109,74 @@ private:
   uint32_t last_grant_;
 };
 
+// Two-level greedy least-recently-granted, as VX_matrix2_arbiter: requesters
+// form groups of kGroup; the least recently granted group with a request
+// wins, then its least recently granted member. A greedy one keeps granting
+// its owner while it requests, without updating either order.
+class GreedyMatrix2Arbiter : public IArbiterImpl {
+public:
+  static constexpr uint32_t kGroup = 8;
+
+  GreedyMatrix2Arbiter(uint32_t size)
+    : size_(size)
+    , groups_((size + kGroup - 1) / kGroup)
+    , members_(groups_) {
+    this->reset();
+  }
+
+  uint32_t select(const BitVector<>& requests) const override {
+    assert(requests.size() == size_);
+    if (last_grant_ < size_ && requests.test(last_grant_)) {
+      return last_grant_;
+    }
+    for (uint32_t g : group_order_) {
+      for (uint32_t m : members_.at(g)) {
+        uint32_t idx = g * kGroup + m;
+        if (idx < size_ && requests.test(idx)) {
+          return idx;
+        }
+      }
+    }
+    return -1u;
+  }
+
+  void commit(uint32_t idx) override {
+    if (idx == last_grant_) {
+      return;
+    }
+    uint32_t g = idx / kGroup, m = idx % kGroup;
+    group_order_.erase(std::find(group_order_.begin(), group_order_.end(), g));
+    group_order_.push_back(g);
+    auto& mo = members_.at(g);
+    mo.erase(std::find(mo.begin(), mo.end(), m));
+    mo.push_back(m);
+    last_grant_ = idx;
+  }
+
+  void reset() override {
+    group_order_.clear();
+    for (uint32_t g = groups_; g-- > 0;) {
+      group_order_.push_back(g);
+    }
+    for (uint32_t g = 0; g < groups_; ++g) {
+      uint32_t n = std::min(kGroup, size_ - g * kGroup);
+      auto& mo = members_.at(g);
+      mo.clear();
+      for (uint32_t m = n; m-- > 0;) {
+        mo.push_back(m);
+      }
+    }
+    last_grant_ = -1u;
+  }
+
+private:
+  uint32_t size_;
+  uint32_t groups_;
+  std::vector<uint32_t> group_order_;
+  std::vector<std::vector<uint32_t>> members_;
+  uint32_t last_grant_;
+};
+
 // Greedy round-robin: keeps granting the current owner while it requests,
 // then hands over to the next requester after it in index order.
 class GreedyRRArbiter : public IArbiterImpl {
@@ -1162,6 +1232,9 @@ public:
       break;
     case ArbiterType::GreedyMatrix:
       impl_ = std::make_shared<MatrixArbiter>(size, true);
+      break;
+    case ArbiterType::GreedyMatrix2:
+      impl_ = std::make_shared<GreedyMatrix2Arbiter>(size);
       break;
     default:
       assert(false);

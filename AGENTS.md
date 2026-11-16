@@ -31,7 +31,7 @@ This is the canonical entry point for **both human contributors and AI coding ag
 - [docs/synthesis_analysis.md](docs/synthesis_analysis.md) — synthesis/PPA analysis
 
 ### Process
-- [CONTRIBUTING.md](CONTRIBUTING.md) — public fork/PR contribution flow
+- [CONTRIBUTING.md](CONTRIBUTING.md) — public fork/PR contribution flow and the `<type>/<name>` branch naming types
 - [docs/bug_fixes.md](docs/bug_fixes.md) — bug-fix discipline (root-cause vs patch)
 - [docs/review/code-review-policy.md](docs/review/code-review-policy.md) — change-impact classes (R0-R3), review obligations and waivers
 - [docs/continuous_integration.md](docs/continuous_integration.md) — CI pipeline

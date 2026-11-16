@@ -15,8 +15,8 @@
 // reference: https://github.com/pulp-platform/fpnew
 
 // Merged sign-inject / min-max / compare / classify / move unit.
-// FLEN=32 handles F32 only; FLEN=64 adds F64, selected per-op by fmt[0]
-// (0=single, 1=double). F32 operands occupy the low 32 bits (NaN-boxed).
+// FLEN=32 handles F32 only; FLEN=64 adds F64, selected per-op by fmt
+// (INST_FMT_S/D). F32 operands occupy the low 32 bits (NaN-boxed).
 
 `include "VX_fpu_define.vh"
 
@@ -46,9 +46,9 @@ module VX_fncp_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     localparam HAS_D   = (FLEN >= 64);
 
     `UNUSED_VAR (fmt)
-    wire is_d = HAS_D ? fmt[0] : 1'b0;
+    wire is_d = HAS_D && (fmt == INST_FMT_D);
 `ifdef VX_CFG_EXT_ZFHMIN_ENABLE
-    wire is_h = fmt[1] && (op_type != INST_FPU_CMP) && (frm[2:1] == 2'b10);
+    wire is_h = (fmt == INST_FMT_H) && (op_type != INST_FPU_CMP) && (frm[2:1] == 2'b10);
 `else
     wire is_h = 1'b0;
 `endif

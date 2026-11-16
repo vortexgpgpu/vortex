@@ -11,10 +11,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "mufu.h"
-#include "mufu_tables.h"
+#include "tfu.h"
+#include "tfu_tables.h"
 
-namespace vortex::mufu {
+namespace vortex::tfu {
 
 namespace {
 
@@ -243,4 +243,4 @@ const char* fn_name(uint32_t fn) {
   return (fn < FN_COUNT) ? names[fn] : "?";
 }
 
-} // namespace vortex::mufu
+} // namespace vortex::tfu

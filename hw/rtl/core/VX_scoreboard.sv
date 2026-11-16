@@ -25,14 +25,24 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
     input wire [NUM_EX_UNITS-1:0] fu_release,
     VX_writeback_if.slave   writeback_if,
-    VX_ibuffer_if.slave     ibuffer_if [PER_ISSUE_WARPS],
+
+    // per warp: the instruction buffer's head entry and the one behind it
+    input wire [PER_ISSUE_WARPS-1:0]      head_valid,
+    input ibuf_hz_t [PER_ISSUE_WARPS-1:0] head_hz,
+    input wire [PER_ISSUE_WARPS-1:0]      next_valid,
+    input ibuf_hz_t [PER_ISSUE_WARPS-1:0] next_hz,
+
+    // the granted warp's head instruction, popped when it issues
+    output wire [ISSUE_WIS_W-1:0]         read_wis,
+    input ibuffer_t                       read_data,
+    output wire [PER_ISSUE_WARPS-1:0]     head_pop,
+
     VX_scoreboard_if.master scoreboard_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR ({writeback_if.data.sop, writeback_if.data.eop, writeback_if.data.wis})
 
     localparam NUM_OPDS  = NUM_SRC_OPDS + 1;
-    localparam IN_DATAW  = $bits(ibuffer_t);
     localparam OUT_DATAW = $bits(scoreboard_t) - ISSUE_WIS_W;
     localparam OUT_BUF   = 3; // Use skid buffer (SIZE=2, OUT_REG=1)
     // x and f registers have an in-use bit each; uniform registers share a few tags
@@ -64,16 +74,11 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         );
     end
 
-    VX_ibuffer_if staging_if [PER_ISSUE_WARPS]();
     wire [PER_ISSUE_WARPS-1:0] operands_ready;
+    wire [PER_ISSUE_WARPS-1:0] arb_ready_in;
 
 `ifdef PERF_ENABLE
-    wire [PER_ISSUE_WARPS-1:0] stg_valid_in;
-    for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_stg_valid_in
-        assign stg_valid_in[w] = staging_if[w].valid;
-    end
-
-    wire perf_stall_per_cycle = |(stg_valid_in & ~operands_ready);
+    wire perf_stall_per_cycle = |(head_valid & ~operands_ready);
 
     always @(posedge clk) begin : g_perf_stalls
         if (reset) begin
@@ -84,40 +89,25 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     end
 `endif
 
-    for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_stanging_bufs
-        VX_pipe_buffer #(
-            .DATAW (IN_DATAW)
-        ) stanging_buf (
-            .clk      (clk),
-            .reset    (reset),
-            .valid_in (ibuffer_if[w].valid),
-            .data_in  (ibuffer_if[w].data),
-            .ready_in (ibuffer_if[w].ready),
-            .valid_out(staging_if[w].valid),
-            .data_out (staging_if[w].data),
-            .ready_out(staging_if[w].ready)
-        );
-    end
-
     for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_scoreboard
         reg [NUM_GPRS-1:0] inuse_regs, inuse_regs_n;
         reg [NUM_XREGS-1:0] inuse_xregs, inuse_xregs_n;
 
-        wire ibuffer_fire = ibuffer_if[w].valid && ibuffer_if[w].ready;
-        wire staging_fire = staging_if[w].valid && staging_if[w].ready;
+        // The head issues this cycle; the entry behind it becomes the head.
+        wire staging_fire = head_pop[w];
 
         wire writeback_fire = writeback_if.valid && writeback_if.data.eop_wis[w];
 
         wire [NUM_OPDS-1:0] [NUM_REGS_BITS-1:0] ibf_opds, stg_opds;
-        assign ibf_opds = {ibuffer_if[w].data.rs3, ibuffer_if[w].data.rs2, ibuffer_if[w].data.rs1, ibuffer_if[w].data.rd};
-        assign stg_opds = {staging_if[w].data.rs3, staging_if[w].data.rs2, staging_if[w].data.rs1, staging_if[w].data.rd};
+        assign ibf_opds = {next_hz[w].rs3, next_hz[w].rs2, next_hz[w].rs1, next_hz[w].rd};
+        assign stg_opds = {head_hz[w].rs3, head_hz[w].rs2, head_hz[w].rs1, head_hz[w].rd};
 
-        wire [NUM_OPDS-1:0] ibf_used_rs = {ibuffer_if[w].data.used_rs, ibuffer_if[w].data.wb};
-        wire [NUM_OPDS-1:0] stg_used_rs = {staging_if[w].data.used_rs, staging_if[w].data.wb};
+        wire [NUM_OPDS-1:0] ibf_used_rs = {next_hz[w].used_rs, next_hz[w].wb};
+        wire [NUM_OPDS-1:0] stg_used_rs = {head_hz[w].used_rs, head_hz[w].wb};
 
         // Special-register dependency masks
-        wire [NUM_XREGS-1:0] ibf_xregs_mask = ibuffer_if[w].data.rd_xregs | ibuffer_if[w].data.wr_xregs;
-        wire [NUM_XREGS-1:0] stg_xregs_mask = staging_if[w].data.rd_xregs | staging_if[w].data.wr_xregs;
+        wire [NUM_XREGS-1:0] ibf_xregs_mask = next_hz[w].rd_xregs | next_hz[w].wr_xregs;
+        wire [NUM_XREGS-1:0] stg_xregs_mask = head_hz[w].rd_xregs | head_hz[w].wr_xregs;
 
         wire [NUM_OPDS-1:0][REG_TYPES-1:0][RV_REGS-1:0] ibf_opd_mask, stg_opd_mask;
 
@@ -129,8 +119,8 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         end
 
         wire wb_is_u  = (get_reg_type(writeback_if.data.rd) == REG_TYPE_U);
-        wire ibf_rd_u = ibuffer_if[w].data.wb && (get_reg_type(ibuffer_if[w].data.rd) == REG_TYPE_U);
-        wire stg_rd_u = staging_if[w].data.wb && (get_reg_type(staging_if[w].data.rd) == REG_TYPE_U);
+        wire ibf_rd_u = next_hz[w].wb && (get_reg_type(next_hz[w].rd) == REG_TYPE_U);
+        wire stg_rd_u = head_hz[w].wb && (get_reg_type(head_hz[w].rd) == REG_TYPE_U);
 
         // Writeback release feeds wb_inuse_regs; the staging reserve is added on
         // top to form the next state, inuse_regs_n.
@@ -151,17 +141,17 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             inuse_regs_n  = wb_inuse_regs;
             inuse_xregs_n = wb_inuse_xregs;
             if (staging_fire) begin
-                if (staging_if[w].data.wb) begin
+                if (head_hz[w].wb) begin
                     inuse_regs_n |= NUM_GPRS'(stg_opd_mask[0]); // reserve rd
                 end
-                inuse_xregs_n |= staging_if[w].data.wr_xregs; // reserve special regs
+                inuse_xregs_n |= head_hz[w].wr_xregs; // reserve special regs
             end
         end
 
         // Uniform tags: one per uniform write in flight, freed by its writeback.
-        // A uniform write waits for a free tag; on fire the staging instr takes
-        // one, so the ibuffer instr behind it needs a second.
-        wire [NUM_OPDS-1:0] ibf_u_inuse;
+        // A uniform write waits for a free tag; on fire the head takes one, so
+        // the entry behind it needs a second.
+        wire [NUM_OPDS-1:0] ibf_u_inuse, stg_u_inuse;
         wire wb_u_hit, ufree1, ufree2;
         if (UTAGS != 0) begin : g_utags
             reg [UTAGS-1:0] utag_valid;
@@ -173,11 +163,13 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             end
             wire [UTAGS-1:0] wb_utag_valid = utag_valid & ~utag_rel;
             for (genvar i = 0; i < NUM_OPDS; ++i) begin : g_lookup
-                wire [UTAGS-1:0] hit;
+                wire [UTAGS-1:0] ibf_hit, stg_hit;
                 for (genvar t = 0; t < UTAGS; ++t) begin : g_t
-                    assign hit[t] = utag_valid[t] && (utag_idx[t] == get_reg_idx(ibf_opds[i]));
+                    assign ibf_hit[t] = utag_valid[t] && (utag_idx[t] == get_reg_idx(ibf_opds[i]));
+                    assign stg_hit[t] = utag_valid[t] && (utag_idx[t] == get_reg_idx(stg_opds[i]));
                 end
-                assign ibf_u_inuse[i] = | hit;
+                assign ibf_u_inuse[i] = | ibf_hit;
+                assign stg_u_inuse[i] = | stg_hit;
             end
 
             reg [UTAGS-1:0] alloc;
@@ -212,12 +204,13 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
                 end
                 for (integer t = 0; t < UTAGS; ++t) begin
                     if (take && alloc[t]) begin
-                        utag_idx[t] <= get_reg_idx(staging_if[w].data.rd);
+                        utag_idx[t] <= get_reg_idx(head_hz[w].rd);
                     end
                 end
             end
         end else begin : g_no_utags
             assign ibf_u_inuse = '0;
+            assign stg_u_inuse = '0;
             assign wb_u_hit = 1'b0;
             assign ufree1 = 1'b1;
             assign ufree2 = 1'b1;
@@ -231,9 +224,10 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         // after that decision puts the whole arbitration in front of a
         // NUM_REGS-wide hazard reduction. Instead both outcomes are evaluated from state that
         // does not depend on the grant, and staging_fire only selects:
-        //   hold: staging keeps its instr (or, if empty, takes the ibuffer's)
-        //   fire: staging hands off, its rd is reserved, the ibuffer instr moves in
-        // Either way the flop gets the value a post-grant evaluation would.
+        //   hold: the head stays
+        //   fire: the head issues, its rd is reserved, the entry behind it moves up
+        // Either way the flop gets the value a post-grant evaluation would. An
+        // entry written this cycle is checked the next, once it is in a slot.
         //
         // Either outcome checks one of only two instrs, so each is checked
         // once and the outcomes select bits.
@@ -243,17 +237,15 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         // this cycle's release, which is shallower than reducing the operand
         // masks against the whole released set.
         wire wb_release = writeback_fire && writeback_if.data.wb;
-        // The staged instr's operands are looked up once, on entry, and then only
-        // a release can clear them: no one else reserves this warp's registers
-        // while it waits (its own reservation happens when it leaves).
-        reg  [NUM_OPDS-1:0] stg_pend_r;
         wire [NUM_OPDS-1:0] ibf_opd_busy, stg_opd_busy;
         for (genvar i = 0; i < NUM_OPDS; ++i) begin : g_opd_busy
             wire ibf_inuse = (get_reg_type(ibf_opds[i]) == REG_TYPE_U) ? ibf_u_inuse[i]
                                                                        : inuse_regs[ibf_opds[i][GPR_BITS-1:0]];
+            wire stg_inuse = (get_reg_type(stg_opds[i]) == REG_TYPE_U) ? stg_u_inuse[i]
+                                                                       : inuse_regs[stg_opds[i][GPR_BITS-1:0]];
             assign ibf_opd_busy[i] = ibf_used_rs[i] && ibf_inuse
                                   && ~(wb_release && (writeback_if.data.rd == ibf_opds[i]));
-            assign stg_opd_busy[i] = stg_pend_r[i]
+            assign stg_opd_busy[i] = stg_used_rs[i] && stg_inuse
                                   && ~(wb_release && (writeback_if.data.rd == stg_opds[i]));
         end
         wire ibf_busy  = | ibf_opd_busy;
@@ -268,42 +260,32 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         for (genvar i = 0; i < NUM_OPDS; ++i) begin : g_ibf_reads_rd
             assign ibf_reads_rd[i] = ibf_used_rs[i] && (ibf_opds[i] == stg_opds[0]);
         end
-        wire stg_rsv_rd = staging_if[w].data.wb;
+        wire stg_rsv_rd = head_hz[w].wb;
         wire ibf_rsv    = (stg_rsv_rd && (| ibf_reads_rd))
-                       || (| (staging_if[w].data.wr_xregs & ibf_xregs_mask));
-        wire stg_rsv    = stg_rsv_rd
-                       || (| (staging_if[w].data.wr_xregs & stg_xregs_mask));
+                       || (| (head_hz[w].wr_xregs & ibf_xregs_mask));
 
-        wire hold_ibf = ibuffer_if[w].valid && ~staging_if[w].valid;
-        wire fire_ibf = ibuffer_if[w].valid;
+        wire ibf_goingfull = fu_goingfull[next_hz[w].ex_type];
+        wire stg_goingfull = fu_goingfull[head_hz[w].ex_type];
 
-        wire hold_busy = hold_ibf ? (ibf_busy || ibf_xbusy || (ibf_rd_u && ~ufree1))
-                                  : (stg_busy || stg_xbusy || (stg_rd_u && ~ufree1));
-        wire fire_busy = fire_ibf ? (ibf_busy || ibf_xbusy || ibf_rsv || (ibf_rd_u && ~(stg_rd_u ? ufree2 : ufree1)))
-                                  : (stg_busy || stg_xbusy || stg_rsv);
-
-        wire ibf_goingfull = fu_goingfull[ibuffer_if[w].data.ex_type];
-        wire stg_goingfull = fu_goingfull[staging_if[w].data.ex_type];
-
-        wire hold_ready = ~hold_busy && ~(hold_ibf ? ibf_goingfull : stg_goingfull);
-        wire fire_ready = ~fire_busy && ~(fire_ibf ? ibf_goingfull : stg_goingfull);
+        wire hold_ready = head_valid[w] && ~(stg_busy || stg_xbusy || (stg_rd_u && ~ufree1)) && ~stg_goingfull;
+        wire fire_ready = ISSUE_LOOKAHEAD && next_valid[w]
+                       && ~(ibf_busy || ibf_xbusy || ibf_rsv || (ibf_rd_u && ~(stg_rd_u ? ufree2 : ufree1)))
+                       && ~ibf_goingfull;
 
         wire operands_ready_n = staging_fire ? fire_ready : hold_ready;
         reg operands_ready_r;
 
     `ifdef SIMULATION
-        // Per-operand busy view of the selected outcome, for the stall trace.
-        wire [NUM_REGS-1:0] regs_mask = ibuffer_fire ? ibf_regs_mask : stg_regs_mask;
-        wire [REG_TYPES-1:0][RV_REGS-1:0] in_use_mask = NUM_REGS'(inuse_regs_n) & regs_mask;
+        // Per-operand busy view of the head, for the stall trace.
+        wire [REG_TYPES-1:0][RV_REGS-1:0] in_use_mask = NUM_REGS'(inuse_regs) & stg_regs_mask;
         wire [NUM_OPDS-1:0] operands_busy;
         for (genvar i = 0; i < NUM_OPDS; ++i) begin : g_operands_busy
             wire [REG_TYPE_BITS-1:0] rtype = get_reg_type(stg_opds[i]);
             assign operands_busy[i] = | (in_use_mask[rtype] & stg_opd_mask[i][rtype]);
         end
-        wire xregs_busy = | (inuse_xregs_n & (ibuffer_fire ? ibf_xregs_mask : stg_xregs_mask));
-        `UNUSED_VAR (xregs_busy)
+        wire xregs_busy = | (inuse_xregs & stg_xregs_mask);
+        `UNUSED_VAR ({ibf_regs_mask, xregs_busy})
     `else
-        `UNUSED_VAR (ibuffer_fire)
         `UNUSED_VAR ({ibf_regs_mask, stg_regs_mask})
     `endif
 
@@ -331,18 +313,6 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             operands_ready_r <= operands_ready_n;
         end
 
-        // The staged pending bits change only when an instruction enters staging
-        // or a writeback reaches this warp.
-    `ifdef ASIC
-        wire stg_pend_clk;
-        VX_clockgate stg_pend_cg (.clk_in (clk), .en (ibuffer_fire || writeback_fire), .clk_out (stg_pend_clk));
-    `endif
-        always @(posedge `GATED_CLK(clk, stg_pend_clk)) begin
-            // entering: the lookup, plus the leaving instr's rd reservation
-            stg_pend_r <= ibuffer_fire ? (ibf_opd_busy | (ibf_reads_rd & {NUM_OPDS{staging_fire && stg_rsv_rd}}))
-                                       : stg_opd_busy;
-        end
-
         assign operands_ready[w] = operands_ready_r;
 
     `ifdef SIMULATION
@@ -352,14 +322,14 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             if (reset) begin
                 timeout_ctr <= '0;
             end else begin
-                if (staging_if[w].valid && ~staging_if[w].ready) begin
+                if (head_valid[w] && ~head_pop[w]) begin
                 `ifdef DBG_TRACE_PIPELINE
                     `TRACE(4, ("%t: *** %s-stall: wid=%0d, PC=0x%0h, tmask=%b, cycles=%0d, opds_busy=%b, xregs_busy=%b (#%0d)\n",
-                        $time, INSTANCE_ID, w, to_fullPC(staging_if[w].data.PC), staging_if[w].data.tmask, timeout_ctr,
-                        operands_busy, xregs_busy, staging_if[w].data.uuid))
+                        $time, INSTANCE_ID, w, to_fullPC(head_hz[w].PC), head_hz[w].tmask, timeout_ctr,
+                        operands_busy, xregs_busy, head_hz[w].uuid))
                 `endif
                     timeout_ctr <= timeout_ctr + 1;
-                end else if (ibuffer_fire) begin
+                end else begin
                     timeout_ctr <= '0;
                 end
             end
@@ -367,8 +337,8 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
         `RUNTIME_ASSERT((timeout_ctr < STALL_TIMEOUT),
             ("timeout: wid=%0d, PC=0x%0h, tmask=%b, cycles=%0d, inuse=%b (#%0d)",
-                w, to_fullPC(staging_if[w].data.PC), staging_if[w].data.tmask, timeout_ctr,
-                operands_busy, staging_if[w].data.uuid))
+                w, to_fullPC(head_hz[w].PC), head_hz[w].tmask, timeout_ctr,
+                operands_busy, head_hz[w].uuid))
 
         `RUNTIME_ASSERT(~(writeback_fire && writeback_if.data.wb) || (wb_is_u ? wb_u_hit : inuse_regs[writeback_if.data.rd[GPR_BITS-1:0]]),
             ("invalid writeback register: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d (#%0d)",
@@ -382,8 +352,6 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     end
 
     wire [PER_ISSUE_WARPS-1:0] arb_valid_in;
-    wire [PER_ISSUE_WARPS-1:0][OUT_DATAW-1:0] arb_data_in;
-    wire [PER_ISSUE_WARPS-1:0] arb_ready_in;
 
     // FU lock: a sequence must not interleave with another warp at the same FU.
     // fu_locked ('1 = open, one-hot = locked) gates arb_valid_in so only the lock
@@ -397,7 +365,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     reg [PER_ISSUE_WARPS-1:0] yield_r;
     wire [PER_ISSUE_WARPS-1:0] staging_yield_vec;
     for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_staging_yield
-        assign staging_yield_vec[w] = staging_if[w].data.issue_yield;
+        assign staging_yield_vec[w] = head_hz[w].issue_yield;
     end
     wire [PER_ISSUE_WARPS-1:0] yield_reqs = arb_valid_in & staging_yield_vec;
     wire [PER_ISSUE_WARPS-1:0] req_below;
@@ -413,29 +381,11 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     wire [PER_ISSUE_WARPS-1:0] yield_r = '0;
 `endif
 
-    for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_arb_data_in
+    for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_arb_valid_in
         // operands_ready carries data-hazard + FU-congestion; fu_locked adds the
         // FU-lock gate so only the lock holder is requested during a sequence.
-        assign arb_valid_in[w] = staging_if[w].valid && operands_ready[w] && fu_locked[w] && ~yield_r[w];
-
-        assign arb_data_in[w] = {
-            staging_if[w].data.uuid,
-            staging_if[w].data.cta_id,
-            staging_if[w].data.tmask,
-            staging_if[w].data.PC,
-            staging_if[w].data.ex_type,
-            staging_if[w].data.op_type,
-            staging_if[w].data.op_args,
-            staging_if[w].data.wb,
-            staging_if[w].data.wr_xregs,
-            staging_if[w].data.used_rs,
-            staging_if[w].data.rd,
-            staging_if[w].data.bytesel,
-            staging_if[w].data.rs1,
-            staging_if[w].data.rs2,
-            staging_if[w].data.rs3
-        };
-        assign staging_if[w].ready = arb_ready_in[w] && operands_ready[w];
+        assign arb_valid_in[w] = head_valid[w] && operands_ready[w] && fu_locked[w] && ~yield_r[w];
+        assign head_pop[w] = arb_valid_in[w] && arb_ready_in[w];
     end
 
     localparam LOG_NUM_REQS = `LOG2UP(PER_ISSUE_WARPS);
@@ -446,26 +396,65 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     wire                    arb_ready;
 
     // Matrix arbiter scales better past 8 requesters; RR is cheaper below that.
-    VX_generic_arbiter #(
-        .NUM_REQS (PER_ISSUE_WARPS),
-        .TYPE     ((PER_ISSUE_WARPS > 8) ? "M" : "R"),
-        .STICKY   (1) // Greedy
-    ) out_arb (
-        .clk          (clk),
-        .reset        (reset),
-        .requests     (arb_valid_in),
-        .grant_valid  (arb_valid),
-        .grant_index  (arb_index),
-        .grant_onehot (arb_onehot),
-        .grant_ready  (arb_ready)
-    );
+    // Past 16 the matrix goes two-level: its state would grow with the square
+    // of the warps.
+    if (PER_ISSUE_WARPS > 16) begin : g_out_arb2
+        VX_matrix2_arbiter #(
+            .NUM_REQS (PER_ISSUE_WARPS),
+            .STICKY   (1) // Greedy
+        ) out_arb (
+            .clk          (clk),
+            .reset        (reset),
+            .requests     (arb_valid_in),
+            .grant_valid  (arb_valid),
+            .grant_index  (arb_index),
+            .grant_onehot (arb_onehot),
+            .grant_ready  (arb_ready)
+        );
+    end else begin : g_out_arb
+        VX_generic_arbiter #(
+            .NUM_REQS (PER_ISSUE_WARPS),
+            .TYPE     ((PER_ISSUE_WARPS > 8) ? "M" : "R"),
+            .STICKY   (1) // Greedy
+        ) out_arb (
+            .clk          (clk),
+            .reset        (reset),
+            .requests     (arb_valid_in),
+            .grant_valid  (arb_valid),
+            .grant_index  (arb_index),
+            .grant_onehot (arb_onehot),
+            .grant_ready  (arb_ready)
+        );
+    end
 
     wire valid_out_w;
     wire [OUT_DATAW-1:0] data_out_w;
     wire ready_out_w;
 
+    // The granted warp's head instruction is read from the buffer's RAM.
+    assign read_wis    = ISSUE_WIS_W'(arb_index);
     assign valid_out_w = arb_valid;
-    assign data_out_w  = arb_data_in[arb_index];
+    assign data_out_w  = {
+        read_data.uuid,
+        read_data.cta_id,
+        read_data.tmask,
+        read_data.PC,
+        read_data.ex_type,
+        read_data.op_type,
+        read_data.op_args,
+        read_data.wb,
+        read_data.wr_xregs,
+        read_data.used_rs,
+        read_data.rd,
+        read_data.bytesel,
+        read_data.rs1,
+        read_data.rs2,
+        read_data.rs3
+    };
+    `UNUSED_VAR ({read_data.wid, read_data.rd_xregs, read_data.fu_lock, read_data.fu_unlock})
+`ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
+    `UNUSED_VAR (read_data.issue_yield)
+`endif
 
     for (genvar i = 0; i < PER_ISSUE_WARPS; ++i) begin : g_arb_ready_in
         assign arb_ready_in[i] = ready_out_w && arb_onehot[i];
@@ -482,9 +471,9 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     wire [PER_ISSUE_WARPS-1:0] staging_fu_lock_vec;
     wire [PER_ISSUE_WARPS-1:0] staging_fu_unlock_vec;
     for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_staging_fu_lock
-        assign staging_ex_vec[w]        = staging_if[w].data.ex_type;
-        assign staging_fu_lock_vec[w]   = staging_if[w].data.fu_lock;
-        assign staging_fu_unlock_vec[w] = staging_if[w].data.fu_unlock;
+        assign staging_ex_vec[w]        = head_hz[w].ex_type;
+        assign staging_fu_lock_vec[w]   = head_hz[w].fu_lock;
+        assign staging_fu_unlock_vec[w] = head_hz[w].fu_unlock;
     end
 
     wire [EX_BITS-1:0] issue_ex = staging_ex_vec[arb_index];

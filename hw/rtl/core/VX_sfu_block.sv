@@ -61,7 +61,7 @@ module VX_sfu_block import VX_gpu_pkg::*; #(
 `ifndef VX_CFG_EXT_RTU_ENABLE
     `UNUSED_VAR (block_idx)
 `endif
-    localparam PE_COUNT     = 2 + `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_OM_ENABLED + `VX_CFG_EXT_RASTER_ENABLED + `VX_CFG_EXT_RTU_ENABLED + `VX_CFG_EXT_MUFU_ENABLED;
+    localparam PE_COUNT     = 2 + `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_OM_ENABLED + `VX_CFG_EXT_RASTER_ENABLED + `VX_CFG_EXT_RTU_ENABLED + `VX_CFG_EXT_TFU_ENABLED;
     localparam PE_SEL_BITS  = `CLOG2(PE_COUNT);
     localparam PE_IDX_WCTL  = 0;
     localparam PE_IDX_CSRS  = 1;
@@ -80,8 +80,8 @@ module VX_sfu_block import VX_gpu_pkg::*; #(
 `ifdef VX_CFG_EXT_RTU_ENABLE
     localparam PE_IDX_RTUW  = 2 + `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_OM_ENABLED + `VX_CFG_EXT_RASTER_ENABLED;
 `endif
-`ifdef VX_CFG_EXT_MUFU_ENABLE
-    localparam PE_IDX_MUFU  = 2 + `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_OM_ENABLED + `VX_CFG_EXT_RASTER_ENABLED + `VX_CFG_EXT_RTU_ENABLED;
+`ifdef VX_CFG_EXT_TFU_ENABLE
+    localparam PE_IDX_TFU   = 2 + `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_OM_ENABLED + `VX_CFG_EXT_RASTER_ENABLED + `VX_CFG_EXT_RTU_ENABLED;
 `endif
 
     VX_execute_if #(
@@ -123,9 +123,9 @@ module VX_sfu_block import VX_gpu_pkg::*; #(
             pe_select = PE_SEL_BITS'(PE_IDX_RTUW);
         end
     `endif
-    `ifdef VX_CFG_EXT_MUFU_ENABLE
-        if (execute_if.data.op_type == INST_SFU_MUFU) begin
-            pe_select = PE_SEL_BITS'(PE_IDX_MUFU);
+    `ifdef VX_CFG_EXT_TFU_ENABLE
+        if (execute_if.data.op_type == INST_SFU_TFU) begin
+            pe_select = PE_SEL_BITS'(PE_IDX_TFU);
         end
     `endif
     end
@@ -261,15 +261,15 @@ module VX_sfu_block import VX_gpu_pkg::*; #(
     );
 `endif
 
-`ifdef VX_CFG_EXT_MUFU_ENABLE
-    VX_mufu_unit #(
-        .INSTANCE_ID (`SFORMATF(("%s-mufu", INSTANCE_ID))),
+`ifdef VX_CFG_EXT_TFU_ENABLE
+    VX_tfu_unit #(
+        .INSTANCE_ID (`SFORMATF(("%s-tfu", INSTANCE_ID))),
         .NUM_LANES   (NUM_LANES)
-    ) mufu_unit (
+    ) tfu_unit (
         .clk        (clk),
         .reset      (reset),
-        .execute_if (pe_execute_if[PE_IDX_MUFU]),
-        .result_if  (pe_result_if[PE_IDX_MUFU])
+        .execute_if (pe_execute_if[PE_IDX_TFU]),
+        .result_if  (pe_result_if[PE_IDX_TFU])
     );
 `endif
 
