@@ -637,6 +637,10 @@ package VX_gpu_pkg;
     localparam ISSUE_ISW_SIZEW = `CLOG2(`VX_CFG_ISSUE_WIDTH + 1);
     localparam ISSUE_ISW_W = `UP(ISSUE_ISW_BITS);
     localparam PER_ISSUE_WARPS = `VX_CFG_NUM_WARPS / `VX_CFG_ISSUE_WIDTH;
+    // With this many warps per issue slice another warp fills the cycle after a
+    // warp issues, so the scoreboard does not check the entry behind the head
+    // ahead of time: a warp issues at most every other cycle.
+    localparam ISSUE_LOOKAHEAD = (PER_ISSUE_WARPS < 32);
     localparam ISSUE_WIS_BITS = `CLOG2(PER_ISSUE_WARPS);
     localparam ISSUE_WIS_W = `UP(ISSUE_WIS_BITS);
 

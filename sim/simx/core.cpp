@@ -853,6 +853,8 @@ public:
         // writes the buffer as it decodes and has a written entry ready to
         // issue two cycles later: here the buffer's one-cycle delay is that.
         auto trace = ibuffer->peek();
+        if (!ISSUE_LOOKAHEAD && SimPlatform::instance().cycles() < last_issue_.at(wid) + 2)
+          continue;
 
         this->check_issue_timeout(iw, wid, trace);
 

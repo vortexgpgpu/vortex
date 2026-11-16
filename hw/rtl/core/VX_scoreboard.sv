@@ -188,7 +188,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         wire stg_goingfull = fu_goingfull[head_hz[w].ex_type];
 
         wire hold_ready = head_valid[w] && ~(stg_busy || stg_xbusy) && ~stg_goingfull;
-        wire fire_ready = next_valid[w] && ~(ibf_busy || ibf_xbusy || ibf_rsv) && ~ibf_goingfull;
+        wire fire_ready = ISSUE_LOOKAHEAD && next_valid[w] && ~(ibf_busy || ibf_xbusy || ibf_rsv) && ~ibf_goingfull;
 
         wire operands_ready_n = staging_fire ? fire_ready : hold_ready;
         reg operands_ready_r;
