@@ -11,7 +11,10 @@
 // wrap/filter mode, and the graceful software fallback — using the software path
 // itself as the reference (no hand-derived golden). Nearest is bit-exact; linear
 // blends in fixed point on hardware vs float in software, so it agrees within a
-// small tolerance. Prints PASSED!/FAILED!.
+// small tolerance. A last phase rotates three distinct images through the three
+// arguments across launches, so each image changes its binding (stage 0, stage
+// 1, software) on every launch; a binding the driver failed to update samples
+// the wrong image. Prints PASSED!/FAILED!.
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -65,6 +68,7 @@ cl_command_queue queue = NULL;
 cl_program program = NULL;
 cl_kernel kernel = NULL;
 cl_mem img[3] = { NULL, NULL, NULL };
+cl_mem rot[3] = { NULL, NULL, NULL };
 cl_mem obuf[3] = { NULL, NULL, NULL };
 uint8_t* kernel_bin = NULL;
 
@@ -74,6 +78,9 @@ static void cleanup() {
   if (program) clReleaseProgram(program);
   for (int i = 0; i < 3; ++i) {
     if (img[i]) clReleaseMemObject(img[i]);
+    if (rot[i]) {
+      clReleaseMemObject(rot[i]);
+    }
     if (obuf[i]) clReleaseMemObject(obuf[i]);
   }
   if (context) clReleaseContext(context);
@@ -213,6 +220,54 @@ int main(int argc, char** argv) {
       printf("  %-16s tol=%d : info-only, hw vs float-sw delta in %d bytes "
              "(FF authoritative; not asserted)\n", modes[m].name, modes[m].tol, errs);
     }
+  }
+
+  // Rotation: distinct images, so sampling one through another's binding shows
+  // up. rot_out[image][slot]; slots 0 and 1 are the TEX stages, slot 2 software.
+  {
+    std::vector<uint8_t> h_rot[3];
+    for (int i = 0; i < 3; ++i) {
+      h_rot[i].resize(h_src.size());
+      for (size_t b = 0; b < h_src.size(); ++b) {
+        h_rot[i][b] = (uint8_t)(h_src[b] + 85 * (i + 1) + (b & 3) * 31 * i);
+      }
+      rot[i] = CL_CHECK2(clCreateImage(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                                       &fmt, &desc, h_rot[i].data(), &_err));
+    }
+    std::vector<uint8_t> rot_out[3][3];
+    cl_sampler smp = CL_CHECK2(clCreateSampler(context, CL_TRUE, CL_ADDRESS_CLAMP_TO_EDGE,
+                                               CL_FILTER_NEAREST, &_err));
+    CL_CHECK(clSetKernelArg(kernel, 3, sizeof(cl_sampler), &smp));
+    for (int r = 0; r < 3; ++r) {
+      for (int k = 0; k < 3; ++k) {
+        CL_CHECK(clSetKernelArg(kernel, k, sizeof(cl_mem), &rot[(k + r) % 3]));
+      }
+      size_t global[2] = { (size_t)ow, (size_t)oh };
+      CL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 2, NULL, global, NULL, 0, NULL, NULL));
+      CL_CHECK(clFinish(queue));
+      for (int k = 0; k < 3; ++k) {
+        std::vector<uint8_t>& o = rot_out[(k + r) % 3][k];
+        o.resize(opx * 4);
+        CL_CHECK(clEnqueueReadBuffer(queue, obuf[k], CL_TRUE, 0, opx * 4, o.data(), 0, NULL, NULL));
+      }
+    }
+    clReleaseSampler(smp);
+
+    int errs = 0;
+    for (int j = 0; j < 3; ++j) {
+      for (size_t i = 0; i < opx * 4; ++i) {
+        unsigned sw = rot_out[j][2][i];
+        if (rot_out[j][0][i] != sw || rot_out[j][1][i] != sw) {
+          if (errs < 4) {
+            printf("  [rotation] image %d byte %zu: hw0=%u hw1=%u sw=%u\n", j, i,
+                   (unsigned)rot_out[j][0][i], (unsigned)rot_out[j][1][i], sw);
+          }
+          ++errs;
+        }
+      }
+    }
+    printf("  %-16s tol=0 : %s (%d mismatches)\n", "rotation", errs ? "FAIL" : "ok", errs);
+    total_errors += errs;
   }
 
   cleanup();

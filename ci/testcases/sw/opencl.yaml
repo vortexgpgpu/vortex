@@ -31,6 +31,44 @@ tests:
   xlen:
   - 32
   configs: "-DVX_CFG_EXT_A_ENABLE"
+# atomicreduce: every OpenCL 1.2 32-bit atomic and its atom_* extension name, on
+# global and local memory, with the values inc and the exchanges return. Needs
+# the A extension. The 4-core L2 shape executes the global atomics at the L2.
+- id: atomicreduce
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: atomicreduce
+  xlen: [32]
+  configs: "-DVX_CFG_EXT_A_ENABLE"
+- id: atomicreduce-4c-l2
+  via: blackbox
+  drivers: [simx]
+  app: atomicreduce
+  xlen: [32]
+  configs: "-DVX_CFG_EXT_A_ENABLE"
+  shape:
+    cores: 4
+    l2cache: true
+# memfence: barriers, fences and wait_group_events on global and local memory. It
+# also runs in the default sweep, where it skips the atomic part. With the A
+# extension it adds the last-work-group reduction, whose reader needs an
+# acquire; the multi-core shapes put the L1 above the point of coherence, where
+# the acquire invalidates it.
+- id: memfence-atomics
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: memfence
+  xlen: [32]
+  configs: "-DVX_CFG_EXT_A_ENABLE"
+- id: memfence-4c-l2
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: memfence
+  xlen: [32]
+  configs: "-DVX_CFG_EXT_A_ENABLE"
+  shape:
+    cores: 4
+    l2cache: true
 # OpenCL image feature tests. These require an image-enabled PoCL-Vortex build
 # (CL_DEVICE_IMAGE_SUPPORT + the vortex scalar read/write_image builtins); point
 # POCL_PATH at that build. Sampling runs in software (no fixed-function TEX), so
