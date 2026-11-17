@@ -59,6 +59,12 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
 
 ### Changed
 
+- **One operand collector per issue slice (`VX_CFG_NUM_OPCS`, default 1).** It was one per 4 warps of a slice. The scoreboard
+  already issues only when the target unit's dispatch queue has room, so extra collectors only absorbed register bank conflicts.
+  *Why:* each collector holds three full-width operands and its own register-file banks. At 64 warps, 4 issue slices and 32
+  threads (rtlsim, 8 SIMT kernels), 1 collector per slice instead of 4 is 2.1% faster on geomean, worst +0.8% (sgemv), and
+  2 per slice matches 4 to the cycle. Beacon's `core` build (16 warps, 16 threads, 4 collectors to 1): LUTs -12.1%,
+  flip-flops -13.3%, block RAM -70%, same logic depth.
 - **Toolchain pinned to v3.0.2** (`TOOLCHAIN_REV`): LLVM f44a6bb2af4c, with PoCL rebuilt on it. Wide loads/stores and 64-bit
   atomics stay behind `+xvortexldstwide` and `+xvortexamod`, so code built with plain `+xvortex` uses no new instructions.
 - **Dcache read-merge pairs realign.** A pair of same-word merge ports whose parts a bank served a cycle apart waits for its partner,
