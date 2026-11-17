@@ -202,23 +202,29 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     // Per-core mstatus and mtvec, written by any SFU block's CSR unit in block
     // order, as SATP is. Trap redirection reads the registered vector: a warp's
     // own mtvec write has committed before its ECALL or EBREAK issues.
+    // The value a block reads and the value after its write are separate
+    // vectors: one vector holding both is a combinational loop to Verilator
+    // when it does not split variables (-O0).
     reg [`VX_CFG_XLEN-1:0] mstatus_r, mtvec_r;
-    wire [`VX_CFG_NUM_SFU_BLOCKS:0][`VX_CFG_XLEN-1:0] mstatus_chain, mtvec_chain;
-    assign mstatus_chain[0] = mstatus_r;
-    assign mtvec_chain[0]   = mtvec_r;
+    wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] mstatus_wr, mtvec_wr;
     for (genvar b = 0; b < `VX_CFG_NUM_SFU_BLOCKS; ++b) begin : g_mtrap
-        assign mstatus[b] = mstatus_chain[b];
-        assign mtvec[b]   = mtvec_chain[b];
-        assign mstatus_chain[b+1] = mstatus_wr_valid[b] ? mtrap_wr_data[b] : mstatus_chain[b];
-        assign mtvec_chain[b+1]   = mtvec_wr_valid[b] ? mtrap_wr_data[b] : mtvec_chain[b];
+        if (b == 0) begin : g_first
+            assign mstatus[b] = mstatus_r;
+            assign mtvec[b]   = mtvec_r;
+        end else begin : g_next
+            assign mstatus[b] = mstatus_wr[b-1];
+            assign mtvec[b]   = mtvec_wr[b-1];
+        end
+        assign mstatus_wr[b] = mstatus_wr_valid[b] ? mtrap_wr_data[b] : mstatus[b];
+        assign mtvec_wr[b]   = mtvec_wr_valid[b] ? mtrap_wr_data[b] : mtvec[b];
     end
     always @(posedge clk) begin
         if (reset) begin
             mstatus_r <= '0;
             mtvec_r   <= '0;
         end else begin
-            mstatus_r <= mstatus_chain[`VX_CFG_NUM_SFU_BLOCKS];
-            mtvec_r   <= mtvec_chain[`VX_CFG_NUM_SFU_BLOCKS];
+            mstatus_r <= mstatus_wr[`VX_CFG_NUM_SFU_BLOCKS-1];
+            mtvec_r   <= mtvec_wr[`VX_CFG_NUM_SFU_BLOCKS-1];
         end
     end
 
