@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 580" role="img" aria-label="Each cache level ORs the visible tokens' operations; a token that owes the level no work is answered at once; otherwise the level walks or quiesces, waits for the uncached path if IO is set, forwards on every port when REL, SYS or IO is set or the next level is above the point of coherence, then answers.">
+  <title>Each cache level ORs the visible tokens' operations; a token that owes the level no work is answered at once; otherwise the level walks or quiesces, waits for the uncached path if IO is set, forwards on every port when REL, SYS or IO is set or the next level is above the point of coherence, then answers.</title>
+  <defs><marker id="rule_a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1b2733"/></marker></defs>
+  <style>
+    text { font-family: Helvetica, Arial, sans-serif; fill: #1b2733; font-size: 11.5px; }
+    .dm { fill: #5a6772; font-size: 10.5px; }
+    .ds { font-size: 10.5px; }
+    .yn { font-size: 10.5px; fill: #5a6772; font-style: italic; }
+    .db { fill: #fbfcfd; stroke: #5a7184; stroke-width: 1.2; }
+    .dq { fill: #eef3f8; stroke: #5a7184; stroke-width: 1.2; }
+    .dgood { fill: #e3f3ea; stroke: #1f7a4d; stroke-width: 1.2; }
+    .didle { fill: #f3f5f8; stroke: #c9d1d9; stroke-width: 1.2; }
+    .ln { stroke: #1b2733; stroke-width: 1.3; fill: none; }
+  </style>
+  <rect width="760" height="580" fill="#ffffff"/>
+
+  <rect x="190" y="14" width="280" height="44" rx="6" class="didle"/>
+  <text x="330" y="33" text-anchor="middle">tokens visible at any input</text>
+  <text x="330" y="48" text-anchor="middle" class="ds">block every input · op = OR of their fence_ops</text>
+
+  <polygon points="330,78 480,110 330,142 180,110" class="dq"/>
+  <text x="330" y="99" text-anchor="middle">work owed? above the point of</text>
+  <text x="330" y="113" text-anchor="middle">coherence (or SYS) with ACQ or</text>
+  <text x="330" y="127" text-anchor="middle">REL, or IO set</text>
+
+  <rect x="545" y="90" width="195" height="40" rx="6" class="dgood"/>
+  <text x="642" y="108" text-anchor="middle">answer at once</text>
+  <text x="642" y="122" text-anchor="middle" class="ds">no walk, no forward</text>
+
+  <polygon points="330,166 480,198 330,230 180,198" class="dq"/>
+  <text x="330" y="187" text-anchor="middle">walk owed? above the point of</text>
+  <text x="330" y="201" text-anchor="middle">coherence with ACQ, or with</text>
+  <text x="330" y="215" text-anchor="middle">REL on a write-back level</text>
+
+  <rect x="20" y="250" width="210" height="50" class="db"/>
+  <text x="125" y="270" text-anchor="middle">walk every bank</text>
+  <text x="125" y="286" text-anchor="middle" class="ds">WB: write back + invalidate · WT: invalidate</text>
+
+  <rect x="430" y="250" width="210" height="50" class="db"/>
+  <text x="535" y="270" text-anchor="middle">quiesce the banks</text>
+  <text x="535" y="286" text-anchor="middle" class="ds">drain MSHR and pipe, no walk</text>
+
+  <polygon points="330,322 430,346 330,370 230,346" class="dq"/>
+  <text x="330" y="350" text-anchor="middle">IO set?</text>
+  <rect x="480" y="326" width="260" height="40" class="db"/>
+  <text x="610" y="344" text-anchor="middle">also wait until the uncached path</text>
+  <text x="610" y="358" text-anchor="middle" class="ds">is empty (nc_req_empty)</text>
+
+  <polygon points="330,394 490,428 330,462 170,428" class="dq"/>
+  <text x="330" y="418" text-anchor="middle">forward? REL, SYS or IO set,</text>
+  <text x="330" y="432" text-anchor="middle">or the next level is above the</text>
+  <text x="330" y="446" text-anchor="middle">point of coherence</text>
+
+  <rect x="20" y="480" width="200" height="50" class="db"/>
+  <text x="120" y="498" text-anchor="middle">one token on every port</text>
+  <text x="120" y="512" text-anchor="middle" class="ds">REL/SYS/IO of the round, ACQ if</text>
+  <text x="120" y="525" text-anchor="middle" class="ds">it walked; wait for every answer</text>
+
+  <rect x="260" y="514" width="280" height="44" rx="6" class="dgood"/>
+  <text x="400" y="533" text-anchor="middle">answer every token the round covers</text>
+  <text x="400" y="548" text-anchor="middle" class="ds">one per cycle, then reopen the inputs</text>
+
+  <line x1="330" y1="58" x2="330" y2="76" class="ln" marker-end="url(#rule_a)"/>
+  <line x1="480" y1="110" x2="543" y2="110" class="ln" marker-end="url(#rule_a)"/>
+  <text x="511" y="103" text-anchor="middle" class="yn">no</text>
+  <line x1="330" y1="142" x2="330" y2="164" class="ln" marker-end="url(#rule_a)"/>
+  <text x="340" y="157" class="yn">yes</text>
+  <polyline points="180,198 125,198 125,248" class="ln" marker-end="url(#rule_a)"/>
+  <text x="152" y="191" text-anchor="middle" class="yn">yes</text>
+  <polyline points="480,198 535,198 535,248" class="ln" marker-end="url(#rule_a)"/>
+  <text x="508" y="191" text-anchor="middle" class="yn">no</text>
+  <polyline points="125,300 125,310 330,310 330,320" class="ln" marker-end="url(#rule_a)"/>
+  <polyline points="535,300 535,310 330,310" class="ln"/>
+  <line x1="430" y1="346" x2="478" y2="346" class="ln" marker-end="url(#rule_a)"/>
+  <text x="454" y="339" text-anchor="middle" class="yn">yes</text>
+  <line x1="330" y1="370" x2="330" y2="392" class="ln" marker-end="url(#rule_a)"/>
+  <text x="320" y="381" text-anchor="end" class="yn">no</text>
+  <polyline points="610,366 610,382 330,382" class="ln"/>
+  <polyline points="170,428 120,428 120,478" class="ln" marker-end="url(#rule_a)"/>
+  <text x="145" y="421" text-anchor="middle" class="yn">yes</text>
+  <polyline points="330,462 330,476 400,476 400,512" class="ln" marker-end="url(#rule_a)"/>
+  <text x="372" y="471" text-anchor="middle" class="yn">no</text>
+  <line x1="220" y1="536" x2="258" y2="536" class="ln" marker-end="url(#rule_a)"/>
+  <polyline points="740,110 752,110 752,536 542,536" class="ln" marker-end="url(#rule_a)"/>
+
+  <text x="510" y="420" class="dm">After a quiesce only the tokens that</text>
+  <text x="510" y="434" class="dm">owe no walk are answered; the next</text>
+  <text x="510" y="448" class="dm">round walks for the others.</text>
+</svg>

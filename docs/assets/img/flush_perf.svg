@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 300" role="img" aria-label="Kernel cycles saved by the targeted-fence, device-scope flush and argument-slot changes, rtlsim: printf at 2 cores plus L2 92.6 percent, fence test 55 percent, printf at the default configuration 42.9 percent, async global barrier 13.3 percent, chained launches 11 percent, multikernel 7.5 percent.">
+  <title>Kernel cycles saved by the targeted-fence, device-scope flush and argument-slot changes, rtlsim: printf at 2 cores plus L2 92.6 percent, fence test 55 percent, printf at the default configuration 42.9 percent, async global barrier 13.3 percent, chained launches 11 percent, multikernel 7.5 percent.</title>
+  <style>
+    text { font-family: Helvetica, Arial, sans-serif; fill: #1b2733; font-size: 11.5px; }
+    .dm { fill: #5a6772; font-size: 10.5px; }
+    .ax { fill: #5a6772; font-size: 10px; }
+    .grid { stroke: #e3e7ec; stroke-width: 1; }
+    .base { stroke: #8a96a3; stroke-width: 1; }
+    .bar { fill: #2f6fb0; }
+  </style>
+  <rect width="720" height="300" fill="#ffffff"/>
+  <!-- plot: x0=230, 100% = 420px -->
+  <line x1="335" y1="20" x2="335" y2="250" class="grid"/>
+  <line x1="440" y1="20" x2="440" y2="250" class="grid"/>
+  <line x1="545" y1="20" x2="545" y2="250" class="grid"/>
+  <line x1="650" y1="20" x2="650" y2="250" class="grid"/>
+  <text x="230" y="266" text-anchor="middle" class="ax">0 %</text>
+  <text x="335" y="266" text-anchor="middle" class="ax">25 %</text>
+  <text x="440" y="266" text-anchor="middle" class="ax">50 %</text>
+  <text x="545" y="266" text-anchor="middle" class="ax">75 %</text>
+  <text x="650" y="266" text-anchor="middle" class="ax">100 %</text>
+  <text x="440" y="288" text-anchor="middle" class="dm">kernel cycles saved (rtlsim)</text>
+
+  <text x="220" y="40" text-anchor="end">printf, 2 cores + L2</text>
+  <path d="M230,28 H615 a4,4 0 0 1 4,4 V44 a4,4 0 0 1 -4,4 H230 Z" class="bar"/>
+  <text x="625" y="42">92.6 %</text>
+
+  <text x="220" y="78" text-anchor="end">fence test, 2 cores + L2</text>
+  <path d="M230,66 H457 a4,4 0 0 1 4,4 V82 a4,4 0 0 1 -4,4 H230 Z" class="bar"/>
+  <text x="467" y="80">55 %</text>
+
+  <text x="220" y="116" text-anchor="end">printf, default config</text>
+  <path d="M230,104 H406 a4,4 0 0 1 4,4 V120 a4,4 0 0 1 -4,4 H230 Z" class="bar"/>
+  <text x="416" y="118">42.9 %</text>
+
+  <text x="220" y="154" text-anchor="end">async global barrier</text>
+  <path d="M230,142 H282 a4,4 0 0 1 4,4 V158 a4,4 0 0 1 -4,4 H230 Z" class="bar"/>
+  <text x="292" y="156">13.3 %</text>
+
+  <text x="220" y="192" text-anchor="end">chained launches, 4 cores + L2</text>
+  <path d="M230,180 H272 a4,4 0 0 1 4,4 V196 a4,4 0 0 1 -4,4 H230 Z" class="bar"/>
+  <text x="282" y="194">11 %</text>
+
+  <text x="220" y="230" text-anchor="end">multikernel, 4 cores + L2</text>
+  <path d="M230,218 H257 a4,4 0 0 1 4,4 V234 a4,4 0 0 1 -4,4 H230 Z" class="bar"/>
+  <text x="267" y="232">7.5 %</text>
+
+  <line x1="230" y1="20" x2="230" y2="250" class="base"/>
+</svg>

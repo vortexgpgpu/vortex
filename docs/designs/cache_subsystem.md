@@ -555,6 +555,10 @@ stage added is a cycle on every hit, so it buys frequency, not bandwidth.
 
 ## 6. Flush architecture
 
+This section covers the cache side of a flush. The end-to-end view (fences, ordered atomics,
+the runtime's flush policy, the point of coherence per topology, measured costs) is in
+[memory_ordering_and_cache_flush.md](memory_ordering_and_cache_flush.md).
+
 The cache exposes exactly **one** flush primitive: a whole-cache
 invalidate-and-writeback, gated on `attr.is_flush`. There is no line-granular
 invalidate, no way-granular invalidate, no tag-only invalidate, and no

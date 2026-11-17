@@ -393,14 +393,16 @@ cd pocl
 mkdir build && cd build
 
 export POCL_PATH=$TOOLDIR/pocl
-export VORTEX_PATH=<path-to-vortex-install-root>     # e.g. <vortex-build>/install
+export VORTEX_PATH=<path-to-vortex-install-root>     # e.g. <vortex-build32>/install
+export VORTEX_PATH_64=<path-to-rv64-install-root>    # e.g. <vortex-build64>/install
 export PKG_CONFIG_PATH=$VORTEX_PATH/lib/pkgconfig:$PKG_CONFIG_PATH
 
 cmake -G "Unix Makefiles" \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=$POCL_PATH \
     -DWITH_LLVM_CONFIG=$LLVM_PREFIX/bin/llvm-config \
-    -DVORTEX_PATH_64=$VORTEX_PATH \
+    -DVORTEX_PATH_32=$VORTEX_PATH \
+    -DVORTEX_PATH_64=$VORTEX_PATH_64 \
     -DENABLE_VORTEX=ON \
     -DENABLE_HOST_CPU_DEVICES=OFF \
     -DENABLE_SPIRV=ON \
@@ -461,8 +463,9 @@ point it there:
 install trees POCL uses to build kernel-side bitcode. Each must
 have been produced by `../configure --xlen={32,64}` + `make
 install` in its own Vortex build dir. Omitting either skips that
-XLEN; setting both builds matching rv32 + rv64 OpenCL kernel
-bitcodes.
+XLEN: without `VORTEX_PATH_32` there is no `kernel-riscv32.bc`, and every
+32-bit OpenCL program fails to build. Setting both builds matching rv32 +
+rv64 OpenCL kernel bitcodes.
 
 `ENABLE_SPIRV=ON` requires `llvm-spirv` to be installed under
 `$LLVM_PREFIX` (see

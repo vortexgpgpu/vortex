@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 360" role="img" aria-label="The device point of coherence is the single cache that serves every memory client: the dcache of a lone core, the L2 of a single cluster, the L3, or else memory.">
+  <title>The device point of coherence is the single cache that serves every memory client: the dcache of a lone core, the L2 of a single cluster, the L3, or else memory.</title>
+  <defs><marker id="poc_a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1b2733"/></marker></defs>
+  <style>
+    text { font-family: Helvetica, Arial, sans-serif; fill: #1b2733; font-size: 11.5px; }
+    .dh { font-size: 12.5px; font-weight: bold; }
+    .dm { fill: #5a6772; font-size: 10.5px; }
+    .ds { font-size: 10.5px; }
+    .db { fill: #fbfcfd; stroke: #5a7184; stroke-width: 1.2; }
+    .dgood { fill: #e3f3ea; stroke: #1f7a4d; stroke-width: 1.6; }
+    .didle { fill: #f3f5f8; stroke: #c9d1d9; stroke-width: 1.2; }
+    .ln { stroke: #1b2733; stroke-width: 1.2; fill: none; }
+    text.g-t { fill: #1f7a4d; font-weight: bold; font-size: 10.5px; }
+  </style>
+  <rect width="900" height="360" fill="#ffffff"/>
+
+  <!-- (a) one core -->
+  <text x="90" y="22" class="dh" text-anchor="middle">1 core</text>
+  <rect x="40" y="40" width="100" height="30" class="didle"/><text x="90" y="59" text-anchor="middle" class="ds">core</text>
+  <rect x="40" y="110" width="100" height="34" class="dgood"/><text x="90" y="131" text-anchor="middle">dcache</text>
+  <rect x="40" y="250" width="100" height="30" class="didle"/><text x="90" y="269" text-anchor="middle" class="ds">memory</text>
+  <line x1="90" y1="70" x2="90" y2="108" class="ln" marker-end="url(#poc_a)"/>
+  <line x1="90" y1="144" x2="90" y2="248" class="ln" marker-end="url(#poc_a)"/>
+  <rect x="34" y="151" width="112" height="15" fill="#ffffff"/><text x="90" y="162" text-anchor="middle" class="g-t">point of coherence</text>
+
+  <!-- (b) one core with a peer client -->
+  <text x="270" y="22" class="dh" text-anchor="middle">1 core + TEX/RTU/OM/DXA</text>
+  <rect x="190" y="40" width="80" height="30" class="didle"/><text x="230" y="59" text-anchor="middle" class="ds">core</text>
+  <rect x="190" y="110" width="80" height="34" class="db"/><text x="230" y="131" text-anchor="middle">dcache</text>
+  <rect x="280" y="110" width="80" height="34" class="db"/><text x="320" y="125" text-anchor="middle" class="ds">unit cache</text><text x="320" y="138" text-anchor="middle" class="ds">(TEX …)</text>
+  <rect x="190" y="250" width="170" height="30" class="dgood"/><text x="275" y="269" text-anchor="middle">memory</text>
+  <line x1="230" y1="70" x2="230" y2="108" class="ln" marker-end="url(#poc_a)"/>
+  <line x1="230" y1="144" x2="230" y2="248" class="ln" marker-end="url(#poc_a)"/>
+  <line x1="320" y1="144" x2="320" y2="248" class="ln" marker-end="url(#poc_a)"/>
+  <text x="275" y="298" text-anchor="middle" class="g-t">point of coherence</text>
+  <rect x="236" y="186" width="78" height="30" fill="#ffffff"/>
+  <text x="275" y="197" text-anchor="middle" class="dm">unit reads</text>
+  <text x="275" y="210" text-anchor="middle" class="dm">beside dcache</text>
+
+  <!-- (c) one cluster with L2 -->
+  <text x="460" y="22" class="dh" text-anchor="middle">1 cluster + L2</text>
+  <rect x="390" y="40" width="40" height="30" class="didle"/><text x="410" y="59" text-anchor="middle" class="ds">core</text>
+  <rect x="440" y="40" width="40" height="30" class="didle"/><text x="460" y="59" text-anchor="middle" class="ds">core</text>
+  <rect x="490" y="40" width="40" height="30" class="didle"/><text x="510" y="59" text-anchor="middle" class="ds">core</text>
+  <rect x="390" y="100" width="40" height="30" class="db"/><text x="410" y="119" text-anchor="middle" class="ds">L1</text>
+  <rect x="440" y="100" width="40" height="30" class="db"/><text x="460" y="119" text-anchor="middle" class="ds">L1</text>
+  <rect x="490" y="100" width="40" height="30" class="db"/><text x="510" y="119" text-anchor="middle" class="ds">L1</text>
+  <rect x="390" y="170" width="140" height="34" class="dgood"/><text x="460" y="191" text-anchor="middle">L2</text>
+  <rect x="390" y="250" width="140" height="30" class="didle"/><text x="460" y="269" text-anchor="middle" class="ds">memory</text>
+  <line x1="410" y1="70" x2="410" y2="98" class="ln" marker-end="url(#poc_a)"/>
+  <line x1="460" y1="70" x2="460" y2="98" class="ln" marker-end="url(#poc_a)"/>
+  <line x1="510" y1="70" x2="510" y2="98" class="ln" marker-end="url(#poc_a)"/>
+  <line x1="410" y1="130" x2="410" y2="168" class="ln" marker-end="url(#poc_a)"/>
+  <line x1="460" y1="130" x2="460" y2="168" class="ln" marker-end="url(#poc_a)"/>
+  <line x1="510" y1="130" x2="510" y2="168" class="ln" marker-end="url(#poc_a)"/>
+  <line x1="460" y1="204" x2="460" y2="248" class="ln" marker-end="url(#poc_a)"/>
+  <rect x="404" y="211" width="112" height="15" fill="#ffffff"/><text x="460" y="222" text-anchor="middle" class="g-t">point of coherence</text>
+
+  <!-- (d) two clusters, no L3 -->
+  <text x="635" y="22" class="dh" text-anchor="middle">2 clusters, no L3</text>
+  <rect x="570" y="100" width="55" height="30" class="db"/><text x="597" y="119" text-anchor="middle" class="ds">L1s</text>
+  <rect x="645" y="100" width="55" height="30" class="db"/><text x="672" y="119" text-anchor="middle" class="ds">L1s</text>
+  <rect x="570" y="170" width="55" height="34" class="db"/><text x="597" y="191" text-anchor="middle">L2</text>
+  <rect x="645" y="170" width="55" height="34" class="db"/><text x="672" y="191" text-anchor="middle">L2</text>
+  <rect x="570" y="250" width="130" height="30" class="dgood"/><text x="635" y="269" text-anchor="middle">memory</text>
+  <line x1="597" y1="130" x2="597" y2="168" class="ln" marker-end="url(#poc_a)"/>
+  <line x1="672" y1="130" x2="672" y2="168" class="ln" marker-end="url(#poc_a)"/>
+  <line x1="597" y1="204" x2="597" y2="248" class="ln" marker-end="url(#poc_a)"/>
+  <line x1="672" y1="204" x2="672" y2="248" class="ln" marker-end="url(#poc_a)"/>
+  <text x="635" y="298" text-anchor="middle" class="g-t">point of coherence</text>
+  <text x="635" y="74" text-anchor="middle" class="dm">replicated L2s</text>
+
+  <!-- (e) L3 -->
+  <text x="810" y="22" class="dh" text-anchor="middle">L3 enabled</text>
+  <rect x="745" y="100" width="55" height="30" class="db"/><text x="772" y="119" text-anchor="middle" class="ds">L2</text>
+  <rect x="820" y="100" width="55" height="30" class="db"/><text x="847" y="119" text-anchor="middle" class="ds">L2</text>
+  <rect x="745" y="170" width="130" height="34" class="dgood"/><text x="810" y="191" text-anchor="middle">L3</text>
+  <rect x="745" y="250" width="130" height="30" class="didle"/><text x="810" y="269" text-anchor="middle" class="ds">memory</text>
+  <line x1="772" y1="130" x2="772" y2="168" class="ln" marker-end="url(#poc_a)"/>
+  <line x1="847" y1="130" x2="847" y2="168" class="ln" marker-end="url(#poc_a)"/>
+  <line x1="810" y1="204" x2="810" y2="248" class="ln" marker-end="url(#poc_a)"/>
+  <rect x="754" y="211" width="112" height="15" fill="#ffffff"/><text x="810" y="222" text-anchor="middle" class="g-t">point of coherence</text>
+  <text x="810" y="74" text-anchor="middle" class="dm">L1s above each L2</text>
+
+  <line x1="20" y1="318" x2="880" y2="318" stroke="#c9d1d9" stroke-width="1" stroke-dasharray="2 4"/>
+  <text x="450" y="340" text-anchor="middle" class="dm">Device scope (no SYS bit). A SYS token treats every level as above the point of coherence: memory is the point of coherence in every topology.</text>
+</svg>

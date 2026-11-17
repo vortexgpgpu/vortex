@@ -54,7 +54,7 @@ Vortex repo owns only the device-side contract plus the test/CI glue.
 |---|---|
 | PoCL ICD, the Vortex device driver (`lib/CL/devices/vortex/`), the OpenCL-C/SPIR-V→LLVM pipeline, the kernel builtin library (`lib/kernel/vortex/`) | **External:** `vortexgpgpu/pocl` @ `vortex_3.x`, built against `$TOOLDIR/llvm-vortex`, installed to `$TOOLDIR/pocl` |
 | [`tests/opencl/`](../../tests/opencl/) — 48 applications + [`common.mk`](../../tests/opencl/common.mk) | In-tree |
-| [`ci/testcases/opencl.yaml`](../../ci/testcases/opencl.yaml) — the `opencl` catalog category (`pytest ci -m opencl`) | In-tree |
+| [`ci/testcases/sw/opencl.yaml`](../../ci/testcases/sw/opencl.yaml) — the `opencl` catalog category (`pytest ci -m opencl`) | In-tree |
 | [`sw/kernel/`](../../sw/kernel/) → `libvortex2.a` — the **device runtime** every kernel ELF links against (`vx_vprintf`, KMU entry/startup), and [`sw/kernel/include/`](../../sw/kernel/include/) the builtin library compiles against | In-tree |
 | [`ci/toolchain_install.sh.in`](../../ci/toolchain_install.sh.in) / [`ci/toolchain_prebuilt.sh.in`](../../ci/toolchain_prebuilt.sh.in) — `pocl()` fetches / packages the prebuilt `$TOOLDIR/pocl` tarball | In-tree |
 
@@ -234,7 +234,10 @@ one producer of that launch ABI.
   device-to-device rect copy. When the device exposes a fixed-function TEX
   unit (`VX_ISA_EXT_TEX`), FF-eligible 2D reads can instead go through the
   [hardware sampler](texture_sampler_architecture.md); otherwise every
-  sample is software.
+  sample is software. The descriptor's two TEX fields (`_tex_stage`,
+  `_tex_sampler`) are rewritten only when the image's binding changes: a host
+  write after a kernel first flushes the device's last-level cache, so an
+  unconditional per-launch patch would add that flush to every image launch.
 
 ---
 
@@ -251,8 +254,8 @@ overrides Vortex genuinely needs:
 |---|---|
 | `read_image.cl` / `write_image.cl` | Scalar software sampling over the `dev_image_t` descriptor across every shape (1D / 1D-array / 1D-buffer / 2D / 2D-array / 3D, nearest + linear, all addressing modes) and samplerless reads. The generic PoCL versions rely on OpenCL vector arithmetic the no-vector Vortex backend (`+xvortex`) cannot select. |
 | `workitems.c` | `get_global_id` etc. read the KMU CSRs, which decode only dims 0–2; the spec-mandated result for an out-of-range `dimindx` (sizes/counts → 1, ids/offsets → 0) is enforced here. |
-| `atomics.c` | The 32-bit AMO builtins lower to hardware `amo*.w`. |
-| `barrier.c` | Work-group barrier on the Vortex `vx_barrier`. |
+| `atomics.c` | The 32-bit atomics, relaxed as OpenCL 1.2 defines them: hardware `amo*.w`, float `atomic_xchg` on the value's bits, and the `atom_*` names of the `cl_khr_*_int32_*_atomics` extensions. `atomic_cmpxchg` is an `lr.w`/`sc.w` loop written in C: a branch inside `asm` escapes the divergence pass, and a Vortex branch follows the warp's last active lane, so contending lanes of one warp would take each other's outcome. |
+| `barrier.c` | Work-group barrier on the Vortex `vx_barrier`, plus the memory fences. `CLK_GLOBAL_MEM_FENCE` adds a release (work-group scope: the warps share the L1), `mem_fence` is acquire and release, `read_mem_fence` acquire, `write_mem_fence` release, and a fence over local memory alone is a compiler barrier. See [memory_ordering_and_cache_flush.md §3.3](memory_ordering_and_cache_flush.md#33-opencl). |
 | `printf.c` | Buffered printf; the host drains it (`device_side_printf = 0`). |
 | `wait_group_events.cl` | A **real** work-group barrier. PoCL's generic stub is empty — sound only under the work-item-loop model where a group runs sequentially on one thread. A Vortex work-group spans independent hardware warps, so the stub would let non-copying warps race ahead of an async copy. |
 | `vxlibm.c` | libm entry points Clang lowers to calls that newlib does not provide accurately enough (e.g. `nextafterf`) implemented directly via IEEE-754 integer encoding. |
@@ -279,7 +282,7 @@ since the `cl_device_id` and its info queries outlive any single context.
 |---|---|
 | Profile / version | Full-profile OpenCL 1.2. |
 | `int64` | **Core** (full-profile CL 1.2); soft-lowered on rv32. Reported via `has_64bit_long` / `__opencl_c_int64`, never as the non-standard `cl_khr_int64` token (the CTS rejects unapproved `cl_khr_*` tokens). |
-| Atomics | int32 base/extended, gated on the RISC-V `A` extension. A device without `A` drops every `*atomics*` extension token *and* rejects an atomic-using program at build time. |
+| Atomics | int32 base/extended (`atomic_*` and the extension `atom_*` names, on global and local memory, plus float `atomic_xchg`), gated on the RISC-V `A` extension. A device without `A` drops every `*atomics*` extension token *and* rejects an atomic-using program at build time. Covered by `tests/opencl/atomicreduce`. |
 | Images | Supported, in software (optionally FF-accelerated for 2D reads). |
 | printf | Host-buffered. |
 | `fp64` (`cl_khr_fp64`) | **Not advertised** — the kernel library has no double-precision builtins, so claiming it would be a promise the toolchain cannot keep. Optional in CL 1.2; the CTS `double` paths auto-skip. |
@@ -327,5 +330,8 @@ stops, root-causes, and fixes.
   (`vx_*`) the driver is written against.
 - [Atomic Memory Operations](atomic_memory_operations.md) — the `A`-extension
   hardware behind the OpenCL atomic builtins.
+- [Memory Ordering and Cache Flush](memory_ordering_and_cache_flush.md) — the
+  fence operations the OpenCL barriers and memory fences lower to, and what
+  each costs at every cache level.
 - [Texture Sampler](texture_sampler_architecture.md) — the fixed-function
   TEX unit the image path optionally routes 2D reads through.
