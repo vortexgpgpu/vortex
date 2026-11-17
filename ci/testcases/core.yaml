@@ -356,6 +356,14 @@ tests:
   app: mixfu
   args: -n40 -i32
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_NUM_ALU_LANES=8 -DVX_CFG_NUM_FPU_LANES=8 -DVX_CFG_NUM_LSU_LANES=8 -DMIXFU_DIV
+# One divider lane for the ALU block's eight: each divide and remainder holds
+# the block's input for eight batches, and blocks the ALU work queued behind it.
+- id: parity-mixfu-idiv8
+  check: model_parity
+  via: blackbox
+  app: mixfu
+  args: -n40 -i32
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_NUM_ALU_LANES=8 -DVX_CFG_NUM_FPU_LANES=8 -DVX_CFG_NUM_LSU_LANES=8 -DMIXFU_DIV -DVX_CFG_IDIV_PE_RATIO=8
 # Division and square root at a quarter rate, as the GPU profiles set them.
 # The F64 FMA rate needs XLEN 64, which the parity gate does not run.
 - id: parity-raycast-fdiv4

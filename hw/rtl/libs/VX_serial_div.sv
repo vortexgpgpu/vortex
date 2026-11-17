@@ -79,8 +79,8 @@ module VX_serial_div #(
             if (strobe) begin
                 working[i]  <= {{WIDTHD{1'b0}}, numer_qual[i], 1'b0};
                 denom_r[i]  <= denom_qual[i];
-                inv_quot[i] <= (denom[i] != 0) && is_signed && (numer[i][31] ^ denom[i][31]);
-                inv_rem[i]  <= is_signed && numer[i][31];
+                inv_quot[i] <= (denom[i] != 0) && is_signed && (numer[i][WIDTHN-1] ^ denom[i][WIDTHD-1]);
+                inv_rem[i]  <= is_signed && numer[i][WIDTHN-1];
             end else if (busy_r) begin
                 working[i]  <= sub_result[i][WIDTHD] ? {working[i][WIDTHN+MIN_ND-1:0], 1'b0} :
                                                        {sub_result[i][WIDTHD-1:0], working[i][WIDTHN-1:0], 1'b1};

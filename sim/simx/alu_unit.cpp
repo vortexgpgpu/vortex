@@ -105,6 +105,25 @@ uint32_t AluUnit::latency_of(const instr_trace_t* trace) const {
 	std::abort();
 }
 
+uint32_t AluUnit::batches_of(const instr_trace_t* trace) const {
+	constexpr uint32_t kLanes = VX_CFG_NUM_ALU_LANES;
+	constexpr uint32_t kDivLanes = std::max<uint32_t>(kLanes / VX_CFG_IDIV_PE_RATIO, 1);
+	static_assert(kLanes % kDivLanes == 0, "NUM_ALU_LANES must be a multiple of its divider lanes");
+	constexpr uint32_t kDivBatches = kLanes / kDivLanes;
+	if (auto mdv_type = std::get_if<MdvType>(&trace->op_type)) {
+		switch (*mdv_type) {
+		case MdvType::DIV:
+		case MdvType::DIVU:
+		case MdvType::REM:
+		case MdvType::REMU:
+			return kDivBatches;
+		default:
+			break;
+		}
+	}
+	return 1;
+}
+
 void AluUnit::execute(instr_trace_t* trace) {
 	auto& sched = core_->scheduler();
 	auto& warp = sched.warp(trace->wid);
@@ -577,6 +596,7 @@ void AluUnit::on_reset() {
     pending.clear();
   }
   out_free_.fill(0);
+  batch_idx_.fill(0);
 }
 
 uint32_t AluUnit::output_wait(uint32_t b, uint64_t ready) {
@@ -613,6 +633,14 @@ void AluUnit::on_tick() {
       auto& output = Outputs.at(b);
       if (!output.full()) {
         auto trace = input.peek();
+        // A divide holds the block's input until its last batch of lanes
+        // enters the divider.
+        if (batch_idx_.at(b) + 1 < this->batches_of(trace)) {
+          ++batch_idx_.at(b);
+          idle = false;
+          continue;
+        }
+        batch_idx_.at(b) = 0;
         this->execute(trace);
         uint32_t latency = this->latency_of(trace) + (kGather ? 1 : 0);
         uint32_t wait = this->output_wait(b, SimPlatform::instance().cycles() + latency);

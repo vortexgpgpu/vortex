@@ -119,6 +119,14 @@ lsu_mem_bytes_in_flight = "expr: ($VX_CFG_PLATFORM_MEMORY_PEAK_BW // $VX_CFG_PLA
 [alu]
 VX_CFG_NUM_ALU_LANES = "expr: $VX_CFG_SIMD_WIDTH"
 VX_CFG_NUM_ALU_BLOCKS = "expr: $VX_CFG_ISSUE_WIDTH"
+# Lanes per integer divider: an ALU block divides on NUM_ALU_LANES / ratio
+# divider lanes (at least one), one batch of lanes after another, and a divide
+# holds the block's input until its last batch starts. Each batch is a full
+# serial divide, about XLEN cycles in hardware; simulation times it as one
+# cycle, as it does the FPU's processing elements. Compilers turn division by a
+# constant into multiplies and shifts, so only runtime divisors reach the
+# divider, and a build can trade their throughput for the divider's area.
+VX_CFG_IDIV_PE_RATIO = 1
 
 [sfu]
 VX_CFG_NUM_SFU_LANES = "expr: $VX_CFG_SIMD_WIDTH"

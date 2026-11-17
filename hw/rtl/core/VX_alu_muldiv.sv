@@ -15,7 +15,8 @@
 
 module VX_alu_muldiv import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
-    parameter NUM_LANES = 1
+    parameter NUM_LANES = 1,
+    parameter IDIV_PE_RATIO = `VX_CFG_IDIV_PE_RATIO
 ) (
     input wire          clk,
     input wire          reset,
@@ -236,12 +237,38 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
     `endif
     end
 
+    // A divide runs on NUM_PES_DIV divider lanes, one batch of lanes after
+    // another, and holds the input until its last batch starts.
+    localparam NUM_PES_DIV = `UP(NUM_LANES / IDIV_PE_RATIO);
+    localparam BATCHES_DIV = NUM_LANES / NUM_PES_DIV;
+    localparam BATCH_BITS  = `LOG2UP(BATCHES_DIV);
+    `STATIC_ASSERT ((NUM_LANES % NUM_PES_DIV) == 0, ("invalid parameter"))
+
+    wire div_last;
+
 `ifdef IDIV_DPI
 
     import "DPI-C" function void dpi_idiv(input logic enable, input logic is_signed, input int a, input int b, output int quotient, output int remainder);
     import "DPI-C" function void dpi_ldiv(input logic enable, input logic is_signed, input longint a, input longint b, output longint quotient, output longint remainder);
 
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] div_result_in;
+    wire div_pipe_ready = div_ready_out || ~div_valid_out;
+
+    if (BATCHES_DIV > 1) begin : g_batch
+        reg [BATCH_BITS-1:0] batch_idx;
+        always @(posedge clk) begin
+            if (reset) begin
+                batch_idx <= '0;
+            end else if (div_valid_in && div_pipe_ready) begin
+                batch_idx <= div_last ? '0 : (batch_idx + 1'b1);
+            end
+        end
+        assign div_last = (batch_idx == BATCH_BITS'(BATCHES_DIV-1));
+    end else begin : g_no_batch
+        assign div_last = 1'b1;
+    end
+
+    assign div_ready_in = div_pipe_ready && div_last;
     wire div_fire_in = div_valid_in && div_ready_in;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_div_result_in
@@ -264,48 +291,126 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
     ) div_shift_reg (
         .clk(clk),
         .reset    (reset),
-        .enable   (div_ready_in),
-        .data_in  ({div_valid_in,  execute_if.data.header, div_result_in}),
-        .data_out ({div_valid_out, div_hdr_out,            div_result_out})
+        .enable   (div_pipe_ready),
+        .data_in  ({div_valid_in && div_last, execute_if.data.header, div_result_in}),
+        .data_out ({div_valid_out,            div_hdr_out,            div_result_out})
     );
-
-    assign div_ready_in = div_ready_out || ~div_valid_out;
 
 `else
 
-    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] div_quotient, div_remainder;
+    wire [BATCHES_DIV-1:0][NUM_PES_DIV-1:0][`VX_CFG_XLEN-1:0] div_in1_b = div_in1;
+    wire [BATCHES_DIV-1:0][NUM_PES_DIV-1:0][`VX_CFG_XLEN-1:0] div_in2_b = div_in2;
+    wire [NUM_PES_DIV-1:0][`VX_CFG_XLEN-1:0] pe_numer, pe_denom;
+    wire [NUM_PES_DIV-1:0][`VX_CFG_XLEN-1:0] div_quotient, div_remainder;
     wire is_rem_op_out;
     wire is_div_w_out;
-    wire div_strode;
+    wire div_strobe;
     wire div_busy;
+    wire batch_run;
 
-    VX_elastic_adapter div_elastic_adapter (
-        .clk       (clk),
-        .reset     (reset),
-        .valid_in  (div_valid_in),
-        .ready_in  (div_ready_in),
-        .valid_out (div_valid_out),
-        .ready_out (div_ready_out),
-        .strobe    (div_strode),
-        .busy      (div_busy)
-    );
+    // the last batch started: the divide owns the divider until its result leaves
+    reg div_loaded;
+    always @(posedge clk) begin
+        if (reset) begin
+            div_loaded <= 0;
+        end else begin
+            if (div_valid_in && div_ready_in) begin
+                div_loaded <= 1;
+            end
+            if (div_valid_out && div_ready_out) begin
+                div_loaded <= 0;
+            end
+        end
+    end
+
+    assign div_strobe    = div_valid_in && ~div_loaded && ~batch_run;
+    assign div_ready_in  = ~div_loaded && ~batch_run && div_last;
+    assign div_valid_out = div_loaded && ~div_busy;
+
+    // Each divider lane's result: the quotient or remainder, sign-extended from
+    // 32 bits for the W forms. pe_result selects by the held input, for the
+    // batches before the last; pe_result_out by the last batch's tag.
+    wire [NUM_PES_DIV-1:0][`VX_CFG_XLEN-1:0] pe_result, pe_result_out;
+    for (genvar j = 0; j < NUM_PES_DIV; ++j) begin : g_pe_result
+        wire [`VX_CFG_XLEN-1:0] value     = is_rem_op ? div_remainder[j] : div_quotient[j];
+        wire [`VX_CFG_XLEN-1:0] value_out = is_rem_op_out ? div_remainder[j] : div_quotient[j];
+    `ifdef VX_CFG_XLEN_64
+        assign pe_result[j]     = is_alu_w ? `VX_CFG_XLEN'($signed(value[31:0])) : value;
+        assign pe_result_out[j] = is_div_w_out ? `VX_CFG_XLEN'($signed(value_out[31:0])) : value_out;
+    `else
+        assign pe_result[j]     = value;
+        assign pe_result_out[j] = value_out;
+    `endif
+    end
+`ifndef VX_CFG_XLEN_64
+    `UNUSED_VAR (is_div_w_out)
+`endif
+
+    if (BATCHES_DIV > 1) begin : g_batch
+        reg [BATCH_BITS-1:0] batch_idx;
+        reg batch_run_r;
+        // the results of the batches before the last, held until the last finishes
+        reg [BATCHES_DIV-2:0][NUM_PES_DIV-1:0][`VX_CFG_XLEN-1:0] batch_res;
+        wire batch_done = batch_run_r && ~div_busy;
+
+        always @(posedge clk) begin
+            if (reset) begin
+                batch_idx   <= '0;
+                batch_run_r <= 0;
+            end else begin
+                if (div_strobe) begin
+                    batch_run_r <= ~div_last;
+                    if (div_last) begin
+                        batch_idx <= '0;
+                    end
+                end
+                if (batch_done) begin
+                    batch_run_r <= 0;
+                    batch_idx   <= batch_idx + 1'b1;
+                end
+            end
+        end
+
+        // the input is held through the batches, so its op still selects the result
+        for (genvar b = 0; b < BATCHES_DIV-1; ++b) begin : g_batch_res
+            for (genvar j = 0; j < NUM_PES_DIV; ++j) begin : g_lanes
+                always @(posedge clk) begin
+                    if (batch_done && batch_idx == BATCH_BITS'(b)) begin
+                        batch_res[b][j] <= pe_result[j];
+                    end
+                end
+                assign div_result_out[b * NUM_PES_DIV + j] = batch_res[b][j];
+            end
+        end
+
+        assign div_last  = (batch_idx == BATCH_BITS'(BATCHES_DIV-1));
+        assign batch_run = batch_run_r;
+        assign pe_numer  = div_in1_b[batch_idx];
+        assign pe_denom  = div_in2_b[batch_idx];
+    end else begin : g_no_batch
+        assign div_last  = 1'b1;
+        assign batch_run = 1'b0;
+        assign pe_numer  = div_in1_b[0];
+        assign pe_denom  = div_in2_b[0];
+        `UNUSED_VAR (pe_result)
+    end
 
     VX_serial_div #(
         .WIDTHN (`VX_CFG_XLEN),
         .WIDTHD (`VX_CFG_XLEN),
         .WIDTHQ (`VX_CFG_XLEN),
         .WIDTHR (`VX_CFG_XLEN),
-        .LANES  (NUM_LANES)
+        .LANES  (NUM_PES_DIV)
     ) serial_div (
         .clk       (clk),
         .reset     (reset),
 
-        .strobe    (div_strode),
+        .strobe    (div_strobe),
         .busy      (div_busy),
 
         .is_signed (is_signed_op),
-        .numer     (div_in1),
-        .denom     (div_in2),
+        .numer     (pe_numer),
+        .denom     (pe_denom),
 
         .quotient  (div_quotient),
         .remainder (div_remainder)
@@ -320,14 +425,9 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
 
     assign {div_hdr_out, is_rem_op_out, is_div_w_out} = div_tag_r;
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_div_result_out
-    `ifdef VX_CFG_XLEN_64
-        assign div_result_out[i] = is_rem_op_out ? (is_div_w_out ? `VX_CFG_XLEN'($signed(div_remainder[i][31:0])) : div_remainder[i]) :
-                                                   (is_div_w_out ? `VX_CFG_XLEN'($signed(div_quotient[i][31:0])) : div_quotient[i]);
-    `else
-        assign div_result_out[i] = is_rem_op_out ? div_remainder[i] : div_quotient[i];
-        `UNUSED_VAR (is_div_w_out)
-    `endif
+    // the last batch's lanes leave straight from the divider
+    for (genvar j = 0; j < NUM_PES_DIV; ++j) begin : g_div_result_out
+        assign div_result_out[(BATCHES_DIV-1) * NUM_PES_DIV + j] = pe_result_out[j];
     end
 
 `endif

@@ -76,3 +76,10 @@ tests:
     via: script
     run: "make -C hw/unittest/tfu_unit run"
     touches: [hw/rtl/tfu, hw/unittest/tfu_unit, sw/common/tfu.cpp, sw/common/tfu_tables.h]
+  # The integer multiplier and serial divider simulation replaces with DPI, at
+  # divider ratios 1 to 16: every lane of mixed multiplies, divides and
+  # remainders against a reference model, under random input gaps and stalls.
+  - id: hw-alu-muldiv
+    via: script
+    run: "make -C hw/unittest/alu_muldiv run"
+    touches: [hw/rtl/core/VX_alu_muldiv.sv, hw/rtl/libs/VX_serial_div.sv, hw/rtl/libs/VX_multiplier.sv, hw/unittest/alu_muldiv]

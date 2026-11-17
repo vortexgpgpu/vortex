@@ -63,6 +63,12 @@ Vortex has a 6-stage pipeline:
 - **Execute**
   - ALU Unit
     - Handle arithmetic and branch operations
+    - Divide and remainder run on `NUM_ALU_LANES / VX_CFG_IDIV_PE_RATIO` serial
+      divider lanes (at least one), one batch of lanes after another; the
+      divide holds the block's input, stalling the integer and multiply work
+      queued behind it, until its last batch starts. In hardware each batch is
+      a full serial divide of about XLEN + 2 cycles; simulation times each
+      batch as one cycle, as it does the FPU's processing elements.
   - FPU Unit
     - Handle floating-point operations
   - LSU Unit
