@@ -59,6 +59,9 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
 
 ### Changed
 
+- **Machine-mode trap CSRs.** `mstatus` and `mtvec` are one per core, held by the core scheduler and shared by every warp; `mcause`
+  holds the 4-bit exception codes the core raises; `mtval` reads as zero. `mepc` and `mcause` stay per warp. Per-warp trap state
+  drops from 160 to 36 bits at XLEN 32.
 - **Toolchain pinned to v3.0.2** (`TOOLCHAIN_REV`): LLVM f44a6bb2af4c, with PoCL rebuilt on it. Wide loads/stores and 64-bit
   atomics stay behind `+xvortexldstwide` and `+xvortexamod`, so code built with plain `+xvortex` uses no new instructions.
 - **Dcache read-merge pairs realign.** A pair of same-word merge ports whose parts a bank served a cycle apart waits for its partner,
@@ -107,6 +110,10 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
 
 ### Fixed
 
+- **Trap CSR writes before ECALL, EBREAK and MRET.** A `csrw mepc` in a trap handler could still be pending when the following `mret`
+  read `mepc`, returning the warp to the trapping instruction. ECALL, EBREAK and MRET now wait for pending writes to `mstatus`, `mtvec`
+  and `mepc`, in SimX and RTL. New regression test `trap` and parity cases
+  `core:parity-trap-fw4`, `core:parity-trap-cs4` and `core:parity-trap-fw2-sfu4`.
 - **ASIC core and top at 800 MHz.** On ASAP7 the core reached 655 MHz and top 654 MHz against the 800 MHz catalog clock, held by
   three datapaths: the FDIV/FSQRT result stage, the FMA's accumulate and rounding stages, and the integer multiplier. Each is
   retimed with no change in latency, so SimX and every cycle count are unchanged. FDIV/FSQRT decides the subnormal shift and tests

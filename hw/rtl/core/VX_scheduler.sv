@@ -51,6 +51,11 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     input wire [`VX_CFG_NUM_SFU_BLOCKS-1:0] satp_wr_valid,
     input wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] satp_wr_data,
 `endif
+    output wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] mstatus,
+    output wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] mtvec,
+    input wire [`VX_CFG_NUM_SFU_BLOCKS-1:0] mstatus_wr_valid,
+    input wire [`VX_CFG_NUM_SFU_BLOCKS-1:0] mtvec_wr_valid,
+    input wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] mtrap_wr_data,
 
     output wire             busy
 );
@@ -194,6 +199,29 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     end
 `endif
 
+    // Per-core mstatus and mtvec, written by any SFU block's CSR unit in block
+    // order, as SATP is. Trap redirection reads the registered vector: a warp's
+    // own mtvec write has committed before its ECALL or EBREAK issues.
+    reg [`VX_CFG_XLEN-1:0] mstatus_r, mtvec_r;
+    wire [`VX_CFG_NUM_SFU_BLOCKS:0][`VX_CFG_XLEN-1:0] mstatus_chain, mtvec_chain;
+    assign mstatus_chain[0] = mstatus_r;
+    assign mtvec_chain[0]   = mtvec_r;
+    for (genvar b = 0; b < `VX_CFG_NUM_SFU_BLOCKS; ++b) begin : g_mtrap
+        assign mstatus[b] = mstatus_chain[b];
+        assign mtvec[b]   = mtvec_chain[b];
+        assign mstatus_chain[b+1] = mstatus_wr_valid[b] ? mtrap_wr_data[b] : mstatus_chain[b];
+        assign mtvec_chain[b+1]   = mtvec_wr_valid[b] ? mtrap_wr_data[b] : mtvec_chain[b];
+    end
+    always @(posedge clk) begin
+        if (reset) begin
+            mstatus_r <= '0;
+            mtvec_r   <= '0;
+        end else begin
+            mstatus_r <= mstatus_chain[`VX_CFG_NUM_SFU_BLOCKS];
+            mtvec_r   <= mtvec_chain[`VX_CFG_NUM_SFU_BLOCKS];
+        end
+    end
+
     // per-slice view of the core-wide events
 
     wire [FETCH_FSW_W-1:0] wspawn_fsw = wid_to_fsw(wspawn_wid);
@@ -201,6 +229,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     for (genvar p = 0; p < FW; ++p) begin : g_slices
         localparam [FETCH_FSW_W-1:0] FSW = FETCH_FSW_W'(p);
 
+        assign slice_if[p].mtvec        = mtvec_r;
         assign slice_if[p].cta_fire     = cta_fire[p];
         assign slice_if[p].cta_lid      = wid_to_wfs(cta_wid[p]);
         assign slice_if[p].cta_PC       = cta_PC;
