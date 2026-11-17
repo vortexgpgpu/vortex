@@ -31,18 +31,18 @@
     "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8",
     "dut": "core",
     "result": {
-      "build_time_s": 60,
-      "cells": 769936,
-      "endpoints": 73708,
+      "build_time_s": 45,
+      "cells": 748197,
+      "endpoints": 66830,
       "env": {
         "circt": "CIRCT 892a65a01",
         "foldsim": "foldsim d8350bc0f",
         "pdk": "asap7",
         "xlen": 32
       },
-      "ff": 102791,
+      "ff": 96581,
       "fmax_mhz": 1051.5,
-      "macros": 16,
+      "macros": 12,
       "max_stages": 30,
       "overhead_ps": 231,
       "period_ps": 951,
