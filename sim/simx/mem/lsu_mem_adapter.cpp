@@ -31,6 +31,10 @@ LsuMemAdapter::LsuMemAdapter(
   , pending_mask_(num_inputs)
 {
   assert(num_inputs > 0);
+  // the cache's last output stage is a skid buffer, whose ready is a register
+  for (auto& in : RspIn) {
+    in.set_registered_ready(true);
+  }
   if (num_inputs == 1) {
     // bypass mode
     ReqIn.bind(&ReqOut.at(0), [](const LsuReq& req) {
@@ -46,7 +50,7 @@ LsuMemAdapter::LsuMemAdapter(
       mr.flags = req.flags;
       mr.amo_cmp = req.amo_cmp.at(0);
       auto t = get_addr_type(mr.addr);
-      mr.flags.io    = mr.flags.flush ? mr.flags.io : (t == AddrType::IO);
+      mr.flags.io    = (t == AddrType::IO);
       mr.flags.local = (t == AddrType::Shared);
       return mr;
     });
@@ -141,7 +145,7 @@ void LsuMemAdapter::on_tick() {
       out_req.flags   = in_req.flags;
       {
         auto t = get_addr_type(out_req.addr);
-        out_req.flags.io    = out_req.flags.flush ? out_req.flags.io : (t == AddrType::IO);
+        out_req.flags.io    = (t == AddrType::IO);
         out_req.flags.local = (t == AddrType::Shared);
       }
 

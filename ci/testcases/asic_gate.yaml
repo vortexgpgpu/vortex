@@ -49,6 +49,10 @@
 # `VX_cache_wrap #(.PASSTHRU(!`VX_CFG_L2_ENABLED))`, and the Yosys catalog was
 # missing L2_ENABLE. It now carries the real 256 KB L2, as `gfx` and `tensor` do.
 #
+# logic_gate's `gate_asic` case (ci/logic_gate.py --tool beacon_asic) measures
+# these same builds with Beacon on every pull request, in minutes: it takes
+# their designs and clock_mhz, not their known_issue or thresholds.
+#
 # See docs/designs/continuous_integration.md §3.5.
 category: asic_gate
 defaults:
@@ -106,7 +110,7 @@ builds:
 - id: cache
   group: core
   dut: cache
-  clock_mhz: 800
+  clock_mhz: 1000
   area_budget_um2: 48726
   configs: ""
 
@@ -119,7 +123,7 @@ builds:
 - id: core
   group: core
   dut: core
-  clock_mhz: 800
+  clock_mhz: 1000
   area_budget_um2: 84624
   configs: "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8"
 
@@ -128,7 +132,7 @@ builds:
 - id: lmem
   group: core
   dut: lmem
-  clock_mhz: 800
+  clock_mhz: 1000
   area_budget_um2: 17137
   configs: "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_A_ENABLE"
 
@@ -138,7 +142,7 @@ builds:
 - id: top
   group: core
   dut: top
-  clock_mhz: 800
+  clock_mhz: 1000
   area_budget_um2: 187230
   # 11.2 GB Yosys peak at NT=NW=4 (8/8: 18.6 GB).
   configs: "-DVX_CFG_NUM_THREADS=4 -DVX_CFG_NUM_WARPS=4"
@@ -149,7 +153,7 @@ builds:
 - id: dxa
   group: dxa
   dut: dxa
-  clock_mhz: 800
+  clock_mhz: 1000
   area_budget_um2: 12449
   configs: ""
 
@@ -160,7 +164,7 @@ builds:
 - id: tfu
   group: tfu
   dut: tfu
-  clock_mhz: 800
+  clock_mhz: 1000
   area_budget_um2: 2073
   configs: ""
 
@@ -171,7 +175,7 @@ builds:
 - id: tcu
   group: tensor
   dut: tcu
-  clock_mhz: 800
+  clock_mhz: 1000
   area_budget_um2: 74407
   configs: ""
 
@@ -180,7 +184,7 @@ builds:
 - id: tensor
   group: tensor
   dut: tensor
-  clock_mhz: 800
+  clock_mhz: 1000
   area_budget_um2: 104438
   configs: "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8"
 
@@ -190,7 +194,7 @@ builds:
 - id: raster
   group: graphics
   dut: raster
-  clock_mhz: 800
+  clock_mhz: 1000
   area_budget_um2: 10527
   configs: ""
 
@@ -198,7 +202,7 @@ builds:
 - id: om
   group: graphics
   dut: om
-  clock_mhz: 800
+  clock_mhz: 1000
   area_budget_um2: 5926
   configs: ""
 
@@ -207,7 +211,7 @@ builds:
 - id: tex
   group: graphics
   dut: tex
-  clock_mhz: 800
+  clock_mhz: 1000
   area_budget_um2: 61159
   configs: "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8"
 
@@ -215,7 +219,7 @@ builds:
 - id: rtu
   group: graphics
   dut: rtu
-  clock_mhz: 800
+  clock_mhz: 1000
   area_budget_um2: 98965
   configs: ""
 
@@ -224,7 +228,7 @@ builds:
 - id: gfx
   group: graphics
   dut: gfx
-  clock_mhz: 800
+  clock_mhz: 1000
   area_budget_um2: 242203
   # 14.6 GB Yosys peak at NT=NW=4 (8/8: 19.5 GB).
   configs: "-DVX_CFG_NUM_THREADS=4 -DVX_CFG_NUM_WARPS=4"
@@ -236,6 +240,6 @@ builds:
 - id: vm
   group: vm
   dut: vm
-  clock_mhz: 800
+  clock_mhz: 1000
   area_budget_um2: 146445
   configs: "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8"

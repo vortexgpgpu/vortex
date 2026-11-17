@@ -286,7 +286,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     // holder is requested while it holds the lock.
     reg [PER_ISSUE_WARPS-1:0] fu_locked;
 
-`ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
+`ifdef EXT_LDST_ANY_ENABLE
     // A warp that issues a yielding uop while another warp also requests with
     // one sits out the next cycle, so the greedy arbiter moves on as it does
     // between scalar instructions that arrive one per fetch.
@@ -406,7 +406,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         end
     end
 
-`ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
+`ifdef EXT_LDST_ANY_ENABLE
     always @(posedge clk) begin
         if (reset) begin
             yield_r <= '0;

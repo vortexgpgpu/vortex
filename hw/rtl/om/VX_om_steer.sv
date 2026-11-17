@@ -48,7 +48,7 @@ module VX_om_steer import VX_gpu_pkg::*; #(
     VX_mem_bus_if.master om_out_if,     // aperture writes -> OM ingress (posted)
 
     output wire          flush_req,     // a flush token is held until the OM side is flushed
-    output wire          flush_l1_only, // the held token is an L1-only one
+    output fence_op_t    flush_op,      // the held token's fence operation
     input wire           flush_ack,     // pulse: the OM side was flushed after flush_req rose
     output wire          om_pending     // an aperture write is still buffered on the OM leg
 );
@@ -90,7 +90,7 @@ module VX_om_steer import VX_gpu_pkg::*; #(
         end
     end
     assign flush_req  = flush_req_r;
-    assign flush_l1_only = (| bus_in_if.req_data.byteen);
+    assign flush_op   = mem_attr_fence_op(mem_bus_attr_t'(bus_in_if.req_data.attr));
     assign om_pending = om_out_if.req_valid;
 
     // Both legs go through an OUT_BUF elastic buffer so the socket->L2 trunk and

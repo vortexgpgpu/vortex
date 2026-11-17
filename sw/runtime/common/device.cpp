@@ -84,9 +84,6 @@ constexpr uint32_t CP_STATUS_BUSY       = 0x1;
 // is physical — the MMU-aware CP DMA skips translation.
 constexpr uint8_t  CP_MEM_FLAG_PHYSICAL = 0x04;
 
-// CMD_CACHE_FLUSH header flag: flush only the levels above the last-level cache.
-constexpr uint8_t  CP_FLUSH_FLAG_L1_ONLY = 0x04;
-
 constexpr uint32_t CP_RING_SIZE_LOG2 = 16;       // 64 KiB
 constexpr uint32_t CP_RING_SIZE      = 1u << CP_RING_SIZE_LOG2;
 constexpr uint8_t  CP_OPCODE_MEM_WRITE  = 0x01;
@@ -543,14 +540,14 @@ const char* cp_opcode_name(uint8_t op) {
 
 namespace {
 // CMD_CACHE_FLUSH on-wire layout (cmd_size=12):
-//   bytes 0..3   header  { opcode=0x0A, flags=CP_FLUSH_FLAG_L1_ONLY?, reserved=0 }
+//   bytes 0..3   header  { opcode=0x0A, flags=fence_op << VX_CP_FLUSH_OP_SHIFT, reserved=0 }
 //   bytes 4..11  arg0    number of cores to flush
 // The CP sweeps a per-core flush DCR-read across [0, num_cores) and
 // retires the command only when the last core's flush completes.
-void build_cache_flush(uint8_t cl[CP_CL_BYTES], uint64_t num_cores, bool l1_only) {
+void build_cache_flush(uint8_t cl[CP_CL_BYTES], uint64_t num_cores, uint8_t fence_op) {
     std::memset(cl, 0, CP_CL_BYTES);
     cl[0] = CP_OPCODE_CACHE_FLUSH;
-    cl[1] = l1_only ? CP_FLUSH_FLAG_L1_ONLY : 0;
+    cl[1] = fence_op << VX_CP_FLUSH_OP_SHIFT;
     std::memcpy(cl + 4, &num_cores, sizeof(num_cores));
 }
 
@@ -575,12 +572,12 @@ bool cp_dma_touches_device_mem(const uint8_t* cl) {
 
 vx_result_t Device::cp_ring_append_(const void* cl, bool llc_clean) {
     // Caller holds cp_mu_. A kernel's results are flushed lazily, by the
-    // next command that needs them: the next launch gets an L1-only flush
-    // (the last-level cache is the point of coherence between kernels), and
-    // the next transfer to or from device memory a full one when the CP DMA
-    // reaches device memory beneath the last-level cache, an L1-only one when
-    // it is a client of that cache. Appending the flush under the same lock
-    // keeps any other command from slipping between.
+    // next command that needs them: the next launch gets a device-scope
+    // flush (the last-level cache is the point of coherence between kernels),
+    // and the next transfer to or from device memory a system-scope one when
+    // the CP DMA reaches device memory beneath the last-level cache, a
+    // device-scope one when it is a client of that cache. Appending the flush
+    // under the same lock keeps any other command from slipping between.
     const uint8_t* b = static_cast<const uint8_t*>(cl);
     // A write into memory the last-level cache holds no line of has nothing
     // to wait for: the cache cannot serve stale data from it or write a
@@ -592,7 +589,7 @@ vx_result_t Device::cp_ring_append_(const void* cl, bool llc_clean) {
     if ((dma && (l1_dirty_ || llc_dirty_)) || (launch && l1_dirty_)) {
         uint8_t flush[CP_CL_BYTES];
         const bool full = dma && llc_dirty_;
-        build_cache_flush(flush, cp_num_cores_, /*l1_only=*/!full);
+        build_cache_flush(flush, cp_num_cores_, VX_FENCE_ACQ | VX_FENCE_REL | (full ? VX_FENCE_SYS : 0));
         auto r = cp_ring_write_(flush);
         if (r != VX_SUCCESS) return r;
         l1_dirty_ = false;
@@ -605,13 +602,14 @@ vx_result_t Device::cp_ring_append_(const void* cl, bool llc_clean) {
     auto r = cp_ring_write_(cl);
     if (r != VX_SUCCESS) return r;
     if (launch) {
-        // a draw descriptor ends on its own L1-only flush step
+        // a draw descriptor ends on its own device-scope flush step
         l1_dirty_ = (b[0] != CP_OPCODE_DRAW);
         llc_dirty_ = !cp_dma_llc_client_;
     } else if (b[0] == CP_OPCODE_CACHE_FLUSH) {
+        const bool sys = ((b[1] >> VX_CP_FLUSH_OP_SHIFT) & VX_FENCE_SYS) != 0;
         l1_dirty_ = false;
-        llc_dirty_ = llc_dirty_ && (b[1] & CP_FLUSH_FLAG_L1_ONLY);
-        if (!(b[1] & CP_FLUSH_FLAG_L1_ONLY)) {
+        llc_dirty_ = llc_dirty_ && !sys;
+        if (sys) {
             ++llc_epoch_;
         }
     }

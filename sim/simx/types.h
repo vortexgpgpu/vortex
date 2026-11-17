@@ -385,17 +385,9 @@ struct IntrLsuArgs {
   uint32_t width : 3;
   uint32_t stride : 4;  // per-uop multiplier: 0 = regular LD/ST; 0..N-1 = packLD uop_idx
   int32_t  offset;      // immediate addr offset (signed); 0 for packLD uops
-  bool     matrix = false; // vx_ldm/vx_stm: offset[4:0] is the fragment shape
+  bool     matrix = false; // vx_ldm/vx_stm: offset[2:0] is the fragment shape
+  uint8_t  fence_op = 0;   // a fence's operation (VX_FENCE_*)
 };
-
-// A fence carries no access width; its width field says what it orders.
-enum class FenceKind : uint32_t {
-  FULL    = 0, // earlier writes visible and later reads see others' writes
-  IO      = 1, // only device (IO) accesses
-  ACQUIRE = 2, // only later reads see others' writes
-  RELEASE = 3  // only earlier writes visible
-};
-inline FenceKind lsu_fence_kind(const IntrLsuArgs& args) { return static_cast<FenceKind>(args.width); }
 
 inline std::ostream &operator<<(std::ostream &os, const LsuType& type) {
   switch (type) {
@@ -456,8 +448,8 @@ struct MemFlags {
       uint32_t local        : 1;  // bit 2: LMEM port
       uint32_t amo_unsigned : 1;  // bit 3: MIN/MAX signedness (1=unsigned)
       uint32_t flush        : 1;  // bit 4: flush token (a fence)
-      uint32_t flush_l1     : 1;  // bit 5: L1-only flush token: stops at the shared LLC
-      uint32_t noalloc      : 1;  // bit 6: a write that misses a write-around cache goes to memory
+      uint32_t fence_op     : VX_FENCE_OP_BITS; // bits 5..8: a flush token's operation (VX_FENCE_*)
+      uint32_t noalloc      : 1;  // bit 9: a write that misses a write-around cache goes to memory
     #ifdef VX_CFG_EXT_DXA_ENABLE
       // DXA completion sideband — populated only on DXA's LMEM-DMA writes.
       // notify_bar_id carries the RAW (kernel-encoded) bar handle:
@@ -467,8 +459,8 @@ struct MemFlags {
       // be wide enough to hold (bar_no << 8) | (MAX_CTAS_per_core - 1).
       // For NUM_BARRIERS = 8 and NUM_WARPS ≤ 16, that's at most 11 bits;
       // 16 bits leaves headroom for larger configs.
-      uint32_t dxa_notify_done   : 1;   // bit 7
-      uint32_t dxa_notify_bar_id : 16;  // bits 8..23
+      uint32_t dxa_notify_done   : 1;   // bit 10
+      uint32_t dxa_notify_bar_id : 16;  // bits 11..26
     #endif
     };
   };

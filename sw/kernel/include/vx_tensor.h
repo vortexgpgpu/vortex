@@ -178,11 +178,11 @@ namespace detail {
 #endif
 
   // The immediate of a fragment access at byte offset off from the group: off
-  // folds in when it is a multiple of 32 and of the column span (the OR with
+  // folds in when it is a multiple of 8 and of the column span (the OR with
   // the uops' column offsets is then an add).
   template <int32_t off, uint32_t span>
-  inline constexpr bool ldm_folds = (off % 32 == 0) && (off % int32_t(span) == 0)
-                                 && (off >= -2048) && (off <= 2016);
+  inline constexpr bool ldm_folds = (off % 8 == 0) && (off % int32_t(span) == 0)
+                                 && (off >= -2048) && (off <= 2040);
 }
 
 // The ldst_matrix flag of a context for this device: fragments move with
@@ -542,15 +542,22 @@ private:
     // A dense A pair is cheaper hoisted; every other group is not: the sparse
     // metadata and MX scale loads, and a second shared-memory stage, leave too
     // few registers to keep each row group's address live across the K loop.
+    // So the K loop keeps one base live and derives the other row groups with
+    // adds the compiler cannot turn into induction variables. The base itself
+    // goes into the group uncopied, and unrolled K tiles, which differ only in
+    // the immediate, share the adds.
     if constexpr (geom::J == 4 || (geom::J > 1 && (!geom::is_a || is_sparse || input_is_mx))) {
-      // opaque, so a K loop keeps one base live and derives the other row
-      // groups by adds instead of keeping one register per group; volatile,
-      // so those adds stay behind the tile's metadata loads instead of delaying them
-      __asm__ volatile("" : "+r"(base));
+      g[0] = base;
+      __asm__("add %0, %1, %2" : "=r"(g[1]) : "r"(g[0]), "r"(row_bytes));
+      if constexpr (geom::J == 4) {
+        __asm__("add %0, %1, %2" : "=r"(g[2]) : "r"(g[1]), "r"(row_bytes));
+        __asm__("add %0, %1, %2" : "=r"(g[3]) : "r"(g[2]), "r"(row_bytes));
+      }
+    } else {
+      detail::unroll_for<geom::J>([&](auto j) {
+        g[j] = base + j * row_bytes;
+      });
     }
-    detail::unroll_for<geom::J>([&](auto j) {
-      g[j] = base + j * row_bytes;
-    });
   }
 
   template <typename Frag, int32_t off_bytes, int32_t shape>

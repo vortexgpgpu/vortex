@@ -625,20 +625,34 @@ previous launch. The host issues `CMD_CACHE_FLUSH` after every kernel launch —
 ### 6.2 VX_dcr_flush — injecting the request
 
 `VX_dcr_flush` synthesizes a degenerate `MemReq` (`rw=0, addr=0, data=0,
-byteen=l1_only, attr = 1 << MEM_ATTR_FLUSH_OFFS`), a **flush token**, and merges it
-into one cache input stream through a 2:1 `VX_mem_bus_arb`. Byteen bit 0
-marks an **L1-only** token (§6.4; a receiving cache tests for any byteen bit,
-since a level with wider words sees the bit at the token's line offset); `VX_dcr_data` latches it from the START
-write's `VX_CACHE_FLUSH_L1_ONLY` bit, and the dcache and icache injectors carry
-it. The ocache, whose tokens reach the L2, sends an L1-only token only when
-every requester of its flush round is L1-only: the cluster flush (kind latched
-from the same broadcast write) and the dcache tokens held at the OM steers.
-The other graphics caches do not forward and send full tokens. A memory fence
-sends an L1-only token. A fence ordering only device accesses sends an **IO**
-token (the `io` attribute): no level walks, each quiesces its banks, waits
-until nothing is held on its uncached path either, and forwards an IO token
-down every memory port, so the answer proves the earlier IO writes reached
-memory. Kinds visible together combine to the weakest that serves them all.
+byteen=0, attr = mem_flush_attr(flush_op)`), a **flush token**, and merges it
+into one cache input stream through a 2:1 `VX_mem_bus_arb`. Every token
+carries a **fence operation** (`fence_op_t`, the `[fence_op]` section of
+`VX_types.toml`): `ACQ` (invalidate above the point of coherence), `REL`
+(drain to it), `SYS` (system scope: the point of coherence is memory, not the
+shared LLC) and `IO` (also drain the uncached path). A token never carries an
+atomic, so the operation rides in the attribute's atomic-operation field with
+`amo_valid` clear (`mem_flush_attr` / `mem_attr_fence_op`).
+
+| request | `fence_op` |
+|---|---|
+| flush of every level (`CMD_CACHE_FLUSH` before a host DMA under a dirty LLC) | `ACQ \| REL \| SYS` |
+| kernel-boundary flush, `fence rw,rw` | `ACQ \| REL` |
+| acquire fence (`fence r,rw`, `.aq`) | `ACQ` |
+| release fence (`fence rw,w`, `.rl`) | `REL` |
+| fence ordering only device accesses | `IO` |
+
+`VX_dcr_data` latches the scope from the START write's value (a fence
+operation; a cache flush always both writes back and invalidates), and the
+dcache and icache injectors carry it. The ocache, whose tokens reach the L2,
+sends a system-scope token when any requester of its flush round reaches
+beyond the device: the cluster flush (scope latched from the same broadcast
+write) or a dcache token held at an OM steer with `SYS` or `IO` set. The other
+graphics caches do not forward and send `ACQ | REL | SYS` tokens. The LSU
+sends each memory fence's operation in its token. An `IO` token makes no level
+walk: each quiesces its banks, waits until nothing is held on its uncached
+path either, and forwards the token down every memory port, so the answer
+proves the earlier IO writes reached memory.
 
 **Core traffic sits on the priority input, not the flush.** The flush waits until
 upstream is quiescent — which it reliably is, because the host only issues
@@ -701,32 +715,39 @@ downstream and `ready=0` upstream, so upstream stalls.
   into the response crossbar whenever bank 0 has no response of its own; the
   token is consumed at its input as its answer is sent. Then the inputs reopen.
 
-**L1-only tokens.** Between kernels nothing outside the GPU reads memory, so
-the last-level cache, the point of coherence, need not be written back. A
-token with a byteen bit set asks only the levels above the LLC to flush:
+**One rule at every level.** Between kernels nothing outside the GPU reads
+memory, so the last-level cache, the device's point of coherence, need not be
+written back. A level that alone serves every memory client (`SHARED_LLC`: the
+L3; the L2 of a single cluster; the dcache of a single core with no texture,
+ray-tracing, DXA, raster or OM unit, since those reach memory below or beside
+it) is the point of coherence for a device-scope token; every other level, and
+every level for a `SYS` token, is above it:
 
-- a non-LLC level walks as usual (write-back levels write back, write-through
-  levels invalidate, so the next kernel sees other cores' and clusters'
-  updates) and forwards the token on every port **with the same kind**
-  (`mem_flush_l1_only`, byteen bit 0 of the forwarded token). Forwarding is what
-  lands a write-through level's last stores in the next level before the
-  token is answered;
-- a last-level cache that alone serves every memory client (`SHARED_LLC`:
-  the L3; the L2 of a single cluster; the dcache of a single core with no
-  texture, ray-tracing, DXA, raster or OM unit, since those reach memory below
-  or beside it) goes from IDLE (or WAIT1) straight to RESPOND, with no walk and
-  no forward: once the token is visible, its input's earlier requests are
-  inside the cache, ahead of anything the next kernel sends. Any other LLC
-  (per-core dcaches without an L2, per-cluster L2s without an L3, a dcache
-  beside fixed-function or DXA ports) walks like any other level: its lines
-  may be stale copies of another instance's writes, or dirty data a client
-  beside it must read from memory. `Vortex.sv` asserts that a write-back LLC
-  has a single instance.
+- above the point of coherence, `ACQ` walks (write-back levels write back,
+  write-through levels invalidate, so the next kernel sees other cores' and
+  clusters' updates); `REL` alone walks a write-back level, whose dirty lines
+  must reach the next level, and only quiesces a write-through one; the level
+  then forwards the round's operation on every port (`mem_flush_op`).
+  Forwarding is what lands a write-through level's last stores in the next
+  level before the token is answered. An `ACQ` alone stops when the next level
+  is the point of coherence (`NEXT_IS_POC`, cleared only on a dcache above an
+  L2 that is not the shared LLC: replicated, or above an L3);
+- at the point of coherence a device-scope token goes from IDLE (or WAIT1)
+  straight to RESPOND, with no walk and no forward: once the token is visible,
+  its input's earlier requests are inside the cache, ahead of anything the next
+  kernel sends. Any other LLC (per-core dcaches without an L2, per-cluster L2s
+  without an L3, a dcache beside fixed-function or DXA ports) is above it: its
+  lines may be stale copies of another instance's writes, or dirty data a
+  client beside it must read from memory. `Vortex.sv` asserts that a write-back
+  LLC has a single instance;
+- `IO` also waits for the uncached path and forwards.
 
-The kind of a walk is L1-only only if every token it answers is, so a full
-token is never answered by an L1-only walk. A token without the bit behaves
-exactly as before. The runtime issues a full flush before any transfer to or
-from device memory, because the host DMA path bypasses the LLC.
+A round after a walk answers every visible token; a round that only quiesced
+answers the tokens owing no walk, and a later round walks for the others. The
+operations of the tokens one round answers combine by OR, so a token is never
+answered by a round weaker than its own. The runtime issues a system-scope
+flush before any transfer to or from device memory, because the host DMA path
+bypasses the LLC.
 
 **Why a token per memory port.** Each port is a separate, separately buffered
 path to the next level, and nothing orders one port's data against another
@@ -916,16 +937,25 @@ closely enough to be a parity oracle:
 mem_ports, write_back, write_reponse, mshr_size, latency, repl_policy, is_llc`
 (`write_reponse` is misspelled in the source). `bypass` mirrors RTL `PASSTHRU`.
 
-**SimX's flush is not a shortcut.** `flush_begin()` only *arms* the walk — and
-no-ops entirely for a write-through cache, since there is no dirty state to evict.
-The real work is `processFlush()`, called every tick, which:
+**SimX's flush is not a shortcut.** `flush_begin(fence_op)` only *arms* the
+walk, under the flush token's rule (`owes_walk`): every level above the point
+of coherence walks, and the shared last-level cache, the point of coherence of
+a device-scope flush, no-ops and keeps its lines. The real work is
+`processFlush()`, called every tick, which:
 
 1. refuses to start while `pending_fill_reqs_ != 0 || !pipe_req_->empty() ||
    !mshr_.empty()` — the same drain barrier as the RTL's `STATE_WAIT1`, and for the
    same reason;
 2. emits one writeback per dirty **sector** with `byteen = sec.dirty_mask`,
    stalling and resuming at the same sector when `mem_req_out` is full;
-3. clears `flushing_` when the walk terminates.
+3. drops every line, as the RTL walk clears each way's valid bits, and clears
+   `flushing_`.
+
+A kernel launch is not a device reset in SimX either: the launch reset keeps
+every cache's lines and skips the init walk, which runs after the device reset
+only, while the host configures the device. Lines from one kernel reach the next
+unless a flush drops them, and the runtime flushes at device scope ahead of
+every launch that follows a kernel.
 
 `Impl::flush_begin()` fans out to every bank and `Impl::flush_done()` ANDs them —
 structurally the same shape as `VX_cache_init`.

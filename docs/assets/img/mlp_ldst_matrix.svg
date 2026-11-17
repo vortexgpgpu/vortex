@@ -34,7 +34,7 @@
 <line x1="110" y1="124" x2="148" y2="124" class="lb" marker-end="url(#ldstmx_b)"/>
 <line x1="320" y1="30" x2="320" y2="215" class="sep"/>
 <rect x="340" y="40" width="140" height="24" class="db"/><text x="410" y="56" text-anchor="middle" class="ds">vx_ldm f0, imm(rs1)</text>
-<text x="340" y="84" class="dm">imm[4:0] = shape:</text>
+<text x="340" y="84" class="dm">imm[2:0] = shape:</text>
 <text x="340" y="99" class="dm">A, B, C, sparse A,</text>
 <text x="340" y="114" class="dm">sparse B, WGMMA C</text>
 <rect x="500" y="40" width="120" height="24" class="dgood"/><text x="560" y="56" text-anchor="middle" class="ds">fetch · decode: 1 slot</text>

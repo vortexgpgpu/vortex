@@ -91,6 +91,10 @@ public:
   std::vector<SimChannel<LsuRsp>> agu_rsp_in;
 #endif
 
+  // Per block: the cycles its lane-gather buffer refuses a result (its ready
+  // is a register, sent the cycle before).
+  std::vector<SimChannel<uint64_t>> result_stall_in;
+
 	void wmma(uint32_t wid,
 	          uint32_t fmt_s,
 	          uint32_t fmt_d,

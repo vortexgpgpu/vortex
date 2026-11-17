@@ -40,7 +40,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     VX_mem_bus_if.slave     lsu_dcache_bus_if [DCACHE_NUM_REQS],
 
     VX_dcr_flush_if.slave   dcr_flush_if,
-    input wire              flush_l1_only,
+    input fence_op_t        flush_op,
     VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS],
 
     // a flush lane holds a request at the D-cache port
@@ -256,7 +256,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
                 .clk          (clk),
                 .reset        (reset),
                 .dcr_flush_if (lane_flush_if[i]),
-                .l1_only      (flush_l1_only),
+                .flush_op     (flush_op),
                 .core_bus_if  (flush_core_if),
                 .cache_bus_if (dcache_bus_if[i])
             );

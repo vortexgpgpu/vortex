@@ -342,18 +342,23 @@ void CommandProcessor::apply_qmd_(uint64_t qmd_addr) {
 // flush, so the cores flush concurrently and share one walk of the shared
 // caches; the per-core reads, answered once that core's flush completes, are
 // serial because the DCR response bus cannot carry two responses at once.
-void CommandProcessor::flush_cores_(uint32_t num_cores, bool l1_only) {
+// A cache flush always writes back and invalidates; the command's fence
+// operation sets only its scope.
+void CommandProcessor::flush_cores_(uint32_t num_cores, uint8_t flags) {
     if (num_cores == 0 || !hooks_.vortex_dcr_read) {
         return;
     }
+    uint32_t op = (flags >> VX_CP_FLUSH_OP_SHIFT) & ((1u << VX_FENCE_OP_BITS) - 1);
+    assert((op | VX_FENCE_SYS) == (VX_FENCE_ACQ | VX_FENCE_REL | VX_FENCE_SYS));
+    bool sys = (op & VX_FENCE_SYS) != 0;
     if (hooks_.vortex_dcr_write) {
         hooks_.vortex_dcr_write(VX_DCR_BASE_CACHE_FLUSH,
-                                l1_only ? VX_CACHE_FLUSH_L1_ONLY : 0);
+                                VX_FENCE_ACQ | VX_FENCE_REL | (sys ? VX_FENCE_SYS : 0));
     }
     for (uint32_t cid = 0; cid < num_cores; ++cid) {
         (void)hooks_.vortex_dcr_read(VX_DCR_BASE_CACHE_FLUSH, cid);
     }
-    if (!l1_only && hooks_.vortex_drain) {
+    if (sys && hooks_.vortex_drain) {
         hooks_.vortex_drain();
     }
 }
@@ -381,8 +386,7 @@ bool CommandProcessor::exec_inline_cmd_(const Cmd& c) {
                     uint32_t(c.arg0 & 0xFFF), uint32_t(c.arg1 & 0xFFFFFFFF));
             return false;
         case OP_CACHE_FLUSH:
-            this->flush_cores_(uint32_t(c.arg0 & 0xFFFFFFFF),
-                               (c.flags & FLUSH_FLAG_L1_ONLY) != 0);
+            this->flush_cores_(uint32_t(c.arg0 & 0xFFFFFFFF), c.flags);
             return false;
         default:
             // NOP / FENCE / unknown step — no-op (draws don't use MEM_*/EVENT_*).
@@ -512,8 +516,7 @@ void CommandProcessor::tick_engine() {
                 eng_state_ = EngState::Retire;
             } else if (cur_cmd_.opcode == OP_CACHE_FLUSH) {
                 // arg0 carries num_cores.
-                this->flush_cores_(uint32_t(cur_cmd_.arg0 & 0xFFFFFFFF),
-                                   (cur_cmd_.flags & FLUSH_FLAG_L1_ONLY) != 0);
+                this->flush_cores_(uint32_t(cur_cmd_.arg0 & 0xFFFFFFFF), cur_cmd_.flags);
                 eng_state_ = EngState::Retire;
             } else if (cur_cmd_.opcode == OP_EVENT_SIG) {
                 // CMD_EVENT_SIGNAL: write arg1 (8-byte value) to arg0

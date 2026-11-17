@@ -52,7 +52,7 @@ public:
 		bool    write_around = false; // a no-allocate write miss goes to memory (write-back only)
 		bool    mem_rsp_queue = false; // memory responses enter through a response queue
 		bool    mem_rsp_slice = false; // a registered boundary ahead of the memory-response port stands for that queue's register
-		bool    acq_forward = false;   // an acquire flush also invalidates the next level
+		bool    next_is_poc = true;    // the next level is the point of coherence: an acquire alone stops here
 		bool    merge_line = false;    // read merging takes any read of the same line, each merged port keeping its own tag and word
 		bool    core_req_skid = false; // banks behind a combinational request crossbar take requests through a skid register
 		bool    set_hash = false;      // hashed set index
@@ -91,16 +91,13 @@ public:
 
 	PerfStats perf_stats() const;
 
-	// Flush API: arm a write-back walk that emits dirty lines via mem_req_out.
-	// flush_done() returns true once the walk completes; the caller is expected
-	// to tick the simulator until then. Write-through caches no-op. On an
-	// L1-only flush the write-back last-level cache skips the walk and keeps
-	// its lines across the next launch reset.
-	void flush_begin(bool l1_only = false);
+	// Flush API: arm a walk that emits dirty lines via mem_req_out, then drops
+	// every line. flush_done() returns true once the walk completes; the caller
+	// is expected to tick the simulator until then. On a device-scope flush
+	// (fence_op without VX_FENCE_SYS) the shared last-level cache, the point of
+	// coherence, skips the walk and keeps its lines.
+	void flush_begin(uint32_t fence_op = VX_FENCE_ACQ | VX_FENCE_REL | VX_FENCE_SYS);
 	bool flush_done() const;
-
-	// A shared last-level cache keeps its lines into the next launch.
-	void keep_lines();
 
 	// Drop every line (a read-only, virtually tagged cache on an
 	// address-space change). Called between launches.

@@ -87,10 +87,6 @@ import VX_tcu_pkg::*;
     VX_sched_csr_if.slave   sched_csr_if,
     input cta_bcast_t       cta_bcast
 );
-    localparam ALU_PARTIAL_BW = (`VX_CFG_NUM_ALU_LANES != `VX_CFG_SIMD_WIDTH);
-`ifdef VX_CFG_EXT_F_ENABLE
-    localparam FPU_PARTIAL_BW = (`VX_CFG_NUM_FPU_LANES != `VX_CFG_SIMD_WIDTH);
-`endif
 
 `ifdef SCOPE
     localparam SCOPE_COUNT = 1 + `VX_CFG_EXT_TCU_ENABLED;

@@ -181,10 +181,6 @@ private:
     // mode is its own descriptor field (modern-GPU convention).
     static constexpr uint8_t MEM_FLAG_PHYSICAL = 0x04;
 
-    // CMD_CACHE_FLUSH header flag: flush only the levels above the last-level
-    // cache.
-    static constexpr uint8_t FLUSH_FLAG_L1_ONLY = 0x04;
-
     // Decoded cmd record (matches cmd_t struct layout on-wire).
     struct Cmd {
         uint8_t  opcode;
@@ -263,9 +259,9 @@ private:
     // CMD_LAUNCH_QMD: read the in-memory KMU descriptor at `qmd_addr` and
     // replay its {dcr_addr,value} pairs through the DCR-write hook.
     void apply_qmd_(uint64_t qmd_addr);
-    // CMD_CACHE_FLUSH across cores [0, num_cores); l1_only leaves the
-    // last-level cache unwalked.
-    void flush_cores_(uint32_t num_cores, bool l1_only);
+    // CMD_CACHE_FLUSH across cores [0, num_cores); a device-scope flush
+    // leaves the shared last-level cache unwalked.
+    void flush_cores_(uint32_t num_cores, uint8_t flags);
     // Advance the launch FSM one step using cur_cmd_.
     void tick_launch();
     // Advance the engine FSM one step.

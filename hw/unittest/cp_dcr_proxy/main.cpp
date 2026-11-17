@@ -21,16 +21,16 @@
 //      S_WAIT_RSP until dcr_rsp_valid arrives; rsp_data is latched
 //      into last_rsp_data and visible while done pulses.
 //   4. Back-to-back write→read: FSM re-arms cleanly.
-//   5. CMD_CACHE_FLUSH over 3 cores: one broadcast write to
-//      VX_DCR_BASE_CACHE_FLUSH, then one read per core in order with the
-//      core index as data, each waiting for its response; done only
-//      after the last core answers.
+//   5. System-scope CMD_CACHE_FLUSH over 3 cores: one broadcast write of
+//      ACQ|REL|SYS to VX_DCR_BASE_CACHE_FLUSH, then one read per core in
+//      order with the core index as data, each waiting for its response;
+//      done only after the last core answers.
 //   6. CMD_CACHE_FLUSH over 0 cores retires without any DCR request.
-//   7. CMD_CACHE_FLUSH with the L1-only flag: the broadcast write carries
-//      VX_CACHE_FLUSH_L1_ONLY (test 5 checks a full flush writes 0), the
-//      per-core read still carries the core index.
-//   8. A full CMD_CACHE_FLUSH holds done while Vortex is busy; an L1-only
-//      one retires regardless.
+//   7. Device-scope CMD_CACHE_FLUSH: the broadcast write carries the
+//      acquire-release fence operation, the per-core read still carries the
+//      core index.
+//   8. A system-scope CMD_CACHE_FLUSH holds done while Vortex is busy; a
+//      device-scope one retires regardless.
 // ============================================================================
 
 #include "vl_simulator.h"
@@ -85,8 +85,9 @@ static void pack_cmd(uint32_t out_words[9],
                    (static_cast<uint32_t>(flags) << 8);
 }
 
-// CMD_CACHE_FLUSH header flag bit 2 (F_FLUSH_L1_ONLY).
-constexpr uint8_t FLUSH_FLAG_L1_ONLY = 0x04;
+// CMD_CACHE_FLUSH header flags: the fence operation at VX_CP_FLUSH_OP_SHIFT.
+constexpr uint8_t FLUSH_FLAGS_DEVICE = (VX_FENCE_ACQ | VX_FENCE_REL) << VX_CP_FLUSH_OP_SHIFT;
+constexpr uint8_t FLUSH_FLAGS_SYSTEM = (VX_FENCE_ACQ | VX_FENCE_REL | VX_FENCE_SYS) << VX_CP_FLUSH_OP_SHIFT;
 
 template <typename T>
 static void set_cmd(T* top, uint8_t opcode,
@@ -213,7 +214,7 @@ int main(int argc, char** argv) {
 
     // ----- Test 5: CMD_CACHE_FLUSH over 3 cores. arg0 = core count. -----
     constexpr uint32_t NCORES = 3;
-    set_cmd(sim.operator->(), OP_CACHE_FLUSH, NCORES);
+    set_cmd(sim.operator->(), OP_CACHE_FLUSH, NCORES, 0, FLUSH_FLAGS_SYSTEM);
     sim->grant = 1;
     cycle(sim, tick);                          // IDLE → S_START
     sim->grant = 0;
@@ -223,7 +224,7 @@ int main(int argc, char** argv) {
     EXPECT(sim->dcr_req_valid == 1, "FLUSH: start write not issued");
     EXPECT(sim->dcr_req_rw    == 1, "FLUSH: start must be a write");
     EXPECT(sim->dcr_req_addr  == VX_DCR_BASE_CACHE_FLUSH, "FLUSH: start addr mismatch");
-    EXPECT(sim->dcr_req_data  == 0, "FLUSH: a full flush starts with value 0");
+    EXPECT(sim->dcr_req_data  == (VX_FENCE_ACQ | VX_FENCE_REL | VX_FENCE_SYS), "FLUSH: a system-scope flush starts with ACQ|REL|SYS");
     EXPECT(sim->done          == 0, "FLUSH: done premature in S_START");
     cycle(sim, tick);                          // S_START → S_REQ
 
@@ -267,32 +268,32 @@ int main(int argc, char** argv) {
     EXPECT(sim->done          == 1, "FLUSH0: done not asserted");
     cycle(sim, tick);
 
-    // ----- Test 7: L1-only CMD_CACHE_FLUSH over 1 core. -----
-    set_cmd(sim.operator->(), OP_CACHE_FLUSH, 1, 0, FLUSH_FLAG_L1_ONLY);
+    // ----- Test 7: device-scope CMD_CACHE_FLUSH over 1 core. -----
+    set_cmd(sim.operator->(), OP_CACHE_FLUSH, 1, 0, FLUSH_FLAGS_DEVICE);
     sim->grant = 1;
     cycle(sim, tick);                          // IDLE → S_START
     sim->grant = 0;
     sim->eval();
-    EXPECT(sim->dcr_req_valid == 1, "FLUSHL1: start write not issued");
-    EXPECT(sim->dcr_req_rw    == 1, "FLUSHL1: start must be a write");
-    EXPECT(sim->dcr_req_data  == VX_CACHE_FLUSH_L1_ONLY, "FLUSHL1: start value must carry the L1-only flag");
+    EXPECT(sim->dcr_req_valid == 1, "FLUSHDEV: start write not issued");
+    EXPECT(sim->dcr_req_rw    == 1, "FLUSHDEV: start must be a write");
+    EXPECT(sim->dcr_req_data  == (VX_FENCE_ACQ | VX_FENCE_REL), "FLUSHDEV: start value must carry the acquire-release fence operation");
     cycle(sim, tick);                          // S_START → S_REQ
     sim->eval();
-    EXPECT(sim->dcr_req_valid == 1, "FLUSHL1: per-core read not issued");
-    EXPECT(sim->dcr_req_rw    == 0, "FLUSHL1: per-core request must be a read");
-    EXPECT(sim->dcr_req_data  == 0, "FLUSHL1: read must carry the core index only");
+    EXPECT(sim->dcr_req_valid == 1, "FLUSHDEV: per-core read not issued");
+    EXPECT(sim->dcr_req_rw    == 0, "FLUSHDEV: per-core request must be a read");
+    EXPECT(sim->dcr_req_data  == 0, "FLUSHDEV: read must carry the core index only");
     cycle(sim, tick);                          // S_REQ → S_WAIT_RSP
     sim->dcr_rsp_valid = 1;
     sim->dcr_rsp_data  = 0;
     cycle(sim, tick);                          // → S_DONE
     sim->dcr_rsp_valid = 0;
     sim->eval();
-    EXPECT(sim->done == 1, "FLUSHL1: done not asserted");
+    EXPECT(sim->done == 1, "FLUSHDEV: done not asserted");
     cycle(sim, tick);
 
-    // ----- Test 8: a full flush waits for busy; an L1-only one does not. -----
-    for (int l1_only = 0; l1_only < 2; ++l1_only) {
-        set_cmd(sim.operator->(), OP_CACHE_FLUSH, 1, 0, l1_only ? FLUSH_FLAG_L1_ONLY : 0);
+    // ----- Test 8: a system-scope flush waits for busy; a device-scope one does not. -----
+    for (int device_scope = 0; device_scope < 2; ++device_scope) {
+        set_cmd(sim.operator->(), OP_CACHE_FLUSH, 1, 0, device_scope ? FLUSH_FLAGS_DEVICE : FLUSH_FLAGS_SYSTEM);
         sim->grant = 1;
         cycle(sim, tick);                      // IDLE → S_START
         sim->grant = 0;
@@ -302,15 +303,15 @@ int main(int argc, char** argv) {
         sim->dcr_rsp_valid = 1;
         cycle(sim, tick);                      // → S_DONE
         sim->dcr_rsp_valid = 0;
-        if (l1_only) {
+        if (device_scope) {
             sim->eval();
-            EXPECT(sim->done == 1, "DRAIN: an L1-only flush must not wait for busy");
+            EXPECT(sim->done == 1, "DRAIN: a device-scope flush must not wait for busy");
             cycle(sim, tick);
             sim->gpu_busy = 0;
         } else {
             for (int i = 0; i < 4; ++i) {
                 sim->eval();
-                EXPECT(sim->done == 0, "DRAIN: a full flush retired while busy");
+                EXPECT(sim->done == 0, "DRAIN: a system-scope flush retired while busy");
                 EXPECT(sim->dcr_req_valid == 0, "DRAIN: request while draining");
                 cycle(sim, tick);
             }

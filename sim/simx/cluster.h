@@ -122,7 +122,7 @@ public:
   // → L2 → L3) to avoid downstream evictions racing the next-level walk.
   // L1 fanout: dcache + icache + socket-local {tcache, rtcache} (forwarded
   // to the sockets) + cluster-local {rcache, ocache}.
-  void dcache_flush_begin(bool l1_only);
+  void dcache_flush_begin(uint32_t fence_op);
   bool dcache_flush_done() const;
   void icache_flush_begin();
   bool icache_flush_done() const;
@@ -142,10 +142,7 @@ public:
   void rtcache_flush_begin();
   bool rtcache_flush_done() const;
 #endif
-  void l2_flush_begin(bool l1_only);
-  // The L2, when it is the shared last-level cache, keeps its lines into the
-  // next launch.
-  void l2_keep_lines();
+  void l2_flush_begin(uint32_t fence_op);
   // The command processor DMA's client slot on this cluster's L2, valid only
   // under CP_ON_L2 (the L2 is the LLC).
   SimChannel<MemReq>& cp_mem_req_in();

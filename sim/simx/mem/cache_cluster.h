@@ -33,7 +33,7 @@ public:
 
 	Cache::PerfStats perf_stats() const;
 
-	void flush_begin(bool l1_only = false);
+	void flush_begin(uint32_t fence_op = VX_FENCE_ACQ | VX_FENCE_REL | VX_FENCE_SYS);
 	bool flush_done() const;
 
 private:

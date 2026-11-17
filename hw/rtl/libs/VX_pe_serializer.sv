@@ -24,9 +24,6 @@ module VX_pe_serializer #(
     parameter TAG_WIDTH      = 0,
     parameter PE_REG         = 0,
     parameter OUT_BUF        = 0,
-    // a zero-latency skid register on the output in place of OUT_BUF: the
-    // input ready is registered, the output is not
-    parameter OUT_SKID       = 0,
     // copies of the PE clock enable, each its own net
     parameter PE_ENABLES     = 1
 ) (
@@ -74,10 +71,11 @@ module VX_pe_serializer #(
     wire                    valid_out_n;
 
     localparam DEPTH = PE_REG + LATENCY;
+    localparam OUT_BYPASS = `TO_OUT_BUF_BYPASS(OUT_BUF);
     // The skid's registered enable also reads the stage before the last.
-    localparam NUM_TAPS = (OUT_SKID != 0 && DEPTH > 1 && NUM_LANES == NUM_PES) ? 2 : 1;
+    localparam NUM_TAPS = (OUT_BYPASS && DEPTH > 1 && NUM_LANES == NUM_PES) ? 2 : 1;
 
-    `STATIC_ASSERT (OUT_SKID == 0 || DEPTH != 0, ("invalid parameter"))
+    `STATIC_ASSERT (!OUT_BYPASS || DEPTH != 0, ("invalid parameter"))
 
     wire [NUM_TAPS-1:0][1 + NUM_PES + TAG_WIDTH_S-1:0] shift_out;
 
@@ -189,7 +187,7 @@ module VX_pe_serializer #(
 
     end
 
-    if (OUT_SKID != 0) begin : g_enable_r
+    if (OUT_BYPASS) begin : g_enable_r
 
         // The core's clock enable, ready_out_u || ~valid_out_u, computed a
         // cycle ahead from the skid's and the last stage's next state, so the
@@ -232,9 +230,7 @@ module VX_pe_serializer #(
 
     end
 
-    if (OUT_SKID != 0) begin : g_out_skid
-
-        `UNUSED_PARAM (OUT_BUF)
+    if (OUT_BYPASS) begin : g_out_skid
 
         VX_bypass_buffer #(
             .DATAW ((NUM_LANES * DATA_OUT_WIDTH) + NUM_LANES + TAG_WIDTH_S)

@@ -236,6 +236,35 @@ package VX_gpu_pkg;
     // wire/reg sizing for any per-cache plumbing.
     localparam MEM_ATTR_WIDTH = $bits(mem_bus_attr_t);
 
+    // Fence operation (VX_FENCE_*): what a fence orders and how far.
+    typedef struct packed {
+        logic io;   // VX_FENCE_IO
+        logic sys;  // VX_FENCE_SYS
+        logic rel;  // VX_FENCE_REL
+        logic acq;  // VX_FENCE_ACQ
+    } fence_op_t;
+    `PACKAGE_ASSERT($bits(fence_op_t) == `VX_FENCE_OP_BITS)
+    `PACKAGE_ASSERT((`VX_FENCE_ACQ == 1) && (`VX_FENCE_REL == 2) && (`VX_FENCE_SYS == 4) && (`VX_FENCE_IO == 8))
+
+    // a flush of every level, down to memory
+    localparam fence_op_t FENCE_OP_FULL = '{io: 1'b0, sys: 1'b1, rel: 1'b1, acq: 1'b1};
+
+    // A flush token never carries an atomic, so its fence operation rides in
+    // the atomic's operation field, with amo_valid clear.
+    `PACKAGE_ASSERT($bits(fence_op_t) == $bits(amo_op_e))
+
+    function automatic mem_bus_attr_t mem_flush_attr(input fence_op_t op);
+        mem_bus_attr_t attr;
+        attr = '0;
+        attr.is_flush   = 1'b1;
+        attr.amo.amo_op = amo_op_e'(op);
+        return attr;
+    endfunction
+
+    function automatic fence_op_t mem_attr_fence_op(input mem_bus_attr_t attr);
+        return fence_op_t'(attr.amo.amo_op);
+    endfunction
+
     // Cache bank-select hash: XORed into the raw bank bits, a function of the
     // line address above them, so XORing it again restores the raw bits. IPOLY
     // for 16 and 32 banks (Rau, ISCA 1991: conflict-free for power-of-two
@@ -299,6 +328,13 @@ package VX_gpu_pkg;
     localparam EX_TCU = (EX_FPU + `VX_CFG_EXT_TCU_ENABLED);
 
     localparam NUM_EX_UNITS = EX_TCU + 1;
+
+    // An ALU or FPU with fewer lanes than SIMD_WIDTH issues an instruction in
+    // lane batches through a registered lane-dispatch buffer; LSU, SFU and TCU
+    // always have one.
+    localparam ALU_PARTIAL_BW = (`VX_CFG_NUM_ALU_LANES != `VX_CFG_SIMD_WIDTH);
+    localparam FPU_PARTIAL_BW = (`VX_CFG_NUM_FPU_LANES != `VX_CFG_SIMD_WIDTH);
+
     localparam EX_BITS = `CLOG2(NUM_EX_UNITS);
     localparam EX_WIDTH = `UP(EX_BITS);
 
@@ -520,7 +556,6 @@ package VX_gpu_pkg;
     localparam INST_LSU_SH =     4'b1001;
     localparam INST_LSU_SW =     4'b1010;
     localparam INST_LSU_SD =     4'b1011; // new for RV64I SD
-    localparam INST_LSU_FENCE_IO = 4'b1110; // a fence ordering only device (IO) accesses
     localparam INST_LSU_FENCE =  4'b1111;
     localparam INST_LSU_BITS =   4;
 
@@ -538,10 +573,6 @@ package VX_gpu_pkg;
 
     function automatic logic inst_lsu_is_fence(input logic [INST_LSU_BITS-1:0] op);
         return (op[3:1] == 3'b111);
-    endfunction
-
-    function automatic logic inst_lsu_is_fence_io(input logic [INST_LSU_BITS-1:0] op);
-        return (op == INST_LSU_FENCE_IO);
     endfunction
 
     ///////////////////////////////////////////////////////////////////////////
@@ -822,25 +853,17 @@ package VX_gpu_pkg;
     localparam MTX_LG_K         = $clog2(MTX_K_STEPS);
     localparam MTX_LG_B_SB      = $clog2(MTX_B_SUB_BLOCKS);
 
-    // Matrix fragment load/store (vx_ldm/vx_stm) shapes: {ctx, role[1:0], trans, sparse}.
-    // Uop e moves fragment register fd + e between it and x[rs1 | grp] +
-    // (imm[11:5] | col): the element the fragment register layout puts there.
-    localparam MTX_LDM_A        = 5'b00000; // A, row-major
-    localparam MTX_LDM_A_SP     = 5'b00001; // sparse A, row-major
-    localparam MTX_LDM_B        = 5'b00110; // B, col-major
-    localparam MTX_LDM_B_SP     = 5'b00111; // symmetric sparse B, col-major
-    localparam MTX_LDM_C        = 5'b01000; // C, row-major
-    localparam MTX_LDM_WG_C     = 5'b11000; // warp-group C, row-major, one 8-register chunk
-
-    // Decode replaces the shape in imm[4:0] with its index, so the per-warp
-    // expander decodes 3 bits instead of 5, and marks an 8-register fragment
-    // in bytesel.
-    localparam MTX_LDM_IDX_A    = 3'd0;
-    localparam MTX_LDM_IDX_A_SP = 3'd1;
-    localparam MTX_LDM_IDX_B    = 3'd2;
-    localparam MTX_LDM_IDX_B_SP = 3'd3;
-    localparam MTX_LDM_IDX_C    = 3'd4;
-    localparam MTX_LDM_IDX_WG_C = 3'd5;
+    // Matrix fragment load/store (vx_ldm/vx_stm) shapes, imm[2:0]; imm[11:3]
+    // is a byte offset, so the K tiles of an unrolled loop, 8 bytes apart at
+    // the narrowest (a sparse A at NT=2 and 4), fold into it.
+    // Uop e moves element e of the fragment, column by column, between
+    // its register and x[rs1 | grp] + (imm[11:3] | col).
+    localparam MTX_LDM_IDX_A    = 3'd0; // A, row-major
+    localparam MTX_LDM_IDX_A_SP = 3'd1; // sparse A, row-major
+    localparam MTX_LDM_IDX_B    = 3'd2; // B, col-major
+    localparam MTX_LDM_IDX_B_SP = 3'd3; // symmetric sparse B, col-major
+    localparam MTX_LDM_IDX_C    = 3'd4; // C, row-major
+    localparam MTX_LDM_IDX_WG_C = 3'd5; // warp-group C, row-major, one 8-register chunk
 
     // Byte strides between the words a lane holds along a fragment row
     localparam MTX_LDM_LG_CS_K  = $clog2(MTX_TC_K * 4);
@@ -848,31 +871,23 @@ package VX_gpu_pkg;
     localparam MTX_LDM_LG_K_SP  = (MTX_LG_K > 0) ? (MTX_LG_K - 1) : 0;
     localparam MTX_LDM_COL_W    = MTX_LDM_LG_CS_K + 4;
 
+    localparam MTX_LDM_LG_B_ROWS = MTX_LG_N - MTX_LG_B_SB;
+
     typedef struct packed {
         logic [1:0]           grp;
         logic [MTX_LDM_COL_W-1:0] col;
+        logic [2:0]           reg_off;
     } mtx_ldm_uop_t;
 
-    function automatic logic mtx_ldm_valid(input logic [4:0] shape);
-        case (shape)
-            MTX_LDM_A,
-            MTX_LDM_A_SP,
-            MTX_LDM_B,
-            MTX_LDM_C,
-            MTX_LDM_WG_C: return 1'b1;
-            MTX_LDM_B_SP: return 1'(MTX_SYM_SPARSE);
-            default:  return 1'b0;
-        endcase
-    endfunction
-
-    function automatic logic [4:0] mtx_ldm_code(input logic [4:0] shape);
-        case (shape)
-            MTX_LDM_A:    return 5'(MTX_LDM_IDX_A);
-            MTX_LDM_A_SP: return 5'(MTX_LDM_IDX_A_SP);
-            MTX_LDM_B:    return 5'(MTX_LDM_IDX_B);
-            MTX_LDM_B_SP: return 5'(MTX_LDM_IDX_B_SP);
-            MTX_LDM_C:    return 5'(MTX_LDM_IDX_C);
-            default:  return 5'(MTX_LDM_IDX_WG_C);
+    function automatic logic mtx_ldm_valid(input logic [2:0] idx);
+        case (idx)
+            MTX_LDM_IDX_A,
+            MTX_LDM_IDX_A_SP,
+            MTX_LDM_IDX_B,
+            MTX_LDM_IDX_C,
+            MTX_LDM_IDX_WG_C: return 1'b1;
+            MTX_LDM_IDX_B_SP: return 1'(MTX_SYM_SPARSE);
+            default:          return 1'b0;
         endcase
     endfunction
 
@@ -885,8 +900,8 @@ package VX_gpu_pkg;
         endcase
     endfunction
 
-    function automatic logic mtx_ldm_is8(input logic [4:0] shape);
-        return (mtx_ldm_count(3'(mtx_ldm_code(shape))) == 8);
+    function automatic logic mtx_ldm_is8(input logic [2:0] idx);
+        return (mtx_ldm_count(idx) == 8);
     endfunction
 
     // Register offsets of the A, B and C fragments' elements at MMA step (m, n, k),
@@ -931,65 +946,55 @@ package VX_gpu_pkg;
         return 3'({n[`UP(MTX_LG_N)-1], m[0], ~(m[0] ^ n[0])});
     endfunction
 
-    // Uop e moves register fd + e, so the counter feeds the register add
-    // directly; the shape maps e to the row group and column of the element
-    // that register holds, a few inverted and XORed bits of e that invert the
-    // permutations above. mtx_ldm_reg checks the inverse at elaboration.
+    // Uop e moves the element at row group grp and column col of the fragment,
+    // column by column, the order the MMA's K-outer steps read them, so its
+    // first steps find their operands loaded first; its register is the
+    // forward permutation above. mtx_ldm_reg checks the register at elaboration.
     function automatic mtx_ldm_uop_t mtx_ldm_uop(input logic [2:0] idx, input logic [2:0] e);
         mtx_ldm_uop_t u;
         logic [2:0] m, n, k;
         u = '0;
-        m = '0;
-        n = '0;
-        k = '0;
         case (idx)
             MTX_LDM_IDX_A: begin
-                if (MTX_LG_B_SB == 0) begin
-                    m = {1'b0, ~e[1], e[2]};
-                    k = {2'b0, e[0]};
-                end else begin
-                    m = {2'b0, ~e[1]};
-                    k = {1'b0, e[0] ^ ~e[1], e[2]};
-                end
+                m = e & 3'((1 << MTX_LG_M) - 1);
+                k = 3'(e >> MTX_LG_M);
                 u.grp = 2'(m);
                 u.col = MTX_LDM_COL_W'(k) << MTX_LDM_LG_CS_K;
+                u.reg_off = mtx_ra_off(`UP(MTX_LG_M)'(m), `UP(MTX_LG_K)'(k));
             end
             // registers in element order {m, k} over half the K steps
             MTX_LDM_IDX_A_SP: begin
-                u.grp = 2'(e >> MTX_LDM_LG_K_SP);
-                u.col = MTX_LDM_COL_W'(e & 3'((1 << MTX_LDM_LG_K_SP) - 1)) << MTX_LDM_LG_CS_K;
+                m = e & 3'((1 << MTX_LG_M) - 1);
+                k = 3'(e >> MTX_LG_M);
+                u.grp = 2'(m);
+                u.col = MTX_LDM_COL_W'(k) << MTX_LDM_LG_CS_K;
+                u.reg_off = 3'((m << MTX_LDM_LG_K_SP) | k);
             end
             // a col-major B row is one of its columns (a pair with two sub-blocks)
             MTX_LDM_IDX_B: begin
-                if (MTX_LG_B_SB == 0) begin
-                    k = {2'b0, ~e[0]};
-                    n = {2'b0, e[1] ^ ~e[0]};
-                end else begin
-                    n = {2'b0, ~e[0]};
-                    k = {1'b0, e[1] ^ ~e[0], e[2]};
-                end
+                n = e & 3'((1 << MTX_LDM_LG_B_ROWS) - 1);
+                k = 3'(e >> MTX_LDM_LG_B_ROWS);
                 u.grp = 2'(n);
                 u.col = MTX_LDM_COL_W'(k) << MTX_LDM_LG_CS_K;
+                u.reg_off = mtx_rb_off(`UP(MTX_LG_N)'(n << MTX_LG_B_SB), `UP(MTX_LG_K)'(k));
             end
             // symmetric sparse: one row per register
             MTX_LDM_IDX_B_SP: begin
                 u.grp = 2'(e);
+                u.reg_off = e;
             end
             MTX_LDM_IDX_C: begin
-                if (MTX_LG_B_SB == 0) begin
-                    m = {1'b0, ~e[1], e[2]};
-                    n = {2'b0, e[0] ^ e[1]};
-                end else begin
-                    m = {2'b0, ~e[1]};
-                    n = {1'b0, e[0], e[2]};
-                end
+                m = e & 3'((1 << MTX_LG_M) - 1);
+                n = 3'(e >> MTX_LG_M);
                 u.grp = 2'(m);
                 u.col = MTX_LDM_COL_W'(n) << MTX_LDM_LG_CS_N;
+                u.reg_off = mtx_rc_off(`UP(MTX_LG_M)'(m), `UP(MTX_LG_N)'(n));
             end
             // n-major registers {n, m}, two row groups
             default: begin
                 u.grp = 2'(e[0]);
-                u.col = MTX_LDM_COL_W'(e >> 1) << MTX_LDM_LG_CS_N;
+                u.col = MTX_LDM_COL_W'(e[2:1]) << MTX_LDM_LG_CS_N;
+                u.reg_off = e;
             end
         endcase
         return u;
@@ -1444,10 +1449,9 @@ package VX_gpu_pkg;
     // lsu_args_t carries AMO sideband when EXT_A_ENABLE.
     // amo_valid / amo_op are inspected only when amo_valid==1; for plain
     // loads/stores they're zero. aq/rl order the AMO with the hart's other
-    // accesses (fence uops around it); on a memory fence they say what it
-    // orders: aq = later reads see others' writes (acquire: invalidate),
-    // rl = earlier writes are visible (release: drain). amo_unsigned
-    // distinguishes the U-variants of MIN/MAX.
+    // accesses (fence uops around it). A fence carries its fence_op_t in
+    // amo_op, with amo_valid clear. amo_unsigned distinguishes the
+    // U-variants of MIN/MAX.
     // export_mask marks a vx_om_export (OM fragment export) and says which
     // words of the aperture record the shader is writing:
     //   bit 0 = colour (record + 0), bit 1 = depth (record + 4)
@@ -1651,7 +1655,7 @@ package VX_gpu_pkg;
         logic [NUM_REGS_BITS-1:0]   rs3;
         logic                       fu_lock;
         logic                       fu_unlock;
-    `ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
+    `ifdef EXT_LDST_ANY_ENABLE
         // hand the next issue cycle to another ready warp
         logic                       issue_yield;
     `endif
@@ -2383,9 +2387,10 @@ package VX_gpu_pkg;
     localparam L2_IS_LLC            = `VX_CFG_L2_ENABLED && !`VX_CFG_L3_ENABLED;
     // Every memory client of a cluster reaches memory through its L2.
     localparam L2_SHARED_LLC        = L2_IS_LLC && (`VX_CFG_NUM_CLUSTERS == 1);
-    // An acquire must also invalidate the cache below the dcache unless that
-    // one is the point of coherence (an L3 always is; memory always is).
-    localparam DCACHE_ACQ_FORWARD   = `VX_CFG_L2_ENABLED && !L2_SHARED_LLC;
+    // The level below the dcache is the point of coherence unless it is an L2
+    // that is not the shared LLC: replicated, or above an L3 (an L3 always is;
+    // memory always is).
+    localparam DCACHE_NEXT_IS_POC   = !`VX_CFG_L2_ENABLED || L2_SHARED_LLC;
 
     /////////////////////////////// L3 Parameters /////////////////////////////
 

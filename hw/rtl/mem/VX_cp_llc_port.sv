@@ -17,10 +17,10 @@
 // Requests in the IO aperture carry the IO attribute and bypass the cache;
 // a write flagged no-allocate writes around it on a miss.
 // A launch that follows DMA writes is held until those writes are inside the
-// cache banks: the port sends an L1-only flush token behind them, which the
-// last-level cache answers once its input crossbar has drained, and only then
-// passes the start pulse on. Reads need no such fence, since the DMA waits for
-// their data.
+// cache banks: the port sends a device-scope acquire-release flush token
+// behind them, which the last-level cache answers once its input crossbar has
+// drained, and only then passes the start pulse on. Reads need no such fence,
+// since the DMA waits for their data.
 module VX_cp_llc_port import VX_gpu_pkg::*; #(
     parameter DATA_SIZE     = 64,
     parameter SLOT_TAG_WIDTH = UUID_WIDTH + 2,
@@ -75,7 +75,7 @@ module VX_cp_llc_port import VX_gpu_pkg::*; #(
         req_attr.is_noalloc = req_rw && req_noalloc;
     end
 
-    wire [`UP(MEM_ATTR_WIDTH)-1:0] fence_attr = `UP(MEM_ATTR_WIDTH)'(1 << MEM_ATTR_FLUSH_OFFS);
+    wire [`UP(MEM_ATTR_WIDTH)-1:0] fence_attr = `UP(MEM_ATTR_WIDTH)'(mem_flush_attr('{io: 1'b0, sys: 1'b0, rel: 1'b1, acq: 1'b1}));
 
     wire [SLOT_TAG_WIDTH-1:0] req_slot_tag   = SLOT_TAG_WIDTH'({req_tag, 1'b0});
     wire [SLOT_TAG_WIDTH-1:0] fence_slot_tag = SLOT_TAG_WIDTH'(1);
@@ -85,7 +85,7 @@ module VX_cp_llc_port import VX_gpu_pkg::*; #(
     wire                 buf_valid_in = fence_req || ((state == STATE_IDLE) && req_valid);
     wire                 buf_ready_in;
     wire [REQ_DATAW-1:0] buf_data_in  = fence_req ?
-        {1'b0, ADDR_WIDTH'(0), (DATA_SIZE*8)'(0), DATA_SIZE'(1), fence_attr, fence_slot_tag} :
+        {1'b0, ADDR_WIDTH'(0), (DATA_SIZE*8)'(0), DATA_SIZE'(0), fence_attr, fence_slot_tag} :
         {req_rw, req_addr, req_data, req_byteen, `UP(MEM_ATTR_WIDTH)'(req_attr), req_slot_tag};
 
     assign req_ready = (state == STATE_IDLE) && buf_ready_in;

@@ -242,8 +242,9 @@ an acquire point and refetches.
 
 There is no dedicated acquire-invalidate. In the RTL the LSU sends a memory
 `fence` (any R or W in its predecessor or successor set) to the data cache as
-an **L1-only** flush token (`is_flush` with byte enables set). Each cache above
-the point of coherence holds its inputs, drains, walks every set (every way of
+a flush token carrying its fence operation (`ACQ`, `REL` or both). For an
+acquire, each cache above the point of coherence holds its inputs, drains,
+walks every set (every way of
 a write-back cache), writing back dirty lines and clearing every valid bit, and
 forwards the token. The shared LLC, the point of coherence, answers it without
 a walk; a replicated LLC still walks. The fence holds its LSU block until the

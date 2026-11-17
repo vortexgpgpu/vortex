@@ -149,7 +149,7 @@ module VX_mem_unit_top import VX_gpu_pkg::*; #(
     `endif
         .lsu_dcache_bus_if (lsu_dcache_bus_if),
         .dcr_flush_if  (dcr_flush_if),
-        .flush_l1_only (1'b0),
+        .flush_op      (FENCE_OP_FULL),
         .dcache_bus_if (mem_bus_if),
         `UNUSED_PIN    (busy)
     );
