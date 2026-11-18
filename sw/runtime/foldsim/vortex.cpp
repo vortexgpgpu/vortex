@@ -52,6 +52,7 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <v80_image.h>
 #include <v80_pcie.h>
 #include <vrt/device.hpp>
 #include <vrt/kernel.hpp>
@@ -120,6 +121,9 @@ public:
         return -1;
       }
     }
+    // The aved driver skips its design write when its record says the card
+    // already holds its image; this write replaces that image.
+    v80_image_record(bdf).clear();
     VRT_TRY()
       device_ = std::make_unique<vrt::Device>(bdf, vbin, /*program=*/true);
       // Clock the kernel at the rate the image was timed for, or lower if

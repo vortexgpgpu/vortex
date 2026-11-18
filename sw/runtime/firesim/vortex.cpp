@@ -30,6 +30,7 @@
 #include <cmd_processor.h>
 #include <firesim_sim.h>
 #include <util.h>
+#include <v80_image.h>
 #include <v80_pcie.h>
 
 #include <stdint.h>
@@ -83,6 +84,9 @@ public:
     }
     plusargs.push_back(std::string("+binary_file=") + vbin);
     plusargs.push_back("+bdf=" + bdf);
+    // The aved driver skips its design write when its record says the card
+    // already holds its image; FireSim's write replaces that image.
+    v80_image_record(bdf).clear();
 #else
     // As the xrt driver: XCLBIN_PATH. Unset falls through as no image rather
     // than a default filename: an empty path is what metasimulation needs --

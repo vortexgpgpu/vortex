@@ -102,6 +102,14 @@ device program $pdi
 puts "PARTIAL_PDI_OK"
 EOF
 
+# The runtime skips its design write when its record says the card already
+# holds the requested image. This load replaces the image behind its back, so
+# void every record: truncated, not removed, because /dev/shm is sticky and a
+# record may belong to another user.
+for rec in /dev/shm/vortex-v80-*.image; do
+    [ -e "$rec" ] && : > "$rec"
+done
+
 echo
 echo "=== program the partial PDI (minutes; do not interrupt) ==="
 if PDI_PATH="$PDI" timeout 1800 xsdb "$WORK/load.tcl" 2>&1 | tee /dev/stderr | grep -q PARTIAL_PDI_OK; then

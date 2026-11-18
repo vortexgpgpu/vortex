@@ -59,6 +59,11 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
 
 ### Changed
 
+- **V80 image reuse across runs.** The `aved` driver no longer writes the image to the PL on every device open: when the card
+  already holds the requested vbin, the design write is skipped, as XRT's `load_xclbin()` does for a loaded xclbin. The driver records
+  what it wrote in `/dev/shm/vortex-v80-<bdf>.image` and checks that record against the device before relying on it; a different vbin,
+  a re-enumerated card or a design that reports another configuration is written as before, and a card that does not answer is never
+  written over. See [docs/designs/aved_driver_architecture.md](docs/designs/aved_driver_architecture.md#31-opening-the-device).
 - **Toolchain pinned to v3.0.2** (`TOOLCHAIN_REV`): LLVM f44a6bb2af4c, with PoCL rebuilt on it. Wide loads/stores and 64-bit
   atomics stay behind `+xvortexldstwide` and `+xvortexamod`, so code built with plain `+xvortex` uses no new instructions.
 - **Dcache read-merge pairs realign.** A pair of same-word merge ports whose parts a bank served a cycle apart waits for its partner,

@@ -96,30 +96,79 @@ a specific failure this platform can produce.
 
 ### 3.1 Opening the device
 
-`vrt::Device(bdf, vbin_path, program)` opens the board and optionally
-reprograms the PL; `vrt::Kernel` then parses the vbin's `system_map.xml`.
+`vrt::Device(bdf, vbin_path, program)` opens the board and, with
+`program=true`, writes the image to the PL; `vrt::Kernel` then parses the
+vbin's `system_map.xml`.
 
-The driver always programs (`program=true`), as the XRT driver's
-`load_xclbin()` does. There is no opt-out switch.
+The driver writes the image on open, as the XRT driver's `load_xclbin()` does,
+and like `load_xclbin()` it skips the write when the card already holds that
+image. A design write takes tens of seconds and is the riskiest thing the
+driver does to the card (two writes back to back, or a write over a kernel that
+stopped answering, are what take it off the bus), so a sequence of runs on one
+image should cost one write, not one per run.
 
-There used to be one — `VORTEX_AVED_NO_PROGRAM=1` constructed with
-`program=false` — because each open that programs the PL goes through `vrtd`'s
-design writer, which runs its reset sequence only when the requested shell
-differs from the current one. On a board whose static shell was never written
-to OSPI flash, that comparison never settles: no reset runs, the design write
-fails with `Input/output error`, and the AMC can be left in `NO_AMC`, costing a
-recovery.
+XRT can skip because its driver remembers the UUID of the xclbin it downloaded.
+SLASH has no query for the design in the fabric, so the driver keeps that fact
+itself, in `/dev/shm/vortex-v80-<domain:bus:dev>.image`
+([`sw/common/v80_image.h`](../../sw/common/v80_image.h)). The record holds:
 
-That is a property of an **unflashed board**, not of the driver. Write the
-static shell to flash first (§5 of `xilinx_slash_setup.md`, *both* boot
-partitions) and programming on open is well-defined. Verified on silicon:
-consecutive programs with `v80-smi list` reporting a valid shell, sgemm passing
-each time, no AMC loss.
+- a digest of the vbin's content, so a copy of the same file matches and any
+  other build does not;
+- the PCI enumeration of the card it was written for (the inode of the PF0
+  sysfs node). A card reset or a hot-plug re-enumerates the functions, and the
+  fabric did not keep its design across that;
+- the six configuration words the image reports about itself: `CP_DEV_CAPS`,
+  `GPU_DEV_CAPS_EXT`, `GPU_DEV_CAPS_LO/HI`, `GPU_ISA_CAPS_LO/HI`.
 
-The switch and the `/tmp/v80_resident_afu.path` fallback that let a run reuse
-whatever bitstream happened to be resident were both removed. Running against a
-resident image is what silently produces results attributed to the wrong
-bitstream when `FPGA_BIN_DIR` changes.
+The record is a claim, not a fact, and it is checked against the device before
+it is relied on. `init()` proceeds as follows:
+
+| record | device | action |
+|---|---|---|
+| none, another image, or an earlier enumeration | not read | void the record, write the image, bring the device up, write the record |
+| this image | the six words match | no write; clock the kernel, then park the CP and reset the device as on every open |
+| this image | answers with other words | another tool replaced the design: write the image as in the first row |
+| this image | all six words read all-ones | stop with an error; nothing is written |
+
+Three details of that table are deliberate:
+
+- **The record is voided before the write and rewritten only after the device
+  came up.** A process that dies in between leaves no claim, and an image that
+  failed its bring-up is not found again.
+- **The words are compared before the clock is raised.** The user clock is
+  whatever the last user left; a design another tool loaded must not be driven
+  at this image's rate.
+- **A device that does not answer is never followed by a design write.** That
+  sequence (a hung kernel, then the next image written over it) is what has
+  reset the host. The same holds when a reused image later fails the transport
+  gate, the CP drain or the device reset: the open fails, and the message names
+  the record. Removing the record makes the next open write the image again;
+  that decision is left to the user, once `v80-smi list` shows the card healthy.
+
+Everything in this repository that changes the design voids the record: this
+driver before a write, the `foldsim` and `firesim` drivers before theirs, and
+`jtag_load_vortex.sh`. A host boot discards it with the rest of `/dev/shm`,
+which is also when the card reloads from flash. So does a `TARGET=sim` open on
+a host with a card: the platform is only known once the vbin is open, and the
+record is voided before that. It costs the next hardware open one write.
+
+**Limit.** A design written by a tool outside this repository is recognised
+only by its six configuration words. Another build of the *same configuration*
+loaded that way reports the same words and would be taken for the recorded
+image, with the recorded image's clock rate and memory binding. After such a
+load, remove the record.
+
+There is still no never-program switch. An earlier one
+(`VORTEX_AVED_NO_PROGRAM=1`, with a `/tmp/v80_resident_afu.path` fallback) ran
+against whatever bitstream happened to be resident, which silently attributes
+results to the wrong image when `FPGA_BIN_DIR` changes. The record is keyed by
+the vbin's content for that reason: a different vbin is always written.
+
+Writing on open is only well-defined once the static shell is in OSPI flash
+(§5 of `xilinx_slash_setup.md`, *both* boot partitions). On a board whose flash
+was never written, `vrtd`'s requested-versus-current shell comparison never
+settles: no reset runs, the design write fails with `Input/output error`, and
+the AMC can be left in `NO_AMC`, costing a recovery.
 
 ### 3.2 The transport gate
 
@@ -189,8 +238,8 @@ build was wrong.
 
 For the record, `xrt` and `opae` never hit the demux defect because XRT issues
 `CTL_AP_RESET` before any CP-window access and re-asserts `ap_rst_n` on every
-`load_xclbin`; the aved backend opens with `program = false`, so the routing
-latch survived from the previous process.
+`load_xclbin`; the aved backend, when it reuses the image on the card (§3.1),
+inherits the routing latch of the previous process.
 
 ### 3.5 Resuming the CP's position
 

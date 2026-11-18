@@ -58,6 +58,7 @@
 #include <stdio.h>
 #include <string>
 #include <util.h>
+#include <v80_image.h>
 #include <v80_pcie.h>
 
 using namespace vortex;
@@ -87,6 +88,12 @@ using namespace vortex;
 // backend only observes them, it never originates a transaction of its own.
 #define CP_REG_CTRL       0x000
 #define CP_REG_STATUS     0x004
+#define CP_REG_DEV_CAPS   0x008
+#define CP_REG_GPU_CAPS_EXT 0x00C
+#define CP_REG_GPU_CAPS_LO  0x018
+#define CP_REG_GPU_CAPS_HI  0x01C
+#define CP_REG_ISA_CAPS_LO  0x020
+#define CP_REG_ISA_CAPS_HI  0x024
 #define CP_Q_RING_BASE_LO 0x100
 #define CP_Q_RING_BASE_HI 0x104
 #define CP_Q_HEAD_ADDR_LO 0x108
@@ -198,6 +205,22 @@ public:
   }
 
   int init() {
+    const int rc = this->bring_up();
+  #ifdef CPP_API
+    if (rc != 0 && !reused_record_.empty()) {
+      // Every later open would skip the write again and stop here again, and
+      // writing a design over a kernel that does not answer is what takes the
+      // card off the bus: the decision to write stays with the user.
+      fprintf(stderr, "[VXDRV] The card already held this image, so nothing "
+              "was written to it. Once `v80-smi list` shows it healthy, remove "
+              "%s to have the next open write the image again.\n",
+              reused_record_.c_str());
+    }
+  #endif
+    return rc;
+  }
+
+  int bring_up() {
     // An empty value is treated as unset: the test harness exports these
     // unconditionally, so they arrive empty rather than absent.
     const char* bdf = getenv("VRT_DEVICE_BDF");
@@ -220,54 +243,48 @@ public:
 
   #ifdef CPP_API
 
-    // Program the PL on open, exactly as the XRT driver's load_xclbin() does.
+    // The image is written to the PL on open, as the XRT driver's
+    // load_xclbin() does, and like load_xclbin() the write is skipped when the
+    // card already holds that image. SLASH cannot say what the fabric holds,
+    // so the driver records what it wrote and checks that record against the
+    // device before relying on it (open_device).
     //
-    // This is only correct because the static shell lives in OSPI flash. vrtd
-    // runs its reset sequence when the requested shell differs from the
+    // Writing is only correct because the static shell lives in OSPI flash.
+    // vrtd runs its reset sequence when the requested shell differs from the
     // current one, and a design write only succeeds on a freshly reset device.
     // A board whose flash was never written reports Shell: unknown, so the
     // requested/current comparison never settles and a program attempt can
     // fail mid-write and take the AMC to NO_AMC. Write the shell to flash
     // (v80-smi write-static-shell --flash, BOTH boot partitions) before using
     // this driver; `v80-smi list` must report Shell: compute.
-    VRT_TRY()
-      vrtDevice_ = vrt::Device(bdf, vbin_path, /*program=*/true);
-      // Only the hardware platform has a slave bridge, so anything else needs
-      // the explicit host-memory sync in cp_reg_write/cp_reg_read.
-      sim_mode_  = (vrtDevice_.getPlatform() != vrt::Platform::HARDWARE);
-      // Like XRT's xclbin load, clock the kernel at the rate the image was
-      // timed for: a design write leaves the user clock at whatever the
-      // previous image set, which can be far above or below this one's.
-      if (!sim_mode_) {
-        const uint64_t timed_hz = vrtDevice_.getMaxFrequency();
-        // The wizard settles on the nearest rate its dividers reach, which can
-        // be a step above the request: lower the request below that step.
-        uint64_t want_hz = timed_hz, clk_hz = 0;
-        for (int i = 0; i < 8; ++i) {
-          vrtDevice_.setFrequency(want_hz);
-          clk_hz = vrtDevice_.getFrequency();
-          if (clk_hz == 0 || clk_hz <= timed_hz)
-            break;
-          want_hz -= (clk_hz - want_hz) + timed_hz / 100;
-        }
-        if (clk_hz == 0 || clk_hz > timed_hz) {
-          fprintf(stderr, "[VXDRV] Error: user clock reads %lu Hz, image is timed for %lu Hz\n",
-                  (unsigned long)clk_hz, (unsigned long)timed_hz);
-          park_clock();
-          return -1;
-        }
-        printf("[VXDRV] kernel clock %lu Hz (image timed for %lu Hz)\n",
-               (unsigned long)clk_hz, (unsigned long)timed_hz);
+    const v80_image_record record(bdf);
+    const uint64_t digest = v80_image_digest(vbin_path);
+    if (digest == 0) {
+      // Stop before the record is touched: the card still holds its image.
+      fprintf(stderr, "[VXDRV] Error: cannot read the vbin '%s'\n", vbin_path);
+      return -1;
+    }
+    v80_image_t image;
+    bool resident = record.holds(digest, &image);
+    if (resident) {
+      reused_record_ = record.path();
+      const int rc = this->open_device(bdf, vbin_path, &image);
+      if (rc < 0) {
+        return -1;
       }
-      vrtKernel_ = vrt::Kernel(vrtDevice_, KERNEL_NAME);
-    } catch (const std::exception& e) {
-      fprintf(stderr, "[VXDRV] VRT exception: %s\n", e.what());
-      park_clock();
-      return -1;
-    } catch (...) {
-      fprintf(stderr, "[VXDRV] VRT exception (unknown)\n");
-      park_clock();
-      return -1;
+      resident = (rc == 0);
+    }
+    if (!resident) {
+      reused_record_.clear();
+      // Voided before the write, not after: a process that dies in between
+      // must not leave a claim to the image it was replacing.
+      if (!record.clear()) {
+        fprintf(stderr, "[VXDRV] Warning: cannot void %s; it still names the "
+                "image this open replaces\n", record.path().c_str());
+      }
+      if (this->open_device(bdf, vbin_path, nullptr) != 0) {
+        return -1;
+      }
     }
 
     // Must follow vrtKernel_: the connection map comes from the vbin's
@@ -443,6 +460,21 @@ public:
         return -1;
       }
     }
+
+  #ifdef CPP_API
+    // Only an image that came up is worth finding again.
+    if (!resident && !sim_mode_) {
+      image = v80_image_t();
+      image.digest = digest;
+      image.pci_instance = record.pci_instance();
+      if (this->read_image_ident(image.ident) != 0
+       || !image_answers(image.ident)
+       || !record.store(image)) {
+        fprintf(stderr, "[VXDRV] note: could not record the image in %s; the "
+                "next open will write it again\n", record.path().c_str());
+      }
+    }
+  #endif
 
   #ifdef SCOPE
     {
@@ -835,11 +867,110 @@ public:
 private:
 
 #ifdef CPP_API
+  // What a Vortex image says about itself: the configuration it was built
+  // with. Constant for the life of the image.
+  int read_image_ident(uint32_t ident[v80_image_t::kIdentWords]) {
+    static const uint32_t regs[v80_image_t::kIdentWords] = {
+      CP_REG_DEV_CAPS,    CP_REG_GPU_CAPS_EXT, CP_REG_GPU_CAPS_LO,
+      CP_REG_GPU_CAPS_HI, CP_REG_ISA_CAPS_LO,  CP_REG_ISA_CAPS_HI,
+    };
+    for (int i = 0; i < v80_image_t::kIdentWords; ++i) {
+      if (this->read_register(CP_BASE + regs[i], &ident[i]) != 0) {
+        return -1;
+      }
+    }
+    return 0;
+  }
+
+  // All-ones in every word is a bus that returned no data, not an identity.
+  static bool image_answers(const uint32_t ident[v80_image_t::kIdentWords]) {
+    for (int i = 0; i < v80_image_t::kIdentWords; ++i) {
+      if (ident[i] != 0xFFFFFFFFu) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Opens the card and clocks the kernel at the rate the image was timed for.
+  //
+  // With `resident` null the image is written to the PL first. Otherwise the
+  // card is recorded as holding it and nothing is written; the record is a
+  // claim, so the device's identity is compared with the one recorded for the
+  // image, and that happens before the clock is raised: a design another tool
+  // loaded since must not be driven at this image's rate.
+  //
+  // Returns 0 when the device is open, 1 with the device closed again when a
+  // different design answers (the caller writes the image), -1 on error.
+  int open_device(const char* bdf, const char* vbin_path, const v80_image_t* resident) {
+    try {
+      vrtDevice_ = vrt::Device(bdf, vbin_path, /*program=*/resident == nullptr);
+      // Only the hardware platform has a slave bridge, so anything else needs
+      // the explicit host-memory sync in cp_reg_write/cp_reg_read.
+      sim_mode_  = (vrtDevice_.getPlatform() != vrt::Platform::HARDWARE);
+      vrtKernel_ = vrt::Kernel(vrtDevice_, KERNEL_NAME);
+      if (resident != nullptr) {
+        uint32_t ident[v80_image_t::kIdentWords];
+        if (this->read_image_ident(ident) != 0 || !image_answers(ident)) {
+          // Not followed by a design write: a kernel that stopped answering
+          // has to be recovered first, and one that was replaced by another
+          // tool's design is for the user to confirm.
+          fprintf(stderr, "[VXDRV] Error: the card is recorded as holding this "
+                  "image, but its registers do not answer. The kernel is hung "
+                  "or another tool replaced it.\n");
+          return -1;
+        }
+        if (memcmp(ident, resident->ident, sizeof(ident)) != 0) {
+          fprintf(stderr, "[VXDRV] the card holds a different design than the "
+                  "one recorded for it; writing the image\n");
+          vrtKernel_ = vrt::Kernel();
+          vrtDevice_ = vrt::Device();
+          return 1;
+        }
+        printf("[VXDRV] image already on the card; design write skipped\n");
+      }
+      // Like XRT's xclbin load, clock the kernel at the rate the image was
+      // timed for: a design write leaves the user clock at whatever the
+      // previous image set, which can be far above or below this one's.
+      if (!sim_mode_) {
+        const uint64_t timed_hz = vrtDevice_.getMaxFrequency();
+        // The wizard settles on the nearest rate its dividers reach, which can
+        // be a step above the request: lower the request below that step.
+        uint64_t want_hz = timed_hz, clk_hz = 0;
+        for (int i = 0; i < 8; ++i) {
+          vrtDevice_.setFrequency(want_hz);
+          clk_hz = vrtDevice_.getFrequency();
+          if (clk_hz == 0 || clk_hz <= timed_hz)
+            break;
+          want_hz -= (clk_hz - want_hz) + timed_hz / 100;
+        }
+        if (clk_hz == 0 || clk_hz > timed_hz) {
+          fprintf(stderr, "[VXDRV] Error: user clock reads %lu Hz, image is timed for %lu Hz\n",
+                  (unsigned long)clk_hz, (unsigned long)timed_hz);
+          park_clock();
+          return -1;
+        }
+        printf("[VXDRV] kernel clock %lu Hz (image timed for %lu Hz)\n",
+               (unsigned long)clk_hz, (unsigned long)timed_hz);
+      }
+    } catch (const std::exception& e) {
+      fprintf(stderr, "[VXDRV] VRT exception: %s\n", e.what());
+      park_clock();
+      return -1;
+    } catch (...) {
+      fprintf(stderr, "[VXDRV] VRT exception (unknown)\n");
+      park_clock();
+      return -1;
+    }
+    return 0;
+  }
+
   // A design that fails to come up stays loaded: leave it clocked below any
   // image's timing so it cannot disturb the shell before the next load.
   void park_clock() noexcept {
     constexpr uint64_t kSafeHz = 50000000;
-    if (sim_mode_)
+    // No handle when the open itself failed, or after open_device closed it.
+    if (sim_mode_ || !vrtDevice_.getHandle())
       return;
     try {
       vrtDevice_.setFrequency(kSafeHz);
@@ -1436,6 +1567,10 @@ private:
   // Set when the vbin is not a hardware platform, i.e. when there is no slave
   // bridge and the CP's host memory has to be synced explicitly.
   bool sim_mode_ = false;
+
+  // Path of the image record this open relied on to skip the design write;
+  // empty when the image was written.
+  std::string reused_record_;
 
   std::map<uint64_t, sim_region_t> sim_regions_;
   std::mutex                       sim_mu_;

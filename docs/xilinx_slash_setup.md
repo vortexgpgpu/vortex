@@ -287,8 +287,11 @@ Four things that are easy to get wrong:
 `Rescanning PCIe`) and the board returns on its own. Confirm with `v80-smi list`
 — all PFs `OK` and a shell reported rather than `unknown`.
 
-Once both partitions are written, the runtime programs the PL on device open
-like XRT's `load_xclbin()`; there is no never-program switch.
+Once both partitions are written, the runtime writes the image to the PL on
+device open like XRT's `load_xclbin()`, and skips the write when the card
+already holds that image: consecutive runs on one vbin cost one design write.
+See [designs/aved_driver_architecture.md §3.1](designs/aved_driver_architecture.md#31-opening-the-device)
+for how that is established and when the image is written again.
 
 > **Flashing writes the card's boot memory.** A bad write can leave the board
 > unbootable, recoverable only over JTAG. Confirm the image and the BDF before
