@@ -141,6 +141,10 @@ Dynamic warps, 1024-row register file (`ws/run_d64.sh`):
 | **Core logic** | **84,933** | **112,325** | **118,177** |
 | Estimated SRAM | 41,121 | 41,620 | 46,511 |
 
+The CTA context table is unchanged RTL: with 64 entries it crosses the
+64-entry threshold (`FORCE_BRAM`) and becomes an SRAM macro, so its cost moves
+into the SRAM estimate rather than going away.
+
 The barrier table grows with warps squared (an entry per CTA x barrier, each
 with a warp mask, and resident CTAs = warps). Without it, 64 warps cost about
 +14% over 16; with it, +39%. A count-based barrier table is in progress on the
