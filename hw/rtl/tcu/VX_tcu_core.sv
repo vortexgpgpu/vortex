@@ -457,6 +457,20 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [PE_M-1:0][PE_N-1:0][31:0] d_pe;
 
     for (genvar i = 0; i < PE_M; ++i) begin : g_i
+    `ifdef VX_CFG_TCU_SPARSE_ENABLE
+        // The row's candidate selects, shared by its FEDPs (all columns).
+        wire [TCU_TC_K-1:0][7:0][5:0] sp_sel;
+        VX_tcu_sp_sel #(
+            .ROW_IDX    (i),
+            .ROW_STRIDE (PE_M),
+            .ROW_SELS   (PE_RATIO_M)
+        ) tcu_sp_sel (
+            .row_sel  (slice_m),
+            .fmt_s    (fmt_s),
+            .vld_mask (vld_meta_block),
+            .sel      (sp_sel)
+        );
+    `endif
         for (genvar j = 0; j < PE_N; ++j) begin : g_j
             // the output element (row_i, col_j) this PE computes this cycle
             wire [ROW_W-1:0] row_i = ROW_W'(i) + ROW_W'(PE_M) * ROW_W'(slice_m);
@@ -563,16 +577,11 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
         `ifdef VX_CFG_TCU_SPARSE_ENABLE
             VX_tcu_sp_mux #(
-                .INSTANCE_ID (INSTANCE_ID),
-                .ROW_IDX     (i),
-                .ROW_STRIDE  (PE_M),
-                .ROW_SELS    (PE_RATIO_M)
+                .INSTANCE_ID (INSTANCE_ID)
             ) tcu_sp_mux (
-                .row_sel   (slice_m),
-                .fmt_s     (fmt_s),
+                .sel       (sp_sel),
                 .b_col_in1 (b_col_1),
                 .b_col_in2 (b_col_2),
-                .vld_mask  (vld_meta_block),
                 .b_col_out (b_col_sparse)
             );
             for (genvar k_idx = 0; k_idx < FEDP_K; ++k_idx) begin : g_sparse_b_select
