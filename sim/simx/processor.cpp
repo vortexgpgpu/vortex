@@ -43,6 +43,7 @@ ProcessorImpl::ProcessorImpl()
 {
   SimPlatform::instance().initialize();
   SimPlatform::instance().set_num_workers(SIMX_NUM_WORKERS);
+  SimPlatform::instance().set_quantum(SIMX_QUANTUM_CYCLES);
 
 	assert(VX_CFG_PLATFORM_MEMORY_DATA_SIZE == VX_CFG_MEM_BLOCK_SIZE);
 

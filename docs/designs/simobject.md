@@ -327,10 +327,10 @@ must complete in-cycle). Default to `delay=1` for normal flow.
 
 ### Inflight counter and `idle()`
 
-`SimChannelBase::inflight_count()` is a process-global counter
-incremented on `reserve()` and decremented on queue pop. Useful for
-deadlock detection (a tick that drops to zero traffic and stays there
-when work is expected) and for end-of-simulation drain assertions.
+Every endpoint counts the packets sent toward it but not yet consumed:
+incremented on `reserve()`, decremented on queue pop. The count lives in the
+endpoint's execution domain (one cache line per domain, no atomics), because
+only that domain's context reserves toward or pops from its endpoints.
 
 Host-side quiescence is a framework service: `SimPlatform::idle()` is true
 when no packet is in flight **and** no deferred cross-domain delivery is
@@ -413,8 +413,8 @@ packet delivery.
 2. Calls `do_reset()` on every active-reset object.
 3. Resets `cycles_ = 0`.
 
-Inflight-count is *not* reset by the platform — clear it externally if
-your test depends on it. Module `on_reset()` should clear all internal
+The in-flight counts are *not* reset by the platform, and `idle()` is their
+only reader. Module `on_reset()` should clear all internal
 queues and counters; channels are reset as a side effect (storage is
 reconstructed at construction; reset doesn't recreate them).
 
@@ -470,6 +470,15 @@ owner, cross-domain deliveries are merged in a canonical `(due, src, seq)`
 order, and each cycle is fenced by barriers. A contributor who follows the
 Cardinal Rule gets deterministic parallelism for free.
 
+Cross-domain calls travel through per-(target, source) mailbox lanes, each
+written by one source and drained by one target, so no lock or shared counter
+sits on the path. A lane is triple-buffered by epoch (a cycle, or a quantum in
+the functional kernel): a source writes the current epoch, and the target
+drains the previous one after the barrier that closed it. A call therefore runs
+at the first epoch boundary at or after its due cycle, in `(due, src, seq)`
+order; with one-cycle epochs this is exactly the order of a single shared
+inbox.
+
 What makes a module MT-safe is not new code — it is the *absence* of illegal
 code, enforced by lint and asserts:
 
@@ -505,6 +514,15 @@ the same executor with timing removed, for full-speed architectural runs
 - The MT executor, domains, canonical ordering, and topology validation are
   retained — `-DSIMX_MT` composes and cycles remain bit-identical across
   thread counts.
+- `-DSIMX_QUANTUM=<Q>` (resolved in `sim/simx/types.h`, handed to
+  `SimPlatform::set_quantum()`) lets domains run `Q` cycles between
+  barriers; a cross-domain call runs at the first quantum boundary at or
+  after its due cycle.
+  Results are bit-identical for every thread count at a given `Q`, but `Q`
+  itself changes the (non-physical) cycle count. A larger `Q` amortizes
+  synchronization but delays every crossing — an L1 miss into the uncore
+  domain waits for the boundary — so `Q` around 100 is a good start. The
+  timed kernel keeps per-cycle lockstep and rejects `Q > 1`.
 - Cycle counts are monotonic but **non-physical**: a functional build must
   never feed `perf_gate`, `model_parity`, or baseline regeneration.
 

@@ -43,19 +43,24 @@
    Useful configure options: `--xlen={32,64}` selects the ISA width,
    `--prefix=<path>` the install location, and `--profile=<name>` builds the
    machine described by `profiles/<name>.json` by default (see
-   [Hardware Profiles](simulation.md#hardware-profiles)). Two SimX build knobs are plain
+   [Hardware Profiles](simulation.md#hardware-profiles)). Three SimX build knobs are plain
    config defines, passed like any `VX_CFG_*` option through `CONFIGS`:
    `-DSIMX_MT=<T>` runs the simulator on `T` host threads (default serial;
-   cycle results are bit-identical for every thread count), and
+   cycle results are bit-identical for every thread count),
    `-DSIMX_FUNCTIONAL` builds the **functional** simulation kernel (timing
    disabled, for full-speed architectural runs such as conformance suites —
    functional cycle counts are non-physical and must never be used for
-   performance comparisons):
+   performance comparisons), and `-DSIMX_QUANTUM=<Q>` (functional kernel
+   only) synchronizes the threads every `Q` cycles instead of every cycle:
 
    ```
    $ CONFIGS="-DSIMX_MT=4" ./ci/blackbox.sh --driver=simx --app=sgemm --cores=4 --l2cache
    $ CONFIGS="-DSIMX_FUNCTIONAL" ./ci/blackbox.sh --driver=simx --app=sgemm
+   $ CONFIGS="-DSIMX_FUNCTIONAL -DSIMX_MT=16 -DSIMX_QUANTUM=100" ./ci/blackbox.sh --driver=simx --app=sgemm --cores=16 --l2cache
    ```
+
+   Multi-threading pays off only with several sockets (one execution domain
+   each); a 1-core build has nothing to run in parallel.
 
    `make install` lays out the Vortex SDK under `$VORTEX_PATH` (default
    `<build>/install`, override with `../configure --prefix=...`):

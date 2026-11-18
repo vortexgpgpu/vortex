@@ -37,17 +37,17 @@ public:
 
   RegOpd      dst_reg;
 
-  std::vector<RegOpd> src_regs;
+  FixedVector<RegOpd, NUM_SRC_REGS> src_regs;
 
   FUType     fu_type;
 
   OpType     op_type;
 
   // Operands data
-  std::vector<std::vector<reg_data_t>> src_data;
+  FixedVector<RegDataVec, NUM_SRC_REGS> src_data;
 
   // Destination data
-  std::vector<reg_data_t> dst_data;
+  RegDataVec dst_data;
 
   // Byte write enable
   uint8_t dst_bytesel;
@@ -92,7 +92,7 @@ public:
     , src_regs(NUM_SRC_REGS, {RegType::None, 0})
     , fu_type(FUType::ALU)
     , op_type({})
-     , src_data(NUM_SRC_REGS, std::vector<reg_data_t>(VX_CFG_NUM_THREADS))
+     , src_data(NUM_SRC_REGS, RegDataVec(VX_CFG_NUM_THREADS))
     , dst_data(VX_CFG_NUM_THREADS)
     , dst_bytesel(0xFF)
     , pid(-1)
