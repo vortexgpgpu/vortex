@@ -307,6 +307,48 @@ tests:
   - xrt
   app: dogfood
   args: -n1 -tbar
+# The FPnew FPU backend. Its div/sqrt latency depends on the operands, so
+# fdiv-special makes the lanes of a warp finish out of step; fflags-lanes checks
+# the warp's flags across lanes, and fp-nanbox the 64-bit NaN-boxing.
+- id: dogfood-fpnew
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: dogfood
+  args: -n16 -xbar -xgbar
+  configs: -DVX_CFG_FPU_TYPE_FPNEW
+# Fewer FPU lanes than threads: an instruction runs as several lane packets,
+# and packets of different warps' instructions complete interleaved, so each
+# must carry its flags to its own warp.
+- id: dogfood-fflags-pbw-std
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: dogfood
+  args: -n16 -tfflags-lanes
+  configs: -DVX_CFG_FPU_TYPE_STD -DVX_CFG_NUM_FPU_LANES=2
+  xlen:
+  - 32
+- id: dogfood-fflags-pbw-fpnew
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: dogfood
+  args: -n16 -tfflags-lanes
+  configs: -DVX_CFG_FPU_TYPE_FPNEW -DVX_CFG_NUM_FPU_LANES=2
+  xlen:
+  - 32
+# NaN-boxing of single-precision operands on the DSP backend's FMA and
+# div/sqrt inputs, with 64-bit FP registers.
+- id: dogfood-nanbox-dsp
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: dogfood
+  args: -tfp-nanbox
+  configs: -DVX_CFG_FPU_TYPE_DSP
+  xlen:
+  - 64
 - id: gbar-phase-1
   via: blackbox
   drivers:

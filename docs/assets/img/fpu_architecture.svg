@@ -58,9 +58,8 @@
   <rect x="1030" y="96" width="330" height="124" rx="6" class="core"/>
   <text x="1042" y="118" class="tb">response</text>
   <text x="1042" y="140" class="ts">tag → header; VX_lane_gather → commit</text>
-  <text x="1042" y="160" class="ts">fflags OR-ed across the packets of one</text>
-  <text x="1042" y="176" class="ts">instruction, written to the warp's fcsr</text>
-  <text x="1042" y="192" class="ts">on the last packet</text>
+  <text x="1042" y="160" class="ts">each packet's fflags OR-ed into the</text>
+  <text x="1042" y="176" class="ts">warp's fcsr as the packet returns</text>
   <text x="1042" y="212" class="tt">VX_fpu_csr_if</text>
 
   <path d="M 290 158 L 330 158" class="flow"/>

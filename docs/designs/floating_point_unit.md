@@ -56,7 +56,7 @@ wide (the SIMD width).
 | `VX_lane_dispatch` | maps issue slots onto FPU blocks and SIMD lanes onto FPU lanes; an instruction wider than the lane count is split into packets |
 | tag store (`VX_index_buffer`, `VX_CFG_FPU_QUEUE_SIZE`) | holds the instruction header while the operands are in the backend; bounds the operations in flight |
 | rounding-mode resolve | a request with `frm = DYN` takes the issuing warp's rounding mode from `fcsr`; `MISC` operations reuse the `frm` field as a sub-operation and are left alone |
-| flag accumulation | flags are OR-ed across the packets of one instruction and written to the warp's `fcsr` on the last packet, through a registered `VX_fpu_csr_if` |
+| flag write | each packet's flags are OR-ed into the warp's `fcsr` as the packet returns, through a registered `VX_fpu_csr_if`; packets of different instructions can complete interleaved, so a per-block accumulator would hand one warp's flags to another |
 | `VX_lane_gather` | reassembles the blocks onto the commit interface |
 
 The header carries the decoded writeback bit through the tag store rather
@@ -132,10 +132,12 @@ build elaborates the F32-only RTL and carries **no** 64-bit datapath.
 
 The active format is selected **per instruction from `dst_fmt`**, never from
 the operand width. A single-precision value in a 64-bit lane is NaN-boxed —
-upper 32 bits all ones. Every unit boxes its F32 results on the way out. The
-arithmetic cores read the low 32 bits of an F32 operand; the
-non-computational unit additionally checks the box and treats an unboxed F32
-operand as the canonical quiet NaN, as the specification requires.
+upper 32 bits all ones. Every unit boxes its F32 results on the way out. Every
+unit also checks the box of an F32 operand and treats an unboxed one as the
+canonical quiet NaN, as the specification requires: the conversion and
+non-computational units in place, the FMA and div/sqrt inputs of the STD and
+DSP backends through `fp_unbox_s`/`fp_unbox_fmt` in `VX_fpu_pkg`, and the
+FPnew wrapper in front of the PULP divider, which ignores the box.
 
 **Double precision requires `XLEN = 64`.** Operand lanes are `XLEN` wide, so
 there is no place to carry a 64-bit value on a 32-bit build;

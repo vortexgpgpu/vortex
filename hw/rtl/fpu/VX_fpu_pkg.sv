@@ -40,6 +40,26 @@ package VX_fpu_pkg;
 
     `DECL_EXECUTE_T (fpu, `VX_CFG_NUM_FPU_LANES);
 
+    // A single-precision operand that is not NaN-boxed in a 64-bit FP register
+    // reads as the canonical NaN.
+    function automatic logic [31:0] fp_unbox_s(input logic [63:0] x);
+        if ((`VX_CFG_FLEN > 32) && ~(&x[63:32])) begin
+            return 32'h7FC00000;
+        end
+        return x[31:0];
+    endfunction
+
+    // The same for the operand of a unit that takes either format: only a
+    // single-precision operand is unboxed.
+    function automatic logic [`VX_CFG_FLEN-1:0] fp_unbox_fmt(input logic [`VX_CFG_FLEN-1:0] x, input logic is_s);
+        logic [63:0] x64;
+        x64 = 64'(x);
+        if (is_s) begin
+            x64[31:0] = fp_unbox_s(x64);
+        end
+        return `VX_CFG_FLEN'(x64);
+    endfunction
+
 endpackage
 
 `endif // VX_FPU_PKG_VH

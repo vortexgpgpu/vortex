@@ -4,6 +4,7 @@
 #include <math.h>
 #include <limits>
 #include <assert.h>
+#include "common.h"
 
 void cleanup();
 
@@ -576,6 +577,185 @@ public:
   }
 };
 
+class Test_FDIV_SPECIAL : public ITestCase {
+public:
+  Test_FDIV_SPECIAL(TestSuite* suite) : ITestCase(suite, "fdiv-special") {}
+
+  // Zero, infinity, NaN and negative operands take the divide and square-root
+  // early-out paths; the hash scatters them across the threads of a warp.
+  int setup(uint32_t n, void* src1, void* src2) override {
+    auto a = (float*)src1;
+    auto b = (float*)src2;
+    for (uint32_t i = 0; i < n; ++i) {
+      float x = 1.0f + fround((n - i) * (1.0f/n));
+      float y = fround((n + i) * (1.0f/n));
+      switch ((i * 0x9E3779B1u) >> 28) {
+      case 0: y = 0.0f; break;
+      case 1: x = 0.0f; y = 0.0f; break;
+      case 2: x = INFINITY; break;
+      case 3: x = NAN; break;
+      case 4: x = 0.0f; break;
+      case 5: x = -x; break;
+      default: break;
+      }
+      a[i] = x;
+      b[i] = y;
+    }
+    return 0;
+  }
+
+  int verify(uint32_t n, void* dst, const void* src1, const void* src2) override {
+    int errors = 0;
+    auto a = (float*)src1;
+    auto b = (float*)src2;
+    auto c = (float*)dst;
+    for (uint32_t i = 0; i < n; ++i) {
+      auto ref = sqrtf(a[i]) / b[i];
+      bool match = std::isnan(ref) ? std::isnan(c[i]) : almost_equal(c[i], ref);
+      if (!match) {
+        std::cout << "error at result #" << std::dec << i << std::hex << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        ++errors;
+      }
+    }
+    return errors;
+  }
+};
+
+class Test_FP_NANBOX : public ITestCase {
+public:
+  Test_FP_NANBOX(TestSuite* suite) : ITestCase(suite, "fp-nanbox") {}
+
+  int setup(uint32_t n, void* src1, void* src2) override {
+    auto a = (float*)src1;
+    auto b = (float*)src2;
+    for (uint32_t i = 0; i < n; ++i) {
+      a[i] = 1.0f + fround((n - i) * (1.0f/n));
+      b[i] = fround((n + i) * (1.0f/n));
+    }
+    return 0;
+  }
+
+  // With 64-bit FP registers, the kernel leaves one input of five elements in
+  // six improperly NaN-boxed, which must read as the canonical NaN.
+  int verify(uint32_t n, void* dst, const void* src1, const void* src2) override {
+    int errors = 0;
+    auto a = (float*)src1;
+    auto b = (float*)src2;
+    auto c = (float*)dst;
+    for (uint32_t i = 0; i < n; ++i) {
+      uint32_t k = i % 6;
+    #ifdef VX_CFG_FLEN_64
+      if (k != 5) {
+        Float_t r{c[i]};
+        if (r.i != 0x7fc00000) {
+          std::cout << "error at result #" << std::dec << i << " (case " << k << ")" << std::hex << ": expected=0x7fc00000, actual=0x" << r.i << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+          ++errors;
+        }
+        continue;
+      }
+    #endif
+      float ref;
+      switch (k) {
+      case 2:  ref = fmaf(a[i], b[i], b[i]); break;
+      case 3:  ref = fmaf(a[i], b[i], a[i]); break;
+      case 4:  ref = fmaf(a[i], b[i], b[i]); break;
+      default: ref = sqrtf(a[i]) / b[i]; break;
+      }
+      if (!almost_equal(c[i], ref)) {
+        std::cout << "error at result #" << std::dec << i << " (case " << k << ")" << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        ++errors;
+      }
+    }
+    return errors;
+  }
+};
+
+class Test_FFLAGS_LANES : public ITestCase {
+public:
+  Test_FFLAGS_LANES(TestSuite* suite) : ITestCase(suite, "fflags-lanes") {}
+
+  enum { FL_NX = 0x01, FL_OF = 0x04, FL_DZ = 0x08, FL_NV = 0x10 };
+  enum { K_NONE, K_NX, K_X1, K_X2 };
+
+  // A warp divides or adds by the parity of its iteration plus its index, so
+  // warps running side by side mix the two; X1 is DZ or OF, X2 is NV.
+  static uint32_t recipe(bool is_add, int kind, float* a, float* b) {
+    static const float div_a[] = {1.0f, 1.0f, 1.0f, 0.0f};
+    static const float div_b[] = {2.0f, 3.0f, 0.0f, 0.0f};
+    static const uint32_t div_f[] = {0, FL_NX, FL_DZ, FL_NV};
+    static const float add_a[] = {1.0f, 1.0f, std::numeric_limits<float>::max(), INFINITY};
+    static const float add_b[] = {2.0f, 0x1p-30f, std::numeric_limits<float>::max(), -INFINITY};
+    static const uint32_t add_f[] = {0, FL_NX, FL_OF | FL_NX, FL_NV};
+    *a = is_add ? add_a[kind] : div_a[kind];
+    *b = is_add ? add_b[kind] : div_b[kind];
+    return is_add ? add_f[kind] : div_f[kind];
+  }
+
+  // Flags raised by one lane; only non-zero lanes raise any, and a masked lane
+  // gets operands raising a flag no active lane raises.
+  uint32_t lane_flags(uint32_t k, uint32_t n, float* a, float* b) const {
+    uint32_t L = num_threads_;
+    uint32_t count = n / (num_cores_ * num_warps_ * L);
+    uint32_t t = k / count, i = k % count;
+    uint32_t lane = t % L, wid = t / L;
+    uint32_t sc = ((i >> 2) + wid) % 4;
+    bool is_add = ((i + wid) & 1) != 0;
+    int kind = K_NONE;
+    if ((sc == 0 && lane == 2) || (sc == 2 && lane == L - 1)) {
+      kind = K_X1;
+    } else if (sc == 1 && lane == 3) {
+      kind = K_X2;
+    } else if ((sc == 2 && lane == 2) || (sc == 3 && lane == 0)) {
+      kind = K_NX;
+    }
+    if (fflags_lane_masked(lane, i, L)) {
+      kind = (sc == 1) ? K_X1 : K_X2;
+    }
+    return recipe(is_add, kind, a, b);
+  }
+
+  int setup(uint32_t n, void* src1, void* src2) override {
+    RT_CHECK(vx_dev_caps(suite_->device(), VX_CAPS_NUM_CORES, &num_cores_));
+    RT_CHECK(vx_dev_caps(suite_->device(), VX_CAPS_NUM_WARPS, &num_warps_));
+    RT_CHECK(vx_dev_caps(suite_->device(), VX_CAPS_NUM_THREADS, &num_threads_));
+    auto a = (float*)src1;
+    auto b = (float*)src2;
+    for (uint32_t k = 0; k < n; ++k) {
+      lane_flags(k, n, &a[k], &b[k]);
+    }
+    return 0;
+  }
+
+  // fflags is per warp: every active lane reads the OR over the active lanes.
+  int verify(uint32_t n, void* dst, const void* /*src1*/, const void* /*src2*/) override {
+    int errors = 0;
+    auto c = (uint32_t*)dst;
+    uint32_t L = num_threads_;
+    uint32_t count = n / (num_cores_ * num_warps_ * L);
+    for (uint32_t k = 0; k < n; ++k) {
+      uint32_t t = k / count, i = k % count;
+      if (fflags_lane_masked(t % L, i, L))
+        continue;
+      uint32_t ref = 0;
+      for (uint32_t l = 0; l < L; ++l) {
+        if (fflags_lane_masked(l, i, L))
+          continue;
+        float a, b;
+        ref |= lane_flags(((t / L) * L + l) * count + i, n, &a, &b);
+      }
+      if (c[k] != ref) {
+        std::cout << "error at result #" << std::dec << k << " (lane " << (t % L) << ", iteration " << i << ")" << std::hex << ": expected fflags=0x" << ref << ", actual=0x" << c[k] << std::endl;
+        ++errors;
+      }
+    }
+    return errors;
+  }
+
+  uint64_t num_cores_;
+  uint64_t num_warps_;
+  uint64_t num_threads_;
+};
+
 class Test_FTOI : public ITestCase {
 public:
   Test_FTOI(TestSuite* suite) : ITestCase(suite, "ftoi") {}
@@ -897,6 +1077,9 @@ TestSuite::TestSuite(vx_device_h device)
   this->add_test(new Test_TRIGO(this));
   this->add_test(new Test_BAR(this));
   this->add_test(new Test_GBAR(this));
+  this->add_test(new Test_FDIV_SPECIAL(this));
+  this->add_test(new Test_FP_NANBOX(this));
+  this->add_test(new Test_FFLAGS_LANES(this));
 }
 
 TestSuite::~TestSuite() {
