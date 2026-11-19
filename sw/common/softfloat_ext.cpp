@@ -493,7 +493,10 @@ uint32_t cvt_f32_to_custom(float value, uint32_t exp_bits, uint32_t sig_bits,
   const uint32_t mant_mask = sig_bits ? ((1u<<sig_bits) - 1u) : 0u;
   const uint32_t sign_shift = exp_bits + sig_bits;
   const int32_t  bias_out = (int32_t)((1u<<(exp_bits-1u)) - 1u);
-  const int32_t  emax = bias_out;
+  // OCP E4M3 has no infinity: exponent 1111 holds normal values (up to 448 =
+  // S.1111.110) and only S.1111.111 is NaN. Out-of-range values saturate.
+  const bool     is_e4m3 = (exp_bits == 4 && sig_bits == 3);
+  const int32_t  emax = is_e4m3 ? bias_out + 1 : bias_out;
   const int32_t  emin = 1 - bias_out;
 
   auto pack_custom = [&](uint32_t exp, uint32_t mant){
@@ -509,10 +512,16 @@ uint32_t cvt_f32_to_custom(float value, uint32_t exp_bits, uint32_t sig_bits,
       if (fflags) {
         *fflags |= flags;
       }
+      if (is_e4m3) {
+        return pack_custom(exp_max, mant_mask); // NaN
+      }
       return pack_custom(exp_max, sig_bits ? (1u<<(sig_bits-1u)) : 0u); // qNaN
     }
     if (fflags) {
       *fflags |= flags;
+    }
+    if (is_e4m3) {
+      return pack_custom(exp_max, mant_mask - 1u); // max finite
     }
     return pack_custom(exp_max, 0); // Inf
   }
@@ -573,9 +582,16 @@ uint32_t cvt_f32_to_custom(float value, uint32_t exp_bits, uint32_t sig_bits,
     // exponent unchanged
   }
 
-  // Overflow?
-  if (exponent > emax) {
+  // Overflow? (for E4M3, S.1111.111 is NaN, so 480 and above overflow)
+  if (exponent > emax
+   || (is_e4m3 && exponent == emax && ((uint32_t)main & mant_mask) == mant_mask)) {
     flags |= (FLAG_OF | FLAG_NX);
+    if (is_e4m3) {
+      if (fflags) {
+        *fflags |= flags;
+      }
+      return pack_custom(exp_max, mant_mask - 1u); // max finite
+    }
     int to_inf =
       (frm == RNE || frm == RMM) ? 1 :
       (frm == RTZ) ? 0 :
