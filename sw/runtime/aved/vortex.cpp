@@ -24,6 +24,7 @@
 // ============================================================================
 
 #include <common.h>
+#include <caps.h>
 
 #ifdef SCOPE
 #include "scope.h"
@@ -89,11 +90,6 @@ using namespace vortex;
 #define CP_REG_CTRL       0x000
 #define CP_REG_STATUS     0x004
 #define CP_REG_DEV_CAPS   0x008
-#define CP_REG_GPU_CAPS_EXT 0x00C
-#define CP_REG_GPU_CAPS_LO  0x018
-#define CP_REG_GPU_CAPS_HI  0x01C
-#define CP_REG_ISA_CAPS_LO  0x020
-#define CP_REG_ISA_CAPS_HI  0x024
 #define CP_Q_RING_BASE_LO 0x100
 #define CP_Q_RING_BASE_HI 0x104
 #define CP_Q_HEAD_ADDR_LO 0x108
@@ -212,9 +208,9 @@ public:
       // writing a design over a kernel that does not answer is what takes the
       // card off the bus: the decision to write stays with the user.
       fprintf(stderr, "[VXDRV] The card already held this image, so nothing "
-              "was written to it. Once `v80-smi list` shows it healthy, remove "
-              "%s to have the next open write the image again.\n",
-              reused_record_.c_str());
+              "was written to it. If the card is at fault: once `v80-smi list` "
+              "shows it healthy, remove %s to have the next open write the "
+              "image again.\n", reused_record_.c_str());
     }
   #endif
     return rc;
@@ -276,11 +272,24 @@ public:
     }
     if (!resident) {
       reused_record_.clear();
+      // The record describes the fabric, which only a hardware vbin writes. A
+      // simulation open must leave it alone: it may be all that keeps the next
+      // hardware open from writing over a kernel that stopped answering.
+      bool writes_fabric = false;
+      try {
+        writes_fabric = (vrt::Vrtbin(vbin_path, bdf).getPlatform() == vrt::Platform::HARDWARE);
+      } catch (const std::exception& e) {
+        fprintf(stderr, "[VXDRV] VRT exception: %s\n", e.what());
+        return -1;
+      }
       // Voided before the write, not after: a process that dies in between
-      // must not leave a claim to the image it was replacing.
-      if (!record.clear()) {
-        fprintf(stderr, "[VXDRV] Warning: cannot void %s; it still names the "
-                "image this open replaces\n", record.path().c_str());
+      // must not leave a claim to the image it was replacing. A claim that
+      // cannot be voided would outlive the write, so the write does not happen.
+      if (writes_fabric && !record.clear()) {
+        fprintf(stderr, "[VXDRV] Error: cannot void %s, which names the image "
+                "this open would replace. Remove it, then run again.\n",
+                record.path().c_str());
+        return -1;
       }
       if (this->open_device(bdf, vbin_path, nullptr) != 0) {
         return -1;
@@ -361,49 +370,8 @@ public:
     }
 
     // ----- Park the CP before touching the device reset -----
-    //
-    // A master must not be reset while it has outstanding transactions, and a
-    // process that crashed, was killed, or was cut short by a host reset ran no
-    // teardown at all -- so entry has to assume the device was left running.
-    // Clearing Q_CONTROL.enable parks the CP's fetch at the next descriptor
-    // boundary and lets in-flight commands drain on their own; CP_STATUS.busy
-    // reports when that has finished.
-    //
-    // This is necessary but NOT sufficient on the V80 compute shell, which is
-    // why the reset below is skippable -- see the note there.
-    {
-      CHECK_ERR(this->write_register(CP_BASE + CP_Q_CONTROL, 0), {
-        return err;
-      });
-      CHECK_ERR(this->write_register(CP_BASE + CP_REG_CTRL, 0), {
-        return err;
-      });
-      uint32_t status = 0xFFFFFFFFu;
-      for (int i = 0; i < CP_DRAIN_POLLS; ++i) {
-        CHECK_ERR(this->read_register(CP_BASE + CP_REG_STATUS, &status), {
-          return err;
-        });
-        if (status == 0xFFFFFFFFu) {
-          printf("[VXDRV] Error: AXI-Lite died while draining the CP before "
-                 "reset. The device was already wedged on entry.\n");
-          return -1;
-        }
-        if ((status & CP_STATUS_BUSY) == 0) {
-          break;
-        }
-      }
-      if (status & CP_STATUS_BUSY) {
-        // A command from an earlier run never retired. Opening anyway would
-        // queue every new command behind it and stall at the first poll, so
-        // fail here where the cause is still legible. Reconfiguring the
-        // partition resets the CP; the host does not need rebooting, and the
-        // device reset that used to be the way out of this is precisely what
-        // takes the card off the bus.
-        printf("[VXDRV] Error: the CP is still busy from a previous run and "
-               "will not retire; commands posted now would stall behind it. "
-               "Reload the AFU (jtag_load_vortex.sh) to reset it.\n");
-        return -1;
-      }
+    if (this->quiesce_cp() != 0) {
+      return -1;
     }
 
     // ----- Device reset -----
@@ -468,7 +436,7 @@ public:
       image.digest = digest;
       image.pci_instance = record.pci_instance();
       if (this->read_image_ident(image.ident) != 0
-       || !image_answers(image.ident)
+       || !v80_image_answers(image.ident)
        || !record.store(image)) {
         fprintf(stderr, "[VXDRV] note: could not record the image in %s; the "
                 "next open will write it again\n", record.path().c_str());
@@ -866,13 +834,60 @@ public:
 
 private:
 
+  // Parks the CP and waits for its in-flight commands to drain.
+  //
+  // A master must not be reset while it has outstanding transactions, and a
+  // process that crashed, was killed, or was cut short by a host reset ran no
+  // teardown at all -- so entry has to assume the device was left running.
+  // Clearing Q_CONTROL.enable parks the CP's fetch at the next descriptor
+  // boundary and lets in-flight commands drain on their own; CP_STATUS.busy
+  // reports when that has finished.
+  //
+  // This is necessary but NOT sufficient on the V80 compute shell; see the
+  // note at the device reset.
+  int quiesce_cp() {
+    CHECK_ERR(this->write_register(CP_BASE + CP_Q_CONTROL, 0), {
+      return err;
+    });
+    CHECK_ERR(this->write_register(CP_BASE + CP_REG_CTRL, 0), {
+      return err;
+    });
+    uint32_t status = 0xFFFFFFFFu;
+    for (int i = 0; i < CP_DRAIN_POLLS; ++i) {
+      CHECK_ERR(this->read_register(CP_BASE + CP_REG_STATUS, &status), {
+        return err;
+      });
+      if (status == 0xFFFFFFFFu) {
+        printf("[VXDRV] Error: AXI-Lite died while draining the CP before "
+               "reset. The device was already wedged on entry.\n");
+        return -1;
+      }
+      if ((status & CP_STATUS_BUSY) == 0) {
+        break;
+      }
+    }
+    if (status & CP_STATUS_BUSY) {
+      // A command from an earlier run never retired. Opening anyway would
+      // queue every new command behind it and stall at the first poll, so
+      // fail here where the cause is still legible. Reconfiguring the
+      // partition resets the CP; the host does not need rebooting, and the
+      // device reset that used to be the way out of this is precisely what
+      // takes the card off the bus.
+      printf("[VXDRV] Error: the CP is still busy from a previous run and "
+             "will not retire; commands posted now would stall behind it. "
+             "Reload the AFU (jtag_load_vortex.sh) to reset it.\n");
+      return -1;
+    }
+    return 0;
+  }
+
 #ifdef CPP_API
   // What a Vortex image says about itself: the configuration it was built
   // with. Constant for the life of the image.
   int read_image_ident(uint32_t ident[v80_image_t::kIdentWords]) {
     static const uint32_t regs[v80_image_t::kIdentWords] = {
-      CP_REG_DEV_CAPS,    CP_REG_GPU_CAPS_EXT, CP_REG_GPU_CAPS_LO,
-      CP_REG_GPU_CAPS_HI, CP_REG_ISA_CAPS_LO,  CP_REG_ISA_CAPS_HI,
+      CP_REG_DEV_CAPS,        CP_REG_GPU_DEV_CAPS_EXT, CP_REG_GPU_DEV_CAPS_LO,
+      CP_REG_GPU_DEV_CAPS_HI, CP_REG_GPU_ISA_CAPS_LO,  CP_REG_GPU_ISA_CAPS_HI,
     };
     for (int i = 0; i < v80_image_t::kIdentWords; ++i) {
       if (this->read_register(CP_BASE + regs[i], &ident[i]) != 0) {
@@ -882,22 +897,12 @@ private:
     return 0;
   }
 
-  // All-ones in every word is a bus that returned no data, not an identity.
-  static bool image_answers(const uint32_t ident[v80_image_t::kIdentWords]) {
-    for (int i = 0; i < v80_image_t::kIdentWords; ++i) {
-      if (ident[i] != 0xFFFFFFFFu) {
-        return true;
-      }
-    }
-    return false;
-  }
-
   // Opens the card and clocks the kernel at the rate the image was timed for.
   //
   // With `resident` null the image is written to the PL first. Otherwise the
   // card is recorded as holding it and nothing is written; the record is a
   // claim, so the device's identity is compared with the one recorded for the
-  // image, and that happens before the clock is raised: a design another tool
+  // image, and that happens before the clock is touched: a design another tool
   // loaded since must not be driven at this image's rate.
   //
   // Returns 0 when the device is open, 1 with the device closed again when a
@@ -911,7 +916,9 @@ private:
       vrtKernel_ = vrt::Kernel(vrtDevice_, KERNEL_NAME);
       if (resident != nullptr) {
         uint32_t ident[v80_image_t::kIdentWords];
-        if (this->read_image_ident(ident) != 0 || !image_answers(ident)) {
+        const bool read = (this->read_image_ident(ident) == 0);
+        switch (v80_image_check(*resident, read ? ident : nullptr)) {
+        case v80_image_check_t::silent:
           // Not followed by a design write: a kernel that stopped answering
           // has to be recovered first, and one that was replaced by another
           // tool's design is for the user to confirm.
@@ -919,15 +926,23 @@ private:
                   "image, but its registers do not answer. The kernel is hung "
                   "or another tool replaced it.\n");
           return -1;
-        }
-        if (memcmp(ident, resident->ident, sizeof(ident)) != 0) {
+        case v80_image_check_t::different:
           fprintf(stderr, "[VXDRV] the card holds a different design than the "
                   "one recorded for it; writing the image\n");
           vrtKernel_ = vrt::Kernel();
           vrtDevice_ = vrt::Device();
           return 1;
+        case v80_image_check_t::same:
+          break;
         }
         printf("[VXDRV] image already on the card; design write skipped\n");
+        // A freshly written design is idle; this one may have been left
+        // running by a process that never tore down. Reprogramming the clock
+        // wizard stops the kernel clock while it relocks, so the CP is parked
+        // first.
+        if (this->quiesce_cp() != 0) {
+          return -1;
+        }
       }
       // Like XRT's xclbin load, clock the kernel at the rate the image was
       // timed for: a design write leaves the user clock at whatever the

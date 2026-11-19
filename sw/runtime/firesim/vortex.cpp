@@ -86,7 +86,12 @@ public:
     plusargs.push_back("+bdf=" + bdf);
     // The aved driver skips its design write when its record says the card
     // already holds its image; FireSim's write replaces that image.
-    v80_image_record(bdf).clear();
+    const v80_image_record record(bdf);
+    if (!record.clear()) {
+      fprintf(stderr, "[VXDRV] cannot void %s, which names the image this run "
+              "would replace; remove it, then run again\n", record.path().c_str());
+      return -1;
+    }
 #else
     // As the xrt driver: XCLBIN_PATH. Unset falls through as no image rather
     // than a default filename: an empty path is what metasimulation needs --

@@ -114,9 +114,12 @@ itself, in `/dev/shm/vortex-v80-<domain:bus:dev>.image`
 
 - a digest of the vbin's content, so a copy of the same file matches and any
   other build does not;
-- the PCI enumeration of the card it was written for (the inode of the PF0
-  sysfs node). A card reset or a hot-plug re-enumerates the functions, and the
-  fabric did not keep its design across that;
+- the PCI enumeration of the card it was written for: the inodes of the PF0
+  and PF2 sysfs nodes, which change when a function is removed and added back.
+  A card reset or a hot-plug re-adds PF0, and the fabric did not keep its
+  design across that. `vrtd` re-adds PF2 after every design write, whichever
+  client asked for it, so a write by `v80-smi`, by another driver or from
+  another container voids the record without knowing it exists;
 - the six configuration words the image reports about itself: `CP_DEV_CAPS`,
   `GPU_DEV_CAPS_EXT`, `GPU_DEV_CAPS_LO/HI`, `GPU_ISA_CAPS_LO/HI`.
 
@@ -126,18 +129,22 @@ it is relied on. `init()` proceeds as follows:
 | record | device | action |
 |---|---|---|
 | none, another image, or an earlier enumeration | not read | void the record, write the image, bring the device up, write the record |
-| this image | the six words match | no write; clock the kernel, then park the CP and reset the device as on every open |
+| this image | the six words match | no write; park the CP, clock the kernel, then reset the device as on every open |
 | this image | answers with other words | another tool replaced the design: write the image as in the first row |
 | this image | all six words read all-ones | stop with an error; nothing is written |
 
-Three details of that table are deliberate:
+Four details of that table are deliberate:
 
 - **The record is voided before the write and rewritten only after the device
   came up.** A process that dies in between leaves no claim, and an image that
   failed its bring-up is not found again.
-- **The words are compared before the clock is raised.** The user clock is
-  whatever the last user left; a design another tool loaded must not be driven
-  at this image's rate.
+- **A record that cannot be voided stops the write.** The claim would outlive
+  the image it names.
+- **The words are compared before the clock is touched, and the CP is parked
+  before it.** The user clock is whatever the last user left; a design another
+  tool loaded must not be driven at this image's rate. A reused image may also
+  have been left running by a process that never tore down, and reprogramming
+  the clock wizard stops the kernel clock while it relocks.
 - **A device that does not answer is never followed by a design write.** That
   sequence (a hung kernel, then the next image written over it) is what has
   reset the host. The same holds when a reused image later fails the transport
@@ -145,18 +152,19 @@ Three details of that table are deliberate:
   the record. Removing the record makes the next open write the image again;
   that decision is left to the user, once `v80-smi list` shows the card healthy.
 
-Everything in this repository that changes the design voids the record: this
-driver before a write, the `foldsim` and `firesim` drivers before theirs, and
-`jtag_load_vortex.sh`. A host boot discards it with the rest of `/dev/shm`,
-which is also when the card reloads from flash. So does a `TARGET=sim` open on
-a host with a card: the platform is only known once the vbin is open, and the
-record is voided before that. It costs the next hardware open one write.
+Everything in this repository that changes the design also voids the record
+explicitly: this driver before a write, the `foldsim` and `firesim` drivers
+before theirs, and `jtag_load_vortex.sh` and `jtag_load_shell.sh`. A host boot
+discards it with the rest of `/dev/shm`, which is also when the card reloads
+from flash. A simulation vbin (`TARGET=sim`) writes nothing to the fabric and
+leaves the record alone.
 
-**Limit.** A design written by a tool outside this repository is recognised
-only by its six configuration words. Another build of the *same configuration*
-loaded that way reports the same words and would be taken for the recorded
-image, with the recorded image's clock rate and memory binding. After such a
-load, remove the record.
+**Limit.** A JTAG load re-enumerates nothing, so one made by a tool outside
+this repository is recognised only by the six configuration words. Another
+build of the *same configuration* loaded that way reports the same words and
+would be taken for the recorded image, with the recorded image's clock rate and
+memory binding. After such a load, remove the record. The same holds for a
+`vrtd` that does not re-add PF2 after a design write.
 
 There is still no never-program switch. An earlier one
 (`VORTEX_AVED_NO_PROGRAM=1`, with a `/tmp/v80_resident_afu.path` fallback) ran

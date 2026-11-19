@@ -123,7 +123,12 @@ public:
     }
     // The aved driver skips its design write when its record says the card
     // already holds its image; this write replaces that image.
-    v80_image_record(bdf).clear();
+    const v80_image_record record(bdf);
+    if (!record.clear()) {
+      fprintf(stderr, "[VXDRV] cannot void %s, which names the image this run "
+              "would replace; remove it, then run again\n", record.path().c_str());
+      return -1;
+    }
     VRT_TRY()
       device_ = std::make_unique<vrt::Device>(bdf, vbin, /*program=*/true);
       // Clock the kernel at the rate the image was timed for, or lower if

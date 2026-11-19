@@ -62,6 +62,13 @@ sleep 4
 ls /dev/ttyUSB* 2>/dev/null | tr '\n' ' '; echo "<- after"
 
 echo
+# This replaces the whole device image, the Vortex AFU included: void the
+# runtime's records of what the card holds (see jtag_load_vortex.sh).
+for rec in /dev/shm/vortex-v80-*.image; do
+    [ -e "$rec" ] || continue
+    truncate -c -s 0 "$rec" || { echo "cannot void $rec; remove it, then run again."; exit 1; }
+done
+
 echo "=== 2. program the PDI (several minutes; do not interrupt) ==="
 kill_hw_server
 if PDI_PATH="$PDI" timeout 1800 xsdb "$TCL"; then

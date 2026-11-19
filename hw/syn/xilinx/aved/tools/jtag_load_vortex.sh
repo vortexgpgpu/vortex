@@ -103,11 +103,16 @@ puts "PARTIAL_PDI_OK"
 EOF
 
 # The runtime skips its design write when its record says the card already
-# holds the requested image. This load replaces the image behind its back, so
-# void every record: truncated, not removed, because /dev/shm is sticky and a
-# record may belong to another user.
+# holds the requested image. This load replaces the image behind its back, and
+# unlike a design write through vrtd it re-enumerates nothing, so void every
+# record first. Truncated without O_CREAT, not removed or redirected into:
+# /dev/shm is sticky and a record may belong to another user.
 for rec in /dev/shm/vortex-v80-*.image; do
-    [ -e "$rec" ] && : > "$rec"
+    [ -e "$rec" ] || continue
+    truncate -c -s 0 "$rec" || {
+        echo "cannot void $rec; the runtime would keep trusting it. Remove it, then run again."
+        exit 1
+    }
 done
 
 echo

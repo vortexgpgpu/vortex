@@ -40,7 +40,38 @@ struct v80_image_t {
   uint32_t ident[kIdentWords] = {};
 };
 
-// Content digest of a vbin: 64-bit FNV-1a over the file, then its size.
+// All-ones in every word is a bus that returned no data, not an identity.
+inline bool v80_image_answers(const uint32_t words[v80_image_t::kIdentWords]) {
+  for (int i = 0; i < v80_image_t::kIdentWords; ++i) {
+    if (words[i] != 0xFFFFFFFFu) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// What the device says about a record's claim. `words` is what it answered
+// for the identity registers, null when a read failed.
+enum class v80_image_check_t {
+  same,       // the recorded image: no design write is needed
+  different,  // another design answers: the image has to be written
+  silent,     // nothing answers: not a state to write a design over
+};
+
+inline v80_image_check_t v80_image_check(const v80_image_t& recorded,
+                                         const uint32_t* words) {
+  if (words == nullptr || !v80_image_answers(words)) {
+    return v80_image_check_t::silent;
+  }
+  for (int i = 0; i < v80_image_t::kIdentWords; ++i) {
+    if (words[i] != recorded.ident[i]) {
+      return v80_image_check_t::different;
+    }
+  }
+  return v80_image_check_t::same;
+}
+
+// Content digest of a vbin: 64-bit FNV-1a over the file.
 // Never zero for a readable file; zero when it cannot be read.
 inline uint64_t v80_image_digest(const std::string& path) {
   const int fd = ::open(path.c_str(), O_RDONLY | O_CLOEXEC);
@@ -51,7 +82,6 @@ inline uint64_t v80_image_digest(const std::string& path) {
   auto mix = [&h](uint8_t b) { h = (h ^ b) * 0x100000001b3ull; };
   static constexpr size_t kChunk = 1 << 16;
   std::string buf(kChunk, '\0');
-  uint64_t size = 0;
   for (;;) {
     const ssize_t n = ::read(fd, &buf[0], kChunk);
     if (n < 0) {
@@ -67,12 +97,8 @@ inline uint64_t v80_image_digest(const std::string& path) {
     for (ssize_t i = 0; i < n; ++i) {
       mix(static_cast<uint8_t>(buf[i]));
     }
-    size += static_cast<uint64_t>(n);
   }
   ::close(fd);
-  for (int i = 0; i < 8; ++i) {
-    mix(static_cast<uint8_t>(size >> (8 * i)));
-  }
   return h ? h : 1;
 }
 
@@ -107,23 +133,27 @@ public:
     return path_;
   }
 
-  // Identifies this enumeration of the card. A card reset or a hot-plug
-  // removes its PCI functions and adds them back as new sysfs nodes, and the
-  // fabric did not keep its design across that. Zero when the card is not on
-  // the bus.
+  // Identifies this enumeration of the card, from the sysfs nodes of two of
+  // its PCI functions; a function that is removed and added back gets a new
+  // node. PF0 is re-added by a card reset or a hot-plug, across which the
+  // fabric did not keep its design. PF2 is re-added by vrtd after every design
+  // write, whichever client asked for it. Zero when either is not on the bus.
   uint64_t pci_instance() const {
-    struct stat st;
-    if (::stat((sysfs_ + "/" + card_ + ".0").c_str(), &st) != 0) {
+    struct stat pf0, pf2;
+    if (::stat((sysfs_ + "/" + card_ + ".0").c_str(), &pf0) != 0
+     || ::stat((sysfs_ + "/" + card_ + ".2").c_str(), &pf2) != 0) {
       return 0;
     }
-    return static_cast<uint64_t>(st.st_ino);
+    const uint64_t instance = (static_cast<uint64_t>(pf0.st_ino) << 32)
+                            ^ static_cast<uint64_t>(pf2.st_ino);
+    return instance ? instance : 1;
   }
 
   // True when the record says this enumeration of the card holds the image
   // with this digest; *image then carries the identity recorded with it.
   bool holds(uint64_t digest, v80_image_t* image) const {
     const uint64_t instance = this->pci_instance();
-    if (digest == 0 || instance == 0) {
+    if (instance == 0) {
       return false;
     }
     v80_image_t rec;
@@ -135,7 +165,7 @@ public:
   }
 
   bool load(v80_image_t* image) const {
-    const int fd = ::open(path_.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+    const int fd = open_regular(O_RDONLY);
     if (fd < 0) {
       return false;
     }
@@ -199,17 +229,34 @@ public:
   }
 
 private:
+  // Only a regular file is a record. Nothing else at the path is followed,
+  // waited on or written to.
+  int open_regular(int flags, mode_t mode = 0) const {
+    const int fd = ::open(path_.c_str(), flags | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC, mode);
+    if (fd < 0) {
+      return -1;
+    }
+    struct stat st;
+    if (::fstat(fd, &st) != 0 || !S_ISREG(st.st_mode)) {
+      ::close(fd);
+      errno = EINVAL;
+      return -1;
+    }
+    return fd;
+  }
+
   // The record is rewritten in place and is writable by every user: whoever
   // programs the card must be able to void a claim somebody else left, and a
-  // sticky directory lets only the owner replace or unlink the file.
+  // sticky directory lets only the owner replace or unlink the file. An
+  // existing record is opened without O_CREAT, which such a directory refuses
+  // for a file of another owner.
   int open_for_write(bool create) const {
     for (int attempt = 0; attempt < 2; ++attempt) {
-      int fd = ::open(path_.c_str(), O_WRONLY | O_NOFOLLOW | O_CLOEXEC);
+      int fd = open_regular(O_WRONLY);
       if (fd >= 0 || errno != ENOENT || !create) {
         return fd;
       }
-      fd = ::open(path_.c_str(),
-                  O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0666);
+      fd = open_regular(O_WRONLY | O_CREAT | O_EXCL, 0666);
       if (fd >= 0) {
         (void)!::fchmod(fd, 0666);   // the umask must not narrow this file
         return fd;
