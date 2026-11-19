@@ -48,7 +48,8 @@ it serves as the RTL oracle for cycle-parity debugging.
   With `SIMX_MT > 1` (a build define set via `CONFIGS`) the engine
   executes execution domains (one per socket, uncore = domain 0) on
   parallel workers in cycle lockstep, with results bit-identical to
-  serial execution.
+  serial execution. The functional kernel can instead synchronize every
+  `SIMX_QUANTUM` cycles (see [SimObject](simobject.md)).
 - **`SimEventLink<Msg>`** — a one-way, typed control-plane link (barrier
   arrive/resume, FWD arm/done, doorbells): both ends are declared members,
   the receiver binds a member-function handler, elaboration wires

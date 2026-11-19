@@ -43,6 +43,7 @@
 
 #include <regslice.h>
 #include <bitvector.h>
+#include <fixed_vector.h>
 #include <iostream>
 #include "debug.h"
 
@@ -53,11 +54,18 @@
 #ifndef SIMX_MT
 #define SIMX_MT 0
 #endif
+// Synchronization quantum of the functional kernel, in cycles (e.g.
+// CONFIGS="-DSIMX_FUNCTIONAL -DSIMX_MT=8 -DSIMX_QUANTUM=100"); 1 keeps
+// per-cycle lockstep. The timed kernel accepts only 1.
+#ifndef SIMX_QUANTUM
+#define SIMX_QUANTUM 1
+#endif
 #include "constants.h"
 
 namespace vortex {
 
 constexpr uint32_t SIMX_NUM_WORKERS = (SIMX_MT > 1) ? SIMX_MT : 1;
+constexpr uint32_t SIMX_QUANTUM_CYCLES = (SIMX_QUANTUM > 1) ? SIMX_QUANTUM : 1;
 
 // One memory block (a cache line / DRAM transfer unit). Carried by
 // MemReq/MemRsp in TLM data-path mode. Use `shared_ptr<mem_block_t>` so
@@ -109,6 +117,10 @@ union reg_data_t {
   int32_t  i32;
   int64_t  i64;
 };
+
+// One register value per thread: inline storage sized by the build's thread
+// count, so traces and operand reads never touch the heap.
+using RegDataVec = FixedVector<reg_data_t, VX_CFG_NUM_THREADS>;
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -1163,17 +1175,21 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
+// Lanes of an LSU request or response: the core's LSU lanes or the D-cache
+// channels behind them, whichever is wider.
+inline constexpr uint32_t LSU_MAX_LANES = (LSU_CHANNELS > DCACHE_CHANNELS) ? LSU_CHANNELS : DCACHE_CHANNELS;
+
 struct LsuReq {
   MemOp op;
   MemFlags flags;
-  std::vector<uint64_t> addrs;
-  std::vector<std::shared_ptr<mem_block_t>> data;
-  std::vector<uint64_t> byteen;
+  FixedVector<uint64_t, LSU_MAX_LANES> addrs;
+  FixedVector<std::shared_ptr<mem_block_t>, LSU_MAX_LANES> data;
+  FixedVector<uint64_t, LSU_MAX_LANES> byteen;
   // Comparand per lane. Only compare-and-swap reads it; it is a separate
   // field because the data operand is already carrying the swap value.
-  std::vector<uint64_t> amo_cmp;
+  FixedVector<uint64_t, LSU_MAX_LANES> amo_cmp;
   BitVector<> mask;
-  std::vector<uint32_t> tids;
+  FixedVector<uint32_t, LSU_MAX_LANES> tids;
   uint32_t tag;
   uint32_t cid;
   uint32_t wid;
@@ -1224,7 +1240,7 @@ struct LsuRsp {
   uint64_t uuid;
 
   // TLM data: per-lane block populated for loads/AMO returns.
-  std::vector<std::shared_ptr<mem_block_t>> data;
+  FixedVector<std::shared_ptr<mem_block_t>, LSU_MAX_LANES> data;
 
  LsuRsp(uint32_t size)
     : mask(size)

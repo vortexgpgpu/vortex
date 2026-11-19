@@ -2497,6 +2497,7 @@ protected:
       offer.held = false;
     }
     held_ = false;
+    idle_ticks_ = 0;
     std::fill(realign_.begin(), realign_.end(), realign_t());
   }
 
@@ -2519,6 +2520,17 @@ protected:
     if (init_cycles_ != 0) {
       --init_cycles_;
       return;
+    }
+    // Sleep once the ports, the tree and the offers have been empty for two
+    // ticks: the second idle tick settles the realign registers, so a skipped
+    // tick cannot change them. A request reserved toward any port re-arms it.
+    if (this->quiescent()) {
+      if (++idle_ticks_ >= 2) {
+        idle_ticks_ = 0;
+        this->tick_sleep();
+      }
+    } else {
+      idle_ticks_ = 0;
     }
     uint32_t nb = ReqOut.size();
     uint32_t nl = levels_.size();
@@ -2571,8 +2583,10 @@ protected:
     const bool hold = this->any_token();
     this->update_realign();
     // merged ports riding each leader's bank access, by offset in its group
-    std::vector<bool> followers(n, false);
-    std::vector<uint64_t> merged(n, 0);
+    auto& followers = followers_;
+    auto& merged = merged_;
+    followers.assign(n, 0);
+    merged.assign(n, 0);
     if (merge_group_ > 1 && !hold) {
       for (uint32_t i = 0; i < n; ++i) {
         if (!this->is_plain_read(i) || this->realign_hold(i)) {
@@ -2601,8 +2615,10 @@ protected:
     // leave on their own port
     uint32_t slices = this->arb_slices(0);
     uint32_t slice_ports = (nl != 0) ? kMaxFanout : n;
-    std::vector<uint32_t> want(nb * slices, 0);
-    std::vector<uint32_t> wants(nb, 0);
+    auto& want = want_;
+    auto& wants = wants_;
+    want.assign(nb * slices, 0);
+    wants.assign(nb, 0);
     for (uint32_t i = 0; i < n; ++i) {
       auto& in = ReqIn.at(i);
       if (in.empty() || followers.at(i)) {
@@ -2778,7 +2794,10 @@ protected:
       return;
     }
     uint32_t n = ReqIn.size();
-    std::vector<bool> start(n), owes_head(n);
+    auto& start = start_;
+    auto& owes_head = owes_head_;
+    start.assign(n, 0);
+    owes_head.assign(n, 0);
     for (uint32_t i = 0; i < n; ++i) {
       auto& r = realign_.at(i);
       auto& in = ReqIn.at(i);
@@ -2821,6 +2840,21 @@ protected:
     return (merge_group_ == 2) && !merge_line_;
   }
 
+  // Nothing at the ports, in the tree or offered to a bank.
+  bool quiescent() const {
+    for (auto& in : ReqIn) {
+      if (in.size() != 0) {
+        return false;
+      }
+    }
+    for (auto& offer : offers_) {
+      if (offer.valid || offer.held) {
+        return false;
+      }
+    }
+    return this->drained();
+  }
+
   // A plain read: no write, flush, IO, local or atomic attribute.
   bool is_plain_read(uint32_t i) const {
     if (ReqIn.at(i).empty()) {
@@ -2857,6 +2891,14 @@ private:
     bool     hold       = false;
   };
   std::vector<realign_t> realign_;
+  // per-tick scratch, kept to avoid an allocation per cycle
+  std::vector<uint8_t>  followers_;
+  std::vector<uint64_t> merged_;
+  std::vector<uint32_t> want_;
+  std::vector<uint32_t> wants_;
+  std::vector<uint8_t>  start_;
+  std::vector<uint8_t>  owes_head_;
+  uint32_t idle_ticks_ = 0;
   struct offer_t {
     SimChannel<MemReq>* bank_in = nullptr;
     bool     valid       = false;
