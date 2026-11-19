@@ -127,6 +127,11 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     wire [31:0] dec_tile3 = rank_ge4 ? 32'(desc_data.tile23[31:16]) : 32'd1;
     wire [31:0] dec_tile4 = rank_ge5 ? desc_data.tile4              : 32'd1;
 
+    // The host programs the multicast stride as the per-CTA LMEM size; the
+    // receivers sit one slot pitch apart, so round it as the KMU rounds the pitch.
+    wire [31:0] desc_smem_pitch = (desc_data.smem_stride + 32'(LMEM_SLOT_ALIGN - 1))
+                                & ~32'(LMEM_SLOT_ALIGN - 1);
+
     wire [31:0] dec_stride0 = rank_ge2 ? desc_data.stride0 : 32'd0;
     wire [31:0] dec_stride1 = rank_ge3 ? desc_data.stride1 : 32'd0;
     wire [31:0] dec_stride2 = rank_ge4 ? desc_data.stride2 : 32'd0;
@@ -465,7 +470,7 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
                 `endif
                     s_is_multicast      <= ($countones(req_data.cta_mask) > 1);
                     s_cta_mask          <= req_data.cta_mask;
-                    s_smem_stride       <= desc_data.smem_stride;
+                    s_smem_stride       <= desc_smem_pitch;
                     s_initial_smem_base <= req_data.smem_addr;
                     s_cfill             <= desc_data.cfill;
                     s_dest_kmajor       <= dec_dest_kmajor;

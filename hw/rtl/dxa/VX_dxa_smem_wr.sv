@@ -699,9 +699,11 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     // Base word addr per beat: km_word_addr in K-major (per-elem scatter),
     // fb_word_addr_r in row-major (streamed). Replay adds the per-receiver
-    // offset accumulated in beat_offset_r (smem_stride is the CTA slot pitch, a
-    // multiple of LMEM_SLOT_ALIGN ≥ SMEM_WORD_SIZE, so the byte→word shift in
-    // stride_words is lossless).
+    // offset accumulated in beat_offset_r (VX_dxa_setup rounds smem_stride to
+    // the CTA slot pitch, a multiple of LMEM_SLOT_ALIGN, itself a multiple of
+    // SMEM_WORD_SIZE, so the byte→word shift in stride_words is lossless).
+    `STATIC_ASSERT((LMEM_SLOT_ALIGN % SMEM_WORD_SIZE) == 0,
+                   ("the CTA slot pitch must be a whole number of SMEM words"))
     wire [SMEM_ADDR_WIDTH-1:0] base_word_addr = scatter ? km_word_addr : fb_word_addr_r;
     wire [SMEM_ADDR_WIDTH-1:0] replay_addr  = base_word_addr + beat_offset_r;
     // Only the low SMEM_ADDR_WIDTH+SMEM_OFF_W bits of smem_stride are used.
