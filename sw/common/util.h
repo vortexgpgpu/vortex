@@ -31,13 +31,17 @@ void unused(Args &&...) {}
 
 #define __unused(...) unused(__VA_ARGS__)
 
-#define __assert(cond, msg)                           \
-  if (!(cond)) {                                      \
-    std::cerr << "Assertion failed: " << msg << "\n"; \
-    std::cerr << "File: " << __FILE__ << "\n";        \
-    std::cerr << "Line: " << __LINE__ << "\n";        \
-    std::cerr << "Function: " << __func__ << "\n";    \
-    std::abort();                                     \
+// The failure report runs in a cold, out-of-line lambda: a call site keeps
+// only the test and a call, so small functions that assert stay inlinable.
+#define __assert(cond, msg)                                       \
+  if (__builtin_expect(!(cond), 0)) {                             \
+    [&, vx_func_ = __func__]() __attribute__((noinline, cold)) {  \
+      std::cerr << "Assertion failed: " << msg << "\n";           \
+      std::cerr << "File: " << __FILE__ << "\n";                  \
+      std::cerr << "Line: " << __LINE__ << "\n";                  \
+      std::cerr << "Function: " << vx_func_ << "\n";              \
+      std::abort();                                               \
+    }();                                                          \
   }
 
 const char *fileExtension(const char *filepath);
