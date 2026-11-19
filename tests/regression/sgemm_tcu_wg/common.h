@@ -39,6 +39,11 @@
 #ifndef B_OFF_K
 #define B_OFF_K 0
 #endif
+// Extra per-CTA LMEM in bytes: a footprint that is not a multiple of an LMEM
+// bank row still gives every co-resident CTA a bank-row aligned base.
+#ifndef SMEM_PAD_BYTES
+#define SMEM_PAD_BYTES 0
+#endif
 
 typedef struct {
   uint32_t M, N, K;

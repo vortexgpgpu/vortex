@@ -84,14 +84,15 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     //   cluster_size : K = cluster_dim product, bounded by NUM_WARPS (cluster
     //                  members are co-resident on one core), so NW_WIDTH+1 bits
     //                  suffice; each dim is sliced to that width.
-    //   aligned_lmem_size : per-CTA LMEM footprint rounded up to MEM_BLOCK_SIZE.
+    //   aligned_lmem_size : per-CTA LMEM footprint rounded up to LMEM_SLOT_ALIGN.
     //   lmem_slots        : the CTA slots that footprint fits (lmem_slots_fit).
     // Registered so the broadcast path is flop-driven. All three settle one
     // cycle after their DCR write, the same cycle, and DCRs are written before
     // `start`, so all are settled before the first CTA is dispatched.
+    `STATIC_ASSERT(`IS_POW2(LMEM_SLOT_ALIGN), ("LMEM_SLOT_ALIGN must be a power of two"))
     wire [`VX_CFG_LMEM_LOG_SIZE:0] aligned_lmem_size_w =
-        ((`VX_CFG_LMEM_LOG_SIZE+1)'(dcr_lmem_size) + (`VX_CFG_LMEM_LOG_SIZE+1)'(`VX_CFG_MEM_BLOCK_SIZE - 1))
-        & ~((`VX_CFG_LMEM_LOG_SIZE+1)'(`VX_CFG_MEM_BLOCK_SIZE - 1));
+        ((`VX_CFG_LMEM_LOG_SIZE+1)'(dcr_lmem_size) + (`VX_CFG_LMEM_LOG_SIZE+1)'(LMEM_SLOT_ALIGN - 1))
+        & ~((`VX_CFG_LMEM_LOG_SIZE+1)'(LMEM_SLOT_ALIGN - 1));
     reg [NW_WIDTH:0]                 cluster_size_r;
     reg [`VX_CFG_LMEM_LOG_SIZE:0]    aligned_lmem_size_r;
     reg [`VX_CFG_NUM_WARPS-1:0]      lmem_slots_r;

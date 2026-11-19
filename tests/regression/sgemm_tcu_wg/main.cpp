@@ -715,7 +715,7 @@ int main(int argc, char *argv[]) {
 #else
   uint32_t b_smem = wg_cfg::tileK * per_warp_N;
 #endif
-  uint32_t smem_size = (a_smem + b_smem) * sizeof(itype_t);
+  uint32_t smem_size = (a_smem + b_smem) * sizeof(itype_t) + SMEM_PAD_BYTES;
   vx_event_h launch_ev = nullptr;
   {
     vx_launch_info_t li = {};
