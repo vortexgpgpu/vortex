@@ -59,6 +59,12 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
 
 ### Changed
 
+- **V80 image reuse across runs.** A design the card already holds is no longer written again on every device open. SLASH now does
+  what XRT does for xclbins: `slashkit` stamps a UUID into the vbin, `vrtd` remembers the UUID it wrote and skips a write of the same
+  one, `VRT_FORCE_PROGRAM=1` overrides, `v80-smi forget-design` reports a design loaded over JTAG (`jtag_load_vortex.sh` now runs
+  it), and a design another client uses cannot be replaced. The `aved` driver is unchanged in this
+  respect and still opens with `program=true`. Needs a SLASH with design UUIDs; a vbin linked earlier gets one with
+  `slashkit stamp-uuid`. See [docs/designs/aved_driver_architecture.md](docs/designs/aved_driver_architecture.md#31-opening-the-device).
 - **Toolchain pinned to v3.0.2** (`TOOLCHAIN_REV`): LLVM f44a6bb2af4c, with PoCL rebuilt on it. Wide loads/stores and 64-bit
   atomics stay behind `+xvortexldstwide` and `+xvortexamod`, so code built with plain `+xvortex` uses no new instructions.
 - **Dcache read-merge pairs realign.** A pair of same-word merge ports whose parts a bank served a cycle apart waits for its partner,
