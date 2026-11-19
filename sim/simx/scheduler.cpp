@@ -54,6 +54,9 @@ void warp_t::reset() {
   this->mepc    = 0;
   this->mcause  = 0;
   this->mtval   = 0;
+#ifdef VX_CFG_EXT_RWIN_ENABLE
+  this->reset_rwin();
+#endif
   // Register files live in OpcUnit and are reset there.
 }
 
@@ -119,6 +122,9 @@ void Scheduler::activate_warp(uint32_t wid, const cta_warp_record_t& rec) {
   warp.PC       = rec.do_init ? rec.PC : (warp.PC - 20);
   warp.tmask    = rec.tmask;
   warp.mscratch = rec.mscratch;
+#ifdef VX_CFG_EXT_RWIN_ENABLE
+  warp.reset_rwin();
+#endif
 
   warp.cta_csrs.cta_id        = rec.cta_id;
   warp.cta_csrs.cta_rank      = rec.cta_rank;
@@ -182,6 +188,9 @@ void Scheduler::schedule_begin() {
       warp.PC = wspawn_.nextPC;
       warp.tmask.set(0);
       warp.mscratch = spawning_mscratch;
+    #ifdef VX_CFG_EXT_RWIN_ENABLE
+      warp.reset_rwin();
+    #endif
       active_warps_.set(i);
       // wspawn activation, like CTA dispatch: immediate (both current + next).
       stalled_warps_.reset(i);
@@ -319,6 +328,33 @@ void Scheduler::advance_pc(const instr_trace_t* trace, uint32_t inc) {
   warps_.at(trace->wid).PC += inc;
 }
 
+#ifdef VX_CFG_EXT_RWIN_ENABLE
+uint32_t Scheduler::take_reg_window(uint32_t wid) {
+  auto& warp = warps_.at(wid);
+  if (warp.rwin_pfx_valid) {
+    warp.rwin_pfx_valid = false;
+    return warp.rwin_pfx;
+  }
+  return warp.rwin;
+}
+
+void Scheduler::set_reg_window(uint32_t wid, uint32_t win, bool sticky) {
+  auto& warp = warps_.at(wid);
+  if (warp.rwin_pfx_valid) {
+    std::cout << "Error: register-window instruction after vx_rpfx, wid=" << wid << std::endl;
+    std::abort();
+  }
+  if (sticky) {
+    warp.rwin = win;
+  } else {
+    warp.rwin_pfx = win;
+    warp.rwin_pfx_valid = true;
+  }
+  DT(3, core_->name() << " warp-state: wid=" << wid << (sticky ? ", rwin=0x" : ", rpfx=0x")
+     << std::hex << win << std::dec);
+}
+#endif
+
 bool Scheduler::setTmask(uint32_t wid, const ThreadMask& tmask) {
   auto& warp = warps_.at(wid);
   if (warp.tmask != tmask) {
@@ -369,6 +405,11 @@ void Scheduler::raise_trap(uint32_t wid, Word cause, Word trap_pc) {
   // Redirect to the handler. Low 2 bits of mtvec are the MODE field;
   // v1 supports direct mode only, so mask them off.
   warp.PC = warp.mtvec & ~Word(3);
+#ifdef VX_CFG_EXT_RWIN_ENABLE
+  // the handler runs in window 0
+  warp.mrwin = warp.rwin;
+  warp.rwin  = 0;
+#endif
   DT(3, core_->name() << " trap: wid=" << wid << ", cause=" << cause
      << ", mepc=0x" << std::hex << trap_pc << ", mtvec=0x" << warp.mtvec << std::dec);
 }
@@ -376,6 +417,9 @@ void Scheduler::raise_trap(uint32_t wid, Word cause, Word trap_pc) {
 void Scheduler::mret(uint32_t wid) {
   auto& warp = warps_.at(wid);
   warp.PC    = warp.mepc;
+#ifdef VX_CFG_EXT_RWIN_ENABLE
+  warp.rwin  = warp.mrwin;
+#endif
   DT(3, core_->name() << " mret: wid=" << wid
      << ", mepc=0x" << std::hex << warp.mepc << std::dec);
 }

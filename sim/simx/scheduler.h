@@ -97,6 +97,22 @@ struct warp_t {
   // CTA CSR values set at dispatch time
   cta_csrs_t                        cta_csrs;
 
+#ifdef VX_CFG_EXT_RWIN_ENABLE
+  // Register windows: sticky state, a pending one-instruction prefix, and the
+  // sticky state saved at trap entry.
+  uint32_t                          rwin       = 0;
+  uint32_t                          rwin_pfx   = 0;
+  bool                              rwin_pfx_valid = false;
+  uint32_t                          mrwin      = 0;
+
+  void reset_rwin() {
+    rwin = 0;
+    rwin_pfx = 0;
+    rwin_pfx_valid = false;
+    mrwin = 0;
+  }
+#endif
+
 #ifdef VX_CFG_EXT_RASTER_ENABLE
   // Per-lane fragment stamp, delivered WITH the launch (the raster engine packs
   // it into the launch message) and read back as the FRAG_* CSRs. The shader no
@@ -135,6 +151,13 @@ public:
   // Advance the warp's PC by `inc` bytes (called at decode with 2 or 4
   // depending on is_rvc; mirrors the hardware warp-PC update at decode).
   void advance_pc(const instr_trace_t* trace, uint32_t inc);
+#ifdef VX_CFG_EXT_RWIN_ENABLE
+  // Windows the next decoded instruction of `wid` uses: a pending prefix
+  // (consumed here), else the sticky state.
+  uint32_t take_reg_window(uint32_t wid);
+  // Applies a decoded vx_rwin (sticky) or vx_rpfx.
+  void set_reg_window(uint32_t wid, uint32_t win, bool sticky);
+#endif
   bool running() const;
   bool wspawn(uint32_t num_warps, Word nextPC);
   bool setTmask(uint32_t wid, const ThreadMask& tmask);

@@ -737,7 +737,16 @@ public:
     // Decode: fill trace metadata from instruction bits. The decoder
     // recognises RVC encoding (low 2 bits != 11), expands internally, and
     // stamps IntrBrArgs.is_rvc.
+  #ifdef VX_CFG_EXT_RWIN_ENABLE
+    auto rwin_op = Decoder::decode_rwin(trace->code);
+    auto rwin = rwin_op.valid ? 0 : scheduler_->take_reg_window(trace->wid);
+    auto instr = decoder_->decode(trace->code, trace->uuid, rwin);
+    if (rwin_op.valid) {
+      scheduler_->set_reg_window(trace->wid, rwin_op.win, rwin_op.sticky);
+    }
+  #else
     auto instr = decoder_->decode(trace->code, trace->uuid);
+  #endif
     DP(1, "Instr: " << *instr << " (#" << trace->uuid << ")");
     trace->instr_ptr   = instr;
     trace->fu_type     = instr->get_fu_type();

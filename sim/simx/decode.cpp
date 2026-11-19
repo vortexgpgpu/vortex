@@ -558,7 +558,36 @@ Decoder::Decoder(const SimContext& ctx, const char* name, PoolAllocator<Instr, 6
 
 Decoder::~Decoder() {}
 
-Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
+Decoder::RwinOp Decoder::decode_rwin(uint32_t code) {
+  RwinOp op{false, false, 0};
+#ifdef VX_CFG_EXT_RWIN_ENABLE
+  auto opcode = Opcode((code >> shift_opcode) & mask_opcode);
+  auto funct7 = (code >> shift_funct7) & mask_funct7;
+  if (opcode != Opcode::EXT3 || (funct7 != 1 && funct7 != 2))
+    return op;
+  uint32_t w[RWIN_FIELDS] = {
+    (code >> shift_rd)  & mask_reg,
+    (code >> shift_rs1) & mask_reg,
+    (code >> shift_rs2) & mask_reg,
+    (code >> shift_funct3) & mask_funct3,
+  };
+  for (uint32_t i = 0; i < RWIN_FIELDS; ++i) {
+    if (w[i] > RWIN_MASK || (w[i] << 5) >= MAX_NUM_REGS) {
+      std::cout << "Error: register window " << w[i] << " out of range for "
+                << MAX_NUM_REGS << " registers" << std::endl;
+      std::abort();
+    }
+    op.win |= w[i] << (RWIN_BITS * i);
+  }
+  op.valid  = true;
+  op.sticky = (funct7 == 1);
+#else
+  __unused(code);
+#endif
+  return op;
+}
+
+Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid, uint32_t rwin) {
   // Detect RVC from the raw bits and expand to a 32-bit instruction.
   const bool is_rvc = (code & 0x3u) != 0x3u;
   if (is_rvc) {
@@ -776,6 +805,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       // the operand collector supplies a stale comparand and the swap decides
       // on the wrong value.
       instr->set_src_reg(2, rd, RegType::Integer);
+      instr->set_src_field(2, 0);
     }
   } break;
   case Opcode::SYS: {
@@ -1387,8 +1417,19 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     std::abort();
   #endif
   } break;
-#ifdef VX_CFG_EXT_TFU_ENABLE
+#if defined(VX_CFG_EXT_TFU_ENABLE) || defined(VX_CFG_EXT_RWIN_ENABLE)
   case Opcode::EXT3: {
+  #ifdef VX_CFG_EXT_RWIN_ENABLE
+    if (decode_rwin(code).valid) {
+      // the window update happens at decode; the instruction issues as a nop
+      instr->set_op_type(AluType::ADD);
+      instr->set_args(IntrAluArgs{1, 0, 0});
+      instr->set_dest_reg(0, RegType::Integer);
+      instr->set_src_reg(0, 0, RegType::Integer);
+      break;
+    }
+  #endif
+  #ifdef VX_CFG_EXT_TFU_ENABLE
     if (funct7 != 0 || funct3 != 0 || rs2 > uint32_t(TfuType::TANH)) {
       std::abort();
     }
@@ -1396,11 +1437,22 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     instr->set_op_type(TfuType(rs2));
     instr->set_dest_reg(rd, RegType::Float);
     instr->set_src_reg(0, rs1, RegType::Float);
+  #else
+    std::abort();
+  #endif
   } break;
 #endif
   default:
     std::abort();
   }
+
+#ifdef VX_CFG_EXT_RWIN_ENABLE
+  if (rwin != 0) {
+    instr->apply_reg_window(rwin);
+  }
+#else
+  __unused(rwin);
+#endif
 
   return instr;
 }

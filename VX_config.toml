@@ -37,6 +37,10 @@ VX_CFG_EXT_ZICOND_ENABLE = true
 # Zfhmin: half-precision load/store, move and fp16<->fp32/fp64 conversion (no
 # half arithmetic). Requires F.
 VX_CFG_EXT_ZFHMIN_ENABLE = false
+# Register windows: up to 256 registers per class with 32-bit instructions, via
+# per-operand window bits (docs/proposals/register_windows_proposal.md).
+VX_CFG_EXT_RWIN_ENABLE = false
+VX_CFG_NUM_RV_REGS = "expr: 256 if $VX_CFG_EXT_RWIN_ENABLE else 32"
 VX_CFG_EXT_TCU_ENABLE = false
 VX_CFG_EXT_DMA_ENABLE = false
 VX_CFG_EXT_DXA_ENABLE = false

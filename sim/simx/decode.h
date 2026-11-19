@@ -29,7 +29,17 @@ public:
   // 32-bit RV32I encoding (low2 == 0b11) or a 16-bit RVC in the low half
   // (low2 != 0b11); the decoder detects RVC, calls rvc_decompress, and
   // stamps IntrBrArgs.is_rvc accordingly.
-  Instr::Ptr decode(uint32_t code, uint64_t uuid);
+  // `rwin` holds the register windows (RWIN_BITS per field) this instruction
+  // decodes under.
+  Instr::Ptr decode(uint32_t code, uint64_t uuid, uint32_t rwin = 0);
+
+  // A vx_rwin (sticky) or vx_rpfx (next instruction only) and its windows.
+  struct RwinOp {
+    bool     valid;
+    bool     sticky;
+    uint32_t win;
+  };
+  static RwinOp decode_rwin(uint32_t code);
 
 private:
   PoolAllocator<Instr, 64>& instr_pool_;
