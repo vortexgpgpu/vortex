@@ -311,6 +311,7 @@ import VX_fpu_pkg::*;
                 `VX_CSR_FCSR,
             `endif
                 `VX_CSR_SATP,
+                `VX_CSR_MISA,
                 `VX_CSR_MSTATUS,
                 `VX_CSR_MNSTATUS,
                 `VX_CSR_MEDELEG,

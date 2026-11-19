@@ -292,6 +292,16 @@ module VX_alu_int import VX_gpu_pkg::*; #(
         assign last_tid = 0;
     end
 
+    // Without C, a jump or branch target with bit 1 set is misaligned (JALR
+    // clears bit 0 first); the warp follows its last active lane's target. A
+    // jump to it traps without writing any lane.
+`ifdef VX_CFG_EXT_C_ENABLE
+    wire br_misaligned = 1'b0;
+`else
+    wire is_jmp_cbr_op = ~br_op[3] || (br_op[2:1] == 2'b00);
+    wire br_misaligned = is_br_op && is_jmp_cbr_op && add_result[last_tid][1];
+`endif
+
     // For WGATHER, suppress write-back for every source lane (one per group of 4).
     // Lane k is a source if its lower 2 bits equal wg_src_offset.
     wire [NUM_LANES-1:0] wg_src_mask;
@@ -310,6 +320,9 @@ module VX_alu_int import VX_gpu_pkg::*; #(
             // Full warps are unchanged (header.tmask is all-ones there).
             alu_hdr_in.tmask = ~wg_src_mask;
         end
+        if (br_misaligned && inst_br_is_static(br_op)) begin
+            alu_hdr_in.tmask = '0;
+        end
     end
 
 `ifdef VX_CFG_EXT_C_ENABLE
@@ -317,17 +330,18 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     wire is_rvc_in = execute_if.data.op_args.br.is_rvc;
     wire is_rvc_r;
 `endif
+    wire br_misaligned_r;
 
     VX_elastic_buffer #(
-        .DATAW ($bits(alu_header_t) + (NUM_LANES * `VX_CFG_XLEN) + PC_BITS + 1 + INST_BR_BITS + LANE_WIDTH + `VX_CFG_EXT_C_ENABLED)
+        .DATAW ($bits(alu_header_t) + (NUM_LANES * `VX_CFG_XLEN) + PC_BITS + 1 + INST_BR_BITS + LANE_WIDTH + 1 + `VX_CFG_EXT_C_ENABLED)
     ) rsp_buf (
         .clk      (clk),
         .reset    (reset),
         .valid_in (execute_if.valid),
         .ready_in (execute_if.ready),
-        .data_in  ({alu_hdr_in,           alu_result,   cbr_dest,   is_br_op,   br_op,   last_tid
+        .data_in  ({alu_hdr_in,           alu_result,   cbr_dest,   is_br_op,   br_op,   last_tid,   br_misaligned
             `ifdef VX_CFG_EXT_C_ENABLE , is_rvc_in `endif }),
-        .data_out ({result_if.data.header, alu_result_r, cbr_dest_r, is_br_op_r, br_op_r, last_tid_r
+        .data_out ({result_if.data.header, alu_result_r, cbr_dest_r, is_br_op_r, br_op_r, last_tid_r, br_misaligned_r
             `ifdef VX_CFG_EXT_C_ENABLE , is_rvc_r `endif }),
         .valid_out (result_if.valid),
         .ready_out (result_if.ready)
@@ -338,13 +352,6 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     wire is_br_less = inst_br_is_less(br_op_r);
     wire is_br_static = inst_br_is_static(br_op_r);
 
-    // Synchronous trap ops: ECALL/EBREAK enter a trap (redirect to mtvec),
-    // MRET/SRET/URET return (restore PC from mepc). The scheduler acts on
-    // these via branch_ctl_if.{is_trap,is_mret,trap_cause}.
-    wire is_trap_entry = is_br_op_r && (br_op_r == INST_BR_ECALL || br_op_r == INST_BR_EBREAK);
-    wire is_mret_op    = is_br_op_r && (br_op_r == INST_BR_MRET || br_op_r == INST_BR_SRET || br_op_r == INST_BR_URET);
-    wire [3:0] br_trap_cause = (br_op_r == INST_BR_EBREAK) ? 4'd3 : 4'd11; // EBREAK / ECALL_M
-
     wire [`VX_CFG_XLEN-1:0] br_result = alu_result_r[last_tid_r];
     wire is_less  = br_result[0];
     wire is_equal = br_result[1];
@@ -352,10 +359,32 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     wire result_fire = result_if.valid && result_if.ready;
     wire br_enable = result_fire && is_br_op_r && result_if.data.header.eop;
     wire br_taken = ((is_br_less ? is_less : is_equal) ^ is_br_neg) | is_br_static;
-    // For a trap entry, `dest` carries the faulting PC (saved into mepc).
-    wire [PC_BITS-1:0] br_dest = is_trap_entry ? result_if.data.header.PC
-                               : is_br_static  ? from_fullPC(br_result)
+
+    // Synchronous traps: ECALL/EBREAK, an illegal instruction and a taken
+    // transfer to a misaligned target enter a trap (redirect to mtvec);
+    // MRET/SRET/URET return (restore PC from mepc). The scheduler acts on
+    // these via branch_ctl_if.{is_trap,is_mret,trap_cause}.
+    wire is_trap_op    = is_br_op_r && (br_op_r == INST_BR_ECALL || br_op_r == INST_BR_EBREAK || br_op_r == INST_BR_ILLEGAL);
+    wire is_misaligned = br_misaligned_r && br_taken;
+    wire is_trap_entry = is_trap_op || is_misaligned;
+    // A trap's `dest` is its own PC (saved into mepc). The select does not wait
+    // for the compare: a not-taken branch with a misaligned target ignores dest.
+    wire [PC_BITS-1:0] br_dest = (is_trap_op || br_misaligned_r) ? result_if.data.header.PC
+                               : is_br_static ? from_fullPC({br_result[`VX_CFG_XLEN-1:1], 1'b0})
                                : cbr_dest_r;
+    wire is_mret_op    = is_br_op_r && (br_op_r == INST_BR_MRET || br_op_r == INST_BR_SRET || br_op_r == INST_BR_URET);
+    reg [3:0] br_trap_cause;
+    always @(*) begin
+        if (is_misaligned) begin
+            br_trap_cause = 4'd0;  // instruction address misaligned
+        end else begin
+            case (br_op_r)
+                INST_BR_EBREAK:  br_trap_cause = 4'd3;  // breakpoint
+                INST_BR_ILLEGAL: br_trap_cause = 4'd2;  // illegal instruction
+                default:         br_trap_cause = 4'd11; // ECALL from M-mode
+            endcase
+        end
+    end
     wire [NW_WIDTH-1:0] br_wid;
     `ASSIGN_BLOCKED_WID (br_wid, result_if.data.header.wid, block_idx, `VX_CFG_NUM_ALU_BLOCKS)
     if (`VX_CFG_NUM_ALU_BLOCKS == 1) begin : g_block_idx_unused
@@ -389,8 +418,8 @@ module VX_alu_int import VX_gpu_pkg::*; #(
 `ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin
         if (br_enable) begin
-            `TRACE(2, ("%t: %s branch: wid=%0d, cta_id=%0d, PC=0x%0h, taken=%b, dest=0x%0h (#%0d)\n",
-                $time, INSTANCE_ID, br_wid, result_if.data.header.cta_id, to_fullPC(result_if.data.header.PC), br_taken, to_fullPC(br_dest), result_if.data.header.uuid))
+            `TRACE(2, ("%t: %s branch: wid=%0d, cta_id=%0d, PC=0x%0h, taken=%b, dest=0x%0h, trap=%b, cause=%0d (#%0d)\n",
+                $time, INSTANCE_ID, br_wid, result_if.data.header.cta_id, to_fullPC(result_if.data.header.PC), br_taken, to_fullPC(br_dest), is_trap_entry, br_trap_cause, result_if.data.header.uuid))
         end
     end
 `endif

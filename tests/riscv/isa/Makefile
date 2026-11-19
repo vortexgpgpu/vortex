@@ -52,19 +52,17 @@ endif
 # coherence), ma_data (no misaligned-access trap), rv64uc-p-rvc (misaligned
 # C.FLD the upstream test expects to trap on).
 ISA_SKIP := *-fence_i|*-ma_data|rv64uc-p-rvc
-# The machine-mode suites run mcsr, scall and sbreak. Only ECALL/EBREAK trap
-# today, so the tests that need another trap source or an unmodelled CSR are
-# skipped:
-#   illegal, shamt       - illegal-instruction trap
-#   csr                  - mstatus.FS=0 must make FP stores trap
-#   ma_fetch, ma_addr,
-#   *-misaligned         - misaligned fetch/load/store traps
+# The machine-mode suites run mcsr, scall, sbreak, illegal, shamt and
+# ma_fetch. The tests that need a trap source or a CSR Vortex does not model
+# are skipped:
+#   csr                  - tests 14-15 need misa.U cleared or an
+#                          unimplemented-CSR trap
+#   ma_addr, *-misaligned - misaligned load/store traps
 #   breakpoint           - Sdtrig trigger CSRs (tselect, tdata1/2, tcontrol)
 #   zicntr               - user counters cycle/instret (Zicntr)
 #   instret_overflow     - writable minstret and mcountinhibit
 #   pmpaddr              - PMP
-ISA_SKIP := $(ISA_SKIP)|rv*mi-p-illegal|rv*mi-p-shamt|rv*mi-p-csr
-ISA_SKIP := $(ISA_SKIP)|rv*mi-p-ma_fetch|rv*mi-p-ma_addr|rv*mi-p-*-misaligned
+ISA_SKIP := $(ISA_SKIP)|rv*mi-p-csr|rv*mi-p-ma_addr|rv*mi-p-*-misaligned
 ISA_SKIP := $(ISA_SKIP)|rv*mi-p-breakpoint|rv*mi-p-zicntr|rv*mi-p-instret_overflow
 ISA_SKIP := $(ISA_SKIP)|rv*mi-p-pmpaddr
 

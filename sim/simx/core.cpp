@@ -737,7 +737,11 @@ public:
     // Decode: fill trace metadata from instruction bits. The decoder
     // recognises RVC encoding (low 2 bits != 11), expands internally, and
     // stamps IntrBrArgs.is_rvc.
-    auto instr = decoder_->decode(trace->code, trace->uuid);
+    auto& warp = scheduler_->warp(trace->wid);
+    auto instr = decoder_->decode(trace->code, trace->uuid, (warp.mstatus & MSTATUS_FS) == 0);
+    if (instr->fs_dirty()) {
+      warp.mstatus |= MSTATUS_FS;
+    }
     DP(1, "Instr: " << *instr << " (#" << trace->uuid << ")");
     trace->instr_ptr   = instr;
     trace->fu_type     = instr->get_fu_type();

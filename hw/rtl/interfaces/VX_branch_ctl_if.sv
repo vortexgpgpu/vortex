@@ -19,11 +19,12 @@ interface VX_branch_ctl_if import VX_gpu_pkg::*; ();
     wire [NW_WIDTH-1:0] wid;
     wire                taken;
     wire [PC_BITS-1:0]  dest;
-    // Synchronous trap signalling (ECALL/EBREAK/MRET). When is_trap is set
-    // `dest` carries the faulting PC (saved into mepc) and trap_cause the
-    // mcause code; the scheduler redirects the warp to mtvec. is_mret
-    // restores the warp PC from mepc. Both are mutually exclusive and
-    // override the normal taken/dest path in the scheduler.
+    // Synchronous trap signalling (ECALL/EBREAK, an illegal instruction, a
+    // misaligned target, MRET). When is_trap is set `dest` carries the
+    // trapping instruction's PC (saved into mepc) and trap_cause the mcause
+    // code; the scheduler redirects the warp to mtvec. is_mret restores the
+    // warp PC from mepc. Both are mutually exclusive and override the normal
+    // taken/dest path in the scheduler.
     wire                is_trap;
     wire                is_mret;
     wire [3:0]          trap_cause;

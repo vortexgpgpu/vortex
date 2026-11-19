@@ -64,7 +64,9 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
     return 0;
 
   // Per-warp machine-mode trap CSRs (see warp_t).
-  case VX_CSR_MSTATUS: return warp.mstatus | MSTATUS_MPP_M;
+  case VX_CSR_MSTATUS:
+    return warp.mstatus | MSTATUS_MPP_M
+         | (((warp.mstatus & MSTATUS_FS) == MSTATUS_FS) ? MSTATUS_SD : 0);
   case VX_CSR_MTVEC:   return warp.mtvec;
   case VX_CSR_MEPC:    return warp.mepc;
   case VX_CSR_MCAUSE:  return warp.mcause;
@@ -379,6 +381,7 @@ void CsrUnit::set_csr(uint32_t addr, Word value, uint32_t wid, uint32_t tid) {
   case VX_CSR_MTVAL:
     warp.mtval = value;
     break;
+  case VX_CSR_MISA:
   case VX_CSR_MEDELEG:
   case VX_CSR_MIDELEG:
   case VX_CSR_MIE:

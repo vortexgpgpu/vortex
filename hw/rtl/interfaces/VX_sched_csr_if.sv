@@ -52,6 +52,8 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
     logic [`VX_CFG_XLEN-1:0]               csr_mtval;
     logic [NUM_TRAP_CSRS-1:0]       trap_csr_wr_valid;
     logic [`VX_CFG_XLEN-1:0]               trap_csr_wr_data;
+    // An mstatus access stalls its warp from decode; this releases it (csr_wr_wid).
+    logic                           csr_unlock;
 
     modport master (
         output cycles,
@@ -76,7 +78,8 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
         input  csr_wr_wid,
         input  csr_wr_data,
         input  trap_csr_wr_valid,
-        input  trap_csr_wr_data
+        input  trap_csr_wr_data,
+        input  csr_unlock
     );
 
     modport slave (
@@ -102,7 +105,8 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
         output csr_wr_wid,
         output csr_wr_data,
         output trap_csr_wr_valid,
-        output trap_csr_wr_data
+        output trap_csr_wr_data,
+        output csr_unlock
     );
 
 endinterface

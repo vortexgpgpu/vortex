@@ -816,7 +816,6 @@ vortex::Word DebugModule::read_register(uint16_t regaddr)
         dm_log("[DM] READ REG  dpc (0x7B1) -> 0x%0*llx\n", (VX_CFG_XLEN == 64) ? 16 : 8, (unsigned long long)value);
         return value;
     }
-    // Helper function to read CSR by number
     // Helper function to read CSR by number (CSRs are XLEN bits wide)
     auto read_csr = [this](uint16_t csr_num, uint16_t regaddr) -> vortex::Word {
         if (csr_num == 0x0301) {

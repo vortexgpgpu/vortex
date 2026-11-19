@@ -249,6 +249,7 @@ import VX_tcu_pkg::*;
     assign csr_wr[0].data       = sched_csr_if.csr_wr_data;
     assign csr_wr[0].trap_valid = sched_csr_if.trap_csr_wr_valid;
     assign csr_wr[0].trap_data  = sched_csr_if.trap_csr_wr_data;
+    assign csr_wr[0].unlock     = sched_csr_if.csr_unlock;
 
     assign sched_csr_if.cycles       = cycles;
     assign sched_csr_if.instret      = instret;

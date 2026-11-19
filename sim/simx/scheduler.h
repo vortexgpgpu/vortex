@@ -39,7 +39,16 @@ constexpr Word MSTATUS_MIE   = Word(1) << VX_CSR_MSTATUS_MIE;
 constexpr Word MSTATUS_MPIE  = Word(1) << VX_CSR_MSTATUS_MPIE;
 constexpr Word MSTATUS_MPP_M = Word(3) << VX_CSR_MSTATUS_MPP;
 constexpr Word MSTATUS_FS    = Word(3) << VX_CSR_MSTATUS_FS;
+constexpr Word MSTATUS_SD    = Word(1) << (VX_CFG_XLEN - 1);
+// FS resets to Initial so that FP code runs without first writing mstatus.
+// Without F, FS is read-only zero.
+#ifdef VX_CFG_EXT_F_ENABLE
+constexpr Word MSTATUS_FS_RESET = Word(1) << VX_CSR_MSTATUS_FS;
 constexpr Word MSTATUS_WMASK = MSTATUS_MIE | MSTATUS_MPIE | MSTATUS_FS;
+#else
+constexpr Word MSTATUS_FS_RESET = 0;
+constexpr Word MSTATUS_WMASK = MSTATUS_MIE | MSTATUS_MPIE;
+#endif
 constexpr Word MTVEC_WMASK   = ~Word(3);
 #ifdef VX_CFG_EXT_C_ENABLE
 constexpr Word MEPC_WMASK    = ~Word(1);
@@ -102,8 +111,8 @@ struct warp_t {
   Word                              mscratch;
 
   // Per-warp machine-mode trap CSRs, held masked to their writable bits.
-  // Synchronous ECALL/EBREAK traps redirect the warp PC to mtvec and
-  // snapshot the faulting PC/cause here; MRET restores the PC from mepc.
+  // Synchronous traps redirect the warp PC to mtvec and snapshot the
+  // faulting PC/cause here; MRET restores the PC from mepc.
   // See Scheduler::raise_trap.
   Word                              mstatus = 0;
   Word                              mtvec   = 0;
@@ -123,7 +132,7 @@ struct warp_t {
 
   warp_t(uint32_t num_threads);
 
-  void reset();
+  void reset(bool launch);
 };
 
 // Per-core warp lifecycle owner: holds warp register state, barrier state,
@@ -198,13 +207,18 @@ public:
 
   // ----- Trap helpers -----
   // Synchronous trap entry: snapshot the faulting PC into mepc, set
-  // mcause, and redirect the warp PC to mtvec. trap_pc is the PC of the
-  // faulting instruction (trace->PC), not the decode-advanced warp.PC.
+  // mcause, clear mtval, and redirect the warp PC to mtvec. trap_pc is the PC
+  // of the faulting instruction (trace->PC), not the decode-advanced warp.PC.
   void raise_trap(uint32_t wid, Word cause, Word trap_pc);
   // Trap return: restore the warp PC from mepc (MRET/SRET/URET).
   void mret(uint32_t wid);
   void trigger_ecall(uint32_t wid, Word trap_pc);
   void trigger_ebreak(uint32_t wid, Word trap_pc);
+  // A fault taken while the warp has no handler (mtvec=0) aborts the
+  // simulation and reports the instruction (`code`).
+  void trigger_illegal(uint32_t wid, Word trap_pc, uint32_t code);
+  // A taken jump or branch to `target`, which is not instruction-aligned.
+  void trigger_misaligned_fetch(uint32_t wid, Word trap_pc, uint32_t code, Word target);
 
   // ----- Accessors -----
   warp_t& warp(uint32_t wid) { return warps_.at(wid); }

@@ -21,6 +21,10 @@ interface VX_decode_sched_if import VX_gpu_pkg::*; ();
     wire                is_rvc;
 `endif
     wire [NW_WIDTH-1:0] wid;
+    // the decoded instruction may write FP state: mstatus.FS becomes Dirty
+    wire                fs_dirty;
+    // per slice warp: mstatus.FS is Off
+    wire [PER_FETCH_WARPS-1:0] fs_off;
 
     modport master (
         output valid,
@@ -28,7 +32,9 @@ interface VX_decode_sched_if import VX_gpu_pkg::*; ();
     `ifdef VX_CFG_EXT_C_ENABLE
         output is_rvc,
     `endif
-        output wid
+        output wid,
+        output fs_dirty,
+        input  fs_off
     );
 
     modport slave (
@@ -37,7 +43,9 @@ interface VX_decode_sched_if import VX_gpu_pkg::*; ();
     `ifdef VX_CFG_EXT_C_ENABLE
         input is_rvc,
     `endif
-        input wid
+        input wid,
+        input fs_dirty,
+        output fs_off
     );
 
 endinterface

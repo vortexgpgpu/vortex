@@ -464,7 +464,7 @@ package VX_gpu_pkg;
     localparam INST_BR_URET =    4'b1100;
     localparam INST_BR_SRET =    4'b1101;
     localparam INST_BR_MRET =    4'b1110;
-    localparam INST_BR_OTHER =   4'b1111;
+    localparam INST_BR_ILLEGAL = 4'b1111;
     localparam INST_BR_BITS =    4;
 
     function automatic logic [1:0] inst_br_class(input logic [INST_BR_BITS-1:0] op);
@@ -1389,6 +1389,7 @@ package VX_gpu_pkg;
         logic [`VX_CFG_MEM_ADDR_WIDTH-1:0] data;
         logic [NUM_TRAP_CSRS-1:0] trap_valid;
         logic [`VX_CFG_XLEN-1:0] trap_data;
+        logic                   unlock;
     } sched_csr_wr_t;
 
     // SFU CSR reads of per-warp state, selected by the read wid and CTA id

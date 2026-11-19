@@ -29,9 +29,13 @@ public:
   // 32-bit RV32I encoding (low2 == 0b11) or a 16-bit RVC in the low half
   // (low2 != 0b11); the decoder detects RVC, calls rvc_decompress, and
   // stamps IntrBrArgs.is_rvc accordingly.
-  Instr::Ptr decode(uint32_t code, uint64_t uuid);
+  // An illegal encoding, or an F/D instruction while fs_off (mstatus.FS is
+  // Off), decodes to an illegal-instruction trap.
+  Instr::Ptr decode(uint32_t code, uint64_t uuid, bool fs_off);
 
 private:
+  Instr::Ptr illegal(uint64_t uuid, bool is_rvc);
+
   PoolAllocator<Instr, 64>& instr_pool_;
 };
 
