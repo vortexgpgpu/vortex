@@ -126,11 +126,16 @@ endif
 # default simx binary does not carry it.
 VORTEX_GEM5_SRCS := $(SRC_DIR)/gem5/vortex_gpgpu.cpp $(SRC_DIR)/gem5/dev_mem.cpp
 
+# Optimization of a release build. libsimx is a shared library: without
+# -fno-semantic-interposition the compiler may not inline a call to any of its
+# own exported functions, and -fno-plt calls them without a PLT stub.
+SIMX_OPT ?= -O3 -fno-semantic-interposition -fno-plt
+
 # Debugging
 ifdef DEBUG
 	CXXFLAGS += -g -O0 -DVX_DBG_DEBUG_LEVEL=$(DEBUG)
 else
-	CXXFLAGS += -O2 -DNDEBUG
+	CXXFLAGS += $(SIMX_OPT) -DNDEBUG
 endif
 
 # Enable perf counters

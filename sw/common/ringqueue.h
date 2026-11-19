@@ -107,6 +107,21 @@ public:
     }
   }
 
+  // Double the capacity, keeping the queued elements in order (for queues
+  // that are unbounded by design).
+  void grow() {
+    uint32_t new_cap = (capacity_ != 0) ? capacity_ * 2 : 4;
+    std::unique_ptr<Storage[]> grown(new Storage[new_cap]);
+    for (uint32_t i = 0, idx = head_; i < size_; ++i, idx = inc(idx)) {
+      new (&grown[i]) T(std::move(*ptr(idx)));
+      ptr(idx)->~T();
+    }
+    storage_ = std::move(grown);
+    capacity_ = new_cap;
+    head_ = 0;
+    tail_ = size_;
+  }
+
 private:
   using Storage = std::aligned_storage_t<sizeof(T), alignof(T)>;
 

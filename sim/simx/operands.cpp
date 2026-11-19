@@ -36,7 +36,7 @@ namespace {
 // Emit a "DEBUG SrcN Reg: <reg>={values...} (#uuid)" line for trace_csv.py.
 inline void log_src_operand(uint32_t src_index,
                             const RegOpd& reg,
-                            const std::vector<reg_data_t>& values,
+                            const RegDataVec& values,
                             const ThreadMask& tmask,
                             uint64_t uuid) {
   // All five params are referenced only inside DPH/DPN, which expand to

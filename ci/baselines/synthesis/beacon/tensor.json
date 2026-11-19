@@ -6,7 +6,7 @@
     "dut": "tcu",
     "result": {
       "bram": 0.0,
-      "build_time_s": 35,
+      "build_time_s": 40,
       "deep_endpoints": 2294,
       "deepest_paths": [
         "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[6]",
@@ -21,17 +21,17 @@
         "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[17]"
       ],
       "dsp": 513,
-      "endpoints": 41750,
+      "endpoints": 41758,
       "env": {
         "circt": "CIRCT 892a65a01",
         "device": "xcu55c-fsvh2892-2L-e",
         "foldsim": "foldsim d8350bc0f",
         "xlen": 32
       },
-      "ff": 44471,
+      "ff": 44475,
       "fix_levels": 12,
       "interfaces": {},
-      "lut": 120216,
+      "lut": 117205,
       "lutram": 2083,
       "max_levels": 25,
       "pred_fmax_mhz": 277.7,
@@ -49,7 +49,7 @@
         "tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_fedp/pipe_norm_round": 25,
         "tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_fedp/shared_mul/g_mul_f8_sf_*_mul_f8/g_lane_*_pipe_ctrl": 8,
         "tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_fedp/shared_mul/pipe_seam": 13,
-        "tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_pipe_fedp": 8,
+        "tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_pipe_fedp": 9,
         "tcu_unit/g_blocks_*_tcu_block/tcu_core/landq_credits": 12,
         "tcu_unit/g_blocks_*_tcu_block/tcu_core/mdata_queue": 11,
         "tcu_unit/g_blocks_*_tcu_block/tcu_core/mdata_queue/g_depth_n_dp_ram": 9,
@@ -57,7 +57,7 @@
         "tcu_unit/lane_dispatch/g_blocks_*_buf_out/g_eb2_stream_buffer": 10
       },
       "uram": 0,
-      "watch_endpoints": 13618,
+      "watch_endpoints": 13626,
       "watch_levels": 8
     }
   },
