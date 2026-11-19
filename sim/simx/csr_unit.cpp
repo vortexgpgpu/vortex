@@ -50,9 +50,13 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
   auto& warp      = sched.warp(wid);
   auto core_perf  = core_->perf_stats();
   switch (addr) {
+  case VX_CSR_MVENDORID: return VX_ISA_VENDOR_ID;
+  case VX_CSR_MARCHID:   return VX_ISA_ARCH_ID;
+  case VX_CSR_MIMPID:    return VX_ISA_IMPL_ID;
+  case VX_CSR_MISA:
+    return (Word(log2floor(VX_CFG_XLEN) - 4) << (VX_CFG_XLEN - 2)) | VX_CFG_MISA_STD;
   case VX_CSR_PMPCFG0:
   case VX_CSR_PMPADDR0:
-  case VX_CSR_MISA:
   case VX_CSR_MEDELEG:
   case VX_CSR_MIDELEG:
   case VX_CSR_MIE:
@@ -60,7 +64,7 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
     return 0;
 
   // Per-warp machine-mode trap CSRs (see warp_t).
-  case VX_CSR_MSTATUS: return warp.mstatus;
+  case VX_CSR_MSTATUS: return warp.mstatus | MSTATUS_MPP_M;
   case VX_CSR_MTVEC:   return warp.mtvec;
   case VX_CSR_MEPC:    return warp.mepc;
   case VX_CSR_MCAUSE:  return warp.mcause;
@@ -361,13 +365,13 @@ void CsrUnit::set_csr(uint32_t addr, Word value, uint32_t wid, uint32_t tid) {
     break;
   // Per-warp machine-mode trap CSRs (see warp_t).
   case VX_CSR_MSTATUS:
-    warp.mstatus = value;
+    warp.mstatus = value & MSTATUS_WMASK;
     break;
   case VX_CSR_MTVEC:
-    warp.mtvec = value;
+    warp.mtvec = value & MTVEC_WMASK;
     break;
   case VX_CSR_MEPC:
-    warp.mepc = value;
+    warp.mepc = value & MEPC_WMASK;
     break;
   case VX_CSR_MCAUSE:
     warp.mcause = value;

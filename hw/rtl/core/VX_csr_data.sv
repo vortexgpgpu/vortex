@@ -120,7 +120,7 @@ import VX_fpu_pkg::*;
             `VX_CSR_MVENDORID  : stable_w = `VX_CFG_XLEN'(`VX_ISA_VENDOR_ID);
             `VX_CSR_MARCHID    : stable_w = `VX_CFG_XLEN'(`VX_ISA_ARCH_ID);
             `VX_CSR_MIMPID     : stable_w = `VX_CFG_XLEN'(`VX_ISA_IMPL_ID);
-            `VX_CSR_MISA       : stable_w = `VX_CFG_XLEN'({2'(`CLOG2(`VX_CFG_XLEN/16)), 30'(`VX_CFG_MISA_STD)});
+            `VX_CSR_MISA       : stable_w = {2'(`CLOG2(`VX_CFG_XLEN/16)), (`VX_CFG_XLEN-2)'(`VX_CFG_MISA_STD)};
         `ifdef VX_CFG_EXT_F_ENABLE
             `VX_CSR_FFLAGS     : begin live_sel_w[LIVE_FFLAGS] = 1; wr_sel_w[WR_FFLAGS] = 1; end
             `VX_CSR_FRM        : begin live_sel_w[LIVE_FRM]    = 1; wr_sel_w[WR_FRM]    = 1; end
@@ -184,8 +184,8 @@ import VX_fpu_pkg::*;
     // Registered in the cycle before the request fires. The stable values
     // cannot change for this warp in that cycle: CSR writes land at an earlier
     // request's fire, and the scheduler's own writes (mscratch at launch or
-    // spawn, mepc/mcause at trap entry) target a warp with no CSR request in
-    // flight. The SIMULATION check below compares the two at fire.
+    // spawn, the trap CSRs at trap entry and return) target a warp with no CSR
+    // request in flight. The SIMULATION check below compares the two at fire.
     reg [`VX_CFG_XLEN-1:0] stable_r, wr_data_r;
     reg [NUM_LIVE-1:0]     live_sel_r;
     reg [NUM_WR-1:0]       wr_sel_r;

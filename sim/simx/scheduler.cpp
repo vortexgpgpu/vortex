@@ -363,18 +363,20 @@ namespace {
 
 void Scheduler::raise_trap(uint32_t wid, Word cause, Word trap_pc) {
   auto& warp = warps_.at(wid);
-  warp.mepc   = trap_pc;
+  warp.mstatus = (warp.mstatus & ~(MSTATUS_MIE | MSTATUS_MPIE))
+               | ((warp.mstatus & MSTATUS_MIE) ? MSTATUS_MPIE : 0);
+  warp.mepc   = trap_pc & MEPC_WMASK;
   warp.mcause = cause;
   warp.mtval  = 0;
-  // Redirect to the handler. Low 2 bits of mtvec are the MODE field;
-  // v1 supports direct mode only, so mask them off.
-  warp.PC = warp.mtvec & ~Word(3);
+  warp.PC = warp.mtvec;
   DT(3, core_->name() << " trap: wid=" << wid << ", cause=" << cause
      << ", mepc=0x" << std::hex << trap_pc << ", mtvec=0x" << warp.mtvec << std::dec);
 }
 
 void Scheduler::mret(uint32_t wid) {
   auto& warp = warps_.at(wid);
+  warp.mstatus = (warp.mstatus & ~MSTATUS_MIE) | MSTATUS_MPIE
+               | ((warp.mstatus & MSTATUS_MPIE) ? MSTATUS_MIE : 0);
   warp.PC    = warp.mepc;
   DT(3, core_->name() << " mret: wid=" << wid
      << ", mepc=0x" << std::hex << warp.mepc << std::dec);

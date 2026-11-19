@@ -33,6 +33,8 @@ P_64F := rv64uf-p
 P_64D :=
 P_64A :=
 P_64C :=
+P_32MI := rv32mi-p
+P_64MI := rv64mi-p
 ifneq ($(HAS_EXT_A),0)
 P_32A := rv32ua-p
 P_64A := rv64ua-p
@@ -46,17 +48,34 @@ P_32D := rv32ud-p
 P_64D := rv64ud-p
 endif
 
+# Known-unsupported tests, skipped by run_isa: fence_i (no instruction-cache
+# coherence), ma_data (no misaligned-access trap), rv64uc-p-rvc (misaligned
+# C.FLD the upstream test expects to trap on).
+ISA_SKIP := *-fence_i|*-ma_data|rv64uc-p-rvc
+# The machine-mode suites run mcsr, scall and sbreak. Only ECALL/EBREAK trap
+# today, so the tests that need another trap source or an unmodelled CSR are
+# skipped:
+#   illegal, shamt       - illegal-instruction trap
+#   csr                  - mstatus.FS=0 must make FP stores trap
+#   ma_fetch, ma_addr,
+#   *-misaligned         - misaligned fetch/load/store traps
+#   breakpoint           - Sdtrig trigger CSRs (tselect, tdata1/2, tcontrol)
+#   zicntr               - user counters cycle/instret (Zicntr)
+#   instret_overflow     - writable minstret and mcountinhibit
+#   pmpaddr              - PMP
+ISA_SKIP := $(ISA_SKIP)|rv*mi-p-illegal|rv*mi-p-shamt|rv*mi-p-csr
+ISA_SKIP := $(ISA_SKIP)|rv*mi-p-ma_fetch|rv*mi-p-ma_addr|rv*mi-p-*-misaligned
+ISA_SKIP := $(ISA_SKIP)|rv*mi-p-breakpoint|rv*mi-p-zicntr|rv*mi-p-instret_overflow
+ISA_SKIP := $(ISA_SKIP)|rv*mi-p-pmpaddr
+
 # Run one or more test-suite prefixes against a simulator.
 #   $(1) = simulator (simx | rtlsim)
 #   $(2) = space-separated test prefixes (e.g. "rv32ui-p rv32um-p")
-# Known-unsupported tests are skipped: fence_i (no instruction-cache
-# coherence), ma_data (no misaligned-access trap), rv64uc-p-rvc
-# (misaligned C.FLD the upstream test expects to trap on).
 define run_isa
 @set -e; for pfx in $(2); do for t in $(ISA_DIR)/$$pfx-*; do \
   case "$$t" in *.dump) continue;; esac; [ -f "$$t" ] || continue; \
   b=`basename $$t`; \
-  case "$$b" in *-fence_i|*-ma_data|rv64uc-p-rvc) echo "[skip] $$b"; continue;; esac; \
+  case "$$b" in $(ISA_SKIP)) echo "[skip] $$b"; continue;; esac; \
   echo "[run]  $$b"; $(SIM_DIR)/$(1)/$(1) "$$t" || { echo "[FAIL] $$b"; exit 1; }; \
 done; done; echo "[$(1)] passed: $(2)"
 endef
@@ -93,6 +112,9 @@ run-simx-32a: $(RISCV_TESTS_STAMP)
 run-simx-32c: $(RISCV_TESTS_STAMP)
 	$(call run_isa,simx,$(P_32C))
 
+run-simx-32mi: $(RISCV_TESTS_STAMP)
+	$(call run_isa,simx,$(P_32MI))
+
 run-simx-64im: $(RISCV_TESTS_STAMP)
 	$(call run_isa,simx,$(P_64I) $(P_64M))
 
@@ -108,9 +130,12 @@ run-simx-64a: $(RISCV_TESTS_STAMP)
 run-simx-64c: $(RISCV_TESTS_STAMP)
 	$(call run_isa,simx,$(P_64C))
 
-run-simx-32: run-simx-32imafd
+run-simx-64mi: $(RISCV_TESTS_STAMP)
+	$(call run_isa,simx,$(P_64MI))
 
-run-simx-64: run-simx-32imafd run-simx-64imafd
+run-simx-32: run-simx-32imafd run-simx-32mi
+
+run-simx-64: run-simx-32imafd run-simx-64imafd run-simx-64mi
 
 run-simx: run-simx-$(XLEN)
 
@@ -135,6 +160,9 @@ run-rtlsim-32a: $(RISCV_TESTS_STAMP)
 run-rtlsim-32c: $(RISCV_TESTS_STAMP)
 	$(call run_isa,rtlsim,$(P_32C))
 
+run-rtlsim-32mi: $(RISCV_TESTS_STAMP)
+	$(call run_isa,rtlsim,$(P_32MI))
+
 run-rtlsim-64im: $(RISCV_TESTS_STAMP)
 	$(call run_isa,rtlsim,$(P_64I) $(P_64M))
 
@@ -150,9 +178,12 @@ run-rtlsim-64a: $(RISCV_TESTS_STAMP)
 run-rtlsim-64c: $(RISCV_TESTS_STAMP)
 	$(call run_isa,rtlsim,$(P_64C))
 
-run-rtlsim-32: run-rtlsim-32imf
+run-rtlsim-64mi: $(RISCV_TESTS_STAMP)
+	$(call run_isa,rtlsim,$(P_64MI))
 
-run-rtlsim-64: run-rtlsim-32imf run-rtlsim-64imf
+run-rtlsim-32: run-rtlsim-32imf run-rtlsim-32mi
+
+run-rtlsim-64: run-rtlsim-32imf run-rtlsim-64imf run-rtlsim-64mi
 
 run-rtlsim: run-rtlsim-$(XLEN)
 

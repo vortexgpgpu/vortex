@@ -816,17 +816,16 @@ vortex::Word DebugModule::read_register(uint16_t regaddr)
         dm_log("[DM] READ REG  dpc (0x7B1) -> 0x%0*llx\n", (VX_CFG_XLEN == 64) ? 16 : 8, (unsigned long long)value);
         return value;
     }
-
     // Helper function to read CSR by number
-    // Note: CSRs are always 32-bit per RISC-V spec, but we return Word for consistency
+    // Helper function to read CSR by number (CSRs are XLEN bits wide)
     auto read_csr = [this](uint16_t csr_num, uint16_t regaddr) -> vortex::Word {
         if (csr_num == 0x0301) {
             // Calculate MISA based on configured extensions
-            // MXL field (bits 31:30): 1=RV32, 2=RV64, 3=RV128
+            // MXL field (bits XLEN-1:XLEN-2): 1=RV32, 2=RV64, 3=RV128
             uint32_t mxl = (vortex::log2floor(VX_CFG_XLEN) - 4);
-            uint32_t value = (mxl << 30) | VX_CFG_MISA_STD;
-            dm_log("[DM] READ REG  misa (0x%03x via 0x%04x) -> 0x%08x (RV%d, MXL=%d, VX_CFG_MISA_STD=0x%08x)\n", 
-                   csr_num, regaddr, value, VX_CFG_XLEN, mxl, VX_CFG_MISA_STD);
+            vortex::Word value = (vortex::Word(mxl) << (VX_CFG_XLEN - 2)) | VX_CFG_MISA_STD;
+            dm_log("[DM] READ REG  misa (0x%03x via 0x%04x) -> 0x%0*llx (RV%d, MXL=%d, VX_CFG_MISA_STD=0x%08x)\n",
+                   csr_num, regaddr, (VX_CFG_XLEN == 64) ? 16 : 8, (unsigned long long)value, VX_CFG_XLEN, mxl, VX_CFG_MISA_STD);
             return value;
         }
 

@@ -21,6 +21,7 @@
 #include "instr.h"
 #include "cta_dispatcher.h"
 #include "barrier_unit.h"
+#include "VX_types.h"
 #ifdef VX_CFG_EXT_RASTER_ENABLE
 #include <vx_gfx_abi.h>
 #endif
@@ -30,6 +31,21 @@ namespace vortex {
 class Core;
 class Instr;
 class instr_trace_t;
+
+// Legal values of the per-warp trap CSRs. M is the only privilege mode, so
+// mstatus keeps MIE/MPIE/FS and MPP reads as M; mtvec supports direct mode
+// only; mepc is aligned to the instruction alignment.
+constexpr Word MSTATUS_MIE   = Word(1) << VX_CSR_MSTATUS_MIE;
+constexpr Word MSTATUS_MPIE  = Word(1) << VX_CSR_MSTATUS_MPIE;
+constexpr Word MSTATUS_MPP_M = Word(3) << VX_CSR_MSTATUS_MPP;
+constexpr Word MSTATUS_FS    = Word(3) << VX_CSR_MSTATUS_FS;
+constexpr Word MSTATUS_WMASK = MSTATUS_MIE | MSTATUS_MPIE | MSTATUS_FS;
+constexpr Word MTVEC_WMASK   = ~Word(3);
+#ifdef VX_CFG_EXT_C_ENABLE
+constexpr Word MEPC_WMASK    = ~Word(1);
+#else
+constexpr Word MEPC_WMASK    = ~Word(3);
+#endif
 
 // IPDOM stack entry — one per nested SPLIT/JOIN.
 struct ipdom_entry_t {
@@ -85,9 +101,10 @@ struct warp_t {
   // Per-warp MSCRATCH (holds kernel arg pointer, set at CTA dispatch)
   Word                              mscratch;
 
-  // Per-warp machine-mode trap CSRs. Synchronous ECALL/EBREAK traps
-  // redirect the warp PC to mtvec and snapshot the faulting PC/cause
-  // here; MRET restores the PC from mepc. See Scheduler::raise_trap.
+  // Per-warp machine-mode trap CSRs, held masked to their writable bits.
+  // Synchronous ECALL/EBREAK traps redirect the warp PC to mtvec and
+  // snapshot the faulting PC/cause here; MRET restores the PC from mepc.
+  // See Scheduler::raise_trap.
   Word                              mstatus = 0;
   Word                              mtvec   = 0;
   Word                              mepc    = 0;
