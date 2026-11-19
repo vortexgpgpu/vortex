@@ -57,6 +57,11 @@ import VX_tcu_pkg::*;
     output wire             satp_wr_valid,
     output wire [`VX_CFG_XLEN-1:0] satp_wr_data,
 `endif
+    input wire [`VX_CFG_XLEN-1:0] mstatus,
+    input wire [`VX_CFG_XLEN-1:0] mtvec,
+    output wire             mstatus_wr_valid,
+    output wire             mtvec_wr_valid,
+    output wire [`VX_CFG_XLEN-1:0] mtrap_wr_data,
 
     // LSU
 `ifdef PERF_ENABLE
@@ -159,6 +164,7 @@ import VX_tcu_pkg::*;
     assign fs_sched_if.bar_unlock_valid = slice_sched_if.bar_unlock_valid;
     assign fs_sched_if.bar_unlock_mask  = slice_sched_if.bar_unlock_mask;
     assign fs_sched_if.slice_ibuf_full  = slice_sched_if.slice_ibuf_full;
+    assign fs_sched_if.mtvec            = slice_sched_if.mtvec;
 `ifdef EXT_SCHED_TIMEOUT_DUMP
     assign fs_sched_if.timeout_dump     = slice_sched_if.timeout_dump;
 `endif
@@ -255,11 +261,8 @@ import VX_tcu_pkg::*;
     assign sched_csr_if.active_warps = active_warps;
     assign sched_csr_if.thread_mask  = csr_rd[0].thread_mask;
     assign sched_csr_if.mscratch     = csr_rd[0].mscratch;
-    assign sched_csr_if.csr_mstatus  = csr_rd[0].mstatus;
-    assign sched_csr_if.csr_mtvec    = csr_rd[0].mtvec;
     assign sched_csr_if.csr_mepc     = csr_rd[0].mepc;
     assign sched_csr_if.csr_mcause   = csr_rd[0].mcause;
-    assign sched_csr_if.csr_mtval    = csr_rd[0].mtval;
     assign sched_csr_if.cta_rank     = csr_rd[0].cta_rank;
     assign sched_csr_if.cta_lane     = csr_rd[0].cta_lane;
 `ifdef VX_CFG_VM_ENABLE
@@ -267,6 +270,11 @@ import VX_tcu_pkg::*;
     assign satp_wr_valid             = sched_csr_if.satp_wr_valid;
     assign satp_wr_data              = sched_csr_if.satp_wr_data;
 `endif
+    assign sched_csr_if.csr_mstatus  = mstatus;
+    assign sched_csr_if.csr_mtvec    = mtvec;
+    assign mstatus_wr_valid          = sched_csr_if.mstatus_wr_valid;
+    assign mtvec_wr_valid            = sched_csr_if.mtvec_wr_valid;
+    assign mtrap_wr_data             = sched_csr_if.mtrap_wr_data;
 
 `ifdef VX_CFG_EXT_RTU_ENABLE
     assign rtu_unlock_valid[0] = sched_unlock_if.valid;

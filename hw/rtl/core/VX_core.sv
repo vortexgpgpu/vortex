@@ -295,6 +295,11 @@ import VX_tcu_pkg::*;
     wire [`VX_CFG_NUM_SFU_BLOCKS-1:0] satp_wr_valid;
     wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] satp_wr_data;
 `endif
+    wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] sched_mstatus;
+    wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] sched_mtvec;
+    wire [`VX_CFG_NUM_SFU_BLOCKS-1:0] mstatus_wr_valid;
+    wire [`VX_CFG_NUM_SFU_BLOCKS-1:0] mtvec_wr_valid;
+    wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] mtrap_wr_data;
 
     cta_bcast_t cta_bcast;
 
@@ -324,6 +329,11 @@ import VX_tcu_pkg::*;
         .satp_wr_valid  (satp_wr_valid),
         .satp_wr_data   (satp_wr_data),
     `endif
+        .mstatus        (sched_mstatus),
+        .mtvec          (sched_mtvec),
+        .mstatus_wr_valid (mstatus_wr_valid),
+        .mtvec_wr_valid (mtvec_wr_valid),
+        .mtrap_wr_data  (mtrap_wr_data),
         .busy           (sched_busy)
     );
 
@@ -463,6 +473,11 @@ import VX_tcu_pkg::*;
                 .satp_wr_valid        (satp_wr_valid[i]),
                 .satp_wr_data         (satp_wr_data[i]),
             `endif
+                .mstatus              (sched_mstatus[i]),
+                .mtvec                (sched_mtvec[i]),
+                .mstatus_wr_valid     (mstatus_wr_valid[i]),
+                .mtvec_wr_valid       (mtvec_wr_valid[i]),
+                .mtrap_wr_data        (mtrap_wr_data[i]),
             `ifdef PERF_ENABLE
                 .lsu_perf_rd_req_fire (lsu_perf_rd_req_fire[i]),
                 .lsu_perf_wr_req_fire (lsu_perf_wr_req_fire[i]),
@@ -559,6 +574,11 @@ import VX_tcu_pkg::*;
             .satp_wr_valid        (satp_wr_valid),
             .satp_wr_data         (satp_wr_data),
         `endif
+            .mstatus              (sched_mstatus),
+            .mtvec                (sched_mtvec),
+            .mstatus_wr_valid     (mstatus_wr_valid),
+            .mtvec_wr_valid       (mtvec_wr_valid),
+            .mtrap_wr_data        (mtrap_wr_data),
             .fs_branch            (fs_branch),
             .fs_wctl              (fs_wctl),
             .fs_dvstack_wid       (fs_dvstack_wid),

@@ -22,31 +22,40 @@ suite rides on. Covers the RTL
 
 ## 1. Architecture
 
-Each warp owns five M-mode trap CSRs held in the scheduler
-([`VX_scheduler.sv:59`](../../hw/rtl/core/VX_scheduler.sv#L59)):
-`mstatus`, `mtvec`, `mepc`, `mcause`, `mtval`
-(`[NUM_WARPS][XLEN]`). Addresses: `MSTATUS=0x300`, `MTVEC=0x305`,
+The M-mode trap CSRs are held by the schedulers. Every warp runs the same
+kernel and trap handler, so `mstatus` and `mtvec` are one per core, in the
+core scheduler ([`VX_scheduler.sv`](../../hw/rtl/core/VX_scheduler.sv));
+the CSR unit reads and writes them in the fire cycle, as it does `satp`.
+`mepc` and `mcause`, which concurrent traps in different warps need, stay
+per warp in the warp schedulers
+([`VX_warp_sched.sv`](../../hw/rtl/core/VX_warp_sched.sv)); `mcause` holds
+only the 4-bit exception codes the core raises. `mtval` reads as zero: no
+exception the core raises carries a trap value. Addresses: `MSTATUS=0x300`, `MTVEC=0x305`,
 `MSCRATCH=0x340`, `MEPC=0x341`, `MCAUSE=0x342`, `MTVAL=0x343`
 ([`VX_types.toml:325-334`](../../VX_types.toml#L325)).
 
 The branch unit is the trap producer
-([`VX_alu_int.sv:310-339`](../../hw/rtl/core/VX_alu_int.sv#L310)): it
-raises `is_trap_entry` / `is_mret_op` with a `br_trap_cause` (`EBREAK=3`,
+([`VX_alu_int.sv`](../../hw/rtl/core/VX_alu_int.sv)): it raises
+`is_trap_entry` / `is_mret_op` with a `br_trap_cause` (`EBREAK=3`,
 `ECALL=11`). These ride the existing `VX_branch_ctl_if` (the proposed
 standalone `VX_trap_if.sv` was folded in — functionally equivalent). The
-scheduler redirects `warp_pcs_n`: a trap goes to `mtvec & ~3`, an `mret`
-returns to `mepc`
-([`VX_scheduler.sv:306-311`](../../hw/rtl/core/VX_scheduler.sv#L306)).
-On trap entry the hardware snapshots `mepc`/`mcause`; a same-cycle software
-`csrw` and a hardware trap entry are ordered hardware-wins
-([`:394-412`](../../hw/rtl/core/VX_scheduler.sv#L394)). The CSR file does
-only the read mux and routes writes back via `sched_csr_if`
-([`VX_csr_data.sv:253-257`](../../hw/rtl/core/VX_csr_data.sv#L253)).
+warp scheduler ([`VX_warp_sched.sv`](../../hw/rtl/core/VX_warp_sched.sv))
+redirects the warp: a trap goes to the core's `mtvec & ~3`, an `mret`
+returns to the warp's `mepc`. On trap entry the hardware snapshots
+`mepc`/`mcause`; a same-cycle software `csrw` and a hardware trap entry are
+ordered hardware-wins. The CSR file
+([`VX_csr_data.sv`](../../hw/rtl/core/VX_csr_data.sv)) does the read mux
+and routes writes back via `sched_csr_if`.
+
+ECALL, EBREAK and MRET depend on the warp's pending writes to `mstatus`,
+`mtvec` and `mepc` through the scoreboard, so a handler's `csrw mepc` lands
+before its `mret` reads `mepc`, and a warp's own `mtvec` write before its
+trap redirects through it.
 
 SimX mirrors this exactly:
-[`scheduler.cpp:271-298`](../../sim/simx/scheduler.cpp#L271) defines
-`raise_trap`, `mret`, `trigger_ecall(wid,pc)`, `trigger_ebreak(wid,pc)`;
-[`alu_unit.cpp:363-366`](../../sim/simx/alu_unit.cpp#L363) dispatches
+[`scheduler.cpp`](../../sim/simx/scheduler.cpp) defines `raise_trap`,
+`mret`, `trigger_ecall(wid,pc)`, `trigger_ebreak(wid,pc)`;
+[`alu_unit.cpp`](../../sim/simx/alu_unit.cpp) dispatches
 ecall/ebreak/mret per warp. The old "kill all warps"
 (`active_warps_.reset()`) hack is gone.
 
@@ -90,7 +99,7 @@ The named **preemption** capability is future work:
    fault causes (2/4/6).
 3. **Supervisor mode** — `stvec`/`sepc`/`scause` + `medeleg`-driven
    redirect.
-4. **Interrupts** — `mie`/`mip`, async injection, `mcause` MSB.
+4. **Interrupts** — `mie`/`mip`, async injection, `mcause` MSB (widening `mcause` past the 4 exception-code bits it holds today).
 5. **Register-file / IPDOM-stack save-restore** — required for true
    context switch (only the trap CSRs are saved today).
 6. **`tests/regression/csr_smoke/`** unit test — absent.

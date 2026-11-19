@@ -343,7 +343,7 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     // these via branch_ctl_if.{is_trap,is_mret,trap_cause}.
     wire is_trap_entry = is_br_op_r && (br_op_r == INST_BR_ECALL || br_op_r == INST_BR_EBREAK);
     wire is_mret_op    = is_br_op_r && (br_op_r == INST_BR_MRET || br_op_r == INST_BR_SRET || br_op_r == INST_BR_URET);
-    wire [3:0] br_trap_cause = (br_op_r == INST_BR_EBREAK) ? 4'd3 : 4'd11; // EBREAK / ECALL_M
+    wire [TRAP_CAUSE_BITS-1:0] br_trap_cause = (br_op_r == INST_BR_EBREAK) ? TRAP_CAUSE_BITS'(3) : TRAP_CAUSE_BITS'(11); // EBREAK / ECALL_M
 
     wire [`VX_CFG_XLEN-1:0] br_result = alu_result_r[last_tid_r];
     wire is_less  = br_result[0];
@@ -363,7 +363,7 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     end
 
     VX_pipe_register #(
-        .DATAW  (1 + NW_WIDTH + 1 + PC_BITS + 1 + 1 + 4),
+        .DATAW  (1 + NW_WIDTH + 1 + PC_BITS + 1 + 1 + TRAP_CAUSE_BITS),
         .RESETW (1)
     ) branch_reg (
         .clk      (clk),
