@@ -315,6 +315,24 @@ stride folds into the packing, so building a descriptor costs one OR.
 Row-major is the layout of a DXA-loaded slab. The buffers' output muxes are
 layout-agnostic; only the fetch differs.
 
+**Alignment.** Each LMEM access returns one bank row
+(`NUM_THREADS × XLEN/8` bytes), and the buffers take a row's words from that
+one access only, so a descriptor must keep every fetch inside a bank row:
+
+| layout | rule |
+|---|---|
+| block-major | the offset is a multiple of a bank row |
+| row-major | the offset (in bytes) and the stride (in words) are multiples of the operand's **K-slice**: `fedpK` words, or for sparse `tcK` words of A and `2·tcK` of B |
+
+The K-slice is the part of a row one micro-op consumes. It divides a bank
+row in every configuration, so an aligned slice never straddles two. One
+tile row (`tileK` elements, `tileK/2` for sparse A) is a multiple of the
+K-slice everywhere, so a descriptor stepped along K by `tileK` stays legal.
+`smem_desc_check` in [`tensor_cfg.h`](../../sw/common/tensor_cfg.h) states the
+rule once: SimX aborts on a descriptor that breaks it rather than read the
+exact address the hardware cannot, and `wgmma_sync` asserts it in debug
+kernel builds.
+
 ### 6.2 A buffer — `VX_tcu_abuf`
 
 One per block. It holds one **k-stripe**: the `M_STEPS` A blocks of the
@@ -525,7 +543,7 @@ constant on both sides.
 | API | purpose |
 |---|---|
 | `wmma_context`, `wgmma_context` | compile-time tile geometry and the instruction emitters for a given pair of formats |
-| `vx_make_smem_desc(ptr, leading_bytes)` | build a shared-memory descriptor; a zero stride selects block-major |
+| `vx_make_smem_desc(ptr, leading_bytes)` | build a shared-memory descriptor; a zero stride selects block-major; `ptr` and `leading_bytes` follow the alignment rule of §6.1 |
 | `load_sp_metadata`, `load_mx_metadata` | emit the `TCU_LD` instructions for a fragment |
 | `a_blockmajor_idx`, `b_blockmajor_idx`, `a_sp_blockmajor_idx` | where element `(r, c)` lives in a block-major slab |
 

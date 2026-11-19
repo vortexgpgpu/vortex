@@ -28,6 +28,11 @@
 #ifndef A_OFF_K
 #define A_OFF_K 0
 #endif
+// Extra A offset in elements: one that is not a multiple of the K-slice builds
+// a descriptor the TCU cannot fetch, which SimX must reject.
+#ifndef A_OFF_ELEMS
+#define A_OFF_ELEMS 0
+#endif
 #ifndef B_PAD_K
 #define B_PAD_K 0
 #endif
