@@ -292,7 +292,8 @@ device open like XRT's `load_xclbin()`, and like it the design is not written
 again when the card already holds it: `vrtd` remembers the UUID of the vbin it
 wrote. `v80-smi list` shows the loaded design, `VRT_FORCE_PROGRAM=1` writes it
 regardless, and `slashkit stamp-uuid <vbin>` gives a vbin linked before UUIDs
-were stamped one without relinking. See
+were stamped one without relinking. The client libraries' ABI changed with
+this, so rebuild any runtime linked against an earlier SLASH. See
 [designs/aved_driver_architecture.md §3.1](designs/aved_driver_architecture.md#31-opening-the-device).
 
 > **Flashing writes the card's boot memory.** A bad write can leave the board
