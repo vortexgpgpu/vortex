@@ -571,9 +571,9 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             fflags_fncp = 'x;
             for (integer i = 0; i < NUM_LANES; ++i) begin
                 case (frm)
-                0:  begin result_fncp[i] = is_fcmp ? result_fle[i][`VX_CFG_XLEN-1:0] : result_fsgnj[i][`VX_CFG_XLEN-1:0];  fflags_fncp[i] = fflags_fle[i]; end
-                1:  begin result_fncp[i] = is_fcmp ? result_flt[i][`VX_CFG_XLEN-1:0] : result_fsgnjn[i][`VX_CFG_XLEN-1:0]; fflags_fncp[i] = fflags_flt[i]; end
-                2:  begin result_fncp[i] = is_fcmp ? result_feq[i][`VX_CFG_XLEN-1:0] : result_fsgnjx[i][`VX_CFG_XLEN-1:0]; fflags_fncp[i] = fflags_feq[i]; end
+                0:  begin result_fncp[i] = is_fcmp ? result_fle[i][`VX_CFG_XLEN-1:0] : result_fsgnj[i][`VX_CFG_XLEN-1:0];  fflags_fncp[i] = is_fcmp ? fflags_fle[i] : '0; end
+                1:  begin result_fncp[i] = is_fcmp ? result_flt[i][`VX_CFG_XLEN-1:0] : result_fsgnjn[i][`VX_CFG_XLEN-1:0]; fflags_fncp[i] = is_fcmp ? fflags_flt[i] : '0; end
+                2:  begin result_fncp[i] = is_fcmp ? result_feq[i][`VX_CFG_XLEN-1:0] : result_fsgnjx[i][`VX_CFG_XLEN-1:0]; fflags_fncp[i] = is_fcmp ? fflags_feq[i] : '0; end
                 3:  begin result_fncp[i] = result_fclss[i][`VX_CFG_XLEN-1:0]; end
                 4:  begin result_fncp[i] = result_fmvx[i][`VX_CFG_XLEN-1:0]; end
                 5:  begin result_fncp[i] = result_fmvf[i][`VX_CFG_XLEN-1:0]; end

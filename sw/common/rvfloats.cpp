@@ -364,6 +364,9 @@ uint32_t rv_fmin_s(uint32_t a, uint32_t b, uint32_t* fflags) {
   uint32_t r;
   rv_init(0);
   if (isNaNF32UI(a) && isNaNF32UI(b)) {
+    if (softfloat_isSigNaNF32UI(a) || softfloat_isSigNaNF32UI(b)) {
+      softfloat_raiseFlags(softfloat_flag_invalid);
+    }
     r = defaultNaNF32UI;
   } else {
     auto fa = to_float32_t(a);
@@ -383,6 +386,9 @@ uint64_t rv_fmin_d(uint64_t a, uint64_t b, uint32_t* fflags) {
   uint64_t r;
   rv_init(0);
   if (isNaNF64UI(a) && isNaNF64UI(b)) {
+    if (softfloat_isSigNaNF64UI(a) || softfloat_isSigNaNF64UI(b)) {
+      softfloat_raiseFlags(softfloat_flag_invalid);
+    }
     r = defaultNaNF64UI;
   } else {
     auto fa = to_float64_t(a);
@@ -402,6 +408,9 @@ uint32_t rv_fmax_s(uint32_t a, uint32_t b, uint32_t* fflags) {
   uint32_t r;
   rv_init(0);
   if (isNaNF32UI(a) && isNaNF32UI(b)) {
+    if (softfloat_isSigNaNF32UI(a) || softfloat_isSigNaNF32UI(b)) {
+      softfloat_raiseFlags(softfloat_flag_invalid);
+    }
     r = defaultNaNF32UI;
   } else {
     auto fa = to_float32_t(a);
@@ -421,6 +430,9 @@ uint64_t rv_fmax_d(uint64_t a, uint64_t b, uint32_t* fflags) {
   uint64_t r;
   rv_init(0);
   if (isNaNF64UI(a) && isNaNF64UI(b)) {
+    if (softfloat_isSigNaNF64UI(a) || softfloat_isSigNaNF64UI(b)) {
+      softfloat_raiseFlags(softfloat_flag_invalid);
+    }
     r = defaultNaNF64UI;
   } else {
     auto fa = to_float64_t(a);
