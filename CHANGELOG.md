@@ -69,7 +69,7 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
   what XRT does for xclbins: `slashkit` stamps a UUID into the vbin, `vrtd` remembers the UUID it wrote and skips a write of the same
   one, `VRT_FORCE_PROGRAM=1` overrides, `v80-smi forget-design` reports a design loaded over JTAG (`jtag_load_vortex.sh` now runs
   it), and a design another client uses cannot be replaced. The `aved` driver is unchanged in this
-  respect and still opens with `program=true`. Needs a SLASH with design UUIDs ([orcaslab/slash](https://github.com/orcaslab/slash) `main`, from 6cb47f6e); rebuild runtimes linked against an earlier SLASH, whose client-library ABI differs; a vbin linked earlier gets one with
+  respect and still opens with `program=true`. Needs a SLASH with design UUIDs ([orcaslab/slash](https://github.com/orcaslab/slash) `main`, from f23273d5); rebuild runtimes linked against an earlier SLASH, whose client-library ABI differs; a vbin linked earlier gets one with
   `slashkit stamp-uuid`. See [docs/designs/aved_driver_architecture.md](docs/designs/aved_driver_architecture.md#31-opening-the-device).
 - **Toolchain pinned to v3.0.2** (`TOOLCHAIN_REV`): LLVM f44a6bb2af4c, with PoCL rebuilt on it. Wide loads/stores and 64-bit
   atomics stay behind `+xvortexldstwide` and `+xvortexamod`, so code built with plain `+xvortex` uses no new instructions.
