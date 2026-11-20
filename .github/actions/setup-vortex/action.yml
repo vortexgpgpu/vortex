@@ -18,8 +18,19 @@ inputs:
       restore."
     required: false
     default: "false"
+  toolchain:
+    description: >
+      "Toolchain identity (<tag>-<sha>, from ci/toolchain_rev.sh) resolved once
+      by an upstream job. Every job of a run must pass the same value: the
+      prebuilt tag can be force-moved mid-run, and a job that re-resolves it
+      then keys a cache the prepare job never saved. Blank resolves it here."
+    required: false
+    default: ""
 
 outputs:
+  toolchain:
+    description: "the toolchain identity the cache is keyed on"
+    value: ${{ steps.vers.outputs.toolchain }}
   toolchain-hit:
     description: "true if the toolchain cache was restored"
     value: ${{ steps.cache-toolchain.outputs.cache-hit }}
@@ -33,9 +44,12 @@ runs:
     - name: Read version pins
       id: vers
       shell: bash
+      env:
+        PINNED: ${{ inputs.toolchain }}
       run: |
-        rev=$(bash ci/toolchain_rev.sh)
+        rev=${PINNED:-$(bash ci/toolchain_rev.sh)}
         echo "toolchain=$rev" >> "$GITHUB_OUTPUT"
+        echo "sha=${rev##*-}" >> "$GITHUB_OUTPUT"
 
     - name: Cache toolchain
       id: cache-toolchain
@@ -43,6 +57,13 @@ runs:
       with:
         path: tools
         key: ${{ runner.os }}-toolchain-${{ steps.vers.outputs.toolchain }}-${{ inputs.profile }}
+
+    - name: Require the toolchain cache
+      if: inputs.prepare != 'true' && steps.cache-toolchain.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        echo "::error::no toolchain cache for ${{ steps.vers.outputs.toolchain }}-${{ inputs.profile }}: the prepare job did not save it, or this job resolved a different toolchain identity"
+        exit 1
 
     - name: Cache third party
       id: cache-thirdparty
@@ -107,17 +128,21 @@ runs:
     # prepare=true (setup job only): warm the shared caches on a miss. The
     # actions/cache step above saves `tools`/`third_party` at job end, so
     # downstream build/test jobs (prepare=false) restore them without rebuilding.
+    # Installs from the commit the cache key names, not the tag, so a tag moved
+    # after the key was resolved cannot save other binaries under that key.
     - name: Prepare toolchain (on cache miss)
       if: inputs.prepare == 'true' && steps.cache-toolchain.outputs.cache-hit != 'true'
       shell: bash
+      env:
+        TOOLCHAIN_SHA: ${{ steps.vers.outputs.sha }}
       run: |
         TOOLDIR=$PWD/tools
         mkdir -p tc && cd tc
         ../configure --tooldir=$TOOLDIR
         if [ "${{ inputs.profile }}" = "full" ]; then
-          ci/toolchain_install.sh --all && ci/sst_install.sh
+          TOOLCHAIN_REV=$TOOLCHAIN_SHA ci/toolchain_install.sh --all && ci/sst_install.sh
         else
-          ci/toolchain_install.sh
+          TOOLCHAIN_REV=$TOOLCHAIN_SHA ci/toolchain_install.sh
         fi
 
     - name: Prepare third_party (on cache miss)
