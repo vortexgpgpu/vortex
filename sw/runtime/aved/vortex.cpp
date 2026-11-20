@@ -220,9 +220,11 @@ public:
 
   #ifdef CPP_API
 
-    // Program the PL on open, exactly as the XRT driver's load_xclbin() does.
+    // Hand the design to the platform on open, exactly as the XRT driver's
+    // load_xclbin() does. As there, the platform decides whether that is a
+    // write: vrtd does not write a design the card already holds.
     //
-    // This is only correct because the static shell lives in OSPI flash. vrtd
+    // A write is only correct because the static shell lives in OSPI flash. vrtd
     // runs its reset sequence when the requested shell differs from the
     // current one, and a design write only succeeds on a freshly reset device.
     // A board whose flash was never written reports Shell: unknown, so the
@@ -839,7 +841,8 @@ private:
   // image's timing so it cannot disturb the shell before the next load.
   void park_clock() noexcept {
     constexpr uint64_t kSafeHz = 50000000;
-    if (sim_mode_)
+    // No handle when the open itself failed: nothing to park.
+    if (sim_mode_ || !vrtDevice_.getHandle())
       return;
     try {
       vrtDevice_.setFrequency(kSafeHz);
