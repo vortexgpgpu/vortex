@@ -43,6 +43,7 @@ jobs:
       cells: ${{ steps.q.outputs.cells }}
       run: ${{ steps.q.outputs.run }}
       profile: ${{ steps.q.outputs.profile }}
+      toolchain: ${{ steps.vers.outputs.toolchain }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -68,9 +69,9 @@ jobs:
             && echo "ASIC gate armed for tonight" \
             || echo "::warning::could not enable asic_gate.yml; the next qualifying push retries"
       - run: pip install --quiet pyyaml
-      # Resolve the toolchain identity so we can probe its cache below. The build
-      # job's setup-vortex caches `tools` under
-      # `${{ runner.os }}-toolchain-<rev>-<sha>-<profile>`, from the same script.
+      # Resolve the toolchain identity once per run: probed below, and handed to
+      # every setup-vortex so all jobs key the cache `tools` is saved under
+      # (`${{ runner.os }}-toolchain-<rev>-<sha>-<profile>`) on the same commit.
       - name: Read toolchain rev
         id: vers
         run: |
@@ -205,6 +206,7 @@ jobs:
         uses: ./.github/actions/setup-vortex
         with:
           profile: ${{ needs.plan.outputs.profile }}
+          toolchain: ${{ needs.plan.outputs.toolchain }}
           prepare: true
 
   # ---------------------------------------------------------------------------
@@ -226,6 +228,7 @@ jobs:
         uses: ./.github/actions/setup-vortex
         with:
           profile: ${{ needs.plan.outputs.profile }}
+          toolchain: ${{ needs.plan.outputs.toolchain }}
       - name: Configure + build software/tests
         run: |
           TOOLDIR=$PWD/tools
@@ -268,6 +271,7 @@ jobs:
         uses: ./.github/actions/setup-vortex
         with:
           profile: ${{ needs.plan.outputs.profile }}
+          toolchain: ${{ needs.plan.outputs.toolchain }}
       - uses: actions/download-artifact@v4
         with:
           name: build-${{ matrix.xlen }}
