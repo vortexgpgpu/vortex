@@ -587,7 +587,15 @@ escalation only; every category of the selected tier still runs.
 The cache and dependency boilerplate is one composite action,
 parameterized by a profile — `lite`, or `full` when a cell needs SST or
 gem5. A `prepare` input, true only in the `setup` job, makes it populate the
-caches on a miss; every other job only restores.
+caches on a miss; every other job only restores, and fails at once on a miss
+rather than running its tests against an empty `tools`.
+
+The toolchain cache key carries the commit the prebuilt tag resolves to. The
+tag can be force-moved while a run is in flight, so a workflow resolves it once
+(`ci/toolchain_rev.sh`, in its first job) and passes that identity to every
+`setup-vortex` through the `toolchain` input; the prepare job installs from
+that commit, not from the tag. A job that re-resolved the tag on its own would
+look up a key the prepare job never saved.
 
 ### 4.3 `apptainer-ci.yml`
 

@@ -117,6 +117,22 @@ tests:
   app: sgemm_tcu_wg
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
     -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8 -DWGMMA_SS -DWGMMA_KMAJOR_B -DB_PAD_K=1 -DB_OFF_K=1 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
+# Two co-resident CTAs whose LMEM footprint is not a bank-row multiple (128 B
+# at 32 threads): the second CTA's block-major operands must still start a bank
+# row, so the dispatcher's slot pitch keeps the bank-row alignment.
+- id: sgemm_tcu_wg-lmem-pad
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  xlen:
+  - 32
+  touches: [hw/rtl/VX_kmu.sv, hw/rtl/VX_gpu_pkg.sv, sim/simx/cta_dispatcher.cpp, sw/common/lmem_slot.h,
+            sim/simx/tcu, sw/kernel/include/vx_tensor.h]
+  app: sgemm_tcu_wg
+  args: -m 128 -n 128 -k 32
+  configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8 -DSMEM_PAD_BYTES=64 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
 
 - id: sgemm_tcu_wg_sp-1
   via: blackbox

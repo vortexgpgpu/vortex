@@ -502,6 +502,13 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     end
 `endif
 
+    // A block-major A operand must start an LMEM bank row: the fetch drops the
+    // offset inside the row.
+    `RUNTIME_ASSERT (~(req_valid && req_a_is_smem && is_first_compute_uop && (desc_a_ldm_words == '0)
+                     && (req_desc_a[BANK_ROW_WORDS_LOG2+1:0] != '0)),
+        ("%t: *** %s: block-major A base 0x%0h is not bank-row aligned", $time, INSTANCE_ID,
+         req_desc_a[TCU_SMEM_DESC_OFF_BITS-1:0]))
+
 endmodule
 
 `endif // VX_CFG_TCU_WGMMA_ENABLE

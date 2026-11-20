@@ -476,9 +476,10 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
 
     localparam LMEM_LOG = `VX_CFG_LMEM_LOG_SIZE;
 
-    // Per-CTA LMEM footprint, block-aligned to MEM_BLOCK_SIZE by the KMU (DXA
-    // multicast resolves receiver addresses as issuer_addr + r*smem_stride;
-    // a non-aligned stride would target the wrong block).
+    // Per-CTA LMEM footprint, aligned to LMEM_SLOT_ALIGN by the KMU, so every
+    // slot base is too (DXA multicast resolves receiver addresses as
+    // issuer_addr + r*smem_stride; a non-aligned stride would target the wrong
+    // block).
     wire [LMEM_LOG:0] stride = kmu_req.aligned_lmem_size;
     wire is_first_of_cluster = eff_is_first;
 

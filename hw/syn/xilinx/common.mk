@@ -95,14 +95,15 @@ COMPILE_CFLAGS += $(RTL_INCLUDE)
 # ast dump flags
 XML_CFLAGS = $(filter-out -DSYNTHESIS -DVIVADO, $(CFLAGS)) $(RTL_PKGS) -I$(DPI_DIR) -DSV_DPI
 
-# Fail before synthesis if any 16-byte block in the CP AXI-Lite regfile is only
+# Fail before synthesis if any block in the CP AXI-Lite regfile is only
 # partially decoded, on cards whose shell resolves AXI-Lite in blocks (the
 # descriptor's axil_block_bytes). Measured on V80 silicon: such a block DECERRs
 # on EVERY word, including the words that ARE implemented. No simulator
 # reproduces it; the symptom is a register reading 0xFFFFFFFF on hardware for no
-# reason visible in the RTL.
+# reason visible in the RTL. The regfile's unit test sweeps the elaborated
+# decoder, so the check follows the RTL whatever shape its decoder takes.
 check-axil-blocks:
-	$(if $(filter-out 0,$(PLATFORM_AXIL_BLOCK_BYTES)),@python3 $(SCRIPT_DIR)/check_axil_blocks.py $(RTL_DIR)/cp/VX_cp_axil_regfile.sv)
+	$(if $(filter-out 0,$(PLATFORM_AXIL_BLOCK_BYTES)),$(MAKE) -C $(ROOT_DIR)/hw/unittest/cp_axil_regfile run OPTS=--axil-block-bytes=$(PLATFORM_AXIL_BLOCK_BYTES))
 
 # Vivado reads the preprocessed sources (gen_sources.sh -P), so its own
 # inference sees the RTL as written; the Xilinx floating-point cores bind to

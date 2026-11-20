@@ -184,7 +184,7 @@ envelope plus a `kind`-discriminated union:
 | `PC`, `entry` | program image PC and kernel entry PC |
 | `param` | kargs pointer |
 | `ctx_id` | 8-bit launch identity, bumped every `start` |
-| `aligned_lmem_size` | per-CTA LMEM footprint, rounded to `MEM_BLOCK_SIZE` |
+| `aligned_lmem_size` | per-CTA LMEM footprint, rounded to `LMEM_SLOT_ALIGN` |
 
 `args.compute` ([`:735-744`](../../hw/rtl/VX_gpu_pkg.sv#L735)) carries
 `grid_dim[3]`, `block_idx[3]`, `block_dim[3]`, `block_size`, `warp_step[3]`,
@@ -375,6 +375,19 @@ receiver as `base + r·smem_stride` — no per-slot base table, no
 receiver-side translation. The stride must be `MEM_BLOCK_SIZE`-aligned (the
 KMU rounds it) because LMEM is block-addressed; a ragged stride would target
 the wrong block.
+
+When the core has an LMEM DMA agent (`VX_CFG_EXT_DXA_ENABLE` or
+`VX_CFG_TCU_WGMMA_ENABLE`) the KMU rounds the stride to a whole LMEM bank row
+(`LMEM_NUM_BANKS × XLEN/8` bytes) instead, when that is larger: the agents
+move whole bank rows, so DXA multicast steps receivers by whole rows and a
+block-major WGMMA operand at `__local_mem()` must start one
+([tensor_core_wgmma_engine.md §6.1](tensor_core_wgmma_engine.md)). This is
+`LMEM_SLOT_ALIGN` in `VX_gpu_pkg`, mirrored for SimX and the runtime by
+[`lmem_slot.h`](../../sw/common/lmem_slot.h). The bank row exceeds
+`MEM_BLOCK_SIZE` only when `LMEM_NUM_BANKS` x XLEN/8 does: with the default
+64-byte block, more than 16 LMEM banks at XLEN 32 or more than 8 at XLEN 64
+(one bank per thread by default), so narrower cores keep the `MEM_BLOCK_SIZE`
+pitch.
 
 `get_cluster_rank()` is derived, never sent:
 `CTA_ID % CTA_CLUSTER_SIZE` ([`vx_spawn2.h:133`](../../sw/kernel/include/vx_spawn2.h#L133)).
