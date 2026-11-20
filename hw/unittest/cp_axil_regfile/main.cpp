@@ -19,6 +19,11 @@
 //   - Q_RING_BASE_LO/HI assemble into q_state.ring_base.
 //   - Out-of-range address returns DECERR; rdata is the 0xDEADBEEF
 //     sentinel for read-side, B has 2'b11 on the write side.
+//   - No aligned block of --axil-block-bytes (default 16) is decoded only in
+//     part, for reads or writes, anywhere in the 4 KB CP window. A shell that
+//     resolves AXI-Lite in such blocks (the V80's) DECERRs every word of a
+//     partly decoded block, the implemented ones included, and no simulator
+//     shows it; the V80 image flows run this scenario before synthesis.
 // ============================================================================
 
 #include "vl_simulator.h"
@@ -179,6 +184,13 @@ static constexpr uint16_t Q_ERROR          = 0x2C;
 
 int main(int argc, char** argv) {
     Verilated::commandArgs(argc, argv);
+    unsigned block_bytes = 16;
+    for (int i = 1; i < argc; ++i) {
+        if (std::strncmp(argv[i], "--axil-block-bytes=", 19) == 0)
+            block_bytes = (unsigned)std::strtoul(argv[i] + 19, nullptr, 0);
+    }
+    EXPECT(block_bytes >= 4 && (block_bytes & (block_bytes - 1)) == 0,
+           "--axil-block-bytes must be a power of two of at least 4");
     vl_simulator<VVX_cp_axil_regfile_top> sim;
     uint64_t tick = 0;
 
@@ -364,6 +376,37 @@ int main(int argc, char** argv) {
                "T11: GPU_DEV_CAPS_LO is read-only");
     }
 
-    std::printf("PASSED — 11 scenarios\n");
+    // ----- Test 12: every aligned block is decoded whole or not at all -----
+    // Writes come last in the sweep: they land on live registers, and nothing
+    // after this scenario reads them back.
+    {
+        constexpr unsigned kWindowBytes = 0x1000;
+        const unsigned words = block_bytes / 4;
+        unsigned decoded_blocks = 0;
+        for (int pass = 0; pass < 2; ++pass) {
+            const bool writes = (pass == 1);
+            for (unsigned base = 0; base < kWindowBytes; base += block_bytes) {
+                unsigned ok = 0;
+                for (unsigned w = 0; w < words; ++w) {
+                    const uint16_t addr = (uint16_t)(base + 4 * w);
+                    const unsigned resp = writes
+                        ? axil_write(sim, tick, addr, 0)
+                        : (unsigned)(axil_read(sim, tick, addr) >> 32);
+                    EXPECT(resp == 0b00 || resp == 0b11, "T12: response is neither OKAY nor DECERR");
+                    ok += (resp == 0b00);
+                }
+                if (ok != 0 && ok != words) {
+                    std::fprintf(stderr, "FAIL T12: %s block 0x%03X: %u of %u words decoded\n",
+                                 writes ? "write" : "read", base, ok, words);
+                    std::exit(1);
+                }
+                decoded_blocks += (!writes && ok == words);
+            }
+        }
+        // The global window and queue 0 are decoded; an empty map passes nothing.
+        EXPECT(decoded_blocks >= (0x40 + 0x40) / block_bytes, "T12: decoded window smaller than expected");
+    }
+
+    std::printf("PASSED — 12 scenarios\n");
     return 0;
 }
