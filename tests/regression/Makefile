@@ -50,10 +50,17 @@ run-$(1): $$(addprefix run-$(1)-,$$(call backend_tests,$(1)))
 endef
 $(foreach b,$(BACKENDS),$(eval $(call backend_rule,$(b))))
 
+# --- shared kernel library -------------------------------------------
+# Every test links a sw/kernel library. Build it once, before the per-test
+# makes run in parallel, so they don't each start the same build.
+.PHONY: kernel-lib
+kernel-lib:
+	$(MAKE) -C $(ROOT_DIR)/sw/kernel
+
 # --- pattern recipes --------------------------------------------------
 .PHONY: build-% clean-%
 
-build-%:
+build-%: kernel-lib
 	$(MAKE) -C $* all
 
 clean-%:
@@ -61,5 +68,5 @@ clean-%:
 
 # run-<backend>-<test>: split "<backend>-<test>" on the first dash.
 # Subdir names must not contain '-' (none currently do).
-run-%:
+run-%: kernel-lib
 	$(MAKE) -C $(word 2,$(subst -, ,$*)) run-$(word 1,$(subst -, ,$*))

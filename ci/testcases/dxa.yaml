@@ -306,6 +306,17 @@ tests:
   app: sgemm_tcu_wg_dxa_mcast
   configs: -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_TCU_TYPE=DPI
   args: -m 128 -n 64 -k 32
+# A per-CTA LMEM size that is not a slot-pitch multiple, passed as the multicast
+# stride: the device rounds it to the pitch the receivers sit at.
+- id: sgemm_tcu_wg_dxa_mcast-pad
+  touches: [hw/rtl/dxa, sim/simx/dxa, hw/rtl/VX_kmu.sv, sim/simx/cta_dispatcher.cpp, sw/common/lmem_slot.h]
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm_tcu_wg_dxa_mcast
+  configs: -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_TCU_TYPE=DPI
+  args: -p 16
 - id: sgemm_tcu_wg_dxa_mcast-mc
   touches: [hw/rtl/VX_kmu.sv, hw/rtl/interfaces/VX_kmu_bus_if.sv,
             hw/rtl/core/VX_kmu_bus_arb.sv, hw/rtl/core/VX_cta_dispatch.sv,
