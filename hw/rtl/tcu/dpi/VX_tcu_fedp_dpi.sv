@@ -50,15 +50,14 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
     `UNUSED_VAR (fmt_d);
 
 `ifdef VX_CFG_TCU_MX_ENABLE
-    function automatic [7:0] mx_scale_exp_sum(
-        input logic [7:0] scale_a,
-        input logic [7:0] scale_b
-    );
-        logic [7:0] raw_scale_a, raw_scale_b;
-        begin
-            raw_scale_a = scale_a - 8'd127;
-            raw_scale_b = scale_b - 8'd127;
-            mx_scale_exp_sum = raw_scale_a + raw_scale_b;
+    // E8M0 scale as the fp32 value 2^(scale-127): 0 is subnormal, and 0xFF
+    // is NaN, so every element it scales is NaN
+    function automatic [63:0] mx_scale_f32(input logic [7:0] scale);
+        mx_scale_f32 = {32'hffffffff, 1'b0, scale, 23'h0};
+        if (scale == 8'd0) begin
+            mx_scale_f32[31:0] = 32'h00400000;
+        end else if (scale == 8'hff) begin
+            mx_scale_f32[31:0] = 32'h7fc00000;
         end
     endfunction
 `endif
@@ -136,12 +135,11 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
                         if ((((i * 4 + j) * SF) / (N * 4)) == s) begin
                             dpi_f2f(enable, int'(0), int'(4), {56'hffffffffffffff, a_row[i][j * 8 +: 8]}, 3'b0, a_f, fflags);
                             dpi_f2f(enable, int'(0), int'(4), {56'hffffffffffffff, b_col[i][j * 8 +: 8]}, 3'b0, b_f, fflags);
+                            dpi_fmul(enable, int'(0), a_f, mx_scale_f32(sf_a[s]), 3'b0, a_f, fflags);
+                            dpi_fmul(enable, int'(0), b_f, mx_scale_f32(sf_b[s]), 3'b0, b_f, fflags);
                             dpi_fmul(enable, int'(0), a_f, b_f, 3'b0, temp, fflags);
                             dpi_fadd(enable, int'(0), temp, group_prod, 3'b0, group_prod, fflags);
                         end
-                    end
-                    if (group_prod[30:0] != 0) begin
-                        group_prod[30:23] = group_prod[30:23] + mx_scale_exp_sum(sf_a[s], sf_b[s]);
                     end
                     dpi_fadd(enable, int'(0), group_prod, prod, 3'b0, prod, fflags);
                 end
@@ -154,12 +152,11 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
                         if ((((i * 4 + j) * SF) / (N * 4)) == s) begin
                             dpi_f2f(enable, int'(0), int'(5), {56'hffffffffffffff, a_row[i][j * 8 +: 8]}, 3'b0, a_f, fflags);
                             dpi_f2f(enable, int'(0), int'(5), {56'hffffffffffffff, b_col[i][j * 8 +: 8]}, 3'b0, b_f, fflags);
+                            dpi_fmul(enable, int'(0), a_f, mx_scale_f32(sf_a[s]), 3'b0, a_f, fflags);
+                            dpi_fmul(enable, int'(0), b_f, mx_scale_f32(sf_b[s]), 3'b0, b_f, fflags);
                             dpi_fmul(enable, int'(0), a_f, b_f, 3'b0, temp, fflags);
                             dpi_fadd(enable, int'(0), temp, group_prod, 3'b0, group_prod, fflags);
                         end
-                    end
-                    if (group_prod[30:0] != 0) begin
-                        group_prod[30:23] = group_prod[30:23] + mx_scale_exp_sum(sf_a[s], sf_b[s]);
                     end
                     dpi_fadd(enable, int'(0), group_prod, prod, 3'b0, prod, fflags);
                 end
@@ -175,12 +172,11 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
                         if ((((i * 8 + j) * SF) / (N * 8)) == s) begin
                             dpi_f2f(enable, int'(0), int'(7), {60'hfffffffffffffff, a_row[i][j * 4 +: 4]}, 3'b0, a_f, fflags);
                             dpi_f2f(enable, int'(0), int'(7), {60'hfffffffffffffff, b_col[i][j * 4 +: 4]}, 3'b0, b_f, fflags);
+                            dpi_fmul(enable, int'(0), a_f, mx_scale_f32(sf_a[s]), 3'b0, a_f, fflags);
+                            dpi_fmul(enable, int'(0), b_f, mx_scale_f32(sf_b[s]), 3'b0, b_f, fflags);
                             dpi_fmul(enable, int'(0), a_f, b_f, 3'b0, temp, fflags);
                             dpi_fadd(enable, int'(0), temp, group_prod, 3'b0, group_prod, fflags);
                         end
-                    end
-                    if (group_prod[30:0] != 0) begin
-                        group_prod[30:23] = group_prod[30:23] + mx_scale_exp_sum(sf_a[s], sf_b[s]);
                     end
                     dpi_fadd(enable, int'(0), group_prod, prod, 3'b0, prod, fflags);
                 end
