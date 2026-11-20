@@ -36,8 +36,8 @@ set -e
 
 TOOLDIR=${TOOLDIR:=@TOOLDIR@}
 
-CIRCT_REPO=${CIRCT_REPO:=https://github.com/vortexgpgpu/circt.git}
-CIRCT_REV=${CIRCT_REV:=vortex_3.x}
+CIRCT_REPO=${CIRCT_REPO:=https://github.com/orcaslab/circt.git}
+CIRCT_REV=${CIRCT_REV:=main}
 
 CIRCT_SRC=${CIRCT_SRC:=$TOOLDIR/circt-src}
 CIRCT_PREFIX=${CIRCT_PREFIX:=$TOOLDIR/circt}

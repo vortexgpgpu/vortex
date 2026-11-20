@@ -13,7 +13,7 @@
 
 # sta_endpoints.tcl: OpenSTA, the worst setup slack at the data input of
 # every flip-flop, for comparing Beacon per register with an ASIC flow (a
-# CSV in the end point table format of ci/beacon.py).
+# CSV in the end point table format of Beacon (`beacon validate`)).
 # env: LIB NETLIST TOP SDC OUT
 proc env {name} { return $::env($name) }
 read_liberty [env LIB]

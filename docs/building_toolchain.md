@@ -27,6 +27,7 @@ The components covered here are:
 13. [SLASH / Alveo V80](#13-slash--alveo-v80-the-aved-backend) — AMD Alveo V80 platform stack for the `aved` backend (optional)
 14. [CIRCT](#14-circt) — the SystemVerilog preprocessor of the synthesis flows and the frontend of Beacon and Foldsim (`circt-verilog`, `circt-opt`, `firtool`)
 15. [Foldsim](#15-foldsim) — FAME-5 simulator compiler of `hw/syn/foldsim`, built on CIRCT (optional)
+16. [Beacon](#16-beacon) — logic-level and area screen of `ci/logic_gate.py` and the `<dut>-beacon` targets, built on CIRCT (optional)
 
 ---
 
@@ -910,7 +911,7 @@ platform stack an administrator installs once per machine — CI never consumes
 it, and only an FPGA flow can use it. Install it by hand:
 
 ```bash
-git clone --branch vortex_3.x https://github.com/vortexgpgpu/firesim.git ~/dev/firesim
+git clone https://github.com/orcaslab/firesim.git ~/dev/firesim
 cd ~/dev/firesim && ./build-setup.sh      # needs `conda` on PATH (e.g. Miniforge)
 ln -s ~/dev/firesim $TOOLDIR/firesim
 ```
@@ -941,7 +942,7 @@ directory, so the tree works wherever it is unpacked; `conda` must still be on
 compiler jars into `~/.cache/coursier` and `~/.sbt`, so it needs network
 access once.
 
-`vortex_3.x` is based on upstream tag 1.21.0. Clone it wherever you keep
+The fork's `main` (orcaslab/firesim) is based on upstream tag 1.21.0. Clone it wherever you keep
 sources; `$TOOLDIR/firesim` only has to resolve to the checkout.
 
 Unlike POCL, Mesa or chipStar there is no compile-and-install step: FireSim is
@@ -1006,7 +1007,7 @@ does not apply to it — SLASH replaces that whole layer. It provides:
 ### We build from a fork, not upstream
 
 The prebuilt bundle carries
-[`vortexgpgpu/slash`](https://github.com/vortexgpgpu/slash), a fork of
+[`orcaslab/slash`](https://github.com/orcaslab/slash), a fork of
 [`Xilinx/SLASH`](https://github.com/Xilinx/SLASH). The fork is not
 cosmetic — Vortex does not run on upstream as shipped:
 
@@ -1080,7 +1081,7 @@ and rebuilds it on upgrade — nothing to do by hand.
 Building it manually is a development fallback only:
 
 ```bash
-git clone https://github.com/vortexgpgpu/slash.git
+git clone https://github.com/orcaslab/slash.git
 cd slash && git submodule update --init --recursive
 make -C driver          # kcompat probes the running kernel; no flags needed
 sudo insmod driver/slash.ko
@@ -1146,8 +1147,8 @@ never an elaborated netlist; Yosys reads them with its slang frontend. Only Beac
 the netlist CIRCT elaborates (`hw/scripts/circt_elaborate.sh`); Foldsim imports
 the sources with CIRCT in its own flow.
 
-> **Baseline:** Vortex's CIRCT fork, branch `vortex_3.x` of
-> `vortexgpgpu/circt`: upstream CIRCT with the import, lowering and
+> **Baseline:** Vortex's CIRCT fork, branch `main` of
+> [`orcaslab/circt`](https://github.com/orcaslab/circt): upstream CIRCT with the import, lowering and
 > memory fixes the Vortex flows need. It pins its own LLVM (a submodule),
 > separate from `llvm-vortex`: CIRCT tracks LLVM main.
 
@@ -1199,7 +1200,7 @@ cmake -G Ninja -S $CIRCT_SRC/llvm/llvm -B $CIRCT_SRC/build \
 `foldsim-opt`. Foldsim is its own project and builds on CIRCT, as POCL builds
 on LLVM.
 
-> **Baseline:** branch `vortex_3.x` of `vortexgpgpu/foldsim`.
+> **Baseline:** branch `main` of [`orcaslab/foldsim`](https://github.com/orcaslab/foldsim).
 
 ### Build
 
@@ -1236,6 +1237,42 @@ cmake -G Ninja -S $FOLDSIM_SRC -B $FOLDSIM_SRC/build \
 - The prebuilt is opt-in: `./ci/toolchain_install.sh --foldsim` (or `--all`)
   installs it; the default install leaves it out, since only the Foldsim
   flow needs it.
+
+---
+
+## 16. Beacon
+
+**Purpose**: the logic-level and area screen of `ci/logic_gate.py` and of the
+`<dut>-beacon` targets (`hw/syn/xilinx/dut`, `hw/syn/yosys/dut`): the `beacon`
+driver and `beacon-opt`. Beacon is its own project,
+[`orcaslab/beacon`](https://github.com/orcaslab/beacon) (design document:
+[docs/beacon.md](https://github.com/orcaslab/beacon/blob/main/docs/beacon.md)),
+and builds on CIRCT, as Foldsim does. Vortex keeps only its DUT catalog
+(`ci/testcases/logic_gate.yaml`), the baselines
+(`ci/baselines/synthesis/beacon*/`) and the gate (`ci/logic_gate.py`).
+
+> **Baseline:** branch `main` of [`orcaslab/beacon`](https://github.com/orcaslab/beacon).
+
+### Build
+
+Build CIRCT first (§14), then:
+
+```bash
+./ci/beacon_install.sh      # BEACON_REPO, BEACON_REV, CIRCT_PREFIX override the defaults
+```
+
+which configures Beacon against `$TOOLDIR/circt`, builds it, runs its lit
+tests (`check-beacon`) and installs `bin/beacon`, `bin/beacon-opt` and the
+calibrations into `$TOOLDIR/beacon`.
+
+### Notes
+
+- `hw/syn/common.mk` sets `BEACON_PATH ?= $(TOOLDIR)/beacon` and
+  `BEACON ?= $(BEACON_PATH)/bin/beacon`; `ci/synth_gate.py` resolves the
+  driver the same way (`BEACON`, `BEACON_PATH`, `$TOOLDIR/beacon`, `PATH`).
+  To use a Beacon build tree, set `BEACON_PATH=<build>` (same `bin/` layout).
+- The prebuilt is opt-in: `./ci/toolchain_install.sh --beacon` (or `--all`)
+  installs it; CI's `logic_gate` cells install it (`needs: beacon`).
 
 ---
 

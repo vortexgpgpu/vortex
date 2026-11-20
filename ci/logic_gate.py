@@ -2,9 +2,10 @@
 """logic_gate — logic-level and area regression gate (Beacon).
 
 Gates the depth of every RTL unit of the DUT catalog, and each DUT's area:
-foldsim-estimate-timing counts the logic levels of every register-to-register
+Beacon (https://github.com/orcaslab/beacon: beacon-estimate-timing) counts the
+logic levels of every register-to-register
 path of the CIRCT netlist the Xilinx flow elaborates, as Vivado counts them on
-DEVICE's family, and foldsim-estimate-area its LUTs, flip-flops, distributed
+DEVICE's family, and beacon-estimate-area its LUTs, flip-flops, distributed
 and block RAM and DSPs, without running Vivado. A unit that gets one level
 deeper than its baseline fails, by name, and a resource more than 5% larger,
 in seconds -- where ci/fpga_gate.py finds the Fmax or area it costs the next
@@ -27,7 +28,8 @@ SRAM macros; baselines in ci/baselines/synthesis/beacon_asic/). With
 same build on REV's RTL, measured under this checkout's flow: CI passes a
 pull request's merge base (BEACON_AGAINST_REV).
 
-It needs CIRCT and foldsim (ci/toolchain_install.sh --circt --foldsim); the
+It needs CIRCT and Beacon (ci/toolchain_install.sh --circt --beacon, or
+BEACON_PATH naming a Beacon build or installation); the
 Xilinx environment is not used.
 
 Usage (from a source checkout):

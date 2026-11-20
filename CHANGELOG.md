@@ -59,6 +59,12 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
 
 ### Changed
 
+- **Beacon is its own project, [orcaslab/beacon](https://github.com/orcaslab/beacon).** The driver (`ci/beacon.py`), the gate
+  summary (`hw/scripts/beacon_summary.py`), the U55C calibration and `docs/designs/beacon.md` moved there with their history, and
+  the passes left Foldsim (`foldsim-beacon-map` etc. are `beacon-map`, `beacon-estimate-timing`, `beacon-estimate-area`). Vortex keeps
+  its DUT catalog, baselines and gate; the `<dut>-beacon` targets and `ci/logic_gate.py` run the installed `beacon`
+  (`BEACON_PATH`, default `$(TOOLDIR)/beacon`; `ci/toolchain_install.sh --beacon`, `ci/beacon_install.sh`). The CIRCT, Foldsim,
+  FireSim and SLASH forks moved to the [orcaslab](https://github.com/orcaslab) organization (`main` branches).
 - **Toolchain pinned to v3.0.2** (`TOOLCHAIN_REV`): LLVM f44a6bb2af4c, with PoCL rebuilt on it. Wide loads/stores and 64-bit
   atomics stay behind `+xvortexldstwide` and `+xvortexamod`, so code built with plain `+xvortex` uses no new instructions.
 - **Dcache read-merge pairs realign.** A pair of same-word merge ports whose parts a bank served a cycle apart waits for its partner,
@@ -173,7 +179,7 @@ The 3.0 release introduces a fixed-function graphics stack (rasterizer, texture 
 
 ### Added
 
-- **FireSim FPGA-accelerated simulation (Alveo U55C).** Vortex runs as a host-decoupled FireSim target — Chisel BlackBox + FASED memory timing model ([hw/syn/firesim/src/main/scala/VortexTarget.scala](hw/syn/firesim/src/main/scala/VortexTarget.scala)), AFU wrapper ([hw/rtl/afu/firesim/VX_firesim_wrap.sv](hw/rtl/afu/firesim/VX_firesim_wrap.sv)), transport ([sim/firesim/firesim_sim.cpp](sim/firesim/firesim_sim.cpp)) and runtime HAL ([sw/runtime/firesim/vortex.cpp](sw/runtime/firesim/vortex.cpp)) — selected by `--driver=firesim`, built from [vortexgpgpu/firesim](https://github.com/vortexgpgpu/firesim) `vortex_3.x` consumed as `$(FIRESIM_PATH)` and packaged by `ci/toolchain_{install,prebuilt}.sh --firesim`; the image is `$(FPGA_BIN_DIR)/firesim.xclbin`, and `XCLBIN_PATH` now names the image for both the xrt and firesim drivers, replacing `XRT_XCLBIN_PATH`.
+- **FireSim FPGA-accelerated simulation (Alveo U55C).** Vortex runs as a host-decoupled FireSim target — Chisel BlackBox + FASED memory timing model ([hw/syn/firesim/src/main/scala/VortexTarget.scala](hw/syn/firesim/src/main/scala/VortexTarget.scala)), AFU wrapper ([hw/rtl/afu/firesim/VX_firesim_wrap.sv](hw/rtl/afu/firesim/VX_firesim_wrap.sv)), transport ([sim/firesim/firesim_sim.cpp](sim/firesim/firesim_sim.cpp)) and runtime HAL ([sw/runtime/firesim/vortex.cpp](sw/runtime/firesim/vortex.cpp)) — selected by `--driver=firesim`, built from [orcaslab/firesim](https://github.com/orcaslab/firesim) `vortex_3.x` consumed as `$(FIRESIM_PATH)` and packaged by `ci/toolchain_{install,prebuilt}.sh --firesim`; the image is `$(FPGA_BIN_DIR)/firesim.xclbin`, and `XCLBIN_PATH` now names the image for both the xrt and firesim drivers, replacing `XRT_XCLBIN_PATH`.
   *Why:* every target clock edge is scheduled by the host and target DRAM is served by a timing model, so cycle counts are reproducible run to run and the modelled memory system can be varied independently of the card — `sgemm -n1024` (1.19 B instructions) runs in ~85 s with instruction counts matching rtlsim exactly, at 10.09 % LUT / 5.41 % BRAM / 0.27 % DSP and WNS +5.283 ns.
   *Limits:* U55C only — the host-memory base address, the `HBM[0:7]` binding and the single memory bank are fixed to that card, and on any other platform the target DRAM path fails silently. See [docs/designs/firesim_integration.md](docs/designs/firesim_integration.md).
 - **AMD Alveo V80 support (`aved` backend).** New AFU, runtime, Verilator model and synthesis flow targeting the V80 through the SLASH platform (VRT runtime, `slashkit` linker, IP-XACT packaging) — the board is not an XDMA shell, so XRT does not apply. `TARGET=hw|sim|avedsim` selects what executes the RTL; `avedsim` is the iteration loop and matches the `xrt` backend cycle-for-cycle.

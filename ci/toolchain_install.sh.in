@@ -201,6 +201,16 @@ foldsim()
     mkdir -p $TOOLDIR && rm -rf $TOOLDIR/foldsim && mv foldsim $TOOLDIR
     rm -rf foldsim foldsim.tar.bz2
 }
+# Beacon (orcaslab/beacon): the logic-level and area screen ci/logic_gate.py
+# and the `<dut>-beacon` targets run (the `beacon` driver and beacon-opt).
+beacon()
+{
+    rm -f beacon.tar.bz2
+    wget $REPOSITORY/beacon/$OSVERSION/beacon.tar.bz2
+    tar -xvf beacon.tar.bz2
+    mkdir -p $TOOLDIR && rm -rf $TOOLDIR/beacon && mv beacon $TOOLDIR
+    rm -rf beacon beacon.tar.bz2
+}
 
 yosys()
 {
@@ -275,10 +285,11 @@ install_base()
 show_usage()
 {
     echo "Install Pre-built Vortex Toolchain"
-    echo "Usage: $0 [--pocl] [--chipstar] [--mesa] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--circt] [--foldsim] [--yosys] [--sta] [--gem5] [--all] [-h|--help]"
-    echo "  (no arguments: install all components except Foldsim and gem5)"
-    echo "  Foldsim and gem5 are opt-in: Foldsim serves only the Foldsim flow, and"
-    echo "  gem5 is a large source build. --all installs them too."
+    echo "Usage: $0 [--pocl] [--chipstar] [--mesa] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--circt] [--foldsim] [--beacon] [--yosys] [--sta] [--gem5] [--all] [-h|--help]"
+    echo "  (no arguments: install all components except Foldsim, Beacon and gem5)"
+    echo "  Foldsim, Beacon and gem5 are opt-in: Foldsim serves only the Foldsim flow,"
+    echo "  Beacon only the logic gate, and gem5 is a large source build. --all"
+    echo "  installs them too."
 }
 
 # Default with no arguments: install every component except the opt-in ones.
@@ -315,6 +326,8 @@ while [ "$1" != "" ]; do
                 ;;
         --foldsim ) foldsim
                 ;;
+        --beacon ) beacon
+                ;;
         --yosys ) yosys
                 ;;
         --sta ) sta
@@ -323,6 +336,7 @@ while [ "$1" != "" ]; do
                 ;;
         --all ) install_base
                 foldsim
+                beacon
                 gem5
                 ;;
         -h | --help ) show_usage

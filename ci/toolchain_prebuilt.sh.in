@@ -144,6 +144,16 @@ foldsim()
     mkdir -p ./foldsim/$OSVERSION
     mv foldsim.tar.bz2 ./foldsim/$OSVERSION
 }
+# Beacon's runtime (ci/beacon_install.sh), one tarball: bin/ (the `beacon`
+# driver, beacon-opt, the gate summary, the path database tools and the
+# calibrations).
+beacon()
+{
+    echo "prebuilt beacon..."
+    tar -C $TOOLDIR -cvjf beacon.tar.bz2 beacon/bin
+    mkdir -p ./beacon/$OSVERSION
+    mv beacon.tar.bz2 ./beacon/$OSVERSION
+}
 
 yosys()
 {
@@ -185,7 +195,7 @@ gem5()
 show_usage()
 {
     echo "Setup Pre-built Vortex Toolchain"
-    echo "Usage: $0 [--pocl] [--chipstar] [--mesa] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--circt] [--foldsim] [--yosys] [--sta] [--gem5] [--all] [-h|--help]"
+    echo "Usage: $0 [--pocl] [--chipstar] [--mesa] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--circt] [--foldsim] [--beacon] [--yosys] [--sta] [--gem5] [--all] [-h|--help]"
 }
 
 while [ "$1" != "" ]; do
@@ -216,6 +226,8 @@ while [ "$1" != "" ]; do
                 ;;
         --foldsim ) foldsim
                 ;;
+        --beacon ) beacon
+                ;;
         --yosys ) yosys
                 ;;
         --sta ) sta
@@ -234,6 +246,7 @@ while [ "$1" != "" ]; do
                 libc64
                 circt
                 foldsim
+                beacon
                 yosys
                 sta
                 mesa
