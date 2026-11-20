@@ -217,6 +217,9 @@ const char *kernel_file = "kernel.vxbin";
 uint32_t xm = 64;
 uint32_t xn = 64;
 uint32_t xk = 64;
+// Extra per-CTA LMEM bytes: a footprint that is not a multiple of the CTA slot
+// pitch, passed as the multicast stride, must still reach each receiver.
+uint32_t smem_pad = 0;
 // `warps` (= warps per CTA = WGMMA group size) is derived at runtime from
 // VX_CAPS_ISSUE_WIDTH after the device opens. WGMMA requires CTA-warp count
 // to match the hardware's TCU BLOCK_SIZE (= ISSUE_WIDTH), so it's not a
@@ -236,16 +239,17 @@ constexpr uint32_t kDescB = 1;
 
 static void show_usage() {
   std::cout << "Vortex SGEMM TCU WGMMA+DXA Test." << std::endl;
-  std::cout << "Usage: [-m M] [-n N] [-k K] [-h help]" << std::endl;
+  std::cout << "Usage: [-m M] [-n N] [-k K] [-p smem_pad_bytes] [-h help]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "m:n:k:h")) != -1) {
+  while ((c = getopt(argc, argv, "m:n:k:p:h")) != -1) {
     switch (c) {
     case 'm': xm = atoi(optarg); break;
     case 'n': xn = atoi(optarg); break;
     case 'k': xk = atoi(optarg); break;
+    case 'p': smem_pad = atoi(optarg); break;
     case 'h': show_usage(); exit(0); break;
     default:  show_usage(); exit(-1);
     }
@@ -346,7 +350,7 @@ int main(int argc, char *argv[]) {
   uint32_t block_dim[2] = {warps * (uint32_t)NT, 1};
 
   // SMEM: A tile [cta_M x tileK] + B tile [tileK x tileN]
-  uint32_t smem_size = (cta_M * cfg::tileK + cfg::tileK * cfg::xtileN) * sizeof(itype_t);
+  uint32_t smem_size = (cta_M * cfg::tileK + cfg::tileK * cfg::xtileN) * sizeof(itype_t) + smem_pad;
 
   std::cout << "input type: " << vt::ITYPE::name << ", output type: " << vt::OTYPE::name << std::endl;
   std::cout << "WGMMA tile: M=" << cfg::xtileM << ", N=" << cfg::xtileN << ", K=" << cfg::tileK << std::endl;
@@ -433,12 +437,8 @@ int main(int argc, char *argv[]) {
 
   // Multicast attribute on B descriptor: smem_stride per receiver. Each
   // co-resident CTA has its own LMEM region; the dispatcher allocates them
-  // sequentially with stride = per-CTA SMEM size.
-  const uint32_t b_tile_bytes = cfg::xtileN * cfg::tileK * sizeof(itype_t);
-  const uint32_t smem_stride  = (cta_M * cfg::tileK + cfg::xtileN * cfg::tileK)
-                                * sizeof(itype_t);
-  RT_CHECK(vortex::dxa::set_multicast(device, kDescB, smem_stride));
-  (void)b_tile_bytes;
+  // sequentially, one per-CTA SMEM size (rounded to the slot pitch) apart.
+  RT_CHECK(vortex::dxa::set_multicast(device, kDescB, smem_size));
 
   std::cout << "load kernel module" << std::endl;
   RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
