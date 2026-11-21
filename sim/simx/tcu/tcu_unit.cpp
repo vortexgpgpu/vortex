@@ -757,6 +757,44 @@ public:
   #endif
   }
 
+  // The tile buffers cannot fetch a descriptor that breaks the alignment rule,
+  // so SimX must not read it from its exact address either.
+  static void check_desc(uint32_t desc, bool is_b, bool is_sparse) {
+    uint32_t slice_words = vt::wgmma_slice_words(is_b, is_sparse, cfg::tcK, kFedpWords);
+    auto fault = vt::smem_desc_check(desc, slice_words, kBankRowWords * 4);
+    if (fault == vt::smem_desc_fault::none) {
+      return;
+    }
+    std::cerr << "*** WGMMA " << (is_b ? "B" : "A") << " descriptor 0x" << std::hex << desc << std::dec
+              << " (offset " << vt::smem_desc_offset(desc) << " B, stride " << vt::smem_desc_stride(desc) << " B): ";
+    switch (fault) {
+    case vt::smem_desc_fault::block_base:
+      std::cerr << "a block-major base must be aligned to an LMEM bank row (" << (kBankRowWords * 4) << " B)";
+      break;
+    case vt::smem_desc_fault::row_base:
+      std::cerr << "a row-major base must be a multiple of the " << (slice_words * 4) << "-byte K-slice";
+      break;
+    default:
+      std::cerr << "a row-major stride must be a multiple of the " << (slice_words * 4) << "-byte K-slice";
+      break;
+    }
+    std::cerr << std::endl;
+    std::abort();
+  }
+
+  // Decode a warp's WGMMA descriptors into LMEM base and row stride.
+  void decode_descs(uint32_t wid, uint32_t fmt_s, bool is_a_smem, bool is_sparse) {
+    uint32_t e_bits = elem_bits(fmt_s);
+    uint32_t a_desc = wgmma_desc_[wid][0];
+    uint32_t b_desc = wgmma_desc_[wid][1];
+    if (is_a_smem) {
+      check_desc(a_desc, false, is_sparse);
+      lmem_desc_[wid][0] = {uint64_t(VX_MEM_LMEM_BASE_ADDR) + vt::smem_desc_offset(a_desc), vt::smem_desc_stride(a_desc) * 8 / e_bits, false};
+    }
+    check_desc(b_desc, true, is_sparse);
+    lmem_desc_[wid][1] = {uint64_t(VX_MEM_LMEM_BASE_ADDR) + vt::smem_desc_offset(b_desc), vt::smem_desc_stride(b_desc) * 8 / e_bits, false};
+  }
+
 #ifdef VX_CFG_TCU_WGMMA_ENABLE
   // A block's A buffer: one k-stripe.
   struct abuf_slot_t {
@@ -973,44 +1011,6 @@ public:
     }
 
     return ready_mask;
-  }
-
-  // The tile buffers cannot fetch a descriptor that breaks the alignment rule,
-  // so SimX must not read it from its exact address either.
-  static void check_desc(uint32_t desc, bool is_b, bool is_sparse) {
-    uint32_t slice_words = vt::wgmma_slice_words(is_b, is_sparse, cfg::tcK, kFedpWords);
-    auto fault = vt::smem_desc_check(desc, slice_words, kBankRowWords * 4);
-    if (fault == vt::smem_desc_fault::none) {
-      return;
-    }
-    std::cerr << "*** WGMMA " << (is_b ? "B" : "A") << " descriptor 0x" << std::hex << desc << std::dec
-              << " (offset " << vt::smem_desc_offset(desc) << " B, stride " << vt::smem_desc_stride(desc) << " B): ";
-    switch (fault) {
-    case vt::smem_desc_fault::block_base:
-      std::cerr << "a block-major base must be aligned to an LMEM bank row (" << (kBankRowWords * 4) << " B)";
-      break;
-    case vt::smem_desc_fault::row_base:
-      std::cerr << "a row-major base must be a multiple of the " << (slice_words * 4) << "-byte K-slice";
-      break;
-    default:
-      std::cerr << "a row-major stride must be a multiple of the " << (slice_words * 4) << "-byte K-slice";
-      break;
-    }
-    std::cerr << std::endl;
-    std::abort();
-  }
-
-  // Decode a warp's WGMMA descriptors into LMEM base and row stride.
-  void decode_descs(uint32_t wid, uint32_t fmt_s, bool is_a_smem, bool is_sparse) {
-    uint32_t e_bits = elem_bits(fmt_s);
-    uint32_t a_desc = wgmma_desc_[wid][0];
-    uint32_t b_desc = wgmma_desc_[wid][1];
-    if (is_a_smem) {
-      check_desc(a_desc, false, is_sparse);
-      lmem_desc_[wid][0] = {uint64_t(VX_MEM_LMEM_BASE_ADDR) + vt::smem_desc_offset(a_desc), vt::smem_desc_stride(a_desc) * 8 / e_bits, false};
-    }
-    check_desc(b_desc, true, is_sparse);
-    lmem_desc_[wid][1] = {uint64_t(VX_MEM_LMEM_BASE_ADDR) + vt::smem_desc_offset(b_desc), vt::smem_desc_stride(b_desc) * 8 / e_bits, false};
   }
 
   static uint32_t xtile_n_of(uint32_t cd_nregs) {
