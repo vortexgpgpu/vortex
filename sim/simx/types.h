@@ -275,6 +275,7 @@ enum class BrType {
   JAL,
   JALR,
   SYS,
+  ILLEGAL,
 };
 
 struct IntrBrArgs {
@@ -289,6 +290,7 @@ inline std::ostream &operator<<(std::ostream &os, const BrType& type) {
   case BrType::JAL:  os << "JAL"; break;
   case BrType::JALR: os << "JALR"; break;
   case BrType::SYS:  os << "SYS"; break;
+  case BrType::ILLEGAL: os << "ILLEGAL"; break;
   default:
     assert(false);
   }

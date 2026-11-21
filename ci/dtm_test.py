@@ -40,6 +40,7 @@ IR_DBUS   = 0x11
 
 # Debug Module register addresses (DMI space, 7-bit)
 DM_DATA0      = 0x04
+DM_DATA1      = 0x05
 DM_DMCONTROL  = 0x10
 DM_DMSTATUS   = 0x11
 DM_COMMAND    = 0x17
@@ -129,17 +130,23 @@ def dmi_write(sock, addr, value):
 
 
 def abstract_reg_read(sock, regaddr):
-    """Issue Access Register (cmdtype=0, transfer=1, read). Return DATA0."""
+    """Issue Access Register (cmdtype=0, transfer=1, read). Return the
+    XLEN-bit value: DATA0, with DATA1 as the high word for XLEN=64."""
     # aarsize=2 (32-bit) for XLEN=32, aarsize=3 (64-bit) for XLEN=64
     aarsize = 2 if XLEN == 32 else 3
     cmd = (0 << 24) | (aarsize << 20) | (1 << 17) | (regaddr & 0xFFFF)
     dmi_write(sock, DM_COMMAND, cmd)
-    return dmi_read(sock, DM_DATA0)
+    value = dmi_read(sock, DM_DATA0)
+    if XLEN == 64:
+        value |= dmi_read(sock, DM_DATA1) << 32
+    return value
 
 
 def abstract_reg_write(sock, regaddr, value):
     aarsize = 2 if XLEN == 32 else 3
     dmi_write(sock, DM_DATA0, value & 0xFFFFFFFF)
+    if XLEN == 64:
+        dmi_write(sock, DM_DATA1, (value >> 32) & 0xFFFFFFFF)
     cmd = (0 << 24) | (aarsize << 20) | (1 << 17) | (1 << 16) | (regaddr & 0xFFFF)
     dmi_write(sock, DM_COMMAND, cmd)
 
@@ -195,11 +202,11 @@ def t_abstract_read_pc(sock):
 
 def t_abstract_read_misa(sock):
     misa = abstract_reg_read(sock, REG_MISA)
-    mxl = (misa >> 30) & 0x3
+    mxl = (misa >> (XLEN - 2)) & 0x3
     i_ext = (misa >> 8) & 1
     expected_mxl = 1 if XLEN == 32 else 2
     ok = mxl == expected_mxl and i_ext == 1
-    return ok, f"MISA=0x{misa:08x} (MXL={mxl}, I={i_ext}, expected MXL={expected_mxl})"
+    return ok, f"MISA=0x{misa:0{XLEN // 4}x} (MXL={mxl}, I={i_ext}, expected MXL={expected_mxl})"
 
 
 def t_gpr_roundtrip(sock):

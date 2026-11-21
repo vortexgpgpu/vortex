@@ -141,6 +141,7 @@ package VX_trace_pkg;
                         INST_BR_URET:  `TRACE(level, ("URET"))
                         INST_BR_SRET:  `TRACE(level, ("SRET"))
                         INST_BR_MRET:  `TRACE(level, ("MRET"))
+                        INST_BR_ILLEGAL:`TRACE(level, ("ILLEGAL"))
                         default:       `TRACE(level, ("?"))
                     endcase
                 end

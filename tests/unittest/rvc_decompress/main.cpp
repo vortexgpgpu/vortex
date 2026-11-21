@@ -85,8 +85,26 @@ int main() {
   expect_illegal("c.addw", 0x9d25);
 #endif
 
-  // C.SLLI with rd=x0 is reserved at both widths.
-  expect_illegal("c.slli rd=x0", 0x0002);
+  // Code points with rd=x0 are HINTs: they expand to a write of x0.
+  expect_expansion("c.slli rd=x0", 0x0002, 0x00001013);
+  expect_expansion("c.lui rd=x0", 0x6005, 0x00001037);
+  expect_expansion("c.mv rd=x0", 0x8006, 0x00100033);
+  expect_expansion("c.add rd=x0", 0x9006, 0x00100033);
+
+  // Reserved code points.
+  expect_illegal("c.lui imm=0", 0x6081);
+  expect_illegal("c.addi16sp imm=0", 0x6101);
+  expect_illegal("c.jr rs1=x0", 0x8002);
+
+  // C.FLD/C.FSD and their SP forms exist only with 64-bit FP registers.
+#ifdef VX_CFG_FLEN_64
+  expect_expansion("c.fld", 0x2000, 0x00043407);
+#else
+  expect_illegal("c.fld", 0x2000);
+  expect_illegal("c.fsd", 0xa000);
+  expect_illegal("c.fldsp", 0x2002);
+  expect_illegal("c.fsdsp", 0xa002);
+#endif
 
   if (failures != 0) {
     printf("FAILED: %d rvc_decompress case(s)\n", failures);

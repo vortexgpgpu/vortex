@@ -98,6 +98,9 @@ DecompResult rvc_decompress(uint32_t word) {
             break;
         }
         case 0b001: { // C.FLD (RV32DC/RV64DC) -> FLD rd', uimm(rs1')
+        #ifndef VX_CFG_FLEN_64
+            out.illegal = true; break;
+        #endif
             uint32_t rd_  = rcp(bits(h, 4, 2));
             uint32_t rs1_ = rcp(bits(h, 9, 7));
             uint32_t uimm = (bits(h, 12, 10) << 3) | (bits(h, 6, 5) << 6);
@@ -112,6 +115,9 @@ DecompResult rvc_decompress(uint32_t word) {
             break;
         }
         case 0b101: { // C.FSD (RV32DC/RV64DC) -> FSD rs2', uimm(rs1')
+        #ifndef VX_CFG_FLEN_64
+            out.illegal = true; break;
+        #endif
             uint32_t rs2_ = rcp(bits(h, 4, 2));
             uint32_t rs1_ = rcp(bits(h, 9, 7));
             uint32_t uimm = (bits(h, 12, 10) << 3) | (bits(h, 6, 5) << 6);
@@ -208,9 +214,9 @@ DecompResult rvc_decompress(uint32_t word) {
                 if (imm == 0) { out.illegal = true; break; }
                 out.instr32 = ENCI(imm & 0xFFF, 2, 0b000, 2, 0b0010011);
             } else {
-                // C.LUI -> LUI rd, imm (rd != x0, x2)
+                // C.LUI -> LUI rd, imm (rd=x0 is a HINT)
                 int32_t imm = static_cast<int32_t>(sext_imm((bit(h,12)<<17) | (bits(h,6,2)<<12), 18));
-                if (rd == 0 || rd == 2 || imm == 0) { out.illegal = true; break; }
+                if (imm == 0) { out.illegal = true; break; }
                 out.instr32 = ENCU((imm >> 12), rd, 0b0110111);
             }
             break;
@@ -295,9 +301,8 @@ DecompResult rvc_decompress(uint32_t word) {
     // ---------------- Quadrant 2 (opcode 10) ----------------
     case 2:
         switch (funct3) {
-        case 0b000: { // C.SLLI
+        case 0b000: { // C.SLLI (rd=x0 is a HINT)
             uint32_t rd = bits(h, 11, 7);
-            if (rd == 0) { out.illegal = true; break; }
         #ifndef VX_CFG_XLEN_64
             if (bit(h, 12)) { out.illegal = true; break; }
         #endif
@@ -306,12 +311,18 @@ DecompResult rvc_decompress(uint32_t word) {
             break;
         }
         case 0b001: { // C.FLDSP (RV32DC/RV64DC) -> FLD rd, uimm(x2)
+        #ifndef VX_CFG_FLEN_64
+            out.illegal = true; break;
+        #endif
             uint32_t rd = bits(h, 11, 7);
             uint32_t uimm = (bit(h, 12) << 5) | (bits(h, 6, 5) << 3) | (bits(h, 4, 2) << 6);
             out.instr32 = ENCI(uimm, 2, 0b011, rd, 0b0000111);
             break;
         }
         case 0b101: { // C.FSDSP (RV32DC/RV64DC) -> FSD rs2, uimm(x2)
+        #ifndef VX_CFG_FLEN_64
+            out.illegal = true; break;
+        #endif
             uint32_t rs2 = bits(h, 6, 2);
             uint32_t uimm = (bits(h, 12, 10) << 3) | (bits(h, 9, 7) << 6);
             out.instr32 = ENCS(uimm, rs2, 2, 0b011, 0b0100111);
@@ -359,7 +370,7 @@ DecompResult rvc_decompress(uint32_t word) {
                     }
                 }
             } else {
-                if (rd == 0) { out.illegal = true; break; }
+                // rd=x0 is a HINT
                 if (s12 == 0) {
                     // C.MV
                     out.instr32 = ENCR(0b0000000, rs2, 0, 0b000, rd, 0b0110011);
@@ -398,10 +409,6 @@ DecompResult rvc_decompress(uint32_t word) {
 
     default:
         out.illegal = true; break;
-    }
-    if (out.illegal) {
-        std::cerr << "Illegal 16-bit RVC: word=0x" << std::hex << (word & 0xFFFFu) << std::dec
-                  << ", quadrant=" << quadrant << ", func3=" << funct3 << std::endl;
     }
     return out;
 }

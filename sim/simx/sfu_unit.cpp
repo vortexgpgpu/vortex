@@ -546,6 +546,12 @@ void SfuUnit::on_tick() {
 		} else if (is_csr) {
 			csr_unit_->process(trace);
 			csr_read_done_.at(b) = nullptr;
+			// An mstatus access holds its warp from decode; it is released as the
+			// request fires, not when its result retires.
+			if (trace->fetch_stall && trace->eop) {
+				warp_ctl_out.send(WarpCtl{trace->wid, false}, 1);
+				release_warp = false;
+			}
 #ifdef VX_CFG_EXT_DXA_ENABLE
 		} else if (std::get_if<DxaType>(&trace->op_type)) {
 			// process() returns nullptr on backpressure (idempotent retry next

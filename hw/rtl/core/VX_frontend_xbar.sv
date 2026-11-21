@@ -172,6 +172,7 @@ module VX_frontend_xbar import VX_gpu_pkg::*; (
             assign fs_csr_wr[f][q].data       = sched_csr_if[B].csr_wr_data;
             assign fs_csr_wr[f][q].trap_valid = sched_csr_if[B].trap_csr_wr_valid & {NUM_TRAP_CSRS{own_wr}};
             assign fs_csr_wr[f][q].trap_data  = sched_csr_if[B].trap_csr_wr_data;
+            assign fs_csr_wr[f][q].unlock     = sched_csr_if[B].csr_unlock && own_wr;
 
         `ifdef VX_CFG_EXT_RTU_ENABLE
             assign fs_rtu_unlock_valid[f][q] = sched_unlock_if[B].valid && own_unlock;

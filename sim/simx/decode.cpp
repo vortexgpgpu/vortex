@@ -225,6 +225,7 @@ static op_string_t op_string(const Instr &instr) {
         default:
           std::abort();
         }
+      case BrType::ILLEGAL: return {"ILLEGAL", ""};
       default:
         std::abort();
       }
@@ -558,13 +559,27 @@ Decoder::Decoder(const SimContext& ctx, const char* name, PoolAllocator<Instr, 6
 
 Decoder::~Decoder() {}
 
-Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
+Instr::Ptr Decoder::illegal(uint64_t uuid, bool is_rvc) {
+  auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::ALU);
+  instr->set_op_type(BrType::ILLEGAL);
+  instr->set_args(IntrBrArgs{0, is_rvc, 0});
+  instr->set_wstall(true);
+  return instr;
+}
+
+Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid, bool fs_off) {
   // Detect RVC from the raw bits and expand to a 32-bit instruction.
   const bool is_rvc = (code & 0x3u) != 0x3u;
   if (is_rvc) {
+  #ifdef VX_CFG_EXT_C_ENABLE
     auto r = rvc_decompress(code & 0xFFFFu);
-    assert(!r.illegal && "illegal RVC encoding");
+    if (r.illegal) {
+      return this->illegal(uuid, true);
+    }
     code = r.instr32;
+  #else
+    return this->illegal(uuid, false);
+  #endif
   }
   auto op = Opcode((code >> shift_opcode) & mask_opcode);
   auto funct2 = (code >> shift_funct2) & mask_funct2;
@@ -578,6 +593,72 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
   auto rs1 = (code >> shift_rs1) & mask_reg;
   auto rs2 = (code >> shift_rs2) & mask_reg;
   auto rs3 = (code >> shift_rs3) & mask_reg;
+
+  // The instructions that name an FP register or FP CSR, which mstatus.FS=Off
+  // makes illegal: the F/D instructions, the FP CSR accesses, and the Vortex
+  // extensions on FP registers.
+  bool is_fp = false;
+  switch (op) {
+  case Opcode::FL:
+  case Opcode::FS:
+  case Opcode::FMADD:
+  case Opcode::FMSUB:
+  case Opcode::FNMSUB:
+  case Opcode::FNMADD:
+  case Opcode::FCI:
+  #ifndef VX_CFG_EXT_F_ENABLE
+    return this->illegal(uuid, is_rvc);
+  #endif
+    is_fp = true;
+    break;
+#ifdef VX_CFG_EXT_F_ENABLE
+  case Opcode::SYS: {
+    uint32_t csr = code >> shift_rs2;
+    is_fp = ((funct3 & 0x3) != 0)
+         && (csr == VX_CSR_FFLAGS || csr == VX_CSR_FRM || csr == VX_CSR_FCSR);
+  } break;
+  case Opcode::EXT1:
+    // packed FP loads
+    is_fp = (funct7 == 0x4) && (funct3 == 1 || funct3 == 2);
+  #ifdef VX_CFG_EXT_TCU_ENABLE
+    // MMA; its metadata load names no FP register
+  #ifdef TCU_META_ENABLE
+    is_fp |= (funct7 == 0x2) && (funct3 != 2);
+  #else
+    is_fp |= (funct7 == 0x2);
+  #endif
+  #endif
+    break;
+#ifdef VX_CFG_EXT_RTU_ENABLE
+  case Opcode::EXT2: // GETWF and CB_RET
+    is_fp = (funct3 == 6) && (funct2 == 0 || funct2 == 2);
+    break;
+#endif
+#ifdef VX_CFG_EXT_TFU_ENABLE
+  case Opcode::EXT3:
+    is_fp = true;
+    break;
+#endif
+#if defined(VX_CFG_EXT_LDST_MATRIX_ENABLE) || defined(VX_CFG_EXT_LDST_WIDE_ENABLE)
+  case Opcode::EXT4: // wide and matrix FP loads and stores
+    is_fp = true;
+    break;
+#endif
+#endif
+#ifndef VX_CFG_EXT_A_ENABLE
+  case Opcode::AMO:
+    return this->illegal(uuid, is_rvc);
+#endif
+#if !defined(VX_CFG_EXT_LDST_MATRIX_ENABLE) && !defined(VX_CFG_EXT_LDST_WIDE_ENABLE)
+  case Opcode::EXT4:
+    return this->illegal(uuid, is_rvc);
+#endif
+  default:
+    break;
+  }
+  if (is_fp && fs_off) {
+    return this->illegal(uuid, is_rvc);
+  }
 
   auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::ALU);
 
@@ -597,6 +678,16 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
   case Opcode::I: {
     bool is_w = (op == Opcode::R_W) || (op == Opcode::I_W);
     bool is_imm = (op == Opcode::I) || (op == Opcode::I_W);
+    // shamt[5] of an immediate shift is reserved on RV32 and for the word shifts
+    if (is_imm && (funct3 & 0x3) == 0x1 && (funct7 & 0x1)) {
+    #ifdef VX_CFG_XLEN_64
+      if (is_w) {
+        return this->illegal(uuid, is_rvc);
+      }
+    #else
+      return this->illegal(uuid, is_rvc);
+    #endif
+    }
     if (op == Opcode::R && funct7 == 0x7) {
       uint32_t imm;
       if (funct3 == 0x5) { // CZERO.EQZ
@@ -667,6 +758,9 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     auto bit_12   = funct7 >> 6;
     auto imm12 = (bits_4_1 << 1) | (bit_10_5 << 5) | (bit_11 << 11) | (bit_12 << 12);
     auto addr = sext(imm12, width_i_imm+1);
+    if (funct3 == 2 || funct3 == 3) {
+      return this->illegal(uuid, is_rvc);
+    }
     instr->set_op_type(BrType::BR);
     instr->set_args(IntrBrArgs{funct3, is_rvc, addr});
     instr->set_src_reg(0, rs1, RegType::Integer);
@@ -787,11 +881,17 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       case 2: case 6: instr->set_op_type(CsrType::CSRRS); break;
       case 3: case 7: instr->set_op_type(CsrType::CSRRC); break;
       default:
-        std::abort();
+        return this->illegal(uuid, is_rvc);
       }
       auto imm12 = code >> shift_rs2;
       {
         bool csr_write = (funct3 == 1) || (funct3 == 5) || (rs1 != 0);
+        // CSR addresses 0xC00-0xFFF are read-only
+        if (csr_write && ((imm12 >> 10) & 0x3) == 0x3) {
+          return this->illegal(uuid, is_rvc);
+        }
+        // mstatus gates the decode of the warp's next instructions
+        instr->set_wstall(imm12 == VX_CSR_MSTATUS);
         uint8_t fcsr_regs = 0;
         if (imm12 == VX_CSR_FFLAGS || imm12 == VX_CSR_FCSR) {
           fcsr_regs |= Instr::FCSR_FFLAGS;
@@ -807,8 +907,13 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       } else { // zimm
         instr->set_args(IntrCsrArgs{1, rs1, imm12});
       }
-    } else { // ECALL/EBREACK/URET/SRET/MRET
+    } else { // ECALL/EBREAK/URET/SRET/MRET/WFI
       auto imm12 = code >> shift_rs2;
+      switch (imm12) {
+      case 0x000: case 0x001: case 0x002: case 0x102: case 0x302: case 0x105: break;
+      default:
+        return this->illegal(uuid, is_rvc);
+      }
       instr->set_op_type(BrType::SYS);
       instr->set_args(IntrBrArgs{0, 0, imm12});
       instr->set_wstall(true);
@@ -825,7 +930,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       bool is_f2f = (group == 0x08);
       bool is_mv = (group == 0x1e) || (group == 0x1c && funct3 == 0);
       if (!is_f2f && !(is_mv ? mv_fmt_supported(fmt) : fmt_supported(fmt))) {
-        std::abort();
+        return this->illegal(uuid, is_rvc);
       }
     }
     switch (funct7) {
@@ -884,7 +989,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       uint32_t src_fmt = rs2;
       bool supported = (src_fmt != dst_fmt) && mv_fmt_supported(src_fmt) && mv_fmt_supported(dst_fmt);
       if (!supported) {
-        std::abort();
+        return this->illegal(uuid, is_rvc);
       }
       instr->set_op_type(FpuType::F2F);
       instr->set_dest_reg(rd, RegType::Float);
@@ -894,7 +999,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
 #ifdef VX_CFG_EXT_ZFHMIN_ENABLE
     case 0x72: // FMV.X.H
       if (funct3 != 0) {
-        std::abort();
+        return this->illegal(uuid, is_rvc);
       }
       instr->set_op_type(FpuType::FMVXW);
       instr->set_dest_reg(rd, RegType::Integer);
@@ -902,7 +1007,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       break;
     case 0x7a: // FMV.H.X
       if (funct3 != 0) {
-        std::abort();
+        return this->illegal(uuid, is_rvc);
       }
       instr->set_op_type(FpuType::FMVWX);
       instr->set_dest_reg(rd, RegType::Float);
@@ -928,7 +1033,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     case 0x61: // FCVT.W.D, FCVT.WU.D, FCVT.L.D, FCVT.LU.D
 #ifndef VX_CFG_XLEN_64
       if (rs2 & 0x2) { // FCVT.L[U] needs RV64
-        std::abort();
+        return this->illegal(uuid, is_rvc);
       }
 #endif
       instr->set_op_type(FpuType::F2I);
@@ -941,7 +1046,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     case 0x69: // FCVT.D.W, FCVT.D.WU, FCVT.D.L, FCVT.D.LU
 #ifndef VX_CFG_XLEN_64
       if (rs2 & 0x2) { // FCVT.*.L[U] needs RV64
-        std::abort();
+        return this->illegal(uuid, is_rvc);
       }
 #endif
       instr->set_op_type(FpuType::I2F);
@@ -953,7 +1058,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     case 0x70: // FCLASS.S, FMV.X.S
     case 0x71: // FCLASS.D, FMV.X.D
       if (funct3 > 1) { // reserved
-        std::abort();
+        return this->illegal(uuid, is_rvc);
       }
       instr->set_op_type((funct3 != 0) ? FpuType::FCLASS : FpuType::FMVXW);
       instr->set_dest_reg(rd, RegType::Integer);
@@ -962,14 +1067,14 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     case 0x78: // FMV.S.X
     case 0x79: // FMV.D.X
       if (funct3 != 0) {
-        std::abort();
+        return this->illegal(uuid, is_rvc);
       }
       instr->set_op_type(FpuType::FMVWX);
       instr->set_dest_reg(rd, RegType::Float);
       instr->set_src_reg(0, rs1, RegType::Integer);
       break;
     default:
-      std::abort();
+      return this->illegal(uuid, is_rvc);
     }
   } break;
   case Opcode::FMADD:
@@ -977,7 +1082,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
   case Opcode::FNMADD:
   case Opcode::FNMSUB: {
     if (!fmt_supported(funct2)) {
-      std::abort();
+      return this->illegal(uuid, is_rvc);
     }
     instr->set_fu_type(FUType::FPU);
     instr->set_op_type((op == Opcode::FMADD) ? FpuType::FMADD :
@@ -1399,8 +1504,20 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
   } break;
 #endif
   default:
-    std::abort();
+    return this->illegal(uuid, is_rvc);
   }
+
+  // Writing an FP register, or FP CSR state, makes mstatus.FS Dirty.
+  bool fs_dirty = (instr->get_dest_reg().type == RegType::Float)
+               || (is_fp && instr->fcsr_writes() != 0);
+#ifdef VX_CFG_EXT_TCU_ENABLE
+  // a tensor MMA writes its result fragment to FP registers
+  auto op_type = instr->get_op_type();
+  if (auto tcu = std::get_if<TcuType>(&op_type)) {
+    fs_dirty |= (*tcu != TcuType::TCU_LD);
+  }
+#endif
+  instr->set_fs_dirty(fs_dirty);
 
   return instr;
 }

@@ -41,7 +41,7 @@ warp_t::warp_t(uint32_t num_threads)
 {
 }
 
-void warp_t::reset() {
+void warp_t::reset(bool launch) {
   this->tmask.reset();
   // PC is excluded: a slot that has already run the startup resumes at its
   // dispatch window, which is derived from where the previous CTA left this
@@ -49,11 +49,15 @@ void warp_t::reset() {
   // construction, and every activation path assigns the PC before it is read.
   this->uuid = 0;
   this->fcsr = 0;
-  this->mstatus = 0;
-  this->mtvec   = 0;
-  this->mepc    = 0;
-  this->mcause  = 0;
-  this->mtval   = 0;
+  // The trap CSRs are device state, as in the RTL: a device reset clears
+  // them and a launch keeps them.
+  if (!launch) {
+    this->mstatus = MSTATUS_FS_RESET;
+    this->mtvec   = 0;
+    this->mepc    = 0;
+    this->mcause  = 0;
+    this->mtval   = 0;
+  }
   // Register files live in OpcUnit and are reset there.
 }
 
@@ -81,8 +85,9 @@ Scheduler::Scheduler(const SimContext& ctx, const char* name, Core* core)
 Scheduler::~Scheduler() {}
 
 void Scheduler::on_reset() {
+  bool launch = SimPlatform::instance().launch_resetting();
   for (auto& warp : warps_) {
-    warp.reset();
+    warp.reset(launch);
   }
 
   stalled_warps_.reset();
@@ -357,24 +362,28 @@ bool Scheduler::wspawn(uint32_t num_warps, Word nextPC) {
 // RISC-V machine-mode synchronous exception cause codes (mcause).
 // Standard 0..15; 24..31 reserved for custom by the privileged spec.
 namespace {
-  constexpr Word TRAP_CAUSE_BREAKPOINT   = 3;
-  constexpr Word TRAP_CAUSE_ECALL_MMODE  = 11;
+  constexpr Word TRAP_CAUSE_MISALIGNED_FETCH = 0;
+  constexpr Word TRAP_CAUSE_ILLEGAL_INSTR    = 2;
+  constexpr Word TRAP_CAUSE_BREAKPOINT       = 3;
+  constexpr Word TRAP_CAUSE_ECALL_MMODE      = 11;
 }
 
 void Scheduler::raise_trap(uint32_t wid, Word cause, Word trap_pc) {
   auto& warp = warps_.at(wid);
-  warp.mepc   = trap_pc;
+  warp.mstatus = (warp.mstatus & ~(MSTATUS_MIE | MSTATUS_MPIE))
+               | ((warp.mstatus & MSTATUS_MIE) ? MSTATUS_MPIE : 0);
+  warp.mepc   = trap_pc & MEPC_WMASK;
   warp.mcause = cause;
   warp.mtval  = 0;
-  // Redirect to the handler. Low 2 bits of mtvec are the MODE field;
-  // v1 supports direct mode only, so mask them off.
-  warp.PC = warp.mtvec & ~Word(3);
+  warp.PC = warp.mtvec;
   DT(3, core_->name() << " trap: wid=" << wid << ", cause=" << cause
      << ", mepc=0x" << std::hex << trap_pc << ", mtvec=0x" << warp.mtvec << std::dec);
 }
 
 void Scheduler::mret(uint32_t wid) {
   auto& warp = warps_.at(wid);
+  warp.mstatus = (warp.mstatus & ~MSTATUS_MIE) | MSTATUS_MPIE
+               | ((warp.mstatus & MSTATUS_MPIE) ? MSTATUS_MIE : 0);
   warp.PC    = warp.mepc;
   DT(3, core_->name() << " mret: wid=" << wid
      << ", mepc=0x" << std::hex << warp.mepc << std::dec);
@@ -386,6 +395,27 @@ void Scheduler::trigger_ecall(uint32_t wid, Word trap_pc) {
 
 void Scheduler::trigger_ebreak(uint32_t wid, Word trap_pc) {
   this->raise_trap(wid, TRAP_CAUSE_BREAKPOINT, trap_pc);
+}
+
+void Scheduler::trigger_illegal(uint32_t wid, Word trap_pc, uint32_t code) {
+  if (warps_.at(wid).mtvec == 0) {
+    std::cerr << "Error: illegal instruction (mcause=" << TRAP_CAUSE_ILLEGAL_INSTR
+              << ") with no trap handler (mtvec=0): " << core_->name() << ", wid=" << wid
+              << ", PC=0x" << std::hex << trap_pc << ", instr=0x" << code << std::dec << std::endl;
+    std::abort();
+  }
+  this->raise_trap(wid, TRAP_CAUSE_ILLEGAL_INSTR, trap_pc);
+}
+
+void Scheduler::trigger_misaligned_fetch(uint32_t wid, Word trap_pc, uint32_t code, Word target) {
+  if (warps_.at(wid).mtvec == 0) {
+    std::cerr << "Error: instruction address misaligned (mcause=" << TRAP_CAUSE_MISALIGNED_FETCH
+              << ") with no trap handler (mtvec=0): " << core_->name() << ", wid=" << wid
+              << ", PC=0x" << std::hex << trap_pc << ", instr=0x" << code
+              << ", target=0x" << target << std::dec << std::endl;
+    std::abort();
+  }
+  this->raise_trap(wid, TRAP_CAUSE_MISALIGNED_FETCH, trap_pc);
 }
 
 #ifdef VX_CFG_EXT_RASTER_ENABLE

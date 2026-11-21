@@ -148,6 +148,7 @@ public:
     , fu_lock_(true)
     , fu_unlock_(true)
     , issue_yield_(false)
+    , fs_dirty_(false)
   {}
 
   void set_fu_type(FUType fu_type) {
@@ -247,6 +248,10 @@ public:
   uint8_t fcsr_reads() const { return fcsr_rd_; }
   uint8_t fcsr_writes() const { return fcsr_wr_; }
 
+  // the instruction may write the F/D state (mstatus.FS becomes Dirty)
+  void set_fs_dirty(bool value) { fs_dirty_ = value; }
+  bool fs_dirty() const { return fs_dirty_; }
+
 private:
 
   uint64_t uuid_;
@@ -267,6 +272,7 @@ private:
   bool     fu_lock_;
   bool     fu_unlock_;
   bool     issue_yield_;
+  bool     fs_dirty_;
 
   friend std::ostream &operator<<(std::ostream &, const Instr &);
 };

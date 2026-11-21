@@ -131,3 +131,23 @@ tests:
   - rtlsim
   dir: tests/riscv/isa
   target: run-{driver}-64f
+# The machine-mode suites on the default config, with C off: only then can a
+# branch target be misaligned, so this is the case that reaches the
+# misaligned-fetch trap (ma_fetch); riscv-1/riscv-2 build with C on.
+- id: isa-mi
+  via: make-run
+  drivers:
+  - simx
+  - rtlsim
+  dir: tests/riscv/isa
+  target: run-{driver}-{xlen}mi
+  configs: ""
+# Illegal-instruction traps raised at decode: FP instructions with
+# mstatus.FS=Off and reserved branch/SYSTEM encodings; an FP write sets FS
+# to Dirty and SD.
+- id: trap-illegal
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: trap_illegal
