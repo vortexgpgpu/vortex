@@ -6,7 +6,7 @@
     "dut": "tcu",
     "result": {
       "bram": 0.0,
-      "build_time_s": 40,
+      "build_time_s": 25,
       "deep_endpoints": 2294,
       "deepest_paths": [
         "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[6]",
@@ -31,10 +31,10 @@
       "ff": 44475,
       "fix_levels": 12,
       "interfaces": {},
-      "lut": 117205,
+      "lut": 96340,
       "lutram": 2083,
       "max_levels": 25,
-      "pred_fmax_mhz": 277.7,
+      "pred_fmax_mhz": 274.0,
       "risk_endpoints": 17,
       "tied_bits": 0,
       "tied_ports": [],
@@ -62,24 +62,13 @@
     }
   },
   "tensor": {
-    "accepted": {
-      "against": "26d2bc4b5409a35a111e8316ac3a87d07b15fc80",
-      "regressions": [
-        {
-          "after": 4,
-          "before": 6,
-          "kind": "ties",
-          "name": "tied_bits"
-        }
-      ]
-    },
     "clock_mhz": 250,
     "config_hash": "f4269536f1b2647b",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
     "dut": "tensor",
     "result": {
       "bram": 114.5,
-      "build_time_s": 85,
+      "build_time_s": 130,
       "deep_endpoints": 4761,
       "deepest_paths": [
         "25  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[14]",
@@ -104,11 +93,11 @@
       "ff": 161531,
       "fix_levels": 12,
       "interfaces": {},
-      "lut": 259747,
+      "lut": 217719,
       "lutram": 12672,
       "max_levels": 25,
       "pred_fmax_mhz": 253.4,
-      "risk_endpoints": 411,
+      "risk_endpoints": 379,
       "tied_bits": 4,
       "tied_ports": [
         {
@@ -156,7 +145,6 @@
         "g_cores_*_mem_unit/lmem_unit/g_data_store_*_g_single_port_lmem_store": 9,
         "g_cores_*_tcu_shared/wgmma": 12,
         "g_cores_*_tcu_shared/wgmma/tbuf/bbuf": 16,
-        "g_cores_*_tcu_shared/wgmma/tbuf/bbuf/storage_a_ram": 10,
         "g_cores_*_tcu_shared/wgmma/tbuf/g_abufs_*_abuf": 15,
         "g_cores_*_tcu_unit/g_blocks_*_tcu_block/tcu_core": 11,
         "g_cores_*_tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_fedp/pipe_acc": 15,
@@ -198,7 +186,7 @@
         "l2cache/g_cache_cache/g_core_req_skid_*_req_skid": 9
       },
       "uram": 0,
-      "watch_endpoints": 26346,
+      "watch_endpoints": 25288,
       "watch_levels": 8
     }
   }

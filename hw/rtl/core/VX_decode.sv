@@ -798,6 +798,7 @@ module VX_decode import
                         op_type = INST_OP_BITS'(funct3);
                     end
                 `ifdef VX_CFG_EXT_TCU_ENABLE
+                `ifdef VX_CFG_TCU_WMMA_ENABLE
                     7'h02: begin
                         ex_type = EX_TCU;
                     `ifdef TCU_META_ENABLE
@@ -831,7 +832,7 @@ module VX_decode import
                             // Sparse variants live in a separate op_type so
                             // tcu_args_t doesn't carry a per-uop is_sparse bit.
                             if (rs2[0]) begin
-                        `ifdef VX_CFG_TCU_WGMMA_ENABLE
+                        `ifdef TCU_WARP_WGMMA
                                 op_type = funct3[0] ? INST_OP_BITS'(INST_TCU_WGMMA_SP)
                                                     : INST_OP_BITS'(INST_TCU_WMMA_SP);
                         `else
@@ -843,7 +844,7 @@ module VX_decode import
                             end else
                     `endif
                             begin
-                        `ifdef VX_CFG_TCU_WGMMA_ENABLE
+                        `ifdef TCU_WARP_WGMMA
                                 op_type = funct3[0] ? INST_OP_BITS'(INST_TCU_WGMMA)
                                                     : INST_OP_BITS'(INST_TCU_WMMA);
                         `else
@@ -870,6 +871,65 @@ module VX_decode import
                             `USED_FREG (rs2);
                             `USED_FREG (rs3);
                         end
+                    end
+                `endif
+                `endif
+                `ifdef VX_CFG_TCU_TMEM_ENABLE
+                    7'h05: begin // TMEM transfers and tensor jobs
+                        ex_type = EX_TCU;
+                        op_args.tcu = '0;
+                        case (funct3)
+                            3'h0, 3'h4: begin // TMEM_LD fd, (rs1), n: rs2 field = n-1
+                                op_type = INST_OP_BITS'(INST_TCU_TMEM_LD);
+                                op_args.tcu.fmt_s       = rs2;
+                                op_args.tcu.a_from_smem = funct3[2];
+                                `USED_FREG (rd);
+                                `USED_IREG (rs1);
+                            end
+                            3'h1, 3'h5: begin // TMEM_ST fs, (rs1), n: rd field = first source
+                                op_type = INST_OP_BITS'(INST_TCU_TMEM_ST);
+                                op_args.tcu.fmt_s       = rs2;
+                                op_args.tcu.a_from_smem = funct3[2];
+                                `USED_IREG (rs1);
+                                reg_ids[RV_RS2]  = make_reg_num(REG_TYPE_F, RV_REGS_BITS'(rd));
+                                use_regs[RV_RS2] = 1'b1;
+                            end
+                            3'h6: begin // TMEM_ALLOC rd, rs1: rs1 columns
+                                op_type = INST_OP_BITS'(INST_TCU_TMEM_ALLOC);
+                                `USED_IREG (rd);
+                                `USED_IREG (rs1);
+                            end
+                            3'h7: begin // TMEM_DEALLOC rs1, rs2: rs2 columns from column rs1
+                                op_type = INST_OP_BITS'(INST_TCU_TMEM_DEALLOC);
+                                `USED_IREG (rs1);
+                                `USED_IREG (rs2);
+                            end
+                            default:;
+                        endcase
+                    end
+                    7'h06: begin // tcgen05-style async tensor ops
+                        ex_type = EX_TCU;
+                        op_args.tcu = '0;
+                        case (funct3)
+                            3'h1: begin // TC_COMMIT rs1, rs2: barrier id, arrival count
+                                op_type = INST_OP_BITS'(INST_TCU_TC_COMMIT);
+                                `USED_IREG (rs1);
+                                `USED_IREG (rs2);
+                            end
+                            3'h2: begin // TC_CP rs1, rs2: {columns, taddr}, source
+                                op_type = INST_OP_BITS'(INST_TCU_TC_CP);
+                                `USED_IREG (rs1);
+                                `USED_IREG (rs2);
+                            end
+                            3'h4: begin // TC_MMA rs1, rs2, rs3 (rd field): instruction descriptor, A, B
+                                op_type = INST_OP_BITS'(INST_TCU_TC_MMA);
+                                `USED_IREG (rs1);
+                                `USED_IREG (rs2);
+                                reg_ids[RV_RS3]  = make_reg_num(REG_TYPE_I, RV_REGS_BITS'(rd));
+                                use_regs[RV_RS3] = 1'b1;
+                            end
+                            default:;
+                        endcase
                     end
                 `endif
                 `ifdef VX_CFG_EXT_DXA_ENABLE
@@ -1052,9 +1112,22 @@ module VX_decode import
         endcase
     end
 
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    // A tensor-memory build has no warp WGMMA: the TCU's MMAs are tc.mma.
+    `RUNTIME_ASSERT(~(fetch_if.valid && (opcode == INST_EXT1) && (funct7 == 7'h02) && (funct3 == 3'h1)),
+        ("%t: %s WGMMA in a tensor-memory build, wid=%0d, PC=0x%0h (#%0d)", $time, INSTANCE_ID, fetch_if.data.wid, to_fullPC(fetch_if.data.PC), fetch_if.data.uuid))
+`endif
+
     // Without its extension a TCU, DXA, wide or matrix load/store instruction
     // decodes to no unit, and its undefined ex/op fields would dispatch an
     // arbitrary operation.
+`ifdef VX_CFG_EXT_TCU_ENABLE
+`ifndef VX_CFG_TCU_WMMA_ENABLE
+    `RUNTIME_ASSERT(~(fetch_if.valid && (opcode == INST_EXT1) && (funct7 == 7'h02)),
+        ("%t: %s per-warp MMA or TCU_LD on a core built without VX_CFG_TCU_WMMA_ENABLE, wid=%0d, PC=0x%0h (#%0d)",
+            $time, INSTANCE_ID, fetch_if.data.wid, to_fullPC(fetch_if.data.PC), fetch_if.data.uuid))
+`endif
+`endif
 `ifndef VX_CFG_EXT_TCU_ENABLE
     `RUNTIME_ASSERT(~(fetch_if.valid && (opcode == INST_EXT1) && (funct7 == 7'h02)),
         ("%t: %s TCU instruction on a core built without VX_CFG_EXT_TCU_ENABLE, wid=%0d, PC=0x%0h (#%0d)",

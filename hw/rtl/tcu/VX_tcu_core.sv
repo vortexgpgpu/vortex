@@ -36,6 +36,18 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input wire [TCU_BLOCK_CAP-1:0][31:0] ext_meta_wr_data,
 `endif
 
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
+    // A tensor job's K-tile metadata; warps do not issue WGMMA_SP with TMEM.
+    input wire [TCU_MAX_META_BLOCK_WIDTH-1:0] job_meta,
+    input wire [TCU_MAX_META_BLOCK_WIDTH-1:0] job_meta_hi,
+`endif
+`ifdef VX_CFG_TCU_MX_ENABLE
+    // A tensor job's MX scales: TC_M A rows, then TC_N B columns.
+    input wire [TCU_TC_M+TCU_TC_N-1:0][TCU_MX_MAX_SF-1:0][7:0] job_sf,
+`endif
+`endif
+
     // Inputs
     VX_execute_if.slave execute_if,
 
@@ -51,6 +63,8 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     // FEDP dot-product width in 32-bit words (doubles under FEDP2K).
     localparam FEDP_K = TCU_WG_FEDP_K;
+    `STATIC_ASSERT (TCU_WG_SP_FULLK == 0 || TCU_WG_FEDP_K == 2 * TCU_TC_K,
+                    ("a full-K sparse tensor-op step requires VX_CFG_TCU_FEDP2K"))
 
     // Total FEDP latency of the configured TCU type; each FEDP variant
     // asserts it against its internal stage structure.
@@ -131,12 +145,24 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
 
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
+`ifdef VX_CFG_TCU_WMMA_ENABLE
     wire is_wgmma = (execute_if.data.op_type == INST_TCU_WGMMA)
               `ifdef VX_CFG_TCU_SPARSE_ENABLE
                  || (execute_if.data.op_type == INST_TCU_WGMMA_SP)
               `endif
                  ;
+`else
+    // Without per-warp MMAs every op is a tensor op's step.
+    wire is_wgmma = 1'b1;
+`endif
+`ifdef TCU_WARP_WGMMA
     wire wg_a_smem = execute_if.data.op_args.tcu.a_from_smem;
+`else
+    // A tensor job's step reads A from the tile buffer (shared memory or TMEM).
+    wire wg_a_smem = 1'b1;
+    `RUNTIME_ASSERT (~execute_if.valid || ~is_wgmma || execute_if.data.op_args.tcu.a_from_smem,
+        ("%t: *** %s WGMMA step with A from registers in a TMEM build", $time, INSTANCE_ID))
+`endif
 
     // A/B operand mux: tile buffer (smem) or register file. The
     // RF-side rs2_data is NUM_THREADS lanes wide; the WGMMA bbuf can be
@@ -151,7 +177,13 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
   `ifdef VX_CFG_TCU_SPARSE_ENABLE
     // Sparse metadata lives in VX_tcu_sp_meta SRAM, preloaded via TCU_LD.
-    wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_meta_block = wmma_sp_meta;
+  `ifdef VX_CFG_TCU_TMEM_ENABLE
+    wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_meta_block    = is_wgmma ? job_meta : wmma_sp_meta;
+    wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_meta_block_hi = job_meta_hi;
+  `else
+    wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_meta_block    = wmma_sp_meta;
+    wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_meta_block_hi = '0;
+  `endif
   `endif
 
     assign exe_ready_extra = ~is_wgmma || tbuf_ready;
@@ -159,7 +191,8 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     assign rs1_data = execute_if.data.rs1_data;
     assign rs2_data = execute_if.data.rs2_data;
   `ifdef VX_CFG_TCU_SPARSE_ENABLE
-    wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_meta_block = wmma_sp_meta;
+    wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_meta_block    = wmma_sp_meta;
+    wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_meta_block_hi = '0;
   `endif
     assign exe_ready_extra = 1'b1;
 `endif
@@ -172,7 +205,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [4:0] fmt_d = execute_if.data.op_args.tcu.fmt_d;
 
     wire execute_fire = execute_if.valid && execute_if.ready;
-`ifdef VX_CFG_TCU_WGMMA_ENABLE
+`ifdef TCU_WARP_WGMMA
     wire is_wgmma_setup = is_wgmma && !execute_if.data.header.wb;
 `else
     wire is_wgmma_setup = 1'b0;
@@ -222,9 +255,11 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // in the result landing queue, so a completing result always has a place
     // to land and no per-register enable network spans the grid.
 
+`ifdef VX_CFG_TCU_WMMA_ENABLE
     // Landing capacity matches the header FIFO: credits bound the results
     // outstanding, so both queues share one occupancy invariant.
     localparam LANDQ_SIZE = MDATA_QUEUE_DEPTH;
+`endif
 
     wire mdata_queue_full;
 
@@ -266,6 +301,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire fedp_done = fedp_delay_pipe[0];
 
     wire landq_credits_full;
+`ifdef VX_CFG_TCU_WMMA_ENABLE
     VX_pending_size #(
         .SIZE (LANDQ_SIZE)
     ) landq_credits (
@@ -279,6 +315,10 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `UNUSED_PIN (alm_full),
         `UNUSED_PIN (size)
     );
+`else
+    // Tensor memory takes every result as it completes: nothing lands.
+    assign landq_credits_full = 1'b0;
+`endif
 
     // Admission stalls while a completed result waits on the consumer: this
     // keeps the landing queue shallow so a chained MMA never sees queueing
@@ -361,6 +401,14 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         , .meta_b   (mx_meta_b)
     `endif
     );
+`else
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
+    assign wmma_sp_meta    = '0;
+`endif
+`ifdef VX_CFG_TCU_MX_ENABLE
+    assign mx_meta_a = '0;
+    assign mx_meta_b = '0;
+`endif
 `endif
 
 `ifdef VX_CFG_TCU_MX_ENABLE
@@ -436,7 +484,13 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         wire [MX_IDX_W-1:0] mx_a_idx = MX_IDX_W'(step_m) * MX_IDX_W'(TCU_TC_M) + MX_IDX_W'(i);
         for (genvar s = 0; s < FEDP_SF; ++s) begin : g_s
             wire [MX_K_IDX_W-1:0] mx_k_idx = mx_k_base_idx + MX_K_IDX_W'((s * mx_fedp_k_elems) / FEDP_SF);
+        `ifdef VX_CFG_TCU_TMEM_ENABLE
+            // Warps issue no WGMMA with TMEM: a WGMMA step is a tensor job's.
+            assign mx_sf_a[i][s] = is_wgmma ? job_sf[i][s]
+                                 : mx_scale_at(mx_meta_a, fmt_s, mx_blocks_k_lg2, mx_blocks_k_nz, mx_a_idx, mx_k_idx);
+        `else
             assign mx_sf_a[i][s] = mx_scale_at(mx_meta_a, fmt_s, mx_blocks_k_lg2, mx_blocks_k_nz, mx_a_idx, mx_k_idx);
+        `endif
         end
     end
 
@@ -444,7 +498,12 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         wire [MX_IDX_W-1:0] mx_b_idx = MX_IDX_W'(step_n) * MX_IDX_W'(TCU_TC_N) + MX_IDX_W'(j);
         for (genvar s = 0; s < FEDP_SF; ++s) begin : g_s
             wire [MX_K_IDX_W-1:0] mx_k_idx = mx_k_base_idx + MX_K_IDX_W'((s * mx_fedp_k_elems) / FEDP_SF);
+        `ifdef VX_CFG_TCU_TMEM_ENABLE
+            assign mx_sf_b[j][s] = is_wgmma ? job_sf[TCU_TC_M + j][s]
+                                 : mx_scale_at(mx_meta_b, fmt_s, mx_blocks_k_lg2, mx_blocks_k_nz, mx_b_idx, mx_k_idx);
+        `else
             assign mx_sf_b[j][s] = mx_scale_at(mx_meta_b, fmt_s, mx_blocks_k_lg2, mx_blocks_k_nz, mx_b_idx, mx_k_idx);
+        `endif
         end
     end
 `endif
@@ -459,7 +518,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     for (genvar i = 0; i < PE_M; ++i) begin : g_i
     `ifdef VX_CFG_TCU_SPARSE_ENABLE
         // The row's candidate selects, shared by its FEDPs (all columns).
-        wire [TCU_TC_K-1:0][7:0][5:0] sp_sel;
+        wire [TCU_TC_K-1:0][7:0][5:0] sp_sel, sp_sel_hi;
         VX_tcu_sp_sel #(
             .ROW_IDX    (i),
             .ROW_STRIDE (PE_M),
@@ -470,6 +529,25 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             .vld_mask (vld_meta_block),
             .sel      (sp_sel)
         );
+    `ifdef VX_CFG_TCU_WGMMA_ENABLE
+        if (TCU_WG_SP_FULLK != 0) begin : g_sp_sel_hi
+            VX_tcu_sp_sel #(
+                .ROW_IDX    (i),
+                .ROW_STRIDE (PE_M),
+                .ROW_SELS   (PE_RATIO_M)
+            ) tcu_sp_sel_hi (
+                .row_sel  (slice_m),
+                .fmt_s    (fmt_s),
+                .vld_mask (vld_meta_block_hi),
+                .sel      (sp_sel_hi)
+            );
+        end else
+    `endif
+        begin : g_sp_sel_hi_off
+            assign sp_sel_hi = '0;
+            `UNUSED_VAR (sp_sel_hi)
+            `UNUSED_VAR (vld_meta_block_hi)
+        end
     `endif
         for (genvar j = 0; j < PE_N; ++j) begin : g_j
             // the output element (row_i, col_j) this PE computes this cycle
@@ -479,6 +557,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `ifdef VX_CFG_TCU_SPARSE_ENABLE
             wire [FEDP_K-1:0][31:0] a_row, b_col, b_col_dense;
             wire [TCU_TC_K-1:0][31:0] b_col_sparse, b_col_1, b_col_2;
+            wire [TCU_TC_K-1:0][31:0] b_col_sparse_hi;
         `else
             wire [FEDP_K-1:0][31:0] a_row, b_col;
         `endif
@@ -527,7 +606,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     `endif
                     assign a_row[k_idx] = (is_wgmma
                         `ifdef VX_CFG_TCU_SPARSE_ENABLE
-                            && !is_sparse
+                            && (!is_sparse || (TCU_WG_SP_FULLK != 0))
                         `endif
                         ) ? (wg_a_smem ? a_wgmma_smem : a_wgmma_reg) : 32'b0;
                 `else
@@ -588,7 +667,36 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 if (k_idx < TCU_TC_K) begin : g_lo
                     assign b_col[k_idx] = is_sparse ? b_col_sparse[k_idx] : b_col_dense[k_idx];
                 end else begin : g_hi
-                    assign b_col[k_idx] = is_sparse ? 32'b0 : b_col_dense[k_idx];
+                    assign b_col[k_idx] = is_sparse ? b_col_sparse_hi[k_idx - TCU_TC_K]
+                                                    : b_col_dense[k_idx];
+                end
+            end
+
+            // A full-K sparse step: the upper FEDP half selects its B candidates from
+            // the second K-word group with the upper half-K metadata.
+        `ifdef VX_CFG_TCU_WGMMA_ENABLE
+            if (TCU_WG_SP_FULLK != 0) begin : g_sp_hi
+                wire [TCU_TC_K-1:0][31:0] b_col_1_hi, b_col_2_hi, b_col_sel_hi;
+                for (genvar k_idx = 0; k_idx < TCU_TC_K; ++k_idx) begin : g_hi_slice
+                    assign b_col_1_hi[k_idx] = 32'(rs2_data[(TCU_TC_K + k_idx) * TCU_TC_N * 2 + col_j * 2]);
+                    assign b_col_2_hi[k_idx] = 32'(rs2_data[(TCU_TC_K + k_idx) * TCU_TC_N * 2 + col_j * 2 + 1]);
+                end
+                VX_tcu_sp_mux #(
+                    .INSTANCE_ID (INSTANCE_ID)
+                ) tcu_sp_mux_hi (
+                    .sel       (sp_sel_hi),
+                    .b_col_in1 (b_col_1_hi),
+                    .b_col_in2 (b_col_2_hi),
+                    .b_col_out (b_col_sel_hi)
+                );
+                assign b_col_sparse_hi = is_wgmma ? b_col_sel_hi : '0;
+            end else
+        `endif
+            begin : g_sp_hi_off
+                assign b_col_sparse_hi = '0;
+                // Without FEDP2K there are no upper FEDP lanes to consume it.
+                if (FEDP_K == TCU_TC_K) begin : g_sp_hi_unused
+                    `UNUSED_VAR (b_col_sparse_hi)
                 end
             end
 
@@ -892,6 +1000,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     localparam RESULT_DATAW = TCU_TC_M * TCU_TC_N * 32;
 
+`ifdef VX_CFG_TCU_WMMA_ENABLE
     wire [RESULT_DATAW-1:0] landq_data;
     wire landq_empty, landq_full;
 
@@ -925,6 +1034,11 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [RESULT_DATAW-1:0] result_data = landq_empty ? RESULT_DATAW'(d_val) : landq_data;
 
     `RUNTIME_ASSERT (~(landq_push && landq_full), ("%t: %s: result landing queue overflow", $time, INSTANCE_ID))
+`else
+    assign result_if.valid = setup_valid_r || fedp_done;
+    wire [RESULT_DATAW-1:0] result_data = RESULT_DATAW'(d_val);
+    `RUNTIME_ASSERT (~fedp_done || result_if.ready, ("%t: %s: a result stalled with no landing queue", $time, INSTANCE_ID))
+`endif
 
     // NaN-box the fp32 results for XLEN=64: upper 32 bits must be all-1s per RVF spec.
     for (genvar e = 0; e < TCU_TC_M * TCU_TC_N; ++e) begin : g_result

@@ -20,11 +20,13 @@
 #include "instr.h"
 #include "func_unit.h"
 #include "tcu_tbuf.h"
+#ifdef VX_CFG_TCU_TMEM_ENABLE
+#endif
 
 // The TCU metadata SRAM is present when any metadata-consuming mode (MX or
-// sparse) is enabled. Internal derived macro — not a VX_CFG_* knob; mirrors
+// sparse) is enabled with per-warp MMAs (tensor ops take theirs from TMEM). Internal derived macro — not a VX_CFG_* knob; mirrors
 // the hardware derivation.
-#if defined(VX_CFG_TCU_MX_ENABLE) || defined(VX_CFG_TCU_SPARSE_ENABLE)
+#if (defined(VX_CFG_TCU_MX_ENABLE) || defined(VX_CFG_TCU_SPARSE_ENABLE)) && defined(VX_CFG_TCU_WMMA_ENABLE)
 #define TCU_META_ENABLE
 #endif
 
@@ -70,12 +72,29 @@ public:
 		uint64_t tbuf_stalls = 0;      // cycles a WGMMA uop waits on its A stripe or the B row, summed over buffers
 		uint64_t tbuf_cache_hits = 0;  // cycles the resident B row serves the representative block
 		uint64_t lmem_reads = 0;       // bank-row reads issued by the A and B buffers
+		uint64_t tj_mma_uops = 0;      // tc.mma steps (all blocks in lockstep)
+		uint64_t tmem_stalls = 0;      // cycles a TMEM transfer waits on its CTA's ops
+		uint64_t tmem_xfers = 0;       // tmem.ld/st transfers
+		// Every cycle falls in one bucket: an MMA step fired (block-cycles, so
+		// utilization is busy / (cycles * blocks)), else operands, other op
+		// activity, or idle.
+		uint64_t mma_busy = 0;
+		uint64_t opnd_waits = 0;
+		uint64_t job_other = 0;
+		uint64_t idle = 0;
 
 		PerfStats& operator+=(const PerfStats& rhs) {
 			this->latency          += rhs.latency;
 			this->tbuf_stalls      += rhs.tbuf_stalls;
 			this->tbuf_cache_hits  += rhs.tbuf_cache_hits;
 			this->lmem_reads       += rhs.lmem_reads;
+			this->tj_mma_uops      += rhs.tj_mma_uops;
+			this->tmem_stalls      += rhs.tmem_stalls;
+			this->tmem_xfers       += rhs.tmem_xfers;
+			this->mma_busy         += rhs.mma_busy;
+			this->opnd_waits       += rhs.opnd_waits;
+			this->job_other        += rhs.job_other;
+			this->idle             += rhs.idle;
 			return *this;
 		}
 	};
@@ -90,6 +109,11 @@ public:
   std::vector<SimChannel<LsuReq>> agu_req_out;
   std::vector<SimChannel<LsuRsp>> agu_rsp_in;
 #endif
+#ifdef VX_CFG_TCU_TMEM_ENABLE
+  // CTA exits from the dispatcher: the TMEM columns the CTA owns are freed.
+  SimChannel<int32_t> cta_exit_in;
+#endif
+
 
   // Per block: the cycles its lane-gather buffer refuses a result (its ready
   // is a register, sent the cycle before).
@@ -106,6 +130,7 @@ public:
 	          const RegDataVec& rs3_data,
 	          RegDataVec& rd_data,
 	          bool is_sparse);
+
 
 	void wgmma(uint32_t wid,
 	           uint32_t fmt_s,

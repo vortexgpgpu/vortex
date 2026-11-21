@@ -46,6 +46,9 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     reg [`VX_CFG_XLEN-1:0] dcr_param;
     reg [CTA_TID_WIDTH:0] dcr_block_size;
     reg [`VX_CFG_LMEM_LOG_SIZE:0] dcr_lmem_size;
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    reg [31:0] dcr_tmem_cols;
+`endif
     reg [2:0][CTA_TID_WIDTH-1:0] dcr_warp_step;
     // Cluster shape: CTAs in the same cluster are guaranteed
     // co-resident on the same core. Default (1,1,1) reproduces the
@@ -79,6 +82,21 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     reg [2:0][31:0] block_idx_r;
     reg             is_first_r;
 
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    // A CTA's TMEM budget, a power-of-two run of 32-column chunks, counts toward
+    // occupancy like its LMEM: m CTAs fit iff m budgets fit the core's TMEM.
+    function automatic logic [`VX_CFG_NUM_WARPS-1:0] tmem_slots_fit(input logic [31:0] cols);
+        logic [31:0] budget;
+        budget = 32;
+        for (integer i = 0; i < 6; ++i) begin
+            if (budget < cols) budget = budget << 1;
+        end
+        for (integer m = 1; m <= `VX_CFG_NUM_WARPS; ++m) begin
+            tmem_slots_fit[m-1] = (m == 1) || (cols == 0) || (budget * m <= `VX_CFG_TCU_TMEM_COLS);
+        end
+    endfunction
+`endif
+
     // Per-kernel launch constants, computed once here and broadcast to every
     // core's dispatcher (identical for all cores, stable for the whole kernel).
     //   cluster_size : K = cluster_dim product, bounded by NUM_WARPS (cluster
@@ -105,7 +123,11 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
             cluster_size_r <= (NW_WIDTH+1)'(dcr_cluster_dim[0] * dcr_cluster_dim[1]
                                           * dcr_cluster_dim[2]);
             aligned_lmem_size_r <= aligned_lmem_size_w;
+        `ifdef VX_CFG_TCU_TMEM_ENABLE
+            lmem_slots_r        <= lmem_slots_fit(aligned_lmem_size_w) & tmem_slots_fit(dcr_tmem_cols);
+        `else
             lmem_slots_r        <= lmem_slots_fit(aligned_lmem_size_w);
+        `endif
         end
     end
 
@@ -117,6 +139,17 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
             // Defaults to (1,1,1): the cluster shape sizes the launch message, so
             // a launch that never programs it would otherwise stall the stream.
             dcr_cluster_dim <= {3{(NW_WIDTH+1)'(1)}};
+            dcr_PC          <= '0;
+            dcr_entry       <= '0;
+            dcr_grid_dim    <= '0;
+            dcr_block_dim   <= '0;
+            dcr_param       <= '0;
+            dcr_block_size  <= '0;
+            dcr_lmem_size   <= '0;
+        `ifdef VX_CFG_TCU_TMEM_ENABLE
+            dcr_tmem_cols   <= '0;
+        `endif
+            dcr_warp_step   <= '0;
         end else if (dcr_req_valid && dcr_req_rw) begin
             case(dcr_req_addr)
                 // Program startup PC
@@ -142,6 +175,10 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
                 `VX_DCR_KMU_BLOCK_DIM_Z: dcr_block_dim[2] <= dcr_req_data[CTA_TID_WIDTH:0];
                 // Local memory size
                 `VX_DCR_KMU_LMEM_SIZE:   dcr_lmem_size  <= dcr_req_data[`VX_CFG_LMEM_LOG_SIZE:0];
+            `ifdef VX_CFG_TCU_TMEM_ENABLE
+                // TMEM columns a CTA may allocate
+                `VX_DCR_KMU_TMEM_COLS:   dcr_tmem_cols  <= dcr_req_data;
+            `endif
                 // Block size (total threads per CTA)
                 `VX_DCR_KMU_BLOCK_SIZE:  dcr_block_size <= dcr_req_data[CTA_TID_WIDTH:0];
                 // Warp steps
@@ -363,6 +400,9 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     assign kmu_req.ctx_id    = ctx_id_r;
     assign kmu_req.aligned_lmem_size = aligned_lmem_size_r;
     assign kmu_req.lmem_slots = lmem_slots_r;
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    assign kmu_req.tmem = (dcr_tmem_cols != 0);
+`endif
     assign kmu_req.args.compute = kmu_comp;
 
     // A compute message is one CLUSTER and carries no placement hint: the fan-out

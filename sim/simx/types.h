@@ -807,6 +807,13 @@ enum class TcuType {
   WMMA_SP,    // Sparse variants live in distinct op_types so IntrTcuArgs
   WGMMA_SP,   // doesn't carry a per-uop is_sparse bit.
   TCU_LD,     // Warp-level metadata load. rd[4] selects sparse/MX namespace.
+  TMEM_LD,    // TMEM -> FP registers, one uop per register.
+  TMEM_ST,    // FP registers -> TMEM, one uop per register.
+  TMEM_ALLOC,   // rd = first column of rs1 TMEM columns, owned by the CTA; waits until they fit.
+  TMEM_DEALLOC, // Frees rs2 TMEM columns from column rs1.
+  TC_MMA,       // tcgen05.mma, one K step: rs1 instruction descriptor, rs2 A, rs3 B.
+  TC_COMMIT,    // tcgen05.commit: arrive (count rs2) on barrier rs1 after earlier ops.
+  TC_CP,        // tcgen05.cp: rs1 {columns, taddr}, rs2 source, rs3 stride.
 };
 
 struct IntrTcuArgs {
@@ -820,6 +827,9 @@ struct IntrTcuArgs {
   uint32_t is_first_uop : 1; // set per-uop by tcu_uops expansion (C4)
   uint32_t is_last_uop  : 1;
   uint32_t is_setup_uop : 1; // WGMMA descriptor setup uop, no FEDP compute
+  uint32_t tmem_n       : 6; // TMEM_LD/ST register count
+  uint32_t tmem_idx     : 5; // TMEM_LD/ST uop register offset
+  uint32_t tmem_row     : 1; // TMEM_LD/ST: fragment shape (else one lane per thread)
 };
 
 // Helper: is_sparse derived from op_type (no per-uop bit).
@@ -830,6 +840,18 @@ inline bool tcu_is_sparse(TcuType t) {
 // Helper: WGMMA family (covers dense + sparse).
 inline bool tcu_is_wgmma(TcuType t) {
   return t == TcuType::WGMMA || t == TcuType::WGMMA_SP;
+}
+
+// Helper: TMEM transfers.
+inline bool tcu_is_tmem(TcuType t) {
+  return t == TcuType::TMEM_LD || t == TcuType::TMEM_ST;
+}
+
+// Helper: ops of the tensor-memory port (TMEM transfers, allocation, tc.*).
+inline bool tcu_is_tj_op(TcuType t) {
+  return tcu_is_tmem(t) || t == TcuType::TMEM_ALLOC || t == TcuType::TMEM_DEALLOC
+      || t == TcuType::TC_MMA || t == TcuType::TC_COMMIT
+      || t == TcuType::TC_CP;
 }
 
 // Helper: WMMA family (covers dense + sparse).
@@ -844,6 +866,13 @@ inline std::ostream &operator<<(std::ostream &os, const TcuType& type) {
   case TcuType::WMMA_SP:    os << "WMMA.SP"; break;
   case TcuType::WGMMA_SP:   os << "WGMMA.SP"; break;
   case TcuType::TCU_LD:     os << "TCU_LD"; break;
+  case TcuType::TMEM_LD:    os << "TMEM_LD"; break;
+  case TcuType::TMEM_ST:    os << "TMEM_ST"; break;
+  case TcuType::TMEM_ALLOC:   os << "TMEM_ALLOC"; break;
+  case TcuType::TMEM_DEALLOC: os << "TMEM_DEALLOC"; break;
+  case TcuType::TC_MMA:       os << "TC_MMA"; break;
+  case TcuType::TC_COMMIT:    os << "TC_COMMIT"; break;
+  case TcuType::TC_CP:        os << "TC_CP"; break;
   default:
     assert(false);
   }

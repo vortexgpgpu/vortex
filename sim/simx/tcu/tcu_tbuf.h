@@ -24,13 +24,14 @@ namespace vortex {
 //
 //   abuf × Q   per-block A k-stripe
 //   bbuf × 1   B bank row, shared by all Q blocks
+//   cbuf × 1   rows of a tensor-job TMEM copy (TMEM builds)
 //
 // The consumer (TcuUnit) owns the refill keys: it decides when a buffer
 // refills and hands over the refill as a list of LMEM reads. Each read is
 // one bank-row request on the hardware port and covers one or more
 // mem_block lines here, sent together on parallel ports. A buffer keeps one
-// read in flight; buffers share the port at fixed priority, abuf[0] first
-// and bbuf last.
+// read in flight (the B buffer may keep more); buffers share the port at fixed priority, abuf[0] first
+// and cbuf last.
 //
 // Sparse metadata is preloaded into the TcuUnit's per-warp `sparse_meta_`
 // SRAM via TCU_LD ahead of the MMA dispatch; it does not flow through here.
@@ -54,10 +55,18 @@ public:
   // Drop the buffer's contents and fetch `reads` in order. `b` indexes the
   // per-block A buffer.
   void fill_a(uint32_t b, std::vector<LmemRead> reads);
-  void fill_b(std::vector<LmemRead> reads);
+  // max_inflight: reads the B buffer keeps outstanding (a tensor op's dense
+  // K-major block issues its row reads back to back).
+  void fill_b(std::vector<LmemRead> reads, uint32_t max_inflight = 1);
 
   bool filling_a(uint32_t b) const;
   bool filling_b() const;
+
+#ifdef VX_CFG_TCU_TMEM_ENABLE
+  void fill_c(std::vector<LmemRead> reads);
+  bool filling_c() const;
+  std::shared_ptr<mem_block_t> read_c(uint64_t line_addr) const;
+#endif
 
   std::shared_ptr<mem_block_t> read_a(uint32_t b, uint64_t line_addr) const;
   std::shared_ptr<mem_block_t> read_b(uint64_t line_addr) const;

@@ -36,7 +36,13 @@ module VX_warp_shared_unit import VX_gpu_pkg::*; #(
 `ifdef VX_CFG_EXT_DXA_ENABLE
     VX_txbar_bus_if.slave   txbar_bus_if,
 `endif
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    // tc.commit arrivals
+    VX_tcu_bar_if.slave     tcu_bar_if,
+`endif
     input wire [`VX_CFG_NUM_WARPS-1:0] active_warps,
+    // a barrier request applies this cycle
+    output wire             bar_active,
 
     // barrier release
     output wire             bar_unlock_valid,
@@ -121,11 +127,13 @@ module VX_warp_shared_unit import VX_gpu_pkg::*; #(
 
     wire txbar_req_valid;
     barrier_t txbar_req;
-    wire [BAR_ADDR_W-1:0] bar_read_addr;
+    wire txbar_valid;
+    wire [BAR_ADDR_W-1:0] txbar_addr;
 `ifdef VX_CFG_EXT_DXA_ENABLE
+    assign txbar_valid = txbar_bus_if.valid;
+    assign txbar_addr  = txbar_bus_if.data.addr;
     assign txbar_bus_if.ready = ~is_bar;
     wire txbar_fire = txbar_bus_if.valid && txbar_bus_if.ready;
-    assign bar_read_addr = is_bar ? req.bar_addr : txbar_bus_if.data.addr;
     // a completion releases one pending transaction event
     barrier_t txbar_req_w;
     assign txbar_req_w.id        = '0;
@@ -146,9 +154,61 @@ module VX_warp_shared_unit import VX_gpu_pkg::*; #(
         .data_out ({txbar_req_valid, txbar_req})
     );
 `else
-    assign bar_read_addr   = req.bar_addr;
+    assign txbar_valid     = 1'b0;
+    assign txbar_addr      = '0;
     assign txbar_req_valid = 1'b0;
     assign txbar_req       = '0;
+`endif
+
+    // a tc.commit arrival takes the barrier unit when neither a request nor a
+    // transaction completion does
+    wire tcu_req_valid;
+    barrier_t tcu_req;
+    wire tcu_valid;
+    wire [BAR_ADDR_W-1:0] tcu_addr;
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    assign tcu_valid = tcu_bar_if.req_valid;
+    assign tcu_addr  = tcu_bar_if.req_data.addr;
+    assign tcu_bar_if.req_ready = ~is_bar && ~txbar_valid;
+    wire tcu_fire = tcu_bar_if.req_valid && tcu_bar_if.req_ready;
+    barrier_t tcu_req_w;
+    assign tcu_req_w.id        = '0;
+    assign tcu_req_w.is_event  = 1'b0;
+    assign tcu_req_w.is_sync   = 1'b0;
+    assign tcu_req_w.is_global = 1'b0;
+    assign tcu_req_w.is_arrive = 1'b1;
+    assign tcu_req_w.phase     = 1'b0;
+    assign tcu_req_w.size_m1   = tcu_bar_if.req_data.size_m1;
+    VX_pipe_register #(
+        .DATAW  (1 + $bits(barrier_t)),
+        .RESETW (1)
+    ) tcu_bar_reg (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (1'b1),
+        .data_in  ({tcu_fire, tcu_req_w}),
+        .data_out ({tcu_req_valid, tcu_req})
+    );
+`else
+    assign tcu_valid     = 1'b0;
+    assign tcu_addr      = '0;
+    assign tcu_req_valid = 1'b0;
+    assign tcu_req       = '0;
+`endif
+    `UNUSED_VAR (tcu_valid)
+
+    wire [BAR_ADDR_W-1:0] bar_read_addr;
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    assign bar_read_addr = is_bar ? req.bar_addr : (txbar_valid ? txbar_addr : tcu_addr);
+`elsif VX_CFG_EXT_DXA_ENABLE
+    assign bar_read_addr = is_bar ? req.bar_addr : txbar_addr;
+    `UNUSED_VAR (txbar_valid)
+    `UNUSED_VAR (tcu_addr)
+`else
+    assign bar_read_addr = req.bar_addr;
+    `UNUSED_VAR (txbar_valid)
+    `UNUSED_VAR (txbar_addr)
+    `UNUSED_VAR (tcu_addr)
 `endif
 
     // the barrier request applies the cycle after its phase is read, as the
@@ -168,15 +228,17 @@ module VX_warp_shared_unit import VX_gpu_pkg::*; #(
 
     wire bar_read_phase;
 
+    assign bar_active = bar_valid_r || txbar_req_valid || tcu_req_valid;
+
     VX_bar_unit #(
         .INSTANCE_ID (`SFORMATF(("%s-barrier", INSTANCE_ID)))
     ) bar_unit (
         .clk          (clk),
         .reset        (reset),
         .core_id      (core_id),
-        .req_valid    (bar_valid_r || txbar_req_valid),
+        .req_valid    (bar_valid_r || txbar_req_valid || tcu_req_valid),
         .req_wid      (bar_wid_r),
-        .req_data     (bar_valid_r ? bar_r : txbar_req),
+        .req_data     (bar_valid_r ? bar_r : (txbar_req_valid ? txbar_req : tcu_req)),
         .read_addr    (bar_read_addr),
         .read_phase   (bar_read_phase),
         .active_warps (active_warps),

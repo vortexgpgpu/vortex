@@ -173,11 +173,48 @@
 `endif
 
 // Convenience flag: the TCU metadata SRAM is present when any metadata-consuming
-// mode (MX or sparse) is enabled. Internal derived macro — not a VX_CFG_* knob.
+// mode (MX or sparse) is enabled with per-warp MMAs; tensor ops take theirs from
+// tensor memory. Internal derived macro — not a VX_CFG_* knob.
+`ifdef VX_CFG_TCU_WMMA_ENABLE
 `ifdef VX_CFG_TCU_MX_ENABLE
     `define TCU_META_ENABLE
 `elsif VX_CFG_TCU_SPARSE_ENABLE
     `define TCU_META_ENABLE
+`endif
+`endif
+
+// Warps issue WGMMA (the per-warp expansion and its front-end logic) unless
+// tensor memory owns the tile buffers: a TMEM build has no warp WGMMA.
+`ifdef VX_CFG_TCU_WGMMA_ENABLE
+`ifndef VX_CFG_TCU_TMEM_ENABLE
+    `define TCU_WARP_WGMMA
+`endif
+`endif
+
+// A tensor op's sparse step fills the doubled-K FEDP with compressed A (both
+// half-K metadata banks of its m-step). Internal derived macro.
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
+`ifdef VX_CFG_TCU_FEDP2K
+    `define TCU_SP_FULLK
+`endif
+`endif
+`endif
+
+`ifndef VX_CFG_TCU_WMMA_ENABLE
+    `ifndef VX_CFG_TCU_TMEM_ENABLE
+        `error "disabling VX_CFG_TCU_WMMA_ENABLE requires VX_CFG_TCU_TMEM_ENABLE"
+    `endif
+`endif
+
+// Tensor jobs drive the WGMMA tile buffers.
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    `ifndef VX_CFG_TCU_WGMMA_ENABLE
+        `error "VX_CFG_TCU_TMEM_ENABLE requires VX_CFG_TCU_WGMMA_ENABLE"
+    `endif
+    `ifndef VX_CFG_EXT_DXA_ENABLE
+        `error "VX_CFG_TCU_TMEM_ENABLE requires VX_CFG_EXT_DXA_ENABLE"
+    `endif
 `endif
 
 // Integer mul/div via DPI: simulation only (not synthesis) with DPI enabled.

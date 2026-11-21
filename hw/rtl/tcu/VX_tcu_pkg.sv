@@ -115,10 +115,22 @@ package VX_tcu_pkg;
     localparam TCU_B_SUB_BLOCKS_SP    = TCU_BLOCK_CAP / TCU_B_BLOCK_SIZE_SP;
     // WGMMA_SP always needs the full candidate lane set, regardless of SYM_SPARSE.
     localparam TCU_WG_B_BLOCK_SIZE_SP = TCU_TC_K * TCU_TC_N * 2;
+    // A tensor op's sparse step (TMEM builds, FEDP2K) fills the doubled-K FEDP
+    // with compressed A, as Blackwell's sparse tcgen05.mma: it needs two half-K
+    // metadata banks per m-step.
+`ifdef TCU_SP_FULLK
+    localparam TCU_WG_SP_FULLK   = (TCU_K_STEPS / 2 >= 2) ? 1 : 0;
+`else
+    localparam TCU_WG_SP_FULLK   = 0;
+`endif
+    localparam TCU_WG_SP_K_WORDS = (TCU_WG_SP_FULLK != 0) ? TCU_WG_FEDP_K : TCU_TC_K;
+    localparam TCU_WG_B_KMAJ_SIZE_SP = TCU_WG_SP_K_WORDS * TCU_TC_N * 2;
     localparam TCU_WG_RS2_WIDTH_DENSE =
         (TCU_WG_B_BLOCK_SIZE > TCU_BLOCK_CAP) ? TCU_WG_B_BLOCK_SIZE : TCU_BLOCK_CAP;
+    localparam TCU_WG_RS2_WIDTH_SP =
+        (TCU_WG_B_KMAJ_SIZE_SP > TCU_WG_B_BLOCK_SIZE_SP) ? TCU_WG_B_KMAJ_SIZE_SP : TCU_WG_B_BLOCK_SIZE_SP;
     localparam TCU_WG_RS2_WIDTH = `VX_CFG_TCU_SPARSE_ENABLED
-        ? ((TCU_WG_B_BLOCK_SIZE_SP > TCU_WG_RS2_WIDTH_DENSE) ? TCU_WG_B_BLOCK_SIZE_SP : TCU_WG_RS2_WIDTH_DENSE)
+        ? ((TCU_WG_RS2_WIDTH_SP > TCU_WG_RS2_WIDTH_DENSE) ? TCU_WG_RS2_WIDTH_SP : TCU_WG_RS2_WIDTH_DENSE)
         : TCU_WG_RS2_WIDTH_DENSE;
 
     localparam TCU_MIN_FMT_WIDTH = 4; //int4
@@ -421,6 +433,15 @@ package VX_tcu_pkg;
                 trace_fmt(level, op_args.tcu.fmt_s);
             end
         `endif
+        `ifdef VX_CFG_TCU_TMEM_ENABLE
+            INST_TCU_TMEM_LD: begin `TRACE(level, ("TMEM_LD%s.%0d", op_args.tcu.a_from_smem ? ".R" : "", op_args.tcu.fmt_d)); end
+            INST_TCU_TMEM_ST: begin `TRACE(level, ("TMEM_ST%s.%0d", op_args.tcu.a_from_smem ? ".R" : "", op_args.tcu.fmt_d)); end
+            INST_TCU_TC_CP:   begin `TRACE(level, ("TC_CP")); end
+            INST_TCU_TMEM_ALLOC:   begin `TRACE(level, ("TMEM_ALLOC")); end
+            INST_TCU_TMEM_DEALLOC: begin `TRACE(level, ("TMEM_DEALLOC")); end
+            INST_TCU_TC_MMA:       begin `TRACE(level, ("TC_MMA.%0d", op_args.tcu.fmt_d)); end
+            INST_TCU_TC_COMMIT:    begin `TRACE(level, ("TC_COMMIT")); end
+        `endif
         `ifdef VX_CFG_TCU_SPARSE_ENABLE
             INST_TCU_WMMA_SP: begin
                 `TRACE(level, ("WMMA.SP."));
@@ -449,6 +470,10 @@ package VX_tcu_pkg;
 
     `DECL_EXECUTE_T (tcu, `VX_CFG_NUM_TCU_LANES);
 
+    // N step width of a tile-buffer request: a tensor op walks up to 128
+    // fragments; a WGMMA at most 16 N steps.
+    localparam TCU_TBUF_N_W = `VX_CFG_TCU_TMEM_ENABLED ? 8 : 4;
+
     // tcu_tbuf_req_t — per-block uop request packed for VX_tcu_tbuf.
     // `valid` is pre-gated to WGMMA and masked by `cta_conflict`.
     typedef struct packed {
@@ -457,7 +482,7 @@ package VX_tcu_pkg;
         logic [NW_WIDTH-1:0]        wid;
         logic [NCTA_WIDTH-1:0]      cta_id;
         logic [3:0]                 step_m;
-        logic [3:0]                 step_n;
+        logic [TCU_TBUF_N_W-1:0]    step_n;
         logic [3:0]                 step_k;
         logic [1:0]                 cd_nregs;
         logic [`VX_CFG_XLEN-1:0]    desc_a;

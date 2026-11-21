@@ -45,6 +45,15 @@ module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // Bank-parallel LMEM read port.
     VX_mem_bus_if.master                                                 tcu_lmem_if,
 
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    // Tensor-job steps own the tile buffers; warps do not issue WGMMA.
+    input  tcu_tbuf_req_t [BLOCK_SIZE-1:0]                               job_req,
+    input  wire                                                          job_a_fill_valid,
+    input  wire [3:0]                                                    job_a_fill_idx,
+    input  wire [BLOCK_SIZE-1:0][TCU_WG_TILE_M-1:0][TCU_TC_N-1:0][31:0] job_a_fill_data,
+    VX_mem_bus_if.slave                                                  job_cp_lmem_if,
+`endif
+
     // Outputs to tcu_core (consumed by the wrapper).
     output wire [BLOCK_SIZE-1:0][TCU_WG_A_DATA_SIZE-1:0][`VX_CFG_XLEN-1:0] tbuf_rs1_data,
     output wire [BLOCK_SIZE-1:0][TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0] tbuf_rs2_data,
@@ -92,6 +101,7 @@ module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         assign is_last_uop_b_w[bi]  = is_wgmma_op && exec_data[bi].op_args.tcu.is_last_uop;
     end
 
+`ifdef TCU_WARP_WGMMA
     always_ff @(posedge clk) begin
         if (reset) begin
             desc_a_r <= '0;
@@ -108,7 +118,15 @@ module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             end
         end
     end
+`else
+    assign desc_a_r = '0;
+    assign desc_b_r = '0;
+`endif
 
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    assign cta_conflict = '0;
+    `UNUSED_VAR ({is_wgmma_b_w, new_cta_b_w, exec_fire_b_w, is_last_uop_b_w})
+`else
     VX_tcu_lockstep #(
         .INSTANCE_ID (`SFORMATF(("%s-lockstep", INSTANCE_ID))),
         .BLOCK_SIZE  (BLOCK_SIZE)
@@ -122,6 +140,7 @@ module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .is_last_uop_b  (is_last_uop_b_w),
         .cta_conflict   (cta_conflict)
     );
+`endif
 
     // -----------------------------------------------------------------------
     // Per-block uop observation → VX_tcu_tbuf request.
@@ -144,7 +163,7 @@ module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         assign req[bi].cta_id       = exec_data[bi].header.cta_id;
         assign req[bi].step_m       = exec_data[bi].op_args.tcu.step_m;
         assign req[bi].step_k       = exec_data[bi].op_args.tcu.step_k;
-        assign req[bi].step_n       = exec_data[bi].op_args.tcu.step_n;
+        assign req[bi].step_n       = TCU_TBUF_N_W'(exec_data[bi].op_args.tcu.step_n);
         assign req[bi].cd_nregs     = exec_data[bi].op_args.tcu.cd_nregs;
         wire use_live_desc = is_first_uop_b_w[bi]
                           && !needs_setup_b_w[bi];
@@ -180,17 +199,31 @@ module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .tbuf_cache_hits(tbuf_cache_hits_w),
         .lmem_reads     (lmem_reads_w),
     `endif
+    `ifdef VX_CFG_TCU_TMEM_ENABLE
+        .req            (job_req),
+        .a_fill_valid   (job_a_fill_valid),
+        .a_fill_idx       (job_a_fill_idx),
+        .a_fill_data    (job_a_fill_data),
+        .tcu_cp_lmem_if (job_cp_lmem_if),
+    `else
         .req            (req),
+    `endif
         .tcu_lmem_if    (tcu_lmem_if),
         .tbuf_rs1_data  (tbuf_rs1_data),
         .tbuf_rs2_data  (tbuf_rs2_data),
         .tbuf_ready     (tbuf_ready)
     );
 
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    assign tbuf_ready_eff = tbuf_ready;
+    `UNUSED_VAR (req)
+    `UNUSED_VAR (cta_conflict)
+`else
     for (genvar bi = 0; bi < BLOCK_SIZE; ++bi) begin : g_tbuf_eff
         assign tbuf_ready_eff[bi] = is_setup_uop_b_w[bi] ? 1'b1
                                   : (tbuf_ready[bi] && !cta_conflict[bi]);
     end
+`endif
 
     // -----------------------------------------------------------------------
     // WGMMA perf counters (instrs / stalls).
@@ -227,6 +260,11 @@ module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     end
     assign tcu_perf.wgmma_instrs = wgmma_instrs_ctr_r;
     assign tcu_perf.wgmma_stalls = wgmma_stalls_ctr_r;
+    assign tcu_perf.mma_busy     = '0;
+    assign tcu_perf.opnd_waits   = '0;
+    assign tcu_perf.job_other    = '0;
+    assign tcu_perf.idle         = '0;
+    assign tcu_perf.tmem_xfers   = '0;
 `endif
 
 endmodule

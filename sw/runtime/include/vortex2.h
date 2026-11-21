@@ -204,6 +204,9 @@ typedef struct {
     uint32_t     block_dim[3];
     uint32_t     lmem_size;
     uint32_t     cluster_dim[3];
+    // Tensor-memory columns each CTA may allocate (tmem::alloc), counted
+    // against the core's TMEM to bound co-resident CTAs. 0 = none.
+    uint32_t     tmem_cols;
 } vx_launch_info_t;
 
 // 3D-strided DMA descriptor for the rect enqueue ops. Mirrors OpenCL 1.2's
