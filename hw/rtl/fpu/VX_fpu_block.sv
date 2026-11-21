@@ -13,7 +13,7 @@
 
 `include "VX_fpu_define.vh"
 
-// One FPU block: the FP datapath with its tag store and fflags accumulation.
+// One FPU block: the FP datapath with its tag store and fflags writes.
 module VX_fpu_block import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter NUM_LANES  = 1,
@@ -29,7 +29,6 @@ module VX_fpu_block import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     VX_fpu_csr_if.master    fpu_csr_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    localparam PID_BITS   = `CLOG2(`VX_CFG_NUM_THREADS / NUM_LANES);
     localparam TAG_WIDTH  = `LOG2UP(`VX_CFG_FPU_QUEUE_SIZE);
 
     wire fpu_req_valid, fpu_req_ready;
@@ -219,27 +218,13 @@ module VX_fpu_block import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
 `endif
 
-    // handle CSR update
-    fflags_t fpu_rsp_fflags_q;
-
-    if (PID_BITS != 0) begin : g_fflags_pid
-        fflags_t fpu_rsp_fflags_r;
-        always @(posedge clk) begin
-            if (reset) begin
-                fpu_rsp_fflags_r <= '0;
-            end else if (fpu_rsp_fire) begin
-                fpu_rsp_fflags_r <= fpu_hdr.eop ? '0 : (fpu_rsp_fflags_r | fpu_rsp_fflags);
-            end
-        end
-        assign fpu_rsp_fflags_q = fpu_rsp_fflags_r | fpu_rsp_fflags;
-    end else begin : g_fflags_no_pid
-        assign fpu_rsp_fflags_q = fpu_rsp_fflags;
-    end
-
+    // handle CSR update: fflags accrue in the CSR, so each lane packet writes
+    // its own flags as it returns, in whatever order the packets of different
+    // instructions complete.
     VX_fpu_csr_if fpu_csr_tmp_if();
-    assign fpu_csr_tmp_if.write_enable = fpu_rsp_fire && fpu_hdr.eop && fpu_rsp_has_fflags;
+    assign fpu_csr_tmp_if.write_enable = fpu_rsp_fire && fpu_rsp_has_fflags;
     `ASSIGN_BLOCKED_WID (fpu_csr_tmp_if.write_wid, fpu_hdr.wid, block_idx, `VX_CFG_NUM_FPU_BLOCKS)
-    assign fpu_csr_tmp_if.write_fflags = fpu_rsp_fflags_q;
+    assign fpu_csr_tmp_if.write_fflags = fpu_rsp_fflags;
 
      VX_pipe_register #(
         .DATAW  (1 + NW_WIDTH + $bits(fflags_t)),

@@ -88,32 +88,42 @@ module VX_fpu_fpnew
     `endif
     };
 
-    localparam fpnew_pkg::fpu_implementation_t FPU_IMPLEMENTATION = '{
+    // Div/sqrt has operand-dependent latency, so it runs on its own per-lane
+    // instance; the remaining groups are fixed-latency and stay in lockstep.
+    localparam fpnew_pkg::fpu_implementation_t FPU_IMPL_LOCKSTEP = '{
       PipeRegs:'{'{`VX_CFG_FMA_LATENCY, 0, 0, 0, 0}, // ADDMUL
-                 '{default: unsigned'(LATENCY_FDIVSQRT)}, // DIVSQRT
+                 '{default: 0}, // DIVSQRT
                  '{default: `VX_CFG_FNCP_LATENCY}, // NONCOMP
                  '{default: `VX_CFG_FCVT_LATENCY}}, // CONV
       UnitTypes:'{'{default: fpnew_pkg::PARALLEL}, // ADDMUL
-                  '{default: fpnew_pkg::MERGED}, // DIVSQRT
+                  '{default: fpnew_pkg::DISABLED}, // DIVSQRT
                   '{default: fpnew_pkg::PARALLEL}, // NONCOMP
                   '{default: fpnew_pkg::MERGED}}, // CONV
       PipeConfig: fpnew_pkg::DISTRIBUTED
     };
 
-    wire fpu_ready_in, fpu_valid_in;
-    wire fpu_ready_out, fpu_valid_out;
+    localparam fpnew_pkg::fpu_implementation_t FPU_IMPL_DIVSQRT = '{
+      PipeRegs:'{'{default: 0}, // ADDMUL
+                 '{default: unsigned'(LATENCY_FDIVSQRT)}, // DIVSQRT
+                 '{default: 0}, // NONCOMP
+                 '{default: 0}}, // CONV
+      UnitTypes:'{'{default: fpnew_pkg::DISABLED}, // ADDMUL
+                  '{default: fpnew_pkg::MERGED}, // DIVSQRT
+                  '{default: fpnew_pkg::DISABLED}, // NONCOMP
+                  '{default: fpnew_pkg::DISABLED}}, // CONV
+      PipeConfig: fpnew_pkg::DISTRIBUTED
+    };
 
-    reg [TAG_WIDTH-1:0] fpu_tag_in, fpu_tag_out;
+    localparam LS_TAGW  = TAG_WIDTH + 1 + NUM_LANES; // {tag, has_fflags, mask}
+    localparam DS_TAGW  = TAG_WIDTH + NUM_LANES;     // {tag, mask}
+    localparam DS_DATAW = DS_TAGW + $bits(fflags_t) + `VX_CFG_XLEN;
 
     logic [2:0][NUM_LANES-1:0][`VX_CFG_XLEN-1:0] fpu_operands;
-
-    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] fpu_result;
-    fpnew_pkg::status_t fpu_status;
 
     fpnew_pkg::operation_e fpu_op;
     reg [INST_FRM_BITS-1:0] fpu_rnd;
     reg fpu_op_mod;
-    reg fpu_has_fflags, fpu_has_fflags_out;
+    reg fpu_has_fflags;
     fpnew_pkg::fp_format_e fpu_src_fmt, fpu_dst_fmt;
     fpnew_pkg::int_format_e fpu_int_fmt;
 
@@ -192,22 +202,64 @@ module VX_fpu_fpnew
         endcase
     end
 
-    `UNUSED_VAR (mask_in)
-    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_fpnew_coreses
-        wire [(TAG_WIDTH+1)-1:0] fpu_tag;
-        wire fpu_valid_out_uq;
-        wire fpu_ready_in_uq;
-        fpnew_pkg::status_t fpu_status_uq;
-        `UNUSED_VAR (fpu_tag)
-        `UNUSED_VAR (fpu_valid_out_uq)
-        `UNUSED_VAR (fpu_ready_in_uq)
-        `UNUSED_VAR (fpu_status_uq)
+    wire is_divsqrt = (op_type == INST_FPU_DIV) || (op_type == INST_FPU_SQRT);
+
+    wire ls_valid_in = valid_in && ~is_divsqrt;
+    wire [NUM_LANES-1:0] ls_ready_in;
+    wire [NUM_LANES-1:0] ls_valid_out;
+    wire ls_ready_out;
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] ls_result;
+    fflags_t [NUM_LANES-1:0] ls_status;
+    wire [NUM_LANES-1:0][LS_TAGW-1:0] ls_tag;
+
+    wire ds_valid_in, ds_ready_in;
+    wire [NUM_LANES-1:0] ds_lane_valid_in, ds_lane_ready_in;
+    wire [NUM_LANES-1:0] ds_lane_valid_out, ds_lane_ready_out;
+    wire [NUM_LANES-1:0][DS_DATAW-1:0] ds_lane_data_out;
+    wire ds_valid_out, ds_ready_out;
+    wire [NUM_LANES-1:0][DS_DATAW-1:0] ds_data_out;
+
+    // Each lane's div/sqrt unit is in order and sees every instruction once, so
+    // the k-th result of every lane belongs to the same instruction.
+    VX_stream_fork #(
+        .NUM_OUTPUTS (NUM_LANES),
+        .DATAW       (1),
+        .EAGER       (1)
+    ) ds_fork (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (ds_valid_in),
+        .data_in   (1'b0),
+        .ready_in  (ds_ready_in),
+        .valid_out (ds_lane_valid_in),
+        `UNUSED_PIN (data_out),
+        .ready_out (ds_lane_ready_in)
+    );
+
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_lanes
+        wire [`VX_CFG_XLEN-1:0] lane_ds_result;
+        fflags_t lane_ds_status;
+        wire [DS_TAGW-1:0] lane_ds_tag;
+        wire [1:0][`VX_CFG_XLEN-1:0] ds_operands;
+
+        for (genvar j = 0; j < 2; ++j) begin : g_ds_operands
+        `ifdef VX_CFG_XLEN_64
+            // fpnew's div/sqrt ignores NaN-boxing: an improperly boxed single
+            // operand must read as the canonical NaN. Sqrt has no operand B,
+            // but the unit still tests it for NaN.
+            wire is_used = (j == 0) || (fpu_op == fpnew_pkg::DIV);
+            wire unboxed = is_used && (fpu_dst_fmt == fpnew_pkg::FP32) && ~(& fpu_operands[j][i][63:32]);
+            assign ds_operands[j] = unboxed ? 64'hFFFFFFFF7FC00000 : fpu_operands[j][i];
+        `else
+            assign ds_operands[j] = fpu_operands[j][i];
+        `endif
+        end
 
         fpnew_top #(
             .Features       (FPU_FEATURES),
-            .Implementation (FPU_IMPLEMENTATION),
-            .TagType        (logic[(TAG_WIDTH+1)-1:0])
-        ) fpnew_core (
+            .Implementation (FPU_IMPL_LOCKSTEP),
+            .TagType        (logic[LS_TAGW-1:0])
+        ) fpnew_lockstep (
             .clk_i          (clk),
             .rst_ni         (~reset),
             .operands_i     ({fpu_operands[2][i], fpu_operands[1][i], fpu_operands[0][i]}),
@@ -219,43 +271,123 @@ module VX_fpu_fpnew
             .int_fmt_i      (fpu_int_fmt),
             .vectorial_op_i (1'b0),
             .simd_mask_i    (1'b1),
-            .tag_i          ({fpu_tag_in, fpu_has_fflags}),
-            .in_valid_i     (fpu_valid_in),
-            .in_ready_o     (fpu_ready_in_uq),
+            .tag_i          ({tag_in, fpu_has_fflags, mask_in}),
+            .in_valid_i     (ls_valid_in),
+            .in_ready_o     (ls_ready_in[i]),
             .flush_i        (1'b0),
-            .result_o       (fpu_result[i]),
-            .status_o       (fpu_status_uq),
-            .tag_o          (fpu_tag),
-            .out_valid_o    (fpu_valid_out_uq),
-            .out_ready_i    (fpu_ready_out),
+            .result_o       (ls_result[i]),
+            .status_o       (ls_status[i]),
+            .tag_o          (ls_tag[i]),
+            .out_valid_o    (ls_valid_out[i]),
+            .out_ready_i    (ls_ready_out),
             `UNUSED_PIN (busy_o)
         );
 
-        if (i == 0) begin : g_output_0
-            assign {fpu_tag_out, fpu_has_fflags_out} = fpu_tag;
-            assign fpu_valid_out = fpu_valid_out_uq;
-            assign fpu_ready_in = fpu_ready_in_uq;
-            assign fpu_status = fpu_status_uq;
+        fpnew_top #(
+            .Features       (FPU_FEATURES),
+            .Implementation (FPU_IMPL_DIVSQRT),
+            .TagType        (logic[DS_TAGW-1:0])
+        ) fpnew_divsqrt (
+            .clk_i          (clk),
+            .rst_ni         (~reset),
+            .operands_i     ({fpu_operands[2][i], ds_operands}),
+            .rnd_mode_i     (fpnew_pkg::roundmode_e'(fpu_rnd)),
+            .op_i           (fpu_op),
+            .op_mod_i       (fpu_op_mod),
+            .src_fmt_i      (fpu_src_fmt),
+            .dst_fmt_i      (fpu_dst_fmt),
+            .int_fmt_i      (fpu_int_fmt),
+            .vectorial_op_i (1'b0),
+            .simd_mask_i    (1'b1),
+            .tag_i          ({tag_in, mask_in}),
+            .in_valid_i     (ds_lane_valid_in[i]),
+            .in_ready_o     (ds_lane_ready_in[i]),
+            .flush_i        (1'b0),
+            .result_o       (lane_ds_result),
+            .status_o       (lane_ds_status),
+            .tag_o          (lane_ds_tag),
+            .out_valid_o    (ds_lane_valid_out[i]),
+            .out_ready_i    (ds_lane_ready_out[i]),
+            `UNUSED_PIN (busy_o)
+        );
+
+        // The div/sqrt unit also raises DZ on 0/0, which is only invalid.
+        fflags_t lane_ds_fflags;
+        always @(*) begin
+            lane_ds_fflags    = lane_ds_status;
+            lane_ds_fflags.DZ = lane_ds_status.DZ && ~lane_ds_status.NV;
+        end
+
+        assign ds_lane_data_out[i] = {lane_ds_tag, lane_ds_fflags, lane_ds_result};
+
+        if (i != 0) begin : g_unused_tags
+            `UNUSED_VAR (ls_tag[i])
         end
     end
 
-    assign fpu_valid_in = valid_in;
-    assign ready_in = fpu_ready_in;
-    assign fpu_tag_in = tag_in;
+    `RUNTIME_ASSERT(((ls_valid_out == '0) || (ls_valid_out == '1)) && ((ls_ready_in == '0) || (ls_ready_in == '1)),
+        ("%t: fpnew lanes out of lockstep: valid_out=%b, ready_in=%b", $time, ls_valid_out, ls_ready_in))
 
-    VX_elastic_buffer #(
-        .DATAW   (RSP_DATAW),
-        .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
-        .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF))
-    ) rsp_buf (
+    VX_stream_join #(
+        .NUM_INPUTS (NUM_LANES),
+        .DATAW      (DS_DATAW)
+    ) ds_join (
         .clk       (clk),
         .reset     (reset),
-        .valid_in  (fpu_valid_out),
-        .ready_in  (fpu_ready_out),
-        .data_in   ({fpu_result, fpu_has_fflags_out, fpu_status, fpu_tag_out}),
+        .valid_in  (ds_lane_valid_out),
+        .data_in   (ds_lane_data_out),
+        .ready_in  (ds_lane_ready_out),
+        .valid_out (ds_valid_out),
+        .data_out  (ds_data_out),
+        .ready_out (ds_ready_out)
+    );
+
+    assign ds_valid_in = valid_in && is_divsqrt;
+    assign ready_in = is_divsqrt ? ds_ready_in : ls_ready_in[0];
+
+    // Lockstep response
+    wire [TAG_WIDTH-1:0] ls_tag_out;
+    wire ls_has_fflags;
+    wire [NUM_LANES-1:0] ls_mask;
+    fflags_t ls_fflags;
+    assign {ls_tag_out, ls_has_fflags, ls_mask} = ls_tag[0];
+
+    `FPU_MERGE_FFLAGS(ls_fflags, ls_status, ls_mask, NUM_LANES);
+
+    // Div/sqrt response
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] ds_result;
+    fflags_t [NUM_LANES-1:0] ds_status;
+    wire [NUM_LANES-1:0][DS_TAGW-1:0] ds_tag;
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_ds_unpack
+        assign {ds_tag[i], ds_status[i], ds_result[i]} = ds_data_out[i];
+        if (i != 0) begin : g_unused_tags
+            `UNUSED_VAR (ds_tag[i])
+        end
+    end
+
+    wire [TAG_WIDTH-1:0] ds_tag_out;
+    wire [NUM_LANES-1:0] ds_mask;
+    fflags_t ds_fflags;
+    assign {ds_tag_out, ds_mask} = ds_tag[0];
+
+    `FPU_MERGE_FFLAGS(ds_fflags, ds_status, ds_mask, NUM_LANES);
+
+    VX_stream_arb #(
+        .NUM_INPUTS (2),
+        .DATAW      (RSP_DATAW),
+        .ARBITER    ("P"),
+        .OUT_BUF    (OUT_BUF)
+    ) rsp_arb (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  ({ls_valid_out[0], ds_valid_out}),
+        .ready_in  ({ls_ready_out, ds_ready_out}),
+        .data_in   ({{ls_result, ls_has_fflags, ls_fflags, ls_tag_out},
+                     {ds_result, 1'b1, ds_fflags, ds_tag_out}}),
         .data_out  ({result, has_fflags, fflags, tag_out}),
         .valid_out (valid_out),
-        .ready_out (ready_out)
+        .ready_out (ready_out),
+        `UNUSED_PIN (sel_out)
     );
 
 endmodule

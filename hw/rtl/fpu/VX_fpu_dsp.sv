@@ -250,9 +250,9 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 .op_type (pe_op),
                 .op_mod  (pe_op_mod),
                 .frm     (pe_frm),
-                .dataa   (pe_data_in[i][0+:32]),
-                .datab   (pe_data_in[i][`VX_CFG_XLEN+:32]),
-                .datac   (pe_data_in[i][2*`VX_CFG_XLEN+:32]),
+                .dataa   (fp_unbox_s(64'(pe_data_in[i][0+:`VX_CFG_XLEN]))),
+                .datab   (fp_unbox_s(64'(pe_data_in[i][`VX_CFG_XLEN+:`VX_CFG_XLEN]))),
+                .datac   (fp_unbox_s(64'(pe_data_in[i][2*`VX_CFG_XLEN+:`VX_CFG_XLEN]))),
                 .result  (res32),
                 .fflags  (ff32)
             );
@@ -510,6 +510,8 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         wire [NUM_PES_DIV-1:0] div_pe_ce;
         assign div_pe_ce = div_pe_enable;
 
+        wire div_pe_is_s = (div_pe_shared[INST_FRM_BITS+:INST_FMT_BITS] == INST_FMT_S);
+
         for (genvar i = 0; i < NUM_PES_DIV; ++i) begin : g_div_units
             if (`VX_CFG_XLEN > `VX_CFG_FLEN) begin : g_pad
                 assign div_pe_data_out[i][`VX_CFG_FLEN +: (`VX_CFG_XLEN-`VX_CFG_FLEN)] = '0;
@@ -526,8 +528,8 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 .mask    (div_pe_mask_out[i]),
                 .fmt     (div_pe_shared[INST_FRM_BITS+:INST_FMT_BITS]),
                 .frm     (div_pe_shared[0+:INST_FRM_BITS]),
-                .dataa   (div_pe_data_in[i][0+:`VX_CFG_FLEN]),
-                .datab   (div_pe_data_in[i][`VX_CFG_XLEN+:`VX_CFG_FLEN]),
+                .dataa   (fp_unbox_fmt(div_pe_data_in[i][0+:`VX_CFG_FLEN], div_pe_is_s)),
+                .datab   (fp_unbox_fmt(div_pe_data_in[i][`VX_CFG_XLEN+:`VX_CFG_FLEN], div_pe_is_s)),
                 .result  (div_pe_data_out[i][0+:`VX_CFG_FLEN]),
                 .fflags  (div_pe_data_out[i][`VX_CFG_XLEN+:`FP_FLAGS_BITS])
             );
@@ -598,6 +600,8 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         wire [NUM_PES_SQRT-1:0] sqrt_pe_ce;
         assign sqrt_pe_ce = sqrt_pe_enable;
 
+        wire sqrt_pe_is_s = (sqrt_pe_shared[INST_FRM_BITS+:INST_FMT_BITS] == INST_FMT_S);
+
         for (genvar i = 0; i < NUM_PES_SQRT; ++i) begin : g_sqrt_units
             if (`VX_CFG_XLEN > `VX_CFG_FLEN) begin : g_pad
                 assign sqrt_pe_data_out[i][`VX_CFG_FLEN +: (`VX_CFG_XLEN-`VX_CFG_FLEN)] = '0;
@@ -614,7 +618,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 .mask    (sqrt_pe_mask_out[i]),
                 .fmt     (sqrt_pe_shared[INST_FRM_BITS+:INST_FMT_BITS]),
                 .frm     (sqrt_pe_shared[0+:INST_FRM_BITS]),
-                .dataa   (sqrt_pe_data_in[i][0+:`VX_CFG_FLEN]),
+                .dataa   (fp_unbox_fmt(sqrt_pe_data_in[i][0+:`VX_CFG_FLEN], sqrt_pe_is_s)),
                 .result  (sqrt_pe_data_out[i][0+:`VX_CFG_FLEN]),
                 .fflags  (sqrt_pe_data_out[i][`VX_CFG_XLEN+:`FP_FLAGS_BITS])
             );
