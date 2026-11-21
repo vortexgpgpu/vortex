@@ -143,8 +143,23 @@ void Kmu::on_tick() {
       }
     }
   }
-  if (target == num_cores)
-    return; // no ready lane this cycle
+  if (target == num_cores) {
+    // No ready lane: nothing changes until a credit returns or a lane slice
+    // takes a CTA, and both wake the KMU. A lane full only through a slot
+    // freed this cycle under a registered ready reopens next cycle with no
+    // event, so the KMU sleeps only on lanes out of credits or truly full.
+    auto blocked = [&](uint32_t c) {
+      return inflight_[c] >= LAUNCH_CREDITS || bus_out.at(c).size() == bus_out.at(c).capacity();
+    };
+    bool asleep = cluster_locked_ ? blocked(cluster_core_) : true;
+    for (uint32_t c = 0; c < num_cores && asleep && !cluster_locked_; ++c) {
+      asleep = blocked(c);
+    }
+    if (asleep) {
+      this->tick_sleep();
+    }
+    return;
+  }
   kmu_req_t req{};
   if (!this->next_cta(&req, target))
     return;

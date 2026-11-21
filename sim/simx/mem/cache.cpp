@@ -3253,6 +3253,25 @@ public:
       banks_.at(i)->mem_req_out.bind(&bank_mem_arb->ReqIn.at(this->bank_lane(i)));
       bank_mem_arb->RspOut.at(this->bank_lane(i)).bind(&banks_.at(i)->mem_rsp_in);
     }
+
+    // The cache sleeps while it has nothing to forward and no flush token is
+    // queued at a port: the channels it reads wake it as a packet is sent
+    // toward them, and a token wakes it as it reaches its port's queue.
+    for (uint32_t i = 0; i < config_.mem_ports; ++i) {
+      nc_mem_arbs_.at(i)->RspOut.at(1).wake_on_push(simobject);
+    }
+    for (uint32_t i = 0; i < config_.num_inputs; ++i) {
+      if (bank_core_xbar_) {
+        bank_core_xbar_->RspOut.at(i).wake_on_push(simobject);
+      }
+      port_arb_->IoOut.at(i).wake_on_push(simobject);
+      port_arb_->ReqIn.at(i).tx_callback([this](const MemReq& req, uint64_t) {
+        if (req.flags.flush) {
+          ++tokens_queued_;
+          simobject_->tick_wake();
+        }
+      });
+    }
   }
 
   void reset() {
@@ -3266,8 +3285,10 @@ public:
   }
 
   void tick() {
-    if (config_.bypass)
+    if (config_.bypass) {
+      simobject_->tick_sleep(); // the bypass arbiter carries all traffic
       return;
+    }
 
     // wait on cache initialization cycles
     if (init_cycles_ != 0) {
@@ -3317,6 +3338,37 @@ public:
         io_req.pop();
       }
     }
+
+    if (this->quiescent()) {
+      simobject_->tick_sleep();
+    }
+  }
+
+  // Nothing for tick() to do until a wake: no flush in progress or queued,
+  // and nothing on the channels it forwards from.
+  bool quiescent() const {
+    if (flush_state_ != FlushState::Idle || tokens_queued_ != 0) {
+      return false;
+    }
+    for (uint32_t i = 0, n = config_.mem_ports; i < n; ++i) {
+      if (nc_mem_arbs_.at(i)->RspOut.at(1).size() != 0) {
+        return false;
+      }
+    }
+    for (auto &net : mem_req_net_) {
+      if (net.size() != 0) {
+        return false;
+      }
+    }
+    for (uint32_t i = 0, n = config_.num_inputs; i < n; ++i) {
+      if (bank_core_xbar_ && bank_core_xbar_->RspOut.at(i).size() != 0) {
+        return false;
+      }
+      if (port_arb_->IoOut.at(i).size() != 0) {
+        return false;
+      }
+    }
+    return true;
   }
 
   // Flush tokens (fences) at any port start one round: the ports hold their
@@ -3453,6 +3505,7 @@ public:
           flush_state_ = FlushState::Idle;
         }
         port_arb_->take_token(i);
+        --tokens_queued_;
         rsp_pending_.at(i) = false;
       }
       break;
@@ -3592,6 +3645,7 @@ private:
   bool walk_skip_ = false;  // the banks only quiesce: no walk is owed
   std::vector<SimChannel<MemReq>> mem_req_net_;
   std::vector<FlushTap::Ptr> flush_taps_;
+  uint32_t tokens_queued_ = 0;  // flush tokens in the port arbiter's queues
 
   // Bank i drives memory port i mod mem_ports: its lane into the bank-to-port
   // arbiter, which serves each port from a contiguous range of lanes.

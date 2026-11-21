@@ -849,8 +849,9 @@ public:
         this->check_issue_timeout(iw, wid, trace, uop_trace);
 
         if (scoreboard_->in_use(uop_trace)) {
-          auto uses = scoreboard_->get_uses(uop_trace);
-          if (!uop_trace->log_once(true)) {
+          if (!uop_trace->log_once(true) && 4 <= VX_DBG_DEBUG_LEVEL) {
+            // The dependents are listed for the trace once per stall.
+            auto uses = scoreboard_->get_uses(uop_trace);
             DTH(4, "*** scoreboard-stall: dependents={");
             for (uint32_t j = 0, n = uses.size(); j < n; ++j) {
               auto& use = uses.at(j);

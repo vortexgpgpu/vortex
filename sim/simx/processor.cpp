@@ -25,6 +25,14 @@
 
 using namespace vortex;
 
+// Tick until done() holds, testing it first: `while (!done()) tick();`.
+template <typename Done>
+static void tick_until(Done&& done) {
+  if (!done()) {
+    SimPlatform::instance().run_until(done);
+  }
+}
+
 static void simx_print_backtrace() {
   void* addrs[64];
   int count = ::backtrace(addrs, int(std::size(addrs)));
@@ -85,6 +93,7 @@ ProcessorImpl::ProcessorImpl()
     auto slice = RegSlice<kmu_req_t>::Create(sname, 1);
     auto* core = clusters_.at(i / cores_per_cluster)->get_core(i % cores_per_cluster);
     kmu_->bus_out.at(i).bind(&slice->In);
+    slice->In.wake_on_pop(kmu_.get());   // a KMU blocked on a full lane
     slice->Out.bind(&core->scheduler().cta_dispatcher()->bus_in);
     snprintf(sname, 100, "kmu-credit%d", i);
     RegSlice<uint8_t>::Ptr cslice;
@@ -264,7 +273,7 @@ void ProcessorImpl::flush_caches(uint32_t fence_op) {
     cluster->rtcache_flush_begin();
 #endif
   }
-  while (true) {
+  tick_until([&]() {
     bool all_done = true;
     for (auto& cluster : clusters_) {
       if (!cluster->dcache_flush_done()) { all_done = false; break; }
@@ -282,30 +291,25 @@ void ProcessorImpl::flush_caches(uint32_t fence_op) {
       if (!cluster->rtcache_flush_done()) { all_done = false; break; }
 #endif
     }
-    if (all_done && SimPlatform::instance().idle())
-      break;
-    SimPlatform::instance().tick();
-  }
+    return all_done && SimPlatform::instance().idle();
+  });
 
   // L2 caches.
   for (auto& cluster : clusters_) {
     cluster->l2_flush_begin(fence_op);
   }
-  while (true) {
-    bool all_done = true;
+  tick_until([&]() {
     for (auto& cluster : clusters_) {
-      if (!cluster->l2_flush_done()) { all_done = false; break; }
+      if (!cluster->l2_flush_done()) {
+        return false;
+      }
     }
-    if (all_done && SimPlatform::instance().idle())
-      break;
-    SimPlatform::instance().tick();
-  }
+    return SimPlatform::instance().idle();
+  });
 
   // L3 cache (single instance at processor level).
   l3cache_->flush_begin(fence_op);
-  while (!l3cache_->flush_done() || !SimPlatform::instance().idle()) {
-    SimPlatform::instance().tick();
-  }
+  tick_until([&]() { return l3cache_->flush_done() && SimPlatform::instance().idle(); });
 }
 
 int ProcessorImpl::run() {
@@ -313,10 +317,14 @@ int ProcessorImpl::run() {
   kmu_->start();
   this->forward_delegated_launch();
 
-  bool done;
   int exitcode = 0;
-  do {
-    SimPlatform::instance().tick();
+  // Evaluated after every cycle (see SimPlatform::run_until). busy: a core
+  // still runs, so the launch cannot end; only the memory counters advance.
+  auto stop = [&](bool busy) {
+    if (busy) {
+      perf_mem_latency_ += perf_mem_pending_reads_;
+      return false;
+    }
     bool any_running = false;
     for (auto cluster : clusters_) {
       if (cluster->running()) {
@@ -341,9 +349,29 @@ int ProcessorImpl::run() {
     // work: cache pipelines wrap a SimChannel inside TFifo, so cache-pipe
     // state (and any in-flight cache→memory writethrough) shows up in
     // idle(), as do launch-lane CTAs and barrier hops between domains.
-    done = (!any_running || faulted) && SimPlatform::instance().idle();
+    bool done = (!any_running || faulted) && SimPlatform::instance().idle();
     perf_mem_latency_ += perf_mem_pending_reads_;
-  } while (!done);
+    return done;
+  };
+
+  // With one cluster, a running core leaves no idle cluster whose exit code
+  // the check would collect, so the launch can let its cores vote. With
+  // several clusters, or with VM (a latched fault ends the launch while cores
+  // run), every cycle takes the full check.
+#ifdef VX_CFG_VM_ENABLE
+  constexpr bool voted = false;
+#else
+  constexpr bool voted = (VX_CFG_NUM_CLUSTERS == 1);
+#endif
+  if constexpr (voted) {
+    std::vector<Core*> cores;
+    for (uint32_t c = 0; c < NUM_SOCKETS * VX_CFG_SOCKET_SIZE; ++c) {
+      cores.push_back(clusters_.at(0)->get_core(c));
+    }
+    SimPlatform::instance().run_until(stop, cores, [](Core* core) { return core->running(); });
+  } else {
+    SimPlatform::instance().run_until([&]() { return stop(false); });
+  }
 
   return exitcode;
 }
@@ -374,9 +402,7 @@ void ProcessorImpl::cp_mem_transfer(uint64_t addr, const uint8_t* src, uint8_t* 
       dst += n;
     }
   }
-  while (!cp_llc_port_->idle()) {
-    SimPlatform::instance().tick();
-  }
+  tick_until([&]() { return cp_llc_port_->idle(); });
 }
 
 void ProcessorImpl::launch_reset() {
@@ -393,9 +419,7 @@ void ProcessorImpl::launch_reset() {
     if (cp_llc_port_->writes_pending()) {
       cp_llc_port_->fence();
     }
-    while (!cp_llc_port_->idle()) {
-      SimPlatform::instance().tick();
-    }
+    tick_until([&]() { return cp_llc_port_->idle(); });
   }
   SimPlatform::instance().reset_launch();
   // The perf_mem_* counters survive: the MPM counters run from device reset.

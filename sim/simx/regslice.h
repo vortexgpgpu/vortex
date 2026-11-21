@@ -62,7 +62,9 @@ protected:
       --credits_;
       In.pop();
     }
-    if (In.size() == 0) {
+    // Nothing to do with no packet queued or on its way in, or with no
+    // credit: an arriving packet and a returned credit both wake the slice.
+    if (In.size() == 0 || credits_ == 0) {
       this->tick_sleep();
     }
   }

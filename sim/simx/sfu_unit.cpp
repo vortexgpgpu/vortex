@@ -585,6 +585,28 @@ void SfuUnit::on_tick() {
 			res_rr_[r] = (winner[r] + 1) % VX_CFG_NUM_SFU_BLOCKS;
 		}
 	}
+
+#ifndef VX_CFG_EXT_RASTER_ENABLE
+	// Sleep with nothing queued or on its way in: a tick then does nothing
+	// (the fragment distributor pulls work on its own, so a raster build
+	// stays awake).
+	for (auto& input : Inputs) {
+		if (input.size() != 0) {
+			return;
+		}
+	}
+#ifdef VX_CFG_EXT_RTU_ENABLE
+	if (rtu_rsp_in.size() != 0) {
+		return;
+	}
+#endif
+#ifdef VX_CFG_EXT_TEX_ENABLE
+	if (tex_rsp_in.size() != 0) {
+		return;
+	}
+#endif
+	this->tick_sleep();
+#endif
 }
 
 void SfuUnit::on_reset() {

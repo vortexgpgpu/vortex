@@ -70,13 +70,20 @@ Why this is non-negotiable:
 
 ```
 fire_immediate_events()                     // delta cycle 0 settle
-for each active object:
+for each awake object, in creation order:   // the domain's ready set
   object->do_tick()                         // calls Impl::on_tick()
   fire_immediate_events()                   // settle delta cycles produced
                                             //   by this tick
 ++cycles_
 fire registered events scheduled for cycles_ // packet deliveries with delay > 0
 ```
+
+Host loops that tick until a condition holds use
+`SimPlatform::run_until(stop)`, which equals `do { tick(); } while (!stop());`
+cycle for cycle. Under the multi-threaded executor it costs one barrier per
+cycle instead of `tick()`'s two (see §10).
+`run_until(stop, voters, busy)` lets objects vote that the run continues,
+which replaces the barrier with neighbor synchronization (see §10).
 
 Two consequences:
 
@@ -141,6 +148,45 @@ default.
 Multi-level CRTP (`Derived → Intermediate → SimObject<Intermediate>`)
 disables this optimization: such derivatives are conservatively kept
 active.
+
+### Sleeping between work (tick gating)
+
+An object whose `on_tick()` would do nothing in its current state calls
+`tick_sleep()` and drops out of the cycle loop; the cycle loop visits only the
+domain's ready set, in creation order. What wakes it:
+
+- a packet sent toward one of its own endpoint channels (at `send`, before
+  delivery, so a skipped tick never hides a packet);
+- a packet sent toward an endpoint it registered with
+  `channel.wake_on_push(this)`: for an object that reads a channel another
+  object owns, such as a sub-object's output;
+- a pop from an endpoint it registered with `channel.wake_on_pop(this)`: for
+  a producer that sleeps while its output is full;
+- its own `tick_wake()`, from any other entry point (a credit return, a
+  flush request, `start()`);
+- a reset, which wakes every object.
+
+A wake by an object ahead of it in creation order lets it tick the same
+cycle; a wake by one behind it, the next cycle: the same as a flag tested in
+a scan of every object. The contract is exactness: sleep only at a fixed
+point, where every skipped tick would have been a no-op until one of the
+wakes above. In particular:
+
+- **State that changes with time** keeps the object awake: a countdown, a
+  per-cycle counter that adds a non-zero value (a latency sum of outstanding
+  loads), or a ready time it waits on.
+- **Use `size()`, not `empty()`,** to test an input: `size()` counts packets
+  still on their way in, whose send already woke the object.
+- **A producer blocked on a full output** can sleep only on its true
+  occupancy (`size() == capacity()`) with a pop waker; under a registered
+  ready a slot freed this cycle is not offered until the next, and no event
+  marks that.
+- **A wake binding** goes on the endpoint itself, after elaboration bound the
+  chain (in a constructor after the binds, or in `on_reset()`), and the waker
+  shares the endpoint's execution domain.
+
+Every sleep predicate must leave the cycle counts and every counter
+identical; the model-parity and perf-gate cases check it.
 
 ---
 
@@ -309,18 +355,26 @@ channel — e.g. periodic counter rollover, deferred wake-ups. Held
 function payload is bounded to ~48 bytes (small-function optimization
 via `SmallFunction`).
 
-### Wheel + immediate buckets
+### Wheel and lanes
 
-Two storage tiers:
+Three storage tiers per execution domain:
 
-- **Registered events** (`reg_events_`) — a hashed timing wheel with
+- **The wheel** — `delay >= 2`: a hashed timing wheel with
   `WHEEL_SIZE = 4096` buckets indexed by `cycle & WHEEL_MASK`. Events
   scheduled for cycles past the current wraparound are revisited each
   pass. Fire on `tick()` after the per-object loop.
-- **Immediate events** (`imm_events_`) — `delay == 0`, fire **between
-  ticks** of the current cycle in delta-order (`delta_` is bumped per
-  scheduled). Multiple delta passes settle combinational chains within
-  the same cycle.
+- **The next-cycle lane** — `delay == 1`, the common case: a flat vector per
+  due-cycle parity, fired right after the wheel bucket of the same cycle. A
+  domain's time only moves forward, so every longer-delay event due that
+  cycle was scheduled before any delay-1 event: wheel first, then the lane,
+  is exactly the order of a single wheel.
+- **The immediate lane** — `delay == 0`, fires **between ticks** of the
+  current cycle in schedule order, including events a firing appends.
+  Multiple delta passes settle combinational chains within the same cycle.
+
+A lane event carries a small trivially copyable packet (a pointer, a
+credit) inline, with no allocation and no virtual call; a larger packet
+rides a pooled `SimChannelEvent`, as on the wheel.
 
 Use `delay=0` only for genuine combinational paths (a forwarder that
 must complete in-cycle). Default to `delay=1` for normal flow.
@@ -469,6 +523,46 @@ per-domain state (scan list, wheel, delta events) is touched only by its
 owner, cross-domain deliveries are merged in a canonical `(due, src, seq)`
 order, and each cycle is fenced by barriers. A contributor who follows the
 Cardinal Rule gets deterministic parallelism for free.
+
+A cycle is one barrier inside `run_until()`: the cycle-end barrier's release
+step commits the cycle and runs the host's stop check while every worker is
+parked, and releasing the barrier starts the next cycle. A bare `tick()`
+costs two (release, then join). The barrier itself has no shared
+read-modify-write: each worker announces its arrival on its own cache line
+and the coordinator (thread 0) collects them. Domains go to threads
+round-robin, with a last partial round placed from the highest thread down,
+so the coordinator, which owns the uncore domain and runs the release steps,
+takes no extra socket.
+
+A host loop that cannot end while some objects are busy uses
+`run_until(stop, voters, busy)` instead. After each cycle every voter is
+evaluated with `busy(voter)` by the thread that ticks it, so model code never
+names a domain; true means the run certainly continues, for example because a
+core still runs. `stop(busy)` gets the OR of the votes; with `busy` set it
+must return `false` and touch only the uncore domain's state, since other
+domains may be mid-cycle. With workers, this replaces the per-cycle barrier
+with **neighbor synchronization**:
+
+- Each domain publishes, on its own cache line, how many cycles it has
+  completed and its vote, and starts cycle `c` once every neighbor has
+  completed `c` cycles. Neighbors are the domains a channel bind chain joins,
+  plus the uncore with every domain. Neighbors stay within one cycle of each
+  other, which keeps the triple-buffered mailboxes valid. Sockets do not wait
+  for each other directly, but each waits for the uncore, so none gets more
+  than two cycles ahead of the slowest.
+- Thread 0 decides the stop check for the cycle ending at `c` when it starts
+  the next one, once every domain has completed `c`. A thread with a busy
+  domain may run ahead, and then the run cannot end at `c`; a thread whose
+  domains all voted idle waits for the decision. When every vote is idle,
+  every other thread is parked, so `stop(false)` sees exactly the lockstep
+  run's state: the stop cycle and every counter equal the lockstep run's.
+- A cross-domain call between two domains that are not neighbors aborts the
+  run, because the synchronization could not order it.
+
+`Processor::run()` lets its cores vote "running" when the processor has one
+cluster and no VM: there a running core leaves the check nothing else to do.
+Other host loops (cache flushes, copy-engine transfers) keep the barrier. In
+the functional kernel the unit is a quantum instead of a cycle.
 
 Cross-domain calls travel through per-(target, source) mailbox lanes, each
 written by one source and drained by one target, so no lock or shared counter

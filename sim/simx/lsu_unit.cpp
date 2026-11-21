@@ -217,6 +217,39 @@ void LsuUnit::on_reset() {
 		state.reset();
 	}
 	pending_loads_ = 0;
+	// Responses come back on the switch's output: wake on them while asleep.
+	for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
+		core_->lmem_switch(b)->RspOut.wake_on_push(this);
+	}
+}
+
+// Nothing for a tick to do until a wake: no trace queued, in flight or
+// awaiting a response, no fence engaged, and no load outstanding (a tick
+// accumulates their latency).
+bool LsuUnit::quiescent() const {
+	if (pending_loads_ != 0) {
+		return false;
+	}
+	for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
+		auto& state = states_.at(b);
+		if (!state.req_queue.empty() || !state.pending_reqs.empty() || state.staged_reads != 0
+		 || !state.meta_reqs.empty() || state.fence.locked() || state.fence_token
+		 || state.head_staged || state.remain_addrs != 0 || !state.rsp_tracks.empty()) {
+			return false;
+		}
+		if (Inputs.at(b).size() != 0 || rsp_bufs_.at(b).size() != 0 || no_rsp_bufs_.at(b).size() != 0
+		 || core_->lmem_switch(b)->RspOut.size() != 0) {
+			return false;
+		}
+	}
+#ifdef TCU_META_ENABLE
+	for (uint32_t p = 0; p < TCU_AGU_PORTS; ++p) {
+		if (TcuReqIn.at(p).size() != 0) {
+			return false;
+		}
+	}
+#endif
+	return true;
 }
 
 void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
@@ -852,5 +885,8 @@ void LsuUnit::on_tick() {
 		this->process_response_step(b);
 		this->process_request_step(b);
 		this->ingest_inputs(b, queue_room, reads_held);
+	}
+	if (this->quiescent()) {
+		this->tick_sleep();
 	}
 }

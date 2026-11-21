@@ -191,4 +191,24 @@ void Dispatcher::on_tick() {
       bp = 0;
     }
   }
-};
+
+  // Sleep at the fixed point: no op queued or on its way in, none held in
+  // the iterator, no block mid-split. A tick there does nothing, and an op
+  // sent toward an input wakes the dispatcher.
+  for (auto& input : Inputs) {
+    if (input.size() != 0) {
+      return;
+    }
+  }
+  for (auto held : held_input_) {
+    if (held >= 0) {
+      return;
+    }
+  }
+  for (auto bp : block_pids_) {
+    if (bp != 0) {
+      return;
+    }
+  }
+  this->tick_sleep();
+}

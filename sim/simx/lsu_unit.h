@@ -104,6 +104,8 @@ protected:
 
 private:
 
+	bool quiescent() const;
+
 	void compute_addrs(uint32_t b, instr_trace_t* trace);
 
 	// Per-cycle handlers.

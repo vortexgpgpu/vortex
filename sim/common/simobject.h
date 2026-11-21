@@ -71,6 +71,9 @@ class SimObjectBase {
 public:
   using Ptr = std::shared_ptr<SimObjectBase>;
   virtual ~SimObjectBase() = default;
+  // An object's ready-set binding is its own: objects are never copied.
+  SimObjectBase(const SimObjectBase&) = delete;
+  SimObjectBase& operator=(const SimObjectBase&) = delete;
 
   const std::string& name() const { return name_; }
 
@@ -89,14 +92,20 @@ protected:
   // state (all watched input channels empty, nothing in flight toward them)
   // may drop out of the per-cycle tick scan. Reserving a packet toward one of
   // its endpoint channels re-arms it before delivery, so a skipped tick never
-  // hides work. Objects opt in by calling tick_sleep() from on_tick();
+  // hides work; so does a packet toward a channel it watches (see
+  // SimChannelBase::wake_on_push) and a pop from one it waits on
+  // (wake_on_pop). Objects opt in by calling tick_sleep() from on_tick();
   // tick_wake() re-arms from non-channel entry points (e.g. a flush request).
-  void tick_sleep() { tick_active_ = false; }
-  void tick_wake()  { tick_active_ = true; }
+  void tick_sleep() { *active_word_ &= ~active_bit_; }
+  void tick_wake()  { *active_word_ |= active_bit_; }
 
 private:
   std::string name_;
-  bool tick_active_ = true;
+  // This object's bit in its domain's ready set (see SimPlatform::Domain);
+  // an object without a tick points at its own scratch word.
+  uint64_t* active_word_ = &inert_word_;
+  uint64_t active_bit_ = 1;
+  uint64_t inert_word_ = 0;
   uint32_t domain_ = 0;
   bool launch_kept_ = false; // built under a LaunchKeepScope
   virtual void do_reset() = 0;
@@ -126,6 +135,21 @@ public:
     pop_cb_ = std::move(callback);
   }
 
+  // Wake `reader` too when a packet is sent toward this endpoint: for an
+  // object that reads a channel another object owns (a sub-object's output)
+  // and sleeps while it is empty. Bindings are made after elaboration binds
+  // the chain, on the endpoint itself, in the same execution domain.
+  void wake_on_push(SimObjectBase* reader) {
+    this->bind_waker(&push_waker_, reader);
+  }
+
+  // Wake `writer` when a packet is popped from this endpoint: for a producer
+  // that sleeps while the channel is full. The pop frees the slot the
+  // producer waits on (the next cycle, under a registered ready).
+  void wake_on_pop(SimObjectBase* writer) {
+    this->bind_waker(&pop_waker_, writer);
+  }
+
   virtual bool empty() const = 0;
   virtual bool full() const = 0;
   virtual uint32_t size() const = 0;
@@ -141,10 +165,20 @@ protected:
 
   // Re-arm a tick-gated module (see SimObjectBase::tick_sleep).
   static void wake_module(SimObjectBase* module) {
-    module->tick_active_ = true;
+    module->tick_wake();
+  }
+
+  void bind_waker(SimObjectBase** slot, SimObjectBase* obj) {
+    __assert(obj != nullptr, "waker is null");
+    __assert(sink_ == nullptr, "a waker binds to a channel endpoint");
+    __assert(obj->domain() == module_->domain(), "a waker shares the endpoint's domain");
+    __assert(*slot == nullptr || *slot == obj, "channel waker already bound");
+    *slot = obj;
   }
 
   SimObjectBase*  module_;
+  SimObjectBase*  push_waker_ = nullptr;
+  SimObjectBase*  pop_waker_ = nullptr;
   SimChannelBase* sink_;
   SimChannelBase* source_;
   SimChannelBase* endpoint_cache_ = nullptr;
@@ -391,10 +425,76 @@ public:
   void reset_launch();
   void tick();
 
+  // Tick until stop() returns true; stop() is evaluated in host context after
+  // every cycle, as in `do { tick(); } while (!stop());`, which it equals
+  // cycle for cycle. With workers, the check runs in the release step of the
+  // cycle-end barrier, so a cycle costs one barrier instead of tick()'s two.
+  template <typename Stop>
+  void run_until(Stop&& stop);
+
+  // Tick until stop(busy) returns true, for a loop that cannot end while any
+  // object of `voters` is busy(voter). After each cycle the thread ticking a
+  // voter evaluates it, and stop runs with busy set when one was: it must then
+  // return false and touch only uncore state, since other objects may be
+  // ticking. stop(false) sees exactly the state run_until(stop) would. With
+  // workers, neighbor synchronization replaces the barrier (sync_loop).
+  template <typename Stop, typename Obj, typename Busy>
+  void run_until(Stop&& stop, const std::vector<Obj*>& voters, Busy&& busy);
+
 private:
   // Timing Wheel Configuration
   static constexpr uint64_t WHEEL_SIZE = 4096;
   static constexpr uint64_t WHEEL_MASK = WHEEL_SIZE - 1;
+
+  // A lane event: a small trivially copyable packet rides inline, anything
+  // else as a pooled event object. fn fires the event (run) or drops it.
+  static constexpr size_t kLanePkt = 16;
+  struct LaneEvent {
+    void (*fn)(LaneEvent&, bool run);
+    void* target;
+    alignas(8) unsigned char pkt[kLanePkt];
+  };
+
+  template <typename Pkt>
+  static constexpr bool lane_inline() {
+    return std::is_trivially_copyable_v<Pkt> && sizeof(Pkt) <= kLanePkt && alignof(Pkt) <= 8;
+  }
+
+  template <typename Pkt>
+  static void lane_fire_inline(LaneEvent& e, bool run) {
+    if (run) {
+      static_cast<SimChannel<Pkt>*>(e.target)->receive_packet(*std::launder(reinterpret_cast<const Pkt*>(e.pkt)));
+    }
+  }
+
+  static void lane_fire_event(LaneEvent& e, bool run) {
+    auto* evt = static_cast<SimEventBase*>(e.target);
+    if (run) {
+      evt->fire();
+    }
+    delete evt;
+  }
+
+  template <typename Pkt, typename P>
+  static void lane_push(std::vector<LaneEvent>& lane, SimChannel<Pkt>* channel, P&& pkt) {
+    LaneEvent e;
+    e.target = channel;
+    if constexpr (lane_inline<Pkt>()) {
+      e.fn = &lane_fire_inline<Pkt>;
+      new (e.pkt) Pkt(std::forward<P>(pkt));
+    } else {
+      e.fn = &lane_fire_event;
+      e.target = static_cast<SimEventBase*>(new SimChannelEvent<Pkt>(channel, std::forward<P>(pkt), 0));
+    }
+    lane.push_back(e);
+  }
+
+  static void lane_drop(std::vector<LaneEvent>& lane) {
+    for (auto& e : lane) {
+      e.fn(e, false);
+    }
+    lane.clear();
+  }
 
   // Per-domain kernel state: scan list, timing wheel, and immediate-event
   // list are private to one execution domain, so a domain can be ticked by
@@ -402,11 +502,26 @@ private:
   // routed to the ENDPOINT's domain at schedule time.
   struct Domain {
     std::vector<SimObjectBase*> scan;   // creation order within the domain
+    // Ready set: bit i is set while scan[i] is awake. Objects sleep and wake
+    // by clearing and setting their own bit, so a cycle visits only the
+    // awake ones, still in creation order. The words come in cache-line
+    // blocks: each domain's are written by its own worker only.
+    struct alignas(64) ActiveBlock {
+      uint64_t words[8] = {};
+    };
+    std::vector<ActiveBlock> active_blocks;
+    uint32_t active_words = 0;
+    uint64_t* active() { return active_blocks.data()->words; }
     std::vector<LinkedList<SimEventBase, &SimEventBase::list_>> wheel;
-    LinkedList<SimEventBase, &SimEventBase::list_> imm;
+    // Events due next cycle (delay 1), by the due cycle's parity, and this
+    // cycle (delay 0), each in schedule order. A delay-1 event is scheduled
+    // after every longer-delay event due the same cycle (a domain's time only
+    // moves forward), so firing the wheel bucket and then the lane keeps the
+    // order a single wheel gives.
+    std::vector<LaneEvent> next[2];
+    std::vector<LaneEvent> imm;
     // Packets in flight toward this domain's endpoints (see SimChannelBase).
     alignas(64) int64_t inflight = 0;
-    uint32_t delta = 0;
     uint32_t id = 0;
     Domain() : wheel(WHEEL_SIZE) {}
   };
@@ -431,6 +546,40 @@ private:
       }
     }
     return *domains_.at(d);
+  }
+
+  // Elaboration only: register a ticking object in its domain's scan list.
+  void add_scan(SimObjectBase* object) {
+    auto& dom = this->domain_at(object->domain_);
+    uint32_t idx = uint32_t(dom.scan.size());
+    dom.scan.push_back(object);
+    if ((idx & 63) == 0) {
+      if ((dom.active_words & 7) == 0) {
+        auto* before = dom.active_blocks.data();
+        dom.active_blocks.emplace_back();
+        if (dom.active_blocks.data() != before) {
+          // the words moved: re-point every object at its word
+          for (uint32_t i = 0; i < idx; ++i) {
+            dom.scan[i]->active_word_ = &dom.active()[i >> 6];
+          }
+        }
+      }
+      ++dom.active_words;
+    }
+    object->active_word_ = &dom.active()[idx >> 6];
+    object->active_bit_ = uint64_t(1) << (idx & 63);
+    *object->active_word_ |= object->active_bit_;
+  }
+
+  // Wake every ticking object (a reset re-arms them all).
+  void wake_all() {
+    for (auto& dom : domains_) {
+      uint32_t n = uint32_t(dom->scan.size());
+      for (uint32_t w = 0; w < dom->active_words; ++w) {
+        uint32_t bits = std::min(64u, n - w * 64);
+        dom->active()[w] = (bits == 64) ? ~uint64_t(0) : ((uint64_t(1) << bits) - 1);
+      }
+    }
   }
 
   SimPlatform() : cycles_(0) {
@@ -525,6 +674,9 @@ private:
     assert(target_domain < num_domains_);
     uint32_t src = tl_exec_domain_;
     uint64_t now = this->cycles();
+    if (sync_active_ && src != HOST_DOMAIN && !sync_edge_[target_domain * num_domains_ + src]) {
+      this->sync_unknown_edge(src, target_domain);
+    }
     auto& lane = this->cross_lane(target_domain, (src == HOST_DOMAIN) ? kHostLane : (src + 1));
     lane.buf[cross_epoch(now) % kCrossEpochs].push_back({now + 1, std::move(fn)});
   }
@@ -636,12 +788,16 @@ private:
 
   // ── Multi-threaded executor ────────────────────────────────────────────
   // One persistent worker per extra thread; domains are assigned round-robin
-  // (coordinator keeps stripe 0). Two phases per cycle, separated by spinning
-  // epoch-counting barriers: A) drain the mailboxes + tick each domain,
-  // B) deliver each domain's due wheel events. All per-domain state, the
-  // inflight count included, is touched only by its owner; the only shared
-  // structures are the mailbox lanes (one writer and one reader each, kept
-  // apart by epoch) and the barrier itself.
+  // (the coordinator, thread 0, keeps stripe 0). A cycle is: drain the
+  // mailboxes and tick each domain, then deliver each domain's due wheel
+  // events, then one barrier. All per-domain state, the inflight count
+  // included, is touched only by its owner; the only shared structures are
+  // the mailbox lanes (one writer and one reader each, kept apart by epoch)
+  // and the barrier itself.
+  //
+  // Inside run_until() the cycle-end barrier also starts the next cycle: its
+  // release step commits the cycle and runs the host's stop check while every
+  // worker is parked, so a cycle costs one barrier instead of two.
   uint32_t mt_threads_ = 1;
   uint32_t req_workers_ = 1;
   uint32_t mt_max_threads_ = std::numeric_limits<uint32_t>::max();
@@ -649,48 +805,209 @@ private:
   bool workers_started_ = false;
   std::vector<std::thread> workers_;
   std::vector<std::vector<Domain*>> stripe_domains_;
-  std::atomic<int>      barrier_count_{0};
   std::atomic<uint64_t> barrier_epoch_{0};
   std::atomic<bool>     workers_exit_{false};
 
-  // Epoch barrier: no per-thread state, so the coordinator may be a different
-  // OS thread on every call without desynchronizing the workers. The last
-  // thread to arrive runs on_release before publishing the new epoch, so its
-  // writes are visible to every thread on the other side of the barrier.
-  static constexpr uint32_t kBarrierSpins = 4096;
+  // Each worker announces its arrival on its own cache line and the
+  // coordinator collects them: no shared read-modify-write, so an arrival
+  // does not contend with its peers' arrivals.
+  struct alignas(64) ArriveFlag {
+    std::atomic<uint64_t> epoch{0};
+  };
+  std::unique_ptr<ArriveFlag[]> arrive_;
 
-  template <typename Fn>
-  void barrier_wait(Fn&& on_release) {
-    int nthreads = int(mt_threads_);
-    uint64_t epoch = barrier_epoch_.load(std::memory_order_acquire);
-    if (barrier_count_.fetch_add(1, std::memory_order_acq_rel) == nthreads - 1) {
-      barrier_count_.store(0, std::memory_order_relaxed);
-      on_release();
-      barrier_epoch_.store(epoch + 1, std::memory_order_release);
-    } else {
-      // Spin briefly (the common case: peers arrive within microseconds),
-      // then yield so a waiting thread does not starve a descheduled peer
-      // on an oversubscribed host.
-      uint32_t spins = 0;
-      while (barrier_epoch_.load(std::memory_order_acquire) == epoch) {
-        if (++spins < kBarrierSpins) {
-        #if defined(__x86_64__)
-          __builtin_ia32_pause();
-        #endif
-        } else {
-          std::this_thread::yield();
+  // Host stop check of the active run_until() loop (see cycle_end()).
+  bool (*run_stop_)(void*) = nullptr;
+  void* run_stop_arg_ = nullptr;
+  bool run_active_ = false;
+
+  // ── Neighbor synchronization (run_until with voters) ──────────────────
+  // Domain d publishes the cycles it has completed and its vote, and starts
+  // cycle c once every neighbor has completed c, so neighbors
+  // stay within one cycle and the triple-buffered mailboxes stay valid.
+  // Thread 0 owns the uncore domain, which neighbors every domain, and
+  // decides the stop check for the cycle ending at c when it starts the
+  // next one. A thread with a busy domain may run one cycle ahead, which
+  // rules out a stop at c; a thread whose domains all voted idle waits for
+  // the decision, so an all-idle check runs with every other thread parked.
+  struct alignas(64) SyncProgress {
+    std::atomic<uint64_t> word{0};   // completed cycles << 1 | busy vote
+  };
+  std::unique_ptr<SyncProgress[]> sync_progress_;
+  std::vector<std::vector<uint32_t>> sync_deps_;   // neighbors per domain
+  std::vector<uint8_t> sync_edge_;                 // [target * num_domains_ + source]
+  alignas(64) std::atomic<uint64_t> sync_decided_{0};   // last cycle decided to continue
+  std::atomic<bool> sync_stop_{false};
+  bool sync_active_ = false;
+  uint64_t sync_start_ = 0;
+  bool (*sync_stop_fn_)(void*, bool) = nullptr;
+  bool (*sync_vote_fn_)(void*, uint32_t) = nullptr;
+  void* sync_stop_arg_ = nullptr;
+  void* sync_vote_arg_ = nullptr;
+
+  // Neighbors: domains joined by a channel bind chain, and the uncore with
+  // every domain. A cross-domain call along any other pair aborts the run
+  // (cross_call).
+  void sync_init_graph() {
+    uint32_t n = num_domains_;
+    sync_edge_.assign(size_t(n) * n, 0);
+    auto link = [&](uint32_t a, uint32_t b) {
+      if (a != b) {
+        sync_edge_[size_t(a) * n + b] = 1;
+        sync_edge_[size_t(b) * n + a] = 1;
+      }
+    };
+    for (auto* ch : channels_) {
+      if (ch->source_ == nullptr && ch->sink_ != nullptr) {
+        link(ch->module_->domain(), ch->endpoint()->module_->domain());
+      }
+    }
+    for (uint32_t d = 1; d < n; ++d) {
+      link(0, d);
+    }
+    sync_deps_.assign(n, {});
+    for (uint32_t a = 0; a < n; ++a) {
+      for (uint32_t b = 0; b < n; ++b) {
+        if (sync_edge_[size_t(a) * n + b]) {
+          sync_deps_[a].push_back(b);
+        }
+      }
+    }
+    sync_progress_.reset(new SyncProgress[n]);
+  }
+
+  __attribute__((noinline, noreturn)) void sync_unknown_edge(uint32_t src, uint32_t target) {
+    std::cerr << "error: cross-domain call from domain " << src << " to domain " << target
+              << ", which share no channel; neighbor synchronization cannot order it" << std::endl;
+    std::abort();
+  }
+
+  // Thread w's part of a synchronized run_until().
+  void sync_loop(uint32_t w) {
+    const uint64_t step = 1;
+    for (uint64_t c = sync_start_;; c += step) {
+      bool any_busy = false;
+      for (auto* dom : stripe_domains_[w]) {
+        if (dom->id == 0 && c > sync_start_) {
+          bool busy = (sync_progress_[0].word.load(std::memory_order_relaxed) & 1) != 0;
+          for (uint32_t d = 1; d < num_domains_; ++d) {
+            uint64_t word;
+            spin_until([&]() {
+              word = sync_progress_[d].word.load(std::memory_order_acquire);
+              return (word >> 1) >= c;
+            });
+            busy |= ((word >> 1) > c) || (word & 1);   // only a thread with a busy domain runs ahead
+          }
+          cycles_ = c;
+          tl_exec_domain_ = HOST_DOMAIN;
+          tl_exec_object_ = nullptr;
+          if (sync_stop_fn_(sync_stop_arg_, busy)) {
+            __assert(!busy, "run_until: stop() returned true on a busy cycle");
+            sync_stop_.store(true, std::memory_order_release);
+            return;
+          }
+          sync_decided_.store(c, std::memory_order_release);
+        }
+        for (auto n : sync_deps_[dom->id]) {
+          spin_until([&]() { return (sync_progress_[n].word.load(std::memory_order_acquire) >> 1) >= c; });
+        }
+        tl_cycles_ = c;
+        this->tick_domain(*dom);
+        tl_cycles_ = c + 1;
+        this->fire_bucket(*dom, c + 1);
+        bool vote = sync_vote_fn_(sync_vote_arg_, dom->id);
+        any_busy |= vote;
+        sync_progress_[dom->id].word.store(((c + step) << 1) | (vote ? 1 : 0), std::memory_order_release);
+      }
+      tl_exec_domain_ = HOST_DOMAIN;
+      tl_exec_object_ = nullptr;
+      if (w != 0) {
+        if (!any_busy) {
+          spin_until([&]() {
+            return sync_stop_.load(std::memory_order_acquire)
+                || sync_decided_.load(std::memory_order_acquire) >= c + step;
+          });
+          if (sync_stop_.load(std::memory_order_acquire)) {
+            return;
+          }
         }
       }
     }
   }
 
-  void barrier_wait() {
-    this->barrier_wait([]() {});
+  static constexpr uint32_t kBarrierSpins = 4096;
+
+  // Spin briefly (the common case: peers arrive within microseconds), then
+  // yield so a waiting thread does not starve a descheduled peer on an
+  // oversubscribed host.
+  template <typename Cond>
+  static void spin_until(Cond&& cond) {
+    uint32_t spins = 0;
+    while (!cond()) {
+      if (++spins < kBarrierSpins) {
+      #if defined(__x86_64__)
+        __builtin_ia32_pause();
+      #endif
+      } else {
+        std::this_thread::yield();
+      }
+    }
+  }
+
+  // Thread `self` arrives (0 is the coordinator: whichever thread drives the
+  // platform). The coordinator waits for every worker, runs on_release and
+  // publishes the new epoch, so the release step's writes are visible to
+  // every thread on the other side of the barrier.
+  template <typename Fn>
+  void barrier_wait(uint32_t self, Fn&& on_release) {
+    uint64_t epoch = barrier_epoch_.load(std::memory_order_acquire);
+    if (self == 0) {
+      for (uint32_t i = 1; i < mt_threads_; ++i) {
+        spin_until([&]() { return arrive_[i].epoch.load(std::memory_order_acquire) == epoch + 1; });
+      }
+      on_release();
+      barrier_epoch_.store(epoch + 1, std::memory_order_release);
+    } else {
+      arrive_[self].epoch.store(epoch + 1, std::memory_order_release);
+      spin_until([&]() { return barrier_epoch_.load(std::memory_order_acquire) != epoch; });
+    }
+  }
+
+  void barrier_wait(uint32_t self) {
+    this->barrier_wait(self, []() {});
+  }
+
+  // One cycle of the domains in stripe w: tick, then deliver the events due
+  // next cycle. A domain's wheel is written only by its own context (cross
+  // traffic goes through the mailboxes), so the two phases need no barrier
+  // between them; each thread advances its thread-local cycle view instead.
+  void run_stripe(uint32_t w) {
+    uint64_t cycle = cycles_;
+    tl_cycles_ = cycle;
+    for (auto* dom : stripe_domains_[w]) {
+      this->tick_domain(*dom);
+    }
+    tl_cycles_ = cycle + 1;
+    for (auto* dom : stripe_domains_[w]) {
+      this->fire_bucket(*dom, cycle + 1);
+    }
+    tl_exec_domain_ = HOST_DOMAIN;
+    tl_exec_object_ = nullptr;
+  }
+
+  // Release step of the cycle-end barrier: commit the cycle and, inside a
+  // run_until() loop, evaluate the host's stop check.
+  void cycle_end() {
+    ++cycles_;
+    if (run_active_ && run_stop_(run_stop_arg_)) {
+      run_active_ = false;
+    }
   }
 
   void fire_bucket(Domain& dom, uint64_t cycle) {
     auto& bucket = dom.wheel[cycle & WHEEL_MASK];
-    if (bucket.empty()) {
+    auto& lane = dom.next[cycle & 1];
+    if (bucket.empty() && lane.empty()) {
       return;
     }
     // Delivery callbacks execute in the endpoint's domain context.
@@ -706,6 +1023,12 @@ private:
         ++it; // future wraparound collision in this wheel slot
       }
     }
+    // A delivery sends a delay-1 event to the other lane, so this one does
+    // not grow while it fires.
+    for (auto& e : lane) {
+      e.fn(e, true);
+    }
+    lane.clear();
   }
 
   void init_mt(uint32_t num_workers) {
@@ -720,33 +1043,36 @@ private:
     // these containers or construct a slot concurrently.
     (void)this->domain_at(num_domains_ - 1);
     this->materialize_cross_lanes();
+    // Round-robin, with the last partial round placed from the highest
+    // thread down: thread 0 owns the uncore domain and runs the release
+    // steps, so it takes no extra socket.
     stripe_domains_.assign(count, {});
+    uint32_t full_rounds = (num_domains_ / count) * count;
     for (uint32_t d = 0; d < num_domains_; ++d) {
-      stripe_domains_[d % count].push_back(domains_[d].get());
+      uint32_t t = (d < full_rounds) ? (d % count) : (count - 1 - (d - full_rounds));
+      stripe_domains_[t].push_back(domains_[d].get());
     }
+    arrive_.reset(new ArriveFlag[count]);
+    barrier_epoch_.store(0, std::memory_order_relaxed);
     for (uint32_t w = 1; w < count; ++w) {
       workers_.emplace_back([this, w]() {
         while (true) {
-          this->barrier_wait();                          // cycle start
+          this->barrier_wait(w);                         // parked between runs
           if (workers_exit_.load(std::memory_order_acquire)) {
             break;
           }
-          // Tick and deliver back-to-back: a domain's wheel is written only
-          // by its own context (cross traffic goes through the mailboxes), so
-          // no synchronization is needed between the two phases — each
-          // worker advances its thread-local cycle view instead.
-          uint64_t cycle = cycles_;
-          tl_cycles_ = cycle;
-          for (auto* dom : stripe_domains_[w]) {
-            this->tick_domain(*dom);
+          if (sync_active_) {
+            this->sync_loop(w);
+            this->barrier_wait(w);                       // join
+            continue;
           }
-          tl_cycles_ = cycle + 1;
-          for (auto* dom : stripe_domains_[w]) {
-            this->fire_bucket(*dom, cycle + 1);
-          }
-          tl_exec_domain_ = HOST_DOMAIN;
-          tl_exec_object_ = nullptr;
-          this->barrier_wait([this]() { ++cycles_; });   // cycle end
+          // One cycle for tick(); cycles until the stop check fires for
+          // run_until(). run_active_ is written only in a release step, so
+          // every thread reads the same value after each barrier.
+          do {
+            this->run_stripe(w);
+            this->barrier_wait(w, [this]() { this->cycle_end(); });
+          } while (run_active_);
         }
       });
     }
@@ -758,11 +1084,12 @@ private:
       return;
     }
     workers_exit_.store(true, std::memory_order_release);
-    this->barrier_wait();       // release parked workers into the exit check
+    this->barrier_wait(0);      // release parked workers into the exit check
     for (auto& t : workers_) {
       t.join();
     }
     workers_.clear();
+    arrive_.reset();
     stripe_domains_.clear();
     workers_started_ = false;
     workers_exit_.store(false, std::memory_order_relaxed);
@@ -809,6 +1136,8 @@ public:
       endpoint_cache_ = nullptr;
       inflight_ = nullptr;
       pop_cb_ = {};
+      push_waker_ = nullptr;
+      pop_waker_ = nullptr;
       storage_ = RingQueue<Pkt>(other.storage_.capacity());
       pending_count_ = 0;
       reg_ready_ = other.reg_ready_;
@@ -975,6 +1304,9 @@ protected:
       ++pending_count_;
       ++this->inflight();
       wake_module(module_);
+      if (push_waker_) {
+        wake_module(push_waker_);
+      }
     }
   }
 
@@ -1032,6 +1364,9 @@ private:
     }
     storage_.pop();
     --this->inflight();
+    if (pop_waker_) {
+      wake_module(pop_waker_);
+    }
     if (pop_cb_) {
       pop_cb_();
     }
@@ -1050,6 +1385,7 @@ private:
   template <typename U> friend class SimChannel;
   template <typename U> friend class SimChannelEvent;
   friend class SimChannelBase;
+  friend class SimPlatform;
 };
 
 // Constructs a std::array of N SimChannel<Pkt> instances, each bound to owner.
@@ -1238,13 +1574,13 @@ std::shared_ptr<Impl> SimPlatform::create_object(Args&&... args) {
   // chains are conservatively kept active because &Impl::on_tick is inaccessible there.
   if constexpr (has_direct_simobject_base<Impl>::value) {
     if (SimObject<Impl>::template has_own_tick<Impl>()) {
-      domain_at(obj->domain_).scan.push_back(obj.get());
+      this->add_scan(obj.get());
     }
     if (SimObject<Impl>::template has_own_reset<Impl>()) {
       active_reset_.push_back(obj.get());
     }
   } else {
-    domain_at(obj->domain_).scan.push_back(obj.get());
+    this->add_scan(obj.get());
     active_reset_.push_back(obj.get());
   }
   return obj;
@@ -1258,9 +1594,9 @@ void SimPlatform::schedule(SimChannel<Pkt>* channel, const Pkt& pkt, uint64_t de
     // context between cycles) — a cross-domain edge must be registered.
     __assert(tl_exec_domain_ == HOST_DOMAIN
         || &dom == &domain_at(tl_exec_domain_), "cross-domain delta send");
-    auto evt = new SimChannelEvent<Pkt>(channel, pkt, dom.delta);
-    dom.imm.push_back(evt);
-    ++dom.delta;
+    lane_push(dom.imm, channel, pkt);
+  } else if (delay == 1) {
+    lane_push(dom.next[(this->cycles() + 1) & 1], channel, pkt);
   } else {
     uint64_t fire_cycle = this->cycles() + delay;
     auto evt = new SimChannelEvent<Pkt>(channel, pkt, fire_cycle);
@@ -1271,11 +1607,13 @@ template <typename Pkt>
 void SimPlatform::schedule(SimChannel<Pkt>* channel, Pkt&& pkt, uint64_t delay) {
   auto& dom = domain_at(channel->endpoint()->module_->domain_);
   if (delay == 0) {
+    // Same-cycle delivery is legal only within one domain (or from host
+    // context between cycles) — a cross-domain edge must be registered.
     __assert(tl_exec_domain_ == HOST_DOMAIN
         || &dom == &domain_at(tl_exec_domain_), "cross-domain delta send");
-    auto evt = new SimChannelEvent<Pkt>(channel, std::move(pkt), dom.delta);
-    dom.imm.push_back(evt);
-    ++dom.delta;
+    lane_push(dom.imm, channel, std::move(pkt));
+  } else if (delay == 1) {
+    lane_push(dom.next[(this->cycles() + 1) & 1], channel, std::move(pkt));
   } else {
     uint64_t fire_cycle = this->cycles() + delay;
     auto evt = new SimChannelEvent<Pkt>(channel, std::move(pkt), fire_cycle);
@@ -1289,7 +1627,11 @@ void SimPlatform::schedule(Func&& func, const Pkt& pkt, uint64_t delay, uint32_t
   auto& dom = domain_at(domain);
   uint64_t fire_cycle = this->cycles() + delay;
   auto evt = new SimCallEvent<Pkt>(std::forward<Func>(func), pkt, fire_cycle);
-  dom.wheel[fire_cycle & WHEEL_MASK].push_back(evt);
+  if (delay == 1) {
+    dom.next[fire_cycle & 1].push_back({&lane_fire_event, static_cast<SimEventBase*>(evt), {}});
+  } else {
+    dom.wheel[fire_cycle & WHEEL_MASK].push_back(evt);
+  }
 }
 
 // One-time topology validation, run at the first reset after elaboration:
@@ -1348,9 +1690,7 @@ inline void SimPlatform::reset_launch() {
     }
   }
   launch_resetting_ = false;
-  for (auto& object : objects_) {
-    object->tick_active_ = true;
-  }
+  this->wake_all();
 }
 
 inline void SimPlatform::reset() {
@@ -1368,13 +1708,9 @@ inline void SimPlatform::reset() {
         delete evt;
       }
     }
-    while (!dom->imm.empty()) {
-      auto it = dom->imm.begin();
-      auto evt = &*it;
-      dom->imm.erase(it);
-      delete evt;
-    }
-    dom->delta = 0;
+    lane_drop(dom->imm);
+    lane_drop(dom->next[0]);
+    lane_drop(dom->next[1]);
   }
 
   // clear sim objects (only those that override reset())
@@ -1383,9 +1719,7 @@ inline void SimPlatform::reset() {
   }
 
   // Re-arm every tick-gated object for the new run.
-  for (auto& object : objects_) {
-    object->tick_active_ = true;
-  }
+  this->wake_all();
 
   // Drop undelivered cross-domain calls from the previous run. The lanes
   // themselves are kept: workers index them concurrently once started,
@@ -1407,19 +1741,9 @@ inline void SimPlatform::tick() {
     // Two barriers per cycle — release and join; the global counter is
     // committed in the join barrier's release step, and each thread's
     // per-phase cycle view is thread-local (see cycles()).
-    this->barrier_wait();                          // release workers
-    uint64_t cycle = cycles_;
-    tl_cycles_ = cycle;
-    for (auto* dom : stripe_domains_[0]) {
-      this->tick_domain(*dom);
-    }
-    tl_cycles_ = cycle + 1;
-    for (auto* dom : stripe_domains_[0]) {
-      this->fire_bucket(*dom, cycle + 1);
-    }
-    tl_exec_domain_ = HOST_DOMAIN;
-    tl_exec_object_ = nullptr;
-    this->barrier_wait([this]() { ++cycles_; });   // join; workers park
+    this->barrier_wait(0);                         // release workers
+    this->run_stripe(0);
+    this->barrier_wait(0, [this]() { this->cycle_end(); });   // join; workers park
     return;
   }
 
@@ -1443,6 +1767,85 @@ inline void SimPlatform::tick() {
   tl_exec_object_ = nullptr;
 }
 
+template <typename Stop>
+void SimPlatform::run_until(Stop&& stop) {
+  if (!mt_init_done_) {
+    this->init_mt(req_workers_);
+  }
+  if (!workers_started_) {
+    do {
+      this->tick();
+    } while (!stop());
+    return;
+  }
+  __assert(!run_active_, "run_until() is not reentrant");
+  using StopFn = std::remove_reference_t<Stop>;
+  run_stop_ = [](void* arg) -> bool { return (*static_cast<StopFn*>(arg))(); };
+  run_stop_arg_ = const_cast<void*>(static_cast<const void*>(&stop));
+  // Set in the release step: a worker reads the flag after each cycle-end
+  // barrier, and one slow to leave the previous run's last barrier must not
+  // see this run's value.
+  this->barrier_wait(0, [this]() { run_active_ = true; });   // release workers
+  do {
+    this->run_stripe(0);
+    this->barrier_wait(0, [this]() { this->cycle_end(); });
+  } while (run_active_);
+  run_stop_ = nullptr;
+  run_stop_arg_ = nullptr;
+}
+
+template <typename Stop, typename Obj, typename Busy>
+void SimPlatform::run_until(Stop&& stop, const std::vector<Obj*>& voters, Busy&& busy) {
+  if (!mt_init_done_) {
+    this->init_mt(req_workers_);
+  }
+  if (!workers_started_) {
+    do {
+      this->tick();
+    } while (!stop(false));
+    return;
+  }
+  __assert(!run_active_ && !sync_active_, "run_until() is not reentrant");
+  __assert(stripe_domains_[0].front()->id == 0, "thread 0 owns the uncore domain");
+  if (sync_progress_ == nullptr) {
+    this->sync_init_graph();
+  }
+  std::vector<std::vector<Obj*>> domain_voters(num_domains_);
+  for (auto* voter : voters) {
+    domain_voters.at(voter->domain()).push_back(voter);
+  }
+  auto vote = [&](uint32_t domain) {
+    for (auto* voter : domain_voters[domain]) {
+      if (busy(voter)) {
+        return true;
+      }
+    }
+    return false;
+  };
+  using StopFn = std::remove_reference_t<Stop>;
+  using VoteFn = decltype(vote);
+  sync_stop_fn_ = [](void* arg, bool any_busy) -> bool { return (*static_cast<StopFn*>(arg))(any_busy); };
+  sync_vote_fn_ = [](void* arg, uint32_t d) -> bool { return (*static_cast<VoteFn*>(arg))(d); };
+  sync_stop_arg_ = const_cast<void*>(static_cast<const void*>(&stop));
+  sync_vote_arg_ = const_cast<void*>(static_cast<const void*>(&vote));
+  sync_start_ = cycles_;
+  for (uint32_t d = 0; d < num_domains_; ++d) {
+    sync_progress_[d].word.store(sync_start_ << 1, std::memory_order_relaxed);
+  }
+  sync_decided_.store(sync_start_, std::memory_order_relaxed);
+  sync_stop_.store(false, std::memory_order_relaxed);
+  sync_active_ = true;
+  this->barrier_wait(0);                           // release workers
+  this->sync_loop(0);
+  this->barrier_wait(0);                           // join: workers parked
+  sync_active_ = false;
+  tl_cycles_ = cycles_;
+  sync_stop_fn_ = nullptr;
+  sync_vote_fn_ = nullptr;
+  sync_stop_arg_ = nullptr;
+  sync_vote_arg_ = nullptr;
+}
+
 inline void SimPlatform::tick_domain(Domain& dom) {
   tl_exec_domain_ = dom.id;
   tl_exec_object_ = nullptr;
@@ -1450,23 +1853,32 @@ inline void SimPlatform::tick_domain(Domain& dom) {
   {
     this->drain_cross_calls_for(dom.id);
   }
-  if (dom.delta != 0) {
+  if (!dom.imm.empty()) {
     fire_immediate_events(dom);
   }
   // Every object on a domain's scan list belongs to that domain, so the
   // execution domain set above holds for the whole scan. The current object
   // is tracked only for the boundary audit, its sole reader.
+  // Visit the ready set in creation order. The word is re-read after each
+  // tick, so an object woken by one ahead of it ticks this cycle and one
+  // woken by an object behind it ticks next cycle, as in a scan of every
+  // object that tests a flag.
   const bool track_object = audit_enabled_;
-  for (auto* object : dom.scan) {
-    if (!object->tick_active_) {
-      continue;
-    }
-    if (track_object) {
-      tl_exec_object_ = object;
-    }
-    object->do_tick();
-    if (dom.delta != 0) {
-      fire_immediate_events(dom);
+  uint64_t* words = dom.active_words ? dom.active() : nullptr;
+  SimObjectBase* const* objects = dom.scan.data();
+  for (uint32_t w = 0, nw = dom.active_words; w < nw; ++w) {
+    uint64_t bits = words[w];
+    while (bits != 0) {
+      uint32_t b = uint32_t(__builtin_ctzll(bits));
+      auto* object = objects[size_t(w) * 64 + b];
+      if (track_object) {
+        tl_exec_object_ = object;
+      }
+      object->do_tick();
+      if (!dom.imm.empty()) {
+        fire_immediate_events(dom);
+      }
+      bits = words[w] & (~uint64_t(1) << b);
     }
   }
 }
@@ -1489,15 +1901,15 @@ inline void SimPlatform::cleanup() {
         delete evt;
       }
     }
-    while (!dom->imm.empty()) {
-      auto it = dom->imm.begin();
-      auto evt = &*it;
-      dom->imm.erase(it);
-      delete evt;
-    }
+    lane_drop(dom->imm);
+    lane_drop(dom->next[0]);
+    lane_drop(dom->next[1]);
   }
   domains_.clear();
   mail_.clear();
+  sync_progress_.reset();
+  sync_deps_.clear();
+  sync_edge_.clear();
   num_domains_ = 1;
   cycles_ = 0;
   // Allow a subsequent initialize() to elaborate and parallelize afresh.
@@ -1508,18 +1920,15 @@ inline void SimPlatform::cleanup() {
 }
 
 inline void SimPlatform::fire_immediate_events(Domain& dom) {
-  // Each immediate event gets a unique, monotonically increasing delta at
-  // schedule time, so the list is already ordered by delta — including events
-  // appended mid-firing, which receive a delta above all queued ones. Firing
-  // front-to-back is therefore identical to draining delta levels in order.
-  while (!dom.imm.empty()) {
-    auto it = dom.imm.begin();
-    auto evt = &*it;
-    evt->fire();
-    dom.imm.erase(it);
-    delete evt;
+  // Immediate events fire in schedule order, including those a firing
+  // appends, which come after every queued one: the same order as draining
+  // delta levels one by one. The lane may grow while it fires, so each
+  // event is copied out before it runs.
+  for (size_t i = 0; i < dom.imm.size(); ++i) {
+    LaneEvent e = dom.imm[i];
+    e.fn(e, true);
   }
-  dom.delta = 0;
+  dom.imm.clear();
 }
 
 template <typename Pkt>
