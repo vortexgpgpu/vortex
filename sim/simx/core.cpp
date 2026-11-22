@@ -640,19 +640,16 @@ public:
         uint32_t offset = trace->PC & (VX_CFG_MEM_BLOCK_SIZE - 1);
         std::memcpy(&trace->code, mem_rsp.data->data() + offset, sizeof(uint32_t));
       #ifdef VX_CFG_EXT_RWIN_ENABLE
-        // a prefix and its instruction in one line arrive together, as one
-        // 64-bit instruction would
-        // (RWIN_FUSE_STUDY also fuses vx_rwin, to measure what it costs)
+        // A vx_rwin fuses with the next word of its 8-byte fetch word, as in
+        // the RTL (RWIN_FUSE_STUDY: anywhere in the line; RWIN_NO_FUSE:
+        // never). A vx_rpfx models a 64-bit instruction and fuses anywhere.
         trace->code2 = 0;
         auto rw = Decoder::decode_rwin(trace->code);
-      #ifdef RWIN_FUSE_STUDY
-        bool fuse = rw.valid;
-      #else
         bool fuse = rw.prefix;
-      #endif
-      #ifdef RWIN_FUSE_ALIGN8
-        // an 8-byte fetch word: only the first word of an aligned pair fuses
-        fuse = fuse && (offset & 4) == 0;
+      #if defined(RWIN_FUSE_STUDY)
+        fuse |= rw.valid;
+      #elif !defined(RWIN_NO_FUSE)
+        fuse |= rw.valid && (offset & 4) == 0;
       #endif
         if (fuse && offset + 2 * sizeof(uint32_t) <= VX_CFG_MEM_BLOCK_SIZE) {
           std::memcpy(&trace->code2, mem_rsp.data->data() + offset + 4, sizeof(uint32_t));
