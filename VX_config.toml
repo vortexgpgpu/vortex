@@ -435,7 +435,14 @@ VX_CFG_TCU_WMMA_ENABLE = true
 VX_CFG_NUM_DXA_CORES = "expr: max(1, up($VX_CFG_NUM_CORES / 8))"
 VX_CFG_DXA_MEM_PORTS = "expr: min($VX_CFG_NUM_DXA_CORES, up($VX_CFG_NUM_CORES / $VX_CFG_SOCKET_SIZE) * $VX_CFG_L1_MEM_PORTS)"
 VX_CFG_DXA_QUEUE_SIZE = 16
-VX_CFG_DXA_MAX_INFLIGHT = 8
+# Line reads a DXA worker keeps in flight (Little's law, as the cache MSHRs):
+# its share of the bytes in flight above the L2, in lines, but no more than
+# the memory latency, since a worker issues at most one line per cycle.
+VX_CFG_DXA_MAX_INFLIGHT = "expr: clamp(pow(2, clog2(min(($l1_mem_bytes_in_flight + $dxa_inflight_bytes - 1) // $dxa_inflight_bytes, $VX_CFG_PLATFORM_MEMORY_LATENCY + 2 * $VX_CFG_L2_LINK_LATENCY))), 8, 512)"
+dxa_inflight_bytes = "expr: $VX_CFG_NUM_CLUSTERS * up($VX_CFG_NUM_CORES // $VX_CFG_SOCKET_SIZE) * $VX_CFG_NUM_DXA_CORES * $VX_CFG_L1_LINE_SIZE"
+# Transfers a worker keeps in flight: the next one issues while earlier ones
+# drain. Sized so tile-sized transfers (16+ lines) can fill the read pool.
+VX_CFG_DXA_MAX_XFERS = "expr: clamp($VX_CFG_DXA_MAX_INFLIGHT // 16, 2, 16)"
 
 [rtu]
 # RTU (Ray-Tracing Unit)

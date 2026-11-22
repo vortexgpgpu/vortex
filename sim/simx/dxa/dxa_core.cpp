@@ -31,6 +31,8 @@ using namespace vortex;
 // response tags index the in-flight slots by masking
 static_assert(VX_CFG_DXA_MAX_INFLIGHT >= 2 && (VX_CFG_DXA_MAX_INFLIGHT & (VX_CFG_DXA_MAX_INFLIGHT - 1)) == 0,
               "DXA_MAX_INFLIGHT must be a power of two of at least 2");
+static_assert(VX_CFG_DXA_MAX_XFERS >= 2 && (VX_CFG_DXA_MAX_XFERS & (VX_CFG_DXA_MAX_XFERS - 1)) == 0,
+              "DXA_MAX_XFERS must be a power of two of at least 2");
 
 namespace {
 
@@ -85,7 +87,6 @@ public:
     uint32_t valid_length;     // valid bytes per write
     uint32_t cfill;            // OOB fill value (lane-replicated)
     bool     oob;              // skip GMEM read; use cfill
-    bool     last;             // last work item of the transfer
     bool     scatter;          // K-major/tiled: one element written per beat
     uint32_t km_num_elems;     // K-major scatter fan-out (1 = contiguous write)
     uint32_t km_lane_stride;   // SMEM byte stride between scattered elements
@@ -94,50 +95,67 @@ public:
     uint32_t tile_n_base;      // tiled scatter: N (dim0) index where the span starts
   };
 
+  // ── Transfer context: one per transfer a worker has in flight ───────
+  // The next transfer issues while earlier ones still drain, so everything
+  // smem_wr needs per line lives here, indexed by the line's slot.
+  struct Xfer {
+    bool                  valid = false;
+    bool                  issued = false;     // every line has been issued
+    uint32_t              outstanding = 0;    // lines issued, not yet written
+    uint64_t              free_cycle = 0;     // first cycle the context can be reused
+    DxaReq                req;
+    Descriptor            desc;
+    bool                  is_multicast = false;
+    std::vector<uint32_t> cta_indices;
+    uint32_t              smem_stride = 0;
+    uint64_t              issue_cycle = 0;
+    uint32_t              writes_emitted = 0;
+  };
+
   // ── Inflight slot for a GMEM read ──────────────────────────────────
   struct InflightSlot {
     bool      allocated = false;
     bool      rsp_arrived = false;
-    bool      oob_pending = false;  // OOB line waiting for its turn into smem_wr
-    bool      deferred = false;     // last line parked until the others drain
     uint64_t  ready_cycle = 0;  // first cycle the line can be written to SMEM
     uint64_t  free_cycle = 0;   // first cycle the slot can carry a new read
+    uint32_t  xfer = 0;         // owning transfer context
     LineWork  work;            // captured at allocation
     std::shared_ptr<mem_block_t> rsp_data;
   };
 
   // ── Worker (one per slice) ───────────────────────────────────────────
-  enum class WState { IDLE, RUNNING };
-
   struct Worker {
-    WState                  state = WState::IDLE;
     uint32_t                worker_id = 0;
-    DxaReq                  req;
-    Descriptor              desc;
-    bool                    is_multicast = false;
-    std::vector<uint32_t>   cta_indices;
-    uint32_t                smem_stride = 0;
-    uint64_t                issue_cycle = 0;
 
-    // setup engine: the next transfer is set up while this one drains
+    // setup engine: the next transfer is set up while this one issues
     bool                    staged = false;
     DxaReq                  staged_req;
     uint64_t                staged_ready = 0;
 
-    // addr_gen: pre-enumerated work list (one entry per GMEM CL +
-    // multicast replays handled at smem_wr stage).
+    // addr_gen: pre-enumerated work list of the transfer being issued (one
+    // entry per GMEM CL; multicast replays are handled at the smem_wr stage).
+    bool                    issuing = false;
+    uint32_t                issue_xfer = 0;
     std::vector<LineWork>   work_list;
     uint32_t                ag_idx = 0;          // next entry to issue (gmem_req)
 
+    std::array<Xfer, VX_CFG_DXA_MAX_XFERS> xfers;
+
     // gmem_req → smem_wr inflight bookkeeping.
     std::array<InflightSlot, VX_CFG_DXA_MAX_INFLIGHT> inflight;
-    std::deque<uint32_t>    issued_order;        // outstanding tags in issue order
+    // Tag pools: never-used slots count up from 0, released slots recycle in
+    // release order; OOB lines wait for smem_wr in issue order.
+    uint32_t                fresh_slots = 0;
+    std::deque<uint32_t>    free_fifo;
+    std::deque<uint32_t>    oob_fifo;
+    uint32_t                stg_slot = UINT32_MAX;   // response stage (slot read)
+    uint32_t                pend_slot = UINT32_MAX;  // captured, waiting to drain
     uint32_t                drain_slot = UINT32_MAX; // slot currently draining
+    bool                    drain_final = false; // drain_slot is its transfer's last line
 
     // smem_wr multicast replay state.
     uint32_t                mc_cta_idx = 0;      // 0..cta_indices.size()
     uint32_t                km_elem_idx = 0;     // 0..km_num_elems (K-major scatter)
-    uint32_t                writes_emitted = 0;  // count for perf
   };
 
   // ── Constructor ──────────────────────────────────────────────────────
@@ -156,17 +174,21 @@ public:
     queue_.clear();
     // perf_stats_ survives: the MPM counters run from device reset.
     for (auto& w : workers_) {
-      w.state = WState::IDLE;
-      w.work_list.clear();
-      w.cta_indices.clear();
-      w.issued_order.clear();
-      w.drain_slot = UINT32_MAX;
-      for (auto& s : w.inflight) { s = InflightSlot(); }
       w.staged = false;
+      w.issuing = false;
+      w.work_list.clear();
       w.ag_idx = 0;
+      for (auto& x : w.xfers) { x = Xfer(); }
+      for (auto& s : w.inflight) { s = InflightSlot(); }
+      w.fresh_slots = 0;
+      w.free_fifo.clear();
+      w.oob_fifo.clear();
+      w.stg_slot = UINT32_MAX;
+      w.pend_slot = UINT32_MAX;
+      w.drain_slot = UINT32_MAX;
+      w.drain_final = false;
       w.mc_cta_idx = 0;
       w.km_elem_idx = 0;
-      w.writes_emitted = 0;
     }
   }
 
@@ -231,21 +253,23 @@ public:
     // (the per-worker slot id).
     for (uint32_t worker_id = 0; worker_id < workers_.size(); ++worker_id) {
       auto& w = workers_[worker_id];
-      if (w.state == WState::RUNNING) {
-        tick_worker_smem_wr(w);
-      }
+      tick_worker_smem_wr(w);
       capture_line(w, gmem_arb_->RspOut.at(worker_id));
-      if (w.state == WState::RUNNING) {
+      if (w.issuing) {
         tick_worker_gmem_req(w);
       }
     }
 
-    // 3) Start a set-up transfer on an idle worker; otherwise let the
-    //    worker's setup engine take the next request.
+    // 3) Start a set-up transfer once the worker has issued the previous
+    //    one and holds a free transfer context; otherwise let the worker's
+    //    setup engine take the next request.
     for (auto& w : workers_) {
-      if (w.staged && w.state == WState::IDLE && cycle_ >= w.staged_ready) {
-        w.staged = false;
-        start_worker(w, w.staged_req);
+      if (w.staged && !w.issuing && cycle_ >= w.staged_ready) {
+        uint32_t xi = free_xfer(w);
+        if (xi != UINT32_MAX) {
+          w.staged = false;
+          start_worker(w, xi, w.staged_req);
+        }
       } else if (!w.staged && !queue_.empty()) {
         w.staged_req   = queue_.front();
         w.staged_ready = cycle_ + this->setup_latency(w.staged_req);
@@ -357,66 +381,71 @@ private:
     }
   }
 
+  uint32_t free_xfer(const Worker& w) const {
+    for (uint32_t i = 0; i < w.xfers.size(); ++i) {
+      if (!w.xfers[i].valid && cycle_ >= w.xfers[i].free_cycle)
+        return i;
+    }
+    return UINT32_MAX;
+  }
+
   // ── Setup: pre-enumerate the work list for this transfer ─────────────
-  void start_worker(Worker& w, const DxaReq& req) {
-    w.req = req;
-    w.issue_cycle = cycle_;
-    w.work_list.clear();
-    w.ag_idx = 0;
-    w.issued_order.clear();
-    w.drain_slot = UINT32_MAX;
-    for (auto& s : w.inflight) { s.allocated = false; s.rsp_arrived = false; s.rsp_data.reset(); }
-    w.mc_cta_idx = 0;
-    w.km_elem_idx = 0;
-    w.writes_emitted = 0;
+  void start_worker(Worker& w, uint32_t xi, const DxaReq& req) {
+    auto& x = w.xfers[xi];
+    x.req = req;
+    x.issue_cycle = cycle_;
+    x.writes_emitted = 0;
 
     // Multicast setup.
-    w.is_multicast = (__builtin_popcount(req.cta_mask) > 1);
-    w.cta_indices.clear();
-    if (w.is_multicast) {
+    x.is_multicast = (__builtin_popcount(req.cta_mask) > 1);
+    x.cta_indices.clear();
+    if (x.is_multicast) {
       for (uint32_t i = 0; i < 32; ++i) {
-        if (req.cta_mask & (1u << i)) w.cta_indices.push_back(i);
+        if (req.cta_mask & (1u << i)) x.cta_indices.push_back(i);
       }
     }
 
     if (req.desc_slot >= VX_DCR_DXA_DESC_COUNT) {
       // Invalid descriptor — release barrier(s) directly without any LMEM write.
-      release_all_barriers(w);
-      finish_worker(w);
+      release_all_barriers(x);
+      count_transfer(w, x);
       return;
     }
 
-    w.desc = descriptors_.at(req.desc_slot);
-    w.smem_stride = w.desc.smem_stride;
+    x.desc = descriptors_.at(req.desc_slot);
+    x.smem_stride = x.desc.smem_stride;
 
-    enumerate_work_list(w);
+    w.work_list.clear();
+    enumerate_work_list(x, w.work_list);
     if (w.work_list.empty()) {
       // No work — same edge case as above.
-      release_all_barriers(w);
-      finish_worker(w);
+      release_all_barriers(x);
+      count_transfer(w, x);
       return;
     }
 
-    // Mark the *last* work item — its multicast replay's last write carries
-    // notify_done.
-    w.work_list.back().last = true;
-
-    w.state = WState::RUNNING;
+    x.valid = true;
+    x.issued = false;
+    x.outstanding = 0;
+    w.issuing = true;
+    w.issue_xfer = xi;
+    w.ag_idx = 0;
     perf_stats_.gmem_reads += w.work_list.size();
 
     DT(3, simobject_->name() << "[" << w.worker_id << "] start: core="
        << req.core->id() << ", wid=" << req.wid
        << ", slot=" << req.desc_slot
+       << ", xfer=" << xi
        << ", lines=" << w.work_list.size()
-       << ", multicast=" << w.is_multicast
-       << ", num_ctas=" << w.cta_indices.size());
+       << ", multicast=" << x.is_multicast
+       << ", num_ctas=" << x.cta_indices.size());
   }
 
   // Enumerate (CL, smem-word, byte-offset, length, oob) tuples — one per
   // GMEM CL the transfer needs to read. Row-major iteration over outer
   // dims, contiguous span over dim-0, dedup of consecutive same-CL.
-  void enumerate_work_list(Worker& w) {
-    const auto& desc = w.desc;
+  void enumerate_work_list(const Xfer& x, std::vector<LineWork>& work_list) {
+    const auto& desc = x.desc;
     uint32_t rank = desc_rank(desc.meta);
     if (rank < 1 || rank > 5) return;
 
@@ -467,21 +496,21 @@ private:
       // OOB check on outer dims.
       bool row_in_bounds = true;
       for (uint32_t d = 1; d < rank; ++d) {
-        if (w.req.coords[d] + outer[d - 1] >= desc.sizes[d]) { row_in_bounds = false; break; }
+        if (x.req.coords[d] + outer[d - 1] >= desc.sizes[d]) { row_in_bounds = false; break; }
       }
 
       // First element GMEM addr in this row.
-      uint64_t row_gbase = desc.base_addr + uint64_t(w.req.coords[0]) * elem_bytes;
+      uint64_t row_gbase = desc.base_addr + uint64_t(x.req.coords[0]) * elem_bytes;
       for (uint32_t d = 1; d < rank; ++d)
-        row_gbase += uint64_t(w.req.coords[d] + outer[d - 1]) * uint64_t(desc.strides[d - 1]);
+        row_gbase += uint64_t(x.req.coords[d] + outer[d - 1]) * uint64_t(desc.strides[d - 1]);
 
       // SMEM destination base for this row:
       //   Row-major:  base + row_idx * row_elems * elem_bytes  (i1 outer × i0 inner).
       //   K-major:    base + outer[0] * elem_bytes              (lane stride applies per e0 below).
       //   Tiled:      computed per-element below (smem_wr recomputes the permuted dest).
       uint64_t row_smem_base = dest_kmajor
-          ? (w.req.smem_addr + uint64_t(outer[0]) * elem_bytes)
-          : (w.req.smem_addr + uint64_t(row * row_elems) * elem_bytes);
+          ? (x.req.smem_addr + uint64_t(outer[0]) * elem_bytes)
+          : (x.req.smem_addr + uint64_t(row * row_elems) * elem_bytes);
 
       // Walk dim-0 elements; each LineWork carries one MemReq write of at
       // most one LMEM word AND at most one GMEM CL (so byteen fits in the
@@ -492,7 +521,7 @@ private:
         uint64_t saddr_e;
         if (dest_tiled) {
           uint32_t de = tiled_dest_elem(layout, outer[0], e0, geo_ratio, geo_tcN, geo_nsteps, geo_bkK);
-          saddr_e = w.req.smem_addr + uint64_t(de) * elem_bytes;
+          saddr_e = x.req.smem_addr + uint64_t(de) * elem_bytes;
         } else if (dest_kmajor) {
           saddr_e = row_smem_base + uint64_t(e0) * uint64_t(per_lane_stride_bytes);
         } else {
@@ -521,7 +550,7 @@ private:
         if (gspan == 0) break;
         uint32_t num_elems = gspan / elem_bytes;
 
-        bool elem_oob = !row_in_bounds || (w.req.coords[0] + e0 >= desc.sizes[0]);
+        bool elem_oob = !row_in_bounds || (x.req.coords[0] + e0 >= desc.sizes[0]);
         // OOB is determined per-element at the start of the span; tile widths
         // are typically aligned to dim-0 size, so this is exact for the common case.
 
@@ -535,7 +564,6 @@ private:
         lw.valid_length     = scatter ? elem_bytes : gspan;
         lw.cfill            = cfill;
         lw.oob              = elem_oob;
-        lw.last             = false;
         lw.scatter          = scatter;
         lw.km_num_elems     = scatter ? num_elems : 1;
         lw.km_lane_stride   = dest_kmajor ? per_lane_stride_bytes : 0;
@@ -549,57 +577,51 @@ private:
         } else if (!elem_oob) {
           global_prev_cl = cl_addr;
         }
-        w.work_list.push_back(lw);
+        work_list.push_back(lw);
 
         e0 += num_elems;
       }
     }
   }
 
-  // ── smem_wr capture: one line per cycle into its line registers ───────
-  // A GMEM response has priority over a pending OOB line. smem_wr holds one
-  // line being written, one captured behind it, and the transfer's last line
-  // while others are outstanding. A response it cannot take stays on the
-  // memory response path and holds the responses queued behind it.
+  // ── Response stage, then smem_wr capture ────────────────────────────
+  // The slot table is a RAM with a registered read, so a line (a GMEM
+  // response, which has priority, or a pending OOB line) first spends a cycle
+  // in a one-entry stage while its slot is read. smem_wr captures the staged
+  // line once its line register is free; the stage refills in the same cycle.
+  // A response that cannot enter the stage stays on the memory response path
+  // and holds the responses queued behind it.
   void capture_line(Worker& w, SimChannel<MemRsp>& ch) {
-    bool pend_busy  = false;
-    bool defer_busy = false;
-    uint32_t oob_slot = UINT32_MAX;
-    for (uint32_t i = 0; i < w.inflight.size(); ++i) {
-      const auto& s = w.inflight[i];
-      if (s.rsp_arrived && i != w.drain_slot) {
-        (s.deferred ? defer_busy : pend_busy) = true;
-      }
-      if (s.oob_pending && oob_slot == UINT32_MAX) {
-        oob_slot = i;
-      }
+    if (w.stg_slot != UINT32_MAX && w.pend_slot == UINT32_MAX) {
+      auto& s = w.inflight[w.stg_slot];
+      s.rsp_arrived = true;
+      s.ready_cycle = cycle_ + kSmemWrLatency;
+      w.pend_slot   = w.stg_slot;
+      w.stg_slot    = UINT32_MAX;
     }
 
-    uint32_t slot = oob_slot;
+    uint32_t slot = UINT32_MAX;
     if (!ch.empty()) {
       slot = uint32_t(ch.peek().tag) & (VX_CFG_DXA_MAX_INFLIGHT - 1);
       if (!w.inflight[slot].allocated) {
         ch.pop();
         return;
       }
+    } else if (!w.oob_fifo.empty()) {
+      slot = w.oob_fifo.front();
     }
-    if (slot == UINT32_MAX) {
+    if (slot == UINT32_MAX || w.stg_slot != UINT32_MAX) {
       return;
     }
 
     auto& s = w.inflight[slot];
-    bool defer = s.work.last && (w.issued_order.size() > 1);
-    if (defer ? defer_busy : pend_busy) {
-      return;
-    }
     if (!ch.empty()) {
       s.rsp_data = ch.peek().data;
       ch.pop();
+    } else {
+      w.oob_fifo.pop_front();
     }
-    s.oob_pending = false;
-    s.rsp_arrived = true;
-    s.deferred    = defer;
-    s.ready_cycle = cycle_ + kSmemWrLatency;
+    w.stg_slot = slot;
   }
 
   // ── gmem_req: issue MemReqs with available inflight slots ────────────
@@ -607,16 +629,14 @@ private:
     // One AGU step per cycle: advance ag_idx by at most one, issuing at most
     // one GMEM read to this worker's ReqIn port (or one OOB skip). A while-loop
     // here would issue many reads to a single port in one cycle.
-    if (w.ag_idx >= w.work_list.size())
-      return;
 
-    // Find a free slot.
+    // Next free slot: a never-used one, else the oldest released one (a
+    // slot released this cycle is reusable from the next).
     uint32_t slot = UINT32_MAX;
-    for (uint32_t s = 0; s < w.inflight.size(); ++s) {
-      if (!w.inflight[s].allocated && cycle_ >= w.inflight[s].free_cycle) {
-        slot = s;
-        break;
-      }
+    if (w.fresh_slots < w.inflight.size()) {
+      slot = w.fresh_slots;
+    } else if (!w.free_fifo.empty() && cycle_ >= w.inflight[w.free_fifo.front()].free_cycle) {
+      slot = w.free_fifo.front();
     }
 
     const LineWork& lw = w.work_list[w.ag_idx];
@@ -633,14 +653,8 @@ private:
     // OOB lines skip the GMEM request entirely; smem_wr takes them in a cycle
     // with no GMEM response (rsp data left null — smem_wr will use cfill).
     if (lw.oob) {
-      w.inflight[slot].allocated   = true;
-      w.inflight[slot].rsp_arrived = false;
-      w.inflight[slot].oob_pending = true;
-      w.inflight[slot].deferred    = false;
-      w.inflight[slot].rsp_data.reset();
-      w.inflight[slot].work        = lw;
-      w.issued_order.push_back(slot);
-      ++w.ag_idx;
+      w.oob_fifo.push_back(slot);
+      issue_line(w, slot, lw);
       return;
     }
 
@@ -650,59 +664,56 @@ private:
     MemReq mreq;
     mreq.addr  = lw.gmem_cl_addr;
     mreq.tag   = slot;
-    mreq.hart_id   = w.req.core->id();
-    mreq.uuid  = w.req.uuid;
+    const auto& req = w.xfers[w.issue_xfer].req;
+    mreq.hart_id   = req.core->id();
+    mreq.uuid  = req.uuid;
 
     auto& ch = gmem_arb_->ReqIn.at(w.worker_id);
     if (!ch.try_send(mreq)) return; // arb backpressure
 
-    w.inflight[slot].allocated   = true;
-    w.inflight[slot].rsp_arrived = false;
-    w.inflight[slot].oob_pending = false;
-    w.inflight[slot].deferred    = false;
-    w.inflight[slot].rsp_data.reset();
-    w.inflight[slot].work        = lw;
-    w.issued_order.push_back(slot);
-    ++w.ag_idx;
+    issue_line(w, slot, lw);
+  }
+
+  void issue_line(Worker& w, uint32_t slot, const LineWork& lw) {
+    if (slot == w.fresh_slots) {
+      ++w.fresh_slots;
+    } else {
+      w.free_fifo.pop_front();
+    }
+    auto& s = w.inflight[slot];
+    s.allocated   = true;
+    s.rsp_arrived = false;
+    s.xfer        = w.issue_xfer;
+    s.rsp_data.reset();
+    s.work        = lw;
+    auto& x = w.xfers[w.issue_xfer];
+    ++x.outstanding;
+    if (++w.ag_idx == w.work_list.size()) {
+      x.issued  = true;
+      w.issuing = false;
+    }
   }
 
   // ── smem_wr: drain ready slots, build LMEM MemReqs ───────────────────
   void tick_worker_smem_wr(Worker& w) {
-    if (w.issued_order.empty()) {
-      // Nothing in flight — if all addr_gen done, transfer is finished.
-      if (w.ag_idx == w.work_list.size()) finish_worker(w);
-      return;
+    // Lines drain in arrival order, whatever their transfer. The line that
+    // leaves its transfer with nothing else outstanding once the transfer
+    // has issued every line is the final one: its write carries notify_done,
+    // so it lands after every other write of the transfer.
+    if (w.drain_slot == UINT32_MAX) {
+      uint32_t p = w.pend_slot;
+      if (p == UINT32_MAX || cycle_ < w.inflight[p].ready_cycle)
+        return;
+      const auto& px = w.xfers[w.inflight[p].xfer];
+      w.drain_final = px.issued && (px.outstanding == 1);
+      w.drain_slot  = p;
+      w.pend_slot   = UINT32_MAX;
     }
 
-    // Match the RTL's OoO direct-drain behavior: select any ready non-last
-    // slot without waiting for older requests. Once selected, keep draining
-    // the same slot because the multicast/scatter cursors are worker-local.
-    // The last work item carries notify_done and must remain deferred until
-    // it is the only outstanding slot.
-    uint32_t slot = w.drain_slot;
-    if (slot == UINT32_MAX) {
-      for (uint32_t i = 0; i < w.inflight.size(); ++i) {
-        const auto& candidate = w.inflight[i];
-        if (candidate.allocated && candidate.rsp_arrived && !candidate.work.last
-         && cycle_ >= candidate.ready_cycle) {
-          slot = i;
-          break;
-        }
-      }
-
-      if (slot == UINT32_MAX && w.issued_order.size() == 1) {
-        uint32_t last_slot = w.issued_order.front();
-        const auto& candidate = w.inflight[last_slot];
-        if (candidate.allocated && candidate.rsp_arrived && cycle_ >= candidate.ready_cycle)
-          slot = last_slot;
-      }
-
-      if (slot == UINT32_MAX) return;
-      w.drain_slot = slot;
-    }
+    auto& x = w.xfers[w.inflight[w.drain_slot].xfer];
 
     // Determine destination core's LMEM port group.
-    uint32_t socket_local_cid = w.req.core->id() % kCoresPerSocket;
+    uint32_t socket_local_cid = x.req.core->id() % kCoresPerSocket;
 
     // One drain beat per cycle covers one aligned LMEM row
     // (DxaCore::LMEM_ROW_SIZE bytes — the full banked row the RTL writes in
@@ -724,7 +735,7 @@ private:
     uint64_t beat_row = UINT64_MAX;
 
     for (uint32_t emitted = 0; emitted < DxaCore::LMEM_PORTS_PER_CORE; ++emitted) {
-      slot = w.drain_slot;
+      uint32_t slot = w.drain_slot;
       if (slot == UINT32_MAX) {
         break; // slot released mid-beat
       }
@@ -743,25 +754,25 @@ private:
 
       uint32_t cta_warp_idx = 0;
       uint64_t cta_off = 0;
-      if (w.is_multicast) {
-        cta_warp_idx = w.cta_indices.at(w.mc_cta_idx);
-        cta_off = uint64_t(cta_warp_idx) * w.smem_stride;
+      if (x.is_multicast) {
+        cta_warp_idx = x.cta_indices.at(w.mc_cta_idx);
+        cta_off = uint64_t(cta_warp_idx) * x.smem_stride;
       }
 
       // Per-element SMEM byte destination. K-major: uniform lane stride from a
       // span base. Tiled (Flat/BlockMajor): permuted index from the WGMMA
       // B-buffer layout formula (idx = within-span dim-0 offset → N = base+idx).
-      const bool     tiled    = desc_dest_tiled(w.desc.meta);
-      const uint32_t t_eb     = desc_elem_bytes(w.desc.meta);
+      const bool     tiled    = desc_dest_tiled(x.desc.meta);
+      const uint32_t t_eb     = desc_elem_bytes(x.desc.meta);
       const uint32_t t_ratio  = tiled ? std::max<uint32_t>(1u, 4u / t_eb) : 1u;
-      const uint32_t t_tcN    = tiled ? desc_geo_tcn(w.desc) : 1u;
-      const uint32_t t_bkK    = tiled ? desc_geo_bkk(w.desc) : 1u;
-      const uint32_t t_nsteps = tiled ? std::max<uint32_t>(1u, uint32_t(w.desc.tile_sizes[0]) / t_tcN) : 1u;
+      const uint32_t t_tcN    = tiled ? desc_geo_tcn(x.desc) : 1u;
+      const uint32_t t_bkK    = tiled ? desc_geo_bkk(x.desc) : 1u;
+      const uint32_t t_nsteps = tiled ? std::max<uint32_t>(1u, uint32_t(x.desc.tile_sizes[0]) / t_tcN) : 1u;
       auto dest_byte_of = [&](uint32_t idx) -> uint64_t {
         if (tiled) {
           uint32_t de = tiled_dest_elem(DestLayout(lw.dest_layout), lw.tile_k_row,
                                         lw.tile_n_base + idx, t_ratio, t_tcN, t_nsteps, t_bkK);
-          return w.req.smem_addr + uint64_t(de) * t_eb + cta_off;
+          return x.req.smem_addr + uint64_t(de) * t_eb + cta_off;
         }
         return lw.smem_word_addr + lw.smem_byte_offset
              + uint64_t(idx) * lw.km_lane_stride + cta_off;
@@ -793,9 +804,9 @@ private:
       MemReq req;
       req.addr   = dword;
       req.op = MemOp::ST;
-      req.tag    = w.req.core->id();           // routing tag
-      req.hart_id = w.req.core->id();
-      req.uuid   = w.req.uuid;
+      req.tag    = x.req.core->id();           // routing tag
+      req.hart_id = x.req.core->id();
+      req.uuid   = x.req.uuid;
       uint64_t byteen = 0;
       auto blk = make_mem_block();
       const uint32_t pat = lw.cfill;
@@ -826,17 +837,16 @@ private:
       req.data = blk;
 
       // notify_done on the LAST block write of the transfer — when the write
-      // reached the last scatter element of the last work item, per receiver.
+      // reached the last scatter element of the final line, per receiver.
       bool is_last_elem   = (ee == num_elems);
-      bool is_last_work   = lw.last;
-      bool is_last_replay = !w.is_multicast || (w.mc_cta_idx + 1 == w.cta_indices.size());
-      if (is_last_work && is_last_elem && (w.is_multicast || is_last_replay)) {
+      bool is_last_replay = !x.is_multicast || (w.mc_cta_idx + 1 == x.cta_indices.size());
+      if (w.drain_final && is_last_elem && (x.is_multicast || is_last_replay)) {
         req.flags.dxa_notify_done   = 1;
-        req.flags.dxa_notify_bar_id = w.req.bar_id + (w.is_multicast ? cta_warp_idx : 0u);
+        req.flags.dxa_notify_bar_id = x.req.bar_id + (x.is_multicast ? cta_warp_idx : 0u);
       }
 
       lmem_ch.send(req);
-      ++w.writes_emitted;
+      ++x.writes_emitted;
       // Count write transactions, not port requests: one per banked-row beat.
       // A beat spans LMEM_PORTS_PER_CORE ports of the same row, so only its
       // first emission is counted.
@@ -850,18 +860,20 @@ private:
         w.km_elem_idx = ee;
       } else {
         w.km_elem_idx = 0;
-        if (w.is_multicast && (w.mc_cta_idx + 1) < w.cta_indices.size()) {
+        if (x.is_multicast && (w.mc_cta_idx + 1) < x.cta_indices.size()) {
           ++w.mc_cta_idx;
         } else {
           w.mc_cta_idx = 0;
           // Slot done — release.
           s.allocated = false;
           s.rsp_arrived = false;
-          s.deferred = false;
           s.free_cycle = cycle_ + 1;
+          w.free_fifo.push_back(slot);
           s.rsp_data.reset();
-          auto it = std::find(w.issued_order.begin(), w.issued_order.end(), slot);
-          if (it != w.issued_order.end()) w.issued_order.erase(it);
+          --x.outstanding;
+          if (w.drain_final) {
+            finish_xfer(w, x);
+          }
           w.drain_slot = UINT32_MAX;
         }
       }
@@ -871,37 +883,34 @@ private:
     } // per-tick row-beat emission loop
   }
 
-  void release_all_barriers(Worker& w) {
+  void release_all_barriers(const Xfer& x) {
     // bar_id is RAW (encoded); decode at release call site.
-    if (w.is_multicast) {
-      for (uint32_t cta : w.cta_indices) {
-        uint32_t decoded = bar_decode_id(w.req.bar_id + cta, VX_CFG_NUM_BARRIERS);
-        w.req.core->barrier_event_release(decoded);
+    if (x.is_multicast) {
+      for (uint32_t cta : x.cta_indices) {
+        uint32_t decoded = bar_decode_id(x.req.bar_id + cta, VX_CFG_NUM_BARRIERS);
+        x.req.core->barrier_event_release(decoded);
       }
     } else {
-      uint32_t decoded = bar_decode_id(w.req.bar_id, VX_CFG_NUM_BARRIERS);
-      w.req.core->barrier_event_release(decoded);
+      uint32_t decoded = bar_decode_id(x.req.bar_id, VX_CFG_NUM_BARRIERS);
+      x.req.core->barrier_event_release(decoded);
     }
   }
 
-  void finish_worker(Worker& w) {
-    if (w.state == WState::RUNNING || w.state == WState::IDLE) {
-      uint64_t latency = cycle_ - w.issue_cycle;
-      ++perf_stats_.transfers;
-      perf_stats_.total_latency += latency;
-      DT(3, simobject_->name() << "[" << w.worker_id << "] complete: core="
-         << w.req.core->id() << ", bar=" << w.req.bar_id
-         << ", writes=" << w.writes_emitted << ", latency=" << latency);
-    }
-    w.state = WState::IDLE;
-    w.work_list.clear();
-    w.cta_indices.clear();
-    w.issued_order.clear();
-    w.drain_slot = UINT32_MAX;
-    w.ag_idx = 0;
-    w.mc_cta_idx = 0;
-    w.km_elem_idx = 0;
-    w.writes_emitted = 0;
+  void count_transfer(const Worker& w, const Xfer& x) {
+    __unused(w);
+    uint64_t latency = cycle_ - x.issue_cycle;
+    ++perf_stats_.transfers;
+    perf_stats_.total_latency += latency;
+    DT(3, simobject_->name() << "[" << w.worker_id << "] complete: core="
+       << x.req.core->id() << ", bar=" << x.req.bar_id
+       << ", writes=" << x.writes_emitted << ", latency=" << latency);
+  }
+
+  void finish_xfer(Worker& w, Xfer& x) {
+    count_transfer(w, x);
+    x.valid = false;
+    x.free_cycle = cycle_ + 1;
+    x.cta_indices.clear();
   }
 
   // ── Members ──────────────────────────────────────────────────────────

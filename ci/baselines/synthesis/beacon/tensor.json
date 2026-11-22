@@ -62,6 +62,23 @@
     }
   },
   "tensor": {
+    "accepted": {
+      "against": "1061088aa91bd6f295d91945832acdc8408223c4",
+      "regressions": [
+        {
+          "after": 13,
+          "before": 11,
+          "kind": "deeper",
+          "name": "dxa_core/g_workers_0.worker/addr_gen/lines_left_r.d"
+        },
+        {
+          "after": 12,
+          "before": 11,
+          "kind": "deeper",
+          "name": "dxa_core/g_workers_0.worker/smem_wr/replay_onehot_r.d"
+        }
+      ]
+    },
     "clock_mhz": 250,
     "config_hash": "f4269536f1b2647b",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
@@ -69,7 +86,7 @@
     "result": {
       "bram": 114.5,
       "build_time_s": 130,
-      "deep_endpoints": 4761,
+      "deep_endpoints": 2751,
       "deepest_paths": [
         "25  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[14]",
         "25  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[17]",
@@ -83,21 +100,21 @@
         "25  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_1.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_1.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[18]"
       ],
       "dsp": 267,
-      "endpoints": 170647,
+      "endpoints": 169785,
       "env": {
         "circt": "CIRCT 892a65a01",
         "device": "xcu55c-fsvh2892-2L-e",
         "foldsim": "foldsim d8350bc0f",
         "xlen": 32
       },
-      "ff": 161531,
+      "ff": 160416,
       "fix_levels": 12,
       "interfaces": {},
-      "lut": 217719,
-      "lutram": 12672,
+      "lut": 216975,
+      "lutram": 12857,
       "max_levels": 25,
       "pred_fmax_mhz": 253.4,
-      "risk_endpoints": 379,
+      "risk_endpoints": 358,
       "tied_bits": 4,
       "tied_ports": [
         {
@@ -133,9 +150,14 @@
         "dcache/g_core_arb_*_core_arb/req_arb/g_input_select_g_arbiter_g_out_buf_*_out_buf/g_eb2_stream_buffer": 8,
         "dxa_core/desc_table/desc_store": 8,
         "dxa_core/g_workers_*_worker/addr_gen": 15,
-        "dxa_core/g_workers_*_worker/gmem_req": 9,
+        "dxa_core/g_workers_*_worker/gmem_req": 8,
+        "dxa_core/g_workers_*_worker/gmem_req/free_fifo": 9,
+        "dxa_core/g_workers_*_worker/gmem_req/free_fifo/pending_size": 10,
+        "dxa_core/g_workers_*_worker/gmem_req/oob_fifo": 9,
+        "dxa_core/g_workers_*_worker/gmem_req/oob_fifo/pending_size": 9,
         "dxa_core/g_workers_*_worker/setup": 12,
-        "dxa_core/g_workers_*_worker/smem_wr": 16,
+        "dxa_core/g_workers_*_worker/smem_wr": 15,
+        "dxa_core/g_workers_*_worker/xfer_table": 9,
         "g_cores_*_g_lsu_mem_path_*_mem_path/g_coalescing_mem_coalescer/req_ibuf/allocator": 12,
         "g_cores_*_g_lsu_mem_path_*_mem_path/lsu_scheduler/mem_scheduler/g_req_queue_rw_req_queue/g_ebN_fifo_queue": 9,
         "g_cores_*_g_lsu_mem_path_*_mem_path/lsu_scheduler/mem_scheduler/req_ibuf/allocator": 11,
@@ -186,7 +208,7 @@
         "l2cache/g_cache_cache/g_core_req_skid_*_req_skid": 9
       },
       "uram": 0,
-      "watch_endpoints": 25288,
+      "watch_endpoints": 23318,
       "watch_levels": 8
     }
   }

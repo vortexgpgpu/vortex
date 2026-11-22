@@ -661,6 +661,19 @@ tests:
   shape:
     threads: [4, 16]
 
+# Overlapped transfers: two resident TMEM GEMM CTAs stream their stages behind
+# a 300-cycle memory, so the reads of several transfers share a worker's
+# latency-sized in-flight pool while earlier transfers still drain.
+- id: model_parity-tmem-lat300
+  check: model_parity
+  via: blackbox
+  app: sgemm_tcu_tmem
+  xlen: [32]
+  args: -m64 -n64 -k256
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_FEDP2K -DVX_CFG_TCU_TMEM_ENABLE -DVX_CFG_TCU_TMEM_COLS=512 -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
+    -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32 -DPIPE_N=2 -DB_KMAJOR -DVX_CFG_PLATFORM_MEMORY_LATENCY=300
+
 # The DXA-staged WGMMA accumulator stored with vx_stm
 # (VX_CFG_EXT_LDST_MATRIX_ENABLE).
 - id: sgemm_tcu_wg_dxa-ldm

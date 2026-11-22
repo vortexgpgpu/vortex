@@ -58,8 +58,12 @@ There is no software→global path; DXA is GMEM-read / LMEM-write only.
   ([`VX_types.toml:278-291`](../../VX_types.toml#L278)) — see §7.
 - **Config** ([`VX_config.toml:40-58`](../../VX_config.toml#L40)):
   `VX_CFG_NUM_DXA_UNITS = max(1, ceil(NUM_CORES/8))`,
-  `VX_CFG_DXA_QUEUE_SIZE = 16`, `VX_CFG_DXA_MAX_INFLIGHT = 8`,
-  `VX_DCR_DXA_DESC_COUNT = 16`.
+  `VX_CFG_DXA_QUEUE_SIZE = 16`, `VX_DCR_DXA_DESC_COUNT = 16`.
+  `VX_CFG_DXA_MAX_INFLIGHT` (line reads in flight per worker) follows
+  Little's law like the cache MSHRs: the worker's share of the bytes in
+  flight at `PLATFORM_MEMORY_LATENCY`, capped at one line per cycle of
+  latency, a power of two in [8, 512]. `VX_CFG_DXA_MAX_XFERS` (transfers in
+  flight per worker) is `MAX_INFLIGHT / 16` in [2, 16].
 - **Perf CSRs** `[csr_mpm_dxa]` 0xB03–0xB08 (transfers, gmem_reads,
   gmem_dedup, lmem_writes, gmem_latency, noslot_stalls),
   `VX_DCR_MPM_CLASS_DXA = 16`
@@ -85,10 +89,11 @@ queue out to `NUM_DXA_UNITS` workers.
 | [`VX_dxa_dispatch.sv`](../../hw/rtl/dxa/VX_dxa_dispatch.sv) | `VX_stream_dispatch` routing req+desc to the first idle worker. |
 | [`VX_dxa_desc_table.sv`](../../hw/rtl/dxa/VX_dxa_desc_table.sv) | DCR-written descriptor RAM, single read port. |
 | [`VX_dxa_worker.sv`](../../hw/rtl/dxa/VX_dxa_worker.sv) | Structural wiring of the active pipeline + watchdog. |
-| [`VX_dxa_setup.sv`](../../hw/rtl/dxa/VX_dxa_setup.sv) | Transfer-lifecycle FSM + decoupled setup engine (overlaps setup with prior drain); 3 DSP multipliers compute rolling-cursor deltas, OOB limits, K-major params. |
+| [`VX_dxa_setup.sv`](../../hw/rtl/dxa/VX_dxa_setup.sv) | Issue-lifecycle FSM + decoupled setup engine (overlaps setup with the prior transfer's issue); 3 DSP multipliers compute rolling-cursor deltas, OOB limits, K-major params. |
+| [`VX_dxa_xfer_table.sv`](../../hw/rtl/dxa/VX_dxa_xfer_table.sv) | Contexts of the `DXA_MAX_XFERS` transfers a worker has in flight (destination geometry, completion target), with per-transfer issued flag and pending-line count. |
 | [`VX_dxa_addr_gen.sv`](../../hw/rtl/dxa/VX_dxa_addr_gen.sv) | Single rolling-cursor `gmem_cursor_r` + 4-level ripple odometer; one beat/cycle. |
-| [`VX_dxa_gmem_req.sv`](../../hw/rtl/dxa/VX_dxa_gmem_req.sv) | Issues GMEM reads; `slot_table_r[MAX_OUTSTANDING]` per-tag credit model (≤8 inflight); direct-drains responses to smem_wr. |
-| [`VX_dxa_smem_wr.sv`](../../hw/rtl/dxa/VX_dxa_smem_wr.sv) | Barrel-shift drain → 1 LMEM word/beat; K-major per-element scatter; serial multicast replay; completion flag on last write. |
+| [`VX_dxa_gmem_req.sv`](../../hw/rtl/dxa/VX_dxa_gmem_req.sv) | Issues GMEM reads; `slot_table_r[MAX_OUTSTANDING]` per-tag credit model, each slot tagged with its transfer; direct-drains responses to smem_wr. |
+| [`VX_dxa_smem_wr.sv`](../../hw/rtl/dxa/VX_dxa_smem_wr.sv) | Barrel-shift drain → 1 LMEM word/beat, lines of any transfer in arrival order; K-major per-element scatter; serial multicast replay; completion flag on each transfer's final write. |
 | [`VX_dxa_completion.sv`](../../hw/rtl/dxa/VX_dxa_completion.sv) | Instantiated **per core** in [`VX_mem_unit.sv:183`](../../hw/rtl/core/VX_mem_unit.sv#L183) (LMEM side): snoops bank writes, reads the completion attr, pushes `bar_addr` into a depth-`NUM_WARPS` FIFO → `txbar_bus_if`. |
 | [`VX_dxa_watchdog.sv`](../../hw/rtl/dxa/VX_dxa_watchdog.sv) | `RUNTIME_ASSERT` on `STALL_TIMEOUT` cycles of no progress. |
 
@@ -107,16 +112,20 @@ queue out to `NUM_DXA_UNITS` workers.
 4. **Setup.** `VX_dxa_setup` latches metadata, decodes rank/elem/LAYOUT,
    computes the initial GMEM base, row length, rolling-cursor deltas, OOB
    limits, and (LAYOUT=1, rank ≤ 2) `dest_kmajor` + `per_lane_stride_bytes`.
-   Setup overlaps the previous transfer's drain (staged → active).
+   Setup overlaps the previous transfer's issue (staged → active). A
+   transfer starts once the previous one has issued its last line and a
+   transfer context is free, so up to `DXA_MAX_XFERS` transfers drain at
+   once and their reads share the in-flight pool.
 5. **Address gen.** `VX_dxa_addr_gen` emits one
    `(cl_addr, smem_byte_addr, byte_offset, valid_length, oob, last)` per
    cycle from the rolling cursor + ripple odometer.
 6. **GMEM read.** `VX_dxa_gmem_req` allocates a `slot_table_r` tag
-   (≤ `DXA_MAX_INFLIGHT=8`) and issues the read (OOB lines synthesize
+   (≤ `DXA_MAX_INFLIGHT`) and issues the read (OOB lines synthesize
    immediate arrival, no bus traffic), direct-draining the response.
 7. **SMEM write.** `VX_dxa_smem_wr` barrel-shift-aligns and drains one
-   LMEM word/beat; the last cache line is deferred so it drains last
-   carrying the completion flag. K-major mode scatters one element/beat at
+   LMEM word/beat. The cache line loaded once its transfer has issued every
+   line and has no other line pending drains last and carries the completion
+   flag. K-major mode scatters one element/beat at
    `+per_lane_stride_bytes`.
 8. **Multicast fan-out.** If `popcount(cta_mask) > 1`: a priority-encoder
    walk replays each receiver's writes at `+r·smem_stride` — **serial**,

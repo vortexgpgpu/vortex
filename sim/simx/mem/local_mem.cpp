@@ -247,6 +247,23 @@ protected:
     return false;
   }
 
+  // Sleeping is safe only with nothing delivered or in flight toward an
+  // input: a packet reserved this cycle by a module scanned earlier is not
+  // yet visible to empty(), and its wake-up has already been consumed.
+  bool inputs_quiet() const {
+    for (auto& in : simobject_->ReqIn) {
+      if (in.size() != 0) {
+        return false;
+      }
+    }
+    for (auto& in : simobject_->DmaInputs) {
+      if (in.size() != 0) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   // Serve one DMA client's row access. Clients are served round-robin,
   // starting after the last one served.
   void dma_fire() {
@@ -577,7 +594,7 @@ public:
     for (auto& r : rsp_regs_) {
       idle = idle && !r.valid;
     }
-    if (idle && !this->dma_pending()) {
+    if (idle && this->inputs_quiet()) {
       simobject_->tick_sleep();
     }
   }

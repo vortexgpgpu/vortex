@@ -2319,11 +2319,18 @@ package VX_gpu_pkg;
     localparam UMMU_DXA_IDX         = UMMU_RTCACHE_IDX + `VX_CFG_EXT_RTU_ENABLED;
     localparam UMMU_NUM_REQS        = `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_RTU_ENABLED + `VX_CFG_EXT_DXA_ENABLED;
 
-    // Widest tag among the socket arb inputs (DXA adapts to the given budget)
-`ifdef VX_CFG_EXT_TEX_ENABLE
-    localparam SOCKET_MEM_TAG_W1    = `MAX(L1_MEM_TAG_WIDTH, TCACHE_MEM_TAG_WIDTH);
+    // Widest tag among the socket arb inputs. A DXA read carries its worker's
+    // in-flight slot under the select bits of the DXA's worker arbiter.
+`ifdef VX_CFG_EXT_DXA_ENABLE
+    localparam DXA_MEM_TAG_WIDTH    = UUID_WIDTH + `CLOG2(`VX_CFG_DXA_MAX_INFLIGHT) + `ARB_SEL_BITS(`VX_CFG_NUM_DXA_CORES, 1);
+    localparam SOCKET_MEM_TAG_W0    = `MAX(L1_MEM_TAG_WIDTH, DXA_MEM_TAG_WIDTH);
 `else
-    localparam SOCKET_MEM_TAG_W1    = L1_MEM_TAG_WIDTH;
+    localparam SOCKET_MEM_TAG_W0    = L1_MEM_TAG_WIDTH;
+`endif
+`ifdef VX_CFG_EXT_TEX_ENABLE
+    localparam SOCKET_MEM_TAG_W1    = `MAX(SOCKET_MEM_TAG_W0, TCACHE_MEM_TAG_WIDTH);
+`else
+    localparam SOCKET_MEM_TAG_W1    = SOCKET_MEM_TAG_W0;
 `endif
 `ifdef VX_CFG_EXT_RTU_ENABLE
     localparam SOCKET_MEM_TAG_WIDTH = `MAX(SOCKET_MEM_TAG_W1, RTCACHE_MEM_TAG_WIDTH);

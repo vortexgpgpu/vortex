@@ -52,20 +52,9 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     output wire                        out_oob,
     output wire                        out_last,
 
-    // Pass-through params for downstream (stable during transfer).
-    output wire [31:0]                 out_cfill,
-    output wire                        out_dest_kmajor,
-    output wire [15:0]                 out_per_lane_stride_bytes,
-    output wire [3:0]                  out_elem_bytes,
-    // Tiled (Flat/BlockMajor) scatter: stable geometry + per-CL (k_row, n_base).
-    output wire [1:0]                  out_dest_mode,
-    output wire [3:0]                  out_lg_ratio,
-    output wire [3:0]                  out_lg_tcN,
-    output wire [3:0]                  out_lg_nsteps,
-    output wire [3:0]                  out_lg_bkK,
+    // Tiled (Flat/BlockMajor) scatter: per-CL (k_row, n_base).
     output wire [15:0]                 out_k_row,    // dim1 index (K-row) of this CL
-    output wire [15:0]                 out_n_base,   // N index of this CL's element 0
-    output wire [DXA_SMEM_ADDR_W-1:0]  out_smem_base // tile SMEM byte base (for tiled dest)
+    output wire [15:0]                 out_n_base    // N index of this CL's element 0
 );
     localparam VLEN_W      = CL_OFF_BITS + 1;
 
@@ -96,9 +85,8 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // K-major scatter-mode state.
     //   km_row_base_r: SMEM base for the current outer-dim row (= initial +
     //                  dim_count[0] * elem_bytes). Updates only at row wrap.
-    //   km_dest_kmajor_r / km_per_lane_stride / km_elem_bytes: stable params.
+    //   km_dest_kmajor_r / km_elem_bytes: stable params.
     reg                        km_dest_kmajor_r;
-    reg [15:0]                 km_per_lane_stride_r;
     reg [3:0]                  km_elem_bytes_r;
     // per_lane_stride / elem_bytes, held stable per transfer. elem_bytes is a
     // power of 2 (per_lane_stride = tile1 * elem_bytes), so the divide is an
@@ -109,29 +97,12 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                               : (setup_params.elem_bytes == 4'd2) ? 2'd1 : 2'd0;
     reg [DXA_SMEM_ADDR_W-1:0]  km_row_base_r;
 
-    // Tiled (Flat/BlockMajor) scatter: stable geometry + per-CL token state.
-    reg [1:0]                  tiled_mode_r;
-    reg [3:0]                  tiled_lg_ratio_r, tiled_lg_tcN_r, tiled_lg_nsteps_r;
-    reg [3:0]                  tiled_lg_bkK_r;
+    // Tiled (Flat/BlockMajor) scatter: per-CL token state.
     reg [3:0]                  km_esize_r;       // log2(elem_bytes)
     reg [15:0]                 n_base_r;         // N index of current CL's element 0
-    reg [DXA_SMEM_ADDR_W-1:0]  tiled_base_r;     // tile SMEM byte base (stable)
 
-    // Pass-through latched params.
-    reg [31:0]                 cfill_r;
-
-    assign out_cfill = cfill_r;
-    assign out_dest_kmajor = km_dest_kmajor_r;
-    assign out_per_lane_stride_bytes = km_per_lane_stride_r;
-    assign out_elem_bytes = km_elem_bytes_r;
-    assign out_dest_mode  = tiled_mode_r;
-    assign out_lg_ratio   = tiled_lg_ratio_r;
-    assign out_lg_tcN     = tiled_lg_tcN_r;
-    assign out_lg_nsteps  = tiled_lg_nsteps_r;
-    assign out_lg_bkK     = tiled_lg_bkK_r;
     assign out_k_row      = dim_count_r[0][15:0];
     assign out_n_base     = n_base_r;
-    assign out_smem_base  = tiled_base_r;
 
     wire [CL_OFF_BITS-1:0] first_off = gmem_cursor_r[CL_OFF_BITS-1:0];
 
@@ -224,23 +195,12 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             is_first_r       <= 1'b0;
             last_vend_r      <= '0;
             smem_byte_addr_r <= '0;
-            // Reset K-major params so out_dest_kmajor (a mux selector
-            // downstream in smem_wr) doesn't carry X before the first
-            // pipeline_start. Without this, fb_word_data / fb_word_byteen
-            // muxes propagate X into the bus even though transfer_active=0.
             km_dest_kmajor_r <= 1'b0;
-            km_per_lane_stride_r <= '0;
             km_elem_bytes_r  <= '0;
             km_tile1_r       <= '0;
             km_row_base_r    <= '0;
-            tiled_mode_r     <= DXA_DEST_ROWMAJOR;
-            tiled_lg_ratio_r <= '0;
-            tiled_lg_tcN_r   <= '0;
-            tiled_lg_nsteps_r<= '0;
-            tiled_lg_bkK_r   <= '0;
             km_esize_r       <= '0;
             n_base_r         <= '0;
-            tiled_base_r     <= '0;
             for (int d = 0; d < DXA_MAX_OUTER_DIMS; d++) begin
                 dim_count_r[d] <= '0;
             end
@@ -253,22 +213,14 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             lines_left_r     <= calc_num_lines(start_span);
             is_first_r       <= 1'b1;
             last_vend_r      <= calc_last_vend(start_span[CL_OFF_BITS-1:0]);
-            cfill_r          <= setup_params.cfill;
             smem_byte_addr_r <= setup_params.initial_smem_base;
             km_dest_kmajor_r <= setup_params.dest_kmajor;
-            km_per_lane_stride_r <= setup_params.per_lane_stride_bytes;
             km_elem_bytes_r  <= setup_params.elem_bytes;
             km_tile1_r       <= (setup_params.elem_bytes == 4'd0) ? 32'd0
                               : (32'(setup_params.per_lane_stride_bytes) >> start_km_esize);
             km_row_base_r    <= setup_params.initial_smem_base;
-            tiled_mode_r     <= setup_params.dest_mode;
-            tiled_lg_ratio_r <= setup_params.lg_ratio;
-            tiled_lg_tcN_r   <= setup_params.lg_tcN;
-            tiled_lg_nsteps_r<= setup_params.lg_nsteps;
-            tiled_lg_bkK_r   <= setup_params.lg_bkK;
             km_esize_r       <= 4'(start_km_esize);
             n_base_r         <= '0;
-            tiled_base_r     <= setup_params.initial_smem_base;
             for (int d = 0; d < DXA_MAX_OUTER_DIMS; d++) begin
                 dim_count_r[d]   <= '0;
                 dim_penult_r[d]  <= setup_params.dim_tiles[d] - 32'd2;
@@ -348,6 +300,13 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     // km_step is LMEM-bounded; only the low DXA_SMEM_ADDR_W bits feed smem_byte_addr_r.
     `UNUSED_VAR (km_step[31:DXA_SMEM_ADDR_W])
+    // destination geometry the SMEM writer takes from the transfer table
+    `UNUSED_VAR (setup_params.cfill)
+    `UNUSED_VAR (setup_params.dest_mode)
+    `UNUSED_VAR (setup_params.lg_ratio)
+    `UNUSED_VAR (setup_params.lg_tcN)
+    `UNUSED_VAR (setup_params.lg_nsteps)
+    `UNUSED_VAR (setup_params.lg_bkK)
     // the outermost dim only steps (all-last ends the transfer), never wraps to 0
     `UNUSED_VAR (dim_single_r[DXA_MAX_OUTER_DIMS-1])
 
