@@ -276,6 +276,7 @@ module VX_decode import
     // each field's window is applied as the field is extracted, beside the
     // opcode decode; an integer field 0 stays x0
     localparam WB = RV_REGS_BITS - 5;
+    `UNUSED_VAR (rwin_cur) // below 256 registers a window uses fewer than RWIN_BITS bits
     wire [RV_REGS_BITS-1:0] rd_f  = {rwin_cur[0 * RWIN_BITS +: WB], rd};
     wire [RV_REGS_BITS-1:0] rs1_f = {rwin_cur[1 * RWIN_BITS +: WB], rs1};
     wire [RV_REGS_BITS-1:0] rs2_f = {rwin_cur[2 * RWIN_BITS +: WB], rs2};
