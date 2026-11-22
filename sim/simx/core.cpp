@@ -776,6 +776,7 @@ public:
         ++rwin_stats_.rwins;
       }
       win = rwin_op.win;
+      ++rwin_stats_.fused;
       scheduler_->advance_pc(trace, 4);
       trace->PC  += 4;
       trace->code = trace->code2;
@@ -1327,7 +1328,8 @@ public:
                 << " decoded=" << rwin_stats_.decoded
                 << " rwins=" << rwin_stats_.rwins
                 << " high_instrs=" << rwin_stats_.high_instrs
-                << " prefixes=" << rwin_stats_.prefixes << std::endl;
+                << " prefixes=" << rwin_stats_.prefixes
+                << " fused=" << rwin_stats_.fused << std::endl;
     }
   }
 #endif
@@ -1528,6 +1530,7 @@ private:
     uint64_t rwins = 0;
     uint64_t high_instrs = 0;
     uint64_t prefixes = 0;
+    uint64_t fused = 0;
   } rwin_stats_;
   // windows of an unfused vx_rpfx (it ended a line), per warp; -1 = none
   std::vector<int32_t> pending_pfx_ = std::vector<int32_t>(VX_CFG_NUM_WARPS, -1);
