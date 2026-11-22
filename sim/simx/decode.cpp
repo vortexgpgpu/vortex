@@ -730,15 +730,21 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid, uint32_t rwin) {
     instr->set_fu_type(FUType::LSU);
     bool is_float = (op == Opcode::FL || op == Opcode::FS);
     bool is_load = (op == Opcode::L || op == Opcode::FL);
+  #ifdef VX_CFG_EXT_ZFINX_ENABLE
+    if (is_float) {
+      std::cout << "Error: FP load/store under Zfinx" << std::endl;
+      std::abort();
+    }
+  #endif
     {
       instr->set_src_reg(0, rs1, RegType::Integer);
       uint32_t imm12 = 0;
       if (is_load) {
         imm12 = code >> shift_rs2;
-        instr->set_dest_reg(rd, is_float ? RegType::Float : RegType::Integer);
+        instr->set_dest_reg(rd, is_float ? FpRegType : RegType::Integer);
       } else {
         imm12 = (funct7 << width_reg) | rd;
-        instr->set_src_reg(1, rs2, is_float ? RegType::Float : RegType::Integer);
+        instr->set_src_reg(1, rs2, is_float ? FpRegType : RegType::Integer);
       }
       auto offset = sext(imm12, width_i_imm);
       instr->set_op_type(is_load ? LsuType::LOAD : LsuType::STORE);
@@ -861,48 +867,48 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid, uint32_t rwin) {
     case 0x00: // RV32F: FADD.S
     case 0x01: // RV32D: FADD.D
       instr->set_op_type(FpuType::FADD);
-      instr->set_dest_reg(rd, RegType::Float);
-      instr->set_src_reg(0, rs1, RegType::Float);
-      instr->set_src_reg(1, rs2, RegType::Float);
+      instr->set_dest_reg(rd, FpRegType);
+      instr->set_src_reg(0, rs1, FpRegType);
+      instr->set_src_reg(1, rs2, FpRegType);
       instr->set_fcsr_use(frm_rd, Instr::FCSR_FFLAGS);
       break;
     case 0x04: // RV32F: FSUB.S
     case 0x05: // RV32D: FSUB.D
       instr->set_op_type(FpuType::FSUB);
-      instr->set_dest_reg(rd, RegType::Float);
-      instr->set_src_reg(0, rs1, RegType::Float);
-      instr->set_src_reg(1, rs2, RegType::Float);
+      instr->set_dest_reg(rd, FpRegType);
+      instr->set_src_reg(0, rs1, FpRegType);
+      instr->set_src_reg(1, rs2, FpRegType);
       instr->set_fcsr_use(frm_rd, Instr::FCSR_FFLAGS);
       break;
     case 0x08: // RV32F: FMUL.S
     case 0x09: // RV32D: FMUL.D
       instr->set_op_type(FpuType::FMUL);
-      instr->set_dest_reg(rd, RegType::Float);
-      instr->set_src_reg(0, rs1, RegType::Float);
-      instr->set_src_reg(1, rs2, RegType::Float);
+      instr->set_dest_reg(rd, FpRegType);
+      instr->set_src_reg(0, rs1, FpRegType);
+      instr->set_src_reg(1, rs2, FpRegType);
       instr->set_fcsr_use(frm_rd, Instr::FCSR_FFLAGS);
       break;
     case 0x10: // RV32F: FSGNJ.S, FSGNJN.S, FSGNJX.S
     case 0x11: // RV32D: FSGNJ.D, FSGNJN.D, FSGNJX.D
       instr->set_op_type(FpuType::FSGNJ);
-      instr->set_dest_reg(rd, RegType::Float);
-      instr->set_src_reg(0, rs1, RegType::Float);
-      instr->set_src_reg(1, rs2, RegType::Float);
+      instr->set_dest_reg(rd, FpRegType);
+      instr->set_src_reg(0, rs1, FpRegType);
+      instr->set_src_reg(1, rs2, FpRegType);
       break;
     case 0x14: // RV32F: FMIN.S, FMAX.S
     case 0x15: // RV32D: FMIN.D, FMAX.D
       instr->set_op_type(FpuType::FMINMAX);
-      instr->set_dest_reg(rd, RegType::Float);
-      instr->set_src_reg(0, rs1, RegType::Float);
-      instr->set_src_reg(1, rs2, RegType::Float);
+      instr->set_dest_reg(rd, FpRegType);
+      instr->set_src_reg(0, rs1, FpRegType);
+      instr->set_src_reg(1, rs2, FpRegType);
       instr->set_fcsr_use(0, Instr::FCSR_FFLAGS);
       break;
     case 0x0c: // RV32F: FDIV.S
     case 0x0d: // RV32D: FDIV.D
       instr->set_op_type(FpuType::FDIV);
-      instr->set_dest_reg(rd, RegType::Float);
-      instr->set_src_reg(0, rs1, RegType::Float);
-      instr->set_src_reg(1, rs2, RegType::Float);
+      instr->set_dest_reg(rd, FpRegType);
+      instr->set_src_reg(0, rs1, FpRegType);
+      instr->set_src_reg(1, rs2, FpRegType);
       instr->set_fcsr_use(frm_rd, Instr::FCSR_FFLAGS);
       break;
     case 0x20: // FCVT.S.D, FCVT.S.H
@@ -916,8 +922,8 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid, uint32_t rwin) {
         std::abort();
       }
       instr->set_op_type(FpuType::F2F);
-      instr->set_dest_reg(rd, RegType::Float);
-      instr->set_src_reg(0, rs1, RegType::Float);
+      instr->set_dest_reg(rd, FpRegType);
+      instr->set_src_reg(0, rs1, FpRegType);
       instr->set_fcsr_use(frm_rd, Instr::FCSR_FFLAGS);
     } break;
 #ifdef VX_CFG_EXT_ZFHMIN_ENABLE
@@ -927,30 +933,30 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid, uint32_t rwin) {
       }
       instr->set_op_type(FpuType::FMVXW);
       instr->set_dest_reg(rd, RegType::Integer);
-      instr->set_src_reg(0, rs1, RegType::Float);
+      instr->set_src_reg(0, rs1, FpRegType);
       break;
     case 0x7a: // FMV.H.X
       if (funct3 != 0) {
         std::abort();
       }
       instr->set_op_type(FpuType::FMVWX);
-      instr->set_dest_reg(rd, RegType::Float);
+      instr->set_dest_reg(rd, FpRegType);
       instr->set_src_reg(0, rs1, RegType::Integer);
       break;
 #endif
     case 0x2c: // FSQRT.S
     case 0x2d: // FSQRT.D
       instr->set_op_type(FpuType::FSQRT);
-      instr->set_dest_reg(rd, RegType::Float);
-      instr->set_src_reg(0, rs1, RegType::Float);
+      instr->set_dest_reg(rd, FpRegType);
+      instr->set_src_reg(0, rs1, FpRegType);
       instr->set_fcsr_use(frm_rd, Instr::FCSR_FFLAGS);
       break;
     case 0x50: // FLE.S, FLT.S, FEQ.S
     case 0x51: // FLE.D, FLT.D, FEQ.D
       instr->set_op_type(FpuType::FCMP);
       instr->set_dest_reg(rd, RegType::Integer);
-      instr->set_src_reg(0, rs1, RegType::Float);
-      instr->set_src_reg(1, rs2, RegType::Float);
+      instr->set_src_reg(0, rs1, FpRegType);
+      instr->set_src_reg(1, rs2, FpRegType);
       instr->set_fcsr_use(0, Instr::FCSR_FFLAGS);
       break;
     case 0x60: // FCVT.W.S, FCVT.WU.S, FCVT.L.S, FCVT.LU.S
@@ -962,7 +968,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid, uint32_t rwin) {
 #endif
       instr->set_op_type(FpuType::F2I);
       instr->set_dest_reg(rd, RegType::Integer);
-      instr->set_src_reg(0, rs1, RegType::Float);
+      instr->set_src_reg(0, rs1, FpRegType);
       instr->set_src_reg(1, rs2, RegType::None);
       instr->set_fcsr_use(frm_rd, Instr::FCSR_FFLAGS);
       break;
@@ -974,7 +980,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid, uint32_t rwin) {
       }
 #endif
       instr->set_op_type(FpuType::I2F);
-      instr->set_dest_reg(rd, RegType::Float);
+      instr->set_dest_reg(rd, FpRegType);
       instr->set_src_reg(0, rs1, RegType::Integer);
       instr->set_src_reg(1, rs2, RegType::None);
       instr->set_fcsr_use(frm_rd, Instr::FCSR_FFLAGS);
@@ -984,17 +990,22 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid, uint32_t rwin) {
       if (funct3 > 1) { // reserved
         std::abort();
       }
+    #ifdef VX_CFG_EXT_ZFINX_ENABLE
+      if (funct3 == 0) { // no FMV.X.W under Zfinx
+        std::abort();
+      }
+    #endif
       instr->set_op_type((funct3 != 0) ? FpuType::FCLASS : FpuType::FMVXW);
       instr->set_dest_reg(rd, RegType::Integer);
-      instr->set_src_reg(0, rs1, RegType::Float);
+      instr->set_src_reg(0, rs1, FpRegType);
       break;
     case 0x78: // FMV.S.X
     case 0x79: // FMV.D.X
-      if (funct3 != 0) {
+      if (funct3 != 0 || VX_CFG_EXT_ZFINX_ENABLED) {
         std::abort();
       }
       instr->set_op_type(FpuType::FMVWX);
-      instr->set_dest_reg(rd, RegType::Float);
+      instr->set_dest_reg(rd, FpRegType);
       instr->set_src_reg(0, rs1, RegType::Integer);
       break;
     default:
@@ -1013,10 +1024,10 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid, uint32_t rwin) {
                      (op == Opcode::FMSUB) ? FpuType::FMSUB :
                      (op == Opcode::FNMADD) ? FpuType::FNMADD : FpuType::FNMSUB);
     instr->set_args(IntrFpuArgs{funct3, funct2, (funct7 & 0x1), 0});
-    instr->set_dest_reg(rd, RegType::Float);
-    instr->set_src_reg(0, rs1, RegType::Float);
-    instr->set_src_reg(1, rs2, RegType::Float);
-    instr->set_src_reg(2, rs3, RegType::Float);
+    instr->set_dest_reg(rd, FpRegType);
+    instr->set_src_reg(0, rs1, FpRegType);
+    instr->set_src_reg(1, rs2, FpRegType);
+    instr->set_src_reg(2, rs3, FpRegType);
     instr->set_fcsr_use((funct3 == 0x7) ? Instr::FCSR_FRM : 0, Instr::FCSR_FFLAGS);
   } break;
   case Opcode::EXT1: {
@@ -1170,7 +1181,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid, uint32_t rwin) {
     case 4: { // Load/Store Packing extensions — macro-ops, sequencer expands to N single-elem uops
       instr->set_fu_type(FUType::LSU);
       instr->set_op_type(LsuType::LOAD);
-      instr->set_dest_reg(rd, RegType::Float);
+      instr->set_dest_reg(rd, FpRegType);
       instr->set_src_reg(0, rs1, RegType::Integer);
       instr->set_src_reg(1, rs2, RegType::Integer);
       switch (funct3) {
@@ -1257,7 +1268,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid, uint32_t rwin) {
                 // Dispatcher follows up with `mret` to resume the post-wait PC.
         instr->set_op_type(GfxwType::CB_RET);
         instr->set_src_reg(0, rs1, RegType::Integer); // action
-        instr->set_src_reg(1, rs2, RegType::Float);   // hit distance t
+        instr->set_src_reg(1, rs2, FpRegType);   // hit distance t
         instr->set_src_reg(2, rs3, RegType::Integer); // hit attribute
         IntrGfxwArgs args{};
         instr->set_args(args);
@@ -1272,7 +1283,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid, uint32_t rwin) {
       // works in a pure-gfx (no-RTU) build.
       case 2: { // GETWF — FP windowed regfile read into rd..rd+count-1.
         instr->set_op_type(GfxwType::GETWF);
-        instr->set_dest_reg(rd, RegType::Float);   // window base register
+        instr->set_dest_reg(rd, FpRegType);   // window base register
         instr->set_src_reg(0, rs1, RegType::Integer); // optional scoreboard chain (x0=none)
         IntrGfxwArgs args{};
         args.slot  = (funct7 >> 2) & 0x1F;         // 5-bit window start slot (funct7[6:2])
@@ -1368,9 +1379,9 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid, uint32_t rwin) {
       instr->set_op_type(is_load ? LsuType::LOAD : LsuType::STORE);
       instr->set_src_reg(0, rs1, RegType::Integer);
       if (is_load) {
-        instr->set_dest_reg(rd, RegType::Float);
+        instr->set_dest_reg(rd, FpRegType);
       } else {
-        instr->set_src_reg(1, rs2, RegType::Float);
+        instr->set_src_reg(1, rs2, FpRegType);
       }
       IntrLsuArgs args{/*LW*/ 2, /*stride*/ 0, (int32_t)sext(imm12, width_i_imm)};
       args.matrix = true;
@@ -1405,9 +1416,9 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid, uint32_t rwin) {
     instr->set_op_type(is_load ? LsuType::LOAD : LsuType::STORE);
     instr->set_src_reg(0, rs1, RegType::Integer);
     if (is_load) {
-      instr->set_dest_reg(rd, RegType::Float);
+      instr->set_dest_reg(rd, FpRegType);
     } else {
-      instr->set_src_reg(1, rs2, RegType::Float);
+      instr->set_src_reg(1, rs2, FpRegType);
     }
     instr->set_args(IntrLsuArgs{width, /*stride*/ 0, offset});
     instr->set_macro_op();
@@ -1423,8 +1434,8 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid, uint32_t rwin) {
     }
     instr->set_fu_type(FUType::SFU);
     instr->set_op_type(TfuType(rs2));
-    instr->set_dest_reg(rd, RegType::Float);
-    instr->set_src_reg(0, rs1, RegType::Float);
+    instr->set_dest_reg(rd, FpRegType);
+    instr->set_src_reg(0, rs1, FpRegType);
   } break;
 #endif
   default:

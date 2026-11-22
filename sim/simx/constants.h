@@ -77,6 +77,10 @@ static_assert(MAX_NUM_REGS == 32 || VX_CFG_EXT_RWIN_ENABLED,
 inline constexpr uint32_t NUM_SRC_REGS    = 3;
 
 // Register windows: high register bits per encoding field (rd, rs1, rs2, rs3).
+static_assert(!VX_CFG_EXT_ZFINX_ENABLED || VX_CFG_EXT_F_ENABLED, "Zfinx needs the FPU (VX_CFG_EXT_F_ENABLE)");
+static_assert(!VX_CFG_EXT_ZFINX_ENABLED || !VX_CFG_EXT_ZFHMIN_ENABLED, "Zfinx with Zfhmin (Zhinxmin) is not supported");
+static_assert(!VX_CFG_EXT_ZFINX_ENABLED || !(VX_CFG_EXT_TCU_ENABLED || VX_CFG_EXT_RTU_ENABLED) || MAX_NUM_REGS >= 64,
+              "Zfinx with the TCU or RTU needs register windows: their implicit FP operands live at x32 up");
 inline constexpr uint32_t RWIN_BITS       = 3;
 inline constexpr uint32_t RWIN_MASK       = (1u << RWIN_BITS) - 1;
 inline constexpr uint32_t RWIN_FIELDS     = 4;

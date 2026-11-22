@@ -103,9 +103,9 @@ Instr::Ptr LsuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
     uop_instr->set_op_type(macro_instr.get_op_type());
     uop_instr->set_src_reg(0, macro_instr.get_src_reg(0).idx | u.grp, RegType::Integer);
     if (is_load) {
-      uop_instr->set_dest_reg(frag_reg(macro_instr.get_dest_reg().idx, u.reg_off), RegType::Float);
+      uop_instr->set_dest_reg(frag_reg(macro_instr.get_dest_reg().idx, u.reg_off), FpRegType);
     } else {
-      uop_instr->set_src_reg(1, frag_reg(macro_instr.get_src_reg(1).idx, u.reg_off), RegType::Float);
+      uop_instr->set_src_reg(1, frag_reg(macro_instr.get_src_reg(1).idx, u.reg_off), FpRegType);
     }
     uop_instr->set_args(IntrLsuArgs{/*LW*/ 2, /*stride*/ 0, int32_t((args.offset & ~int32_t(frag::kLdmMask)) | u.col)});
     // every uop but the last may hand the next issue cycle to another warp,
@@ -123,9 +123,9 @@ Instr::Ptr LsuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
     uop_instr->set_op_type(macro_instr.get_op_type());
     uop_instr->set_src_reg(0, macro_instr.get_src_reg(0).idx, RegType::Integer);
     if (is_load) {
-      uop_instr->set_dest_reg(macro_instr.get_dest_reg().idx + uop_index, RegType::Float);
+      uop_instr->set_dest_reg(macro_instr.get_dest_reg().idx + uop_index, FpRegType);
     } else {
-      uop_instr->set_src_reg(1, macro_instr.get_src_reg(1).idx + uop_index, RegType::Float);
+      uop_instr->set_src_reg(1, macro_instr.get_src_reg(1).idx + uop_index, FpRegType);
     }
     uop_instr->set_args(IntrLsuArgs{/*LW*/ 2, /*stride*/ 0, args.offset + int32_t(4 * uop_index)});
     // every uop but the last may hand the next issue cycle to another warp,
