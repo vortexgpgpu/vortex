@@ -212,8 +212,16 @@
 `define __used_reg_rv_rs2 RV_RS2
 `define __used_reg_rv_rs3 RV_RS3
 
+`define __used_reg_fd_rd  0
+`define __used_reg_fd_rs1 1
+`define __used_reg_fd_rs2 2
+`define __used_reg_fd_rs3 3
+
+// reg_fields records the instruction field each operand slot came from, which
+// selects its register window.
 `define USED_REG(t, x, v) \
     reg_ids[`__used_reg_rv_``x]  = make_reg_num(REG_TYPE_BITS'(t), RV_REGS_BITS'(``x)); \
+    reg_fields[`__used_reg_rv_``x] = 2'(`__used_reg_fd_``x); \
     use_regs[`__used_reg_rv_``x] = v
 
 `define USED_IREG(x) \

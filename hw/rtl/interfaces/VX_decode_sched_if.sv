@@ -17,6 +17,8 @@ interface VX_decode_sched_if import VX_gpu_pkg::*; ();
 
     wire                valid;
     wire                unlock;
+    // decode consumed the instruction (vx_rwin): it never enters the ibuffer
+    wire                drop;
 `ifdef VX_CFG_EXT_C_ENABLE
     wire                is_rvc;
 `endif
@@ -25,6 +27,7 @@ interface VX_decode_sched_if import VX_gpu_pkg::*; ();
     modport master (
         output valid,
         output unlock,
+        output drop,
     `ifdef VX_CFG_EXT_C_ENABLE
         output is_rvc,
     `endif
@@ -34,6 +37,7 @@ interface VX_decode_sched_if import VX_gpu_pkg::*; ();
     modport slave (
         input valid,
         input unlock,
+        input drop,
     `ifdef VX_CFG_EXT_C_ENABLE
         input is_rvc,
     `endif

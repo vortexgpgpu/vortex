@@ -334,7 +334,9 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
         logic [IBUF_CW-1:0] ibuf_size_r, ibuf_size_n;
         logic ibuf_full_r;
         wire ibuf_incr = sched_fire && cand_onehot[l];
-        assign ibuf_size_n = ibuf_size_r + IBUF_CW'(ibuf_incr) - IBUF_CW'(ibuf_pop[l]);
+        // decode consumed this warp's instruction (vx_rwin): its slot is free
+        wire ibuf_drop = decode_sched_if.valid && decode_sched_if.drop && (dec_lid == LID);
+        assign ibuf_size_n = ibuf_size_r + IBUF_CW'(ibuf_incr) - IBUF_CW'(ibuf_pop[l]) - IBUF_CW'(ibuf_drop);
         always @(posedge clk) begin
             if (reset) begin
                 ibuf_size_r <= '0;

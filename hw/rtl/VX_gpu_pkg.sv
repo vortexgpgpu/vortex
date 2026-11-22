@@ -44,18 +44,23 @@ package VX_gpu_pkg;
     localparam BYTESEL_BITS = (XLENB_W + XLENB_W);
     localparam [BYTESEL_BITS-1:0] BYTESEL_DEFAULT = {XLENB_W'(XLENB-1), XLENB_W'(0)};
 
-    localparam RV_REGS = 32;
-    localparam RV_REGS_BITS = 5;
+    // Registers per thread; above 32 they are reached through register windows.
+    localparam RV_REGS = `VX_CFG_NUM_RV_REGS;
+    localparam RV_REGS_BITS = `CLOG2(RV_REGS);
+    localparam RWIN_BITS = 3;
 
     localparam RV_RD  = 0;
     localparam RV_RS1 = 1;
     localparam RV_RS2 = 2;
     localparam RV_RS3 = 3;
 
-    localparam REG_TYPE_I = 0;
-    localparam REG_TYPE_F = 1;
+    // Zfinx: FP operands are x registers, so there is one register type.
+    localparam FP_REGFILE = `VX_CFG_EXT_F_ENABLED && !`VX_CFG_EXT_ZFINX_ENABLED;
 
-    localparam REG_TYPES = 1 + `VX_CFG_EXT_F_ENABLED;
+    localparam REG_TYPE_I = 0;
+    localparam REG_TYPE_F = FP_REGFILE ? 1 : 0;
+
+    localparam REG_TYPES = 1 + FP_REGFILE;
 
     localparam NUM_REGS = (REG_TYPES * RV_REGS);
 

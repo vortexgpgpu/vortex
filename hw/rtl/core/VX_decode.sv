@@ -41,6 +41,7 @@ module VX_decode import
     reg [INST_OP_BITS-1:0] op_type;
     op_args_t op_args;
     reg [NUM_SRC_OPDS:0][NUM_REGS_BITS-1:0] reg_ids;
+    reg [NUM_SRC_OPDS:0][1:0] reg_fields;
     reg [NUM_SRC_OPDS:0] use_regs;
     reg [NUM_XREGS-1:0] rd_xregs;
     reg [NUM_XREGS-1:0] wr_xregs;
@@ -240,12 +241,32 @@ module VX_decode import
 
     fence_op_t fence_op;
 
+`ifdef VX_CFG_EXT_RWIN_ENABLE
+    // vx_rwin (custom-2, funct7 1) sets the warp's windows for the rd, rs1,
+    // rs2 and rs3 fields; decode consumes it, so it never reaches the ibuffer
+    localparam RWIN_W = 4 * RWIN_BITS;
+    wire is_rwin = (opcode == INST_EXT3) && (funct7 == 7'h01);
+    wire [RWIN_W-1:0] rwin_new = {funct3[RWIN_BITS-1:0], rs2[RWIN_BITS-1:0], rs1[RWIN_BITS-1:0], rd[RWIN_BITS-1:0]};
+    reg [`VX_CFG_NUM_WARPS-1:0][RWIN_W-1:0] rwin_r;
+    wire [RWIN_W-1:0] rwin_cur = rwin_r[fetch_if.data.wid];
+    always @(posedge clk) begin
+        if (reset) begin
+            rwin_r <= '0;
+        end else if (fetch_if.valid && is_rwin) begin
+            rwin_r[fetch_if.data.wid] <= rwin_new;
+        end
+    end
+`else
+    wire is_rwin = 1'b0;
+`endif
+
     always @(*) begin
 
         ex_type   = 'x;
         op_type   = 'x;
         op_args   = 'x;
         reg_ids   = 'x;
+        reg_fields = '0;
         use_regs  = '0;
         rd_xregs  = '0;
         wr_xregs  = '0;
@@ -470,6 +491,7 @@ module VX_decode import
                 // rs3 wire is the funct5 field for an AMO and is not used.
                 if (amo_type == AMO_OP_CAS) begin
                     reg_ids[RV_RS3]  = make_reg_num(REG_TYPE_I, RV_REGS_BITS'(rd));
+                    reg_fields[RV_RS3] = 2'(`__used_reg_fd_rd);
                     use_regs[RV_RS3] = 1'b1;
                 end
             `endif
@@ -1050,6 +1072,15 @@ module VX_decode import
         `endif
             default:;
         endcase
+    `ifdef VX_CFG_EXT_RWIN_ENABLE
+        // register windows: an operand's upper register bits come from the
+        // window of its instruction field; field value 0 stays x0
+        for (integer i = 0; i <= NUM_SRC_OPDS; ++i) begin
+            if (!(get_reg_type(reg_ids[i]) == REG_TYPE_I && reg_ids[i][4:0] == 5'd0)) begin
+                reg_ids[i][RV_REGS_BITS-1:5] = (RV_REGS_BITS-5)'(rwin_cur[reg_fields[i] * RWIN_BITS +: RWIN_BITS]);
+            end
+        end
+    `endif
     end
 
     // Without its extension a TCU, DXA, wide or matrix load/store instruction
@@ -1091,14 +1122,17 @@ module VX_decode import
     // disable writes to x0
     wire wb = use_regs[RV_RD] && (reg_ids[RV_RD] != 0);
 
+    wire req_ready;
+    assign fetch_if.ready = req_ready || is_rwin;
+
     VX_elastic_buffer #(
         .DATAW (OUT_DATAW),
         .SIZE  (0)
     ) req_buf (
         .clk       (clk),
         .reset     (reset),
-        .valid_in  (fetch_if.valid),
-        .ready_in  (fetch_if.ready),
+        .valid_in  (fetch_if.valid && ~is_rwin),
+        .ready_in  (req_ready),
         .data_in   ({fetch_if.data.uuid,  fetch_if.data.wid,  fetch_if.data.cta_id,  fetch_if.data.tmask,  fetch_if.data.PC,  ex_type,                op_type,                op_args,                wb,                rd_xregs,                wr_xregs,                use_regs[3:1],          reg_ids[RV_RD],    bytesel,                  reg_ids[RV_RS1],    reg_ids[RV_RS2],    reg_ids[RV_RS3]}),
         .data_out  ({decode_if.data.uuid, decode_if.data.wid, decode_if.data.cta_id, decode_if.data.tmask, decode_if.data.PC, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args, decode_if.data.wb, decode_if.data.rd_xregs, decode_if.data.wr_xregs, decode_if.data.used_rs, decode_if.data.rd, decode_if.data.bytesel,   decode_if.data.rs1, decode_if.data.rs2, decode_if.data.rs3}),
         .valid_out (decode_if.valid),
@@ -1112,6 +1146,7 @@ module VX_decode import
     // Register decode_sched_if to break the long combinational path.
     reg                  decode_sched_valid_r;
     reg                  decode_sched_unlock_r;
+    reg                  decode_sched_drop_r;
     reg [NW_WIDTH-1:0]   decode_sched_wid_r;
 `ifdef VX_CFG_EXT_C_ENABLE
     reg                  decode_sched_is_rvc_r;
@@ -1122,7 +1157,8 @@ module VX_decode import
             decode_sched_valid_r <= 1'b0;
         end else begin
             decode_sched_valid_r  <= fetch_fire;
-            decode_sched_unlock_r <= ~is_wstall;
+            decode_sched_unlock_r <= ~is_wstall || is_rwin;
+            decode_sched_drop_r   <= is_rwin;
             decode_sched_wid_r    <= fetch_if.data.wid;
         `ifdef VX_CFG_EXT_C_ENABLE
             decode_sched_is_rvc_r <= fetch_if.data.is_rvc;
@@ -1133,6 +1169,7 @@ module VX_decode import
     assign decode_sched_if.valid  = decode_sched_valid_r;
     assign decode_sched_if.wid    = decode_sched_wid_r;
     assign decode_sched_if.unlock = decode_sched_unlock_r;
+    assign decode_sched_if.drop   = decode_sched_drop_r;
 `ifdef VX_CFG_EXT_C_ENABLE
     assign decode_sched_if.is_rvc = decode_sched_is_rvc_r;
 `endif

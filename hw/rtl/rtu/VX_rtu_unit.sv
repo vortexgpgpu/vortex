@@ -401,7 +401,7 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
 `ifdef VX_CFG_XLEN_64
 `ifdef VX_CFG_EXT_F_ENABLE
     // A single-precision slot read into a 64-bit FP register must be NaN-boxed.
-    wire rsp_is_float = (get_reg_type(s1_header.rd) == REG_TYPE_F);
+    wire rsp_is_float = FP_REGFILE && (get_reg_type(s1_header.rd) == REG_TYPE_F);
 `else
     wire rsp_is_float = 1'b0;
 `endif
