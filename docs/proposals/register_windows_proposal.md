@@ -131,13 +131,13 @@ Windows use the fused fetch the RTL implements (an 8-byte fetch word: a
 
 | Registers (warps) | Model | Softmax | Epilogue | FFT | Raycast |
 |---|---|---|---|---|---|
-| 64 (16) | windows | 1.082 | **1.228** | 1.008 | 0.999 |
-| | windows, unfused | 1.083 | 1.227 | 0.941 | 0.835 |
-| | windows, line fused | 1.082 | 1.227 | 1.007 | 1.036 |
-| | mixed 32/64-bit | 1.075 | 1.226 | 1.007 | 1.036 |
-| 128 (8) | windows | **1.087** | 1.203 | 1.010 | 0.658 |
-| | mixed 32/64-bit | 1.086 | 1.198 | 1.009 | 0.703 |
-| | all 64-bit | 1.085 | 1.195 | 1.010 | 0.679 |
+| 64 (16) | windows | 1.082 | **1.228** | 1.008 | 1.043 |
+| | windows, unfused | 1.083 | 1.227 | 0.941 | not rerun |
+| | windows, line fused | 1.082 | 1.227 | 1.007 | not rerun |
+| | mixed 32/64-bit | 1.075 | 1.226 | 1.007 | **1.046** |
+| 128 (8) | windows | **1.087** | 1.203 | 1.010 | not rerun |
+| | mixed 32/64-bit | 1.086 | 1.198 | 1.009 | not rerun |
+| | all 64-bit | 1.085 | 1.195 | 1.010 | not rerun |
 | 256 (4) | every model | 0.91 to 0.93 | 0.90 to 0.96 | 0.72 to 0.81 | not run |
 | 32 (32) | Zfinx without windows | 0.994 | 1.026 | 0.957 | not run |
 
@@ -161,11 +161,16 @@ than either cache holds and FFT fits in both, so neither changes.
 2. With fused fetch, windows match the 64-bit encodings within 1% on softmax,
    epilogue and FFT at 64 and 128 registers, from 8% to 74% fewer fetched bytes
    and 5% to 74% less code.
-3. Irregular code (raycast) switches windows often: with the 8-byte fetch word
-   about half of its `vx_rwin` fuse and windows trail the 64-bit encodings by
-   3.6% at 64 registers; line-granular fusion (a two-bank fetch) closes it.
-   Moving `vx_rwin` to even words in the compiler was tried and does not help:
-   the instruction before a `vx_rwin` almost always needs the old window.
+3. Irregular code (raycast) needs branchless selects. Its ray-box test used
+   `std::min`/`std::max` on floats, which compiled to a divergent split/join
+   around one move; windows are zero at split and join, so each select cost
+   about four `vx_rwin` (2.6 M for 5.6 M instructions) and windows trailed the
+   64-bit encodings by 3.6%. Under Zfinx an f32 select is an integer select, so
+   the compiler now uses Zicond for it, and the test uses `fminf`/`fmaxf` (one
+   `fmin.s`/`fmax.s` under F too). Raycast then runs 1.043 times F with windows
+   and 1.046 with the mixed encoding; 62% of its remaining 0.84 M `vx_rwin`
+   fuse. The 128-register raycast rows lost to occupancy (8 warps, same code
+   as at 64) and were not rerun.
 4. Fusing about half the `vx_rwin` (8-byte word) gives the same cycles as fusing
    almost all of them on the three phase-structured kernels.
 5. The compiler matters more than the encoding: level-order scheduling is worth

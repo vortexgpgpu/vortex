@@ -1450,16 +1450,16 @@ struct ray_t {
     float idir_z = 1.0f / this->dir.z;
     float tx1 = (aabbMin.x - this->orig.x) * idir_x;
     float tx2 = (aabbMax.x - this->orig.x) * idir_x;
-    float tmin = std::min(tx1, tx2);
-    float tmax = std::max(tx1, tx2);
+    float tmin = __builtin_fminf(tx1, tx2);
+    float tmax = __builtin_fmaxf(tx1, tx2);
     float ty1 = (aabbMin.y - this->orig.y) * idir_y;
     float ty2 = (aabbMax.y - this->orig.y) * idir_y;
-    tmin = std::max(tmin, std::min(ty1, ty2)),
-    tmax = std::min(tmax, std::max(ty1, ty2));
+    tmin = __builtin_fmaxf(tmin, __builtin_fminf(ty1, ty2)),
+    tmax = __builtin_fminf(tmax, __builtin_fmaxf(ty1, ty2));
     float tz1 = (aabbMin.z - this->orig.z) * idir_z;
     float tz2 = (aabbMax.z - this->orig.z) * idir_z;
-    tmin = std::max(tmin, std::min(tz1, tz2)),
-    tmax = std::min(tmax, std::max(tz1, tz2));
+    tmin = __builtin_fmaxf(tmin, __builtin_fminf(tz1, tz2)),
+    tmax = __builtin_fminf(tmax, __builtin_fmaxf(tz1, tz2));
     if (tmax < tmin || tmax <= 0)
       return LARGE_FLOAT; // no intersection
     return tmin;
