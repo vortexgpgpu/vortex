@@ -1,8 +1,7 @@
 # Per-Operand Register Windows
 
-Status: SimX and LLVM prototype with measurements (branch
+Status: SimX, LLVM and RTL prototype with measurements (branch
 `feature/register-windows`; LLVM branch `feature/register-windows` on the fork).
-No RTL yet.
 
 ## Goal
 
@@ -62,12 +61,13 @@ nothing is read from a register, so decode applies `vx_rwin` without a hazard.
 ### Pipeline: fused fetch
 
 Decode applies the windows, so everything after decode sees 8-bit register
-numbers. `vx_rwin` takes no issue slot. The I-cache returns a whole 64-byte
-line, so fetch hands decode a `vx_rwin` together with the word after it when
-both are in the line: the pair costs one fetch slot, like one 64-bit
-instruction, while the code keeps 32-bit density. Without fusion, a `vx_rwin`
-costs its warp a fetch round trip, which fewer warps (larger register budgets)
-hide less well.
+numbers. `vx_rwin` takes no issue slot. Fetch reads 8-byte words: when a
+`vx_rwin` is the first word, decode applies it and decodes the second word in
+the same step, so the pair costs one fetch, like one 64-bit instruction, while
+the code keeps 32-bit density. A `vx_rwin` in the second word costs its warp a
+fetch round trip, which fewer warps (larger register budgets) hide less well.
+Decode applies each field's window as it extracts the field, beside the opcode
+decode, so the windows add no logic depth after it.
 
 Per-warp state grows by 12 bits. Register numbers widen from 6 to 8 bits through
 the pipeline; a tag-based scoreboard keeps its cost independent of the register
@@ -125,55 +125,93 @@ are therefore real.
 
 ### Speedup over F's best
 
-| Registers (warps) | Model | Softmax | Epilogue | FFT |
-|---|---|---|---|---|
-| 64 (16) | windows + fused fetch | 1.082 | **1.227** | 1.007 |
-| | windows, unfused | 1.083 | 1.227 | 0.941 |
-| | mixed 32/64-bit | 1.075 | 1.226 | 1.007 |
-| 128 (8) | windows + fused fetch | **1.087** | 1.199 | 1.009 |
-| | mixed 32/64-bit | 1.086 | 1.198 | 1.009 |
-| | all 64-bit | 1.085 | 1.195 | 1.010 |
-| 256 (4) | every model | 0.91 to 0.93 | 0.90 to 0.96 | 0.72 to 0.81 |
-| 32 (32) | Zfinx without windows | 0.994 | 1.026 | 0.957 |
+Windows use the fused fetch the RTL implements (an 8-byte fetch word: a
+`vx_rwin` in the first word fuses with the second). "Unfused" and "line fused"
+(a `vx_rwin` fuses with the next word anywhere in the 64-byte line) bound it.
+
+| Registers (warps) | Model | Softmax | Epilogue | FFT | Raycast |
+|---|---|---|---|---|---|
+| 64 (16) | windows | 1.082 | **1.228** | 1.008 | 0.999 |
+| | windows, unfused | 1.083 | 1.227 | 0.941 | 0.835 |
+| | windows, line fused | 1.082 | 1.227 | 1.007 | 1.036 |
+| | mixed 32/64-bit | 1.075 | 1.226 | 1.007 | 1.036 |
+| 128 (8) | windows | **1.087** | 1.203 | 1.010 | 0.658 |
+| | mixed 32/64-bit | 1.086 | 1.198 | 1.009 | 0.703 |
+| | all 64-bit | 1.085 | 1.195 | 1.010 | 0.679 |
+| 256 (4) | every model | 0.91 to 0.93 | 0.90 to 0.96 | 0.72 to 0.81 | not run |
+| 32 (32) | Zfinx without windows | 0.994 | 1.026 | 0.957 | not run |
 
 ### Instruction bytes relative to windows (same budget)
 
-| Registers | Model | Fetched | Code |
+| Registers | Model | Fetched bytes | Code (text) |
 |---|---|---|---|
 | 64 | mixed 32/64-bit | +3% to +11% | +5% to +11% |
-| 128 | mixed 32/64-bit | +19% to +35% | +19% to +36% |
+| 128 | mixed 32/64-bit | +8% to +35% | +8% to +36% |
 | 128 | all 64-bit | +33% to +74% | +37% to +74% |
+
+With an 8 KB I-cache, all-64-bit softmax loses 4.9% of its cycles to misses;
+windows and the mixed encoding lose under 0.5%. The epilogue streams more code
+than either cache holds and FFT fits in both, so neither changes.
 
 ### Findings
 
-1. More registers pay up to 128 per thread: 1.01 to 1.23 times F at equal
+1. More registers pay up to 128 per thread: up to 1.23 times F at equal
    register-file bytes. At 256, four warps cannot hide latency under any
-   encoding.
-2. With fused fetch, windows match the 64-bit encodings in cycles within 1% on
-   all three kernels at 64 and 128 registers, and fetch 3% to 74% fewer bytes
-   from 5% to 74% less code.
-3. Fused fetch is needed: unfused, FFT at 64 registers loses 6%, because half its
-   fetched words are `vx_rwin` and 16 warps do not hide the extra round trips.
-4. The compiler matters more than the encoding: level-order scheduling is worth
-   up to 30% on the epilogue under every encoding.
+   encoding; the latency-bound raycast already loses at 128.
+2. With fused fetch, windows match the 64-bit encodings within 1% on softmax,
+   epilogue and FFT at 64 and 128 registers, from 8% to 74% fewer fetched bytes
+   and 5% to 74% less code.
+3. Irregular code (raycast) switches windows often: with the 8-byte fetch word
+   about half of its `vx_rwin` fuse and windows trail the 64-bit encodings by
+   3.6% at 64 registers; line-granular fusion (a two-bank fetch) closes it.
+   Moving `vx_rwin` to even words in the compiler was tried and does not help:
+   the instruction before a `vx_rwin` almost always needs the old window.
+4. Fusing about half the `vx_rwin` (8-byte word) gives the same cycles as fusing
+   almost all of them on the three phase-structured kernels.
+5. The compiler matters more than the encoding: level-order scheduling is worth
+   up to 30% on the epilogue under every encoding; block-choosing allocation
+   hints never helped and are off.
+
+### RTL
+
+Implemented in `hw/rtl` (decode, fetch, warp scheduler): Zfinx as one register
+type, windows applied as each field is extracted (in parallel with opcode
+decode), `vx_rwin` consumed in decode with its instruction-buffer slot
+released, and the 8-byte fetch word with fusion. The scoreboard, register file
+and operand collector take the wider register numbers unchanged; the register
+file grows with the register count (dynamic warp allocation is not merged here).
+
+- **Correctness and parity.** The `rwin` test, the Zfinx `rp_softmax` and
+  `rp_epilogue` pass in rtlsim, with the same instruction counts as SimX and
+  cycles within 0.01% to 2.3%.
+- **Cost** (Beacon, ASAP7, core DUT at 8 warps, against master, 64 registers so
+  the register file matches F's 32 x + 32 f): Fmax 1,052 MHz and the deepest path
+  (30 stages) unchanged, no register deeper, cells +0.01%, flip-flops +98 (12
+  window bits per warp). Applying the windows after the opcode decode instead
+  made the instruction-buffer inputs 6 to 10 stages deeper.
+- **At 256 registers** the depth is still unchanged; cells grow 6.2% and
+  flip-flops 2.2%, mostly the per-warp scoreboard bit vector (64 to 256 bits per
+  warp). A tag-based scoreboard removes that growth.
 
 ### Limits
 
-- Three kernels, SimX only, one core configuration.
-- With a 16 KB I-cache the code-size difference barely reaches cycles; the case
-  for short instructions rests on fetch bytes, I-cache capacity and energy.
-  Absolute fetch energy is not given: the characterized 28 nm macros stop at
-  256 x 128 bits, and per-access cost depends on whether the I-cache reads a word
-  or a line.
+- Four kernels, one core configuration, SimX timing (RTL parity on small runs).
+- The fetch-energy advantage depends on the I-cache: from 0% to 10% if each
+  access reads a whole line, to 8% to 74% if it reads only the instruction's
+  bytes. The characterized 28 nm macros do not cover a 16 KB I-cache.
 - The 64-bit models give the wider encoding only its register reach, not
   predication or 32-bit immediates.
+- The TMEM FlashAttention kernel is not included: its register-group TMEM loads
+  are inline asm pinned to f registers and need compiler intrinsics before
+  windows can place them.
 - 256-register runs of the 64-bit models on the epilogue and FFT used LLVM's
   default scheduler.
 
 ## Plan
 
-1. SimX evidence: I-cache size sensitivity; fetch cost under word-read and
-   line-read I-cache models; more kernels (TMEM FlashAttention, raycast).
-2. RTL, rebased on dynamic warps: Zfinx operand routing, window decode, fused
-   fetch, tag-based scoreboard; Beacon depth check; `model_parity` case.
-3. Write-up.
+1. Rebase on dynamic warp allocation, so a kernel's register count sets its
+   warps; a tag-based scoreboard for 256 registers.
+2. TMEM intrinsics with register-group operands, then the TMEM FlashAttention
+   kernel.
+3. A `model_parity` case for windows and fused fetch.
+4. Write-up.
