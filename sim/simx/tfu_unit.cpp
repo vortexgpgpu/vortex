@@ -52,8 +52,13 @@ bool TfuUnit::process(instr_trace_t* trace) {
   trace->dst_data.assign(VX_CFG_NUM_THREADS, reg_data_t{});
   for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
     if (trace->tmask.test(t)) {
+    #ifdef VX_CFG_EXT_ZFINX_ENABLE
+      uint32_t x = uint32_t(rs1_data[t].u64);
+      trace->dst_data[t].u64 = uint64_t(int64_t(int32_t(tfu::eval(fn, x))));
+    #else
       uint32_t x = nanbox::unbox32(rs1_data[t].u64, tfu::QNAN_F32);
       trace->dst_data[t].u64 = nanbox::box32(tfu::eval(fn, x));
+    #endif
     }
   }
   DT(3, "tfu-unit process: " << *trace);
