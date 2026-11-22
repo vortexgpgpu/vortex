@@ -1617,6 +1617,8 @@ package VX_gpu_pkg;
         logic [31:0]            instr;
     `ifdef VX_CFG_EXT_C_ENABLE
         logic                   is_rvc;
+    `elsif VX_CFG_EXT_RWIN_ENABLE
+        logic [31:0]            instr2; // the next word when it shares the fetch word (else 0)
     `endif
     } fetch_t;
 
@@ -2021,7 +2023,10 @@ package VX_gpu_pkg;
     ////////////////////////// Icache Parameters //////////////////////////////
 
     // Word size in bytes
-    localparam ICACHE_WORD_SIZE	    = 4;
+    // Register windows fetch 8 bytes, so a vx_rwin and the instruction after it
+    // in the same aligned pair reach decode together.
+    localparam RWIN_FUSED_FETCH     = `VX_CFG_EXT_RWIN_ENABLED && !`VX_CFG_EXT_C_ENABLED;
+    localparam ICACHE_WORD_SIZE	    = RWIN_FUSED_FETCH ? 8 : 4;
     localparam ICACHE_ADDR_WIDTH	= (`VX_CFG_MEM_ADDR_WIDTH - `CLOG2(ICACHE_WORD_SIZE));
 
     // Block size in bytes

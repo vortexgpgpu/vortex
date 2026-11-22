@@ -251,6 +251,13 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
             `endif
             end
 
+        `ifndef VX_CFG_EXT_C_ENABLE
+            // a fused vx_rwin pair is 8 bytes; schedule advanced the PC by 4
+            if (decode_sched_if.valid && decode_sched_if.fused && (dec_lid == LID)) begin
+                pc_n = pc_r + from_fullPC(`VX_CFG_XLEN'(4));
+            end
+        `endif
+
         `ifdef VX_CFG_EXT_C_ENABLE
             // Every redirect source stalls its warp from schedule until it resolves, so
             // no redirect writes a warp's PC on the cycle that warp decode-advances.

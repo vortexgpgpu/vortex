@@ -202,7 +202,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
     // ------------------------------------------------------------------------
 
     assign icache_req_valid = schedule_if.valid;
-    assign icache_req_addr  = schedule_if.data.PC[2-(`VX_CFG_XLEN-PC_BITS) +: ICACHE_ADDR_WIDTH];
+    assign icache_req_addr  = schedule_if.data.PC[`CLOG2(ICACHE_WORD_SIZE)-(`VX_CFG_XLEN-PC_BITS) +: ICACHE_ADDR_WIDTH];
     assign icache_req_wid   = sched_wid;
     assign icache_req_uuid  = schedule_if.data.uuid;
     assign icache_req_tag   = {icache_req_uuid, icache_req_wid};
@@ -214,7 +214,18 @@ module VX_fetch import VX_gpu_pkg::*; #(
     assign fetch_if.data.wid    = NW_WIDTH'(rsp_tag);
     assign fetch_if.data.cta_id = rsp_cta_id;
     assign fetch_if.data.PC     = rsp_PC;
-    assign fetch_if.data.instr  = icache_bus_if.rsp_data.data;
+    if (RWIN_FUSED_FETCH) begin : g_fused_fetch
+        // 8-byte fetch word: the instruction at PC, and the word after it when
+        // PC is the first of the pair
+        wire rsp_hi = rsp_PC[2-(`VX_CFG_XLEN-PC_BITS)];
+        assign fetch_if.data.instr  = rsp_hi ? icache_bus_if.rsp_data.data[32 +: 32] : icache_bus_if.rsp_data.data[0 +: 32];
+        assign fetch_if.data.instr2 = rsp_hi ? 32'd0 : icache_bus_if.rsp_data.data[32 +: 32];
+    end else begin : g_word_fetch
+        assign fetch_if.data.instr  = icache_bus_if.rsp_data.data[0 +: 32];
+    `ifdef VX_CFG_EXT_RWIN_ENABLE
+        assign fetch_if.data.instr2 = 32'd0;
+    `endif
+    end
     assign fetch_if.data.uuid   = rsp_uuid;
     assign icache_bus_if.rsp_ready = fetch_if.ready;
 `endif
