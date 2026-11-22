@@ -181,9 +181,9 @@ released, and the 8-byte fetch word with fusion. The scoreboard, register file
 and operand collector take the wider register numbers unchanged; the register
 file grows with the register count (dynamic warp allocation is not merged here).
 
-- **Correctness and parity.** The `rwin` test, the Zfinx `rp_softmax` and
-  `rp_epilogue` pass in rtlsim, with the same instruction counts as SimX and
-  cycles within 0.01% to 2.3%.
+- **Correctness and parity.** The `rwin` test and the Zfinx `rp_softmax`,
+  `rp_epilogue` and `rp_fft` pass in rtlsim, with the same instruction counts as
+  SimX and cycles within 0.0002% to 2.3%.
 - **Cost** (Beacon, ASAP7, core DUT at 8 warps, against master, 64 registers so
   the register file matches F's 32 x + 32 f): Fmax 1,052 MHz and the deepest path
   (30 stages) unchanged, no register deeper, cells +0.01%, flip-flops +98 (12
