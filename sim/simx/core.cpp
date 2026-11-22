@@ -639,6 +639,24 @@ public:
       if (ibuf_room && decode_latch.try_push(trace)) {
         uint32_t offset = trace->PC & (VX_CFG_MEM_BLOCK_SIZE - 1);
         std::memcpy(&trace->code, mem_rsp.data->data() + offset, sizeof(uint32_t));
+      #ifdef VX_CFG_EXT_RWIN_ENABLE
+        // a prefix and its instruction in one line arrive together, as one
+        // 64-bit instruction would
+        // (RWIN_FUSE_STUDY also fuses vx_rwin, to measure what it costs)
+        trace->code2 = 0;
+        auto rw = Decoder::decode_rwin(trace->code);
+      #ifdef RWIN_FUSE_STUDY
+        bool fuse = rw.valid;
+      #else
+        bool fuse = rw.prefix;
+      #endif
+        if (fuse && offset + 2 * sizeof(uint32_t) <= VX_CFG_MEM_BLOCK_SIZE) {
+          std::memcpy(&trace->code2, mem_rsp.data->data() + offset + 4, sizeof(uint32_t));
+          if (Decoder::decode_rwin(trace->code2).valid) {
+            trace->code2 = 0;
+          }
+        }
+      #endif
         progressed = true;
       }
     #endif
@@ -740,11 +758,35 @@ public:
   #ifdef VX_CFG_EXT_RWIN_ENABLE
     // vx_rwin is consumed here: it takes a fetch slot but no ibuffer entry or issue slot
     auto rwin_op = Decoder::decode_rwin(trace->code);
+    uint32_t win = scheduler_->reg_window(trace->wid);
+    if (pending_pfx_.at(trace->wid) >= 0) {
+      win = pending_pfx_.at(trace->wid);
+      pending_pfx_.at(trace->wid) = -1;
+    }
+    if (rwin_op.valid && trace->code2 != 0) {
+      // fused with the instruction after it: one fetch for both
+      if (rwin_op.prefix) {
+        ++rwin_stats_.prefixes;
+      } else {
+        scheduler_->set_reg_window(trace->wid, rwin_op.win);
+        ++rwin_stats_.rwins;
+      }
+      win = rwin_op.win;
+      scheduler_->advance_pc(trace, 4);
+      trace->PC  += 4;
+      trace->code = trace->code2;
+      rwin_op.valid = false;
+    } else if (rwin_op.valid && rwin_op.prefix) {
+      ++rwin_stats_.prefixes;
+      pending_pfx_.at(trace->wid) = rwin_op.win;
+    }
     if (rwin_op.valid) {
-      scheduler_->set_reg_window(trace->wid, rwin_op.win);
+      if (!rwin_op.prefix) {
+        scheduler_->set_reg_window(trace->wid, rwin_op.win);
+      }
       scheduler_->advance_pc(trace, 4);
       scheduler_->resume(trace->wid);
-      ++rwin_stats_.rwins;
+      rwin_stats_.rwins += !rwin_op.prefix;
       DT(3, simobject_->name() << "-pipeline decode: rwin=0x" << std::hex << rwin_op.win << std::dec << ", " << *trace);
       decode_latch.pop();
       this->ibuf_release(trace->wid);
@@ -753,7 +795,7 @@ public:
       trace_pool_.deallocate(trace, 1);
       return;
     }
-    auto instr = decoder_->decode(trace->code, trace->uuid, scheduler_->reg_window(trace->wid));
+    auto instr = decoder_->decode(trace->code, trace->uuid, win);
     ++rwin_stats_.decoded;
     {
       bool high = instr->get_dest_reg().idx >= 32;
@@ -1280,7 +1322,8 @@ public:
       std::cout << "rwin-stats: " << simobject_->name()
                 << " decoded=" << rwin_stats_.decoded
                 << " rwins=" << rwin_stats_.rwins
-                << " high_instrs=" << rwin_stats_.high_instrs << std::endl;
+                << " high_instrs=" << rwin_stats_.high_instrs
+                << " prefixes=" << rwin_stats_.prefixes << std::endl;
     }
   }
 #endif
@@ -1480,7 +1523,10 @@ private:
     uint64_t decoded = 0;
     uint64_t rwins = 0;
     uint64_t high_instrs = 0;
+    uint64_t prefixes = 0;
   } rwin_stats_;
+  // windows of an unfused vx_rpfx (it ended a line), per warp; -1 = none
+  std::vector<int32_t> pending_pfx_ = std::vector<int32_t>(VX_CFG_NUM_WARPS, -1);
 #endif
 
   // [iw][fu] commit staging: FU outputs land here one registered stage

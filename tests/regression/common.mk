@@ -73,6 +73,12 @@ ifneq (,$(filter -DVX_CFG_EXT_RWIN_ENABLE, $(XCONFIGS)))
 	RWIN_REGS := $(patsubst -DVX_CFG_NUM_RV_REGS=%,%,$(filter -DVX_CFG_NUM_RV_REGS=%, $(XCONFIGS)))
 	RWIN_REGS := $(if $(RWIN_REGS),$(RWIN_REGS),256)
 	LLVM_CFLAGS += -mllvm -riscv-vortex-max-regs=$(RWIN_REGS)
+# study: extra compiler flags for register-window experiments
+LLVM_CFLAGS += $(RWIN_LLVM_FLAGS)
+ifneq ($(RWIN_MODE),)
+	# study models of 64-bit encodings (1: prefix where needed, 2: on every instruction)
+	LLVM_CFLAGS += -mllvm -riscv-vortex-rwin-mode=$(RWIN_MODE)
+endif
 endif
 
 LLVM_CFLAGS += --target=riscv$(XLEN)-unknown-elf

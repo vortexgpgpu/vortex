@@ -559,11 +559,11 @@ Decoder::Decoder(const SimContext& ctx, const char* name, PoolAllocator<Instr, 6
 Decoder::~Decoder() {}
 
 Decoder::RwinOp Decoder::decode_rwin(uint32_t code) {
-  RwinOp op{false, 0};
+  RwinOp op{false, false, 0};
 #ifdef VX_CFG_EXT_RWIN_ENABLE
   auto opcode = Opcode((code >> shift_opcode) & mask_opcode);
   auto funct7 = (code >> shift_funct7) & mask_funct7;
-  if (opcode != Opcode::EXT3 || funct7 != 1)
+  if (opcode != Opcode::EXT3 || (funct7 != 1 && funct7 != 2))
     return op;
   uint32_t w[RWIN_FIELDS] = {
     (code >> shift_rd)  & mask_reg,
@@ -579,7 +579,8 @@ Decoder::RwinOp Decoder::decode_rwin(uint32_t code) {
     }
     op.win |= w[i] << (RWIN_BITS * i);
   }
-  op.valid = true;
+  op.valid  = true;
+  op.prefix = (funct7 == 2);
 #else
   __unused(code);
 #endif
