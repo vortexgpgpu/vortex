@@ -559,11 +559,11 @@ Decoder::Decoder(const SimContext& ctx, const char* name, PoolAllocator<Instr, 6
 Decoder::~Decoder() {}
 
 Decoder::RwinOp Decoder::decode_rwin(uint32_t code) {
-  RwinOp op{false, false, 0};
+  RwinOp op{false, 0};
 #ifdef VX_CFG_EXT_RWIN_ENABLE
   auto opcode = Opcode((code >> shift_opcode) & mask_opcode);
   auto funct7 = (code >> shift_funct7) & mask_funct7;
-  if (opcode != Opcode::EXT3 || (funct7 != 1 && funct7 != 2))
+  if (opcode != Opcode::EXT3 || funct7 != 1)
     return op;
   uint32_t w[RWIN_FIELDS] = {
     (code >> shift_rd)  & mask_reg,
@@ -579,8 +579,7 @@ Decoder::RwinOp Decoder::decode_rwin(uint32_t code) {
     }
     op.win |= w[i] << (RWIN_BITS * i);
   }
-  op.valid  = true;
-  op.sticky = (funct7 == 1);
+  op.valid = true;
 #else
   __unused(code);
 #endif
@@ -1417,19 +1416,8 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid, uint32_t rwin) {
     std::abort();
   #endif
   } break;
-#if defined(VX_CFG_EXT_TFU_ENABLE) || defined(VX_CFG_EXT_RWIN_ENABLE)
+#ifdef VX_CFG_EXT_TFU_ENABLE
   case Opcode::EXT3: {
-  #ifdef VX_CFG_EXT_RWIN_ENABLE
-    if (decode_rwin(code).valid) {
-      // the window update happens at decode; the instruction issues as a nop
-      instr->set_op_type(AluType::ADD);
-      instr->set_args(IntrAluArgs{1, 0, 0});
-      instr->set_dest_reg(0, RegType::Integer);
-      instr->set_src_reg(0, 0, RegType::Integer);
-      break;
-    }
-  #endif
-  #ifdef VX_CFG_EXT_TFU_ENABLE
     if (funct7 != 0 || funct3 != 0 || rs2 > uint32_t(TfuType::TANH)) {
       std::abort();
     }
@@ -1437,9 +1425,6 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid, uint32_t rwin) {
     instr->set_op_type(TfuType(rs2));
     instr->set_dest_reg(rd, RegType::Float);
     instr->set_src_reg(0, rs1, RegType::Float);
-  #else
-    std::abort();
-  #endif
   } break;
 #endif
   default:

@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 enum {
-  CHK_PREFIX = 0,   // a + b through x37/x69 written and read under vx_rpfx
+  CHK_FIELDS = 0,   // a + b through x37/x69, with rs1 and rs2 in different windows
   CHK_STICKY,       // (a + 1) + b * b through x102/x103 under vx_rwin
   CHK_X0,           // x0 reads zero with a nonzero rs1 window
   CHK_FP,           // a through f225

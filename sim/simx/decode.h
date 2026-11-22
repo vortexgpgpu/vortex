@@ -33,10 +33,9 @@ public:
   // decodes under.
   Instr::Ptr decode(uint32_t code, uint64_t uuid, uint32_t rwin = 0);
 
-  // A vx_rwin (sticky) or vx_rpfx (next instruction only) and its windows.
+  // A vx_rwin and the windows it sets.
   struct RwinOp {
     bool     valid;
-    bool     sticky;
     uint32_t win;
   };
   static RwinOp decode_rwin(uint32_t code);

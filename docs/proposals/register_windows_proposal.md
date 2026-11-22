@@ -43,27 +43,29 @@ value with `(W[p] << 5) >= VX_CFG_NUM_RV_REGS` is illegal.
 
 ### Instructions
 
-Both use custom-2 (`0x5B`) with `funct7` `0x01`/`0x02`; `funct7 0x00` stays TFU.
+`vx_rwin` uses custom-2 (`0x5B`) with `funct7 0x01`; `funct7 0x00` stays TFU.
 The window for each field is written into that same field:
 
 | Instruction | funct7 | rd | rs1 | rs2 | funct3 | Effect |
 |---|---|---|---|---|---|---|
-| `vx_rwin`  | `0x01` | `W.rd` | `W.rs1` | `W.rs2` | `W.rs3` | set the sticky window state |
-| `vx_rpfx`  | `0x02` | `W.rd` | `W.rs1` | `W.rs2` | `W.rs3` | use these windows for the next instruction only |
+| `vx_rwin`  | `0x01` | `W.rd` | `W.rs1` | `W.rs2` | `W.rs3` | set the window state |
 
 The upper two bits of the `rd`, `rs1` and `rs2` fields are reserved and must be
 zero. In assembly the window values are written as literal register names:
 `.insn r 0x5B, w3, 1, x<w0>, x<w1>, x<w2>`.
 
-A `vx_rpfx` must be followed by an instruction that is neither `vx_rwin` nor
-`vx_rpfx`.
+There is no one-instruction prefix: it would double the per-warp state, and
+a switch and switch-back costs only two fetch slots (see Pipeline).
 
 ### State lifetime
 
 - **Launch.** The window state is zero when a warp is activated (CTA dispatch,
   `wspawn`), so code that never uses the extension sees no change.
-- **Traps.** Trap entry saves the sticky state and clears it, so a handler runs
-  in window 0; `mret` restores it.
+- **Traps.** Vortex traps are synchronous only (`ecall`, `ebreak`), so the
+  window state must be zero at any instruction that can trap or enter a
+  callback; the compiler guarantees it as at calls. Hardware saves nothing.
+  Asynchronous preemption would save the window state with the register file,
+  through a CSR.
 - **Divergence.** The state is not saved on the IPDOM stack. Software rule: at a
   `vx_join`, the window state must equal the state at the matching `vx_split`.
   Vortex runs the two sides of a split one after the other, so with that rule a
@@ -81,11 +83,10 @@ of the base register: `(base & ~31) | ((base + k) & 31)`.
 
 The window state is applied in decode, which sees each warp's instructions in
 program order, so everything after decode works on 8-bit register numbers and
-`vx_rwin` needs no serialization. In the first prototype `vx_rwin` and
-`vx_rpfx` take an issue slot as an ALU no-op; folding them into the next
-instruction at fetch is a later optimization.
+`vx_rwin` needs no serialization. Decode consumes `vx_rwin`: it takes a fetch
+slot but no instruction-buffer entry or issue slot.
 
-Per-warp state grows by 12 sticky bits, a 12-bit pending prefix and a valid bit.
+Per-warp state grows by 12 bits.
 The scoreboard and register-file addresses widen to 8-bit register numbers; a
 tag-based scoreboard keeps scoreboard cost independent of the register count.
 
@@ -94,8 +95,7 @@ tag-based scoreboard keeps scoreboard cost independent of the register count.
 LLVM sees `NUM_REGS` registers per class. A post-RA pass, structured like
 `RISCVInsertVSETVLI`, computes the required window state per instruction with a
 forward dataflow over the CFG, inserts `vx_rwin` where the state changes
-(hoisted out of loops) and `vx_rpfx` for single mismatches, and enforces the
-split/join and call rules. Correctness depends only on this pass; allocation
+(hoisted out of loops), and enforces the split/join, call and trap rules. Correctness depends only on this pass; allocation
 hints that keep each loop's operands in consistent blocks reduce the number of
 inserted instructions.
 

@@ -738,11 +738,29 @@ public:
     // recognises RVC encoding (low 2 bits != 11), expands internally, and
     // stamps IntrBrArgs.is_rvc.
   #ifdef VX_CFG_EXT_RWIN_ENABLE
+    // vx_rwin is consumed here: it takes a fetch slot but no ibuffer entry or issue slot
     auto rwin_op = Decoder::decode_rwin(trace->code);
-    auto rwin = rwin_op.valid ? 0 : scheduler_->take_reg_window(trace->wid);
-    auto instr = decoder_->decode(trace->code, trace->uuid, rwin);
     if (rwin_op.valid) {
-      scheduler_->set_reg_window(trace->wid, rwin_op.win, rwin_op.sticky);
+      scheduler_->set_reg_window(trace->wid, rwin_op.win);
+      scheduler_->advance_pc(trace, 4);
+      scheduler_->resume(trace->wid);
+      ++rwin_stats_.rwins;
+      DT(3, simobject_->name() << "-pipeline decode: rwin=0x" << std::hex << rwin_op.win << std::dec << ", " << *trace);
+      decode_latch.pop();
+      this->ibuf_release(trace->wid);
+      this->pending_remove(trace->wid);
+      trace->~instr_trace_t();
+      trace_pool_.deallocate(trace, 1);
+      return;
+    }
+    auto instr = decoder_->decode(trace->code, trace->uuid, scheduler_->reg_window(trace->wid));
+    ++rwin_stats_.decoded;
+    {
+      bool high = instr->get_dest_reg().idx >= 32;
+      for (uint32_t i = 0; i < NUM_SRC_REGS; ++i) {
+        high |= instr->get_src_reg(i).idx >= 32;
+      }
+      rwin_stats_.high_instrs += high;
     }
   #else
     auto instr = decoder_->decode(trace->code, trace->uuid);
@@ -1256,6 +1274,17 @@ public:
 
   // ----- Public-facing API (called from outer Core trampolines) -----
 
+#ifdef VX_CFG_EXT_RWIN_ENABLE
+  ~Impl() {
+    if (rwin_stats_.decoded != 0) {
+      std::cout << "rwin-stats: " << simobject_->name()
+                << " decoded=" << rwin_stats_.decoded
+                << " rwins=" << rwin_stats_.rwins
+                << " high_instrs=" << rwin_stats_.high_instrs << std::endl;
+    }
+  }
+#endif
+
   bool running() const {
     // committed stores wait in the LSU request queue until sent to memory
     if (scheduler_->running() || pending_total_ != 0 || !this->lsu_drained()) {
@@ -1445,6 +1474,14 @@ private:
   uint64_t pending_ifetches_;
 
   mutable PerfStats perf_stats_;
+#ifdef VX_CFG_EXT_RWIN_ENABLE
+  // decoded instructions (excluding vx_rwin), vx_rwin consumed, and instructions naming a register above x31
+  struct {
+    uint64_t decoded = 0;
+    uint64_t rwins = 0;
+    uint64_t high_instrs = 0;
+  } rwin_stats_;
+#endif
 
   // [iw][fu] commit staging: FU outputs land here one registered stage
   // before retirement; commit() grants among them fixed-priority.

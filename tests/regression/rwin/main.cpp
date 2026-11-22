@@ -100,7 +100,7 @@ int main(int argc, char *argv[]) {
   vx_event_release(read_ev);
   vx_event_release(launch_ev);
 
-  static const char* names[CHK_COUNT] = {"prefix", "sticky", "x0", "fp", "isolated"};
+  static const char* names[CHK_COUNT] = {"fields", "sticky", "x0", "fp", "isolated"};
   int errors = 0;
   for (uint32_t i = 0; i < num_points; ++i) {
     uint32_t a = h_src[i], b = a * 3 + 1;
