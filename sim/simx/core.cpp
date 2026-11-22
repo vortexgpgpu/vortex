@@ -650,6 +650,10 @@ public:
       #else
         bool fuse = rw.prefix;
       #endif
+      #ifdef RWIN_FUSE_ALIGN8
+        // an 8-byte fetch word: only the first word of an aligned pair fuses
+        fuse = fuse && (offset & 4) == 0;
+      #endif
         if (fuse && offset + 2 * sizeof(uint32_t) <= VX_CFG_MEM_BLOCK_SIZE) {
           std::memcpy(&trace->code2, mem_rsp.data->data() + offset + 4, sizeof(uint32_t));
           if (Decoder::decode_rwin(trace->code2).valid) {
