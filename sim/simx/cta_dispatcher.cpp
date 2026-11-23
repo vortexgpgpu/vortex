@@ -16,6 +16,7 @@
 #include <lmem_slot.h>
 #include "core.h"
 #include <VX_config.h>
+#include <algorithm>
 #include <cassert>
 #include <iostream>
 
@@ -25,6 +26,9 @@ CtaDispatcher::CtaDispatcher(const SimContext& ctx, const char* name, Core* core
   : SimObject<CtaDispatcher>(ctx, name)
   , bus_in(this, 1)
   , credit_out(this)
+#ifdef VX_CFG_TCU_TMEM_ENABLE
+  , cta_exit_out(this)
+#endif
   , core_(core)
   , num_threads_(VX_CFG_NUM_THREADS)
   , num_warps_(VX_CFG_NUM_WARPS)
@@ -125,6 +129,12 @@ uint32_t CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wids, cta_w
     }
     assert(slot_rem_warps_[retiring_[i].first] > 0);
     --slot_rem_warps_[retiring_[i].first];
+  #ifdef VX_CFG_TCU_TMEM_ENABLE
+    // The CTA's last warp: its tensor-memory columns are freed with it.
+    if (slot_rem_warps_[retiring_[i].first] == 0) {
+      cta_exit_out.send(int32_t(retiring_[i].first), 1);
+    }
+  #endif
     retire_write |= (retiring_[i].second == now);
     retiring_.erase(retiring_.begin() + i);
   }
@@ -151,6 +161,22 @@ uint32_t CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wids, cta_w
     // same way to stay consistent.
     uint32_t stride = lmem_slot_pitch(next.lmem_size);
     uint32_t max_slots = usable_slots(stride);
+  #ifdef VX_CFG_TCU_TMEM_ENABLE
+    // A CTA's TMEM budget, a power-of-two run of 32-column chunks, counts
+    // toward occupancy like its LMEM: the resident CTAs' allocations fit.
+    if (next.tmem_cols != 0) {
+      uint32_t budget = 32;
+      while (budget < next.tmem_cols) {
+        budget <<= 1;
+      }
+      if (budget > VX_CFG_TCU_TMEM_COLS) {
+        std::cout << "Error: a CTA TMEM budget of " << next.tmem_cols << " columns exceeds the "
+                  << VX_CFG_TCU_TMEM_COLS << " of a core" << std::endl;
+        std::abort();
+      }
+      max_slots = std::min(max_slots, uint32_t(VX_CFG_TCU_TMEM_COLS / budget));
+    }
+  #endif
 
     uint32_t k = next.cluster_dim[0]
                * next.cluster_dim[1]
@@ -229,6 +255,13 @@ uint32_t CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wids, cta_w
 
     cur_slot_  = base;
     lmem_addr_ = lmem_base_ + uint64_t(base) * stride;
+  #ifdef VX_CFG_TCU_TMEM_ENABLE
+    // A TMEM CTA's warps launch as runs of consecutive lanes from lane 0, so
+    // rank r lands on lane (TCU block) r % FETCH_WIDTH.
+    if (cta_.tmem_cols != 0) {
+      lane_rr_ = 0;
+    }
+  #endif
     slot_rem_warps_[base] = cta_size_;
     if (!is_single) {
       tail_slot_ = (base + 1) % max_slots;
@@ -270,12 +303,24 @@ uint32_t CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wids, cta_w
     uint32_t lane = (lane_rr_ + o) % VX_CFG_FETCH_WIDTH;
     int free_wid = -1;
     for (uint32_t wid = lane; wid < num_warps_; wid += VX_CFG_FETCH_WIDTH) {
+    #ifdef VX_CFG_TCU_TMEM_ENABLE
+      // A tensor-memory CTA's warp of rank r runs on TCU block r % ISSUE_WIDTH,
+      // whose TMEM lanes its tmem.ld/st reach.
+      if (cta_.tmem_cols != 0 && (wid % VX_CFG_ISSUE_WIDTH) != (rank_ % VX_CFG_ISSUE_WIDTH)) {
+        continue;
+      }
+    #endif
       if (!active_warps.test(wid) && !cta_wids_.test(wid)) {
         free_wid = int(wid);
         break;
       }
     }
     if (free_wid < 0) {
+    #ifdef VX_CFG_TCU_TMEM_ENABLE
+      if (cta_.tmem_cols != 0) {
+        break;
+      }
+    #endif
       continue;
     }
     // Skip the startup only if every lane this launch activates has already run it.

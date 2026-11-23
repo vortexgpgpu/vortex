@@ -421,6 +421,14 @@ VX_CFG_TCU_SPARSE_ENABLE = false
 VX_CFG_TCU_DSM_ENABLE = false
 VX_CFG_TCU_WGMMA_ENABLE = false
 VX_CFG_TCU_FEDP2K = false
+# Tensor memory: a per-core accumulator of (TCU blocks x WGMMA M) lanes by
+# TMEM_COLS 32-bit columns, written by the TCU's single-thread MMA engine.
+VX_CFG_TCU_TMEM_ENABLE = false
+VX_CFG_TCU_TMEM_COLS = 128
+# Per-warp MMAs (tcu.wmma, and tcu.ld for their sparse and MX metadata). A
+# tensor-memory build can drop them, as its MMAs are tc.mma: the TCU then keeps
+# no register-operand path, result landing queue or metadata store.
+VX_CFG_TCU_WMMA_ENABLE = true
 
 [dxa]
 # Cluster-level DXA engine count, decoupled from cores/socket size.

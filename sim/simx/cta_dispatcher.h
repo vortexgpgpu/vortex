@@ -53,6 +53,12 @@ public:
   // rests on explicit slot accounting rather than transport back-pressure.
   SimChannel<uint8_t> credit_out;
 
+#ifdef VX_CFG_TCU_TMEM_ENABLE
+  // A CTA's last warp has retired (its slot, the CTA id): the TCU frees the
+  // TMEM columns it still owns.
+  SimChannel<int32_t> cta_exit_out;
+#endif
+
   CtaDispatcher(const SimContext& ctx, const char* name, Core* core);
   ~CtaDispatcher();
 

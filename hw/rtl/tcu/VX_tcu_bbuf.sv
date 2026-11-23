@@ -58,7 +58,7 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input  wire                     req_is_sparse,
     input  wire [3:0]               req_step_m,
     input  wire [3:0]               req_step_k,
-    input  wire [3:0]               req_step_n,
+    input  wire [TCU_TBUF_N_W-1:0]  req_step_n,
     input  wire [1:0]               req_cd_nregs,
     input  wire [NCTA_WIDTH-1:0]    req_cta_id,
     input  wire [`VX_CFG_XLEN-1:0]  req_desc_b,
@@ -80,7 +80,9 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam BANK_SEL_BITS      = $clog2(NUM_BANKS);
     localparam WORD_SIZE_LOG2     = $clog2(`VX_CFG_XLEN / 8);
     localparam B_BLOCK_WORDS      = TCU_WG_FEDP_K * TCU_TC_N;
-    localparam B_BLOCK_WORDS_SP   = TCU_TC_K * TCU_TC_N;
+    // K-major sparse: the two storage slots split at a K-word group boundary,
+    // which a full-K sparse tensor-op step moves to fedpK words.
+    localparam B_KMAJ_SPLIT_SP    = TCU_WG_SP_K_WORDS * TCU_TC_N;
     localparam B_BUF_WORDS        = NUM_BANKS;             // storage per slot
                                                            // (= 1 logical 32-bit bank-row)
     localparam LG_B_SUB_BLOCKS    = $clog2(TCU_WG_B_SUB_BLOCKS);
@@ -113,22 +115,33 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam LG_B_BLOCK_WORDS   = $clog2(B_BLOCK_WORDS);
     localparam KM_CTR_W           = $clog2(TCU_TC_N + 1);
     // 32-bit-word offset width for K-major address arithmetic.
-    //   step_n × TCU_TC_N + j has ≤ 4+4 bits; × ldm_words adds LDM_W.
-    localparam KM_OFF_W           = LDM_W + 4 + 4;
+    //   step_n × TCU_TC_N + j has ≤ N_W+4 bits; × ldm_words adds LDM_W.
+    localparam KM_OFF_W           = LDM_W + TCU_TBUF_N_W + 4;
+    // Tensor ops reuse slots across descriptors.
+    localparam bit TMEM_EN        = (`VX_CFG_TCU_TMEM_ENABLED != 0);
 
     // -----------------------------------------------------------------------
     // Block-index compute (variable N_STEPS via cd_nregs).
     // K_STEPS=2 always; N_STEPS=4/8/16 for cd_nregs=0/1/2 (NRC=8/16/32).
     // -----------------------------------------------------------------------
 
-    logic [4:0] block_index;
+    // A tensor op is one K step (step_k = 0) over up to 2^N_W N blocks, so
+    // its block index is step_n itself.
+    localparam BI_W = 1 + TCU_TBUF_N_W;
+    logic [BI_W-1:0] block_index;
     always_comb begin
-        case (req_cd_nregs)
-            2'd0:    block_index = {2'b0, req_step_k[0], req_step_n[1:0]};   // N_STEPS=4
-            2'd1:    block_index = {1'b0, req_step_k[0], req_step_n[2:0]};   // N_STEPS=8
-            default: block_index = {req_step_k[0], req_step_n[3:0]};         // N_STEPS=16
-        endcase
+        if (TMEM_EN) begin
+            block_index = BI_W'(req_step_n);
+        end else begin
+            case (req_cd_nregs)
+                2'd0:    block_index = BI_W'({req_step_k[0], req_step_n[1:0]});   // N_STEPS=4
+                2'd1:    block_index = BI_W'({req_step_k[0], req_step_n[2:0]});   // N_STEPS=8
+                default: block_index = BI_W'({req_step_k[0], req_step_n[3:0]});   // N_STEPS=16
+            endcase
+        end
     end
+    `RUNTIME_ASSERT (~(TMEM_EN && req_valid && (req_step_k != 4'd0)),
+        ("%s tensor-op tile-buffer request with step_k %0d", INSTANCE_ID, req_step_k))
     if (4 > 1) begin : g_step_k_upper_unused
         `UNUSED_VAR (req_step_k[3:1])
     end
@@ -142,9 +155,7 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // Sparse blocks use the flat producer layout and can span one or two
     // logical 32-bit bank rows.
     localparam TOTAL_SHIFT = LG_B_SUB_BLOCKS + LG_XLEN_RATIO;
-    wire [4:0] dense_offset = (TOTAL_SHIFT == 0)
-                            ? block_index
-                            : 5'(block_index >> TOTAL_SHIFT);
+    wire [BANK_ADDR_WIDTH-1:0] dense_offset = BANK_ADDR_WIDTH'(block_index >> TOTAL_SHIFT);
 
     // Dense within-physical-bank-row selector (XLEN>32 only). Picks which
     // of the XLEN_RATIO logical 32-bit bank-rows to copy into slot A.
@@ -152,9 +163,9 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [SUB_HALF_W-1:0] dense_sub_half =
         (LG_XLEN_RATIO == 0)
         ? '0
-        : SUB_HALF_W'(({27'b0, block_index} >> LG_B_SUB_BLOCKS) & ((1 << LG_XLEN_RATIO) - 1));
+        : SUB_HALF_W'((32'(block_index) >> LG_B_SUB_BLOCKS) & ((1 << LG_XLEN_RATIO) - 1));
 
-    localparam SP_LOGROW_W = 6;
+    localparam SP_LOGROW_W = BI_W + 1;
     wire [SP_LOGROW_W-1:0] sp_logrow_a =
         SP_LOGROW_W'(block_index) * SP_LOGROW_W'(LOGICAL_ROWS_PER_BLK);
     wire [SP_LOGROW_W-1:0] sp_logrow_b = sp_logrow_a + SP_LOGROW_W'(1);
@@ -186,12 +197,13 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // -----------------------------------------------------------------------
     // Resident slots
     //   slot A: holds k_blk=0 bank-row (dense uses this exclusively)
-    //   slot B: holds k_blk=1 bank-row (sparse only)
+    //   slot B: holds k_blk=1 bank-row (sparse)
     // -----------------------------------------------------------------------
 
     logic                       slot_a_valid_r;
     logic [BANK_ADDR_WIDTH-1:0] slot_a_addr_r;
     logic [BANK_ADDR_WIDTH-1:0] slot_desc_b_row_base_r;
+    logic [BANK_ROW_WORDS_LOG2-1:0] slot_desc_b_inrow_r;
     logic                       slot_fetching_r;
     // Dense within-physical-bank-row half (XLEN>32 only).
     logic [SUB_HALF_W-1:0]      slot_a_sub_half_r;
@@ -205,9 +217,11 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // K-major mode, descriptor and step fields of the block the slot holds,
     // latched when its fetch is allocated.
     logic                       slot_row_major_r;
+    // Tensor ops take K-major B only.
+    wire slot_rm = TMEM_EN || slot_row_major_r;
     logic [LDM_W-1:0]           slot_ldm_words_r;
     logic [3:0]                 slot_step_k_r;
-    logic [3:0]                 slot_step_n_r;
+    logic [TCU_TBUF_N_W-1:0]    slot_step_n_r;
     logic [NCTA_WIDTH-1:0]      slot_cta_id_r;
     // K-major descriptors can point to storage rewritten between WGMMA instructions.
     logic                       refetched_for_first_uop_r;
@@ -216,15 +230,15 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     logic [KM_CTR_W-1:0]        km_req_ctr_r;
     logic [KM_CTR_W-1:0]        km_rsp_ctr_r;
 
-    // Every compute uop carries its WGMMA's descriptor (the WGMMA wrapper
-    // supplies the setup-latched one after the first uop). The representative
-    // request can change while a fetch is in flight, so a fetch reads only the
-    // slot fields latched at its allocation.
     `UNUSED_VAR (req_step_m)
+    // K-major slot fields (slot_row_major_r / slot_ldm_words_r /
+    // slot_step_k_r / slot_step_n_r) are latched at alloc_en — see the
+    // always_ff below. The K-major addressing arithmetic reads them
+    // directly. desc_b_ldm_words on the bus is used only for setup.
 
     // Per-mode fetch addresses.
     wire [BANK_ADDR_WIDTH-1:0] fetch_addr_dense =
-        desc_b_row_base + BANK_ADDR_WIDTH'(dense_offset);
+        desc_b_row_base + dense_offset;
     wire [BANK_ADDR_WIDTH-1:0] fetch_addr_a_sparse =
         desc_b_row_base + BANK_ADDR_WIDTH'(sp_logrow_a >> LG_XLEN_RATIO);
     wire [BANK_ADDR_WIDTH-1:0] fetch_addr_b_sparse =
@@ -233,8 +247,11 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [BANK_ADDR_WIDTH-1:0] fetch_addr_a =
         req_is_sparse ? fetch_addr_a_sparse : fetch_addr_dense;
 
+    // A K-tile's first step refetches: a tensor op reloads a stage at the
+    // same address without a setup uop to invalidate the slot.
     wire bank_row_resident_dense =
         slot_a_valid_r && !slot_is_sparse_r
+        && (!TMEM_EN || !req_is_first_uop || refetched_for_first_uop_r)
         && (slot_a_addr_r == fetch_addr_dense)
         && (slot_a_sub_half_r == dense_sub_half);
 
@@ -250,16 +267,20 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // the slot pair. For sparse, both slots must be filled because sparse B
     // is split across the two dense candidate streams.
     wire bank_row_resident_kmajor =
-        slot_a_valid_r && slot_row_major_r
+        slot_a_valid_r && slot_rm
         && (!slot_is_sparse_r || slot_b_valid_r)
         && (!req_is_first_uop || refetched_for_first_uop_r)
         && (slot_cta_id_r == req_cta_id)
         && (slot_step_k_r == req_step_k)
-        && (slot_step_n_r == req_step_n);
+        && (slot_step_n_r == req_step_n)
+        && (!TMEM_EN || ((slot_desc_b_row_base_r == desc_b_row_base)
+                      && (slot_desc_b_inrow_r    == desc_b_inrow)
+                      && (slot_ldm_words_r       == desc_b_ldm_words)));
 
     // Block-major residency is the existing dense/sparse branch; K-major
-    // overrides it when the request's descriptor selects K-major.
-    wire req_wants_kmajor = (desc_b_ldm_words != '0);
+    // overrides it when the first compute descriptor or latched slot mode
+    // selects K-major.
+    wire req_wants_kmajor = TMEM_EN || (desc_b_ldm_words != '0);
 
     wire bank_row_resident = req_wants_kmajor
         ? bank_row_resident_kmajor
@@ -284,10 +305,11 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // the values being latched into the slot) and each request/response
     // accumulates the row stride, keeping the multiplier chain off the LMEM
     // request-address and response-lane paths.
+    wire [LDM_W-1:0] km_ldm_words_alloc = desc_b_ldm_words;
     wire [3:0] km_k_words_alloc = req_is_sparse ? 4'(TCU_TC_K) : 4'(TCU_WG_FEDP_K);
 
     wire [KM_OFF_W-1:0] km_word_off_init =
-        KM_OFF_W'(req_step_n) * KM_OFF_W'(TCU_TC_N) * KM_OFF_W'(desc_b_ldm_words)
+        KM_OFF_W'(req_step_n) * KM_OFF_W'(TCU_TC_N) * KM_OFF_W'(km_ldm_words_alloc)
       + KM_OFF_W'(req_step_k) * KM_OFF_W'(km_k_words_alloc)
       + KM_OFF_W'(desc_b_inrow);
 
@@ -297,8 +319,52 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [BANK_ADDR_WIDTH-1:0] km_lmem_addr =
         slot_desc_b_row_base_r + BANK_ADDR_WIDTH'(km_word_off_req_r >> BANK_ROW_WORDS_LOG2);
 
-    wire [BANK_ROW_WORDS_LOG2:0] km_lane_rsp = (BANK_ROW_WORDS_LOG2+1)'(
-        km_word_off_rsp_r & KM_OFF_W'(BANK_ROW_WORDS - 1));
+    logic [KM_OFF_W-1:0] km_word_off_row0_r;
+    wire  [KM_OFF_W-1:0] km_row_off [TCU_TC_N];
+    logic [TCU_TC_N-1:0] km_row_in_req;
+    logic [TCU_TC_N-1:0] km_row_in_rsp;
+    logic [KM_CTR_W-1:0] km_req_ctr_next, km_rsp_ctr_next;
+    logic [KM_OFF_W-1:0] km_word_off_req_next, km_word_off_rsp_next;
+    if (TMEM_EN) begin : g_km_merge
+        // One read serves every remaining row that shares its bank row.
+        wire [KM_OFF_W-1:0] km_br_req = km_word_off_req_r >> BANK_ROW_WORDS_LOG2;
+        wire [KM_OFF_W-1:0] km_br_rsp = km_word_off_rsp_r >> BANK_ROW_WORDS_LOG2;
+        for (genvar jj = 0; jj < TCU_TC_N; ++jj) begin : g_km_rows
+            assign km_row_off[jj]    = km_word_off_row0_r
+                                     + KM_OFF_W'(jj) * KM_OFF_W'(slot_ldm_words_r);
+            assign km_row_in_req[jj] = (KM_CTR_W'(jj) >= km_req_ctr_r)
+                                    && ((km_row_off[jj] >> BANK_ROW_WORDS_LOG2) == km_br_req);
+            assign km_row_in_rsp[jj] = (KM_CTR_W'(jj) >= km_rsp_ctr_r)
+                                    && ((km_row_off[jj] >> BANK_ROW_WORDS_LOG2) == km_br_rsp);
+        end
+        always_comb begin
+            km_req_ctr_next = km_req_ctr_r;
+            km_rsp_ctr_next = km_rsp_ctr_r;
+            for (int jj = 0; jj < TCU_TC_N; ++jj) begin
+                if (km_row_in_req[jj]) km_req_ctr_next = km_req_ctr_next + KM_CTR_W'(1);
+                if (km_row_in_rsp[jj]) km_rsp_ctr_next = km_rsp_ctr_next + KM_CTR_W'(1);
+            end
+            km_word_off_req_next = km_word_off_req_r;
+            km_word_off_rsp_next = km_word_off_rsp_r;
+            for (int jj = 0; jj < TCU_TC_N; ++jj) begin
+                if (KM_CTR_W'(jj) == km_req_ctr_next) km_word_off_req_next = km_row_off[jj];
+                if (KM_CTR_W'(jj) == km_rsp_ctr_next) km_word_off_rsp_next = km_row_off[jj];
+            end
+        end
+    end else begin : g_km_single
+        // One read per row.
+        for (genvar jj = 0; jj < TCU_TC_N; ++jj) begin : g_km_rows
+            assign km_row_off[jj]    = km_word_off_rsp_r;
+            assign km_row_in_req[jj] = (km_req_ctr_r == KM_CTR_W'(jj));
+            assign km_row_in_rsp[jj] = (km_rsp_ctr_r == KM_CTR_W'(jj));
+        end
+        assign km_req_ctr_next      = km_req_ctr_r + KM_CTR_W'(1);
+        assign km_rsp_ctr_next      = km_rsp_ctr_r + KM_CTR_W'(1);
+        assign km_word_off_req_next = km_word_off_req_r + KM_OFF_W'(slot_ldm_words_r);
+        assign km_word_off_rsp_next = km_word_off_rsp_r + KM_OFF_W'(slot_ldm_words_r);
+        `UNUSED_VAR (km_word_off_row0_r)
+        `UNUSED_VAR (km_row_in_req)
+    end
 
     // Storage offset where this K-major block lands (matches tcu_core's
     // b_off = (step_n & (B_SUB_BLOCKS-1)) << LG_B_BLOCK_WORDS so the
@@ -325,6 +391,24 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     } state_e;
     state_e fsm_state_r;
 
+    // Row merging and descriptor-exact residency (tensor ops) latch the
+    // block's first row offset and in-row offset with the slot.
+    if (TMEM_EN) begin : g_km_row0
+        always_ff @(posedge clk) begin
+            if (reset) begin
+                km_word_off_row0_r  <= '0;
+                slot_desc_b_inrow_r <= '0;
+            end else if (!req_setup && (fsm_state_r == S_IDLE) && alloc_en) begin
+                km_word_off_row0_r  <= km_word_off_init;
+                slot_desc_b_inrow_r <= desc_b_inrow;
+            end
+        end
+    end else begin : g_km_row0_off
+        assign km_word_off_row0_r  = '0;
+        assign slot_desc_b_inrow_r = '0;
+    end
+
+
     wire in_fetch_a = (fsm_state_r == S_FETCH_A);
     wire in_fetch_b = (fsm_state_r == S_FETCH_B);
     wire in_fetch   = in_fetch_a || in_fetch_b;
@@ -334,19 +418,26 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // outstanding). Block-major: original single-fire-per-state behavior
     // (km_req_ctr_r is reset on alloc; goes 0 → 1 for one block-major fire).
     wire km_more_to_request =
-        slot_row_major_r ? (km_req_ctr_r < KM_CTR_W'(TCU_TC_N))
+        slot_rm ? (km_req_ctr_r < KM_CTR_W'(TCU_TC_N))
                          : (km_req_ctr_r == '0);
-    wire can_issue  = in_fetch && !req_inflight_r && km_more_to_request;
-    wire km_final_rsp = slot_row_major_r
+    // A tensor op's dense K-major block keeps its row reads in flight together
+    // (LMEM responses return in order); other fetches keep one outstanding.
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    wire km_pipelined = slot_rm && !slot_is_sparse_r;
+`else
+    wire km_pipelined = 1'b0;
+`endif
+    wire can_issue  = in_fetch && (!req_inflight_r || km_pipelined) && km_more_to_request;
+    wire km_final_rsp = slot_rm
                      && tcu_lmem_if.rsp_valid
-                     && (km_rsp_ctr_r == KM_CTR_W'(TCU_TC_N - 1));
-    wire bm_final_rsp = !slot_row_major_r && tcu_lmem_if.rsp_valid;
+                     && km_row_in_rsp[TCU_TC_N - 1];
+    wire bm_final_rsp = !slot_rm && tcu_lmem_if.rsp_valid;
     wire last_rsp  = in_fetch && (km_final_rsp || bm_final_rsp);
 
     // Issue address: K-major path uses km_lmem_addr (re-derived per
     // km_req_ctr_r); block-major path uses the original slot_a/b addr.
     wire [BANK_ADDR_WIDTH-1:0] active_lmem_addr =
-        slot_row_major_r ? km_lmem_addr
+        slot_rm ? km_lmem_addr
                          : (in_fetch_b ? slot_b_addr_r : slot_a_addr_r);
 
     assign tcu_lmem_if.req_valid       = can_issue;
@@ -405,14 +496,14 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     refetched_for_first_uop_r <= 1'b0;
 
                 // K-major req/rsp counters advance independently of FSM state
-                // (single-outstanding still enforced via req_inflight_r).
-                if (slot_row_major_r && tcu_lmem_if.req_valid && tcu_lmem_if.req_ready) begin
-                    km_req_ctr_r      <= km_req_ctr_r + KM_CTR_W'(1);
-                    km_word_off_req_r <= km_word_off_req_r + KM_OFF_W'(slot_ldm_words_r);
+                // (one outstanding via req_inflight_r unless km_pipelined).
+                if (slot_rm && tcu_lmem_if.req_valid && tcu_lmem_if.req_ready) begin
+                    km_req_ctr_r      <= km_req_ctr_next;
+                    km_word_off_req_r <= km_word_off_req_next;
                 end
-                if (slot_row_major_r && tcu_lmem_if.rsp_valid && !km_final_rsp) begin
-                    km_rsp_ctr_r      <= km_rsp_ctr_r + KM_CTR_W'(1);
-                    km_word_off_rsp_r <= km_word_off_rsp_r + KM_OFF_W'(slot_ldm_words_r);
+                if (slot_rm && tcu_lmem_if.rsp_valid && !km_final_rsp) begin
+                    km_rsp_ctr_r      <= km_rsp_ctr_next;
+                    km_word_off_rsp_r <= km_word_off_rsp_next;
                 end
 
                 case (fsm_state_r)
@@ -427,9 +518,6 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                             slot_b_addr_r       <= fetch_addr_b_sparse;
                             slot_b_sub_half_r   <= sp_sub_b;
                             slot_is_sparse_r    <= req_is_sparse;
-                            slot_desc_b_row_base_r <= desc_b_row_base;
-                            slot_ldm_words_r    <= desc_b_ldm_words;
-                            slot_row_major_r    <= req_wants_kmajor;
                             // K-major per-compute slot state for this
                             // (step_k, step_n) block.
                             slot_step_k_r       <= req_step_k;
@@ -439,6 +527,9 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                             km_rsp_ctr_r        <= '0;
                             km_word_off_req_r   <= km_word_off_init;
                             km_word_off_rsp_r   <= km_word_off_init;
+                            slot_desc_b_row_base_r <= desc_b_row_base;
+                            slot_ldm_words_r       <= desc_b_ldm_words;
+                            slot_row_major_r       <= (desc_b_ldm_words != '0);
                             req_inflight_r      <= 1'b0;
                         end
                     end
@@ -446,7 +537,7 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                         if (last_rsp) begin
                             slot_a_valid_r <= 1'b1;
                             req_inflight_r <= 1'b0;
-                            if (slot_is_sparse_r && slot_row_major_r) begin
+                            if (slot_is_sparse_r && slot_rm) begin
                                 slot_b_valid_r  <= 1'b1;
                                 fsm_state_r     <= S_IDLE;
                                 slot_fetching_r <= 1'b0;
@@ -488,15 +579,50 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     //                 dense B blocks and stores them in the compact rs2 order.
     // -----------------------------------------------------------------------
 
+    wire  [B_BUF_WORDS-1:0][31:0] storage_a_rdata, storage_b_rdata;
     logic [B_BUF_WORDS*32-1:0] storage_a_wdata, storage_b_wdata;
     logic [B_BUF_WORDS-1:0]    storage_a_wren,  storage_b_wren;
 
-    // Per-slot logical-row offsets within a physical LMEM response.
-    localparam OFF_W = $clog2(NUM_BANKS * XLEN_RATIO) + 1;
-    wire [OFF_W-1:0] a_off_words = OFF_W'(slot_a_sub_half_r) * OFF_W'(NUM_BANKS);
-    wire [OFF_W-1:0] b_off_words = OFF_W'(slot_b_sub_half_r) * OFF_W'(NUM_BANKS);
+    // The logical 32-bit bank row a slot copies: an XLEN_RATIO-way select of
+    // the response (a plain wire at XLEN=32).
+    wire [XLEN_RATIO-1:0][NUM_BANKS-1:0][31:0] rsp_halves = tcu_lmem_if.rsp_data.data;
+    wire [NUM_BANKS-1:0][31:0] rsp_half_a, rsp_half_b;
+    if (XLEN_RATIO > 1) begin : g_halves
+        assign rsp_half_a = rsp_halves[slot_a_sub_half_r];
+        assign rsp_half_b = rsp_halves[slot_b_sub_half_r];
+    end else begin : g_half
+        assign rsp_half_a = rsp_halves[0];
+        assign rsp_half_b = rsp_halves[0];
+        `UNUSED_VAR ({slot_a_sub_half_r, slot_b_sub_half_r})
+    end
     wire sparse_b_from_a = SPARSE_TWO_SLOT && !SPARSE_TWO_FETCH
-                          && slot_is_sparse_r && !slot_row_major_r;
+                          && slot_is_sparse_r && !slot_rm;
+
+    // K-major rows: one shifter per row a response carries (KM_NROT),
+    // rot[r][x] = response word (row r's lane) + x, shared by the dense
+    // (x < fedpK) and sparse (x < 2*SP_K_WORDS) writes. Without row merging a
+    // response carries one row.
+    localparam KM_ROT_SP = `VX_CFG_TCU_SPARSE_ENABLED ? (2 * TCU_WG_SP_K_WORDS) : 0;
+    localparam KM_ROT    = (KM_ROT_SP > TCU_WG_FEDP_K) ? KM_ROT_SP : TCU_WG_FEDP_K;
+    localparam KM_NROT   = TMEM_EN ? TCU_TC_N : 1;
+    logic [KM_NROT-1:0][KM_ROT-1:0][31:0] km_rot;
+    logic [KM_NROT-1:0][KM_ROT-1:0]       km_rot_ok;
+    wire [KM_NROT-1:0][BANK_ROW_WORDS_LOG2:0] km_lane;
+    for (genvar jj = 0; jj < KM_NROT; ++jj) begin : g_km_lane
+        assign km_lane[jj] = (BANK_ROW_WORDS_LOG2+1)'(km_row_off[jj] & KM_OFF_W'(BANK_ROW_WORDS - 1));
+    end
+    always_comb begin
+        for (int jj = 0; jj < KM_NROT; ++jj) begin
+            for (int x = 0; x < KM_ROT; ++x) begin
+                km_rot_ok[jj][x] = (int'(km_lane[jj]) + x < BANK_ROW_WORDS);
+                km_rot[jj][x]    = '0;
+                for (int i = x; i < BANK_ROW_WORDS; ++i) begin
+                    if (int'(km_lane[jj]) == i - x)
+                        km_rot[jj][x] = tcu_lmem_if.rsp_data.data[i * 32 +: 32];
+                end
+            end
+        end
+    end
 
     always_comb begin
         storage_a_wdata = '0;
@@ -504,74 +630,61 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         storage_b_wdata = '0;
         storage_b_wren  = '0;
         if (tcu_lmem_if.rsp_valid) begin
-            if (slot_row_major_r && slot_is_sparse_r) begin
-                // K-major sparse: per N-row r (= km_rsp_ctr_r = column j) the
-                // response carries this column's K dimension z-major with the
-                // two sparse candidates adjacent — word (z*2 + cand) holds the
-                // FEDP's bword{cand} for K-step z.
-                // The FEDP reads rs2[k_idx*(TC_N*2) + j*2 + cand] with k_idx=z;
-                // slot_a||slot_b splits at B_BLOCK_WORDS_SP (= TC_K*TC_N).
-                // Drive each (z,cand) word to its exact flat target and route by slot.
-                for (int z = 0; z < TCU_TC_K; ++z) begin
-                    for (int c = 0; c < 2; ++c) begin
-                        automatic int src = int'(km_lane_rsp) + z * 2 + c;
-                        automatic int tgt = z * (TCU_TC_N * 2) + int'(km_rsp_ctr_r) * 2 + c;
-                        if (src < (NUM_BANKS * XLEN_RATIO) && in_fetch_a) begin
-                            if (tgt < int'(B_BLOCK_WORDS_SP)) begin
-                                if (tgt < B_BUF_WORDS) begin
-                                    storage_a_wren[tgt]             = 1'b1;
-                                    storage_a_wdata[tgt * 32 +: 32] =
-                                        tcu_lmem_if.rsp_data.data[src * 32 +: 32];
-                                end
-                            end else begin
-                                automatic int tgt_b = tgt - int'(B_BLOCK_WORDS_SP);
-                                if (tgt_b < B_BUF_WORDS) begin
-                                    storage_b_wren[tgt_b]             = 1'b1;
-                                    storage_b_wdata[tgt_b * 32 +: 32] =
-                                        tcu_lmem_if.rsp_data.data[src * 32 +: 32];
-                                end
-                            end
+            if (slot_rm && slot_is_sparse_r) begin
+                // K-major sparse: row jj's K dimension is z-major with the two
+                // candidates adjacent, word (z*2 + cand) from its lane. Flat
+                // target z*(TC_N*2) + jj*2 + cand splits across slot A || slot B
+                // at B_KMAJ_SPLIT_SP. Each storage word has one (z, jj, cand):
+                // its data is a fixed shifter output, its enable the row's.
+                for (int w = 0; w < 2 * B_BUF_WORDS; ++w) begin
+                    if (w < 2 * int'(B_KMAJ_SPLIT_SP)) begin
+                        automatic int z  = w / (TCU_TC_N * 2);
+                        automatic int jj = (w % (TCU_TC_N * 2)) / 2;
+                        automatic int x  = z * 2 + (w % 2);
+                        automatic bit en = in_fetch_a && km_row_in_rsp[jj] && km_rot_ok[jj % KM_NROT][x];
+                        if (w < int'(B_KMAJ_SPLIT_SP)) begin
+                            storage_a_wren[w]             = en;
+                            storage_a_wdata[w * 32 +: 32] = km_rot[jj % KM_NROT][x];
+                        end else begin
+                            automatic int wb = w - int'(B_KMAJ_SPLIT_SP);
+                            storage_b_wren[wb]             = en;
+                            storage_b_wdata[wb * 32 +: 32] = km_rot[jj % KM_NROT][x];
                         end
                     end
                 end
-            end else if (slot_row_major_r) begin
-                // K-major dense: write fedpK words for this row (km_rsp_ctr_r)
-                // into storage[km_b_off + km_rsp_ctr_r * fedpK .. + fedpK),
-                // sourced from the response at lane km_lane_rsp.
-                for (int k = 0; k < TCU_WG_FEDP_K; ++k) begin
-                    automatic int dst = int'(km_b_off)
-                                      + int'(km_rsp_ctr_r) * TCU_WG_FEDP_K
-                                      + k;
-                    automatic int src = int'(km_lane_rsp) + k;
-                    if (dst < B_BUF_WORDS && src < (NUM_BANKS * XLEN_RATIO) && in_fetch_a) begin
-                        storage_a_wren[dst]             = 1'b1;
-                        storage_a_wdata[dst * 32 +: 32] =
-                            tcu_lmem_if.rsp_data.data[src * 32 +: 32];
-                    end
+            end else if (slot_rm) begin
+                // K-major dense: row jj's fedpK words land at
+                // km_b_off + jj*fedpK + k; storage word w is (sub-block, jj, k).
+                for (int w = 0; w < B_BUF_WORDS; ++w) begin
+                    automatic int sb = w / B_BLOCK_WORDS;
+                    automatic int jj = (w % B_BLOCK_WORDS) / TCU_WG_FEDP_K;
+                    automatic int k  = w % TCU_WG_FEDP_K;
+                    storage_a_wren[w] = in_fetch_a && km_rot_ok[jj % KM_NROT][k]
+                                     && (int'(km_b_off) == sb * B_BLOCK_WORDS)
+                                     && km_row_in_rsp[jj];
+                    storage_a_wdata[w * 32 +: 32] = km_rot[jj % KM_NROT][k];
                 end
             end else begin
                 for (int b = 0; b < B_BUF_WORDS; ++b) begin
                     if (in_fetch_a) begin
                         storage_a_wren[b]             = 1'b1;
                         storage_a_wdata[b * 32 +: 32] =
-                            tcu_lmem_if.rsp_data.data[(int'(a_off_words) + b) * 32 +: 32];
+                            rsp_half_a[b];
                         if (sparse_b_from_a) begin
                             storage_b_wren[b]             = 1'b1;
                             storage_b_wdata[b * 32 +: 32] =
-                                tcu_lmem_if.rsp_data.data[(int'(b_off_words) + b) * 32 +: 32];
+                                rsp_half_b[b];
                         end
                     end
                     if (in_fetch_b) begin
                         storage_b_wren[b]             = 1'b1;
                         storage_b_wdata[b * 32 +: 32] =
-                            tcu_lmem_if.rsp_data.data[(int'(b_off_words) + b) * 32 +: 32];
+                            rsp_half_b[b];
                     end
                 end
             end
         end
     end
-
-    wire [B_BUF_WORDS-1:0][31:0] storage_a_rdata, storage_b_rdata;
 
     VX_dp_ram #(
         .DATAW   (B_BUF_WORDS * 32),
@@ -605,7 +718,7 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .read  (1'b1),
         .write ((in_fetch_b && tcu_lmem_if.rsp_valid)
              || (in_fetch_a && tcu_lmem_if.rsp_valid && slot_is_sparse_r
-                 && (slot_row_major_r || sparse_b_from_a))),
+                 && (slot_rm || sparse_b_from_a))),
         .wren  (storage_b_wren),
         .waddr (1'b0),
         .wdata (storage_b_wdata),
@@ -626,12 +739,12 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         rs2_mux = '0;
         for (int lane = 0; lane < TCU_WG_RS2_WIDTH; ++lane) begin
             if (slot_is_sparse_r) begin
-                if (slot_row_major_r) begin
-                    if (lane < int'(B_BLOCK_WORDS_SP)) begin
+                if (slot_rm) begin
+                    if (lane < int'(B_KMAJ_SPLIT_SP)) begin
                         rs2_mux[lane] = `VX_CFG_XLEN'(storage_a_rdata[lane]);
-                    end else if (lane < int'(2 * B_BLOCK_WORDS_SP)) begin
+                    end else if (lane < int'(2 * B_KMAJ_SPLIT_SP)) begin
                         rs2_mux[lane] = `VX_CFG_XLEN'(
-                            storage_b_rdata[lane - int'(B_BLOCK_WORDS_SP)]);
+                            storage_b_rdata[lane - int'(B_KMAJ_SPLIT_SP)]);
                     end
                 end else begin
                     automatic int unsigned k_idx_l = lane / (TCU_TC_N * 2);
@@ -653,6 +766,24 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         end
     end
     assign bbuf_rs2_data = rs2_mux;
+
+    `STATIC_ASSERT (B_KMAJ_SPLIT_SP <= B_BUF_WORDS,
+                    ("K-major sparse candidate lanes exceed the two B storage slots"))
+`ifndef SYNTHESIS
+    logic km_sp_row_spill;
+    always_comb begin
+        km_sp_row_spill = 1'b0;
+        for (int jj = 0; jj < TCU_TC_N; ++jj) begin
+            if (tcu_lmem_if.rsp_valid && in_fetch_a && slot_rm && slot_is_sparse_r
+             && km_row_in_rsp[jj]
+             && (int'(32'(km_row_off[jj] & KM_OFF_W'(BANK_ROW_WORDS - 1))) + 2 * TCU_WG_SP_K_WORDS
+                 > (NUM_BANKS * XLEN_RATIO)))
+                km_sp_row_spill = 1'b1;
+        end
+    end
+    `RUNTIME_ASSERT (~km_sp_row_spill,
+        ("%s K-major sparse B row straddles an LMEM bank row (misaligned descriptor)", INSTANCE_ID))
+`endif
 
     // -----------------------------------------------------------------------
     // Performance counters

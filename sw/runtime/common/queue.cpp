@@ -209,6 +209,9 @@ vx_result_t Queue::enqueue_write(Buffer* dst, uint64_t off, const void* host,
             *s = now_ns();
             std::lock_guard<std::mutex> g(enqueue_mu_);
             // Host->device through the CP's DMA engine (CMD_MEM_WRITE).
+            // (FireSim replay capture happens inside cp_submit_mem_write
+            // itself now, so it also covers dev_write's callers -- the
+            // args blob and the module image.)
             r = device_->cp_submit_mem_write(dst->dev_address() + off,
                                              host, sz);
             *e = now_ns();
@@ -313,6 +316,7 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
     // kernel==NULL and args_host==NULL are the analogous PC / ARG hatches.
     const uint32_t ndim      = info->ndim;
     const uint32_t lmem_size = info->lmem_size;
+    const uint32_t tmem_cols = info->tmem_cols;
     std::array<uint32_t, 3> grid_in  = {1, 1, 1};
     std::array<uint32_t, 3> block_in = {1, 1, 1};
     for (uint32_t i = 0; i < ndim; ++i) {
@@ -369,7 +373,7 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
 
     Command cmd;
     cmd.queued_ns = now_ns();
-    cmd.work = [this, kernel, ndim, lmem_size, grid_in, block_in, lg_in,
+    cmd.work = [this, kernel, ndim, lmem_size, tmem_cols, grid_in, block_in, lg_in,
                 args_blob = std::move(args_blob)](uint64_t* s, uint64_t* e) {
         // Launch PCs, derived from the retained kernel handle. has_kernel is
         // false on the legacy escape hatch (caller pre-programmed the DCRs).
@@ -475,6 +479,10 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
                 WR(VX_DCR_KMU_CLUSTER_DIM_X, lg_in[0]);
                 WR(VX_DCR_KMU_CLUSTER_DIM_Y, lg_in[1]);
                 WR(VX_DCR_KMU_CLUSTER_DIM_Z, lg_in[2]);
+                if (tmem_cols != 0 || device_->tmem_cols_dcr != 0) {
+                    WR(VX_DCR_KMU_TMEM_COLS, tmem_cols);
+                    device_->tmem_cols_dcr = tmem_cols;
+                }
             }
             #undef WR
 
@@ -522,6 +530,7 @@ struct CmdRec {
     std::vector<uint8_t>   args;
     uint32_t               ndim      = 0;
     uint32_t               lmem_size = 0;
+    uint32_t               tmem_cols = 0;
     std::array<uint32_t,3> grid      = {1, 1, 1};
     std::array<uint32_t,3> block     = {1, 1, 1};
     std::array<uint32_t,3> cluster   = {1, 1, 1};
@@ -571,6 +580,7 @@ vx_result_t cmd_build_recs(const vx_command_t* commands, uint32_t count,
             }
             r.ndim      = info->ndim;
             r.lmem_size = info->lmem_size;
+            r.tmem_cols = info->tmem_cols;
             for (uint32_t d = 0; d < info->ndim; ++d) {
                 r.grid [d] = info->grid_dim [d];
                 r.block[d] = info->block_dim[d];
@@ -663,6 +673,10 @@ vx_result_t cmd_stage_qmds(Device* device_, const std::vector<CmdRec>& recs,
             put(VX_DCR_KMU_CLUSTER_DIM_X, rec.cluster[0]);
             put(VX_DCR_KMU_CLUSTER_DIM_Y, rec.cluster[1]);
             put(VX_DCR_KMU_CLUSTER_DIM_Z, rec.cluster[2]);
+            if (rec.tmem_cols != 0 || device_->tmem_cols_dcr != 0) {
+                put(VX_DCR_KMU_TMEM_COLS, rec.tmem_cols);
+                device_->tmem_cols_dcr = rec.tmem_cols;
+            }
         }
         qmd[0] = uint32_t((qmd.size() - 1) / 2);   // pair count
 

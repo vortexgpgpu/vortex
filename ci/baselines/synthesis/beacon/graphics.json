@@ -1,29 +1,12 @@
 {
   "gfx": {
-    "accepted": {
-      "against": "26d2bc4b5409a35a111e8316ac3a87d07b15fc80",
-      "regressions": [
-        {
-          "after": 14,
-          "before": null,
-          "kind": "new",
-          "name": "graphics/g_raster_core_0.raster_core/raster_slices_0.raster_earlyz/quad_zprod.d"
-        },
-        {
-          "after": 1071,
-          "before": 1073,
-          "kind": "ties",
-          "name": "tied_bits"
-        }
-      ]
-    },
     "clock_mhz": 250,
     "config_hash": "d39e5baadbeea03c",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
     "dut": "gfx",
     "result": {
       "bram": 183.5,
-      "build_time_s": 155,
+      "build_time_s": 180,
       "deep_endpoints": 1738,
       "deepest_paths": [
         "19  g_rtu_core_0.rtu_core/scheduler/g_recip_pe.recip_tags/g_shift.g_partial_reset.pipe_free[219] -> g_rtu_core_0.rtu_core/scheduler/g1_idx.d[4]",
@@ -189,30 +172,13 @@
     }
   },
   "gfxvm": {
-    "accepted": {
-      "against": "26d2bc4b5409a35a111e8316ac3a87d07b15fc80",
-      "regressions": [
-        {
-          "after": 14,
-          "before": null,
-          "kind": "new",
-          "name": "graphics/g_raster_core_0.raster_core/raster_slices_0.raster_earlyz/quad_zprod.d"
-        },
-        {
-          "after": 1073,
-          "before": 1075,
-          "kind": "ties",
-          "name": "tied_bits"
-        }
-      ]
-    },
     "clock_mhz": 250,
     "config_hash": "dda6e15b71ddde55",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
     "dut": "gfxvm",
     "result": {
       "bram": 183.5,
-      "build_time_s": 160,
+      "build_time_s": 175,
       "deep_endpoints": 1889,
       "deepest_paths": [
         "19  g_rtu_core_0.rtu_core/scheduler/g_recip_pe.recip_tags/g_shift.g_partial_reset.pipe_free[219] -> g_rtu_core_0.rtu_core/scheduler/g1_idx.d[4]",
@@ -227,20 +193,20 @@
         "18  g_rtu_core_0.rtu_core/scheduler/g_recip_pe.recip_tags/g_shift.g_partial_reset.pipe_free[219] -> g_rtu_core_0.rtu_core/scheduler/ctx_arbiter/g_model1.reqs_mask.d[29]"
       ],
       "dsp": 1140,
-      "endpoints": 328937,
+      "endpoints": 328940,
       "env": {
         "circt": "CIRCT 892a65a01",
         "device": "xcu55c-fsvh2892-2L-e",
         "foldsim": "foldsim d8350bc0f",
         "xlen": 32
       },
-      "ff": 415294,
+      "ff": 415297,
       "fix_levels": 12,
       "interfaces": {},
       "lut": 331144,
       "lutram": 14557,
       "max_levels": 19,
-      "pred_fmax_mhz": 256.3,
+      "pred_fmax_mhz": 255.6,
       "risk_endpoints": 475,
       "tied_bits": 1073,
       "tied_ports": [
@@ -398,7 +364,7 @@
         "ummu/tlb/mshr/reqpool": 10
       },
       "uram": 0,
-      "watch_endpoints": 18305,
+      "watch_endpoints": 18364,
       "watch_levels": 8
     }
   },
@@ -595,7 +561,7 @@
     "dut": "tex",
     "result": {
       "bram": 0.0,
-      "build_time_s": 70,
+      "build_time_s": 60,
       "deep_endpoints": 0,
       "deepest_paths": [
         "11  tex_core/tex_addr/pipe_reg0/g_pipe.g_partial_reset.pipe_free[4197] -> tex_core/tex_addr/pipe_reg1/g_pipe.g_partial_reset.pipe_free.d[831]",

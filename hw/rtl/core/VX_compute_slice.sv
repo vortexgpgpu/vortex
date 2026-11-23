@@ -93,6 +93,9 @@ import VX_tcu_pkg::*;
     input wire [TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0]   tcu_tbuf_rs2_data,
     input wire              tcu_tbuf_ready,
 `endif
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    VX_tcu_job_if.block     tcu_job_if,
+`endif
 
     // core-wide warp control
     VX_warp_shared_if.master warp_shared_if
@@ -324,6 +327,9 @@ import VX_tcu_pkg::*;
         .tcu_tbuf_rs1_data    (tcu_tbuf_rs1_data),
         .tcu_tbuf_rs2_data    (tcu_tbuf_rs2_data),
         .tcu_tbuf_ready       (tcu_tbuf_ready),
+    `endif
+    `ifdef VX_CFG_TCU_TMEM_ENABLE
+        .tcu_job_if           (tcu_job_if),
     `endif
         .warp_shared_if       (warp_shared_if),
         .cta_bcast            (cta_bcast)
