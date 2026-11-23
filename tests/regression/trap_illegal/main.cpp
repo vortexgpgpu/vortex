@@ -64,7 +64,7 @@ int main(int argc, char** argv) {
   CHECK(vx_buffer_create(dev, sizeof(out), VX_MEM_WRITE, &dst));
   CHECK(vx_buffer_address(dst, &arg.dst_addr));
 
-  // One thread: mstatus, mtvec and mepc are per warp.
+  // One thread: the probes install their own mtvec, which is per core.
   vx_launch_info_t li{};
   li.struct_size = sizeof(li);
   li.kernel      = kern;

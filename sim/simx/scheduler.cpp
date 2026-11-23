@@ -53,10 +53,8 @@ void warp_t::reset(bool launch) {
   // them and a launch keeps them.
   if (!launch) {
     this->mstatus = MSTATUS_FS_RESET;
-    this->mtvec   = 0;
     this->mepc    = 0;
     this->mcause  = 0;
-    this->mtval   = 0;
   }
   // Register files live in OpcUnit and are reset there.
 }
@@ -88,6 +86,10 @@ void Scheduler::on_reset() {
   bool launch = SimPlatform::instance().launch_resetting();
   for (auto& warp : warps_) {
     warp.reset(launch);
+  }
+
+  if (!launch) {
+    mtvec_ = 0;
   }
 
   stalled_warps_.reset();
@@ -373,11 +375,10 @@ void Scheduler::raise_trap(uint32_t wid, Word cause, Word trap_pc) {
   warp.mstatus = (warp.mstatus & ~(MSTATUS_MIE | MSTATUS_MPIE))
                | ((warp.mstatus & MSTATUS_MIE) ? MSTATUS_MPIE : 0);
   warp.mepc   = trap_pc & MEPC_WMASK;
-  warp.mcause = cause;
-  warp.mtval  = 0;
-  warp.PC = warp.mtvec;
+  warp.mcause = cause & TRAP_CAUSE_MASK;
+  warp.PC = mtvec_;
   DT(3, core_->name() << " trap: wid=" << wid << ", cause=" << cause
-     << ", mepc=0x" << std::hex << trap_pc << ", mtvec=0x" << warp.mtvec << std::dec);
+     << ", mepc=0x" << std::hex << trap_pc << ", mtvec=0x" << mtvec_ << std::dec);
 }
 
 void Scheduler::mret(uint32_t wid) {
@@ -398,7 +399,7 @@ void Scheduler::trigger_ebreak(uint32_t wid, Word trap_pc) {
 }
 
 void Scheduler::trigger_illegal(uint32_t wid, Word trap_pc, uint32_t code) {
-  if (warps_.at(wid).mtvec == 0) {
+  if (mtvec_ == 0) {
     std::cerr << "Error: illegal instruction (mcause=" << TRAP_CAUSE_ILLEGAL_INSTR
               << ") with no trap handler (mtvec=0): " << core_->name() << ", wid=" << wid
               << ", PC=0x" << std::hex << trap_pc << ", instr=0x" << code << std::dec << std::endl;
@@ -408,7 +409,7 @@ void Scheduler::trigger_illegal(uint32_t wid, Word trap_pc, uint32_t code) {
 }
 
 void Scheduler::trigger_misaligned_fetch(uint32_t wid, Word trap_pc, uint32_t code, Word target) {
-  if (warps_.at(wid).mtvec == 0) {
+  if (mtvec_ == 0) {
     std::cerr << "Error: instruction address misaligned (mcause=" << TRAP_CAUSE_MISALIGNED_FETCH
               << ") with no trap handler (mtvec=0): " << core_->name() << ", wid=" << wid
               << ", PC=0x" << std::hex << trap_pc << ", instr=0x" << code

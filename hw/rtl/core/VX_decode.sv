@@ -121,6 +121,9 @@ module VX_decode import
     wire is_csr_fflags = (u_12 == `VX_CSR_FFLAGS);
     wire is_csr_frm    = (u_12 == `VX_CSR_FRM);
     wire is_csr_fcsr   = (u_12 == `VX_CSR_FCSR);
+    // Trap CSRs that a trap or MRET reads when it executes in the ALU, while
+    // the CSR unit writes them: XREG_2 orders the two.
+    wire is_csr_trap   = (u_12 == `VX_CSR_MSTATUS) || (u_12 == `VX_CSR_MTVEC) || (u_12 == `VX_CSR_MEPC);
     wire frm_is_dyn    = (funct3 == 3'b111);
     wire is_rd_zero    = (rd == 0);
     `UNUSED_VAR (frm_is_dyn)
@@ -556,6 +559,8 @@ module VX_decode import
                     rd_xregs[XREG_1]    = is_csr_fcsr || is_csr_frm;
                     wr_xregs[XREG_0] = csr_write && (is_csr_fcsr || is_csr_fflags);
                     wr_xregs[XREG_1]    = csr_write && (is_csr_fcsr || is_csr_frm);
+                    rd_xregs[XREG_2] = is_csr_trap;
+                    wr_xregs[XREG_2] = csr_write && is_csr_trap;
                     // mstatus gates the decode of the warp's next instructions
                     is_wstall = (u_12 == `VX_CSR_MSTATUS);
                     // CSR addresses 0xC00-0xFFF are read-only
@@ -574,6 +579,7 @@ module VX_decode import
                     op_args.br.imm20  = 20'd4;
                     op_args.br.is_rvc = decode_is_rvc;
                     is_wstall = 1;
+                    rd_xregs[XREG_2] = 1'b1;
                 end
             end
         `ifdef VX_CFG_EXT_F_ENABLE
@@ -1139,6 +1145,7 @@ module VX_decode import
             op_args.br.is_rvc  = decode_is_rvc;
             use_regs  = '0;
             rd_xregs  = '0;
+            rd_xregs[XREG_2] = 1'b1;
             wr_xregs  = '0;
             bytesel   = BYTESEL_DEFAULT;
             is_wstall = 1;

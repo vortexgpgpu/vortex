@@ -373,15 +373,15 @@ module VX_alu_int import VX_gpu_pkg::*; #(
                                : is_br_static ? from_fullPC({br_result[`VX_CFG_XLEN-1:1], 1'b0})
                                : cbr_dest_r;
     wire is_mret_op    = is_br_op_r && (br_op_r == INST_BR_MRET || br_op_r == INST_BR_SRET || br_op_r == INST_BR_URET);
-    reg [3:0] br_trap_cause;
+    reg [TRAP_CAUSE_BITS-1:0] br_trap_cause;
     always @(*) begin
         if (is_misaligned) begin
-            br_trap_cause = 4'd0;  // instruction address misaligned
+            br_trap_cause = TRAP_CAUSE_BITS'(0);  // instruction address misaligned
         end else begin
             case (br_op_r)
-                INST_BR_EBREAK:  br_trap_cause = 4'd3;  // breakpoint
-                INST_BR_ILLEGAL: br_trap_cause = 4'd2;  // illegal instruction
-                default:         br_trap_cause = 4'd11; // ECALL from M-mode
+                INST_BR_EBREAK:  br_trap_cause = TRAP_CAUSE_BITS'(3);  // breakpoint
+                INST_BR_ILLEGAL: br_trap_cause = TRAP_CAUSE_BITS'(2);  // illegal instruction
+                default:         br_trap_cause = TRAP_CAUSE_BITS'(11); // ECALL from M-mode
             endcase
         end
     end
@@ -392,7 +392,7 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     end
 
     VX_pipe_register #(
-        .DATAW  (1 + NW_WIDTH + 1 + PC_BITS + 1 + 1 + 4),
+        .DATAW  (1 + NW_WIDTH + 1 + PC_BITS + 1 + 1 + TRAP_CAUSE_BITS),
         .RESETW (1)
     ) branch_reg (
         .clk      (clk),

@@ -140,14 +140,13 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
     wire          cand_valid;
     wire          sched_fire;
 
-    // M is the only privilege mode and mtvec supports direct mode only, so
-    // mstatus keeps MIE/MPIE/FS, and mtvec/mepc keep the bits that can be set.
+    // M is the only privilege mode, so mstatus keeps MIE/MPIE/FS, and mepc
+    // keeps the bits that can be set.
 `ifdef VX_CFG_EXT_C_ENABLE
     localparam MEPC_LSB  = 1;
 `else
     localparam MEPC_LSB  = 2;
 `endif
-    localparam MTVEC_LSB = 2;
     // FS resets to Initial so that FP code runs without first writing mstatus.
     // Without F, FS is read-only zero.
 `ifdef VX_CFG_EXT_F_ENABLE
@@ -174,10 +173,9 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
     reg [SW-1:0][`VX_CFG_MEM_ADDR_WIDTH-1:0] mscratch_r;
     reg [SW-1:0] mstatus_mie_r, mstatus_mpie_r;
     reg [SW-1:0][1:0] mstatus_fs_r;
-    reg [SW-1:0][`VX_CFG_XLEN-1:MTVEC_LSB] mtvec_r;
     reg [SW-1:0][`VX_CFG_XLEN-1:MEPC_LSB] mepc_r;
-    reg [SW-1:0][`VX_CFG_XLEN-1:0] mcause_r, mtval_r;
-    wire [SW-1:0][`VX_CFG_XLEN-1:0] mstatus, mtvec, mepc;
+    reg [SW-1:0][TRAP_CAUSE_BITS-1:0] mcause_r;
+    wire [SW-1:0][`VX_CFG_XLEN-1:0] mstatus, mepc;
 
     for (genvar l = 0; l < SW; ++l) begin : g_warps
         localparam [LW-1:0] LID = LW'(l);
@@ -195,7 +193,6 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
         wire join_hit = join_valid[QS] && (join_k[QS] == K);
 
         assign mstatus[l] = mstatus_value(mstatus_mie_r[l], mstatus_mpie_r[l], mstatus_fs_r[l]);
-        assign mtvec[l]   = {mtvec_r[l], MTVEC_LSB'(0)};
         assign mepc[l]    = {mepc_r[l], MEPC_LSB'(0)};
         assign decode_sched_if.fs_off[l] = (mstatus_fs_r[l] == 2'b00);
 
@@ -277,7 +274,7 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
 
             if (br_hit) begin
                 if (branch[QA].is_trap) begin
-                    pc_n = from_fullPC(mtvec[l]);
+                    pc_n = from_fullPC(sched_if.mtvec);
                 end else if (branch[QA].is_mret) begin
                     // MRET/SRET/URET: restore the saved PC from mepc.
                     pc_n = from_fullPC(mepc[l]);
@@ -321,10 +318,8 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
                 mstatus_mie_r[l]  <= 1'b0;
                 mstatus_mpie_r[l] <= 1'b0;
                 mstatus_fs_r[l]   <= FS_RESET;
-                mtvec_r[l]    <= '0;
                 mepc_r[l]     <= '0;
                 mcause_r[l]   <= '0;
-                mtval_r[l]    <= '0;
             end else begin
                 active_r  <= active_n;
                 stalled_r <= stalled_n;
@@ -349,22 +344,16 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
                 end
 
                 if (csr_wr_lid[QS] == LID) begin
-                    if (csr_wr[QS].trap_valid[0]) begin
+                    if (csr_wr[QS].trap_valid[TRAP_CSR_MSTATUS]) begin
                         mstatus_mie_r[l]  <= csr_wr[QS].trap_data[`VX_CSR_MSTATUS_MIE];
                         mstatus_mpie_r[l] <= csr_wr[QS].trap_data[`VX_CSR_MSTATUS_MPIE];
                         mstatus_fs_r[l]   <= csr_wr[QS].trap_data[`VX_CSR_MSTATUS_FS +: 2] & FS_WMASK;
                     end
-                    if (csr_wr[QS].trap_valid[1]) begin
-                        mtvec_r[l] <= csr_wr[QS].trap_data[`VX_CFG_XLEN-1:MTVEC_LSB];
-                    end
-                    if (csr_wr[QS].trap_valid[2]) begin
+                    if (csr_wr[QS].trap_valid[TRAP_CSR_MEPC]) begin
                         mepc_r[l] <= csr_wr[QS].trap_data[`VX_CFG_XLEN-1:MEPC_LSB];
                     end
-                    if (csr_wr[QS].trap_valid[3]) begin
-                        mcause_r[l] <= csr_wr[QS].trap_data;
-                    end
-                    if (csr_wr[QS].trap_valid[4]) begin
-                        mtval_r[l] <= csr_wr[QS].trap_data;
+                    if (csr_wr[QS].trap_valid[TRAP_CSR_MCAUSE]) begin
+                        mcause_r[l] <= TRAP_CAUSE_BITS'(csr_wr[QS].trap_data);
                     end
                 end
 
@@ -373,8 +362,7 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
                     mstatus_mie_r[l]  <= 1'b0;
                     mstatus_mpie_r[l] <= mstatus_mie_r[l];
                     mepc_r[l]   <= (`VX_CFG_XLEN-MEPC_LSB)'(to_fullPC(branch[QA].dest) >> MEPC_LSB);
-                    mcause_r[l] <= `VX_CFG_XLEN'(branch[QA].trap_cause);
-                    mtval_r[l]  <= '0;
+                    mcause_r[l] <= branch[QA].trap_cause;
                 end
                 if (br_hit && branch[QA].is_mret) begin
                     mstatus_mie_r[l]  <= mstatus_mpie_r[l];
@@ -484,10 +472,8 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
         assign csr_rd[q].thread_mask = thread_masks[csr_rd_lid[q]];
         assign csr_rd[q].mscratch    = mscratch_r[csr_rd_lid[q]];
         assign csr_rd[q].mstatus     = mstatus[csr_rd_lid[q]];
-        assign csr_rd[q].mtvec       = mtvec[csr_rd_lid[q]];
         assign csr_rd[q].mepc        = mepc[csr_rd_lid[q]];
-        assign csr_rd[q].mcause      = mcause_r[csr_rd_lid[q]];
-        assign csr_rd[q].mtval       = mtval_r[csr_rd_lid[q]];
+        assign csr_rd[q].mcause      = `VX_CFG_XLEN'(mcause_r[csr_rd_lid[q]]);
 
         assign dvstack_mscratch[q]   = mscratch_r[wid_to_wfs(dvstack_wid[q])];
     end

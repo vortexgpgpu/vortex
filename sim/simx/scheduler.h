@@ -32,7 +32,7 @@ class Core;
 class Instr;
 class instr_trace_t;
 
-// Legal values of the per-warp trap CSRs. M is the only privilege mode, so
+// Legal values of the trap CSRs. M is the only privilege mode, so
 // mstatus keeps MIE/MPIE/FS and MPP reads as M; mtvec supports direct mode
 // only; mepc is aligned to the instruction alignment.
 constexpr Word MSTATUS_MIE   = Word(1) << VX_CSR_MSTATUS_MIE;
@@ -111,14 +111,12 @@ struct warp_t {
   Word                              mscratch;
 
   // Per-warp machine-mode trap CSRs, held masked to their writable bits.
-  // Synchronous traps redirect the warp PC to mtvec and snapshot the
-  // faulting PC/cause here; MRET restores the PC from mepc.
-  // See Scheduler::raise_trap.
+  // Synchronous traps stack mstatus.MIE and snapshot the trapping PC and
+  // cause here; MRET restores the PC from mepc. mtvec is core-wide
+  // (Scheduler); see Scheduler::raise_trap.
   Word                              mstatus = 0;
-  Word                              mtvec   = 0;
   Word                              mepc    = 0;
   Word                              mcause  = 0;
-  Word                              mtval   = 0;
 
   // CTA CSR values set at dispatch time
   cta_csrs_t                        cta_csrs;
@@ -206,8 +204,10 @@ public:
   // core_->csr_unit().
 
   // ----- Trap helpers -----
-  // Synchronous trap entry: snapshot the faulting PC into mepc, set
-  // mcause, clear mtval, and redirect the warp PC to mtvec. trap_pc is the PC
+  // mcause holds only the exception codes the core raises (TRAP_CAUSE_BITS in RTL).
+  static constexpr Word TRAP_CAUSE_MASK = 0xF;
+  // Synchronous trap entry: stack mstatus.MIE, snapshot the faulting PC into
+  // mepc, set mcause, and redirect the warp PC to mtvec. trap_pc is the PC
   // of the faulting instruction (trace->PC), not the decode-advanced warp.PC.
   void raise_trap(uint32_t wid, Word cause, Word trap_pc);
   // Trap return: restore the warp PC from mepc (MRET/SRET/URET).
@@ -220,6 +220,12 @@ public:
   // A taken jump or branch to `target`, which is not instruction-aligned.
   void trigger_misaligned_fetch(uint32_t wid, Word trap_pc, uint32_t code, Word target);
 
+  // ----- Core-wide trap CSRs -----
+  // Every warp runs the same trap handler, so mtvec is one per core: a write
+  // by any warp updates it for all.
+  Word mtvec() const { return mtvec_; }
+  void set_mtvec(Word value) { mtvec_ = value & MTVEC_WMASK; }
+
   // ----- Accessors -----
   warp_t& warp(uint32_t wid) { return warps_.at(wid); }
   uint32_t ipdom_size() const { return ipdom_size_; }
@@ -230,6 +236,8 @@ protected:
   void on_reset();
 
 private:
+  Word mtvec_ = 0;
+
   struct wspawn_t {
     bool      valid;
     uint32_t  num_warps;

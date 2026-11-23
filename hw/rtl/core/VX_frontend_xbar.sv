@@ -50,6 +50,9 @@ module VX_frontend_xbar import VX_gpu_pkg::*; (
     output wire [`VX_CFG_NUM_SFU_BLOCKS-1:0] satp_wr_valid,
     output wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] satp_wr_data,
 `endif
+    input wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] mtvec,
+    output wire [`VX_CFG_NUM_SFU_BLOCKS-1:0] mtvec_wr_valid,
+    output wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] mtvec_wr_data,
 
     // frontend slices
     output sched_branch_t [`VX_CFG_FETCH_WIDTH-1:0][FETCH_ALU_PORTS-1:0] fs_branch,
@@ -207,10 +210,8 @@ module VX_frontend_xbar import VX_gpu_pkg::*; (
         assign sched_csr_if[b].thread_mask  = csr_rd.thread_mask;
         assign sched_csr_if[b].mscratch     = csr_rd.mscratch;
         assign sched_csr_if[b].csr_mstatus  = csr_rd.mstatus;
-        assign sched_csr_if[b].csr_mtvec    = csr_rd.mtvec;
         assign sched_csr_if[b].csr_mepc     = csr_rd.mepc;
         assign sched_csr_if[b].csr_mcause   = csr_rd.mcause;
-        assign sched_csr_if[b].csr_mtval    = csr_rd.mtval;
         assign sched_csr_if[b].cta_rank     = csr_rd.cta_rank;
         assign sched_csr_if[b].cta_lane     = csr_rd.cta_lane;
     `ifdef VX_CFG_VM_ENABLE
@@ -218,6 +219,9 @@ module VX_frontend_xbar import VX_gpu_pkg::*; (
         assign satp_wr_valid[b]             = sched_csr_if[b].satp_wr_valid;
         assign satp_wr_data[b]              = sched_csr_if[b].satp_wr_data;
     `endif
+        assign sched_csr_if[b].csr_mtvec    = mtvec[b];
+        assign mtvec_wr_valid[b]            = sched_csr_if[b].mtvec_wr_valid;
+        assign mtvec_wr_data[b]             = sched_csr_if[b].mtvec_wr_data;
     end
 
 endmodule

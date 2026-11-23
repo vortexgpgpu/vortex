@@ -255,6 +255,92 @@ void kernel_fsqrt(kernel_arg_t* __UNIFORM__ arg) {
 	}
 }
 
+void kernel_fdiv_special(kernel_arg_t* __UNIFORM__ arg) {
+	size_t count  = arg->task_size;
+	auto src0_ptr = (float*)arg->src0_addr;
+	auto src1_ptr = (float*)arg->src1_addr;
+	auto dst_ptr  = (float*)arg->dst_addr;
+	uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
+	auto offset = gid * count;
+
+	for (size_t i = 0; i < count; ++i) {
+		auto a = src0_ptr[offset+i];
+		auto b = src1_ptr[offset+i];
+		auto c = __ieee754_sqrtf(a) / b;
+		dst_ptr[offset+i] = c;
+	}
+}
+
+#ifdef VX_CFG_FLEN_64
+// Zero the upper word of a single-precision register, leaving it improperly NaN-boxed.
+inline float unbox_f32(float x) {
+	float r;
+	uint64_t t;
+	asm volatile ("fmv.x.w %1, %2\n slli %1, %1, 32\n srli %1, %1, 32\n fmv.d.x %0, %1" : "=f"(r), "=&r"(t) : "f"(x));
+	return r;
+}
+#endif
+
+// Six cases per element: sqrt, div and each FMA operand (a, b, c) take an
+// improperly NaN-boxed input once, plus one case with every input boxed.
+void kernel_fp_nanbox(kernel_arg_t* __UNIFORM__ arg) {
+	size_t count  = arg->task_size;
+	auto src0_ptr = (float*)arg->src0_addr;
+	auto src1_ptr = (float*)arg->src1_addr;
+	auto dst_ptr  = (float*)arg->dst_addr;
+	uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
+	auto offset = gid * count;
+
+	for (size_t i = 0; i < count; ++i) {
+		auto a = src0_ptr[offset+i];
+		auto b = src1_ptr[offset+i];
+		auto ua = a, ub = b;
+	#ifdef VX_CFG_FLEN_64
+		ua = unbox_f32(a);
+		ub = unbox_f32(b);
+	#endif
+		float c;
+		switch ((offset + i) % 6) {
+		case 0:  c = __ieee754_sqrtf(ua) / b; break;
+		case 1:  c = __ieee754_sqrtf(a) / ub; break;
+		case 2:  asm volatile ("fmadd.s %0, %1, %2, %3" : "=f"(c) : "f"(ua), "f"(b), "f"(b)); break;
+		case 3:  asm volatile ("fmadd.s %0, %1, %2, %3" : "=f"(c) : "f"(a), "f"(ub), "f"(a)); break;
+		case 4:  asm volatile ("fmadd.s %0, %1, %2, %3" : "=f"(c) : "f"(a), "f"(b), "f"(ub)); break;
+		default: c = __ieee754_sqrtf(a) / b; break;
+		}
+		dst_ptr[offset+i] = c;
+	}
+}
+
+void kernel_fflags_lanes(kernel_arg_t* __UNIFORM__ arg) {
+	size_t count  = arg->task_size;
+	auto src0_ptr = (float*)arg->src0_addr;
+	auto src1_ptr = (float*)arg->src1_addr;
+	auto dst_ptr  = (uint32_t*)arg->dst_addr;
+	uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
+	uint32_t num_threads = vx_num_threads();
+	uint32_t lane = gid % num_threads;
+	uint32_t wid  = gid / num_threads;
+	auto offset = gid * count;
+
+	for (size_t i = 0; i < count; ++i) {
+		auto a = src0_ptr[offset+i];
+		auto b = src1_ptr[offset+i];
+		// keep the operands live in the lanes the branch below masks off
+		asm volatile ("" : "+f"(a), "+f"(b));
+		if (!fflags_lane_masked(lane, i, num_threads)) {
+			float c;
+			uint32_t flags;
+			if ((i + wid) & 1) {
+				asm volatile ("csrwi fflags, 0\n fadd.s %0, %2, %3\n frflags %1" : "=&f"(c), "=&r"(flags) : "f"(a), "f"(b));
+			} else {
+				asm volatile ("csrwi fflags, 0\n fdiv.s %0, %2, %3\n frflags %1" : "=&f"(c), "=&r"(flags) : "f"(a), "f"(b));
+			}
+			dst_ptr[offset+i] = flags;
+		}
+	}
+}
+
 void kernel_ftoi(kernel_arg_t* __UNIFORM__ arg) {
 	size_t count  = arg->task_size;
 	auto src0_ptr = (float*)arg->src0_addr;
@@ -446,6 +532,7 @@ static const PFN_Kernel sc_tests[] = {
 	kernel_fdiv, kernel_fdiv2, kernel_fsqrt, kernel_ftoi,
 	kernel_ftou, kernel_itof, kernel_utof, kernel_fclamp,
 	kernel_iclamp, kernel_trigo, kernel_bar, kernel_gbar,
+	kernel_fdiv_special, kernel_fp_nanbox, kernel_fflags_lanes,
 };
 
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {

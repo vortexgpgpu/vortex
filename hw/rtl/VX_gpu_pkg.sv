@@ -70,7 +70,8 @@ package VX_gpu_pkg;
     // these bits.
     localparam XREG_0      = 0;
     localparam XREG_1      = 1;
-    localparam NUM_XREGS   = 2;
+    localparam XREG_2      = 2;
+    localparam NUM_XREGS   = 3;
 
     localparam DV_STACK_SIZE = `UP(`VX_CFG_NUM_THREADS-1);
     localparam DV_STACK_SIZEW = `LOG2UP(DV_STACK_SIZE);
@@ -670,8 +671,17 @@ package VX_gpu_pkg;
     localparam ISSUE_WIS_BITS = `CLOG2(PER_ISSUE_WARPS);
     localparam ISSUE_WIS_W = `UP(ISSUE_WIS_BITS);
 
-    // Machine-mode trap CSRs stored per warp in the scheduler: mstatus, mtvec, mepc, mcause, mtval.
-    localparam NUM_TRAP_CSRS = 5;
+    // Per-warp machine-mode trap CSRs, held by the warp schedulers: the return
+    // PC, the cause and the mstatus interrupt-enable stack and FS, which
+    // concurrent traps and FP code in different warps need. Every warp runs
+    // the same trap handler, so mtvec is one per core, held by the core
+    // scheduler.
+    localparam NUM_TRAP_CSRS    = 3;
+    localparam TRAP_CSR_MEPC    = 0;
+    localparam TRAP_CSR_MCAUSE  = 1;
+    localparam TRAP_CSR_MSTATUS = 2;
+    // mcause holds only the exception codes the core raises.
+    localparam TRAP_CAUSE_BITS = 4;
 
     localparam DISPATCH_QSIZE = `VX_CFG_DISPATCH_QUEUE_SIZE;
 
@@ -1367,7 +1377,7 @@ package VX_gpu_pkg;
         logic [PC_BITS-1:0]     dest;
         logic                   is_trap;
         logic                   is_mret;
-        logic [3:0]             trap_cause;
+        logic [TRAP_CAUSE_BITS-1:0] trap_cause;
     } sched_branch_t;
 
     // SFU warp control
@@ -1397,10 +1407,8 @@ package VX_gpu_pkg;
         logic [`VX_CFG_NUM_THREADS-1:0] thread_mask;
         logic [`VX_CFG_MEM_ADDR_WIDTH-1:0] mscratch;
         logic [`VX_CFG_XLEN-1:0] mstatus;
-        logic [`VX_CFG_XLEN-1:0] mtvec;
         logic [`VX_CFG_XLEN-1:0] mepc;
         logic [`VX_CFG_XLEN-1:0] mcause;
-        logic [`VX_CFG_XLEN-1:0] mtval;
         logic [NW_WIDTH-1:0]    cta_rank;
         cta_lane_t [`VX_CFG_NUM_THREADS-1:0] cta_lane;
     } sched_csr_rd_t;

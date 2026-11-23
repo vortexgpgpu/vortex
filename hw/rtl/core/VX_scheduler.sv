@@ -51,6 +51,9 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     input wire [`VX_CFG_NUM_SFU_BLOCKS-1:0] satp_wr_valid,
     input wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] satp_wr_data,
 `endif
+    output wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] mtvec,
+    input wire [`VX_CFG_NUM_SFU_BLOCKS-1:0] mtvec_wr_valid,
+    input wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] mtvec_wr_data,
 
     output wire             busy
 );
@@ -194,6 +197,31 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     end
 `endif
 
+    // Per-core mtvec, written by any SFU block's CSR unit in block order, as
+    // SATP is. Trap redirection reads the registered vector: a warp's own
+    // mtvec write has committed before its trap issues. Only direct mode
+    // exists, so MODE (bits 1:0) reads zero.
+    // The value a block reads and the value after its write are separate
+    // vectors: one vector holding both is a combinational loop to Verilator
+    // when it does not split variables (-O0).
+    reg [`VX_CFG_XLEN-1:0] mtvec_r;
+    wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] mtvec_wr;
+    for (genvar b = 0; b < `VX_CFG_NUM_SFU_BLOCKS; ++b) begin : g_mtvec
+        if (b == 0) begin : g_first
+            assign mtvec[b] = mtvec_r;
+        end else begin : g_next
+            assign mtvec[b] = mtvec_wr[b-1];
+        end
+        assign mtvec_wr[b] = mtvec_wr_valid[b] ? {mtvec_wr_data[b][`VX_CFG_XLEN-1:2], 2'b00} : mtvec[b];
+    end
+    always @(posedge clk) begin
+        if (reset) begin
+            mtvec_r <= '0;
+        end else begin
+            mtvec_r <= mtvec_wr[`VX_CFG_NUM_SFU_BLOCKS-1];
+        end
+    end
+
     // per-slice view of the core-wide events
 
     wire [FETCH_FSW_W-1:0] wspawn_fsw = wid_to_fsw(wspawn_wid);
@@ -201,6 +229,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     for (genvar p = 0; p < FW; ++p) begin : g_slices
         localparam [FETCH_FSW_W-1:0] FSW = FETCH_FSW_W'(p);
 
+        assign slice_if[p].mtvec        = mtvec_r;
         assign slice_if[p].cta_fire     = cta_fire[p];
         assign slice_if[p].cta_lid      = wid_to_wfs(cta_wid[p]);
         assign slice_if[p].cta_PC       = cta_PC;

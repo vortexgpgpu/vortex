@@ -49,4 +49,3 @@ build-%: kernel-lib
 
 clean-%:
 	$(MAKE) -C $* clean
-

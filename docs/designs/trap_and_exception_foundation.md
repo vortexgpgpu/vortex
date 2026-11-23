@@ -22,12 +22,17 @@ suite rides on. Covers the RTL
 
 ## 1. Architecture
 
-Each warp owns five M-mode trap CSRs held in its slice's warp scheduler
-([`VX_warp_sched.sv`](../../hw/rtl/core/VX_warp_sched.sv)):
-`mstatus`, `mtvec`, `mepc`, `mcause`, `mtval`. Each is stored in its legal
-(WARL) form, keeping only the bits that can be nonzero (§1.1). Addresses:
-`MSTATUS=0x300`, `MTVEC=0x305`, `MSCRATCH=0x340`, `MEPC=0x341`,
-`MCAUSE=0x342`, `MTVAL=0x343`, with the `mstatus` field positions
+The M-mode trap CSRs are held by the schedulers. Every warp runs the same
+trap handler, so `mtvec` is one per core, in the core scheduler
+([`VX_scheduler.sv`](../../hw/rtl/core/VX_scheduler.sv)); the CSR unit
+reads and writes it in the fire cycle, as it does `satp`. `mstatus`,
+`mepc` and `mcause`, which concurrent traps and FP code in different warps
+need, stay per warp in the warp schedulers
+([`VX_warp_sched.sv`](../../hw/rtl/core/VX_warp_sched.sv)). `mtval` reads
+as zero (§1.3). Each CSR is stored in its legal (WARL) form, keeping only
+the bits that can be nonzero (§1.1). Addresses: `MSTATUS=0x300`,
+`MTVEC=0x305`, `MSCRATCH=0x340`, `MEPC=0x341`, `MCAUSE=0x342`,
+`MTVAL=0x343`, with the `mstatus` field positions
 (`VX_CSR_MSTATUS_{MIE,MPIE,MPP,FS}`) beside them in
 [`VX_types.toml`](../../VX_types.toml).
 
@@ -36,22 +41,30 @@ The branch unit is the trap producer
 raises `is_trap_entry` / `is_mret_op` with a `br_trap_cause` (§1.3).
 These ride the existing `VX_branch_ctl_if` (the proposed
 standalone `VX_trap_if.sv` was folded in — functionally equivalent), which
-carries the trapping instruction's PC in `dest`. The
-scheduler redirects the warp PC: a trap goes to `mtvec`, an `mret`
-returns to `mepc`. On trap entry the hardware snapshots `mepc` (the
-trapping instruction's PC) and `mcause`, clears `mtval` and updates `mstatus`;
+carries the trapping instruction's PC in `dest`. The warp scheduler
+redirects the warp PC: a trap goes to the core's `mtvec`, an `mret`
+returns to the warp's `mepc`. On trap entry the hardware snapshots `mepc`
+(the trapping instruction's PC) and `mcause`, and updates `mstatus`;
 `mret` updates `mstatus` too (§1.1).
 A same-cycle software `csrw` and a hardware trap entry or return are ordered
 hardware-wins, per field: the fields the hardware writes take the hardware
 value, and the software write still lands in the others. The CSR file
 ([`VX_csr_data.sv`](../../hw/rtl/core/VX_csr_data.sv)) does only the read
-mux and routes writes back via `sched_csr_if`; the scheduler legalises
+mux and routes writes back via `sched_csr_if`; the schedulers legalise
 them.
 
+A trap uop (`ECALL`, `EBREAK`, an illegal instruction) and `MRET` depend on
+the warp's pending writes to `mstatus`, `mtvec` and `mepc` through the
+scoreboard (`XREG_2`), so a handler's `csrw mepc` lands before its `mret`
+reads `mepc`, and a warp's own `mtvec` write before its trap redirects
+through it. A misaligned-target trap is raised by an ordinary jump or
+branch, which does not wait on that slot: a jump issued right after the
+warp's own `mtvec` write can still trap through the previous `mtvec`.
+
 SimX mirrors this exactly:
-[`scheduler.cpp`](../../sim/simx/scheduler.cpp) defines `raise_trap`,
-`mret`, `trigger_ecall`, `trigger_ebreak`, `trigger_illegal` and
-`trigger_misaligned_fetch`;
+[`scheduler.cpp`](../../sim/simx/scheduler.cpp) holds the core's `mtvec`
+and defines `raise_trap`, `mret`, `trigger_ecall`, `trigger_ebreak`,
+`trigger_illegal` and `trigger_misaligned_fetch`;
 [`alu_unit.cpp`](../../sim/simx/alu_unit.cpp) dispatches the traps and
 `mret` per warp; [`decode.cpp`](../../sim/simx/decode.cpp) produces the
 same illegal-instruction uop as the RTL decoder;
@@ -69,7 +82,8 @@ Machine mode is the only privilege mode, there are no interrupts yet, and
 | `mstatus` | `MIE` (3), `MPIE` (7), `FS` (14:13) | those fields, `MPP` (12:11) hardwired `11`, `SD` (XLEN-1) = (`FS` == Dirty); every other bit 0 |
 | `mtvec` | `[XLEN-1:2]` | `MODE` (1:0) always 0 (Direct) |
 | `mepc` | `[XLEN-1:1]` with C, `[XLEN-1:2]` without | bit 0 always 0; bit 1 also 0 without C (IALIGN=32) |
-| `mcause`, `mtval` | `[XLEN-1:0]` | as written |
+| `mcause` | `[3:0]` | the 4-bit exception codes the core raises; upper bits 0 |
+| `mtval` | nothing | always 0 |
 
 A write keeps only the stored bits; a CSRRS/CSRRC reads the legal value,
 so it cannot set a hardwired bit. `misa` is read-only: a write is ignored.
@@ -146,9 +160,10 @@ supported); the trap follows the same lane, so a warp traps exactly when
 the target it would jump to is misaligned, and the trap is per-warp like
 every other.
 
-`mtval` is 0 for every cause, which the privileged spec allows; writing the
-target or the instruction bits would cost a second data source into every
-warp's `mtval`. Only `dest`, the trapping PC, travels with the trap.
+`mtval` is read-only zero, which the privileged spec allows for every
+cause here; writing the target or the instruction bits would cost a
+per-warp `mtval` with a second data source. Only `dest`, the trapping PC,
+travels with the trap.
 
 The RTL jumps to `mtvec` as architected even when no handler is installed
 (`mtvec`=0, as in every plain Vortex kernel); SimX instead aborts on an
@@ -224,7 +239,7 @@ The named **preemption** capability is future work:
    (§1.3).
 3. **Supervisor mode** — `stvec`/`sepc`/`scause` + `medeleg`-driven
    redirect.
-4. **Interrupts** — `mie`/`mip`, async injection, `mcause` MSB.
+4. **Interrupts** — `mie`/`mip`, async injection, `mcause` MSB (widening `mcause` past the 4 exception-code bits it holds today).
 5. **Register-file / IPDOM-stack save-restore** — required for true
    context switch (only the trap CSRs are saved today).
 6. **`tests/regression/csr_smoke/`** unit test — absent.
