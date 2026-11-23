@@ -6,8 +6,8 @@
     "dut": "cache",
     "result": {
       "build_time_s": 25,
-      "cells": 282062,
-      "endpoints": 32478,
+      "cells": 282013,
+      "endpoints": 32477,
       "env": {
         "circt": "CIRCT 892a65a01",
         "foldsim": "foldsim d8350bc0f",
@@ -31,16 +31,16 @@
     "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8",
     "dut": "core",
     "result": {
-      "build_time_s": 60,
-      "cells": 769936,
-      "endpoints": 73708,
+      "build_time_s": 40,
+      "cells": 759542,
+      "endpoints": 72495,
       "env": {
         "circt": "CIRCT 892a65a01",
         "foldsim": "foldsim d8350bc0f",
         "pdk": "asap7",
         "xlen": 32
       },
-      "ff": 102791,
+      "ff": 101061,
       "fmax_mhz": 1051.5,
       "macros": 16,
       "max_stages": 30,
@@ -100,16 +100,16 @@
     "configs": "-DVX_CFG_NUM_THREADS=4 -DVX_CFG_NUM_WARPS=4",
     "dut": "top",
     "result": {
-      "build_time_s": 80,
-      "cells": 1438152,
-      "endpoints": 169931,
+      "build_time_s": 60,
+      "cells": 1427771,
+      "endpoints": 168590,
       "env": {
         "circt": "CIRCT 892a65a01",
         "foldsim": "foldsim d8350bc0f",
         "pdk": "asap7",
         "xlen": 32
       },
-      "ff": 305204,
+      "ff": 303334,
       "fmax_mhz": 749.1,
       "macros": 82,
       "max_stages": 46,

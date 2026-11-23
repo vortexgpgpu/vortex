@@ -11,7 +11,7 @@
 # directory, no dispatcher edit.
 
 DUTS := cache core cp dxa fpu gfx gfxvm issue lmem mem_unit tfu om raster rtu \
-        scope tcu tensor tex top vm vortex
+        scope tcu tcuw tensor tex top vm vortex
 
 # ---------------------------------------------------------------------------
 # shared include fragments
@@ -126,6 +126,13 @@ tcu_IP  := 1
 tcu_CFG := -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_F_DISABLE
 tcu_INC  = $(BASE_INC) -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(UNITTEST_DIR)/tcu_unit $(TCU_INC)
 tcu_PKG  = $(TCU_PKG)
+
+# The tensor-core unit at any issue width, with tensor memory when enabled.
+tcuw_PRJ := VX_tcu_wide_top
+tcuw_IP  := 1
+tcuw_CFG := -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_F_DISABLE
+tcuw_INC  = $(BASE_INC) -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(UNITTEST_DIR)/tcu_unit $(TCU_INC)
+tcuw_PKG  = $(TCU_PKG)
 
 tensor_PRJ := VX_tensor_top
 tensor_IP  := 1

@@ -33,10 +33,18 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 `ifdef VX_CFG_EXT_DXA_ENABLE
     VX_txbar_bus_if.slave   txbar_bus_if,
 `endif
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    VX_tcu_bar_if.slave     tcu_bar_if,
+`endif
     input wire [`VX_CFG_NUM_WARPS-1:0] committed_warps,
 
     // CTA context writes, to every SFU block's copy
     output cta_bcast_t      cta_bcast,
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    // a CTA's last warp retired (its TMEM columns are freed)
+    output wire             cta_exit_valid,
+    output wire [NCTA_WIDTH-1:0] cta_exit_id,
+`endif
 
     VX_kmu_bus_if.slave     kmu_bus_if,
 
@@ -103,12 +111,17 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         .cta_init     (cta_init),
         .cta_bcast    (cta_bcast),
         .cta_lane_bcast(cta_lane_bcast),
+    `ifdef VX_CFG_TCU_TMEM_ENABLE
+        .cta_exit_valid (cta_exit_valid),
+        .cta_exit_id    (cta_exit_id),
+    `endif
         .busy         (cta_dispatcher_busy)
     );
 
     // core-wide warp-control resources
     wire bar_unlock_valid;
     wire [`VX_CFG_NUM_WARPS-1:0] bar_unlock_mask;
+    wire bar_active;
     wire wspawn_apply;
     wire [`VX_CFG_NUM_WARPS-1:0] wspawn_wmask;
     wire [PC_BITS-1:0] wspawn_pc;
@@ -126,7 +139,11 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     `ifdef VX_CFG_EXT_DXA_ENABLE
         .txbar_bus_if    (txbar_bus_if),
     `endif
+    `ifdef VX_CFG_TCU_TMEM_ENABLE
+        .tcu_bar_if      (tcu_bar_if),
+    `endif
         .active_warps    (active_warps),
+        .bar_active      (bar_active),
         .bar_unlock_valid(bar_unlock_valid),
         .bar_unlock_mask (bar_unlock_mask),
         .gbar_bus_if     (gbar_bus_if),
@@ -271,9 +288,10 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             if (| cta_fire) begin
                 timeout_enable <= 1;
             end
-            if (timeout_enable && active_warps !=0 && active_warps == stalled_warps) begin
+            // Barrier traffic from async units (DXA, tc.commit) is progress while every warp waits.
+            if (timeout_enable && active_warps !=0 && active_warps == stalled_warps && !bar_active) begin
                 timeout_ctr <= timeout_ctr + 1;
-            end else if (active_warps == 0 || active_warps != stalled_warps) begin
+            end else if (active_warps == 0 || active_warps != stalled_warps || bar_active) begin
                 timeout_ctr <= '0;
             end
         end

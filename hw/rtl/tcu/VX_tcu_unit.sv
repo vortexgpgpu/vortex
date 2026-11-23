@@ -36,6 +36,11 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     VX_lsu_sched_if.master  tcu_mem_if [`VX_CFG_NUM_LSU_BLOCKS],
 `endif
 
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    // per-block ports of the core's tensor memory (VX_tcu_shared)
+    VX_tcu_job_if.block     job_if [`VX_CFG_NUM_TCU_BLOCKS],
+`endif
+
     // Inputs
     VX_dispatch_if.slave    dispatch_if [`VX_CFG_ISSUE_WIDTH],
 
@@ -168,6 +173,9 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `endif
         `ifdef TCU_META_ENABLE
             .tcu_mem_if       (block_mem_if[block_idx]),
+        `endif
+        `ifdef VX_CFG_TCU_TMEM_ENABLE
+            .job_if           (job_if[block_idx]),
         `endif
             .execute_if       (per_block_execute_if[block_idx]),
             .result_if        (per_block_result_if[block_idx])

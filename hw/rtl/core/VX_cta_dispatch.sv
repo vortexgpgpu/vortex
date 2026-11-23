@@ -44,6 +44,12 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     output cta_bcast_t              cta_bcast,
     output cta_lane_bcast_t [NUM_LANES-1:0] cta_lane_bcast,
 
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    // a CTA's last warp retired (its TMEM columns are freed)
+    output wire                     cta_exit_valid,
+    output wire [NCTA_WIDTH-1:0]    cta_exit_id,
+`endif
+
     output wire                     busy
 );
     `UNUSED_SPARAM (INSTANCE_ID)
@@ -297,12 +303,29 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     wire [NUM_LANES-1:0]                 lane_sel;
     wire [NUM_LANES-1:0][LANE_WIDTH-1:0] lane_order;
     wire [LCNT_WIDTH-1:0]                lane_cnt;
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    // A TMEM CTA's warp of rank r runs on TCU block r % ISSUE_WIDTH, the block
+    // of launch lane r % NUM_LANES: its warps launch as a run of consecutive
+    // lanes from the rotation start, which tracks its rank.
+    `STATIC_ASSERT (NUM_LANES == `VX_CFG_ISSUE_WIDTH, ("TMEM needs one launch lane per TCU block"))
+    reg tmem_cta_r;
+    wire [NUM_LANES-1:0] lane_go;
+    for (genvar l = 0; l < NUM_LANES; ++l) begin : g_lane_go
+        wire [NUM_LANES-1:0] ahead;
+        for (genvar m = 0; m < NUM_LANES; ++m) begin : g_ahead
+            assign ahead[m] = (LANE_WIDTH'(m) - lane_rr_r) < (LANE_WIDTH'(l) - lane_rr_r);
+        end
+        assign lane_go[l] = lane_ready[l] && (~tmem_cta_r || (&(lane_ready | ~ahead)));
+    end
+`else
+    wire [NUM_LANES-1:0] lane_go = lane_ready;
+`endif
     for (genvar l = 0; l < NUM_LANES; ++l) begin : g_lane_sel
         wire [NUM_LANES-1:0] ahead;
         for (genvar m = 0; m < NUM_LANES; ++m) begin : g_ahead
             assign ahead[m] = (LANE_WIDTH'(m) - lane_rr_r) < (LANE_WIDTH'(l) - lane_rr_r);
         end
-        wire [NUM_LANES-1:0]  ready_ahead = lane_ready & ahead;
+        wire [NUM_LANES-1:0]  ready_ahead = lane_go & ahead;
         wire [LCNT_WIDTH-1:0] order;
         VX_popcount #(
             .N (NUM_LANES)
@@ -311,7 +334,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
             .data_out (order)
         );
         assign lane_order[l] = LANE_WIDTH'(order);
-        assign lane_sel[l]   = launch_en && lane_ready[l] && 1'(rem_gt >> order);
+        assign lane_sel[l]   = launch_en && lane_go[l] && 1'(rem_gt >> order);
     end
     VX_popcount #(
         .N (NUM_LANES)
@@ -450,6 +473,10 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     wire cta_done = warp_done_r_dly
                  && slot_valid_r[done_slot_r_dly]
                  && (rem_warps_rdata_fwd == (NW_WIDTH+1)'(1));
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    assign cta_exit_valid = cta_done;
+    assign cta_exit_id    = NCTA_WIDTH'(done_slot_r_dly);
+`endif
 
     // -------------------------------------------------------------------------
     // Admission control — fixed-stride LMEM slots
@@ -494,8 +521,14 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // reset the valid bit alone, so an idle beat carries arbitrary bits.
     `RUNTIME_ASSERT(~kmu_bus_if.valid || (stride == 0) || (PROD_W'(stride) <= PROD_W'(LMEM_SIZE)),
         ("%t: %s CTA shared-memory footprint %0d exceeds the %0d-byte capacity; the CTA overruns its slot", $time, INSTANCE_ID, stride, LMEM_SIZE))
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    // The TMEM budget can only narrow the slots the LMEM footprint fits.
+    `RUNTIME_ASSERT(~kmu_bus_if.valid || ((usable_therm & ~lmem_slots_fit(stride)) == '0),
+        ("%t: %s slot map %b does not match the %0d-byte CTA footprint", $time, INSTANCE_ID, usable_therm, stride))
+`else
     `RUNTIME_ASSERT(~kmu_bus_if.valid || (usable_therm == lmem_slots_fit(stride)),
         ("%t: %s slot map %b does not match the %0d-byte CTA footprint", $time, INSTANCE_ID, usable_therm, stride))
+`endif
 
     // A cluster member's slot base is either the round-robin tail or slot 0: the
     // tail is normalized to 0 when a kernel transition shrank the usable range
@@ -621,6 +654,9 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
             warp_order_r    <= '0;
             nfired_r        <= '0;
             lane_rr_r       <= '0;
+        `ifdef VX_CFG_TCU_TMEM_ENABLE
+            tmem_cta_r      <= 1'b0;
+        `endif
             init_cnt_r      <= '0;
             shape_step_r    <= '0;
             shape_dim_r     <= '0;
@@ -705,6 +741,12 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                         warp_step_r  <= kmu_req.args.compute.warp_step;
                         cluster_size_r <= eff_cluster_size;
                         cta_rank_r   <= '0;
+                    `ifdef VX_CFG_TCU_TMEM_ENABLE
+                        tmem_cta_r   <= kmu_req.tmem;
+                        if (kmu_req.tmem) begin
+                            lane_rr_r <= '0;  // rank 0 on lane 0
+                        end
+                    `endif
                         group_step_r <= (NUM_LANES == 1) ? kmu_req.args.compute.warp_step : group_step_r;
                         // A new block shape rebuilds the window constants before launching.
                         if (shape_new) begin

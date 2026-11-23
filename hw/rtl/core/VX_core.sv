@@ -298,6 +298,15 @@ import VX_tcu_pkg::*;
 
     cta_bcast_t cta_bcast;
 
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    wire                  cta_exit_valid;
+    wire [NCTA_WIDTH-1:0] cta_exit_id;
+`endif
+
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    VX_tcu_bar_if       tcu_bar_if();
+`endif
+
     VX_scheduler #(
         .INSTANCE_ID (`SFORMATF(("%s-scheduler", INSTANCE_ID)))
     ) scheduler (
@@ -312,8 +321,15 @@ import VX_tcu_pkg::*;
     `ifdef VX_CFG_EXT_DXA_ENABLE
         .txbar_bus_if   (dxa_txbar_bus_if),
     `endif
+    `ifdef VX_CFG_TCU_TMEM_ENABLE
+        .tcu_bar_if     (tcu_bar_if),
+    `endif
         .committed_warps(committed_warps),
         .cta_bcast      (cta_bcast),
+    `ifdef VX_CFG_TCU_TMEM_ENABLE
+        .cta_exit_valid (cta_exit_valid),
+        .cta_exit_id    (cta_exit_id),
+    `endif
         .kmu_bus_if     (kmu_bus_if),
         .gbar_bus_if    (gbar_bus_if),
         .cycles         (sched_cycles),
@@ -356,6 +372,9 @@ import VX_tcu_pkg::*;
     wire [`VX_CFG_NUM_TCU_BLOCKS-1:0][TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0]   tcu_tbuf_rs2_data;
     wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tcu_tbuf_ready;
 `endif
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    VX_tcu_job_if       tcu_job_if [`VX_CFG_NUM_TCU_BLOCKS]();
+`endif
 
     VX_sfu_shared #(
         .INSTANCE_ID (`SFORMATF(("%s-sfu-shared", INSTANCE_ID)))
@@ -392,6 +411,12 @@ import VX_tcu_pkg::*;
         .tbuf_rs2_data    (tcu_tbuf_rs2_data),
         .tbuf_ready_eff   (tcu_tbuf_ready),
         .tcu_lmem_if      (tcu_lmem_if),
+    `endif
+    `ifdef VX_CFG_TCU_TMEM_ENABLE
+        .job_if           (tcu_job_if),
+        .tcu_bar_if       (tcu_bar_if),
+        .cta_exit_valid   (cta_exit_valid),
+        .cta_exit_id      (cta_exit_id),
     `endif
         .clk              (clk),
         .reset            (reset)
@@ -492,6 +517,9 @@ import VX_tcu_pkg::*;
                 .tcu_tbuf_rs1_data    (tcu_tbuf_rs1_data[i]),
                 .tcu_tbuf_rs2_data    (tcu_tbuf_rs2_data[i]),
                 .tcu_tbuf_ready       (tcu_tbuf_ready[i]),
+            `endif
+            `ifdef VX_CFG_TCU_TMEM_ENABLE
+                .tcu_job_if           (tcu_job_if[i]),
             `endif
                 .warp_shared_if       (warp_shared_if[i])
             );
@@ -712,6 +740,9 @@ import VX_tcu_pkg::*;
                     .tcu_tbuf_rs2_data    (tcu_tbuf_rs2_data[i]),
                     .tcu_tbuf_ready       (tcu_tbuf_ready[i]),
                 `endif
+                `ifdef VX_CFG_TCU_TMEM_ENABLE
+                    .tcu_job_if           (tcu_job_if[i]),
+                `endif
                     .warp_shared_if       (warp_shared_if[i]),
                     .cta_bcast            (cta_bcast)
                 );
@@ -789,6 +820,9 @@ import VX_tcu_pkg::*;
                 .tcu_tbuf_rs1_data    (tcu_tbuf_rs1_data),
                 .tcu_tbuf_rs2_data    (tcu_tbuf_rs2_data),
                 .tcu_tbuf_ready       (tcu_tbuf_ready),
+            `endif
+            `ifdef VX_CFG_TCU_TMEM_ENABLE
+                .tcu_job_if           (tcu_job_if),
             `endif
             `ifdef VX_CFG_EXT_DXA_ENABLE
                 .dxa_req_bus_if       (block_dxa_req_bus_if),

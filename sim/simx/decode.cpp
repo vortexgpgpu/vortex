@@ -1099,21 +1099,30 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       instr->set_fu_type(FUType::TCU);
       switch (funct3) {
       case 0: { // WMMA_SYNC / WMMA_SP_SYNC — single macro Instr, sequencer expands to micro-ops
+      #ifndef VX_CFG_TCU_WMMA_ENABLE
+        std::cout << "Error: WMMA on a core built without VX_CFG_TCU_WMMA_ENABLE" << std::endl;
+        std::abort();
+      #endif
         uint32_t fmt_d = rd, fmt_s = rs1;
         bool is_sparse = (rs2 & 1) != 0;
         instr->set_op_type(is_sparse ? TcuType::WMMA_SP : TcuType::WMMA);
-        instr->set_args(IntrTcuArgs{0, 0, fmt_s, fmt_d, 0, 0, 0, 0, 0, 0});
+        instr->set_args(IntrTcuArgs{0, 0, fmt_s, fmt_d, 0, 0, 0, 0, 0, 0, 0, 0, 0});
         instr->set_fcsr_use(tcu_meta_reads(fmt_s, is_sparse), 0);
         instr->set_macro_op();
       } break;
     #ifdef VX_CFG_TCU_WGMMA_ENABLE
       case 1: { // WGMMA_SYNC — single macro Instr, sequencer expands to micro-ops
+      #ifdef VX_CFG_TCU_TMEM_ENABLE
+        // A tensor-memory build has no warp WGMMA: the TCU's MMAs are tc.mma.
+        std::cout << "Error: WGMMA in a tensor-memory build" << std::endl;
+        std::abort();
+      #endif
         uint32_t fmt_d = rd, fmt_s = rs1;
         bool is_sparse = (rs2 & 1) != 0;
         uint32_t cd_nregs = (rs2 >> 1) & 0x3;
         bool is_a_smem = (rs2 >> 3) & 1;
         instr->set_op_type(is_sparse ? TcuType::WGMMA_SP : TcuType::WGMMA);
-        instr->set_args(IntrTcuArgs{is_a_smem ? 1u : 0u, cd_nregs, fmt_s, fmt_d, 0, 0, 0, 0, 0, 0});
+        instr->set_args(IntrTcuArgs{is_a_smem ? 1u : 0u, cd_nregs, fmt_s, fmt_d, 0, 0, 0, 0, 0, 0, 0, 0, 0});
         instr->set_fcsr_use(tcu_meta_reads(fmt_s, is_sparse), 0);
         instr->set_macro_op();
       } break;
@@ -1123,11 +1132,15 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         uint32_t fmt_s = rs2;
         uint32_t slot  = rd;
         instr->set_op_type(TcuType::TCU_LD);
-        instr->set_args(IntrTcuArgs{0, 0, fmt_s, slot, 0, 0, 0, 0, 0, 0});
+        instr->set_args(IntrTcuArgs{0, 0, fmt_s, slot, 0, 0, 0, 0, 0, 0, 0, 0, 0});
         // rs1 holds the warp-broadcast base address (real I-reg read).
         instr->set_src_reg(0, rs1, RegType::Integer);
         instr->set_fcsr_use(0, (rd & 0x10) ? Instr::FCSR_FRM : Instr::FCSR_FFLAGS);
       } break;
+    #else
+      case 2:
+        std::cout << "Error: TCU_LD on a core without the metadata store (per-warp MMAs with sparse or MX)" << std::endl;
+        std::abort();
     #endif // TCU_META_ENABLE
       default:
         std::abort();
@@ -1137,6 +1150,68 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     case 2:
       std::cout << "Error: TCU instruction on a core built without VX_CFG_EXT_TCU_ENABLE" << std::endl;
       std::abort();
+  #endif
+  #ifdef VX_CFG_TCU_TMEM_ENABLE
+    case 5: {
+      instr->set_fu_type(FUType::TCU);
+      IntrTcuArgs args{};
+      switch (funct3) {
+      case 0: // TMEM_LD fd, (rs1), n: rd = first FP destination, rs2 = n-1
+      case 4: // TMEM_LD.F: fragment shape
+        args.fmt_d  = rd;
+        args.tmem_row = (funct3 == 4);
+        args.tmem_n = rs2 + 1;
+        instr->set_op_type(TcuType::TMEM_LD);
+        instr->set_src_reg(0, rs1, RegType::Integer);
+        instr->set_macro_op();
+        break;
+      case 1: // TMEM_ST fs, (rs1), n: rd = first FP source, rs2 = n-1
+      case 5: // TMEM_ST.F: fragment shape
+        args.fmt_s  = rd;
+        args.tmem_row = (funct3 == 5);
+        args.tmem_n = rs2 + 1;
+        instr->set_op_type(TcuType::TMEM_ST);
+        instr->set_src_reg(0, rs1, RegType::Integer);
+        instr->set_macro_op();
+        break;
+      case 6: // TMEM_ALLOC rd, rs1: rs1 columns
+        instr->set_op_type(TcuType::TMEM_ALLOC);
+        instr->set_dest_reg(rd, RegType::Integer);
+        instr->set_src_reg(0, rs1, RegType::Integer);
+        break;
+      case 7: // TMEM_DEALLOC rs1, rs2: rs2 columns from column rs1
+        instr->set_op_type(TcuType::TMEM_DEALLOC);
+        instr->set_src_reg(0, rs1, RegType::Integer);
+        instr->set_src_reg(1, rs2, RegType::Integer);
+        break;
+      default:
+        std::abort();
+      }
+      instr->set_args(args);
+    } break;
+    case 6: { // tcgen05-style async tensor ops
+      instr->set_fu_type(FUType::TCU);
+      IntrTcuArgs args{};
+      switch (funct3) {
+      case 1: // TC_COMMIT rs1, rs2: barrier id, arrival count
+        instr->set_op_type(TcuType::TC_COMMIT);
+        instr->set_src_reg(1, rs2, RegType::Integer);
+        break;
+      case 2: // TC_CP rs1, rs2: {columns, taddr}, source
+        instr->set_op_type(TcuType::TC_CP);
+        instr->set_src_reg(1, rs2, RegType::Integer);
+        break;
+      case 4: // TC_MMA rs1, rs2, rs3 (rd field): instruction descriptor, A, B
+        instr->set_op_type(TcuType::TC_MMA);
+        instr->set_src_reg(1, rs2, RegType::Integer);
+        instr->set_src_reg(2, rd, RegType::Integer);
+        break;
+      default:
+        std::abort();
+      }
+      instr->set_src_reg(0, rs1, RegType::Integer);
+      instr->set_args(args);
+    } break;
   #endif
     case 4: { // Load/Store Packing extensions — macro-ops, sequencer expands to N single-elem uops
       instr->set_fu_type(FUType::LSU);

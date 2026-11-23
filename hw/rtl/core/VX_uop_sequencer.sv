@@ -130,14 +130,18 @@ module VX_uop_sequencer import
     // ------------------------------------------------------------------
     assign uop_in_valid[UOP_TCU] = (uop_in_data.ex_type == EX_TCU)
         && (uop_in_data.op_type == INST_TCU_WMMA
-    `ifdef VX_CFG_TCU_WGMMA_ENABLE
+    `ifdef TCU_WARP_WGMMA
         || uop_in_data.op_type == INST_TCU_WGMMA
     `endif
     `ifdef VX_CFG_TCU_SPARSE_ENABLE
         || uop_in_data.op_type == INST_TCU_WMMA_SP
-      `ifdef VX_CFG_TCU_WGMMA_ENABLE
+      `ifdef TCU_WARP_WGMMA
         || uop_in_data.op_type == INST_TCU_WGMMA_SP
       `endif
+    `endif
+    `ifdef VX_CFG_TCU_TMEM_ENABLE
+        || uop_in_data.op_type == INST_TCU_TMEM_LD
+        || uop_in_data.op_type == INST_TCU_TMEM_ST
     `endif
         );
     VX_tcu_uops tcu_uops (

@@ -40,6 +40,10 @@ module VX_tcu_block import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     VX_lsu_sched_if.master  tcu_mem_if,
 `endif
 
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    VX_tcu_job_if.block     job_if,
+`endif
+
     VX_execute_if.slave     execute_if,
     VX_result_if.master     result_if
 );
@@ -83,20 +87,146 @@ module VX_tcu_block import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .result_ready (agu_result_ready)
     );
 
-    // TCU_LD goes to the AGU, every MMA op to the core
-    wire is_tcu_ld = (execute_if.data.op_type == INST_TCU_LD);
+`endif
 
-    assign agu_ld_valid          = execute_if.valid && is_tcu_ld;
-    assign core_execute_if.valid = execute_if.valid && !is_tcu_ld;
+    // TCU_LD goes to the AGU, TMEM and tc ops to the tensor memory, every MMA
+    // op to the core.
+    wire [INST_OP_BITS-1:0] op_type = execute_if.data.op_type;
+    `UNUSED_VAR (op_type)
+`ifdef TCU_META_ENABLE
+    wire is_tcu_ld = (op_type == INST_TCU_LD);
+`else
+    wire is_tcu_ld = 1'b0;
+`endif
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    wire is_tj_op = (op_type == INST_OP_BITS'(INST_TCU_TMEM_LD))
+                 || (op_type == INST_OP_BITS'(INST_TCU_TMEM_ST))
+                 || (op_type == INST_OP_BITS'(INST_TCU_TC_CP))
+                 || (op_type == INST_OP_BITS'(INST_TCU_TMEM_ALLOC))
+                 || (op_type == INST_OP_BITS'(INST_TCU_TMEM_DEALLOC))
+                 || (op_type == INST_OP_BITS'(INST_TCU_TC_MMA))
+                 || (op_type == INST_OP_BITS'(INST_TCU_TC_COMMIT));
+`else
+    wire is_tj_op = 1'b0;
+`endif
+`ifdef VX_CFG_TCU_WMMA_ENABLE
+    wire warp_core_valid = execute_if.valid && !is_tcu_ld && !is_tj_op;
+`else
+    wire warp_core_valid = 1'b0;
+`endif
+
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    // Tensor-op MMA steps take the core ahead of warp MMAs.
+    assign job_if.op_valid       = execute_if.valid && is_tj_op;
+    assign job_if.op_data        = execute_if.data;
+    assign core_execute_if.valid = job_if.job_valid ? job_if.job_fire : warp_core_valid;
+    // A step's A and B come from the tile buffers, so only the header, op
+    // fields and C (rs3) switch to the step; rs1/rs2 stay the warp's.
+`ifdef VX_CFG_TCU_WMMA_ENABLE
+    wire step = job_if.job_valid;
+`else
+    wire step = 1'b1;
+`endif
+    assign core_execute_if.data  = {step ? job_if.job_data.header  : execute_if.data.header,
+                                    step ? job_if.job_data.op_type : execute_if.data.op_type,
+                                    step ? job_if.job_data.op_args : execute_if.data.op_args,
+                                    execute_if.data.rs1_data,
+                                    execute_if.data.rs2_data,
+                                    step ? job_if.job_data.rs3_data : execute_if.data.rs3_data};
+    `UNUSED_VAR ({job_if.job_data.rs1_data, job_if.job_data.rs2_data})
+    assign job_if.core_ready     = core_execute_if.ready;
+    wire warp_core_ready = core_execute_if.ready && !job_if.job_valid;
+    wire tj_ready        = job_if.op_ready;
+    `RUNTIME_ASSERT (~(warp_core_valid && (op_type == INST_OP_BITS'(INST_TCU_WGMMA)
+                    `ifdef VX_CFG_TCU_SPARSE_ENABLE
+                        || op_type == INST_OP_BITS'(INST_TCU_WGMMA_SP)
+                    `endif
+                    )), ("%t: %s: WGMMA is not supported with tensor memory", $time, INSTANCE_ID))
+`else
+    assign core_execute_if.valid = warp_core_valid;
     assign core_execute_if.data  = execute_if.data;
-    assign execute_if.ready      = is_tcu_ld ? agu_ld_ready : core_execute_if.ready;
+    wire warp_core_ready = core_execute_if.ready;
+    wire tj_ready        = 1'b0;
+`endif
+`ifdef TCU_META_ENABLE
+    assign agu_ld_valid = execute_if.valid && is_tcu_ld;
+    wire agu_ready = agu_ld_ready;
+`else
+    wire agu_ready = 1'b0;
+`endif
+    assign execute_if.ready = is_tcu_ld ? agu_ready
+                            : is_tj_op  ? tj_ready
+                            : warp_core_ready;
 
-    // AGU wins same-cycle conflicts; the core stalls and retries next cycle.
-    assign result_if.valid       = agu_result_valid || core_result_if.valid;
-    assign result_if.data        = agu_result_valid ? agu_result_data : core_result_if.data;
-    assign agu_result_ready      = result_if.ready;
-    assign core_result_if.ready  = result_if.ready && !agu_result_valid;
+    // Results: the AGU, then the tensor memory, then the core. A tensor-op
+    // MMA step's result goes back to the tensor memory, in issue order.
+`ifdef TCU_META_ENABLE
+    wire a_valid = agu_result_valid;
+    tcu_result_t a_data;
+    assign a_data = agu_result_data;
+    assign agu_result_ready = result_if.ready;
+`else
+    wire a_valid = 1'b0;
+    tcu_result_t a_data;
+    assign a_data = 'x;
+`endif
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    wire t_valid = job_if.rsp_valid;
+    tcu_result_t t_data;
+    assign t_data = job_if.rsp_data;
+    assign job_if.rsp_ready = result_if.ready && !a_valid;
 
+`ifdef VX_CFG_TCU_WMMA_ENABLE
+    wire is_job_head, order_empty, order_full;
+    wire core_in_fire  = core_execute_if.valid && core_execute_if.ready;
+    wire core_out_fire = core_result_if.valid && core_result_if.ready;
+    VX_fifo_queue #(
+        .DATAW  (1),
+        .DEPTH  (32),
+        .LUTRAM (1)
+    ) order_q (
+        .clk     (clk),
+        .reset   (reset),
+        .push    (core_in_fire),
+        .pop     (core_out_fire),
+        .data_in (job_if.job_valid),
+        .data_out(is_job_head),
+        .empty   (order_empty),
+        `UNUSED_PIN (alm_empty),
+        .full    (order_full),
+        `UNUSED_PIN (alm_full),
+        `UNUSED_PIN (size)
+    );
+    `UNUSED_VAR (order_empty)
+    `RUNTIME_ASSERT (~(core_in_fire && order_full), ("%t: %s: tcu order queue overflow", $time, INSTANCE_ID))
+    assign job_if.jres_valid = core_result_if.valid && is_job_head;
+    for (genvar t = 0; t < `VX_CFG_NUM_THREADS; ++t) begin : g_jres
+        assign job_if.jres_data[t] = core_result_if.data.data[t][31:0];
+    end
+    wire c_valid = core_result_if.valid && !is_job_head;
+    assign core_result_if.ready = is_job_head || (result_if.ready && !a_valid && !t_valid);
+`else
+    // Every core result is a tensor-op step's, written back to tensor memory.
+    assign job_if.jres_valid = core_result_if.valid;
+    for (genvar t = 0; t < `VX_CFG_NUM_THREADS; ++t) begin : g_jres
+        assign job_if.jres_data[t] = core_result_if.data.data[t][31:0];
+    end
+    wire c_valid = 1'b0;
+    assign core_result_if.ready = 1'b1;
+`endif
+`else
+    wire t_valid = 1'b0;
+    tcu_result_t t_data;
+    assign t_data = 'x;
+    wire c_valid = core_result_if.valid;
+    assign core_result_if.ready = result_if.ready && !a_valid;
+`endif
+    assign result_if.valid = a_valid || t_valid || c_valid;
+    assign result_if.data  = a_valid ? a_data
+                           : t_valid ? t_data
+                           : core_result_if.data;
+
+`ifdef TCU_META_ENABLE
     // A TCU_LD writes its response fragments straight into the metadata RAM,
     // which an MMA reads while it is presented to the core. That is safe only
     // if no MMA of the loading warp that reads the region being loaded is
@@ -118,21 +248,19 @@ module VX_tcu_block import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `else
     wire mma_reads_mx = 1'b0;
 `endif
+    // the warp's own MMA is presented (not a tensor-op step)
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    wire warp_mma_presented = warp_core_valid && !job_if.job_valid;
+`else
+    wire warp_mma_presented = warp_core_valid;
+`endif
     // ~ld_ready: the AGU holds a TCU_LD, so its wid and slot are registered
     wire mma_reads_ld_region = meta_wr_idx[4] ? mma_reads_mx : mma_reads_sp;
-    `RUNTIME_ASSERT(~(core_execute_if.valid && ~agu_ld_ready
+    `RUNTIME_ASSERT(~(warp_mma_presented && ~agu_ld_ready
                    && (execute_if.data.header.wid == meta_wr_wid) && mma_reads_ld_region),
         ("%t: *** %s MMA reads metadata a TCU_LD is loading: wid=%0d, slot=%0d, op_type=%0d (#%0d)",
             $time, INSTANCE_ID, meta_wr_wid, meta_wr_idx, execute_if.data.op_type, execute_if.data.header.uuid))
 `endif
-`else
-    assign core_execute_if.valid = execute_if.valid;
-    assign core_execute_if.data  = execute_if.data;
-    assign execute_if.ready      = core_execute_if.ready;
-
-    assign result_if.valid       = core_result_if.valid;
-    assign result_if.data        = core_result_if.data;
-    assign core_result_if.ready  = result_if.ready;
 `endif
 
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
@@ -162,6 +290,15 @@ module VX_tcu_block import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .ext_meta_wr_idx  (meta_wr_idx),
         .ext_meta_wr_mask (meta_wr_mask),
         .ext_meta_wr_data (meta_wr_data),
+    `endif
+    `ifdef VX_CFG_TCU_TMEM_ENABLE
+    `ifdef VX_CFG_TCU_SPARSE_ENABLE
+        .job_meta         (job_if.job_meta),
+        .job_meta_hi      (job_if.job_meta_hi),
+    `endif
+    `ifdef VX_CFG_TCU_MX_ENABLE
+        .job_sf           (job_if.job_sf),
+    `endif
     `endif
         .execute_if (core_execute_if),
         .result_if  (core_result_if)
