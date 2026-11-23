@@ -6,10 +6,15 @@ all: unittest kernel regression opencl riscv
 unittest:
 	$(MAKE) -C unittest
 
-kernel:
+# kernel and regression both link the sw/kernel libraries: build them once
+# first, so the two don't build them at the same time under -j.
+kernel-lib:
+	$(MAKE) -C $(ROOT_DIR)/sw/kernel
+
+kernel: kernel-lib
 	$(MAKE) -C kernel
 
-regression:
+regression: kernel-lib
 	$(MAKE) -C regression
 
 opencl:
@@ -41,4 +46,4 @@ clean:
 	$(MAKE) -C graphics clean
 	$(MAKE) -C mpi clean
 
-.PHONY: all unittest kernel regression opencl riscv hip graphics mpi
+.PHONY: all kernel-lib unittest kernel regression opencl riscv hip graphics mpi

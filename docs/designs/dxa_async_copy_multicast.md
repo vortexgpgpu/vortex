@@ -47,7 +47,9 @@ There is no software→global path; DXA is GMEM-read / LMEM-write only.
   ([`VX_dxa_pkg.sv:54`](../../hw/rtl/dxa/VX_dxa_pkg.sv#L54)): `base_addr` +
   `meta` + packed tile sizes (`tile01/tile23/tile4`) + `cfill` +
   `size0..4` (OOB bounds) + `stride0..3` (byte row strides) +
-  `smem_stride` (per-CTA LMEM stride for multicast). Programmed by the
+  `smem_stride` (per-CTA LMEM stride for multicast: the host writes the
+  kernel's per-CTA LMEM size, and the setup stage rounds it up to the CTA
+  slot pitch, `LMEM_SLOT_ALIGN`, as the KMU rounds the slots). Programmed by the
   host over a DCR block `[dcr_dxa]` at 0x100, 16 descriptors
   ([`VX_types.toml:87-123`](../../VX_types.toml#L87)).
 - **META subfields** `[dxa_desc_meta]`: `DIM` (3b), `ELEMSZ` (2b),
