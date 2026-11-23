@@ -56,6 +56,9 @@ interface VX_slice_sched_if import VX_gpu_pkg::*; ();
 
     // every slice's ibuf_full; the slice ANDs them into its core-wide view
     logic [FW-1:0]          slice_ibuf_full;
+
+    // the per-core trap vector, where ECALL and EBREAK redirect
+    logic [`VX_CFG_XLEN-1:0] mtvec;
 `ifdef EXT_SCHED_TIMEOUT_DUMP
     // the core-wide stall timeout is about to fire
     logic                   timeout_dump;
@@ -99,6 +102,7 @@ interface VX_slice_sched_if import VX_gpu_pkg::*; ();
         output retire_valid,
         output retire_lid,
         output slice_ibuf_full,
+        output mtvec,
 `ifdef EXT_SCHED_TIMEOUT_DUMP
         output timeout_dump,
 `endif
@@ -138,6 +142,7 @@ interface VX_slice_sched_if import VX_gpu_pkg::*; ();
         input  retire_valid,
         input  retire_lid,
         input  slice_ibuf_full,
+        input  mtvec,
 `ifdef EXT_SCHED_TIMEOUT_DUMP
         input  timeout_dump,
 `endif

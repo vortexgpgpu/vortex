@@ -26,7 +26,7 @@ interface VX_branch_ctl_if import VX_gpu_pkg::*; ();
     // override the normal taken/dest path in the scheduler.
     wire                is_trap;
     wire                is_mret;
-    wire [3:0]          trap_cause;
+    wire [TRAP_CAUSE_BITS-1:0] trap_cause;
 
     modport master (
         output valid,
