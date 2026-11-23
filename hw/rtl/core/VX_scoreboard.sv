@@ -25,6 +25,14 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
     input wire [NUM_EX_UNITS-1:0] fu_release,
     VX_writeback_if.slave   writeback_if,
+    input gpr_layout_t      gpr_layout,
+
+    // the entry the buffer writes this cycle, and every warp's entries
+    input wire                            ins_valid,
+    input wire [ISSUE_WIS_W-1:0]          ins_wis,
+    input ibuf_hz_t                       ins_hz,
+    input ibuf_hz_t [PER_ISSUE_WARPS-1:0][`VX_CFG_IBUF_SIZE-1:0] slots_hz,
+    input wire [PER_ISSUE_WARPS-1:0][`CLOG2(`VX_CFG_IBUF_SIZE + 1)-1:0] slots_count,
 
     // per warp: the instruction buffer's head entry and the one behind it
     input wire [PER_ISSUE_WARPS-1:0]      head_valid,
@@ -40,15 +48,23 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     VX_scoreboard_if.master scoreboard_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    `UNUSED_VAR ({writeback_if.data.sop, writeback_if.data.eop, writeback_if.data.wis})
+    `UNUSED_VAR ({writeback_if.data.sop, writeback_if.data.eop})
 
     localparam NUM_OPDS  = NUM_SRC_OPDS + 1;
     localparam OUT_DATAW = $bits(scoreboard_t) - ISSUE_WIS_W;
     localparam OUT_BUF   = 3; // Use skid buffer (SIZE=2, OUT_REG=1)
-    // x and f registers have an in-use bit each; uniform registers share a few tags
-    localparam NUM_GPRS  = GPR_TYPES * RV_REGS;
-    localparam GPR_BITS  = `CLOG2(NUM_GPRS);
-    localparam UTAGS     = `VX_CFG_EXT_U_ENABLED ? `VX_CFG_UREG_TAGS : 0;
+    localparam DEPTH     = `VX_CFG_IBUF_SIZE;
+    localparam CNTW      = `CLOG2(DEPTH + 1);
+    localparam NOPC      = `VX_CFG_NUM_OPCS;
+    // one busy bit per register-file row of the slice's collectors
+    localparam GROWS     = NOPC * `VX_CFG_GPR_ROWS;
+    localparam GROW_W    = `LOG2UP(GROWS);
+`ifdef VX_CFG_EXT_U_ENABLE
+    localparam UROWS     = NOPC * `VX_CFG_UREG_ROWS;
+`else
+    localparam UROWS     = 1;
+`endif
+    localparam UROW_W    = `LOG2UP(UROWS);
 
     // Per-FU dispatch credits: spent at issue, reclaimed on FU accept, so a
     // credit covers ops still in operand collection (not yet at the queue).
@@ -89,187 +105,221 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     end
 `endif
 
+    // A warp's registers sit at its set's base in its collector's file, as the
+    // operand collectors lay them out: warps dealt round-robin to collectors.
+    reg [PER_ISSUE_WARPS-1:0][GROW_W-1:0] xbase_r, fbase_r;
+    reg [PER_ISSUE_WARPS-1:0][UROW_W-1:0] ubase_r;
+    always @(posedge clk) begin
+        for (integer w = 0; w < PER_ISSUE_WARPS; ++w) begin
+            xbase_r[w] <= GROW_W'((w % NOPC) * `VX_CFG_GPR_ROWS + (w / NOPC) * gpr_layout.size4 * 4);
+            fbase_r[w] <= GROW_W'((w % NOPC) * `VX_CFG_GPR_ROWS + (w / NOPC) * gpr_layout.size4 * 4 + gpr_layout.fp_off4 * 4);
+        `ifdef VX_CFG_EXT_U_ENABLE
+            // u1 takes the set's first row; u0 reads zero and takes none
+            ubase_r[w] <= UROW_W'((w % NOPC) * `VX_CFG_UREG_ROWS + (w / NOPC) * gpr_layout.usize4 * 4);
+        `else
+            ubase_r[w] <= '0;
+        `endif
+        end
+    end
+
+    function automatic logic is_ureg(input logic [NUM_REGS_BITS-1:0] r);
+        return `VX_CFG_EXT_U_ENABLED && (get_reg_type(r) == REG_TYPE_U);
+    endfunction
+
+    // x0 and u0 are never written, so they are never busy
+    function automatic logic is_zero(input logic [NUM_REGS_BITS-1:0] r);
+        return (get_reg_type(r) != REG_TYPE_F || GPR_TYPES == 1) && (get_reg_idx(r) == '0);
+    endfunction
+
+    function automatic logic [GROW_W-1:0] grow_of(input logic [ISSUE_WIS_W-1:0] wis,
+                                                  input logic [NUM_REGS_BITS-1:0] r);
+        logic is_f;
+        is_f = (GPR_TYPES > 1) && (get_reg_type(r) == REG_TYPE_F);
+        return (is_f ? fbase_r[wis] : xbase_r[wis]) + GROW_W'(get_reg_idx(r));
+    endfunction
+
+    function automatic logic [UROW_W-1:0] urow_of(input logic [ISSUE_WIS_W-1:0] wis,
+                                                  input logic [NUM_REGS_BITS-1:0] r);
+        return ubase_r[wis] + UROW_W'(get_reg_idx(r)) - UROW_W'(1);
+    endfunction
+
+    // Busy bits: a register with a write pending, from the writer's insertion
+    // to its writeback. A warp issues in order, so a register reserved at
+    // insertion holds every later entry of the warp as reserving it at issue
+    // would; each entry looks its operands up once. The lookup and the
+    // reservation take the cycle after the write, from a registered copy: the
+    // write ends the whole front-end path, and the entry is checked for issue
+    // only from that next cycle anyway.
+    reg [GROWS-1:0] gbusy;
+    reg [UROWS-1:0] ubusy;
+
+    reg                   insq_valid;
+    reg [ISSUE_WIS_W-1:0] insq_wis;
+    ibuf_hz_t             insq_hz;
+    reg [CNTW-1:0]        insq_slot;
+    wire [CNTW-1:0] ins_slot = slots_count[ins_wis] - CNTW'(head_pop[ins_wis]);
+    always @(posedge clk) begin
+        insq_valid <= ~reset && ins_valid;
+        insq_wis   <= ins_wis;
+        insq_hz    <= ins_hz;
+        insq_slot  <= ins_slot;
+    end
+
+    wire [NUM_REGS_BITS-1:0] wb_rd = writeback_if.data.rd;
+    wire wb_any  = writeback_if.valid && (| writeback_if.data.eop_wis) && writeback_if.data.wb;
+    wire wb_is_u = is_ureg(wb_rd);
+    wire [GROW_W-1:0] wb_grow = grow_of(writeback_if.data.wis, wb_rd);
+    wire [UROW_W-1:0] wb_urow = urow_of(writeback_if.data.wis, wb_rd);
+    // an older entry of the writing warp, already reserved, writes the register too
+    wire [PER_ISSUE_WARPS-1:0] wb_keep_w;
+    wire wb_keep = | (wb_keep_w & writeback_if.data.eop_wis);
+    wire gclear  = wb_any && ~wb_is_u && ~wb_keep;
+    wire uclear  = wb_any && wb_is_u && ~wb_keep;
+
+    // the entry written last cycle: its operands' busy bits, after this cycle's release
+    wire [NUM_OPDS-1:0][NUM_REGS_BITS-1:0] ins_opds = {insq_hz.rs3, insq_hz.rs2, insq_hz.rs1, insq_hz.rd};
+    wire [NUM_OPDS-1:0] ins_used = {insq_hz.used_rs, insq_hz.wb};
+    wire [NUM_OPDS-1:0] ins_pend;
+    wire [NUM_OPDS-1:0][GROW_W-1:0] ins_grow;
+    wire [NUM_OPDS-1:0][UROW_W-1:0] ins_urow;
+    for (genvar i = 0; i < NUM_OPDS; ++i) begin : g_ins
+        assign ins_grow[i] = grow_of(insq_wis, ins_opds[i]);
+        assign ins_urow[i] = urow_of(insq_wis, ins_opds[i]);
+        wire gb = gbusy[ins_grow[i]] && ~(gclear && (wb_grow == ins_grow[i]));
+        wire ub = ubusy[ins_urow[i]] && ~(uclear && (wb_urow == ins_urow[i]));
+        assign ins_pend[i] = ins_used[i] && ~is_zero(ins_opds[i]) && (is_ureg(ins_opds[i]) ? ub : gb);
+    end
+    `UNUSED_VAR (insq_hz) // only its operands are looked up
+    wire ins_rsv = insq_valid && insq_hz.wb && ~is_zero(insq_hz.rd);
+    wire ins_rd_u = is_ureg(insq_hz.rd);
+
+    // the busy bits change only on an insertion or a writeback
+    wire busy_upd = insq_valid || wb_any;
+`ifdef ASIC
+    wire busy_clk;
+    VX_clockgate busy_cg (.clk_in (clk), .en (reset || busy_upd), .clk_out (busy_clk));
+`else
+    `UNUSED_VAR (busy_upd)
+`endif
+    always @(posedge `GATED_CLK(clk, busy_clk)) begin
+        if (reset) begin
+            gbusy <= '0;
+            ubusy <= '0;
+        end else begin
+            if (gclear) begin
+                gbusy[wb_grow] <= 1'b0;
+            end
+            if (uclear) begin
+                ubusy[wb_urow] <= 1'b0;
+            end
+            // an insertion's reservation wins over a release of the same row
+            if (ins_rsv && ~ins_rd_u) begin
+                gbusy[ins_grow[0]] <= 1'b1;
+            end
+            if (ins_rsv && ins_rd_u) begin
+                ubusy[ins_urow[0]] <= 1'b1;
+            end
+        end
+    end
+
+`ifdef SIMULATION
+    `RUNTIME_ASSERT(~wb_any || (wb_is_u ? ubusy[wb_urow] : gbusy[wb_grow]),
+        ("invalid writeback register: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d (#%0d)",
+            writeback_if.data.wis, to_fullPC(writeback_if.data.PC), writeback_if.data.tmask, wb_rd, writeback_if.data.uuid))
+`endif
+
     for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_scoreboard
-        reg [NUM_GPRS-1:0] inuse_regs, inuse_regs_n;
         reg [NUM_XREGS-1:0] inuse_xregs, inuse_xregs_n;
 
         // The head issues this cycle; the entry behind it becomes the head.
         wire staging_fire = head_pop[w];
 
         wire writeback_fire = writeback_if.valid && writeback_if.data.eop_wis[w];
+        wire wb_release = writeback_fire && writeback_if.data.wb;
 
-        wire [NUM_OPDS-1:0] [NUM_REGS_BITS-1:0] ibf_opds, stg_opds;
-        assign ibf_opds = {next_hz[w].rs3, next_hz[w].rs2, next_hz[w].rs1, next_hz[w].rd};
-        assign stg_opds = {head_hz[w].rs3, head_hz[w].rs2, head_hz[w].rs1, head_hz[w].rd};
+        // Per entry, its operands still waiting on a write; a writeback clears
+        // an operand unless an older entry of the warp writes the register too.
+        reg  [DEPTH-1:0][NUM_OPDS-1:0] pend;
+        wire [DEPTH-1:0][NUM_OPDS-1:0] pend_w;
+        wire [CNTW-1:0] count = slots_count[w];
+        // the entry written last cycle takes this cycle's lookup; it has not
+        // reserved its own register yet
+        wire [DEPTH-1:0] fresh;
+        wire [DEPTH-1:0] slot_writes;
+        for (genvar k = 0; k < DEPTH; ++k) begin : g_slot_writes
+            assign fresh[k] = insq_valid && (insq_wis == ISSUE_WIS_W'(w)) && (insq_slot == CNTW'(k));
+            assign slot_writes[k] = (CNTW'(k) < count) && ~fresh[k] && slots_hz[w][k].wb && (slots_hz[w][k].rd == wb_rd);
+        end
+        assign wb_keep_w[w] = | slot_writes;
+        for (genvar k = 0; k < DEPTH; ++k) begin : g_wake
+            wire older_writes;
+            if (k == 0) begin : g_head
+                assign older_writes = 1'b0;
+            end else begin : g_behind
+                assign older_writes = | slot_writes[k-1:0];
+            end
+            wire [NUM_OPDS-1:0][NUM_REGS_BITS-1:0] opds = {slots_hz[w][k].rs3, slots_hz[w][k].rs2,
+                                                           slots_hz[w][k].rs1, slots_hz[w][k].rd};
+            wire [NUM_OPDS-1:0] pend_k = fresh[k] ? ins_pend : pend[k];
+            for (genvar i = 0; i < NUM_OPDS; ++i) begin : g_opd
+                assign pend_w[k][i] = pend_k[i] && ~(wb_release && ~older_writes && (opds[i] == wb_rd));
+            end
+        end
 
-        wire [NUM_OPDS-1:0] ibf_used_rs = {next_hz[w].used_rs, next_hz[w].wb};
-        wire [NUM_OPDS-1:0] stg_used_rs = {head_hz[w].used_rs, head_hz[w].wb};
+        // an entry written this cycle gets its bits from next cycle's lookup
+        for (genvar k = 0; k < DEPTH; ++k) begin : g_pend
+            always @(posedge clk) begin
+                if (staging_fire && (k + 1 < DEPTH)) begin
+                    pend[k] <= pend_w[`MIN(k + 1, DEPTH - 1)];
+                end else begin
+                    pend[k] <= pend_w[k];
+                end
+            end
+        end
 
         // Special-register dependency masks
         wire [NUM_XREGS-1:0] ibf_xregs_mask = next_hz[w].rd_xregs | next_hz[w].wr_xregs;
         wire [NUM_XREGS-1:0] stg_xregs_mask = head_hz[w].rd_xregs | head_hz[w].wr_xregs;
 
-        wire [NUM_OPDS-1:0][REG_TYPES-1:0][RV_REGS-1:0] ibf_opd_mask, stg_opd_mask;
-
-        for (genvar i = 0; i < NUM_OPDS; ++i) begin : g_opd_masks
-            for (genvar j = 0; j < REG_TYPES; ++j) begin : g_j
-                assign ibf_opd_mask[i][j] = (1 << get_reg_idx(ibf_opds[i])) & {RV_REGS{ibf_used_rs[i] && get_reg_type(ibf_opds[i]) == j}};
-                assign stg_opd_mask[i][j] = (1 << get_reg_idx(stg_opds[i])) & {RV_REGS{stg_used_rs[i] && get_reg_type(stg_opds[i]) == j}};
-            end
-        end
-
-        wire wb_is_u  = (get_reg_type(writeback_if.data.rd) == REG_TYPE_U);
-        wire ibf_rd_u = next_hz[w].wb && (get_reg_type(next_hz[w].rd) == REG_TYPE_U);
-        wire stg_rd_u = head_hz[w].wb && (get_reg_type(head_hz[w].rd) == REG_TYPE_U);
-
-        // Writeback release feeds wb_inuse_regs; the staging reserve is added on
-        // top to form the next state, inuse_regs_n.
-        reg [NUM_GPRS-1:0]  wb_inuse_regs;
+        // Special registers are reserved at issue and released at writeback.
         reg [NUM_XREGS-1:0] wb_inuse_xregs;
         always @(*) begin
-            wb_inuse_regs  = inuse_regs;
             wb_inuse_xregs = inuse_xregs;
             if (writeback_fire) begin
-                if (writeback_if.data.wb && ~wb_is_u) begin
-                    wb_inuse_regs[writeback_if.data.rd[GPR_BITS-1:0]] = 0; // release rd
-                end
                 wb_inuse_xregs &= ~writeback_if.data.wr_xregs; // release special regs
             end
         end
 
         always @(*) begin
-            inuse_regs_n  = wb_inuse_regs;
             inuse_xregs_n = wb_inuse_xregs;
             if (staging_fire) begin
-                if (head_hz[w].wb) begin
-                    inuse_regs_n |= NUM_GPRS'(stg_opd_mask[0]); // reserve rd
-                end
                 inuse_xregs_n |= head_hz[w].wr_xregs; // reserve special regs
             end
-        end
-
-        // Uniform tags: one per uniform write in flight, freed by its writeback.
-        // A uniform write waits for a free tag; on fire the head takes one, so
-        // the entry behind it needs a second.
-        wire [NUM_OPDS-1:0] ibf_u_inuse, stg_u_inuse;
-        wire wb_u_hit, ufree1, ufree2;
-        if (UTAGS != 0) begin : g_utags
-            reg [UTAGS-1:0] utag_valid;
-            reg [UTAGS-1:0][RV_REGS_BITS-1:0] utag_idx;
-            wire [UTAGS-1:0] utag_rel;
-            for (genvar t = 0; t < UTAGS; ++t) begin : g_rel
-                assign utag_rel[t] = writeback_fire && writeback_if.data.wb && wb_is_u && utag_valid[t]
-                                  && (utag_idx[t] == get_reg_idx(writeback_if.data.rd));
-            end
-            wire [UTAGS-1:0] wb_utag_valid = utag_valid & ~utag_rel;
-            for (genvar i = 0; i < NUM_OPDS; ++i) begin : g_lookup
-                wire [UTAGS-1:0] ibf_hit, stg_hit;
-                for (genvar t = 0; t < UTAGS; ++t) begin : g_t
-                    assign ibf_hit[t] = utag_valid[t] && (utag_idx[t] == get_reg_idx(ibf_opds[i]));
-                    assign stg_hit[t] = utag_valid[t] && (utag_idx[t] == get_reg_idx(stg_opds[i]));
-                end
-                assign ibf_u_inuse[i] = | ibf_hit;
-                assign stg_u_inuse[i] = | stg_hit;
-            end
-
-            reg [UTAGS-1:0] alloc;
-            reg free2;
-            always @(*) begin
-                alloc = '0;
-                free2 = 1'b0;
-                for (integer t = UTAGS-1; t >= 0; --t) begin
-                    if (~wb_utag_valid[t]) begin
-                        alloc = UTAGS'(1) << t;
-                    end
-                    for (integer t2 = 0; t2 < t; ++t2) begin
-                        free2 |= ~wb_utag_valid[t] && ~wb_utag_valid[t2];
-                    end
-                end
-            end
-            assign wb_u_hit = | utag_rel;
-            assign ufree1 = ~(& wb_utag_valid);
-            assign ufree2 = free2;
-
-            wire take = staging_fire && stg_rd_u;
-            // the tags change only on a uniform issue or a uniform writeback
-        `ifdef ASIC
-            wire utag_clk;
-            VX_clockgate utag_cg (.clk_in (clk), .en (reset || take || (| utag_rel)), .clk_out (utag_clk));
-        `endif
-            always @(posedge `GATED_CLK(clk, utag_clk)) begin
-                if (reset) begin
-                    utag_valid <= '0;
-                end else begin
-                    utag_valid <= wb_utag_valid | (alloc & {UTAGS{take}});
-                end
-                for (integer t = 0; t < UTAGS; ++t) begin
-                    if (take && alloc[t]) begin
-                        utag_idx[t] <= get_reg_idx(head_hz[w].rd);
-                    end
-                end
-            end
-        end else begin : g_no_utags
-            assign ibf_u_inuse = '0;
-            assign stg_u_inuse = '0;
-            assign wb_u_hit = 1'b0;
-            assign ufree1 = 1'b1;
-            assign ufree2 = 1'b1;
         end
 
         // Readiness folds data hazards and FU-congestion into one flop; FU-lock
         // is enforced downstream by masking the arbiter requests.
         //
         // Whether this warp issues this cycle is decided by the out_arb grant,
-        // which depends on every warp's operands_ready_r. Computing readiness
-        // after that decision puts the whole arbitration in front of a
-        // NUM_REGS-wide hazard reduction. Instead both outcomes are evaluated from state that
-        // does not depend on the grant, and staging_fire only selects:
+        // which depends on every warp's operands_ready_r. Both outcomes are
+        // evaluated from state that does not depend on the grant, and
+        // staging_fire only selects:
         //   hold: the head stays
-        //   fire: the head issues, its rd is reserved, the entry behind it moves up
-        // Either way the flop gets the value a post-grant evaluation would. An
-        // entry written this cycle is checked the next, once it is in a slot.
-        //
-        // Either outcome checks one of only two instrs, so each is checked
-        // once and the outcomes select bits.
-        wire [NUM_REGS-1:0] ibf_regs_mask = ibf_opd_mask[0] | ibf_opd_mask[1] | ibf_opd_mask[2] | ibf_opd_mask[3];
-        wire [NUM_REGS-1:0] stg_regs_mask = stg_opd_mask[0] | stg_opd_mask[1] | stg_opd_mask[2] | stg_opd_mask[3];
-        // Each operand reads its in-use bit by index and compares its index with
-        // this cycle's release, which is shallower than reducing the operand
-        // masks against the whole released set.
-        wire wb_release = writeback_fire && writeback_if.data.wb;
-        wire [NUM_OPDS-1:0] ibf_opd_busy, stg_opd_busy;
-        for (genvar i = 0; i < NUM_OPDS; ++i) begin : g_opd_busy
-            wire ibf_inuse = (get_reg_type(ibf_opds[i]) == REG_TYPE_U) ? ibf_u_inuse[i]
-                                                                       : inuse_regs[ibf_opds[i][GPR_BITS-1:0]];
-            wire stg_inuse = (get_reg_type(stg_opds[i]) == REG_TYPE_U) ? stg_u_inuse[i]
-                                                                       : inuse_regs[stg_opds[i][GPR_BITS-1:0]];
-            assign ibf_opd_busy[i] = ibf_used_rs[i] && ibf_inuse
-                                  && ~(wb_release && (writeback_if.data.rd == ibf_opds[i]));
-            assign stg_opd_busy[i] = stg_used_rs[i] && stg_inuse
-                                  && ~(wb_release && (writeback_if.data.rd == stg_opds[i]));
-        end
-        wire ibf_busy  = | ibf_opd_busy;
-        wire stg_busy  = | stg_opd_busy;
-        wire ibf_xbusy = | (wb_inuse_xregs & ibf_xregs_mask);
+        //   fire: the head issues, the entry behind it moves up
+        // An entry written this cycle is checked the next, once it is in a slot.
+        wire stg_busy  = | pend_w[0];
+        wire ibf_busy  = | pend_w[`MIN(1, DEPTH - 1)];
         wire stg_xbusy = | (wb_inuse_xregs & stg_xregs_mask);
-
-        // On fire the staging instr also reserves its rd and wr_xregs. Its
-        // successor sees that reservation only through a register it names,
-        // and a lone staging instr always names its own rd.
-        wire [NUM_OPDS-1:0] ibf_reads_rd;
-        for (genvar i = 0; i < NUM_OPDS; ++i) begin : g_ibf_reads_rd
-            assign ibf_reads_rd[i] = ibf_used_rs[i] && (ibf_opds[i] == stg_opds[0]);
-        end
-        wire stg_rsv_rd = head_hz[w].wb;
-        wire ibf_rsv    = (stg_rsv_rd && (| ibf_reads_rd))
-                       || (| (head_hz[w].wr_xregs & ibf_xregs_mask));
+        wire ibf_xbusy = | (wb_inuse_xregs & ibf_xregs_mask);
+        // On fire the head reserves its special registers.
+        wire ibf_xrsv  = | (head_hz[w].wr_xregs & ibf_xregs_mask);
 
         wire ibf_goingfull = fu_goingfull[next_hz[w].ex_type];
         wire stg_goingfull = fu_goingfull[head_hz[w].ex_type];
 
-        wire hold_ready = head_valid[w] && ~(stg_busy || stg_xbusy || (stg_rd_u && ~ufree1)) && ~stg_goingfull;
+        wire hold_ready = head_valid[w] && ~(stg_busy || stg_xbusy) && ~stg_goingfull;
         wire fire_ready = ISSUE_LOOKAHEAD && next_valid[w]
-                       && ~(ibf_busy || ibf_xbusy || ibf_rsv || (ibf_rd_u && ~(stg_rd_u ? ufree2 : ufree1)))
+                       && ~(ibf_busy || ibf_xbusy || ibf_xrsv)
                        && ~ibf_goingfull;
 
         wire operands_ready_n = staging_fire ? fire_ready : hold_ready;
@@ -277,22 +327,15 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
     `ifdef SIMULATION
         // Per-operand busy view of the head, for the stall trace.
-        wire [REG_TYPES-1:0][RV_REGS-1:0] in_use_mask = NUM_REGS'(inuse_regs) & stg_regs_mask;
-        wire [NUM_OPDS-1:0] operands_busy;
-        for (genvar i = 0; i < NUM_OPDS; ++i) begin : g_operands_busy
-            wire [REG_TYPE_BITS-1:0] rtype = get_reg_type(stg_opds[i]);
-            assign operands_busy[i] = | (in_use_mask[rtype] & stg_opd_mask[i][rtype]);
-        end
+        wire [NUM_OPDS-1:0] operands_busy = pend_w[0];
         wire xregs_busy = | (inuse_xregs & stg_xregs_mask);
-        `UNUSED_VAR ({ibf_regs_mask, xregs_busy})
-    `else
-        `UNUSED_VAR ({ibf_regs_mask, stg_regs_mask})
+        `UNUSED_VAR (xregs_busy)
     `endif
 
         // The in-use bits change only on this warp's writeback or issue; on
         // ASIC they take no clock edge otherwise.
         wire inuse_upd = writeback_fire || staging_fire;
-        `RUNTIME_ASSERT (inuse_upd || ({inuse_regs_n, inuse_xregs_n} == {inuse_regs, inuse_xregs}),
+        `RUNTIME_ASSERT (inuse_upd || (inuse_xregs_n == inuse_xregs),
             ("%t: scoreboard %0d in-use bits changed without writeback or issue", $time, w))
     `ifdef ASIC
         wire inuse_clk;
@@ -301,10 +344,8 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
         always @(posedge `GATED_CLK(clk, inuse_clk)) begin
             if (reset) begin
-                inuse_regs  <= '0;
                 inuse_xregs <= '0;
             end else begin
-                inuse_regs  <= inuse_regs_n;
                 inuse_xregs <= inuse_xregs_n;
             end
         end
@@ -339,10 +380,6 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             ("timeout: wid=%0d, PC=0x%0h, tmask=%b, cycles=%0d, inuse=%b (#%0d)",
                 w, to_fullPC(head_hz[w].PC), head_hz[w].tmask, timeout_ctr,
                 operands_busy, head_hz[w].uuid))
-
-        `RUNTIME_ASSERT(~(writeback_fire && writeback_if.data.wb) || (wb_is_u ? wb_u_hit : inuse_regs[writeback_if.data.rd[GPR_BITS-1:0]]),
-            ("invalid writeback register: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d (#%0d)",
-                w, to_fullPC(writeback_if.data.PC), writeback_if.data.tmask, writeback_if.data.rd, writeback_if.data.uuid))
 
         `RUNTIME_ASSERT(~writeback_fire || ((writeback_if.data.wr_xregs & ~inuse_xregs) == '0),
             ("invalid writeback special register: wid=%0d, PC=0x%0h, tmask=%b, xregs=%b (#%0d)",

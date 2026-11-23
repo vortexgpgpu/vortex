@@ -38,6 +38,11 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     ibuf_hz_t [PER_ISSUE_WARPS-1:0] ibf_head_hz, ibf_next_hz;
     wire [ISSUE_WIS_W-1:0]          ibf_read_wis;
     ibuffer_t                       ibf_read_data;
+    wire                            ibf_ins_valid;
+    wire [ISSUE_WIS_W-1:0]          ibf_ins_wis;
+    ibuf_hz_t                       ibf_ins_hz;
+    ibuf_hz_t [PER_ISSUE_WARPS-1:0][`VX_CFG_IBUF_SIZE-1:0] ibf_slots_hz;
+    wire [PER_ISSUE_WARPS-1:0][`CLOG2(`VX_CFG_IBUF_SIZE + 1)-1:0] ibf_slots_count;
     VX_scoreboard_if scoreboard_if();
     VX_operands_if operands_if();
 
@@ -56,6 +61,11 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
         .head_hz        (ibf_head_hz),
         .next_valid     (ibf_next_valid),
         .next_hz        (ibf_next_hz),
+        .ins_valid      (ibf_ins_valid),
+        .ins_wis        (ibf_ins_wis),
+        .ins_hz         (ibf_ins_hz),
+        .slots_hz       (ibf_slots_hz),
+        .slots_count    (ibf_slots_count),
         .read_wis       (ibf_read_wis),
         .read_data      (ibf_read_data),
         .head_pop       (ibf_head_pop)
@@ -71,6 +81,12 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     `endif
         .fu_release     (fu_release),
         .writeback_if   (writeback_if),
+        .gpr_layout     (gpr_layout),
+        .ins_valid      (ibf_ins_valid),
+        .ins_wis        (ibf_ins_wis),
+        .ins_hz         (ibf_ins_hz),
+        .slots_hz       (ibf_slots_hz),
+        .slots_count    (ibf_slots_count),
         .head_valid     (ibf_head_valid),
         .head_hz        (ibf_head_hz),
         .next_valid     (ibf_next_valid),

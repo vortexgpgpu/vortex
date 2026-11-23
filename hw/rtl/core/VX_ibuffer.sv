@@ -36,6 +36,14 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
     output wire [PER_ISSUE_WARPS-1:0]      next_valid,
     output ibuf_hz_t [PER_ISSUE_WARPS-1:0] next_hz,
 
+    // the entry written this cycle, and every warp's entries and their count,
+    // for the scoreboard's check at insertion
+    output wire                            ins_valid,
+    output wire [ISSUE_WIS_W-1:0]          ins_wis,
+    output ibuf_hz_t                       ins_hz,
+    output ibuf_hz_t [PER_ISSUE_WARPS-1:0][`VX_CFG_IBUF_SIZE-1:0] slots_hz,
+    output wire [PER_ISSUE_WARPS-1:0][`CLOG2(`VX_CFG_IBUF_SIZE + 1)-1:0] slots_count,
+
     // the granted warp's head instruction, popped when it issues
     input wire [ISSUE_WIS_W-1:0]           read_wis,
     output ibuffer_t                       read_data,
@@ -95,6 +103,10 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
     ibuf_hz_t wr_hz;
     assign wr_hz = to_ibuf_hz(seq_out_if.data);
 
+    assign ins_valid = wr_fire;
+    assign ins_wis   = wr_wis;
+    assign ins_hz    = wr_hz;
+
     wire [PER_ISSUE_WARPS-1:0][PTRW-1:0] head_ptrs, tail_ptrs;
 
     for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_warps
@@ -144,6 +156,9 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
                 end
             end
         end
+
+        assign slots_hz[w]    = slot_hz;
+        assign slots_count[w] = count;
 
         assign buf_full[w]   = (count == CNTW'(DEPTH));
         assign head_valid[w] = (count != '0);

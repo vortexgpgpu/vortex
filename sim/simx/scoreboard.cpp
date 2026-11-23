@@ -68,13 +68,6 @@ bool Scoreboard::in_use(instr_trace_t* trace) const {
     if (in_use_regs_.at(trace->wid).at((int)trace->dst_reg.type).test(trace->dst_reg.idx)) {
       return true;
     }
-#ifdef VX_CFG_EXT_U_ENABLE
-    // uniform writes in flight share the warp's VX_CFG_UREG_TAGS tags
-    if (trace->dst_reg.type == RegType::Uniform
-     && in_use_regs_.at(trace->wid).at((int)RegType::Uniform).count() >= VX_CFG_UREG_TAGS) {
-      return true;
-    }
-#endif
   }
   for (uint32_t i = 0; i < trace->src_regs.size(); ++i) {
     if (trace->src_regs[i].type != RegType::None) {
