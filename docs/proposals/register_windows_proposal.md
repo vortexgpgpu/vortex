@@ -134,12 +134,12 @@ Windows use the fused fetch the RTL implements (an 8-byte fetch word: a
 | Registers (warps) | Model | Softmax | Epilogue | FFT | Raycast |
 |---|---|---|---|---|---|
 | 64 (16) | windows | 1.082 | **1.228** | 1.008 | 0.958 |
-| | windows, unfused | 1.083 | 1.227 | 0.941 | not rerun |
-| | windows, line fused | 1.082 | 1.227 | 1.007 | not rerun |
+| | windows, unfused | 1.083 | 1.227 | 0.941 | 0.953 |
+| | windows, line fused | 1.082 | 1.227 | 1.007 | 0.958 |
 | | mixed 32/64-bit | 1.075 | 1.226 | 1.007 | 0.958 |
-| 128 (8) | windows | **1.087** | 1.203 | 1.010 | not rerun |
-| | mixed 32/64-bit | 1.086 | 1.198 | 1.009 | not rerun |
-| | all 64-bit | 1.085 | 1.195 | 1.010 | not rerun |
+| 128 (8) | windows | **1.087** | 1.203 | 1.010 | 0.794 |
+| | mixed 32/64-bit | 1.086 | 1.198 | 1.009 | 0.810 |
+| | all 64-bit | 1.085 | 1.195 | 1.010 | 0.794 |
 | 256 (4) | every model | 0.91 to 0.93 | 0.90 to 0.96 | 0.72 to 0.81 | not run |
 | 32 (32) | Zfinx without windows | 0.994 | 1.026 | 0.957 | not run |
 
@@ -173,8 +173,8 @@ than either cache holds and FFT fits in both, so neither changes.
    (5,435,069 and 5,433,910 cycles); 71% of the remaining 0.83 M `vx_rwin`
    fuse. Both run at 0.958 times F: raycast gains nothing from 64 registers
    (same instruction count as F) and loses SIMT utilization (63% against 67%),
-   not yet explained. The 128-register raycast rows lost to occupancy (8 warps, same code
-   as at 64) and were not rerun.
+   not yet explained. At 128 registers raycast loses to occupancy (8 warps, same
+   code as at 64) under every encoding: 0.79 to 0.81 times F.
 4. Fusing about half the `vx_rwin` (8-byte word) gives the same cycles as fusing
    almost all of them on the three phase-structured kernels.
 5. The compiler matters more than the encoding: level-order scheduling is worth
@@ -207,9 +207,14 @@ file grows with the register count (dynamic warp allocation is not merged here).
   (30 stages) unchanged, no register deeper, cells +0.01%, flip-flops +98 (12
   window bits per warp). Applying the windows after the opcode decode instead
   made the instruction-buffer inputs 6 to 10 stages deeper.
-- **At 256 registers** the depth is still unchanged; cells grow 6.2% and
-  flip-flops 2.2%, mostly the per-warp scoreboard bit vector (64 to 256 bits per
-  warp). A tag-based scoreboard removes that growth.
+- **At equal register-file capacity** (against F at 8 warps x 64 registers):
+  4 warps x 128 registers has 6.1% fewer cells and 15% fewer flip-flops, and
+  2 warps x 256 registers 8.5% and 20% fewer, with the depth unchanged; per-warp
+  state shrinks with the warp count and the scoreboard (one bit per register per
+  warp) stays the same size. Keeping 8 warps at 256 registers (four times the
+  register state) costs 6.2% cells, mostly that scoreboard; the scoreboard only
+  needs a new design with dynamic warp allocation, where every warp slot must
+  cover the largest register count.
 
 ### Limits
 
