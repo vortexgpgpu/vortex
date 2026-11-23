@@ -121,6 +121,18 @@ if PDI_PATH="$PDI" timeout 1800 xsdb "$WORK/load.tcl" 2>&1 | tee /dev/stderr | g
     # also exactly when the card reloads from OSPI and loses the AFU.
     realpath "$VBIN" > /tmp/v80_resident_afu.path
     echo "  recorded resident vbin: $VBIN"
+
+    # vrtd does not write a design the card already holds, and it knows only
+    # what it wrote itself: tell it the fabric changed, or the next run of the
+    # vbin it wrote last would be skipped and run on this one.
+    BDF=${VRT_DEVICE_BDF:-$(lspci -D -d 10ee:50b4 2>/dev/null | head -1 | cut -d' ' -f1)}
+    BDF=${BDF%.*}
+    if [ -z "$BDF" ] || ! v80-smi forget-design -d "$BDF"; then
+        echo
+        echo "  vrtd could not be told that the design changed (card: ${BDF:-not found})."
+        echo "  Before the next run: v80-smi forget-design -d <BDF>"
+        exit 1
+    fi
 else
     rm -f /tmp/v80_resident_afu.path
     echo

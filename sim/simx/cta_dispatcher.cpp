@@ -13,6 +13,7 @@
 
 #include <VX_types.h>
 #include "cta_dispatcher.h"
+#include <lmem_slot.h>
 #include "core.h"
 #include <VX_config.h>
 #include <cassert>
@@ -142,14 +143,13 @@ uint32_t CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wids, cta_w
       return 0;
     const kmu_req_t& next = bus_in.peek();
 
-    // Fixed-stride admission. Round the per-CTA LMEM size up to a
-    // MEM_BLOCK_SIZE multiple — this uniform stride is the slot pitch.
-    // Multicast resolves receiver destinations as `issuer_base + r * stride`
-    // and the LMEM model is block-addressed (byteen-masked), so a non-aligned
-    // stride would truncate the destination; the descriptor handler rounds
-    // its stride the same way to stay consistent.
-    uint32_t stride = (next.lmem_size + VX_CFG_MEM_BLOCK_SIZE - 1u)
-                      & ~uint32_t(VX_CFG_MEM_BLOCK_SIZE - 1u);
+    // Fixed-stride admission. Round the per-CTA LMEM size up to the slot
+    // alignment — this uniform stride is the slot pitch. Multicast resolves
+    // receiver destinations as `issuer_base + r * stride` and the LMEM model
+    // is block-addressed (byteen-masked), so a non-aligned stride would
+    // truncate the destination; the descriptor handler rounds its stride the
+    // same way to stay consistent.
+    uint32_t stride = lmem_slot_pitch(next.lmem_size);
     uint32_t max_slots = usable_slots(stride);
 
     uint32_t k = next.cluster_dim[0]

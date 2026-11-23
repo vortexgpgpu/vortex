@@ -12,6 +12,7 @@
 // limitations under the License.
 
 #include <common.h>
+#include <lmem_slot.h>
 
 #include <iostream>
 #include <fstream>
@@ -176,10 +177,9 @@ int vx_check_occupancy(vx_device_h hdevice, uint32_t block_size, uint32_t max_lo
              max_localmem, (unsigned long)local_mem_size);
       return -1;
     }
-    // LMEM-limited co-residency uses the same MEM_BLOCK-aligned stride as the
-    // CTA dispatcher; report when LMEM (not threads) caps occupancy.
-    uint32_t stride = (max_localmem + VX_CFG_MEM_BLOCK_SIZE - 1u)
-                    & ~uint32_t(VX_CFG_MEM_BLOCK_SIZE - 1u);
+    // LMEM-limited co-residency uses the same slot pitch as the CTA
+    // dispatcher; report when LMEM (not threads) caps occupancy.
+    uint32_t stride = vortex::lmem_slot_pitch(max_localmem);
     int blocks_by_lmem = (int)(local_mem_size / stride);
     if (blocks_by_lmem < blocks_per_core)
       blocks_per_core = blocks_by_lmem;

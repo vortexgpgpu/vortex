@@ -11,10 +11,10 @@ using ctx = vt::wgmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, false, W
 // each operand starting *_OFF_K K-slices into its row: a descriptor advanced
 // along K, whose base need not be bank-row aligned.
 [[maybe_unused]] static constexpr uint32_t lda = ctx::tileK * (1 + A_PAD_K);
-[[maybe_unused]] static constexpr uint32_t a_off = ctx::tileK * A_OFF_K;
+[[maybe_unused]] static constexpr uint32_t a_off = ctx::tileK * A_OFF_K + A_OFF_ELEMS;
 [[maybe_unused]] static constexpr uint32_t ldb = ctx::tileK * (1 + B_PAD_K);
 [[maybe_unused]] static constexpr uint32_t b_off = ctx::tileK * B_OFF_K;
-static_assert(A_OFF_K <= A_PAD_K && B_OFF_K <= B_PAD_K, "an offset row must fit its padded stride");
+static_assert(a_off + ctx::tileK <= lda && B_OFF_K <= B_PAD_K, "an offset row must fit its padded stride");
 
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   auto pA = reinterpret_cast<ctx::input_t *>(arg->A_addr);
