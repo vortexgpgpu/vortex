@@ -21,7 +21,8 @@
 import struct
 import sys
 
-REG_GRANULE = 4
+REG_GRANULE = 8   # x and f registers are counted in multiples of 8
+UREG_GRANULE = 4  # uniform registers in multiples of 4
 
 OP_L, OP_FL, OP_EXT1, OP_FENCE, OP_I, OP_AUIPC, OP_I_W = 0x03, 0x07, 0x0B, 0x0F, 0x13, 0x17, 0x1B
 OP_S, OP_FS, OP_EXT2, OP_AMO, OP_R, OP_LUI, OP_R_W = 0x23, 0x27, 0x2B, 0x2F, 0x33, 0x37, 0x3B
@@ -270,21 +271,25 @@ def regs_used(insts, kind):
     return used
 
 
-def round_up(n):
-    return (n + REG_GRANULE - 1) // REG_GRANULE * REG_GRANULE
+def round_up(n, granule=REG_GRANULE):
+    return (n + granule - 1) // granule * granule
 
 
-def counts_of(insts, props):
+def counts_of(insts, props, reports=()):
     """(Rx, Rf, Ru) of these instructions, or None when they must run with every
-    register. Ru counts u1 up: u0 reads zero and takes no row."""
+    register. Ru counts u1 up: u0 reads zero and takes no row. `reports` are the
+    (Rx, Rf) the compiler recorded for functions whose fields alone do not tell."""
     if UNPACKED in props:
         return None
     xs = regs_used(insts, 'x') | {0}
     fs = regs_used(insts, 'f') | {p[1] for p in props if isinstance(p, tuple) and p[0] == FP_HI}
     us = regs_used(insts, 'u') | {0}
-    rx = round_up(max(xs) + 1)
+    rx = round_up(max([max(xs) + 1] + [r[0] for r in reports]))
     rf = 32 if FP_FIXED in props else (round_up(max(fs) + 1) if fs else 0)
-    ru = round_up(max(us))
+    rf_rep = max([r[1] for r in reports], default=0)
+    if rf_rep:
+        rf = max(rf, round_up(rf_rep))
+    ru = round_up(max(us), UREG_GRANULE)
     # A field in window w can name any register up to w * 32 + 31; the windows
     # each instruction runs under are not tracked, so count whole windows.
     wins = [p[1] for p in props if isinstance(p, tuple) and p[0] == WIN_HI]
@@ -298,6 +303,45 @@ def counts_of(insts, props):
 def counts(data):
     """(Rx, Rf, Ru) of an image, or None when it must run with every register."""
     return counts_of(*scan(data))
+
+
+def section_bytes(data, name):
+    """The contents of the ELF section called `name`, or None."""
+    is64 = data[4] == 2
+    if is64:
+        e_shoff, = struct.unpack_from('<Q', data, 0x28)
+        e_shentsize, e_shnum, e_shstrndx = struct.unpack_from('<HHH', data, 0x3A)
+    else:
+        e_shoff, = struct.unpack_from('<I', data, 0x20)
+        e_shentsize, e_shnum, e_shstrndx = struct.unpack_from('<HHH', data, 0x2E)
+    def header(i):
+        sh = e_shoff + i * e_shentsize
+        if is64:
+            sh_name, = struct.unpack_from('<I', data, sh)
+            _, _, _, sh_offset, sh_size = struct.unpack_from('<IQQQQ', data, sh + 4)
+        else:
+            sh_name, = struct.unpack_from('<I', data, sh)
+            _, _, _, sh_offset, sh_size = struct.unpack_from('<IIIII', data, sh + 4)
+        return sh_name, sh_offset, sh_size
+    _, str_off, _ = header(e_shstrndx)
+    for i in range(e_shnum):
+        sh_name, off, size = header(i)
+        end = data.index(b'\0', str_off + sh_name)
+        if data[str_off + sh_name:end] == name.encode():
+            return data[off:off + size]
+    return None
+
+
+def reg_reports(data):
+    """{function address: (Rx, Rf)} from .vortex.regs: the compiler's count for
+    each function it built with register windows."""
+    sec = section_bytes(data, '.vortex.regs')
+    if not sec:
+        return {}
+    is64 = data[4] == 2
+    fmt, size = ('<QHH', 12) if is64 else ('<IHH', 8)
+    return {a: (rx, rf) for a, rx, rf in (struct.unpack_from(fmt, sec, i)
+                                         for i in range(0, len(sec) - size + 1, size))}
 
 
 def elf_header(data):
@@ -351,8 +395,9 @@ def kernel_counts(data, pcs):
     can run for that kernel, i.e. the startup code and what the kernel reaches by
     direct calls and jumps. A kernel that makes any other indirect call or jump
     gets the whole image's counts."""
-    insts, props = scan(data)
-    image = counts_of(insts, props)
+    insts, _ = scan(data)
+    reports = reg_reports(data)
+    zfinx = is_zfinx(data)
     by_addr = {}
     regions = []
     for off, size, addr in code_ranges(data):
@@ -370,6 +415,23 @@ def kernel_counts(data, pcs):
         end = next(hi for lo, hi in regions if lo <= a < hi)
         nxt = starts[i + 1] if i + 1 < len(starts) and starts[i + 1] < end else end
         return starts[i], nxt
+
+    func_of = {inst[0]: extent(a)[0] for a, inst in by_addr.items()}
+
+    def counts_reported(code, funcs):
+        """Counts of these instructions: a function the compiler reported counts as
+        reported, not by the windows its vx_rwin instructions name."""
+        props = set()
+        for off, w, fields in code:
+            p = decode(w)[1]
+            if zfinx:
+                p = zfinx_view(fields, p)[1]
+            if func_of.get(off) in reports:
+                p = tuple(q for q in p if not (isinstance(q, tuple) and q[0] == WIN_HI))
+            props.update(p)
+        return counts_of(code, props, [reports[f] for f in funcs if f in reports])
+
+    image = counts_reported(insts, set(starts))
 
     def closure(entry, allow_indirect):
         seen, work, code, indirect = set(), [entry], [], False
@@ -405,24 +467,20 @@ def kernel_counts(data, pcs):
                     else:
                         indirect = True
         if indirect and not allow_indirect:
-            return None
-        return code
+            return None, seen
+        return code, seen
 
     _, entry = elf_header(data)
-    startup = closure(entry, True) if any(lo <= entry < hi for lo, hi in regions) else []
+    startup, startup_funcs = (closure(entry, True) if any(lo <= entry < hi for lo, hi in regions)
+                              else ([], set()))
     result = []
     for pc in pcs:
-        code = closure(pc, False)
+        code, funcs = closure(pc, False)
         if code is None:
             result.append(image)
             continue
         sub = {i[0]: i for i in startup + code}
-        sub_props = set()
-        zfinx = is_zfinx(data)
-        for _, w, fields in sub.values():
-            p = decode(w)[1]
-            sub_props.update(zfinx_view(fields, p)[1] if zfinx else p)
-        result.append(counts_of(list(sub.values()), sub_props))
+        result.append(counts_reported(list(sub.values()), startup_funcs | funcs))
     return result
 
 

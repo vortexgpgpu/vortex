@@ -71,10 +71,12 @@ else
 	STARTUP_ADDR ?= 0x80000000
 endif
 
-# Register windows: let the compiler allocate up to VX_CFG_NUM_RV_REGS registers.
+# Register windows: let the compiler allocate up to VX_CFG_NUM_RV_REGS registers,
+# or REG_BUDGET (a multiple of 8) to trade registers for resident warps.
 ifneq (,$(filter -DVX_CFG_EXT_RWIN_ENABLE, $(XCONFIGS)))
 	RWIN_REGS := $(patsubst -DVX_CFG_NUM_RV_REGS=%,%,$(filter -DVX_CFG_NUM_RV_REGS=%, $(XCONFIGS)))
 	RWIN_REGS := $(if $(RWIN_REGS),$(RWIN_REGS),256)
+	RWIN_REGS := $(if $(REG_BUDGET),$(REG_BUDGET),$(RWIN_REGS))
 	LLVM_CFLAGS += -mllvm -riscv-vortex-max-regs=$(RWIN_REGS)
 # study: extra compiler flags for register-window experiments
 LLVM_CFLAGS += $(RWIN_LLVM_FLAGS)
