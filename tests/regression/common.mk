@@ -71,13 +71,21 @@ else
 	STARTUP_ADDR ?= 0x80000000
 endif
 
-# Register windows: let the compiler allocate up to VX_CFG_NUM_RV_REGS registers,
-# or REG_BUDGET (a multiple of 8) to trade registers for resident warps.
+# Register windows: the compiler allocates up to VX_CFG_NUM_RV_REGS registers per
+# thread, as many as keep a kernel's __launch_bounds__ blocks resident, or else
+# half of each partition's warps; REG_BUDGET (a multiple of 8) replaces the latter.
+cfg_val = $(patsubst -DVX_CFG_$(1)=%,%,$(filter -DVX_CFG_$(1)=%, $(XCONFIGS)))
 ifneq (,$(filter -DVX_CFG_EXT_RWIN_ENABLE, $(XCONFIGS)))
-	RWIN_REGS := $(patsubst -DVX_CFG_NUM_RV_REGS=%,%,$(filter -DVX_CFG_NUM_RV_REGS=%, $(XCONFIGS)))
+	RWIN_REGS := $(call cfg_val,NUM_RV_REGS)
 	RWIN_REGS := $(if $(RWIN_REGS),$(RWIN_REGS),256)
-	RWIN_REGS := $(if $(REG_BUDGET),$(REG_BUDGET),$(RWIN_REGS))
 	LLVM_CFLAGS += -mllvm -riscv-vortex-max-regs=$(RWIN_REGS)
+	LLVM_CFLAGS += -mllvm -riscv-vortex-gpr-rows=$(call cfg_val,GPR_ROWS)
+	LLVM_CFLAGS += -mllvm -riscv-vortex-reg-parts=$(shell expr $(call cfg_val,ISSUE_WIDTH) \* $(call cfg_val,NUM_OPCS))
+	LLVM_CFLAGS += -mllvm -riscv-vortex-num-warps=$(call cfg_val,NUM_WARPS)
+	LLVM_CFLAGS += -mllvm -riscv-vortex-warp-size=$(call cfg_val,NUM_THREADS)
+ifneq ($(REG_BUDGET),)
+	LLVM_CFLAGS += -mllvm -riscv-vortex-reg-budget=$(REG_BUDGET)
+endif
 # study: extra compiler flags for register-window experiments
 LLVM_CFLAGS += $(RWIN_LLVM_FLAGS)
 ifneq ($(RWIN_MODE),)

@@ -23,6 +23,11 @@
 // statically and it would otherwise be dropped by --gc-sections.
 #define __kernel extern "C" __attribute__((annotate("vortex.kernel"), used, retain))
 
+// __launch_bounds__(max threads per block[, min resident blocks per core]), as
+// in CUDA: the compiler gives the kernel as many registers per thread as still
+// keep that many blocks resident. Blocks must not exceed the thread count.
+#define __launch_bounds__(...) __attribute__((annotate("vortex.launch_bounds", __VA_ARGS__)))
+
 // flat local thread index = cta_rank * num_threads_per_warp + thread_id
 struct ThreadIdx {
   struct {

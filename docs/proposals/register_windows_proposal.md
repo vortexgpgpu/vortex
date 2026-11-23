@@ -83,6 +83,16 @@ count.
   the divergence instructions stay in x1 to x31. With the default of 32,
   generated code matches the shipped compiler apart from register-choice noise
   in two of six kernels checked (same instruction and spill counts).
+- **Registers per thread.** A warp holds its registers in one partition of the
+  register file while it runs, so the count sets how many warps are resident.
+  The build passes the partition size, partitions, warps and warp size
+  (`-riscv-vortex-gpr-rows`, `-reg-parts`, `-num-warps`, `-warp-size`). A kernel
+  declared `__launch_bounds__(threads[, blocks])` gets the most registers that
+  keep that many blocks resident, as in CUDA. Everything else keeps half of each
+  partition's warps resident: 64 registers at 512 rows and 16 warps per
+  partition, the best budget for all four kernels measured. `REG_BUDGET`
+  replaces that default. A function takes the smallest count among the kernels
+  that reach it.
 - **Window placement** (post-RA, after pseudo expansion; branch relaxation runs
   again after it). Each instruction's requirement per field is found by encoding
   the instruction with probe registers. Placement is exact within a block
