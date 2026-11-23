@@ -80,6 +80,9 @@ import VX_tcu_pkg::*;
     input wire [TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0]   tcu_tbuf_rs2_data,
     input wire              tcu_tbuf_ready,
 `endif
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    VX_tcu_job_if.block     tcu_job_if,
+`endif
 
     // SFU warp control and CSRs
     VX_warp_shared_if.master warp_shared_if,
@@ -386,6 +389,9 @@ import VX_tcu_pkg::*;
         .tbuf_rs1_data    (tcu_tbuf_rs1_data),
         .tbuf_rs2_data    (tcu_tbuf_rs2_data),
         .tbuf_ready       (tcu_tbuf_ready),
+    `endif
+    `ifdef VX_CFG_TCU_TMEM_ENABLE
+        .job_if           (tcu_job_if),
     `endif
     `ifdef TCU_META_ENABLE
         .tcu_mem_if       (lsu_tcu_mem_if),

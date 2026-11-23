@@ -124,6 +124,41 @@ package VX_dxa_pkg;
         logic [3:0]                 lg_bkK;      // log2(dense B block K extent, in elements)
     } dxa_setup_params_t;
 
+    // Per-transfer context the SMEM writer reads for every line it drains. A
+    // worker issues its next transfer while earlier ones drain, so each line
+    // names its transfer and finds its destination and completion here.
+    typedef struct packed {
+        logic [NC_WIDTH-1:0]          core_id;
+        logic [UUID_WIDTH-1:0]        uuid;
+        logic [BAR_ADDR_W-1:0]        bar_addr;
+        logic                         notify_smem_done;
+        logic                         is_multicast;
+        logic [`VX_CFG_NUM_WARPS-1:0] cta_mask;
+        logic [DXA_LMEM_ADDR_W-1:0]   stride_words;   // multicast receiver step
+        logic [31:0]                  cfill;
+        logic                         scatter;        // one element per beat (K-major or tiled)
+        logic                         tiled;          // Flat/BlockMajor permuted destination
+        logic                         is_flat;
+        logic [3:0]                   elem_bytes;
+        logic [DXA_SMEM_ADDR_W-1:0]   lane_stride;    // K-major step per element
+        // Tiled destination: per-beat step inside an n-block and across a block
+        // wrap, and the per-line element-0 permute terms (see VX_dxa_smem_wr).
+        logic [DXA_SMEM_ADDR_W-1:0]   tiled_step;
+        logic [DXA_SMEM_ADDR_W-1:0]   tiled_wrap;
+        logic [15:0]                  tcn_mask;
+        logic [3:0]                   lg_tcN;
+        logic [3:0]                   lg_ratio;
+        logic [3:0]                   lg_bkK;
+        logic [3:0]                   lg_nsteps;
+        logic [3:0]                   esize;
+        logic [4:0]                   calc_sh2;
+        logic [4:0]                   intra_khi_sh;
+        logic [4:0]                   intra_n_sh;
+        logic [15:0]                  intra_khi_mask;
+        logic [15:0]                  intra_klo_mask;
+        logic [DXA_SMEM_ADDR_W-1:0]   smem_base;
+    } dxa_xfer_t;
+
     // SMEM byte destination for B element (k = K-row, n = N-col) under the
     // bbuf-native Flat / BlockMajor layouts. Mirrors vx_tensor.h::b_sp_flat_idx
     // and b_blockmajor_idx; tcK == tcN for canonical WGMMA configs. Every

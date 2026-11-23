@@ -6,7 +6,7 @@
     "dut": "dxa",
     "result": {
       "build_time_s": 20,
-      "cells": 84969,
+      "cells": 85181,
       "endpoints": 11408,
       "env": {
         "circt": "CIRCT 892a65a01",

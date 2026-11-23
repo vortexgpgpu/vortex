@@ -1065,6 +1065,18 @@ package VX_gpu_pkg;
     // TCU_LD — warp-level load into a metadata SRAM namespace.
     localparam INST_TCU_LD         = 4'h5;
 `endif
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    // TMEM transfers (one uop per register), allocation and tcgen05-style ops.
+    // op_args.tcu: fmt_s = register count - 1 (macro), fmt_d = register index
+    // (uop), a_from_smem = one lane per register.
+    localparam INST_TCU_TMEM_LD    = 4'h6;
+    localparam INST_TCU_TMEM_ST    = 4'h7;
+    localparam INST_TCU_TC_CP      = 4'h8;
+    localparam INST_TCU_TMEM_ALLOC   = 4'hA;
+    localparam INST_TCU_TMEM_DEALLOC = 4'hB;
+    localparam INST_TCU_TC_MMA       = 4'hC;
+    localparam INST_TCU_TC_COMMIT    = 4'hD;
+`endif
     localparam INST_TCU_BITS = 4;
 `endif
 
@@ -1131,6 +1143,14 @@ package VX_gpu_pkg;
         logic [BAR_ADDR_W-1:0] addr;
         logic                  is_done;
     } txbar_t;
+
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    // tc.commit arrival.
+    typedef struct packed {
+        logic [BAR_ADDR_W-1:0] addr;
+        logic [BAR_SIZE_W-1:0] size_m1;  // arrival count - 1
+    } tcu_bar_t;
+`endif
 
     typedef struct packed {
         logic                         rw;
@@ -1235,7 +1255,10 @@ package VX_gpu_pkg;
         logic [`VX_CFG_MEM_ADDR_WIDTH-1:0] param;
         logic [7:0]                        ctx_id;
         logic [`VX_CFG_LMEM_LOG_SIZE:0]    aligned_lmem_size;
-        logic [`VX_CFG_NUM_WARPS-1:0]      lmem_slots; // see lmem_slots_fit
+        logic [`VX_CFG_NUM_WARPS-1:0]      lmem_slots; // see lmem_slots_fit (and the TMEM budget)
+    `ifdef VX_CFG_TCU_TMEM_ENABLE
+        logic                              tmem;   // the CTAs allocate TMEM: block-aligned warps
+    `endif
         kmu_args_t                         args;   // .compute | .fragment
     } kmu_req_t;
 
@@ -1817,6 +1840,11 @@ package VX_gpu_pkg;
         logic [PERF_CTR_BITS-1:0] wgmma_stalls;      // cycles: WGMMA valid but stalled (tbuf or mdata)
         logic [PERF_CTR_BITS-1:0] wgmma_instrs;      // WGMMA µops executed
         logic [PERF_CTR_BITS-1:0] tbuf_stalls;         // cycles: WGMMA valid but stalled (uop cannot enter TCU core because tbuf data not ready)
+        logic [PERF_CTR_BITS-1:0] mma_busy;          // block-cycles a tensor-op MMA step fired
+        logic [PERF_CTR_BITS-1:0] opnd_waits;        // cycles a running tensor op waits on operands
+        logic [PERF_CTR_BITS-1:0] job_other;         // cycles of op drain or tc.cp only
+        logic [PERF_CTR_BITS-1:0] idle;              // cycles with no tensor-op work
+        logic [PERF_CTR_BITS-1:0] tmem_xfers;        // tmem.ld/st transfers
     } tcu_perf_t;
 `endif
 
@@ -1993,12 +2021,11 @@ package VX_gpu_pkg;
     localparam DXA_LMEM_OUT_TAG_W = DXA_LMEM_TAG_W + `ARB_SEL_BITS(`VX_CFG_NUM_DXA_CORES, 1);
 
     // TCU lmem tag and attr widths for DMA arb.
-    // Masters into the TCU LMEM port: BLOCK_SIZE abufs + 1 shared bbuf.
-    // (Sparse metadata does not fetch from LMEM — it preloads into the
-    // VX_tcu_sp_meta SRAM via TCU_LD ahead of the MMA dispatch.)
+    // Masters into the TCU LMEM port: BLOCK_SIZE abufs + 1 shared bbuf, and
+    // the tensor-job copy engine in TMEM builds.
     localparam TCU_LMEM_ATTR_W = 1;
     localparam TCU_LMEM_BLK_TAG_W = UUID_WIDTH + 1;
-    localparam TCU_LMEM_NUM_MASTERS = `VX_CFG_NUM_TCU_BLOCKS + 1;
+    localparam TCU_LMEM_NUM_MASTERS = `VX_CFG_NUM_TCU_BLOCKS + 1 + `VX_CFG_TCU_TMEM_ENABLED;
     localparam TCU_LMEM_TAG_W = TCU_LMEM_BLK_TAG_W + `ARB_SEL_BITS(TCU_LMEM_NUM_MASTERS, 1);
 
     // LMEM DMA port parameters. (The raster FWD needs no LMEM DMA agent —
@@ -2292,11 +2319,18 @@ package VX_gpu_pkg;
     localparam UMMU_DXA_IDX         = UMMU_RTCACHE_IDX + `VX_CFG_EXT_RTU_ENABLED;
     localparam UMMU_NUM_REQS        = `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_RTU_ENABLED + `VX_CFG_EXT_DXA_ENABLED;
 
-    // Widest tag among the socket arb inputs (DXA adapts to the given budget)
-`ifdef VX_CFG_EXT_TEX_ENABLE
-    localparam SOCKET_MEM_TAG_W1    = `MAX(L1_MEM_TAG_WIDTH, TCACHE_MEM_TAG_WIDTH);
+    // Widest tag among the socket arb inputs. A DXA read carries its worker's
+    // in-flight slot under the select bits of the DXA's worker arbiter.
+`ifdef VX_CFG_EXT_DXA_ENABLE
+    localparam DXA_MEM_TAG_WIDTH    = UUID_WIDTH + `CLOG2(`VX_CFG_DXA_MAX_INFLIGHT) + `ARB_SEL_BITS(`VX_CFG_NUM_DXA_CORES, 1);
+    localparam SOCKET_MEM_TAG_W0    = `MAX(L1_MEM_TAG_WIDTH, DXA_MEM_TAG_WIDTH);
 `else
-    localparam SOCKET_MEM_TAG_W1    = L1_MEM_TAG_WIDTH;
+    localparam SOCKET_MEM_TAG_W0    = L1_MEM_TAG_WIDTH;
+`endif
+`ifdef VX_CFG_EXT_TEX_ENABLE
+    localparam SOCKET_MEM_TAG_W1    = `MAX(SOCKET_MEM_TAG_W0, TCACHE_MEM_TAG_WIDTH);
+`else
+    localparam SOCKET_MEM_TAG_W1    = SOCKET_MEM_TAG_W0;
 `endif
 `ifdef VX_CFG_EXT_RTU_ENABLE
     localparam SOCKET_MEM_TAG_WIDTH = `MAX(SOCKET_MEM_TAG_W1, RTCACHE_MEM_TAG_WIDTH);

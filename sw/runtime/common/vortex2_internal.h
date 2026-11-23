@@ -232,6 +232,10 @@ public:
     // Q_SEQNUM to reach the post's sequence number. Synchronous semantics.
     vx_result_t cp_submit_dcr_write(uint32_t addr, uint32_t value);
 
+    // The KMU's TMEM budget DCR as last written. Launches without a budget
+    // write it only to clear a previous one, so other launches are unchanged.
+    uint32_t tmem_cols_dcr = 0;
+
     // Post one CMD_LAUNCH to the ring, commit Q_TAIL, and wait for
     // Q_SEQNUM. Synchronous. The kernel's results are flushed by the next
     // command that needs them (see cp_ring_append_).

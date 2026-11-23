@@ -11,13 +11,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// DXA Setup: owns transfer lifecycle, issue decode, metadata latching,
+// DXA Setup: owns the issue lifecycle, issue decode, metadata latching,
 // and DSP-based parameter precomputation. The setup engine runs in
-// parallel with an active transfer's drain: a new request is accepted
+// parallel with an active transfer's issue: a new request is accepted
 // the cycle the DSPs are idle, the result lands in `staged_*`, and is
 // promoted to the live `r_*` registers the cycle the previous transfer
-// completes. Setup latency overlaps with drain, eliminating the
-// pipeline bubble for streamed transfers.
+// issues its last line, provided a transfer context is free. Earlier
+// transfers keep draining meanwhile.
 //
 // Rank-dependent setup latency (cycles from launch_accept to staged):
 //   rank 1-2: 4, rank 3: 6, rank 4: 8, rank 5: 10.
@@ -36,11 +36,12 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     input  wire dxa_req_data_t         req_data,
     input  wire dxa_desc_t             desc_data,
 
-    // Transfer done (from smem_wr).
-    input  wire                        transfer_done,
+    // The issuing transfer's last line was accepted (from gmem_req).
+    input  wire                        issue_done,
+    // A transfer context is free for the next transfer.
+    input  wire                        xfer_avail,
 
     // State outputs.
-    output wire                        transfer_active,
     output wire                        pipeline_start,
 
     // Precomputed parameters (stable during ACTIVE).
@@ -61,14 +62,13 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     localparam MUL_LATENCY = 2;
 
     // ════════════════════════════════════════════════════════════════════
-    // Transfer state: TS_IDLE / TS_ACTIVE.
+    // Issue state: TS_IDLE / TS_ACTIVE (a transfer is issuing its lines).
     // (TS_SETUP is gone — setup is tracked separately by setup_state_r.)
     // ════════════════════════════════════════════════════════════════════
     localparam TS_IDLE   = 1'b0;
     localparam TS_ACTIVE = 1'b1;
 
     reg state_r;
-    assign transfer_active = (state_r == TS_ACTIVE);
 
     // ════════════════════════════════════════════════════════════════════
     // Setup engine state: SS_IDLE / SS_RUNNING / SS_STAGED.
@@ -368,12 +368,12 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
 
     // ════════════════════════════════════════════════════════════════════
     // Promote: copy staged → active and pulse pipeline_start.
-    // Fires when a staged result exists AND the active slot is free
-    // (either idle, or completing this cycle via transfer_done).
+    // Fires when a staged result exists, a transfer context is free, AND the
+    // issuer is free (either idle, or issuing its last line this cycle).
     // ════════════════════════════════════════════════════════════════════
 
-    wire promote_now = (setup_state_r == SS_STAGED)
-                    && (state_r == TS_IDLE || transfer_done);
+    wire promote_now = (setup_state_r == SS_STAGED) && xfer_avail
+                    && (state_r == TS_IDLE || issue_done);
 
     reg pipeline_start_r;
     assign pipeline_start = pipeline_start_r;
@@ -449,8 +449,8 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
                 state_r             <= TS_ACTIVE;
                 pipeline_start_r    <= 1'b1;
                 setup_state_r       <= SS_IDLE;
-            end else if (state_r == TS_ACTIVE && transfer_done) begin
-                // Active drain complete, no staged result waiting.
+            end else if (state_r == TS_ACTIVE && issue_done) begin
+                // Active issue complete, no staged result waiting.
                 state_r <= TS_IDLE;
             end
 

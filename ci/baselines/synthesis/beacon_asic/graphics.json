@@ -1,22 +1,11 @@
 {
   "gfx": {
-    "accepted": {
-      "against": "26d2bc4b5409a35a111e8316ac3a87d07b15fc80",
-      "regressions": [
-        {
-          "after": 1063,
-          "before": 1065,
-          "kind": "ties",
-          "name": "tied_bits"
-        }
-      ]
-    },
     "clock_mhz": 1000,
     "config_hash": "f49712b842f2f234",
     "configs": "-DVX_CFG_NUM_THREADS=4 -DVX_CFG_NUM_WARPS=4",
     "dut": "gfx",
     "result": {
-      "build_time_s": 100,
+      "build_time_s": 110,
       "cells": 1875217,
       "endpoints": 239287,
       "env": {
@@ -115,7 +104,7 @@
     "configs": "",
     "dut": "raster",
     "result": {
-      "build_time_s": 15,
+      "build_time_s": 20,
       "cells": 76084,
       "endpoints": 12792,
       "env": {
@@ -152,7 +141,7 @@
     "configs": "",
     "dut": "rtu",
     "result": {
-      "build_time_s": 130,
+      "build_time_s": 55,
       "cells": 1060729,
       "endpoints": 105631,
       "env": {
@@ -178,7 +167,7 @@
     "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8",
     "dut": "tex",
     "result": {
-      "build_time_s": 45,
+      "build_time_s": 40,
       "cells": 376164,
       "endpoints": 49445,
       "env": {

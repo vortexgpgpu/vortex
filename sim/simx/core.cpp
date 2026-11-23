@@ -354,6 +354,9 @@ public:
     // its first read in the same cycle, seen by the LMEM the next.
     snprintf(sname, 100, "%s-tcu-tbuf", name.c_str());
     tcu_unit_->set_tbuf(TcuTbuf::Create(sname));
+  #ifdef VX_CFG_TCU_TMEM_ENABLE
+    scheduler_->cta_dispatcher()->cta_exit_out.bind(&tcu_unit_->cta_exit_in);
+  #endif
 
   #ifdef VX_CFG_TCU_WGMMA_ENABLE
     // Bind the TCU tile-buffer subsystem (TcuTbuf) to the LMEM DMA port,

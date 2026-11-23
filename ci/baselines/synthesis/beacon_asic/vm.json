@@ -5,9 +5,9 @@
     "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8",
     "dut": "vm",
     "result": {
-      "build_time_s": 65,
-      "cells": 1156412,
-      "endpoints": 115494,
+      "build_time_s": 55,
+      "cells": 1156102,
+      "endpoints": 115499,
       "env": {
         "circt": "CIRCT 892a65a01",
         "foldsim": "foldsim d8350bc0f",

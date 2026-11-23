@@ -421,13 +421,28 @@ VX_CFG_TCU_SPARSE_ENABLE = false
 VX_CFG_TCU_DSM_ENABLE = false
 VX_CFG_TCU_WGMMA_ENABLE = false
 VX_CFG_TCU_FEDP2K = false
+# Tensor memory: a per-core accumulator of (TCU blocks x WGMMA M) lanes by
+# TMEM_COLS 32-bit columns, written by the TCU's single-thread MMA engine.
+VX_CFG_TCU_TMEM_ENABLE = false
+VX_CFG_TCU_TMEM_COLS = 128
+# Per-warp MMAs (tcu.wmma, and tcu.ld for their sparse and MX metadata). A
+# tensor-memory build can drop them, as its MMAs are tc.mma: the TCU then keeps
+# no register-operand path, result landing queue or metadata store.
+VX_CFG_TCU_WMMA_ENABLE = true
 
 [dxa]
 # Cluster-level DXA engine count, decoupled from cores/socket size.
 VX_CFG_NUM_DXA_CORES = "expr: max(1, up($VX_CFG_NUM_CORES / 8))"
 VX_CFG_DXA_MEM_PORTS = "expr: min($VX_CFG_NUM_DXA_CORES, up($VX_CFG_NUM_CORES / $VX_CFG_SOCKET_SIZE) * $VX_CFG_L1_MEM_PORTS)"
 VX_CFG_DXA_QUEUE_SIZE = 16
-VX_CFG_DXA_MAX_INFLIGHT = 8
+# Line reads a DXA worker keeps in flight (Little's law, as the cache MSHRs):
+# its share of the bytes in flight above the L2, in lines, but no more than
+# the memory latency, since a worker issues at most one line per cycle.
+VX_CFG_DXA_MAX_INFLIGHT = "expr: clamp(pow(2, clog2(min(($l1_mem_bytes_in_flight + $dxa_inflight_bytes - 1) // $dxa_inflight_bytes, $VX_CFG_PLATFORM_MEMORY_LATENCY + 2 * $VX_CFG_L2_LINK_LATENCY))), 8, 512)"
+dxa_inflight_bytes = "expr: $VX_CFG_NUM_CLUSTERS * up($VX_CFG_NUM_CORES // $VX_CFG_SOCKET_SIZE) * $VX_CFG_NUM_DXA_CORES * $VX_CFG_L1_LINE_SIZE"
+# Transfers a worker keeps in flight: the next one issues while earlier ones
+# drain. Sized so tile-sized transfers (16+ lines) can fill the read pool.
+VX_CFG_DXA_MAX_XFERS = "expr: clamp($VX_CFG_DXA_MAX_INFLIGHT // 16, 2, 16)"
 
 [rtu]
 # RTU (Ray-Tracing Unit)

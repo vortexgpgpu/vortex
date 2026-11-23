@@ -24,12 +24,18 @@ namespace {
 
 constexpr uint64_t kLineMask = ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
 
-// Q+1 buffers share one LMEM port. Buffer IDs, in priority order:
+// The buffers share one LMEM port. Buffer IDs, in priority order:
 //   0 .. VX_CFG_NUM_TCU_BLOCKS-1   → abuf[b]
 //   VX_CFG_NUM_TCU_BLOCKS          → bbuf
+//   VX_CFG_NUM_TCU_BLOCKS + 1      → cbuf (TMEM builds)
+#ifdef VX_CFG_TCU_TMEM_ENABLE
+constexpr uint32_t kNumBuffers = VX_CFG_NUM_TCU_BLOCKS + 2;
+#else
 constexpr uint32_t kNumBuffers = VX_CFG_NUM_TCU_BLOCKS + 1;
+#endif
 constexpr uint32_t kAOffset    = 0;
 constexpr uint32_t kBOffset    = VX_CFG_NUM_TCU_BLOCKS;
+[[maybe_unused]] constexpr uint32_t kCOffset = VX_CFG_NUM_TCU_BLOCKS + 1;
 
 struct Buffer {
   std::deque<TcuTbuf::LmemRead> pending_;
@@ -38,6 +44,7 @@ struct Buffer {
   bool     rsp_seen_ = false;   // a response arrived this cycle
   uint32_t next_tag_ = 0;
   uint64_t reads_ = 0;
+  uint32_t max_inflight_ = 1;
 
   bool filling() const {
     return !pending_.empty() || !inflight_.empty();
@@ -70,6 +77,7 @@ struct Buffer {
     rsp_seen_ = false;
     next_tag_ = 0;
     // reads_ survives: it backs an MPM counter, which runs from device reset.
+    max_inflight_ = 1;
   }
 };
 
@@ -151,10 +159,10 @@ public:
     }
     for (uint32_t s = 0; s < kNumBuffers; ++s) {
       auto& b = bufs_.at(s);
-      if (b.pending_.empty() || !b.inflight_.empty()) {
+      if (b.pending_.empty() || b.inflight_.size() >= b.max_inflight_) {
         continue;
       }
-      if (s == kBOffset && b.rsp_seen_) {
+      if (s == kBOffset && b.rsp_seen_ && b.max_inflight_ == 1) {
         continue;
       }
       this->issue(s, b);
@@ -195,8 +203,13 @@ private:
   }
 
   std::string buf_name(uint32_t source) const {
-    return (source == kBOffset) ? std::string("bbuf")
-                                : ("abuf" + std::to_string(source - kAOffset));
+    if (source == kBOffset) {
+      return "bbuf";
+    }
+    if (source > kBOffset) {
+      return "cbuf";
+    }
+    return "abuf" + std::to_string(source - kAOffset);
   }
 
   TcuTbuf* simobject_;
@@ -218,8 +231,10 @@ void TcuTbuf::on_tick()  { impl_->tick(); }
 void TcuTbuf::fill_a(uint32_t b, std::vector<LmemRead> reads) {
   impl_->buf(kAOffset + b).fill(std::move(reads));
 }
-void TcuTbuf::fill_b(std::vector<LmemRead> reads) {
-  impl_->buf(kBOffset).fill(std::move(reads));
+void TcuTbuf::fill_b(std::vector<LmemRead> reads, uint32_t max_inflight) {
+  auto& b = impl_->buf(kBOffset);
+  b.fill(std::move(reads));
+  b.max_inflight_ = max_inflight;
 }
 
 bool TcuTbuf::filling_a(uint32_t b) const { return impl_->buf(kAOffset + b).filling(); }
@@ -231,6 +246,16 @@ std::shared_ptr<mem_block_t> TcuTbuf::read_a(uint32_t b, uint64_t line_addr) con
 std::shared_ptr<mem_block_t> TcuTbuf::read_b(uint64_t line_addr) const {
   return impl_->buf(kBOffset).read(line_addr);
 }
+
+#ifdef VX_CFG_TCU_TMEM_ENABLE
+void TcuTbuf::fill_c(std::vector<LmemRead> reads) {
+  impl_->buf(kCOffset).fill(std::move(reads));
+}
+bool TcuTbuf::filling_c() const { return impl_->buf(kCOffset).filling(); }
+std::shared_ptr<mem_block_t> TcuTbuf::read_c(uint64_t line_addr) const {
+  return impl_->buf(kCOffset).read(line_addr);
+}
+#endif
 
 void TcuTbuf::invalidate_a(uint32_t b) { impl_->buf(kAOffset + b).invalidate(); }
 void TcuTbuf::invalidate_b()           { impl_->buf(kBOffset).invalidate(); }

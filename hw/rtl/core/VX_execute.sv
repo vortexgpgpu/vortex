@@ -77,6 +77,9 @@ import VX_tcu_pkg::*;
     input wire [`VX_CFG_NUM_TCU_BLOCKS-1:0][TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0]   tcu_tbuf_rs2_data,
     input wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tcu_tbuf_ready,
 `endif
+`ifdef VX_CFG_TCU_TMEM_ENABLE
+    VX_tcu_job_if.block     tcu_job_if [`VX_CFG_NUM_TCU_BLOCKS],
+`endif
 
     // scheduler interfaces
     VX_sched_csr_if.slave   sched_csr_if [`VX_CFG_NUM_SFU_BLOCKS],
@@ -163,6 +166,9 @@ import VX_tcu_pkg::*;
         .tbuf_rs1_data    (tcu_tbuf_rs1_data),
         .tbuf_rs2_data    (tcu_tbuf_rs2_data),
         .tbuf_ready       (tcu_tbuf_ready),
+    `endif
+    `ifdef VX_CFG_TCU_TMEM_ENABLE
+        .job_if           (tcu_job_if),
     `endif
     `ifdef TCU_META_ENABLE
         .tcu_mem_if       (lsu_tcu_mem_if),
