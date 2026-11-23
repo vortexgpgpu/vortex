@@ -57,11 +57,9 @@ import VX_tcu_pkg::*;
     output wire             satp_wr_valid,
     output wire [`VX_CFG_XLEN-1:0] satp_wr_data,
 `endif
-    input wire [`VX_CFG_XLEN-1:0] mstatus,
     input wire [`VX_CFG_XLEN-1:0] mtvec,
-    output wire             mstatus_wr_valid,
     output wire             mtvec_wr_valid,
-    output wire [`VX_CFG_XLEN-1:0] mtrap_wr_data,
+    output wire [`VX_CFG_XLEN-1:0] mtvec_wr_data,
 
     // LSU
 `ifdef PERF_ENABLE
@@ -255,12 +253,14 @@ import VX_tcu_pkg::*;
     assign csr_wr[0].data       = sched_csr_if.csr_wr_data;
     assign csr_wr[0].trap_valid = sched_csr_if.trap_csr_wr_valid;
     assign csr_wr[0].trap_data  = sched_csr_if.trap_csr_wr_data;
+    assign csr_wr[0].unlock     = sched_csr_if.csr_unlock;
 
     assign sched_csr_if.cycles       = cycles;
     assign sched_csr_if.instret      = instret;
     assign sched_csr_if.active_warps = active_warps;
     assign sched_csr_if.thread_mask  = csr_rd[0].thread_mask;
     assign sched_csr_if.mscratch     = csr_rd[0].mscratch;
+    assign sched_csr_if.csr_mstatus  = csr_rd[0].mstatus;
     assign sched_csr_if.csr_mepc     = csr_rd[0].mepc;
     assign sched_csr_if.csr_mcause   = csr_rd[0].mcause;
     assign sched_csr_if.cta_rank     = csr_rd[0].cta_rank;
@@ -270,11 +270,9 @@ import VX_tcu_pkg::*;
     assign satp_wr_valid             = sched_csr_if.satp_wr_valid;
     assign satp_wr_data              = sched_csr_if.satp_wr_data;
 `endif
-    assign sched_csr_if.csr_mstatus  = mstatus;
     assign sched_csr_if.csr_mtvec    = mtvec;
-    assign mstatus_wr_valid          = sched_csr_if.mstatus_wr_valid;
     assign mtvec_wr_valid            = sched_csr_if.mtvec_wr_valid;
-    assign mtrap_wr_data             = sched_csr_if.mtrap_wr_data;
+    assign mtvec_wr_data             = sched_csr_if.mtvec_wr_data;
 
 `ifdef VX_CFG_EXT_RTU_ENABLE
     assign rtu_unlock_valid[0] = sched_unlock_if.valid;

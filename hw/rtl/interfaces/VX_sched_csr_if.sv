@@ -40,21 +40,22 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
     logic [NW_WIDTH-1:0]            csr_wr_wid;
     logic [`VX_CFG_MEM_ADDR_WIDTH-1:0]     csr_wr_data;
 
-    // The per-warp trap CSRs (mepc, mcause) live in the warp schedulers, which
-    // own warp PC redirection. Reads are returned already selected by
-    // csr_rd_wid; csrw writes are forwarded here as a one-hot {mcause, mepc}.
-    // csr_wr_wid is shared with mscratch.
+    // The per-warp trap CSRs (mstatus, mepc, mcause) live in the warp
+    // schedulers, which own warp PC redirection. Reads are returned already
+    // selected by csr_rd_wid; csrw writes are forwarded here as a one-hot
+    // {mstatus, mcause, mepc}. csr_wr_wid is shared with mscratch.
+    logic [`VX_CFG_XLEN-1:0]               csr_mstatus;
     logic [`VX_CFG_XLEN-1:0]               csr_mepc;
     logic [`VX_CFG_XLEN-1:0]               csr_mcause;
     logic [NUM_TRAP_CSRS-1:0]       trap_csr_wr_valid;
     logic [`VX_CFG_XLEN-1:0]               trap_csr_wr_data;
+    // An mstatus access stalls its warp from decode; this releases it (csr_wr_wid).
+    logic                           csr_unlock;
 
-    // The per-core mstatus and mtvec live in the core scheduler, as SATP does.
-    logic [`VX_CFG_XLEN-1:0]               csr_mstatus;
+    // The per-core mtvec lives in the core scheduler, as SATP does.
     logic [`VX_CFG_XLEN-1:0]               csr_mtvec;
-    logic                           mstatus_wr_valid;
     logic                           mtvec_wr_valid;
-    logic [`VX_CFG_XLEN-1:0]               mtrap_wr_data;
+    logic [`VX_CFG_XLEN-1:0]               mtvec_wr_data;
 
     modport master (
         output cycles,
@@ -79,9 +80,9 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
         input  csr_wr_data,
         input  trap_csr_wr_valid,
         input  trap_csr_wr_data,
-        input  mstatus_wr_valid,
+        input  csr_unlock,
         input  mtvec_wr_valid,
-        input  mtrap_wr_data
+        input  mtvec_wr_data
     );
 
     modport slave (
@@ -107,9 +108,9 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
         output csr_wr_data,
         output trap_csr_wr_valid,
         output trap_csr_wr_data,
-        output mstatus_wr_valid,
+        output csr_unlock,
         output mtvec_wr_valid,
-        output mtrap_wr_data
+        output mtvec_wr_data
     );
 
 endinterface

@@ -41,9 +41,10 @@ BENCH_LIST := median qsort rsort towers memcpy multiply dhrystone spmv
 # (VX_MEM_IO_EXIT_CODE, VX_MEM_IO_COUT_*) via the patched crt.S +
 # syscalls.c, so the stamp must invalidate when those values change.
 # Listing $(ROOT_DIR)/sw/VX_types.h as a prerequisite forces a rebuild
-# after a memory-map shift (e.g. a COUT region size change), and listing
-# the patch re-applies an edited patch to a fresh clone.
-$(RISCV_TESTS_STAMP): $(ROOT_DIR)/sw/VX_types.h $(VORTEX_HOME)/miscs/patches/riscv-benchmarks.patch
+# after a memory-map shift (e.g. a COUT region size change), listing
+# the patch re-applies an edited patch to a fresh clone, and listing this
+# file rebuilds the cache when the set of built suites changes.
+$(RISCV_TESTS_STAMP): $(ROOT_DIR)/sw/VX_types.h $(VORTEX_HOME)/miscs/patches/riscv-benchmarks.patch $(COMMON_MK_DIR)common.mk
 	rm -rf $(RISCV_TESTS_DIR)
 	git clone $(RISCV_TESTS_REPO) $(RISCV_TESTS_DIR)
 	cd $(RISCV_TESTS_DIR) && git checkout --quiet $(RISCV_TESTS_COMMIT) && git submodule update --init --recursive
@@ -57,7 +58,7 @@ $(RISCV_TESTS_STAMP): $(ROOT_DIR)/sw/VX_types.h $(VORTEX_HOME)/miscs/patches/ris
 	       $(RISCV_TESTS_DIR)/env/p/link.ld
 	PATH=$(RISCV_TOOLCHAIN_PATH)/bin:$$PATH $(MAKE) -C $(ISA_DIR) \
 	  XLEN=$(XLEN) RISCV_PREFIX=$(RISCV_PREFIX)- \
-	  rv$(XLEN)ui rv$(XLEN)um rv$(XLEN)uf rv$(XLEN)ud rv$(XLEN)ua rv$(XLEN)uc
+	  rv$(XLEN)ui rv$(XLEN)um rv$(XLEN)uf rv$(XLEN)ud rv$(XLEN)ua rv$(XLEN)uc rv$(XLEN)mi
 ifeq ($(XLEN),64)
 	# Even on XLEN=64, the debug suite's test_csv_trace32 (called
 	# unconditionally) drives the simulators with the rv32* ISA ELFs.

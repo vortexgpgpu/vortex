@@ -59,9 +59,9 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
 
 ### Changed
 
-- **Machine-mode trap CSRs.** `mstatus` and `mtvec` are one per core, held by the core scheduler and shared by every warp; `mcause`
-  holds the 4-bit exception codes the core raises; `mtval` reads as zero. `mepc` and `mcause` stay per warp. Per-warp trap state
-  drops from 160 to 36 bits at XLEN 32.
+- **Machine-mode trap CSRs.** `mtvec` is one per core, held by the core scheduler and shared by every warp; `mcause` holds the
+  4-bit exception codes the core raises; `mtval` reads as zero. `mstatus` (its `MIE`, `MPIE` and `FS` fields), `mepc` and `mcause`
+  stay per warp. Per-warp trap state drops from 160 to at most 39 bits at XLEN 32.
 - **One operand collector per issue slice (`VX_CFG_NUM_OPCS`, default 1).** It was one per 4 warps of a slice. The scoreboard
   already issues only when the target unit's dispatch queue has room, so extra collectors only absorbed register bank conflicts.
   *Why:* each collector holds three full-width operands and its own register-file banks. At 64 warps, 4 issue slices and 32
@@ -125,8 +125,8 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
 ### Fixed
 
 - **Trap CSR writes before ECALL, EBREAK and MRET.** A `csrw mepc` in a trap handler could still be pending when the following `mret`
-  read `mepc`, returning the warp to the trapping instruction. ECALL, EBREAK and MRET now wait for pending writes to `mstatus`, `mtvec`
-  and `mepc`, in SimX and RTL. New regression test `trap` and parity cases
+  read `mepc`, returning the warp to the trapping instruction. ECALL, EBREAK, an illegal-instruction trap and MRET now wait for pending
+  writes to `mstatus`, `mtvec` and `mepc`, in SimX and RTL. New regression test `trap` and parity cases
   `core:parity-trap-fw4`, `core:parity-trap-cs4` and `core:parity-trap-fw2-sfu4`.
 - **ASIC core and top at 800 MHz.** On ASAP7 the core reached 655 MHz and top 654 MHz against the 800 MHz catalog clock, held by
   three datapaths: the FDIV/FSQRT result stage, the FMA's accumulate and rounding stages, and the integer multiplier. Each is

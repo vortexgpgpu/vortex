@@ -50,11 +50,9 @@ module VX_frontend_xbar import VX_gpu_pkg::*; (
     output wire [`VX_CFG_NUM_SFU_BLOCKS-1:0] satp_wr_valid,
     output wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] satp_wr_data,
 `endif
-    input wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] mstatus,
     input wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] mtvec,
-    output wire [`VX_CFG_NUM_SFU_BLOCKS-1:0] mstatus_wr_valid,
     output wire [`VX_CFG_NUM_SFU_BLOCKS-1:0] mtvec_wr_valid,
-    output wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] mtrap_wr_data,
+    output wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] mtvec_wr_data,
 
     // frontend slices
     output sched_branch_t [`VX_CFG_FETCH_WIDTH-1:0][FETCH_ALU_PORTS-1:0] fs_branch,
@@ -177,6 +175,7 @@ module VX_frontend_xbar import VX_gpu_pkg::*; (
             assign fs_csr_wr[f][q].data       = sched_csr_if[B].csr_wr_data;
             assign fs_csr_wr[f][q].trap_valid = sched_csr_if[B].trap_csr_wr_valid & {NUM_TRAP_CSRS{own_wr}};
             assign fs_csr_wr[f][q].trap_data  = sched_csr_if[B].trap_csr_wr_data;
+            assign fs_csr_wr[f][q].unlock     = sched_csr_if[B].csr_unlock && own_wr;
 
         `ifdef VX_CFG_EXT_RTU_ENABLE
             assign fs_rtu_unlock_valid[f][q] = sched_unlock_if[B].valid && own_unlock;
@@ -210,6 +209,7 @@ module VX_frontend_xbar import VX_gpu_pkg::*; (
         assign sched_csr_if[b].active_warps = active_warps;
         assign sched_csr_if[b].thread_mask  = csr_rd.thread_mask;
         assign sched_csr_if[b].mscratch     = csr_rd.mscratch;
+        assign sched_csr_if[b].csr_mstatus  = csr_rd.mstatus;
         assign sched_csr_if[b].csr_mepc     = csr_rd.mepc;
         assign sched_csr_if[b].csr_mcause   = csr_rd.mcause;
         assign sched_csr_if[b].cta_rank     = csr_rd.cta_rank;
@@ -219,11 +219,9 @@ module VX_frontend_xbar import VX_gpu_pkg::*; (
         assign satp_wr_valid[b]             = sched_csr_if[b].satp_wr_valid;
         assign satp_wr_data[b]              = sched_csr_if[b].satp_wr_data;
     `endif
-        assign sched_csr_if[b].csr_mstatus  = mstatus[b];
         assign sched_csr_if[b].csr_mtvec    = mtvec[b];
-        assign mstatus_wr_valid[b]          = sched_csr_if[b].mstatus_wr_valid;
         assign mtvec_wr_valid[b]            = sched_csr_if[b].mtvec_wr_valid;
-        assign mtrap_wr_data[b]             = sched_csr_if[b].mtrap_wr_data;
+        assign mtvec_wr_data[b]             = sched_csr_if[b].mtvec_wr_data;
     end
 
 endmodule

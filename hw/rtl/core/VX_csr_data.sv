@@ -80,9 +80,8 @@ import VX_fpu_pkg::*;
     localparam LIVE_CLUSTER     = 21;
     localparam LIVE_ENTRY       = 22;
     localparam LIVE_SATP        = 23;
-    localparam LIVE_MSTATUS     = 24;
-    localparam LIVE_MTVEC       = 25;
-    localparam NUM_LIVE         = 26;
+    localparam LIVE_MTVEC       = 24;
+    localparam NUM_LIVE         = 25;
 
     // Writable CSRs
     localparam WR_MSCRATCH      = 0;
@@ -90,9 +89,8 @@ import VX_fpu_pkg::*;
     localparam WR_FFLAGS        = 2;
     localparam WR_FRM           = 3;
     localparam WR_FCSR          = 4;
-    localparam WR_MSTATUS       = 5;
-    localparam WR_MTVEC         = 6;
-    localparam WR_TRAP          = 7;
+    localparam WR_MTVEC         = 5;
+    localparam WR_TRAP          = 6;
     localparam NUM_WR           = WR_TRAP + NUM_TRAP_CSRS;
 
     function automatic logic [`VX_CFG_XLEN-1:0] csr_rmw(
@@ -124,7 +122,7 @@ import VX_fpu_pkg::*;
             `VX_CSR_MVENDORID  : stable_w = `VX_CFG_XLEN'(`VX_ISA_VENDOR_ID);
             `VX_CSR_MARCHID    : stable_w = `VX_CFG_XLEN'(`VX_ISA_ARCH_ID);
             `VX_CSR_MIMPID     : stable_w = `VX_CFG_XLEN'(`VX_ISA_IMPL_ID);
-            `VX_CSR_MISA       : stable_w = `VX_CFG_XLEN'({2'(`CLOG2(`VX_CFG_XLEN/16)), 30'(`VX_CFG_MISA_STD)});
+            `VX_CSR_MISA       : stable_w = {2'(`CLOG2(`VX_CFG_XLEN/16)), (`VX_CFG_XLEN-2)'(`VX_CFG_MISA_STD)};
         `ifdef VX_CFG_EXT_F_ENABLE
             `VX_CSR_FFLAGS     : begin live_sel_w[LIVE_FFLAGS] = 1; wr_sel_w[WR_FFLAGS] = 1; end
             `VX_CSR_FRM        : begin live_sel_w[LIVE_FRM]    = 1; wr_sel_w[WR_FRM]    = 1; end
@@ -169,10 +167,10 @@ import VX_fpu_pkg::*;
             `VX_CSR_SATP       : begin live_sel_w[LIVE_SATP] = 1; wr_sel_w[WR_SATP] = 1; end
         `endif
 
-            // Machine-mode trap CSRs: mstatus and mtvec per core, mepc and
-            // mcause per warp, all held by the schedulers.
-            `VX_CSR_MSTATUS : begin live_sel_w[LIVE_MSTATUS] = 1; wr_sel_w[WR_MSTATUS] = 1; end
-            `VX_CSR_MTVEC   : begin live_sel_w[LIVE_MTVEC] = 1;   wr_sel_w[WR_MTVEC] = 1; end
+            // Machine-mode trap CSRs: mtvec per core, mstatus, mepc and mcause
+            // per warp, all held by the schedulers.
+            `VX_CSR_MSTATUS : begin stable_w = sched_csr_if.csr_mstatus; wr_sel_w[WR_TRAP + TRAP_CSR_MSTATUS] = 1; end
+            `VX_CSR_MTVEC   : begin live_sel_w[LIVE_MTVEC] = 1; wr_sel_w[WR_MTVEC] = 1; end
             `VX_CSR_MEPC    : begin stable_w = sched_csr_if.csr_mepc;   wr_sel_w[WR_TRAP + TRAP_CSR_MEPC] = 1; end
             `VX_CSR_MCAUSE  : begin stable_w = sched_csr_if.csr_mcause; wr_sel_w[WR_TRAP + TRAP_CSR_MCAUSE] = 1; end
             // mtval is read-only zero: no exception the core raises carries a trap value.
@@ -190,8 +188,8 @@ import VX_fpu_pkg::*;
     // Registered in the cycle before the request fires. The stable values
     // cannot change for this warp in that cycle: CSR writes land at an earlier
     // request's fire, and the scheduler's own writes (mscratch at launch or
-    // spawn, mepc/mcause at trap entry) target a warp with no CSR request in
-    // flight. The SIMULATION check below compares the two at fire.
+    // spawn, the trap CSRs at trap entry and return) target a warp with no CSR
+    // request in flight. The SIMULATION check below compares the two at fire.
     reg [`VX_CFG_XLEN-1:0] stable_r, wr_data_r;
     reg [NUM_LIVE-1:0]     live_sel_r;
     reg [NUM_WR-1:0]       wr_sel_r;
@@ -267,7 +265,6 @@ import VX_fpu_pkg::*;
 `else
     assign live_src[LIVE_SATP]      = '0;
 `endif
-    assign live_src[LIVE_MSTATUS]   = sched_csr_if.csr_mstatus;
     assign live_src[LIVE_MTVEC]     = sched_csr_if.csr_mtvec;
 
     reg [`VX_CFG_XLEN-1:0] live_data;
@@ -292,14 +289,13 @@ import VX_fpu_pkg::*;
     assign sched_csr_if.trap_csr_wr_valid = write_sel[WR_TRAP +: NUM_TRAP_CSRS];
     assign sched_csr_if.trap_csr_wr_data  = wr_data_r;
 
-    // The per-core CSRs (mstatus, mtvec, SATP) live in the core scheduler,
+    // The per-core CSRs (mtvec, SATP) live in the core scheduler,
     // shared by every SFU block, so their read-modify-write stays in the fire
     // cycle.
     wire [`VX_CFG_XLEN-1:0] live_wr_data = csr_rmw(req_op, live_data, req_src);
 
-    assign sched_csr_if.mstatus_wr_valid  = write_sel[WR_MSTATUS];
-    assign sched_csr_if.mtvec_wr_valid    = write_sel[WR_MTVEC];
-    assign sched_csr_if.mtrap_wr_data     = live_wr_data;
+    assign sched_csr_if.mtvec_wr_valid = write_sel[WR_MTVEC];
+    assign sched_csr_if.mtvec_wr_data  = live_wr_data;
 
 `ifdef VX_CFG_EXT_F_ENABLE
     // The FP flags keep moving under in-flight FP instructions, so their
@@ -326,6 +322,7 @@ import VX_fpu_pkg::*;
                 `VX_CSR_FCSR,
             `endif
                 `VX_CSR_SATP,
+                `VX_CSR_MISA,
                 `VX_CSR_MSTATUS,
                 `VX_CSR_MNSTATUS,
                 `VX_CSR_MEDELEG,

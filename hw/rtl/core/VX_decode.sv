@@ -46,6 +46,9 @@ module VX_decode import
     reg [NUM_XREGS-1:0] wr_xregs;
     reg [BYTESEL_BITS-1:0] bytesel;
     reg is_wstall;
+    reg illegal;
+    reg use_rd, fs_write_fcsr;
+    reg trap_uop;
 
     wire [31:0] instr = fetch_if.data.instr;
     wire [6:0] opcode = instr[6:0];
@@ -118,8 +121,8 @@ module VX_decode import
     wire is_csr_fflags = (u_12 == `VX_CSR_FFLAGS);
     wire is_csr_frm    = (u_12 == `VX_CSR_FRM);
     wire is_csr_fcsr   = (u_12 == `VX_CSR_FCSR);
-    // Trap CSRs that ECALL/EBREAK/MRET read when they execute in the ALU,
-    // while the CSR unit writes them: XREG_2 orders the two.
+    // Trap CSRs that a trap or MRET reads when it executes in the ALU, while
+    // the CSR unit writes them: XREG_2 orders the two.
     wire is_csr_trap   = (u_12 == `VX_CSR_MSTATUS) || (u_12 == `VX_CSR_MTVEC) || (u_12 == `VX_CSR_MEPC);
     wire frm_is_dyn    = (funct3 == 3'b111);
     wire is_rd_zero    = (rd == 0);
@@ -141,6 +144,58 @@ module VX_decode import
             default: csr_write = 1'b0;
         endcase
     end
+
+    // mstatus.FS of the instruction's warp
+    wire fs_off_w;
+    if (FETCH_WFS_BITS != 0) begin : g_fs_off
+        assign fs_off_w = decode_sched_if.fs_off[fetch_if.data.wid[FETCH_WFS_W-1:0]];
+    end else begin : g_fs_off_1
+        assign fs_off_w = decode_sched_if.fs_off[0];
+    end
+`ifdef VX_CFG_EXT_F_ENABLE
+    // The instructions that name an FP register or FP CSR, which FS=Off makes
+    // illegal: the F/D instructions, the FP CSR accesses, and the Vortex
+    // extensions on FP registers.
+    reg is_fp_inst;
+    always @(*) begin
+        case (opcode)
+            INST_FL, INST_FS, INST_FMADD, INST_FMSUB, INST_FNMSUB, INST_FNMADD, INST_FCI:
+                is_fp_inst = 1'b1;
+            INST_SYS:
+                is_fp_inst = (funct3[1:0] != 0) && (is_csr_fflags || is_csr_frm || is_csr_fcsr);
+            INST_EXT1: begin
+                // packed FP loads
+                is_fp_inst = (funct7 == 7'h04) && ((funct3 == 3'h1) || (funct3 == 3'h2));
+            `ifdef VX_CFG_EXT_TCU_ENABLE
+                // MMA; its metadata load names no FP register
+            `ifdef TCU_META_ENABLE
+                is_fp_inst |= (funct7 == 7'h02) && (funct3 != 3'h2);
+            `else
+                is_fp_inst |= (funct7 == 7'h02);
+            `endif
+            `endif
+            end
+        `ifdef VX_CFG_EXT_RTU_ENABLE
+            INST_EXT2:
+                // GETWF and CB_RET
+                is_fp_inst = (funct3 == 3'h6) && ((funct2 == 2'd0) || (funct2 == 2'd2));
+        `endif
+        `ifdef VX_CFG_EXT_TFU_ENABLE
+            INST_EXT3:
+                is_fp_inst = 1'b1;
+        `endif
+        `ifdef EXT_LDST_ANY_ENABLE
+            INST_EXT4: // wide and matrix FP loads and stores
+                is_fp_inst = 1'b1;
+        `endif
+            default:
+                is_fp_inst = 1'b0;
+        endcase
+    end
+`else
+    wire is_fp_inst = 1'b0;
+    `UNUSED_VAR (fs_off_w)
+`endif
 
     wire [19:0] ui_imm  = instr[31:12];
 `ifdef VX_CFG_XLEN_64
@@ -181,14 +236,21 @@ module VX_decode import
     end
 
     reg [INST_BR_BITS-1:0] s_type;
+    reg s_legal;
     always @(*) begin
+        s_legal = 1;
         case (u_12)
             12'h000: s_type = INST_OP_BITS'(INST_BR_ECALL);
             12'h001: s_type = INST_OP_BITS'(INST_BR_EBREAK);
             12'h002: s_type = INST_OP_BITS'(INST_BR_URET);
             12'h102: s_type = INST_OP_BITS'(INST_BR_SRET);
             12'h302: s_type = INST_OP_BITS'(INST_BR_MRET);
-            default: s_type = 'x;
+            // WFI: no interrupt to wait for, so a jump to the next instruction
+            12'h105: s_type = INST_OP_BITS'(INST_BR_JAL);
+            default: begin
+                s_type  = 'x;
+                s_legal = 0;
+            end
         endcase
     end
 
@@ -255,6 +317,7 @@ module VX_decode import
         bytesel   = BYTESEL_DEFAULT;
         is_wstall = 0;
         fence_op  = 'x;
+        illegal   = 0;
 
     `ifdef VX_CFG_EXT_A_ENABLE
         // Default the LSU amo sideband to "not an AMO" so plain
@@ -282,6 +345,10 @@ module VX_decode import
                 op_args.alu.imm20 = `SEXT(20, i_imm);
                 `USED_IREG (rd);
                 `USED_IREG (rs1);
+            `ifndef VX_CFG_XLEN_64
+                // shamt[5] is reserved on RV32
+                illegal = is_itype_sh && instr[25];
+            `endif
             end
             INST_R: begin
                 ex_type = EX_ALU;
@@ -328,6 +395,8 @@ module VX_decode import
                 op_args.alu.imm20 = `SEXT(20, iw_imm);
                 `USED_IREG (rd);
                 `USED_IREG (rs1);
+                // shamt[5] is reserved for the word shifts
+                illegal = is_itype_sh && instr[25];
             end
             INST_R_W: begin
                 ex_type = EX_ALU;
@@ -409,6 +478,7 @@ module VX_decode import
             INST_B: begin
                 ex_type = EX_ALU;
                 op_type = INST_OP_BITS'(b_type);
+                illegal = (funct3[2:1] == 2'b01);
                 op_args.br.xtype  = ALU_TYPE_BRANCH;
                 op_args.br.use_PC = 1;
                 op_args.br.use_imm= 1;
@@ -491,11 +561,16 @@ module VX_decode import
                     wr_xregs[XREG_1]    = csr_write && (is_csr_fcsr || is_csr_frm);
                     rd_xregs[XREG_2] = is_csr_trap;
                     wr_xregs[XREG_2] = csr_write && is_csr_trap;
+                    // mstatus gates the decode of the warp's next instructions
+                    is_wstall = (u_12 == `VX_CSR_MSTATUS);
+                    // CSR addresses 0xC00-0xFFF are read-only
+                    illegal = csr_write && (u_12[11:10] == 2'b11);
                     `USED_IREG (rd);
                     `USED_REG (REG_TYPE_I, rs1, ~funct3[2]);
                 end else begin
                     ex_type = EX_ALU;
                     op_type = INST_OP_BITS'(s_type);
+                    illegal = funct3[2] || ~s_legal;
                     op_args.br.xtype  = ALU_TYPE_BRANCH;
                     op_args.br.use_imm= 1;
                     op_args.br.imm_hi = 0;
@@ -505,7 +580,6 @@ module VX_decode import
                     op_args.br.is_rvc = decode_is_rvc;
                     is_wstall = 1;
                     rd_xregs[XREG_2] = 1'b1;
-                    `USED_IREG (rd);
                 end
             end
         `ifdef VX_CFG_EXT_F_ENABLE
@@ -619,13 +693,9 @@ module VX_decode import
                 op_args.fpu.dst_fmt = funct2;
                 op_args.fpu.src_fmt = funct2;
                 op_args.fpu.op_mod  = 1'b0;
-                if (~fp_legal) begin
-                    // A sign injection with no destination writes neither rd nor fflags.
-                    op_type = INST_OP_BITS'(INST_FPU_MISC);
-                    op_args.fpu.frm     = INST_FRM_BITS'(0);
-                    op_args.fpu.dst_fmt = INST_FMT_S;
-                    op_args.fpu.src_fmt = INST_FMT_S;
-                end else if (opcode != INST_FCI) begin
+                // a reserved encoding traps; the fields below are then unused
+                illegal = ~fp_legal;
+                if (opcode != INST_FCI) begin
                     op_type = INST_OP_BITS'({2'b00, 1'b1, opcode[3]});
                     op_args.fpu.op_mod = opcode[3] ^ opcode[2]; // MSUB, NMSUB
 
@@ -1054,8 +1124,32 @@ module VX_decode import
                 end
             end
         `endif
-            default:;
+            default: illegal = 1;
         endcase
+
+        use_rd        = use_regs[RV_RD];
+        fs_write_fcsr = is_fp_inst && (| wr_xregs);
+
+        // An illegal instruction, or an F/D instruction while mstatus.FS is
+        // Off, becomes a trap uop: no operands, no writeback.
+        trap_uop = illegal || (is_fp_inst && fs_off_w);
+        if (trap_uop) begin
+            ex_type = EX_ALU;
+            op_type = INST_OP_BITS'(INST_BR_ILLEGAL);
+            op_args.br.xtype   = ALU_TYPE_BRANCH;
+            op_args.br.use_PC  = 1;
+            op_args.br.use_imm = 1;
+            op_args.br.imm_hi  = 0;
+            op_args.br.imm_x2  = 0;
+            op_args.br.imm20   = 20'd4;
+            op_args.br.is_rvc  = decode_is_rvc;
+            use_regs  = '0;
+            rd_xregs  = '0;
+            rd_xregs[XREG_2] = 1'b1;
+            wr_xregs  = '0;
+            bytesel   = BYTESEL_DEFAULT;
+            is_wstall = 1;
+        end
     end
 
     // Without its extension a TCU, DXA, wide or matrix load/store instruction
@@ -1071,26 +1165,24 @@ module VX_decode import
         ("%t: %s DXA instruction on a core built without VX_CFG_EXT_DXA_ENABLE, wid=%0d, PC=0x%0h (#%0d)",
             $time, INSTANCE_ID, fetch_if.data.wid, to_fullPC(fetch_if.data.PC), fetch_if.data.uuid))
 `endif
+    // Without either load/store extension the opcode is illegal and traps.
+`ifdef EXT_LDST_ANY_ENABLE
 `ifndef VX_CFG_EXT_LDST_WIDE_ENABLE
     `RUNTIME_ASSERT(~(fetch_if.valid && (opcode == INST_EXT4) && (funct3 >= 3'h3) && (funct3 <= 3'h6)),
         ("%t: %s wide load/store on a core built without VX_CFG_EXT_LDST_WIDE_ENABLE, wid=%0d, PC=0x%0h (#%0d)",
             $time, INSTANCE_ID, fetch_if.data.wid, to_fullPC(fetch_if.data.PC), fetch_if.data.uuid))
 `endif
+`endif
 `ifndef VX_CFG_EXT_LDST_MATRIX_ENABLE
+`ifdef EXT_LDST_ANY_ENABLE
     `RUNTIME_ASSERT(~(fetch_if.valid && (opcode == INST_EXT4) && ((funct3 == 3'h0) || (funct3 == 3'h2))),
         ("%t: %s matrix load/store on a core built without VX_CFG_EXT_LDST_MATRIX_ENABLE, wid=%0d, PC=0x%0h (#%0d)",
             $time, INSTANCE_ID, fetch_if.data.wid, to_fullPC(fetch_if.data.PC), fetch_if.data.uuid))
+`endif
 `else
     `RUNTIME_ASSERT(~(fetch_if.valid && (opcode == INST_EXT4)
                       && (((funct3 == 3'h0) && ~mtx_ldm_valid(u_12[2:0])) || ((funct3 == 3'h2) && ~mtx_ldm_valid(rd[2:0])))),
         ("%t: %s matrix load/store with a reserved fragment shape, wid=%0d, PC=0x%0h (#%0d)",
-            $time, INSTANCE_ID, fetch_if.data.wid, to_fullPC(fetch_if.data.PC), fetch_if.data.uuid))
-`endif
-
-`ifdef VX_CFG_EXT_F_ENABLE
-    `RUNTIME_ASSERT(~(fetch_if.valid && ~fp_legal && ((opcode == INST_FCI) || (opcode == INST_FMADD) || (opcode == INST_FMSUB)
-                                                    || (opcode == INST_FNMSUB) || (opcode == INST_FNMADD))),
-        ("%t: %s FP instruction with an unsupported format or a reserved encoding, wid=%0d, PC=0x%0h (#%0d)",
             $time, INSTANCE_ID, fetch_if.data.wid, to_fullPC(fetch_if.data.PC), fetch_if.data.uuid))
 `endif
 
@@ -1118,6 +1210,12 @@ module VX_decode import
     // Register decode_sched_if to break the long combinational path.
     reg                  decode_sched_valid_r;
     reg                  decode_sched_unlock_r;
+    // Writing an FP register or FP CSR state makes mstatus.FS Dirty, unless
+    // the instruction traps. The terms are registered apart to keep them shallow.
+    reg                  decode_sched_use_rd_r;
+    reg                  decode_sched_rd_freg_r;
+    reg                  decode_sched_fs_write_r;
+    reg                  decode_sched_trap_r;
     reg [NW_WIDTH-1:0]   decode_sched_wid_r;
 `ifdef VX_CFG_EXT_C_ENABLE
     reg                  decode_sched_is_rvc_r;
@@ -1129,6 +1227,10 @@ module VX_decode import
         end else begin
             decode_sched_valid_r  <= fetch_fire;
             decode_sched_unlock_r <= ~is_wstall;
+            decode_sched_use_rd_r   <= use_rd;
+            decode_sched_rd_freg_r  <= (get_reg_type(reg_ids[RV_RD]) == REG_TYPE_F);
+            decode_sched_fs_write_r <= fs_write_fcsr;
+            decode_sched_trap_r     <= trap_uop;
             decode_sched_wid_r    <= fetch_if.data.wid;
         `ifdef VX_CFG_EXT_C_ENABLE
             decode_sched_is_rvc_r <= fetch_if.data.is_rvc;
@@ -1139,6 +1241,8 @@ module VX_decode import
     assign decode_sched_if.valid  = decode_sched_valid_r;
     assign decode_sched_if.wid    = decode_sched_wid_r;
     assign decode_sched_if.unlock = decode_sched_unlock_r;
+    assign decode_sched_if.fs_dirty = ((decode_sched_use_rd_r && decode_sched_rd_freg_r) || decode_sched_fs_write_r)
+                                   && ~decode_sched_trap_r;
 `ifdef VX_CFG_EXT_C_ENABLE
     assign decode_sched_if.is_rvc = decode_sched_is_rvc_r;
 `endif

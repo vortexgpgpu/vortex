@@ -126,6 +126,9 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     assign fcsr_wid = execute_if.data.header.wid;
 `endif
 
+    // An mstatus access holds its warp from decode until it has fired.
+    assign sched_csr_if.csr_unlock = csr_req_fire && execute_if.data.header.eop && (csr_addr == `VX_CSR_MSTATUS);
+
     // Per-lane CSRs
 
     // Thread ids are the lane index on top of a per-request base.

@@ -21,6 +21,7 @@
 #include "instr.h"
 #include "cta_dispatcher.h"
 #include "barrier_unit.h"
+#include "VX_types.h"
 #ifdef VX_CFG_EXT_RASTER_ENABLE
 #include <vx_gfx_abi.h>
 #endif
@@ -30,6 +31,30 @@ namespace vortex {
 class Core;
 class Instr;
 class instr_trace_t;
+
+// Legal values of the trap CSRs. M is the only privilege mode, so
+// mstatus keeps MIE/MPIE/FS and MPP reads as M; mtvec supports direct mode
+// only; mepc is aligned to the instruction alignment.
+constexpr Word MSTATUS_MIE   = Word(1) << VX_CSR_MSTATUS_MIE;
+constexpr Word MSTATUS_MPIE  = Word(1) << VX_CSR_MSTATUS_MPIE;
+constexpr Word MSTATUS_MPP_M = Word(3) << VX_CSR_MSTATUS_MPP;
+constexpr Word MSTATUS_FS    = Word(3) << VX_CSR_MSTATUS_FS;
+constexpr Word MSTATUS_SD    = Word(1) << (VX_CFG_XLEN - 1);
+// FS resets to Initial so that FP code runs without first writing mstatus.
+// Without F, FS is read-only zero.
+#ifdef VX_CFG_EXT_F_ENABLE
+constexpr Word MSTATUS_FS_RESET = Word(1) << VX_CSR_MSTATUS_FS;
+constexpr Word MSTATUS_WMASK = MSTATUS_MIE | MSTATUS_MPIE | MSTATUS_FS;
+#else
+constexpr Word MSTATUS_FS_RESET = 0;
+constexpr Word MSTATUS_WMASK = MSTATUS_MIE | MSTATUS_MPIE;
+#endif
+constexpr Word MTVEC_WMASK   = ~Word(3);
+#ifdef VX_CFG_EXT_C_ENABLE
+constexpr Word MEPC_WMASK    = ~Word(1);
+#else
+constexpr Word MEPC_WMASK    = ~Word(3);
+#endif
 
 // IPDOM stack entry — one per nested SPLIT/JOIN.
 struct ipdom_entry_t {
@@ -85,9 +110,11 @@ struct warp_t {
   // Per-warp MSCRATCH (holds kernel arg pointer, set at CTA dispatch)
   Word                              mscratch;
 
-  // Per-warp trap return PC and cause: synchronous ECALL/EBREAK traps snapshot
-  // the faulting PC/cause here and MRET restores the PC from mepc. mstatus and
-  // mtvec are core-wide (Scheduler); see Scheduler::raise_trap.
+  // Per-warp machine-mode trap CSRs, held masked to their writable bits.
+  // Synchronous traps stack mstatus.MIE and snapshot the trapping PC and
+  // cause here; MRET restores the PC from mepc. mtvec is core-wide
+  // (Scheduler); see Scheduler::raise_trap.
+  Word                              mstatus = 0;
   Word                              mepc    = 0;
   Word                              mcause  = 0;
 
@@ -103,7 +130,7 @@ struct warp_t {
 
   warp_t(uint32_t num_threads);
 
-  void reset();
+  void reset(bool launch);
 };
 
 // Per-core warp lifecycle owner: holds warp register state, barrier state,
@@ -179,22 +206,25 @@ public:
   // ----- Trap helpers -----
   // mcause holds only the exception codes the core raises (TRAP_CAUSE_BITS in RTL).
   static constexpr Word TRAP_CAUSE_MASK = 0xF;
-  // Synchronous trap entry: snapshot the faulting PC into mepc, set
-  // mcause, and redirect the warp PC to mtvec. trap_pc is the PC of the
-  // faulting instruction (trace->PC), not the decode-advanced warp.PC.
+  // Synchronous trap entry: stack mstatus.MIE, snapshot the faulting PC into
+  // mepc, set mcause, and redirect the warp PC to mtvec. trap_pc is the PC
+  // of the faulting instruction (trace->PC), not the decode-advanced warp.PC.
   void raise_trap(uint32_t wid, Word cause, Word trap_pc);
   // Trap return: restore the warp PC from mepc (MRET/SRET/URET).
   void mret(uint32_t wid);
   void trigger_ecall(uint32_t wid, Word trap_pc);
   void trigger_ebreak(uint32_t wid, Word trap_pc);
+  // A fault taken while the warp has no handler (mtvec=0) aborts the
+  // simulation and reports the instruction (`code`).
+  void trigger_illegal(uint32_t wid, Word trap_pc, uint32_t code);
+  // A taken jump or branch to `target`, which is not instruction-aligned.
+  void trigger_misaligned_fetch(uint32_t wid, Word trap_pc, uint32_t code, Word target);
 
   // ----- Core-wide trap CSRs -----
-  // Every warp runs the same kernel and trap handler, so mstatus and mtvec are
-  // one per core: a write by any warp updates them for all.
-  Word mstatus() const { return mstatus_; }
+  // Every warp runs the same trap handler, so mtvec is one per core: a write
+  // by any warp updates it for all.
   Word mtvec() const { return mtvec_; }
-  void set_mstatus(Word value) { mstatus_ = value; }
-  void set_mtvec(Word value) { mtvec_ = value; }
+  void set_mtvec(Word value) { mtvec_ = value & MTVEC_WMASK; }
 
   // ----- Accessors -----
   warp_t& warp(uint32_t wid) { return warps_.at(wid); }
@@ -206,8 +236,7 @@ protected:
   void on_reset();
 
 private:
-  Word mstatus_ = 0;
-  Word mtvec_   = 0;
+  Word mtvec_ = 0;
 
   struct wspawn_t {
     bool      valid;

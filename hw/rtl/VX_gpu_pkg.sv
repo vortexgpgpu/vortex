@@ -465,7 +465,7 @@ package VX_gpu_pkg;
     localparam INST_BR_URET =    4'b1100;
     localparam INST_BR_SRET =    4'b1101;
     localparam INST_BR_MRET =    4'b1110;
-    localparam INST_BR_OTHER =   4'b1111;
+    localparam INST_BR_ILLEGAL = 4'b1111;
     localparam INST_BR_BITS =    4;
 
     function automatic logic [1:0] inst_br_class(input logic [INST_BR_BITS-1:0] op);
@@ -672,13 +672,15 @@ package VX_gpu_pkg;
     localparam ISSUE_WIS_W = `UP(ISSUE_WIS_BITS);
 
     // Per-warp machine-mode trap CSRs, held by the warp schedulers: the return
-    // PC and cause, which concurrent traps in different warps need. Every warp
-    // runs the same kernel and trap handler, so mstatus and mtvec are one per
-    // core, held by the core scheduler.
-    localparam NUM_TRAP_CSRS   = 2;
-    localparam TRAP_CSR_MEPC   = 0;
-    localparam TRAP_CSR_MCAUSE = 1;
-    // mcause holds only the exception codes the core raises (ECALL, EBREAK).
+    // PC, the cause and the mstatus interrupt-enable stack and FS, which
+    // concurrent traps and FP code in different warps need. Every warp runs
+    // the same trap handler, so mtvec is one per core, held by the core
+    // scheduler.
+    localparam NUM_TRAP_CSRS    = 3;
+    localparam TRAP_CSR_MEPC    = 0;
+    localparam TRAP_CSR_MCAUSE  = 1;
+    localparam TRAP_CSR_MSTATUS = 2;
+    // mcause holds only the exception codes the core raises.
     localparam TRAP_CAUSE_BITS = 4;
 
     localparam DISPATCH_QSIZE = `VX_CFG_DISPATCH_QUEUE_SIZE;
@@ -1397,12 +1399,14 @@ package VX_gpu_pkg;
         logic [`VX_CFG_MEM_ADDR_WIDTH-1:0] data;
         logic [NUM_TRAP_CSRS-1:0] trap_valid;
         logic [`VX_CFG_XLEN-1:0] trap_data;
+        logic                   unlock;
     } sched_csr_wr_t;
 
     // SFU CSR reads of per-warp state, selected by the read wid and CTA id
     typedef struct packed {
         logic [`VX_CFG_NUM_THREADS-1:0] thread_mask;
         logic [`VX_CFG_MEM_ADDR_WIDTH-1:0] mscratch;
+        logic [`VX_CFG_XLEN-1:0] mstatus;
         logic [`VX_CFG_XLEN-1:0] mepc;
         logic [`VX_CFG_XLEN-1:0] mcause;
         logic [NW_WIDTH-1:0]    cta_rank;

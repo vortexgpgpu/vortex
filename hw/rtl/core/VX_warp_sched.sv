@@ -140,9 +140,42 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
     wire          cand_valid;
     wire          sched_fire;
 
+    // M is the only privilege mode, so mstatus keeps MIE/MPIE/FS, and mepc
+    // keeps the bits that can be set.
+`ifdef VX_CFG_EXT_C_ENABLE
+    localparam MEPC_LSB  = 1;
+`else
+    localparam MEPC_LSB  = 2;
+`endif
+    // FS resets to Initial so that FP code runs without first writing mstatus.
+    // Without F, FS is read-only zero.
+`ifdef VX_CFG_EXT_F_ENABLE
+    localparam [1:0] FS_RESET = 2'b01;
+    localparam [1:0] FS_WMASK = 2'b11;
+`else
+    localparam [1:0] FS_RESET = 2'b00;
+    localparam [1:0] FS_WMASK = 2'b00;
+`endif
+
+    function automatic logic [`VX_CFG_XLEN-1:0] mstatus_value(
+        input logic       mie,
+        input logic       mpie,
+        input logic [1:0] fs
+    );
+        mstatus_value = '0;
+        mstatus_value[`VX_CSR_MSTATUS_MIE]      = mie;
+        mstatus_value[`VX_CSR_MSTATUS_MPIE]     = mpie;
+        mstatus_value[`VX_CSR_MSTATUS_MPP +: 2] = 2'b11;
+        mstatus_value[`VX_CSR_MSTATUS_FS +: 2]  = fs;
+        mstatus_value[`VX_CFG_XLEN-1]           = (fs == 2'b11); // SD
+    endfunction
+
     reg [SW-1:0][`VX_CFG_MEM_ADDR_WIDTH-1:0] mscratch_r;
-    reg [SW-1:0][`VX_CFG_XLEN-1:0] mepc_r;
+    reg [SW-1:0] mstatus_mie_r, mstatus_mpie_r;
+    reg [SW-1:0][1:0] mstatus_fs_r;
+    reg [SW-1:0][`VX_CFG_XLEN-1:MEPC_LSB] mepc_r;
     reg [SW-1:0][TRAP_CAUSE_BITS-1:0] mcause_r;
+    wire [SW-1:0][`VX_CFG_XLEN-1:0] mstatus, mepc;
 
     for (genvar l = 0; l < SW; ++l) begin : g_warps
         localparam [LW-1:0] LID = LW'(l);
@@ -158,6 +191,10 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
         wire ctl_hit  = (ctl_lid[QS] == LID);
         wire br_hit   = branch[QA].valid && (br_lid[QA] == LID);
         wire join_hit = join_valid[QS] && (join_k[QS] == K);
+
+        assign mstatus[l] = mstatus_value(mstatus_mie_r[l], mstatus_mpie_r[l], mstatus_fs_r[l]);
+        assign mepc[l]    = {mepc_r[l], MEPC_LSB'(0)};
+        assign decode_sched_if.fs_off[l] = (mstatus_fs_r[l] == 2'b00);
 
         always @(*) begin
             active_n  = active_r;
@@ -175,6 +212,10 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
             end
 
             if (decode_sched_if.valid && decode_sched_if.unlock && (dec_lid == LID)) begin
+                stalled_n = 0;
+            end
+
+            if (csr_wr[QS].unlock && (csr_wr_lid[QS] == LID)) begin
                 stalled_n = 0;
             end
 
@@ -233,11 +274,10 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
 
             if (br_hit) begin
                 if (branch[QA].is_trap) begin
-                    // ECALL/EBREAK: redirect to trap vector (mtvec[1:0] = MODE field; mask off to get base address).
-                    pc_n = from_fullPC(sched_if.mtvec & ~`VX_CFG_XLEN'(3));
+                    pc_n = from_fullPC(sched_if.mtvec);
                 end else if (branch[QA].is_mret) begin
                     // MRET/SRET/URET: restore the saved PC from mepc.
-                    pc_n = from_fullPC(mepc_r[l]);
+                    pc_n = from_fullPC(mepc[l]);
                 end else if (branch[QA].taken) begin
                     pc_n = branch[QA].dest;
                 end
@@ -275,6 +315,9 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
                 tmask_r       <= '0;
                 pc_r          <= '0;
                 mscratch_r[l] <= '0;
+                mstatus_mie_r[l]  <= 1'b0;
+                mstatus_mpie_r[l] <= 1'b0;
+                mstatus_fs_r[l]   <= FS_RESET;
                 mepc_r[l]     <= '0;
                 mcause_r[l]   <= '0;
             end else begin
@@ -296,19 +339,34 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
                     mscratch_r[l] <= csr_wr[QS].data;
                 end
 
+                if (decode_sched_if.valid && decode_sched_if.fs_dirty && (dec_lid == LID)) begin
+                    mstatus_fs_r[l] <= 2'b11;
+                end
+
                 if (csr_wr_lid[QS] == LID) begin
+                    if (csr_wr[QS].trap_valid[TRAP_CSR_MSTATUS]) begin
+                        mstatus_mie_r[l]  <= csr_wr[QS].trap_data[`VX_CSR_MSTATUS_MIE];
+                        mstatus_mpie_r[l] <= csr_wr[QS].trap_data[`VX_CSR_MSTATUS_MPIE];
+                        mstatus_fs_r[l]   <= csr_wr[QS].trap_data[`VX_CSR_MSTATUS_FS +: 2] & FS_WMASK;
+                    end
                     if (csr_wr[QS].trap_valid[TRAP_CSR_MEPC]) begin
-                        mepc_r[l] <= csr_wr[QS].trap_data;
+                        mepc_r[l] <= csr_wr[QS].trap_data[`VX_CFG_XLEN-1:MEPC_LSB];
                     end
                     if (csr_wr[QS].trap_valid[TRAP_CSR_MCAUSE]) begin
                         mcause_r[l] <= TRAP_CAUSE_BITS'(csr_wr[QS].trap_data);
                     end
                 end
 
-                // Hardware trap entry (ECALL/EBREAK) wins a same-cycle software write.
+                // Hardware trap entry and return win a same-cycle software write.
                 if (br_hit && branch[QA].is_trap) begin
-                    mepc_r[l]   <= to_fullPC(branch[QA].dest);
+                    mstatus_mie_r[l]  <= 1'b0;
+                    mstatus_mpie_r[l] <= mstatus_mie_r[l];
+                    mepc_r[l]   <= (`VX_CFG_XLEN-MEPC_LSB)'(to_fullPC(branch[QA].dest) >> MEPC_LSB);
                     mcause_r[l] <= branch[QA].trap_cause;
+                end
+                if (br_hit && branch[QA].is_mret) begin
+                    mstatus_mie_r[l]  <= mstatus_mpie_r[l];
+                    mstatus_mpie_r[l] <= 1'b1;
                 end
             end
         end
@@ -413,7 +471,8 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
 
         assign csr_rd[q].thread_mask = thread_masks[csr_rd_lid[q]];
         assign csr_rd[q].mscratch    = mscratch_r[csr_rd_lid[q]];
-        assign csr_rd[q].mepc        = mepc_r[csr_rd_lid[q]];
+        assign csr_rd[q].mstatus     = mstatus[csr_rd_lid[q]];
+        assign csr_rd[q].mepc        = mepc[csr_rd_lid[q]];
         assign csr_rd[q].mcause      = `VX_CFG_XLEN'(mcause_r[csr_rd_lid[q]]);
 
         assign dvstack_mscratch[q]   = mscratch_r[wid_to_wfs(dvstack_wid[q])];

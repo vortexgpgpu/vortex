@@ -79,6 +79,7 @@ uint32_t AluUnit::latency_of(const instr_trace_t* trace) const {
 		case BrType::JAL:
 		case BrType::JALR:
 		case BrType::SYS:
+		case BrType::ILLEGAL:
 			return 0;
 		default:
 			std::abort();
@@ -381,6 +382,19 @@ void AluUnit::execute(instr_trace_t* trace) {
 		auto br_type = std::get<BrType>(trace->op_type);
 		auto brArgs = std::get<IntrBrArgs>(instrArgs);
 		Word offset = sext<Word>(brArgs.offset, 32);
+		// Without C, a target with bit 1 set is misaligned: the jump or taken
+		// branch traps instead, and writes no lane.
+		auto misaligned = [](Word target) {
+		#ifdef VX_CFG_EXT_C_ENABLE
+			__unused(target);
+			return false;
+		#else
+			return (target & 0x2) != 0;
+		#endif
+		};
+		// A warp follows its last active thread; with more threads than lanes
+		// the last packet decides the redirect or trap, as each packet only
+		// writes its own lanes.
 		switch (br_type) {
 		case BrType::BR: {
 			bool curr_taken = false;
@@ -394,43 +408,62 @@ void AluUnit::execute(instr_trace_t* trace) {
 			case 7: curr_taken = (rs1_data[t].u >= rs2_data[t].u); break;
 			default: std::abort();
 			}
-			if (curr_taken) {
-				warp.PC = trace->PC + offset;
+			if (trace->eop) {
+				if (curr_taken) {
+					Word target = trace->PC + offset;
+					if (misaligned(target)) {
+						sched.trigger_misaligned_fetch(trace->wid, trace->PC, trace->code, target);
+					} else {
+						warp.PC = target;
+					}
+				}
+				core_->perf_stats().branches += 1;
 			}
-			core_->perf_stats().branches += 1;
 		} break;
-		case BrType::JAL: {
-			// RVC source returns PC+2; full RV32I returns PC+4.
-			Word link_pc = trace->PC + (brArgs.is_rvc ? 2 : 4);
-			for (uint32_t t = thread_start; t < num_threads; ++t) {
-				if (!tmask.test(t)) continue;
-				rd_data[t].i = link_pc;
-			}
-			warp.PC = trace->PC + offset;
-			core_->perf_stats().branches += 1;
-		} break;
+		case BrType::JAL:
 		case BrType::JALR: {
-			// RVC source returns PC+2; full RV32I returns PC+4.
-			Word link_pc = trace->PC + (brArgs.is_rvc ? 2 : 4);
-			for (uint32_t t = thread_start; t < num_threads; ++t) {
-				if (!tmask.test(t)) continue;
-				rd_data[t].i = link_pc;
+			// JALR clears bit 0 of the computed target.
+			Word target = (br_type == BrType::JAL) ? (trace->PC + offset)
+			            : ((rs1_data[thread_last].u + offset) & ~Word(1));
+			if (misaligned(target)) {
+				tmask.reset();
+			} else {
+				// RVC source returns PC+2; full RV32I returns PC+4.
+				Word link_pc = trace->PC + (brArgs.is_rvc ? 2 : 4);
+				for (uint32_t t = thread_start; t < num_threads; ++t) {
+					if (!tmask.test(t)) continue;
+					rd_data[t].i = link_pc;
+				}
 			}
-			// JALR clears bit 0 of the computed target (RISC-V ISA); the RTL
-			// release build drops it implicitly via from_fullPC() truncation.
-			warp.PC = (rs1_data[thread_last].u + offset) & ~Word(1);
-			core_->perf_stats().branches += 1;
+			if (trace->eop) {
+				if (misaligned(target)) {
+					sched.trigger_misaligned_fetch(trace->wid, trace->PC, trace->code, target);
+				} else {
+					warp.PC = target;
+				}
+				core_->perf_stats().branches += 1;
+			}
 		} break;
 		case BrType::SYS:
-			switch (brArgs.offset) {
-			// ECALL / EBREAK: synchronous trap — redirect warp PC to mtvec.
-			case 0x000: sched.trigger_ecall(trace->wid, trace->PC);  break;
-			case 0x001: sched.trigger_ebreak(trace->wid, trace->PC); break;
-			// URET / SRET / MRET: trap return — restore warp PC from mepc.
-			case 0x002: case 0x102: case 0x302: sched.mret(trace->wid); break;
-			default: std::abort();
+			if (trace->eop) {
+				switch (brArgs.offset) {
+				// ECALL / EBREAK: synchronous trap — redirect warp PC to mtvec.
+				case 0x000: sched.trigger_ecall(trace->wid, trace->PC);  break;
+				case 0x001: sched.trigger_ebreak(trace->wid, trace->PC); break;
+				// URET / SRET / MRET: trap return — restore warp PC from mepc.
+				case 0x002: case 0x102: case 0x302: sched.mret(trace->wid); break;
+				// WFI: no interrupt to wait for, so it falls through.
+				case 0x105: break;
+				default: std::abort();
+				}
+				core_->perf_stats().branches += 1;
 			}
-			core_->perf_stats().branches += 1;
+			break;
+		case BrType::ILLEGAL:
+			if (trace->eop) {
+				sched.trigger_illegal(trace->wid, trace->PC, trace->code);
+				core_->perf_stats().branches += 1;
+			}
 			break;
 		default:
 			std::abort();

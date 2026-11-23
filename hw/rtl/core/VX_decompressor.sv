@@ -194,6 +194,7 @@ module VX_decompressor import VX_gpu_pkg::*; #(
         logic [11:0] i_imm, b_imm, x_imm, w_imm;
         logic [19:0] j_imm;
         logic [31:0] instr_o;
+        logic        reserved;
 
         func3 = instr_i[15:13];
         rd    = instr_i[11:7];
@@ -216,12 +217,19 @@ module VX_decompressor import VX_gpu_pkg::*; #(
                   instr_i[2], instr_i[11], instr_i[5:3]};
         x_imm  = {{3{instr_i[12]}}, instr_i[4:3], instr_i[5], instr_i[2], instr_i[6], 4'b0};
         w_imm  = {2'd0, instr_i[10:7], instr_i[12:11], instr_i[5], instr_i[6], 2'b0};
-        instr_o = '0;
+        instr_o  = '0;
+        reserved = 1'b0;
 
+        // A reserved encoding expands to the all-zero word, which decodes as an
+        // illegal instruction. The rd=x0 forms the spec calls HINTs execute as
+        // no-ops.
         case (instr_i[1:0])
         2'b00: begin // Quadrant 0
             case (func3)
-            3'b000: instr_o = {w_imm, 5'd2, 3'b000, rdp, OPC_I};
+            3'b000: begin // C.ADDI4SPN; nzuimm=0 is reserved
+                instr_o  = {w_imm, 5'd2, 3'b000, rdp, OPC_I};
+                reserved = (instr_i[12:5] == 8'd0);
+            end
         `ifdef VX_CFG_FLEN_64
             3'b001: instr_o = {lsd_imm, rs1p, 3'b011, rdp, OPC_FL};
         `endif
@@ -240,7 +248,7 @@ module VX_decompressor import VX_gpu_pkg::*; #(
         `else
             3'b111: instr_o = {lsw_imm[11:5], rs2p, rs1p, 3'b010, lsw_imm[4:0], OPC_FS};
         `endif
-            default: instr_o = 32'h00000013;
+            default: reserved = 1'b1;
             endcase
         end
         2'b01: begin // Quadrant 1
@@ -252,22 +260,37 @@ module VX_decompressor import VX_gpu_pkg::*; #(
                     instr_o = {i_imm, rd, 3'b000, rd, OPC_I};
             end
         `ifdef VX_CFG_XLEN_64
-            3'b001: instr_o = {i_imm, rd, 3'b000, rd, OPC_I_W};
+            3'b001: begin // C.ADDIW; rd=x0 is reserved
+                instr_o  = {i_imm, rd, 3'b000, rd, OPC_I_W};
+                reserved = (rd == 5'd0);
+            end
         `else
             // RV32C: C.JAL -> JAL x1, j_imm (CJ-format).
             3'b001: instr_o = {j_imm[19], j_imm[9:0], j_imm[10], j_imm[18:11], 5'd1, OPC_JAL};
         `endif
             3'b010: instr_o = {i_imm, 5'd0, 3'b000, rd, OPC_I};
-            3'b011: begin
-                if (rd == 5'd2)
+            3'b011: begin // C.ADDI16SP, C.LUI; a zero immediate is reserved
+                if (rd == 5'd2) begin
                     instr_o = {x_imm, 5'd2, 3'b000, 5'd2, OPC_I};
-                else
+                end else begin
                     instr_o = {{{8{i_imm[11]}}, i_imm}, rd, OPC_LUI};
+                end
+                reserved = ~instr_i[12] && (instr_i[6:2] == 5'd0);
             end
             3'b100: begin
                 case (instr_i[11:10])
-                2'b00: instr_o = {{6'b000000, i_imm[5:0]}, rs1p, 3'b101, rs1p, OPC_I};
-                2'b01: instr_o = {{6'b010000, i_imm[5:0]}, rs1p, 3'b101, rs1p, OPC_I};
+                2'b00: begin // C.SRLI
+                    instr_o  = {{6'b000000, i_imm[5:0]}, rs1p, 3'b101, rs1p, OPC_I};
+                `ifndef VX_CFG_XLEN_64
+                    reserved = instr_i[12];
+                `endif
+                end
+                2'b01: begin // C.SRAI
+                    instr_o  = {{6'b010000, i_imm[5:0]}, rs1p, 3'b101, rs1p, OPC_I};
+                `ifndef VX_CFG_XLEN_64
+                    reserved = instr_i[12];
+                `endif
+                end
                 2'b10: instr_o = {i_imm, rs1p, 3'b111, rs1p, OPC_I};
                 2'b11: begin
                     case ({instr_i[12], instr_i[6:5]})
@@ -279,44 +302,59 @@ module VX_decompressor import VX_gpu_pkg::*; #(
                     3'b100: instr_o = {7'b0100000, rs2p, rs1p, 3'b000, rs1p, OPC_R_W};
                     3'b101: instr_o = {7'b0000000, rs2p, rs1p, 3'b000, rs1p, OPC_R_W};
         `endif
-                    default: instr_o = 32'h00000013;
+                    default: reserved = 1'b1;
                     endcase
                 end
-                default: instr_o = 32'h00000013;
+                default: reserved = 1'b1;
                 endcase
             end
             3'b101: instr_o = {j_imm[19], j_imm[9:0], j_imm[10], j_imm[18:11], 5'd0, OPC_JAL};
             3'b110: instr_o = {b_imm[11], b_imm[9:4], 5'd0, rs1p, 3'b000, b_imm[3:0], b_imm[10], OPC_B};
             3'b111: instr_o = {b_imm[11], b_imm[9:4], 5'd0, rs1p, 3'b001, b_imm[3:0], b_imm[10], OPC_B};
-            default: instr_o = 32'h00000013;
+            default: reserved = 1'b1;
             endcase
         end
         2'b10: begin // Quadrant 2
             case (func3)
-            3'b000: instr_o = {{6'b000000, i_imm[5:0]}, rd, 3'b001, rd, OPC_I};
+            3'b000: begin // C.SLLI
+                instr_o  = {{6'b000000, i_imm[5:0]}, rd, 3'b001, rd, OPC_I};
+            `ifndef VX_CFG_XLEN_64
+                reserved = instr_i[12];
+            `endif
+            end
         `ifdef VX_CFG_FLEN_64
             3'b001: instr_o = {ldsp_imm, 5'd2, 3'b011, rd, OPC_FL};
         `endif
-            3'b010: instr_o = {lwsp_imm, 5'd2, 3'b010, rd, OPC_L};
+            3'b010: begin // C.LWSP; rd=x0 is reserved
+                instr_o  = {lwsp_imm, 5'd2, 3'b010, rd, OPC_L};
+                reserved = (rd == 5'd0);
+            end
         `ifdef VX_CFG_XLEN_64
-            3'b011: instr_o = {ldsp_imm, 5'd2, 3'b011, rd, OPC_L};
+            3'b011: begin // C.LDSP; rd=x0 is reserved
+                instr_o  = {ldsp_imm, 5'd2, 3'b011, rd, OPC_L};
+                reserved = (rd == 5'd0);
+            end
         `else
             3'b011: instr_o = {lwsp_imm, 5'd2, 3'b010, rd, OPC_FL};
         `endif
             3'b100: begin
                 if (instr_i[12] == 1'b0) begin
-                    if (rs2 == 5'd0)
-                        instr_o = {12'd0, rs1, 3'b000, 5'd0, OPC_JALR};
-                    else
+                    if (rs2 == 5'd0) begin // C.JR; rs1=x0 is reserved
+                        instr_o  = {12'd0, rs1, 3'b000, 5'd0, OPC_JALR};
+                        reserved = (rs1 == 5'd0);
+                    end else begin
                         instr_o = {7'b0000000, rs2, 5'd0, 3'b000, rd, OPC_R};
+                    end
                 end else begin
                     if (rs2 == 5'd0) begin
-                        if (rs1 == 5'd0)
+                        if (rs1 == 5'd0) begin
                             instr_o = 32'b000000000001_00000_000_00000_1110011;
-                        else
+                        end else begin
                             instr_o = {12'd0, rs1, 3'b000, 5'd1, OPC_JALR};
-                    end else
+                        end
+                    end else begin
                         instr_o = {7'b0000000, rs2, rd, 3'b000, rd, OPC_R};
+                    end
                 end
             end
         `ifdef VX_CFG_FLEN_64
@@ -328,12 +366,12 @@ module VX_decompressor import VX_gpu_pkg::*; #(
         `else
             3'b111: instr_o = {swsp_imm[11:5], rs2, 5'd2, 3'b010, swsp_imm[4:0], OPC_FS};
         `endif
-            default: instr_o = 32'h00000013;
+            default: reserved = 1'b1;
             endcase
         end
-        default: instr_o = 32'h00000013;
+        default: reserved = 1'b1;
         endcase
-        return instr_o;
+        return reserved ? 32'h0 : instr_o;
     endfunction
 
     // ------------------------------------------------------------------

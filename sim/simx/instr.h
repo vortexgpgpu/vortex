@@ -148,6 +148,7 @@ public:
     , fu_lock_(true)
     , fu_unlock_(true)
     , issue_yield_(false)
+    , fs_dirty_(false)
   {}
 
   void set_fu_type(FUType fu_type) {
@@ -236,8 +237,8 @@ public:
 
   // CSR fields the scoreboard orders like GPRs: an instruction naming one,
   // read or written, waits for an older writer to commit. Besides the FP
-  // control fields, TRAP_CSRS stands for mstatus/mtvec/mepc, which
-  // ECALL/EBREAK/MRET read outside the CSR unit.
+  // control fields, TRAP_CSRS stands for mstatus/mtvec/mepc, which a trap
+  // and MRET read outside the CSR unit.
   enum : uint8_t {
     FCSR_FFLAGS = 1u << 0,
     FCSR_FRM    = 1u << 1,
@@ -249,6 +250,10 @@ public:
   }
   uint8_t fcsr_reads() const { return fcsr_rd_; }
   uint8_t fcsr_writes() const { return fcsr_wr_; }
+
+  // the instruction may write the F/D state (mstatus.FS becomes Dirty)
+  void set_fs_dirty(bool value) { fs_dirty_ = value; }
+  bool fs_dirty() const { return fs_dirty_; }
 
 private:
 
@@ -270,6 +275,7 @@ private:
   bool     fu_lock_;
   bool     fu_unlock_;
   bool     issue_yield_;
+  bool     fs_dirty_;
 
   friend std::ostream &operator<<(std::ostream &, const Instr &);
 };
