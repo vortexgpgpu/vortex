@@ -39,7 +39,12 @@ MemCoalescer::MemCoalescer(
   , sent_mask_(input_size)
   , line_size_(line_size)
   , delay_(delay)
-{}
+{
+  // the cache's last output stage is a skid buffer, whose ready is a register
+  for (auto& in : RspIn) {
+    in.set_registered_ready(true);
+  }
+}
 
 void MemCoalescer::on_reset() {
   sent_mask_.reset();
@@ -66,7 +71,7 @@ void MemCoalescer::on_tick() {
     auto& entry = pending_rd_reqs_.at(rsp0.tag);
 
     BitVector<> lane_mask(output_size_);
-    std::vector<std::shared_ptr<mem_block_t>> lane_data(output_size_);
+    FixedVector<std::shared_ptr<mem_block_t>, LSU_MAX_LANES> lane_data(output_size_);
     for (uint32_t j = o; j < output_size_; ++j) {
       if (RspIn.at(j).empty()) {
         continue;
@@ -167,13 +172,13 @@ void MemCoalescer::on_tick() {
   const bool in_is_amo = in_req.is_amo();
 
   BitVector<> out_mask(output_size_);
-  std::vector<uint64_t> out_addrs(output_size_);
-  std::vector<std::shared_ptr<mem_block_t>> out_data(output_size_);
-  std::vector<uint64_t> out_byteen(output_size_, 0);
+  FixedVector<uint64_t, LSU_MAX_LANES> out_addrs(output_size_);
+  FixedVector<std::shared_ptr<mem_block_t>, LSU_MAX_LANES> out_data(output_size_);
+  FixedVector<uint64_t, LSU_MAX_LANES> out_byteen(output_size_, 0);
   // Comparand rides with the lane that owns the output. AMOs never coalesce
   // across lanes, so there is exactly one owner and no merge to do.
-  std::vector<uint64_t> out_amo_cmp(output_size_, 0);
-  std::vector<uint32_t> out_tids(output_size_, 0);
+  FixedVector<uint64_t, LSU_MAX_LANES> out_amo_cmp(output_size_, 0);
+  FixedVector<uint32_t, LSU_MAX_LANES> out_tids(output_size_, 0);
 
   BitVector<> cur_mask(input_size_);
 
@@ -275,7 +280,7 @@ void MemCoalescer::on_tick() {
     mr.uuid   = in_req.uuid;
     mr.flags  = in_req.flags;
     auto t = get_addr_type(mr.addr);
-    mr.flags.io    = mr.flags.flush ? mr.flags.io : (t == AddrType::IO);
+    mr.flags.io    = (t == AddrType::IO);
     mr.flags.local = (t == AddrType::Shared);
   }
 

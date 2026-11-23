@@ -226,6 +226,47 @@ module VX_lsu_mem_path import VX_gpu_pkg::*; #(
 
     end
 
+    VX_lsu_mem_if #(
+        .NUM_LANES (DCACHE_CHANNELS),
+        .DATA_SIZE (DCACHE_WORD_SIZE),
+        .TAG_WIDTH (DCACHE_CORE_TAG_WIDTH)
+    ) dcache_token_if();
+
+`ifdef VX_CFG_EXT_A_ENABLE
+    `ASSIGN_VX_MEM_BUS_IF (dcache_token_if, dcache_coalesced_if);
+`else
+    // Without atomics no lane carries the operation field: a flush token
+    // crosses the memory path with its release half in the noalloc bit and its
+    // acquire half in the io bit (VX_lsu_block), and takes its operation here.
+    // A fence with neither orders the IO path.
+    assign dcache_token_if.req_valid       = dcache_coalesced_if.req_valid;
+    assign dcache_token_if.req_data.mask   = dcache_coalesced_if.req_data.mask;
+    assign dcache_token_if.req_data.rw     = dcache_coalesced_if.req_data.rw;
+    assign dcache_token_if.req_data.addr   = dcache_coalesced_if.req_data.addr;
+    assign dcache_token_if.req_data.data   = dcache_coalesced_if.req_data.data;
+    assign dcache_token_if.req_data.byteen = dcache_coalesced_if.req_data.byteen;
+    assign dcache_token_if.req_data.tag    = dcache_coalesced_if.req_data.tag;
+    assign dcache_coalesced_if.req_ready   = dcache_token_if.req_ready;
+    for (genvar j = 0; j < DCACHE_CHANNELS; ++j) begin : g_token_op
+        mem_bus_attr_t in_attr, lane_attr;
+        assign in_attr = mem_bus_attr_t'(dcache_coalesced_if.req_data.user[j]);
+        // the operation field means nothing without amo_valid or the flush bit
+        always @(*) begin
+            lane_attr = in_attr;
+            lane_attr.is_addr_io = in_attr.is_addr_io && ~in_attr.is_flush;
+            lane_attr.is_noalloc = in_attr.is_noalloc && ~in_attr.is_flush;
+            lane_attr.amo.amo_op = amo_op_e'(fence_op_t'{io:  ~in_attr.is_addr_io && ~in_attr.is_noalloc,
+                                                        sys: 1'b0,
+                                                        rel: in_attr.is_noalloc,
+                                                        acq: in_attr.is_addr_io});
+        end
+        assign dcache_token_if.req_data.user[j] = lane_attr;
+    end
+    assign dcache_coalesced_if.rsp_valid   = dcache_token_if.rsp_valid;
+    assign dcache_coalesced_if.rsp_data    = dcache_token_if.rsp_data;
+    assign dcache_token_if.rsp_ready       = dcache_coalesced_if.rsp_ready;
+`endif
+
     VX_mem_bus_if #(
         .DATA_SIZE (DCACHE_WORD_SIZE),
         .TAG_WIDTH (DCACHE_CORE_TAG_WIDTH)
@@ -242,7 +283,7 @@ module VX_lsu_mem_path import VX_gpu_pkg::*; #(
     ) dcache_adapter (
         .clk        (clk),
         .reset      (reset),
-        .lsu_mem_if (dcache_coalesced_if),
+        .lsu_mem_if (dcache_token_if),
         .mem_bus_if (dcache_adapter_if)
     );
 

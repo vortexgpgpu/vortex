@@ -26,8 +26,8 @@ namespace vortex {
 // The command processor's DMA port into the last-level cache's client slot.
 // Requests in the IO aperture carry the IO attribute and bypass the cache; a
 // write flagged no-allocate writes around it on a miss. A launch that follows
-// DMA writes first sends an L1-only flush token behind them, which the
-// last-level cache answers once its inputs have drained.
+// DMA writes first sends a device-scope acquire-release flush token behind
+// them, which the last-level cache answers once its inputs have drained.
 class CpLlcPort : public SimObject<CpLlcPort> {
 public:
   using Ptr = std::shared_ptr<CpLlcPort>;
@@ -118,7 +118,7 @@ protected:
       if (!fence_sent_) {
         MemReq token;
         token.flags.flush = 1;
-        token.flags.flush_l1 = 1;
+        token.flags.fence_op = VX_FENCE_ACQ | VX_FENCE_REL;
         token.tag = kFenceTag;
         if (MemReqOut.try_send(token, 1)) {
           DT(3, this->name() << " fence: " << token);

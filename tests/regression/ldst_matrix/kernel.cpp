@@ -7,15 +7,15 @@ using cfg = vt::wmma_config_t<VX_CFG_NUM_THREADS>;
 
 // vx_ldm fd, imm(rs1) and vx_stm fs2, imm(rs1) (custom-3 funct3 0/2, I- and
 // S-type), written as .insn so the encodings are tested independently of the
-// compiler. imm[4:0] is the fragment shape, imm[11:5] a byte offset; rs1 is
+// compiler. imm[2:0] is the fragment shape, imm[11:3] a byte offset; rs1 is
 // the first of J registers, a multiple of J, holding one address per row group.
 enum : uint32_t {
-  SHAPE_A    = 0x00,
-  SHAPE_A_SP = 0x01,
-  SHAPE_B    = 0x06,
-  SHAPE_B_SP = 0x07, // symmetric sparse only
-  SHAPE_C    = 0x08,
-  SHAPE_WG_C = 0x18
+  SHAPE_A    = 0,
+  SHAPE_A_SP = 1,
+  SHAPE_B    = 2,
+  SHAPE_B_SP = 3, // symmetric sparse only
+  SHAPE_C    = 4,
+  SHAPE_WG_C = 5
 };
 
 // A fragment of a shape: J row groups of C words, CS bytes apart in a row.
@@ -192,6 +192,8 @@ uint32_t check_offsets(volatile uint32_t* src, volatile uint32_t* dst, uint32_t 
   constexpr int32_t S = int32_t(pow2ceil((g.C * g.CS > 32) ? (g.C * g.CS) : 32));
   uint32_t errors = 0;
   errors += check<SHAPE, FD, 0>(src, dst, region_words, row);
+  // the smallest 8-byte multiple of the column span
+  errors += check<SHAPE, FD, int32_t((g.C * g.CS + 7) / 8 * 8)>(src, dst, region_words, row);
   errors += check<SHAPE, FD, S>(src, dst, region_words, row);
   errors += check<SHAPE, FD, 2 * S>(src, dst, region_words, row);
   errors += check<SHAPE, FD, -S>(src, dst, region_words, row);

@@ -1,11 +1,10 @@
+#include <cmath>
 #include <iostream>
 #include <unistd.h>
 #include <string.h>
 #include <vector>
 #include <vortex2.h>
 #include "common.h"
-
-#define FLOAT_ULP 6
 
 #define RT_CHECK(_expr)                                         \
    do {                                                         \
@@ -31,11 +30,19 @@ public:
   static int generate() {
     return rand();
   }
-  static bool compare(int a, int b, int index, int errors) {
-    if (a != b) {
-      if (errors < 100) {
-        printf("*** error: [%d] expected=%d, actual=%d\n", index, b, a);
-      }
+  // Integer sums wrap modulo 2^32 on the device, so they are exact in any
+  // order; the reference wraps the same way, in unsigned arithmetic.
+  static bool verify(const std::vector<int>& a, const std::vector<int>& b,
+                     const std::vector<int>& partials, uint32_t /*depth*/) {
+    uint32_t ref = 0, cur = 0;
+    for (size_t i = 0; i < a.size(); ++i) {
+      ref += uint32_t(a[i]) * uint32_t(b[i]);
+    }
+    for (int p : partials) {
+      cur += uint32_t(p);
+    }
+    if (cur != ref) {
+      printf("*** error: expected=%d, actual=%d\n", int(ref), int(cur));
       return false;
     }
     return true;
@@ -44,8 +51,6 @@ public:
 
 template <>
 class Comparator<float> {
-private:
-  union Float_t { float f; int i; };
 public:
   static const char* type_str() {
     return "float";
@@ -53,16 +58,26 @@ public:
   static float generate() {
     return static_cast<float>(rand()) / RAND_MAX;
   }
-  static bool compare(float a, float b, int index, int errors) {
-    union fi_t { float f; int32_t i; };
-    fi_t fa, fb;
-    fa.f = a;
-    fb.f = b;
-    auto d = std::abs(fa.i - fb.i);
-    if (d > FLOAT_ULP) {
-      if (errors < 100) {
-        printf("*** error: [%d] expected=%f, actual=%f\n", index, b, a);
-      }
+  // The device rounds through at most `depth` float operations on the way from
+  // each product to its block sum, so the forward error bound is
+  // gamma_depth * sum|a*b| with gamma_k = k*u/(1 - k*u), u = 2^-24 (Higham,
+  // summation in any order). The reference and the sum of the block partials are
+  // computed in double, so the bound holds for every n.
+  static bool verify(const std::vector<float>& a, const std::vector<float>& b,
+                     const std::vector<float>& partials, uint32_t depth) {
+    double ref = 0, abs_sum = 0, cur = 0;
+    for (size_t i = 0; i < a.size(); ++i) {
+      double p = double(a[i]) * double(b[i]);
+      ref += p;
+      abs_sum += std::abs(p);
+    }
+    for (float p : partials) {
+      cur += p;
+    }
+    double ku = depth * std::ldexp(1.0, -24);
+    double tol = ku / (1 - ku) * abs_sum;
+    if (std::abs(cur - ref) > tol) {
+      printf("*** error: expected=%f, actual=%f, tolerance=%g\n", ref, cur, tol);
       return false;
     }
     return true;
@@ -168,7 +183,7 @@ int main(int argc, char *argv[]) {
   std::cout << "allocate host buffers" << std::endl;
   std::vector<TYPE> h_src0(num_points);
   std::vector<TYPE> h_src1(num_points);
-  std::vector<TYPE> h_dst(dst_buf_size);
+  std::vector<TYPE> h_dst(blocksPerGrid);
 
   for (uint32_t i = 0; i < num_points; ++i) {
     h_src0[i] = Comparator<TYPE>::generate();
@@ -217,22 +232,18 @@ int main(int argc, char *argv[]) {
   // verify result
   std::cout << "verify result" << std::endl;
 
+  // Per element: one product, ceil(n/stride) grid-stride accumulations, then
+  // log2(threadsPerBlock) tree levels.
+  uint32_t stride = threadsPerBlock * blocksPerGrid;
+  uint32_t depth = 1 + (num_points + stride - 1) / stride;
+  for (uint32_t t = 1; t < threadsPerBlock; t *= 2) {
+    ++depth;
+  }
   int errors = 0;
-  TYPE ref = 0;
-  TYPE cur = 0;
-
-  for (uint32_t i = 0; i < num_points; ++i) {
-    ref += h_src0[i] * h_src1[i];
-  }
-
-  for(uint32_t i = 0; i < blocksPerGrid; i++) {
-    cur += h_dst[i];
-  }
-
-  if (!Comparator<TYPE>::compare(cur, ref, 0, errors)) {
+  if (!Comparator<TYPE>::verify(h_src0, h_src1, h_dst, depth)) {
     ++errors;
   }
-  
+
   // cleanup
   std::cout << "cleanup" << std::endl;
   cleanup();

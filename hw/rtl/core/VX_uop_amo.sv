@@ -19,8 +19,8 @@
 // become visible first) and one with .aq is followed by an acquire fence
 // (later reads see what the atomic observed):
 //   [release fence] atomic [acquire fence]
-// The fences are plain LSU fence ops whose aq/rl arguments carry their kind;
-// they read and write no register.
+// The fences are plain LSU fence ops carrying the acquire or release fence
+// operation; they read and write no register.
 
 module VX_uop_amo import VX_gpu_pkg::*; (
     input clk,
@@ -50,8 +50,7 @@ module VX_uop_amo import VX_gpu_pkg::*; (
         if (is_rel || is_acq) begin
             ibuf_r.op_type  = INST_OP_BITS'(INST_LSU_FENCE);
             ibuf_r.op_args  = '0;
-            ibuf_r.op_args.lsu.amo_aq = is_acq;
-            ibuf_r.op_args.lsu.amo_rl = is_rel;
+            ibuf_r.op_args.lsu.amo_op = amo_op_e'(fence_op_t'{io: 1'b0, sys: 1'b0, rel: is_rel, acq: is_acq});
             ibuf_r.wb       = 1'b0;
             ibuf_r.rd_xregs = '0;
             ibuf_r.wr_xregs = '0;

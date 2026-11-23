@@ -1,7 +1,7 @@
 {
   "tfu": {
-    "clock_mhz": 800,
-    "config_hash": "e22492d24465c10d",
+    "clock_mhz": 1000,
+    "config_hash": "5e071e2419b516e2",
     "configs": "",
     "dut": "tfu",
     "result": {
@@ -16,12 +16,12 @@
         "xlen": 32,
         "yosys": "Yosys 0.69"
       },
-      "fmax_mhz": 1026.167,
-      "power_mw": 15.6,
+      "fmax_mhz": 1031.46,
+      "power_mw": 19.2,
       "seq_area_um2": 507.384,
       "sram_area_um2": 0.0,
       "tns_ns": 0.0,
-      "wns_ns": 0.276
+      "wns_ns": 0.03
     }
   }
 }

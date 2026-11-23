@@ -125,6 +125,8 @@ private:
   // earliest; the stage takes a request only while empty, and a lane whose
   // page is staged holds meanwhile.
   bool                     park_reg_;
+  uint32_t                 next_park_port_ = 0;
+  uint32_t                 reserved_port_;
   struct Staged {
     uint32_t port;
     MemReq   req;

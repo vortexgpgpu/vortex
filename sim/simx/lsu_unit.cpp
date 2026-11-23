@@ -44,7 +44,7 @@ uint32_t LsuUopGen::uop_count(const Instr& instr) {
   auto args = std::get<IntrLsuArgs>(instr.get_args());
 #ifdef VX_CFG_EXT_LDST_MATRIX_ENABLE
   if (args.matrix) {
-    return frag::ldm_count(args.offset & 0x1f);
+    return frag::ldm_count(args.offset & frag::kLdmMask);
   }
 #endif
 #ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
@@ -76,9 +76,10 @@ Instr::Ptr LsuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
         uop_instr->set_src_reg(i, rs.idx, rs.type);
       }
     } else {
-      auto kind = (uop_index < amo_index) ? FenceKind::RELEASE : FenceKind::ACQUIRE;
+      IntrLsuArgs fence_args{0, 0, 0};
+      fence_args.fence_op = (uop_index < amo_index) ? VX_FENCE_REL : VX_FENCE_ACQ;
       uop_instr->set_op_type(LsuType::FENCE);
-      uop_instr->set_args(IntrLsuArgs{static_cast<uint32_t>(kind), 0, 0});
+      uop_instr->set_args(fence_args);
     }
     return uop_instr;
   }
@@ -87,9 +88,9 @@ Instr::Ptr LsuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
 #ifdef VX_CFG_EXT_LDST_MATRIX_ENABLE
   if (args.matrix) {
     // a fragment uop reads its base from rs1 | grp, ORs its column into the
-    // offset (whose low 5 bits held the shape) and moves register fd/fs2 + reg_off
+    // offset (whose low 3 bits held the shape) and moves register fd/fs2 + reg_off
     bool is_load = (std::get<LsuType>(macro_instr.get_op_type()) == LsuType::LOAD);
-    auto u = frag::ldm_uop(args.offset & 0x1f, uop_index);
+    auto u = frag::ldm_uop(args.offset & frag::kLdmMask, uop_index);
     auto uop_instr = std::allocate_shared<Instr>(pool_, uop_uuid, FUType::LSU);
     uop_instr->set_parent_uuid(parent_uuid);
     uop_instr->set_op_type(macro_instr.get_op_type());
@@ -99,7 +100,10 @@ Instr::Ptr LsuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
     } else {
       uop_instr->set_src_reg(1, (macro_instr.get_src_reg(1).idx + u.reg_off) & 0x1f, RegType::Float);
     }
-    uop_instr->set_args(IntrLsuArgs{/*LW*/ 2, /*stride*/ 0, int32_t((args.offset & ~0x1f) | u.col)});
+    uop_instr->set_args(IntrLsuArgs{/*LW*/ 2, /*stride*/ 0, int32_t((args.offset & ~int32_t(frag::kLdmMask)) | u.col)});
+    // every uop but the last may hand the next issue cycle to another warp,
+    // so several warps' fragment accesses interleave as their scalar loads would
+    uop_instr->set_issue_yield(uop_index + 1 != uop_count(macro_instr));
     return uop_instr;
   }
 #endif
@@ -518,12 +522,7 @@ void LsuUnit::send_fence_token(uint32_t b) {
 	LsuReq lsu_req(VX_CFG_NUM_LSU_LANES);
 	lsu_req.op = MemOp::LD;
 	lsu_req.flags.flush = 1;
-	// an IO fence's token walks nowhere; a memory fence's stops at the shared
-	// LLC, an acquire one owing no drain and a release one no invalidation
-	auto kind = lsu_fence_kind(std::get<IntrLsuArgs>(trace->instr_ptr->get_args()));
-	lsu_req.flags.io       = (kind == FenceKind::IO) || (kind == FenceKind::ACQUIRE);
-	lsu_req.flags.flush_l1 = (kind != FenceKind::IO);
-	lsu_req.flags.noalloc  = (kind == FenceKind::RELEASE);
+	lsu_req.flags.fence_op = std::get<IntrLsuArgs>(trace->instr_ptr->get_args()).fence_op;
 	std::vector<mem_addr_size_t> lane_entries(VX_CFG_NUM_LSU_LANES);
 	for (uint32_t t = base; t < VX_CFG_NUM_THREADS; ++t) {
 		if (trace->tmask.test(t)) {

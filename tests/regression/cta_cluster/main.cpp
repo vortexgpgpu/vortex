@@ -241,10 +241,9 @@ int main(int argc, char* argv[]) {
     RT_CHECK(vx_device_query(device, VX_CAPS_NUM_WARPS,   &num_warps));
 
     // Default: one launch where one cluster fills one core (= num_warps
-    // single-warp CTAs). The cta_dispatcher rounds each CTA's LMEM up to
-    // VX_CFG_MEM_BLOCK_SIZE so consecutive CTAs land at block-aligned
-    // offsets; the DXA multicast descriptor's smem_stride must match that,
-    // else peer CTAs receive the scale at the wrong SMEM offset.
+    // single-warp CTAs). The device rounds each CTA's LMEM slot, and the DXA
+    // multicast descriptor's smem_stride, up to the same slot alignment, so a
+    // stride of the per-CTA LMEM size lands peer CTAs at their slot offsets.
     if (launch_specs.empty()) {
         const uint32_t K = (uint32_t)num_warps;
         launch_specs.push_back({K, num_clusters, VX_CFG_MEM_BLOCK_SIZE});

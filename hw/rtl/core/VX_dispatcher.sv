@@ -50,10 +50,16 @@ module VX_dispatcher import VX_gpu_pkg::*; #(
     // All execution units pass operand data straight through; LSU address
     // generation (pack-load included) lives in VX_lsu_block.
     for (genvar i = 0; i < NUM_EX_UNITS; ++i) begin : g_buffers
+        // A unit whose lane dispatch registers its input reads the queue head
+        // straight from LUTRAM: an output register here would only duplicate
+        // that buffer and put its ready on the enable of both.
+        localparam LANE_BUF = (i == EX_ALU) ? ALU_PARTIAL_BW
+                            : ((`VX_CFG_EXT_F_ENABLED != 0) && (i == EX_FPU)) ? FPU_PARTIAL_BW
+                            : 1;
         VX_elastic_buffer #(
             .DATAW   (OUT_DATAW),
             .SIZE    (DISPATCH_QSIZE),
-            .OUT_REG (1)
+            .OUT_REG (LANE_BUF ? 0 : 1)
         ) buffer (
             .clk        (clk),
             .reset      (reset),

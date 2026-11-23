@@ -67,7 +67,7 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
                 decode_if.data.rs3,
                 1'b1, // fu_lock
                 1'b1  // fu_unlock
-            `ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
+            `ifdef EXT_LDST_ANY_ENABLE
                 , 1'b0 // issue_yield
             `endif
             }),

@@ -774,16 +774,16 @@ __attribute__((always_inline)) inline void vx_fsw_q(void* addr, vx_float4 value)
 // Matrix loads and stores
 //
 
-// vx_ldm fd, imm(rs1) / vx_stm fs2, imm(rs1) shapes (imm[4:0]): a warp's matrix
+// vx_ldm fd, imm(rs1) / vx_stm fs2, imm(rs1) shapes (imm[2:0]): a warp's matrix
 // fragment of NR registers in the fragment register layout, the A/B/C operand
-// layouts of the warp MMA; imm[11:5] is a byte offset.
+// layouts of the warp MMA; imm[11:3] is a byte offset.
 enum vx_ldm_shape_t : int32_t {
-  VX_LDM_A    = 0x00, // A, row-major
-  VX_LDM_A_SP = 0x01, // sparse A, row-major
-  VX_LDM_B    = 0x06, // B, col-major
-  VX_LDM_B_SP = 0x07, // symmetric sparse B, col-major
-  VX_LDM_C    = 0x08, // C, row-major
-  VX_LDM_WG_C = 0x18  // warp-group C, row-major, one 8-register chunk
+  VX_LDM_A    = 0, // A, row-major
+  VX_LDM_A_SP = 1, // sparse A, row-major
+  VX_LDM_B    = 2, // B, col-major
+  VX_LDM_B_SP = 3, // symmetric sparse B, col-major
+  VX_LDM_C    = 4, // C, row-major
+  VX_LDM_WG_C = 5  // warp-group C, row-major, one 8-register chunk
 };
 
 #ifdef VX_CFG_EXT_LDST_MATRIX_ENABLE

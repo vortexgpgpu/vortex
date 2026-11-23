@@ -30,7 +30,15 @@ struct smem_matrix_desc {
 };
 
 // Build a smem descriptor from a pointer and a row stride in bytes, a multiple of 4.
+// The TCU fetches only aligned operands (smem_desc_check), checked by wgmma_sync:
+//   row-major (leading_bytes != 0): ptr and leading_bytes are multiples of the
+//     operand's K-slice, fedpK words (sparse: tcK words for A, 2*tcK for B).
+//     A multiple of one tile row (tileK elements, tileK/2 for sparse A) holds
+//     in every configuration, so stepping a descriptor along K by tileK does.
+//   block-major (leading_bytes == 0): ptr starts an LMEM bank row,
+//     NUM_THREADS * XLEN/8 bytes.
 static inline __attribute__((always_inline)) smem_matrix_desc vx_make_smem_desc(const void* ptr, uint32_t leading_bytes) {
+  assert((leading_bytes % 4) == 0 && "smem descriptor stride must be a multiple of 4 bytes");
   size_t lmem_base = csr_read_nv(VX_CSR_LOCAL_MEM_BASE);
   uint32_t offset = static_cast<uint32_t>(static_cast<size_t>(reinterpret_cast<uintptr_t>(ptr)) - lmem_base);
   return {smem_desc_pack(offset, leading_bytes)};
@@ -178,11 +186,11 @@ namespace detail {
 #endif
 
   // The immediate of a fragment access at byte offset off from the group: off
-  // folds in when it is a multiple of 32 and of the column span (the OR with
+  // folds in when it is a multiple of 8 and of the column span (the OR with
   // the uops' column offsets is then an add).
   template <int32_t off, uint32_t span>
-  inline constexpr bool ldm_folds = (off % 32 == 0) && (off % int32_t(span) == 0)
-                                 && (off >= -2048) && (off <= 2016);
+  inline constexpr bool ldm_folds = (off % 8 == 0) && (off % int32_t(span) == 0)
+                                 && (off >= -2048) && (off <= 2040);
 }
 
 // The ldst_matrix flag of a context for this device: fragments move with
@@ -542,15 +550,22 @@ private:
     // A dense A pair is cheaper hoisted; every other group is not: the sparse
     // metadata and MX scale loads, and a second shared-memory stage, leave too
     // few registers to keep each row group's address live across the K loop.
+    // So the K loop keeps one base live and derives the other row groups with
+    // adds the compiler cannot turn into induction variables. The base itself
+    // goes into the group uncopied, and unrolled K tiles, which differ only in
+    // the immediate, share the adds.
     if constexpr (geom::J == 4 || (geom::J > 1 && (!geom::is_a || is_sparse || input_is_mx))) {
-      // opaque, so a K loop keeps one base live and derives the other row
-      // groups by adds instead of keeping one register per group; volatile,
-      // so those adds stay behind the tile's metadata loads instead of delaying them
-      __asm__ volatile("" : "+r"(base));
+      g[0] = base;
+      __asm__("add %0, %1, %2" : "=r"(g[1]) : "r"(g[0]), "r"(row_bytes));
+      if constexpr (geom::J == 4) {
+        __asm__("add %0, %1, %2" : "=r"(g[2]) : "r"(g[1]), "r"(row_bytes));
+        __asm__("add %0, %1, %2" : "=r"(g[3]) : "r"(g[2]), "r"(row_bytes));
+      }
+    } else {
+      detail::unroll_for<geom::J>([&](auto j) {
+        g[j] = base + j * row_bytes;
+      });
     }
-    detail::unroll_for<geom::J>([&](auto j) {
-      g[j] = base + j * row_bytes;
-    });
   }
 
   template <typename Frag, int32_t off_bytes, int32_t shape>
@@ -903,6 +918,14 @@ private:
          | ((a_is_smem ? 1 : 0) << 3);
   }
 
+  // The TCU requires one LMEM bank per thread.
+  static constexpr uint32_t smem_bank_row_bytes = NT * (__riscv_xlen / 8);
+
+  static bool smem_desc_valid(smem_matrix_desc desc, bool is_b) {
+    uint32_t slice_words = wgmma_slice_words(is_b, is_sparse, tcK, fedpK);
+    return smem_desc_check(desc.value, slice_words, smem_bank_row_bytes) == smem_desc_fault::none;
+  }
+
 public:
   // Types
   using input_t  = typename ctx_c::input_t;
@@ -1215,6 +1238,11 @@ public:
       static_assert(NRC_ <= 16, "A-from-reg requires NRC <= 16");
     }
     static_assert(b_is_smem, "B must be smem_matrix_desc (SR mode is not supported)");
+
+    if constexpr (a_is_smem) {
+      assert(smem_desc_valid(op_a, false) && "WGMMA A descriptor breaks the TCU alignment rule (vx_make_smem_desc)");
+    }
+    assert(smem_desc_valid(op_b, true) && "WGMMA B descriptor breaks the TCU alignment rule (vx_make_smem_desc)");
 
     constexpr int flags = wgmma_flags<a_is_smem>();
 

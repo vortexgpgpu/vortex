@@ -29,10 +29,10 @@
 // leaves with pack cleared, so the LSU sees a plain flw/fsw. The NaN-boxing of
 // a loaded word is handled automatically because is_float==1 and rd is a float
 // register (triggers nan-box in lsu_block).
-// A fragment uop e moves register fd/fs2 + e: it reads its base from
-// rs1 | grp(e) and ORs its column into the immediate (whose low 5 bits decode
-// set to the shape's code), for the element the fragment layout puts in that
-// register.
+// A fragment uop e moves element e of the fragment, column by column: it
+// reads its base from rs1 | grp(e), ORs its column into the immediate (whose
+// low 3 bits hold the shape) and moves register fd/fs2 + reg(e), where the
+// fragment layout puts that element.
 
 module VX_uop_packld import VX_gpu_pkg::*; (
     input clk,
@@ -65,13 +65,17 @@ module VX_uop_packld import VX_gpu_pkg::*; (
     mtx_ldm_uop_t ldm_uop;
     assign ldm_uop = mtx_ldm_uop(ibuf_in.op_args.lsu.offset[2:0], uop_idx[2:0]);
 
-    // uop e of every shape moves the register its element occupies in the
-    // fragment register layout
+    // uop e of every shape moves its element to or from the register the
+    // fragment register layout puts it in, a distinct one per uop
     for (genvar s = 0; s < 6; ++s) begin : g_ldm_check
         if (s != MTX_LDM_IDX_B_SP || MTX_SYM_SPARSE) begin : g_valid
             for (genvar e = 0; e < mtx_ldm_count(3'(s)); ++e) begin : g_uops
-                `STATIC_ASSERT (mtx_ldm_reg(3'(s), mtx_ldm_uop(3'(s), 3'(e))) == e,
-                    ("vx_ldm shape %0d uop %0d does not invert the fragment register permutation", s, e))
+                `STATIC_ASSERT (mtx_ldm_reg(3'(s), mtx_ldm_uop(3'(s), 3'(e))) == int'(mtx_ldm_uop(3'(s), 3'(e)).reg_off),
+                    ("vx_ldm shape %0d uop %0d does not follow the fragment register permutation", s, e))
+                for (genvar f = 0; f < e; ++f) begin : g_distinct
+                    `STATIC_ASSERT (mtx_ldm_uop(3'(s), 3'(f)).reg_off != mtx_ldm_uop(3'(s), 3'(e)).reg_off,
+                        ("vx_ldm shape %0d uops %0d and %0d move the same register", s, f, e))
+                end
             end
         end
     end
@@ -95,8 +99,8 @@ module VX_uop_packld import VX_gpu_pkg::*; (
     // register have their low group bits clear, so each uop ORs its index in:
     // into offset[1:0] for a packed load; into offset[3:2] (word k) and the
     // register (fd+k, fs2+k) for a wide access, which becomes a plain flw/fsw.
-    // A fragment uop replaces offset[4:0] (the shape code) with its column and
-    // adds its register offset, through the same adder the wide uops use.
+    // A fragment uop replaces offset[2:0] (the shape) with its column and adds
+    // its register offset, through the same adder the wide uops use.
 `ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
     wire [1:0] wide_idx = is_wide ? idx2 : 2'b00;
 `ifdef VX_CFG_EXT_LDST_MATRIX_ENABLE
@@ -110,9 +114,9 @@ module VX_uop_packld import VX_gpu_pkg::*; (
     wire [1:0] pack_idx = is_wide ? 2'b00 : idx2;
 
 `ifdef VX_CFG_EXT_LDST_MATRIX_ENABLE
-    wire [11:0] off_base = is_matrix ? {ibuf_in.op_args.lsu.offset[11:5], 5'd0} : ibuf_in.op_args.lsu.offset;
+    wire [11:0] off_base = is_matrix ? {ibuf_in.op_args.lsu.offset[11:3], 3'd0} : ibuf_in.op_args.lsu.offset;
     wire [11:0] off_add  = is_matrix ? 12'(ldm_uop.col) : {8'd0, wide_idx, pack_idx};
-    wire [4:0]  reg_add  = is_matrix ? 5'(uop_idx[2:0]) : 5'(wide_idx);
+    wire [4:0]  reg_add  = is_matrix ? 5'(ldm_uop.reg_off) : 5'(wide_idx);
     wire [1:0]  grp      = is_matrix ? ldm_uop.grp : 2'b00;
 `endif
 
@@ -131,9 +135,16 @@ module VX_uop_packld import VX_gpu_pkg::*; (
         ibuf_r.rs2 = ibuf_in.rs2 | NUM_REGS_BITS'(wide_idx);
     `endif
         ibuf_r.bytesel = {byte_size, byte_off};
+        // every uop of a wide or fragment access but its last may yield the
+        // next issue cycle, so several warps' accesses interleave as their
+        // scalar loads do
+    `ifdef VX_CFG_EXT_LDST_MATRIX_ENABLE
+        ibuf_r.issue_yield = (is_matrix && (uop_idx[2:0] != 3'(uop_count - 1)))
     `ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
-        // every uop of a wide access but its last may yield the next issue
-        // cycle, so several warps' accesses interleave as their scalar loads do
+                          || (is_wide_word && (~idx2[0] || (ibuf_in.bytesel[0] && ~idx2[1])))
+    `endif
+                           ;
+    `else
         ibuf_r.issue_yield = is_wide_word && (~idx2[0] || (ibuf_in.bytesel[0] && ~idx2[1]));
     `endif
     end

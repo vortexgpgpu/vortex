@@ -55,7 +55,7 @@ module VX_cache import VX_gpu_pkg::*; #(
 
     parameter IS_LLC                = 0,      // last-level cache: banks own AMO commit + RVA reservation tracking
     parameter SHARED_LLC            = 0,      // the LLC serves every memory client alone (point of coherence)
-    parameter ACQ_FORWARD           = 0,      // an acquire flush also invalidates the next level
+    parameter NEXT_IS_POC           = 1,      // the next level is the point of coherence: an acquire alone stops here
 
     parameter FLUSH_FORWARD         = 1,      // a flush also flushes the next level
 
@@ -158,9 +158,7 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0] per_bank_core_req_held;
     wire                     mem_req_empty;
     wire [MEM_PORTS-1:0]     mem_flush_valid;
-    wire                     mem_flush_l1_only;
-    wire                     mem_flush_io;
-    wire                     mem_flush_noalloc;
+    fence_op_t               mem_flush_op;
     wire [MEM_PORTS-1:0]     mem_flush_ready;
     wire                     mem_flush_rsp_phase;
     wire [MEM_PORTS-1:0]     mem_flush_rsp_valid;
@@ -174,7 +172,8 @@ module VX_cache import VX_gpu_pkg::*; #(
         .MEM_PORTS        (MEM_PORTS),
         .FLUSH_FORWARD    (FLUSH_FORWARD),
         .SHARED_LLC       (SHARED_LLC),
-        .ACQ_FORWARD      (ACQ_FORWARD),
+        .NEXT_IS_POC      (NEXT_IS_POC),
+        .WRITEBACK        (WRITEBACK),
         .TAG_WIDTH        (TAG_WIDTH),
         .XBAR_SIZE        (REQ_XBAR_SIZE),
         .REQ_SEL_WIDTH    (REQ_SEL_WIDTH)
@@ -193,9 +192,7 @@ module VX_cache import VX_gpu_pkg::*; #(
         .mem_req_empty       (mem_req_empty),
         .nc_req_empty        (nc_req_empty),
         .mem_flush_valid     (mem_flush_valid),
-        .mem_flush_l1_only   (mem_flush_l1_only),
-        .mem_flush_io        (mem_flush_io),
-        .mem_flush_noalloc   (mem_flush_noalloc),
+        .mem_flush_op        (mem_flush_op),
         .mem_flush_ready     (mem_flush_ready),
         .mem_flush_rsp_phase (mem_flush_rsp_phase),
         .mem_flush_rsp_valid (mem_flush_rsp_valid),
@@ -819,11 +816,10 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [MEM_PORTS-1:0][`UP(`LOG2UP(NUM_BANKS))-1:0] mem_req_tmp_idx;
     wire [MEM_PORTS-1:0]                    mem_req_tmp_ready;
     // The flush token for port i is a read of the port's first line with the
-    // flush attribute; byteen bit 0 carries the L1-only kind and the io
-    // attribute the IO kind. It takes bank
-    // i's lane into the request crossbar (bank i maps to port i), so the
-    // crossbar forms its address and it leaves through the same registered
-    // outputs as the write-backs ahead of it.
+    // flush attribute and the round's fence operation. It takes bank i's lane
+    // into the request crossbar (bank i maps to port i), so the crossbar forms
+    // its address and it leaves through the same registered outputs as the
+    // write-backs ahead of it.
     wire [NUM_BANKS-1:0]                    mem_req_xbar_valid;
     wire [NUM_BANKS-1:0][MEM_REQ_DATAW-1:0] mem_req_xbar_pdata;
     wire [NUM_BANKS-1:0]                    mem_req_xbar_ready;
@@ -858,11 +854,10 @@ module VX_cache import VX_gpu_pkg::*; #(
                 `UP(BANK_SEL_BITS)'(i),
                 `CS_LINE_SECTOR_ADDR_WIDTH'(0),
                 1'b0,
-                SECTOR_SIZE'(mem_flush_l1_only),
+                SECTOR_SIZE'(0),
                 `CS_SECTOR_WIDTH'(0),
                 BANK_MEM_TAG_WIDTH'(0),
-                (`UP(MEM_ATTR_WIDTH)'(1) << MEM_ATTR_FLUSH_OFFS) | (`UP(MEM_ATTR_WIDTH)'(mem_flush_io) << MEM_ATTR_IO_OFFS)
-                | (`UP(MEM_ATTR_WIDTH)'(mem_flush_noalloc) << MEM_ATTR_NOALLOC_OFFS)
+                `UP(MEM_ATTR_WIDTH)'(mem_flush_attr(mem_flush_op))
             };
             assign mem_req_xbar_valid[i] = (per_bank_mem_req_valid[i] && ~dbg_mem_req_hold[i]) || mem_flush_valid[i];
             assign mem_req_xbar_pdata[i] = per_bank_mem_req_valid[i] ? per_bank_mem_req_pdata[i] : mem_flush_pdata;

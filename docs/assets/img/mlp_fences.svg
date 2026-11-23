@@ -20,7 +20,7 @@
   </style>
   <rect width="640" height="260" fill="#ffffff"/>
 <text x="160" y="20" class="dh" text-anchor="middle">Before: full flush per fence</text>
-        <text x="480" y="20" class="dh" text-anchor="middle">After: L1-only token</text>
+        <text x="480" y="20" class="dh" text-anchor="middle">After: device-scope token</text>
         <g class="dl">
           <rect x="90" y="36" width="140" height="28" class="db"/><text x="160" y="55" text-anchor="middle">core: fence</text>
           <rect x="90" y="94" width="140" height="28" class="dbad"/><text x="160" y="113" text-anchor="middle">L1: walk all lines</text>
@@ -34,7 +34,7 @@
           <rect x="410" y="94" width="140" height="28" class="db"/><text x="480" y="113" text-anchor="middle">L1: write back dirty</text>
           <rect x="410" y="152" width="140" height="28" class="dgood"/><text x="480" y="171" text-anchor="middle">L2 (LLC): ack, no walk</text>
           <rect x="410" y="210" width="140" height="28" class="didle"/><text x="480" y="229" text-anchor="middle">DRAM: not touched</text>
-          <line x1="480" y1="64" x2="480" y2="92" class="ln" marker-end="url(#fences_a)"/><text x="488" y="83" class="dm">L1-only token</text>
+          <line x1="480" y1="64" x2="480" y2="92" class="ln" marker-end="url(#fences_a)"/><text x="488" y="83" class="dm">device-scope token</text>
           <line x1="480" y1="122" x2="480" y2="150" class="ln" marker-end="url(#fences_a)"/><text x="488" y="141" class="dm">dirty lines</text>
           <path d="M552,166 C600,166 600,50 552,50" class="lg" fill="none" marker-end="url(#fences_g)"/><text x="604" y="112" class="dm" text-anchor="end">ack</text>
         </g>

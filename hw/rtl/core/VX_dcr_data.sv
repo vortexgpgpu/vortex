@@ -29,7 +29,7 @@ module VX_dcr_data import VX_gpu_pkg::*; #(
 
     // DCR-triggered cache flush
     VX_dcr_flush_if.master  dcr_flush_if,
-    output wire             flush_l1_only
+    output fence_op_t       flush_op
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
@@ -84,13 +84,19 @@ module VX_dcr_data import VX_gpu_pkg::*; #(
     reg flush_pending_r;  // flush running
     reg flush_complete_r; // flush finished, not yet reported
     reg flush_read_r;     // flush read waiting for completion
-    reg flush_l1_only_r;  // the last-level cache keeps its lines
+    reg flush_sys_r;      // system scope: the flush reaches memory
 
     wire is_flush_req   = dcr_bus_if.req_valid
                        && (dcr_bus_if.req_data.addr == `VX_DCR_BASE_CACHE_FLUSH);
     wire is_flush_write = is_flush_req && dcr_bus_if.req_data.rw;
     wire is_flush_read  = is_flush_req && ~dcr_bus_if.req_data.rw
                        && (mpm_target_cid == 16'(core_id));
+
+    fence_op_t flush_write_op;
+    assign flush_write_op = fence_op_t'(dcr_bus_if.req_data.data[`VX_FENCE_OP_BITS-1:0]);
+    `UNUSED_VAR ({flush_write_op.io, flush_write_op.rel, flush_write_op.acq})
+    `RUNTIME_ASSERT (~is_flush_write || (flush_write_op.acq && flush_write_op.rel && ~flush_write_op.io),
+                     ("%t: CACHE_FLUSH write fence operation 0x%0h is not ACQ|REL[|SYS]", $time, flush_write_op))
 
     wire flush_done  = flush_pending_r && dcr_flush_if.done;
     wire flush_start = ~flush_pending_r && is_flush_write;
@@ -101,20 +107,22 @@ module VX_dcr_data import VX_gpu_pkg::*; #(
             flush_pending_r  <= 1'b0;
             flush_complete_r <= 1'b0;
             flush_read_r     <= 1'b0;
-            flush_l1_only_r  <= 1'b0;
+            flush_sys_r      <= 1'b0;
         end else begin
             flush_pending_r  <= flush_start || (flush_pending_r && ~flush_done);
             // a write opens a new flush, so an older completion cannot answer it
             flush_complete_r <= ~is_flush_write && ~flush_rsp && (flush_complete_r || flush_done);
             flush_read_r     <= ~flush_rsp && (flush_read_r || is_flush_read);
             if (flush_start) begin
-                flush_l1_only_r <= (dcr_bus_if.req_data.data & VX_DCR_DATA_WIDTH'(`VX_CACHE_FLUSH_L1_ONLY)) != 0;
+                flush_sys_r <= flush_write_op.sys;
             end
         end
     end
 
+    // A cache flush always writes back and invalidates; the write value's
+    // fence operation sets only its scope.
     assign dcr_flush_if.req = flush_pending_r;
-    assign flush_l1_only    = flush_l1_only_r;
+    assign flush_op         = '{io: 1'b0, sys: flush_sys_r, rel: 1'b1, acq: 1'b1};
 
     // Return CSR data or flush-done on DCR response bus
     // Use intermediate registers — Vivado (Synth 8-453) forbids procedural

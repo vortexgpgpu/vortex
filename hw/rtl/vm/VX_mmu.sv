@@ -291,7 +291,7 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         // A hit joins its page's live entry only to stay behind the lane's own
         // parked requests (per-lane program order). Joining otherwise would funnel
         // every access to a hot page through the one-per-cycle miss station
-        // drain, lowest lane first. A fetch needs no order (one request in flight
+        // drain. A fetch needs no order (one request in flight
         // per warp). A registered park joins always: its stage is a cycle stale.
         assign mshr_order[l] = (EXEC_SIDE == 0) && ((PARK_REG != 0) || lane_parked[l]);
         assign cam_acc[l]    = req_acc[l];
@@ -301,43 +301,52 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         assign cat_pfault[l] = xlat && !mshr_join[l] && cam_hit[l] && !cam_perm[l];
     end
 
-    // Park arbitration: at most one lane parks a miss per cycle (lowest lane).
-    // The parked fields are taken with a one-hot select straight off the lane
-    // categories; the encoded lane only rides in the payload. The one-hot comes
-    // from a prefix OR (MODEL 2), so a lane's park grant, and with it the lane's
-    // accept, depends only on the lanes below it.
+    // Rotate park priority so a stream of misses cannot starve another lane.
     localparam PARK_W = TLB_VPN_WIDTH + $bits(tlb_access_e) + 1 + FIELDS_W;
 
     wire [NUM_REQS-1:0] park_sel;
     wire                sel_valid;
     wire                sel_ready;
     wire [LANE_W-1:0]   sel_lane;
-    VX_priority_encoder #(
-        .N     (NUM_REQS),
-        .MODEL (2)
-    ) park_enc (
-        .data_in    (cat_park),
-        .onehot_out (park_sel),
-        .index_out  (sel_lane),
-        .valid_out  (sel_valid)
+    wire [NUM_REQS-1:0] park_requests;
+    wire                grant_valid;
+    wire                grant_ready;
+    if (NUM_REQS > 1 && PARK_REG == 0) begin : g_reserve
+        // Select from the preceding cycle's misses while their current probes run.
+        // A fill may turn the reserved miss into a hit before it reaches the station.
+        reg [NUM_REQS-1:0] requests_r;
+        always @(posedge clk) begin
+            if (reset) begin
+                requests_r <= '0;
+            end else if (grant_ready) begin
+                requests_r <= cat_park;
+            end
+        end
+        assign park_requests = requests_r;
+        assign sel_valid = |(cat_park & park_sel);
+        assign grant_ready = !sel_valid || sel_ready;
+        `UNUSED_VAR (grant_valid)
+    end else begin : g_select
+        assign park_requests = cat_park;
+        assign sel_valid = grant_valid;
+        assign grant_ready = sel_ready;
+    end
+    VX_rr_arbiter #(
+        .NUM_REQS (NUM_REQS)
+    ) park_arb (
+        .clk          (clk),
+        .reset        (reset),
+        .requests     (park_requests),
+        .grant_onehot (park_sel),
+        .grant_index  (sel_lane),
+        .grant_valid  (grant_valid),
+        .grant_ready  (grant_ready)
     );
 
     wire [NUM_REQS-1:0][PARK_W-1:0] park_src;
     for (genvar l = 0; l < NUM_REQS; ++l) begin : g_park_src
         assign park_src[l] = {req_vpn[l], req_acc[l], req_amo[l], req_fields[l]};
     end
-    // park_sel[l] is cat_park[l] && park_first[l]. A lane's accept reads
-    // park_first under its own cat_park, so its translation result enters the
-    // accept only once, at the category select.
-    wire [NUM_REQS-1:0] park_first;
-    for (genvar l = 0; l < NUM_REQS; ++l) begin : g_park_first
-        if (l == 0) begin : g_first
-            assign park_first[l] = 1'b1;
-        end else begin : g_rest
-            assign park_first[l] = ~(| cat_park[l-1:0]);
-        end
-    end
-
     wire [PARK_W-1:0] park_out;
     VX_onehot_mux #(
         .DATAW (PARK_W),
@@ -553,9 +562,7 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         assign req_if[l].req_ready =
               cat_bypass[l] ? (!replay_to_lane[l] && pipe_ready[l])
             : cat_hit[l]    ? (!replay_to_lane[l] && pipe_ready[l])
-            : cat_park[l]   ? (park_first[l] && sel_ready)
-            : cat_pfault[l] ? pf_accept[l]
-            : 1'b0;
+            : (cat_park[l] && park_sel[l] && sel_ready) || pf_accept[l];
 
         // Response path wires straight back, except a kill teardown or a
         // permission fault injects a zeroed response ahead of the cache reply.

@@ -94,11 +94,6 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
     // VX_lsu_agu; this slice contains no address arithmetic).
 
     wire req_is_fence, rsp_is_fence;
-    wire req_fence_io = inst_lsu_is_fence_io(execute_if.data.op_type);
-    // a memory fence that orders only later reads (acquire) or only earlier
-    // writes (release)
-    wire req_fence_acq = ~req_fence_io && ~execute_if.data.op_args.lsu.amo_rl;
-    wire req_fence_rel = ~req_fence_io && ~execute_if.data.op_args.lsu.amo_aq;
 
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] full_addr;
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] lin_addr;
@@ -137,6 +132,12 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
     // carried through the scheduler's USER channel and out via the
     // lsu_mem_if's per-lane req_data.user field.
 
+`ifndef VX_CFG_EXT_A_ENABLE
+    fence_op_t req_fence_op;
+    assign req_fence_op = fence_op_t'(execute_if.data.op_args.lsu.amo_op);
+    `UNUSED_VAR ({req_fence_op.io, req_fence_op.sys})
+`endif
+
     mem_bus_attr_t [NUM_LANES-1:0] mem_req_attr_struct;
     wire [NUM_LANES-1:0][MEM_ATTR_WIDTH-1:0] mem_req_attr;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mem_req_attr
@@ -145,8 +146,15 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
         wire [MEM_ADDRW-1:0] io_addr_start = MEM_ADDRW'(`VX_CFG_XLEN'(`VX_MEM_IO_BASE_ADDR) >> MEM_ASHIFT);
         wire [MEM_ADDRW-1:0] io_addr_end = MEM_ADDRW'(`VX_CFG_XLEN'(`VX_MEM_IO_END_ADDR) >> MEM_ASHIFT);
         assign mem_req_attr_struct[i].is_flush  = req_is_fence;
-        // a release fence's token: no invalidation owed
-        assign mem_req_attr_struct[i].is_noalloc = req_is_fence && req_fence_rel;
+    `ifdef VX_CFG_EXT_A_ENABLE
+        assign mem_req_attr_struct[i].is_noalloc = 1'b0;
+    `else
+        // Without atomics no lane carries the operation field: a fence's
+        // release and acquire halves cross the memory path in the noalloc and
+        // io bits, which a token has no other use for, and VX_lsu_mem_path
+        // moves them into the operation field.
+        assign mem_req_attr_struct[i].is_noalloc = req_is_fence && req_fence_op.rel;
+    `endif
     `ifdef VX_CFG_EXT_OM_ENABLE
         // OM fragment-export aperture.
         //
@@ -165,11 +173,12 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
         wire lane_is_om = 1'b0;
         assign mem_req_attr_struct[i].is_addr_om = 1'b0;
     `endif
-        // a fence's token carries its kind: io for a fence ordering only device
-        // accesses, and for an acquire fence's (byte enables set: no drain owed)
-        assign mem_req_attr_struct[i].is_addr_io = req_is_fence ? (req_fence_io || req_fence_acq)
-                                                 : (((block_addr >= io_addr_start) && (block_addr < io_addr_end))
-                                                    || lane_is_om);
+        wire lane_is_io = ((block_addr >= io_addr_start) && (block_addr < io_addr_end)) || lane_is_om;
+    `ifdef VX_CFG_EXT_A_ENABLE
+        assign mem_req_attr_struct[i].is_addr_io = lane_is_io;
+    `else
+        assign mem_req_attr_struct[i].is_addr_io = req_is_fence ? req_fence_op.acq : lane_is_io;
+    `endif
     `ifdef VX_CFG_LMEM_ENABLE
         // is local memory address
         assign mem_req_attr_struct[i].is_addr_local =
@@ -180,6 +189,7 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
     `ifdef VX_CFG_EXT_A_ENABLE
         amo_req_t lane_amo;
         assign lane_amo.amo_valid    = execute_if.data.op_args.lsu.amo_valid;
+        // a fence's token carries its fence operation here
         assign lane_amo.amo_op       = execute_if.data.op_args.lsu.amo_op;
         // amo_unsigned distinguishes signed/unsigned AMOMIN/MAX variants
         // (decoder collapses MINU/MAXU into MIN/MAX + this bit).
@@ -311,9 +321,7 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
                 default : mem_req_byteen_w = {LSU_WORD_SIZE{1'b1}};
             endcase
         end
-        // A fence is a flush token and carries no data. A memory fence is an
-        // L1-only token (byte enables set): it stops at the shared LLC.
-        assign mem_req_byteen[i] = req_is_fence ? (req_fence_io ? '0 : '1) : mem_req_byteen_w;
+        assign mem_req_byteen[i] = mem_req_byteen_w;
     end
 
     // memory misalignment not supported!

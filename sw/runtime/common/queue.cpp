@@ -506,8 +506,6 @@ namespace {
 constexpr uint8_t CP_OP_DCR_WRITE    = 0x04;
 constexpr uint8_t CP_OP_CACHE_FLUSH  = 0x0A;
 constexpr uint8_t CP_OP_LAUNCH_QMD   = 0x0B;
-// CMD_CACHE_FLUSH header flag: flush only the levels above the last-level cache.
-constexpr uint8_t CP_FLUSH_FLAG_L1_ONLY = 0x04;
 // Fixed per-step stride in a draw descriptor (28-byte cmd-record prefix).
 // Must equal CommandProcessor::DRAW_STEP_BYTES.
 constexpr int     CP_DRAW_STEP_BYTES = 28;
@@ -838,7 +836,7 @@ vx_result_t Queue::enqueue_draw(const vx_command_t* commands,
                 const CmdRec& rec = recs[i];
                 if (rec.is_launch) {
                     put_step(CP_OP_LAUNCH_QMD, 0, staged[i].qmd_addr, 0);
-                    put_step(CP_OP_CACHE_FLUSH, CP_FLUSH_FLAG_L1_ONLY, num_cores, 0);
+                    put_step(CP_OP_CACHE_FLUSH, (VX_FENCE_ACQ | VX_FENCE_REL) << VX_CP_FLUSH_OP_SHIFT, num_cores, 0);
                 } else {
                     put_step(CP_OP_DCR_WRITE, 0, rec.dcr_addr, rec.dcr_value);
                 }

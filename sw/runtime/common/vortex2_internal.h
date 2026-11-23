@@ -393,9 +393,9 @@ private:
     // cp_tail_ + cp_expected_seqnum_). Caller must hold cp_mu_ (directly in
     // the non-batch path, or via cp_batch_begin). No doorbell, no poll.
     // Inserts the lazy kernel-boundary CMD_CACHE_FLUSH (AMD ACQUIRE_MEM
-    // model) under the same lock: L1-only ahead of a launch while
+    // model) under the same lock: device-scope ahead of a launch while
     // l1_dirty_, and ahead of a CMD_MEM_* touching device memory while
-    // either flag is set -- full while llc_dirty_.
+    // either flag is set -- system-scope while llc_dirty_.
     vx_result_t cp_ring_append_(const void* cl, bool llc_clean = false);
     vx_result_t cp_ring_write_(const void* cl);
 

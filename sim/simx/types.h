@@ -43,6 +43,7 @@
 
 #include <regslice.h>
 #include <bitvector.h>
+#include <fixed_vector.h>
 #include <iostream>
 #include "debug.h"
 
@@ -53,11 +54,18 @@
 #ifndef SIMX_MT
 #define SIMX_MT 0
 #endif
+// Synchronization quantum of the functional kernel, in cycles (e.g.
+// CONFIGS="-DSIMX_FUNCTIONAL -DSIMX_MT=8 -DSIMX_QUANTUM=100"); 1 keeps
+// per-cycle lockstep. The timed kernel accepts only 1.
+#ifndef SIMX_QUANTUM
+#define SIMX_QUANTUM 1
+#endif
 #include "constants.h"
 
 namespace vortex {
 
 constexpr uint32_t SIMX_NUM_WORKERS = (SIMX_MT > 1) ? SIMX_MT : 1;
+constexpr uint32_t SIMX_QUANTUM_CYCLES = (SIMX_QUANTUM > 1) ? SIMX_QUANTUM : 1;
 
 // One memory block (a cache line / DRAM transfer unit). Carried by
 // MemReq/MemRsp in TLM data-path mode. Use `shared_ptr<mem_block_t>` so
@@ -109,6 +117,10 @@ union reg_data_t {
   int32_t  i32;
   int64_t  i64;
 };
+
+// One register value per thread: inline storage sized by the build's thread
+// count, so traces and operand reads never touch the heap.
+using RegDataVec = FixedVector<reg_data_t, VX_CFG_NUM_THREADS>;
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -385,17 +397,9 @@ struct IntrLsuArgs {
   uint32_t width : 3;
   uint32_t stride : 4;  // per-uop multiplier: 0 = regular LD/ST; 0..N-1 = packLD uop_idx
   int32_t  offset;      // immediate addr offset (signed); 0 for packLD uops
-  bool     matrix = false; // vx_ldm/vx_stm: offset[4:0] is the fragment shape
+  bool     matrix = false; // vx_ldm/vx_stm: offset[2:0] is the fragment shape
+  uint8_t  fence_op = 0;   // a fence's operation (VX_FENCE_*)
 };
-
-// A fence carries no access width; its width field says what it orders.
-enum class FenceKind : uint32_t {
-  FULL    = 0, // earlier writes visible and later reads see others' writes
-  IO      = 1, // only device (IO) accesses
-  ACQUIRE = 2, // only later reads see others' writes
-  RELEASE = 3  // only earlier writes visible
-};
-inline FenceKind lsu_fence_kind(const IntrLsuArgs& args) { return static_cast<FenceKind>(args.width); }
 
 inline std::ostream &operator<<(std::ostream &os, const LsuType& type) {
   switch (type) {
@@ -456,8 +460,8 @@ struct MemFlags {
       uint32_t local        : 1;  // bit 2: LMEM port
       uint32_t amo_unsigned : 1;  // bit 3: MIN/MAX signedness (1=unsigned)
       uint32_t flush        : 1;  // bit 4: flush token (a fence)
-      uint32_t flush_l1     : 1;  // bit 5: L1-only flush token: stops at the shared LLC
-      uint32_t noalloc      : 1;  // bit 6: a write that misses a write-around cache goes to memory
+      uint32_t fence_op     : VX_FENCE_OP_BITS; // bits 5..8: a flush token's operation (VX_FENCE_*)
+      uint32_t noalloc      : 1;  // bit 9: a write that misses a write-around cache goes to memory
     #ifdef VX_CFG_EXT_DXA_ENABLE
       // DXA completion sideband — populated only on DXA's LMEM-DMA writes.
       // notify_bar_id carries the RAW (kernel-encoded) bar handle:
@@ -467,8 +471,8 @@ struct MemFlags {
       // be wide enough to hold (bar_no << 8) | (MAX_CTAS_per_core - 1).
       // For NUM_BARRIERS = 8 and NUM_WARPS ≤ 16, that's at most 11 bits;
       // 16 bits leaves headroom for larger configs.
-      uint32_t dxa_notify_done   : 1;   // bit 7
-      uint32_t dxa_notify_bar_id : 16;  // bits 8..23
+      uint32_t dxa_notify_done   : 1;   // bit 10
+      uint32_t dxa_notify_bar_id : 16;  // bits 11..26
     #endif
     };
   };
@@ -1171,17 +1175,21 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
+// Lanes of an LSU request or response: the core's LSU lanes or the D-cache
+// channels behind them, whichever is wider.
+inline constexpr uint32_t LSU_MAX_LANES = (LSU_CHANNELS > DCACHE_CHANNELS) ? LSU_CHANNELS : DCACHE_CHANNELS;
+
 struct LsuReq {
   MemOp op;
   MemFlags flags;
-  std::vector<uint64_t> addrs;
-  std::vector<std::shared_ptr<mem_block_t>> data;
-  std::vector<uint64_t> byteen;
+  FixedVector<uint64_t, LSU_MAX_LANES> addrs;
+  FixedVector<std::shared_ptr<mem_block_t>, LSU_MAX_LANES> data;
+  FixedVector<uint64_t, LSU_MAX_LANES> byteen;
   // Comparand per lane. Only compare-and-swap reads it; it is a separate
   // field because the data operand is already carrying the swap value.
-  std::vector<uint64_t> amo_cmp;
+  FixedVector<uint64_t, LSU_MAX_LANES> amo_cmp;
   BitVector<> mask;
-  std::vector<uint32_t> tids;
+  FixedVector<uint32_t, LSU_MAX_LANES> tids;
   uint32_t tag;
   uint32_t cid;
   uint32_t wid;
@@ -1232,7 +1240,7 @@ struct LsuRsp {
   uint64_t uuid;
 
   // TLM data: per-lane block populated for loads/AMO returns.
-  std::vector<std::shared_ptr<mem_block_t>> data;
+  FixedVector<std::shared_ptr<mem_block_t>, LSU_MAX_LANES> data;
 
  LsuRsp(uint32_t size)
     : mask(size)

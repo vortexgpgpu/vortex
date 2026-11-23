@@ -145,7 +145,7 @@ import VX_tcu_pkg::*;
     VX_dcr_flush_if dcr_flush_if();
     VX_dcr_flush_if dcr_flush_dcache_if();
     VX_dcr_flush_if dcr_flush_icache_if();
-    wire dcr_flush_l1_only;
+    fence_op_t dcr_flush_op;
 
     // the in-core global-store path is empty
     wire mem_unit_empty = (& lsu_store_empty);
@@ -207,7 +207,7 @@ import VX_tcu_pkg::*;
         .dcr_bus_if (dcr_bus_if),
         .dcr_csr_if (dcr_csr_if),
         .dcr_flush_if(dcr_flush_if),
-        .flush_l1_only(dcr_flush_l1_only)
+        .flush_op   (dcr_flush_op)
     );
 
     wire sched_busy;
@@ -262,7 +262,7 @@ import VX_tcu_pkg::*;
         .clk          (clk),
         .reset        (reset),
         .dcr_flush_if (dcr_flush_icache_if),
-        .l1_only      (dcr_flush_l1_only),
+        .flush_op     (dcr_flush_op),
         .core_bus_if  (flush_core_if),
         .cache_bus_if (icache_bus_if[0])
     );
@@ -866,7 +866,7 @@ import VX_tcu_pkg::*;
     `endif
         .lsu_dcache_bus_if (lsu_dcache_bus_if),
         .dcr_flush_if    (dcr_flush_dcache_if),
-        .flush_l1_only   (dcr_flush_l1_only),
+        .flush_op        (dcr_flush_op),
         .dcache_bus_if   (dcache_bus_if),
         .busy            (mem_unit_busy)
     );

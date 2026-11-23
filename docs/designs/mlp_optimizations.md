@@ -32,11 +32,11 @@ Every MLP feature of Phase 1 and Phase 2, plus the earlier features this design 
 | P1 | [Broadcast flush, per-port tokens](#broadcast-flush-and-per-port-flush-tokens) | One flush DCR starts every core; a token down every memory port | `046ff33b0`, `62dc764f4` | none | on | N | flush per launch 2.76M → 16.5k cycles; fixes lost writes | n/m |
 | P1 | [Hashed bank select](#hashed-bank-select) | Bank = low line bits XOR an IPOLY fold of the upper bits | `ef75f8e62` | `VX_CFG_DCACHE_BANK_HASH`, `VX_CFG_L2_BANK_HASH` | L2 on; dcache on at ≥ 4 banks | N | sgemv −32.8%, fp16 tensor −13.8%, WGMMA+DXA −13.5% | cache DUT 281.4 vs 278.8 MHz; LUT n/m |
 | P1 | [Back-to-back fills](#back-to-back-fills) | Fills enter a bank on consecutive cycles, each with its own staged sector | `f9dfa6a13` | none | on | N | rtx5080 stream −6.2% | cache DUT 300.4 → 309.6 MHz |
-| P1 | [L1-only launch flush](#l1-only-flush-between-launches) | The shared LLC answers a launch's L1-only token without a walk | `7ce8a7483`, `9473f26e9` | none (from topology) | on | N | flush 2,750 → 180 cycles; chained launches −11% | n/m |
+| P1 | [Device-scope launch flush](#device-scope-flush-between-launches) | The shared LLC answers a launch's device-scope token without a walk | `7ce8a7483`, `9473f26e9` | none (from topology) | on | N | flush 2,750 → 180 cycles; chained launches −11% | n/m |
 | P1 | [Write-allocate without fetch (lazy fetch)](#write-allocate-without-fetch-lazy-fetch) | A store miss installs the sector with a dirty-byte mask, no fill | `4f173e313`, `bdf39536d`, `1de9126e6`, default `a99c1be47` | `VX_CFG_{DCACHE,L2,L3}_LAZY_FETCH` | on where the cache is a write-back LLC | N | DRAM reads −33% (cycles flat) | cache DUT 1.4k LUT below the earlier dirty-byte RAMs, 288.3 vs 276.9 MHz |
 | P1 | [Per-slice fetch and core partitioning](#per-slice-fetch) | FW fetch slices, each with scheduler, fetch, decode and icache port | `e58720478`, `8705e2b7b` | `VX_CFG_FETCH_WIDTH` | = issue width | N | sgemm IW4 −31.6%; SimX profiles −29.7% / −40.7% | n/m |
 | P1 | [Device-wide global barrier](#device-wide-global-barrier) | One gbar unit counts every core across clusters | `5f1ef4fad`, `c1516d3e1` | none | on | N | correctness at > 1 cluster | n/m |
-| P1 | [Targeted fences](#targeted-fences) | L1-only token for memory fences; I/O fences drain without a walk | `3f27ba402`, `18b6fe521` | none | on | N | printf 13.6×, fence −55% | n/m |
+| P1 | [Targeted fences](#targeted-fences) | Device-scope token for memory fences; I/O fences drain without a walk | `3f27ba402`, `18b6fe521` | none | on | N | printf 13.6×, fence −55% | n/m |
 | P1 | [CP DMA through the LLC](#command-processor-dma-through-the-llc) | The command processor's DMA is a client of the shared LLC | `1d3db49b6`, `cc7bb17cc`, `bbad636e3`, `f93df327f`, default `60d79470a` | `VX_CFG_CP_LLC_CLIENT` | on (acts only with one shared LLC) | N | multikernel −42.7%, dogfood −30% | est. +2–3k LUT (not synthesized) |
 | P1 | [Dcache read merge](#dcache-read-merge) | Same-word reads of one LSU block share one bank access | `4e1d2a7ec`, `2342ffdcd`, port 0 `d6be497d7` | `VX_CFG_DCACHE_READ_MERGE` | on | N | sgemm −6.5% to −17.2% | n/m |
 | P1 | [LMEM DMA round-robin](#local-memory-dma-round-robin) | DXA writes and TCU reads share the LMEM DMA port round-robin | `c96140253` | none | on | N | WGMMA+DXA −10.2%, sparse −11.6% | 1 bit |
@@ -88,7 +88,7 @@ Some of these features can be set with a `VX_CFG_*` knob (see [Build Configurati
 **Always on:** fill forwarding, back-to-back fills, broadcast flush and per-port flush tokens, launch argument slots, targeted fences, acquire/release fences, the device-wide global barrier, write-through ordering, victim advance on a new line only, request skids at the L2 and MMU inputs, the warp-wide local-memory unit, the lane-gather writeback merge, local-memory DMA round-robin, per-block LSU memory paths, TCU loads in LSU-lane passes, non-power-of-two GPU shapes, many AXI transactions in flight, and write fall-through.
 
 **Selected automatically:**
-- The L1-only launch flush and the fence shortcuts apply whenever a single LLC is the point of coherence.
+- The device-scope launch flush and the fence shortcuts apply whenever a single LLC is the point of coherence.
 - Write-allocate without fetch, the full-sector refetch skip and the dirty-byte masks turn on in whichever cache is a write-back LLC.
 - The FPGA shell's memory port count follows the GPU's memory ports.
 
@@ -349,13 +349,13 @@ With the merge, 16 icache banks are no longer slower than 4.
 
 **Gain:** flush cost per launch dropped from 2.76M to 16.5k cycles on the measured shape. It also fixed the lost-write case above.
 
-### L1-only flush between launches
+### Device-scope flush between launches
 
-![L1-only launch flush](../assets/img/mlp_launch_flush.svg)
+![Device-scope launch flush](../assets/img/mlp_launch_flush.svg)
 
 **Problem.** Every kernel launch flushed the whole hierarchy, including a walk of the LLC. Back-to-back launches paid for it each time.
 
-**How it works.** When a single LLC serves every memory client, it is the point of coherence: launches only need the L1s cleaned. The launch flush becomes an L1-only token, which the shared LLC answers without walking. LLCs that are replicated per core or per cluster, and LLCs with peer clients beside them (texture, ray tracing, raster, output merger, DXA), still walk. A dcache counts as the LLC only when it is the single dcache of a single socket with no other memory client. The runtime posts flushes lazily and flushes fully before any device-memory transfer that needs it. The device reports busy until every core write, including uncached I/O stores, is visible in memory.
+**How it works.** When a single LLC serves every memory client, it is the point of coherence: launches only need the L1s cleaned. The launch flush becomes a device-scope (`ACQ|REL`) token, which the shared LLC answers without walking. LLCs that are replicated per core or per cluster, and LLCs with peer clients beside them (texture, ray tracing, raster, output merger, DXA), still walk. A dcache counts as the LLC only when it is the single dcache of a single socket with no other memory client. The runtime posts flushes lazily and flushes fully before any device-memory transfer that needs it. The device reports busy until every core write, including uncached I/O stores, is visible in memory.
 
 **Gain:** flush cycles per launch 422 → 152 at 1 core and 2,750 → 180 at 4 cores + L2. Chained launches at 4 cores + L2: −11%.
 
@@ -363,7 +363,7 @@ With the merge, 16 icache banks are no longer slower than 4.
 
 ![Launch argument slots](../assets/img/mlp_arg_slots.svg)
 
-**Problem.** Each launch uploads its arguments and launch descriptors to device memory. That upload made the LLC dirty, so the next launch needed a full flush. Workloads that launch many small kernels behaved as if the L1-only flush didn't exist.
+**Problem.** Each launch uploads its arguments and launch descriptors to device memory. That upload made the LLC dirty, so the next launch needed a full flush. Workloads that launch many small kernels behaved as if the device-scope flush didn't exist.
 
 **How it works.** Arguments and descriptors go into a pool of slots. A slot is reused only if no kernel has read it since the last full flush, so no cache can hold a stale copy and the upload needs no flush. This is the same dirty tracking AMD's driver does for its argument buffers.
 
@@ -376,8 +376,8 @@ With the merge, 16 icache banks are no longer slower than 4.
 **Problem.** A memory fence flushed the whole hierarchy: every level walked all of its lines and wrote dirty data to DRAM. `printf` fences after every device write, so printf-heavy kernels spent most of their time walking caches.
 
 **How it works.**
-- A memory fence sends an L1-only token. The L1s write their dirty lines back to the shared LLC, and the LLC answers without walking. DRAM is not touched.
-- A fence that orders only device (I/O) accesses becomes its own LSU operation. Every level drains its in-flight writes to its memory ports, with no walk anywhere.
+- A memory fence sends a device-scope token. The L1s write their dirty lines back to the shared LLC, and the LLC answers without walking. DRAM is not touched.
+- A fence that orders only device (I/O) accesses sends an `IO` token. Every level drains its in-flight writes to its memory ports, with no walk anywhere.
 
 **Gain (rtlsim):**
 - printf at 2 cores + L2: 4,006,822 → 295,165 cycles (13.6×)
@@ -470,9 +470,9 @@ Atomics with `.aq`/`.rl` get these steps around them. All of it is skipped when 
 
 **How it works:**
 - When one LLC serves every core, the command processor's DMA becomes a client of it on its own slot. A page-table walker attaches the same way.
-- Host data flows through the LLC and keeps it coherent, so a transfer needs only an L1-only flush.
+- Host data flows through the LLC and keeps it coherent, so a transfer needs only a device-scope flush.
 - Transfers of at least half the LLC write around it, so they don't evict the working set.
-- A launch issued after DMA writes waits for an L1-only flush token sent on the DMA's slot.
+- A launch issued after DMA writes waits for a device-scope flush token sent on the DMA's slot.
 - The runtime detects the feature through the `DMA_LLC_CLIENT` capability.
 - Controlled by `VX_CFG_CP_LLC_CLIENT`: on by default.
 
@@ -589,18 +589,19 @@ Area: +33 LUT in decode and +3 LUT per warp in the expander; the issue yield add
 **Problem.** A tensor kernel loads each matrix fragment with one `flw` per register, plus the per-lane address arithmetic: 4 or 8 fetched loads per fragment and K step. In the K loop those loads take front-end slots the tensor instructions need.
 
 **How it works:**
-- `vx_ldm` and `vx_stm` move a whole fragment. The immediate's low 5 bits name the fragment shape (A, B, C, sparse A, symmetric sparse B, WGMMA C), and its upper bits are a byte offset.
-- The micro-op sequencer (`VX_uop_packld`) expands the instruction into one `flw` or `fsw` per register, 4 or 8 per fragment, in closed form: each uop's row group and column come from the micro-op counter. A uop takes its address from register rs1 | its row group and ORs its column into the immediate, so it reaches the element the fragment layout puts in that register. The uops issue like scalar loads, each with its own register in the scoreboard.
-- Any kernel can use it: it does not depend on the TCU. The fragment geometry and shape table live in `VX_gpu_pkg`, and SimX's `fragment_layout.h` is shared by the LSU and the TCU model. A simulation check in `VX_uop_packld` walks every shape and uop through the TCU's register permutation and asserts each uop lands on its own register.
+- `vx_ldm` and `vx_stm` move a whole fragment. The immediate's low 3 bits name the fragment shape (A, B, C, sparse A, symmetric sparse B, WGMMA C), and its upper bits are a byte offset in 8-byte steps, so every K tile of an unrolled loop folds into it.
+- The micro-op sequencer (`VX_uop_packld`) expands the instruction into one `flw` or `fsw` per register, 4 or 8 per fragment, in closed form: each uop's row group and column come from the micro-op counter, column by column, the order the MMA's K-outer steps read them, and its register from the TCU's register permutation. A uop takes its address from register rs1 | its row group and ORs its column into the immediate. The uops issue like scalar loads, each with its own register in the scoreboard; every uop but the last may yield the next issue cycle to another warp holding one, so the warps' fragment accesses interleave as their scalar loads do.
+- Any kernel can use it: it does not depend on the TCU. The fragment geometry and shape table live in `VX_gpu_pkg`, and SimX's `fragment_layout.h` is shared by the LSU and the TCU model. An elaboration check in `VX_uop_packld` walks every shape and uop through the TCU's register permutation and asserts each uop lands on the register of its element, a distinct one per uop.
 - Every shape is valid whenever the knob is on, except that the symmetric sparse B shape needs a square TCU block (a thread count that is an even power of two, such as 4 or 16). Asymmetric sparse B and sparse MX fragments have no shape and use scalar loads.
-- Kernels pass one address register per fragment row group. `ldm_group` in `vx_tensor.h` derives the B fragment's groups, and the A fragment's in sparse and MX kernels, from one live base, so the K loop does not run out of registers; a dense A pair stays hoisted.
+- Kernels pass one address register per fragment row group. `ldm_group` in `vx_tensor.h` derives the B fragment's groups, and the A fragment's in sparse and MX kernels, from one live base with adds the compiler cannot turn into induction variables, so the K loop does not run out of registers; the base goes into the group uncopied, and unrolled K tiles share the adds. A dense A pair stays hoisted.
 - Controlled by `VX_CFG_EXT_LDST_MATRIX_ENABLE`, **off by default**; it needs F. Kernels use it through the `vx_ldm`/`vx_stm` intrinsics in `vx_intrinsics.h` (`.insn` encodings, no compiler support needed); `vx_tensor.h` calls them when a context is built with `ldst_matrix`. The device reports it in its ISA flags (`VX_ISA_EXT_LDST_MATRIX`).
 
 **Gain:**
 - rtlsim: dense, MX and sparse TCU kernels −3.4% to −10.1%, with bit-identical results.
 - SimX, knob off → on: sgemm_tcu 64³ / 128³ / 256³ −9.4% / −1.0% / −11.6%; sgemm_tcu_mx 32³ / 64³ / 128³ −8.1% / −7.2% / −5.8%, and −5.4% at its CI shape; sgemm_tcu_sp −6.5% / −5.2% / −4.8%; sgemm2_tcu 64³ / 128³ / 256³ −0.01% / −0.51% / −0.42%; sgemm_tcu_wg_dxa −0.2% to −0.8%.
 - Five WGMMA points stay within +0.18% of the scalar loads (`sgemm_tcu_wg` 64³ and 256³, `sgemm_tcu_wg_mx` 128³, `sgemm_tcu_wg_sp` 64³, `sgemm_tcu_wg_sp_dxa` 256³), from CTA composition and code layout that shift with the epilogue.
-- Area: core with TCU +169 LUT; core without the TCU +157 LUT; nothing deeper.
+- The rtlsim and SimX points above were measured before the column-major uop order and the issue yield. With both, the SimX A/B over 114 knob-off/knob-on pairs has a geomean of −1.3% (−0.3% before), with 57 pairs still slower with the knob on (87 before).
+- Area (Beacon, core with TCU, knob off → on): +407 LUT, nothing deeper.
 
 ---
 

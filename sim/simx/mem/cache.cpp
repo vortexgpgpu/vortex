@@ -818,10 +818,10 @@ public:
   }
 
   // Flush API.
-  // flush_begin() arms the bank; subsequent ticks scan all sets/ways and emit
-  // a writeback request for every dirty line via mem_req_out (write-back only;
-  // write-through caches have nothing to evict). flush_done() reports when the
-  // walk finishes AND the cache is otherwise idle.
+  // flush_begin() arms the bank; subsequent ticks scan all sets/ways, emit a
+  // writeback request for every dirty line via mem_req_out (write-back only;
+  // write-through caches have nothing to evict), then drop every line.
+  // flush_done() reports when the walk finishes AND the cache is otherwise idle.
   // Drop every line, as an address-space change does to a read-only
   // virtually tagged cache. Called between launches, with no line in flight.
   void invalidate() {
@@ -830,9 +830,8 @@ public:
     }
   }
 
-  void flush_begin(bool keep_lines) {
-    keep_lines_ = keep_lines;
-    if (!config_.write_back || keep_lines) {
+  void flush_begin(bool walk) {
+    if (!walk) {
       flushing_ = false;
       flush_set_idx_ = 0;
       flush_way_idx_ = 0;
@@ -884,12 +883,10 @@ protected:
   #ifdef DBG_MEM_BANK0_WDELAY
     dbg_mem_req_free_ = 0;
   #endif
-    if (!keep_lines_) {
-      for (auto &set : sets_) {
-        set.reset();
-      }
+    // Lines persist across a launch: only a device reset or a flush drops them.
+    if (!SimPlatform::instance().launch_resetting()) {
+      this->invalidate();
     }
-    keep_lines_ = false;
     mshr_.reset();
     fwd_active_ = false;
     fwd_set_    = 0;
@@ -931,21 +928,26 @@ protected:
     // release frees this tick admit a new request only from the next one.
     mshr_occupancy_ = mshr_.size() + pending_mshr_size_;
 
-    // Process next request at the head of the pipeline.
+    // Process next request at the head of the pipeline. A head that cannot
+    // retire stalls the whole pipeline, its input stage included: a bubble
+    // behind the head stays a bubble, and nothing enters or forwards.
+    bool pipe_stall = false;
     if (!pipe_req_->empty()) {
+        uint32_t pipe_size = pipe_req_->size();
         this->processRequests();
+        pipe_stall = (pipe_req_->size() == pipe_size);
     }
 
     // Fill-forward drain: complete the read-prefix of a fill's pending chain
     // directly (one per tick), leaving the input slot free for new requests.
     // On response backpressure the head falls back to the replay path.
     bool fwd_consumed = false;
-    if (fwd_active_) {
+    if (fwd_active_ && !pipe_stall) {
         fwd_consumed = this->processForward();
     }
 
     // Accept one new input if there's room.
-    if (!pipe_req_->full()) {
+    if (!pipe_req_->full() && !pipe_stall) {
         this->processInputs(fwd_consumed);
     }
 
@@ -2182,6 +2184,7 @@ private:
       ++flush_set_idx_;
       flush_way_idx_ = 0;
     }
+    this->invalidate();
     flushing_ = false;
     DT(3, this->name() << " flush-done");
   }
@@ -2321,7 +2324,6 @@ private:
 
   // Flush walk state.
   bool     flushing_;
-  bool     keep_lines_ = false; // the next launch reset keeps the lines
   uint32_t flush_set_idx_;
   uint32_t flush_way_idx_;
   uint32_t flush_sector_idx_;
@@ -2452,22 +2454,6 @@ public:
     return mask;
   }
 
-  // Tokens owing no walk: IO and release tokens, and L1-only or acquire ones
-  // unless they still need a walk here.
-  std::vector<bool> tokens(bool l1_needs_walk) const {
-    std::vector<bool> mask(ReqIn.size(), false);
-    for (uint32_t i = 0, n = ReqIn.size(); i < n; ++i) {
-      if (!this->is_token(i)) {
-        continue;
-      }
-      auto &flags = ReqIn.at(i).peek().flags;
-      bool io  = flags.io && !flags.flush_l1;
-      bool rel = !flags.io && flags.flush_l1 && flags.noalloc;
-      mask.at(i) = io || rel || (flags.flush_l1 && !l1_needs_walk);
-    }
-    return mask;
-  }
-
   // A bank's skid register holds a request: its occupancy as of the start of
   // the cycle, as the RTL's registered ready sees it, even if the bank takes
   // the request later this cycle.
@@ -2511,6 +2497,7 @@ protected:
       offer.held = false;
     }
     held_ = false;
+    idle_ticks_ = 0;
     std::fill(realign_.begin(), realign_.end(), realign_t());
   }
 
@@ -2533,6 +2520,17 @@ protected:
     if (init_cycles_ != 0) {
       --init_cycles_;
       return;
+    }
+    // Sleep once the ports, the tree and the offers have been empty for two
+    // ticks: the second idle tick settles the realign registers, so a skipped
+    // tick cannot change them. A request reserved toward any port re-arms it.
+    if (this->quiescent()) {
+      if (++idle_ticks_ >= 2) {
+        idle_ticks_ = 0;
+        this->tick_sleep();
+      }
+    } else {
+      idle_ticks_ = 0;
     }
     uint32_t nb = ReqOut.size();
     uint32_t nl = levels_.size();
@@ -2585,8 +2583,10 @@ protected:
     const bool hold = this->any_token();
     this->update_realign();
     // merged ports riding each leader's bank access, by offset in its group
-    std::vector<bool> followers(n, false);
-    std::vector<uint64_t> merged(n, 0);
+    auto& followers = followers_;
+    auto& merged = merged_;
+    followers.assign(n, 0);
+    merged.assign(n, 0);
     if (merge_group_ > 1 && !hold) {
       for (uint32_t i = 0; i < n; ++i) {
         if (!this->is_plain_read(i) || this->realign_hold(i)) {
@@ -2615,8 +2615,10 @@ protected:
     // leave on their own port
     uint32_t slices = this->arb_slices(0);
     uint32_t slice_ports = (nl != 0) ? kMaxFanout : n;
-    std::vector<uint32_t> want(nb * slices, 0);
-    std::vector<uint32_t> wants(nb, 0);
+    auto& want = want_;
+    auto& wants = wants_;
+    want.assign(nb * slices, 0);
+    wants.assign(nb, 0);
     for (uint32_t i = 0; i < n; ++i) {
       auto& in = ReqIn.at(i);
       if (in.empty() || followers.at(i)) {
@@ -2792,7 +2794,10 @@ protected:
       return;
     }
     uint32_t n = ReqIn.size();
-    std::vector<bool> start(n), owes_head(n);
+    auto& start = start_;
+    auto& owes_head = owes_head_;
+    start.assign(n, 0);
+    owes_head.assign(n, 0);
     for (uint32_t i = 0; i < n; ++i) {
       auto& r = realign_.at(i);
       auto& in = ReqIn.at(i);
@@ -2835,6 +2840,21 @@ protected:
     return (merge_group_ == 2) && !merge_line_;
   }
 
+  // Nothing at the ports, in the tree or offered to a bank.
+  bool quiescent() const {
+    for (auto& in : ReqIn) {
+      if (in.size() != 0) {
+        return false;
+      }
+    }
+    for (auto& offer : offers_) {
+      if (offer.valid || offer.held) {
+        return false;
+      }
+    }
+    return this->drained();
+  }
+
   // A plain read: no write, flush, IO, local or atomic attribute.
   bool is_plain_read(uint32_t i) const {
     if (ReqIn.at(i).empty()) {
@@ -2871,6 +2891,14 @@ private:
     bool     hold       = false;
   };
   std::vector<realign_t> realign_;
+  // per-tick scratch, kept to avoid an allocation per cycle
+  std::vector<uint8_t>  followers_;
+  std::vector<uint64_t> merged_;
+  std::vector<uint32_t> want_;
+  std::vector<uint32_t> wants_;
+  std::vector<uint8_t>  start_;
+  std::vector<uint8_t>  owes_head_;
+  uint32_t idle_ticks_ = 0;
   struct offer_t {
     SimChannel<MemReq>* bank_in = nullptr;
     bool     valid       = false;
@@ -2893,6 +2921,9 @@ private:
 // takes it when its arbiter grants that lane, and the lane is released once
 // all of them have. Over many banks a port's arbiter is a tree: each slice of
 // lanes grants into its own buffer, and a join picks among the slices.
+// A port's arbiter grants straight into the cache's response port, whose
+// registered stages out_delay stands for: no buffer sits between a bank's
+// response queue and the arbiter's output register.
 class CacheRspMcast : public SimObject<CacheRspMcast> {
 public:
   using Ptr = std::shared_ptr<CacheRspMcast>;
@@ -2901,13 +2932,15 @@ public:
   std::vector<SimChannel<MemRsp>> RspOut; // core ports
 
   CacheRspMcast(const SimContext& ctx, const char* name, uint32_t num_banks,
-                uint32_t num_outputs, uint32_t merge_group, bool merge_line)
+                uint32_t num_outputs, uint32_t merge_group, bool merge_line,
+                uint32_t out_delay)
     : SimObject<CacheRspMcast>(ctx, name)
     , RspIn(num_banks, this)
     , RspOut(num_outputs, this)
     , lg2_outputs_(log2ceil(num_outputs))
     , merge_group_(merge_group)
     , merge_line_(merge_line)
+    , out_delay_(out_delay)
     , slices_(arb_tree_slices(num_banks))
     , sent_(num_banks, 0)
     , last_grant_(num_outputs * slices_, num_banks - 1)
@@ -2916,6 +2949,14 @@ public:
   {
     __assert(num_outputs <= 64 && merge_group < 64, "the read-merge response network takes at most 64 ports");
     __assert(arb_tree_levels(num_banks).size() <= 1, "the read-merge response network takes one tree level");
+    // A bank's response queue and each tree slice are skid buffers: a slot
+    // the arbiter frees takes a new response from the next cycle.
+    for (auto& in : RspIn) {
+      in.set_registered_ready(true);
+    }
+    for (auto& stage : tree_stage_) {
+      stage.set_registered_ready(true);
+    }
   }
 
 protected:
@@ -2937,7 +2978,8 @@ protected:
         if (stage.empty()) {
           continue;
         }
-        if (RspOut.at(o).try_send(stage.peek(), 0)) {
+        if (RspOut.at(o).try_send(stage.peek(), out_delay_)) {
+          DT(3, this->name() << " core-rsp" << o << ": " << stage.peek());
           stage.pop();
           join_rr_.at(o) = sl;
         }
@@ -2981,8 +3023,11 @@ protected:
             __assert(rsp.merged_tags, "a line-merged response lost its merged tags");
             rsp.tag = rsp.merged_tags->at(o % merge_group_);
           }
-          if (out.try_send(rsp, (slices_ > 1) ? 1 : 0)) {
+          if (out.try_send(rsp, (slices_ > 1) ? 1 : out_delay_)) {
             DT(4, this->name() << " rsp" << b << "_" << o << ": " << rsp);
+            if (slices_ == 1) {
+              DT(3, this->name() << " core-rsp" << o << ": " << rsp);
+            }
             sent_.at(b) |= 1ull << o;
             rr = b;
           }
@@ -3002,6 +3047,7 @@ private:
   uint32_t lg2_outputs_;
   uint32_t merge_group_;
   bool merge_line_;
+  uint32_t out_delay_;
   uint32_t slices_;
   std::vector<uint64_t> sent_;       // [bank] ports that took the lane's response
   std::vector<uint32_t> last_grant_; // [port][slice] round-robin pointer
@@ -3175,7 +3221,6 @@ public:
     if (port_arb_->merge_bits() != 0) {
       // one buffered arbiter per core port over the bank lanes
       __assert(config_.core_out_buf, "read merging needs a registered core-response port");
-      rsp_mcast_ = CacheRspMcast::Create(sname, num_banks, config_.num_inputs, port_arb_->merge_bits(), merge_line);
       core_rsp_delay_ = 1;
     } else if (config_.core_out_buf) {
       bank_core_xbar_ = MemCrossBar::Create(sname, ArbiterType::RoundRobin, config_.num_inputs, num_banks, bank_sel, 0, 0);
@@ -3185,6 +3230,13 @@ public:
     }
     if (config_.nc_enable) {
       ++core_rsp_delay_;
+    }
+    if (port_arb_->merge_bits() != 0) {
+      rsp_mcast_ = CacheRspMcast::Create(sname, num_banks, config_.num_inputs, port_arb_->merge_bits(), merge_line,
+                                         core_rsp_delay_);
+      for (uint32_t i = 0; i < config_.num_inputs; ++i) {
+        rsp_mcast_->RspOut.at(i).bind(&simobject->core_rsp_out.at(i));
+      }
     }
 
     // Create cache banks
@@ -3206,10 +3258,11 @@ public:
   void reset() {
     if (config_.bypass)
       return;
-    // calculate cache initialization cycles
-    init_cycles_ = keep_lines_ ? 0 : params_.sets_per_bank;
+    // The line initialization runs after a device reset only. A launch reset
+    // keeps the lines, which the runtime's flush ahead of each launch keeps
+    // coherent, so it does not walk them again.
+    init_cycles_ = SimPlatform::instance().launch_resetting() ? 0 : params_.sets_per_bank;
     port_arb_->set_init_cycles(init_cycles_);
-    keep_lines_ = false;
   }
 
   void tick() {
@@ -3246,8 +3299,8 @@ public:
     }
 
     // schedule core responses
-    for (uint32_t req_id = 0, n = config_.num_inputs; req_id < n; ++req_id) {
-      auto &bank_rsp = rsp_mcast_ ? rsp_mcast_->RspOut.at(req_id) : bank_core_xbar_->RspOut.at(req_id);
+    for (uint32_t req_id = 0, n = rsp_mcast_ ? 0 : config_.num_inputs; req_id < n; ++req_id) {
+      auto &bank_rsp = bank_core_xbar_->RspOut.at(req_id);
       if (bank_rsp.empty())
         continue;
       auto &core_rsp = bank_rsp.peek();
@@ -3266,12 +3319,14 @@ public:
     }
   }
 
-  // Flush tokens (fences) at any port start one walk: the ports hold their
-  // cacheable requests, in-flight ones drain, every bank writes back and
-  // invalidates its lines, a token goes down each memory port behind that
-  // port's write-backs, and once every port has answered, each token
-  // visible at the end of the walk is answered through the response path,
-  // one per cycle.
+  // Flush tokens (fences) at any port start one round: the ports hold their
+  // cacheable requests, in-flight ones drain, and every bank writes back and
+  // invalidates its lines (an acquire above the point of coherence) or only
+  // quiesces (a release or IO token). The round's operation then goes down
+  // each memory port behind that port's write-backs, and once every port has
+  // answered, each token the round serves is answered through the response
+  // path, one per cycle. The operations of the tokens a round serves combine
+  // by OR.
   void flush_step() {
     switch (flush_state_) {
     case FlushState::Idle:
@@ -3311,24 +3366,29 @@ public:
           return;
         }
       }
-      auto kinds = this->token_kinds();
-      // a quiesce without a walk serves only the tokens owing none, and
-      // forwards IO if it serves an IO token, else release
-      rsp_pending_ = walk_skip_ ? port_arb_->tokens(!config_.shared_llc) : port_arb_->tokens();
-      // after a walk: full if a full token or an IO one asks for more than the
-      // point of coherence, L1-only if any token owes a drain to it, acquire
-      // if only acquire tokens were visible
-      bool fwd_acq = !walk_skip_ && kinds.any_acq && !kinds.any_full && !kinds.any_io
-                  && !kinds.any_l1 && !kinds.any_rel;
-      bool fwd_l1  = !walk_skip_ && (kinds.any_l1 || kinds.any_rel) && !kinds.any_full && !kinds.any_io;
-      if (walk_skip_) {
-        this->forward_begin(kinds.any_io, !kinds.any_io, !kinds.any_io);
-      } else {
-        this->forward_begin(fwd_acq, fwd_l1 || fwd_acq, false);
+      // a walk serves every visible token, a quiesce only those owing no walk
+      uint32_t op = 0;
+      rsp_pending_.assign(config_.num_inputs, false);
+      for (uint32_t i = 0, n = config_.num_inputs; i < n; ++i) {
+        bool served = port_arb_->is_token(i) && !(walk_skip_ && this->owes_walk(this->token_op(i)));
+        rsp_pending_.at(i) = served;
+        if (served) {
+          op |= this->token_op(i);
+        }
       }
-      // an acquire walk owes the next level nothing unless it too may hold
-      // stale lines
-      flush_state_ = (fwd_acq && !config_.acq_forward) ? FlushState::Respond : FlushState::Forward;
+      // A walk forwards an acquire, a quiesce none. A release alone also
+      // walks a write-back level, whose next level is memory or the point of
+      // coherence, so the acquire it forwards there costs nothing. At the
+      // point of coherence the tokens go on to memory, which reads no
+      // operation.
+      fwd_op_ = (op & ~VX_FENCE_ACQ) | (walk_skip_ ? 0 : VX_FENCE_ACQ);
+      fwd_go_ = false;
+      fwd_sent_ = 0;
+      fwd_done_ = 0;
+      // an acquire alone owes the next level nothing unless it is above the
+      // point of coherence
+      bool forward = (op & (VX_FENCE_REL | VX_FENCE_SYS | VX_FENCE_IO)) || !config_.next_is_poc;
+      flush_state_ = forward ? FlushState::Forward : FlushState::Respond;
       break;
     }
     case FlushState::Forward: {
@@ -3341,7 +3401,7 @@ public:
       }
       // an IO token also waits for the non-cacheable path, which carries the
       // IO writes it orders
-      if (fwd_io_ && !fwd_l1_ && mem_req_empty) {
+      if ((fwd_op_ & VX_FENCE_IO) && mem_req_empty) {
         for (uint32_t i = 0, n = config_.num_inputs; i < n; ++i) {
           mem_req_empty &= (port_arb_->IoOut.at(i).size() == 0);
         }
@@ -3359,9 +3419,7 @@ public:
         MemReq token;
         token.addr = uint64_t(i) << config_.L;
         token.flags.flush = 1;
-        token.flags.io = fwd_io_;
-        token.flags.flush_l1 = fwd_l1_;
-        token.flags.noalloc = fwd_noalloc_;
+        token.flags.fence_op = fwd_op_;
         token.tag = 0;
         if (bank_arb_->ReqIn.at(this->bank_lane(i)).try_send(token, 1)) {
           DT(3, simobject_->name() << " flush-fwd: " << token);
@@ -3405,9 +3463,15 @@ public:
   // Tokens owing nothing are answered from the next cycle; otherwise the
   // banks start their walk, or only quiesce, the next cycle.
   void flush_serve() {
-    auto kinds = this->token_kinds();
-    bool walk = kinds.walk(config_.shared_llc);
-    if (!walk && !kinds.drain(config_.shared_llc)) {
+    bool walk = false;
+    bool work = false;
+    for (uint32_t i = 0, n = config_.num_inputs; i < n; ++i) {
+      if (port_arb_->is_token(i)) {
+        walk |= this->owes_walk(this->token_op(i));
+        work |= this->owes_work(this->token_op(i));
+      }
+    }
+    if (!work) {
       rsp_pending_ = port_arb_->tokens();
       flush_state_ = FlushState::Respond;
       return;
@@ -3418,55 +3482,26 @@ public:
     flush_state_ = FlushState::Begin;
   }
 
-  struct token_kinds_t {
-    bool any_full = false;
-    bool any_l1 = false;
-    bool any_io = false;
-    bool any_acq = false;
-    bool any_rel = false;
-    // a walk is owed to a full token, and to an L1-only or acquire one above
-    // the point of coherence
-    bool walk(bool shared_llc) const { return any_full || ((any_l1 || any_acq) && !shared_llc); }
-    // a drain with no walk is owed to an IO token, and to a release one above
-    // the point of coherence
-    bool drain(bool shared_llc) const { return any_io || (any_rel && !shared_llc); }
-  };
-
-  // Kinds of the visible tokens. Several kinds together combine to the
-  // weakest one that serves them all.
-  token_kinds_t token_kinds() const {
-    token_kinds_t kinds;
-    for (uint32_t i = 0, n = config_.num_inputs; i < n; ++i) {
-      if (!port_arb_->is_token(i)) {
-        continue;
-      }
-      auto &flags = port_arb_->ReqIn.at(i).peek().flags;
-      if (flags.io) {
-        if (flags.flush_l1) {
-          kinds.any_acq = true;
-        } else {
-          kinds.any_io = true;
-        }
-      } else if (flags.flush_l1) {
-        if (flags.noalloc) {
-          kinds.any_rel = true;
-        } else {
-          kinds.any_l1 = true;
-        }
-      } else {
-        kinds.any_full = true;
-      }
-    }
-    return kinds;
+  uint32_t token_op(uint32_t i) const {
+    return port_arb_->ReqIn.at(i).peek().flags.fence_op;
   }
 
-  void forward_begin(bool io, bool l1_only, bool noalloc) {
-    fwd_io_ = io;
-    fwd_l1_ = l1_only;
-    fwd_noalloc_ = noalloc;
-    fwd_go_ = false;
-    fwd_sent_ = 0;
-    fwd_done_ = 0;
+  // The shared last-level cache is the device's point of coherence; every
+  // level is above memory, a system-scope operation's.
+  bool above_poc(uint32_t op) const {
+    return !config_.shared_llc || (op & VX_FENCE_SYS);
+  }
+
+  // an acquire walks; a release alone walks a write-back level, whose dirty
+  // lines must reach the next level
+  bool owes_walk(uint32_t op) const {
+    bool walk_op = (op & VX_FENCE_ACQ) || (config_.write_back && (op & VX_FENCE_REL));
+    return walk_op && this->above_poc(op);
+  }
+
+  // a walk, or a drain without one
+  bool owes_work(uint32_t op) const {
+    return ((op & (VX_FENCE_ACQ | VX_FENCE_REL)) && this->above_poc(op)) || (op & VX_FENCE_IO);
   }
 
   PerfStats perf_stats() const {
@@ -3489,21 +3524,14 @@ public:
     }
   }
 
-  void flush_begin(bool l1_only) {
+  void flush_begin(uint32_t fence_op) {
     if (config_.bypass) return;
-    // The shared last-level cache stays the point of coherence across an
-    // L1-only flush and keeps its lines into the next launch.
-    keep_lines_ = l1_only && config_.shared_llc;
+    // The same rule as a flush token's: a level above the point of coherence
+    // walks, writing back and dropping its lines; the shared last-level cache,
+    // the point of coherence of a device-scope flush, keeps them.
+    bool walk = this->owes_walk(fence_op);
     for (auto &bank : banks_) {
-      bank->flush_begin(keep_lines_);
-    }
-  }
-
-  void keep_lines() {
-    if (config_.bypass || !config_.shared_llc) return;
-    keep_lines_ = true;
-    for (auto &bank : banks_) {
-      bank->flush_begin(true);
+      bank->flush_begin(walk);
     }
   }
 
@@ -3560,9 +3588,7 @@ private:
   uint64_t fwd_sent_ = 0;
   uint64_t fwd_done_ = 0;
   bool fwd_go_ = false;   // nothing is left ahead of the forwarded tokens
-  bool fwd_io_ = false;   // the forwarded tokens' kind
-  bool fwd_l1_ = false;
-  bool fwd_noalloc_ = false;
+  uint32_t fwd_op_ = 0;   // the forwarded tokens' operation
   bool walk_skip_ = false;  // the banks only quiesce: no walk is owed
   std::vector<SimChannel<MemReq>> mem_req_net_;
   std::vector<FlushTap::Ptr> flush_taps_;
@@ -3575,7 +3601,6 @@ private:
     return (bank_id % config_.mem_ports) * banks_per_port + bank_id / config_.mem_ports;
   }
   uint32_t init_cycles_;
-  bool     keep_lines_ = false;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -3599,8 +3624,8 @@ Cache::PerfStats Cache::perf_stats() const {
   return impl_->perf_stats();
 }
 
-void Cache::flush_begin(bool l1_only) {
-  impl_->flush_begin(l1_only);
+void Cache::flush_begin(uint32_t fence_op) {
+  impl_->flush_begin(fence_op);
 }
 
 bool Cache::flush_done() const {
@@ -3609,8 +3634,4 @@ bool Cache::flush_done() const {
 
 void Cache::invalidate() {
   impl_->invalidate();
-}
-
-void Cache::keep_lines() {
-  impl_->keep_lines();
 }

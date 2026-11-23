@@ -436,6 +436,14 @@ public:
         }
       }
     }
+  #ifdef VX_CFG_EXT_TCU_ENABLE
+    // one TCU block per issue slot, as VX_tcu_unit requires
+    static_assert(VX_CFG_NUM_TCU_BLOCKS == VX_CFG_ISSUE_WIDTH, "one TCU block per issue slot");
+    for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
+      tcu_stall_out_.emplace_back(std::make_unique<SimChannel<uint64_t>>(simobject_));
+      tcu_stall_out_.back()->bind(&tcu_unit_->result_stall_in.at(b));
+    }
+  #endif
     gather_holds_.resize(VX_CFG_ISSUE_WIDTH, std::vector<GatherHold>((uint32_t)FUType::Count));
 
     this->reset();
@@ -1161,6 +1169,18 @@ public:
       this->retire(trace, iw);
       granted->pop();
     }
+
+  #ifdef VX_CFG_EXT_TCU_ENABLE
+    // A TCU block's results enter its slot's lane-gather buffer, whose ready
+    // is a register: a buffer that ends the cycle full refuses the next
+    // cycle's result, and the block holds admission while one completes.
+    uint64_t next = SimPlatform::instance().cycles() + 1;
+    for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
+      if (commit_queues_.at(b).at((uint32_t)FUType::TCU)->full()) {
+        tcu_stall_out_.at(b)->send(next, 1);
+      }
+    }
+  #endif
   }
 
   // A pass completes its commit beat when it is the last pass of its SIMD
@@ -1420,6 +1440,11 @@ private:
   // [iw][fu] commit staging: FU outputs land here one registered stage
   // before retirement; commit() grants among them fixed-priority.
   std::vector<std::vector<std::unique_ptr<SimChannel<instr_trace_t*>>>> commit_queues_;
+
+#ifdef VX_CFG_EXT_TCU_ENABLE
+  // [block] the TCU lane-gather buffer's ready, to the block's admission
+  std::vector<std::unique_ptr<SimChannel<uint64_t>>> tcu_stall_out_;
+#endif
 
   // A lane gather's hold: the SIMD slice of an instruction whose passes wait
   // for the beat of the pass that completes it. Micro-ops of one instruction

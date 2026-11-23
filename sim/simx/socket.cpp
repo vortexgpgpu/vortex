@@ -83,7 +83,7 @@ public:
       false,                  // write_around
       VX_CFG_ICACHE_MRSQ_SIZE != 0, // memory-response queue
       true,                   // the socket's registered memory port
-      false,                  // acq_forward
+      true,                   // next_is_poc
       true,                   // merge_line: slices fetch different words of a line
     });
 
@@ -115,7 +115,7 @@ public:
       false,                         // write_around
       VX_CFG_DCACHE_MRSQ_SIZE != 0,  // memory-response queue
       true,                          // the socket's registered memory port
-      DCACHE_ACQ_FORWARD,            // acq_forward
+      DCACHE_NEXT_IS_POC,            // next_is_poc
       false,                         // line merging
       false,                         // core-request skid
       VX_CFG_DCACHE_SET_HASH != 0,   // set_hash
@@ -503,7 +503,7 @@ public:
     return cores_.at(idx);
   }
 
-  void dcache_flush_begin(bool l1_only) { dcaches_->flush_begin(l1_only); }
+  void dcache_flush_begin(uint32_t fence_op) { dcaches_->flush_begin(fence_op); }
   bool dcache_flush_done() const { return dcaches_->flush_done(); }
   void icache_flush_begin() { icaches_->flush_begin(); }
   bool icache_flush_done() const { return icaches_->flush_done(); }
@@ -612,8 +612,8 @@ Core::Ptr& Socket::core(uint32_t idx) {
   return impl_->core(idx);
 }
 
-void Socket::dcache_flush_begin(bool l1_only) {
-  impl_->dcache_flush_begin(l1_only);
+void Socket::dcache_flush_begin(uint32_t fence_op) {
+  impl_->dcache_flush_begin(fence_op);
 }
 
 bool Socket::dcache_flush_done() const {

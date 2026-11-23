@@ -273,7 +273,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .MEM_OUT_BUF    (3),
         .IS_LLC         (DCACHE_IS_LLC),
         .SHARED_LLC     (DCACHE_SHARED_LLC),
-        .ACQ_FORWARD    (DCACHE_ACQ_FORWARD),
+        .NEXT_IS_POC    (DCACHE_NEXT_IS_POC),
         .BANK_HASH      (`VX_CFG_DCACHE_BANK_HASH),
         .SET_HASH       (`VX_CFG_DCACHE_SET_HASH),
         .READ_MERGE     (`VX_CFG_DCACHE_READ_MERGE ? DCACHE_CHANNELS : 0),
@@ -569,7 +569,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .clk          (clk),
         .reset        (reset),
         .dcr_flush_if (tcache_flush_if),
-        .l1_only      (1'b0),
+        .flush_op     (FENCE_OP_FULL),
         .core_bus_if  (tcache_bus_if[0]),
         .cache_bus_if (tcache_flushable_bus_if[0])
     );
@@ -722,7 +722,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .clk          (clk),
         .reset        (reset),
         .dcr_flush_if (rtcache_flush_if),
-        .l1_only      (1'b0),
+        .flush_op     (FENCE_OP_FULL),
         .core_bus_if  (rtcache_bus_if[0]),
         .cache_bus_if (rtcache_flushable_bus_if[0])
     );

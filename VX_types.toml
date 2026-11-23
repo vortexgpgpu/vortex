@@ -82,10 +82,21 @@ VX_DCR_BASE_CACHE_FLUSH = 0x000
 VX_DCR_BASE_MPM_VALUE   = 0x001
 VX_DCR_BASE_STATE_END   = 0x002
 
-[cache_flush]
-# VX_DCR_BASE_CACHE_FLUSH write value: flush only the levels above the
-# last-level cache, which stays the point of coherence for the next kernel.
-VX_CACHE_FLUSH_L1_ONLY  = 0x10000
+# Fence operation: the cache work a memory fence or a cache flush owes, carried
+# by the CMD_CACHE_FLUSH header, the VX_DCR_BASE_CACHE_FLUSH write value and
+# every flush token. Device scope ends at the shared last-level cache, system
+# scope at memory.
+[fence_op]
+VX_FENCE_ACQ     = 0x1  # acquire: later reads see writes made visible at the scope
+VX_FENCE_REL     = 0x2  # release: earlier writes reach the scope's point of coherence
+VX_FENCE_SYS     = 0x4  # system scope
+VX_FENCE_IO      = 0x8  # also order the non-cacheable (IO) path
+VX_FENCE_OP_BITS = 4
+# CMD_CACHE_FLUSH carries its fence operation in the header flags, above the
+# flags every command shares. A cache flush, as a command and as the
+# VX_DCR_BASE_CACHE_FLUSH write value, is ACQ|REL at device scope or
+# ACQ|REL|SYS at system scope; any other value is illegal.
+VX_CP_FLUSH_OP_SHIFT = 2
 
 [dcr_mmu]
 VX_DCR_MMU_STATE_BEGIN  = 0x004

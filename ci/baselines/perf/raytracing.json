@@ -1,34 +1,34 @@
 {
   "raytracing:perf_gate-rt_raycast-mc:rtlsim": {
     "32": {
-      "cycles": 83800,
+      "cycles": 75908,
       "instrs": 39346
     },
     "app": "rt_raycast",
     "args": "",
-    "config_hash": "acf96f38d26b37ee",
+    "config_hash": "926004202e1230cc",
     "configs": "-DVX_CFG_EXT_RTU_ENABLE -DVX_CFG_NUM_CORES=2 -DVX_CFG_NUM_THREADS=4 -DVX_CFG_L2_ENABLE",
     "driver": "rtlsim"
   },
   "raytracing:perf_gate-rt_raycast-nt16:rtlsim": {
     "32": {
-      "cycles": 52892,
+      "cycles": 50995,
       "instrs": 11372
     },
     "app": "rt_raycast",
     "args": "",
-    "config_hash": "f219bd68b8919361",
+    "config_hash": "cde0e92d03a53a87",
     "configs": "-DVX_CFG_EXT_RTU_ENABLE -DVX_CFG_NUM_THREADS=16",
     "driver": "rtlsim"
   },
   "raytracing:perf_gate-rt_raycast-nt4:rtlsim": {
     "32": {
-      "cycles": 157980,
+      "cycles": 147867,
       "instrs": 39330
     },
     "app": "rt_raycast",
     "args": "",
-    "config_hash": "917af3d6cb8141f1",
+    "config_hash": "fffab4e1c8cfe28a",
     "configs": "-DVX_CFG_EXT_RTU_ENABLE -DVX_CFG_NUM_THREADS=4",
     "driver": "rtlsim"
   }

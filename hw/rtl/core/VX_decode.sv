@@ -241,6 +241,8 @@ module VX_decode import
     wire decode_is_rvc = 1'b0;
 `endif
 
+    fence_op_t fence_op;
+
     always @(*) begin
 
         ex_type   = 'x;
@@ -252,6 +254,7 @@ module VX_decode import
         wr_xregs  = '0;
         bytesel   = BYTESEL_DEFAULT;
         is_wstall = 0;
+        fence_op  = 'x;
 
     `ifdef VX_CFG_EXT_A_ENABLE
         // Default the LSU amo sideband to "not an AMO" so plain
@@ -419,21 +422,26 @@ module VX_decode import
             end
             INST_FENCE: begin
                 ex_type = EX_LSU;
-                // neither the predecessor nor the successor set holds a memory
-                // read or write (pred = instr[27:24], succ = instr[23:20], IORW)
-                op_type = ((funct3 == 3'b000) && (instr[25:24] == 2'b00) && (instr[21:20] == 2'b00))
-                        ? INST_LSU_FENCE_IO : INST_LSU_FENCE;
+                op_type = INST_LSU_FENCE;
                 op_args.lsu.is_store = 0;
                 op_args.lsu.is_float = 0;
                 op_args.lsu.pack     = 0;
                 op_args.lsu.offset   = 0;
-                // A later read must see other harts' data (acquire) when the
-                // successor set reads; earlier writes must be visible (release)
-                // when the predecessor set writes. A fence with neither
-                // releases; one with a device access in its predecessor set,
-                // or fence.i, does both.
-                op_args.lsu.amo_aq = (funct3 != 3'b000) || (instr[27:26] != 2'b00) || instr[21];
-                op_args.lsu.amo_rl = (funct3 != 3'b000) || (instr[27:26] != 2'b00) || instr[24] || ~instr[21];
+                // A fence whose predecessor and successor sets (pred =
+                // instr[27:24], succ = instr[23:20], IORW) hold no memory read
+                // or write orders only the IO path. Otherwise a later read must
+                // see other harts' data (acquire) when the successor set reads;
+                // earlier writes must be visible (release) when the predecessor
+                // set writes. A fence with neither releases; one with a device
+                // access in its predecessor set, or fence.i, does both.
+                fence_op = '0;
+                if ((funct3 == 3'b000) && (instr[25:24] == 2'b00) && (instr[21:20] == 2'b00)) begin
+                    fence_op.io = 1'b1;
+                end else begin
+                    fence_op.acq = (funct3 != 3'b000) || (instr[27:26] != 2'b00) || instr[21];
+                    fence_op.rel = (funct3 != 3'b000) || (instr[27:26] != 2'b00) || instr[24] || ~instr[21];
+                end
+                op_args.lsu.amo_op = amo_op_e'(fence_op);
             end
         `ifdef VX_CFG_EXT_A_ENABLE
             INST_AMO: begin
@@ -539,31 +547,30 @@ module VX_decode import
                 case (funct3)
                 `ifdef VX_CFG_EXT_LDST_MATRIX_ENABLE
                     // vx_ldm/vx_stm: a matrix fragment, expanded into one flw/fsw
-                    // per register. imm[4:0] is the fragment shape, replaced by its
-                    // expander code; a bytesel offset of 2 (4 registers) or 3 (8)
-                    // marks the access as a fragment.
+                    // per register. imm[2:0] is the fragment shape; a bytesel
+                    // offset of 2 (4 registers) or 3 (8) marks the access as a fragment.
                     3'h0: begin
-                        if (mtx_ldm_valid(u_12[4:0])) begin
+                        if (mtx_ldm_valid(u_12[2:0])) begin
                             ex_type = EX_LSU;
                             op_type = INST_OP_BITS'(INST_LSU_LW);
                             op_args.lsu.is_store = 0;
                             op_args.lsu.is_float = 1;
                             op_args.lsu.pack     = 2'b11;
-                            op_args.lsu.offset   = {u_12[11:5], mtx_ldm_code(u_12[4:0])};
-                            bytesel = {XLENB_W'(XLENB-1), XLENB_W'({1'b1, mtx_ldm_is8(u_12[4:0])})};
+                            op_args.lsu.offset   = u_12;
+                            bytesel = {XLENB_W'(XLENB-1), XLENB_W'({1'b1, mtx_ldm_is8(u_12[2:0])})};
                             `USED_IREG (rs1);
                             `USED_FREG (rd);
                         end
                     end
                     3'h2: begin
-                        if (mtx_ldm_valid(rd)) begin
+                        if (mtx_ldm_valid(rd[2:0])) begin
                             ex_type = EX_LSU;
                             op_type = INST_OP_BITS'(INST_LSU_SW);
                             op_args.lsu.is_store = 1;
                             op_args.lsu.is_float = 1;
                             op_args.lsu.pack     = 2'b11;
-                            op_args.lsu.offset   = {s_imm[11:5], mtx_ldm_code(rd)};
-                            bytesel = {XLENB_W'(XLENB-1), XLENB_W'({1'b1, mtx_ldm_is8(rd)})};
+                            op_args.lsu.offset   = s_imm;
+                            bytesel = {XLENB_W'(XLENB-1), XLENB_W'({1'b1, mtx_ldm_is8(rd[2:0])})};
                             `USED_IREG (rs1);
                             `USED_FREG (rs2);
                         end
@@ -1072,6 +1079,11 @@ module VX_decode import
 `ifndef VX_CFG_EXT_LDST_MATRIX_ENABLE
     `RUNTIME_ASSERT(~(fetch_if.valid && (opcode == INST_EXT4) && ((funct3 == 3'h0) || (funct3 == 3'h2))),
         ("%t: %s matrix load/store on a core built without VX_CFG_EXT_LDST_MATRIX_ENABLE, wid=%0d, PC=0x%0h (#%0d)",
+            $time, INSTANCE_ID, fetch_if.data.wid, to_fullPC(fetch_if.data.PC), fetch_if.data.uuid))
+`else
+    `RUNTIME_ASSERT(~(fetch_if.valid && (opcode == INST_EXT4)
+                      && (((funct3 == 3'h0) && ~mtx_ldm_valid(u_12[2:0])) || ((funct3 == 3'h2) && ~mtx_ldm_valid(rd[2:0])))),
+        ("%t: %s matrix load/store with a reserved fragment shape, wid=%0d, PC=0x%0h (#%0d)",
             $time, INSTANCE_ID, fetch_if.data.wid, to_fullPC(fetch_if.data.PC), fetch_if.data.uuid))
 `endif
 

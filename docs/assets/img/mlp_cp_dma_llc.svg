@@ -39,7 +39,7 @@
           <rect x="510" y="110" width="110" height="28" class="dgood"/><text x="565" y="129" text-anchor="middle">L2: coherent</text>
           <rect x="425" y="190" width="110" height="28" class="db"/><text x="480" y="209" text-anchor="middle">DRAM</text>
           <line x1="390" y1="68" x2="390" y2="108" class="ln" marker-end="url(#cpdmal_a)"/>
-          <line x1="565" y1="68" x2="565" y2="108" class="ln" marker-end="url(#cpdmal_a)"/><text x="571" y="92" class="dm">L1-only flush</text>
+          <line x1="565" y1="68" x2="565" y2="108" class="ln" marker-end="url(#cpdmal_a)"/><text x="571" y="92" class="dm">device-scope flush</text>
           <line x1="440" y1="124" x2="508" y2="124" class="lg" marker-end="url(#cpdmal_g)"/><text x="474" y="116" class="dm" text-anchor="middle">client slot</text>
           <line x1="565" y1="138" x2="510" y2="188" class="ln" marker-end="url(#cpdmal_a)"/>
         </g>

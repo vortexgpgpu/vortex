@@ -109,7 +109,7 @@ public:
         CP_ON_L2 != 0,                 // write_around
         VX_CFG_L2_MRSQ_SIZE != 0,      // memory-response queue
         false,                         // memory-response slice
-        false,                         // acquire forward
+        true,                          // next_is_poc
         false,                         // line merging
         true,                          // core-request skid
       });
@@ -615,9 +615,9 @@ public:
     return 0;
   }
 
-  void dcache_flush_begin(bool l1_only) {
+  void dcache_flush_begin(uint32_t fence_op) {
     for (auto& socket : sockets_) {
-      socket->dcache_flush_begin(l1_only);
+      socket->dcache_flush_begin(fence_op);
     }
   }
 
@@ -679,12 +679,8 @@ public:
   }
 #endif
 
-  void l2_flush_begin(bool l1_only) {
-    l2cache_->flush_begin(l1_only);
-  }
-
-  void l2_keep_lines() {
-    l2cache_->keep_lines();
+  void l2_flush_begin(uint32_t fence_op) {
+    l2cache_->flush_begin(fence_op);
   }
 
   SimChannel<MemReq>& cp_mem_req_in() {
@@ -821,8 +817,8 @@ Core* Cluster::get_core(uint32_t idx) const {
   return impl_->get_core(idx);
 }
 
-void Cluster::dcache_flush_begin(bool l1_only) {
-  impl_->dcache_flush_begin(l1_only);
+void Cluster::dcache_flush_begin(uint32_t fence_op) {
+  impl_->dcache_flush_begin(fence_op);
 }
 
 bool Cluster::dcache_flush_done() const {
@@ -857,12 +853,8 @@ void Cluster::rtcache_flush_begin() { impl_->rtcache_flush_begin(); }
 bool Cluster::rtcache_flush_done() const { return impl_->rtcache_flush_done(); }
 #endif
 
-void Cluster::l2_flush_begin(bool l1_only) {
-  impl_->l2_flush_begin(l1_only);
-}
-
-void Cluster::l2_keep_lines() {
-  impl_->l2_keep_lines();
+void Cluster::l2_flush_begin(uint32_t fence_op) {
+  impl_->l2_flush_begin(fence_op);
 }
 
 SimChannel<MemReq>& Cluster::cp_mem_req_in() {

@@ -109,6 +109,7 @@ architecturally defined; FENCE reads only `arg0[1:0]`, which is inside its
 | 0 | `F_PROFILE` | Appends an 8 B `profile_slot` trailer; every size below grows by 8. |
 | 1 | `F_FENCE_PRE` | Declared in the package; not acted on by any consumer. |
 | 2 | `F_MEM_PHYSICAL` | `CMD_MEM_*` device operand is a physical address — the MMU-aware DMA skips translation (§8). |
+| 2..5 | fence operation | `CMD_CACHE_FLUSH`: its `fence_op` (`VX_FENCE_*`) at `VX_CP_FLUSH_OP_SHIFT`. |
 
 ### 2.2 Opcode map
 
@@ -168,12 +169,15 @@ come from `cmd_size_bytes`
   (`WAIT_OP_EQ/GE/GT/NE`, [`VX_cp_pkg.sv:109-114`](../../hw/rtl/cp/VX_cp_pkg.sv#L109)).
 - **`CMD_CACHE_FLUSH`** — `arg0` = number of cores. Provides AMD
   `ACQUIRE_MEM`-style cache maintenance; the host fills `arg0` from
-  `VX_CAPS_NUM_CORES`. Header flag bit 2 (`F_FLUSH_L1_ONLY`) asks for an
-  L1-only flush: the START write carries `VX_CACHE_FLUSH_L1_ONLY`, and the
-  last-level cache answers without its walk
-  ([cache_subsystem.md §6.4](cache_subsystem.md#64-vx_cache_init--the-flush-sequencer)).
-  The runtime flushes lazily: an L1-only flush ahead of the next launch, a
-  full flush ahead of the next device-memory transfer (see the launch
+  `VX_CAPS_NUM_CORES`. The header flags carry the flush's fence operation
+  (`VX_FENCE_*`, above the two flags every command shares). The runtime
+  posts only two: `ACQ | REL` (device scope) and `ACQ | REL | SYS` (system
+  scope). The START write's value is `ACQ | REL` plus the command's `SYS`; on
+  a device-scope flush the shared last-level cache answers without its walk
+  ([cache_subsystem.md §6.4](cache_subsystem.md#64-vx_cache_init--the-flush-sequencer)),
+  and only a system-scope one waits for Vortex busy to drop. The runtime
+  flushes lazily: a device-scope flush ahead of the next launch, a
+  system-scope flush ahead of the next device-memory transfer (see the launch
   encoding in §9).
 
 ---
@@ -663,12 +667,13 @@ group is independently skippable through the legacy escape hatches (no
 kernel, empty args, `ndim == 0`), so the real count ranges from 20 down to
 0. The kernel-boundary `CMD_CACHE_FLUSH` (`arg0 = num_cores`) is posted lazily
 by `cp_ring_append_`, under the same ring lock, from two flags: `l1_dirty_` (a
-kernel ran since the last flush) puts an L1-only flush ahead of the next
-launch; `l1_dirty_` or `llc_dirty_` (a kernel ran since the last full flush)
-puts a full flush ahead of the next `CMD_MEM_*` that touches device memory
-outside the IO aperture, because the CP DMA reaches device memory beneath
-the last-level cache. A launch followed by a transfer therefore costs one
-full flush, and back-to-back launches one L1-only flush each. The COUT drain
+kernel ran since the last flush) puts a device-scope flush ahead of the next
+launch; `l1_dirty_` or `llc_dirty_` (a kernel ran since the last
+system-scope flush) puts a system-scope flush ahead of the next `CMD_MEM_*`
+that touches device memory outside the IO aperture, because the CP DMA
+reaches device memory beneath the last-level cache. A launch followed by a
+transfer therefore costs one system-scope flush, and back-to-back launches
+one device-scope flush each. The COUT drain
 needs no flush: the console rings are uncached, and the device `busy` the
 launch retires on stays high until memory has completed every write the cores
 issued ([cache_subsystem.md §4.9](cache_subsystem.md#49-requests-in-flight-and-device-busy)). The drain's
