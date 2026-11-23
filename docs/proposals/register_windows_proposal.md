@@ -131,10 +131,10 @@ Windows use the fused fetch the RTL implements (an 8-byte fetch word: a
 
 | Registers (warps) | Model | Softmax | Epilogue | FFT | Raycast |
 |---|---|---|---|---|---|
-| 64 (16) | windows | 1.082 | **1.228** | 1.008 | 1.043 |
+| 64 (16) | windows | 1.082 | **1.228** | 1.008 | 0.958 |
 | | windows, unfused | 1.083 | 1.227 | 0.941 | not rerun |
 | | windows, line fused | 1.082 | 1.227 | 1.007 | not rerun |
-| | mixed 32/64-bit | 1.075 | 1.226 | 1.007 | **1.046** |
+| | mixed 32/64-bit | 1.075 | 1.226 | 1.007 | 0.958 |
 | 128 (8) | windows | **1.087** | 1.203 | 1.010 | not rerun |
 | | mixed 32/64-bit | 1.086 | 1.198 | 1.009 | not rerun |
 | | all 64-bit | 1.085 | 1.195 | 1.010 | not rerun |
@@ -167,9 +167,11 @@ than either cache holds and FFT fits in both, so neither changes.
    about four `vx_rwin` (2.6 M for 5.6 M instructions) and windows trailed the
    64-bit encodings by 3.6%. Under Zfinx an f32 select is an integer select, so
    the compiler now uses Zicond for it, and the test uses `fminf`/`fmaxf` (one
-   `fmin.s`/`fmax.s` under F too). Raycast then runs 1.043 times F with windows
-   and 1.046 with the mixed encoding; 62% of its remaining 0.84 M `vx_rwin`
-   fuse. The 128-register raycast rows lost to occupancy (8 warps, same code
+   `fmin.s`/`fmax.s` under F too). Windows and the mixed encoding then tie
+   (5,435,069 and 5,433,910 cycles); 71% of the remaining 0.83 M `vx_rwin`
+   fuse. Both run at 0.958 times F: raycast gains nothing from 64 registers
+   (same instruction count as F) and loses SIMT utilization (63% against 67%),
+   not yet explained. The 128-register raycast rows lost to occupancy (8 warps, same code
    as at 64) and were not rerun.
 4. Fusing about half the `vx_rwin` (8-byte word) gives the same cycles as fusing
    almost all of them on the three phase-structured kernels.
@@ -186,6 +188,14 @@ released, and the 8-byte fetch word with fusion. The scoreboard, register file
 and operand collector take the wider register numbers unchanged; the register
 file grows with the register count (dynamic warp allocation is not merged here).
 
+- **Regression suite** (SimX, Zfinx with windows at 64 registers): 66 of 81
+  pass; F passes all 81. The rest are the TCU tests and `ldst_matrix` (inline
+  asm pinned to f registers; the implicit block at x32 must also move, since
+  the compiler reserves x32), `ldst_wide` (hard-coded f registers) and
+  `zfhmin` (no Zhinx). Two bugs found and fixed: mask-changing instructions were
+  not scheduling boundaries (`diverge` miscompiled under level-order
+  scheduling), and the packed loads let their destination alias the base
+  address, which Zfinx permits.
 - **Correctness and parity.** The `rwin` test and the Zfinx `rp_softmax`,
   `rp_epilogue` and `rp_fft` pass in rtlsim, with the same instruction counts as
   SimX and cycles within 0.0002% to 2.3%.
