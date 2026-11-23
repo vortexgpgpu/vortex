@@ -8,7 +8,7 @@ TESTS := \
     arith printf diverge diverge_large sort fence fence_mp ldst_order \
     vecadd vecadd_v1 sgemm sgemmx sgemm_v1 conv3 relu sgemv           \
     sgemm2 sgemm2_v1 madmax mixfu stencil3d raycast bfs jacobi pathfinder   \
-    softmax uniform_ld lmem_access ldst_wide ldst_matrix tfu zfhmin              \
+    softmax uniform_ld lmem_access ldst_wide ldst_matrix tfu zfhmin fp_flags     \
     flash_attn flash_attn_tcu_wg                                      \
     sgemm_tcu sgemm_tcu_mx sgemm_tcu_sp_mx sgemm_tcu_wg sgemm_tcu_wg_mx sgemm_tcu_sp sgemm_tcu_wg_sp  \
     sgemm2_dxa sgemm2_tcu sgemm_tcu_wg_dxa sgemm_tcu_wg_sp_dxa        \
@@ -50,10 +50,17 @@ run-$(1): $$(addprefix run-$(1)-,$$(call backend_tests,$(1)))
 endef
 $(foreach b,$(BACKENDS),$(eval $(call backend_rule,$(b))))
 
+# --- shared kernel library -------------------------------------------
+# Every test links a sw/kernel library. Build it once, before the per-test
+# makes run in parallel, so they don't each start the same build.
+.PHONY: kernel-lib
+kernel-lib:
+	$(MAKE) -C $(ROOT_DIR)/sw/kernel
+
 # --- pattern recipes --------------------------------------------------
 .PHONY: build-% clean-%
 
-build-%:
+build-%: kernel-lib
 	$(MAKE) -C $* all
 
 clean-%:
@@ -61,5 +68,5 @@ clean-%:
 
 # run-<backend>-<test>: split "<backend>-<test>" on the first dash.
 # Subdir names must not contain '-' (none currently do).
-run-%:
+run-%: kernel-lib
 	$(MAKE) -C $(word 2,$(subst -, ,$*)) run-$(word 1,$(subst -, ,$*))

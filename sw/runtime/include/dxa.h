@@ -255,7 +255,9 @@ inline int program_5d(
 }
 
 // Program the multicast SMEM stride for an existing DXA descriptor.
-//   smem_stride_bytes: byte offset between consecutive CTAs' SMEM bases
+//   smem_stride_bytes: the per-CTA LMEM size the kernel is launched with
+//     (lmem_size). The device rounds it up to the CTA slot pitch, the distance
+//     between consecutive CTAs' SMEM bases, as it rounds each CTA's LMEM slot.
 // Bar stride is always 1 (hardcoded in hardware).
 // Multicast is active when cta_mask has more than one bit set.
 inline int set_multicast(

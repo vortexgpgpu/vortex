@@ -2014,6 +2014,12 @@ package VX_gpu_pkg;
     localparam LMEM_DMA_IN_TAG_MAX = `MAX(DXA_LMEM_OUT_TAG_W, TCU_LMEM_TAG_W);
     localparam LMEM_DMA_TAG_WIDTH  = LMEM_DMA_IN_TAG_MAX + `ARB_SEL_BITS(LMEM_DMA_INPUTS, 1);
 
+    // Alignment of every CTA's LMEM slot, and so of its LMEM base. A DMA agent
+    // moves whole bank rows: a block-major WGMMA operand must start one, and
+    // DXA multicast steps receivers by whole rows.
+    localparam LMEM_SLOT_ALIGN = LMEM_DMA_EN ? `MAX(`VX_CFG_MEM_BLOCK_SIZE, LMEM_DMA_DATA_SIZE)
+                                             : `VX_CFG_MEM_BLOCK_SIZE;
+
     ////////////////////////// Icache Parameters //////////////////////////////
 
     // Word size in bytes

@@ -1,0 +1,33 @@
+# F/D sign injection, min/max and compare on NaN operands: bit-exact results and
+# fflags against values from the RISC-V spec (no softfloat reference, since the
+# simulators share it): fsgnj* never raise NV, and fmin/fmax of two NaNs raise
+# NV when either is signaling, on every FPU backend.
+category: isa
+defaults:
+  xlen:
+  - 32
+  - 64
+  tier: smoke
+  touches: [hw/rtl/fpu, hw/dpi/dpi_float.cpp, sim/simx/fpu_unit.cpp, sw/common/rvfloats.cpp]
+tests:
+- id: fp_flags-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: fp_flags
+# The synthesizable backends rather than the DPI model rtlsim uses by default.
+- id: fp_flags-std
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: fp_flags
+  configs: -DVX_CFG_FPU_TYPE_STD
+- id: fp_flags-dsp
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: fp_flags
+  configs: -DVX_CFG_FPU_TYPE_DSP
+  xlen:
+  - 32

@@ -174,6 +174,41 @@ inline constexpr uint32_t smem_desc_stride(uint32_t desc) {
   return (desc >> smem_desc_offset_bits) << smem_desc_stride_lg;
 }
 
+// 32-bit words of its K dimension one row of a row-major operand supplies to
+// a WGMMA micro-op: a sparse A row is compressed, a sparse B row carries both
+// candidates of each K step.
+inline constexpr uint32_t wgmma_slice_words(bool is_b, bool is_sparse,
+                                            uint32_t tc_k, uint32_t fedp_k) {
+  return is_sparse ? (is_b ? 2 * tc_k : tc_k) : fedp_k;
+}
+
+// What the TCU tile buffers can fetch. A row-major operand (stride != 0) is
+// read one row per LMEM access, so each row's K-slice must lie in one bank
+// row: the base and the stride must be multiples of the slice. A block-major
+// operand (stride == 0) is read in whole bank rows, so its base must start one.
+enum class smem_desc_fault {
+  none,
+  block_base,     // block-major base not aligned to an LMEM bank row
+  row_base,       // row-major base not a multiple of the K-slice
+  row_stride      // row-major stride not a multiple of the K-slice
+};
+
+inline constexpr smem_desc_fault smem_desc_check(uint32_t desc, uint32_t slice_words,
+                                                 uint32_t bank_row_bytes) {
+  uint32_t offset = smem_desc_offset(desc);
+  uint32_t stride_words = smem_desc_stride(desc) >> smem_desc_stride_lg;
+  if (stride_words == 0) {
+    return (offset % bank_row_bytes) ? smem_desc_fault::block_base : smem_desc_fault::none;
+  }
+  if (offset % (slice_words * 4)) {
+    return smem_desc_fault::row_base;
+  }
+  if (stride_words % slice_words) {
+    return smem_desc_fault::row_stride;
+  }
+  return smem_desc_fault::none;
+}
+
 // The TCU accumulates and returns fp32 (int32 for integer inputs); it has no
 // other output format.
 inline constexpr bool tcu_output_valid(uint32_t it, uint32_t ot) {

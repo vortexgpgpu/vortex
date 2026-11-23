@@ -96,30 +96,70 @@ a specific failure this platform can produce.
 
 ### 3.1 Opening the device
 
-`vrt::Device(bdf, vbin_path, program)` opens the board and optionally
-reprograms the PL; `vrt::Kernel` then parses the vbin's `system_map.xml`.
+`vrt::Device(bdf, vbin_path, program)` opens the board and, with
+`program=true`, hands the vbin's design to `vrtd` to be written to the PL;
+`vrt::Kernel` then parses the vbin's `system_map.xml`.
 
-The driver always programs (`program=true`), as the XRT driver's
-`load_xclbin()` does. There is no opt-out switch.
+The driver always passes `program=true`, as the XRT driver always calls
+`load_xclbin()`, and it has no logic of its own for what happens next. As with
+`load_xclbin()`, that call does not mean a design write on every open: the
+platform skips the write when the card already holds that design. A sequence of
+runs on one vbin costs one design write.
 
-There used to be one — `VORTEX_AVED_NO_PROGRAM=1` constructed with
-`program=false` — because each open that programs the PL goes through `vrtd`'s
-design writer, which runs its reset sequence only when the requested shell
-differs from the current one. On a board whose static shell was never written
-to OSPI flash, that comparison never settles: no reset runs, the design write
-fails with `Input/output error`, and the AMC can be left in `NO_AMC`, costing a
-recovery.
+SLASH does this the way XRT does:
 
-That is a property of an **unflashed board**, not of the driver. Write the
-static shell to flash first (§5 of `xilinx_slash_setup.md`, *both* boot
-partitions) and programming on open is well-defined. Verified on silicon:
-consecutive programs with `v80-smi list` reporting a valid shell, sgemm passing
-each time, no AMC loss.
+| | XRT | SLASH |
+|---|---|---|
+| identity of an image | UUID in the xclbin header, stamped by `xclbinutil` | `<UUID>` in the vbin's `system_map.xml`, stamped by `slashkit` at link |
+| who remembers what is loaded | the `xocl` driver (`icap_bitstream_uuid`) | `vrtd`, per card |
+| same UUID requested | no download | no design write |
+| override | `force_program_xclbin=true` in `xrt.ini` | `VRT_FORCE_PROGRAM=1` in the environment |
+| image in use by another client | replacing it fails with `EBUSY` | replacing it fails with `VRTD_RET_BUSY` |
+| where to see it | sysfs `xclbinuuid` | `v80-smi list` |
 
-The switch and the `/tmp/v80_resident_afu.path` fallback that let a run reuse
-whatever bitstream happened to be resident were both removed. Running against a
-resident image is what silently produces results attributed to the wrong
-bitstream when `FPGA_BIN_DIR` changes.
+`vrtd` forgets the loaded UUID when a write starts, and records it again only
+when the write has completed, so a failed write is never mistaken for a loaded
+design. It also forgets on every reset, hot-plug and shell switch it performs,
+and when the daemon restarts. Each client that loaded or reused the design
+holds it until its connection closes; `vrtd` parks the user clock when the last
+one leaves.
+
+What follows for this driver:
+
+- **Nothing in `init()` depends on whether the write was skipped.** The clock
+  is set, the transport is gated, the CP is parked and the device is reset on
+  every open (§3.2 to §3.4). Those steps already assume a device that a
+  previous process left running, which is now the common case rather than the
+  exception.
+- **A reused image whose kernel does not answer is not written over.** The open
+  fails at the transport gate or the reset, and the next open skips the write
+  again. Writing a design over a hung kernel is what has reset the host, so
+  that write has to be asked for: recover the card, then
+  `v80-smi forget-design -d <BDF>` (or run once with `VRT_FORCE_PROGRAM=1`).
+- **A vbin without a UUID is written on every open.** That is every vbin linked
+  before `slashkit` stamped them. `slashkit stamp-uuid <vbin>` gives one a UUID
+  in place, without relinking.
+- **A design loaded outside `vrtd` is invisible to it** until it is told.
+  `jtag_load_vortex.sh` and `v80-smi write-static-shell --jtag` run
+  `v80-smi forget-design` themselves; after any other JTAG load, run it by
+  hand. Otherwise a run of the vbin `vrtd` wrote last would be skipped while
+  the fabric holds another design. XRT has the same blind spot for a
+  bitstream loaded behind its driver.
+- **A skipped write keeps whatever state the design was left in**, as with
+  XRT. That is why the CP park and device reset above run on every open.
+
+There is still no never-program switch in the driver. An earlier one
+(`VORTEX_AVED_NO_PROGRAM=1`, with a `/tmp/v80_resident_afu.path` fallback) ran
+against whatever bitstream happened to be resident, which silently attributes
+results to the wrong image when `FPGA_BIN_DIR` changes. The skip is decided by
+UUID, in the one place every design write goes through, so a different vbin is
+always written.
+
+Writing a design is only well-defined once the static shell is in OSPI flash
+(§5 of `xilinx_slash_setup.md`, *both* boot partitions). On a board whose flash
+was never written, `vrtd`'s requested-versus-current shell comparison never
+settles: no reset runs, the design write fails with `Input/output error`, and
+the AMC can be left in `NO_AMC`, costing a recovery.
 
 ### 3.2 The transport gate
 
@@ -189,8 +229,8 @@ build was wrong.
 
 For the record, `xrt` and `opae` never hit the demux defect because XRT issues
 `CTL_AP_RESET` before any CP-window access and re-asserts `ap_rst_n` on every
-`load_xclbin`; the aved backend opens with `program = false`, so the routing
-latch survived from the previous process.
+`load_xclbin`; on the aved backend a design that `vrtd` does not write again
+(§3.1) keeps the routing latch of the previous process.
 
 ### 3.5 Resuming the CP's position
 
