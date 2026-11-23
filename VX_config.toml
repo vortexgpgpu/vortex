@@ -89,10 +89,12 @@ VX_CFG_ISSUE_WIDTH = "expr: pow(2, clog2(up($VX_CFG_NUM_WARPS / 16)))"
 # default (the largest power of two dividing ISSUE_WIDTH).
 VX_CFG_FETCH_WIDTH = "expr: $VX_CFG_ISSUE_WIDTH & -$VX_CFG_ISSUE_WIDTH"
 VX_CFG_SIMD_WIDTH = "expr: $VX_CFG_NUM_THREADS"
-# Operand collectors per issue slice: each owns the register banks of its
-# warps. Four cover the slice's one-issue-a-cycle rate; more warps make the
-# banks deeper rather than add collectors.
-VX_CFG_NUM_OPCS = "expr: min(4, up($VX_CFG_NUM_WARPS / (4 * $VX_CFG_ISSUE_WIDTH)))"
+# Operand collectors per issue slice (ISSUE_WIDTH x NUM_OPCS in the core). The
+# scoreboard issues only when the target unit's dispatch queue has room, so a
+# collector never waits on a busy unit; more collectors only hide register bank
+# conflicts. Each owns the register banks of its warps, so with one per slice
+# a warp can take up to its slice's share of the register file.
+VX_CFG_NUM_OPCS = 1
 VX_CFG_NUM_GPR_BANKS = 4
 # Registers per operand collector: by default a full set (x, and f with F) for
 # each of its warps. A smaller file holds fewer warps of a kernel that uses
