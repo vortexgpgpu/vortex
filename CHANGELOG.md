@@ -59,6 +59,13 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
 
 ### Changed
 
+- **One operand collector per issue slice (`VX_CFG_NUM_OPCS`, default 1).** It was one per 4 warps of a slice. The scoreboard
+  already issues only when the target unit's dispatch queue has room, so extra collectors only absorbed register bank conflicts.
+  *Why:* each collector holds three full-width operands and its own register-file banks. At 64 warps, 4 issue slices and 32
+  threads (rtlsim, 8 SIMT kernels), 1 collector per slice instead of 4 is 2.1% faster on geomean, worst +0.8% (sgemv), and
+  2 per slice matches 4 to the cycle. Beacon's `core` build (16 warps, 16 threads, 4 collectors to 1): LUTs -12.1%,
+  flip-flops -13.3%, block RAM -70%, same logic depth.
+
 - **V80 image reuse across runs.** A design the card already holds is no longer written again on every device open. SLASH now does
   what XRT does for xclbins: `slashkit` stamps a UUID into the vbin, `vrtd` remembers the UUID it wrote and skips a write of the same
   one, `VRT_FORCE_PROGRAM=1` overrides, `v80-smi forget-design` reports a design loaded over JTAG (`jtag_load_vortex.sh` now runs

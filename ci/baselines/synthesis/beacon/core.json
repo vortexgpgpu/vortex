@@ -81,9 +81,9 @@
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_EXT_C_ENABLE -DVX_CFG_EXT_A_ENABLE",
     "dut": "core",
     "result": {
-      "bram": 129.0,
+      "bram": 39.0,
       "build_time_s": 75,
-      "deep_endpoints": 1536,
+      "deep_endpoints": 1520,
       "deepest_paths": [
         "15  core/g_compute_slices.g_slices_0.compute_slice/frontend_slice/fetch/inflight[2] -> core/g_compute_slices.g_slices_0.compute_slice/frontend_slice/fetch/req_buf/g_eb2.stream_buffer/g_buffer.data_out_r.d[28]",
         "15  core/g_compute_slices.g_slices_0.compute_slice/frontend_slice/fetch/inflight[2] -> core/g_compute_slices.g_slices_0.compute_slice/frontend_slice/fetch/req_buf/g_eb2.stream_buffer/g_buffer.data_out_r.d[29]",
@@ -97,14 +97,14 @@
         "15  core/g_compute_slices.g_slices_0.compute_slice/backend_slice/execute_slice/lsu_dispatch/g_blocks_0.buf_out/g_eb2.stream_buffer/g_buffer.data_out_r[1551] -> core/g_compute_slices.g_slices_0.compute_slice/backend_slice/execute_slice/lsu_block/mem_path/lsu_scheduler/mem_scheduler/g_req_queue_rw.req_queue/g_ebN.fifo_queue/g_depth_n.g_out_reg.data_out_r.d[824]"
       ],
       "dsp": 97,
-      "endpoints": 122340,
+      "endpoints": 94500,
       "env": {
         "circt": "CIRCT 892a65a01",
         "device": "xcu55c-fsvh2892-2L-e",
         "foldsim": "foldsim d8350bc0f",
         "xlen": 32
       },
-      "ff": 163874,
+      "ff": 142023,
       "fix_levels": 12,
       "interfaces": {
         "core.dcache_bus_if_0_rsp_ready": 1,
@@ -114,11 +114,11 @@
         "core.icache_bus_if_0_rsp_ready": 1,
         "core.kmu_bus_if_ready": 1
       },
-      "lut": 143741,
+      "lut": 126361,
       "lutram": 6838,
       "max_levels": 15,
-      "pred_fmax_mhz": 285.6,
-      "risk_endpoints": 11,
+      "pred_fmax_mhz": 283.6,
+      "risk_endpoints": 8,
       "tied_bits": 2,
       "tied_ports": [
         {
@@ -152,7 +152,6 @@
         "core/g_compute_slices_g_slices_*_compute_slice/backend_slice/issue_slice/ibuffer/g_bufs_*_instr_buf/g_ebN_fifo_queue": 10,
         "core/g_compute_slices_g_slices_*_compute_slice/backend_slice/issue_slice/ibuffer/g_bufs_*_instr_buf/g_ebN_fifo_queue/g_depth_n_dp_ram": 9,
         "core/g_compute_slices_g_slices_*_compute_slice/backend_slice/issue_slice/ibuffer/g_bufs_*_instr_buf/g_ebN_fifo_queue/pending_size": 8,
-        "core/g_compute_slices_g_slices_*_compute_slice/backend_slice/issue_slice/operands/g_collectors_*_opc_unit": 8,
         "core/g_compute_slices_g_slices_*_compute_slice/backend_slice/issue_slice/scoreboard": 8,
         "core/g_compute_slices_g_slices_*_compute_slice/backend_slice/issue_slice/scoreboard/g_fu_goingfull_*_fu_pending": 10,
         "core/g_compute_slices_g_slices_*_compute_slice/frontend_slice/fetch": 9,
@@ -169,7 +168,7 @@
         "core/scheduler/warp_shared_unit/bar_unit": 9
       },
       "uram": 0,
-      "watch_endpoints": 8283,
+      "watch_endpoints": 8367,
       "watch_levels": 8
     }
   },
