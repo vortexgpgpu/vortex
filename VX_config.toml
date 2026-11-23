@@ -46,7 +46,7 @@ VX_CFG_EXT_RWIN_ENABLE = false
 VX_CFG_EXT_ZFINX_ENABLE = false
 VX_CFG_NUM_RV_REGS = "expr: 256 if $VX_CFG_EXT_RWIN_ENABLE else 32"
 # register files a warp's set holds: x, and f with F (not under Zfinx)
-gpr_types = "expr: 1 if $VX_CFG_EXT_ZFINX_ENABLED else 1 + $VX_CFG_EXT_F_ENABLED"
+gpr_types = "expr: 1 + $VX_CFG_EXT_F_ENABLED * (1 - $VX_CFG_EXT_ZFINX_ENABLED)"
 VX_CFG_EXT_TCU_ENABLE = false
 VX_CFG_EXT_DMA_ENABLE = false
 VX_CFG_EXT_DXA_ENABLE = false
