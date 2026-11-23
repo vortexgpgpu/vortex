@@ -107,3 +107,13 @@ tests:
     cores: 4
     l2cache: true
   args: -n128
+- id: simx_functional-3
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm
+  configs: -DSIMX_FUNCTIONAL -DSIMX_MT=4 -DSIMX_QUANTUM=100
+  shape:
+    cores: 4
+    l2cache: true
+  args: -n128

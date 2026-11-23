@@ -292,7 +292,7 @@ module VX_fncp_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             0,1,2: begin
                 // SGNJ, CMP
                 result_s0 = op_mod_s0[3] ? FLEN'(fcmp_res_s0) : fsgnj_res_s0;
-                fflags_NV_s0 = fcmp_fflags_NV_s0;
+                fflags_NV_s0 = op_mod_s0[3] & fcmp_fflags_NV_s0;
             end
             3: begin
                 // CLASS

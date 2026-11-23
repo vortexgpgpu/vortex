@@ -29,15 +29,12 @@ OpcUnit::OpcUnit(const SimContext &ctx, const char* name,
                  uint32_t num_warp_slots, uint32_t num_threads)
   : SimObject<OpcUnit>(ctx, name)
   , Input(this)
-  , Output(this)
-  , num_threads_(num_threads) {
+  , Output(this) {
+  __assert(num_threads == VX_CFG_NUM_THREADS, "register file sized for VX_CFG_NUM_THREADS");
   // The scoreboard's output skid buffer: two entries, the one being collected
   // among them, with a registered ready.
   Input.set_registered_ready(true);
-  regs_.reserve(num_warp_slots);
-  for (uint32_t i = 0; i < num_warp_slots; ++i) {
-    regs_.emplace_back(num_threads);
-  }
+  regs_.resize(num_warp_slots);
   this->on_reset();
 }
 
@@ -100,7 +97,7 @@ void OpcUnit::on_tick() {
   }
 }
 
-void OpcUnit::read_src(std::vector<reg_data_t>& out,
+void OpcUnit::read_src(RegDataVec& out,
                        uint32_t wid,
                        uint32_t src_index,
                        const RegOpd& reg) const {
@@ -109,13 +106,13 @@ void OpcUnit::read_src(std::vector<reg_data_t>& out,
   switch (reg.type) {
   case RegType::Integer: {
     const auto& src = slot.ireg_file[reg.idx];
-    for (uint32_t t = 0; t < num_threads_; ++t) {
+    for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       out[t].u = src[t];
     }
   } break;
   case RegType::Float: {
     const auto& src = slot.freg_file[reg.idx];
-    for (uint32_t t = 0; t < num_threads_; ++t) {
+    for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       out[t].u64 = src[t];
     }
   } break;
@@ -141,7 +138,7 @@ void OpcUnit::writeback(instr_trace_t* trace, uint32_t wid) {
     return;
   uint32_t warp_slot = wid_to_opc_slot(wid);
   auto& rdest = trace->dst_reg;
-  auto num_threads = num_threads_;
+  constexpr uint32_t num_threads = VX_CFG_NUM_THREADS;
   // Bytesel: 0xFF (default) collapses to full overwrite. Partial-width writers
   // (packLD uops) supply a sub-mask so we OR-merge into the regfile slot.
   uint64_t mask = expand_bytesel64(trace->dst_bytesel);

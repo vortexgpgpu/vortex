@@ -117,12 +117,15 @@ jobs:
     needs: plan
     if: needs.plan.outputs.run == 'true'
     runs-on: ubuntu-22.04
+    outputs:
+      toolchain: ${{ steps.setup.outputs.toolchain }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ needs.plan.outputs.sha }}
           submodules: recursive
-      - uses: ./.github/actions/setup-vortex
+      - id: setup
+        uses: ./.github/actions/setup-vortex
         with:
           prepare: true
 
@@ -156,6 +159,8 @@ jobs:
       # slang SystemVerilog frontend) and OpenSTA.
       - name: Setup Vortex
         uses: ./.github/actions/setup-vortex
+        with:
+          toolchain: ${{ needs.toolchain.outputs.toolchain }}
 
       # ASAP7 is content-addressed by its manifest, so that file's hash IS the
       # cache key. Every job in the matrix shares it; the first to finish saves

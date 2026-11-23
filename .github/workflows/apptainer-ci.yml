@@ -47,6 +47,8 @@ jobs:
 
   setup:
     runs-on: ubuntu-22.04
+    outputs:
+      toolchain: ${{ steps.setup.outputs.toolchain }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -56,15 +58,7 @@ jobs:
         uses: ./.github/actions/setup-vortex
         with:
           profile: lite
-      - name: Build toolchain on cache miss
-        if: steps.setup.outputs.toolchain-hit != 'true'
-        run: |
-          TOOLDIR=$PWD/tools
-          mkdir -p tc && cd tc
-          ../configure --tooldir=$TOOLDIR
-          ci/toolchain_install.sh
-      - name: Setup third party
-        run: make -C third_party > /dev/null
+          prepare: true
 
   # Build + a representative pytest smoke (regression on simx, xlen 32) inside
   # the container.
@@ -86,6 +80,7 @@ jobs:
         uses: ./.github/actions/setup-vortex
         with:
           profile: lite
+          toolchain: ${{ needs.setup.outputs.toolchain }}
       - name: Build + smoke inside container
         run: |
           apptainer exec --writable-tmpfs \

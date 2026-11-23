@@ -102,7 +102,7 @@ private:
   mutable bool lmem_overrun_reported_;
 
   // Fixed-stride slot allocation. Every resident CTA gets LMEM base
-  // slot × stride, where stride = align(lmem_size, MEM_BLOCK_SIZE) is uniform
+  // slot × stride, where stride = lmem_slot_pitch(lmem_size) is uniform
   // within a kernel. The occupancy bound floor(capacity/stride) (capped at
   // NUM_WARPS) replaces the byte ring's free_size accounting, so no wrap or
   // padding arithmetic is needed. A CTA alone in its cluster takes the lowest

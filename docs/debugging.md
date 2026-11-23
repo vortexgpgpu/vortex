@@ -51,6 +51,15 @@ before switching to a timed build for cycle-level analysis. Cycle counts in
 a functional run are non-physical: never use them for performance
 comparisons, `perf_gate`, or `model_parity`.
 
+For the fastest multi-threaded functional runs, add `-DSIMX_QUANTUM=<Q>`:
+domains run `Q` cycles between barriers and a cross-domain call waits for
+the next quantum boundary. Results stay bit-identical across thread
+counts for a given `Q`, but changing `Q` changes the cycle count. `Q=100` is
+a good start; the timed kernel rejects `Q > 1`.
+
+    // Functional, 16 host threads, barrier every 100 cycles
+    $ CONFIGS="-DSIMX_FUNCTIONAL -DSIMX_MT=16 -DSIMX_QUANTUM=100" ./ci/blackbox.sh --driver=simx --app=raycast --cores=16 --l2cache
+
 ## RTL Debugging
 
 To debug the processor RTL, you need to use VLSIM or RTLSIM driver. VLSIM simulates the full processor including the AFU command processor (using `/rtl/afu/opae/vortex_afu.sv` as top module). RTLSIM simulates the Vortex processor only (using `/rtl/Vortex.v` as top module).

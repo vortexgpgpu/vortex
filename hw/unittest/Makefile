@@ -1,6 +1,7 @@
 all:
 	$(MAKE) -C generic_queue
 	$(MAKE) -C mem_scheduler
+	$(MAKE) -C mmu_park
 	$(MAKE) -C cache
 	$(MAKE) -C core
 	$(MAKE) -C issue
@@ -36,6 +37,7 @@ all:
 run:
 	$(MAKE) -C generic_queue run
 	$(MAKE) -C mem_scheduler run
+	$(MAKE) -C mmu_park run
 	$(MAKE) -C cache run
 	$(MAKE) -C core run
 	$(MAKE) -C issue run
@@ -197,6 +199,7 @@ run-tcu-dsp:
 clean:
 	$(MAKE) -C generic_queue clean
 	$(MAKE) -C mem_scheduler clean
+	$(MAKE) -C mmu_park clean
 	$(MAKE) -C cache clean
 	$(MAKE) -C core clean
 	$(MAKE) -C issue clean

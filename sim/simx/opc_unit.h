@@ -39,7 +39,7 @@ public:
   void writeback(instr_trace_t* trace, uint32_t wid);
 
   // Read one source operand for `wid` into `out[t]`
-  void read_src(std::vector<reg_data_t>& out,
+  void read_src(RegDataVec& out,
                 uint32_t wid,
                 uint32_t src_index,
                 const RegOpd& reg) const;
@@ -61,17 +61,14 @@ protected:
   virtual void on_tick();
 
 private:
+  // Register files sized by the build's thread count: lane loops get a
+  // constant trip count and no per-register indirection.
   struct warp_regs_t {
-    std::vector<std::vector<Word>>     ireg_file;   // [reg][thread]
-    std::vector<std::vector<uint64_t>> freg_file;   // [reg][thread]
-    warp_regs_t(uint32_t num_threads)
-      : ireg_file(MAX_NUM_REGS, std::vector<Word>(num_threads, 0))
-      , freg_file(MAX_NUM_REGS, std::vector<uint64_t>(num_threads, 0))
-    {}
+    std::array<std::array<Word, VX_CFG_NUM_THREADS>, MAX_NUM_REGS>     ireg_file{};   // [reg][thread]
+    std::array<std::array<uint64_t, VX_CFG_NUM_THREADS>, MAX_NUM_REGS> freg_file{};   // [reg][thread]
   };
 
   std::vector<warp_regs_t> regs_;     // indexed by warp_slot
-  uint32_t num_threads_;
 
   uint32_t total_stalls_ = 0;
   instr_trace_t* cur_trace_ = nullptr;

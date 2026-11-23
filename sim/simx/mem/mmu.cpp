@@ -37,6 +37,7 @@ Mmu::Mmu(const SimContext& ctx,
   , rsp_reg_(rsp_reg)
   , write_enable_(write_enable)
   , park_reg_(park_reg)
+  , reserved_port_(num_ports)
   , tlb_(tlb_size)
   , mshr_(VX_CFG_L1_TLB_MSHR_SIZE)
   , replay_(num_ports)
@@ -66,6 +67,8 @@ void Mmu::on_reset() {
     s.reset();
   }
   stage_.reset();
+  next_park_port_ = 0;
+  reserved_port_ = num_ports_;
   reports_ = {};
   // Physical pages move under a virtual address between launches, so
   // cached translations cannot outlive one — the shared levels clear here
@@ -387,7 +390,7 @@ void Mmu::on_tick() {
   // 4) Forward requests. This is a hit-under-miss stage: a hit issues
   // while older requests are still parked, so only same-address order is
   // guaranteed — those share a VPN, hence one entry and its arrival-order
-  // parked list. Replays drain ahead of new input on the same port.
+  // parked list. Replays take the outgoing port, but a new miss can still park.
   // With a registered park, the stage's state at the start of the cycle
   // decides both whether it takes a park and which page holds.
   bool stage_free = !stage_.has_value();
@@ -398,12 +401,12 @@ void Mmu::on_tick() {
   if (park_reg_) {
     stage_drain();
   }
+  uint32_t selected = num_ports_;
+  bool reserved_miss = false;
   for (uint32_t p = 0; p < num_ports_; ++p) {
-    if (!replay_.at(p).empty()) {
-      if (ReqOut.at(p).try_send(replay_.at(p).front())) {
-        replay_.at(p).pop();
-      }
-      continue;
+    bool replaying = !replay_.at(p).empty();
+    if (replaying && ReqOut.at(p).try_send(replay_.at(p).front())) {
+      replay_.at(p).pop();
     }
 
     if (ReqIn.at(p).empty()) {
@@ -417,7 +420,7 @@ void Mmu::on_tick() {
       if (req.flags.flush && write_enable_ && !exec_side_ && port_parked(p)) {
         continue;
       }
-      if (ReqOut.at(p).try_send(req)) {
+      if (!replaying && ReqOut.at(p).try_send(req)) {
         ReqIn.at(p).pop();
       }
       continue;
@@ -455,30 +458,49 @@ void Mmu::on_tick() {
       MemReq translated = req;
       translated.addr = (res.ppn << VX_VM_PAGE_LOG2_SIZE) |
                         (req.addr & ((1ULL << VX_VM_PAGE_LOG2_SIZE) - 1));
-      if (ReqOut.at(p).try_send(translated)) {
+      if (!replaying && ReqOut.at(p).try_send(translated)) {
         ReqIn.at(p).pop();
       }
     } else {
-      // Park the miss and keep the port flowing (hit-under-miss).
-      // Same-VPN misses chain on one entry, preserving arrival order;
-      // a full entry or a full station stalls this port only.
-      if (park_reg_) {
-        if (stage_free) {
-          stage_ = Staged{p, req, vpn, SimPlatform::instance().cycles() + 1};
-          stage_free = false;
-          ReqIn.at(p).pop();
-        }
-        continue;
+      if (selected == num_ports_ || (selected < next_park_port_ && p >= next_park_port_)) {
+        selected = p;
       }
+      if (reserved_port_ == p) {
+        reserved_miss = true;
+      }
+    }
+  }
+
+  const bool reserve = num_ports_ > 1 && !park_reg_;
+  uint32_t port = selected;
+  if (reserve) {
+    port = reserved_miss ? reserved_port_ : num_ports_;
+  }
+  if (port != num_ports_) {
+    const auto& req = ReqIn.at(port).peek();
+    uint64_t vpn = req.addr >> VX_VM_PAGE_LOG2_SIZE;
+    if (park_reg_) {
+      if (!stage_free) {
+        return;
+      }
+      stage_ = Staged{port, req, vpn, SimPlatform::instance().cycles() + 1};
+    } else {
       int id = mshr_find(vpn);
       if (id < 0) {
         id = mshr_alloc(vpn);
       }
-      if (id >= 0 && mshr_[id].parked.size() < MAX_PARKED_PER_ENTRY) {
-        mshr_[id].parked.emplace_back(p, req);
-        ReqIn.at(p).pop();
+      if (id < 0 || mshr_[id].parked.size() >= MAX_PARKED_PER_ENTRY) {
+        return;
       }
+      mshr_[id].parked.emplace_back(port, req);
     }
+    ReqIn.at(port).pop();
+  }
+  if (selected != num_ports_) {
+    next_park_port_ = selected + 1 == num_ports_ ? 0 : selected + 1;
+  }
+  if (reserve) {
+    reserved_port_ = selected;
   }
 }
 

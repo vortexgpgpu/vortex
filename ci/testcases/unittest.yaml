@@ -11,6 +11,10 @@ tests:
   - id: hw
     via: script
     run: "make -C hw/unittest"
+  - id: hw-mmu-park
+    via: script
+    run: "make -C hw/unittest/mmu_park run"
+    touches: [hw/rtl/vm, hw/rtl/libs/VX_rr_arbiter.sv, hw/unittest/mmu_park]
   # FPU arithmetic units (VX_fma/fdiv/fsqrt/fcvt/fdivsqrt): the `hw` lane above only
   # builds the unit tests; this lane executes them so a softfloat-divergent
   # regression actually fails CI (each driver checks bit-exact result+fflags over

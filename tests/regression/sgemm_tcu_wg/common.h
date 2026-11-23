@@ -28,11 +28,21 @@
 #ifndef A_OFF_K
 #define A_OFF_K 0
 #endif
+// Extra A offset in elements: one that is not a multiple of the K-slice builds
+// a descriptor the TCU cannot fetch, which SimX must reject.
+#ifndef A_OFF_ELEMS
+#define A_OFF_ELEMS 0
+#endif
 #ifndef B_PAD_K
 #define B_PAD_K 0
 #endif
 #ifndef B_OFF_K
 #define B_OFF_K 0
+#endif
+// Extra per-CTA LMEM in bytes: a footprint that is not a multiple of an LMEM
+// bank row still gives every co-resident CTA a bank-row aligned base.
+#ifndef SMEM_PAD_BYTES
+#define SMEM_PAD_BYTES 0
 #endif
 
 typedef struct {
