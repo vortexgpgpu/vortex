@@ -49,11 +49,8 @@ void warp_t::reset() {
   // construction, and every activation path assigns the PC before it is read.
   this->uuid = 0;
   this->fcsr = 0;
-  this->mstatus = 0;
-  this->mtvec   = 0;
   this->mepc    = 0;
   this->mcause  = 0;
-  this->mtval   = 0;
   // Register files live in OpcUnit and are reset there.
 }
 
@@ -84,6 +81,9 @@ void Scheduler::on_reset() {
   for (auto& warp : warps_) {
     warp.reset();
   }
+
+  mstatus_ = 0;
+  mtvec_   = 0;
 
   stalled_warps_.reset();
   stalled_warps_next_.reset();
@@ -364,13 +364,12 @@ namespace {
 void Scheduler::raise_trap(uint32_t wid, Word cause, Word trap_pc) {
   auto& warp = warps_.at(wid);
   warp.mepc   = trap_pc;
-  warp.mcause = cause;
-  warp.mtval  = 0;
+  warp.mcause = cause & TRAP_CAUSE_MASK;
   // Redirect to the handler. Low 2 bits of mtvec are the MODE field;
   // v1 supports direct mode only, so mask them off.
-  warp.PC = warp.mtvec & ~Word(3);
+  warp.PC = mtvec_ & ~Word(3);
   DT(3, core_->name() << " trap: wid=" << wid << ", cause=" << cause
-     << ", mepc=0x" << std::hex << trap_pc << ", mtvec=0x" << warp.mtvec << std::dec);
+     << ", mepc=0x" << std::hex << trap_pc << ", mtvec=0x" << mtvec_ << std::dec);
 }
 
 void Scheduler::mret(uint32_t wid) {

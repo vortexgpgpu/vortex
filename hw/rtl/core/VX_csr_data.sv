@@ -80,7 +80,9 @@ import VX_fpu_pkg::*;
     localparam LIVE_CLUSTER     = 21;
     localparam LIVE_ENTRY       = 22;
     localparam LIVE_SATP        = 23;
-    localparam NUM_LIVE         = 24;
+    localparam LIVE_MSTATUS     = 24;
+    localparam LIVE_MTVEC       = 25;
+    localparam NUM_LIVE         = 26;
 
     // Writable CSRs
     localparam WR_MSCRATCH      = 0;
@@ -88,7 +90,9 @@ import VX_fpu_pkg::*;
     localparam WR_FFLAGS        = 2;
     localparam WR_FRM           = 3;
     localparam WR_FCSR          = 4;
-    localparam WR_TRAP          = 5;
+    localparam WR_MSTATUS       = 5;
+    localparam WR_MTVEC         = 6;
+    localparam WR_TRAP          = 7;
     localparam NUM_WR           = WR_TRAP + NUM_TRAP_CSRS;
 
     function automatic logic [`VX_CFG_XLEN-1:0] csr_rmw(
@@ -165,12 +169,14 @@ import VX_fpu_pkg::*;
             `VX_CSR_SATP       : begin live_sel_w[LIVE_SATP] = 1; wr_sel_w[WR_SATP] = 1; end
         `endif
 
-            // Machine-mode trap CSRs (stored in the scheduler).
-            `VX_CSR_MSTATUS : begin stable_w = sched_csr_if.csr_mstatus; wr_sel_w[WR_TRAP + 0] = 1; end
-            `VX_CSR_MTVEC   : begin stable_w = sched_csr_if.csr_mtvec;   wr_sel_w[WR_TRAP + 1] = 1; end
-            `VX_CSR_MEPC    : begin stable_w = sched_csr_if.csr_mepc;    wr_sel_w[WR_TRAP + 2] = 1; end
-            `VX_CSR_MCAUSE  : begin stable_w = sched_csr_if.csr_mcause;  wr_sel_w[WR_TRAP + 3] = 1; end
-            `VX_CSR_MTVAL   : begin stable_w = sched_csr_if.csr_mtval;   wr_sel_w[WR_TRAP + 4] = 1; end
+            // Machine-mode trap CSRs: mstatus and mtvec per core, mepc and
+            // mcause per warp, all held by the schedulers.
+            `VX_CSR_MSTATUS : begin live_sel_w[LIVE_MSTATUS] = 1; wr_sel_w[WR_MSTATUS] = 1; end
+            `VX_CSR_MTVEC   : begin live_sel_w[LIVE_MTVEC] = 1;   wr_sel_w[WR_MTVEC] = 1; end
+            `VX_CSR_MEPC    : begin stable_w = sched_csr_if.csr_mepc;   wr_sel_w[WR_TRAP + TRAP_CSR_MEPC] = 1; end
+            `VX_CSR_MCAUSE  : begin stable_w = sched_csr_if.csr_mcause; wr_sel_w[WR_TRAP + TRAP_CSR_MCAUSE] = 1; end
+            // mtval is read-only zero: no exception the core raises carries a trap value.
+            `VX_CSR_MTVAL   : begin stable_w = '0; end
 
             // The MPM counters are only reachable from the host; everything
             // else reads as zero.
@@ -261,6 +267,8 @@ import VX_fpu_pkg::*;
 `else
     assign live_src[LIVE_SATP]      = '0;
 `endif
+    assign live_src[LIVE_MSTATUS]   = sched_csr_if.csr_mstatus;
+    assign live_src[LIVE_MTVEC]     = sched_csr_if.csr_mtvec;
 
     reg [`VX_CFG_XLEN-1:0] live_data;
     always @(*) begin
@@ -284,6 +292,15 @@ import VX_fpu_pkg::*;
     assign sched_csr_if.trap_csr_wr_valid = write_sel[WR_TRAP +: NUM_TRAP_CSRS];
     assign sched_csr_if.trap_csr_wr_data  = wr_data_r;
 
+    // The per-core CSRs (mstatus, mtvec, SATP) live in the core scheduler,
+    // shared by every SFU block, so their read-modify-write stays in the fire
+    // cycle.
+    wire [`VX_CFG_XLEN-1:0] live_wr_data = csr_rmw(req_op, live_data, req_src);
+
+    assign sched_csr_if.mstatus_wr_valid  = write_sel[WR_MSTATUS];
+    assign sched_csr_if.mtvec_wr_valid    = write_sel[WR_MTVEC];
+    assign sched_csr_if.mtrap_wr_data     = live_wr_data;
+
 `ifdef VX_CFG_EXT_F_ENABLE
     // The FP flags keep moving under in-flight FP instructions, so their
     // read-modify-write stays in the fire cycle.
@@ -294,10 +311,8 @@ import VX_fpu_pkg::*;
 `endif
 
 `ifdef VX_CFG_VM_ENABLE
-    // The per-core SATP CSR lives in the scheduler, shared by every SFU block,
-    // so its read-modify-write stays in the fire cycle.
     assign sched_csr_if.satp_wr_valid = write_sel[WR_SATP];
-    assign sched_csr_if.satp_wr_data  = csr_rmw(req_op, live_data, req_src);
+    assign sched_csr_if.satp_wr_data  = live_wr_data;
 `else
     `UNUSED_VAR (write_sel[WR_SATP])
 `endif

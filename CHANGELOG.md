@@ -59,6 +59,15 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
 
 ### Changed
 
+- **Machine-mode trap CSRs.** `mstatus` and `mtvec` are one per core, held by the core scheduler and shared by every warp; `mcause`
+  holds the 4-bit exception codes the core raises; `mtval` reads as zero. `mepc` and `mcause` stay per warp. Per-warp trap state
+  drops from 160 to 36 bits at XLEN 32.
+- **One operand collector per issue slice (`VX_CFG_NUM_OPCS`, default 1).** It was one per 4 warps of a slice. The scoreboard
+  already issues only when the target unit's dispatch queue has room, so extra collectors only absorbed register bank conflicts.
+  *Why:* each collector holds three full-width operands and its own register-file banks. At 64 warps, 4 issue slices and 32
+  threads (rtlsim, 8 SIMT kernels), 1 collector per slice instead of 4 is 2.1% faster on geomean, worst +0.8% (sgemv), and
+  2 per slice matches 4 to the cycle. Beacon's `core` build (16 warps, 16 threads, 4 collectors to 1): LUTs -12.1%,
+  flip-flops -13.3%, block RAM -70%, same logic depth.
 - **V80 image reuse across runs.** A design the card already holds is no longer written again on every device open. SLASH now does
   what XRT does for xclbins: `slashkit` stamps a UUID into the vbin, `vrtd` remembers the UUID it wrote and skips a write of the same
   one, `VRT_FORCE_PROGRAM=1` overrides, `v80-smi forget-design` reports a design loaded over JTAG (`jtag_load_vortex.sh` now runs
@@ -115,6 +124,10 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
 
 ### Fixed
 
+- **Trap CSR writes before ECALL, EBREAK and MRET.** A `csrw mepc` in a trap handler could still be pending when the following `mret`
+  read `mepc`, returning the warp to the trapping instruction. ECALL, EBREAK and MRET now wait for pending writes to `mstatus`, `mtvec`
+  and `mepc`, in SimX and RTL. New regression test `trap` and parity cases
+  `core:parity-trap-fw4`, `core:parity-trap-cs4` and `core:parity-trap-fw2-sfu4`.
 - **ASIC core and top at 800 MHz.** On ASAP7 the core reached 655 MHz and top 654 MHz against the 800 MHz catalog clock, held by
   three datapaths: the FDIV/FSQRT result stage, the FMA's accumulate and rounding stages, and the integer multiplier. Each is
   retimed with no change in latency, so SimX and every cycle count are unchanged. FDIV/FSQRT decides the subnormal shift and tests
