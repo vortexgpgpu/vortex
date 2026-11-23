@@ -238,9 +238,9 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 .op_type (pe_op),
                 .op_mod  (pe_op_mod),
                 .frm     (pe_frm),
-                .dataa   (pe_data_in[i][0+:32]),
-                .datab   (pe_data_in[i][`VX_CFG_XLEN+:32]),
-                .datac   (pe_data_in[i][2*`VX_CFG_XLEN+:32]),
+                .dataa   (fp_unbox_s(64'(pe_data_in[i][0+:`VX_CFG_XLEN]))),
+                .datab   (fp_unbox_s(64'(pe_data_in[i][`VX_CFG_XLEN+:`VX_CFG_XLEN]))),
+                .datac   (fp_unbox_s(64'(pe_data_in[i][2*`VX_CFG_XLEN+:`VX_CFG_XLEN]))),
                 .result  (res32),
                 .fflags  (ff32)
             );
@@ -434,6 +434,8 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             assign fflags_lanes[i] = data_out[i][`VX_CFG_XLEN+:`FP_FLAGS_BITS];
         end
 
+        wire pe_is_s = (pe_shared[INST_FRM_BITS+:INST_FMT_BITS] == INST_FMT_S);
+
         for (genvar i = 0; i < NUM_PES_DIV; ++i) begin : g_units
             if (`VX_CFG_XLEN > `VX_CFG_FLEN) begin : g_pad
                 assign pe_data_out[i][`VX_CFG_FLEN +: (`VX_CFG_XLEN-`VX_CFG_FLEN)] = '0;
@@ -448,8 +450,8 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 .mask    (pe_mask_out[i]),
                 .fmt     (pe_shared[INST_FRM_BITS+:INST_FMT_BITS]),
                 .frm     (pe_shared[0+:INST_FRM_BITS]),
-                .dataa   (pe_data_in[i][0+:`VX_CFG_FLEN]),
-                .datab   (pe_data_in[i][`VX_CFG_XLEN+:`VX_CFG_FLEN]),
+                .dataa   (fp_unbox_fmt(pe_data_in[i][0+:`VX_CFG_FLEN], pe_is_s)),
+                .datab   (fp_unbox_fmt(pe_data_in[i][`VX_CFG_XLEN+:`VX_CFG_FLEN], pe_is_s)),
                 .is_sqrt (pe_shared[INST_FRM_BITS+INST_FMT_BITS]),
                 .result  (pe_data_out[i][0+:`VX_CFG_FLEN]),
                 .fflags  (pe_data_out[i][`VX_CFG_XLEN+:`FP_FLAGS_BITS])
