@@ -493,7 +493,7 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
 
 `ifdef VX_CFG_EXT_F_ENABLE
     // apply nan-boxing to flw outputs
-    wire rsp_is_float = (get_reg_type(rsp_hdr.rd) == REG_TYPE_F);
+    wire rsp_is_float = FP_REGFILE && (get_reg_type(rsp_hdr.rd) == REG_TYPE_F);
 `else
     wire rsp_is_float = 0;
 `endif

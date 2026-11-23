@@ -51,18 +51,37 @@ else
 	ZACAS_EXT :=
 endif
 
+# under Zfinx, Zfhmin is Zhinxmin: half conversions on x registers
 ifneq (,$(filter -DVX_CFG_EXT_ZFHMIN_ENABLE, $(XCONFIGS)))
 	ZFHMIN_EXT := _zfhmin
+	ZHINXMIN_EXT := _zhinxmin
 else
 	ZFHMIN_EXT :=
+	ZHINXMIN_EXT :=
 endif
 
 ifeq ($(XLEN),64)
 	VX_CFLAGS += -march=rv64imafd$(C_EXT)$(ZACAS_EXT)$(ZFHMIN_EXT) -mabi=lp64d
 	STARTUP_ADDR ?= 0x180000000
+else ifneq (,$(filter -DVX_CFG_EXT_ZFINX_ENABLE, $(XCONFIGS)))
+	VX_CFLAGS += -march=rv32ima_zfinx$(C_EXT)$(ZACAS_EXT)$(ZHINXMIN_EXT) -mabi=ilp32
+	STARTUP_ADDR ?= 0x80000000
 else
 	VX_CFLAGS += -march=rv32imaf$(C_EXT)$(ZACAS_EXT)$(ZFHMIN_EXT) -mabi=ilp32f
 	STARTUP_ADDR ?= 0x80000000
+endif
+
+# Register windows: let the compiler allocate up to VX_CFG_NUM_RV_REGS registers.
+ifneq (,$(filter -DVX_CFG_EXT_RWIN_ENABLE, $(XCONFIGS)))
+	RWIN_REGS := $(patsubst -DVX_CFG_NUM_RV_REGS=%,%,$(filter -DVX_CFG_NUM_RV_REGS=%, $(XCONFIGS)))
+	RWIN_REGS := $(if $(RWIN_REGS),$(RWIN_REGS),256)
+	LLVM_CFLAGS += -mllvm -riscv-vortex-max-regs=$(RWIN_REGS)
+# study: extra compiler flags for register-window experiments
+LLVM_CFLAGS += $(RWIN_LLVM_FLAGS)
+ifneq ($(RWIN_MODE),)
+	# study models of 64-bit encodings (1: prefix where needed, 2: on every instruction)
+	LLVM_CFLAGS += -mllvm -riscv-vortex-rwin-mode=$(RWIN_MODE)
+endif
 endif
 
 LLVM_CFLAGS += --target=riscv$(XLEN)-unknown-elf

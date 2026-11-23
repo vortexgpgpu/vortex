@@ -47,7 +47,24 @@ module VX_decode import
     reg [BYTESEL_BITS-1:0] bytesel;
     reg is_wstall;
 
+`ifdef VX_CFG_EXT_RWIN_ENABLE
+    // A vx_rwin fetched with the instruction after it is applied and that
+    // instruction decoded in the same step (fused fetch).
+    wire [31:0] instr0 = fetch_if.data.instr;
+    wire is_rwin0 = (instr0[6:0] == INST_EXT3) && (instr0[31:25] == 7'h01);
+    `ifndef VX_CFG_EXT_C_ENABLE
+    wire [31:0] instr2 = fetch_if.data.instr2;
+    // the pair fuses unless the second word is absent or another vx_rwin
+    wire rwin_fused = is_rwin0 && (instr2 != 32'd0)
+                   && ~((instr2[6:0] == INST_EXT3) && (instr2[31:25] == 7'h01));
+    wire [31:0] instr = rwin_fused ? instr2 : instr0;
+    `else
+    wire rwin_fused = 1'b0;
+    wire [31:0] instr = instr0;
+    `endif
+`else
     wire [31:0] instr = fetch_if.data.instr;
+`endif
 `ifdef VX_CFG_EXT_U_ENABLE
     `STATIC_ASSERT (!`VX_CFG_EXT_C_ENABLED, ("uniform registers take the compressed encodings"))
     // Bits [1:0] select the register file of an otherwise standard encoding:
@@ -93,7 +110,12 @@ module VX_decode import
     wire fmt_supported = (funct2 == INST_FMT_S);
 `endif
 `ifdef VX_CFG_EXT_ZFHMIN_ENABLE
+`ifdef VX_CFG_EXT_ZFINX_ENABLE
+    // Zhinxmin: H moves need f registers, so only the conversions remain.
+    wire mv_fmt_supported = fmt_supported;
+`else
     wire mv_fmt_supported = fmt_supported || (funct2 == INST_FMT_H);
+`endif
 `else
     wire mv_fmt_supported = fmt_supported;
 `endif
@@ -248,6 +270,47 @@ module VX_decode import
     wire decode_is_rvc = fetch_if.data.is_rvc;
 `else
     wire decode_is_rvc = 1'b0;
+`endif
+
+`ifdef VX_CFG_EXT_RWIN_ENABLE
+    // vx_rwin (custom-2, funct7 1) sets the warp's windows for the rd, rs1,
+    // rs2 and rs3 fields; decode consumes it, so it never reaches the ibuffer
+    localparam RWIN_W = 4 * RWIN_BITS;
+    // a fused vx_rwin yields the instruction after it; an unfused one is dropped
+    wire is_rwin = is_rwin0 && ~rwin_fused;
+    wire [RWIN_W-1:0] rwin_new = {instr0[12 +: RWIN_BITS], instr0[20 +: RWIN_BITS], instr0[15 +: RWIN_BITS], instr0[7 +: RWIN_BITS]};
+    reg [`VX_CFG_NUM_WARPS-1:0][RWIN_W-1:0] rwin_r;
+    wire [RWIN_W-1:0] rwin_cur = rwin_fused ? rwin_new : rwin_r[fetch_if.data.wid];
+    always @(posedge clk) begin
+        if (reset) begin
+            rwin_r <= '0;
+        end else if (fetch_if.valid && fetch_if.ready && is_rwin0) begin
+            rwin_r[fetch_if.data.wid] <= rwin_new;
+        end
+    end
+    // each field's window is applied as the field is extracted, beside the
+    // opcode decode; an integer field 0 stays x0
+    localparam WB = RV_REGS_BITS - 5;
+    `UNUSED_VAR (rwin_cur) // below 256 registers a window uses fewer than RWIN_BITS bits
+    wire [RV_REGS_BITS-1:0] rd_f  = {rwin_cur[0 * RWIN_BITS +: WB], rd};
+    wire [RV_REGS_BITS-1:0] rs1_f = {rwin_cur[1 * RWIN_BITS +: WB], rs1};
+    wire [RV_REGS_BITS-1:0] rs2_f = {rwin_cur[2 * RWIN_BITS +: WB], rs2};
+    wire [RV_REGS_BITS-1:0] rs3_f = {rwin_cur[3 * RWIN_BITS +: WB], rs3};
+    wire [RV_REGS_BITS-1:0] rd_i  = (rd  == 5'd0) ? '0 : rd_f;
+    wire [RV_REGS_BITS-1:0] rs1_i = (rs1 == 5'd0) ? '0 : rs1_f;
+    wire [RV_REGS_BITS-1:0] rs2_i = (rs2 == 5'd0) ? '0 : rs2_f;
+    wire [RV_REGS_BITS-1:0] rs3_i = (rs3 == 5'd0) ? '0 : rs3_f;
+`else
+    wire is_rwin = 1'b0;
+    wire [RV_REGS_BITS-1:0] rd_i  = RV_REGS_BITS'(rd),  rd_f  = RV_REGS_BITS'(rd);
+    wire [RV_REGS_BITS-1:0] rs1_i = RV_REGS_BITS'(rs1), rs1_f = RV_REGS_BITS'(rs1);
+    wire [RV_REGS_BITS-1:0] rs2_i = RV_REGS_BITS'(rs2), rs2_f = RV_REGS_BITS'(rs2);
+    wire [RV_REGS_BITS-1:0] rs3_i = RV_REGS_BITS'(rs3), rs3_f = RV_REGS_BITS'(rs3);
+`endif
+
+`ifdef VX_CFG_EXT_U_ENABLE
+    // the encoded fields, indexed like reg_ids: a u register is never windowed
+    wire [NUM_SRC_OPDS:0][4:0] raw_fields = {rs3, rs2, rs1, rd};
 `endif
 
     always @(*) begin
@@ -473,7 +536,7 @@ module VX_decode import
                 // the decoder puts in it, so rd goes there directly -- the
                 // rs3 wire is the funct5 field for an AMO and is not used.
                 if (amo_type == AMO_OP_CAS) begin
-                    reg_ids[RV_RS3]  = make_reg_num(REG_TYPE_I, RV_REGS_BITS'(rd));
+                    reg_ids[RV_RS3]  = make_reg_num(REG_TYPE_I, rd_i);
                     use_regs[RV_RS3] = 1'b1;
                 end
             `endif
@@ -1140,12 +1203,17 @@ module VX_decode import
                 use_regs = '0;
                 rd_xregs = '0;
                 wr_xregs = '0;
-                `USED_REG ((funct7 == 7'h79) ? REG_TYPE_U : REG_TYPE_I, rd, 1'b1);
-                `USED_REG ((funct7 == 7'h79) ? REG_TYPE_I : REG_TYPE_U, rs1, 1'b1);
+                // windows apply to the x side only; a u register is its raw field
+                reg_ids[RV_RD]  = (funct7 == 7'h79) ? make_reg_num(REG_TYPE_U, RV_REGS_BITS'(rd))
+                                                    : make_reg_num(REG_TYPE_I, rd_i);
+                reg_ids[RV_RS1] = (funct7 == 7'h79) ? make_reg_num(REG_TYPE_I, rs1_i)
+                                                    : make_reg_num(REG_TYPE_U, RV_REGS_BITS'(rs1));
+                use_regs[RV_RD]  = 1'b1;
+                use_regs[RV_RS1] = 1'b1;
             end else begin
                 for (integer i = 0; i <= NUM_SRC_OPDS; ++i) begin
                     if (use_regs[i] && get_reg_type(reg_ids[i]) == REG_TYPE_I) begin
-                        reg_ids[i] = make_reg_num(REG_TYPE_U, get_reg_idx(reg_ids[i]));
+                        reg_ids[i] = make_reg_num(REG_TYPE_U, RV_REGS_BITS'(raw_fields[i]));
                     end
                 end
             end
@@ -1153,13 +1221,13 @@ module VX_decode import
             // the uniform operand: the second source, or the only one of an
             // immediate form or a load
             if (opcode == INST_I || opcode == INST_I_W || opcode == INST_L || opcode == INST_FL) begin
-                reg_ids[RV_RS1] = make_reg_num(REG_TYPE_U, rs1);
+                reg_ids[RV_RS1] = make_reg_num(REG_TYPE_U, RV_REGS_BITS'(rs1));
             end else begin
-                reg_ids[RV_RS2] = make_reg_num(REG_TYPE_U, rs2);
+                reg_ids[RV_RS2] = make_reg_num(REG_TYPE_U, RV_REGS_BITS'(rs2));
             end
         end else if (umode == 2'b00) begin
             // the uniform operand: the first source
-            reg_ids[RV_RS1] = make_reg_num(REG_TYPE_U, rs1);
+            reg_ids[RV_RS1] = make_reg_num(REG_TYPE_U, RV_REGS_BITS'(rs1));
         end
     `endif
     end
@@ -1207,15 +1275,25 @@ module VX_decode import
     wire [`VX_CFG_NUM_THREADS-1:0] dec_tmask = fetch_if.data.tmask;
 `endif
 
+    wire req_ready;
+    assign fetch_if.ready = req_ready || is_rwin;
+
+`ifdef VX_CFG_EXT_RWIN_ENABLE
+    wire [PC_BITS-1:0] dec_PC = rwin_fused ? (fetch_if.data.PC + from_fullPC(`VX_CFG_XLEN'(4))) : fetch_if.data.PC;
+`else
+    wire [PC_BITS-1:0] dec_PC = fetch_if.data.PC;
+    wire rwin_fused = 1'b0;
+`endif
+
     VX_elastic_buffer #(
         .DATAW (OUT_DATAW),
         .SIZE  (0)
     ) req_buf (
         .clk       (clk),
         .reset     (reset),
-        .valid_in  (fetch_if.valid),
-        .ready_in  (fetch_if.ready),
-        .data_in   ({fetch_if.data.uuid,  fetch_if.data.wid,  fetch_if.data.cta_id,  dec_tmask,  fetch_if.data.PC,  ex_type,                op_type,                op_args,                wb,                rd_xregs,                wr_xregs,                use_regs[3:1],          reg_ids[RV_RD],    bytesel,                  reg_ids[RV_RS1],    reg_ids[RV_RS2],    reg_ids[RV_RS3]}),
+        .valid_in  (fetch_if.valid && ~is_rwin),
+        .ready_in  (req_ready),
+        .data_in   ({fetch_if.data.uuid,  fetch_if.data.wid,  fetch_if.data.cta_id,  dec_tmask,  dec_PC,  ex_type,                op_type,                op_args,                wb,                rd_xregs,                wr_xregs,                use_regs[3:1],          reg_ids[RV_RD],    bytesel,                  reg_ids[RV_RS1],    reg_ids[RV_RS2],    reg_ids[RV_RS3]}),
         .data_out  ({decode_if.data.uuid, decode_if.data.wid, decode_if.data.cta_id, decode_if.data.tmask, decode_if.data.PC, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args, decode_if.data.wb, decode_if.data.rd_xregs, decode_if.data.wr_xregs, decode_if.data.used_rs, decode_if.data.rd, decode_if.data.bytesel,   decode_if.data.rs1, decode_if.data.rs2, decode_if.data.rs3}),
         .valid_out (decode_if.valid),
         .ready_out (decode_if.ready)
@@ -1228,6 +1306,8 @@ module VX_decode import
     // Register decode_sched_if to break the long combinational path.
     reg                  decode_sched_valid_r;
     reg                  decode_sched_unlock_r;
+    reg                  decode_sched_drop_r;
+    reg                  decode_sched_fused_r;
     reg [NW_WIDTH-1:0]   decode_sched_wid_r;
 `ifdef VX_CFG_EXT_C_ENABLE
     reg                  decode_sched_is_rvc_r;
@@ -1238,7 +1318,9 @@ module VX_decode import
             decode_sched_valid_r <= 1'b0;
         end else begin
             decode_sched_valid_r  <= fetch_fire;
-            decode_sched_unlock_r <= ~is_wstall;
+            decode_sched_unlock_r <= ~is_wstall || is_rwin;
+            decode_sched_drop_r   <= is_rwin;
+            decode_sched_fused_r  <= rwin_fused;
             decode_sched_wid_r    <= fetch_if.data.wid;
         `ifdef VX_CFG_EXT_C_ENABLE
             decode_sched_is_rvc_r <= fetch_if.data.is_rvc;
@@ -1249,6 +1331,8 @@ module VX_decode import
     assign decode_sched_if.valid  = decode_sched_valid_r;
     assign decode_sched_if.wid    = decode_sched_wid_r;
     assign decode_sched_if.unlock = decode_sched_unlock_r;
+    assign decode_sched_if.drop   = decode_sched_drop_r;
+    assign decode_sched_if.fused  = decode_sched_fused_r;
 `ifdef VX_CFG_EXT_C_ENABLE
     assign decode_sched_if.is_rvc = decode_sched_is_rvc_r;
 `endif

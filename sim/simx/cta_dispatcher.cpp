@@ -106,10 +106,11 @@ uint32_t CtaDispatcher::usable_slots(uint32_t stride) const {
   return fit;
 }
 
-static_assert(VX_CFG_GPR_ROWS >= (VX_CFG_EXT_F_ENABLED ? 2 : 1) * MAX_NUM_REGS && VX_CFG_GPR_ROWS % 4 == 0,
+static_assert(VX_CFG_GPR_ROWS >= ((VX_CFG_EXT_F_ENABLED && !VX_CFG_EXT_ZFINX_ENABLED) ? 2 : 1) * MAX_NUM_REGS
+              && VX_CFG_GPR_ROWS % 4 == 0,
               "invalid VX_CFG_GPR_ROWS");
 #ifdef VX_CFG_EXT_U_ENABLE
-static_assert(VX_CFG_UREG_ROWS >= MAX_NUM_REGS && VX_CFG_UREG_ROWS % 4 == 0, "invalid VX_CFG_UREG_ROWS");
+static_assert(VX_CFG_UREG_ROWS >= UREG_REGS && VX_CFG_UREG_ROWS % 4 == 0, "invalid VX_CFG_UREG_ROWS");
 #endif
 
 uint32_t CtaDispatcher::fitting_warps(uint32_t num_regs, uint32_t cta_warps) const {
@@ -117,7 +118,7 @@ uint32_t CtaDispatcher::fitting_warps(uint32_t num_regs, uint32_t cta_warps) con
                                   : (num_regs & 0xff) + ((num_regs >> 8) & 0xff);
   uint32_t fit = (VX_CFG_GPR_ROWS / regs) * (VX_CFG_ISSUE_WIDTH * VX_CFG_NUM_OPCS);
 #ifdef VX_CFG_EXT_U_ENABLE
-  uint32_t uregs = (num_regs == 0) ? MAX_NUM_REGS : ((num_regs >> 16) & 0xff);
+  uint32_t uregs = (num_regs == 0) ? UREG_REGS : ((num_regs >> 16) & 0xff);
   if (uregs != 0) {
     fit = std::min<uint32_t>(fit, (VX_CFG_UREG_ROWS / uregs) * (VX_CFG_ISSUE_WIDTH * VX_CFG_NUM_OPCS));
   }

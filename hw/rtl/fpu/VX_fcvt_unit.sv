@@ -121,8 +121,13 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
 
     wire [63:0] safe_dataa = 64'(dataa);
 
+`ifdef VX_CFG_EXT_ZFINX_ENABLE
+    // Zhinxmin: a half sits unboxed in an x register; the upper bits are ignored.
+    wire [15:0] h_op = dataa[15:0];
+`else
     // A narrower format is NaN-boxed to FLEN; operand bits above FLEN are not part of the FP register.
     wire [15:0] h_op = (&dataa[FLEN-1:16]) ? dataa[15:0] : 16'h7E00;
+`endif
 
     wire [31:0] s_op;
     if (HAS_D) begin : g_s_unbox
@@ -549,11 +554,20 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
         wire [`VX_CFG_XLEN-1:0] box_s_zero = (`VX_CFG_XLEN > 32) ? {{(`VX_CFG_XLEN-32){1'b1}}, zero_s32} : `VX_CFG_XLEN'(zero_s32);
         wire [`VX_CFG_XLEN-1:0] box_s_max  = (`VX_CFG_XLEN > 32) ? {{(`VX_CFG_XLEN-32){1'b1}}, max_s32}  : `VX_CFG_XLEN'(max_s32);
 
+    `ifdef VX_CFG_EXT_ZFINX_ENABLE
+        // Zhinxmin: a half result is sign-extended into the x register.
+        wire [`VX_CFG_XLEN-1:0] box_h_res  = `VX_CFG_XLEN'(signed'(fp_16_res));
+        wire [`VX_CFG_XLEN-1:0] box_h_qnan = `VX_CFG_XLEN'(signed'(qnan_h16));
+        wire [`VX_CFG_XLEN-1:0] box_h_inf  = `VX_CFG_XLEN'(signed'(inf_h16));
+        wire [`VX_CFG_XLEN-1:0] box_h_zero = `VX_CFG_XLEN'(signed'(zero_h16));
+        wire [`VX_CFG_XLEN-1:0] box_h_max  = `VX_CFG_XLEN'(signed'(max_h16));
+    `else
         wire [`VX_CFG_XLEN-1:0] box_h_res  = {{(`VX_CFG_XLEN-16){1'b1}}, fp_16_res};
         wire [`VX_CFG_XLEN-1:0] box_h_qnan = {{(`VX_CFG_XLEN-16){1'b1}}, qnan_h16};
         wire [`VX_CFG_XLEN-1:0] box_h_inf  = {{(`VX_CFG_XLEN-16){1'b1}}, inf_h16};
         wire [`VX_CFG_XLEN-1:0] box_h_zero = {{(`VX_CFG_XLEN-16){1'b1}}, zero_h16};
         wire [`VX_CFG_XLEN-1:0] box_h_max  = {{(`VX_CFG_XLEN-16){1'b1}}, max_h16};
+    `endif
 
         wire [`VX_CFG_XLEN-1:0] normal_dst = dst_d_s5 ? fp64_boxed : dst_h_s5 ? box_h_res : f32_boxed;
 

@@ -35,6 +35,9 @@ FP_FIXED = 'fp_fixed'   # names FP registers implicitly: FP numbering kept, ever
 FP_KEPT  = 'fp_kept'    # names a run of FP registers: FP numbering kept, the run counted
 UNPACKED = 'unpacked'   # names integer registers implicitly: image left as is
 FP_HI    = 'fp_hi'      # (FP_HI, n): the instruction names FP registers up to fn
+WIN_HI   = 'win_hi'     # (WIN_HI, w): a vx_rwin sets a field's window up to w
+
+REG_WINDOW = 32         # registers per register window
 
 
 class DecodeError(Exception):
@@ -132,6 +135,10 @@ def decode(w):
     if op == OP_EXT3:
         if f7 == 0x00 and f3 == 0:
             return [('rd', F), ('rs1', F)], ()          # MUFU: rs2 field is the function
+        if f7 == 0x01:
+            # vx_rwin: its fields are windows, not registers
+            wins = [(w >> 7) & 7, (w >> 15) & 7, (w >> 20) & 7, (w >> 12) & 7]
+            return [], ((WIN_HI, max(wins)),)
         raise DecodeError("unknown EXT3 instruction")
     if op == OP_EXT4:
         if f3 in (0, 3, 4):
@@ -245,6 +252,13 @@ def counts_of(insts, props):
     rx = round_up(max(xs) + 1)
     rf = 32 if FP_FIXED in props else (round_up(max(fs) + 1) if fs else 0)
     ru = round_up(max(us))
+    # A field in window w can name any register up to w * 32 + 31; the windows
+    # each instruction runs under are not tracked, so count whole windows.
+    wins = [p[1] for p in props if isinstance(p, tuple) and p[0] == WIN_HI]
+    if wins:
+        reach = (max(wins) + 1) * REG_WINDOW
+        rx = max(rx, reach)
+        rf = max(rf, reach) if rf else 0
     return rx, rf, ru
 
 
@@ -380,7 +394,7 @@ def kernel_counts(data, pcs):
 def pack(data):
     """The image with its registers renamed, or unchanged when it cannot be packed."""
     insts, props = scan(data)
-    if UNPACKED in props:
+    if UNPACKED in props or any(isinstance(p, tuple) and p[0] == WIN_HI for p in props):
         return data
     maps = {
         'x': {r: i for i, r in enumerate(sorted(regs_used(insts, 'x') | {0}))},

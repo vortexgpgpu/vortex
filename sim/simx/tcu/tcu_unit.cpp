@@ -2643,9 +2643,9 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
     uop_instr->set_args(uop_args);
     uop_instr->set_src_reg(0, macro_instr.get_src_reg(0).idx, macro_instr.get_src_reg(0).type);
     if (tcu_type == TcuType::TMEM_LD) {
-      uop_instr->set_dest_reg(freg + uop_index, RegType::Float);
+      uop_instr->set_dest_reg(freg + uop_index, FpRegType);
     } else {
-      uop_instr->set_src_reg(1, freg + uop_index, RegType::Float);
+      uop_instr->set_src_reg(1, freg + uop_index, FpRegType);
     }
     return uop_instr;
   }
@@ -2653,8 +2653,8 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
 
   if (tcu_is_wmma(tcu_type)) {
     using wmma = vt::wmma_config_t<VX_CFG_NUM_THREADS>;
-    constexpr uint32_t rc_base = 0, ra_base = 10;
-    constexpr uint32_t rb_base = (wmma::NRB == 4) ? 28 : 24;
+    constexpr uint32_t rc_base = FP_IMPLICIT_BASE, ra_base = FP_IMPLICIT_BASE + 10;
+    constexpr uint32_t rb_base = FP_IMPLICIT_BASE + ((wmma::NRB == 4) ? 28 : 24);
     bool is_sparse = tcu_is_sparse(tcu_type);
     uint32_t fmt_s = args.fmt_s;
     uint32_t fmt_d = args.fmt_d;
@@ -2679,10 +2679,10 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
         uint32_t reg_rs3 = rc_base + (mma_idx >> 1);
         uop_instr->set_op_type(TcuType::WMMA_SP);
         uop_instr->set_args(IntrTcuArgs{0, 0, fmt_s, fmt_d, m_sp, actual_n, 0, 0, 0, 0, 0, 0, 0});
-        uop_instr->set_dest_reg(reg_rs3, RegType::Float);
-        uop_instr->set_src_reg(0, ra_base + m_sp, RegType::Float);
-        uop_instr->set_src_reg(1, rb_base + n_sp, RegType::Float);
-        uop_instr->set_src_reg(2, reg_rs3, RegType::Float);
+        uop_instr->set_dest_reg(reg_rs3, FpRegType);
+        uop_instr->set_src_reg(0, ra_base + m_sp, FpRegType);
+        uop_instr->set_src_reg(1, rb_base + n_sp, FpRegType);
+        uop_instr->set_src_reg(2, reg_rs3, FpRegType);
         // Symmetric sparse: no k-loop, always wb=1 and always reads C from RF.
         // Even uops run the low half of each block's columns, odd uops the high half.
         ThreadMask tmask(VX_CFG_NUM_THREADS);
@@ -2714,10 +2714,10 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
         }
         uop_instr->set_op_type(is_sparse ? TcuType::WMMA_SP : TcuType::WMMA);
         uop_instr->set_args(IntrTcuArgs{0, 0, fmt_s, fmt_d, m, n, k, 0, 0, 0, 0, 0, 0});
-        uop_instr->set_dest_reg(reg_rs3, RegType::Float);
-        uop_instr->set_src_reg(0, reg_rs1, RegType::Float);
-        uop_instr->set_src_reg(1, reg_rs2, RegType::Float);
-        uop_instr->set_src_reg(2, reg_rs3, RegType::Float);
+        uop_instr->set_dest_reg(reg_rs3, FpRegType);
+        uop_instr->set_src_reg(0, reg_rs1, FpRegType);
+        uop_instr->set_src_reg(1, reg_rs2, FpRegType);
+        uop_instr->set_src_reg(2, reg_rs3, FpRegType);
       }
     }
   }
@@ -2751,7 +2751,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
 
       // MMA phase
       uint32_t mma_idx = uop_index - needs_setup;
-      uint32_t ra_base = is_a_smem ? 10 : 24;
+      uint32_t ra_base = FP_IMPLICIT_BASE + (is_a_smem ? 10 : 24);
 
       // Loop order: m (inner) -> n (middle) -> k (outer). K-outer maximizes
       // per-block A-buffer reuse: each A_w[m,k] is consumed across the entire
@@ -2763,24 +2763,24 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
       uint32_t rem = mma_idx % mn;
       uint32_t n = rem / m_steps;
       uint32_t m = rem % m_steps;
-      uint32_t r = n * m_steps + m;
+      uint32_t r = FP_IMPLICIT_BASE + n * m_steps + m;
 
       bool first = (mma_idx == 0);
       bool last  = (uop_index == (total - 1));
       uop_instr->set_args(IntrTcuArgs{is_a_smem ? 1u : 0u, cd_nregs,
                                      fmt_s, fmt_d, m, n, k, first ? 1u : 0u, last ? 1u : 0u, 0, 0, 0, 0});
-      uop_instr->set_dest_reg(r, RegType::Float);
+      uop_instr->set_dest_reg(r, FpRegType);
       if (!is_a_smem) {
         uint32_t rs1_off = (is_sparse && !kSpFullK) ? m : (m * a_reg_k_steps + k);
-        uop_instr->set_src_reg(0, ra_base + rs1_off, RegType::Float);
+        uop_instr->set_src_reg(0, ra_base + rs1_off, FpRegType);
         if (needs_setup)
-          uop_instr->set_src_reg(1, ra_base + rs1_off + 1, RegType::Float);
+          uop_instr->set_src_reg(1, ra_base + rs1_off + 1, FpRegType);
       } else if (first) {
         uop_instr->set_src_reg(0, a0, RegType::Integer);
       }
       if (first && !needs_setup)
         uop_instr->set_src_reg(1, a1, RegType::Integer);
-      uop_instr->set_src_reg(2, r, RegType::Float);
+      uop_instr->set_src_reg(2, r, FpRegType);
     }
     // fu_lock on first uop, fu_unlock on last uop
     uop_instr->set_fu_lock(uop_index == 0);

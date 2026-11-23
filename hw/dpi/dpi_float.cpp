@@ -58,9 +58,16 @@ inline uint64_t nan_box(uint32_t value) {
   return nanbox::box(value, 32, kRegBits);
 }
 
+#ifdef VX_CFG_EXT_ZFINX_ENABLE
+// Zhinxmin: a half sits sign-extended in an x register; inputs ignore the upper bits.
+inline uint64_t nan_box16(uint32_t value) {
+  return uint64_t(int64_t(int16_t(value)));
+}
+#else
 inline uint64_t nan_box16(uint32_t value) {
   return nanbox::box(value, 16, kRegBits);
 }
+#endif
 
 inline uint64_t nan_box19(uint32_t value) {
   return nanbox::box(value, 19, kRegBits);
@@ -79,7 +86,12 @@ inline int64_t check_boxing(int64_t a) {
 }
 
 inline int64_t check_boxing16(int64_t a, uint16_t nan_value) {
+#ifdef VX_CFG_EXT_ZFINX_ENABLE
+  (void)nan_value;
+  return uint16_t(a);
+#else
   return nanbox::is_boxed(a, 16, kRegBits) ? a : nan_box16(nan_value);
+#endif
 }
 
 inline int64_t check_boxing19(int64_t a, uint32_t nan_value) {

@@ -642,7 +642,7 @@ __attribute__((always_inline))
 inline float vx_packlb_f(const void* base, size_t stride) {
     float out;
     __asm__ volatile (
-        ".insn r %1, 1, 4, %0, %2, %3" : "=f"(out) : "i"(RISCV_CUSTOM0), "r"(base), "r"(stride) : "memory"
+        ".insn r %1, 1, 4, %0, %2, %3" : "=&f"(out) : "i"(RISCV_CUSTOM0), "r"(base), "r"(stride) : "memory"
     );
     return out;
 }
@@ -656,7 +656,7 @@ __attribute__((always_inline))
 inline float vx_packlh_f(const void* base, size_t stride) {
     float out;
     __asm__ volatile (
-        ".insn r %1, 2, 4, %0, %2, %3" : "=f"(out) : "i"(RISCV_CUSTOM0), "r"(base), "r"(stride) : "memory"
+        ".insn r %1, 2, 4, %0, %2, %3" : "=&f"(out) : "i"(RISCV_CUSTOM0), "r"(base), "r"(stride) : "memory"
     );
     return out;
 }

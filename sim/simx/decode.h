@@ -30,8 +30,18 @@ public:
   // (low2 != 0b11); the decoder detects RVC, calls rvc_decompress, and
   // stamps IntrBrArgs.is_rvc accordingly.
   // With VX_CFG_EXT_U_ENABLE, low2 of 0b10 and 0b01 are 32-bit instructions
-  // with uniform operands instead.
-  Instr::Ptr decode(uint32_t code, uint64_t uuid);
+  // with uniform operands instead. `rwin` holds the register windows
+  // (RWIN_BITS per field) this instruction decodes under.
+  Instr::Ptr decode(uint32_t code, uint64_t uuid, uint32_t rwin = 0);
+
+  // A vx_rwin and the windows it sets, or (prefix) a vx_rpfx: the windows of
+  // the next instruction only, a study model of 64-bit encodings.
+  struct RwinOp {
+    bool     valid;
+    bool     prefix;
+    uint32_t win;
+  };
+  static RwinOp decode_rwin(uint32_t code);
 
 private:
   Instr::Ptr decode_code(uint32_t code, uint64_t uuid);

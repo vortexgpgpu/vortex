@@ -44,22 +44,28 @@ package VX_gpu_pkg;
     localparam BYTESEL_BITS = (XLENB_W + XLENB_W);
     localparam [BYTESEL_BITS-1:0] BYTESEL_DEFAULT = {XLENB_W'(XLENB-1), XLENB_W'(0)};
 
-    localparam RV_REGS = 32;
-    localparam RV_REGS_BITS = 5;
+    // Registers per thread; above 32 they are reached through register windows.
+    localparam RV_REGS = `VX_CFG_NUM_RV_REGS;
+    localparam RV_REGS_BITS = `CLOG2(RV_REGS);
+    localparam RWIN_BITS = 3;
 
     localparam RV_RD  = 0;
     localparam RV_RS1 = 1;
     localparam RV_RS2 = 2;
     localparam RV_RS3 = 3;
 
-    localparam REG_TYPE_I = 0;
-    localparam REG_TYPE_F = 1;
+    // Zfinx: FP operands are x registers, so there is one register type.
+    localparam FP_REGFILE = `VX_CFG_EXT_F_ENABLED && !`VX_CFG_EXT_ZFINX_ENABLED;
 
-    // The register files a warp's set holds in the GPR banks: x, and f with F.
-    localparam GPR_TYPES = 1 + `VX_CFG_EXT_F_ENABLED;
+    localparam REG_TYPE_I = 0;
+    localparam REG_TYPE_F = FP_REGFILE ? 1 : 0;
+
+    // The register files a warp's set holds in the GPR banks: x, and f with F
+    // (not under Zfinx, where FP operands are x registers).
+    localparam GPR_TYPES = 1 + FP_REGFILE;
     localparam GPR_SET_REGS = (GPR_TYPES * RV_REGS);
 
-    // Register ids: x, f with F, and the uniform registers with U, which live
+    // Register ids: the GPR files, and the uniform registers with U, which live
     // in the operand collectors outside the GPR banks.
     localparam REG_TYPE_U = GPR_TYPES;
     localparam REG_TYPES = GPR_TYPES + `VX_CFG_EXT_U_ENABLED;
@@ -74,7 +80,9 @@ package VX_gpu_pkg;
     // rows, integer registers first, FP registers fp_off4 * 4 rows in, and
     // usize4 * 4 uniform registers (VX_DCR_KMU_NUM_REGS).
     localparam GPR_SET_W = `CLOG2(GPR_SET_REGS / 4 + 1);
-    localparam UREG_SET_W = `CLOG2(RV_REGS / 4 + 1);
+    // u registers are never windowed: 32 whatever the per-thread count
+    localparam UREG_REGS = 32;
+    localparam UREG_SET_W = `CLOG2(UREG_REGS / 4 + 1);
     typedef struct packed {
         logic [GPR_SET_W-1:0] size4;
         logic [GPR_SET_W-1:0] fp_off4;
@@ -1665,6 +1673,8 @@ package VX_gpu_pkg;
         logic [31:0]            instr;
     `ifdef VX_CFG_EXT_C_ENABLE
         logic                   is_rvc;
+    `elsif VX_CFG_EXT_RWIN_ENABLE
+        logic [31:0]            instr2; // the next word when it shares the fetch word (else 0)
     `endif
     } fetch_t;
 
@@ -2123,7 +2133,10 @@ package VX_gpu_pkg;
     ////////////////////////// Icache Parameters //////////////////////////////
 
     // Word size in bytes
-    localparam ICACHE_WORD_SIZE	    = 4;
+    // Register windows fetch 8 bytes, so a vx_rwin and the instruction after it
+    // in the same aligned pair reach decode together.
+    localparam RWIN_FUSED_FETCH     = `VX_CFG_EXT_RWIN_ENABLED && !`VX_CFG_EXT_C_ENABLED;
+    localparam ICACHE_WORD_SIZE	    = RWIN_FUSED_FETCH ? 8 : 4;
     localparam ICACHE_ADDR_WIDTH	= (`VX_CFG_MEM_ADDR_WIDTH - `CLOG2(ICACHE_WORD_SIZE));
 
     // Block size in bytes

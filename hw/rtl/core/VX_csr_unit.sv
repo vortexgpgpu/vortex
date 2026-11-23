@@ -45,7 +45,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     `UNUSED_VAR (execute_if.data.rs3_data)
 
     wire [`VX_CSR_ADDR_BITS-1:0] csr_addr = execute_if.data.op_args.csr.addr;
-    wire [RV_REGS_BITS-1:0] csr_imm = execute_if.data.op_args.csr.imm5;
+    wire [4:0] csr_imm = execute_if.data.op_args.csr.imm5;
 
     // A request is held for one cycle before it may fire: the CTA context RAMs
     // are read in that cycle, and the CSR decode is registered in it.

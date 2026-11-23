@@ -67,9 +67,23 @@ static_assert(!((VX_CFG_L2_ENABLED != 0) && (VX_CFG_L3_ENABLED == 0) && VX_CFG_L
 
 inline constexpr uint32_t MAX_NUM_CORES   = 1024;
 inline constexpr uint32_t MAX_NUM_WARPS   = 64;
-inline constexpr uint32_t MAX_NUM_REGS    = 32;
-inline constexpr uint32_t LOG_NUM_REGS    = 5;
+inline constexpr uint32_t MAX_NUM_REGS    = VX_CFG_NUM_RV_REGS;
+inline constexpr uint32_t LOG_NUM_REGS    = log2ceil(MAX_NUM_REGS);
+static_assert(MAX_NUM_REGS >= 32 && MAX_NUM_REGS <= 256 && (MAX_NUM_REGS & (MAX_NUM_REGS - 1)) == 0,
+              "VX_CFG_NUM_RV_REGS must be 32, 64, 128 or 256");
+static_assert(MAX_NUM_REGS == 32 || VX_CFG_EXT_RWIN_ENABLED,
+              "registers above x31/f31 are reachable only through register windows");
 inline constexpr uint32_t NUM_SRC_REGS    = 3;
+// u registers are never windowed: 32 whatever the per-thread count
+inline constexpr uint32_t UREG_REGS       = 32;
+
+// Register windows: high register bits per encoding field (rd, rs1, rs2, rs3).
+static_assert(!VX_CFG_EXT_ZFINX_ENABLED || VX_CFG_EXT_F_ENABLED, "Zfinx needs the FPU (VX_CFG_EXT_F_ENABLE)");
+static_assert(!VX_CFG_EXT_ZFINX_ENABLED || !(VX_CFG_EXT_TCU_ENABLED || VX_CFG_EXT_RTU_ENABLED) || MAX_NUM_REGS >= 64,
+              "Zfinx with the TCU or RTU needs register windows: their implicit FP operands live at x32 up");
+inline constexpr uint32_t RWIN_BITS       = 3;
+inline constexpr uint32_t RWIN_MASK       = (1u << RWIN_BITS) - 1;
+inline constexpr uint32_t RWIN_FIELDS     = 4;
 
 inline constexpr uint32_t LSU_WORD_SIZE   = (VX_CFG_XLEN / 8);
 inline constexpr uint32_t LSU_CHANNELS    = VX_CFG_NUM_LSU_LANES;

@@ -95,8 +95,9 @@ def get_kernel_entries(elf_file):
     return entries
 
 def get_reg_counts(elf_file, pcs):
-    # Each entry's {Ru, Rf, Rx} in units of 4 registers for its pad field, 0
-    # when the kernel runs with every register (vx_regpack.py).
+    # Each entry's {Ru:4, Rf:6, Rx:6} in units of 4 registers for its pad field,
+    # 0 when the kernel runs with every register (vx_regpack.py), as it does
+    # when a count does not fit (256 registers through register windows).
     with open(elf_file, 'rb') as f:
         data = f.read()
     try:
@@ -105,8 +106,11 @@ def get_reg_counts(elf_file, pcs):
         print("vxbin: warning: {}: {}; the kernel runs with every register".format(elf_file, e),
               file=sys.stderr)
         return [0] * len(pcs)
-    return [0 if r is None else (r[2] // 4) << 8 | (r[1] // 4) << 4 | (r[0] // 4)
-            for r in counts]
+    def field(r):
+        if r is None or r[0] > 252 or r[1] > 252 or r[2] > 60:
+            return 0
+        return (r[2] // 4) << 12 | (r[1] // 4) << 6 | (r[0] // 4)
+    return [field(r) for r in counts]
 
 def build_symtab_footer(entries, reg_counts):
     # VXSYMTAB footer layout consumed by vx_module.cpp Module::load_bytes:

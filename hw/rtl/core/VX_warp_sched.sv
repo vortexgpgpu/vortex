@@ -175,7 +175,7 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
         // Every event that can change this warp's state: without one, the next
         // state is the current one, so on ASIC the registers take no clock edge.
         wire state_upd = (sched_if.cta_fire && (sched_if.cta_lid == LID))
-                      || (decode_sched_if.valid && decode_sched_if.unlock && (dec_lid == LID))
+                      || (decode_sched_if.valid && (decode_sched_if.unlock || decode_sched_if.fused) && (dec_lid == LID))
                       || sched_if.wspawn_apply
                       || ((wctl[QS].tmc_valid || wctl[QS].split_valid || wctl[QS].wsync_valid) && ctl_hit)
                       || join_hit
@@ -293,6 +293,13 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
                 pc_n = seq_pc;
             end
 
+        `ifndef VX_CFG_EXT_C_ENABLE
+            // a fused vx_rwin pair is 8 bytes; the sequential advance covers 4
+            if (decode_sched_if.valid && decode_sched_if.fused && (dec_lid == LID)) begin
+                pc_n = pc_n + from_fullPC(`VX_CFG_XLEN'(4));
+            end
+        `endif
+
         `ifdef VX_CFG_EXT_RTU_ENABLE
             // A wstall'd TRACE retires: resume the warp so it proceeds to WAIT.
             if (rtu_unlock_valid[QS] && (rtu_lid[QS] == LID)) begin
@@ -371,7 +378,9 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
         logic [IBUF_CW-1:0] ibuf_size_r, ibuf_size_n;
         logic ibuf_full_r;
         wire ibuf_incr = sched_fire && cand_onehot[l];
-        assign ibuf_size_n = ibuf_size_r + IBUF_CW'(ibuf_incr) - IBUF_CW'(ibuf_pop[l]);
+        // decode consumed this warp's instruction (vx_rwin): its slot is free
+        wire ibuf_drop = decode_sched_if.valid && decode_sched_if.drop && (dec_lid == LID);
+        assign ibuf_size_n = ibuf_size_r + IBUF_CW'(ibuf_incr) - IBUF_CW'(ibuf_pop[l]) - IBUF_CW'(ibuf_drop);
         always @(posedge clk) begin
             if (reset) begin
                 ibuf_size_r <= '0;

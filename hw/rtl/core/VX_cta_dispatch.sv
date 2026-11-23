@@ -282,8 +282,8 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
 `ifdef VX_CFG_EXT_U_ENABLE
     // Its uniform registers fit iff (w / GPR_NC + 1) * Ru <= UREG_ROWS.
     localparam UREG_ROWS = `VX_CFG_UREG_ROWS;
-    `STATIC_ASSERT ((UREG_ROWS >= RV_REGS) && ((UREG_ROWS % 4) == 0), ("invalid VX_CFG_UREG_ROWS"))
-    wire [8:0] kreq_ru = kreq_all_regs ? 9'(RV_REGS) : 9'(kmu_req.num_regs[23:16]);
+    `STATIC_ASSERT ((UREG_ROWS >= UREG_REGS) && ((UREG_ROWS % 4) == 0), ("invalid VX_CFG_UREG_ROWS"))
+    wire [8:0] kreq_ru = kreq_all_regs ? 9'(UREG_REGS) : 9'(kmu_req.num_regs[23:16]);
 `else
     `UNUSED_VAR (kmu_req.num_regs[23:16])
 `endif
@@ -310,7 +310,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
             gpr_layout_r.size4   <= GPR_SET_W'(GPR_SET_REGS / 4);
             gpr_layout_r.fp_off4 <= GPR_SET_W'(RV_REGS / 4);
         `ifdef VX_CFG_EXT_U_ENABLE
-            gpr_layout_r.usize4  <= UREG_SET_W'(RV_REGS / 4);
+            gpr_layout_r.usize4  <= UREG_SET_W'(UREG_REGS / 4);
         `endif
         end else if (layout_load) begin
             warp_fits_r          <= warp_fits;
