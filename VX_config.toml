@@ -94,11 +94,11 @@ VX_CFG_SIMD_WIDTH = "expr: $VX_CFG_NUM_THREADS"
 # banks deeper rather than add collectors.
 VX_CFG_NUM_OPCS = "expr: min(4, up($VX_CFG_NUM_WARPS / (4 * $VX_CFG_ISSUE_WIDTH)))"
 VX_CFG_NUM_GPR_BANKS = 4
-# Registers per operand collector: by default 32 per register file (x, and f
-# with F) for each of its warps, and never less than one full set. A smaller file holds fewer warps of a kernel that uses every
-# register and more of one that uses few (VX_DCR_KMU_NUM_REGS); it must hold
-# at least one full set.
-VX_CFG_GPR_ROWS = "expr: max(32 * $gpr_types * (($VX_CFG_NUM_WARPS // $VX_CFG_ISSUE_WIDTH + $VX_CFG_NUM_OPCS - 1) // $VX_CFG_NUM_OPCS), $gpr_types * $VX_CFG_NUM_RV_REGS)"
+# Registers per operand collector: by default a full set (x, and f with F) for
+# each of its warps. A smaller file holds fewer warps of a kernel that uses
+# every register and more of one that uses few (VX_DCR_KMU_NUM_REGS); it must
+# hold at least one full set.
+VX_CFG_GPR_ROWS = "expr: $gpr_types * $VX_CFG_NUM_RV_REGS * (($VX_CFG_NUM_WARPS // $VX_CFG_ISSUE_WIDTH + $VX_CFG_NUM_OPCS - 1) // $VX_CFG_NUM_OPCS)"
 # Uniform registers per operand collector (VX_CFG_EXT_U_ENABLE): by default 32
 # for each of its warps. A kernel takes them in multiples of 4, u1 up, so a
 # smaller file holds more warps of a kernel that uses few.

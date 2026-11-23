@@ -211,9 +211,40 @@ def code_ranges(data):
     return ranges
 
 
+def is_zfinx(data):
+    """Whether the image's RISC-V arch attribute names Zfinx: FP operands are x registers."""
+    is64 = data[4] == 2
+    if is64:
+        e_shoff, = struct.unpack_from('<Q', data, 0x28)
+        e_shentsize, e_shnum = struct.unpack_from('<HH', data, 0x3A)
+    else:
+        e_shoff, = struct.unpack_from('<I', data, 0x20)
+        e_shentsize, e_shnum = struct.unpack_from('<HH', data, 0x2E)
+    SHT_RISCV_ATTRIBUTES = 0x70000003
+    for i in range(e_shnum):
+        sh = e_shoff + i * e_shentsize
+        if is64:
+            sh_type, _, _, sh_offset, sh_size = struct.unpack_from('<IQQQQ', data, sh + 4)
+        else:
+            sh_type, _, _, sh_offset, sh_size = struct.unpack_from('<IIIII', data, sh + 4)
+        if sh_type == SHT_RISCV_ATTRIBUTES and b'_zfinx' in data[sh_offset:sh_offset + sh_size]:
+            return True
+    return False
+
+
+def zfinx_view(fields, props):
+    """Under Zfinx an FP field names an x register; FP registers named implicitly
+    (fragments, register runs) sit at x positions this script does not model."""
+    fields = [(name, 'x' if k == 'f' else k) for name, k in fields]
+    props = tuple(UNPACKED if (p in (FP_FIXED, FP_KEPT) or (isinstance(p, tuple) and p[0] == FP_HI))
+                  else p for p in props)
+    return fields, props
+
+
 def scan(data):
     """Decoded instructions as [(file offset, word, fields)], and the image properties."""
     insts, props = [], set()
+    zfinx = is_zfinx(data)
     for off, size, addr in code_ranges(data):
         for i in range(0, size - size % 4, 4):
             w, = struct.unpack_from('<I', data, off + i)
@@ -223,6 +254,8 @@ def scan(data):
                 fields, p = decode(w)
             except DecodeError as e:
                 raise DecodeError("0x{:x}: {:08x}: {}".format(addr + i, w, e))
+            if zfinx:
+                fields, p = zfinx_view(fields, p)
             insts.append((off + i, w, fields))
             props.update(p)
     return insts, props
@@ -385,8 +418,10 @@ def kernel_counts(data, pcs):
             continue
         sub = {i[0]: i for i in startup + code}
         sub_props = set()
-        for _, w, _ in sub.values():
-            sub_props.update(decode(w)[1])
+        zfinx = is_zfinx(data)
+        for _, w, fields in sub.values():
+            p = decode(w)[1]
+            sub_props.update(zfinx_view(fields, p)[1] if zfinx else p)
         result.append(counts_of(list(sub.values()), sub_props))
     return result
 
