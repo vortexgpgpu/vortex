@@ -155,7 +155,6 @@ public:
   virtual uint32_t size() const = 0;
   virtual uint32_t capacity() const = 0;
 
-
 protected:
   // Defined after SimPlatform: registers with the platform channel registry
   // (used for topology validation).
@@ -183,16 +182,35 @@ protected:
   SimChannelBase* source_;
   SimChannelBase* endpoint_cache_ = nullptr;
   // Packets sent toward this endpoint and not yet consumed are counted in the
-  // endpoint's domain (resolved on first use): only that domain's context
+  // endpoint's domain (bound at construction): only that domain's context
   // touches the counter, so it needs no atomic and shares no cache line.
   int64_t* inflight_ = nullptr;
-  int64_t& inflight() {
-    if (__builtin_expect(inflight_ == nullptr, 0)) {
-      inflight_ = &this->resolve_inflight();
-    }
-    return *inflight_;
-  }
+  int64_t& inflight() { return *inflight_; }
   int64_t& resolve_inflight();
+  // The endpoint domain's cycle counter (bound at construction): a delay-line
+  // endpoint compares its head's ready cycle against it.
+  const uint64_t* clock_ = nullptr;
+  const uint64_t& clock() const { return *clock_; }
+  const uint64_t& resolve_clock();
+  // Bind the domain counters (at construction, and when a copy-assignment
+  // moves the channel to another module).
+  void resolve_domain() {
+    inflight_ = &this->resolve_inflight();
+    clock_ = &this->resolve_clock();
+  }
+  // A send writes straight into the endpoint's delay line unless a delivery
+  // callback sits on the chain, which must run at arrival (resolved on first
+  // send; 0 unknown, 1 direct, 2 through events).
+  bool has_tx_cb_ = false;
+  uint8_t delivery_mode_ = 0;
+  bool chain_has_tx_cb() const {
+    for (auto* e = this; e != nullptr; e = e->sink_) {
+      if (e->has_tx_cb_) {
+        return true;
+      }
+    }
+    return false;
+  }
   bool boundary_stage_ = false;
   SmallFunction<void(), 48> pop_cb_;
 
@@ -522,6 +540,9 @@ private:
     std::vector<LaneEvent> imm;
     // Packets in flight toward this domain's endpoints (see SimChannelBase).
     alignas(64) int64_t inflight = 0;
+    // The cycle this domain is ticking, or delivering into; the next cycle to
+    // run between cycles. Read by its delay-line endpoints.
+    uint64_t now = 0;
     uint32_t id = 0;
     Domain() : wheel(WHEEL_SIZE) {}
   };
@@ -1005,6 +1026,7 @@ private:
   }
 
   void fire_bucket(Domain& dom, uint64_t cycle) {
+    dom.now = cycle;
     auto& bucket = dom.wheel[cycle & WHEEL_MASK];
     auto& lane = dom.next[cycle & 1];
     if (bucket.empty() && lane.empty()) {
@@ -1106,6 +1128,109 @@ private:
 // SimChannel Implementation
 ///////////////////////////////////////////////////////////////////////////////
 
+// The storage of a channel endpoint: a delay line. Each slot holds a packet
+// and the cycle it becomes visible, in ready order (equal cycles in send
+// order), so a send writes its packet here at once and no delivery event is
+// needed. Capacity is fixed; packets are constructed in place.
+template <typename Pkt>
+class DelayRing {
+public:
+  DelayRing() = default;
+
+  explicit DelayRing(uint32_t capacity)
+    : capacity_(capacity)
+    , slots_(new Slot[capacity]) {
+    __assert(capacity > 0, "DelayRing: capacity must be > 0");
+  }
+
+  DelayRing(const DelayRing&) = delete;
+  DelayRing& operator=(const DelayRing&) = delete;
+
+  DelayRing(DelayRing&& other) noexcept { this->take(other); }
+
+  DelayRing& operator=(DelayRing&& other) noexcept {
+    if (this != &other) {
+      this->clear();
+      this->take(other);
+    }
+    return *this;
+  }
+
+  ~DelayRing() { this->clear(); }
+
+  uint32_t size() const { return size_; }
+  uint32_t capacity() const { return capacity_; }
+
+  // Ready cycle of the oldest packet; all ones when empty.
+  uint64_t head_ready() const { return head_ready_; }
+
+  const Pkt& front() const { return *slots_[head_].pkt(); }
+
+  void pop() {
+    slots_[head_].pkt()->~Pkt();
+    head_ = this->wrap(head_ + 1);
+    --size_;
+    head_ready_ = (size_ != 0) ? slots_[head_].ready : ~uint64_t(0);
+  }
+
+  template <typename P>
+  void insert(P&& pkt, uint64_t ready) {
+    __assert(size_ < capacity_, "channel delay line overflow");
+    uint32_t i = size_;
+    uint32_t pos = this->wrap(head_ + i);
+    while (i > 0) {
+      uint32_t prev = this->wrap(head_ + i - 1);
+      if (slots_[prev].ready <= ready) {
+        break;
+      }
+      new (slots_[pos].buf) Pkt(std::move(*slots_[prev].pkt()));
+      slots_[pos].ready = slots_[prev].ready;
+      slots_[prev].pkt()->~Pkt();
+      pos = prev;
+      --i;
+    }
+    new (slots_[pos].buf) Pkt(std::forward<P>(pkt));
+    slots_[pos].ready = ready;
+    ++size_;
+    if (i == 0) {
+      head_ready_ = ready;
+    }
+  }
+
+  void clear() {
+    while (size_ != 0) {
+      this->pop();
+    }
+  }
+
+private:
+  struct Slot {
+    uint64_t ready;
+    alignas(Pkt) unsigned char buf[sizeof(Pkt)];
+    Pkt* pkt() { return std::launder(reinterpret_cast<Pkt*>(buf)); }
+    const Pkt* pkt() const { return std::launder(reinterpret_cast<const Pkt*>(buf)); }
+  };
+
+  uint32_t wrap(uint32_t i) const { return (i >= capacity_) ? i - capacity_ : i; }
+
+  void take(DelayRing& other) {
+    capacity_ = other.capacity_;
+    slots_ = std::move(other.slots_);
+    head_ = other.head_;
+    size_ = other.size_;
+    head_ready_ = other.head_ready_;
+    other.capacity_ = 0;
+    other.head_ = other.size_ = 0;
+    other.head_ready_ = ~uint64_t(0);
+  }
+
+  uint32_t capacity_ = 0;
+  std::unique_ptr<Slot[]> slots_;
+  uint32_t head_ = 0;
+  uint32_t size_ = 0;
+  uint64_t head_ready_ = ~uint64_t(0);
+};
+
 template <typename Pkt>
 class SimChannel : public SimChannelBase {
 public:
@@ -1123,9 +1248,11 @@ public:
     , pending_count_(0)
     , reg_ready_(other.reg_ready_)
     , convert_fn_(other.convert_fn_)
+    , deliver_fn_(other.deliver_fn_)
     , tx_cb_(other.tx_cb_) {
     sink_ = nullptr;
     source_ = nullptr;
+    has_tx_cb_ = other.has_tx_cb_;
   }
 
   SimChannel& operator=(const SimChannel& other) {
@@ -1134,17 +1261,20 @@ public:
       sink_ = nullptr;
       source_ = nullptr;
       endpoint_cache_ = nullptr;
-      inflight_ = nullptr;
+      this->resolve_domain();
       pop_cb_ = {};
       push_waker_ = nullptr;
       pop_waker_ = nullptr;
-      storage_ = RingQueue<Pkt>(other.storage_.capacity());
+      storage_ = DelayRing<Pkt>(other.storage_.capacity());
       pending_count_ = 0;
       reg_ready_ = other.reg_ready_;
       freed_cycle_ = ~uint64_t(0);
       freed_count_ = 0;
       convert_fn_ = other.convert_fn_;
+      deliver_fn_ = other.deliver_fn_;
       tx_cb_ = other.tx_cb_;
+      has_tx_cb_ = other.has_tx_cb_;
+      delivery_mode_ = 0;
     }
     return *this;
   }
@@ -1152,12 +1282,16 @@ public:
   void bind(SimChannel<Pkt>* sink) {
     this->bind_setup(sink);
     convert_fn_.reset();
+    deliver_fn_.reset();
   }
 
   template <typename U, typename Converter>
   void bind(SimChannel<U>* sink, Converter&& converter) {
     static_assert(std::is_invocable_r_v<U, Converter, Pkt>, "Converter signature mismatch");
     this->bind_setup(sink);
+    deliver_fn_ = [sink, conv = converter](const Pkt& pkt, uint64_t ready) {
+      sink->deliver(conv(pkt), ready);
+    };
     convert_fn_ = [sink, conv = std::forward<Converter>(converter)](const Pkt& pkt) {
       sink->receive_packet(conv(pkt));
     };
@@ -1166,6 +1300,9 @@ public:
   template <typename U, typename = std::enable_if_t<std::is_convertible_v<Pkt, U>>>
   void bind(SimChannel<U>* sink) {
     this->bind_setup(sink);
+    deliver_fn_ = [sink](const Pkt& pkt, uint64_t ready) {
+      sink->deliver(U(pkt), ready);
+    };
     convert_fn_ = [sink](const Pkt& pkt) {
       sink->receive_packet(pkt);
     };
@@ -1174,7 +1311,10 @@ public:
   // Fires on delivery, in the endpoint domain's execution context: a
   // callback on a cross-domain chain must only touch endpoint-side state.
   template <typename F>
-  void tx_callback(F&& callback) { tx_cb_ = std::forward<F>(callback); }
+  void tx_callback(F&& callback) {
+    tx_cb_ = std::forward<F>(callback);
+    has_tx_cb_ = true;
+  }
 
   bool full() const override {
     if (sink_) {
@@ -1206,6 +1346,10 @@ public:
     if (platform.audit_enabled()) {
       platform.audit_send(this, delay);
     }
+    if (this->direct_delivery()) {
+      this->deliver(pkt, this->endpoint()->clock() + delay);
+      return;
+    }
     this->reserve();
     platform.schedule(this, pkt, delay);
   }
@@ -1220,6 +1364,10 @@ public:
     __assert(!this->full(), "channel is full");
     if (platform.audit_enabled()) {
       platform.audit_send(this, delay);
+    }
+    if (this->direct_delivery()) {
+      this->deliver(std::move(pkt), this->endpoint()->clock() + delay);
+      return;
     }
     this->reserve();
     platform.schedule(this, std::move(pkt), delay);
@@ -1325,11 +1473,39 @@ protected:
     }
     __assert(pending_count_ > 0, "pending count underflow");
     --pending_count_;
-    this->queue_push(pkt);
+    storage_.insert(pkt, this->clock());
+  }
+
+  // Direct delivery: down the chain (converting where a hop converts) into
+  // the endpoint's delay line, visible at `ready`. The endpoint's owner wakes
+  // now, at the send, as a reservation does.
+  template <typename P>
+  void deliver(P&& pkt, uint64_t ready) {
+    if (sink_) {
+      if (deliver_fn_) {
+        deliver_fn_(pkt, ready);
+      } else {
+        static_cast<SimChannel<Pkt>*>(sink_)->deliver(std::forward<P>(pkt), ready);
+      }
+      return;
+    }
+    ++this->inflight();
+    storage_.insert(std::forward<P>(pkt), ready);
+    wake_module(module_);
+    if (push_waker_) {
+      wake_module(push_waker_);
+    }
   }
 
 private:
   bool forwarded() const { return sink_ != nullptr; }
+
+  bool direct_delivery() {
+    if (__builtin_expect(delivery_mode_ == 0, 0)) {
+      delivery_mode_ = this->chain_has_tx_cb() ? 2 : 1;
+    }
+    return delivery_mode_ == 1;
+  }
 
   void bind_setup(SimChannelBase* sink) {
     __assert(sink != nullptr, "bind target is null");
@@ -1342,9 +1518,12 @@ private:
     __assert(!forwarded(), "cannot read from a forwarded channel");
   }
 
-  uint32_t occupancy() const { return this->queue_size() + pending_count_; }
+  uint32_t occupancy() const { return storage_.size() + pending_count_; }
 
-  bool queue_empty() const { return storage_.empty(); }
+  // No packet ready at the endpoint domain's current cycle.
+  bool queue_empty() const {
+    return storage_.head_ready() > this->clock();
+  }
   uint32_t queue_size() const { return storage_.size(); }
   const Pkt& queue_front() const { return storage_.front(); }
   uint32_t freed_now() const {
@@ -1371,15 +1550,14 @@ private:
       pop_cb_();
     }
   }
-  void queue_push(const Pkt& pkt) { storage_.push(pkt); }
-
-  RingQueue<Pkt> storage_;
+  DelayRing<Pkt> storage_;
   uint32_t pending_count_;
   bool reg_ready_ = false;
   uint64_t freed_cycle_ = ~uint64_t(0);
   uint64_t freed_gen_ = 0;
   uint32_t freed_count_ = 0;
   SmallFunction<void(const Pkt&), 48> convert_fn_;
+  SmallFunction<void(const Pkt&, uint64_t), 48> deliver_fn_;
   TxCallback tx_cb_;
 
   template <typename U> friend class SimChannel;
@@ -1728,6 +1906,9 @@ inline void SimPlatform::reset() {
 
   // Reset timing
   cycles_ = 0;
+  for (auto& dom : domains_) {
+    dom->now = 0;
+  }
   ++reset_gen_;
 }
 
@@ -1847,6 +2028,7 @@ void SimPlatform::run_until(Stop&& stop, const std::vector<Obj*>& voters, Busy&&
 }
 
 inline void SimPlatform::tick_domain(Domain& dom) {
+  dom.now = tl_cycles_;
   tl_exec_domain_ = dom.id;
   tl_exec_object_ = nullptr;
   // Start-of-cycle for this domain: integrate deferred cross-domain work.
@@ -1946,10 +2128,15 @@ inline SimChannelBase::SimChannelBase(SimObjectBase* module)
     , sink_(nullptr)
     , source_(nullptr) {
   SimPlatform::instance().register_channel(this);
+  this->resolve_domain();
 }
 
 inline int64_t& SimChannelBase::resolve_inflight() {
   return SimPlatform::instance().domain_at(module_->domain()).inflight;
+}
+
+inline const uint64_t& SimChannelBase::resolve_clock() {
+  return SimPlatform::instance().domain_at(module_->domain()).now;
 }
 
 inline SimChannelBase::~SimChannelBase() {
