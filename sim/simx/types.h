@@ -152,6 +152,16 @@ enum class RegType {
   Count
 };
 
+// Zfinx: FP operands name x registers, and the ones macro-ops address
+// implicitly (TCU fragments, RTU ray window) move to block 1 (x32 up).
+#ifdef VX_CFG_EXT_ZFINX_ENABLE
+inline constexpr RegType  FpRegType        = RegType::Integer;
+inline constexpr uint32_t FP_IMPLICIT_BASE = 32;
+#else
+inline constexpr RegType  FpRegType        = RegType::Float;
+inline constexpr uint32_t FP_IMPLICIT_BASE = 0;
+#endif
+
 inline std::ostream &operator<<(std::ostream &os, const RegType& type) {
   switch (type) {
   case RegType::None: break;

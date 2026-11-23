@@ -175,6 +175,26 @@ public:
     rsrc_[index] = { type, srcReg};
   }
 
+  // Encoding field a source was read from (0=rd, 1=rs1, 2=rs2, 3=rs3); it
+  // selects the register window. Defaults to rs<index+1>.
+  void set_src_field(uint32_t index, uint8_t field) {
+    rsrc_field_[index] = field;
+  }
+
+  // Widens each register operand by the window of its encoding field.
+  // Integer field 0 stays x0 in every window.
+  void apply_reg_window(uint32_t win) {
+    auto widen = [win](RegOpd& r, uint32_t field) {
+      if (r.type == RegType::None || (r.type == RegType::Integer && r.idx == 0))
+        return;
+      r.idx |= ((win >> (RWIN_BITS * field)) & RWIN_MASK) << 5;
+    };
+    widen(rdest_, 0);
+    for (uint32_t i = 0; i < MAX_REG_SOURCES; ++i) {
+      widen(rsrc_[i], rsrc_field_[i]);
+    }
+  }
+
   void set_parent_uuid(uint64_t parent_uuid) {
     parent_uuid_ = parent_uuid;
     is_uop_ = true;
@@ -255,6 +275,7 @@ private:
   OpType   op_type_;
   IntrArgs args_;
   RegOpd   rsrc_[MAX_REG_SOURCES];
+  uint8_t  rsrc_field_[MAX_REG_SOURCES] = {1, 2, 3};
   RegOpd   rdest_;
   uint8_t  dst_bytesel_;
   uint8_t  fcsr_rd_;

@@ -33,6 +33,8 @@ public:
   ThreadMask  tmask;
   Word        PC;
   uint32_t    code;
+  // instruction after a fused vx_rpfx (64-bit encoding model)
+  uint32_t    code2;
   bool        wb;
 
   RegOpd      dst_reg;
@@ -87,6 +89,7 @@ public:
     , tmask(0)
     , PC(0)
     , code(0)
+    , code2(0)
     , wb(false)
     , dst_reg({RegType::None, 0})
     , src_regs(NUM_SRC_REGS, {RegType::None, 0})
@@ -115,6 +118,7 @@ public:
     , tmask(rhs.tmask)
     , PC(rhs.PC)
     , code(rhs.code)
+    , code2(rhs.code2)
     , wb(rhs.wb)
     , dst_reg(rhs.dst_reg)
     , src_regs(rhs.src_regs)

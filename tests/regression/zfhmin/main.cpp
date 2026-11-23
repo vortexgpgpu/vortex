@@ -32,6 +32,7 @@ vx_device_h dev = nullptr;
 vx_queue_h  q = nullptr;
 vx_kernel_h kern = nullptr;
 uint32_t    xlen = 32;
+bool        zfinx = false;
 int         errors = 0;
 
 void parse_args(int argc, char** argv) {
@@ -330,6 +331,14 @@ void test_box(std::mt19937& rng) {
     uint64_t r2 = (uint64_t)sext16(h[i]);
     uint64_t r3 = ((g[i] >> 16) == 0xffff) ? rv_htof_s(uint16_t(g[i]), 0, nullptr) : 0x7fc00000u;
     uint64_t r4 = (uint64_t)sext16(g[i]);
+    if (zfinx) {
+      // Zhinxmin: no NaN-boxing; a half is sign-extended in an x register and
+      // fcvt.s.h ignores the bits above it. The moves are plain x registers.
+      r0 = uint32_t(sext16(h[i]));
+      r1 = g[i];
+      r3 = rv_htof_s(uint16_t(g[i]), 0, nullptr);
+      r4 = uint64_t(int64_t(int32_t(g[i])));
+    }
     if (o[0] != r0) {
       report("flh box", h[i], 0, r0, o[0]);
     }
@@ -364,13 +373,14 @@ int main(int argc, char** argv) {
     return 1;
   }
   xlen = VX_ISA_ARCH(isa);
+  zfinx = !(isa & VX_ISA_STD_F);
   vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
   CHECK(vx_queue_create(dev, &qi, &q));
   vx_module_h mod = nullptr;
   CHECK(vx_module_load_file(dev, kernel_file, &mod));
   CHECK(vx_module_get_kernel(mod, "main", &kern));
 
-  std::printf("zfhmin: xlen=%u dynamic frm=%u\n", xlen, frm_dyn);
+  std::printf("zfhmin: xlen=%u%s dynamic frm=%u\n", xlen, zfinx ? " zhinxmin" : "", frm_dyn);
   auto f32 = f32_inputs(rng);
   auto f64 = f64_inputs(rng);
   if (phases & 0x01) {

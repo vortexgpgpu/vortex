@@ -124,6 +124,12 @@
     `ifndef VX_CFG_EXT_F_ENABLE
         `error "VX_CFG_EXT_ZFHMIN_ENABLE requires VX_CFG_EXT_F_ENABLE"
     `endif
+    // FPnew NaN-boxes half results; Zhinxmin needs them sign-extended.
+    `ifdef VX_CFG_EXT_ZFINX_ENABLE
+        `ifdef VX_CFG_FPU_TYPE_FPNEW
+            `error "Zfhmin under Zfinx (Zhinxmin) is not supported with the FPnew FPU"
+        `endif
+    `endif
 `endif
 
 `ifdef VX_CFG_EXT_LDST_WIDE_ENABLE
@@ -212,8 +218,10 @@
 `define __used_reg_rv_rs2 RV_RS2
 `define __used_reg_rv_rs3 RV_RS3
 
+// x_i / x_f: the register a field names as an integer or an FP operand, with
+// the field's register window applied (integer field 0 stays x0).
 `define USED_REG(t, x, v) \
-    reg_ids[`__used_reg_rv_``x]  = make_reg_num(REG_TYPE_BITS'(t), RV_REGS_BITS'(``x)); \
+    reg_ids[`__used_reg_rv_``x]  = make_reg_num(REG_TYPE_BITS'(t), ((t) == REG_TYPE_I) ? ``x``_i : ``x``_f); \
     use_regs[`__used_reg_rv_``x] = v
 
 `define USED_IREG(x) \

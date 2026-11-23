@@ -631,6 +631,25 @@ public:
       if (ibuf_room && decode_latch.try_push(trace)) {
         uint32_t offset = trace->PC & (VX_CFG_MEM_BLOCK_SIZE - 1);
         std::memcpy(&trace->code, mem_rsp.data->data() + offset, sizeof(uint32_t));
+      #ifdef VX_CFG_EXT_RWIN_ENABLE
+        // A vx_rwin fuses with the next word of its 8-byte fetch word, as in
+        // the RTL (RWIN_FUSE_STUDY: anywhere in the line; RWIN_NO_FUSE:
+        // never). A vx_rpfx models a 64-bit instruction and fuses anywhere.
+        trace->code2 = 0;
+        auto rw = Decoder::decode_rwin(trace->code);
+        bool fuse = rw.prefix;
+      #if defined(RWIN_FUSE_STUDY)
+        fuse |= rw.valid;
+      #elif !defined(RWIN_NO_FUSE)
+        fuse |= rw.valid && (offset & 4) == 0;
+      #endif
+        if (fuse && offset + 2 * sizeof(uint32_t) <= VX_CFG_MEM_BLOCK_SIZE) {
+          std::memcpy(&trace->code2, mem_rsp.data->data() + offset + 4, sizeof(uint32_t));
+          if (Decoder::decode_rwin(trace->code2).valid) {
+            trace->code2 = 0;
+          }
+        }
+      #endif
         progressed = true;
       }
     #endif
@@ -729,7 +748,59 @@ public:
     // Decode: fill trace metadata from instruction bits. The decoder
     // recognises RVC encoding (low 2 bits != 11), expands internally, and
     // stamps IntrBrArgs.is_rvc.
+  #ifdef VX_CFG_EXT_RWIN_ENABLE
+    // vx_rwin is consumed here: it takes a fetch slot but no ibuffer entry or issue slot
+    auto rwin_op = Decoder::decode_rwin(trace->code);
+    uint32_t win = scheduler_->reg_window(trace->wid);
+    if (pending_pfx_.at(trace->wid) >= 0) {
+      win = pending_pfx_.at(trace->wid);
+      pending_pfx_.at(trace->wid) = -1;
+    }
+    if (rwin_op.valid && trace->code2 != 0) {
+      // fused with the instruction after it: one fetch for both
+      if (rwin_op.prefix) {
+        ++rwin_stats_.prefixes;
+      } else {
+        scheduler_->set_reg_window(trace->wid, rwin_op.win);
+        ++rwin_stats_.rwins;
+      }
+      win = rwin_op.win;
+      ++rwin_stats_.fused;
+      scheduler_->advance_pc(trace, 4);
+      trace->PC  += 4;
+      trace->code = trace->code2;
+      rwin_op.valid = false;
+    } else if (rwin_op.valid && rwin_op.prefix) {
+      ++rwin_stats_.prefixes;
+      pending_pfx_.at(trace->wid) = rwin_op.win;
+    }
+    if (rwin_op.valid) {
+      if (!rwin_op.prefix) {
+        scheduler_->set_reg_window(trace->wid, rwin_op.win);
+      }
+      scheduler_->advance_pc(trace, 4);
+      scheduler_->resume(trace->wid);
+      rwin_stats_.rwins += !rwin_op.prefix;
+      DT(3, simobject_->name() << "-pipeline decode: rwin=0x" << std::hex << rwin_op.win << std::dec << ", " << *trace);
+      decode_latch.pop();
+      this->ibuf_release(trace->wid);
+      this->pending_remove(trace->wid);
+      trace->~instr_trace_t();
+      trace_pool_.deallocate(trace, 1);
+      return;
+    }
+    auto instr = decoder_->decode(trace->code, trace->uuid, win);
+    ++rwin_stats_.decoded;
+    {
+      bool high = instr->get_dest_reg().idx >= 32;
+      for (uint32_t i = 0; i < NUM_SRC_REGS; ++i) {
+        high |= instr->get_src_reg(i).idx >= 32;
+      }
+      rwin_stats_.high_instrs += high;
+    }
+  #else
     auto instr = decoder_->decode(trace->code, trace->uuid);
+  #endif
     DP(1, "Instr: " << *instr << " (#" << trace->uuid << ")");
     trace->instr_ptr   = instr;
     trace->fu_type     = instr->get_fu_type();
@@ -1227,6 +1298,19 @@ public:
 
   // ----- Public-facing API (called from outer Core trampolines) -----
 
+#ifdef VX_CFG_EXT_RWIN_ENABLE
+  ~Impl() {
+    if (rwin_stats_.decoded != 0) {
+      std::cout << "rwin-stats: " << simobject_->name()
+                << " decoded=" << rwin_stats_.decoded
+                << " rwins=" << rwin_stats_.rwins
+                << " high_instrs=" << rwin_stats_.high_instrs
+                << " prefixes=" << rwin_stats_.prefixes
+                << " fused=" << rwin_stats_.fused << std::endl;
+    }
+  }
+#endif
+
   bool running() const {
     // committed stores wait in the LSU request queue until sent to memory
     if (scheduler_->running() || pending_total_ != 0 || !this->lsu_drained()) {
@@ -1416,6 +1500,18 @@ private:
   uint64_t pending_ifetches_;
 
   mutable PerfStats perf_stats_;
+#ifdef VX_CFG_EXT_RWIN_ENABLE
+  // decoded instructions (excluding vx_rwin), vx_rwin consumed, and instructions naming a register above x31
+  struct {
+    uint64_t decoded = 0;
+    uint64_t rwins = 0;
+    uint64_t high_instrs = 0;
+    uint64_t prefixes = 0;
+    uint64_t fused = 0;
+  } rwin_stats_;
+  // windows of an unfused vx_rpfx (it ended a line), per warp; -1 = none
+  std::vector<int32_t> pending_pfx_ = std::vector<int32_t>(VX_CFG_NUM_WARPS, -1);
+#endif
 
   // [iw][fu] commit staging: FU outputs land here one registered stage
   // before retirement; commit() grants among them fixed-priority.

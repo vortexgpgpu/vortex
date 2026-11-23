@@ -97,6 +97,11 @@ struct warp_t {
   // CTA CSR values set at dispatch time
   cta_csrs_t                        cta_csrs;
 
+#ifdef VX_CFG_EXT_RWIN_ENABLE
+  // register windows, RWIN_BITS per operand field (rd, rs1, rs2, rs3)
+  uint32_t                          rwin = 0;
+#endif
+
 #ifdef VX_CFG_EXT_RASTER_ENABLE
   // Per-lane fragment stamp, delivered WITH the launch (the raster engine packs
   // it into the launch message) and read back as the FRAG_* CSRs. The shader no
@@ -135,6 +140,10 @@ public:
   // Advance the warp's PC by `inc` bytes (called at decode with 2 or 4
   // depending on is_rvc; mirrors the hardware warp-PC update at decode).
   void advance_pc(const instr_trace_t* trace, uint32_t inc);
+#ifdef VX_CFG_EXT_RWIN_ENABLE
+  uint32_t reg_window(uint32_t wid) const;
+  void set_reg_window(uint32_t wid, uint32_t win);
+#endif
   bool running() const;
   bool wspawn(uint32_t num_warps, Word nextPC);
   bool setTmask(uint32_t wid, const ThreadMask& tmask);

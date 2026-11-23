@@ -44,18 +44,23 @@ package VX_gpu_pkg;
     localparam BYTESEL_BITS = (XLENB_W + XLENB_W);
     localparam [BYTESEL_BITS-1:0] BYTESEL_DEFAULT = {XLENB_W'(XLENB-1), XLENB_W'(0)};
 
-    localparam RV_REGS = 32;
-    localparam RV_REGS_BITS = 5;
+    // Registers per thread; above 32 they are reached through register windows.
+    localparam RV_REGS = `VX_CFG_NUM_RV_REGS;
+    localparam RV_REGS_BITS = `CLOG2(RV_REGS);
+    localparam RWIN_BITS = 3;
 
     localparam RV_RD  = 0;
     localparam RV_RS1 = 1;
     localparam RV_RS2 = 2;
     localparam RV_RS3 = 3;
 
-    localparam REG_TYPE_I = 0;
-    localparam REG_TYPE_F = 1;
+    // Zfinx: FP operands are x registers, so there is one register type.
+    localparam FP_REGFILE = `VX_CFG_EXT_F_ENABLED && !`VX_CFG_EXT_ZFINX_ENABLED;
 
-    localparam REG_TYPES = 1 + `VX_CFG_EXT_F_ENABLED;
+    localparam REG_TYPE_I = 0;
+    localparam REG_TYPE_F = FP_REGFILE ? 1 : 0;
+
+    localparam REG_TYPES = 1 + FP_REGFILE;
 
     localparam NUM_REGS = (REG_TYPES * RV_REGS);
 
@@ -1608,6 +1613,8 @@ package VX_gpu_pkg;
         logic [31:0]            instr;
     `ifdef VX_CFG_EXT_C_ENABLE
         logic                   is_rvc;
+    `elsif VX_CFG_EXT_RWIN_ENABLE
+        logic [31:0]            instr2; // the next word when it shares the fetch word (else 0)
     `endif
     } fetch_t;
 
@@ -2012,7 +2019,10 @@ package VX_gpu_pkg;
     ////////////////////////// Icache Parameters //////////////////////////////
 
     // Word size in bytes
-    localparam ICACHE_WORD_SIZE	    = 4;
+    // Register windows fetch 8 bytes, so a vx_rwin and the instruction after it
+    // in the same aligned pair reach decode together.
+    localparam RWIN_FUSED_FETCH     = `VX_CFG_EXT_RWIN_ENABLED && !`VX_CFG_EXT_C_ENABLED;
+    localparam ICACHE_WORD_SIZE	    = RWIN_FUSED_FETCH ? 8 : 4;
     localparam ICACHE_ADDR_WIDTH	= (`VX_CFG_MEM_ADDR_WIDTH - `CLOG2(ICACHE_WORD_SIZE));
 
     // Block size in bytes

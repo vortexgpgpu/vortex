@@ -54,6 +54,9 @@ void warp_t::reset() {
   this->mepc    = 0;
   this->mcause  = 0;
   this->mtval   = 0;
+#ifdef VX_CFG_EXT_RWIN_ENABLE
+  this->rwin = 0;
+#endif
   // Register files live in OpcUnit and are reset there.
 }
 
@@ -119,6 +122,9 @@ void Scheduler::activate_warp(uint32_t wid, const cta_warp_record_t& rec) {
   warp.PC       = rec.do_init ? rec.PC : (warp.PC - 20);
   warp.tmask    = rec.tmask;
   warp.mscratch = rec.mscratch;
+#ifdef VX_CFG_EXT_RWIN_ENABLE
+  warp.rwin = 0;
+#endif
 
   warp.cta_csrs.cta_id        = rec.cta_id;
   warp.cta_csrs.cta_rank      = rec.cta_rank;
@@ -182,6 +188,9 @@ void Scheduler::schedule_begin() {
       warp.PC = wspawn_.nextPC;
       warp.tmask.set(0);
       warp.mscratch = spawning_mscratch;
+    #ifdef VX_CFG_EXT_RWIN_ENABLE
+      warp.rwin = 0;
+    #endif
       active_warps_.set(i);
       // wspawn activation, like CTA dispatch: immediate (both current + next).
       stalled_warps_.reset(i);
@@ -318,6 +327,17 @@ void Scheduler::resume(uint32_t wid) {
 void Scheduler::advance_pc(const instr_trace_t* trace, uint32_t inc) {
   warps_.at(trace->wid).PC += inc;
 }
+
+#ifdef VX_CFG_EXT_RWIN_ENABLE
+uint32_t Scheduler::reg_window(uint32_t wid) const {
+  return warps_.at(wid).rwin;
+}
+
+void Scheduler::set_reg_window(uint32_t wid, uint32_t win) {
+  warps_.at(wid).rwin = win;
+  DT(3, core_->name() << " warp-state: wid=" << wid << ", rwin=0x" << std::hex << win << std::dec);
+}
+#endif
 
 bool Scheduler::setTmask(uint32_t wid, const ThreadMask& tmask) {
   auto& warp = warps_.at(wid);

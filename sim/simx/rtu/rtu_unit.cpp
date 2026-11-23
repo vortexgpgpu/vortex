@@ -382,7 +382,7 @@ Instr::Ptr RtuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
     // No source operands — the data comes from the RTU regfile. GETWF -> FP
     // (NaN-boxed), GETW -> GP (raw).
     uop->set_dest_reg(rd_idx + uop_index,
-                      rtu_type == GfxwType::GETWF ? RegType::Float : RegType::Integer);
+                      rtu_type == GfxwType::GETWF ? FpRegType : RegType::Integer);
   } else if (rtu_type == GfxwType::TRACE) {
     // f0..f7 ray window streamed three regs per uop.
     switch (uop_index) {
@@ -391,18 +391,18 @@ Instr::Ptr RtuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
       uop->set_src_reg(0, rs1_idx, RegType::Integer);
       break;
     case 1: // origin.xyz <- f0,f1,f2
-      uop->set_src_reg(0, 0, RegType::Float);
-      uop->set_src_reg(1, 1, RegType::Float);
-      uop->set_src_reg(2, 2, RegType::Float);
+      uop->set_src_reg(0, FP_IMPLICIT_BASE + 0, FpRegType);
+      uop->set_src_reg(1, FP_IMPLICIT_BASE + 1, FpRegType);
+      uop->set_src_reg(2, FP_IMPLICIT_BASE + 2, FpRegType);
       break;
     case 2: // dir.xyz <- f3,f4,f5
-      uop->set_src_reg(0, 3, RegType::Float);
-      uop->set_src_reg(1, 4, RegType::Float);
-      uop->set_src_reg(2, 5, RegType::Float);
+      uop->set_src_reg(0, FP_IMPLICIT_BASE + 3, FpRegType);
+      uop->set_src_reg(1, FP_IMPLICIT_BASE + 4, FpRegType);
+      uop->set_src_reg(2, FP_IMPLICIT_BASE + 5, FpRegType);
       break;
     case 3: // tmin,tmax <- f6,f7 (then arm)
-      uop->set_src_reg(0, 6, RegType::Float);
-      uop->set_src_reg(1, 7, RegType::Float);
+      uop->set_src_reg(0, FP_IMPLICIT_BASE + 6, FpRegType);
+      uop->set_src_reg(1, FP_IMPLICIT_BASE + 7, FpRegType);
       break;
     default:
       std::abort();
