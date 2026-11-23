@@ -101,7 +101,12 @@ module VX_decode import
     wire fmt_supported = (funct2 == INST_FMT_S);
 `endif
 `ifdef VX_CFG_EXT_ZFHMIN_ENABLE
+`ifdef VX_CFG_EXT_ZFINX_ENABLE
+    // Zhinxmin: H moves need f registers, so only the conversions remain.
+    wire mv_fmt_supported = fmt_supported;
+`else
     wire mv_fmt_supported = fmt_supported || (funct2 == INST_FMT_H);
+`endif
 `else
     wire mv_fmt_supported = fmt_supported;
 `endif

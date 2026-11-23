@@ -124,6 +124,12 @@
     `ifndef VX_CFG_EXT_F_ENABLE
         `error "VX_CFG_EXT_ZFHMIN_ENABLE requires VX_CFG_EXT_F_ENABLE"
     `endif
+    // FPnew NaN-boxes half results; Zhinxmin needs them sign-extended.
+    `ifdef VX_CFG_EXT_ZFINX_ENABLE
+        `ifdef VX_CFG_FPU_TYPE_FPNEW
+            `error "Zfhmin under Zfinx (Zhinxmin) is not supported with the FPnew FPU"
+        `endif
+    `endif
 `endif
 
 `ifdef VX_CFG_EXT_LDST_WIDE_ENABLE

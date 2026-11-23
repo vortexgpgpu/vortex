@@ -19,7 +19,9 @@ FP instructions read and write the x registers (Zfinx; no Zdinx, since RV32
 Vortex has no D). There are no f registers, FP loads and stores, or FP/integer
 moves. `VX_CFG_EXT_ZFINX_ENABLE` selects it; F stays the default. One file means
 one register budget per kernel instead of two padded halves, and one class for
-the compiler.
+the compiler. With `VX_CFG_EXT_ZFHMIN_ENABLE`, Zfinx gives Zhinxmin: the fp16
+conversions on x registers, half results sign-extended and the upper input bits
+ignored (no NaN-boxing); half loads, stores and moves are the integer ones.
 
 ### Windows
 
@@ -188,11 +190,12 @@ released, and the 8-byte fetch word with fusion. The scoreboard, register file
 and operand collector take the wider register numbers unchanged; the register
 file grows with the register count (dynamic warp allocation is not merged here).
 
-- **Regression suite** (SimX, Zfinx with windows at 64 registers): 66 of 81
-  pass; F passes all 81. The rest are the TCU tests and `ldst_matrix` (inline
-  asm pinned to f registers; the implicit block at x32 must also move, since
-  the compiler reserves x32), `ldst_wide` (hard-coded f registers) and
-  `zfhmin` (no Zhinx). Two bugs found and fixed: mask-changing instructions were
+- **Regression suite** (SimX, Zfinx with windows at 64 registers): 68 of 81
+  pass; F passes all 81. The rest are the 12 TCU tests and `ldst_matrix`
+  (inline asm pinned to f registers; the implicit block at x32 must also move,
+  since the compiler reserves x32), which are out of scope here: the tensor path
+  of interest keeps its operands in TMEM. `ldst_wide` and `zfhmin` (as
+  Zhinxmin) pass in SimX and rtlsim. Two bugs found and fixed: mask-changing instructions were
   not scheduling boundaries (`diverge` miscompiled under level-order
   scheduling), and the packed loads let their destination alias the base
   address, which Zfinx permits.

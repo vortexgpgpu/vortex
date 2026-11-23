@@ -53,7 +53,8 @@
 using namespace vortex;
 
 // FP format codes: 0 = S, 1 = D, 2 = H. Arithmetic and integer conversions
-// take S, or D with FLEN 64; Zfhmin adds H to moves and float conversions.
+// take S, or D with FLEN 64; Zfhmin adds H to moves and float conversions,
+// Zhinxmin (Zfhmin under Zfinx) to float conversions only.
 static bool fmt_supported(uint32_t fmt) {
 #ifdef VX_CFG_FLEN_64
   return (fmt == 0) || (fmt == 1);
@@ -62,11 +63,19 @@ static bool fmt_supported(uint32_t fmt) {
 #endif
 }
 
-static bool mv_fmt_supported(uint32_t fmt) {
+static bool cvt_fmt_supported(uint32_t fmt) {
 #ifdef VX_CFG_EXT_ZFHMIN_ENABLE
   return fmt_supported(fmt) || (fmt == 2);
 #else
   return fmt_supported(fmt);
+#endif
+}
+
+static bool mv_fmt_supported(uint32_t fmt) {
+#ifdef VX_CFG_EXT_ZFINX_ENABLE
+  return fmt_supported(fmt);
+#else
+  return cvt_fmt_supported(fmt);
 #endif
 }
 
@@ -918,7 +927,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid, uint32_t rwin) {
       // fmt codes: 0 = S, 1 = D, 2 = H
       uint32_t dst_fmt = funct7 & 0x3;
       uint32_t src_fmt = rs2;
-      bool supported = (src_fmt != dst_fmt) && mv_fmt_supported(src_fmt) && mv_fmt_supported(dst_fmt);
+      bool supported = (src_fmt != dst_fmt) && cvt_fmt_supported(src_fmt) && cvt_fmt_supported(dst_fmt);
       if (!supported) {
         std::abort();
       }
@@ -927,7 +936,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid, uint32_t rwin) {
       instr->set_src_reg(0, rs1, FpRegType);
       instr->set_fcsr_use(frm_rd, Instr::FCSR_FFLAGS);
     } break;
-#ifdef VX_CFG_EXT_ZFHMIN_ENABLE
+#if defined(VX_CFG_EXT_ZFHMIN_ENABLE) && !defined(VX_CFG_EXT_ZFINX_ENABLE)
     case 0x72: // FMV.X.H
       if (funct3 != 0) {
         std::abort();

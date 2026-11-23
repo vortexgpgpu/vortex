@@ -29,13 +29,19 @@ using namespace vortex;
 
 namespace {
 #ifdef VX_CFG_EXT_ZFINX_ENABLE
-// Zfinx: single-precision values sit unboxed in the x registers,
-// sign-extended to XLEN; inputs ignore the upper bits.
+// Zfinx (and Zhinxmin): single- and half-precision values sit unboxed in the
+// x registers, sign-extended to XLEN; inputs ignore the upper bits.
 inline uint64_t nan_box(uint32_t value) {
   return uint64_t(int64_t(int32_t(value)));
 }
 inline int64_t check_boxing(int64_t a) {
   return uint32_t(a);
+}
+inline uint64_t nan_box16(uint16_t value) {
+  return uint64_t(int64_t(int16_t(value)));
+}
+inline uint16_t check_boxing16(uint64_t a) {
+  return uint16_t(a);
 }
 #else
 inline uint64_t nan_box(uint32_t value) {
@@ -44,13 +50,13 @@ inline uint64_t nan_box(uint32_t value) {
 inline int64_t check_boxing(int64_t a) {
   return nanbox::box32(nanbox::unbox32(a, 0x7fc00000));
 }
-#endif
 inline uint64_t nan_box16(uint16_t value) {
   return nanbox::box16(value);
 }
 inline uint16_t check_boxing16(uint64_t a) {
   return nanbox::unbox16(a, 0x7e00);
 }
+#endif
 }
 
 FpuUnit::FpuUnit(const SimContext& ctx, const char* name, Core* core)

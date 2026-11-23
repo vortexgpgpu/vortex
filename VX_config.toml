@@ -35,7 +35,8 @@ VX_CFG_EXT_ZACAS_ENABLE = false
 
 VX_CFG_EXT_ZICOND_ENABLE = true
 # Zfhmin: half-precision load/store, move and fp16<->fp32/fp64 conversion (no
-# half arithmetic). Requires F.
+# half arithmetic). Requires F. Under Zfinx it is Zhinxmin: the conversions
+# only, on x registers, with half results sign-extended.
 VX_CFG_EXT_ZFHMIN_ENABLE = false
 # Register windows: up to 256 registers per class with 32-bit instructions, via
 # per-operand window bits (docs/proposals/register_windows_proposal.md).
