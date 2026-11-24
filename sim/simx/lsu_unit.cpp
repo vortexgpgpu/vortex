@@ -301,7 +301,7 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 			}
 			if (is_write || is_amo) {
 				// Stores carry rs2 as data; AMOs carry rs2 as the RMW operand
-				// (LR encodes rs2 = x0, so the captured value is 0).
+				// (LR has no rs2 operand, so the captured value is 0).
 				e.data = rs2_data[t].u64;
 			}
 			if (is_cas) {

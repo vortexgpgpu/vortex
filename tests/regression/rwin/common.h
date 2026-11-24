@@ -6,7 +6,7 @@
 enum {
   CHK_FIELDS = 0,   // a + b through x37/x69, with rs1 and rs2 in different windows
   CHK_STICKY,       // (a + 1) + b * b through x102/x103 under vx_rwin
-  CHK_X0,           // x0 reads zero with a nonzero rs1 window
+  CHK_X0,           // field 0 is x96 in window 3; x0 is zero in window 0
   CHK_FP,           // a through f225
   CHK_ISOLATED,     // a ^ 0x55 kept in x200 across compiler-generated code
   CHK_COUNT

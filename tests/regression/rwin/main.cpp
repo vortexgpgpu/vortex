@@ -100,11 +100,11 @@ int main(int argc, char *argv[]) {
   vx_event_release(read_ev);
   vx_event_release(launch_ev);
 
-  static const char* names[CHK_COUNT] = {"fields", "sticky", "x0", "fp", "isolated"};
+  static const char* names[CHK_COUNT] = {"fields", "sticky", "field0", "fp", "isolated"};
   int errors = 0;
   for (uint32_t i = 0; i < num_points; ++i) {
     uint32_t a = h_src[i], b = a * 3 + 1;
-    uint32_t ref[CHK_COUNT] = {a + b, (a + 1) + b * b, a + 1, a, a ^ 0x55};
+    uint32_t ref[CHK_COUNT] = {a + b, (a + 1) + b * b, (a + 2) + (a + 1), a, a ^ 0x55};
     for (uint32_t k = 0; k < CHK_COUNT; ++k) {
       uint32_t cur = h_dst[i * CHK_COUNT + k];
       if (cur != ref[k]) {

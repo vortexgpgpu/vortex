@@ -813,7 +813,9 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid, uint32_t rwin) {
     }
     instr->set_dest_reg(rd, RegType::Integer);
     instr->set_src_reg(0, rs1, RegType::Integer);
-    instr->set_src_reg(1, rs2, RegType::Integer);
+    if (funct5 != 0x02) { // LR's rs2 field is fixed at 0, not an operand
+      instr->set_src_reg(1, rs2, RegType::Integer);
+    }
     if (funct5 == 0x05) {
       // Compare-and-swap reads rd as well as writing it: rd carries the
       // comparand in, the loaded word out. It has to join the source set or

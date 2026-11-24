@@ -29,13 +29,16 @@ Each warp holds `W = {W.rd, W.rs1, W.rs2, W.rs3}`, 3 bits per instruction field
 (12 bits per warp). A register operand in field `p` with 5-bit value `f` names
 
 ```
-reg = (f == 0) ? x0 : (W[p] << 5) | f
+reg = (W[p] << 5) | f
 ```
 
 The field is the bit position the operand is encoded in (`rd` [11:7], `rs1`
 [19:15], `rs2` [24:20], `rs3` [31:27]), not its role: `amocas` reads its `rd`
-field through `W.rd`. Field value 0 is x0 in every window, so x32, x64, ... are
-never reachable. `VX_CFG_NUM_RV_REGS` (32, 64, 128 or 256) sets the registers
+field through `W.rd`. x0 is the only zero register: field value 0 names it in
+window 0 and x32, x64, ... in the others, so every register is reachable and a
+block of consecutive registers has no holes (as instructions that name a
+register range, such as TMEM loads, need). An instruction that uses x0 (`j`,
+`bnez`, `li`, ...) needs window 0 in that field. `VX_CFG_NUM_RV_REGS` (32, 64, 128 or 256) sets the registers
 per thread; a window beyond it is illegal.
 
 ### `vx_rwin`
@@ -79,7 +82,7 @@ count.
 
 - **Registers.** x32 to x255 are added to the GPR class (and to the Zfinx f16
   and f32 sub-register classes) and reserved unless `-riscv-vortex-max-regs`
-  allows them; x32, x64, ... are always reserved. Inline asm and the operands of
+  allows them. Inline asm and the operands of
   the divergence instructions stay in x1 to x31. With the default of 32,
   generated code matches the shipped compiler apart from register-choice noise
   in two of six kernels checked (same instruction and spill counts).
@@ -192,8 +195,8 @@ file grows with the register count (dynamic warp allocation is not merged here).
 
 - **Regression suite** (SimX, Zfinx with windows at 64 registers): 68 of 81
   pass; F passes all 81. The rest are the 12 TCU tests and `ldst_matrix`
-  (inline asm pinned to f registers; the implicit block at x32 must also move,
-  since the compiler reserves x32), which are out of scope here: the tensor path
+  (inline asm pinned to f registers; the implicit block at x32 must also move),
+  which are out of scope here: the tensor path
   of interest keeps its operands in TMEM. `ldst_wide` and `zfhmin` (as
   Zhinxmin) pass in SimX and rtlsim. Two bugs found and fixed: mask-changing instructions were
   not scheduling boundaries (`diverge` miscompiled under level-order

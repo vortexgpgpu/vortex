@@ -279,23 +279,19 @@ module VX_decode import
         end
     end
     // each field's window is applied as the field is extracted, beside the
-    // opcode decode; an integer field 0 stays x0
+    // opcode decode; field 0 names x0 only in window 0
     localparam WB = RV_REGS_BITS - 5;
     `UNUSED_VAR (rwin_cur) // below 256 registers a window uses fewer than RWIN_BITS bits
-    wire [RV_REGS_BITS-1:0] rd_f  = {rwin_cur[0 * RWIN_BITS +: WB], rd};
-    wire [RV_REGS_BITS-1:0] rs1_f = {rwin_cur[1 * RWIN_BITS +: WB], rs1};
-    wire [RV_REGS_BITS-1:0] rs2_f = {rwin_cur[2 * RWIN_BITS +: WB], rs2};
-    wire [RV_REGS_BITS-1:0] rs3_f = {rwin_cur[3 * RWIN_BITS +: WB], rs3};
-    wire [RV_REGS_BITS-1:0] rd_i  = (rd  == 5'd0) ? '0 : rd_f;
-    wire [RV_REGS_BITS-1:0] rs1_i = (rs1 == 5'd0) ? '0 : rs1_f;
-    wire [RV_REGS_BITS-1:0] rs2_i = (rs2 == 5'd0) ? '0 : rs2_f;
-    wire [RV_REGS_BITS-1:0] rs3_i = (rs3 == 5'd0) ? '0 : rs3_f;
+    wire [RV_REGS_BITS-1:0] rd_i  = {rwin_cur[0 * RWIN_BITS +: WB], rd};
+    wire [RV_REGS_BITS-1:0] rs1_i = {rwin_cur[1 * RWIN_BITS +: WB], rs1};
+    wire [RV_REGS_BITS-1:0] rs2_i = {rwin_cur[2 * RWIN_BITS +: WB], rs2};
+    wire [RV_REGS_BITS-1:0] rs3_i = {rwin_cur[3 * RWIN_BITS +: WB], rs3};
 `else
     wire is_rwin = 1'b0;
-    wire [RV_REGS_BITS-1:0] rd_i  = RV_REGS_BITS'(rd),  rd_f  = RV_REGS_BITS'(rd);
-    wire [RV_REGS_BITS-1:0] rs1_i = RV_REGS_BITS'(rs1), rs1_f = RV_REGS_BITS'(rs1);
-    wire [RV_REGS_BITS-1:0] rs2_i = RV_REGS_BITS'(rs2), rs2_f = RV_REGS_BITS'(rs2);
-    wire [RV_REGS_BITS-1:0] rs3_i = RV_REGS_BITS'(rs3), rs3_f = RV_REGS_BITS'(rs3);
+    wire [RV_REGS_BITS-1:0] rd_i  = RV_REGS_BITS'(rd);
+    wire [RV_REGS_BITS-1:0] rs1_i = RV_REGS_BITS'(rs1);
+    wire [RV_REGS_BITS-1:0] rs2_i = RV_REGS_BITS'(rs2);
+    wire [RV_REGS_BITS-1:0] rs3_i = RV_REGS_BITS'(rs3);
 `endif
 
     always @(*) begin

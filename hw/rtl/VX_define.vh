@@ -218,10 +218,9 @@
 `define __used_reg_rv_rs2 RV_RS2
 `define __used_reg_rv_rs3 RV_RS3
 
-// x_i / x_f: the register a field names as an integer or an FP operand, with
-// the field's register window applied (integer field 0 stays x0).
+// x_i: the register a field names, with the field's register window applied
 `define USED_REG(t, x, v) \
-    reg_ids[`__used_reg_rv_``x]  = make_reg_num(REG_TYPE_BITS'(t), ((t) == REG_TYPE_I) ? ``x``_i : ``x``_f); \
+    reg_ids[`__used_reg_rv_``x]  = make_reg_num(REG_TYPE_BITS'(t), ``x``_i); \
     use_regs[`__used_reg_rv_``x] = v
 
 `define USED_IREG(x) \

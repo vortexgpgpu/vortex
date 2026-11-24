@@ -24,15 +24,19 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     RWIN(0, 0, 0, 0)
     : [r] "=&r"(r0) : [a] "r"(a), [b] "r"(b));
 
-  // x102 = a + 1, x103 = b * b, r1 = x102 + x103, r2 = x0 + x102
+  // x102 = a + 1, x103 = b * b, x96 = a + 2, r1 = x102 + x103,
+  // r2 = x96 + x102 + x0: field 0 is x96 in window 3, x0 only in window 0
   __asm__ volatile (
     RWIN(3, 0, 0, 0)
     "addi x6, %[a], 1\n\t"
     "mul x7, %[b], %[b]\n\t"
+    "addi x0, %[a], 2\n\t"
     RWIN(0, 3, 3, 0)
     "add %[r1], x6, x7\n\t"
     "add %[r2], x0, x6\n\t"
     RWIN(0, 0, 0, 0)
+    "addi x0, %[a], 5\n\t"
+    "add %[r2], %[r2], x0\n\t"
     : [r1] "=&r"(r1), [r2] "=&r"(r2) : [a] "r"(a), [b] "r"(b));
 
   // f225 = a, r3 = f225

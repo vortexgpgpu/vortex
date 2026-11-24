@@ -181,11 +181,11 @@ public:
     rsrc_field_[index] = field;
   }
 
-  // Widens each register operand by the window of its encoding field.
-  // Integer field 0 stays x0 in every window.
+  // Widens each register operand by the window of its encoding field; field 0
+  // names x0 only in window 0.
   void apply_reg_window(uint32_t win) {
     auto widen = [win](RegOpd& r, uint32_t field) {
-      if (r.type == RegType::None || (r.type == RegType::Integer && r.idx == 0))
+      if (r.type == RegType::None)
         return;
       r.idx |= ((win >> (RWIN_BITS * field)) & RWIN_MASK) << 5;
     };
