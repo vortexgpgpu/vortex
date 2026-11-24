@@ -309,20 +309,25 @@ module VX_alu_int import VX_gpu_pkg::*; #(
         assign wg_src_mask[k] = (2'(k) == wg_src_offset);
     end
 
+    // WGATHER writes the FULL nibble (every non-source lane), regardless of the
+    // active mask, so the gathered value is materialised even in masked lanes:
+    // the consumer can then read any nibble lane under a partial warp. Source
+    // lanes stay suppressed (keep their self value). Full warps are unchanged
+    // (header.tmask is all-ones there).
+    // The written lanes are selected whole and the header takes them in one
+    // assignment: with two conditional writes of header.tmask in one block,
+    // the 5.050 simulator build set the header bits above tmask (cta_id, wid,
+    // uuid).
+    wire is_wgather = (execute_if.data.op_args.alu.xtype == ALU_TYPE_OTHER) && alu_op[3];
+    wire is_jmp_misaligned = br_misaligned && inst_br_is_static(br_op);
+    wire [NUM_LANES-1:0] alu_tmask = is_jmp_misaligned ? NUM_LANES'(0)
+                                   : is_wgather ? ~wg_src_mask
+                                   : execute_if.data.header.tmask;
+
     alu_header_t alu_hdr_in;
     always @(*) begin
         alu_hdr_in = execute_if.data.header;
-        if ((execute_if.data.op_args.alu.xtype == ALU_TYPE_OTHER) && alu_op[3]) begin
-            // WGATHER writes the FULL nibble (every non-source lane), regardless
-            // of the active mask, so the gathered value is materialised even in
-            // masked lanes — the consumer can then read any nibble lane under a
-            // partial warp. Source lanes stay suppressed (keep their self value).
-            // Full warps are unchanged (header.tmask is all-ones there).
-            alu_hdr_in.tmask = ~wg_src_mask;
-        end
-        if (br_misaligned && inst_br_is_static(br_op)) begin
-            alu_hdr_in.tmask = '0;
-        end
+        alu_hdr_in.tmask = alu_tmask;
     end
 
 `ifdef VX_CFG_EXT_C_ENABLE
