@@ -18,3 +18,8 @@ OPTS ?= -n2
 KERNEL_LIB := vortex2
 
 include ../common.mk
+
+# The kernel sets windows in inline asm, which the compiler's register count
+# cannot see. With the compiler's windows off it records no count, and the
+# loader takes the registers from the kernel's vx_rwin instructions.
+LLVM_CFLAGS += -mllvm -riscv-vortex-max-regs=32
