@@ -23,7 +23,7 @@ OSVERSION=${OSVERSION:=@OSVERSION@}
 REPOSITORY=https://github.com/vortexgpgpu/vortex-toolchain-prebuilt/raw/${TOOLCHAIN_REV}
 
 # Download <name>.tar.bz2 from <dir>, published whole or as the parts
-# ci/toolchain_prebuilt.sh's `split -b 50M` wrote (.partaa, .partab, ...),
+# ci/toolchain_prebuilt.sh's `split -b 50M` wrote (.partaa, .partab, ... .partzz),
 # and leave it whole in the current directory. Parts are fetched in order
 # until the server answers 404 (wget exit 8), so the count follows the
 # release instead of being hard-coded here. A missing first part, or any
@@ -31,21 +31,21 @@ REPOSITORY=https://github.com/vortexgpgpu/vortex-toolchain-prebuilt/raw/${TOOLCH
 fetch_parts()
 {
     local name=$1 dir=$2 x rc
-    rm -f $name.tar.bz2 $name.tar.bz2.parta*
-    for x in {a..z}; do
+    rm -f $name.tar.bz2 $name.tar.bz2.part*
+    for x in {a..z}{a..z}; do
         rc=0
-        wget $REPOSITORY/$dir/$name.tar.bz2.parta$x || rc=$?
+        wget $REPOSITORY/$dir/$name.tar.bz2.part$x || rc=$?
         if [ $rc -ne 0 ]; then
-            rm -f $name.tar.bz2.parta$x
-            if [ $rc -eq 8 ] && [ $x != a ]; then
+            rm -f $name.tar.bz2.part$x
+            if [ $rc -eq 8 ] && [ $x != aa ]; then
                 break
             fi
-            echo "error: $name: cannot fetch $REPOSITORY/$dir/$name.tar.bz2.parta$x (wget exit $rc)"
+            echo "error: $name: cannot fetch $REPOSITORY/$dir/$name.tar.bz2.part$x (wget exit $rc)"
             exit 1
         fi
     done
-    cat $name.tar.bz2.parta* > $name.tar.bz2
-    rm -f $name.tar.bz2.parta*
+    cat $name.tar.bz2.part* > $name.tar.bz2
+    rm -f $name.tar.bz2.part*
 }
 
 riscv32()
