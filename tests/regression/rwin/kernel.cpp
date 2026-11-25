@@ -39,12 +39,21 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     "add %[r2], %[r2], x0\n\t"
     : [r1] "=&r"(r1), [r2] "=&r"(r2) : [a] "r"(a), [b] "r"(b));
 
+#ifdef __riscv_zfinx
+  // x225 = a, r3 = x225, through FP moves (Zfinx FP operands are x registers)
+  __asm__ volatile (
+    RWIN(7, 0, 0, 0) "fsgnj.s x1, %[a], %[a]\n\t"
+    RWIN(0, 7, 7, 0) "fsgnj.s %[r], x1, x1\n\t"
+    RWIN(0, 0, 0, 0)
+    : [r] "=&r"(r3) : [a] "r"(a));
+#else
   // f225 = a, r3 = f225
   __asm__ volatile (
     RWIN(7, 0, 0, 0) "fmv.w.x f1, %[a]\n\t"
     RWIN(0, 7, 0, 0) "fmv.x.w %[r], f1\n\t"
     RWIN(0, 0, 0, 0)
     : [r] "=&r"(r3) : [a] "r"(a));
+#endif
 
   // x200 = a ^ 0x55; normal code in between cannot reach it
   __asm__ volatile (RWIN(6, 0, 0, 0) "xori x8, %[a], 0x55\n\t" RWIN(0, 0, 0, 0) :: [a] "r"(a));

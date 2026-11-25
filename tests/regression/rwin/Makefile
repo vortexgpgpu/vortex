@@ -18,3 +18,7 @@ OPTS ?= -n2
 KERNEL_LIB := vortex2
 
 include ../common.mk
+
+# The kernel keeps values in x200 and x225 across asm statements, out of the
+# compiler's sight; compiled code stays in window 0 so it cannot overwrite them.
+LLVM_CFLAGS += -mllvm -riscv-vortex-max-regs=32
