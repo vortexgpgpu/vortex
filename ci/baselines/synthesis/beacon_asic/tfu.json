@@ -1,20 +1,20 @@
 {
   "tfu": {
     "clock_mhz": 1000,
-    "config_hash": "fd7c2ca30634d513",
+    "config_hash": "922adf0806d7b31e",
     "configs": "",
     "dut": "tfu",
     "result": {
-      "build_time_s": 15,
-      "cells": 15143,
-      "endpoints": 2332,
+      "build_time_s": 5,
+      "cells": 15150,
+      "endpoints": 2340,
       "env": {
-        "circt": "CIRCT 892a65a01",
-        "foldsim": "foldsim d8350bc0f",
+        "beacon": "beacon 4060e3af4",
+        "circt": "CIRCT ab733d13d",
         "pdk": "asap7",
         "xlen": 32
       },
-      "ff": 1806,
+      "ff": 1813,
       "fmax_mhz": 913.2,
       "macros": 0,
       "max_stages": 36,

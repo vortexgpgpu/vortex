@@ -1,25 +1,25 @@
 {
   "vm": {
     "clock_mhz": 1000,
-    "config_hash": "d06ba9a368334b96",
+    "config_hash": "81d5538a1f8002d4",
     "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8",
     "dut": "vm",
     "result": {
-      "build_time_s": 65,
-      "cells": 1156412,
-      "endpoints": 115494,
+      "build_time_s": 20,
+      "cells": 1130502,
+      "endpoints": 115499,
       "env": {
-        "circt": "CIRCT 892a65a01",
-        "foldsim": "foldsim d8350bc0f",
+        "beacon": "beacon 4060e3af4",
+        "circt": "CIRCT ab733d13d",
         "pdk": "asap7",
         "xlen": 32
       },
       "ff": 297476,
-      "fmax_mhz": 749.1,
+      "fmax_mhz": 807.1,
       "macros": 66,
-      "max_stages": 46,
+      "max_stages": 42,
       "overhead_ps": 231,
-      "period_ps": 1335,
+      "period_ps": 1239,
       "stage_ps": 24,
       "tied_bits": 114,
       "tied_ports": [

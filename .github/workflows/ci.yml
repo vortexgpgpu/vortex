@@ -302,6 +302,11 @@ jobs:
         run: |
           (cd build${{ matrix.xlen }} && bash ci/toolchain_install.sh --foldsim)
           pip install --quiet "pyslang>=11,<13"
+      - name: Per-case tools (Beacon)
+        if: contains(matrix.needs, 'beacon')
+        run: |
+          (cd build${{ matrix.xlen }} && bash ci/toolchain_install.sh --beacon)
+          pip install --quiet "pyslang>=11,<13"
       # logic_gate on a pull request: every build is also compared with the
       # same build on the merge base's RTL (ci/logic_gate.py --against-rev,
       # through BEACON_AGAINST_REV). The checkout is the merge of the pull

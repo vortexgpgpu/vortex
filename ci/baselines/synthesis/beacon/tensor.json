@@ -1,12 +1,12 @@
 {
   "tcu": {
     "clock_mhz": 300,
-    "config_hash": "3d4442eee5f4a8cf",
+    "config_hash": "05869d786de11e57",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_TCU_TYPE_TFR -DVX_CFG_TCU_FP16_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DVX_CFG_TCU_INT8_ENABLE -DVX_CFG_TCU_INT4_ENABLE -DVX_CFG_TCU_TF32_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE",
     "dut": "tcu",
     "result": {
       "bram": 0.0,
-      "build_time_s": 40,
+      "build_time_s": 15,
       "deep_endpoints": 2294,
       "deepest_paths": [
         "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[6]",
@@ -21,17 +21,17 @@
         "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[17]"
       ],
       "dsp": 513,
-      "endpoints": 41758,
+      "endpoints": 41767,
       "env": {
-        "circt": "CIRCT 892a65a01",
+        "beacon": "beacon 4060e3af4",
+        "circt": "CIRCT ab733d13d",
         "device": "xcu55c-fsvh2892-2L-e",
-        "foldsim": "foldsim d8350bc0f",
         "xlen": 32
       },
-      "ff": 44475,
+      "ff": 44482,
       "fix_levels": 12,
       "interfaces": {},
-      "lut": 117205,
+      "lut": 117209,
       "lutram": 2083,
       "max_levels": 25,
       "pred_fmax_mhz": 277.7,
@@ -57,29 +57,18 @@
         "tcu_unit/lane_dispatch/g_blocks_*_buf_out/g_eb2_stream_buffer": 10
       },
       "uram": 0,
-      "watch_endpoints": 13626,
+      "watch_endpoints": 13629,
       "watch_levels": 8
     }
   },
   "tensor": {
-    "accepted": {
-      "against": "26d2bc4b5409a35a111e8316ac3a87d07b15fc80",
-      "regressions": [
-        {
-          "after": 4,
-          "before": 6,
-          "kind": "ties",
-          "name": "tied_bits"
-        }
-      ]
-    },
     "clock_mhz": 250,
-    "config_hash": "f4269536f1b2647b",
+    "config_hash": "8879cc0588d4ab38",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
     "dut": "tensor",
     "result": {
       "bram": 114.5,
-      "build_time_s": 85,
+      "build_time_s": 40,
       "deep_endpoints": 4761,
       "deepest_paths": [
         "25  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[14]",
@@ -94,18 +83,18 @@
         "25  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_1.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_1.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[18]"
       ],
       "dsp": 267,
-      "endpoints": 170647,
+      "endpoints": 170669,
       "env": {
-        "circt": "CIRCT 892a65a01",
+        "beacon": "beacon 4060e3af4",
+        "circt": "CIRCT ab733d13d",
         "device": "xcu55c-fsvh2892-2L-e",
-        "foldsim": "foldsim d8350bc0f",
         "xlen": 32
       },
-      "ff": 161531,
+      "ff": 161545,
       "fix_levels": 12,
       "interfaces": {},
-      "lut": 259747,
-      "lutram": 12672,
+      "lut": 259889,
+      "lutram": 12675,
       "max_levels": 25,
       "pred_fmax_mhz": 253.4,
       "risk_endpoints": 411,
@@ -198,7 +187,7 @@
         "l2cache/g_cache_cache/g_core_req_skid_*_req_skid": 9
       },
       "uram": 0,
-      "watch_endpoints": 26346,
+      "watch_endpoints": 26352,
       "watch_levels": 8
     }
   }

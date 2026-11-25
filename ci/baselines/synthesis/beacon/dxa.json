@@ -1,12 +1,12 @@
 {
   "dxa": {
     "clock_mhz": 300,
-    "config_hash": "0eaf10f31ff7d9ff",
+    "config_hash": "81e17d8fd4f39432",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
     "dut": "dxa",
     "result": {
       "bram": 0.0,
-      "build_time_s": 20,
+      "build_time_s": 5,
       "deep_endpoints": 2081,
       "deepest_paths": [
         "15  dxa_core/g_workers_0.worker/addr_gen/gmem_cursor_r[0] -> dxa_core/g_workers_0.worker/addr_gen/smem_byte_addr_r.d[8]",
@@ -23,15 +23,15 @@
       "dsp": 9,
       "endpoints": 11408,
       "env": {
-        "circt": "CIRCT 892a65a01",
+        "beacon": "beacon 4060e3af4",
+        "circt": "CIRCT ab733d13d",
         "device": "xcu55c-fsvh2892-2L-e",
-        "foldsim": "foldsim d8350bc0f",
         "xlen": 32
       },
       "ff": 9328,
       "fix_levels": 12,
       "interfaces": {},
-      "lut": 10675,
+      "lut": 10685,
       "lutram": 568,
       "max_levels": 15,
       "pred_fmax_mhz": 298.6,
